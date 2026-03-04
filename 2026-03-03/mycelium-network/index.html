@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Mycelium Network</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0c0a; overflow:hidden; touch-action:none; font-family:'Courier New',monospace; }
+canvas { display:block; position:fixed; top:0; left:0; touch-action:none; }
+#ui {
+  position:fixed; top:0; left:0; right:0;
+  display:flex; justify-content:space-between; align-items:center;
+  padding:10px 14px; z-index:10; pointer-events:none;
+}
+.bar-wrap { display:flex; flex-direction:column; gap:3px; }
+.bar-label { font-size:10px; letter-spacing:1.5px; opacity:0.6; }
+.bar-outer { width:110px; height:8px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden; }
+.bar-inner { height:100%; border-radius:4px; transition:width 0.2s; }
+#playerBar { background:linear-gradient(90deg,#0ff8,#4af4); }
+#aiBar { background:linear-gradient(90deg,#f840,#f84f); }
+#timeWrap { text-align:center; color:rgba(200,230,200,0.8); }
+#timeNum { font-size:26px; font-weight:bold; }
+#timeLabel { font-size:9px; letter-spacing:2px; opacity:0.5; }
+#instructions {
+  position:fixed; bottom:14px; left:50%; transform:translateX(-50%);
+  color:rgba(160,210,160,0.45); font-size:11px; text-align:center; pointer-events:none;
+  white-space:nowrap;
+}
+#overlay {
+  position:fixed; inset:0; background:rgba(5,8,5,0.95);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  z-index:20; padding:20px;
+}
+#overlay h1 { font-size:clamp(24px,6vw,44px); color:#4dffb0; letter-spacing:4px; margin-bottom:12px;
+  text-shadow:0 0 30px rgba(77,255,176,0.5); }
+#overlay p { font-size:clamp(12px,3vw,14px); color:rgba(160,220,180,0.7); max-width:360px; text-align:center; line-height:1.7; margin:4px 0; }
+#overlay button {
+  margin-top:20px; padding:14px 40px; font-size:15px;
+  background:rgba(77,255,176,0.12); border:1px solid rgba(77,255,176,0.5);
+  color:#4dffb0; font-family:'Courier New',monospace; letter-spacing:2px;
+  cursor:pointer; border-radius:3px; min-height:48px; min-width:160px;
+  -webkit-tap-highlight-color:transparent;
+}
+#overlay button:hover { background:rgba(77,255,176,0.22); }
+.ob2 { margin-top:8px!important; border-color:rgba(255,120,60,0.4)!important; color:rgba(255,120,60,0.8)!important; background:rgba(255,100,40,0.08)!important; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div class="bar-wrap">
+    <div class="bar-label">YOUR ENERGY</div>
+    <div class="bar-outer"><div class="bar-inner" id="playerBar" style="width:50%"></div></div>
+    <div id="p1nodes" style="font-size:11px;color:rgba(100,240,200,0.6);margin-top:2px">Nodes: 0</div>
+  </div>
+  <div id="timeWrap">
+    <div id="timeNum">90</div>
+    <div id="timeLabel">SECONDS</div>
+    <div style="font-size:9px;opacity:0.4;letter-spacing:1px">LEVEL <span id="levelEl">1</span></div>
+  </div>
+  <div class="bar-wrap" style="align-items:flex-end">
+    <div class="bar-label" style="text-align:right">AI ENERGY</div>
+    <div class="bar-outer"><div class="bar-inner" id="aiBar" style="width:50%"></div></div>
+    <div id="p2nodes" style="font-size:11px;color:rgba(255,100,60,0.6);margin-top:2px">Nodes: 0</div>
+  </div>
+</div>
+<div id="instructions">TAP near tendril tips to extend · Drag for direction · Reach nutrients to gain energy</div>
+
+<div id="overlay">
+  <h1>MYCELIUM</h1>
+  <ul style="list-style:none;margin:14px 0;max-width:340px;width:100%;display:flex;flex-direction:column;gap:10px;text-align:left;">
+    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(160,220,180,0.85);">🟢 You are the <strong style="color:#4dffb0">cyan</strong> colony — the AI is the orange colony</li>
+    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(160,220,180,0.85);">👆 Tap anywhere to grow a tendril toward that point from your nearest tip</li>
+    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(160,220,180,0.85);">✨ Reach glowing <strong style="color:#ffc850">nutrient nodes</strong> before the AI to gain energy</li>
+    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(160,220,180,0.85);">⚡ Energy drains over time — bigger networks drain faster, so grow smart</li>
+    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(160,220,180,0.85);">🏆 Out-energize the rival colony before the timer runs out to win!</li>
+  </ul>
+  <button onclick="startGame(1)" style="margin-top:20px;font-size:clamp(15px,4vw,19px);padding:16px 44px;font-weight:bold;letter-spacing:2px;">▶ TAP TO PLAY</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const playerBarEl = document.getElementById('playerBar');
+const aiBarEl = document.getElementById('aiBar');
+const timeEl = document.getElementById('timeNum');
+const p1nodesEl = document.getElementById('p1nodes');
+const p2nodesEl = document.getElementById('p2nodes');
+const levelEl = document.getElementById('levelEl');
+
+// ==== TOUCH FX ====
+const FX = {
+  ripples: [], trails: [],
+  spawn(x, y, col) {
+    col = col || 'rgba(100,255,200,0.85)';
+    this.ripples.push({x, y, r: 8, a: 0.8, col, spd: 70});
+    this.trails.push({x, y, r: 14, a: 0.6, col, decay: 3.5});
+  },
+  move(x, y) {
+    if (Math.random() < 0.5)
+      this.trails.push({x, y, r: 6, a: 0.4, col:'rgba(80,220,160,0.5)', decay: 5});
+  },
+  update(dt) {
+    this.ripples = this.ripples.filter(r => { r.r += r.spd*dt; r.a -= dt*1.5; return r.a > 0.01; });
+    this.trails = this.trails.filter(t => { t.a -= t.decay*dt; t.r -= dt*12; return t.a > 0.01 && t.r > 0.1; });
+  },
+  draw(ctx) {
+    ctx.save(); ctx.shadowBlur = 16;
+    for (const r of this.ripples) {
+      ctx.globalAlpha = r.a; ctx.strokeStyle = ctx.shadowColor = r.col;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI*2); ctx.stroke();
+    }
+    for (const t of this.trails) {
+      ctx.globalAlpha = t.a * 0.7; ctx.fillStyle = ctx.shadowColor = t.col;
+      ctx.beginPath(); ctx.arc(t.x, t.y, Math.max(0.5, t.r), 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.restore();
+  }
+};
+
+// ==== SCREEN SHAKE SYSTEM ====
+let shakeX=0, shakeY=0, shakeDur=0, shakeInt=0;
+function screenShake(intensity, dur) { shakeInt=intensity; shakeDur=dur; }
+function updateShake(dt) {
+  if(shakeDur>0){ shakeDur-=dt; shakeX=(Math.random()-.5)*shakeInt*2; shakeY=(Math.random()-.5)*shakeInt*2; if(shakeDur<=0){shakeX=shakeY=0;} }
+}
+
+// Touch swipe tracking
+let touchStart = null;
+
+let W, H, CX, CY, RADIUS;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  CX = W/2; CY = H/2;
+  RADIUS = Math.min(W,H)*0.44;
+}
+resize();
+window.addEventListener('resize', resize);
+
+let state='menu', level=1, lastTime=0, frameId=null;
+let timeLeft, timerAccum, playerEnergy, aiEnergy, playerNodes, aiNodes, nutrients, pulseT=0, growQueue=[];
+let spores = [];
+
+const LEVELS = [
+  { duration:90, nutrientCount:14, aiInterval:2.2, aiAggressiveness:0.5, drainRate:1.2 },
+  { duration:90, nutrientCount:18, aiInterval:1.4, aiAggressiveness:0.75, drainRate:1.5 },
+  { duration:90, nutrientCount:22, aiInterval:0.8, aiAggressiveness:0.95, drainRate:2.0 },
+];
+
+// ==== LEVEL THEME COLORS ====
+const LEVEL_THEMES = [
+  { dishColor: '#14201a', tipGlow: 'rgba(100,255,200,', tipHex: '#4dffb0' },
+  { dishColor: '#101c18', tipGlow: 'rgba(32,255,204,', tipHex: '#20ffcc' },
+  { dishColor: '#0c1612', tipGlow: 'rgba(32,224,255,', tipHex: '#20e0ff' },
+];
+
+function inDish(x,y){ return Math.sqrt((x-CX)**2+(y-CY)**2) < RADIUS*0.95; }
+
+// ==== NUTRIENT BURST ====
+function spawnNutrientBurst(x, y, isPlayer) {
+  let col = isPlayer ? 'rgba(100,255,200,0.9)' : 'rgba(255,150,60,0.9)';
+  for(let i=0;i<10;i++){
+    let angle = (Math.PI*2/10)*i + (Math.random()-0.5)*0.5;
+    let speed = 30+Math.random()*40;
+    FX.trails.push({x, y, r:5+Math.random()*5, a:0.8, col:'rgba(255,200,80,0.9)', decay:1.0});
+  }
+  FX.ripples.push({x, y, r:6, a:0.8, col:'rgba(255,200,80,0.85)', spd:60});
+  FX.ripples.push({x, y, r:3, a:0.6, col, spd:90});
+}
+
+function startGame(lvl) {
+  level=lvl; levelEl.textContent=level;
+  const cfg=LEVELS[level-1];
+  timeLeft=cfg.duration; timerAccum=0; playerEnergy=100; aiEnergy=100; pulseT=0; growQueue=[];
+  playerNodes=[{x:CX-RADIUS*0.7,y:CY,parent:null,energy:100,dead:false,owner:'p',tips:true,t:0,growing:false}];
+  aiNodes=[{x:CX+RADIUS*0.7,y:CY,parent:null,energy:100,dead:false,owner:'a',tips:true,t:0,growing:false}];
+  nutrients=[];
+  let attempts=0;
+  while(nutrients.length<cfg.nutrientCount&&attempts<300){
+    let angle=Math.random()*Math.PI*2, r=RADIUS*(0.15+Math.random()*0.75);
+    let nx=CX+Math.cos(angle)*r, ny=CY+Math.sin(angle)*r;
+    if(inDish(nx,ny)){
+      let tooClose=nutrients.some(n=>Math.sqrt((n.x-nx)**2+(n.y-ny)**2)<40);
+      if(!tooClose) nutrients.push({x:nx,y:ny,value:15+Math.random()*15,pulsePh:Math.random()*Math.PI*2,consumed:false});
+    }
+    attempts++;
+  }
+  // Initialize spore particles
+  spores = [];
+  for(let i=0;i<30;i++){
+    spores.push({x:Math.random()*W, y:Math.random()*H, vx:Math.random()*8-4, vy:Math.random()*4-2, a:Math.random()*0.4+0.1, r:1.5+Math.random()*1.5});
+  }
+  state='playing'; overlay.style.display='none';
+  lastTime=performance.now();
+  if(frameId) cancelAnimationFrame(frameId);
+  frameId=requestAnimationFrame(loop);
+}
+
+let aiTimer=0;
+function update(dt) {
+  const cfg=LEVELS[level-1];
+  pulseT+=dt; timerAccum+=dt;
+  if(timerAccum>=1){timerAccum-=1;timeLeft--;timeEl.textContent=timeLeft;if(timeLeft<=0){endGame();return;}}
+  let pDrain=(1+playerNodes.length*0.04)*cfg.drainRate*dt;
+  let aDrain=(1+aiNodes.length*0.04)*cfg.drainRate*dt;
+  playerEnergy=Math.max(0,playerEnergy-pDrain); aiEnergy=Math.max(0,aiEnergy-aDrain);
+  if(playerEnergy<5&&playerNodes.length>1){let tips=playerNodes.filter(n=>n.tips&&!n.dead);if(tips.length>0){tips[Math.floor(Math.random()*tips.length)].dead=true;}playerEnergy=15;}
+  if(aiEnergy<5&&aiNodes.length>1){let tips=aiNodes.filter(n=>n.tips&&!n.dead);if(tips.length>0){tips[Math.floor(Math.random()*tips.length)].dead=true;}aiEnergy=15;}
+  for(let g of growQueue){if(!g.done){g.t+=dt*2;if(g.t>=1){g.t=1;g.done=true;}}}
+  growQueue=growQueue.filter(g=>!g.done||g.t>=1);
+  let allNodes=[...playerNodes,...aiNodes];
+  for(let seg of allNodes){
+    if(seg.dead||!seg.tips) continue;
+    for(let n of nutrients){
+      if(n.consumed) continue;
+      let d=Math.sqrt((seg.x-n.x)**2+(seg.y-n.y)**2);
+      if(d<22){n.consumed=true;spawnNutrientBurst(n.x, n.y, seg.owner==='p');if(seg.owner==='p')playerEnergy=Math.min(200,playerEnergy+n.value);else aiEnergy=Math.min(200,aiEnergy+n.value);}
+    }
+  }
+  for(let ps of playerNodes){if(ps.dead) continue;for(let as of aiNodes){if(as.dead) continue;let d=Math.sqrt((ps.x-as.x)**2+(ps.y-as.y)**2);if(d<16){if(playerEnergy>aiEnergy*1.1){as.dead=true;screenShake(5,0.3);}else if(aiEnergy>playerEnergy*1.1){ps.dead=true;screenShake(5,0.3);}else{ps.dead=true;as.dead=true;screenShake(5,0.3);}}}}
+  aiTimer+=dt;
+  if(aiTimer>=cfg.aiInterval){aiTimer=0;aiDecide(cfg.aiAggressiveness);}
+  let maxE=200;
+  playerBarEl.style.width=Math.min(100,playerEnergy/maxE*100)+'%';
+  aiBarEl.style.width=Math.min(100,aiEnergy/maxE*100)+'%';
+  p1nodesEl.textContent='Nodes: '+playerNodes.filter(n=>!n.dead).length;
+  p2nodesEl.textContent='Nodes: '+aiNodes.filter(n=>!n.dead).length;
+  FX.update(dt);
+  updateShake(dt);
+  // Update spore particles
+  for(let s of spores) { s.x += s.vx*dt; s.y += s.vy*dt; if(s.x<0)s.x=W; if(s.x>W)s.x=0; if(s.y<0)s.y=H; if(s.y>H)s.y=0; }
+}
+
+function findNearestNutrient(tips,owner){
+  let best=null,bestDist=Infinity;
+  for(let t of tips){if(t.dead) continue;for(let n of nutrients){if(n.consumed) continue;let d=Math.sqrt((t.x-n.x)**2+(t.y-n.y)**2);if(d<bestDist){bestDist=d;best={tip:t,nutrient:n,dist:d};}}}
+  return best;
+}
+
+function growToward(tip,tx,ty,owner){
+  let dx=tx-tip.x,dy=ty-tip.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+  let step=28+Math.random()*12;
+  let nx2=tip.x+(dx/d)*Math.min(step,d*0.7)+(Math.random()-0.5)*10;
+  let ny2=tip.y+(dy/d)*Math.min(step,d*0.7)+(Math.random()-0.5)*10;
+  if(!inDish(nx2,ny2)) return null;
+  let newSeg={x:nx2,y:ny2,parent:tip,energy:50,dead:false,owner,tips:true,t:0,growing:true};
+  tip.tips=false;
+  if(owner==='a') aiNodes.push(newSeg); else playerNodes.push(newSeg);
+  growQueue.push(newSeg);
+  return newSeg;
+}
+
+function aiDecide(aggressiveness){
+  if(aiEnergy<8) return;
+  let tips=aiNodes.filter(n=>n.tips&&!n.dead);
+  if(tips.length===0) return;
+  let best=findNearestNutrient(tips,'a');
+  if(best&&Math.random()<aggressiveness+0.1){growToward(best.tip,best.nutrient.x,best.nutrient.y,'a');aiEnergy-=8;}
+  else{let tip=tips[Math.floor(Math.random()*tips.length)];let angle=Math.random()*Math.PI*2;growToward(tip,tip.x+Math.cos(angle)*60,tip.y+Math.sin(angle)*60,'a');aiEnergy-=5;}
+}
+
+function handleTap(px,py) {
+  if(state!=='playing'||playerEnergy<8) return;
+  FX.spawn(px, py, 'rgba(100,255,200,0.85)');
+  let tips=playerNodes.filter(n=>n.tips&&!n.dead);
+  let nearest=null,nd=Infinity;
+  for(let t of tips){let d=Math.sqrt((t.x-px)**2+(t.y-py)**2);if(d<nd){nd=d;nearest=t;}}
+  if(!nearest||nd>100){
+    let root=playerNodes[0];
+    if(root&&!root.dead){let d=Math.sqrt((root.x-px)**2+(root.y-py)**2);if(d>20){growToward(root,px,py,'p');playerEnergy-=10;}}
+    return;
+  }
+  growToward(nearest,px,py,'p');
+  playerEnergy-=10;
+}
+
+// Touch: tap OR drag-direction to grow
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  touchStart = {x: t.clientX, y: t.clientY, id: t.identifier};
+  FX.spawn(t.clientX, t.clientY, 'rgba(100,255,200,0.85)');
+}, {passive:false});
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    FX.move(t.clientX, t.clientY);
+  }
+}, {passive:false});
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  if (touchStart) {
+    const dx = t.clientX - touchStart.x;
+    const dy = t.clientY - touchStart.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > 30) {
+      // Swipe: grow toward tap end point
+      handleTap(t.clientX, t.clientY);
+    } else {
+      // Tap: grow toward tap point
+      handleTap(touchStart.x, touchStart.y);
+    }
+  }
+  touchStart = null;
+}, {passive:false});
+
+canvas.addEventListener('click', e => handleTap(e.clientX, e.clientY));
+
+function drawNode(seg,isPlayer){
+  if(seg.dead) return;
+  let theme = LEVEL_THEMES[level-1];
+  if(seg.parent){
+    let progress=seg.t<1?seg.t:1;
+    let ex=seg.parent.x+(seg.x-seg.parent.x)*progress,ey=seg.parent.y+(seg.y-seg.parent.y)*progress;
+    ctx.beginPath();ctx.moveTo(seg.parent.x,seg.parent.y);ctx.lineTo(ex,ey);
+    if(isPlayer){let grad=ctx.createLinearGradient(seg.parent.x,seg.parent.y,ex,ey);grad.addColorStop(0,'rgba(80,220,180,0.6)');grad.addColorStop(1,'rgba(60,200,255,0.4)');ctx.strokeStyle=grad;}
+    else{let grad=ctx.createLinearGradient(seg.parent.x,seg.parent.y,ex,ey);grad.addColorStop(0,'rgba(255,120,40,0.6)');grad.addColorStop(1,'rgba(255,60,20,0.4)');ctx.strokeStyle=grad;}
+    ctx.lineWidth=seg.tips?2:1.5;ctx.lineCap='round';ctx.stroke();
+  }
+  if(seg.tips&&seg.t>=0.9){
+    let glow=isPlayer?theme.tipGlow:'rgba(255,130,60,';
+    let glowR = 10 + Math.sin(pulseT*3)*4;
+    let gr=ctx.createRadialGradient(seg.x,seg.y,0,seg.x,seg.y,glowR);
+    gr.addColorStop(0,glow+'0.8)');gr.addColorStop(1,glow+'0)');
+    ctx.beginPath();ctx.arc(seg.x,seg.y,glowR,0,Math.PI*2);ctx.fillStyle=gr;ctx.fill();
+    ctx.shadowBlur = 14 + Math.sin(pulseT*2)*6;
+    ctx.shadowColor = isPlayer ? theme.tipHex : 'rgba(255,150,80,0.9)';
+    ctx.beginPath();ctx.arc(seg.x,seg.y,3,0,Math.PI*2);
+    ctx.fillStyle=isPlayer?'rgba(150,255,220,0.9)':'rgba(255,150,80,0.9)';ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
+  }
+}
+
+function draw(){
+  let theme = LEVEL_THEMES[level-1];
+  ctx.fillStyle='#070a07';ctx.fillRect(0,0,W,H);
+
+  // Screen shake wrapper
+  ctx.save();
+  ctx.translate(shakeX, shakeY);
+
+  let dishGrad=ctx.createRadialGradient(CX,CY,0,CX,CY,RADIUS);
+  dishGrad.addColorStop(0,theme.dishColor);dishGrad.addColorStop(0.6,'rgba(15,22,16,1)');dishGrad.addColorStop(1,'rgba(8,12,8,1)');
+  ctx.beginPath();ctx.arc(CX,CY,RADIUS,0,Math.PI*2);ctx.fillStyle=dishGrad;ctx.fill();
+  for(let i=1;i<=4;i++){ctx.beginPath();ctx.arc(CX,CY,RADIUS*(i/4),0,Math.PI*2);ctx.strokeStyle='rgba(30,50,30,0.3)';ctx.lineWidth=1;ctx.stroke();}
+  for(let n of nutrients){
+    if(n.consumed) continue;
+    n.pulsePh+=0.04;let pulse=0.7+Math.sin(n.pulsePh)*0.3;
+    let gr=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,14*pulse);
+    gr.addColorStop(0,'rgba(255,200,80,0.9)');gr.addColorStop(0.4,'rgba(220,140,40,0.7)');gr.addColorStop(1,'rgba(180,100,0,0)');
+    ctx.beginPath();ctx.arc(n.x,n.y,14*pulse,0,Math.PI*2);ctx.fillStyle=gr;ctx.fill();
+    ctx.beginPath();ctx.arc(n.x,n.y,4,0,Math.PI*2);ctx.fillStyle='rgba(255,220,120,0.95)';ctx.fill();
+  }
+
+  // Draw spore particles (before nodes)
+  ctx.save();
+  for(let s of spores) {
+    ctx.globalAlpha = s.a;
+    ctx.fillStyle = 'rgba(120,200,140,0.6)';
+    ctx.shadowBlur = 6;
+    ctx.shadowColor = 'rgba(100,200,150,0.4)';
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  ctx.restore();
+
+  for(let seg of playerNodes) drawNode(seg,true);
+  for(let seg of aiNodes) drawNode(seg,false);
+  for(let seg of [...playerNodes,...aiNodes]){
+    if(!seg.dead) continue;
+    if(seg.parent){ctx.beginPath();ctx.moveTo(seg.parent.x,seg.parent.y);ctx.lineTo(seg.x,seg.y);ctx.strokeStyle='rgba(60,70,60,0.3)';ctx.lineWidth=1;ctx.stroke();}
+  }
+  ctx.beginPath();ctx.arc(CX,CY,RADIUS,0,Math.PI*2);ctx.strokeStyle='rgba(40,60,40,0.8)';ctx.lineWidth=3;ctx.stroke();
+  ctx.beginPath();ctx.arc(CX,CY,RADIUS+2,0,Math.PI*2);ctx.strokeStyle='rgba(80,120,80,0.15)';ctx.lineWidth=5;ctx.stroke();
+  let pg=ctx.createRadialGradient(playerNodes[0].x,playerNodes[0].y,0,playerNodes[0].x,playerNodes[0].y,20);
+  pg.addColorStop(0,'rgba(60,255,180,0.4)');pg.addColorStop(1,'rgba(60,255,180,0)');
+  ctx.beginPath();ctx.arc(playerNodes[0].x,playerNodes[0].y,20,0,Math.PI*2);ctx.fillStyle=pg;ctx.fill();
+  let ag=ctx.createRadialGradient(aiNodes[0].x,aiNodes[0].y,0,aiNodes[0].x,aiNodes[0].y,20);
+  ag.addColorStop(0,'rgba(255,80,30,0.4)');ag.addColorStop(1,'rgba(255,80,30,0)');
+  ctx.beginPath();ctx.arc(aiNodes[0].x,aiNodes[0].y,20,0,Math.PI*2);ctx.fillStyle=ag;ctx.fill();
+
+  // Low energy pulse vignette
+  if(playerEnergy < 30) {
+    let pulseA = 0.04 + Math.sin(pulseT*4)*0.03;
+    let vignette = ctx.createRadialGradient(CX, CY, RADIUS*0.3, CX, CY, RADIUS*1.2);
+    vignette.addColorStop(0, 'rgba(255,0,0,0)');
+    vignette.addColorStop(1, `rgba(255,0,0,${pulseA})`);
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  ctx.restore();
+  // End screen shake wrapper
+
+  FX.draw(ctx);
+}
+
+function endGame(){
+  state='end';
+  let playerWon=playerEnergy>=aiEnergy;
+  overlay.style.display='flex';
+  let html=playerWon?`<h1>COLONY THRIVES</h1><p>Your network out-energized the rival.</p><p>Energy: <strong style="color:#4dffb0">${Math.round(playerEnergy)}</strong> vs AI: ${Math.round(aiEnergy)}</p>${level<3?`<button onclick="startGame(${level+1})">DEEPER SUBSTRATE</button>`:'<p style="color:#4dffb0;font-weight:bold">You have conquered the petri dish.</p>'}<button class="ob2" onclick="startGame(${level})" style="margin-top:8px;border-color:rgba(80,200,140,0.4);color:rgba(80,200,140,0.8);background:rgba(60,180,120,0.08)">REPLAY</button>`
+    :`<h1 style="color:rgba(255,100,50,0.9)">STARVED</h1><p>The rival colony consumed more nutrients.</p><p>Your energy: ${Math.round(playerEnergy)} · AI: <strong style="color:rgba(255,100,50,0.9)">${Math.round(aiEnergy)}</strong></p><button onclick="startGame(${level})">RETRY LEVEL ${level}</button><button class="ob2" onclick="startGame(1)">RESTART</button>`;
+  overlay.innerHTML=html;
+  cancelAnimationFrame(frameId);
+}
+
+function loop(ts){
+  if(state!=='playing') return;
+  let dt=Math.min((ts-lastTime)/1000,0.05);lastTime=ts;
+  update(dt);draw();
+  frameId=requestAnimationFrame(loop);
+}
+
+ctx.fillStyle='#070a07';ctx.fillRect(0,0,W,H);
+</script>
+</body>
+</html>

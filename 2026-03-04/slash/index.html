@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>SLASH – Rune Cutter</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#030008; overflow:hidden; touch-action:none; font-family:'Courier New',monospace; }
+  canvas { display:block; width:100vw; height:100vh; }
+  #hud { position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:10px 16px; z-index:10; pointer-events:none; background:linear-gradient(to bottom,rgba(3,0,8,0.8),transparent); }
+  .stat { font-size:13px; letter-spacing:2px; }
+  #scoreTxt { color:#e0c0ff; text-shadow:0 0 10px #a060ff; }
+  #lvlTxt { color:#c0a0ff; text-shadow:0 0 10px #8040cc; }
+  #sealHp { font-size:18px; }
+  #bombBar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; color:#8060aa; z-index:10; pointer-events:none; }
+  #bombFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#8040cc,#e080ff); box-shadow:0 0 10px #a060ff; transition:width 0.1s; vertical-align:middle; }
+  #bombTrack { display:inline-block; width:140px; height:6px; background:rgba(80,40,120,0.3); border-radius:3px; vertical-align:middle; overflow:hidden; }
+  #overlay { position:fixed; inset:0; background:rgba(2,0,6,0.96); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:20; }
+  #overlay h1 { font-size:52px; color:#e080ff; letter-spacing:8px; text-shadow:0 0 30px #c040ff,0 0 80px #6020aa; }
+  #overlay p { color:#a070c0; font-size:14px; text-align:center; max-width:340px; line-height:2; margin-top:16px; }
+  #tapBtn { margin-top:30px; padding:14px 48px; background:linear-gradient(135deg,#3010aa,#e080ff33); color:#e080ff; font-size:18px; letter-spacing:4px; border:1px solid #e080ff; border-radius:4px; cursor:pointer; animation:pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 20px #8040aa} 50%{box-shadow:0 0 50px #e080ff,0 0 80px #8040aa} }
+  #endMsg { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; z-index:30; background:rgba(2,0,6,0.93); }
+  #endMsg h2 { font-size:40px; letter-spacing:6px; margin-bottom:10px; }
+  #endMsg p { font-size:14px; color:#c090e0; }
+  #endMsg button { margin-top:24px; padding:12px 36px; font-size:16px; letter-spacing:3px; cursor:pointer; border-radius:4px; background:transparent; color:#e080ff; border:1px solid #e080ff; }
+  #combo { position:fixed; top:50px; left:50%; transform:translateX(-50%); font-size:24px; letter-spacing:6px; pointer-events:none; z-index:15; opacity:0; transition:opacity 0.3s; color:#e0c0ff; text-shadow:0 0 20px #c060ff; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span class="stat" id="scoreTxt">SCORE: 0</span>
+  <span class="stat" id="sealHp">🔮🔮🔮🔮🔮</span>
+  <span class="stat" id="lvlTxt">LEVEL 1</span>
+</div>
+<div id="combo"></div>
+<div id="bombBar">
+  CIRCLE BOMB: <span id="bombTrack"><span id="bombFill" style="width:100%"></span></span>&nbsp;READY
+</div>
+<canvas id="c"></canvas>
+<div id="overlay">
+  <h1>⚔️ SLASH</h1>
+  <p>Rune-creatures converge on the sacred seal.<br>
+  <b style="color:#e0b0ff">SWIPE</b> across enemies to cut them down.<br>
+  Cut multiple in one stroke for combos!<br>
+  <b style="color:#ffe080">Draw a CIRCLE</b> to summon a divine bomb.<br>
+  Don't let them reach the center seal!<br><br>
+  <span style="color:#b080e0">Glowing shields = needs 2 hits · Echo ghosts = still dangerous!</span></p>
+  <p style="margin-top:12px;color:#40304a;font-size:12px">3 LEVELS · 500+ PTS TO MASTER</p>
+  <button id="tapBtn" onclick="startGame()">TAP TO PLAY</button>
+</div>
+<div id="endMsg">
+  <h2 id="endTitle">SEAL BROKEN</h2>
+  <p id="endSub"></p>
+  <button onclick="restartGame()">RESTART</button>
+</div>
+
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let W,H;
+function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+resize();
+
+const ENEMY_COLORS=['#b040ff','#40c0ff','#ff8040','#40ff90'];
+const ENEMY_GLOW  =['#8000ff','#0090ff','#ff4000','#00ff50'];
+const ENEMY_SHAPES=[3,4,5,6];
+
+let enemies=[], particles=[], slashes=[], ripples=[];
+let sealHP=5, score=0, level=1, gameActive=false;
+let bombCooldown=0, BOMB_MAX=15000;
+let slashPoints=[], drawing=false;
+let shakeX=0,shakeY=0,shakeT=0;
+let comboFlash=0;
+let spawnTimer=0;
+
+function initGame(){
+  enemies=[]; particles=[]; slashes=[]; ripples=[];
+  sealHP=5; score=0; level=1; gameActive=true;
+  bombCooldown=0; drawing=false; slashPoints=[];
+  shakeT=0; spawnTimer=0;
+}
+
+function spawnEnemy(isEcho=false){
+  const edge=Math.floor(Math.random()*4);
+  const m=40;
+  let x,y;
+  if(edge===0){x=Math.random()*W;y=-m;}
+  else if(edge===1){x=W+m;y=Math.random()*H;}
+  else if(edge===2){x=Math.random()*W;y=H+m;}
+  else{x=-m;y=Math.random()*H;}
+  const ci=Math.floor(Math.random()*(level===1?2:level===2?3:4));
+  const shielded=!isEcho&&Math.random()<(level===1?0:level===2?0.2:0.4);
+  const speed=(0.4+Math.random()*0.3)*(1+level*0.2)*(isEcho?0.6:1);
+  const angle=Math.atan2(H/2-y,W/2-x);
+  enemies.push({
+    x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,
+    hp:shielded?2:1, maxHp:shielded?2:1, colorIdx:ci,
+    r:18+Math.floor(Math.random()*6), sides:ENEMY_SHAPES[ci%4],
+    rotation:Math.random()*Math.PI*2, rotSpeed:(Math.random()-0.5)*0.03,
+    isEcho, alive:true, alpha:isEcho?0.5:1
+  });
+}
+
+function spawnBurst(x,y,ci,n){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2,sp=1.5+Math.random()*3.5;
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,color:ENEMY_COLORS[ci],glow:ENEMY_GLOW[ci],size:3+Math.random()*4});
+  }
+}
+
+function drawBackground(){
+  ctx.fillStyle='#030008'; ctx.fillRect(0,0,W,H);
+  // Ink swirl pattern
+  ctx.save();
+  ctx.globalAlpha=0.03;
+  const t=Date.now()*0.0002;
+  for(let i=0;i<5;i++){
+    ctx.beginPath();
+    ctx.arc(W/2+Math.sin(t+i)*W*0.2, H/2+Math.cos(t+i*1.3)*H*0.2,
+            80+i*30+Math.sin(t*2+i)*20, 0, Math.PI*2);
+    ctx.strokeStyle='#6030aa'; ctx.lineWidth=30; ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawSeal(){
+  const cx=W/2,cy=H/2;
+  const t=Date.now()*0.001;
+  const pulse=0.5+0.5*Math.sin(t*1.5);
+  ctx.save();
+  ctx.translate(cx,cy);
+  // Outer rings
+  for(let ring=0;ring<3;ring++){
+    ctx.rotate(t*(ring%2===0?0.3:-0.2));
+    const ri=20+ring*14;
+    ctx.strokeStyle=`rgba(${180-ring*30},${100-ring*20},${255},${0.3+0.2*pulse})`;
+    ctx.shadowColor='#8040ff'; ctx.shadowBlur=10;
+    ctx.lineWidth=1.5;
+    ctx.beginPath();
+    for(let i=0;i<8;i++){
+      const a=i/8*Math.PI*2, r2=ri+(i%2?4:-4);
+      i===0?ctx.moveTo(r2*Math.cos(a),r2*Math.sin(a)):ctx.lineTo(r2*Math.cos(a),r2*Math.sin(a));
+    }
+    ctx.closePath(); ctx.stroke();
+  }
+  // Center gem
+  const hp=sealHP/5;
+  ctx.shadowColor=`rgba(${255*(1-hp)},${100*hp},${255*hp},1)`; ctx.shadowBlur=25*pulse;
+  ctx.fillStyle=`rgba(${Math.floor(200*(1-hp)+55)},${Math.floor(100*hp)},${Math.floor(255*hp)},0.9)`;
+  ctx.beginPath(); ctx.arc(0,0,10,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawEnemies(){
+  const t=Date.now()*0.001;
+  enemies.forEach(e=>{
+    if(!e.alive) return;
+    e.rotation+=e.rotSpeed;
+    ctx.save();
+    ctx.translate(e.x,e.y);
+    ctx.rotate(e.rotation);
+    ctx.globalAlpha=e.alpha;
+    // Shield ring
+    if(e.hp>=2){
+      ctx.save();
+      const sh=0.5+0.5*Math.sin(t*4);
+      ctx.strokeStyle=`rgba(255,220,80,${0.6+0.3*sh})`;
+      ctx.shadowColor='#ffcc40'; ctx.shadowBlur=15*sh; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(0,0,e.r+8,0,Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+    // Polygon body
+    ctx.beginPath();
+    for(let i=0;i<e.sides;i++){
+      const a=i/e.sides*Math.PI*2;
+      i===0?ctx.moveTo(e.r*Math.cos(a),e.r*Math.sin(a)):ctx.lineTo(e.r*Math.cos(a),e.r*Math.sin(a));
+    }
+    ctx.closePath();
+    ctx.fillStyle=ENEMY_COLORS[e.colorIdx]; ctx.shadowColor=ENEMY_GLOW[e.colorIdx]; ctx.shadowBlur=18;
+    ctx.globalAlpha*=(e.isEcho?0.5:0.8);
+    ctx.fill();
+    // Rune inner lines
+    ctx.globalAlpha*=0.6;
+    ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=1; ctx.shadowBlur=5;
+    ctx.stroke();
+    // Rune symbol
+    ctx.globalAlpha=0.7;
+    ctx.fillStyle='rgba(255,255,255,0.8)';
+    ctx.font=`bold ${e.r*0.7}px serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    const runes=['ᚠ','ᚢ','ᚦ','ᚨ','ᚱ','ᚲ'];
+    ctx.fillText(runes[e.colorIdx*2%runes.length],0,0);
+    ctx.restore();
+  });
+}
+
+function drawSlashes(){
+  for(let i=slashes.length-1;i>=0;i--){
+    const s=slashes[i];
+    s.life-=0.025;
+    if(s.life<=0){slashes.splice(i,1);continue;}
+    if(s.points.length<2) continue;
+    ctx.save();
+    ctx.globalAlpha=s.life;
+    // White-gold trail
+    ctx.strokeStyle=`rgba(255,230,120,${s.life})`;
+    ctx.shadowColor='#ffe080'; ctx.shadowBlur=20*s.life;
+    ctx.lineWidth=3; ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.beginPath();
+    s.points.forEach((p,idx)=>idx===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+    ctx.stroke();
+    // Thinner bright core
+    ctx.strokeStyle=`rgba(255,255,255,${s.life*0.8})`;
+    ctx.shadowBlur=8; ctx.lineWidth=1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+  // Current drawing
+  if(drawing && slashPoints.length>1){
+    ctx.save();
+    ctx.strokeStyle='rgba(255,240,150,0.9)';
+    ctx.shadowColor='#ffee80'; ctx.shadowBlur=25;
+    ctx.lineWidth=3; ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.beginPath();
+    slashPoints.forEach((p,i)=>i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawParticles(){
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.06; p.life-=0.02;
+    if(p.life<=0){particles.splice(i,1);continue;}
+    ctx.save();
+    ctx.globalAlpha=p.life;
+    ctx.fillStyle=p.color; ctx.shadowColor=p.glow; ctx.shadowBlur=12;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawRipples(){
+  for(let i=ripples.length-1;i>=0;i--){
+    const r=ripples[i]; r.radius+=4; r.life-=0.05;
+    if(r.life<=0){ripples.splice(i,1);continue;}
+    ctx.save();
+    ctx.globalAlpha=r.life;
+    ctx.strokeStyle='rgba(200,160,255,0.8)'; ctx.lineWidth=1.5; ctx.shadowColor='#c0a0ff'; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.arc(r.x,r.y,r.radius,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// Circle detection
+function isCircleGesture(pts){
+  if(pts.length<20) return false;
+  const sx=pts[0].x,sy=pts[0].y,ex=pts[pts.length-1].x,ey=pts[pts.length-1].y;
+  if(Math.hypot(ex-sx,ey-sy)>60) return false; // ends must be close
+  // Check that path forms a loop by measuring variance from centroid
+  let cx=0,cy=0; pts.forEach(p=>{cx+=p.x;cy+=p.y;}); cx/=pts.length;cy/=pts.length;
+  const radii=pts.map(p=>Math.hypot(p.x-cx,p.y-cy));
+  const avgR=radii.reduce((a,b)=>a+b)/radii.length;
+  if(avgR<30) return false; // circle too small
+  const variance=radii.reduce((a,r)=>a+Math.abs(r-avgR),0)/radii.length;
+  return variance/avgR < 0.35; // reasonably circular
+}
+
+function triggerBomb(){
+  bombCooldown=BOMB_MAX;
+  // Ring expands from center
+  const cx=W/2,cy=H/2;
+  let ring={x:cx,y:cy,radius:0,speed:12,alive:true};
+  let frames=0;
+  const bombInterval=setInterval(()=>{
+    ring.radius+=ring.speed;
+    frames++;
+    enemies.forEach(e=>{
+      if(!e.alive) return;
+      const d=Math.hypot(e.x-cx,e.y-cy);
+      if(Math.abs(d-ring.radius)<ring.speed*2){
+        e.alive=false;
+        spawnBurst(e.x,e.y,e.colorIdx,12);
+        score+=20;
+      }
+    });
+    // Draw ring effect
+    ctx.save();
+    ctx.globalAlpha=Math.max(0,1-frames/40);
+    ctx.strokeStyle='rgba(220,180,255,0.9)';
+    ctx.shadowColor='#e0a0ff'; ctx.shadowBlur=40;
+    ctx.lineWidth=8; ctx.beginPath(); ctx.arc(cx,cy,ring.radius,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+    if(frames>40||ring.radius>Math.max(W,H)){clearInterval(bombInterval);}
+  },16);
+}
+
+function resolveSlash(pts){
+  if(pts.length<3) return;
+  if(isCircleGesture(pts)){
+    if(bombCooldown<=0) triggerBomb();
+    return;
+  }
+  let killCount=0;
+  enemies.forEach(e=>{
+    if(!e.alive) return;
+    // Check if any segment of slash passes near enemy
+    for(let i=1;i<pts.length;i++){
+      const dx=pts[i].x-pts[i-1].x, dy=pts[i].y-pts[i-1].y;
+      const len=Math.hypot(dx,dy);
+      if(len===0) continue;
+      const t2=Math.max(0,Math.min(1,((e.x-pts[i-1].x)*dx+(e.y-pts[i-1].y)*dy)/(len*len)));
+      const nx=pts[i-1].x+t2*dx, ny=pts[i-1].y+t2*dy;
+      if(Math.hypot(e.x-nx,e.y-ny)<e.r+10){
+        e.hp--;
+        if(e.hp<=0){
+          e.alive=false;
+          spawnBurst(e.x,e.y,e.colorIdx,10);
+          // Echo chance
+          if(!e.isEcho && Math.random()<0.3*(level-1)/2+0.1*(level>1?1:0)) {
+            setTimeout(()=>spawnEchoAt(e.x,e.y,e.colorIdx),400);
+          }
+          killCount++;
+          score+=10;
+        } else {
+          // Hit shielded
+          spawnBurst(e.x,e.y,e.colorIdx,4);
+        }
+        break;
+      }
+    }
+  });
+  if(killCount>1){
+    score+=killCount*killCount*5;
+    showCombo(killCount);
+  }
+  updateLevel();
+}
+
+function spawnEchoAt(x,y,ci){
+  const angle=Math.random()*Math.PI*2;
+  const sp=0.3;
+  enemies.push({
+    x,y,vx:Math.cos(angle)*sp,vy:Math.sin(angle)*sp,
+    hp:1,maxHp:1,colorIdx:ci,r:15,sides:ENEMY_SHAPES[ci%4],
+    rotation:0,rotSpeed:0.02,isEcho:true,alive:true,alpha:0.5
+  });
+}
+
+function showCombo(n){
+  const el=document.getElementById('combo');
+  el.textContent=`${n}x COMBO!`;
+  el.style.opacity='1';
+  setTimeout(()=>el.style.opacity='0',1000);
+}
+
+function updateLevel(){
+  if(level===1&&score>=200){level=2;}
+  else if(level===2&&score>=500){level=3;}
+}
+
+let lastTime=0;
+function loop(ts){
+  const dt=Math.min(ts-lastTime,50); lastTime=ts;
+  if(shakeT>0){shakeX=(Math.random()-0.5)*10;shakeY=(Math.random()-0.5)*10;shakeT--;}
+  else{shakeX=0;shakeY=0;}
+  ctx.save(); ctx.translate(shakeX,shakeY);
+  drawBackground();
+
+  if(gameActive){
+    bombCooldown=Math.max(0,bombCooldown-dt);
+    spawnTimer+=dt;
+    const interval=Math.max(300,1400-level*200-(score*0.3));
+    if(spawnTimer>interval){spawnTimer=0;spawnEnemy();}
+    // Move enemies
+    const cx=W/2,cy=H/2;
+    enemies.forEach(e=>{
+      if(!e.alive) return;
+      // Slight spiral toward center
+      const dx=cx-e.x,dy=cy-e.y;
+      const d=Math.hypot(dx,dy);
+      if(d<e.r+12){
+        sealHP--;
+        e.alive=false;
+        shakeT=20;
+        spawnBurst(cx,cy,e.colorIdx,6);
+        if(sealHP<=0){gameOver();return;}
+      }
+      e.x+=e.vx; e.y+=e.vy;
+    });
+  }
+
+  drawSeal();
+  drawEnemies();
+  drawSlashes();
+  drawParticles();
+  drawRipples();
+  ctx.restore();
+
+  // HUD update
+  document.getElementById('scoreTxt').textContent=`SCORE: ${score}`;
+  document.getElementById('lvlTxt').textContent=`LEVEL ${level}`;
+  document.getElementById('sealHp').textContent='🔮'.repeat(sealHP)+'💀'.repeat(5-sealHP);
+  const bombPct=(bombCooldown<=0?1:1-bombCooldown/BOMB_MAX)*100;
+  document.getElementById('bombFill').style.width=bombPct+'%';
+  document.getElementById('bombBar').lastChild.textContent=bombCooldown<=0?'READY':'CHARGING';
+
+  requestAnimationFrame(loop);
+}
+
+function gameOver(){
+  gameActive=false;
+  document.getElementById('endTitle').textContent='SEAL BROKEN';
+  document.getElementById('endTitle').style.color='#ff4060';
+  document.getElementById('endSub').textContent=`Score: ${score} · Level ${level}`;
+  document.getElementById('endMsg').style.display='flex';
+}
+
+function startGame(){
+  document.getElementById('overlay').style.display='none';
+  initGame();
+  requestAnimationFrame(loop);
+}
+
+function restartGame(){
+  document.getElementById('endMsg').style.display='none';
+  initGame();
+}
+
+// Touch/pointer
+canvas.addEventListener('pointerdown',e=>{
+  drawing=true; slashPoints=[{x:e.clientX,y:e.clientY}];
+  ripples.push({x:e.clientX,y:e.clientY,radius:5,life:1});
+});
+canvas.addEventListener('pointermove',e=>{
+  if(!drawing) return;
+  slashPoints.push({x:e.clientX,y:e.clientY});
+});
+canvas.addEventListener('pointerup',e=>{
+  if(!drawing) return;
+  drawing=false;
+  const pts=[...slashPoints];
+  if(pts.length>2){
+    slashes.push({points:pts,life:1});
+    if(gameActive) resolveSlash(pts);
+  }
+  slashPoints=[];
+});
+
+window.addEventListener('resize',resize);
+</script>
+</body>
+</html>

@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>VORTEX – Storm Eater</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#080010; overflow:hidden; touch-action:none; font-family:'Courier New',monospace; }
+  canvas { display:block; width:100vw; height:100vh; }
+  #hud { position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:10px 16px; z-index:10; pointer-events:none; }
+  .stat { font-size:13px; letter-spacing:2px; color:#c0a0ff; text-shadow:0 0 10px #8060cc; }
+  #hearts { font-size:18px; }
+  #overlay { position:fixed; inset:0; background:rgba(4,0,12,0.95); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:20; }
+  #overlay h1 { font-size:52px; color:#a060ff; letter-spacing:8px; text-shadow:0 0 30px #8040ff,0 0 80px #4020aa; }
+  #overlay p { color:#806ab0; font-size:14px; text-align:center; max-width:320px; line-height:1.9; margin-top:16px; }
+  .colorDot { display:inline-block; width:12px; height:12px; border-radius:50%; margin:0 3px; vertical-align:middle; }
+  #tapBtn { margin-top:30px; padding:14px 48px; background:linear-gradient(135deg,#3010aa,#a060ff33); color:#c090ff; font-size:18px; letter-spacing:4px; border:1px solid #a060ff; border-radius:4px; cursor:pointer; animation:pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 20px #5030aa} 50%{box-shadow:0 0 50px #a060ff,0 0 80px #5030aa} }
+  #endMsg { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; z-index:30; background:rgba(4,0,12,0.9); }
+  #endMsg h2 { font-size:40px; letter-spacing:6px; margin-bottom:10px; }
+  #endMsg p { font-size:14px; color:#b090e0; }
+  #endMsg button { margin-top:24px; padding:12px 36px; font-size:16px; letter-spacing:3px; cursor:pointer; border-radius:4px; background:transparent; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span class="stat" id="scoreTxt">SCORE: 0</span>
+  <span class="stat" id="hearts">❤️❤️❤️❤️❤️</span>
+  <span class="stat" id="lvlTxt">LEVEL 1</span>
+</div>
+<canvas id="c"></canvas>
+<div id="overlay">
+  <h1>🌀 VORTEX</h1>
+  <p>You ARE the storm. Drag the vortex to <b style="color:#c0a0ff">devour matching orbs</b>.<br>
+  Your active color glows at the center.<br>
+  <b style="color:#ff6060">Wrong color</b> = health damage!<br>
+  <b>Tap the vortex</b> to cycle your color mode.<br><br>
+  <span style="background:#ff4040;display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:middle"></span> Fire &nbsp;
+  <span style="background:#40a0ff;display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:middle"></span> Ice &nbsp;
+  <span style="background:#40ff60;display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:middle"></span> Storm &nbsp;
+  <span style="background:#ffcc40;display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:middle"></span> Void
+  </p>
+  <p style="margin-top:12px;color:#504060;font-size:12px">3 LEVELS · SCORE 100/250 TO ADVANCE</p>
+  <button id="tapBtn" onclick="startGame()">TAP TO PLAY</button>
+</div>
+<div id="endMsg">
+  <h2 id="endTitle">DISSIPATED</h2>
+  <p id="endSub"></p>
+  <button id="endBtn" style="color:#a060ff;border:1px solid #a060ff" onclick="restartGame()">RESTART</button>
+</div>
+
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let W,H;
+function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+resize();
+
+const ORB_COLORS=['#ff4040','#40a0ff','#40ff60','#ffcc40'];
+const ORB_GLOW  =['#ff0020','#0080ff','#00ff30','#ffaa00'];
+const ORB_NAMES =['FIRE','ICE','STORM','VOID'];
+
+let vortex={x:0,y:0,r:44,health:5,mode:0,score:0,rotation:0,level:1};
+let orbs=[], particles=[], ripples=[];
+let shakeX=0,shakeY=0,shakeT=0;
+let dragActive=false, lastDrag={x:0,y:0};
+let lastSpawn=0, gameActive=false;
+let comboCount=0, lastComboColor=-1, comboTimer=0;
+let autoModeTimer=0;
+
+function initGame() {
+  vortex={x:W/2,y:H/2,r:44,health:5,mode:0,score:0,rotation:0,level:1};
+  orbs=[]; particles=[]; ripples=[];
+  shakeT=0; comboCount=0; comboTimer=0; autoModeTimer=0;
+  gameActive=true;
+}
+
+function spawnOrb() {
+  const edge=Math.floor(Math.random()*4);
+  let x,y;
+  if(edge===0){x=Math.random()*W;y=-20;}
+  else if(edge===1){x=W+20;y=Math.random()*H;}
+  else if(edge===2){x=Math.random()*W;y=H+20;}
+  else{x=-20;y=Math.random()*H;}
+  const speed=(0.6+Math.random()*0.5)*(1+vortex.level*0.3);
+  const numColors=vortex.level===1?2:vortex.level===2?3:4;
+  const colorIdx=Math.floor(Math.random()*numColors);
+  const angle=Math.atan2(H/2-y,W/2-x)+( (Math.random()-0.5)*0.5 );
+  orbs.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,color:colorIdx,r:14,trail:[],alive:true,wobble:Math.random()*Math.PI*2});
+}
+
+function spawnBurst(x,y,colorIdx,n) {
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2,sp=1+Math.random()*3;
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,color:ORB_COLORS[colorIdx],glow:ORB_GLOW[colorIdx],size:3+Math.random()*3});
+  }
+}
+
+function updateLevel() {
+  const {score,level}=vortex;
+  if(level===1&&score>=100){vortex.level=2;showLevelUp();}
+  else if(level===2&&score>=250){vortex.level=3;showLevelUp();}
+}
+
+function showLevelUp() {
+  // Big shockwave
+  for(let i=0;i<50;i++){
+    const a=i/50*Math.PI*2;
+    particles.push({x:vortex.x,y:vortex.y,vx:Math.cos(a)*4,vy:Math.sin(a)*4,life:1.5,color:'#c0a0ff',glow:'#8060ff',size:4});
+  }
+}
+
+// Aurora background bands
+let auroraT=0;
+function drawBackground() {
+  ctx.fillStyle='#050008';
+  ctx.fillRect(0,0,W,H);
+  // Radial nebula glow
+  const grad=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.max(W,H)*0.7);
+  grad.addColorStop(0,'rgba(40,10,80,0.3)');
+  grad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+  // Aurora bands
+  auroraT+=0.003;
+  for(let b=0;b<3;b++) {
+    ctx.save();
+    ctx.globalAlpha=0.04+0.02*Math.sin(auroraT+b*2);
+    ctx.beginPath();
+    ctx.moveTo(0,H*(0.3+b*0.15)+Math.sin(auroraT+b)*H*0.08);
+    for(let i=0;i<=W;i+=W/8) ctx.lineTo(i,H*(0.3+b*0.15)+Math.sin(auroraT+i*0.003+b)*H*0.08);
+    ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath();
+    const cols=['rgba(100,60,200,0.5)','rgba(60,100,160,0.4)','rgba(80,160,100,0.3)'];
+    ctx.fillStyle=cols[b]; ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawVortex() {
+  const {x,y,r,mode,rotation}=vortex;
+  const modeColor=ORB_COLORS[mode];
+  const modeGlow=ORB_GLOW[mode];
+  // Outer glow ring
+  const pulse=0.5+0.5*Math.sin(Date.now()*0.004);
+  ctx.save();
+  ctx.shadowColor=modeGlow; ctx.shadowBlur=30+20*pulse;
+  ctx.strokeStyle=modeColor; ctx.lineWidth=2; ctx.globalAlpha=0.3+0.2*pulse;
+  ctx.beginPath(); ctx.arc(x,y,r*1.6,0,Math.PI*2); ctx.stroke();
+  ctx.restore();
+  // Spinning arms
+  ctx.save();
+  ctx.translate(x,y);
+  for(let arm=0;arm<4;arm++) {
+    ctx.save();
+    ctx.rotate(rotation+arm*Math.PI/2);
+    const grad=ctx.createLinearGradient(0,0,r,0);
+    grad.addColorStop(0,modeColor);
+    grad.addColorStop(1,'transparent');
+    ctx.shadowColor=modeGlow; ctx.shadowBlur=15;
+    ctx.strokeStyle=grad; ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.arc(0,0,r,0,Math.PI*0.7);
+    ctx.stroke();
+    ctx.restore();
+  }
+  // Core
+  ctx.shadowColor=modeGlow; ctx.shadowBlur=25;
+  ctx.fillStyle=modeColor; ctx.globalAlpha=0.9;
+  ctx.beginPath(); ctx.arc(0,0,r*0.35,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.shadowBlur=10; ctx.globalAlpha=1;
+  ctx.beginPath(); ctx.arc(0,0,r*0.12,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawOrbs() {
+  const t=Date.now();
+  orbs.forEach(o=>{
+    if(!o.alive) return;
+    o.wobble+=0.05;
+    const wr=o.r+Math.sin(o.wobble)*2;
+    // Trail
+    o.trail.forEach((pt,i)=>{
+      const alpha=(i/o.trail.length)*0.5;
+      ctx.save();
+      ctx.globalAlpha=alpha;
+      ctx.fillStyle=ORB_COLORS[o.color]; ctx.shadowColor=ORB_GLOW[o.color]; ctx.shadowBlur=6;
+      ctx.beginPath(); ctx.arc(pt.x,pt.y,wr*(i/o.trail.length)*0.7,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    });
+    // Main orb
+    ctx.save();
+    ctx.shadowColor=ORB_GLOW[o.color]; ctx.shadowBlur=18;
+    ctx.fillStyle=ORB_COLORS[o.color]; ctx.globalAlpha=0.85;
+    ctx.beginPath(); ctx.arc(o.x,o.y,wr,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.shadowBlur=0;
+    ctx.beginPath(); ctx.arc(o.x-wr*0.3,o.y-wr*0.3,wr*0.3,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  });
+}
+
+function drawParticles() {
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.05; p.life-=0.02;
+    if(p.life<=0){particles.splice(i,1);continue;}
+    ctx.save();
+    ctx.globalAlpha=p.life;
+    ctx.fillStyle=p.color; ctx.shadowColor=p.glow; ctx.shadowBlur=10;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawRipples() {
+  for(let i=ripples.length-1;i>=0;i--){
+    const rp=ripples[i];
+    rp.r+=3; rp.life-=0.04;
+    if(rp.life<=0){ripples.splice(i,1);continue;}
+    ctx.save();
+    ctx.globalAlpha=rp.life;
+    ctx.strokeStyle='rgba(200,180,255,0.8)'; ctx.lineWidth=2; ctx.shadowColor='#a080ff'; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.arc(rp.x,rp.y,rp.r,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawHUD() {
+  document.getElementById('scoreTxt').textContent=`SCORE: ${vortex.score}`;
+  document.getElementById('lvlTxt').textContent=`LEVEL ${vortex.level}`;
+  const hrt='❤️'.repeat(vortex.health)+'🖤'.repeat(5-vortex.health);
+  document.getElementById('hearts').textContent=hrt;
+}
+
+let lastTime=0;
+function loop(ts) {
+  const dt=Math.min(ts-lastTime,50); lastTime=ts;
+  // Shake
+  if(shakeT>0){shakeX=(Math.random()-0.5)*8;shakeY=(Math.random()-0.5)*8;shakeT--;}
+  else{shakeX=0;shakeY=0;}
+  ctx.save();
+  ctx.translate(shakeX,shakeY);
+  drawBackground();
+
+  if(gameActive) {
+    vortex.rotation-=0.04;
+    autoModeTimer+=dt;
+    if(autoModeTimer>8000){autoModeTimer=0;vortex.mode=(vortex.mode+1)%(vortex.level===1?2:vortex.level===2?3:4);}
+    comboTimer=Math.max(0,comboTimer-dt);
+    if(comboTimer===0)comboCount=0;
+
+    // Spawn
+    lastSpawn+=dt;
+    const spawnInterval=800-vortex.level*150;
+    if(lastSpawn>spawnInterval){lastSpawn=0;spawnOrb();}
+
+    // Update orbs
+    const absorbR=vortex.r*1.4;
+    for(let i=orbs.length-1;i>=0;i--){
+      const o=orbs[i];
+      if(!o.alive){orbs.splice(i,1);continue;}
+      // Level 3: orbs curve toward vortex
+      if(vortex.level===3){
+        const dx=vortex.x-o.x,dy=vortex.y-o.y;
+        const d=Math.hypot(dx,dy);
+        o.vx+=dx/d*0.02; o.vy+=dy/d*0.02;
+      }
+      o.x+=o.vx; o.y+=o.vy;
+      o.trail.push({x:o.x,y:o.y});
+      if(o.trail.length>8)o.trail.shift();
+      // Check out of bounds
+      if(o.x<-50||o.x>W+50||o.y<-50||o.y>H+50){orbs.splice(i,1);continue;}
+      // Absorption check
+      const dist=Math.hypot(o.x-vortex.x,o.y-vortex.y);
+      if(dist<absorbR){
+        o.alive=false;
+        if(o.color===vortex.mode){
+          // Correct!
+          comboCount++;
+          comboTimer=2000;
+          const pts=10*(lastComboColor===o.color?comboCount:1);
+          vortex.score+=pts;
+          lastComboColor=o.color;
+          vortex.r=Math.min(80,vortex.r+0.5);
+          spawnBurst(o.x,o.y,o.color,8);
+        } else {
+          // Wrong color
+          vortex.health--;
+          shakeT=15;
+          vortex.r=Math.max(30,vortex.r-2);
+          spawnBurst(o.x,o.y,o.color,4);
+          comboCount=0;
+          if(vortex.health<=0){gameOver();return;}
+        }
+        updateLevel();
+      }
+    }
+  }
+
+  drawOrbs();
+  drawVortex();
+  drawParticles();
+  drawRipples();
+  ctx.restore();
+  drawHUD();
+  requestAnimationFrame(loop);
+}
+
+function gameOver() {
+  gameActive=false;
+  const el=document.getElementById('endMsg');
+  document.getElementById('endTitle').textContent='DISSIPATED';
+  document.getElementById('endTitle').style.color='#ff4060';
+  document.getElementById('endSub').textContent=`Final Score: ${vortex.score} · Level ${vortex.level}`;
+  document.getElementById('endBtn').style.color='#a060ff';
+  document.getElementById('endBtn').style.border='1px solid #a060ff';
+  el.style.display='flex';
+}
+
+function startGame() {
+  document.getElementById('overlay').style.display='none';
+  initGame();
+  requestAnimationFrame(loop);
+}
+
+function restartGame() {
+  document.getElementById('endMsg').style.display='none';
+  initGame();
+}
+
+// Touch handling
+let touchStart={x:0,y:0,t:0};
+canvas.addEventListener('pointerdown',e=>{
+  dragActive=true;
+  lastDrag={x:e.clientX,y:e.clientY};
+  touchStart={x:e.clientX,y:e.clientY,t:Date.now()};
+  ripples.push({x:e.clientX,y:e.clientY,r:5,life:1});
+});
+canvas.addEventListener('pointermove',e=>{
+  if(!dragActive) return;
+  if(gameActive){vortex.x=e.clientX;vortex.y=e.clientY;}
+  lastDrag={x:e.clientX,y:e.clientY};
+});
+canvas.addEventListener('pointerup',e=>{
+  dragActive=false;
+  // Tap to cycle color?
+  const dx=e.clientX-touchStart.x, dy=e.clientY-touchStart.y;
+  const dt=Date.now()-touchStart.t;
+  if(Math.hypot(dx,dy)<20 && dt<200 && gameActive) {
+    const numColors=vortex.level===1?2:vortex.level===2?3:4;
+    vortex.mode=(vortex.mode+1)%numColors;
+    autoModeTimer=0;
+    // Ring burst
+    for(let i=0;i<20;i++){const a=i/20*Math.PI*2;particles.push({x:vortex.x,y:vortex.y,vx:Math.cos(a)*3,vy:Math.sin(a)*3,life:0.8,color:ORB_COLORS[vortex.mode],glow:ORB_GLOW[vortex.mode],size:3});}
+  }
+});
+
+window.addEventListener('resize',resize);
+</script>
+</body>
+</html>
