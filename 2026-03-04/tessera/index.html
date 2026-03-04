@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>TESSERA — Hex Territory War</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body {
+  background:#030310; color:#fff;
+  font-family:'Courier New',monospace;
+  overflow:hidden; width:100vw; height:100vh;
+  user-select:none;
+}
+canvas { position:fixed; top:0; left:0; touch-action:none; }
+#ui {
+  position:fixed; top:0; left:0; right:0; z-index:20;
+  padding:12px 16px;
+  display:flex; align-items:center; gap:12px;
+  pointer-events:none;
+}
+.side-score { min-width:52px; text-align:center; }
+.side-label { font-size:9px; letter-spacing:3px; opacity:.5; text-transform:uppercase; margin-bottom:2px; }
+.side-val { font-size:24px; font-weight:bold; line-height:1; }
+#playerVal { color:#4af; text-shadow:0 0 14px #4af8; }
+#aiVal { color:#f54; text-shadow:0 0 14px #f548; }
+#terrBar {
+  flex:1; height:6px; border-radius:3px;
+  background:rgba(255,255,255,.07);
+  overflow:hidden; position:relative;
+}
+#terrFill {
+  height:100%; width:50%;
+  background:linear-gradient(to right,#4af,#a4f);
+  transition:width .5s cubic-bezier(.25,.46,.45,.94);
+  border-radius:3px;
+}
+#terrGoal {
+  position:absolute; top:0; left:60%; width:2px; height:100%;
+  background:rgba(255,255,255,.3);
+}
+#levelBadge {
+  position:fixed; top:12px; left:50%; transform:translateX(-50%);
+  font-size:9px; letter-spacing:3px; color:#556;
+  z-index:21; pointer-events:none;
+  text-transform:uppercase;
+}
+#apBar {
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+  display:flex; gap:7px; align-items:center; z-index:20;
+}
+.ap-dot {
+  width:11px; height:11px; border-radius:50%;
+  background:#4af; box-shadow:0 0 10px #4af;
+  transition:all .3s;
+}
+.ap-dot.empty { background:#1a1a2e; box-shadow:none; }
+.ap-dot.charging { animation:apcharge .4s ease-out; }
+@keyframes apcharge {
+  0% { transform:scale(0); opacity:0; }
+  70% { transform:scale(1.4); }
+  100% { transform:scale(1); opacity:1; }
+}
+#apLabel {
+  font-size:9px; letter-spacing:2px; color:#334; margin-bottom:0;
+  position:fixed; bottom:44px; left:50%; transform:translateX(-50%);
+  z-index:20; pointer-events:none; text-transform:uppercase;
+}
+/* Overlays */
+.overlay {
+  position:fixed; inset:0; z-index:100;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  text-align:center; padding:28px;
+}
+#intro { background:rgba(3,3,16,.97); }
+#intro h1 {
+  font-size:clamp(42px,12vw,72px);
+  letter-spacing:clamp(8px,3vw,18px);
+  background:linear-gradient(135deg,#4af 0%,#a4f 50%,#f4a 100%);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  margin-bottom:4px;
+}
+.tagline { font-size:11px; letter-spacing:4px; color:#334; margin-bottom:40px; }
+.rules {
+  max-width:320px; text-align:left;
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.07);
+  border-radius:16px; padding:20px 24px; margin-bottom:36px;
+}
+.rules h3 { font-size:9px; letter-spacing:4px; color:#4af; margin-bottom:14px; text-transform:uppercase; }
+.rule { display:flex; gap:10px; margin-bottom:10px; font-size:12px; line-height:1.7; color:#7ab; }
+.rule-icon { font-size:16px; flex-shrink:0; width:22px; }
+.play-btn {
+  background:linear-gradient(135deg,rgba(68,170,255,.15),rgba(160,68,255,.15));
+  border:1.5px solid #4af;
+  color:#fff; font-family:inherit;
+  font-size:13px; letter-spacing:5px;
+  padding:15px 50px; border-radius:50px;
+  cursor:pointer; text-transform:uppercase;
+  box-shadow:0 0 30px rgba(68,170,255,.3),0 0 60px rgba(160,68,255,.15);
+  animation:btnpulse 2s ease-in-out infinite;
+}
+@keyframes btnpulse {
+  0%,100% { box-shadow:0 0 20px rgba(68,170,255,.3),0 0 40px rgba(160,68,255,.1); }
+  50% { box-shadow:0 0 40px rgba(68,170,255,.5),0 0 80px rgba(160,68,255,.25); }
+}
+#result { background:rgba(3,3,16,.97); display:none; }
+#result.show { display:flex; }
+#resTitle { font-size:clamp(36px,10vw,60px); letter-spacing:8px; margin-bottom:8px; }
+#resSub { font-size:12px; letter-spacing:3px; color:#556; margin-bottom:8px; }
+#resStats { font-size:14px; color:#667; margin-bottom:36px; }
+.res-btn {
+  background:transparent; border:1.5px solid #4af;
+  color:#4af; font-family:inherit;
+  font-size:12px; letter-spacing:4px;
+  padding:13px 40px; border-radius:50px;
+  cursor:pointer; text-transform:uppercase;
+}
+/* Vignette */
+#vignette {
+  position:fixed; inset:0; z-index:5; pointer-events:none;
+  transition:opacity .5s;
+  opacity:0;
+}
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="vignette"></div>
+
+<div id="ui">
+  <div class="side-score">
+    <div class="side-label">You</div>
+    <div class="side-val" id="playerVal">0</div>
+  </div>
+  <div id="terrBar">
+    <div id="terrFill"></div>
+    <div id="terrGoal"></div>
+  </div>
+  <div class="side-score">
+    <div class="side-val" id="aiVal">0</div>
+    <div class="side-label">AI</div>
+  </div>
+</div>
+
+<div id="levelBadge">LEVEL 1</div>
+<div id="apLabel">ACTION POINTS</div>
+<div id="apBar"></div>
+
+<div class="overlay" id="intro">
+  <h1>TESSERA</h1>
+  <div class="tagline">HEX TERRITORY WAR</div>
+  <div class="rules">
+    <h3>How to Play</h3>
+    <div class="rule"><span class="rule-icon">👆</span><span>Tap empty hexes to claim them for <b style="color:#4af">blue</b></span></div>
+    <div class="rule"><span class="rule-icon">⚡</span><span>Surround 3+ sides of a <b style="color:#f54">red</b> hex to flip it — chain captures cascade</span></div>
+    <div class="rule"><span class="rule-icon">🔵</span><span>Action points regenerate — spend them wisely</span></div>
+    <div class="rule"><span class="rule-icon">🏆</span><span>Control <b>60%</b> of the board to win each level</span></div>
+  </div>
+  <button class="play-btn" onclick="startGame()">TAP TO PLAY</button>
+</div>
+
+<div class="overlay" id="result">
+  <div id="resTitle"></div>
+  <div id="resSub"></div>
+  <div id="resStats"></div>
+  <button class="res-btn" id="resBtn">CONTINUE</button>
+</div>
+
+<script>
+// ─── Canvas / Globals ────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+// State
+let level = 1;
+let hexes = [], particles = [], ripples = [], shockwaves = [], stars = [];
+let actionPoints = 5, maxAP = 5, apTimer = 0;
+let aiTimer = 0, aiDelay = [0,1800,1300,900][1];
+let gameActive = false;
+let shake = { x:0, y:0, power:0 };
+let vignette = { r:0, g:0, b:0, a:0 }; // target
+let bgStarDrift = { x:0, y:0 };
+
+const EMPTY=0, PLAYER=1, AI=2;
+const PC='#44aaff', AC='#ff5544';
+
+// ─── Resize ──────────────────────────────────────────────────────────────────
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', ()=>{ resize(); if(gameActive) buildGrid(); });
+
+// ─── Stars ───────────────────────────────────────────────────────────────────
+function initStars() {
+  stars = [];
+  for(let i=0;i<180;i++){
+    stars.push({
+      x:Math.random()*W, y:Math.random()*H,
+      r:Math.random()*1.3+0.2,
+      brightness:Math.random(),
+      twinkle:Math.random()*Math.PI*2,
+      twinkleSpeed:0.01+Math.random()*0.03,
+      drift:{ x:(Math.random()-.5)*.15, y:(Math.random()-.5)*.15 }
+    });
+  }
+}
+
+// ─── Hex Grid ─────────────────────────────────────────────────────────────────
+function hexPixel(q,r,size,ox,oy){
+  return {
+    x: ox + size*(1.5*q),
+    y: oy + size*(Math.sqrt(3)*r + Math.sqrt(3)/2*q)
+  };
+}
+function hexCorners(cx,cy,s){
+  return Array.from({length:6},(_,i)=>{
+    const a=Math.PI/180*(60*i);
+    return {x:cx+s*Math.cos(a), y:cy+s*Math.sin(a)};
+  });
+}
+function hexPath(cx,cy,s){
+  const pts=hexCorners(cx,cy,s);
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<6;i++) ctx.lineTo(pts[i].x,pts[i].y);
+  ctx.closePath();
+}
+function hexNeighbors(hex){
+  const D=[[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]];
+  return D.map(([dq,dr])=>hexes.find(h=>h.q===hex.q+dq&&h.r===hex.r+dr)).filter(Boolean);
+}
+function adjCount(hex,owner){ return hexNeighbors(hex).filter(n=>n.owner===owner).length; }
+
+function buildGrid(){
+  hexes=[];
+  const G = [0,3,4,5][level];
+  const hs = Math.min(W,H)/((G*2+1)*2.0+0.5);
+  const ox=W/2, oy=H/2+14;
+  for(let q=-G;q<=G;q++){
+    const r1=Math.max(-G,-q-G), r2=Math.min(G,-q+G);
+    for(let r=r1;r<=r2;r++){
+      const {x,y}=hexPixel(q,r,hs*1.08,ox,oy);
+      hexes.push({q,r,x,y,size:hs,owner:EMPTY,
+        pulse:0,       // ownership flash
+        fill:0,        // 0→1 animated fill when claimed
+        fillTarget:0,
+        ring:0,        // ring pulse on chain capture
+        hover:false
+      });
+    }
+  }
+}
+
+// ─── Particles ───────────────────────────────────────────────────────────────
+function burst(x,y,color,n=12,spread=4.5,size=2.5){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2;
+    const sp=(0.5+Math.random())*spread;
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
+      life:1,decay:0.018+Math.random()*.025,
+      size:size*(0.5+Math.random()*.8),color,
+      gravity:0.07
+    });
+  }
+}
+function chainBurst(x,y,color){
+  burst(x,y,color,22,6,3.5);
+  shockwaves.push({x,y,r:0,maxR:80,life:1,color});
+}
+function ripple(x,y,color,maxR=50){
+  ripples.push({x,y,r:4,maxR,life:1,color});
+}
+function shake_(power){ shake.power=Math.max(shake.power,power); }
+
+// ─── Hex Claiming ─────────────────────────────────────────────────────────────
+function claim(hex,owner,chainDepth=0){
+  if(!hex) return;
+  hex.owner=owner;
+  hex.fill=chainDepth>0?0.3:0;
+  hex.fillTarget=1;
+  hex.pulse=1;
+  const col=owner===PLAYER?PC:AC;
+  burst(hex.x,hex.y,col,chainDepth>0?18:10,chainDepth>0?5:3.5);
+  if(chainDepth>0){ shake_(chainDepth*3); chainBurst(hex.x,hex.y,col); }
+  else ripple(hex.x,hex.y,col,70);
+
+  // Check chain captures
+  const opp=owner===PLAYER?AI:PLAYER;
+  hexNeighbors(hex).forEach(n=>{
+    if(n.owner===opp && adjCount(n,owner)>=3){
+      const depth=chainDepth+1;
+      setTimeout(()=>claim(n,owner,depth), 180*depth);
+    }
+  });
+  updateScores();
+}
+
+// ─── Scores / Win ─────────────────────────────────────────────────────────────
+function updateScores(){
+  const pc=hexes.filter(h=>h.owner===PLAYER).length;
+  const ac=hexes.filter(h=>h.owner===AI).length;
+  const total=hexes.length;
+  document.getElementById('playerVal').textContent=pc;
+  document.getElementById('aiVal').textContent=ac;
+  const pFrac=pc/total;
+  document.getElementById('terrFill').style.width=(pFrac*100)+'%';
+
+  // Vignette based on advantage
+  const margin=(pc-ac)/total;
+  if(margin>0.1){
+    document.getElementById('vignette').style.background=
+      `radial-gradient(ellipse at center,transparent 40%,rgba(0,80,180,${Math.min(margin*1.5,.4)}) 100%)`;
+    document.getElementById('vignette').style.opacity=1;
+  } else if(margin<-0.1){
+    document.getElementById('vignette').style.background=
+      `radial-gradient(ellipse at center,transparent 40%,rgba(180,30,0,${Math.min(-margin*1.5,.4)}) 100%)`;
+    document.getElementById('vignette').style.opacity=1;
+  } else {
+    document.getElementById('vignette').style.opacity=0;
+  }
+
+  if(pFrac>=0.60){ setTimeout(()=>endLevel(true),700); return; }
+  if(ac/total>=0.60){ setTimeout(()=>endLevel(false),700); return; }
+  if(pc+ac===total){ setTimeout(()=>endLevel(pFrac>=.5),700); }
+}
+
+// ─── AI ───────────────────────────────────────────────────────────────────────
+function aiMove(){
+  const empties=hexes.filter(h=>h.owner===EMPTY);
+  if(!empties.length) return;
+  let best=null, bestScore=-Infinity;
+  empties.forEach(h=>{
+    let score=0;
+    // Chain capture: can we flip an opponent hex?
+    hexNeighbors(h).filter(n=>n.owner===PLAYER).forEach(ph=>{
+      const willAdj=adjCount(ph,AI)+1;
+      if(willAdj>=3) score+=80;
+      else score+=willAdj*6;
+    });
+    // Blocking player from chain capturing our hexes
+    hexNeighbors(h).filter(n=>n.owner===AI).forEach(ah=>{
+      const playerThreat=adjCount(ah,PLAYER);
+      score+=playerThreat*4;
+    });
+    // Adjacency bonus
+    score+=adjCount(h,AI)*5;
+    // Center preference (level 3 especially)
+    const cx=W/2,cy=H/2;
+    const dist=Math.hypot(h.x-cx,h.y-cy);
+    score+=(level===3?50:20)/(1+dist*.008);
+    // Noise by level
+    score+=Math.random()*(level===1?40:level===2?20:8);
+    if(score>bestScore){ bestScore=score; best=h; }
+  });
+  if(best){
+    ripple(best.x,best.y,AC,60);
+    setTimeout(()=>claim(best,AI),220);
+  }
+}
+
+// ─── Action Points ────────────────────────────────────────────────────────────
+function spendAP(){
+  if(actionPoints<=0) return false;
+  actionPoints--;
+  renderAPBar();
+  return true;
+}
+function regenAP(dt){
+  if(actionPoints>=maxAP){ apTimer=0; return; }
+  apTimer+=dt;
+  const regenTime=[0,2000,2500,3200][level];
+  if(apTimer>=regenTime){
+    apTimer=0;
+    actionPoints=Math.min(maxAP,actionPoints+1);
+    renderAPBar(true);
+  }
+}
+function renderAPBar(animate=false){
+  const bar=document.getElementById('apBar');
+  bar.innerHTML='';
+  for(let i=0;i<maxAP;i++){
+    const d=document.createElement('div');
+    d.className='ap-dot'+(i<actionPoints?'':(i===actionPoints&&animate?' charging':' empty'));
+    bar.appendChild(d);
+  }
+}
+
+// ─── Drawing ──────────────────────────────────────────────────────────────────
+function drawBackground(){
+  ctx.fillStyle='#030310';
+  ctx.fillRect(0,0,W,H);
+
+  // Nebula wisps
+  const g1=ctx.createRadialGradient(W*.3,H*.3,0,W*.3,H*.3,W*.5);
+  g1.addColorStop(0,'rgba(30,10,80,.12)'); g1.addColorStop(1,'transparent');
+  ctx.fillStyle=g1; ctx.fillRect(0,0,W,H);
+  const g2=ctx.createRadialGradient(W*.7,H*.7,0,W*.7,H*.7,W*.4);
+  g2.addColorStop(0,'rgba(0,30,80,.1)'); g2.addColorStop(1,'transparent');
+  ctx.fillStyle=g2; ctx.fillRect(0,0,W,H);
+}
+
+function drawStars(ts){
+  stars.forEach(s=>{
+    s.twinkle+=s.twinkleSpeed;
+    s.x+=s.drift.x; s.y+=s.drift.y;
+    if(s.x<0) s.x=W; if(s.x>W) s.x=0;
+    if(s.y<0) s.y=H; if(s.y>H) s.y=0;
+    const b=s.brightness*(0.5+0.5*Math.sin(s.twinkle));
+    ctx.globalAlpha=b*0.6;
+    ctx.fillStyle='#fff';
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    ctx.fill();
+  });
+  ctx.globalAlpha=1;
+}
+
+function drawHex(h){
+  const s=h.size*.88;
+  // Animated fill: lerp h.fill → h.fillTarget
+  h.fill+=(h.fillTarget-h.fill)*.08;
+  h.pulse*=.92;
+
+  // Base fill
+  let baseFill='#0d0d20';
+  if(h.owner===PLAYER || h.owner===AI){
+    const col=h.owner===PLAYER?[30,90,180]:[160,30,20];
+    const f=h.fill, p=h.pulse;
+    baseFill=`rgba(${col[0]},${col[1]},${col[2]},${0.45+f*.45+p*.15})`;
+  }
+
+  // Draw base
+  hexPath(h.x,h.y,s);
+  ctx.fillStyle=baseFill;
+  ctx.fill();
+
+  // Ownership animated radial fill overlay
+  if(h.owner!==EMPTY && h.fill>0.02){
+    const f=Math.min(h.fill,1);
+    const col=h.owner===PLAYER?'rgba(68,170,255,':'rgba(255,80,60,';
+    const grad=ctx.createRadialGradient(h.x,h.y,0,h.x,h.y,s*f*1.2);
+    grad.addColorStop(0,col+'0.35)');
+    grad.addColorStop(1,col+'0)');
+    hexPath(h.x,h.y,s);
+    ctx.fillStyle=grad;
+    ctx.fill();
+  }
+
+  // Glow border
+  const glowCol=h.owner===PLAYER?`rgba(68,170,255,${0.4+h.pulse*.5})`:
+                h.owner===AI?`rgba(255,80,60,${0.4+h.pulse*.5})`:'rgba(30,30,60,0.5)';
+  ctx.shadowBlur=h.owner!==EMPTY?(6+h.pulse*18):0;
+  ctx.shadowColor=h.owner===PLAYER?PC:AC;
+  hexPath(h.x,h.y,s);
+  ctx.strokeStyle=glowCol;
+  ctx.lineWidth=h.owner!==EMPTY?1.8:1;
+  ctx.stroke();
+  ctx.shadowBlur=0;
+
+  // Inner center dot
+  if(h.owner!==EMPTY && h.fill>.4){
+    const dotR=s*.1*(h.fill-.3)*2;
+    ctx.beginPath();
+    ctx.arc(h.x,h.y,Math.max(0,dotR),0,Math.PI*2);
+    ctx.fillStyle=h.owner===PLAYER?'rgba(150,220,255,0.8)':'rgba(255,160,140,0.8)';
+    ctx.shadowBlur=10; ctx.shadowColor=h.owner===PLAYER?PC:AC;
+    ctx.fill();
+    ctx.shadowBlur=0;
+  }
+
+  // Ring pulse (chain capture indicator)
+  if(h.ring>0){
+    ctx.beginPath();
+    ctx.arc(h.x,h.y,s*(1+h.ring*.4),0,Math.PI*2);
+    ctx.strokeStyle=h.owner===PLAYER?`rgba(68,170,255,${h.ring})`:
+                                    `rgba(255,80,60,${h.ring})`;
+    ctx.lineWidth=2;
+    ctx.stroke();
+    h.ring*=.88;
+  }
+}
+
+function drawParticles(){
+  particles.forEach(p=>{
+    ctx.globalAlpha=p.life*p.life;
+    ctx.fillStyle=p.color;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2);
+    ctx.fill();
+  });
+  ctx.globalAlpha=1;
+}
+
+function drawRipples(){
+  ripples.forEach(r=>{
+    ctx.globalAlpha=r.life*.5;
+    ctx.strokeStyle=r.color;
+    ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.arc(r.x,r.y,r.r,0,Math.PI*2);
+    ctx.stroke();
+  });
+  ctx.globalAlpha=1;
+}
+
+function drawShockwaves(){
+  shockwaves.forEach(s=>{
+    ctx.globalAlpha=s.life*.35;
+    ctx.strokeStyle=s.color;
+    ctx.lineWidth=3*s.life;
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    ctx.stroke();
+  });
+  ctx.globalAlpha=1;
+}
+
+// ─── Main Loop ────────────────────────────────────────────────────────────────
+let lastTs=0;
+function loop(ts){
+  if(!gameActive) return;
+  const dt=Math.min(ts-lastTs,50);
+  lastTs=ts;
+
+  // Shake
+  if(shake.power>.3){
+    shake.x=(Math.random()-.5)*shake.power*2.5;
+    shake.y=(Math.random()-.5)*shake.power*2.5;
+    shake.power*=.82;
+  } else { shake.x=0; shake.y=0; shake.power=0; }
+
+  ctx.save();
+  ctx.translate(shake.x,shake.y);
+
+  drawBackground();
+  drawStars(ts);
+  drawShockwaves();
+  drawRipples();
+  hexes.forEach(drawHex);
+  drawParticles();
+
+  ctx.restore();
+
+  // Update particles
+  particles=particles.filter(p=>p.life>.01);
+  particles.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=p.gravity; p.vx*=.97; p.vy*=.97; p.life-=p.decay; });
+
+  // Update ripples
+  ripples=ripples.filter(r=>r.life>.01);
+  ripples.forEach(r=>{ r.r+=(r.maxR-r.r)*.12; r.life-=.035; });
+
+  // Update shockwaves
+  shockwaves=shockwaves.filter(s=>s.life>.01);
+  shockwaves.forEach(s=>{ s.r+=5; s.life-=.04; });
+
+  // Regen AP
+  regenAP(dt);
+
+  // AI turn
+  aiTimer+=dt;
+  if(aiTimer>=aiDelay){ aiTimer=0; aiMove(); }
+
+  requestAnimationFrame(loop);
+}
+
+// ─── Input ────────────────────────────────────────────────────────────────────
+function nearestHex(px,py){
+  let best=null,bestD=Infinity;
+  hexes.forEach(h=>{
+    const d=Math.hypot(px-h.x,py-h.y);
+    if(d<bestD){ bestD=d; best=h; }
+  });
+  return bestD<best?.size*1.0?best:null;
+}
+
+canvas.addEventListener('pointerdown',e=>{
+  if(!gameActive) return;
+  const r=canvas.getBoundingClientRect();
+  const px=e.clientX-r.left, py=e.clientY-r.top;
+  ripple(px,py,'rgba(120,200,255,.5)',40);
+
+  if(actionPoints<=0) return;
+  const h=nearestHex(px,py);
+  if(h && h.owner===EMPTY){
+    if(spendAP()) claim(h,PLAYER);
+  }
+});
+
+// ─── Level Flow ───────────────────────────────────────────────────────────────
+function endLevel(playerWon){
+  gameActive=false;
+  const pc=hexes.filter(h=>h.owner===PLAYER).length;
+  const ac=hexes.filter(h=>h.owner===AI).length;
+  const res=document.getElementById('result');
+
+  if(playerWon && level<3){
+    document.getElementById('resTitle').innerHTML=`<span style="color:#4af">LEVEL ${level}</span><span style="color:#a4f"> CLEAR</span>`;
+    document.getElementById('resSub').textContent='TERRITORY CONQUERED';
+    document.getElementById('resStats').textContent=`${pc} hexes claimed · ${Math.round(pc/hexes.length*100)}% control`;
+    const btn=document.getElementById('resBtn');
+    btn.textContent=`LEVEL ${level+1} →`;
+    btn.onclick=()=>{ level++; initLevel(); };
+  } else if(playerWon && level===3){
+    document.getElementById('resTitle').innerHTML=`<span style="background:linear-gradient(135deg,#4af,#a4f,#f4a);-webkit-background-clip:text;-webkit-text-fill-color:transparent">VICTORY</span>`;
+    document.getElementById('resSub').textContent='TESSERA CONQUERED';
+    document.getElementById('resStats').textContent=`All 3 levels cleared — well played`;
+    const btn=document.getElementById('resBtn');
+    btn.textContent='PLAY AGAIN';
+    btn.onclick=()=>{ level=1; initLevel(); };
+    // Celebration burst
+    for(let i=0;i<8;i++) setTimeout(()=>{
+      burst(Math.random()*W,Math.random()*H,Math.random()>.5?PC:AC,20,6);
+    },i*120);
+  } else {
+    document.getElementById('resTitle').innerHTML=`<span style="color:#f54">OVERRUN</span>`;
+    document.getElementById('resSub').textContent='THE AI CLAIMS VICTORY';
+    document.getElementById('resStats').textContent=`AI controlled ${Math.round(ac/hexes.length*100)}% of the board`;
+    const btn=document.getElementById('resBtn');
+    btn.textContent='TRY AGAIN';
+    btn.onclick=()=>initLevel();
+  }
+  res.classList.add('show');
+}
+
+function initLevel(){
+  document.getElementById('result').classList.remove('show');
+  document.getElementById('levelBadge').textContent=`LEVEL ${level}`;
+  aiDelay=[0,1800,1300,900][level];
+  aiTimer=0;
+  actionPoints=maxAP;
+  renderAPBar();
+  resize();
+  initStars();
+  buildGrid();
+  particles=[]; ripples=[]; shockwaves=[];
+  shake={x:0,y:0,power:0};
+  document.getElementById('vignette').style.opacity=0;
+  gameActive=true;
+  requestAnimationFrame(ts=>{ lastTs=ts; loop(ts); });
+}
+
+function startGame(){
+  document.getElementById('intro').style.display='none';
+  initLevel();
+}
+
+resize();
+renderAPBar();
+</script>
+</body>
+</html>
