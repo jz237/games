@@ -10,7 +10,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a1a;font-family:
 canvas{display:block;width:100%;height:100%}
 #overlay{position:fixed;inset:0;background:rgba(5,5,15,0.93);display:flex;align-items:center;justify-content:center;z-index:100;flex-direction:column}
 #overlay.hidden{display:none}
-.panel{background:linear-gradient(135deg,#1a0a2e,#2a1040);border:2px solid #9b59b6;border-radius:16px;padding:32px 28px;max-width:440px;width:90%;text-align:center;box-shadow:0 0 40px rgba(155,89,182,0.3)}
+.panel{background:linear-gradient(135deg,#1a0a2e,#2a1040);border:2px solid #9b59b6;border-radius:16px;padding:32px 28px;max-width:480px;width:92%;text-align:center;box-shadow:0 0 40px rgba(155,89,182,0.3)}
 .panel h1{font-size:2.2em;margin-bottom:8px;background:linear-gradient(90deg,#9b59b6,#e74c3c,#f39c12);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .panel h2{font-size:1.3em;color:#bb8fce;margin-bottom:12px}
 .panel p{font-size:0.92em;color:#c0b0d0;line-height:1.6;margin-bottom:10px}
@@ -20,11 +20,31 @@ canvas{display:block;width:100%;height:100%}
 .btn:hover{transform:scale(1.05)}.btn:active{transform:scale(0.97)}
 #restartBtn{position:fixed;bottom:16px;right:16px;z-index:50;padding:8px 18px;border-radius:20px;border:1px solid #9b59b6;background:rgba(26,10,46,0.8);color:#bb8fce;font-size:0.85em;cursor:pointer}
 #restartBtn.hidden{display:none}
+
+/* Spell choice buttons */
+#spellChoice{position:fixed;bottom:0;left:0;right:0;z-index:60;display:none;padding:12px 8px 20px;background:linear-gradient(to top,rgba(10,10,26,0.97),rgba(10,10,26,0.7));flex-wrap:wrap;justify-content:center;gap:8px}
+#spellChoice.show{display:flex}
+.spell-btn{padding:12px 6px;border-radius:14px;border:2px solid;cursor:pointer;font-size:1em;font-weight:700;color:#fff;flex:1;min-width:70px;max-width:110px;text-align:center;transition:transform 0.12s,box-shadow 0.12s;background:rgba(20,15,40,0.9)}
+.spell-btn:active{transform:scale(0.93)}
+.spell-btn .icon{font-size:1.4em;display:block;margin-bottom:2px}
+.spell-btn .counter-hint{font-size:0.7em;font-weight:400;opacity:0.7;display:block;margin-top:2px}
+.spell-btn.effective{box-shadow:0 0 18px rgba(46,204,113,0.6);border-color:#2ecc71 !important}
+.spell-btn.effective .counter-hint{color:#2ecc71;opacity:1;font-weight:700}
+
+#choicePrompt{position:fixed;z-index:61;left:0;right:0;text-align:center;color:#f39c12;font-size:1.05em;font-weight:700;display:none;text-shadow:0 0 12px rgba(243,156,18,0.5)}
+#choicePrompt.show{display:block}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <button id="restartBtn" class="hidden" onclick="startLevel(currentLevel)">↻ Restart</button>
+<div id="spellChoice">
+  <button class="spell-btn" data-spell="BOLT" style="border-color:#3498db" onclick="pickSpell('BOLT')"><span class="icon">⚡</span>BOLT<span class="counter-hint"></span></button>
+  <button class="spell-btn" data-spell="EMBER" style="border-color:#e74c3c" onclick="pickSpell('EMBER')"><span class="icon">🔥</span>EMBER<span class="counter-hint"></span></button>
+  <button class="spell-btn" data-spell="WARD" style="border-color:#2ecc71" onclick="pickSpell('WARD')"><span class="icon">🛡️</span>WARD<span class="counter-hint"></span></button>
+  <button class="spell-btn" data-spell="VORTEX" style="border-color:#9b59b6" onclick="pickSpell('VORTEX')"><span class="icon">🌀</span>VORTEX<span class="counter-hint"></span></button>
+</div>
+<div id="choicePrompt">Choose your spell to counter!</div>
 <div id="overlay">
   <div class="panel" id="panelContent"></div>
 </div>
@@ -33,6 +53,8 @@ canvas{display:block;width:100%;height:100%}
 const C=document.getElementById('c'),X=C.getContext('2d');
 const overlay=document.getElementById('overlay'),panelContent=document.getElementById('panelContent');
 const restartBtn=document.getElementById('restartBtn');
+const spellChoiceEl=document.getElementById('spellChoice');
+const choicePromptEl=document.getElementById('choicePrompt');
 let W,H,dpr;
 
 // Game state
@@ -44,14 +66,21 @@ let aiCastTimer=0,aiCastDuration=5000,aiCasting=false,aiCastProgress=0;
 let spellResult=null,resultTimer=0;
 let particles=[],screenFlash=0;
 let roundActive=false,roundCooldown=0;
+// Round phases: 'choosing' (player picks spell), 'tracing' (player traces rune), 'resolved'
+let roundPhase='';
 
 const SPELLS=['BOLT','EMBER','WARD','VORTEX'];
 const SPELL_COLORS={BOLT:'#3498db',EMBER:'#e74c3c',WARD:'#2ecc71',VORTEX:'#9b59b6'};
 const SPELL_ICONS={BOLT:'⚡',EMBER:'🔥',WARD:'🛡️',VORTEX:'🌀'};
-// BOLT > VORTEX, EMBER > BOLT, WARD > EMBER, VORTEX > WARD
-const BEATS={BOLT:'VORTEX',EMBER:'BOLT',WARD:'EMBER',VORTEX:'WARD'};
 
-// Rune patterns: arrays of [x,y] normalized 0-1, to be scaled to the rune area
+// Each spell beats exactly one other in a 4-way cycle:
+// BOLT > VORTEX > WARD > EMBER > BOLT
+// The "opposite" pair (BOLT-WARD, EMBER-VORTEX) = no effect (miss)
+const BEATS={BOLT:'VORTEX',EMBER:'BOLT',WARD:'EMBER',VORTEX:'WARD'};
+// For quick counter-hint lookup: what counters what
+const COUNTERED_BY={BOLT:'EMBER',EMBER:'WARD',WARD:'VORTEX',VORTEX:'BOLT'};
+
+// Rune patterns: arrays of [x,y] normalized 0-1
 const RUNE_PATTERNS={
   BOLT:{
     simple:[[0.5,0],[0.3,0.4],[0.6,0.4],[0.4,1]],
@@ -76,9 +105,9 @@ const RUNE_PATTERNS={
 };
 
 const LEVELS={
-  1:{aiSpeed:6000,complexity:'simple',aiSmarts:0.3},
-  2:{aiSpeed:4000,complexity:'medium',aiSmarts:0.55},
-  3:{aiSpeed:2500,complexity:'complex',aiSmarts:0.8}
+  1:{aiSpeed:8000,complexity:'simple',aiSmarts:0.2,choiceTime:99999},
+  2:{aiSpeed:5500,complexity:'medium',aiSmarts:0.5,choiceTime:99999},
+  3:{aiSpeed:3500,complexity:'complex',aiSmarts:0.75,choiceTime:99999}
 };
 
 function resize(){
@@ -87,22 +116,22 @@ function resize(){
   C.width=W*dpr;C.height=H*dpr;
   C.style.width=W+'px';C.style.height=H+'px';
   X.setTransform(dpr,0,0,dpr,0,0);
-  if(roundActive)positionRuneNodes();
+  if(roundActive&&roundPhase==='tracing')positionRuneNodes();
+  // Position choice prompt above spell buttons
+  choicePromptEl.style.bottom=(spellChoiceEl.offsetHeight+8)+'px';
 }
 window.addEventListener('resize',resize);
 resize();
 
 function getRuneArea(){
-  // Left side of screen for player rune
-  const pad=20;
   const isPortrait=H>W;
   let cx,cy,size;
   if(isPortrait){
-    size=Math.min(W*0.55,H*0.3);
-    cx=W*0.3;cy=H*0.55;
+    size=Math.min(W*0.6,H*0.28);
+    cx=W*0.5;cy=H*0.48;
   }else{
     size=Math.min(W*0.25,H*0.5);
-    cx=W*0.3;cy=H*0.55;
+    cx=W*0.38;cy=H*0.55;
   }
   return{cx,cy,size};
 }
@@ -111,11 +140,11 @@ function getAIRuneArea(){
   const isPortrait=H>W;
   let cx,cy,size;
   if(isPortrait){
-    size=Math.min(W*0.35,H*0.2);
-    cx=W*0.72;cy=H*0.55;
+    size=Math.min(W*0.3,H*0.13);
+    cx=W*0.5;cy=H*0.17;
   }else{
-    size=Math.min(W*0.18,H*0.4);
-    cx=W*0.72;cy=H*0.55;
+    size=Math.min(W*0.15,H*0.35);
+    cx=W*0.78;cy=H*0.45;
   }
   return{cx,cy,size};
 }
@@ -133,99 +162,158 @@ function positionRuneNodes(){
   }));
 }
 
+function showSpellChoice(){
+  roundPhase='choosing';
+  const aiType=aiRune.type;
+  const counterSpell=COUNTERED_BY[aiType]; // the spell that beats the AI's spell
+  
+  // Update button hints
+  document.querySelectorAll('.spell-btn').forEach(btn=>{
+    const spell=btn.dataset.spell;
+    const hint=btn.querySelector('.counter-hint');
+    btn.classList.remove('effective');
+    if(spell===counterSpell){
+      hint.textContent='⚔ COUNTER!';
+      btn.classList.add('effective');
+    }else if(BEATS[spell]===aiType){
+      // this shouldn't differ from counterSpell, but just in case
+      hint.textContent='⚔ COUNTER!';
+      btn.classList.add('effective');
+    }else if(BEATS[aiType]===spell){
+      hint.textContent='✗ Weak';
+    }else if(spell===aiType){
+      hint.textContent='= Mirror';
+    }else{
+      hint.textContent='— No effect';
+    }
+  });
+  
+  spellChoiceEl.classList.add('show');
+  choicePromptEl.classList.add('show');
+  // re-position prompt
+  requestAnimationFrame(()=>{
+    choicePromptEl.style.bottom=(spellChoiceEl.offsetHeight+8)+'px';
+  });
+}
+
+function hideSpellChoice(){
+  spellChoiceEl.classList.remove('show');
+  choicePromptEl.classList.remove('show');
+}
+
+function pickSpell(type){
+  if(roundPhase!=='choosing'||!roundActive)return;
+  playerRune={type,cast:false};
+  hideSpellChoice();
+  roundPhase='tracing';
+  positionRuneNodes();
+}
+// Make pickSpell globally accessible
+window.pickSpell=pickSpell;
+
 function startRound(){
   roundActive=true;traceComplete=false;tracing=false;
   tracePath=[];spellResult=null;resultTimer=0;
-  
-  // Pick random spell for player to cast
-  const type=SPELLS[Math.floor(Math.random()*SPELLS.length)];
-  playerRune={type,cast:false};
+  traceNodes=[];
   
   // AI picks its spell
   const cfg=LEVELS[currentLevel];
   let aiType;
   if(Math.random()<cfg.aiSmarts){
-    // Smart: try to counter what player might cast
-    // Pick something that beats a random spell (not perfectly predictive)
+    // Smart: pick a spell that beats a random likely player choice
+    // At higher levels, AI is less predictable
     aiType=SPELLS[Math.floor(Math.random()*SPELLS.length)];
   }else{
     aiType=SPELLS[Math.floor(Math.random()*SPELLS.length)];
   }
   aiRune={type:aiType,cast:false};
+  playerRune=null; // player hasn't chosen yet
   
   aiCastTimer=0;aiCastDuration=cfg.aiSpeed;aiCasting=true;aiCastProgress=0;
-  positionRuneNodes();
+  
+  // Show AI spell and let player choose
+  showSpellChoice();
 }
 
 function resolveSpells(pType,aType){
-  let pDmg=0,aDmg=0;
-  // Base damage is 1
-  if(BEATS[pType]===aType){
-    pDmg=2; // Player counters AI
-  }else if(BEATS[aType]===pType){
-    aDmg=2; // AI counters player
-  }else if(pType===aType){
-    // Same spell: both take 1
-    pDmg=1;aDmg=1;
-  }else{
-    pDmg=1;aDmg=1;
+  if(pType===aType){
+    // Mirror: both take 1
+    return{pDmg:1,aDmg:1,result:'mirror'};
   }
-  return{pDmg,aDmg};
+  if(BEATS[pType]===aType){
+    // Player counters AI
+    return{pDmg:2,aDmg:0,result:'counter'};
+  }
+  if(BEATS[aType]===pType){
+    // AI counters player
+    return{pDmg:0,aDmg:2,result:'countered'};
+  }
+  // Neutral / opposite pair: no effect
+  return{pDmg:0,aDmg:0,result:'neutral'};
 }
 
 function finishRound(playerCast){
-  roundActive=false;
+  roundActive=false;roundPhase='resolved';
+  hideSpellChoice();
   let pType=playerCast?playerRune.type:null;
   let aType=aiRune.type;
   
   if(!playerCast){
     // Player didn't finish: AI hits for 1
-    aiHP=aiHP; // no change to AI
     playerHP=Math.max(0,playerHP-1);
-    spellResult={text:'Too slow!',color:'#e74c3c',pDmg:0,aDmg:1};
-    screenFlash=1;
-    spawnHitParticles(W*0.3,H*0.3,'#e74c3c');
+    spellResult={text:'⏱ Too slow! Dark Mage strikes!',color:'#e74c3c',pDmg:0,aDmg:1};
+    screenFlash=0.7;
+    spawnHitParticles(W*0.5,H*0.35,'#e74c3c');
   }else{
-    const{pDmg,aDmg}=resolveSpells(pType,aType);
+    const{pDmg,aDmg,result}=resolveSpells(pType,aType);
     aiHP=Math.max(0,aiHP-pDmg);
     playerHP=Math.max(0,playerHP-aDmg);
     
     let text='',color='#fff';
-    if(pDmg>aDmg){
-      text=pDmg>=2?`${SPELL_ICONS[pType]} COUNTER! 2x damage!`:`${SPELL_ICONS[pType]} Hit!`;
+    if(result==='counter'){
+      text=`${SPELL_ICONS[pType]} COUNTER! 2x damage!`;
       color=SPELL_COLORS[pType];
-      spawnHitParticles(W*0.72,H*0.3,'#2ecc71');
-    }else if(aDmg>pDmg){
-      text=`${SPELL_ICONS[aType]} AI counters you!`;
+      spawnHitParticles(W*0.5,H*0.15,'#2ecc71');
+    }else if(result==='countered'){
+      text=`${SPELL_ICONS[aType]} Dark Mage counters you!`;
       color='#e74c3c';
       screenFlash=0.5;
-      spawnHitParticles(W*0.3,H*0.3,'#e74c3c');
+      spawnHitParticles(W*0.5,H*0.35,'#e74c3c');
+    }else if(result==='mirror'){
+      text=`${SPELL_ICONS[pType]} Mirror match! Both take 1`;
+      color='#f39c12';
+      spawnHitParticles(W*0.5,H*0.25,'#f39c12');
+      screenFlash=0.2;
     }else{
-      text='Clash! Both hit!';color='#f39c12';
-      spawnHitParticles(W*0.5,H*0.35,'#f39c12');
-      screenFlash=0.3;
+      // Neutral: no effect
+      text='💨 No effect! Spells fizzle!';
+      color='#8a80a0';
     }
     spellResult={text,color,pDmg,aDmg};
-    if(pDmg>0)spawnHitParticles(W*0.72,H*0.3,SPELL_COLORS[pType]);
+    if(pDmg>0){
+      const aiArea=getAIRuneArea();
+      spawnHitParticles(aiArea.cx,aiArea.cy,SPELL_COLORS[pType]);
+    }
   }
   
-  resultTimer=2000;
+  resultTimer=2200;
   aiCasting=false;
   
   // Check win/lose after delay
   setTimeout(()=>{
+    if(gameState!=='playing')return;
     if(aiHP<=0){
       gameState='won';
       if(currentLevel<3){
-        showOverlay('victory',`Level ${currentLevel} Complete!`,`The Dark Mage staggers back...`,'Next Level',()=>startLevel(currentLevel+1));
+        showOverlay('victory',`Level ${currentLevel} Complete!`,`The Dark Mage staggers back... Prepare for a tougher fight!`,'Next Level',()=>startLevel(currentLevel+1));
       }else{
         showOverlay('victory','🏆 RUNECASTER SUPREME! 🏆','The Dark Mage is vanquished forever!','Play Again',()=>startLevel(1));
       }
     }else if(playerHP<=0){
       gameState='lost';
-      showOverlay('defeat','Defeated!','The Dark Mage overwhelmed you.','Try Again',()=>startLevel(currentLevel));
+      showOverlay('defeat','💀 Defeated!','The Dark Mage overwhelmed you...','Try Again',()=>startLevel(currentLevel));
     }
-  },1200);
+  },1400);
 }
 
 function spawnHitParticles(px,py,color){
@@ -271,7 +359,6 @@ function drawHealthOrbs(cx,cy,hp,maxHP,color,label){
       const g=X.createRadialGradient(ox-3,cy-3,2,ox,cy,orbR);
       g.addColorStop(0,'#fff');g.addColorStop(0.5,color);g.addColorStop(1,color+'80');
       X.fillStyle=g;X.fill();
-      // Glow
       X.shadowColor=color;X.shadowBlur=10;
       X.beginPath();X.arc(ox,cy,orbR,0,Math.PI*2);X.fill();
       X.shadowBlur=0;
@@ -284,7 +371,7 @@ function drawHealthOrbs(cx,cy,hp,maxHP,color,label){
 }
 
 function drawRuneNodes(){
-  if(!roundActive||!traceNodes.length)return;
+  if(!roundActive||roundPhase!=='tracing'||!traceNodes.length)return;
   const color=SPELL_COLORS[playerRune.type];
   
   // Draw guide lines (dim)
@@ -338,51 +425,53 @@ function drawRuneNodes(){
     X.fillText(i+1,n.x,n.y);
   }
   
-  // Spell name
+  // Spell name below rune area
   const{cx,cy,size}=getRuneArea();
   X.font='bold 18px system-ui';X.fillStyle=color;X.textAlign='center';
-  X.fillText(`${SPELL_ICONS[playerRune.type]} ${playerRune.type}`,cx,cy-size/2-20);
+  X.fillText(`${SPELL_ICONS[playerRune.type]} ${playerRune.type}`,cx,cy+size/2+28);
 }
 
-function drawAIRune(){
-  if(!roundActive||!aiRune)return;
+function drawAICasting(){
+  if(!aiRune)return;
   const{cx,cy,size}=getAIRuneArea();
   const color=SPELL_COLORS[aiRune.type];
   
-  // AI casting indicator
+  // Label
   X.font='bold 14px system-ui';X.fillStyle='#e74c3c';X.textAlign='center';
-  X.fillText('Dark Mage',cx,cy-size/2-30);
+  X.fillText('DARK MAGE',cx,cy-size-18);
   
-  // Progress circle
-  const r=size*0.4;
-  X.strokeStyle='#333';X.lineWidth=4;
+  // Always show AI spell type (the core fix!)
+  X.font=`${Math.round(size*0.7)}px system-ui`;X.textAlign='center';X.textBaseline='middle';
+  X.fillText(SPELL_ICONS[aiRune.type],cx,cy);
+  X.font='bold 15px system-ui';X.fillStyle=color;
+  X.fillText(aiRune.type,cx,cy+size*0.55);
+  
+  // Casting progress ring
+  const r=size*0.85;
+  X.strokeStyle='#222';X.lineWidth=5;
   X.beginPath();X.arc(cx,cy,r,0,Math.PI*2);X.stroke();
   
   if(aiCasting){
-    X.strokeStyle=color;X.lineWidth=4;X.lineCap='round';
-    X.shadowColor=color;X.shadowBlur=10;
+    X.strokeStyle=color;X.lineWidth=5;X.lineCap='round';
+    X.shadowColor=color;X.shadowBlur=12;
     X.beginPath();
     X.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+aiCastProgress*Math.PI*2);
     X.stroke();
     X.shadowBlur=0;
     
-    // Pulsing center
-    const pulse=0.3+0.7*aiCastProgress;
-    X.globalAlpha=pulse*0.3;
-    X.fillStyle=color;
-    X.beginPath();X.arc(cx,cy,r*0.6,0,Math.PI*2);X.fill();
-    X.globalAlpha=1;
-  }
-  
-  // Spell icon after cast
-  if(aiCastProgress>=1||!roundActive){
-    X.font='28px system-ui';X.textAlign='center';X.textBaseline='middle';
-    X.fillText(SPELL_ICONS[aiRune.type],cx,cy);
-    X.font='bold 13px system-ui';X.fillStyle=color;
-    X.fillText(aiRune.type,cx,cy+r+18);
-  }else{
-    X.font='16px system-ui';X.fillStyle='#666';X.textAlign='center';X.textBaseline='middle';
-    X.fillText('?',cx,cy);
+    // Danger warning when almost done
+    if(aiCastProgress>0.75){
+      const pulse=0.5+0.5*Math.sin(Date.now()*0.01);
+      X.globalAlpha=pulse*0.15;
+      X.fillStyle='#e74c3c';
+      X.beginPath();X.arc(cx,cy,r+5,0,Math.PI*2);X.fill();
+      X.globalAlpha=1;
+    }
+    
+    // Time remaining text
+    const remaining=Math.max(0,Math.ceil((aiCastDuration-aiCastTimer)/1000));
+    X.font='bold 12px system-ui';X.fillStyle='#e74c3c';X.textAlign='center';
+    X.fillText(`${remaining}s`,cx,cy+size+12);
   }
 }
 
@@ -401,7 +490,8 @@ function drawResult(){
   X.globalAlpha=alpha;
   X.font='bold 22px system-ui';X.fillStyle=spellResult.color;
   X.textAlign='center';
-  X.fillText(spellResult.text,W/2,H*0.42);
+  const resultY=H>W?H*0.36:H*0.42;
+  X.fillText(spellResult.text,W/2,resultY);
   X.globalAlpha=1;
 }
 
@@ -415,18 +505,24 @@ function drawScreenFlash(){
 }
 
 function drawHUD(){
+  const isPortrait=H>W;
   // Player health - left
-  drawHealthOrbs(W*0.3,50,playerHP,5,'#3498db','YOU');
+  drawHealthOrbs(isPortrait?W*0.25:W*0.25,50,playerHP,5,'#3498db','YOU');
   // AI health - right
-  drawHealthOrbs(W*0.72,50,aiHP,5,'#e74c3c','DARK MAGE');
+  drawHealthOrbs(isPortrait?W*0.75:W*0.75,50,aiHP,5,'#e74c3c','DARK MAGE');
   // Level
   X.font='bold 13px system-ui';X.fillStyle='#f39c12';X.textAlign='center';
-  X.fillText(`Level ${currentLevel}`,W/2,20);
+  X.fillText(`— Level ${currentLevel} —`,W/2,20);
   
-  // Instructions during round
-  if(roundActive&&!traceComplete){
+  // Phase-specific instructions
+  if(roundActive){
     X.font='14px system-ui';X.fillStyle='#8a80a0';X.textAlign='center';
-    X.fillText('Trace the rune pattern!',W*0.3,H*0.88);
+    if(roundPhase==='choosing'){
+      X.fillStyle='#f39c12';
+      X.fillText('⬇ Pick a spell to cast!',W/2,H*0.92);
+    }else if(roundPhase==='tracing'&&!traceComplete){
+      X.fillText('Trace the rune — drag through numbered nodes!',W/2,H*0.92);
+    }
   }
 }
 
@@ -437,13 +533,14 @@ function gameLoop(t){
   drawBackground();
   
   if(gameState==='playing'){
-    // AI cast timer
+    // AI cast timer (runs during both choosing and tracing)
     if(roundActive&&aiCasting){
       aiCastTimer+=dt;
       aiCastProgress=Math.min(1,aiCastTimer/aiCastDuration);
-      if(aiCastProgress>=1&&!traceComplete){
-        // AI finished casting, player didn't: AI spell resolves
+      if(aiCastProgress>=1){
+        // AI finished casting before player
         aiCasting=false;
+        hideSpellChoice();
         finishRound(false);
       }
     }
@@ -451,14 +548,13 @@ function gameLoop(t){
     // Round cooldown (between rounds)
     if(!roundActive&&resultTimer>0){
       resultTimer-=dt;
-      if(resultTimer<=0&&gameState==='playing'){
-        roundCooldown-=dt;
-        if(roundCooldown<=0)startRound();
-      }
     }
     if(!roundActive&&resultTimer<=0&&gameState==='playing'){
       roundCooldown-=dt;
-      if(roundCooldown<=0)startRound();
+      if(roundCooldown<=0){
+        roundCooldown=999999;
+        startRound();
+      }
     }
     
     // Screen flash decay
@@ -470,7 +566,7 @@ function gameLoop(t){
     
     drawHUD();
     drawRuneNodes();
-    drawAIRune();
+    drawAICasting();
     drawParticles();
     drawResult();
     drawScreenFlash();
@@ -493,11 +589,10 @@ function getNodeAtPos(mx,my,threshold){
 
 C.addEventListener('pointerdown',e=>{
   e.preventDefault();
-  if(gameState!=='playing'||!roundActive||traceComplete)return;
+  if(gameState!=='playing'||!roundActive||roundPhase!=='tracing'||traceComplete)return;
   pointerDown=true;
   const mx=e.clientX,my=e.clientY;
   
-  // Check if touching first node
   const reached=traceNodes.filter(n=>n.reached).length;
   if(reached===0){
     const n=getNodeAtPos(mx,my,40);
@@ -513,19 +608,15 @@ C.addEventListener('pointermove',e=>{
   tracePath.push({x:mx,y:my});
   if(tracePath.length>200)tracePath.splice(0,tracePath.length-200);
   
-  // Trail particles
   if(playerRune)spawnTrailParticle(mx,my,SPELL_COLORS[playerRune.type]);
   
-  // Check if near next node
   const n=getNodeAtPos(mx,my,35);
   if(n){
     n.reached=true;
     tracePath.push({x:n.x,y:n.y});
     
-    // Check if all nodes reached
     if(traceNodes.every(n=>n.reached)){
       traceComplete=true;tracing=false;
-      // Big particle burst
       const{cx,cy}=getRuneArea();
       spawnHitParticles(cx,cy,SPELL_COLORS[playerRune.type]);
       finishRound(true);
@@ -537,7 +628,6 @@ C.addEventListener('pointerup',e=>{
   e.preventDefault();
   pointerDown=false;
   if(tracing&&!traceComplete){
-    // Reset trace if finger lifted before completing
     tracing=false;
     tracePath=[];
     for(const n of traceNodes)n.reached=false;
@@ -545,24 +635,27 @@ C.addEventListener('pointerup',e=>{
 });
 
 function showOverlay(type,title,msg,btnText,btnAction){
+  hideSpellChoice();
   panelContent.innerHTML=`<h1>${title}</h1><p>${msg}</p><button class="btn" id="overlayBtn">${btnText}</button>`;
   overlay.classList.remove('hidden');
+  restartBtn.classList.add('hidden');
   document.getElementById('overlayBtn').onclick=()=>{overlay.classList.add('hidden');btnAction();};
 }
 
 function showHowToPlay(){
   panelContent.innerHTML=`
     <h1>RUNECASTER</h1>
-    <h2>Wizard Duel</h2>
+    <h2>⚔ Wizard Duel ⚔</h2>
+    <p style="color:#f39c12;font-weight:700">Outsmart the Dark Mage with strategic spellcasting!</p>
     <ul>
-      <li>Trace the glowing rune pattern by dragging through nodes in order</li>
-      <li>Complete the rune before the Dark Mage finishes casting!</li>
-      <li>Spells have counters: <strong>BOLT→VORTEX, EMBER→BOLT, WARD→EMBER, VORTEX→WARD</strong></li>
-      <li>Countering the AI's spell deals <strong>2x damage!</strong></li>
-      <li>Drain all 5 of the Dark Mage's health orbs to win</li>
-      <li>Don't let your health reach zero!</li>
+      <li>The Dark Mage reveals their spell — <strong>choose yours to counter it!</strong></li>
+      <li>Then trace the rune pattern before the Mage finishes casting</li>
+      <li><strong>⚡BOLT</strong> beats <strong>🌀VORTEX</strong> — <strong>🌀VORTEX</strong> beats <strong>🛡️WARD</strong></li>
+      <li><strong>🛡️WARD</strong> beats <strong>🔥EMBER</strong> — <strong>🔥EMBER</strong> beats <strong>⚡BOLT</strong></li>
+      <li>Counter = <strong>2x damage!</strong> Same spell = both take 1. Opposite = no effect!</li>
+      <li>Drain all 5 health orbs to win each level!</li>
     </ul>
-    <button class="btn" id="overlayBtn">TAP TO PLAY</button>
+    <button class="btn" id="overlayBtn">⚔ BEGIN DUEL</button>
   `;
   overlay.classList.remove('hidden');
   document.getElementById('overlayBtn').onclick=()=>{overlay.classList.add('hidden');startLevel(1);};
@@ -576,9 +669,11 @@ function startLevel(lvl){
   spellResult=null;resultTimer=0;
   roundActive=false;roundCooldown=800;
   traceComplete=false;tracing=false;tracePath=[];
+  roundPhase='';
+  hideSpellChoice();
   restartBtn.classList.remove('hidden');
   overlay.classList.add('hidden');
-  setTimeout(()=>startRound(),500);
+  setTimeout(()=>startRound(),600);
 }
 
 showHowToPlay();
