@@ -406,6 +406,7 @@ function scoreMoveForAI(r,c){
 }
 
 function draw(){
+  if(!grid) { ctx.fillStyle='#f8f3e8'; ctx.fillRect(0,0,canvas.width,canvas.height); return; }
   const paperTones=['#f8f3e8','#f0e8d8','#e8ddc8'];
   ctx.fillStyle=paperTones[level-1]||'#f8f3e8';
   ctx.fillRect(0,0,canvas.width,canvas.height);

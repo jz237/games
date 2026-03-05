@@ -81,9 +81,9 @@ function mixColor(c1,c2){let a=COLORS[c1]||[0,0,0],b=COLORS[c2]||[0,0,0];return 
 function beamCol(c){return({white:'rgba(255,255,255,.9)',red:'rgba(255,70,70,.9)',green:'rgba(70,255,100,.9)',blue:'rgba(80,150,255,.9)',yellow:'rgba(255,220,60,.9)',cyan:'rgba(60,230,255,.9)',magenta:'rgba(230,80,255,.9)'}[c]||'rgba(255,255,255,.7)')}
 
 const LEVELS=[
-  {turns:5,sources:[{x:-1,y:2,dir:0,color:'white'},{x:2,y:-1,dir:1,color:'white'}],pTargets:[{x:9,y:2,needColor:'blue'},{x:9,y:5,needColor:'green'}],aTargets:[{x:5,y:10,needColor:'red'},{x:7,y:10,needColor:'cyan'}],pHand:['prism','mirror_fw','filter_b','filter_g','mirror_bw'],aHand:['prism','mirror_bw','filter_r','mirror_fw','prism']},
-  {turns:6,sources:[{x:-1,y:1,dir:0,color:'white'},{x:-1,y:6,dir:0,color:'white'},{x:5,y:-1,dir:1,color:'white'}],pTargets:[{x:9,y:1,needColor:'blue'},{x:9,y:4,needColor:'magenta'},{x:9,y:7,needColor:'green'}],aTargets:[{x:2,y:10,needColor:'red'},{x:5,y:10,needColor:'yellow'},{x:8,y:10,needColor:'cyan'}],pHand:['prism','mirror_fw','mirror_fw','filter_b','filter_g','mirror_bw'],aHand:['prism','mirror_bw','filter_r','mirror_fw','prism','mirror_fw']},
-  {turns:7,sources:[{x:-1,y:0,dir:0,color:'white'},{x:-1,y:4,dir:0,color:'white'},{x:-1,y:8,dir:0,color:'white'},{x:4,y:-1,dir:1,color:'white'}],pTargets:[{x:9,y:2,needColor:'blue'},{x:9,y:5,needColor:'cyan'},{x:9,y:8,needColor:'magenta'},{x:6,y:10,needColor:'green'}],aTargets:[{x:1,y:10,needColor:'red'},{x:3,y:10,needColor:'yellow'},{x:8,y:10,needColor:'white'},{x:9,y:4,needColor:'red'}],pHand:['prism','prism','mirror_fw','mirror_fw','filter_b','filter_g','lens'],aHand:['prism','prism','mirror_bw','filter_r','mirror_fw','lens','mirror_bw']}
+  {turns:5,sources:[{x:-1,y:2,dir:0,color:'white'},{x:2,y:-1,dir:1,color:'white'}],pTargets:[{x:10,y:2,needColor:'blue'},{x:10,y:5,needColor:'green'}],aTargets:[{x:5,y:10,needColor:'red'},{x:7,y:10,needColor:'cyan'}],pHand:['prism','mirror_fw','filter_b','filter_g','mirror_bw'],aHand:['prism','mirror_bw','filter_r','mirror_fw','prism']},
+  {turns:6,sources:[{x:-1,y:1,dir:0,color:'white'},{x:-1,y:6,dir:0,color:'white'},{x:5,y:-1,dir:1,color:'white'}],pTargets:[{x:10,y:1,needColor:'blue'},{x:10,y:4,needColor:'magenta'},{x:10,y:7,needColor:'green'}],aTargets:[{x:2,y:10,needColor:'red'},{x:5,y:10,needColor:'yellow'},{x:8,y:10,needColor:'cyan'}],pHand:['prism','mirror_fw','mirror_fw','filter_b','filter_g','mirror_bw'],aHand:['prism','mirror_bw','filter_r','mirror_fw','prism','mirror_fw']},
+  {turns:7,sources:[{x:-1,y:0,dir:0,color:'white'},{x:-1,y:4,dir:0,color:'white'},{x:-1,y:8,dir:0,color:'white'},{x:4,y:-1,dir:1,color:'white'}],pTargets:[{x:10,y:2,needColor:'blue'},{x:10,y:5,needColor:'cyan'},{x:10,y:8,needColor:'magenta'},{x:6,y:10,needColor:'green'}],aTargets:[{x:1,y:10,needColor:'red'},{x:3,y:10,needColor:'yellow'},{x:8,y:10,needColor:'white'},{x:10,y:4,needColor:'red'}],pHand:['prism','prism','mirror_fw','mirror_fw','filter_b','filter_g','lens'],aHand:['prism','prism','mirror_bw','filter_r','mirror_fw','lens','mirror_bw']}
 ];
 
 function startGame(lvl){
@@ -148,7 +148,7 @@ function simulate(){
   pScore=Math.max(0,np);aScore=Math.max(0,na);
 }
 
-function burstTarget(t){const x=(t.x+.5)*CELL,y=(t.y+.5)*CELL,c=beamCol(t.needColor);for(let i=0;i<14;i++){FX.ripples.push({x,y,r:3+Math.random()*4,a:.85,col:c,spd:60+Math.random()*55});FX.trails.push({x,y,r:5+Math.random()*5,a:.8,col:c,decay:1.1})}}
+function burstTarget(t){const x=Math.min(Math.max((t.x+.5)*CELL,CELL*.5),(COLS-.5)*CELL),y=Math.min(Math.max((t.y+.5)*CELL,CELL*.5),(ROWS-.5)*CELL),c=beamCol(t.needColor);for(let i=0;i<14;i++){FX.ripples.push({x,y,r:3+Math.random()*4,a:.85,col:c,spd:60+Math.random()*55});FX.trails.push({x,y,r:5+Math.random()*5,a:.8,col:c,decay:1.1})}}
 
 function placePiece(cx,cy,type,owner,idx){
   grid[cy][cx]=type;
@@ -234,7 +234,7 @@ function render(){
   for(const s of sources){const sx=(s.x+.5)*CELL,sy=(s.y+.5)*CELL;let g=ctx.createRadialGradient(sx,sy,0,sx,sy,CELL*.45);g.addColorStop(0,'rgba(255,255,220,.95)');g.addColorStop(1,'rgba(255,255,130,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(sx,sy,CELL*.42,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(255,255,255,.95)';ctx.font=`bold ${Math.floor(CELL*.34)}px Courier New`;ctx.fillText('λ',sx,sy)}
 
   // targets
-  for(const t of [...pTargets,...aTargets]){const tx=(t.x+.5)*CELL,ty=(t.y+.5)*CELL;const base=t.owner==='p'?'rgba(80,150,255,':'rgba(255,90,110,';ctx.beginPath();ctx.arc(tx,ty,CELL*.38,0,Math.PI*2);ctx.strokeStyle=t.lit?beamCol(t.needColor):base+'.55)';ctx.lineWidth=2;ctx.stroke();ctx.beginPath();ctx.arc(tx,ty,CELL*.2,0,Math.PI*2);ctx.fillStyle=t.lit?beamCol(t.needColor):base+'.22)';ctx.fill();ctx.fillStyle='rgba(220,230,255,.66)';ctx.font=`${Math.floor(CELL*.22)}px Courier New`;ctx.fillText(t.needColor[0].toUpperCase(),tx,ty)}
+  for(const t of [...pTargets,...aTargets]){const tx=Math.min(Math.max((t.x+.5)*CELL,CELL*.5),(COLS-.5)*CELL),ty=Math.min(Math.max((t.y+.5)*CELL,CELL*.5),(ROWS-.5)*CELL);const base=t.owner==='p'?'rgba(80,150,255,':'rgba(255,90,110,';ctx.beginPath();ctx.arc(tx,ty,CELL*.38,0,Math.PI*2);ctx.strokeStyle=t.lit?beamCol(t.needColor):base+'.55)';ctx.lineWidth=2;ctx.stroke();ctx.beginPath();ctx.arc(tx,ty,CELL*.2,0,Math.PI*2);ctx.fillStyle=t.lit?beamCol(t.needColor):base+'.22)';ctx.fill();ctx.fillStyle='rgba(220,230,255,.66)';ctx.font=`${Math.floor(CELL*.22)}px Courier New`;ctx.fillText(t.needColor[0].toUpperCase(),tx,ty)}
 
   ctx.restore();
 }

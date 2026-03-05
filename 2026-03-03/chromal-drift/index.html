@@ -319,11 +319,12 @@ canvas.addEventListener('touchend', e => { e.preventDefault(); }, {passive:false
 
 // ==== INTELLIGENT AI ====
 function aiTurn() {
-  if(state!=='playing'||aiMovesLeft<=0) return;
+  if(state!=='playing'||aiMovesLeft<=0) { isPlayerTurn=true; updateUI(); if(checkRoundEnd()) return; return; }
   let best=findAIMove();
   if(best){ grid[best.row][best.col]=best.type; aiMovesLeft--; totalMoves++; simulate(); }
-  isPlayerTurn=true; updateUI();
   if(checkRoundEnd()) return;
+  if(movesLeft<=0 && aiMovesLeft>0) { updateUI(); setTimeout(aiTurn, 500+Math.random()*600); return; }
+  isPlayerTurn=true; updateUI();
 }
 
 function findAIMove() {

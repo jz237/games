@@ -221,7 +221,7 @@ function update(dt) {
   if(playerEnergy<5&&playerNodes.length>1){let tips=playerNodes.filter(n=>n.tips&&!n.dead);if(tips.length>0)tips[Math.floor(Math.random()*tips.length)].dead=true;playerEnergy=18;}
   if(aiEnergy<5&&aiNodes.length>1){let tips=aiNodes.filter(n=>n.tips&&!n.dead);if(tips.length>0)tips[Math.floor(Math.random()*tips.length)].dead=true;aiEnergy=18;}
   for(let g of growQueue){if(!g.done){g.t+=dt*2.2;if(g.t>=1){g.t=1;g.done=true;}}}
-  growQueue=growQueue.filter(g=>!g.done||g.t>=1);
+  growQueue=growQueue.filter(g=>!g.done);
   // Nutrient collection
   let allNodes=[...playerNodes,...aiNodes];
   for(let seg of allNodes){
