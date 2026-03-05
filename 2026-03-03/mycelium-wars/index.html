@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Mycelium Wars</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -14,255 +14,195 @@ canvas{display:block;touch-action:none}
 #bar{display:flex;width:90vmin;max-width:460px;height:12px;margin-top:4px;border-radius:6px;overflow:hidden}
 #bar-p{background:linear-gradient(90deg,#88cc44,#44ff88);transition:width .3s}
 #bar-a{background:linear-gradient(90deg,#ff6622,#ffaa00);transition:width .3s}
-#overlay{position:fixed;inset:0;background:rgba(10,8,4,.93);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#88cc44;font-family:monospace}
-#overlay h2{font-size:2em;margin-bottom:12px}
-#overlay p{font-size:.85em;color:#557733;margin-bottom:5px;text-align:center;max-width:320px;line-height:1.5}
-#overlay button{margin-top:16px;padding:14px 36px;background:#0a0804;color:#88cc44;border:2px solid #88cc44;border-radius:24px;font-size:1em;cursor:pointer;font-family:monospace;min-height:48px;min-width:180px;-webkit-tap-highlight-color:transparent}
+#actions{display:flex;gap:8px;margin-top:5px}
+#sporeBtn{min-height:44px;min-width:140px;padding:10px 18px;background:#1b2b0f;color:#b8ff7a;border:1px solid #7ec44a;border-radius:10px;font-family:monospace;cursor:pointer}
+#sporeBtn:disabled{opacity:.35;cursor:not-allowed}
+#overlay{position:fixed;inset:0;background:rgba(10,8,4,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#88cc44;font-family:monospace;z-index:20;padding:18px}
+#overlay h2{font-size:2em;margin-bottom:10px}
+#overlay button{margin-top:16px;min-height:48px;min-width:185px;padding:14px 34px;background:#0a0804;color:#88cc44;border:2px solid #88cc44;border-radius:24px;font-size:1em;cursor:pointer;font-family:monospace}
 </style>
 </head>
 <body>
 <h1>🍄 MYCELIUM WARS 🍄</h1>
-<div id="hud"><span>LEVEL <span id="lvl">1</span></span><span>🟢 YOU: <span id="pct">0</span>%</span><span>🟠 FOE: <span id="act">0</span>%</span><span>TURNS <span id="turns">0</span></span></div>
+<div id="hud"><span>LEVEL <span id="lvl">1</span></span><span>🟢 YOU <span id="pct">0</span>%</span><span>🟠 FOE <span id="act">0</span>%</span><span>TURNS <span id="turns">0</span></span></div>
 <canvas id="c"></canvas>
 <div id="bar"><div id="bar-p" style="width:50%"></div><div id="bar-a" style="width:50%"></div></div>
+<div id="actions"><button id="sporeBtn" onclick="activateSporeBomb()">💥 SPORE BOMB</button></div>
 <div id="status">Tap an empty cell next to your network to expand!</div>
 <div id="overlay">
   <h2>MYCELIUM WARS</h2>
-  <ul style="list-style:none;margin:14px 0;max-width:340px;width:100%;display:flex;flex-direction:column;gap:10px;text-align:left;">
-    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(136,204,68,0.85);">🟢 You are the <strong style="color:#88cc44">green</strong> fungus — tap to expand your colony</li>
-    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(136,204,68,0.85);">👆 Only tap <strong>empty cells touching your existing green cells</strong> to grow</li>
-    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(136,204,68,0.85);">🟠 You and the AI alternate turns — the AI grows after every move you make</li>
-    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(136,204,68,0.85);">✨ <strong style="color:#aadd44">Nutrient nodes</strong> (small glowing dots) trigger bonus spreading when claimed</li>
-    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(255,221,68,0.9);">🏆 Cover <strong>60%</strong> of the board before the AI does to win!</li>
+  <ul style="list-style:none;max-width:340px;display:flex;flex-direction:column;gap:8px;color:rgba(150,220,90,.88);line-height:1.4">
+    <li>🟢 Expand from your existing green cells by tapping adjacent empty cells.</li>
+    <li>🟠 AI responds every turn and blocks your highest-growth fronts.</li>
+    <li>✨ Nutrient nodes trigger bonus spread when captured.</li>
+    <li>💥 One Spore Bomb per match: tap once to arm, tap a legal cell to detonate.</li>
+    <li>🏆 Reach 60% control before the rival colony in 3 strategic levels.</li>
   </ul>
-  <button onclick="startGame(0)" style="margin-top:20px;font-size:clamp(15px,4vw,19px);padding:16px 44px;font-weight:bold;letter-spacing:2px;background:#0a0804;color:#88cc44;border:2px solid #88cc44;border-radius:24px;cursor:pointer;font-family:monospace;min-height:52px;min-width:200px;">▶ TAP TO PLAY</button>
+  <button onclick="startGame(0)" style="font-weight:bold">▶ TAP TO PLAY</button>
 </div>
 <script>
-const GRID=18,W=Math.min(window.innerWidth*.97,window.innerHeight*.65,460),CS=W/GRID;
+const GRID=18,W=Math.min(innerWidth*.97,innerHeight*.62,460),CS=W/GRID;
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');canvas.width=W;canvas.height=W;
-const EMPTY=0,PLAYER=1,AI=2,DEAD=3;let state=null;
-const LEVELS=[{aiDelay:3,aiSpread:.7},{aiDelay:2,aiSpread:.85},{aiDelay:1,aiSpread:1}];
+const EMPTY=0,PLAYER=1,AI=2,DEAD=3;
+const LEVELS=[{aiDelay:420,aiSpread:.72},{aiDelay:320,aiSpread:.9},{aiDelay:240,aiSpread:1.12}];
+let state=null;
 
-/* === ENHANCEMENT 1: SCREEN SHAKE SYSTEM === */
-let shakeX=0, shakeY=0, shakeDur=0, shakeInt=0;
-function screenShake(intensity, dur) { shakeInt=intensity; shakeDur=dur; }
-function updateShake(dt) {
-  if(shakeDur>0){ shakeDur-=dt; shakeX=(Math.random()-.5)*shakeInt*2; shakeY=(Math.random()-.5)*shakeInt*2; if(shakeDur<=0){shakeX=shakeY=0;} }
-}
+let shakeX=0,shakeY=0,shakeDur=0,shakeInt=0;function screenShake(i,d){shakeInt=i;shakeDur=d}function updateShake(dt){if(shakeDur>0){shakeDur-=dt;shakeX=(Math.random()-.5)*shakeInt*2;shakeY=(Math.random()-.5)*shakeInt*2;if(shakeDur<=0){shakeX=shakeY=0}}}
+const FX={ripples:[],trails:[],spawn(x,y,col='rgba(136,220,90,.9)'){this.ripples.push({x,y,r:7,a:.9,col,spd:82});this.trails.push({x,y,r:12,a:.55,col,decay:3.6})},move(x,y){if(Math.random()<.6)this.trails.push({x,y,r:4,a:.32,col:'rgba(136,220,90,.7)',decay:5.2})},update(dt){this.ripples=this.ripples.filter(r=>(r.r+=r.spd*dt,r.a-=1.8*dt,r.a>0));this.trails=this.trails.filter(t=>(t.r-=14*dt,t.a-=t.decay*dt,t.a>0&&t.r>.2))},draw(){ctx.save();ctx.shadowBlur=12;for(const r of this.ripples){ctx.globalAlpha=r.a;ctx.strokeStyle=ctx.shadowColor=r.col;ctx.lineWidth=2.2;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.stroke()}for(const t of this.trails){ctx.globalAlpha=t.a*.8;ctx.fillStyle=ctx.shadowColor=t.col;ctx.beginPath();ctx.arc(t.x,t.y,t.r,0,Math.PI*2);ctx.fill()}ctx.restore();ctx.globalAlpha=1}};
 
-/* === ENHANCEMENT 2: CELL GROWTH ANIMATION === */
-const cellAnims = new Map();
-
-/* === ENHANCEMENT 4: TERRITORY PULSE === */
-let pulseWave = null;
-
-/* === ENHANCEMENT 7: LEVEL-BASED COLORS === */
-const LEVEL_COLORS = [
-  { empty:'#1a1208', player:'#4a9922', playerCell:'#88dd44', playerGlow:'rgba(100,220,60,0.6)', playerShadow:'#44ff88', ai:'#cc4411', aiCell:'#ff8844', aiGlow:'rgba(255,100,30,0.6)', aiShadow:'#ff6622' },
-  { empty:'#141008', player:'#55bb22', playerCell:'#aaee44', playerGlow:'rgba(130,240,60,0.6)', playerShadow:'#66ff88', ai:'#dd5500', aiCell:'#ff7733', aiGlow:'rgba(255,90,20,0.6)', aiShadow:'#ff4411' },
-  { empty:'#0e0c06', player:'#44dd11', playerCell:'#66ff44', playerGlow:'rgba(80,255,50,0.7)', playerShadow:'#44ff66', ai:'#bb2200', aiCell:'#ee4422', aiGlow:'rgba(255,60,20,0.7)', aiShadow:'#dd2200' }
+const cellAnims=new Map();let pulseWave=null;
+const LEVEL_COLORS=[
+  {empty:'#1a1208',player:'#4a9922',playerCell:'#88dd44',playerGlow:'rgba(100,220,60,.6)',ai:'#cc4411',aiCell:'#ff8844',aiGlow:'rgba(255,100,30,.6)'},
+  {empty:'#141008',player:'#55bb22',playerCell:'#aaee44',playerGlow:'rgba(130,240,60,.6)',ai:'#dd5500',aiCell:'#ff7733',aiGlow:'rgba(255,90,20,.6)'},
+  {empty:'#0e0c06',player:'#44dd11',playerCell:'#66ff44',playerGlow:'rgba(80,255,50,.7)',ai:'#bb2200',aiCell:'#ee4422',aiGlow:'rgba(255,60,20,.7)'}
 ];
 
-const FX={ripples:[],trails:[],spawn(x,y,col='rgba(136,220,90,.9)'){this.ripples.push({x,y,r:7,a:.9,col,spd:80});this.trails.push({x,y,r:12,a:.55,col,decay:3.6})},update(dt){this.ripples=this.ripples.filter(r=>(r.r+=r.spd*dt,r.a-=1.8*dt,r.a>0));this.trails=this.trails.filter(t=>(t.r-=14*dt,t.a-=t.decay*dt,t.a>0&&t.r>.2))},draw(){ctx.save();ctx.shadowBlur=12;for(const r of this.ripples){ctx.globalAlpha=r.a;ctx.strokeStyle=ctx.shadowColor=r.col;ctx.lineWidth=2.2;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.stroke()}for(const t of this.trails){ctx.globalAlpha=t.a*.8;ctx.fillStyle=ctx.shadowColor=t.col;ctx.beginPath();ctx.arc(t.x,t.y,t.r,0,Math.PI*2);ctx.fill()}ctx.restore();ctx.globalAlpha=1}}
-
-/* === ENHANCEMENT 3: NUTRIENT BURST === */
-function spawnNutrientBurst(x, y, col='rgba(170,220,70,0.9)'){
-  for(let i=0;i<8;i++){
-    const angle = (Math.PI*2/8)*i;
-    const speed = 60+Math.random()*40;
-    FX.ripples.push({x:x, y:y, r:3, a:.95, col:col, spd:speed, vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed});
-  }
-}
-
-/* Patch FX.update to handle burst particles with vx/vy */
-const _origFXUpdate = FX.update.bind(FX);
-FX.update = function(dt){
-  for(const r of this.ripples){
-    if(r.vx!==undefined){ r.x+=r.vx*dt; r.y+=r.vy*dt; }
-  }
-  _origFXUpdate(dt);
-};
-
 let fxId=null,fxLast=0;
-function startFx(){if(fxId)return;const loop=ts=>{let dt=Math.min((ts-fxLast)/1000,.05);fxLast=ts;FX.update(dt);updateShake(dt);
-
-  /* Update cell growth anims */
-  for(const [key, anim] of cellAnims){
-    anim.progress += dt*3;
-    if(anim.progress>=1){ anim.progress=1; cellAnims.delete(key); }
-  }
-
-  /* Update territory pulse */
-  if(pulseWave && pulseWave.active){
-    pulseWave.r += pulseWave.speed * dt;
-    pulseWave.a -= dt*1.5;
-    if(pulseWave.r >= pulseWave.maxR || pulseWave.a <= 0){ pulseWave.active=false; pulseWave=null; }
-  }
-
-  render(); FX.draw();
-  fxId=requestAnimationFrame(loop)};fxId=requestAnimationFrame(loop)}
+function startFx(){if(fxId)return;const loop=ts=>{const dt=Math.min((ts-fxLast)/1000,.05);fxLast=ts;FX.update(dt);updateShake(dt);for(const [k,a] of cellAnims){a.progress+=dt*3.8;if(a.progress>=1){cellAnims.delete(k)}}if(pulseWave&&pulseWave.active){pulseWave.r+=pulseWave.speed*dt;pulseWave.a-=dt*1.5;if(pulseWave.r>=pulseWave.maxR||pulseWave.a<=0){pulseWave=null}}render();FX.draw();fxId=requestAnimationFrame(loop)};fxId=requestAnimationFrame(loop)}
 
 function startGame(lvl=0,score=0){
   document.getElementById('overlay').style.display='none';const L=LEVELS[lvl];
-  const grid=Array.from({length:GRID},()=>new Array(GRID).fill(EMPTY));
-  const absorb=Array.from({length:GRID},()=>Array.from({length:GRID},()=>.3+Math.random()*.7));
-  for(let i=0;i<12;i++){const r=Math.floor(Math.random()*GRID),c=Math.floor(Math.random()*GRID);absorb[r][c]=0}
-  const nutrients=new Set();for(let i=0;i<6;i++){const r=1+Math.floor(Math.random()*(GRID-2)),c=1+Math.floor(Math.random()*(GRID-2));nutrients.add(`${r},${c}`)}
-  grid[GRID-2][1]=PLAYER;grid[GRID-2][2]=PLAYER;grid[GRID-3][1]=PLAYER;grid[1][GRID-2]=AI;grid[1][GRID-3]=AI;grid[2][GRID-2]=AI;
-  state={lvl,L,grid,absorb,nutrients,turns:0,aiTimer:0,score,gameOver:false,playerTurn:true};
-  cellAnims.clear();
-  pulseWave=null;
-  /* Add initial cell anims for starting cells */
-  cellAnims.set(`${GRID-2},1`,{progress:0,owner:PLAYER});
-  cellAnims.set(`${GRID-2},2`,{progress:0,owner:PLAYER});
-  cellAnims.set(`${GRID-3},1`,{progress:0,owner:PLAYER});
-  cellAnims.set(`1,${GRID-2}`,{progress:0,owner:AI});
-  cellAnims.set(`1,${GRID-3}`,{progress:0,owner:AI});
-  cellAnims.set(`2,${GRID-2}`,{progress:0,owner:AI});
-  updateHUD();render();startFx();
+  const grid=Array.from({length:GRID},()=>Array(GRID).fill(EMPTY));
+  const absorb=Array.from({length:GRID},()=>Array.from({length:GRID},()=>.3+Math.random()*.68));
+  const wax=Array.from({length:GRID},()=>Array(GRID).fill(false));
+  for(let i=0;i<12+lvl*3;i++){const r=Math.floor(Math.random()*GRID),c=Math.floor(Math.random()*GRID);if((r<3&&c<3)||(r>GRID-4&&c>GRID-4))continue;wax[r][c]=true;absorb[r][c]=0}
+  const nutrients=new Set();for(let i=0;i<6+lvl;i++){const r=1+Math.floor(Math.random()*(GRID-2)),c=1+Math.floor(Math.random()*(GRID-2));if(!wax[r][c])nutrients.add(`${r},${c}`)}
+  grid[GRID-2][1]=PLAYER;grid[GRID-2][2]=PLAYER;grid[GRID-3][1]=PLAYER;
+  grid[1][GRID-2]=AI;grid[1][GRID-3]=AI;grid[2][GRID-2]=AI;
+  state={lvl,L,grid,absorb,wax,nutrients,turns:0,score,gameOver:false,playerTurn:true,sporeUsed:false,sporeArmed:false,aiTimer:null};
+  cellAnims.clear();['16,1','16,2','15,1','1,16','1,15','2,16'].forEach((k,i)=>cellAnims.set(k,{progress:0,owner:i<3?PLAYER:AI}));
+  updateHUD();updateActionUI();render();startFx();
 }
+
 function neighbors(r,c){return[[r-1,c],[r+1,c],[r,c-1],[r,c+1]].filter(([rr,cc])=>rr>=0&&rr<GRID&&cc>=0&&cc<GRID)}
-function countCells(){let p=0,a=0,total=0;for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++){if(state.absorb[r][c]===0)continue;total++;if(state.grid[r][c]===PLAYER)p++;else if(state.grid[r][c]===AI)a++}return[p,a,total]}
+function countCells(){let p=0,a=0,total=0;for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++){if(state.wax[r][c])continue;total++;if(state.grid[r][c]===PLAYER)p++;else if(state.grid[r][c]===AI)a++}return[p,a,total]}
+
+function isLegalPlayerCell(r,c){return state.grid[r][c]===EMPTY&&!state.wax[r][c]&&neighbors(r,c).some(([rr,cc])=>state.grid[rr][cc]===PLAYER)}
+function spreadFrom(r,c,who,pct=.65){for(const [nr,nc] of neighbors(r,c)){if(state.grid[nr][nc]===EMPTY&&!state.wax[nr][nc]&&Math.random()<pct){state.grid[nr][nc]=who;cellAnims.set(`${nr},${nc}`,{progress:0,owner:who})}}}
+
+function activateSporeBomb(){if(!state||state.gameOver||state.sporeUsed||!state.playerTurn)return;state.sporeArmed=!state.sporeArmed;updateActionUI();document.getElementById('status').textContent=state.sporeArmed?'Spore Bomb armed! Tap a legal green-adjacent cell.':'Spore Bomb canceled.'}
+function updateActionUI(){const b=document.getElementById('sporeBtn');if(!state){b.disabled=true;return}b.disabled=state.sporeUsed||!state.playerTurn;b.textContent=state.sporeUsed?'💥 USED':(state.sporeArmed?'💥 ARMED':'💥 SPORE BOMB')}
 
 function playerMove(r,c){
   const s=state;if(s.gameOver||!s.playerTurn)return;
-  if(s.grid[r][c]!==EMPTY){document.getElementById('status').textContent='Pick an empty cell next to your network!';return}
-  if(!neighbors(r,c).some(([rr,cc])=>s.grid[rr][cc]===PLAYER)){document.getElementById('status').textContent='Must expand from your existing cells!';return}
-  if(s.absorb[r][c]===0){document.getElementById('status').textContent='Wax cell — cannot grow here!';return}
-  s.grid[r][c]=PLAYER;
-  /* Enhancement 2: cell growth anim */
-  cellAnims.set(`${r},${c}`,{progress:0,owner:PLAYER});
-  if(s.nutrients.has(`${r},${c}`)){
-    /* Enhancement 3: nutrient burst for player */
-    spawnNutrientBurst(c*CS+CS/2, r*CS+CS/2, 'rgba(170,220,70,0.9)');
-    screenShake(3, 0.2);
-    for(const[nr,nc]of neighbors(r,c))if(s.grid[nr][nc]===EMPTY&&s.absorb[nr][nc]>0&&Math.random()<.7){s.grid[nr][nc]=PLAYER;cellAnims.set(`${nr},${nc}`,{progress:0,owner:PLAYER});}
+  if(!isLegalPlayerCell(r,c)){document.getElementById('status').textContent='Pick an empty cell touching your colony.';return}
+  s.grid[r][c]=PLAYER;cellAnims.set(`${r},${c}`,{progress:0,owner:PLAYER});
+  let cx=c*CS+CS/2,cy=r*CS+CS/2;FX.spawn(cx,cy,'rgba(120,220,80,.95)');
+  if(s.nutrients.has(`${r},${c}`)){spawnNutrientBurst(cx,cy,'rgba(170,220,70,.92)');spreadFrom(r,c,PLAYER,.72);screenShake(3,.18)}
+
+  if(s.sporeArmed&&!s.sporeUsed){
+    s.sporeUsed=true;s.sporeArmed=false;for(let i=0;i<2;i++)spreadFrom(r,c,PLAYER,.82);
+    pulseWave={active:true,r:0,maxR:W*1.4,speed:420,owner:'p',a:.62};screenShake(6,.32);
+    for(let i=0;i<16;i++)FX.ripples.push({x:cx,y:cy,r:4+Math.random()*4,a:.82,col:'rgba(130,255,90,.95)',spd:70+Math.random()*80});
   }
-  s.turns++;s.playerTurn=false;document.getElementById('status').textContent='AI is growing...';
-  /* Enhancement 4: territory pulse every 5 turns */
-  if(s.turns % 5 === 0){ pulseWave = {active:true, r:0, maxR:W*1.5, speed:400, owner:'p', a:0.6}; }
-  updateHUD();render();if(checkWin())return;
-  s.aiTimer=setTimeout(aiMove,400);
+
+  s.turns++;s.playerTurn=false;updateHUD();updateActionUI();
+  if(checkWin())return;
+  document.getElementById('status').textContent='AI is growing...';
+  s.aiTimer=setTimeout(aiMove,s.L.aiDelay);
+}
+
+function scoreAIMove(r,c){
+  let score=state.absorb[r][c]*6;
+  // adjacency value
+  let adjA=0,adjP=0,empty=0;
+  for(const [nr,nc] of neighbors(r,c)){if(state.grid[nr][nc]===AI)adjA++;else if(state.grid[nr][nc]===PLAYER)adjP++;else if(state.grid[nr][nc]===EMPTY)empty++}
+  score+=adjA*3+adjP*2+empty*1.2;
+  if(state.nutrients.has(`${r},${c}`))score+=12;
+  // level3 lookahead: evaluate frontier after hypothetical placement
+  if(state.lvl===2){
+    let reach=0;for(const [nr,nc] of neighbors(r,c)){for(const [x,y] of neighbors(nr,nc)){if(state.grid[x][y]===EMPTY&&!state.wax[x][y])reach++;if(state.grid[x][y]===PLAYER)reach+=1.5}}
+    score+=reach*.45;
+  }
+  return score+(Math.random()-.5)*.8;
 }
 
 function aiMove(){
-  const s=state;if(s.gameOver)return;const front=[];
+  const s=state;if(s.gameOver)return;
+  const front=[];
   for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++){
-    if(s.grid[r][c]!==EMPTY||s.absorb[r][c]===0)continue;
-    const adjAI=neighbors(r,c).filter(([rr,cc])=>s.grid[rr][cc]===AI).length,adjP=neighbors(r,c).filter(([rr,cc])=>s.grid[rr][cc]===PLAYER).length;
-    if(adjAI>0)front.push({r,c,score:adjAI*2-adjP+s.absorb[r][c]*s.L.aiSpread});
+    if(s.grid[r][c]!==EMPTY||s.wax[r][c])continue;
+    if(neighbors(r,c).some(([rr,cc])=>s.grid[rr][cc]===AI))front.push({r,c,score:scoreAIMove(r,c)});
   }
-  front.sort((a,b)=>b.score-a.score);let num=1+Math.floor(s.L.aiSpread),m=0;
-  for(const f of front){if(m>=num)break;if(s.grid[f.r][f.c]!==EMPTY)continue;s.grid[f.r][f.c]=AI;
-    /* Enhancement 2: cell growth anim for AI */
-    cellAnims.set(`${f.r},${f.c}`,{progress:0,owner:AI});
-    if(s.nutrients.has(`${f.r},${f.c}`)){
-      /* Enhancement 3: nutrient burst for AI */
-      spawnNutrientBurst(f.c*CS+CS/2, f.r*CS+CS/2, 'rgba(255,160,40,0.9)');
-      screenShake(3, 0.2);
-      for(const[nr,nc]of neighbors(f.r,f.c))if(s.grid[nr][nc]===EMPTY&&s.absorb[nr][nc]>0&&Math.random()<.6){s.grid[nr][nc]=AI;cellAnims.set(`${nr},${nc}`,{progress:0,owner:AI});}
-    }
-    m++}
-  s.turns++;s.playerTurn=true;document.getElementById('status').textContent='Your turn — tap to expand!';
-  /* Enhancement 4: territory pulse every 5 turns (AI) */
-  if(s.turns % 5 === 0){ pulseWave = {active:true, r:0, maxR:W*1.5, speed:400, owner:'a', a:0.6}; }
-  updateHUD();render();checkWin();
+  front.sort((a,b)=>b.score-a.score);
+  let placements=Math.min(1+Math.floor(s.L.aiSpread),front.length);
+  for(let i=0;i<placements;i++){
+    const f=front[i];if(!f)break;if(s.grid[f.r][f.c]!==EMPTY)continue;
+    s.grid[f.r][f.c]=AI;cellAnims.set(`${f.r},${f.c}`,{progress:0,owner:AI});
+    if(s.nutrients.has(`${f.r},${f.c}`)){spawnNutrientBurst(f.c*CS+CS/2,f.r*CS+CS/2,'rgba(255,160,40,.92)');spreadFrom(f.r,f.c,AI,.65);screenShake(3,.2)}
+  }
+  s.turns++;s.playerTurn=true;updateHUD();updateActionUI();
+  if(s.turns%5===0)pulseWave={active:true,r:0,maxR:W*1.4,speed:400,owner:'a',a:.58};
+  document.getElementById('status').textContent='Your turn — tap to expand.';
+  checkWin();
 }
 
 function checkWin(){
-  const[p,a,total]=countCells(),pct=p/total*100,act=a/total*100;
-  if(pct>=60){state.score+=200*(state.lvl+1);state.gameOver=true;if(state.lvl<2){document.getElementById('status').textContent=`Level ${state.lvl+1} conquered! 🍄`;setTimeout(()=>startGame(state.lvl+1,state.score),1500)}else showEnd(true);return true}
+  const [p,a,total]=countCells(),pct=p/total*100,act=a/total*100;
+  if(pct>=60){state.score+=210*(state.lvl+1);state.gameOver=true;if(state.lvl<2){document.getElementById('status').textContent=`Level ${state.lvl+1} conquered!`;setTimeout(()=>startGame(state.lvl+1,state.score),1300)}else showEnd(true);return true}
   if(act>=60){state.gameOver=true;showEnd(false);return true}
-  let has=false;for(let r=0;r<GRID&&!has;r++)for(let c=0;c<GRID;c++)if(state.grid[r][c]===EMPTY&&state.absorb[r][c]>0&&neighbors(r,c).some(([rr,cc])=>state.grid[rr][cc]===PLAYER)){has=true;break}
+  let has=false;for(let r=0;r<GRID&&!has;r++)for(let c=0;c<GRID;c++)if(isLegalPlayerCell(r,c)){has=true;break}
   if(!has){state.gameOver=true;showEnd(pct>act);return true}
   return false;
 }
 
-/* === ENHANCEMENT 6: WIN CELEBRATION === */
+function spawnNutrientBurst(x,y,col){for(let i=0;i<10;i++){let a=(Math.PI*2/10)*i;FX.ripples.push({x,y,r:3,a:.9,col,spd:65+Math.random()*60});FX.trails.push({x,y,r:5,a:.82,col,decay:1.2})}}
+
 function showEnd(won){
-  const[p,a,total]=countCells();
-  /* If player won, fire celebration bursts at player cells */
   if(won){
-    const playerCells=[];
-    for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++)if(state.grid[r][c]===PLAYER)playerCells.push({r,c});
-    for(let i=0;i<5;i++){
-      const idx=Math.floor(Math.random()*playerCells.length);
-      const cell=playerCells[idx];
-      setTimeout(()=>{
-        spawnNutrientBurst(cell.c*CS+CS/2, cell.r*CS+CS/2, 'rgba(170,220,70,0.9)');
-        screenShake(4, 0.15);
-      }, i*150);
-    }
+    const cells=[];for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++)if(state.grid[r][c]===PLAYER)cells.push({r,c});
+    for(let i=0;i<6;i++){const cel=cells[Math.floor(Math.random()*cells.length)];setTimeout(()=>{spawnNutrientBurst(cel.c*CS+CS/2,cel.r*CS+CS/2,'rgba(170,240,80,.95)');screenShake(4,.16)},i*130)}
   }
-  setTimeout(()=>{
-    const ov=document.getElementById('overlay');ov.innerHTML=`<h2 style='color:${won?'#88cc44':'#ff6622'}'>${won?'🍄 NETWORK DOMINATES':'🔥 OVERRUN'}</h2><p style='font-size:1.1em;color:#fff'>Score: ${state.score}</p><p>You: ${Math.round(p/total*100)}% · AI: ${Math.round(a/total*100)}%</p><button onclick='startGame(0)'>↺ New Colony</button>`;ov.style.display='flex';
-  }, won ? 800 : 0);
+  setTimeout(()=>{const [p,a,total]=countCells();const ov=document.getElementById('overlay');ov.innerHTML=`<h2 style='color:${won?'#88cc44':'#ff6622'}'>${won?'🍄 NETWORK DOMINATES':'🔥 OVERRUN'}</h2><p style='font-size:1.1em;color:#fff'>Score: ${state.score}</p><p>You: ${Math.round(p/total*100)}% · AI: ${Math.round(a/total*100)}%</p><button onclick='startGame(0)'>↺ New Colony</button>`;ov.style.display='flex'},won?760:0)
 }
 
 function updateHUD(){if(!state)return;const[p,a,total]=countCells(),pct=Math.round(p/total*100),act=Math.round(a/total*100);document.getElementById('lvl').textContent=state.lvl+1;document.getElementById('pct').textContent=pct;document.getElementById('act').textContent=act;document.getElementById('turns').textContent=state.turns;document.getElementById('bar-p').style.width=pct+'%';document.getElementById('bar-a').style.width=act+'%'}
 
 function render(){
-  const s=state;if(!s)return;
-  const lc = LEVEL_COLORS[s.lvl];
+  if(!state)return;const s=state,lc=LEVEL_COLORS[s.lvl];ctx.fillStyle='#0a0804';ctx.fillRect(0,0,W,W);
+  ctx.save();ctx.translate(shakeX,shakeY);
 
-  ctx.fillStyle='#0a0804';ctx.fillRect(0,0,W,W);
-
-  /* Enhancement 1: screen shake wrapper */
-  ctx.save();
-  ctx.translate(shakeX, shakeY);
-
+  // cells
   for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++){
-    const x=c*CS,y=r*CS,v=s.grid[r][c],ab=s.absorb[r][c];
-    /* Enhancement 7: level-based empty cell color */
-    ctx.fillStyle=ab===0?'#241a10':(v===PLAYER?lc.player:(v===AI?lc.ai:(v===DEAD?'#332211':lc.empty)));
-    ctx.globalAlpha=1;ctx.fillRect(x+.5,y+.5,CS-1,CS-1);
-    if(s.nutrients.has(`${r},${c}`)&&v===EMPTY){ctx.save();ctx.globalAlpha=.5;ctx.fillStyle='#aadd44';ctx.beginPath();ctx.arc(x+CS/2,y+CS/2,CS*.2,0,Math.PI*2);ctx.fill();ctx.restore()}
+    const x=c*CS,y=r*CS,v=s.grid[r][c],isWax=s.wax[r][c];
+    ctx.fillStyle=isWax?'#241a10':(v===PLAYER?lc.player:(v===AI?lc.ai:(v===DEAD?'#332211':lc.empty)));
+    ctx.fillRect(x+.5,y+.5,CS-1,CS-1);
+
+    if(s.nutrients.has(`${r},${c}`)&&v===EMPTY&&!isWax){ctx.globalAlpha=.52;ctx.fillStyle='#aadd44';ctx.beginPath();ctx.arc(x+CS/2,y+CS/2,CS*.2,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1}
+
     if(v===PLAYER||v===AI){
-      ctx.save();ctx.globalAlpha=.7;
-      /* Enhancement 7: level-based cell colors */
-      ctx.fillStyle=v===PLAYER?lc.playerCell:lc.aiCell;
-      /* Enhancement 5: cell glow */
-      ctx.shadowColor=v===PLAYER?lc.playerGlow:lc.aiGlow;
-      ctx.shadowBlur=8;
-      /* Enhancement 2: cell growth animation */
-      const animKey = `${r},${c}`;
-      let scale = 1;
-      if(cellAnims.has(animKey)){
-        scale = cellAnims.get(animKey).progress;
-      }
-      const radius = CS*0.38*scale;
-      ctx.beginPath();ctx.arc(x+CS/2,y+CS/2,radius,0,Math.PI*2);ctx.fill();
-      ctx.restore();
+      const anim=cellAnims.get(`${r},${c}`),scale=anim?Math.min(1,anim.progress):1;
+      ctx.save();ctx.shadowColor=v===PLAYER?lc.playerGlow:lc.aiGlow;ctx.shadowBlur=8;ctx.fillStyle=v===PLAYER?lc.playerCell:lc.aiCell;ctx.beginPath();ctx.arc(x+CS/2,y+CS/2,CS*.38*scale,0,Math.PI*2);ctx.fill();ctx.restore();
     }
-    if(ab===0){ctx.save();ctx.globalAlpha=.3;ctx.strokeStyle='#665544';ctx.lineWidth=.5;ctx.strokeRect(x+.5,y+.5,CS-1,CS-1);ctx.restore()}
+
+    if(isWax){ctx.globalAlpha=.28;ctx.strokeStyle='#665544';ctx.lineWidth=.5;ctx.strokeRect(x+.5,y+.5,CS-1,CS-1);ctx.globalAlpha=1}
   }
 
-  ctx.strokeStyle='rgba(80,60,20,.3)';ctx.lineWidth=.5;
-  for(let i=0;i<=GRID;i++){ctx.beginPath();ctx.moveTo(i*CS,0);ctx.lineTo(i*CS,W);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i*CS);ctx.lineTo(W,i*CS);ctx.stroke()}
-
-  /* Enhancement 4: territory pulse ring */
-  if(pulseWave && pulseWave.active){
-    ctx.save();
-    ctx.globalAlpha = pulseWave.a;
-    ctx.strokeStyle = pulseWave.owner==='p' ? 'rgba(100,220,60,0.5)' : 'rgba(255,140,30,0.5)';
-    ctx.lineWidth = 3;
-    ctx.shadowColor = pulseWave.owner==='p' ? 'rgba(100,220,60,0.6)' : 'rgba(255,140,30,0.6)';
-    ctx.shadowBlur = 12;
-    ctx.beginPath();
-    ctx.arc(W/2, W/2, pulseWave.r, 0, Math.PI*2);
-    ctx.stroke();
-    ctx.restore();
+  // mycelium connection lines (new depth)
+  for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++){
+    const v=s.grid[r][c];if(v!==PLAYER&&v!==AI)continue;
+    for(const [nr,nc] of [[r+1,c],[r,c+1]]){
+      if(nr>=GRID||nc>=GRID)continue;
+      if(s.grid[nr][nc]===v){
+        ctx.strokeStyle=v===PLAYER?'rgba(120,230,90,.24)':'rgba(255,140,70,.22)';ctx.lineWidth=1.4;
+        ctx.beginPath();ctx.moveTo(c*CS+CS/2,r*CS+CS/2);ctx.lineTo(nc*CS+CS/2,nr*CS+CS/2);ctx.stroke();
+      }
+    }
   }
 
-  /* End screen shake wrapper */
+  ctx.strokeStyle='rgba(80,60,20,.28)';ctx.lineWidth=.5;for(let i=0;i<=GRID;i++){ctx.beginPath();ctx.moveTo(i*CS,0);ctx.lineTo(i*CS,W);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i*CS);ctx.lineTo(W,i*CS);ctx.stroke()}
+
+  if(pulseWave&&pulseWave.active){ctx.globalAlpha=pulseWave.a;ctx.strokeStyle=pulseWave.owner==='p'?'rgba(100,220,60,.55)':'rgba(255,140,30,.55)';ctx.lineWidth=3;ctx.shadowColor=ctx.strokeStyle;ctx.shadowBlur=12;ctx.beginPath();ctx.arc(W/2,W/2,pulseWave.r,0,Math.PI*2);ctx.stroke();ctx.shadowBlur=0;ctx.globalAlpha=1}
+
   ctx.restore();
 }
 
-function getCellFromClient(clientX,clientY){const rect=canvas.getBoundingClientRect(),sx=W/rect.width,sy=W/rect.height;const x=(clientX-rect.left)*sx,y=(clientY-rect.top)*sy;return{r:Math.floor(y/CS),c:Math.floor(x/CS),x,y}}
+function getCellFromClient(clientX,clientY){const r=canvas.getBoundingClientRect(),sx=W/r.width,sy=W/r.height;const x=(clientX-r.left)*sx,y=(clientY-r.top)*sy;return{r:Math.floor(y/CS),c:Math.floor(x/CS),x,y}}
 canvas.addEventListener('click',e=>{const p=getCellFromClient(e.clientX,e.clientY);playerMove(p.r,p.c)});
-canvas.addEventListener('touchstart',e=>{e.preventDefault();const t=e.changedTouches[0],p=getCellFromClient(t.clientX,t.clientY);FX.spawn(p.x,p.y,'rgba(136,220,90,.9)');playerMove(p.r,p.c)}, {passive:false});
-canvas.addEventListener('touchmove',e=>{e.preventDefault()}, {passive:false});
-canvas.addEventListener('touchend',e=>{e.preventDefault()}, {passive:false});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();for(const t of e.changedTouches){const p=getCellFromClient(t.clientX,t.clientY);FX.spawn(p.x,p.y,'rgba(136,220,90,.9)');playerMove(p.r,p.c)}},{passive:false});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();for(const t of e.changedTouches){const p=getCellFromClient(t.clientX,t.clientY);FX.move(p.x,p.y)}},{passive:false});
+canvas.addEventListener('touchend',e=>e.preventDefault(),{passive:false});
+canvas.addEventListener('touchcancel',e=>e.preventDefault(),{passive:false});
 </script>
 </body>
 </html>

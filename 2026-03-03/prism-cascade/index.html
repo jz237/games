@@ -1,519 +1,247 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
 <title>Prism Cascade</title>
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { background:#0a0a14; overflow:hidden; touch-action:none; font-family:'Courier New',monospace; }
-#wrap { display:flex; flex-direction:column; align-items:center; height:100dvh; padding:6px; gap:4px; }
-#topbar {
-  width:100%; max-width:560px; display:flex;
-  justify-content:space-between; align-items:center;
-  padding:6px 10px; background:rgba(255,255,255,0.04);
-  border:1px solid rgba(255,255,255,0.07); border-radius:6px;
-  color:rgba(200,210,255,0.8); font-size:12px;
-}
-.score { font-size:18px; font-weight:bold; }
-.score-you { color:#55aaff; text-shadow:0 0 12px rgba(85,170,255,0.5); }
-.score-ai  { color:#ff5566; text-shadow:0 0 12px rgba(255,85,102,0.5); }
-#canvas-wrap { flex:1; display:flex; align-items:center; justify-content:center; position:relative; width:100%; max-width:560px; }
-canvas { border-radius:4px; touch-action:none; display:block; }
-#hand { width:100%; max-width:560px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap; padding:4px 2px; }
-.piece-btn {
-  background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15);
-  color:rgba(200,210,255,0.8); font-size:11px; border-radius:6px;
-  cursor:pointer; min-height:48px; padding:6px 10px;
-  display:flex; flex-direction:column; align-items:center; gap:2px;
-  letter-spacing:0.5px; transition:all 0.15s; flex:1; min-width:55px;
-  -webkit-tap-highlight-color:transparent;
-}
-.piece-btn:hover { background:rgba(255,255,255,0.12); border-color:rgba(255,255,255,0.3); }
-.piece-btn.selected { border-color:#55aaff; background:rgba(85,170,255,0.15); color:#55aaff; }
-.piece-btn.used { opacity:0.3; cursor:not-allowed; }
-.piece-icon { font-size:18px; line-height:1; }
-#status { color:rgba(160,170,210,0.6); font-size:11px; text-align:center; min-height:16px; }
-#overlay {
-  position:fixed; inset:0; background:rgba(5,5,18,0.96);
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  z-index:30; padding:20px; text-align:center;
-}
-#overlay h1 { font-size:clamp(24px,6vw,44px); color:#a0c0ff; letter-spacing:4px; margin-bottom:14px; text-shadow:0 0 40px rgba(120,160,255,0.6); }
-#overlay p { font-size:clamp(11px,3vw,14px); color:rgba(160,180,230,0.7); max-width:380px; line-height:1.7; margin:3px 0; }
-#overlay button { margin-top:18px; padding:13px 36px; font-size:14px; background:rgba(100,130,255,0.12); border:1px solid rgba(100,130,255,0.45); color:rgba(160,190,255,0.9); font-family:'Courier New',monospace; letter-spacing:2px; cursor:pointer; border-radius:3px; min-height:48px; min-width:160px; -webkit-tap-highlight-color:transparent; }
-#overlay button:hover { background:rgba(100,130,255,0.22); }
-.btn2 { margin-top:8px!important; border-color:rgba(255,100,120,0.35)!important; color:rgba(255,120,130,0.8)!important; background:rgba(255,80,100,0.07)!important; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#080a18;overflow:hidden;touch-action:none;font-family:'Courier New',monospace}
+#wrap{display:flex;flex-direction:column;align-items:center;height:100dvh;padding:6px;gap:4px}
+#topbar{width:100%;max-width:560px;display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:#c9d4ff;font-size:12px}
+.score{font-size:18px;font-weight:bold}.you{color:#5bb2ff}.ai{color:#ff6677}
+#canvas-wrap{flex:1;display:flex;align-items:center;justify-content:center;width:100%;max-width:560px}
+canvas{display:block;border-radius:6px;touch-action:none}
+#hand{width:100%;max-width:560px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;padding:2px}
+.piece-btn{flex:1;min-width:60px;min-height:48px;border-radius:7px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#d5defe;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;letter-spacing:.5px;-webkit-tap-highlight-color:transparent}
+.piece-btn.selected{border-color:#5bb2ff;background:rgba(91,178,255,.18);color:#5bb2ff}
+.piece-btn.used{opacity:.3;cursor:not-allowed}
+.piece-icon{font-size:18px;line-height:1}
+#status{font-size:11px;color:rgba(180,190,230,.65);min-height:15px;text-align:center}
+#overlay{position:fixed;inset:0;background:rgba(5,6,20,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;padding:20px}
+#overlay h1{font-size:clamp(26px,7vw,50px);color:#a9c6ff;letter-spacing:4px;margin-bottom:10px;text-shadow:0 0 30px rgba(120,170,255,.6)}
+#overlay button{margin-top:18px;min-height:48px;min-width:170px;padding:14px 36px;border-radius:5px;border:1px solid rgba(120,170,255,.55);background:rgba(120,170,255,.15);color:#cde0ff;font-family:'Courier New',monospace;letter-spacing:2px;cursor:pointer}
+.ob2{margin-top:8px!important;border-color:rgba(255,120,130,.45)!important;background:rgba(255,80,100,.08)!important;color:rgba(255,140,150,.9)!important}
 </style>
 </head>
 <body>
 <div id="wrap">
   <div id="topbar">
-    <div>YOU: <span class="score score-you" id="p1score">0</span></div>
+    <div>YOU <span id="p1score" class="score you">0</span></div>
     <div style="text-align:center">
-      <div style="font-size:10px;opacity:0.4">LEVEL <span id="levelEl">1</span> · TURN <span id="turnEl">1</span></div>
-      <div style="font-size:11px;opacity:0.6" id="whoEl">Your turn — place a piece</div>
+      <div style="font-size:10px;opacity:.45">LEVEL <span id="levelEl">1</span> · TURN <span id="turnEl">1</span></div>
+      <div id="whoEl" style="font-size:11px;opacity:.75">Your turn</div>
     </div>
-    <div>AI: <span class="score score-ai" id="p2score">0</span></div>
+    <div>AI <span id="p2score" class="score ai">0</span></div>
   </div>
   <div id="canvas-wrap"><canvas id="c"></canvas></div>
   <div id="hand"></div>
-  <div id="status">Select a piece, then tap a grid cell to place it.</div>
+  <div id="status">Select a piece, then tap a cell.</div>
 </div>
+
 <div id="overlay">
   <h1>PRISM CASCADE</h1>
-  <ul style="list-style:none;margin:14px 0;max-width:360px;width:100%;display:flex;flex-direction:column;gap:10px;text-align:left;">
-    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(160,180,230,0.85);">💡 White light beams enter from the edges — route them to your <strong style="color:#55aaff">blue targets</strong></li>
-    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(160,180,230,0.85);">🃏 Select a piece from your hand at the bottom, then tap the grid to place it</li>
-    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(160,180,230,0.85);">◈ <strong>Prism</strong> splits white → Red, Green, Blue · <strong>Mirror</strong> (/ \) reflects beams</li>
-    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(160,180,230,0.85);">◉ <strong>Filters</strong> block all colors except their own (R/G/B)</li>
-    <li style="font-size:clamp(13px,3.8vw,16px);line-height:1.4;color:rgba(160,180,230,0.85);">🏆 Score more than the AI after all turns — hitting targets earns points!</li>
+  <ul style="list-style:none;max-width:360px;display:flex;flex-direction:column;gap:8px;color:rgba(170,190,235,.86);line-height:1.4">
+    <li>💡 White light enters from the edges — route colors into your blue targets.</li>
+    <li>🃏 Choose a piece from your hand, then place it on the board.</li>
+    <li>◈ Prism splits white into RGB. Mirrors redirect. Filters pass one color.</li>
+    <li>🤖 AI is tactical and adapts to beam paths each turn.</li>
+    <li>🏆 Win by outscoring the AI across 3 increasingly complex arenas.</li>
   </ul>
-  <button onclick="startGame(1)" style="margin-top:20px;font-size:clamp(15px,4vw,19px);padding:16px 44px;font-weight:bold;letter-spacing:2px;">▶ TAP TO PLAY</button>
+  <button onclick="startGame(1)" style="font-weight:bold">▶ TAP TO PLAY</button>
 </div>
 
 <script>
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-const overlay = document.getElementById('overlay');
-const p1El = document.getElementById('p1score');
-const p2El = document.getElementById('p2score');
-const whoEl = document.getElementById('whoEl');
-const turnEl = document.getElementById('turnEl');
-const statusEl = document.getElementById('status');
-const handEl = document.getElementById('hand');
-const levelEl = document.getElementById('levelEl');
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const overlay=document.getElementById('overlay');
+const p1El=document.getElementById('p1score'),p2El=document.getElementById('p2score');
+const whoEl=document.getElementById('whoEl'),turnEl=document.getElementById('turnEl'),statusEl=document.getElementById('status');
+const handEl=document.getElementById('hand'),levelEl=document.getElementById('levelEl');
 
-// ==== TOUCH FX ====
-const FX = {
-  ripples: [], trails: [],
-  spawn(x, y, col) {
-    this.ripples.push({x, y, r: 6, a: 0.85, col: col||'rgba(100,170,255,0.85)', spd: 80});
-    this.trails.push({x, y, r: 14, a: 0.65, col: col||'rgba(80,140,255,0.7)', decay: 3});
-  },
-  update(dt) {
-    this.ripples = this.ripples.filter(r => { r.r += r.spd*dt; r.a -= dt*1.8; return r.a > 0.01; });
-    this.trails = this.trails.filter(t => { t.a -= t.decay*dt; t.r -= dt*14; return t.a > 0.01 && t.r > 0.1; });
-  },
-  draw(ctx) {
-    ctx.save(); ctx.shadowBlur = 16;
-    for (const r of this.ripples) {
-      ctx.globalAlpha = r.a; ctx.strokeStyle = ctx.shadowColor = r.col;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI*2); ctx.stroke();
-    }
-    for (const t of this.trails) {
-      ctx.globalAlpha = t.a * 0.7; ctx.fillStyle = ctx.shadowColor = t.col;
-      ctx.beginPath(); ctx.arc(t.x, t.y, Math.max(0.5, t.r), 0, Math.PI*2); ctx.fill();
-    }
-    ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.restore();
-  }
-};
+const COLS=10,ROWS=10,DX=[1,0,-1,0],DY=[0,1,0,-1];
+let CELL,frameId,lastTs=0;
+let state='menu',level=1,turn=0,maxTurns=5;
+let grid,sources,pTargets,aTargets,pHand,aHand,pHandUsed,aHandUsed,selectedPiece=null,pScore=0,aScore=0,beamPaths=[];
 
-// ==== SCREEN SHAKE SYSTEM ====
-let shakeX=0, shakeY=0, shakeDur=0, shakeInt=0;
-function screenShake(intensity, dur) { shakeInt=intensity; shakeDur=dur; }
-function updateShake(dt) {
-  if(shakeDur>0){ shakeDur-=dt; shakeX=(Math.random()-.5)*shakeInt*2; shakeY=(Math.random()-.5)*shakeInt*2; if(shakeDur<=0){shakeX=shakeY=0;} }
-}
+const FX={ripples:[],trails:[],spawn(x,y,col='rgba(100,170,255,.9)'){this.ripples.push({x,y,r:6,a:.9,col,spd:80});this.trails.push({x,y,r:14,a:.65,col,decay:3})},move(x,y){if(Math.random()<.5)this.trails.push({x,y,r:4,a:.35,col:'rgba(110,170,255,.6)',decay:5})},update(dt){this.ripples=this.ripples.filter(r=>(r.r+=r.spd*dt,r.a-=1.8*dt,r.a>0));this.trails=this.trails.filter(t=>(t.r-=dt*14,t.a-=t.decay*dt,t.a>0&&t.r>.2))},draw(){ctx.save();ctx.shadowBlur=16;for(const r of this.ripples){ctx.globalAlpha=r.a;ctx.strokeStyle=ctx.shadowColor=r.col;ctx.lineWidth=2.4;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.stroke()}for(const t of this.trails){ctx.globalAlpha=t.a*.75;ctx.fillStyle=ctx.shadowColor=t.col;ctx.beginPath();ctx.arc(t.x,t.y,t.r,0,Math.PI*2);ctx.fill()}ctx.restore();ctx.globalAlpha=1}};
+let shakeX=0,shakeY=0,shakeDur=0,shakeInt=0;const sparkles=[];
+function screenShake(i,d){shakeInt=i;shakeDur=d}
+function updateShake(dt){if(shakeDur>0){shakeDur-=dt;shakeX=(Math.random()-.5)*shakeInt*2;shakeY=(Math.random()-.5)*shakeInt*2;if(shakeDur<=0){shakeX=shakeY=0}}}
 
-// ==== BEAM SPARKLES ====
-let sparkles = [];
-
-// ==== SOURCE EMITTER PULSE ====
-let sourceRingT = 0;
-
-// ==== NEBULA BACKGROUND ====
-let nebulaPoints = [];
-
-function toCanvasXY(touch) {
-  const rect = canvas.getBoundingClientRect();
-  return { x: (touch.clientX-rect.left)*canvas.width/rect.width, y: (touch.clientY-rect.top)*canvas.height/rect.height };
-}
-
-const COLS=10, ROWS=10;
-let CELL, W, H;
-let fxFrameId=null, fxLastTs=0;
-
-function resize() {
-  W=window.innerWidth; H=window.innerHeight;
-  let wrap=document.getElementById('canvas-wrap');
-  let maxSize=Math.min(wrap.clientWidth||W,wrap.clientHeight||H-120,500);
-  CELL=Math.floor(maxSize/COLS);
-  canvas.width=CELL*COLS; canvas.height=CELL*ROWS;
-}
-window.addEventListener('resize',()=>{resize();if(state==='playing')render();});
-
-const DX=[1,0,-1,0], DY=[0,1,0,-1];
-const COLORS={white:'rgba(255,255,255,0.95)',red:'rgba(255,50,50,0.95)',green:'rgba(50,255,80,0.95)',blue:'rgba(60,140,255,0.95)',yellow:'rgba(255,230,30,0.95)',cyan:'rgba(30,230,255,0.95)',magenta:'rgba(240,60,255,0.95)'};
-
-function getRGB(c){return{white:[1,1,1],red:[1,0,0],green:[0,1,0],blue:[0,0,1],yellow:[1,1,0],cyan:[0,1,1],magenta:[1,0,1]}[c]||[0,0,0];}
-function fromRGB(r,g,b){if(r&&g&&b)return 'white';if(r&&g)return 'yellow';if(r&&b)return 'magenta';if(g&&b)return 'cyan';if(r)return 'red';if(g)return 'green';if(b)return 'blue';return null;}
-function mixColor(c1,c2){let r1=getRGB(c1),r2=getRGB(c2);let r=Math.min(1,r1[0]+r2[0]),g=Math.min(1,r1[1]+r2[1]),b=Math.min(1,r1[2]+r2[2]);return fromRGB(r,g,b);}
+function resize(){let wrap=document.getElementById('canvas-wrap');let max=Math.min(wrap.clientWidth||innerWidth,wrap.clientHeight||innerHeight-140,500);CELL=Math.floor(max/COLS);canvas.width=CELL*COLS;canvas.height=CELL*ROWS}
+addEventListener('resize',()=>{resize();if(state==='playing')render()});resize();
 
 const PIECE_TYPES={
-  prism:{icon:'◈',label:'PRISM',desc:'Splits white→RGB'},mirror_fw:{icon:'/',label:'MIRROR /',desc:'Reflects beam'},
-  mirror_bw:{icon:'\\',label:'MIRROR \\',desc:'Reflects beam'},filter_r:{icon:'◉',label:'FILTER R',desc:'Passes red'},
-  filter_g:{icon:'◉',label:'FILTER G',desc:'Passes green'},filter_b:{icon:'◉',label:'FILTER B',desc:'Passes blue'},
+  prism:{icon:'◈',label:'PRISM'},mirror_fw:{icon:'/',label:'MIRROR /'},mirror_bw:{icon:'\\',label:'MIRROR \\'},
+  filter_r:{icon:'◉',label:'FILTER R'},filter_g:{icon:'◉',label:'FILTER G'},filter_b:{icon:'◉',label:'FILTER B'},lens:{icon:'⬢',label:'LENS'}
 };
+const COLORS={white:[1,1,1],red:[1,0,0],green:[0,1,0],blue:[0,0,1],yellow:[1,1,0],cyan:[0,1,1],magenta:[1,0,1]};
+const colorName=v=>Object.keys(COLORS).find(k=>COLORS[k].every((x,i)=>x===v[i]))||null;
+function mixColor(c1,c2){let a=COLORS[c1]||[0,0,0],b=COLORS[c2]||[0,0,0];return colorName([Math.min(1,a[0]+b[0]),Math.min(1,a[1]+b[1]),Math.min(1,a[2]+b[2])])||c1}
+function beamCol(c){return({white:'rgba(255,255,255,.9)',red:'rgba(255,70,70,.9)',green:'rgba(70,255,100,.9)',blue:'rgba(80,150,255,.9)',yellow:'rgba(255,220,60,.9)',cyan:'rgba(60,230,255,.9)',magenta:'rgba(230,80,255,.9)'}[c]||'rgba(255,255,255,.7)')}
 
 const LEVELS=[
-  {sources:[{x:-1,y:2,dir:0,color:'white'},{x:2,y:-1,dir:1,color:'white'}],
-   pTargets:[{x:9,y:2,needColor:'blue'},{x:9,y:5,needColor:'green'}],
-   aTargets:[{x:5,y:10,needColor:'red'},{x:7,y:10,needColor:'cyan'}],
-   pHand:['prism','mirror_fw','filter_b','filter_g','mirror_bw'],
-   aHand:['prism','mirror_bw','filter_r','mirror_fw','prism'],turns:5},
-  {sources:[{x:-1,y:1,dir:0,color:'white'},{x:-1,y:6,dir:0,color:'white'},{x:5,y:-1,dir:1,color:'white'}],
-   pTargets:[{x:9,y:1,needColor:'blue'},{x:9,y:4,needColor:'magenta'},{x:9,y:7,needColor:'green'}],
-   aTargets:[{x:2,y:10,needColor:'red'},{x:5,y:10,needColor:'yellow'},{x:8,y:10,needColor:'cyan'}],
-   pHand:['prism','mirror_fw','mirror_fw','filter_b','filter_g','mirror_bw'],
-   aHand:['prism','mirror_bw','filter_r','mirror_fw','prism','mirror_fw'],turns:6},
-  {sources:[{x:-1,y:0,dir:0,color:'white'},{x:-1,y:4,dir:0,color:'white'},{x:-1,y:8,dir:0,color:'white'},{x:4,y:-1,dir:1,color:'white'}],
-   pTargets:[{x:9,y:2,needColor:'blue'},{x:9,y:5,needColor:'cyan'},{x:9,y:8,needColor:'magenta'},{x:6,y:10,needColor:'green'}],
-   aTargets:[{x:1,y:10,needColor:'red'},{x:3,y:10,needColor:'yellow'},{x:8,y:10,needColor:'white'},{x:9,y:4,needColor:'red'}],
-   pHand:['prism','prism','mirror_fw','mirror_fw','filter_b','filter_g','mirror_bw'],
-   aHand:['prism','prism','mirror_bw','filter_r','mirror_fw','prism','mirror_bw'],turns:7}
+  {turns:5,sources:[{x:-1,y:2,dir:0,color:'white'},{x:2,y:-1,dir:1,color:'white'}],pTargets:[{x:9,y:2,needColor:'blue'},{x:9,y:5,needColor:'green'}],aTargets:[{x:5,y:10,needColor:'red'},{x:7,y:10,needColor:'cyan'}],pHand:['prism','mirror_fw','filter_b','filter_g','mirror_bw'],aHand:['prism','mirror_bw','filter_r','mirror_fw','prism']},
+  {turns:6,sources:[{x:-1,y:1,dir:0,color:'white'},{x:-1,y:6,dir:0,color:'white'},{x:5,y:-1,dir:1,color:'white'}],pTargets:[{x:9,y:1,needColor:'blue'},{x:9,y:4,needColor:'magenta'},{x:9,y:7,needColor:'green'}],aTargets:[{x:2,y:10,needColor:'red'},{x:5,y:10,needColor:'yellow'},{x:8,y:10,needColor:'cyan'}],pHand:['prism','mirror_fw','mirror_fw','filter_b','filter_g','mirror_bw'],aHand:['prism','mirror_bw','filter_r','mirror_fw','prism','mirror_fw']},
+  {turns:7,sources:[{x:-1,y:0,dir:0,color:'white'},{x:-1,y:4,dir:0,color:'white'},{x:-1,y:8,dir:0,color:'white'},{x:4,y:-1,dir:1,color:'white'}],pTargets:[{x:9,y:2,needColor:'blue'},{x:9,y:5,needColor:'cyan'},{x:9,y:8,needColor:'magenta'},{x:6,y:10,needColor:'green'}],aTargets:[{x:1,y:10,needColor:'red'},{x:3,y:10,needColor:'yellow'},{x:8,y:10,needColor:'white'},{x:9,y:4,needColor:'red'}],pHand:['prism','prism','mirror_fw','mirror_fw','filter_b','filter_g','lens'],aHand:['prism','prism','mirror_bw','filter_r','mirror_fw','lens','mirror_bw']}
 ];
 
-let state='menu',level=1,turn=0,maxTurns=5;
-let grid,sources,pTargets,aTargets,pHand,aHand,pHandUsed,aHandUsed;
-let selectedPiece=null,pScore=0,aScore=0,beamPaths=[],litTargets=new Map();
-let frameId=null;
-
-// ==== TARGET HIT BURST ====
-function spawnTargetBurst(x, y, color) {
-  let col = getBeamColor(color);
-  for(let i=0;i<16;i++){
-    let angle = (Math.PI*2/16)*i + (Math.random()-0.5)*0.3;
-    let speed = 50+Math.random()*50;
-    FX.ripples.push({x, y, r:3+Math.random()*4, a:0.85, col, spd:speed});
-    FX.trails.push({x, y, r:5+Math.random()*5, a:0.8, col, decay:1.0});
-  }
-  FX.ripples.push({x, y, r:4, a:0.7, col, spd:80});
-  FX.ripples.push({x, y, r:8, a:0.5, col, spd:120});
-}
-
-function startFxLoop() {
-  if (fxFrameId) return;
-  function fxLoop(ts) {
-    const dt = Math.min((ts-fxLastTs)/1000, 0.05); fxLastTs=ts;
-    FX.update(dt);
-    updateShake(dt);
-    sourceRingT += dt;
-    sparkles = sparkles.filter(s => { s.x += s.vx*dt; s.y += s.vy*dt; s.life -= dt; return s.life > 0; });
-    if (FX.ripples.length > 0 || FX.trails.length > 0 || sparkles.length > 0 || shakeDur > 0 || state==='playing') { render(); FX.draw(ctx); }
-    fxFrameId = requestAnimationFrame(fxLoop);
-  }
-  fxFrameId = requestAnimationFrame(fxLoop);
-}
-
 function startGame(lvl){
-  level=lvl;levelEl.textContent=level;
-  const cfg=LEVELS[level-1]; resize();
-  grid=Array.from({length:ROWS},()=>new Array(COLS).fill(null));
-  sources=cfg.sources;
-  pTargets=cfg.pTargets.map(t=>({...t,owner:'p',lit:false}));
-  aTargets=cfg.aTargets.map(t=>({...t,owner:'a',lit:false}));
-  pHand=[...cfg.pHand];aHand=[...cfg.aHand];
-  pHandUsed=new Array(pHand.length).fill(false);aHandUsed=new Array(aHand.length).fill(false);
-  maxTurns=cfg.turns;turn=0;pScore=0;aScore=0;selectedPiece=null;beamPaths=[];litTargets=new Map();
-  sparkles=[];sourceRingT=0;
-  // Pre-compute nebula background points
-  nebulaPoints = [];
-  for(let i=0;i<4;i++) {
-    nebulaPoints.push({
-      x: Math.random()*CELL*COLS,
-      y: Math.random()*CELL*ROWS,
-      r: CELL*3 + Math.random()*CELL*3,
-      h: 220 + Math.random()*40,
-      a: 0.04 + Math.random()*0.04
-    });
-  }
-  state='playing';overlay.style.display='none';
-  buildHand();simulate();render();updateUI();
-  startFxLoop();
+  level=lvl;levelEl.textContent=level;resize();
+  const cfg=LEVELS[level-1];
+  grid=Array.from({length:ROWS},()=>Array(COLS).fill(null));
+  sources=cfg.sources; pTargets=cfg.pTargets.map(t=>({...t,owner:'p',lit:false})); aTargets=cfg.aTargets.map(t=>({...t,owner:'a',lit:false}));
+  pHand=[...cfg.pHand];aHand=[...cfg.aHand]; pHandUsed=Array(pHand.length).fill(false);aHandUsed=Array(aHand.length).fill(false);
+  maxTurns=cfg.turns;turn=0;selectedPiece=null;pScore=0;aScore=0;beamPaths=[];
+  state='playing';overlay.style.display='none';buildHand();simulate();updateUI();
+  if(frameId)cancelAnimationFrame(frameId);lastTs=0;frameId=requestAnimationFrame(loop);
 }
 
 function buildHand(){
   handEl.innerHTML='';
   pHand.forEach((p,i)=>{
-    let btn=document.createElement('button');
-    btn.className='piece-btn'+(pHandUsed[i]?' used':'');
-    let pt=PIECE_TYPES[p];
-    let colorStyle=p==='filter_r'?'color:#ff5566':p==='filter_g'?'color:#50ff80':p==='filter_b'?'color:#55aaff':'';
-    btn.innerHTML=`<span class="piece-icon" style="${colorStyle}">${pt.icon}</span><span>${pt.label}</span>`;
-    btn.onclick=()=>{if(!pHandUsed[i]&&isPlayerTurn()){selectedPiece=i;highlightSelected();}};
-    btn.setAttribute('data-idx',i); handEl.appendChild(btn);
+    const b=document.createElement('button');
+    b.className='piece-btn'+(pHandUsed[i]?' used':'');
+    const c=p==='filter_r'?'#ff6677':p==='filter_g'?'#66ff88':p==='filter_b'?'#66b7ff':p==='lens'?'#ffd86b':'#d5defe';
+    b.innerHTML=`<span class='piece-icon' style='color:${c}'>${PIECE_TYPES[p].icon}</span><span>${PIECE_TYPES[p].label}</span>`;
+    b.onclick=()=>{if(!pHandUsed[i]&&isPlayerTurn()){selectedPiece=i;highlightSelected()}};
+    handEl.appendChild(b);
   });
 }
+function highlightSelected(){[...handEl.children].forEach((x,i)=>x.classList.toggle('selected',i===selectedPiece&&!pHandUsed[i]))}
+const isPlayerTurn=()=>turn%2===0&&state==='playing';
 
-function highlightSelected(){document.querySelectorAll('.piece-btn').forEach((b,i)=>b.classList.toggle('selected',i===selectedPiece&&!pHandUsed[i]));}
-function isPlayerTurn(){return turn%2===0&&state==='playing';}
+function updateUI(){p1El.textContent=pScore;p2El.textContent=aScore;turnEl.textContent=`${Math.floor(turn/2)+1}/${maxTurns}`;whoEl.textContent=isPlayerTurn()?'Your turn — place a piece':'AI calculating...';whoEl.style.color=isPlayerTurn()?'rgba(90,180,255,.9)':'rgba(255,110,130,.85)'}
 
-function updateUI(){
-  p1El.textContent=pScore;p2El.textContent=aScore;
-  turnEl.textContent=Math.floor(turn/2)+1+'/'+maxTurns;
-  whoEl.textContent=isPlayerTurn()?"Your turn — place a piece":"AI placing...";
-  whoEl.style.color=isPlayerTurn()?'rgba(85,170,255,0.8)':'rgba(255,85,102,0.7)';
+function processBeam(piece,dir,color){
+  const out=[];
+  if(piece==='mirror_fw'){const map=[3,2,1,0];out.push({dir:map[dir],color})}
+  else if(piece==='mirror_bw'){const map=[1,0,3,2];out.push({dir:map[dir],color})}
+  else if(piece==='prism'){ if(color==='white'){out.push({dir,color:'green'},{dir:(dir+1)%4,color:'red'},{dir:(dir+3)%4,color:'blue'})} else {out.push({dir,color});out.push({dir:(dir+1)%4,color})} }
+  else if(piece==='filter_r'){if(COLORS[color]?.[0])out.push({dir,color:'red'})}
+  else if(piece==='filter_g'){if(COLORS[color]?.[1])out.push({dir,color:'green'})}
+  else if(piece==='filter_b'){if(COLORS[color]?.[2])out.push({dir,color:'blue'})}
+  else if(piece==='lens'){out.push({dir,color});out.push({dir,color});}
+  return out;
 }
 
 function simulate(){
-  // Save previous lit states for target hit burst detection
-  let prevLit = new Map();
-  for(let t of [...pTargets,...aTargets]) prevLit.set(`${t.x},${t.y}`, t.lit);
-
-  let paths=[],litMap=new Map(),allBeams=[];
-  for(let s of sources) allBeams.push({x:s.x,y:s.y,dir:s.dir,color:s.color,path:[{x:s.x,y:s.y}]});
-  let visited=new Set(),iters=0;
-  while(allBeams.length>0&&iters++<2000){
-    let b=allBeams.shift();
-    let key=`${b.x},${b.y},${b.dir},${b.color}`;if(visited.has(key))continue;visited.add(key);
-    let nx=b.x+DX[b.dir],ny=b.y+DY[b.dir];
-    paths.push({x1:b.x,y1:b.y,x2:nx,y2:ny,color:b.color});
-    if(nx<0||nx>=COLS||ny<0||ny>=ROWS){checkTargetHit(nx,ny,b.color,litMap);continue;}
-    let cell=grid[ny][nx];
-    if(!cell) allBeams.push({x:nx,y:ny,dir:b.dir,color:b.color});
-    else{let results=processBeam(cell,b.dir,b.color);for(let r of results)allBeams.push({x:nx,y:ny,...r});}
-  }
-  beamPaths=paths;litTargets=litMap;
-
-  // Beam sparkles: randomly spawn sparkles along beam paths
-  for(let bp of beamPaths) {
-    if(Math.random() < 0.1) {
-      let t = Math.random();
-      let sx = bp.x1 + (bp.x2-bp.x1)*t;
-      let sy = bp.y1 + (bp.y2-bp.y1)*t;
-      sparkles.push({x:(sx+0.5)*CELL, y:(sy+0.5)*CELL, life:0.6+Math.random()*0.4, maxLife:0.6+Math.random()*0.4, vx:Math.random()*30-15, vy:Math.random()*30-15, col:getBeamColor(bp.color)});
+  const litMap=new Map();beamPaths=[];
+  const q=[];for(const s of sources)q.push({x:s.x,y:s.y,dir:s.dir,color:s.color});
+  const visited=new Set();let guard=0;
+  while(q.length&&guard++<2500){
+    const b=q.shift();const key=`${b.x},${b.y},${b.dir},${b.color}`;if(visited.has(key))continue;visited.add(key);
+    const nx=b.x+DX[b.dir],ny=b.y+DY[b.dir];
+    beamPaths.push({x1:b.x,y1:b.y,x2:nx,y2:ny,color:b.color});
+    if(Math.random()<.09){const t=Math.random();sparkles.push({x:(b.x+(nx-b.x)*t+.5)*CELL,y:(b.y+(ny-b.y)*t+.5)*CELL,life:.6+Math.random()*.5,max:.8,col:beamCol(b.color),vx:(Math.random()-.5)*20,vy:(Math.random()-.5)*20})}
+    if(nx<0||nx>=COLS||ny<0||ny>=ROWS){
+      for(const t of [...pTargets,...aTargets])if(t.x===nx&&t.y===ny){const k=`${nx},${ny}`;litMap.set(k,litMap.has(k)?mixColor(litMap.get(k),b.color):b.color)}
+      continue;
     }
+    const piece=grid[ny][nx];
+    if(!piece)q.push({x:nx,y:ny,dir:b.dir,color:b.color});
+    else for(const r of processBeam(piece,b.dir,b.color))q.push({x:nx,y:ny,...r});
   }
-
-  let newPS=0,newAS=0;
-  for(let t of pTargets){let key=`${t.x},${t.y}`;t.lit=litTargets.has(key)&&litTargets.get(key)===t.needColor;if(t.lit)newPS+=100;else if(litTargets.has(key))newPS-=20;}
-  for(let t of aTargets){let key=`${t.x},${t.y}`;t.lit=litTargets.has(key)&&litTargets.get(key)===t.needColor;if(t.lit)newAS+=100;else if(litTargets.has(key))newAS-=20;}
-  pScore=Math.max(0,newPS);aScore=Math.max(0,newAS);p1El.textContent=pScore;p2El.textContent=aScore;
-
-  // Check for newly lit targets and spawn burst + shake
-  for(let t of [...pTargets,...aTargets]) {
-    let key = `${t.x},${t.y}`;
-    if(t.lit && !prevLit.get(key)) {
-      spawnTargetBurst((t.x+0.5)*CELL, (t.y+0.5)*CELL, t.needColor);
-      screenShake(3, 0.2);
-    }
-  }
+  let np=0,na=0;
+  for(const t of pTargets){const k=`${t.x},${t.y}`;const old=t.lit;t.lit=litMap.has(k)&&litMap.get(k)===t.needColor;if(t.lit)np+=120;else if(litMap.has(k))np-=25;if(t.lit&&!old){burstTarget(t);screenShake(3,.2)}}
+  for(const t of aTargets){const k=`${t.x},${t.y}`;const old=t.lit;t.lit=litMap.has(k)&&litMap.get(k)===t.needColor;if(t.lit)na+=120;else if(litMap.has(k))na-=25;if(t.lit&&!old){burstTarget(t);screenShake(3,.2)}}
+  pScore=Math.max(0,np);aScore=Math.max(0,na);
 }
 
-function checkTargetHit(x,y,color,litMap){
-  for(let t of [...pTargets,...aTargets]){
-    if(t.x===x&&t.y===y){let k=`${x},${y}`;if(!litMap.has(k))litMap.set(k,color);else{let ex=litMap.get(k);let mixed=mixColor(ex,color);if(mixed)litMap.set(k,mixed);}}
-  }
+function burstTarget(t){const x=(t.x+.5)*CELL,y=(t.y+.5)*CELL,c=beamCol(t.needColor);for(let i=0;i<14;i++){FX.ripples.push({x,y,r:3+Math.random()*4,a:.85,col:c,spd:60+Math.random()*55});FX.trails.push({x,y,r:5+Math.random()*5,a:.8,col:c,decay:1.1})}}
+
+function placePiece(cx,cy,type,owner,idx){
+  grid[cy][cx]=type;
+  if(owner==='p'){pHandUsed[idx]=true;selectedPiece=null;buildHand();}
+  simulate();turn++;updateUI();
+  if(turn>=maxTurns*2){endGame();return}
+  if(turn%2===1){statusEl.textContent='AI analyzing beam tree...';setTimeout(aiTurn,420+Math.random()*420)}
+  else statusEl.textContent='Select a piece, then tap a cell.'
 }
 
-function processBeam(piece,dir,color){
-  let results=[];
-  if(piece==='mirror_fw'){let map=[3,2,1,0];results.push({dir:map[dir],color});}
-  else if(piece==='mirror_bw'){let map=[1,0,3,2];results.push({dir:map[dir],color});}
-  else if(piece==='prism'){
-    if(color==='white'){let right=(dir+1)%4,left=(dir+3)%4;results.push({dir,color:'green'},{dir:right,color:'red'},{dir:left,color:'blue'});}
-    else{results.push({dir,color});results.push({dir:(dir+1)%4,color});}
-  }
-  else if(piece==='filter_r'){let rgb=getRGB(color);if(rgb[0])results.push({dir,color:'red'});}
-  else if(piece==='filter_g'){let rgb=getRGB(color);if(rgb[1])results.push({dir,color:'green'});}
-  else if(piece==='filter_b'){let rgb=getRGB(color);if(rgb[2])results.push({dir,color:'blue'});}
-  return results;
-}
-
-function handleCanvasTouch(clientX, clientY) {
-  if(state!=='playing'||!isPlayerTurn()||selectedPiece===null) return;
-  if(pHandUsed[selectedPiece]) return;
-  let rect=canvas.getBoundingClientRect();
-  let cx=Math.floor((clientX-rect.left)*canvas.width/rect.width/CELL);
-  let cy=Math.floor((clientY-rect.top)*canvas.height/rect.height/CELL);
-  if(cx<0||cx>=COLS||cy<0||cy>=ROWS) return;
-  if(grid[cy][cx]){statusEl.textContent='Cell occupied! Choose another.';return;}
+function handlePlace(clientX,clientY){
+  if(state!=='playing'||!isPlayerTurn()||selectedPiece===null||pHandUsed[selectedPiece])return;
+  const r=canvas.getBoundingClientRect(),cx=Math.floor((clientX-r.left)*canvas.width/r.width/CELL),cy=Math.floor((clientY-r.top)*canvas.height/r.height/CELL);
+  if(cx<0||cx>=COLS||cy<0||cy>=ROWS)return;
+  if(grid[cy][cx]){statusEl.textContent='Cell occupied.';return}
   placePiece(cx,cy,pHand[selectedPiece],'p',selectedPiece);
 }
+canvas.addEventListener('click',e=>handlePlace(e.clientX,e.clientY));
+canvas.addEventListener('touchstart',e=>{e.preventDefault();for(const t of e.changedTouches){const r=canvas.getBoundingClientRect();FX.spawn((t.clientX-r.left)*canvas.width/r.width,(t.clientY-r.top)*canvas.height/r.height,'rgba(100,170,255,.9)');handlePlace(t.clientX,t.clientY)}},{passive:false});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();for(const t of e.changedTouches){const r=canvas.getBoundingClientRect();FX.move((t.clientX-r.left)*canvas.width/r.width,(t.clientY-r.top)*canvas.height/r.height)}},{passive:false});
+canvas.addEventListener('touchend',e=>e.preventDefault(),{passive:false});
 
-canvas.addEventListener('click', e => handleCanvasTouch(e.clientX, e.clientY));
-
-canvas.addEventListener('touchstart', e => {
-  e.preventDefault();
-  const t = e.changedTouches[0];
-  const p = toCanvasXY(t);
-  FX.spawn(p.x, p.y, 'rgba(100,160,255,0.85)');
-  handleCanvasTouch(t.clientX, t.clientY);
-}, {passive:false});
-
-canvas.addEventListener('touchmove', e => { e.preventDefault(); }, {passive:false});
-canvas.addEventListener('touchend', e => { e.preventDefault(); }, {passive:false});
-
-function placePiece(cx,cy,type,owner,handIdx){
-  grid[cy][cx]=type;
-  if(owner==='p'){pHandUsed[handIdx]=true;buildHand();selectedPiece=null;}
-  simulate();render();turn++;
-  updateUI();
-  if(turn>=maxTurns*2){endGame();return;}
-  if(turn%2===1){statusEl.textContent='AI is placing...';setTimeout(aiTurn,500+Math.random()*400);}
-  else statusEl.textContent='Select a piece and tap a cell.';
-}
-
+function evaluateBoard(){return aScore*1.15-pScore*0.55 + aTargets.filter(t=>t.lit).length*30 - pTargets.filter(t=>t.lit).length*25}
 function aiTurn(){
-  if(state!=='playing') return;
-  let available=aHand.filter((_,i)=>!aHandUsed[i]);
-  if(available.length===0){turn++;updateUI();if(turn>=maxTurns*2)endGame();return;}
-  let best=findAIBestMove();
-  if(best){
-    let idx=aHand.findIndex((t,i)=>t===best.piece&&!aHandUsed[i]);
-    if(idx>=0){aHandUsed[idx]=true;grid[best.y][best.x]=best.piece;simulate();render();turn++;updateUI();if(turn>=maxTurns*2){endGame();return;}statusEl.textContent='Your turn — select a piece and place it.';}
-  }
-}
+  if(state!=='playing')return;
+  const avail=[];aHand.forEach((p,i)=>{if(!aHandUsed[i])avail.push({piece:p,idx:i})});
+  if(!avail.length){turn++;updateUI();if(turn>=maxTurns*2)endGame();return}
+  const empties=[];for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)if(!grid[y][x])empties.push({x,y});
+  if(!empties.length){turn++;updateUI();if(turn>=maxTurns*2)endGame();return}
 
-function findAIBestMove(){
-  let available=aHand.filter((_,i)=>!aHandUsed[i]);
-  let empties=[];for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)if(!grid[y][x])empties.push({x,y});
-  if(empties.length===0||available.length===0) return null;
-  let bestScore=-Infinity,bestMove=null;
-  let tries=Math.min(empties.length*available.length,60);
-  for(let i=0;i<tries;i++){
-    let cell=empties[Math.floor(Math.random()*empties.length)];
-    let piece=available[Math.floor(Math.random()*available.length)];
-    grid[cell.y][cell.x]=piece;simulate();
-    let sc=aScore-pScore*0.3;if(sc>bestScore){bestScore=sc;bestMove={x:cell.x,y:cell.y,piece};}
-    grid[cell.y][cell.x]=null;
+  // Intelligent search: evaluate all piece types on beam-adjacent cells first, fallback to full scan subset
+  const hotCells=empties.filter(c=>beamPaths.some(b=>Math.abs((b.x2)-c.x)<=1&&Math.abs((b.y2)-c.y)<=1));
+  const candidates=(hotCells.length?hotCells:empties).slice(0,Math.min(70,(hotCells.length||empties.length)));
+  let best=null,bestVal=-Infinity;
+  const oldP=pScore,oldA=aScore;
+
+  for(const cell of candidates){
+    for(const a of avail){
+      grid[cell.y][cell.x]=a.piece;
+      simulate();
+      let v=evaluateBoard();
+      // tactical bonus: blocking player's required colors
+      const blocks=pTargets.filter(t=>!t.lit).length; v+=blocks*2;
+      if(v>bestVal){bestVal=v;best={...cell,piece:a.piece,idx:a.idx}}
+      grid[cell.y][cell.x]=null;
+    }
   }
   simulate();
-  if(!bestMove) bestMove={x:empties[0].x,y:empties[0].y,piece:available[0]};
-  return bestMove;
+  if(!best){const c=empties[Math.floor(Math.random()*empties.length)],a=avail[Math.floor(Math.random()*avail.length)];best={...c,piece:a.piece,idx:a.idx}}
+
+  grid[best.y][best.x]=best.piece;aHandUsed[best.idx]=true;simulate();turn++;updateUI();
+  if(turn>=maxTurns*2){endGame();return}
+  statusEl.textContent='Your turn — place a piece.';
 }
 
 function endGame(){
   state='end';
-  let pLit=pTargets.filter(t=>t.lit).length,playerWon=pScore>aScore;
+  const pLit=pTargets.filter(t=>t.lit).length,won=pScore>aScore;
   overlay.style.display='flex';
-  let html=playerWon?`<h1>RADIANT</h1><p>Your beam routing scored <strong style="color:#55aaff">${pScore}</strong> vs AI ${aScore}.</p><p>You lit ${pLit}/${pTargets.length} of your targets.</p>${level<3?`<button onclick="startGame(${level+1})">LEVEL ${level+1}</button>`:'<p style="color:#a0c0ff;font-weight:bold">The chamber is yours.</p>'}<button class="btn2" onclick="startGame(${level})">REPLAY</button>`
-    :`<h1 style="color:rgba(255,80,100,0.9)">REFRACTED</h1><p>AI scored ${aScore} vs your ${pScore}.</p><p>You lit ${pLit}/${pTargets.length} targets.</p><button onclick="startGame(${level})">RETRY L${level}</button><button class="btn2" onclick="startGame(1)">RESTART</button>`;
-  overlay.innerHTML=html;
+  overlay.innerHTML=won?`<h1>RADIANT</h1><p style='color:#c8dafd'>You scored <strong style='color:#6ebcff'>${pScore}</strong> vs AI ${aScore}</p><p style='color:#9fb6ea'>Targets lit: ${pLit}/${pTargets.length}</p>${level<3?`<button onclick='startGame(${level+1})'>LEVEL ${level+1}</button>`:`<p style='color:#9fc6ff;font-weight:bold;margin-top:10px'>🏆 Prism mastery achieved.</p>`}<button class='ob2' onclick='startGame(${level})'>REPLAY</button>`
+  :`<h1 style='color:#ff7f95'>REFRACTED</h1><p style='color:#f3bcc8'>AI scored ${aScore} vs your ${pScore}</p><p style='color:#dca8b4'>Targets lit: ${pLit}/${pTargets.length}</p><button onclick='startGame(${level})'>RETRY</button><button class='ob2' onclick='startGame(1)'>RESTART</button>`;
 }
-
-function getBeamColor(c){const m={white:'rgba(255,255,255,0.9)',red:'rgba(255,50,60,0.9)',green:'rgba(40,230,80,0.9)',blue:'rgba(60,140,255,0.9)',yellow:'rgba(255,220,30,0.9)',cyan:'rgba(30,220,255,0.9)',magenta:'rgba(230,50,255,0.9)'};return m[c]||'rgba(255,255,255,0.5)';}
-function getBeamGlow(c){const m={white:'rgba(200,200,255,0.25)',red:'rgba(255,40,40,0.3)',green:'rgba(40,200,60,0.3)',blue:'rgba(60,120,255,0.3)',yellow:'rgba(255,200,20,0.3)',cyan:'rgba(20,200,255,0.3)',magenta:'rgba(200,40,255,0.3)'};return m[c]||'rgba(255,255,255,0.15)';}
 
 function render(){
-  ctx.save();
-  ctx.translate(shakeX, shakeY);
+  ctx.save();ctx.translate(shakeX,shakeY);
+  ctx.fillStyle='#080a18';ctx.fillRect(-10,-10,canvas.width+20,canvas.height+20);
+  // nebula
+  for(let i=0;i<4;i++){let x=(i*173+level*97)%canvas.width,y=(i*227+level*53)%canvas.height,r=CELL*(2.8+i*.8);let g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,`hsla(${215+i*18},70%,45%,.07)`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height)}
+  // grid
+  ctx.strokeStyle='rgba(255,255,255,.055)';ctx.lineWidth=.5;for(let x=0;x<=COLS;x++){ctx.beginPath();ctx.moveTo(x*CELL,0);ctx.lineTo(x*CELL,ROWS*CELL);ctx.stroke()}for(let y=0;y<=ROWS;y++){ctx.beginPath();ctx.moveTo(0,y*CELL);ctx.lineTo(COLS*CELL,y*CELL);ctx.stroke()}
 
-  // Solid background
-  ctx.fillStyle='#0a0a14';ctx.fillRect(-10,-10,canvas.width+20,canvas.height+20);
+  // beams
+  const bw=[2.2,2.6,3][level-1]||2.4, glow=[10,14,18][level-1]||12;
+  for(const b of beamPaths){let x1=(b.x1+.5)*CELL,y1=(b.y1+.5)*CELL,x2=(b.x2+.5)*CELL,y2=(b.y2+.5)*CELL;ctx.strokeStyle=beamCol(b.color).replace('.9','.26');ctx.lineWidth=8;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.shadowBlur=glow;ctx.shadowColor=beamCol(b.color);ctx.strokeStyle=beamCol(b.color);ctx.lineWidth=bw;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.shadowBlur=0}
 
-  // Nebula background
-  for(let nb of nebulaPoints) {
-    let gr = ctx.createRadialGradient(nb.x, nb.y, 0, nb.x, nb.y, nb.r);
-    gr.addColorStop(0, `hsla(${nb.h},60%,40%,${nb.a})`);
-    gr.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = gr;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }
+  // sparkles
+  for(let i=sparkles.length-1;i>=0;i--){const s=sparkles[i];s.life-=.016;s.x+=s.vx*.016;s.y+=s.vy*.016;if(s.life<=0){sparkles.splice(i,1);continue}ctx.save();ctx.globalAlpha=Math.max(0,s.life/s.max);ctx.fillStyle=s.col;ctx.shadowColor=s.col;ctx.shadowBlur=7;ctx.beginPath();ctx.arc(s.x,s.y,2,0,Math.PI*2);ctx.fill();ctx.restore()}
 
-  // Grid lines
-  ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=0.5;
-  for(let x=0;x<=COLS;x++){ctx.beginPath();ctx.moveTo(x*CELL,0);ctx.lineTo(x*CELL,ROWS*CELL);ctx.stroke();}
-  for(let y=0;y<=ROWS;y++){ctx.beginPath();ctx.moveTo(0,y*CELL);ctx.lineTo(COLS*CELL,y*CELL);ctx.stroke();}
+  // pieces
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){const p=grid[y][x];if(!p)continue;const px=(x+.5)*CELL,py=(y+.5)*CELL;ctx.fillStyle='rgba(38,50,84,.9)';ctx.fillRect(x*CELL+2,y*CELL+2,CELL-4,CELL-4);ctx.strokeStyle='rgba(110,130,210,.48)';ctx.strokeRect(x*CELL+2,y*CELL+2,CELL-4,CELL-4);ctx.shadowBlur=14;ctx.shadowColor=p==='filter_r'?'rgba(255,90,90,.8)':p==='filter_g'?'rgba(90,255,130,.8)':p==='filter_b'?'rgba(90,170,255,.8)':p==='lens'?'rgba(255,220,110,.8)':'rgba(180,200,255,.75)';ctx.font=`bold ${Math.floor(CELL*.45)}px Courier New`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=p==='filter_r'?'#ff7f8a':p==='filter_g'?'#7fff9f':p==='filter_b'?'#89c6ff':p==='lens'?'#ffd975':'#d3e0ff';ctx.fillText(PIECE_TYPES[p].icon,px,py);ctx.shadowBlur=0}
 
-  // Level-based beam intensity
-  let beamWidth = [2, 2.5, 3][level-1] || 2;
-  let beamGlowSize = [8, 14, 20][level-1] || 8;
+  // sources
+  for(const s of sources){const sx=(s.x+.5)*CELL,sy=(s.y+.5)*CELL;let g=ctx.createRadialGradient(sx,sy,0,sx,sy,CELL*.45);g.addColorStop(0,'rgba(255,255,220,.95)');g.addColorStop(1,'rgba(255,255,130,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(sx,sy,CELL*.42,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(255,255,255,.95)';ctx.font=`bold ${Math.floor(CELL*.34)}px Courier New`;ctx.fillText('λ',sx,sy)}
 
-  // Draw beams
-  for(let b of beamPaths){
-    let x1=(b.x1+0.5)*CELL,y1=(b.y1+0.5)*CELL,x2=(b.x2+0.5)*CELL,y2=(b.y2+0.5)*CELL;
-    x1=Math.max(-CELL/2,Math.min((COLS+0.5)*CELL,x1));y1=Math.max(-CELL/2,Math.min((ROWS+0.5)*CELL,y1));
-    x2=Math.max(-CELL/2,Math.min((COLS+0.5)*CELL,x2));y2=Math.max(-CELL/2,Math.min((ROWS+0.5)*CELL,y2));
-    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.strokeStyle=getBeamGlow(b.color);ctx.lineWidth=8;ctx.lineCap='round';ctx.stroke();
-    ctx.shadowBlur=beamGlowSize;ctx.shadowColor=getBeamGlow(b.color);
-    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.strokeStyle=getBeamColor(b.color);ctx.lineWidth=beamWidth;ctx.stroke();
-    ctx.shadowBlur=0;
-  }
-
-  // Draw beam sparkles
-  ctx.save();
-  for(let s of sparkles) {
-    ctx.globalAlpha = s.life / s.maxLife;
-    ctx.fillStyle = s.col;
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = s.col;
-    ctx.beginPath(); ctx.arc(s.x, s.y, 2+Math.random(), 0, Math.PI*2); ctx.fill();
-  }
-  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-  ctx.restore();
-
-  // Draw sources
-  for(let s of sources){
-    let sx=(s.x+0.5)*CELL,sy=(s.y+0.5)*CELL;
-    let gr=ctx.createRadialGradient(sx,sy,0,sx,sy,CELL*0.5);
-    gr.addColorStop(0,'rgba(255,255,200,0.8)');gr.addColorStop(1,'rgba(255,255,100,0)');
-    ctx.beginPath();ctx.arc(sx,sy,CELL*0.4,0,Math.PI*2);ctx.fillStyle=gr;ctx.fill();
-    ctx.fillStyle='rgba(255,255,255,0.9)';ctx.font=`bold ${Math.floor(CELL*0.35)}px Courier New`;
-    ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('λ',sx,sy);
-  }
-
-  // Source emitter pulse rings
-  for(let si=0; si<sources.length; si++) {
-    let s = sources[si];
-    let sx=(s.x+0.5)*CELL, sy=(s.y+0.5)*CELL;
-    let phase = (sourceRingT + si*0.7) % 1.5;
-    let ringR = 4 + phase/1.5 * CELL*0.8;
-    let ringA = 1 - phase/1.5;
-    ctx.beginPath(); ctx.arc(sx, sy, ringR, 0, Math.PI*2);
-    ctx.strokeStyle = `rgba(255,255,200,${ringA*0.5})`;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-  }
-
-  // Draw placed pieces with glow
-  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
-    let piece=grid[y][x];if(!piece) continue;
-    let px=(x+0.5)*CELL,py=(y+0.5)*CELL;
-
-    // Piece glow
-    if(piece==='prism') { ctx.shadowBlur=18; ctx.shadowColor='rgba(200,180,255,0.8)'; }
-    else if(piece==='mirror_fw'||piece==='mirror_bw') { ctx.shadowBlur=18; ctx.shadowColor='rgba(180,200,255,0.6)'; }
-    else if(piece==='filter_r') { ctx.shadowBlur=18; ctx.shadowColor='rgba(255,60,60,0.8)'; }
-    else if(piece==='filter_g') { ctx.shadowBlur=18; ctx.shadowColor='rgba(60,220,80,0.8)'; }
-    else if(piece==='filter_b') { ctx.shadowBlur=18; ctx.shadowColor='rgba(60,140,255,0.8)'; }
-
-    ctx.fillStyle='rgba(40,50,80,0.9)';ctx.fillRect(x*CELL+2,y*CELL+2,CELL-4,CELL-4);
-    ctx.strokeStyle='rgba(100,120,200,0.5)';ctx.lineWidth=1;ctx.strokeRect(x*CELL+2,y*CELL+2,CELL-4,CELL-4);
-    ctx.fillStyle='rgba(180,200,255,0.9)';ctx.font=`bold ${Math.floor(CELL*0.45)}px Courier New`;
-    ctx.textAlign='center';ctx.textBaseline='middle';
-    if(piece==='filter_r')ctx.fillStyle='rgba(255,80,80,0.9)';
-    else if(piece==='filter_g')ctx.fillStyle='rgba(60,220,80,0.9)';
-    else if(piece==='filter_b')ctx.fillStyle='rgba(80,140,255,0.9)';
-    ctx.fillText(PIECE_TYPES[piece]?.icon||'?',px,py);
-  }
-  ctx.shadowBlur=0;
-
-  // Draw targets
-  let allTargets=[...pTargets,...aTargets];
-  for(let t of allTargets){
-    let tx=(t.x+0.5)*CELL,ty=(t.y+0.5)*CELL,isP=t.owner==='p';
-    let baseColor=isP?'rgba(60,120,255,':'rgba(255,60,80,';
-    ctx.beginPath();ctx.arc(tx,ty,CELL*0.38,0,Math.PI*2);
-    ctx.strokeStyle=t.lit?getBeamColor(t.needColor):baseColor+'0.5)';ctx.lineWidth=2;ctx.stroke();
-    ctx.beginPath();ctx.arc(tx,ty,CELL*0.2,0,Math.PI*2);
-    ctx.fillStyle=t.lit?getBeamColor(t.needColor):baseColor+'0.2)';ctx.fill();
-    ctx.fillStyle='rgba(200,210,255,0.6)';ctx.font=`${Math.floor(CELL*0.22)}px Courier New`;
-    ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t.needColor[0].toUpperCase(),tx,ty);
-    if(t.lit){
-      let gr=ctx.createRadialGradient(tx,ty,0,tx,ty,CELL*0.6);
-      gr.addColorStop(0,getBeamColor(t.needColor).replace('0.9','0.3'));gr.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.beginPath();ctx.arc(tx,ty,CELL*0.6,0,Math.PI*2);ctx.fillStyle=gr;ctx.fill();
-    }
-  }
+  // targets
+  for(const t of [...pTargets,...aTargets]){const tx=(t.x+.5)*CELL,ty=(t.y+.5)*CELL;const base=t.owner==='p'?'rgba(80,150,255,':'rgba(255,90,110,';ctx.beginPath();ctx.arc(tx,ty,CELL*.38,0,Math.PI*2);ctx.strokeStyle=t.lit?beamCol(t.needColor):base+'.55)';ctx.lineWidth=2;ctx.stroke();ctx.beginPath();ctx.arc(tx,ty,CELL*.2,0,Math.PI*2);ctx.fillStyle=t.lit?beamCol(t.needColor):base+'.22)';ctx.fill();ctx.fillStyle='rgba(220,230,255,.66)';ctx.font=`${Math.floor(CELL*.22)}px Courier New`;ctx.fillText(t.needColor[0].toUpperCase(),tx,ty)}
 
   ctx.restore();
 }
 
-resize();
-ctx.fillStyle='#0a0a14';ctx.fillRect(0,0,canvas.width||400,canvas.height||400);
+function loop(ts){const dt=Math.min((ts-lastTs)/1000,.05);lastTs=ts;FX.update(dt);updateShake(dt);render();FX.draw();frameId=requestAnimationFrame(loop)}
+canvas.addEventListener('touchcancel',e=>e.preventDefault(),{passive:false});
+ctx.fillStyle='#080a18';ctx.fillRect(0,0,canvas.width,canvas.height);
 </script>
 </body>
 </html>
