@@ -96,23 +96,51 @@ function playCollect() {
 function playDeath() {
   if (!audioCtx) return;
   const t = audioCtx.currentTime;
-  const o = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  o.type = 'sawtooth'; o.frequency.setValueAtTime(120, t);
-  o.frequency.exponentialRampToValueAtTime(30, t + 0.5);
-  g.gain.setValueAtTime(0.2, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
-  o.connect(g); g.connect(audioCtx.destination);
-  o.start(t); o.stop(t + 0.6);
-  // shatter noise
-  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.3, audioCtx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (d.length * 0.15));
-  const n = audioCtx.createBufferSource();
-  const ng = audioCtx.createGain();
-  n.buffer = buf; ng.gain.setValueAtTime(0.12, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
-  n.connect(ng); ng.connect(audioCtx.destination);
-  n.start(t); n.stop(t + 0.3);
+
+  // Stage 1: deep rumble
+  const rumble = audioCtx.createOscillator();
+  const rumbleGain = audioCtx.createGain();
+  rumble.type = 'sawtooth';
+  rumble.frequency.setValueAtTime(90, t);
+  rumble.frequency.exponentialRampToValueAtTime(24, t + 0.75);
+  rumbleGain.gain.setValueAtTime(0.0001, t);
+  rumbleGain.gain.exponentialRampToValueAtTime(0.26, t + 0.04);
+  rumbleGain.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
+  rumble.connect(rumbleGain); rumbleGain.connect(audioCtx.destination);
+  rumble.start(t); rumble.stop(t + 0.9);
+
+  // Stage 2: crack blast (filtered noise)
+  const crackBuf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.28), audioCtx.sampleRate);
+  const crackData = crackBuf.getChannelData(0);
+  for (let i = 0; i < crackData.length; i++) {
+    crackData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (crackData.length * 0.12));
+  }
+  const crack = audioCtx.createBufferSource();
+  crack.buffer = crackBuf;
+  const crackFilter = audioCtx.createBiquadFilter();
+  crackFilter.type = 'highpass';
+  crackFilter.frequency.setValueAtTime(850, t);
+  const crackGain = audioCtx.createGain();
+  crackGain.gain.setValueAtTime(0.0001, t + 0.01);
+  crackGain.gain.exponentialRampToValueAtTime(0.2, t + 0.03);
+  crackGain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  crack.connect(crackFilter); crackFilter.connect(crackGain); crackGain.connect(audioCtx.destination);
+  crack.start(t + 0.01); crack.stop(t + 0.31);
+
+  // Stage 3: sparkle tail
+  [1320, 1760, 2100, 2480].forEach((f, i) => {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(f, t + 0.09 + i * 0.045);
+    o.frequency.exponentialRampToValueAtTime(f * 0.6, t + 0.24 + i * 0.045);
+    g.gain.setValueAtTime(0.0001, t + 0.09 + i * 0.045);
+    g.gain.exponentialRampToValueAtTime(0.06, t + 0.11 + i * 0.045);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.36 + i * 0.045);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t + 0.09 + i * 0.045);
+    o.stop(t + 0.38 + i * 0.045);
+  });
 }
 function playPowerUp() {
   if (!audioCtx) return;
@@ -171,6 +199,27 @@ let gridPhase = 0;
 let activePowerups = []; // {type, timer, maxTime}
 let levelTransTimer = 0;
 let deathTimer = 0;
+let deathExplosionDelay = 1.05;
+let deathFX = { flash: 0, ring: 0, secondary: false, embersTimer: 0 };
+let scatteredSegments = [];
+
+function cloneSegments(segments) {
+  return segments.map(s => ({ x: s.x, y: s.y }));
+}
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function lerpPoint(a, b, t) { return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) }; }
+function getInterpSegments(snake, alpha) {
+  const prev = snake.prevSegments || snake.segments;
+  const curr = snake.segments;
+  const out = [];
+  const n = curr.length;
+  for (let i = 0; i < n; i++) {
+    const pa = prev[i] || prev[prev.length - 1] || curr[i];
+    const pb = curr[i];
+    out.push(lerpPoint(pa, pb, alpha));
+  }
+  return out;
+}
 
 // ─── Helpers ───
 function lerp(a, b, t) { return a + (b - a) * t; }
@@ -223,13 +272,16 @@ function initLevel() {
   activePowerups = [];
   powerups = [];
   shakeX = shakeY = shakeVX = shakeVY = 0;
+  deathFX = { flash: 0, ring: 0, secondary: false, embersTimer: 0 };
+  scatteredSegments = [];
 
   // Player start
   const px = Math.floor(cols / 2), py = Math.floor(rows / 2);
   player = {
     segments: [{ x: px, y: py }, { x: px - 1, y: py }, { x: px - 2, y: py }],
-    dir: DIR.RIGHT, nextDir: DIR.RIGHT, moveTimer: 0, moveInterval: L.playerInterval,
-    alive: true, phase: false, magnet: false, boosted: false
+    prevSegments: [{ x: px, y: py }, { x: px - 1, y: py }, { x: px - 2, y: py }],
+    dir: DIR.RIGHT, nextDir: DIR.RIGHT, moveTimer: 0, moveInterval: Math.max(0.085, L.playerInterval * 0.92),
+    alive: true, phase: false, magnet: false, boosted: false, turnPulse: 0
   };
 
   // AI snakes
@@ -244,7 +296,8 @@ function initLevel() {
     const ay = i < 2 ? 3 : rows - 4;
     aiSnakes.push({
       segments: [{ x: ax, y: ay }, { x: ax - 1, y: ay }, { x: ax - 2, y: ay }],
-      dir: DIR.RIGHT, moveTimer: 0, moveInterval: 0.12 / L.aiSpeed,
+      prevSegments: [{ x: ax, y: ay }, { x: ax - 1, y: ay }, { x: ax - 2, y: ay }],
+      dir: DIR.RIGHT, moveTimer: 0, moveInterval: Math.max(0.075, (0.115 / L.aiSpeed) * 0.92),
       alive: true, respawnTimer: 0, color: aiColors[i],
       lookahead: L.aiLookahead
     });
@@ -402,9 +455,29 @@ function drawGlowOrb(x, y, r, coreH, coreS, coreL, glowAlpha) {
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
 }
 
-function drawSnake(snake, hue, saturation, lightness, alpha, isPlayer) {
-  const segs = snake.segments;
+function drawSnake(snake, segs, hue, saturation, lightness, alpha, isPlayer, interpAlpha) {
   const r = cellSize * 0.4;
+
+  // Curved trail ribbon for smoother feel
+  if (segs.length > 2) {
+    ctx.globalAlpha = alpha * (isPlayer ? 0.24 : 0.14);
+    ctx.strokeStyle = isPlayer ? 'rgba(0,255,255,0.9)' : `hsla(${hue},95%,60%,0.85)`;
+    ctx.lineWidth = r * (isPlayer ? 1.1 : 0.9);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    const p0 = segs[0];
+    ctx.moveTo(cx(p0.x), cy(p0.y));
+    for (let i = 1; i < segs.length - 1; i++) {
+      const p = segs[i], n = segs[i + 1];
+      const mx = (cx(p.x) + cx(n.x)) * 0.5;
+      const my = (cy(p.y) + cy(n.y)) * 0.5;
+      ctx.quadraticCurveTo(cx(p.x), cy(p.y), mx, my);
+    }
+    const lp = segs[segs.length - 1];
+    ctx.lineTo(cx(lp.x), cy(lp.y));
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
 
   // Trail afterglow
   ctx.globalAlpha = alpha * 0.15;
@@ -412,11 +485,12 @@ function drawSnake(snake, hue, saturation, lightness, alpha, isPlayer) {
     const t = i / segs.length;
     const h = isPlayer ? lerp(180, 270, t) : hue;
     const sz = r * lerp(1, 0.6, t);
-    const g = ctx.createRadialGradient(cx(segs[i].x), cy(segs[i].y), 0, cx(segs[i].x), cy(segs[i].y), sz * 2.5);
+    const px = cx(segs[i].x), py = cy(segs[i].y);
+    const g = ctx.createRadialGradient(px, py, 0, px, py, sz * 2.5);
     g.addColorStop(0, `hsla(${h},${saturation}%,${lightness}%,0.3)`);
     g.addColorStop(1, 'transparent');
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(cx(segs[i].x), cy(segs[i].y), sz * 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(px, py, sz * 2.5, 0, Math.PI * 2); ctx.fill();
   }
   ctx.globalAlpha = 1;
 
@@ -430,16 +504,19 @@ function drawSnake(snake, hue, saturation, lightness, alpha, isPlayer) {
     ctx.globalAlpha = 1;
   }
 
-  // Head
+  // Head with subtle bob synced to movement
   const head = segs[0];
-  const hx = cx(head.x), hy = cy(head.y);
+  let hx = cx(head.x), hy = cy(head.y);
+  const bobAmp = isPlayer ? cellSize * 0.06 : cellSize * 0.035;
+  const bob = Math.sin((gameTime * 14) + interpAlpha * Math.PI * 2) * bobAmp;
+  hx += -snake.dir.y * bob;
+  hy += snake.dir.x * bob;
   const headHue = isPlayer ? 180 : hue;
 
-  // Pulsing aura (player only)
   if (isPlayer) {
-    const pulse = 0.7 + 0.3 * Math.sin(gameTime * 4);
+    const pulse = 0.72 + 0.28 * Math.sin(gameTime * 4 + interpAlpha * Math.PI * 2);
     const ga = ctx.createRadialGradient(hx, hy, r * 0.5, hx, hy, r * 3 * pulse);
-    ga.addColorStop(0, 'rgba(0,255,255,0.15)');
+    ga.addColorStop(0, 'rgba(0,255,255,0.16)');
     ga.addColorStop(1, 'transparent');
     ctx.fillStyle = ga;
     ctx.beginPath(); ctx.arc(hx, hy, r * 3 * pulse, 0, Math.PI * 2); ctx.fill();
@@ -449,12 +526,10 @@ function drawSnake(snake, hue, saturation, lightness, alpha, isPlayer) {
   drawGlowOrb(hx, hy, r, headHue, saturation, lightness + 10, 0.3 * alpha);
   ctx.globalAlpha = 1;
 
-  // Eye
   const ed = snake.dir;
   const ex = hx + ed.x * r * 0.3, ey = hy + ed.y * r * 0.3;
   ctx.fillStyle = isPlayer ? '#003' : `hsl(${hue},100%,10%)`;
   ctx.beginPath(); ctx.arc(ex, ey, r * 0.25, 0, Math.PI * 2); ctx.fill();
-  // Eye glint
   ctx.fillStyle = '#fff';
   ctx.beginPath(); ctx.arc(ex + r * 0.08, ey - r * 0.08, r * 0.1, 0, Math.PI * 2); ctx.fill();
 }
@@ -571,9 +646,32 @@ function update(dt) {
       activePowerups.splice(i, 1);
     }
   }
+  if (player?.turnPulse > 0) player.turnPulse = Math.max(0, player.turnPulse - adt * 2.6);
+
+  // Scattered death segment motion
+  for (let i = scatteredSegments.length - 1; i >= 0; i--) {
+    const s = scatteredSegments[i];
+    s.x += s.vx * adt;
+    s.y += s.vy * adt;
+    s.vx *= Math.exp(-2.8 * adt);
+    s.vy = s.vy * Math.exp(-2.0 * adt) + 110 * adt;
+    s.life -= adt;
+    if (s.life <= 0) scatteredSegments.splice(i, 1);
+  }
 
   if (state === 'dying') {
     deathTimer -= dt;
+    deathFX.flash = Math.max(0, deathFX.flash - dt * 3.6);
+    deathFX.ring += dt * 3.8;
+    deathFX.embersTimer -= dt;
+    if (deathFX.embersTimer > 0 && Math.random() < 0.9) {
+      const h = player?.segments?.[0] || { x: cols / 2, y: rows / 2 };
+      particles.push({
+        x: cx(h.x) + rand(-cellSize, cellSize), y: cy(h.y) + rand(-cellSize, cellSize),
+        vx: rand(-30, 30), vy: rand(-95, -30),
+        life: rand(0.8, 1.25), maxLife: 1.25, color: Math.random() < 0.5 ? '#ff9a44' : '#ff3ea5', size: rand(1.2, 2.6), sparkle: true
+      });
+    }
     if (deathTimer <= 0) {
       state = 'gameOver';
       showOverlay('GAME OVER', `SCORE: ${score}`, '↻ RETRY');
@@ -628,8 +726,26 @@ function update(dt) {
   player.moveTimer += adt;
   if (player.moveTimer >= moveSpeed) {
     player.moveTimer -= moveSpeed;
+    const oldDir = player.dir;
     player.dir = player.nextDir;
+    player.prevSegments = cloneSegments(player.segments);
     const head = player.segments[0];
+
+    // impact sparks on sharp turns
+    if (oldDir.x !== player.dir.x || oldDir.y !== player.dir.y) {
+      const hx = cx(head.x), hy = cy(head.y);
+      player.turnPulse = 1;
+      for (let i = 0; i < 12; i++) {
+        const a = Math.atan2(player.dir.y, player.dir.x) + Math.PI + rand(-0.95, 0.95);
+        particles.push({
+          x: hx, y: hy,
+          vx: Math.cos(a) * rand(45, 160), vy: Math.sin(a) * rand(45, 160),
+          life: rand(0.2, 0.46), maxLife: 0.46,
+          color: i % 2 ? '#4ff' : '#f6f', size: rand(1.4, 3.1), sparkle: i % 3 === 0
+        });
+      }
+    }
+
     const nx = head.x + player.dir.x, ny = head.y + player.dir.y;
 
     // Wall collision
@@ -721,6 +837,7 @@ function update(dt) {
       if (ai.respawnTimer <= 0) {
         const sx = randInt(1, cols - 2), sy = randInt(1, rows - 2);
         ai.segments = [{ x: sx, y: sy }, { x: sx - 1, y: sy }, { x: sx - 2, y: sy }];
+        ai.prevSegments = cloneSegments(ai.segments);
         ai.alive = true;
         ai.dir = DIR.RIGHT;
       }
@@ -731,6 +848,7 @@ function update(dt) {
     if (ai.moveTimer >= ai.moveInterval) {
       ai.moveTimer -= ai.moveInterval;
       aiMove(ai);
+      ai.prevSegments = cloneSegments(ai.segments);
       const head = ai.segments[0];
       const nx = head.x + ai.dir.x, ny = head.y + ai.dir.y;
 
@@ -769,18 +887,77 @@ function update(dt) {
   }
 }
 
+function spawnDeathBurst(x, y, power = 1) {
+  // 3-layer burst: chunks, sparks, glitter
+  for (let i = 0; i < 52; i++) {
+    const a = rand(0, Math.PI * 2), s = rand(120, 270) * power;
+    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(0.45, 0.9), maxLife: 0.9, color: i % 2 ? '#88ffff' : '#ff66dd', size: rand(4, 8) });
+  }
+  for (let i = 0; i < 64; i++) {
+    const a = rand(0, Math.PI * 2), s = rand(160, 360) * power;
+    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40, life: rand(0.5, 1.0), maxLife: 1.0, color: i % 3 ? '#00f5ff' : '#ff38c7', size: rand(2.1, 4.5), sparkle: i % 5 === 0 });
+  }
+  for (let i = 0; i < 82; i++) {
+    const a = rand(0, Math.PI * 2), s = rand(120, 420) * power;
+    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60, life: rand(0.65, 1.25), maxLife: 1.25, color: i % 2 ? '#ffffff' : '#9fffff', size: rand(0.8, 2.2), sparkle: true });
+  }
+}
+
+function createDeathExplosion() {
+  const head = player.segments[0];
+  const hx = cx(head.x), hy = cy(head.y);
+  deathFX.flash = 1;
+  deathFX.ring = 0;
+  deathFX.secondary = false;
+  deathFX.embersTimer = 1.2;
+
+  // Stage B immediate burst
+  spawnDeathBurst(hx, hy, 1);
+
+  // Stage D embers seeded around corpse
+  for (let i = 0; i < 70; i++) {
+    particles.push({
+      x: hx + rand(-cellSize * 0.7, cellSize * 0.7), y: hy + rand(-cellSize * 0.7, cellSize * 0.7),
+      vx: rand(-65, 65), vy: rand(-120, -30), life: rand(0.8, 1.25), maxLife: 1.25,
+      color: i % 2 ? '#ff7d45' : '#ffd37a', size: rand(1.2, 2.8), sparkle: true
+    });
+  }
+
+  // Player segment scattering with glow decay
+  scatteredSegments = player.segments.map((s, idx) => {
+    const px = cx(s.x), py = cy(s.y);
+    const away = { x: s.x - head.x, y: s.y - head.y };
+    const ang = Math.atan2(away.y + rand(-0.3, 0.3), away.x + rand(-0.3, 0.3));
+    const speed = rand(60, 230) + idx * 8;
+    return {
+      x: px, y: py,
+      vx: Math.cos(ang) * speed + rand(-50, 50),
+      vy: Math.sin(ang) * speed + rand(-120, -10),
+      life: rand(0.85, 1.2), maxLife: 1.2,
+      size: cellSize * lerp(0.2, 0.42, 1 - idx / Math.max(1, player.segments.length)),
+      hue: lerp(180, 300, idx / Math.max(1, player.segments.length - 1))
+    };
+  });
+
+  // Stage C secondary burst (~120ms)
+  setTimeout(() => {
+    if (state !== 'dying') return;
+    deathFX.secondary = true;
+    spawnDeathBurst(hx + rand(-10, 10), hy + rand(-10, 10), 0.85);
+    shakeVX += rand(-500, 500);
+    shakeVY += rand(-500, 500);
+  }, 120);
+}
+
 function killPlayer() {
   player.alive = false;
   state = 'dying';
-  deathTimer = 1.5;
-  slowMoTimer = 0.3;
+  deathTimer = deathExplosionDelay;
+  slowMoTimer = 0.34;
   playDeath();
-  screenFlash('#f00', 0.4);
-  shakeVX = rand(-400, 400); shakeVY = rand(-400, 400);
-  // Scatter segments
-  for (const s of player.segments) {
-    spawnParticles(cx(s.x), cy(s.y), '#0ff', 8, 120, 0.8);
-  }
+  screenFlash('#fff', 0.72);
+  shakeVX = rand(-520, 520); shakeVY = rand(-520, 520);
+  createDeathExplosion();
 }
 
 function killAI(ai) {
@@ -788,7 +965,7 @@ function killAI(ai) {
   ai.respawnTimer = 5;
   const c = hsl(ai.color.h, 100, 60);
   for (const s of ai.segments) {
-    spawnParticles(cx(s.x), cy(s.y), c, 6, 100, 0.6);
+    spawnParticles(cx(s.x), cy(s.y), c, 8, 120, 0.7);
   }
 }
 
@@ -817,7 +994,7 @@ function draw() {
   ctx.globalAlpha = 1;
 
   // Skip game rendering if not in game state
-  if (state !== 'playing' && state !== 'dead' && state !== 'levelComplete') {
+  if (state !== 'playing' && state !== 'dying' && state !== 'levelComplete') {
     ctx.restore();
     ctx.globalAlpha = 1;
     return;
@@ -897,31 +1074,35 @@ function draw() {
     ctx.fillText(puIcon, px2, py2);
   }
 
-  // AI snakes
+  // AI snakes (interpolated)
   for (const ai of aiSnakes) {
     if (!ai.alive) continue;
-    drawSnake(ai, ai.color.h, 90, 55, 0.7, false);
+    const aiAlpha = clamp(ai.moveTimer / ai.moveInterval, 0, 1);
+    const aiSegs = getInterpSegments(ai, aiAlpha);
+    drawSnake(ai, aiSegs, ai.color.h, 90, 55, 0.72, false, aiAlpha);
   }
 
-  // Player snake
+  // Player snake (interpolated)
   if (player.alive || state === 'dying') {
-    const alpha = state === 'dying' ? Math.max(0, deathTimer / 1.5) : 1;
+    const playerMove = player.boosted ? player.moveInterval * 0.5 : player.moveInterval;
+    const interpAlpha = clamp(player.moveTimer / playerMove, 0, 1);
+    const segs = getInterpSegments(player, interpAlpha);
+    const alpha = state === 'dying' ? Math.max(0, deathTimer / deathExplosionDelay) : 1;
+
     if (player.alive) {
-      // Speed lines when boosted
       if (player.boosted) {
-        const head = player.segments[0];
-        for (let i = 0; i < 3; i++) {
-          const a = Math.atan2(player.dir.y, player.dir.x) + Math.PI + rand(-0.5, 0.5);
+        const head = segs[0];
+        for (let i = 0; i < 2; i++) {
+          const a = Math.atan2(player.dir.y, player.dir.x) + Math.PI + rand(-0.45, 0.45);
           particles.push({
-            x: cx(head.x), y: cy(head.y), vx: Math.cos(a) * rand(80, 150), vy: Math.sin(a) * rand(80, 150),
-            life: 0.2, maxLife: 0.2, color: '#4af', size: rand(1, 2)
+            x: cx(head.x), y: cy(head.y), vx: Math.cos(a) * rand(90, 165), vy: Math.sin(a) * rand(90, 165),
+            life: 0.18, maxLife: 0.18, color: '#4af', size: rand(1, 2)
           });
         }
       }
-      // Phase trail
       if (player.phase) {
-        const head = player.segments[0];
-        if (Math.random() < 0.5) {
+        const head = segs[0];
+        if (Math.random() < 0.45) {
           particles.push({
             x: cx(head.x) + rand(-10, 10), y: cy(head.y) + rand(-10, 10),
             vx: rand(-20, 20), vy: rand(-30, -10), life: 0.4, maxLife: 0.4,
@@ -929,9 +1110,8 @@ function draw() {
           });
         }
       }
-      // Magnet aura
       if (player.magnet) {
-        const head = player.segments[0];
+        const head = segs[0];
         const mr = cellSize * 6;
         const mg = ctx.createRadialGradient(cx(head.x), cy(head.y), 0, cx(head.x), cy(head.y), mr);
         mg.addColorStop(0, 'rgba(255,220,50,0.06)');
@@ -939,7 +1119,53 @@ function draw() {
         ctx.fillStyle = mg;
         ctx.beginPath(); ctx.arc(cx(head.x), cy(head.y), mr, 0, Math.PI * 2); ctx.fill();
       }
-      drawSnake(player, 180, 100, 60, alpha, true);
+      drawSnake(player, segs, 180, 100, 60, alpha, true, interpAlpha);
+
+      if (player.turnPulse > 0) {
+        const head = segs[0];
+        const tr = cellSize * (1 + player.turnPulse * 0.65);
+        const tg = ctx.createRadialGradient(cx(head.x), cy(head.y), tr * 0.2, cx(head.x), cy(head.y), tr);
+        tg.addColorStop(0, `rgba(255,255,255,${0.35 * player.turnPulse})`);
+        tg.addColorStop(1, 'transparent');
+        ctx.fillStyle = tg;
+        ctx.beginPath(); ctx.arc(cx(head.x), cy(head.y), tr, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  // Scattered body shards during death
+  for (const s of scatteredSegments) {
+    const a = s.life / s.maxLife;
+    ctx.globalAlpha = a;
+    drawGlowOrb(s.x, s.y, s.size * a, s.hue, 95, 60, 0.35 * a);
+  }
+  ctx.globalAlpha = 1;
+
+  if (state === 'dying' && player?.segments?.length) {
+    const head = player.segments[0];
+    const hx = cx(head.x), hy = cy(head.y);
+
+    // Stage A: white core flash
+    if (deathFX.flash > 0) {
+      const fr = cellSize * (1.6 + (1 - deathFX.flash) * 2.2);
+      const fg = ctx.createRadialGradient(hx, hy, 0, hx, hy, fr * 2.5);
+      fg.addColorStop(0, `rgba(255,255,255,${0.95 * deathFX.flash})`);
+      fg.addColorStop(0.28, `rgba(140,255,255,${0.55 * deathFX.flash})`);
+      fg.addColorStop(1, 'transparent');
+      ctx.fillStyle = fg;
+      ctx.beginPath(); ctx.arc(hx, hy, fr * 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Stage A: cyan/magenta shockwave ring
+    const ringR = cellSize * (1.2 + deathFX.ring * 6.2);
+    const ringA = clamp(1 - deathFX.ring * 0.42, 0, 0.85);
+    if (ringA > 0.01) {
+      ctx.lineWidth = cellSize * 0.25;
+      const rg = ctx.createLinearGradient(hx - ringR, hy, hx + ringR, hy);
+      rg.addColorStop(0, `rgba(0,255,255,${ringA})`);
+      rg.addColorStop(1, `rgba(255,0,200,${ringA})`);
+      ctx.strokeStyle = rg;
+      ctx.beginPath(); ctx.arc(hx, hy, ringR, 0, Math.PI * 2); ctx.stroke();
     }
   }
 
