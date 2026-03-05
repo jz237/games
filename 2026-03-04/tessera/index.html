@@ -392,7 +392,7 @@ function renderAPBar(animate=false){
 
 // ─── Drawing ──────────────────────────────────────────────────────────────────
 function drawBackground(){
-  ctx.fillStyle='#030310';
+  ctx.fillStyle='#04041a';
   ctx.fillRect(0,0,W,H);
 
   // Nebula wisps
@@ -427,11 +427,11 @@ function drawHex(h){
   h.pulse*=.92;
 
   // Base fill
-  let baseFill='#1c1c3a';
+  let baseFill='#0f0f2e';
   if(h.owner===PLAYER || h.owner===AI){
     const col=h.owner===PLAYER?[40,120,220]:[200,40,30];
     const f=h.fill, p=h.pulse;
-    baseFill=`rgba(${col[0]},${col[1]},${col[2]},${0.5+f*.45+p*.15})`;
+    baseFill=`rgba(${col[0]},${col[1]},${col[2]},${0.6+f*.35+p*.15})`;
   }
 
   // Draw base
@@ -452,13 +452,13 @@ function drawHex(h){
   }
 
   // Glow border
-  const glowCol=h.owner===PLAYER?`rgba(68,170,255,${0.6+h.pulse*.4})`:
-                h.owner===AI?`rgba(255,80,60,${0.6+h.pulse*.4})`:'rgba(80,80,160,0.7)';
-  ctx.shadowBlur=h.owner!==EMPTY?(8+h.pulse*18):0;
-  ctx.shadowColor=h.owner===PLAYER?PC:AC;
+  const glowCol=h.owner===PLAYER?`rgba(68,170,255,${0.7+h.pulse*.3})`:
+                h.owner===AI?`rgba(255,80,60,${0.7+h.pulse*.3})`:'rgba(100,100,200,0.85)';
+  ctx.shadowBlur=h.owner!==EMPTY?(10+h.pulse*18):2;
+  ctx.shadowColor=h.owner===PLAYER?PC:h.owner===AI?AC:'rgba(100,100,200,0.5)';
   hexPath(h.x,h.y,s);
   ctx.strokeStyle=glowCol;
-  ctx.lineWidth=h.owner!==EMPTY?2:1.5;
+  ctx.lineWidth=h.owner!==EMPTY?2.5:1.5;
   ctx.stroke();
   ctx.shadowBlur=0;
 
