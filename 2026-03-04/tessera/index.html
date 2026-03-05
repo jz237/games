@@ -2,663 +2,407 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>TESSERA — Hex Territory War</title>
 <style>
-* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-body {
-  background:#030310; color:#fff;
-  font-family:'Courier New',monospace;
-  overflow:hidden; width:100vw; height:100vh;
-  user-select:none;
-}
-canvas { position:fixed; top:0; left:0; touch-action:none; }
-#ui {
-  position:fixed; top:0; left:0; right:0; z-index:20;
-  padding:12px 16px;
-  display:flex; align-items:center; gap:12px;
-  pointer-events:none;
-}
-.side-score { min-width:52px; text-align:center; }
-.side-label { font-size:9px; letter-spacing:3px; opacity:.5; text-transform:uppercase; margin-bottom:2px; }
-.side-val { font-size:24px; font-weight:bold; line-height:1; }
-#playerVal { color:#4af; text-shadow:0 0 14px #4af8; }
-#aiVal { color:#f54; text-shadow:0 0 14px #f548; }
-#terrBar {
-  flex:1; height:6px; border-radius:3px;
-  background:rgba(255,255,255,.07);
-  overflow:hidden; position:relative;
-}
-#terrFill {
-  height:100%; width:50%;
-  background:linear-gradient(to right,#4af,#a4f);
-  transition:width .5s cubic-bezier(.25,.46,.45,.94);
-  border-radius:3px;
-}
-#terrGoal {
-  position:absolute; top:0; left:60%; width:2px; height:100%;
-  background:rgba(255,255,255,.3);
-}
-#levelBadge {
-  position:fixed; top:12px; left:50%; transform:translateX(-50%);
-  font-size:9px; letter-spacing:3px; color:#556;
-  z-index:21; pointer-events:none;
-  text-transform:uppercase;
-}
-#apBar {
-  position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
-  display:flex; gap:7px; align-items:center; z-index:20;
-}
-.ap-dot {
-  width:11px; height:11px; border-radius:50%;
-  background:#4af; box-shadow:0 0 10px #4af;
-  transition:all .3s;
-}
-.ap-dot.empty { background:#1a1a2e; box-shadow:none; }
-.ap-dot.charging { animation:apcharge .4s ease-out; }
-@keyframes apcharge {
-  0% { transform:scale(0); opacity:0; }
-  70% { transform:scale(1.4); }
-  100% { transform:scale(1); opacity:1; }
-}
-#apLabel {
-  font-size:9px; letter-spacing:2px; color:#334; margin-bottom:0;
-  position:fixed; bottom:44px; left:50%; transform:translateX(-50%);
-  z-index:20; pointer-events:none; text-transform:uppercase;
-}
-/* Overlays */
-.overlay {
-  position:fixed; inset:0; z-index:100;
-  display:flex; flex-direction:column;
-  align-items:center; justify-content:center;
-  text-align:center; padding:28px;
-}
-#intro { background:rgba(3,3,16,.97); }
-#intro h1 {
-  font-size:clamp(42px,12vw,72px);
-  letter-spacing:clamp(8px,3vw,18px);
-  background:linear-gradient(135deg,#4af 0%,#a4f 50%,#f4a 100%);
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-  margin-bottom:4px;
-}
-.tagline { font-size:11px; letter-spacing:4px; color:#334; margin-bottom:40px; }
-.rules {
-  max-width:320px; text-align:left;
-  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.07);
-  border-radius:16px; padding:20px 24px; margin-bottom:36px;
-}
-.rules h3 { font-size:9px; letter-spacing:4px; color:#4af; margin-bottom:14px; text-transform:uppercase; }
-.rule { display:flex; gap:10px; margin-bottom:10px; font-size:12px; line-height:1.7; color:#7ab; }
-.rule-icon { font-size:16px; flex-shrink:0; width:22px; }
-.play-btn {
-  background:linear-gradient(135deg,rgba(68,170,255,.15),rgba(160,68,255,.15));
-  border:1.5px solid #4af;
-  color:#fff; font-family:inherit;
-  font-size:13px; letter-spacing:5px;
-  padding:15px 50px; border-radius:50px;
-  cursor:pointer; text-transform:uppercase;
-  box-shadow:0 0 30px rgba(68,170,255,.3),0 0 60px rgba(160,68,255,.15);
-  animation:btnpulse 2s ease-in-out infinite;
-}
-@keyframes btnpulse {
-  0%,100% { box-shadow:0 0 20px rgba(68,170,255,.3),0 0 40px rgba(160,68,255,.1); }
-  50% { box-shadow:0 0 40px rgba(68,170,255,.5),0 0 80px rgba(160,68,255,.25); }
-}
-#result { background:rgba(3,3,16,.97); display:none; }
-#result.show { display:flex; }
-#resTitle { font-size:clamp(36px,10vw,60px); letter-spacing:8px; margin-bottom:8px; }
-#resSub { font-size:12px; letter-spacing:3px; color:#556; margin-bottom:8px; }
-#resStats { font-size:14px; color:#667; margin-bottom:36px; }
-.res-btn {
-  background:transparent; border:1.5px solid #4af;
-  color:#4af; font-family:inherit;
-  font-size:12px; letter-spacing:4px;
-  padding:13px 40px; border-radius:50px;
-  cursor:pointer; text-transform:uppercase;
-}
-/* Vignette */
-#vignette {
-  position:fixed; inset:0; z-index:5; pointer-events:none;
-  transition:opacity .5s;
-  opacity:0;
-}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:'Segoe UI',system-ui,sans-serif;color:#fff;touch-action:none;user-select:none}
+canvas{display:block;width:100%;height:100%}
+#overlay{position:fixed;inset:0;background:rgba(10,10,30,0.92);display:flex;align-items:center;justify-content:center;z-index:100;flex-direction:column}
+#overlay.hidden{display:none}
+.panel{background:linear-gradient(135deg,#16213e,#0f3460);border:2px solid #4a90d9;border-radius:16px;padding:32px 28px;max-width:420px;width:90%;text-align:center;box-shadow:0 0 40px rgba(74,144,217,0.3)}
+.panel h1{font-size:2.2em;margin-bottom:8px;background:linear-gradient(90deg,#4a90d9,#e94560);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-shadow:none}
+.panel h2{font-size:1.4em;color:#8ec5fc;margin-bottom:12px}
+.panel p{font-size:0.95em;color:#c0d0e0;line-height:1.6;margin-bottom:10px}
+.panel ul{text-align:left;margin:10px 20px;color:#c0d0e0;font-size:0.9em;line-height:1.7}
+.btn{display:inline-block;margin-top:16px;padding:14px 40px;font-size:1.2em;font-weight:700;border:none;border-radius:30px;cursor:pointer;background:linear-gradient(90deg,#4a90d9,#e94560);color:#fff;box-shadow:0 0 20px rgba(74,144,217,0.5);transition:transform 0.15s,box-shadow 0.15s}
+.btn:hover{transform:scale(1.05);box-shadow:0 0 30px rgba(74,144,217,0.7)}
+.btn:active{transform:scale(0.97)}
+#hud{position:fixed;top:0;left:0;right:0;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:linear-gradient(180deg,rgba(10,10,30,0.85),transparent);z-index:50;pointer-events:none}
+#hud.hidden{display:none}
+#hud>div{pointer-events:auto;font-size:0.85em}
+.hud-label{color:#8ec5fc;font-size:0.7em;text-transform:uppercase;letter-spacing:1px}
+.hud-val{font-size:1.3em;font-weight:700}
+.blue{color:#4a90d9}.red{color:#e94560}.gold{color:#ffd700}
+#restartBtn{position:fixed;bottom:16px;right:16px;z-index:50;padding:8px 18px;border-radius:20px;border:1px solid #4a90d9;background:rgba(16,33,62,0.8);color:#8ec5fc;font-size:0.85em;cursor:pointer}
+#restartBtn.hidden{display:none}
 </style>
 </head>
 <body>
-
 <canvas id="c"></canvas>
-
-<div id="vignette"></div>
-
-<div id="ui">
-  <div class="side-score">
-    <div class="side-label">You</div>
-    <div class="side-val" id="playerVal">0</div>
-  </div>
-  <div id="terrBar">
-    <div id="terrFill"></div>
-    <div id="terrGoal"></div>
-  </div>
-  <div class="side-score">
-    <div class="side-val" id="aiVal">0</div>
-    <div class="side-label">AI</div>
-  </div>
+<div id="hud" class="hidden">
+  <div><span class="hud-label">You</span><br><span id="playerScore" class="hud-val blue">0%</span></div>
+  <div><span class="hud-label">Level</span><br><span id="levelDisp" class="hud-val gold">1</span></div>
+  <div style="text-align:center"><span class="hud-label">AP</span><br><span id="apDisp" class="hud-val gold">3</span></div>
+  <div><span class="hud-label">AI</span><br><span id="aiScore" class="hud-val red">0%</span></div>
 </div>
-
-<div id="levelBadge">LEVEL 1</div>
-<div id="apLabel">ACTION POINTS</div>
-<div id="apBar"></div>
-
-<div class="overlay" id="intro">
-  <h1>TESSERA</h1>
-  <div class="tagline">HEX TERRITORY WAR</div>
-  <div class="rules">
-    <h3>How to Play</h3>
-    <div class="rule"><span class="rule-icon">👆</span><span>Tap empty hexes to claim them for <b style="color:#4af">blue</b></span></div>
-    <div class="rule"><span class="rule-icon">⚡</span><span>Surround 3+ sides of a <b style="color:#f54">red</b> hex to flip it — chain captures cascade</span></div>
-    <div class="rule"><span class="rule-icon">🔵</span><span>Action points regenerate — spend them wisely</span></div>
-    <div class="rule"><span class="rule-icon">🏆</span><span>Control <b>60%</b> of the board to win each level</span></div>
-  </div>
-  <button class="play-btn" onclick="startGame()">TAP TO PLAY</button>
+<button id="restartBtn" class="hidden" onclick="startLevel(currentLevel)">↻ Restart</button>
+<div id="overlay">
+  <div class="panel" id="panelContent"></div>
 </div>
-
-<div class="overlay" id="result">
-  <div id="resTitle"></div>
-  <div id="resSub"></div>
-  <div id="resStats"></div>
-  <button class="res-btn" id="resBtn">CONTINUE</button>
-</div>
-
 <script>
-// ─── Canvas / Globals ────────────────────────────────────────────────────────
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-let W, H;
+"use strict";
+const C=document.getElementById('c'),X=C.getContext('2d');
+const overlay=document.getElementById('overlay'),panelContent=document.getElementById('panelContent');
+const hud=document.getElementById('hud'),restartBtn=document.getElementById('restartBtn');
+let W,H,dpr;
+let hexes=[],particles=[];
+let currentLevel=1,gameState='menu';
+let playerAP=3,maxAP=3,apRegenTimer=0,apRegenRate=2000;
+let aiTimer=0,aiInterval=2000;
+let gridCols,gridRows,hexSize,originX,originY;
+const EMPTY=0,PLAYER=1,AI=2;
+const SQRT3=Math.sqrt(3);
 
-// State
-let level = 1;
-let hexes = [], particles = [], ripples = [], shockwaves = [], stars = [];
-let actionPoints = 5, maxAP = 5, apTimer = 0;
-let aiTimer = 0, aiDelay = [0,1800,1300,900][1];
-let gameActive = false;
-let shake = { x:0, y:0, power:0 };
-let vignette = { r:0, g:0, b:0, a:0 }; // target
-let bgStarDrift = { x:0, y:0 };
+// Level configs
+const LEVELS={
+  1:{cols:7,rows:7,aiInterval:2800,maxAP:3,apRegen:2200,aiSmarts:0.3},
+  2:{cols:9,rows:9,aiInterval:1800,maxAP:4,apRegen:1800,aiSmarts:0.55},
+  3:{cols:11,rows:11,aiInterval:1000,maxAP:5,apRegen:1400,aiSmarts:0.8}
+};
 
-const EMPTY=0, PLAYER=1, AI=2;
-const PC='#44aaff', AC='#ff5544';
-
-// ─── Resize ──────────────────────────────────────────────────────────────────
-function resize() {
-  W = canvas.width = window.innerWidth;
-  H = canvas.height = window.innerHeight;
+function resize(){
+  dpr=window.devicePixelRatio||1;
+  W=window.innerWidth;H=window.innerHeight;
+  C.width=W*dpr;C.height=H*dpr;
+  C.style.width=W+'px';C.style.height=H+'px';
+  X.setTransform(dpr,0,0,dpr,0,0);
+  if(gameState==='playing') calcGrid();
 }
-window.addEventListener('resize', ()=>{ resize(); if(gameActive) buildGrid(); });
+window.addEventListener('resize',resize);
+resize();
 
-// ─── Stars ───────────────────────────────────────────────────────────────────
-function initStars() {
-  stars = [];
-  for(let i=0;i<180;i++){
-    stars.push({
-      x:Math.random()*W, y:Math.random()*H,
-      r:Math.random()*1.3+0.2,
-      brightness:Math.random(),
-      twinkle:Math.random()*Math.PI*2,
-      twinkleSpeed:0.01+Math.random()*0.03,
-      drift:{ x:(Math.random()-.5)*.15, y:(Math.random()-.5)*.15 }
-    });
-  }
+function calcGrid(){
+  const cfg=LEVELS[currentLevel];
+  gridCols=cfg.cols;gridRows=cfg.rows;
+  const padTop=64,padBot=50,padSide=20;
+  const availW=W-padSide*2,availH=H-padTop-padBot;
+  const sizeByW=availW/((gridCols+0.5)*SQRT3);
+  const sizeByH=availH/(gridRows*1.5+0.5);
+  hexSize=Math.min(sizeByW,sizeByH);
+  const totalW=(gridCols+0.5)*SQRT3*hexSize;
+  const totalH=(gridRows*1.5+0.5)*hexSize;
+  originX=(W-totalW)/2+hexSize*SQRT3/2;
+  originY=padTop+(availH-totalH)/2+hexSize;
 }
 
-// ─── Hex Grid ─────────────────────────────────────────────────────────────────
-function hexPixel(q,r,size,ox,oy){
-  return {
-    x: ox + size*(1.5*q),
-    y: oy + size*(Math.sqrt(3)*r + Math.sqrt(3)/2*q)
-  };
+function hexCenter(col,row){
+  const x=originX+col*SQRT3*hexSize+(row%2)*SQRT3/2*hexSize;
+  const y=originY+row*1.5*hexSize;
+  return{x,y};
 }
-function hexCorners(cx,cy,s){
-  return Array.from({length:6},(_,i)=>{
-    const a=Math.PI/180*(60*i);
-    return {x:cx+s*Math.cos(a), y:cy+s*Math.sin(a)};
-  });
-}
-function hexPath(cx,cy,s){
-  const pts=hexCorners(cx,cy,s);
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x,pts[0].y);
-  for(let i=1;i<6;i++) ctx.lineTo(pts[i].x,pts[i].y);
-  ctx.closePath();
-}
-function hexNeighbors(hex){
-  const D=[[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]];
-  return D.map(([dq,dr])=>hexes.find(h=>h.q===hex.q+dq&&h.r===hex.r+dr)).filter(Boolean);
-}
-function adjCount(hex,owner){ return hexNeighbors(hex).filter(n=>n.owner===owner).length; }
 
 function buildGrid(){
   hexes=[];
-  const G = [0,3,4,5][level];
-  const hs = Math.min(W,H)/((G*2+1)*2.0+0.5);
-  const ox=W/2, oy=H/2+14;
-  for(let q=-G;q<=G;q++){
-    const r1=Math.max(-G,-q-G), r2=Math.min(G,-q+G);
-    for(let r=r1;r<=r2;r++){
-      const {x,y}=hexPixel(q,r,hs*1.08,ox,oy);
-      hexes.push({q,r,x,y,size:hs,owner:EMPTY,
-        pulse:0,       // ownership flash
-        fill:0,        // 0→1 animated fill when claimed
-        fillTarget:0,
-        ring:0,        // ring pulse on chain capture
-        hover:false
-      });
+  for(let r=0;r<gridRows;r++){
+    for(let c=0;c<gridCols;c++){
+      const{x,y}=hexCenter(c,r);
+      hexes.push({col:c,row:r,x,y,owner:EMPTY,glow:0,flipAnim:0});
     }
   }
 }
 
-// ─── Particles ───────────────────────────────────────────────────────────────
-function burst(x,y,color,n=12,spread=4.5,size=2.5){
-  for(let i=0;i<n;i++){
-    const a=Math.random()*Math.PI*2;
-    const sp=(0.5+Math.random())*spread;
-    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
-      life:1,decay:0.018+Math.random()*.025,
-      size:size*(0.5+Math.random()*.8),color,
-      gravity:0.07
-    });
-  }
-}
-function chainBurst(x,y,color){
-  burst(x,y,color,22,6,3.5);
-  shockwaves.push({x,y,r:0,maxR:80,life:1,color});
-}
-function ripple(x,y,color,maxR=50){
-  ripples.push({x,y,r:4,maxR,life:1,color});
-}
-function shake_(power){ shake.power=Math.max(shake.power,power); }
+function getHex(c,r){return hexes.find(h=>h.col===c&&h.row===r)}
 
-// ─── Hex Claiming ─────────────────────────────────────────────────────────────
-function claim(hex,owner,chainDepth=0){
-  if(!hex) return;
-  hex.owner=owner;
-  hex.fill=chainDepth>0?0.3:0;
-  hex.fillTarget=1;
-  hex.pulse=1;
-  const col=owner===PLAYER?PC:AC;
-  burst(hex.x,hex.y,col,chainDepth>0?18:10,chainDepth>0?5:3.5);
-  if(chainDepth>0){ shake_(chainDepth*3); chainBurst(hex.x,hex.y,col); }
-  else ripple(hex.x,hex.y,col,70);
+function neighbors(h){
+  const dirs=h.row%2?
+    [[-1,0],[1,0],[0,-1],[1,-1],[0,1],[1,1]]:
+    [[-1,0],[1,0],[-1,-1],[0,-1],[-1,1],[0,1]];
+  return dirs.map(([dc,dr])=>getHex(h.col+dc,h.row+dr)).filter(Boolean);
+}
 
-  // Check chain captures
-  const opp=owner===PLAYER?AI:PLAYER;
-  hexNeighbors(hex).forEach(n=>{
-    if(n.owner===opp && adjCount(n,owner)>=3){
-      const depth=chainDepth+1;
-      setTimeout(()=>claim(n,owner,depth), 180*depth);
+function countSurrounding(hex,owner){
+  return neighbors(hex).filter(n=>n.owner===owner).length;
+}
+
+function checkCaptures(owner){
+  const enemy=owner===PLAYER?AI:PLAYER;
+  let flipped=true,totalFlipped=0;
+  while(flipped){
+    flipped=false;
+    for(const h of hexes){
+      if(h.owner===enemy){
+        const surrounded=countSurrounding(h,owner);
+        if(surrounded>=3){
+          h.owner=owner;h.flipAnim=1;
+          spawnCaptureParticles(h.x,h.y,owner);
+          flipped=true;totalFlipped++;
+        }
+      }
     }
-  });
-  updateScores();
+  }
+  return totalFlipped;
 }
 
-// ─── Scores / Win ─────────────────────────────────────────────────────────────
-function updateScores(){
-  const pc=hexes.filter(h=>h.owner===PLAYER).length;
-  const ac=hexes.filter(h=>h.owner===AI).length;
+function getScores(){
   const total=hexes.length;
-  document.getElementById('playerVal').textContent=pc;
-  document.getElementById('aiVal').textContent=ac;
-  const pFrac=pc/total;
-  document.getElementById('terrFill').style.width=(pFrac*100)+'%';
-
-  // Vignette based on advantage
-  const margin=(pc-ac)/total;
-  if(margin>0.1){
-    document.getElementById('vignette').style.background=
-      `radial-gradient(ellipse at center,transparent 40%,rgba(0,80,180,${Math.min(margin*1.5,.4)}) 100%)`;
-    document.getElementById('vignette').style.opacity=1;
-  } else if(margin<-0.1){
-    document.getElementById('vignette').style.background=
-      `radial-gradient(ellipse at center,transparent 40%,rgba(180,30,0,${Math.min(-margin*1.5,.4)}) 100%)`;
-    document.getElementById('vignette').style.opacity=1;
-  } else {
-    document.getElementById('vignette').style.opacity=0;
-  }
-
-  if(pFrac>=0.60){ setTimeout(()=>endLevel(true),700); return; }
-  if(ac/total>=0.60){ setTimeout(()=>endLevel(false),700); return; }
-  if(pc+ac===total){ setTimeout(()=>endLevel(pFrac>=.5),700); }
+  const p=hexes.filter(h=>h.owner===PLAYER).length;
+  const a=hexes.filter(h=>h.owner===AI).length;
+  return{player:p/total,ai:a/total,playerCount:p,aiCount:a,total};
 }
 
-// ─── AI ───────────────────────────────────────────────────────────────────────
-function aiMove(){
+function updateHUD(){
+  const s=getScores();
+  document.getElementById('playerScore').textContent=Math.round(s.player*100)+'%';
+  document.getElementById('aiScore').textContent=Math.round(s.ai*100)+'%';
+  document.getElementById('levelDisp').textContent=currentLevel;
+  document.getElementById('apDisp').textContent=playerAP;
+}
+
+function checkWinLose(){
+  const s=getScores();
+  if(s.player>=0.6){
+    gameState='won';
+    setTimeout(()=>{
+      if(currentLevel<3){
+        showOverlay('victory',`Level ${currentLevel} Complete!`,'You dominated the grid!','Next Level',()=>startLevel(currentLevel+1));
+      }else{
+        showOverlay('victory','🏆 TESSERA MASTER! 🏆','You conquered all three levels!','Play Again',()=>startLevel(1));
+      }
+    },600);
+  }else if(s.ai>=0.6){
+    gameState='lost';
+    setTimeout(()=>{
+      showOverlay('defeat','Defeated!','The AI claimed the grid.','Try Again',()=>startLevel(currentLevel));
+    },600);
+  }
+}
+
+// AI logic
+function aiTurn(){
+  if(gameState!=='playing')return;
   const empties=hexes.filter(h=>h.owner===EMPTY);
-  if(!empties.length) return;
-  let best=null, bestScore=-Infinity;
-  empties.forEach(h=>{
+  if(empties.length===0)return;
+  const cfg=LEVELS[currentLevel];
+  let best=null,bestScore=-Infinity;
+
+  for(const h of empties){
     let score=0;
-    // Chain capture: can we flip an opponent hex?
-    hexNeighbors(h).filter(n=>n.owner===PLAYER).forEach(ph=>{
-      const willAdj=adjCount(ph,AI)+1;
-      if(willAdj>=3) score+=80;
-      else score+=willAdj*6;
-    });
-    // Blocking player from chain capturing our hexes
-    hexNeighbors(h).filter(n=>n.owner===AI).forEach(ah=>{
-      const playerThreat=adjCount(ah,PLAYER);
-      score+=playerThreat*4;
-    });
+    // Count how many captures this would cause
+    h.owner=AI;
+    const enemy=PLAYER;
+    for(const n of neighbors(h)){
+      if(n.owner===enemy){
+        const surr=countSurrounding(n,AI);
+        if(surr>=3)score+=10;
+        else if(surr===2)score+=3;
+      }
+    }
+    // Defensive: block player captures
+    for(const n of neighbors(h)){
+      if(n.owner===AI){
+        const playerSurr=countSurrounding(n,PLAYER);
+        if(playerSurr>=2)score+=4;
+      }
+    }
     // Adjacency bonus
-    score+=adjCount(h,AI)*5;
-    // Center preference (level 3 especially)
-    const cx=W/2,cy=H/2;
-    const dist=Math.hypot(h.x-cx,h.y-cy);
-    score+=(level===3?50:20)/(1+dist*.008);
-    // Noise by level
-    score+=Math.random()*(level===1?40:level===2?20:8);
-    if(score>bestScore){ bestScore=score; best=h; }
-  });
-  if(best){
-    ripple(best.x,best.y,AC,60);
-    setTimeout(()=>claim(best,AI),220);
+    score+=countSurrounding(h,AI)*0.5;
+    h.owner=EMPTY;
+
+    if(Math.random()>cfg.aiSmarts)score=Math.random()*5;
+    if(score>bestScore){bestScore=score;best=h;}
+  }
+
+  if(!best)best=empties[Math.floor(Math.random()*empties.length)];
+  best.owner=AI;best.glow=1;
+  spawnClaimParticles(best.x,best.y,AI);
+  checkCaptures(AI);
+  updateHUD();
+  checkWinLose();
+}
+
+// Particles
+function spawnClaimParticles(px,py,owner){
+  const color=owner===PLAYER?'#4a90d9':'#e94560';
+  for(let i=0;i<12;i++){
+    const angle=Math.random()*Math.PI*2;
+    const speed=1+Math.random()*3;
+    particles.push({x:px,y:py,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:1,color,size:2+Math.random()*3});
+  }
+}
+function spawnCaptureParticles(px,py,owner){
+  const color=owner===PLAYER?'#6bb5ff':'#ff6b8a';
+  for(let i=0;i<20;i++){
+    const angle=Math.random()*Math.PI*2;
+    const speed=2+Math.random()*4;
+    particles.push({x:px,y:py,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:1,color,size:3+Math.random()*4});
   }
 }
 
-// ─── Action Points ────────────────────────────────────────────────────────────
-function spendAP(){
-  if(actionPoints<=0) return false;
-  actionPoints--;
-  renderAPBar();
-  return true;
-}
-function regenAP(dt){
-  if(actionPoints>=maxAP){ apTimer=0; return; }
-  apTimer+=dt;
-  const regenTime=[0,2000,2500,3200][level];
-  if(apTimer>=regenTime){
-    apTimer=0;
-    actionPoints=Math.min(maxAP,actionPoints+1);
-    renderAPBar(true);
+function drawHex(cx,cy,size,fill,stroke,lineW,glowColor,glowAmt){
+  X.beginPath();
+  for(let i=0;i<6;i++){
+    const angle=Math.PI/6+i*Math.PI/3;
+    const px=cx+size*Math.cos(angle);
+    const py=cy+size*Math.sin(angle);
+    i===0?X.moveTo(px,py):X.lineTo(px,py);
   }
-}
-function renderAPBar(animate=false){
-  const bar=document.getElementById('apBar');
-  bar.innerHTML='';
-  for(let i=0;i<maxAP;i++){
-    const d=document.createElement('div');
-    d.className='ap-dot'+(i<actionPoints?'':(i===actionPoints&&animate?' charging':' empty'));
-    bar.appendChild(d);
+  X.closePath();
+  if(glowAmt>0&&glowColor){
+    X.save();
+    X.shadowColor=glowColor;
+    X.shadowBlur=20*glowAmt;
+    X.fillStyle=fill;X.fill();
+    X.restore();
+  }else{
+    X.fillStyle=fill;X.fill();
   }
+  X.strokeStyle=stroke;X.lineWidth=lineW;X.stroke();
 }
 
-// ─── Drawing ──────────────────────────────────────────────────────────────────
-function drawBackground(){
-  ctx.fillStyle='#04041a';
-  ctx.fillRect(0,0,W,H);
+function drawBoard(){
+  // Background gradient
+  const bg=X.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.max(W,H)*0.7);
+  bg.addColorStop(0,'#1a1a2e');bg.addColorStop(1,'#0a0a1a');
+  X.fillStyle=bg;X.fillRect(0,0,W,H);
 
-  // Nebula wisps
-  const g1=ctx.createRadialGradient(W*.3,H*.3,0,W*.3,H*.3,W*.5);
-  g1.addColorStop(0,'rgba(30,10,80,.12)'); g1.addColorStop(1,'transparent');
-  ctx.fillStyle=g1; ctx.fillRect(0,0,W,H);
-  const g2=ctx.createRadialGradient(W*.7,H*.7,0,W*.7,H*.7,W*.4);
-  g2.addColorStop(0,'rgba(0,30,80,.1)'); g2.addColorStop(1,'transparent');
-  ctx.fillStyle=g2; ctx.fillRect(0,0,W,H);
-}
+  // Subtle grid lines for ambiance
+  X.strokeStyle='rgba(74,144,217,0.05)';X.lineWidth=1;
+  for(let i=0;i<W;i+=40){X.beginPath();X.moveTo(i,0);X.lineTo(i,H);X.stroke();}
+  for(let i=0;i<H;i+=40){X.beginPath();X.moveTo(0,i);X.lineTo(W,i);X.stroke();}
 
-function drawStars(ts){
-  stars.forEach(s=>{
-    s.twinkle+=s.twinkleSpeed;
-    s.x+=s.drift.x; s.y+=s.drift.y;
-    if(s.x<0) s.x=W; if(s.x>W) s.x=0;
-    if(s.y<0) s.y=H; if(s.y>H) s.y=0;
-    const b=s.brightness*(0.5+0.5*Math.sin(s.twinkle));
-    ctx.globalAlpha=b*0.6;
-    ctx.fillStyle='#fff';
-    ctx.beginPath();
-    ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-    ctx.fill();
-  });
-  ctx.globalAlpha=1;
-}
-
-function drawHex(h){
-  const s=h.size*.88;
-  // Animated fill: lerp h.fill → h.fillTarget
-  h.fill+=(h.fillTarget-h.fill)*.08;
-  h.pulse*=.92;
-
-  // Base fill
-  let baseFill='#0f0f2e';
-  if(h.owner===PLAYER || h.owner===AI){
-    const col=h.owner===PLAYER?[40,120,220]:[200,40,30];
-    const f=h.fill, p=h.pulse;
-    baseFill=`rgba(${col[0]},${col[1]},${col[2]},${0.6+f*.35+p*.15})`;
-  }
-
-  // Draw base
-  hexPath(h.x,h.y,s);
-  ctx.fillStyle=baseFill;
-  ctx.fill();
-
-  // Ownership animated radial fill overlay
-  if(h.owner!==EMPTY && h.fill>0.02){
-    const f=Math.min(h.fill,1);
-    const col=h.owner===PLAYER?'rgba(68,170,255,':'rgba(255,80,60,';
-    const grad=ctx.createRadialGradient(h.x,h.y,0,h.x,h.y,s*f*1.2);
-    grad.addColorStop(0,col+'0.35)');
-    grad.addColorStop(1,col+'0)');
-    hexPath(h.x,h.y,s);
-    ctx.fillStyle=grad;
-    ctx.fill();
-  }
-
-  // Glow border
-  const glowCol=h.owner===PLAYER?`rgba(68,170,255,${0.7+h.pulse*.3})`:
-                h.owner===AI?`rgba(255,80,60,${0.7+h.pulse*.3})`:'rgba(100,100,200,0.85)';
-  ctx.shadowBlur=h.owner!==EMPTY?(10+h.pulse*18):2;
-  ctx.shadowColor=h.owner===PLAYER?PC:h.owner===AI?AC:'rgba(100,100,200,0.5)';
-  hexPath(h.x,h.y,s);
-  ctx.strokeStyle=glowCol;
-  ctx.lineWidth=h.owner!==EMPTY?2.5:1.5;
-  ctx.stroke();
-  ctx.shadowBlur=0;
-
-  // Inner center dot
-  if(h.owner!==EMPTY && h.fill>.4){
-    const dotR=s*.1*(h.fill-.3)*2;
-    ctx.beginPath();
-    ctx.arc(h.x,h.y,Math.max(0,dotR),0,Math.PI*2);
-    ctx.fillStyle=h.owner===PLAYER?'rgba(150,220,255,0.8)':'rgba(255,160,140,0.8)';
-    ctx.shadowBlur=10; ctx.shadowColor=h.owner===PLAYER?PC:AC;
-    ctx.fill();
-    ctx.shadowBlur=0;
-  }
-
-  // Ring pulse (chain capture indicator)
-  if(h.ring>0){
-    ctx.beginPath();
-    ctx.arc(h.x,h.y,s*(1+h.ring*.4),0,Math.PI*2);
-    ctx.strokeStyle=h.owner===PLAYER?`rgba(68,170,255,${h.ring})`:
-                                    `rgba(255,80,60,${h.ring})`;
-    ctx.lineWidth=2;
-    ctx.stroke();
-    h.ring*=.88;
+  for(const h of hexes){
+    let fill,stroke,glow=null,glowAmt=0;
+    const innerSize=hexSize*0.92;
+    if(h.owner===EMPTY){
+      fill='#1e2d4a';stroke='#2a4a6a';
+    }else if(h.owner===PLAYER){
+      fill='#1a4a8a';stroke='#4a90d9';glow='#4a90d9';glowAmt=0.3+h.glow*0.7;
+    }else{
+      fill='#6a1a2a';stroke='#e94560';glow='#e94560';glowAmt=0.3+h.glow*0.7;
+    }
+    if(h.flipAnim>0){
+      glowAmt=Math.max(glowAmt,h.flipAnim);
+    }
+    drawHex(h.x,h.y,innerSize,fill,stroke,1.5,glow,glowAmt);
   }
 }
 
 function drawParticles(){
-  particles.forEach(p=>{
-    ctx.globalAlpha=p.life*p.life;
-    ctx.fillStyle=p.color;
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2);
-    ctx.fill();
-  });
-  ctx.globalAlpha=1;
+  for(const p of particles){
+    X.globalAlpha=p.life*0.8;
+    X.fillStyle=p.color;
+    X.beginPath();
+    X.arc(p.x,p.y,p.size*p.life,0,Math.PI*2);
+    X.fill();
+  }
+  X.globalAlpha=1;
 }
 
-function drawRipples(){
-  ripples.forEach(r=>{
-    ctx.globalAlpha=r.life*.5;
-    ctx.strokeStyle=r.color;
-    ctx.lineWidth=1.5;
-    ctx.beginPath();
-    ctx.arc(r.x,r.y,r.r,0,Math.PI*2);
-    ctx.stroke();
-  });
-  ctx.globalAlpha=1;
+function drawAPBar(){
+  const barW=120,barH=6,barX=W/2-barW/2,barY=46;
+  X.fillStyle='rgba(255,255,255,0.1)';
+  X.fillRect(barX,barY,barW,barH);
+  const pct=playerAP/maxAP;
+  const apGrad=X.createLinearGradient(barX,0,barX+barW,0);
+  apGrad.addColorStop(0,'#ffd700');apGrad.addColorStop(1,'#ff8c00');
+  X.fillStyle=apGrad;
+  X.fillRect(barX,barY,barW*pct,barH);
 }
 
-function drawShockwaves(){
-  shockwaves.forEach(s=>{
-    ctx.globalAlpha=s.life*.35;
-    ctx.strokeStyle=s.color;
-    ctx.lineWidth=3*s.life;
-    ctx.beginPath();
-    ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-    ctx.stroke();
-  });
-  ctx.globalAlpha=1;
-}
-
-// ─── Main Loop ────────────────────────────────────────────────────────────────
-let lastTs=0;
-function loop(ts){
-  if(!gameActive) return;
-  const dt=Math.min(ts-lastTs,50);
-  lastTs=ts;
-
-  // Shake
-  if(shake.power>.3){
-    shake.x=(Math.random()-.5)*shake.power*2.5;
-    shake.y=(Math.random()-.5)*shake.power*2.5;
-    shake.power*=.82;
-  } else { shake.x=0; shake.y=0; shake.power=0; }
-
-  ctx.save();
-  ctx.translate(shake.x,shake.y);
-
-  drawBackground();
-  drawStars(ts);
-  drawShockwaves();
-  drawRipples();
-  hexes.forEach(drawHex);
+let lastTime=0;
+function gameLoop(t){
+  const dt=lastTime?t-lastTime:16;lastTime=t;
+  if(gameState==='playing'){
+    // AP regen
+    apRegenTimer+=dt;
+    if(apRegenTimer>=apRegenRate&&playerAP<maxAP){
+      playerAP++;apRegenTimer=0;updateHUD();
+    }
+    // AI timer
+    aiTimer+=dt;
+    if(aiTimer>=aiInterval){aiTimer=0;aiTurn();}
+    // Animate glows
+    for(const h of hexes){
+      if(h.glow>0)h.glow=Math.max(0,h.glow-dt*0.002);
+      if(h.flipAnim>0)h.flipAnim=Math.max(0,h.flipAnim-dt*0.003);
+    }
+    // Animate particles
+    for(const p of particles){
+      p.x+=p.vx;p.y+=p.vy;p.life-=dt*0.002;p.vy+=0.02;
+    }
+    particles=particles.filter(p=>p.life>0);
+  }
+  drawBoard();
   drawParticles();
-
-  ctx.restore();
-
-  // Update particles
-  particles=particles.filter(p=>p.life>.01);
-  particles.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=p.gravity; p.vx*=.97; p.vy*=.97; p.life-=p.decay; });
-
-  // Update ripples
-  ripples=ripples.filter(r=>r.life>.01);
-  ripples.forEach(r=>{ r.r+=(r.maxR-r.r)*.12; r.life-=.035; });
-
-  // Update shockwaves
-  shockwaves=shockwaves.filter(s=>s.life>.01);
-  shockwaves.forEach(s=>{ s.r+=5; s.life-=.04; });
-
-  // Regen AP
-  regenAP(dt);
-
-  // AI turn
-  aiTimer+=dt;
-  if(aiTimer>=aiDelay){ aiTimer=0; aiMove(); }
-
-  requestAnimationFrame(loop);
+  if(gameState==='playing')drawAPBar();
+  requestAnimationFrame(gameLoop);
 }
 
-// ─── Input ────────────────────────────────────────────────────────────────────
-function nearestHex(px,py){
-  let best=null,bestD=Infinity;
-  hexes.forEach(h=>{
-    const d=Math.hypot(px-h.x,py-h.y);
-    if(d<bestD){ bestD=d; best=h; }
-  });
-  return bestD<best?.size*1.0?best:null;
-}
-
-canvas.addEventListener('pointerdown',e=>{
-  if(!gameActive) return;
-  const r=canvas.getBoundingClientRect();
-  const px=e.clientX-r.left, py=e.clientY-r.top;
-  ripple(px,py,'rgba(120,200,255,.5)',40);
-
-  if(actionPoints<=0) return;
-  const h=nearestHex(px,py);
-  if(h && h.owner===EMPTY){
-    if(spendAP()) claim(h,PLAYER);
+function hitTest(mx,my){
+  let closest=null,closestDist=Infinity;
+  for(const h of hexes){
+    const dx=mx-h.x,dy=my-h.y;
+    const dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist<hexSize*0.9&&dist<closestDist){closestDist=dist;closest=h;}
   }
+  return closest;
+}
+
+function handleClick(mx,my){
+  if(gameState!=='playing')return;
+  const h=hitTest(mx,my);
+  if(!h||h.owner!==EMPTY)return;
+  if(playerAP<=0)return;
+  playerAP--;
+  h.owner=PLAYER;h.glow=1;
+  spawnClaimParticles(h.x,h.y,PLAYER);
+  checkCaptures(PLAYER);
+  updateHUD();
+  checkWinLose();
+}
+
+C.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  handleClick(e.clientX,e.clientY);
 });
 
-// ─── Level Flow ───────────────────────────────────────────────────────────────
-function endLevel(playerWon){
-  gameActive=false;
-  const pc=hexes.filter(h=>h.owner===PLAYER).length;
-  const ac=hexes.filter(h=>h.owner===AI).length;
-  const res=document.getElementById('result');
-
-  if(playerWon && level<3){
-    document.getElementById('resTitle').innerHTML=`<span style="color:#4af">LEVEL ${level}</span><span style="color:#a4f"> CLEAR</span>`;
-    document.getElementById('resSub').textContent='TERRITORY CONQUERED';
-    document.getElementById('resStats').textContent=`${pc} hexes claimed · ${Math.round(pc/hexes.length*100)}% control`;
-    const btn=document.getElementById('resBtn');
-    btn.textContent=`LEVEL ${level+1} →`;
-    btn.onclick=()=>{ level++; initLevel(); };
-  } else if(playerWon && level===3){
-    document.getElementById('resTitle').innerHTML=`<span style="background:linear-gradient(135deg,#4af,#a4f,#f4a);-webkit-background-clip:text;-webkit-text-fill-color:transparent">VICTORY</span>`;
-    document.getElementById('resSub').textContent='TESSERA CONQUERED';
-    document.getElementById('resStats').textContent=`All 3 levels cleared — well played`;
-    const btn=document.getElementById('resBtn');
-    btn.textContent='PLAY AGAIN';
-    btn.onclick=()=>{ level=1; initLevel(); };
-    // Celebration burst
-    for(let i=0;i<8;i++) setTimeout(()=>{
-      burst(Math.random()*W,Math.random()*H,Math.random()>.5?PC:AC,20,6);
-    },i*120);
-  } else {
-    document.getElementById('resTitle').innerHTML=`<span style="color:#f54">OVERRUN</span>`;
-    document.getElementById('resSub').textContent='THE AI CLAIMS VICTORY';
-    document.getElementById('resStats').textContent=`AI controlled ${Math.round(ac/hexes.length*100)}% of the board`;
-    const btn=document.getElementById('resBtn');
-    btn.textContent='TRY AGAIN';
-    btn.onclick=()=>initLevel();
-  }
-  res.classList.add('show');
+function showOverlay(type,title,msg,btnText,btnAction){
+  let html=`<h1>${title}</h1><p>${msg}</p>`;
+  html+=`<button class="btn" id="overlayBtn">${btnText}</button>`;
+  panelContent.innerHTML=html;
+  overlay.classList.remove('hidden');
+  document.getElementById('overlayBtn').onclick=()=>{overlay.classList.add('hidden');btnAction();};
 }
 
-function initLevel(){
-  document.getElementById('result').classList.remove('show');
-  document.getElementById('levelBadge').textContent=`LEVEL ${level}`;
-  aiDelay=[0,1800,1300,900][level];
-  aiTimer=0;
-  actionPoints=maxAP;
-  renderAPBar();
-  resize();
-  initStars();
-  buildGrid();
-  particles=[]; ripples=[]; shockwaves=[];
-  shake={x:0,y:0,power:0};
-  document.getElementById('vignette').style.opacity=0;
-  gameActive=true;
-  requestAnimationFrame(ts=>{ lastTs=ts; loop(ts); });
+function showHowToPlay(){
+  panelContent.innerHTML=`
+    <h1>TESSERA</h1>
+    <h2>Hex Territory War</h2>
+    <ul>
+      <li>Tap empty hexes to claim them <span class="blue">■</span></li>
+      <li>Surround 3+ sides of an enemy hex to <strong>flip</strong> it</li>
+      <li>Captures chain — flipped hexes can trigger more flips!</li>
+      <li>Action Points (AP) limit your moves — they regenerate over time</li>
+      <li>Control <strong>60%</strong> of the board to win</li>
+      <li>Don't let the AI <span class="red">■</span> reach 60% first!</li>
+    </ul>
+    <button class="btn" id="overlayBtn">TAP TO PLAY</button>
+  `;
+  overlay.classList.remove('hidden');
+  document.getElementById('overlayBtn').onclick=()=>{overlay.classList.add('hidden');startLevel(1);};
 }
 
-function startGame(){
-  document.getElementById('intro').style.display='none';
-  initLevel();
+function startLevel(lvl){
+  currentLevel=lvl;
+  const cfg=LEVELS[lvl];
+  gameState='playing';
+  aiInterval=cfg.aiInterval;
+  maxAP=cfg.maxAP;
+  playerAP=maxAP;
+  apRegenRate=cfg.apRegen;
+  apRegenTimer=0;aiTimer=0;
+  particles=[];
+  calcGrid();buildGrid();
+  hud.classList.remove('hidden');
+  restartBtn.classList.remove('hidden');
+  overlay.classList.add('hidden');
+  updateHUD();
 }
 
-resize();
-renderAPBar();
-// Draw a static preview hex grid behind the intro overlay
-initStars();
-buildGrid();
-requestAnimationFrame(ts=>{
-  drawBackground();
-  drawStars(ts);
-  hexes.forEach(drawHex);
-});
+// Init
+showHowToPlay();
+requestAnimationFrame(gameLoop);
 </script>
 </body>
 </html>

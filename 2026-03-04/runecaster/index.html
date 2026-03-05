@@ -2,814 +2,587 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>RUNECASTER</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>RUNECASTER — Wizard Duel</title>
 <style>
-* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-body {
-  background:#080510; color:#fff;
-  font-family:'Courier New',monospace;
-  overflow:hidden; width:100vw; height:100vh;
-  user-select:none;
-}
-canvas { position:fixed; top:0; left:0; touch-action:none; }
-
-#hpRow {
-  position:fixed; top:0; left:0; right:0; z-index:20;
-  display:flex; justify-content:space-between; align-items:flex-start;
-  padding:12px 16px; pointer-events:none;
-}
-.wizard-panel { text-align:center; }
-.wizard-name { font-size:9px; letter-spacing:3px; opacity:.4; margin-bottom:6px; text-transform:uppercase; }
-.orb-row { display:flex; gap:6px; }
-.ai-panel .orb-row { flex-direction:row-reverse; }
-.hp-orb {
-  width:16px; height:16px; border-radius:50%;
-  background:radial-gradient(circle at 35% 35%, #e0b0ff, #7030b0);
-  box-shadow:0 0 10px rgba(180,80,255,.7);
-  transition:all .3s;
-}
-.hp-orb.lost { background:#110820; box-shadow:0 0 3px rgba(60,0,80,.3); }
-
-#levelTag {
-  position:fixed; top:14px; left:50%; transform:translateX(-50%);
-  font-size:10px; letter-spacing:3px; color:#443; z-index:21; pointer-events:none;
-}
-
-#centerMsg {
-  position:fixed; left:50%; transform:translateX(-50%);
-  z-index:25; font-size:16px; letter-spacing:5px;
-  pointer-events:none; text-transform:uppercase;
-  text-shadow:0 0 20px currentColor;
-  white-space:nowrap; opacity:0;
-  transition:opacity .15s;
-}
-
-.overlay {
-  position:fixed; inset:0; z-index:100;
-  display:flex; flex-direction:column;
-  align-items:center; justify-content:center;
-  text-align:center; padding:24px;
-  background:rgba(8,5,16,.97);
-}
-.overlay h1 {
-  font-size:clamp(38px,11vw,66px);
-  letter-spacing:clamp(6px,2.5vw,14px);
-  background:linear-gradient(135deg,#a060ff 0%,#ff60c0 60%,#ffaa40 100%);
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-  margin-bottom:4px;
-}
-.tagline { font-size:11px; letter-spacing:5px; color:#332; margin-bottom:34px; }
-.rules {
-  max-width:330px; text-align:left;
-  background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);
-  border-radius:16px; padding:20px 24px; margin-bottom:30px;
-}
-.rules h3 { font-size:9px; letter-spacing:4px; color:#a060ff; margin-bottom:14px; text-transform:uppercase; }
-.rule { display:flex; gap:10px; margin-bottom:10px; font-size:12px; line-height:1.7; color:#897; }
-.ctr { color:#c090ff; }
-.chart { width:100%; border-collapse:collapse; margin-top:10px; font-size:11px; }
-.chart td { padding:3px 6px; color:#776; }
-.chart td:first-child { color:#b090ee; }
-.play-btn {
-  background:linear-gradient(135deg,rgba(160,60,255,.15),rgba(255,60,160,.08));
-  border:1.5px solid #a060ff; color:#fff; font-family:inherit;
-  font-size:13px; letter-spacing:5px; padding:15px 50px; border-radius:50px;
-  cursor:pointer; text-transform:uppercase;
-  animation:glowpulse 2s ease-in-out infinite;
-}
-@keyframes glowpulse {
-  0%,100% { box-shadow:0 0 20px rgba(160,60,255,.3); }
-  50% { box-shadow:0 0 50px rgba(160,60,255,.55),0 0 80px rgba(255,60,160,.2); }
-}
-#result { display:none; }
-#result.show { display:flex; }
-#resTitle { font-size:clamp(32px,9vw,52px); letter-spacing:8px; margin-bottom:10px; }
-#resSub { font-size:12px; letter-spacing:3px; color:#554; margin-bottom:8px; }
-#resStats { font-size:13px; color:#665; margin-bottom:36px; }
-.res-btn {
-  background:transparent; border:1.5px solid #a060ff; color:#a060ff;
-  font-family:inherit; font-size:12px; letter-spacing:4px;
-  padding:13px 40px; border-radius:50px; cursor:pointer; text-transform:uppercase;
-}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0a1a;font-family:'Segoe UI',system-ui,sans-serif;color:#fff;touch-action:none;user-select:none}
+canvas{display:block;width:100%;height:100%}
+#overlay{position:fixed;inset:0;background:rgba(5,5,15,0.93);display:flex;align-items:center;justify-content:center;z-index:100;flex-direction:column}
+#overlay.hidden{display:none}
+.panel{background:linear-gradient(135deg,#1a0a2e,#2a1040);border:2px solid #9b59b6;border-radius:16px;padding:32px 28px;max-width:440px;width:90%;text-align:center;box-shadow:0 0 40px rgba(155,89,182,0.3)}
+.panel h1{font-size:2.2em;margin-bottom:8px;background:linear-gradient(90deg,#9b59b6,#e74c3c,#f39c12);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.panel h2{font-size:1.3em;color:#bb8fce;margin-bottom:12px}
+.panel p{font-size:0.92em;color:#c0b0d0;line-height:1.6;margin-bottom:10px}
+.panel ul{text-align:left;margin:10px 16px;color:#c0b0d0;font-size:0.85em;line-height:1.8}
+.panel ul strong{color:#f39c12}
+.btn{display:inline-block;margin-top:16px;padding:14px 40px;font-size:1.2em;font-weight:700;border:none;border-radius:30px;cursor:pointer;background:linear-gradient(90deg,#9b59b6,#e74c3c);color:#fff;box-shadow:0 0 20px rgba(155,89,182,0.5);transition:transform 0.15s}
+.btn:hover{transform:scale(1.05)}.btn:active{transform:scale(0.97)}
+#restartBtn{position:fixed;bottom:16px;right:16px;z-index:50;padding:8px 18px;border-radius:20px;border:1px solid #9b59b6;background:rgba(26,10,46,0.8);color:#bb8fce;font-size:0.85em;cursor:pointer}
+#restartBtn.hidden{display:none}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-
-<div id="hpRow">
-  <div class="wizard-panel" id="playerPanel">
-    <div class="wizard-name">YOU</div>
-    <div class="orb-row" id="playerOrbs"></div>
-  </div>
-  <div id="levelTag">LEVEL 1</div>
-  <div class="wizard-panel ai-panel" id="aiPanel">
-    <div class="wizard-name">DARK MAGE</div>
-    <div class="orb-row" id="aiOrbs"></div>
-  </div>
+<button id="restartBtn" class="hidden" onclick="startLevel(currentLevel)">↻ Restart</button>
+<div id="overlay">
+  <div class="panel" id="panelContent"></div>
 </div>
-
-<div id="centerMsg"></div>
-
-<div class="overlay" id="intro">
-  <h1>RUNECASTER</h1>
-  <div class="tagline">WIZARD DUEL</div>
-  <div class="rules">
-    <h3>How to Play</h3>
-    <div class="rule"><span>1.</span><span>A rune pattern appears — <span class="ctr">trace it with your finger</span>, hitting each glowing node in order</span></div>
-    <div class="rule"><span>2.</span><span>Complete the rune before the AI to cast your spell first</span></div>
-    <div class="rule"><span>3.</span><span>Spells have a <span class="ctr">rock-paper-scissors</span> system — counter for double damage!</span></div>
-    <div class="rule"><span>4.</span><span>Drain the Dark Mage's <span class="ctr">5 health orbs</span> to win</span></div>
-    <table class="chart">
-      <tr><td>BOLT beats</td><td>VORTEX</td></tr>
-      <tr><td>EMBER beats</td><td>BOLT</td></tr>
-      <tr><td>WARD beats</td><td>EMBER</td></tr>
-      <tr><td>VORTEX beats</td><td>WARD</td></tr>
-    </table>
-  </div>
-  <button class="play-btn" onclick="startGame()">TAP TO PLAY</button>
-</div>
-
-<div class="overlay" id="result">
-  <div id="resTitle"></div>
-  <div id="resSub"></div>
-  <div id="resStats"></div>
-  <button class="res-btn" id="resBtn">CONTINUE</button>
-</div>
-
 <script>
-var canvas = document.getElementById('c');
-var ctx = canvas.getContext('2d');
-var W, H;
+"use strict";
+const C=document.getElementById('c'),X=C.getContext('2d');
+const overlay=document.getElementById('overlay'),panelContent=document.getElementById('panelContent');
+const restartBtn=document.getElementById('restartBtn');
+let W,H,dpr;
 
-// ── Rune definitions (normalized coords, scaled at runtime) ──────────────
-var RUNES = {
-  BOLT: {
-    name: 'BOLT', emoji: 'BOLT',
-    color: '#ffdd22', shadow: 'rgba(255,220,20,0.6)',
-    beats: 'VORTEX',
-    pts: [[0,-0.82],[0.42,-0.18],[-0.32,0.22],[0.38,0.65],[0,0.82]]
+// Game state
+let gameState='menu',currentLevel=1;
+let playerHP=5,aiHP=5;
+let playerRune=null,aiRune=null;
+let traceNodes=[],tracePath=[],tracing=false,traceComplete=false;
+let aiCastTimer=0,aiCastDuration=5000,aiCasting=false,aiCastProgress=0;
+let spellResult=null,resultTimer=0;
+let particles=[],screenFlash=0;
+let roundActive=false,roundCooldown=0;
+
+const SPELLS=['BOLT','EMBER','WARD','VORTEX'];
+const SPELL_COLORS={BOLT:'#3498db',EMBER:'#e74c3c',WARD:'#2ecc71',VORTEX:'#9b59b6'};
+const SPELL_ICONS={BOLT:'⚡',EMBER:'🔥',WARD:'🛡️',VORTEX:'🌀'};
+// BOLT > VORTEX, EMBER > BOLT, WARD > EMBER, VORTEX > WARD
+const BEATS={BOLT:'VORTEX',EMBER:'BOLT',WARD:'EMBER',VORTEX:'WARD'};
+
+// Rune patterns: arrays of [x,y] normalized 0-1, to be scaled to the rune area
+const RUNE_PATTERNS={
+  BOLT:{
+    simple:[[0.5,0],[0.3,0.4],[0.6,0.4],[0.4,1]],
+    medium:[[0.5,0],[0.25,0.3],[0.55,0.3],[0.35,0.55],[0.65,0.55],[0.45,1]],
+    complex:[[0.5,0],[0.2,0.2],[0.6,0.2],[0.3,0.4],[0.7,0.4],[0.25,0.6],[0.55,0.6],[0.4,1]]
   },
-  EMBER: {
-    name: 'EMBER', emoji: 'EMBER',
-    color: '#ff6622', shadow: 'rgba(255,100,30,0.6)',
-    beats: 'BOLT',
-    pts: [[0,-0.88],[0.55,-0.4],[0.82,0.15],[0.45,0.7],[0,0.88],[-0.45,0.7],[-0.82,0.15],[-0.28,-0.55]]
+  EMBER:{
+    simple:[[0.5,0.1],[0.8,0.4],[0.5,0.6],[0.2,0.4]],
+    medium:[[0.5,0],[0.8,0.25],[0.65,0.55],[0.5,0.35],[0.35,0.55],[0.2,0.25]],
+    complex:[[0.5,0],[0.85,0.2],[0.7,0.5],[0.85,0.8],[0.5,1],[0.15,0.8],[0.3,0.5],[0.15,0.2]]
   },
-  WARD: {
-    name: 'WARD', emoji: 'WARD',
-    color: '#44ddff', shadow: 'rgba(60,200,255,0.6)',
-    beats: 'EMBER',
-    pts: (function() {
-      var out = [];
-      for (var i = 0; i < 8; i++) {
-        var a = Math.PI * 2 * (i / 8) - Math.PI / 2;
-        out.push([Math.cos(a)*0.82, Math.sin(a)*0.82]);
-      }
-      return out;
-    })()
+  WARD:{
+    simple:[[0.2,0.2],[0.8,0.2],[0.8,0.8],[0.2,0.8]],
+    medium:[[0.5,0],[0.9,0.3],[0.9,0.7],[0.5,1],[0.1,0.7],[0.1,0.3]],
+    complex:[[0.5,0],[0.8,0.1],[1,0.4],[0.85,0.75],[0.5,1],[0.15,0.75],[0,0.4],[0.2,0.1]]
   },
-  VORTEX: {
-    name: 'VORTEX', emoji: 'VORTEX',
-    color: '#aa44ff', shadow: 'rgba(170,60,255,0.6)',
-    beats: 'WARD',
-    pts: [[-0.5,-0.5],[-0.1,-0.82],[0.48,-0.58],[0.2,0],
-          [-0.48,0.58],[-0.1,0.82],[0.5,0.5],[0.2,0],[-0.5,-0.5]]
+  VORTEX:{
+    simple:[[0.5,0.1],[0.85,0.5],[0.5,0.9],[0.15,0.5]],
+    medium:[[0.5,0],[0.9,0.2],[0.8,0.7],[0.5,0.95],[0.2,0.7],[0.1,0.2]],
+    complex:[[0.5,0],[0.8,0.1],[0.95,0.4],[0.85,0.7],[0.6,0.9],[0.3,0.95],[0.1,0.7],[0.05,0.35],[0.2,0.1]]
   }
 };
 
-var LEVEL_SPELLS = [null, ['BOLT','WARD'], ['BOLT','WARD','EMBER'], ['BOLT','WARD','EMBER','VORTEX']];
-var LEVEL_AI_SPEED = [0, 0.21, 0.33, 0.50];
+const LEVELS={
+  1:{aiSpeed:6000,complexity:'simple',aiSmarts:0.3},
+  2:{aiSpeed:4000,complexity:'medium',aiSmarts:0.55},
+  3:{aiSpeed:2500,complexity:'complex',aiSmarts:0.8}
+};
 
-// ── State ────────────────────────────────────────────────
-var level = 1;
-var playerHP = 5, aiHP = 5;
-var gameActive = false;
-var phase = ''; // 'idle' | 'drawing' | 'resolving'
-var resolving = false;
-
-var runeKey = '';
-var rune = null;
-var waypoints = []; // {x,y,hit}
-var playerIdx = 0;
-var aiProgress = 0; // 0..1
-var playerDone = false, aiDone = false;
-var aiSpellKey = '';
-
-var playerTrail = [];
-var aiPathPts = []; // pixel coords for AI ghost trail
-var particles = [], stars = [], flashes = [];
-var shakeX = 0, shakeY = 0, shakePow = 0;
-
-var cx, cy, aR, wpR; // arena geometry
-
-// ── Resize ───────────────────────────────────────────────
-function resize() {
-  W = canvas.width = window.innerWidth;
-  H = canvas.height = window.innerHeight;
-  cx = W / 2;
-  cy = H / 2;
-  aR = Math.min(W, H) * 0.33;
-  wpR = Math.min(W, H) * 0.045;
+function resize(){
+  dpr=window.devicePixelRatio||1;
+  W=window.innerWidth;H=window.innerHeight;
+  C.width=W*dpr;C.height=H*dpr;
+  C.style.width=W+'px';C.style.height=H+'px';
+  X.setTransform(dpr,0,0,dpr,0,0);
+  if(roundActive)positionRuneNodes();
 }
-window.addEventListener('resize', function() { resize(); if (gameActive && rune) layoutWaypoints(); });
-
-// ── Stars ────────────────────────────────────────────────
-function initStars() {
-  stars = [];
-  for (var i = 0; i < 180; i++) {
-    stars.push({
-      x: Math.random()*W, y: Math.random()*H,
-      r: Math.random()*1.2+0.2, a: Math.random(),
-      t: Math.random()*Math.PI*2, ts: 0.01+Math.random()*.025
-    });
-  }
-}
-
-// ── HP Orbs ──────────────────────────────────────────────
-function renderHP() {
-  function fill(id, hp) {
-    var el = document.getElementById(id);
-    el.innerHTML = '';
-    for (var i = 0; i < 5; i++) {
-      var d = document.createElement('div');
-      d.className = 'hp-orb' + (i >= hp ? ' lost' : '');
-      el.appendChild(d);
-    }
-  }
-  fill('playerOrbs', playerHP);
-  fill('aiOrbs', aiHP);
-}
-
-function damageOrbs(side, amount) {
-  var id = side === 'player' ? 'playerOrbs' : 'aiOrbs';
-  var orbs = document.getElementById(id).querySelectorAll('.hp-orb');
-  var hp = side === 'player' ? playerHP : aiHP;
-  for (var i = 0; i < amount; i++) {
-    var idx = hp - 1 - i;
-    if (idx >= 0 && orbs[idx]) {
-      (function(el) {
-        el.style.transform = 'scale(1.7)';
-        el.style.background = 'radial-gradient(circle,#fff,#f88)';
-        setTimeout(function() {
-          el.style.transform = '';
-          el.style.background = '';
-          el.classList.add('lost');
-        }, 300);
-      })(orbs[idx]);
-    }
-  }
-}
-
-// ── Center message ───────────────────────────────────────
-var msgTimer = null;
-function showMsg(text, color, dur) {
-  var el = document.getElementById('centerMsg');
-  el.textContent = text;
-  el.style.color = color || '#fff';
-  el.style.top = (cy - aR - 55) + 'px';
-  el.style.opacity = 1;
-  clearTimeout(msgTimer);
-  msgTimer = setTimeout(function() { el.style.opacity = 0; }, dur || 1000);
-}
-
-// ── Waypoints ────────────────────────────────────────────
-function layoutWaypoints() {
-  waypoints = rune.pts.map(function(p) {
-    return { x: cx + p[0]*aR*0.82, y: cy + p[1]*aR*0.82, hit: false };
-  });
-  // Build smooth AI path (pixel coords)
-  aiPathPts = [];
-  var pts = rune.pts;
-  for (var i = 0; i < pts.length - 1; i++) {
-    var p0 = pts[i], p1 = pts[i+1];
-    var steps = 20;
-    for (var t = 0; t <= steps; t++) {
-      aiPathPts.push({
-        x: cx + (p0[0] + (p1[0]-p0[0]) * t/steps) * aR * 0.82,
-        y: cy + (p0[1] + (p1[1]-p0[1]) * t/steps) * aR * 0.82
-      });
-    }
-  }
-}
-
-// ── Round setup ──────────────────────────────────────────
-function startRound() {
-  phase = 'drawing';
-  resolving = false;
-  playerIdx = 0;
-  aiProgress = 0;
-  playerDone = false;
-  aiDone = false;
-  playerTrail = [];
-  flashes = [];
-
-  // Pick rune
-  var spells = LEVEL_SPELLS[level];
-  runeKey = spells[Math.floor(Math.random() * spells.length)];
-  rune = RUNES[runeKey];
-  layoutWaypoints();
-
-  // AI picks spell (tries to counter player's rune with level-scaled chance)
-  var counter = Object.keys(RUNES).find(function(k) { return RUNES[k].beats === runeKey; });
-  var counterAvail = spells.indexOf(counter) >= 0;
-  var smartChance = [0, 0.35, 0.60, 0.82][level];
-  aiSpellKey = (counterAvail && Math.random() < smartChance) ? counter : spells[Math.floor(Math.random()*spells.length)];
-
-  showMsg('DRAW: ' + rune.name + '!', rune.color, 900);
-}
-
-// ── Touch input ──────────────────────────────────────────
-var touching = false;
-canvas.addEventListener('pointerdown', function(e) {
-  if (!gameActive || phase !== 'drawing') return;
-  touching = true;
-  handleTouch(e);
-});
-canvas.addEventListener('pointermove', function(e) {
-  if (!touching || !gameActive || phase !== 'drawing') return;
-  handleTouch(e);
-});
-canvas.addEventListener('pointerup', function() { touching = false; });
-canvas.addEventListener('pointercancel', function() { touching = false; });
-
-function handleTouch(e) {
-  var r = canvas.getBoundingClientRect();
-  var px = e.clientX - r.left, py = e.clientY - r.top;
-  playerTrail.push({x:px, y:py});
-  if (playerTrail.length > 90) playerTrail.shift();
-  spawnBurst(px, py, rune.color, 1, 1.2, 1.0);
-  checkWP(px, py);
-}
-
-function checkWP(px, py) {
-  if (playerDone || resolving) return;
-  var wp = waypoints[playerIdx];
-  if (wp && Math.hypot(px - wp.x, py - wp.y) < wpR * 1.4) {
-    wp.hit = true;
-    playerIdx++;
-    spawnBurst(wp.x, wp.y, rune.color, 10, 3.5, 2.5);
-    if (playerIdx >= waypoints.length) {
-      playerDone = true;
-      if (!aiDone) doResolve();
-    }
-  }
-}
-
-// ── Resolve round ─────────────────────────────────────────
-function doResolve() {
-  if (resolving) return;
-  resolving = true;
-  phase = 'resolving';
-
-  var ps = playerDone ? runeKey : null;
-  var as = aiSpellKey;
-  var result;
-
-  if (!ps) {
-    result = 'ai_win';
-  } else if (RUNES[ps].beats === as) {
-    result = 'counter_player';
-  } else if (RUNES[as] && RUNES[as].beats === ps) {
-    result = 'counter_ai';
-  } else if (ps === as) {
-    result = 'tie';
-  } else {
-    result = playerDone && !aiDone ? 'player_win' : 'ai_win';
-  }
-
-  // Collision VFX
-  setTimeout(function() { collisionVFX(ps, as, result); }, 100);
-  setTimeout(function() { applyResult(result, as); }, 1100);
-}
-
-function collisionVFX(ps, as, result) {
-  var pc = ps ? RUNES[ps].color : '#888';
-  var ac = RUNES[as].color;
-  spawnBurst(cx, cy, pc, 18, 7, 3.5);
-  spawnBurst(cx, cy, ac, 18, 7, 3.5);
-  flashes.push({ a: result.indexOf('counter') >= 0 ? 0.45 : 0.22 });
-  shakePow = result.indexOf('counter') >= 0 ? 20 : 10;
-
-  // Spell-specific VFX
-  if (ps === 'BOLT' || as === 'BOLT') spawnLightning();
-  if (ps === 'EMBER' || as === 'EMBER') {
-    for (var i = 0; i < 6; i++) setTimeout(function() {
-      spawnBurst(cx + (Math.random()-.5)*aR*.7, cy + (Math.random()-.5)*aR*.7, '#ff7733', 8, 5, 3);
-    }, i * 60);
-  }
-  if (ps === 'WARD' || as === 'WARD') {
-    for (var j = 0; j <= 32; j++) {
-      var a2 = Math.PI*2*j/32;
-      particles.push({
-        x: cx + Math.cos(a2)*aR*.5, y: cy + Math.sin(a2)*aR*.5,
-        vx: Math.cos(a2)*2, vy: Math.sin(a2)*2,
-        life:1, decay:0.04, size:2.5, color:'#44ddff', gravity:0
-      });
-    }
-  }
-  if (ps === 'VORTEX' || as === 'VORTEX') {
-    for (var k = 0; k < 20; k++) {
-      var ang = Math.PI*2*k/20, spd = 1+k*.2;
-      particles.push({
-        x:cx, y:cy,
-        vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd,
-        life:1, decay:0.025, size:3, color:'#aa44ff', gravity:-0.03
-      });
-    }
-  }
-}
-
-function spawnLightning() {
-  var x = cx - aR*0.8, y = cy;
-  var prevX = x, prevY = y;
-  while (x < cx + aR*0.8) {
-    x += 18 + Math.random()*24;
-    y = cy + (Math.random()-.5)*70;
-    var steps = 6;
-    for (var t = 0; t < steps; t++) {
-      particles.push({
-        x: prevX + (x-prevX)*t/steps,
-        y: prevY + (y-prevY)*t/steps,
-        vx: (Math.random()-.5)*1.5, vy: (Math.random()-.5)*1.5,
-        life: 1, decay: 0.07, size: 2.5, color: '#ffee88', gravity: 0
-      });
-    }
-    prevX = x; prevY = y;
-  }
-}
-
-function applyResult(result, as) {
-  var dmgPlayer = 0, dmgAI = 0;
-  var msg = '', col = '#fff';
-
-  if (result === 'counter_player') { dmgAI = 2; msg = 'COUNTER! x2 DMG'; col = rune.color; }
-  else if (result === 'counter_ai') { dmgPlayer = 2; msg = 'COUNTERED! x2'; col = RUNES[as].color; }
-  else if (result === 'player_win') { dmgAI = 1; msg = 'HIT!'; col = '#88ff99'; }
-  else if (result === 'ai_win') { dmgPlayer = 1; msg = 'BLOCKED'; col = '#ff6644'; }
-  else { msg = 'CLASH!'; col = '#cc99ff'; }
-
-  if (dmgAI > 0) { damageOrbs('ai', dmgAI); aiHP = Math.max(0, aiHP - dmgAI); }
-  if (dmgPlayer > 0) { damageOrbs('player', dmgPlayer); playerHP = Math.max(0, playerHP - dmgPlayer); }
-  setTimeout(renderHP, 350);
-
-  showMsg(msg, col, 900);
-
-  if (playerHP <= 0 || aiHP <= 0) {
-    setTimeout(function() { endLevel(playerHP > 0); }, 800);
-  } else {
-    setTimeout(startRound, 1300);
-  }
-}
-
-// ── Particles ─────────────────────────────────────────────
-function spawnBurst(x, y, color, n, spread, size) {
-  n = n||10; spread = spread||4; size = size||2.5;
-  for (var i = 0; i < n; i++) {
-    var a = Math.random()*Math.PI*2, sp = (0.3+Math.random())*spread;
-    particles.push({
-      x:x, y:y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
-      life:1, decay:0.018+Math.random()*.028,
-      size:size*(0.4+Math.random()*.9), color:color, gravity:0.04
-    });
-  }
-}
-
-// ── Draw ──────────────────────────────────────────────────
-function drawBG() {
-  ctx.fillStyle = '#080510';
-  ctx.fillRect(0,0,W,H);
-  var g = ctx.createRadialGradient(cx,cy,aR*.3,cx,cy,Math.max(W,H)*.8);
-  g.addColorStop(0,'rgba(30,10,60,.2)');
-  g.addColorStop(1,'rgba(0,0,0,.5)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0,0,W,H);
-}
-
-function drawStars() {
-  stars.forEach(function(s) {
-    s.t += s.ts;
-    var b = s.a * (0.4 + 0.6*Math.sin(s.t));
-    ctx.globalAlpha = b * 0.55;
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
-    ctx.fill();
-  });
-  ctx.globalAlpha = 1;
-}
-
-function drawArena() {
-  // Outer circle
-  ctx.beginPath();
-  ctx.arc(cx, cy, aR, 0, Math.PI*2);
-  ctx.strokeStyle = 'rgba(80,40,120,.25)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  // Inner glow
-  var ig = ctx.createRadialGradient(cx,cy,0,cx,cy,aR);
-  ig.addColorStop(0,'rgba(60,20,100,.06)');
-  ig.addColorStop(1,'transparent');
-  ctx.fillStyle = ig;
-  ctx.beginPath();
-  ctx.arc(cx, cy, aR, 0, Math.PI*2);
-  ctx.fill();
-}
-
-function drawRuneGuide() {
-  if (!rune || !waypoints.length) return;
-  var pts = waypoints;
-
-  // Dashed guide path
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.strokeStyle = rune.color.replace('#','rgba(').replace(/(..)(..)(..)/, function(_,r2,g2,b2) {
-    return 'rgba(' + parseInt(r2,16) + ',' + parseInt(g2,16) + ',' + parseInt(b2,16) + ',0.12)';
-  });
-  // simpler:
-  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-  ctx.lineWidth = 2;
-  ctx.setLineDash([5,7]);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Waypoints
-  for (var j = 0; j < pts.length; j++) {
-    var wp = pts[j];
-    var isNext = j === playerIdx;
-    var isDone = j < playerIdx;
-    var r2 = isDone ? wpR*0.45 : isNext ? wpR : wpR*0.6;
-
-    ctx.shadowBlur = isDone ? 6 : isNext ? 24 : 5;
-    ctx.shadowColor = rune.color;
-
-    ctx.beginPath();
-    ctx.arc(wp.x, wp.y, r2, 0, Math.PI*2);
-    if (isDone) {
-      ctx.fillStyle = rune.color + 'cc';
-      ctx.fill();
-    } else if (isNext) {
-      ctx.strokeStyle = rune.color;
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(wp.x, wp.y, r2*0.38, 0, Math.PI*2);
-      ctx.fillStyle = rune.color + 'bb';
-      ctx.fill();
-    } else {
-      ctx.strokeStyle = 'rgba(200,160,255,0.22)';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-    }
-    ctx.shadowBlur = 0;
-
-    // Number
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = Math.round(wpR*0.48) + 'px Courier New';
-    ctx.fillStyle = isDone ? 'rgba(255,255,255,.35)' : isNext ? '#fff' : 'rgba(255,255,255,.18)';
-    ctx.fillText(j+1, wp.x, wp.y);
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-  }
-}
-
-function drawPlayerTrail() {
-  if (playerTrail.length < 2 || !rune) return;
-  ctx.beginPath();
-  ctx.moveTo(playerTrail[0].x, playerTrail[0].y);
-  for (var i = 1; i < playerTrail.length; i++) ctx.lineTo(playerTrail[i].x, playerTrail[i].y);
-  ctx.strokeStyle = rune.color;
-  ctx.lineWidth = 3.5;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.shadowBlur = 20;
-  ctx.shadowColor = rune.color;
-  ctx.globalAlpha = 0.8;
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-  ctx.shadowBlur = 0;
-}
-
-function drawAITrail() {
-  if (!aiPathPts.length || aiProgress <= 0 || !aiSpellKey) return;
-  var endIdx = Math.min(Math.floor(aiProgress * aiPathPts.length), aiPathPts.length - 1);
-  if (endIdx < 1) return;
-  var aiRune = RUNES[aiSpellKey];
-
-  ctx.beginPath();
-  ctx.moveTo(aiPathPts[0].x, aiPathPts[0].y);
-  for (var i = 1; i <= endIdx; i++) ctx.lineTo(aiPathPts[i].x, aiPathPts[i].y);
-  ctx.strokeStyle = aiRune.color + '66';
-  ctx.lineWidth = 2.5;
-  ctx.lineCap = 'round';
-  ctx.setLineDash([4,8]);
-  ctx.shadowBlur = 10;
-  ctx.shadowColor = aiRune.color;
-  ctx.globalAlpha = 0.55;
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-  ctx.shadowBlur = 0;
-  ctx.setLineDash([]);
-
-  // Cursor dot
-  var cur = aiPathPts[endIdx];
-  ctx.beginPath();
-  ctx.arc(cur.x, cur.y, 7, 0, Math.PI*2);
-  ctx.fillStyle = aiRune.color;
-  ctx.shadowBlur = 15;
-  ctx.shadowColor = aiRune.color;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  ctx.font = '9px Courier New';
-  ctx.fillStyle = aiRune.color + 'bb';
-  ctx.fillText('AI', cur.x, cur.y - 10);
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-}
-
-function drawProgressBars() {
-  if (phase !== 'drawing' || !rune) return;
-  var barW = aR * 1.5, barH = 6, barX = cx - barW/2;
-
-  // Player bar (below arena)
-  var pFrac = waypoints.length > 0 ? playerIdx / waypoints.length : 0;
-  var pBarY = cy + aR + 12;
-  ctx.fillStyle = 'rgba(255,255,255,.06)';
-  ctx.beginPath(); ctx.roundRect(barX, pBarY, barW, barH, 3); ctx.fill();
-  if (pFrac > 0) {
-    var g1 = ctx.createLinearGradient(barX,0,barX+barW,0);
-    g1.addColorStop(0, rune.color + '88');
-    g1.addColorStop(1, rune.color);
-    ctx.fillStyle = g1;
-    ctx.shadowBlur = 8; ctx.shadowColor = rune.color;
-    ctx.beginPath(); ctx.roundRect(barX, pBarY, barW*pFrac, barH, 3); ctx.fill();
-    ctx.shadowBlur = 0;
-  }
-  ctx.textAlign = 'left';
-  ctx.font = '9px Courier New';
-  ctx.fillStyle = rune.color + 'aa';
-  ctx.fillText('YOU  ' + Math.round(pFrac*100) + '%', barX, pBarY + barH + 12);
-
-  // AI bar (above arena)
-  var aiFrac = aiProgress;
-  var aiBarY = cy - aR - 20;
-  ctx.fillStyle = 'rgba(255,255,255,.06)';
-  ctx.beginPath(); ctx.roundRect(barX, aiBarY, barW, barH, 3); ctx.fill();
-  if (aiFrac > 0) {
-    var aiRune = RUNES[aiSpellKey];
-    var g2 = ctx.createLinearGradient(barX,0,barX+barW,0);
-    g2.addColorStop(0, aiRune.color + '55');
-    g2.addColorStop(1, aiRune.color + 'bb');
-    ctx.fillStyle = g2;
-    ctx.beginPath(); ctx.roundRect(barX, aiBarY, barW*aiFrac, barH, 3); ctx.fill();
-  }
-  ctx.textAlign = 'right';
-  ctx.fillStyle = 'rgba(255,255,255,.3)';
-  ctx.fillText('AI  ' + Math.round(aiFrac*100) + '%', barX+barW, aiBarY - 5);
-  ctx.textAlign = 'left';
-}
-
-function drawParticles() {
-  particles.forEach(function(p) {
-    ctx.globalAlpha = p.life * p.life;
-    ctx.fillStyle = p.color;
-    ctx.shadowBlur = 5; ctx.shadowColor = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, Math.max(0.2, p.size * p.life), 0, Math.PI*2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  });
-  ctx.globalAlpha = 1;
-}
-
-function drawFlashes() {
-  flashes.forEach(function(f) {
-    ctx.fillStyle = 'rgba(255,255,255,' + (f.a * 0.7) + ')';
-    ctx.fillRect(0,0,W,H);
-  });
-}
-
-// ── Main Loop ─────────────────────────────────────────────
-var lastTs = 0;
-function loop(ts) {
-  if (!gameActive) return;
-  var dt = Math.min(ts - lastTs, 50);
-  lastTs = ts;
-
-  // AI trace
-  if (phase === 'drawing' && !aiDone) {
-    aiProgress += LEVEL_AI_SPEED[level] * (dt/1000);
-    if (aiProgress >= 1) {
-      aiProgress = 1;
-      aiDone = true;
-      if (!playerDone) doResolve();
-    }
-  }
-
-  // Shake
-  if (shakePow > 0.3) {
-    shakeX = (Math.random()-.5)*shakePow*2.2;
-    shakeY = (Math.random()-.5)*shakePow*2.2;
-    shakePow *= 0.82;
-  } else { shakeX = 0; shakeY = 0; shakePow = 0; }
-
-  ctx.save();
-  ctx.translate(shakeX, shakeY);
-
-  drawBG();
-  drawFlashes();
-  drawStars();
-  drawArena();
-  if (phase === 'drawing') {
-    drawRuneGuide();
-    drawAITrail();
-    drawPlayerTrail();
-    drawProgressBars();
-  }
-  drawParticles();
-
-  ctx.restore();
-
-  // Update particles
-  particles = particles.filter(function(p) { return p.life > 0.01; });
-  particles.forEach(function(p) {
-    p.x += p.vx; p.y += p.vy;
-    p.vy += p.gravity; p.vx *= 0.97; p.vy *= 0.97;
-    p.life -= p.decay;
-  });
-
-  // Decay flashes
-  flashes.forEach(function(f) { f.a *= 0.82; });
-  flashes = flashes.filter(function(f) { return f.a > 0.01; });
-
-  requestAnimationFrame(loop);
-}
-
-// ── Level/Game Flow ──────────────────────────────────────
-function endLevel(playerWon) {
-  gameActive = false;
-  var res = document.getElementById('result');
-
-  if (playerWon && level < 3) {
-    document.getElementById('resTitle').innerHTML = '<span style="color:#a060ff">LEVEL ' + level + '</span><span style="color:#ff60c0"> CLEAR</span>';
-    document.getElementById('resSub').textContent = 'THE WIZARD FALLS';
-    document.getElementById('resStats').textContent = 'HP remaining: ' + playerHP + ' / 5';
-    var btn = document.getElementById('resBtn');
-    btn.textContent = 'LEVEL ' + (level+1) + ' \u2192';
-    btn.onclick = function() { level++; initLevel(); };
-  } else if (playerWon && level === 3) {
-    document.getElementById('resTitle').innerHTML = '<span style="background:linear-gradient(135deg,#a060ff,#ff60c0,#ffaa40);-webkit-background-clip:text;-webkit-text-fill-color:transparent">GRAND MAGE</span>';
-    document.getElementById('resSub').textContent = 'ALL DARK WIZARDS VANQUISHED';
-    document.getElementById('resStats').textContent = 'You have mastered all four runes';
-    var btn2 = document.getElementById('resBtn');
-    btn2.textContent = 'PLAY AGAIN';
-    btn2.onclick = function() { level=1; initLevel(); };
-    for (var i = 0; i < 12; i++) setTimeout(function() {
-      var cols = ['#a060ff','#ff60c0','#ffaa40','#60ddff'];
-      spawnBurst(Math.random()*W, Math.random()*H, cols[Math.floor(Math.random()*4)], 16, 6, 3);
-    }, i * 130);
-  } else {
-    document.getElementById('resTitle').innerHTML = '<span style="color:#ff4422">DEFEATED</span>';
-    document.getElementById('resSub').textContent = 'THE DARK MAGE PREVAILS';
-    document.getElementById('resStats').textContent = 'AI HP remaining: ' + aiHP + ' / 5';
-    var btn3 = document.getElementById('resBtn');
-    btn3.textContent = 'TRY AGAIN';
-    btn3.onclick = function() { initLevel(); };
-  }
-  res.classList.add('show');
-}
-
-function initLevel() {
-  document.getElementById('result').classList.remove('show');
-  document.getElementById('levelTag').textContent = 'LEVEL ' + level;
-  playerHP = 5; aiHP = 5;
-  renderHP();
-  phase = 'idle';
-  rune = null;
-  resolving = false;
-  particles = []; flashes = [];
-  shakePow = 0;
-  resize();
-  initStars();
-  gameActive = true;
-  requestAnimationFrame(function(ts) { lastTs = ts; loop(ts); });
-  setTimeout(startRound, 500);
-}
-
-function startGame() {
-  document.getElementById('intro').style.display = 'none';
-  level = 1;
-  initLevel();
-}
-
+window.addEventListener('resize',resize);
 resize();
-renderHP();
+
+function getRuneArea(){
+  // Left side of screen for player rune
+  const pad=20;
+  const isPortrait=H>W;
+  let cx,cy,size;
+  if(isPortrait){
+    size=Math.min(W*0.55,H*0.3);
+    cx=W*0.3;cy=H*0.55;
+  }else{
+    size=Math.min(W*0.25,H*0.5);
+    cx=W*0.3;cy=H*0.55;
+  }
+  return{cx,cy,size};
+}
+
+function getAIRuneArea(){
+  const isPortrait=H>W;
+  let cx,cy,size;
+  if(isPortrait){
+    size=Math.min(W*0.35,H*0.2);
+    cx=W*0.72;cy=H*0.55;
+  }else{
+    size=Math.min(W*0.18,H*0.4);
+    cx=W*0.72;cy=H*0.55;
+  }
+  return{cx,cy,size};
+}
+
+function positionRuneNodes(){
+  if(!playerRune)return;
+  const{cx,cy,size}=getRuneArea();
+  const cfg=LEVELS[currentLevel];
+  const pattern=RUNE_PATTERNS[playerRune.type][cfg.complexity];
+  traceNodes=pattern.map(([px,py],i)=>({
+    x:cx+(px-0.5)*size,
+    y:cy+(py-0.5)*size,
+    index:i,
+    reached:false
+  }));
+}
+
+function startRound(){
+  roundActive=true;traceComplete=false;tracing=false;
+  tracePath=[];spellResult=null;resultTimer=0;
+  
+  // Pick random spell for player to cast
+  const type=SPELLS[Math.floor(Math.random()*SPELLS.length)];
+  playerRune={type,cast:false};
+  
+  // AI picks its spell
+  const cfg=LEVELS[currentLevel];
+  let aiType;
+  if(Math.random()<cfg.aiSmarts){
+    // Smart: try to counter what player might cast
+    // Pick something that beats a random spell (not perfectly predictive)
+    aiType=SPELLS[Math.floor(Math.random()*SPELLS.length)];
+  }else{
+    aiType=SPELLS[Math.floor(Math.random()*SPELLS.length)];
+  }
+  aiRune={type:aiType,cast:false};
+  
+  aiCastTimer=0;aiCastDuration=cfg.aiSpeed;aiCasting=true;aiCastProgress=0;
+  positionRuneNodes();
+}
+
+function resolveSpells(pType,aType){
+  let pDmg=0,aDmg=0;
+  // Base damage is 1
+  if(BEATS[pType]===aType){
+    pDmg=2; // Player counters AI
+  }else if(BEATS[aType]===pType){
+    aDmg=2; // AI counters player
+  }else if(pType===aType){
+    // Same spell: both take 1
+    pDmg=1;aDmg=1;
+  }else{
+    pDmg=1;aDmg=1;
+  }
+  return{pDmg,aDmg};
+}
+
+function finishRound(playerCast){
+  roundActive=false;
+  let pType=playerCast?playerRune.type:null;
+  let aType=aiRune.type;
+  
+  if(!playerCast){
+    // Player didn't finish: AI hits for 1
+    aiHP=aiHP; // no change to AI
+    playerHP=Math.max(0,playerHP-1);
+    spellResult={text:'Too slow!',color:'#e74c3c',pDmg:0,aDmg:1};
+    screenFlash=1;
+    spawnHitParticles(W*0.3,H*0.3,'#e74c3c');
+  }else{
+    const{pDmg,aDmg}=resolveSpells(pType,aType);
+    aiHP=Math.max(0,aiHP-pDmg);
+    playerHP=Math.max(0,playerHP-aDmg);
+    
+    let text='',color='#fff';
+    if(pDmg>aDmg){
+      text=pDmg>=2?`${SPELL_ICONS[pType]} COUNTER! 2x damage!`:`${SPELL_ICONS[pType]} Hit!`;
+      color=SPELL_COLORS[pType];
+      spawnHitParticles(W*0.72,H*0.3,'#2ecc71');
+    }else if(aDmg>pDmg){
+      text=`${SPELL_ICONS[aType]} AI counters you!`;
+      color='#e74c3c';
+      screenFlash=0.5;
+      spawnHitParticles(W*0.3,H*0.3,'#e74c3c');
+    }else{
+      text='Clash! Both hit!';color='#f39c12';
+      spawnHitParticles(W*0.5,H*0.35,'#f39c12');
+      screenFlash=0.3;
+    }
+    spellResult={text,color,pDmg,aDmg};
+    if(pDmg>0)spawnHitParticles(W*0.72,H*0.3,SPELL_COLORS[pType]);
+  }
+  
+  resultTimer=2000;
+  aiCasting=false;
+  
+  // Check win/lose after delay
+  setTimeout(()=>{
+    if(aiHP<=0){
+      gameState='won';
+      if(currentLevel<3){
+        showOverlay('victory',`Level ${currentLevel} Complete!`,`The Dark Mage staggers back...`,'Next Level',()=>startLevel(currentLevel+1));
+      }else{
+        showOverlay('victory','🏆 RUNECASTER SUPREME! 🏆','The Dark Mage is vanquished forever!','Play Again',()=>startLevel(1));
+      }
+    }else if(playerHP<=0){
+      gameState='lost';
+      showOverlay('defeat','Defeated!','The Dark Mage overwhelmed you.','Try Again',()=>startLevel(currentLevel));
+    }
+  },1200);
+}
+
+function spawnHitParticles(px,py,color){
+  for(let i=0;i<30;i++){
+    const angle=Math.random()*Math.PI*2;
+    const speed=2+Math.random()*5;
+    particles.push({x:px,y:py,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:1,color,size:2+Math.random()*4});
+  }
+}
+
+function spawnTrailParticle(px,py,color){
+  particles.push({x:px+Math.random()*6-3,y:py+Math.random()*6-3,vx:Math.random()*2-1,vy:-Math.random()*2,life:0.8,color,size:2+Math.random()*2});
+}
+
+// Drawing
+function drawBackground(){
+  const bg=X.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.max(W,H)*0.7);
+  bg.addColorStop(0,'#15102a');bg.addColorStop(1,'#0a0a1a');
+  X.fillStyle=bg;X.fillRect(0,0,W,H);
+  
+  // Subtle magic particles in bg
+  const t=Date.now()*0.001;
+  X.globalAlpha=0.03;
+  for(let i=0;i<20;i++){
+    const x=W*(0.1+0.8*((Math.sin(t+i*1.3)+1)/2));
+    const y=H*(0.1+0.8*((Math.cos(t*0.7+i*0.9)+1)/2));
+    X.fillStyle='#9b59b6';
+    X.beginPath();X.arc(x,y,2,0,Math.PI*2);X.fill();
+  }
+  X.globalAlpha=1;
+}
+
+function drawHealthOrbs(cx,cy,hp,maxHP,color,label){
+  X.font='bold 14px system-ui';X.fillStyle='#a0a0c0';X.textAlign='center';
+  X.fillText(label,cx,cy-22);
+  const orbR=10,gap=6;
+  const totalW=maxHP*(orbR*2+gap)-gap;
+  const startX=cx-totalW/2+orbR;
+  for(let i=0;i<maxHP;i++){
+    const ox=startX+i*(orbR*2+gap);
+    if(i<hp){
+      X.beginPath();X.arc(ox,cy,orbR,0,Math.PI*2);
+      const g=X.createRadialGradient(ox-3,cy-3,2,ox,cy,orbR);
+      g.addColorStop(0,'#fff');g.addColorStop(0.5,color);g.addColorStop(1,color+'80');
+      X.fillStyle=g;X.fill();
+      // Glow
+      X.shadowColor=color;X.shadowBlur=10;
+      X.beginPath();X.arc(ox,cy,orbR,0,Math.PI*2);X.fill();
+      X.shadowBlur=0;
+    }else{
+      X.beginPath();X.arc(ox,cy,orbR,0,Math.PI*2);
+      X.fillStyle='#1a1a2e';X.fill();
+      X.strokeStyle='#333';X.lineWidth=1;X.stroke();
+    }
+  }
+}
+
+function drawRuneNodes(){
+  if(!roundActive||!traceNodes.length)return;
+  const color=SPELL_COLORS[playerRune.type];
+  
+  // Draw guide lines (dim)
+  X.strokeStyle=color+'30';X.lineWidth=2;X.setLineDash([5,5]);
+  X.beginPath();
+  for(let i=0;i<traceNodes.length;i++){
+    const n=traceNodes[i];
+    i===0?X.moveTo(n.x,n.y):X.lineTo(n.x,n.y);
+  }
+  X.stroke();X.setLineDash([]);
+  
+  // Draw traced path
+  if(tracePath.length>1){
+    X.strokeStyle=color;X.lineWidth=4;X.lineCap='round';X.lineJoin='round';
+    X.shadowColor=color;X.shadowBlur=15;
+    X.beginPath();
+    X.moveTo(tracePath[0].x,tracePath[0].y);
+    for(let i=1;i<tracePath.length;i++){
+      X.lineTo(tracePath[i].x,tracePath[i].y);
+    }
+    X.stroke();
+    X.shadowBlur=0;
+  }
+  
+  // Draw nodes
+  for(let i=0;i<traceNodes.length;i++){
+    const n=traceNodes[i];
+    const r=n.reached?8:12;
+    X.beginPath();X.arc(n.x,n.y,r,0,Math.PI*2);
+    if(n.reached){
+      X.fillStyle=color;X.fill();
+      X.shadowColor=color;X.shadowBlur=15;
+      X.beginPath();X.arc(n.x,n.y,r,0,Math.PI*2);X.fill();
+      X.shadowBlur=0;
+    }else{
+      X.fillStyle='#1a1a2e';X.fill();
+      X.strokeStyle=color;X.lineWidth=2;X.stroke();
+      // Pulsing glow on next target
+      const nextIdx=traceNodes.filter(t=>t.reached).length;
+      if(i===nextIdx){
+        const pulse=0.5+0.5*Math.sin(Date.now()*0.005);
+        X.shadowColor=color;X.shadowBlur=20*pulse;
+        X.strokeStyle=color;X.lineWidth=3;
+        X.beginPath();X.arc(n.x,n.y,r+2,0,Math.PI*2);X.stroke();
+        X.shadowBlur=0;
+      }
+    }
+    // Number label
+    X.font='bold 11px system-ui';X.fillStyle=n.reached?'#fff':color;
+    X.textAlign='center';X.textBaseline='middle';
+    X.fillText(i+1,n.x,n.y);
+  }
+  
+  // Spell name
+  const{cx,cy,size}=getRuneArea();
+  X.font='bold 18px system-ui';X.fillStyle=color;X.textAlign='center';
+  X.fillText(`${SPELL_ICONS[playerRune.type]} ${playerRune.type}`,cx,cy-size/2-20);
+}
+
+function drawAIRune(){
+  if(!roundActive||!aiRune)return;
+  const{cx,cy,size}=getAIRuneArea();
+  const color=SPELL_COLORS[aiRune.type];
+  
+  // AI casting indicator
+  X.font='bold 14px system-ui';X.fillStyle='#e74c3c';X.textAlign='center';
+  X.fillText('Dark Mage',cx,cy-size/2-30);
+  
+  // Progress circle
+  const r=size*0.4;
+  X.strokeStyle='#333';X.lineWidth=4;
+  X.beginPath();X.arc(cx,cy,r,0,Math.PI*2);X.stroke();
+  
+  if(aiCasting){
+    X.strokeStyle=color;X.lineWidth=4;X.lineCap='round';
+    X.shadowColor=color;X.shadowBlur=10;
+    X.beginPath();
+    X.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+aiCastProgress*Math.PI*2);
+    X.stroke();
+    X.shadowBlur=0;
+    
+    // Pulsing center
+    const pulse=0.3+0.7*aiCastProgress;
+    X.globalAlpha=pulse*0.3;
+    X.fillStyle=color;
+    X.beginPath();X.arc(cx,cy,r*0.6,0,Math.PI*2);X.fill();
+    X.globalAlpha=1;
+  }
+  
+  // Spell icon after cast
+  if(aiCastProgress>=1||!roundActive){
+    X.font='28px system-ui';X.textAlign='center';X.textBaseline='middle';
+    X.fillText(SPELL_ICONS[aiRune.type],cx,cy);
+    X.font='bold 13px system-ui';X.fillStyle=color;
+    X.fillText(aiRune.type,cx,cy+r+18);
+  }else{
+    X.font='16px system-ui';X.fillStyle='#666';X.textAlign='center';X.textBaseline='middle';
+    X.fillText('?',cx,cy);
+  }
+}
+
+function drawParticles(){
+  for(const p of particles){
+    X.globalAlpha=p.life*0.9;
+    X.fillStyle=p.color;
+    X.beginPath();X.arc(p.x,p.y,p.size*p.life,0,Math.PI*2);X.fill();
+  }
+  X.globalAlpha=1;
+}
+
+function drawResult(){
+  if(!spellResult||resultTimer<=0)return;
+  const alpha=Math.min(1,resultTimer/500);
+  X.globalAlpha=alpha;
+  X.font='bold 22px system-ui';X.fillStyle=spellResult.color;
+  X.textAlign='center';
+  X.fillText(spellResult.text,W/2,H*0.42);
+  X.globalAlpha=1;
+}
+
+function drawScreenFlash(){
+  if(screenFlash>0){
+    X.globalAlpha=screenFlash*0.3;
+    X.fillStyle='#e74c3c';
+    X.fillRect(0,0,W,H);
+    X.globalAlpha=1;
+  }
+}
+
+function drawHUD(){
+  // Player health - left
+  drawHealthOrbs(W*0.3,50,playerHP,5,'#3498db','YOU');
+  // AI health - right
+  drawHealthOrbs(W*0.72,50,aiHP,5,'#e74c3c','DARK MAGE');
+  // Level
+  X.font='bold 13px system-ui';X.fillStyle='#f39c12';X.textAlign='center';
+  X.fillText(`Level ${currentLevel}`,W/2,20);
+  
+  // Instructions during round
+  if(roundActive&&!traceComplete){
+    X.font='14px system-ui';X.fillStyle='#8a80a0';X.textAlign='center';
+    X.fillText('Trace the rune pattern!',W*0.3,H*0.88);
+  }
+}
+
+let lastTime=0;
+function gameLoop(t){
+  const dt=lastTime?Math.min(t-lastTime,50):16;lastTime=t;
+  
+  drawBackground();
+  
+  if(gameState==='playing'){
+    // AI cast timer
+    if(roundActive&&aiCasting){
+      aiCastTimer+=dt;
+      aiCastProgress=Math.min(1,aiCastTimer/aiCastDuration);
+      if(aiCastProgress>=1&&!traceComplete){
+        // AI finished casting, player didn't: AI spell resolves
+        aiCasting=false;
+        finishRound(false);
+      }
+    }
+    
+    // Round cooldown (between rounds)
+    if(!roundActive&&resultTimer>0){
+      resultTimer-=dt;
+      if(resultTimer<=0&&gameState==='playing'){
+        roundCooldown-=dt;
+        if(roundCooldown<=0)startRound();
+      }
+    }
+    if(!roundActive&&resultTimer<=0&&gameState==='playing'){
+      roundCooldown-=dt;
+      if(roundCooldown<=0)startRound();
+    }
+    
+    // Screen flash decay
+    if(screenFlash>0)screenFlash=Math.max(0,screenFlash-dt*0.003);
+    
+    // Particles
+    for(const p of particles){p.x+=p.vx;p.y+=p.vy;p.life-=dt*0.002;p.vy+=0.02;}
+    particles=particles.filter(p=>p.life>0);
+    
+    drawHUD();
+    drawRuneNodes();
+    drawAIRune();
+    drawParticles();
+    drawResult();
+    drawScreenFlash();
+  }
+  
+  requestAnimationFrame(gameLoop);
+}
+
+// Input handling
+let pointerDown=false;
+
+function getNodeAtPos(mx,my,threshold){
+  const nextIdx=traceNodes.filter(n=>n.reached).length;
+  if(nextIdx>=traceNodes.length)return null;
+  const n=traceNodes[nextIdx];
+  const dx=mx-n.x,dy=my-n.y;
+  if(Math.sqrt(dx*dx+dy*dy)<threshold)return n;
+  return null;
+}
+
+C.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  if(gameState!=='playing'||!roundActive||traceComplete)return;
+  pointerDown=true;
+  const mx=e.clientX,my=e.clientY;
+  
+  // Check if touching first node
+  const reached=traceNodes.filter(n=>n.reached).length;
+  if(reached===0){
+    const n=getNodeAtPos(mx,my,40);
+    if(n){n.reached=true;tracePath=[{x:n.x,y:n.y}];tracing=true;}
+  }
+});
+
+C.addEventListener('pointermove',e=>{
+  e.preventDefault();
+  if(!pointerDown||!tracing||traceComplete)return;
+  const mx=e.clientX,my=e.clientY;
+  
+  tracePath.push({x:mx,y:my});
+  if(tracePath.length>200)tracePath.splice(0,tracePath.length-200);
+  
+  // Trail particles
+  if(playerRune)spawnTrailParticle(mx,my,SPELL_COLORS[playerRune.type]);
+  
+  // Check if near next node
+  const n=getNodeAtPos(mx,my,35);
+  if(n){
+    n.reached=true;
+    tracePath.push({x:n.x,y:n.y});
+    
+    // Check if all nodes reached
+    if(traceNodes.every(n=>n.reached)){
+      traceComplete=true;tracing=false;
+      // Big particle burst
+      const{cx,cy}=getRuneArea();
+      spawnHitParticles(cx,cy,SPELL_COLORS[playerRune.type]);
+      finishRound(true);
+    }
+  }
+});
+
+C.addEventListener('pointerup',e=>{
+  e.preventDefault();
+  pointerDown=false;
+  if(tracing&&!traceComplete){
+    // Reset trace if finger lifted before completing
+    tracing=false;
+    tracePath=[];
+    for(const n of traceNodes)n.reached=false;
+  }
+});
+
+function showOverlay(type,title,msg,btnText,btnAction){
+  panelContent.innerHTML=`<h1>${title}</h1><p>${msg}</p><button class="btn" id="overlayBtn">${btnText}</button>`;
+  overlay.classList.remove('hidden');
+  document.getElementById('overlayBtn').onclick=()=>{overlay.classList.add('hidden');btnAction();};
+}
+
+function showHowToPlay(){
+  panelContent.innerHTML=`
+    <h1>RUNECASTER</h1>
+    <h2>Wizard Duel</h2>
+    <ul>
+      <li>Trace the glowing rune pattern by dragging through nodes in order</li>
+      <li>Complete the rune before the Dark Mage finishes casting!</li>
+      <li>Spells have counters: <strong>BOLT→VORTEX, EMBER→BOLT, WARD→EMBER, VORTEX→WARD</strong></li>
+      <li>Countering the AI's spell deals <strong>2x damage!</strong></li>
+      <li>Drain all 5 of the Dark Mage's health orbs to win</li>
+      <li>Don't let your health reach zero!</li>
+    </ul>
+    <button class="btn" id="overlayBtn">TAP TO PLAY</button>
+  `;
+  overlay.classList.remove('hidden');
+  document.getElementById('overlayBtn').onclick=()=>{overlay.classList.add('hidden');startLevel(1);};
+}
+
+function startLevel(lvl){
+  currentLevel=lvl;
+  gameState='playing';
+  playerHP=5;aiHP=5;
+  particles=[];screenFlash=0;
+  spellResult=null;resultTimer=0;
+  roundActive=false;roundCooldown=800;
+  traceComplete=false;tracing=false;tracePath=[];
+  restartBtn.classList.remove('hidden');
+  overlay.classList.add('hidden');
+  setTimeout(()=>startRound(),500);
+}
+
+showHowToPlay();
+requestAnimationFrame(gameLoop);
 </script>
 </body>
 </html>
