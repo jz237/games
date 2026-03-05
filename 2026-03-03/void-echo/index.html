@@ -55,7 +55,7 @@ function startGame(lvl){
   level=lvl;const cfg=LEVELS[level-1];score=0;timeLeft=cfg.duration;timerAccum=0;
   ship={x:W/2,y:H/2,vx:0,vy:0,trail:[],shield:0};
   pulses=[];voids=[];asteroids=[];particles=[];crystals=[];shockRings=[];
-  for(let i=0;i<cfg.asteroids;i++){let ax=50+Math.random()*(W-100),ay=50+Math.random()*(H-100),r=12+Math.random()*17,s=6+Math.floor(Math.random()*4),pts=[];for(let j=0;j<s;j++){let a=j/s*Math.PI*2,rr=r*(.65+Math.random()*.6);pts.push({x:Math.cos(a)*rr,y:Math.sin(a)*rr})}asteroids.push({x:ax,y:ay,r,pts,lit:0,lastLit:0})}
+  for(let i=0;i<cfg.asteroids;i++){let ax,ay,r=12+Math.random()*17,t=0;do{ax=50+Math.random()*(W-100);ay=50+Math.random()*(H-100);t++}while(dist(ax,ay,ship.x,ship.y)<r+60&&t<40);let s=6+Math.floor(Math.random()*4),pts=[];for(let j=0;j<s;j++){let a=j/s*Math.PI*2,rr=r*(.65+Math.random()*.6);pts.push({x:Math.cos(a)*rr,y:Math.sin(a)*rr})}asteroids.push({x:ax,y:ay,r,pts,lit:0,lastLit:0})}
   for(let i=0;i<cfg.voids;i++)spawnVoid(cfg.speed);
   for(let i=0;i<cfg.crystals;i++)spawnCrystal();
   state='playing';overlay.style.display='none';levelEl.textContent=level;scoreEl.textContent=score;timeEl.textContent=timeLeft;

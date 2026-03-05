@@ -61,7 +61,7 @@ let fxId=null,fxLast=0;
 function startFx(){if(fxId)return;const loop=ts=>{const dt=Math.min((ts-fxLast)/1000,.05);fxLast=ts;FX.update(dt);updateShake(dt);for(const [k,a] of cellAnims){a.progress+=dt*3.8;if(a.progress>=1){cellAnims.delete(k)}}if(pulseWave&&pulseWave.active){pulseWave.r+=pulseWave.speed*dt;pulseWave.a-=dt*1.5;if(pulseWave.r>=pulseWave.maxR||pulseWave.a<=0){pulseWave=null}}render();FX.draw();fxId=requestAnimationFrame(loop)};fxId=requestAnimationFrame(loop)}
 
 function startGame(lvl=0,score=0){
-  document.getElementById('overlay').style.display='none';const L=LEVELS[lvl];
+  document.getElementById('overlay').style.display='none';if(state&&state.aiTimer)clearTimeout(state.aiTimer);const L=LEVELS[lvl];
   const grid=Array.from({length:GRID},()=>Array(GRID).fill(EMPTY));
   const absorb=Array.from({length:GRID},()=>Array.from({length:GRID},()=>.3+Math.random()*.68));
   const wax=Array.from({length:GRID},()=>Array(GRID).fill(false));
