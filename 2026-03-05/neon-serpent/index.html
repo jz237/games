@@ -162,7 +162,7 @@ const LEVELS = [
 let state = 'menu'; // menu, playing, dying, levelComplete, gameOver, win
 let level = 0;
 let cellSize, offsetX, offsetY, cols, rows;
-let player, aiSnakes, orbs, powerups, particles = [], bgParticles = [], fireworks = [];
+let player = null, aiSnakes = [], orbs = [], powerups = [], particles = [], bgParticles = [], fireworks = [];
 let score = 0, displayScore = 0, orbsCollected = 0;
 let gameTime = 0, slowMoTimer = 0, slowMoFactor = 1;
 let shakeX = 0, shakeY = 0, shakeVX = 0, shakeVY = 0;
@@ -789,6 +789,13 @@ function draw() {
     ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
   }
   ctx.globalAlpha = 1;
+
+  // Skip game rendering if not in game state
+  if (state !== 'playing' && state !== 'dead' && state !== 'levelComplete') {
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    return;
+  }
 
   // Arena grid
   const gAlpha = 0.06 + 0.02 * Math.sin(gridPhase * 1.5);
