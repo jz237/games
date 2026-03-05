@@ -1752,99 +1752,180 @@ function drawBoulder(gx, gy, isFalling) {
   const [sx, sy] = worldToScreen(gx + 0.5, gy + 0.5);
   if (sx < -CELL*2 || sx > W+CELL*2 || sy < -CELL*2 || sy > H+CELL*2) return;
 
-  const r = CELL * 0.42;
+  const r = CELL * 0.44;
   const fk = fallKey(gx, gy);
   const fallDist = fallMap[fk] || 0;
 
-  // Ground shadow — grows with fall distance
+  // ── Rotation speed: slow when stationary, fast when falling ──
+  // Stationary: ~1 revolution per 4 seconds = PI/2 rad/s
+  // Falling: speed increases with fall distance
+  const baseRotSpeed = Math.PI * 0.5; // 1 rev per 4 sec
+  const fallRotSpeed = baseRotSpeed + fallDist * Math.PI * 2; // faster spin when falling
+  const rotSpeed = isFalling ? fallRotSpeed : baseRotSpeed;
+  // Use a seeded phase offset per boulder so they don't all sync
+  const phaseOffset = gx * 3.7 + gy * 5.3;
+  const rotAngle = globalTime * rotSpeed + phaseOffset;
+
+  // ── Ground shadow — grows with fall distance, shifts with rotation ──
   const shadowScale = 1 + fallDist * 0.15;
-  ctx.fillStyle = `rgba(0,0,0,${0.3 + fallDist * 0.05})`;
+  const shadowAlpha = 0.35 + fallDist * 0.06;
+  ctx.fillStyle = `rgba(0,0,0,${Math.min(shadowAlpha, 0.6)})`;
   ctx.beginPath();
-  ctx.ellipse(sx, sy + r * 0.92, r * 0.9 * shadowScale, r * (0.25 + fallDist * 0.04), 0, 0, Math.PI * 2);
+  ctx.ellipse(sx + Math.sin(rotAngle) * r * 0.05, sy + r * 0.88, r * 0.85 * shadowScale, r * (0.2 + fallDist * 0.04), 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Secondary softer shadow
+  ctx.fillStyle = `rgba(0,0,0,${Math.min(shadowAlpha * 0.4, 0.2)})`;
+  ctx.beginPath();
+  ctx.ellipse(sx, sy + r * 0.95, r * 1.1 * shadowScale, r * (0.12 + fallDist * 0.02), 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Motion blur streak when falling
+  // ── Motion blur streak when falling ──
   if (isFalling && fallDist > 0) {
-    const streakLen = Math.min(fallDist * 0.3, 0.8);
+    const streakLen = Math.min(fallDist * 0.35, 0.9);
     const streakGrd = ctx.createLinearGradient(sx, sy - r - streakLen * CELL, sx, sy - r);
     streakGrd.addColorStop(0, 'rgba(120,108,90,0)');
-    streakGrd.addColorStop(1, `rgba(120,108,90,${0.12 * Math.min(fallDist, 3)})`);
+    streakGrd.addColorStop(1, `rgba(120,108,90,${0.15 * Math.min(fallDist, 3)})`);
     ctx.fillStyle = streakGrd;
     ctx.fillRect(sx - r * 0.6, sy - r - streakLen * CELL, r * 1.2, streakLen * CELL);
   }
 
-  // Rolling rotation when sliding sideways
-  const rollAngle = isFalling ? 0 : globalTime * 3 * (gx % 2 === 0 ? 1 : -1);
-
   ctx.save();
   ctx.translate(sx, sy);
-  if (!isFalling) ctx.rotate(Math.sin(rollAngle) * 0.05);
 
-  // Boulder body — irregular rock shape
+  // ── Main sphere body — dramatic 3D radial gradient ──
+  // Highlight top-left, deep shadow bottom-right
+  const hlX = -r * 0.3;
+  const hlY = -r * 0.35;
+  const sphereGrd = ctx.createRadialGradient(hlX, hlY, r * 0.05, r * 0.15, r * 0.2, r * 1.4);
+  sphereGrd.addColorStop(0, '#e8ddd0');   // bright highlight
+  sphereGrd.addColorStop(0.12, '#c8baa8');
+  sphereGrd.addColorStop(0.3, '#9a8e7e');
+  sphereGrd.addColorStop(0.55, '#6b6050');
+  sphereGrd.addColorStop(0.8, '#3a3228');
+  sphereGrd.addColorStop(1, '#1a1510');   // deep shadow
+  ctx.fillStyle = sphereGrd;
   ctx.beginPath();
-  const segments = 12;
-  for (let i = 0; i <= segments; i++) {
-    const a = (i / segments) * Math.PI * 2;
-    const rVar = r * (0.86 + Math.sin(a * 3 + gx * 4.8 + gy * 6.9) * 0.13);
-    const px = Math.cos(a) * rVar;
-    const py = Math.sin(a) * rVar;
-    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Secondary hemisphere shading for extra depth ──
+  const hemiGrd = ctx.createLinearGradient(-r, -r, r, r);
+  hemiGrd.addColorStop(0, 'rgba(255,240,220,0.12)');
+  hemiGrd.addColorStop(0.4, 'rgba(255,240,220,0)');
+  hemiGrd.addColorStop(0.6, 'rgba(0,0,0,0)');
+  hemiGrd.addColorStop(1, 'rgba(0,0,0,0.25)');
+  ctx.fillStyle = hemiGrd;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Rotating rock texture spots (3 darker patches) ──
+  // These spots rotate around the sphere surface using sin/cos
+  const spotData = [
+    { angOff: 0, latOff: 0.2, sizeF: 0.12 },
+    { angOff: 2.3, latOff: -0.15, sizeF: 0.09 },
+    { angOff: 4.1, latOff: 0.35, sizeF: 0.1 }
+  ];
+  for (const spot of spotData) {
+    const spotAng = rotAngle + spot.angOff;
+    // Project 3D position onto 2D circle surface
+    const spotX3d = Math.cos(spotAng) * r * 0.55;
+    const spotY3d = spot.latOff * r + Math.sin(spotAng * 0.7) * r * 0.15;
+    const spotDepth = Math.sin(spotAng); // >0 = facing us
+    if (spotDepth > -0.2) { // only draw when visible (facing toward viewer)
+      const alpha = Math.max(0, (spotDepth + 0.2) * 0.4);
+      const spotR = r * spot.sizeF * (0.7 + spotDepth * 0.3);
+      ctx.fillStyle = `rgba(40,35,25,${alpha})`;
+      ctx.beginPath();
+      ctx.ellipse(spotX3d, spotY3d, spotR, spotR * 0.7, spotAng * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
-  ctx.closePath();
 
-  // Dramatic 3D shading — strong top highlight, dark bottom
-  const rockGrad = ctx.createRadialGradient(-r * 0.25, -r * 0.35, r * 0.1, r * 0.1, r * 0.2, r * 1.3);
-  rockGrad.addColorStop(0, '#c8c0b4'); // bright highlight
-  rockGrad.addColorStop(0.25, '#9a9589');
-  rockGrad.addColorStop(0.6, '#6a6359');
-  rockGrad.addColorStop(1, '#2a2319'); // deep shadow
-  ctx.fillStyle = rockGrad;
-  ctx.fill();
-
-  // Rim light
-  const rim = ctx.createRadialGradient(-r * 0.2, -r * 0.35, r * 0.05, 0, 0, r * 1.1);
-  rim.addColorStop(0, 'rgba(255,255,255,0.3)');
-  rim.addColorStop(0.4, 'rgba(255,255,255,0.06)');
-  rim.addColorStop(1, 'rgba(0,0,0,0.2)');
-  ctx.fillStyle = rim;
-  ctx.fill();
-
-  // Specular highlights — multiple chips for realism
-  ctx.fillStyle = 'rgba(255,255,255,0.28)';
+  // ── Rotating band/crack line across surface ──
+  // This is the key 3D rotation illusion: a line that wraps around the sphere
+  ctx.strokeStyle = 'rgba(30,25,18,0.45)';
+  ctx.lineWidth = Math.max(1.5, r * 0.06);
   ctx.beginPath();
-  ctx.arc(-r * 0.28, -r * 0.25, r * 0.14, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.beginPath();
-  ctx.arc(-r * 0.1, -r * 0.35, r * 0.08, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(r * 0.1, -r * 0.1, r * 0.06, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Crack details
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.lineWidth = Math.max(1, r * 0.05);
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.25, -r * 0.1);
-  ctx.lineTo(r * 0.1, r * 0.15);
-  ctx.lineTo(r * 0.31, -r * 0.06);
-  ctx.moveTo(-r * 0.05, r * 0.25);
-  ctx.lineTo(r * 0.19, r * 0.35);
+  const bandSegments = 20;
+  for (let i = 0; i <= bandSegments; i++) {
+    const t = (i / bandSegments) * Math.PI - Math.PI / 2; // -PI/2 to PI/2 (visible hemisphere)
+    // The band goes around the equator, shifted by rotAngle
+    const bx = Math.sin(t) * r * 0.92;
+    // The y-position oscillates based on rotation, creating the wrap-around illusion
+    const by = Math.cos(rotAngle) * Math.cos(t) * r * 0.35 + Math.sin(rotAngle) * r * 0.08;
+    if (i === 0) ctx.moveTo(bx, by); else ctx.lineTo(bx, by);
+  }
   ctx.stroke();
 
-  // Outline
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  ctx.lineWidth = Math.max(1, r * 0.07);
+  // ── Secondary crack line (perpendicular to main band) ──
+  ctx.strokeStyle = 'rgba(30,25,18,0.3)';
+  ctx.lineWidth = Math.max(1, r * 0.04);
   ctx.beginPath();
-  for (let i = 0; i <= segments; i++) {
-    const a = (i / segments) * Math.PI * 2;
-    const rVar2 = r * (0.86 + Math.sin(a * 3 + gx * 4.8 + gy * 6.9) * 0.13);
-    const px = Math.cos(a) * rVar2;
-    const py = Math.sin(a) * rVar2;
-    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  const crack2Segments = 14;
+  for (let i = 0; i <= crack2Segments; i++) {
+    const t = (i / crack2Segments) * Math.PI - Math.PI / 2;
+    const bx = Math.sin(rotAngle + Math.PI/2) * Math.cos(t) * r * 0.3 + Math.sin(t) * r * 0.15;
+    const by = Math.sin(t) * r * 0.85;
+    if (i === 0) ctx.moveTo(bx, by); else ctx.lineTo(bx, by);
   }
-  ctx.closePath();
+  ctx.stroke();
+
+  // ── Small crack details (static, add rock texture) ──
+  ctx.strokeStyle = 'rgba(20,18,12,0.3)';
+  ctx.lineWidth = Math.max(1, r * 0.03);
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.15, -r * 0.25);
+  ctx.lineTo(r * 0.05, -r * 0.1);
+  ctx.lineTo(r * 0.2, -r * 0.2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(r * 0.1, r * 0.3);
+  ctx.lineTo(r * 0.3, r * 0.15);
+  ctx.stroke();
+
+  // ── Primary specular highlight (top-left, moves with rotation) ──
+  const specOffX = hlX + Math.sin(rotAngle * 0.5) * r * 0.08;
+  const specOffY = hlY + Math.cos(rotAngle * 0.5) * r * 0.06;
+  ctx.fillStyle = 'rgba(255,255,250,0.45)';
+  ctx.beginPath();
+  ctx.ellipse(specOffX, specOffY, r * 0.18, r * 0.12, -0.4 + Math.sin(rotAngle) * 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  // Secondary smaller specular
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.beginPath();
+  ctx.arc(specOffX + r * 0.08, specOffY + r * 0.12, r * 0.07, 0, Math.PI * 2);
+  ctx.fill();
+  // Tiny pin highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.beginPath();
+  ctx.arc(specOffX - r * 0.02, specOffY - r * 0.02, r * 0.04, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Moving specular highlight that follows rotation ──
+  const movSpecX = Math.cos(rotAngle * 1.3) * r * 0.25 - r * 0.1;
+  const movSpecY = Math.sin(rotAngle * 1.3) * r * 0.2 - r * 0.15;
+  const movSpecAlpha = Math.max(0, 0.2 + Math.cos(rotAngle * 1.3) * 0.15);
+  ctx.fillStyle = `rgba(255,250,230,${movSpecAlpha})`;
+  ctx.beginPath();
+  ctx.ellipse(movSpecX, movSpecY, r * 0.08, r * 0.05, rotAngle * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Rim light (bottom edge, subtle reflected light) ──
+  const rimGrd = ctx.createRadialGradient(r * 0.15, r * 0.5, r * 0.1, 0, 0, r * 1.05);
+  rimGrd.addColorStop(0, 'rgba(180,160,130,0.15)');
+  rimGrd.addColorStop(0.5, 'rgba(180,160,130,0)');
+  rimGrd.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = rimGrd;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Dark outline ──
+  ctx.strokeStyle = 'rgba(15,12,8,0.55)';
+  ctx.lineWidth = Math.max(1.5, r * 0.06);
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
   ctx.stroke();
 
   ctx.restore();
@@ -2206,268 +2287,577 @@ function drawPlayer(px, py) {
   ctx.fill();
 }
 
+// ── Miner dust particles system ──
+let minerDustParticles = [];
+
+function spawnMinerDust(sx, sy, S, dx) {
+  for (let i = 0; i < 4; i++) {
+    minerDustParticles.push({
+      x: sx + (Math.random() - 0.5) * S * 0.2,
+      y: sy + S * 0.42 + Math.random() * S * 0.05,
+      vx: (Math.random() - 0.5) * 30 - dx * 15,
+      vy: 10 + Math.random() * 20,
+      life: 0.4 + Math.random() * 0.3,
+      maxLife: 0.4 + Math.random() * 0.3,
+      size: 1.5 + Math.random() * 2.5
+    });
+  }
+}
+
+function updateMinerDust(dt) {
+  for (let i = minerDustParticles.length - 1; i >= 0; i--) {
+    const p = minerDustParticles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 40 * dt;
+    p.life -= dt;
+    if (p.life <= 0) minerDustParticles.splice(i, 1);
+  }
+}
+
+function drawMinerDust() {
+  for (const p of minerDustParticles) {
+    const alpha = (p.life / p.maxLife) * 0.6;
+    ctx.fillStyle = `rgba(140,110,70,${alpha})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 function drawPlayerSprite(sx, sy, s) {
-  // ── Scale factor: character fills ~82% of tile ──
-  const S = s * 0.82;
+  // ═══════════════════════════════════════════════════════════════
+  //  HD MINER CHARACTER — fills 88% of tile with full detail
+  //  50+ canvas drawing calls for rich visual detail
+  // ═══════════════════════════════════════════════════════════════
+  const S = s * 0.88; // character fills 88% of tile
   const isWalking = player.moving;
-  const walkCycle = globalTime * 12; // walk animation speed
-  const walkPhase = Math.sin(walkCycle);
-  const walkPhase2 = Math.cos(walkCycle);
+  const walkSpeed = 10; // walk animation speed
+  const walkCycle = globalTime * walkSpeed;
+  const walkPhase = Math.sin(walkCycle);       // leg/arm oscillation
+  const walkPhase2 = Math.cos(walkCycle);      // offset phase
 
   // ── Idle animations ──
-  const breathScale = isWalking ? 1 : 1 + Math.sin(player.breathT) * 0.02; // visible breathing
-  const idleSway = !isWalking && player.idleT > 0.5 ? Math.sin(globalTime * 1.8) * S * 0.015 : 0;
+  // Breathing: gentle vertical oscillation (2-3px)
+  const breathOffset = isWalking ? 0 : Math.sin(player.breathT * 1.5) * S * 0.025;
+  const breathScale = isWalking ? 1 : 1 + Math.sin(player.breathT * 1.5) * 0.015;
+  const idleSway = !isWalking && player.idleT > 0.5 ? Math.sin(globalTime * 1.5) * S * 0.02 : 0;
 
-  // ── Walk bob (body bobs up/down when walking) ──
-  const walkBob = isWalking ? Math.abs(Math.sin(walkCycle * 2)) * S * 0.04 : 0;
+  // Blink: eyes close briefly every 3-4 seconds
+  const blinkCycle = (globalTime % 3.5);
+  const isBlinking = !isWalking && blinkCycle > 3.3 && blinkCycle < 3.45;
+
+  // Walk bob (body bobs up/down when walking)
+  const walkBob = isWalking ? Math.abs(Math.sin(walkCycle * 2)) * S * 0.06 : 0;
+
+  // Spawn dust when walking
+  if (isWalking && Math.sin(walkCycle * 2) > 0.95) {
+    const dirDx = player.dir === 0 ? 1 : player.dir === 2 ? -1 : 0;
+    spawnMinerDust(sx, sy, S, dirDx);
+  }
+
+  // Update and draw dust particles
+  updateMinerDust(1/60);
+  drawMinerDust();
 
   ctx.save();
-  ctx.translate(sx + idleSway, sy - walkBob);
+  ctx.translate(sx + idleSway, sy - walkBob - breathOffset);
   ctx.scale(breathScale, breathScale);
 
-  // ── Dark outline/stroke around entire character ──
-  // Draw the character outline first (slightly larger, black)
-  ctx.strokeStyle = 'rgba(0,0,0,0.7)';
-  ctx.lineWidth = Math.max(2, S * 0.05);
+  // ── Global outline settings ──
+  ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+  ctx.lineWidth = Math.max(2, S * 0.04);
   ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
 
-  // ── LEGS ──
-  const legLen = S * 0.22;
-  const legW = S * 0.1;
-  const legBaseY = S * 0.1;
-  // When walking, legs alternate positions dramatically
-  const leftLegExt = isWalking ? walkPhase * S * 0.14 : 0;
-  const rightLegExt = isWalking ? -walkPhase * S * 0.14 : 0;
-  const leftLegX = -S * 0.1;
-  const rightLegX = S * 0.04;
+  // ══════════════════════════════
+  //  LEGS — dramatic walk animation
+  // ══════════════════════════════
+  const legLen = S * 0.25;
+  const legW = S * 0.11;
+  const legBaseY = S * 0.12;
+  const legSpread = S * 0.07;
+
+  // Walk animation: legs alternate DRAMATICALLY
+  // Amplitude = 25%+ of character height for obvious motion
+  const legAmplitude = S * 0.28; // 28% of char height — very obvious
+  const leftLegSwing = isWalking ? Math.sin(walkCycle) * legAmplitude : 0;
+  const rightLegSwing = isWalking ? Math.sin(walkCycle + Math.PI) * legAmplitude : 0;
+
+  // Leg gradient — blue denim overalls
+  const legGrd = ctx.createLinearGradient(0, legBaseY, 0, legBaseY + legLen + S * 0.3);
+  legGrd.addColorStop(0, '#3a6298');  // 1
+  legGrd.addColorStop(0.4, '#2d5080'); // 2
+  legGrd.addColorStop(0.8, '#1e3a60'); // 3
+  legGrd.addColorStop(1, '#152a48');   // 4
 
   // Left leg
-  const leftLegY = legBaseY + Math.max(0, leftLegExt);
-  const leftBootY = leftLegY + legLen;
-  const legGrd = ctx.createLinearGradient(0, legBaseY, 0, legBaseY + legLen + S * 0.15);
-  legGrd.addColorStop(0, '#4a72aa');
-  legGrd.addColorStop(0.5, '#3a5e90');
-  legGrd.addColorStop(1, '#2a4a72');
-  ctx.fillStyle = legGrd;
-  ctx.beginPath();
-  ctx.roundRect(leftLegX, legBaseY, legW, legLen + Math.max(0, leftLegExt), S * 0.02);
-  ctx.fill();
-  ctx.stroke();
+  ctx.save();
+  ctx.translate(-legSpread, legBaseY);
+  if (isWalking) ctx.rotate(leftLegSwing / (legLen * 2)); // 5 - rotation for natural swing
+  ctx.fillStyle = legGrd; // 6
+  ctx.beginPath(); // 7
+  ctx.roundRect(-legW/2, 0, legW, legLen, S * 0.025);
+  ctx.fill(); // 8
+  ctx.stroke(); // 9
+  // Knee highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'; // 10
+  ctx.fillRect(-legW/2 + legW*0.15, legLen * 0.35, legW * 0.7, legLen * 0.15); // 11
   // Left boot
-  ctx.fillStyle = '#5a4030';
-  ctx.beginPath();
-  ctx.roundRect(leftLegX - S*0.02, leftBootY, legW + S*0.04, S * 0.07, S * 0.02);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.fillRect(leftLegX - S*0.02, leftBootY, legW + S*0.04, S * 0.025);
+  ctx.fillStyle = '#5a3d28'; // 12
+  ctx.beginPath(); // 13
+  ctx.roundRect(-legW/2 - S*0.02, legLen - S*0.01, legW + S*0.04, S * 0.09, [S*0.015, S*0.015, S*0.025, S*0.025]);
+  ctx.fill(); // 14
+  ctx.stroke(); // 15
+  // Boot sole
+  ctx.fillStyle = '#2a1a10'; // 16
+  ctx.fillRect(-legW/2 - S*0.02, legLen + S*0.06, legW + S*0.04, S * 0.02); // 17
+  // Boot highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; // 18
+  ctx.fillRect(-legW/2, legLen, legW * 0.6, S * 0.02); // 19
+  // Boot lace detail
+  ctx.strokeStyle = 'rgba(180,140,100,0.5)'; // 20
+  ctx.lineWidth = Math.max(0.5, S * 0.012);
+  ctx.beginPath(); ctx.moveTo(-legW*0.1, legLen + S*0.01); ctx.lineTo(legW*0.1, legLen + S*0.03); ctx.stroke(); // 21
+  ctx.beginPath(); ctx.moveTo(-legW*0.1, legLen + S*0.03); ctx.lineTo(legW*0.1, legLen + S*0.05); ctx.stroke(); // 22
+  ctx.restore();
+
+  // Reset stroke for next elements
+  ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+  ctx.lineWidth = Math.max(2, S * 0.04);
 
   // Right leg
-  const rightLegY = legBaseY + Math.max(0, rightLegExt);
-  const rightBootY = rightLegY + legLen;
-  ctx.fillStyle = legGrd;
-  ctx.beginPath();
-  ctx.roundRect(rightLegX, legBaseY, legW, legLen + Math.max(0, rightLegExt), S * 0.02);
-  ctx.fill();
-  ctx.stroke();
+  ctx.save();
+  ctx.translate(legSpread, legBaseY);
+  if (isWalking) ctx.rotate(rightLegSwing / (legLen * 2)); // 23
+  ctx.fillStyle = legGrd; // 24
+  ctx.beginPath(); // 25
+  ctx.roundRect(-legW/2, 0, legW, legLen, S * 0.025);
+  ctx.fill(); // 26
+  ctx.stroke(); // 27
+  // Knee highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'; // 28
+  ctx.fillRect(-legW/2 + legW*0.15, legLen * 0.35, legW * 0.7, legLen * 0.15); // 29
   // Right boot
-  ctx.fillStyle = '#5a4030';
-  ctx.beginPath();
-  ctx.roundRect(rightLegX - S*0.02, rightBootY, legW + S*0.04, S * 0.07, S * 0.02);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.fillRect(rightLegX - S*0.02, rightBootY, legW + S*0.04, S * 0.025);
+  ctx.fillStyle = '#5a3d28'; // 30
+  ctx.beginPath(); // 31
+  ctx.roundRect(-legW/2 - S*0.02, legLen - S*0.01, legW + S*0.04, S * 0.09, [S*0.015, S*0.015, S*0.025, S*0.025]);
+  ctx.fill(); // 32
+  ctx.stroke(); // 33
+  // Boot sole
+  ctx.fillStyle = '#2a1a10'; // 34
+  ctx.fillRect(-legW/2 - S*0.02, legLen + S*0.06, legW + S*0.04, S * 0.02); // 35
+  // Boot highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; // 36
+  ctx.fillRect(-legW/2, legLen, legW * 0.6, S * 0.02); // 37
+  ctx.restore();
 
-  // ── BODY (vest/shirt) ──
-  const bodyW = S * 0.36;
-  const bodyH = S * 0.26;
-  const bodyTop = -S * 0.12;
-  // 3D shading from light source above-left
+  // Reset stroke
+  ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+  ctx.lineWidth = Math.max(2, S * 0.04);
+
+  // ══════════════════════════════
+  //  BODY — Blue overalls with straps
+  // ══════════════════════════════
+  const bodyW = S * 0.42;
+  const bodyH = S * 0.3;
+  const bodyTop = -S * 0.16;
+
+  // Main body gradient — blue overalls
   const bodyGrd = ctx.createLinearGradient(-bodyW/2, bodyTop, bodyW/2, bodyTop + bodyH);
-  bodyGrd.addColorStop(0, '#f0a858');   // bright top-left
-  bodyGrd.addColorStop(0.3, '#e09848');
-  bodyGrd.addColorStop(0.7, '#c08038');
-  bodyGrd.addColorStop(1, '#906828');   // dark bottom shadow
+  bodyGrd.addColorStop(0, '#3a6da8');   // 38
+  bodyGrd.addColorStop(0.3, '#2d5a90');
+  bodyGrd.addColorStop(0.7, '#1e4a78');
+  bodyGrd.addColorStop(1, '#163a60');
   ctx.fillStyle = bodyGrd;
-  ctx.beginPath();
-  ctx.roundRect(-bodyW/2, bodyTop, bodyW, bodyH, S * 0.05);
-  ctx.fill();
-  // Side shadow (right side darker — light from left)
-  const sideShade = ctx.createLinearGradient(-bodyW/2, 0, bodyW/2, 0);
-  sideShade.addColorStop(0, 'rgba(255,255,200,0.12)');
-  sideShade.addColorStop(0.6, 'rgba(0,0,0,0)');
-  sideShade.addColorStop(1, 'rgba(0,0,0,0.18)');
-  ctx.fillStyle = sideShade;
-  ctx.beginPath();
-  ctx.roundRect(-bodyW/2, bodyTop, bodyW, bodyH, S * 0.05);
-  ctx.fill();
+  ctx.beginPath(); // 39
+  ctx.roundRect(-bodyW/2, bodyTop, bodyW, bodyH, S * 0.04);
+  ctx.fill(); // 40
+
+  // Side lighting — lamp hits from facing direction
+  const lampSide = player.dir === 0 ? -1 : player.dir === 2 ? 1 : 0;
+  const bodyLightGrd = ctx.createLinearGradient(-bodyW/2, 0, bodyW/2, 0);
+  bodyLightGrd.addColorStop(0, `rgba(255,255,200,${lampSide <= 0 ? 0.12 : 0})`); // 41
+  bodyLightGrd.addColorStop(0.5, 'rgba(0,0,0,0)');
+  bodyLightGrd.addColorStop(1, `rgba(255,255,200,${lampSide >= 0 ? 0.12 : 0})`);
+  ctx.fillStyle = bodyLightGrd;
+  ctx.beginPath(); // 42
+  ctx.roundRect(-bodyW/2, bodyTop, bodyW, bodyH, S * 0.04);
+  ctx.fill(); // 43
+
+  // Shadow on opposite side of lamp
+  const bodyShadowGrd = ctx.createLinearGradient(-bodyW/2, 0, bodyW/2, 0);
+  bodyShadowGrd.addColorStop(0, `rgba(0,0,0,${lampSide >= 0 ? 0.2 : 0})`); // 44
+  bodyShadowGrd.addColorStop(0.5, 'rgba(0,0,0,0)');
+  bodyShadowGrd.addColorStop(1, `rgba(0,0,0,${lampSide <= 0 ? 0.2 : 0})`);
+  ctx.fillStyle = bodyShadowGrd;
+  ctx.beginPath(); // 45
+  ctx.roundRect(-bodyW/2, bodyTop, bodyW, bodyH, S * 0.04);
+  ctx.fill(); // 46
+
   // Body outline
-  ctx.beginPath();
-  ctx.roundRect(-bodyW/2, bodyTop, bodyW, bodyH, S * 0.05);
-  ctx.stroke();
+  ctx.beginPath(); // 47
+  ctx.roundRect(-bodyW/2, bodyTop, bodyW, bodyH, S * 0.04);
+  ctx.stroke(); // 48
 
-  // Belt
-  ctx.fillStyle = '#6b4c30';
-  ctx.fillRect(-bodyW/2, bodyTop + bodyH - S*0.05, bodyW, S * 0.04);
-  ctx.fillStyle = '#e8c850';
-  ctx.beginPath();
-  ctx.arc(0, bodyTop + bodyH - S*0.03, S*0.025, 0, Math.PI*2);
-  ctx.fill();
+  // Shoulder straps
+  ctx.fillStyle = '#2d5080'; // 49
+  ctx.fillRect(-bodyW/2 + S*0.02, bodyTop - S*0.04, S * 0.06, S * 0.08); // 50
+  ctx.fillRect(bodyW/2 - S*0.08, bodyTop - S*0.04, S * 0.06, S * 0.08); // 51
+  // Strap outlines
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineWidth = Math.max(1, S * 0.02);
+  ctx.strokeRect(-bodyW/2 + S*0.02, bodyTop - S*0.04, S * 0.06, S * 0.08); // 52
+  ctx.strokeRect(bodyW/2 - S*0.08, bodyTop - S*0.04, S * 0.06, S * 0.08); // 53
+  // Strap buttons (brass)
+  ctx.fillStyle = '#d4a840'; // 54
+  ctx.beginPath(); ctx.arc(-bodyW/2 + S*0.05, bodyTop + S*0.02, S*0.015, 0, Math.PI*2); ctx.fill(); // 55
+  ctx.beginPath(); ctx.arc(bodyW/2 - S*0.05, bodyTop + S*0.02, S*0.015, 0, Math.PI*2); ctx.fill(); // 56
 
-  // ── ARMS (swing dramatically when walking) ──
-  const armSwing = isWalking ? walkPhase * 0.7 : Math.sin(globalTime * 0.8) * 0.05;
-  const armLen = S * 0.2;
-  const armW2 = S * 0.07;
-  
+  // Belt line
+  ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+  ctx.lineWidth = Math.max(2, S * 0.04);
+  ctx.fillStyle = '#5a3c22'; // 57
+  ctx.fillRect(-bodyW/2, bodyTop + bodyH - S*0.055, bodyW, S * 0.045); // 58
+  // Belt buckle
+  ctx.fillStyle = '#e8c040'; // 59
+  ctx.beginPath(); ctx.roundRect(-S*0.03, bodyTop + bodyH - S*0.052, S*0.06, S*0.04, S*0.008); ctx.fill(); // 60
+  ctx.strokeStyle = '#b89830';
+  ctx.lineWidth = Math.max(0.5, S * 0.01);
+  ctx.beginPath(); ctx.roundRect(-S*0.03, bodyTop + bodyH - S*0.052, S*0.06, S*0.04, S*0.008); ctx.stroke(); // 61
+  // Buckle prong
+  ctx.strokeStyle = '#a08020';
+  ctx.lineWidth = Math.max(0.5, S * 0.008);
+  ctx.beginPath(); ctx.moveTo(0, bodyTop + bodyH - S*0.05); ctx.lineTo(0, bodyTop + bodyH - S*0.015); ctx.stroke(); // 62
+
+  // Chest pocket detail
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = Math.max(0.5, S * 0.01);
+  ctx.beginPath(); // 63
+  ctx.roundRect(-bodyW/4 - S*0.01, bodyTop + S*0.04, S*0.08, S*0.06, S*0.01);
+  ctx.stroke(); // 64
+
+  // ══════════════════════════════
+  //  ARMS — swing opposite to legs
+  // ══════════════════════════════
+  // Arms swing opposite to legs: left arm forward when right leg forward
+  const armAmplitude = isWalking ? 0.9 : 0.06; // 15%+ char height swing
+  const leftArmSwing = isWalking ? Math.sin(walkCycle + Math.PI) * armAmplitude : Math.sin(globalTime * 0.8) * 0.06;
+  const rightArmSwing = isWalking ? Math.sin(walkCycle) * armAmplitude : -Math.sin(globalTime * 0.8) * 0.06;
+  const armLen = S * 0.22;
+  const armW2 = S * 0.08;
+
+  // Arm gradient — shirt sleeve color
+  const armGrd = ctx.createLinearGradient(0, 0, 0, armLen);
+  armGrd.addColorStop(0, '#4a8ac0'); // 65
+  armGrd.addColorStop(0.4, '#3a7ab0');
+  armGrd.addColorStop(1, '#2a5a88');
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+  ctx.lineWidth = Math.max(2, S * 0.04);
+
   // Left arm
   ctx.save();
-  ctx.translate(-bodyW/2 - S*0.02, bodyTop + S*0.04);
-  ctx.rotate(-0.2 + armSwing);
-  const armGrd = ctx.createLinearGradient(0, 0, 0, armLen);
-  armGrd.addColorStop(0, '#e09848');
-  armGrd.addColorStop(1, '#b87040');
+  ctx.translate(-bodyW/2 - S*0.01, bodyTop + S*0.06);
+  ctx.rotate(-0.15 + leftArmSwing); // 66
   ctx.fillStyle = armGrd;
+  ctx.beginPath(); // 67
+  ctx.roundRect(-armW2/2, 0, armW2, armLen, S*0.025);
+  ctx.fill(); // 68
+  ctx.stroke(); // 69
+  // Sleeve cuff
+  ctx.fillStyle = '#3a6898'; // 70
+  ctx.fillRect(-armW2/2 - S*0.005, armLen - S*0.03, armW2 + S*0.01, S*0.03); // 71
+  // Hand — skin tone
+  const handGrd = ctx.createRadialGradient(0, armLen + S*0.02, 0, 0, armLen + S*0.02, S*0.04);
+  handGrd.addColorStop(0, '#f8d8a8'); // 72
+  handGrd.addColorStop(1, '#d8a878');
+  ctx.fillStyle = handGrd;
+  ctx.beginPath(); ctx.arc(0, armLen + S*0.02, S * 0.04, 0, Math.PI * 2); ctx.fill(); // 73
+  // Fingers
+  ctx.fillStyle = '#ecc898'; // 74
   ctx.beginPath();
-  ctx.roundRect(-armW2/2, 0, armW2, armLen, S*0.02);
-  ctx.fill();
-  ctx.stroke();
-  // Hand
-  ctx.fillStyle = '#f0c890';
-  ctx.beginPath(); ctx.arc(0, armLen, S * 0.035, 0, Math.PI * 2); ctx.fill();
+  ctx.ellipse(S*0.02, armLen + S*0.04, S*0.015, S*0.01, 0.3, 0, Math.PI*2);
+  ctx.fill(); // 75
+  ctx.beginPath();
+  ctx.ellipse(-S*0.02, armLen + S*0.04, S*0.012, S*0.008, -0.3, 0, Math.PI*2);
+  ctx.fill(); // 76
   ctx.restore();
 
   // Right arm
   ctx.save();
-  ctx.translate(bodyW/2 + S*0.02, bodyTop + S*0.04);
-  ctx.rotate(0.2 - armSwing);
+  ctx.translate(bodyW/2 + S*0.01, bodyTop + S*0.06);
+  ctx.rotate(0.15 + rightArmSwing); // 77
   ctx.fillStyle = armGrd;
-  ctx.beginPath();
-  ctx.roundRect(-armW2/2, 0, armW2, armLen, S*0.02);
-  ctx.fill();
-  ctx.stroke();
+  ctx.beginPath(); // 78
+  ctx.roundRect(-armW2/2, 0, armW2, armLen, S*0.025);
+  ctx.fill(); // 79
+  ctx.stroke(); // 80
+  // Sleeve cuff
+  ctx.fillStyle = '#3a6898'; // 81
+  ctx.fillRect(-armW2/2 - S*0.005, armLen - S*0.03, armW2 + S*0.01, S*0.03); // 82
   // Hand
-  ctx.fillStyle = '#f0c890';
-  ctx.beginPath(); ctx.arc(0, armLen, S * 0.035, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = handGrd;
+  ctx.beginPath(); ctx.arc(0, armLen + S*0.02, S * 0.04, 0, Math.PI * 2); ctx.fill(); // 83
   ctx.restore();
 
-  // ── HEAD ──
-  const headR = S * 0.15;
-  const headY = -S * 0.27;
-  // 3D skin shading
-  const headGrd = ctx.createRadialGradient(-headR*0.3, headY - headR*0.2, headR*0.1, 0, headY, headR);
-  headGrd.addColorStop(0, '#ffe0b8');  // bright highlight
-  headGrd.addColorStop(0.5, '#f0c890');
+  // Reset stroke
+  ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+  ctx.lineWidth = Math.max(2, S * 0.04);
+
+  // ══════════════════════════════
+  //  HEAD — detailed with gradients
+  // ══════════════════════════════
+  const headR = S * 0.17;
+  const headY = -S * 0.3;
+
+  // Head shadow on body (neck shadow)
+  ctx.fillStyle = 'rgba(0,0,0,0.15)'; // 84
+  ctx.beginPath();
+  ctx.ellipse(0, bodyTop + S*0.01, headR * 0.8, S * 0.03, 0, 0, Math.PI * 2);
+  ctx.fill(); // 85
+
+  // Head — radial gradient for 3D skin
+  const headGrd = ctx.createRadialGradient(-headR*0.25, headY - headR*0.2, headR*0.1, headR*0.1, headY + headR*0.1, headR*1.1);
+  headGrd.addColorStop(0, '#ffe8c8');  // 86 bright highlight
+  headGrd.addColorStop(0.3, '#f5d0a0');
+  headGrd.addColorStop(0.6, '#e4b880');
   headGrd.addColorStop(0.85, '#d4a068');
   headGrd.addColorStop(1, '#b88050');  // shadow edge
   ctx.fillStyle = headGrd;
-  ctx.beginPath();
+  ctx.beginPath(); // 87
   ctx.arc(0, headY, headR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
+  ctx.fill(); // 88
+  ctx.stroke(); // 89
 
-  // Eyes
+  // Cheek blush
+  ctx.fillStyle = 'rgba(220,140,100,0.15)'; // 90
+  ctx.beginPath(); ctx.arc(-headR*0.5, headY + headR*0.2, headR*0.2, 0, Math.PI*2); ctx.fill(); // 91
+  ctx.beginPath(); ctx.arc(headR*0.5, headY + headR*0.2, headR*0.2, 0, Math.PI*2); ctx.fill(); // 92
+
+  // Ears
+  ctx.fillStyle = '#e4b880'; // 93
+  ctx.beginPath(); ctx.ellipse(-headR*0.95, headY + headR*0.05, headR*0.12, headR*0.18, 0, 0, Math.PI*2); ctx.fill(); // 94
+  ctx.beginPath(); ctx.ellipse(headR*0.95, headY + headR*0.05, headR*0.12, headR*0.18, 0, 0, Math.PI*2); ctx.fill(); // 95
+  // Inner ear
+  ctx.fillStyle = '#d4a070'; // 96
+  ctx.beginPath(); ctx.ellipse(-headR*0.95, headY + headR*0.05, headR*0.06, headR*0.1, 0, 0, Math.PI*2); ctx.fill(); // 97
+  ctx.beginPath(); ctx.ellipse(headR*0.95, headY + headR*0.05, headR*0.06, headR*0.1, 0, 0, Math.PI*2); ctx.fill(); // 98
+
+  // ── Eyes — look in movement direction ──
   const eyeDir = player.dir === 0 ? 1 : player.dir === 2 ? -1 : 0;
-  const eyeOffX = eyeDir * S * 0.015;
-  // Eye whites
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.ellipse(-S*0.05 + eyeOffX, headY - S*0.01, S*0.03, S*0.025, 0, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(S*0.05 + eyeOffX, headY - S*0.01, S*0.03, S*0.025, 0, 0, Math.PI*2); ctx.fill();
-  // Pupils
-  ctx.fillStyle = '#1a1a1a';
-  ctx.beginPath(); ctx.arc(-S*0.05 + eyeOffX*1.5, headY - S*0.008, S*0.015, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(S*0.05 + eyeOffX*1.5, headY - S*0.008, S*0.015, 0, Math.PI*2); ctx.fill();
-  // Eye highlights
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(-S*0.045 + eyeOffX*1.5, headY - S*0.015, S*0.007, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(S*0.055 + eyeOffX*1.5, headY - S*0.015, S*0.007, 0, Math.PI*2); ctx.fill();
+  const eyeDirY = player.dir === 3 ? -1 : player.dir === 1 ? 1 : 0;
+  const eyeOffX = eyeDir * S * 0.02;
+  const eyeOffY = eyeDirY * S * 0.01;
+  const eyeY = headY - headR * 0.08;
+  const eyeSpacing = S * 0.065;
 
-  // Mouth
-  ctx.strokeStyle = '#8b5a3a';
+  if (!isBlinking) {
+    // Eye whites (larger, more visible)
+    ctx.fillStyle = '#fff'; // 99
+    ctx.beginPath(); ctx.ellipse(-eyeSpacing + eyeOffX, eyeY, S*0.038, S*0.032, 0, 0, Math.PI*2); ctx.fill(); // 100
+    ctx.beginPath(); ctx.ellipse(eyeSpacing + eyeOffX, eyeY, S*0.038, S*0.032, 0, 0, Math.PI*2); ctx.fill(); // 101
+    // Eye outlines
+    ctx.strokeStyle = 'rgba(80,50,30,0.5)';
+    ctx.lineWidth = Math.max(0.5, S * 0.012);
+    ctx.beginPath(); ctx.ellipse(-eyeSpacing + eyeOffX, eyeY, S*0.038, S*0.032, 0, 0, Math.PI*2); ctx.stroke(); // 102
+    ctx.beginPath(); ctx.ellipse(eyeSpacing + eyeOffX, eyeY, S*0.038, S*0.032, 0, 0, Math.PI*2); ctx.stroke(); // 103
+    // Iris (dark brown)
+    ctx.fillStyle = '#3a2818'; // 104
+    ctx.beginPath(); ctx.arc(-eyeSpacing + eyeOffX*1.8, eyeY + eyeOffY, S*0.02, 0, Math.PI*2); ctx.fill(); // 105
+    ctx.beginPath(); ctx.arc(eyeSpacing + eyeOffX*1.8, eyeY + eyeOffY, S*0.02, 0, Math.PI*2); ctx.fill(); // 106
+    // Pupils (black)
+    ctx.fillStyle = '#0a0a0a'; // 107
+    ctx.beginPath(); ctx.arc(-eyeSpacing + eyeOffX*2, eyeY + eyeOffY, S*0.012, 0, Math.PI*2); ctx.fill(); // 108
+    ctx.beginPath(); ctx.arc(eyeSpacing + eyeOffX*2, eyeY + eyeOffY, S*0.012, 0, Math.PI*2); ctx.fill(); // 109
+    // Eye sparkle highlights
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'; // 110
+    ctx.beginPath(); ctx.arc(-eyeSpacing + eyeOffX*1.2 - S*0.008, eyeY - S*0.01, S*0.009, 0, Math.PI*2); ctx.fill(); // 111
+    ctx.beginPath(); ctx.arc(eyeSpacing + eyeOffX*1.2 - S*0.008, eyeY - S*0.01, S*0.009, 0, Math.PI*2); ctx.fill(); // 112
+    // Secondary smaller highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.5)'; // 113
+    ctx.beginPath(); ctx.arc(-eyeSpacing + eyeOffX*1.5 + S*0.005, eyeY + S*0.005, S*0.005, 0, Math.PI*2); ctx.fill(); // 114
+    ctx.beginPath(); ctx.arc(eyeSpacing + eyeOffX*1.5 + S*0.005, eyeY + S*0.005, S*0.005, 0, Math.PI*2); ctx.fill(); // 115
+    // Eyebrows
+    ctx.strokeStyle = '#6a4a2a'; // 116
+    ctx.lineWidth = Math.max(1, S * 0.02);
+    ctx.beginPath(); ctx.moveTo(-eyeSpacing - S*0.03, eyeY - S*0.04); ctx.quadraticCurveTo(-eyeSpacing, eyeY - S*0.05, -eyeSpacing + S*0.03, eyeY - S*0.038); ctx.stroke(); // 117
+    ctx.beginPath(); ctx.moveTo(eyeSpacing - S*0.03, eyeY - S*0.038); ctx.quadraticCurveTo(eyeSpacing, eyeY - S*0.05, eyeSpacing + S*0.03, eyeY - S*0.04); ctx.stroke(); // 118
+  } else {
+    // Blinking — closed eyes (horizontal lines)
+    ctx.strokeStyle = '#5a3a1a'; // 119
+    ctx.lineWidth = Math.max(1, S * 0.02);
+    ctx.beginPath(); ctx.moveTo(-eyeSpacing - S*0.025, eyeY); ctx.lineTo(-eyeSpacing + S*0.025, eyeY); ctx.stroke(); // 120
+    ctx.beginPath(); ctx.moveTo(eyeSpacing - S*0.025, eyeY); ctx.lineTo(eyeSpacing + S*0.025, eyeY); ctx.stroke(); // 121
+    // Eyebrows still visible
+    ctx.strokeStyle = '#6a4a2a';
+    ctx.lineWidth = Math.max(1, S * 0.02);
+    ctx.beginPath(); ctx.moveTo(-eyeSpacing - S*0.03, eyeY - S*0.035); ctx.quadraticCurveTo(-eyeSpacing, eyeY - S*0.045, -eyeSpacing + S*0.03, eyeY - S*0.033); ctx.stroke(); // 122
+    ctx.beginPath(); ctx.moveTo(eyeSpacing - S*0.03, eyeY - S*0.033); ctx.quadraticCurveTo(eyeSpacing, eyeY - S*0.045, eyeSpacing + S*0.03, eyeY - S*0.035); ctx.stroke(); // 123
+  }
+
+  // Nose
+  ctx.fillStyle = '#daa870'; // 124
+  ctx.beginPath();
+  ctx.moveTo(0, headY + headR*0.05);
+  ctx.lineTo(S*0.015, headY + headR*0.25);
+  ctx.lineTo(-S*0.015, headY + headR*0.25);
+  ctx.closePath();
+  ctx.fill(); // 125
+
+  // Mouth — slight smile
+  ctx.strokeStyle = '#8b5a3a'; // 126
+  ctx.lineWidth = Math.max(1, S * 0.018);
+  ctx.beginPath(); // 127
+  ctx.arc(0, headY + headR * 0.42, S * 0.04, 0.15, Math.PI - 0.15);
+  ctx.stroke(); // 128
+  // Lower lip highlight
+  ctx.strokeStyle = 'rgba(200,140,100,0.3)'; // 129
+  ctx.lineWidth = Math.max(0.5, S * 0.01);
+  ctx.beginPath();
+  ctx.arc(0, headY + headR * 0.42, S * 0.035, 0.3, Math.PI - 0.3);
+  ctx.stroke(); // 130
+
+  // Chin shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.08)'; // 131
+  ctx.beginPath();
+  ctx.ellipse(0, headY + headR * 0.85, headR * 0.5, headR * 0.15, 0, 0, Math.PI * 2);
+  ctx.fill(); // 132
+
+  // ══════════════════════════════
+  //  HELMET — metallic yellow hard hat
+  // ══════════════════════════════
+  const helmetY = headY - headR * 0.5;
+  ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+  ctx.lineWidth = Math.max(2, S * 0.04);
+
+  // Helmet dome — metallic gradient with bright yellow top → darker gold bottom
+  const helmetGrd = ctx.createRadialGradient(-S*0.08, helmetY - S*0.04, S*0.02, S*0.05, helmetY + S*0.03, S*0.25);
+  helmetGrd.addColorStop(0, '#FFFAB0');  // 133 bright specular
+  helmetGrd.addColorStop(0.15, '#FFE850');
+  helmetGrd.addColorStop(0.35, '#F0D020');
+  helmetGrd.addColorStop(0.6, '#D4A800');
+  helmetGrd.addColorStop(0.85, '#B08500');
+  helmetGrd.addColorStop(1, '#8B6500');  // dark gold edge
+  ctx.fillStyle = helmetGrd;
+  ctx.beginPath(); // 134
+  ctx.ellipse(0, helmetY + S*0.015, S * 0.22, S * 0.12, 0, Math.PI, 0);
+  ctx.fill(); // 135
+
+  // Helmet brim — wider than dome
+  const brimGrd = ctx.createLinearGradient(-S*0.26, 0, S*0.26, 0);
+  brimGrd.addColorStop(0, '#E8C010'); // 136
+  brimGrd.addColorStop(0.3, '#FFD700');
+  brimGrd.addColorStop(0.5, '#FFE040');
+  brimGrd.addColorStop(0.7, '#FFD700');
+  brimGrd.addColorStop(1, '#C8A000');
+  ctx.fillStyle = brimGrd;
+  ctx.beginPath(); // 137
+  ctx.ellipse(0, helmetY + S*0.015, S * 0.25, S * 0.055, 0, 0, Math.PI * 2);
+  ctx.fill(); // 138
+
+  // Brim shadow underneath
+  ctx.fillStyle = 'rgba(80,60,0,0.35)'; // 139
+  ctx.beginPath();
+  ctx.ellipse(0, helmetY + S*0.04, S * 0.23, S * 0.025, 0, 0, Math.PI);
+  ctx.fill(); // 140
+
+  // Helmet ridge line (center)
+  ctx.strokeStyle = 'rgba(180,140,0,0.4)'; // 141
   ctx.lineWidth = Math.max(1, S * 0.015);
   ctx.beginPath();
-  ctx.arc(0, headY + S * 0.06, S * 0.035, 0.2, Math.PI - 0.2);
-  ctx.stroke();
+  ctx.moveTo(0, helmetY - S*0.1);
+  ctx.quadraticCurveTo(0, helmetY, 0, helmetY + S*0.015);
+  ctx.stroke(); // 142
 
-  // ── HELMET (metallic with strong 3D shading) ──
-  const helmetY = headY - headR * 0.45;
-  // Helmet dome
-  const helmetGrd = ctx.createRadialGradient(-S*0.06, helmetY - S*0.03, S*0.02, 0, helmetY, S*0.2);
-  helmetGrd.addColorStop(0, '#FFF5A0');  // bright specular spot
-  helmetGrd.addColorStop(0.2, '#FFE040');
-  helmetGrd.addColorStop(0.5, '#E8B800');
-  helmetGrd.addColorStop(0.8, '#CC9500');
-  helmetGrd.addColorStop(1, '#8B6800');  // dark edge
-  ctx.fillStyle = helmetGrd;
-  ctx.beginPath();
-  ctx.ellipse(0, helmetY + S*0.01, S * 0.2, S * 0.1, 0, Math.PI, 0);
-  ctx.fill();
-  // Helmet brim
-  const brimGrd = ctx.createLinearGradient(-S*0.22, 0, S*0.22, 0);
-  brimGrd.addColorStop(0, '#FFE040');
-  brimGrd.addColorStop(0.3, '#FFD700');
-  brimGrd.addColorStop(0.7, '#E8B800');
-  brimGrd.addColorStop(1, '#CC9C00');
-  ctx.fillStyle = brimGrd;
-  ctx.beginPath();
-  ctx.ellipse(0, helmetY + S*0.01, S * 0.22, S * 0.055, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Helmet outline
-  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-  ctx.lineWidth = Math.max(1, S * 0.025);
-  ctx.beginPath();
-  ctx.ellipse(0, helmetY + S*0.01, S * 0.22, S * 0.055, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.ellipse(0, helmetY + S*0.01, S * 0.2, S * 0.1, 0, Math.PI, 0);
-  ctx.stroke();
+  // Helmet outlines
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.lineWidth = Math.max(1.5, S * 0.028);
+  ctx.beginPath(); // 143
+  ctx.ellipse(0, helmetY + S*0.015, S * 0.25, S * 0.055, 0, 0, Math.PI * 2);
+  ctx.stroke(); // 144
+  ctx.beginPath(); // 145
+  ctx.ellipse(0, helmetY + S*0.015, S * 0.22, S * 0.12, 0, Math.PI, 0);
+  ctx.stroke(); // 146
 
-  // Bright specular highlight spot on helmet
+  // ── Bright white specular highlight spot (top-left) ──
   const glintPhase = Math.sin(player.lampFlicker * 2) * 0.3 + 0.7;
   const flickerOn = Math.sin(player.lampFlicker * 12) > -0.8;
-  ctx.fillStyle = `rgba(255,255,250,${flickerOn ? 0.7 * glintPhase : 0.2})`;
+  ctx.fillStyle = `rgba(255,255,255,${0.75 * glintPhase})`; // 147
   ctx.beginPath();
-  ctx.ellipse(-S * 0.06, helmetY - S*0.02, S * 0.06, S * 0.03, -0.3, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.ellipse(-S * 0.08, helmetY - S*0.04, S * 0.055, S * 0.03, -0.4, 0, Math.PI * 2);
+  ctx.fill(); // 148
+  // Secondary glint
+  ctx.fillStyle = `rgba(255,255,240,${0.4 * glintPhase})`; // 149
+  ctx.beginPath();
+  ctx.ellipse(-S * 0.04, helmetY - S*0.06, S * 0.025, S * 0.015, -0.2, 0, Math.PI * 2);
+  ctx.fill(); // 150
+
   // Rim light on helmet edges
-  ctx.strokeStyle = `rgba(255,240,180,${0.3 + Math.sin(globalTime * 3) * 0.1})`;
-  ctx.lineWidth = Math.max(1, S * 0.015);
+  ctx.strokeStyle = `rgba(255,240,180,${0.3 + Math.sin(globalTime * 3) * 0.1})`; // 151
+  ctx.lineWidth = Math.max(1, S * 0.018);
   ctx.beginPath();
-  ctx.ellipse(0, helmetY + S*0.01, S * 0.21, S * 0.09, 0, Math.PI + 0.5, -0.5);
-  ctx.stroke();
+  ctx.ellipse(0, helmetY + S*0.015, S * 0.215, S * 0.095, 0, Math.PI + 0.4, -0.4);
+  ctx.stroke(); // 152
 
-  // ── HEADLAMP ──
-  const lampBrightness = flickerOn ? (0.8 + Math.sin(globalTime * 5) * 0.2) : 0.15;
-  // Lamp housing
-  ctx.fillStyle = '#888';
-  ctx.beginPath();
-  ctx.arc(0, helmetY + S*0.01, S * 0.035, 0, Math.PI * 2);
-  ctx.fill();
-  // Lamp light
-  ctx.fillStyle = `rgba(255,255,220,${lampBrightness})`;
-  ctx.beginPath();
-  ctx.arc(0, helmetY + S*0.01, S * 0.025, 0, Math.PI * 2);
-  ctx.fill();
-  // Lamp glow
-  const lampGlow = ctx.createRadialGradient(0, helmetY + S*0.01, 0, 0, helmetY + S*0.01, S * 0.12);
-  lampGlow.addColorStop(0, `rgba(255,255,200,${lampBrightness * 0.5})`);
-  lampGlow.addColorStop(1, 'rgba(255,255,200,0)');
-  ctx.fillStyle = lampGlow;
-  ctx.beginPath();
-  ctx.arc(0, helmetY + S*0.01, S * 0.12, 0, Math.PI * 2);
-  ctx.fill();
+  // ══════════════════════════════
+  //  HEADLAMP — with glow
+  // ══════════════════════════════
+  const lampBrightness = flickerOn ? (0.85 + Math.sin(globalTime * 5) * 0.15) : 0.15;
 
-  // ── LAMP LIGHT BEAM ──
+  // Lamp housing (metal bracket)
+  ctx.fillStyle = '#707070'; // 153
+  ctx.beginPath();
+  ctx.roundRect(-S*0.04, helmetY - S*0.005, S*0.08, S*0.045, S*0.01);
+  ctx.fill(); // 154
+  // Housing highlight
+  ctx.fillStyle = 'rgba(200,200,200,0.3)'; // 155
+  ctx.fillRect(-S*0.035, helmetY, S*0.07, S*0.012); // 156
+  // Housing outline
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineWidth = Math.max(0.5, S * 0.01);
+  ctx.beginPath();
+  ctx.roundRect(-S*0.04, helmetY - S*0.005, S*0.08, S*0.045, S*0.01);
+  ctx.stroke(); // 157
+
+  // Lamp lens (circular)
+  ctx.fillStyle = `rgba(255,255,220,${lampBrightness})`; // 158
+  ctx.beginPath();
+  ctx.arc(0, helmetY + S*0.015, S * 0.022, 0, Math.PI * 2);
+  ctx.fill(); // 159
+  // Lamp lens glow ring
+  const lampGlowGrd = ctx.createRadialGradient(0, helmetY + S*0.015, S*0.01, 0, helmetY + S*0.015, S * 0.15);
+  lampGlowGrd.addColorStop(0, `rgba(255,255,200,${lampBrightness * 0.6})`); // 160
+  lampGlowGrd.addColorStop(0.3, `rgba(255,255,180,${lampBrightness * 0.2})`);
+  lampGlowGrd.addColorStop(1, 'rgba(255,255,180,0)');
+  ctx.fillStyle = lampGlowGrd;
+  ctx.beginPath(); // 161
+  ctx.arc(0, helmetY + S*0.015, S * 0.15, 0, Math.PI * 2);
+  ctx.fill(); // 162
+
+  // ── LAMP LIGHT BEAM (directional) ──
   const dirVec = player.dir === 0 ? [1, 0] : player.dir === 2 ? [-1, 0] : player.dir === 3 ? [0, -0.8] : [0, 0.8];
-  const beamLen = S * 1.1;
+  const beamLen = S * 1.3;
   const bx = dirVec[0] * beamLen;
   const by = dirVec[1] * beamLen;
   if (flickerOn) {
-    const beam = ctx.createRadialGradient(0, helmetY, 0, bx * 0.6, helmetY + by * 0.6, beamLen * 1.1);
-    beam.addColorStop(0, 'rgba(255,240,180,0.2)');
+    const beam = ctx.createRadialGradient(0, helmetY, 0, bx * 0.6, helmetY + by * 0.6, beamLen * 1.2);
+    beam.addColorStop(0, 'rgba(255,240,180,0.22)'); // 163
+    beam.addColorStop(0.5, 'rgba(255,240,180,0.06)');
     beam.addColorStop(1, 'rgba(255,240,180,0)');
     ctx.fillStyle = beam;
-    ctx.beginPath();
-    ctx.ellipse(bx * 0.4, helmetY + by * 0.4, S * 0.7, S * 0.4, Math.atan2(by, bx), 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); // 164
+    ctx.ellipse(bx * 0.4, helmetY + by * 0.4, S * 0.75, S * 0.45, Math.atan2(by, bx), 0, Math.PI * 2);
+    ctx.fill(); // 165
+
+    // Inner bright beam core
+    const beamCore = ctx.createRadialGradient(0, helmetY, 0, bx * 0.3, helmetY + by * 0.3, beamLen * 0.5);
+    beamCore.addColorStop(0, 'rgba(255,250,200,0.15)'); // 166
+    beamCore.addColorStop(1, 'rgba(255,250,200,0)');
+    ctx.fillStyle = beamCore;
+    ctx.beginPath(); // 167
+    ctx.ellipse(bx * 0.25, helmetY + by * 0.25, S * 0.3, S * 0.2, Math.atan2(by, bx), 0, Math.PI * 2);
+    ctx.fill(); // 168
   }
 
   ctx.restore();
