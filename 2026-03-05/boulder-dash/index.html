@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Boulder Dash — Diamond Mine</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;font-family:'Courier New',monospace;touch-action:none;user-select:none;}
+canvas{display:block;margin:0 auto;}
+#overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;color:#fff;text-align:center;padding:20px;}
+#overlay h1{font-size:2.2em;color:#44ffaa;text-shadow:0 0 20px #44ffaa;margin-bottom:10px;}
+#overlay h2{font-size:1.1em;color:#88ccff;margin-bottom:20px;}
+#overlay .rules{font-size:0.85em;color:#aaa;max-width:400px;line-height:1.6;margin-bottom:30px;text-align:left;}
+#overlay .rules b{color:#ffcc44;}
+#overlay .rules em{color:#ff6666;font-style:normal;}
+#overlay button{font-size:1.3em;padding:16px 40px;background:#44ffaa;color:#000;border:none;border-radius:12px;cursor:pointer;font-weight:bold;letter-spacing:2px;text-transform:uppercase;}
+#overlay button:active{transform:scale(0.95);background:#33cc88;}
+#hud{position:fixed;top:0;left:0;width:100%;display:flex;justify-content:space-between;padding:8px 16px;font-size:0.85em;color:#44ffaa;z-index:50;pointer-events:none;text-shadow:0 0 6px #44ffaa;}
+#endscreen{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:100;color:#fff;text-align:center;padding:20px;}
+#endscreen h1{font-size:2em;margin-bottom:10px;}
+#endscreen p{font-size:1em;color:#aaa;margin-bottom:30px;}
+#endscreen button{font-size:1.2em;padding:14px 36px;background:#44ffaa;color:#000;border:none;border-radius:12px;cursor:pointer;font-weight:bold;letter-spacing:2px;}
+</style>
+</head>
+<body>
+<div id="overlay">
+<h1>💎 BOULDER DASH</h1>
+<h2>Diamond Mine</h2>
+<div class="rules">
+<b>⬆⬇⬅➡ / WASD</b> — Move & dig through dirt<br>
+<b>Swipe</b> on mobile to move<br><br>
+Collect <b>💎 diamonds</b> to reach the goal.<br>
+<em>🪨 Boulders fall</em> when dirt below is removed — don't get crushed!<br>
+<em>👾 Enemies</em> patrol the caves — avoid them!<br>
+Reach the <b>🚪 exit</b> once you've collected enough gems.<br><br>
+3 levels — each harder than the last!
+</div>
+<button id="startBtn">TAP TO PLAY</button>
+</div>
+<div id="hud">
+<span id="hudLevel">Level 1</span>
+<span id="hudGems">💎 0 / 5</span>
+<span id="hudLives">❤️ 3</span>
+</div>
+<div id="endscreen">
+<h1 id="endTitle"></h1>
+<p id="endMsg"></p>
+<button id="restartBtn">RESTART</button>
+</div>
+<canvas id="c"></canvas>
+<script>
+(function(){
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const overlay=document.getElementById('overlay');
+const endscreen=document.getElementById('endscreen');
+const hudLevel=document.getElementById('hudLevel');
+const hudGems=document.getElementById('hudGems');
+const hudLives=document.getElementById('hudLives');
+const endTitle=document.getElementById('endTitle');
+const endMsg=document.getElementById('endMsg');
+
+// Tile types
+const EMPTY=0,DIRT=1,WALL=2,GEM=3,ROCK=4,PLAYER=5,EXIT=6,ENEMY=7;
+
+let W,H,tileSize,cols,rows;
+let grid,player,enemies,gems,gemsNeeded,gemsCollected,lives,level,playing,exitOpen;
+let particles=[];
+let shakeTimer=0,shakeMag=0;
+let moveQueue=[];
+let lastMoveTime=0;
+const MOVE_DELAY=120;
+let animFrame;
+let gameStarted=false;
+
+// Levels
+const LEVELS=[
+  {cols:16,rows:12,gems:5,enemies:2,rocks:12,dirtPct:0.6},
+  {cols:20,rows:14,gems:10,enemies:4,rocks:25,dirtPct:0.65},
+  {cols:24,rows:16,gems:18,enemies:7,rocks:40,dirtPct:0.7}
+];
+
+function resize(){
+  const lv=LEVELS[(level||1)-1]||LEVELS[0];
+  cols=lv.cols;rows=lv.rows;
+  const maxW=window.innerWidth;
+  const maxH=window.innerHeight-40;
+  tileSize=Math.floor(Math.min(maxW/cols,maxH/rows));
+  W=cols*tileSize;H=rows*tileSize;
+  canvas.width=W;canvas.height=H;
+  canvas.style.marginTop='36px';
+}
+
+function generateLevel(lv){
+  const L=LEVELS[lv-1];
+  cols=L.cols;rows=L.rows;gemsNeeded=L.gems;gemsCollected=0;exitOpen=false;
+  resize();
+  grid=[];
+  for(let y=0;y<rows;y++){
+    grid[y]=[];
+    for(let x=0;x<cols;x++){
+      if(y===0||y===rows-1||x===0||x===cols-1) grid[y][x]=WALL;
+      else grid[y][x]=Math.random()<L.dirtPct?DIRT:EMPTY;
+    }
+  }
+  // Place rocks
+  let placed=0;
+  while(placed<L.rocks){
+    let rx=1+Math.floor(Math.random()*(cols-2));
+    let ry=1+Math.floor(Math.random()*(rows-2));
+    if(grid[ry][rx]===DIRT||grid[ry][rx]===EMPTY){grid[ry][rx]=ROCK;placed++;}
+  }
+  // Place gems
+  placed=0;
+  let gemTarget=L.gems+Math.floor(L.gems*0.4);
+  while(placed<gemTarget){
+    let gx=1+Math.floor(Math.random()*(cols-2));
+    let gy=1+Math.floor(Math.random()*(rows-2));
+    if(grid[gy][gx]===DIRT){grid[gy][gx]=GEM;placed++;}
+  }
+  // Place player top-left area
+  player={x:1,y:1};
+  grid[1][1]=EMPTY;grid[1][2]=EMPTY;grid[2][1]=EMPTY;
+  // Place exit bottom-right area
+  let ex=cols-2,ey=rows-2;
+  grid[ey][ex]=EXIT;
+  // Place enemies
+  enemies=[];
+  placed=0;
+  while(placed<L.enemies){
+    let ex2=3+Math.floor(Math.random()*(cols-6));
+    let ey2=3+Math.floor(Math.random()*(rows-6));
+    if(grid[ey2][ex2]===EMPTY||grid[ey2][ex2]===DIRT){
+      grid[ey2][ex2]=EMPTY;
+      enemies.push({x:ex2,y:ey2,dx:Math.random()<0.5?1:-1,dy:0,timer:0});
+      placed++;
+    }
+  }
+  updateHUD();
+}
+
+function updateHUD(){
+  hudLevel.textContent='Level '+level;
+  hudGems.textContent='💎 '+gemsCollected+' / '+gemsNeeded;
+  hudLives.textContent='❤️ '+lives;
+}
+
+function spawnParticles(x,y,color,count){
+  for(let i=0;i<count;i++){
+    particles.push({
+      x:x*tileSize+tileSize/2,y:y*tileSize+tileSize/2,
+      vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,
+      life:30+Math.random()*20,maxLife:50,
+      color:color,size:2+Math.random()*3
+    });
+  }
+}
+
+function shake(mag,dur){shakeTimer=dur;shakeMag=mag;}
+
+function movePlayer(dx,dy){
+  if(!playing)return;
+  let nx=player.x+dx,ny=player.y+dy;
+  if(nx<0||nx>=cols||ny<0||ny>=rows)return;
+  let tile=grid[ny][nx];
+  if(tile===WALL)return;
+  // Push rock
+  if(tile===ROCK&&dy===0){
+    let bx=nx+dx;
+    if(bx>=0&&bx<cols&&(grid[ny][bx]===EMPTY)){
+      grid[ny][bx]=ROCK;
+      grid[ny][nx]=EMPTY;
+      tile=EMPTY;
+    } else return;
+  } else if(tile===ROCK)return;
+
+  if(tile===GEM){
+    gemsCollected++;
+    spawnParticles(nx,ny,'#ffee44',15);
+    if(gemsCollected>=gemsNeeded)exitOpen=true;
+    updateHUD();
+  }
+  if(tile===EXIT&&exitOpen){
+    // Level complete
+    spawnParticles(nx,ny,'#44ffaa',30);
+    shake(6,15);
+    if(level>=3){
+      playing=false;
+      showEnd(true,'You escaped all 3 caves!');
+      return;
+    }
+    level++;
+    generateLevel(level);
+    return;
+  }
+  if(tile===EXIT&&!exitOpen)return;
+
+  grid[player.y][player.x]=EMPTY;
+  player.x=nx;player.y=ny;
+  if(grid[ny][nx]!==EXIT)grid[ny][nx]=EMPTY;
+  // Check enemy collision
+  for(let e of enemies){
+    if(e.x===player.x&&e.y===player.y){playerDie();return;}
+  }
+}
+
+function playerDie(){
+  spawnParticles(player.x,player.y,'#ff4444',20);
+  shake(8,12);
+  lives--;
+  updateHUD();
+  if(lives<=0){
+    playing=false;
+    showEnd(false,'Crushed in the mines...');
+  } else {
+    // Respawn
+    player.x=1;player.y=1;
+    grid[1][1]=EMPTY;
+  }
+}
+
+function applyGravity(){
+  // Rocks and gems fall
+  for(let y=rows-2;y>=1;y--){
+    for(let x=1;x<cols-1;x++){
+      if(grid[y][x]===ROCK||grid[y][x]===GEM){
+        let below=grid[y+1][x];
+        if(below===EMPTY){
+          // Check if player is below
+          if(player.x===x&&player.y===y+1){
+            // Check if rock was already falling (above was empty last frame or rock was not supported)
+            // Simple: if tile directly falls on player, kill
+            grid[y+1][x]=grid[y][x];
+            grid[y][x]=EMPTY;
+            if(player.x===x&&player.y===y+1){playerDie();return;}
+          } else {
+            grid[y+1][x]=grid[y][x];
+            grid[y][x]=EMPTY;
+          }
+        }
+        // Slide off rounded surfaces
+        else if(below===ROCK||below===GEM){
+          // Try slide left
+          if(x>1&&grid[y][x-1]===EMPTY&&grid[y+1][x-1]===EMPTY){
+            if(player.x===x-1&&player.y===y+1){/*don't slide onto player directly*/}
+            else{grid[y+1][x-1]=grid[y][x];grid[y][x]=EMPTY;}
+          }
+          // Try slide right
+          else if(x<cols-2&&grid[y][x+1]===EMPTY&&grid[y+1][x+1]===EMPTY){
+            if(player.x===x+1&&player.y===y+1){}
+            else{grid[y+1][x+1]=grid[y][x];grid[y][x]=EMPTY;}
+          }
+        }
+      }
+    }
+  }
+  // Check if rock/gem landed on player
+  if(grid[player.y][player.x]===ROCK){playerDie();}
+}
+
+function moveEnemies(){
+  for(let e of enemies){
+    e.timer++;
+    if(e.timer<4)continue;// enemies move slower
+    e.timer=0;
+    // Simple patrol AI: try to move in current direction, if blocked turn
+    let nx=e.x+e.dx,ny=e.y+e.dy;
+    // If enemy can see player in line, chase
+    let chasing=false;
+    if(e.y===player.y&&Math.abs(e.x-player.x)<6){
+      let dir=player.x>e.x?1:-1;
+      let blocked=false;
+      let cx=e.x+dir;
+      while(cx!==player.x){
+        if(grid[e.y][cx]!==EMPTY){blocked=true;break;}
+        cx+=dir;
+      }
+      if(!blocked){nx=e.x+dir;ny=e.y;chasing=true;}
+    }
+    if(e.x===player.x&&Math.abs(e.y-player.y)<6&&!chasing){
+      let dir=player.y>e.y?1:-1;
+      let blocked=false;
+      let cy=e.y+dir;
+      while(cy!==player.y){
+        if(grid[cy][e.x]!==EMPTY){blocked=true;break;}
+        cy+=dir;
+      }
+      if(!blocked){ny=e.y+dir;nx=e.x;chasing=true;}
+    }
+    if(!chasing){
+      // Random patrol in empty space
+      let dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+      // Prefer current direction
+      let tried=false;
+      if(nx>=0&&nx<cols&&ny>=0&&ny<rows&&grid[ny][nx]===EMPTY){
+        tried=true;
+      }
+      if(!tried){
+        // Shuffle and try
+        dirs.sort(()=>Math.random()-0.5);
+        for(let d of dirs){
+          let tx=e.x+d[0],ty=e.y+d[1];
+          if(tx>=0&&tx<cols&&ty>=0&&ty<rows&&grid[ty][tx]===EMPTY){
+            nx=tx;ny=ty;e.dx=d[0];e.dy=d[1];tried=true;break;
+          }
+        }
+        if(!tried)continue;
+      }
+    }
+    if(nx>=0&&nx<cols&&ny>=0&&ny<rows&&grid[ny][nx]===EMPTY){
+      e.x=nx;e.y=ny;
+    }
+    // Check player collision
+    if(e.x===player.x&&e.y===player.y){playerDie();}
+  }
+}
+
+let tickCount=0;
+function update(){
+  if(!playing)return;
+  tickCount++;
+  // Process move queue
+  let now=performance.now();
+  if(moveQueue.length>0&&now-lastMoveTime>MOVE_DELAY){
+    let m=moveQueue.shift();
+    movePlayer(m[0],m[1]);
+    lastMoveTime=now;
+  }
+  // Gravity every 3 ticks
+  if(tickCount%3===0)applyGravity();
+  // Enemies
+  moveEnemies();
+  // Particles
+  for(let i=particles.length-1;i>=0;i--){
+    let p=particles[i];
+    p.x+=p.vx;p.y+=p.vy;p.vy+=0.1;p.life--;
+    if(p.life<=0)particles.splice(i,1);
+  }
+  if(shakeTimer>0)shakeTimer--;
+}
+
+function draw(){
+  ctx.fillStyle='#0a0a0a';
+  ctx.fillRect(0,0,W,H);
+  ctx.save();
+  if(shakeTimer>0){
+    ctx.translate((Math.random()-0.5)*shakeMag,(Math.random()-0.5)*shakeMag);
+  }
+  // Draw grid
+  for(let y=0;y<rows;y++){
+    for(let x=0;x<cols;x++){
+      let t=grid[y][x];
+      let px=x*tileSize,py=y*tileSize;
+      if(t===WALL){
+        ctx.fillStyle='#2a2a3a';
+        ctx.fillRect(px,py,tileSize,tileSize);
+        // Subtle texture
+        ctx.fillStyle='rgba(255,255,255,0.03)';
+        if((x+y)%2===0)ctx.fillRect(px,py,tileSize,tileSize);
+        ctx.strokeStyle='#1a1a2a';ctx.lineWidth=1;
+        ctx.strokeRect(px,py,tileSize,tileSize);
+      } else if(t===DIRT){
+        ctx.fillStyle='#3d2b1a';
+        ctx.fillRect(px,py,tileSize,tileSize);
+        ctx.fillStyle='rgba(60,40,20,0.6)';
+        if((x+y)%3===0)ctx.fillRect(px+2,py+2,tileSize-4,tileSize-4);
+        ctx.strokeStyle='#2a1a0a';ctx.lineWidth=0.5;
+        ctx.strokeRect(px,py,tileSize,tileSize);
+      } else if(t===EMPTY){
+        ctx.fillStyle='#0d0d14';
+        ctx.fillRect(px,py,tileSize,tileSize);
+      } else if(t===GEM){
+        ctx.fillStyle='#0d0d14';
+        ctx.fillRect(px,py,tileSize,tileSize);
+        // Glowing gem
+        let cx2=px+tileSize/2,cy2=py+tileSize/2;
+        let glow=ctx.createRadialGradient(cx2,cy2,1,cx2,cy2,tileSize*0.6);
+        glow.addColorStop(0,'rgba(68,255,170,0.3)');
+        glow.addColorStop(1,'rgba(68,255,170,0)');
+        ctx.fillStyle=glow;ctx.fillRect(px,py,tileSize,tileSize);
+        // Diamond shape
+        ctx.beginPath();
+        ctx.moveTo(cx2,py+3);
+        ctx.lineTo(px+tileSize-3,cy2);
+        ctx.lineTo(cx2,py+tileSize-3);
+        ctx.lineTo(px+3,cy2);
+        ctx.closePath();
+        ctx.fillStyle='#44ffaa';ctx.fill();
+        ctx.strokeStyle='#88ffdd';ctx.lineWidth=1;ctx.stroke();
+        // Sparkle
+        let sp=Math.sin(tickCount*0.15+x*3+y*7)*0.5+0.5;
+        ctx.globalAlpha=sp*0.6;
+        ctx.fillStyle='#ffffff';
+        ctx.fillRect(cx2-1,cy2-4,2,3);
+        ctx.fillRect(cx2-1,cy2+1,2,3);
+        ctx.fillRect(cx2-4,cy2-1,3,2);
+        ctx.fillRect(cx2+1,cy2-1,3,2);
+        ctx.globalAlpha=1;
+      } else if(t===ROCK){
+        ctx.fillStyle='#0d0d14';
+        ctx.fillRect(px,py,tileSize,tileSize);
+        // Boulder
+        let cx2=px+tileSize/2,cy2=py+tileSize/2,r=tileSize*0.4;
+        ctx.beginPath();ctx.arc(cx2,cy2,r,0,Math.PI*2);
+        ctx.fillStyle='#666677';ctx.fill();
+        ctx.strokeStyle='#888899';ctx.lineWidth=1;ctx.stroke();
+        // Highlight
+        ctx.beginPath();ctx.arc(cx2-r*0.2,cy2-r*0.2,r*0.5,0,Math.PI*2);
+        ctx.fillStyle='rgba(255,255,255,0.08)';ctx.fill();
+      } else if(t===EXIT){
+        ctx.fillStyle='#0d0d14';
+        ctx.fillRect(px,py,tileSize,tileSize);
+        if(exitOpen){
+          let glow2=ctx.createRadialGradient(px+tileSize/2,py+tileSize/2,1,px+tileSize/2,py+tileSize/2,tileSize*0.7);
+          glow2.addColorStop(0,'rgba(255,200,0,0.4)');
+          glow2.addColorStop(1,'rgba(255,200,0,0)');
+          ctx.fillStyle=glow2;ctx.fillRect(px,py,tileSize,tileSize);
+          ctx.fillStyle='#ffcc00';
+          ctx.fillRect(px+3,py+2,tileSize-6,tileSize-4);
+          ctx.fillStyle='#0d0d14';
+          ctx.fillRect(px+tileSize/2-2,py+tileSize*0.4,4,tileSize*0.4);
+        } else {
+          ctx.fillStyle='#333340';
+          ctx.fillRect(px+3,py+2,tileSize-6,tileSize-4);
+          ctx.fillStyle='#222230';
+          ctx.fillRect(px+tileSize/2-2,py+tileSize*0.4,4,tileSize*0.4);
+        }
+      }
+    }
+  }
+  // Draw enemies
+  for(let e of enemies){
+    let px=e.x*tileSize,py=e.y*tileSize;
+    let cx2=px+tileSize/2,cy2=py+tileSize/2;
+    // Glow
+    let eg=ctx.createRadialGradient(cx2,cy2,1,cx2,cy2,tileSize*0.7);
+    eg.addColorStop(0,'rgba(255,50,50,0.25)');
+    eg.addColorStop(1,'rgba(255,50,50,0)');
+    ctx.fillStyle=eg;ctx.fillRect(px-4,py-4,tileSize+8,tileSize+8);
+    // Body
+    ctx.beginPath();
+    ctx.moveTo(px+3,py+tileSize-3);
+    ctx.lineTo(cx2,py+3);
+    ctx.lineTo(px+tileSize-3,py+tileSize-3);
+    // Wavy bottom
+    let segs=4;
+    for(let i=segs;i>=0;i--){
+      let sx=px+3+(tileSize-6)*(i/segs);
+      let sy=py+tileSize-3+(i%2===0?-3:0);
+      ctx.lineTo(sx,sy);
+    }
+    ctx.closePath();
+    ctx.fillStyle='#ff4455';ctx.fill();
+    // Eyes
+    ctx.fillStyle='#fff';
+    ctx.fillRect(cx2-4,cy2-2,3,3);
+    ctx.fillRect(cx2+1,cy2-2,3,3);
+    ctx.fillStyle='#000';
+    ctx.fillRect(cx2-3,cy2-1,2,2);
+    ctx.fillRect(cx2+2,cy2-1,2,2);
+  }
+  // Draw player
+  if(playing||lives>0){
+    let ppx=player.x*tileSize,ppy=player.y*tileSize;
+    let pcx=ppx+tileSize/2,pcy=ppy+tileSize/2;
+    // Player glow
+    let pg=ctx.createRadialGradient(pcx,pcy,1,pcx,pcy,tileSize*0.8);
+    pg.addColorStop(0,'rgba(68,170,255,0.3)');
+    pg.addColorStop(1,'rgba(68,170,255,0)');
+    ctx.fillStyle=pg;ctx.fillRect(ppx-6,ppy-6,tileSize+12,tileSize+12);
+    // Helmet body
+    ctx.beginPath();ctx.arc(pcx,pcy,tileSize*0.38,0,Math.PI*2);
+    ctx.fillStyle='#44aaff';ctx.fill();
+    ctx.strokeStyle='#66ccff';ctx.lineWidth=1.5;ctx.stroke();
+    // Visor
+    ctx.beginPath();ctx.arc(pcx+2,pcy-1,tileSize*0.2,0,Math.PI*2);
+    ctx.fillStyle='#aaddff';ctx.fill();
+    // Headlamp
+    let lampPulse=Math.sin(tickCount*0.1)*0.3+0.7;
+    ctx.beginPath();ctx.arc(pcx,ppy+4,3,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,255,200,${lampPulse})`;ctx.fill();
+  }
+  // Draw particles
+  for(let p of particles){
+    ctx.globalAlpha=p.life/p.maxLife;
+    ctx.fillStyle=p.color;
+    ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
+  }
+  ctx.globalAlpha=1;
+  ctx.restore();
+}
+
+function gameLoop(){
+  update();
+  draw();
+  animFrame=requestAnimationFrame(gameLoop);
+}
+
+function startGame(){
+  overlay.style.display='none';
+  endscreen.style.display='none';
+  level=1;lives=3;
+  particles=[];
+  generateLevel(level);
+  playing=true;
+  gameStarted=true;
+  moveQueue=[];
+  gameLoop();
+}
+
+function showEnd(win,msg){
+  endscreen.style.display='flex';
+  endTitle.textContent=win?'🏆 YOU WIN!':'💀 GAME OVER';
+  endTitle.style.color=win?'#44ffaa':'#ff4455';
+  endMsg.textContent=msg;
+}
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('restartBtn').addEventListener('click',()=>{
+  cancelAnimationFrame(animFrame);
+  startGame();
+});
+
+// Keyboard
+document.addEventListener('keydown',(e)=>{
+  if(!playing)return;
+  let dx=0,dy=0;
+  if(e.key==='ArrowUp'||e.key==='w'||e.key==='W'){dy=-1;}
+  else if(e.key==='ArrowDown'||e.key==='s'||e.key==='S'){dy=1;}
+  else if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A'){dx=-1;}
+  else if(e.key==='ArrowRight'||e.key==='d'||e.key==='D'){dx=1;}
+  if(dx!==0||dy!==0){
+    e.preventDefault();
+    moveQueue=[[dx,dy]];// Only queue last input
+  }
+});
+
+// Touch / Swipe
+let touchStart=null;
+document.addEventListener('touchstart',(e)=>{
+  if(!playing)return;
+  touchStart={x:e.touches[0].clientX,y:e.touches[0].clientY};
+},{passive:true});
+document.addEventListener('touchend',(e)=>{
+  if(!playing||!touchStart)return;
+  let dx2=e.changedTouches[0].clientX-touchStart.x;
+  let dy2=e.changedTouches[0].clientY-touchStart.y;
+  let threshold=20;
+  if(Math.abs(dx2)<threshold&&Math.abs(dy2)<threshold)return;
+  if(Math.abs(dx2)>Math.abs(dy2)){
+    moveQueue=[[dx2>0?1:-1,0]];
+  } else {
+    moveQueue=[[0,dy2>0?1:-1]];
+  }
+  touchStart=null;
+},{passive:true});
+
+window.addEventListener('resize',()=>{if(gameStarted)resize();});
+})();
+</script>
+</body>
+</html>
