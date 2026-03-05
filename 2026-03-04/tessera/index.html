@@ -427,11 +427,11 @@ function drawHex(h){
   h.pulse*=.92;
 
   // Base fill
-  let baseFill='#0d0d20';
+  let baseFill='#1c1c3a';
   if(h.owner===PLAYER || h.owner===AI){
-    const col=h.owner===PLAYER?[30,90,180]:[160,30,20];
+    const col=h.owner===PLAYER?[40,120,220]:[200,40,30];
     const f=h.fill, p=h.pulse;
-    baseFill=`rgba(${col[0]},${col[1]},${col[2]},${0.45+f*.45+p*.15})`;
+    baseFill=`rgba(${col[0]},${col[1]},${col[2]},${0.5+f*.45+p*.15})`;
   }
 
   // Draw base
@@ -452,13 +452,13 @@ function drawHex(h){
   }
 
   // Glow border
-  const glowCol=h.owner===PLAYER?`rgba(68,170,255,${0.4+h.pulse*.5})`:
-                h.owner===AI?`rgba(255,80,60,${0.4+h.pulse*.5})`:'rgba(30,30,60,0.5)';
-  ctx.shadowBlur=h.owner!==EMPTY?(6+h.pulse*18):0;
+  const glowCol=h.owner===PLAYER?`rgba(68,170,255,${0.6+h.pulse*.4})`:
+                h.owner===AI?`rgba(255,80,60,${0.6+h.pulse*.4})`:'rgba(80,80,160,0.7)';
+  ctx.shadowBlur=h.owner!==EMPTY?(8+h.pulse*18):0;
   ctx.shadowColor=h.owner===PLAYER?PC:AC;
   hexPath(h.x,h.y,s);
   ctx.strokeStyle=glowCol;
-  ctx.lineWidth=h.owner!==EMPTY?1.8:1;
+  ctx.lineWidth=h.owner!==EMPTY?2:1.5;
   ctx.stroke();
   ctx.shadowBlur=0;
 
@@ -651,6 +651,14 @@ function startGame(){
 
 resize();
 renderAPBar();
+// Draw a static preview hex grid behind the intro overlay
+initStars();
+buildGrid();
+requestAnimationFrame(ts=>{
+  drawBackground();
+  drawStars(ts);
+  hexes.forEach(drawHex);
+});
 </script>
 </body>
 </html>
