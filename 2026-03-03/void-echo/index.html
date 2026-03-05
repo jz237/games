@@ -3,142 +3,543 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-<title>Void Echo</title>
+<title>Void Echo – Space Survival</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#000;overflow:hidden;touch-action:none;font-family:'Courier New',monospace}
+body{background:#000;overflow:hidden;touch-action:none;font-family:'Courier New',monospace;-webkit-user-select:none;user-select:none}
 canvas{display:block;position:fixed;inset:0;touch-action:none}
-#ui{position:fixed;top:0;left:0;right:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;color:rgba(190,225,255,.92);font-size:14px;text-shadow:0 0 10px rgba(180,220,255,.55);pointer-events:none;z-index:10}
-#hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);font-size:11px;color:rgba(180,220,255,.45);pointer-events:none;white-space:nowrap}
-#overlay{position:fixed;inset:0;background:rgba(0,0,0,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#b9ddff;z-index:20;padding:20px}
-#overlay h1{font-size:clamp(30px,7vw,56px);letter-spacing:6px;margin-bottom:12px;text-shadow:0 0 30px rgba(180,220,255,.7)}
-#overlay button{margin-top:18px;min-height:48px;min-width:185px;padding:14px 34px;border-radius:4px;border:1px solid rgba(180,220,255,.55);background:rgba(180,220,255,.14);color:#cce5ff;font-family:'Courier New',monospace;letter-spacing:2px;cursor:pointer}
+#ui{position:fixed;top:0;left:0;right:0;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;color:rgba(200,230,255,.95);font-size:clamp(12px,2.5vw,16px);text-shadow:0 0 8px rgba(100,180,255,.6);pointer-events:none;z-index:10}
+#ui .shield-bar{display:inline-block;width:60px;height:8px;border:1px solid rgba(100,200,255,.5);border-radius:4px;vertical-align:middle;margin-left:4px;overflow:hidden;background:rgba(0,0,0,.3)}
+#ui .shield-fill{height:100%;background:linear-gradient(90deg,#0af,#0ff);transition:width .3s;border-radius:3px}
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#b9ddff;z-index:20;padding:24px;text-align:center}
+#overlay h1{font-size:clamp(28px,7vw,52px);letter-spacing:5px;margin-bottom:8px;text-shadow:0 0 30px rgba(100,180,255,.7)}
+#overlay .sub{font-size:clamp(13px,2.5vw,18px);margin-bottom:20px;color:rgba(180,215,255,.7);max-width:420px;line-height:1.6}
+#overlay .how{font-size:clamp(11px,2vw,14px);color:rgba(160,200,240,.55);max-width:380px;line-height:1.7;margin-bottom:24px}
+#overlay button{min-height:52px;min-width:200px;padding:14px 36px;border-radius:6px;border:1px solid rgba(100,180,255,.6);background:rgba(100,180,255,.15);color:#cce5ff;font-family:'Courier New',monospace;font-size:clamp(14px,2.5vw,18px);letter-spacing:3px;cursor:pointer;transition:background .2s,box-shadow .2s;text-transform:uppercase}
+#overlay button:hover,#overlay button:active{background:rgba(100,180,255,.3);box-shadow:0 0 20px rgba(100,180,255,.4)}
+#overlay .result{font-size:clamp(20px,5vw,36px);letter-spacing:3px;margin-bottom:6px}
+#overlay .score-final{font-size:clamp(14px,3vw,20px);color:rgba(180,220,255,.7);margin-bottom:20px}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="ui"><div>SCORE <span id="scoreEl">0</span></div><div>LEVEL <span id="levelEl">1</span>/3</div><div>TIME <span id="timeEl">90</span>s</div></div>
-<div id="hint">TAP pulse · DOUBLE-TAP destroy · HOLD big pulse · SWIPE dash</div>
+<div id="ui">
+  <div>⚡ <span id="scoreEl">0</span></div>
+  <div>LV <span id="levelEl">1</span>/3</div>
+  <div>🛡<span class="shield-bar"><span class="shield-fill" id="shieldBar" style="width:0%"></span></span></div>
+  <div>⏱ <span id="timeEl">30</span></div>
+</div>
 <div id="overlay">
   <h1>VOID ECHO</h1>
-  <ul style="list-style:none;max-width:350px;display:flex;flex-direction:column;gap:9px;color:rgba(190,225,255,.85);line-height:1.4">
-    <li>⬜ You are the white ship in darkness. Pulses reveal hidden threats.</li>
-    <li>👆 Tap to emit sonar. Double-tap near revealed voids to shatter them.</li>
-    <li>⏳ Hold for a wide pulse. Swipe to dash away from danger.</li>
-    <li>💎 Collect Echo Crystals for score and short shield bursts.</li>
-    <li>🤖 Enemies hunt your last pulse location with predictive steering.</li>
-  </ul>
-  <button onclick="startGame(1)" style="font-weight:bold">▶ TAP TO PLAY</button>
+  <div class="sub">Survive the void. Dodge enemies. Collect crystals.</div>
+  <div class="how">
+    🚀 Drag or move mouse to pilot your ship<br>
+    💎 Collect crystals for points + shield<br>
+    🛡 Shield absorbs one hit<br>
+    ☠️ Dodge red enemies &amp; asteroids<br>
+    ⏱ Survive all 3 levels to win!
+  </div>
+  <button id="startBtn">TAP TO PLAY</button>
 </div>
 <script>
-const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
-const overlay=document.getElementById('overlay'),scoreEl=document.getElementById('scoreEl'),levelEl=document.getElementById('levelEl'),timeEl=document.getElementById('timeEl');
-let W,H;function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}resize();addEventListener('resize',resize);
+// ─── VOID ECHO: Space Survival ───
+const C = document.getElementById('c');
+const ctx = C.getContext('2d');
+const overlay = document.getElementById('overlay');
+const startBtn = document.getElementById('startBtn');
+const scoreEl = document.getElementById('scoreEl');
+const levelEl = document.getElementById('levelEl');
+const timeEl = document.getElementById('timeEl');
+const shieldBar = document.getElementById('shieldBar');
 
-const FX={ripples:[],trails:[],spawn(x,y,col='rgba(190,230,255,.9)'){this.ripples.push({x,y,r:6,a:.9,col,spd:92});this.trails.push({x,y,r:12,a:.52,col,decay:3.8})},move(x,y){if(Math.random()<.6)this.trails.push({x,y,r:4,a:.35,col:'rgba(190,230,255,.6)',decay:5})},update(dt){this.ripples=this.ripples.filter(r=>(r.r+=r.spd*dt,r.a-=1.9*dt,r.a>0));this.trails=this.trails.filter(t=>(t.r-=14*dt,t.a-=t.decay*dt,t.a>0&&t.r>.2))},draw(){ctx.save();ctx.shadowBlur=16;for(const r of this.ripples){ctx.globalAlpha=r.a;ctx.strokeStyle=ctx.shadowColor=r.col;ctx.lineWidth=2.2;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.stroke()}for(const t of this.trails){ctx.globalAlpha=t.a*.78;ctx.fillStyle=ctx.shadowColor=t.col;ctx.beginPath();ctx.arc(t.x,t.y,t.r,0,Math.PI*2);ctx.fill()}ctx.restore();ctx.globalAlpha=1}};
-let shakeX=0,shakeY=0,shakeDur=0,shakeInt=0;function screenShake(i,d){shakeInt=i;shakeDur=d}function updateShake(dt){if(shakeDur>0){shakeDur-=dt;shakeX=(Math.random()-.5)*shakeInt*2;shakeY=(Math.random()-.5)*shakeInt*2;if(shakeDur<=0){shakeX=shakeY=0}}}
+let W, H;
+function resize() { W = C.width = innerWidth; H = C.height = innerHeight; }
+resize();
+addEventListener('resize', resize);
 
-let state='menu',level=1,score=0,timeLeft=90,lastTime=0,timerAccum=0,frameId=null;
-let ship,pulses=[],voids=[],asteroids=[],particles=[],crystals=[],shockRings=[];
-let lastTap={x:0,y:0,time:0},holdStart=0,holdPos=null,touchStart=null;
-const LEVELS=[
-  {voids:4,speed:40,asteroids:6,duration:90,newVoidRate:.12,crystals:6},
-  {voids:6,speed:62,asteroids:10,duration:95,newVoidRate:.24,crystals:7},
-  {voids:9,speed:86,asteroids:14,duration:100,newVoidRate:.42,crystals:8}
+// ─── Game State ───
+let state = 'menu'; // menu | playing | won | lost
+let score = 0;
+let level = 1;
+let timer = 0;
+let shieldHP = 0; // 0-100
+let shakeT = 0;
+let particles = [];
+let stars = [];
+let enemies = [];
+let asteroids = [];
+let crystals = [];
+let player = { x: 0, y: 0, tx: 0, ty: 0, r: 16, glow: 0 };
+let inputActive = false;
+let lastTime = 0;
+
+// Level config: { duration, enemyCount, enemySpeed, asteroidCount, crystalCount }
+const LEVELS = [
+  { duration: 30, enemyCount: 3, enemySpeed: 60, asteroidCount: 4, crystalCount: 6 },
+  { duration: 30, enemyCount: 6, enemySpeed: 100, asteroidCount: 7, crystalCount: 5 },
+  { duration: 30, enemyCount: 12, enemySpeed: 140, asteroidCount: 10, crystalCount: 4 },
 ];
-const dist=(x1,y1,x2,y2)=>Math.hypot(x1-x2,y1-y2);
 
-function spawnVoid(speed){let x,y,t=0;do{x=40+Math.random()*(W-80);y=40+Math.random()*(H-80);t++}while(dist(x,y,ship.x,ship.y)<160&&t<45);voids.push({x,y,speed,tx:x,ty:y,alerted:false,alertTimer:0,lit:0,lastLit:0,phase:Math.random()*Math.PI*2,wander:Math.random()*Math.PI*2,r:13,predict:0.4+Math.random()*0.5})}
-function spawnCrystal(){let x,y,t=0;do{x=40+Math.random()*(W-80);y=40+Math.random()*(H-80);t++}while(dist(x,y,ship.x,ship.y)<90&&t<35);crystals.push({x,y,r:8,phase:Math.random()*Math.PI*2,collected:false})}
-
-function startGame(lvl){
-  level=lvl;const cfg=LEVELS[level-1];score=0;timeLeft=cfg.duration;timerAccum=0;
-  ship={x:W/2,y:H/2,vx:0,vy:0,trail:[],shield:0};
-  pulses=[];voids=[];asteroids=[];particles=[];crystals=[];shockRings=[];
-  for(let i=0;i<cfg.asteroids;i++){let ax,ay,r=12+Math.random()*17,t=0;do{ax=50+Math.random()*(W-100);ay=50+Math.random()*(H-100);t++}while(dist(ax,ay,ship.x,ship.y)<r+60&&t<40);let s=6+Math.floor(Math.random()*4),pts=[];for(let j=0;j<s;j++){let a=j/s*Math.PI*2,rr=r*(.65+Math.random()*.6);pts.push({x:Math.cos(a)*rr,y:Math.sin(a)*rr})}asteroids.push({x:ax,y:ay,r,pts,lit:0,lastLit:0})}
-  for(let i=0;i<cfg.voids;i++)spawnVoid(cfg.speed);
-  for(let i=0;i<cfg.crystals;i++)spawnCrystal();
-  state='playing';overlay.style.display='none';levelEl.textContent=level;scoreEl.textContent=score;timeEl.textContent=timeLeft;
-  lastTime=performance.now();cancelAnimationFrame(frameId);frameId=requestAnimationFrame(loop);
+// ─── Stars ───
+function initStars() {
+  stars = [];
+  for (let i = 0; i < 120; i++) {
+    stars.push({ x: Math.random() * W, y: Math.random() * H, s: Math.random() * 1.8 + 0.3, b: Math.random() });
+  }
 }
 
-function emitPulse(x,y,big){const maxR=big?460:300,spd=big?195:270;pulses.push({x,y,r:4,maxR,spd,alpha:big?.88:.68,big});let dx=x-ship.x,dy=y-ship.y,d=dist(x,y,ship.x,ship.y)||1,f=big?120:80;ship.vx+=(dx/d)*f;ship.vy+=(dy/d)*f;let alertR=maxR*1.35;for(const v of voids)if(dist(v.x,v.y,x,y)<alertR){v.alerted=true;v.alertTimer=big?5:3;v.tx=x;v.ty=y}}
-function destroyAt(x,y){let now=Date.now();for(let i=voids.length-1;i>=0;i--){let v=voids[i];if(dist(v.x,v.y,x,y)<72&&(v.lit||now-v.lastLit<420)){burst(v.x,v.y,'rgba(255,90,50,.95)');voids.splice(i,1);score+=180;scoreEl.textContent=score;return true}}return false}
-function burst(x,y,col){for(let i=0;i<30;i++){let a=Math.random()*Math.PI*2,s=45+Math.random()*110;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,r:2+Math.random()*4,col})}for(let i=0;i<3;i++)shockRings.push({x,y,r:10+i*8,max:130,alpha:.85,spd:180,col});screenShake(7,.45)}
+// ─── Init Level ───
+function initLevel() {
+  const cfg = LEVELS[level - 1];
+  timer = cfg.duration;
+  enemies = [];
+  asteroids = [];
+  crystals = [];
+  particles = [];
 
-function handleTap(x,y){if(state!=='playing')return;FX.spawn(x,y);let now=Date.now(),dt=now-lastTap.time,dd=dist(x,y,lastTap.x,lastTap.y);if(dt<380&&dd<90){destroyAt(x,y);emitPulse(x,y,false);lastTap.time=0}else{emitPulse(x,y,false);lastTap={x,y,time:now}}}
-function dash(dx,dy){let d=Math.hypot(dx,dy);if(d<36)return;let p=Math.min(195,d*1.65);ship.vx+=(dx/d)*p;ship.vy+=(dy/d)*p;}
+  // Spawn enemies at edges
+  for (let i = 0; i < cfg.enemyCount; i++) {
+    spawnEnemy();
+  }
+  // Spawn asteroids
+  for (let i = 0; i < cfg.asteroidCount; i++) {
+    asteroids.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: 14 + Math.random() * 22,
+      vx: (Math.random() - 0.5) * 40,
+      vy: (Math.random() - 0.5) * 40,
+      rot: Math.random() * Math.PI * 2,
+      rv: (Math.random() - 0.5) * 2,
+      verts: genAsteroidVerts()
+    });
+  }
+  // Spawn crystals
+  for (let i = 0; i < cfg.crystalCount; i++) {
+    spawnCrystal();
+  }
+}
 
-canvas.addEventListener('click',e=>handleTap(e.clientX,e.clientY));
-canvas.addEventListener('touchstart',e=>{e.preventDefault();for(const t of e.changedTouches){touchStart={x:t.clientX,y:t.clientY,time:Date.now()};holdStart=Date.now();holdPos={x:t.clientX,y:t.clientY};FX.spawn(t.clientX,t.clientY)}},{passive:false});
-canvas.addEventListener('touchmove',e=>{e.preventDefault();for(const t of e.changedTouches)FX.move(t.clientX,t.clientY)},{passive:false});
-canvas.addEventListener('touchend',e=>{e.preventDefault();const t=e.changedTouches[0];if(!t)return;let elapsed=Date.now()-holdStart;if(elapsed>620&&holdPos){emitPulse(holdPos.x,holdPos.y,true);FX.spawn(holdPos.x,holdPos.y,'rgba(255,190,120,.95)')}else if(touchStart){let dx=t.clientX-touchStart.x,dy=t.clientY-touchStart.y,d=Math.hypot(dx,dy);if(d>35)dash(dx,dy);else handleTap(t.clientX,t.clientY)}touchStart=null;holdPos=null;},{passive:false});
-canvas.addEventListener('touchcancel',e=>e.preventDefault(),{passive:false});
+function spawnEnemy() {
+  const side = Math.random() * 4 | 0;
+  let x, y;
+  if (side === 0) { x = -30; y = Math.random() * H; }
+  else if (side === 1) { x = W + 30; y = Math.random() * H; }
+  else if (side === 2) { x = Math.random() * W; y = -30; }
+  else { x = Math.random() * W; y = H + 30; }
+  enemies.push({ x, y, r: 12 + Math.random() * 6, pulse: Math.random() * Math.PI * 2 });
+}
 
-function update(dt){
-  const cfg=LEVELS[level-1];timerAccum+=dt;
-  if(timerAccum>=1){timerAccum-=1;timeLeft--;timeEl.textContent=timeLeft;if(timeLeft<=0){endGame(true);return}if(Math.random()<cfg.newVoidRate&&voids.length<cfg.voids+6)spawnVoid(cfg.speed);if(Math.random()<.13&&crystals.filter(c=>!c.collected).length<cfg.crystals)spawnCrystal();score+=3;scoreEl.textContent=score}
+function spawnCrystal() {
+  crystals.push({
+    x: 40 + Math.random() * (W - 80),
+    y: 40 + Math.random() * (H - 80),
+    r: 10,
+    rot: Math.random() * Math.PI * 2,
+    sparkle: Math.random() * Math.PI * 2
+  });
+}
 
-  ship.vx*=.92;ship.vy*=.92;ship.x+=ship.vx*dt;ship.y+=ship.vy*dt;ship.x=Math.max(12,Math.min(W-12,ship.x));ship.y=Math.max(12,Math.min(H-12,ship.y));ship.trail.unshift({x:ship.x,y:ship.y});if(ship.trail.length>14)ship.trail.pop();if(ship.shield>0)ship.shield-=dt;
+function genAsteroidVerts() {
+  const n = 6 + (Math.random() * 4 | 0);
+  const v = [];
+  for (let i = 0; i < n; i++) {
+    v.push(0.6 + Math.random() * 0.4);
+  }
+  return v;
+}
 
-  for(const p of pulses){p.r+=p.spd*dt;p.alpha=(p.big?.88:.68)*(1-p.r/p.maxR)}pulses=pulses.filter(p=>p.r<p.maxR);
-  for(const p of particles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.96;p.vy*=.96;p.life-=dt*1.6}particles=particles.filter(p=>p.life>0);
-  for(const s of shockRings){s.r+=s.spd*dt;s.alpha*=1-dt*2.4}shockRings=shockRings.filter(s=>s.alpha>.02&&s.r<s.max);
+// ─── Particles ───
+function emitParticles(x, y, color, count, speed) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = Math.random() * speed + speed * 0.3;
+    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, color, r: 1.5 + Math.random() * 2.5 });
+  }
+}
 
-  for(const a of asteroids){a.lit=0;for(const p of pulses){let d=dist(a.x,a.y,p.x,p.y);if(Math.abs(d-p.r)<a.r+18){a.lit=1;break}}if(a.lit)a.lastLit=Date.now();if(dist(ship.x,ship.y,a.x,a.y)<a.r+8){if(ship.shield>0){ship.shield=0;burst(ship.x,ship.y,'rgba(120,210,255,.9)')}else{screenShake(10,.6);endGame(false);return}}}
+// ─── Input ───
+function setTarget(cx, cy) {
+  player.tx = cx;
+  player.ty = cy;
+}
 
-  let now=Date.now();
-  for(let i=voids.length-1;i>=0;i--){let v=voids[i];v.phase+=dt*1.8;v.lit=0;for(const p of pulses){let d=dist(v.x,v.y,p.x,p.y);if(Math.abs(d-p.r)<30){v.lit=1;break}}if(v.lit)v.lastLit=now;
-    // intelligent pursuit: predict ship future position after pulse reveals
-    if(v.alerted){v.alertTimer-=dt;if(v.alertTimer<=0)v.alerted=false;let predX=ship.x+ship.vx*v.predict,predY=ship.y+ship.vy*v.predict;let tx=(predX+v.tx)/2,ty=(predY+v.ty)/2;let dx=tx-v.x,dy=ty-v.y,d=dist(tx,ty,v.x,v.y)||1;v.x+=(dx/d)*v.speed*dt;v.y+=(dy/d)*v.speed*dt}
-    else{v.wander+=(Math.random()-.5)*dt*3;v.x+=Math.cos(v.wander)*v.speed*.17*dt;v.y+=Math.sin(v.wander)*v.speed*.17*dt;if(v.x<20){v.x=20;v.wander=Math.PI-v.wander}if(v.x>W-20){v.x=W-20;v.wander=Math.PI-v.wander}if(v.y<20){v.y=20;v.wander=-v.wander}if(v.y>H-20){v.y=H-20;v.wander=-v.wander}}
-    for(const a of asteroids)if(dist(v.x,v.y,a.x,a.y)<a.r+16){v.wander+=Math.PI*.65;v.alerted=false}
-    if(dist(ship.x,ship.y,v.x,v.y)<20){if(ship.shield>0){ship.shield=0;burst(v.x,v.y,'rgba(120,210,255,.9)');voids.splice(i,1);score+=80;scoreEl.textContent=score}else{endGame(false);return}}
+C.addEventListener('pointerdown', e => {
+  if (state !== 'playing') return;
+  inputActive = true;
+  setTarget(e.clientX, e.clientY);
+});
+C.addEventListener('pointermove', e => {
+  if (state !== 'playing') return;
+  if (e.pointerType === 'mouse' || inputActive) {
+    setTarget(e.clientX, e.clientY);
+  }
+});
+C.addEventListener('pointerup', () => { inputActive = false; });
+C.addEventListener('pointercancel', () => { inputActive = false; });
+
+// Mouse always controls on desktop
+C.addEventListener('mousemove', e => {
+  if (state !== 'playing') return;
+  setTarget(e.clientX, e.clientY);
+});
+
+// ─── Collision ───
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+// ─── Start / Restart ───
+function startGame() {
+  state = 'playing';
+  score = 0;
+  level = 1;
+  shieldHP = 0;
+  shakeT = 0;
+  player.x = W / 2;
+  player.y = H / 2;
+  player.tx = W / 2;
+  player.ty = H / 2;
+  player.glow = 0;
+  particles = [];
+  overlay.style.display = 'none';
+  initStars();
+  initLevel();
+  updateUI();
+  lastTime = performance.now();
+  requestAnimationFrame(loop);
+}
+
+startBtn.addEventListener('click', startGame);
+startBtn.addEventListener('touchend', e => { e.preventDefault(); startGame(); });
+
+// ─── UI ───
+function updateUI() {
+  scoreEl.textContent = score;
+  levelEl.textContent = level;
+  timeEl.textContent = Math.ceil(timer);
+  shieldBar.style.width = Math.min(100, shieldHP) + '%';
+}
+
+function showEnd(won) {
+  state = won ? 'won' : 'lost';
+  overlay.style.display = 'flex';
+  overlay.innerHTML = `
+    <div class="result">${won ? '🏆 YOU SURVIVED!' : '💀 DESTROYED'}</div>
+    <div class="score-final">Score: ${score}${won ? ' — All 3 levels cleared!' : ` — Reached Level ${level}`}</div>
+    <button id="restartBtn">PLAY AGAIN</button>
+  `;
+  document.getElementById('restartBtn').addEventListener('click', startGame);
+}
+
+// ─── Main Loop ───
+function loop(now) {
+  if (state !== 'playing') return;
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+
+  update(dt);
+  draw();
+  updateUI();
+
+  requestAnimationFrame(loop);
+}
+
+// ─── Update ───
+function update(dt) {
+  const cfg = LEVELS[level - 1];
+
+  // Timer
+  timer -= dt;
+  if (timer <= 0) {
+    timer = 0;
+    if (level >= 3) {
+      showEnd(true);
+      return;
+    }
+    level++;
+    initLevel();
+    // Flash effect
+    emitParticles(player.x, player.y, '#0af', 30, 120);
+    return;
   }
 
-  for(const c of crystals){if(c.collected)continue;c.phase+=dt*3;if(dist(ship.x,ship.y,c.x,c.y)<16){c.collected=true;score+=120;ship.shield=Math.min(4,ship.shield+2.2);scoreEl.textContent=score;burst(c.x,c.y,'rgba(120,220,255,.95)')}}
+  // Player movement – smooth follow
+  const dx = player.tx - player.x;
+  const dy = player.ty - player.y;
+  const d = Math.hypot(dx, dy);
+  const speed = 8;
+  if (d > 2) {
+    player.x += dx * speed * dt * (d > 100 ? 3 : 1.5);
+    player.y += dy * speed * dt * (d > 100 ? 3 : 1.5);
+  }
 
-  FX.update(dt);updateShake(dt);
+  // Clamp to screen
+  player.x = Math.max(player.r, Math.min(W - player.r, player.x));
+  player.y = Math.max(player.r, Math.min(H - player.r, player.y));
+
+  player.glow += dt * 3;
+
+  // Shield decay
+  if (shieldHP > 0) shieldHP -= dt * 4;
+  if (shieldHP < 0) shieldHP = 0;
+
+  // Enemies – chase player
+  for (const e of enemies) {
+    const ex = player.x - e.x;
+    const ey = player.y - e.y;
+    const ed = Math.hypot(ex, ey) || 1;
+    e.x += (ex / ed) * cfg.enemySpeed * dt;
+    e.y += (ey / ed) * cfg.enemySpeed * dt;
+    e.pulse += dt * 5;
+
+    // Collision with player
+    if (dist(player, e) < player.r + e.r) {
+      if (shieldHP > 0) {
+        shieldHP = 0;
+        emitParticles(e.x, e.y, '#0ff', 20, 150);
+        shakeT = 0.2;
+        // Push enemy away
+        e.x = player.x - (ex / ed) * 150;
+        e.y = player.y - (ey / ed) * 150;
+      } else {
+        emitParticles(player.x, player.y, '#f44', 40, 200);
+        shakeT = 0.4;
+        showEnd(false);
+        // Do one more draw with particles
+        draw();
+        return;
+      }
+    }
+  }
+
+  // Occasionally spawn new enemies in later levels
+  if (level >= 2 && Math.random() < dt * 0.3) {
+    if (enemies.length < cfg.enemyCount + 4) spawnEnemy();
+  }
+
+  // Asteroids
+  for (const a of asteroids) {
+    a.x += a.vx * dt;
+    a.y += a.vy * dt;
+    a.rot += a.rv * dt;
+    // Wrap
+    if (a.x < -50) a.x = W + 40;
+    if (a.x > W + 50) a.x = -40;
+    if (a.y < -50) a.y = H + 40;
+    if (a.y > H + 50) a.y = -40;
+
+    // Collision
+    if (dist(player, a) < player.r + a.r * 0.7) {
+      if (shieldHP > 0) {
+        shieldHP = 0;
+        emitParticles(a.x, a.y, '#fa0', 15, 100);
+        shakeT = 0.2;
+      } else {
+        emitParticles(player.x, player.y, '#f80', 35, 180);
+        shakeT = 0.4;
+        showEnd(false);
+        draw();
+        return;
+      }
+    }
+  }
+
+  // Crystals
+  for (let i = crystals.length - 1; i >= 0; i--) {
+    const cr = crystals[i];
+    cr.rot += dt * 2;
+    cr.sparkle += dt * 4;
+    if (dist(player, cr) < player.r + cr.r + 8) {
+      score += 10;
+      shieldHP = Math.min(100, shieldHP + 35);
+      emitParticles(cr.x, cr.y, '#0ff', 12, 80);
+      crystals.splice(i, 1);
+      // Respawn after delay
+      setTimeout(() => { if (state === 'playing') spawnCrystal(); }, 3000);
+    }
+  }
+
+  // Particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life -= dt * 2.5;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  // Shake decay
+  if (shakeT > 0) shakeT -= dt;
 }
 
-function draw(){
-  const now=Date.now();
-  if(level===1){ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);let g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.min(W,H)*.55);g.addColorStop(0,'#001020');g.addColorStop(1,'#000');ctx.globalAlpha=.36;ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.globalAlpha=1}
-  else if(level===2){ctx.fillStyle='#00060a';ctx.fillRect(0,0,W,H)}
-  else{ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);let a=.05+Math.sin(now*.0012)*.04;let v=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.2,W/2,H/2,Math.min(W,H)*.72);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,`rgba(80,0,0,${a})`);ctx.fillStyle=v;ctx.fillRect(0,0,W,H)}
+// ─── Draw ───
+function draw() {
+  ctx.save();
 
-  ctx.save();ctx.translate(shakeX,shakeY);
+  // Screen shake
+  if (shakeT > 0) {
+    const s = shakeT * 20;
+    ctx.translate((Math.random() - 0.5) * s, (Math.random() - 0.5) * s);
+  }
 
-  for(const p of pulses){let b=p.big?'255,205,160':'185,225,255',i=p.big?'255,230,190':'215,236,255';ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.strokeStyle=`rgba(${b},${p.alpha*.46})`;ctx.lineWidth=2;ctx.stroke();ctx.beginPath();ctx.arc(p.x,p.y,Math.max(0,p.r-9),0,Math.PI*2);ctx.strokeStyle=`rgba(${i},${p.alpha*.26})`;ctx.lineWidth=1.5;ctx.stroke();if(p.r>15){ctx.beginPath();ctx.arc(p.x,p.y,p.r-18,0,Math.PI*2);ctx.strokeStyle=`rgba(${i},${p.alpha*.12})`;ctx.lineWidth=1;ctx.stroke()}}
+  // Background
+  ctx.fillStyle = '#08090f';
+  ctx.fillRect(-10, -10, W + 20, H + 20);
 
-  for(const a of asteroids){let f=a.lit?1:Math.max(0,1-(now-a.lastLit)/560);if(f<=0)continue;ctx.save();ctx.translate(a.x,a.y);if(a.lit){ctx.shadowBlur=9;ctx.shadowColor='rgba(160,210,255,.45)'}ctx.beginPath();ctx.moveTo(a.pts[0].x,a.pts[0].y);for(const p of a.pts)ctx.lineTo(p.x,p.y);ctx.closePath();ctx.fillStyle=`rgba(80,115,145,${f*.52})`;ctx.fill();ctx.strokeStyle=`rgba(165,215,255,${f*.9})`;ctx.lineWidth=1.5;ctx.stroke();ctx.restore()}
+  // Stars
+  for (const s of stars) {
+    const b = 0.3 + Math.sin(s.b + performance.now() * 0.001) * 0.3;
+    ctx.globalAlpha = b;
+    ctx.fillStyle = '#c8deff';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
 
-  for(const c of crystals){if(c.collected)continue;let pulse=.8+Math.sin(c.phase)*.25;let g=ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,c.r*2.6*pulse);g.addColorStop(0,'rgba(120,220,255,.8)');g.addColorStop(1,'rgba(70,140,255,0)');ctx.beginPath();ctx.arc(c.x,c.y,c.r*2.6*pulse,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();ctx.fillStyle='rgba(180,245,255,.95)';ctx.shadowBlur=11;ctx.shadowColor='rgba(120,220,255,.85)';ctx.beginPath();ctx.moveTo(c.x,c.y-c.r);ctx.lineTo(c.x-c.r*.7,c.y);ctx.lineTo(c.x,c.y+c.r);ctx.lineTo(c.x+c.r*.7,c.y);ctx.closePath();ctx.fill();ctx.shadowBlur=0}
+  // Asteroids
+  for (const a of asteroids) {
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    ctx.rotate(a.rot);
+    ctx.beginPath();
+    const n = a.verts.length;
+    for (let i = 0; i < n; i++) {
+      const angle = (i / n) * Math.PI * 2;
+      const r = a.r * a.verts[i];
+      if (i === 0) ctx.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
+      else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#3a3530';
+    ctx.fill();
+    ctx.strokeStyle = '#7a6e60';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
 
-  for(const v of voids){let f=v.lit?1:Math.max(0,1-(now-v.lastLit)/700);if(f<=0)continue;let pulse=.84+Math.sin(v.phase)*.18;let g=ctx.createRadialGradient(v.x,v.y,0,v.x,v.y,v.r*3*pulse);g.addColorStop(0,`rgba(255,75,35,${f*.95})`);g.addColorStop(.35,`rgba(200,30,10,${f*.7})`);g.addColorStop(1,'rgba(90,0,0,0)');ctx.beginPath();ctx.arc(v.x,v.y,v.r*3*pulse,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();ctx.beginPath();ctx.arc(v.x,v.y,v.r*pulse,0,Math.PI*2);ctx.fillStyle=`rgba(255,125,70,${f})`;ctx.fill();ctx.strokeStyle=`rgba(255,90,40,${f*.45})`;ctx.lineWidth=1.2;for(let i=0;i<4;i++){let a=v.phase+i*Math.PI/2;ctx.beginPath();ctx.moveTo(v.x,v.y);ctx.lineTo(v.x+Math.cos(a)*v.r*2.4,v.y+Math.sin(a)*v.r*2.4);ctx.stroke()}}
+  // Crystals
+  for (const cr of crystals) {
+    ctx.save();
+    ctx.translate(cr.x, cr.y);
+    ctx.rotate(cr.rot);
+    // Glow
+    ctx.shadowColor = '#0ff';
+    ctx.shadowBlur = 12 + Math.sin(cr.sparkle) * 5;
+    // Diamond shape
+    ctx.beginPath();
+    ctx.moveTo(0, -cr.r);
+    ctx.lineTo(cr.r * 0.6, 0);
+    ctx.lineTo(0, cr.r);
+    ctx.lineTo(-cr.r * 0.6, 0);
+    ctx.closePath();
+    ctx.fillStyle = '#0ef';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
 
-  for(const p of particles){ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);ctx.fillStyle=p.col.replace('.95',`${Math.max(0,p.life)}`);ctx.fill()}
-  for(const s of shockRings){ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.strokeStyle=s.col.replace('.95',`${s.alpha}`);ctx.lineWidth=2.6;ctx.stroke()}
+  // Enemies
+  for (const e of enemies) {
+    const pulse = 0.7 + Math.sin(e.pulse) * 0.3;
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    // Glow
+    ctx.shadowColor = '#f33';
+    ctx.shadowBlur = 10 + Math.sin(e.pulse) * 6;
+    // Body
+    ctx.beginPath();
+    ctx.arc(0, 0, e.r * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(220,40,30,${0.7 + Math.sin(e.pulse) * 0.2})`;
+    ctx.fill();
+    // Inner eye
+    ctx.beginPath();
+    ctx.arc(0, 0, e.r * 0.35, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff8';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
 
-  for(let i=ship.trail.length-1;i>=0;i--){const t=ship.trail[i],a=.5*(1-i/ship.trail.length);ctx.beginPath();ctx.arc(t.x,t.y,2*(1-i/ship.trail.length),0,Math.PI*2);ctx.fillStyle=`rgba(185,225,255,${a*.65})`;ctx.fill()}
-  ctx.save();ctx.translate(ship.x,ship.y);let ang=Math.atan2(ship.vy,ship.vx);if(Math.abs(ship.vx)+Math.abs(ship.vy)>2)ctx.rotate(ang+Math.PI/4);ctx.fillStyle='rgba(225,238,255,.98)';ctx.beginPath();ctx.rect(-8,-8,16,16);ctx.fill();ctx.strokeStyle='rgba(145,205,255,.55)';ctx.stroke();ctx.restore();
+  // Player
+  ctx.save();
+  ctx.translate(player.x, player.y);
 
-  if(ship.shield>0){let a=.28+Math.sin(now*.015)*.12;ctx.beginPath();ctx.arc(ship.x,ship.y,18,0,Math.PI*2);ctx.strokeStyle=`rgba(120,220,255,${a})`;ctx.lineWidth=2.2;ctx.stroke()}
+  // Shield ring
+  if (shieldHP > 0) {
+    ctx.beginPath();
+    ctx.arc(0, 0, player.r + 8, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(0,200,255,${0.3 + shieldHP / 200})`;
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = '#0af';
+    ctx.shadowBlur = 15;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
 
-  let vig=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.28,W/2,H/2,Math.min(W,H)*.72);vig.addColorStop(0,'transparent');vig.addColorStop(1,'rgba(0,0,0,.66)');ctx.fillStyle=vig;ctx.fillRect(0,0,W,H);
+  // Ship glow
+  ctx.shadowColor = '#4af';
+  ctx.shadowBlur = 18 + Math.sin(player.glow) * 6;
 
+  // Ship body – triangle
+  const angle = Math.atan2(player.ty - player.y, player.tx - player.x);
+  ctx.rotate(angle);
+  ctx.beginPath();
+  ctx.moveTo(player.r + 4, 0);
+  ctx.lineTo(-player.r * 0.7, -player.r * 0.7);
+  ctx.lineTo(-player.r * 0.4, 0);
+  ctx.lineTo(-player.r * 0.7, player.r * 0.7);
+  ctx.closePath();
+  ctx.fillStyle = '#5af';
+  ctx.fill();
+  ctx.strokeStyle = '#adf';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Engine glow
+  ctx.beginPath();
+  ctx.arc(-player.r * 0.5, 0, 3 + Math.sin(player.glow * 3) * 1.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#0ff';
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
   ctx.restore();
-  FX.draw();
+
+  // Particles
+  for (const p of particles) {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Level transition flash
+  ctx.restore();
 }
 
-function endGame(won){
-  state=won?'win':'lose';overlay.style.display='flex';
-  overlay.innerHTML=won?`<h1>SURVIVED</h1><p style='opacity:.75;margin-bottom:6px'>Score: <strong>${score}</strong></p><p style='opacity:.65'>${level<3?'Deeper darkness awaits...':'You mastered the Void Echo.'}</p><div style='display:flex;flex-direction:column;gap:8px;margin-top:16px'>${level<3?`<button onclick='startGame(${level+1})'>LEVEL ${level+1}</button>`:''}<button onclick='startGame(1)'>RESTART</button></div>`
-  :`<h1 style='color:rgba(255,130,80,.95)'>CONSUMED</h1><p style='opacity:.75;margin-bottom:6px'>Score: <strong>${score}</strong></p><p style='opacity:.65'>The Void found you.</p><div style='display:flex;flex-direction:column;gap:8px;margin-top:16px'><button onclick='startGame(${level})'>RETRY L${level}</button><button onclick='startGame(1)'>RESTART</button></div>`;
+// ─── Initial star render for menu ───
+initStars();
+function menuDraw() {
+  if (state !== 'menu') return;
+  ctx.fillStyle = '#08090f';
+  ctx.fillRect(0, 0, W, H);
+  for (const s of stars) {
+    const b = 0.3 + Math.sin(s.b + performance.now() * 0.001) * 0.3;
+    ctx.globalAlpha = b;
+    ctx.fillStyle = '#c8deff';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  requestAnimationFrame(menuDraw);
 }
-
-function loop(ts){if(state!=='playing')return;let dt=Math.min((ts-lastTime)/1000,.05);lastTime=ts;update(dt);draw();frameId=requestAnimationFrame(loop)}
-ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+menuDraw();
 </script>
 </body>
 </html>
