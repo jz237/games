@@ -70,7 +70,7 @@ function initAudio() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   // background drone
   bgGain = audioCtx.createGain();
-  bgGain.gain.value = 0.03;
+  bgGain.gain.value = 0.012;
   bgGain.connect(audioCtx.destination);
   bgOsc = audioCtx.createOscillator();
   bgOsc.type = 'sawtooth';
@@ -154,9 +154,9 @@ resize();
 
 // ─── Game State ───
 const LEVELS = [
-  { cols: 24, rows: 18, aiCount: 1, orbsNeeded: 10, aiSpeed: 0.55, aiLookahead: 2, powerups: [] },
-  { cols: 28, rows: 20, aiCount: 2, orbsNeeded: 15, aiSpeed: 0.75, aiLookahead: 4, powerups: ['speed'] },
-  { cols: 22, rows: 16, aiCount: 3, orbsNeeded: 20, aiSpeed: 0.95, aiLookahead: 6, powerups: ['phase', 'magnet'] },
+  { cols: 24, rows: 18, orbsNeeded: 10, playerInterval: 0.18, aiCount: 1, aiSpeed: 0.48, aiLookahead: 2, powerups: [] },
+  { cols: 28, rows: 20, orbsNeeded: 15, playerInterval: 0.145, aiCount: 2, aiSpeed: 0.72, aiLookahead: 4, powerups: ['speed'] },
+  { cols: 22, rows: 16, orbsNeeded: 20, playerInterval: 0.12, aiCount: 3, aiSpeed: 0.95, aiLookahead: 6, powerups: ['phase', 'magnet'] },
 ];
 
 let state = 'menu'; // menu, playing, dying, levelComplete, gameOver, win
@@ -204,12 +204,17 @@ function screenFlash(color, intensity) {
 function initLevel() {
   const L = LEVELS[level];
   cols = L.cols; rows = L.rows;
-  // calc cell size to fit screen with padding
-  const pad = 60;
-  cellSize = Math.min((W - pad * 2) / cols, (H - pad * 2 - 48) / rows);
+  // responsive board sizing (larger on phones, not oversized on desktop)
+  const isPortrait = H > W;
+  const hudH = 48;
+  const padX = isPortrait ? 12 : Math.max(20, W * 0.035);
+  const padY = isPortrait ? 8 : 16;
+  cellSize = Math.min((W - padX * 2) / cols, (H - hudH - padY * 2) / rows);
+  if (isPortrait) cellSize *= 1.05;
+  cellSize = Math.min(cellSize, isPortrait ? 34 : 40);
   cellSize = Math.max(cellSize, 12);
   offsetX = (W - cols * cellSize) / 2;
-  offsetY = (H - rows * cellSize) / 2 + 24;
+  offsetY = hudH + (H - hudH - rows * cellSize) / 2;
 
   orbsCollected = 0;
   particles = [];
@@ -222,7 +227,7 @@ function initLevel() {
   const px = Math.floor(cols / 2), py = Math.floor(rows / 2);
   player = {
     segments: [{ x: px, y: py }, { x: px - 1, y: py }, { x: px - 2, y: py }],
-    dir: DIR.RIGHT, nextDir: DIR.RIGHT, moveTimer: 0, moveInterval: 0.12,
+    dir: DIR.RIGHT, nextDir: DIR.RIGHT, moveTimer: 0, moveInterval: L.playerInterval,
     alive: true, phase: false, magnet: false, boosted: false
   };
 
@@ -324,6 +329,26 @@ document.addEventListener('touchmove', e => {
   }
 }, { passive: true });
 document.addEventListener('touchend', () => { touchStart = null; }, { passive: true });
+
+// Mouse / touch tap steering: click/tap around the snake head to steer
+function steerTowardPoint(px, py) {
+  if (state !== 'playing' || !player || !player.segments?.length) return;
+  const head = player.segments[0];
+  const hx = cx(head.x), hy = cy(head.y);
+  const dx = px - hx, dy = py - hy;
+  if (Math.abs(dx) + Math.abs(dy) < 6) return;
+  let d;
+  if (Math.abs(dx) > Math.abs(dy)) d = dx > 0 ? DIR.RIGHT : DIR.LEFT;
+  else d = dy > 0 ? DIR.DOWN : DIR.UP;
+  // prevent reversing into self
+  if (!(d.x === -player.dir.x && d.y === -player.dir.y)) inputDir = d;
+}
+
+canvas.addEventListener('mousedown', e => steerTowardPoint(e.clientX, e.clientY));
+canvas.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse') return;
+  steerTowardPoint(e.clientX, e.clientY);
+});
 
 // ─── Start ───
 startBtn.addEventListener('click', () => {
