@@ -1,0 +1,9 @@
+Smoke test log - Neon Tinkerer
+Run: 2026-03-07 05:36 (America/New_York)
+
+Actions:
+- Verified files present: index.html, style.css, main.js
+- Quick manual load check: main.js logs 'Neon Tinkerer prototype scaffold loaded.' to console when run in browser.
+
+Notes:
+- No headless browser available in this environment; include an in-page harness for automated checks in next run.
