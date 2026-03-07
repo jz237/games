@@ -1,0 +1,11 @@
+Glassrail Bastion Smoke Test
+timestamp=2026-03-07T00:52:05.016Z
+PASS exists:index.html
+PASS exists:style.css
+PASS exists:game.mjs
+PASS exists:design.md
+PASS has-level-2
+PASS has-boss
+PASS has-smoke-harness
+PASS has-upgrade-system
+RESULT: PASS

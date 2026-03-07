@@ -1,0 +1,38 @@
+Run Summary — Glassrail Bastion
+Date: 2026-03-06
+Status: SUCCESS (complete prototype)
+
+Created:
+- games/2026-03-06/glassrail-bastion/design.md
+- games/2026-03-06/glassrail-bastion/index.html
+- games/2026-03-06/glassrail-bastion/style.css
+- games/2026-03-06/glassrail-bastion/game.mjs
+- games/2026-03-06/glassrail-bastion/tests/run-smoke.mjs
+- games/2026-03-06/glassrail-bastion/tests/log.txt
+- games/2026-03-06/glassrail-bastion/QA_APPROVED=true
+
+Gameplay delivered:
+- Mid/longform wave-defense action loop tuned for 30–90 minute runs.
+- Two full levels:
+  1) Skybridge Approach (waves + boss)
+  2) Citadel Breach (waves + final boss)
+- Progression systems: engineer XP levels, random upgrade choices between waves, increased enemy pressure.
+- Core mechanics: movement (desktop + mobile hold controls), aiming/shooting, dash, pickups, enemy AI, bosses.
+
+Polish pass completed:
+- Particle effects for impacts/dash/spark fields
+- Layered neon background + grid + glow shaders
+- Screen shake on heavy interactions
+- Shimmering rotating pickups
+- HUD with objective + run clock
+
+Automated smoke test:
+- Command: node tests/run-smoke.mjs > tests/log.txt
+- Result: PASS
+
+Publishing paths:
+- Dated path: games/2026-03-06/glassrail-bastion/index.html
+- Shortcut path: games/glassrail.html
+- Expected live URLs after push:
+  - https://jz237.github.io/games/2026-03-06/glassrail-bastion/
+  - https://jz237.github.io/games/glassrail.html
