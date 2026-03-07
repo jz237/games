@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skyforge Caravan</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="hud">
+    <div><strong>Sector:</strong> <span id="sectorLabel">1</span>/4</div>
+    <div><strong>HP:</strong> <span id="hpLabel">100</span></div>
+    <div><strong>Shards:</strong> <span id="shardLabel">0</span></div>
+    <div><strong>XP:</strong> <span id="xpLabel">0</span> | <strong>Lvl:</strong> <span id="lvlLabel">1</span></div>
+    <div><strong>Objective:</strong> <span id="objectiveLabel">Collect chrono shards and survive.</span></div>
+  </div>
+
+  <canvas id="game" width="960" height="540"></canvas>
+
+  <div id="overlay" class="show">
+    <h1>Skyforge Caravan</h1>
+    <p>Escort your arcane caravan through 4 hostile sky provinces.</p>
+    <p>WASD/Arrows = Move, Space = Blink Dash, J = Arc Pulse</p>
+    <button id="startBtn">Launch Caravan</button>
+  </div>
+
+  <div id="touchControls">
+    <div id="joyBase"><div id="joyStick"></div></div>
+    <button id="dashBtn">Dash</button>
+    <button id="pulseBtn">Pulse</button>
+  </div>
+
+  <script type="module" src="game.mjs"></script>
+</body>
+</html>
