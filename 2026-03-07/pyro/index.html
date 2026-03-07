@@ -43,7 +43,7 @@ let screenShakeX = 0, screenShakeY = 0;
 let levelStartTime = 0;
 
 // Player
-let player = { x: 0, y: 0, tx: 0, ty: 0, speed: 0.6, moving: false, trail: [], alive: true };
+let player = { x: 0, y: 0, tx: 0, ty: 0, speed: 0.9, moving: false, trail: [], alive: true };
 let inputDir = { x: 0, y: 0 };
 let keys = {};
 
@@ -428,8 +428,8 @@ canvas.addEventListener('touchend', e => {
   if (window._lastTouchPos && e.changedTouches.length>0) {
     const t = e.changedTouches[0];
     const rect = canvas.getBoundingClientRect();
-    const tx = Math.floor((t.clientX - rect.left) / rect.width * W / tileW);
-    const ty = Math.floor((t.clientY - rect.top) / rect.height * H / tileH);
+    const tx = Math.floor((t.clientX - rect.left) / (rect.width / COLS));
+    const ty = Math.floor((t.clientY - rect.top) / (rect.height / ROWS));
     // set target tile coords
     if (tx>=0 && ty>=0 && tx<COLS && ty<ROWS) {
       player.tx = tx; player.ty = ty; player.moving = true;
