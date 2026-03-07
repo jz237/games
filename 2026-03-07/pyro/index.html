@@ -418,6 +418,15 @@ canvas.addEventListener('touchmove', e => {
     const p = getTouchPos(t);
     const dp = checkDpad(p.x, p.y);
     if (dp) { dpadDir = dp; dpadActive = true; }
+    else {
+      // follow finger: set continuous target tile while holding
+      const rect = canvas.getBoundingClientRect();
+      const tx = Math.floor((t.clientX - rect.left) / (rect.width / COLS));
+      const ty = Math.floor((t.clientY - rect.top) / (rect.height / ROWS));
+      if (tx>=0 && ty>=0 && tx<COLS && ty<ROWS) {
+        player.tx = tx; player.ty = ty; player.moving = true;
+      }
+    }
   }
 }, { passive: false });
 
