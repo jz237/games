@@ -43,7 +43,7 @@ let screenShakeX = 0, screenShakeY = 0;
 let levelStartTime = 0;
 
 // Player
-let player = { x: 0, y: 0, tx: 0, ty: 0, speed: 0.9, moving: false, trail: [], alive: true };
+let player = { x: 0, y: 0, tx: 0, ty: 0, speed: 0.9, moving: false, trail: [], alive: true, gx:0, gy:0, _step:false, _stepTime:0, _stepDur:140 };
 let inputDir = { x: 0, y: 0 };
 let keys = {};
 
@@ -293,8 +293,10 @@ function loadLevel(idx) {
   levelGrid = lvl.grid.map(row => [...row]);
   player.tx = lvl.start.x;
   player.ty = lvl.start.y;
-  player.x = lvl.start.x;
-  player.y = lvl.start.y;
+  player.gx = lvl.start.x; player.gy = lvl.start.y;
+  player.x = lvl.start.x + 0.5;
+  player.y = lvl.start.y + 0.5;
+  player._step=false; player._tick=0;
   player.moving = false;
   player.alive = true;
   player.trail = [];
@@ -614,18 +616,47 @@ function updatePlayer(dt) {
     }
   }
 
-  // Smooth movement toward target using fixed per-tile duration (ms)
-  if (player.moving) {
-    player._moveTime = (player._moveTime || 0) + dt;
-    const t = Math.min(1, player._moveTime / (player._moveDuration || 160));
-    // Lerp from start to target (in tile units)
-    const sx = player._startX, sy = player._startY;
-    player.x = sx + (player.tx - sx) * t;
-    player.y = sy + (player.ty - sy) * t;
-    if (t >= 1) player.moving = false;
+  // Per-tile tick movement (mobile-friendly, discrete steps) ─ target is player.tx/player.ty (tile coords)
+  // Convert tile coords to center positions: px = tx + 0.5
+  player._tick = (player._tick || 0) + dt;
+  const interval = player._stepDur || 140; // ms per tile
+  if (!player._step) {
+    // If we are not currently interpolating between tiles, accumulate tick and spawn a step when ready
+    if (player._tick >= interval) {
+      player._tick -= interval;
+      // determine the next single-tile step direction toward target
+      const dx = Math.sign(player.tx - player.gx);
+      const dy = Math.sign(player.ty - player.gy);
+      // prefer one-axis movement if both present
+      let sx = player.gx + (dx !== 0 ? dx : 0);
+      let sy = player.gy + (dx !== 0 ? 0 : (dy !== 0 ? dy : 0));
+      // clamp
+      sx = Math.max(0, Math.min(COLS-1, sx));
+      sy = Math.max(0, Math.min(ROWS-1, sy));
+      // start interpolation from current center to next center
+      player._step = true;
+      player._stepTime = 0;
+      player._stepFromX = player.gx + 0.5;
+      player._stepFromY = player.gy + 0.5;
+      player._stepToX = sx + 0.5;
+      player._stepToY = sy + 0.5;
+      // advance logical grid position immediately so collision checks refer to next tile
+      player.gx = sx; player.gy = sy;
+    }
+  }
+  if (player._step) {
+    player._stepTime += dt;
+    const t = Math.min(1, player._stepTime / interval);
+    player.x = player._stepFromX + (player._stepToX - player._stepFromX) * t;
+    player.y = player._stepFromY + (player._stepToY - player._stepFromY) * t;
+    if (t >= 1) {
+      player._step = false;
+      // snap to center
+      player.x = player.gx + 0.5; player.y = player.gy + 0.5;
+    }
   } else {
-    player.x = player.tx;
-    player.y = player.ty;
+    // ensure centered when idle
+    player.x = player.gx + 0.5; player.y = player.gy + 0.5;
   }
 
   // Fire trail
