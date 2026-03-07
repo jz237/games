@@ -424,7 +424,7 @@ canvas.addEventListener('touchmove', e => {
       const tx = Math.floor((t.clientX - rect.left) / (rect.width / COLS));
       const ty = Math.floor((t.clientY - rect.top) / (rect.height / ROWS));
       if (tx>=0 && ty>=0 && tx<COLS && ty<ROWS) {
-        player.tx = tx; player.ty = ty; player.moving = true;
+        player.tx = tx; player.ty = ty; player.moving = true; player._startX = player.x; player._startY = player.y; player._moveTime = 0; player._moveDuration = 160;
       }
     }
   }
@@ -441,7 +441,7 @@ canvas.addEventListener('touchend', e => {
     const ty = Math.floor((t.clientY - rect.top) / (rect.height / ROWS));
     // set target tile coords
     if (tx>=0 && ty>=0 && tx<COLS && ty<ROWS) {
-      player.tx = tx; player.ty = ty; player.moving = true;
+      player.tx = tx; player.ty = ty; player.moving = true; player._startX = player.x; player._startY = player.y; player._moveTime = 0; player._moveDuration = 160;
     }
   }
 
@@ -608,20 +608,25 @@ function updatePlayer(dt) {
         player.tx = nx;
         player.ty = ny;
         player.moving = true;
+        player._startX = player.x; player._startY = player.y; player._moveTime = 0; player._moveDuration = 160;
         if (Math.random() < 0.3) playSound('woosh');
       }
     }
   }
 
-  // Smooth movement toward target (eased, slower)
-  const ease = 1 - Math.exp(-player.speed * dt / 200);
-  const mx = player.tx - player.x;
-  const my = player.ty - player.y;
-  if (Math.abs(mx) > 0.01) player.x += mx * Math.min(1, ease);
-  else player.x = player.tx;
-  if (Math.abs(my) > 0.01) player.y += my * Math.min(1, ease);
-  else player.y = player.ty;
-  if (Math.abs(mx) <= 0.01 && Math.abs(my) <= 0.01) player.moving = false;
+  // Smooth movement toward target using fixed per-tile duration (ms)
+  if (player.moving) {
+    player._moveTime = (player._moveTime || 0) + dt;
+    const t = Math.min(1, player._moveTime / (player._moveDuration || 160));
+    // Lerp from start to target (in tile units)
+    const sx = player._startX, sy = player._startY;
+    player.x = sx + (player.tx - sx) * t;
+    player.y = sy + (player.ty - sy) * t;
+    if (t >= 1) player.moving = false;
+  } else {
+    player.x = player.tx;
+    player.y = player.ty;
+  }
 
   // Fire trail
   const wx = (player.x + 0.5) * tileW;
