@@ -399,6 +399,18 @@ canvas.addEventListener('touchstart', e => {
   }
 }, { passive: false });
 
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (gameState !== STATE.PLAYING) return;
+  for (const t of e.touches) {
+    const p = getTouchPos(t);
+    touchRipples.push({ x: p.x, y: p.y, r: 0, alpha: 0.5 });
+    const dp = checkDpad(p.x, p.y);
+    if (dp) { dpadDir = dp; dpadActive = true; }
+    window._lastTouchPos = {x:p.x, y:p.y};
+  }
+}, { passive: false });
+
 canvas.addEventListener('touchmove', e => {
   e.preventDefault();
   if (gameState !== STATE.PLAYING) return;
@@ -410,6 +422,20 @@ canvas.addEventListener('touchmove', e => {
 }, { passive: false });
 
 canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (gameState !== STATE.PLAYING) return;
+  // If it was a short tap (no dpad), move to tapped tile
+  if (window._lastTouchPos && e.changedTouches.length>0) {
+    const t = e.changedTouches[0];
+    const rect = canvas.getBoundingClientRect();
+    const tx = Math.floor((t.clientX - rect.left) / rect.width * W / tileW);
+    const ty = Math.floor((t.clientY - rect.top) / rect.height * H / tileH);
+    // set target tile coords
+    if (tx>=0 && ty>=0 && tx<COLS && ty<ROWS) {
+      player.tx = tx; player.ty = ty; player.moving = true;
+    }
+  }
+
   e.preventDefault();
   if (e.touches.length === 0) { dpadDir = { x: 0, y: 0 }; dpadActive = false; }
 }, { passive: false });
