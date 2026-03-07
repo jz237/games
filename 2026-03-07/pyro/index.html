@@ -43,7 +43,7 @@ let screenShakeX = 0, screenShakeY = 0;
 let levelStartTime = 0;
 
 // Player
-let player = { x: 0, y: 0, tx: 0, ty: 0, speed: 4.5, moving: false, trail: [], alive: true };
+let player = { x: 0, y: 0, tx: 0, ty: 0, speed: 0.6, moving: false, trail: [], alive: true };
 let inputDir = { x: 0, y: 0 };
 let keys = {};
 
@@ -578,14 +578,15 @@ function updatePlayer(dt) {
     }
   }
 
-  // Smooth movement toward target
-  const speed = player.speed * dt * 60;
+  // Smooth movement toward target (eased, slower)
+  const ease = 1 - Math.exp(-player.speed * dt / 200);
   const mx = player.tx - player.x;
   const my = player.ty - player.y;
-  if (Math.abs(mx) > 0.01) player.x += Math.sign(mx) * Math.min(Math.abs(mx), speed);
+  if (Math.abs(mx) > 0.01) player.x += mx * Math.min(1, ease);
   else player.x = player.tx;
-  if (Math.abs(my) > 0.01) player.y += Math.sign(my) * Math.min(Math.abs(my), speed);
+  if (Math.abs(my) > 0.01) player.y += my * Math.min(1, ease);
   else player.y = player.ty;
+  if (Math.abs(mx) <= 0.01 && Math.abs(my) <= 0.01) player.moving = false;
 
   // Fire trail
   const wx = (player.x + 0.5) * tileW;
