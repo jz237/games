@@ -1,0 +1,13 @@
+{
+  "current_run": "2026-03-07/neon-tinkerer",
+  "phase": "Prototype Build",
+  "remaining_tasks": [
+    "Implement player movement polish and input remap",
+    "Create Level 1: assembly puzzle and win condition",
+    "Create Level 2: power-routing mechanic and hazards",
+    "Implement upgrade system and UI",
+    "Add in-page automated smoke harness and run it",
+    "QA & packaging"
+  ],
+  "last_update": "2026-03-07T05:36:00-05:00"
+}
