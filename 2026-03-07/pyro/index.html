@@ -294,8 +294,8 @@ function loadLevel(idx) {
   player.tx = lvl.start.x;
   player.ty = lvl.start.y;
   player.gx = lvl.start.x; player.gy = lvl.start.y;
-  player.x = lvl.start.x + 0.5;
-  player.y = lvl.start.y + 0.5;
+  player.x = lvl.start.x; player.y = lvl.start.y;
+  player.renderX = lvl.start.x + 0.5; player.renderY = lvl.start.y + 0.5;
   player._step=false; player._tick=0;
   player.moving = false;
   player.alive = true;
@@ -647,21 +647,21 @@ function updatePlayer(dt) {
   if (player._step) {
     player._stepTime += dt;
     const t = Math.min(1, player._stepTime / interval);
-    player.x = player._stepFromX + (player._stepToX - player._stepFromX) * t;
-    player.y = player._stepFromY + (player._stepToY - player._stepFromY) * t;
+    player.renderX = player._stepFromX + (player._stepToX - player._stepFromX) * t;
+    player.renderY = player._stepFromY + (player._stepToY - player._stepFromY) * t;
     if (t >= 1) {
       player._step = false;
       // snap to center
-      player.x = player.gx + 0.5; player.y = player.gy + 0.5;
+      player.renderX = player.gx + 0.5; player.renderY = player.gy + 0.5;
     }
   } else {
     // ensure centered when idle
-    player.x = player.gx + 0.5; player.y = player.gy + 0.5;
+    player.renderX = player.gx + 0.5; player.renderY = player.gy + 0.5;
   }
 
   // Fire trail
-  const wx = (player.x + 0.5) * tileW;
-  const wy = (player.y + 0.5) * tileH;
+  const wx = (player.renderX) * tileW;
+  const wy = (player.renderY) * tileH;
   spawnFireTrail(wx, wy);
   player.trail.push({ x: wx, y: wy, life: 1 });
   if (player.trail.length > 15) player.trail.shift();
@@ -674,8 +674,8 @@ function playerDeath() {
   playSound('death');
 
   // Death particles
-  const wx = (player.x + 0.5) * tileW;
-  const wy = (player.y + 0.5) * tileH;
+  const wx = (player.renderX) * tileW;
+  const wy = (player.renderY) * tileH;
   for (let i = 0; i < 30; i++) {
     const angle = Math.random() * Math.PI * 2;
     particles.push({
@@ -1028,8 +1028,8 @@ function drawFloor(px, py) {
 
 function drawPlayer() {
   if (!player.alive) return;
-  const cx = (player.x + 0.5) * tileW;
-  const cy = (player.y + 0.5) * tileH;
+  const cx = (player.renderX) * tileW;
+  const cy = (player.renderY) * tileH;
   const flicker = Math.sin(frameCount * 0.3) * 0.15 + 0.85;
   const baseR = Math.min(tileW, tileH) * 0.3;
 
