@@ -275,7 +275,8 @@ button:active { transform: translateY(1px) scale(.99); }
     setTimeout(() => ui.waveBanner.classList.remove('show'), 1600);
     if (!first) audio.fanfare();
     const count = 8 + state.wave * 3;
-    for (let i=0;i<count;i++) scheduleEnemy(i * (0.6 - Math.min(0.38, state.wave*0.03)) + rand(0.45));
+    const spawnInterval = Math.max(0.35, 1.4 - state.wave * 0.09);
+    for (let i=0;i<count;i++) scheduleEnemy(i * spawnInterval + rand(0.6));
     if (state.wave >= 4) {
       const sats = 1 + Math.floor((state.wave-4)/3);
       for (let s=0;s<sats;s++) state.satellites.push(spawnSatellite(s));
@@ -292,7 +293,7 @@ button:active { transform: translateY(1px) scale(.99); }
     let kind = 'normal';
     if (wave >= 3 && typeRoll < 0.24) kind = 'mirv';
     else if (wave >= 6 && typeRoll < 0.42) kind = 'smart';
-    const speed = rand(125 + wave*24, 85 + wave*14);
+    const speed = rand(40 + wave*18, 28 + wave*12);
     state.enemyMissiles.push({ x:startX, y:-rand(220,20), sx:startX, sy:-20, tx:target.x, ty:target.y, speed, progress:-delay*speed/Math.max(1,dist(startX,-20,target.x,target.y)), trail:[], alive:true, split:false, kind, wiggle:rand(1000), whistle:false });
   }
 
@@ -380,7 +381,7 @@ button:active { transform: translateY(1px) scale(.99); }
     for (let i=0;i<2 + (state.wave>7?1:0); i++) {
       const targetCities = state.cities.filter(c=>c.alive);
       const t = targetCities[Math.floor(Math.random()*targetCities.length)] || { x: rand(w*0.9,w*0.1), y:h*0.84 };
-      state.enemyMissiles.push({ x:m.x, y:m.y, sx:m.x, sy:m.y, tx:t.x + rand(70,-70), ty:t.y, speed:m.speed*1.18, progress:0, trail:[], alive:true, split:true, kind:'normal', wiggle:rand(1000), whistle:false });
+      state.enemyMissiles.push({ x:m.x, y:m.y, sx:m.x, sy:m.y, tx:t.x + rand(70,-70), ty:t.y, speed:m.speed*1.1, progress:0, trail:[], alive:true, split:true, kind:'normal', wiggle:rand(1000), whistle:false });
     }
     spawnParticles(m.x,m.y, 18, '#ffd69e', 1.7, 1.1, 10);
     audio.whistle();
@@ -423,7 +424,7 @@ button:active { transform: translateY(1px) scale(.99); }
         sat.cooldown = Math.max(0.55, 1.8 - state.wave*0.07) + Math.random()*0.5;
         const live = state.cities.filter(c=>c.alive);
         const t = live[Math.floor(Math.random()*live.length)] || { x:rand(w*0.9,w*0.1), y:h*0.84 };
-        state.enemyMissiles.push({ x:sat.x, y:sat.y+8, sx:sat.x, sy:sat.y, tx:t.x, ty:t.y, speed:155 + state.wave*18, progress:0, trail:[], alive:true, split:false, kind: state.wave > 8 && Math.random() < 0.35 ? 'smart' : 'normal', wiggle:rand(1000), whistle:false });
+        state.enemyMissiles.push({ x:sat.x, y:sat.y+8, sx:sat.x, sy:sat.y, tx:t.x, ty:t.y, speed:50 + state.wave*16, progress:0, trail:[], alive:true, split:false, kind: state.wave > 8 && Math.random() < 0.35 ? 'smart' : 'normal', wiggle:rand(1000), whistle:false });
       }
       if ((sat.dir > 0 && sat.x > w+120) || (sat.dir < 0 && sat.x < -120)) sat.x = sat.dir > 0 ? -120 : w+120;
     }
@@ -471,11 +472,21 @@ button:active { transform: translateY(1px) scale(.99); }
       }
     }
     state.particles = state.particles.filter(p => p.life > 0);
-    state.smoke = state.smoke.filter(p => p.life > 0).map(s => ({ ...s, y:s.y-12*dt, size:s.size+7*dt }));
+    if (state.particles.length > 400) state.particles.splice(0, state.particles.length - 400);
+    state.smoke = state.smoke.filter(p => p.life > 0);
+    for (const s of state.smoke) { s.y -= 12*dt; s.size += 7*dt; }
+    if (state.smoke.length > 300) state.smoke.splice(0, state.smoke.length - 300);
     state.debris = state.debris.filter(d => d.life > 0);
     state.fires = state.fires.filter(f => f.life > 0);
     state.cities.forEach(c => c.rebuildGlow = Math.max(0, c.rebuildGlow - dt));
     state.bases.forEach(b => b.reloadPulse = Math.max(0, b.reloadPulse - dt));
+
+    // Clean up dead missiles' trails over time
+    for (const m of state.enemyMissiles) { if (!m.alive && m.trail.length) { m.trail.forEach(t => t.life -= dt); m.trail = m.trail.filter(t => t.life > 0); } }
+    for (const m of state.playerMissiles) { if (!m.alive && m.trail.length) { m.trail.forEach(t => t.life -= dt); m.trail = m.trail.filter(t => t.life > 0); } }
+    // Remove fully dead missiles with no remaining trails
+    state.enemyMissiles = state.enemyMissiles.filter(m => m.alive || m.progress < 0 || m.trail.length > 0);
+    state.playerMissiles = state.playerMissiles.filter(m => m.alive || m.trail.length > 0);
 
     const activeEnemies = state.enemyMissiles.some(m => m.alive || m.progress < 0);
     const activeEffects = state.explosions.length || state.playerMissiles.some(m=>m.alive);
@@ -556,6 +567,7 @@ button:active { transform: translateY(1px) scale(.99); }
       const alive = city.alive;
       ctx.save();
       ctx.translate(city.x, city.y);
+      ctx.shadowBlur = 0;
       if (!alive) ctx.globalAlpha = 0.32;
       const glow = alive ? 12 + city.rebuildGlow*30 : 0;
       if (glow > 0) {
@@ -583,16 +595,17 @@ button:active { transform: translateY(1px) scale(.99); }
   }
 
   function drawTrails(list, colorA, colorB) {
+    ctx.save();
     list.forEach(m => {
       if (!m.trail || m.trail.length < 2) return;
       for (let i=1;i<m.trail.length;i++) {
         const a = m.trail[i-1], b = m.trail[i];
         ctx.strokeStyle = i > m.trail.length*0.6 ? colorA : colorB;
-        ctx.lineWidth = a.w || 2; ctx.globalAlpha = i / m.trail.length;
+        ctx.lineWidth = a.w || 2; ctx.globalAlpha = clamp(i / m.trail.length, 0, 1);
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
       }
-      ctx.globalAlpha = 1;
     });
+    ctx.restore();
   }
 
   function drawEntities(time) {
@@ -624,7 +637,7 @@ button:active { transform: translateY(1px) scale(.99); }
 
     state.explosions.forEach(e => {
       const t = e.age / e.life;
-      const alpha = 1 - t;
+      const alpha = clamp(1 - t, 0, 1);
       const cols = e.friendly ? ['255,255,255','255,232,120','255,162,71','255,87,64'] : ['255,250,220','255,120,90','255,70,55','120,20,18'];
       [1, .78, .58, .34].forEach((mul, i) => {
         ctx.strokeStyle = `rgba(${cols[i]},${alpha*(0.9 - i*0.15)})`;
@@ -636,12 +649,12 @@ button:active { transform: translateY(1px) scale(.99); }
     });
 
     state.particles.forEach(p => {
-      ctx.fillStyle = p.color.replace(')', '');
-      if (!p.color.startsWith('rgba')) ctx.fillStyle = p.color;
-      ctx.globalAlpha = p.life / p.max;
+      ctx.save();
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
       ctx.shadowBlur = 12 + p.glow*10; ctx.shadowColor = p.color;
       ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill();
-      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+      ctx.restore();
     });
 
     state.debris.forEach(d => {
@@ -657,8 +670,9 @@ button:active { transform: translateY(1px) scale(.99); }
   }
 
   function draw(time) {
+    ctx.clearRect(0, 0, w, h);
     ctx.save();
-    const sx = shake ? rand(shake,-shake) : 0, sy = shake ? rand(shake,-shake) : 0;
+    const sx = shake > 0.1 ? rand(shake,-shake) : 0, sy = shake > 0.1 ? rand(shake,-shake) : 0;
     ctx.translate(sx, sy);
     drawSky(time);
     drawGround(time);
