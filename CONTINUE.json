@@ -1,13 +1,13 @@
 {
   "slug": "neon-harbor",
   "next_steps": [
-    "Initialize Godot 4 project in games/neon-harbor/ (create project.godot and scenes folder).",
-    "Implement player movement and camera with layered parallax in a dock scene (Milestone A).",
-    "Create a basic water shader and neon sign overlay.",
-    "Place placeholder assets and test Web export.",
-    "Update CONTINUE.json when Milestone A is complete with new precise tasks."
+    "Complete Milestone B: add more collectibles, build Scene02 (Fish Market)",
+    "Implement scene transitions (exit zones)",
+    "Start Milestone C: Loom UI for combining shards into memory vignettes",
+    "Add save/load keyboard shortcuts",
+    "Fix resize handling for interaction positions"
   ],
   "status": "in-progress",
-  "current_milestone": "Milestone A - player movement and dock scene",
-  "timestamp": "2026-03-07T20:36:00-05:00"
+  "current_milestone": "Milestone B - collection system + scene transitions",
+  "timestamp": "2026-03-08T01:36:00-05:00"
 }

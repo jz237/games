@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neon Harbor</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a1a; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+canvas { display: block; }
+#ui-overlay {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  pointer-events: none; z-index: 10;
+}
+#dialogue-box {
+  display: none; pointer-events: all;
+  margin: 20px auto; max-width: 700px; padding: 24px;
+  background: rgba(10, 10, 40, 0.92); border: 1px solid rgba(0, 200, 255, 0.3);
+  border-radius: 8px; color: #e0e8ff;
+  box-shadow: 0 0 30px rgba(0, 150, 255, 0.15);
+}
+#dialogue-box .speaker { color: #00d4ff; font-size: 14px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 2px; }
+#dialogue-box .text { font-size: 16px; line-height: 1.6; margin-bottom: 16px; }
+#dialogue-box .choices { display: flex; flex-direction: column; gap: 8px; }
+#dialogue-box .choice-btn {
+  pointer-events: all; cursor: pointer;
+  background: rgba(0, 180, 255, 0.1); border: 1px solid rgba(0, 180, 255, 0.3);
+  color: #a0d8ff; padding: 10px 16px; border-radius: 4px; font-size: 14px;
+  transition: all 0.2s;
+}
+#dialogue-box .choice-btn:hover { background: rgba(0, 180, 255, 0.25); color: #fff; }
+#hud {
+  position: fixed; top: 16px; left: 16px; z-index: 10;
+  color: rgba(0, 200, 255, 0.6); font-size: 12px; letter-spacing: 1px;
+}
+#hud .shards { margin-top: 4px; }
+#location-label {
+  position: fixed; top: 16px; right: 16px; z-index: 10;
+  color: rgba(0, 200, 255, 0.4); font-size: 11px; text-transform: uppercase; letter-spacing: 3px;
+}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud">
+  <div>NEON HARBOR</div>
+  <div class="shards" id="shard-count">Light Signatures: 0 | Audio Shards: 0</div>
+</div>
+<div id="location-label">The Docks</div>
+<div id="ui-overlay">
+  <div id="dialogue-box">
+    <div class="speaker" id="dlg-speaker"></div>
+    <div class="text" id="dlg-text"></div>
+    <div class="choices" id="dlg-choices"></div>
+  </div>
+</div>
+<script src="engine.js"></script>
+<script src="scenes/scene01.js"></script>
+<script>
+  window.addEventListener('load', () => {
+    NeonHarbor.init(document.getElementById('game'));
+    NeonHarbor.loadScene(Scene01);
+  });
+</script>
+</body>
+</html>

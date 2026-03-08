@@ -1,0 +1,21 @@
+{
+  "slug": "neon-harbor",
+  "status": "in-progress",
+  "current_milestone": "Milestone B - collection system + scene transitions",
+  "completed": [
+    "Milestone A: engine.js with parallax, water shader, player movement, dialogue system",
+    "Scene01 (The Docks) with 3 layers, 2 NPCs, branching dialogue, 1 shard, 1 signature",
+    "Unit tests (tests.html, 8 tests)",
+    "index.html with HUD and dialogue UI"
+  ],
+  "next_steps": [
+    "Add 2nd audio shard and 2nd light signature to Scene01 to complete collection set",
+    "Build Scene02 (Fish Market) with Mara NPC and new collectibles",
+    "Implement scene transition system in engine.js (exit zones that load new scenes)",
+    "Add Loom UI prototype (combine shards to unlock memory vignettes) for Milestone C",
+    "Add resize handler to fix interaction Y positions on window resize",
+    "Wire save/load to keyboard shortcuts (F5/F9)"
+  ],
+  "QA_APPROVED": false,
+  "timestamp": "2026-03-08T01:36:00-05:00"
+}

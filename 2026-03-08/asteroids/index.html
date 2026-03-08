@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>ASTEROIDS</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Courier New',monospace;color:#0ff;touch-action:none;user-select:none}
+canvas{display:block;width:100%;height:100%}
+#hud{position:absolute;top:10px;left:10px;font-size:18px;text-shadow:0 0 8px #0ff,0 0 16px #0ff;z-index:10;pointer-events:none}
+#hud .score{font-size:24px;font-weight:bold}
+#hud .lives{margin-top:4px;font-size:20px}
+#hud .wave{margin-top:2px;font-size:14px;color:#0f8}
+#overlay{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;pointer-events:auto}
+#overlay h1{font-size:48px;text-shadow:0 0 20px #0ff,0 0 40px #08f;margin-bottom:16px}
+#overlay .sub{font-size:16px;color:#f0f;text-shadow:0 0 10px #f0f;margin-bottom:30px}
+#overlay button{background:none;border:2px solid #0ff;color:#0ff;font-family:inherit;font-size:20px;padding:12px 32px;cursor:pointer;text-shadow:0 0 8px #0ff;box-shadow:0 0 12px #0ff44,inset 0 0 12px #0ff22;transition:all .2s}
+#overlay button:hover{background:#0ff22;box-shadow:0 0 24px #0ff88}
+#overlay.hidden{display:none;pointer-events:none}
+#touch-controls{position:absolute;bottom:20px;left:0;width:100%;display:none;justify-content:space-between;padding:0 16px;z-index:15;pointer-events:none}
+#touch-left,#touch-right{display:flex;gap:10px;pointer-events:auto}
+.tbtn{width:60px;height:60px;border:2px solid #0ff8;border-radius:50%;background:#0ff11;color:#0ff;font-size:22px;display:flex;align-items:center;justify-content:center;text-shadow:0 0 6px #0ff;box-shadow:0 0 8px #0ff44}
+@media(pointer:coarse){#touch-controls{display:flex!important}}
+</style>
+</head>
+<body>
+<div id="hud"><div class="score" id="score">0</div><div class="lives" id="lives"></div><div class="wave" id="wave"></div></div>
+<div id="overlay"><h1>ASTEROIDS</h1><div class="sub">NEON VECTOR EDITION</div><button id="startBtn">START</button></div>
+<canvas id="c"></canvas>
+<div id="touch-controls">
+<div id="touch-left">
+<div class="tbtn" data-key="left">◀</div>
+<div class="tbtn" data-key="right">▶</div>
+</div>
+<div id="touch-right">
+<div class="tbtn" data-key="thrust">▲</div>
+<div class="tbtn" data-key="fire">●</div>
+</div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const scoreEl=document.getElementById('score'),livesEl=document.getElementById('lives'),waveEl=document.getElementById('wave');
+const overlay=document.getElementById('overlay'),startBtn=document.getElementById('startBtn');
+
+let W,H,ship,asteroids,bullets,particles,score,lives,wave,gameOver,gameStarted,shakeTimer,shakeMag;
+let keys={};
+const TAU=Math.PI*2;
+
+function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
+window.addEventListener('resize',resize);resize();
+
+// --- Input ---
+window.addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Space')e.preventDefault()});
+window.addEventListener('keyup',e=>{keys[e.code]=false});
+
+// Touch
+document.querySelectorAll('.tbtn').forEach(b=>{
+  const k=b.dataset.key;
+  const on=()=>{keys['t_'+k]=true};
+  const off=()=>{keys['t_'+k]=false};
+  b.addEventListener('touchstart',e=>{e.preventDefault();on()},{passive:false});
+  b.addEventListener('touchend',e=>{e.preventDefault();off()},{passive:false});
+  b.addEventListener('touchcancel',off);
+});
+
+function isKey(action){
+  switch(action){
+    case'left':return keys.ArrowLeft||keys.KeyA||keys.t_left;
+    case'right':return keys.ArrowRight||keys.KeyD||keys.t_right;
+    case'thrust':return keys.ArrowUp||keys.KeyW||keys.t_thrust;
+    case'fire':return keys.Space||keys.t_fire;
+  }
+}
+
+// --- Entities ---
+function makeShip(){return{x:W/2,y:H/2,a:-Math.PI/2,vx:0,vy:0,r:15,fireCd:0,invuln:120,thrustOn:false}}
+
+function makeAsteroid(x,y,size){
+  const r=size===3?40:size===2?22:12;
+  const speed=(1.2+wave*0.15)*(4-size)*0.4;
+  const a=Math.random()*TAU;
+  const verts=[];
+  const n=8+Math.floor(Math.random()*5);
+  for(let i=0;i<n;i++){const ang=TAU*i/n;verts.push(r*(0.7+Math.random()*0.3));}
+  return{x,y,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed,r,size,verts,n,rot:Math.random()*TAU,rotV:(Math.random()-0.5)*0.02};
+}
+
+function spawnWave(){
+  wave++;
+  waveEl.textContent='WAVE '+wave;
+  const count=3+wave;
+  for(let i=0;i<count;i++){
+    let x,y;
+    do{x=Math.random()*W;y=Math.random()*H}while(Math.hypot(x-ship.x,y-ship.y)<150);
+    asteroids.push(makeAsteroid(x,y,3));
+  }
+}
+
+function spawnParticles(x,y,color,count){
+  for(let i=0;i<count;i++){
+    const a=Math.random()*TAU,s=Math.random()*3+1;
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:30+Math.random()*30,maxLife:60,color});
+  }
+}
+
+// --- Game Loop ---
+function initGame(){
+  ship=makeShip();asteroids=[];bullets=[];particles=[];score=0;lives=3;wave=0;gameOver=false;shakeTimer=0;shakeMag=0;
+  spawnWave();updateHUD();
+}
+
+function updateHUD(){
+  scoreEl.textContent=score;
+  livesEl.textContent='♦'.repeat(lives);
+}
+
+let lastFire=0;
+function update(){
+  if(gameOver)return;
+  // Ship rotation
+  if(isKey('left'))ship.a-=0.06;
+  if(isKey('right'))ship.a+=0.06;
+  // Thrust
+  ship.thrustOn=isKey('thrust');
+  if(ship.thrustOn){ship.vx+=Math.cos(ship.a)*0.12;ship.vy+=Math.sin(ship.a)*0.12}
+  // Friction
+  ship.vx*=0.99;ship.vy*=0.99;
+  // Clamp speed
+  const spd=Math.hypot(ship.vx,ship.vy);if(spd>8){ship.vx*=8/spd;ship.vy*=8/spd}
+  ship.x+=ship.vx;ship.y+=ship.vy;
+  wrap(ship);
+  if(ship.invuln>0)ship.invuln--;
+  // Fire
+  if(ship.fireCd>0)ship.fireCd--;
+  if(isKey('fire')&&ship.fireCd<=0){
+    bullets.push({x:ship.x+Math.cos(ship.a)*18,y:ship.y+Math.sin(ship.a)*18,vx:Math.cos(ship.a)*7,vy:Math.sin(ship.a)*7,life:55});
+    ship.fireCd=10;
+  }
+  // Bullets
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i];b.x+=b.vx;b.y+=b.vy;b.life--;
+    if(b.life<=0){bullets.splice(i,1);continue}
+    wrap(b);
+  }
+  // Asteroids
+  for(const a of asteroids){a.x+=a.vx;a.y+=a.vy;a.rot+=a.rotV;wrap(a)}
+  // Bullet-asteroid collision
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i];
+    for(let j=asteroids.length-1;j>=0;j--){
+      const a=asteroids[j];
+      if(Math.hypot(b.x-a.x,b.y-a.y)<a.r){
+        bullets.splice(i,1);
+        asteroids.splice(j,1);
+        const pts=a.size===1?100:a.size===2?50:20;
+        score+=pts;
+        const colors=['#0ff','#0f0','#f0f'];
+        spawnParticles(a.x,a.y,colors[a.size-1],12+a.size*4);
+        if(a.size>1){
+          asteroids.push(makeAsteroid(a.x,a.y,a.size-1));
+          asteroids.push(makeAsteroid(a.x,a.y,a.size-1));
+        }
+        updateHUD();
+        break;
+      }
+    }
+  }
+  // Ship-asteroid collision
+  if(ship.invuln<=0){
+    for(let j=asteroids.length-1;j>=0;j--){
+      const a=asteroids[j];
+      if(Math.hypot(ship.x-a.x,ship.y-a.y)<a.r+ship.r*0.6){
+        lives--;shakeTimer=20;shakeMag=12;
+        spawnParticles(ship.x,ship.y,'#f44',25);
+        updateHUD();
+        if(lives<=0){gameOver=true;showOverlay('GAME OVER','Score: '+score);return}
+        ship.x=W/2;ship.y=H/2;ship.vx=0;ship.vy=0;ship.invuln=120;
+        break;
+      }
+    }
+  }
+  // Particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vx*=0.97;p.vy*=0.97;p.life--;
+    if(p.life<=0)particles.splice(i,1);
+  }
+  // Next wave
+  if(asteroids.length===0)spawnWave();
+  // Shake decay
+  if(shakeTimer>0)shakeTimer--;
+}
+
+function wrap(o){
+  const m=50;
+  if(o.x<-m)o.x=W+m;if(o.x>W+m)o.x=-m;
+  if(o.y<-m)o.y=H+m;if(o.y>H+m)o.y=-m;
+}
+
+// --- Rendering ---
+function draw(){
+  ctx.save();
+  if(shakeTimer>0){
+    const s=shakeMag*(shakeTimer/20);
+    ctx.translate((Math.random()-0.5)*s,(Math.random()-0.5)*s);
+  }
+  ctx.clearRect(-50,-50,W+100,H+100);
+
+  // Stars (static bg)
+  // Draw ship
+  if(!gameOver){
+    const blink=ship.invuln>0&&Math.floor(ship.invuln/4)%2;
+    if(!blink){
+      ctx.save();ctx.translate(ship.x,ship.y);ctx.rotate(ship.a);
+      ctx.strokeStyle='#0ff';ctx.lineWidth=2;ctx.shadowColor='#0ff';ctx.shadowBlur=12;
+      ctx.beginPath();ctx.moveTo(18,0);ctx.lineTo(-12,10);ctx.lineTo(-7,0);ctx.lineTo(-12,-10);ctx.closePath();ctx.stroke();
+      // Thrust flame
+      if(ship.thrustOn){
+        ctx.strokeStyle='#f80';ctx.shadowColor='#f80';ctx.shadowBlur=16;
+        ctx.beginPath();ctx.moveTo(-7,5);ctx.lineTo(-18-Math.random()*8,0);ctx.lineTo(-7,-5);ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Asteroids
+  ctx.strokeStyle='#0f8';ctx.lineWidth=1.5;ctx.shadowColor='#0f8';ctx.shadowBlur=10;
+  for(const a of asteroids){
+    ctx.save();ctx.translate(a.x,a.y);ctx.rotate(a.rot);
+    ctx.beginPath();
+    for(let i=0;i<=a.n;i++){
+      const idx=i%a.n,ang=TAU*idx/a.n;
+      const r=a.verts[idx];
+      const px=Math.cos(ang)*r,py=Math.sin(ang)*r;
+      i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+    }
+    ctx.closePath();ctx.stroke();ctx.restore();
+  }
+
+  // Bullets
+  ctx.shadowColor='#f0f';ctx.shadowBlur=14;
+  for(const b of bullets){
+    ctx.fillStyle='#f0f';
+    ctx.beginPath();ctx.arc(b.x,b.y,2.5,0,TAU);ctx.fill();
+  }
+
+  // Particles
+  ctx.shadowBlur=6;
+  for(const p of particles){
+    const alpha=p.life/p.maxLife;
+    ctx.globalAlpha=alpha;ctx.fillStyle=p.color;ctx.shadowColor=p.color;
+    ctx.beginPath();ctx.arc(p.x,p.y,2*alpha,0,TAU);ctx.fill();
+  }
+  ctx.globalAlpha=1;ctx.shadowBlur=0;
+  ctx.restore();
+}
+
+function showOverlay(title,sub){
+  overlay.classList.remove('hidden');
+  overlay.querySelector('h1').textContent=title;
+  overlay.querySelector('.sub').textContent=sub||'';
+  startBtn.textContent=gameOver?'RESTART':'START';
+}
+
+startBtn.addEventListener('click',()=>{
+  overlay.classList.add('hidden');
+  gameStarted=true;initGame();
+});
+
+// Start screen stars
+let bgStars=[];for(let i=0;i<80;i++)bgStars.push({x:Math.random()*2000,y:Math.random()*2000,s:Math.random()*1.5+0.5});
+
+function loop(){
+  requestAnimationFrame(loop);
+  if(gameStarted&&!gameOver)update();
+  draw();
+  // Draw bg stars
+  ctx.fillStyle='#fff3';
+  for(const s of bgStars){ctx.fillRect(s.x%W,s.y%H,s.s,s.s)}
+}
+loop();
+</script>
+</body>
+</html>

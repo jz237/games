@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html><head><title>Neon Harbor — Tests</title>
+<style>body{background:#111;color:#eee;font:14px monospace;padding:20px}.pass{color:#4f8}
+.fail{color:#f44}h2{color:#0af;margin-top:20px}</style></head><body>
+<h1>Neon Harbor Unit Tests</h1><div id="results"></div>
+<script>
+const log = document.getElementById('results');
+let pass=0, fail=0;
+function test(name, fn) {
+  try { fn(); log.innerHTML += `<div class="pass">✓ ${name}</div>`; pass++; }
+  catch(e) { log.innerHTML += `<div class="fail">✗ ${name}: ${e.message}</div>`; fail++; }
+}
+function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
+
+// Scene structure tests
+test('Scene01 exists and has required fields', () => {
+  assert(typeof Scene01 === 'object');
+  assert(Scene01.name === 'The Docks');
+  assert(Scene01.width === 2400);
+  assert(Array.isArray(Scene01.layers));
+  assert(Array.isArray(Scene01.interactions));
+});
+
+test('Scene01 has player start position', () => {
+  assert(Scene01.playerStart.x === 100);
+  assert(Scene01.playerStart.y === 0);
+});
+
+test('Scene01 interactions have valid types', () => {
+  const validTypes = ['dialogue', 'shard', 'signature'];
+  for (const i of Scene01.interactions) {
+    assert(validTypes.includes(i.type), `Invalid type: ${i.type}`);
+    assert(typeof i.id === 'string', `Missing id`);
+    assert(typeof i.x === 'number', `Missing x`);
+  }
+});
+
+test('Dialogue nodes have speaker and text', () => {
+  for (const i of Scene01.interactions) {
+    if (i.type !== 'dialogue') continue;
+    for (const node of i.dialogue) {
+      assert(typeof node.speaker === 'string');
+      assert(typeof node.text === 'string');
+      assert(Array.isArray(node.choices));
+    }
+  }
+});
+
+test('Choice "next" indices are in range', () => {
+  for (const i of Scene01.interactions) {
+    if (i.type !== 'dialogue') continue;
+    const len = i.dialogue.length;
+    for (const node of i.dialogue) {
+      for (const ch of node.choices) {
+        if (ch.next != null) assert(ch.next < len, `next=${ch.next} >= len=${len}`);
+      }
+    }
+  }
+});
+
+test('Shard/signature interactions have name field', () => {
+  for (const i of Scene01.interactions) {
+    if (i.type === 'shard' || i.type === 'signature') {
+      assert(typeof i.name === 'string', `Missing name on ${i.id}`);
+    }
+  }
+});
+
+test('Scene01 has at least 3 parallax layers', () => {
+  assert(Scene01.layers.length >= 3);
+});
+
+test('Each layer has a render function', () => {
+  for (const l of Scene01.layers) assert(typeof l.render === 'function');
+});
+
+// Summary
+log.innerHTML += `<h2>Results: ${pass} passed, ${fail} failed</h2>`;
+</script>
+<script src="scenes/scene01.js"></script>
+</body></html>
