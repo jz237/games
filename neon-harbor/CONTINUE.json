@@ -1,26 +1,13 @@
 {
   "slug": "neon-harbor",
-  "status": "in-progress",
-  "current_milestone": "Milestone C - Loom UI + memory vignettes",
-  "completed": [
-    "Milestone A: engine.js with parallax, water shader, player movement, dialogue system",
-    "Milestone B: Scene01 (The Docks) with 2 shards, 2 signatures, 2 NPCs, exit zone",
-    "Milestone B: Scene02 (Fish Market) with Mara NPC, Fish Vendor, 2 shards, 2 signatures, rain, exit zone",
-    "Milestone B: Scene transition system (exit zones + scene registry)",
-    "Milestone B: Resize handler for interaction Y positions",
-    "Milestone B: Save/Load on F5/F9",
-    "20 unit tests covering both scenes"
-  ],
   "next_steps": [
-    "Build Loom UI (inventory screen showing collected shards + signatures)",
-    "Implement memory vignette system (combine shard + signature to unlock short narrative scenes)",
-    "Add scene transition animation (fade to black)",
-    "Build Scene03 (The Tunnels / Loom Chamber) as the destination for the Loom quest",
-    "Add ambient particle effects (rain in docks, steam in fish market)",
-    "Add sound design hooks (Web Audio API stubs for when audio is added)",
-    "Polish NPC sprites (more detail, idle animations)",
-    "Add mini-map or scene indicator to HUD"
+    "Build ending sequence: when all 8 memories are woven, trigger a final cinematic dialogue at the Loom",
+    "Add 'third way' ending branch if player set questioned_restoration + third_way flags",
+    "Polish scene transitions with particle effects during fade",
+    "Add ambient particle systems to each scene (fireflies, embers, etc.)",
+    "Final QA pass and set QA_APPROVED=true"
   ],
-  "QA_APPROVED": false,
-  "timestamp": "2026-03-08T07:36:00-05:00"
+  "status": "in-progress",
+  "current_milestone": "Milestone E - endings + polish",
+  "timestamp": "2026-03-08T17:36:00-05:00"
 }

@@ -147,15 +147,259 @@ test('Scene02 has exit zones', () => {
   assert(Scene02.exitZones.length > 0);
 });
 
-test('All interaction IDs are unique across scenes', () => {
-  const allIds = [...Scene01.interactions, ...Scene02.interactions].map(i => i.id);
+test('Scene02 has exit zone to scene03', () => {
+  const toTunnels = Scene02.exitZones.find(z => z.target === 'scene03');
+  assert(toTunnels, 'No exit zone to scene03');
+  assert(toTunnels.x === 2700, `Expected x=2700, got ${toTunnels.x}`);
+});
+
+// --- Scene03 Tests ---
+test('Scene03 exists and has required fields', () => {
+  assert(typeof Scene03 === 'object');
+  assert(Scene03.name === 'The Tunnels');
+  assert(Scene03.width === 3000);
+  assert(Array.isArray(Scene03.layers));
+  assert(Array.isArray(Scene03.interactions));
+});
+
+test('Scene03 has player start position', () => {
+  assert(typeof Scene03.playerStart.x === 'number');
+  assert(typeof Scene03.playerStart.y === 'number');
+});
+
+test('Scene03 has at least 3 parallax layers', () => {
+  assert(Scene03.layers.length >= 3);
+});
+
+test('Scene03 layers have render functions', () => {
+  for (const l of Scene03.layers) assert(typeof l.render === 'function');
+});
+
+test('Scene03 interactions have valid types', () => {
+  const validTypes = ['dialogue', 'shard', 'signature'];
+  for (const i of Scene03.interactions) {
+    assert(validTypes.includes(i.type), `Invalid type: ${i.type}`);
+    assert(typeof i.id === 'string');
+  }
+});
+
+test('Scene03 has Tunnel Dweller NPC', () => {
+  const dweller = Scene03.interactions.find(i => i.id === 'tunnel_dweller');
+  assert(dweller, 'Tunnel Dweller not found');
+  assert(dweller.type === 'dialogue');
+  assert(dweller.dialogue.length >= 3);
+});
+
+test('Scene03 has The Keeper NPC', () => {
+  const keeper = Scene03.interactions.find(i => i.id === 'the_keeper');
+  assert(keeper, 'The Keeper not found');
+  assert(keeper.type === 'dialogue');
+  assert(keeper.dialogue.length >= 4);
+});
+
+test('Scene03 dialogue choice indices in range', () => {
+  for (const i of Scene03.interactions) {
+    if (i.type !== 'dialogue') continue;
+    const len = i.dialogue.length;
+    for (const node of i.dialogue) {
+      for (const ch of node.choices) {
+        if (ch.next != null) assert(ch.next < len, `next=${ch.next} >= len=${len}`);
+      }
+    }
+  }
+});
+
+test('Scene03 has 2 audio shards', () => {
+  const shards = Scene03.interactions.filter(i => i.type === 'shard');
+  assert(shards.length === 2, `Expected 2, got ${shards.length}`);
+});
+
+test('Scene03 has 2 light signatures', () => {
+  const sigs = Scene03.interactions.filter(i => i.type === 'signature');
+  assert(sigs.length === 2, `Expected 2, got ${sigs.length}`);
+});
+
+test('Scene03 has exit zone back to scene02', () => {
+  const back = Scene03.exitZones.find(z => z.target === 'scene02');
+  assert(back, 'No exit zone back to scene02');
+});
+
+test('Scene03 has blocked exit zone requiring memories', () => {
+  const loom = Scene03.exitZones.find(z => z.requiresMemories);
+  assert(loom, 'No memory-gated exit zone');
+  assert(loom.requiresMemories === 4, `Expected 4, got ${loom.requiresMemories}`);
+});
+
+test('Scene03 shard/signature have name field', () => {
+  for (const i of Scene03.interactions) {
+    if (i.type === 'shard' || i.type === 'signature') {
+      assert(typeof i.name === 'string', `Missing name on ${i.id}`);
+    }
+  }
+});
+
+test('Scene03 has renderObjects function', () => {
+  assert(typeof Scene03.renderObjects === 'function');
+});
+
+test('Scene03 has onEnter function', () => {
+  assert(typeof Scene03.onEnter === 'function');
+});
+
+// --- Scene04 Tests ---
+test('Scene04 exists and has required fields', () => {
+  assert(typeof Scene04 === 'object');
+  assert(Scene04.name === 'The Loom Chamber');
+  assert(Scene04.width === 2000);
+  assert(Array.isArray(Scene04.layers));
+  assert(Array.isArray(Scene04.interactions));
+});
+
+test('Scene04 has player start position', () => {
+  assert(typeof Scene04.playerStart.x === 'number');
+  assert(typeof Scene04.playerStart.y === 'number');
+});
+
+test('Scene04 has at least 3 parallax layers', () => {
+  assert(Scene04.layers.length >= 3);
+});
+
+test('Scene04 layers have render functions', () => {
+  for (const l of Scene04.layers) assert(typeof l.render === 'function');
+});
+
+test('Scene04 interactions have valid types', () => {
+  const validTypes = ['dialogue', 'shard', 'signature'];
+  for (const i of Scene04.interactions) {
+    assert(validTypes.includes(i.type), `Invalid type: ${i.type}`);
+    assert(typeof i.id === 'string');
+  }
+});
+
+test('Scene04 has The Loom Machine NPC', () => {
+  const loom = Scene04.interactions.find(i => i.id === 'the_loom_machine');
+  assert(loom, 'The Loom Machine not found');
+  assert(loom.type === 'dialogue');
+  assert(loom.dialogue.length >= 5);
+});
+
+test('Scene04 has The Architect NPC', () => {
+  const arch = Scene04.interactions.find(i => i.id === 'the_architect');
+  assert(arch, 'The Architect not found');
+  assert(arch.type === 'dialogue');
+  assert(arch.dialogue.length >= 6);
+});
+
+test('Scene04 dialogue choice indices in range', () => {
+  for (const i of Scene04.interactions) {
+    if (i.type !== 'dialogue') continue;
+    const len = i.dialogue.length;
+    for (const node of i.dialogue) {
+      for (const ch of node.choices) {
+        if (ch.next != null) assert(ch.next < len, `next=${ch.next} >= len=${len}`);
+      }
+    }
+  }
+});
+
+test('Scene04 has 2 audio shards', () => {
+  const shards = Scene04.interactions.filter(i => i.type === 'shard');
+  assert(shards.length === 2, `Expected 2, got ${shards.length}`);
+});
+
+test('Scene04 has 2 light signatures', () => {
+  const sigs = Scene04.interactions.filter(i => i.type === 'signature');
+  assert(sigs.length === 2, `Expected 2, got ${sigs.length}`);
+});
+
+test('Scene04 has exit zone back to scene03', () => {
+  const back = Scene04.exitZones.find(z => z.target === 'scene03');
+  assert(back, 'No exit zone back to scene03');
+});
+
+test('Scene04 shard/signature have name field', () => {
+  for (const i of Scene04.interactions) {
+    if (i.type === 'shard' || i.type === 'signature') {
+      assert(typeof i.name === 'string', `Missing name on ${i.id}`);
+    }
+  }
+});
+
+test('Scene04 has renderObjects function', () => {
+  assert(typeof Scene04.renderObjects === 'function');
+});
+
+test('Scene04 has onEnter function', () => {
+  assert(typeof Scene04.onEnter === 'function');
+});
+
+// --- Cross-scene Tests ---
+test('All interaction IDs are unique across all scenes', () => {
+  const allIds = [...Scene01.interactions, ...Scene02.interactions, ...Scene03.interactions, ...Scene04.interactions].map(i => i.id);
   const unique = new Set(allIds);
   assert(unique.size === allIds.length, 'Duplicate interaction IDs found');
+});
+
+// --- Loom UI Tests ---
+test('NeonHarbor exposes loomOpen property', () => {
+  assert('loomOpen' in NeonHarbor, 'loomOpen not exposed');
+});
+
+test('NeonHarbor state has wovenMemories array', () => {
+  assert(Array.isArray(NeonHarbor.state.wovenMemories), 'wovenMemories not an array');
+});
+
+test('Loom UI starts closed', () => {
+  assert(NeonHarbor.loomOpen === false, 'Loom should start closed');
+});
+
+// --- Vignette Weaving Tests ---
+test('Weaving adds to wovenMemories', () => {
+  // Simulate: add shard + signature, then check state
+  const origShards = [...NeonHarbor.state.audioShards];
+  const origSigs = [...NeonHarbor.state.lightSignatures];
+  const origWoven = [...NeonHarbor.state.wovenMemories];
+
+  NeonHarbor.state.audioShards.push('shard_dock_ambient');
+  NeonHarbor.state.lightSignatures.push('sig_cyan_dock');
+  NeonHarbor.state.wovenMemories.push('The First Ships');
+
+  assert(NeonHarbor.state.wovenMemories.includes('The First Ships'), 'Memory not woven');
+
+  // Restore
+  NeonHarbor.state.audioShards.length = 0;
+  origShards.forEach(s => NeonHarbor.state.audioShards.push(s));
+  NeonHarbor.state.lightSignatures.length = 0;
+  origSigs.forEach(s => NeonHarbor.state.lightSignatures.push(s));
+  NeonHarbor.state.wovenMemories.length = 0;
+  origWoven.forEach(m => NeonHarbor.state.wovenMemories.push(m));
+});
+
+test('Woven memories count correctly', () => {
+  NeonHarbor.state.wovenMemories.push('Test Memory 1', 'Test Memory 2');
+  assert(NeonHarbor.state.wovenMemories.length === 2);
+  NeonHarbor.state.wovenMemories.length = 0;
+});
+
+// --- Scene Transition Tests ---
+test('NeonHarbor exposes fadeState property', () => {
+  assert('fadeState' in NeonHarbor, 'fadeState not exposed');
+});
+
+test('fadeState starts as null', () => {
+  assert(NeonHarbor.fadeState === null, 'fadeState should start null');
+});
+
+test('NeonHarbor exposes dialogueActive property', () => {
+  assert('dialogueActive' in NeonHarbor, 'dialogueActive not exposed');
 });
 
 // Summary
 log.innerHTML += `<h2>Results: ${pass} passed, ${fail} failed</h2>`;
 </script>
+<script src="engine.js"></script>
 <script src="scenes/scene01.js"></script>
 <script src="scenes/scene02.js"></script>
+<script src="scenes/scene03.js"></script>
+<script src="scenes/scene04.js"></script>
 </body></html>

@@ -234,6 +234,7 @@ const Scene02 = {
 
   exitZones: [
     { x: -20, width: 80, target: 'scene01', playerStartX: 2200 }, // back to docks
+    { x: 2700, width: 100, target: 'scene03', playerStartX: 100 }, // to tunnels
   ],
 
   renderObjects(ctx, W, H, camX, time, state) {

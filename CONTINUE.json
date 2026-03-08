@@ -1,13 +1,13 @@
 {
   "slug": "neon-harbor",
   "next_steps": [
-    "Complete Milestone B: add more collectibles, build Scene02 (Fish Market)",
-    "Implement scene transitions (exit zones)",
-    "Start Milestone C: Loom UI for combining shards into memory vignettes",
-    "Add save/load keyboard shortcuts",
-    "Fix resize handling for interaction positions"
+    "Build ending sequence: when all 8 memories are woven, trigger a final cinematic dialogue at the Loom",
+    "Add 'third way' ending branch if player set questioned_restoration + third_way flags",
+    "Polish scene transitions with particle effects during fade",
+    "Add ambient particle systems to each scene (fireflies, embers, etc.)",
+    "Final QA pass and set QA_APPROVED=true"
   ],
   "status": "in-progress",
-  "current_milestone": "Milestone B - collection system + scene transitions",
-  "timestamp": "2026-03-08T01:36:00-05:00"
+  "current_milestone": "Milestone E - endings + polish",
+  "timestamp": "2026-03-08T17:36:00-05:00"
 }
