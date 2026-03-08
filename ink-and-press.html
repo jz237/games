@@ -1,3 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Ink & Press</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#2c2218;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+#game{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
+canvas{display:block;max-width:100vw;max-height:100vh;image-rendering:auto}
+  </style>
+</head>
+<body>
+  <div id="game">
+    <canvas id="canvas" width="960" height="600"></canvas>
+    <div id="ui">
+      <button id="startBtn">Start Tutorial</button>
+      <div id="score">Score: 0</div>
+    </div>
+  </div>
+  <script>
 // Ink & Press — Complete letterpress printing game
 (function(){
 'use strict';
@@ -804,3 +826,6 @@ window.__INK_PRESS = {
 
 logTest('game_loaded');
 })();
+  </script>
+</body>
+</html>
