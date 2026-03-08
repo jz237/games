@@ -26,9 +26,7 @@ canvas{display:block;width:100%;height:100%;position:fixed;top:0;left:0}
 #tutorial .ctrl .icon{font-size:22px;margin-right:6px}
 #tutorial button{margin-top:28px;background:none;border:2px solid #0ff;color:#0ff;font-family:inherit;font-size:18px;padding:12px 36px;border-radius:8px;text-shadow:0 0 8px #0ff;box-shadow:0 0 12px #0ff44}
 #tutorial button:active{background:#0ff33}
-.zone-hint{position:fixed;bottom:0;left:0;width:100%;display:flex;pointer-events:none;z-index:5;opacity:0;transition:opacity 0.5s}
-.zone-hint.show{opacity:1}
-.zone-hint div{flex:1;height:60px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff4;border-top:1px solid #fff1}
+
 </style>
 </head>
 <body>
@@ -36,29 +34,22 @@ canvas{display:block;width:100%;height:100%;position:fixed;top:0;left:0}
 
 <div id="tutorial">
 <h2>🚀 CONTROLS</h2>
-<div class="ctrl"><span class="icon">👈</span> Hold <em>LEFT side</em> → Rotate left</div>
-<div class="ctrl"><span class="icon">👉</span> Hold <em>RIGHT side</em> → Rotate right</div>
-<div class="ctrl"><span class="icon">⬆️</span> <em>Swipe up</em> → Thrust</div>
-<div class="ctrl"><span class="icon">🔥</span> Hold <em>BOTTOM center</em> → Continuous thrust</div>
-<div class="ctrl"><span class="icon">💥</span> <em>Tap</em> anywhere → Shoot</div>
-<div class="ctrl" style="margin-top:12px;font-size:13px;color:#f0f">Multi-touch supported!</div>
+<div class="ctrl"><span class="icon">👆</span> <em>Hold anywhere</em> → Fly toward that point</div>
+<div class="ctrl"><span class="icon">💥</span> <em>Tap</em> → Shoot</div>
+<div class="ctrl" style="margin-top:12px;font-size:13px;color:#f0f">Hold one finger to fly, tap with another to shoot!</div>
 <button id="tutorialBtn">GOT IT</button>
 </div>
 
 <div id="overlay" class="hidden"><h1>ASTEROIDS</h1><div class="sub">NEON VECTOR EDITION</div><button id="startBtn">START</button></div>
 <canvas id="c"></canvas>
-<div class="zone-hint" id="zoneHint">
-<div>◀ ROTATE</div>
-<div>▲ THRUST</div>
-<div>ROTATE ▶</div>
-</div>
+
 
 <script>
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
 const scoreEl=document.getElementById('score'),livesEl=document.getElementById('lives'),waveEl=document.getElementById('wave');
 const overlay=document.getElementById('overlay'),startBtn=document.getElementById('startBtn');
 const tutorial=document.getElementById('tutorial'),tutorialBtn=document.getElementById('tutorialBtn');
-const zoneHint=document.getElementById('zoneHint');
+
 
 // Prevent all default touch behavior
 document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
@@ -78,17 +69,18 @@ window.addEventListener('resize',resize);resize();
 window.addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Space')e.preventDefault()});
 window.addEventListener('keyup',e=>{keys[e.code]=false});
 
-// --- Touch Controls ---
+// --- Touch Controls (hold to steer+thrust, tap to shoot) ---
 const touches={};// track active touches
-let swipeThrust=0;// frames of thrust from swipe
+let touchThrust=false;// is any finger held down for thrust?
+let touchTargetA=null;// target angle from touch point
 
 canvas.addEventListener('touchstart',e=>{
   e.preventDefault();
   if(!gameStarted||gameOver)return;
   for(const t of e.changedTouches){
-    const x=t.clientX,y=t.clientY;
-    touches[t.identifier]={x,y,startX:x,startY:y,startTime:performance.now(),moved:false,action:classifyZone(x,y)};
+    touches[t.identifier]={x:t.clientX,y:t.clientY,startTime:performance.now(),moved:false};
   }
+  updateTouchTarget();
 },{passive:false});
 
 canvas.addEventListener('touchmove',e=>{
@@ -96,16 +88,11 @@ canvas.addEventListener('touchmove',e=>{
   for(const t of e.changedTouches){
     const info=touches[t.identifier];
     if(!info)continue;
-    const dx=t.clientX-info.startX,dy=t.clientY-info.startY;
-    if(Math.abs(dx)>10||Math.abs(dy)>10)info.moved=true;
-    // Detect swipe up for thrust
-    if(dy<-40&&!info.swiped){
-      info.swiped=true;
-      swipeThrust=25;// thrust for ~25 frames
-    }
+    const dx=t.clientX-info.x,dy=t.clientY-info.y;
+    if(Math.abs(t.clientX-info.x)>8||Math.abs(t.clientY-info.y)>8)info.moved=true;
     info.x=t.clientX;info.y=t.clientY;
-    info.action=classifyZone(t.clientX,t.clientY);
   }
+  updateTouchTarget();
 },{passive:false});
 
 canvas.addEventListener('touchend',e=>{
@@ -113,50 +100,55 @@ canvas.addEventListener('touchend',e=>{
   for(const t of e.changedTouches){
     const info=touches[t.identifier];
     if(info){
-      // Tap to shoot: short duration, didn't move
       const dt=performance.now()-info.startTime;
-      if(!info.moved&&dt<300){
+      if(dt<200&&!info.moved){
+        // Tap = shoot
         keys._tapFire=true;
         setTimeout(()=>{keys._tapFire=false},50);
       }
       delete touches[t.identifier];
     }
   }
+  updateTouchTarget();
 },{passive:false});
 
 canvas.addEventListener('touchcancel',e=>{
   for(const t of e.changedTouches)delete touches[t.identifier];
+  updateTouchTarget();
 },{passive:false});
 
-function classifyZone(x,y){
-  const thirdW=W/3;
-  const bottomZone=H*0.75;
-  // Bottom center = thrust zone
-  if(y>bottomZone&&x>thirdW&&x<thirdW*2)return'thrust';
-  // Left side = rotate left
-  if(x<W/2)return'left';
-  // Right side = rotate right
-  return'right';
-}
-
-function getTouchState(){
-  let left=false,right=false,thrust=false;
-  for(const id in touches){
+function updateTouchTarget(){
+  const ids=Object.keys(touches);
+  // Find the oldest held touch (primary finger for steering)
+  let oldest=null,oldestTime=Infinity;
+  for(const id of ids){
     const t=touches[id];
-    if(t.action==='left')left=true;
-    if(t.action==='right')right=true;
-    if(t.action==='thrust')thrust=true;
+    if(performance.now()-t.startTime>=150||t.moved){
+      // This is a hold, not a tap candidate — use it for steering
+      if(t.startTime<oldestTime){oldest=t;oldestTime=t.startTime;}
+    }
   }
-  if(swipeThrust>0){thrust=true;swipeThrust--}
-  return{left,right,thrust};
+  // If no definitive hold yet, use any active touch for steering (responsive feel)
+  if(!oldest&&ids.length>0){
+    for(const id of ids){
+      const t=touches[id];
+      if(t.startTime<oldestTime){oldest=t;oldestTime=t.startTime;}
+    }
+  }
+  if(oldest&&ship){
+    touchTargetA=Math.atan2(oldest.y-ship.y,oldest.x-ship.x);
+    touchThrust=ids.length>0;
+  }else{
+    touchThrust=false;
+    touchTargetA=null;
+  }
 }
 
 function isKey(action){
-  const ts=getTouchState();
   switch(action){
-    case'left':return keys.ArrowLeft||keys.KeyA||ts.left;
-    case'right':return keys.ArrowRight||keys.KeyD||ts.right;
-    case'thrust':return keys.ArrowUp||keys.KeyW||ts.thrust;
+    case'left':return keys.ArrowLeft||keys.KeyA;
+    case'right':return keys.ArrowRight||keys.KeyD;
+    case'thrust':return keys.ArrowUp||keys.KeyW||touchThrust;
     case'fire':return keys.Space||keys._tapFire;
   }
 }
@@ -196,9 +188,7 @@ function spawnParticles(x,y,color,count){
 function initGame(){
   ship=makeShip();asteroids=[];bullets=[];particles=[];score=0;lives=3;wave=0;gameOver=false;shakeTimer=0;shakeMag=0;
   spawnWave();updateHUD();
-  // Show zone hints briefly
-  zoneHint.classList.add('show');
-  setTimeout(()=>zoneHint.classList.remove('show'),3000);
+
 }
 
 function updateHUD(){
@@ -210,6 +200,17 @@ function update(){
   if(gameOver)return;
   if(isKey('left'))ship.a-=0.06;
   if(isKey('right'))ship.a+=0.06;
+  // Smooth rotation toward touch target
+  if(touchTargetA!==null&&touchThrust){
+    updateTouchTarget();// refresh angle with current ship pos
+    let diff=touchTargetA-ship.a;
+    // Normalize to [-PI, PI]
+    while(diff>Math.PI)diff-=TAU;
+    while(diff<-Math.PI)diff+=TAU;
+    const rotSpeed=0.08;
+    if(Math.abs(diff)>rotSpeed)ship.a+=Math.sign(diff)*rotSpeed;
+    else ship.a=touchTargetA;
+  }
   ship.thrustOn=isKey('thrust');
   if(ship.thrustOn){ship.vx+=Math.cos(ship.a)*0.12;ship.vy+=Math.sin(ship.a)*0.12}
   ship.vx*=0.99;ship.vy*=0.99;
@@ -308,14 +309,7 @@ function draw(){
     ctx.beginPath();ctx.arc(p.x,p.y,2*alpha,0,TAU);ctx.fill();
   }
   ctx.globalAlpha=1;ctx.shadowBlur=0;ctx.restore();
-  // Draw touch zones faintly when touching
-  if(Object.keys(touches).length>0){
-    ctx.save();ctx.globalAlpha=0.06;
-    ctx.fillStyle='#0ff';ctx.fillRect(0,0,W/2,H);
-    ctx.fillStyle='#f0f';ctx.fillRect(W/2,0,W/2,H);
-    ctx.fillStyle='#0f0';ctx.fillRect(W/3,H*0.75,W/3,H*0.25);
-    ctx.restore();
-  }
+
 }
 
 function showOverlay(title,sub){
