@@ -22,31 +22,28 @@ body::before {
   position: fixed; left: 0; right: 0; pointer-events: none;
 }
 #titleBar {
-  top: 0; padding: max(10px, env(safe-area-inset-top)) 18px 10px;
-  display: flex; justify-content: space-between; align-items: center; gap: 12px;
-  color: #d7f4ff; text-transform: uppercase; letter-spacing: .14em; font-size: 12px;
-  text-shadow: 0 0 10px rgba(135,230,255,.45);
+  display: none;
 }
-.brand {
-  font-weight: 900; font-size: clamp(15px, 2vw, 20px);
-  color: #f7fbff;
-}
+.brand { display: none; }
 #hud {
-  top: 48px; padding: 0 18px; display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px;
+  top: 0; padding: max(4px, env(safe-area-inset-top)) 12px 0;
+  display: flex; align-items: center; gap: 14px; justify-content: center;
+  color: #d7f4ff; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(135,230,255,.4);
+  background: linear-gradient(180deg, rgba(4,10,20,.6) 0%, transparent 100%);
 }
 .panel {
-  background: linear-gradient(180deg, rgba(8,20,34,.7), rgba(6,12,24,.45));
-  border: 1px solid rgba(120,220,255,.24); border-radius: 14px; padding: 10px 12px;
-  box-shadow: inset 0 0 24px rgba(128,214,255,.08), 0 0 18px rgba(0,0,0,.35);
-  backdrop-filter: blur(6px);
+  background: none; border: none; border-radius: 0; padding: 0;
+  box-shadow: none; backdrop-filter: none;
+  display: flex; align-items: center; gap: 4px;
 }
-.panel .label { font-size: 10px; opacity: .7; text-transform: uppercase; letter-spacing: .16em; }
-.panel .value { font-size: clamp(16px, 2.1vw, 26px); font-weight: 800; margin-top: 2px; }
-#ammoBars { display: flex; gap: 6px; margin-top: 4px; }
-.ammoBase { flex: 1; min-width: 0; }
-.ammoLabel { font-size: 10px; opacity: .8; margin-bottom: 3px; }
-.ammoTrack { height: 10px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
-.ammoFill { height: 100%; width: 100%; border-radius: inherit; background: linear-gradient(90deg, #6bf8ff, #ffe66d, #ff8f5a); box-shadow: 0 0 14px rgba(255,220,120,.45); }
+.panel .label { font-size: 9px; opacity: .6; text-transform: uppercase; letter-spacing: .12em; }
+.panel .value { font-size: 12px; font-weight: 700; margin-top: 0; color: #fff; }
+#ammoBars { display: flex; gap: 3px; margin-top: 0; align-items: center; }
+.ammoBase { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; }
+.ammoLabel { font-size: 8px; opacity: .6; margin-bottom: 0; }
+.ammoTrack { height: 5px; width: 28px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+.ammoFill { height: 100%; width: 100%; border-radius: inherit; background: linear-gradient(90deg, #6bf8ff, #ffe66d, #ff8f5a); box-shadow: 0 0 6px rgba(255,220,120,.3); }
 #waveBanner, #comboBurst {
   top: 16%; text-align: center; font-weight: 900; text-transform: uppercase; letter-spacing: .16em;
   opacity: 0; transform: translateY(-14px) scale(.96); transition: .45s ease;
@@ -85,8 +82,7 @@ button:active { transform: translateY(1px) scale(.99); }
   bottom: max(10px, env(safe-area-inset-bottom)); text-align: center; color: rgba(230,245,255,.7); font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
 }
 @media (max-width: 720px) {
-  #hud { grid-template-columns: repeat(2, minmax(0,1fr)); top: 58px; }
-  .panel .value { font-size: 18px; }
+  #hud { gap: 10px; flex-wrap: wrap; }
 }
 </style>
 </head>
@@ -250,7 +246,27 @@ button:active { transform: translateY(1px) scale(.99); }
       state.skyline.push({ x, y: groundY, width, height, pieces, glow: Math.random() });
     }
     citySlots.forEach((slot, i) => {
-      state.cities.push({ id:i, x: margin + slotW*slot + slotW*0.5, y: groundY, alive:true, damage:0, rebuildGlow:0 });
+      const city = { id:i, x: margin + slotW*slot + slotW*0.5, y: groundY, alive:true, damage:0, rebuildGlow:0 };
+      // Generate detailed buildings for this city
+      const cx = city.x;
+      const buildings = [];
+      const numBuildings = 5 + Math.floor(Math.random()*4);
+      let bx = cx - 38;
+      const roofTypes = ['flat','flat','pointed','antenna','flat'];
+      for (let b = 0; b < numBuildings; b++) {
+        const bw = 8 + Math.floor(Math.random()*14);
+        const bh = 18 + Math.floor(Math.random()*42);
+        const shade = 16 + Math.floor(Math.random()*20);
+        const roofType = roofTypes[b % roofTypes.length];
+        buildings.push({
+          left: bx, right: bx + bw, top: groundY - bh, bot: groundY,
+          bodyColor: `rgb(${shade},${shade+4},${shade+14})`,
+          roofType
+        });
+        bx += bw + 1 + Math.floor(Math.random()*3);
+      }
+      generateCityWindows(city, buildings);
+      state.cities.push(city);
     });
     baseSlots.forEach((slot, i) => {
       state.bases.push({ id:i, x: margin + slotW*slot + slotW*0.5, y: groundY + 2, ammoMax: 10, ammo: 10, reloadPulse:0, alive:true });
@@ -538,48 +554,120 @@ button:active { transform: translateY(1px) scale(.99); }
     }
   }
 
+  // Pre-generate stable window patterns per city (called once in layoutGround)
+  function generateCityWindows(city, buildings) {
+    city._buildings = buildings;
+    city._windows = [];
+    for (const b of buildings) {
+      const wins = [];
+      const winW = 2, winH = 3, padX = 3, padY = 5;
+      for (let wy = b.top + 4; wy < b.bot - 3; wy += winH + padY) {
+        for (let wx = b.left + 3; wx < b.right - 3; wx += winW + padX) {
+          const litRoll = Math.random();
+          let color;
+          if (litRoll < 0.35) color = null; // dark
+          else if (litRoll < 0.7) color = `rgba(255,${210 + Math.floor(Math.random()*30)},${140 + Math.floor(Math.random()*40)},${0.4 + Math.random()*0.35})`; // warm yellow
+          else if (litRoll < 0.85) color = `rgba(${180 + Math.floor(Math.random()*40)},${210 + Math.floor(Math.random()*30)},255,${0.3 + Math.random()*0.3})`; // cool blue-white
+          else color = `rgba(255,${240 + Math.floor(Math.random()*15)},${200 + Math.floor(Math.random()*40)},${0.2 + Math.random()*0.2})`; // dim warm
+          wins.push({ x: wx, y: wy, w: winW, h: winH, color });
+        }
+      }
+      city._windows.push(wins);
+    }
+  }
+
   function drawGround(time) {
     const groundY = h * 0.84;
     const ground = ctx.createLinearGradient(0, groundY-40, 0, h);
     ground.addColorStop(0, 'rgba(35,20,32,0.9)'); ground.addColorStop(1, 'rgba(4,7,14,1)');
     ctx.fillStyle = ground; ctx.fillRect(0, groundY, w, h-groundY);
 
+    // Draw background skyline (non-interactive decoration)
     state.skyline.forEach((b,idx) => {
       ctx.save();
-      ctx.fillStyle = `rgba(${20 + idx*5},${25 + idx*2},${40 + idx*4},0.95)`;
+      const baseR = 18 + idx*4, baseG = 22 + idx*3, baseB = 36 + idx*5;
       for (const p of b.pieces) {
+        ctx.fillStyle = `rgba(${baseR},${baseG},${baseB},0.92)`;
         ctx.fillRect(p.x, b.y - p.h, p.w, p.h);
-        for (let wy = b.y - p.h + 8; wy < b.y - 8; wy += 12) {
-          for (let wx = p.x + 4; wx < p.x + p.w - 4; wx += 9) {
-            const lit = ((wx + wy + idx * 13) % 3) !== 0;
-            if (lit) {
-              ctx.fillStyle = `rgba(255, ${180 + (idx*11)%50}, ${100 + (idx*17)%90}, ${0.12 + 0.3*Math.sin(time*0.001 + wx)})`;
-              ctx.fillRect(wx, wy, 3, 5);
-            }
+        // subtle edge highlight
+        ctx.strokeStyle = `rgba(${baseR+30},${baseG+25},${baseB+40},0.25)`;
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(p.x, b.y - p.h, p.w, p.h);
+        // tiny windows
+        for (let wy = b.y - p.h + 5; wy < b.y - 4; wy += 7) {
+          for (let wx = p.x + 3; wx < p.x + p.w - 3; wx += 6) {
+            const seed = (wx*73 + wy*137 + idx*17) & 0xff;
+            if (seed < 90) continue; // dark window
+            const warmth = seed & 1;
+            ctx.fillStyle = warmth
+              ? `rgba(255,${215 + seed%30},${140 + seed%50},${0.25 + (seed%40)/120})`
+              : `rgba(${190 + seed%40},${210 + seed%30},255,${0.2 + (seed%30)/120})`;
+            ctx.fillRect(wx, wy, 2, 3);
           }
-          ctx.fillStyle = `rgba(${20 + idx*5},${25 + idx*2},${40 + idx*4},0.95)`;
         }
       }
       ctx.restore();
     });
 
+    // Draw cities with detailed buildings
     state.cities.forEach(city => {
       const alive = city.alive;
       ctx.save();
-      ctx.translate(city.x, city.y);
-      ctx.shadowBlur = 0;
-      if (!alive) ctx.globalAlpha = 0.32;
-      const glow = alive ? 12 + city.rebuildGlow*30 : 0;
-      if (glow > 0) {
-        ctx.shadowBlur = glow; ctx.shadowColor = '#8ff7ff';
+      if (!alive) ctx.globalAlpha = 0.28;
+
+      const glow = alive ? 8 + city.rebuildGlow*25 : 0;
+
+      if (city._buildings) {
+        for (let bi = 0; bi < city._buildings.length; bi++) {
+          const b = city._buildings[bi];
+          // Building body
+          ctx.fillStyle = alive ? b.bodyColor : '#2a1a22';
+          ctx.fillRect(b.left, b.top, b.right - b.left, b.bot - b.top);
+
+          // Roof features
+          if (b.roofType === 'pointed') {
+            ctx.fillStyle = alive ? b.bodyColor : '#2a1a22';
+            ctx.beginPath();
+            ctx.moveTo(b.left, b.top);
+            ctx.lineTo((b.left + b.right)/2, b.top - 6);
+            ctx.lineTo(b.right, b.top);
+            ctx.fill();
+          } else if (b.roofType === 'antenna') {
+            ctx.strokeStyle = alive ? 'rgba(180,210,240,.5)' : 'rgba(80,50,60,.3)';
+            ctx.lineWidth = 1;
+            const cx = (b.left + b.right)/2;
+            ctx.beginPath(); ctx.moveTo(cx, b.top); ctx.lineTo(cx, b.top - 10); ctx.stroke();
+            if (alive) {
+              ctx.fillStyle = `rgba(255,80,80,${0.4 + 0.3 * Math.sin(time*0.003)})`;
+              ctx.beginPath(); ctx.arc(cx, b.top - 11, 1.5, 0, Math.PI*2); ctx.fill();
+            }
+          }
+
+          // Edge highlight
+          ctx.strokeStyle = alive ? `rgba(140,180,220,0.18)` : 'rgba(60,40,50,0.15)';
+          ctx.lineWidth = 0.5;
+          ctx.strokeRect(b.left, b.top, b.right - b.left, b.bot - b.top);
+
+          // Windows (stable, no blinking)
+          if (alive && city._windows && city._windows[bi]) {
+            for (const win of city._windows[bi]) {
+              if (!win.color) continue;
+              ctx.fillStyle = win.color;
+              ctx.fillRect(win.x, win.y, win.w, win.h);
+            }
+          }
+        }
+
+        // Soft glow under city
+        if (alive && glow > 0) {
+          const glowGrad = ctx.createRadialGradient(city.x, city.y, 0, city.x, city.y, 60);
+          glowGrad.addColorStop(0, `rgba(140,230,255,${0.06 + city.rebuildGlow*0.12})`);
+          glowGrad.addColorStop(1, 'transparent');
+          ctx.fillStyle = glowGrad;
+          ctx.fillRect(city.x - 60, city.y - 60, 120, 65);
+        }
       }
-      ctx.fillStyle = alive ? '#9dd6ff' : '#432b34';
-      const widths = [18, 34, 12, 26, 16]; const heights = [34, 52, 22, 40, 28]; let cx = -44;
-      widths.forEach((ww, i) => { ctx.fillRect(cx, -heights[i], ww, heights[i]); cx += ww + 4; });
-      if (alive) {
-        ctx.fillStyle = 'rgba(255,222,124,.8)';
-        for (let i=-40;i<42;i+=10) for (let j=-48;j<-4;j+=10) if (Math.random() > 0.25) ctx.fillRect(i, j, 4, 5);
-      }
+
       ctx.restore();
     });
 
