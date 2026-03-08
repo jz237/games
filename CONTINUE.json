@@ -1,13 +1,13 @@
 {
-  "current_run": "2026-03-07/neon-tinkerer",
-  "phase": "Prototype Build",
-  "remaining_tasks": [
-    "Implement player movement polish and input remap",
-    "Create Level 1: assembly puzzle and win condition",
-    "Create Level 2: power-routing mechanic and hazards",
-    "Implement upgrade system and UI",
-    "Add in-page automated smoke harness and run it",
-    "QA & packaging"
+  "slug": "neon-harbor",
+  "next_steps": [
+    "Initialize Godot 4 project in games/neon-harbor/ (create project.godot and scenes folder).",
+    "Implement player movement and camera with layered parallax in a dock scene (Milestone A).",
+    "Create a basic water shader and neon sign overlay.",
+    "Place placeholder assets and test Web export.",
+    "Update CONTINUE.json when Milestone A is complete with new precise tasks."
   ],
-  "last_update": "2026-03-07T05:36:00-05:00"
+  "status": "in-progress",
+  "current_milestone": "Milestone A - player movement and dock scene",
+  "timestamp": "2026-03-07T20:36:00-05:00"
 }

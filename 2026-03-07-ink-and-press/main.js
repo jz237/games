@@ -1,10 +1,18 @@
-// Ink & Press — minimal prototype scaffold
+// Ink & Press — mobile-first scaffold
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const startBtn = document.getElementById('startBtn');
 const scoreEl = document.getElementById('score');
 let score = 0;
 let state = 'idle';
+
+// fit canvas to viewport width (mobile-first)
+function fit(){
+  const vw = window.innerWidth;
+  canvas.style.width = vw + 'px';
+  canvas.style.height = Math.round(vw * (canvas.height/canvas.width)) + 'px';
+}
+window.addEventListener('resize', fit); fit();
 
 function drawBackground(){
   ctx.fillStyle = '#fbf7f2';
@@ -54,19 +62,20 @@ startBtn.addEventListener('click', ()=>{
   if(state === 'idle'){
     state = 'tutorial';
     running = true;
-    startBtn.textContent = 'Press SPACE to press';
+    startBtn.textContent = 'Tap to press';
     logTest('tutorial_started');
   }
 });
 
-window.addEventListener('keydown', (e)=>{
-  if(e.code === 'Space' && state === 'tutorial'){
-    // evaluate timing
-    const t = Math.abs(cueAng) < 0.08;
-    if(t){ score += 100; scoreEl.textContent = 'Score: '+score; logTest('press_good'); }
-    else { score += 10; scoreEl.textContent = 'Score: '+score; logTest('press_bad'); }
-  }
-});
+// add simple touch controls: tap to press
+canvas.addEventListener('touchstart', e=>{ e.preventDefault(); if(state==='tutorial'){ doPress(); } }, {passive:false});
+canvas.addEventListener('click', ()=>{ if(state==='tutorial'){ doPress(); } });
+
+function doPress(){
+  const t = Math.abs(cueAng) < 0.08;
+  if(t){ score += 100; scoreEl.textContent = 'Score: '+score; logTest('press_good'); }
+  else { score += 10; scoreEl.textContent = 'Score: '+score; logTest('press_bad'); }
+}
 
 // Simple in-page test logger (will be saved by smoke tests harness)
 const testLog = [];
@@ -79,7 +88,7 @@ function logTest(entry){
 // Expose for automated harness
 window.__INK_PRESS = {
   startTutorial: () => { startBtn.click(); },
-  pressSpace: () => { window.dispatchEvent(new KeyboardEvent('keydown',{code:'Space'})); },
+  press: () => { doPress(); },
   readLog: () => testLog.slice(),
 };
 
