@@ -107,6 +107,8 @@
       border: 0;
       border-radius: 999px;
       padding: 12px 18px;
+      touch-action: manipulation;
+      cursor: pointer;
       color: #04111c;
       background: linear-gradient(180deg, #9ff6ff, #57d4ff);
       font-weight: 800;
@@ -1355,18 +1357,40 @@
         }, { passive: false });
       }
 
-      ['touchmove','touchend','touchcancel','gesturestart','gesturechange','gestureend'].forEach(evt => {
-        document.addEventListener(evt, e => e.preventDefault(), { passive: false });
+      ['touchmove','touchcancel','gesturestart','gesturechange','gestureend'].forEach(evt => {
+        document.addEventListener(evt, e => {
+          if (!e.target.closest('button') && !e.target.closest('.overlay')) e.preventDefault();
+        }, { passive: false });
       });
+      document.addEventListener('touchend', e => {
+        if (!e.target.closest('button') && !e.target.closest('.overlay')) e.preventDefault();
+      }, { passive: false });
 
-      startButton.addEventListener('click', startGame);
-      dismissTutorial.addEventListener('click', async () => {
+      function addTouchAndClick(el, handler) {
+        el.addEventListener('click', handler);
+        el.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handler(e);
+        }, { passive: false });
+      }
+
+      addTouchAndClick(startButton, startGame);
+      addTouchAndClick(dismissTutorial, async () => {
         await unlockAudioAndMaybeStart();
         tutorialOverlay.classList.add('hidden');
         resetGame();
       });
-      restartButton.addEventListener('click', restartGame);
-      gameOverOverlay.addEventListener('click', restartGame);
+      addTouchAndClick(restartButton, restartGame);
+      gameOverOverlay.addEventListener('click', (e) => {
+        if (!e.target.closest('button')) restartGame();
+      });
+      gameOverOverlay.addEventListener('touchend', (e) => {
+        if (!e.target.closest('button')) {
+          e.preventDefault();
+          restartGame();
+        }
+      }, { passive: false });
 
       window.addEventListener('resize', resize);
       window.addEventListener('keydown', async (e) => {
