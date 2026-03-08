@@ -371,7 +371,8 @@
         state.stars = [];
         state.skyline = [];
         state.mountains = [];
-        const starCount = Math.floor(state.width * state.height / 7000);
+        const isMobile = state.width < 768;
+        const starCount = Math.floor(state.width * state.height / (isMobile ? 14000 : 7000));
         for (let i = 0; i < starCount; i++) {
           state.stars.push({ x: Math.random() * state.width, y: Math.random() * state.groundY * 0.72, r: Math.random() * 1.8 + 0.2, a: rand(0.35, 0.95), tw: rand(0.5, 1.8) });
         }
@@ -982,12 +983,10 @@
           ag.addColorStop(0.3, set.aurora[i]);
           ag.addColorStop(1, 'rgba(0,0,0,0)');
           ctx.fillStyle = ag;
-          ctx.filter = 'blur(10px)';
           ctx.fill();
           ctx.restore();
         }
 
-        ctx.filter = 'none';
         ctx.fillStyle = 'rgba(9,12,20,0.38)';
         for (const m of state.mountains) {
           ctx.beginPath();
@@ -1318,19 +1317,21 @@
         launchDefense(x, y);
       }
 
-      canvas.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        const p = localPoint(e.clientX, e.clientY);
-        handlePointer(p.x, p.y);
-      }, { passive: false });
-
-      canvas.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        for (const touch of e.changedTouches) {
-          const p = localPoint(touch.clientX, touch.clientY);
+      if ('ontouchstart' in window) {
+        canvas.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          for (const touch of e.changedTouches) {
+            const p = localPoint(touch.clientX, touch.clientY);
+            handlePointer(p.x, p.y);
+          }
+        }, { passive: false });
+      } else {
+        canvas.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          const p = localPoint(e.clientX, e.clientY);
           handlePointer(p.x, p.y);
-        }
-      }, { passive: false });
+        }, { passive: false });
+      }
 
       ['touchmove','touchend','touchcancel','gesturestart','gesturechange','gestureend'].forEach(evt => {
         document.addEventListener(evt, e => e.preventDefault(), { passive: false });
