@@ -12,7 +12,7 @@ function test(name, fn) {
 }
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
 
-// Scene structure tests
+// --- Scene01 Tests ---
 test('Scene01 exists and has required fields', () => {
   assert(typeof Scene01 === 'object');
   assert(Scene01.name === 'The Docks');
@@ -35,7 +35,7 @@ test('Scene01 interactions have valid types', () => {
   }
 });
 
-test('Dialogue nodes have speaker and text', () => {
+test('Scene01 dialogue nodes have speaker and text', () => {
   for (const i of Scene01.interactions) {
     if (i.type !== 'dialogue') continue;
     for (const node of i.dialogue) {
@@ -46,7 +46,7 @@ test('Dialogue nodes have speaker and text', () => {
   }
 });
 
-test('Choice "next" indices are in range', () => {
+test('Scene01 choice "next" indices are in range', () => {
   for (const i of Scene01.interactions) {
     if (i.type !== 'dialogue') continue;
     const len = i.dialogue.length;
@@ -58,7 +58,7 @@ test('Choice "next" indices are in range', () => {
   }
 });
 
-test('Shard/signature interactions have name field', () => {
+test('Scene01 shard/signature have name field', () => {
   for (const i of Scene01.interactions) {
     if (i.type === 'shard' || i.type === 'signature') {
       assert(typeof i.name === 'string', `Missing name on ${i.id}`);
@@ -70,12 +70,92 @@ test('Scene01 has at least 3 parallax layers', () => {
   assert(Scene01.layers.length >= 3);
 });
 
-test('Each layer has a render function', () => {
+test('Scene01 layers have render functions', () => {
   for (const l of Scene01.layers) assert(typeof l.render === 'function');
+});
+
+test('Scene01 has 2 audio shards', () => {
+  const shards = Scene01.interactions.filter(i => i.type === 'shard');
+  assert(shards.length === 2, `Expected 2, got ${shards.length}`);
+});
+
+test('Scene01 has 2 light signatures', () => {
+  const sigs = Scene01.interactions.filter(i => i.type === 'signature');
+  assert(sigs.length === 2, `Expected 2, got ${sigs.length}`);
+});
+
+test('Scene01 has exit zones', () => {
+  assert(Array.isArray(Scene01.exitZones));
+  assert(Scene01.exitZones.length > 0);
+  assert(typeof Scene01.exitZones[0].target === 'string');
+});
+
+// --- Scene02 Tests ---
+test('Scene02 exists and has required fields', () => {
+  assert(typeof Scene02 === 'object');
+  assert(Scene02.name === 'Fish Market');
+  assert(Scene02.width === 2800);
+  assert(Array.isArray(Scene02.layers));
+  assert(Array.isArray(Scene02.interactions));
+});
+
+test('Scene02 has player start position', () => {
+  assert(typeof Scene02.playerStart.x === 'number');
+  assert(typeof Scene02.playerStart.y === 'number');
+});
+
+test('Scene02 has Mara NPC', () => {
+  const mara = Scene02.interactions.find(i => i.id === 'mara_fishmarket');
+  assert(mara, 'Mara not found');
+  assert(mara.type === 'dialogue');
+  assert(mara.dialogue.length >= 5, 'Mara needs substantial dialogue');
+});
+
+test('Scene02 interactions have valid types', () => {
+  const validTypes = ['dialogue', 'shard', 'signature'];
+  for (const i of Scene02.interactions) {
+    assert(validTypes.includes(i.type), `Invalid type: ${i.type}`);
+    assert(typeof i.id === 'string');
+  }
+});
+
+test('Scene02 dialogue choice indices in range', () => {
+  for (const i of Scene02.interactions) {
+    if (i.type !== 'dialogue') continue;
+    const len = i.dialogue.length;
+    for (const node of i.dialogue) {
+      for (const ch of node.choices) {
+        if (ch.next != null) assert(ch.next < len, `next=${ch.next} >= len=${len}`);
+      }
+    }
+  }
+});
+
+test('Scene02 has at least 3 parallax layers', () => {
+  assert(Scene02.layers.length >= 3);
+});
+
+test('Scene02 has collectibles', () => {
+  const shards = Scene02.interactions.filter(i => i.type === 'shard');
+  const sigs = Scene02.interactions.filter(i => i.type === 'signature');
+  assert(shards.length >= 2, `Expected >=2 shards, got ${shards.length}`);
+  assert(sigs.length >= 2, `Expected >=2 sigs, got ${sigs.length}`);
+});
+
+test('Scene02 has exit zones', () => {
+  assert(Array.isArray(Scene02.exitZones));
+  assert(Scene02.exitZones.length > 0);
+});
+
+test('All interaction IDs are unique across scenes', () => {
+  const allIds = [...Scene01.interactions, ...Scene02.interactions].map(i => i.id);
+  const unique = new Set(allIds);
+  assert(unique.size === allIds.length, 'Duplicate interaction IDs found');
 });
 
 // Summary
 log.innerHTML += `<h2>Results: ${pass} passed, ${fail} failed</h2>`;
 </script>
 <script src="scenes/scene01.js"></script>
+<script src="scenes/scene02.js"></script>
 </body></html>

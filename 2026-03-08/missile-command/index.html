@@ -693,14 +693,24 @@ button:active { transform: translateY(1px) scale(.99); }
   }
 
   window.addEventListener('resize', resize);
-  ['touchstart','touchmove','touchend','gesturestart'].forEach(type => document.addEventListener(type, e => e.preventDefault(), { passive:false }));
+  ['touchstart','touchmove','touchend','gesturestart'].forEach(type => document.addEventListener(type, e => {
+    if (e.target.closest('button, .overlayCard')) return;
+    e.preventDefault();
+  }, { passive:false }));
   canvas.addEventListener('pointerdown', handlePointer);
   canvas.addEventListener('touchstart', handlePointer, { passive:false });
   document.getElementById('startBtn').addEventListener('click', async () => {
-    ui.tutorial.style.display = 'none'; audio.init(); await audio.ctx.resume(); running = true; resetGame();
+    ui.tutorial.style.display = 'none';
+    try { audio.init(); await audio.ctx.resume(); } catch(e) { console.warn('Audio init failed:', e); }
+    running = true; resetGame();
     localStorage.setItem('missile-command-tutorial-seen', '1');
   });
+  document.getElementById('startBtn').addEventListener('touchend', (e) => {
+    e.stopPropagation();
+    document.getElementById('startBtn').click();
+  });
   document.getElementById('restartBtn').addEventListener('click', () => { ui.gameOver.classList.remove('show'); running = true; resetGame(); });
+  document.getElementById('restartBtn').addEventListener('touchend', (e) => { e.stopPropagation(); document.getElementById('restartBtn').click(); });
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') { paused = !paused; updateUI(); }
     if (e.key.toLowerCase() === 'r') { running = true; resetGame(); }

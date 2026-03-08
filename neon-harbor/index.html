@@ -56,9 +56,12 @@ canvas { display: block; }
 </div>
 <script src="engine.js"></script>
 <script src="scenes/scene01.js"></script>
+<script src="scenes/scene02.js"></script>
 <script>
   window.addEventListener('load', () => {
     NeonHarbor.init(document.getElementById('game'));
+    NeonHarbor.registerScene('scene01', Scene01);
+    NeonHarbor.registerScene('scene02', Scene02);
     NeonHarbor.loadScene(Scene01);
   });
 </script>

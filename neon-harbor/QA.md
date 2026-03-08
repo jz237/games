@@ -1,26 +1,35 @@
-# QA Notes — Neon Harbor (Run 2026-03-08)
+# QA Notes — Neon Harbor (Run 2 — 2026-03-08)
 
-## What was built
-- **engine.js**: Full HTML5 Canvas engine with parallax, water shader, player movement, gravity/jump, dialogue system with branching choices, shard/signature collection, save/load (localStorage), interaction hints, vignette overlay
-- **scenes/scene01.js**: "The Docks" scene with 3 parallax layers (city skyline, cranes, dock objects), 5 neon signs, 2 NPCs with branching dialogue (dock worker + old fisherman), 1 audio shard, 1 light signature collectible
-- **index.html**: Game shell with HUD, dialogue UI, neon-themed styling
-- **tests.html**: 8 unit tests covering scene structure, dialogue integrity, layer validation
+## What was built (this run)
+- **Scene01 additions**: 2nd audio shard ("Fog Horn Echo"), 2nd light signature ("Docklight Rose"), exit zone at right edge
+- **Scene02 (Fish Market)**: 3 parallax layers (smokestacks, market stalls with hanging lanterns, fish crates/nets), rain effect, Mara NPC with deep 7-node branching dialogue, Fish Vendor NPC, 2 audio shards, 2 light signatures, exit zone back to docks
+- **Scene transition system**: Exit zones in scenes trigger automatic scene loading via engine registry; walk to edge to transition
+- **Resize handler**: Window resize now updates interaction Y positions for current scene
+- **Save/Load shortcuts**: F5 saves, F9 loads (with system dialogue confirmation)
+- **Tests**: Expanded from 8 to 20 tests covering Scene02, exit zones, collectible counts, cross-scene ID uniqueness
 
 ## Controls
 - Arrow keys / WASD: move + jump
 - E / Enter: interact
-- Scene width: 2400px (scrolling)
+- F5: save game
+- F9: load game
+- Walk to right edge of Docks → transitions to Fish Market
+- Walk to left edge of Fish Market → transitions back to Docks
 
 ## Milestone Status
 - **Milestone A** (player movement + dock scene + parallax + water shader): ✅ COMPLETE
-- **Milestone B** (collection system + 2 shards): Partially done (1 shard + 1 signature in scene)
+- **Milestone B** (collection system + scene transitions): ✅ COMPLETE
+  - Scene01: 2 shards, 2 signatures, 2 NPCs, exit zone
+  - Scene02: 2 shards, 2 signatures, 2 NPCs, exit zone
+  - Scene transitions working via exit zones
+  - Save/load on F5/F9
 - **Milestone C** (Loom UI + memory vignette): Not started
 
 ## Known Issues
-- Interaction Y positions are set at page load using window.innerHeight; resizing may misalign
-- No scene transitions yet (single scene)
 - No audio (visual-only prototype)
-- Save/load not connected to UI buttons yet
+- Save/load preserves state but doesn't restore scene position (loads at scene default start)
+- No transition animation (instant cut)
+- Rain in Fish Market is simple pseudo-random, not physically accurate
 
 ## QA_APPROVED
-false — needs Milestone B completion and scene transition before approval
+false — needs Milestone C and transition polish before approval

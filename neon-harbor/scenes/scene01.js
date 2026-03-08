@@ -143,6 +143,20 @@ const Scene01 = {
       radius: 40
     },
     {
+      id: 'shard_fog_horn',
+      type: 'shard',
+      name: 'Fog Horn Echo',
+      x: 2000, y: window.innerHeight * 0.62 - 20,
+      radius: 40
+    },
+    {
+      id: 'sig_rose_dock',
+      type: 'signature',
+      name: 'Docklight Rose',
+      x: 600, y: window.innerHeight * 0.62 - 20,
+      radius: 40
+    },
+    {
       id: 'dock_worker_2',
       type: 'dialogue',
       x: 1800, y: window.innerHeight * 0.62 - 24,
@@ -176,7 +190,8 @@ const Scene01 = {
 
     // Update interaction Y positions
     for (const obj of this.interactions) {
-      if (obj.y < 100) obj.y = groundY - 24;
+      if (obj.type === 'dialogue') obj.y = groundY - 24;
+      else obj.y = groundY - 20;
     }
 
     // Neon signs
@@ -257,6 +272,10 @@ const Scene01 = {
       ctx.fillText(npc.label, sx, ny - 20);
     }
   },
+
+  exitZones: [
+    { x: 2300, width: 100, target: 'scene02', playerStartX: 80 }
+  ],
 
   onEnter(state) {
     state.location = 'docks';

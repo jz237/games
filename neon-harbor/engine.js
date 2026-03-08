@@ -35,13 +35,24 @@ const NeonHarbor = (() => {
   const SKY_TOP = '#05051a';
   const SKY_BOT = '#0a1030';
 
+  // Scene registry for transitions
+  const sceneRegistry = {};
+
+  function registerScene(id, scene) {
+    sceneRegistry[id] = scene;
+  }
+
   // --- INIT ---
   function init(c) {
     canvas = c;
     ctx = canvas.getContext('2d');
     resize();
     window.addEventListener('resize', resize);
-    window.addEventListener('keydown', e => { keys[e.key] = true; });
+    window.addEventListener('keydown', e => {
+      keys[e.key] = true;
+      if (e.key === 'F5') { e.preventDefault(); saveGame(); showDialogue([{ speaker: 'System', text: 'Game saved.', choices: [] }]); }
+      if (e.key === 'F9') { e.preventDefault(); loadGame(); showDialogue([{ speaker: 'System', text: 'Game loaded.', choices: [] }]); }
+    });
     window.addEventListener('keyup', e => { keys[e.key] = false; });
     requestAnimationFrame(loop);
   }
@@ -49,6 +60,14 @@ const NeonHarbor = (() => {
   function resize() {
     W = canvas.width = window.innerWidth;
     H = canvas.height = window.innerHeight;
+    // Fix interaction Y positions for current scene
+    if (currentScene?.interactions) {
+      const groundY = currentScene.groundYCalc ?? (H * 0.62);
+      for (const obj of currentScene.interactions) {
+        if (obj.type === 'dialogue') obj.y = groundY - 24;
+        else obj.y = groundY - 20;
+      }
+    }
   }
 
   // --- SCENE LOADING ---
@@ -112,10 +131,28 @@ const NeonHarbor = (() => {
     const sceneW = currentScene?.width ?? 1600;
     player.x = Math.max(0, Math.min(sceneW - player.w, player.x));
 
+    // Exit zones (scene transitions)
+    checkExitZones();
+
     // Interact
     if (keys['e'] || keys['Enter']) {
       keys['e'] = false; keys['Enter'] = false;
       checkInteractions();
+    }
+  }
+
+  function checkExitZones() {
+    if (!currentScene?.exitZones) return;
+    for (const zone of currentScene.exitZones) {
+      if (player.x >= zone.x && player.x <= zone.x + zone.width) {
+        const target = sceneRegistry[zone.target];
+        if (target) {
+          const startX = zone.playerStartX ?? target.playerStart?.x ?? 100;
+          target.playerStart = { ...target.playerStart, x: startX };
+          loadScene(target);
+        }
+        break;
+      }
     }
   }
 
@@ -387,5 +424,5 @@ const NeonHarbor = (() => {
     if (data) Object.assign(state, JSON.parse(data));
   }
 
-  return { init, loadScene, player, state, showDialogue, saveGame, loadGame, time: () => time };
+  return { init, loadScene, registerScene, player, state, showDialogue, saveGame, loadGame, time: () => time };
 })();
