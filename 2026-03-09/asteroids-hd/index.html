@@ -169,7 +169,7 @@ function makeAstShape(r,verts=12){
 // --- Game State ---
 let ship=null,bullets=[],asteroids=[],ufos=[],ufoBullets=[],powerups=[];
 const keys={};
-let score=0,lives=3,level=1,gameState='start';
+let score=0,lives=4,level=1,gameState='start';
 let invulnTimer=0,shieldTimer=0,rapidTimer=0,tripleTimer=0,speedTimer=0;
 let levelAnnounce='',levelAnnounceTimer=0;
 let screenFlash=0;
@@ -184,7 +184,7 @@ function resetShip(){
 }
 
 function startGame(){
-  initAudio();score=0;lives=3;level=1;
+  initAudio();score=0;lives=4;level=1;
   bullets=[];asteroids=[];ufos=[];ufoBullets=[];powerups=[];particles=[];
   fireCooldown=0;shieldTimer=0;rapidTimer=0;tripleTimer=0;speedTimer=0;
   resetShip();spawnLevel();
@@ -209,13 +209,17 @@ function spawnLevel(){
 function spawnAsteroid(size,x,y){
   const r=size==='large'?50:size==='medium'?25:12;
   if(x===undefined){
-    // Spawn just inside the visible area so players immediately see action
+    // Spawn at edges, never near the ship (safe zone of 150px)
     const margin=Math.max(40,r+10);
-    const side=Math.floor(rand(0,4));
-    if(side===0){x=rand(margin,W-margin);y=margin;}           // top
-    else if(side===1){x=W-margin;y=rand(margin,H-margin);}     // right
-    else if(side===2){x=rand(margin,W-margin);y=H-margin;}     // bottom
-    else{x=margin;y=rand(margin,H-margin);}                    // left
+    let tries=0;
+    do {
+      const side=Math.floor(rand(0,4));
+      if(side===0){x=rand(margin,W-margin);y=margin;}
+      else if(side===1){x=W-margin;y=rand(margin,H-margin);}
+      else if(side===2){x=rand(margin,W-margin);y=H-margin;}
+      else{x=margin;y=rand(margin,H-margin);}
+      tries++;
+    } while(ship && Math.hypot(x-ship.x, y-ship.y) < 150 && tries < 20);
   }
 
   const spd=40+level*8+rand(0,35);
