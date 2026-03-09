@@ -47,6 +47,7 @@ let stateChangeTime = 0; // BUG 1 FIX: transition guard timestamp
 let player = { x: 0, y: 0, tx: 0, ty: 0, speed: 0.9, moving: false, trail: [], alive: true, gx:0, gy:0, moveTimer:0, moveInterval:140 };
 let inputDir = { x: 0, y: 0 };
 let keys = {};
+let pendingStep = null; // queued single-step from tap
 
 // Particles
 let particles = [];
@@ -425,7 +426,10 @@ function getInputDir() {
   if (keys['ArrowRight'] || keys['d'] || keys['D']) dx = 1;
   if (keys['ArrowUp'] || keys['w'] || keys['W']) dy = -1;
   if (keys['ArrowDown'] || keys['s'] || keys['S']) dy = 1;
+  // D-pad held direction
   if (dpadDir.x !== 0 || dpadDir.y !== 0) { dx = dpadDir.x; dy = dpadDir.y; }
+  // Pending step from tap (consumed once) — ensures at least one step per tap
+  if (pendingStep) { dx = pendingStep.x; dy = pendingStep.y; pendingStep = null; }
   if (dx !== 0 && dy !== 0) dy = 0;
   return { x: dx, y: dy };
 }
@@ -487,7 +491,7 @@ canvas.addEventListener('touchstart', e => {
     const p = getTouchPos(t);
     touchRipples.push({ x: p.x, y: p.y, r: 0, alpha: 0.5 });
     const dp = checkDpad(p.x, p.y);
-    if (dp) { dpadDir = dp; dpadActive = true; }
+    if (dp) { dpadDir = dp; dpadActive = true; pendingStep = { x: dp.x, y: dp.y }; }
   }
 }, { passive: false });
 
@@ -615,8 +619,11 @@ function updatePlayer(dt) {
   player.moveTimer = (player.moveTimer || 0) + dt * 1000;
   const intervalMs = player.moveInterval || 140;
 
-  if (player.moveTimer >= intervalMs) {
-    player.moveTimer -= intervalMs;
+  // Force tick if there's a pending step (instant response to tap)
+  const hasPending = pendingStep !== null;
+  if (player.moveTimer >= intervalMs || hasPending) {
+    if (player.moveTimer >= intervalMs) player.moveTimer -= intervalMs;
+    else if (hasPending) player.moveTimer = 0; // reset timer on forced step
 
     if (dir.x !== 0 || dir.y !== 0) {
       const nx = player.gx + dir.x;
