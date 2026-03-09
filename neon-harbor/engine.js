@@ -40,6 +40,9 @@ const NeonHarbor = (() => {
   const SKY_TOP = '#05051a';
   const SKY_BOT = '#0a1030';
 
+  // Ending state
+  let endingTriggered = false;
+
   // Scene registry for transitions
   const sceneRegistry = {};
 
@@ -417,6 +420,7 @@ const NeonHarbor = (() => {
       }
       ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, Math.max(0, alpha))})`;
       ctx.fillRect(0, 0, W, H);
+      renderDissolveParticles();
     }
 
     updateHUD();
@@ -485,6 +489,105 @@ const NeonHarbor = (() => {
     }
   }
 
+  // --- ENDING SEQUENCES ---
+  const restorationEnding = [
+    { speaker: 'The Loom', text: 'All eight memories pulse within the threads. The Loom shudders — a deep, resonant vibration that shakes dust from the ceiling and sends ripples through every vein of light in the chamber walls.', choices: [] },
+    { speaker: 'The Loom', text: 'Golden light erupts from the machine\'s core, flooding the chamber in waves. The cold blue that has haunted the harbor for so long retreats, dissolving like fog before the sun.', choices: [] },
+    { speaker: 'The Architect', text: 'Eira\'s echo blazes bright — no longer translucent, but radiant. "The original frequency," she breathes. "You found every thread. You remembered what we forgot."', choices: [] },
+    { speaker: 'The Loom', text: 'The warmth surges upward through the tunnels, through the fish market, through the docks. Above, the harbor glows gold for the first time in a century. The cobblestones hum with stories. The water shimmers with memory.', choices: [] },
+    { speaker: 'The Loom', text: 'People will touch the walls and feel joy. They will hear the welcome song in the salt wind. The harbor remembers — and it will never forget again.', choices: [] },
+    { speaker: 'The Loom', text: 'THE END — The Harbor Remembers', choices: [] }
+  ];
+
+  const thirdWayEnding = [
+    { speaker: 'The Loom', text: 'All eight memories pulse within the threads — but something else pulses too. A violet shimmer, born from the space between remembering and forgetting. The third frequency awakens.', choices: [] },
+    { speaker: 'The Loom', text: 'Gold and blue light spiral together, neither overtaking the other. Where they meet, violet blooms — a new color, a new resonance. The Loom doesn\'t restore. It transforms.', choices: [] },
+    { speaker: 'The Architect', text: 'Eira\'s echo watches, eyes wide with wonder. "Neither gold nor blue," she whispers. "You found what I only theorized. The frequency of acceptance — holding memory and release in the same breath."', choices: [] },
+    { speaker: 'The Loom', text: 'The violet frequency rises through the harbor like a tide. Not erasing the silence, not drowning it in memory — but weaving both into something that breathes. The city becomes a living palimpsest, past and present layered in light.', choices: [] },
+    { speaker: 'The Loom', text: 'People will touch the walls and feel peace — not the ache of loss, not the weight of remembering, but the quiet grace of a story that continues. The harbor is neither restored nor forgotten. It is alive.', choices: [] },
+    { speaker: 'The Loom', text: 'THE END — The Third Frequency', choices: [] }
+  ];
+
+  function checkEndingTrigger(obj) {
+    if (endingTriggered) return false;
+    if (obj.id !== 'the_loom_machine') return false;
+    if (state.wovenMemories.length < 8) return false;
+    endingTriggered = true;
+    const isThirdWay = state.flags.questioned_restoration && state.flags.third_way;
+    const endingNodes = isThirdWay ? thirdWayEnding : restorationEnding;
+    showEndingDialogue(endingNodes, 0);
+    return true;
+  }
+
+  function showEndingDialogue(nodes, idx) {
+    if (idx >= nodes.length) { showCredits(); return; }
+    dialogueActive = true;
+    const node = nodes[idx];
+    const box = document.getElementById('dialogue-box');
+    box.style.display = 'block';
+    document.getElementById('dlg-speaker').textContent = node.speaker || '';
+    document.getElementById('dlg-text').textContent = node.text || '';
+    const choicesEl = document.getElementById('dlg-choices');
+    choicesEl.innerHTML = '';
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    btn.textContent = idx < nodes.length - 1 ? '▸ Continue' : '▸ . . .';
+    btn.onclick = () => showEndingDialogue(nodes, idx + 1);
+    choicesEl.appendChild(btn);
+  }
+
+  function showCredits() {
+    hideDialogue();
+    const overlay = document.createElement('div');
+    overlay.id = 'credits-overlay';
+    overlay.innerHTML = `
+      <style>
+        #credits-overlay {
+          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0, 0, 0, 0.95); z-index: 200;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          font-family: 'Segoe UI', monospace; color: #c0d0e0;
+          animation: credits-fade-in 2s ease-in;
+        }
+        @keyframes credits-fade-in { from { opacity: 0; } to { opacity: 1; } }
+        .credits-title { font-size: 48px; color: #00d4ff; letter-spacing: 8px; margin-bottom: 24px;
+          text-shadow: 0 0 30px rgba(0, 212, 255, 0.5); }
+        .credits-message { font-size: 18px; color: #a0b0c0; max-width: 500px; text-align: center;
+          line-height: 1.8; margin-bottom: 40px; }
+        .credits-play-again { padding: 14px 40px; background: rgba(0, 180, 255, 0.15);
+          border: 1px solid rgba(0, 180, 255, 0.4); color: #a0d8ff; font-size: 16px;
+          cursor: pointer; border-radius: 6px; text-transform: uppercase; letter-spacing: 3px;
+          transition: all 0.3s; }
+        .credits-play-again:hover { background: rgba(0, 180, 255, 0.3); color: #fff;
+          box-shadow: 0 0 20px rgba(0, 180, 255, 0.3); }
+      </style>
+      <div class="credits-title">NEON HARBOR</div>
+      <div class="credits-message">
+        Every city is built on stories. Some are remembered. Some are woven into the walls, the water, the light itself.
+        <br><br>Thank you for listening.
+      </div>
+      <button class="credits-play-again" id="credits-play-again">Play Again</button>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('credits-play-again').onclick = () => {
+      overlay.remove();
+      // Reset state
+      state.lightSignatures.length = 0;
+      state.audioShards.length = 0;
+      state.wovenMemories.length = 0;
+      state.location = 'docks';
+      Object.keys(state.reputation).forEach(k => delete state.reputation[k]);
+      Object.keys(state.flags).forEach(k => delete state.flags[k]);
+      endingTriggered = false;
+      // Clear collected flags on all scene interactions
+      for (const sceneId in sceneRegistry) {
+        const s = sceneRegistry[sceneId];
+        if (s.interactions) s.interactions.forEach(i => delete i._collected);
+      }
+      loadScene(sceneRegistry['scene01']);
+    };
+  }
+
   // --- INTERACTIONS ---
   function checkInteractions() {
     if (!currentScene?.interactions) return;
@@ -492,7 +595,10 @@ const NeonHarbor = (() => {
       const dx = Math.abs((player.x + player.w/2) - obj.x);
       const dy = Math.abs((player.y + player.h/2) - obj.y);
       if (dx < (obj.radius ?? 50) && dy < (obj.radius ?? 60)) {
-        if (obj.type === 'dialogue') showDialogue(obj.dialogue);
+        if (obj.type === 'dialogue') {
+          if (checkEndingTrigger(obj)) break;
+          showDialogue(obj.dialogue);
+        }
         if (obj.type === 'shard') collectShard(obj);
         if (obj.type === 'signature') collectSignature(obj);
         break;
@@ -557,6 +663,98 @@ const NeonHarbor = (() => {
     document.getElementById('dialogue-box').style.display = 'none';
   }
 
+  // --- AMBIENT PARTICLES ---
+  const ambientParticles = { docks: [], tunnels: [] };
+  function initAmbientParticles() {
+    // Fireflies for docks
+    for (let i = 0; i < 15; i++) {
+      ambientParticles.docks.push({
+        x: Math.random() * 2400, y: Math.random() * 0.5,
+        vx: (Math.random() - 0.5) * 20, vy: (Math.random() - 0.5) * 10,
+        phase: Math.random() * Math.PI * 2
+      });
+    }
+    // Spores for tunnels
+    for (let i = 0; i < 20; i++) {
+      ambientParticles.tunnels.push({
+        x: Math.random() * 3000, y: Math.random() * 0.6 + 0.2,
+        vx: (Math.random() - 0.5) * 8, vy: -5 - Math.random() * 10,
+        phase: Math.random() * Math.PI * 2
+      });
+    }
+  }
+  initAmbientParticles();
+
+  function renderAmbientParticles(camX) {
+    const sceneName = currentScene?.name;
+    if (sceneName === 'The Docks') {
+      for (const p of ambientParticles.docks) {
+        p.x += p.vx * 0.016;
+        p.y += Math.sin(time * 0.5 + p.phase) * 0.0003;
+        const sx = p.x - camX;
+        const sy = H * (0.15 + p.y * 0.45) + Math.sin(time * 0.7 + p.phase) * 15;
+        if (sx < -20 || sx > W + 20) continue;
+        const alpha = 0.3 + 0.3 * Math.sin(time * 2 + p.phase);
+        ctx.beginPath();
+        ctx.arc(sx, sy, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(180, 255, 100, ${alpha})`;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(180, 255, 100, ${alpha * 0.15})`;
+        ctx.fill();
+        // Wrap around
+        if (p.x > 2500) p.x -= 2500;
+        if (p.x < -100) p.x += 2500;
+      }
+    } else if (sceneName === 'The Tunnels') {
+      for (const p of ambientParticles.tunnels) {
+        p.x += p.vx * 0.016 + Math.sin(time * 0.3 + p.phase) * 0.3;
+        p.y += p.vy * 0.00005;
+        const sx = p.x - camX;
+        const sy = H * p.y;
+        if (sx < -20 || sx > W + 20) continue;
+        const alpha = 0.2 + 0.2 * Math.sin(time * 1.5 + p.phase);
+        ctx.beginPath();
+        ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(160, 80, 220, ${alpha})`;
+        ctx.fill();
+        // Wrap vertically
+        if (p.y < 0.05) p.y = 0.8;
+      }
+    }
+  }
+
+  // --- TRANSITION DISSOLVE PARTICLES ---
+  const dissolveParticles = [];
+  for (let i = 0; i < 40; i++) {
+    const angle = (i / 40) * Math.PI * 2 + Math.random() * 0.3;
+    dissolveParticles.push({ angle, speed: 80 + Math.random() * 120, size: 2 + Math.random() * 3 });
+  }
+
+  function renderDissolveParticles() {
+    if (!fadeState) return;
+    const cx = W / 2, cy = H / 2;
+    let progress;
+    if (fadeState.phase === 'out') {
+      progress = fadeState.elapsed / fadeState.duration;
+    } else {
+      progress = 1 - fadeState.elapsed / fadeState.duration;
+    }
+    const maxDist = Math.max(W, H) * 0.7;
+    for (const p of dissolveParticles) {
+      const dist = progress * maxDist * (p.speed / 200);
+      const px = cx + Math.cos(p.angle) * dist;
+      const py = cy + Math.sin(p.angle) * dist;
+      const alpha = 0.6 * (1 - Math.abs(progress - 0.5) * 2);
+      if (alpha <= 0) continue;
+      ctx.beginPath();
+      ctx.arc(px, py, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.fill();
+    }
+  }
+
   // --- RENDER ---
   function render(dt) {
     const camX = Math.max(0, player.x - W/2 + player.w/2);
@@ -575,6 +773,9 @@ const NeonHarbor = (() => {
     for (const layer of layers) {
       layer.render(ctx, W, H, camX, time);
     }
+
+    // Ambient particles (after layers, before scene objects)
+    renderAmbientParticles(camX);
 
     // Ground platform (tunnels handle their own)
     if (currentScene?.name !== 'The Tunnels') {
@@ -744,10 +945,12 @@ const NeonHarbor = (() => {
 
   return {
     init, loadScene, registerScene, player, state,
-    showDialogue, saveGame, loadGame,
+    showDialogue, saveGame, loadGame, checkEndingTrigger,
     time: () => time,
     get loomOpen() { return loomOpen; },
     get fadeState() { return fadeState; },
-    get dialogueActive() { return dialogueActive; }
+    get dialogueActive() { return dialogueActive; },
+    get endingTriggered() { return endingTriggered; },
+    set _endingTriggered(v) { endingTriggered = v; }
   };
 })();

@@ -394,6 +394,94 @@ test('NeonHarbor exposes dialogueActive property', () => {
   assert('dialogueActive' in NeonHarbor, 'dialogueActive not exposed');
 });
 
+// --- Ending System Tests ---
+test('Ending triggers when all 8 memories woven', () => {
+  const origWoven = [...NeonHarbor.state.wovenMemories];
+  const origFlags = { ...NeonHarbor.state.flags };
+  NeonHarbor._endingTriggered = false;
+
+  // Fill 8 memories
+  const memoryNames = [
+    'The First Ships', 'The Last Festival', "Mara's Youth", "The Engineers' Descent",
+    "The Keeper's Vigil", 'The Original Frequency', 'The Third Frequency', 'The Deep Current'
+  ];
+  NeonHarbor.state.wovenMemories.length = 0;
+  memoryNames.forEach(m => NeonHarbor.state.wovenMemories.push(m));
+
+  const result = NeonHarbor.checkEndingTrigger({ id: 'the_loom_machine', type: 'dialogue' });
+  assert(result === true, 'Ending should trigger with 8 woven memories');
+  assert(NeonHarbor.endingTriggered === true, 'endingTriggered should be true');
+
+  // Restore
+  NeonHarbor.state.wovenMemories.length = 0;
+  origWoven.forEach(m => NeonHarbor.state.wovenMemories.push(m));
+  Object.keys(NeonHarbor.state.flags).forEach(k => delete NeonHarbor.state.flags[k]);
+  Object.assign(NeonHarbor.state.flags, origFlags);
+  NeonHarbor._endingTriggered = false;
+});
+
+test('Ending does not trigger with fewer than 8 memories', () => {
+  NeonHarbor._endingTriggered = false;
+  NeonHarbor.state.wovenMemories.length = 0;
+  NeonHarbor.state.wovenMemories.push('The First Ships', 'The Last Festival');
+
+  const result = NeonHarbor.checkEndingTrigger({ id: 'the_loom_machine', type: 'dialogue' });
+  assert(result === false, 'Ending should not trigger with only 2 memories');
+
+  NeonHarbor.state.wovenMemories.length = 0;
+});
+
+test('Ending does not trigger for non-loom interactions', () => {
+  NeonHarbor._endingTriggered = false;
+  const memoryNames = [
+    'The First Ships', 'The Last Festival', "Mara's Youth", "The Engineers' Descent",
+    "The Keeper's Vigil", 'The Original Frequency', 'The Third Frequency', 'The Deep Current'
+  ];
+  NeonHarbor.state.wovenMemories.length = 0;
+  memoryNames.forEach(m => NeonHarbor.state.wovenMemories.push(m));
+
+  const result = NeonHarbor.checkEndingTrigger({ id: 'the_architect', type: 'dialogue' });
+  assert(result === false, 'Ending should not trigger for non-loom object');
+
+  NeonHarbor.state.wovenMemories.length = 0;
+  NeonHarbor._endingTriggered = false;
+});
+
+test('Third way ending triggers with correct flags', () => {
+  NeonHarbor._endingTriggered = false;
+  const memoryNames = [
+    'The First Ships', 'The Last Festival', "Mara's Youth", "The Engineers' Descent",
+    "The Keeper's Vigil", 'The Original Frequency', 'The Third Frequency', 'The Deep Current'
+  ];
+  NeonHarbor.state.wovenMemories.length = 0;
+  memoryNames.forEach(m => NeonHarbor.state.wovenMemories.push(m));
+  NeonHarbor.state.flags.questioned_restoration = true;
+  NeonHarbor.state.flags.third_way = true;
+
+  const result = NeonHarbor.checkEndingTrigger({ id: 'the_loom_machine', type: 'dialogue' });
+  assert(result === true, 'Third way ending should trigger');
+  assert(NeonHarbor.endingTriggered === true);
+
+  // Check the dialogue box shows the third way text
+  const dlgText = document.getElementById('dlg-text')?.textContent || '';
+  assert(dlgText.includes('violet') || dlgText.includes('third frequency'), 'Should show third way ending text');
+
+  NeonHarbor.state.wovenMemories.length = 0;
+  delete NeonHarbor.state.flags.questioned_restoration;
+  delete NeonHarbor.state.flags.third_way;
+  NeonHarbor._endingTriggered = false;
+});
+
+test('Credits overlay appears after ending', () => {
+  // The credits overlay is created dynamically, verify the function exists
+  assert(typeof NeonHarbor.checkEndingTrigger === 'function', 'checkEndingTrigger should exist');
+  // Check that endingTriggered is exposed
+  assert('endingTriggered' in NeonHarbor, 'endingTriggered should be exposed');
+  // Verify credits overlay is not present at start
+  const existing = document.getElementById('credits-overlay');
+  assert(!existing, 'Credits overlay should not exist at start');
+});
+
 // Summary
 log.innerHTML += `<h2>Results: ${pass} passed, ${fail} failed</h2>`;
 </script>

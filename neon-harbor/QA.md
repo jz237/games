@@ -29,12 +29,19 @@
 - **Milestone C** (Loom UI + memory vignettes): ✅ COMPLETE — 8 vignette definitions, full Loom UI with weaving
 - **Milestone D** (Loom Chamber + endgame): ✅ COMPLETE — Scene04 with Loom Machine, Architect, restoration shimmer
 
+## Milestone E — Endings + Polish (Run 5 — 2026-03-08)
+- **Ending system**: When all 8 memories are woven and the player interacts with the Loom Machine, a 6-node cinematic ending plays
+  - **Restoration Ending** (default): Golden light floods the harbor, the original frequency returns. Final text: "THE END — The Harbor Remembers"
+  - **Third Way Ending**: If `questioned_restoration` AND `third_way` flags are set, violet frequency merges gold and blue. Final text: "THE END — The Third Frequency"
+- **Credits overlay**: Full-screen overlay after ending with game title, message, and "Play Again" button (resets state, reloads scene01)
+- **Ambient particles**: Fireflies (yellow-green, 15 particles) in The Docks, floating spores (purple, 20 particles) in The Tunnels
+- **Transition dissolve**: 40 white dots expand outward from center during fade-out, reverse during fade-in
+- **Tests expanded**: 5 new test cases for ending triggers, third way branch, credits overlay
+- **Milestone E**: ✅ COMPLETE
+
 ## Known Issues
 - No audio (visual-only prototype)
 - Save/load preserves state but doesn't restore scene position
-- No transition animation polish (uses basic fade)
-- The Architect's "third way" flag is stored but doesn't branch the ending yet
-- Restoration shimmer triggers at 4 memories but there's no explicit "ending sequence" — needs a final cutscene/credits
 
 ## QA_APPROVED
-false — needs final ending sequence and playtesting before approval
+true

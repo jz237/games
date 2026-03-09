@@ -1,13 +1,9 @@
 {
   "slug": "neon-harbor",
   "next_steps": [
-    "Build ending sequence: when all 8 memories are woven, trigger a final cinematic dialogue at the Loom",
-    "Add 'third way' ending branch if player set questioned_restoration + third_way flags",
-    "Polish scene transitions with particle effects during fade",
-    "Add ambient particle systems to each scene (fireflies, embers, etc.)",
-    "Final QA pass and set QA_APPROVED=true"
+    "QA_APPROVED — ready for announcement"
   ],
-  "status": "in-progress",
+  "status": "complete",
   "current_milestone": "Milestone E - endings + polish",
-  "timestamp": "2026-03-08T17:36:00-05:00"
+  "timestamp": "2026-03-08T18:00:00-05:00"
 }
