@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Pyro - Flame Spirit</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a12; touch-action: none; user-select: none; -webkit-user-select: none; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a12; touch-action: none; user-select: none; -webkit-user-select: none; position: fixed; overscroll-behavior: none; }
+button { touch-action: manipulation; cursor: pointer; }
 canvas { display: block; width: 100%; height: 100%; }
 </style>
 </head>
@@ -172,6 +173,7 @@ function initAudio() {
   if (audioInitialized) return;
   try {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
     audioInitialized = true;
   } catch(e) {}
 }
@@ -381,6 +383,20 @@ function checkDpad(px, py) {
   return null;
 }
 
+// Document-level touch prevention (skip buttons/overlays)
+document.addEventListener('touchstart', (e) => {
+  if (e.target.closest('button') || e.target.closest('.overlay')) return;
+  e.preventDefault();
+}, { passive: false });
+document.addEventListener('touchmove', (e) => {
+  if (e.target.closest('button') || e.target.closest('.overlay')) return;
+  e.preventDefault();
+}, { passive: false });
+document.addEventListener('touchend', (e) => {
+  if (e.target.closest('button') || e.target.closest('.overlay')) return;
+  e.preventDefault();
+}, { passive: false });
+
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
   initAudio();
@@ -393,17 +409,6 @@ canvas.addEventListener('touchstart', e => {
     else { gameState = STATE.WIN; }
     return;
   }
-  for (const t of e.touches) {
-    const p = getTouchPos(t);
-    touchRipples.push({ x: p.x, y: p.y, r: 0, alpha: 0.5 });
-    const dp = checkDpad(p.x, p.y);
-    if (dp) { dpadDir = dp; dpadActive = true; }
-  }
-}, { passive: false });
-
-canvas.addEventListener('touchstart', e => {
-  e.preventDefault();
-  if (gameState !== STATE.PLAYING) return;
   for (const t of e.touches) {
     const p = getTouchPos(t);
     touchRipples.push({ x: p.x, y: p.y, r: 0, alpha: 0.5 });
@@ -434,20 +439,18 @@ canvas.addEventListener('touchmove', e => {
 
 canvas.addEventListener('touchend', e => {
   e.preventDefault();
-  if (gameState !== STATE.PLAYING) return;
-  // If it was a short tap (no dpad), move to tapped tile
-  if (window._lastTouchPos && e.changedTouches.length>0) {
-    const t = e.changedTouches[0];
-    const rect = canvas.getBoundingClientRect();
-    const tx = Math.floor((t.clientX - rect.left) / (rect.width / COLS));
-    const ty = Math.floor((t.clientY - rect.top) / (rect.height / ROWS));
-    // set target tile coords
-    if (tx>=0 && ty>=0 && tx<COLS && ty<ROWS) {
-      player.tx = tx; player.ty = ty; player.moving = true; player._startX = player.x; player._startY = player.y; player._moveTime = 0; player._moveDuration = 160;
+  if (gameState === STATE.PLAYING) {
+    // If it was a short tap (no dpad), move to tapped tile
+    if (window._lastTouchPos && e.changedTouches.length>0) {
+      const t = e.changedTouches[0];
+      const rect = canvas.getBoundingClientRect();
+      const tx = Math.floor((t.clientX - rect.left) / (rect.width / COLS));
+      const ty = Math.floor((t.clientY - rect.top) / (rect.height / ROWS));
+      if (tx>=0 && ty>=0 && tx<COLS && ty<ROWS) {
+        player.tx = tx; player.ty = ty; player.moving = true; player._startX = player.x; player._startY = player.y; player._moveTime = 0; player._moveDuration = 160;
+      }
     }
   }
-
-  e.preventDefault();
   if (e.touches.length === 0) { dpadDir = { x: 0, y: 0 }; dpadActive = false; }
 }, { passive: false });
 
