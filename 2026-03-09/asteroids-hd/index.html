@@ -739,7 +739,16 @@ function loop(ts){
   update(dt);draw();
   requestAnimationFrame(loop);
 }
-requestAnimationFrame((ts)=>{lastTime=ts;loop(ts);});
+function kickLoop(){
+  requestAnimationFrame((ts)=>{lastTime=ts;loop(ts);});
+}
+kickLoop();
+// Watchdog: some mobile browsers can stall RAF after first frame; auto-kick if heartbeat stalls
+setInterval(()=>{
+  if(performance.now()-lastTime>300){
+    kickLoop();
+  }
+},250);
 initStars();
 
 // --- Input: Touch ---
