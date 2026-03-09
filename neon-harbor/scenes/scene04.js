@@ -1,5 +1,6 @@
 // Scene 04: The Loom Chamber — The heart of the harbor's forgotten memory
 const Scene04 = {
+  _id: 'scene04',
   name: 'The Loom Chamber',
   width: 2000,
   groundY: null,

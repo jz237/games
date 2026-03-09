@@ -936,11 +936,32 @@ const NeonHarbor = (() => {
 
   // --- SAVE / LOAD ---
   function saveGame() {
-    localStorage.setItem('neonharbor_save', JSON.stringify(state));
+    const saveData = {
+      ...state,
+      _scene: currentScene?._id || 'scene01',
+      _playerX: player.x,
+      _playerY: player.y
+    };
+    localStorage.setItem('neonharbor_save', JSON.stringify(saveData));
   }
   function loadGame() {
     const data = localStorage.getItem('neonharbor_save');
-    if (data) Object.assign(state, JSON.parse(data));
+    if (!data) return;
+    const parsed = JSON.parse(data);
+    const sceneId = parsed._scene || 'scene01';
+    const px = parsed._playerX;
+    const py = parsed._playerY;
+    delete parsed._scene;
+    delete parsed._playerX;
+    delete parsed._playerY;
+    Object.assign(state, parsed);
+    // Restore scene and player position
+    const target = sceneRegistry[sceneId];
+    if (target) {
+      loadScene(target);
+      if (px != null) player.x = px;
+      if (py != null) player.y = py;
+    }
   }
 
   return {

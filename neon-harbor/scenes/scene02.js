@@ -1,5 +1,6 @@
 // Scene 02: The Fish Market — East end of the harbor
 const Scene02 = {
+  _id: 'scene02',
   name: 'Fish Market',
   width: 2800,
   groundY: null,

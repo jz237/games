@@ -1,5 +1,6 @@
 // Scene 03: The Tunnels — Underground passage to the Loom Chamber
 const Scene03 = {
+  _id: 'scene03',
   name: 'The Tunnels',
   width: 3000,
   groundY: null,

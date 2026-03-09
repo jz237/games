@@ -1,5 +1,6 @@
 // Scene 01: The Docks — Opening scene
 const Scene01 = {
+  _id: 'scene01',
   name: 'The Docks',
   width: 2400,
   groundY: null, // set dynamically
