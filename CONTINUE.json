@@ -1,12 +1,13 @@
 {
   "slug": "neon-harbor",
   "next_steps": [
-    "Awaiting human confirmation flag before posting announcement to #games"
+    "Awaiting human confirmation flag before posting announcement to #games",
+    "Optional polish: add background music/SFX if Jez wants audio layer"
   ],
   "status": "complete",
-  "current_milestone": "All milestones complete (A-E)",
+  "current_milestone": "All milestones complete (A-E) + save/load position restoration",
   "qa_approved": true,
-  "timestamp": "2026-03-09T08:36:00-05:00",
-  "last_checked": "2026-03-09T08:36:00-05:00",
-  "note": "All milestones complete. Awaiting human confirmation to post to #games."
+  "human_confirmed_post": false,
+  "last_checked": "2026-03-09T18:36:00-05:00",
+  "timestamp": "2026-03-09T18:36:00-05:00"
 }
