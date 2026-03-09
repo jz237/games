@@ -168,6 +168,7 @@ function makeAstShape(r,verts=12){
 
 // --- Game State ---
 let ship,bullets,asteroids,ufos,ufoBullets,powerups;
+const keys={}; // must exist before first update() tick
 let score=0,lives=3,level=1,gameState='start';
 let invulnTimer=0,shieldTimer=0,rapidTimer=0,tripleTimer=0,speedTimer=0;
 let levelAnnounce='',levelAnnounceTimer=0;
@@ -796,7 +797,6 @@ document.addEventListener('touchstart',(e)=>{if(!isUI(e))e.preventDefault();},{p
 document.addEventListener('touchmove',(e)=>{if(!isUI(e))e.preventDefault();},{passive:false});
 
 // --- Input: Keyboard (desktop) ---
-const keys={};
 window.addEventListener('keydown',(e)=>{keys[e.code]=true;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();});
 window.addEventListener('keyup',(e)=>{keys[e.code]=false;});
 
