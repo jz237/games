@@ -487,9 +487,11 @@ function update(dt){
     if(b.life<=0)ufoBullets.splice(i,1);
   }
 
-  // Powerups
+  // Powerups (slow drift, easy to catch)
   for(const p of powerups){
-    p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;wrap(p);
+    p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;
+    p.vx*=0.98;p.vy*=0.98; // drag so they slow to a near-stop
+    wrap(p);
   }
   powerups=powerups.filter(p=>p.life>0);
 
@@ -619,7 +621,7 @@ function destroyAsteroid(a,ai){
   if(Math.random()<0.15){
     const types=['shield','rapid','triple','speed'];
     const type=types[Math.floor(rand(0,types.length))];
-    powerups.push({x:a.x,y:a.y,vx:rand(-20,20),vy:rand(-20,20),life:10,type});
+    powerups.push({x:a.x,y:a.y,vx:rand(-8,8),vy:rand(-8,8),life:12,type});
   }
 }
 
