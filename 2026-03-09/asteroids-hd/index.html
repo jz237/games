@@ -193,6 +193,7 @@ let ship=null,bullets=[],asteroids=[],ufos=[],ufoBullets=[],powerups=[];
 const keys={};
 let score=0,lives=4,level=1,gameState='start';
 let invulnTimer=0,shieldTimer=0,rapidTimer=0,tripleTimer=0,speedTimer=0;
+let scorePopups=[];
 let levelAnnounce='',levelAnnounceTimer=0;
 let screenFlash=0;
 let fireRate=0.1,fireCooldown=0;
@@ -207,7 +208,7 @@ function resetShip(){
 
 function startGame(){
   initAudio();score=0;lives=4;level=1;
-  bullets=[];asteroids=[];ufos=[];ufoBullets=[];powerups=[];particles=[];
+  bullets=[];asteroids=[];ufos=[];ufoBullets=[];powerups=[];particles=[];scorePopups=[];
   fireCooldown=0;shieldTimer=0;rapidTimer=0;tripleTimer=0;speedTimer=0;
   resetShip();spawnLevel();
   gameState='play';
@@ -649,6 +650,7 @@ function update(dt){
       if(dist(b,u)<u.radius){
         bullets.splice(bi,1);ufos.splice(ui,1);
         score+=200;
+        scorePopups.push({x:u.x,y:u.y,text:'+200',life:1.2,maxLife:1.2,vy:-40,color:'#66ff66',size:18});
         spawnParticles(u.x,u.y,40,'#66ff66',1.5);
         spawnDebris(u.x,u.y,8,['#888','#aaa','#66ff66']);
         spawnShockwave(u.x,u.y,'#66ff66');
@@ -672,6 +674,7 @@ function update(dt){
         // Points for ram kill
         const ramPts=a.size==='large'?30:a.size==='medium'?75:a.size==='boss'?300:150;
         score+=ramPts;
+        scorePopups.push({x:a.x,y:a.y,text:'+'+ramPts,life:1.2,maxLife:1.2,vy:-40,color:'#44aaff',size:16});
         a.hp--;
         if(a.hp<=0){
           destroyAsteroid(a,ai);
@@ -742,6 +745,15 @@ function update(dt){
     if(p.life<=0)particles.splice(i,1);
   }
 
+  // Score popups
+  for(let i=scorePopups.length-1;i>=0;i--){
+    const sp=scorePopups[i];
+    sp.y+=sp.vy*dt;
+    sp.vy*=0.95;
+    sp.life-=dt;
+    if(sp.life<=0)scorePopups.splice(i,1);
+  }
+
   // HUD
   document.getElementById('scoreDisp').textContent=score;
   let lstr='';for(let i=0;i<lives;i++)lstr+='\u25B2 ';
@@ -753,6 +765,8 @@ function destroyAsteroid(a,ai){
   asteroids.splice(ai,1);
   const pts=a.size==='large'?20:a.size==='medium'?50:a.size==='boss'?200:100;
   score+=pts;
+  // Floating score popup
+  scorePopups.push({x:a.x,y:a.y,text:'+'+pts,life:1.2,maxLife:1.2,vy:-40,color:a.palette[2]||'#fff',size:pts>=200?22:pts>=100?18:pts>=50?15:12});
   // Particles
   const col=a.palette[2]||'#fff';
   const cnt=a.size==='large'||a.size==='boss'?60:a.size==='medium'?35:20;
@@ -867,6 +881,19 @@ function draw(){
       ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
       ctx.globalAlpha=1;
     }
+  }
+
+  // Floating score popups
+  for(const sp of scorePopups){
+    const alpha=Math.max(0,sp.life/sp.maxLife);
+    ctx.globalAlpha=alpha;
+    ctx.font=`bold ${sp.size}px monospace`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.shadowColor=sp.color;ctx.shadowBlur=8;
+    ctx.fillStyle='#fff';
+    ctx.fillText(sp.text,sp.x,sp.y);
+    ctx.shadowBlur=0;
+    ctx.globalAlpha=1;
   }
 
   ctx.restore(); // shake
