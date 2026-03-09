@@ -262,7 +262,7 @@ function spawnAsteroid(size,x,y){
     rot:0,rotV:rand(-2,2)*(level>=4?2:1),
     rotX:rand(0,Math.PI*2),rotY:rand(0,Math.PI*2),
     rotXV:rand(-1.5,1.5),rotYV:rand(-1.2,1.2),
-    craters:makeCraters(ar,Math.floor(rand(3,6))),
+    craters:makeCraters(ar,Math.floor(rand(5,9))),
     palette:pal,hp:isBoss?5:1
   });
 }
@@ -348,100 +348,118 @@ function draw3DAsteroid(ast){
   const rx=ast.rotX,ry=ast.rotY;
   const sinRx=Math.sin(rx),cosRx=Math.cos(rx),sinRy=Math.sin(ry),cosRy=Math.cos(ry);
 
-  // Compute 3D-warped vertices: modulate by rotation to fake perspective tumbling
+  // Stable polygon outline — only slow spin, NO perspective squishing
   const pts=ast.shape.map(p=>{
-    const ba=p.ba+ast.rot; // base angle + spin
-    const br=p.br;
-    // Treat each vertex as a point on a sphere-ish surface and project
-    const x3=Math.cos(ba)*br;
-    const y3=Math.sin(ba)*br;
-    // Apply fake 3D foreshortening based on rotation
-    const xw=x3*cosRy + r*0.15*sinRy*Math.cos(ba);
-    const yw=y3*cosRx + r*0.15*sinRx*Math.sin(ba);
-    return {x:xw,y:yw};
+    const ba=p.ba+ast.rot;
+    return {x:Math.cos(ba)*p.br, y:Math.sin(ba)*p.br};
   });
 
-  // Light direction shifts with rotation (top-left base)
-  const lx=-0.7+sinRy*0.3, ly=-0.7+sinRx*0.3;
+  // Light direction orbits with rotation (simulates tumbling under fixed light)
+  const lx=-0.7+sinRy*0.4, ly=-0.7+sinRx*0.4;
   const lLen=Math.hypot(lx,ly); const lnx=lx/lLen, lny=ly/lLen;
 
-  // Shadow underneath — shifts with rotation
+  // Drop shadow — shifts with rotation
   const shOx=4+sinRy*3, shOy=4+sinRx*3;
   ctx.save();ctx.translate(shOx,shOy);
   ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
   for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
   ctx.closePath();ctx.fillStyle='rgba(0,0,0,0.35)';ctx.fill();ctx.restore();
 
-  // Main body
+  // Clip to asteroid shape for all surface rendering
   ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
   for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
   ctx.closePath();
+  ctx.save();ctx.clip();
 
-  // Gradient: highlight shifts with rotation
-  const hlx=-r*0.3*cosRy-r*0.1*sinRy;
-  const hly=-r*0.3*cosRx-r*0.1*sinRx;
-  const bg=ctx.createRadialGradient(hlx,hly,r*0.05,sinRy*r*0.1,sinRx*r*0.1,r*1.3);
-  bg.addColorStop(0,pal[3]||pal[2]); // bright highlight
-  bg.addColorStop(0.35,pal[2]);
-  bg.addColorStop(0.7,pal[1]);
-  bg.addColorStop(1,pal[0]); // deep shadow
-  ctx.fillStyle=bg;ctx.fill();
-  ctx.strokeStyle=pal[0];ctx.lineWidth=1.2;ctx.stroke();
+  // Sphere shading gradient — hotspot orbits with rotation
+  const hlx=-r*0.35*lnx, hly=-r*0.35*lny;
+  const bg=ctx.createRadialGradient(hlx,hly,r*0.05,sinRy*r*0.05,sinRx*r*0.05,r*1.3);
+  bg.addColorStop(0,pal[3]||pal[2]);
+  bg.addColorStop(0.3,pal[2]);
+  bg.addColorStop(0.65,pal[1]);
+  bg.addColorStop(1,pal[0]);
+  ctx.fillStyle=bg;ctx.fillRect(-r*1.5,-r*1.5,r*3,r*3);
 
-  // Dark terminator shading (shadow on opposite side of light)
+  // Dark terminator shading
   const shGx=r*0.5*(-lnx), shGy=r*0.5*(-lny);
   const termG=ctx.createRadialGradient(shGx,shGy,r*0.2,shGx,shGy,r*1.1);
   termG.addColorStop(0,'rgba(0,0,0,0.4)');
   termG.addColorStop(0.5,'rgba(0,0,0,0.15)');
   termG.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=termG;ctx.fill();
+  ctx.fillStyle=termG;ctx.fillRect(-r*1.5,-r*1.5,r*3,r*3);
 
-  // Surface craters that rotate with the asteroid
+  // Rocky surface bumps — noise dots that shift with rotation
+  if(!ast._bumps){
+    ast._bumps=[];
+    for(let i=0;i<Math.floor(r*1.5);i++){
+      ast._bumps.push({theta:rand(0,Math.PI*2),phi:rand(0.2,Math.PI-0.2),
+        size:rand(1,r*0.06),bright:rand(-0.15,0.15)});
+    }
+  }
+  for(const b of ast._bumps){
+    const bt=b.theta+ry, bp=b.phi+rx;
+    const bx=Math.sin(bp)*Math.cos(bt), by=Math.cos(bp), bz=Math.sin(bp)*Math.sin(bt);
+    if(bz>0){
+      const sx=bx*r*0.75, sy=by*r*0.75;
+      const a=bz*0.6;
+      ctx.beginPath();ctx.arc(sx,sy,b.size*(0.5+bz*0.5),0,Math.PI*2);
+      ctx.fillStyle=b.bright>0?`rgba(255,255,255,${b.bright*a})`:`rgba(0,0,0,${-b.bright*a})`;
+      ctx.fill();
+    }
+  }
+
+  // Surface craters that orbit with 3D rotation
   for(const cr of ast.craters){
-    // Project crater position from sphere coords
-    const ct=cr.theta+ry; // rotate with Y axis
-    const cp=cr.phi+rx*0.5; // rotate with X axis
+    const ct=cr.theta+ry;
+    const cp=cr.phi+rx;
     const cx3=Math.sin(cp)*Math.cos(ct);
     const cy3=Math.cos(cp);
     const cz3=Math.sin(cp)*Math.sin(ct);
-    // Only draw if facing us (z > 0)
-    if(cz3>-0.1){
-      const csx=cx3*r*0.6;
-      const csy=cy3*r*0.6;
-      const visScale=0.5+cz3*0.5; // smaller when near edge
+    if(cz3>0.05){
+      const csx=cx3*r*0.7;
+      const csy=cy3*r*0.7;
+      const visScale=0.3+cz3*0.7;
       const crSize=cr.cr*visScale;
       if(crSize>1){
+        // Dark crater interior
+        const cg=ctx.createRadialGradient(csx+crSize*0.15*lnx,csy+crSize*0.15*lny,0,csx,csy,crSize);
+        cg.addColorStop(0,`rgba(0,0,0,${cr.darkness*visScale*0.9})`);
+        cg.addColorStop(0.6,`rgba(0,0,0,${cr.darkness*0.4*visScale})`);
+        cg.addColorStop(1,'rgba(0,0,0,0)');
         ctx.beginPath();ctx.arc(csx,csy,crSize,0,Math.PI*2);
-        // Crater is darker with a slight highlight on light-facing rim
-        const cg=ctx.createRadialGradient(csx+crSize*0.2*lnx,csy+crSize*0.2*lny,0,csx,csy,crSize);
-        cg.addColorStop(0,`rgba(0,0,0,${cr.darkness*visScale})`);
-        cg.addColorStop(0.7,`rgba(0,0,0,${cr.darkness*0.5*visScale})`);
-        cg.addColorStop(1,`rgba(0,0,0,0)`);
         ctx.fillStyle=cg;ctx.fill();
-        // Rim highlight
+        // Rim highlight on light-facing edge
         ctx.beginPath();
-        ctx.arc(csx-crSize*0.3*lnx,csy-crSize*0.3*lny,crSize*0.9,0,Math.PI*2);
-        ctx.strokeStyle=`rgba(255,255,255,${0.08*visScale})`;ctx.lineWidth=0.5;ctx.stroke();
+        ctx.arc(csx-crSize*0.3*lnx,csy-crSize*0.3*lny,crSize*0.95,0,Math.PI*2);
+        ctx.strokeStyle=`rgba(255,255,255,${0.12*visScale})`;ctx.lineWidth=0.7;ctx.stroke();
       }
     }
   }
 
-  // Specular highlight — shifts with rotation
-  const spx=hlx*0.8, spy=hly*0.8;
-  ctx.beginPath();ctx.arc(spx,spy,r*0.25,0,Math.PI*2);
-  const spG=ctx.createRadialGradient(spx,spy,0,spx,spy,r*0.25);
-  spG.addColorStop(0,'rgba(255,255,255,0.25)');
+  // Specular highlight — orbits with rotation
+  const spx=hlx*0.7, spy=hly*0.7;
+  ctx.beginPath();ctx.arc(spx,spy,r*0.22,0,Math.PI*2);
+  const spG=ctx.createRadialGradient(spx,spy,0,spx,spy,r*0.22);
+  spG.addColorStop(0,'rgba(255,255,255,0.3)');
   spG.addColorStop(0.5,'rgba(255,255,255,0.08)');
   spG.addColorStop(1,'rgba(255,255,255,0)');
   ctx.fillStyle=spG;ctx.fill();
 
-  // Rim light (edge glow on dark side)
+  // Rim light (subtle edge glow on dark side)
   ctx.beginPath();ctx.arc(0,0,r*0.85,0,Math.PI*2);
   const rimG=ctx.createRadialGradient(-lnx*r*0.3,-lny*r*0.3,r*0.5,0,0,r*0.95);
   rimG.addColorStop(0,'rgba(0,0,0,0)');
   rimG.addColorStop(0.8,'rgba(0,0,0,0)');
-  rimG.addColorStop(1,`rgba(200,210,255,0.08)`);
+  rimG.addColorStop(1,'rgba(200,210,255,0.1)');
   ctx.fillStyle=rimG;ctx.fill();
+
+  ctx.restore(); // end clip
+
+  // Stroke the outline (outside clip)
+  ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
+  ctx.closePath();
+  ctx.strokeStyle=pal[0];ctx.lineWidth=1.2;ctx.stroke();
 
   // Boss marker
   if(ast.size==='boss'){
@@ -709,7 +727,7 @@ function update(dt){
       asteroids.push({x:bx<W/2?W+80:-80,y:rand(50,H-50),vx:rand(-30,30),vy:rand(-30,30),
         size:'boss',radius:80,shape:makeAstShape(80,16),rot:0,rotV:rand(-1,1),
         rotX:rand(0,6.28),rotY:rand(0,6.28),rotXV:rand(-1,1),rotYV:rand(-0.8,0.8),
-        craters:makeCraters(80,5),
+        craters:makeCraters(80,7),
         palette:['#880000','#aa2222','#cc4444','#ff6666'],hp:5});
     } else {
       spawnLevel();
