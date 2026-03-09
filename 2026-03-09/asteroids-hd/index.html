@@ -118,7 +118,7 @@ function drawStars(){
 }
 function updateStars(sx,sy){
   for(const s of stars){
-    const spd=[0.02,0.05,0.1][s.layer];
+    const spd=[0.005,0.012,0.025][s.layer];
     s.x-=sx*spd;s.y-=sy*spd;
     if(s.x<0)s.x+=W;if(s.x>W)s.x-=W;
     if(s.y<0)s.y+=H;if(s.y>H)s.y-=H;
@@ -173,7 +173,7 @@ let score=0,lives=3,level=1,gameState='start';
 let invulnTimer=0,shieldTimer=0,rapidTimer=0,tripleTimer=0,speedTimer=0;
 let levelAnnounce='',levelAnnounceTimer=0;
 let screenFlash=0;
-let fireRate=0.25,fireCooldown=0;
+let fireRate=0.1,fireCooldown=0;
 let ufoSpawnTimer=0,ufoSoundTimer=0;
 let touchStartTime=0,touchStartPos=null,isTouching=false,touchPos=null;
 let lastSwipeTime=0,boostTimer=0;
@@ -425,7 +425,7 @@ function update(dt){
   if(screenFlash>0)screenFlash-=dt*3;
   if(boostTimer>0)boostTimer-=dt;
   shakeAmount*=shakeDecay;
-  fireRate=rapidTimer>0?0.08:0.25;
+  fireRate=rapidTimer>0?0.04:0.1;
   const spdMul=speedTimer>0?1.6:1;
   ufoSoundTimer-=dt;
 
