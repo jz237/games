@@ -100,14 +100,19 @@ const lerp=(a,b,t)=>a+(b-a)*t;
 let stars=[];
 function initStars(){
   stars=[];
-  for(let i=0;i<200;i++){
-    stars.push({x:rand(0,W),y:rand(0,H),s:rand(0.5,2.5),b:rand(0.3,1),layer:Math.floor(rand(0,3))});
+  for(let i=0;i<340;i++){
+    stars.push({x:rand(0,W),y:rand(0,H),s:rand(1.2,3.6),b:rand(0.45,1),layer:Math.floor(rand(0,3))});
   }
 }
 function drawStars(){
   for(const s of stars){
-    ctx.globalAlpha=s.b*0.7;ctx.fillStyle='#fff';
+    const a=s.b*0.9;
+    ctx.globalAlpha=a;
+    ctx.fillStyle='#ffffff';
     ctx.fillRect(s.x,s.y,s.s,s.s);
+    // soft halo so stars remain visible on mobile compression
+    ctx.globalAlpha=a*0.25;
+    ctx.fillRect(s.x-1,s.y-1,s.s+2,s.s+2);
   }
   ctx.globalAlpha=1;
 }
@@ -202,15 +207,22 @@ function spawnLevel(){
 function spawnAsteroid(size,x,y){
   const r=size==='large'?50:size==='medium'?25:12;
   if(x===undefined){
-    // spawn at edges
+    // Spawn just inside the visible area so players immediately see action
+    const margin=Math.max(40,r+10);
     const side=Math.floor(rand(0,4));
-    if(side===0){x=rand(0,W);y=-50;}
-    else if(side===1){x=W+50;y=rand(0,H);}
-    else if(side===2){x=rand(0,W);y=H+50;}
-    else{x=-50;y=rand(0,H);}
+    if(side===0){x=rand(margin,W-margin);y=margin;}           // top
+    else if(side===1){x=W-margin;y=rand(margin,H-margin);}     // right
+    else if(side===2){x=rand(margin,W-margin);y=H-margin;}     // bottom
+    else{x=margin;y=rand(margin,H-margin);}                    // left
   }
-  const spd=30+level*5+rand(0,30);
-  const a=rand(0,Math.PI*2);
+
+  const spd=40+level*8+rand(0,35);
+
+  // Bias asteroid movement inward toward center so they don't drift off-screen at start
+  const cx=W/2, cy=H/2;
+  const baseAngle=Math.atan2(cy-y,cx-x);
+  const a=baseAngle+rand(-0.85,0.85);
+
   const pal=astPalettes[Math.floor(rand(0,astPalettes.length))];
   const isBoss=size==='boss';
   const bossR=80;
@@ -233,8 +245,10 @@ function spawnUFO(){
 function drawShip(){
   if(!ship)return;
   const s=ship;
-  if(invulnTimer>0&&Math.floor(invulnTimer*10)%2===0)return;
-  ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.angle);
+  ctx.save();
+  // During invulnerability, keep ship visible with pulse instead of fully hiding
+  if(invulnTimer>0) ctx.globalAlpha=(Math.floor(invulnTimer*12)%2===0)?0.45:1;
+  ctx.translate(s.x,s.y);ctx.rotate(s.angle);
   // Shadow
   ctx.save();ctx.translate(2,2);
   ctx.beginPath();ctx.moveTo(20,0);ctx.lineTo(-14,12);ctx.lineTo(-8,0);ctx.lineTo(-14,-12);ctx.closePath();
@@ -624,8 +638,12 @@ function fireBullet(){
 // --- Draw ---
 function draw(){
   ctx.clearRect(0,0,W,H);
-  // Background
-  ctx.fillStyle='#050510';ctx.fillRect(0,0,W,H);
+  // Background (brighter deep-space gradient so scene isn't pure black on mobile)
+  const bg=ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#0a1030');
+  bg.addColorStop(0.55,'#060818');
+  bg.addColorStop(1,'#03040c');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
 
   // Screen shake
   ctx.save();
