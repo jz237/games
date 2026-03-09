@@ -374,6 +374,13 @@ function drawPowerup(p){
 // --- Update ---
 function update(dt){
   if(gameState!=='play')return;
+  // Keyboard poll (integrated directly)
+  if(ship){
+    if(keys['ArrowLeft']||keys['KeyA'])ship.angle-=0.07;
+    if(keys['ArrowRight']||keys['KeyD'])ship.angle+=0.07;
+    ship.thrust=!!(keys['ArrowUp']||keys['KeyW']);
+    if(keys['Space']||keys['KeyF'])fireBullet();
+  }
   // Timers
   if(invulnTimer>0)invulnTimer-=dt;
   if(shieldTimer>0)shieldTimer-=dt;
@@ -775,19 +782,7 @@ const keys={};
 window.addEventListener('keydown',(e)=>{keys[e.code]=true;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();});
 window.addEventListener('keyup',(e)=>{keys[e.code]=false;});
 
-// Keyboard update in game loop
-const origUpdate=update;
-const keyboardPoll=()=>{
-  if(!ship||gameState!=='play')return;
-  if(keys['ArrowLeft']||keys['KeyA'])ship.angle-=0.07;
-  if(keys['ArrowRight']||keys['KeyD'])ship.angle+=0.07;
-  ship.thrust=!!(keys['ArrowUp']||keys['KeyW']);
-  if(keys['Space']||keys['KeyF'])fireBullet();
-};
-// Patch update
-const patchedUpdate=(dt)=>{keyboardPoll();origUpdate(dt);};
-// Override
-update=patchedUpdate;
+// Keyboard controls integrated directly into update()
 
 // --- Buttons ---
 function bindBtn(id,fn){
