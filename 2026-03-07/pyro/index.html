@@ -619,27 +619,29 @@ function updatePlayer(dt) {
     }
   }
 
-  // Movement: use discrete per-tile ticks like Neon Serpent
-  player.moveTimer = (player.moveTimer || 0) + dt;
+  // Movement: use discrete per-tile ticks (dt is in seconds, convert to ms)
+  player.moveTimer = (player.moveTimer || 0) + dt * 1000;
   const intervalMs = player.moveInterval || 140;
   // If enough time elapsed, advance one tile toward target
   if (player.moveTimer >= intervalMs) {
     player.moveTimer -= intervalMs;
-    const dx = Math.sign(player.tx - player.gx);
-    const dy = Math.sign(player.ty - player.gy);
+    const mdx = Math.sign(player.tx - player.gx);
+    const mdy = Math.sign(player.ty - player.gy);
     // prefer one axis if both present
     let stepX = 0, stepY = 0;
-    if (dx !== 0) stepX = dx; else if (dy !== 0) stepY = dy;
-    const nx = Math.max(0, Math.min(COLS-1, player.gx + stepX));
-    const ny = Math.max(0, Math.min(ROWS-1, player.gy + stepY));
+    if (mdx !== 0) stepX = mdx; else if (mdy !== 0) stepY = mdy;
+    const mnx = Math.max(0, Math.min(COLS-1, player.gx + stepX));
+    const mny = Math.max(0, Math.min(ROWS-1, player.gy + stepY));
     // record for interpolation
     player._prevGx = player.gx; player._prevGy = player.gy;
-    player.gx = nx; player.gy = ny;
+    player.gx = mnx; player.gy = mny;
+    // Sync player.x/y so atTarget check works when grid pos matches target
+    player.x = player.gx; player.y = player.gy;
     player._interpTime = 0; player._interpDur = intervalMs;
   }
   // interpolate render position between prev and current grid pos
   if (player._interpDur && player._interpTime < player._interpDur) {
-    player._interpTime = (player._interpTime || 0) + dt;
+    player._interpTime = (player._interpTime || 0) + dt * 1000;
     const t = Math.min(1, player._interpTime / player._interpDur);
     const fromX = (player._prevGx !== undefined ? player._prevGx : player.gx) + 0.5;
     const fromY = (player._prevGy !== undefined ? player._prevGy : player.gy) + 0.5;
