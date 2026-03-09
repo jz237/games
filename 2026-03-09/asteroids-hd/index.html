@@ -26,11 +26,23 @@ canvas{display:block;width:100%;height:100%;}
 <p>Touch to aim &bull; Tap to fire &bull; Swipe to thrust &bull; Double-swipe to boost!</p>
 <p>Destroy all asteroids to advance</p>
 <button id="startBtn">Start Game</button>
+<button id="showHSBtn">High Scores</button>
 </div>
 <div class="overlay hidden" id="gameOverScreen">
 <h1>Game Over</h1>
 <p id="finalScore"></p>
+<div id="hsEntryArea" class="hidden" style="margin:0.5em 0;text-align:center;">
+  <p style="color:#ffaa00;font-size:clamp(0.9rem,2.5vw,1.2rem);margin-bottom:0.4em;">NEW HIGH SCORE! Enter initials:</p>
+  <div id="initialPickers" style="display:flex;gap:0.5em;justify-content:center;align-items:center;"></div>
+  <button id="hsSubmitBtn" style="margin-top:0.8em;">Submit</button>
+</div>
+<div id="hsTableGO" style="margin:0.5em 0;"></div>
 <button id="restartBtn">Play Again</button>
+</div>
+<div class="overlay hidden" id="hsScreen">
+<h1>High Scores</h1>
+<div id="hsTableView"></div>
+<button id="hsBackBtn">Back</button>
 </div>
 <script>
 'use strict';
@@ -536,7 +548,31 @@ function update(dt){
     }
   }
 
-  // Ship vs asteroids
+  // Shield RAM: destroy asteroids on contact when shield is active
+  if(ship&&shieldTimer>0){
+    for(let ai=asteroids.length-1;ai>=0;ai--){
+      const a=asteroids[ai];
+      if(dist(ship,a)<a.radius+ship.radius+7){
+        // Impact flash & particles
+        const ix=(ship.x+a.x)/2, iy=(ship.y+a.y)/2;
+        spawnParticles(ix,iy,40,'#44aaff',2,0.8);
+        spawnParticles(ix,iy,20,'#ffffff',1.5,0.5);
+        spawnShockwave(ix,iy,'#44aaff');
+        screenFlash=0.3;shakeAmount=10;
+        // Points for ram kill
+        const ramPts=a.size==='large'?30:a.size==='medium'?75:a.size==='boss'?300:150;
+        score+=ramPts;
+        a.hp--;
+        if(a.hp<=0){
+          destroyAsteroid(a,ai);
+        } else {
+          spawnParticles(ix,iy,8,'#ff8888',0.5,0.3);
+        }
+        playSound('explosion');
+      }
+    }
+  }
+  // Ship vs asteroids (no shield)
   if(ship&&invulnTimer<=0&&shieldTimer<=0){
     for(let ai=asteroids.length-1;ai>=0;ai--){
       const a=asteroids[ai];
@@ -637,8 +673,7 @@ function killShip(){
   lives--;
   if(lives<=0){
     ship=null;gameState='over';
-    document.getElementById('finalScore').textContent='Score: '+score;
-    setTimeout(()=>document.getElementById('gameOverScreen').classList.remove('hidden'),1500);
+    setTimeout(()=>showGameOver(),1500);
   } else {
     ship=null;
     setTimeout(()=>{if(gameState==='play'){resetShip();}},1500);
@@ -813,7 +848,7 @@ canvas.addEventListener('touchend',(e)=>{
         ship.thrust=true;
         if(isDoubleSwipe){
           // DOUBLE SWIPE BOOST — big speed burst
-          const boostAcc=800*(speedTimer>0?1.6:1);
+          const boostAcc=1360*(speedTimer>0?1.6:1);
           ship.vx+=Math.cos(ship.angle)*boostAcc*0.05;
           ship.vy+=Math.sin(ship.angle)*boostAcc*0.05;
           boostTimer=0.5;
@@ -828,7 +863,7 @@ canvas.addEventListener('touchend',(e)=>{
               life:rand(0.2,0.5),maxLife:0.5,size:rand(2,5),color:Math.random()>0.5?'#aaccff':'#ffffff',type:'dot'});
           }
         } else {
-          const acc=200*(speedTimer>0?1.6:1);
+          const acc=340*(speedTimer>0?1.6:1);
           ship.vx+=Math.cos(ship.angle)*acc*0.05;
           ship.vy+=Math.sin(ship.angle)*acc*0.05;
           playSound('thrust');
@@ -861,6 +896,98 @@ function bindBtn(id,fn){
 }
 bindBtn('startBtn',startGame);
 bindBtn('restartBtn',startGame);
+bindBtn('showHSBtn',()=>{
+  document.getElementById('startScreen').classList.add('hidden');
+  renderHSTable('hsTableView');
+  document.getElementById('hsScreen').classList.remove('hidden');
+});
+bindBtn('hsBackBtn',()=>{
+  document.getElementById('hsScreen').classList.add('hidden');
+  document.getElementById('startScreen').classList.remove('hidden');
+});
+
+// --- HIGH SCORE SYSTEM ---
+const HS_KEY='asteroidsHD_highscores';
+function getHighScores(){try{return JSON.parse(localStorage.getItem(HS_KEY))||[];}catch(e){return[];}}
+function saveHighScores(hs){localStorage.setItem(HS_KEY,JSON.stringify(hs));}
+function isHighScore(s){const hs=getHighScores();return hs.length<10||s>hs[hs.length-1].score;}
+function addHighScore(name,sc,lv){
+  const hs=getHighScores();
+  hs.push({name,score:sc,level:lv});
+  hs.sort((a,b)=>b.score-a.score);
+  if(hs.length>10)hs.length=10;
+  saveHighScores(hs);
+  return hs;
+}
+function renderHSTable(containerId,highlightScore){
+  const hs=getHighScores();
+  const el=document.getElementById(containerId);
+  if(!hs.length){el.innerHTML='<p style="color:#888;font-size:0.9rem;">No scores yet</p>';return;}
+  let html='<table style="margin:0 auto;border-collapse:collapse;font-size:clamp(0.7rem,2vw,1rem);font-family:monospace;">';
+  html+='<tr style="color:#888;"><td style="padding:2px 8px;">#</td><td style="padding:2px 8px;">NAME</td><td style="padding:2px 8px;">SCORE</td><td style="padding:2px 8px;">LV</td></tr>';
+  hs.forEach((e,i)=>{
+    const hi=highlightScore!==undefined&&e.score===highlightScore;
+    const c=hi?'color:#ffaa00;font-weight:bold;':'color:#ccc;';
+    html+=`<tr style="${c}"><td style="padding:2px 8px;">${i+1}</td><td style="padding:2px 8px;">${e.name}</td><td style="padding:2px 8px;">${e.score}</td><td style="padding:2px 8px;">${e.level}</td></tr>`;
+  });
+  html+='</table>';
+  el.innerHTML=html;
+}
+
+// Patch killShip to show high score entry
+const _origKillShip=killShip;
+
+// Build initial picker UI
+function buildInitialPickers(){
+  const container=document.getElementById('initialPickers');
+  container.innerHTML='';
+  const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  for(let i=0;i<3;i++){
+    const col=document.createElement('div');
+    col.style.cssText='display:flex;flex-direction:column;align-items:center;gap:4px;';
+    const up=document.createElement('button');
+    up.textContent='▲';up.style.cssText='font-size:1.5rem;padding:4px 12px;background:none;border:1px solid #888;color:#fff;cursor:pointer;touch-action:manipulation;';
+    const ltr=document.createElement('span');
+    ltr.textContent='A';ltr.style.cssText='font-size:2rem;color:#ffaa00;min-width:1.5em;text-align:center;';
+    ltr.dataset.idx='0';ltr.id='hsLetter'+i;
+    const dn=document.createElement('button');
+    dn.textContent='▼';dn.style.cssText='font-size:1.5rem;padding:4px 12px;background:none;border:1px solid #888;color:#fff;cursor:pointer;touch-action:manipulation;';
+    up.addEventListener('click',()=>{let idx=(parseInt(ltr.dataset.idx)+1)%26;ltr.dataset.idx=idx;ltr.textContent=letters[idx];});
+    up.addEventListener('touchend',(e)=>{e.preventDefault();e.stopPropagation();let idx=(parseInt(ltr.dataset.idx)+1)%26;ltr.dataset.idx=idx;ltr.textContent=letters[idx];},{passive:false});
+    dn.addEventListener('click',()=>{let idx=(parseInt(ltr.dataset.idx)+25)%26;ltr.dataset.idx=idx;ltr.textContent=letters[idx];});
+    dn.addEventListener('touchend',(e)=>{e.preventDefault();e.stopPropagation();let idx=(parseInt(ltr.dataset.idx)+25)%26;ltr.dataset.idx=idx;ltr.textContent=letters[idx];},{passive:false});
+    col.appendChild(up);col.appendChild(ltr);col.appendChild(dn);
+    container.appendChild(col);
+  }
+}
+
+function showGameOver(){
+  document.getElementById('finalScore').textContent='Score: '+score+' | Level: '+level;
+  const entryArea=document.getElementById('hsEntryArea');
+  const hsTableGO=document.getElementById('hsTableGO');
+  if(isHighScore(score)){
+    buildInitialPickers();
+    entryArea.classList.remove('hidden');
+    hsTableGO.innerHTML='';
+    // Bind submit
+    const submitBtn=document.getElementById('hsSubmitBtn');
+    const newSubmit=submitBtn.cloneNode(true);
+    submitBtn.parentNode.replaceChild(newSubmit,submitBtn);
+    const doSubmit=()=>{
+      const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const name=[0,1,2].map(i=>letters[parseInt(document.getElementById('hsLetter'+i).dataset.idx)]).join('');
+      addHighScore(name,score,level);
+      entryArea.classList.add('hidden');
+      renderHSTable('hsTableGO',score);
+    };
+    newSubmit.addEventListener('click',doSubmit);
+    newSubmit.addEventListener('touchend',(e)=>{e.preventDefault();e.stopPropagation();doSubmit();},{passive:false});
+  } else {
+    entryArea.classList.add('hidden');
+    renderHSTable('hsTableGO');
+  }
+  document.getElementById('gameOverScreen').classList.remove('hidden');
+}
 </script>
 </body>
 </html>
