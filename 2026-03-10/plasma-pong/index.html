@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Plasma Pong</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{position:fixed;overflow:hidden;overscroll-behavior:none;width:100%;height:100%;margin:0;padding:0;background:#0a0a1a;touch-action:none}
+canvas{display:block;width:100%;height:100%}
+button{touch-action:manipulation;cursor:pointer;background:none;border:2px solid #00ffff;color:#00ffff;font-family:'Courier New',monospace;font-size:18px;padding:12px 32px;border-radius:8px;text-transform:uppercase;letter-spacing:2px;position:relative;z-index:10}
+button:active{background:rgba(0,255,255,0.2)}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:5;pointer-events:none}
+.overlay.active{pointer-events:auto}
+.overlay *{pointer-events:auto}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+
+// Audio
+let audioCtx=null;
+function initAudio(){if(audioCtx)return;try{audioCtx=new(window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume()}catch(e){}}
+function playSound(freq,dur,type='sine',vol=0.3,sweep=0){
+if(!audioCtx)return;
+try{
+const o=audioCtx.createOscillator();const g=audioCtx.createGain();
+o.type=type;o.frequency.setValueAtTime(freq,audioCtx.currentTime);
+if(sweep)o.frequency.linearRampToValueAtTime(freq+sweep,audioCtx.currentTime+dur);
+g.gain.setValueAtTime(vol,audioCtx.currentTime);
+g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+o.connect(g);g.connect(audioCtx.destination);
+o.start();o.stop(audioCtx.currentTime+dur);
+}catch(e){}
+}
+function sndHit(){playSound(880,0.08,'sine',0.25)}
+function sndWall(){playSound(220,0.1,'triangle',0.15)}
+function sndScore(){playSound(300,0.4,'sine',0.3,800)}
+function sndPowerup(){playSound(1200,0.05,'sine',0.2);setTimeout(()=>playSound(1600,0.05,'sine',0.2),50);setTimeout(()=>playSound(2000,0.08,'sine',0.2),100)}
+
+// Game constants
+const WINNING_SCORE=11;const BEST_OF=3;
+const PADDLE_W_R=0.015;const PADDLE_H_R=0.12;
+const BALL_R_R=0.008;const BALL_SPEED_R=0.45;
+const AI_SPEEDS=[0.3,0.45,0.6];
+
+// State
+let W,H,dpr;
+let state='title'; // title|playing|roundEnd|gameOver
+let balls=[];let particles=[];let trails=[];let powerups=[];let bgParticles=[];
+let playerScore=0,aiScore=0,playerRounds=0,aiRounds=0,currentRound=0;
+let hitCount=0;
+let playerY=0.5,aiY=0.5;
+let shakeX=0,shakeY=0,shakeTimer=0;
+let flashAlpha=0;
+let playerPower=null,aiPower=null;let playerPowerTimer=0;
+let shieldTimer=0;let shieldSide='';
+let titleTime=0;
+let roundEndMsg='';let roundEndTimer=0;
+let touchActive=false;
+
+function resize(){
+dpr=window.devicePixelRatio||1;
+W=window.innerWidth;H=window.innerHeight;
+canvas.width=W*dpr;canvas.height=H*dpr;
+ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize',resize);
+resize();
+
+// Init bg particles
+function initBgParticles(){
+bgParticles=[];
+for(let i=0;i<50;i++){
+bgParticles.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-0.5)*0.3,vy:(Math.random()-0.5)*0.3,r:Math.random()*1.5+0.5,a:Math.random()*0.3+0.1});
+}
+}
+initBgParticles();
+
+function spawnBall(x,y,vx,vy){
+const speed=BALL_SPEED_R*Math.min(W,H);
+if(vx===undefined){
+const angle=(Math.random()-0.5)*Math.PI*0.5;
+vx=Math.cos(angle)*speed*(Math.random()<0.5?1:-1);
+vy=Math.sin(angle)*speed;
+}
+balls.push({x:x||W/2,y:y||H/2,vx,vy,r:BALL_R_R*Math.min(W,H),fireball:false});
+}
+
+function resetRound(){
+balls=[];trails=[];particles=[];powerups=[];
+hitCount=0;playerScore=0;aiScore=0;
+playerY=0.5;aiY=0.5;
+playerPower=null;shieldTimer=0;
+spawnBall();
+}
+
+function startGame(){
+initAudio();
+playerRounds=0;aiRounds=0;currentRound=0;
+resetRound();
+state='playing';
+}
+
+// Particles
+function addParticles(x,y,color,count,speed){
+for(let i=0;i<count;i++){
+const a=Math.random()*Math.PI*2;
+const s=Math.random()*speed;
+particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,color,r:Math.random()*3+1});
+}
+}
+
+// Power-ups
+function maybeSpawnPowerup(){
+if(powerups.length>0||Math.random()>0.003)return;
+const types=['fire','magnet','shield'];
+const t=types[Math.floor(Math.random()*3)];
+const emojis={fire:'🔥',magnet:'🧲',shield:'🛡️'};
+powerups.push({x:W/2,y:Math.random()*(H-100)+50,vx:(Math.random()-0.5)*60,vy:(Math.random()-0.5)*40,type:t,emoji:emojis[t],r:15,life:10});
+}
+
+// Input
+let keys={};
+document.addEventListener('keydown',e=>{keys[e.key]=true});
+document.addEventListener('keyup',e=>{keys[e.key]=false});
+
+document.addEventListener('touchstart',e=>{
+if(e.target.closest('button'))return;
+initAudio();
+if(state==='title'){startGame();e.preventDefault();return}
+if(state==='gameOver'){startGame();e.preventDefault();return}
+if(state==='roundEnd')return;
+const t=e.touches[0];
+if(t.clientX<W*0.6){touchActive=true;playerY=t.clientY/H}
+e.preventDefault();
+},{passive:false});
+
+document.addEventListener('touchmove',e=>{
+if(e.target.closest('button'))return;
+if(state==='playing'&&touchActive){
+const t=e.touches[0];
+playerY=t.clientY/H;
+}
+e.preventDefault();
+},{passive:false});
+
+document.addEventListener('touchend',e=>{
+if(e.target.closest('button'))return;
+touchActive=false;
+if(state==='title'){initAudio();startGame();return}
+if(state==='gameOver'){startGame();return}
+},{passive:false});
+
+canvas.addEventListener('mousemove',e=>{
+if(state==='playing')playerY=e.clientY/H;
+});
+canvas.addEventListener('click',()=>{
+initAudio();
+if(state==='title')startGame();
+if(state==='gameOver')startGame();
+});
+
+// Update
+let lastTime=0;
+function update(dt){
+if(state!=='playing')return;
+
+const pw=PADDLE_W_R*W;const ph=PADDLE_H_R*H;
+const br=BALL_R_R*Math.min(W,H);
+
+// Keyboard
+if(keys['ArrowUp']||keys['w']||keys['W'])playerY-=0.8*dt;
+if(keys['ArrowDown']||keys['s']||keys['S'])playerY+=0.8*dt;
+playerY=Math.max(ph/2/H,Math.min(1-ph/2/H,playerY));
+
+// AI
+const aiSpeed=AI_SPEEDS[Math.min(currentRound,2)];
+let targetY=0.5;
+if(balls.length>0){
+let closest=null,closestDist=Infinity;
+for(const b of balls){
+if(b.vx>0){const d=W-pw-b.x;if(d<closestDist){closestDist=d;closest=b}}
+}
+if(closest)targetY=closest.y/H;
+}
+const diff=targetY-aiY;
+aiY+=Math.sign(diff)*Math.min(Math.abs(diff),aiSpeed*dt);
+aiY=Math.max(ph/2/H,Math.min(1-ph/2/H,aiY));
+
+// Magnet effect
+if(playerPower==='magnet'&&playerPowerTimer>0){
+for(const b of balls){
+const dx=pw-b.x;const dy=playerY*H-b.y;
+const dist=Math.sqrt(dx*dx+dy*dy);
+if(dist<200&&dist>10){
+b.vx+=dx/dist*100*dt;
+b.vy+=dy/dist*100*dt;
+}
+}
+playerPowerTimer-=dt;
+if(playerPowerTimer<=0)playerPower=null;
+}
+
+// Balls
+for(let i=balls.length-1;i>=0;i--){
+const b=balls[i];
+b.x+=b.vx*dt;b.y+=b.vy*dt;
+
+// Trail
+trails.push({x:b.x,y:b.y,r:b.r,life:1,fireball:b.fireball});
+
+// Wall bounce
+if(b.y-b.r<0){b.y=b.r;b.vy=Math.abs(b.vy);sndWall();shake(1)}
+if(b.y+b.r>H){b.y=H-b.r;b.vy=-Math.abs(b.vy);sndWall();shake(1)}
+
+// Paddle collision - player (left)
+const ppy=playerY*H;
+if(b.x-b.r<pw+5&&b.x-b.r>0&&b.y>ppy-ph/2&&b.y<ppy+ph/2&&b.vx<0){
+b.vx=Math.abs(b.vx)*1.05;
+const offset=(b.y-ppy)/(ph/2);
+b.vy+=offset*200;
+b.x=pw+5+b.r;
+hitCount++;
+sndHit();shake(2);
+addParticles(b.x,b.y,'#00ffff',25,200);
+if(b.fireball)b.fireball=false;
+// Split
+if(hitCount%5===0&&balls.length<3){
+spawnBall(b.x,b.y,b.vx,b.vy+(Math.random()-0.5)*100);
+}
+}
+
+// Paddle collision - AI (right)
+const apy=aiY*H;
+if(b.x+b.r>W-pw-5&&b.x+b.r<W&&b.y>apy-ph/2&&b.y<apy+ph/2&&b.vx>0){
+if(b.fireball){
+b.fireball=false;
+// Pass through once
+}else{
+b.vx=-Math.abs(b.vx)*1.05;
+const offset=(b.y-apy)/(ph/2);
+b.vy+=offset*200;
+b.x=W-pw-5-b.r;
+hitCount++;
+sndHit();shake(2);
+addParticles(b.x,b.y,'#ff00ff',25,200);
+if(hitCount%5===0&&balls.length<3){
+spawnBall(b.x,b.y,b.vx,b.vy+(Math.random()-0.5)*100);
+}
+}
+}
+
+// Shield collision
+if(shieldTimer>0){
+if(shieldSide==='player'&&b.x-b.r<10&&b.vx<0){
+b.vx=Math.abs(b.vx);b.x=10+b.r;shake(3);
+addParticles(5,b.y,'#00ffff',15,150);
+}
+if(shieldSide==='ai'&&b.x+b.r>W-10&&b.vx>0){
+b.vx=-Math.abs(b.vx);b.x=W-10-b.r;shake(3);
+addParticles(W-5,b.y,'#ff00ff',15,150);
+}
+}
+
+// Score
+if(b.x<-20){
+// AI scores
+aiScore++;sndScore();
+addParticles(0,H/2,'#ff00ff',120,350);
+flashAlpha=0.4;
+balls.splice(i,1);
+if(balls.length===0){
+if(aiScore>=WINNING_SCORE){endRound('ai')}
+else spawnBall();
+}
+continue;
+}
+if(b.x>W+20){
+playerScore++;sndScore();
+addParticles(W,H/2,'#00ffff',120,350);
+flashAlpha=0.4;
+balls.splice(i,1);
+if(balls.length===0){
+if(playerScore>=WINNING_SCORE){endRound('player')}
+else spawnBall();
+}
+continue;
+}
+
+// Power-up collision
+for(let j=powerups.length-1;j>=0;j--){
+const p=powerups[j];
+const dx=b.x-p.x,dy=b.y-p.y;
+if(Math.sqrt(dx*dx+dy*dy)<b.r+p.r){
+sndPowerup();
+addParticles(p.x,p.y,'#ffff00',20,200);
+if(p.type==='fire'){b.fireball=true}
+if(p.type==='magnet'){playerPower='magnet';playerPowerTimer=5}
+if(p.type==='shield'){shieldTimer=6;shieldSide=b.vx>0?'ai':'player'}
+powerups.splice(j,1);
+}
+}
+}
+
+// Shield timer
+if(shieldTimer>0)shieldTimer-=dt;
+
+// Power-ups
+maybeSpawnPowerup();
+for(let i=powerups.length-1;i>=0;i--){
+const p=powerups[i];
+p.x+=p.vx*dt;p.y+=p.vy*dt;
+p.life-=dt;
+if(p.x<-30||p.x>W+30||p.y<-30||p.y>H+30||p.life<=0){powerups.splice(i,1)}
+}
+
+// Particles
+for(let i=particles.length-1;i>=0;i--){
+const p=particles[i];
+p.x+=p.vx*dt;p.y+=p.vy*dt;
+p.vx*=0.98;p.vy*=0.98;
+p.life-=dt*2;
+if(p.life<=0)particles.splice(i,1);
+}
+
+// Trails
+for(let i=trails.length-1;i>=0;i--){
+trails[i].life-=dt*4;
+if(trails[i].life<=0)trails.splice(i,1);
+}
+
+// Bg particles react to balls
+for(const bp of bgParticles){
+bp.x+=bp.vx;bp.y+=bp.vy;
+if(bp.x<0)bp.x=W;if(bp.x>W)bp.x=0;
+if(bp.y<0)bp.y=H;if(bp.y>H)bp.y=0;
+for(const b of balls){
+const dx=bp.x-b.x,dy=bp.y-b.y;
+const dist=Math.sqrt(dx*dx+dy*dy);
+if(dist<80&&dist>1){
+bp.vx+=dx/dist*0.5;bp.vy+=dy/dist*0.5;
+}
+}
+bp.vx*=0.99;bp.vy*=0.99;
+}
+
+// Shake
+if(shakeTimer>0){shakeTimer-=dt;if(shakeTimer<=0){shakeX=0;shakeY=0}}
+// Flash
+if(flashAlpha>0)flashAlpha-=dt*2;
+}
+
+function shake(intensity){
+shakeX=(Math.random()-0.5)*intensity*2;
+shakeY=(Math.random()-0.5)*intensity*2;
+shakeTimer=0.1;
+}
+
+function endRound(winner){
+if(winner==='player'){playerRounds++;roundEndMsg='ROUND WON!'}
+else{aiRounds++;roundEndMsg='ROUND LOST'}
+currentRound++;
+addParticles(W/2,H/2,winner==='player'?'#00ffff':'#ff00ff',100,300);
+if(playerRounds>=2||aiRounds>=2){
+state='gameOver';
+roundEndMsg=playerRounds>=2?'VICTORY!':'DEFEAT';
+}else{
+state='roundEnd';roundEndTimer=2.5;
+}
+}
+
+// Draw
+function draw(){
+ctx.save();
+ctx.translate(shakeX,shakeY);
+
+// Background
+ctx.fillStyle='#0a0a1a';
+ctx.fillRect(-5,-5,W+10,H+10);
+
+// Grid
+ctx.strokeStyle='rgba(255,255,255,0.03)';
+ctx.lineWidth=1;
+const gridSize=40;
+for(let x=0;x<W;x+=gridSize){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}
+for(let y=0;y<H;y+=gridSize){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+
+// Center line
+ctx.setLineDash([8,8]);
+ctx.strokeStyle='rgba(255,255,255,0.1)';
+ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.stroke();
+ctx.setLineDash([]);
+
+// Bg particles
+for(const bp of bgParticles){
+ctx.globalAlpha=bp.a;
+ctx.fillStyle='#334';
+ctx.beginPath();ctx.arc(bp.x,bp.y,bp.r,0,Math.PI*2);ctx.fill();
+}
+ctx.globalAlpha=1;
+
+// Shield
+if(shieldTimer>0&&state==='playing'){
+const alpha=Math.min(1,shieldTimer/2)*0.5;
+ctx.strokeStyle=shieldSide==='player'?`rgba(0,255,255,${alpha})`:`rgba(255,0,255,${alpha})`;
+ctx.lineWidth=4;
+ctx.shadowColor=ctx.strokeStyle;ctx.shadowBlur=15;
+const sx=shieldSide==='player'?5:W-5;
+ctx.beginPath();ctx.moveTo(sx,0);ctx.lineTo(sx,H);ctx.stroke();
+ctx.shadowBlur=0;
+}
+
+// Trails
+for(const t of trails){
+const alpha=t.life*0.4;
+const hue=t.fireball?0:200+t.life*60;
+ctx.globalAlpha=alpha;
+ctx.fillStyle=t.fireball?`rgba(255,${Math.floor(100*t.life)},0,${alpha})`:`hsla(${hue},100%,70%,${alpha})`;
+ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=8;
+ctx.beginPath();ctx.arc(t.x,t.y,t.r*t.life,0,Math.PI*2);ctx.fill();
+}
+ctx.globalAlpha=1;ctx.shadowBlur=0;
+
+// Balls
+for(const b of balls){
+ctx.shadowColor=b.fireball?'#ff4400':'#ffffff';
+ctx.shadowBlur=20;
+ctx.fillStyle=b.fireball?'#ff6600':'#ffffff';
+ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();
+ctx.shadowBlur=0;
+}
+
+// Paddles
+const pw=PADDLE_W_R*W;const ph=PADDLE_H_R*H;
+
+// Player paddle
+ctx.shadowColor='#00ffff';ctx.shadowBlur=20;
+ctx.fillStyle='#00ffff';
+ctx.fillRect(5,playerY*H-ph/2,pw,ph);
+ctx.shadowBlur=0;
+
+// AI paddle
+ctx.shadowColor='#ff00ff';ctx.shadowBlur=20;
+ctx.fillStyle='#ff00ff';
+ctx.fillRect(W-pw-5,aiY*H-ph/2,pw,ph);
+ctx.shadowBlur=0;
+
+// Particles
+for(const p of particles){
+ctx.globalAlpha=p.life;
+ctx.fillStyle=p.color;
+ctx.shadowColor=p.color;ctx.shadowBlur=5;
+ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);ctx.fill();
+}
+ctx.globalAlpha=1;ctx.shadowBlur=0;
+
+// Power-ups
+for(const p of powerups){
+ctx.font='24px serif';
+ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText(p.emoji,p.x,p.y);
+}
+
+// Flash
+if(flashAlpha>0){
+ctx.fillStyle=`rgba(255,255,255,${flashAlpha})`;
+ctx.fillRect(-5,-5,W+10,H+10);
+}
+
+// HUD
+if(state==='playing'||state==='roundEnd'||state==='gameOver'){
+ctx.textAlign='center';ctx.textBaseline='top';
+ctx.font='bold 48px "Courier New",monospace';
+ctx.shadowColor='#00ffff';ctx.shadowBlur=10;
+ctx.fillStyle='#00ffff';
+ctx.fillText(String(playerScore),W/2-60,20);
+ctx.shadowColor='#ff00ff';
+ctx.fillStyle='#ff00ff';
+ctx.fillText(String(aiScore),W/2+60,20);
+ctx.shadowColor='#fff';ctx.shadowBlur=5;
+ctx.fillStyle='rgba(255,255,255,0.5)';
+ctx.font='16px "Courier New",monospace';
+ctx.fillText(`Round ${Math.min(currentRound+1,BEST_OF*2-1)}  |  ${playerRounds}-${aiRounds}`,W/2,75);
+ctx.shadowBlur=0;
+}
+
+// Title
+if(state==='title'){
+titleTime+=0.016;
+ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.font='bold 52px "Courier New",monospace';
+ctx.shadowColor='#00ffff';ctx.shadowBlur=30;
+ctx.fillStyle='#00ffff';
+ctx.fillText('PLASMA PONG',W/2,H/2-40);
+ctx.shadowBlur=0;
+ctx.font='18px "Courier New",monospace';
+ctx.globalAlpha=0.5+Math.sin(titleTime*3)*0.5;
+ctx.fillStyle='#fff';
+ctx.fillText('TAP TO START',W/2,H/2+40);
+ctx.globalAlpha=1;
+}
+
+// Round end
+if(state==='roundEnd'){
+ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.font='bold 44px "Courier New",monospace';
+const col=roundEndMsg.includes('WON')?'#00ffff':'#ff00ff';
+ctx.shadowColor=col;ctx.shadowBlur=25;
+ctx.fillStyle=col;
+ctx.fillText(roundEndMsg,W/2,H/2);
+ctx.shadowBlur=0;
+ctx.font='16px "Courier New",monospace';
+ctx.fillStyle='rgba(255,255,255,0.6)';
+ctx.fillText('Next round starting...',W/2,H/2+50);
+}
+
+// Game over
+if(state==='gameOver'){
+ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.font='bold 56px "Courier New",monospace';
+const col=roundEndMsg==='VICTORY!'?'#00ffff':'#ff00ff';
+ctx.shadowColor=col;ctx.shadowBlur=30;
+ctx.fillStyle=col;
+ctx.fillText(roundEndMsg,W/2,H/2-20);
+ctx.shadowBlur=0;
+ctx.font='18px "Courier New",monospace';
+ctx.globalAlpha=0.5+Math.sin(Date.now()/300)*0.5;
+ctx.fillStyle='#fff';
+ctx.fillText('TAP TO PLAY AGAIN',W/2,H/2+40);
+ctx.globalAlpha=1;
+}
+
+ctx.restore();
+}
+
+function gameLoop(timestamp){
+const dt=Math.min((timestamp-(lastTime||timestamp))/1000,0.05);
+lastTime=timestamp;
+
+// Title bg particles animation
+if(state==='title'){
+titleTime+=dt;
+for(const bp of bgParticles){
+bp.x+=bp.vx+Math.sin(titleTime+bp.y*0.01)*0.3;
+bp.y+=bp.vy;
+if(bp.x<0)bp.x=W;if(bp.x>W)bp.x=0;
+if(bp.y<0)bp.y=H;if(bp.y>H)bp.y=0;
+}
+}
+
+if(state==='roundEnd'){
+roundEndTimer-=dt;
+// Still update particles
+for(let i=particles.length-1;i>=0;i--){
+const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt*2;
+if(p.life<=0)particles.splice(i,1);
+}
+if(roundEndTimer<=0){resetRound();state='playing'}
+}
+
+if(state==='gameOver'){
+for(let i=particles.length-1;i>=0;i--){
+const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt*2;
+if(p.life<=0)particles.splice(i,1);
+}
+}
+
+update(dt);
+draw();
+requestAnimationFrame(gameLoop);
+}
+
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
