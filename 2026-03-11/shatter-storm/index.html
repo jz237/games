@@ -165,7 +165,7 @@ function spawnShards(x,y,color,count){
 
 // ---- BALL ----
 function createBall(x,y,vx,vy){
-  const baseSpeed=Math.min(5+level*0.3,10);
+  const baseSpeed=Math.min(7.5+level*0.45,15);
   const speed=activePowers.slow>0?baseSpeed*0.5:baseSpeed;
   return {x,y,vx:vx||0,vy:vy||-speed,trail:[],fire:activePowers.fire>0,stuck:false};
 }
@@ -211,19 +211,19 @@ function generateLevel(lv){
       if(lv>=4&&Math.random()<0.1+lv*0.02)hp=3;
 
       let steel=false;
-      if(lv>=4&&pattern==='cross'&&(Math.abs(cx)>cols*0.35||Math.abs(cy)>rows*0.35)){steel=true;hp=99;}
-      if(lv>=6&&Math.random()<0.08)steel=true,hp=99;
+      if(lv>=4&&pattern==='cross'&&(Math.abs(cx)>cols*0.35||Math.abs(cy)>rows*0.35)){hp=5;}
+      if(lv>=6&&Math.random()<0.08)hp=5;
 
       let ci=(r+c+themeIdx)%COLOR_VALUES.length;
       let color=COLOR_VALUES[ci];
-      if(steel){color='#888';ci=-1;}
+      if(hp>=5){color='#888';ci=-1;}
 
       const moving=(lv===5||(lv>5&&r%3===0));
 
       bricks.push({
         x:area.x+c*bw+gap,y:area.y+r*bh+gap,
         w:bw-gap*2,h:bh-gap*2,
-        hp,maxHp:hp,color,ci,steel,
+        hp,maxHp:hp,color,ci,
         flash:0,moving,moveDir:c%2===0?1:-1,moveBase:area.x+c*bw+gap,
         alive:true
       });
@@ -255,7 +255,7 @@ function launchBall(){
   if(!launchMode||balls.length===0)return;
   launchMode=false;
   const angle=(60+Math.random()*60)*Math.PI/180;
-  const baseSpeed=Math.min(5+level*0.3,10);
+  const baseSpeed=Math.min(7.5+level*0.45,15);
   const speed=activePowers.slow>0?baseSpeed*0.5:baseSpeed;
   balls[0].vx=-Math.cos(angle)*speed;
   balls[0].vy=-Math.sin(angle)*speed;
@@ -305,7 +305,7 @@ function update(dt){
   }
 
   // Balls
-  const baseSpeed=Math.min(5+level*0.3,10);
+  const baseSpeed=Math.min(7.5+level*0.45,15);
   const speed=activePowers.slow>0?baseSpeed*0.5:baseSpeed;
   const pwHalf=pw/2;
 
@@ -341,7 +341,7 @@ function update(dt){
     for(const br of bricks){
       if(!br.alive)continue;
       if(b.x+8>br.x&&b.x-8<br.x+br.w&&b.y+8>br.y&&b.y-8<br.y+br.h){
-        if(!b.fire&&!br.steel){
+        if(!b.fire&&!false){
           // Determine bounce side
           const ox1=b.x+8-br.x,ox2=br.x+br.w-(b.x-8);
           const oy1=b.y+8-br.y,oy2=br.y+br.h-(b.y-8);
@@ -351,7 +351,7 @@ function update(dt){
           else if(minO===oy1)b.vy=-Math.abs(b.vy);
           else b.vy=Math.abs(b.vy);
         }
-        if(br.steel){
+        if(false){
           if(!b.fire){
             // bounce off steel
             const ox1=b.x+8-br.x,ox2=br.x+br.w-(b.x-8);
@@ -453,7 +453,7 @@ function update(dt){
   }
 
   // Check level complete
-  const remaining=bricks.filter(b=>b.alive&&!b.steel);
+  const remaining=bricks.filter(b=>b.alive&&!false);
   if(remaining.length===0){
     state=LEVEL_TRANSITION;levelTransTime=0;sfxLevelComplete();
   }
@@ -625,7 +625,7 @@ function drawBrick(br){
 
   if(br.flash>0){
     ctx.fillStyle='#fff';
-  }else if(br.steel){
+  }else if(false){
     const g=ctx.createLinearGradient(br.x,br.y,br.x,br.y+br.h);
     g.addColorStop(0,'#aaa');g.addColorStop(0.5,'#666');g.addColorStop(1,'#888');
     ctx.fillStyle=g;
@@ -641,7 +641,7 @@ function drawBrick(br){
   ctx.stroke();
 
   // Crack overlay for damaged bricks
-  if(!br.steel&&br.hp<br.maxHp&&br.hp>0){
+  if(!false&&br.hp<br.maxHp&&br.hp>0){
     ctx.strokeStyle='rgba(255,255,255,0.5)';
     ctx.lineWidth=1;
     ctx.beginPath();
@@ -653,7 +653,7 @@ function drawBrick(br){
   }
 
   // HP indicator for 3HP
-  if(!br.steel&&br.maxHp>=3){
+  if(!false&&br.maxHp>=3){
     ctx.strokeStyle='rgba(180,180,180,0.6)';
     ctx.lineWidth=2;
     ctx.beginPath();
