@@ -1,12 +1,108 @@
-<html><head><title>Games Index</title></head><body><h1>Games</h1><ul>
-<li><a href="/games/2026-03-11/shatter-storm/">Shatter Storm</a> — 💎🔨 Stunning stained-glass breakout: smash kaleidoscope patterns, glass shard particles, power-ups, combos, screen shake & full touch controls</li>
-<li><a href="/games/2026-03-10/plasma-pong/">Plasma Pong</a> — 🏓⚡ Neon pong with plasma trails, particle explosions, power-ups, ball splitting, best-of-3 rounds & full touch controls</li>
-<li><a href="/games/neon-harbor/">Neon Harbor</a> — 🌊 ✅ Complete! Atmospheric exploration: 4 scenes, 8 memory vignettes, Loom weaving, 3 endings (2026-03-08)</li>
-<li><a href="/games/neon-tinkerer.html">Neon Tinkerer</a> — 🎮 Neon puzzle game: collect parts, assemble gadgets, dodge lasers (2 levels)</li>
-<li><a href="/games/ink-and-press.html">Ink & Press</a> — 🎮 Letterpress printing game: compose, ink, press with timing (2 levels)</li>
-<li><a href="/games/2026-03-09/asteroids-hd/">Asteroids HD</a> — 🚀✨ Stunning 3D-shaded asteroids, particle explosions, UFOs, bosses, powerups, parallax starfield & full touch controls</li>
-<li><a href="/games/2026-03-08/asteroids/">Asteroids</a> — 🚀 Classic Asteroids with neon vector-glow aesthetic, particles & touch controls</li>
-<li><a href="/games/2026-03-08/missile-command/">Missile Command</a> — ☄️ Aurora-drenched arcade siege with MIRVs, smart bombs, chain explosions, skyline destruction, and full touch support</li>
-<li><a href="/games/gpt-missile-command/">Missile Command (GPT)</a> — ☄️ Elaborate single-file arcade defense with MIRVs, satellites, smart bombs, chain scoring, skyline destruction, and mobile touch support</li>
-<li><a href="/games/depth-charge.html">Depth Charge</a> — 🛥️ Sonar Hunt: command a destroyer, drop depth charges on enemy subs with sonar pings, underwater VFX, 3 levels</li>
-</ul></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎮 GameMaster Arcade</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a1a;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;padding:20px}
+h1{text-align:center;font-size:2em;margin:20px 0 5px;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#9b59b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{text-align:center;color:#666;font-size:0.9em;margin-bottom:30px}
+.filters{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:25px}
+.filters button{background:#1a1a2e;border:1px solid #333;color:#aaa;padding:6px 14px;border-radius:20px;font-size:0.85em;cursor:pointer;transition:all 0.2s}
+.filters button:hover,.filters button.active{background:#2a2a4e;border-color:#6b6bff;color:#fff}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;max-width:900px;margin:0 auto}
+.card{background:linear-gradient(145deg,#12122a,#1a1a35);border:1px solid #252545;border-radius:12px;padding:16px 14px;text-decoration:none;color:#e0e0e0;transition:all 0.2s;display:flex;flex-direction:column;gap:6px}
+.card:hover{transform:translateY(-3px);border-color:#6b6bff;box-shadow:0 8px 25px rgba(107,107,255,0.2)}
+.card .emoji{font-size:2em;margin-bottom:4px}
+.card .title{font-weight:600;font-size:0.95em;line-height:1.2}
+.card .date{font-size:0.75em;color:#555}
+.card .tag{display:inline-block;font-size:0.65em;padding:2px 8px;border-radius:10px;margin-top:4px;width:fit-content}
+.tag.featured{background:#6b6bff22;color:#8b8bff;border:1px solid #6b6bff44}
+.tag.classic{background:#ffd93d22;color:#ffd93d;border:1px solid #ffd93d44}
+.tag.experimental{background:#66666622;color:#888;border:1px solid #66666644}
+.count{text-align:center;color:#444;font-size:0.8em;margin-top:25px;padding-bottom:20px}
+</style>
+</head>
+<body>
+
+<h1>🎮 GameMaster Arcade</h1>
+<p class="subtitle">Mobile-first HTML5 games — tap to play</p>
+
+<div class="filters">
+  <button class="active" onclick="filter('all')">All</button>
+  <button onclick="filter('featured')">⭐ Featured</button>
+  <button onclick="filter('arcade')">🕹️ Arcade</button>
+  <button onclick="filter('puzzle')">🧩 Puzzle</button>
+  <button onclick="filter('adventure')">🗺️ Adventure</button>
+</div>
+
+<div class="grid" id="grid"></div>
+<p class="count" id="count"></p>
+
+<script>
+const games = [
+  // === FEATURED (polished, posted to #games) ===
+  {title:"Shatter Storm",path:"2026-03-11/shatter-storm/",emoji:"🧱",date:"Mar 11",cat:"arcade",tag:"featured",desc:"Stained-glass breakout"},
+  {title:"Plasma Pong",path:"2026-03-10/plasma-pong/",emoji:"🏓",date:"Mar 10",cat:"arcade",tag:"featured",desc:"Neon pong with plasma trails"},
+  {title:"Asteroids HD",path:"2026-03-09/asteroids-hd/",emoji:"🚀",date:"Mar 9",cat:"arcade",tag:"featured",desc:"3D asteroids, powerups, boost"},
+  {title:"Missile Command: Aurora Siege",path:"2026-03-08/missile-command/",emoji:"🎆",date:"Mar 8",cat:"arcade",tag:"featured",desc:"Defend cities from the sky"},
+  {title:"Missile Command (GPT)",path:"gpt-missile-command/",emoji:"🎇",date:"Mar 8",cat:"arcade",tag:"featured",desc:"GPT's take on Missile Command"},
+  {title:"Asteroids",path:"2026-03-08/asteroids/",emoji:"☄️",date:"Mar 8",cat:"arcade",tag:"featured",desc:"Classic asteroids, mobile controls"},
+
+  // === CLASSIC (solid games) ===
+  {title:"Pyro: Flame Spirit",path:"2026-03-07/pyro/",emoji:"🔥",date:"Mar 7",cat:"puzzle",tag:"classic",desc:"Flame spirit puzzle adventure"},
+  {title:"Depth Charge",path:"2026-03-08/depth-charge/",emoji:"🌊",date:"Mar 8",cat:"arcade",tag:"classic",desc:"Sonar submarine hunt"},
+  {title:"Neon Harbor",path:"neon-harbor/",emoji:"🌃",date:"Mar 6–9",cat:"adventure",tag:"classic",desc:"Narrative exploration"},
+  {title:"Boulder Dash",path:"2026-03-05/boulder-dash/",emoji:"💎",date:"Mar 5",cat:"puzzle",tag:"classic",desc:"Diamond mine classic"},
+  {title:"Neon Serpent",path:"2026-03-05/neon-serpent/",emoji:"🐍",date:"Mar 5",cat:"arcade",tag:"classic",desc:"Snake with neon style"},
+  {title:"Ember Knight",path:"2026-03-06/ember-knight/",emoji:"⚔️",date:"Mar 6",cat:"adventure",tag:"classic",desc:"Dungeon crawler"},
+  {title:"Chrono Reef",path:"2026-03-06/chrono-reef-expedition/",emoji:"🐠",date:"Mar 6",cat:"adventure",tag:"classic",desc:"Underwater reef expedition"},
+  {title:"Skyforge Caravan",path:"2026-03-06/skyforge-caravan/",emoji:"⛅",date:"Mar 6",cat:"adventure",tag:"classic",desc:"Sky trading caravan"},
+  {title:"Glassrail Bastion",path:"2026-03-06/glassrail-bastion/",emoji:"🚂",date:"Mar 6",cat:"arcade",tag:"classic",desc:"Rail defense"},
+
+  // === EXPERIMENTAL (early builds) ===
+  {title:"Vortex: Storm Eater",path:"2026-03-04/vortex/",emoji:"🌪️",date:"Mar 4",cat:"arcade",tag:"experimental"},
+  {title:"Runecaster",path:"2026-03-04/runecaster/",emoji:"🧙",date:"Mar 4",cat:"arcade",tag:"experimental"},
+  {title:"Tessera",path:"2026-03-04/tessera/",emoji:"⬡",date:"Mar 4",cat:"puzzle",tag:"experimental"},
+  {title:"Slash",path:"2026-03-04/slash/",emoji:"⚡",date:"Mar 4",cat:"arcade",tag:"experimental"},
+  {title:"Prism",path:"2026-03-04/prism/",emoji:"🔷",date:"Mar 4",cat:"puzzle",tag:"experimental"},
+  {title:"Mycel",path:"2026-03-04/mycel/",emoji:"🍄",date:"Mar 4",cat:"puzzle",tag:"experimental"},
+  {title:"Neon Tinkerer",path:"2026-03-07/neon-tinkerer/",emoji:"🔧",date:"Mar 7",cat:"puzzle",tag:"experimental"},
+  {title:"Ink & Press",path:"2026-03-07-ink-and-press/",emoji:"🖨️",date:"Mar 7",cat:"puzzle",tag:"experimental"},
+  {title:"Void Echo",path:"2026-03-03/void-echo/",emoji:"🌌",date:"Mar 3",cat:"arcade",tag:"experimental"},
+  {title:"Prism Cascade",path:"2026-03-03/prism-cascade/",emoji:"🌈",date:"Mar 3",cat:"puzzle",tag:"experimental"},
+  {title:"Chromal Drift",path:"2026-03-03/chromal-drift/",emoji:"🎨",date:"Mar 3",cat:"arcade",tag:"experimental"},
+  {title:"Echo Duel",path:"2026-03-03/echo-duel/",emoji:"🎭",date:"Mar 3",cat:"arcade",tag:"experimental"},
+  {title:"Gravity Weaver",path:"2026-03-03/gravity-weaver/",emoji:"🕸️",date:"Mar 3",cat:"puzzle",tag:"experimental"},
+  {title:"Ink Bloom",path:"2026-03-03/ink-bloom/",emoji:"🌸",date:"Mar 3",cat:"puzzle",tag:"experimental"},
+  {title:"Mycelium Network",path:"2026-03-03/mycelium-network/",emoji:"🔬",date:"Mar 3",cat:"puzzle",tag:"experimental"},
+  {title:"Mycelium Wars",path:"2026-03-03/mycelium-wars/",emoji:"⚔️",date:"Mar 3",cat:"arcade",tag:"experimental"},
+];
+
+let currentFilter='all';
+function filter(f){
+  currentFilter=f;
+  document.querySelectorAll('.filters button').forEach(b=>b.classList.remove('active'));
+  event.target.classList.add('active');
+  render();
+}
+function render(){
+  const grid=document.getElementById('grid');
+  const filtered=currentFilter==='all'?games:games.filter(g=>g.tag===currentFilter||g.cat===currentFilter);
+  grid.innerHTML=filtered.map(g=>`
+    <a class="card" href="${g.path}" data-tag="${g.tag}" data-cat="${g.cat}">
+      <span class="emoji">${g.emoji}</span>
+      <span class="title">${g.title}</span>
+      ${g.desc?`<span class="date">${g.desc}</span>`:''}
+      <span class="date">${g.date}</span>
+      <span class="tag ${g.tag}">${g.tag==='featured'?'⭐ Featured':g.tag==='classic'?'🎮 Classic':'🧪 Experimental'}</span>
+    </a>
+  `).join('');
+  document.getElementById('count').textContent=`${filtered.length} game${filtered.length!==1?'s':''}`;
+}
+render();
+</script>
+</body>
+</html>
