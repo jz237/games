@@ -101,7 +101,7 @@ button{touch-action:manipulation;cursor:pointer;border:none;outline:none;font-fa
 const HS_KEY='glassrail_bastion_highscores';
 function getHighScores(){try{return JSON.parse(localStorage.getItem(HS_KEY))||[]}catch(e){return[]}}
 function saveHighScores(hs){localStorage.setItem(HS_KEY,JSON.stringify(hs))}
-function isHighScore(s){const hs=getHighScores();return hs.length<10||s>hs[hs.length-1].score}
+function isHighScore(s){if(s<=0)return false;const hs=getHighScores();if(hs.length<10)return true;hs.sort((a,b)=>b.score-a.score);return s>hs[hs.length-1].score}
 function renderHSTable(list,highlightIdx){
   let h='<table class="hs-table">';
   list.forEach((e,i)=>{
