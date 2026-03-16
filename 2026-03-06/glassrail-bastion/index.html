@@ -173,7 +173,7 @@ const UPGRADES=[
   {name:'Crystal Magnet',desc:'Larger shard collection radius',apply(){magnetRadius+=40}},
   {name:'Dash Recharge',desc:'Dash cooldown -40%',apply(){dashCdMax*=.6}},
 ];
-let magnetRadius=80,dashCdMax=3;
+let magnetRadius=300,dashCdMax=3;
 
 // ============ WAVE DEFINITIONS ============
 function getWaveDef(w){
@@ -291,7 +291,7 @@ document.getElementById('muteBtn').addEventListener('click',()=>{
 function resetGame(){
   score=0;shards=0;wave=1;bastionHp=bastionMaxHp=100;shield=maxShield=50;
   fireRate=5;fireDmg=10;fireTimer=0;spreadCount=1;piercing=false;shieldRegen=.5;
-  magnetRadius=80;dashCdMax=3;dashCooldown=0;dashActive=0;invuln=0;
+  magnetRadius=300;dashCdMax=3;dashCooldown=0;dashActive=0;invuln=0;
   enemies=[];bullets=[];particles=[];shardItems=[];
   turretAngle=0;aiming=false;shakeTimer=0;
   waveActive=false;bossAlive=false;
@@ -350,8 +350,8 @@ function update(dt){
           score+=e.type==='boss'?500:e.type==='brute'?30:e.type==='drone'?20:10;
           spawnParticles(e.x,e.y,e.color,15,120);
           playSound('death');
-          shardItems.push({x:e.x,y:e.y,life:8});
-          if(e.type==='boss')for(let k=0;k<5;k++)shardItems.push({x:e.x+(Math.random()-0.5)*40,y:e.y+(Math.random()-0.5)*40,life:8});
+          shardItems.push({x:e.x,y:e.y,life:15});
+          if(e.type==='boss')for(let k=0;k<5;k++)shardItems.push({x:e.x+(Math.random()-0.5)*40,y:e.y+(Math.random()-0.5)*40,life:15});
           enemies.splice(j,1);
           shakeTimer=.15;shakeIntensity=e.type==='boss'?12:5;
         }
