@@ -200,7 +200,7 @@ function onTouchStart(e){
     if(t.clientX<W/2&&!joystick.active){
       joystick.active=true;joystick.id=t.identifier;joystick.sx=t.clientX;joystick.sy=t.clientY;joystick.cx=t.clientX;joystick.cy=t.clientY;joystick.dx=0;joystick.dy=0;
     }else if(t.clientX>=W/2){
-      doAttack();
+      doAttack(t.clientX,t.clientY);
     }
   }
 }
@@ -236,7 +236,7 @@ canvas.addEventListener('mousedown',(e)=>{
   if(state!=='play')return;
   if(e.clientX<W/2){
     joystick.active=true;joystick.sx=e.clientX;joystick.sy=e.clientY;joystick.cx=e.clientX;joystick.cy=e.clientY;joystick.dx=0;joystick.dy=0;mouseDown=true;
-  }else{doAttack()}
+  }else{doAttack(e.clientX,e.clientY)}
 });
 canvas.addEventListener('mousemove',(e)=>{
   if(!mouseDown||!joystick.active)return;
@@ -249,8 +249,13 @@ canvas.addEventListener('mousemove',(e)=>{
 canvas.addEventListener('mouseup',()=>{mouseDown=false;joystick.active=false;joystick.dx=0;joystick.dy=0});
 
 // ===== ATTACK =====
-function doAttack(){
+function doAttack(screenX,screenY){
   if(slashAnim)return;
+  // Aim toward tap position (convert screen to world coords)
+  if(screenX!==undefined&&screenY!==undefined){
+    const worldX=screenX+camX,worldY=screenY+camY;
+    player.dir=Math.atan2(worldY-player.y,worldX-player.x);
+  }
   playSound('slash');
   slashAnim={t:0,dur:0.2,dir:player.dir};
   // Check enemy hits
