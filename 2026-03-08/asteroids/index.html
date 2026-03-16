@@ -58,8 +58,8 @@ button{touch-action:manipulation;cursor:pointer}
 <div id="tutorial">
 <h2>🚀 CONTROLS</h2>
 <div class="ctrl"><span class="icon">👆</span> <em>Hold anywhere</em> → Fly toward that point</div>
-<div class="ctrl"><span class="icon">💥</span> <em>Tap</em> → Shoot</div>
-<div class="ctrl" style="margin-top:12px;font-size:13px;color:#f0f">Hold one finger to fly, tap with another to shoot!</div>
+<div class="ctrl"><span class="icon">💥</span> <em>Tap</em> → Aim &amp; shoot toward tap</div>
+<div class="ctrl" style="margin-top:12px;font-size:13px;color:#f0f">Hold to thrust, tap to aim+fire in any direction!</div>
 <button id="tutorialBtn">GOT IT</button>
 </div>
 
@@ -184,18 +184,23 @@ function playSound(type){
     }
   }catch(e){}
 }
-let thrustOsc=null,thrustGain=null;
+let thrustNode=null,thrustGain=null;
 function startThrust(){
-  if(!audioCtx||muted||thrustOsc)return;
+  if(!audioCtx||muted||thrustNode)return;
   try{
-    thrustOsc=audioCtx.createOscillator();thrustGain=audioCtx.createGain();
-    thrustOsc.type='sawtooth';thrustOsc.frequency.setValueAtTime(55,audioCtx.currentTime);
-    thrustGain.gain.setValueAtTime(0.06,audioCtx.currentTime);
-    thrustOsc.connect(thrustGain);thrustGain.connect(audioCtx.destination);thrustOsc.start();
+    // Brown noise rumble (much better than raw sawtooth)
+    const bufLen=audioCtx.sampleRate*2;
+    const buf=audioCtx.createBuffer(1,bufLen,audioCtx.sampleRate);
+    const d=buf.getChannelData(0);let last=0;
+    for(let i=0;i<bufLen;i++){last=(last+(Math.random()*2-1)*0.02)/1.02;d[i]=last*3.5}
+    thrustNode=audioCtx.createBufferSource();thrustNode.buffer=buf;thrustNode.loop=true;
+    const filt=audioCtx.createBiquadFilter();filt.type='lowpass';filt.frequency.value=200;
+    thrustGain=audioCtx.createGain();thrustGain.gain.setValueAtTime(0.12,audioCtx.currentTime);
+    thrustNode.connect(filt);filt.connect(thrustGain);thrustGain.connect(audioCtx.destination);thrustNode.start();
   }catch(e){}
 }
 function stopThrust(){
-  if(thrustOsc){try{thrustOsc.stop()}catch(e){}thrustOsc=null;thrustGain=null}
+  if(thrustNode){try{thrustNode.stop()}catch(e){}thrustNode=null;thrustGain=null}
 }
 
 function toggleMute(){muted=!muted;muteBtn.textContent=muted?'🔇':'🔊';if(muted)stopThrust()}
@@ -247,7 +252,11 @@ canvas.addEventListener('touchend',e=>{
   for(const t of e.changedTouches){
     const info=touches[t.identifier];
     if(info){
-      if(performance.now()-info.startTime<200&&!info.moved){keys._tapFire=true;setTimeout(()=>{keys._tapFire=false},50)}
+      if(performance.now()-info.startTime<200&&!info.moved){
+        // Rotate ship toward tap point, then fire
+        if(ship){ship.a=Math.atan2(info.y-ship.y,info.x-ship.x)}
+        keys._tapFire=true;setTimeout(()=>{keys._tapFire=false},50);
+      }
       delete touches[t.identifier];
     }
   }
