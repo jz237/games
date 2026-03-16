@@ -128,16 +128,16 @@ function updateTouchTarget(){
       if(t.startTime<oldestTime){oldest=t;oldestTime=t.startTime;}
     }
   }
-  // If no definitive hold yet, use any active touch for steering (responsive feel)
+  // Only use touches held long enough (not quick taps) for steering
   if(!oldest&&ids.length>0){
     for(const id of ids){
       const t=touches[id];
-      if(t.startTime<oldestTime){oldest=t;oldestTime=t.startTime;}
+      if((performance.now()-t.startTime>=150||t.moved)&&t.startTime<oldestTime){oldest=t;oldestTime=t.startTime;}
     }
   }
   if(oldest&&ship){
     touchTargetA=Math.atan2(oldest.y-ship.y,oldest.x-ship.x);
-    touchThrust=ids.length>0;
+    touchThrust=true;
   }else{
     touchThrust=false;
     touchTargetA=null;
