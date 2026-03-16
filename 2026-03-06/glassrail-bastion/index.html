@@ -146,7 +146,7 @@ let score=0,shards=0,wave=1,bastionHp=100,bastionMaxHp=100,shield=50,maxShield=5
 let turretAngle=0,aiming=false,aimX=0,aimY=0;
 let dashCooldown=0,dashActive=0,invuln=0;
 let fireRate=5,fireDmg=10,fireTimer=0,spreadCount=1,piercing=false,shieldRegen=.5;
-let enemies=[],bullets=[],particles=[],shardItems=[],stars=[];
+let enemies=[],bullets=[],particles=[],shardItems=[],stars=[],floatingTexts=[];
 let scrollOffset=0,shakeTimer=0,shakeIntensity=0;
 let spawnTimer=0,enemiesRemaining=0,waveActive=false,bossAlive=false;
 let lastTime=0;
@@ -292,7 +292,7 @@ function resetGame(){
   score=0;shards=0;wave=1;bastionHp=bastionMaxHp=100;shield=maxShield=50;
   fireRate=5;fireDmg=10;fireTimer=0;spreadCount=1;piercing=false;shieldRegen=.5;
   magnetRadius=300;dashCdMax=3;dashCooldown=0;dashActive=0;invuln=0;
-  enemies=[];bullets=[];particles=[];shardItems=[];
+  enemies=[];bullets=[];particles=[];shardItems=[];floatingTexts=[];
   turretAngle=0;aiming=false;shakeTimer=0;
   waveActive=false;bossAlive=false;
 }
@@ -347,7 +347,9 @@ function update(dt){
         spawnParticles(b.x,b.y,e.color,3,80);
         if(!b.piercing){bullets.splice(i,1)}
         if(e.hp<=0){
-          score+=e.type==='boss'?500:e.type==='brute'?30:e.type==='drone'?20:10;
+          const pts=e.type==='boss'?500:e.type==='brute'?30:e.type==='drone'?20:10;
+          score+=pts;
+          floatingTexts.push({x:e.x,y:e.y,text:'+'+pts,life:1,maxLife:1,color:e.type==='boss'?'#ff0':'#0f8'});
           spawnParticles(e.x,e.y,e.color,15,120);
           playSound('death');
           shardItems.push({x:e.x,y:e.y,life:15});
@@ -424,7 +426,7 @@ function update(dt){
     s.life-=dt;
     const dx=cx-s.x,dy=cy-s.y,dist=Math.sqrt(dx*dx+dy*dy);
     if(dist<magnetRadius){s.x+=dx/dist*200*dt;s.y+=dy/dist*200*dt}
-    if(dist<25){shards++;score+=5;shardItems.splice(i,1);continue}
+    if(dist<25){shards++;score+=5;floatingTexts.push({x:s.x,y:s.y,text:'+5',life:0.7,maxLife:0.7,color:'#0ff'});shardItems.splice(i,1);continue}
     if(s.life<=0){shardItems.splice(i,1)}
   }
 
@@ -433,6 +435,12 @@ function update(dt){
     const p=particles[i];
     p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt*2;
     if(p.life<=0)particles.splice(i,1);
+  }
+
+  // Floating texts
+  for(let i=floatingTexts.length-1;i>=0;i--){
+    const f=floatingTexts[i];f.y-=50*dt;f.life-=dt;
+    if(f.life<=0)floatingTexts.splice(i,1);
   }
 
   // Shake
@@ -668,6 +676,15 @@ function draw(){
     ctx.globalAlpha=Math.max(0,p.life);
     ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=4;
     ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);ctx.fill();
+  }
+  // Floating score texts
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  for(const f of floatingTexts){
+    const alpha=f.life/f.maxLife;
+    ctx.globalAlpha=alpha;
+    ctx.font='bold 18px "Courier New",monospace';
+    ctx.fillStyle=f.color;ctx.shadowColor=f.color;ctx.shadowBlur=8;
+    ctx.fillText(f.text,f.x,f.y);
   }
   ctx.globalAlpha=1;ctx.shadowBlur=0;
   ctx.restore();
