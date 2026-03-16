@@ -53,8 +53,8 @@ button{touch-action:manipulation;cursor:pointer;border:none;outline:none;font-fa
 </div>
 
 <div id="controlsOverlay" class="overlay hidden">
-<p>👈 Left side: MOVE</p>
-<p>👉 Right side: ATTACK</p>
+<p>👆 Tap: AIM &amp; ATTACK</p>
+<p>👆 Hold: MOVE toward finger</p>
 <p style="margin-top:1em;color:#ff6600;font-weight:bold">TAP TO BEGIN</p>
 </div>
 
@@ -193,60 +193,93 @@ function genFloor(fl){
 }
 
 // ===== TOUCH HANDLING =====
+// Unified: quick tap = aim + attack toward tap point
+//          long press (>180ms) or drag = move toward held point
+const touchInfo={};
+const HOLD_MS=180;
+
 function onTouchStart(e){
   initAudio();
   if(state!=='play')return;
   for(const t of e.changedTouches){
-    if(t.clientX<W/2&&!joystick.active){
-      joystick.active=true;joystick.id=t.identifier;joystick.sx=t.clientX;joystick.sy=t.clientY;joystick.cx=t.clientX;joystick.cy=t.clientY;joystick.dx=0;joystick.dy=0;
-    }else if(t.clientX>=W/2){
-      doAttack(t.clientX,t.clientY);
-    }
+    touchInfo[t.identifier]={sx:t.clientX,sy:t.clientY,cx:t.clientX,cy:t.clientY,start:performance.now(),moved:false,isMove:false};
   }
 }
 function onTouchMove(e){
   if(e.target.closest('button')||e.target.closest('.overlay'))return;
   e.preventDefault();
   for(const t of e.changedTouches){
-    if(joystick.active&&t.identifier===joystick.id){
-      joystick.cx=t.clientX;joystick.cy=t.clientY;
-      let dx=joystick.cx-joystick.sx,dy=joystick.cy-joystick.sy;
-      const dist=Math.sqrt(dx*dx+dy*dy);
-      const maxR=60;
-      if(dist>maxR){dx=dx/dist*maxR;dy=dy/dist*maxR}
-      joystick.dx=dx/maxR;joystick.dy=dy/maxR;
-    }
+    const info=touchInfo[t.identifier];if(!info)continue;
+    info.cx=t.clientX;info.cy=t.clientY;
+    if(Math.abs(t.clientX-info.sx)>10||Math.abs(t.clientY-info.sy)>10)info.moved=true;
   }
 }
 function onTouchEnd(e){
   for(const t of e.changedTouches){
-    if(joystick.active&&t.identifier===joystick.id){
-      joystick.active=false;joystick.dx=0;joystick.dy=0;
+    const info=touchInfo[t.identifier];
+    if(info){
+      const held=performance.now()-info.start;
+      // Quick tap = attack toward that point
+      if(held<HOLD_MS&&!info.moved){
+        doAttack(info.cx,info.cy);
+      }
+      delete touchInfo[t.identifier];
     }
   }
+  // If no touches left, stop moving
+  if(Object.keys(touchInfo).length===0){joystick.active=false;joystick.dx=0;joystick.dy=0}
 }
+
+// Check held touches each frame for movement (called from update)
+function updateTouchMovement(){
+  const now=performance.now();
+  let moveTouch=null;
+  for(const id in touchInfo){
+    const info=touchInfo[id];
+    if(now-info.start>=HOLD_MS||info.moved){
+      info.isMove=true;
+      moveTouch=info;
+    }
+  }
+  if(moveTouch){
+    // Move toward held point (convert screen to world)
+    const worldX=moveTouch.cx+camX,worldY=moveTouch.cy+camY;
+    const dx=worldX-player.x,dy=worldY-player.y;
+    const dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist>8){
+      joystick.active=true;
+      joystick.dx=dx/dist;joystick.dy=dy/dist;
+      player.dir=Math.atan2(dy,dx);
+    }else{joystick.active=false;joystick.dx=0;joystick.dy=0}
+  }else if(Object.keys(touchInfo).length===0){
+    joystick.active=false;joystick.dx=0;joystick.dy=0;
+  }
+}
+
 document.addEventListener('touchstart',onTouchStart,{passive:true});
 document.addEventListener('touchmove',onTouchMove,{passive:false});
 document.addEventListener('touchend',onTouchEnd,{passive:true});
+document.addEventListener('touchcancel',(e)=>{for(const t of e.changedTouches)delete touchInfo[t.identifier]},{passive:true});
 
 // Mouse fallback
-let mouseDown=false;
+let mouseDown=false,mouseHoldStart=0;
 canvas.addEventListener('mousedown',(e)=>{
-  initAudio();
-  if(state!=='play')return;
-  if(e.clientX<W/2){
-    joystick.active=true;joystick.sx=e.clientX;joystick.sy=e.clientY;joystick.cx=e.clientX;joystick.cy=e.clientY;joystick.dx=0;joystick.dy=0;mouseDown=true;
-  }else{doAttack(e.clientX,e.clientY)}
+  initAudio();if(state!=='play')return;
+  mouseDown=true;mouseHoldStart=performance.now();
+  joystick.sx=e.clientX;joystick.sy=e.clientY;
 });
 canvas.addEventListener('mousemove',(e)=>{
-  if(!mouseDown||!joystick.active)return;
-  joystick.cx=e.clientX;joystick.cy=e.clientY;
-  let dx=joystick.cx-joystick.sx,dy=joystick.cy-joystick.sy;
-  const dist=Math.sqrt(dx*dx+dy*dy),maxR=60;
-  if(dist>maxR){dx=dx/dist*maxR;dy=dy/dist*maxR}
-  joystick.dx=dx/maxR;joystick.dy=dy/maxR;
+  if(!mouseDown)return;
+  if(performance.now()-mouseHoldStart>=HOLD_MS){
+    const worldX=e.clientX+camX,worldY=e.clientY+camY;
+    const dx=worldX-player.x,dy=worldY-player.y,dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist>8){joystick.active=true;joystick.dx=dx/dist;joystick.dy=dy/dist;player.dir=Math.atan2(dy,dx)}
+  }
 });
-canvas.addEventListener('mouseup',()=>{mouseDown=false;joystick.active=false;joystick.dx=0;joystick.dy=0});
+canvas.addEventListener('mouseup',(e)=>{
+  if(mouseDown&&performance.now()-mouseHoldStart<HOLD_MS){doAttack(e.clientX,e.clientY)}
+  mouseDown=false;joystick.active=false;joystick.dx=0;joystick.dy=0;
+});
 
 // ===== ATTACK =====
 function doAttack(screenX,screenY){
@@ -309,6 +342,7 @@ function shake(amt){shakeT=0.15;shakeX=(Math.random()-0.5)*amt*2;shakeY=(Math.ra
 function update(dt){
   if(state!=='play')return;
   gameTime+=dt;flickerT+=dt;
+  updateTouchMovement();
   // Player movement
   const spd=player.speed*(player.speedBoost>0?1.5:1);
   let mx=joystick.dx*spd*dt,my=joystick.dy*spd*dt;
