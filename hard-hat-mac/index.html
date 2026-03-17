@@ -38,7 +38,7 @@ const controlsDiv = document.getElementById('controls');
 const muteBtn = document.getElementById('btn-mute');
 
 const DPR = Math.min(window.devicePixelRatio || 1, 3);
-let W, H, CTRL_H = 120, viewW, viewH;
+let W, H, CTRL_H = 0, viewW, viewH;
 function resize() {
   W = window.innerWidth; H = window.innerHeight;
   canvas.width = W * DPR; canvas.height = H * DPR;
@@ -179,6 +179,8 @@ let player = { x:0, y:0, vx:0, vy:0, onGround:false, onLadder:false, facing:1, w
 
 // Camera
 let camX = 0, camY = 0;
+let gameZoom = 0.65; // default zoom (0.4 = zoomed out, 1.0 = zoomed in)
+try { const sz = parseFloat(localStorage.getItem('hhm_zoom')); if (sz >= 0.4 && sz <= 1.0) gameZoom = sz; } catch(e) {}
 
 // Level data
 let levelMap = [];
@@ -288,7 +290,7 @@ function genLevel1(diff, tmult) {
   player.vx = 0; player.vy = 0; player.onGround = false; player.onLadder = false;
   player.climbing = false; player.jumping = false; player.dead = false; player.carrying = null;
 
-  bonusTimerMax = 60 * tmult;
+  bonusTimerMax = 105 * tmult;
   bonusTimer = bonusTimerMax;
 }
 
@@ -344,7 +346,7 @@ function genLevel2(diff, tmult) {
   player.vx=0;player.vy=0;player.onGround=false;player.onLadder=false;
   player.climbing=false;player.jumping=false;player.dead=false;player.carrying=null;
 
-  bonusTimerMax = 90 * tmult;
+  bonusTimerMax = 157 * tmult;
   bonusTimer = bonusTimerMax;
 }
 
@@ -397,7 +399,7 @@ function genLevel3(diff, tmult) {
   player.vx=0;player.vy=0;player.onGround=false;player.onLadder=false;
   player.climbing=false;player.jumping=false;player.dead=false;player.carrying=null;
 
-  bonusTimerMax = 80 * tmult;
+  bonusTimerMax = 140 * tmult;
   bonusTimer = bonusTimerMax;
 }
 
@@ -767,13 +769,14 @@ function updateGame(dt) {
     }
   }
 
-  // Camera
-  const targetCX = player.x + PLAYER_W/2 - viewW/2;
-  const targetCY = player.y + PLAYER_H/2 - viewH/2;
+  // Camera (zoom-aware: viewport in world coords is larger when zoomed out)
+  const zViewW = viewW / gameZoom, zViewH = viewH / gameZoom;
+  const targetCX = player.x + PLAYER_W/2 - zViewW/2;
+  const targetCY = player.y + PLAYER_H/2 - zViewH/2;
   camX += (targetCX - camX) * 0.08;
   camY += (targetCY - camY) * 0.08;
-  camX = Math.max(0, Math.min(camX, levelW*TILE - viewW));
-  camY = Math.max(0, Math.min(camY, levelH*TILE - viewH));
+  camX = Math.max(0, Math.min(camX, levelW*TILE - zViewW));
+  camY = Math.max(0, Math.min(camY, levelH*TILE - zViewH));
 }
 
 function killPlayer() {
@@ -1531,15 +1534,18 @@ function drawWorld(t) {
   ctx.rect(0, 0, viewW, viewH);
   ctx.clip();
 
-  ctx.translate(sx, sy);
+  // Apply zoom
+  ctx.scale(gameZoom, gameZoom);
+  ctx.translate(sx / gameZoom, sy / gameZoom);
 
   drawBackground(ox, oy);
 
-  // Draw tiles
+  // Draw tiles (account for zoom — visible world area is viewW/gameZoom)
+  const zVW = viewW / gameZoom, zVH = viewH / gameZoom;
   const startC = Math.max(0, Math.floor(ox / TILE));
-  const endC = Math.min(levelW, Math.ceil((ox + viewW) / TILE) + 1);
+  const endC = Math.min(levelW, Math.ceil((ox + zVW) / TILE) + 1);
   const startR = Math.max(0, Math.floor(oy / TILE));
-  const endR = Math.min(levelH, Math.ceil((oy + viewH) / TILE) + 1);
+  const endR = Math.min(levelH, Math.ceil((oy + zVH) / TILE) + 1);
 
   for (let r = startR; r < endR; r++) {
     for (let c = startC; c < endC; c++) {
@@ -1616,11 +1622,20 @@ function drawWorld(t) {
 }
 
 function drawHUD() {
+  // Solid HUD background strip at top
+  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  ctx.fillRect(0, 0, viewW, 42);
+
   // Score
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 16px monospace';
   ctx.textAlign = 'left';
-  ctx.fillText(`SCORE: ${score}`, 10, 22);
+  ctx.fillText(`SCORE: ${score}`, 10, 18);
+
+  // Round / Level under score
+  ctx.fillStyle = 'rgba(255,255,200,0.7)';
+  ctx.font = '11px monospace';
+  ctx.fillText(`R${round} L${level}`, 10, 34);
 
   // Timer
   const timerPct = bonusTimer / bonusTimerMax;
@@ -1629,37 +1644,37 @@ function drawHUD() {
   else if (timerPct < 0.6) timerColor = '#ff8800';
   ctx.fillStyle = timerColor;
   ctx.textAlign = 'center';
-  ctx.fillText(`TIME: ${Math.ceil(bonusTimer)}`, viewW/2, 22);
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText(`TIME: ${Math.ceil(bonusTimer)}`, viewW/2, 18);
 
   // Timer bar
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  ctx.fillRect(viewW/2-60, 28, 120, 6);
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(viewW/2-60, 24, 120, 8);
   ctx.fillStyle = timerColor;
-  ctx.fillRect(viewW/2-60, 28, 120*timerPct, 6);
+  ctx.fillRect(viewW/2-60, 24, 120*timerPct, 8);
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.strokeRect(viewW/2-60, 24, 120, 8);
 
   // Lives
   for (let i = 0; i < lives; i++) {
     const lx = viewW - 30 - i * 28;
-    // Mini hard hat
     ctx.fillStyle = '#ffdd00';
-    ctx.fillRect(lx, 10, 20, 8);
-    ctx.fillRect(lx-2, 16, 24, 3);
+    ctx.fillRect(lx, 8, 20, 8);
+    ctx.fillRect(lx-2, 14, 24, 3);
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.fillRect(lx+3, 11, 6, 3);
+    ctx.fillRect(lx+3, 9, 6, 3);
   }
 
-  // Round / Level
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  ctx.font = '12px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText(`ROUND ${round} - LEVEL ${level}`, 10, viewH - 4);
+  // Bottom status bar (solid background)
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, viewH - 24, viewW, 24);
 
   // Carrying indicator
   if (player.carrying) {
     ctx.fillStyle = '#ffcc00';
     ctx.textAlign = 'right';
     ctx.font = '12px monospace';
-    ctx.fillText(`CARRYING: ${player.carrying.toUpperCase()}`, viewW-10, viewH-4);
+    ctx.fillText(`CARRYING: ${player.carrying.toUpperCase()}`, viewW-10, viewH-8);
   }
 
   // Collected count
@@ -1667,7 +1682,7 @@ function drawHUD() {
   ctx.textAlign = 'center';
   ctx.font = '12px monospace';
   const label = level===1?'GIRDERS DRILLED':level===2?'LUNCHBOXES':'BOXES PROCESSED';
-  ctx.fillText(`${collectedCount}/${totalCollect} ${label}`, viewW/2, viewH-4);
+  ctx.fillText(`${collectedCount}/${totalCollect} ${label}`, viewW/2, viewH-8);
 }
 
 // ============ HIGH SCORES ============
@@ -1852,6 +1867,24 @@ function drawTitle(t) {
   drawPlayer(mx, my, {facing:1, walkFrame:0, climbing:false, jumping:false, dead:false, carrying:null, climbFrame:0}, t);
 
   // Buttons
+  // Zoom slider
+  ctx.fillStyle = '#aabbcc';
+  ctx.font = '13px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('ZOOM', W/2, H*0.6 - 8);
+  const sliderW = 180, sliderX = W/2 - sliderW/2, sliderY = H*0.6 + 2;
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(sliderX, sliderY, sliderW, 12);
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.strokeRect(sliderX, sliderY, sliderW, 12);
+  // Slider knob
+  const knobX = sliderX + (gameZoom - 0.4) / 0.6 * sliderW; // range 0.4 - 1.0
+  ctx.fillStyle = '#ffcc00';
+  ctx.beginPath(); ctx.arc(knobX, sliderY + 6, 10, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.font = '9px monospace';
+  ctx.fillText(Math.round(gameZoom*100)+'%', knobX, sliderY + 9);
+
   drawButton(W/2, H*0.72, 160, 44, 'START GAME', '#ffcc00', '#aa7700');
   drawButton(W/2, H*0.82, 160, 44, 'HIGH SCORES', '#88aacc', '#446688');
 
@@ -1927,6 +1960,15 @@ function handleTap(tx, ty) {
   initAudio();
   switch(state) {
     case 'title':
+      // Zoom slider
+      {
+        const sliderW = 180, sliderX = W/2 - sliderW/2, sliderY = H*0.6 + 2;
+        if (ty > sliderY - 14 && ty < sliderY + 26 && tx > sliderX - 10 && tx < sliderX + sliderW + 10) {
+          gameZoom = Math.max(0.4, Math.min(1.0, 0.4 + (tx - sliderX) / sliderW * 0.6));
+          try { localStorage.setItem('hhm_zoom', gameZoom); } catch(e) {}
+          break;
+        }
+      }
       // Start button
       if (ty > H*0.72-22 && ty < H*0.72+22 && tx > W/2-80 && tx < W/2+80) {
         score = 0; lives = 3; round = 1; level = 1;
@@ -1962,6 +2004,16 @@ canvas.addEventListener('touchstart', (e) => {
   e.preventDefault();
   if (e.touches.length > 0) handleTap(e.touches[0].clientX, e.touches[0].clientY);
 }, {passive:false});
+canvas.addEventListener('touchmove', (e) => {
+  if (state === 'title' && e.touches.length > 0) {
+    const tx = e.touches[0].clientX, ty = e.touches[0].clientY;
+    const sliderW = 180, sliderX = W/2 - sliderW/2, sliderY = H*0.6 + 2;
+    if (ty > sliderY - 14 && ty < sliderY + 26 && tx > sliderX - 10 && tx < sliderX + sliderW + 10) {
+      gameZoom = Math.max(0.4, Math.min(1.0, 0.4 + (tx - sliderX) / sliderW * 0.6));
+      try { localStorage.setItem('hhm_zoom', gameZoom); } catch(e2) {}
+    }
+  }
+}, {passive:true});
 
 // ============ MAIN LOOP ============
 let lastTime = 0, gameTime = 0;
