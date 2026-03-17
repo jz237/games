@@ -234,7 +234,7 @@ function genLevel1(diff, tmult) {
   const cols = 28, rows = 48;
   makeTileMap(cols, rows);
   // 5 platforms spaced out
-  const platRows = [42, 34, 26, 18, 10];
+  const platRows = [38, 33, 28, 23, 18];
   for (const r of platRows) fillPlatform(r, 1, cols-2);
   // Ground
   fillPlatform(rows-1, 0, cols-1);
@@ -299,7 +299,7 @@ function genLevel1(diff, tmult) {
 function genLevel2(diff, tmult) {
   const cols = 28, rows = 44;
   makeTileMap(cols, rows);
-  const platRows = [38, 28, 18, 8];
+  const platRows = [36, 30, 24, 18];
   for (const r of platRows) fillPlatform(r, 1, cols-2);
   fillPlatform(rows-1, 0, cols-1);
 
@@ -335,7 +335,8 @@ function genLevel2(diff, tmult) {
   entities.push({type:'pincers', x:10*TILE, y:(platRows[0]-1)*TILE, w:TILE, h:TILE, snapTimer:0});
   entities.push({type:'dynamite', x:16*TILE, y:(platRows[1]-1)*TILE, w:TILE, h:TILE, fuseTimer:0});
   entities.push({type:'poison', x:18*TILE, y:(platRows[2]-1)*TILE, w:TILE, h:TILE});
-  entities.push({type:'squasher', x:6*TILE, y:(platRows[2])*TILE, w:TILE*3, h:0, maxH:TILE*2, speed:40*diff, extending:true});
+  // Squasher hangs from platform above (platRows[2]) and crushes down toward platRows[1] walkway
+  entities.push({type:'squasher', x:6*TILE, y:(platRows[2]+1)*TILE, w:TILE*3, h:0, maxH:(platRows[1]-platRows[2]-2)*TILE, speed:60*diff, extending:true});
 
   // Enemies
   entities.push({type:'vandal', x:20*TILE, y:(platRows[0]-1)*TILE, vx:45*diff, patrolMin:2*TILE, patrolMax:25*TILE, platRow:platRows[0]});
@@ -356,48 +357,48 @@ function genLevel3(diff, tmult) {
   const cols = 28, rows = 44;
   makeTileMap(cols, rows);
 
-  // Platforms in a circular-ish arrangement
-  fillPlatform(38, 1, cols-2); // bottom
-  fillPlatform(28, 1, 12); // left mid
-  fillPlatform(28, 16, cols-2); // right mid
-  fillPlatform(18, 4, cols-5); // upper
-  fillPlatform(8, 1, cols-2); // top
+  // Platforms in a circular-ish arrangement (tighter spacing)
+  fillPlatform(36, 1, cols-2); // bottom
+  fillPlatform(30, 1, 12); // left mid
+  fillPlatform(30, 16, cols-2); // right mid
+  fillPlatform(24, 4, cols-5); // upper
+  fillPlatform(18, 1, cols-2); // top
   fillPlatform(rows-1, 0, cols-1); // ground
 
   // Circular conveyor (L and R sections)
-  fillPlatform(38, 8, 12, T_CONV_R);
-  fillPlatform(38, 16, 20, T_CONV_L);
+  fillPlatform(36, 8, 12, T_CONV_R);
+  fillPlatform(36, 16, 20, T_CONV_L);
 
   // Ladders
-  fillLadder(3, 29, 37); fillLadder(4, 29, 37);
-  fillLadder(24, 29, 37); fillLadder(25, 29, 37);
-  fillLadder(10, 19, 27); fillLadder(11, 19, 27);
-  fillLadder(18, 9, 17); fillLadder(19, 9, 17);
-  fillLadder(6, 9, 17); fillLadder(7, 9, 17);
+  fillLadder(3, 31, 35); fillLadder(4, 31, 35);
+  fillLadder(24, 31, 35); fillLadder(25, 31, 35);
+  fillLadder(10, 25, 29); fillLadder(11, 25, 29);
+  fillLadder(18, 19, 23); fillLadder(19, 19, 23);
+  fillLadder(6, 19, 23); fillLadder(7, 19, 23);
 
   // Springboards
-  levelMap[37][2] = T_SPRING;
-  levelMap[27][25] = T_SPRING;
+  levelMap[35][2] = T_SPRING;
+  levelMap[29][25] = T_SPRING;
 
   // 5 boxes to collect
   const boxPos = [
-    {x:6*TILE, y:37*TILE}, {x:22*TILE, y:37*TILE},
-    {x:15*TILE, y:27*TILE}, {x:8*TILE, y:17*TILE},
-    {x:20*TILE, y:7*TILE}
+    {x:6*TILE, y:35*TILE}, {x:22*TILE, y:35*TILE},
+    {x:15*TILE, y:29*TILE}, {x:8*TILE, y:23*TILE},
+    {x:20*TILE, y:17*TILE}
   ];
   for (const b of boxPos) entities.push({type:'crate', x:b.x, y:b.y, w:TILE, h:TILE, collected:false});
   totalCollect = 5;
 
   // Processor
-  entities.push({type:'processor', x:13*TILE, y:37*TILE, w:TILE*2, h:TILE});
+  entities.push({type:'processor', x:13*TILE, y:35*TILE, w:TILE*2, h:TILE});
 
   // OSHA
-  entities.push({type:'osha', x:12*TILE, y:27*TILE, vx:35*diff, patrolMin:2*TILE, patrolMax:14*TILE, platRow:28});
+  entities.push({type:'osha', x:12*TILE, y:29*TILE, vx:35*diff, patrolMin:2*TILE, patrolMax:14*TILE, platRow:30});
 
   // Pool hazard
-  entities.push({type:'pool', x:1*TILE, y:39*TILE, w:TILE*4, h:TILE*3});
+  entities.push({type:'pool', x:1*TILE, y:37*TILE, w:TILE*4, h:TILE*3});
 
-  player.x = 14*TILE; player.y = 36*TILE;
+  player.x = 14*TILE; player.y = 34*TILE;
   player.vx=0;player.vy=0;player.onGround=false;player.onLadder=false;
   player.climbing=false;player.jumping=false;player.dead=false;player.carrying=null;
 
@@ -694,13 +695,20 @@ function updateGame(dt) {
         if (e.x <= e.patrolMin) { e.x = e.patrolMin; e.vx = Math.abs(e.vx); }
         // Check for holes ahead — turn around if floor is missing
         {
-          const checkX = e.vx > 0 ? e.x + PLAYER_W + 2 : e.x - 2;
-          const checkC = Math.floor(checkX / TILE);
-          const feetR = e.platRow; // row the enemy walks on
-          if (checkC >= 0 && checkC < levelW && feetR >= 0 && feetR < levelH) {
-            const tileBelow = tileAt(checkC, feetR);
-            if (tileBelow === T_HOLE || tileBelow === T_EMPTY) {
-              e.vx = -e.vx; // turn around
+          const feetR = e.platRow;
+          // Check the tile under the enemy's leading edge AND one tile ahead
+          const midX = e.x + PLAYER_W / 2;
+          const leadX = e.vx > 0 ? e.x + PLAYER_W : e.x;
+          const aheadX = e.vx > 0 ? leadX + TILE * 0.5 : leadX - TILE * 0.5;
+          const leadC = Math.floor(leadX / TILE);
+          const aheadC = Math.floor(aheadX / TILE);
+          if (feetR >= 0 && feetR < levelH) {
+            const tLead = (leadC >= 0 && leadC < levelW) ? tileAt(leadC, feetR) : T_SOLID;
+            const tAhead = (aheadC >= 0 && aheadC < levelW) ? tileAt(aheadC, feetR) : T_SOLID;
+            if (tLead === T_HOLE || tLead === T_EMPTY || tAhead === T_HOLE || tAhead === T_EMPTY) {
+              e.vx = -e.vx;
+              // Push back slightly so they don't get stuck
+              e.x += e.vx > 0 ? 2 : -2;
             }
           }
         }
