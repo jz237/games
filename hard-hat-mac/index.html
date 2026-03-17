@@ -180,7 +180,7 @@ let player = { x:0, y:0, vx:0, vy:0, onGround:false, onLadder:false, facing:1, w
 // Camera
 let camX = 0, camY = 0;
 let gameZoom = 0.65; // default zoom (0.4 = zoomed out, 1.0 = zoomed in)
-let gameSpeed = 1.0; // speed multiplier (0.5 = slow, 2.0 = fast)
+let gameSpeed = 1.5; // speed multiplier (0.5 = slow, 2.0 = fast)
 try { const sz = parseFloat(localStorage.getItem('hhm_zoom')); if (sz >= 0.4 && sz <= 1.0) gameZoom = sz; } catch(e) {}
 try { const ss = parseFloat(localStorage.getItem('hhm_speed')); if (ss >= 0.5 && ss <= 2.0) gameSpeed = ss; } catch(e) {}
 
