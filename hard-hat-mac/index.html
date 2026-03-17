@@ -1711,11 +1711,37 @@ function drawHUD() {
 
 // ============ HIGH SCORES ============
 const HS_KEY = 'hard_hat_mac_highscores';
+
+// Cookie helpers for persistence backup (localStorage can be evicted on mobile Safari)
+function setCookie(k, v, days) {
+  const d = new Date(); d.setTime(d.getTime() + days*86400000);
+  document.cookie = k + '=' + encodeURIComponent(v) + ';expires=' + d.toUTCString() + ';path=/;SameSite=Lax';
+}
+function getCookie(k) {
+  const m = document.cookie.match(new RegExp('(?:^|; )' + k + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 function loadScores() {
-  try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; } catch(e) { return []; }
+  try {
+    // Try localStorage first
+    let data = localStorage.getItem(HS_KEY);
+    if (data) return JSON.parse(data);
+    // Fallback: try cookie
+    data = getCookie(HS_KEY);
+    if (data) {
+      const parsed = JSON.parse(data);
+      // Restore to localStorage
+      try { localStorage.setItem(HS_KEY, JSON.stringify(parsed)); } catch(e2) {}
+      return parsed;
+    }
+  } catch(e) {}
+  return [];
 }
 function saveScores(scores) {
-  try { localStorage.setItem(HS_KEY, JSON.stringify(scores)); } catch(e) {}
+  const json = JSON.stringify(scores);
+  try { localStorage.setItem(HS_KEY, json); } catch(e) {}
+  try { setCookie(HS_KEY, json, 365); } catch(e) {} // backup to cookie (1 year)
 }
 function isHighScore(s) {
   const hs = loadScores();
