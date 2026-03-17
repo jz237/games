@@ -1,0 +1,52 @@
+name: Update Leaderboard
+on:
+  repository_dispatch:
+    types: [score-submit]
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Update score file
+        run: |
+          GAME="${{ github.event.client_payload.game }}"
+          INITIALS="${{ github.event.client_payload.initials }}"
+          SCORE="${{ github.event.client_payload.score }}"
+          EXTRA="${{ github.event.client_payload.extra }}"
+          
+          FILE="scores/${GAME}.json"
+          
+          if [ -z "$GAME" ] || [ -z "$INITIALS" ] || [ -z "$SCORE" ]; then
+            echo "Missing required fields"
+            exit 0
+          fi
+          
+          INITIALS=$(echo "$INITIALS" | tr -cd 'A-Za-z0-9' | head -c 3 | tr 'a-z' 'A-Z')
+          
+          if [ ! -f "$FILE" ]; then
+            echo "[]" > "$FILE"
+          fi
+          
+          python3 -c "
+          import json
+          with open('$FILE') as f:
+              scores = json.load(f)
+          scores.append({'initials': '$INITIALS', 'score': int('$SCORE'), 'extra': '$EXTRA'})
+          scores.sort(key=lambda x: x['score'], reverse=True)
+          scores = scores[:10]
+          with open('$FILE', 'w') as f:
+              json.dump(scores, f, indent=2)
+          "
+          
+      - name: Commit and push
+        run: |
+          git config user.name "GameMaster Bot"
+          git config user.email "bot@gamemaster.arcade"
+          git add scores/
+          git diff --cached --quiet || git commit -m "Update ${{ github.event.client_payload.game }} leaderboard"
+          git push
