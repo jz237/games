@@ -799,19 +799,20 @@ function completeLvl() {
 
 // ============ DRAWING ============
 function drawBackground(ox, oy) {
-  // Sky gradient
-  const grd = ctx.createLinearGradient(0, 0, 0, viewH);
+  // Sky gradient (fill zoomed world area)
+  const bw = viewW / gameZoom, bh = viewH / gameZoom;
+  const grd = ctx.createLinearGradient(0, 0, 0, bh);
   grd.addColorStop(0, '#0a1628');
   grd.addColorStop(0.6, '#1a3a5c');
   grd.addColorStop(1, '#3a6080');
   ctx.fillStyle = grd;
-  ctx.fillRect(0, 0, viewW, viewH);
+  ctx.fillRect(0, 0, bw, bh);
 
   // Parallax clouds
   const cloudOx = ox * 0.1;
   ctx.fillStyle = 'rgba(255,255,255,0.06)';
   for (let i = 0; i < 5; i++) {
-    const cx = ((i * 200 + 50) - cloudOx) % (viewW + 200) - 100;
+    const cx = ((i * 200 + 50) - cloudOx) % (bw + 200) - 100;
     ctx.beginPath();
     ctx.ellipse(cx, 40 + i*20, 60+i*10, 15+i*3, 0, 0, Math.PI*2);
     ctx.fill();
@@ -824,14 +825,14 @@ function drawBackground(ox, oy) {
     [0,50],[40,80],[80,40],[120,90],[170,55],[210,70],[260,45],[300,85],[350,60],[400,75],
     [450,50],[500,90],[550,40],[600,65],[650,80],[700,55],[750,70],[800,45],[850,85]
   ];
-  for (const [bx, bh] of buildings) {
-    const sx = (bx - silOx) % (viewW + 100) - 50;
-    ctx.fillRect(sx, viewH - bh, 35, bh);
+  for (const [bx, bht] of buildings) {
+    const sx = (bx - silOx) % (bw + 100) - 50;
+    ctx.fillRect(sx, bh - bht, 35, bht);
   }
 
   // Warm amber overlay
   ctx.fillStyle = 'rgba(255,160,50,0.04)';
-  ctx.fillRect(0, 0, viewW, viewH);
+  ctx.fillRect(0, 0, bw, bh);
 }
 
 function drawGirder(x, y, w, h) {
@@ -1528,6 +1529,10 @@ function drawWorld(t) {
     sx = (Math.random()-0.5) * shakeIntensity * 2;
     sy = (Math.random()-0.5) * shakeIntensity * 2;
   }
+
+  // Clear full canvas before zoom to prevent trails
+  ctx.fillStyle = '#0a1628';
+  ctx.fillRect(0, 0, viewW, viewH);
 
   ctx.save();
   ctx.beginPath();
