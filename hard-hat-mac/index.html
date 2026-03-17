@@ -180,7 +180,9 @@ let player = { x:0, y:0, vx:0, vy:0, onGround:false, onLadder:false, facing:1, w
 // Camera
 let camX = 0, camY = 0;
 let gameZoom = 0.65; // default zoom (0.4 = zoomed out, 1.0 = zoomed in)
+let gameSpeed = 1.0; // speed multiplier (0.5 = slow, 2.0 = fast)
 try { const sz = parseFloat(localStorage.getItem('hhm_zoom')); if (sz >= 0.4 && sz <= 1.0) gameZoom = sz; } catch(e) {}
+try { const ss = parseFloat(localStorage.getItem('hhm_speed')); if (ss >= 0.5 && ss <= 2.0) gameSpeed = ss; } catch(e) {}
 
 // Level data
 let levelMap = [];
@@ -1872,23 +1874,41 @@ function drawTitle(t) {
   drawPlayer(mx, my, {facing:1, walkFrame:0, climbing:false, jumping:false, dead:false, carrying:null, climbFrame:0}, t);
 
   // Buttons
+  const sliderW = 180, sliderXBase = W/2 - sliderW/2;
+
   // Zoom slider
   ctx.fillStyle = '#aabbcc';
   ctx.font = '13px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('ZOOM', W/2, H*0.6 - 8);
-  const sliderW = 180, sliderX = W/2 - sliderW/2, sliderY = H*0.6 + 2;
+  ctx.fillText('ZOOM', W/2, H*0.55 - 8);
+  const zoomSliderY = H*0.55 + 2;
   ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.fillRect(sliderX, sliderY, sliderW, 12);
+  ctx.fillRect(sliderXBase, zoomSliderY, sliderW, 12);
   ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-  ctx.strokeRect(sliderX, sliderY, sliderW, 12);
-  // Slider knob
-  const knobX = sliderX + (gameZoom - 0.4) / 0.6 * sliderW; // range 0.4 - 1.0
+  ctx.strokeRect(sliderXBase, zoomSliderY, sliderW, 12);
+  const zoomKnobX = sliderXBase + (gameZoom - 0.4) / 0.6 * sliderW;
   ctx.fillStyle = '#ffcc00';
-  ctx.beginPath(); ctx.arc(knobX, sliderY + 6, 10, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(zoomKnobX, zoomSliderY + 6, 10, 0, Math.PI*2); ctx.fill();
   ctx.fillStyle = '#000';
   ctx.font = '9px monospace';
-  ctx.fillText(Math.round(gameZoom*100)+'%', knobX, sliderY + 9);
+  ctx.fillText(Math.round(gameZoom*100)+'%', zoomKnobX, zoomSliderY + 9);
+
+  // Speed slider
+  ctx.fillStyle = '#aabbcc';
+  ctx.font = '13px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('SPEED', W/2, H*0.63 - 8);
+  const speedSliderY = H*0.63 + 2;
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(sliderXBase, speedSliderY, sliderW, 12);
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.strokeRect(sliderXBase, speedSliderY, sliderW, 12);
+  const speedKnobX = sliderXBase + (gameSpeed - 0.5) / 1.5 * sliderW; // range 0.5 - 2.0
+  ctx.fillStyle = '#ff8844';
+  ctx.beginPath(); ctx.arc(speedKnobX, speedSliderY + 6, 10, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.font = '9px monospace';
+  ctx.fillText(gameSpeed.toFixed(1)+'x', speedKnobX, speedSliderY + 9);
 
   drawButton(W/2, H*0.72, 160, 44, 'START GAME', '#ffcc00', '#aa7700');
   drawButton(W/2, H*0.82, 160, 44, 'HIGH SCORES', '#88aacc', '#446688');
@@ -1967,10 +1987,19 @@ function handleTap(tx, ty) {
     case 'title':
       // Zoom slider
       {
-        const sliderW = 180, sliderX = W/2 - sliderW/2, sliderY = H*0.6 + 2;
-        if (ty > sliderY - 14 && ty < sliderY + 26 && tx > sliderX - 10 && tx < sliderX + sliderW + 10) {
+        const sliderW = 180, sliderX = W/2 - sliderW/2;
+        const zoomSliderY = H*0.55 + 2;
+        if (ty > zoomSliderY - 14 && ty < zoomSliderY + 26 && tx > sliderX - 10 && tx < sliderX + sliderW + 10) {
           gameZoom = Math.max(0.4, Math.min(1.0, 0.4 + (tx - sliderX) / sliderW * 0.6));
           try { localStorage.setItem('hhm_zoom', gameZoom); } catch(e) {}
+          break;
+        }
+        // Speed slider
+        const speedSliderY = H*0.63 + 2;
+        if (ty > speedSliderY - 14 && ty < speedSliderY + 26 && tx > sliderX - 10 && tx < sliderX + sliderW + 10) {
+          gameSpeed = Math.max(0.5, Math.min(2.0, 0.5 + (tx - sliderX) / sliderW * 1.5));
+          gameSpeed = Math.round(gameSpeed * 10) / 10;
+          try { localStorage.setItem('hhm_speed', gameSpeed); } catch(e) {}
           break;
         }
       }
@@ -2012,10 +2041,17 @@ canvas.addEventListener('touchstart', (e) => {
 canvas.addEventListener('touchmove', (e) => {
   if (state === 'title' && e.touches.length > 0) {
     const tx = e.touches[0].clientX, ty = e.touches[0].clientY;
-    const sliderW = 180, sliderX = W/2 - sliderW/2, sliderY = H*0.6 + 2;
-    if (ty > sliderY - 14 && ty < sliderY + 26 && tx > sliderX - 10 && tx < sliderX + sliderW + 10) {
+    const sliderW = 180, sliderX = W/2 - sliderW/2;
+    const zoomSliderY = H*0.55 + 2;
+    const speedSliderY = H*0.63 + 2;
+    if (ty > zoomSliderY - 14 && ty < zoomSliderY + 26 && tx > sliderX - 10 && tx < sliderX + sliderW + 10) {
       gameZoom = Math.max(0.4, Math.min(1.0, 0.4 + (tx - sliderX) / sliderW * 0.6));
       try { localStorage.setItem('hhm_zoom', gameZoom); } catch(e2) {}
+    }
+    if (ty > speedSliderY - 14 && ty < speedSliderY + 26 && tx > sliderX - 10 && tx < sliderX + sliderW + 10) {
+      gameSpeed = Math.max(0.5, Math.min(2.0, 0.5 + (tx - sliderX) / sliderW * 1.5));
+      gameSpeed = Math.round(gameSpeed * 10) / 10;
+      try { localStorage.setItem('hhm_speed', gameSpeed); } catch(e2) {}
     }
   }
 }, {passive:true});
@@ -2028,6 +2064,7 @@ function loop(timestamp) {
   lastTime = timestamp;
   if (dt > 1/30) dt = 1/30;
   if (dt <= 0) dt = 1/60;
+  dt *= gameSpeed; // apply speed multiplier
   gameTime += dt;
 
   // Shake
