@@ -130,7 +130,7 @@ const TILE = 48;
 const PLAYER_W = 36, PLAYER_H = 56;
 const GRAVITY = 600;
 const WALK_SPEED = 120;
-const JUMP_VEL = -280;
+const JUMP_VEL = -340;
 const CLIMB_SPEED = 100;
 const WORLD_W = 900;
 
@@ -692,6 +692,18 @@ function updateGame(dt) {
         e.x += e.vx * dt;
         if (e.x >= e.patrolMax) { e.x = e.patrolMax; e.vx = -Math.abs(e.vx); }
         if (e.x <= e.patrolMin) { e.x = e.patrolMin; e.vx = Math.abs(e.vx); }
+        // Check for holes ahead — turn around if floor is missing
+        {
+          const checkX = e.vx > 0 ? e.x + PLAYER_W + 2 : e.x - 2;
+          const checkC = Math.floor(checkX / TILE);
+          const feetR = e.platRow; // row the enemy walks on
+          if (checkC >= 0 && checkC < levelW && feetR >= 0 && feetR < levelH) {
+            const tileBelow = tileAt(checkC, feetR);
+            if (tileBelow === T_HOLE || tileBelow === T_EMPTY) {
+              e.vx = -e.vx; // turn around
+            }
+          }
+        }
         // Collision with player
         if (rectOverlap(player.x, player.y, PLAYER_W, PLAYER_H, e.x, e.y, PLAYER_W, PLAYER_H)) {
           killPlayer(); return;
