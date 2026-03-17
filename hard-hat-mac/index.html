@@ -8,7 +8,7 @@
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{position:fixed;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;background:#000;touch-action:none;user-select:none;-webkit-user-select:none}
 canvas{display:block}
-#controls{position:fixed;bottom:0;left:0;right:0;height:120px;background:rgba(0,0,0,0.75);display:none;z-index:10;touch-action:none}
+#controls{position:fixed;bottom:0;left:0;right:0;height:120px;background:transparent;display:none;z-index:10;touch-action:none}
 .ctrl-btn{position:absolute;border-radius:50%;border:2px solid rgba(255,255,255,0.5);background:rgba(255,255,255,0.15);color:#fff;font-size:22px;font-weight:bold;display:flex;align-items:center;justify-content:center;touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .ctrl-btn:active{background:rgba(255,255,255,0.35)}
 #btn-up{width:52px;height:52px;left:56px;top:6px}
@@ -584,8 +584,13 @@ function updateGame(dt) {
     }
   }
 
-  // Fall off bottom
-  if (player.y > levelH * TILE) { killPlayer(); return; }
+  // Prevent falling off bottom — treat bottom of level as solid floor
+  if (player.y + PLAYER_H >= levelH * TILE) {
+    player.y = levelH * TILE - PLAYER_H;
+    player.vy = 0;
+    player.onGround = true;
+    player.jumping = false;
+  }
 
   // World bounds
   if (player.x < 0) player.x = 0;
