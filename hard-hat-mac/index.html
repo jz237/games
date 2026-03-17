@@ -1711,37 +1711,47 @@ function drawHUD() {
 
 // ============ HIGH SCORES ============
 const HS_KEY = 'hard_hat_mac_highscores';
+const BLOB_ID = '019cfca6-94ef-7855-bf2e-24a77b85e990';
+const BLOB_URL = 'https://jsonblob.com/api/jsonBlob/' + BLOB_ID;
 
-// Cookie helpers for persistence backup (localStorage can be evicted on mobile Safari)
-function setCookie(k, v, days) {
-  const d = new Date(); d.setTime(d.getTime() + days*86400000);
-  document.cookie = k + '=' + encodeURIComponent(v) + ';expires=' + d.toUTCString() + ';path=/;SameSite=Lax';
+// Online leaderboard: JsonBlob (free, HTTPS, shared across all devices)
+let onlineScores = [];
+let onlineLoaded = false;
+
+function fetchOnlineScores() {
+  fetch(BLOB_URL).then(r => r.json()).then(data => {
+    if (Array.isArray(data)) {
+      onlineScores = data;
+      onlineLoaded = true;
+      // Merge into localStorage cache
+      try { localStorage.setItem(HS_KEY, JSON.stringify(onlineScores)); } catch(e) {}
+    }
+  }).catch(() => {});
 }
-function getCookie(k) {
-  const m = document.cookie.match(new RegExp('(?:^|; )' + k + '=([^;]*)'));
-  return m ? decodeURIComponent(m[1]) : null;
-}
+// Fetch on load
+fetchOnlineScores();
 
 function loadScores() {
+  if (onlineLoaded) return [...onlineScores];
   try {
-    // Try localStorage first
-    let data = localStorage.getItem(HS_KEY);
+    const data = localStorage.getItem(HS_KEY);
     if (data) return JSON.parse(data);
-    // Fallback: try cookie
-    data = getCookie(HS_KEY);
-    if (data) {
-      const parsed = JSON.parse(data);
-      // Restore to localStorage
-      try { localStorage.setItem(HS_KEY, JSON.stringify(parsed)); } catch(e2) {}
-      return parsed;
-    }
   } catch(e) {}
   return [];
 }
+
 function saveScores(scores) {
-  const json = JSON.stringify(scores);
-  try { localStorage.setItem(HS_KEY, json); } catch(e) {}
-  try { setCookie(HS_KEY, json, 365); } catch(e) {} // backup to cookie (1 year)
+  scores.sort((a,b) => b.score - a.score);
+  if (scores.length > 10) scores.length = 10;
+  onlineScores = scores;
+  // Save to localStorage (instant cache)
+  try { localStorage.setItem(HS_KEY, JSON.stringify(scores)); } catch(e) {}
+  // Save to online leaderboard (shared persistence)
+  fetch(BLOB_URL, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(scores)
+  }).catch(() => {});
 }
 function isHighScore(s) {
   const hs = loadScores();
