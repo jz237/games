@@ -471,10 +471,11 @@ function generateStars() {
 // ============ BUILDINGS ============
 function createBuildings() {
   S.buildings = [];
-  const spacing = W * 0.12;
-  const startX = W * 0.2;
-  for (let i = 0; i < 6; i++) {
-    const bx = startX + i * spacing;
+  const count = 8;
+  const margin = W * 0.05;
+  const spacing = (W - margin * 2) / (count - 1);
+  for (let i = 0; i < count; i++) {
+    const bx = margin + i * spacing;
     const bw = rand(30, 50);
     const bh = rand(50, 100);
     const bd = rand(20, 35);
@@ -516,11 +517,10 @@ function createBatteries() {
   for (let i = 0; i < 3; i++) {
     S.batteries.push({
       x3: W * positions[i],
-      y3: H * 0.88,
-      z3: 5,
+      y3: H + 50,
+      z3: 0,
       ammo: AMMO_PER_WAVE,
-      alive: true,
-      flash: 0
+      alive: true
     });
   }
 }
@@ -529,7 +529,6 @@ function resetWaveBatteries() {
   for (const b of S.batteries) {
     b.ammo = AMMO_PER_WAVE;
     b.alive = true;
-    b.flash = 0;
   }
 }
 
@@ -586,10 +585,8 @@ function spawnEnemy() {
   const x = rand(W * 0.1, W * 0.9);
   const y = VPY + rand(-20, 20);
   const z = FAR_Z;
-  // Pick a target: building or battery
-  const targets = [];
-  for (const b of S.buildings) if (b.alive) targets.push({ x3: b.x3, y3: b.y3, z3: b.z3 });
-  for (const b of S.batteries) if (b.alive) targets.push({ x3: b.x3, y3: b.y3, z3: b.z3 });
+  // Pick a target building
+  const targets = S.buildings.filter(b => b.alive);
   if (!targets.length) return;
   const tgt = targets[randi(0, targets.length - 1)];
 
@@ -611,6 +608,7 @@ function spawnEnemy() {
     mirvZ: rand(300, 600),
     isSmart,
     smartTarget: isSmart ? tgt : null,
+    targetBuilding: tgt,
     trail: [],
     alive: true,
     value: isMirv ? 25 : 10
@@ -649,19 +647,24 @@ function launchCounter(sx, sy) {
   if (!best) return;
 
   best.ammo--;
-  best.flash = 0.3;
   if (audio) audio.launch();
 
-  const dx = tgt.x - best.x3, dy = tgt.y - best.y3, dz = tgt.z - best.z3;
+  // Launch from bottom of screen, behind the city
+  const launchX = best.x3;
+  const launchY = H + 20;
+  const launchZ = 0;
+
+  const dx = tgt.x - launchX, dy = tgt.y - launchY, dz = tgt.z - launchZ;
   const len = Math.hypot(dx, dy, dz);
   const speed = 250;
 
   S.counterMissiles.push({
-    x: best.x3, y: best.y3, z: best.z3,
+    x: launchX, y: launchY, z: launchZ,
     tx: tgt.x, ty: tgt.y, tz: tgt.z,
     vx: dx / len * speed,
     vy: dy / len * speed,
     vz: dz / len * speed,
+    speed,
     trail: [],
     alive: true,
     dist: 0,
@@ -819,6 +822,7 @@ function update(dt) {
           speed: spd,
           isMirv: false, mirvSplit: false, mirvZ: 0,
           isSmart: false, smartTarget: null,
+          targetBuilding: tgt,
           trail: [{ x: m.x, y: m.y, z: m.z, a: 0.5 }],
           alive: true,
           value: 25
@@ -828,27 +832,31 @@ function update(dt) {
       continue;
     }
 
-    // Hit ground / buildings / batteries
-    if (m.z <= 10) {
+    // Hit target building — check distance to target or ground
+    let hit = false;
+    if (m.targetBuilding) {
+      const tb = m.targetBuilding;
+      const distToTarget = Math.hypot(tb.x3 - m.x, tb.y3 - m.y, tb.z3 - m.z);
+      if (distToTarget < 40) {
+        hit = true;
+        m.alive = false;
+        createExplosion(m.x, m.y, m.z, 35, true);
+        S.shake = Math.max(S.shake, 10);
+        if (tb.alive) {
+          damageBuilding(tb, rand(0.25, 0.45));
+        }
+      }
+    }
+    // Fallback: hit ground if no target or overshot
+    if (!hit && m.z <= 5) {
       m.alive = false;
       createExplosion(m.x, m.y, m.z, 30, true);
       S.shake = Math.max(S.shake, 6);
-
-      // Check building hits
+      // Check nearby building hits
       for (const b of S.buildings) {
         if (!b.alive) continue;
-        const dx = Math.abs(m.x - b.x3);
-        const dz = Math.abs(m.z - b.z3);
-        if (dx < b.w * 0.8 && dz < b.d * 1.5) {
-          damageBuilding(b, rand(0.25, 0.45));
-        }
-      }
-      // Check battery hits
-      for (const b of S.batteries) {
-        if (!b.alive) continue;
-        if (Math.abs(m.x - b.x3) < 30 && Math.abs(m.z - b.z3) < 30) {
-          b.alive = false;
-          b.ammo = 0;
+        if (Math.abs(m.x - b.x3) < b.w && Math.abs(m.z - b.z3) < b.d * 2) {
+          damageBuilding(b, rand(0.2, 0.35));
         }
       }
     }
@@ -884,11 +892,15 @@ function update(dt) {
       e.radius = e.maxRadius * (1 - t);
     }
 
-    // Kill enemy missiles in radius
+    // Kill enemy missiles in radius — use 2D screen distance
     if (!e.isEnemy) {
+      const epr = project(e.x, e.y, e.z);
+      const screenRadius = Math.max(50, e.radius * epr.s * 1.5);
       for (const m of S.enemyMissiles) {
         if (!m.alive) continue;
-        if (dist3(e, m) < e.radius + 10) {
+        const mpr = project(m.x, m.y, m.z);
+        const screenDist = Math.hypot(epr.sx - mpr.sx, epr.sy - mpr.sy);
+        if (screenDist < screenRadius) {
           m.alive = false;
           S.score += m.value;
           createExplosion(m.x, m.y, m.z, 35, false); // chain reaction
@@ -897,7 +909,9 @@ function update(dt) {
       // Kill bombers
       for (const b of S.bombers) {
         if (!b.alive) continue;
-        if (dist3(e, b) < e.radius + 20) {
+        const bpr = project(b.x, b.y, b.z);
+        const screenDist = Math.hypot(epr.sx - bpr.sx, epr.sy - bpr.sy);
+        if (screenDist < screenRadius + 20) {
           b.alive = false;
           S.score += b.value;
           createExplosion(b.x, b.y, b.z, 40, false);
@@ -926,6 +940,7 @@ function update(dt) {
         speed: spd,
         isMirv: false, mirvSplit: false, mirvZ: 0,
         isSmart: false, smartTarget: null,
+        targetBuilding: tgt,
         trail: [],
         alive: true,
         value: 10
@@ -967,10 +982,7 @@ function update(dt) {
   S.counterMissiles = S.counterMissiles.filter(m => m.alive);
   S.bombers = S.bombers.filter(b => b.alive);
 
-  // Battery flash decay
-  for (const b of S.batteries) {
-    if (b.flash > 0) b.flash = Math.max(0, b.flash - dt);
-  }
+  // (batteries are hidden, no flash to decay)
 
   // Shake decay
   if (S.shake > 0) S.shake = Math.max(0, S.shake - dt * 30);
@@ -1140,10 +1152,7 @@ function draw() {
     drawBuilding(b);
   }
 
-  // Batteries
-  for (const b of S.batteries) {
-    drawBattery(b);
-  }
+  // Batteries hidden — counter-missiles launch from behind the city
 
   // Enemy missile trails & missiles
   for (const m of S.enemyMissiles) {
@@ -1517,7 +1526,9 @@ function drawMissileTrail(trail, color1, color2) {
 function drawEnemyMissile(m) {
   const pr = project(m.x, m.y, m.z);
   const s = pr.s;
-  const size = Math.max(2, 4 * s);
+  // Dramatic size increase as missile approaches (z goes from FAR_Z to 0)
+  const proximity = clamp(1 - m.z / FAR_Z, 0, 1);
+  const size = Math.max(1.5, lerp(2, 14, proximity) * s);
 
   // Glow
   ctx.globalAlpha = 0.4;
