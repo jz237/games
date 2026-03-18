@@ -587,9 +587,9 @@ function spawnEnemy() {
   if (!targets.length) return;
   const tgt = targets[randi(0, targets.length - 1)];
 
-  // Start from random x across top of screen, falling DOWN toward city
+  // Start from ~20% down from top for a 3D "coming from sky" look
   const x = rand(W * 0.05, W * 0.95);
-  const y = rand(-20, 20);
+  const y = H * 0.2 + rand(-20, 20);
   const z = rand(20, 60); // similar z range as buildings
 
   const isMirv = Math.random() < cfg.mirvChance;
@@ -683,23 +683,25 @@ function createExplosion(x, y, z, radius, isEnemy) {
     maxRadius: radius || 45,
     phase: 'expand',
     timer: 0,
-    maxTime: 0.8,
+    maxTime: isEnemy ? 0.6 : 1.3, // player explosions linger ~1.3s
     isEnemy: !!isEnemy
   });
   if (audio) audio.explode(radius > 40 ? 1.2 : 0.8);
   S.flash = 0.15;
 
-  // Particles
-  for (let i = 0; i < 12; i++) {
+  // Particles — more for bigger explosions
+  const pCount = isEnemy ? 10 : 20;
+  const spread = isEnemy ? 60 : 100;
+  for (let i = 0; i < pCount; i++) {
     S.particles.push({
       x, y, z,
-      vx: rand(-60, 60),
-      vy: rand(-80, 20),
-      vz: rand(-60, 60),
-      life: rand(0.3, 0.8),
-      maxLife: rand(0.3, 0.8),
-      r: rand(2, 5),
-      color: Math.random() < 0.5 ? '#ff6622' : '#ffdd44'
+      vx: rand(-spread, spread),
+      vy: rand(-spread * 1.2, spread * 0.3),
+      vz: rand(-spread, spread),
+      life: rand(0.3, 1.0),
+      maxLife: rand(0.3, 1.0),
+      r: rand(2, 6),
+      color: Math.random() < 0.3 ? '#ffdd44' : (Math.random() < 0.5 ? '#ff6622' : '#ff3300')
     });
   }
 }
@@ -879,28 +881,33 @@ function update(dt) {
 
     if (m.dist >= m.maxDist || m.z > FAR_Z || m.z < -10) {
       m.alive = false;
-      createExplosion(m.x, m.y, m.z, 28, false);
+      createExplosion(m.x, m.y, m.z, 55, false);
     }
   }
 
   // Update explosions — check for missile kills
   for (const e of S.explosions) {
     e.timer += dt;
+    // Timing: expand 0.5s, hold 0.3s, shrink 0.5s (for 1.3s total)
+    // For enemy explosions (0.6s): scale proportionally
+    const expandEnd = e.maxTime * 0.385;  // ~0.5s for 1.3s
+    const holdEnd = e.maxTime * 0.615;    // ~0.8s for 1.3s
     if (e.phase === 'expand') {
-      e.radius = (e.timer / (e.maxTime * 0.4)) * e.maxRadius;
-      if (e.timer >= e.maxTime * 0.4) e.phase = 'hold';
+      e.radius = (e.timer / expandEnd) * e.maxRadius;
+      if (e.timer >= expandEnd) e.phase = 'hold';
     } else if (e.phase === 'hold') {
       e.radius = e.maxRadius;
-      if (e.timer >= e.maxTime * 0.7) e.phase = 'shrink';
+      if (e.timer >= holdEnd) e.phase = 'shrink';
     } else {
-      const t = (e.timer - e.maxTime * 0.7) / (e.maxTime * 0.3);
-      e.radius = e.maxRadius * (1 - t);
+      const t = (e.timer - holdEnd) / (e.maxTime - holdEnd);
+      e.radius = e.maxRadius * Math.max(0, 1 - t);
     }
 
     // Kill enemy missiles in radius — use 2D screen distance
-    if (!e.isEnemy) {
+    // During ENTIRE lifetime (expand + hold + shrink), missiles touching get destroyed
+    if (!e.isEnemy && e.radius > 1) {
       const epr = project(e.x, e.y, e.z);
-      const screenRadius = Math.max(25, e.radius * epr.s * 0.8);
+      const screenRadius = Math.max(38, e.radius * epr.s);
       for (const m of S.enemyMissiles) {
         if (!m.alive) continue;
         const mpr = project(m.x, m.y, m.z);
@@ -908,7 +915,7 @@ function update(dt) {
         if (screenDist < screenRadius) {
           m.alive = false;
           S.score += m.value;
-          createExplosion(m.x, m.y, m.z, 20, false); // chain reaction
+          createExplosion(m.x, m.y, m.z, 35, false); // chain reaction
         }
       }
       // Kill bombers
@@ -919,7 +926,7 @@ function update(dt) {
         if (screenDist < screenRadius + 10) {
           b.alive = false;
           S.score += b.value;
-          createExplosion(b.x, b.y, b.z, 25, false);
+          createExplosion(b.x, b.y, b.z, 35, false);
         }
       }
     }
@@ -1594,28 +1601,49 @@ function drawExplosion(e) {
   const sr = e.radius * pr.s;
   if (sr < 0.5) return;
 
-  const alpha = clamp(1 - e.timer / e.maxTime, 0, 1) * 0.8;
+  // Alpha stays high during expand+hold, fades during shrink
+  const fadeStart = e.maxTime * 0.615;
+  const alpha = e.timer < fadeStart ? 0.9 : clamp(1 - (e.timer - fadeStart) / (e.maxTime - fadeStart), 0, 1) * 0.9;
   ctx.globalAlpha = alpha;
 
-  // Outer glow
-  const g1 = ctx.createRadialGradient(pr.sx, pr.sy, 0, pr.sx, pr.sy, sr * 1.5);
-  g1.addColorStop(0, 'rgba(255,200,100,0.4)');
-  g1.addColorStop(0.5, 'rgba(255,100,30,0.2)');
+  // Wide outer glow — big visible kill zone
+  const g0 = ctx.createRadialGradient(pr.sx, pr.sy, 0, pr.sx, pr.sy, sr * 2.2);
+  g0.addColorStop(0, 'rgba(255,180,60,0.3)');
+  g0.addColorStop(0.4, 'rgba(255,80,20,0.15)');
+  g0.addColorStop(0.7, 'rgba(255,40,0,0.06)');
+  g0.addColorStop(1, 'transparent');
+  ctx.fillStyle = g0;
+  ctx.beginPath();
+  ctx.arc(pr.sx, pr.sy, sr * 2.2, 0, TAU);
+  ctx.fill();
+
+  // Mid glow
+  const g1 = ctx.createRadialGradient(pr.sx, pr.sy, 0, pr.sx, pr.sy, sr * 1.4);
+  g1.addColorStop(0, 'rgba(255,220,120,0.6)');
+  g1.addColorStop(0.5, 'rgba(255,100,30,0.35)');
   g1.addColorStop(1, 'transparent');
   ctx.fillStyle = g1;
   ctx.beginPath();
-  ctx.arc(pr.sx, pr.sy, sr * 1.5, 0, TAU);
+  ctx.arc(pr.sx, pr.sy, sr * 1.4, 0, TAU);
   ctx.fill();
 
-  // Core sphere
-  const g2 = ctx.createRadialGradient(pr.sx - sr * 0.2, pr.sy - sr * 0.2, 0, pr.sx, pr.sy, sr);
+  // Core fireball sphere
+  const g2 = ctx.createRadialGradient(pr.sx - sr * 0.15, pr.sy - sr * 0.15, 0, pr.sx, pr.sy, sr);
   g2.addColorStop(0, '#ffffee');
-  g2.addColorStop(0.3, '#ffaa44');
-  g2.addColorStop(0.7, '#ff4400');
-  g2.addColorStop(1, 'rgba(255,30,0,0)');
+  g2.addColorStop(0.2, '#ffcc44');
+  g2.addColorStop(0.5, '#ff6600');
+  g2.addColorStop(0.8, '#cc2200');
+  g2.addColorStop(1, 'rgba(180,20,0,0)');
   ctx.fillStyle = g2;
   ctx.beginPath();
   ctx.arc(pr.sx, pr.sy, sr, 0, TAU);
+  ctx.fill();
+
+  // Hot white center
+  ctx.globalAlpha = alpha * 0.6;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(pr.sx, pr.sy, sr * 0.25, 0, TAU);
   ctx.fill();
 
   ctx.globalAlpha = 1;
