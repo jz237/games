@@ -6,20 +6,27 @@
 <title>Gravity Weaver</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#050510;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:monospace;color:#aaa;touch-action:none;user-select:none;overflow:hidden}
-h1{font-size:1.2em;color:#aa88ff;letter-spacing:3px;margin-bottom:4px}
-#hud{display:flex;gap:14px;font-size:.8em;color:#aa88ff;margin-bottom:6px;flex-wrap:wrap;justify-content:center}
-canvas{display:block;touch-action:none}
-#status{font-size:.8em;color:#6655aa;margin-top:6px;text-align:center;min-height:1.4em}
+html,body{position:fixed;overflow:hidden;overscroll-behavior:none;width:100%;height:100%}
+body{background:#050510;font-family:monospace;color:#aaa;touch-action:none;user-select:none}
+canvas{display:block;position:fixed;top:0;left:0;width:100vw;height:100vh;touch-action:none}
+#hud{position:fixed;top:0;left:0;right:0;display:flex;gap:10px;font-size:.75em;color:#aa88ff;padding:8px 12px;justify-content:center;z-index:10;pointer-events:none;flex-wrap:wrap;background:linear-gradient(to bottom,rgba(5,5,16,.7),transparent);text-shadow:0 0 6px rgba(170,136,255,.4)}
+#hud span{pointer-events:none}
+#title-bar{position:fixed;top:0;left:0;right:0;text-align:center;padding-top:2px;z-index:9;pointer-events:none}
+#title-bar h1{font-size:.9em;color:#aa88ff;letter-spacing:3px;opacity:.5;display:none}
+#status{position:fixed;bottom:8px;left:0;right:0;font-size:.75em;color:#6655aa;text-align:center;z-index:10;pointer-events:none;min-height:1.4em;text-shadow:0 0 4px rgba(0,0,0,.8)}
 #overlay{position:fixed;inset:0;background:rgba(6,6,16,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#aa88ff;font-family:monospace;z-index:20;padding:18px}
 #overlay h2{font-size:2em;margin-bottom:10px}
-#overlay button{margin-top:16px;min-height:48px;min-width:190px;padding:14px 34px;background:#0a0518;color:#aa88ff;border:2px solid #aa88ff;border-radius:24px;font-size:1em;cursor:pointer;font-family:monospace}
+#overlay button,#mute-btn{touch-action:manipulation;cursor:pointer}
+#overlay button{margin-top:16px;min-height:48px;min-width:190px;padding:14px 34px;background:#0a0518;color:#aa88ff;border:2px solid #aa88ff;border-radius:24px;font-size:1em;font-family:monospace}
+#mute-btn{position:fixed;top:6px;right:10px;z-index:15;background:none;border:none;color:#aa88ff;font-size:1.4em;padding:8px;line-height:1;opacity:.7}
+#mute-btn:active{opacity:1}
 </style>
 </head>
 <body>
-<h1>⊕ GRAVITY WEAVER ⊕</h1>
+<div id="title-bar"><h1>⊕ GRAVITY WEAVER ⊕</h1></div>
 <div id="hud"><span>LVL <span id="lvl">1</span></span><span>LIVES <span id="lives">3</span></span><span>SCORE <span id="score">0</span></span><span>WELLS <span id="wells">3</span></span><span>FUEL <span id="fuel">0/0</span></span></div>
 <canvas id="c"></canvas>
+<button id="mute-btn" aria-label="Toggle sound">🔊</button>
 <div id="status">Tap to place wells. Swipe to slingshot your ship.</div>
 <div id="overlay">
   <h2>GRAVITY WEAVER</h2>
@@ -30,11 +37,238 @@ canvas{display:block;touch-action:none}
     <li>🤖 Enemy drones hunt predictive intercepts each level.</li>
     <li>🏆 3 levels: asteroid lanes, tractor fields, and wormholes.</li>
   </ul>
-  <button onclick="startGame(0)" style="font-weight:bold">▶ TAP TO PLAY</button>
+  <button id="start-btn" style="font-weight:bold">▶ TAP TO PLAY</button>
 </div>
 <script>
-const W=Math.min(innerWidth*.97,innerHeight*.72,500);
-const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');canvas.width=W;canvas.height=W;
+// --- Sizing ---
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,H;
+function resize(){
+  W=window.innerWidth;H=window.innerHeight;
+  canvas.width=W;canvas.height=H;
+}
+resize();
+window.addEventListener('resize',resize);
+window.addEventListener('orientationchange',()=>setTimeout(resize,120));
+
+// --- Audio Engine ---
+let audioCtx=null,masterGain=null,muted=false,ambientNode=null;
+function initAudio(){
+  if(audioCtx)return;
+  try{
+    audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    masterGain=audioCtx.createGain();
+    masterGain.gain.value=0.5;
+    masterGain.connect(audioCtx.destination);
+  }catch(e){audioCtx=null}
+}
+function resumeAudio(){
+  if(audioCtx&&audioCtx.state==='suspended')try{audioCtx.resume()}catch(e){}}
+
+function toggleMute(){
+  muted=!muted;
+  document.getElementById('mute-btn').textContent=muted?'🔇':'🔊';
+  if(masterGain)masterGain.gain.value=muted?0:0.5;
+}
+
+// Procedural sound helpers
+function playTone(freq,type,dur,vol,attack,decay,detune){
+  if(!audioCtx)return null;
+  const t=audioCtx.currentTime;
+  const o=audioCtx.createOscillator();
+  const g=audioCtx.createGain();
+  o.type=type||'sine';
+  o.frequency.value=freq;
+  if(detune)o.detune.value=detune;
+  g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime((vol||.3),t+(attack||.01));
+  g.gain.linearRampToValueAtTime(0,t+(dur||.3));
+  o.connect(g);g.connect(masterGain);
+  o.start(t);o.stop(t+(dur||.3)+.05);
+  return o;
+}
+
+function playNoise(dur,vol,attack){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime;
+  const len=audioCtx.sampleRate*dur;
+  const buf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<len;i++)d[i]=(Math.random()*2-1);
+  const src=audioCtx.createBufferSource();src.buffer=buf;
+  const g=audioCtx.createGain();
+  g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime(vol||.1,t+(attack||.005));
+  g.gain.linearRampToValueAtTime(0,t+dur);
+  const filt=audioCtx.createBiquadFilter();
+  filt.type='lowpass';filt.frequency.value=400;
+  src.connect(filt);filt.connect(g);g.connect(masterGain);
+  src.start(t);src.stop(t+dur+.05);
+}
+
+// Gravity pull/push — low resonant hum, pitch follows strength
+function sndGravity(strength){
+  if(!audioCtx)return;
+  const freq=40+Math.min(strength,200)*0.4;
+  playTone(freq,'sine',.12,.08,.01,.1);
+  playTone(freq*1.5,'triangle',.1,.03,.01,.08);
+}
+
+// Orbit capture — satisfying lock-in chime
+function sndOrbitCapture(){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime;
+  [660,880,1100].forEach((f,i)=>{
+    const o=audioCtx.createOscillator();const g=audioCtx.createGain();
+    o.type='sine';o.frequency.value=f;
+    const start=t+i*.06;
+    g.gain.setValueAtTime(0,start);
+    g.gain.linearRampToValueAtTime(.12,start+.02);
+    g.gain.exponentialRampToValueAtTime(.001,start+.4);
+    o.connect(g);g.connect(masterGain);
+    o.start(start);o.stop(start+.45);
+  });
+}
+
+// Collision — deep impact thud with reverb
+function sndCollision(){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime;
+  // thud
+  const o=audioCtx.createOscillator();const g=audioCtx.createGain();
+  o.type='sine';o.frequency.setValueAtTime(120,t);
+  o.frequency.exponentialRampToValueAtTime(30,t+.4);
+  g.gain.setValueAtTime(.4,t);
+  g.gain.exponentialRampToValueAtTime(.001,t+.6);
+  // reverb via delay
+  const delay=audioCtx.createDelay();delay.delayTime.value=.12;
+  const fb=audioCtx.createGain();fb.gain.value=.3;
+  const filt=audioCtx.createBiquadFilter();filt.type='lowpass';filt.frequency.value=600;
+  o.connect(g);g.connect(masterGain);
+  g.connect(delay);delay.connect(filt);filt.connect(fb);fb.connect(delay);
+  delay.connect(masterGain);
+  o.start(t);o.stop(t+.7);
+  // noise layer
+  playNoise(.25,.12,.005);
+}
+
+// Score/collect — bright ascending tone
+function sndCollect(){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime;
+  const o=audioCtx.createOscillator();const g=audioCtx.createGain();
+  o.type='square';
+  o.frequency.setValueAtTime(520,t);
+  o.frequency.linearRampToValueAtTime(1200,t+.12);
+  g.gain.setValueAtTime(.15,t);
+  g.gain.linearRampToValueAtTime(0,t+.2);
+  o.connect(g);g.connect(masterGain);
+  o.start(t);o.stop(t+.25);
+  // shimmer
+  playTone(1400,'sine',.15,.06,.01,.14);
+}
+
+// Level up — triumphant chord
+function sndLevelUp(){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime;
+  [523,659,784,1047].forEach((f,i)=>{
+    const o=audioCtx.createOscillator();const g=audioCtx.createGain();
+    o.type='triangle';o.frequency.value=f;
+    const start=t+i*.1;
+    g.gain.setValueAtTime(0,start);
+    g.gain.linearRampToValueAtTime(.15,start+.05);
+    g.gain.linearRampToValueAtTime(0,start+.7);
+    o.connect(g);g.connect(masterGain);
+    o.start(start);o.stop(start+.75);
+  });
+}
+
+// Game over — descending warble into silence
+function sndGameOver(){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime;
+  const o=audioCtx.createOscillator();const g=audioCtx.createGain();
+  const lfo=audioCtx.createOscillator();const lfoG=audioCtx.createGain();
+  o.type='sawtooth';
+  o.frequency.setValueAtTime(440,t);
+  o.frequency.exponentialRampToValueAtTime(60,t+1.8);
+  lfo.type='sine';lfo.frequency.value=6;
+  lfoG.gain.value=30;
+  lfo.connect(lfoG);lfoG.connect(o.frequency);
+  g.gain.setValueAtTime(.2,t);
+  g.gain.linearRampToValueAtTime(0,t+2.0);
+  o.connect(g);g.connect(masterGain);
+  lfo.start(t);o.start(t);
+  o.stop(t+2.1);lfo.stop(t+2.1);
+}
+
+// Well placement sound — gravity pulse
+function sndWellPlace(){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime;
+  const o=audioCtx.createOscillator();const g=audioCtx.createGain();
+  o.type='sine';
+  o.frequency.setValueAtTime(180,t);
+  o.frequency.exponentialRampToValueAtTime(55,t+.35);
+  g.gain.setValueAtTime(.2,t);
+  g.gain.exponentialRampToValueAtTime(.001,t+.4);
+  o.connect(g);g.connect(masterGain);
+  o.start(t);o.stop(t+.45);
+  // overtone
+  playTone(360,'triangle',.2,.06,.01,.18);
+}
+
+// Wormhole teleport
+function sndWormhole(){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime;
+  const o=audioCtx.createOscillator();const g=audioCtx.createGain();
+  o.type='sine';
+  o.frequency.setValueAtTime(200,t);
+  o.frequency.exponentialRampToValueAtTime(2000,t+.15);
+  o.frequency.exponentialRampToValueAtTime(300,t+.3);
+  g.gain.setValueAtTime(.15,t);
+  g.gain.linearRampToValueAtTime(0,t+.35);
+  o.connect(g);g.connect(masterGain);
+  o.start(t);o.stop(t+.4);
+}
+
+// Ambient space drone
+function startAmbient(){
+  if(!audioCtx||ambientNode)return;
+  const g=audioCtx.createGain();g.gain.value=.04;
+  const o1=audioCtx.createOscillator();o1.type='sine';o1.frequency.value=55;
+  const o2=audioCtx.createOscillator();o2.type='sine';o2.frequency.value=82.5;
+  const o3=audioCtx.createOscillator();o3.type='triangle';o3.frequency.value=110;
+  const g3=audioCtx.createGain();g3.gain.value=.3;
+  const lfo=audioCtx.createOscillator();lfo.type='sine';lfo.frequency.value=.15;
+  const lfoG=audioCtx.createGain();lfoG.gain.value=.015;
+  lfo.connect(lfoG);lfoG.connect(g.gain);
+  const filt=audioCtx.createBiquadFilter();filt.type='lowpass';filt.frequency.value=200;
+  o1.connect(filt);o2.connect(filt);o3.connect(g3);g3.connect(filt);
+  filt.connect(g);g.connect(masterGain);
+  o1.start();o2.start();o3.start();lfo.start();
+  ambientNode={g,oscs:[o1,o2,o3,lfo],filt};
+}
+function stopAmbient(){
+  if(!ambientNode)return;
+  const t=audioCtx?audioCtx.currentTime:0;
+  ambientNode.g.gain.linearRampToValueAtTime(0,t+.5);
+  setTimeout(()=>{
+    try{ambientNode.oscs.forEach(o=>o.stop())}catch(e){}
+    ambientNode=null;
+  },600);
+}
+
+// Slingshot whoosh
+function sndSlingshot(){
+  if(!audioCtx)return;
+  playNoise(.18,.08,.01);
+  playTone(300,'sine',.15,.06,.01,.14);
+}
+
+// --- Game Constants ---
 const LEVELS=[
   {wells:4,aiCount:1,aiSpeed:.7,asteroids:4,fuel:3,wormholes:false,tractors:false},
   {wells:3,aiCount:2,aiSpeed:1.0,asteroids:6,fuel:4,wormholes:false,tractors:true},
@@ -42,75 +276,96 @@ const LEVELS=[
 ];
 
 let state=null,animId=null;
-let shakeX=0,shakeY=0,shakeDur=0,shakeInt=0;function screenShake(i,d){shakeInt=i;shakeDur=d}function updateShake(dt){if(shakeDur>0){shakeDur-=dt;shakeX=(Math.random()-.5)*shakeInt*2;shakeY=(Math.random()-.5)*shakeInt*2;if(shakeDur<=0){shakeX=shakeY=0}}}
+let shakeX=0,shakeY=0,shakeDur=0,shakeInt=0;
+function screenShake(i,d){shakeInt=i;shakeDur=d}
+function updateShake(dt){if(shakeDur>0){shakeDur-=dt;shakeX=(Math.random()-.5)*shakeInt*2;shakeY=(Math.random()-.5)*shakeInt*2;if(shakeDur<=0){shakeX=shakeY=0}}}
+
 const FX={ripples:[],trails:[],spawn(x,y,col='#aa88ff'){this.ripples.push({x,y,r:7,a:.85,col,spd:86});this.trails.push({x,y,r:13,a:.56,col,decay:3.5})},move(x,y){if(Math.random()<.6)this.trails.push({x,y,r:4,a:.36,col:'#bb99ff',decay:5.1})},update(dt){this.ripples=this.ripples.filter(r=>(r.r+=r.spd*dt,r.a-=1.8*dt,r.a>0));this.trails=this.trails.filter(t=>(t.r-=14*dt,t.a-=t.decay*dt,t.a>0&&t.r>.2))},draw(){ctx.save();ctx.shadowBlur=14;for(const r of this.ripples){ctx.globalAlpha=r.a;ctx.strokeStyle=ctx.shadowColor=r.col;ctx.lineWidth=2.2;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.stroke()}for(const t of this.trails){ctx.globalAlpha=t.a*.8;ctx.fillStyle=ctx.shadowColor=t.col;ctx.beginPath();ctx.arc(t.x,t.y,t.r,0,Math.PI*2);ctx.fill()}ctx.restore();ctx.globalAlpha=1}};
 
 function startGame(lvl=0,lives=3,score=0){
-  document.getElementById('overlay').style.display='none';const L=LEVELS[lvl];
-  const goal={x:W/2+(Math.random()-.5)*W*.35,y:60+Math.random()*80,open:false};
-  const asteroids=Array.from({length:L.asteroids},(_,i)=>({x:55+Math.random()*(W-110),y:100+Math.random()*(W-180),r:12+Math.random()*16,vx:(Math.random()-.5)*(lvl>0?.45:.2),vy:(Math.random()-.5)*(lvl>1?.45:.2)}));
-  const aiShips=Array.from({length:L.aiCount},()=>({x:50+Math.random()*(W-100),y:130+Math.random()*(W-220),vx:(Math.random()-.5)*L.aiSpeed*2,vy:(Math.random()-.5)*L.aiSpeed*2,r:9,phase:Math.random()*Math.PI*2,trail:[],predict:.35+Math.random()*.35}));
-  const stars=Array.from({length:44},()=>({x:Math.random()*W,y:Math.random()*W,r:lvl>=2?.8+Math.random()*1.8:.45+Math.random(),b:lvl>=2?.5+Math.random()*.45:.25+Math.random()*.3,p:.1+Math.random()*.22}));
-  const fuel=Array.from({length:L.fuel},()=>({x:60+Math.random()*(W-120),y:90+Math.random()*(W-180),r:7,collected:false,phase:Math.random()*Math.PI*2}));
-  let wormholes=[];if(L.wormholes){wormholes=[{x:W*.2,y:W*.35,r:16,id:0},{x:W*.8,y:W*.65,r:16,id:0}]}
-  let tractors=[];if(L.tractors){tractors=Array.from({length:lvl===2?2:1},()=>({x:80+Math.random()*(W-160),y:120+Math.random()*(W-220),r:65,phase:Math.random()*Math.PI*2}))}
+  initAudio();resumeAudio();
+  document.getElementById('overlay').style.display='none';
+  const L=LEVELS[lvl];
+  const goal={x:W/2+(Math.random()-.5)*W*.35,y:60+Math.random()*H*.15,open:false};
+  const asteroids=Array.from({length:L.asteroids},()=>({x:55+Math.random()*(W-110),y:100+Math.random()*(H-180),r:12+Math.random()*16,vx:(Math.random()-.5)*(lvl>0?.45:.2),vy:(Math.random()-.5)*(lvl>1?.45:.2)}));
+  const aiShips=Array.from({length:L.aiCount},()=>({x:50+Math.random()*(W-100),y:130+Math.random()*(H-220),vx:(Math.random()-.5)*L.aiSpeed*2,vy:(Math.random()-.5)*L.aiSpeed*2,r:9,phase:Math.random()*Math.PI*2,trail:[],predict:.35+Math.random()*.35}));
+  const stars=Array.from({length:60},()=>({x:Math.random()*W,y:Math.random()*H,r:lvl>=2?.8+Math.random()*1.8:.45+Math.random(),b:lvl>=2?.5+Math.random()*.45:.25+Math.random()*.3,p:.1+Math.random()*.22}));
+  const fuel=Array.from({length:L.fuel},()=>({x:60+Math.random()*(W-120),y:90+Math.random()*(H-180),r:7,collected:false,phase:Math.random()*Math.PI*2}));
+  let wormholes=[];if(L.wormholes){wormholes=[{x:W*.2,y:H*.35,r:16,id:0},{x:W*.8,y:H*.65,r:16,id:0}]}
+  let tractors=[];if(L.tractors){tractors=Array.from({length:lvl===2?2:1},()=>({x:80+Math.random()*(W-160),y:120+Math.random()*(H-220),r:65,phase:Math.random()*Math.PI*2}))}
 
-  state={lvl,L,lives,score,player:{x:W/2+(Math.random()-.5)*60,y:W-80,vx:0,vy:0,r:9,trail:[]},gravWells:[],maxWells:L.wells,goal,asteroids,aiShips,stars,fuel,fuelGot:0,wormholes,tractors,particles:[],gameOver:false,lastTime:null};
+  state={lvl,L,lives,score,player:{x:W/2+(Math.random()-.5)*60,y:H-80,vx:0,vy:0,r:9,trail:[]},gravWells:[],maxWells:L.wells,goal,asteroids,aiShips,stars,fuel,fuelGot:0,wormholes,tractors,particles:[],gameOver:false,lastTime:null,gravSndCooldown:0};
   updateHUD();cancelAnimationFrame(animId);animId=requestAnimationFrame(loop);
+  startAmbient();
 }
 
 function updateHUD(){if(!state)return;document.getElementById('lvl').textContent=state.lvl+1;document.getElementById('lives').textContent='♦'.repeat(state.lives);document.getElementById('score').textContent=state.score;document.getElementById('wells').textContent=state.maxWells-state.gravWells.length;document.getElementById('fuel').textContent=`${state.fuelGot}/${state.fuel.length}`}
 
-function placeWell(x,y){if(!state||state.gameOver)return;if(state.gravWells.length>=state.maxWells)state.gravWells.shift();const orbit=Array.from({length:3},()=>({a:Math.random()*Math.PI*2,r:18+Math.random()*20,s:.6+Math.random()*1.2}));state.gravWells.push({x,y,strength:125,r:8+Math.random()*6,alpha:1,orbit});FX.spawn(x,y,'#c4a9ff');updateHUD()}
+function placeWell(x,y){if(!state||state.gameOver)return;if(state.gravWells.length>=state.maxWells)state.gravWells.shift();const orbit=Array.from({length:3},()=>({a:Math.random()*Math.PI*2,r:18+Math.random()*20,s:.6+Math.random()*1.2}));state.gravWells.push({x,y,strength:125,r:8+Math.random()*6,alpha:1,orbit});FX.spawn(x,y,'#c4a9ff');sndWellPlace();updateHUD()}
 
 function loop(now){if(!state)return;if(!state.lastTime)state.lastTime=now;const dt=Math.min((now-state.lastTime)/16,3);state.lastTime=now;if(!state.gameOver)update(dt);render();animId=requestAnimationFrame(loop)}
 
 function update(dt){
   const s=state,p=s.player;let ax=0,ay=0;
-  for(const w of s.gravWells){const dx=w.x-p.x,dy=w.y-p.y,d=Math.max(Math.hypot(dx,dy),18),f=w.strength/(d*d)*dt;ax+=(dx/d)*f;ay+=(dy/d)*f;w.alpha=Math.max(.32,w.alpha-.0011*dt);for(const o of w.orbit)o.a+=o.s*dt*.04}
+  let totalGravStr=0;
+  for(const w of s.gravWells){const dx=w.x-p.x,dy=w.y-p.y,d=Math.max(Math.hypot(dx,dy),18),f=w.strength/(d*d)*dt;ax+=(dx/d)*f;ay+=(dy/d)*f;totalGravStr+=f;w.alpha=Math.max(.32,w.alpha-.0011*dt);for(const o of w.orbit)o.a+=o.s*dt*.04}
+  // Gravity sound
+  s.gravSndCooldown-=dt;
+  if(totalGravStr>.02&&s.gravSndCooldown<=0){sndGravity(totalGravStr*60);s.gravSndCooldown=8}
+
   for(const t of s.tractors){t.phase+=.02*dt;const dx=t.x-p.x,dy=t.y-p.y,d=Math.hypot(dx,dy);if(d<t.r){const pull=(1-d/t.r)*0.055*dt;ax+=(dx/(d||1))*pull;ay+=(dy/(d||1))*pull}}
 
   p.vx+=ax;p.vy+=ay;p.vx*=.9985;p.vy*=.9985;const sp=Math.hypot(p.vx,p.vy);if(sp>5.4){p.vx*=5.4/sp;p.vy*=5.4/sp}
   p.x+=p.vx*dt;p.y+=p.vy*dt;
   if(p.x<12){p.x=12;p.vx=Math.abs(p.vx)*.55}if(p.x>W-12){p.x=W-12;p.vx=-Math.abs(p.vx)*.55}
-  if(p.y<12){p.y=12;p.vy=Math.abs(p.vy)*.55}if(p.y>W-12){p.y=W-12;p.vy=-Math.abs(p.vy)*.55}
+  if(p.y<12){p.y=12;p.vy=Math.abs(p.vy)*.55}if(p.y>H-12){p.y=H-12;p.vy=-Math.abs(p.vy)*.55}
   p.trail.push({x:p.x,y:p.y});if(p.trail.length>24)p.trail.shift();
 
   // wormholes
-  if(s.wormholes.length===2){const [a,b]=s.wormholes; if(Math.hypot(p.x-a.x,p.y-a.y)<a.r-2){p.x=b.x+12;p.y=b.y+12;screenShake(5,.25);spawnParticles(p.x,p.y,'#99ccff')} else if(Math.hypot(p.x-b.x,p.y-b.y)<b.r-2){p.x=a.x+12;p.y=a.y+12;screenShake(5,.25);spawnParticles(p.x,p.y,'#99ccff')}}
+  if(s.wormholes.length===2){const [a,b]=s.wormholes; if(Math.hypot(p.x-a.x,p.y-a.y)<a.r-2){p.x=b.x+12;p.y=b.y+12;screenShake(5,.25);spawnParticles(p.x,p.y,'#99ccff');sndWormhole()} else if(Math.hypot(p.x-b.x,p.y-b.y)<b.r-2){p.x=a.x+12;p.y=a.y+12;screenShake(5,.25);spawnParticles(p.x,p.y,'#99ccff');sndWormhole()}}
 
   // fuel
-  for(const f of s.fuel){if(f.collected)continue;f.phase+=.04*dt;if(Math.hypot(p.x-f.x,p.y-f.y)<p.r+f.r+1){f.collected=true;s.fuelGot++;s.score+=35;spawnParticles(f.x,f.y,'#ffdd66');screenShake(3,.2);updateHUD();if(s.fuelGot===s.fuel.length)s.goal.open=true}}
+  for(const f of s.fuel){if(f.collected)continue;f.phase+=.04*dt;if(Math.hypot(p.x-f.x,p.y-f.y)<p.r+f.r+1){f.collected=true;s.fuelGot++;s.score+=35;spawnParticles(f.x,f.y,'#ffdd66');screenShake(3,.2);sndCollect();updateHUD();if(s.fuelGot===s.fuel.length){s.goal.open=true;sndOrbitCapture()}}}
 
   // goal
-  if(s.goal.open&&Math.hypot(p.x-s.goal.x,p.y-s.goal.y)<24){s.score+=120*(s.lvl+1);spawnParticles(s.goal.x,s.goal.y,'#ffdd44');if(s.lvl<2){s.gameOver=true;document.getElementById('status').textContent=`Level ${s.lvl+1} complete!`;setTimeout(()=>startGame(s.lvl+1,s.lives,s.score),1200)}else endGame(true);return}
+  if(s.goal.open&&Math.hypot(p.x-s.goal.x,p.y-s.goal.y)<24){s.score+=120*(s.lvl+1);spawnParticles(s.goal.x,s.goal.y,'#ffdd44');if(s.lvl<2){sndLevelUp();s.gameOver=true;document.getElementById('status').textContent=`Level ${s.lvl+1} complete!`;setTimeout(()=>startGame(s.lvl+1,s.lives,s.score),1200)}else{sndLevelUp();endGame(true)}return}
 
-  // asteroids move
-  for(const a of s.asteroids){a.x+=a.vx*dt;a.y+=a.vy*dt;if(a.x<a.r+6||a.x>W-a.r-6)a.vx*=-1;if(a.y<a.r+6||a.y>W-a.r-6)a.vy*=-1;a.x=Math.max(a.r+6,Math.min(W-a.r-6,a.x));a.y=Math.max(a.r+6,Math.min(W-a.r-6,a.y));if(Math.hypot(p.x-a.x,p.y-a.y)<p.r+a.r-3){die();return}}
+  // asteroids
+  for(const a of s.asteroids){a.x+=a.vx*dt;a.y+=a.vy*dt;if(a.x<a.r+6||a.x>W-a.r-6)a.vx*=-1;if(a.y<a.r+6||a.y>H-a.r-6)a.vy*=-1;a.x=Math.max(a.r+6,Math.min(W-a.r-6,a.x));a.y=Math.max(a.r+6,Math.min(H-a.r-6,a.y));if(Math.hypot(p.x-a.x,p.y-a.y)<p.r+a.r-3){die();return}}
 
-  // ai ships with predictive chase
-  for(const ai of s.aiShips){ai.phase+=.02*dt;let tx=p.x+p.vx*ai.predict*18,ty=p.y+p.vy*ai.predict*18;let dx=tx-ai.x,dy=ty-ai.y,d=Math.hypot(dx,dy)||1;ai.vx+=(dx/d)*0.03*dt;ai.vy+=(dy/d)*0.03*dt;const lim=s.L.aiSpeed*2.2;let sp=Math.hypot(ai.vx,ai.vy);if(sp>lim){ai.vx*=lim/sp;ai.vy*=lim/sp}ai.x+=ai.vx*dt+Math.sin(ai.phase)*.35;ai.y+=ai.vy*dt+Math.cos(ai.phase*.7)*.28;if(ai.x<20||ai.x>W-20)ai.vx*=-1;if(ai.y<20||ai.y>W-20)ai.vy*=-1;ai.x=Math.max(20,Math.min(W-20,ai.x));ai.y=Math.max(20,Math.min(W-20,ai.y));ai.trail.push({x:ai.x,y:ai.y});if(ai.trail.length>7)ai.trail.shift();if(Math.hypot(p.x-ai.x,p.y-ai.y)<p.r+ai.r+2){die();return}}
+  // ai ships
+  for(const ai of s.aiShips){ai.phase+=.02*dt;let tx=p.x+p.vx*ai.predict*18,ty=p.y+p.vy*ai.predict*18;let dx=tx-ai.x,dy=ty-ai.y,d=Math.hypot(dx,dy)||1;ai.vx+=(dx/d)*0.03*dt;ai.vy+=(dy/d)*0.03*dt;const lim=s.L.aiSpeed*2.2;let asp=Math.hypot(ai.vx,ai.vy);if(asp>lim){ai.vx*=lim/asp;ai.vy*=lim/asp}ai.x+=ai.vx*dt+Math.sin(ai.phase)*.35;ai.y+=ai.vy*dt+Math.cos(ai.phase*.7)*.28;if(ai.x<20||ai.x>W-20)ai.vx*=-1;if(ai.y<20||ai.y>H-20)ai.vy*=-1;ai.x=Math.max(20,Math.min(W-20,ai.x));ai.y=Math.max(20,Math.min(H-20,ai.y));ai.trail.push({x:ai.x,y:ai.y});if(ai.trail.length>7)ai.trail.shift();if(Math.hypot(p.x-ai.x,p.y-ai.y)<p.r+ai.r+2){die();return}}
 
   for(let i=s.particles.length-1;i>=0;i--){const pt=s.particles[i];pt.x+=pt.vx*dt;pt.y+=pt.vy*dt;pt.alpha-=.04*dt;if(pt.alpha<=0)s.particles.splice(i,1)}
   updateShake(dt/60);FX.update(dt/60);
 }
 
-function die(){const s=state;screenShake(8,.5);spawnParticles(s.player.x,s.player.y,'#aa88ff');s.lives--;updateHUD();if(s.lives<=0){endGame(false);return}s.gameOver=true;document.getElementById('status').textContent='Destroyed! Respawning...';setTimeout(()=>startGame(s.lvl,s.lives,s.score),1000)}
+function die(){const s=state;screenShake(8,.5);spawnParticles(s.player.x,s.player.y,'#aa88ff');sndCollision();s.lives--;updateHUD();if(s.lives<=0){endGame(false);return}s.gameOver=true;document.getElementById('status').textContent='Destroyed! Respawning...';setTimeout(()=>startGame(s.lvl,s.lives,s.score),1000)}
 function spawnParticles(x,y,col){for(let i=0;i<11;i++){const a=Math.random()*Math.PI*2;state.particles.push({x,y,vx:Math.cos(a)*3.1,vy:Math.sin(a)*3.1,alpha:1,color:col})}}
 
-function endGame(won){state.gameOver=true;const ov=document.getElementById('overlay');ov.innerHTML=`<h2 style='color:${won?'#ffdd44':'#ff4466'}'>${won?'✦ MISSION COMPLETE':'✖ LOST IN SPACE'}</h2><p style='font-size:1.15em;color:#fff'>Score: ${state.score}</p><p style='margin-top:6px;color:#99a'>${won?'You mastered gravity itself!':'The void claims another ship.'}</p><button onclick='startGame(0)'>↺ Try Again</button>`;ov.style.display='flex'}
+function endGame(won){
+  state.gameOver=true;stopAmbient();
+  if(won)sndLevelUp();else sndGameOver();
+  const ov=document.getElementById('overlay');
+  ov.innerHTML=`<h2 style='color:${won?'#ffdd44':'#ff4466'}'>${won?'✦ MISSION COMPLETE':'✖ LOST IN SPACE'}</h2><p style='font-size:1.15em;color:#fff'>Score: ${state.score}</p><p style='margin-top:6px;color:#99a'>${won?'You mastered gravity itself!':'The void claims another ship.'}</p><button id="restart-btn">↺ Try Again</button>`;
+  ov.style.display='flex';
+  const rb=document.getElementById('restart-btn');
+  rb.addEventListener('click',e=>{e.stopPropagation();startGame(0)});
+  rb.addEventListener('touchend',e=>{e.stopPropagation();e.preventDefault();startGame(0)});
+}
 
 function render(){
-  const s=state;ctx.fillStyle=['#050510','#080514','#0a0318'][s.lvl]||'#050510';ctx.fillRect(0,0,W,W);
+  const s=state;
+  ctx.fillStyle=['#050510','#080514','#0a0318'][s.lvl]||'#050510';ctx.fillRect(0,0,W,H);
   // nebula
-  if(s.lvl>=1){let g=ctx.createRadialGradient(W*.8,W*.75,10,W*.8,W*.75,W*.42);g.addColorStop(0,'rgba(120,30,60,.09)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(0,0,W,W)}
-  if(s.lvl>=2){let g=ctx.createRadialGradient(W*.15,W*.2,10,W*.15,W*.2,W*.35);g.addColorStop(0,'rgba(70,25,130,.11)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(0,0,W,W)}
+  if(s.lvl>=1){let g=ctx.createRadialGradient(W*.8,H*.75,10,W*.8,H*.75,Math.min(W,H)*.42);g.addColorStop(0,'rgba(120,30,60,.09)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H)}
+  if(s.lvl>=2){let g=ctx.createRadialGradient(W*.15,H*.2,10,W*.15,H*.2,Math.min(W,H)*.35);g.addColorStop(0,'rgba(70,25,130,.11)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H)}
 
   ctx.save();ctx.translate(shakeX,shakeY);
 
   // stars parallax
-  const pOffX=s.player.x-W/2,pOffY=s.player.y-W/2;
-  for(const st of s.stars){const sx=((st.x-pOffX*st.p)%W+W)%W,sy=((st.y-pOffY*st.p)%W+W)%W;ctx.globalAlpha=st.b;ctx.fillStyle='rgba(200,210,255,1)';ctx.beginPath();ctx.arc(sx,sy,st.r,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1;
+  const pOffX=s.player.x-W/2,pOffY=s.player.y-H/2;
+  for(const st of s.stars){const sx=((st.x-pOffX*st.p)%W+W)%W,sy=((st.y-pOffY*st.p)%H+H)%H;ctx.globalAlpha=st.b;ctx.fillStyle='rgba(200,210,255,1)';ctx.beginPath();ctx.arc(sx,sy,st.r,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1;
 
   // tractors
   for(const t of s.tractors){let a=.16+Math.sin(t.phase)*.08;let g=ctx.createRadialGradient(t.x,t.y,5,t.x,t.y,t.r);g.addColorStop(0,`rgba(110,160,255,${a*.7})`);g.addColorStop(1,'rgba(50,90,190,0)');ctx.beginPath();ctx.arc(t.x,t.y,t.r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();ctx.strokeStyle=`rgba(130,180,255,${a})`;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(t.x,t.y,t.r*.72,0,Math.PI*2);ctx.stroke();ctx.fillStyle='rgba(160,200,255,.7)';ctx.font='10px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('TR',t.x,t.y)}
@@ -141,19 +396,61 @@ function render(){
   const p=s.player;ctx.fillStyle='#aa88ff';ctx.shadowColor='#aa88ff';ctx.shadowBlur=18;ctx.beginPath();ctx.moveTo(p.x,p.y-p.r);ctx.lineTo(p.x-p.r*.7,p.y+p.r);ctx.lineTo(p.x,p.y+p.r*.4);ctx.lineTo(p.x+p.r*.7,p.y+p.r);ctx.closePath();ctx.fill();ctx.shadowBlur=6;ctx.globalAlpha=.55;ctx.fillStyle='#ddbbff';ctx.beginPath();ctx.arc(p.x,p.y+p.r*.4,3,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;ctx.shadowBlur=0;
 
   for(const pt of s.particles){ctx.globalAlpha=pt.alpha;ctx.fillStyle=pt.color;ctx.shadowColor=pt.color;ctx.shadowBlur=8;ctx.beginPath();ctx.arc(pt.x,pt.y,3,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1;ctx.shadowBlur=0;
-  if(s.maxWells-s.gravWells.length===0){ctx.globalAlpha=.55;ctx.fillStyle='#ff8844';ctx.font='.75em monospace';ctx.textAlign='center';ctx.fillText('NO WELLS LEFT — oldest replaced on next tap',W/2,W-8);ctx.globalAlpha=1}
+  if(s.maxWells-s.gravWells.length===0){ctx.globalAlpha=.55;ctx.fillStyle='#ff8844';ctx.font='.75em monospace';ctx.textAlign='center';ctx.fillText('NO WELLS LEFT — oldest replaced on next tap',W/2,H-28);ctx.globalAlpha=1}
 
   ctx.restore();
   FX.draw();
 }
 
-function getPos(e){const r=canvas.getBoundingClientRect(),sx=W/r.width,sy=W/r.height;if(e.touches)return{x:(e.touches[0].clientX-r.left)*sx,y:(e.touches[0].clientY-r.top)*sy};return{x:(e.clientX-r.left)*sx,y:(e.clientY-r.top)*sy}}
+// --- Input ---
+function getPos(e){
+  const r=canvas.getBoundingClientRect(),sx=W/r.width,sy=H/r.height;
+  if(e.touches)return{x:(e.touches[0].clientX-r.left)*sx,y:(e.touches[0].clientY-r.top)*sy};
+  return{x:(e.clientX-r.left)*sx,y:(e.clientY-r.top)*sy};
+}
 let swipeStart=null;
-canvas.addEventListener('click',e=>{const p=getPos(e);placeWell(p.x,p.y)});
-canvas.addEventListener('touchstart',e=>{e.preventDefault();const p=getPos(e);swipeStart={x:p.x,y:p.y};FX.spawn(p.x,p.y,'#c2a8ff');placeWell(p.x,p.y)},{passive:false});
-canvas.addEventListener('touchmove',e=>{e.preventDefault();const p=getPos(e);FX.move(p.x,p.y)},{passive:false});
-canvas.addEventListener('touchend',e=>{e.preventDefault();if(!state||!swipeStart)return;const r=canvas.getBoundingClientRect(),sx=W/r.width,sy=W/r.height,t=e.changedTouches[0],ex=(t.clientX-r.left)*sx,ey=(t.clientY-r.top)*sy,dx=ex-swipeStart.x,dy=ey-swipeStart.y,d=Math.hypot(dx,dy);if(d>36){state.player.vx+=(dx/d)*Math.min(2.5,d/58);state.player.vy+=(dy/d)*Math.min(2.5,d/58);FX.spawn(ex,ey,'#aa88ff')}swipeStart=null},{passive:false});
-canvas.addEventListener('touchcancel',e=>e.preventDefault(),{passive:false});
+
+canvas.addEventListener('click',e=>{
+  initAudio();resumeAudio();
+  const p=getPos(e);placeWell(p.x,p.y);
+});
+
+canvas.addEventListener('touchstart',e=>{
+  if(e.target.closest('button')||e.target.closest('.overlay')||e.target.closest('#overlay'))return;
+  e.preventDefault();
+  initAudio();resumeAudio();
+  const p=getPos(e);swipeStart={x:p.x,y:p.y};FX.spawn(p.x,p.y,'#c2a8ff');placeWell(p.x,p.y);
+},{passive:false});
+
+canvas.addEventListener('touchmove',e=>{
+  if(e.target.closest('button')||e.target.closest('#overlay'))return;
+  e.preventDefault();
+  const p=getPos(e);FX.move(p.x,p.y);
+},{passive:false});
+
+canvas.addEventListener('touchend',e=>{
+  if(e.target.closest('button')||e.target.closest('#overlay'))return;
+  e.preventDefault();
+  if(!state||!swipeStart)return;
+  const r=canvas.getBoundingClientRect(),sx=W/r.width,sy=H/r.height,t=e.changedTouches[0],ex=(t.clientX-r.left)*sx,ey=(t.clientY-r.top)*sy,dx=ex-swipeStart.x,dy=ey-swipeStart.y,d=Math.hypot(dx,dy);
+  if(d>36){state.player.vx+=(dx/d)*Math.min(2.5,d/58);state.player.vy+=(dy/d)*Math.min(2.5,d/58);FX.spawn(ex,ey,'#aa88ff');sndSlingshot()}
+  swipeStart=null;
+},{passive:false});
+
+canvas.addEventListener('touchcancel',e=>{
+  if(e.target.closest('button')||e.target.closest('#overlay'))return;
+  e.preventDefault();
+},{passive:false});
+
+// Start button
+const startBtn=document.getElementById('start-btn');
+startBtn.addEventListener('click',e=>{e.stopPropagation();initAudio();resumeAudio();startGame(0)});
+startBtn.addEventListener('touchend',e=>{e.stopPropagation();e.preventDefault();initAudio();resumeAudio();startGame(0)});
+
+// Mute button
+const muteBtn=document.getElementById('mute-btn');
+muteBtn.addEventListener('click',e=>{e.stopPropagation();toggleMute()});
+muteBtn.addEventListener('touchend',e=>{e.stopPropagation();e.preventDefault();toggleMute()});
 </script>
 </body>
 </html>
