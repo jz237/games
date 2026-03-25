@@ -137,9 +137,9 @@ let difficulty = 'easy';
 try { const saved = localStorage.getItem(DIFF_KEY); if (saved === 'easy' || saved === 'normal' || saved === 'hard') difficulty = saved; } catch(e) {}
 
 const DIFF_SETTINGS = {
-  easy:   { speedMul: 1.0, enemyBase: 8, enemyPerWave: 3, spawnMul: 1.0, tankWave: 10 },
-  normal: { speedMul: 1.4, enemyBase: 12, enemyPerWave: 4, spawnMul: 0.7, tankWave: 10 },
-  hard:   { speedMul: 1.8, enemyBase: 18, enemyPerWave: 5, spawnMul: 0.5, tankWave: 7 }
+  easy:   { speedMul: 1.0, enemyBase: 8, enemyPerWave: 3, spawnMul: 1.0, tankWave: 10, fireMul: 1.0 },
+  normal: { speedMul: 1.4, enemyBase: 12, enemyPerWave: 4, spawnMul: 0.7, tankWave: 10, fireMul: 0.85 },
+  hard:   { speedMul: 1.8, enemyBase: 18, enemyPerWave: 5, spawnMul: 0.5, tankWave: 7, fireMul: 0.72 }
 };
 
 function getDiff() { return DIFF_SETTINGS[difficulty]; }
@@ -905,7 +905,7 @@ function update() {
 
   // Auto-fire
   if (!player.laserActive) {
-    const fireRate = player.rapidFire > 0 ? BASE_FIRE_RATE / 2 : BASE_FIRE_RATE;
+    const fireRate = (player.rapidFire > 0 ? BASE_FIRE_RATE / 2 : BASE_FIRE_RATE) * getDiff().fireMul;
     player.fireTimer -= dt;
     if (player.fireTimer <= 0) {
       player.fireTimer = fireRate;
