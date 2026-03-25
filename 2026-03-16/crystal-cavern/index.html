@@ -87,16 +87,9 @@ let caveCenterVel = 0;
 let caveSinPhase = 0;
 let caveSinFreq = 0.003;
 let caveSinAmp = 0;
-let targetSinFreq = 0.003;
-let targetSinAmp = 0;
-let smoothedLeft = 0;
-let smoothedRight = 0;
 let squeezeTimer = 0;
 let squeezing = false;
 let caveGenY = 0; // the deepest generated y in world coords
-
-// Pulsing walls (moving wall sections)
-let pulsingWalls = [];
 
 // Gems in cave
 let gems = [];
@@ -137,7 +130,6 @@ let pulseRings = [];
 // Zone transition
 let zoneFlashText = '';
 let zoneFlashTimer = 0;
-let zonePauseTimer = 0;
 let lastZone = 0;
 
 // Title screen particles
@@ -403,30 +395,20 @@ function initCave() {
     caveCenterVel = 0;
     caveSinPhase = 0;
     caveSinFreq = 0.003 + Math.random() * 0.002;
-    targetSinFreq = caveSinFreq;
     caveSinAmp = W * 0.15;
-    targetSinAmp = caveSinAmp;
-    smoothedLeft = W / 2 - caveWidth / 2;
-    smoothedRight = W / 2 + caveWidth / 2;
     squeezeTimer = 0;
     squeezing = false;
     caveGenY = 0;
-    pulsingWalls = [];
     generateCaveSegments(H + 200);
 }
 
 function generateCaveSegments(toWorldY) {
-    const MAX_WALL_DELTA = 4; // max px change per segment for smooth walls
     while (caveGenY < toWorldY) {
         caveSinPhase += caveSinFreq;
-
-        // Gradually drift frequency/amplitude toward targets (no sudden jumps)
         if (Math.random() < 0.001) {
-            targetSinFreq = 0.002 + Math.random() * 0.004;
-            targetSinAmp = W * (0.08 + Math.random() * 0.15);
+            caveSinFreq = 0.002 + Math.random() * 0.004;
+            caveSinAmp = W * (0.08 + Math.random() * 0.15);
         }
-        caveSinFreq = lerp(caveSinFreq, targetSinFreq, 0.005);
-        caveSinAmp = lerp(caveSinAmp, targetSinAmp, 0.005);
 
         caveCenter = W / 2 + Math.sin(caveSinPhase) * caveSinAmp;
 
@@ -437,7 +419,7 @@ function generateCaveSegments(toWorldY) {
         const narrowFactor = clamp(depthAtY / 5000, 0, 1);
         let baseWidth = W * lerp(maxWidthFrac, minWidthFrac, narrowFactor);
 
-        // Squeeze sections — gradual squeeze via lerp
+        // Squeeze sections
         squeezeTimer--;
         if (squeezeTimer <= 0 && !squeezing) {
             if (depthAtY > 200 && Math.random() < 0.002) {
@@ -453,21 +435,27 @@ function generateCaveSegments(toWorldY) {
 
         caveWidth = baseWidth;
 
-        // Gentle organic undulations (low-frequency sines only)
-        const undL = Math.sin(caveGenY * 0.012) * 12 + Math.sin(caveGenY * 0.005) * 18;
-        const undR = Math.sin(caveGenY * 0.010 + 2.5) * 14 + Math.sin(caveGenY * 0.007 + 1.2) * 16;
+        // Jagged walls
+        const jag = Math.sin(caveGenY * 0.08) * 15 + Math.sin(caveGenY * 0.03) * 25;
+        const jag2 = Math.sin(caveGenY * 0.05 + 3) * 20 + Math.sin(caveGenY * 0.07 + 1) * 10;
 
         const half = caveWidth / 2;
-        const rawLeft = caveCenter - half + undL;
-        const rawRight = caveCenter + half + undR;
+        let left = caveCenter - half + jag;
+        let right = caveCenter + half + jag2;
 
-        // Smooth: clamp change per segment
-        smoothedLeft += clamp(rawLeft - smoothedLeft, -MAX_WALL_DELTA, MAX_WALL_DELTA);
-        smoothedRight += clamp(rawRight - smoothedRight, -MAX_WALL_DELTA, MAX_WALL_DELTA);
+        // Enforce minimum gap: 2.5x orb diameter (orb radius=12, diameter=24)
+        const MIN_GAP = 24 * 2.5; // 60px
+        left = clamp(left, 5, W - 5);
+        right = clamp(right, 5, W - 5);
+        if (right - left < MIN_GAP) {
+            const center = (left + right) / 2;
+            left = clamp(center - MIN_GAP / 2, 5, W - MIN_GAP - 5);
+            right = left + MIN_GAP;
+        }
 
         caveSegments.push({
-            left: clamp(smoothedLeft, 5, W - 5),
-            right: clamp(smoothedRight, 5, W - 5),
+            left,
+            right,
             worldY: caveGenY
         });
         caveGenY++;
@@ -498,7 +486,6 @@ function initGame() {
     scorePopups = [];
     movingFormations = [];
     lavaStreams = [];
-    pulsingWalls = [];
     pulseRings = [];
     deathFragments = [];
     deathLightRadius = 0;
@@ -509,7 +496,6 @@ function initGame() {
     nextGemDepth = 50;
     zoneFlashText = '';
     zoneFlashTimer = 0;
-    zonePauseTimer = 0;
     lastZone = 0;
     frameCount = 0;
 
@@ -804,27 +790,13 @@ function update() {
         return;
     }
 
-    // Zone transitions — 1.5s pause with fade in/hold/fade out
+    // Zone transitions — overlay only, no pause
     const currentZone = getZoneColors(depth).zoneIndex;
     if (currentZone !== lastZone && depth > 10) {
         zoneFlashText = ZONES[currentZone].name;
-        zoneFlashTimer = 90; // 1.5s total at 60fps
-        zonePauseTimer = 90;
+        zoneFlashTimer = 90; // ~1.5s at 60fps
         lastZone = currentZone;
         playGongSound();
-    }
-
-    // Zone pause — freeze gameplay, player invulnerable
-    if (zonePauseTimer > 0) {
-        zonePauseTimer--;
-        zoneFlashTimer = zonePauseTimer; // keep in sync
-        // Only update visuals, not gameplay
-        updateParticles();
-        updateShake();
-        orbRefAngle += 0.03;
-        // Update pulsing wall phases (visual only)
-        for (const pw of pulsingWalls) pw.phase += pw.speed;
-        return;
     }
 
     // Depth milestones (gong)
@@ -834,8 +806,8 @@ function update() {
         playGongSound();
     }
 
-    // Scroll speed — continuous ramp, no steps
-    scrollSpeed = 1.5 + depth * 0.0003;
+    // Scroll speed
+    scrollSpeed = 1.5 + Math.floor(depth / 500) * 0.15;
     if (scrollSpeed > 5) scrollSpeed = 5;
 
     depth += scrollSpeed;
@@ -888,29 +860,6 @@ function update() {
                 w: rand(20, 40), h: rand(15, 30)
             });
         }
-    }
-
-    // Spawn pulsing wall sections after depth 1500
-    if (depth > 1500 && Math.random() < 0.004) {
-        const py = depth + H + 100;
-        const depthTier = clamp((depth - 1500) / 3000, 0, 1);
-        const amp = 8 + depthTier * 22; // 8px early, up to 30px deep
-        const sides = ['left', 'right', 'both'];
-        pulsingWalls.push({
-            startY: py,
-            endY: py + rand(150, 350),
-            amplitude: amp,
-            phase: rand(0, TAU),
-            speed: 0.04 + depthTier * 0.02,
-            side: sides[randInt(0, 2)]
-        });
-    }
-
-    // Update pulsing walls — animate phase, remove off-screen
-    for (let i = pulsingWalls.length - 1; i >= 0; i--) {
-        const pw = pulsingWalls[i];
-        pw.phase += pw.speed;
-        if (pw.endY < depth - 50) { pulsingWalls.splice(i, 1); }
     }
 
     // Spawn lava streams after depth 3000
@@ -1151,22 +1100,7 @@ function updatePulseRings() {
 function getCaveSegAt(worldY) {
     const idx = Math.floor(worldY);
     if (idx < 0 || idx >= caveSegments.length) return null;
-    const seg = caveSegments[idx];
-
-    // Apply pulsing wall offsets
-    let leftOff = 0, rightOff = 0;
-    for (const pw of pulsingWalls) {
-        if (worldY >= pw.startY && worldY <= pw.endY) {
-            const t = (worldY - pw.startY) / (pw.endY - pw.startY);
-            const envelope = Math.sin(t * Math.PI); // smooth fade at edges
-            const pulse = Math.sin(pw.phase + worldY * 0.015) * pw.amplitude * envelope;
-            if (pw.side !== 'right') leftOff += pulse;
-            if (pw.side !== 'left') rightOff -= pulse;
-        }
-    }
-
-    if (leftOff === 0 && rightOff === 0) return seg;
-    return { left: seg.left + leftOff, right: seg.right + rightOff, worldY: seg.worldY, pulsing: true };
+    return caveSegments[idx];
 }
 
 // ============================================================
@@ -1224,33 +1158,17 @@ function draw() {
     // Score popups
     drawScorePopups();
 
-    // Zone flash text — fade in 0.3s (18f), hold 0.9s (54f), fade out 0.3s (18f) = 90f
+    // Zone flash text
     if (zoneFlashTimer > 0) {
-        let a;
-        if (zoneFlashTimer > 72) a = (90 - zoneFlashTimer) / 18; // fade in
-        else if (zoneFlashTimer > 18) a = 1; // hold
-        else a = zoneFlashTimer / 18; // fade out
-        a = clamp(a, 0, 1);
-
+        const a = zoneFlashTimer > 70 ? (90 - zoneFlashTimer) / 20 : zoneFlashTimer / 70;
         ctx.save();
-        ctx.globalAlpha = a;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        // Dramatic glow backdrop
-        const glowSize = Math.min(W * 0.12, 48);
-        ctx.shadowColor = '#4fc3f7';
-        ctx.shadowBlur = 40 + a * 20;
+        ctx.globalAlpha = clamp(a, 0, 1);
         ctx.fillStyle = '#fff';
-        ctx.font = `bold ${glowSize}px Orbitron, monospace`;
+        ctx.font = 'bold 28px Orbitron, monospace';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = '#4fc3f7';
+        ctx.shadowBlur = 20;
         ctx.fillText(zoneFlashText, W / 2, H / 2);
-
-        // Second pass for extra glow
-        ctx.shadowBlur = 60;
-        ctx.shadowColor = '#ffffff';
-        ctx.globalAlpha = a * 0.4;
-        ctx.fillText(zoneFlashText, W / 2, H / 2);
-
         ctx.restore();
     }
 
@@ -1333,7 +1251,6 @@ function drawCaveWalls() {
         const seg = getCaveSegAt(y);
         if (!seg) continue;
         const screenY = y - depth;
-        const isPulsing = seg.pulsing;
 
         // 2D distance for lighting
         const dy = screenY - orbScreenY;
@@ -1430,17 +1347,6 @@ function drawCaveWalls() {
                 ctx.fillStyle = grad;
                 ctx.fillRect(seg.right - 2, screenY, edgeW + 2, 2);
             }
-        }
-
-        // Pulsing wall glow — warn the player with colored inner edge
-        if (isPulsing) {
-            const pulseGlow = 0.3 + 0.2 * Math.sin(frameCount * 0.08);
-            const glowW = 6;
-            // Left edge glow
-            ctx.fillStyle = rgbStr(100, 200, 255, pulseGlow);
-            ctx.fillRect(seg.left - 1, screenY, glowW, 2);
-            // Right edge glow
-            ctx.fillRect(seg.right - glowW + 1, screenY, glowW, 2);
         }
     }
 }
