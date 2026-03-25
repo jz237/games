@@ -19,6 +19,11 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 .btn:hover,.btn:active{background:rgba(0,255,255,0.15);border-color:#0ff;box-shadow:0 0 20px rgba(0,255,255,0.3)}
 .btn-start{font-size:clamp(1.1rem,3.5vw,1.5rem);border-color:#0ff;animation:pulse-btn 2s infinite}
 @keyframes pulse-btn{0%,100%{box-shadow:0 0 10px rgba(0,255,255,0.2)}50%{box-shadow:0 0 30px rgba(0,255,255,0.5)}}
+.diff-row{display:flex;gap:0.5em;margin-bottom:1.2em;justify-content:center}
+.diff-btn{background:none;border:2px solid rgba(0,255,255,0.3);color:rgba(0,255,255,0.5);font-size:clamp(0.7rem,2.2vw,0.95rem);padding:0.5em 1.2em;border-radius:8px;font-family:inherit;letter-spacing:0.12em;font-weight:700;transition:all 0.2s;min-height:44px;min-width:70px;touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
+.diff-btn.selected{border-color:#0ff;color:#fff;background:rgba(0,255,255,0.15);box-shadow:0 0 16px rgba(0,255,255,0.35)}
+.diff-btn.diff-hard.selected{border-color:#f44;color:#fff;background:rgba(255,68,68,0.15);box-shadow:0 0 16px rgba(255,68,68,0.35)}
+.diff-btn.diff-normal.selected{border-color:#ffd700;color:#fff;background:rgba(255,215,0,0.12);box-shadow:0 0 16px rgba(255,215,0,0.3)}
 .hud-btn{position:absolute;z-index:20;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.2);color:#fff;font-size:1.3rem;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0}
 #pauseBtn{top:10px;left:10px}
 #muteBtn{top:10px;right:10px}
@@ -47,6 +52,11 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 <div class="overlay-content">
 <div class="game-title">STELLAR DRIFT</div>
 <div class="game-subtitle">One-Finger Space Shooter</div>
+<div class="diff-row">
+<button class="diff-btn diff-easy selected" id="diffEasy">EASY</button>
+<button class="diff-btn diff-normal" id="diffNormal">NORMAL</button>
+<button class="diff-btn diff-hard" id="diffHard">HARD</button>
+</div>
 <button class="btn btn-start" id="startBtn">TAP TO START</button>
 <button class="btn" id="hsBtn">HIGH SCORES</button>
 </div>
@@ -120,6 +130,19 @@ const MAX_BULLETS = 300;
 const MAX_ENEMY_BULLETS = 200;
 const POOL_SCORE_POPUPS = 60;
 const HS_KEY = 'stellar_drift_highscores';
+const DIFF_KEY = 'stellar_drift_difficulty';
+
+// ===== DIFFICULTY =====
+let difficulty = 'easy';
+try { const saved = localStorage.getItem(DIFF_KEY); if (saved === 'easy' || saved === 'normal' || saved === 'hard') difficulty = saved; } catch(e) {}
+
+const DIFF_SETTINGS = {
+  easy:   { speedMul: 1.0, enemyBase: 8, enemyPerWave: 3, spawnMul: 1.0, tankWave: 10 },
+  normal: { speedMul: 1.4, enemyBase: 12, enemyPerWave: 4, spawnMul: 0.7, tankWave: 10 },
+  hard:   { speedMul: 1.8, enemyBase: 18, enemyPerWave: 5, spawnMul: 0.5, tankWave: 7 }
+};
+
+function getDiff() { return DIFF_SETTINGS[difficulty]; }
 
 // ===== STATE =====
 let state = 'title'; // title, playing, paused, gameover, highscores
@@ -530,6 +553,20 @@ btnHandler(goRestartBtn, () => { startGame(); });
 btnHandler(document.getElementById('goHsBtn'), () => { renderHSList(score); showScreen('hsScreen'); });
 btnHandler(document.getElementById('goMenuBtn'), () => { stopDrone(); showScreen('titleScreen'); showHUD(false); state = 'title'; });
 
+// ===== DIFFICULTY BUTTONS =====
+const diffBtns = [document.getElementById('diffEasy'), document.getElementById('diffNormal'), document.getElementById('diffHard')];
+function selectDifficulty(d) {
+  difficulty = d;
+  try { localStorage.setItem(DIFF_KEY, d); } catch(e) {}
+  diffBtns.forEach(b => b.classList.remove('selected'));
+  document.getElementById('diff' + d.charAt(0).toUpperCase() + d.slice(1)).classList.add('selected');
+}
+selectDifficulty(difficulty); // apply saved
+diffBtns.forEach(b => {
+  const d = b.id.replace('diff', '').toLowerCase();
+  btnHandler(b, () => selectDifficulty(d));
+});
+
 // ===== INPUT =====
 function getInputPos(e) {
   if (e.touches && e.touches.length > 0) {
@@ -621,8 +658,9 @@ function nextWave() {
     return;
   }
 
-  // Calculate enemy count — more non-shooters early, fewer shooters
-  const base = 8 + (wave - 1) * 3;
+  // Calculate enemy count — scaled by difficulty
+  const ds = getDiff();
+  const base = ds.enemyBase + (wave - 1) * ds.enemyPerWave;
   waveEnemyCount = Math.min(base, 50);
   wavePause = 2.0; // pause before wave starts
 }
@@ -641,10 +679,11 @@ function spawnBoss() {
 }
 
 function spawnEnemy() {
+  const tankWave = getDiff().tankWave;
   let type;
   if (wave < 4) type = 'drifter';
   else if (wave < 7) type = Math.random() < 0.6 ? 'drifter' : 'zigzagger';
-  else if (wave < 10) {
+  else if (wave < tankWave) {
     const r = Math.random();
     type = r < 0.3 ? 'drifter' : r < 0.6 ? 'zigzagger' : 'swarmer';
   } else {
@@ -668,7 +707,7 @@ function spawnEnemy() {
 }
 
 function makeEnemy(type, x, y) {
-  const speedMul = 1 + Math.min(wave, 25) * 0.03;
+  const speedMul = getDiff().speedMul * (1 + Math.min(wave, 25) * 0.03);
   const e = { type, x, y, hp: 1, maxHp: 1, size: 16, speed: 60, sinAmp: 0, sinFreq: 0, sinOffset: 0, startX: x, fireTimer: 0, flashTimer: 0 };
   if (type === 'drifter') {
     e.hp = 1; e.maxHp = 1; e.size = 16; e.speed = (55 + Math.random() * 35) * speedMul;
@@ -897,7 +936,7 @@ function update() {
     if (bossWarning <= 0) spawnBoss();
   } else if (!bossActive) {
     waveTimer += dt;
-    const spawnInterval = Math.max(0.3, 1.5 - wave * 0.05);
+    const spawnInterval = Math.max(0.3, (1.5 - wave * 0.05) * getDiff().spawnMul);
     if (waveEnemiesSpawned < waveEnemyCount && waveTimer >= spawnInterval) {
       waveTimer = 0;
       spawnEnemy();
@@ -2174,6 +2213,12 @@ function renderHUD() {
   ctx.font = `bold ${fontSize}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.fillText(`WAVE ${wave}`, W / 2, 14);
+
+  // Difficulty label
+  const diffColors = { easy: 'rgba(0,255,255,0.4)', normal: 'rgba(255,215,0,0.5)', hard: 'rgba(255,68,68,0.5)' };
+  ctx.fillStyle = diffColors[difficulty];
+  ctx.font = `bold ${fontSize * 0.55}px sans-serif`;
+  ctx.fillText(difficulty.toUpperCase(), W / 2, 14 + fontSize * 1.15);
 
   // Wave pulse on new wave
   if (wavePause > 1.0) {
