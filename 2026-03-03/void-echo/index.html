@@ -19,6 +19,8 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
 #overlay button:hover,#overlay button:active{background:rgba(100,180,255,.3);box-shadow:0 0 20px rgba(100,180,255,.4)}
 #overlay .result{font-size:clamp(20px,5vw,36px);letter-spacing:3px;margin-bottom:6px}
 #overlay .score-final{font-size:clamp(14px,3vw,20px);color:rgba(180,220,255,.7);margin-bottom:20px}
+#muteBtn{position:fixed;bottom:14px;right:14px;z-index:30;width:44px;height:44px;border-radius:50%;border:1px solid rgba(100,180,255,.4);background:rgba(10,15,30,.7);color:#b9ddff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+#muteBtn:hover,#muteBtn:active{background:rgba(100,180,255,.2)}
 </style>
 </head>
 <body>
@@ -41,6 +43,7 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   </div>
   <button id="startBtn">TAP TO PLAY</button>
 </div>
+<button id="muteBtn" aria-label="Toggle sound">🔊</button>
 <script>
 // ─── VOID ECHO: Space Survival ───
 const C = document.getElementById('c');
@@ -52,10 +55,248 @@ const levelEl = document.getElementById('levelEl');
 const timeEl = document.getElementById('timeEl');
 const shieldBar = document.getElementById('shieldBar');
 
+const muteBtn = document.getElementById('muteBtn');
+
 let W, H;
 function resize() { W = C.width = innerWidth; H = C.height = innerHeight; }
 resize();
 addEventListener('resize', resize);
+
+// ─── Audio Engine (Echo/Reverb) ───
+let audioCtx, masterGain, echoDelay, echoFeedback, echoWet, echoDry;
+let audioReady = false;
+let muted = false;
+
+function initAudio() {
+  if (audioReady) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.5;
+    masterGain.connect(audioCtx.destination);
+
+    // Echo chain: delay → feedback gain → back to delay
+    echoDelay = audioCtx.createDelay(2.0);
+    echoDelay.delayTime.value = 0.35;
+    echoFeedback = audioCtx.createGain();
+    echoFeedback.gain.value = 0.4;
+    echoDelay.connect(echoFeedback);
+    echoFeedback.connect(echoDelay);
+
+    // Wet path (echo output)
+    echoWet = audioCtx.createGain();
+    echoWet.gain.value = 0.5;
+    echoDelay.connect(echoWet);
+    echoWet.connect(masterGain);
+
+    // Dry path
+    echoDry = audioCtx.createGain();
+    echoDry.gain.value = 0.7;
+    echoDry.connect(masterGain);
+
+    audioReady = true;
+  } catch (e) { /* audio not available */ }
+}
+
+function resumeAudio() {
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+}
+
+// Route a source node through the echo chain
+function connectEcho(node) {
+  node.connect(echoDry);
+  node.connect(echoDelay);
+}
+
+muteBtn.addEventListener('click', () => {
+  muted = !muted;
+  muteBtn.textContent = muted ? '🔇' : '🔊';
+  if (masterGain) masterGain.gain.value = muted ? 0 : 0.5;
+});
+
+// ─── Sound Effects ───
+function playPing() {
+  // Player action: ethereal ping ~400hz
+  if (!audioReady || muted) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(400, t);
+  osc.frequency.exponentialRampToValueAtTime(600, t + 0.08);
+  g.gain.setValueAtTime(0.25, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  osc.connect(g);
+  connectEcho(g);
+  osc.start(t);
+  osc.stop(t + 0.3);
+}
+
+function playCollect() {
+  // Crystal pickup: crystalline chime arpeggio
+  if (!audioReady || muted) return;
+  const t = audioCtx.currentTime;
+  const notes = [800, 1000, 1200, 1500];
+  notes.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0, t + i * 0.06);
+    g.gain.linearRampToValueAtTime(0.18, t + i * 0.06 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.06 + 0.5);
+    osc.connect(g);
+    connectEcho(g);
+    osc.start(t + i * 0.06);
+    osc.stop(t + i * 0.06 + 0.5);
+  });
+}
+
+function playHazard() {
+  // Enemy/hazard: deep resonant warning pulse ~80hz
+  if (!audioReady || muted) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = 80;
+  g.gain.setValueAtTime(0.001, t);
+  g.gain.linearRampToValueAtTime(0.3, t + 0.15);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+  osc.connect(g);
+  connectEcho(g);
+  osc.start(t);
+  osc.stop(t + 0.8);
+}
+
+function playDeath() {
+  // Death: noise burst through heavy delay
+  if (!audioReady || muted) return;
+  const t = audioCtx.currentTime;
+  // Noise burst
+  const bufLen = audioCtx.sampleRate * 0.3;
+  const buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) data[i] = (Math.random() * 2 - 1) * 0.5;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buf;
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.4, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+  // Low pass for rumble
+  const filt = audioCtx.createBiquadFilter();
+  filt.type = 'lowpass';
+  filt.frequency.value = 400;
+  noise.connect(filt);
+  filt.connect(g);
+  connectEcho(g);
+  noise.start(t);
+  noise.stop(t + 0.5);
+  // Sub boom
+  const osc = audioCtx.createOscillator();
+  const g2 = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(100, t);
+  osc.frequency.exponentialRampToValueAtTime(30, t + 0.6);
+  g2.gain.setValueAtTime(0.35, t);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+  osc.connect(g2);
+  connectEcho(g2);
+  osc.start(t);
+  osc.stop(t + 0.6);
+}
+
+function playLevelComplete() {
+  // Ascending echo sequence
+  if (!audioReady || muted) return;
+  const t = audioCtx.currentTime;
+  const notes = [400, 500, 600, 800, 1000];
+  notes.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const start = t + i * 0.12;
+    g.gain.setValueAtTime(0.001, start);
+    g.gain.linearRampToValueAtTime(0.2, start + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.001, start + 0.6);
+    osc.connect(g);
+    connectEcho(g);
+    osc.start(start);
+    osc.stop(start + 0.6);
+  });
+}
+
+function playGameOver() {
+  // Deep descending tone fading into infinite echo
+  if (!audioReady || muted) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(300, t);
+  osc.frequency.exponentialRampToValueAtTime(40, t + 2.0);
+  g.gain.setValueAtTime(0.3, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 2.0);
+  osc.connect(g);
+  connectEcho(g);
+  osc.start(t);
+  osc.stop(t + 2.0);
+  // Second voice, slightly detuned
+  const osc2 = audioCtx.createOscillator();
+  const g2 = audioCtx.createGain();
+  osc2.type = 'sine';
+  osc2.frequency.setValueAtTime(303, t);
+  osc2.frequency.exponentialRampToValueAtTime(42, t + 2.2);
+  g2.gain.setValueAtTime(0.2, t);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 2.2);
+  osc2.connect(g2);
+  connectEcho(g2);
+  osc2.start(t);
+  osc2.stop(t + 2.2);
+}
+
+let lastMoveSoundTime = 0;
+function playMovePing() {
+  // Subtle ambient echo ping on movement
+  if (!audioReady || muted) return;
+  const now = audioCtx.currentTime;
+  if (now - lastMoveSoundTime < 0.4) return;
+  lastMoveSoundTime = now;
+  const t = now;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = 1200 + Math.random() * 800;
+  g.gain.setValueAtTime(0.04, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+  osc.connect(g);
+  connectEcho(g);
+  osc.start(t);
+  osc.stop(t + 0.15);
+}
+
+let comboCount = 0;
+let comboTimer = 0;
+function playCombo() {
+  // Each successive hit echoes at higher pitch
+  if (!audioReady || muted) return;
+  comboCount++;
+  const t = audioCtx.currentTime;
+  const freq = 500 + comboCount * 100;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = Math.min(freq, 2000);
+  g.gain.setValueAtTime(0.2, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  osc.connect(g);
+  connectEcho(g);
+  osc.start(t);
+  osc.stop(t + 0.4);
+}
 
 // ─── Game State ───
 let state = 'menu'; // menu | playing | won | lost
@@ -168,6 +409,7 @@ C.addEventListener('pointerdown', e => {
   if (state !== 'playing') return;
   inputActive = true;
   setTarget(e.clientX, e.clientY);
+  playPing();
 });
 C.addEventListener('pointermove', e => {
   if (state !== 'playing') return;
@@ -189,9 +431,13 @@ function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
 // ─── Start / Restart ───
 function startGame() {
+  initAudio();
+  resumeAudio();
   state = 'playing';
   score = 0;
   level = 1;
+  comboCount = 0;
+  comboTimer = 0;
   shieldHP = 0;
   shakeT = 0;
   player.x = W / 2;
@@ -252,11 +498,13 @@ function update(dt) {
   if (timer <= 0) {
     timer = 0;
     if (level >= 3) {
+      playLevelComplete();
       showEnd(true);
       return;
     }
     level++;
     initLevel();
+    playLevelComplete();
     // Flash effect
     emitParticles(player.x, player.y, '#0af', 30, 120);
     return;
@@ -275,6 +523,15 @@ function update(dt) {
   // Clamp to screen
   player.x = Math.max(player.r, Math.min(W - player.r, player.x));
   player.y = Math.max(player.r, Math.min(H - player.r, player.y));
+
+  // Movement sound
+  if (d > 10) playMovePing();
+
+  // Combo decay
+  if (comboTimer > 0) {
+    comboTimer -= dt;
+    if (comboTimer <= 0) comboCount = 0;
+  }
 
   player.glow += dt * 3;
 
@@ -297,12 +554,15 @@ function update(dt) {
         shieldHP = 0;
         emitParticles(e.x, e.y, '#0ff', 20, 150);
         shakeT = 0.2;
+        playHazard();
         // Push enemy away
         e.x = player.x - (ex / ed) * 150;
         e.y = player.y - (ey / ed) * 150;
       } else {
         emitParticles(player.x, player.y, '#f44', 40, 200);
         shakeT = 0.4;
+        playDeath();
+        playGameOver();
         showEnd(false);
         // Do one more draw with particles
         draw();
@@ -333,9 +593,12 @@ function update(dt) {
         shieldHP = 0;
         emitParticles(a.x, a.y, '#fa0', 15, 100);
         shakeT = 0.2;
+        playHazard();
       } else {
         emitParticles(player.x, player.y, '#f80', 35, 180);
         shakeT = 0.4;
+        playDeath();
+        playGameOver();
         showEnd(false);
         draw();
         return;
@@ -352,6 +615,9 @@ function update(dt) {
       score += 10;
       shieldHP = Math.min(100, shieldHP + 35);
       emitParticles(cr.x, cr.y, '#0ff', 12, 80);
+      playCollect();
+      playCombo();
+      comboTimer = 2;
       crystals.splice(i, 1);
       // Respawn after delay
       setTimeout(() => { if (state === 'playing') spawnCrystal(); }, 3000);
