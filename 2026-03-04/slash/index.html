@@ -107,7 +107,7 @@ function initAudio(){
   try{
     audioCtx=new (window.AudioContext||window.webkitAudioContext)();
     masterGain=audioCtx.createGain();
-    masterGain.gain.value=0.5;
+    masterGain.gain.value=0.8;
     masterGain.connect(audioCtx.destination);
     musicGain=audioCtx.createGain();
     musicGain.gain.value=0.12;
@@ -970,6 +970,7 @@ function isButton(e){return e.target&&e.target.closest&&e.target.closest('button
 
 canvas.addEventListener('pointerdown',e=>{
   if(isButton(e)) return;
+  resumeAudio();
   drawing=true; slashPoints=[{x:e.clientX,y:e.clientY}];
   ripples.push({x:e.clientX,y:e.clientY,radius:5,life:1});
 });
