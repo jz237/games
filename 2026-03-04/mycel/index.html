@@ -2,26 +2,30 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>MYCEL – Bioluminescent Network Wars</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#050a03; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; overflow:hidden; font-family:'Courier New',monospace; touch-action:none; }
+  html, body { position:fixed; width:100%; height:100%; overflow:hidden; overscroll-behavior:none; }
+  body { background:#050a03; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; font-family:'Courier New',monospace; touch-action:none; }
   #hud { position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between; padding:10px 14px; font-size:13px; letter-spacing:2px; z-index:10; background:linear-gradient(to bottom,rgba(5,10,3,0.9),transparent); }
   .p-stat { color:#40ffaa; text-shadow:0 0 10px #00ff88; }
   .a-stat { color:#ff6030; text-shadow:0 0 10px #ff3000; }
   .n-stat { color:#ffe080; text-shadow:0 0 10px #ffcc00; }
-  canvas { display:block; }
+  canvas { display:block; touch-action:none; }
   #overlay { position:fixed; inset:0; background:rgba(2,5,1,0.95); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:20; }
   #overlay h1 { font-size:44px; color:#40ffaa; letter-spacing:8px; text-shadow:0 0 30px #00ff88,0 0 60px #00aa44; margin-bottom:10px; }
   #overlay p { color:#60c090; font-size:14px; text-align:center; max-width:320px; line-height:1.9; margin-bottom:6px; }
-  #tapBtn { margin-top:28px; padding:14px 48px; background:linear-gradient(135deg,#0a4020,#40ffaa33); color:#40ffaa; font-size:18px; letter-spacing:4px; border:1px solid #40ffaa; border-radius:4px; cursor:pointer; box-shadow:0 0 30px #00aa44; animation:pulse 1.5s infinite; }
+  button { touch-action:manipulation; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  #tapBtn { margin-top:28px; padding:14px 48px; background:linear-gradient(135deg,#0a4020,#40ffaa33); color:#40ffaa; font-size:18px; letter-spacing:4px; border:1px solid #40ffaa; border-radius:4px; box-shadow:0 0 30px #00aa44; animation:pulse 1.5s infinite; }
   @keyframes pulse { 0%,100%{box-shadow:0 0 20px #00aa44} 50%{box-shadow:0 0 50px #40ffaa,0 0 80px #00aa44} }
   #endMsg { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; z-index:30; background:rgba(2,5,1,0.92); }
   #endMsg h2 { font-size:40px; letter-spacing:6px; margin-bottom:10px; }
   #endMsg p { font-size:14px; margin-top:6px; color:#a0e0b0; }
-  #endMsg button { margin-top:24px; padding:12px 36px; font-size:16px; border-radius:4px; cursor:pointer; letter-spacing:3px; border:1px solid currentColor; background:transparent; }
+  #endMsg button { margin-top:24px; padding:12px 36px; font-size:16px; border-radius:4px; letter-spacing:3px; border:1px solid currentColor; background:transparent; }
   #lvlMsg { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); font-size:36px; letter-spacing:8px; color:#40ffaa; text-shadow:0 0 30px #00ff88; display:none; pointer-events:none; z-index:25; }
+  #muteBtn { position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:15; background:transparent; border:none; font-size:22px; color:#40ffaa; padding:6px 10px; opacity:0.7; }
+  #muteBtn:active { opacity:1; }
 </style>
 </head>
 <body>
@@ -30,6 +34,7 @@
   <span class="n-stat" id="lvlTxt">LEVEL 1</span>
   <span class="a-stat" id="aStat">AI: 0 · 🍄 5</span>
 </div>
+<button id="muteBtn" style="display:none;">🔊</button>
 <canvas id="c"></canvas>
 <div id="overlay">
   <h1>🍄 MYCEL</h1>
@@ -40,12 +45,12 @@
   Out-expand the red AI colony!<br>
   <b style="color:#c0ffd0">Long-press your cell</b> to sacrifice it (stuns AI nearby).</p>
   <p style="margin-top:12px;color:#406040;font-size:12px">3 LEVELS · SMARTER AI EACH ROUND</p>
-  <button id="tapBtn" onclick="startGame()">TAP TO PLAY</button>
+  <button id="tapBtn">TAP TO PLAY</button>
 </div>
 <div id="endMsg">
   <h2 id="endTitle">YOU WIN!</h2>
   <p id="endSub"></p>
-  <button id="endBtn" style="color:#40ffaa" onclick="nextLevel()">NEXT →</button>
+  <button id="endBtn" style="color:#40ffaa">NEXT →</button>
 </div>
 <div id="lvlMsg"></div>
 
@@ -57,7 +62,7 @@ let level=1, gameActive=false;
 let hexR, hexH, hexW, cols, rows, grid=[];
 let playerSpores=5, aiSpores=5;
 let nutrients=[];
-let stunned=[]; // {r,c,t}
+let stunned=[];
 let aiThinking=false;
 let particles=[];
 let longPressTimer=null, longPressCell=null;
@@ -67,6 +72,94 @@ const PLAYER_COLOR='#40ffaa', PLAYER_GLOW='#00ff88';
 const AI_COLOR='#ff6030', AI_GLOW='#ff2000';
 const NUT_COLOR='#ffffa0', NUT_GLOW='#ffcc00';
 
+// ─── AUDIO ───
+let audioCtx=null, muted=false;
+function initAudio() {
+  if(audioCtx) return;
+  try {
+    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended') audioCtx.resume();
+  } catch(e) { audioCtx=null; }
+}
+
+function playTone(freq,dur,type,vol,detune) {
+  if(!audioCtx||muted) return;
+  try {
+    const g=audioCtx.createGain();
+    const o=audioCtx.createOscillator();
+    o.type=type||'sine';
+    o.frequency.value=freq;
+    if(detune) o.detune.value=detune;
+    g.gain.setValueAtTime(vol||0.12,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+(dur||0.2));
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime+(dur||0.2)+0.01);
+  } catch(e) {}
+}
+
+function playNoise(dur,vol) {
+  if(!audioCtx||muted) return;
+  try {
+    const len=audioCtx.sampleRate*(dur||0.1);
+    const buf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*0.5;
+    const src=audioCtx.createBufferSource();
+    src.buffer=buf;
+    const g=audioCtx.createGain();
+    g.gain.setValueAtTime(vol||0.06,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+(dur||0.1));
+    src.connect(g); g.connect(audioCtx.destination);
+    src.start(); src.stop(audioCtx.currentTime+(dur||0.1)+0.01);
+  } catch(e) {}
+}
+
+function sndGrow() {
+  playTone(220,0.15,'sine',0.1);
+  playTone(330,0.12,'sine',0.08);
+  setTimeout(()=>playTone(440,0.1,'sine',0.06),60);
+}
+function sndNutrient() {
+  playTone(523,0.12,'sine',0.12);
+  setTimeout(()=>playTone(659,0.1,'sine',0.1),50);
+  setTimeout(()=>playTone(784,0.15,'sine',0.08),120);
+}
+function sndSacrifice() {
+  playNoise(0.2,0.1);
+  playTone(150,0.3,'sawtooth',0.08);
+  setTimeout(()=>playTone(80,0.4,'sawtooth',0.06),100);
+}
+function sndAiGrow() {
+  playTone(130,0.1,'triangle',0.04);
+}
+function sndWin() {
+  [523,659,784,1047].forEach((f,i)=>setTimeout(()=>playTone(f,0.2,'sine',0.1),i*120));
+}
+function sndLose() {
+  [300,250,200,150].forEach((f,i)=>setTimeout(()=>playTone(f,0.25,'sawtooth',0.07),i*150));
+}
+function sndLevelUp() {
+  [440,554,659,880].forEach((f,i)=>setTimeout(()=>playTone(f,0.15,'sine',0.09),i*100));
+}
+function sndInvalid() {
+  playTone(100,0.12,'square',0.06);
+}
+function sndStart() {
+  playTone(330,0.15,'sine',0.08);
+  setTimeout(()=>playTone(440,0.2,'sine',0.1),100);
+}
+
+// Mute toggle
+const muteBtn=document.getElementById('muteBtn');
+function toggleMute(e) {
+  e.stopPropagation();
+  muted=!muted;
+  muteBtn.textContent=muted?'🔇':'🔊';
+}
+muteBtn.addEventListener('click',toggleMute);
+muteBtn.addEventListener('touchend',function(e){e.preventDefault();e.stopPropagation();toggleMute(e);});
+
+// ─── GAME ───
 function resize() {
   W=window.innerWidth; H=window.innerHeight;
   canvas.width=W; canvas.height=H;
@@ -76,7 +169,6 @@ function resize() {
   hexH=Math.sqrt(3)*hexR;
 }
 
-// Offset hex grid
 function hexCenter(row,col) {
   const totalW = cols*hexW*0.75+hexR*0.5;
   const totalH = rows*hexH+(hexH/2);
@@ -108,13 +200,11 @@ function initLevel(lvl) {
   cols=11; rows=9;
   if(lvl===3) { cols=13; rows=11; }
   grid=Array.from({length:rows},()=>Array(cols).fill(NONE));
-  // Player starts top-left area, AI starts bottom-right
   grid[0][0]=PLAYER;
   grid[rows-1][cols-1]=AI;
   playerSpores=5; aiSpores=5;
   particles=[];
   stunned=[];
-  // Place nutrients
   nutrients=[];
   const nutCount = lvl===1?8:lvl===2?6:5;
   for(let i=0;i<nutCount;i++) {
@@ -132,27 +222,32 @@ function isAdjacent(r,c,owner) {
 
 function expandTo(r,c,owner) {
   grid[r][c]=owner;
-  // Check nutrients
+  let gotNutrient=false;
   for(let i=nutrients.length-1;i>=0;i--) {
     const n=nutrients[i];
     if(n.r===r&&n.c===c&&n.alive) {
       n.alive=false;
+      gotNutrient=true;
       const {x,y}=hexCenter(r,c);
       spawnBurst(x,y,'#ffffa0',12);
-      if(owner===PLAYER) playerSpores+=2;
+      if(owner===PLAYER) { playerSpores+=2; sndNutrient(); }
       else aiSpores+=2;
     }
   }
   const {x,y}=hexCenter(r,c);
   spawnBurst(x,y,owner===PLAYER?PLAYER_COLOR:AI_COLOR,5);
+  if(!gotNutrient) {
+    if(owner===PLAYER) sndGrow();
+    else sndAiGrow();
+  }
 }
 
 function sacrifice(r,c) {
   grid[r][c]=NONE;
   playerSpores--;
+  sndSacrifice();
   const {x,y}=hexCenter(r,c);
   spawnBurst(x,y,'#ffffff',20);
-  // Stun adjacent AI
   getNeighbors(r,c).forEach(({r:nr,c:nc})=>{
     if(grid[nr][nc]===AI) { stunned.push({r:nr,c:nc,t:180}); }
   });
@@ -167,14 +262,11 @@ function spawnBurst(x,y,color,n) {
 
 function aiTurn() {
   if(aiSpores<1) return;
-  // Find all empty cells adjacent to AI
   let candidates=[];
   for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) {
     if(grid[r][c]===NONE && isAdjacent(r,c,AI)) {
-      // Check not stunned
       const isStunned=stunned.some(s=>s.r===r&&s.c===c);
       if(!isStunned) {
-        // Score: distance to nearest nutrient + level-based aggression toward player
         let nutScore=100;
         nutrients.filter(n=>n.alive).forEach(n=>{ const d=Math.abs(n.r-r)+Math.abs(n.c-c); if(d<nutScore) nutScore=d; });
         let playerDist=100;
@@ -201,6 +293,7 @@ function checkGameEnd() {
     for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) { if(grid[r][c]===PLAYER)pc++; if(grid[r][c]===AI)ac++; }
     const won=pc>ac;
     gameActive=false;
+    if(won) sndWin(); else sndLose();
     const el=document.getElementById('endMsg');
     const t=document.getElementById('endTitle');
     const s=document.getElementById('endSub');
@@ -217,15 +310,12 @@ function checkGameEnd() {
 function draw() {
   ctx.fillStyle='#050a03';
   ctx.fillRect(0,0,W,H);
-  // Subtle soil texture
   ctx.fillStyle='rgba(20,15,8,0.3)';
   for(let i=0;i<80;i++) ctx.fillRect(Math.floor(i*73.1%W),Math.floor(i*47.3%H),2,2);
 
   const t=Date.now();
-  // Update stun timers
   for(let i=stunned.length-1;i>=0;i--) { stunned[i].t--; if(stunned[i].t<=0)stunned.splice(i,1); }
 
-  // Draw hexes
   for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) {
     const {x,y}=hexCenter(r,c);
     const owner=grid[r][c];
@@ -239,7 +329,6 @@ function draw() {
       ctx.fillStyle=`rgba(0,${Math.floor(200*bri+55)},${Math.floor(120*bri+30)},${0.7+0.3*pulse})`;
       ctx.shadowColor=PLAYER_GLOW; ctx.shadowBlur=10*pulse;
       ctx.fill();
-      // Tendril lines to neighbors
       getNeighbors(r,c).forEach(({r:nr,c:nc})=>{
         if(grid[nr][nc]===PLAYER) {
           const nb=hexCenter(nr,nc);
@@ -258,7 +347,6 @@ function draw() {
       ctx.fill();
       ctx.restore();
     } else {
-      // Empty hex outline
       ctx.save();
       hexPath(x,y,hexR-2);
       ctx.strokeStyle='rgba(40,60,30,0.4)'; ctx.lineWidth=0.5;
@@ -267,7 +355,6 @@ function draw() {
     }
   }
 
-  // Draw nutrients
   nutrients.filter(n=>n.alive).forEach(n=>{
     const {x,y}=hexCenter(n.r,n.c);
     n.pulse+=0.04;
@@ -280,7 +367,6 @@ function draw() {
     ctx.restore();
   });
 
-  // Adjacent hints for player
   if(gameActive&&playerSpores>0) {
     for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) {
       if(grid[r][c]===NONE&&isAdjacent(r,c,PLAYER)) {
@@ -295,7 +381,6 @@ function draw() {
     }
   }
 
-  // Particles
   for(let i=particles.length-1;i>=0;i--) {
     const p=particles[i];
     p.x+=p.vx; p.y+=p.vy; p.vy+=0.04; p.life-=0.025;
@@ -307,7 +392,6 @@ function draw() {
     ctx.restore();
   }
 
-  // HUD
   let pc=0,ac=0;
   for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){if(grid[r][c]===PLAYER)pc++;if(grid[r][c]===AI)ac++;}
   document.getElementById('pStat').textContent=`YOU: ${pc} · 🌿${playerSpores}`;
@@ -336,20 +420,41 @@ function getTouchedCell(px,py) {
   return best;
 }
 
-canvas.addEventListener('pointerdown', e=>{
+// ─── TOUCH / INPUT ───
+// Prevent default scrolling/zooming on document, but allow buttons & overlays
+document.addEventListener('touchstart', function(e) {
+  if(e.target.closest('button')||e.target.closest('#overlay')||e.target.closest('#endMsg')) return;
+  e.preventDefault();
+}, {passive:false});
+document.addEventListener('touchmove', function(e) {
+  if(e.target.closest('button')||e.target.closest('#overlay')||e.target.closest('#endMsg')) return;
+  e.preventDefault();
+}, {passive:false});
+
+function getXY(e) {
+  if(e.changedTouches&&e.changedTouches.length>0) {
+    return {x:e.changedTouches[0].clientX, y:e.changedTouches[0].clientY};
+  }
+  return {x:e.clientX, y:e.clientY};
+}
+
+// Use touch events directly on canvas for reliable mobile input
+canvas.addEventListener('touchstart', function(e) {
+  e.preventDefault();
   if(!gameActive) return;
-  const hit=getTouchedCell(e.clientX,e.clientY);
+  const {x,y}=getXY(e);
+  const hit=getTouchedCell(x,y);
   if(!hit) return;
   const {r,c}=hit;
-  // Long press detection
   longPressCell={r,c};
   longPressTimer=setTimeout(()=>{
     if(grid[r][c]===PLAYER&&playerSpores>0) { sacrifice(r,c); checkGameEnd(); }
     longPressCell=null;
   },500);
-});
+}, {passive:false});
 
-canvas.addEventListener('pointerup', e=>{
+canvas.addEventListener('touchend', function(e) {
+  e.preventDefault();
   if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}
   if(!gameActive||!longPressCell) return;
   const {r,c}=longPressCell;
@@ -358,14 +463,57 @@ canvas.addEventListener('pointerup', e=>{
     expandTo(r,c,PLAYER);
     playerSpores--;
     checkGameEnd();
+  } else if(grid[r][c]!==NONE||!isAdjacent(r,c,PLAYER)) {
+    sndInvalid();
+  }
+}, {passive:false});
+
+canvas.addEventListener('touchmove', function(e) {
+  e.preventDefault();
+  if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;longPressCell=null;}
+}, {passive:false});
+
+// Also keep mouse/pointer for desktop
+canvas.addEventListener('pointerdown', function(e) {
+  if(e.pointerType==='touch') return; // handled by touch events
+  if(!gameActive) return;
+  const hit=getTouchedCell(e.clientX,e.clientY);
+  if(!hit) return;
+  const {r,c}=hit;
+  longPressCell={r,c};
+  longPressTimer=setTimeout(()=>{
+    if(grid[r][c]===PLAYER&&playerSpores>0) { sacrifice(r,c); checkGameEnd(); }
+    longPressCell=null;
+  },500);
+});
+
+canvas.addEventListener('pointerup', function(e) {
+  if(e.pointerType==='touch') return;
+  if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}
+  if(!gameActive||!longPressCell) return;
+  const {r,c}=longPressCell;
+  longPressCell=null;
+  if(grid[r][c]===NONE&&isAdjacent(r,c,PLAYER)&&playerSpores>0) {
+    expandTo(r,c,PLAYER);
+    playerSpores--;
+    checkGameEnd();
+  } else if(grid[r][c]!==NONE||!isAdjacent(r,c,PLAYER)) {
+    sndInvalid();
   }
 });
 
-canvas.addEventListener('pointermove',()=>{ if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;longPressCell=null;} });
+canvas.addEventListener('pointermove', function(e) {
+  if(e.pointerType==='touch') return;
+  if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;longPressCell=null;}
+});
 
+// ─── BUTTON HANDLERS ───
 function startGame() {
+  initAudio();
+  sndStart();
   document.getElementById('overlay').style.display='none';
   document.getElementById('endMsg').style.display='none';
+  muteBtn.style.display='block';
   resize(); initLevel(level);
   requestAnimationFrame(loop);
 }
@@ -373,8 +521,19 @@ function startGame() {
 function nextLevel() {
   document.getElementById('endMsg').style.display='none';
   level++;
+  sndLevelUp();
   resize(); initLevel(level);
 }
+
+// tapBtn - both click and touchend
+const tapBtn=document.getElementById('tapBtn');
+tapBtn.addEventListener('click', function(e) { e.stopPropagation(); startGame(); });
+tapBtn.addEventListener('touchend', function(e) { e.preventDefault(); e.stopPropagation(); startGame(); });
+
+// endBtn - both click and touchend
+const endBtn=document.getElementById('endBtn');
+endBtn.addEventListener('click', function(e) { e.stopPropagation(); });
+endBtn.addEventListener('touchend', function(e) { e.preventDefault(); e.stopPropagation(); endBtn.click(); });
 
 window.addEventListener('resize',()=>resize());
 resize();
