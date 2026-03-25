@@ -155,6 +155,13 @@ let enemies = [];
 let powerups = [];
 let boss = null;
 
+// Debris pool (cosmetic falling particles)
+const debris = createPool(200, () => ({x:0,y:0,vx:0,vy:0,rot:0,rotSpeed:0,life:0,maxLife:1,r:0,g:0,b:0,size:3,shape:0,active:false}));
+
+// Boss death sequence state
+let bossDeathSequence = null; // {timer, subExplosions, finalDone, slowTimer}
+let gameSpeedMul = 1; // for slowdown effect
+
 // ===== PLAYER =====
 const player = {
   x: 0, y: 0, targetX: 0, targetY: 0,
@@ -575,7 +582,7 @@ function startGame() {
   score = 0; lives = 3; wave = 0;
   comboCount = 0; comboTimer = 0; comboMultiplier = 1;
   waveTimer = 0; waveEnemiesSpawned = 0; waveEnemyCount = 0; wavePause = 0;
-  bossActive = false; bossWarning = 0; boss = null;
+  bossActive = false; bossWarning = 0; boss = null; bossDeathSequence = null; gameSpeedMul = 1;
   invincibleTimer = 0; shakeTimer = 0; shakeIntensity = 0;
   scoreBoostTimer = 0;
   player.x = W / 2; player.y = H * 0.75;
@@ -590,6 +597,7 @@ function startGame() {
   for (let i = 0; i < bullets.length; i++) bullets[i].active = false;
   for (let i = 0; i < enemyBullets.length; i++) enemyBullets[i].active = false;
   for (let i = 0; i < scorePopups.length; i++) scorePopups[i].active = false;
+  for (let i = 0; i < debris.length; i++) debris[i].active = false;
   inputActive = false;
   highScore = getHighScore();
   initStars();
@@ -707,26 +715,49 @@ function spawnScorePopup(x, y, text, r, g, b) {
   p.r = r || 255; p.g = g || 215; p.b = b || 0;
 }
 
+function spawnDebris(x, y, count, r, g, b) {
+  for (let i = 0; i < count; i++) {
+    const d = debris.get();
+    d.x = x + (Math.random() - 0.5) * 20;
+    d.y = y + (Math.random() - 0.5) * 10;
+    d.vx = (Math.random() - 0.5) * 60;
+    d.vy = 30 + Math.random() * 80; // falls downward
+    d.rot = Math.random() * Math.PI * 2;
+    d.rotSpeed = (Math.random() - 0.5) * 8;
+    d.life = 2.0 + Math.random() * 1.5;
+    d.maxLife = d.life;
+    // Color variation from enemy type
+    d.r = Math.max(0, Math.min(255, r + Math.floor((Math.random() - 0.5) * 60)));
+    d.g = Math.max(0, Math.min(255, g + Math.floor((Math.random() - 0.5) * 40)));
+    d.b = Math.max(0, Math.min(255, b + Math.floor((Math.random() - 0.5) * 40)));
+    d.size = 1.5 + Math.random() * 3;
+    d.shape = Math.floor(Math.random() * 3); // 0=rect, 1=triangle, 2=line
+  }
+}
+
 function spawnExplosion(x, y, count, r, g, b, speedMul) {
   speedMul = speedMul || 1;
-  const boostedCount = Math.floor(count * 1.8); // more particles
+  const boostedCount = Math.floor(count * 1.8);
   for (let i = 0; i < boostedCount; i++) {
     const angle = Math.random() * Math.PI * 2;
     const spd = (40 + Math.random() * 160) * speedMul;
-    // Color variation: white core → original color → darker as they age
     const t = i / boostedCount;
     let pr, pg, pb;
-    if (t < 0.2) { pr = 255; pg = 255; pb = 255; } // white core
-    else if (t < 0.5) { pr = Math.min(255, r + 60); pg = Math.min(255, g + 40); pb = b; } // bright original
-    else if (t < 0.8) { pr = r; pg = g; pb = b; } // original
-    else { pr = Math.floor(r * 0.6); pg = Math.floor(g * 0.4); pb = Math.floor(b * 0.3); } // dark fade
+    if (t < 0.2) { pr = 255; pg = 255; pb = 255; }
+    else if (t < 0.5) { pr = Math.min(255, r + 60); pg = Math.min(255, g + 40); pb = b; }
+    else if (t < 0.8) { pr = r; pg = g; pb = b; }
+    else { pr = Math.floor(r * 0.6); pg = Math.floor(g * 0.4); pb = Math.floor(b * 0.3); }
+    // 2-3x longer particle life
     spawnParticle(x, y, Math.cos(angle) * spd, Math.sin(angle) * spd, pr, pg, pb,
-      0.4 + Math.random() * 0.6, 2 + Math.random() * 6);
+      0.8 + Math.random() * 1.4, 2 + Math.random() * 6);
   }
   // Bright flash at center
   for (let i = 0; i < 5; i++) {
-    spawnParticle(x + (Math.random()-0.5)*4, y + (Math.random()-0.5)*4, 0, 0, 255, 255, 255, 0.1 + Math.random() * 0.1, 10 + Math.random() * 15);
+    spawnParticle(x + (Math.random()-0.5)*4, y + (Math.random()-0.5)*4, 0, 0, 255, 255, 255, 0.15 + Math.random() * 0.15, 10 + Math.random() * 15);
   }
+  // Spawn debris rain (5-10 pieces)
+  const debrisCount = 5 + Math.floor(Math.random() * 6);
+  spawnDebris(x, y, debrisCount, r, g, b);
   // Screen flash for bigger explosions
   if (count >= 15) {
     screenFlashAlpha = Math.min(0.25, count * 0.008);
@@ -947,19 +978,88 @@ function update() {
 
     if (boss.dying) {
       boss.deathTimer -= dt;
-      // Sequential explosions
-      if (Math.random() < 0.4) {
+
+      // Start boss death sequence
+      if (!bossDeathSequence) {
+        bossDeathSequence = {
+          timer: 0,
+          subExplosionCount: 0,
+          subExplosionInterval: 0.35,
+          totalSubExplosions: 4,
+          finalDone: false,
+          slowTimer: 1.0
+        };
+        gameSpeedMul = 0.3; // dramatic slowdown
+      }
+
+      // Slowdown timer
+      if (bossDeathSequence.slowTimer > 0) {
+        bossDeathSequence.slowTimer -= dt;
+        if (bossDeathSequence.slowTimer <= 0) gameSpeedMul = 1;
+      }
+
+      // Sequential sub-explosions at different positions on boss body
+      bossDeathSequence.timer += dt;
+      if (bossDeathSequence.subExplosionCount < bossDeathSequence.totalSubExplosions &&
+          bossDeathSequence.timer >= bossDeathSequence.subExplosionInterval) {
+        bossDeathSequence.timer = 0;
+        bossDeathSequence.subExplosionCount++;
+        const ex = boss.x + (Math.random() - 0.5) * boss.size * 1.8;
+        const ey = boss.y + (Math.random() - 0.5) * boss.size * 1.8;
+        // Each sub-explosion: 30-40 particles, large
+        const subCount = 30 + Math.floor(Math.random() * 11);
+        for (let i = 0; i < subCount; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const spd = (60 + Math.random() * 200) * 1.5;
+          const t = i / subCount;
+          let pr, pg, pb;
+          if (t < 0.3) { pr = 255; pg = 255; pb = 200; }
+          else if (t < 0.6) { pr = 255; pg = 140; pb = 0; }
+          else { pr = 200; pg = 40; pb = 0; }
+          // Boss particles: 10-20px radius, 3-4 second life
+          spawnParticle(ex, ey, Math.cos(angle) * spd, Math.sin(angle) * spd, pr, pg, pb,
+            2.5 + Math.random() * 1.5, 10 + Math.random() * 10);
+        }
+        triggerShake(8, 0.3);
+        spawnDebris(ex, ey, 5, 255, 100, 0);
+        playSound('explode');
+      }
+
+      // Random smaller explosions during sequence
+      if (Math.random() < 0.5) {
         const ex = boss.x + (Math.random() - 0.5) * boss.size * 2;
         const ey = boss.y + (Math.random() - 0.5) * boss.size * 2;
         spawnExplosion(ex, ey, 8, 255, 100, 0, 1.5);
       }
-      if (boss.deathTimer <= 0) {
-        spawnExplosion(boss.x, boss.y, 60, 255, 200, 0, 2);
-        triggerShake(12, 0.5);
+
+      // Final massive explosion when timer runs out
+      if (boss.deathTimer <= 0 && !bossDeathSequence.finalDone) {
+        bossDeathSequence.finalDone = true;
+        // Final explosion: 60+ particles, large (10-20px), long lasting (3-4s)
+        for (let i = 0; i < 70; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const spd = (80 + Math.random() * 300) * 2;
+          const t = i / 70;
+          let pr, pg, pb;
+          if (t < 0.2) { pr = 255; pg = 255; pb = 255; }
+          else if (t < 0.5) { pr = 255; pg = 200; pb = 50; }
+          else if (t < 0.8) { pr = 255; pg = 100; pb = 0; }
+          else { pr = 180; pg = 30; pb = 0; }
+          spawnParticle(boss.x, boss.y, Math.cos(angle) * spd, Math.sin(angle) * spd, pr, pg, pb,
+            3.0 + Math.random() * 1.5, 10 + Math.random() * 12);
+        }
+        // Full screen flash
+        screenFlashAlpha = 0.6;
+        // Heavy screen shake
+        triggerShake(18, 0.8);
+        // TONS of debris raining down (20-30 pieces)
+        spawnDebris(boss.x, boss.y, 25 + Math.floor(Math.random() * 6), 255, 120, 0);
         playSound('boss_explode');
         addScore(500, boss.x, boss.y);
+        gameSpeedMul = 1;
         boss = null;
         bossActive = false;
+        bossDeathSequence = null;
         nextWave();
       }
     }
@@ -1004,6 +1104,19 @@ function update() {
     p.life -= dt;
     p.vx *= 0.98; p.vy *= 0.98;
     if (p.life <= 0) p.active = false;
+  }
+
+  // Update debris (cosmetic falling pieces)
+  for (let i = 0; i < debris.length; i++) {
+    const d = debris[i];
+    if (!d.active) continue;
+    d.x += d.vx * dt;
+    d.vy += 120 * dt; // gravity pulls down
+    d.y += d.vy * dt;
+    d.rot += d.rotSpeed * dt;
+    d.vx *= 0.99;
+    d.life -= dt;
+    if (d.life <= 0 || d.y > H + 30) d.active = false;
   }
 
   // Update score popups
@@ -1397,6 +1510,40 @@ function render() {
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
 
+  // Debris — small tumbling shapes falling down
+  for (let i = 0; i < debris.length; i++) {
+    const d = debris[i];
+    if (!d.active) continue;
+    const alpha = Math.max(0, d.life / d.maxLife) * 0.8;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = `rgb(${d.r},${d.g},${d.b})`;
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    ctx.rotate(d.rot);
+    if (d.shape === 0) {
+      // Small rectangle
+      ctx.fillRect(-d.size, -d.size * 0.5, d.size * 2, d.size);
+    } else if (d.shape === 1) {
+      // Small triangle
+      ctx.beginPath();
+      ctx.moveTo(0, -d.size);
+      ctx.lineTo(d.size * 0.8, d.size * 0.6);
+      ctx.lineTo(-d.size * 0.8, d.size * 0.6);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // Line/shard
+      ctx.strokeStyle = `rgb(${d.r},${d.g},${d.b})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-d.size, 0);
+      ctx.lineTo(d.size, 0);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+
   // Laser beam
   if (player.laserActive && player.laser > 0 && (state === 'playing' || state === 'paused')) {
     ctx.globalCompositeOperation = 'lighter';
@@ -1445,80 +1592,205 @@ function render() {
     ctx.restore();
   }
 
-  // Enemies — with strong glow halos and pulsing brightness
+  // Enemies — detailed geometric shapes
   for (const e of enemies) {
     ctx.save();
     ctx.translate(e.x, e.y);
     const flash = e.flashTimer > 0;
     const pulse = 0.85 + Math.sin(Date.now() * 0.006 + e.x) * 0.15;
+    const rot = Date.now() * 0.001; // slow rotation timer
 
-    // Large glow halo (additive)
+    // Glow halo (additive)
     ctx.globalCompositeOperation = 'lighter';
-    const glowRadius = e.size * 2.2;
-    const glow = ctx.createRadialGradient(0, 0, e.size * 0.2, 0, 0, glowRadius);
+    const glowRadius = e.size * 1.8;
+    const glow = ctx.createRadialGradient(0, 0, e.size * 0.3, 0, 0, glowRadius);
     if (flash) {
-      glow.addColorStop(0, 'rgba(255,255,255,0.7)');
-      glow.addColorStop(0.3, 'rgba(255,255,255,0.3)');
+      glow.addColorStop(0, 'rgba(255,255,255,0.6)');
+      glow.addColorStop(0.4, 'rgba(255,255,255,0.2)');
     } else {
-      glow.addColorStop(0, `rgba(${e.r},${e.g},${e.b},${0.35 * pulse})`);
-      glow.addColorStop(0.4, `rgba(${e.r},${e.g},${e.b},${0.15 * pulse})`);
+      glow.addColorStop(0, `rgba(${e.r},${e.g},${e.b},${0.25 * pulse})`);
+      glow.addColorStop(0.5, `rgba(${e.r},${e.g},${e.b},${0.08 * pulse})`);
     }
     glow.addColorStop(1, 'transparent');
     ctx.fillStyle = glow;
     ctx.fillRect(-glowRadius, -glowRadius, glowRadius * 2, glowRadius * 2);
     ctx.globalCompositeOperation = 'source-over';
 
-    // Body
-    ctx.fillStyle = flash ? '#fff' : `rgb(${e.r},${e.g},${e.b})`;
-
     if (e.type === 'drifter') {
-      ctx.beginPath();
-      ctx.arc(0, 0, e.size * pulse, 0, Math.PI * 2);
-      ctx.fill();
-      // Inner bright core
-      ctx.fillStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+80)},${Math.min(255,e.g+60)},${Math.min(255,e.b+40)},0.6)`;
-      ctx.beginPath();
-      ctx.arc(0, 0, e.size * 0.5 * pulse, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (e.type === 'zigzagger') {
+      // Hexagon with inscribed triangle, slowly rotating, glowing edges
+      const hexRot = rot * 0.4 + e.x * 0.01;
+      const sz = e.size * pulse;
+      // Outer hexagon fill
+      ctx.fillStyle = flash ? '#fff' : `rgba(${e.r},${e.g},${e.b},0.85)`;
       ctx.beginPath();
       for (let p = 0; p < 6; p++) {
-        const a = (p / 6) * Math.PI * 2 - Math.PI / 2;
-        const r = e.size * pulse;
-        if (p === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
-        else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        const a = hexRot + (p / 6) * Math.PI * 2;
+        const px = Math.cos(a) * sz, py = Math.sin(a) * sz;
+        p === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
       }
       ctx.closePath();
       ctx.fill();
-      // Inner detail
-      ctx.fillStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+60)},${Math.min(255,e.g+60)},${Math.min(255,e.b+60)},0.5)`;
+      // Glowing edges
+      ctx.strokeStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+100)},${Math.min(255,e.g+80)},${Math.min(255,e.b+60)},0.8)`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Inscribed triangle
+      ctx.strokeStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+60)},${Math.min(255,e.g+40)},${Math.min(255,e.b+20)},0.6)`;
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(0, 0, e.size * 0.35, 0, Math.PI * 2);
+      for (let p = 0; p < 3; p++) {
+        const a = hexRot + (p / 3) * Math.PI * 2;
+        const px = Math.cos(a) * sz * 0.65, py = Math.sin(a) * sz * 0.65;
+        p === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      // Inner hex ring detail
+      ctx.strokeStyle = flash ? '#fff' : `rgba(${e.r},${e.g},${e.b},0.35)`;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      for (let p = 0; p < 6; p++) {
+        const a = hexRot + (p / 6) * Math.PI * 2 + Math.PI / 6;
+        const px = Math.cos(a) * sz * 0.4, py = Math.sin(a) * sz * 0.4;
+        p === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      // Center dot
+      ctx.fillStyle = flash ? '#fff' : `rgba(255,${Math.min(255,e.g+120)},${Math.min(255,e.b+80)},0.7)`;
+      ctx.beginPath();
+      ctx.arc(0, 0, sz * 0.15, 0, Math.PI * 2);
       ctx.fill();
-    } else if (e.type === 'swarmer') {
+
+    } else if (e.type === 'zigzagger') {
+      // Diamond/rhombus with pulsing energy core, spiky protrusions
+      const sz = e.size * pulse;
+      // Outer diamond
+      ctx.fillStyle = flash ? '#fff' : `rgba(${e.r},${e.g},${e.b},0.85)`;
       ctx.beginPath();
-      ctx.moveTo(0, -e.size); ctx.lineTo(e.size * 0.7, e.size * 0.5); ctx.lineTo(-e.size * 0.7, e.size * 0.5);
+      ctx.moveTo(0, -sz * 1.2);
+      ctx.lineTo(sz * 0.8, 0);
+      ctx.lineTo(0, sz * 1.2);
+      ctx.lineTo(-sz * 0.8, 0);
       ctx.closePath();
       ctx.fill();
-      // Bright center dot
-      ctx.fillStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+100)},${Math.min(255,e.g+80)},${Math.min(255,e.b+60)},0.7)`;
-      ctx.beginPath();
-      ctx.arc(0, e.size * 0.05, 3, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (e.type === 'tank') {
-      ctx.beginPath();
-      ctx.arc(0, 0, e.size * pulse, 0, Math.PI * 2);
-      ctx.fill();
-      // Inner ring
-      ctx.strokeStyle = `rgba(${Math.min(255, e.r + 100)},${Math.min(255, e.g + 40)},${Math.min(255, e.b + 40)},0.6)`;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, e.size * 0.6, 0, Math.PI * 2);
+      // Glowing edge
+      ctx.strokeStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+80)},${Math.min(255,e.g+80)},${Math.min(255,e.b+80)},0.7)`;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
-      // Core
-      ctx.fillStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+60)},${Math.min(255,e.g+30)},${Math.min(255,e.b+30)},0.5)`;
+      // Spiky protrusions on corners
+      ctx.fillStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+40)},${Math.min(255,e.g+20)},${Math.min(255,e.b+20)},0.7)`;
+      const spikes = [[0, -sz*1.2, 0, -sz*1.6], [sz*0.8, 0, sz*1.15, 0], [0, sz*1.2, 0, sz*1.6], [-sz*0.8, 0, -sz*1.15, 0]];
+      for (const sp of spikes) {
+        ctx.beginPath();
+        ctx.moveTo(sp[0] - 2.5, sp[1]);
+        ctx.lineTo(sp[2], sp[3]);
+        ctx.lineTo(sp[0] + 2.5, sp[1]);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // Inner diamond detail lines
+      ctx.strokeStyle = flash ? '#fff' : `rgba(${e.r},${e.g},${e.b},0.4)`;
+      ctx.lineWidth = 0.8;
       ctx.beginPath();
-      ctx.arc(0, 0, e.size * 0.35, 0, Math.PI * 2);
+      ctx.moveTo(0, -sz * 0.5); ctx.lineTo(sz * 0.35, 0);
+      ctx.lineTo(0, sz * 0.5); ctx.lineTo(-sz * 0.35, 0); ctx.closePath();
+      ctx.stroke();
+      // Pulsing energy core
+      const corePulse = 0.6 + Math.sin(Date.now() * 0.01 + e.x) * 0.4;
+      ctx.globalCompositeOperation = 'lighter';
+      const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, sz * 0.35);
+      coreGrad.addColorStop(0, `rgba(255,255,255,${0.6 * corePulse})`);
+      coreGrad.addColorStop(0.5, `rgba(${e.r},${e.g},${e.b},${0.3 * corePulse})`);
+      coreGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = coreGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, sz * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+
+    } else if (e.type === 'swarmer') {
+      // Angular pentagon/arrow shape — little fighter drone with wing details
+      const sz = e.size;
+      ctx.fillStyle = flash ? '#fff' : `rgba(${e.r},${e.g},${e.b},0.9)`;
+      ctx.beginPath();
+      // Arrow/pentagon body
+      ctx.moveTo(0, -sz * 1.1);           // nose
+      ctx.lineTo(sz * 0.45, -sz * 0.1);   // right shoulder
+      ctx.lineTo(sz * 0.9, sz * 0.5);     // right wing tip
+      ctx.lineTo(sz * 0.3, sz * 0.3);     // right wing notch
+      ctx.lineTo(0, sz * 0.7);            // tail
+      ctx.lineTo(-sz * 0.3, sz * 0.3);    // left wing notch
+      ctx.lineTo(-sz * 0.9, sz * 0.5);    // left wing tip
+      ctx.lineTo(-sz * 0.45, -sz * 0.1);  // left shoulder
+      ctx.closePath();
+      ctx.fill();
+      // Edge highlight
+      ctx.strokeStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+80)},${Math.min(255,e.g+60)},${Math.min(255,e.b+40)},0.6)`;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      // Wing panel lines
+      ctx.strokeStyle = flash ? '#fff' : `rgba(${e.r},${e.g},${e.b},0.4)`;
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(sz * 0.2, -sz * 0.05); ctx.lineTo(sz * 0.5, sz * 0.35);
+      ctx.moveTo(-sz * 0.2, -sz * 0.05); ctx.lineTo(-sz * 0.5, sz * 0.35);
+      ctx.stroke();
+      // Cockpit dot
+      ctx.fillStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+100)},${Math.min(255,e.g+100)},${Math.min(255,e.b+80)},0.8)`;
+      ctx.beginPath();
+      ctx.arc(0, -sz * 0.2, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (e.type === 'tank') {
+      // Octagon with layered armor rings, turret, panel lines
+      const sz = e.size * pulse;
+      // Outer octagon
+      ctx.fillStyle = flash ? '#fff' : `rgba(${e.r},${e.g},${e.b},0.9)`;
+      ctx.beginPath();
+      for (let p = 0; p < 8; p++) {
+        const a = (p / 8) * Math.PI * 2 - Math.PI / 8;
+        const px = Math.cos(a) * sz, py = Math.sin(a) * sz;
+        p === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      // Edge
+      ctx.strokeStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+80)},${Math.min(255,e.g+30)},${Math.min(255,e.b+30)},0.7)`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Armor ring 1
+      ctx.strokeStyle = flash ? '#fcc' : `rgba(${Math.min(255,e.r+40)},${Math.min(255,e.g+20)},${Math.min(255,e.b+20)},0.5)`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, sz * 0.72, 0, Math.PI * 2);
+      ctx.stroke();
+      // Armor ring 2
+      ctx.strokeStyle = flash ? '#faa' : `rgba(${e.r},${e.g},${e.b},0.35)`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, sz * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+      // Panel lines (battle-scarred)
+      ctx.strokeStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+60)},${Math.min(255,e.g+15)},${Math.min(255,e.b+15)},0.3)`;
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      // Horizontal + vertical cross lines
+      ctx.moveTo(-sz * 0.7, 0); ctx.lineTo(sz * 0.7, 0);
+      ctx.moveTo(0, -sz * 0.7); ctx.lineTo(0, sz * 0.7);
+      // Diagonal scar lines
+      ctx.moveTo(-sz * 0.4, -sz * 0.5); ctx.lineTo(sz * 0.1, -sz * 0.2);
+      ctx.moveTo(sz * 0.2, sz * 0.3); ctx.lineTo(sz * 0.5, sz * 0.1);
+      ctx.stroke();
+      // Turret — central rectangle + barrel
+      ctx.fillStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+30)},${Math.min(255,e.g+10)},${Math.min(255,e.b+10)},0.8)`;
+      ctx.fillRect(-sz * 0.2, -sz * 0.2, sz * 0.4, sz * 0.4);
+      // Barrel pointing down
+      ctx.fillRect(-sz * 0.06, sz * 0.2, sz * 0.12, sz * 0.45);
+      // Turret core
+      ctx.fillStyle = flash ? '#fff' : `rgba(255,${Math.min(255,e.g+60)},${Math.min(255,e.b+40)},0.6)`;
+      ctx.beginPath();
+      ctx.arc(0, 0, sz * 0.12, 0, Math.PI * 2);
       ctx.fill();
       // Health bar
       const barW = e.size * 2;
@@ -1691,21 +1963,21 @@ function render() {
       const s = player.size;
       const pulse = 0.95 + Math.sin(Date.now() * 0.004) * 0.05;
 
-      // Large outer energy glow
+      // Outer energy glow (reduced ~60%)
       ctx.globalCompositeOperation = 'lighter';
-      const outerGlow = ctx.createRadialGradient(0, 0, s * 0.3, 0, 0, s * 3.5);
-      outerGlow.addColorStop(0, 'rgba(0,180,255,0.25)');
-      outerGlow.addColorStop(0.4, 'rgba(0,100,200,0.1)');
+      const outerGlow = ctx.createRadialGradient(0, 0, s * 0.2, 0, 0, s * 1.4);
+      outerGlow.addColorStop(0, 'rgba(0,180,255,0.18)');
+      outerGlow.addColorStop(0.5, 'rgba(0,100,200,0.06)');
       outerGlow.addColorStop(1, 'rgba(0,40,120,0)');
       ctx.fillStyle = outerGlow;
-      ctx.fillRect(-s * 3.5, -s * 3.5, s * 7, s * 7);
+      ctx.fillRect(-s * 1.4, -s * 1.4, s * 2.8, s * 2.8);
 
-      // Medium inner glow
-      const midGlow = ctx.createRadialGradient(0, -s * 0.2, 2, 0, -s * 0.2, s * 2);
-      midGlow.addColorStop(0, `rgba(100,220,255,${0.3 * pulse})`);
+      // Medium inner glow (reduced)
+      const midGlow = ctx.createRadialGradient(0, -s * 0.2, 2, 0, -s * 0.2, s * 1.0);
+      midGlow.addColorStop(0, `rgba(100,220,255,${0.25 * pulse})`);
       midGlow.addColorStop(1, 'rgba(0,120,255,0)');
       ctx.fillStyle = midGlow;
-      ctx.fillRect(-s * 2, -s * 2.2, s * 4, s * 4.2);
+      ctx.fillRect(-s * 1.0, -s * 1.2, s * 2.0, s * 2.2);
       ctx.globalCompositeOperation = 'source-over';
 
       // Shield glow ring
@@ -1969,7 +2241,7 @@ function renderHUD() {
 function gameLoop(time) {
   requestAnimationFrame(gameLoop);
   if (lastTime === 0) { lastTime = time; return; }
-  dt = Math.min((time - lastTime) / 1000, 1 / 30);
+  dt = Math.min((time - lastTime) / 1000, 1 / 30) * gameSpeedMul;
   lastTime = time;
 
   update();
