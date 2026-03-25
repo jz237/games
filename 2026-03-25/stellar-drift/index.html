@@ -115,7 +115,7 @@ const BULLET_SPEED = 600;
 const PLAYER_SPEED = 1.0;
 const POWERUP_CHANCE = 0.15;
 const COMBO_WINDOW = 1.0;
-const MAX_PARTICLES = 2000;
+const MAX_PARTICLES = 6000;
 const MAX_BULLETS = 300;
 const MAX_ENEMY_BULLETS = 200;
 const POOL_SCORE_POPUPS = 60;
@@ -130,6 +130,7 @@ let bossActive = false, bossWarning = 0;
 let invincibleTimer = 0;
 let shakeTimer = 0, shakeIntensity = 0;
 let scoreBoostTimer = 0;
+let screenFlashAlpha = 0; // for explosion screen flash
 let dt = 0, lastTime = 0;
 let inputX = 0, inputY = 0, inputActive = false;
 let muted = false;
@@ -178,20 +179,26 @@ let activePowerup = null; // {name, color, timer, maxTimer, icon}
 
 // ===== STARS =====
 const starLayers = [[], [], []];
+let shootingStars = [];
 function initStars() {
   for (let l = 0; l < 3; l++) {
     starLayers[l] = [];
-    const count = [120, 80, 40][l];
+    const count = [180, 100, 50][l];
     for (let i = 0; i < count; i++) {
       starLayers[l].push({
         x: Math.random() * W,
         y: Math.random() * H,
-        size: [0.5, 1, 1.8][l],
-        speed: [15, 35, 70][l],
-        brightness: 0.3 + Math.random() * 0.7
+        size: [0.6, 1.3, 2.2][l],
+        speed: [12, 30, 65][l],
+        brightness: 0.3 + Math.random() * 0.7,
+        twinklePhase: Math.random() * Math.PI * 2,
+        twinkleSpeed: 1.5 + Math.random() * 3,
+        baseAlpha: 0.3 + Math.random() * 0.5,
+        color: l === 2 && Math.random() < 0.3 ? (Math.random() < 0.5 ? '#aaf' : '#ffa') : '#fff'
       });
     }
   }
+  shootingStars = [];
 }
 initStars();
 
@@ -199,14 +206,21 @@ initStars();
 let nebulae = [];
 function initNebulae() {
   nebulae = [];
-  for (let i = 0; i < 5; i++) {
+  const nebColors = [
+    {r:60,g:0,b:120},{r:0,g:30,b:100},{r:100,g:0,b:70},
+    {r:20,g:10,b:80},{r:80,g:0,b:100},{r:10,g:30,b:90},{r:50,g:0,b:60}
+  ];
+  for (let i = 0; i < 7; i++) {
+    const c = nebColors[i];
     nebulae.push({
       x: Math.random() * W,
       y: Math.random() * H,
-      r: 60 + Math.random() * 120,
-      color: ['rgba(80,0,120,0.04)','rgba(0,40,120,0.04)','rgba(120,0,80,0.03)'][i % 3],
-      speed: 5 + Math.random() * 10,
-      drift: (Math.random() - 0.5) * 8
+      r: 100 + Math.random() * 200,
+      cr: c.r, cg: c.g, cb: c.b,
+      alpha: 0.04 + Math.random() * 0.03,
+      speed: 3 + Math.random() * 8,
+      drift: (Math.random() - 0.5) * 6,
+      pulsePhase: Math.random() * Math.PI * 2
     });
   }
 }
@@ -695,10 +709,27 @@ function spawnScorePopup(x, y, text, r, g, b) {
 
 function spawnExplosion(x, y, count, r, g, b, speedMul) {
   speedMul = speedMul || 1;
-  for (let i = 0; i < count; i++) {
+  const boostedCount = Math.floor(count * 1.8); // more particles
+  for (let i = 0; i < boostedCount; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const spd = (30 + Math.random() * 120) * speedMul;
-    spawnParticle(x, y, Math.cos(angle) * spd, Math.sin(angle) * spd, r, g, b, 0.3 + Math.random() * 0.5, 1 + Math.random() * 3);
+    const spd = (40 + Math.random() * 160) * speedMul;
+    // Color variation: white core → original color → darker as they age
+    const t = i / boostedCount;
+    let pr, pg, pb;
+    if (t < 0.2) { pr = 255; pg = 255; pb = 255; } // white core
+    else if (t < 0.5) { pr = Math.min(255, r + 60); pg = Math.min(255, g + 40); pb = b; } // bright original
+    else if (t < 0.8) { pr = r; pg = g; pb = b; } // original
+    else { pr = Math.floor(r * 0.6); pg = Math.floor(g * 0.4); pb = Math.floor(b * 0.3); } // dark fade
+    spawnParticle(x, y, Math.cos(angle) * spd, Math.sin(angle) * spd, pr, pg, pb,
+      0.4 + Math.random() * 0.6, 2 + Math.random() * 6);
+  }
+  // Bright flash at center
+  for (let i = 0; i < 5; i++) {
+    spawnParticle(x + (Math.random()-0.5)*4, y + (Math.random()-0.5)*4, 0, 0, 255, 255, 255, 0.1 + Math.random() * 0.1, 10 + Math.random() * 15);
+  }
+  // Screen flash for bigger explosions
+  if (count >= 15) {
+    screenFlashAlpha = Math.min(0.25, count * 0.008);
   }
 }
 
@@ -768,18 +799,38 @@ function update() {
   const dx = player.x - player.prevX;
   player.tilt += (Math.max(-0.3, Math.min(0.3, dx * 0.02)) - player.tilt) * 0.15;
 
-  // Engine trail
+  // Engine trail — MASSIVE comet/plasma exhaust
   const moveSpeed = Math.abs(dx) + Math.abs(player.y - player.prevY);
-  const trailCount = Math.min(Math.floor(2 + moveSpeed * 0.5), 25);
+  const trailCount = Math.min(40 + Math.floor(moveSpeed * 1.5), 60);
   for (let i = 0; i < trailCount; i++) {
+    const spread = (Math.random() - 0.5) * 22; // wide horizontal spread
+    const depth = Math.random();
+    // Color: white/cyan core fading to blue
+    const brightness = 1 - depth * 0.7;
+    const r = Math.floor(brightness * 100);
+    const g = Math.floor(150 + brightness * 105);
+    const b = 255;
+    const size = 4 + Math.random() * 11; // large particles 4-15px
+    spawnParticle(
+      player.x + spread,
+      player.y + player.size * 0.6 + Math.random() * 6,
+      spread * 2.5 + (Math.random() - 0.5) * 40, // horizontal drift
+      40 + Math.random() * 100,
+      r, g, b,
+      0.25 + Math.random() * 0.45,
+      size
+    );
+  }
+  // Extra bright core particles
+  for (let i = 0; i < 8; i++) {
     spawnParticle(
       player.x + (Math.random() - 0.5) * 6,
-      player.y + player.size * 0.7 + Math.random() * 4,
-      (Math.random() - 0.5) * 20,
-      30 + Math.random() * 60,
-      0, 150 + Math.random() * 105, 255,
-      0.2 + Math.random() * 0.3,
-      1 + Math.random() * 2.5
+      player.y + player.size * 0.5,
+      (Math.random() - 0.5) * 15,
+      20 + Math.random() * 40,
+      200, 240, 255,
+      0.1 + Math.random() * 0.15,
+      6 + Math.random() * 8
     );
   }
 
@@ -796,9 +847,9 @@ function update() {
         const bx = player.x + offsets[i];
         const by = player.y - player.size;
         spawnBullet(bx, by, Math.sin(angles[i]) * BULLET_SPEED * 0.3, -BULLET_SPEED);
-        // Muzzle flash
-        for (let j = 0; j < 4; j++) {
-          spawnParticle(bx, by, (Math.random() - 0.5) * 60, -Math.random() * 80, 255, 255, 150, 0.08 + Math.random() * 0.06, 1.5);
+        // Muzzle flash — bigger and brighter
+        for (let j = 0; j < 6; j++) {
+          spawnParticle(bx, by, (Math.random() - 0.5) * 80, -Math.random() * 100, 255, 240, 120, 0.08 + Math.random() * 0.08, 2 + Math.random() * 3);
         }
       }
       playSound('pew');
@@ -921,9 +972,17 @@ function update() {
     b.x += b.vx * dt;
     b.y += b.vy * dt;
     if (b.y < -20 || b.x < -20 || b.x > W + 20) { b.active = false; continue; }
-    // Bullet trail
-    if (Math.random() < 0.5) {
-      spawnParticle(b.x, b.y + 4, (Math.random() - 0.5) * 10, Math.random() * 20, 255, 255, 100, 0.1, 1);
+    // Bullet trail — 3-4 fading particles behind each bullet
+    for (let t = 0; t < 3; t++) {
+      spawnParticle(
+        b.x + (Math.random() - 0.5) * 4,
+        b.y + 4 + t * 3,
+        (Math.random() - 0.5) * 12,
+        Math.random() * 30,
+        255, 200 + Math.floor(Math.random() * 55), 50,
+        0.08 + Math.random() * 0.1,
+        1.5 + Math.random() * 2
+      );
     }
   }
 
@@ -1121,10 +1180,11 @@ function update() {
     }
   }
 
-  // Update stars
+  // Update stars with twinkle
   for (let l = 0; l < 3; l++) {
     for (const s of starLayers[l]) {
       s.y += s.speed * dt;
+      s.twinklePhase += s.twinkleSpeed * dt;
       if (s.y > H) { s.y = -2; s.x = Math.random() * W; }
     }
   }
@@ -1132,8 +1192,25 @@ function update() {
   for (const n of nebulae) {
     n.y += n.speed * dt;
     n.x += n.drift * dt;
+    n.pulsePhase += 0.3 * dt;
     if (n.y > H + n.r) { n.y = -n.r; n.x = Math.random() * W; }
   }
+  // Update shooting stars
+  if (Math.random() < 0.003) { // occasional shooting star
+    shootingStars.push({
+      x: Math.random() * W, y: Math.random() * H * 0.3,
+      vx: -150 - Math.random() * 200, vy: 200 + Math.random() * 150,
+      life: 0.5 + Math.random() * 0.5, maxLife: 0.5 + Math.random() * 0.5,
+      size: 1 + Math.random() * 1.5
+    });
+  }
+  for (let i = shootingStars.length - 1; i >= 0; i--) {
+    const ss = shootingStars[i];
+    ss.x += ss.vx * dt; ss.y += ss.vy * dt; ss.life -= dt;
+    if (ss.life <= 0) shootingStars.splice(i, 1);
+  }
+  // Screen flash decay
+  if (screenFlashAlpha > 0) screenFlashAlpha = Math.max(0, screenFlashAlpha - dt * 2);
 }
 
 function addScore(pts, x, y) {
@@ -1233,28 +1310,61 @@ function render() {
     ctx.translate(sx, sy);
   }
 
-  // Background
-  ctx.fillStyle = '#000';
+  // Background — deep dark space
+  ctx.fillStyle = '#020108';
   ctx.fillRect(-10, -10, W + 20, H + 20);
 
-  // Nebulae
+  // Nebulae — large semi-transparent radial gradients
   for (const n of nebulae) {
+    const pulseAlpha = n.alpha + Math.sin(n.pulsePhase) * 0.008;
     const grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
-    grad.addColorStop(0, n.color);
+    grad.addColorStop(0, `rgba(${n.cr},${n.cg},${n.cb},${pulseAlpha})`);
+    grad.addColorStop(0.5, `rgba(${n.cr},${n.cg},${n.cb},${pulseAlpha * 0.5})`);
     grad.addColorStop(1, 'transparent');
     ctx.fillStyle = grad;
     ctx.fillRect(n.x - n.r, n.y - n.r, n.r * 2, n.r * 2);
   }
 
-  // Stars
+  // Stars — 3 parallax layers with twinkle
   for (let l = 0; l < 3; l++) {
     for (const s of starLayers[l]) {
-      ctx.globalAlpha = s.brightness;
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(s.x, s.y, s.size, s.size);
+      const twinkle = s.baseAlpha + Math.sin(s.twinklePhase) * 0.3;
+      ctx.globalAlpha = Math.max(0.05, Math.min(1, twinkle));
+      ctx.fillStyle = s.color;
+      if (l === 2) {
+        // Largest layer: draw with glow
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha *= 0.3;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(s.x, s.y, s.size, s.size);
+      }
     }
   }
   ctx.globalAlpha = 1;
+
+  // Shooting stars
+  ctx.globalCompositeOperation = 'lighter';
+  for (const ss of shootingStars) {
+    const alpha = ss.life / ss.maxLife;
+    const tailLen = 40 + (1 - alpha) * 30;
+    const nx = ss.vx / Math.hypot(ss.vx, ss.vy);
+    const ny = ss.vy / Math.hypot(ss.vx, ss.vy);
+    const grad = ctx.createLinearGradient(ss.x, ss.y, ss.x - nx * tailLen, ss.y - ny * tailLen);
+    grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = ss.size;
+    ctx.beginPath();
+    ctx.moveTo(ss.x, ss.y);
+    ctx.lineTo(ss.x - nx * tailLen, ss.y - ny * tailLen);
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
 
   if (state === 'title' || state === 'highscores') {
     // Demo starfield is enough
@@ -1262,16 +1372,26 @@ function render() {
     return;
   }
 
-  // Particles (behind everything for engine trails)
+  // Particles — additive blending for luminous glow
   ctx.globalCompositeOperation = 'lighter';
   for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
     if (!p.active) continue;
     const alpha = Math.max(0, p.life / p.maxLife);
+    const sz = p.size * (0.3 + alpha * 0.7);
+    // Soft glow halo
+    if (sz > 2) {
+      ctx.globalAlpha = alpha * 0.35;
+      ctx.fillStyle = `rgb(${p.r},${p.g},${p.b})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, sz * 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Core
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = `rgb(${p.r},${p.g},${p.b})`;
+    ctx.fillStyle = `rgb(${Math.min(255, p.r + 40)},${Math.min(255, p.g + 40)},${Math.min(255, p.b + 20)})`;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, sz, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalCompositeOperation = 'source-over';
@@ -1325,28 +1445,40 @@ function render() {
     ctx.restore();
   }
 
-  // Enemies
+  // Enemies — with strong glow halos and pulsing brightness
   for (const e of enemies) {
     ctx.save();
     ctx.translate(e.x, e.y);
     const flash = e.flashTimer > 0;
+    const pulse = 0.85 + Math.sin(Date.now() * 0.006 + e.x) * 0.15;
 
-    // Glow
+    // Large glow halo (additive)
     ctx.globalCompositeOperation = 'lighter';
-    const glow = ctx.createRadialGradient(0, 0, e.size * 0.3, 0, 0, e.size * 1.5);
-    glow.addColorStop(0, flash ? 'rgba(255,255,255,0.4)' : `rgba(${e.r},${e.g},${e.b},0.3)`);
+    const glowRadius = e.size * 2.2;
+    const glow = ctx.createRadialGradient(0, 0, e.size * 0.2, 0, 0, glowRadius);
+    if (flash) {
+      glow.addColorStop(0, 'rgba(255,255,255,0.7)');
+      glow.addColorStop(0.3, 'rgba(255,255,255,0.3)');
+    } else {
+      glow.addColorStop(0, `rgba(${e.r},${e.g},${e.b},${0.35 * pulse})`);
+      glow.addColorStop(0.4, `rgba(${e.r},${e.g},${e.b},${0.15 * pulse})`);
+    }
     glow.addColorStop(1, 'transparent');
     ctx.fillStyle = glow;
-    ctx.fillRect(-e.size * 1.5, -e.size * 1.5, e.size * 3, e.size * 3);
+    ctx.fillRect(-glowRadius, -glowRadius, glowRadius * 2, glowRadius * 2);
     ctx.globalCompositeOperation = 'source-over';
 
     // Body
-    const pulse = 0.9 + Math.sin(Date.now() * 0.006) * 0.1;
     ctx.fillStyle = flash ? '#fff' : `rgb(${e.r},${e.g},${e.b})`;
 
     if (e.type === 'drifter') {
       ctx.beginPath();
       ctx.arc(0, 0, e.size * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      // Inner bright core
+      ctx.fillStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+80)},${Math.min(255,e.g+60)},${Math.min(255,e.b+40)},0.6)`;
+      ctx.beginPath();
+      ctx.arc(0, 0, e.size * 0.5 * pulse, 0, Math.PI * 2);
       ctx.fill();
     } else if (e.type === 'zigzagger') {
       ctx.beginPath();
@@ -1358,21 +1490,36 @@ function render() {
       }
       ctx.closePath();
       ctx.fill();
+      // Inner detail
+      ctx.fillStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+60)},${Math.min(255,e.g+60)},${Math.min(255,e.b+60)},0.5)`;
+      ctx.beginPath();
+      ctx.arc(0, 0, e.size * 0.35, 0, Math.PI * 2);
+      ctx.fill();
     } else if (e.type === 'swarmer') {
       ctx.beginPath();
       ctx.moveTo(0, -e.size); ctx.lineTo(e.size * 0.7, e.size * 0.5); ctx.lineTo(-e.size * 0.7, e.size * 0.5);
       ctx.closePath();
+      ctx.fill();
+      // Bright center dot
+      ctx.fillStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+100)},${Math.min(255,e.g+80)},${Math.min(255,e.b+60)},0.7)`;
+      ctx.beginPath();
+      ctx.arc(0, e.size * 0.05, 3, 0, Math.PI * 2);
       ctx.fill();
     } else if (e.type === 'tank') {
       ctx.beginPath();
       ctx.arc(0, 0, e.size * pulse, 0, Math.PI * 2);
       ctx.fill();
       // Inner ring
-      ctx.strokeStyle = `rgba(${Math.min(255, e.r + 80)},${e.g},${e.b},0.5)`;
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = `rgba(${Math.min(255, e.r + 100)},${Math.min(255, e.g + 40)},${Math.min(255, e.b + 40)},0.6)`;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.arc(0, 0, e.size * 0.6, 0, Math.PI * 2);
       ctx.stroke();
+      // Core
+      ctx.fillStyle = flash ? '#fff' : `rgba(${Math.min(255,e.r+60)},${Math.min(255,e.g+30)},${Math.min(255,e.b+30)},0.5)`;
+      ctx.beginPath();
+      ctx.arc(0, 0, e.size * 0.35, 0, Math.PI * 2);
+      ctx.fill();
       // Health bar
       const barW = e.size * 2;
       const barH = 4;
@@ -1385,34 +1532,61 @@ function render() {
     ctx.restore();
   }
 
-  // Boss
+  // Boss — with intense glow and layered rendering
   if (boss) {
     ctx.save();
     ctx.translate(boss.x, boss.y);
     const flash = boss.flashTimer > 0;
+    const bPulse = 0.9 + Math.sin(Date.now() * 0.004) * 0.1;
 
-    // Glow
+    // Large menacing glow
     ctx.globalCompositeOperation = 'lighter';
-    const glow = ctx.createRadialGradient(0, 0, boss.size * 0.3, 0, 0, boss.size * 2);
-    glow.addColorStop(0, flash ? 'rgba(255,255,255,0.5)' : 'rgba(255,50,0,0.3)');
+    const glowR = boss.size * 3;
+    const glow = ctx.createRadialGradient(0, 0, boss.size * 0.3, 0, 0, glowR);
+    if (flash) {
+      glow.addColorStop(0, 'rgba(255,255,255,0.6)');
+      glow.addColorStop(0.3, 'rgba(255,200,150,0.3)');
+    } else {
+      glow.addColorStop(0, `rgba(255,60,0,${0.3 * bPulse})`);
+      glow.addColorStop(0.3, `rgba(200,30,0,${0.15 * bPulse})`);
+    }
     glow.addColorStop(1, 'transparent');
     ctx.fillStyle = glow;
-    ctx.fillRect(-boss.size * 2, -boss.size * 2, boss.size * 4, boss.size * 4);
+    ctx.fillRect(-glowR, -glowR, glowR * 2, glowR * 2);
     ctx.globalCompositeOperation = 'source-over';
 
-    // Body
+    // Body — layered rings
     ctx.fillStyle = flash ? '#fff' : '#c00';
     ctx.beginPath();
-    ctx.arc(0, 0, boss.size, 0, Math.PI * 2);
+    ctx.arc(0, 0, boss.size * bPulse, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = flash ? '#fcc' : '#800';
+    // Mid ring gradient
+    const midGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, boss.size * 0.65);
+    midGrad.addColorStop(0, flash ? '#fcc' : '#a00');
+    midGrad.addColorStop(1, flash ? '#faa' : '#600');
+    ctx.fillStyle = midGrad;
     ctx.beginPath();
-    ctx.arc(0, 0, boss.size * 0.6, 0, Math.PI * 2);
+    ctx.arc(0, 0, boss.size * 0.65, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = flash ? '#fff' : '#f40';
+    // Hot core
+    ctx.globalCompositeOperation = 'lighter';
+    const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, boss.size * 0.35);
+    coreGrad.addColorStop(0, flash ? 'rgba(255,255,255,0.9)' : `rgba(255,120,0,${0.8 * bPulse})`);
+    coreGrad.addColorStop(1, flash ? 'rgba(255,200,200,0)' : 'rgba(255,40,0,0)');
+    ctx.fillStyle = coreGrad;
     ctx.beginPath();
-    ctx.arc(0, 0, boss.size * 0.3, 0, Math.PI * 2);
+    ctx.arc(0, 0, boss.size * 0.35, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Rotating energy ring
+    ctx.strokeStyle = `rgba(255,100,0,${0.3 * bPulse})`;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([8, 8]);
+    ctx.beginPath();
+    ctx.arc(0, 0, boss.size * 0.85, Date.now() * 0.002 % (Math.PI * 2), Date.now() * 0.002 % (Math.PI * 2) + Math.PI * 1.5);
+    ctx.stroke();
+    ctx.setLineDash([]);
 
     // Health bar
     const barW = boss.size * 3;
@@ -1427,107 +1601,211 @@ function render() {
     ctx.restore();
   }
 
-  // Enemy bullets
+  // Enemy bullets — with stronger glow halos
   ctx.globalCompositeOperation = 'lighter';
   for (let i = 0; i < enemyBullets.length; i++) {
     const b = enemyBullets[i];
     if (!b.active) continue;
-    const glow = ctx.createRadialGradient(b.x, b.y, 1, b.x, b.y, 6);
-    glow.addColorStop(0, 'rgba(255,80,80,1)');
+    // Outer glow
+    const glow2 = ctx.createRadialGradient(b.x, b.y, 2, b.x, b.y, 10);
+    glow2.addColorStop(0, 'rgba(255,60,60,0.4)');
+    glow2.addColorStop(1, 'rgba(255,0,0,0)');
+    ctx.fillStyle = glow2;
+    ctx.fillRect(b.x - 10, b.y - 10, 20, 20);
+    // Inner glow
+    const glow = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 5);
+    glow.addColorStop(0, 'rgba(255,200,180,1)');
+    glow.addColorStop(0.5, 'rgba(255,80,80,0.8)');
     glow.addColorStop(1, 'rgba(255,0,0,0)');
     ctx.fillStyle = glow;
-    ctx.fillRect(b.x - 6, b.y - 6, 12, 12);
-    ctx.fillStyle = '#f44';
+    ctx.fillRect(b.x - 5, b.y - 5, 10, 10);
+    // Core
+    ctx.fillStyle = '#fcc';
     ctx.beginPath();
-    ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+    ctx.arc(b.x, b.y, 2.5, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalCompositeOperation = 'source-over';
 
-  // Player bullets
+  // Player bullets — bright yellow-white elongated with orange glow
   ctx.globalCompositeOperation = 'lighter';
   for (let i = 0; i < bullets.length; i++) {
     const b = bullets[i];
     if (!b.active) continue;
-    const glow = ctx.createRadialGradient(b.x, b.y, 1, b.x, b.y, 5);
-    glow.addColorStop(0, 'rgba(255,255,200,1)');
-    glow.addColorStop(1, 'rgba(255,255,0,0)');
+    // Outer orange glow
+    const glow2 = ctx.createRadialGradient(b.x, b.y, 2, b.x, b.y, 12);
+    glow2.addColorStop(0, 'rgba(255,180,50,0.5)');
+    glow2.addColorStop(1, 'rgba(255,100,0,0)');
+    ctx.fillStyle = glow2;
+    ctx.fillRect(b.x - 12, b.y - 14, 24, 28);
+    // Inner bright glow
+    const glow = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 6);
+    glow.addColorStop(0, 'rgba(255,255,240,1)');
+    glow.addColorStop(0.4, 'rgba(255,255,100,0.8)');
+    glow.addColorStop(1, 'rgba(255,200,0,0)');
     ctx.fillStyle = glow;
-    ctx.fillRect(b.x - 5, b.y - 7, 10, 14);
-    ctx.fillStyle = '#ffa';
+    ctx.fillRect(b.x - 6, b.y - 8, 12, 16);
+    // Elongated bright core
+    ctx.fillStyle = '#ffe';
     ctx.beginPath();
-    ctx.ellipse(b.x, b.y, 1.5, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(b.x, b.y, 2, 6, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalCompositeOperation = 'source-over';
 
-  // Homing missiles
+  // Homing missiles — with glow
   for (const m of homingMissiles) {
     ctx.save();
     ctx.translate(m.x, m.y);
     const angle = Math.atan2(m.vy, m.vx);
     ctx.rotate(angle + Math.PI / 2);
-    ctx.fillStyle = '#f64';
+    // Glow halo
+    ctx.globalCompositeOperation = 'lighter';
+    const mGlow = ctx.createRadialGradient(0, 0, 1, 0, 0, m.size * 2);
+    mGlow.addColorStop(0, 'rgba(255,120,40,0.5)');
+    mGlow.addColorStop(1, 'rgba(255,60,0,0)');
+    ctx.fillStyle = mGlow;
+    ctx.fillRect(-m.size * 2, -m.size * 2, m.size * 4, m.size * 4);
+    ctx.globalCompositeOperation = 'source-over';
+    // Body
+    ctx.fillStyle = '#f84';
     ctx.beginPath();
     ctx.moveTo(0, -m.size); ctx.lineTo(m.size * 0.5, m.size * 0.5); ctx.lineTo(-m.size * 0.5, m.size * 0.5);
     ctx.closePath();
     ctx.fill();
+    // Hot tip
+    ctx.fillStyle = '#ffe';
+    ctx.beginPath();
+    ctx.arc(0, -m.size * 0.5, 2, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 
-  // Player ship
+  // Player ship — glowing crystal/gem with layered gradients
   if (state === 'playing' || state === 'paused') {
     const blinkOff = invincibleTimer > 0 && Math.floor(invincibleTimer * 10) % 2 === 0;
     if (!blinkOff) {
       ctx.save();
       ctx.translate(player.x, player.y);
       ctx.rotate(player.tilt);
+      const s = player.size;
+      const pulse = 0.95 + Math.sin(Date.now() * 0.004) * 0.05;
 
-      // Shield glow ring
-      const shieldAlpha = player.shield ? 0.5 : 0.08 + Math.sin(Date.now() * 0.003) * 0.04;
-      const shieldColor = player.shield ? 'rgba(0,255,100,' + shieldAlpha + ')' : 'rgba(0,200,255,' + shieldAlpha + ')';
-      ctx.strokeStyle = shieldColor;
-      ctx.lineWidth = player.shield ? 2.5 : 1;
-      ctx.beginPath();
-      ctx.arc(0, 0, player.size + 6, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Ship glow
+      // Large outer energy glow
       ctx.globalCompositeOperation = 'lighter';
-      const shipGlow = ctx.createRadialGradient(0, 0, 2, 0, 0, player.size * 2);
-      shipGlow.addColorStop(0, 'rgba(0,200,255,0.2)');
-      shipGlow.addColorStop(1, 'transparent');
-      ctx.fillStyle = shipGlow;
-      ctx.fillRect(-player.size * 2, -player.size * 2, player.size * 4, player.size * 4);
+      const outerGlow = ctx.createRadialGradient(0, 0, s * 0.3, 0, 0, s * 3.5);
+      outerGlow.addColorStop(0, 'rgba(0,180,255,0.25)');
+      outerGlow.addColorStop(0.4, 'rgba(0,100,200,0.1)');
+      outerGlow.addColorStop(1, 'rgba(0,40,120,0)');
+      ctx.fillStyle = outerGlow;
+      ctx.fillRect(-s * 3.5, -s * 3.5, s * 7, s * 7);
+
+      // Medium inner glow
+      const midGlow = ctx.createRadialGradient(0, -s * 0.2, 2, 0, -s * 0.2, s * 2);
+      midGlow.addColorStop(0, `rgba(100,220,255,${0.3 * pulse})`);
+      midGlow.addColorStop(1, 'rgba(0,120,255,0)');
+      ctx.fillStyle = midGlow;
+      ctx.fillRect(-s * 2, -s * 2.2, s * 4, s * 4.2);
       ctx.globalCompositeOperation = 'source-over';
 
-      // Ship body
-      const s = player.size;
-      ctx.fillStyle = '#0cf';
+      // Shield glow ring
+      if (player.shield) {
+        ctx.globalCompositeOperation = 'lighter';
+        const shieldGlow = ctx.createRadialGradient(0, 0, s + 4, 0, 0, s + 14);
+        shieldGlow.addColorStop(0, 'rgba(0,255,120,0.4)');
+        shieldGlow.addColorStop(1, 'rgba(0,255,80,0)');
+        ctx.fillStyle = shieldGlow;
+        ctx.fillRect(-s - 14, -s - 14, (s + 14) * 2, (s + 14) * 2);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = `rgba(0,255,100,${0.5 + Math.sin(Date.now() * 0.006) * 0.2})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, s + 8, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Ship body — outer dark cyan layer (wings)
+      ctx.fillStyle = '#068';
       ctx.beginPath();
-      ctx.moveTo(0, -s);
-      ctx.lineTo(-s * 0.6, s * 0.6);
-      ctx.lineTo(-s * 0.2, s * 0.4);
+      ctx.moveTo(0, -s * 1.1);
+      ctx.lineTo(-s * 0.7, s * 0.5);
+      ctx.lineTo(-s * 0.55, s * 0.7);
+      ctx.lineTo(-s * 0.15, s * 0.45);
       ctx.lineTo(0, s * 0.55);
-      ctx.lineTo(s * 0.2, s * 0.4);
-      ctx.lineTo(s * 0.6, s * 0.6);
+      ctx.lineTo(s * 0.15, s * 0.45);
+      ctx.lineTo(s * 0.55, s * 0.7);
+      ctx.lineTo(s * 0.7, s * 0.5);
       ctx.closePath();
       ctx.fill();
 
-      // Hull highlight
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      // Mid layer — bright cyan body
+      const bodyGrad = ctx.createLinearGradient(0, -s, 0, s * 0.6);
+      bodyGrad.addColorStop(0, '#4ef');
+      bodyGrad.addColorStop(0.5, '#0cf');
+      bodyGrad.addColorStop(1, '#068');
+      ctx.fillStyle = bodyGrad;
       ctx.beginPath();
       ctx.moveTo(0, -s);
-      ctx.lineTo(-s * 0.15, s * 0.1);
-      ctx.lineTo(s * 0.15, s * 0.1);
+      ctx.lineTo(-s * 0.5, s * 0.4);
+      ctx.lineTo(-s * 0.15, s * 0.35);
+      ctx.lineTo(0, s * 0.5);
+      ctx.lineTo(s * 0.15, s * 0.35);
+      ctx.lineTo(s * 0.5, s * 0.4);
       ctx.closePath();
       ctx.fill();
 
-      // Engine core
-      ctx.fillStyle = '#fff';
+      // Inner gem facet — lighter
+      const facetGrad = ctx.createLinearGradient(0, -s * 0.8, 0, s * 0.2);
+      facetGrad.addColorStop(0, 'rgba(200,255,255,0.7)');
+      facetGrad.addColorStop(1, 'rgba(0,180,220,0.3)');
+      ctx.fillStyle = facetGrad;
       ctx.beginPath();
-      ctx.arc(0, s * 0.45, 3, 0, Math.PI * 2);
+      ctx.moveTo(0, -s * 0.85);
+      ctx.lineTo(-s * 0.2, s * 0.05);
+      ctx.lineTo(0, s * 0.15);
+      ctx.lineTo(s * 0.2, s * 0.05);
+      ctx.closePath();
       ctx.fill();
+
+      // Bright white hot-spot at center
+      ctx.globalCompositeOperation = 'lighter';
+      const hotspot = ctx.createRadialGradient(0, -s * 0.15, 0, 0, -s * 0.15, s * 0.4);
+      hotspot.addColorStop(0, `rgba(255,255,255,${0.6 * pulse})`);
+      hotspot.addColorStop(0.4, 'rgba(150,230,255,0.2)');
+      hotspot.addColorStop(1, 'rgba(0,150,255,0)');
+      ctx.fillStyle = hotspot;
+      ctx.beginPath();
+      ctx.arc(0, -s * 0.15, s * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Wing tip accents
+      ctx.fillStyle = 'rgba(0,200,255,0.5)';
+      ctx.beginPath();
+      ctx.arc(-s * 0.6, s * 0.55, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(s * 0.6, s * 0.55, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Engine exhaust glow at base
+      const engineGlow = ctx.createRadialGradient(0, s * 0.5, 1, 0, s * 0.5, s * 0.6);
+      engineGlow.addColorStop(0, 'rgba(200,240,255,0.8)');
+      engineGlow.addColorStop(0.5, 'rgba(0,180,255,0.3)');
+      engineGlow.addColorStop(1, 'rgba(0,80,200,0)');
+      ctx.fillStyle = engineGlow;
+      ctx.beginPath();
+      ctx.arc(0, s * 0.5, s * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+
+      // Subtle ambient ring when no shield
+      if (!player.shield) {
+        ctx.strokeStyle = `rgba(0,200,255,${0.08 + Math.sin(Date.now() * 0.003) * 0.04})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(0, 0, s + 6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
       ctx.restore();
     }
@@ -1559,8 +1837,43 @@ function render() {
     ctx.fillText('⚠ WARNING ⚠', W / 2, H / 2);
   }
 
+  // Speed lines when moving fast
+  const pSpeed = Math.hypot(player.x - player.prevX, player.y - player.prevY);
+  if (pSpeed > 3) {
+    ctx.globalCompositeOperation = 'lighter';
+    const lineCount = Math.min(Math.floor(pSpeed * 0.8), 8);
+    for (let i = 0; i < lineCount; i++) {
+      const lx = Math.random() * W;
+      const ly = Math.random() * H;
+      const ldx = (player.x - player.prevX) * -0.5;
+      const ldy = (player.y - player.prevY) * -0.5;
+      ctx.strokeStyle = `rgba(100,180,255,${0.05 + Math.random() * 0.08})`;
+      ctx.lineWidth = 0.5 + Math.random();
+      ctx.beginPath();
+      ctx.moveTo(lx, ly);
+      ctx.lineTo(lx + ldx * (8 + Math.random() * 15), ly + ldy * (8 + Math.random() * 15));
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // Screen flash on big explosions
+  if (screenFlashAlpha > 0) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(255,255,255,${screenFlashAlpha})`;
+    ctx.fillRect(-10, -10, W + 20, H + 20);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
   // HUD
   renderHUD();
+
+  // Vignette — darker corners/edges
+  const vignetteGrad = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+  vignetteGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  vignetteGrad.addColorStop(1, 'rgba(0,0,0,0.45)');
+  ctx.fillStyle = vignetteGrad;
+  ctx.fillRect(-10, -10, W + 20, H + 20);
 
   ctx.restore();
 }
