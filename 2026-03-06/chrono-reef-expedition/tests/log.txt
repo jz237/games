@@ -1,5 +1,0 @@
-[PASS] Initial HP :: hp=100
-[PASS] Initial sector :: sector=0
-[PASS] Simulation progression :: lvl=6, shards=16
-[PASS] Level increased :: lvl=6
-[PASS] Shards collected :: shards=16
