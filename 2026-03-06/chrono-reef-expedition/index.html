@@ -163,10 +163,10 @@ let ambientBubbles = [];
 let bgLayers = [];
 let causticTime = 0;
 let sectorPalettes = [
-  { bg: '#0a2a3a', water: [10,42,58], coral: ['#f06','#f80','#a0f','#ff6','#f48'], floor: '#2a1a08', name: 'Shallow Reef' },
-  { bg: '#0a2a1a', water: [10,42,26], coral: ['#0a4','#084','#2a6','#0c4','#4a2'], floor: '#0a1a08', name: 'Kelp Forest' },
-  { bg: '#040810', water: [4,8,16], coral: ['#226','#114','#048','#206','#024'], floor: '#0a0a12', name: 'Deep Trench' },
-  { bg: '#1a0a2a', water: [26,10,42], coral: ['#f0f','#0ff','#ff0','#f44','#4f4'], floor: '#120818', name: 'Time Rift' }
+  { bg: '#0a2a3a', water: [10,42,58], coral: ['#ff0066','#ff8800','#aa00ff','#ffff66','#ff4488'], floor: '#2a1a08', name: 'Shallow Reef' },
+  { bg: '#0a2a1a', water: [10,42,26], coral: ['#00aa44','#008844','#22aa66','#00cc44','#44aa22'], floor: '#0a1a08', name: 'Kelp Forest' },
+  { bg: '#040810', water: [4,8,16], coral: ['#222266','#111144','#004488','#220066','#002244'], floor: '#0a0a12', name: 'Deep Trench' },
+  { bg: '#1a0a2a', water: [26,10,42], coral: ['#ff00ff','#00ffff','#ffff00','#ff4444','#44ff44'], floor: '#120818', name: 'Time Rift' }
 ];
 let palette;
 
@@ -377,13 +377,13 @@ function createEnemy(x, y, sector) {
     shootTimer: 2 + Math.random() * 2, moveTimer: 0, phase: 0, vel: { x: 0, y: 0 }
   };
   switch(type) {
-    case 'jellyfish': return { ...base, hp: 2*mult, maxHp: 2*mult, speed: 30*mult, color: '#f0f', radius: 14, dmg: 1, score: 50 };
-    case 'fishSwarm': return { ...base, hp: 1*mult, maxHp: 1*mult, speed: 80*mult, color: '#4cf', radius: 10, dmg: 1, score: 30 };
-    case 'eel': return { ...base, hp: 3*mult, maxHp: 3*mult, speed: 40*mult, color: '#ff0', radius: 16, dmg: 2, score: 80 };
-    case 'octopus': return { ...base, hp: 4*mult, maxHp: 4*mult, speed: 25*mult, color: '#f80', radius: 18, dmg: 2, score: 100 };
-    case 'anglerfish': return { ...base, hp: 5*mult, maxHp: 5*mult, speed: 50*mult, color: '#0ff', radius: 20, dmg: 3, score: 120 };
-    case 'crab': return { ...base, hp: 8*mult, maxHp: 8*mult, speed: 20*mult, color: '#f44', radius: 22, dmg: 2, score: 100 };
-    default: return { ...base, hp: 2, maxHp: 2, speed: 30, color: '#f0f', radius: 14, dmg: 1, score: 50 };
+    case 'jellyfish': return { ...base, hp: 2*mult, maxHp: 2*mult, speed: 30*mult, color: '#ff00ff', radius: 14, dmg: 1, score: 50 };
+    case 'fishSwarm': return { ...base, hp: 1*mult, maxHp: 1*mult, speed: 80*mult, color: '#44ccff', radius: 10, dmg: 1, score: 30 };
+    case 'eel': return { ...base, hp: 3*mult, maxHp: 3*mult, speed: 40*mult, color: '#ffff00', radius: 16, dmg: 2, score: 80 };
+    case 'octopus': return { ...base, hp: 4*mult, maxHp: 4*mult, speed: 25*mult, color: '#ff8800', radius: 18, dmg: 2, score: 100 };
+    case 'anglerfish': return { ...base, hp: 5*mult, maxHp: 5*mult, speed: 50*mult, color: '#00ffff', radius: 20, dmg: 3, score: 120 };
+    case 'crab': return { ...base, hp: 8*mult, maxHp: 8*mult, speed: 20*mult, color: '#ff4444', radius: 22, dmg: 2, score: 100 };
+    default: return { ...base, hp: 2, maxHp: 2, speed: 30, color: '#ff00ff', radius: 14, dmg: 1, score: 50 };
   }
 }
 
@@ -393,15 +393,15 @@ function createBoss(sector, room) {
   const cy = (room.y + room.h / 2) * TILE;
   const base = { x: cx, y: cy, alive: true, flash: 0, phase: 0, timer: 0, attackTimer: 2, sector };
   switch(sector) {
-    case 0: return { ...base, type: 'mantisShrimp', hp: 40, maxHp: 40, radius: 36, speed: 100, color: '#0f0', dmg: 3, score: 500,
+    case 0: return { ...base, type: 'mantisShrimp', hp: 40, maxHp: 40, radius: 36, speed: 100, color: '#00ff00', dmg: 3, score: 500,
       state: 'idle', chargeDir: {x:0,y:0}, shockwave: 0 };
-    case 1: return { ...base, type: 'kraken', hp: 60, maxHp: 60, radius: 44, speed: 30, color: '#80f', dmg: 3, score: 800,
+    case 1: return { ...base, type: 'kraken', hp: 60, maxHp: 60, radius: 44, speed: 30, color: '#8800ff', dmg: 3, score: 800,
       tentacles: [], tentacleTimer: 0 };
-    case 2: return { ...base, type: 'leviathan', hp: 80, maxHp: 80, radius: 50, speed: 60, color: '#08f', dmg: 4, score: 1200,
+    case 2: return { ...base, type: 'leviathan', hp: 80, maxHp: 80, radius: 50, speed: 60, color: '#0088ff', dmg: 4, score: 1200,
       segments: [], state: 'circle' };
-    case 3: return { ...base, type: 'chronoHydra', hp: 120, maxHp: 120, radius: 40, speed: 40, color: '#f0f', dmg: 4, score: 2000,
+    case 3: return { ...base, type: 'chronoHydra', hp: 120, maxHp: 120, radius: 40, speed: 40, color: '#ff00ff', dmg: 4, score: 2000,
       heads: [{angle:0,hp:30,maxHp:30,type:'fire'},{angle:Math.PI*0.66,hp:30,maxHp:30,type:'ice'},{angle:Math.PI*1.33,hp:30,maxHp:30,type:'lightning'}] };
-    default: return { ...base, type: 'mantisShrimp', hp: 40, maxHp: 40, radius: 36, speed: 100, color: '#0f0', dmg: 3, score: 500, state: 'idle', chargeDir: {x:0,y:0}, shockwave: 0 };
+    default: return { ...base, type: 'mantisShrimp', hp: 40, maxHp: 40, radius: 36, speed: 100, color: '#00ff00', dmg: 3, score: 500, state: 'idle', chargeDir: {x:0,y:0}, shockwave: 0 };
   }
 }
 
@@ -425,6 +425,8 @@ function startSector(sector) {
   palette = sectorPalettes[sector];
   generateMap(sector);
   player = createPlayer(rooms[0]);
+  camera.x = player.x - W / 2;
+  camera.y = player.y - H / 2;
   rooms[0].explored = true;
   bullets = [];
   particles = [];
@@ -1774,7 +1776,7 @@ function drawBoss(b) {
       ctx.arc(0, 0, b.radius * 0.7, 0, Math.PI * 2);
       ctx.fill();
       // Heads
-      const headColors = { fire: '#f40', ice: '#4df', lightning: '#ff0' };
+      const headColors = { fire: '#ff4400', ice: '#44ddff', lightning: '#ffff00' };
       for (const h of b.heads) {
         if (h.hp <= 0) continue;
         const nx = Math.cos(h.angle) * b.radius * 1.8;
