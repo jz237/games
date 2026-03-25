@@ -830,38 +830,37 @@ function update() {
   const dx = player.x - player.prevX;
   player.tilt += (Math.max(-0.3, Math.min(0.3, dx * 0.02)) - player.tilt) * 0.15;
 
-  // Engine trail — MASSIVE comet/plasma exhaust
+  // Engine trail — compact focused exhaust
   const moveSpeed = Math.abs(dx) + Math.abs(player.y - player.prevY);
-  const trailCount = Math.min(40 + Math.floor(moveSpeed * 1.5), 60);
+  const trailCount = Math.min(8 + Math.floor(moveSpeed * 0.5), 16);
   for (let i = 0; i < trailCount; i++) {
-    const spread = (Math.random() - 0.5) * 22; // wide horizontal spread
+    const spread = (Math.random() - 0.5) * 8; // tight spread
     const depth = Math.random();
-    // Color: white/cyan core fading to blue
     const brightness = 1 - depth * 0.7;
     const r = Math.floor(brightness * 100);
     const g = Math.floor(150 + brightness * 105);
     const b = 255;
-    const size = 4 + Math.random() * 11; // large particles 4-15px
+    const size = 2 + Math.random() * 5; // smaller particles 2-7px
     spawnParticle(
       player.x + spread,
-      player.y + player.size * 0.6 + Math.random() * 6,
-      spread * 2.5 + (Math.random() - 0.5) * 40, // horizontal drift
-      40 + Math.random() * 100,
+      player.y + player.size * 0.6 + Math.random() * 4,
+      spread * 1.5 + (Math.random() - 0.5) * 15,
+      40 + Math.random() * 80,
       r, g, b,
-      0.25 + Math.random() * 0.45,
+      0.2 + Math.random() * 0.3,
       size
     );
   }
-  // Extra bright core particles
-  for (let i = 0; i < 8; i++) {
+  // Small bright core particles
+  for (let i = 0; i < 3; i++) {
     spawnParticle(
-      player.x + (Math.random() - 0.5) * 6,
+      player.x + (Math.random() - 0.5) * 4,
       player.y + player.size * 0.5,
-      (Math.random() - 0.5) * 15,
-      20 + Math.random() * 40,
+      (Math.random() - 0.5) * 8,
+      20 + Math.random() * 30,
       200, 240, 255,
-      0.1 + Math.random() * 0.15,
-      6 + Math.random() * 8
+      0.1 + Math.random() * 0.1,
+      3 + Math.random() * 4
     );
   }
 
@@ -2059,10 +2058,10 @@ function render() {
       ctx.arc(s * 0.6, s * 0.55, 2.5, 0, Math.PI * 2);
       ctx.fill();
 
-      // Engine exhaust glow at base
-      const engineGlow = ctx.createRadialGradient(0, s * 0.5, 1, 0, s * 0.5, s * 0.6);
-      engineGlow.addColorStop(0, 'rgba(200,240,255,0.8)');
-      engineGlow.addColorStop(0.5, 'rgba(0,180,255,0.3)');
+      // Engine exhaust glow at base — subtle
+      const engineGlow = ctx.createRadialGradient(0, s * 0.5, 1, 0, s * 0.5, s * 0.35);
+      engineGlow.addColorStop(0, 'rgba(200,240,255,0.5)');
+      engineGlow.addColorStop(0.5, 'rgba(0,180,255,0.15)');
       engineGlow.addColorStop(1, 'rgba(0,80,200,0)');
       ctx.fillStyle = engineGlow;
       ctx.beginPath();
