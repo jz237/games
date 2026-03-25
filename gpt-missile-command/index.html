@@ -479,7 +479,6 @@
         state.lastTime = performance.now();
         state.waveIntroTimer = 3.4;
         state.waveCooldown = 0;
-        state.spawnBudget = 0;
         state.spawnedThisWave = 0;
         state.enemyClearedBonusTimer = 0;
         state.enemyMissiles.length = 0;
@@ -497,6 +496,7 @@
         layoutDefenses();
         state.bases.forEach(base => { base.ammo = 15; base.alive = true; base.flash = 0; });
         state.cities.forEach((city, i) => Object.assign(city, createCity(city.x, i)));
+        prepareWave(); // set up wave 1 spawn budget
         gameOverOverlay.classList.add('hidden');
       }
 
