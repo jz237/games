@@ -37,9 +37,9 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 <h1>BUBBLE BOBBLE 2</h1>
 <h2>🐉 Dragon's Bubble Adventure 🫧</h2>
 <div class="controls-info">
-<p>🎮 HOLD left/right side to MOVE</p>
-<p>👆 Quick TAP to BLOW BUBBLES</p>
-<p>⬆️ SWIPE UP to JUMP</p>
+<p>👈 TAP LEFT = move left + shoot</p>
+<p>👉 TAP RIGHT = move right + shoot</p>
+<p>⬆️ SWIPE UP = jump</p>
 </div>
 <button class="btn" id="startBtn">START GAME</button>
 <button class="btn btn-small" id="scoresBtn">HIGH SCORES</button>
@@ -478,96 +478,67 @@ function spawnFloatingText(x, y, text, color='#fff') {
 }
 
 // ==================== INPUT HANDLING ====================
-let touchState = { active: false, startX: 0, startY: 0, startTime: 0, id: -1, moved: false };
-let moveDir = 0; // -1 left, 0 none, 1 right
+// Dead simple: tap left = move left + shoot, tap right = move right + shoot, swipe up = jump
+let tapQueue = []; // queued taps: each is -1 (left) or 1 (right)
 let wantJump = false;
-let wantBubble = false;
+
+// Track touches for swipe-up detection
+const activeTouches = {};
 
 function handleTouchStart(e) {
   if (e.target.closest('button') || e.target.closest('.overlay')) return;
   e.preventDefault();
-  const t = e.changedTouches[0];
-  touchState = { active: true, startX: t.clientX, startY: t.clientY, startTime: performance.now(), id: t.identifier, moved: false };
-  // Start movement based on side
-  if (t.clientX < W / 2) moveDir = -1;
-  else moveDir = 1;
+  for (const t of e.changedTouches) {
+    activeTouches[t.identifier] = { startX: t.clientX, startY: t.clientY, swiped: false };
+    // Tap = move + shoot in that direction
+    const dir = t.clientX < W / 2 ? -1 : 1;
+    tapQueue.push(dir);
+  }
 }
 
 function handleTouchMove(e) {
-  if (!touchState.active) return;
   e.preventDefault();
-  const t = Array.from(e.changedTouches).find(tt => tt.identifier === touchState.id);
-  if (!t) return;
-  const dy = t.clientY - touchState.startY;
-  const dx = t.clientX - touchState.startX;
-  if (Math.abs(dx) > 15 || Math.abs(dy) > 15) touchState.moved = true;
-  // Check swipe up for jump
-  if (dy < -30 && (performance.now() - touchState.startTime) < 300) {
-    wantJump = true;
-    touchState.startY = t.clientY; // reset to prevent re-trigger
+  for (const t of e.changedTouches) {
+    const at = activeTouches[t.identifier];
+    if (!at || at.swiped) continue;
+    const dy = t.clientY - at.startY;
+    if (dy < -30) {
+      wantJump = true;
+      at.swiped = true;
+    }
   }
-  // Update move direction based on current position
-  if (t.clientX < W / 2) moveDir = -1;
-  else moveDir = 1;
 }
 
 function handleTouchEnd(e) {
-  if (!touchState.active) return;
-  const t = Array.from(e.changedTouches).find(tt => tt.identifier === touchState.id);
-  if (!t) return;
-  e.preventDefault();
-  const dur = performance.now() - touchState.startTime;
-  const dy = t.clientY - touchState.startY;
-  // Quick tap = bubble
-  if (dur < 200 && !touchState.moved) {
-    wantBubble = true;
+  for (const t of e.changedTouches) {
+    delete activeTouches[t.identifier];
   }
-  // Swipe up check again
-  if (dy < -30 && dur < 300) {
-    wantJump = true;
-  }
-  moveDir = 0;
-  touchState.active = false;
 }
 
 canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
 canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
 canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
-canvas.addEventListener('touchcancel', (e) => { moveDir = 0; touchState.active = false; }, { passive: false });
+canvas.addEventListener('touchcancel', (e) => {
+  for (const t of e.changedTouches) delete activeTouches[t.identifier];
+}, { passive: false });
 
-// Mouse support for desktop
-let mouseDown = false;
-let mouseStartX = 0, mouseStartY = 0, mouseStartTime = 0, mouseMoved = false;
+// Mouse support for desktop — same logic: click side = move+shoot, drag up = jump
+let mouseStartY = 0;
 canvas.addEventListener('mousedown', (e) => {
   if (e.target.closest('button') || e.target.closest('.overlay')) return;
-  mouseDown = true;
-  mouseStartX = e.clientX;
   mouseStartY = e.clientY;
-  mouseStartTime = performance.now();
-  mouseMoved = false;
-  if (e.clientX < W / 2) moveDir = -1;
-  else moveDir = 1;
+  const dir = e.clientX < W / 2 ? -1 : 1;
+  tapQueue.push(dir);
 });
 canvas.addEventListener('mousemove', (e) => {
-  if (!mouseDown) return;
-  if (Math.abs(e.clientX - mouseStartX) > 15 || Math.abs(e.clientY - mouseStartY) > 15) mouseMoved = true;
+  if (!(e.buttons & 1)) return;
   const dy = e.clientY - mouseStartY;
-  if (dy < -30 && (performance.now() - mouseStartTime) < 300) {
+  if (dy < -30) {
     wantJump = true;
     mouseStartY = e.clientY;
   }
-  if (e.clientX < W / 2) moveDir = -1;
-  else moveDir = 1;
 });
-canvas.addEventListener('mouseup', (e) => {
-  if (!mouseDown) return;
-  mouseDown = false;
-  const dur = performance.now() - mouseStartTime;
-  if (dur < 200 && !mouseMoved) wantBubble = true;
-  const dy = e.clientY - mouseStartY;
-  if (dy < -30 && dur < 300) wantJump = true;
-  moveDir = 0;
-});
+canvas.addEventListener('mouseup', () => {});
 
 // Keyboard support
 const keys = {};
@@ -596,8 +567,16 @@ function update(dt) {
     let kbDir = 0;
     if (keys['ArrowLeft'] || keys['a']) kbDir = -1;
     if (keys['ArrowRight'] || keys['d']) kbDir = 1;
-    const dir = kbDir || moveDir;
 
+    // Process tap queue — each tap = step + shoot in that direction
+    let tapDir = 0;
+    let didTap = false;
+    if (tapQueue.length > 0) {
+      tapDir = tapQueue.shift();
+      didTap = true;
+    }
+
+    const dir = kbDir || tapDir;
     player.vx = dir * PLAYER_SPEED;
     if (dir !== 0) player.facing = dir;
 
@@ -609,18 +588,16 @@ function update(dt) {
     }
     wantJump = false;
 
-    // Bubble
-    if (wantBubble || keys['z'] || keys['x']) {
+    // Bubble — fires on every tap, or keyboard z/x
+    if (didTap || keys['z'] || keys['x']) {
       if (player.blowing <= 0) {
         createBubble(player.x + player.facing * 20, player.y - player.h / 2, player.facing);
-        player.blowing = 0.25;
+        player.blowing = 0.15;
         sfxBubbleBlow();
       }
-      wantBubble = false;
       keys['z'] = false;
       keys['x'] = false;
     }
-    wantBubble = false;
 
     // Physics
     player.vy += GRAVITY * dt;
