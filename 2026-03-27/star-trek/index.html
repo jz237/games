@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Star Trek — Classic Reborn</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{position:fixed;overflow:hidden;overscroll-behavior:none;width:100%;height:100%;background:#000;font-family:'Courier New',monospace;color:#ff9900;touch-action:none;user-select:none}
+#game-container{width:100%;height:100%;display:flex;flex-direction:column}
+#canvas-wrap{flex:1;position:relative;overflow:hidden}
+canvas{display:block;width:100%;height:100%}
+button{touch-action:manipulation;cursor:pointer;border:none;outline:none;font-family:'Courier New',monospace;font-weight:bold;font-size:12px;padding:6px 10px;border-radius:8px 0 8px 0;color:#000;background:#ff9900;transition:background .15s}
+button:active{background:#ffcc00}
+button.danger{background:#cc3333;color:#fff}
+button.blue{background:#5599ff;color:#000}
+button.green{background:#33cc66;color:#000}
+#ui-panel{background:linear-gradient(180deg,#1a0a00 0%,#0d0500 100%);border-top:3px solid #ff9900;padding:6px;display:flex;flex-direction:column;gap:4px;max-height:45vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.ui-row{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.stat-box{background:#1a0800;border:1px solid #663300;border-radius:6px 0 6px 0;padding:3px 6px;font-size:10px;color:#ff9900;white-space:nowrap}
+.stat-box .label{color:#996633;font-size:8px;display:block}
+.stat-box .value{font-size:13px;font-weight:bold}
+.condition-GREEN .value{color:#33ff66}
+.condition-YELLOW .value{color:#ffff33}
+.condition-RED .value{color:#ff3333;animation:blink 0.5s infinite}
+.condition-DOCKED .value{color:#66ccff}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+.controls{display:flex;gap:4px;flex-wrap:wrap;justify-content:center}
+.nav-grid{display:grid;grid-template-columns:repeat(3,40px);grid-template-rows:repeat(3,34px);gap:2px}
+.nav-grid button{font-size:14px;padding:0;display:flex;align-items:center;justify-content:center}
+.msg-log{background:#0a0500;border:1px solid #331a00;border-radius:4px;padding:4px;font-size:9px;color:#cc8833;max-height:60px;overflow-y:auto;line-height:1.3}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:100;flex-direction:column;padding:20px}
+.overlay-box{background:#1a0a00;border:2px solid #ff9900;border-radius:12px 0 12px 0;padding:20px;max-width:360px;width:90%;text-align:center}
+.overlay-box h2{color:#ff9900;margin-bottom:10px;font-size:18px}
+.overlay-box p{color:#cc8833;font-size:12px;margin-bottom:8px}
+.overlay-box input{background:#0a0500;border:1px solid #ff9900;color:#ff9900;font-family:inherit;font-size:16px;padding:6px;width:80px;text-align:center;text-transform:uppercase;border-radius:4px}
+.overlay-box button{margin:6px}
+.slider-wrap{display:flex;align-items:center;gap:6px;margin:8px 0}
+.slider-wrap input[type=range]{flex:1;accent-color:#ff9900}
+.slider-wrap .sv{color:#ffcc00;font-size:14px;min-width:40px;text-align:right}
+.lrs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin:8px auto;max-width:200px}
+.lrs-cell{background:#0a0500;border:1px solid #663300;padding:6px;text-align:center;font-size:14px;color:#66ccff;font-weight:bold;border-radius:4px}
+.lrs-cell.current{border-color:#ff9900;background:#1a0a00}
+.lrs-cell.unknown{color:#444}
+.hs-list{text-align:left;font-size:11px;color:#cc8833;margin:8px 0}
+.hs-list div{padding:2px 0}
+.floating-text{position:absolute;pointer-events:none;font-weight:bold;font-size:14px;color:#ffcc00;text-shadow:0 0 8px #ff9900;animation:floatUp 2s forwards;white-space:nowrap;z-index:50}
+@keyframes floatUp{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-40px)}}
+</style>
+</head>
+<body>
+<div id="game-container">
+<div id="canvas-wrap"><canvas id="c"></canvas></div>
+<div id="ui-panel" class="ui-panel">
+<div class="ui-row" id="status-row"></div>
+<div class="ui-row controls" id="ctrl-row"></div>
+<div class="msg-log" id="msg-log"></div>
+</div>
+</div>
+<script>
+'use strict';
+// ===================== AUDIO =====================
+let audioCtx=null,audioUnlocked=false;
+function unlockAudio(){if(audioUnlocked)return;try{audioCtx=new(window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();audioUnlocked=true}catch(e){}}
+function playSound(type){if(!audioCtx)return;try{const now=audioCtx.currentTime;const g=audioCtx.createGain();g.connect(audioCtx.destination);
+if(type==='phaser'){const o=audioCtx.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(800,now);o.frequency.exponentialRampToValueAtTime(200,now+0.4);g.gain.setValueAtTime(0.15,now);g.gain.exponentialRampToValueAtTime(0.001,now+0.4);o.connect(g);o.start(now);o.stop(now+0.4)}
+else if(type==='torpedo'){const o=audioCtx.createOscillator();o.type='sine';o.frequency.setValueAtTime(1200,now);o.frequency.exponentialRampToValueAtTime(100,now+0.6);g.gain.setValueAtTime(0.12,now);g.gain.exponentialRampToValueAtTime(0.001,now+0.6);o.connect(g);o.start(now);o.stop(now+0.6)}
+else if(type==='explosion'){const buf=audioCtx.createBufferSource();const b=audioCtx.createBuffer(1,audioCtx.sampleRate*0.5,audioCtx.sampleRate);const d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(audioCtx.sampleRate*0.15));buf.buffer=b;g.gain.setValueAtTime(0.25,now);buf.connect(g);buf.start(now)}
+else if(type==='warp'){const o=audioCtx.createOscillator();o.type='sine';o.frequency.setValueAtTime(100,now);o.frequency.exponentialRampToValueAtTime(2000,now+0.5);o.frequency.exponentialRampToValueAtTime(100,now+0.8);g.gain.setValueAtTime(0.1,now);g.gain.exponentialRampToValueAtTime(0.001,now+0.8);o.connect(g);o.start(now);o.stop(now+0.8)}
+else if(type==='redalert'){const o=audioCtx.createOscillator();o.type='square';o.frequency.setValueAtTime(880,now);g.gain.setValueAtTime(0.08,now);for(let i=0;i<6;i++){g.gain.setValueAtTime(0.08,now+i*0.2);g.gain.setValueAtTime(0,now+i*0.2+0.1)}o.connect(g);o.start(now);o.stop(now+1.2)}
+else if(type==='dock'){const o1=audioCtx.createOscillator();const o2=audioCtx.createOscillator();o1.type='sine';o2.type='sine';o1.frequency.value=440;o2.frequency.value=554;g.gain.setValueAtTime(0.08,now);g.gain.exponentialRampToValueAtTime(0.001,now+1);o1.connect(g);o2.connect(g);o1.start(now);o2.start(now);o1.stop(now+1);o2.stop(now+1)}
+}catch(e){}}
+
+// ===================== CONSTANTS =====================
+const QUADRANT_NAMES=["Antares","Rigel","Procyon","Vega","Canopus","Aldebaran","Altair","Sagittarius","Pollux","Sirius","Deneb","Capella","Betelgeuse","Fomalhaut","Arcturus","Regulus","Spica","Castor","Achernar","Polaris","Mizar","Alcor","Elnath","Mintaka","Bellatrix","Alnilam","Alnitak","Saiph","Naos","Wezen","Adhara","Aludra","Mirzam","Phact","Arneb","Nihal","Hadar","Menkent","Nunki","Ascella","Kaus","Shaula","Sargas","Dschubba","Acrab","Zuben","Unukalhai","Rasalhague","Cebalrai","Yed","Sabik","Marfik","Graffias","Kornephoros","Rutilicus","Sarin","Maasym","Rasalgethi","Kajam","Cujam","Gianfar","Thuban","Eltanin","Rastaban"];
+const SYSTEM_NAMES=["Warp Engines","Short Range Sensors","Long Range Sensors","Phasers","Photon Torpedoes","Damage Control","Shield Control","Computer"];
+const HS_KEY='startrek_highscores';
+
+// ===================== GAME STATE =====================
+let galaxy=[],visited=[],enterprise={},klingonsTotal=0,starbasesTotal=0,stardateStart=0,stardateEnd=0,stardate=0,gameOver=false,gameWon=false,score=0;
+let currentQuadKlingons=[],currentQuadStars=[],currentQuadBases=[];
+let animations=[],floatingTexts=[];
+let mode='play'; // play, nav, phaser, torpedo, shields, lrs, gameover
+let navDir=-1;
+
+// Canvas
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let W=0,H=0,dpr=1,cellW=0,cellH=0,gridX=0,gridY=0,gridSize=0;
+
+// ===================== INIT =====================
+function initGame(){
+  galaxy=[];visited=[];animations=[];floatingTexts=[];gameOver=false;gameWon=false;score=0;mode='play';navDir=-1;
+  klingonsTotal=15+Math.floor(Math.random()*6);
+  starbasesTotal=3+Math.floor(Math.random()*3);
+  stardateStart=2400+Math.floor(Math.random()*100);
+  stardate=stardateStart;
+  stardateEnd=stardateStart+25+Math.floor(Math.random()*10);
+  // Build galaxy
+  let kLeft=klingonsTotal,bLeft=starbasesTotal;
+  for(let qr=0;qr<8;qr++){galaxy[qr]=[];visited[qr]=[];for(let qc=0;qc<8;qc++){
+    let k=0,b=0,s=1+Math.floor(Math.random()*5);
+    if(kLeft>0){k=Math.min(kLeft,Math.random()<0.3?0:1+Math.floor(Math.random()*3));kLeft-=k}
+    if(bLeft>0&&Math.random()<0.15){b=1;bLeft--}
+    galaxy[qr][qc]={k,b,s};visited[qr][qc]=false;
+  }}
+  // Distribute remaining
+  while(kLeft>0){let r=Math.floor(Math.random()*8),c=Math.floor(Math.random()*8);galaxy[r][c].k++;kLeft--}
+  while(bLeft>0){let r=Math.floor(Math.random()*8),c=Math.floor(Math.random()*8);if(galaxy[r][c].b===0){galaxy[r][c].b=1;bLeft--}}
+  // Enterprise
+  enterprise={qr:Math.floor(Math.random()*8),qc:Math.floor(Math.random()*8),sr:Math.floor(Math.random()*8),sc:Math.floor(Math.random()*8),energy:3000,shields:0,torpedoes:10,damage:new Array(8).fill(0),heading:0};
+  enterQuadrant();
+  addMsg("USS ENTERPRISE — STARDATE "+stardate);
+  addMsg("MISSION: DESTROY "+klingonsTotal+" KLINGON WARSHIPS");
+  addMsg("TIME LIMIT: STARDATE "+stardateEnd);
+}
+
+function enterQuadrant(){
+  const q=galaxy[enterprise.qr][enterprise.qc];
+  visited[enterprise.qr][enterprise.qc]=true;
+  currentQuadKlingons=[];currentQuadStars=[];currentQuadBases=[];
+  // Place objects avoiding enterprise position
+  const occupied=new Set();
+  occupied.add(enterprise.sr+','+enterprise.sc);
+  function findEmpty(){let r,c,tries=0;do{r=Math.floor(Math.random()*8);c=Math.floor(Math.random()*8);tries++}while(occupied.has(r+','+c)&&tries<100);occupied.add(r+','+c);return{r,c}}
+  for(let i=0;i<q.k;i++){const p=findEmpty();currentQuadKlingons.push({r:p.r,c:p.c,power:100+Math.floor(Math.random()*201)})}
+  for(let i=0;i<q.b;i++){const p=findEmpty();currentQuadBases.push({r:p.r,c:p.c})}
+  for(let i=0;i<q.s;i++){const p=findEmpty();currentQuadStars.push({r:p.r,c:p.c})}
+  if(currentQuadKlingons.length>0){playSound('redalert');addFloating("RED ALERT",'#ff3333')}
+  checkDock();
+}
+
+// ===================== GAME LOGIC =====================
+function getCondition(){
+  if(isDocked())return'DOCKED';
+  if(currentQuadKlingons.length>0)return'RED';
+  // Check adjacent quadrants for klingons
+  for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+    const r=enterprise.qr+dr,c=enterprise.qc+dc;
+    if(r>=0&&r<8&&c>=0&&c<8&&galaxy[r][c].k>0)return'YELLOW';
+  }
+  return'GREEN';
+}
+function isDocked(){
+  for(const b of currentQuadBases){
+    if(Math.abs(b.r-enterprise.sr)<=1&&Math.abs(b.c-enterprise.sc)<=1)return true;
+  }return false;
+}
+function checkDock(){
+  if(isDocked()){
+    enterprise.energy=3000;enterprise.torpedoes=10;enterprise.shields=0;
+    for(let i=0;i<8;i++)enterprise.damage[i]=0;
+    playSound('dock');addMsg("DOCKED AT STARBASE — ALL SYSTEMS RESTORED");addFloating("DOCKED",'#66ccff');
+  }
+}
+function advanceStardate(){
+  stardate++;
+  // Repair
+  for(let i=0;i<8;i++){if(enterprise.damage[i]>0)enterprise.damage[i]=Math.max(0,enterprise.damage[i]-1)}
+  if(stardate>=stardateEnd){gameOver=true;addMsg("TIME HAS RUN OUT!");endGame(false)}
+  if(enterprise.energy<=0&&!isDocked()){gameOver=true;addMsg("ENTERPRISE OUT OF ENERGY!");endGame(false)}
+}
+function klingonsFire(){
+  for(const k of currentQuadKlingons){
+    const dist=Math.sqrt((k.r-enterprise.sr)**2+(k.c-enterprise.sc)**2);
+    let dmg=Math.floor(k.power*(1/(dist+0.5))*(0.5+Math.random()*0.5));
+    if(enterprise.shields>0){
+      const absorbed=Math.min(enterprise.shields,dmg);
+      enterprise.shields-=absorbed;dmg-=absorbed;
+      if(absorbed>0){addMsg("SHIELDS ABSORBED "+absorbed+" UNITS");addAnim('shieldhit',10)}
+    }
+    if(dmg>0){
+      enterprise.energy-=dmg;
+      addMsg("KLINGON HIT — "+dmg+" DAMAGE");
+      // Random system damage
+      if(Math.random()<0.3){const sys=Math.floor(Math.random()*8);enterprise.damage[sys]+=1+Math.floor(Math.random()*3);addMsg(SYSTEM_NAMES[sys]+" DAMAGED");addFloating("ENTERPRISE DAMAGED",'#ff6633')}
+    }
+    if(enterprise.energy<=0){gameOver=true;addMsg("ENTERPRISE DESTROYED!");endGame(false);return}
+  }
+}
+function countKlingonsRemaining(){
+  let t=0;for(let r=0;r<8;r++)for(let c=0;c<8;c++)t+=galaxy[r][c].k;return t;
+}
+
+// Navigation
+function doNav(dir,warp){
+  if(enterprise.damage[0]>0&&warp>0.2){addMsg("WARP ENGINES DAMAGED — MAX WARP 0.2");return}
+  const angles=[null,5.497787,4.712389,3.926991,3.141593,null,0,2.356194,1.570796,0.785398];
+  if(!angles[dir]&&dir!==5){addMsg("INVALID DIRECTION");return}
+  if(dir===5){addMsg("STAYING PUT");advanceStardate();if(currentQuadKlingons.length>0)klingonsFire();return}
+  const angle=angles[dir];
+  const dx=Math.cos(angle),dy=-Math.sin(angle);
+  enterprise.heading=angle;
+  if(warp>=1){
+    // Quadrant movement
+    const cost=Math.floor(warp*warp*10+10);
+    if(cost>enterprise.energy){addMsg("INSUFFICIENT ENERGY FOR WARP "+warp);return}
+    enterprise.energy-=cost;
+    const dist=Math.round(warp);
+    let nqr=enterprise.qr+Math.round(dy*dist),nqc=enterprise.qc+Math.round(dx*dist);
+    nqr=Math.max(0,Math.min(7,nqr));nqc=Math.max(0,Math.min(7,nqc));
+    enterprise.qr=nqr;enterprise.qc=nqc;enterprise.sr=Math.floor(Math.random()*8);enterprise.sc=Math.floor(Math.random()*8);
+    playSound('warp');addMsg("WARP "+warp+" TO "+getQuadName(nqr,nqc));addFloating("COURSE SET",'#ffcc00');
+    enterQuadrant();
+  } else {
+    // Impulse within quadrant
+    const cost=100;
+    if(cost>enterprise.energy){addMsg("INSUFFICIENT ENERGY");return}
+    enterprise.energy-=cost;
+    let nr=Math.round(enterprise.sr+dy*warp*8),nc=Math.round(enterprise.sc+dx*warp*8);
+    nr=Math.max(0,Math.min(7,nr));nc=Math.max(0,Math.min(7,nc));
+    // Check collision with star
+    for(const s of currentQuadStars){if(s.r===nr&&s.c===nc){addMsg("BLOCKED BY STAR");nr=enterprise.sr;nc=enterprise.sc;break}}
+    enterprise.sr=nr;enterprise.sc=nc;
+    addMsg("IMPULSE MOVE TO SECTOR "+nr+","+nc);
+    checkDock();
+  }
+  advanceStardate();
+  if(!gameOver&&currentQuadKlingons.length>0)klingonsFire();
+}
+
+function doPhasers(energy){
+  if(enterprise.damage[3]>0){addMsg("PHASERS DAMAGED");return}
+  if(energy>enterprise.energy){addMsg("INSUFFICIENT ENERGY");return}
+  if(currentQuadKlingons.length===0){addMsg("NO KLINGONS IN QUADRANT");return}
+  enterprise.energy-=energy;
+  playSound('phaser');addAnim('phaser',20);
+  const share=Math.floor(energy/currentQuadKlingons.length);
+  const toRemove=[];
+  for(let i=0;i<currentQuadKlingons.length;i++){
+    const k=currentQuadKlingons[i];
+    const dist=Math.sqrt((k.r-enterprise.sr)**2+(k.c-enterprise.sc)**2);
+    const dmg=Math.floor(share*(1/(dist+0.5))*(0.5+Math.random()));
+    k.power-=dmg;
+    addMsg("HIT KLINGON AT "+k.r+","+k.c+" — "+dmg+" DAMAGE");
+    if(k.power<=0){toRemove.push(i);addMsg("KLINGON DESTROYED!");addFloating("KLINGON DESTROYED",'#ff3333');playSound('explosion');addAnim('explosion',15,k);
+      galaxy[enterprise.qr][enterprise.qc].k--;score+=100;
+    }
+  }
+  for(let i=toRemove.length-1;i>=0;i--)currentQuadKlingons.splice(toRemove[i],1);
+  if(countKlingonsRemaining()===0){gameOver=true;gameWon=true;addMsg("ALL KLINGONS DESTROYED!");endGame(true);return}
+  advanceStardate();
+  if(!gameOver&&currentQuadKlingons.length>0)klingonsFire();
+}
+
+function doTorpedo(dir){
+  if(enterprise.damage[4]>0){addMsg("TORPEDO SYSTEM DAMAGED");return}
+  if(enterprise.torpedoes<=0){addMsg("NO TORPEDOES REMAINING");return}
+  enterprise.torpedoes--;
+  playSound('torpedo');
+  const angles=[null,5.497787,4.712389,3.926991,3.141593,null,0,2.356194,1.570796,0.785398];
+  if(!angles[dir]){addMsg("TORPEDO MISSED");advanceStardate();if(currentQuadKlingons.length>0)klingonsFire();return}
+  const angle=angles[dir];
+  const dx=Math.cos(angle),dy=-Math.sin(angle);
+  let tr=enterprise.sr,tc=enterprise.sc;
+  addAnim('torpedo',20,{angle});
+  let hit=false;
+  for(let step=1;step<=8;step++){
+    tr=Math.round(enterprise.sr+dy*step);tc=Math.round(enterprise.sc+dx*step);
+    if(tr<0||tr>7||tc<0||tc>7)break;
+    for(let i=0;i<currentQuadKlingons.length;i++){
+      const k=currentQuadKlingons[i];
+      if(k.r===tr&&k.c===tc){
+        addMsg("TORPEDO HIT KLINGON AT "+tr+","+tc);
+        k.power-=300;
+        if(k.power<=0){currentQuadKlingons.splice(i,1);galaxy[enterprise.qr][enterprise.qc].k--;score+=100;
+          addMsg("KLINGON DESTROYED!");addFloating("KLINGON DESTROYED",'#ff3333');playSound('explosion');addAnim('explosion',15,{r:tr,c:tc})}
+        hit=true;break;
+      }
+    }
+    if(hit)break;
+    for(const s of currentQuadStars){if(s.r===tr&&s.c===tc){addMsg("TORPEDO HIT STAR AT "+tr+","+tc);hit=true;break}}
+    if(hit)break;
+    for(let i=0;i<currentQuadBases.length;i++){
+      if(currentQuadBases[i].r===tr&&currentQuadBases[i].c===tc){
+        addMsg("TORPEDO DESTROYED STARBASE!");currentQuadBases.splice(i,1);galaxy[enterprise.qr][enterprise.qc].b--;starbasesTotal--;hit=true;break}
+    }
+    if(hit)break;
+  }
+  if(!hit)addMsg("TORPEDO MISSED");
+  if(countKlingonsRemaining()===0){gameOver=true;gameWon=true;addMsg("ALL KLINGONS DESTROYED!");endGame(true);return}
+  advanceStardate();
+  if(!gameOver&&currentQuadKlingons.length>0)klingonsFire();
+}
+
+function doShields(amount){
+  const total=enterprise.energy+enterprise.shields;
+  const s=Math.min(amount,total);
+  enterprise.shields=s;enterprise.energy=total-s;
+  addMsg("SHIELDS SET TO "+s);addFloating("SHIELDS UP",'#5599ff');
+}
+
+function endGame(won){
+  gameOver=true;gameWon=won;mode='gameover';
+  if(won){score+=Math.max(0,(stardateEnd-stardate))*50;score+=starbasesTotal*200}
+}
+
+function getQuadName(r,c){return QUADRANT_NAMES[(r*8+c)%QUADRANT_NAMES.length]}
+
+// ===================== MESSAGES =====================
+const msgLog=document.getElementById('msg-log');
+let messages=[];
+function addMsg(m){messages.push(m);if(messages.length>50)messages.shift();msgLog.innerHTML=messages.map(s=>'<div>'+s+'</div>').join('');msgLog.scrollTop=msgLog.scrollHeight}
+
+// ===================== FLOATING TEXT =====================
+function addFloating(text,color){
+  const el=document.createElement('div');el.className='floating-text';el.textContent=text;el.style.color=color||'#ffcc00';
+  el.style.left=(W/2-60)+'px';el.style.top=(H*0.3)+'px';
+  document.getElementById('canvas-wrap').appendChild(el);
+  setTimeout(()=>el.remove(),2000);
+}
+
+// ===================== ANIMATIONS =====================
+function addAnim(type,dur,data){animations.push({type,frame:0,dur,data:data||{}})}
+
+// ===================== CANVAS DRAWING =====================
+function resize(){
+  dpr=window.devicePixelRatio||1;
+  const wrap=document.getElementById('canvas-wrap');
+  W=wrap.clientWidth;H=wrap.clientHeight;
+  canvas.width=W*dpr;canvas.height=H*dpr;
+  canvas.style.width=W+'px';canvas.style.height=H+'px';
+  gridSize=Math.min(W,H)*0.92;cellW=gridSize/8;cellH=gridSize/8;
+  gridX=(W-gridSize)/2;gridY=(H-gridSize)/2;
+}
+
+let bgStars=[];
+function initBgStars(){bgStars=[];for(let i=0;i<120;i++)bgStars.push({x:Math.random(),y:Math.random(),s:Math.random()*2+0.5,b:Math.random(),sp:0.3+Math.random()*0.7,phase:Math.random()*Math.PI*2})}
+
+let frameCount=0;
+function draw(){
+  frameCount++;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+
+  // Deep space background
+  const bgGrad=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,W);
+  bgGrad.addColorStop(0,'#0a0520');bgGrad.addColorStop(0.5,'#050210');bgGrad.addColorStop(1,'#000005');
+  ctx.fillStyle=bgGrad;ctx.fillRect(0,0,W,H);
+
+  // Nebula
+  const t=frameCount*0.005;
+  for(let i=0;i<3;i++){
+    const nx=W*(0.3+0.4*Math.sin(t+i*2)),ny=H*(0.3+0.4*Math.cos(t*0.7+i*3));
+    const ng=ctx.createRadialGradient(nx,ny,0,nx,ny,W*0.3);
+    const colors=[['rgba(80,20,120,0.03)','rgba(80,20,120,0)'],['rgba(20,60,120,0.025)','rgba(20,60,120,0)'],['rgba(20,100,100,0.02)','rgba(20,100,100,0)']];
+    ng.addColorStop(0,colors[i][0]);ng.addColorStop(1,colors[i][1]);
+    ctx.fillStyle=ng;ctx.fillRect(0,0,W,H);
+  }
+
+  // Stars
+  for(const s of bgStars){
+    const twinkle=0.5+0.5*Math.sin(frameCount*0.03*s.sp+s.phase);
+    ctx.fillStyle=`rgba(255,255,255,${(s.b*0.6+0.2)*twinkle})`;
+    ctx.beginPath();ctx.arc(s.x*W,s.y*H,s.s*dpr/dpr,0,Math.PI*2);ctx.fill();
+  }
+
+  // Grid
+  ctx.strokeStyle='rgba(0,180,255,0.15)';ctx.lineWidth=0.5;
+  for(let i=0;i<=8;i++){
+    ctx.beginPath();ctx.moveTo(gridX+i*cellW,gridY);ctx.lineTo(gridX+i*cellW,gridY+gridSize);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(gridX,gridY+i*cellH);ctx.lineTo(gridX+gridSize,gridY+i*cellH);ctx.stroke();
+  }
+  // Grid glow
+  ctx.strokeStyle='rgba(0,180,255,0.06)';ctx.lineWidth=3;
+  for(let i=0;i<=8;i++){
+    ctx.beginPath();ctx.moveTo(gridX+i*cellW,gridY);ctx.lineTo(gridX+i*cellW,gridY+gridSize);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(gridX,gridY+i*cellH);ctx.lineTo(gridX+gridSize,gridY+i*cellH);ctx.stroke();
+  }
+
+  // Draw objects
+  for(const s of currentQuadStars)drawStar(s.c,s.r);
+  for(const b of currentQuadBases)drawBase(b.c,b.r);
+  for(const k of currentQuadKlingons)drawKlingon(k.c,k.r);
+  drawEnterprise(enterprise.sc,enterprise.sr);
+
+  // Animations
+  for(let i=animations.length-1;i>=0;i--){
+    const a=animations[i];a.frame++;
+    if(a.type==='phaser')drawPhaserAnim(a);
+    else if(a.type==='explosion')drawExplosionAnim(a);
+    else if(a.type==='torpedo')drawTorpedoAnim(a);
+    else if(a.type==='shieldhit')drawShieldHitAnim(a);
+    if(a.frame>=a.dur)animations.splice(i,1);
+  }
+
+  requestAnimationFrame(draw);
+}
+
+function cellCX(c){return gridX+c*cellW+cellW/2}
+function cellCY(r){return gridY+r*cellH+cellH/2}
+
+function drawEnterprise(c,r){
+  const cx=cellCX(c),cy=cellCY(r),sz=cellW*0.35;
+  ctx.save();ctx.translate(cx,cy);
+  // Glow
+  const gl=ctx.createRadialGradient(0,0,0,0,0,sz*2);
+  gl.addColorStop(0,'rgba(100,180,255,0.15)');gl.addColorStop(1,'rgba(100,180,255,0)');
+  ctx.fillStyle=gl;ctx.beginPath();ctx.arc(0,0,sz*2,0,Math.PI*2);ctx.fill();
+  // Saucer
+  ctx.fillStyle='#aaccff';ctx.beginPath();ctx.arc(0,-sz*0.2,sz*0.45,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#6699cc';ctx.beginPath();ctx.arc(0,-sz*0.2,sz*0.3,0,Math.PI*2);ctx.fill();
+  // Secondary hull
+  ctx.fillStyle='#8899bb';ctx.beginPath();ctx.ellipse(0,sz*0.3,sz*0.15,sz*0.4,0,0,Math.PI*2);ctx.fill();
+  // Nacelles
+  ctx.fillStyle='#88aadd';
+  ctx.fillRect(-sz*0.55,0,sz*0.12,sz*0.5);
+  ctx.fillRect(sz*0.43,0,sz*0.12,sz*0.5);
+  // Nacelle glow
+  ctx.fillStyle=`rgba(100,200,255,${0.5+0.3*Math.sin(frameCount*0.1)})`;
+  ctx.fillRect(-sz*0.55,sz*0.4,sz*0.12,sz*0.12);
+  ctx.fillRect(sz*0.43,sz*0.4,sz*0.12,sz*0.12);
+  // Pylons
+  ctx.strokeStyle='#7799bb';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(-sz*0.15,sz*0.1);ctx.lineTo(-sz*0.49,sz*0.2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(sz*0.15,sz*0.1);ctx.lineTo(sz*0.49,sz*0.2);ctx.stroke();
+  ctx.restore();
+}
+
+function drawKlingon(c,r){
+  const cx=cellCX(c),cy=cellCY(r),sz=cellW*0.35;
+  ctx.save();ctx.translate(cx,cy);
+  // Glow
+  const gl=ctx.createRadialGradient(0,0,0,0,0,sz*2);
+  gl.addColorStop(0,'rgba(255,50,50,0.12)');gl.addColorStop(1,'rgba(255,50,50,0)');
+  ctx.fillStyle=gl;ctx.beginPath();ctx.arc(0,0,sz*2,0,Math.PI*2);ctx.fill();
+  // Forward hull
+  ctx.fillStyle='#44aa44';ctx.beginPath();ctx.moveTo(0,-sz*0.5);ctx.lineTo(-sz*0.12,sz*0.1);ctx.lineTo(sz*0.12,sz*0.1);ctx.fill();
+  // Wings
+  ctx.fillStyle='#338833';
+  ctx.beginPath();ctx.moveTo(-sz*0.1,0);ctx.lineTo(-sz*0.7,sz*0.5);ctx.lineTo(-sz*0.5,sz*0.55);ctx.lineTo(-sz*0.05,sz*0.15);ctx.fill();
+  ctx.beginPath();ctx.moveTo(sz*0.1,0);ctx.lineTo(sz*0.7,sz*0.5);ctx.lineTo(sz*0.5,sz*0.55);ctx.lineTo(sz*0.05,sz*0.15);ctx.fill();
+  // Wing tips glow
+  ctx.fillStyle=`rgba(255,80,80,${0.4+0.3*Math.sin(frameCount*0.08)})`;
+  ctx.beginPath();ctx.arc(-sz*0.6,sz*0.5,sz*0.08,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(sz*0.6,sz*0.5,sz*0.08,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+}
+
+function drawBase(c,r){
+  const cx=cellCX(c),cy=cellCY(r),sz=cellW*0.3;
+  ctx.save();ctx.translate(cx,cy);
+  // Glow
+  const gl=ctx.createRadialGradient(0,0,0,0,0,sz*2.5);
+  gl.addColorStop(0,'rgba(100,200,255,0.1)');gl.addColorStop(1,'rgba(100,200,255,0)');
+  ctx.fillStyle=gl;ctx.beginPath();ctx.arc(0,0,sz*2.5,0,Math.PI*2);ctx.fill();
+  // Hexagon
+  ctx.strokeStyle='#66ccff';ctx.lineWidth=2;ctx.fillStyle='rgba(30,80,120,0.5)';
+  ctx.beginPath();for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/2;ctx.lineTo(Math.cos(a)*sz,Math.sin(a)*sz)}ctx.closePath();ctx.fill();ctx.stroke();
+  // Docking arms
+  ctx.strokeStyle='rgba(100,200,255,0.5)';ctx.lineWidth=1;
+  for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/2;ctx.beginPath();ctx.moveTo(Math.cos(a)*sz,Math.sin(a)*sz);ctx.lineTo(Math.cos(a)*sz*1.5,Math.sin(a)*sz*1.5);ctx.stroke()}
+  // Center
+  ctx.fillStyle=`rgba(150,220,255,${0.5+0.3*Math.sin(frameCount*0.06)})`;
+  ctx.beginPath();ctx.arc(0,0,sz*0.2,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+}
+
+function drawStar(c,r){
+  const cx=cellCX(c),cy=cellCY(r),sz=cellW*0.12;
+  const bright=0.7+0.3*Math.sin(frameCount*0.04+c*3+r*7);
+  ctx.save();ctx.translate(cx,cy);
+  // Halo cross
+  ctx.strokeStyle=`rgba(255,255,200,${bright*0.3})`;ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(-sz*2,0);ctx.lineTo(sz*2,0);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,-sz*2);ctx.lineTo(0,sz*2);ctx.stroke();
+  // Core
+  const g=ctx.createRadialGradient(0,0,0,0,0,sz);
+  g.addColorStop(0,`rgba(255,255,240,${bright})`);g.addColorStop(1,'rgba(255,255,200,0)');
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,sz,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=`rgba(255,255,255,${bright})`;ctx.beginPath();ctx.arc(0,0,sz*0.3,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+}
+
+function drawPhaserAnim(a){
+  const p=a.frame/a.dur;
+  const ecx=cellCX(enterprise.sc),ecy=cellCY(enterprise.sr);
+  ctx.globalAlpha=1-p;
+  for(const k of currentQuadKlingons){
+    const kx=cellCX(k.c),ky=cellCY(k.r);
+    ctx.strokeStyle=`rgba(255,200,50,${0.8-p*0.8})`;ctx.lineWidth=2+3*(1-p);
+    ctx.beginPath();ctx.moveTo(ecx,ecy);ctx.lineTo(kx,ky);ctx.stroke();
+    // Impact flash
+    ctx.fillStyle=`rgba(255,200,50,${0.5*(1-p)})`;ctx.beginPath();ctx.arc(kx,ky,cellW*0.2*(1-p),0,Math.PI*2);ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+function drawExplosionAnim(a){
+  const p=a.frame/a.dur;
+  const d=a.data;
+  const cx=d.r!==undefined?cellCX(d.c):cellCX(enterprise.sc);
+  const cy=d.r!==undefined?cellCY(d.r):cellCY(enterprise.sr);
+  const maxR=cellW*0.8;
+  // Shockwave ring
+  ctx.strokeStyle=`rgba(255,150,50,${1-p})`;ctx.lineWidth=3*(1-p);
+  ctx.beginPath();ctx.arc(cx,cy,maxR*p,0,Math.PI*2);ctx.stroke();
+  // Particles
+  for(let i=0;i<12;i++){
+    const angle=Math.PI*2*i/12;const dist=maxR*p*(0.5+Math.random()*0.5);
+    ctx.fillStyle=`rgba(255,${100+Math.floor(Math.random()*100)},50,${1-p})`;
+    ctx.beginPath();ctx.arc(cx+Math.cos(angle)*dist,cy+Math.sin(angle)*dist,2*(1-p),0,Math.PI*2);ctx.fill();
+  }
+}
+
+function drawTorpedoAnim(a){
+  const p=a.frame/a.dur;
+  const ecx=cellCX(enterprise.sc),ecy=cellCY(enterprise.sr);
+  const angle=a.data.angle||0;
+  const dx=Math.cos(angle)*gridSize*0.5*p,dy=-Math.sin(angle)*gridSize*0.5*p;
+  const tx=ecx+dx,ty=ecy+dy;
+  ctx.fillStyle=`rgba(255,100,100,${1-p*0.5})`;ctx.beginPath();ctx.arc(tx,ty,3,0,Math.PI*2);ctx.fill();
+  // Trail
+  ctx.strokeStyle=`rgba(255,100,100,${0.3*(1-p)})`;ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(ecx,ecy);ctx.lineTo(tx,ty);ctx.stroke();
+}
+
+function drawShieldHitAnim(a){
+  const p=a.frame/a.dur;
+  const cx=cellCX(enterprise.sc),cy=cellCY(enterprise.sr);
+  ctx.strokeStyle=`rgba(80,180,255,${0.8*(1-p)})`;ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(cx,cy,cellW*0.5+cellW*0.3*p,0,Math.PI*2);ctx.stroke();
+}
+
+// ===================== UI =====================
+function updateUI(){
+  const cond=getCondition();
+  const kRem=countKlingonsRemaining();
+  const timeRem=stardateEnd-stardate;
+  const qName=getQuadName(enterprise.qr,enterprise.qc);
+  document.getElementById('status-row').innerHTML=
+    `<div class="stat-box"><span class="label">STARDATE</span><span class="value">${stardate}</span></div>`+
+    `<div class="stat-box"><span class="label">TIME LEFT</span><span class="value">${timeRem}</span></div>`+
+    `<div class="stat-box condition-${cond}"><span class="label">CONDITION</span><span class="value">${cond}</span></div>`+
+    `<div class="stat-box"><span class="label">ENERGY</span><span class="value">${enterprise.energy}</span></div>`+
+    `<div class="stat-box"><span class="label">SHIELDS</span><span class="value">${enterprise.shields}</span></div>`+
+    `<div class="stat-box"><span class="label">TORPS</span><span class="value">${enterprise.torpedoes}</span></div>`+
+    `<div class="stat-box"><span class="label">KLINGONS</span><span class="value">${kRem}</span></div>`+
+    `<div class="stat-box"><span class="label">QUAD</span><span class="value">${qName}</span></div>`+
+    `<div class="stat-box"><span class="label">SECTOR</span><span class="value">${enterprise.sr},${enterprise.sc}</span></div>`;
+  updateControls();
+}
+
+function updateControls(){
+  const ctrl=document.getElementById('ctrl-row');
+  if(gameOver){
+    ctrl.innerHTML=`<button onclick="showGameOver()">RESULTS</button>`;return;
+  }
+  if(mode==='play'){
+    ctrl.innerHTML=
+      `<button onclick="setMode('nav')">NAV</button>`+
+      `<button class="danger" onclick="setMode('phaser')">PHASERS</button>`+
+      `<button class="danger" onclick="setMode('torpedo')">TORPEDO</button>`+
+      `<button class="blue" onclick="setMode('shields')">SHIELDS</button>`+
+      `<button class="green" onclick="setMode('lrs')">LRS</button>`+
+      (isDocked()?`<button class="green" onclick="checkDock()">DOCK</button>`:'');
+  } else if(mode==='nav'){
+    ctrl.innerHTML=`<div style="text-align:center"><div style="color:#cc8833;font-size:10px;margin-bottom:2px">DIRECTION:</div><div class="nav-grid">`+
+      `<button onclick="pickNav(7)">↖</button><button onclick="pickNav(8)">↑</button><button onclick="pickNav(9)">↗</button>`+
+      `<button onclick="pickNav(4)">←</button><button onclick="pickNav(5)">•</button><button onclick="pickNav(6)">→</button>`+
+      `<button onclick="pickNav(1)">↙</button><button onclick="pickNav(2)">↓</button><button onclick="pickNav(3)">↘</button>`+
+      `</div>`+
+      (navDir>=0?`<div class="slider-wrap"><span style="font-size:10px;color:#996633">WARP:</span><input type="range" min="1" max="8" step="1" value="1" id="warp-slider" oninput="document.getElementById('warp-val').textContent=this.value"><span class="sv" id="warp-val">1</span></div><button onclick="execNav()">ENGAGE</button>`:'') +
+      `<button style="margin-left:8px" onclick="setMode('play')">CANCEL</button></div>`;
+  } else if(mode==='phaser'){
+    ctrl.innerHTML=`<div style="text-align:center"><div style="color:#cc8833;font-size:10px">PHASER ENERGY:</div>`+
+      `<div class="slider-wrap"><input type="range" min="100" max="${Math.min(enterprise.energy,2000)}" step="100" value="500" id="phaser-slider" oninput="document.getElementById('phaser-val').textContent=this.value"><span class="sv" id="phaser-val">500</span></div>`+
+      `<button class="danger" onclick="execPhaser()">FIRE</button><button onclick="setMode('play')">CANCEL</button></div>`;
+  } else if(mode==='torpedo'){
+    ctrl.innerHTML=`<div style="text-align:center"><div style="color:#cc8833;font-size:10px;margin-bottom:2px">TORPEDO DIRECTION:</div><div class="nav-grid">`+
+      `<button onclick="execTorpedo(7)">↖</button><button onclick="execTorpedo(8)">↑</button><button onclick="execTorpedo(9)">↗</button>`+
+      `<button onclick="execTorpedo(4)">←</button><button onclick="setMode('play')">✕</button><button onclick="execTorpedo(6)">→</button>`+
+      `<button onclick="execTorpedo(1)">↙</button><button onclick="execTorpedo(2)">↓</button><button onclick="execTorpedo(3)">↘</button>`+
+      `</div></div>`;
+  } else if(mode==='shields'){
+    ctrl.innerHTML=`<div style="text-align:center"><div style="color:#cc8833;font-size:10px">SHIELD ENERGY:</div>`+
+      `<div class="slider-wrap"><input type="range" min="0" max="${enterprise.energy+enterprise.shields}" step="100" value="${enterprise.shields}" id="shield-slider" oninput="document.getElementById('shield-val').textContent=this.value"><span class="sv" id="shield-val">${enterprise.shields}</span></div>`+
+      `<button class="blue" onclick="execShields()">SET</button><button onclick="setMode('play')">CANCEL</button></div>`;
+  } else if(mode==='lrs'){
+    showLRS();
+  }
+}
+
+function setMode(m){mode=m;navDir=-1;updateUI()}
+
+function pickNav(dir){navDir=dir;updateControls()}
+function execNav(){const w=parseInt(document.getElementById('warp-slider')?.value||1);doNav(navDir,w);mode='play';updateUI()}
+function execPhaser(){const e=parseInt(document.getElementById('phaser-slider')?.value||500);doPhasers(e);mode='play';updateUI()}
+function execTorpedo(dir){doTorpedo(dir);mode='play';updateUI()}
+function execShields(){const s=parseInt(document.getElementById('shield-slider')?.value||0);doShields(s);mode='play';updateUI()}
+
+function showLRS(){
+  if(enterprise.damage[2]>0){addMsg("LONG RANGE SENSORS DAMAGED");mode='play';updateUI();return}
+  let html='<div style="text-align:center"><div style="color:#cc8833;font-size:10px;margin-bottom:4px">LONG RANGE SCAN</div><div class="lrs-grid">';
+  for(let dr=-1;dr<=1;dr++){for(let dc=-1;dc<=1;dc++){
+    const r=enterprise.qr+dr,c=enterprise.qc+dc;
+    const isCurrent=dr===0&&dc===0;
+    if(r<0||r>7||c<0||c>7){html+=`<div class="lrs-cell unknown">***</div>`}
+    else{
+      visited[r][c]=true;
+      const q=galaxy[r][c];
+      html+=`<div class="lrs-cell${isCurrent?' current':''}">${q.k}${q.b}${q.s}</div>`;
+    }
+  }}
+  html+='</div><button onclick="setMode(\'play\')">CLOSE</button></div>';
+  document.getElementById('ctrl-row').innerHTML=html;
+}
+
+function showGameOver(){
+  const overlay=document.createElement('div');overlay.className='overlay';overlay.id='go-overlay';
+  const hs=JSON.parse(localStorage.getItem(HS_KEY)||'[]');
+  const isHigh=hs.length<10||score>(hs[hs.length-1]?.score||0);
+  overlay.innerHTML=`<div class="overlay-box"><h2>${gameWon?'🖖 VICTORY!':'💥 GAME OVER'}</h2>`+
+    `<p>${gameWon?'All Klingons destroyed! The Federation is safe.':'The Enterprise has fallen...'}</p>`+
+    `<p style="font-size:16px;color:#ffcc00">SCORE: ${score}</p>`+
+    (isHigh?`<p>HIGH SCORE! Enter initials:</p><input id="hs-input" maxlength="3" value="AAA"><br><button onclick="saveHS()">SAVE</button>`:'') +
+    `<div class="hs-list" id="hs-display">${hs.map((h,i)=>`<div>${i+1}. ${h.name} — ${h.score}</div>`).join('')}</div>`+
+    `<button onclick="document.getElementById('go-overlay').remove();initGame();updateUI()">NEW GAME</button></div>`;
+  document.body.appendChild(overlay);
+}
+
+function saveHS(){
+  const name=(document.getElementById('hs-input')?.value||'AAA').toUpperCase().substring(0,3);
+  let hs=JSON.parse(localStorage.getItem(HS_KEY)||'[]');
+  hs.push({name,score});hs.sort((a,b)=>b.score-a.score);hs=hs.slice(0,10);
+  localStorage.setItem(HS_KEY,JSON.stringify(hs));
+  document.getElementById('hs-display').innerHTML=hs.map((h,i)=>`<div>${i+1}. ${h.name} — ${h.score}</div>`).join('');
+}
+
+// ===================== TOUCH =====================
+canvas.addEventListener('touchstart',(e)=>{
+  if(e.target.closest('button')||e.target.closest('.overlay')||e.target.closest('.ui-panel'))return;
+  e.preventDefault();unlockAudio();
+},{passive:false});
+document.addEventListener('touchstart',unlockAudio,{once:true,passive:true});
+document.addEventListener('click',unlockAudio,{once:true});
+
+// ===================== BOOT =====================
+window.addEventListener('resize',()=>{resize();updateUI()});
+resize();initBgStars();initGame();updateUI();draw();
+</script>
+</body>
+</html>
