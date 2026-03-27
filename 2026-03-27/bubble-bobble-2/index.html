@@ -1,0 +1,1954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bubble Bobble 2</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{position:fixed;overflow:hidden;overscroll-behavior:none;width:100%;height:100%;background:#000;font-family:'Segoe UI',Arial,sans-serif}
+canvas{display:block;touch-action:none}
+button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;background:rgba(0,0,20,0.92)}
+.overlay h1{font-size:clamp(28px,6vw,52px);color:#4f4;text-shadow:0 0 20px #0f0,0 0 40px #0a0;margin-bottom:10px;letter-spacing:2px}
+.overlay h2{font-size:clamp(16px,3vw,28px);color:#ff0;text-shadow:0 0 10px #fa0;margin-bottom:20px}
+.overlay p{color:#aef;font-size:clamp(12px,2.5vw,18px);margin:4px 0;text-align:center;max-width:90%}
+.overlay .controls-info{color:#8cf;font-size:clamp(11px,2vw,15px);margin:12px 0;line-height:1.6;text-align:center}
+.btn{background:linear-gradient(180deg,#5f5,#2a2);color:#fff;border:2px solid #8f8;border-radius:12px;padding:14px 40px;font-size:clamp(16px,3vw,24px);font-weight:bold;text-shadow:0 1px 2px #000;box-shadow:0 4px 15px rgba(0,255,0,0.3);margin:8px;transition:transform 0.1s}
+.btn:active{transform:scale(0.95)}
+.btn-small{padding:8px 20px;font-size:clamp(12px,2vw,16px)}
+#muteBtn{position:fixed;top:10px;right:10px;z-index:20;background:rgba(0,0,0,0.6);border:1px solid #fff4;color:#fff;border-radius:8px;padding:8px 12px;font-size:18px}
+#pauseBtn{position:fixed;top:10px;right:60px;z-index:20;background:rgba(0,0,0,0.6);border:1px solid #fff4;color:#fff;border-radius:8px;padding:8px 12px;font-size:14px}
+.score-entry{display:flex;align-items:center;gap:8px;margin:8px 0}
+.score-entry .letter-select{display:flex;flex-direction:column;align-items:center}
+.score-entry .letter-select button{background:#224;color:#ff0;border:1px solid #ff0;border-radius:6px;width:36px;height:30px;font-size:18px;font-weight:bold}
+.score-entry .letter-select span{font-size:28px;color:#ff0;font-weight:bold;margin:4px 0}
+.high-score-list{text-align:left;color:#fff;font-size:clamp(13px,2.5vw,18px)}
+.high-score-list .new-entry{color:#ff0;text-shadow:0 0 8px #fa0}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<button id="muteBtn">🔊</button>
+<button id="pauseBtn" class="hidden">⏸</button>
+
+<div id="titleScreen" class="overlay">
+<h1>BUBBLE BOBBLE 2</h1>
+<h2>🐉 Dragon's Bubble Adventure 🫧</h2>
+<div class="controls-info">
+<p>🎮 HOLD left/right side to MOVE</p>
+<p>👆 Quick TAP to BLOW BUBBLES</p>
+<p>⬆️ SWIPE UP to JUMP</p>
+</div>
+<button class="btn" id="startBtn">START GAME</button>
+<button class="btn btn-small" id="scoresBtn">HIGH SCORES</button>
+</div>
+
+<div id="gameOverScreen" class="overlay hidden">
+<h1>GAME OVER</h1>
+<h2 id="finalScore">Score: 0</h2>
+<div id="scoreEntryArea"></div>
+<button class="btn" id="restartBtn" style="margin-top:12px">PLAY AGAIN</button>
+<button class="btn btn-small" id="scoresBtn2">HIGH SCORES</button>
+</div>
+
+<div id="highScoreScreen" class="overlay hidden">
+<h1>HIGH SCORES</h1>
+<div id="highScoreList" class="high-score-list"></div>
+<button class="btn btn-small" id="backBtn" style="margin-top:16px">BACK</button>
+</div>
+
+<div id="levelClearScreen" class="overlay hidden" style="background:rgba(0,0,20,0.8)">
+<h1 id="levelClearTitle">LEVEL CLEAR!</h1>
+<h2 id="levelClearScore">Score: 0</h2>
+<p id="levelClearBonus" style="color:#ff0;font-size:clamp(14px,3vw,22px)"></p>
+</div>
+
+<script>
+'use strict';
+
+// ==================== CONSTANTS ====================
+const W_BASE = 480, H_BASE = 640;
+const TILE = 32;
+const GRAVITY = 1800;
+const PLAYER_SPEED = 160;
+const JUMP_VEL = -520;
+const BUBBLE_SPEED = 250;
+const BUBBLE_FLOAT_SPEED = -60;
+const BUBBLE_LIFETIME = 10000;
+const TRAP_ESCAPE_TIME = 8000;
+const ENEMY_SPEED_BASE = 70;
+const MAX_DT = 1/30;
+const SPECIAL_BUBBLE_INTERVAL = 30000;
+
+// ==================== CANVAS SETUP ====================
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W, H, SCALE, DPR;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 3);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  SCALE = Math.min(W / W_BASE, H / H_BASE);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ==================== AUDIO ====================
+let audioCtx = null;
+let muted = false;
+let masterGain = null;
+let musicGain = null;
+let musicPlaying = false;
+let musicInterval = null;
+
+function initAudio() {
+  try {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = audioCtx.createGain();
+      masterGain.connect(audioCtx.destination);
+      masterGain.gain.value = 0.4;
+      musicGain = audioCtx.createGain();
+      musicGain.connect(masterGain);
+      musicGain.gain.value = 0.15;
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch(e) {}
+}
+
+function playTone(freq, dur, type='sine', vol=0.3, sweep=0) {
+  if (!audioCtx || muted) return;
+  try {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    if (sweep) o.frequency.linearRampToValueAtTime(sweep, audioCtx.currentTime + dur);
+    g.gain.setValueAtTime(vol, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    o.connect(g);
+    g.connect(masterGain);
+    o.start();
+    o.stop(audioCtx.currentTime + dur);
+  } catch(e) {}
+}
+
+function playNoise(dur, vol=0.2) {
+  if (!audioCtx || muted) return;
+  try {
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(vol, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    const filt = audioCtx.createBiquadFilter();
+    filt.type = 'highpass';
+    filt.frequency.value = 2000;
+    src.connect(filt);
+    filt.connect(g);
+    g.connect(masterGain);
+    src.start();
+  } catch(e) {}
+}
+
+function sfxBubbleBlow() { playTone(200, 0.08, 'sine', 0.25, 400); playNoise(0.05, 0.08); }
+function sfxBubblePop() { playNoise(0.06, 0.3); playTone(1200, 0.1, 'sine', 0.15); }
+function sfxTrapped() { playTone(150, 0.15, 'sine', 0.3, 80); }
+function sfxEnemyDefeat() {
+  playTone(523, 0.08, 'square', 0.15);
+  setTimeout(() => playTone(659, 0.08, 'square', 0.15), 80);
+  setTimeout(() => playTone(784, 0.12, 'square', 0.15), 160);
+}
+function sfxJump() { playTone(300, 0.1, 'sine', 0.2, 500); }
+function sfxFruitCollect() { playTone(880, 0.12, 'triangle', 0.2); }
+function sfxChainPop(n) { playTone(523 * Math.pow(1.122, n), 0.1, 'square', 0.2); }
+function sfxLevelClear() {
+  [523,659,784,1047].forEach((f,i) => setTimeout(() => playTone(f, 0.2, 'square', 0.2), i*120));
+}
+function sfxGameOver() {
+  [400,350,300,250].forEach((f,i) => setTimeout(() => playTone(f, 0.3, 'sine', 0.2), i*200));
+}
+function sfxPlayerDeath() { playTone(400, 0.3, 'sine', 0.2, 80); playNoise(0.2, 0.1); }
+function sfxSpecialBubble() { playTone(600, 0.15, 'sine', 0.15, 1200); playNoise(0.1, 0.05); }
+
+// Simple background music
+const MELODY_NOTES = [
+  523,523,659,784,659,523,392,440,
+  523,523,659,784,880,784,659,523,
+  392,440,523,659,523,440,392,349,
+  392,440,523,440,392,349,330,392
+];
+let melodyIdx = 0;
+let melodyTime = 0;
+
+function startMusic() {
+  if (musicPlaying) return;
+  musicPlaying = true;
+  melodyIdx = 0;
+  melodyTime = 0;
+}
+function stopMusic() {
+  musicPlaying = false;
+}
+function updateMusic(dt) {
+  if (!musicPlaying || muted || !audioCtx) return;
+  melodyTime += dt;
+  if (melodyTime >= 0.214) { // ~140bpm, 16th notes feel
+    melodyTime -= 0.214;
+    try {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'square';
+      o.frequency.value = MELODY_NOTES[melodyIdx % MELODY_NOTES.length];
+      g.gain.setValueAtTime(0.06, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+      o.connect(g);
+      g.connect(musicGain);
+      o.start();
+      o.stop(audioCtx.currentTime + 0.2);
+    } catch(e) {}
+    melodyIdx++;
+  }
+}
+
+// ==================== GAME STATE ====================
+let gameState = 'title'; // title, playing, paused, gameOver, levelClear, highScores
+let score = 0;
+let lives = 3;
+let level = 1;
+let player = null;
+let enemies = [];
+let bubbles = [];
+let fruits = [];
+let particles = [];
+let floatingTexts = [];
+let specialBubbleTimer = 0;
+let chainTimer = 0;
+let chainCount = 0;
+let screenShake = 0;
+let levelClearTimer = 0;
+let highScores = [];
+
+// ==================== LEVEL DATA ====================
+// Each level: platforms array of {x, y, w} in tile coords, color theme, bg type, enemy types
+const LEVEL_DEFS = [
+  { // 1: Simple 3-tier
+    platforms: [
+      {x:0,y:18,w:15},{x:1,y:13,w:13},{x:2,y:8,w:11},
+      {x:0,y:3,w:2},{x:13,y:3,w:2}
+    ],
+    theme: '#4a4', bgType: 'stars', enemies: [{type:'zen',x:3,y:12},{type:'zen',x:10,y:7}]
+  },
+  { // 2: Staircase
+    platforms: [
+      {x:0,y:18,w:15},{x:0,y:15,w:5},{x:5,y:12,w:5},{x:10,y:9,w:5},
+      {x:0,y:6,w:5},{x:5,y:3,w:5}
+    ],
+    theme: '#48f', bgType: 'night', enemies: [{type:'zen',x:2,y:14},{type:'zen',x:7,y:11},{type:'zen',x:12,y:8}]
+  },
+  { // 3: U-shape
+    platforms: [
+      {x:0,y:18,w:15},{x:0,y:8,w:3},{x:12,y:8,w:3},{x:0,y:13,w:3},{x:12,y:13,w:3},
+      {x:4,y:11,w:7}
+    ],
+    theme: '#a4f', bgType: 'aurora', enemies: [{type:'zen',x:1,y:12},{type:'zen',x:13,y:12},{type:'zen',x:7,y:10}]
+  },
+  { // 4: Scattered islands
+    platforms: [
+      {x:0,y:18,w:15},{x:1,y:14,w:3},{x:6,y:14,w:3},{x:11,y:14,w:3},
+      {x:3,y:10,w:3},{x:9,y:10,w:3},{x:6,y:6,w:3}
+    ],
+    theme: '#f84', bgType: 'sunset', enemies: [{type:'zen',x:2,y:13},{type:'mighta',x:7,y:13},{type:'zen',x:12,y:13},{type:'mighta',x:4,y:9}]
+  },
+  { // 5: Zigzag
+    platforms: [
+      {x:0,y:18,w:15},{x:0,y:15,w:6},{x:9,y:12,w:6},{x:0,y:9,w:6},{x:9,y:6,w:6},
+      {x:0,y:3,w:6}
+    ],
+    theme: '#4dd', bgType: 'underwater', enemies: [{type:'zen',x:3,y:14},{type:'mighta',x:11,y:11},{type:'zen',x:3,y:8},{type:'mighta',x:11,y:5}]
+  },
+  { // 6: Open arena
+    platforms: [
+      {x:0,y:18,w:15},{x:5,y:12,w:5},{x:0,y:6,w:4},{x:11,y:6,w:4}
+    ],
+    theme: '#f44', bgType: 'volcanic', enemies: [{type:'zen',x:6,y:11},{type:'mighta',x:1,y:5},{type:'mighta',x:12,y:5},{type:'zen',x:3,y:17},{type:'zen',x:11,y:17}]
+  },
+  { // 7: Vertical tower
+    platforms: [
+      {x:0,y:18,w:15},{x:4,y:15,w:7},{x:2,y:12,w:5},{x:8,y:12,w:5},
+      {x:4,y:9,w:7},{x:2,y:6,w:5},{x:8,y:6,w:5},{x:4,y:3,w:7}
+    ],
+    theme: '#f8c', bgType: 'clouds', enemies: [{type:'zen',x:5,y:14},{type:'monsta',x:3,y:11},{type:'monsta',x:9,y:11},{type:'mighta',x:5,y:8},{type:'zen',x:5,y:2}]
+  },
+  { // 8: Diamond
+    platforms: [
+      {x:0,y:18,w:15},{x:5,y:15,w:5},{x:3,y:12,w:9},{x:1,y:9,w:13},
+      {x:3,y:6,w:9},{x:5,y:3,w:5}
+    ],
+    theme: '#fc4', bgType: 'cave', enemies: [{type:'zen',x:6,y:14},{type:'mighta',x:4,y:11},{type:'mighta',x:10,y:11},{type:'monsta',x:7,y:8},{type:'zen',x:6,y:5}]
+  },
+  { // 9: Complex maze
+    platforms: [
+      {x:0,y:18,w:15},{x:0,y:15,w:4},{x:6,y:15,w:3},{x:11,y:15,w:4},
+      {x:3,y:12,w:4},{x:8,y:12,w:4},{x:0,y:9,w:3},{x:6,y:9,w:3},{x:12,y:9,w:3},
+      {x:3,y:6,w:4},{x:8,y:6,w:4},{x:5,y:3,w:5}
+    ],
+    theme: '#44a', bgType: 'space', enemies: [{type:'mighta',x:1,y:14},{type:'monsta',x:7,y:14},{type:'mighta',x:12,y:14},{type:'zen',x:4,y:11},{type:'zen',x:9,y:11},{type:'monsta',x:7,y:8}]
+  },
+  { // 10: Minimal
+    platforms: [
+      {x:0,y:18,w:15},{x:3,y:12,w:4},{x:8,y:12,w:4},{x:5,y:6,w:5}
+    ],
+    theme: '#ddd', bgType: 'snow', enemies: [{type:'drunk',x:4,y:11},{type:'drunk',x:9,y:11},{type:'monsta',x:6,y:5},{type:'mighta',x:2,y:17},{type:'mighta',x:12,y:17}]
+  },
+  { // 11: Dense maze
+    platforms: [
+      {x:0,y:18,w:15},{x:0,y:16,w:3},{x:6,y:16,w:3},{x:12,y:16,w:3},
+      {x:3,y:14,w:3},{x:9,y:14,w:3},{x:0,y:12,w:3},{x:6,y:12,w:3},{x:12,y:12,w:3},
+      {x:3,y:10,w:3},{x:9,y:10,w:3},{x:0,y:8,w:3},{x:6,y:8,w:3},{x:12,y:8,w:3},
+      {x:3,y:6,w:3},{x:9,y:6,w:3},{x:5,y:3,w:5}
+    ],
+    theme: '#4a4', bgType: 'jungle', enemies: [
+      {type:'zen',x:1,y:15},{type:'mighta',x:7,y:15},{type:'zen',x:13,y:15},
+      {type:'monsta',x:4,y:13},{type:'drunk',x:10,y:13},{type:'mighta',x:7,y:11}
+    ]
+  },
+  { // 12: Final arena
+    platforms: [
+      {x:0,y:18,w:15},{x:0,y:14,w:5},{x:10,y:14,w:5},
+      {x:3,y:11,w:9},{x:0,y:8,w:4},{x:11,y:8,w:4},{x:5,y:5,w:5},
+      {x:0,y:3,w:3},{x:12,y:3,w:3}
+    ],
+    theme: '#f4f', bgType: 'cosmic', enemies: [
+      {type:'drunk',x:1,y:13},{type:'drunk',x:11,y:13},{type:'monsta',x:5,y:10},{type:'monsta',x:9,y:10},
+      {type:'mighta',x:1,y:7},{type:'mighta',x:12,y:7},{type:'drunk',x:6,y:4}
+    ]
+  }
+];
+
+// ==================== LOAD HIGH SCORES ====================
+function loadHighScores() {
+  try {
+    highScores = JSON.parse(localStorage.getItem('bubble_bobble_2_highscores')) || [];
+  } catch(e) { highScores = []; }
+}
+function saveHighScores() {
+  try { localStorage.setItem('bubble_bobble_2_highscores', JSON.stringify(highScores)); } catch(e) {}
+}
+loadHighScores();
+
+// ==================== PLATFORM / COLLISION HELPERS ====================
+let platforms = []; // current level platforms in world coords
+let worldW, worldH;
+
+function buildLevel(n) {
+  const def = LEVEL_DEFS[(n - 1) % LEVEL_DEFS.length];
+  worldW = 15 * TILE;
+  worldH = 20 * TILE;
+  platforms = [];
+  // Bottom floor (always)
+  // Side walls - thin platforms for boundary feel but we use screen wrapping
+  for (const p of def.platforms) {
+    platforms.push({ x: p.x * TILE, y: p.y * TILE, w: p.w * TILE, h: TILE });
+  }
+  // Spawn enemies
+  enemies = [];
+  for (const e of def.enemies) {
+    spawnEnemy(e.type, e.x * TILE + 16, e.y * TILE - 16);
+  }
+  specialBubbleTimer = SPECIAL_BUBBLE_INTERVAL * 0.6;
+}
+
+function rectOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function isOnPlatform(entity) {
+  const feet = { x: entity.x - entity.w/2, y: entity.y, w: entity.w, h: 4 };
+  for (const p of platforms) {
+    if (rectOverlap(feet, p) && entity.vy >= 0) return true;
+  }
+  return false;
+}
+
+function resolveCollisions(entity) {
+  const hw = entity.w / 2;
+  for (const p of platforms) {
+    const ex = entity.x - hw, ey = entity.y - entity.h;
+    const ew = entity.w, eh = entity.h;
+    if (ex < p.x + p.w && ex + ew > p.x && ey < p.y + p.h && ey + eh > p.y) {
+      const overlapTop = (ey + eh) - p.y;
+      const overlapBot = (p.y + p.h) - ey;
+      const overlapLeft = (ex + ew) - p.x;
+      const overlapRight = (p.x + p.w) - ex;
+      const minOverlap = Math.min(overlapTop, overlapBot, overlapLeft, overlapRight);
+      if (minOverlap === overlapTop && entity.vy >= 0) {
+        entity.y = p.y;
+        entity.vy = 0;
+        entity.grounded = true;
+      } else if (minOverlap === overlapBot && entity.vy < 0) {
+        entity.y = p.y + p.h + entity.h;
+        entity.vy = 0;
+      }
+    }
+  }
+  // Screen wrap horizontal
+  if (entity.x < -hw) entity.x = worldW + hw;
+  if (entity.x > worldW + hw) entity.x = -hw;
+  // Wrap vertical (fall through bottom → top)
+  if (entity.y > worldH + entity.h) entity.y = -entity.h;
+  if (entity.y < -entity.h * 2) entity.y = worldH + entity.h;
+}
+
+// ==================== PLAYER ====================
+function createPlayer() {
+  return {
+    x: worldW / 2, y: 17 * TILE, w: 28, h: 36,
+    vx: 0, vy: 0, facing: 1, grounded: false,
+    walkFrame: 0, walkTimer: 0,
+    blowing: 0, // countdown for blow animation
+    hit: 0, // invincibility timer
+    breathe: 0, // idle breathing
+    dead: false, combo: 0
+  };
+}
+
+// ==================== ENEMIES ====================
+function spawnEnemy(type, x, y) {
+  enemies.push({
+    type, x, y, w: 28, h: 28, vx: (Math.random() < 0.5 ? 1 : -1) * ENEMY_SPEED_BASE,
+    vy: 0, grounded: false, trapped: false, trapTimer: 0, angry: false,
+    walkFrame: 0, walkTimer: 0, eyeTrack: 0, alive: true,
+    attackTimer: Math.random() * 3 + 2, hp: type === 'monsta' ? 1 : 1
+  });
+}
+
+// ==================== BUBBLES ====================
+function createBubble(x, y, dir, special=null) {
+  bubbles.push({
+    x, y, vx: dir * BUBBLE_SPEED, vy: 0,
+    radius: 14, age: 0, floating: false, floatTimer: 0,
+    trapped: null, special, popping: false, popTimer: 0,
+    wobble: Math.random() * Math.PI * 2
+  });
+}
+
+// ==================== FRUITS ====================
+const FRUIT_TYPES = [
+  { name: 'banana', pts: 100, color: '#ff0', prob: 0.35 },
+  { name: 'orange', pts: 200, color: '#f80', prob: 0.3 },
+  { name: 'cherry', pts: 300, color: '#f22', prob: 0.2 },
+  { name: 'strawberry', pts: 500, color: '#f48', prob: 0.1 },
+  { name: 'cake', pts: 1000, color: '#f8f', prob: 0.05 }
+];
+
+function spawnFruit(x, y) {
+  let r = Math.random(), acc = 0;
+  let ft = FRUIT_TYPES[0];
+  for (const f of FRUIT_TYPES) { acc += f.prob; if (r < acc) { ft = f; break; } }
+  fruits.push({ x, y, vy: -100, vx: (Math.random()-0.5)*60, type: ft, grounded: false, age: 0, w: 20, h: 20, collected: false });
+}
+
+// ==================== PARTICLES ====================
+function spawnParticles(x, y, count, colors, speed=150, life=0.6) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const spd = Math.random() * speed + speed * 0.3;
+    particles.push({
+      x, y, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd - 50,
+      life, maxLife: life, color: colors[Math.floor(Math.random() * colors.length)],
+      size: Math.random() * 4 + 2
+    });
+  }
+}
+
+function spawnFloatingText(x, y, text, color='#fff') {
+  floatingTexts.push({ x, y, text, color, life: 1.2 });
+}
+
+// ==================== INPUT HANDLING ====================
+let touchState = { active: false, startX: 0, startY: 0, startTime: 0, id: -1, moved: false };
+let moveDir = 0; // -1 left, 0 none, 1 right
+let wantJump = false;
+let wantBubble = false;
+
+function handleTouchStart(e) {
+  if (e.target.closest('button') || e.target.closest('.overlay')) return;
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  touchState = { active: true, startX: t.clientX, startY: t.clientY, startTime: performance.now(), id: t.identifier, moved: false };
+  // Start movement based on side
+  if (t.clientX < W / 2) moveDir = -1;
+  else moveDir = 1;
+}
+
+function handleTouchMove(e) {
+  if (!touchState.active) return;
+  e.preventDefault();
+  const t = Array.from(e.changedTouches).find(tt => tt.identifier === touchState.id);
+  if (!t) return;
+  const dy = t.clientY - touchState.startY;
+  const dx = t.clientX - touchState.startX;
+  if (Math.abs(dx) > 15 || Math.abs(dy) > 15) touchState.moved = true;
+  // Check swipe up for jump
+  if (dy < -30 && (performance.now() - touchState.startTime) < 300) {
+    wantJump = true;
+    touchState.startY = t.clientY; // reset to prevent re-trigger
+  }
+  // Update move direction based on current position
+  if (t.clientX < W / 2) moveDir = -1;
+  else moveDir = 1;
+}
+
+function handleTouchEnd(e) {
+  if (!touchState.active) return;
+  const t = Array.from(e.changedTouches).find(tt => tt.identifier === touchState.id);
+  if (!t) return;
+  e.preventDefault();
+  const dur = performance.now() - touchState.startTime;
+  const dy = t.clientY - touchState.startY;
+  // Quick tap = bubble
+  if (dur < 200 && !touchState.moved) {
+    wantBubble = true;
+  }
+  // Swipe up check again
+  if (dy < -30 && dur < 300) {
+    wantJump = true;
+  }
+  moveDir = 0;
+  touchState.active = false;
+}
+
+canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+canvas.addEventListener('touchcancel', (e) => { moveDir = 0; touchState.active = false; }, { passive: false });
+
+// Mouse support for desktop
+let mouseDown = false;
+let mouseStartX = 0, mouseStartY = 0, mouseStartTime = 0, mouseMoved = false;
+canvas.addEventListener('mousedown', (e) => {
+  if (e.target.closest('button') || e.target.closest('.overlay')) return;
+  mouseDown = true;
+  mouseStartX = e.clientX;
+  mouseStartY = e.clientY;
+  mouseStartTime = performance.now();
+  mouseMoved = false;
+  if (e.clientX < W / 2) moveDir = -1;
+  else moveDir = 1;
+});
+canvas.addEventListener('mousemove', (e) => {
+  if (!mouseDown) return;
+  if (Math.abs(e.clientX - mouseStartX) > 15 || Math.abs(e.clientY - mouseStartY) > 15) mouseMoved = true;
+  const dy = e.clientY - mouseStartY;
+  if (dy < -30 && (performance.now() - mouseStartTime) < 300) {
+    wantJump = true;
+    mouseStartY = e.clientY;
+  }
+  if (e.clientX < W / 2) moveDir = -1;
+  else moveDir = 1;
+});
+canvas.addEventListener('mouseup', (e) => {
+  if (!mouseDown) return;
+  mouseDown = false;
+  const dur = performance.now() - mouseStartTime;
+  if (dur < 200 && !mouseMoved) wantBubble = true;
+  const dy = e.clientY - mouseStartY;
+  if (dy < -30 && dur < 300) wantJump = true;
+  moveDir = 0;
+});
+
+// Keyboard support
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (e.key === ' ' || e.key === 'ArrowUp') e.preventDefault();
+});
+document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+// ==================== UPDATE LOGIC ====================
+function update(dt) {
+  if (gameState !== 'playing') return;
+  updateMusic(dt);
+  screenShake *= 0.9;
+  if (screenShake < 0.5) screenShake = 0;
+
+  // Chain timer
+  if (chainTimer > 0) {
+    chainTimer -= dt;
+    if (chainTimer <= 0) chainCount = 0;
+  }
+
+  // --- PLAYER ---
+  if (player && !player.dead) {
+    // Keyboard input
+    let kbDir = 0;
+    if (keys['ArrowLeft'] || keys['a']) kbDir = -1;
+    if (keys['ArrowRight'] || keys['d']) kbDir = 1;
+    const dir = kbDir || moveDir;
+
+    player.vx = dir * PLAYER_SPEED;
+    if (dir !== 0) player.facing = dir;
+
+    // Jump
+    if ((wantJump || keys['ArrowUp'] || keys['w'] || keys[' ']) && player.grounded) {
+      player.vy = JUMP_VEL;
+      player.grounded = false;
+      sfxJump();
+    }
+    wantJump = false;
+
+    // Bubble
+    if (wantBubble || keys['z'] || keys['x']) {
+      if (player.blowing <= 0) {
+        createBubble(player.x + player.facing * 20, player.y - player.h / 2, player.facing);
+        player.blowing = 0.25;
+        sfxBubbleBlow();
+      }
+      wantBubble = false;
+      keys['z'] = false;
+      keys['x'] = false;
+    }
+    wantBubble = false;
+
+    // Physics
+    player.vy += GRAVITY * dt;
+    player.grounded = false;
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+    resolveCollisions(player);
+
+    // Animation
+    if (Math.abs(player.vx) > 10) {
+      player.walkTimer += dt;
+      if (player.walkTimer > 0.1) { player.walkTimer = 0; player.walkFrame = (player.walkFrame + 1) % 4; }
+    } else {
+      player.walkFrame = 0;
+    }
+    player.blowing = Math.max(0, player.blowing - dt);
+    player.hit = Math.max(0, player.hit - dt);
+    player.breathe += dt;
+  }
+
+  // --- SPECIAL BUBBLE TIMER ---
+  specialBubbleTimer += dt * 1000;
+  if (specialBubbleTimer >= SPECIAL_BUBBLE_INTERVAL) {
+    specialBubbleTimer = 0;
+    const types = ['water', 'fire', 'lightning'];
+    const sp = types[Math.floor(Math.random() * types.length)];
+    const bx = Math.random() * (worldW - 60) + 30;
+    bubbles.push({
+      x: bx, y: worldH - 40, vx: 0, vy: BUBBLE_FLOAT_SPEED * 0.7,
+      radius: 16, age: 0, floating: true, floatTimer: 0,
+      trapped: null, special: sp, popping: false, popTimer: 0,
+      wobble: Math.random() * Math.PI * 2
+    });
+    sfxSpecialBubble();
+  }
+
+  // --- ENEMIES ---
+  for (const en of enemies) {
+    if (!en.alive) continue;
+    if (en.trapped) {
+      en.trapTimer += dt * 1000;
+      if (en.trapTimer >= TRAP_ESCAPE_TIME) {
+        en.trapped = false;
+        en.angry = true;
+        en.vx = (Math.random() < 0.5 ? 1 : -1) * ENEMY_SPEED_BASE * 1.6;
+        // Find and pop the bubble that has this enemy
+        for (const b of bubbles) {
+          if (b.trapped === en) { b.trapped = null; b.popping = true; b.popTimer = 0.3; }
+        }
+      }
+      continue;
+    }
+    // AI
+    en.vy += GRAVITY * dt;
+    en.grounded = false;
+
+    // Movement type
+    const spd = en.angry ? ENEMY_SPEED_BASE * 1.5 : ENEMY_SPEED_BASE;
+    if (en.type === 'monsta') {
+      // Bouncy - jump randomly
+      if (en.grounded && Math.random() < dt * 2) {
+        en.vy = JUMP_VEL * 0.7;
+        en.vx = (Math.random() < 0.5 ? -1 : 1) * spd * 1.5;
+      }
+    } else {
+      // Walk, reverse at edges or randomly
+      if (en.grounded) {
+        if (Math.abs(en.vx) < 10) en.vx = (Math.random() < 0.5 ? 1 : -1) * spd;
+        // Check if about to walk off platform edge (simple check)
+        const aheadX = en.x + Math.sign(en.vx) * 20;
+        let onPlat = false;
+        for (const p of platforms) {
+          if (aheadX > p.x && aheadX < p.x + p.w && Math.abs(en.y - p.y) < 8) onPlat = true;
+        }
+        // Zen-chan falls off edges, others may turn
+        if (!onPlat && en.type !== 'zen') {
+          en.vx *= -1;
+        }
+        // Random direction change
+        if (Math.random() < dt * 0.5) en.vx = Math.sign(en.vx) * spd;
+      }
+    }
+
+    // Attack
+    if (player && !player.dead && en.attackTimer !== undefined) {
+      en.attackTimer -= dt;
+      if (en.attackTimer <= 0) {
+        en.attackTimer = Math.random() * 4 + 2;
+        if (en.type === 'mighta') {
+          // Throw rock
+          const dx = player.x - en.x;
+          const dir = Math.sign(dx) || 1;
+          bubbles.push({
+            x: en.x + dir * 16, y: en.y - 14, vx: dir * 180, vy: -80,
+            radius: 5, age: 0, floating: false, floatTimer: 0,
+            trapped: null, special: 'rock', popping: false, popTimer: 0, wobble: 0,
+            isProjectile: true
+          });
+        } else if (en.type === 'drunk') {
+          // Fire breath
+          const dx = player.x - en.x;
+          const dir = Math.sign(dx) || 1;
+          for (let i = 0; i < 5; i++) {
+            particles.push({
+              x: en.x + dir * (10 + i * 8), y: en.y - 14 + (Math.random()-0.5)*10,
+              vx: dir * (100 + i * 30), vy: (Math.random()-0.5)*40,
+              life: 0.4, maxLife: 0.4, color: ['#f80','#f40','#ff0'][Math.floor(Math.random()*3)],
+              size: 6 + Math.random() * 4, isDamage: true
+            });
+          }
+        }
+      }
+    }
+
+    en.x += en.vx * dt;
+    en.y += en.vy * dt;
+    resolveCollisions(en);
+
+    // Eye tracking
+    if (player) en.eyeTrack = Math.sign(player.x - en.x);
+
+    // Walk animation
+    en.walkTimer += dt;
+    if (en.walkTimer > 0.12) { en.walkTimer = 0; en.walkFrame = (en.walkFrame + 1) % 4; }
+
+    // Collision with player
+    if (player && !player.dead && player.hit <= 0) {
+      const dx = Math.abs(player.x - en.x);
+      const dy = Math.abs((player.y - player.h/2) - (en.y - en.h/2));
+      if (dx < 20 && dy < 24) {
+        playerHit();
+      }
+    }
+  }
+
+  // --- BUBBLES ---
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    const b = bubbles[i];
+    b.age += dt * 1000;
+    b.wobble += dt * 3;
+
+    if (b.popping) {
+      b.popTimer -= dt;
+      if (b.popTimer <= 0) {
+        bubbles.splice(i, 1);
+      }
+      continue;
+    }
+
+    // Rock projectile
+    if (b.isProjectile) {
+      b.vy += GRAVITY * 0.5 * dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      if (b.age > 3000 || b.y > worldH) { bubbles.splice(i, 1); continue; }
+      // Hit player
+      if (player && !player.dead && player.hit <= 0) {
+        const dx = Math.abs(player.x - b.x);
+        const dy = Math.abs((player.y - player.h/2) - b.y);
+        if (dx < 16 && dy < 20) {
+          playerHit();
+          bubbles.splice(i, 1);
+          continue;
+        }
+      }
+      continue;
+    }
+
+    if (!b.floating && !b.trapped) {
+      // Moving horizontally first
+      b.x += b.vx * dt;
+      // Check hit enemy
+      for (const en of enemies) {
+        if (!en.alive || en.trapped) continue;
+        const dx = Math.abs(b.x - en.x);
+        const dy = Math.abs(b.y - (en.y - en.h/2));
+        if (dx < b.radius + en.w/2 && dy < b.radius + en.h/2) {
+          // Trap enemy!
+          en.trapped = true;
+          en.trapTimer = 0;
+          b.trapped = en;
+          b.vx = 0;
+          b.floating = true;
+          sfxTrapped();
+          break;
+        }
+      }
+      // After some time, start floating
+      if (b.age > 500 && !b.floating) {
+        b.floating = true;
+        b.vx *= 0.1;
+      }
+    }
+
+    if (b.floating) {
+      b.vy = BUBBLE_FLOAT_SPEED;
+      b.x += Math.sin(b.wobble) * 20 * dt;
+      b.y += b.vy * dt;
+      b.vx *= 0.95;
+      b.x += b.vx * dt;
+    }
+
+    // Screen wrap
+    if (b.x < -b.radius) b.x = worldW + b.radius;
+    if (b.x > worldW + b.radius) b.x = -b.radius;
+
+    // Pop at ceiling or timeout
+    if (b.y < -b.radius || b.age > BUBBLE_LIFETIME) {
+      if (b.trapped) {
+        b.trapped.trapped = false;
+        b.trapped.angry = true;
+        b.trapped.vx = (Math.random() < 0.5 ? 1 : -1) * ENEMY_SPEED_BASE * 1.6;
+      }
+      popBubble(b, i);
+      continue;
+    }
+
+    // Player pops trapped bubbles
+    if (b.trapped && player && !player.dead) {
+      const dx = Math.abs(player.x - b.x);
+      const dy = Math.abs((player.y - player.h/2) - b.y);
+      if (dx < b.radius + 16 && dy < b.radius + 20) {
+        defeatEnemy(b.trapped, b.x, b.y);
+        popBubble(b, i);
+        continue;
+      }
+    }
+
+    // Player pops special bubbles
+    if (b.special && b.special !== 'rock' && player && !player.dead) {
+      const dx = Math.abs(player.x - b.x);
+      const dy = Math.abs((player.y - player.h/2) - b.y);
+      if (dx < b.radius + 16 && dy < b.radius + 20) {
+        activateSpecial(b.special, b.x, b.y);
+        popBubble(b, i);
+        continue;
+      }
+    }
+  }
+
+  // --- FIRE PARTICLES DAMAGE ---
+  for (const p of particles) {
+    if (p.isDamage && player && !player.dead && player.hit <= 0) {
+      const dx = Math.abs(player.x - p.x);
+      const dy = Math.abs((player.y - player.h/2) - p.y);
+      if (dx < 14 && dy < 18) { playerHit(); p.life = 0; }
+    }
+  }
+
+  // --- FRUITS ---
+  for (let i = fruits.length - 1; i >= 0; i--) {
+    const f = fruits[i];
+    f.age += dt;
+    if (f.collected) { fruits.splice(i, 1); continue; }
+    if (f.age > 8) { fruits.splice(i, 1); continue; }
+    f.vy += GRAVITY * dt;
+    f.x += f.vx * dt;
+    f.y += f.vy * dt;
+    // Platform collision
+    for (const p of platforms) {
+      if (f.x > p.x && f.x < p.x + p.w && f.y > p.y && f.y < p.y + p.h && f.vy > 0) {
+        f.y = p.y;
+        f.vy = 0;
+        f.vx = 0;
+        f.grounded = true;
+      }
+    }
+    if (f.x < 0) f.x = worldW;
+    if (f.x > worldW) f.x = 0;
+    // Player collect
+    if (player && !player.dead) {
+      const dx = Math.abs(player.x - f.x);
+      const dy = Math.abs((player.y - player.h/2) - f.y);
+      if (dx < 18 && dy < 22) {
+        score += f.type.pts;
+        spawnFloatingText(f.x, f.y - 10, '+' + f.type.pts, f.type.color);
+        spawnParticles(f.x, f.y, 6, [f.type.color, '#fff'], 80, 0.3);
+        sfxFruitCollect();
+        f.collected = true;
+      }
+    }
+  }
+
+  // --- PARTICLES ---
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 200 * dt;
+  }
+
+  // --- FLOATING TEXTS ---
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const ft = floatingTexts[i];
+    ft.life -= dt;
+    ft.y -= 40 * dt;
+    if (ft.life <= 0) floatingTexts.splice(i, 1);
+  }
+
+  // --- CHECK LEVEL CLEAR ---
+  const aliveEnemies = enemies.filter(e => e.alive);
+  if (aliveEnemies.length === 0 && enemies.length > 0) {
+    levelComplete();
+  }
+}
+
+function playerHit() {
+  if (player.hit > 0) return;
+  lives--;
+  sfxPlayerDeath();
+  screenShake = 8;
+  player.hit = 2.0; // invincibility frames
+  spawnParticles(player.x, player.y - player.h/2, 10, ['#f00','#f80','#ff0'], 100, 0.5);
+  if (lives <= 0) {
+    player.dead = true;
+    gameOver();
+  }
+}
+
+function popBubble(b, idx) {
+  sfxBubblePop();
+  spawnParticles(b.x, b.y, 12, ['#f0f','#0ff','#ff0','#f80','#0f0','#88f'], 120, 0.5);
+  bubbles.splice(idx, 1);
+}
+
+function defeatEnemy(en, x, y) {
+  en.alive = false;
+  en.trapped = false;
+  chainCount++;
+  chainTimer = 1.5;
+  const chainPts = 200 * Math.pow(2, Math.min(chainCount - 1, 5));
+  score += chainPts;
+  sfxChainPop(chainCount);
+  if (chainCount > 1) {
+    spawnFloatingText(x, y - 30, 'COMBO x' + chainCount + '!', '#ff0');
+    screenShake = 4 + chainCount * 2;
+  }
+  spawnFloatingText(x, y - 10, '+' + chainPts, '#fff');
+  spawnParticles(x, y, 16, ['#f00','#0f0','#00f','#ff0','#f0f','#0ff'], 150, 0.6);
+  sfxEnemyDefeat();
+  spawnFruit(x, y);
+}
+
+function activateSpecial(type, x, y) {
+  sfxSpecialBubble();
+  screenShake = 6;
+  if (type === 'water') {
+    // Water wave
+    for (let i = 0; i < 20; i++) {
+      particles.push({
+        x: x + (Math.random()-0.5)*40, y: y, vx: (Math.random()-0.5)*400, vy: Math.random()*-100,
+        life: 1.5, maxLife: 1.5, color: '#4af', size: 6 + Math.random()*4, isWave: true
+      });
+    }
+    // Kill nearby enemies
+    for (const en of enemies) {
+      if (en.alive && !en.trapped) {
+        const d = Math.hypot(en.x - x, en.y - y);
+        if (d < 200) defeatEnemy(en, en.x, en.y);
+      }
+    }
+  } else if (type === 'fire') {
+    for (let i = 0; i < 15; i++) {
+      particles.push({
+        x: x + (Math.random()-0.5)*20, y: y, vx: (Math.random()-0.5)*500, vy: -20,
+        life: 1.0, maxLife: 1.0, color: ['#f80','#f40','#ff0'][i%3], size: 5+Math.random()*5
+      });
+    }
+    for (const en of enemies) {
+      if (en.alive && !en.trapped && Math.abs(en.y - y) < 60) defeatEnemy(en, en.x, en.y);
+    }
+  } else if (type === 'lightning') {
+    let nearest = null, dist = Infinity;
+    for (const en of enemies) {
+      if (!en.alive) continue;
+      const d = Math.hypot(en.x - x, en.y - y);
+      if (d < dist) { dist = d; nearest = en; }
+    }
+    if (nearest) {
+      spawnParticles(nearest.x, nearest.y - nearest.h/2, 20, ['#ff0','#fff','#fe0'], 200, 0.4);
+      if (nearest.trapped) {
+        defeatEnemy(nearest, nearest.x, nearest.y);
+        // Remove the bubble
+        for (let i = bubbles.length-1; i >= 0; i--) {
+          if (bubbles[i].trapped === nearest) { bubbles.splice(i, 1); break; }
+        }
+      } else {
+        defeatEnemy(nearest, nearest.x, nearest.y);
+      }
+    }
+  }
+}
+
+function levelComplete() {
+  gameState = 'levelClear';
+  stopMusic();
+  sfxLevelClear();
+  const bonus = level * 100;
+  score += bonus;
+  document.getElementById('levelClearTitle').textContent = 'LEVEL ' + level + ' CLEAR!';
+  document.getElementById('levelClearScore').textContent = 'Score: ' + score;
+  document.getElementById('levelClearBonus').textContent = 'Bonus: +' + bonus;
+  document.getElementById('levelClearScreen').classList.remove('hidden');
+  levelClearTimer = 0;
+  // Auto advance after 2.5s
+  setTimeout(() => {
+    if (gameState !== 'levelClear') return;
+    document.getElementById('levelClearScreen').classList.add('hidden');
+    level++;
+    if (level > 12) level = 1; // Loop with harder enemies
+    startLevel();
+  }, 2500);
+}
+
+function startLevel() {
+  gameState = 'playing';
+  buildLevel(level);
+  player = createPlayer();
+  bubbles = [];
+  fruits = [];
+  particles = [];
+  floatingTexts = [];
+  chainCount = 0;
+  chainTimer = 0;
+  startMusic();
+}
+
+function gameOver() {
+  gameState = 'gameOver';
+  stopMusic();
+  sfxGameOver();
+  document.getElementById('finalScore').textContent = 'Score: ' + score;
+  // Check high score
+  const isHigh = highScores.length < 10 || score > (highScores[highScores.length - 1]?.score || 0);
+  const entryArea = document.getElementById('scoreEntryArea');
+  entryArea.innerHTML = '';
+  if (isHigh && score > 0) {
+    const letters = ['A','A','A'];
+    const div = document.createElement('div');
+    div.className = 'score-entry';
+    div.style.justifyContent = 'center';
+    for (let i = 0; i < 3; i++) {
+      const sel = document.createElement('div');
+      sel.className = 'letter-select';
+      const up = document.createElement('button');
+      up.textContent = '▲';
+      up.addEventListener('click', (e) => { e.stopPropagation(); letters[i] = String.fromCharCode(((letters[i].charCodeAt(0) - 64) % 26) + 65); sp.textContent = letters[i]; });
+      up.addEventListener('touchend', (e) => { e.stopPropagation(); });
+      const sp = document.createElement('span');
+      sp.textContent = 'A';
+      const dn = document.createElement('button');
+      dn.textContent = '▼';
+      dn.addEventListener('click', (e) => { e.stopPropagation(); letters[i] = String.fromCharCode(((letters[i].charCodeAt(0) - 66 + 26) % 26) + 65); sp.textContent = letters[i]; });
+      dn.addEventListener('touchend', (e) => { e.stopPropagation(); });
+      sel.append(up, sp, dn);
+      div.appendChild(sel);
+    }
+    entryArea.appendChild(div);
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-small';
+    saveBtn.textContent = 'SAVE SCORE';
+    saveBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const initials = letters.join('');
+      highScores.push({ initials, score, level });
+      highScores.sort((a,b) => b.score - a.score);
+      highScores = highScores.slice(0, 10);
+      saveHighScores();
+      entryArea.innerHTML = '<p style="color:#4f4">Saved!</p>';
+    });
+    saveBtn.addEventListener('touchend', (e) => { e.stopPropagation(); });
+    entryArea.appendChild(saveBtn);
+  }
+  setTimeout(() => document.getElementById('gameOverScreen').classList.remove('hidden'), 500);
+}
+
+function showHighScores(returnTo) {
+  const list = document.getElementById('highScoreList');
+  list.innerHTML = '';
+  if (highScores.length === 0) {
+    list.innerHTML = '<p style="color:#888;text-align:center">No scores yet!</p>';
+  } else {
+    highScores.forEach((h, i) => {
+      const p = document.createElement('p');
+      p.textContent = `${(i+1+'').padStart(2,' ')}. ${h.initials}  ${(h.score+'').padStart(8,' ')}  Lv${h.level}`;
+      p.style.fontFamily = 'monospace';
+      list.appendChild(p);
+    });
+  }
+  document.getElementById('highScoreScreen').classList.remove('hidden');
+  document.getElementById('highScoreScreen')._returnTo = returnTo;
+}
+
+// ==================== DRAWING ====================
+function worldToScreen(wx, wy) {
+  const ox = (W - worldW * SCALE) / 2;
+  const oy = (H - worldH * SCALE) / 2;
+  return { x: ox + wx * SCALE, y: oy + wy * SCALE };
+}
+
+function drawBackground(t) {
+  const def = LEVEL_DEFS[(level - 1) % LEVEL_DEFS.length];
+  const bgType = def.bgType;
+
+  // Base gradient
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  switch(bgType) {
+    case 'stars': grad.addColorStop(0, '#0a0a2e'); grad.addColorStop(1, '#1a1a4e'); break;
+    case 'night': grad.addColorStop(0, '#050520'); grad.addColorStop(1, '#101040'); break;
+    case 'aurora': grad.addColorStop(0, '#1a0030'); grad.addColorStop(1, '#0a2040'); break;
+    case 'sunset': grad.addColorStop(0, '#4a1500'); grad.addColorStop(1, '#1a0500'); break;
+    case 'underwater': grad.addColorStop(0, '#002030'); grad.addColorStop(1, '#001020'); break;
+    case 'volcanic': grad.addColorStop(0, '#200000'); grad.addColorStop(1, '#100000'); break;
+    case 'clouds': grad.addColorStop(0, '#3a2050'); grad.addColorStop(1, '#1a1030'); break;
+    case 'cave': grad.addColorStop(0, '#1a1500'); grad.addColorStop(1, '#0a0a00'); break;
+    case 'space': grad.addColorStop(0, '#000020'); grad.addColorStop(1, '#000010'); break;
+    case 'snow': grad.addColorStop(0, '#202030'); grad.addColorStop(1, '#101020'); break;
+    case 'jungle': grad.addColorStop(0, '#001a00'); grad.addColorStop(1, '#000a00'); break;
+    case 'cosmic': grad.addColorStop(0, '#1a0020'); grad.addColorStop(1, '#000a20'); break;
+    default: grad.addColorStop(0, '#0a0a2e'); grad.addColorStop(1, '#1a1a4e');
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Animated elements
+  if (bgType === 'stars' || bgType === 'night' || bgType === 'space' || bgType === 'cosmic') {
+    // Stars
+    ctx.fillStyle = '#fff';
+    for (let i = 0; i < 60; i++) {
+      const sx = (i * 137.5 + t * 3 * (i%3+1)) % W;
+      const sy = (i * 97.3) % H;
+      const bri = 0.3 + 0.7 * Math.abs(Math.sin(t * 2 + i));
+      ctx.globalAlpha = bri;
+      ctx.fillRect(sx, sy, 1.5, 1.5);
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (bgType === 'aurora') {
+    ctx.globalAlpha = 0.15;
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath();
+      ctx.strokeStyle = ['#0f0','#0ff','#f0f','#0f8','#80f'][i];
+      ctx.lineWidth = 8;
+      ctx.moveTo(0, H * 0.2 + i * 20);
+      for (let x = 0; x < W; x += 20) {
+        ctx.lineTo(x, H * 0.2 + i * 20 + Math.sin(x * 0.01 + t + i) * 30);
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (bgType === 'clouds' || bgType === 'snow') {
+    ctx.globalAlpha = 0.1;
+    ctx.fillStyle = '#fff';
+    for (let i = 0; i < 8; i++) {
+      const cx = (i * 80 + t * 15 * (i%2+1)) % (W + 100) - 50;
+      const cy = 40 + i * 50;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 30, 0, Math.PI*2);
+      ctx.arc(cx+20, cy-10, 25, 0, Math.PI*2);
+      ctx.arc(cx+40, cy, 28, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (bgType === 'snow') {
+      ctx.fillStyle = '#fff';
+      for (let i = 0; i < 40; i++) {
+        const sx = (i * 47 + t * 20 * ((i%3)+1)) % W;
+        const sy = (i * 67 + t * 40 * ((i%2)+1)) % H;
+        ctx.globalAlpha = 0.3 + 0.3 * Math.sin(t+i);
+        ctx.fillRect(sx, sy, 2, 2);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+  if (bgType === 'volcanic') {
+    // Lava glow at bottom
+    ctx.globalAlpha = 0.15;
+    const lgrad = ctx.createRadialGradient(W/2, H, 0, W/2, H, H*0.6);
+    lgrad.addColorStop(0, '#f40');
+    lgrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = lgrad;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+  if (bgType === 'underwater') {
+    ctx.globalAlpha = 0.08;
+    ctx.fillStyle = '#4af';
+    for (let i = 0; i < 15; i++) {
+      const bx = (i * 50 + Math.sin(t*0.5+i)*20) % W;
+      const by = (H - 20 - i * 30 - t * 10 * ((i%3)+0.5)) % (H + 40);
+      ctx.beginPath();
+      ctx.arc(bx, by, 3+Math.random()*5, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawPlatforms() {
+  const def = LEVEL_DEFS[(level - 1) % LEVEL_DEFS.length];
+  const col = def.theme;
+  for (const p of platforms) {
+    const s = worldToScreen(p.x, p.y);
+    const sw = p.w * SCALE;
+    const sh = p.h * SCALE;
+    // 3D beveled block
+    ctx.fillStyle = col;
+    ctx.fillRect(s.x, s.y, sw, sh);
+    // Top highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillRect(s.x, s.y, sw, 3 * SCALE);
+    // Bottom shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(s.x, s.y + sh - 3 * SCALE, sw, 3 * SCALE);
+    // Left highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(s.x, s.y, 2 * SCALE, sh);
+    // Right shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(s.x + sw - 2 * SCALE, s.y, 2 * SCALE, sh);
+  }
+}
+
+function drawDragon(p) {
+  if (!p || p.dead) return;
+  const s = worldToScreen(p.x, p.y);
+  const sc = SCALE;
+  const f = p.facing;
+  const breatheOff = Math.sin(p.breathe * 2) * 1.5 * sc;
+
+  ctx.save();
+  ctx.translate(s.x, s.y);
+  ctx.scale(f, 1);
+
+  // Hit flash
+  if (p.hit > 0 && Math.floor(p.hit * 10) % 2 === 0) {
+    ctx.globalAlpha = 0.5;
+  }
+
+  const bh = (36 + breatheOff / sc) * sc;
+  const bw = 28 * sc;
+
+  // Tail
+  ctx.fillStyle = '#3a3';
+  ctx.beginPath();
+  const tailWag = Math.sin(p.walkTimer * 15 + p.breathe * 3) * 4 * sc;
+  ctx.moveTo(-12 * sc, -10 * sc);
+  ctx.quadraticCurveTo(-18 * sc, -14 * sc + tailWag, -20 * sc, -8 * sc + tailWag);
+  ctx.quadraticCurveTo(-18 * sc, -4 * sc, -12 * sc, -6 * sc);
+  ctx.fill();
+
+  // Body
+  ctx.fillStyle = '#4c4';
+  ctx.beginPath();
+  ctx.ellipse(0, -bh * 0.45, bw * 0.48, bh * 0.48, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Belly
+  ctx.fillStyle = '#ee8';
+  ctx.beginPath();
+  ctx.ellipse(1 * sc, -bh * 0.35, bw * 0.3, bh * 0.35, 0, 0.2, Math.PI - 0.2);
+  ctx.fill();
+
+  // Legs (animated)
+  const legOffset = [0, 2, 0, -2][p.walkFrame];
+  ctx.fillStyle = '#3a3';
+  // Front leg
+  ctx.beginPath();
+  ctx.ellipse(5 * sc, -2 * sc + legOffset * sc, 5 * sc, 6 * sc, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  // Back leg
+  ctx.beginPath();
+  ctx.ellipse(-5 * sc, -2 * sc - legOffset * sc, 5 * sc, 6 * sc, -0.1, 0, Math.PI * 2);
+  ctx.fill();
+  // Feet
+  ctx.fillStyle = '#4c4';
+  ctx.beginPath();
+  ctx.ellipse(6 * sc, 0 + legOffset * sc, 6 * sc, 3 * sc, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(-4 * sc, 0 - legOffset * sc, 6 * sc, 3 * sc, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Small wings
+  ctx.fillStyle = '#5d5';
+  const wingFlap = p.grounded ? Math.sin(p.breathe * 2) * 3 : Math.sin(p.breathe * 8) * 8;
+  ctx.beginPath();
+  ctx.moveTo(-4 * sc, -bh * 0.7);
+  ctx.quadraticCurveTo(-14 * sc, -bh * 0.9 - wingFlap * sc, -10 * sc, -bh * 0.6);
+  ctx.fill();
+
+  // Head
+  ctx.fillStyle = '#4c4';
+  ctx.beginPath();
+  ctx.arc(6 * sc, -bh * 0.75, 12 * sc, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eyes
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(9 * sc, -bh * 0.8, 5 * sc, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.arc(10 * sc, -bh * 0.79, 2.5 * sc, 0, Math.PI * 2);
+  ctx.fill();
+  // Eye highlight
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(11 * sc, -bh * 0.82, 1 * sc, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Horns
+  ctx.fillStyle = '#f80';
+  ctx.beginPath();
+  ctx.moveTo(2 * sc, -bh * 0.88);
+  ctx.lineTo(0, -bh * 1.02);
+  ctx.lineTo(5 * sc, -bh * 0.88);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(8 * sc, -bh * 0.9);
+  ctx.lineTo(7 * sc, -bh * 1.05);
+  ctx.lineTo(11 * sc, -bh * 0.9);
+  ctx.fill();
+
+  // Back spikes
+  ctx.fillStyle = '#f80';
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.moveTo((-3 - i * 4) * sc, -bh * 0.65 + i * 3 * sc);
+    ctx.lineTo((-5 - i * 4) * sc, -bh * 0.75 + i * 2 * sc);
+    ctx.lineTo((-1 - i * 4) * sc, -bh * 0.65 + i * 3 * sc);
+    ctx.fill();
+  }
+
+  // Mouth
+  if (p.blowing > 0) {
+    ctx.fillStyle = '#d44';
+    ctx.beginPath();
+    ctx.arc(14 * sc, -bh * 0.68, 4 * sc, 0, Math.PI * 2);
+    ctx.fill();
+    // Puff
+    ctx.fillStyle = 'rgba(100,200,255,0.4)';
+    ctx.beginPath();
+    ctx.arc(20 * sc, -bh * 0.68, (3 + p.blowing * 10) * sc, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    // Smile
+    ctx.strokeStyle = '#2a2';
+    ctx.lineWidth = 1.5 * sc;
+    ctx.beginPath();
+    ctx.arc(12 * sc, -bh * 0.7, 3 * sc, 0, Math.PI);
+    ctx.stroke();
+  }
+
+  // Player aura (combo glow)
+  if (chainCount > 0 && chainTimer > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.2 * (chainTimer / 1.5);
+    const agrad = ctx.createRadialGradient(0, -bh*0.5, 0, 0, -bh*0.5, 30*sc);
+    agrad.addColorStop(0, '#ff0');
+    agrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = agrad;
+    ctx.fillRect(-30*sc, -bh-10*sc, 60*sc, bh+20*sc);
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function drawEnemy(en) {
+  if (!en.alive && !en.trapped) return;
+  const s = worldToScreen(en.x, en.y);
+  const sc = SCALE;
+  const dir = Math.sign(en.vx) || 1;
+
+  ctx.save();
+  ctx.translate(s.x, s.y);
+
+  if (en.trapped) {
+    // Squished inside bubble - drawn in bubble draw
+    ctx.restore();
+    return;
+  }
+
+  // Angry tint
+  if (en.angry) {
+    ctx.globalAlpha = 0.5 + 0.5 * Math.abs(Math.sin(performance.now() * 0.01));
+  }
+
+  const bh = en.h * sc;
+  const bw = en.w * sc;
+
+  if (en.type === 'zen') {
+    // Green blob
+    ctx.fillStyle = en.angry ? '#f44' : '#6c6';
+    ctx.beginPath();
+    ctx.ellipse(0, -bh * 0.5, bw * 0.5, bh * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Eyes
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(-4 * sc, -bh * 0.55, 4 * sc, 0, Math.PI * 2);
+    ctx.arc(4 * sc, -bh * 0.55, 4 * sc, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc((-4 + en.eyeTrack * 1.5) * sc, -bh * 0.54, 2 * sc, 0, Math.PI * 2);
+    ctx.arc((4 + en.eyeTrack * 1.5) * sc, -bh * 0.54, 2 * sc, 0, Math.PI * 2);
+    ctx.fill();
+    // Feet
+    const lo = [0,2,0,-2][en.walkFrame] * sc;
+    ctx.fillStyle = en.angry ? '#d22' : '#4a4';
+    ctx.beginPath();
+    ctx.ellipse(-6*sc, 0+lo, 5*sc, 3*sc, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(6*sc, 0-lo, 5*sc, 3*sc, 0, 0, Math.PI*2);
+    ctx.fill();
+  } else if (en.type === 'mighta') {
+    // Blue hooded creature
+    ctx.fillStyle = en.angry ? '#f44' : '#48f';
+    ctx.beginPath();
+    ctx.ellipse(0, -bh * 0.45, bw * 0.45, bh * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Hood
+    ctx.fillStyle = en.angry ? '#d22' : '#36c';
+    ctx.beginPath();
+    ctx.arc(0, -bh * 0.65, bw * 0.4, Math.PI, 0);
+    ctx.fill();
+    // Eyes (peering from under hood)
+    ctx.fillStyle = '#ff0';
+    ctx.beginPath();
+    ctx.arc(-3*sc, -bh*0.5, 3*sc, 0, Math.PI*2);
+    ctx.arc(3*sc, -bh*0.5, 3*sc, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc((-3+en.eyeTrack)*sc, -bh*0.49, 1.5*sc, 0, Math.PI*2);
+    ctx.arc((3+en.eyeTrack)*sc, -bh*0.49, 1.5*sc, 0, Math.PI*2);
+    ctx.fill();
+  } else if (en.type === 'monsta') {
+    // White bouncy whale
+    ctx.fillStyle = en.angry ? '#f88' : '#eef';
+    ctx.beginPath();
+    ctx.ellipse(0, -bh*0.45, bw*0.5, bh*0.45, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Tail
+    ctx.fillStyle = en.angry ? '#f66' : '#ccf';
+    ctx.beginPath();
+    ctx.moveTo(-12*sc, -bh*0.45);
+    ctx.quadraticCurveTo(-18*sc, -bh*0.7, -14*sc, -bh*0.85);
+    ctx.quadraticCurveTo(-10*sc, -bh*0.7, -10*sc, -bh*0.5);
+    ctx.fill();
+    // Eyes
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc((4+en.eyeTrack)*sc, -bh*0.55, 2.5*sc, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc((5+en.eyeTrack)*sc, -bh*0.58, 1*sc, 0, Math.PI*2);
+    ctx.fill();
+    // Smile
+    ctx.strokeStyle = '#99a';
+    ctx.lineWidth = 1.5*sc;
+    ctx.beginPath();
+    ctx.arc(6*sc, -bh*0.4, 4*sc, 0, Math.PI * 0.6);
+    ctx.stroke();
+  } else if (en.type === 'drunk') {
+    // Purple fire creature
+    ctx.fillStyle = en.angry ? '#f44' : '#a4f';
+    ctx.beginPath();
+    ctx.ellipse(0, -bh*0.5, bw*0.48, bh*0.5, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Flame crown
+    ctx.fillStyle = en.angry ? '#f80' : '#c6f';
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      const fx = (i - 1.5) * 5 * sc;
+      ctx.moveTo(fx - 3*sc, -bh*0.85);
+      ctx.lineTo(fx, -bh*1.05 - Math.sin(en.walkTimer*10+i)*3*sc);
+      ctx.lineTo(fx + 3*sc, -bh*0.85);
+      ctx.fill();
+    }
+    // Eyes
+    ctx.fillStyle = '#f00';
+    ctx.beginPath();
+    ctx.arc(-3*sc, -bh*0.55, 3*sc, 0, Math.PI*2);
+    ctx.arc(5*sc, -bh*0.55, 3*sc, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#ff0';
+    ctx.beginPath();
+    ctx.arc((-3+en.eyeTrack)*sc, -bh*0.54, 1.5*sc, 0, Math.PI*2);
+    ctx.arc((5+en.eyeTrack)*sc, -bh*0.54, 1.5*sc, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawTrappedEnemy(en, bx, by, radius) {
+  const sc = SCALE;
+  ctx.save();
+  ctx.translate(bx, by);
+
+  const squish = 1 + 0.1 * Math.sin(performance.now() * 0.005);
+  ctx.scale(0.6 * squish, 0.6 / squish);
+
+  // Simplified enemy inside bubble
+  const col = en.type === 'zen' ? '#6c6' : en.type === 'mighta' ? '#48f' : en.type === 'monsta' ? '#eef' : '#a4f';
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.arc(0, 0, 10 * sc, 0, Math.PI * 2);
+  ctx.fill();
+  // X eyes (distressed)
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = 1.5 * sc;
+  ctx.beginPath();
+  ctx.moveTo(-5*sc, -3*sc); ctx.lineTo(-2*sc, 0);
+  ctx.moveTo(-2*sc, -3*sc); ctx.lineTo(-5*sc, 0);
+  ctx.moveTo(2*sc, -3*sc); ctx.lineTo(5*sc, 0);
+  ctx.moveTo(5*sc, -3*sc); ctx.lineTo(2*sc, 0);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawBubble(b) {
+  const s = worldToScreen(b.x, b.y);
+  const r = b.radius * SCALE;
+  const sc = SCALE;
+
+  if (b.isProjectile) {
+    // Rock
+    ctx.fillStyle = '#888';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 5 * sc, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#666';
+    ctx.beginPath();
+    ctx.arc(s.x - 1*sc, s.y - 1*sc, 2*sc, 0, Math.PI*2);
+    ctx.fill();
+    return;
+  }
+
+  if (b.popping) {
+    // Pop animation handled by particles
+    return;
+  }
+
+  ctx.save();
+
+  // Special bubble tint
+  let tint = 'rgba(100,200,255,0.15)';
+  if (b.special === 'water') tint = 'rgba(50,100,255,0.25)';
+  else if (b.special === 'fire') tint = 'rgba(255,80,0,0.25)';
+  else if (b.special === 'lightning') tint = 'rgba(255,255,0,0.25)';
+
+  // Bubble body - rainbow iridescent
+  const grad = ctx.createRadialGradient(s.x - r*0.3, s.y - r*0.3, 0, s.x, s.y, r);
+  const hue = (performance.now() * 0.05 + b.wobble * 50) % 360;
+  grad.addColorStop(0, `hsla(${hue}, 80%, 80%, 0.3)`);
+  grad.addColorStop(0.5, `hsla(${(hue+120)%360}, 70%, 60%, 0.2)`);
+  grad.addColorStop(1, `hsla(${(hue+240)%360}, 80%, 50%, 0.15)`);
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Inner tint
+  ctx.fillStyle = tint;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outline
+  ctx.strokeStyle = `hsla(${hue}, 60%, 70%, 0.5)`;
+  ctx.lineWidth = 1.5 * sc;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Inner highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.beginPath();
+  ctx.arc(s.x - r*0.3, s.y - r*0.3, r*0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Glow
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.15;
+  const ggrad = ctx.createRadialGradient(s.x, s.y, r*0.5, s.x, s.y, r*1.5);
+  ggrad.addColorStop(0, `hsla(${hue}, 80%, 70%, 0.3)`);
+  ggrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = ggrad;
+  ctx.fillRect(s.x - r*1.5, s.y - r*1.5, r*3, r*3);
+  ctx.restore();
+
+  // Special bubble icon
+  if (b.special && b.special !== 'rock') {
+    ctx.font = `${Math.floor(12*sc)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const icon = b.special === 'water' ? '💧' : b.special === 'fire' ? '🔥' : '⚡';
+    ctx.fillText(icon, s.x, s.y);
+  }
+
+  // Trapped enemy
+  if (b.trapped) {
+    drawTrappedEnemy(b.trapped, s.x, s.y, r);
+  }
+
+  ctx.restore();
+}
+
+function drawFruit(f) {
+  const s = worldToScreen(f.x, f.y);
+  const sc = SCALE;
+  const sz = 10 * sc;
+
+  ctx.save();
+  ctx.translate(s.x, s.y - sz);
+
+  // Glow
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = f.type.color;
+  ctx.beginPath();
+  ctx.arc(0, 0, sz * 1.3, 0, Math.PI*2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  ctx.fillStyle = f.type.color;
+  if (f.type.name === 'banana') {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, sz*0.8, sz*0.4, 0.3, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#da0';
+    ctx.beginPath();
+    ctx.ellipse(0, -1*sc, sz*0.6, sz*0.25, 0.3, 0, Math.PI*2);
+    ctx.fill();
+  } else if (f.type.name === 'orange') {
+    ctx.beginPath();
+    ctx.arc(0, 0, sz*0.6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#4a2';
+    ctx.fillRect(-2*sc, -sz*0.7, 4*sc, 3*sc);
+  } else if (f.type.name === 'cherry') {
+    ctx.beginPath();
+    ctx.arc(-3*sc, 2*sc, sz*0.4, 0, Math.PI*2);
+    ctx.arc(3*sc, 2*sc, sz*0.4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = '#4a2';
+    ctx.lineWidth = 1.5*sc;
+    ctx.beginPath();
+    ctx.moveTo(-3*sc, 2*sc);
+    ctx.quadraticCurveTo(0, -sz*0.8, 3*sc, 2*sc);
+    ctx.stroke();
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath();
+    ctx.arc(-2*sc, 0, sz*0.15, 0, Math.PI*2);
+    ctx.fill();
+  } else if (f.type.name === 'strawberry') {
+    ctx.beginPath();
+    ctx.moveTo(0, sz*0.5);
+    ctx.quadraticCurveTo(sz*0.6, -sz*0.1, 0, -sz*0.5);
+    ctx.quadraticCurveTo(-sz*0.6, -sz*0.1, 0, sz*0.5);
+    ctx.fill();
+    ctx.fillStyle = '#4a2';
+    ctx.beginPath();
+    ctx.ellipse(0, -sz*0.5, sz*0.4, sz*0.15, 0, 0, Math.PI*2);
+    ctx.fill();
+  } else if (f.type.name === 'cake') {
+    ctx.fillStyle = '#fa8';
+    ctx.fillRect(-sz*0.5, -sz*0.3, sz, sz*0.6);
+    ctx.fillStyle = '#f4f';
+    ctx.fillRect(-sz*0.5, -sz*0.3, sz, sz*0.15);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-sz*0.5, -sz*0.35, sz, sz*0.08);
+    // Candle
+    ctx.fillStyle = '#ff0';
+    ctx.fillRect(-1*sc, -sz*0.6, 2*sc, sz*0.25);
+    ctx.fillStyle = '#f80';
+    ctx.beginPath();
+    ctx.arc(0, -sz*0.65, 2*sc, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawParticles() {
+  ctx.save();
+  for (const p of particles) {
+    const s = worldToScreen(p.x, p.y);
+    const alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    const sz = p.size * SCALE * alpha;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, sz, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Sparkle glow
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const p of particles) {
+    const s = worldToScreen(p.x, p.y);
+    const alpha = (p.life / p.maxLife) * 0.3;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    const sz = p.size * SCALE * 2;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, sz, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawFloatingTexts() {
+  for (const ft of floatingTexts) {
+    const s = worldToScreen(ft.x, ft.y);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, ft.life * 2);
+    ctx.font = `bold ${Math.floor(14 * SCALE)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#000';
+    ctx.fillText(ft.text, s.x + 1, s.y + 1);
+    ctx.fillStyle = ft.color;
+    ctx.fillText(ft.text, s.x, s.y);
+    ctx.restore();
+  }
+}
+
+function drawHUD() {
+  const pad = 10;
+  const fs = Math.floor(16 * Math.min(SCALE, 1.2));
+  ctx.font = `bold ${fs}px sans-serif`;
+  ctx.textBaseline = 'top';
+
+  // Score
+  ctx.fillStyle = '#000';
+  ctx.textAlign = 'left';
+  ctx.fillText('SCORE: ' + score, pad + 1, pad + 1);
+  ctx.fillStyle = '#fff';
+  ctx.fillText('SCORE: ' + score, pad, pad);
+
+  // Level
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#000';
+  ctx.fillText('LEVEL ' + level, W/2 + 1, pad + 1);
+  ctx.fillStyle = '#ff0';
+  ctx.fillText('LEVEL ' + level, W/2, pad);
+
+  // Lives
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#000';
+  ctx.fillText('LIVES: ' + lives, W - pad + 1, pad + 1);
+  ctx.fillStyle = '#f44';
+  ctx.fillText('LIVES: ' + lives, W - pad, pad);
+
+  // Chain combo indicator
+  if (chainCount > 1 && chainTimer > 0) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff0';
+    ctx.globalAlpha = chainTimer / 1.5;
+    ctx.font = `bold ${Math.floor(20 * SCALE)}px sans-serif`;
+    ctx.fillText('COMBO x' + chainCount, W/2, pad + fs + 5);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function draw(t) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Screen shake
+  if (screenShake > 0) {
+    ctx.save();
+    ctx.translate(
+      (Math.random() - 0.5) * screenShake * SCALE,
+      (Math.random() - 0.5) * screenShake * SCALE
+    );
+  }
+
+  drawBackground(t / 1000);
+  drawPlatforms();
+
+  // Draw game objects
+  for (const f of fruits) drawFruit(f);
+  for (const en of enemies) {
+    if (en.alive && !en.trapped) drawEnemy(en);
+  }
+  for (const b of bubbles) drawBubble(b);
+  drawDragon(player);
+  drawParticles();
+  drawFloatingTexts();
+
+  if (screenShake > 0) ctx.restore();
+
+  drawHUD();
+}
+
+// ==================== GAME LOOP ====================
+let lastTime = 0;
+
+function gameLoop(ts) {
+  requestAnimationFrame(gameLoop);
+  const dt = Math.min((ts - lastTime) / 1000, MAX_DT);
+  lastTime = ts;
+
+  if (gameState === 'playing') {
+    update(dt);
+  }
+
+  if (gameState === 'playing' || gameState === 'levelClear' || gameState === 'paused') {
+    draw(ts);
+    if (gameState === 'paused') {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.font = `bold ${Math.floor(36 * SCALE)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('PAUSED', W/2, H/2);
+    }
+  } else if (gameState === 'title' || gameState === 'gameOver' || gameState === 'highScores') {
+    // Draw animated background for menus
+    ctx.clearRect(0, 0, W, H);
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#0a0a2e');
+    grad.addColorStop(1, '#1a1a4e');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+    // Floating bubbles on title
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 20; i++) {
+      const bx = (i * 73 + ts * 0.02 * (i%3+1)) % W;
+      const by = H - ((i * 97 + ts * 0.03 * (i%2+1)) % (H + 100));
+      const br = 10 + (i % 5) * 5;
+      const hue = (ts * 0.03 + i * 30) % 360;
+      ctx.globalAlpha = 0.15;
+      ctx.fillStyle = `hsl(${hue}, 70%, 60%)`;
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// ==================== UI HANDLERS ====================
+function addBtnHandler(id, fn) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+  btn.addEventListener('touchend', (e) => { e.stopPropagation(); });
+}
+
+addBtnHandler('startBtn', () => {
+  initAudio();
+  score = 0;
+  lives = 3;
+  level = 1;
+  document.getElementById('titleScreen').classList.add('hidden');
+  document.getElementById('pauseBtn').classList.remove('hidden');
+  startLevel();
+});
+
+addBtnHandler('restartBtn', () => {
+  initAudio();
+  score = 0;
+  lives = 3;
+  level = 1;
+  document.getElementById('gameOverScreen').classList.add('hidden');
+  document.getElementById('pauseBtn').classList.remove('hidden');
+  startLevel();
+});
+
+addBtnHandler('scoresBtn', () => {
+  document.getElementById('titleScreen').classList.add('hidden');
+  showHighScores('title');
+});
+
+addBtnHandler('scoresBtn2', () => {
+  document.getElementById('gameOverScreen').classList.add('hidden');
+  showHighScores('gameOver');
+});
+
+addBtnHandler('backBtn', () => {
+  const hs = document.getElementById('highScoreScreen');
+  const ret = hs._returnTo || 'title';
+  hs.classList.add('hidden');
+  if (ret === 'title') document.getElementById('titleScreen').classList.remove('hidden');
+  else if (ret === 'gameOver') document.getElementById('gameOverScreen').classList.remove('hidden');
+});
+
+addBtnHandler('muteBtn', () => {
+  muted = !muted;
+  document.getElementById('muteBtn').textContent = muted ? '🔇' : '🔊';
+  if (masterGain) masterGain.gain.value = muted ? 0 : 0.4;
+});
+
+addBtnHandler('pauseBtn', () => {
+  if (gameState === 'playing') {
+    gameState = 'paused';
+    stopMusic();
+    document.getElementById('pauseBtn').textContent = '▶';
+  } else if (gameState === 'paused') {
+    gameState = 'playing';
+    startMusic();
+    document.getElementById('pauseBtn').textContent = '⏸';
+  }
+});
+
+// Prevent default on game canvas
+document.addEventListener('gesturestart', e => e.preventDefault());
+
+// Start
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
