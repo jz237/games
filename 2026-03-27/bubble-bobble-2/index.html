@@ -963,6 +963,23 @@ function updatePlayer() {
     }
   });
 
+  // Jump on top of floating bubbles
+  if (p.vy >= 0) {
+    bubbles.forEach(b => {
+      if (b.phase === 'floating' || b.phase === 'idle') {
+        const bTop = b.y - b.r;
+        const px = p.x + p.w / 2;
+        const inRange = px > b.x - b.r * 0.8 && px < b.x + b.r * 0.8;
+        const landing = p.y + p.h > bTop && p.y + p.h < bTop + p.vy + b.r * 0.5 + 4;
+        if (inRange && landing) {
+          p.y = bTop - p.h;
+          p.vy = 0;
+          p.grounded = true;
+        }
+      }
+    });
+  }
+
   // Screen wrap
   if (p.x > GW) p.x = -p.w;
   if (p.x + p.w < 0) p.x = GW;
@@ -1126,8 +1143,16 @@ function updateBubbles() {
       }
     }
 
-    // Remove old bubbles
+    // Remove old bubbles — if trapped enemy inside, kill it (counts for level clear)
     if (b.age > b.maxAge || b.y < -30) {
+      if (b.trapped) {
+        b.trapped.alive = false;
+        b.trapped.trapped = false;
+        const pts = 100 * (b.trapped.angry ? 2 : 1);
+        score += pts;
+        spawnParticles(b.x, b.y, 14, `hsl(${Math.random()*360},90%,60%)`, true);
+        spawnFloatingText(b.x, b.y, `${pts}`, '#aff');
+      }
       bubbles.splice(i, 1);
     }
   }
