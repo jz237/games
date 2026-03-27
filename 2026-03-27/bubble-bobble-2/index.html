@@ -37,9 +37,10 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 <h1>BUBBLE BOBBLE 2</h1>
 <h2>🐉 Dragon's Bubble Adventure 🫧</h2>
 <div class="controls-info">
-<p>👈 TAP LEFT = move left + shoot</p>
-<p>👉 TAP RIGHT = move right + shoot</p>
-<p>⬆️ SWIPE UP = jump</p>
+<p>👈 HOLD LEFT = walk left (auto-shoots)</p>
+<p>👉 HOLD RIGHT = walk right (auto-shoots)</p>
+<p>👆 SWIPE UP = jump</p>
+<p>👉 TAP = shoot bubble</p>
 </div>
 <button class="btn" id="startBtn">START GAME</button>
 <button class="btn btn-small" id="scoresBtn">HIGH SCORES</button>
@@ -478,21 +479,32 @@ function spawnFloatingText(x, y, text, color='#fff') {
 }
 
 // ==================== INPUT HANDLING ====================
-// Dead simple: tap left = move left + shoot, tap right = move right + shoot, swipe up = jump
-let tapQueue = []; // queued taps: each is -1 (left) or 1 (right)
+// HOLD left/right = continuous movement + auto-shoot
+// SWIPE UP = jump (dy < -30 within 300ms)
+// TAP (< 200ms, minimal movement) = shoot bubble while standing
+let holdDir = 0;        // -1, 0, or 1: current held direction
 let wantJump = false;
+let wantShoot = false;  // set by tap
+let autoShootTimer = 0; // auto-shoot while moving
 
-// Track touches for swipe-up detection
+// Track active touch for hold detection
 const activeTouches = {};
+let primaryTouchId = null; // the touch controlling movement
 
 function handleTouchStart(e) {
   if (e.target.closest('button') || e.target.closest('.overlay')) return;
   e.preventDefault();
   for (const t of e.changedTouches) {
-    activeTouches[t.identifier] = { startX: t.clientX, startY: t.clientY, swiped: false };
-    // Tap = move + shoot in that direction
-    const dir = t.clientX < W / 2 ? -1 : 1;
-    tapQueue.push(dir);
+    activeTouches[t.identifier] = {
+      startX: t.clientX, startY: t.clientY,
+      startTime: performance.now(), swiped: false,
+      currentX: t.clientX, currentY: t.clientY
+    };
+    // First touch becomes primary (controls movement)
+    if (primaryTouchId === null) {
+      primaryTouchId = t.identifier;
+      holdDir = t.clientX < W / 2 ? -1 : 1;
+    }
   }
 }
 
@@ -500,18 +512,50 @@ function handleTouchMove(e) {
   e.preventDefault();
   for (const t of e.changedTouches) {
     const at = activeTouches[t.identifier];
-    if (!at || at.swiped) continue;
-    const dy = t.clientY - at.startY;
-    if (dy < -30) {
-      wantJump = true;
-      at.swiped = true;
+    if (!at) continue;
+    at.currentX = t.clientX;
+    at.currentY = t.clientY;
+
+    // Swipe up detection: dy < -30
+    if (!at.swiped) {
+      const dy = t.clientY - at.startY;
+      const elapsed = performance.now() - at.startTime;
+      if (dy < -30 && elapsed < 300) {
+        wantJump = true;
+        at.swiped = true;
+      }
+    }
+
+    // Update hold direction based on current touch position
+    if (t.identifier === primaryTouchId) {
+      holdDir = t.clientX < W / 2 ? -1 : 1;
     }
   }
 }
 
 function handleTouchEnd(e) {
   for (const t of e.changedTouches) {
+    const at = activeTouches[t.identifier];
+    if (at) {
+      const elapsed = performance.now() - at.startTime;
+      const dx = Math.abs(t.clientX - at.startX);
+      const dy = Math.abs(t.clientY - at.startY);
+      // TAP: short duration, no significant movement
+      if (elapsed < 200 && dx < 15 && dy < 15 && !at.swiped) {
+        wantShoot = true;
+      }
+    }
     delete activeTouches[t.identifier];
+    if (t.identifier === primaryTouchId) {
+      primaryTouchId = null;
+      holdDir = 0;
+      // Check if another touch is still active — adopt it
+      for (const id in activeTouches) {
+        primaryTouchId = parseInt(id);
+        holdDir = activeTouches[id].currentX < W / 2 ? -1 : 1;
+        break;
+      }
+    }
   }
 }
 
@@ -519,26 +563,58 @@ canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
 canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
 canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
 canvas.addEventListener('touchcancel', (e) => {
-  for (const t of e.changedTouches) delete activeTouches[t.identifier];
+  for (const t of e.changedTouches) {
+    delete activeTouches[t.identifier];
+    if (t.identifier === primaryTouchId) {
+      primaryTouchId = null;
+      holdDir = 0;
+      for (const id in activeTouches) {
+        primaryTouchId = parseInt(id);
+        holdDir = activeTouches[id].currentX < W / 2 ? -1 : 1;
+        break;
+      }
+    }
+  }
 }, { passive: false });
 
-// Mouse support for desktop — same logic: click side = move+shoot, drag up = jump
-let mouseStartY = 0;
+// Mouse support for desktop — hold-based
+let mouseDown = false;
+let mouseStartX = 0, mouseStartY = 0, mouseStartTime = 0;
+let mouseSwiped = false;
 canvas.addEventListener('mousedown', (e) => {
   if (e.target.closest('button') || e.target.closest('.overlay')) return;
+  mouseDown = true;
+  mouseStartX = e.clientX;
   mouseStartY = e.clientY;
-  const dir = e.clientX < W / 2 ? -1 : 1;
-  tapQueue.push(dir);
+  mouseStartTime = performance.now();
+  mouseSwiped = false;
+  holdDir = e.clientX < W / 2 ? -1 : 1;
 });
 canvas.addEventListener('mousemove', (e) => {
-  if (!(e.buttons & 1)) return;
-  const dy = e.clientY - mouseStartY;
-  if (dy < -30) {
-    wantJump = true;
-    mouseStartY = e.clientY;
+  if (!mouseDown) return;
+  // Swipe up
+  if (!mouseSwiped) {
+    const dy = e.clientY - mouseStartY;
+    const elapsed = performance.now() - mouseStartTime;
+    if (dy < -30 && elapsed < 300) {
+      wantJump = true;
+      mouseSwiped = true;
+    }
   }
+  holdDir = e.clientX < W / 2 ? -1 : 1;
 });
-canvas.addEventListener('mouseup', () => {});
+canvas.addEventListener('mouseup', (e) => {
+  if (mouseDown) {
+    const elapsed = performance.now() - mouseStartTime;
+    const dx = Math.abs(e.clientX - mouseStartX);
+    const dy = Math.abs(e.clientY - mouseStartY);
+    if (elapsed < 200 && dx < 15 && dy < 15 && !mouseSwiped) {
+      wantShoot = true;
+    }
+  }
+  mouseDown = false;
+  holdDir = 0;
+});
 
 // Keyboard support
 const keys = {};
@@ -568,15 +644,8 @@ function update(dt) {
     if (keys['ArrowLeft'] || keys['a']) kbDir = -1;
     if (keys['ArrowRight'] || keys['d']) kbDir = 1;
 
-    // Process tap queue — each tap = step + shoot in that direction
-    let tapDir = 0;
-    let didTap = false;
-    if (tapQueue.length > 0) {
-      tapDir = tapQueue.shift();
-      didTap = true;
-    }
-
-    const dir = kbDir || tapDir;
+    // Combine keyboard and touch hold direction
+    const dir = kbDir || holdDir;
     player.vx = dir * PLAYER_SPEED;
     if (dir !== 0) player.facing = dir;
 
@@ -588,13 +657,29 @@ function update(dt) {
     }
     wantJump = false;
 
-    // Bubble — fires on every tap, or keyboard z/x
-    if (didTap || keys['z'] || keys['x']) {
+    // Auto-shoot while moving (every 0.4s)
+    if (dir !== 0) {
+      autoShootTimer -= dt;
+      if (autoShootTimer <= 0) {
+        autoShootTimer = 0.4;
+        if (player.blowing <= 0) {
+          createBubble(player.x + player.facing * 20, player.y - player.h / 2, player.facing);
+          player.blowing = 0.15;
+          sfxBubbleBlow();
+        }
+      }
+    } else {
+      autoShootTimer = 0; // reset so first move shoots immediately
+    }
+
+    // Tap shoot (standing still) or keyboard z/x
+    if (wantShoot || keys['z'] || keys['x']) {
       if (player.blowing <= 0) {
         createBubble(player.x + player.facing * 20, player.y - player.h / 2, player.facing);
         player.blowing = 0.15;
         sfxBubbleBlow();
       }
+      wantShoot = false;
       keys['z'] = false;
       keys['x'] = false;
     }
@@ -921,7 +1006,8 @@ function playerHit() {
 
 function popBubble(b, idx) {
   sfxBubblePop();
-  spawnParticles(b.x, b.y, 12, ['#f0f','#0ff','#ff0','#f80','#0f0','#88f'], 120, 0.5);
+  // 18 rainbow sparkle particles
+  spawnParticles(b.x, b.y, 18, ['#ff2080','#ff8020','#ffee20','#40ff40','#20ccff','#8040ff','#ff40ff','#fff'], 160, 0.6);
   bubbles.splice(idx, 1);
 }
 
@@ -938,7 +1024,12 @@ function defeatEnemy(en, x, y) {
     screenShake = 4 + chainCount * 2;
   }
   spawnFloatingText(x, y - 10, '+' + chainPts, '#fff');
-  spawnParticles(x, y, 16, ['#f00','#0f0','#00f','#ff0','#f0f','#0ff'], 150, 0.6);
+  // 20 particles in enemy's color palette
+  const enemyColors = en.type === 'zen' ? ['#6c6','#4a4','#8e8','#afa','#fff'] :
+                      en.type === 'mighta' ? ['#48f','#36c','#6af','#88f','#fff'] :
+                      en.type === 'monsta' ? ['#eef','#ccf','#fff','#aaf','#ddf'] :
+                      ['#a4f','#c6f','#f80','#ff0','#fff'];
+  spawnParticles(x, y, 20, enemyColors, 180, 0.7);
   sfxEnemyDefeat();
   spawnFruit(x, y);
 }
@@ -1100,127 +1191,328 @@ function worldToScreen(wx, wy) {
   return { x: ox + wx * SCALE, y: oy + wy * SCALE };
 }
 
+// Pre-seeded pseudo-random for deterministic background particles
+const bgSeeds = [];
+for (let i = 0; i < 100; i++) bgSeeds.push(Math.random());
+
 function drawBackground(t) {
   const def = LEVEL_DEFS[(level - 1) % LEVEL_DEFS.length];
   const bgType = def.bgType;
 
-  // Base gradient
+  // Rich base gradient (3-stop for depth)
   const grad = ctx.createLinearGradient(0, 0, 0, H);
   switch(bgType) {
-    case 'stars': grad.addColorStop(0, '#0a0a2e'); grad.addColorStop(1, '#1a1a4e'); break;
-    case 'night': grad.addColorStop(0, '#050520'); grad.addColorStop(1, '#101040'); break;
-    case 'aurora': grad.addColorStop(0, '#1a0030'); grad.addColorStop(1, '#0a2040'); break;
-    case 'sunset': grad.addColorStop(0, '#4a1500'); grad.addColorStop(1, '#1a0500'); break;
-    case 'underwater': grad.addColorStop(0, '#002030'); grad.addColorStop(1, '#001020'); break;
-    case 'volcanic': grad.addColorStop(0, '#200000'); grad.addColorStop(1, '#100000'); break;
-    case 'clouds': grad.addColorStop(0, '#3a2050'); grad.addColorStop(1, '#1a1030'); break;
-    case 'cave': grad.addColorStop(0, '#1a1500'); grad.addColorStop(1, '#0a0a00'); break;
-    case 'space': grad.addColorStop(0, '#000020'); grad.addColorStop(1, '#000010'); break;
-    case 'snow': grad.addColorStop(0, '#202030'); grad.addColorStop(1, '#101020'); break;
-    case 'jungle': grad.addColorStop(0, '#001a00'); grad.addColorStop(1, '#000a00'); break;
-    case 'cosmic': grad.addColorStop(0, '#1a0020'); grad.addColorStop(1, '#000a20'); break;
-    default: grad.addColorStop(0, '#0a0a2e'); grad.addColorStop(1, '#1a1a4e');
+    case 'stars': grad.addColorStop(0,'#060622'); grad.addColorStop(0.5,'#0e0e3a'); grad.addColorStop(1,'#1a1a5e'); break;
+    case 'night': grad.addColorStop(0,'#020218'); grad.addColorStop(0.5,'#0a0a30'); grad.addColorStop(1,'#141450'); break;
+    case 'aurora': grad.addColorStop(0,'#1a0040'); grad.addColorStop(0.4,'#0a1838'); grad.addColorStop(1,'#081830'); break;
+    case 'sunset': grad.addColorStop(0,'#5a1a00'); grad.addColorStop(0.4,'#3a0e00'); grad.addColorStop(1,'#180800'); break;
+    case 'underwater': grad.addColorStop(0,'#003848'); grad.addColorStop(0.5,'#002838'); grad.addColorStop(1,'#001018'); break;
+    case 'volcanic': grad.addColorStop(0,'#280000'); grad.addColorStop(0.6,'#180000'); grad.addColorStop(1,'#0a0000'); break;
+    case 'clouds': grad.addColorStop(0,'#4a2868'); grad.addColorStop(0.5,'#2a1840'); grad.addColorStop(1,'#141028'); break;
+    case 'cave': grad.addColorStop(0,'#201a08'); grad.addColorStop(0.5,'#141000'); grad.addColorStop(1,'#0a0800'); break;
+    case 'space': grad.addColorStop(0,'#000028'); grad.addColorStop(0.5,'#000818'); grad.addColorStop(1,'#000008'); break;
+    case 'snow': grad.addColorStop(0,'#282838'); grad.addColorStop(0.5,'#1a1a28'); grad.addColorStop(1,'#101018'); break;
+    case 'jungle': grad.addColorStop(0,'#002200'); grad.addColorStop(0.5,'#001400'); grad.addColorStop(1,'#000a00'); break;
+    case 'cosmic': grad.addColorStop(0,'#200030'); grad.addColorStop(0.4,'#100828'); grad.addColorStop(1,'#000a28'); break;
+    default: grad.addColorStop(0,'#0a0a2e'); grad.addColorStop(1,'#1a1a4e');
   }
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
-  // Animated elements
-  if (bgType === 'stars' || bgType === 'night' || bgType === 'space' || bgType === 'cosmic') {
-    // Stars
+  // Ambient floating particles (dust motes / sparkles) — all backgrounds
+  ctx.save();
+  for (let i = 0; i < 30; i++) {
+    const sx = (bgSeeds[i] * W + t * 8 * (bgSeeds[i+30]*2+0.5)) % (W + 20) - 10;
+    const sy = (bgSeeds[i+10] * H + t * 5 * (bgSeeds[i+40]+0.5)) % (H + 20) - 10;
+    const bri = 0.06 + 0.06 * Math.sin(t * 1.5 + i * 2.1);
+    ctx.globalAlpha = bri;
     ctx.fillStyle = '#fff';
-    for (let i = 0; i < 60; i++) {
-      const sx = (i * 137.5 + t * 3 * (i%3+1)) % W;
-      const sy = (i * 97.3) % H;
-      const bri = 0.3 + 0.7 * Math.abs(Math.sin(t * 2 + i));
-      ctx.globalAlpha = bri;
-      ctx.fillRect(sx, sy, 1.5, 1.5);
+    ctx.beginPath();
+    ctx.arc(sx, sy, 1 + bgSeeds[i+20] * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Animated background elements
+  if (bgType === 'stars' || bgType === 'night' || bgType === 'space' || bgType === 'cosmic') {
+    // Parallax star layers
+    ctx.save();
+    for (let layer = 0; layer < 3; layer++) {
+      const speed = (layer + 1) * 2;
+      const count = 20 + layer * 15;
+      const baseSize = 0.5 + layer * 0.7;
+      for (let i = 0; i < count; i++) {
+        const si = layer * 35 + i;
+        const sx = (bgSeeds[si % 100] * W + t * speed * (bgSeeds[(si+50) % 100] + 0.3)) % W;
+        const sy = (bgSeeds[(si+20) % 100] * H);
+        const pulse = 0.3 + 0.7 * Math.abs(Math.sin(t * (1.5 + layer) + i * 0.7));
+        ctx.globalAlpha = pulse * (0.3 + layer * 0.2);
+        // Star cross shape for brightest layer
+        if (layer === 2 && i < 8) {
+          const ss = baseSize * 2;
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(sx - ss, sy - 0.3, ss * 2, 0.6);
+          ctx.fillRect(sx - 0.3, sy - ss, 0.6, ss * 2);
+        } else {
+          ctx.fillStyle = layer === 0 ? '#aac' : layer === 1 ? '#dde' : '#fff';
+          ctx.fillRect(sx, sy, baseSize, baseSize);
+        }
+      }
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
+    // Nebula glow for cosmic/space
+    if (bgType === 'cosmic' || bgType === 'space') {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.04;
+      const ng = ctx.createRadialGradient(W*0.3, H*0.4, 0, W*0.3, H*0.4, W*0.4);
+      ng.addColorStop(0, bgType === 'cosmic' ? '#a040ff' : '#2060ff');
+      ng.addColorStop(1, 'transparent');
+      ctx.fillStyle = ng;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
   }
   if (bgType === 'aurora') {
-    ctx.globalAlpha = 0.15;
+    ctx.save();
+    ctx.globalAlpha = 0.12;
+    ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 5; i++) {
       ctx.beginPath();
       ctx.strokeStyle = ['#0f0','#0ff','#f0f','#0f8','#80f'][i];
-      ctx.lineWidth = 8;
-      ctx.moveTo(0, H * 0.2 + i * 20);
-      for (let x = 0; x < W; x += 20) {
-        ctx.lineTo(x, H * 0.2 + i * 20 + Math.sin(x * 0.01 + t + i) * 30);
+      ctx.lineWidth = 10 + Math.sin(t * 0.5 + i) * 4;
+      ctx.moveTo(0, H * 0.15 + i * 25);
+      for (let x = 0; x < W; x += 10) {
+        const y = H * 0.15 + i * 25 + Math.sin(x * 0.008 + t * 0.7 + i * 1.2) * 35 + Math.sin(x * 0.02 + t * 1.5) * 10;
+        ctx.lineTo(x, y);
       }
       ctx.stroke();
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
   }
   if (bgType === 'clouds' || bgType === 'snow') {
-    ctx.globalAlpha = 0.1;
-    ctx.fillStyle = '#fff';
-    for (let i = 0; i < 8; i++) {
-      const cx = (i * 80 + t * 15 * (i%2+1)) % (W + 100) - 50;
-      const cy = 40 + i * 50;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 30, 0, Math.PI*2);
-      ctx.arc(cx+20, cy-10, 25, 0, Math.PI*2);
-      ctx.arc(cx+40, cy, 28, 0, Math.PI*2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    if (bgType === 'snow') {
-      ctx.fillStyle = '#fff';
-      for (let i = 0; i < 40; i++) {
-        const sx = (i * 47 + t * 20 * ((i%3)+1)) % W;
-        const sy = (i * 67 + t * 40 * ((i%2)+1)) % H;
-        ctx.globalAlpha = 0.3 + 0.3 * Math.sin(t+i);
-        ctx.fillRect(sx, sy, 2, 2);
+    // Layered clouds with gradients
+    ctx.save();
+    for (let layer = 0; layer < 2; layer++) {
+      ctx.globalAlpha = 0.06 + layer * 0.04;
+      for (let i = 0; i < 6; i++) {
+        const cx = (i * 90 + t * (10 + layer * 8) * (bgSeeds[i]+0.5)) % (W + 150) - 75;
+        const cy = 30 + i * 55 + layer * 20;
+        const cg = ctx.createRadialGradient(cx+20, cy-5, 5, cx+20, cy, 40);
+        cg.addColorStop(0, 'rgba(255,255,255,0.5)');
+        cg.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = cg;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 32, 0, Math.PI*2);
+        ctx.arc(cx+22, cy-12, 26, 0, Math.PI*2);
+        ctx.arc(cx+44, cy, 30, 0, Math.PI*2);
+        ctx.arc(cx+18, cy+8, 24, 0, Math.PI*2);
+        ctx.fill();
       }
-      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+    if (bgType === 'snow') {
+      ctx.save();
+      for (let i = 0; i < 50; i++) {
+        const sx = (bgSeeds[i % 100] * W + Math.sin(t * 0.8 + i) * 20 + t * 12 * (bgSeeds[(i+30) % 100] + 0.3)) % W;
+        const sy = (bgSeeds[(i+10) % 100] * H + t * 35 * (bgSeeds[(i+50) % 100] + 0.3)) % H;
+        const sz = 1 + bgSeeds[(i+20) % 100] * 2;
+        ctx.globalAlpha = 0.2 + 0.2 * Math.sin(t + i * 1.3);
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(sx, sy, sz, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
     }
   }
   if (bgType === 'volcanic') {
-    // Lava glow at bottom
-    ctx.globalAlpha = 0.15;
-    const lgrad = ctx.createRadialGradient(W/2, H, 0, W/2, H, H*0.6);
-    lgrad.addColorStop(0, '#f40');
+    ctx.save();
+    // Lava glow
+    ctx.globalAlpha = 0.12;
+    const lgrad = ctx.createRadialGradient(W/2, H, 0, W/2, H, H*0.7);
+    lgrad.addColorStop(0, '#f60');
+    lgrad.addColorStop(0.5, '#a20');
     lgrad.addColorStop(1, 'transparent');
     ctx.fillStyle = lgrad;
     ctx.fillRect(0, 0, W, H);
-    ctx.globalAlpha = 1;
-  }
-  if (bgType === 'underwater') {
-    ctx.globalAlpha = 0.08;
-    ctx.fillStyle = '#4af';
-    for (let i = 0; i < 15; i++) {
-      const bx = (i * 50 + Math.sin(t*0.5+i)*20) % W;
-      const by = (H - 20 - i * 30 - t * 10 * ((i%3)+0.5)) % (H + 40);
+    // Rising embers
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 20; i++) {
+      const ex = (bgSeeds[i] * W + Math.sin(t * 0.6 + i * 2) * 30) % W;
+      const ey = H - ((bgSeeds[(i+10) % 100] * H * 0.8 + t * 25 * (bgSeeds[(i+30) % 100] + 0.5)) % (H * 0.8));
+      ctx.globalAlpha = 0.15 * (1 - ey / H);
+      ctx.fillStyle = i % 3 === 0 ? '#f80' : i % 3 === 1 ? '#f40' : '#fa0';
       ctx.beginPath();
-      ctx.arc(bx, by, 3+Math.random()*5, 0, Math.PI*2);
+      ctx.arc(ex, ey, 1.5, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+  if (bgType === 'underwater') {
+    ctx.save();
+    // Light rays from above
+    ctx.globalAlpha = 0.04;
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 5; i++) {
+      const rx = W * 0.15 + i * W * 0.18 + Math.sin(t * 0.3 + i) * 20;
+      ctx.fillStyle = '#4af';
+      ctx.beginPath();
+      ctx.moveTo(rx - 5, 0);
+      ctx.lineTo(rx + 5, 0);
+      ctx.lineTo(rx + 40 + Math.sin(t * 0.5 + i) * 15, H);
+      ctx.lineTo(rx - 40 + Math.sin(t * 0.5 + i) * 15, H);
+      ctx.fill();
+    }
+    // Floating bubbles
+    for (let i = 0; i < 20; i++) {
+      const bx = (bgSeeds[i] * W + Math.sin(t * 0.4 + i * 1.5) * 25);
+      const by = H - ((bgSeeds[(i+15) % 100] * H + t * 18 * (bgSeeds[(i+40) % 100] + 0.3)) % (H + 40));
+      const br = 2 + bgSeeds[(i+25) % 100] * 3;
+      ctx.globalAlpha = 0.06;
+      ctx.strokeStyle = '#6cf';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (bgType === 'sunset') {
+    ctx.save();
+    ctx.globalAlpha = 0.06;
+    // Sun glow
+    const sg = ctx.createRadialGradient(W*0.7, H*0.15, 0, W*0.7, H*0.15, W*0.4);
+    sg.addColorStop(0, '#fa0');
+    sg.addColorStop(0.5, '#f40');
+    sg.addColorStop(1, 'transparent');
+    ctx.fillStyle = sg;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+  if (bgType === 'jungle') {
+    ctx.save();
+    ctx.globalAlpha = 0.05;
+    ctx.fillStyle = '#0f0';
+    // Hanging vines
+    for (let i = 0; i < 8; i++) {
+      const vx = bgSeeds[i] * W;
+      ctx.beginPath();
+      ctx.moveTo(vx, 0);
+      for (let y = 0; y < H * 0.5; y += 10) {
+        ctx.lineTo(vx + Math.sin(y * 0.03 + t * 0.5 + i) * 15, y);
+      }
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#0a0';
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (bgType === 'cave') {
+    ctx.save();
+    // Crystal glow spots
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.03;
+    for (let i = 0; i < 6; i++) {
+      const cx = bgSeeds[i] * W;
+      const cy = bgSeeds[i+10] * H;
+      const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 60);
+      cg.addColorStop(0, ['#ff0','#0ff','#f80','#a0f','#0f0','#f0a'][i]);
+      cg.addColorStop(1, 'transparent');
+      ctx.fillStyle = cg;
+      ctx.globalAlpha = 0.03 + 0.02 * Math.sin(t * 1.2 + i * 2);
+      ctx.fillRect(cx-60, cy-60, 120, 120);
+    }
+    ctx.restore();
   }
 }
 
 function drawPlatforms() {
   const def = LEVEL_DEFS[(level - 1) % LEVEL_DEFS.length];
   const col = def.theme;
+  // Parse theme color for gradient manipulation
+  const tc = document.createElement('canvas').getContext('2d');
+  tc.fillStyle = col;
+  const colHex = tc.fillStyle; // normalized
+
   for (const p of platforms) {
     const s = worldToScreen(p.x, p.y);
     const sw = p.w * SCALE;
     const sh = p.h * SCALE;
-    // 3D beveled block
+    const bevel = Math.max(2, 3 * SCALE);
+
+    // Main face gradient (top lighter, bottom darker)
+    const faceGrad = ctx.createLinearGradient(s.x, s.y, s.x, s.y + sh);
+    faceGrad.addColorStop(0, col);
+    faceGrad.addColorStop(1, 'rgba(0,0,0,0.25)');
+
+    // Draw main body
     ctx.fillStyle = col;
     ctx.fillRect(s.x, s.y, sw, sh);
-    // Top highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.fillRect(s.x, s.y, sw, 3 * SCALE);
-    // Bottom shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(s.x, s.y + sh - 3 * SCALE, sw, 3 * SCALE);
-    // Left highlight
+    // Darken gradient overlay
+    ctx.fillStyle = faceGrad;
+    ctx.fillRect(s.x, s.y, sw, sh);
+
+    // Top face (lighter — beveled top)
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x + sw, s.y);
+    ctx.lineTo(s.x + sw - bevel, s.y + bevel);
+    ctx.lineTo(s.x + bevel, s.y + bevel);
+    ctx.fill();
+
+    // Bottom face (darker — beveled bottom)
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y + sh);
+    ctx.lineTo(s.x + sw, s.y + sh);
+    ctx.lineTo(s.x + sw - bevel, s.y + sh - bevel);
+    ctx.lineTo(s.x + bevel, s.y + sh - bevel);
+    ctx.fill();
+
+    // Left face (slightly lighter)
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.fillRect(s.x, s.y, 2 * SCALE, sh);
-    // Right shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.15)';
-    ctx.fillRect(s.x + sw - 2 * SCALE, s.y, 2 * SCALE, sh);
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x + bevel, s.y + bevel);
+    ctx.lineTo(s.x + bevel, s.y + sh - bevel);
+    ctx.lineTo(s.x, s.y + sh);
+    ctx.fill();
+
+    // Right face (slightly darker)
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.moveTo(s.x + sw, s.y);
+    ctx.lineTo(s.x + sw - bevel, s.y + bevel);
+    ctx.lineTo(s.x + sw - bevel, s.y + sh - bevel);
+    ctx.lineTo(s.x + sw, s.y + sh);
+    ctx.fill();
+
+    // Pixel grid texture (subtle)
+    ctx.save();
+    ctx.globalAlpha = 0.06;
+    const gridSize = Math.max(4, TILE * SCALE / 8);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 0.5;
+    for (let gx = s.x + bevel; gx < s.x + sw - bevel; gx += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(gx, s.y + bevel);
+      ctx.lineTo(gx, s.y + sh - bevel);
+      ctx.stroke();
+    }
+    for (let gy = s.y + bevel; gy < s.y + sh - bevel; gy += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(s.x + bevel, gy);
+      ctx.lineTo(s.x + sw - bevel, gy);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Subtle outline
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(s.x, s.y, sw, sh);
   }
 }
 
@@ -1230,6 +1522,7 @@ function drawDragon(p) {
   const sc = SCALE;
   const f = p.facing;
   const breatheOff = Math.sin(p.breathe * 2) * 1.5 * sc;
+  const t = performance.now() / 1000;
 
   ctx.save();
   ctx.translate(s.x, s.y);
@@ -1242,130 +1535,346 @@ function drawDragon(p) {
 
   const bh = (36 + breatheOff / sc) * sc;
   const bw = 28 * sc;
+  const legOffset = [0, 2.5, 0, -2.5][p.walkFrame];
 
-  // Tail
+  // === SHADOW ===
+  ctx.save();
+  ctx.globalAlpha = 0.15;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(0, 2 * sc, bw * 0.5, 4 * sc, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // === TAIL (wiggly sine wave) ===
+  const tailSegs = 6;
+  ctx.save();
+  ctx.strokeStyle = '#3a3';
+  ctx.lineWidth = 4 * sc;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-10 * sc, -bh * 0.3);
+  for (let i = 1; i <= tailSegs; i++) {
+    const tt = i / tailSegs;
+    const tx = (-10 - i * 4) * sc;
+    const ty = -bh * 0.3 + Math.sin(t * 4 + i * 1.2) * (3 + i * 1.2) * sc + i * 1 * sc;
+    ctx.lineTo(tx, ty);
+  }
+  ctx.stroke();
+  // Tail tip
+  const tipX = (-10 - tailSegs * 4) * sc;
+  const tipY = -bh * 0.3 + Math.sin(t * 4 + tailSegs * 1.2) * (3 + tailSegs * 1.2) * sc + tailSegs * 1 * sc;
+  ctx.fillStyle = '#f80';
+  ctx.beginPath();
+  ctx.moveTo(tipX, tipY - 2 * sc);
+  ctx.lineTo(tipX - 4 * sc, tipY);
+  ctx.lineTo(tipX, tipY + 2 * sc);
+  ctx.fill();
+  ctx.restore();
+
+  // === BACK LEG (behind body) ===
+  ctx.save();
+  const backLegY = -2 * sc - legOffset * sc;
+  // Thigh
   ctx.fillStyle = '#3a3';
   ctx.beginPath();
-  const tailWag = Math.sin(p.walkTimer * 15 + p.breathe * 3) * 4 * sc;
-  ctx.moveTo(-12 * sc, -10 * sc);
-  ctx.quadraticCurveTo(-18 * sc, -14 * sc + tailWag, -20 * sc, -8 * sc + tailWag);
-  ctx.quadraticCurveTo(-18 * sc, -4 * sc, -12 * sc, -6 * sc);
+  ctx.ellipse(-5 * sc, backLegY, 5.5 * sc, 7 * sc, -0.15, 0, Math.PI * 2);
   ctx.fill();
-
-  // Body
+  // Foot
+  const bfGrad = ctx.createRadialGradient(-4*sc, backLegY + 5*sc, 0, -4*sc, backLegY + 5*sc, 7*sc);
+  bfGrad.addColorStop(0, '#5d5');
+  bfGrad.addColorStop(1, '#3a3');
+  ctx.fillStyle = bfGrad;
+  ctx.beginPath();
+  ctx.ellipse(-4 * sc, 0 - legOffset * sc, 7 * sc, 3.5 * sc, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Toes
   ctx.fillStyle = '#4c4';
-  ctx.beginPath();
-  ctx.ellipse(0, -bh * 0.45, bw * 0.48, bh * 0.48, 0, 0, Math.PI * 2);
-  ctx.fill();
+  for (let toe = 0; toe < 3; toe++) {
+    ctx.beginPath();
+    ctx.arc((-6 + toe * 2.5) * sc, 0 - legOffset * sc + 2 * sc, 1.5 * sc, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 
-  // Belly
-  ctx.fillStyle = '#ee8';
+  // === WINGS ===
+  ctx.save();
+  const wingFlap = p.grounded ? Math.sin(p.breathe * 2) * 4 : Math.sin(t * 10) * 12;
+  const wingOpen = p.grounded ? 0.7 : 1.0;
+  ctx.globalAlpha = 0.85;
+  // Wing membrane
+  const wmGrad = ctx.createLinearGradient(-4*sc, -bh*0.9, -16*sc, -bh*0.5);
+  wmGrad.addColorStop(0, '#6e6');
+  wmGrad.addColorStop(1, 'rgba(80,220,80,0.3)');
+  ctx.fillStyle = wmGrad;
   ctx.beginPath();
-  ctx.ellipse(1 * sc, -bh * 0.35, bw * 0.3, bh * 0.35, 0, 0.2, Math.PI - 0.2);
+  ctx.moveTo(-4 * sc, -bh * 0.65);
+  ctx.quadraticCurveTo(-10 * sc, -bh * 0.85 - wingFlap * sc * wingOpen, -18 * sc * wingOpen, -bh * 0.8 - wingFlap * sc * wingOpen);
+  ctx.quadraticCurveTo(-16 * sc * wingOpen, -bh * 0.65 - wingFlap * sc * 0.5, -12 * sc, -bh * 0.55);
+  ctx.quadraticCurveTo(-8 * sc, -bh * 0.55, -4 * sc, -bh * 0.6);
   ctx.fill();
+  // Wing bone
+  ctx.strokeStyle = '#4a4';
+  ctx.lineWidth = 1.5 * sc;
+  ctx.beginPath();
+  ctx.moveTo(-4 * sc, -bh * 0.65);
+  ctx.quadraticCurveTo(-10 * sc, -bh * 0.85 - wingFlap * sc * wingOpen, -18 * sc * wingOpen, -bh * 0.8 - wingFlap * sc * wingOpen);
+  ctx.stroke();
+  ctx.restore();
 
-  // Legs (animated)
-  const legOffset = [0, 2, 0, -2][p.walkFrame];
+  // === BODY (chunky bezier shape with gradient) ===
+  ctx.save();
+  const bodyGrad = ctx.createLinearGradient(0, -bh * 0.85, 0, -bh * 0.05);
+  bodyGrad.addColorStop(0, '#4dd44d'); // bright green top
+  bodyGrad.addColorStop(0.4, '#44cc44');
+  bodyGrad.addColorStop(1, '#66ee44'); // lime green bottom
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  // Chunky rounded body using bezier curves
+  ctx.moveTo(bw * 0.35, -bh * 0.08);
+  ctx.bezierCurveTo(bw * 0.55, -bh * 0.08, bw * 0.55, -bh * 0.25, bw * 0.5, -bh * 0.45);
+  ctx.bezierCurveTo(bw * 0.48, -bh * 0.7, bw * 0.3, -bh * 0.85, 0, -bh * 0.85);
+  ctx.bezierCurveTo(-bw * 0.35, -bh * 0.85, -bw * 0.5, -bh * 0.7, -bw * 0.48, -bh * 0.35);
+  ctx.bezierCurveTo(-bw * 0.45, -bh * 0.1, -bw * 0.3, -bh * 0.05, -bw * 0.1, -bh * 0.08);
+  ctx.bezierCurveTo(bw * 0.05, -bh * 0.06, bw * 0.2, -bh * 0.06, bw * 0.35, -bh * 0.08);
+  ctx.fill();
+  // Body shadow (bottom edge)
+  ctx.fillStyle = 'rgba(0,80,0,0.15)';
+  ctx.beginPath();
+  ctx.ellipse(0, -bh * 0.15, bw * 0.42, bh * 0.12, 0, 0, Math.PI);
+  ctx.fill();
+  ctx.restore();
+
+  // === BELLY PATCH (cream/yellow oval) ===
+  ctx.save();
+  const bellyGrad = ctx.createRadialGradient(2*sc, -bh*0.35, 0, 2*sc, -bh*0.35, bh*0.3);
+  bellyGrad.addColorStop(0, '#fff8d0');
+  bellyGrad.addColorStop(0.7, '#eecc66');
+  bellyGrad.addColorStop(1, '#ddbb44');
+  ctx.fillStyle = bellyGrad;
+  ctx.beginPath();
+  ctx.ellipse(2 * sc, -bh * 0.33, bw * 0.28, bh * 0.3, 0.05, 0.3, Math.PI - 0.3);
+  ctx.fill();
+  ctx.restore();
+
+  // === BACK SPIKES (row along the back curve) ===
+  ctx.save();
+  for (let i = 0; i < 5; i++) {
+    const spX = (-2 - i * 3.5) * sc;
+    const spBaseY = -bh * 0.68 + i * 3.5 * sc;
+    const spH = (5 - i * 0.5) * sc;
+    const spikeGrad = ctx.createLinearGradient(spX, spBaseY, spX, spBaseY - spH);
+    spikeGrad.addColorStop(0, '#f80');
+    spikeGrad.addColorStop(1, '#ff4');
+    ctx.fillStyle = spikeGrad;
+    ctx.beginPath();
+    ctx.moveTo(spX - 2.5 * sc, spBaseY);
+    ctx.lineTo(spX, spBaseY - spH);
+    ctx.lineTo(spX + 2.5 * sc, spBaseY);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // === FRONT LEG ===
+  ctx.save();
+  const frontLegY = -2 * sc + legOffset * sc;
   ctx.fillStyle = '#3a3';
-  // Front leg
   ctx.beginPath();
-  ctx.ellipse(5 * sc, -2 * sc + legOffset * sc, 5 * sc, 6 * sc, 0.1, 0, Math.PI * 2);
+  ctx.ellipse(5 * sc, frontLegY, 5.5 * sc, 7 * sc, 0.15, 0, Math.PI * 2);
   ctx.fill();
-  // Back leg
+  // Foot with gradient
+  const ffGrad = ctx.createRadialGradient(6*sc, frontLegY + 5*sc, 0, 6*sc, frontLegY + 5*sc, 7*sc);
+  ffGrad.addColorStop(0, '#5d5');
+  ffGrad.addColorStop(1, '#3a3');
+  ctx.fillStyle = ffGrad;
   ctx.beginPath();
-  ctx.ellipse(-5 * sc, -2 * sc - legOffset * sc, 5 * sc, 6 * sc, -0.1, 0, Math.PI * 2);
+  ctx.ellipse(6 * sc, 0 + legOffset * sc, 7 * sc, 3.5 * sc, 0, 0, Math.PI * 2);
   ctx.fill();
-  // Feet
+  // Toes
   ctx.fillStyle = '#4c4';
-  ctx.beginPath();
-  ctx.ellipse(6 * sc, 0 + legOffset * sc, 6 * sc, 3 * sc, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(-4 * sc, 0 - legOffset * sc, 6 * sc, 3 * sc, 0, 0, Math.PI * 2);
-  ctx.fill();
+  for (let toe = 0; toe < 3; toe++) {
+    ctx.beginPath();
+    ctx.arc((4 + toe * 2.5) * sc, 0 + legOffset * sc + 2 * sc, 1.5 * sc, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 
-  // Small wings
+  // === STUBBY ARMS ===
+  ctx.save();
+  const armSwing = Math.abs(player.vx) > 10 ? Math.sin(t * 8) * 0.3 : 0;
+  // Front arm
+  ctx.fillStyle = '#3c3';
+  ctx.beginPath();
+  ctx.save();
+  ctx.translate(8 * sc, -bh * 0.4);
+  ctx.rotate(0.4 + armSwing);
+  ctx.ellipse(0, 4 * sc, 3 * sc, 5 * sc, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Rounded hand
   ctx.fillStyle = '#5d5';
-  const wingFlap = p.grounded ? Math.sin(p.breathe * 2) * 3 : Math.sin(p.breathe * 8) * 8;
   ctx.beginPath();
-  ctx.moveTo(-4 * sc, -bh * 0.7);
-  ctx.quadraticCurveTo(-14 * sc, -bh * 0.9 - wingFlap * sc, -10 * sc, -bh * 0.6);
+  ctx.arc(0, 8 * sc, 2.5 * sc, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  // Back arm (behind)
+  ctx.fillStyle = '#2a2';
+  ctx.beginPath();
+  ctx.save();
+  ctx.translate(-6 * sc, -bh * 0.4);
+  ctx.rotate(-0.3 - armSwing);
+  ctx.ellipse(0, 4 * sc, 3 * sc, 5 * sc, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#4a4';
+  ctx.beginPath();
+  ctx.arc(0, 8 * sc, 2.5 * sc, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.restore();
+
+  // === HEAD ===
+  ctx.save();
+  // Head gradient
+  const headGrad = ctx.createRadialGradient(5*sc, -bh*0.78, 2*sc, 6*sc, -bh*0.75, 13*sc);
+  headGrad.addColorStop(0, '#5ee55e');
+  headGrad.addColorStop(1, '#3cb43c');
+  ctx.fillStyle = headGrad;
+  ctx.beginPath();
+  // Rounded head with snout bump
+  ctx.arc(5 * sc, -bh * 0.75, 12.5 * sc, 0, Math.PI * 2);
+  ctx.fill();
+  // Snout bump
+  ctx.fillStyle = '#4dd44d';
+  ctx.beginPath();
+  ctx.ellipse(14 * sc, -bh * 0.68, 6 * sc, 5 * sc, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // === NOSTRILS ===
+  ctx.fillStyle = '#2a6';
+  ctx.beginPath();
+  ctx.ellipse(17 * sc, -bh * 0.7, 1.2 * sc, 1 * sc, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(17 * sc, -bh * 0.65, 1.2 * sc, 1 * sc, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Head
-  ctx.fillStyle = '#4c4';
-  ctx.beginPath();
-  ctx.arc(6 * sc, -bh * 0.75, 12 * sc, 0, Math.PI * 2);
-  ctx.fill();
+  // === HORNS (orange triangular with gradient) ===
+  ctx.save();
+  for (let h = 0; h < 2; h++) {
+    const hx = (1 + h * 7) * sc;
+    const hy = -bh * (0.88 + h * 0.02);
+    const hGrad = ctx.createLinearGradient(hx, hy, hx, hy - 8 * sc);
+    hGrad.addColorStop(0, '#f80');
+    hGrad.addColorStop(1, '#ff4');
+    ctx.fillStyle = hGrad;
+    ctx.beginPath();
+    ctx.moveTo(hx - 2.5 * sc, hy);
+    ctx.quadraticCurveTo(hx - 1 * sc, hy - 5 * sc, hx + 0.5 * sc, hy - 8 * sc);
+    ctx.quadraticCurveTo(hx + 2 * sc, hy - 5 * sc, hx + 3 * sc, hy);
+    ctx.fill();
+  }
+  ctx.restore();
 
-  // Eyes
+  // === EYES (BIG, expressive, look in movement direction) ===
+  ctx.save();
+  // Eye whites
+  const eyeX = 8 * sc, eyeY = -bh * 0.8;
+  const eyeRx = 5.5 * sc, eyeRy = 6 * sc;
   ctx.fillStyle = '#fff';
+  ctx.shadowColor = 'rgba(0,0,0,0.2)';
+  ctx.shadowBlur = 3 * sc;
   ctx.beginPath();
-  ctx.arc(9 * sc, -bh * 0.8, 5 * sc, 0, Math.PI * 2);
+  ctx.ellipse(eyeX, eyeY, eyeRx, eyeRy, 0, 0, Math.PI * 2);
   ctx.fill();
+  // Second eye (smaller, further back)
+  ctx.beginPath();
+  ctx.ellipse(eyeX - 8 * sc, eyeY + 0.5 * sc, eyeRx * 0.75, eyeRy * 0.8, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Pupils (look in movement direction — since we're flipped, just offset forward)
+  const pupilOff = Math.abs(player.vx) > 10 ? 1.5 : 0;
   ctx.fillStyle = '#111';
   ctx.beginPath();
-  ctx.arc(10 * sc, -bh * 0.79, 2.5 * sc, 0, Math.PI * 2);
+  ctx.ellipse(eyeX + pupilOff * sc, eyeY + 0.5 * sc, 2.8 * sc, 3.2 * sc, 0, 0, Math.PI * 2);
   ctx.fill();
-  // Eye highlight
+  ctx.beginPath();
+  ctx.ellipse(eyeX - 8 * sc + pupilOff * sc, eyeY + 1 * sc, 2.2 * sc, 2.6 * sc, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Highlight dots (two per eye for that cute sparkle)
   ctx.fillStyle = '#fff';
   ctx.beginPath();
-  ctx.arc(11 * sc, -bh * 0.82, 1 * sc, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Horns
-  ctx.fillStyle = '#f80';
-  ctx.beginPath();
-  ctx.moveTo(2 * sc, -bh * 0.88);
-  ctx.lineTo(0, -bh * 1.02);
-  ctx.lineTo(5 * sc, -bh * 0.88);
+  ctx.arc(eyeX + 1.5 * sc, eyeY - 2 * sc, 1.5 * sc, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(8 * sc, -bh * 0.9);
-  ctx.lineTo(7 * sc, -bh * 1.05);
-  ctx.lineTo(11 * sc, -bh * 0.9);
+  ctx.arc(eyeX - 1 * sc, eyeY + 1 * sc, 0.8 * sc, 0, Math.PI * 2);
   ctx.fill();
+  ctx.beginPath();
+  ctx.arc(eyeX - 7 * sc, eyeY - 1.5 * sc, 1.2 * sc, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 
-  // Back spikes
-  ctx.fillStyle = '#f80';
-  for (let i = 0; i < 3; i++) {
-    ctx.beginPath();
-    ctx.moveTo((-3 - i * 4) * sc, -bh * 0.65 + i * 3 * sc);
-    ctx.lineTo((-5 - i * 4) * sc, -bh * 0.75 + i * 2 * sc);
-    ctx.lineTo((-1 - i * 4) * sc, -bh * 0.65 + i * 3 * sc);
-    ctx.fill();
-  }
-
-  // Mouth
+  // === MOUTH ===
   if (p.blowing > 0) {
-    ctx.fillStyle = '#d44';
+    // Puffed cheeks
+    ctx.save();
+    ctx.fillStyle = '#6e6';
     ctx.beginPath();
-    ctx.arc(14 * sc, -bh * 0.68, 4 * sc, 0, Math.PI * 2);
+    ctx.ellipse(12 * sc, -bh * 0.62, 7 * sc, 6 * sc, 0, 0, Math.PI * 2);
     ctx.fill();
-    // Puff
-    ctx.fillStyle = 'rgba(100,200,255,0.4)';
+    // Open mouth (circle)
+    ctx.fillStyle = '#c33';
     ctx.beginPath();
-    ctx.arc(20 * sc, -bh * 0.68, (3 + p.blowing * 10) * sc, 0, Math.PI * 2);
+    ctx.arc(16 * sc, -bh * 0.65, 4 * sc, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = '#811';
+    ctx.beginPath();
+    ctx.arc(16 * sc, -bh * 0.65, 2.5 * sc, 0, Math.PI * 2);
+    ctx.fill();
+    // Bubble forming
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.4;
+    const puffR = (3 + p.blowing * 15) * sc;
+    const pGrad = ctx.createRadialGradient(22*sc, -bh*0.65, 0, 22*sc, -bh*0.65, puffR);
+    pGrad.addColorStop(0, 'rgba(150,220,255,0.6)');
+    pGrad.addColorStop(1, 'rgba(100,180,255,0)');
+    ctx.fillStyle = pGrad;
+    ctx.beginPath();
+    ctx.arc(22 * sc, -bh * 0.65, puffR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   } else {
-    // Smile
-    ctx.strokeStyle = '#2a2';
-    ctx.lineWidth = 1.5 * sc;
+    // Happy smile (bezier)
+    ctx.strokeStyle = '#2a7a2a';
+    ctx.lineWidth = 1.8 * sc;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.arc(12 * sc, -bh * 0.7, 3 * sc, 0, Math.PI);
+    ctx.moveTo(10 * sc, -bh * 0.66);
+    ctx.quadraticCurveTo(13 * sc, -bh * 0.6, 15 * sc, -bh * 0.66);
     ctx.stroke();
+    // Cheek blush
+    ctx.save();
+    ctx.globalAlpha = 0.15;
+    ctx.fillStyle = '#f88';
+    ctx.beginPath();
+    ctx.ellipse(14 * sc, -bh * 0.62, 3.5 * sc, 2.5 * sc, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
-  // Player aura (combo glow)
+  // === COMBO AURA ===
   if (chainCount > 0 && chainTimer > 0) {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.2 * (chainTimer / 1.5);
-    const agrad = ctx.createRadialGradient(0, -bh*0.5, 0, 0, -bh*0.5, 30*sc);
+    ctx.globalAlpha = 0.25 * (chainTimer / 1.5);
+    const agrad = ctx.createRadialGradient(0, -bh*0.45, 0, 0, -bh*0.45, 35*sc);
     agrad.addColorStop(0, '#ff0');
+    agrad.addColorStop(0.5, '#fa0');
     agrad.addColorStop(1, 'transparent');
     ctx.fillStyle = agrad;
-    ctx.fillRect(-30*sc, -bh-10*sc, 60*sc, bh+20*sc);
+    ctx.fillRect(-35*sc, -bh-15*sc, 70*sc, bh+30*sc);
     ctx.restore();
   }
 
@@ -1377,127 +1886,374 @@ function drawEnemy(en) {
   const s = worldToScreen(en.x, en.y);
   const sc = SCALE;
   const dir = Math.sign(en.vx) || 1;
+  const t = performance.now() / 1000;
 
   ctx.save();
   ctx.translate(s.x, s.y);
 
-  if (en.trapped) {
-    // Squished inside bubble - drawn in bubble draw
-    ctx.restore();
-    return;
-  }
+  if (en.trapped) { ctx.restore(); return; }
 
-  // Angry tint
+  // Angry pulsing
   if (en.angry) {
-    ctx.globalAlpha = 0.5 + 0.5 * Math.abs(Math.sin(performance.now() * 0.01));
+    ctx.globalAlpha = 0.6 + 0.4 * Math.abs(Math.sin(t * 8));
   }
 
   const bh = en.h * sc;
   const bw = en.w * sc;
 
+  // Shadow
+  ctx.save();
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(0, 1 * sc, bw * 0.4, 3 * sc, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
   if (en.type === 'zen') {
-    // Green blob
-    ctx.fillStyle = en.angry ? '#f44' : '#6c6';
+    // === ZEN-CHAN: Round green blob with googly eyes ===
+    const wobble = Math.sin(t * 5 + en.x * 0.1) * 0.04;
+    ctx.save();
+    ctx.rotate(wobble);
+
+    // Body gradient (round blob)
+    const zenGrad = ctx.createRadialGradient(-2*sc, -bh*0.55, 2*sc, 0, -bh*0.45, bw*0.5);
+    zenGrad.addColorStop(0, en.angry ? '#ff6644' : '#88ee66');
+    zenGrad.addColorStop(1, en.angry ? '#cc2200' : '#44aa22');
+    ctx.fillStyle = zenGrad;
     ctx.beginPath();
-    ctx.ellipse(0, -bh * 0.5, bw * 0.5, bh * 0.5, 0, 0, Math.PI * 2);
+    // Blobby shape using bezier
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(bw*0.5, 0, bw*0.55, -bh*0.3, bw*0.48, -bh*0.55);
+    ctx.bezierCurveTo(bw*0.4, -bh*0.85, bw*0.15, -bh*0.95, 0, -bh*0.95);
+    ctx.bezierCurveTo(-bw*0.15, -bh*0.95, -bw*0.4, -bh*0.85, -bw*0.48, -bh*0.55);
+    ctx.bezierCurveTo(-bw*0.55, -bh*0.3, -bw*0.5, 0, 0, 0);
     ctx.fill();
-    // Eyes
+
+    // Belly highlight
+    ctx.save();
+    ctx.globalAlpha = 0.2;
     ctx.fillStyle = '#fff';
     ctx.beginPath();
-    ctx.arc(-4 * sc, -bh * 0.55, 4 * sc, 0, Math.PI * 2);
-    ctx.arc(4 * sc, -bh * 0.55, 4 * sc, 0, Math.PI * 2);
+    ctx.ellipse(0, -bh*0.4, bw*0.25, bh*0.2, 0, 0, Math.PI*2);
     ctx.fill();
-    ctx.fillStyle = '#111';
+    ctx.restore();
+
+    // BIG googly eyes
+    const eyeSize = 5.5 * sc;
+    for (let e = -1; e <= 1; e += 2) {
+      const ex = e * 4.5 * sc;
+      const ey = -bh * 0.6;
+      // White
+      ctx.fillStyle = '#fff';
+      ctx.shadowColor = 'rgba(0,0,0,0.15)';
+      ctx.shadowBlur = 2 * sc;
+      ctx.beginPath();
+      ctx.arc(ex, ey, eyeSize, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // Pupil (tracks player)
+      ctx.fillStyle = '#111';
+      ctx.beginPath();
+      ctx.arc(ex + en.eyeTrack * 2 * sc, ey + 0.5 * sc, eyeSize * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      // Highlight
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(ex + 1.5 * sc, ey - 1.5 * sc, eyeSize * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Small mouth
+    ctx.strokeStyle = en.angry ? '#800' : '#2a6a22';
+    ctx.lineWidth = 1.5 * sc;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.arc((-4 + en.eyeTrack * 1.5) * sc, -bh * 0.54, 2 * sc, 0, Math.PI * 2);
-    ctx.arc((4 + en.eyeTrack * 1.5) * sc, -bh * 0.54, 2 * sc, 0, Math.PI * 2);
-    ctx.fill();
-    // Feet
-    const lo = [0,2,0,-2][en.walkFrame] * sc;
-    ctx.fillStyle = en.angry ? '#d22' : '#4a4';
-    ctx.beginPath();
-    ctx.ellipse(-6*sc, 0+lo, 5*sc, 3*sc, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(6*sc, 0-lo, 5*sc, 3*sc, 0, 0, Math.PI*2);
-    ctx.fill();
-  } else if (en.type === 'mighta') {
-    // Blue hooded creature
-    ctx.fillStyle = en.angry ? '#f44' : '#48f';
-    ctx.beginPath();
-    ctx.ellipse(0, -bh * 0.45, bw * 0.45, bh * 0.45, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Hood
-    ctx.fillStyle = en.angry ? '#d22' : '#36c';
-    ctx.beginPath();
-    ctx.arc(0, -bh * 0.65, bw * 0.4, Math.PI, 0);
-    ctx.fill();
-    // Eyes (peering from under hood)
-    ctx.fillStyle = '#ff0';
-    ctx.beginPath();
-    ctx.arc(-3*sc, -bh*0.5, 3*sc, 0, Math.PI*2);
-    ctx.arc(3*sc, -bh*0.5, 3*sc, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = '#111';
-    ctx.beginPath();
-    ctx.arc((-3+en.eyeTrack)*sc, -bh*0.49, 1.5*sc, 0, Math.PI*2);
-    ctx.arc((3+en.eyeTrack)*sc, -bh*0.49, 1.5*sc, 0, Math.PI*2);
-    ctx.fill();
-  } else if (en.type === 'monsta') {
-    // White bouncy whale
-    ctx.fillStyle = en.angry ? '#f88' : '#eef';
-    ctx.beginPath();
-    ctx.ellipse(0, -bh*0.45, bw*0.5, bh*0.45, 0, 0, Math.PI*2);
-    ctx.fill();
-    // Tail
-    ctx.fillStyle = en.angry ? '#f66' : '#ccf';
-    ctx.beginPath();
-    ctx.moveTo(-12*sc, -bh*0.45);
-    ctx.quadraticCurveTo(-18*sc, -bh*0.7, -14*sc, -bh*0.85);
-    ctx.quadraticCurveTo(-10*sc, -bh*0.7, -10*sc, -bh*0.5);
-    ctx.fill();
-    // Eyes
-    ctx.fillStyle = '#111';
-    ctx.beginPath();
-    ctx.arc((4+en.eyeTrack)*sc, -bh*0.55, 2.5*sc, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc((5+en.eyeTrack)*sc, -bh*0.58, 1*sc, 0, Math.PI*2);
-    ctx.fill();
-    // Smile
-    ctx.strokeStyle = '#99a';
-    ctx.lineWidth = 1.5*sc;
-    ctx.beginPath();
-    ctx.arc(6*sc, -bh*0.4, 4*sc, 0, Math.PI * 0.6);
+    if (en.angry) {
+      ctx.moveTo(-3*sc, -bh*0.35); ctx.lineTo(0, -bh*0.3); ctx.lineTo(3*sc, -bh*0.35);
+    } else {
+      ctx.arc(0, -bh*0.38, 3*sc, 0.1, Math.PI - 0.1);
+    }
     ctx.stroke();
+
+    // Feet (wobble animated)
+    const lo = [0,2.5,0,-2.5][en.walkFrame] * sc;
+    const footCol = en.angry ? '#cc3300' : '#55aa33';
+    for (let f = -1; f <= 1; f += 2) {
+      ctx.fillStyle = footCol;
+      ctx.beginPath();
+      ctx.ellipse(f * 6.5 * sc, 0 + f * lo, 5.5 * sc, 3.5 * sc, f * 0.15, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+  } else if (en.type === 'mighta') {
+    // === MIGHTA: Hooded figure with glowing eyes and cape ===
+    const sway = Math.sin(t * 3 + en.x * 0.1) * 0.03;
+    ctx.save();
+    ctx.rotate(sway);
+
+    // Cape flowing behind
+    ctx.save();
+    const capeDir = -Math.sign(en.vx) || -1;
+    ctx.fillStyle = en.angry ? '#881100' : '#223388';
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(capeDir * -2 * sc, -bh * 0.7);
+    ctx.quadraticCurveTo(capeDir * -10 * sc, -bh * 0.4 + Math.sin(t * 4) * 3 * sc,
+                         capeDir * -8 * sc, 0 + Math.sin(t * 3) * 2 * sc);
+    ctx.quadraticCurveTo(capeDir * -5 * sc, -bh * 0.3, capeDir * -2 * sc, -bh * 0.2);
+    ctx.fill();
+    ctx.restore();
+
+    // Body
+    const migGrad = ctx.createRadialGradient(0, -bh*0.5, 2*sc, 0, -bh*0.45, bw*0.5);
+    migGrad.addColorStop(0, en.angry ? '#ff5533' : '#5588ff');
+    migGrad.addColorStop(1, en.angry ? '#aa2200' : '#2244aa');
+    ctx.fillStyle = migGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, -bh * 0.45, bw * 0.46, bh * 0.46, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hood (pointed top)
+    const hoodGrad = ctx.createLinearGradient(0, -bh*0.95, 0, -bh*0.5);
+    hoodGrad.addColorStop(0, en.angry ? '#aa1100' : '#1a3377');
+    hoodGrad.addColorStop(1, en.angry ? '#cc2200' : '#2a44aa');
+    ctx.fillStyle = hoodGrad;
+    ctx.beginPath();
+    ctx.moveTo(-bw*0.42, -bh*0.55);
+    ctx.quadraticCurveTo(-bw*0.3, -bh*0.9, 0, -bh*1.05);
+    ctx.quadraticCurveTo(bw*0.3, -bh*0.9, bw*0.42, -bh*0.55);
+    ctx.quadraticCurveTo(bw*0.2, -bh*0.65, 0, -bh*0.6);
+    ctx.quadraticCurveTo(-bw*0.2, -bh*0.65, -bw*0.42, -bh*0.55);
+    ctx.fill();
+
+    // Glowing eyes under hood
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let e = -1; e <= 1; e += 2) {
+      const ex = e * 3.5 * sc + en.eyeTrack * sc;
+      const ey = -bh * 0.55;
+      // Glow
+      ctx.globalAlpha = 0.4;
+      const eGlow = ctx.createRadialGradient(ex, ey, 0, ex, ey, 5*sc);
+      eGlow.addColorStop(0, en.angry ? '#ff4400' : '#ffff00');
+      eGlow.addColorStop(1, 'transparent');
+      ctx.fillStyle = eGlow;
+      ctx.fillRect(ex-5*sc, ey-5*sc, 10*sc, 10*sc);
+      // Core
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = en.angry ? '#ff6600' : '#ffee00';
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, 2.5*sc, 2*sc, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Small feet
+    const lo = [0,2,0,-2][en.walkFrame] * sc;
+    ctx.fillStyle = en.angry ? '#882200' : '#223388';
+    ctx.beginPath();
+    ctx.ellipse(-4*sc, 0+lo, 4*sc, 2.5*sc, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(4*sc, 0-lo, 4*sc, 2.5*sc, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
+
+  } else if (en.type === 'monsta') {
+    // === MONSTA: Chubby white whale, squash/stretch bounce ===
+    const bounce = Math.sin(t * 4) * 0.06;
+    const squashX = 1 + bounce;
+    const squashY = 1 - bounce;
+
+    ctx.save();
+    ctx.scale(squashX, squashY);
+
+    // Body gradient
+    const monGrad = ctx.createRadialGradient(2*sc, -bh*0.5, 2*sc, 0, -bh*0.45, bw*0.55);
+    monGrad.addColorStop(0, en.angry ? '#ffaaaa' : '#ffffff');
+    monGrad.addColorStop(1, en.angry ? '#ff6666' : '#ccccee');
+    ctx.fillStyle = monGrad;
+    ctx.beginPath();
+    // Whale body shape
+    ctx.moveTo(bw*0.45, -bh*0.3);
+    ctx.bezierCurveTo(bw*0.55, -bh*0.5, bw*0.45, -bh*0.8, bw*0.1, -bh*0.9);
+    ctx.bezierCurveTo(-bw*0.15, -bh*0.92, -bw*0.45, -bh*0.8, -bw*0.5, -bh*0.5);
+    ctx.bezierCurveTo(-bw*0.52, -bh*0.2, -bw*0.3, 0, 0, 0);
+    ctx.bezierCurveTo(bw*0.2, 0, bw*0.4, -bh*0.1, bw*0.45, -bh*0.3);
+    ctx.fill();
+
+    // Belly
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#eef';
+    ctx.beginPath();
+    ctx.ellipse(2*sc, -bh*0.35, bw*0.3, bh*0.25, 0.1, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+
+    // Tail fin
+    const tailWag = Math.sin(t * 5) * 5 * sc;
+    ctx.fillStyle = en.angry ? '#ff8888' : '#bbbbee';
+    ctx.beginPath();
+    ctx.moveTo(-bw*0.4, -bh*0.5);
+    ctx.quadraticCurveTo(-bw*0.65, -bh*0.75 + tailWag, -bw*0.55, -bh*0.9 + tailWag);
+    ctx.quadraticCurveTo(-bw*0.45, -bh*0.7, -bw*0.35, -bh*0.55);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-bw*0.4, -bh*0.5);
+    ctx.quadraticCurveTo(-bw*0.65, -bh*0.3 + tailWag, -bw*0.55, -bh*0.15 + tailWag);
+    ctx.quadraticCurveTo(-bw*0.45, -bh*0.35, -bw*0.35, -bh*0.45);
+    ctx.fill();
+
+    // Blowhole
+    ctx.fillStyle = en.angry ? '#dd6666' : '#aaaacc';
+    ctx.beginPath();
+    ctx.ellipse(-bw*0.05, -bh*0.88, 2.5*sc, 1.5*sc, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Eye (one visible - whale style)
+    const ex = 5 * sc + en.eyeTrack * sc;
+    const ey = -bh * 0.6;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(ex, ey, 4*sc, 4.5*sc, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.arc(ex + en.eyeTrack * sc, ey + 0.5*sc, 2.5*sc, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(ex + 1*sc, ey - 1*sc, 1*sc, 0, Math.PI*2);
+    ctx.fill();
+
+    // Cute smile
+    ctx.strokeStyle = en.angry ? '#cc4444' : '#8888bb';
+    ctx.lineWidth = 1.5*sc;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(8*sc, -bh*0.42, 4*sc, -0.2, Math.PI * 0.5);
+    ctx.stroke();
+
+    ctx.restore();
+
   } else if (en.type === 'drunk') {
-    // Purple fire creature
-    ctx.fillStyle = en.angry ? '#f44' : '#a4f';
+    // === DRUNK: Purple dragon-like with flame particles ===
+    const sway = Math.sin(t * 3.5) * 0.04;
+    ctx.save();
+    ctx.rotate(sway);
+
+    // Body gradient
+    const drkGrad = ctx.createRadialGradient(0, -bh*0.55, 2*sc, 0, -bh*0.5, bw*0.5);
+    drkGrad.addColorStop(0, en.angry ? '#ff5544' : '#bb66ff');
+    drkGrad.addColorStop(1, en.angry ? '#aa2200' : '#7733cc');
+    ctx.fillStyle = drkGrad;
     ctx.beginPath();
     ctx.ellipse(0, -bh*0.5, bw*0.48, bh*0.5, 0, 0, Math.PI*2);
     ctx.fill();
-    // Flame crown
-    ctx.fillStyle = en.angry ? '#f80' : '#c6f';
-    for (let i = 0; i < 4; i++) {
+
+    // Dragon belly
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#e8d0ff';
+    ctx.beginPath();
+    ctx.ellipse(2*sc, -bh*0.38, bw*0.25, bh*0.25, 0.1, 0.2, Math.PI-0.2);
+    ctx.fill();
+    ctx.restore();
+
+    // Animated flame crown
+    for (let i = 0; i < 5; i++) {
+      const fx = (i - 2) * 4.5 * sc;
+      const flameH = (6 + Math.sin(t * 12 + i * 1.8) * 3) * sc;
+      const fGrad = ctx.createLinearGradient(fx, -bh*0.88, fx, -bh*0.88 - flameH);
+      if (en.angry) {
+        fGrad.addColorStop(0, '#ff4400');
+        fGrad.addColorStop(0.5, '#ff8800');
+        fGrad.addColorStop(1, '#ffcc00');
+      } else {
+        fGrad.addColorStop(0, '#9944cc');
+        fGrad.addColorStop(0.5, '#cc66ff');
+        fGrad.addColorStop(1, '#ff88ff');
+      }
+      ctx.fillStyle = fGrad;
       ctx.beginPath();
-      const fx = (i - 1.5) * 5 * sc;
-      ctx.moveTo(fx - 3*sc, -bh*0.85);
-      ctx.lineTo(fx, -bh*1.05 - Math.sin(en.walkTimer*10+i)*3*sc);
-      ctx.lineTo(fx + 3*sc, -bh*0.85);
+      ctx.moveTo(fx - 3*sc, -bh*0.88);
+      ctx.quadraticCurveTo(fx - 1*sc, -bh*0.88 - flameH*0.7, fx, -bh*0.88 - flameH);
+      ctx.quadraticCurveTo(fx + 1*sc, -bh*0.88 - flameH*0.7, fx + 3*sc, -bh*0.88);
       ctx.fill();
     }
-    // Eyes
-    ctx.fillStyle = '#f00';
+
+    // Flame particles around mouth area when angry
+    if (en.angry) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.5;
+      for (let i = 0; i < 4; i++) {
+        const px = (8 + i * 3) * sc * dir;
+        const py = -bh * 0.45 + Math.sin(t * 10 + i * 2) * 3 * sc;
+        ctx.fillStyle = ['#f80','#ff0','#f40'][i % 3];
+        ctx.beginPath();
+        ctx.arc(px, py, (2 + Math.sin(t * 8 + i) * 1) * sc, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // Eyes (menacing)
+    for (let e = -1; e <= 1; e += 2) {
+      const ex = (e * 4 + (e > 0 ? 1 : 0)) * sc;
+      const ey = -bh * 0.58;
+      // Red sclera
+      ctx.fillStyle = en.angry ? '#ff2200' : '#dd2200';
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, 3.5*sc, 3*sc, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Yellow slit pupil
+      ctx.fillStyle = '#ff0';
+      ctx.beginPath();
+      ctx.ellipse(ex + en.eyeTrack * sc, ey, 1.5*sc, 2.5*sc, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Glow
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.2;
+      const eGlow = ctx.createRadialGradient(ex, ey, 0, ex, ey, 5*sc);
+      eGlow.addColorStop(0, '#f00');
+      eGlow.addColorStop(1, 'transparent');
+      ctx.fillStyle = eGlow;
+      ctx.fillRect(ex-5*sc, ey-5*sc, 10*sc, 10*sc);
+      ctx.restore();
+    }
+
+    // Snout / mouth
+    ctx.fillStyle = en.angry ? '#cc3322' : '#8844aa';
     ctx.beginPath();
-    ctx.arc(-3*sc, -bh*0.55, 3*sc, 0, Math.PI*2);
-    ctx.arc(5*sc, -bh*0.55, 3*sc, 0, Math.PI*2);
+    ctx.ellipse(6*sc*dir, -bh*0.42, 3.5*sc, 2.5*sc, 0, 0, Math.PI*2);
     ctx.fill();
-    ctx.fillStyle = '#ff0';
+    // Nostrils
+    ctx.fillStyle = '#333';
     ctx.beginPath();
-    ctx.arc((-3+en.eyeTrack)*sc, -bh*0.54, 1.5*sc, 0, Math.PI*2);
-    ctx.arc((5+en.eyeTrack)*sc, -bh*0.54, 1.5*sc, 0, Math.PI*2);
+    ctx.arc((7*dir - 1)*sc, -bh*0.44, 1*sc, 0, Math.PI*2);
     ctx.fill();
+    ctx.beginPath();
+    ctx.arc((7*dir + 1)*sc, -bh*0.44, 1*sc, 0, Math.PI*2);
+    ctx.fill();
+
+    // Feet
+    const lo = [0,2,0,-2][en.walkFrame] * sc;
+    ctx.fillStyle = en.angry ? '#992200' : '#6633aa';
+    ctx.beginPath();
+    ctx.ellipse(-5*sc, 0+lo, 5*sc, 3*sc, -0.1, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(5*sc, 0-lo, 5*sc, 3*sc, 0.1, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
   }
 
   ctx.restore();
@@ -1505,26 +2261,42 @@ function drawEnemy(en) {
 
 function drawTrappedEnemy(en, bx, by, radius) {
   const sc = SCALE;
+  const t = performance.now() / 1000;
   ctx.save();
   ctx.translate(bx, by);
 
-  const squish = 1 + 0.1 * Math.sin(performance.now() * 0.005);
-  ctx.scale(0.6 * squish, 0.6 / squish);
+  const squish = 1 + 0.12 * Math.sin(t * 5);
+  const wiggle = Math.sin(t * 6) * 0.15;
+  ctx.rotate(wiggle);
+  ctx.scale(0.55 * squish, 0.55 / squish);
 
-  // Simplified enemy inside bubble
+  // Enemy body (slightly distorted inside)
   const col = en.type === 'zen' ? '#6c6' : en.type === 'mighta' ? '#48f' : en.type === 'monsta' ? '#eef' : '#a4f';
-  ctx.fillStyle = col;
+  const bodyGrad = ctx.createRadialGradient(-2*sc, -2*sc, 0, 0, 0, 11*sc);
+  bodyGrad.addColorStop(0, col);
+  bodyGrad.addColorStop(1, '#333');
+  ctx.fillStyle = bodyGrad;
   ctx.beginPath();
   ctx.arc(0, 0, 10 * sc, 0, Math.PI * 2);
   ctx.fill();
-  // X eyes (distressed)
-  ctx.strokeStyle = '#111';
+
+  // Distressed X eyes
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2 * sc;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-5*sc, -4*sc); ctx.lineTo(-2*sc, -1*sc);
+  ctx.moveTo(-2*sc, -4*sc); ctx.lineTo(-5*sc, -1*sc);
+  ctx.moveTo(2*sc, -4*sc); ctx.lineTo(5*sc, -1*sc);
+  ctx.moveTo(5*sc, -4*sc); ctx.lineTo(2*sc, -1*sc);
+  ctx.stroke();
+
+  // Distressed mouth (wobbly)
+  ctx.strokeStyle = '#fff';
   ctx.lineWidth = 1.5 * sc;
   ctx.beginPath();
-  ctx.moveTo(-5*sc, -3*sc); ctx.lineTo(-2*sc, 0);
-  ctx.moveTo(-2*sc, -3*sc); ctx.lineTo(-5*sc, 0);
-  ctx.moveTo(2*sc, -3*sc); ctx.lineTo(5*sc, 0);
-  ctx.moveTo(5*sc, -3*sc); ctx.lineTo(2*sc, 0);
+  ctx.moveTo(-3*sc, 3*sc);
+  ctx.quadraticCurveTo(0, 3*sc + Math.sin(t*8)*2*sc, 3*sc, 3*sc);
   ctx.stroke();
 
   ctx.restore();
@@ -1534,72 +2306,127 @@ function drawBubble(b) {
   const s = worldToScreen(b.x, b.y);
   const r = b.radius * SCALE;
   const sc = SCALE;
+  const t = performance.now() / 1000;
 
   if (b.isProjectile) {
-    // Rock
-    ctx.fillStyle = '#888';
+    // Rock projectile — craggy with shadow
+    const rockGrad = ctx.createRadialGradient(s.x - 1*sc, s.y - 1*sc, 0, s.x, s.y, 6*sc);
+    rockGrad.addColorStop(0, '#aaa');
+    rockGrad.addColorStop(0.5, '#888');
+    rockGrad.addColorStop(1, '#555');
+    ctx.fillStyle = rockGrad;
     ctx.beginPath();
-    ctx.arc(s.x, s.y, 5 * sc, 0, Math.PI * 2);
+    // Irregular rock shape
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      const rr = (4 + (i % 3) * 1.5) * sc;
+      const rx = s.x + Math.cos(a) * rr;
+      const ry = s.y + Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(rx, ry); else ctx.lineTo(rx, ry);
+    }
+    ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#666';
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.beginPath();
-    ctx.arc(s.x - 1*sc, s.y - 1*sc, 2*sc, 0, Math.PI*2);
+    ctx.arc(s.x - 1.5*sc, s.y - 1.5*sc, 2*sc, 0, Math.PI*2);
     ctx.fill();
     return;
   }
 
-  if (b.popping) {
-    // Pop animation handled by particles
-    return;
-  }
+  if (b.popping) return;
 
   ctx.save();
 
-  // Special bubble tint
-  let tint = 'rgba(100,200,255,0.15)';
-  if (b.special === 'water') tint = 'rgba(50,100,255,0.25)';
-  else if (b.special === 'fire') tint = 'rgba(255,80,0,0.25)';
-  else if (b.special === 'lightning') tint = 'rgba(255,255,0,0.25)';
+  const hue = (t * 18 + b.wobble * 50) % 360;
 
-  // Bubble body - rainbow iridescent
-  const grad = ctx.createRadialGradient(s.x - r*0.3, s.y - r*0.3, 0, s.x, s.y, r);
-  const hue = (performance.now() * 0.05 + b.wobble * 50) % 360;
-  grad.addColorStop(0, `hsla(${hue}, 80%, 80%, 0.3)`);
-  grad.addColorStop(0.5, `hsla(${(hue+120)%360}, 70%, 60%, 0.2)`);
-  grad.addColorStop(1, `hsla(${(hue+240)%360}, 80%, 50%, 0.15)`);
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Inner tint
-  ctx.fillStyle = tint;
-  ctx.beginPath();
-  ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Outline
-  ctx.strokeStyle = `hsla(${hue}, 60%, 70%, 0.5)`;
-  ctx.lineWidth = 1.5 * sc;
-  ctx.beginPath();
-  ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Inner highlight
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.beginPath();
-  ctx.arc(s.x - r*0.3, s.y - r*0.3, r*0.3, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Glow
+  // Outer glow (additive)
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = 0.15;
-  const ggrad = ctx.createRadialGradient(s.x, s.y, r*0.5, s.x, s.y, r*1.5);
-  ggrad.addColorStop(0, `hsla(${hue}, 80%, 70%, 0.3)`);
-  ggrad.addColorStop(1, 'transparent');
-  ctx.fillStyle = ggrad;
-  ctx.fillRect(s.x - r*1.5, s.y - r*1.5, r*3, r*3);
+  ctx.globalAlpha = 0.12;
+  const outerGlow = ctx.createRadialGradient(s.x, s.y, r * 0.6, s.x, s.y, r * 1.8);
+  outerGlow.addColorStop(0, `hsla(${hue}, 80%, 70%, 0.4)`);
+  outerGlow.addColorStop(1, 'transparent');
+  ctx.fillStyle = outerGlow;
+  ctx.fillRect(s.x - r*2, s.y - r*2, r*4, r*4);
+  ctx.restore();
+
+  // Main bubble body — multiple gradient layers for depth
+  // Layer 1: base translucent fill
+  const baseGrad = ctx.createRadialGradient(s.x - r*0.2, s.y - r*0.2, r*0.1, s.x, s.y, r);
+  baseGrad.addColorStop(0, `hsla(${hue}, 60%, 85%, 0.25)`);
+  baseGrad.addColorStop(0.6, `hsla(${(hue+90)%360}, 50%, 70%, 0.12)`);
+  baseGrad.addColorStop(1, `hsla(${(hue+180)%360}, 60%, 60%, 0.08)`);
+  ctx.fillStyle = baseGrad;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Layer 2: inner color gradient
+  const innerGrad = ctx.createRadialGradient(s.x, s.y + r*0.3, r*0.1, s.x, s.y, r*0.9);
+  innerGrad.addColorStop(0, `hsla(${(hue+120)%360}, 70%, 75%, 0.15)`);
+  innerGrad.addColorStop(1, `hsla(${(hue+240)%360}, 60%, 50%, 0.05)`);
+  ctx.fillStyle = innerGrad;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Special bubble inner tint
+  if (b.special === 'water') {
+    ctx.fillStyle = 'rgba(40,100,255,0.2)';
+    ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI*2); ctx.fill();
+  } else if (b.special === 'fire') {
+    ctx.fillStyle = 'rgba(255,80,0,0.2)';
+    ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI*2); ctx.fill();
+  } else if (b.special === 'lightning') {
+    ctx.fillStyle = 'rgba(255,255,0,0.2)';
+    ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI*2); ctx.fill();
+  }
+
+  // Rainbow iridescent edge ring (cycling hue around circumference)
+  ctx.save();
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 2 * sc;
+  const edgeSegs = 24;
+  for (let i = 0; i < edgeSegs; i++) {
+    const a1 = (i / edgeSegs) * Math.PI * 2;
+    const a2 = ((i + 1) / edgeSegs) * Math.PI * 2;
+    const segHue = (hue + (i / edgeSegs) * 360) % 360;
+    ctx.strokeStyle = `hsla(${segHue}, 80%, 65%, 0.6)`;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, r, a1, a2);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // White highlight arc (top-left crescent)
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2.5 * sc;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(s.x - r*0.15, s.y - r*0.15, r*0.7, Math.PI * 1.1, Math.PI * 1.65);
+  ctx.stroke();
+  ctx.restore();
+
+  // Small secondary highlight dot
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.beginPath();
+  ctx.arc(s.x + r*0.25, s.y + r*0.3, r*0.12, 0, Math.PI*2);
+  ctx.fill();
+
+  // Subtle inner glow
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.08;
+  const igGrad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r*0.8);
+  igGrad.addColorStop(0, `hsla(${(hue+60)%360}, 90%, 80%, 0.5)`);
+  igGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = igGrad;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, r*0.8, 0, Math.PI*2);
+  ctx.fill();
   ctx.restore();
 
   // Special bubble icon
@@ -1623,72 +2450,183 @@ function drawFruit(f) {
   const s = worldToScreen(f.x, f.y);
   const sc = SCALE;
   const sz = 10 * sc;
+  const t = performance.now() / 1000;
+  const pulse = 1 + Math.sin(t * 4 + f.x) * 0.08;
 
   ctx.save();
   ctx.translate(s.x, s.y - sz);
+  ctx.scale(pulse, pulse);
 
-  // Glow
-  ctx.globalAlpha = 0.3;
-  ctx.fillStyle = f.type.color;
+  // Inviting glow (additive)
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.2 + 0.1 * Math.sin(t * 3 + f.x);
+  const glowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, sz * 1.5);
+  glowGrad.addColorStop(0, f.type.color);
+  glowGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = glowGrad;
   ctx.beginPath();
-  ctx.arc(0, 0, sz * 1.3, 0, Math.PI*2);
+  ctx.arc(0, 0, sz * 1.5, 0, Math.PI*2);
   ctx.fill();
-  ctx.globalAlpha = 1;
+  ctx.restore();
 
-  ctx.fillStyle = f.type.color;
   if (f.type.name === 'banana') {
+    // Banana with gradient
+    const bGrad = ctx.createLinearGradient(-sz*0.8, 0, sz*0.8, 0);
+    bGrad.addColorStop(0, '#eecc00');
+    bGrad.addColorStop(0.5, '#ffee44');
+    bGrad.addColorStop(1, '#ddaa00');
+    ctx.fillStyle = bGrad;
     ctx.beginPath();
-    ctx.ellipse(0, 0, sz*0.8, sz*0.4, 0.3, 0, Math.PI*2);
+    // Curved banana shape
+    ctx.moveTo(-sz*0.6, sz*0.1);
+    ctx.quadraticCurveTo(-sz*0.3, -sz*0.4, sz*0.1, -sz*0.35);
+    ctx.quadraticCurveTo(sz*0.5, -sz*0.3, sz*0.6, -sz*0.1);
+    ctx.quadraticCurveTo(sz*0.5, sz*0.15, sz*0.1, sz*0.1);
+    ctx.quadraticCurveTo(-sz*0.2, sz*0.05, -sz*0.6, sz*0.1);
     ctx.fill();
-    ctx.fillStyle = '#da0';
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.beginPath();
-    ctx.ellipse(0, -1*sc, sz*0.6, sz*0.25, 0.3, 0, Math.PI*2);
+    ctx.ellipse(0, -sz*0.15, sz*0.35, sz*0.08, 0.3, 0, Math.PI*2);
     ctx.fill();
   } else if (f.type.name === 'orange') {
+    const oGrad = ctx.createRadialGradient(-2*sc, -2*sc, 0, 0, 0, sz*0.65);
+    oGrad.addColorStop(0, '#ffaa33');
+    oGrad.addColorStop(1, '#ee6600');
+    ctx.fillStyle = oGrad;
     ctx.beginPath();
     ctx.arc(0, 0, sz*0.6, 0, Math.PI*2);
     ctx.fill();
+    // Texture dots
+    ctx.save();
+    ctx.globalAlpha = 0.15;
+    ctx.fillStyle = '#cc5500';
+    for (let i = 0; i < 6; i++) {
+      const dx = Math.cos(i * 1.1) * sz * 0.3;
+      const dy = Math.sin(i * 1.1) * sz * 0.3;
+      ctx.beginPath(); ctx.arc(dx, dy, sc, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+    // Stem
     ctx.fillStyle = '#4a2';
-    ctx.fillRect(-2*sc, -sz*0.7, 4*sc, 3*sc);
-  } else if (f.type.name === 'cherry') {
     ctx.beginPath();
-    ctx.arc(-3*sc, 2*sc, sz*0.4, 0, Math.PI*2);
-    ctx.arc(3*sc, 2*sc, sz*0.4, 0, Math.PI*2);
+    ctx.ellipse(0, -sz*0.6, 2.5*sc, 2*sc, 0, 0, Math.PI*2);
     ctx.fill();
-    ctx.strokeStyle = '#4a2';
+    ctx.fillStyle = '#6a4';
+    ctx.fillRect(-1*sc, -sz*0.7, 2*sc, 3*sc);
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.arc(-2*sc, -2*sc, sz*0.2, 0, Math.PI*2);
+    ctx.fill();
+  } else if (f.type.name === 'cherry') {
+    // Stems
+    ctx.strokeStyle = '#3a6a22';
     ctx.lineWidth = 1.5*sc;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(-3*sc, 2*sc);
-    ctx.quadraticCurveTo(0, -sz*0.8, 3*sc, 2*sc);
+    ctx.quadraticCurveTo(-2*sc, -sz*0.5, 0, -sz*0.7);
+    ctx.moveTo(3*sc, 2*sc);
+    ctx.quadraticCurveTo(2*sc, -sz*0.5, 0, -sz*0.7);
     ctx.stroke();
-    // Highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    // Leaf
+    ctx.fillStyle = '#5a2';
     ctx.beginPath();
-    ctx.arc(-2*sc, 0, sz*0.15, 0, Math.PI*2);
+    ctx.ellipse(2*sc, -sz*0.65, 3*sc, 1.5*sc, 0.5, 0, Math.PI*2);
     ctx.fill();
+    // Cherries with gradient
+    for (let c = -1; c <= 1; c += 2) {
+      const cGrad = ctx.createRadialGradient(c*3*sc - 1*sc, 1*sc, 0, c*3*sc, 2*sc, sz*0.45);
+      cGrad.addColorStop(0, '#ff4444');
+      cGrad.addColorStop(1, '#aa0000');
+      ctx.fillStyle = cGrad;
+      ctx.beginPath();
+      ctx.arc(c * 3 * sc, 2 * sc, sz * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      // Highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.beginPath();
+      ctx.arc(c*3*sc - 1*sc, 0.5*sc, sz*0.12, 0, Math.PI*2);
+      ctx.fill();
+    }
   } else if (f.type.name === 'strawberry') {
+    // Strawberry with gradient
+    const sGrad = ctx.createLinearGradient(0, -sz*0.5, 0, sz*0.5);
+    sGrad.addColorStop(0, '#ff4466');
+    sGrad.addColorStop(1, '#cc1133');
+    ctx.fillStyle = sGrad;
     ctx.beginPath();
     ctx.moveTo(0, sz*0.5);
-    ctx.quadraticCurveTo(sz*0.6, -sz*0.1, 0, -sz*0.5);
-    ctx.quadraticCurveTo(-sz*0.6, -sz*0.1, 0, sz*0.5);
+    ctx.quadraticCurveTo(sz*0.65, -sz*0.05, 0, -sz*0.45);
+    ctx.quadraticCurveTo(-sz*0.65, -sz*0.05, 0, sz*0.5);
     ctx.fill();
+    // Seeds
+    ctx.fillStyle = '#ffee66';
+    ctx.globalAlpha = 0.5;
+    for (let sy = -2; sy <= 2; sy++) {
+      for (let sx = -1; sx <= 1; sx++) {
+        if ((sx + sy) % 2 === 0) {
+          ctx.beginPath();
+          ctx.ellipse(sx * 2.5 * sc, sy * 2.5 * sc, 0.8*sc, 1.2*sc, 0, 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+    // Leaves
     ctx.fillStyle = '#4a2';
     ctx.beginPath();
-    ctx.ellipse(0, -sz*0.5, sz*0.4, sz*0.15, 0, 0, Math.PI*2);
+    ctx.ellipse(0, -sz*0.45, sz*0.45, sz*0.15, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(-2*sc, -sz*0.2, sz*0.15, sz*0.25, -0.3, 0, Math.PI*2);
     ctx.fill();
   } else if (f.type.name === 'cake') {
-    ctx.fillStyle = '#fa8';
-    ctx.fillRect(-sz*0.5, -sz*0.3, sz, sz*0.6);
-    ctx.fillStyle = '#f4f';
-    ctx.fillRect(-sz*0.5, -sz*0.3, sz, sz*0.15);
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(-sz*0.5, -sz*0.35, sz, sz*0.08);
-    // Candle
-    ctx.fillStyle = '#ff0';
-    ctx.fillRect(-1*sc, -sz*0.6, 2*sc, sz*0.25);
-    ctx.fillStyle = '#f80';
+    // Cake body with layers
+    const cakeGrad = ctx.createLinearGradient(0, -sz*0.35, 0, sz*0.3);
+    cakeGrad.addColorStop(0, '#ffbb88');
+    cakeGrad.addColorStop(1, '#ee9966');
+    ctx.fillStyle = cakeGrad;
+    // Rounded cake shape
     ctx.beginPath();
-    ctx.arc(0, -sz*0.65, 2*sc, 0, Math.PI*2);
+    ctx.moveTo(-sz*0.5, sz*0.3);
+    ctx.lineTo(-sz*0.5, -sz*0.2);
+    ctx.quadraticCurveTo(-sz*0.5, -sz*0.35, -sz*0.3, -sz*0.35);
+    ctx.lineTo(sz*0.3, -sz*0.35);
+    ctx.quadraticCurveTo(sz*0.5, -sz*0.35, sz*0.5, -sz*0.2);
+    ctx.lineTo(sz*0.5, sz*0.3);
+    ctx.closePath();
+    ctx.fill();
+    // Frosting
+    ctx.fillStyle = '#ff88cc';
+    ctx.beginPath();
+    ctx.moveTo(-sz*0.5, -sz*0.15);
+    for (let x = -sz*0.5; x <= sz*0.5; x += sz*0.2) {
+      ctx.quadraticCurveTo(x + sz*0.05, -sz*0.25, x + sz*0.1, -sz*0.15);
+      ctx.quadraticCurveTo(x + sz*0.15, -sz*0.05, x + sz*0.2, -sz*0.15);
+    }
+    ctx.lineTo(sz*0.5, -sz*0.3);
+    ctx.lineTo(-sz*0.5, -sz*0.3);
+    ctx.fill();
+    // Cream layer
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-sz*0.48, -sz*0.35, sz*0.96, sz*0.06);
+    // Candle
+    ctx.fillStyle = '#ff4488';
+    ctx.fillRect(-1.2*sc, -sz*0.65, 2.4*sc, sz*0.3);
+    // Flame
+    const flameH = 3 + Math.sin(t * 10) * 1;
+    const flGrad = ctx.createRadialGradient(0, -sz*0.68, 0, 0, -sz*0.68, flameH*sc);
+    flGrad.addColorStop(0, '#fff');
+    flGrad.addColorStop(0.3, '#ff0');
+    flGrad.addColorStop(1, '#f80');
+    ctx.fillStyle = flGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, -sz*0.7, 2*sc, flameH*sc, 0, 0, Math.PI*2);
     ctx.fill();
   }
 
@@ -1696,31 +2634,33 @@ function drawFruit(f) {
 }
 
 function drawParticles() {
+  // Base particles
   ctx.save();
   for (const p of particles) {
     const s = worldToScreen(p.x, p.y);
     const alpha = p.life / p.maxLife;
     ctx.globalAlpha = alpha;
     ctx.fillStyle = p.color;
-    const sz = p.size * SCALE * alpha;
+    const sz = p.size * SCALE * (0.5 + alpha * 0.5);
     ctx.beginPath();
     ctx.arc(s.x, s.y, sz, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
 
-  // Sparkle glow
+  // Additive glow layer
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   for (const p of particles) {
     const s = worldToScreen(p.x, p.y);
-    const alpha = (p.life / p.maxLife) * 0.3;
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = p.color;
-    const sz = p.size * SCALE * 2;
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, sz, 0, Math.PI * 2);
-    ctx.fill();
+    const alpha = (p.life / p.maxLife);
+    ctx.globalAlpha = alpha * 0.35;
+    const sz = p.size * SCALE * 2.5;
+    const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, sz);
+    glow.addColorStop(0, p.color);
+    glow.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow;
+    ctx.fillRect(s.x - sz, s.y - sz, sz*2, sz*2);
   }
   ctx.restore();
 }
@@ -1728,12 +2668,25 @@ function drawParticles() {
 function drawFloatingTexts() {
   for (const ft of floatingTexts) {
     const s = worldToScreen(ft.x, ft.y);
+    const alpha = Math.min(1, ft.life * 2);
+    const fs = Math.floor(14 * SCALE);
     ctx.save();
-    ctx.globalAlpha = Math.min(1, ft.life * 2);
-    ctx.font = `bold ${Math.floor(14 * SCALE)}px sans-serif`;
+    ctx.globalAlpha = alpha;
+    ctx.font = `bold ${fs}px sans-serif`;
     ctx.textAlign = 'center';
+    // Glow
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = alpha * 0.4;
+    ctx.shadowColor = ft.color;
+    ctx.shadowBlur = 8 * SCALE;
+    ctx.fillStyle = ft.color;
+    ctx.fillText(ft.text, s.x, s.y);
+    ctx.restore();
+    // Shadow
     ctx.fillStyle = '#000';
     ctx.fillText(ft.text, s.x + 1, s.y + 1);
+    // Text
     ctx.fillStyle = ft.color;
     ctx.fillText(ft.text, s.x, s.y);
     ctx.restore();
