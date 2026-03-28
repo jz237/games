@@ -334,13 +334,13 @@ function playSound(type) {
       const variant = Math.floor(Math.random() * 5);
 
       // Shared helper: lowpass noise thump
-      function noiseBurst(freq, dur2, gain2, startTime) {
+      function noiseBurst(freq, dur2, gain2, startTime, shape='lowpass') {
         const bsz = audioCtx.sampleRate * dur2;
         const nb = audioCtx.createBuffer(1, bsz, audioCtx.sampleRate);
         const nd = nb.getChannelData(0);
         for (let i = 0; i < bsz; i++) nd[i] = (Math.random()*2-1) * Math.pow(1-i/bsz, 1.6);
         const ns = audioCtx.createBufferSource(); ns.buffer = nb;
-        const nf = audioCtx.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.value = freq;
+        const nf = audioCtx.createBiquadFilter(); nf.type = shape; nf.frequency.value = freq;
         const ng = audioCtx.createGain(); ng.gain.setValueAtTime(gain2, startTime); ng.gain.exponentialRampToValueAtTime(0.001, startTime+dur2);
         ns.connect(nf).connect(ng).connect(audioCtx.destination); ns.start(startTime);
       }
@@ -354,30 +354,32 @@ function playSound(type) {
       }
 
       if (variant === 0) {
-        // Deep hull crack — low thump + sharp snap
-        sineThump(160, 22, 0.3, 0.4, now);
+        // V1 — classic deep hull (copy of #2)
+        sineThump(160, 22, 0.32, 0.42, now);
         noiseBurst(500, 0.35, 0.16, now);
-        noiseBurst(4000, 0.05, 0.2, now);
+        noiseBurst(4000, 0.04, 0.18, now, 'highpass');
       } else if (variant === 1) {
-        // Hollow pop — mid-range, short
-        sineThump(240, 40, 0.2, 0.3, now);
-        noiseBurst(800, 0.22, 0.14, now);
+        // V3 — brighter snap (louder crack on top)
+        sineThump(160, 22, 0.32, 0.42, now);
+        noiseBurst(500, 0.35, 0.16, now);
+        noiseBurst(4000, 0.04, 0.28, now, 'highpass');
       } else if (variant === 2) {
-        // Double thump — two hits
-        sineThump(200, 35, 0.25, 0.35, now);
-        noiseBurst(600, 0.28, 0.15, now);
-        sineThump(140, 25, 0.2, 0.25, now + 0.1);
-        noiseBurst(400, 0.2, 0.12, now + 0.1);
+        // V6 — loud crack (very sharp high end)
+        sineThump(160, 22, 0.32, 0.4, now);
+        noiseBurst(500, 0.35, 0.14, now);
+        noiseBurst(5000, 0.05, 0.32, now, 'highpass');
       } else if (variant === 3) {
-        // High crack then deep rumble
-        noiseBurst(3500, 0.04, 0.25, now);
-        sineThump(120, 18, 0.4, 0.38, now + 0.03);
-        noiseBurst(350, 0.4, 0.15, now + 0.03);
+        // V11 — double crack (two snaps)
+        sineThump(160, 22, 0.32, 0.42, now);
+        noiseBurst(500, 0.35, 0.15, now);
+        noiseBurst(4000, 0.04, 0.20, now, 'highpass');
+        noiseBurst(4000, 0.04, 0.14, now + 0.05, 'highpass');
       } else {
-        // Fat boom — widest noise band
-        sineThump(100, 15, 0.45, 0.42, now);
-        noiseBurst(1200, 0.4, 0.18, now);
-        noiseBurst(200, 0.5, 0.12, now + 0.05);
+        // V20 — max beef (deepest, loudest)
+        sineThump(155, 20, 0.35, 0.5, now);
+        noiseBurst(450, 0.38, 0.22, now);
+        noiseBurst(4000, 0.04, 0.24, now, 'highpass');
+        sineThump(55, 8, 0.45, 0.18, now);
       }
     } else if (type === 'boss_explode') {
       // Cinematic boss death — deep rolling booms, varied pitches, no harsh grinding
