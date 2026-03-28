@@ -363,24 +363,29 @@ function playSound(type) {
         osc.start(t); osc.stop(t + 0.13);
       });
     } else if (type === 'impact') {
-      // Short metallic clang + spark crackle — boss hit
-      const impOsc = audioCtx.createOscillator();
-      const impGain = audioCtx.createGain();
-      impOsc.type = 'square';
-      impOsc.frequency.setValueAtTime(900, now);
-      impOsc.frequency.exponentialRampToValueAtTime(180, now + 0.06);
-      impGain.gain.setValueAtTime(0.0, now);
-      impGain.gain.linearRampToValueAtTime(0.18, now + 0.004);
-      impGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
-      impOsc.connect(impGain).connect(audioCtx.destination);
-      impOsc.start(now); impOsc.stop(now + 0.08);
-      // Crackle layer
-      const cBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
+      // Thud + hull resonance — shot punching into metal
+      // Layer 1: low thud (noise burst, lowpass)
+      const tBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.12, audioCtx.sampleRate);
+      const td = tBuf.getChannelData(0);
+      for (let i = 0; i < td.length; i++) {
+        const env = Math.pow(1 - i/td.length, 2.5);
+        td[i] = (Math.random()*2-1) * env;
+      }
+      const tSrc = audioCtx.createBufferSource(); tSrc.buffer = tBuf;
+      const tLpf = audioCtx.createBiquadFilter(); tLpf.type = 'lowpass'; tLpf.frequency.value = 400;
+      const tGain = audioCtx.createGain(); tGain.gain.setValueAtTime(0.35, now); tGain.gain.exponentialRampToValueAtTime(0.001, now+0.12);
+      tSrc.connect(tLpf).connect(tGain).connect(audioCtx.destination); tSrc.start(now);
+      // Layer 2: metallic ring (sine, decays fast)
+      const rOsc = audioCtx.createOscillator(); rOsc.type = 'sine'; rOsc.frequency.value = 220;
+      const rGain = audioCtx.createGain(); rGain.gain.setValueAtTime(0.12, now); rGain.gain.exponentialRampToValueAtTime(0.001, now+0.18);
+      rOsc.connect(rGain).connect(audioCtx.destination); rOsc.start(now); rOsc.stop(now+0.2);
+      // Layer 3: short mid crunch
+      const cBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.04, audioCtx.sampleRate);
       const cd = cBuf.getChannelData(0);
       for (let i = 0; i < cd.length; i++) cd[i] = (Math.random()*2-1) * (1 - i/cd.length);
       const cSrc = audioCtx.createBufferSource(); cSrc.buffer = cBuf;
-      const cFilt = audioCtx.createBiquadFilter(); cFilt.type = 'bandpass'; cFilt.frequency.value = 2500; cFilt.Q.value = 1;
-      const cGain = audioCtx.createGain(); cGain.gain.setValueAtTime(0.12, now); cGain.gain.exponentialRampToValueAtTime(0.001, now+0.05);
+      const cFilt = audioCtx.createBiquadFilter(); cFilt.type = 'bandpass'; cFilt.frequency.value = 800; cFilt.Q.value = 1.5;
+      const cGain = audioCtx.createGain(); cGain.gain.setValueAtTime(0.2, now); cGain.gain.exponentialRampToValueAtTime(0.001, now+0.04);
       cSrc.connect(cFilt).connect(cGain).connect(audioCtx.destination); cSrc.start(now);
     } else if (type === 'hit') {
       const osc = audioCtx.createOscillator();
@@ -2145,75 +2150,90 @@ function render() {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // === DAMAGE EFFECTS (additive overlays — no black masking) ===
+    // === PROGRESSIVE DAMAGE VISUALS ===
     const dmg = boss.damage || 0;
-    const now2 = Date.now();
+    const T = Date.now();
 
-    // 30%+: scorch patches (dark red overlay, not black)
-    if (dmg > 0.3) {
+    if (dmg > 0) {
       ctx.save();
-      const scorchAlpha = Math.min(0.65, (dmg - 0.3) * 1.6);
-      ctx.globalAlpha = scorchAlpha;
-      ctx.fillStyle = '#3a0800';
-      ctx.beginPath(); ctx.ellipse(sz*0.85, sz*0.25, sz*0.38, sz*0.2, 0.5, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(-sz*0.1, -sz*0.15, sz*0.25, sz*0.18, -0.3, 0, Math.PI*2); ctx.fill();
-      // Char texture lines
-      ctx.strokeStyle = '#1a0400'; ctx.lineWidth = 1.5; ctx.globalAlpha = scorchAlpha * 0.8;
-      ctx.beginPath(); ctx.moveTo(sz*0.6,sz*0.1); ctx.lineTo(sz*1.1,sz*0.4); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(sz*0.7,sz*0.3); ctx.lineTo(sz*0.9,sz*0.15); ctx.stroke();
-      ctx.restore();
-    }
 
-    // 50%+: glowing cracks (additive orange/yellow, animated flicker)
-    if (dmg > 0.5) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = (0.3 + Math.sin(now2*0.022)*0.25) * ((dmg-0.5)*2);
-      ctx.strokeStyle = '#ff6600'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(-sz*0.28,-sz*0.38); ctx.lineTo(-sz*0.08,-sz*0.18); ctx.lineTo(-sz*0.22,sz*0.12); ctx.stroke();
-      ctx.globalAlpha = (0.25 + Math.sin(now2*0.031+1)*0.25) * ((dmg-0.5)*2);
-      ctx.strokeStyle = '#ffcc00'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(sz*0.18,sz*0.28); ctx.lineTo(sz*0.33,sz*0.08); ctx.lineTo(sz*0.12,-sz*0.12); ctx.stroke();
-      // Extra crack at high damage
-      if (dmg > 0.65) {
-        ctx.globalAlpha = (0.3 + Math.sin(now2*0.018+2)*0.3) * ((dmg-0.65)*3);
-        ctx.strokeStyle = '#ff4400'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(sz*0.3,-sz*0.5); ctx.lineTo(sz*0.15,-sz*0.2); ctx.lineTo(sz*0.4,sz*0.1); ctx.stroke();
+      // --- SCORCH MARKS (25%+): painted on hull surface ---
+      if (dmg > 0.25) {
+        const sa = Math.min(0.85, (dmg-0.25)*2.0);
+        // Dark burnt patches using hull-relative positions
+        const grad1 = ctx.createRadialGradient(sz*0.7, sz*0.2, 0, sz*0.7, sz*0.2, sz*0.45);
+        grad1.addColorStop(0, `rgba(8,2,0,${sa})`);
+        grad1.addColorStop(0.5, `rgba(30,8,0,${sa*0.5})`);
+        grad1.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad1; ctx.fillRect(sz*0.25, sz*0.0, sz*0.9, sz*0.5);
+
+        const grad2 = ctx.createRadialGradient(-sz*0.15, -sz*0.1, 0, -sz*0.15, -sz*0.1, sz*0.3);
+        grad2.addColorStop(0, `rgba(5,2,0,${sa*0.7})`);
+        grad2.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad2; ctx.fillRect(-sz*0.5, -sz*0.4, sz*0.7, sz*0.6);
       }
-      ctx.restore();
-    }
 
-    // 70%+: glowing fire pools on wing + engine (additive red/orange glow)
-    if (dmg > 0.7) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      const fireFlicker = 0.5 + Math.sin(now2*0.04)*0.3 + Math.sin(now2*0.07+1)*0.2;
-      // Left wing fire
-      ctx.globalAlpha = Math.min(0.5, (dmg-0.7)*1.8) * fireFlicker;
-      const wf = ctx.createRadialGradient(-sz*1.1,sz*0.5,0,-sz*1.1,sz*0.5,sz*0.5);
-      wf.addColorStop(0,'rgba(255,120,0,0.9)'); wf.addColorStop(0.5,'rgba(255,40,0,0.4)'); wf.addColorStop(1,'transparent');
-      ctx.fillStyle = wf; ctx.fillRect(-sz*1.6,sz*0.1,sz,sz*0.8);
-      // Right engine pod fire
-      ctx.globalAlpha = Math.min(0.4, (dmg-0.7)*1.5) * fireFlicker;
-      const ef = ctx.createRadialGradient(sz*1.35,sz*0.55,0,sz*1.35,sz*0.55,sz*0.4);
-      ef.addColorStop(0,'rgba(255,80,0,0.8)'); ef.addColorStop(1,'transparent');
-      ctx.fillStyle = ef; ctx.fillRect(sz*0.95,sz*0.2,sz*0.8,sz*0.7);
-      ctx.restore();
-    }
+      // --- GLOWING CRACKS (45%+): bright jagged lines pulsing ---
+      if (dmg > 0.45) {
+        const cp = (dmg-0.45)/0.55;
+        ctx.globalCompositeOperation = 'lighter';
+        // Crack 1 — left hull
+        const c1a = (0.4 + Math.sin(T*0.019)*0.4) * cp;
+        ctx.globalAlpha = c1a;
+        ctx.strokeStyle = '#ff5500'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(-sz*0.35,-sz*0.5); ctx.lineTo(-sz*0.15,-sz*0.2); ctx.lineTo(-sz*0.3,sz*0.15); ctx.lineTo(-sz*0.1,sz*0.3); ctx.stroke();
+        // Inner glow on crack
+        ctx.lineWidth = 6; ctx.globalAlpha = c1a * 0.3;
+        ctx.beginPath(); ctx.moveTo(-sz*0.35,-sz*0.5); ctx.lineTo(-sz*0.15,-sz*0.2); ctx.lineTo(-sz*0.3,sz*0.15); ctx.lineTo(-sz*0.1,sz*0.3); ctx.stroke();
+        // Crack 2 — right hull
+        const c2a = (0.35 + Math.sin(T*0.023+2)*0.4) * cp;
+        ctx.globalAlpha = c2a;
+        ctx.strokeStyle = '#ffaa00'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(sz*0.25,sz*0.35); ctx.lineTo(sz*0.4,sz*0.1); ctx.lineTo(sz*0.2,-sz*0.15); ctx.stroke();
+        ctx.lineWidth = 5; ctx.globalAlpha = c2a * 0.25;
+        ctx.beginPath(); ctx.moveTo(sz*0.25,sz*0.35); ctx.lineTo(sz*0.4,sz*0.1); ctx.lineTo(sz*0.2,-sz*0.15); ctx.stroke();
+        ctx.globalCompositeOperation = 'source-over';
+      }
 
-    // 85%+: nose breach — bright glowing core exposed
-    if (dmg > 0.85) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = (0.4 + Math.sin(now2*0.016)*0.35) * ((dmg-0.85)*7);
-      const cg = ctx.createRadialGradient(0,-sz*0.6,0,0,-sz*0.5,sz*0.55);
-      cg.addColorStop(0,'rgba(255,230,80,0.95)'); cg.addColorStop(0.4,'rgba(255,100,0,0.6)'); cg.addColorStop(1,'transparent');
-      ctx.fillStyle = cg; ctx.fillRect(-sz*0.6,-sz*1.1,sz*1.2,sz*0.8);
-      // Shockwave ring
-      ctx.globalAlpha = 0.15 + Math.sin(now2*0.025)*0.15;
-      ctx.strokeStyle = '#ff8800'; ctx.lineWidth = 2;
-      const ringR = sz*(0.3 + ((now2*0.001) % 0.5));
-      ctx.beginPath(); ctx.arc(0,-sz*0.55,ringR,0,Math.PI*2); ctx.stroke();
+      // --- LEFT WING ON FIRE (65%+) ---
+      if (dmg > 0.65) {
+        ctx.globalCompositeOperation = 'lighter';
+        const ff = 0.45 + Math.sin(T*0.038)*0.3 + Math.sin(T*0.071+1)*0.2;
+        const wp = Math.min(1, (dmg-0.65)/0.2);
+        // Fire glow blob on left wing
+        const wg = ctx.createRadialGradient(-sz*1.05, sz*0.45, 0, -sz*1.05, sz*0.45, sz*0.7);
+        wg.addColorStop(0, `rgba(255,140,0,${0.7*ff*wp})`);
+        wg.addColorStop(0.4, `rgba(255,50,0,${0.4*ff*wp})`);
+        wg.addColorStop(1, 'transparent');
+        ctx.fillStyle = wg; ctx.fillRect(-sz*1.75, sz*0.05, sz*1.4, sz);
+        // Right engine pod fire
+        const eg = ctx.createRadialGradient(sz*1.35, sz*0.6, 0, sz*1.35, sz*0.6, sz*0.45);
+        eg.addColorStop(0, `rgba(255,100,0,${0.6*ff*wp})`);
+        eg.addColorStop(1, 'transparent');
+        ctx.fillStyle = eg; ctx.fillRect(sz*0.9, sz*0.2, sz*0.9, sz*0.8);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+
+      // --- HULL BREACH + EXPOSED CORE (82%+) ---
+      if (dmg > 0.82) {
+        ctx.globalCompositeOperation = 'lighter';
+        const bp = Math.min(1, (dmg-0.82)/0.18);
+        const bf = 0.5 + Math.sin(T*0.017)*0.35 + Math.sin(T*0.041)*0.15;
+        // Exposed reactor glow — centre of hull, very bright
+        const rg = ctx.createRadialGradient(0, -sz*0.3, 0, 0, -sz*0.3, sz*0.8);
+        rg.addColorStop(0, `rgba(255,240,100,${0.85*bf*bp})`);
+        rg.addColorStop(0.3, `rgba(255,120,0,${0.5*bf*bp})`);
+        rg.addColorStop(0.6, `rgba(200,30,0,${0.2*bp})`);
+        rg.addColorStop(1, 'transparent');
+        ctx.fillStyle = rg; ctx.fillRect(-sz, -sz*1.1, sz*2, sz*1.6);
+        // Pulsing ring
+        ctx.globalAlpha = (0.2 + Math.sin(T*0.025)*0.15) * bp;
+        ctx.strokeStyle = '#ffcc44'; ctx.lineWidth = 2.5;
+        const rr = sz*(0.25 + ((T*0.0008) % 0.6));
+        ctx.beginPath(); ctx.arc(0, -sz*0.3, rr, 0, Math.PI*2); ctx.stroke();
+        ctx.globalCompositeOperation = 'source-over';
+      }
+
       ctx.restore();
     }
 
