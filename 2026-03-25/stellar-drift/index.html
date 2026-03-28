@@ -362,6 +362,26 @@ function playSound(type) {
         osc.connect(gain).connect(audioCtx.destination);
         osc.start(t); osc.stop(t + 0.13);
       });
+    } else if (type === 'impact') {
+      // Short metallic clang + spark crackle — boss hit
+      const impOsc = audioCtx.createOscillator();
+      const impGain = audioCtx.createGain();
+      impOsc.type = 'square';
+      impOsc.frequency.setValueAtTime(900, now);
+      impOsc.frequency.exponentialRampToValueAtTime(180, now + 0.06);
+      impGain.gain.setValueAtTime(0.0, now);
+      impGain.gain.linearRampToValueAtTime(0.18, now + 0.004);
+      impGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+      impOsc.connect(impGain).connect(audioCtx.destination);
+      impOsc.start(now); impOsc.stop(now + 0.08);
+      // Crackle layer
+      const cBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
+      const cd = cBuf.getChannelData(0);
+      for (let i = 0; i < cd.length; i++) cd[i] = (Math.random()*2-1) * (1 - i/cd.length);
+      const cSrc = audioCtx.createBufferSource(); cSrc.buffer = cBuf;
+      const cFilt = audioCtx.createBiquadFilter(); cFilt.type = 'bandpass'; cFilt.frequency.value = 2500; cFilt.Q.value = 1;
+      const cGain = audioCtx.createGain(); cGain.gain.setValueAtTime(0.12, now); cGain.gain.exponentialRampToValueAtTime(0.001, now+0.05);
+      cSrc.connect(cFilt).connect(cGain).connect(audioCtx.destination); cSrc.start(now);
     } else if (type === 'hit') {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
@@ -1434,7 +1454,15 @@ function update() {
         boss.hp--;
         boss.flashTimer = 0.08;
         triggerShake(2, 0.05);
-        spawnParticle(b.x, b.y, (Math.random()-0.5)*80, (Math.random()-0.5)*80, 255, 200, 0, 0.15, 2);
+        // Impact particles — spark burst at hit point
+        for (let pi = 0; pi < 8; pi++) {
+          const a = Math.random() * Math.PI * 2;
+          const spd = 60 + Math.random() * 120;
+          spawnParticle(b.x, b.y, Math.cos(a)*spd, Math.sin(a)*spd, 255, 180+Math.random()*75|0, 0, 0.3+Math.random()*0.2, 2+Math.random()*3);
+        }
+        // Bright flash at impact
+        spawnParticle(b.x, b.y, 0, 0, 255, 255, 255, 0.08, 8);
+        playSound('impact');
         if (boss.hp <= 0) {
           boss.dying = true;
           boss.deathTimer = 1.5;
@@ -2117,45 +2145,75 @@ function render() {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // === DAMAGE EFFECTS ===
+    // === DAMAGE EFFECTS (additive overlays — no black masking) ===
     const dmg = boss.damage || 0;
+    const now2 = Date.now();
+
+    // 30%+: scorch patches (dark red overlay, not black)
     if (dmg > 0.3) {
       ctx.save();
-      ctx.globalAlpha = Math.min(0.75, (dmg - 0.3) * 1.8);
-      ctx.fillStyle = '#0a0505';
-      ctx.beginPath(); ctx.ellipse(sz*0.9, sz*0.3, sz*0.4, sz*0.22, 0.5, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(sz*0.1, -sz*0.2, sz*0.28, sz*0.22, -0.3, 0, Math.PI*2); ctx.fill();
+      const scorchAlpha = Math.min(0.65, (dmg - 0.3) * 1.6);
+      ctx.globalAlpha = scorchAlpha;
+      ctx.fillStyle = '#3a0800';
+      ctx.beginPath(); ctx.ellipse(sz*0.85, sz*0.25, sz*0.38, sz*0.2, 0.5, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-sz*0.1, -sz*0.15, sz*0.25, sz*0.18, -0.3, 0, Math.PI*2); ctx.fill();
+      // Char texture lines
+      ctx.strokeStyle = '#1a0400'; ctx.lineWidth = 1.5; ctx.globalAlpha = scorchAlpha * 0.8;
+      ctx.beginPath(); ctx.moveTo(sz*0.6,sz*0.1); ctx.lineTo(sz*1.1,sz*0.4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sz*0.7,sz*0.3); ctx.lineTo(sz*0.9,sz*0.15); ctx.stroke();
       ctx.restore();
     }
+
+    // 50%+: glowing cracks (additive orange/yellow, animated flicker)
     if (dmg > 0.5) {
       ctx.save();
-      ctx.globalAlpha = 0.55 + Math.sin(Date.now()*0.022)*0.45;
-      ctx.strokeStyle = '#ff8800'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(-sz*0.3,-sz*0.4); ctx.lineTo(-sz*0.1,-sz*0.2); ctx.lineTo(-sz*0.25,sz*0.1); ctx.stroke();
-      ctx.globalAlpha = 0.5 + Math.sin(Date.now()*0.031+1)*0.5;
-      ctx.strokeStyle = '#ffee00'; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.moveTo(sz*0.2,sz*0.3); ctx.lineTo(sz*0.35,sz*0.1); ctx.lineTo(sz*0.15,-sz*0.1); ctx.stroke();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = (0.3 + Math.sin(now2*0.022)*0.25) * ((dmg-0.5)*2);
+      ctx.strokeStyle = '#ff6600'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-sz*0.28,-sz*0.38); ctx.lineTo(-sz*0.08,-sz*0.18); ctx.lineTo(-sz*0.22,sz*0.12); ctx.stroke();
+      ctx.globalAlpha = (0.25 + Math.sin(now2*0.031+1)*0.25) * ((dmg-0.5)*2);
+      ctx.strokeStyle = '#ffcc00'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(sz*0.18,sz*0.28); ctx.lineTo(sz*0.33,sz*0.08); ctx.lineTo(sz*0.12,-sz*0.12); ctx.stroke();
+      // Extra crack at high damage
+      if (dmg > 0.65) {
+        ctx.globalAlpha = (0.3 + Math.sin(now2*0.018+2)*0.3) * ((dmg-0.65)*3);
+        ctx.strokeStyle = '#ff4400'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(sz*0.3,-sz*0.5); ctx.lineTo(sz*0.15,-sz*0.2); ctx.lineTo(sz*0.4,sz*0.1); ctx.stroke();
+      }
       ctx.restore();
     }
+
+    // 70%+: glowing fire pools on wing + engine (additive red/orange glow)
     if (dmg > 0.7) {
       ctx.save();
-      ctx.globalAlpha = 0.92;
-      ctx.fillStyle = '#000';
-      ctx.beginPath(); ctx.moveTo(-sz*0.8,sz*0.2); ctx.lineTo(-sz*1.45,sz*0.5); ctx.lineTo(-sz*1.1,sz*0.72); ctx.lineTo(-sz*0.6,sz*0.42); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(sz*1.35, sz*0.55, sz*0.21, sz*0.36, 0, 0, Math.PI*2); ctx.fill();
-      ctx.globalAlpha = 0.5; ctx.fillStyle = '#1a0000';
-      ctx.beginPath(); ctx.ellipse(sz*0.6, sz*0.2, sz*0.65, sz*0.5, 0, 0, Math.PI*2); ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      const fireFlicker = 0.5 + Math.sin(now2*0.04)*0.3 + Math.sin(now2*0.07+1)*0.2;
+      // Left wing fire
+      ctx.globalAlpha = Math.min(0.5, (dmg-0.7)*1.8) * fireFlicker;
+      const wf = ctx.createRadialGradient(-sz*1.1,sz*0.5,0,-sz*1.1,sz*0.5,sz*0.5);
+      wf.addColorStop(0,'rgba(255,120,0,0.9)'); wf.addColorStop(0.5,'rgba(255,40,0,0.4)'); wf.addColorStop(1,'transparent');
+      ctx.fillStyle = wf; ctx.fillRect(-sz*1.6,sz*0.1,sz,sz*0.8);
+      // Right engine pod fire
+      ctx.globalAlpha = Math.min(0.4, (dmg-0.7)*1.5) * fireFlicker;
+      const ef = ctx.createRadialGradient(sz*1.35,sz*0.55,0,sz*1.35,sz*0.55,sz*0.4);
+      ef.addColorStop(0,'rgba(255,80,0,0.8)'); ef.addColorStop(1,'transparent');
+      ctx.fillStyle = ef; ctx.fillRect(sz*0.95,sz*0.2,sz*0.8,sz*0.7);
       ctx.restore();
     }
+
+    // 85%+: nose breach — bright glowing core exposed
     if (dmg > 0.85) {
       ctx.save();
-      ctx.globalAlpha = 0.95; ctx.fillStyle = '#000';
-      ctx.beginPath(); ctx.moveTo(0,-sz*1.4); ctx.lineTo(sz*0.32,-sz*0.78); ctx.lineTo(-sz*0.36,-sz*0.58); ctx.closePath(); ctx.fill();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.38 + Math.sin(Date.now()*0.016)*0.32;
-      const cg = ctx.createRadialGradient(0,-sz*0.5,0,0,-sz*0.5,sz*0.52);
-      cg.addColorStop(0,'rgba(255,200,50,0.9)'); cg.addColorStop(1,'transparent');
-      ctx.fillStyle = cg; ctx.fillRect(-sz*0.52,-sz,sz,sz*0.62);
+      ctx.globalAlpha = (0.4 + Math.sin(now2*0.016)*0.35) * ((dmg-0.85)*7);
+      const cg = ctx.createRadialGradient(0,-sz*0.6,0,0,-sz*0.5,sz*0.55);
+      cg.addColorStop(0,'rgba(255,230,80,0.95)'); cg.addColorStop(0.4,'rgba(255,100,0,0.6)'); cg.addColorStop(1,'transparent');
+      ctx.fillStyle = cg; ctx.fillRect(-sz*0.6,-sz*1.1,sz*1.2,sz*0.8);
+      // Shockwave ring
+      ctx.globalAlpha = 0.15 + Math.sin(now2*0.025)*0.15;
+      ctx.strokeStyle = '#ff8800'; ctx.lineWidth = 2;
+      const ringR = sz*(0.3 + ((now2*0.001) % 0.5));
+      ctx.beginPath(); ctx.arc(0,-sz*0.55,ringR,0,Math.PI*2); ctx.stroke();
       ctx.restore();
     }
 
