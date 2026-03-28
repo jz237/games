@@ -137,9 +137,9 @@ let difficulty = 'easy';
 try { const saved = localStorage.getItem(DIFF_KEY); if (saved === 'easy' || saved === 'normal' || saved === 'hard') difficulty = saved; } catch(e) {}
 
 const DIFF_SETTINGS = {
-  easy:   { speedMul: 1.0, enemyBase: 8, enemyPerWave: 3, spawnMul: 1.0, tankWave: 10, fireMul: 1.0 },
-  normal: { speedMul: 1.4, enemyBase: 12, enemyPerWave: 4, spawnMul: 0.7, tankWave: 10, fireMul: 0.85 },
-  hard:   { speedMul: 1.8, enemyBase: 18, enemyPerWave: 5, spawnMul: 0.5, tankWave: 7, fireMul: 0.72 }
+  easy:   { speedMul: 1.0, enemyBase: 16, enemyPerWave: 5, spawnMul: 1.0, tankWave: 10, fireMul: 1.0 },
+  normal: { speedMul: 1.4, enemyBase: 22, enemyPerWave: 6, spawnMul: 0.7, tankWave: 10, fireMul: 0.85 },
+  hard:   { speedMul: 1.8, enemyBase: 30, enemyPerWave: 8, spawnMul: 0.5, tankWave: 7, fireMul: 0.72 }
 };
 
 function getDiff() { return DIFF_SETTINGS[difficulty]; }
@@ -711,7 +711,7 @@ function makeEnemy(type, x, y) {
   const e = { type, x, y, hp: 1, maxHp: 1, size: 16, speed: 60, sinAmp: 0, sinFreq: 0, sinOffset: 0, startX: x, fireTimer: 0, flashTimer: 0 };
   if (type === 'drifter') {
     e.hp = 1; e.maxHp = 1; e.size = 16; e.speed = (55 + Math.random() * 35) * speedMul;
-    e.r = 255; e.g = 80; e.b = 20;
+    e.r = 255; e.g = 100; e.b = 0;
   } else if (type === 'zigzagger') {
     e.hp = 2; e.maxHp = 2; e.size = 14; e.speed = (65 + Math.random() * 35) * speedMul;
     e.sinAmp = 40 + Math.random() * 40; e.sinFreq = 2 + Math.random(); e.sinOffset = Math.random() * Math.PI * 2;
@@ -957,6 +957,13 @@ function update() {
       e.x = e.startX + Math.sin(e.sinOffset) * e.sinAmp;
     }
     if (e.flashTimer > 0) e.flashTimer -= dt;
+
+    // Enemy trail particles
+    if (Math.random() < 0.4) {
+      spawnParticle(e.x + (Math.random()-0.5)*e.size*0.5, e.y - e.size*0.3,
+        (Math.random()-0.5)*10, -20 - Math.random()*30,
+        e.r, e.g, e.b, 0.25 + Math.random()*0.2, 2 + Math.random()*3);
+    }
 
     // Tank shooting
     if (e.type === 'tank' && e.y > 0) {
@@ -1243,6 +1250,7 @@ function update() {
         e.flashTimer = 0.05;
         if (e.hp <= 0) {
           spawnExplosion(e.x, e.y, 15, e.r, e.g, e.b);
+          for (let ci = 0; ci < 8; ci++) { const ca = (ci/8)*Math.PI*2; spawnParticle(e.x, e.y, Math.cos(ca)*120, Math.sin(ca)*120, e.r, e.g, e.b, 0.6, 4); }
           playSound('explode');
           const pts = e.type === 'tank' ? 50 : e.type === 'zigzagger' ? 25 : e.type === 'swarmer' ? 15 : 10;
           addScore(pts, e.x, e.y);
@@ -1274,6 +1282,7 @@ function update() {
         e.flashTimer = 0.08;
         if (e.hp <= 0) {
           spawnExplosion(e.x, e.y, 12 + Math.floor(Math.random() * 8), e.r, e.g, e.b);
+          for (let ci = 0; ci < 8; ci++) { const ca = (ci/8)*Math.PI*2; spawnParticle(e.x, e.y, Math.cos(ca)*120, Math.sin(ca)*120, e.r, e.g, e.b, 0.6, 4); }
           playSound('explode');
           const pts = e.type === 'tank' ? 50 : e.type === 'zigzagger' ? 25 : e.type === 'swarmer' ? 15 : 10;
           addScore(pts, e.x, e.y);
@@ -1315,6 +1324,7 @@ function update() {
       const e = enemies[i];
       if (Math.hypot(e.x - player.x, e.y - player.y) < e.size + player.size * 0.7) {
         spawnExplosion(e.x, e.y, 10, e.r, e.g, e.b);
+        for (let ci = 0; ci < 8; ci++) { const ca = (ci/8)*Math.PI*2; spawnParticle(e.x, e.y, Math.cos(ca)*120, Math.sin(ca)*120, e.r, e.g, e.b, 0.6, 4); }
         enemies.splice(i, 1);
         playerHit();
         break;
@@ -1842,72 +1852,151 @@ function render() {
     ctx.restore();
   }
 
-  // Boss — with intense glow and layered rendering
+  // Boss — spaceship dreadnought
   if (boss) {
     ctx.save();
     ctx.translate(boss.x, boss.y);
     const flash = boss.flashTimer > 0;
     const bPulse = 0.9 + Math.sin(Date.now() * 0.004) * 0.1;
+    const sz = boss.size;
+    const t = Date.now() * 0.001;
 
-    // Large menacing glow
+    // Outer engine glow
     ctx.globalCompositeOperation = 'lighter';
-    const glowR = boss.size * 3;
-    const glow = ctx.createRadialGradient(0, 0, boss.size * 0.3, 0, 0, glowR);
-    if (flash) {
-      glow.addColorStop(0, 'rgba(255,255,255,0.6)');
-      glow.addColorStop(0.3, 'rgba(255,200,150,0.3)');
-    } else {
-      glow.addColorStop(0, `rgba(255,60,0,${0.3 * bPulse})`);
-      glow.addColorStop(0.3, `rgba(200,30,0,${0.15 * bPulse})`);
-    }
+    const glowR = sz * 3;
+    const glow = ctx.createRadialGradient(0, 0, sz*0.3, 0, 0, glowR);
+    glow.addColorStop(0, flash ? 'rgba(255,255,255,0.5)' : `rgba(255,60,0,${0.25*bPulse})`);
     glow.addColorStop(1, 'transparent');
     ctx.fillStyle = glow;
-    ctx.fillRect(-glowR, -glowR, glowR * 2, glowR * 2);
+    ctx.fillRect(-glowR, -glowR, glowR*2, glowR*2);
     ctx.globalCompositeOperation = 'source-over';
 
-    // Body — layered rings
-    ctx.fillStyle = flash ? '#fff' : '#c00';
+    // Main hull (elongated diamond body)
+    ctx.fillStyle = flash ? '#fff' : '#cc2200';
     ctx.beginPath();
-    ctx.arc(0, 0, boss.size * bPulse, 0, Math.PI * 2);
+    ctx.moveTo(0, -sz*1.4);
+    ctx.lineTo(sz*0.55, -sz*0.2);
+    ctx.lineTo(sz*0.4, sz*1.0);
+    ctx.lineTo(0, sz*0.7);
+    ctx.lineTo(-sz*0.4, sz*1.0);
+    ctx.lineTo(-sz*0.55, -sz*0.2);
+    ctx.closePath();
     ctx.fill();
-    // Mid ring gradient
-    const midGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, boss.size * 0.65);
-    midGrad.addColorStop(0, flash ? '#fcc' : '#a00');
-    midGrad.addColorStop(1, flash ? '#faa' : '#600');
-    ctx.fillStyle = midGrad;
-    ctx.beginPath();
-    ctx.arc(0, 0, boss.size * 0.65, 0, Math.PI * 2);
-    ctx.fill();
-    // Hot core
-    ctx.globalCompositeOperation = 'lighter';
-    const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, boss.size * 0.35);
-    coreGrad.addColorStop(0, flash ? 'rgba(255,255,255,0.9)' : `rgba(255,120,0,${0.8 * bPulse})`);
-    coreGrad.addColorStop(1, flash ? 'rgba(255,200,200,0)' : 'rgba(255,40,0,0)');
-    ctx.fillStyle = coreGrad;
-    ctx.beginPath();
-    ctx.arc(0, 0, boss.size * 0.35, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalCompositeOperation = 'source-over';
 
-    // Rotating energy ring
-    ctx.strokeStyle = `rgba(255,100,0,${0.3 * bPulse})`;
+    // Hull gradient overlay
+    const hullGrad = ctx.createLinearGradient(-sz*0.5, -sz*1.2, sz*0.5, sz*0.8);
+    hullGrad.addColorStop(0, flash ? 'rgba(255,255,255,0.4)' : 'rgba(255,100,50,0.4)');
+    hullGrad.addColorStop(0.5, 'transparent');
+    hullGrad.addColorStop(1, 'rgba(0,0,0,0.3)');
+    ctx.fillStyle = hullGrad;
+    ctx.beginPath();
+    ctx.moveTo(0, -sz*1.4);
+    ctx.lineTo(sz*0.55, -sz*0.2);
+    ctx.lineTo(sz*0.4, sz*1.0);
+    ctx.lineTo(0, sz*0.7);
+    ctx.lineTo(-sz*0.4, sz*1.0);
+    ctx.lineTo(-sz*0.55, -sz*0.2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Swept wings
+    ctx.fillStyle = flash ? '#fcc' : '#991100';
+    ctx.beginPath();
+    ctx.moveTo(sz*0.5, -sz*0.1);
+    ctx.lineTo(sz*1.6, sz*0.4);
+    ctx.lineTo(sz*1.3, sz*0.8);
+    ctx.lineTo(sz*0.6, sz*0.5);
+    ctx.lineTo(sz*0.35, sz*0.8);
+    ctx.lineTo(sz*0.3, sz*0.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-sz*0.5, -sz*0.1);
+    ctx.lineTo(-sz*1.6, sz*0.4);
+    ctx.lineTo(-sz*1.3, sz*0.8);
+    ctx.lineTo(-sz*0.6, sz*0.5);
+    ctx.lineTo(-sz*0.35, sz*0.8);
+    ctx.lineTo(-sz*0.3, sz*0.2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Wing detail lines
+    ctx.strokeStyle = flash ? '#fff' : 'rgba(255,80,30,0.6)';
     ctx.lineWidth = 1.5;
-    ctx.setLineDash([8, 8]);
     ctx.beginPath();
-    ctx.arc(0, 0, boss.size * 0.85, Date.now() * 0.002 % (Math.PI * 2), Date.now() * 0.002 % (Math.PI * 2) + Math.PI * 1.5);
+    ctx.moveTo(sz*0.5, -sz*0.1); ctx.lineTo(sz*1.4, sz*0.55);
+    ctx.moveTo(-sz*0.5, -sz*0.1); ctx.lineTo(-sz*1.4, sz*0.55);
+    ctx.stroke();
+
+    // Engine pods at wing tips
+    for (const side of [-1, 1]) {
+      const ex = side * sz * 1.35, ey = sz * 0.55;
+      ctx.fillStyle = flash ? '#fff' : '#771100';
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, sz*0.18, sz*0.32, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      const engGlow = ctx.createRadialGradient(ex, ey+sz*0.25, 0, ex, ey+sz*0.25, sz*0.4);
+      engGlow.addColorStop(0, `rgba(255,${140+Math.sin(t*6+side)*60|0},0,${0.8*bPulse})`);
+      engGlow.addColorStop(1, 'transparent');
+      ctx.fillStyle = engGlow;
+      ctx.fillRect(ex-sz*0.4, ey, sz*0.8, sz*0.5);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // Central engine (main thruster)
+    ctx.globalCompositeOperation = 'lighter';
+    const mainEng = ctx.createRadialGradient(0, sz*0.7, 0, 0, sz*0.8, sz*0.5);
+    mainEng.addColorStop(0, `rgba(255,180,0,${0.9*bPulse})`);
+    mainEng.addColorStop(0.4, `rgba(255,80,0,${0.5*bPulse})`);
+    mainEng.addColorStop(1, 'transparent');
+    ctx.fillStyle = mainEng;
+    ctx.fillRect(-sz*0.5, sz*0.5, sz, sz*0.7);
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Cockpit / bridge
+    const cockpitGrad = ctx.createRadialGradient(-sz*0.08, -sz*0.6, 0, 0, -sz*0.55, sz*0.3);
+    cockpitGrad.addColorStop(0, flash ? '#fff' : 'rgba(255,200,150,0.9)');
+    cockpitGrad.addColorStop(0.5, flash ? '#faa' : 'rgba(200,80,30,0.6)');
+    cockpitGrad.addColorStop(1, 'rgba(80,0,0,0.3)');
+    ctx.fillStyle = cockpitGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, -sz*0.55, sz*0.22, sz*0.28, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Panel lines on hull
+    ctx.strokeStyle = flash ? '#fff' : 'rgba(255,120,60,0.35)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(0, -sz*0.3); ctx.lineTo(sz*0.3, sz*0.4);
+    ctx.moveTo(0, -sz*0.3); ctx.lineTo(-sz*0.3, sz*0.4);
+    ctx.moveTo(-sz*0.25, sz*0.1); ctx.lineTo(sz*0.25, sz*0.1);
+    ctx.stroke();
+
+    // Rotating weapon ring
+    ctx.strokeStyle = `rgba(255,100,0,${0.4*bPulse})`;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6,6]);
+    ctx.beginPath();
+    ctx.arc(0, 0, sz*0.9, t*1.5 % (Math.PI*2), t*1.5 % (Math.PI*2) + Math.PI*1.2);
     ctx.stroke();
     ctx.setLineDash([]);
 
     // Health bar
-    const barW = boss.size * 3;
-    const barH = 6;
-    const barY = -boss.size - 14;
-    ctx.fillStyle = 'rgba(100,0,0,0.7)';
-    ctx.fillRect(-barW / 2, barY, barW, barH);
-    const hpPct = Math.max(0, boss.hp / boss.maxHp);
-    const hpColor = hpPct > 0.5 ? '#f44' : hpPct > 0.25 ? '#f80' : '#ff0';
-    ctx.fillStyle = hpColor;
-    ctx.fillRect(-barW / 2, barY, barW * hpPct, barH);
+    const barW = sz * 3.5;
+    const barH = 7;
+    const barY = -sz*1.6;
+    ctx.fillStyle = 'rgba(80,0,0,0.8)';
+    ctx.fillRect(-barW/2, barY, barW, barH);
+    const hpPct = Math.max(0, boss.hp/boss.maxHp);
+    ctx.fillStyle = hpPct > 0.5 ? '#f44' : hpPct > 0.25 ? '#f80' : '#ff0';
+    ctx.fillRect(-barW/2, barY, barW*hpPct, barH);
+    // DREADNOUGHT label
+    ctx.fillStyle = 'rgba(255,100,50,0.8)';
+    ctx.font = `bold ${Math.floor(sz*0.35)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('DREADNOUGHT', 0, barY - 4);
+
     ctx.restore();
   }
 
