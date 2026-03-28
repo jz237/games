@@ -438,30 +438,27 @@ function playSound(type) {
         osc.start(t); osc.stop(t + 0.13);
       });
     } else if (type === 'impact') {
-      // Thud + hull resonance — shot punching into metal
-      // Layer 1: low thud (noise burst, lowpass)
-      const tBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.12, audioCtx.sampleRate);
-      const td = tBuf.getChannelData(0);
-      for (let i = 0; i < td.length; i++) {
-        const env = Math.pow(1 - i/td.length, 2.5);
-        td[i] = (Math.random()*2-1) * env;
-      }
-      const tSrc = audioCtx.createBufferSource(); tSrc.buffer = tBuf;
-      const tLpf = audioCtx.createBiquadFilter(); tLpf.type = 'lowpass'; tLpf.frequency.value = 400;
-      const tGain = audioCtx.createGain(); tGain.gain.setValueAtTime(0.35, now); tGain.gain.exponentialRampToValueAtTime(0.001, now+0.12);
-      tSrc.connect(tLpf).connect(tGain).connect(audioCtx.destination); tSrc.start(now);
-      // Layer 2: metallic ring (sine, decays fast)
-      const rOsc = audioCtx.createOscillator(); rOsc.type = 'sine'; rOsc.frequency.value = 220;
-      const rGain = audioCtx.createGain(); rGain.gain.setValueAtTime(0.12, now); rGain.gain.exponentialRampToValueAtTime(0.001, now+0.18);
-      rOsc.connect(rGain).connect(audioCtx.destination); rOsc.start(now); rOsc.stop(now+0.2);
-      // Layer 3: short mid crunch
-      const cBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.04, audioCtx.sampleRate);
-      const cd = cBuf.getChannelData(0);
-      for (let i = 0; i < cd.length; i++) cd[i] = (Math.random()*2-1) * (1 - i/cd.length);
-      const cSrc = audioCtx.createBufferSource(); cSrc.buffer = cBuf;
-      const cFilt = audioCtx.createBiquadFilter(); cFilt.type = 'bandpass'; cFilt.frequency.value = 800; cFilt.Q.value = 1.5;
-      const cGain = audioCtx.createGain(); cGain.gain.setValueAtTime(0.2, now); cGain.gain.exponentialRampToValueAtTime(0.001, now+0.04);
-      cSrc.connect(cFilt).connect(cGain).connect(audioCtx.destination); cSrc.start(now);
+      // Sound #13 — wobble boom (LFO-modulated thump + noise)
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      const lfo = audioCtx.createOscillator();
+      const lfog = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(150, now);
+      o.frequency.exponentialRampToValueAtTime(20, now + 0.4);
+      lfo.frequency.value = 12; lfog.gain.value = 30;
+      lfo.connect(lfog).connect(o.frequency);
+      g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(0.28, now+0.01); g.gain.exponentialRampToValueAtTime(0.001, now+0.4);
+      o.connect(g).connect(audioCtx.destination);
+      lfo.start(now); lfo.stop(now+0.45); o.start(now); o.stop(now+0.45);
+      // Noise body
+      const nb = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate*0.3), audioCtx.sampleRate);
+      const nd = nb.getChannelData(0);
+      for (let i = 0; i < nd.length; i++) nd[i] = (Math.random()*2-1) * Math.pow(1-i/nd.length, 1.4);
+      const ns = audioCtx.createBufferSource(); ns.buffer = nb;
+      const nf = audioCtx.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.value = 400;
+      const ng = audioCtx.createGain(); ng.gain.setValueAtTime(0.12, now); ng.gain.exponentialRampToValueAtTime(0.001, now+0.3);
+      ns.connect(nf).connect(ng).connect(audioCtx.destination); ns.start(now);
     } else if (type === 'hit') {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
@@ -1403,6 +1400,26 @@ function update() {
     }
     if (boss.flashTimer > 0) boss.flashTimer -= dt;
     boss.damage = 1 - (boss.hp / boss.maxHp);
+
+    // Boss hover idle sound — sound #29 (rapid pops), fires every ~1.8s
+    if (!boss.hoverTimer) boss.hoverTimer = 1.2;
+    boss.hoverTimer -= dt;
+    if (boss.hoverTimer <= 0 && !boss.dying && boss.entered && !muted && audioCtx) {
+      boss.hoverTimer = 1.6 + Math.random() * 0.8;
+      try {
+        const ht = audioCtx.currentTime;
+        for (let i = 0; i < 5; i++) {
+          const d = i * 0.05;
+          const ho = audioCtx.createOscillator(); const hg = audioCtx.createGain();
+          ho.type = 'sine';
+          ho.frequency.setValueAtTime(200 + i * 20, ht + d);
+          ho.frequency.exponentialRampToValueAtTime(40, ht + d + 0.1);
+          hg.gain.setValueAtTime(0, ht+d); hg.gain.linearRampToValueAtTime(0.06 - i*0.008, ht+d+0.008);
+          hg.gain.exponentialRampToValueAtTime(0.001, ht+d+0.12);
+          ho.connect(hg).connect(audioCtx.destination); ho.start(ht+d); ho.stop(ht+d+0.13);
+        }
+      } catch(e) {}
+    }
 
     // Smoke when >30% damaged
     if (boss.damage > 0.3 && Math.random() < boss.damage * 0.4) {
