@@ -3231,9 +3231,42 @@ requestAnimationFrame(gameLoop);
   let tShooting = [];
   let lastShoot = 0;
 
+  // Title explosion particles
+  const tExplosions = []; // {x,y,particles:[{x,y,vx,vy,r,g,b,life,maxLife,size}]}
+  let nextExplosionTime = 0;
+  const EXPLOSION_PALETTES = [
+    [255,80,0],[255,220,0],[0,200,255],[180,0,255],[0,255,100],[255,30,120],[255,160,0],[30,120,255]
+  ];
+
+  function spawnTitleExplosion() {
+    const x = Math.random() * tW;
+    const y = Math.random() * tH;
+    const pal = EXPLOSION_PALETTES[Math.floor(Math.random()*EXPLOSION_PALETTES.length)];
+    const count = 18 + Math.floor(Math.random()*22);
+    const scale = 0.5 + Math.random()*1.5;
+    const pts = [];
+    for(let i=0;i<count;i++){
+      const a=Math.random()*Math.PI*2;
+      const spd=(40+Math.random()*120)*scale;
+      const life=0.5+Math.random()*0.8;
+      pts.push({x,y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,
+        r:pal[0],g:pal[1],b:pal[2],life,maxLife:life,
+        size:(2+Math.random()*4)*scale});
+    }
+    // White flash at center
+    pts.push({x,y,vx:0,vy:0,r:255,g:255,b:255,life:0.12,maxLife:0.12,size:12*scale});
+    tExplosions.push(pts);
+  }
+
   function titleAnimLoop(time) {
     if(state!=='title'){requestAnimationFrame(titleAnimLoop);return;}
     const dt2 = 1/60;
+
+    // Spawn explosions at random intervals
+    if(time > nextExplosionTime) {
+      spawnTitleExplosion();
+      nextExplosionTime = time + 400 + Math.random()*900;
+    }
     tctx.clearRect(0,0,tW,tH);
     // BG gradient
     const bg = tctx.createLinearGradient(0,0,0,tH);
@@ -3278,6 +3311,36 @@ requestAnimationFrame(gameLoop);
       tctx.moveTo(ss.x,ss.y);tctx.lineTo(ss.x-nx*len,ss.y-ny*len);tctx.stroke();
     }
     tctx.globalCompositeOperation='source-over';
+
+    // Background explosions
+    tctx.globalCompositeOperation='lighter';
+    for(let ei=tExplosions.length-1;ei>=0;ei--){
+      const pts=tExplosions[ei];
+      let alive=false;
+      for(let pi=pts.length-1;pi>=0;pi--){
+        const p=pts[pi];
+        p.x+=p.vx*dt2; p.y+=p.vy*dt2;
+        p.vy+=30*dt2; // slight gravity
+        p.life-=dt2;
+        if(p.life<=0){pts.splice(pi,1);continue;}
+        alive=true;
+        const a=(p.life/p.maxLife);
+        tctx.globalAlpha=a*0.85;
+        // Glow halo
+        const gr2=tctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.size*2.5);
+        gr2.addColorStop(0,`rgba(${p.r},${p.g},${p.b},0.6)`);
+        gr2.addColorStop(1,'transparent');
+        tctx.fillStyle=gr2;
+        tctx.fillRect(p.x-p.size*2.5,p.y-p.size*2.5,p.size*5,p.size*5);
+        // Core dot
+        tctx.fillStyle=`rgba(${p.r},${p.g},${p.b},1)`;
+        tctx.beginPath();tctx.arc(p.x,p.y,p.size*0.7,0,6.28);tctx.fill();
+      }
+      if(!alive)tExplosions.splice(ei,1);
+    }
+    tctx.globalAlpha=1;
+    tctx.globalCompositeOperation='source-over';
+
     requestAnimationFrame(titleAnimLoop);
   }
   requestAnimationFrame(titleAnimLoop);
