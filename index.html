@@ -21,6 +21,7 @@ h1{text-align:center;font-size:2em;margin:20px 0 5px;background:linear-gradient(
 .card .tag{display:inline-block;font-size:0.65em;padding:2px 8px;border-radius:10px;margin-top:4px;width:fit-content}
 .tag.featured{background:#6b6bff22;color:#8b8bff;border:1px solid #6b6bff44}
 .tag.classic{background:#ffd93d22;color:#ffd93d;border:1px solid #ffd93d44}
+.tag.retro70s{background:#ff6a0022;color:#ff9944;border:1px solid #ff6a0044}
 .tag.experimental{background:#66666622;color:#888;border:1px solid #66666644}
 .count{text-align:center;color:#444;font-size:0.8em;margin-top:25px;padding-bottom:20px}
 </style>
@@ -36,6 +37,7 @@ h1{text-align:center;font-size:2em;margin:20px 0 5px;background:linear-gradient(
   <button onclick="filter('arcade')">🕹️ Arcade</button>
   <button onclick="filter('puzzle')">🧩 Puzzle</button>
   <button onclick="filter('adventure')">🗺️ Adventure</button>
+  <button onclick="filter('retro70s')">📺 70s Classics</button>
 </div>
 
 <div class="grid" id="grid"></div>
@@ -54,8 +56,7 @@ const games = [
   {title:"Missile Command (GPT)",path:"gpt-missile-command/",emoji:"🎇",date:"Mar 8",cat:"arcade",tag:"featured",desc:"GPT's take on Missile Command"},
   {title:"Missile Command 3D",path:"2026-03-17/missile-command-3d/",emoji:"🚀",date:"Mar 17",cat:"arcade",tag:"featured",desc:"3D perspective with destructible cities"},
   {title:"Stellar Drift",path:"2026-03-25/stellar-drift/",emoji:"✨",date:"Mar 25",cat:"arcade",tag:"featured",desc:"One-finger auto-fire space shooter"},
-  {title:"Bubble Bobble 2",path:"2026-03-27/bubble-bobble-2/",emoji:"🫧",date:"Mar 27",cat:"arcade",tag:"featured",desc:"Classic bubble-trapping platformer tribute"},
-  {title:"SUPER STAR TREK",path:"2026-03-27/star-trek/",emoji:"🖖",date:"Mar 27",cat:"adventure",tag:"featured",desc:"The awesome 70s computer classic — reborn with LCARS visuals"},
+  {title:"SUPER STAR TREK",path:"2026-03-27/star-trek/",emoji:"🖖",date:"Mar 27",cat:"retro70s",tag:"featured",desc:"The awesome 70s computer classic — reborn with LCARS visuals"},
   {title:"Asteroids",path:"2026-03-08/asteroids/",emoji:"☄️",date:"Mar 8",cat:"arcade",tag:"featured",desc:"Classic asteroids, mobile controls"},
 
   // === CLASSIC (solid games) ===
