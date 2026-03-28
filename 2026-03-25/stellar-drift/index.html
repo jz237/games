@@ -686,8 +686,9 @@ function nextWave() {
 
   // Calculate enemy count — scaled by difficulty
   const ds = getDiff();
-  const base = ds.enemyBase + (wave - 1) * ds.enemyPerWave;
-  waveEnemyCount = Math.min(base, 120);
+  const waveScaled = wave > 16 ? 16 + (wave - 16) * 0.15 : wave - 1;
+  const base = ds.enemyBase + waveScaled * ds.enemyPerWave;
+  waveEnemyCount = Math.min(Math.floor(base), 120);
   wavePause = 2.0; // pause before wave starts
 }
 
@@ -699,7 +700,7 @@ function spawnBoss() {
     size: 50, phase: 0,
     fireTimer: 0, patternTimer: 0, pattern: 0,
     entered: false, dying: false, deathTimer: 0,
-    flashTimer: 0
+    flashTimer: 0, bossNum: Math.floor(wave / 5), damage: 0
   };
   bossActive = true;
 }
@@ -733,7 +734,8 @@ function spawnEnemy() {
 }
 
 function makeEnemy(type, x, y) {
-  const speedMul = getDiff().speedMul * (1 + Math.min(wave, 25) * 0.03);
+  const postCap = wave > 16 ? 16 + (wave - 16) * 0.04 : wave;
+  const speedMul = getDiff().speedMul * (1 + Math.min(postCap, 40) * 0.03);
   const e = { type, x, y, hp: 1, maxHp: 1, size: 16, speed: 60, sinAmp: 0, sinFreq: 0, sinOffset: 0, startX: x, fireTimer: 0, flashTimer: 0 };
   if (type === 'drifter') {
     e.hp = 1; e.maxHp = 1; e.size = 16; e.speed = (55 + Math.random() * 35) * speedMul;
@@ -986,7 +988,7 @@ function update() {
   }
 
   // Update enemies
-  const bulletSpeedMul = wave > 10 ? 1 + (wave - 10) * 0.05 : 1;
+  const bulletSpeedMul = wave > 10 ? (wave > 16 ? 1.3 + (wave - 16) * 0.005 : 1 + (wave - 10) * 0.05) : 1;
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     e.y += e.speed * dt;
@@ -1025,35 +1027,130 @@ function update() {
       if (Math.abs(boss.y - boss.targetY) < 2) boss.entered = true;
     }
     if (boss.flashTimer > 0) boss.flashTimer -= dt;
+    boss.damage = 1 - (boss.hp / boss.maxHp);
+
+    // Smoke when >30% damaged
+    if (boss.damage > 0.3 && Math.random() < boss.damage * 0.4) {
+      const ex = boss.x + (Math.random()-0.5) * boss.size * 2;
+      const ey = boss.y + (Math.random()-0.5) * boss.size;
+      spawnParticle(ex, ey, (Math.random()-0.5)*20, -30-Math.random()*50, 180, 180, 180, 0.8+Math.random()*0.5, 3+Math.random()*4);
+    }
+    // Fire/sparks when >60% damaged
+    if (boss.damage > 0.6 && Math.random() < (boss.damage - 0.6) * 0.6) {
+      const ex = boss.x + (Math.random()-0.5) * boss.size * 1.5;
+      const ey = boss.y + (Math.random()-0.5) * boss.size;
+      spawnParticle(ex, ey, (Math.random()-0.5)*15, -20-Math.random()*30, 255, (120+Math.random()*80)|0, 0, 0.4+Math.random()*0.3, 4+Math.random()*5);
+    }
 
     if (boss.entered && !boss.dying) {
       // Boss movement
-      boss.x += Math.sin(Date.now() * 0.001) * 80 * dt;
+      const bossType2 = boss.bossNum % 5;
+      if (bossType2 === 1) { // PHANTOM — fast strafe
+        boss.x += Math.sin(Date.now() * 0.003) * 200 * dt;
+      } else if (bossType2 === 3) { // VIPER — aggressive zigzag
+        boss.x += Math.sin(Date.now() * 0.004 + boss.y) * 250 * dt;
+      } else if (bossType2 === 4) { // OMEGA — figure-8
+        boss.x += Math.sin(Date.now() * 0.002) * 160 * dt;
+        boss.y = boss.targetY + Math.sin(Date.now() * 0.001) * 40;
+      } else {
+        boss.x += Math.sin(Date.now() * 0.001) * 80 * dt;
+      }
       boss.x = Math.max(boss.size, Math.min(W - boss.size, boss.x));
 
       // Boss fire patterns
       boss.fireTimer -= dt;
       if (boss.fireTimer <= 0) {
-        boss.fireTimer = Math.max(0.8, 2 - wave * 0.05);
         boss.pattern = (boss.pattern + 1) % 3;
         const spd = 160 * bulletSpeedMul;
 
-        if (boss.pattern === 0) {
-          // Spread shot
-          for (let a = -0.4; a <= 0.4; a += 0.2) {
-            spawnEnemyBullet(boss.x, boss.y + boss.size, Math.sin(a) * spd, Math.cos(a) * spd);
+        // Boss fire patterns — unique per boss type
+        const bossType = boss.bossNum % 5; // 5 distinct boss types cycling
+
+        if (bossType === 0) {
+          // DREADNOUGHT — wide spread shots
+          boss.fireTimer = Math.max(0.9, 2.2 - wave * 0.04);
+          if (boss.pattern === 0) {
+            for (let a = -0.5; a <= 0.5; a += 0.2)
+              spawnEnemyBullet(boss.x, boss.y + boss.size, Math.sin(a) * spd, Math.cos(a) * spd);
+          } else if (boss.pattern === 1) {
+            const angle = Math.atan2(player.y - boss.y, player.x - boss.x);
+            for (let i = -1; i <= 1; i++)
+              spawnEnemyBullet(boss.x, boss.y + boss.size, Math.cos(angle + i*0.15)*spd, Math.sin(angle + i*0.15)*spd);
+          } else {
+            for (let i = 0; i < 12; i++) {
+              const a = (i/12)*Math.PI*2;
+              spawnEnemyBullet(boss.x, boss.y, Math.cos(a)*spd*0.8, Math.sin(a)*spd*0.8);
+            }
           }
-        } else if (boss.pattern === 1) {
-          // Aimed shot
-          const angle = Math.atan2(player.y - boss.y, player.x - boss.x);
-          for (let i = -1; i <= 1; i++) {
-            spawnEnemyBullet(boss.x, boss.y + boss.size, Math.cos(angle + i * 0.15) * spd, Math.sin(angle + i * 0.15) * spd);
+        } else if (bossType === 1) {
+          // PHANTOM — fires from sides + teleports (fast side-to-side)
+          boss.fireTimer = Math.max(0.6, 1.8 - wave * 0.04);
+          if (boss.pattern === 0) {
+            for (let side = -1; side <= 1; side += 2) {
+              spawnEnemyBullet(boss.x + side * boss.size, boss.y, side * spd * 0.6, spd * 0.6);
+              spawnEnemyBullet(boss.x + side * boss.size, boss.y, side * spd * 0.3, spd * 0.8);
+            }
+          } else if (boss.pattern === 1) {
+            const angle = Math.atan2(player.y - boss.y, player.x - boss.x);
+            for (let i = 0; i < 5; i++)
+              spawnEnemyBullet(boss.x, boss.y + boss.size, Math.cos(angle + (i-2)*0.1)*spd, Math.sin(angle + (i-2)*0.1)*spd);
+          } else {
+            for (let a = 0; a < Math.PI*2; a += Math.PI/4)
+              spawnEnemyBullet(boss.x, boss.y, Math.cos(a)*spd*0.7, Math.sin(a)*spd*0.7);
+          }
+        } else if (bossType === 2) {
+          // TITAN — slow heavy shots
+          boss.fireTimer = Math.max(1.2, 2.5 - wave * 0.04);
+          if (boss.pattern === 0) {
+            for (let a = -0.7; a <= 0.7; a += 0.14)
+              spawnEnemyBullet(boss.x, boss.y + boss.size, Math.sin(a)*spd*0.7, Math.cos(a)*spd*0.7);
+          } else if (boss.pattern === 1) {
+            const rot = Date.now() * 0.003;
+            for (let i = 0; i < 12; i++) {
+              const a = rot + (i/12)*Math.PI*2;
+              spawnEnemyBullet(boss.x, boss.y, Math.cos(a)*spd*0.6, Math.sin(a)*spd*0.6);
+            }
+          } else {
+            const angle = Math.atan2(player.y - boss.y, player.x - boss.x);
+            for (let i = -3; i <= 3; i++)
+              spawnEnemyBullet(boss.x, boss.y + boss.size, Math.cos(angle + i*0.12)*spd, Math.sin(angle + i*0.12)*spd);
+          }
+        } else if (bossType === 3) {
+          // VIPER — fast moving, fires while strafing
+          boss.fireTimer = Math.max(0.4, 1.4 - wave * 0.04);
+          if (boss.pattern === 0) {
+            const angle = Math.atan2(player.y - boss.y, player.x - boss.x);
+            spawnEnemyBullet(boss.x - 15, boss.y + boss.size, Math.cos(angle)*spd, Math.sin(angle)*spd);
+            spawnEnemyBullet(boss.x + 15, boss.y + boss.size, Math.cos(angle)*spd, Math.sin(angle)*spd);
+          } else if (boss.pattern === 1) {
+            for (let i = 0; i < 3; i++) {
+              const angle = Math.atan2(player.y - boss.y, player.x - boss.x) + (i-1)*0.2;
+              spawnEnemyBullet(boss.x, boss.y + boss.size*0.5, Math.cos(angle)*spd*1.2, Math.sin(angle)*spd*1.2);
+            }
+          } else {
+            for (let i = 0; i < 7; i++)
+              spawnEnemyBullet(boss.x - boss.size*1.5 + i * boss.size*0.5, boss.y + boss.size, 0, spd*0.9);
           }
         } else {
-          // Circle
-          for (let i = 0; i < 12; i++) {
-            const a = (i / 12) * Math.PI * 2;
-            spawnEnemyBullet(boss.x, boss.y, Math.cos(a) * spd * 0.8, Math.sin(a) * spd * 0.8);
+          // OMEGA — endgame boss, all patterns combined
+          boss.fireTimer = Math.max(0.5, 1.5 - wave * 0.04);
+          if (boss.pattern === 0) {
+            const angle = Math.atan2(player.y - boss.y, player.x - boss.x);
+            for (let i = -2; i <= 2; i++)
+              spawnEnemyBullet(boss.x, boss.y + boss.size, Math.cos(angle+i*0.15)*spd, Math.sin(angle+i*0.15)*spd);
+          } else if (boss.pattern === 1) {
+            const rot = Date.now() * 0.004;
+            for (let i = 0; i < 16; i++) {
+              const a = rot + (i/16)*Math.PI*2;
+              spawnEnemyBullet(boss.x, boss.y, Math.cos(a)*spd*0.75, Math.sin(a)*spd*0.75);
+            }
+          } else {
+            for (let side = -1; side <= 1; side += 2) {
+              for (let i = 0; i < 4; i++) {
+                const a = Math.PI*0.5 + side * (0.1 + i*0.15);
+                spawnEnemyBullet(boss.x + side*boss.size, boss.y, Math.cos(a)*spd*0.9, Math.sin(a)*spd*0.9);
+              }
+            }
           }
         }
       }
@@ -2020,6 +2117,48 @@ function render() {
     ctx.stroke();
     ctx.setLineDash([]);
 
+    // === DAMAGE EFFECTS ===
+    const dmg = boss.damage || 0;
+    if (dmg > 0.3) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(0.75, (dmg - 0.3) * 1.8);
+      ctx.fillStyle = '#0a0505';
+      ctx.beginPath(); ctx.ellipse(sz*0.9, sz*0.3, sz*0.4, sz*0.22, 0.5, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sz*0.1, -sz*0.2, sz*0.28, sz*0.22, -0.3, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+    if (dmg > 0.5) {
+      ctx.save();
+      ctx.globalAlpha = 0.55 + Math.sin(Date.now()*0.022)*0.45;
+      ctx.strokeStyle = '#ff8800'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-sz*0.3,-sz*0.4); ctx.lineTo(-sz*0.1,-sz*0.2); ctx.lineTo(-sz*0.25,sz*0.1); ctx.stroke();
+      ctx.globalAlpha = 0.5 + Math.sin(Date.now()*0.031+1)*0.5;
+      ctx.strokeStyle = '#ffee00'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(sz*0.2,sz*0.3); ctx.lineTo(sz*0.35,sz*0.1); ctx.lineTo(sz*0.15,-sz*0.1); ctx.stroke();
+      ctx.restore();
+    }
+    if (dmg > 0.7) {
+      ctx.save();
+      ctx.globalAlpha = 0.92;
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.moveTo(-sz*0.8,sz*0.2); ctx.lineTo(-sz*1.45,sz*0.5); ctx.lineTo(-sz*1.1,sz*0.72); ctx.lineTo(-sz*0.6,sz*0.42); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sz*1.35, sz*0.55, sz*0.21, sz*0.36, 0, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 0.5; ctx.fillStyle = '#1a0000';
+      ctx.beginPath(); ctx.ellipse(sz*0.6, sz*0.2, sz*0.65, sz*0.5, 0, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+    if (dmg > 0.85) {
+      ctx.save();
+      ctx.globalAlpha = 0.95; ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.moveTo(0,-sz*1.4); ctx.lineTo(sz*0.32,-sz*0.78); ctx.lineTo(-sz*0.36,-sz*0.58); ctx.closePath(); ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.38 + Math.sin(Date.now()*0.016)*0.32;
+      const cg = ctx.createRadialGradient(0,-sz*0.5,0,0,-sz*0.5,sz*0.52);
+      cg.addColorStop(0,'rgba(255,200,50,0.9)'); cg.addColorStop(1,'transparent');
+      ctx.fillStyle = cg; ctx.fillRect(-sz*0.52,-sz,sz,sz*0.62);
+      ctx.restore();
+    }
+
     // Health bar
     const barW = sz * 3.5;
     const barH = 7;
@@ -2029,11 +2168,12 @@ function render() {
     const hpPct = Math.max(0, boss.hp/boss.maxHp);
     ctx.fillStyle = hpPct > 0.5 ? '#f44' : hpPct > 0.25 ? '#f80' : '#ff0';
     ctx.fillRect(-barW/2, barY, barW*hpPct, barH);
-    // DREADNOUGHT label
+    // Boss name label
+    const bossNames = ['DREADNOUGHT','PHANTOM','TITAN','VIPER','OMEGA'];
     ctx.fillStyle = 'rgba(255,100,50,0.8)';
     ctx.font = `bold ${Math.floor(sz*0.35)}px monospace`;
     ctx.textAlign = 'center';
-    ctx.fillText('DREADNOUGHT', 0, barY - 4);
+    ctx.fillText(bossNames[(boss.bossNum||0) % 5], 0, barY - 4);
 
     ctx.restore();
   }
