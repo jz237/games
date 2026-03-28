@@ -137,9 +137,9 @@ let difficulty = 'easy';
 try { const saved = localStorage.getItem(DIFF_KEY); if (saved === 'easy' || saved === 'normal' || saved === 'hard') difficulty = saved; } catch(e) {}
 
 const DIFF_SETTINGS = {
-  easy:   { speedMul: 1.0, enemyBase: 16, enemyPerWave: 5, spawnMul: 1.0, tankWave: 10, fireMul: 1.0 },
-  normal: { speedMul: 1.4, enemyBase: 22, enemyPerWave: 6, spawnMul: 0.7, tankWave: 10, fireMul: 0.85 },
-  hard:   { speedMul: 1.8, enemyBase: 30, enemyPerWave: 8, spawnMul: 0.5, tankWave: 7, fireMul: 0.72 }
+  easy:   { speedMul: 1.8, enemyBase: 30, enemyPerWave: 8,  spawnMul: 0.5, tankWave: 7,  fireMul: 0.72 },
+  normal: { speedMul: 2.2, enemyBase: 45, enemyPerWave: 12, spawnMul: 0.35, tankWave: 5, fireMul: 0.6 },
+  hard:   { speedMul: 2.8, enemyBase: 65, enemyPerWave: 18, spawnMul: 0.2, tankWave: 4,  fireMul: 0.45 }
 };
 
 function getDiff() { return DIFF_SETTINGS[difficulty]; }
@@ -661,7 +661,7 @@ function nextWave() {
   // Calculate enemy count — scaled by difficulty
   const ds = getDiff();
   const base = ds.enemyBase + (wave - 1) * ds.enemyPerWave;
-  waveEnemyCount = Math.min(base, 50);
+  waveEnemyCount = Math.min(base, 120);
   wavePause = 2.0; // pause before wave starts
 }
 
