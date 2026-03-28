@@ -193,7 +193,7 @@ let muted = false;
 
 // === NEW SYSTEMS ===
 let totalKills = 0;
-let playerUpgrades = { fireRate: 0, spread: 0, shieldRegen: 0, bulletSpeed: 0, tripleDur: 0, extraLives: 0 };
+let playerUpgrades = { fireRate: 0, spread: 0, shieldRegen: 0, bulletSpeed: 0, tripleShot: false, extraLives: 0 };
 let upgradeActive = false;
 let bossIntro = null; // {timer, name}
 let waveClearText = null; // {timer, wave}
@@ -705,12 +705,12 @@ function showUpgradeScreen() {
   const opts = document.getElementById('upgradeOptions');
   opts.innerHTML = '';
   const allUpgrades = [
-    {name:'FIRE RATE +20%', apply:()=>{ playerUpgrades.fireRate++; }},
-    {name:'WIDER SPREAD',   apply:()=>{ playerUpgrades.spread++; }},
-    {name:'SHIELD REGEN',   apply:()=>{ playerUpgrades.shieldRegen++; player.shield = true; }},
-    {name:'BULLET SPEED +15%', apply:()=>{ playerUpgrades.bulletSpeed++; }},
-    {name:'TRIPLE SHOT +3s',   apply:()=>{ playerUpgrades.tripleDur++; }},
-    {name:'EXTRA LIFE',    apply:()=>{ playerUpgrades.extraLives++; lives++; }}
+    {name:'FIRE RATE +20%',      desc:'Shoots 20% faster',          apply:()=>{ playerUpgrades.fireRate++; }},
+    {name:'SPREAD SHOT +15°',    desc:'Bullets fan out wider',       apply:()=>{ playerUpgrades.spread++; }},
+    {name:'SHIELD REGEN',        desc:'Shield refills each wave',    apply:()=>{ playerUpgrades.shieldRegen++; player.shield = true; }},
+    {name:'BULLET SPEED +15%',   desc:'Bullets travel faster',       apply:()=>{ playerUpgrades.bulletSpeed++; }},
+    {name:'PERMANENT TRIPLE',    desc:'Always fires 3 streams',      apply:()=>{ playerUpgrades.tripleShot = true; }},
+    {name:'EXTRA LIFE',          desc:'+1 life right now',           apply:()=>{ playerUpgrades.extraLives++; lives++; }}
   ];
   // Shuffle into a new array (don't mutate original)
   const shuffled = [...allUpgrades].sort(()=>Math.random()-0.5).slice(0,3);
@@ -719,7 +719,7 @@ function showUpgradeScreen() {
     const btn = document.createElement('button');
     btn.className = 'btn';
     btn.style.cssText = 'border-color:#f90;color:#f90;min-width:220px;touch-action:manipulation;display:block;';
-    btn.textContent = up.name;
+    btn.innerHTML = `<span style="display:block;font-size:1em">${up.name}</span><span style="display:block;font-size:0.65em;opacity:0.7;margin-top:2px">${up.desc}</span>`;
     function pick() {
       if (picked) return;
       picked = true;
@@ -822,7 +822,7 @@ function startGame() {
   score = 0; lives = 3; wave = 0;
   comboCount = 0; comboTimer = 0; comboMultiplier = 1;
   totalKills = 0;
-  playerUpgrades = { fireRate:0, spread:0, shieldRegen:0, bulletSpeed:0, tripleDur:0, extraLives:0 };
+  playerUpgrades = { fireRate:0, spread:0, shieldRegen:0, bulletSpeed:0, tripleShot:false, extraLives:0 };
   upgradeActive = false; bossIntro = null; waveClearText = null; phaseFlashTimer = 0; phaseFloatText = null;
   asteroids = [];
   stats = { shotsFired:0, shotsHit:0, enemiesKilled:0, bossesKilled:0, timeSurvived:0, maxCombo:0, wavesCleared:0 };
@@ -835,7 +835,9 @@ function startGame() {
   player.targetX = player.x; player.targetY = player.y;
   player.prevX = player.x; player.prevY = player.y;
   player.fireTimer = 0; player.tilt = 0;
-  player.shield = false; player.rapidFire = 0; player.tripleShot = 0;
+  player.rapidFire = 0; player.tripleShot = 0;
+  // Shield regen upgrade — restore shield at start of each wave
+  player.shield = playerUpgrades.shieldRegen > 0;
   player.missile = 0; player.speedBoost = 0; player.laser = 0; player.laserActive = false;
   activePowerup = null;
   enemies = []; powerups = [];
@@ -1189,10 +1191,11 @@ function update() {
     if (player.fireTimer <= 0) {
       player.fireTimer = fireRate;
       const bSpeed = BULLET_SPEED * (1 + playerUpgrades.bulletSpeed * 0.15);
-      const spreadBonus = playerUpgrades.spread * 0.05;
-      const streams = player.tripleShot > 0 ? 3 : 2;
-      const offsets = streams === 2 ? [-5, 5] : [-8, 0, 8];
-      const angles = streams === 2 ? [-spreadBonus, spreadBonus] : [-0.1 - spreadBonus, 0, 0.1 + spreadBonus];
+      const spreadBonus = playerUpgrades.spread * 0.18; // 0.18rad ≈ 10° per stack — clearly visible
+      const useTriple = player.tripleShot > 0 || playerUpgrades.tripleShot;
+      const streams = useTriple ? 3 : 2;
+      const offsets = streams === 2 ? [-5, 5] : [-10, 0, 10];
+      const angles = streams === 2 ? [-0.05 - spreadBonus, 0.05 + spreadBonus] : [-0.18 - spreadBonus, 0, 0.18 + spreadBonus];
       stats.shotsFired += streams;
       for (let i = 0; i < streams; i++) {
         const bx = player.x + offsets[i];
