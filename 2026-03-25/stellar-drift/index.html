@@ -283,24 +283,50 @@ function playSound(type) {
       osc.connect(gain).connect(audioCtx.destination);
       osc.start(now); osc.stop(now + 0.06);
     } else if (type === 'explode') {
-      const bufSize = audioCtx.sampleRate * 0.1;
+      // Layer 1: deep thump (low sine punch)
+      const thump = audioCtx.createOscillator();
+      const thumpGain = audioCtx.createGain();
+      thump.type = 'sine';
+      thump.frequency.setValueAtTime(180, now);
+      thump.frequency.exponentialRampToValueAtTime(28, now + 0.35);
+      thumpGain.gain.setValueAtTime(0.0, now);
+      thumpGain.gain.linearRampToValueAtTime(0.45, now + 0.01);
+      thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      thump.connect(thumpGain).connect(audioCtx.destination);
+      thump.start(now); thump.stop(now + 0.36);
+
+      // Layer 2: mid crunch (filtered noise burst)
+      const dur = 0.4;
+      const bufSize = audioCtx.sampleRate * dur;
       const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
       const d = buf.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+      for (let i = 0; i < bufSize; i++) {
+        const env = Math.pow(1 - i / bufSize, 1.5);
+        d[i] = (Math.random() * 2 - 1) * env;
+      }
       const src = audioCtx.createBufferSource();
       src.buffer = buf;
-      const gain = audioCtx.createGain();
-      gain.gain.setValueAtTime(0.12, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-      const osc = audioCtx.createOscillator();
-      osc.type = 'sine'; osc.frequency.setValueAtTime(120, now);
-      osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
-      const g2 = audioCtx.createGain();
-      g2.gain.setValueAtTime(0.15, now);
-      g2.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-      src.connect(gain).connect(audioCtx.destination);
-      osc.connect(g2).connect(audioCtx.destination);
-      src.start(now); osc.start(now); osc.stop(now + 0.12);
+      const hpf = audioCtx.createBiquadFilter();
+      hpf.type = 'bandpass'; hpf.frequency.value = 600; hpf.Q.value = 0.6;
+      const noiseGain = audioCtx.createGain();
+      noiseGain.gain.setValueAtTime(0.18, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      src.connect(hpf).connect(noiseGain).connect(audioCtx.destination);
+      src.start(now);
+
+      // Layer 3: sharp crack (short highpass noise)
+      const crackBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.06, audioCtx.sampleRate);
+      const cd = crackBuf.getChannelData(0);
+      for (let i = 0; i < cd.length; i++) cd[i] = (Math.random() * 2 - 1) * (1 - i / cd.length);
+      const crackSrc = audioCtx.createBufferSource();
+      crackSrc.buffer = crackBuf;
+      const hpf2 = audioCtx.createBiquadFilter();
+      hpf2.type = 'highpass'; hpf2.frequency.value = 3000;
+      const crackGain = audioCtx.createGain();
+      crackGain.gain.setValueAtTime(0.22, now);
+      crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      crackSrc.connect(hpf2).connect(crackGain).connect(audioCtx.destination);
+      crackSrc.start(now);
     } else if (type === 'boss_explode') {
       for (let i = 0; i < 4; i++) {
         const t = now + i * 0.12;
@@ -711,7 +737,19 @@ function makeEnemy(type, x, y) {
   const e = { type, x, y, hp: 1, maxHp: 1, size: 16, speed: 60, sinAmp: 0, sinFreq: 0, sinOffset: 0, startX: x, fireTimer: 0, flashTimer: 0 };
   if (type === 'drifter') {
     e.hp = 1; e.maxHp = 1; e.size = 16; e.speed = (55 + Math.random() * 35) * speedMul;
-    e.r = 255; e.g = 100; e.b = 0;
+    // Random vivid color per hex — cycle through a palette
+    const hexPalette = [
+      [255, 80, 0],   // orange
+      [255, 220, 0],  // yellow
+      [0, 220, 255],  // cyan
+      [180, 0, 255],  // violet
+      [0, 255, 100],  // green
+      [255, 30, 120], // hot pink
+      [255, 140, 0],  // amber
+      [30, 120, 255], // blue
+    ];
+    const pc = hexPalette[Math.floor(Math.random() * hexPalette.length)];
+    e.r = pc[0]; e.g = pc[1]; e.b = pc[2];
   } else if (type === 'zigzagger') {
     e.hp = 2; e.maxHp = 2; e.size = 14; e.speed = (65 + Math.random() * 35) * speedMul;
     e.sinAmp = 40 + Math.random() * 40; e.sinFreq = 2 + Math.random(); e.sinOffset = Math.random() * Math.PI * 2;
