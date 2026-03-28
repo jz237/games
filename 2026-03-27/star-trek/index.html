@@ -185,7 +185,7 @@ function countKlingonsRemaining(){
 // Navigation
 function doNav(dir,warp){
   if(enterprise.damage[0]>0&&warp>0.2){addMsg("WARP ENGINES DAMAGED — MAX WARP 0.2");return}
-  const angles=[null,5.497787,4.712389,3.926991,3.141593,null,0,2.356194,1.570796,0.785398];
+  const angles=[null,3.926991,4.712389,5.497787,3.141593,null,0,2.356194,1.570796,0.785398];
   if(!angles[dir]&&dir!==5){addMsg("INVALID DIRECTION");return}
   if(dir===5){addMsg("STAYING PUT");advanceStardate();if(currentQuadKlingons.length>0)klingonsFire();return}
   const angle=angles[dir];
@@ -248,7 +248,7 @@ function doTorpedo(dir){
   if(enterprise.torpedoes<=0){addMsg("NO TORPEDOES REMAINING");return}
   enterprise.torpedoes--;
   playSound('torpedo');
-  const angles=[null,5.497787,4.712389,3.926991,3.141593,null,0,2.356194,1.570796,0.785398];
+  const angles=[null,3.926991,4.712389,5.497787,3.141593,null,0,2.356194,1.570796,0.785398];
   if(!angles[dir]){addMsg("TORPEDO MISSED");advanceStardate();if(currentQuadKlingons.length>0)klingonsFire();return}
   const angle=angles[dir];
   const dx=Math.cos(angle),dy=-Math.sin(angle);
@@ -560,7 +560,7 @@ function updateControls(){
       `<button onclick="pickNav(4)">←</button><button onclick="pickNav(5)">•</button><button onclick="pickNav(6)">→</button>`+
       `<button onclick="pickNav(1)">↙</button><button onclick="pickNav(2)">↓</button><button onclick="pickNav(3)">↘</button>`+
       `</div>`+
-      (navDir>=0?`<div class="slider-wrap"><span style="font-size:10px;color:#996633">WARP:</span><input type="range" min="1" max="8" step="1" value="1" id="warp-slider" oninput="document.getElementById('warp-val').textContent=this.value"><span class="sv" id="warp-val">1</span></div><button onclick="execNav()">ENGAGE</button>`:'') +
+      (navDir>=0?`<div class="slider-wrap"><span style="font-size:10px;color:#996633">WARP:</span><input type="range" min="1" max="8" step="1" value="1" id="warp-slider" oninput="document.getElementById('warp-val').textContent=this.value"><span class="sv" id="warp-val">1</span></div><button onclick="execNav()">WARP</button><button onclick="execImpulse()" style="margin-left:4px">IMPULSE</button>`:'') +
       `<button style="margin-left:8px" onclick="setMode('play')">CANCEL</button></div>`;
   } else if(mode==='phaser'){
     ctrl.innerHTML=`<div style="text-align:center"><div style="color:#cc8833;font-size:10px">PHASER ENERGY:</div>`+
@@ -585,6 +585,7 @@ function setMode(m){mode=m;navDir=-1;updateUI()}
 
 function pickNav(dir){navDir=dir;updateControls()}
 function execNav(){const w=parseInt(document.getElementById('warp-slider')?.value||1);doNav(navDir,w);mode='play';updateUI()}
+function execImpulse(){doNav(navDir,0.5);mode='play';updateUI()}
 function execPhaser(){const e=parseInt(document.getElementById('phaser-slider')?.value||500);doPhasers(e);mode='play';updateUI()}
 function execTorpedo(dir){doTorpedo(dir);mode='play';updateUI()}
 function execShields(){const s=parseInt(document.getElementById('shield-slider')?.value||0);doShields(s);mode='play';updateUI()}
