@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Explosion Sound Demo</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:#050510;color:#fff;font-family:monospace;min-height:100vh;overscroll-behavior:none}
+h1{text-align:center;padding:20px 16px 4px;font-size:clamp(1.2rem,4vw,2rem);color:#0ff;letter-spacing:0.1em}
+p.sub{text-align:center;color:rgba(0,255,255,0.5);font-size:0.8rem;margin-bottom:20px;padding:0 16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;padding:12px 12px 40px}
+.btn{
+  background:rgba(0,30,60,0.8);
+  border:1px solid rgba(0,200,255,0.3);
+  border-radius:10px;
+  color:#fff;
+  font-family:monospace;
+  font-size:0.95rem;
+  padding:16px 8px 12px;
+  cursor:pointer;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  transition:background 0.15s, border-color 0.15s;
+  user-select:none;
+}
+.btn:active,.btn.flash{background:rgba(255,255,255,0.15);border-color:#0ff}
+.btn .num{font-size:1.4rem;color:#0ff;font-weight:bold}
+.btn .label{font-size:0.6rem;color:rgba(255,255,255,0.5);letter-spacing:0.05em;text-align:center;line-height:1.4}
+</style>
+</head>
+<body>
+<h1>💥 EXPLOSION SOUND DEMO</h1>
+<p class="sub">Tap each button — note the numbers you like!</p>
+<div class="grid" id="grid"></div>
+
+<script>
+'use strict';
+let audioCtx = null;
+
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+// Helper functions
+function noiseBurst(freq, dur, gain, t, shape='lowpass') {
+  const bsz = audioCtx.sampleRate * dur;
+  const buf = audioCtx.createBuffer(1, bsz, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < bsz; i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/bsz, 1.4);
+  const src = audioCtx.createBufferSource(); src.buffer = buf;
+  const filt = audioCtx.createBiquadFilter(); filt.type = shape; filt.frequency.value = freq;
+  const g = audioCtx.createGain(); g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+  src.connect(filt).connect(g).connect(audioCtx.destination); src.start(t);
+}
+
+function sineThump(f1, f2, dur, gain, t) {
+  const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+  o.type = 'sine'; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t+dur);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(gain,t+0.01); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+dur+0.02);
+}
+
+function triNoise(f1, f2, dur, gain, t) {
+  const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+  o.type = 'triangle'; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t+dur);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(gain,t+0.008); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+dur+0.02);
+}
+
+function squareThump(f1, f2, dur, gain, t) {
+  const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+  o.type = 'square'; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t+dur);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(gain*0.5,t+0.005); g.gain.exponentialRampToValueAtTime(0.001,t+dur*0.6);
+  o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+dur+0.02);
+}
+
+// ====== 30 EXPLOSION VARIANTS ======
+const explosions = [
+
+  // 1 — Classic arcade pop
+  { label:'arcade pop', fn(t){ sineThump(200,35,0.25,0.4,t); noiseBurst(600,0.25,0.15,t); } },
+
+  // 2 — Deep hull crack
+  { label:'deep hull', fn(t){ sineThump(160,22,0.32,0.42,t); noiseBurst(500,0.35,0.16,t); noiseBurst(4000,0.04,0.18,t); } },
+
+  // 3 — Hollow pop
+  { label:'hollow pop', fn(t){ sineThump(240,40,0.2,0.3,t); noiseBurst(800,0.22,0.14,t); } },
+
+  // 4 — Double thump
+  { label:'double thump', fn(t){ sineThump(200,35,0.25,0.35,t); noiseBurst(600,0.28,0.15,t); sineThump(140,25,0.2,0.25,t+0.1); noiseBurst(400,0.2,0.12,t+0.1); } },
+
+  // 5 — High crack + deep rumble
+  { label:'crack+rumble', fn(t){ noiseBurst(4000,0.04,0.25,t,'highpass'); sineThump(120,18,0.4,0.38,t+0.03); noiseBurst(350,0.4,0.15,t+0.03); } },
+
+  // 6 — Fat boom
+  { label:'fat boom', fn(t){ sineThump(100,15,0.45,0.42,t); noiseBurst(1200,0.4,0.18,t); noiseBurst(200,0.5,0.12,t+0.05); } },
+
+  // 7 — Snappy zap
+  { label:'snappy zap', fn(t){ sineThump(400,50,0.15,0.45,t); noiseBurst(2000,0.1,0.2,t,'highpass'); } },
+
+  // 8 — Muffled thud
+  { label:'muffled thud', fn(t){ sineThump(80,12,0.4,0.35,t); noiseBurst(200,0.4,0.18,t); } },
+
+  // 9 — Spaceship engine burst
+  { label:'engine burst', fn(t){ sineThump(300,60,0.3,0.3,t); triNoise(200,30,0.35,0.25,t); noiseBurst(1000,0.3,0.12,t); } },
+
+  // 10 — Punchy mid
+  { label:'punchy mid', fn(t){ sineThump(180,30,0.22,0.38,t); noiseBurst(800,0.2,0.17,t,'bandpass'); } },
+
+  // 11 — Big cinematic boom
+  { label:'cinematic', fn(t){
+    sineThump(60,10,0.6,0.38,t); noiseBurst(300,0.6,0.16,t);
+    sineThump(90,15,0.5,0.28,t+0.05); noiseBurst(150,0.55,0.12,t+0.08);
+  }},
+
+  // 12 — Dry crack
+  { label:'dry crack', fn(t){ noiseBurst(2500,0.08,0.3,t,'highpass'); sineThump(300,60,0.12,0.2,t); } },
+
+  // 13 — Wobble boom
+  { label:'wobble boom', fn(t){
+    const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); const lfo=audioCtx.createOscillator(); const lfog=audioCtx.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(20,t+0.4);
+    lfo.frequency.value=12; lfog.gain.value=30; lfo.connect(lfog).connect(o.frequency);
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.35,t+0.01); g.gain.exponentialRampToValueAtTime(0.001,t+0.4);
+    o.connect(g).connect(audioCtx.destination); lfo.start(t); lfo.stop(t+0.45); o.start(t); o.stop(t+0.45);
+    noiseBurst(400,0.3,0.14,t);
+  }},
+
+  // 14 — Triple layer crunch
+  { label:'triple crunch', fn(t){
+    sineThump(220,35,0.28,0.35,t); noiseBurst(600,0.3,0.15,t,'bandpass');
+    sineThump(110,18,0.35,0.28,t+0.04); noiseBurst(200,0.35,0.12,t+0.06);
+    noiseBurst(3000,0.06,0.15,t,'highpass');
+  }},
+
+  // 15 — Popcorn burst
+  { label:'popcorn', fn(t){
+    for(let i=0;i<4;i++){
+      const delay=i*0.04+Math.random()*0.03;
+      sineThump(180+i*30,25+i*5,0.12,0.22,t+delay);
+      noiseBurst(800,0.1,0.1,t+delay);
+    }
+  }},
+
+  // 16 — Deep underwater
+  { label:'underwater', fn(t){
+    sineThump(70,8,0.55,0.36,t); noiseBurst(120,0.6,0.15,t);
+    const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(400,t+0.1); o.frequency.exponentialRampToValueAtTime(50,t+0.5);
+    g.gain.setValueAtTime(0.08,t+0.1); g.gain.exponentialRampToValueAtTime(0.001,t+0.5);
+    o.connect(g).connect(audioCtx.destination); o.start(t+0.1); o.stop(t+0.55);
+  }},
+
+  // 17 — Sharp electric crack
+  { label:'electric crack', fn(t){
+    squareThump(600,80,0.15,0.4,t); noiseBurst(5000,0.06,0.22,t,'highpass'); sineThump(200,30,0.2,0.22,t+0.02);
+  }},
+
+  // 18 — Rolling thunder
+  { label:'rolling thunder', fn(t){
+    for(let i=0;i<5;i++){
+      const d=i*0.07;
+      sineThump(90-i*8, 10, 0.3, 0.3-i*0.04, t+d);
+      noiseBurst(250, 0.3, 0.1+i*0.01, t+d);
+    }
+  }},
+
+  // 19 — Metallic clang + boom
+  { label:'metal clang', fn(t){
+    const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+    o.type='triangle'; o.frequency.value=440;
+    g.gain.setValueAtTime(0.25,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.35);
+    o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+0.36);
+    sineThump(120,18,0.35,0.32,t+0.02); noiseBurst(400,0.35,0.14,t+0.02);
+  }},
+
+  // 20 — Sci-fi disintegrate
+  { label:'disintegrate', fn(t){
+    for(let i=0;i<6;i++){
+      const d=i*0.03;
+      const f=800-i*100;
+      const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+      o.type='sine'; o.frequency.setValueAtTime(f,t+d); o.frequency.exponentialRampToValueAtTime(f*0.3,t+d+0.12);
+      g.gain.setValueAtTime(0.06,t+d); g.gain.exponentialRampToValueAtTime(0.001,t+d+0.15);
+      o.connect(g).connect(audioCtx.destination); o.start(t+d); o.stop(t+d+0.16);
+    }
+    noiseBurst(1500,0.2,0.15,t,'bandpass');
+  }},
+
+  // 21 — Sub bass only
+  { label:'sub bass', fn(t){ sineThump(55,8,0.5,0.42,t); noiseBurst(100,0.5,0.12,t); } },
+
+  // 22 — Fizz pop
+  { label:'fizz pop', fn(t){ noiseBurst(3000,0.18,0.22,t,'bandpass'); sineThump(350,60,0.15,0.28,t); } },
+
+  // 23 — Retro 8-bit boom
+  { label:'8-bit boom', fn(t){
+    squareThump(180,20,0.3,0.45,t); noiseBurst(800,0.2,0.12,t,'bandpass');
+    squareThump(90,12,0.25,0.3,t+0.08);
+  }},
+
+  // 24 — Slow rumble build
+  { label:'slow rumble', fn(t){
+    sineThump(40,8,0.7,0.32,t); noiseBurst(80,0.7,0.14,t);
+    sineThump(120,20,0.5,0.2,t+0.15); noiseBurst(300,0.4,0.1,t+0.2);
+  }},
+
+  // 25 — Sharp whip crack
+  { label:'whip crack', fn(t){
+    noiseBurst(6000,0.03,0.35,t,'highpass'); noiseBurst(800,0.06,0.18,t,'bandpass');
+    sineThump(250,50,0.1,0.18,t+0.01);
+  }},
+
+  // 26 — Resonant clunk
+  { label:'resonant clunk', fn(t){
+    const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+    o.type='sine'; o.frequency.value=200;
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.38,t+0.005); g.gain.exponentialRampToValueAtTime(0.001,t+0.45);
+    o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+0.5);
+    noiseBurst(500,0.25,0.16,t,'bandpass'); sineThump(80,15,0.3,0.22,t+0.02);
+  }},
+
+  // 27 — Distant explosion
+  { label:'distant', fn(t){
+    sineThump(50,8,0.6,0.22,t); noiseBurst(150,0.6,0.08,t);
+    sineThump(70,12,0.5,0.16,t+0.08);
+  }},
+
+  // 28 — Massive destroyer
+  { label:'destroyer', fn(t){
+    sineThump(50,8,0.7,0.4,t); noiseBurst(200,0.7,0.18,t);
+    sineThump(80,12,0.6,0.3,t+0.1); noiseBurst(300,0.55,0.15,t+0.12);
+    sineThump(110,18,0.5,0.22,t+0.22); noiseBurst(500,0.4,0.12,t+0.25);
+    noiseBurst(4000,0.05,0.2,t,'highpass');
+  }},
+
+  // 29 — Rapid fire pops
+  { label:'rapid pops', fn(t){
+    for(let i=0;i<5;i++){
+      const d=i*0.05;
+      sineThump(200+i*20,40,0.1,0.25-i*0.02,t+d);
+    }
+  }},
+
+  // 30 — Epic multi-layer
+  { label:'epic multi', fn(t){
+    noiseBurst(5000,0.03,0.28,t,'highpass');
+    sineThump(250,45,0.2,0.35,t+0.01);
+    noiseBurst(800,0.25,0.18,t+0.01,'bandpass');
+    sineThump(100,15,0.45,0.38,t+0.03);
+    noiseBurst(250,0.5,0.16,t+0.05);
+    sineThump(60,8,0.55,0.28,t+0.1);
+    noiseBurst(120,0.55,0.12,t+0.12);
+  }},
+];
+
+// Build grid
+const grid = document.getElementById('grid');
+explosions.forEach((exp, idx) => {
+  const n = idx + 1;
+  const btn = document.createElement('button');
+  btn.className = 'btn';
+  btn.innerHTML = `<span class="num">${n}</span><span class="label">${exp.label}</span>`;
+
+  function fire() {
+    initAudio();
+    btn.classList.add('flash');
+    setTimeout(() => btn.classList.remove('flash'), 200);
+    const t = audioCtx.currentTime;
+    exp.fn(t);
+  }
+  btn.addEventListener('click', e => { e.stopPropagation(); fire(); });
+  btn.addEventListener('touchend', e => { e.stopPropagation(); e.preventDefault(); fire(); });
+  grid.appendChild(btn);
+});
+</script>
+</body>
+</html>
