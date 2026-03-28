@@ -330,50 +330,55 @@ function playSound(type) {
       osc.connect(gain).connect(audioCtx.destination);
       osc.start(now); osc.stop(now + 0.06);
     } else if (type === 'explode') {
-      // Layer 1: deep thump (low sine punch)
-      const thump = audioCtx.createOscillator();
-      const thumpGain = audioCtx.createGain();
-      thump.type = 'sine';
-      thump.frequency.setValueAtTime(180, now);
-      thump.frequency.exponentialRampToValueAtTime(28, now + 0.35);
-      thumpGain.gain.setValueAtTime(0.0, now);
-      thumpGain.gain.linearRampToValueAtTime(0.45, now + 0.01);
-      thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-      thump.connect(thumpGain).connect(audioCtx.destination);
-      thump.start(now); thump.stop(now + 0.36);
+      // Pick one of 5 explosion variants randomly
+      const variant = Math.floor(Math.random() * 5);
 
-      // Layer 2: mid crunch (filtered noise burst)
-      const dur = 0.4;
-      const bufSize = audioCtx.sampleRate * dur;
-      const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) {
-        const env = Math.pow(1 - i / bufSize, 1.5);
-        d[i] = (Math.random() * 2 - 1) * env;
+      // Shared helper: lowpass noise thump
+      function noiseBurst(freq, dur2, gain2, startTime) {
+        const bsz = audioCtx.sampleRate * dur2;
+        const nb = audioCtx.createBuffer(1, bsz, audioCtx.sampleRate);
+        const nd = nb.getChannelData(0);
+        for (let i = 0; i < bsz; i++) nd[i] = (Math.random()*2-1) * Math.pow(1-i/bsz, 1.6);
+        const ns = audioCtx.createBufferSource(); ns.buffer = nb;
+        const nf = audioCtx.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.value = freq;
+        const ng = audioCtx.createGain(); ng.gain.setValueAtTime(gain2, startTime); ng.gain.exponentialRampToValueAtTime(0.001, startTime+dur2);
+        ns.connect(nf).connect(ng).connect(audioCtx.destination); ns.start(startTime);
       }
-      const src = audioCtx.createBufferSource();
-      src.buffer = buf;
-      const hpf = audioCtx.createBiquadFilter();
-      hpf.type = 'bandpass'; hpf.frequency.value = 600; hpf.Q.value = 0.6;
-      const noiseGain = audioCtx.createGain();
-      noiseGain.gain.setValueAtTime(0.18, now);
-      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
-      src.connect(hpf).connect(noiseGain).connect(audioCtx.destination);
-      src.start(now);
+      function sineThump(startFreq, endFreq, dur2, gain2, startTime) {
+        const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+        o.type = 'sine'; o.frequency.setValueAtTime(startFreq, startTime);
+        o.frequency.exponentialRampToValueAtTime(endFreq, startTime+dur2);
+        g.gain.setValueAtTime(0,startTime); g.gain.linearRampToValueAtTime(gain2,startTime+0.01);
+        g.gain.exponentialRampToValueAtTime(0.001,startTime+dur2);
+        o.connect(g).connect(audioCtx.destination); o.start(startTime); o.stop(startTime+dur2+0.01);
+      }
 
-      // Layer 3: sharp crack (short highpass noise)
-      const crackBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.06, audioCtx.sampleRate);
-      const cd = crackBuf.getChannelData(0);
-      for (let i = 0; i < cd.length; i++) cd[i] = (Math.random() * 2 - 1) * (1 - i / cd.length);
-      const crackSrc = audioCtx.createBufferSource();
-      crackSrc.buffer = crackBuf;
-      const hpf2 = audioCtx.createBiquadFilter();
-      hpf2.type = 'highpass'; hpf2.frequency.value = 3000;
-      const crackGain = audioCtx.createGain();
-      crackGain.gain.setValueAtTime(0.22, now);
-      crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-      crackSrc.connect(hpf2).connect(crackGain).connect(audioCtx.destination);
-      crackSrc.start(now);
+      if (variant === 0) {
+        // Deep hull crack — low thump + sharp snap
+        sineThump(160, 22, 0.3, 0.4, now);
+        noiseBurst(500, 0.35, 0.16, now);
+        noiseBurst(4000, 0.05, 0.2, now);
+      } else if (variant === 1) {
+        // Hollow pop — mid-range, short
+        sineThump(240, 40, 0.2, 0.3, now);
+        noiseBurst(800, 0.22, 0.14, now);
+      } else if (variant === 2) {
+        // Double thump — two hits
+        sineThump(200, 35, 0.25, 0.35, now);
+        noiseBurst(600, 0.28, 0.15, now);
+        sineThump(140, 25, 0.2, 0.25, now + 0.1);
+        noiseBurst(400, 0.2, 0.12, now + 0.1);
+      } else if (variant === 3) {
+        // High crack then deep rumble
+        noiseBurst(3500, 0.04, 0.25, now);
+        sineThump(120, 18, 0.4, 0.38, now + 0.03);
+        noiseBurst(350, 0.4, 0.15, now + 0.03);
+      } else {
+        // Fat boom — widest noise band
+        sineThump(100, 15, 0.45, 0.42, now);
+        noiseBurst(1200, 0.4, 0.18, now);
+        noiseBurst(200, 0.5, 0.12, now + 0.05);
+      }
     } else if (type === 'boss_explode') {
       // Cinematic boss death — deep rolling booms, varied pitches, no harsh grinding
       const boomTimes = [0, 0.18, 0.38, 0.62, 0.9];
@@ -500,14 +505,27 @@ function playSound(type) {
       osc.connect(gain).connect(audioCtx.destination);
       osc.start(now); osc.stop(now + 0.26);
     } else if (type === 'laser') {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sawtooth'; osc.frequency.value = 300;
-      gain.gain.setValueAtTime(0.04, now);
-      gain.gain.linearRampToValueAtTime(0.04, now + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-      osc.connect(gain).connect(audioCtx.destination);
-      osc.start(now); osc.stop(now + 0.07);
+      // Sci-fi laser beam — high sine sweep down + sizzle
+      // Layer 1: descending sine sweep (the "pew" tone)
+      const lo = audioCtx.createOscillator();
+      const lg = audioCtx.createGain();
+      lo.type = 'sine';
+      lo.frequency.setValueAtTime(1800, now);
+      lo.frequency.exponentialRampToValueAtTime(600, now + 0.08);
+      lg.gain.setValueAtTime(0.0, now);
+      lg.gain.linearRampToValueAtTime(0.12, now + 0.005);
+      lg.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      lo.connect(lg).connect(audioCtx.destination);
+      lo.start(now); lo.stop(now + 0.11);
+      // Layer 2: high sizzle (bandpass noise — gives it the "zap" texture)
+      const lbsz = audioCtx.sampleRate * 0.08;
+      const lbuf = audioCtx.createBuffer(1, lbsz, audioCtx.sampleRate);
+      const ld = lbuf.getChannelData(0);
+      for (let i = 0; i < lbsz; i++) ld[i] = (Math.random()*2-1) * (1-i/lbsz);
+      const lsrc = audioCtx.createBufferSource(); lsrc.buffer = lbuf;
+      const lbpf = audioCtx.createBiquadFilter(); lbpf.type = 'bandpass'; lbpf.frequency.value = 4000; lbpf.Q.value = 2;
+      const lbg = audioCtx.createGain(); lbg.gain.setValueAtTime(0.08, now); lbg.gain.exponentialRampToValueAtTime(0.001, now+0.08);
+      lsrc.connect(lbpf).connect(lbg).connect(audioCtx.destination); lsrc.start(now);
     }
   } catch(e) {}
 }
