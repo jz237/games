@@ -855,7 +855,7 @@ function nextWave() {
         verts.push(0.6 + Math.random() * 0.4);
       }
       asteroids.push({
-        x: Math.random() * W, y: -r - Math.random() * H * 0.5,
+        x: Math.random() * W, y: -r - Math.random() * 80,
         vx: (Math.random() - 0.5) * 30, vy: 40 + Math.random() * 60,
         r: r, hp: Math.ceil(r / 10), rot: Math.random() * Math.PI * 2,
         rotSpeed: (Math.random() - 0.5) * 2, verts: verts
@@ -1137,8 +1137,8 @@ function update() {
     );
   }
 
-  // Auto-fire
-  if (!player.laserActive) {
+  // Auto-fire — disabled during upgrade screen
+  if (!player.laserActive && !upgradeActive) {
     const frMul = Math.pow(0.8, playerUpgrades.fireRate);
     const fireRate = (player.rapidFire > 0 ? BASE_FIRE_RATE / 2 : BASE_FIRE_RATE) * getDiff().fireMul * frMul;
     player.fireTimer -= dt;
@@ -1236,19 +1236,23 @@ function update() {
   }
 
   // Dynamic music intensity
-  if (droneGain && droneOsc) {
-    const baseGain = muted ? 0 : 0.03 + wave * 0.003;
-    const enemyBoost = enemies.length > 15 ? 0.02 : 0;
-    const bossBoost = bossActive ? 0.03 : 0;
-    droneGain.gain.value = Math.min(0.12, baseGain + enemyBoost + bossBoost);
-    droneOsc.frequency.value = 55 + wave * 2 + (enemies.length > 15 ? 10 : 0);
+  if (droneGain && droneOsc && !muted) {
+    const enemyCount = enemies.length;
+    const baseGain = 0.04 + wave * 0.002;
+    const enemyBoost = enemyCount > 10 ? Math.min(0.08, (enemyCount - 10) * 0.006) : 0;
+    const bossBoost = bossActive ? 0.07 : 0;
+    const clearCalm = (waveEnemiesSpawned >= waveEnemyCount && enemyCount === 0 && !bossActive) ? -0.02 : 0;
+    droneGain.gain.value = Math.min(0.18, baseGain + enemyBoost + bossBoost + clearCalm);
+    droneOsc.frequency.value = 55 + wave * 1.5 + (bossActive ? 15 : 0) + (enemyCount > 15 ? 8 : 0);
+    droneOsc.type = bossActive ? 'sawtooth' : 'sine';
     // Dissonant boss oscillator
     if (bossActive && !droneOsc2 && audioCtx) {
       try {
         droneOsc2 = audioCtx.createOscillator();
         droneGain2 = audioCtx.createGain();
-        droneOsc2.type = 'sawtooth'; droneOsc2.frequency.value = 73;
-        droneGain2.gain.value = muted ? 0 : 0.015;
+        droneOsc2.type = 'sawtooth';
+        droneOsc2.frequency.value = 82; // tritone above 55Hz — very dissonant
+        droneGain2.gain.value = 0.055;
         droneOsc2.connect(droneGain2).connect(audioCtx.destination);
         droneOsc2.start();
       } catch(e) {}
@@ -1256,7 +1260,10 @@ function update() {
     if (!bossActive && droneOsc2) {
       try { droneOsc2.stop(); } catch(e) {} droneOsc2 = null; droneGain2 = null;
     }
-    if (droneGain2) droneGain2.gain.value = muted ? 0 : 0.015;
+    if (droneGain2) droneGain2.gain.value = 0.055;
+  } else if (droneGain && muted) {
+    droneGain.gain.value = 0;
+    if (droneGain2) droneGain2.gain.value = 0;
   }
 
   // Boss phase change
@@ -2448,18 +2455,31 @@ function render() {
     const sz = boss.size;
     const t = Date.now() * 0.001;
 
+    // Per-boss-type color scheme
+    const bTypeIdx = boss.isMini ? 99 : (boss.bossNum || 0) % 5;
+    // [hullColor, wingColor, podColor, glowR, glowG, glowB, cockpitColor]
+    const bColors = [
+      ['#cc2200','#991100','#771100', 255,60,0,  'rgba(255,200,150,0.9)'],  // 0 DREADNOUGHT — red
+      ['#1a0066','#110044','#220088', 80,40,255,  'rgba(140,120,255,0.9)'], // 1 PHANTOM — deep purple
+      ['#005533','#003322','#007744', 0,200,100,  'rgba(100,255,180,0.9)'], // 2 TITAN — dark green
+      ['#884400','#553300','#aa6600', 255,140,0,  'rgba(255,220,100,0.9)'], // 3 VIPER — amber/gold
+      ['#440044','#220033','#660066', 200,0,255,  'rgba(220,140,255,0.9)'], // 4 OMEGA — magenta
+    ];
+    const bc = bTypeIdx === 99 ? ['#334455','#223344','#445566', 100,160,220, 'rgba(180,220,255,0.9)'] : bColors[bTypeIdx];
+    const [hullCol, wingCol, podCol, gR, gG, gB, cockCol] = bc;
+
     // Outer engine glow
     ctx.globalCompositeOperation = 'lighter';
     const glowR = sz * 3;
     const glow = ctx.createRadialGradient(0, 0, sz*0.3, 0, 0, glowR);
-    glow.addColorStop(0, flash ? 'rgba(255,255,255,0.5)' : `rgba(255,60,0,${0.25*bPulse})`);
+    glow.addColorStop(0, flash ? 'rgba(255,255,255,0.5)' : `rgba(${gR},${gG},${gB},${0.25*bPulse})`);
     glow.addColorStop(1, 'transparent');
     ctx.fillStyle = glow;
     ctx.fillRect(-glowR, -glowR, glowR*2, glowR*2);
     ctx.globalCompositeOperation = 'source-over';
 
     // Main hull (elongated diamond body)
-    ctx.fillStyle = flash ? '#fff' : '#cc2200';
+    ctx.fillStyle = flash ? '#fff' : hullCol;
     ctx.beginPath();
     ctx.moveTo(0, -sz*1.4);
     ctx.lineTo(sz*0.55, -sz*0.2);
@@ -2472,7 +2492,7 @@ function render() {
 
     // Hull gradient overlay
     const hullGrad = ctx.createLinearGradient(-sz*0.5, -sz*1.2, sz*0.5, sz*0.8);
-    hullGrad.addColorStop(0, flash ? 'rgba(255,255,255,0.4)' : 'rgba(255,100,50,0.4)');
+    hullGrad.addColorStop(0, flash ? 'rgba(255,255,255,0.4)' : `rgba(${gR},${Math.min(255,gG+50)},${Math.min(255,gB+30)},0.4)`);
     hullGrad.addColorStop(0.5, 'transparent');
     hullGrad.addColorStop(1, 'rgba(0,0,0,0.3)');
     ctx.fillStyle = hullGrad;
@@ -2487,7 +2507,7 @@ function render() {
     ctx.fill();
 
     // Swept wings
-    ctx.fillStyle = flash ? '#fcc' : '#991100';
+    ctx.fillStyle = flash ? '#fcc' : wingCol;
     ctx.beginPath();
     ctx.moveTo(sz*0.5, -sz*0.1);
     ctx.lineTo(sz*1.6, sz*0.4);
@@ -2508,7 +2528,7 @@ function render() {
     ctx.fill();
 
     // Wing detail lines
-    ctx.strokeStyle = flash ? '#fff' : 'rgba(255,80,30,0.6)';
+    ctx.strokeStyle = flash ? '#fff' : `rgba(${gR},${gG},${gB},0.6)`;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(sz*0.5, -sz*0.1); ctx.lineTo(sz*1.4, sz*0.55);
@@ -2518,13 +2538,13 @@ function render() {
     // Engine pods at wing tips
     for (const side of [-1, 1]) {
       const ex = side * sz * 1.35, ey = sz * 0.55;
-      ctx.fillStyle = flash ? '#fff' : '#771100';
+      ctx.fillStyle = flash ? '#fff' : podCol;
       ctx.beginPath();
       ctx.ellipse(ex, ey, sz*0.18, sz*0.32, 0, 0, Math.PI*2);
       ctx.fill();
       ctx.globalCompositeOperation = 'lighter';
       const engGlow = ctx.createRadialGradient(ex, ey+sz*0.25, 0, ex, ey+sz*0.25, sz*0.4);
-      engGlow.addColorStop(0, `rgba(255,${140+Math.sin(t*6+side)*60|0},0,${0.8*bPulse})`);
+      engGlow.addColorStop(0, `rgba(${gR},${Math.min(255,gG+100+Math.sin(t*6+side)*60|0)},${gB},${0.8*bPulse})`);
       engGlow.addColorStop(1, 'transparent');
       ctx.fillStyle = engGlow;
       ctx.fillRect(ex-sz*0.4, ey, sz*0.8, sz*0.5);
@@ -2543,8 +2563,8 @@ function render() {
 
     // Cockpit / bridge
     const cockpitGrad = ctx.createRadialGradient(-sz*0.08, -sz*0.6, 0, 0, -sz*0.55, sz*0.3);
-    cockpitGrad.addColorStop(0, flash ? '#fff' : 'rgba(255,200,150,0.9)');
-    cockpitGrad.addColorStop(0.5, flash ? '#faa' : 'rgba(200,80,30,0.6)');
+    cockpitGrad.addColorStop(0, flash ? '#fff' : cockCol);
+    cockpitGrad.addColorStop(0.5, flash ? '#faa' : `rgba(${gR*0.8|0},${gG*0.3|0},${gB*0.1|0},0.6)`);
     cockpitGrad.addColorStop(1, 'rgba(80,0,0,0.3)');
     ctx.fillStyle = cockpitGrad;
     ctx.beginPath();
