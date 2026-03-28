@@ -664,24 +664,28 @@ btnHandler(document.getElementById('statsContinueBtn'), () => {
 
 function showUpgradeScreen() {
   upgradeActive = true;
+  inputActive = false; // stop player movement
   const opts = document.getElementById('upgradeOptions');
   opts.innerHTML = '';
   const allUpgrades = [
-    {name:'FIRE RATE +20%', key:'fireRate', apply:()=>{ playerUpgrades.fireRate++; }},
-    {name:'WIDER SPREAD', key:'spread', apply:()=>{ playerUpgrades.spread++; }},
-    {name:'SHIELD REGEN', key:'shieldRegen', apply:()=>{ playerUpgrades.shieldRegen++; player.shield = true; }},
-    {name:'BULLET SPEED +15%', key:'bulletSpeed', apply:()=>{ playerUpgrades.bulletSpeed++; }},
-    {name:'TRIPLE SHOT +3s', key:'tripleDur', apply:()=>{ playerUpgrades.tripleDur++; }},
-    {name:'EXTRA LIFE', key:'extraLives', apply:()=>{ playerUpgrades.extraLives++; lives++; }}
+    {name:'FIRE RATE +20%', apply:()=>{ playerUpgrades.fireRate++; }},
+    {name:'WIDER SPREAD',   apply:()=>{ playerUpgrades.spread++; }},
+    {name:'SHIELD REGEN',   apply:()=>{ playerUpgrades.shieldRegen++; player.shield = true; }},
+    {name:'BULLET SPEED +15%', apply:()=>{ playerUpgrades.bulletSpeed++; }},
+    {name:'TRIPLE SHOT +3s',   apply:()=>{ playerUpgrades.tripleDur++; }},
+    {name:'EXTRA LIFE',    apply:()=>{ playerUpgrades.extraLives++; lives++; }}
   ];
-  // Pick 3 random
-  const shuffled = allUpgrades.sort(()=>Math.random()-0.5).slice(0,3);
+  // Shuffle into a new array (don't mutate original)
+  const shuffled = [...allUpgrades].sort(()=>Math.random()-0.5).slice(0,3);
+  let picked = false; // prevent double-fire
   shuffled.forEach(up => {
     const btn = document.createElement('button');
     btn.className = 'btn';
-    btn.style.cssText = 'border-color:#f90;color:#f90;min-width:220px;touch-action:manipulation;';
+    btn.style.cssText = 'border-color:#f90;color:#f90;min-width:220px;touch-action:manipulation;display:block;';
     btn.textContent = up.name;
     function pick() {
+      if (picked) return;
+      picked = true;
       up.apply();
       upgradeActive = false;
       document.getElementById('upgradeScreen').classList.add('hidden');
@@ -691,7 +695,11 @@ function showUpgradeScreen() {
     btn.addEventListener('touchend', e => { e.stopPropagation(); e.preventDefault(); pick(); });
     opts.appendChild(btn);
   });
-  document.getElementById('upgradeScreen').classList.remove('hidden');
+  const screen = document.getElementById('upgradeScreen');
+  screen.classList.remove('hidden');
+  // Block canvas touches from bleeding through
+  screen.ontouchstart = e => e.stopPropagation();
+  screen.ontouchmove = e => e.stopPropagation();
 }
 
 function playAlarmBeeps() {
@@ -1236,35 +1244,9 @@ function update() {
   }
 
   // Dynamic music intensity
-  if (droneGain && droneOsc && !muted) {
-    const enemyCount = enemies.length;
-    const baseGain = 0.04 + wave * 0.002;
-    const enemyBoost = enemyCount > 10 ? Math.min(0.08, (enemyCount - 10) * 0.006) : 0;
-    const bossBoost = bossActive ? 0.07 : 0;
-    const clearCalm = (waveEnemiesSpawned >= waveEnemyCount && enemyCount === 0 && !bossActive) ? -0.02 : 0;
-    droneGain.gain.value = Math.min(0.18, baseGain + enemyBoost + bossBoost + clearCalm);
-    droneOsc.frequency.value = 55 + wave * 1.5 + (bossActive ? 15 : 0) + (enemyCount > 15 ? 8 : 0);
-    droneOsc.type = bossActive ? 'sawtooth' : 'sine';
-    // Dissonant boss oscillator
-    if (bossActive && !droneOsc2 && audioCtx) {
-      try {
-        droneOsc2 = audioCtx.createOscillator();
-        droneGain2 = audioCtx.createGain();
-        droneOsc2.type = 'sawtooth';
-        droneOsc2.frequency.value = 82; // tritone above 55Hz — very dissonant
-        droneGain2.gain.value = 0.055;
-        droneOsc2.connect(droneGain2).connect(audioCtx.destination);
-        droneOsc2.start();
-      } catch(e) {}
-    }
-    if (!bossActive && droneOsc2) {
-      try { droneOsc2.stop(); } catch(e) {} droneOsc2 = null; droneGain2 = null;
-    }
-    if (droneGain2) droneGain2.gain.value = 0.055;
-  } else if (droneGain && muted) {
-    droneGain.gain.value = 0;
-    if (droneGain2) droneGain2.gain.value = 0;
-  }
+  // Dynamic music removed — static drone only
+  if (droneGain) droneGain.gain.value = muted ? 0 : 0.04;
+  if (droneOsc2) { try { droneOsc2.stop(); } catch(e) {} droneOsc2 = null; droneGain2 = null; }
 
   // Boss phase change
   if (boss && !boss.dying && boss.entered) {
