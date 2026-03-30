@@ -366,7 +366,12 @@ canvas.addEventListener("touchend", function(e){
   e.preventDefault();
   thrusting = false;
 }, { passive: false });
+canvas.addEventListener("touchmove", function(e){
+  e.preventDefault();
+  if(gameState === "playing"){ thrusting = true; }
+}, { passive: false });
 canvas.addEventListener("touchcancel", function(e){
+  e.preventDefault();
   thrusting = false;
 }, { passive: false });
 canvas.addEventListener("mousedown", function(e){
