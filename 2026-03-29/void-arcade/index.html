@@ -111,9 +111,9 @@ let audioCtx = null, audioUnlocked = false;
 
 // === DIFFICULTY CONFIG ===
 const DIFF = {
-  easy:   { gapBase: 200, gapMin: 140, gravity: 600, thrust: -320, wallSpeed: 140, speedInc: 3, orbChance: 0.6, livesStart: 5 },
-  normal: { gapBase: 170, gapMin: 110, gravity: 750, thrust: -380, wallSpeed: 170, speedInc: 5, orbChance: 0.45, livesStart: 3 },
-  hard:   { gapBase: 140, gapMin: 90, gravity: 900, thrust: -420, wallSpeed: 210, speedInc: 7, orbChance: 0.35, livesStart: 2 }
+  easy:   { gapBase: 200, gapMin: 140, gravity: 600, thrust: -320, wallSpeed: 140, speedInc: 3, orbChance: 0.6, livesStart: 4 },
+  normal: { gapBase: 170, gapMin: 110, gravity: 750, thrust: -380, wallSpeed: 170, speedInc: 5, orbChance: 0.45, livesStart: 4 },
+  hard:   { gapBase: 140, gapMin: 90,  gravity: 900, thrust: -420, wallSpeed: 210, speedInc: 7, orbChance: 0.35, livesStart: 4 }
 };
 let cfg;
 
@@ -128,6 +128,7 @@ let sparkles = [];
 let stars = [];
 let nebulae = [];
 let plasmaBlobs = [];
+let plasmaTendrils = []; // player-emitted plasma attracted to walls
 let galaxyAngle = 0;
 let shootingStars = [];
 
@@ -151,6 +152,7 @@ function initBackground(){
     { x: W * 0.85, y: H * 0.8, r: Math.min(W,H)*0.2, color: [60,10,90], drift: -0.12, phase: 1 }
   ];
   plasmaBlobs = [];
+  plasmaTendrils = [];
   const colors = [[255,60,60],[60,100,255],[60,220,100],[160,60,255],[0,220,220],[255,180,40]];
   for(let i = 0; i < 6; i++){
     plasmaBlobs.push({
@@ -873,6 +875,47 @@ function drawOrbs(t){
   }
 }
 
+function drawPlasmaTendrils(){
+  if(!plasmaTendrils.length) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineCap = "round";
+  for(const tn of plasmaTendrils){
+    const alpha = tn.life / tn.maxLife;
+    // Glow pass
+    ctx.globalAlpha = alpha * 0.3;
+    ctx.strokeStyle = `hsla(${tn.hue},100%,70%,1)`;
+    ctx.lineWidth = tn.width * 4;
+    ctx.beginPath();
+    ctx.moveTo(tn.x, tn.y);
+    for(let s=1;s<=tn.segs;s++){
+      const frac=s/tn.segs;
+      const ox=tn.offsets[s%tn.offsets.length]||0;
+      const oy=tn.offsets[(s+1)%tn.offsets.length]||0;
+      ctx.lineTo(tn.x+(tn.tx-tn.x)*frac+ox, tn.y+(tn.ty-tn.y)*frac+oy);
+    }
+    ctx.lineTo(tn.tx, tn.ty);
+    ctx.stroke();
+    // Core pass
+    ctx.globalAlpha = alpha * 0.9;
+    ctx.strokeStyle = `hsla(${tn.hue},100%,90%,1)`;
+    ctx.lineWidth = tn.width;
+    ctx.beginPath();
+    ctx.moveTo(tn.x, tn.y);
+    for(let s=1;s<=tn.segs;s++){
+      const frac=s/tn.segs;
+      const ox=(tn.offsets[s%tn.offsets.length]||0)*0.5;
+      const oy=(tn.offsets[(s+1)%tn.offsets.length]||0)*0.5;
+      ctx.lineTo(tn.x+(tn.tx-tn.x)*frac+ox, tn.y+(tn.ty-tn.y)*frac+oy);
+    }
+    ctx.lineTo(tn.tx, tn.ty);
+    ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+  ctx.globalCompositeOperation="source-over";
+  ctx.restore();
+}
+
 function drawPlayer(t){
   const px = player.x, py = player.y, pr = player.radius;
   ctx.save();
@@ -988,6 +1031,7 @@ function update(t){
     drawWalls(t);
     drawOrbs(t);
     drawParticles();
+    drawPlasmaTendrils();
     if(gameState === "playing") drawPlayer(t);
     drawPopups();
   } else {
@@ -1018,6 +1062,64 @@ function updateBackground(t, dt){
     b.x = b.cx + Math.sin(t * b.freqX + b.phaseX) * b.ampX;
     b.y = b.cy + Math.cos(t * b.freqY + b.phaseY) * b.ampY;
   }
+  // === PLASMA TENDRILS — emitted from player, attracted to walls ===
+  if(gameState === "playing"){
+    // Find nearest wall and proximity to its edges
+    let nearWall = null, wallProx = 0;
+    for(const w of walls){
+      const dx = Math.abs(player.x - w.x);
+      if(dx < WALL_WIDTH * 2 + 120){
+        // Distance to top wall bottom edge and bottom wall top edge
+        const topEdge = w.gapY - w.gap/2;
+        const botEdge = w.gapY + w.gap/2;
+        const distTop = Math.abs(player.y - topEdge);
+        const distBot = Math.abs(player.y - botEdge);
+        const minDist = Math.min(distTop, distBot, player.y, H - player.y);
+        const prox = Math.max(0, 1 - minDist / 140);
+        if(prox > wallProx){ wallProx = prox; nearWall = w; }
+      }
+    }
+    // Always emit some plasma even away from walls, lots near walls
+    const emitRate = 0.15 + wallProx * 0.7;
+    if(Math.random() < emitRate){
+      const hue = 180 + Math.random()*140; // cyan→purple range
+      // Target: nearest wall surface, or random direction if no wall
+      let tx, ty;
+      if(nearWall && wallProx > 0.05){
+        const topEdge = nearWall.gapY - nearWall.gap/2;
+        const botEdge = nearWall.gapY + nearWall.gap/2;
+        if(player.y < nearWall.gapY){
+          tx = nearWall.x + (Math.random()-0.5)*WALL_WIDTH;
+          ty = topEdge;
+        } else {
+          tx = nearWall.x + (Math.random()-0.5)*WALL_WIDTH;
+          ty = botEdge;
+        }
+      } else {
+        const angle = Math.random()*Math.PI*2;
+        tx = player.x + Math.cos(angle)*(60+Math.random()*80);
+        ty = player.y + Math.sin(angle)*(60+Math.random()*80);
+      }
+      plasmaTendrils.push({
+        x: player.x + (Math.random()-0.5)*8,
+        y: player.y + (Math.random()-0.5)*8,
+        tx, ty,
+        life: 0.25 + Math.random()*0.2,
+        maxLife: 0.25 + Math.random()*0.2,
+        hue,
+        width: (1 + wallProx*3) * (0.5 + Math.random()*0.8),
+        segs: 5 + Math.floor(Math.random()*5),
+        offsets: Array.from({length:8},()=>(Math.random()-0.5)*22*(0.5+wallProx))
+      });
+    }
+  }
+  // Update tendrils
+  for(let i = plasmaTendrils.length-1; i >= 0; i--){
+    const t2 = plasmaTendrils[i];
+    t2.life -= dt;
+    if(t2.life <= 0){ plasmaTendrils.splice(i,1); }
+  }
+
   // Shooting stars
   if(Math.random() < 0.002){
     shootingStars.push({
