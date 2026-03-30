@@ -111,9 +111,9 @@ let audioCtx = null, audioUnlocked = false;
 
 // === DIFFICULTY CONFIG ===
 const DIFF = {
-  easy:   { gapBase: 200, gapMin: 140, gravity: 600, thrust: -320, wallSpeed: 140, speedInc: 3, orbChance: 0.6, livesStart: 4 },
-  normal: { gapBase: 170, gapMin: 110, gravity: 750, thrust: -380, wallSpeed: 170, speedInc: 5, orbChance: 0.45, livesStart: 4 },
-  hard:   { gapBase: 140, gapMin: 90,  gravity: 900, thrust: -420, wallSpeed: 210, speedInc: 7, orbChance: 0.35, livesStart: 4 }
+  easy:   { gapBase: 220, gapMin: 160, gravity: 420, thrust: -240, wallSpeed: 120, speedInc: 2, orbChance: 0.6, livesStart: 4 },
+  normal: { gapBase: 190, gapMin: 130, gravity: 500, thrust: -280, wallSpeed: 150, speedInc: 3, orbChance: 0.45, livesStart: 4 },
+  hard:   { gapBase: 160, gapMin: 110, gravity: 600, thrust: -320, wallSpeed: 180, speedInc: 5, orbChance: 0.35, livesStart: 4 }
 };
 let cfg;
 
@@ -230,30 +230,44 @@ function stopDrone(){
   try { if(droneOsc2){droneOsc2.stop();droneOsc2=null;} } catch(e){}
 }
 
-// Proximity buzz — continuous electrical hiss that gets louder/higher near walls
-let buzzOsc = null, buzzGain = null, buzzProx = 0;
+// Proximity electrical arc sound — random crackle bursts that increase near walls
+let buzzProx = 0, buzzTimer = 0;
 function updateBuzz(prox){
   if(!audioCtx) return;
   buzzProx = prox;
+}
+function tickBuzz(dt){
+  if(!audioCtx || buzzProx < 0.06) { buzzTimer = 0; return; }
+  buzzTimer -= dt;
+  if(buzzTimer > 0) return;
+  // Schedule next crackle — more frequent the closer to wall
+  buzzTimer = 0.04 + (1 - buzzProx) * 0.18;
   try {
-    if(prox > 0.05){
-      if(!buzzOsc){
-        buzzOsc = audioCtx.createOscillator();
-        buzzGain = audioCtx.createGain();
-        buzzOsc.type = "sawtooth";
-        buzzOsc.frequency.value = 80;
-        buzzGain.gain.value = 0;
-        buzzOsc.connect(buzzGain).connect(audioCtx.destination);
-        buzzOsc.start();
-      }
-      buzzOsc.frequency.value = 60 + prox * 180;
-      buzzGain.gain.value = Math.min(0.12, prox * 0.18);
-    } else {
-      if(buzzOsc){ try{buzzOsc.stop();}catch(e){} buzzOsc=null; buzzGain=null; }
+    const now = audioCtx.currentTime;
+    // Sharp crack: very short highpass noise burst
+    const crackLen = Math.floor(audioCtx.sampleRate * (0.015 + Math.random()*0.025));
+    const cb = audioCtx.createBuffer(1, crackLen, audioCtx.sampleRate);
+    const cd = cb.getChannelData(0);
+    for(let i=0;i<crackLen;i++){
+      const env = Math.pow(1 - i/crackLen, 0.4); // fast sharp attack, quick decay
+      cd[i] = (Math.random()*2-1) * env;
+    }
+    const cs = audioCtx.createBufferSource(); cs.buffer = cb;
+    const hpf = audioCtx.createBiquadFilter(); hpf.type="highpass"; hpf.frequency.value=2000+Math.random()*3000;
+    const cg = audioCtx.createGain(); cg.gain.value = Math.min(0.35, buzzProx * 0.5);
+    cs.connect(hpf).connect(cg).connect(audioCtx.destination); cs.start(now);
+
+    // Occasional resonant mid-crack (the "zap" character)
+    if(Math.random() < buzzProx * 0.6){
+      const zo = audioCtx.createOscillator(); zo.type="square";
+      zo.frequency.setValueAtTime(400+Math.random()*800, now);
+      zo.frequency.exponentialRampToValueAtTime(80, now+0.02);
+      const zg = audioCtx.createGain(); zg.gain.setValueAtTime(buzzProx*0.08, now); zg.gain.exponentialRampToValueAtTime(0.001, now+0.025);
+      zo.connect(zg).connect(audioCtx.destination); zo.start(now); zo.stop(now+0.03);
     }
   } catch(e){}
 }
-function stopBuzz(){ try{if(buzzOsc){buzzOsc.stop();buzzOsc=null;buzzGain=null;}}catch(e){} }
+function stopBuzz(){ buzzProx=0; buzzTimer=0; }
 
 function sfxThrust(){ playTone(1200, 0.08, 0.04, "sine"); }
 function sfxCollect(){ playTone(600, 0.15, 0.12, "sine"); playTone(900, 0.15, 0.08, "sine"); playNoise(0.1, 0.04); }
@@ -1055,6 +1069,7 @@ function updateBackground(t, dt){
     }
     // Update electrical buzz based on wall proximity
     updateBuzz(wallProx);
+    tickBuzz(dt);
     // Always emit some plasma even away from walls, lots near walls
     const emitRate = 0.15 + wallProx * 0.7;
     if(Math.random() < emitRate){
@@ -1120,7 +1135,7 @@ function updateGame(t, dt){
   // Player physics
   if(thrusting){
     // Smooth acceleration — no instant snap
-    player.vy += (cfg.thrust - player.vy) * Math.min(1, dt * 6);
+    player.vy += (cfg.thrust - player.vy) * Math.min(1, dt * 3.5);
     if(Math.random() < 0.6) spawnTrail();
   } else {
     player.vy += cfg.gravity * dt;
