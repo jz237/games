@@ -194,6 +194,8 @@ function initGame(){
   nextLanternTimer=0;nextGateTimer=0;
   for(let i=0;i<3;i++)petals.push(makePetal());
   scrollSpeed=20;
+  touches={};
+  swipeTrails=[];
 }
 
 function spawnPhaseObstacles(){
@@ -276,6 +278,7 @@ function applyHeldForces(dt){
 canvas.addEventListener('touchstart',(e)=>{if(e.target.closest('button')||e.target.closest('.overlay'))return;e.preventDefault();handleTouchStart(e)},{passive:false});
 canvas.addEventListener('touchmove',(e)=>{if(e.target.closest('button')||e.target.closest('.overlay'))return;e.preventDefault();handleTouchMove(e)},{passive:false});
 canvas.addEventListener('touchend',(e)=>{if(e.target.closest('button')||e.target.closest('.overlay'))return;e.preventDefault();handleTouchEnd(e)},{passive:false});
+canvas.addEventListener('touchcancel',(e)=>{for(const t of e.changedTouches){delete touches[t.identifier];}swipeTrails=[];},{passive:true});
 // Mouse fallback
 let mouseDown=false;
 canvas.addEventListener('mousedown',(e)=>{unlockAudio();startAmbient();mouseDown=true;const fake={changedTouches:[{identifier:0,clientX:e.clientX,clientY:e.clientY}]};handleTouchStart(fake)});
