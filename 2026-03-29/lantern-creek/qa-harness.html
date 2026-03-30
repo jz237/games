@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html><body>
+<pre id="out">running...</pre>
+<iframe id="game" src="/index.html" style="width:390px;height:844px;border:0"></iframe>
+<script>
+const out=document.getElementById('out');
+const lines=[];
+function log(msg){lines.push(msg); out.textContent=lines.join('\n'); console.log(msg);}
+function wait(ms){return new Promise(r=>setTimeout(r,ms));}
+function assert(name, cond, detail=''){
+  if(cond) log('PASS: '+name+(detail?' -- '+detail:''));
+  else log('FAIL: '+name+(detail?' -- '+detail:''));
+}
+(async()=>{
+  const frame=document.getElementById('game');
+  await new Promise(r=>frame.addEventListener('load',r,{once:true}));
+  const win=frame.contentWindow, doc=frame.contentDocument;
+  await wait(300);
+
+  // start game
+  doc.getElementById('btnPlay').dispatchEvent(new Event('touchend',{bubbles:true,cancelable:true}));
+  await wait(200);
+  assert('play transitions to gameplay', win.eval("state==='playing'"));
+  assert('hud visible in gameplay', !doc.getElementById('hud').classList.contains('hidden'));
+
+  // fix 1: restart clears touches + swipeTrails
+  win.eval("touches={1:{x:1,y:1,sx:1,sy:1,startTime:0,moved:false,held:true},2:{x:2,y:2,sx:2,sy:2,startTime:0,moved:true,held:false}}; swipeTrails=[{x:1,y:2,vx:3,vy:4,t:0,maxT:1}] ");
+  doc.getElementById('btnReplay').dispatchEvent(new Event('touchend',{bubbles:true,cancelable:true}));
+  await wait(100);
+  assert('restart clears touches', win.eval('Object.keys(touches).length===0'));
+  assert('restart clears swipeTrails', win.eval('swipeTrails.length===0'));
+
+  // fix 2: touchcancel handler exists and clears active touches + trails
+  win.eval("touches={7:{x:11,y:12,sx:11,sy:12,startTime:performance.now(),moved:false,held:false}}; swipeTrails=[{x:9,y:9,vx:1,vy:1,t:0,maxT:1}] ");
+  const touchObj={identifier:7,clientX:11,clientY:12,target:doc.getElementById('c')};
+  let evt;
+  try { evt=new TouchEvent('touchcancel',{changedTouches:[touchObj],bubbles:true,cancelable:true}); }
+  catch(e){ evt=new Event('touchcancel',{bubbles:true,cancelable:true}); evt.changedTouches=[touchObj]; }
+  doc.getElementById('c').dispatchEvent(evt);
+  await wait(50);
+  assert('touchcancel clears matching touch', win.eval('Object.keys(touches).length===0'));
+  assert('touchcancel clears swipe trails', win.eval('swipeTrails.length===0'));
+
+  // HUD/gameplay smoke
+  assert('score starts at 0', doc.getElementById('hudScore').textContent.trim()==='0');
+  assert('phase starts at 1', /Phase 1/.test(doc.getElementById('hudPhase').textContent));
+  assert('five lives shown at start', doc.getElementById('hudLives').textContent==='🏮🏮🏮🏮🏮');
+
+  // collect lantern updates score / streak
+  win.eval("lanterns=[makeLantern(100,100,'orange')]; gates=[makeGate(50,100,200)]; collectLantern(lanterns[0],gates[0]); updateHUD();");
+  await wait(50);
+  assert('collect lantern increases score', Number(doc.getElementById('hudScore').textContent)>=10, 'score='+doc.getElementById('hudScore').textContent);
+  assert('collect lantern shows streak', /×1|^$/.test(doc.getElementById('hudStreak').textContent)===true, 'streakText='+doc.getElementById('hudStreak').textContent);
+
+  // losing lanterns reaches gameover and overlay appears
+  win.eval("state='playing'; lanternsLostCount=4; loseLantern({alive:true,x:100,y:100,color:'#fff'});");
+  await wait(100);
+  assert('gameover state reached after 5 losses', win.eval("state==='gameover'"));
+  assert('gameover overlay shown', !doc.getElementById('gameOver').classList.contains('hidden'));
+  assert('final score populated', doc.getElementById('finalScore').textContent.trim()!=='');
+
+  // menu/high-score navigation smoke
+  doc.getElementById('btnBackMenu').dispatchEvent(new Event('touchend',{bubbles:true,cancelable:true}));
+  await wait(50);
+  assert('menu button returns to title', !doc.getElementById('titleScreen').classList.contains('hidden'));
+  doc.getElementById('btnHS').dispatchEvent(new Event('touchend',{bubbles:true,cancelable:true}));
+  await wait(50);
+  assert('high scores screen opens', !doc.getElementById('highScores').classList.contains('hidden'));
+  doc.getElementById('btnHSBack').dispatchEvent(new Event('touchend',{bubbles:true,cancelable:true}));
+  await wait(50);
+  assert('back from high scores returns to title', !doc.getElementById('titleScreen').classList.contains('hidden'));
+
+  const failed=lines.filter(x=>x.startsWith('FAIL:')).length;
+  log('SUMMARY: failed='+failed);
+})();
+</script>
+</body></html>
