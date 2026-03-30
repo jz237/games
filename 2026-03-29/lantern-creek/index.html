@@ -191,6 +191,7 @@ function initGame(){
   initStars();initFireflies(10);
   spawnPhaseObstacles();
   spawnGate();
+  nextLanternTimer=0;nextGateTimer=0;
   for(let i=0;i<3;i++)petals.push(makePetal());
   scrollSpeed=20;
 }
@@ -274,7 +275,7 @@ function applyHeldForces(dt){
 
 canvas.addEventListener('touchstart',(e)=>{if(e.target.closest('button')||e.target.closest('.overlay'))return;e.preventDefault();handleTouchStart(e)},{passive:false});
 canvas.addEventListener('touchmove',(e)=>{if(e.target.closest('button')||e.target.closest('.overlay'))return;e.preventDefault();handleTouchMove(e)},{passive:false});
-canvas.addEventListener('touchend',(e)=>{handleTouchEnd(e)},{passive:false});
+canvas.addEventListener('touchend',(e)=>{if(e.target.closest('button')||e.target.closest('.overlay'))return;e.preventDefault();handleTouchEnd(e)},{passive:false});
 // Mouse fallback
 let mouseDown=false;
 canvas.addEventListener('mousedown',(e)=>{unlockAudio();startAmbient();mouseDown=true;const fake={changedTouches:[{identifier:0,clientX:e.clientX,clientY:e.clientY}]};handleTouchStart(fake)});
@@ -787,7 +788,7 @@ function updateHUD(){
 
 // --- HIGH SCORES ---
 function getHighScores(){try{return JSON.parse(localStorage.getItem('lantern_creek_highscores'))||[]}catch(e){return[]}}
-function saveHighScores(hs){localStorage.setItem('lantern_creek_highscores',JSON.stringify(hs.slice(0,10)))}
+function saveHighScores(hs){try{localStorage.setItem('lantern_creek_highscores',JSON.stringify(hs.slice(0,10)))}catch(e){}}
 let newHSIndex=-1;
 function addHighScore(initials){
   const hs=getHighScores();
@@ -830,8 +831,18 @@ function show(id){
   document.getElementById('hud').classList.toggle('hidden',id!==null);
 }
 function addBtn(btn,fn){
-  btn.addEventListener('click',(e)=>{e.stopPropagation();fn()});
-  btn.addEventListener('touchend',(e)=>{e.stopPropagation();e.preventDefault();fn()});
+  let touchHandled=false;
+  btn.addEventListener('touchend',(e)=>{
+    e.stopPropagation();e.preventDefault();
+    touchHandled=true;
+    setTimeout(()=>{touchHandled=false;},500);
+    fn();
+  });
+  btn.addEventListener('click',(e)=>{
+    e.stopPropagation();
+    if(touchHandled)return;
+    fn();
+  });
 }
 addBtn(document.getElementById('btnPlay'),()=>{state='playing';initGame();show(null);document.getElementById('hud').classList.remove('hidden')});
 addBtn(document.getElementById('btnHS'),()=>{newHSIndex=-1;renderHighScores(document.getElementById('hsList'));show('highScores')});
