@@ -1966,7 +1966,7 @@ function collectPowerup(pu) {
 
   switch(pu.type) {
     case 0: player.rapidFire = def.dur; activePowerup = {name:def.name, color:def.color, timer:def.dur, maxTimer:def.dur, icon:def.icon}; break;
-    case 1: { const tdur = def.dur + playerUpgrades.tripleDur * 3; player.tripleShot = tdur; activePowerup = {name:def.name, color:def.color, timer:tdur, maxTimer:tdur, icon:def.icon}; break; }
+    case 1: { const tdur = def.dur + 3; player.tripleShot = tdur; activePowerup = {name:def.name, color:def.color, timer:tdur, maxTimer:tdur, icon:def.icon}; break; }
     case 2: player.shield = true; break;
     case 3: fireHomingMissile(); break;
     case 4: scoreBoostTimer = def.dur; activePowerup = {name:def.name, color:def.color, timer:def.dur, maxTimer:def.dur, icon:def.icon}; break;
