@@ -850,23 +850,29 @@ button:active { transform: translateY(1px) scale(.99); }
     });
   }
 
-  function drawTrails(list, colorA, colorB) {
+  function drawTrails(list, friendly) {
     ctx.save();
     list.forEach(m => {
       if (!m.trail || m.trail.length < 2) return;
-      for (let i=1;i<m.trail.length;i++) {
+      const len = m.trail.length;
+      for (let i = 1; i < len; i++) {
         const a = m.trail[i-1], b = m.trail[i];
-        ctx.strokeStyle = i > m.trail.length*0.6 ? colorA : colorB;
-        ctx.lineWidth = a.w || 2; ctx.globalAlpha = clamp(i / m.trail.length, 0, 1);
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+        const t = i / len; // 0 at tail, 1 at head
+        // tapering width
+        ctx.lineWidth = friendly ? 2.5 * t : 2 * t;
+        // fading opacity
+        ctx.strokeStyle = friendly
+          ? `rgba(143,252,255,${t * 0.65})`
+          : `rgba(255,100,60,${t * 0.5})`;
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       }
     });
     ctx.restore();
   }
 
   function drawEntities(time) {
-    drawTrails(state.enemyMissiles, 'rgba(255,160,95,.9)', 'rgba(255,255,255,.28)');
-    drawTrails(state.playerMissiles, 'rgba(130,250,255,.95)', 'rgba(255,255,255,.24)');
+    drawTrails(state.enemyMissiles, false);
+    drawTrails(state.playerMissiles, true);
 
     state.smoke.forEach(s => {
       ctx.fillStyle = `rgba(${s.color},${Math.min(0.35,s.life*0.4)})`;
