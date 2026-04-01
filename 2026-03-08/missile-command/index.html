@@ -1222,12 +1222,12 @@ button:active { transform: translateY(1px) scale(.99); }
     for (let i = 0; i < 5; i++) {
       const nx = w * (0.15 + 0.7 * ((Math.sin(t * (0.7 + i * 0.3) + i * 2.1) + 1) / 2));
       const ny = h * (0.08 + 0.35 * ((Math.cos(t * (0.5 + i * 0.2) + i * 1.7) + 1) / 2));
-      const nr = 60 + 40 * Math.sin(t * (0.4 + i * 0.15) + i);
+      const nr = 80 + 60 * Math.sin(t * (0.4 + i * 0.15) + i);
       const [r2,g2,b2] = hexRgb(preset.aurora[i % preset.aurora.length]);
-      const nebAlpha = 0.035 + 0.02 * Math.sin(t * 2 + i * 3);
+      const nebAlpha = 0.12 + 0.06 * Math.sin(t * 2 + i * 3);
       const ng = ctx.createRadialGradient(nx, ny, 0, nx, ny, nr);
       ng.addColorStop(0, `rgba(${r2},${g2},${b2},${nebAlpha})`);
-      ng.addColorStop(0.5, `rgba(${r2},${g2},${b2},${nebAlpha * 0.4})`);
+      ng.addColorStop(0.4, `rgba(${r2},${g2},${b2},${nebAlpha * 0.5})`);
       ng.addColorStop(1, `rgba(${r2},${g2},${b2},0)`);
       ctx.fillStyle = ng; ctx.beginPath(); ctx.arc(nx, ny, nr, 0, Math.PI * 2); ctx.fill();
     }
@@ -1235,12 +1235,12 @@ button:active { transform: translateY(1px) scale(.99); }
     for (let i = 0; i < 3; i++) {
       const wx = w * (0.2 + 0.6 * ((Math.sin(t * 0.3 + i * 4.2) + 1) / 2));
       const wy = h * (0.05 + 0.3 * ((Math.cos(t * 0.25 + i * 2.8) + 1) / 2));
-      const wr = 100 + 60 * Math.sin(t * 0.2 + i * 1.5);
+      const wr = 120 + 80 * Math.sin(t * 0.2 + i * 1.5);
       const [r2,g2,b2] = hexRgb(preset.aurora[(i + 1) % preset.aurora.length]);
-      const wa = 0.02 + 0.01 * Math.sin(t * 1.5 + i);
+      const wa = 0.08 + 0.04 * Math.sin(t * 1.5 + i);
       const wg = ctx.createRadialGradient(wx, wy, 0, wx, wy, wr);
       wg.addColorStop(0, `rgba(${r2},${g2},${b2},${wa})`);
-      wg.addColorStop(0.6, `rgba(${r2},${g2},${b2},${wa * 0.3})`);
+      wg.addColorStop(0.5, `rgba(${r2},${g2},${b2},${wa * 0.4})`);
       wg.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = wg; ctx.beginPath(); ctx.arc(wx, wy, wr, 0, Math.PI * 2); ctx.fill();
     }
