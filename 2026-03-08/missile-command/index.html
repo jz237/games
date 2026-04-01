@@ -944,7 +944,7 @@ button:active { transform: translateY(1px) scale(.99); }
         m.alive = false;
         if (m.nuke) {
           // NUCLEAR DETONATION — massive
-          detonate(m.x, h * 0.84, 200, false);
+          detonate(m.x, h * 0.84, 130, false);
           shake = 30; flash = 0.9;
           // Mushroom cloud particles
           for (let p = 0; p < 80; p++) {
@@ -963,10 +963,10 @@ button:active { transform: translateY(1px) scale(.99); }
           for (let i = 0; i < 10; i++) state.fires.push({ x: m.x + rand(40, -40), y: h * 0.84 - rand(8, 0), life: rand(5, 3), t: Math.random() * 10 });
           // Check all cities within nuke blast radius
           for (const c of state.cities) {
-            if (c.alive && dist(m.x, h * 0.84, c.x, c.y) < 200) destroyCity(c);
+            if (c.alive && dist(m.x, h * 0.84, c.x, c.y) < 130) destroyCity(c);
           }
           for (const b of state.bases) {
-            if (dist(m.x, h * 0.84, b.x, b.y) < 200) { b.ammo = 0; b.reloadPulse = 0; }
+            if (dist(m.x, h * 0.84, b.x, b.y) < 130) { b.ammo = 0; b.reloadPulse = 0; }
           }
           // Nuclear explosion sound
           audio.nukeExplosion();
