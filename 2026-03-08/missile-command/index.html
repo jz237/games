@@ -334,7 +334,7 @@ button:active { transform: translateY(1px) scale(.99); }
     state.enemyMissiles = []; state.playerMissiles = []; state.explosions = []; state.particles = []; state.smoke = []; state.satellites = []; state.debris = []; state.fires = [];
     state.waveSeed = Math.random()*9999;
     state.bases.forEach(b => { b.ammoMax = 15 + Math.floor(state.wave * 1.5); b.ammo = b.ammoMax; b.reloadPulse = 1; b.alive = true; });
-    waveTransition = 1.2;
+    waveTransition = 0.7;
     ui.waveBannerBig.textContent = `Wave ${state.wave}`;
     ui.waveBannerSmall.textContent = state.wave < 6 ? 'Initial bombardment' : state.wave < 10 ? 'MIRV signatures detected' : 'Smart weapons entering the theater';
     ui.waveBanner.classList.add('show');
@@ -397,7 +397,9 @@ button:active { transform: translateY(1px) scale(.99); }
     state.explosions.push({ x, y, radius: 1, maxRadius: radius, age: 0, life: friendly ? 0.72 : 0.94, friendly, comboBoost, hitIds: new Set() });
     flash = Math.min(1, flash + (friendly ? 0.12 : 0.18));
     shake = Math.max(shake, friendly ? 4 : 7);
-    spawnParticles(x,y, friendly ? 26 : 34, friendly ? '#ffd38a' : '#ff784f', friendly ? 1.9 : 2.3, friendly ? 1.2 : 1.6, 40);
+    spawnParticles(x,y, friendly ? 45 : 55, friendly ? '#ffd38a' : '#ff784f', friendly ? 2.5 : 3.0, friendly ? 1.6 : 2.0, 40);
+    spawnParticles(x,y, friendly ? 15 : 20, '#fff', friendly ? 1.2 : 1.5, 0.8, 60);
+    spawnParticles(x,y, friendly ? 12 : 16, friendly ? '#ff8844' : '#ff3322', friendly ? 3.0 : 3.5, friendly ? 2.0 : 2.5, 80);
     audio.explosion(friendly ? 1 : 1.2, state.chainCount || 1);
   }
 
@@ -412,7 +414,8 @@ button:active { transform: translateY(1px) scale(.99); }
     ui.combo.classList.add('show');
     setTimeout(() => ui.combo.classList.remove('show'), 600);
     audio.combo(state.chainCount);
-    spawnParticles(missile.x, missile.y, 16, '#fff3a6', 1.6, 1.05, 20);
+    spawnParticles(missile.x, missile.y, 28, '#fff3a6', 2.2, 1.4, 20);
+    spawnParticles(missile.x, missile.y, 10, '#fff', 1.0, 0.7, 40);
     if (missile.kind === 'mirv' && !missile.split) {
       missile.split = true;
     }
@@ -449,7 +452,8 @@ button:active { transform: translateY(1px) scale(.99); }
       const t = targetCities[Math.floor(Math.random()*targetCities.length)] || { x: rand(w*0.9,w*0.1), y:h*0.84 };
       state.enemyMissiles.push({ x:m.x, y:m.y, sx:m.x, sy:m.y, tx:t.x + rand(70,-70), ty:t.y, speed:m.speed*1.1, progress:0, trail:[], alive:true, split:true, kind:'normal', wiggle:rand(1000), whistle:false });
     }
-    spawnParticles(m.x,m.y, 18, '#ffd69e', 1.7, 1.1, 10);
+    spawnParticles(m.x,m.y, 30, '#ffd69e', 2.2, 1.4, 10);
+    spawnParticles(m.x,m.y, 12, '#ff6622', 2.8, 1.8, 50);
     audio.whistle();
   }
 
@@ -946,8 +950,11 @@ button:active { transform: translateY(1px) scale(.99); }
     }
     const ok = document.createElement('button');
     ok.textContent = 'OK'; ok.style.cssText = 'margin-left:0.8em;padding:0.3em 1em;cursor:pointer;font-size:1rem;background:#ffd700;border:none;color:#000;border-radius:4px';
+    let submitted = false;
     function submitH(e) {
       e.stopPropagation();
+      if (submitted) return;
+      submitted = true;
       const ini = pendingInitials.map(i => String.fromCharCode(65+i)).join('');
       addHS(ini, sc, wv);
       submitGlobalScore(ini, sc, {wave:wv});
