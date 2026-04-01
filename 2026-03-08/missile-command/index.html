@@ -334,7 +334,7 @@ button:active { transform: translateY(1px) scale(.99); }
     state.enemyMissiles = []; state.playerMissiles = []; state.explosions = []; state.particles = []; state.smoke = []; state.satellites = []; state.debris = []; state.fires = [];
     state.waveSeed = Math.random()*9999;
     state.bases.forEach(b => { b.ammoMax = 15 + Math.floor(state.wave * 1.5); b.ammo = b.ammoMax; b.reloadPulse = 1; b.alive = true; });
-    waveTransition = 2.2;
+    waveTransition = 1.2;
     ui.waveBannerBig.textContent = `Wave ${state.wave}`;
     ui.waveBannerSmall.textContent = state.wave < 6 ? 'Initial bombardment' : state.wave < 10 ? 'MIRV signatures detected' : 'Smart weapons entering the theater';
     ui.waveBanner.classList.add('show');
@@ -342,7 +342,7 @@ button:active { transform: translateY(1px) scale(.99); }
     if (!first) audio.fanfare();
     const count = 6 + state.wave * 2;
     const spawnInterval = Math.max(0.45, 1.8 - state.wave * 0.05);
-    for (let i=0;i<count;i++) scheduleEnemy(i * spawnInterval + rand(0.6));
+    for (let i=0;i<count;i++) scheduleEnemy(i * spawnInterval + rand(0.6) + 1.0);
     if (state.wave >= 8) {
       const sats = 1 + Math.floor((state.wave-8)/4);
       for (let s=0;s<sats;s++) state.satellites.push(spawnSatellite(s));
@@ -369,7 +369,7 @@ button:active { transform: translateY(1px) scale(.99); }
   }
 
   function fireAt(x, y) {
-    if (!running || paused || state.gameOver || waveTransition > 0.2) return;
+    if (!running || paused || state.gameOver || waveTransition > 0) return;
     let chosen = null, best = Infinity;
     for (const base of state.bases) {
       if (base.ammo <= 0 || !base.alive) continue;
