@@ -208,6 +208,7 @@ button:active { transform: translateY(1px) scale(.99); }
   let w = 0, h = 0, dpr = Math.min(2, window.devicePixelRatio || 1), last = 0;
   let shake = 0, flash = 0, paused = false, running = false, waveTransition = 0, comboTimer = 0;
   let waveClearFX = []; // persistent particles that survive startWave()
+  let tally = null; // wave-end bonus tally state
 
   const skyPresets = [
     { top: '#21112f', mid: '#8d3767', bottom: '#ff9757', aurora: ['#5be4ff','#ff7dd6','#d6ff7d'] },
@@ -734,12 +735,23 @@ button:active { transform: translateY(1px) scale(.99); }
 
     const activeEnemies = state.enemyMissiles.some(m => m.alive || m.progress < 0);
     const activeEffects = state.explosions.length || state.playerMissiles.some(m=>m.alive);
-    if (!activeEnemies && !activeEffects && !state.gameOver) {
-      state.waveOverDelay += dt;
-      if (state.waveOverDelay > 1.4) {
-        const bonus = state.cities.filter(c=>c.alive).length * 150 + state.bases.reduce((sum,b)=>sum+b.ammo*8,0);
-        state.score += bonus;
-        // spawn fireworks into persistent array (survives startWave clear)
+    // tally update
+    if (tally) {
+      tally.timer += dt;
+      // phase 0: show cities (0-1.5s), phase 1: count ammo (1.5-3s), phase 2: done (3-4s)
+      if (tally.phase === 0 && tally.timer > 0.06 && tally.cityAwarded < tally.cityCount) {
+        tally.cityAwarded++; tally.runningScore += 150;
+        state.score += 150; tally.timer = 0;
+      } else if (tally.phase === 0 && tally.cityAwarded >= tally.cityCount) {
+        tally.phase = 1; tally.timer = 0;
+      } else if (tally.phase === 1 && tally.timer > 0.03 && tally.ammoAwarded < tally.ammoCount) {
+        const batch = Math.min(3, tally.ammoCount - tally.ammoAwarded);
+        tally.ammoAwarded += batch; tally.runningScore += batch * 8;
+        state.score += batch * 8; tally.timer = 0;
+      } else if (tally.phase === 1 && tally.ammoAwarded >= tally.ammoCount) {
+        tally.phase = 2; tally.timer = 0;
+      } else if (tally.phase === 2 && tally.timer > 1.2) {
+        // fireworks + next wave
         for (let i = 0; i < 6 + Math.floor(Math.random()*3); i++) {
           const fx = w * 0.1 + Math.random() * w * 0.8, fy = h * 0.1 + Math.random() * h * 0.35;
           const col = ['#ff4488','#44ff88','#4488ff','#ffdd44','#ff8844'][Math.floor(Math.random()*5)];
@@ -750,10 +762,19 @@ button:active { transform: translateY(1px) scale(.99); }
           }
         }
         audio.fanfare();
-        state.wave++; state.waveOverDelay = 0;
+        state.wave++; tally = null; state.waveOverDelay = 0;
         startWave();
       }
-    } else {
+      updateUI();
+    }
+    if (!activeEnemies && !activeEffects && !state.gameOver && !tally) {
+      state.waveOverDelay += dt;
+      if (state.waveOverDelay > 1.0) {
+        const cityCount = state.cities.filter(c=>c.alive).length;
+        const ammoCount = state.bases.reduce((sum,b)=>sum+b.ammo,0);
+        tally = { cityCount, ammoCount, cityAwarded: 0, ammoAwarded: 0, runningScore: 0, phase: 0, timer: 0, wave: state.wave };
+      }
+    } else if (!tally) {
       state.waveOverDelay = 0;
     }
     updateUI();
@@ -1124,6 +1145,58 @@ button:active { transform: translateY(1px) scale(.99); }
       ctx.fillStyle = 'rgba(4,8,16,.45)'; ctx.fillRect(0,0,w,h);
       ctx.fillStyle = '#fff'; ctx.font = '700 28px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('PAUSED', w/2, h/2);
     }
+    // wave-end tally overlay
+    if (tally) {
+      ctx.fillStyle = 'rgba(2,6,14,0.55)'; ctx.fillRect(0,0,w,h);
+      ctx.textAlign = 'center';
+      const cx = w/2, cy = h * 0.28;
+      // title
+      ctx.font = '700 clamp(18px,4vw,32px) Inter, sans-serif';
+      ctx.fillStyle = '#8ffcff';
+      ctx.fillText(`WAVE ${tally.wave} CLEARED`, cx, cy);
+      // cities section
+      const rowY = cy + 45;
+      ctx.font = '600 clamp(13px,3vw,20px) Inter, sans-serif';
+      ctx.fillStyle = '#ffd700'; ctx.fillText('CITIES SAVED', cx, rowY);
+      // city icons + bar
+      const barW = Math.min(w * 0.6, 260), barH = 18, barX = cx - barW/2;
+      const cityBarY = rowY + 14;
+      // background bar
+      ctx.fillStyle = 'rgba(255,255,255,0.08)'; roundRect(ctx, barX, cityBarY, barW, barH, 4);
+      // filled portion
+      const cityFrac = tally.cityCount > 0 ? tally.cityAwarded / tally.cityCount : 0;
+      if (cityFrac > 0) { ctx.fillStyle = '#ffd700'; roundRect(ctx, barX, cityBarY, barW * cityFrac, barH, 4); }
+      // count text
+      ctx.fillStyle = '#fff'; ctx.font = '700 clamp(11px,2.5vw,16px) Inter, sans-serif';
+      ctx.fillText(`${tally.cityAwarded} / ${tally.cityCount}  × 150 = +${tally.cityAwarded * 150}`, cx, cityBarY + barH + 18);
+      // ammo section
+      const ammoY = cityBarY + barH + 48;
+      ctx.font = '600 clamp(13px,3vw,20px) Inter, sans-serif';
+      ctx.fillStyle = tally.phase >= 1 ? '#8ffcff' : 'rgba(143,252,255,0.3)';
+      ctx.fillText('AMMO REMAINING', cx, ammoY);
+      if (tally.phase >= 1) {
+        const ammoBarY = ammoY + 14;
+        ctx.fillStyle = 'rgba(255,255,255,0.08)'; roundRect(ctx, barX, ammoBarY, barW, barH, 4);
+        const ammoFrac = tally.ammoCount > 0 ? tally.ammoAwarded / tally.ammoCount : 0;
+        if (ammoFrac > 0) { ctx.fillStyle = '#8ffcff'; roundRect(ctx, barX, ammoBarY, barW * ammoFrac, barH, 4); }
+        ctx.fillStyle = '#fff'; ctx.font = '700 clamp(11px,2.5vw,16px) Inter, sans-serif';
+        ctx.fillText(`${tally.ammoAwarded} / ${tally.ammoCount}  × 8 = +${tally.ammoAwarded * 8}`, cx, ammoBarY + barH + 18);
+      }
+      // total
+      if (tally.phase >= 2) {
+        const totalY = ammoY + 75;
+        ctx.font = '700 clamp(16px,4vw,28px) Inter, sans-serif';
+        ctx.fillStyle = '#ffd700';
+        ctx.fillText(`WAVE BONUS: +${tally.runningScore}`, cx, totalY);
+      }
+    }
+  }
+  // rounded rect helper
+  function roundRect(c, x, y, w2, h2, r) {
+    c.beginPath(); c.moveTo(x+r,y); c.lineTo(x+w2-r,y); c.quadraticCurveTo(x+w2,y,x+w2,y+r);
+    c.lineTo(x+w2,y+h2-r); c.quadraticCurveTo(x+w2,y+h2,x+w2-r,y+h2);
+    c.lineTo(x+r,y+h2); c.quadraticCurveTo(x,y+h2,x,y+h2-r);
+    c.lineTo(x,y+r); c.quadraticCurveTo(x,y,x+r,y); c.closePath(); c.fill();
   }
 
   function loop(ts) {
