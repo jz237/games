@@ -209,6 +209,8 @@ button:active { transform: translateY(1px) scale(.99); }
   let shake = 0, flash = 0, paused = false, running = false, waveTransition = 0, comboTimer = 0;
   let waveClearFX = []; // persistent particles that survive startWave()
   let tally = null; // wave-end bonus tally state
+  // After wave 16, scaling grows at only 10% rate
+  function ew(w) { return w <= 16 ? w : 16 + (w - 16) * 0.1; }
 
   const skyPresets = [
     { top: '#21112f', mid: '#8d3767', bottom: '#ff9757', aurora: ['#5be4ff','#ff7dd6','#d6ff7d'] },
@@ -426,18 +428,18 @@ button:active { transform: translateY(1px) scale(.99); }
     state.enemyMissiles = []; state.playerMissiles = []; state.explosions = []; state.particles = []; state.smoke = []; state.satellites = []; state.debris = []; state.fires = [];
     state.chainPopups = []; state.smokes = []; state.scorePopups = []; state.tapRipples = []; state.fireworks = [];
     state.waveSeed = Math.random()*9999;
-    state.bases.forEach(b => { b.ammoMax = 15 + Math.floor(state.wave * 1.5); b.ammo = b.ammoMax; b.reloadPulse = 1; b.alive = true; });
+    state.bases.forEach(b => { b.ammoMax = 15 + Math.floor(ew(state.wave) * 1.5); b.ammo = b.ammoMax; b.reloadPulse = 1; b.alive = true; });
     waveTransition = 0.7;
     ui.waveBannerBig.textContent = `Wave ${state.wave}`;
     ui.waveBannerSmall.textContent = state.wave < 6 ? 'Initial bombardment' : state.wave < 10 ? 'MIRV signatures detected' : 'Smart weapons entering the theater';
     ui.waveBanner.classList.add('show');
     setTimeout(() => ui.waveBanner.classList.remove('show'), 1600);
     if (!first) audio.fanfare();
-    const count = 6 + state.wave * 2;
-    const spawnInterval = Math.max(0.45, 1.8 - state.wave * 0.05);
+    const count = 6 + Math.floor(ew(state.wave) * 2);
+    const spawnInterval = Math.max(0.45, 1.8 - ew(state.wave) * 0.05);
     for (let i=0;i<count;i++) scheduleEnemy(i * spawnInterval + rand(0.6) + 1.0);
     if (state.wave >= 8) {
-      const sats = 1 + Math.floor((state.wave-8)/4);
+      const sats = 1 + Math.floor((ew(state.wave)-8)/4);
       for (let s=0;s<sats;s++) state.satellites.push(spawnSatellite(s));
     }
     updateUI();
@@ -452,13 +454,13 @@ button:active { transform: translateY(1px) scale(.99); }
     let kind = 'normal';
     if (wave >= 6 && typeRoll < 0.20) kind = 'mirv';
     else if (wave >= 10 && typeRoll < 0.35) kind = 'smart';
-    const speed = rand(40 + wave*10, 28 + wave*7);
+    const speed = rand(40 + ew(wave)*10, 28 + ew(wave)*7);
     state.enemyMissiles.push({ x:startX, y:-rand(220,20), sx:startX, sy:-20, tx:target.x, ty:target.y, speed, progress:-delay*speed/Math.max(1,dist(startX,-20,target.x,target.y)), trail:[], alive:true, split:false, kind, wiggle:rand(1000), whistle:false });
   }
 
   function spawnSatellite(i) {
     const dir = i % 2 === 0 ? 1 : -1;
-    return { x: dir>0 ? -80 : w+80, y: h*(0.15 + Math.random()*0.15), vx: dir*(55 + state.wave*5), cooldown: 2.4 + Math.random()*1.5, dir, pulse:Math.random()*Math.PI*2, hp:2, hits:0, damageFlash:0, alive:true };
+    return { x: dir>0 ? -80 : w+80, y: h*(0.15 + Math.random()*0.15), vx: dir*(55 + ew(state.wave)*5), cooldown: 2.4 + Math.random()*1.5, dir, pulse:Math.random()*Math.PI*2, hp:2, hits:0, damageFlash:0, alive:true };
   }
 
   function fireAt(x, y) {
@@ -620,10 +622,10 @@ button:active { transform: translateY(1px) scale(.99); }
       sat.damageFlash = Math.max(0, sat.damageFlash - dt);
       sat.x += sat.vx * dt; sat.pulse += dt * 5; sat.cooldown -= dt;
       if (sat.cooldown <= 0) {
-        sat.cooldown = Math.max(0.8, 2.4 - state.wave*0.04) + Math.random()*0.7;
+        sat.cooldown = Math.max(0.8, 2.4 - ew(state.wave)*0.04) + Math.random()*0.7;
         const live = state.cities.filter(c=>c.alive);
         const t = live[Math.floor(Math.random()*live.length)] || { x:rand(w*0.9,w*0.1), y:h*0.84 };
-        state.enemyMissiles.push({ x:sat.x, y:sat.y+8, sx:sat.x, sy:sat.y, tx:t.x, ty:t.y, speed:50 + state.wave*9, progress:0, trail:[], alive:true, split:false, kind: state.wave > 12 && Math.random() < 0.30 ? 'smart' : 'normal', wiggle:rand(1000), whistle:false });
+        state.enemyMissiles.push({ x:sat.x, y:sat.y+8, sx:sat.x, sy:sat.y, tx:t.x, ty:t.y, speed:50 + ew(state.wave)*9, progress:0, trail:[], alive:true, split:false, kind: state.wave > 12 && Math.random() < 0.30 ? 'smart' : 'normal', wiggle:rand(1000), whistle:false });
       }
       if ((sat.dir > 0 && sat.x > w+120) || (sat.dir < 0 && sat.x < -120)) sat.x = sat.dir > 0 ? -120 : w+120;
     }
