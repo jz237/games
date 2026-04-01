@@ -726,7 +726,7 @@ button:active { transform: translateY(1px) scale(.99); }
       if (state.waveOverDelay > 1.4) {
         const bonus = state.cities.filter(c=>c.alive).length * 150 + state.bases.reduce((sum,b)=>sum+b.ammo*8,0);
         state.score += bonus;
-        // spawn fireworks BEFORE startWave clears them — use particles directly
+        // spawn fireworks
         for (let i = 0; i < 6 + Math.floor(Math.random()*3); i++) {
           const fx = w * 0.1 + Math.random() * w * 0.8, fy = h * 0.1 + Math.random() * h * 0.35;
           const col = ['#ff4488','#44ff88','#4488ff','#ffdd44','#ff8844'][Math.floor(Math.random()*5)];
@@ -734,8 +734,7 @@ button:active { transform: translateY(1px) scale(.99); }
         }
         audio.fanfare();
         state.wave++; state.waveOverDelay = 0;
-        // delay startWave slightly so fireworks aren't immediately cleared
-        setTimeout(() => { if (running && !state.gameOver) startWave(); }, 800);
+        startWave();
       }
     } else {
       state.waveOverDelay = 0;
