@@ -940,10 +940,69 @@ button:active { transform: translateY(1px) scale(.99); }
     state.bases.forEach(base => {
       ctx.save(); ctx.translate(base.x, base.y);
       const pulse = base.reloadPulse;
-      ctx.shadowBlur = 16 + pulse*26; ctx.shadowColor = pulse > 0 ? '#8ffcff' : 'transparent';
-      ctx.fillStyle = '#7ac8ff'; ctx.beginPath(); ctx.moveTo(-26,0); ctx.lineTo(-10,-18); ctx.lineTo(10,-18); ctx.lineTo(26,0); ctx.closePath(); ctx.fill();
-      ctx.fillRect(-10, -24, 20, 8);
-      ctx.fillStyle = '#1e3445'; ctx.fillRect(-8, -22, 16, 6);
+      const alive = base.alive;
+      const dim = alive ? 1 : 0.35;
+
+      // concrete bunker base — trapezoid foundation
+      const bGrad = ctx.createLinearGradient(-30, 0, -30, -12);
+      bGrad.addColorStop(0, `rgba(45,55,65,${dim})`); bGrad.addColorStop(1, `rgba(65,80,90,${dim})`);
+      ctx.fillStyle = bGrad;
+      ctx.beginPath(); ctx.moveTo(-30, 2); ctx.lineTo(-22, -12); ctx.lineTo(22, -12); ctx.lineTo(30, 2); ctx.closePath(); ctx.fill();
+      // concrete texture lines
+      ctx.strokeStyle = `rgba(80,95,105,${0.4*dim})`; ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(-25, -4); ctx.lineTo(25, -4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-27, -1); ctx.lineTo(27, -1); ctx.stroke();
+
+      // launch tube — vertical cylinder
+      const tubeGrad = ctx.createLinearGradient(-8, -12, 8, -12);
+      tubeGrad.addColorStop(0, `rgba(50,60,72,${dim})`); tubeGrad.addColorStop(0.3, `rgba(80,95,110,${dim})`);
+      tubeGrad.addColorStop(0.7, `rgba(75,88,100,${dim})`); tubeGrad.addColorStop(1, `rgba(45,55,65,${dim})`);
+      ctx.fillStyle = tubeGrad;
+      ctx.fillRect(-8, -28, 16, 16);
+
+      // tube opening — dark interior
+      ctx.fillStyle = `rgba(12,18,25,${dim})`;
+      ctx.beginPath(); ctx.ellipse(0, -28, 7, 3, 0, 0, Math.PI * 2); ctx.fill();
+      // rim highlight
+      ctx.strokeStyle = `rgba(120,140,160,${0.5*dim})`; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(0, -28, 7, 3, 0, Math.PI, Math.PI * 2); ctx.stroke();
+
+      // missile tip visible inside tube (if ammo > 0)
+      if (alive && base.ammo > 0) {
+        ctx.fillStyle = '#c8dde8';
+        ctx.beginPath(); ctx.moveTo(-3, -25); ctx.lineTo(0, -32); ctx.lineTo(3, -25); ctx.closePath(); ctx.fill();
+        // red nose cone
+        ctx.fillStyle = '#cc4444';
+        ctx.beginPath(); ctx.moveTo(-1.5, -29); ctx.lineTo(0, -33); ctx.lineTo(1.5, -29); ctx.closePath(); ctx.fill();
+      }
+
+      // status light
+      if (alive) {
+        const lightCol = base.ammo > 3 ? '#44ff88' : base.ammo > 0 ? '#ffaa22' : '#ff3333';
+        const blink = base.ammo > 0 ? 1 : 0.4 + 0.4 * Math.sin(Date.now() * 0.006);
+        ctx.fillStyle = lightCol; ctx.globalAlpha = blink * dim;
+        ctx.beginPath(); ctx.arc(12, -8, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = blink * dim * 0.3;
+        ctx.beginPath(); ctx.arc(12, -8, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // launch flash when firing
+      if (pulse > 0) {
+        ctx.globalAlpha = pulse;
+        const fGrad = ctx.createRadialGradient(0, -30, 0, 0, -30, 20);
+        fGrad.addColorStop(0, 'rgba(143,252,255,0.8)'); fGrad.addColorStop(0.5, 'rgba(143,252,255,0.2)'); fGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = fGrad; ctx.beginPath(); ctx.arc(0, -30, 20, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // sandbag details on sides
+      ctx.fillStyle = `rgba(75,70,55,${0.5*dim})`;
+      ctx.beginPath(); ctx.ellipse(-22, -2, 6, 3, -0.2, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(22, -2, 6, 3, 0.2, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-18, -5, 5, 2.5, -0.1, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(18, -5, 5, 2.5, 0.1, 0, Math.PI*2); ctx.fill();
+
       ctx.restore();
     });
   }
