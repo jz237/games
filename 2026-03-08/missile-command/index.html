@@ -169,7 +169,19 @@ button:active { transform: translateY(1px) scale(.99); }
     return globalScoresCache || [];
   }
   async function submitGlobalScore(initials, score, extras) {
-    try { await fetch(SCORES_API, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({initials, score, ...extras}) }); globalScoresCache = null; } catch(e) {}
+    const entry = { initials, score, ...extras, ts: Date.now() };
+    if (globalScoresCache) {
+      globalScoresCache = [...globalScoresCache, entry].sort((a,b) => b.score - a.score).slice(0, 50);
+      globalScoresCacheTime = Date.now();
+    }
+    try {
+      const res = await fetch(SCORES_API, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({initials, score, ...extras}) });
+      if (res.ok) {
+        globalScoresCache = null;
+        globalScoresCacheTime = 0;
+        fetchGlobalScores();
+      }
+    } catch(e) {}
   }
   function renderHSBoth(container) {
     const list = loadHS();
@@ -960,6 +972,7 @@ button:active { transform: translateY(1px) scale(.99); }
       submitGlobalScore(ini, sc, {wave:wv});
       document.getElementById('hsInitialsSection').classList.add('hidden');
       renderHSBoth(scoreContainer);
+      setTimeout(() => renderHSBoth(scoreContainer), 500);
     }
     ok.addEventListener('click', submitH); ok.addEventListener('touchend', submitH);
     row.appendChild(ok);
