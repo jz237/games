@@ -556,13 +556,13 @@ button:active { transform: translateY(1px) scale(.99); }
       state.enemyMissiles.forEach(m => { m.stealth = true; m.revealed = 0; });
       state.radarTimer = 0;
     } else if (state.bossWave === 4) {
-      // NUCLEAR BARRAGE — 14 nuke missiles, faster, tighter spacing
-      for (let i = 0; i < 14; i++) {
+      // NUCLEAR BARRAGE — 10 slow nukes + 12 fast normal missiles
+      for (let i = 0; i < 10; i++) {
         const startX = rand(w * 0.95, w * 0.05);
         const targetPool = [...state.cities.filter(c => c.alive).map(c => ({ x: c.x, y: c.y })), ...state.bases.map(b => ({ x: b.x, y: b.y }))];
         const target = targetPool[Math.floor(Math.random() * targetPool.length)] || { x: rand(w * 0.9, w * 0.1), y: h * 0.84 };
-        const speed = rand(50 + ew(state.wave) * 8, 35 + ew(state.wave) * 6);
-        const delay = i * 0.7 + rand(0.5) + 1.0;
+        const speed = rand(25 + ew(state.wave) * 3, 18 + ew(state.wave) * 2);
+        const delay = i * 0.9 + rand(0.6) + 1.0;
         state.enemyMissiles.push({
           x: startX, y: -rand(220, 20), sx: startX, sy: -20, tx: target.x, ty: target.y,
           speed, progress: -delay * speed / Math.max(1, dist(startX, -20, target.x, target.y)),
@@ -570,6 +570,8 @@ button:active { transform: translateY(1px) scale(.99); }
           nuke: true
         });
       }
+      // Also spawn fast normal missiles as distractions
+      for (let i = 0; i < 12; i++) scheduleEnemy(i * 0.6 + rand(0.4) + 0.5);
     } else {
       // Normal wave spawning
       const count = 6 + Math.floor(ew(state.wave) * 2);
@@ -667,10 +669,26 @@ button:active { transform: translateY(1px) scale(.99); }
     ui.combo.classList.add('show');
     setTimeout(() => ui.combo.classList.remove('show'), 600);
     audio.combo(state.chainCount);
-    // bright airburst for missile intercept
-    spawnParticles(missile.x, missile.y, 35, '#fff3a6', 2.5, 1.6, 20);
-    spawnParticles(missile.x, missile.y, 15, '#fff', 1.4, 0.9, 40);
-    spawnParticles(missile.x, missile.y, 10, '#8ffcff', 1.8, 1.0, 30);
+    if (missile.nuke) {
+      // NUCLEAR INTERCEPT — massive airburst
+      for (let p = 0; p < 80; p++) {
+        const a = Math.random()*Math.PI*2, s = 30+Math.random()*200;
+        state.particles.push({x:missile.x, y:missile.y, vx:Math.cos(a)*s, vy:Math.sin(a)*s,
+          life:1.0+Math.random()*1.2, max:2.0, color:['#fff','#ffdd44','#ff8800','#ff4400','#ffaa00'][Math.floor(Math.random()*5)],
+          size:3+Math.random()*5, gravity:10, glow:3});
+      }
+      for (let p = 0; p < 20; p++) {
+        state.particles.push({x:missile.x+rand(10,-10), y:missile.y, vx:rand(15,-15), vy:-(80+Math.random()*120),
+          life:1.2+Math.random()*0.8, max:2.0, color:'#ff6600', size:3+Math.random()*4, gravity:-20, glow:2});
+      }
+      shake = 25; flash = 0.7;
+      audio.nukeExplosion();
+    } else {
+      // normal bright airburst
+      spawnParticles(missile.x, missile.y, 35, '#fff3a6', 2.5, 1.6, 20);
+      spawnParticles(missile.x, missile.y, 15, '#fff', 1.4, 0.9, 40);
+      spawnParticles(missile.x, missile.y, 10, '#8ffcff', 1.8, 1.0, 30);
+    }
     if (missile.kind === 'mirv' && !missile.split) {
       missile.split = true;
     }
@@ -930,8 +948,8 @@ button:active { transform: translateY(1px) scale(.99); }
               life:1.5+Math.random()*1.0, max:2.5, color:'#ff6600',
               size:4+Math.random()*5, gravity:-30, glow:2});
           }
-          // Ground fires in wide radius
-          for (let i = 0; i < 18; i++) state.fires.push({ x: m.x + rand(80, -80), y: h * 0.84 - rand(10, 0), life: rand(7, 4), t: Math.random() * 10 });
+          // Ground fires
+          for (let i = 0; i < 10; i++) state.fires.push({ x: m.x + rand(40, -40), y: h * 0.84 - rand(8, 0), life: rand(5, 3), t: Math.random() * 10 });
           // Check all cities within nuke blast radius
           for (const c of state.cities) {
             if (c.alive && dist(m.x, h * 0.84, c.x, c.y) < 250) destroyCity(c);
