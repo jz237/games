@@ -142,6 +142,7 @@ button:active { transform: translateY(1px) scale(.99); }
   </div>
 </div>
 <button id="pauseBtn" style="position:fixed;top:max(8px,env(safe-area-inset-top));right:8px;z-index:50;pointer-events:auto;background:rgba(255,255,255,0.15);border:none;border-radius:50%;width:36px;height:36px;font-size:18px;color:#fff;cursor:pointer;backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:0">⏸</button>
+<button id="muteBtn" style="position:fixed;top:max(8px,env(safe-area-inset-top));right:50px;z-index:50;pointer-events:auto;background:rgba(255,255,255,0.15);border:none;border-radius:50%;width:36px;height:36px;font-size:18px;color:#fff;cursor:pointer;backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:0">🔊</button>
 <div id="pauseHint">Space = pause • R = restart</div>
 <script>
 (() => {
@@ -523,8 +524,10 @@ button:active { transform: translateY(1px) scale(.99); }
     ui.combo.classList.add('show');
     setTimeout(() => ui.combo.classList.remove('show'), 600);
     audio.combo(state.chainCount);
-    spawnParticles(missile.x, missile.y, 28, '#fff3a6', 2.2, 1.4, 20);
-    spawnParticles(missile.x, missile.y, 10, '#fff', 1.0, 0.7, 40);
+    // bright airburst for missile intercept
+    spawnParticles(missile.x, missile.y, 35, '#fff3a6', 2.5, 1.6, 20);
+    spawnParticles(missile.x, missile.y, 15, '#fff', 1.4, 0.9, 40);
+    spawnParticles(missile.x, missile.y, 10, '#8ffcff', 1.8, 1.0, 30);
     if (missile.kind === 'mirv' && !missile.split) {
       missile.split = true;
     }
@@ -582,6 +585,10 @@ button:active { transform: translateY(1px) scale(.99); }
     city.alive = false; city.damage = 1; city._smokeActive = true;
     for (let i=0;i<32;i++) state.debris.push({ x:city.x+rand(34,-34), y:city.y-rand(20,6), vx:rand(160,-160), vy:rand(-280,-60), life:rand(1.8,0.7), size:rand(8,3), rot:rand(4,-4) });
     for (let i=0;i<12;i++) state.fires.push({ x:city.x+rand(30,-30), y:city.y-rand(10,0), life:rand(5,2.5), t:Math.random()*10 });
+    // dirt/debris burst for city hit
+    spawnParticles(city.x, city.y, 25, '#8b7355', 1.8, 2.0, 120);
+    spawnParticles(city.x, city.y, 15, '#5a4a3a', 1.4, 2.5, 150);
+    spawnParticles(city.x, city.y, 10, '#3a3028', 1.0, 3.0, 180);
     audio.cityCrash(); shake = Math.max(shake, 10); flash = Math.max(flash, .24); updateUI();
     if (!state.cities.some(c=>c.alive)) {
       state.gameOver = true; running = false;
@@ -661,9 +668,11 @@ button:active { transform: translateY(1px) scale(.99); }
               sat.alive = false;
               // Big explosion
               detonate(sat.x, sat.y, 110, true);
-              spawnParticles(sat.x, sat.y, 50, '#fff', 3, 2, 30);
-              spawnParticles(sat.x, sat.y, 30, '#ff9944', 2.5, 1.8, 50);
-              spawnParticles(sat.x, sat.y, 20, '#55ddff', 2, 1.5, 20);
+              // metallic spark shower for satellite
+              spawnParticles(sat.x, sat.y, 40, '#ddeeff', 3.5, 1.5, 30);
+              spawnParticles(sat.x, sat.y, 30, '#aaccff', 2.8, 1.2, 50);
+              spawnParticles(sat.x, sat.y, 25, '#fff', 4, 0.8, 20);
+              spawnParticles(sat.x, sat.y, 15, '#88aacc', 2, 2, 70);
               for (let i=0;i<10;i++) state.debris.push({ x:sat.x+rand(20,-20), y:sat.y+rand(10,-10), vx:rand(250,-250), vy:rand(-300,-50), life:rand(2.5,1), size:rand(7,3), rot:rand(6,-6) });
               shake = Math.max(shake, 14); flash = Math.min(1, flash + 0.3);
               const bonus = 750;
@@ -984,8 +993,21 @@ button:active { transform: translateY(1px) scale(.99); }
       ctx.fillStyle = eGrad; ctx.beginPath(); ctx.arc(m.x,m.y,eR*3.5,0,Math.PI*2); ctx.fill();
       ctx.fillStyle = '#ff6644'; ctx.beginPath(); ctx.arc(m.x,m.y,eR,0,Math.PI*2); ctx.fill();
     });
+    // intercept preview rings at destination
     state.playerMissiles.forEach(m => {
       if (!m.alive) return;
+      // faint pulsing ring at target
+      const pulse = 0.12 + 0.06 * Math.sin(time * 0.008);
+      ctx.strokeStyle = `rgba(143,252,255,${pulse})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(m.tx, m.ty, 22, 0, Math.PI * 2); ctx.stroke();
+      // crosshair dots
+      ctx.fillStyle = `rgba(143,252,255,${pulse * 0.8})`;
+      for (let a = 0; a < 4; a++) {
+        const ax = m.tx + Math.cos(a * Math.PI/2) * 22;
+        const ay = m.ty + Math.sin(a * Math.PI/2) * 22;
+        ctx.beginPath(); ctx.arc(ax, ay, 1.5, 0, Math.PI * 2); ctx.fill();
+      }
       // slimmer tip with glow
       const pGrad = ctx.createRadialGradient(m.x,m.y,0,m.x,m.y,9);
       pGrad.addColorStop(0, 'rgba(143,252,255,1)'); pGrad.addColorStop(0.35, 'rgba(143,252,255,0.3)'); pGrad.addColorStop(1, 'rgba(0,0,0,0)');
@@ -1193,6 +1215,13 @@ button:active { transform: translateY(1px) scale(.99); }
   function togglePause(e) { e.stopPropagation(); e.preventDefault(); if (!running || state.gameOver) return; paused = !paused; pauseBtn.textContent = paused ? '▶' : '⏸'; updateUI(); }
   pauseBtn.addEventListener('click', togglePause);
   pauseBtn.addEventListener('touchend', togglePause);
+
+  // Mute button
+  let muted = false;
+  const muteBtn = document.getElementById('muteBtn');
+  function toggleMute(e) { e.stopPropagation(); e.preventDefault(); muted = !muted; if (audio.master) audio.master.gain.value = muted ? 0 : 0.18; muteBtn.textContent = muted ? '🔇' : '🔊'; }
+  muteBtn.addEventListener('click', toggleMute);
+  muteBtn.addEventListener('touchend', toggleMute);
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') { paused = !paused; pauseBtn.textContent = paused ? '▶' : '⏸'; updateUI(); }
     if (e.key.toLowerCase() === 'r') { running = true; resetGame(); }
