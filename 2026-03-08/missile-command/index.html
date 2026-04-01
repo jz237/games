@@ -1216,19 +1216,7 @@ button:active { transform: translateY(1px) scale(.99); }
     grad.addColorStop(0, preset.top); grad.addColorStop(0.48, preset.mid); grad.addColorStop(1, preset.bottom);
     ctx.fillStyle = grad; ctx.fillRect(0,0,w,h);
 
-    for (const band of state.auroraBands) {
-      ctx.save(); ctx.globalAlpha = 0.12 + Math.sin(time*0.0005 + band.phase)*0.05;
-      const aur = ctx.createLinearGradient(0, band.y, 0, band.y + h*0.16);
-      aur.addColorStop(0, 'transparent');
-      aur.addColorStop(.3, preset.aurora[band.hue % preset.aurora.length]);
-      aur.addColorStop(1, 'transparent');
-      ctx.fillStyle = aur;
-      ctx.beginPath();
-      ctx.moveTo(-30, band.y + 20);
-      for (let x=0; x<=w+40; x += 30) ctx.lineTo(x, band.y + Math.sin(x*0.01 + time*0.001 + band.phase)*18 + Math.cos(x*0.018 + band.phase)*10);
-      ctx.lineTo(w+40, band.y + h*0.16); ctx.lineTo(-40, band.y + h*0.16); ctx.closePath(); ctx.fill();
-      ctx.restore();
-    }
+
 
     const dt2 = 0.016; // approx frame dt for star movement
     for (const s of state.stars) {
