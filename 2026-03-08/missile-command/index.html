@@ -482,7 +482,7 @@ button:active { transform: translateY(1px) scale(.99); }
       const dir = state.wave % 8 === 4 ? 1 : -1;
       state.bomber = {
         x: dir > 0 ? -100 : w + 100, y: h * 0.18 + rand(h * 0.08),
-        vx: dir * (60 + ew(state.wave) * 3), hp: 5, maxHp: 5,
+        vx: dir * (30 + ew(state.wave) * 1.5), hp: 10, maxHp: 10,
         drops: [], dropTimer: 0, dropInterval: 1.5,
         smoke: [], alive: true, flash: 0, sparks: []
       };
@@ -492,8 +492,8 @@ button:active { transform: translateY(1px) scale(.99); }
       // ORBITAL STRIKE
       state.chargingSatellite = {
         x: w / 2, y: h * 0.08,
-        chargeTime: 8, charged: 0, firing: false, fireTimer: 0,
-        hp: 6, hits: 0, alive: true, beam: null, flash: 0, pulse: 0,
+        chargeTime: 10, charged: 0, firing: false, fireTimer: 0,
+        hp: 12, hits: 0, alive: true, beam: null, flash: 0, pulse: 0,
         targetCity: null
       };
       // Moderate normal missiles
@@ -505,8 +505,8 @@ button:active { transform: translateY(1px) scale(.99); }
         const delay = i * 0.8 + rand(0.5);
         state.meteors.push({
           x: mx, y: -20 - delay * 60,
-          vx: rand(30, -30), vy: 40 + ew(state.wave) * 4 + rand(15),
-          size: 'large', hp: 2, trail: [], alive: true, radius: 8
+          vx: rand(30, -30), vy: 35 + ew(state.wave) * 3 + rand(12),
+          size: 'large', hp: 3, trail: [], alive: true, radius: 10
         });
       }
     } else if (state.bossWave === 3) {
@@ -805,7 +805,7 @@ button:active { transform: translateY(1px) scale(.99); }
           impactGround(m.x, h * 0.84, true);
         }
       }
-      state.meteors = state.meteors.filter(m => m.alive || m.trail.length > 0);
+      state.meteors = state.meteors.filter(m => m.alive);
     }
 
     // STEALTH WAVE update
@@ -964,14 +964,23 @@ button:active { transform: translateY(1px) scale(.99); }
                 const pts = met.size === 'large' ? 200 : 100;
                 state.score += pts;
                 state.scorePopups.push({ x: met.x, y: met.y, text: '+' + pts, life: 1.0, maxLife: 1.0, color: '#ffa040' });
-                // Large splits into 3 small
+                // Large splits into 3 medium, medium splits into 3 small
                 if (met.size === 'large') {
                   for (let i = 0; i < 3; i++) {
                     const angle = (Math.PI * 2 / 3) * i + rand(0.5, -0.5);
                     state.meteors.push({
                       x: met.x, y: met.y,
-                      vx: Math.cos(angle) * (40 + rand(30)), vy: Math.sin(angle) * 20 + 30 + rand(20),
-                      size: 'small', hp: 1, trail: [], alive: true, radius: 4
+                      vx: Math.cos(angle) * (35 + rand(25)), vy: Math.sin(angle) * 15 + met.vy * 0.8 + rand(15),
+                      size: 'medium', hp: 2, trail: [], alive: true, radius: 6
+                    });
+                  }
+                } else if (met.size === 'medium') {
+                  for (let i = 0; i < 3; i++) {
+                    const angle = (Math.PI * 2 / 3) * i + rand(0.6, -0.6);
+                    state.meteors.push({
+                      x: met.x, y: met.y,
+                      vx: Math.cos(angle) * (50 + rand(30)), vy: Math.sin(angle) * 20 + met.vy * 0.7 + rand(20),
+                      size: 'small', hp: 1, trail: [], alive: true, radius: 3
                     });
                   }
                 }
@@ -1516,7 +1525,7 @@ button:active { transform: translateY(1px) scale(.99); }
     state.chainPopups.forEach(p => { const a = p.life / p.maxLife; const s = 0.5 + p.scale * 0.8; ctx.save(); ctx.globalAlpha = a; ctx.translate(p.x, p.y); ctx.scale(s, s); ctx.font = '900 24px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffd700'; ctx.shadowBlur = 16; ctx.shadowColor = '#ffd700'; ctx.fillText(p.text, 0, 0); ctx.restore(); });
     // ===== BOSS WAVE DRAWING =====
     // BOMBER
-    if (state.bomber && (state.bomber.alive || state.bomber.sparks.length > 0)) {
+    if (state.bomber && state.bomber.alive) {
       const b = state.bomber;
       // Smoke trail
       for (const s of b.smoke) {
@@ -1615,20 +1624,19 @@ button:active { transform: translateY(1px) scale(.99); }
 
     // METEORS
     for (const met of state.meteors) {
-      if (!met.alive && met.trail.length === 0) continue;
+      if (!met.alive) continue;
       // Fire trail
       for (const t of met.trail) {
         const a = Math.min(0.4, t.life * 0.5);
         ctx.fillStyle = `rgba(255,120,30,${a})`;
         ctx.beginPath(); ctx.arc(t.x, t.y, t.size, 0, Math.PI * 2); ctx.fill();
       }
-      if (!met.alive) continue;
       // Rocky body (irregular shape)
       ctx.save(); ctx.translate(met.x, met.y);
       const r = met.radius;
       const mGrad = ctx.createRadialGradient(-r * 0.3, -r * 0.3, 0, 0, 0, r * 1.2);
-      mGrad.addColorStop(0, met.size === 'large' ? '#cc8844' : '#aa6633');
-      mGrad.addColorStop(0.6, met.size === 'large' ? '#885522' : '#664411');
+      mGrad.addColorStop(0, met.size === 'large' ? '#cc8844' : met.size === 'medium' ? '#bb7744' : '#aa6633');
+      mGrad.addColorStop(0.6, met.size === 'large' ? '#885522' : met.size === 'medium' ? '#775522' : '#664411');
       mGrad.addColorStop(1, '#442200');
       ctx.fillStyle = mGrad;
       ctx.beginPath();
