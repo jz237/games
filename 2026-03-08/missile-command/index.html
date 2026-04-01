@@ -120,13 +120,12 @@ button:active { transform: translateY(1px) scale(.99); }
     </div>
     <button id="startBtn">Begin Defense</button>
     <button id="titleHsBtn" style="margin-top:0.5em;background:transparent;border:1px solid #ffd700;color:#ffd700;padding:0.4em 1.2em;cursor:pointer;font-size:0.9rem">High Scores</button>
-    <div style="margin-top:0.8em;font-size:0.6rem;color:rgba(255,255,255,0.5);letter-spacing:0.1em;text-transform:uppercase">Boss Wave Test</div>
-    <div id="bossTestRow" style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:0.3em">
-      <button class="bossTestBtn" data-boss="0" style="font-size:0.55rem;padding:3px 8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#ccc;border-radius:8px;cursor:pointer">✈️ Bomber</button>
-      <button class="bossTestBtn" data-boss="1" style="font-size:0.55rem;padding:3px 8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#ccc;border-radius:8px;cursor:pointer">🛰️ Orbital</button>
-      <button class="bossTestBtn" data-boss="2" style="font-size:0.55rem;padding:3px 8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#ccc;border-radius:8px;cursor:pointer">☄️ Meteor</button>
-      <button class="bossTestBtn" data-boss="3" style="font-size:0.55rem;padding:3px 8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#ccc;border-radius:8px;cursor:pointer">👻 Stealth</button>
-      <button class="bossTestBtn" data-boss="4" style="font-size:0.55rem;padding:3px 8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#ccc;border-radius:8px;cursor:pointer">☢️ Nuclear</button>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:0.8em;pointer-events:none">
+      <span style="font-size:0.65rem;padding:3px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.4);border-radius:8px">✈️ Bomber</span>
+      <span style="font-size:0.65rem;padding:3px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.4);border-radius:8px">🛰️ Orbital</span>
+      <span style="font-size:0.65rem;padding:3px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.4);border-radius:8px">☄️ Meteor</span>
+      <span style="font-size:0.65rem;padding:3px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.4);border-radius:8px">👻 Stealth</span>
+      <span style="font-size:0.65rem;padding:3px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.4);border-radius:8px">☢️ Nuclear</span>
     </div>
   </div>
 </div>
@@ -1928,22 +1927,7 @@ button:active { transform: translateY(1px) scale(.99); }
     document.getElementById('startBtn').click();
   });
 
-  // Boss wave test buttons
   let forceBossType = -1, forceBossWave = 0;
-  const bossWaveMap = [4, 8, 12, 16, 20];
-  document.querySelectorAll('.bossTestBtn').forEach(btn => {
-    function handler(e) {
-      e.stopPropagation(); e.preventDefault();
-      const bType = parseInt(btn.dataset.boss);
-      forceBossType = bType;
-      forceBossWave = bossWaveMap[bType];
-      ui.tutorial.style.display = 'none';
-      try { audio.init(); audio.ctx.resume(); } catch(e2) {}
-      running = true; resetGame();
-    }
-    btn.addEventListener('click', handler);
-    btn.addEventListener('touchend', handler);
-  });
 
   // ===== HS INITIALS BUILDER =====
   let pendingInitials = [0,0,0];
