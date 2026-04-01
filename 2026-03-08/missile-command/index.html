@@ -482,7 +482,7 @@ button:active { transform: translateY(1px) scale(.99); }
       const dir = state.wave % 8 === 4 ? 1 : -1;
       state.bomber = {
         x: dir > 0 ? -100 : w + 100, y: h * 0.18 + rand(h * 0.08),
-        vx: dir * (30 + ew(state.wave) * 1.5), hp: 10, maxHp: 10,
+        vx: dir * (30 + ew(state.wave) * 1.5), hp: 20, maxHp: 20,
         drops: [], dropTimer: 0, dropInterval: 1.5,
         smoke: [], alive: true, flash: 0, sparks: []
       };
@@ -493,20 +493,20 @@ button:active { transform: translateY(1px) scale(.99); }
       state.chargingSatellite = {
         x: w / 2, y: h * 0.08,
         chargeTime: 10, charged: 0, firing: false, fireTimer: 0,
-        hp: 12, hits: 0, alive: true, beam: null, flash: 0, pulse: 0,
+        hp: 36, hits: 0, alive: true, beam: null, flash: 0, pulse: 0,
         targetCity: null
       };
       // Moderate normal missiles
       for (let i = 0; i < 5; i++) scheduleEnemy(i * 1.5 + 1.5);
     } else if (state.bossWave === 2) {
-      // METEOR SHOWER — spawn 12 large meteors staggered
-      for (let i = 0; i < 12; i++) {
+      // METEOR SHOWER — spawn 18 large meteors staggered (50% harder)
+      for (let i = 0; i < 18; i++) {
         const mx = rand(w * 0.95, w * 0.05);
-        const delay = i * 0.8 + rand(0.5);
+        const delay = i * 0.6 + rand(0.4);
         state.meteors.push({
           x: mx, y: -20 - delay * 60,
-          vx: rand(30, -30), vy: 35 + ew(state.wave) * 3 + rand(12),
-          size: 'large', hp: 3, trail: [], alive: true, radius: 10
+          vx: rand(35, -35), vy: 40 + ew(state.wave) * 3.5 + rand(15),
+          size: 'large', hp: 4, trail: [], alive: true, radius: 10
         });
       }
     } else if (state.bossWave === 3) {
@@ -1070,9 +1070,10 @@ button:active { transform: translateY(1px) scale(.99); }
 
     const activeMeteors = state.meteors.some(m => m.alive);
     const activeBomber = state.bomber && state.bomber.alive;
-    const activeChargingSat = state.chargingSatellite && state.chargingSatellite.alive;
+    const activeChargingSat = state.chargingSatellite && (state.chargingSatellite.alive || state.chargingSatellite.firing);
     const activeEnemies = state.enemyMissiles.some(m => m.alive || m.progress < 0) || activeMeteors || activeBomber || activeChargingSat;
-    const activeEffects = state.explosions.length || state.playerMissiles.some(m=>m.alive);
+    // Only block wave transition for player missiles still in flight, NOT lingering explosions
+    const activePlayerMissiles = state.playerMissiles.some(m => m.alive);
     // tally update
     if (tally) {
       tally.timer += dt;
@@ -1105,7 +1106,7 @@ button:active { transform: translateY(1px) scale(.99); }
       }
       updateUI();
     }
-    if (!activeEnemies && !activeEffects && !state.gameOver && !tally) {
+    if (!activeEnemies && !activePlayerMissiles && !state.gameOver && !tally) {
       state.waveOverDelay += dt;
       if (state.waveOverDelay > 1.0) {
         const cityCount = state.cities.filter(c=>c.alive).length;
