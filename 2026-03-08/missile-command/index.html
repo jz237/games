@@ -452,7 +452,7 @@ button:active { transform: translateY(1px) scale(.99); }
   }
 
   function resetGame() {
-    state.score = 0; state.wave = 1; state.livesBonusThreshold = 12000; state.chainCount = 0; state.chainWindow = 0;
+    state.score = 0; state.wave = forceBossWave || 1; forceBossWave = 0; state.livesBonusThreshold = 12000; state.chainCount = 0; state.chainWindow = 0;
     state.enemyMissiles = []; state.playerMissiles = []; state.explosions = []; state.particles = []; state.smoke = []; state.satellites = []; state.debris = []; state.fires = [];
     state.chainPopups = []; state.smokes = []; state.scorePopups = []; state.tapRipples = []; state.fireworks = [];
     state.gameOver = false; state.waveOverDelay = 0; shake = 0; flash = 0; comboTimer = 0;
@@ -1900,11 +1900,14 @@ button:active { transform: translateY(1px) scale(.99); }
   });
 
   // Boss wave test buttons
-  let forceBossType = -1;
+  let forceBossType = -1, forceBossWave = 0;
+  const bossWaveMap = [4, 8, 12, 16, 20];
   document.querySelectorAll('.bossTestBtn').forEach(btn => {
     function handler(e) {
       e.stopPropagation(); e.preventDefault();
-      forceBossType = parseInt(btn.dataset.boss);
+      const bType = parseInt(btn.dataset.boss);
+      forceBossType = bType;
+      forceBossWave = bossWaveMap[bType];
       ui.tutorial.style.display = 'none';
       try { audio.init(); audio.ctx.resume(); } catch(e2) {}
       running = true; resetGame();
