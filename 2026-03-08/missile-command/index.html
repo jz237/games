@@ -1046,9 +1046,37 @@ button:active { transform: translateY(1px) scale(.99); }
     state.scorePopups.forEach(p => { const a = p.life / p.maxLife; ctx.save(); ctx.globalAlpha = a; ctx.font = '700 14px Inter, sans-serif'; ctx.fillStyle = p.color; ctx.shadowBlur = 6; ctx.shadowColor = p.color; ctx.fillText(p.text, p.x, p.y); ctx.restore(); });
     state.chainPopups.forEach(p => { const a = p.life / p.maxLife; const s = 0.5 + p.scale * 0.8; ctx.save(); ctx.globalAlpha = a; ctx.translate(p.x, p.y); ctx.scale(s, s); ctx.font = '900 24px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffd700'; ctx.shadowBlur = 16; ctx.shadowColor = '#ffd700'; ctx.fillText(p.text, 0, 0); ctx.restore(); });
     state.fires.forEach(f => {
-      const flicker = (Math.sin(time*0.015 + f.t)+1)/2;
-      ctx.fillStyle = `rgba(255,${120 + flicker*100},${40 + flicker*30},${Math.min(0.8,f.life/4)})`;
-      ctx.beginPath(); ctx.ellipse(f.x, f.y - flicker*6, 6 + flicker*4, 12 + flicker*10, 0, 0, Math.PI*2); ctx.fill();
+      const fade = Math.min(1, f.life / 3);
+      const t2 = time * 0.001 + f.t;
+      // spawn rising flame particles each frame
+      if (f.life > 0.5 && Math.random() < 0.7 * fade) {
+        const fx = f.x + (Math.random()-0.5) * 10;
+        state.particles.push({ x: fx, y: f.y, vx: (Math.random()-0.5)*15, vy: -(30 + Math.random()*50),
+          life: 0.3 + Math.random()*0.4, max: 0.7, color: Math.random()<0.3 ? '#ffdd44' : Math.random()<0.5 ? '#ff8822' : '#ff4411',
+          size: 2 + Math.random()*4, gravity: -40, glow: 2 });
+      }
+      // ember sparks
+      if (f.life > 1 && Math.random() < 0.15 * fade) {
+        state.particles.push({ x: f.x + (Math.random()-0.5)*8, y: f.y - Math.random()*10,
+          vx: (Math.random()-0.5)*40, vy: -(50 + Math.random()*80),
+          life: 0.4 + Math.random()*0.5, max: 0.8, color: '#ffcc44', size: 0.8 + Math.random()*1.2, gravity: 30, glow: 3 });
+      }
+      // glowing base — layered circles
+      const baseR = (5 + Math.sin(t2*6)*2) * fade;
+      const midR = (8 + Math.sin(t2*4.3)*3) * fade;
+      const outerR = (12 + Math.sin(t2*3.1)*4) * fade;
+      // outer orange glow
+      const g1 = ctx.createRadialGradient(f.x, f.y-4, 0, f.x, f.y-4, outerR);
+      g1.addColorStop(0, `rgba(255,100,20,${0.4*fade})`); g1.addColorStop(1, 'rgba(255,60,10,0)');
+      ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(f.x, f.y-4, outerR, 0, Math.PI*2); ctx.fill();
+      // mid yellow
+      const g2 = ctx.createRadialGradient(f.x, f.y-6, 0, f.x, f.y-6, midR);
+      g2.addColorStop(0, `rgba(255,200,50,${0.5*fade})`); g2.addColorStop(1, 'rgba(255,120,20,0)');
+      ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(f.x, f.y-6, midR, 0, Math.PI*2); ctx.fill();
+      // core white-hot
+      const g3 = ctx.createRadialGradient(f.x, f.y-5, 0, f.x, f.y-5, baseR);
+      g3.addColorStop(0, `rgba(255,255,200,${0.6*fade})`); g3.addColorStop(1, 'rgba(255,220,100,0)');
+      ctx.fillStyle = g3; ctx.beginPath(); ctx.arc(f.x, f.y-5, baseR, 0, Math.PI*2); ctx.fill();
     });
   }
 
