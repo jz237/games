@@ -120,6 +120,14 @@ button:active { transform: translateY(1px) scale(.99); }
     </div>
     <button id="startBtn">Begin Defense</button>
     <button id="titleHsBtn" style="margin-top:0.5em;background:transparent;border:1px solid #ffd700;color:#ffd700;padding:0.4em 1.2em;cursor:pointer;font-size:0.9rem">High Scores</button>
+    <div style="margin-top:0.8em;font-size:0.6rem;color:rgba(255,255,255,0.5);letter-spacing:0.1em;text-transform:uppercase">Boss Wave Test</div>
+    <div id="bossTestRow" style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:0.3em">
+      <button class="bossTestBtn" data-boss="0" style="font-size:0.55rem;padding:3px 8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#ccc;border-radius:8px;cursor:pointer">✈️ Bomber</button>
+      <button class="bossTestBtn" data-boss="1" style="font-size:0.55rem;padding:3px 8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#ccc;border-radius:8px;cursor:pointer">🛰️ Orbital</button>
+      <button class="bossTestBtn" data-boss="2" style="font-size:0.55rem;padding:3px 8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#ccc;border-radius:8px;cursor:pointer">☄️ Meteor</button>
+      <button class="bossTestBtn" data-boss="3" style="font-size:0.55rem;padding:3px 8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#ccc;border-radius:8px;cursor:pointer">👻 Stealth</button>
+      <button class="bossTestBtn" data-boss="4" style="font-size:0.55rem;padding:3px 8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#ccc;border-radius:8px;cursor:pointer">☢️ Nuclear</button>
+    </div>
   </div>
 </div>
 <div id="gameOver">
@@ -340,6 +348,30 @@ button:active { transform: translateY(1px) scale(.99); }
       src.connect(hp).connect(g).connect(this.master); src.start(t); src.stop(t + 1.6);
     },
     combo(count) { if (!this.ctx) return; this.burst(400 + count*65, 0.16, 0.05 + Math.min(.08,count*.01), 'square', 1.02); },
+    nukeExplosion() {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      // massive low boom
+      this.burst(20, 2.0, 0.25, 'triangle', 0.15);
+      this.burst(30, 1.5, 0.2, 'sawtooth', 0.2);
+      // deep rumble chain
+      for (let i = 0; i < 6; i++) {
+        const d = 0.1 + i * 0.15 + Math.random() * 0.08;
+        const o = this.ctx.createOscillator(); const g = this.ctx.createGain();
+        o.type = 'sawtooth'; o.frequency.setValueAtTime(18 + Math.random()*15, t+d);
+        o.frequency.exponentialRampToValueAtTime(12, t+d+0.8);
+        g.gain.setValueAtTime(0.001,t+d); g.gain.exponentialRampToValueAtTime(0.12,t+d+0.04); g.gain.exponentialRampToValueAtTime(0.001,t+d+0.7);
+        o.connect(g).connect(this.master); o.start(t+d); o.stop(t+d+0.8);
+      }
+      // whooshing shockwave
+      this.noiseHit(1.5, 0.3, 30, 800);
+      // delayed crackle/debris
+      const ns = this.ctx.createBufferSource(); ns.buffer = this.noiseBuffer();
+      const hp = this.ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=100;
+      const lp = this.ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1500;
+      const ng = this.ctx.createGain(); ng.gain.setValueAtTime(0.001,t+0.4); ng.gain.exponentialRampToValueAtTime(0.15,t+0.5); ng.gain.exponentialRampToValueAtTime(0.001,t+2.0);
+      ns.connect(hp).connect(lp).connect(ng).connect(this.master); ns.start(t+0.4); ns.stop(t+2.1);
+    },
     startDrone() {
       const t = this.ctx.currentTime;
       const osc1 = this.ctx.createOscillator(), osc2 = this.ctx.createOscillator();
@@ -439,8 +471,12 @@ button:active { transform: translateY(1px) scale(.99); }
     waveTransition = 0.7;
 
     // Detect boss wave
-    const isBoss = state.wave >= 4 && state.wave % 4 === 0;
-    if (isBoss) {
+    let isBoss = state.wave >= 4 && state.wave % 4 === 0;
+    if (forceBossType >= 0) {
+      isBoss = true;
+      state.bossWave = forceBossType;
+      forceBossType = -1; // only force first wave
+    } else if (isBoss) {
       state.bossWave = Math.floor((state.wave - 4) / 4) % 5;
     } else {
       state.bossWave = -1;
@@ -520,13 +556,13 @@ button:active { transform: translateY(1px) scale(.99); }
       state.enemyMissiles.forEach(m => { m.stealth = true; m.revealed = 0; });
       state.radarTimer = 0;
     } else if (state.bossWave === 4) {
-      // NUCLEAR BARRAGE — 8 nuke missiles
-      for (let i = 0; i < 8; i++) {
+      // NUCLEAR BARRAGE — 14 nuke missiles, faster, tighter spacing
+      for (let i = 0; i < 14; i++) {
         const startX = rand(w * 0.95, w * 0.05);
         const targetPool = [...state.cities.filter(c => c.alive).map(c => ({ x: c.x, y: c.y })), ...state.bases.map(b => ({ x: b.x, y: b.y }))];
         const target = targetPool[Math.floor(Math.random() * targetPool.length)] || { x: rand(w * 0.9, w * 0.1), y: h * 0.84 };
-        const speed = rand(35 + ew(state.wave) * 6, 25 + ew(state.wave) * 4);
-        const delay = i * 1.0 + rand(0.8) + 1.0;
+        const speed = rand(50 + ew(state.wave) * 8, 35 + ew(state.wave) * 6);
+        const delay = i * 0.7 + rand(0.5) + 1.0;
         state.enemyMissiles.push({
           x: startX, y: -rand(220, 20), sx: startX, sy: -20, tx: target.x, ty: target.y,
           speed, progress: -delay * speed / Math.max(1, dist(startX, -20, target.x, target.y)),
@@ -878,18 +914,33 @@ button:active { transform: translateY(1px) scale(.99); }
       if (dist(m.x,m.y,m.tx,m.ty) < 8 || m.y >= h*0.84) {
         m.alive = false;
         if (m.nuke) {
-          // Nuke: 3x radius explosion
-          detonate(m.x, h * 0.84, 180, false);
-          shake = 18; flash = 0.5;
+          // NUCLEAR DETONATION — massive
+          detonate(m.x, h * 0.84, 250, false);
+          shake = 30; flash = 0.9;
+          // Mushroom cloud particles
+          for (let p = 0; p < 80; p++) {
+            const a = Math.random()*Math.PI*2, s = 20+Math.random()*200;
+            state.particles.push({x:m.x, y:h*0.84, vx:Math.cos(a)*s, vy:Math.sin(a)*s - 60 - Math.random()*100,
+              life:1.0+Math.random()*1.5, max:2.0, color:['#fff','#ffdd44','#ff8800','#ff4400','#ffaa00'][Math.floor(Math.random()*5)],
+              size:3+Math.random()*6, gravity:-20, glow:3});
+          }
+          // Rising fireball column
+          for (let p = 0; p < 30; p++) {
+            state.particles.push({x:m.x+rand(15,-15), y:h*0.84, vx:rand(10,-10), vy:-(100+Math.random()*150),
+              life:1.5+Math.random()*1.0, max:2.5, color:'#ff6600',
+              size:4+Math.random()*5, gravity:-30, glow:2});
+          }
+          // Ground fires in wide radius
+          for (let i = 0; i < 18; i++) state.fires.push({ x: m.x + rand(80, -80), y: h * 0.84 - rand(10, 0), life: rand(7, 4), t: Math.random() * 10 });
           // Check all cities within nuke blast radius
           for (const c of state.cities) {
-            if (c.alive && dist(m.x, h * 0.84, c.x, c.y) < 180) destroyCity(c);
+            if (c.alive && dist(m.x, h * 0.84, c.x, c.y) < 250) destroyCity(c);
           }
           for (const b of state.bases) {
-            if (dist(m.x, h * 0.84, b.x, b.y) < 180) { b.ammo = 0; b.reloadPulse = 0; }
+            if (dist(m.x, h * 0.84, b.x, b.y) < 250) { b.ammo = 0; b.reloadPulse = 0; }
           }
-          for (let i = 0; i < 10; i++) state.fires.push({ x: m.x + rand(40, -40), y: h * 0.84 - rand(8, 0), life: rand(5, 3), t: Math.random() * 10 });
-          audio.explosion(2.5, 5);
+          // Nuclear explosion sound
+          audio.nukeExplosion();
         } else {
           impactGround(m.x, h * 0.84, true);
         }
@@ -1818,6 +1869,21 @@ button:active { transform: translateY(1px) scale(.99); }
     e.stopPropagation();
     document.getElementById('startBtn').click();
   });
+
+  // Boss wave test buttons
+  let forceBossType = -1;
+  document.querySelectorAll('.bossTestBtn').forEach(btn => {
+    function handler(e) {
+      e.stopPropagation(); e.preventDefault();
+      forceBossType = parseInt(btn.dataset.boss);
+      ui.tutorial.style.display = 'none';
+      try { audio.init(); audio.ctx.resume(); } catch(e2) {}
+      running = true; resetGame();
+    }
+    btn.addEventListener('click', handler);
+    btn.addEventListener('touchend', handler);
+  });
+
   // ===== HS INITIALS BUILDER =====
   let pendingInitials = [0,0,0];
   function buildHSInitials(sc, wv, scoreContainer) {
