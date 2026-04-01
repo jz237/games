@@ -254,7 +254,35 @@ button:active { transform: translateY(1px) scale(.99); }
     },
     launch() { if (!this.ctx) return; this.burst(190, 0.17, 0.07, 'triangle', 0.6); this.noiseHit(0.14, 0.05, 250, 1800); },
     whistle() { if (!this.ctx) return; this.burst(780, 0.42, 0.03, 'sine', 1.7); },
-    explosion(power = 1, combo = 1) { if (!this.ctx) return; this.noiseHit(0.5 * power, 0.2 * power, 80, 1200); this.burst(90 + combo*10, 0.55 * power, 0.12 * power, 'sawtooth', 0.35); this.burst(45, 0.8 * power, 0.1 * power, 'triangle', 0.5); },
+    explosion(power = 1, combo = 1) {
+      if (!this.ctx) return;
+      // initial crack
+      this.noiseHit(0.5 * power, 0.22 * power, 80, 1200);
+      this.burst(90 + combo*10, 0.55 * power, 0.12 * power, 'sawtooth', 0.35);
+      // deep bass boom
+      this.burst(35, 1.0 * power, 0.14 * power, 'triangle', 0.3);
+      // rumble tail — staggered low-freq bursts
+      const t = this.ctx.currentTime;
+      for (let i = 0; i < 3; i++) {
+        const delay = 0.06 + i * 0.09 + Math.random() * 0.05;
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(28 + Math.random() * 25, t + delay);
+        osc.frequency.exponentialRampToValueAtTime(20, t + delay + 0.4 * power);
+        const vol = (0.06 + Math.random() * 0.04) * power;
+        g.gain.setValueAtTime(0.001, t + delay);
+        g.gain.exponentialRampToValueAtTime(vol, t + delay + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.35 * power);
+        osc.connect(g).connect(this.master); osc.start(t + delay); osc.stop(t + delay + 0.4 * power);
+      }
+      // crackle debris noise
+      const nSrc = this.ctx.createBufferSource(); nSrc.buffer = this.noiseBuffer();
+      const nHP = this.ctx.createBiquadFilter(); nHP.type = 'highpass'; nHP.frequency.value = 200;
+      const nLP = this.ctx.createBiquadFilter(); nLP.type = 'lowpass'; nLP.frequency.value = 2500;
+      const nG = this.ctx.createGain(); nG.gain.setValueAtTime(0.001, t + 0.15); nG.gain.exponentialRampToValueAtTime(0.08 * power, t + 0.2); nG.gain.exponentialRampToValueAtTime(0.001, t + 0.6 * power);
+      nSrc.connect(nHP).connect(nLP).connect(nG).connect(this.master); nSrc.start(t + 0.15); nSrc.stop(t + 0.65 * power);
+    },
     cityCrash() { if (!this.ctx) return; this.noiseHit(0.75, 0.22, 40, 900); this.burst(50, 0.9, 0.16, 'square', 0.25); },
     fanfare() { if (!this.ctx) return; [260,390,520].forEach((f,i)=>this.burst(f, 0.25 + i*0.05, 0.07, 'triangle', 1.4)); },
     combo(count) { if (!this.ctx) return; this.burst(400 + count*65, 0.16, 0.05 + Math.min(.08,count*.01), 'square', 1.02); },
@@ -408,12 +436,24 @@ button:active { transform: translateY(1px) scale(.99); }
   }
 
   function detonate(x, y, radius, friendly = true, comboBoost = 1) {
-    state.explosions.push({ x, y, radius: 1, maxRadius: radius, age: 0, life: friendly ? 0.72 : 0.94, friendly, comboBoost, hitIds: new Set() });
-    flash = Math.min(1, flash + (friendly ? 0.12 : 0.18));
-    shake = Math.max(shake, friendly ? 4 : 7);
-    spawnParticles(x,y, friendly ? 45 : 55, friendly ? '#ffd38a' : '#ff784f', friendly ? 2.5 : 3.0, friendly ? 1.6 : 2.0, 40);
-    spawnParticles(x,y, friendly ? 15 : 20, '#fff', friendly ? 1.2 : 1.5, 0.8, 60);
-    spawnParticles(x,y, friendly ? 12 : 16, friendly ? '#ff8844' : '#ff3322', friendly ? 3.0 : 3.5, friendly ? 2.0 : 2.5, 80);
+    state.explosions.push({ x, y, radius: 1, maxRadius: radius * 1.4, age: 0, life: friendly ? 1.0 : 1.2, friendly, comboBoost, hitIds: new Set() });
+    flash = Math.min(1, flash + (friendly ? 0.15 : 0.22));
+    shake = Math.max(shake, friendly ? 6 : 10);
+    // massive particle burst — matching title screen style
+    const colors = friendly
+      ? ['#fff','#ffd38a','#ff8844','#ffa040','#8ffcff','#ffe4a0','#ffcc66']
+      : ['#ff784f','#ff3322','#ffa644','#ff6622','#ffcc44'];
+    for (let i = 0; i < (friendly ? 50 : 60); i++) {
+      const a = Math.random() * Math.PI * 2, s = 40 + Math.random() * 180;
+      state.particles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, life: 0.4+Math.random()*0.9, max: 1.2,
+        color: colors[Math.floor(Math.random()*colors.length)], size: 1.5 + Math.random() * 4, gravity: 50, glow: Math.random()*2 });
+    }
+    // ember ring
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2, s = 10 + Math.random() * 40;
+      state.particles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s - 30, life: 0.8+Math.random()*1.0, max: 1.5,
+        color: '#ff6622', size: 0.8 + Math.random() * 1.5, gravity: 60, glow: 1 });
+    }
     audio.explosion(friendly ? 1 : 1.2, state.chainCount || 1);
   }
 
@@ -845,24 +885,44 @@ button:active { transform: translateY(1px) scale(.99); }
     state.enemyMissiles.forEach(m => {
       if (!m.alive || m.progress < 0) return;
       ctx.fillStyle = m.kind === 'smart' ? '#ff6d6d' : m.kind === 'mirv' ? '#ffd47b' : '#ffffff';
-      ctx.beginPath(); ctx.arc(m.x,m.y,m.kind === 'smart' ? 4.2 : 3, 0, Math.PI*2); ctx.fill();
+      // slimmer tip with glow
+      const eR = m.kind === 'smart' ? 2.5 : 2;
+      const eGrad = ctx.createRadialGradient(m.x,m.y,0,m.x,m.y,eR*3.5);
+      eGrad.addColorStop(0, 'rgba(255,100,68,1)'); eGrad.addColorStop(0.4, 'rgba(255,60,30,0.35)'); eGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = eGrad; ctx.beginPath(); ctx.arc(m.x,m.y,eR*3.5,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#ff6644'; ctx.beginPath(); ctx.arc(m.x,m.y,eR,0,Math.PI*2); ctx.fill();
     });
     state.playerMissiles.forEach(m => {
       if (!m.alive) return;
-      ctx.fillStyle = '#8ffcff'; ctx.beginPath(); ctx.arc(m.x,m.y,3.5,0,Math.PI*2); ctx.fill();
+      // slimmer tip with glow
+      const pGrad = ctx.createRadialGradient(m.x,m.y,0,m.x,m.y,9);
+      pGrad.addColorStop(0, 'rgba(143,252,255,1)'); pGrad.addColorStop(0.35, 'rgba(143,252,255,0.3)'); pGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = pGrad; ctx.beginPath(); ctx.arc(m.x,m.y,9,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#8ffcff'; ctx.beginPath(); ctx.arc(m.x,m.y,2,0,Math.PI*2); ctx.fill();
     });
 
     state.explosions.forEach(e => {
       const t = e.age / e.life;
-      const alpha = clamp(1 - t, 0, 1);
-      const cols = e.friendly ? ['255,255,255','255,232,120','255,162,71','255,87,64'] : ['255,250,220','255,120,90','255,70,55','120,20,18'];
-      [1, .78, .58, .34].forEach((mul, i) => {
-        ctx.strokeStyle = `rgba(${cols[i]},${alpha*(0.9 - i*0.15)})`;
-        ctx.lineWidth = 10 - i*2;
-        ctx.beginPath(); ctx.arc(e.x,e.y,e.radius*mul,0,Math.PI*2); ctx.stroke();
-      });
-      ctx.fillStyle = `rgba(255,245,220,${alpha*0.16})`;
-      ctx.beginPath(); ctx.arc(e.x,e.y,e.radius*0.72,0,Math.PI*2); ctx.fill();
+      const alpha = clamp(1 - t * t, 0, 1) * 0.85;
+      // outer glow halo
+      const g1 = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.radius * 1.6);
+      g1.addColorStop(0, `rgba(255,255,220,${alpha * 0.25})`); g1.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(e.x, e.y, e.radius * 1.6, 0, Math.PI * 2); ctx.fill();
+      // core fireball
+      const g2 = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.radius);
+      g2.addColorStop(0, e.friendly ? `rgba(255,255,230,${alpha})` : `rgba(255,120,60,${alpha})`);
+      g2.addColorStop(0.35, e.friendly ? `rgba(255,200,100,${alpha*0.75})` : `rgba(255,60,20,${alpha*0.65})`);
+      g2.addColorStop(0.65, e.friendly ? `rgba(255,140,50,${alpha*0.35})` : `rgba(200,30,10,${alpha*0.3})`);
+      g2.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2); ctx.fill();
+      // hot white center
+      if (t < 0.3) {
+        const cAlpha = (1 - t / 0.3) * 0.5;
+        ctx.fillStyle = `rgba(255,255,255,${cAlpha})`;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.radius * 0.25, 0, Math.PI * 2); ctx.fill();
+      }
+      // screen flash on big ones
+      if (t < 0.06 && e.maxRadius > 55) { ctx.fillStyle = `rgba(255,240,200,${0.08 * (1-t/0.06)})`; ctx.fillRect(0,0,w,h); }
     });
 
     state.particles.forEach(p => {
