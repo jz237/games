@@ -1007,39 +1007,80 @@ button:active { transform: translateY(1px) scale(.99); }
 // ===== TITLE SCREEN ANIMATED BACKGROUND =====
 (function() {
   const tc = document.getElementById('titleBgCanvas');
-  const tx = tc.getContext('2d');
+  const bx = tc.getContext('2d');
   let tw, th;
-  function tresize() { tw = tc.width = window.innerWidth; th = tc.height = window.innerHeight; }
-  window.addEventListener('resize', tresize); tresize();
+  function tresize() { tw = tc.width = window.innerWidth; th = tc.height = window.innerHeight; buildCity(); }
+  window.addEventListener('resize', tresize);
 
-  const missiles = [], explosions = [], particles = [], cities = [];
-  // ground cities
-  for (let i = 0; i < 6; i++) cities.push({ x: tw * (0.1 + i * 0.15), w: 30 + Math.random() * 20 });
+  const tMissiles = [], tExplosions = [], tParticles = [], tStars = [];
+  let buildings = [], bases = [];
 
-  function spawnMissile() {
+  function buildCity() {
+    buildings = []; bases = [];
+    const groundY = th * 0.86;
+    // 3 missile bases
+    for (let i = 0; i < 3; i++) {
+      bases.push({ x: tw * (0.15 + i * 0.35), y: groundY });
+    }
+    // buildings between and around bases
+    const zones = [0, tw * 0.08, tw * 0.25, tw * 0.42, tw * 0.58, tw * 0.75, tw * 0.92];
+    for (let z = 0; z < zones.length - 1; z++) {
+      const zx = zones[z], zw = zones[z+1] - zones[z];
+      const count = 3 + Math.floor(Math.random() * 4);
+      for (let b = 0; b < count; b++) {
+        const bw = 8 + Math.random() * 18;
+        const bh = 20 + Math.random() * 65;
+        const bxx = zx + 4 + Math.random() * (zw - bw - 8);
+        const floors = Math.floor(bh / 8);
+        const winColor = Math.random() < 0.5 ? '#ffe488' : '#88ccff';
+        const dark = Math.random() < 0.3;
+        buildings.push({ x: bxx, y: groundY - bh, w: bw, h: bh, floors, winColor, dark,
+          baseColor: `hsl(${210 + Math.random()*30}, ${10+Math.random()*15}%, ${8+Math.random()*10}%)` });
+      }
+    }
+    buildings.sort((a,b) => b.h - a.h); // draw tall ones first for overlap
+    // stars
+    tStars.length = 0;
+    for (let i = 0; i < 120; i++) tStars.push({ x: Math.random()*tw, y: Math.random()*th*0.8, s: 0.3+Math.random()*1.2, b: Math.random() });
+  }
+  tresize();
+
+  function spawnEnemy() {
     const sx = Math.random() * tw;
-    const ci = cities[Math.floor(Math.random() * cities.length)];
-    const tx2 = ci ? ci.x : Math.random() * tw;
-    missiles.push({ x: sx, y: -10, tx: tx2, ty: th * 0.88, speed: 40 + Math.random() * 60, trail: [] });
+    const tgt = bases[Math.floor(Math.random()*bases.length)];
+    const target = Math.random() < 0.5 ? tgt : { x: buildings.length ? buildings[Math.floor(Math.random()*buildings.length)].x : tw*0.5, y: th*0.86 };
+    tMissiles.push({ x: sx, y: -10, tx: target.x, ty: th * 0.84, speed: 35 + Math.random() * 45, trail: [], friendly: false, targeted: false });
   }
 
-  function spawnIntercept(mx, my) {
-    const bx = tw * (0.2 + Math.random() * 0.6);
-    const by = th * 0.92;
-    const aimY = my - 30 - Math.random() * 60;
-    const aimX = mx + (Math.random() - 0.5) * 80;
-    missiles.push({ x: bx, y: by, tx: aimX, ty: aimY, speed: 180 + Math.random() * 80, trail: [], friendly: true });
+  function spawnIntercept(enemy) {
+    const base = bases[Math.floor(Math.random()*bases.length)];
+    // aim ahead of enemy
+    const aimX = enemy.x + (enemy.tx - enemy.x) * 0.3 + (Math.random()-0.5)*20;
+    const aimY = enemy.y + (enemy.ty - enemy.y) * 0.3 + (Math.random()-0.5)*20;
+    tMissiles.push({ x: base.x, y: base.y - 4, tx: aimX, ty: Math.max(aimY, th*0.15), speed: 250 + Math.random() * 100, trail: [], friendly: true });
+    enemy.targeted = true;
   }
 
-  function explode(x, y, friendly) {
-    const r = friendly ? 30 + Math.random() * 25 : 18 + Math.random() * 12;
-    explosions.push({ x, y, r: 1, maxR: r, age: 0, life: 0.6 + Math.random() * 0.3, friendly });
-    const count = friendly ? 20 : 12;
+  function bigExplode(x, y, friendly) {
+    // HUGE explosions for title screen drama
+    const r = friendly ? 60 + Math.random() * 50 : 35 + Math.random() * 25;
+    const life = friendly ? 1.0 + Math.random() * 0.4 : 0.7 + Math.random() * 0.3;
+    tExplosions.push({ x, y, r: 1, maxR: r, age: 0, life, friendly });
+    // massive particle burst
+    const count = friendly ? 50 : 30;
+    const colors = friendly
+      ? ['#fff','#ffd38a','#ff8844','#ffa040','#8ffcff','#ffe4a0','#ffcc66']
+      : ['#ff784f','#ff3322','#ffa644','#ff6622','#ffcc44'];
     for (let i = 0; i < count; i++) {
-      const a = Math.random() * Math.PI * 2, s = 30 + Math.random() * 80;
-      particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.3 + Math.random() * 0.5, max: 0.8,
-        color: friendly ? ['#ffd38a','#ff8844','#fff','#8ffcff'][Math.floor(Math.random()*4)] : ['#ff784f','#ff3322','#ffa644'][Math.floor(Math.random()*3)],
-        size: 1 + Math.random() * 2.5 });
+      const a = Math.random() * Math.PI * 2, s = 40 + Math.random() * 180;
+      tParticles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, life: 0.4+Math.random()*0.9, max: 1.2,
+        color: colors[Math.floor(Math.random()*colors.length)], size: 1.5 + Math.random() * 4 });
+    }
+    // extra ember ring
+    for (let i = 0; i < 15; i++) {
+      const a = Math.random() * Math.PI * 2, s = 10 + Math.random() * 40;
+      tParticles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s - 30, life: 0.8+Math.random()*1.0, max: 1.5,
+        color: '#ff6622', size: 0.8 + Math.random() * 1.5 });
     }
   }
 
@@ -1047,107 +1088,190 @@ button:active { transform: translateY(1px) scale(.99); }
   function tloop(t) {
     const tut = document.getElementById('tutorial');
     const tutVisible = tut && tut.style.display !== 'none' && getComputedStyle(tut).display !== 'none';
-    if (!tutVisible) {
-      tc.style.display = 'none';
-      requestAnimationFrame(tloop); return;
-    }
+    if (!tutVisible) { tc.style.display = 'none'; requestAnimationFrame(tloop); return; }
     tc.style.display = 'block';
     const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
 
-    // spawn
     spawnTimer -= dt;
-    if (spawnTimer <= 0) { spawnMissile(); spawnTimer = 0.6 + Math.random() * 1.2; }
+    if (spawnTimer <= 0) { spawnEnemy(); spawnTimer = 0.5 + Math.random() * 1.0; }
 
-    // intercepts
+    // intercept enemies that haven't been targeted yet (high success rate)
     interceptTimer -= dt;
-    const enemies = missiles.filter(m => !m.friendly);
-    if (interceptTimer <= 0 && enemies.length > 0) {
-      const target = enemies[Math.floor(Math.random() * enemies.length)];
-      spawnIntercept(target.x, target.y);
-      interceptTimer = 0.3 + Math.random() * 0.8;
+    if (interceptTimer <= 0) {
+      const untargeted = tMissiles.filter(m => !m.friendly && !m.targeted && m.y > th * 0.1);
+      if (untargeted.length > 0) {
+        const target = untargeted[Math.floor(Math.random() * untargeted.length)];
+        spawnIntercept(target);
+        interceptTimer = 0.15 + Math.random() * 0.35;
+      }
     }
 
-    tx.clearRect(0, 0, tw, th);
+    bx.clearRect(0, 0, tw, th);
 
-    // sky gradient
-    const skyGrad = tx.createLinearGradient(0, 0, 0, th);
-    skyGrad.addColorStop(0, '#030812'); skyGrad.addColorStop(0.7, '#0a1628'); skyGrad.addColorStop(1, '#0f1d30');
-    tx.fillStyle = skyGrad; tx.fillRect(0, 0, tw, th);
+    // sky gradient with subtle aurora
+    const skyGrad = bx.createLinearGradient(0, 0, 0, th);
+    skyGrad.addColorStop(0, '#020810'); skyGrad.addColorStop(0.3, '#061228');
+    skyGrad.addColorStop(0.65, '#0c1e3a'); skyGrad.addColorStop(0.85, '#12283a'); skyGrad.addColorStop(1, '#0a1a18');
+    bx.fillStyle = skyGrad; bx.fillRect(0, 0, tw, th);
 
-    // ground
-    tx.fillStyle = '#1a2a18';
-    tx.fillRect(0, th * 0.88, tw, th * 0.12);
-    // city silhouettes
-    for (const c of cities) {
-      tx.fillStyle = '#334433';
-      tx.fillRect(c.x - c.w/2, th * 0.82, c.w, th * 0.06);
-      tx.fillRect(c.x - c.w/3, th * 0.78, c.w * 0.6, th * 0.04);
+    // stars
+    const st = t * 0.001;
+    for (const s of tStars) {
+      const flicker = 0.4 + 0.6 * Math.sin(st * (1 + s.b * 3) + s.b * 50);
+      bx.globalAlpha = flicker * 0.7;
+      bx.fillStyle = '#cce8ff';
+      bx.fillRect(s.x, s.y, s.s, s.s);
+    }
+    bx.globalAlpha = 1;
+
+    // aurora shimmer
+    for (let i = 0; i < 3; i++) {
+      const ay = th * (0.15 + i * 0.12) + Math.sin(st * 0.4 + i) * 20;
+      const ag = bx.createLinearGradient(0, ay, tw, ay);
+      const ao = 0.02 + 0.015 * Math.sin(st * 0.3 + i * 2);
+      ag.addColorStop(0, 'rgba(0,255,150,0)'); ag.addColorStop(0.3, `rgba(0,255,180,${ao})`);
+      ag.addColorStop(0.5, `rgba(80,200,255,${ao*1.2})`); ag.addColorStop(0.7, `rgba(0,255,150,${ao})`);
+      ag.addColorStop(1, 'rgba(0,255,150,0)');
+      bx.fillStyle = ag; bx.fillRect(0, ay - 25, tw, 50);
+    }
+
+    // ground with terrain variation
+    const gy = th * 0.86;
+    bx.fillStyle = '#0d1a0c';
+    bx.beginPath(); bx.moveTo(0, gy);
+    for (let gx = 0; gx <= tw; gx += 4) {
+      bx.lineTo(gx, gy - 2 * Math.sin(gx * 0.02) - Math.sin(gx * 0.007) * 4);
+    }
+    bx.lineTo(tw, th); bx.lineTo(0, th); bx.closePath(); bx.fill();
+    // ground gradient overlay
+    const ggr = bx.createLinearGradient(0, gy, 0, th);
+    ggr.addColorStop(0, '#1a2e18'); ggr.addColorStop(1, '#0a1408');
+    bx.fillStyle = ggr; bx.fillRect(0, gy + 3, tw, th - gy);
+
+    // buildings with lit windows
+    for (const b of buildings) {
+      // building body
+      const bg = bx.createLinearGradient(b.x, b.y, b.x + b.w, b.y);
+      bg.addColorStop(0, b.baseColor); bg.addColorStop(0.5, `hsl(220,12%,14%)`); bg.addColorStop(1, b.baseColor);
+      bx.fillStyle = bg; bx.fillRect(b.x, b.y, b.w, b.h);
+      // roof edge
+      bx.fillStyle = 'rgba(100,140,180,0.15)'; bx.fillRect(b.x - 1, b.y, b.w + 2, 2);
+      // windows
+      if (!b.dark) {
+        const winW = Math.max(2, b.w * 0.18), winH = 3, gapX = b.w * 0.08, gapY = 8;
+        const cols = Math.max(1, Math.floor((b.w - gapX * 2) / (winW + gapX)));
+        for (let f = 0; f < b.floors; f++) {
+          const wy = b.y + 5 + f * gapY;
+          if (wy + winH > b.y + b.h - 3) break;
+          for (let c = 0; c < cols; c++) {
+            const wx = b.x + gapX + c * (winW + gapX);
+            const lit = Math.sin(f * 7.3 + c * 13.7 + b.x * 0.1) > -0.3;
+            if (lit) {
+              bx.fillStyle = b.winColor;
+              bx.globalAlpha = 0.3 + 0.3 * Math.sin(st * 0.5 + f + c * 3);
+              bx.fillRect(wx, wy, winW, winH);
+              // window glow
+              bx.globalAlpha = 0.08;
+              bx.fillRect(wx - 1, wy - 1, winW + 2, winH + 2);
+            }
+          }
+        }
+        bx.globalAlpha = 1;
+      }
+    }
+
+    // missile bases (small domes)
+    for (const base of bases) {
+      bx.fillStyle = '#2a4a3a';
+      bx.beginPath(); bx.arc(base.x, base.y, 8, Math.PI, 0); bx.fill();
+      bx.fillStyle = '#3a6a4a';
+      bx.fillRect(base.x - 10, base.y, 20, 4);
     }
 
     // missiles
-    for (let i = missiles.length - 1; i >= 0; i--) {
-      const m = missiles[i];
-      const dx = m.tx - m.x, dy = m.ty - m.y;
-      const len = Math.hypot(dx, dy) || 1;
-      m.x += (dx / len) * m.speed * dt;
-      m.y += (dy / len) * m.speed * dt;
+    for (let i = tMissiles.length - 1; i >= 0; i--) {
+      const m = tMissiles[i];
+      const ddx = m.tx - m.x, ddy = m.ty - m.y;
+      const len = Math.hypot(ddx, ddy) || 1;
+      m.x += (ddx / len) * m.speed * dt;
+      m.y += (ddy / len) * m.speed * dt;
       m.trail.push({ x: m.x, y: m.y });
-      if (m.trail.length > 30) m.trail.shift();
+      if (m.trail.length > (m.friendly ? 40 : 50)) m.trail.shift();
 
-      // draw trail
+      // draw trail with fade
       if (m.trail.length > 1) {
-        tx.strokeStyle = m.friendly ? 'rgba(143,252,255,0.4)' : 'rgba(255,120,80,0.3)';
-        tx.lineWidth = m.friendly ? 1.5 : 1;
-        tx.beginPath(); tx.moveTo(m.trail[0].x, m.trail[0].y);
-        for (let j = 1; j < m.trail.length; j++) tx.lineTo(m.trail[j].x, m.trail[j].y);
-        tx.stroke();
+        for (let j = 1; j < m.trail.length; j++) {
+          const ta = j / m.trail.length;
+          bx.strokeStyle = m.friendly ? `rgba(143,252,255,${ta*0.6})` : `rgba(255,100,60,${ta*0.4})`;
+          bx.lineWidth = m.friendly ? 2 * ta : 1.5 * ta;
+          bx.beginPath(); bx.moveTo(m.trail[j-1].x, m.trail[j-1].y); bx.lineTo(m.trail[j].x, m.trail[j].y); bx.stroke();
+        }
       }
 
       // tip glow
-      tx.beginPath(); tx.arc(m.x, m.y, m.friendly ? 2 : 1.5, 0, Math.PI * 2);
-      tx.fillStyle = m.friendly ? '#8ffcff' : '#ff6644'; tx.fill();
+      const tipR = m.friendly ? 3 : 2;
+      const tipGrad = bx.createRadialGradient(m.x, m.y, 0, m.x, m.y, tipR * 3);
+      tipGrad.addColorStop(0, m.friendly ? 'rgba(143,252,255,1)' : 'rgba(255,100,68,1)');
+      tipGrad.addColorStop(0.5, m.friendly ? 'rgba(143,252,255,0.3)' : 'rgba(255,60,30,0.3)');
+      tipGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      bx.fillStyle = tipGrad; bx.beginPath(); bx.arc(m.x, m.y, tipR * 3, 0, Math.PI * 2); bx.fill();
 
       // arrived?
-      if (Math.hypot(m.x - m.tx, m.y - m.ty) < 8) {
-        explode(m.x, m.y, !!m.friendly);
-        missiles.splice(i, 1);
+      if (Math.hypot(m.x - m.tx, m.y - m.ty) < 12) {
+        bigExplode(m.x, m.y, !!m.friendly);
+        tMissiles.splice(i, 1);
       }
     }
 
-    // explosions
-    for (let i = explosions.length - 1; i >= 0; i--) {
-      const e = explosions[i]; e.age += dt;
-      const p = e.age / e.life;
-      if (p < 0.4) e.r = e.maxR * (p / 0.4);
-      else e.r = e.maxR * (1 - (p - 0.4) / 0.6);
-      if (p >= 1) { explosions.splice(i, 1); continue; }
-      const alpha = (1 - p) * 0.6;
-      const grad = tx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.r);
-      grad.addColorStop(0, e.friendly ? `rgba(255,255,200,${alpha})` : `rgba(255,100,60,${alpha})`);
-      grad.addColorStop(0.5, e.friendly ? `rgba(255,180,80,${alpha * 0.6})` : `rgba(255,60,30,${alpha * 0.5})`);
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      tx.fillStyle = grad; tx.beginPath(); tx.arc(e.x, e.y, e.r, 0, Math.PI * 2); tx.fill();
-
-      // chain-kill nearby enemy missiles
-      if (e.friendly) {
-        for (let j = missiles.length - 1; j >= 0; j--) {
-          if (!missiles[j].friendly && Math.hypot(missiles[j].x - e.x, missiles[j].y - e.y) < e.r) {
-            explode(missiles[j].x, missiles[j].y, false);
-            missiles.splice(j, 1);
-          }
+    // check intercept kills (friendly explosions destroy enemy missiles)
+    for (const e of tExplosions) {
+      if (!e.friendly) continue;
+      for (let j = tMissiles.length - 1; j >= 0; j--) {
+        if (!tMissiles[j].friendly && Math.hypot(tMissiles[j].x - e.x, tMissiles[j].y - e.y) < e.r * 0.8) {
+          bigExplode(tMissiles[j].x, tMissiles[j].y, false);
+          tMissiles.splice(j, 1);
         }
       }
     }
 
-    // particles
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i]; p.life -= dt; if (p.life <= 0) { particles.splice(i, 1); continue; }
-      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 60 * dt;
-      const a = Math.min(1, p.life / p.max);
-      tx.globalAlpha = a; tx.fillStyle = p.color;
-      tx.beginPath(); tx.arc(p.x, p.y, p.size * a, 0, Math.PI * 2); tx.fill();
+    // explosions with multi-layer glow
+    for (let i = tExplosions.length - 1; i >= 0; i--) {
+      const e = tExplosions[i]; e.age += dt;
+      const p = e.age / e.life;
+      if (p < 0.3) e.r = e.maxR * (p / 0.3);
+      else e.r = e.maxR * (1 - (p - 0.3) / 0.7) * 0.8 + e.maxR * 0.2;
+      if (p >= 1) { tExplosions.splice(i, 1); continue; }
+      const alpha = (1 - p * p) * 0.8;
+      // outer glow
+      const g1 = bx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.r * 1.5);
+      g1.addColorStop(0, `rgba(255,255,220,${alpha * 0.3})`); g1.addColorStop(1, 'rgba(0,0,0,0)');
+      bx.fillStyle = g1; bx.beginPath(); bx.arc(e.x, e.y, e.r * 1.5, 0, Math.PI * 2); bx.fill();
+      // core
+      const g2 = bx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.r);
+      g2.addColorStop(0, e.friendly ? `rgba(255,255,230,${alpha})` : `rgba(255,120,60,${alpha})`);
+      g2.addColorStop(0.4, e.friendly ? `rgba(255,200,100,${alpha*0.7})` : `rgba(255,60,20,${alpha*0.6})`);
+      g2.addColorStop(0.7, e.friendly ? `rgba(255,140,50,${alpha*0.3})` : `rgba(200,30,10,${alpha*0.3})`);
+      g2.addColorStop(1, 'rgba(0,0,0,0)');
+      bx.fillStyle = g2; bx.beginPath(); bx.arc(e.x, e.y, e.r, 0, Math.PI * 2); bx.fill();
+      // screen flash effect for big ones
+      if (p < 0.08 && e.maxR > 60) { bx.fillStyle = `rgba(255,240,200,${0.06 * (1-p/0.08)})`; bx.fillRect(0,0,tw,th); }
     }
-    tx.globalAlpha = 1;
+
+    // particles
+    for (let i = tParticles.length - 1; i >= 0; i--) {
+      const p = tParticles[i]; p.life -= dt; if (p.life <= 0) { tParticles.splice(i, 1); continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 50 * dt;
+      p.vx *= 0.995;
+      const a = Math.min(1, p.life / p.max);
+      bx.globalAlpha = a;
+      // glow around particle
+      bx.fillStyle = p.color;
+      bx.beginPath(); bx.arc(p.x, p.y, p.size * a * 2, 0, Math.PI * 2); bx.globalAlpha = a * 0.15; bx.fill();
+      // core
+      bx.globalAlpha = a;
+      bx.beginPath(); bx.arc(p.x, p.y, p.size * a, 0, Math.PI * 2); bx.fill();
+    }
+    bx.globalAlpha = 1;
 
     requestAnimationFrame(tloop);
   }
