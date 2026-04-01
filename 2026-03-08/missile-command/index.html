@@ -56,22 +56,23 @@ body::before {
   inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px;
 }
 .overlayCard {
-  pointer-events: auto; width: min(760px, 100%);
-  background: linear-gradient(180deg, rgba(4,10,22,.92), rgba(4,9,18,.82));
-  border: 1px solid rgba(130,220,255,.25); border-radius: 24px; padding: 22px;
+  pointer-events: auto; width: min(520px, 92%); position: relative; z-index: 1;
+  background: linear-gradient(180deg, rgba(4,10,22,.88), rgba(4,9,18,.75));
+  border: 1px solid rgba(130,220,255,.25); border-radius: 16px; padding: 14px 16px;
   box-shadow: 0 18px 70px rgba(0,0,0,.48), inset 0 0 60px rgba(78,185,255,.06);
   color: #eaf9ff;
 }
-.overlayCard h1 { margin: 0 0 10px; font-size: clamp(30px, 6vw, 62px); line-height: .95; letter-spacing: .05em; text-transform: uppercase; }
-.overlayCard p { opacity: .9; line-height: 1.45; }
-.overlayGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 12px; margin: 16px 0; }
+.overlayCard h1 { margin: 0 0 6px; font-size: clamp(22px, 5vw, 48px); line-height: .95; letter-spacing: .05em; text-transform: uppercase; }
+.overlayCard p { opacity: .8; line-height: 1.3; font-size: 0.75rem; margin: 0 0 6px; }
+.overlayGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
 .tip {
-  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; padding: 14px;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); border-radius: 10px; padding: 6px 8px; font-size: 0.65rem; line-height: 1.3;
 }
-.tip b { display: block; margin-bottom: 5px; color: #fff1b4; text-transform: uppercase; letter-spacing: .1em; font-size: 12px; }
+.tip b { display: block; margin-bottom: 2px; color: #fff1b4; text-transform: uppercase; letter-spacing: .1em; font-size: 0.55rem; }
+#titleBgCanvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 button {
-  pointer-events: auto; border: 0; border-radius: 999px; padding: 14px 22px; font-weight: 900; letter-spacing: .12em;
-  text-transform: uppercase; color: #071120; cursor: pointer;
+  pointer-events: auto; border: 0; border-radius: 999px; padding: 10px 18px; font-weight: 900; letter-spacing: .12em;
+  text-transform: uppercase; color: #071120; cursor: pointer; font-size: 0.8rem;
   background: linear-gradient(90deg, #7ff6ff, #ffe37b, #ff986c);
   box-shadow: 0 8px 24px rgba(255,180,90,.28), inset 0 1px 0 rgba(255,255,255,.55);
 }
@@ -104,6 +105,7 @@ button:active { transform: translateY(1px) scale(.99); }
 </div>
 <div id="waveBanner"><div class="big" id="waveBannerBig">Wave 1</div><div class="small" id="waveBannerSmall">Skyfall incoming</div></div>
 <div id="comboBurst"><div class="big" id="comboBig">Chain x2</div><div class="small" id="comboSmall">Cascade bonus</div></div>
+<canvas id="titleBgCanvas"></canvas>
 <div id="tutorial">
   <div class="overlayCard">
     <h1>Aurora Siege</h1>
@@ -1000,6 +1002,155 @@ button:active { transform: translateY(1px) scale(.99); }
   }
 
   resize(); updateUI(); requestAnimationFrame(loop);
+})();
+
+// ===== TITLE SCREEN ANIMATED BACKGROUND =====
+(function() {
+  const tc = document.getElementById('titleBgCanvas');
+  const tx = tc.getContext('2d');
+  let tw, th;
+  function tresize() { tw = tc.width = window.innerWidth; th = tc.height = window.innerHeight; }
+  window.addEventListener('resize', tresize); tresize();
+
+  const missiles = [], explosions = [], particles = [], cities = [];
+  // ground cities
+  for (let i = 0; i < 6; i++) cities.push({ x: tw * (0.1 + i * 0.15), w: 30 + Math.random() * 20 });
+
+  function spawnMissile() {
+    const sx = Math.random() * tw;
+    const ci = cities[Math.floor(Math.random() * cities.length)];
+    const tx2 = ci ? ci.x : Math.random() * tw;
+    missiles.push({ x: sx, y: -10, tx: tx2, ty: th * 0.88, speed: 40 + Math.random() * 60, trail: [] });
+  }
+
+  function spawnIntercept(mx, my) {
+    const bx = tw * (0.2 + Math.random() * 0.6);
+    const by = th * 0.92;
+    const aimY = my - 30 - Math.random() * 60;
+    const aimX = mx + (Math.random() - 0.5) * 80;
+    missiles.push({ x: bx, y: by, tx: aimX, ty: aimY, speed: 180 + Math.random() * 80, trail: [], friendly: true });
+  }
+
+  function explode(x, y, friendly) {
+    const r = friendly ? 30 + Math.random() * 25 : 18 + Math.random() * 12;
+    explosions.push({ x, y, r: 1, maxR: r, age: 0, life: 0.6 + Math.random() * 0.3, friendly });
+    const count = friendly ? 20 : 12;
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2, s = 30 + Math.random() * 80;
+      particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.3 + Math.random() * 0.5, max: 0.8,
+        color: friendly ? ['#ffd38a','#ff8844','#fff','#8ffcff'][Math.floor(Math.random()*4)] : ['#ff784f','#ff3322','#ffa644'][Math.floor(Math.random()*3)],
+        size: 1 + Math.random() * 2.5 });
+    }
+  }
+
+  let lastT = 0, spawnTimer = 0, interceptTimer = 0;
+  function tloop(t) {
+    const tut = document.getElementById('tutorial');
+    if (!tut || tut.style.display === 'none' || tut.offsetParent === null) {
+      tc.style.display = 'none';
+      requestAnimationFrame(tloop); return;
+    }
+    tc.style.display = 'block';
+    const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
+
+    // spawn
+    spawnTimer -= dt;
+    if (spawnTimer <= 0) { spawnMissile(); spawnTimer = 0.6 + Math.random() * 1.2; }
+
+    // intercepts
+    interceptTimer -= dt;
+    const enemies = missiles.filter(m => !m.friendly);
+    if (interceptTimer <= 0 && enemies.length > 0) {
+      const target = enemies[Math.floor(Math.random() * enemies.length)];
+      spawnIntercept(target.x, target.y);
+      interceptTimer = 0.3 + Math.random() * 0.8;
+    }
+
+    tx.clearRect(0, 0, tw, th);
+
+    // sky gradient
+    const skyGrad = tx.createLinearGradient(0, 0, 0, th);
+    skyGrad.addColorStop(0, '#030812'); skyGrad.addColorStop(0.7, '#0a1628'); skyGrad.addColorStop(1, '#0f1d30');
+    tx.fillStyle = skyGrad; tx.fillRect(0, 0, tw, th);
+
+    // ground
+    tx.fillStyle = '#1a2a18';
+    tx.fillRect(0, th * 0.88, tw, th * 0.12);
+    // city silhouettes
+    for (const c of cities) {
+      tx.fillStyle = '#334433';
+      tx.fillRect(c.x - c.w/2, th * 0.82, c.w, th * 0.06);
+      tx.fillRect(c.x - c.w/3, th * 0.78, c.w * 0.6, th * 0.04);
+    }
+
+    // missiles
+    for (let i = missiles.length - 1; i >= 0; i--) {
+      const m = missiles[i];
+      const dx = m.tx - m.x, dy = m.ty - m.y;
+      const len = Math.hypot(dx, dy) || 1;
+      m.x += (dx / len) * m.speed * dt;
+      m.y += (dy / len) * m.speed * dt;
+      m.trail.push({ x: m.x, y: m.y });
+      if (m.trail.length > 30) m.trail.shift();
+
+      // draw trail
+      if (m.trail.length > 1) {
+        tx.strokeStyle = m.friendly ? 'rgba(143,252,255,0.4)' : 'rgba(255,120,80,0.3)';
+        tx.lineWidth = m.friendly ? 1.5 : 1;
+        tx.beginPath(); tx.moveTo(m.trail[0].x, m.trail[0].y);
+        for (let j = 1; j < m.trail.length; j++) tx.lineTo(m.trail[j].x, m.trail[j].y);
+        tx.stroke();
+      }
+
+      // tip glow
+      tx.beginPath(); tx.arc(m.x, m.y, m.friendly ? 2 : 1.5, 0, Math.PI * 2);
+      tx.fillStyle = m.friendly ? '#8ffcff' : '#ff6644'; tx.fill();
+
+      // arrived?
+      if (Math.hypot(m.x - m.tx, m.y - m.ty) < 8) {
+        explode(m.x, m.y, !!m.friendly);
+        missiles.splice(i, 1);
+      }
+    }
+
+    // explosions
+    for (let i = explosions.length - 1; i >= 0; i--) {
+      const e = explosions[i]; e.age += dt;
+      const p = e.age / e.life;
+      if (p < 0.4) e.r = e.maxR * (p / 0.4);
+      else e.r = e.maxR * (1 - (p - 0.4) / 0.6);
+      if (p >= 1) { explosions.splice(i, 1); continue; }
+      const alpha = (1 - p) * 0.6;
+      const grad = tx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.r);
+      grad.addColorStop(0, e.friendly ? `rgba(255,255,200,${alpha})` : `rgba(255,100,60,${alpha})`);
+      grad.addColorStop(0.5, e.friendly ? `rgba(255,180,80,${alpha * 0.6})` : `rgba(255,60,30,${alpha * 0.5})`);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      tx.fillStyle = grad; tx.beginPath(); tx.arc(e.x, e.y, e.r, 0, Math.PI * 2); tx.fill();
+
+      // chain-kill nearby enemy missiles
+      if (e.friendly) {
+        for (let j = missiles.length - 1; j >= 0; j--) {
+          if (!missiles[j].friendly && Math.hypot(missiles[j].x - e.x, missiles[j].y - e.y) < e.r) {
+            explode(missiles[j].x, missiles[j].y, false);
+            missiles.splice(j, 1);
+          }
+        }
+      }
+    }
+
+    // particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i]; p.life -= dt; if (p.life <= 0) { particles.splice(i, 1); continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 60 * dt;
+      const a = Math.min(1, p.life / p.max);
+      tx.globalAlpha = a; tx.fillStyle = p.color;
+      tx.beginPath(); tx.arc(p.x, p.y, p.size * a, 0, Math.PI * 2); tx.fill();
+    }
+    tx.globalAlpha = 1;
+
+    requestAnimationFrame(tloop);
+  }
+  requestAnimationFrame(tloop);
 })();
 </script>
 </body>
