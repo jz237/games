@@ -223,7 +223,10 @@ button:active { transform: translateY(1px) scale(.99); }
     score: 0, wave: 1, livesBonusThreshold: 12000, chainCount: 0, chainWindow: 0,
     enemyMissiles: [], playerMissiles: [], explosions: [], particles: [], smoke: [], stars: [], auroraBands: [], satellites: [], debris: [], fires: [],
     chainPopups: [], smokes: [], scorePopups: [], tapRipples: [], fireworks: [],
-    cities: [], bases: [], skyline: [], gameOver: false, waveOverDelay: 0, waveSeed: 0
+    cities: [], bases: [], skyline: [], gameOver: false, waveOverDelay: 0, waveSeed: 0,
+    // Boss wave state
+    bossWave: -1, bomber: null, chargingSatellite: null, meteors: [], radarTimer: 0, radarRings: [],
+    bossTint: 0, bossTintColor: 'rgba(0,0,0,0)'
   };
 
   const audio = {
@@ -421,6 +424,8 @@ button:active { transform: translateY(1px) scale(.99); }
     state.enemyMissiles = []; state.playerMissiles = []; state.explosions = []; state.particles = []; state.smoke = []; state.satellites = []; state.debris = []; state.fires = [];
     state.chainPopups = []; state.smokes = []; state.scorePopups = []; state.tapRipples = []; state.fireworks = [];
     state.gameOver = false; state.waveOverDelay = 0; shake = 0; flash = 0; comboTimer = 0;
+    state.bossWave = -1; state.bomber = null; state.chargingSatellite = null; state.meteors = []; state.radarTimer = 0; state.radarRings = [];
+    state.bossTint = 0; state.bossTintColor = 'rgba(0,0,0,0)';
     layoutGround(); startWave(true); updateUI(); ui.gameOver.classList.remove('show');
   }
 
@@ -428,19 +433,116 @@ button:active { transform: translateY(1px) scale(.99); }
     state.enemyMissiles = []; state.playerMissiles = []; state.explosions = []; state.particles = []; state.smoke = []; state.satellites = []; state.debris = []; state.fires = [];
     state.chainPopups = []; state.smokes = []; state.scorePopups = []; state.tapRipples = []; state.fireworks = [];
     state.waveSeed = Math.random()*9999;
+    state.bomber = null; state.chargingSatellite = null; state.meteors = []; state.radarTimer = 0; state.radarRings = [];
+    state.bossTint = 0;
     state.bases.forEach(b => { b.ammoMax = 15 + Math.floor(ew(state.wave) * 1.5); b.ammo = b.ammoMax; b.reloadPulse = 1; b.alive = true; });
     waveTransition = 0.7;
-    ui.waveBannerBig.textContent = `Wave ${state.wave}`;
-    ui.waveBannerSmall.textContent = state.wave < 6 ? 'Initial bombardment' : state.wave < 10 ? 'MIRV signatures detected' : 'Smart weapons entering the theater';
+
+    // Detect boss wave
+    const isBoss = state.wave >= 4 && state.wave % 4 === 0;
+    if (isBoss) {
+      state.bossWave = Math.floor((state.wave - 4) / 4) % 5;
+    } else {
+      state.bossWave = -1;
+    }
+
+    // Banner text
+    if (state.bossWave === 0) {
+      ui.waveBannerBig.textContent = '⚠️ BOMBER DETECTED';
+      ui.waveBannerSmall.textContent = `Wave ${state.wave} — Boss Wave`;
+      state.bossTintColor = 'rgba(100,100,100,0.08)';
+    } else if (state.bossWave === 1) {
+      ui.waveBannerBig.textContent = '⚠️ ORBITAL WEAPON CHARGING';
+      ui.waveBannerSmall.textContent = `Wave ${state.wave} — Boss Wave`;
+      state.bossTintColor = 'rgba(100,50,255,0.08)';
+    } else if (state.bossWave === 2) {
+      ui.waveBannerBig.textContent = '☄️ METEOR SHOWER INCOMING';
+      ui.waveBannerSmall.textContent = `Wave ${state.wave} — Boss Wave`;
+      state.bossTintColor = 'rgba(200,100,20,0.08)';
+    } else if (state.bossWave === 3) {
+      ui.waveBannerBig.textContent = '👻 STEALTH SIGNATURES DETECTED';
+      ui.waveBannerSmall.textContent = `Wave ${state.wave} — Boss Wave`;
+      state.bossTintColor = 'rgba(0,255,100,0.08)';
+    } else if (state.bossWave === 4) {
+      ui.waveBannerBig.textContent = '☢️ NUCLEAR WARHEADS DETECTED';
+      ui.waveBannerSmall.textContent = `Wave ${state.wave} — Boss Wave`;
+      state.bossTintColor = 'rgba(255,200,0,0.1)';
+    } else {
+      ui.waveBannerBig.textContent = `Wave ${state.wave}`;
+      ui.waveBannerSmall.textContent = state.wave < 6 ? 'Initial bombardment' : state.wave < 10 ? 'MIRV signatures detected' : 'Smart weapons entering the theater';
+    }
     ui.waveBanner.classList.add('show');
-    setTimeout(() => ui.waveBanner.classList.remove('show'), 1600);
+    setTimeout(() => ui.waveBanner.classList.remove('show'), 2200);
+    if (state.bossWave >= 0) state.bossTint = 2.5; // tint screen briefly
     if (!first) audio.fanfare();
-    const count = 6 + Math.floor(ew(state.wave) * 2);
-    const spawnInterval = Math.max(0.45, 1.8 - ew(state.wave) * 0.05);
-    for (let i=0;i<count;i++) scheduleEnemy(i * spawnInterval + rand(0.6) + 1.0);
-    if (state.wave >= 8) {
-      const sats = 1 + Math.floor((ew(state.wave)-8)/4);
-      for (let s=0;s<sats;s++) state.satellites.push(spawnSatellite(s));
+
+    // Boss wave spawning
+    if (state.bossWave === 0) {
+      // BOMBER RUN
+      const dir = state.wave % 8 === 4 ? 1 : -1;
+      state.bomber = {
+        x: dir > 0 ? -100 : w + 100, y: h * 0.18 + rand(h * 0.08),
+        vx: dir * (60 + ew(state.wave) * 3), hp: 5, maxHp: 5,
+        drops: [], dropTimer: 0, dropInterval: 1.5,
+        smoke: [], alive: true, flash: 0, sparks: []
+      };
+      // Also spawn a few normal missiles
+      for (let i = 0; i < 4; i++) scheduleEnemy(i * 1.2 + 2.0);
+    } else if (state.bossWave === 1) {
+      // ORBITAL STRIKE
+      state.chargingSatellite = {
+        x: w / 2, y: h * 0.08,
+        chargeTime: 8, charged: 0, firing: false, fireTimer: 0,
+        hp: 6, hits: 0, alive: true, beam: null, flash: 0, pulse: 0,
+        targetCity: null
+      };
+      // Moderate normal missiles
+      for (let i = 0; i < 5; i++) scheduleEnemy(i * 1.5 + 1.5);
+    } else if (state.bossWave === 2) {
+      // METEOR SHOWER — spawn 12 large meteors staggered
+      for (let i = 0; i < 12; i++) {
+        const mx = rand(w * 0.95, w * 0.05);
+        const delay = i * 0.8 + rand(0.5);
+        state.meteors.push({
+          x: mx, y: -20 - delay * 60,
+          vx: rand(30, -30), vy: 40 + ew(state.wave) * 4 + rand(15),
+          size: 'large', hp: 2, trail: [], alive: true, radius: 8
+        });
+      }
+    } else if (state.bossWave === 3) {
+      // STEALTH WAVE — normal count but stealthy
+      const count = 6 + Math.floor(ew(state.wave) * 2);
+      const spawnInterval = Math.max(0.45, 1.8 - ew(state.wave) * 0.05);
+      for (let i = 0; i < count; i++) {
+        scheduleEnemy(i * spawnInterval + rand(0.6) + 1.0);
+      }
+      // Mark all as stealth
+      state.enemyMissiles.forEach(m => { m.stealth = true; m.revealed = 0; });
+      state.radarTimer = 0;
+    } else if (state.bossWave === 4) {
+      // NUCLEAR BARRAGE — 8 nuke missiles
+      for (let i = 0; i < 8; i++) {
+        const startX = rand(w * 0.95, w * 0.05);
+        const targetPool = [...state.cities.filter(c => c.alive).map(c => ({ x: c.x, y: c.y })), ...state.bases.map(b => ({ x: b.x, y: b.y }))];
+        const target = targetPool[Math.floor(Math.random() * targetPool.length)] || { x: rand(w * 0.9, w * 0.1), y: h * 0.84 };
+        const speed = rand(35 + ew(state.wave) * 6, 25 + ew(state.wave) * 4);
+        const delay = i * 1.0 + rand(0.8) + 1.0;
+        state.enemyMissiles.push({
+          x: startX, y: -rand(220, 20), sx: startX, sy: -20, tx: target.x, ty: target.y,
+          speed, progress: -delay * speed / Math.max(1, dist(startX, -20, target.x, target.y)),
+          trail: [], alive: true, split: false, kind: 'nuke', wiggle: rand(1000), whistle: false,
+          nuke: true
+        });
+      }
+    } else {
+      // Normal wave spawning
+      const count = 6 + Math.floor(ew(state.wave) * 2);
+      const spawnInterval = Math.max(0.45, 1.8 - ew(state.wave) * 0.05);
+      for (let i = 0; i < count; i++) scheduleEnemy(i * spawnInterval + rand(0.6) + 1.0);
+      if (state.wave >= 8) {
+        const sats = 1 + Math.floor((ew(state.wave) - 8) / 4);
+        for (let s = 0; s < sats; s++) state.satellites.push(spawnSatellite(s));
+      }
     }
     updateUI();
   }
@@ -515,7 +617,9 @@ button:active { transform: translateY(1px) scale(.99); }
     if (!missile.alive) return;
     missile.alive = false;
     const comboGain = 1 + Math.max(0, state.chainCount - 1) * 0.35;
-    const pts = Math.round((missile.kind === 'smart' ? 240 : missile.kind === 'mirv' ? 180 : 100) * comboGain);
+    let basePts = missile.kind === 'smart' ? 240 : missile.kind === 'mirv' ? 180 : 100;
+    if (missile.nuke) basePts = 300; // 100 base + 200 bonus for nuke intercept
+    const pts = Math.round(basePts * comboGain);
     state.score += pts;
     state.scorePopups.push({ x: missile.x, y: missile.y, text: '+' + pts, life: 1.0, maxLife: 1.0, color: state.chainCount >= 2 ? '#55ffff' : '#ffd700' });
     state.chainCount++; state.chainWindow = 1.2; comboTimer = 0.8;
@@ -616,6 +720,126 @@ button:active { transform: translateY(1px) scale(.99); }
     comboTimer = Math.max(0, comboTimer - dt);
     shake *= 0.9; flash *= 0.88;
 
+    // Boss tint fade
+    state.bossTint = Math.max(0, state.bossTint - dt);
+
+    // ===== BOSS WAVE UPDATES =====
+    // BOMBER RUN update
+    if (state.bossWave === 0 && state.bomber && state.bomber.alive) {
+      const b = state.bomber;
+      b.x += b.vx * dt;
+      b.flash = Math.max(0, b.flash - dt * 3);
+      // Smoke trail
+      if (b.smoke.length < 80) {
+        b.smoke.push({ x: b.x - Math.sign(b.vx) * 30, y: b.y + 4, life: 1.2, size: 3 + rand(4) });
+        b.smoke.push({ x: b.x - Math.sign(b.vx) * 30, y: b.y - 4, life: 1.2, size: 3 + rand(4) });
+      }
+      for (const s of b.smoke) { s.life -= dt; s.y -= 8 * dt; s.size += 5 * dt; }
+      b.smoke = b.smoke.filter(s => s.life > 0);
+      // Sparks
+      for (const s of b.sparks) { s.life -= dt; s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 120 * dt; }
+      b.sparks = b.sparks.filter(s => s.life > 0);
+      // Drop cluster missiles
+      b.dropTimer += dt;
+      if (b.dropTimer >= b.dropInterval) {
+        b.dropTimer = 0;
+        const live = state.cities.filter(c => c.alive);
+        const t = live[Math.floor(Math.random() * live.length)] || { x: rand(w * 0.9, w * 0.1), y: h * 0.84 };
+        for (let i = 0; i < 3; i++) {
+          state.enemyMissiles.push({
+            x: b.x + rand(10, -10), y: b.y + 10, sx: b.x, sy: b.y,
+            tx: t.x + rand(50, -50), ty: t.y, speed: 50 + ew(state.wave) * 8,
+            progress: 0, trail: [], alive: true, split: false, kind: 'normal',
+            wiggle: rand(1000), whistle: false
+          });
+        }
+        audio.whistle();
+      }
+      // Off-screen check
+      if ((b.vx > 0 && b.x > w + 150) || (b.vx < 0 && b.x < -150)) {
+        b.alive = false;
+      }
+    }
+
+    // ORBITAL STRIKE update
+    if (state.bossWave === 1 && state.chargingSatellite && state.chargingSatellite.alive) {
+      const cs = state.chargingSatellite;
+      cs.pulse += dt * 4;
+      cs.flash = Math.max(0, cs.flash - dt * 3);
+      cs.charged += dt;
+      if (cs.charged >= cs.chargeTime && !cs.firing) {
+        // Fire beam!
+        cs.firing = true; cs.fireTimer = 1.5;
+        const liveCities = state.cities.filter(c => c.alive);
+        cs.targetCity = liveCities[Math.floor(Math.random() * liveCities.length)] || null;
+        if (cs.targetCity) {
+          cs.beam = { x1: cs.x, y1: cs.y + 20, x2: cs.targetCity.x, y2: cs.targetCity.y };
+        }
+        shake = 20; flash = 0.6;
+        audio.explosion(2, 5);
+      }
+      if (cs.firing) {
+        cs.fireTimer -= dt;
+        if (cs.fireTimer <= 0) {
+          if (cs.targetCity && cs.targetCity.alive) destroyCity(cs.targetCity);
+          cs.alive = false; cs.beam = null;
+        }
+      }
+    }
+
+    // METEOR SHOWER update
+    if (state.bossWave === 2) {
+      for (const m of state.meteors) {
+        if (!m.alive) continue;
+        m.x += m.vx * dt;
+        m.y += m.vy * dt;
+        // Fire trail
+        if (m.trail.length < 30) {
+          m.trail.push({ x: m.x + rand(m.radius * 0.5, -m.radius * 0.5), y: m.y - m.radius * 0.5, life: 0.5, size: rand(m.radius * 0.8, 2) });
+        }
+        for (const t of m.trail) { t.life -= dt; t.y -= 15 * dt; t.size += 3 * dt; }
+        m.trail = m.trail.filter(t => t.life > 0);
+        // Ground impact
+        if (m.y >= h * 0.84) {
+          m.alive = false;
+          impactGround(m.x, h * 0.84, true);
+        }
+      }
+      state.meteors = state.meteors.filter(m => m.alive || m.trail.length > 0);
+    }
+
+    // STEALTH WAVE update
+    if (state.bossWave === 3) {
+      state.radarTimer += dt;
+      if (state.radarTimer >= 2.0) {
+        state.radarTimer = 0;
+        state.radarRings.push({ x: w / 2, y: h * 0.84, radius: 0, maxRadius: Math.max(w, h) * 1.2, life: 1.5 });
+        // play radar ping
+        if (audio.ctx) audio.burst(1200, 0.15, 0.06, 'sine', 0.5);
+      }
+      for (const r of state.radarRings) {
+        r.life -= dt; r.radius += 400 * dt;
+      }
+      state.radarRings = state.radarRings.filter(r => r.life > 0);
+      // Check if radar ring reveals any stealth missiles
+      for (const m of state.enemyMissiles) {
+        if (!m.stealth || !m.alive) continue;
+        for (const r of state.radarRings) {
+          const d = dist(m.x, m.y, r.x, r.y);
+          if (Math.abs(d - r.radius) < 40) {
+            m.revealed = 0.3;
+          }
+        }
+        if (m.revealed > 0) m.revealed -= dt;
+      }
+      // Mark new stealth missiles spawned during wave
+      for (const m of state.enemyMissiles) {
+        if (m.stealth === undefined) { m.stealth = true; m.revealed = 0; }
+      }
+    }
+
+    // NUCLEAR BARRAGE — sky tint handled in draw
+
     state.satellites = state.satellites.filter(s => s.alive || s.damageFlash > 0);
     for (const sat of state.satellites) {
       if (!sat.alive) { sat.damageFlash -= dt; continue; }
@@ -651,7 +875,25 @@ button:active { transform: translateY(1px) scale(.99); }
       m.progress += dt;
       m.trail.push({ x:m.x, y:m.y, life:0.48, w:2 + Math.random()*1.5 }); if (m.trail.length > 34) m.trail.shift();
       state.smoke.push({ x:m.x, y:m.y, life:0.6, size: rand(10,3), color:'110,110,120' });
-      if (dist(m.x,m.y,m.tx,m.ty) < 8 || m.y >= h*0.84) { m.alive = false; impactGround(m.x, h*0.84, true); }
+      if (dist(m.x,m.y,m.tx,m.ty) < 8 || m.y >= h*0.84) {
+        m.alive = false;
+        if (m.nuke) {
+          // Nuke: 3x radius explosion
+          detonate(m.x, h * 0.84, 180, false);
+          shake = 18; flash = 0.5;
+          // Check all cities within nuke blast radius
+          for (const c of state.cities) {
+            if (c.alive && dist(m.x, h * 0.84, c.x, c.y) < 180) destroyCity(c);
+          }
+          for (const b of state.bases) {
+            if (dist(m.x, h * 0.84, b.x, b.y) < 180) { b.ammo = 0; b.reloadPulse = 0; }
+          }
+          for (let i = 0; i < 10; i++) state.fires.push({ x: m.x + rand(40, -40), y: h * 0.84 - rand(8, 0), life: rand(5, 3), t: Math.random() * 10 });
+          audio.explosion(2.5, 5);
+        } else {
+          impactGround(m.x, h * 0.84, true);
+        }
+      }
     }
 
     for (const e of state.explosions) {
@@ -660,6 +902,85 @@ button:active { transform: translateY(1px) scale(.99); }
         for (const m of state.enemyMissiles) {
           if (!m.alive || e.hitIds.has(m)) continue;
           if (dist(e.x,e.y,m.x,m.y) <= e.radius) { e.hitIds.add(m); killEnemy(m, e); }
+        }
+        // Boss collision: Bomber
+        if (state.bomber && state.bomber.alive && !e.hitIds.has(state.bomber)) {
+          if (dist(e.x, e.y, state.bomber.x, state.bomber.y) <= e.radius + 30) {
+            e.hitIds.add(state.bomber);
+            const b = state.bomber;
+            b.hp--; b.flash = 1.0;
+            // Sparks
+            for (let i = 0; i < 8; i++) {
+              b.sparks.push({ x: b.x + rand(20, -20), y: b.y + rand(10, -10), vx: rand(150, -150), vy: rand(-200, -50), life: 0.6 + rand(0.4) });
+            }
+            audio.explosion(0.6, 1);
+            spawnParticles(b.x, b.y, 12, '#ffaa44', 1.5, 1, 20);
+            if (b.hp <= 0) {
+              b.alive = false;
+              detonate(b.x, b.y, 120, true);
+              spawnParticles(b.x, b.y, 50, '#ddeeff', 3.5, 1.5, 30);
+              spawnParticles(b.x, b.y, 30, '#ff8844', 2.5, 2, 50);
+              for (let i = 0; i < 12; i++) state.debris.push({ x: b.x + rand(30, -30), y: b.y + rand(15, -15), vx: rand(250, -250), vy: rand(-300, -50), life: rand(2.5, 1), size: rand(8, 3), rot: rand(6, -6) });
+              state.score += 1000;
+              state.scorePopups.push({ x: b.x, y: b.y - 30, text: '+1000 BOMBER', life: 1.5, maxLife: 1.5, color: '#ffd700' });
+              shake = 18; flash = 0.4;
+              audio.explosion(2, 4);
+            }
+          }
+        }
+        // Boss collision: Charging Satellite
+        if (state.chargingSatellite && state.chargingSatellite.alive && !state.chargingSatellite.firing && !e.hitIds.has(state.chargingSatellite)) {
+          const cs = state.chargingSatellite;
+          if (dist(e.x, e.y, cs.x, cs.y) <= e.radius + 24) {
+            e.hitIds.add(cs);
+            cs.hits++; cs.flash = 1.0;
+            cs.charged = Math.max(0, cs.charged - 0.5); // reduce charge
+            audio.explosion(0.6, 1);
+            spawnParticles(cs.x, cs.y, 15, '#aa88ff', 1.5, 1, 20);
+            if (cs.hits >= cs.hp) {
+              cs.alive = false; cs.beam = null;
+              detonate(cs.x, cs.y, 130, true);
+              spawnParticles(cs.x, cs.y, 50, '#ddeeff', 3.5, 1.5, 30);
+              spawnParticles(cs.x, cs.y, 30, '#aaccff', 2.8, 1.2, 50);
+              for (let i = 0; i < 10; i++) state.debris.push({ x: cs.x + rand(20, -20), y: cs.y + rand(10, -10), vx: rand(250, -250), vy: rand(-300, -50), life: rand(2.5, 1), size: rand(7, 3), rot: rand(6, -6) });
+              state.score += 1500;
+              state.scorePopups.push({ x: cs.x, y: cs.y - 30, text: '+1500 ORBITAL', life: 1.5, maxLife: 1.5, color: '#aa88ff' });
+              shake = 16; flash = 0.4;
+              audio.explosion(2, 4);
+            }
+          }
+        }
+        // Boss collision: Meteors
+        if (state.bossWave === 2) {
+          for (const met of state.meteors) {
+            if (!met.alive || e.hitIds.has(met)) continue;
+            if (dist(e.x, e.y, met.x, met.y) <= e.radius + met.radius) {
+              e.hitIds.add(met);
+              met.hp--;
+              if (met.hp <= 0) {
+                met.alive = false;
+                spawnParticles(met.x, met.y, 20, '#ff8844', 2, 1.5, 40);
+                audio.explosion(0.7, 2);
+                const pts = met.size === 'large' ? 200 : 100;
+                state.score += pts;
+                state.scorePopups.push({ x: met.x, y: met.y, text: '+' + pts, life: 1.0, maxLife: 1.0, color: '#ffa040' });
+                // Large splits into 3 small
+                if (met.size === 'large') {
+                  for (let i = 0; i < 3; i++) {
+                    const angle = (Math.PI * 2 / 3) * i + rand(0.5, -0.5);
+                    state.meteors.push({
+                      x: met.x, y: met.y,
+                      vx: Math.cos(angle) * (40 + rand(30)), vy: Math.sin(angle) * 20 + 30 + rand(20),
+                      size: 'small', hp: 1, trail: [], alive: true, radius: 4
+                    });
+                  }
+                }
+              } else {
+                spawnParticles(met.x, met.y, 8, '#ffcc44', 1.2, 1, 30);
+                audio.explosion(0.4, 1);
+              }
+            }
+          }
         }
         for (const sat of state.satellites) {
           if (!sat.alive || e.hitIds.has(sat)) continue;
@@ -728,6 +1049,9 @@ button:active { transform: translateY(1px) scale(.99); }
     for (const fw of state.fireworks) { fw.life -= dt; if (!fw.spawned) { fw.spawned = true; spawnParticles(fw.x, fw.y, 25, ['#ff4488','#44ff88','#4488ff','#ffdd44','#ff8844'][Math.floor(Math.random()*5)], 2.5, 1.2, 40); } }
     state.fireworks = state.fireworks.filter(fw => fw.life > 0);
 
+    // Nuke missile impact — 3x explosion radius
+    // (handled inline: check in enemy missile ground impact)
+
     // Clean up dead missiles' trails over time
     for (const m of state.enemyMissiles) { if (!m.alive && m.trail.length) { m.trail.forEach(t => t.life -= dt); m.trail = m.trail.filter(t => t.life > 0); } }
     for (const m of state.playerMissiles) { if (!m.alive && m.trail.length) { m.trail.forEach(t => t.life -= dt); m.trail = m.trail.filter(t => t.life > 0); } }
@@ -735,7 +1059,10 @@ button:active { transform: translateY(1px) scale(.99); }
     state.enemyMissiles = state.enemyMissiles.filter(m => m.alive || m.progress < 0 || m.trail.length > 0);
     state.playerMissiles = state.playerMissiles.filter(m => m.alive || m.trail.length > 0);
 
-    const activeEnemies = state.enemyMissiles.some(m => m.alive || m.progress < 0);
+    const activeMeteors = state.meteors.some(m => m.alive);
+    const activeBomber = state.bomber && state.bomber.alive;
+    const activeChargingSat = state.chargingSatellite && state.chargingSatellite.alive;
+    const activeEnemies = state.enemyMissiles.some(m => m.alive || m.progress < 0) || activeMeteors || activeBomber || activeChargingSat;
     const activeEffects = state.explosions.length || state.playerMissiles.some(m=>m.alive);
     // tally update
     if (tally) {
@@ -1013,18 +1340,27 @@ button:active { transform: translateY(1px) scale(.99); }
     ctx.save();
     list.forEach(m => {
       if (!m.trail || m.trail.length < 2) return;
+      // Stealth: hide trails too
+      if (m.stealth && state.bossWave === 3) {
+        const sa = (m.revealed > 0) ? 1.0 : 0.07;
+        ctx.globalAlpha = sa;
+      }
       const len = m.trail.length;
       for (let i = 1; i < len; i++) {
         const a = m.trail[i-1], b = m.trail[i];
-        const t = i / len; // 0 at tail, 1 at head
-        // tapering width
+        const t = i / len;
         ctx.lineWidth = friendly ? 2.5 * t : 2 * t;
-        // fading opacity
-        ctx.strokeStyle = friendly
-          ? `rgba(143,252,255,${t * 0.65})`
-          : `rgba(255,100,60,${t * 0.5})`;
+        if (m.nuke && !friendly) {
+          ctx.strokeStyle = `rgba(255,200,50,${t * 0.5})`;
+          ctx.lineWidth = 3 * t;
+        } else {
+          ctx.strokeStyle = friendly
+            ? `rgba(143,252,255,${t * 0.65})`
+            : `rgba(255,100,60,${t * 0.5})`;
+        }
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       }
+      if (m.stealth && state.bossWave === 3) ctx.globalAlpha = 1;
     });
     ctx.restore();
   }
@@ -1067,13 +1403,42 @@ button:active { transform: translateY(1px) scale(.99); }
 
     state.enemyMissiles.forEach(m => {
       if (!m.alive || m.progress < 0) return;
-      ctx.fillStyle = m.kind === 'smart' ? '#ff6d6d' : m.kind === 'mirv' ? '#ffd47b' : '#ffffff';
-      // slimmer tip with glow
-      const eR = m.kind === 'smart' ? 2.5 : 2;
-      const eGrad = ctx.createRadialGradient(m.x,m.y,0,m.x,m.y,eR*3.5);
-      eGrad.addColorStop(0, 'rgba(255,100,68,1)'); eGrad.addColorStop(0.4, 'rgba(255,60,30,0.35)'); eGrad.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = eGrad; ctx.beginPath(); ctx.arc(m.x,m.y,eR*3.5,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#ff6644'; ctx.beginPath(); ctx.arc(m.x,m.y,eR,0,Math.PI*2); ctx.fill();
+      // Stealth wave: nearly invisible unless revealed
+      if (m.stealth && state.bossWave === 3) {
+        const alpha = (m.revealed > 0) ? 1.0 : 0.07;
+        ctx.save(); ctx.globalAlpha = alpha;
+        if (m.revealed > 0) {
+          // Shimmer effect when revealed
+          ctx.shadowBlur = 12; ctx.shadowColor = '#00ff88';
+        }
+      }
+      // Nuke missiles: larger, yellow glow
+      if (m.nuke) {
+        const pulseA = 0.5 + 0.3 * Math.sin(time * 0.006);
+        const nGrad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, 16);
+        nGrad.addColorStop(0, `rgba(255,220,50,${pulseA})`);
+        nGrad.addColorStop(0.4, `rgba(255,160,20,${pulseA * 0.4})`);
+        nGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = nGrad; ctx.beginPath(); ctx.arc(m.x, m.y, 16, 0, Math.PI * 2); ctx.fill();
+        // Thick contrail
+        if (m.trail.length > 1) {
+          for (let i = 1; i < m.trail.length; i++) {
+            const t = i / m.trail.length;
+            ctx.strokeStyle = `rgba(255,200,50,${t * 0.4})`;
+            ctx.lineWidth = 3 * t;
+            ctx.beginPath(); ctx.moveTo(m.trail[i-1].x, m.trail[i-1].y); ctx.lineTo(m.trail[i].x, m.trail[i].y); ctx.stroke();
+          }
+        }
+        ctx.fillStyle = '#ffdd44'; ctx.beginPath(); ctx.arc(m.x, m.y, 4, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.fillStyle = m.kind === 'smart' ? '#ff6d6d' : m.kind === 'mirv' ? '#ffd47b' : '#ffffff';
+        const eR = m.kind === 'smart' ? 2.5 : 2;
+        const eGrad = ctx.createRadialGradient(m.x,m.y,0,m.x,m.y,eR*3.5);
+        eGrad.addColorStop(0, 'rgba(255,100,68,1)'); eGrad.addColorStop(0.4, 'rgba(255,60,30,0.35)'); eGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = eGrad; ctx.beginPath(); ctx.arc(m.x,m.y,eR*3.5,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ff6644'; ctx.beginPath(); ctx.arc(m.x,m.y,eR,0,Math.PI*2); ctx.fill();
+      }
+      if (m.stealth && state.bossWave === 3) ctx.restore();
     });
     // intercept preview rings at destination
     state.playerMissiles.forEach(m => {
@@ -1149,6 +1514,149 @@ button:active { transform: translateY(1px) scale(.99); }
     ctx.textAlign = 'center';
     state.scorePopups.forEach(p => { const a = p.life / p.maxLife; ctx.save(); ctx.globalAlpha = a; ctx.font = '700 14px Inter, sans-serif'; ctx.fillStyle = p.color; ctx.shadowBlur = 6; ctx.shadowColor = p.color; ctx.fillText(p.text, p.x, p.y); ctx.restore(); });
     state.chainPopups.forEach(p => { const a = p.life / p.maxLife; const s = 0.5 + p.scale * 0.8; ctx.save(); ctx.globalAlpha = a; ctx.translate(p.x, p.y); ctx.scale(s, s); ctx.font = '900 24px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffd700'; ctx.shadowBlur = 16; ctx.shadowColor = '#ffd700'; ctx.fillText(p.text, 0, 0); ctx.restore(); });
+    // ===== BOSS WAVE DRAWING =====
+    // BOMBER
+    if (state.bomber && (state.bomber.alive || state.bomber.sparks.length > 0)) {
+      const b = state.bomber;
+      // Smoke trail
+      for (const s of b.smoke) {
+        ctx.fillStyle = `rgba(80,80,90,${Math.min(0.3, s.life * 0.25)})`;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill();
+      }
+      if (b.alive) {
+        ctx.save(); ctx.translate(b.x, b.y);
+        const dir = Math.sign(b.vx);
+        ctx.scale(dir, 1);
+        // Flash on hit
+        if (b.flash > 0) { ctx.shadowBlur = 20; ctx.shadowColor = '#fff'; }
+        // Fuselage
+        ctx.fillStyle = '#3a3a44';
+        ctx.beginPath(); ctx.ellipse(0, 0, 40, 8, 0, 0, Math.PI * 2); ctx.fill();
+        // Wings
+        ctx.fillStyle = '#2e2e38';
+        ctx.beginPath(); ctx.moveTo(-5, -2); ctx.lineTo(-18, -22); ctx.lineTo(8, -2); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-5, 2); ctx.lineTo(-18, 22); ctx.lineTo(8, 2); ctx.closePath(); ctx.fill();
+        // Tail
+        ctx.fillStyle = '#33333d';
+        ctx.beginPath(); ctx.moveTo(-35, 0); ctx.lineTo(-45, -12); ctx.lineTo(-38, 0); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-35, 0); ctx.lineTo(-45, 12); ctx.lineTo(-38, 0); ctx.closePath(); ctx.fill();
+        // Cockpit
+        ctx.fillStyle = '#556688'; ctx.beginPath(); ctx.ellipse(30, 0, 6, 4, 0, 0, Math.PI * 2); ctx.fill();
+        // Engine glow
+        const eg = ctx.createRadialGradient(-38, 0, 0, -38, 0, 10);
+        eg.addColorStop(0, 'rgba(255,180,60,0.8)'); eg.addColorStop(1, 'rgba(255,80,20,0)');
+        ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(-38, 0, 10, 0, Math.PI * 2); ctx.fill();
+        // Markings
+        ctx.strokeStyle = 'rgba(255,50,50,0.4)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(20, 0); ctx.stroke();
+        // HP bar
+        ctx.restore();
+        // HP bar above bomber
+        const hpW = 50, hpH = 4;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(b.x - hpW / 2, b.y - 30, hpW, hpH);
+        ctx.fillStyle = b.hp > 2 ? '#44ff88' : b.hp > 1 ? '#ffaa22' : '#ff3333';
+        ctx.fillRect(b.x - hpW / 2, b.y - 30, hpW * (b.hp / b.maxHp), hpH);
+      }
+      // Sparks
+      for (const s of b.sparks) {
+        ctx.fillStyle = `rgba(255,200,100,${Math.min(1, s.life * 2)})`;
+        ctx.beginPath(); ctx.arc(s.x, s.y, 2, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    // CHARGING SATELLITE
+    if (state.chargingSatellite && (state.chargingSatellite.alive || (state.chargingSatellite.firing && state.chargingSatellite.fireTimer > 0))) {
+      const cs = state.chargingSatellite;
+      ctx.save(); ctx.translate(cs.x, cs.y);
+      // Satellite body
+      ctx.fillStyle = cs.flash > 0 ? '#fff' : '#aabbdd';
+      ctx.fillRect(-20, -3, 40, 6);
+      ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fillStyle = '#8899bb'; ctx.fill();
+      // Solar panels
+      ctx.fillStyle = '#334466'; ctx.fillRect(-35, -8, 12, 16); ctx.fillRect(23, -8, 12, 16);
+      // Charge-up glow
+      if (!cs.firing) {
+        const chargeFrac = cs.charged / cs.chargeTime;
+        const pulseSize = 15 + chargeFrac * 35 + Math.sin(cs.pulse * (1 + chargeFrac * 3)) * 5 * chargeFrac;
+        const cg = ctx.createRadialGradient(0, 0, 0, 0, 0, pulseSize);
+        cg.addColorStop(0, `rgba(180,100,255,${0.15 + chargeFrac * 0.5})`);
+        cg.addColorStop(0.6, `rgba(120,60,255,${0.05 + chargeFrac * 0.2})`);
+        cg.addColorStop(1, 'rgba(80,40,200,0)');
+        ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(0, 0, pulseSize, 0, Math.PI * 2); ctx.fill();
+        // Charge bar
+        const barW = 40, barH = 4;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(-barW / 2, 18, barW, barH);
+        ctx.fillStyle = chargeFrac < 0.5 ? '#88aaff' : chargeFrac < 0.8 ? '#ffaa44' : '#ff4444';
+        ctx.fillRect(-barW / 2, 18, barW * chargeFrac, barH);
+      }
+      // HP bar
+      const hpW = 40, hpH = 3;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(-hpW / 2, -18, hpW, hpH);
+      ctx.fillStyle = cs.hits < 3 ? '#44ff88' : cs.hits < 5 ? '#ffaa22' : '#ff3333';
+      ctx.fillRect(-hpW / 2, -18, hpW * ((cs.hp - cs.hits) / cs.hp), hpH);
+      ctx.restore();
+      // Beam
+      if (cs.firing && cs.beam) {
+        const beamAlpha = Math.min(1, cs.fireTimer);
+        ctx.save();
+        ctx.strokeStyle = `rgba(200,120,255,${beamAlpha * 0.8})`;
+        ctx.lineWidth = 12 + Math.sin(time * 0.02) * 4;
+        ctx.shadowBlur = 30; ctx.shadowColor = '#aa66ff';
+        ctx.beginPath(); ctx.moveTo(cs.beam.x1, cs.beam.y1); ctx.lineTo(cs.beam.x2, cs.beam.y2); ctx.stroke();
+        // Inner bright beam
+        ctx.strokeStyle = `rgba(255,255,255,${beamAlpha * 0.6})`;
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(cs.beam.x1, cs.beam.y1); ctx.lineTo(cs.beam.x2, cs.beam.y2); ctx.stroke();
+        ctx.restore();
+        // Screen flash
+        ctx.fillStyle = `rgba(180,120,255,${beamAlpha * 0.1})`; ctx.fillRect(0, 0, w, h);
+      }
+    }
+
+    // METEORS
+    for (const met of state.meteors) {
+      if (!met.alive && met.trail.length === 0) continue;
+      // Fire trail
+      for (const t of met.trail) {
+        const a = Math.min(0.4, t.life * 0.5);
+        ctx.fillStyle = `rgba(255,120,30,${a})`;
+        ctx.beginPath(); ctx.arc(t.x, t.y, t.size, 0, Math.PI * 2); ctx.fill();
+      }
+      if (!met.alive) continue;
+      // Rocky body (irregular shape)
+      ctx.save(); ctx.translate(met.x, met.y);
+      const r = met.radius;
+      const mGrad = ctx.createRadialGradient(-r * 0.3, -r * 0.3, 0, 0, 0, r * 1.2);
+      mGrad.addColorStop(0, met.size === 'large' ? '#cc8844' : '#aa6633');
+      mGrad.addColorStop(0.6, met.size === 'large' ? '#885522' : '#664411');
+      mGrad.addColorStop(1, '#442200');
+      ctx.fillStyle = mGrad;
+      ctx.beginPath();
+      const segs = 8;
+      for (let i = 0; i < segs; i++) {
+        const ang = (Math.PI * 2 / segs) * i;
+        const rr = r * (0.7 + 0.3 * Math.sin(i * 3.7 + met.x * 0.1));
+        if (i === 0) ctx.moveTo(Math.cos(ang) * rr, Math.sin(ang) * rr);
+        else ctx.lineTo(Math.cos(ang) * rr, Math.sin(ang) * rr);
+      }
+      ctx.closePath(); ctx.fill();
+      // Fire glow on leading edge
+      const fg = ctx.createRadialGradient(0, r * 0.3, 0, 0, r * 0.3, r * 1.5);
+      fg.addColorStop(0, 'rgba(255,200,80,0.4)'); fg.addColorStop(1, 'rgba(255,80,20,0)');
+      ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(0, r * 0.3, r * 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // STEALTH RADAR RINGS
+    if (state.bossWave === 3) {
+      for (const r of state.radarRings) {
+        const a = Math.min(0.4, r.life * 0.3);
+        ctx.strokeStyle = `rgba(0,255,100,${a})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+
     state.fires.forEach(f => {
       const fade = Math.min(1, f.life / 3);
       const t2 = time * 0.001 + f.t;
@@ -1198,6 +1706,16 @@ button:active { transform: translateY(1px) scale(.99); }
     ctx.fillStyle = vigGrad; ctx.fillRect(0,0,w,h);
     if (flash > 0.01) {
       ctx.fillStyle = `rgba(255,245,230,${flash*0.22})`; ctx.fillRect(0,0,w,h);
+    }
+    // Boss wave screen tint
+    if (state.bossTint > 0 && state.bossWave >= 0) {
+      ctx.fillStyle = state.bossTintColor; ctx.fillRect(0, 0, w, h);
+    }
+    // Nuclear barrage: red/orange sky tint
+    if (state.bossWave === 4) {
+      const ng = ctx.createLinearGradient(0, 0, 0, h * 0.5);
+      ng.addColorStop(0, 'rgba(180,40,0,0.12)'); ng.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = ng; ctx.fillRect(0, 0, w, h * 0.5);
     }
     if (comboTimer > 0.02) {
       ctx.fillStyle = `rgba(120,220,255,${comboTimer*0.06})`; ctx.fillRect(0,0,w,h);
