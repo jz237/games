@@ -561,7 +561,7 @@ button:active { transform: translateY(1px) scale(.99); }
         const startX = rand(w * 0.95, w * 0.05);
         const targetPool = [...state.cities.filter(c => c.alive).map(c => ({ x: c.x, y: c.y })), ...state.bases.map(b => ({ x: b.x, y: b.y }))];
         const target = targetPool[Math.floor(Math.random() * targetPool.length)] || { x: rand(w * 0.9, w * 0.1), y: h * 0.84 };
-        const speed = rand(100 + ew(state.wave) * 12, 70 + ew(state.wave) * 8);
+        const speed = rand(75 + ew(state.wave) * 9, 53 + ew(state.wave) * 6);
         const delay = i * 0.9 + rand(0.6) + 1.0;
         state.enemyMissiles.push({
           x: startX, y: -rand(220, 20), sx: startX, sy: -20, tx: target.x, ty: target.y,
