@@ -493,7 +493,7 @@ button:active { transform: translateY(1px) scale(.99); }
       state.chargingSatellite = {
         x: w / 2, y: h * 0.08,
         chargeTime: 10, charged: 0, firing: false, fireTimer: 0,
-        hp: 36, hits: 0, alive: true, beam: null, flash: 0, pulse: 0,
+        hp: 36, hits: 0, alive: true, beam: null, flash: 0, pulse: 0, hitStun: 0,
         targetCity: null
       };
       // Moderate normal missiles
@@ -766,7 +766,7 @@ button:active { transform: translateY(1px) scale(.99); }
       const cs = state.chargingSatellite;
       cs.pulse += dt * 4;
       cs.flash = Math.max(0, cs.flash - dt * 3);
-      cs.charged += dt;
+      if (cs.hitStun > 0) { cs.hitStun -= dt; } else { cs.charged += dt; }
       if (cs.charged >= cs.chargeTime && !cs.firing) {
         // Fire beam!
         cs.firing = true; cs.fireTimer = 1.5;
@@ -934,7 +934,7 @@ button:active { transform: translateY(1px) scale(.99); }
           if (dist(e.x, e.y, cs.x, cs.y) <= e.radius + 24) {
             e.hitIds.add(cs);
             cs.hits++; cs.flash = 1.0;
-            cs.charged = Math.max(0, cs.charged - 0.5); // reduce charge
+            cs.hitStun = 0.3; // pause charge for 0.3s on hit
             audio.explosion(0.6, 1);
             spawnParticles(cs.x, cs.y, 15, '#aa88ff', 1.5, 1, 20);
             if (cs.hits >= cs.hp) {
@@ -1071,9 +1071,7 @@ button:active { transform: translateY(1px) scale(.99); }
     const activeMeteors = state.meteors.some(m => m.alive);
     const activeBomber = state.bomber && state.bomber.alive;
     const activeChargingSat = state.chargingSatellite && (state.chargingSatellite.alive || state.chargingSatellite.firing);
-    const activeEnemies = state.enemyMissiles.some(m => m.alive || m.progress < 0) || activeMeteors || activeBomber || activeChargingSat;
-    // Only block wave transition for player missiles still in flight, NOT lingering explosions
-    const activePlayerMissiles = state.playerMissiles.some(m => m.alive);
+    const activeEnemies = state.enemyMissiles.some(m => m.alive && m.progress < 0) || state.enemyMissiles.some(m => m.alive) || activeMeteors || activeBomber || activeChargingSat;
     // tally update
     if (tally) {
       tally.timer += dt;
@@ -1106,7 +1104,7 @@ button:active { transform: translateY(1px) scale(.99); }
       }
       updateUI();
     }
-    if (!activeEnemies && !activePlayerMissiles && !state.gameOver && !tally) {
+    if (!activeEnemies && !state.gameOver && !tally) {
       state.waveOverDelay += dt;
       if (state.waveOverDelay > 1.0) {
         const cityCount = state.cities.filter(c=>c.alive).length;
