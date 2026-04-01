@@ -148,6 +148,7 @@
         <div class="row" style="margin-top:0">
           <button class="ghost" id="dismissTutorial">Practice</button>
           <button id="startButton">Start Defense</button>
+          <button class="ghost" id="titleHsBtn" style="color:#ffd700;border-color:#ffd700">High Scores</button>
         </div>
       </div>
     </div>
@@ -157,10 +158,22 @@
     <div class="panel">
       <h1 id="gameOverTitle">Cities Lost</h1>
       <p id="gameOverText">The skyline burned out.</p>
+      <div id="hsInitialsSection" class="hidden" style="text-align:center;margin:0.8em 0">
+        <div style="color:#ffd700;font-size:0.9rem;margin-bottom:0.4em">NEW HIGH SCORE! ENTER INITIALS</div>
+        <div id="hsInitialsRow" style="display:flex;align-items:center;justify-content:center;gap:0.5em"></div>
+      </div>
+      <div id="hsScoresDisplay" style="margin:0.8em 0;max-height:40vh;overflow-y:auto;font-family:monospace;font-size:0.85rem"></div>
       <div class="row">
         <span class="tiny">Tap anywhere or press the button to launch a new defense.</span>
         <button id="restartButton">Restart</button>
       </div>
+    </div>
+  </div>
+  <div id="hsOverlay" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.85);align-items:center;justify-content:center">
+    <div class="panel" style="max-width:420px;width:90%">
+      <h1 style="color:#ffd700">HIGH SCORES</h1>
+      <div id="hsOverlayScores" style="margin:0.8em 0;max-height:50vh;overflow-y:auto;font-family:monospace;font-size:0.85rem"></div>
+      <button id="hsOverlayClose">Back</button>
     </div>
   </div>
 
@@ -176,6 +189,77 @@
       const startButton = document.getElementById('startButton');
       const dismissTutorial = document.getElementById('dismissTutorial');
       const restartButton = document.getElementById('restartButton');
+
+      // ===== HIGH SCORES & GLOBAL LEADERBOARD =====
+      const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/gpt-missile-command';
+      const HS_KEY = 'gpt_missile_command_highscores';
+      let globalScoresCache = null, globalScoresCacheTime = 0;
+      function loadHS() { try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; } catch(e) { return []; } }
+      function saveHSList(list) { try { localStorage.setItem(HS_KEY, JSON.stringify(list)); } catch(e) {} }
+      function addHS(initials, sc, w) {
+        const list = loadHS(); list.push({initials, score:sc, wave:w});
+        list.sort((a,b) => b.score - a.score); if (list.length > 10) list.length = 10;
+        saveHSList(list); return list;
+      }
+      function isHighScore(sc) { const list = loadHS(); return list.length < 10 || sc > (list[list.length-1]?.score || 0); }
+      async function fetchGlobalScores() {
+        const now = Date.now();
+        if (globalScoresCache && now - globalScoresCacheTime < 30000) return globalScoresCache;
+        try { const res = await fetch(SCORES_API); if (res.ok) { globalScoresCache = await res.json(); globalScoresCacheTime = now; return globalScoresCache; } } catch(e) {}
+        return globalScoresCache || [];
+      }
+      async function submitGlobalScore(initials, score, extras) {
+        try { await fetch(SCORES_API, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({initials, score, ...extras}) }); globalScoresCache = null; } catch(e) {}
+      }
+      function renderHSBoth(container) {
+        const list = loadHS();
+        let html = '<div style="color:#5be4ff;font-size:0.9em;letter-spacing:0.1em;margin-bottom:0.3em">🏠 LOCAL HIGH SCORES</div>';
+        if (!list.length) html += '<div style="color:rgba(255,255,255,0.4);padding:0.2em 0">No scores yet</div>';
+        else list.forEach((e,i) => { html += `<div style="color:#aef;padding:0.15em 0">${String(i+1).padStart(2,' ')}. ${e.initials}  ${String(e.score).padStart(8,' ')}  W${e.wave}</div>`; });
+        html += '<div style="color:#ffd700;font-size:0.9em;letter-spacing:0.1em;margin:0.6em 0 0.3em">🌐 GLOBAL HIGH SCORES</div>';
+        html += '<div id="globalInner_' + container.id + '"><div style="color:rgba(255,255,255,0.4)">Loading...</div></div>';
+        container.innerHTML = html;
+        fetchGlobalScores().then(gs => {
+          const el = document.getElementById('globalInner_' + container.id);
+          if (!el) return;
+          if (!gs || !gs.length) { el.innerHTML = '<div style="color:rgba(255,255,255,0.4)">No scores yet</div>'; return; }
+          el.innerHTML = gs.slice(0,20).map((e,i) => `<div style="color:#ffe082;padding:0.15em 0">${String(i+1).padStart(2,' ')}. ${e.initials}  ${String(e.score).padStart(8,' ')}  W${e.wave||'?'}</div>`).join('');
+        });
+      }
+      let pendingInitials = [0,0,0];
+      function buildHSInitials(sc, wv, scoreContainer) {
+        pendingInitials = [0,0,0];
+        const row = document.getElementById('hsInitialsRow');
+        row.innerHTML = '';
+        for (let i = 0; i < 3; i++) {
+          const col = document.createElement('div');
+          col.style.cssText = 'display:flex;flex-direction:column;align-items:center';
+          const up = document.createElement('button');
+          up.textContent = '▲'; up.style.cssText = 'background:transparent;border:none;color:#ffd700;font-size:1.2rem;cursor:pointer';
+          const letter = document.createElement('div');
+          letter.textContent = 'A'; letter.style.cssText = 'font-size:1.5rem;color:#fff;font-family:monospace;width:1.5em;text-align:center';
+          const dn = document.createElement('button');
+          dn.textContent = '▼'; dn.style.cssText = 'background:transparent;border:none;color:#ffd700;font-size:1.2rem;cursor:pointer';
+          const idx = i;
+          function upH(e) { e.stopPropagation(); pendingInitials[idx] = (pendingInitials[idx]+1)%26; letter.textContent = String.fromCharCode(65+pendingInitials[idx]); }
+          function dnH(e) { e.stopPropagation(); pendingInitials[idx] = (pendingInitials[idx]+25)%26; letter.textContent = String.fromCharCode(65+pendingInitials[idx]); }
+          up.addEventListener('click', upH); up.addEventListener('touchend', upH);
+          dn.addEventListener('click', dnH); dn.addEventListener('touchend', dnH);
+          col.appendChild(up); col.appendChild(letter); col.appendChild(dn); row.appendChild(col);
+        }
+        const ok = document.createElement('button');
+        ok.textContent = 'OK'; ok.style.cssText = 'margin-left:0.8em;padding:0.3em 1em;cursor:pointer;font-size:1rem;background:#ffd700;border:none;color:#000;border-radius:4px';
+        function submitH(e) {
+          e.stopPropagation();
+          const ini = pendingInitials.map(i => String.fromCharCode(65+i)).join('');
+          addHS(ini, sc, wv);
+          submitGlobalScore(ini, sc, {wave:wv});
+          document.getElementById('hsInitialsSection').classList.add('hidden');
+          renderHSBoth(scoreContainer);
+        }
+        ok.addEventListener('click', submitH); ok.addEventListener('touchend', submitH);
+        row.appendChild(ok);
+      }
 
       const DPR = () => Math.min(window.devicePixelRatio || 1, 2);
       const TAU = Math.PI * 2;
@@ -947,6 +1031,15 @@
           const survived = Math.max(1, state.wave - 1);
           gameOverTitle.textContent = 'All Cities Lost';
           gameOverText.textContent = `Final Score ${state.score.toLocaleString()} · Reached Wave ${survived}`;
+          const hsInit = document.getElementById('hsInitialsSection');
+          const hsDisp = document.getElementById('hsScoresDisplay');
+          if (isHighScore(state.score) && state.score > 0) {
+            hsInit.classList.remove('hidden');
+            buildHSInitials(state.score, state.wave, hsDisp);
+          } else {
+            hsInit.classList.add('hidden');
+            renderHSBoth(hsDisp);
+          }
           gameOverOverlay.classList.remove('hidden');
         }
       }
@@ -1374,6 +1467,14 @@
           handler(e);
         }, { passive: false });
       }
+
+      // HS overlay handlers
+      const hsOverlay = document.getElementById('hsOverlay');
+      const titleHsBtn = document.getElementById('titleHsBtn');
+      function openHsOverlay() { hsOverlay.style.display = 'flex'; renderHSBoth(document.getElementById('hsOverlayScores')); }
+      function closeHsOverlay() { hsOverlay.style.display = 'none'; }
+      addTouchAndClick(titleHsBtn, openHsOverlay);
+      addTouchAndClick(document.getElementById('hsOverlayClose'), closeHsOverlay);
 
       addTouchAndClick(startButton, startGame);
       addTouchAndClick(dismissTutorial, async () => {

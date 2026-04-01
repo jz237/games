@@ -80,7 +80,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 <div class="overlay-bg"></div>
 <div class="overlay-content">
 <div style="font-size:clamp(1.2rem,4vw,2rem);color:#ffd700;margin-bottom:0.5em;letter-spacing:0.1em">HIGH SCORES</div>
-<ol id="highScoreList"></ol>
+<div id="highScoreList" style="list-style:none;padding:0;margin:1em 0;max-height:50vh;overflow-y:auto"></div>
 <button class="btn" id="hsBackBtn">BACK</button>
 </div>
 </div>
@@ -553,6 +553,23 @@ function stopDrone() {
   if (droneOsc2) { try { droneOsc2.stop(); } catch(e) {} droneOsc2 = null; droneGain2 = null; }
 }
 
+// ===== GLOBAL LEADERBOARD =====
+const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/stellar-drift';
+let globalScoresCache = null;
+let globalScoresCacheTime = 0;
+async function fetchGlobalScores() {
+  const now = Date.now();
+  if (globalScoresCache && now - globalScoresCacheTime < 30000) return globalScoresCache;
+  try {
+    const res = await fetch(SCORES_API);
+    if (res.ok) { globalScoresCache = await res.json(); globalScoresCacheTime = now; return globalScoresCache; }
+  } catch(e) {}
+  return globalScoresCache || [];
+}
+async function submitGlobalScore(initials, score, extras) {
+  try { await fetch(SCORES_API, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({initials, score, ...extras}) }); globalScoresCache = null; } catch(e) {}
+}
+
 // ===== HIGH SCORES =====
 function loadHS() {
   try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; } catch(e) { return []; }
@@ -605,22 +622,29 @@ function showHUD(show) {
 
 function renderHSList(highlightScore) {
   const list = loadHS();
-  highScoreList.innerHTML = '';
-  list.forEach((entry, i) => {
-    const li = document.createElement('li');
-    li.textContent = `${String(i + 1).padStart(2, ' ')}. ${entry.initials}  ${String(entry.score).padStart(8, ' ')}  W${entry.wave}`;
-    if (highlightScore !== undefined && entry.score === highlightScore && !li.classList.contains('gold')) {
-      li.classList.add('gold');
-      highlightScore = undefined; // only highlight first match
-    }
-    highScoreList.appendChild(li);
-  });
+  let html = '<div style="color:#5be4ff;font-size:0.9em;letter-spacing:0.1em;margin-bottom:0.3em">🏠 LOCAL HIGH SCORES</div>';
   if (list.length === 0) {
-    const li = document.createElement('li');
-    li.textContent = 'No scores yet';
-    li.style.color = 'rgba(255,255,255,0.4)';
-    highScoreList.appendChild(li);
+    html += '<div style="color:rgba(255,255,255,0.4);font-family:monospace;padding:0.3em 0.8em">No scores yet</div>';
+  } else {
+    let hl = highlightScore;
+    list.forEach((entry, i) => {
+      const gold = (hl !== undefined && entry.score === hl) ? (hl = undefined, ' style="color:#ffd700;text-shadow:0 0 8px rgba(255,215,0,0.5)"') : '';
+      html += `<div${gold} style="font-size:clamp(0.8rem,2.5vw,1rem);padding:0.3em 0.8em;color:${gold ? '#ffd700' : '#aef'};font-family:monospace;letter-spacing:0.05em">${String(i+1).padStart(2,' ')}. ${entry.initials}  ${String(entry.score).padStart(8,' ')}  W${entry.wave}</div>`;
+    });
   }
+  // Global section - show cached or loading
+  html += '<div style="color:#ffd700;font-size:0.9em;letter-spacing:0.1em;margin:0.8em 0 0.3em">🌐 GLOBAL HIGH SCORES</div>';
+  html += '<div id="globalScoresInner" style="font-family:monospace"><div style="color:rgba(255,255,255,0.4);padding:0.3em 0.8em">Loading...</div></div>';
+  highScoreList.innerHTML = html;
+  // Fetch and fill global
+  fetchGlobalScores().then(gs => {
+    const el = document.getElementById('globalScoresInner');
+    if (!el) return;
+    if (!gs || gs.length === 0) { el.innerHTML = '<div style="color:rgba(255,255,255,0.4);padding:0.3em 0.8em">No scores yet</div>'; return; }
+    el.innerHTML = gs.slice(0, 20).map((e, i) =>
+      `<div style="font-size:clamp(0.8rem,2.5vw,1rem);padding:0.3em 0.8em;color:#ffe082;letter-spacing:0.05em">${String(i+1).padStart(2,' ')}. ${e.initials}  ${String(e.score).padStart(8,' ')}  W${e.wave || '?'}</div>`
+    ).join('');
+  });
 }
 
 // Initials entry
@@ -683,6 +707,7 @@ btnHandler(muteBtn, () => {
 btnHandler(goSubmitBtn, () => {
   const ini = initials.map(i => String.fromCharCode(65 + i)).join('');
   addHS(ini, score, wave);
+  submitGlobalScore(ini, score, {wave});
   goSubmitBtn.style.display = 'none';
   initialsSection.classList.add('hidden');
   goRestartBtn.style.display = '';

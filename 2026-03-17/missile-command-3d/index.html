@@ -408,6 +408,23 @@ function initAudio() {
   } catch(e) {}
 }
 
+// ============ GLOBAL LEADERBOARD ============
+const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/missile-command-3d';
+let globalScoresCache = null;
+let globalScoresCacheTime = 0;
+async function fetchGlobalScores() {
+  const now = Date.now();
+  if (globalScoresCache && now - globalScoresCacheTime < 30000) return globalScoresCache;
+  try {
+    const res = await fetch(SCORES_API);
+    if (res.ok) { globalScoresCache = await res.json(); globalScoresCacheTime = now; return globalScoresCache; }
+  } catch(e) {}
+  return globalScoresCache || [];
+}
+async function submitGlobalScore(initials, score, extras) {
+  try { await fetch(SCORES_API, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({initials, score, ...extras}) }); globalScoresCache = null; } catch(e) {}
+}
+
 // ============ HIGH SCORES ============
 const LS_KEY = 'missile_command_3d_highscores';
 function loadScores() {
@@ -427,15 +444,29 @@ function addScore(initials, score, level) {
 }
 function renderScores(container, highlightTs) {
   const scores = loadScores();
+  let html = '<div style="color:#5be4ff;font-size:0.9em;letter-spacing:0.1em;margin-bottom:0.3em">🏠 LOCAL HIGH SCORES</div>';
   if (!scores.length) {
-    container.innerHTML = '<p style="text-align:center;opacity:0.5">No scores yet</p>';
-    return;
+    html += '<p style="text-align:center;opacity:0.5">No scores yet</p>';
+  } else {
+    html += scores.map((e, i) =>
+      `<div class="entry${e.ts === highlightTs ? ' gold' : ''}">`
+      + `<span>#${i + 1} ${e.initials}</span>`
+      + `<span>LV${e.level} &mdash; ${e.score.toLocaleString()}</span></div>`
+    ).join('');
   }
-  container.innerHTML = scores.map((e, i) =>
-    `<div class="entry${e.ts === highlightTs ? ' gold' : ''}">`
-    + `<span>#${i + 1} ${e.initials}</span>`
-    + `<span>LV${e.level} &mdash; ${e.score.toLocaleString()}</span></div>`
-  ).join('');
+  html += '<div style="color:#ffd700;font-size:0.9em;letter-spacing:0.1em;margin:0.8em 0 0.3em">🌐 GLOBAL HIGH SCORES</div>';
+  html += '<div id="globalScoresInner_' + container.id + '"><p style="text-align:center;opacity:0.5">Loading...</p></div>';
+  container.innerHTML = html;
+  fetchGlobalScores().then(gs => {
+    const el = document.getElementById('globalScoresInner_' + container.id);
+    if (!el) return;
+    if (!gs || gs.length === 0) { el.innerHTML = '<p style="text-align:center;opacity:0.5">No scores yet</p>'; return; }
+    el.innerHTML = gs.slice(0, 20).map((e, i) =>
+      `<div class="entry" style="color:#ffe082">`
+      + `<span>#${i + 1} ${e.initials}</span>`
+      + `<span>LV${e.wave || e.level || '?'} &mdash; ${e.score.toLocaleString()}</span></div>`
+    ).join('');
+  });
 }
 
 // ============ RESIZE ============
@@ -1108,6 +1139,7 @@ function renderInitials() {
     e.stopPropagation();
     const initials = pendingInitials.map(i => String.fromCharCode(65 + i)).join('');
     const rank = addScore(initials, S.score, S.wave);
+    submitGlobalScore(initials, S.score, {wave: S.wave});
     const scores = loadScores();
     const ts = scores[rank]?.ts;
     initialsEntry.classList.add('hidden');
