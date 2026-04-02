@@ -217,7 +217,7 @@ button:active { transform: translateY(1px) scale(.99); }
   let waveClearFX = []; // persistent particles that survive startWave()
   let tally = null; // wave-end bonus tally state
   // After wave 16, scaling grows at only 10% rate
-  function ew(w) { return w <= 16 ? w : 16 + (w - 16) * 0.1; }
+  function ew(w) { return w <= 16 ? w : 16 + (w - 16) * 0.25; }
 
   const skyPresets = [
     { top: '#21112f', mid: '#8d3767', bottom: '#ff9757', aurora: ['#5be4ff','#ff7dd6','#d6ff7d'] },
