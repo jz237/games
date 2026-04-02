@@ -1288,94 +1288,47 @@ button:active { transform: translateY(1px) scale(.99); }
 
   function drawGround(time) {
     const groundY = h * 0.84;
-    function gRoll(gx) { return Math.sin(gx*0.008)*6 + Math.sin(gx*0.022)*3 + Math.sin(gx*0.05)*1.5; }
-
-    // back layer — darker distant hills
-    ctx.beginPath(); ctx.moveTo(0, groundY + 12);
-    for (let gx = 0; gx <= w; gx += 3) ctx.lineTo(gx, groundY + 10 + Math.sin(gx*0.005+2)*8 + Math.sin(gx*0.015)*4);
-    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
-    ctx.fillStyle = '#0c0a08'; ctx.fill();
-
-    // mid layer — main terrain
+    // ground — matching title screen style
+    ctx.fillStyle = '#0d1a0c';
     ctx.beginPath(); ctx.moveTo(0, groundY);
-    for (let gx = 0; gx <= w; gx += 3) ctx.lineTo(gx, groundY + gRoll(gx));
-    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
-    const ground = ctx.createLinearGradient(0, groundY - 5, 0, h);
-    ground.addColorStop(0, '#3a2a1e'); ground.addColorStop(0.08, '#2e2018');
-    ground.addColorStop(0.25, '#221810'); ground.addColorStop(0.5, '#18120c');
-    ground.addColorStop(1, '#0a0806');
-    ctx.fillStyle = ground; ctx.fill();
-
-    // soil strata lines — horizontal bands of slightly different color
-    for (let layer = 0; layer < 4; layer++) {
-      const ly = groundY + 4 + layer * (h - groundY) * 0.2;
-      ctx.strokeStyle = `rgba(${60-layer*10},${40-layer*8},${30-layer*6},${0.12 - layer*0.02})`;
-      ctx.lineWidth = 0.5 + Math.random() * 0.5;
-      ctx.beginPath();
-      for (let gx = 0; gx <= w; gx += 4) {
-        const y = ly + Math.sin(gx*0.012 + layer)*2;
-        if (gx === 0) ctx.moveTo(gx, y); else ctx.lineTo(gx, y);
-      }
-      ctx.stroke();
+    for (let gx = 0; gx <= w; gx += 4) {
+      ctx.lineTo(gx, groundY - 2 * Math.sin(gx * 0.02) - Math.sin(gx * 0.007) * 4);
     }
+    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+    // ground gradient overlay
+    const ggr = ctx.createLinearGradient(0, groundY, 0, h);
+    ggr.addColorStop(0, '#1a2e18'); ggr.addColorStop(1, '#0a1408');
+    ctx.fillStyle = ggr; ctx.fillRect(0, groundY + 3, w, h - groundY);
 
-    // rocks along ridgeline
-    for (let gx = 8; gx < w; gx += 14) {
-      const seed = (gx * 53 + 77) & 0xff;
-      if (seed > 100) continue;
-      const ry = groundY + gRoll(gx);
-      const rw = 3 + seed % 5, rh = 2 + seed % 3;
-      ctx.fillStyle = `rgba(${55+seed%20},${40+seed%15},${30+seed%15},0.6)`;
-      ctx.beginPath();
-      ctx.moveTo(gx - rw, ry); ctx.lineTo(gx - rw*0.6, ry - rh);
-      ctx.lineTo(gx + rw*0.4, ry - rh*0.8); ctx.lineTo(gx + rw, ry);
-      ctx.closePath(); ctx.fill();
-    }
-
-    // sparse grass tufts on ridgeline
-    for (let gx = 5; gx < w; gx += 7) {
-      const seed = (gx * 31 + 43) & 0xff;
-      if (seed > 80) continue;
-      const gy2 = groundY + gRoll(gx);
-      const blades = 2 + seed % 3;
-      for (let b = 0; b < blades; b++) {
-        const bx = gx + (b - blades/2) * 1.5;
-        const bh = 3 + seed % 4 + b;
-        const lean = (Math.sin(time * 0.001 + gx * 0.1) * 1.5) + (b - 1) * 0.8;
-        ctx.strokeStyle = `rgba(${30+seed%20},${45+seed%25},${20+seed%15},${0.4 + (seed%20)/80})`;
-        ctx.lineWidth = 0.6;
-        ctx.beginPath(); ctx.moveTo(bx, gy2); ctx.lineTo(bx + lean, gy2 - bh); ctx.stroke();
-      }
-    }
-
-    // rim light along terrain edge
-    ctx.beginPath();
-    for (let gx = 0; gx <= w; gx += 3) {
-      if (gx === 0) ctx.moveTo(gx, groundY + gRoll(gx)); else ctx.lineTo(gx, groundY + gRoll(gx));
-    }
-    ctx.strokeStyle = 'rgba(100,75,55,0.3)'; ctx.lineWidth = 1; ctx.stroke();
-
-    // Draw background skyline (non-interactive decoration)
+    // Draw background skyline — matching title screen style
     state.skyline.forEach((b,idx) => {
       ctx.save();
-      const baseR = 18 + idx*4, baseG = 22 + idx*3, baseB = 36 + idx*5;
       for (const p of b.pieces) {
-        ctx.fillStyle = `rgba(${baseR},${baseG},${baseB},0.92)`;
-        ctx.fillRect(p.x, b.y - p.h, p.w, p.h);
-        // subtle edge highlight
-        ctx.strokeStyle = `rgba(${baseR+30},${baseG+25},${baseB+40},0.25)`;
-        ctx.lineWidth = 0.5;
-        ctx.strokeRect(p.x, b.y - p.h, p.w, p.h);
-        // tiny windows
+        // building body with side-lit gradient
+        const bg = ctx.createLinearGradient(p.x, b.y - p.h, p.x + p.w, b.y - p.h);
+        const hue = 210 + (idx * 7 + p.x * 0.1) % 30;
+        bg.addColorStop(0, `hsl(${hue},${10+idx*2}%,${8+idx*2}%)`);
+        bg.addColorStop(0.5, `hsl(220,12%,${12+idx*2}%)`);
+        bg.addColorStop(1, `hsl(${hue},${10+idx*2}%,${8+idx*2}%)`);
+        ctx.fillStyle = bg; ctx.fillRect(p.x, b.y - p.h, p.w, p.h);
+        // roof edge highlight
+        ctx.fillStyle = 'rgba(100,140,180,0.15)';
+        ctx.fillRect(p.x - 1, b.y - p.h, p.w + 2, 2);
+        // windows with glow halos
         for (let wy = b.y - p.h + 5; wy < b.y - 4; wy += 7) {
           for (let wx = p.x + 3; wx < p.x + p.w - 3; wx += 6) {
             const seed = (wx*73 + wy*137 + idx*17) & 0xff;
-            if (seed < 90) continue; // dark window
+            if (seed < 90) continue;
             const warmth = seed & 1;
-            ctx.fillStyle = warmth
-              ? `rgba(255,${215 + seed%30},${140 + seed%50},${0.25 + (seed%40)/120})`
-              : `rgba(${190 + seed%40},${210 + seed%30},255,${0.2 + (seed%30)/120})`;
+            const winColor = warmth ? '#ffe488' : '#88ccff';
+            const flickerAlpha = 0.3 + 0.3 * Math.sin(time * 0.0005 + wx * 0.3 + wy * 0.7);
+            ctx.fillStyle = winColor;
+            ctx.globalAlpha = flickerAlpha;
             ctx.fillRect(wx, wy, 2, 3);
+            // window glow halo
+            ctx.globalAlpha = flickerAlpha * 0.15;
+            ctx.fillRect(wx - 1, wy - 1, 4, 5);
+            ctx.globalAlpha = 1;
           }
         }
       }
