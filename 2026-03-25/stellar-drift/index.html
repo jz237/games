@@ -1413,8 +1413,8 @@ function update() {
       }
     }
 
-    // Remove if off screen
-    if (e.y > H + 50) { enemies.splice(i, 1); }
+    // Remove if off screen (any edge — prevents kamikaze/dive enemies from getting stuck)
+    if (e.y > H + 50 || e.y < -200 || e.x < -200 || e.x > W + 200) { enemies.splice(i, 1); }
   }
 
   // Update boss
