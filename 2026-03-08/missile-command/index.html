@@ -1288,9 +1288,48 @@ button:active { transform: translateY(1px) scale(.99); }
 
   function drawGround(time) {
     const groundY = h * 0.84;
-    const ground = ctx.createLinearGradient(0, groundY-40, 0, h);
-    ground.addColorStop(0, 'rgba(35,20,32,0.9)'); ground.addColorStop(1, 'rgba(4,7,14,1)');
-    ctx.fillStyle = ground; ctx.fillRect(0, groundY, w, h-groundY);
+
+    // rolling terrain silhouette
+    ctx.beginPath();
+    ctx.moveTo(0, groundY);
+    for (let gx = 0; gx <= w; gx += 3) {
+      const roll = Math.sin(gx * 0.008) * 6 + Math.sin(gx * 0.022) * 3 + Math.sin(gx * 0.05) * 1.5;
+      ctx.lineTo(gx, groundY + roll);
+    }
+    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+    // layered ground gradient
+    const ground = ctx.createLinearGradient(0, groundY - 10, 0, h);
+    ground.addColorStop(0, '#2a1e1a'); ground.addColorStop(0.15, '#1f1610');
+    ground.addColorStop(0.4, '#14100c'); ground.addColorStop(1, '#08060a');
+    ctx.fillStyle = ground; ctx.fill();
+
+    // surface texture — darker patches
+    for (let gx = 0; gx < w; gx += 12) {
+      const seed = (gx * 37 + 91) & 0xff;
+      if (seed > 160) continue;
+      const roll = Math.sin(gx * 0.008) * 6 + Math.sin(gx * 0.022) * 3 + Math.sin(gx * 0.05) * 1.5;
+      const pw = 4 + (seed % 8);
+      const pa = 0.08 + (seed % 30) / 300;
+      ctx.fillStyle = `rgba(0,0,0,${pa})`;
+      ctx.fillRect(gx, groundY + roll + 1, pw, 3 + seed % 4);
+    }
+
+    // surface highlight — subtle rim light along terrain edge
+    ctx.beginPath();
+    for (let gx = 0; gx <= w; gx += 3) {
+      const roll = Math.sin(gx * 0.008) * 6 + Math.sin(gx * 0.022) * 3 + Math.sin(gx * 0.05) * 1.5;
+      if (gx === 0) ctx.moveTo(gx, groundY + roll);
+      else ctx.lineTo(gx, groundY + roll);
+    }
+    ctx.strokeStyle = 'rgba(80,60,50,0.25)'; ctx.lineWidth = 1; ctx.stroke();
+    // second highlight slightly below
+    ctx.beginPath();
+    for (let gx = 0; gx <= w; gx += 3) {
+      const roll = Math.sin(gx * 0.008) * 6 + Math.sin(gx * 0.022) * 3 + Math.sin(gx * 0.05) * 1.5;
+      if (gx === 0) ctx.moveTo(gx, groundY + roll + 2);
+      else ctx.lineTo(gx, groundY + roll + 2);
+    }
+    ctx.strokeStyle = 'rgba(50,35,30,0.15)'; ctx.lineWidth = 0.5; ctx.stroke();
 
     // Draw background skyline (non-interactive decoration)
     state.skyline.forEach((b,idx) => {
