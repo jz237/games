@@ -1288,48 +1288,72 @@ button:active { transform: translateY(1px) scale(.99); }
 
   function drawGround(time) {
     const groundY = h * 0.84;
+    function gRoll(gx) { return Math.sin(gx*0.008)*6 + Math.sin(gx*0.022)*3 + Math.sin(gx*0.05)*1.5; }
 
-    // rolling terrain silhouette
-    ctx.beginPath();
-    ctx.moveTo(0, groundY);
-    for (let gx = 0; gx <= w; gx += 3) {
-      const roll = Math.sin(gx * 0.008) * 6 + Math.sin(gx * 0.022) * 3 + Math.sin(gx * 0.05) * 1.5;
-      ctx.lineTo(gx, groundY + roll);
-    }
+    // back layer — darker distant hills
+    ctx.beginPath(); ctx.moveTo(0, groundY + 12);
+    for (let gx = 0; gx <= w; gx += 3) ctx.lineTo(gx, groundY + 10 + Math.sin(gx*0.005+2)*8 + Math.sin(gx*0.015)*4);
     ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
-    // layered ground gradient
-    const ground = ctx.createLinearGradient(0, groundY - 10, 0, h);
-    ground.addColorStop(0, '#2a1e1a'); ground.addColorStop(0.15, '#1f1610');
-    ground.addColorStop(0.4, '#14100c'); ground.addColorStop(1, '#08060a');
+    ctx.fillStyle = '#0c0a08'; ctx.fill();
+
+    // mid layer — main terrain
+    ctx.beginPath(); ctx.moveTo(0, groundY);
+    for (let gx = 0; gx <= w; gx += 3) ctx.lineTo(gx, groundY + gRoll(gx));
+    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+    const ground = ctx.createLinearGradient(0, groundY - 5, 0, h);
+    ground.addColorStop(0, '#3a2a1e'); ground.addColorStop(0.08, '#2e2018');
+    ground.addColorStop(0.25, '#221810'); ground.addColorStop(0.5, '#18120c');
+    ground.addColorStop(1, '#0a0806');
     ctx.fillStyle = ground; ctx.fill();
 
-    // surface texture — darker patches
-    for (let gx = 0; gx < w; gx += 12) {
-      const seed = (gx * 37 + 91) & 0xff;
-      if (seed > 160) continue;
-      const roll = Math.sin(gx * 0.008) * 6 + Math.sin(gx * 0.022) * 3 + Math.sin(gx * 0.05) * 1.5;
-      const pw = 4 + (seed % 8);
-      const pa = 0.08 + (seed % 30) / 300;
-      ctx.fillStyle = `rgba(0,0,0,${pa})`;
-      ctx.fillRect(gx, groundY + roll + 1, pw, 3 + seed % 4);
+    // soil strata lines — horizontal bands of slightly different color
+    for (let layer = 0; layer < 4; layer++) {
+      const ly = groundY + 4 + layer * (h - groundY) * 0.2;
+      ctx.strokeStyle = `rgba(${60-layer*10},${40-layer*8},${30-layer*6},${0.12 - layer*0.02})`;
+      ctx.lineWidth = 0.5 + Math.random() * 0.5;
+      ctx.beginPath();
+      for (let gx = 0; gx <= w; gx += 4) {
+        const y = ly + Math.sin(gx*0.012 + layer)*2;
+        if (gx === 0) ctx.moveTo(gx, y); else ctx.lineTo(gx, y);
+      }
+      ctx.stroke();
     }
 
-    // surface highlight — subtle rim light along terrain edge
+    // rocks along ridgeline
+    for (let gx = 8; gx < w; gx += 14) {
+      const seed = (gx * 53 + 77) & 0xff;
+      if (seed > 100) continue;
+      const ry = groundY + gRoll(gx);
+      const rw = 3 + seed % 5, rh = 2 + seed % 3;
+      ctx.fillStyle = `rgba(${55+seed%20},${40+seed%15},${30+seed%15},0.6)`;
+      ctx.beginPath();
+      ctx.moveTo(gx - rw, ry); ctx.lineTo(gx - rw*0.6, ry - rh);
+      ctx.lineTo(gx + rw*0.4, ry - rh*0.8); ctx.lineTo(gx + rw, ry);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // sparse grass tufts on ridgeline
+    for (let gx = 5; gx < w; gx += 7) {
+      const seed = (gx * 31 + 43) & 0xff;
+      if (seed > 80) continue;
+      const gy2 = groundY + gRoll(gx);
+      const blades = 2 + seed % 3;
+      for (let b = 0; b < blades; b++) {
+        const bx = gx + (b - blades/2) * 1.5;
+        const bh = 3 + seed % 4 + b;
+        const lean = (Math.sin(time * 0.001 + gx * 0.1) * 1.5) + (b - 1) * 0.8;
+        ctx.strokeStyle = `rgba(${30+seed%20},${45+seed%25},${20+seed%15},${0.4 + (seed%20)/80})`;
+        ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.moveTo(bx, gy2); ctx.lineTo(bx + lean, gy2 - bh); ctx.stroke();
+      }
+    }
+
+    // rim light along terrain edge
     ctx.beginPath();
     for (let gx = 0; gx <= w; gx += 3) {
-      const roll = Math.sin(gx * 0.008) * 6 + Math.sin(gx * 0.022) * 3 + Math.sin(gx * 0.05) * 1.5;
-      if (gx === 0) ctx.moveTo(gx, groundY + roll);
-      else ctx.lineTo(gx, groundY + roll);
+      if (gx === 0) ctx.moveTo(gx, groundY + gRoll(gx)); else ctx.lineTo(gx, groundY + gRoll(gx));
     }
-    ctx.strokeStyle = 'rgba(80,60,50,0.25)'; ctx.lineWidth = 1; ctx.stroke();
-    // second highlight slightly below
-    ctx.beginPath();
-    for (let gx = 0; gx <= w; gx += 3) {
-      const roll = Math.sin(gx * 0.008) * 6 + Math.sin(gx * 0.022) * 3 + Math.sin(gx * 0.05) * 1.5;
-      if (gx === 0) ctx.moveTo(gx, groundY + roll + 2);
-      else ctx.lineTo(gx, groundY + roll + 2);
-    }
-    ctx.strokeStyle = 'rgba(50,35,30,0.15)'; ctx.lineWidth = 0.5; ctx.stroke();
+    ctx.strokeStyle = 'rgba(100,75,55,0.3)'; ctx.lineWidth = 1; ctx.stroke();
 
     // Draw background skyline (non-interactive decoration)
     state.skyline.forEach((b,idx) => {
