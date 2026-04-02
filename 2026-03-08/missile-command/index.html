@@ -1346,17 +1346,30 @@ button:active { transform: translateY(1px) scale(.99); }
       if (city._buildings) {
         for (let bi = 0; bi < city._buildings.length; bi++) {
           const b = city._buildings[bi];
-          // Building body
-          ctx.fillStyle = alive ? b.bodyColor : '#2a1a22';
-          ctx.fillRect(b.left, b.top, b.right - b.left, b.bot - b.top);
+          const bw = b.right - b.left, bh = b.bot - b.top;
+
+          // Building body — side-lit gradient like title screen
+          const bg = ctx.createLinearGradient(b.left, b.top, b.right, b.top);
+          if (alive) {
+            bg.addColorStop(0, 'hsl(215,12%,10%)'); bg.addColorStop(0.35, 'hsl(220,12%,16%)');
+            bg.addColorStop(0.65, 'hsl(220,12%,14%)'); bg.addColorStop(1, 'hsl(215,12%,9%)');
+          } else {
+            bg.addColorStop(0, '#1a1216'); bg.addColorStop(1, '#2a1a22');
+          }
+          ctx.fillStyle = bg;
+          ctx.fillRect(b.left, b.top, bw, bh);
+
+          // Roof edge highlight
+          if (alive) {
+            ctx.fillStyle = 'rgba(100,140,180,0.15)';
+            ctx.fillRect(b.left - 1, b.top, bw + 2, 2);
+          }
 
           // Roof features
           if (b.roofType === 'pointed') {
-            ctx.fillStyle = alive ? b.bodyColor : '#2a1a22';
+            ctx.fillStyle = alive ? 'hsl(215,12%,12%)' : '#2a1a22';
             ctx.beginPath();
-            ctx.moveTo(b.left, b.top);
-            ctx.lineTo((b.left + b.right)/2, b.top - 6);
-            ctx.lineTo(b.right, b.top);
+            ctx.moveTo(b.left, b.top); ctx.lineTo((b.left + b.right)/2, b.top - 6); ctx.lineTo(b.right, b.top);
             ctx.fill();
           } else if (b.roofType === 'antenna') {
             ctx.strokeStyle = alive ? 'rgba(180,210,240,.5)' : 'rgba(80,50,60,.3)';
@@ -1369,21 +1382,21 @@ button:active { transform: translateY(1px) scale(.99); }
             }
           }
 
-          // Edge highlight
-          ctx.strokeStyle = alive ? `rgba(140,180,220,0.18)` : 'rgba(60,40,50,0.15)';
-          ctx.lineWidth = 0.5;
-          ctx.strokeRect(b.left, b.top, b.right - b.left, b.bot - b.top);
-
-          // Windows (stable, no blinking)
+          // Windows with flickering glow halos
           if (alive && city._windows && city._windows[bi]) {
             for (const win of city._windows[bi]) {
               if (!win.color) continue;
+              const flickA = 0.3 + 0.3 * Math.sin(time * 0.0005 + win.x * 0.3 + win.y * 0.7);
               ctx.fillStyle = win.color;
+              ctx.globalAlpha = flickA;
               ctx.fillRect(win.x, win.y, win.w, win.h);
+              // glow halo
+              ctx.globalAlpha = flickA * 0.12;
+              ctx.fillRect(win.x - 1, win.y - 1, win.w + 2, win.h + 2);
+              ctx.globalAlpha = 1;
             }
           }
         }
-
 
         // Soft glow under city
         if (alive && glow > 0) {
