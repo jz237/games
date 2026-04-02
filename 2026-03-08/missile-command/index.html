@@ -839,7 +839,7 @@ button:active { transform: translateY(1px) scale(.99); }
         cs.fireTimer -= dt;
         if (cs.fireTimer <= 0) {
           if (cs.targetCity && cs.targetCity.alive) destroyCity(cs.targetCity);
-          cs.alive = false; cs.beam = null;
+          cs.alive = false; cs.firing = false; cs.beam = null;
         }
       }
     }
