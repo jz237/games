@@ -465,6 +465,7 @@ button:active { transform: translateY(1px) scale(.99); }
   }
 
   function startWave(first = false) {
+    state.waveElapsed = 0;
     state.enemyMissiles = []; state.playerMissiles = []; state.explosions = []; state.particles = []; state.smoke = []; state.satellites = []; state.debris = []; state.fires = [];
     state.chainPopups = []; state.smokes = []; state.scorePopups = []; state.tapRipples = []; state.fireworks = [];
     state.waveSeed = Math.random()*9999;
@@ -1021,7 +1022,8 @@ button:active { transform: translateY(1px) scale(.99); }
             audio.explosion(0.6, 1);
             spawnParticles(cs.x, cs.y, 15, '#aa88ff', 1.5, 1, 20);
             if (cs.hits >= cs.hp) {
-              cs.alive = false; cs.beam = null;
+              cs.alive = false; cs.firing = false; cs.beam = null;
+              state.chargingSatellite = null;
               detonate(cs.x, cs.y, 130, true);
               spawnParticles(cs.x, cs.y, 50, '#ddeeff', 3.5, 1.5, 30);
               spawnParticles(cs.x, cs.y, 30, '#aaccff', 2.8, 1.2, 50);
@@ -1154,6 +1156,8 @@ button:active { transform: translateY(1px) scale(.99); }
     const activeMeteors = state.meteors.some(m => m.alive);
     const activeBomber = state.bomber && state.bomber.alive;
     const activeChargingSat = state.chargingSatellite && (state.chargingSatellite.alive || state.chargingSatellite.firing);
+    // Safety: if chargingSatellite exists but is dead and not firing, null it out
+    if (state.chargingSatellite && !state.chargingSatellite.alive && !state.chargingSatellite.firing) state.chargingSatellite = null;
     const activeEnemies = state.enemyMissiles.some(m => m.alive && m.progress < 0) || state.enemyMissiles.some(m => m.alive) || activeMeteors || activeBomber || activeChargingSat;
     // tally update
     if (tally) {
@@ -1186,6 +1190,21 @@ button:active { transform: translateY(1px) scale(.99); }
         startWave();
       }
       updateUI();
+    }
+    // Safety timeout: if wave has been going for 90+ seconds with no visible enemies, force-clear boss state
+    if (!state.waveElapsed) state.waveElapsed = 0;
+    state.waveElapsed += dt;
+    if (state.waveElapsed > 90 && activeEnemies && !state.gameOver && !tally) {
+      // Check if only ghost references remain (dead boss objects still flagged active)
+      const realEnemies = state.enemyMissiles.some(m => m.alive);
+      const realBomber = state.bomber && state.bomber.alive;
+      const realSat = state.chargingSatellite && state.chargingSatellite.alive;
+      const realMeteors = state.meteors.some(m => m.alive);
+      if (!realEnemies && !realBomber && !realSat && !realMeteors) {
+        // Ghost state — force cleanup
+        state.chargingSatellite = null; state.bomber = null;
+        state.enemyMissiles = state.enemyMissiles.filter(m => m.alive);
+      }
     }
     if (!activeEnemies && !state.gameOver && !tally) {
       state.waveOverDelay += dt;
