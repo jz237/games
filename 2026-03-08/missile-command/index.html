@@ -177,7 +177,7 @@ button:active { transform: translateY(1px) scale(.99); }
     list.sort((a,b) => b.score - a.score); if (list.length > 10) list.length = 10;
     saveHSList(list); return list;
   }
-  function isHighScore(sc) { const list = loadHS(); return list.length < 10 || sc > (list[list.length-1]?.score || 0); }
+  function isHighScore(sc) { const list = loadHS(); return list.length < 10 || sc > ((list[list.length-1] && list[list.length-1].score) || 0); }
   async function fetchGlobalScores() {
     const now = Date.now();
     if (globalScoresCache && now - globalScoresCacheTime < 30000) return globalScoresCache;
@@ -1115,7 +1115,7 @@ button:active { transform: translateY(1px) scale(.99); }
     for (const list of [state.particles, state.smoke, state.debris, state.fires]) {
       for (const p of list) {
         p.life -= dt;
-        if ('vx' in p) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.gravity ?? 120) * dt; }
+        if ('vx' in p) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.gravity != null ? p.gravity : 120) * dt; }
         else if ('size' in p) { p.y -= 6 * dt; }
       }
     }
@@ -1945,8 +1945,20 @@ button:active { transform: translateY(1px) scale(.99); }
   }
 
   function loop(ts) {
-    const dt = Math.min(0.033, (ts - last) / 1000 || 0.016); last = ts;
-    update(dt); draw(ts); requestAnimationFrame(loop);
+    try {
+      const dt = Math.min(0.033, (ts - last) / 1000 || 0.016); last = ts;
+      update(dt); draw(ts);
+    } catch(err) {
+      console.error('Game loop error:', err);
+      // Attempt recovery: clear any boss state that might have caused the crash
+      try {
+        if (state.chargingSatellite && !state.chargingSatellite.alive) state.chargingSatellite = null;
+        if (state.bomber && !state.bomber.alive) state.bomber = null;
+        state.enemyMissiles = (state.enemyMissiles || []).filter(m => m && m.alive);
+        state.meteors = (state.meteors || []).filter(m => m && m.alive);
+      } catch(e2) {}
+    }
+    requestAnimationFrame(loop);
   }
 
   function handlePointer(e) {
