@@ -177,6 +177,7 @@
   <div class="result-title" style="color:#6af; font-size:2rem;">PAUSED</div>
   <div style="color:#8af; font-size:0.85rem; margin:1rem 0;">Press ESC to resume</div>
   <button class="btn" id="resume-btn">Resume</button>
+  <button class="btn" id="pause-menu-btn" style="margin-top:0.6rem; padding:10px 32px; font-size:0.9rem; opacity:0.9;">Back to Main Menu</button>
 </div>
 
 <div id="crash-screen">
@@ -3273,10 +3274,28 @@ document.getElementById('play-again-btn').addEventListener('touchend', (e) => {
 });
 
 // Pause (ESC)
-document.getElementById('resume-btn').addEventListener('click', () => {
+function resumeGame() {
   document.getElementById('pause-screen').style.display = 'none';
   state = 'playing';
   if (thrustNodes) playThrustSound(true, false);
+}
+
+function returnToMainMenu() {
+  document.getElementById('pause-screen').style.display = 'none';
+  playThrustSound(false, false);
+  state = 'start';
+  document.getElementById('start-screen').style.display = 'flex';
+}
+
+document.getElementById('resume-btn').addEventListener('click', resumeGame);
+document.getElementById('resume-btn').addEventListener('touchend', (e) => {
+  e.preventDefault();
+  resumeGame();
+});
+document.getElementById('pause-menu-btn').addEventListener('click', returnToMainMenu);
+document.getElementById('pause-menu-btn').addEventListener('touchend', (e) => {
+  e.preventDefault();
+  returnToMainMenu();
 });
 
 window.addEventListener('keydown', (e) => {
@@ -3286,8 +3305,7 @@ window.addEventListener('keydown', (e) => {
       playThrustSound(false, false);
       document.getElementById('pause-screen').style.display = 'flex';
     } else if (state === 'paused') {
-      state = 'playing';
-      document.getElementById('pause-screen').style.display = 'none';
+      resumeGame();
     }
   }
 });
