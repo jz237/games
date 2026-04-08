@@ -170,6 +170,7 @@
   </div>
   <div id="badge-display" style="margin:0.5rem 0; min-height:20px; color:#fda; font-size:0.75rem;"></div>
   <button class="btn" id="start-btn">Launch Mission</button>
+  <button class="btn" id="title-highscores-btn" style="margin-top:0.6rem; padding:10px 32px; font-size:0.9rem; opacity:0.85;">High Scores</button>
 </div>
 
 <div id="pause-screen" style="display:none; position:absolute; top:0; left:0; right:0; bottom:0; display:none; flex-direction:column; justify-content:center; align-items:center; z-index:25; pointer-events:all; background:rgba(0,0,0,0.75); color:#fff; text-align:center;">
@@ -530,6 +531,7 @@ const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/lunar-lander';
 let highScores = [];
 let globalScoresCache = null;
 let globalScoresCacheTime = 0;
+let leaderboardReturnTarget = 'game';
 let lander, terrain, stars, particles, explosionParticles, dustParticles;
 let keys = {};
 let camera = { x: 0, y: 0, shake: 0 };
@@ -1588,7 +1590,8 @@ function addHighScore(name) {
   return entry;
 }
 
-function showLeaderboard(highlightScore) {
+function showLeaderboard(highlightScore, source = 'game') {
+  leaderboardReturnTarget = source;
   const table = document.getElementById('leaderboard-table');
   const highlightIndex = highScores.findIndex(h => h.score === highlightScore);
   let html = `<div style="color:#5be4ff; font-size:0.9rem; letter-spacing:0.1em; margin-bottom:0.35rem;">🏠 LOCAL HIGH SCORES</div>`;
@@ -1618,6 +1621,8 @@ function showLeaderboard(highlightScore) {
   html += `<div id="global-scores-inner"><div class="lb-row" style="justify-content:center; color:#667;">Loading...</div></div>`;
 
   table.innerHTML = html;
+  const playAgainBtn = document.getElementById('play-again-btn');
+  playAgainBtn.textContent = source === 'menu' ? 'Back to Menu' : 'New Mission';
   document.getElementById('leaderboard-screen').style.display = 'flex';
 
   fetchGlobalScores().then((scores) => {
@@ -3220,7 +3225,7 @@ function submitScore() {
   const finalScore = score;
   const entry = addHighScore(name);
   document.getElementById('gameover-screen').style.display = 'none';
-  showLeaderboard(finalScore);
+  showLeaderboard(finalScore, 'game');
   submitGlobalScore(entry.name, entry.score, entry.level);
 }
 
@@ -3234,12 +3239,28 @@ document.getElementById('pilot-name').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('submit-score-btn').click();
 });
 
+function openTitleHighScores() {
+  document.getElementById('start-screen').style.display = 'none';
+  showLeaderboard(undefined, 'menu');
+}
+
+document.getElementById('title-highscores-btn').addEventListener('click', openTitleHighScores);
+document.getElementById('title-highscores-btn').addEventListener('touchend', (e) => {
+  e.preventDefault();
+  openTitleHighScores();
+});
+
 let lastPlayAgainTime = 0;
 function playAgain() {
   const now = Date.now();
   if (now - lastPlayAgainTime < 400) return;
   lastPlayAgainTime = now;
   document.getElementById('leaderboard-screen').style.display = 'none';
+  if (leaderboardReturnTarget === 'menu') {
+    state = 'start';
+    document.getElementById('start-screen').style.display = 'flex';
+    return;
+  }
   resetGame();
   state = 'playing';
   init();
