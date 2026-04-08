@@ -1371,20 +1371,55 @@ button:active { transform: translateY(1px) scale(.99); }
           const b = city._buildings[bi];
           const bw = b.right - b.left, bh = b.bot - b.top;
 
-          // Building body — side-lit gradient like title screen
+          // Building body — front face
           const bg = ctx.createLinearGradient(b.left, b.top, b.right, b.top);
           if (alive) {
-            bg.addColorStop(0, 'hsl(215,12%,10%)'); bg.addColorStop(0.35, 'hsl(220,12%,16%)');
-            bg.addColorStop(0.65, 'hsl(220,12%,14%)'); bg.addColorStop(1, 'hsl(215,12%,9%)');
+            bg.addColorStop(0, 'hsl(215,12%,12%)'); bg.addColorStop(0.35, 'hsl(220,12%,18%)');
+            bg.addColorStop(0.65, 'hsl(220,12%,15%)'); bg.addColorStop(1, 'hsl(215,12%,10%)');
           } else {
             bg.addColorStop(0, '#1a1216'); bg.addColorStop(1, '#2a1a22');
           }
           ctx.fillStyle = bg;
           ctx.fillRect(b.left, b.top, bw, bh);
 
+          // 3D side face (right wall)
+          const depth = Math.max(3, Math.min(8, bw * 0.18));
+          if (alive) {
+            const sideGrad = ctx.createLinearGradient(b.right, b.top, b.right + depth, b.top);
+            sideGrad.addColorStop(0, 'hsl(220,10%,10%)');
+            sideGrad.addColorStop(1, 'hsl(220,10%,6%)');
+            ctx.fillStyle = sideGrad;
+          } else {
+            ctx.fillStyle = '#140d12';
+          }
+          ctx.beginPath();
+          ctx.moveTo(b.right, b.top);
+          ctx.lineTo(b.right + depth, b.top - depth * 0.45);
+          ctx.lineTo(b.right + depth, b.bot - depth * 0.2);
+          ctx.lineTo(b.right, b.bot);
+          ctx.closePath();
+          ctx.fill();
+
+          // 3D top cap
+          if (alive) {
+            const topCap = ctx.createLinearGradient(b.left, b.top, b.right, b.top - depth * 0.45);
+            topCap.addColorStop(0, 'rgba(180,200,220,0.18)');
+            topCap.addColorStop(1, 'rgba(110,130,150,0.08)');
+            ctx.fillStyle = topCap;
+          } else {
+            ctx.fillStyle = 'rgba(80,50,60,0.08)';
+          }
+          ctx.beginPath();
+          ctx.moveTo(b.left, b.top);
+          ctx.lineTo(b.right, b.top);
+          ctx.lineTo(b.right + depth, b.top - depth * 0.45);
+          ctx.lineTo(b.left + depth, b.top - depth * 0.45);
+          ctx.closePath();
+          ctx.fill();
+
           // Roof edge highlight
           if (alive) {
-            ctx.fillStyle = 'rgba(100,140,180,0.15)';
+            ctx.fillStyle = 'rgba(120,160,200,0.18)';
             ctx.fillRect(b.left - 1, b.top, bw + 2, 2);
           }
 
@@ -1394,6 +1429,14 @@ button:active { transform: translateY(1px) scale(.99); }
             ctx.beginPath();
             ctx.moveTo(b.left, b.top); ctx.lineTo((b.left + b.right)/2, b.top - 6); ctx.lineTo(b.right, b.top);
             ctx.fill();
+            if (alive) {
+              ctx.fillStyle = 'rgba(120,160,200,0.14)';
+              ctx.beginPath();
+              ctx.moveTo(b.left + depth, b.top - depth * 0.45);
+              ctx.lineTo((b.left + b.right)/2 + depth * 0.6, b.top - 6 - depth * 0.35);
+              ctx.lineTo(b.right + depth, b.top - depth * 0.45);
+              ctx.fill();
+            }
           } else if (b.roofType === 'antenna') {
             ctx.strokeStyle = alive ? 'rgba(180,210,240,.5)' : 'rgba(80,50,60,.3)';
             ctx.lineWidth = 1;
@@ -1409,13 +1452,25 @@ button:active { transform: translateY(1px) scale(.99); }
           if (alive && city._windows && city._windows[bi]) {
             for (const win of city._windows[bi]) {
               if (!win.color) continue;
-              const flickA = 0.3 + 0.3 * Math.sin(time * 0.0005 + win.x * 0.3 + win.y * 0.7);
+              const flickA = 0.35 + 0.3 * Math.sin(time * 0.0005 + win.x * 0.3 + win.y * 0.7);
               ctx.fillStyle = win.color;
               ctx.globalAlpha = flickA;
               ctx.fillRect(win.x, win.y, win.w, win.h);
               // glow halo
-              ctx.globalAlpha = flickA * 0.12;
+              ctx.globalAlpha = flickA * 0.14;
               ctx.fillRect(win.x - 1, win.y - 1, win.w + 2, win.h + 2);
+              ctx.globalAlpha = 1;
+            }
+            // sparse side windows on right face for 3D read
+            const sideCols = Math.max(1, Math.floor(bh / 12));
+            for (let sw = 0; sw < sideCols; sw++) {
+              const wy = b.top + 5 + sw * 10;
+              if (wy > b.bot - 4) break;
+              const wx = b.right + depth * 0.35;
+              const sa = 0.12 + 0.12 * Math.sin(time * 0.0005 + wy * 0.5 + bi);
+              ctx.fillStyle = sw % 2 ? '#88ccff' : '#ffe488';
+              ctx.globalAlpha = sa;
+              ctx.fillRect(wx, wy - depth * 0.15, 1.5, 2.5);
               ctx.globalAlpha = 1;
             }
           }
