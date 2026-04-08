@@ -525,7 +525,11 @@ let lives = 3;
 let score = 0;
 let levelScore = 0;
 let comboMultiplier = 1;
+const HS_KEY = 'lunar_lander_highscores';
+const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/lunar-lander';
 let highScores = [];
+let globalScoresCache = null;
+let globalScoresCacheTime = 0;
 let lander, terrain, stars, particles, explosionParticles, dustParticles;
 let keys = {};
 let camera = { x: 0, y: 0, shake: 0 };
@@ -1537,22 +1541,58 @@ function showResult(type) {
   }
 }
 
+function loadHighScores() {
+  try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; } catch (e) { return []; }
+}
+
+function saveHighScores(list) {
+  try { localStorage.setItem(HS_KEY, JSON.stringify(list)); } catch (e) {}
+}
+
+async function fetchGlobalScores() {
+  const now = Date.now();
+  if (globalScoresCache && now - globalScoresCacheTime < 30000) return globalScoresCache;
+  try {
+    const res = await fetch(SCORES_API);
+    if (res.ok) {
+      globalScoresCache = await res.json();
+      globalScoresCacheTime = now;
+      return globalScoresCache;
+    }
+  } catch (e) {}
+  return globalScoresCache || [];
+}
+
+async function submitGlobalScore(name, scoreValue, levelValue) {
+  try {
+    await fetch(SCORES_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initials: name, score: scoreValue, level: levelValue })
+    });
+    globalScoresCache = null;
+  } catch (e) {}
+}
+
 function addHighScore(name) {
-  highScores.push({
+  const entry = {
     name: (name || 'PILOT').toUpperCase().substring(0, 12),
     score: score,
     level: level,
     date: new Date().toLocaleDateString()
-  });
-  // Sort descending by score
+  };
+  highScores.push(entry);
   highScores.sort((a, b) => b.score - a.score);
-  // Keep top 10
   if (highScores.length > 10) highScores.length = 10;
+  saveHighScores(highScores);
+  return entry;
 }
 
 function showLeaderboard(highlightScore) {
   const table = document.getElementById('leaderboard-table');
-  let html = `<div class="lb-row header">
+  const highlightIndex = highScores.findIndex(h => h.score === highlightScore);
+  let html = `<div style="color:#5be4ff; font-size:0.9rem; letter-spacing:0.1em; margin-bottom:0.35rem;">🏠 LOCAL HIGH SCORES</div>`;
+  html += `<div class="lb-row header">
     <span class="lb-rank">#</span>
     <span class="lb-name">PILOT</span>
     <span class="lb-score">SCORE</span>
@@ -1565,7 +1605,7 @@ function showLeaderboard(highlightScore) {
 
   for (let i = 0; i < highScores.length; i++) {
     const hs = highScores[i];
-    const isHighlight = hs.score === highlightScore && i === highScores.findIndex(h => h.score === highlightScore);
+    const isHighlight = i === highlightIndex;
     html += `<div class="lb-row ${isHighlight ? 'highlight' : ''}">
       <span class="lb-rank">${i + 1}</span>
       <span class="lb-name">${hs.name}</span>
@@ -1574,8 +1614,31 @@ function showLeaderboard(highlightScore) {
     </div>`;
   }
 
+  html += `<div style="color:#ffd700; font-size:0.9rem; letter-spacing:0.1em; margin:1rem 0 0.35rem;">🌐 GLOBAL HIGH SCORES</div>`;
+  html += `<div id="global-scores-inner"><div class="lb-row" style="justify-content:center; color:#667;">Loading...</div></div>`;
+
   table.innerHTML = html;
   document.getElementById('leaderboard-screen').style.display = 'flex';
+
+  fetchGlobalScores().then((scores) => {
+    const globalEl = document.getElementById('global-scores-inner');
+    if (!globalEl) return;
+    if (!scores || scores.length === 0) {
+      globalEl.innerHTML = `<div class="lb-row" style="justify-content:center; color:#556;">No scores yet</div>`;
+      return;
+    }
+    globalEl.innerHTML = scores.slice(0, 10).map((entry, i) => `
+      <div class="lb-row ${entry.score === highlightScore ? 'highlight' : ''}">
+        <span class="lb-rank">${i + 1}</span>
+        <span class="lb-name">${(entry.initials || entry.name || 'PILOT').toString().substring(0, 12)}</span>
+        <span class="lb-score">${Number(entry.score || 0).toLocaleString()}</span>
+        <span class="lb-level">${entry.level ?? '?'}</span>
+      </div>
+    `).join('');
+  }).catch(() => {
+    const globalEl = document.getElementById('global-scores-inner');
+    if (globalEl) globalEl.innerHTML = `<div class="lb-row" style="justify-content:center; color:#556;">Offline, showing local only</div>`;
+  });
 }
 
 function resetGame() {
@@ -3147,24 +3210,45 @@ document.getElementById('retry-btn-win').addEventListener('click', () => {
   init();
 });
 
-document.getElementById('submit-score-btn').addEventListener('click', () => {
+let lastSubmitTime = 0;
+function submitScore() {
+  const now = Date.now();
+  if (now - lastSubmitTime < 400) return;
+  lastSubmitTime = now;
   const nameInput = document.getElementById('pilot-name');
-  const name = nameInput.value.trim() || 'PILOT';
+  const name = (nameInput.value.trim() || 'PILOT').toUpperCase().substring(0, 12);
   const finalScore = score;
-  addHighScore(name);
+  const entry = addHighScore(name);
   document.getElementById('gameover-screen').style.display = 'none';
   showLeaderboard(finalScore);
+  submitGlobalScore(entry.name, entry.score, entry.level);
+}
+
+document.getElementById('submit-score-btn').addEventListener('click', submitScore);
+document.getElementById('submit-score-btn').addEventListener('touchend', (e) => {
+  e.preventDefault();
+  submitScore();
 });
 
 document.getElementById('pilot-name').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('submit-score-btn').click();
 });
 
-document.getElementById('play-again-btn').addEventListener('click', () => {
+let lastPlayAgainTime = 0;
+function playAgain() {
+  const now = Date.now();
+  if (now - lastPlayAgainTime < 400) return;
+  lastPlayAgainTime = now;
   document.getElementById('leaderboard-screen').style.display = 'none';
   resetGame();
   state = 'playing';
   init();
+}
+
+document.getElementById('play-again-btn').addEventListener('click', playAgain);
+document.getElementById('play-again-btn').addEventListener('touchend', (e) => {
+  e.preventDefault();
+  playAgain();
 });
 
 // Pause (ESC)
@@ -3188,6 +3272,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // --- Start ---
+highScores = loadHighScores();
 init();
 updateBadgeDisplay();
 requestAnimationFrame(gameLoop);
