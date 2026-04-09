@@ -519,9 +519,9 @@ button.ghost{
     };
   }
 
-  function getQixEndpoints() {
-    if (!state.qix) return null;
-    const q = state.qix;
+  function getQixEndpoints(qix = state.qix) {
+    if (!qix) return null;
+    const q = qix;
     const wobble = Math.sin(q.phase * 1.7) * 2.4;
     const len = q.length + wobble;
     const a1 = q.phase;
@@ -531,6 +531,18 @@ button.ghost{
       b: {x: q.x + Math.cos(a2) * len * 0.92, y: q.y + Math.sin(a2 * 1.11) * len * 0.88},
       center: {x: q.x, y: q.y}
     };
+  }
+
+  function qixShapeHitsWall(qix = state.qix) {
+    const shape = getQixEndpoints(qix);
+    if (!shape) return {hitX:false,hitY:false};
+    const points = [shape.a, shape.b, shape.center];
+    let hitX = false, hitY = false;
+    for (const p of points) {
+      if (p.x <= 1.05 || p.x >= GRID_W - 2.05 || isQixBlocked(p.x, p.y)) hitX = hitX || isQixBlocked(p.x, p.y) || p.x <= 1.05 || p.x >= GRID_W - 2.05;
+      if (p.y <= 1.05 || p.y >= GRID_H - 2.05 || isQixBlocked(p.x, p.y)) hitY = hitY || isQixBlocked(p.x, p.y) || p.y <= 1.05 || p.y >= GRID_H - 2.05;
+    }
+    return {hitX,hitY};
   }
 
   function resetPlayer() {
@@ -620,33 +632,42 @@ button.ghost{
     if (!state.qix) return;
     const q = state.qix;
     q.phase += dt * q.spin * 2.4;
-    const step = Math.min(0.016, dt);
+    const step = Math.min(0.012, dt);
     let remaining = dt;
     while (remaining > 0) {
       const slice = Math.min(step, remaining);
-      const nextX = q.x + q.vx * slice;
-      if (isQixBlocked(nextX, q.y)) {
+      const testX = {...q, x:q.x + q.vx * slice};
+      const hitX = qixShapeHitsWall(testX).hitX;
+      if (hitX) {
         q.vx *= -1;
       } else {
-        q.x = nextX;
+        q.x = testX.x;
       }
-      const nextY = q.y + q.vy * slice;
-      if (isQixBlocked(q.x, nextY)) {
+
+      const testY = {...q, y:q.y + q.vy * slice};
+      const hitY = qixShapeHitsWall(testY).hitY;
+      if (hitY) {
         q.vy *= -1;
       } else {
-        q.y = nextY;
+        q.y = testY.y;
       }
+
       clampQixPoint(q);
       remaining -= slice;
     }
 
-    const drift = 0.55 + state.level * 0.03;
-    q.vx += Math.sin(performance.now() * 0.0009 + state.level) * drift * dt;
-    q.vy += Math.cos(performance.now() * 0.0011 + 2.2) * drift * dt;
+    const t = performance.now() * 0.001;
+    q.vx += Math.sin(t * 0.83 + state.level * 0.7) * (0.22 + state.level * 0.01) * dt;
+    q.vy += Math.cos(t * 0.91 + 1.7) * (0.24 + state.level * 0.01) * dt;
+
+    const centerBiasX = (GRID_W * 0.5 - q.x) * 0.045;
+    const centerBiasY = (GRID_H * 0.5 - q.y) * 0.045;
+    q.vx += centerBiasX * dt;
+    q.vy += centerBiasY * dt;
 
     const speed = Math.hypot(q.vx, q.vy) || 1;
     const minSpeed = 8 + state.level * 0.9;
-    const maxSpeed = 16 + state.level * 1.25;
+    const maxSpeed = 15 + state.level * 1.15;
     if (speed < minSpeed) {
       const scale = minSpeed / speed;
       q.vx *= scale;
