@@ -513,7 +513,12 @@ button.ghost{
       vy: speed * 0.74,
       phase: 0,
       spin: 1.7 + level * 0.08,
-      length: 11 + level * 0.6,
+      length: 12 + level * 0.7,
+      baseLength: 12 + level * 0.7,
+      stretch: 0,
+      stretchV: 0,
+      wanderX: Math.random() * Math.PI * 2,
+      wanderY: Math.random() * Math.PI * 2,
       width: 1.5 + Math.min(level * 0.06, 1),
       hue: (195 + level * 14) % 360
     };
@@ -522,13 +527,14 @@ button.ghost{
   function getQixEndpoints(qix = state.qix) {
     if (!qix) return null;
     const q = qix;
-    const wobble = Math.sin(q.phase * 1.7) * 2.4;
-    const len = q.length + wobble;
+    const wobble = Math.sin(q.phase * 1.7) * 2.8 + Math.sin(q.phase * 0.63) * 1.6;
+    const len = Math.max(6, q.length + wobble + q.stretch);
+    const skew = Math.sin(q.phase * 0.91) * 0.26;
     const a1 = q.phase;
-    const a2 = q.phase * 1.37 + Math.PI * 0.72;
+    const a2 = q.phase * 1.37 + Math.PI * 0.72 + skew;
     return {
-      a: {x: q.x + Math.cos(a1) * len, y: q.y + Math.sin(a1 * 1.18) * len * 0.82},
-      b: {x: q.x + Math.cos(a2) * len * 0.92, y: q.y + Math.sin(a2 * 1.11) * len * 0.88},
+      a: {x: q.x + Math.cos(a1) * len, y: q.y + Math.sin(a1 * 1.18) * len * (0.72 + Math.sin(q.phase*0.6)*0.12)},
+      b: {x: q.x + Math.cos(a2) * len * (0.78 + Math.cos(q.phase*0.74)*0.2), y: q.y + Math.sin(a2 * 1.11) * len * (0.76 + Math.sin(q.phase*0.52)*0.16)},
       center: {x: q.x, y: q.y}
     };
   }
@@ -631,8 +637,15 @@ button.ghost{
   function updateQix(dt) {
     if (!state.qix) return;
     const q = state.qix;
-    q.phase += dt * q.spin * 2.4;
-    const step = Math.min(0.012, dt);
+    q.phase += dt * q.spin * 2.6;
+    q.wanderX += dt * (0.9 + state.level * 0.03);
+    q.wanderY += dt * (1.1 + state.level * 0.035);
+    q.stretchV += (Math.sin(q.wanderX) * 7 + Math.cos(q.wanderY * 0.7) * 5 - q.stretch) * dt * 1.8;
+    q.stretchV *= 0.94;
+    q.stretch += q.stretchV * dt * 14;
+    q.length = q.baseLength + Math.sin(q.wanderX * 0.8) * 2.2;
+
+    const step = Math.min(0.01, dt);
     let remaining = dt;
     while (remaining > 0) {
       const slice = Math.min(step, remaining);
@@ -640,6 +653,7 @@ button.ghost{
       const hitX = qixShapeHitsWall(testX).hitX;
       if (hitX) {
         q.vx *= -1;
+        spawnBurst(q.x, q.y, 8, "spark");
       } else {
         q.x = testX.x;
       }
@@ -648,6 +662,7 @@ button.ghost{
       const hitY = qixShapeHitsWall(testY).hitY;
       if (hitY) {
         q.vy *= -1;
+        spawnBurst(q.x, q.y, 8, "spark");
       } else {
         q.y = testY.y;
       }
@@ -657,17 +672,19 @@ button.ghost{
     }
 
     const t = performance.now() * 0.001;
-    q.vx += Math.sin(t * 0.83 + state.level * 0.7) * (0.22 + state.level * 0.01) * dt;
-    q.vy += Math.cos(t * 0.91 + 1.7) * (0.24 + state.level * 0.01) * dt;
+    q.vx += Math.sin(t * 1.17 + q.wanderX) * (0.5 + state.level * 0.018) * dt;
+    q.vy += Math.cos(t * 1.31 + q.wanderY) * (0.52 + state.level * 0.018) * dt;
+    q.vx += Math.sin(q.wanderY * 0.6) * 0.12 * dt;
+    q.vy += Math.cos(q.wanderX * 0.65) * 0.12 * dt;
 
-    const centerBiasX = (GRID_W * 0.5 - q.x) * 0.045;
-    const centerBiasY = (GRID_H * 0.5 - q.y) * 0.045;
-    q.vx += centerBiasX * dt;
-    q.vy += centerBiasY * dt;
+    const roamBiasX = (GRID_W * 0.5 - q.x) * 0.02 + Math.sin(q.wanderX * 0.35) * 0.08;
+    const roamBiasY = (GRID_H * 0.5 - q.y) * 0.02 + Math.cos(q.wanderY * 0.31) * 0.08;
+    q.vx += roamBiasX * dt;
+    q.vy += roamBiasY * dt;
 
     const speed = Math.hypot(q.vx, q.vy) || 1;
     const minSpeed = 8 + state.level * 0.9;
-    const maxSpeed = 15 + state.level * 1.15;
+    const maxSpeed = 16 + state.level * 1.2;
     if (speed < minSpeed) {
       const scale = minSpeed / speed;
       q.vx *= scale;
@@ -1189,7 +1206,7 @@ button.ghost{
     }
     for (const p of state.particles) {
       const alpha = Math.max(0, p.life / p.maxLife);
-      const color = p.kind === "danger" ? "255,106,122" : p.kind === "capture" ? "255,213,106" : "125,246,255";
+      const color = p.kind === "danger" ? "255,106,122" : p.kind === "capture" ? "255,213,106" : p.kind === "spark" ? "125,246,255" : "125,246,255";
       ctx.fillStyle = "rgba(" + color + "," + alpha + ")";
       ctx.shadowBlur = scale * 1.2;
       ctx.shadowColor = "rgba(" + color + "," + Math.min(alpha * 1.4, 1) + ")";
