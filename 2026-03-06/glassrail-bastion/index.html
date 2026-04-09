@@ -695,7 +695,8 @@ function draw(){
   if(shakeTimer>0){sx=(Math.random()-.5)*shakeIntensity*2;sy=(Math.random()-.5)*shakeIntensity*2}
   ctx.translate(sx,sy);
 
-  const cx=W/2,cy=H/2;
+  const trackCx=W/2,cy=H/2;
+  const cx=trackCx+trainX;
   const def=getWaveDef(wave);
   const theme=currentTheme||def.theme||getWaveTheme(wave);
 
@@ -707,14 +708,14 @@ function draw(){
   ctx.fillStyle=sky;ctx.fillRect(-10,-10,W+20,H+20);
 
   // Horizon haze and energy curtains
-  const haze=ctx.createRadialGradient(cx,H*.45,20,cx,H*.45,Math.max(W,H)*.85);
+  const haze=ctx.createRadialGradient(trackCx,H*.45,20,trackCx,H*.45,Math.max(W,H)*.85);
   haze.addColorStop(0,rgba(theme.fog,.28+.12*Math.sin(ambientPulse*.8)));
   haze.addColorStop(.45,rgba(theme.accent,.12));
   haze.addColorStop(1,'rgba(0,0,0,0)');
   ctx.fillStyle=haze;ctx.fillRect(0,0,W,H);
 
   for(let i=0;i<4;i++){
-    const bandX=cx+(Math.sin(ambientPulse*.35+i*1.7)*W*.32);
+    const bandX=trackCx+(Math.sin(ambientPulse*.35+i*1.7)*W*.32);
     const curtain=ctx.createLinearGradient(bandX,0,bandX+W*.12,0);
     curtain.addColorStop(0,'rgba(0,0,0,0)');
     curtain.addColorStop(.5,rgba(theme.accent,.08+.03*Math.sin(ambientPulse+i)));
@@ -726,7 +727,7 @@ function draw(){
   // Big wave-specific vista effects
   if(theme.vista==='aurora'){
     for(let i=0;i<5;i++){
-      const ax=cx+Math.sin(ambientPulse*.35+i)*W*.28;
+      const ax=trackCx+Math.sin(ambientPulse*.35+i)*W*.28;
       const aur=ctx.createLinearGradient(ax,0,ax+W*.16,0);
       aur.addColorStop(0,'rgba(0,0,0,0)');
       aur.addColorStop(.35,rgba('#5dffef',.12));
@@ -811,21 +812,21 @@ function draw(){
     const arcR=120+i*26+Math.sin(ambientPulse+i)*8;
     ctx.strokeStyle=rgba(theme.hazard,.04+.02*Math.sin(ambientPulse*1.3+i));
     ctx.lineWidth=2;
-    ctx.beginPath();ctx.arc(cx,H*.08,arcR,Math.PI*.08,Math.PI*.92);ctx.stroke();
+    ctx.beginPath();ctx.arc(trackCx,H*.08,arcR,Math.PI*.08,Math.PI*.92);ctx.stroke();
   }
 
   // Train tracks with perspective
   const topHalf=TRACK_HALF_WIDTH*.28;
   const railTop=TRACK_RAIL_GAUGE*.42;
-  const leftOuterBottom=cx-TRACK_HALF_WIDTH;
-  const rightOuterBottom=cx+TRACK_HALF_WIDTH;
-  const leftOuterTop=cx-topHalf;
-  const rightOuterTop=cx+topHalf;
-  const leftRailBottom=cx-TRACK_RAIL_GAUGE;
-  const rightRailBottom=cx+TRACK_RAIL_GAUGE;
-  const leftRailTop=cx-railTop;
-  const rightRailTop=cx+railTop;
-  const laneRailBottom=[cx-TRACK_RAIL_GAUGE,cx,cx+TRACK_RAIL_GAUGE];
+  const leftOuterBottom=trackCx-TRACK_HALF_WIDTH;
+  const rightOuterBottom=trackCx+TRACK_HALF_WIDTH;
+  const leftOuterTop=trackCx-topHalf;
+  const rightOuterTop=trackCx+topHalf;
+  const leftRailBottom=trackCx-TRACK_RAIL_GAUGE;
+  const rightRailBottom=trackCx+TRACK_RAIL_GAUGE;
+  const leftRailTop=trackCx-railTop;
+  const rightRailTop=trackCx+railTop;
+  const laneRailBottom=[trackCx-TRACK_RAIL_GAUGE,trackCx,trackCx+TRACK_RAIL_GAUGE];
 
   const bed=ctx.createLinearGradient(0,0,0,H);
   bed.addColorStop(0,rgba(theme.sleeper,.2));
@@ -843,10 +844,10 @@ function draw(){
     const y=p;
     ctx.fillStyle=i%3===0?rgba(theme.sleeper,.95):rgba(theme.sleeper,.78);
     ctx.beginPath();
-    ctx.moveTo(cx-sleeperHalf,y-sleeperThick*.5);
-    ctx.lineTo(cx+sleeperHalf,y-sleeperThick*.5);
-    ctx.lineTo(cx+sleeperHalf*1.08,y+sleeperThick*.5);
-    ctx.lineTo(cx-sleeperHalf*1.08,y+sleeperThick*.5);
+    ctx.moveTo(trackCx-sleeperHalf,y-sleeperThick*.5);
+    ctx.lineTo(trackCx+sleeperHalf,y-sleeperThick*.5);
+    ctx.lineTo(trackCx+sleeperHalf*1.08,y+sleeperThick*.5);
+    ctx.lineTo(trackCx-sleeperHalf*1.08,y+sleeperThick*.5);
     ctx.closePath();ctx.fill();
   }
 
@@ -858,26 +859,26 @@ function draw(){
   ctx.shadowColor=rgba(theme.rail,.65);
   ctx.shadowBlur=18;
   ctx.beginPath();ctx.moveTo(leftRailTop,0);ctx.lineTo(leftRailBottom,H);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,H);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(trackCx,0);ctx.lineTo(trackCx,H);ctx.stroke();
   ctx.beginPath();ctx.moveTo(rightRailTop,0);ctx.lineTo(rightRailBottom,H);ctx.stroke();
 
   ctx.shadowBlur=0;
   ctx.strokeStyle='rgba(255,255,255,.28)';
   ctx.lineWidth=1.25;
   ctx.beginPath();ctx.moveTo(leftRailTop+2,0);ctx.lineTo(leftRailBottom+2,H);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(cx+1,0);ctx.lineTo(cx+1,H);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(trackCx+1,0);ctx.lineTo(trackCx+1,H);ctx.stroke();
   ctx.beginPath();ctx.moveTo(rightRailTop-2,0);ctx.lineTo(rightRailBottom-2,H);ctx.stroke();
 
   for(let side of [-1,1]){
-    const outerTop=cx+side*(topHalf+12);
-    const outerBottom=cx+side*(TRACK_HALF_WIDTH+24);
+    const outerTop=trackCx+side*(topHalf+12);
+    const outerBottom=trackCx+side*(TRACK_HALF_WIDTH+24);
     ctx.strokeStyle=rgba(theme.sleeper,.55);
     ctx.lineWidth=3;
     ctx.beginPath();ctx.moveTo(outerTop,0);ctx.lineTo(outerBottom,H);ctx.stroke();
     for(let i=-1;i<11;i++){
       const y=((i*130+scrollOffset*2.2)% (H+180))-90;
       const t=Math.max(0,Math.min(1,y/H));
-      const x=cx+side*((topHalf+12)+(TRACK_HALF_WIDTH+24-(topHalf+12))*t);
+      const x=trackCx+side*((topHalf+12)+(TRACK_HALF_WIDTH+24-(topHalf+12))*t);
       ctx.strokeStyle=rgba(theme.sleeper,.35);
       ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+side*(16+t*18),y+24+t*30);ctx.stroke();
     }
