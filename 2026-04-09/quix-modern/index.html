@@ -60,8 +60,8 @@ body{
   inset:0;
   display:flex;
   flex-direction:column;
-  padding:calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
-  gap:10px;
+  padding:calc(env(safe-area-inset-top, 0px) + 10px) 10px calc(env(safe-area-inset-bottom, 0px) + 58px);
+  gap:8px;
 }
 .hud{
   display:grid;
@@ -247,18 +247,13 @@ button.ghost{
   color:rgba(234,248,255,0.35);
   letter-spacing:0.2em;
 }
-.controls{
-  display:grid;
-  grid-template-columns:1fr auto;
-  gap:10px;
-  align-items:end;
-}
 .status-bar{
   min-width:0;
   padding:10px 12px;
   border-radius:18px;
   background:rgba(255,255,255,0.04);
   border:1px solid rgba(255,255,255,0.06);
+  margin-top:2px;
 }
 .status-bar strong{
   display:block;
@@ -273,38 +268,6 @@ button.ghost{
   font-size:13px;
   line-height:1.35;
   color:#d0e6fb;
-}
-.pad{
-  width:168px;
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  grid-template-rows:repeat(3,56px);
-  gap:8px;
-  pointer-events:auto;
-}
-.pad button{
-  padding:0;
-  border-radius:18px;
-  min-height:auto;
-  touch-action:none;
-  font-size:21px;
-  font-weight:700;
-}
-.pad button.active{
-  background:linear-gradient(180deg, rgba(255,213,106,0.32), rgba(255,94,168,0.28));
-  border-color:rgba(255,213,106,0.42);
-  box-shadow:0 10px 24px rgba(0,0,0,0.3), 0 0 24px rgba(255,213,106,0.22) inset;
-}
-.pad .empty{
-  visibility:hidden;
-}
-.pad .up{grid-column:2;grid-row:1}
-.pad .left{grid-column:1;grid-row:2}
-.pad .right{grid-column:3;grid-row:2}
-.pad .down{grid-column:2;grid-row:3}
-.tiny{
-  font-size:12px;
-  color:var(--muted);
 }
 .footer-actions{
   position:absolute;
@@ -349,7 +312,7 @@ button.ghost{
           <h1 class="title">Neon <span>Qix</span></h1>
           <p class="lead">Trace through open space, close the loop, and let the field collapse away from the roaming energy line. The deeper the cut, the bigger the score, but your trail is live and lethal until you reconnect with safety.</p>
           <div class="howto">
-            <div><strong>Move on the border</strong> to stay safe. Use the on-screen pad or drag on the playfield to steer.</div>
+            <div><strong>Move on the border</strong> to stay safe. Drag on the playfield to steer, or use arrow keys on desktop.</div>
             <div><strong>Push away from a safe edge</strong> to start a live cut, then close the shape by reconnecting to a wall.</div>
             <div><strong>Avoid contact</strong> with the Qix line while drawing. Clear the target percentage to advance.</div>
           </div>
@@ -369,7 +332,7 @@ button.ghost{
           <span class="eyebrow">How To Play</span>
           <p class="lead">This version keeps the original Qix loop: safe movement on existing walls, dangerous movement while drawing, and area capture determined by which side traps the Qix.</p>
           <div class="howto">
-            <div><strong>Controls:</strong> press the on-screen pad or drag anywhere on the field. Your current direction stays active while you hold.</div>
+            <div><strong>Controls:</strong> drag anywhere on the field. Your current direction stays active while you hold. On desktop, use arrow keys or WASD.</div>
             <div><strong>Safe movement:</strong> move along glowing walls and captured territory edges with no risk from the Qix.</div>
             <div><strong>Danger movement:</strong> when you leave safety, your tracer becomes vulnerable. If the Qix line touches it, you lose a life.</div>
             <div><strong>Scoring:</strong> bigger captures score more, and each level raises Qix speed and the target percentage.</div>
@@ -407,22 +370,9 @@ button.ghost{
       </div>
     </div>
 
-    <div class="controls">
-      <div class="status-bar">
-        <strong id="statusMode">Safe Edge</strong>
-        <span id="statusText">Use the pad or drag on the field to move along the border, then cut inward to claim territory.</span>
-      </div>
-      <div class="pad" aria-label="Touch controls">
-        <button class="empty" tabindex="-1" aria-hidden="true"></button>
-        <button class="up" data-dir="up" aria-label="Move up">▲</button>
-        <button class="empty" tabindex="-1" aria-hidden="true"></button>
-        <button class="left" data-dir="left" aria-label="Move left">◀</button>
-        <button class="empty" tabindex="-1" aria-hidden="true"></button>
-        <button class="right" data-dir="right" aria-label="Move right">▶</button>
-        <button class="empty" tabindex="-1" aria-hidden="true"></button>
-        <button class="down" data-dir="down" aria-label="Move down">▼</button>
-        <button class="empty" tabindex="-1" aria-hidden="true"></button>
-      </div>
+    <div class="status-bar">
+      <strong id="statusMode">Safe Edge</strong>
+      <span id="statusText">Drag on the field to move along the border, then cut inward to claim territory.</span>
     </div>
   </div>
 
@@ -485,6 +435,7 @@ button.ghost{
   let canvasPointerId = null;
   let canvasStartX = 0;
   let canvasStartY = 0;
+  let canvasLastDir = null;
   let dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
   let audioCtx = null;
   let audioUnlocked = false;
@@ -554,11 +505,11 @@ button.ghost{
   }
 
   function createQix(level) {
-    const speed = 12 + level * 1.8;
+    const speed = 18 + level * 2.1;
     return {
-      a: {x: GRID_W * 0.36, y: GRID_H * 0.42, vx: speed * 0.78, vy: speed * 0.96},
-      b: {x: GRID_W * 0.66, y: GRID_H * 0.58, vx: -speed * 0.9, vy: speed * 0.72},
-      width: 1.4 + Math.min(level * 0.05, 0.9),
+      a: {x: GRID_W * 0.36, y: GRID_H * 0.42, vx: speed * 0.92, vy: speed * 1.08},
+      b: {x: GRID_W * 0.66, y: GRID_H * 0.58, vx: -speed * 1.02, vy: speed * 0.86},
+      width: 1.5 + Math.min(level * 0.06, 1),
       hue: (195 + level * 14) % 360
     };
   }
@@ -641,34 +592,54 @@ button.ghost{
   }
 
   function isQixBlocked(x, y) {
-    return getCell(Math.round(x), Math.round(y)) === CELL_SAFE;
+    const ix = Math.floor(x);
+    const iy = Math.floor(y);
+    return getCell(ix, iy) === CELL_SAFE;
   }
 
   function advanceQixPoint(point, dt) {
-    const nextX = point.x + point.vx * dt;
-    if (isQixBlocked(nextX, point.y)) {
-      point.vx *= -1;
-    } else {
-      point.x = nextX;
+    const step = Math.min(0.016, dt);
+    let remaining = dt;
+    while (remaining > 0) {
+      const slice = Math.min(step, remaining);
+      const nextX = point.x + point.vx * slice;
+      if (isQixBlocked(nextX, point.y)) {
+        point.vx *= -1;
+        point.x += point.vx * slice * 0.9;
+      } else {
+        point.x = nextX;
+      }
+      const nextY = point.y + point.vy * slice;
+      if (isQixBlocked(point.x, nextY)) {
+        point.vy *= -1;
+        point.y += point.vy * slice * 0.9;
+      } else {
+        point.y = nextY;
+      }
+      clampQixPoint(point);
+      remaining -= slice;
     }
-    const nextY = point.y + point.vy * dt;
-    if (isQixBlocked(point.x, nextY)) {
-      point.vy *= -1;
-    } else {
-      point.y = nextY;
-    }
-    clampQixPoint(point);
   }
 
   function updateQix(dt) {
     if (!state.qix) return;
     advanceQixPoint(state.qix.a, dt);
     advanceQixPoint(state.qix.b, dt);
-    const drift = 0.35 + state.level * 0.03;
-    state.qix.a.vx += Math.sin(performance.now() * 0.0006 + state.level) * drift * dt;
-    state.qix.a.vy += Math.cos(performance.now() * 0.0007 + 2) * drift * dt;
-    state.qix.b.vx += Math.cos(performance.now() * 0.00055 + 1) * drift * dt;
-    state.qix.b.vy += Math.sin(performance.now() * 0.00065 + 4) * drift * dt;
+    const drift = 0.9 + state.level * 0.06;
+    state.qix.a.vx += Math.sin(performance.now() * 0.0011 + state.level) * drift * dt;
+    state.qix.a.vy += Math.cos(performance.now() * 0.0013 + 2) * drift * dt;
+    state.qix.b.vx += Math.cos(performance.now() * 0.001 + 1) * drift * dt;
+    state.qix.b.vy += Math.sin(performance.now() * 0.00125 + 4) * drift * dt;
+
+    const minSpeed = 10 + state.level * 1.2;
+    for (const point of [state.qix.a, state.qix.b]) {
+      const speed = Math.hypot(point.vx, point.vy) || 1;
+      if (speed < minSpeed) {
+        const scale = minSpeed / speed;
+        point.vx *= scale;
+        point.vy *= scale;
+      }
+    }
   }
 
   function activeDirection() {
@@ -1317,50 +1288,22 @@ button.ghost{
     controlSource = dir ? source || controlSource : null;
   }
 
-  function updatePadVisuals() {
-    document.querySelectorAll('.pad button[data-dir]').forEach((button) => {
-      button.classList.toggle('active', controlDir === button.dataset.dir);
-    });
-  }
-
-  function bindPad() {
-    document.querySelectorAll(".pad button[data-dir]").forEach((button) => {
-      const dir = button.dataset.dir;
-      button.addEventListener("pointerdown", (event) => {
-        event.preventDefault();
-        unlockAudio();
-        setControlDirection(dir, "pad");
-        updatePadVisuals();
-      });
-      button.addEventListener("pointerup", () => {
-        if (controlDir === dir && controlSource === "pad") setControlDirection(null);
-        updatePadVisuals();
-      });
-      button.addEventListener("pointercancel", () => {
-        if (controlDir === dir && controlSource === "pad") setControlDirection(null);
-        updatePadVisuals();
-      });
-      button.addEventListener("pointerleave", (event) => {
-        if (event.buttons === 0 && controlDir === dir && controlSource === "pad") setControlDirection(null);
-        updatePadVisuals();
-      });
-    });
-    window.addEventListener("pointerup", () => {
-      if (controlSource === "pad") setControlDirection(null);
-      updatePadVisuals();
-    });
-  }
+  function updatePadVisuals() {}
 
   function bindCanvasDrag() {
     function applyCanvasDirection(clientX, clientY) {
       const dx = clientX - canvasStartX;
       const dy = clientY - canvasStartY;
-      if (Math.abs(dx) < 18 && Math.abs(dy) < 18) return;
+      if (Math.abs(dx) < 14 && Math.abs(dy) < 14) return;
       const dir = Math.abs(dx) > Math.abs(dy)
         ? (dx > 0 ? "right" : "left")
         : (dy > 0 ? "down" : "up");
+      if (dir !== canvasLastDir) {
+        canvasStartX = clientX;
+        canvasStartY = clientY;
+        canvasLastDir = dir;
+      }
       setControlDirection(dir, "canvas");
-      updatePadVisuals();
     }
 
     canvas.addEventListener("pointerdown", (event) => {
@@ -1370,6 +1313,7 @@ button.ghost{
       canvasPointerId = event.pointerId;
       canvasStartX = event.clientX;
       canvasStartY = event.clientY;
+      canvasLastDir = null;
       canvas.setPointerCapture?.(event.pointerId);
     });
     canvas.addEventListener("pointermove", (event) => {
@@ -1381,13 +1325,13 @@ button.ghost{
       if (canvasPointerId !== event.pointerId) return;
       if (controlSource === "canvas") setControlDirection(null);
       canvasPointerId = null;
-      updatePadVisuals();
+      canvasLastDir = null;
     });
     canvas.addEventListener("pointercancel", (event) => {
       if (canvasPointerId !== event.pointerId) return;
       if (controlSource === "canvas") setControlDirection(null);
       canvasPointerId = null;
-      updatePadVisuals();
+      canvasLastDir = null;
     });
   }
 
@@ -1406,7 +1350,6 @@ button.ghost{
       const mapped = keyMap[event.key];
       if (mapped) {
         keyboardDir = mapped;
-        updatePadVisuals();
         event.preventDefault();
       } else if (event.key === " ") {
         if (state.phase === "playing" || state.phase === "paused") {
@@ -1428,7 +1371,6 @@ button.ghost{
       };
       if (keyMap[event.key] && keyboardDir === keyMap[event.key]) {
         keyboardDir = null;
-        updatePadVisuals();
       }
     });
   }
@@ -1500,7 +1442,6 @@ button.ghost{
   }
 
   window.addEventListener("resize", resizeCanvas);
-  bindPad();
   bindCanvasDrag();
   bindKeyboard();
   initUi();
