@@ -12,7 +12,7 @@
 html,body{position:fixed;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;background:#000;font-family:'Segoe UI',sans-serif}
 canvas{display:block;width:100%;height:100%}
 button{touch-action:manipulation;cursor:pointer;border:none;outline:none;font-family:inherit}
-.overlay{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:24px 16px;text-align:center}
 .overlay.hidden{display:none}
 .title-text{font-size:clamp(28px,6vw,56px);font-weight:900;letter-spacing:4px;text-align:center;background:linear-gradient(135deg,#0ff,#f0f,#fc0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-shadow:0 0 30px rgba(0,255,255,.3);margin-bottom:8px;filter:drop-shadow(0 0 20px rgba(0,255,255,.5))}
 .subtitle{color:#8af;font-size:clamp(12px,2.5vw,18px);margin-bottom:30px;text-align:center;opacity:.8}
@@ -41,7 +41,12 @@ button{touch-action:manipulation;cursor:pointer;border:none;outline:none;font-fa
 .hp-fill{background:linear-gradient(90deg,#f44,#f88)}
 .shield-fill{background:linear-gradient(90deg,#08f,#0ff)}
 .hud-text{color:#fff;font-size:clamp(11px,2vw,14px);text-shadow:0 0 4px #000}
-.tutorial{color:#fff;font-size:clamp(14px,3vw,20px);text-align:center;line-height:1.8;text-shadow:0 0 10px rgba(0,255,255,.5)}
+.tutorial{color:#fff;font-size:clamp(14px,3vw,20px);text-align:center;line-height:1.8;text-shadow:0 0 10px rgba(0,255,255,.5);max-width:min(92vw,560px)}
+.overlay-card{width:min(92vw,420px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;margin:0 auto}
+.howto-list{color:#d9f7ff;font-size:clamp(13px,2.8vw,18px);line-height:1.7;text-align:left;width:min(92vw,520px);background:rgba(10,18,26,.55);border:1px solid rgba(140,240,255,.2);border-radius:18px;padding:18px 18px 14px;backdrop-filter:blur(8px);box-shadow:0 0 24px rgba(0,255,255,.08)}
+.howto-list b{color:#fff}
+.howto-list div{margin-bottom:10px}
+.howto-list div:last-child{margin-bottom:0}
 </style>
 </head>
 <body>
@@ -57,25 +62,36 @@ button{touch-action:manipulation;cursor:pointer;border:none;outline:none;font-fa
 </div>
 
 <div id="tutorialScreen" class="overlay hidden">
-  <div class="tutorial">
-    Hold to aim • Auto-fire<br>Release left or right to switch tracks<br>Swipe up to surge shield and slip danger<br><br>Collect bright orb shards and survive each rail zone.
+  <div class="overlay-card">
+    <div style="color:#fc0;font-size:clamp(20px,4vw,30px);font-weight:800;margin-bottom:14px">HOW TO PLAY</div>
+    <div class="howto-list">
+      <div><b>Aim and fire:</b> hold anywhere on the playfield to aim the cannon. The train auto-fires while you hold.</div>
+      <div><b>Switch tracks:</b> release on the left or right side of your train to snap onto the next rail lane.</div>
+      <div><b>Shield Burst:</b> swipe up to trigger a short defensive surge. It gives you a brief safety window, helps you slip through danger, and recharges on a cooldown.</div>
+      <div><b>Collect shards:</b> grab the bright glowing orb shards dropped by destroyed enemies for score and upgrade momentum.</div>
+      <div><b>Survive the zone:</b> clear each wave, pick an upgrade, and keep your firepower growing fast enough to match the incoming rail assault.</div>
+    </div>
+    <button class="btn btn-primary" id="tutorialOk" style="margin-top:20px">GOT IT</button>
   </div>
-  <button class="btn btn-primary" id="tutorialOk" style="margin-top:20px">GOT IT</button>
 </div>
 
 <div id="upgradeScreen" class="overlay hidden" style="background:rgba(0,0,0,.85)">
-  <div style="color:#fc0;font-size:clamp(18px,4vw,28px);font-weight:700;margin-bottom:4px">WAVE CLEAR!</div>
-  <div style="color:#aaa;font-size:14px;margin-bottom:16px">Choose an upgrade</div>
-  <div id="upgradeChoices"></div>
+  <div class="overlay-card">
+    <div style="color:#fc0;font-size:clamp(18px,4vw,28px);font-weight:700;margin-bottom:4px">WAVE CLEAR!</div>
+    <div style="color:#aaa;font-size:14px;margin-bottom:16px">Choose an upgrade</div>
+    <div id="upgradeChoices"></div>
+  </div>
 </div>
 
 <div id="gameOverScreen" class="overlay hidden" style="background:rgba(0,0,0,.9)">
-  <div id="goTitle" style="color:#f44;font-size:clamp(24px,5vw,40px);font-weight:900;margin-bottom:8px">GAME OVER</div>
-  <div id="goScore" style="color:#ccc;font-size:18px;margin-bottom:16px"></div>
-  <div id="hsEntry" class="hidden"></div>
-  <div id="hsDisplay"></div>
-  <button class="btn btn-primary" id="restartBtn">PLAY AGAIN</button>
-  <button class="btn btn-secondary" id="menuBtn">MENU</button>
+  <div class="overlay-card">
+    <div id="goTitle" style="color:#f44;font-size:clamp(24px,5vw,40px);font-weight:900;margin-bottom:8px">GAME OVER</div>
+    <div id="goScore" style="color:#ccc;font-size:18px;margin-bottom:16px"></div>
+    <div id="hsEntry" class="hidden"></div>
+    <div id="hsDisplay"></div>
+    <button class="btn btn-primary" id="restartBtn">PLAY AGAIN</button>
+    <button class="btn btn-secondary" id="menuBtn">MENU</button>
+  </div>
 </div>
 
 <div id="hsScreen" class="overlay hidden" style="background:rgba(0,0,0,.95)">
