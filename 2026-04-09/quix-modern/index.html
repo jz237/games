@@ -551,14 +551,23 @@ button.ghost{
 
   function qixShapeHitsWall(qix = state.qix) {
     const shape = getQixEndpoints(qix);
-    if (!shape) return {hitX:false,hitY:false};
+    if (!shape) return {hitX:false,hitY:false,minX:0,maxX:0,minY:0,maxY:0};
     const points = [shape.a, shape.b, shape.center];
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     let hitX = false, hitY = false;
     for (const p of points) {
-      if (p.x <= 1.05 || p.x >= GRID_W - 2.05 || isQixBlocked(p.x, p.y)) hitX = hitX || isQixBlocked(p.x, p.y) || p.x <= 1.05 || p.x >= GRID_W - 2.05;
-      if (p.y <= 1.05 || p.y >= GRID_H - 2.05 || isQixBlocked(p.x, p.y)) hitY = hitY || isQixBlocked(p.x, p.y) || p.y <= 1.05 || p.y >= GRID_H - 2.05;
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+      if (p.x <= 1.25 || p.x >= GRID_W - 2.25) hitX = true;
+      if (p.y <= 1.25 || p.y >= GRID_H - 2.25) hitY = true;
+      if (isQixBlocked(p.x, p.y)) {
+        if (p.x <= 2 || p.x >= GRID_W - 3) hitX = true;
+        if (p.y <= 2 || p.y >= GRID_H - 3) hitY = true;
+      }
     }
-    return {hitX,hitY};
+    return {hitX,hitY,minX,maxX,minY,maxY};
   }
 
   function resetPlayer() {
@@ -660,21 +669,27 @@ button.ghost{
     while (remaining > 0) {
       const slice = Math.min(step, remaining);
       const testX = {...q, x:q.x + q.vx * slice};
-      const hitX = qixShapeHitsWall(testX).hitX;
-      if (hitX) {
-        const wallX = q.vx > 0 ? GRID_W - 2.2 : 1.2;
-        q.vx *= -1;
-        spawnBurst(wallX, q.y, 4, "spark", {angle: q.vx > 0 ? 0 : Math.PI, spread: 0.8, speedMin: 3, speedMax: 7, lifeMin: 0.12});
+      const shapeX = qixShapeHitsWall(testX);
+      if (shapeX.hitX) {
+        if (q.vx > 0) q.x -= Math.max(0, shapeX.maxX - (GRID_W - 2.35));
+        else q.x += Math.max(0, 1.35 - shapeX.minX);
+        const wallX = q.vx > 0 ? GRID_W - 2.05 : 1.05;
+        const sparkAngle = q.vx > 0 ? Math.PI : 0;
+        q.vx = Math.abs(q.vx) * (q.vx > 0 ? -1 : 1);
+        spawnBurst(wallX, q.y, 3, "spark", {angle: sparkAngle, spread: 0.32, speedMin: 1.5, speedMax: 3.5, lifeMin: 0.08});
       } else {
         q.x = testX.x;
       }
 
       const testY = {...q, y:q.y + q.vy * slice};
-      const hitY = qixShapeHitsWall(testY).hitY;
-      if (hitY) {
-        const wallY = q.vy > 0 ? GRID_H - 2.2 : 1.2;
-        q.vy *= -1;
-        spawnBurst(q.x, wallY, 4, "spark", {angle: q.vy > 0 ? Math.PI * 0.5 : -Math.PI * 0.5, spread: 0.8, speedMin: 3, speedMax: 7, lifeMin: 0.12});
+      const shapeY = qixShapeHitsWall(testY);
+      if (shapeY.hitY) {
+        if (q.vy > 0) q.y -= Math.max(0, shapeY.maxY - (GRID_H - 2.35));
+        else q.y += Math.max(0, 1.35 - shapeY.minY);
+        const wallY = q.vy > 0 ? GRID_H - 2.05 : 1.05;
+        const sparkAngle = q.vy > 0 ? -Math.PI * 0.5 : Math.PI * 0.5;
+        q.vy = Math.abs(q.vy) * (q.vy > 0 ? -1 : 1);
+        spawnBurst(q.x, wallY, 3, "spark", {angle: sparkAngle, spread: 0.32, speedMin: 1.5, speedMax: 3.5, lifeMin: 0.08});
       } else {
         q.y = testY.y;
       }
@@ -1227,10 +1242,10 @@ button.ghost{
       const alpha = Math.max(0, p.life / p.maxLife);
       const color = p.kind === "danger" ? "255,106,122" : p.kind === "capture" ? "255,213,106" : p.kind === "spark" ? "125,246,255" : "125,246,255";
       ctx.fillStyle = "rgba(" + color + "," + alpha + ")";
-      ctx.shadowBlur = scale * 1.2;
-      ctx.shadowColor = "rgba(" + color + "," + Math.min(alpha * 1.4, 1) + ")";
+      ctx.shadowBlur = p.kind === "spark" ? scale * 0.45 : scale * 1.2;
+      ctx.shadowColor = "rgba(" + color + "," + Math.min(alpha * 1.2, 1) + ")";
       ctx.beginPath();
-      ctx.arc(offsetX + p.x * scale, offsetY + p.y * scale, Math.max(1, scale * 0.22), 0, Math.PI * 2);
+      ctx.arc(offsetX + p.x * scale, offsetY + p.y * scale, p.kind === "spark" ? Math.max(0.5, scale * 0.09) : Math.max(1, scale * 0.22), 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
