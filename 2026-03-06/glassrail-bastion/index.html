@@ -148,6 +148,7 @@ let state='title'; // title,tutorial,playing,upgrade,gameover
 let score=0,shards=0,wave=1,bastionHp=100,bastionMaxHp=100,shield=50,maxShield=50;
 let turretAngle=0,aiming=false,aimX=0,aimY=0;
 let dashCooldown=0,dashActive=0,invuln=0;
+let laneIndex=1,trainX=0,targetTrainX=0,trackSwitchCooldown=0;
 let fireRate=5,fireDmg=10,fireTimer=0,spreadCount=1,piercing=false,shieldRegen=.5;
 let enemies=[],bullets=[],particles=[],shardItems=[],stars=[],floatingTexts=[],eventTexts=[];
 let scrollOffset=0,shakeTimer=0,shakeIntensity=0;
@@ -197,7 +198,7 @@ const UPGRADES=[
   {name:'Piercing Rounds',desc:'Bullets pass through enemies',apply(){piercing=true}},
   {name:'Hull Repair',desc:'Restore 30 HP, max +10',apply(){bastionMaxHp+=10;bastionHp=Math.min(bastionHp+30,bastionMaxHp)}},
   {name:'Crystal Magnet',desc:'Larger shard collection radius',apply(){magnetRadius+=40}},
-  {name:'Dash Recharge',desc:'Dash cooldown -40%',apply(){dashCdMax*=.6}},
+  {name:'Track Switch Boost',desc:'Switch rails faster and recharge surge -40%',apply(){dashCdMax*=.6}},
 ];
 let magnetRadius=300,dashCdMax=3;
 
@@ -228,18 +229,20 @@ function getWaveDef(w){
 }
 
 function spawnEnemy(type,hpMul,spdMul,isBoss){
+  const laneOffsets=[-TRACK_RAIL_GAUGE,0,TRACK_RAIL_GAUGE];
+  const lane=laneOffsets[Math.random()*laneOffsets.length|0];
   const side=Math.random()*4|0;
   let x,y;
-  if(side===0){x=Math.random()*W;y=-30}
+  if(side===0){x=W/2+lane+(Math.random()-.5)*26;y=-30}
   else if(side===1){x=W+30;y=Math.random()*H}
-  else if(side===2){x=Math.random()*W;y=H+30}
+  else if(side===2){x=W/2+lane+(Math.random()-.5)*26;y=H+30}
   else{x=-30;y=Math.random()*H}
   let hp,spd,r,color,dmg,accent,core,shape;
   if(isBoss){hp=500*hpMul;spd=30*spdMul;r=36;color='#f0f';accent='#ffdcff';core='#ffffff';dmg=15;shape='boss'}
   else if(type==='raider'){hp=20*hpMul;spd=100*spdMul;r=10;color='#f44';accent='#ffb099';core='#fff0dd';dmg=5;shape='raider'}
   else if(type==='brute'){hp=60*hpMul;spd=40*spdMul;r=18;color='#fa0';accent='#ffe08a';core='#fff6d5';dmg=12;shape='brute'}
   else{hp=15*hpMul;spd=80*spdMul;r=8;color='#8f6bff';accent='#ff8cff';core='#ffffff';dmg=3;shape='drone'}
-  enemies.push({x,y,hp,maxHp:hp,spd,r,color,accent,core,dmg,type:isBoss?'boss':type,shape,flash:0,shootTimer:type==='drone'?2:0,rot:Math.random()*Math.PI*2,trailSeed:Math.random()*10});
+  enemies.push({x,y,hp,maxHp:hp,spd,r,color,accent,core,dmg,type:isBoss?'boss':type,shape,flash:0,shootTimer:type==='drone'?2:0,rot:Math.random()*Math.PI*2,trailSeed:Math.random()*10,laneHint:lane});
 }
 
 function startWave(){
@@ -274,10 +277,22 @@ function onPointerMove(x,y){
   if(!aiming)return;
   aimX=x;aimY=y;
 }
+function setLane(next){
+  laneIndex=Math.max(0,Math.min(2,next));
+  targetTrainX=(laneIndex-1)*TRACK_RAIL_GAUGE;
+}
+
 function onPointerUp(x,y){
-  if(state==='playing'&&aiming&&touchStartY-y>60&&dashCooldown<=0){
-    dashActive=.3;dashCooldown=dashCdMax;invuln=.3;
-    playSound('shield');
+  if(state==='playing'&&aiming){
+    const dx=x-(W/2+trainX);
+    if(Math.abs(dx)>36 && trackSwitchCooldown<=0){
+      setLane(laneIndex+(dx>0?1:-1));
+      trackSwitchCooldown=.18;
+    }
+    if(touchStartY-y>60&&dashCooldown<=0){
+      dashActive=.3;dashCooldown=dashCdMax;invuln=.3;
+      playSound('shield');
+    }
   }
   aiming=false;
 }
@@ -341,6 +356,7 @@ function resetGame(){
   magnetRadius=300;dashCdMax=3;dashCooldown=0;dashActive=0;invuln=0;
   enemies=[];bullets=[];particles=[];shardItems=[];floatingTexts=[];eventTexts=[];
   turretAngle=0;aiming=false;shakeTimer=0;zoneFlash=0;ambientPulse=0;surgeTimer=0;
+  laneIndex=1;trainX=0;targetTrainX=0;trackSwitchCooldown=0;
   waveActive=false;bossAlive=false;currentTheme=getWaveTheme(1);
 }
 
@@ -367,14 +383,17 @@ function update(dt){
   if(state!=='playing')return;
   scrollOffset+=dt*(70+wave*3);trackPhase+=dt*(2+wave*.04);ambientPulse+=dt;
 
-  // Dash
+  // Dash / rail switching
   if(dashActive>0)dashActive-=dt;
   if(dashCooldown>0)dashCooldown-=dt;
   if(invuln>0)invuln-=dt;
   if(zoneFlash>0)zoneFlash-=dt*.6;
+  if(trackSwitchCooldown>0)trackSwitchCooldown-=dt;
+  trainX += (targetTrainX-trainX)*Math.min(1,dt*10);
 
   // Turret aim
-  const cx=W/2,cy=H/2;
+  const cx=W/2+trainX,cy=H/2;
+  const def=getWaveDef(wave);
   if(aiming){
     turretAngle=Math.atan2(aimY-cy,aimX-cx);
     // Fire
@@ -410,10 +429,11 @@ function update(dt){
           floatingTexts.push({x:e.x,y:e.y,text:'+'+pts,life:1,maxLife:1,color:e.type==='boss'?'#ff0':'#0f8'});
           spawnParticles(e.x,e.y,e.color,15,120,{life:1.2,maxR:4.5,glow:12,fade:1.5});
           playSound('death');
-          shardItems.push({x:e.x,y:e.y,life:15});
-          if(e.type==='boss')for(let k=0;k<5;k++)shardItems.push({x:e.x+(Math.random()-0.5)*40,y:e.y+(Math.random()-0.5)*40,life:15});
+          shardItems.push({x:e.x,y:e.y,life:15,spin:Math.random()*6,pulse:Math.random()*6});
+          if(e.type==='boss')for(let k=0;k<5;k++)shardItems.push({x:e.x+(Math.random()-0.5)*40,y:e.y+(Math.random()-0.5)*40,life:15,spin:Math.random()*6,pulse:Math.random()*6});
           enemies.splice(j,1);
           shakeTimer=.15;shakeIntensity=e.type==='boss'?12:5;
+          if(e.type==='boss')zoneFlash=1;
           if(def.eventType==='phantom'&&Math.random()<.25&&enemiesRemaining>0){
             spawnEnemy('drone',def.hpMul*0.9,def.spdMul*1.1,false);
             enemiesRemaining=Math.max(0,enemiesRemaining-1);
@@ -426,7 +446,6 @@ function update(dt){
   }
 
   // Enemies
-  const def=getWaveDef(wave);
   if(waveActive&&enemiesRemaining>0){
     spawnTimer-=dt;
     if(spawnTimer<=0){
@@ -477,7 +496,7 @@ function update(dt){
     }
 
     // Hit bastion
-    if(dist<30+e.r){
+    if(dist<34+e.r){
       if(invuln<=0){
         let dmg=e.dmg;
         if(shield>0){const absorbed=Math.min(shield,dmg*.6);shield-=absorbed;dmg-=absorbed;playSound('shield')}
@@ -495,7 +514,7 @@ function update(dt){
     const b=bullets[i];
     if(!b.enemy)continue;
     const dx=cx-b.x,dy=cy-b.y;
-    if(dx*dx+dy*dy<30*30){
+    if(dx*dx+dy*dy<34*34){
       if(invuln<=0){
         let dmg=b.dmg;
         if(shield>0){const absorbed=Math.min(shield,dmg*.6);shield-=absorbed;dmg-=absorbed;playSound('shield')}
@@ -705,6 +724,20 @@ function draw(){
     ctx.beginPath();ctx.moveTo(x,H*.2);ctx.lineTo(x,H*.2+h);ctx.stroke();
     ctx.beginPath();ctx.moveTo(x-18,H*.2+h*.35);ctx.lineTo(x+18,H*.2+h*.35);ctx.stroke();
   }
+  for(let i=0;i<5;i++){
+    const t=i/4;
+    const bx=W*.12+t*W*.76;
+    const by=H*.18+Math.sin(ambientPulse*.3+i)*14;
+    const bw=70+i*18;
+    const bh=50+i*12;
+    const bg=ctx.createLinearGradient(bx,by,bx,by+bh);
+    bg.addColorStop(0,rgba(theme.accent,.18));
+    bg.addColorStop(1,rgba(theme.sleeper,.5));
+    ctx.fillStyle=bg;
+    ctx.fillRect(bx-bw*.5,by,bw,bh);
+    ctx.fillStyle=rgba(theme.hazard,.55);
+    ctx.fillRect(bx-bw*.22,by-16,bw*.44,16);
+  }
 
   // Train tracks with perspective
   const topHalf=TRACK_HALF_WIDTH*.28;
@@ -717,6 +750,7 @@ function draw(){
   const rightRailBottom=cx+TRACK_RAIL_GAUGE;
   const leftRailTop=cx-railTop;
   const rightRailTop=cx+railTop;
+  const laneRailBottom=[cx-TRACK_RAIL_GAUGE,cx,cx+TRACK_RAIL_GAUGE];
 
   const bed=ctx.createLinearGradient(0,0,0,H);
   bed.addColorStop(0,rgba(theme.sleeper,.2));
@@ -749,12 +783,14 @@ function draw(){
   ctx.shadowColor=rgba(theme.rail,.65);
   ctx.shadowBlur=18;
   ctx.beginPath();ctx.moveTo(leftRailTop,0);ctx.lineTo(leftRailBottom,H);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,H);ctx.stroke();
   ctx.beginPath();ctx.moveTo(rightRailTop,0);ctx.lineTo(rightRailBottom,H);ctx.stroke();
 
   ctx.shadowBlur=0;
   ctx.strokeStyle='rgba(255,255,255,.28)';
   ctx.lineWidth=1.25;
   ctx.beginPath();ctx.moveTo(leftRailTop+2,0);ctx.lineTo(leftRailBottom+2,H);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx+1,0);ctx.lineTo(cx+1,H);ctx.stroke();
   ctx.beginPath();ctx.moveTo(rightRailTop-2,0);ctx.lineTo(rightRailBottom-2,H);ctx.stroke();
 
   for(let side of [-1,1]){
@@ -831,6 +867,15 @@ function draw(){
     ctx.restore();
   }
 
+  // Lane indicators and switch target
+  for(let i=0;i<3;i++){
+    const laneX=laneRailBottom[i];
+    const active=i===laneIndex;
+    ctx.strokeStyle=active?rgba(theme.hazard,.6):'rgba(255,255,255,.08)';
+    ctx.lineWidth=active?5:2;
+    ctx.beginPath();ctx.moveTo(laneX,H*.78);ctx.lineTo(laneX,H);ctx.stroke();
+  }
+
   // Enemies
   for(const e of enemies){
     ctx.save();ctx.translate(e.x,e.y);
@@ -838,6 +883,8 @@ function draw(){
     const flash=e.flash>0;
 
     if(e.type==='boss'){
+      ctx.fillStyle=rgba(e.color,.12);
+      ctx.fillRect(-e.r*1.2,-e.r*.5,e.r*2.4,e.r);
       for(let ring=0;ring<3;ring++){
         ctx.strokeStyle=rgba(e.color,.16-ring*.03+.03*Math.sin(ambientPulse*2+ring));
         ctx.lineWidth=5-ring;
@@ -865,6 +912,8 @@ function draw(){
       ctx.fillStyle='#400';ctx.fillRect(-e.r,-e.r-16,e.r*2,6);
       ctx.fillStyle=e.color;ctx.fillRect(-e.r,-e.r-16,e.r*2*(e.hp/e.maxHp),6);
     }else if(e.type==='brute'){
+      ctx.fillStyle=rgba(e.color,.12);
+      ctx.fillRect(-e.r*1.1,-e.r*.42,e.r*2.2,e.r*.84);
       ctx.shadowColor=e.color;ctx.shadowBlur=18;
       const g=ctx.createLinearGradient(-e.r,-e.r,e.r,e.r);
       g.addColorStop(0,flash?'#fff':e.accent);
@@ -877,6 +926,8 @@ function draw(){
       ctx.beginPath();ctx.moveTo(-e.r*.45,-e.r*.2);ctx.lineTo(e.r*.55,-e.r*.45);ctx.stroke();
       ctx.beginPath();ctx.moveTo(-e.r*.2,e.r*.25);ctx.lineTo(e.r*.48,e.r*.08);ctx.stroke();
     }else if(e.type==='drone'){
+      ctx.fillStyle=rgba(e.color,.14);
+      ctx.fillRect(-e.r*1.2,-e.r*.25,e.r*2.4,e.r*.5);
       ctx.shadowColor=e.color;ctx.shadowBlur=16;
       for(let i=0;i<3;i++){
         ctx.strokeStyle=rgba(e.accent,.35-i*.08);
@@ -888,6 +939,8 @@ function draw(){
       ctx.fillStyle=e.core;
       ctx.beginPath();ctx.arc(0,0,e.r*.38,0,Math.PI*2);ctx.fill();
     }else{
+      ctx.fillStyle=rgba(e.color,.14);
+      ctx.fillRect(-e.r*1.25,-e.r*.35,e.r*2.5,e.r*.7);
       ctx.shadowColor=e.color;ctx.shadowBlur=14;
       const g=ctx.createRadialGradient(-e.r*.25,-e.r*.35,1,0,0,e.r*1.2);
       g.addColorStop(0,flash?'#fff':e.accent);
@@ -933,6 +986,11 @@ function draw(){
 
   // Bastion (center) now reads like a combat train
   ctx.save();ctx.translate(cx,cy);
+  const laneTrailAlpha=Math.min(1,Math.abs(targetTrainX-trainX)/TRACK_RAIL_GAUGE);
+  if(laneTrailAlpha>.01){
+    ctx.fillStyle=`rgba(255,255,255,${laneTrailAlpha*.12})`;
+    ctx.fillRect(-18,-34,-Math.sign(targetTrainX-trainX||1)*28,68);
+  }
   if(dashActive>0){
     ctx.strokeStyle='rgba(255,255,255,.18)';
     ctx.lineWidth=8;
@@ -948,6 +1006,9 @@ function draw(){
   ctx.fillRect(14,22,10,10);
   ctx.fillRect(-8,22,10,10);
   ctx.fillRect(-2,22,10,10);
+  ctx.fillStyle='rgba(255,190,90,.85)';
+  ctx.fillRect(-22,16,7,3);
+  ctx.fillRect(15,16,7,3);
 
   const trainBody=ctx.createLinearGradient(-34,-28,34,32);
   trainBody.addColorStop(0,'#21344c');
@@ -964,6 +1025,8 @@ function draw(){
   ctx.fillRect(-17,-14,12,9);
   ctx.fillRect(-1,-14,12,9);
   ctx.fillRect(15,-14,9,9);
+  ctx.fillStyle='rgba(255,255,255,.22)';
+  ctx.fillRect(-30,4,60,3);
 
   ctx.fillStyle='rgba(255,245,210,.95)';ctx.shadowColor='rgba(255,230,160,.85)';ctx.shadowBlur=18;
   ctx.beginPath();ctx.moveTo(-8,-24);ctx.lineTo(0,-32);ctx.lineTo(8,-24);ctx.closePath();ctx.fill();
