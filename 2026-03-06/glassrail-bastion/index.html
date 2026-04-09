@@ -66,8 +66,8 @@ button{touch-action:manipulation;cursor:pointer;border:none;outline:none;font-fa
     <div style="color:#fc0;font-size:clamp(20px,4vw,30px);font-weight:800;margin-bottom:14px">HOW TO PLAY</div>
     <div class="howto-list">
       <div><b>Aim and fire:</b> hold anywhere on the playfield to aim the cannon. The train auto-fires while you hold.</div>
-      <div><b>Switch tracks:</b> release on the left or right side of your train to snap onto the next rail lane.</div>
-      <div><b>Shield Burst:</b> swipe up to trigger a short defensive surge. It gives you a brief safety window, helps you slip through danger, and recharges on a cooldown.</div>
+      <div><b>Switch tracks:</b> touch and drag left or right, then release. A clear horizontal swipe jumps your train one lane in that direction.</div>
+      <div><b>Shield Burst:</b> touch and swipe upward, then release to trigger a short defensive surge. It gives you a brief safety window, helps you slip through danger, and recharges on a cooldown.</div>
       <div><b>Collect shards:</b> grab the bright glowing orb shards dropped by destroyed enemies for score and upgrade momentum.</div>
       <div><b>Survive the zone:</b> clear each wave, pick an upgrade, and keep your firepower growing fast enough to match the incoming rail assault.</div>
     </div>
@@ -171,7 +171,7 @@ let enemies=[],bullets=[],particles=[],shardItems=[],stars=[],floatingTexts=[],e
 let scrollOffset=0,shakeTimer=0,shakeIntensity=0;
 let spawnTimer=0,enemiesRemaining=0,waveActive=false,bossAlive=false;
 let lastTime=0;
-let touchStartY=0;
+let touchStartX=0,touchStartY=0;
 let newHsIdx=-1;
 let hsInitials=['A','A','A'];
 let hsCharIdx=0;
@@ -288,7 +288,7 @@ function onPointerDown(x,y){
   if(state!=='playing')return;
   initAudio();resumeAudio();
   aiming=true;aimX=x;aimY=y;
-  touchStartY=y;
+  touchStartX=x;touchStartY=y;
 }
 function onPointerMove(x,y){
   if(!aiming)return;
@@ -301,14 +301,15 @@ function setLane(next){
 
 function onPointerUp(x,y){
   if(state==='playing'&&aiming){
-    const dx=x-(W/2+trainX);
-    if(Math.abs(dx)>36 && trackSwitchCooldown<=0){
-      setLane(laneIndex+(dx>0?1:-1));
-      trackSwitchCooldown=.18;
-    }
-    if(touchStartY-y>60&&dashCooldown<=0){
+    const swipeX=x-touchStartX;
+    const swipeY=y-touchStartY;
+    if(swipeY<-60&&dashCooldown<=0){
       dashActive=.3;dashCooldown=dashCdMax;invuln=.3;
       playSound('shield');
+    }else if(Math.abs(swipeX)>40 && Math.abs(swipeX)>Math.abs(swipeY)*1.1 && trackSwitchCooldown<=0){
+      setLane(laneIndex+(swipeX>0?1:-1));
+      trackSwitchCooldown=.18;
+      zoneFlash=Math.max(zoneFlash,.25);
     }
   }
   aiming=false;
