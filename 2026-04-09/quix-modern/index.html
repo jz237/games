@@ -505,12 +505,31 @@ button.ghost{
   }
 
   function createQix(level) {
-    const speed = 18 + level * 2.1;
+    const speed = 10 + level * 1.15;
     return {
-      a: {x: GRID_W * 0.36, y: GRID_H * 0.42, vx: speed * 0.92, vy: speed * 1.08},
-      b: {x: GRID_W * 0.66, y: GRID_H * 0.58, vx: -speed * 1.02, vy: speed * 0.86},
+      x: GRID_W * 0.5,
+      y: GRID_H * 0.46,
+      vx: speed * 0.9,
+      vy: speed * 0.74,
+      phase: 0,
+      spin: 1.7 + level * 0.08,
+      length: 11 + level * 0.6,
       width: 1.5 + Math.min(level * 0.06, 1),
       hue: (195 + level * 14) % 360
+    };
+  }
+
+  function getQixEndpoints() {
+    if (!state.qix) return null;
+    const q = state.qix;
+    const wobble = Math.sin(q.phase * 1.7) * 2.4;
+    const len = q.length + wobble;
+    const a1 = q.phase;
+    const a2 = q.phase * 1.37 + Math.PI * 0.72;
+    return {
+      a: {x: q.x + Math.cos(a1) * len, y: q.y + Math.sin(a1 * 1.18) * len * 0.82},
+      b: {x: q.x + Math.cos(a2) * len * 0.92, y: q.y + Math.sin(a2 * 1.11) * len * 0.88},
+      center: {x: q.x, y: q.y}
     };
   }
 
@@ -587,8 +606,8 @@ button.ghost{
   }
 
   function clampQixPoint(point) {
-    point.x = Math.max(1.2, Math.min(GRID_W - 2.2, point.x));
-    point.y = Math.max(1.2, Math.min(GRID_H - 2.2, point.y));
+    point.x = Math.max(3.5, Math.min(GRID_W - 4.5, point.x));
+    point.y = Math.max(3.5, Math.min(GRID_H - 4.5, point.y));
   }
 
   function isQixBlocked(x, y) {
@@ -597,48 +616,45 @@ button.ghost{
     return getCell(ix, iy) === CELL_SAFE;
   }
 
-  function advanceQixPoint(point, dt) {
+  function updateQix(dt) {
+    if (!state.qix) return;
+    const q = state.qix;
+    q.phase += dt * q.spin * 2.4;
     const step = Math.min(0.016, dt);
     let remaining = dt;
     while (remaining > 0) {
       const slice = Math.min(step, remaining);
-      const nextX = point.x + point.vx * slice;
-      if (isQixBlocked(nextX, point.y)) {
-        point.vx *= -1;
-        point.x += point.vx * slice * 0.9;
+      const nextX = q.x + q.vx * slice;
+      if (isQixBlocked(nextX, q.y)) {
+        q.vx *= -1;
       } else {
-        point.x = nextX;
+        q.x = nextX;
       }
-      const nextY = point.y + point.vy * slice;
-      if (isQixBlocked(point.x, nextY)) {
-        point.vy *= -1;
-        point.y += point.vy * slice * 0.9;
+      const nextY = q.y + q.vy * slice;
+      if (isQixBlocked(q.x, nextY)) {
+        q.vy *= -1;
       } else {
-        point.y = nextY;
+        q.y = nextY;
       }
-      clampQixPoint(point);
+      clampQixPoint(q);
       remaining -= slice;
     }
-  }
 
-  function updateQix(dt) {
-    if (!state.qix) return;
-    advanceQixPoint(state.qix.a, dt);
-    advanceQixPoint(state.qix.b, dt);
-    const drift = 0.9 + state.level * 0.06;
-    state.qix.a.vx += Math.sin(performance.now() * 0.0011 + state.level) * drift * dt;
-    state.qix.a.vy += Math.cos(performance.now() * 0.0013 + 2) * drift * dt;
-    state.qix.b.vx += Math.cos(performance.now() * 0.001 + 1) * drift * dt;
-    state.qix.b.vy += Math.sin(performance.now() * 0.00125 + 4) * drift * dt;
+    const drift = 0.55 + state.level * 0.03;
+    q.vx += Math.sin(performance.now() * 0.0009 + state.level) * drift * dt;
+    q.vy += Math.cos(performance.now() * 0.0011 + 2.2) * drift * dt;
 
-    const minSpeed = 10 + state.level * 1.2;
-    for (const point of [state.qix.a, state.qix.b]) {
-      const speed = Math.hypot(point.vx, point.vy) || 1;
-      if (speed < minSpeed) {
-        const scale = minSpeed / speed;
-        point.vx *= scale;
-        point.vy *= scale;
-      }
+    const speed = Math.hypot(q.vx, q.vy) || 1;
+    const minSpeed = 8 + state.level * 0.9;
+    const maxSpeed = 16 + state.level * 1.25;
+    if (speed < minSpeed) {
+      const scale = minSpeed / speed;
+      q.vx *= scale;
+      q.vy *= scale;
+    } else if (speed > maxSpeed) {
+      const scale = maxSpeed / speed;
+      q.vx *= scale;
+      q.vy *= scale;
     }
   }
 
@@ -758,10 +774,11 @@ button.ghost{
       setCell(cell.x, cell.y, CELL_SAFE);
     }
 
+    const qixShape = getQixEndpoints();
     const seeds = [
-      state.qix.a,
-      state.qix.b,
-      {x: (state.qix.a.x + state.qix.b.x) * 0.5, y: (state.qix.a.y + state.qix.b.y) * 0.5}
+      qixShape.a,
+      qixShape.b,
+      qixShape.center
     ];
     const reachable = floodFillFromSeeds(seeds);
     let captured = 0;
@@ -957,10 +974,11 @@ button.ghost{
 
   function qixHitsTrail() {
     if (!state.player.drawing || !state.qix) return false;
-    const ax = state.qix.a.x + 0.5;
-    const ay = state.qix.a.y + 0.5;
-    const bx = state.qix.b.x + 0.5;
-    const by = state.qix.b.y + 0.5;
+    const qixShape = getQixEndpoints();
+    const ax = qixShape.a.x + 0.5;
+    const ay = qixShape.a.y + 0.5;
+    const bx = qixShape.b.x + 0.5;
+    const by = qixShape.b.y + 0.5;
     if (distToSegment(state.player.x + 0.5, state.player.y + 0.5, ax, ay, bx, by) < 1.1) {
       return true;
     }
@@ -980,7 +998,7 @@ button.ghost{
     updateQix(dt);
     updateParticles(dt);
     if (Math.random() < 0.18) {
-      spawnParticle((state.qix.a.x + state.qix.b.x) * 0.5, (state.qix.a.y + state.qix.b.y) * 0.5, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, 0.55, "capture");
+      spawnParticle(state.qix.x, state.qix.y, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, 0.55, "capture");
     }
   }
 
@@ -1078,10 +1096,11 @@ button.ghost{
 
   function drawQix(scale, offsetX, offsetY) {
     if (!state.qix) return;
-    const ax = offsetX + (state.qix.a.x + 0.5) * scale;
-    const ay = offsetY + (state.qix.a.y + 0.5) * scale;
-    const bx = offsetX + (state.qix.b.x + 0.5) * scale;
-    const by = offsetY + (state.qix.b.y + 0.5) * scale;
+    const qixShape = getQixEndpoints();
+    const ax = offsetX + (qixShape.a.x + 0.5) * scale;
+    const ay = offsetY + (qixShape.a.y + 0.5) * scale;
+    const bx = offsetX + (qixShape.b.x + 0.5) * scale;
+    const by = offsetY + (qixShape.b.y + 0.5) * scale;
 
     ctx.save();
     ctx.lineJoin = "round";
