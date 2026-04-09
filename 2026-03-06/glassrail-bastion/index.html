@@ -52,12 +52,13 @@ button{touch-action:manipulation;cursor:pointer;border:none;outline:none;font-fa
   <div class="title-text">GLASSRAIL<br>BASTION</div>
   <div class="subtitle">Crystal Rail Defense</div>
   <button class="btn btn-primary" id="startBtn">START</button>
+  <button class="btn btn-secondary" id="howToBtn">HOW TO PLAY</button>
   <button class="btn btn-secondary" id="hsBtn">HIGH SCORES</button>
 </div>
 
 <div id="tutorialScreen" class="overlay hidden">
   <div class="tutorial">
-    Hold to aim • Auto-fire<br>Swipe up to dash<br><br>Defend the bastion!
+    Hold to aim • Auto-fire<br>Release left or right to switch tracks<br>Swipe up to surge shield and slip danger<br><br>Collect bright orb shards and survive each rail zone.
   </div>
   <button class="btn btn-primary" id="tutorialOk" style="margin-top:20px">GOT IT</button>
 </div>
@@ -180,10 +181,10 @@ function rgba(hex,a){
 }
 
 const WAVE_THEMES=[
-  {name:'Aurora Crossing', skyTop:'#06111f', skyBottom:'#102b44', fog:'#38c6ff', rail:'#8ef3ff', accent:'#7cf7ff', sleeper:'#204257', hazard:'#89e6ff', event:'Aurora surge brightens the railglass'},
-  {name:'Amber Freight', skyTop:'#1a0d18', skyBottom:'#4a1f2c', fog:'#ff8c42', rail:'#ffd38a', accent:'#ff9b54', sleeper:'#5a3428', hazard:'#ffb347', event:'A freight storm spits ember sparks across the line'},
-  {name:'Prism Storm', skyTop:'#130b2e', skyBottom:'#2c1456', fog:'#b36bff', rail:'#c5a8ff', accent:'#7b6dff', sleeper:'#32274b', hazard:'#ff66ff', event:'Prismatic lightning fractures the skyline'},
-  {name:'Midnight Signal', skyTop:'#03060f', skyBottom:'#10203a', fog:'#00e1ff', rail:'#72bfff', accent:'#00ffd5', sleeper:'#1f2e48', hazard:'#36f0b5', event:'Signal towers flare and ghost trains flicker past'}
+  {name:'Aurora Crossing', skyTop:'#06111f', skyBottom:'#102b44', fog:'#38c6ff', rail:'#8ef3ff', accent:'#7cf7ff', sleeper:'#204257', hazard:'#89e6ff', event:'Aurora surge brightens the railglass', vista:'aurora', scenery:'ice-spires'},
+  {name:'Amber Freight', skyTop:'#1a0d18', skyBottom:'#4a1f2c', fog:'#ff8c42', rail:'#ffd38a', accent:'#ff9b54', sleeper:'#5a3428', hazard:'#ffb347', event:'A freight storm spits ember sparks across the line', vista:'forge', scenery:'industry'},
+  {name:'Prism Storm', skyTop:'#130b2e', skyBottom:'#2c1456', fog:'#b36bff', rail:'#c5a8ff', accent:'#7b6dff', sleeper:'#32274b', hazard:'#ff66ff', event:'Prismatic lightning fractures the skyline', vista:'crystal', scenery:'monoliths'},
+  {name:'Midnight Signal', skyTop:'#03060f', skyBottom:'#10203a', fog:'#00e1ff', rail:'#72bfff', accent:'#00ffd5', sleeper:'#1f2e48', hazard:'#36f0b5', event:'Signal towers flare and ghost trains flicker past', vista:'signal', scenery:'city'}
 ];
 
 // Track shimmer
@@ -317,6 +318,11 @@ function btnHandler(el,fn){
 
 btnHandler(document.getElementById('startBtn'),()=>{
   initAudio();resumeAudio();
+  document.getElementById('titleScreen').classList.add('hidden');
+  document.getElementById('tutorialScreen').classList.remove('hidden');
+  state='tutorial';
+});
+btnHandler(document.getElementById('howToBtn'),()=>{
   document.getElementById('titleScreen').classList.add('hidden');
   document.getElementById('tutorialScreen').classList.remove('hidden');
   state='tutorial';
@@ -700,6 +706,50 @@ function draw(){
     ctx.fillRect(bandX-W*.08,0,W*.16,H);
   }
 
+  // Big wave-specific vista effects
+  if(theme.vista==='aurora'){
+    for(let i=0;i<5;i++){
+      const ax=cx+Math.sin(ambientPulse*.35+i)*W*.28;
+      const aur=ctx.createLinearGradient(ax,0,ax+W*.16,0);
+      aur.addColorStop(0,'rgba(0,0,0,0)');
+      aur.addColorStop(.35,rgba('#5dffef',.12));
+      aur.addColorStop(.7,rgba(theme.hazard,.2));
+      aur.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=aur;
+      ctx.fillRect(ax-W*.1,0,W*.2,H*.7);
+    }
+  }else if(theme.vista==='forge'){
+    for(let i=0;i<28;i++){
+      const ex=((i*61+scrollOffset*7)% (W+80))-40;
+      const ey=((i*93+scrollOffset*3)% (H*.7+80))-40;
+      ctx.fillStyle=rgba(theme.hazard,.18+.08*Math.sin(i+ambientPulse*3));
+      ctx.beginPath();ctx.arc(ex,ey,2+(i%3),0,Math.PI*2);ctx.fill();
+    }
+    const heat=ctx.createLinearGradient(0,H*.1,0,H*.8);
+    heat.addColorStop(0,'rgba(0,0,0,0)');
+    heat.addColorStop(.5,rgba(theme.hazard,.1));
+    heat.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=heat;ctx.fillRect(0,0,W,H);
+  }else if(theme.vista==='crystal'){
+    for(let i=0;i<7;i++){
+      const mx=W*.08+i*W*.13;
+      const mh=70+(i%3)*38+Math.sin(ambientPulse+i)*10;
+      ctx.fillStyle=rgba(theme.accent,.16);
+      ctx.beginPath();ctx.moveTo(mx,H*.36-mh);ctx.lineTo(mx+18,H*.36);ctx.lineTo(mx-18,H*.36);ctx.closePath();ctx.fill();
+      ctx.fillStyle=rgba(theme.hazard,.1);
+      ctx.beginPath();ctx.moveTo(mx+24,H*.42-mh*.8);ctx.lineTo(mx+40,H*.42);ctx.lineTo(mx+8,H*.42);ctx.closePath();ctx.fill();
+    }
+  }else if(theme.vista==='signal'){
+    for(let i=0;i<6;i++){
+      const sx=W*.1+i*W*.15;
+      const pulse=.25+.15*Math.sin(ambientPulse*2+i);
+      ctx.strokeStyle=rgba(theme.hazard,pulse);
+      ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(sx,H*.22,16+i*3,0,Math.PI*2);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(sx,H*.22);ctx.lineTo(sx,H*.48);ctx.stroke();
+    }
+  }
+
   // Stars parallax
   for(const s of stars){
     const px=((s.x-scrollOffset*s.d*.12)%W+W)%W;
@@ -737,6 +787,40 @@ function draw(){
     ctx.fillRect(bx-bw*.5,by,bw,bh);
     ctx.fillStyle=rgba(theme.hazard,.55);
     ctx.fillRect(bx-bw*.22,by-16,bw*.44,16);
+  }
+  if(theme.scenery==='ice-spires'){
+    for(let i=0;i<9;i++){
+      const x=W*.05+i*W*.11;
+      const h=90+(i%4)*34;
+      ctx.fillStyle=rgba(theme.rail,.1);
+      ctx.beginPath();ctx.moveTo(x,H*.62);ctx.lineTo(x+20,H*.62-h);ctx.lineTo(x+42,H*.62);ctx.closePath();ctx.fill();
+    }
+  }else if(theme.scenery==='industry'){
+    for(let i=0;i<6;i++){
+      const x=W*.06+i*W*.16;
+      const h=80+(i%3)*30;
+      ctx.fillStyle='rgba(30,18,14,.75)';ctx.fillRect(x,H*.5-h,50,h);
+      ctx.fillStyle=rgba(theme.hazard,.22);ctx.fillRect(x+16,H*.5-h-26,14,26);
+      ctx.fillStyle=rgba(theme.hazard,.14);ctx.fillRect(x+22,H*.5-h-54,3,28);
+    }
+  }else if(theme.scenery==='monoliths'){
+    for(let i=0;i<8;i++){
+      const x=W*.04+i*W*.12;
+      const h=120+(i%2)*50;
+      ctx.fillStyle=rgba(theme.accent,.12);
+      ctx.beginPath();ctx.moveTo(x,H*.6);ctx.lineTo(x+18,H*.6-h);ctx.lineTo(x+36,H*.6);ctx.closePath();ctx.fill();
+      ctx.strokeStyle=rgba(theme.hazard,.2);ctx.lineWidth=1.5;ctx.stroke();
+    }
+  }else if(theme.scenery==='city'){
+    for(let i=0;i<10;i++){
+      const x=W*.02+i*W*.1;
+      const h=70+(i%5)*22;
+      ctx.fillStyle='rgba(8,16,28,.78)';ctx.fillRect(x,H*.56-h,44,h);
+      for(let r=0;r<4;r++)for(let c=0;c<2;c++){
+        ctx.fillStyle=((r+c+i)%3===0)?rgba(theme.hazard,.3):'rgba(255,255,255,.06)';
+        ctx.fillRect(x+8+c*14,H*.56-h+10+r*12,6,6);
+      }
+    }
   }
 
   // Train tracks with perspective
