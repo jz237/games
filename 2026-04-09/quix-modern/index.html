@@ -519,6 +519,8 @@ button.ghost{
   let qixHum = null;
   let levelAdvanceTimer = 0;
   let deathResolveTimer = 0;
+  let mouseDragActive = false;
+  let lastRenderError = "";
 
   const state = {
     phase: "title",
@@ -556,8 +558,20 @@ button.ghost{
   function resizeCanvas() {
     const bounds = canvas.getBoundingClientRect();
     dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
-    canvas.width = Math.round(bounds.width * dpr);
-    canvas.height = Math.round(bounds.height * dpr);
+    canvas.width = Math.max(1, Math.round(bounds.width * dpr));
+    canvas.height = Math.max(1, Math.round(bounds.height * dpr));
+  }
+
+  function safeFocus(el) {
+    if (!el || typeof el.focus !== "function") return;
+    try {
+      el.focus({preventScroll: true});
+    } catch (error) {
+      try {
+        el.focus();
+      } catch (error2) {
+      }
+    }
   }
 
   function idx(x, y) {
@@ -1352,7 +1366,7 @@ button.ghost{
     initialsInput.value = "";
     showOverlay(gameOverOverlay);
     if (qualifies) {
-      initialsInput.focus({preventScroll: true});
+      safeFocus(initialsInput);
     }
     updateHud(true);
   }
@@ -2217,8 +2231,23 @@ button.ghost{
   function tick(time) {
     const dt = Math.min(0.033, (time - lastTime) / 1000 || 0.016);
     lastTime = time;
-    update(dt);
-    render();
+    try {
+      update(dt);
+      render();
+      lastRenderError = "";
+    } catch (error) {
+      const message = (error && error.message) ? error.message : String(error);
+      if (message !== lastRenderError) {
+        console.error("Neon Qix runtime error:", error);
+        lastRenderError = message;
+      }
+      try {
+        state.phase = "paused";
+        state.levelMessage = "Browser hit an error. Reload and it should recover.";
+        updateHud(true);
+      } catch (error2) {
+      }
+    }
     raf = requestAnimationFrame(tick);
   }
 
@@ -2231,7 +2260,7 @@ button.ghost{
     const name = normalizeInitials(initialsInput.value || "AAA");
     if (name.length !== 3) {
       initialsInput.value = name;
-      initialsInput.focus({preventScroll: true});
+      safeFocus(initialsInput);
       return;
     }
     const pending = state.pendingScore;
@@ -2330,9 +2359,11 @@ button.ghost{
   function unlockAudio() {
     if (audioUnlocked) return;
     try {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const AudioCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtor) return;
+      audioCtx = new AudioCtor();
       if (audioCtx && audioCtx.state === "suspended") {
-        audioCtx.resume();
+        audioCtx.resume().catch?.(() => {});
       }
       audioUnlocked = true;
       ensureQixHum();
@@ -2463,32 +2494,83 @@ button.ghost{
       setControlDirection(dir, "canvas");
     }
 
+    function beginCanvasDrag(pointerId, clientX, clientY) {
+      if (state.phase !== "playing") return;
+      unlockAudio();
+      canvasPointerId = pointerId;
+      canvasStartX = clientX;
+      canvasStartY = clientY;
+      canvasLastDir = null;
+    }
+
+    function endCanvasDrag(pointerId = null) {
+      if (pointerId != null && canvasPointerId != null && canvasPointerId !== pointerId) return;
+      if (controlSource === "canvas") setControlDirection(null);
+      canvasPointerId = null;
+      canvasLastDir = null;
+      mouseDragActive = false;
+    }
+
     canvas.addEventListener("pointerdown", (event) => {
       if (state.phase !== "playing") return;
       event.preventDefault();
-      unlockAudio();
-      canvasPointerId = event.pointerId;
-      canvasStartX = event.clientX;
-      canvasStartY = event.clientY;
-      canvasLastDir = null;
-      canvas.setPointerCapture?.(event.pointerId);
-    });
+      beginCanvasDrag(event.pointerId, event.clientX, event.clientY);
+      try {
+        canvas.setPointerCapture?.(event.pointerId);
+      } catch (error) {
+      }
+    }, {passive:false});
     canvas.addEventListener("pointermove", (event) => {
       if (canvasPointerId !== event.pointerId || state.phase !== "playing") return;
       event.preventDefault();
       applyCanvasDirection(event.clientX, event.clientY);
-    });
+    }, {passive:false});
     canvas.addEventListener("pointerup", (event) => {
-      if (canvasPointerId !== event.pointerId) return;
-      if (controlSource === "canvas") setControlDirection(null);
-      canvasPointerId = null;
-      canvasLastDir = null;
+      endCanvasDrag(event.pointerId);
     });
     canvas.addEventListener("pointercancel", (event) => {
-      if (canvasPointerId !== event.pointerId) return;
-      if (controlSource === "canvas") setControlDirection(null);
-      canvasPointerId = null;
-      canvasLastDir = null;
+      endCanvasDrag(event.pointerId);
+    });
+
+    canvas.addEventListener("mousedown", (event) => {
+      if (window.PointerEvent) return;
+      if (state.phase !== "playing") return;
+      event.preventDefault();
+      mouseDragActive = true;
+      beginCanvasDrag("mouse", event.clientX, event.clientY);
+    });
+    window.addEventListener("mousemove", (event) => {
+      if (window.PointerEvent || !mouseDragActive || state.phase !== "playing") return;
+      event.preventDefault();
+      applyCanvasDirection(event.clientX, event.clientY);
+    });
+    window.addEventListener("mouseup", () => {
+      if (window.PointerEvent || !mouseDragActive) return;
+      endCanvasDrag("mouse");
+    });
+
+    canvas.addEventListener("touchstart", (event) => {
+      if (window.PointerEvent) return;
+      if (state.phase !== "playing") return;
+      const touch = event.changedTouches && event.changedTouches[0];
+      if (!touch) return;
+      event.preventDefault();
+      beginCanvasDrag("touch", touch.clientX, touch.clientY);
+    }, {passive:false});
+    canvas.addEventListener("touchmove", (event) => {
+      if (window.PointerEvent || canvasPointerId !== "touch" || state.phase !== "playing") return;
+      const touch = event.changedTouches && event.changedTouches[0];
+      if (!touch) return;
+      event.preventDefault();
+      applyCanvasDirection(touch.clientX, touch.clientY);
+    }, {passive:false});
+    canvas.addEventListener("touchend", () => {
+      if (window.PointerEvent) return;
+      endCanvasDrag("touch");
+    });
+    canvas.addEventListener("touchcancel", () => {
+      if (window.PointerEvent) return;
+      endCanvasDrag("touch");
     });
   }
 
