@@ -1574,7 +1574,7 @@ button.ghost{
 
     const now = audioCtx.currentTime;
     const active = state.phase === "playing" || state.phase === "title" || state.phase === "paused";
-    const targetGain = active && state.qix ? 0.018 : 0.00001;
+    const targetGain = active && state.qix ? 0.04 : 0.00001;
     qixHum.gain.gain.setTargetAtTime(targetGain, now, 0.09);
     if (!state.qix) return;
 
@@ -1623,7 +1623,7 @@ button.ghost{
       oscB.frequency.exponentialRampToValueAtTime(Math.max(40, bEnd), now + decay * 0.92);
       filter.frequency.setValueAtTime(cutoff, now);
       gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(peak, now + attack);
+      gain.gain.exponentialRampToValueAtTime(peak * 2.1, now + attack);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
       return decay;
     };
