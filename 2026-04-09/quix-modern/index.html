@@ -453,6 +453,7 @@ button.ghost{
     player: {x: 0, y: 0, alive: true, drawing: false, moveClock: 0, respawnFlash: 0},
     trail: [],
     qix: null,
+    qixTrail: [],
     particles: [],
     pulses: [],
     captureFlash: 0,
@@ -554,20 +555,18 @@ button.ghost{
     if (!shape) return {hitX:false,hitY:false,minX:0,maxX:0,minY:0,maxY:0};
     const points = [shape.a, shape.b, shape.center];
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    let hitX = false, hitY = false;
     for (const p of points) {
       minX = Math.min(minX, p.x);
       maxX = Math.max(maxX, p.x);
       minY = Math.min(minY, p.y);
       maxY = Math.max(maxY, p.y);
-      if (p.x <= 1.25 || p.x >= GRID_W - 2.25) hitX = true;
-      if (p.y <= 1.25 || p.y >= GRID_H - 2.25) hitY = true;
-      if (isQixBlocked(p.x, p.y)) {
-        if (p.x <= 2 || p.x >= GRID_W - 3) hitX = true;
-        if (p.y <= 2 || p.y >= GRID_H - 3) hitY = true;
-      }
     }
-    return {hitX,hitY,minX,maxX,minY,maxY};
+    const margin = 2.8;
+    return {
+      hitX: minX <= margin || maxX >= GRID_W - 1 - margin,
+      hitY: minY <= margin || maxY >= GRID_H - 1 - margin,
+      minX,maxX,minY,maxY
+    };
   }
 
   function resetPlayer() {
@@ -605,6 +604,7 @@ button.ghost{
     state.shake = 0;
     state.particles.length = 0;
     state.pulses.length = 0;
+    state.qixTrail.length = 0;
     resetField();
     resetPlayer();
     state.qix = createQix(level);
@@ -668,30 +668,25 @@ button.ghost{
     let remaining = dt;
     while (remaining > 0) {
       const slice = Math.min(step, remaining);
-      const testX = {...q, x:q.x + q.vx * slice};
-      const shapeX = qixShapeHitsWall(testX);
-      if (shapeX.hitX) {
-        if (q.vx > 0) q.x -= Math.max(0, shapeX.maxX - (GRID_W - 2.35));
-        else q.x += Math.max(0, 1.35 - shapeX.minX);
-        const wallX = q.vx > 0 ? GRID_W - 2.05 : 1.05;
-        const sparkAngle = q.vx > 0 ? Math.PI : 0;
-        q.vx = Math.abs(q.vx) * (q.vx > 0 ? -1 : 1);
-        spawnBurst(wallX, q.y, 3, "spark", {angle: sparkAngle, spread: 0.32, speedMin: 1.5, speedMax: 3.5, lifeMin: 0.08});
-      } else {
-        q.x = testX.x;
-      }
+      q.x += q.vx * slice;
+      q.y += q.vy * slice;
 
-      const testY = {...q, y:q.y + q.vy * slice};
-      const shapeY = qixShapeHitsWall(testY);
-      if (shapeY.hitY) {
-        if (q.vy > 0) q.y -= Math.max(0, shapeY.maxY - (GRID_H - 2.35));
-        else q.y += Math.max(0, 1.35 - shapeY.minY);
-        const wallY = q.vy > 0 ? GRID_H - 2.05 : 1.05;
-        const sparkAngle = q.vy > 0 ? -Math.PI * 0.5 : Math.PI * 0.5;
-        q.vy = Math.abs(q.vy) * (q.vy > 0 ? -1 : 1);
-        spawnBurst(q.x, wallY, 3, "spark", {angle: sparkAngle, spread: 0.32, speedMin: 1.5, speedMax: 3.5, lifeMin: 0.08});
-      } else {
-        q.y = testY.y;
+      let shape = qixShapeHitsWall(q);
+      const margin = 2.8;
+      if (shape.minX <= margin) {
+        q.x += margin - shape.minX;
+        q.vx = Math.abs(q.vx);
+      } else if (shape.maxX >= GRID_W - 1 - margin) {
+        q.x -= shape.maxX - (GRID_W - 1 - margin);
+        q.vx = -Math.abs(q.vx);
+      }
+      shape = qixShapeHitsWall(q);
+      if (shape.minY <= margin) {
+        q.y += margin - shape.minY;
+        q.vy = Math.abs(q.vy);
+      } else if (shape.maxY >= GRID_H - 1 - margin) {
+        q.y -= shape.maxY - (GRID_H - 1 - margin);
+        q.vy = -Math.abs(q.vy);
       }
 
       clampQixPoint(q);
@@ -721,6 +716,15 @@ button.ghost{
       q.vx *= scale;
       q.vy *= scale;
     }
+
+    const shape = getQixEndpoints(q);
+    state.qixTrail.unshift({
+      ax: shape.a.x, ay: shape.a.y,
+      bx: shape.b.x, by: shape.b.y,
+      hue: (q.hue + Math.sin(q.phase * 1.3) * 40 + Math.cos(q.phase * 0.7) * 25 + 360) % 360,
+      life: 1
+    });
+    if (state.qixTrail.length > 22) state.qixTrail.length = 22;
   }
 
   function activeDirection() {
@@ -1176,11 +1180,23 @@ button.ghost{
     ctx.save();
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
+
+    for (let i = state.qixTrail.length - 1; i >= 0; i--) {
+      const trail = state.qixTrail[i];
+      const alpha = (i + 1) / state.qixTrail.length * 0.45;
+      ctx.strokeStyle = `hsla(${trail.hue}, 95%, 70%, ${alpha})`;
+      ctx.lineWidth = Math.max(1, scale * 0.18);
+      ctx.beginPath();
+      ctx.moveTo(offsetX + (trail.ax + 0.5) * scale, offsetY + (trail.ay + 0.5) * scale);
+      ctx.lineTo(offsetX + (trail.bx + 0.5) * scale, offsetY + (trail.by + 0.5) * scale);
+      ctx.stroke();
+    }
+
     const liveHue = (state.qix.hue + Math.sin(state.qix.phase * 1.3) * 40 + Math.cos(state.qix.phase * 0.7) * 25 + 360) % 360;
     ctx.strokeStyle = "hsla(" + liveHue + ", 100%, 72%, 0.96)";
     ctx.lineWidth = Math.max(3, scale * state.qix.width);
-    ctx.shadowBlur = scale * 2.8;
-    ctx.shadowColor = "hsla(" + ((liveHue + 24) % 360) + ", 100%, 66%, 0.9)";
+    ctx.shadowBlur = scale * 1.6;
+    ctx.shadowColor = "hsla(" + ((liveHue + 24) % 360) + ", 100%, 66%, 0.7)";
     ctx.beginPath();
     ctx.moveTo(ax, ay);
     ctx.lineTo(bx, by);
@@ -1191,7 +1207,7 @@ button.ghost{
     coreGrad.addColorStop(0.5, "rgba(255,213,106,0.95)");
     coreGrad.addColorStop(1, "rgba(255,255,255,0.9)");
     ctx.strokeStyle = coreGrad;
-    ctx.lineWidth = Math.max(1.4, scale * 0.34);
+    ctx.lineWidth = Math.max(1.2, scale * 0.26);
     ctx.beginPath();
     ctx.moveTo(ax, ay);
     ctx.lineTo(bx, by);
@@ -1239,13 +1255,14 @@ button.ghost{
       ctx.stroke();
     }
     for (const p of state.particles) {
+      if (p.kind === "spark") continue;
       const alpha = Math.max(0, p.life / p.maxLife);
-      const color = p.kind === "danger" ? "255,106,122" : p.kind === "capture" ? "255,213,106" : p.kind === "spark" ? "125,246,255" : "125,246,255";
+      const color = p.kind === "danger" ? "255,106,122" : p.kind === "capture" ? "255,213,106" : "125,246,255";
       ctx.fillStyle = "rgba(" + color + "," + alpha + ")";
-      ctx.shadowBlur = p.kind === "spark" ? scale * 0.45 : scale * 1.2;
+      ctx.shadowBlur = scale * 1.2;
       ctx.shadowColor = "rgba(" + color + "," + Math.min(alpha * 1.2, 1) + ")";
       ctx.beginPath();
-      ctx.arc(offsetX + p.x * scale, offsetY + p.y * scale, p.kind === "spark" ? Math.max(0.5, scale * 0.09) : Math.max(1, scale * 0.22), 0, Math.PI * 2);
+      ctx.arc(offsetX + p.x * scale, offsetY + p.y * scale, Math.max(1, scale * 0.22), 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
