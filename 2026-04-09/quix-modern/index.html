@@ -370,12 +370,7 @@ button.ghost{
         <div class="panel">
           <span class="eyebrow">Vector Arcade / 1981 Reimagined</span>
           <h1 class="title">Neon <span>Qix</span></h1>
-          <p class="lead">Trace through open space, close the loop, and let the field collapse away from the roaming energy line. The deeper the cut, the bigger the score, but your trail is live and lethal until you reconnect with safety.</p>
-          <div class="howto">
-            <div><strong>Move on the border</strong> to stay safe. Drag on the playfield to steer, or use arrow keys on desktop.</div>
-            <div><strong>Push away from a safe edge</strong> to start a live cut, then close the shape by reconnecting to a wall.</div>
-            <div><strong>Avoid contact</strong> with the Qix line while drawing. Clear the target percentage to advance.</div>
-          </div>
+          <p class="lead">Cut fast, trap space, stay off the live line.</p>
           <div class="cta-row">
             <button class="primary" id="startButton">Start Game</button>
             <button class="ghost" id="howButton">How To Play</button>
@@ -383,7 +378,7 @@ button.ghost{
           <div class="secondary-row" style="margin-top:10px">
             <button id="scoresButton">High Scores</button>
           </div>
-          <p class="small-copy" id="attractCopy">Attract mode is live behind this panel. Tap Start to arm the full weird audio bed.</p>
+          <p class="small-copy" id="attractCopy">Fast demo play runs behind this panel. Use How To Play if you want the full rules.</p>
         </div>
       </div>
 
@@ -502,6 +497,7 @@ button.ghost{
   let canvasStartX = 0;
   let canvasStartY = 0;
   let canvasLastDir = null;
+  let attractDir = null;
   let dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
   let audioCtx = null;
   let audioUnlocked = false;
@@ -530,6 +526,10 @@ button.ghost{
     shake: 0,
     pendingScore: null,
     attractClock: 0,
+    attractCycle: 0,
+    attractStep: 0,
+    attractScript: [],
+    attractCooldown: 0,
     totalClaimedCells: 0,
     levelMessage: "Trace into open space and close the cut."
   };
@@ -1091,6 +1091,7 @@ button.ghost{
   }
 
   function activeDirection() {
+    if (state.phase === "title") return attractDir;
     return controlDir || keyboardDir;
   }
 
@@ -1098,11 +1099,12 @@ button.ghost{
     const dirName = activeDirection();
     if (!dirName) return;
     state.player.moveClock += dt;
-    const interval = state.player.drawing ? Math.max(0.032, 0.056 - state.level * 0.002) : Math.max(0.026, 0.042 - state.level * 0.0015);
+    const intervalBase = state.player.drawing ? Math.max(0.032, 0.056 - state.level * 0.002) : Math.max(0.026, 0.042 - state.level * 0.0015);
+    const interval = state.phase === "title" ? intervalBase * 0.55 : intervalBase;
     while (state.player.moveClock >= interval) {
       state.player.moveClock -= interval;
       stepPlayer(dirName);
-      if (state.phase !== "playing") return;
+      if (state.phase !== "playing" && state.phase !== "title") return;
     }
   }
 
@@ -1525,18 +1527,86 @@ button.ghost{
     return false;
   }
 
-  function updateAttractMode(dt) {
-    if (!state.qix) {
-      state.qix = createQix(3);
+  function buildAttractScript() {
+    const leftSide = state.attractCycle % 2 === 0;
+    const entryX = leftSide ? 20 : GRID_W - 21;
+    const sweepX = leftSide ? 32 : GRID_W - 33;
+    const topY = 74;
+    return [
+      {x: entryX, y: GRID_H - 1},
+      {x: entryX, y: topY},
+      {x: sweepX, y: topY},
+      {x: sweepX, y: GRID_H - 1}
+    ];
+  }
+
+  function updateAttractDirector() {
+    if (state.attractCooldown > 0) {
+      attractDir = null;
+      return;
     }
-    if (!state.sparx.length) {
-      state.sparx = createSparxWave(2, true);
+    const target = state.attractScript[state.attractStep];
+    if (!target) {
+      attractDir = null;
+      return;
+    }
+    if (state.player.x === target.x && state.player.y === target.y) {
+      state.attractStep += 1;
+      const next = state.attractScript[state.attractStep];
+      if (!next) {
+        attractDir = null;
+        return;
+      }
+      return updateAttractDirector();
+    }
+    const dx = target.x - state.player.x;
+    const dy = target.y - state.player.y;
+    attractDir = Math.abs(dx) > 0 ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
+  }
+
+  function resetAttractDemo() {
+    resetField();
+    resetPlayer();
+    state.sparx = createSparxWave(3, true);
+    state.qix = createQix(4);
+    state.qixTrail.length = 0;
+    state.particles.length = 0;
+    state.pulses.length = 0;
+    state.captureFlash = 0;
+    state.screenFlash = 0;
+    state.shake = 0;
+    state.claimedRatio = calculateClaimedRatio();
+    state.targetRatio = levelGoal(2);
+    state.attractCycle += 1;
+    state.attractStep = 0;
+    state.attractScript = buildAttractScript();
+    state.attractCooldown = 0.35;
+    attractDir = null;
+  }
+
+  function updateAttractMode(dt) {
+    if (!state.qix || !state.sparx.length || !state.attractScript.length) {
+      resetAttractDemo();
     }
     state.attractClock += dt;
-    state.captureFlash = Math.max(0, state.captureFlash - dt * 0.7);
-    updateQix(dt * 1.05);
-    updateSparx(dt);
+    state.captureFlash = Math.max(0, state.captureFlash - dt * 0.8);
+    state.attractCooldown = Math.max(0, state.attractCooldown - dt);
+
+    updateAttractDirector();
+    updateQix(dt * 1.2);
+    updatePlayer(dt * 1.2);
+    updateSparx(dt * 1.15);
     updateParticles(dt);
+
+    if (qixHitsTrail()) {
+      resetAttractDemo();
+      return;
+    }
+    if (!state.player.drawing && state.claimedRatio > 0.03 && state.attractStep >= state.attractScript.length) {
+      resetAttractDemo();
+      return;
+    }
+
     if (Math.random() < 0.24) {
       spawnParticle(state.qix.x, state.qix.y, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, 0.65, "capture");
     }
@@ -1859,7 +1929,7 @@ button.ghost{
     drawQix(scale, offsetX, offsetY);
     drawParticles(scale, offsetX, offsetY);
     drawSparx(scale, offsetX, offsetY);
-    if (state.phase !== "title" && state.player.alive) {
+    if (state.player.alive) {
       drawPlayer(scale, offsetX, offsetY);
     }
 
@@ -2191,17 +2261,7 @@ button.ghost{
       pauseButton.textContent = "Pause";
       showOverlay(titleOverlay);
       renderHighScores();
-      state.qix = createQix(3);
-      state.particles.length = 0;
-      state.pulses.length = 0;
-      resetField();
-      clearTrail();
-      state.claimedRatio = 0;
-      state.score = 0;
-      state.level = 1;
-      state.lives = 3;
-      state.targetRatio = levelGoal(1);
-      updateHud(true);
+      seedAttractState();
     });
     pauseButton.addEventListener("click", () => {
       if (state.phase === "playing" || state.phase === "paused") {
@@ -2220,13 +2280,11 @@ button.ghost{
   }
 
   function seedAttractState() {
-    resetField();
-    state.qix = createQix(3);
     state.score = 0;
-    state.level = 1;
+    state.level = 2;
     state.lives = 3;
-    state.claimedRatio = 0;
-    state.targetRatio = levelGoal(1);
+    state.levelMessage = "Demo play is live in the background.";
+    resetAttractDemo();
     updateHud(true);
     renderHighScores();
   }
