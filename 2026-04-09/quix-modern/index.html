@@ -60,25 +60,25 @@ body{
   inset:0;
   display:flex;
   flex-direction:column;
-  padding:calc(env(safe-area-inset-top, 0px) + 10px) 10px calc(env(safe-area-inset-bottom, 0px) + 58px);
-  gap:8px;
+  padding:calc(env(safe-area-inset-top, 0px) + 6px) 6px calc(env(safe-area-inset-bottom, 0px) + 46px);
+  gap:6px;
 }
 .hud{
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
-  gap:8px;
+  gap:6px;
   pointer-events:none;
 }
 .hud-card{
   background:linear-gradient(180deg, rgba(20,37,72,0.9), rgba(7,13,30,0.86));
   border:1px solid var(--panel-border);
-  border-radius:16px;
-  padding:8px 10px;
-  box-shadow:0 0 0 1px rgba(255,255,255,0.03) inset, 0 12px 30px rgba(0,0,0,0.28);
+  border-radius:14px;
+  padding:6px 8px;
+  box-shadow:0 0 0 1px rgba(255,255,255,0.03) inset, 0 10px 22px rgba(0,0,0,0.24);
 }
 .hud-label{
   display:block;
-  font-size:10px;
+  font-size:9px;
   letter-spacing:0.18em;
   text-transform:uppercase;
   color:var(--muted);
@@ -86,7 +86,7 @@ body{
 }
 .hud-value{
   display:block;
-  font-size:17px;
+  font-size:15px;
   font-weight:700;
 }
 .stage{
@@ -249,38 +249,51 @@ button.ghost{
 }
 .status-bar{
   min-width:0;
-  padding:10px 12px;
-  border-radius:18px;
+  padding:8px 10px;
+  border-radius:16px;
   background:rgba(255,255,255,0.04);
   border:1px solid rgba(255,255,255,0.06);
   margin-top:2px;
+  position:absolute;
+  left:6px;
+  right:92px;
+  bottom:6px;
+  z-index:6;
+  pointer-events:none;
+  backdrop-filter:blur(6px);
 }
 .status-bar strong{
   display:block;
   color:var(--gold);
   letter-spacing:0.16em;
-  font-size:11px;
-  margin-bottom:4px;
+  font-size:10px;
+  margin-bottom:3px;
   text-transform:uppercase;
 }
 .status-bar span{
   display:block;
-  font-size:13px;
-  line-height:1.35;
+  font-size:12px;
+  line-height:1.25;
   color:#d0e6fb;
 }
 .footer-actions{
   position:absolute;
-  right:12px;
-  bottom:12px;
+  right:6px;
+  bottom:6px;
   display:flex;
-  gap:8px;
+  gap:6px;
   pointer-events:auto;
+  z-index:7;
 }
 .footer-actions button{
-  min-height:40px;
-  padding:10px 14px;
-  border-radius:14px;
+  min-height:34px;
+  padding:8px 10px;
+  border-radius:12px;
+  font-size:12px;
+}
+@media (max-width:520px){
+  .status-bar{right:78px;bottom:4px;padding:7px 9px}
+  .status-bar span{font-size:11px}
 }
 @media (min-width:720px){
   .shell{
@@ -561,7 +574,7 @@ button.ghost{
       minY = Math.min(minY, p.y);
       maxY = Math.max(maxY, p.y);
     }
-    const margin = 2.8;
+    const margin = 3.2;
     let blocked = minX <= margin || maxX >= GRID_W - 1 - margin || minY <= margin || maxY >= GRID_H - 1 - margin;
 
     const dx = shape.b.x - shape.a.x;
@@ -569,8 +582,8 @@ button.ghost{
     const len = Math.hypot(dx, dy) || 1;
     const nx = -dy / len;
     const ny = dx / len;
-    const sampleCount = Math.max(28, Math.ceil(len * 10));
-    const offsets = [-0.55, 0, 0.55];
+    const sampleCount = Math.max(40, Math.ceil(len * 14));
+    const offsets = [-0.9, -0.45, 0, 0.45, 0.9];
 
     for (let i = 0; i <= sampleCount && !blocked; i++) {
       const t = i / sampleCount;
@@ -693,7 +706,7 @@ button.ghost{
     q.stretch += q.stretchV * dt * 14;
     q.length = q.baseLength + Math.sin(q.wanderX * 0.8) * 2.2;
 
-    const step = Math.min(0.008, dt);
+    const step = Math.min(0.005, dt);
     let remaining = dt;
     while (remaining > 0) {
       const slice = Math.min(step, remaining);
