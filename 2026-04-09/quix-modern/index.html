@@ -563,6 +563,20 @@ button.ghost{
     };
   }
 
+  function isQixForbiddenPoint(x, y) {
+    const ix = Math.floor(x);
+    const iy = Math.floor(y);
+    for (let oy = -1; oy <= 1; oy++) {
+      for (let ox = -1; ox <= 1; ox++) {
+        const cx = ix + ox;
+        const cy = iy + oy;
+        if (!inBounds(cx, cy)) return true;
+        if (getCell(cx, cy) === CELL_SAFE) return true;
+      }
+    }
+    return false;
+  }
+
   function qixShapeCollision(qix = state.qix) {
     const shape = getQixEndpoints(qix);
     if (!shape) return {blocked:false,minX:0,maxX:0,minY:0,maxY:0};
@@ -574,7 +588,7 @@ button.ghost{
       minY = Math.min(minY, p.y);
       maxY = Math.max(maxY, p.y);
     }
-    const margin = 3.2;
+    const margin = 4.1;
     let blocked = minX <= margin || maxX >= GRID_W - 1 - margin || minY <= margin || maxY >= GRID_H - 1 - margin;
 
     const dx = shape.b.x - shape.a.x;
@@ -582,8 +596,8 @@ button.ghost{
     const len = Math.hypot(dx, dy) || 1;
     const nx = -dy / len;
     const ny = dx / len;
-    const sampleCount = Math.max(40, Math.ceil(len * 14));
-    const offsets = [-0.9, -0.45, 0, 0.45, 0.9];
+    const sampleCount = Math.max(56, Math.ceil(len * 18));
+    const offsets = [-1.2, -0.6, 0, 0.6, 1.2];
 
     for (let i = 0; i <= sampleCount && !blocked; i++) {
       const t = i / sampleCount;
@@ -592,7 +606,7 @@ button.ghost{
       for (const off of offsets) {
         const sx = baseX + nx * off;
         const sy = baseY + ny * off;
-        if (isQixBlocked(sx, sy)) {
+        if (isQixForbiddenPoint(sx, sy)) {
           blocked = true;
           break;
         }
@@ -601,7 +615,7 @@ button.ghost{
 
     if (!blocked) {
       for (const p of points) {
-        if (isQixBlocked(p.x, p.y)) {
+        if (isQixForbiddenPoint(p.x, p.y)) {
           blocked = true;
           break;
         }
@@ -906,7 +920,7 @@ button.ghost{
       for (let x = 1; x < GRID_W - 1; x++) {
         if (getCell(x, y) !== CELL_EMPTY) continue;
         if (!reachable[idx(x, y)]) {
-          setCell(x, y, CELL_SAFE, (captureHue + x * 2 + y) % 360);
+          setCell(x, y, CELL_SAFE, captureHue);
           captured += 1;
         }
       }
@@ -1181,22 +1195,34 @@ button.ghost{
     for (let y = 0; y < GRID_H; y++) {
       for (let x = 0; x < GRID_W; x++) {
         const cell = getCell(x, y);
-        if (cell === CELL_SAFE) {
+        if (cell === CELL_SAFE && !isBorderSafeCell(x, y)) {
           const hue = getCellHue(x, y);
           const px = x * scale;
           const py = y * scale;
-          if (y === 0 || y === GRID_H-1 || x === 0 || x === GRID_W-1) {
-            ctx.fillStyle = "rgba(56,112,214,0.96)";
-          } else {
-            ctx.fillStyle = `hsla(${hue}, 70%, ${34 + ((x + y) % 3) * 2}%, 0.97)`;
-          }
+          ctx.fillStyle = `hsla(${hue}, 62%, 44%, 0.98)`;
           ctx.fillRect(px, py, scale, scale);
         }
       }
     }
 
-    ctx.strokeStyle = "rgba(125,246,255,0.52)";
-    ctx.lineWidth = Math.max(0.8, scale * 0.08);
+    ctx.lineWidth = Math.max(0.75, scale * 0.065);
+    ctx.lineCap = "square";
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        if (!isBorderSafeCell(x, y)) continue;
+        const hue = (y === 0 || y === GRID_H-1 || x === 0 || x === GRID_W-1) ? 214 : getCellHue(x, y);
+        const px = x * scale;
+        const py = y * scale;
+        ctx.strokeStyle = `hsla(${hue}, 86%, 58%, 0.95)`;
+        if (!inBounds(x, y-1) || getCell(x, y-1) !== CELL_SAFE) { ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + scale, py); ctx.stroke(); }
+        if (!inBounds(x, y+1) || getCell(x, y+1) !== CELL_SAFE) { ctx.beginPath(); ctx.moveTo(px, py + scale); ctx.lineTo(px + scale, py + scale); ctx.stroke(); }
+        if (!inBounds(x-1, y) || getCell(x-1, y) !== CELL_SAFE) { ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py + scale); ctx.stroke(); }
+        if (!inBounds(x+1, y) || getCell(x+1, y) !== CELL_SAFE) { ctx.beginPath(); ctx.moveTo(px + scale, py); ctx.lineTo(px + scale, py + scale); ctx.stroke(); }
+      }
+    }
+
+    ctx.strokeStyle = "rgba(125,246,255,0.42)";
+    ctx.lineWidth = Math.max(0.65, scale * 0.05);
     ctx.strokeRect(0, 0, GRID_W * scale, GRID_H * scale);
 
     if (state.captureFlash > 0) {
