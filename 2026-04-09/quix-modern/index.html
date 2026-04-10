@@ -948,6 +948,8 @@ button.ghost{
       x, y,
       cellX: x,
       cellY: y,
+      prevCellX: null,
+      prevCellY: null,
       targetX: null,
       targetY: null,
       dx, dy,
@@ -958,7 +960,7 @@ button.ghost{
   }
 
   function createSparxWave(level, attractMode = false) {
-    const speed = (attractMode ? 4.8 : 5.6) + level * 0.2;
+    const speed = ((attractMode ? 4.8 : 5.6) + level * 0.2) * 1.5;
     const list = [createSparx(Math.floor(GRID_W * 0.25), GRID_H - 1, 1, 0, 1, speed)];
     if (level >= 2 || attractMode) {
       list.push(createSparx(Math.floor(GRID_W * 0.75), GRID_H - 1, -1, 0, -1, speed * 1.03));
@@ -971,26 +973,38 @@ button.ghost{
     return isReachableEmptyCell(x + side.dx, y + side.dy, reachable);
   }
 
+  function borderDepth(x, y) {
+    return Math.min(x, y, GRID_W - 1 - x, GRID_H - 1 - y);
+  }
+
   function chooseNextSparxTarget(sparx, reachable) {
     snapSparxToBorder(sparx, reachable);
-    const options = getBorderNeighbors(sparx.cellX, sparx.cellY, reachable);
+    let options = getBorderNeighbors(sparx.cellX, sparx.cellY, reachable);
     if (!options.length) {
       sparx.targetX = sparx.cellX;
       sparx.targetY = sparx.cellY;
       return;
     }
 
+    if (options.length > 1 && sparx.prevCellX != null && sparx.prevCellY != null) {
+      const forwardish = options.filter((option) => option.x !== sparx.prevCellX || option.y !== sparx.prevCellY);
+      if (forwardish.length) options = forwardish;
+    }
+
     let chosen = options[0];
     let bestScore = -Infinity;
     for (const option of options) {
       let score = 0;
-      if (option.dx === sparx.dx && option.dy === sparx.dy) score += 3;
-      if (option.dx === -sparx.dx && option.dy === -sparx.dy) score -= 5;
-      if (!isOuterPerimeterCell(option.x, option.y)) score += 2.5;
-      if (sideHasReachableOpen(sparx.cellX, sparx.cellY, option.dx, option.dy, sparx.turnBias, reachable)) score += 4;
-      if (sideHasReachableOpen(option.x, option.y, option.dx, option.dy, sparx.turnBias, reachable)) score += 2;
+      if (option.dx === sparx.dx && option.dy === sparx.dy) score += 4;
+      if (option.dx === -sparx.dx && option.dy === -sparx.dy) score -= 8;
+      if (!isOuterPerimeterCell(option.x, option.y)) score += 8;
+      if (isOuterPerimeterCell(sparx.cellX, sparx.cellY) && !isOuterPerimeterCell(option.x, option.y)) score += 6;
+      if (!isOuterPerimeterCell(sparx.cellX, sparx.cellY) && isOuterPerimeterCell(option.x, option.y)) score -= 6;
+      if (sideHasReachableOpen(sparx.cellX, sparx.cellY, option.dx, option.dy, sparx.turnBias, reachable)) score += 7;
+      if (sideHasReachableOpen(option.x, option.y, option.dx, option.dy, sparx.turnBias, reachable)) score += 4;
       const openAdj = Object.values(DIRS).reduce((sum, dir) => sum + (isReachableEmptyCell(option.x + dir.x, option.y + dir.y, reachable) ? 1 : 0), 0);
-      score += openAdj * 0.6;
+      score += openAdj * 0.9;
+      score += borderDepth(option.x, option.y) * 1.6;
       if (score > bestScore) {
         bestScore = score;
         chosen = option;
@@ -1027,6 +1041,8 @@ button.ghost{
         if (dist < 0.0001) {
           sparx.x = tx;
           sparx.y = ty;
+          sparx.prevCellX = sparx.cellX;
+          sparx.prevCellY = sparx.cellY;
           sparx.cellX = Math.round(tx);
           sparx.cellY = Math.round(ty);
           chooseNextSparxTarget(sparx, reachable);
@@ -1038,6 +1054,8 @@ button.ghost{
         if (remaining >= dist) {
           sparx.x = tx;
           sparx.y = ty;
+          sparx.prevCellX = sparx.cellX;
+          sparx.prevCellY = sparx.cellY;
           sparx.cellX = Math.round(tx);
           sparx.cellY = Math.round(ty);
           remaining -= dist;
