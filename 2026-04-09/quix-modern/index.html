@@ -902,6 +902,32 @@ button.ghost{
       startMap.get(key).push(index);
     });
 
+    function pickNextEdge(edge, options, visited) {
+      const available = options.filter((idx2) => !visited[idx2]);
+      if (!available.length) return null;
+      const cdx = edge.ex - edge.sx;
+      const cdy = edge.ey - edge.sy;
+      let best = null;
+      let bestScore = -Infinity;
+      for (const idx2 of available) {
+        const next = edges[idx2];
+        const ndx = next.ex - next.sx;
+        const ndy = next.ey - next.sy;
+        const dot = cdx * ndx + cdy * ndy;
+        const cross = cdx * ndy - cdy * ndx;
+        let score = -100;
+        if (dot === 1) score = 4;
+        else if (cross === -1) score = 3;
+        else if (cross === 1) score = 1;
+        else if (dot === -1) score = -10;
+        if (score > bestScore) {
+          bestScore = score;
+          best = idx2;
+        }
+      }
+      return best;
+    }
+
     const visited = new Array(edges.length).fill(false);
     const cycles = [];
 
@@ -917,7 +943,7 @@ button.ghost{
         points.push({x: edge.ex, y: edge.ey});
         const nextKey = edge.ex + "," + edge.ey;
         const nextOptions = startMap.get(nextKey) || [];
-        current = nextOptions.find((idx2) => !visited[idx2]);
+        current = pickNextEdge(edge, nextOptions, visited);
         guard += 1;
       }
       if (points.length >= 3) {
