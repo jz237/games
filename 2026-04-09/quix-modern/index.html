@@ -877,8 +877,8 @@ button.ghost{
     return floodFillFromSeeds(seeds);
   }
 
-  function isReachableEmptyCell(x, y, reachable) {
-    return inBounds(x, y) && getCell(x, y) === CELL_EMPTY && !!reachable[idx(x, y)];
+  function isReachableSparxOpenCell(x, y, reachable) {
+    return inBounds(x, y) && getCell(x, y) !== CELL_SAFE && !!reachable[idx(x, y)];
   }
 
   function buildSparxCycles(reachable) {
@@ -887,7 +887,7 @@ button.ghost{
 
     for (let y = 0; y < GRID_H; y++) {
       for (let x = 0; x < GRID_W; x++) {
-        if (!isReachableEmptyCell(x, y, reachable)) continue;
+        if (!isReachableSparxOpenCell(x, y, reachable)) continue;
         if (getCell(x, y - 1) === CELL_SAFE) pushEdge(x + 1, y, x, y);
         if (getCell(x + 1, y) === CELL_SAFE) pushEdge(x + 1, y + 1, x + 1, y);
         if (getCell(x, y + 1) === CELL_SAFE) pushEdge(x, y + 1, x + 1, y + 1);
