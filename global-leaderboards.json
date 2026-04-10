@@ -3,36 +3,35 @@
     "slug": "lunar-lander",
     "name": "Lunar Lander",
     "url": "https://game-scores.jez237.workers.dev/scores/lunar-lander",
+    "playUrl": "https://jz237.github.io/games/lunar-lander/lunar-lander.html",
     "scoreLabel": "LV"
   },
   {
     "slug": "missile-command",
     "name": "Missile Command: Aurora Siege",
     "url": "https://game-scores.jez237.workers.dev/scores/missile-command",
+    "playUrl": "https://jz237.github.io/games/2026-03-08/missile-command/",
     "scoreLabel": "W"
   },
   {
     "slug": "missile-command-3d",
     "name": "Missile Command 3D",
     "url": "https://game-scores.jez237.workers.dev/scores/missile-command-3d",
-    "scoreLabel": "W"
-  },
-  {
-    "slug": "gpt-missile-command",
-    "name": "Missile Command (GPT)",
-    "url": "https://game-scores.jez237.workers.dev/scores/gpt-missile-command",
+    "playUrl": "https://jz237.github.io/games/2026-03-17/missile-command-3d/",
     "scoreLabel": "W"
   },
   {
     "slug": "stellar-drift",
     "name": "Stellar Drift",
     "url": "https://game-scores.jez237.workers.dev/scores/stellar-drift",
+    "playUrl": "https://jz237.github.io/games/2026-03-25/stellar-drift/",
     "scoreLabel": "W"
   },
   {
     "slug": "neon-qix",
     "name": "Neon Qix",
     "url": "https://game-scores.jez237.workers.dev/scores/neon-qix",
+    "playUrl": "https://jz237.github.io/games/2026-04-09/quix-modern/",
     "scoreLabel": "LV"
   }
 ]
