@@ -1626,20 +1626,43 @@ button.ghost{
       const px = offsetX + (sparx.x + 0.5) * scale;
       const py = offsetY + (sparx.y + 0.5) * scale;
       const pulse = 0.8 + Math.sin(performance.now() * 0.018 + sparx.phase) * 0.18;
-      ctx.shadowBlur = scale * 2.6;
-      ctx.shadowColor = "rgba(255,213,106,0.95)";
-      ctx.fillStyle = "rgba(255,213,106,0.95)";
+      const size = Math.max(2.6, scale * 0.52 * pulse);
+      const moveAngle = Math.atan2(sparx.dy || 0, sparx.dx || 1);
+      const sparkLen = Math.max(4.2, scale * 0.9);
+
+      ctx.shadowBlur = scale * 3.2;
+      ctx.shadowColor = "rgba(255,213,106,0.98)";
+
+      ctx.strokeStyle = "rgba(255,213,106,0.95)";
+      ctx.lineWidth = Math.max(1.1, scale * 0.14);
       ctx.beginPath();
-      ctx.arc(px, py, Math.max(2.4, scale * 0.5 * pulse), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.9)";
-      ctx.lineWidth = Math.max(0.9, scale * 0.12);
-      ctx.beginPath();
-      ctx.moveTo(px - scale * 0.42, py);
-      ctx.lineTo(px + scale * 0.42, py);
-      ctx.moveTo(px, py - scale * 0.42);
-      ctx.lineTo(px, py + scale * 0.42);
+      for (let i = 0; i < 8; i++) {
+        const angle = moveAngle + i * (Math.PI / 4) + Math.sin(sparx.phase + i) * 0.08;
+        const inner = size * (0.5 + (i % 2) * 0.18);
+        const outer = sparkLen * (i % 2 === 0 ? 1.05 : 0.68);
+        ctx.moveTo(px + Math.cos(angle) * inner, py + Math.sin(angle) * inner);
+        ctx.lineTo(px + Math.cos(angle) * outer, py + Math.sin(angle) * outer);
+      }
       ctx.stroke();
+
+      ctx.strokeStyle = "rgba(255,248,210,0.95)";
+      ctx.lineWidth = Math.max(0.9, scale * 0.11);
+      ctx.beginPath();
+      ctx.moveTo(px - scale * 0.52, py);
+      ctx.lineTo(px + scale * 0.52, py);
+      ctx.moveTo(px, py - scale * 0.52);
+      ctx.lineTo(px, py + scale * 0.52);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255,213,106,0.96)";
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(1.1, size * 0.42), 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
   }
