@@ -393,7 +393,7 @@ button.ghost{
           <div class="secondary-row" style="margin-top:10px">
             <button id="scoresButton">High Scores</button>
           </div>
-          <p class="small-copy" id="attractCopy">Fast demo play runs behind this panel. Use How To Play if you want the full rules.</p>
+          <p class="small-copy" id="attractCopy">Fast demo play runs behind this panel. Audio wakes on your first tap because of browser rules. Use How To Play if you want the full rules.</p>
         </div>
       </div>
 
@@ -2131,7 +2131,7 @@ button.ghost{
       ctx.textAlign = "center";
       ctx.font = (10 * dpr) + "px Verdana";
       ctx.fillStyle = "rgba(125,246,255,0.8)";
-      ctx.fillText(audioUnlocked ? "ATTRACT MODE ACTIVE" : "ATTRACT MODE, AUDIO ARMS ON START", w * 0.5, offsetY + drawH - 10 * dpr);
+      ctx.fillText(audioUnlocked ? "ATTRACT MODE ACTIVE, CABINET AUDIO LIVE" : "ATTRACT MODE ACTIVE, TAP ANY BUTTON TO WAKE AUDIO", w * 0.5, offsetY + drawH - 10 * dpr);
       ctx.restore();
     }
 
@@ -2265,7 +2265,7 @@ button.ghost{
       }
       audioUnlocked = true;
       ensureQixHum();
-      if (attractCopy) attractCopy.textContent = "Attract mode is live and the cabinet hum is awake. Tap Start when you want control.";
+      if (attractCopy) attractCopy.textContent = "Attract mode is live, and the cabinet audio is awake. Tap Start when you want control.";
     } catch (error) {
       audioUnlocked = false;
     }
