@@ -520,6 +520,7 @@ button.ghost{
     fieldHue: new Uint16Array(GRID_W * GRID_H),
     player: {x: 0, y: 0, alive: true, drawing: false, moveClock: 0, respawnFlash: 0},
     trail: [],
+    sparx: [],
     qix: null,
     qixTrail: [],
     particles: [],
@@ -729,6 +730,7 @@ button.ghost{
     state.qixTrail.length = 0;
     resetField();
     resetPlayer();
+    state.sparx = createSparxWave(level, false);
     state.qix = createQix(level);
     state.claimedRatio = calculateClaimedRatio();
     state.levelMessage = "Claim " + Math.round(state.targetRatio * 100) + "% to clear the field.";
@@ -861,6 +863,106 @@ button.ghost{
     return false;
   }
 
+  function createSparx(x, y, dx, dy, turnBias = 1) {
+    return {x, y, dx, dy, turnBias, moveClock: Math.random() * 0.08, phase: Math.random() * Math.PI * 2};
+  }
+
+  function createSparxWave(level, attractMode = false) {
+    const list = [
+      createSparx(Math.floor(GRID_W * 0.25), GRID_H - 1, 1, 0, 1)
+    ];
+    if (level >= 2 || attractMode) {
+      list.push(createSparx(Math.floor(GRID_W * 0.75), GRID_H - 1, -1, 0, -1));
+    }
+    return list;
+  }
+
+  function sparxAt(x, y) {
+    return state.sparx.some((sparx) => sparx.x === x && sparx.y === y);
+  }
+
+  function getBorderNeighbors(x, y) {
+    const neighbors = [];
+    for (const dir of Object.values(DIRS)) {
+      const nx = x + dir.x;
+      const ny = y + dir.y;
+      if (inBounds(nx, ny) && isBorderSafeCell(nx, ny)) {
+        neighbors.push({x: nx, y: ny, dx: dir.x, dy: dir.y});
+      }
+    }
+    return neighbors;
+  }
+
+  function rotateRight(dx, dy) {
+    return {dx: -dy, dy: dx};
+  }
+
+  function rotateLeft(dx, dy) {
+    return {dx: dy, dy: -dx};
+  }
+
+  function ensureSparxOnBorder(sparx) {
+    if (isBorderSafeCell(sparx.x, sparx.y)) return;
+    let best = null;
+    let bestDist = Infinity;
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        if (!isBorderSafeCell(x, y)) continue;
+        const dist = Math.abs(x - sparx.x) + Math.abs(y - sparx.y);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = {x, y};
+        }
+      }
+    }
+    if (best) {
+      sparx.x = best.x;
+      sparx.y = best.y;
+    }
+  }
+
+  function stepSparx(sparx) {
+    ensureSparxOnBorder(sparx);
+    const options = getBorderNeighbors(sparx.x, sparx.y);
+    if (!options.length) return;
+
+    const straight = {dx: sparx.dx || 1, dy: sparx.dy || 0};
+    const right = rotateRight(straight.dx, straight.dy);
+    const left = rotateLeft(straight.dx, straight.dy);
+    const reverse = {dx: -straight.dx, dy: -straight.dy};
+    const priority = sparx.turnBias >= 0
+      ? [right, straight, left, reverse]
+      : [left, straight, right, reverse];
+
+    let chosen = null;
+    for (const dir of priority) {
+      chosen = options.find((option) => option.dx === dir.dx && option.dy === dir.dy);
+      if (chosen) break;
+    }
+    if (!chosen) chosen = options[0];
+    sparx.x = chosen.x;
+    sparx.y = chosen.y;
+    sparx.dx = chosen.dx;
+    sparx.dy = chosen.dy;
+    sparx.phase += 0.55;
+  }
+
+  function updateSparx(dt) {
+    if (!state.sparx.length) return;
+    const moveInterval = Math.max(0.05, 0.115 - state.level * 0.006 + (state.phase === "title" ? 0.018 : 0));
+    for (const sparx of state.sparx) {
+      sparx.moveClock += dt;
+      while (sparx.moveClock >= moveInterval) {
+        sparx.moveClock -= moveInterval;
+        stepSparx(sparx);
+      }
+      if (state.phase === "playing" && state.player.alive && !state.player.drawing && sparx.x === state.player.x && sparx.y === state.player.y) {
+        loseLife("A Sparx caught you on the wall.");
+        return;
+      }
+    }
+  }
+
   function activeDirection() {
     return controlDir || keyboardDir;
   }
@@ -889,6 +991,10 @@ button.ghost{
 
     if (!state.player.drawing) {
       if (nextCell === CELL_SAFE && isBorderSafeCell(nx, ny)) {
+        if (sparxAt(nx, ny)) {
+          loseLife("A Sparx caught you on the wall.");
+          return;
+        }
         movePlayerTo(nx, ny);
         return;
       }
@@ -916,6 +1022,10 @@ button.ghost{
     }
 
     if (nextCell === CELL_SAFE) {
+      if (sparxAt(nx, ny)) {
+        loseLife("A Sparx was waiting on the wall.");
+        return;
+      }
       movePlayerTo(nx, ny);
       completeCapture();
     }
@@ -1019,6 +1129,7 @@ button.ghost{
     playTone("capture");
     spawnCaptureEffect(captureRatio, captured);
     clearTrail();
+    for (const sparx of state.sparx) ensureSparxOnBorder(sparx);
     state.claimedRatio = calculateClaimedRatio();
     state.levelMessage = "Captured " + Math.round(captureRatio * 1000) / 10 + "% for +" + scoreGain + " points.";
     updateHud(true);
@@ -1284,9 +1395,13 @@ button.ghost{
     if (!state.qix) {
       state.qix = createQix(3);
     }
+    if (!state.sparx.length) {
+      state.sparx = createSparxWave(2, true);
+    }
     state.attractClock += dt;
     state.captureFlash = Math.max(0, state.captureFlash - dt * 0.7);
     updateQix(dt * 1.05);
+    updateSparx(dt);
     updateParticles(dt);
     if (Math.random() < 0.24) {
       spawnParticle(state.qix.x, state.qix.y, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, 0.65, "capture");
@@ -1323,6 +1438,7 @@ button.ghost{
 
     updateQix(dt);
     updatePlayer(dt);
+    updateSparx(dt);
     updateParticles(dt);
     if (qixHitsTrail()) {
       loseLife("The Qix line hit your live trace.");
@@ -1503,6 +1619,31 @@ button.ghost{
     ctx.restore();
   }
 
+  function drawSparx(scale, offsetX, offsetY) {
+    if (!state.sparx.length) return;
+    ctx.save();
+    for (const sparx of state.sparx) {
+      const px = offsetX + (sparx.x + 0.5) * scale;
+      const py = offsetY + (sparx.y + 0.5) * scale;
+      const pulse = 0.8 + Math.sin(performance.now() * 0.018 + sparx.phase) * 0.18;
+      ctx.shadowBlur = scale * 2.6;
+      ctx.shadowColor = "rgba(255,213,106,0.95)";
+      ctx.fillStyle = "rgba(255,213,106,0.95)";
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(2.4, scale * 0.5 * pulse), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.lineWidth = Math.max(0.9, scale * 0.12);
+      ctx.beginPath();
+      ctx.moveTo(px - scale * 0.42, py);
+      ctx.lineTo(px + scale * 0.42, py);
+      ctx.moveTo(px, py - scale * 0.42);
+      ctx.lineTo(px, py + scale * 0.42);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawParticles(scale, offsetX, offsetY) {
     ctx.save();
     for (const pulse of state.pulses) {
@@ -1551,6 +1692,7 @@ button.ghost{
     drawField(scale, offsetX, offsetY);
     drawQix(scale, offsetX, offsetY);
     drawParticles(scale, offsetX, offsetY);
+    drawSparx(scale, offsetX, offsetY);
     if (state.phase !== "title" && state.player.alive) {
       drawPlayer(scale, offsetX, offsetY);
     }
