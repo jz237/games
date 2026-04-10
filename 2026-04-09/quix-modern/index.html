@@ -1032,7 +1032,8 @@ button.ghost{
       progress: null,
       dx: dir,
       dy: 0,
-      soundClock: Math.random() * 0.12,
+      soundClock: Math.random() * 0.16,
+      soundInterval: 0.11 + Math.random() * 0.08,
       phase: Math.random() * Math.PI * 2
     };
   }
@@ -1094,8 +1095,9 @@ button.ghost{
       const ahead = sampleSparxCycle(activeCycle, sparx.progress + sparx.dir * 0.2);
       sparx.x = pos.x;
       sparx.y = pos.y;
-      if ((state.phase === "playing" || state.phase === "title") && sparx.soundClock >= 0.16) {
+      if ((state.phase === "playing" || state.phase === "title") && sparx.soundClock >= (sparx.soundInterval || 0.16)) {
         sparx.soundClock = 0;
+        sparx.soundInterval = 0.1 + Math.random() * 0.1;
         playTone("sparx");
       }
       const dirX = ahead.x - pos.x;
@@ -1550,18 +1552,34 @@ button.ghost{
 
   function buildAttractScript() {
     const qixX = state.qix ? state.qix.x : GRID_W * 0.5;
+    const qixY = state.qix ? state.qix.y : GRID_H * 0.45;
     const saferLeft = qixX > GRID_W * 0.5;
     const alternate = state.attractCycle % 2 === 1;
     const leftSide = alternate ? !saferLeft : saferLeft;
-    const entryX = leftSide ? 14 + (state.attractCycle % 3) * 4 : GRID_W - 15 - (state.attractCycle % 3) * 4;
-    const sweepX = leftSide ? entryX + 12 + (state.attractCycle % 2) * 4 : entryX - 12 - (state.attractCycle % 2) * 4;
-    const topY = 82 - (state.attractCycle % 3) * 6;
-    return [
-      {x: entryX, y: GRID_H - 1},
+    const margin = 11 + (state.attractCycle % 3) * 3;
+    const entryX = leftSide ? margin : GRID_W - 1 - margin;
+    const laneWidth = 8 + ((state.attractCycle + 1) % 3) * 2;
+    const sweepX = leftSide ? Math.min(GRID_W - 2, entryX + laneWidth) : Math.max(1, entryX - laneWidth);
+    const depth = qixY > GRID_H * 0.66 ? 14 : qixY > GRID_H * 0.52 ? 19 : 25;
+    const topY = Math.max(76, GRID_H - 1 - depth - (state.attractCycle % 2) * 3);
+    const script = [];
+    if (state.player.x !== entryX || state.player.y !== GRID_H - 1) {
+      script.push({x: entryX, y: GRID_H - 1});
+    }
+    script.push(
       {x: entryX, y: topY},
       {x: sweepX, y: topY},
       {x: sweepX, y: GRID_H - 1}
-    ];
+    );
+    return script;
+  }
+
+  function queueAttractScript() {
+    state.attractCycle += 1;
+    state.attractStep = 0;
+    state.attractScript = buildAttractScript();
+    state.attractCooldown = 0.24;
+    attractDir = null;
   }
 
   function updateAttractDirector() {
@@ -1591,8 +1609,8 @@ button.ghost{
   function resetAttractDemo() {
     resetField();
     resetPlayer();
-    state.sparx = createSparxWave(3, true);
-    state.qix = createQix(4);
+    state.sparx = createSparxWave(1, true);
+    state.qix = createQix(2);
     state.qixTrail.length = 0;
     state.particles.length = 0;
     state.pulses.length = 0;
@@ -1600,12 +1618,9 @@ button.ghost{
     state.screenFlash = 0;
     state.shake = 0;
     state.claimedRatio = calculateClaimedRatio();
-    state.targetRatio = levelGoal(2);
-    state.attractCycle += 1;
-    state.attractStep = 0;
-    state.attractScript = buildAttractScript();
-    state.attractCooldown = 0.35;
-    attractDir = null;
+    state.targetRatio = levelGoal(1);
+    state.attractClock = 0;
+    queueAttractScript();
   }
 
   function updateAttractMode(dt) {
@@ -1625,8 +1640,12 @@ button.ghost{
     if (qixHitsTrail()) {
       state.captureFlash = Math.max(state.captureFlash, 0.08);
     }
-    if (!state.player.drawing && state.claimedRatio > 0.03 && state.attractStep >= state.attractScript.length) {
-      resetAttractDemo();
+    if (!state.player.drawing && state.attractStep >= state.attractScript.length) {
+      if (state.claimedRatio >= 0.24 || state.attractClock >= 18) {
+        resetAttractDemo();
+      } else {
+        queueAttractScript();
+      }
       return;
     }
 
@@ -2116,42 +2135,48 @@ button.ghost{
     const now = audioCtx.currentTime;
 
     if (type === "sparx") {
-      const duration = 0.055;
-      const noiseBuffer = audioCtx.createBuffer(1, Math.max(1, Math.floor(audioCtx.sampleRate * duration)), audioCtx.sampleRate);
-      const data = noiseBuffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) {
-        const env = 1 - i / data.length;
-        data[i] = (Math.random() * 2 - 1) * env;
-      }
-      const noise = audioCtx.createBufferSource();
-      noise.buffer = noiseBuffer;
-      const noiseFilter = audioCtx.createBiquadFilter();
-      noiseFilter.type = "bandpass";
-      noiseFilter.frequency.value = 2800;
-      noiseFilter.Q.value = 2.8;
-      const noiseGain = audioCtx.createGain();
-      noiseGain.gain.setValueAtTime(0.0001, now);
-      noiseGain.gain.linearRampToValueAtTime(0.03, now + 0.004);
-      noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      const duration = 0.1;
+      const pulse = audioCtx.createOscillator();
+      const sub = audioCtx.createOscillator();
+      const filter = audioCtx.createBiquadFilter();
+      const gain = audioCtx.createGain();
+      const lfo = audioCtx.createOscillator();
+      const lfoGain = audioCtx.createGain();
 
-      const zap = audioCtx.createOscillator();
-      const zapGain = audioCtx.createGain();
-      zap.type = "square";
-      zap.frequency.setValueAtTime(2200 + Math.random() * 500, now);
-      zap.frequency.exponentialRampToValueAtTime(620 + Math.random() * 120, now + duration);
-      zapGain.gain.setValueAtTime(0.0001, now);
-      zapGain.gain.linearRampToValueAtTime(0.018, now + 0.003);
-      zapGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      pulse.type = "sawtooth";
+      sub.type = "sawtooth";
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(360, now);
+      filter.frequency.exponentialRampToValueAtTime(240, now + duration);
+      filter.Q.value = 1.1;
 
-      noise.connect(noiseFilter);
-      noiseFilter.connect(noiseGain);
-      noiseGain.connect(audioCtx.destination);
-      zap.connect(zapGain);
-      zapGain.connect(audioCtx.destination);
-      noise.start(now);
-      noise.stop(now + duration + 0.01);
-      zap.start(now);
-      zap.stop(now + duration + 0.01);
+      pulse.frequency.setValueAtTime(168 + Math.random() * 16, now);
+      pulse.frequency.exponentialRampToValueAtTime(92 + Math.random() * 10, now + duration);
+      sub.frequency.setValueAtTime(88 + Math.random() * 10, now);
+      sub.frequency.exponentialRampToValueAtTime(54 + Math.random() * 8, now + duration);
+
+      lfo.type = "triangle";
+      lfo.frequency.setValueAtTime(13 + Math.random() * 5, now);
+      lfoGain.gain.setValueAtTime(28 + Math.random() * 8, now);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(0.012, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+      lfo.connect(lfoGain);
+      lfoGain.connect(pulse.detune);
+      lfoGain.connect(sub.detune);
+      pulse.connect(filter);
+      sub.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      pulse.start(now);
+      sub.start(now);
+      lfo.start(now);
+      pulse.stop(now + duration + 0.02);
+      sub.stop(now + duration + 0.02);
+      lfo.stop(now + duration + 0.02);
       return;
     }
 
