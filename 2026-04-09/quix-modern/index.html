@@ -1557,26 +1557,48 @@ button.ghost{
     return false;
   }
 
-  function buildAttractScript() {
+  function minQixDistanceToPoint(x, y) {
+    if (!state.qix) return 999;
+    const shape = getQixEndpoints();
+    const px = x + 0.5;
+    const py = y + 0.5;
+    const segment = distToSegment(px, py, shape.a.x + 0.5, shape.a.y + 0.5, shape.b.x + 0.5, shape.b.y + 0.5);
+    const center = Math.hypot(px - (shape.center.x + 0.5), py - (shape.center.y + 0.5));
+    return Math.min(segment, center * 0.9);
+  }
+
+  function minSparxDistanceToPoint(x, y) {
+    if (!state.sparx.length) return 999;
+    const px = x + 0.5;
+    const py = y + 0.5;
+    let best = Infinity;
+    for (const sparx of state.sparx) {
+      best = Math.min(best, Math.hypot(px - sparx.x, py - sparx.y));
+    }
+    return best;
+  }
+
+  function buildAttractCandidate() {
     const qixX = state.qix ? state.qix.x : GRID_W * 0.5;
     const qixY = state.qix ? state.qix.y : GRID_H * 0.45;
     const saferLeft = qixX > GRID_W * 0.5;
-    const leftSide = Math.random() < 0.7 ? saferLeft : !saferLeft;
-    const margin = randomInt(8, 18);
+    const leftBias = saferLeft ? 0.74 : 0.26;
+    const leftSide = Math.random() < leftBias;
+    const margin = randomInt(7, 19);
     const entryX = leftSide ? margin : GRID_W - 1 - margin;
-    const laneWidth = randomInt(7, 15);
+    const laneWidth = randomInt(6, 16);
     const sweepX = leftSide ? Math.min(GRID_W - 2, entryX + laneWidth) : Math.max(1, entryX - laneWidth);
-    const maxDepth = qixY > GRID_H * 0.66 ? 14 : qixY > GRID_H * 0.52 ? 20 : 28;
-    const depth = randomInt(10, maxDepth);
+    const maxDepth = qixY > GRID_H * 0.68 ? 13 : qixY > GRID_H * 0.54 ? 18 : 26;
+    const depth = randomInt(8, maxDepth);
     const topY = Math.max(74, GRID_H - 1 - depth);
     const script = [];
     if (state.player.x !== entryX || state.player.y !== GRID_H - 1) {
       script.push({x: entryX, y: GRID_H - 1});
     }
     script.push({x: entryX, y: topY});
-    if (Math.random() < 0.45) {
-      const pocketY = Math.min(GRID_H - 2, topY + randomInt(4, 10));
+    if (Math.random() < 0.38) {
       const pocketX = leftSide ? Math.min(GRID_W - 2, sweepX + randomInt(2, 5)) : Math.max(1, sweepX - randomInt(2, 5));
+      const pocketY = Math.min(GRID_H - 2, topY + randomInt(3, 8));
       script.push({x: sweepX, y: topY}, {x: pocketX, y: pocketY}, {x: sweepX, y: GRID_H - 1});
     } else {
       script.push({x: sweepX, y: topY}, {x: sweepX, y: GRID_H - 1});
@@ -1584,15 +1606,90 @@ button.ghost{
     return script;
   }
 
+  function scoreAttractScript(script) {
+    if (!script.length) return -Infinity;
+    const points = [{x: state.player.x, y: state.player.y}, ...script];
+    let minQix = Infinity;
+    let minSparx = Infinity;
+    let widthMin = Infinity;
+    let widthMax = -Infinity;
+    let topY = GRID_H - 1;
+    let totalLen = 0;
+
+    for (let i = 1; i < points.length; i++) {
+      const start = points[i - 1];
+      const end = points[i];
+      const len = Math.hypot(end.x - start.x, end.y - start.y);
+      totalLen += len;
+      const samples = Math.max(3, Math.ceil(len / 3));
+      for (let s = 0; s <= samples; s++) {
+        const t = s / samples;
+        const x = start.x + (end.x - start.x) * t;
+        const y = start.y + (end.y - start.y) * t;
+        minQix = Math.min(minQix, minQixDistanceToPoint(x, y));
+        minSparx = Math.min(minSparx, minSparxDistanceToPoint(x, y));
+        widthMin = Math.min(widthMin, x);
+        widthMax = Math.max(widthMax, x);
+        topY = Math.min(topY, y);
+      }
+    }
+
+    const depth = GRID_H - 1 - topY;
+    const width = Math.max(0, widthMax - widthMin);
+    const depthScore = 6 - Math.abs(depth - 14) * 0.4;
+    const widthScore = 5 - Math.abs(width - 10) * 0.35;
+    const safetyScore = minQix * 2.4 + minSparx * 1.15;
+    const lengthPenalty = totalLen * 0.05;
+    return safetyScore + depthScore + widthScore - lengthPenalty + Math.random() * 0.9;
+  }
+
+  function buildAttractScript() {
+    let bestScript = null;
+    let bestScore = -Infinity;
+    for (let i = 0; i < 14; i++) {
+      const candidate = buildAttractCandidate();
+      const score = scoreAttractScript(candidate);
+      if (score > bestScore) {
+        bestScore = score;
+        bestScript = candidate;
+      }
+    }
+    return bestScript || [{x: state.player.x, y: GRID_H - 1}];
+  }
+
   function queueAttractScript() {
     state.attractCycle += 1;
     state.attractStep = 0;
     state.attractScript = buildAttractScript();
-    state.attractCooldown = 0.18 + Math.random() * 0.16;
+    state.attractCooldown = 0.12 + Math.random() * 0.12;
     state.attractStallClock = 0;
     state.attractLastX = state.player.x;
     state.attractLastY = state.player.y;
     attractDir = null;
+  }
+
+  function attractTrailThreat() {
+    if (!state.player.drawing) return Infinity;
+    let best = minQixDistanceToPoint(state.player.x, state.player.y);
+    const stride = Math.max(1, Math.floor(state.trail.length / 6));
+    for (let i = 0; i < state.trail.length; i += stride) {
+      const cell = state.trail[i];
+      best = Math.min(best, minQixDistanceToPoint(cell.x, cell.y));
+    }
+    const tail = state.trail[state.trail.length - 1];
+    if (tail) best = Math.min(best, minQixDistanceToPoint(tail.x, tail.y));
+    return best;
+  }
+
+  function forceAttractCloseOut() {
+    if (!state.player.drawing) {
+      queueAttractScript();
+      return;
+    }
+    state.attractScript = [{x: state.player.x, y: GRID_H - 1}];
+    state.attractStep = 0;
+    state.attractCooldown = 0;
+    attractDir = "down";
   }
 
   function updateAttractDirector() {
@@ -1655,6 +1752,9 @@ button.ghost{
 
     updateAttractDirector();
     updateQix(dt * 1.2);
+    if (state.player.drawing && attractTrailThreat() < 8.2) {
+      forceAttractCloseOut();
+    }
     updatePlayer(dt * 1.2);
     updateSparx(dt * 1.15);
     updateParticles(dt);
