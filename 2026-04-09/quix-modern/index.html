@@ -863,65 +863,154 @@ button.ghost{
     return false;
   }
 
-  function isOuterBorderCell(x, y) {
-    return x === 0 || y === 0 || x === GRID_W - 1 || y === GRID_H - 1;
+  function rotateRight(dx, dy) {
+    return {dx: -dy, dy: dx};
   }
 
-  function outerPerimeterLength() {
-    return 2 * ((GRID_W - 1) + (GRID_H - 1));
+  function rotateLeft(dx, dy) {
+    return {dx: dy, dy: -dx};
   }
 
-  function sampleOuterPerimeter(progress) {
-    const length = outerPerimeterLength();
-    let p = ((progress % length) + length) % length;
-
-    if (p < GRID_W - 1) {
-      return {x: p, y: 0, dx: 1, dy: 0};
+  function getBorderNeighbors(x, y) {
+    const neighbors = [];
+    for (const dir of Object.values(DIRS)) {
+      const nx = x + dir.x;
+      const ny = y + dir.y;
+      if (inBounds(nx, ny) && isBorderSafeCell(nx, ny)) {
+        neighbors.push({x: nx, y: ny, dx: dir.x, dy: dir.y});
+      }
     }
-    p -= GRID_W - 1;
-    if (p < GRID_H - 1) {
-      return {x: GRID_W - 1, y: p, dx: 0, dy: 1};
-    }
-    p -= GRID_H - 1;
-    if (p < GRID_W - 1) {
-      return {x: GRID_W - 1 - p, y: GRID_H - 1, dx: -1, dy: 0};
-    }
-    p -= GRID_W - 1;
-    return {x: 0, y: GRID_H - 1 - p, dx: 0, dy: -1};
+    return neighbors;
   }
 
-  function createSparx(progress, dir, speed) {
-    const pos = sampleOuterPerimeter(progress);
-    return {progress, dir, speed, phase: Math.random() * Math.PI * 2, x: pos.x, y: pos.y, dx: pos.dx, dy: pos.dy};
+  function snapSparxToBorder(sparx) {
+    const cx = Math.round(sparx.cellX ?? sparx.x ?? 0);
+    const cy = Math.round(sparx.cellY ?? sparx.y ?? 0);
+    if (inBounds(cx, cy) && isBorderSafeCell(cx, cy)) {
+      sparx.cellX = cx;
+      sparx.cellY = cy;
+      sparx.x = cx;
+      sparx.y = cy;
+      return;
+    }
+    let best = null;
+    let bestDist = Infinity;
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        if (!isBorderSafeCell(x, y)) continue;
+        const dist = Math.abs(x - cx) + Math.abs(y - cy);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = {x, y};
+        }
+      }
+    }
+    if (best) {
+      sparx.cellX = best.x;
+      sparx.cellY = best.y;
+      sparx.x = best.x;
+      sparx.y = best.y;
+      sparx.targetX = best.x;
+      sparx.targetY = best.y;
+    }
+  }
+
+  function createSparx(x, y, dx, dy, turnBias, speed) {
+    return {
+      x, y,
+      cellX: x,
+      cellY: y,
+      targetX: x,
+      targetY: y,
+      dx, dy,
+      turnBias,
+      speed,
+      phase: Math.random() * Math.PI * 2
+    };
   }
 
   function createSparxWave(level, attractMode = false) {
-    const length = outerPerimeterLength();
-    const speed = (attractMode ? 5.1 : 5.8) + level * 0.22;
-    const list = [createSparx(length * 0.18, 1, speed)];
+    const speed = (attractMode ? 4.8 : 5.6) + level * 0.2;
+    const list = [createSparx(Math.floor(GRID_W * 0.25), GRID_H - 1, 1, 0, 1, speed)];
     if (level >= 2 || attractMode) {
-      list.push(createSparx(length * 0.67, -1, speed * 1.02));
+      list.push(createSparx(Math.floor(GRID_W * 0.75), GRID_H - 1, -1, 0, -1, speed * 1.03));
     }
     return list;
   }
 
+  function chooseNextSparxTarget(sparx) {
+    snapSparxToBorder(sparx);
+    const options = getBorderNeighbors(sparx.cellX, sparx.cellY);
+    if (!options.length) {
+      sparx.targetX = sparx.cellX;
+      sparx.targetY = sparx.cellY;
+      return;
+    }
+
+    const straight = {dx: sparx.dx || 1, dy: sparx.dy || 0};
+    const right = rotateRight(straight.dx, straight.dy);
+    const left = rotateLeft(straight.dx, straight.dy);
+    const reverse = {dx: -straight.dx, dy: -straight.dy};
+    const priority = sparx.turnBias >= 0
+      ? [right, straight, left, reverse]
+      : [left, straight, right, reverse];
+
+    let chosen = null;
+    for (const dir of priority) {
+      chosen = options.find((option) => option.dx === dir.dx && option.dy === dir.dy);
+      if (chosen) break;
+    }
+    if (!chosen) chosen = options[0];
+
+    sparx.targetX = chosen.x;
+    sparx.targetY = chosen.y;
+    sparx.dx = chosen.dx;
+    sparx.dy = chosen.dy;
+  }
+
   function sparxAt(x, y) {
-    if (!isOuterBorderCell(x, y)) return false;
-    return state.sparx.some((sparx) => Math.hypot(sparx.x - x, sparx.y - y) < 0.62);
+    return state.sparx.some((sparx) => Math.hypot(sparx.x - x, sparx.y - y) < 0.6);
   }
 
   function updateSparx(dt) {
     if (!state.sparx.length) return;
     for (const sparx of state.sparx) {
-      sparx.progress += sparx.dir * sparx.speed * dt;
       sparx.phase += dt * 12;
-      const pos = sampleOuterPerimeter(sparx.progress);
-      sparx.x = pos.x;
-      sparx.y = pos.y;
-      sparx.dx = pos.dx * sparx.dir;
-      sparx.dy = pos.dy * sparx.dir;
+      snapSparxToBorder(sparx);
+      let remaining = sparx.speed * dt;
+      while (remaining > 0.0001) {
+        const tx = sparx.targetX ?? sparx.cellX;
+        const ty = sparx.targetY ?? sparx.cellY;
+        const vx = tx - sparx.x;
+        const vy = ty - sparx.y;
+        const dist = Math.hypot(vx, vy);
 
-      if (state.phase === "playing" && state.player.alive && !state.player.drawing && isOuterBorderCell(state.player.x, state.player.y) && Math.hypot(sparx.x - state.player.x, sparx.y - state.player.y) < 0.58) {
+        if (dist < 0.0001) {
+          sparx.x = tx;
+          sparx.y = ty;
+          sparx.cellX = Math.round(tx);
+          sparx.cellY = Math.round(ty);
+          chooseNextSparxTarget(sparx);
+          const stuck = Math.hypot((sparx.targetX ?? sparx.cellX) - sparx.x, (sparx.targetY ?? sparx.cellY) - sparx.y);
+          if (stuck < 0.0001) break;
+          continue;
+        }
+
+        if (remaining >= dist) {
+          sparx.x = tx;
+          sparx.y = ty;
+          sparx.cellX = Math.round(tx);
+          sparx.cellY = Math.round(ty);
+          remaining -= dist;
+          chooseNextSparxTarget(sparx);
+        } else {
+          sparx.x += vx / dist * remaining;
+          sparx.y += vy / dist * remaining;
+          remaining = 0;
+        }
+      }
+
+      if (state.phase === "playing" && state.player.alive && !state.player.drawing && Math.hypot(sparx.x - state.player.x, sparx.y - state.player.y) < 0.58) {
         loseLife("A Sparx caught you on the wall.");
         return;
       }
@@ -1094,6 +1183,10 @@ button.ghost{
     playTone("capture");
     spawnCaptureEffect(captureRatio, captured);
     clearTrail();
+    for (const sparx of state.sparx) {
+      snapSparxToBorder(sparx);
+      chooseNextSparxTarget(sparx);
+    }
     state.claimedRatio = calculateClaimedRatio();
     state.levelMessage = "Captured " + Math.round(captureRatio * 1000) / 10 + "% for +" + scoreGain + " points.";
     updateHud(true);
