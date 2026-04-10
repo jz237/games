@@ -564,12 +564,26 @@ button.ghost{
     const margin = 2.8;
     let blocked = minX <= margin || maxX >= GRID_W - 1 - margin || minY <= margin || maxY >= GRID_H - 1 - margin;
 
-    const sampleCount = 24;
+    const dx = shape.b.x - shape.a.x;
+    const dy = shape.b.y - shape.a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    const sampleCount = Math.max(28, Math.ceil(len * 10));
+    const offsets = [-0.55, 0, 0.55];
+
     for (let i = 0; i <= sampleCount && !blocked; i++) {
       const t = i / sampleCount;
-      const sx = shape.a.x + (shape.b.x - shape.a.x) * t;
-      const sy = shape.a.y + (shape.b.y - shape.a.y) * t;
-      if (isQixBlocked(sx, sy)) blocked = true;
+      const baseX = shape.a.x + dx * t;
+      const baseY = shape.a.y + dy * t;
+      for (const off of offsets) {
+        const sx = baseX + nx * off;
+        const sy = baseY + ny * off;
+        if (isQixBlocked(sx, sy)) {
+          blocked = true;
+          break;
+        }
+      }
     }
 
     if (!blocked) {
@@ -738,6 +752,18 @@ button.ghost{
     if (state.qixTrail.length > 22) state.qixTrail.length = 22;
   }
 
+  function isBorderSafeCell(x, y) {
+    if (getCell(x, y) !== CELL_SAFE) return false;
+    if (x === 0 || y === 0 || x === GRID_W - 1 || y === GRID_H - 1) return true;
+    for (const dir of Object.values(DIRS)) {
+      const nx = x + dir.x;
+      const ny = y + dir.y;
+      if (!inBounds(nx, ny)) return true;
+      if (getCell(nx, ny) !== CELL_SAFE) return true;
+    }
+    return false;
+  }
+
   function activeDirection() {
     return controlDir || keyboardDir;
   }
@@ -765,11 +791,11 @@ button.ghost{
     const currentSafe = getCell(state.player.x, state.player.y) === CELL_SAFE;
 
     if (!state.player.drawing) {
-      if (nextCell === CELL_SAFE) {
+      if (nextCell === CELL_SAFE && isBorderSafeCell(nx, ny)) {
         movePlayerTo(nx, ny);
         return;
       }
-      if (currentSafe && nextCell === CELL_EMPTY) {
+      if (currentSafe && isBorderSafeCell(state.player.x, state.player.y) && nextCell === CELL_EMPTY) {
         state.player.drawing = true;
         movePlayerTo(nx, ny);
         setCell(nx, ny, CELL_TRAIL);
@@ -1144,10 +1170,25 @@ button.ghost{
         const cell = getCell(x, y);
         if (cell === CELL_SAFE) {
           const hue = getCellHue(x, y);
-          ctx.fillStyle = y === 0 || y === GRID_H-1 || x === 0 || x === GRID_W-1
-            ? "rgba(40,92,180,0.95)"
-            : `hsla(${hue}, 72%, ${28 + ((x + y) % 5) * 3}%, 0.96)`;
-          ctx.fillRect(x * scale, y * scale, scale, scale);
+          const px = x * scale;
+          const py = y * scale;
+          if (y === 0 || y === GRID_H-1 || x === 0 || x === GRID_W-1) {
+            ctx.fillStyle = "rgba(40,92,180,0.95)";
+            ctx.fillRect(px, py, scale, scale);
+          } else {
+            ctx.fillStyle = `hsla(${hue}, 68%, ${30 + ((x + y) % 4) * 2}%, 0.96)`;
+            ctx.fillRect(px, py, scale, scale);
+            ctx.fillStyle = `hsla(${(hue + 18) % 360}, 82%, 62%, 0.18)`;
+            ctx.fillRect(px, py, scale, Math.max(1, scale * 0.24));
+            ctx.fillStyle = `hsla(${(hue + 36) % 360}, 88%, 70%, 0.12)`;
+            ctx.beginPath();
+            ctx.moveTo(px + scale * 0.18, py + scale);
+            ctx.lineTo(px + scale, py + scale * 0.18);
+            ctx.lineTo(px + scale, py + scale * 0.38);
+            ctx.lineTo(px + scale * 0.38, py + scale);
+            ctx.closePath();
+            ctx.fill();
+          }
         }
       }
     }
