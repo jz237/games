@@ -1,0 +1,38 @@
+[
+  {
+    "slug": "lunar-lander",
+    "name": "Lunar Lander",
+    "url": "https://game-scores.jez237.workers.dev/scores/lunar-lander",
+    "scoreLabel": "LV"
+  },
+  {
+    "slug": "missile-command",
+    "name": "Missile Command: Aurora Siege",
+    "url": "https://game-scores.jez237.workers.dev/scores/missile-command",
+    "scoreLabel": "W"
+  },
+  {
+    "slug": "missile-command-3d",
+    "name": "Missile Command 3D",
+    "url": "https://game-scores.jez237.workers.dev/scores/missile-command-3d",
+    "scoreLabel": "W"
+  },
+  {
+    "slug": "gpt-missile-command",
+    "name": "Missile Command (GPT)",
+    "url": "https://game-scores.jez237.workers.dev/scores/gpt-missile-command",
+    "scoreLabel": "W"
+  },
+  {
+    "slug": "stellar-drift",
+    "name": "Stellar Drift",
+    "url": "https://game-scores.jez237.workers.dev/scores/stellar-drift",
+    "scoreLabel": "W"
+  },
+  {
+    "slug": "neon-qix",
+    "name": "Neon Qix",
+    "url": "https://game-scores.jez237.workers.dev/scores/neon-qix",
+    "scoreLabel": "LV"
+  }
+]
