@@ -884,15 +884,16 @@ button.ghost{
   }
 
   function snapSparxToBorder(sparx) {
-    const cx = Math.round(sparx.cellX ?? sparx.x ?? 0);
-    const cy = Math.round(sparx.cellY ?? sparx.y ?? 0);
-    if (inBounds(cx, cy) && isBorderSafeCell(cx, cy)) {
-      sparx.cellX = cx;
-      sparx.cellY = cy;
-      sparx.x = cx;
-      sparx.y = cy;
+    const rx = Math.round(sparx.x ?? sparx.cellX ?? 0);
+    const ry = Math.round(sparx.y ?? sparx.cellY ?? 0);
+    if (inBounds(rx, ry) && isBorderSafeCell(rx, ry)) {
+      sparx.cellX = rx;
+      sparx.cellY = ry;
       return;
     }
+
+    const cx = Math.round(sparx.cellX ?? sparx.x ?? 0);
+    const cy = Math.round(sparx.cellY ?? sparx.y ?? 0);
     let best = null;
     let bestDist = Infinity;
     for (let y = 0; y < GRID_H; y++) {
@@ -910,8 +911,8 @@ button.ghost{
       sparx.cellY = best.y;
       sparx.x = best.x;
       sparx.y = best.y;
-      sparx.targetX = best.x;
-      sparx.targetY = best.y;
+      sparx.targetX = null;
+      sparx.targetY = null;
     }
   }
 
@@ -920,8 +921,8 @@ button.ghost{
       x, y,
       cellX: x,
       cellY: y,
-      targetX: x,
-      targetY: y,
+      targetX: null,
+      targetY: null,
       dx, dy,
       turnBias,
       speed,
@@ -977,6 +978,9 @@ button.ghost{
     for (const sparx of state.sparx) {
       sparx.phase += dt * 12;
       snapSparxToBorder(sparx);
+      if (sparx.targetX == null || sparx.targetY == null) {
+        chooseNextSparxTarget(sparx);
+      }
       let remaining = sparx.speed * dt;
       while (remaining > 0.0001) {
         const tx = sparx.targetX ?? sparx.cellX;
