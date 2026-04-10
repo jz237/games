@@ -973,8 +973,12 @@ button.ghost{
     return isReachableEmptyCell(x + side.dx, y + side.dy, reachable);
   }
 
-  function borderDepth(x, y) {
-    return Math.min(x, y, GRID_W - 1 - x, GRID_H - 1 - y);
+  function optionTracksBoundary(fromX, fromY, option, turnBias, reachable) {
+    const side = turnBias >= 0 ? rotateRight(option.dx, option.dy) : rotateLeft(option.dx, option.dy);
+    const currentSide = isReachableEmptyCell(fromX + side.dx, fromY + side.dy, reachable);
+    const nextSide = isReachableEmptyCell(option.x + side.dx, option.y + side.dy, reachable);
+    const forwardSide = isReachableEmptyCell(fromX + option.dx + side.dx, fromY + option.dy + side.dy, reachable);
+    return (currentSide && nextSide) || (currentSide && forwardSide) || (nextSide && forwardSide);
   }
 
   function chooseNextSparxTarget(sparx, reachable) {
@@ -987,29 +991,27 @@ button.ghost{
     }
 
     if (options.length > 1 && sparx.prevCellX != null && sparx.prevCellY != null) {
-      const forwardish = options.filter((option) => option.x !== sparx.prevCellX || option.y !== sparx.prevCellY);
-      if (forwardish.length) options = forwardish;
+      const nonReverse = options.filter((option) => option.x !== sparx.prevCellX || option.y !== sparx.prevCellY);
+      if (nonReverse.length) options = nonReverse;
     }
 
-    let chosen = options[0];
-    let bestScore = -Infinity;
-    for (const option of options) {
-      let score = 0;
-      if (option.dx === sparx.dx && option.dy === sparx.dy) score += 4;
-      if (option.dx === -sparx.dx && option.dy === -sparx.dy) score -= 8;
-      if (!isOuterPerimeterCell(option.x, option.y)) score += 8;
-      if (isOuterPerimeterCell(sparx.cellX, sparx.cellY) && !isOuterPerimeterCell(option.x, option.y)) score += 6;
-      if (!isOuterPerimeterCell(sparx.cellX, sparx.cellY) && isOuterPerimeterCell(option.x, option.y)) score -= 6;
-      if (sideHasReachableOpen(sparx.cellX, sparx.cellY, option.dx, option.dy, sparx.turnBias, reachable)) score += 7;
-      if (sideHasReachableOpen(option.x, option.y, option.dx, option.dy, sparx.turnBias, reachable)) score += 4;
-      const openAdj = Object.values(DIRS).reduce((sum, dir) => sum + (isReachableEmptyCell(option.x + dir.x, option.y + dir.y, reachable) ? 1 : 0), 0);
-      score += openAdj * 0.9;
-      score += borderDepth(option.x, option.y) * 1.6;
-      if (score > bestScore) {
-        bestScore = score;
-        chosen = option;
-      }
+    const boundaryOptions = options.filter((option) => optionTracksBoundary(sparx.cellX, sparx.cellY, option, sparx.turnBias, reachable));
+    if (boundaryOptions.length) options = boundaryOptions;
+
+    const straight = {dx: sparx.dx || 1, dy: sparx.dy || 0};
+    const right = rotateRight(straight.dx, straight.dy);
+    const left = rotateLeft(straight.dx, straight.dy);
+    const reverse = {dx: -straight.dx, dy: -straight.dy};
+    const priority = sparx.turnBias >= 0
+      ? [right, straight, left, reverse]
+      : [left, straight, right, reverse];
+
+    let chosen = null;
+    for (const dir of priority) {
+      chosen = options.find((option) => option.dx === dir.dx && option.dy === dir.dy);
+      if (chosen) break;
     }
+    if (!chosen) chosen = options[0];
 
     sparx.targetX = chosen.x;
     sparx.targetY = chosen.y;
