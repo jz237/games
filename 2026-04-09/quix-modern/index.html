@@ -358,8 +358,8 @@ button.ghost{
 
       <div class="overlay" id="scoresOverlay">
         <div class="panel">
-          <span class="eyebrow">Local Top 10</span>
-          <p class="lead">Stored in your browser with 3-letter initials.</p>
+          <span class="eyebrow">Local + Global Scores</span>
+          <p class="lead">Local scores stay on your device. Global scores sync to the shared leaderboard.</p>
           <div class="score-list" id="scoreList"></div>
           <div class="cta-row" style="margin-top:14px">
             <button class="primary" id="scoresCloseButton">Close</button>
@@ -401,6 +401,7 @@ button.ghost{
   const GRID_H = 116;
   const CLAIM_GOAL_BASE = 0.72;
   const SCORE_KEY = "neon-qix-highscores-v1";
+  const GLOBAL_SCORES_API = "https://game-scores.jez237.workers.dev/scores/neon-qix";
   const CELL_EMPTY = 0;
   const CELL_SAFE = 1;
   const CELL_TRAIL = 2;
@@ -442,6 +443,8 @@ button.ghost{
   let raf = 0;
   let lastTime = 0;
   let lastHudState = "";
+  let globalScoresCache = null;
+  let globalScoresCacheTime = 0;
   let controlDir = null;
   let controlSource = null;
   let keyboardDir = null;
@@ -833,7 +836,8 @@ button.ghost{
     }
 
     if (nextCell === CELL_TRAIL) {
-      loseLife("You crossed your own live cut.");
+      state.levelMessage = "You can't reverse through your live cut.";
+      updateHud(true);
       return;
     }
 
@@ -994,6 +998,34 @@ button.ghost{
     return scores.length < 10 || score > scores[scores.length - 1].score;
   }
 
+  async function fetchGlobalScores() {
+    const now = Date.now();
+    if (globalScoresCache && now - globalScoresCacheTime < 30000) return globalScoresCache;
+    try {
+      const res = await fetch(GLOBAL_SCORES_API);
+      if (res.ok) {
+        globalScoresCache = await res.json();
+        globalScoresCacheTime = now;
+        return globalScoresCache;
+      }
+    } catch (error) {
+    }
+    return globalScoresCache || [];
+  }
+
+  async function submitGlobalScore(name, score, level) {
+    try {
+      await fetch(GLOBAL_SCORES_API, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({initials: name, score, level})
+      });
+      globalScoresCache = null;
+      globalScoresCacheTime = 0;
+    } catch (error) {
+    }
+  }
+
   function loadHighScores() {
     try {
       const parsed = JSON.parse(localStorage.getItem(SCORE_KEY) || "[]");
@@ -1008,7 +1040,7 @@ button.ghost{
 
   function saveHighScore(name, score, level) {
     const scores = loadHighScores();
-    scores.push({name, score, level});
+    scores.push({name, score, level, ts: Date.now()});
     scores.sort((a, b) => b.score - a.score);
     const trimmed = scores.slice(0, 10);
     localStorage.setItem(SCORE_KEY, JSON.stringify(trimmed));
@@ -1017,15 +1049,37 @@ button.ghost{
 
   function renderHighScores() {
     const scores = loadHighScores();
+    let html = '<div style="color:#7df6ff;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:8px">🏠 Local Top 10</div>';
     if (!scores.length) {
-      scoreList.innerHTML = '<div class="score-row"><span>--</span><strong>AAA</strong><span>0</span></div>';
-      return;
+      html += '<div class="score-row"><span>--</span><strong>AAA</strong><span>0</span></div>';
+    } else {
+      html += scores.map((entry, index) =>
+        '<div class="score-row"><span>' + String(index + 1).padStart(2, "0") +
+        '</span><strong>' + entry.name +
+        '</strong><span>L' + (entry.level || 1) + ' · ' + entry.score.toLocaleString() + '</span></div>'
+      ).join("");
     }
-    scoreList.innerHTML = scores.map((entry, index) =>
-      '<div class="score-row"><span>' + String(index + 1).padStart(2, "0") +
-      '</span><strong>' + entry.name +
-      '</strong><span>' + entry.score.toLocaleString() + '</span></div>'
-    ).join("");
+    html += '<div style="color:#ffd56a;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;margin:16px 0 8px">🌐 Global Top 10</div>';
+    html += '<div id="globalScoreRows"><div class="score-row"><span>..</span><strong>SYNC</strong><span>Loading</span></div></div>';
+    scoreList.innerHTML = html;
+
+    fetchGlobalScores().then((scores) => {
+      const rows = document.getElementById("globalScoreRows");
+      if (!rows) return;
+      if (!scores || !scores.length) {
+        rows.innerHTML = '<div class="score-row"><span>--</span><strong>EMPTY</strong><span>No scores yet</span></div>';
+        return;
+      }
+      rows.innerHTML = scores.slice(0, 10).map((entry, index) =>
+        '<div class="score-row"><span>' + String(index + 1).padStart(2, "0") +
+        '</span><strong>' + (entry.initials || entry.name || "AAA") +
+        '</strong><span>L' + (entry.level || entry.wave || 1) + ' · ' + Number(entry.score || 0).toLocaleString() + '</span></div>'
+      ).join("");
+    }).catch(() => {
+      const rows = document.getElementById("globalScoreRows");
+      if (!rows) return;
+      rows.innerHTML = '<div class="score-row"><span>--</span><strong>OFF</strong><span>Global unavailable</span></div>';
+    });
   }
 
   function updateHud(force) {
@@ -1205,24 +1259,20 @@ button.ghost{
       }
     }
 
-    ctx.lineWidth = Math.max(0.75, scale * 0.065);
-    ctx.lineCap = "square";
     for (let y = 0; y < GRID_H; y++) {
       for (let x = 0; x < GRID_W; x++) {
         if (!isBorderSafeCell(x, y)) continue;
-        const hue = (y === 0 || y === GRID_H-1 || x === 0 || x === GRID_W-1) ? 214 : getCellHue(x, y);
         const px = x * scale;
         const py = y * scale;
-        ctx.strokeStyle = `hsla(${hue}, 86%, 58%, 0.95)`;
-        if (!inBounds(x, y-1) || getCell(x, y-1) !== CELL_SAFE) { ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + scale, py); ctx.stroke(); }
-        if (!inBounds(x, y+1) || getCell(x, y+1) !== CELL_SAFE) { ctx.beginPath(); ctx.moveTo(px, py + scale); ctx.lineTo(px + scale, py + scale); ctx.stroke(); }
-        if (!inBounds(x-1, y) || getCell(x-1, y) !== CELL_SAFE) { ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py + scale); ctx.stroke(); }
-        if (!inBounds(x+1, y) || getCell(x+1, y) !== CELL_SAFE) { ctx.beginPath(); ctx.moveTo(px + scale, py); ctx.lineTo(px + scale, py + scale); ctx.stroke(); }
+        ctx.fillStyle = (y === 0 || y === GRID_H - 1 || x === 0 || x === GRID_W - 1)
+          ? "rgba(18,42,84,0.985)"
+          : "rgba(8,16,30,0.985)";
+        ctx.fillRect(px, py, scale, scale);
       }
     }
 
     ctx.strokeStyle = "rgba(125,246,255,0.42)";
-    ctx.lineWidth = Math.max(0.65, scale * 0.05);
+    ctx.lineWidth = Math.max(0.7, scale * 0.055);
     ctx.strokeRect(0, 0, GRID_W * scale, GRID_H * scale);
 
     if (state.captureFlash > 0) {
@@ -1409,13 +1459,17 @@ button.ghost{
       initialsInput.focus({preventScroll: true});
       return;
     }
-    saveHighScore(name, state.pendingScore.score, state.pendingScore.level);
+    const pending = state.pendingScore;
+    saveHighScore(name, pending.score, pending.level);
+    submitGlobalScore(name, pending.score, pending.level).then(() => {
+      renderHighScores();
+    });
     state.pendingScore = null;
     initialsWrap.style.display = "none";
     saveScoreButton.style.display = "none";
     restartButton.style.display = "inline-flex";
     gameOverEyebrow.textContent = "Score Saved";
-    gameOverText.textContent = "Stored " + name + " with " + state.score.toLocaleString() + " points.";
+    gameOverText.textContent = "Stored " + name + " with " + state.score.toLocaleString() + " points and synced it to global scores.";
   }
 
   function togglePause() {
