@@ -457,6 +457,7 @@ button.ghost{
   let audioUnlocked = false;
   let qixHum = null;
   let levelAdvanceTimer = 0;
+  let deathResolveTimer = 0;
 
   const state = {
     phase: "title",
@@ -639,6 +640,13 @@ button.ghost{
     clearTrail();
   }
 
+  function clearDeathTimer() {
+    if (deathResolveTimer) {
+      clearTimeout(deathResolveTimer);
+      deathResolveTimer = 0;
+    }
+  }
+
   function clearTrail() {
     for (const cell of state.trail) {
       if (getCell(cell.x, cell.y) === CELL_TRAIL) {
@@ -654,6 +662,7 @@ button.ghost{
       clearTimeout(levelAdvanceTimer);
       levelAdvanceTimer = 0;
     }
+    clearDeathTimer();
     state.level = level;
     if (!keepScore) {
       state.score = 0;
@@ -866,18 +875,31 @@ button.ghost{
 
   function loseLife(message) {
     if (state.phase !== "playing") return;
+    clearDeathTimer();
     state.lives -= 1;
-    state.shake = 0.45;
-    spawnBurst(state.player.x, state.player.y, 24, "danger");
+    state.phase = "dying";
+    state.player.alive = false;
+    state.player.drawing = false;
+    state.player.moveClock = 0;
+    state.shake = 0.95;
+    spawnBurst(state.player.x, state.player.y, 56, "danger", {speedMin: 7, speedMax: 30, lifeMin: 0.45, spread: Math.PI * 2});
+    spawnBurst(state.player.x, state.player.y, 30, "capture", {speedMin: 4, speedMax: 16, lifeMin: 0.38, spread: Math.PI * 2});
+    state.pulses.push({x: state.player.x + 0.5, y: state.player.y + 0.5, r: 0.8, maxR: 10, life: 0.72});
     clearTrail();
-    resetPlayer();
     playTone("hit");
-    if (state.lives <= 0) {
-      triggerGameOver(message || "The Qix line cut through your trace.");
-    } else {
-      state.levelMessage = message || "Trace broken. Re-enter from a safe wall.";
-      updateHud(true);
-    }
+
+    const deathMessage = message || "Trace broken. Re-enter from a safe wall.";
+    deathResolveTimer = setTimeout(() => {
+      deathResolveTimer = 0;
+      if (state.lives <= 0) {
+        triggerGameOver(message || "The Qix line cut through your trace.");
+      } else {
+        resetPlayer();
+        state.phase = "playing";
+        state.levelMessage = deathMessage;
+        updateHud(true);
+      }
+    }, 720);
   }
 
   function floodFillFromSeeds(seeds) {
@@ -1209,8 +1231,10 @@ button.ghost{
       updateQixHum(dt);
       return;
     }
-    if (state.phase === "paused" || state.phase === "gameover") {
+    if (state.phase === "paused" || state.phase === "gameover" || state.phase === "dying") {
       updateParticles(dt);
+      if (state.player.respawnFlash > 0) state.player.respawnFlash = Math.max(0, state.player.respawnFlash - dt);
+      if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * (state.phase === "dying" ? 1.3 : 2.4));
       updateQixHum(dt);
       return;
     }
@@ -1415,11 +1439,16 @@ button.ghost{
       if (p.kind === "spark") continue;
       const alpha = Math.max(0, p.life / p.maxLife);
       const color = p.kind === "danger" ? "255,106,122" : p.kind === "capture" ? "255,213,106" : "125,246,255";
+      const radius = p.kind === "danger"
+        ? Math.max(1.5, scale * (0.34 + alpha * 0.34))
+        : p.kind === "capture"
+          ? Math.max(1.2, scale * (0.26 + alpha * 0.18))
+          : Math.max(1, scale * 0.22);
       ctx.fillStyle = "rgba(" + color + "," + alpha + ")";
-      ctx.shadowBlur = scale * 1.2;
+      ctx.shadowBlur = p.kind === "danger" ? scale * 2.6 : scale * 1.2;
       ctx.shadowColor = "rgba(" + color + "," + Math.min(alpha * 1.2, 1) + ")";
       ctx.beginPath();
-      ctx.arc(offsetX + p.x * scale, offsetY + p.y * scale, Math.max(1, scale * 0.22), 0, Math.PI * 2);
+      ctx.arc(offsetX + p.x * scale, offsetY + p.y * scale, radius, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
@@ -1444,7 +1473,7 @@ button.ghost{
     drawField(scale, offsetX, offsetY);
     drawQix(scale, offsetX, offsetY);
     drawParticles(scale, offsetX, offsetY);
-    if (state.phase !== "title") {
+    if (state.phase !== "title" && state.player.alive) {
       drawPlayer(scale, offsetX, offsetY);
     }
 
@@ -1737,6 +1766,7 @@ button.ghost{
         clearTimeout(levelAdvanceTimer);
         levelAdvanceTimer = 0;
       }
+      clearDeathTimer();
       state.phase = "title";
       pauseButton.textContent = "Pause";
       showOverlay(titleOverlay);
