@@ -1048,16 +1048,16 @@ button.ghost{
 
   function createSparxWave(level, attractMode = false) {
     const speed = ((attractMode ? 4.8 : 5.6) + level * 0.2) * 1.5;
-    const list = [createSparx(Math.floor(GRID_W * 0.25), GRID_H - 1, 1, speed)];
+    const list = [createSparx(Math.floor(GRID_W * 0.25), 0, 1, speed)];
     if (level >= 2 || attractMode) {
-      list.push(createSparx(Math.floor(GRID_W * 0.75), GRID_H - 1, -1, speed * 1.03));
+      list.push(createSparx(Math.floor(GRID_W * 0.75), 0, -1, speed * 1.03));
     }
     return list;
   }
 
   function createAttractSparxWave() {
     const startLeft = Math.random() < 0.5;
-    return [createSparx(Math.floor(GRID_W * (startLeft ? 0.24 : 0.76)), GRID_H - 1, startLeft ? 1 : -1, 6.2)];
+    return [createSparx(Math.floor(GRID_W * (startLeft ? 0.24 : 0.76)), 0, startLeft ? 1 : -1, 6.2)];
   }
 
   function projectSparxToCycles(sparx, cycles) {
