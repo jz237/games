@@ -545,6 +545,9 @@ button.ghost{
     attractStep: 0,
     attractScript: [],
     attractCooldown: 0,
+    attractStallClock: 0,
+    attractLastX: 0,
+    attractLastY: 0,
     totalClaimedCells: 0,
     levelMessage: "Trace into open space and close the cut."
   };
@@ -599,6 +602,10 @@ button.ghost{
 
   function levelGoal(level) {
     return Math.min(0.82, CLAIM_GOAL_BASE + (level - 1) * 0.015);
+  }
+
+  function randomInt(min, max) {
+    return Math.floor(min + Math.random() * (max - min + 1));
   }
 
   function createQix(level) {
@@ -1554,23 +1561,26 @@ button.ghost{
     const qixX = state.qix ? state.qix.x : GRID_W * 0.5;
     const qixY = state.qix ? state.qix.y : GRID_H * 0.45;
     const saferLeft = qixX > GRID_W * 0.5;
-    const alternate = state.attractCycle % 2 === 1;
-    const leftSide = alternate ? !saferLeft : saferLeft;
-    const margin = 11 + (state.attractCycle % 3) * 3;
+    const leftSide = Math.random() < 0.7 ? saferLeft : !saferLeft;
+    const margin = randomInt(8, 18);
     const entryX = leftSide ? margin : GRID_W - 1 - margin;
-    const laneWidth = 8 + ((state.attractCycle + 1) % 3) * 2;
+    const laneWidth = randomInt(7, 15);
     const sweepX = leftSide ? Math.min(GRID_W - 2, entryX + laneWidth) : Math.max(1, entryX - laneWidth);
-    const depth = qixY > GRID_H * 0.66 ? 14 : qixY > GRID_H * 0.52 ? 19 : 25;
-    const topY = Math.max(76, GRID_H - 1 - depth - (state.attractCycle % 2) * 3);
+    const maxDepth = qixY > GRID_H * 0.66 ? 14 : qixY > GRID_H * 0.52 ? 20 : 28;
+    const depth = randomInt(10, maxDepth);
+    const topY = Math.max(74, GRID_H - 1 - depth);
     const script = [];
     if (state.player.x !== entryX || state.player.y !== GRID_H - 1) {
       script.push({x: entryX, y: GRID_H - 1});
     }
-    script.push(
-      {x: entryX, y: topY},
-      {x: sweepX, y: topY},
-      {x: sweepX, y: GRID_H - 1}
-    );
+    script.push({x: entryX, y: topY});
+    if (Math.random() < 0.45) {
+      const pocketY = Math.min(GRID_H - 2, topY + randomInt(4, 10));
+      const pocketX = leftSide ? Math.min(GRID_W - 2, sweepX + randomInt(2, 5)) : Math.max(1, sweepX - randomInt(2, 5));
+      script.push({x: sweepX, y: topY}, {x: pocketX, y: pocketY}, {x: sweepX, y: GRID_H - 1});
+    } else {
+      script.push({x: sweepX, y: topY}, {x: sweepX, y: GRID_H - 1});
+    }
     return script;
   }
 
@@ -1578,7 +1588,10 @@ button.ghost{
     state.attractCycle += 1;
     state.attractStep = 0;
     state.attractScript = buildAttractScript();
-    state.attractCooldown = 0.24;
+    state.attractCooldown = 0.18 + Math.random() * 0.16;
+    state.attractStallClock = 0;
+    state.attractLastX = state.player.x;
+    state.attractLastY = state.player.y;
     attractDir = null;
   }
 
@@ -1620,6 +1633,9 @@ button.ghost{
     state.claimedRatio = calculateClaimedRatio();
     state.targetRatio = levelGoal(1);
     state.attractClock = 0;
+    state.attractStallClock = 0;
+    state.attractLastX = state.player.x;
+    state.attractLastY = state.player.y;
     queueAttractScript();
   }
 
@@ -1631,15 +1647,41 @@ button.ghost{
     state.captureFlash = Math.max(0, state.captureFlash - dt * 0.8);
     state.attractCooldown = Math.max(0, state.attractCooldown - dt);
 
+    if (!state.player.drawing && (!isBorderSafeCell(state.player.x, state.player.y) || getCell(state.player.x, state.player.y) !== CELL_SAFE)) {
+      resetPlayer();
+      queueAttractScript();
+      return;
+    }
+
     updateAttractDirector();
     updateQix(dt * 1.2);
     updatePlayer(dt * 1.2);
     updateSparx(dt * 1.15);
     updateParticles(dt);
 
+    if (state.player.x === state.attractLastX && state.player.y === state.attractLastY && attractDir) {
+      state.attractStallClock += dt;
+    } else {
+      state.attractStallClock = 0;
+      state.attractLastX = state.player.x;
+      state.attractLastY = state.player.y;
+    }
+
     if (qixHitsTrail()) {
       state.captureFlash = Math.max(state.captureFlash, 0.08);
+      clearTrail();
+      resetPlayer();
+      queueAttractScript();
+      return;
     }
+
+    if (state.attractStallClock > 0.9) {
+      if (state.player.drawing) clearTrail();
+      resetPlayer();
+      queueAttractScript();
+      return;
+    }
+
     if (!state.player.drawing && state.attractStep >= state.attractScript.length) {
       if (state.claimedRatio >= 0.24 || state.attractClock >= 18) {
         resetAttractDemo();
