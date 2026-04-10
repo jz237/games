@@ -871,34 +871,46 @@ button.ghost{
     return {dx: dy, dy: -dx};
   }
 
-  function getBorderNeighbors(x, y) {
+  function isOuterPerimeterCell(x, y) {
+    return x === 0 || y === 0 || x === GRID_W - 1 || y === GRID_H - 1;
+  }
+
+  function computeReachableOpenMap() {
+    const shape = state.qix ? getQixEndpoints() : null;
+    const seeds = shape ? [shape.a, shape.b, shape.center] : [{x: GRID_W * 0.5, y: GRID_H * 0.5}];
+    return floodFillFromSeeds(seeds);
+  }
+
+  function isReachableEmptyCell(x, y, reachable) {
+    return inBounds(x, y) && getCell(x, y) === CELL_EMPTY && !!reachable[idx(x, y)];
+  }
+
+  function isActiveSparxBorderCell(x, y, reachable) {
+    if (getCell(x, y) !== CELL_SAFE) return false;
+    for (const dir of Object.values(DIRS)) {
+      if (isReachableEmptyCell(x + dir.x, y + dir.y, reachable)) return true;
+    }
+    return false;
+  }
+
+  function getBorderNeighbors(x, y, reachable) {
     const neighbors = [];
     for (const dir of Object.values(DIRS)) {
       const nx = x + dir.x;
       const ny = y + dir.y;
-      if (inBounds(nx, ny) && isBorderSafeCell(nx, ny)) {
+      if (inBounds(nx, ny) && isActiveSparxBorderCell(nx, ny, reachable)) {
         neighbors.push({x: nx, y: ny, dx: dir.x, dy: dir.y});
       }
     }
     return neighbors;
   }
 
-  function snapSparxToBorder(sparx) {
-    const rx = Math.round(sparx.x ?? sparx.cellX ?? 0);
-    const ry = Math.round(sparx.y ?? sparx.cellY ?? 0);
-    if (inBounds(rx, ry) && isBorderSafeCell(rx, ry)) {
-      sparx.cellX = rx;
-      sparx.cellY = ry;
-      return;
-    }
-
-    const cx = Math.round(sparx.cellX ?? sparx.x ?? 0);
-    const cy = Math.round(sparx.cellY ?? sparx.y ?? 0);
+  function findNearestActiveSparxCell(cx, cy, reachable) {
     let best = null;
     let bestDist = Infinity;
     for (let y = 0; y < GRID_H; y++) {
       for (let x = 0; x < GRID_W; x++) {
-        if (!isBorderSafeCell(x, y)) continue;
+        if (!isActiveSparxBorderCell(x, y, reachable)) continue;
         const dist = Math.abs(x - cx) + Math.abs(y - cy);
         if (dist < bestDist) {
           bestDist = dist;
@@ -906,6 +918,21 @@ button.ghost{
         }
       }
     }
+    return best;
+  }
+
+  function snapSparxToBorder(sparx, reachable) {
+    const rx = Math.round(sparx.x ?? sparx.cellX ?? 0);
+    const ry = Math.round(sparx.y ?? sparx.cellY ?? 0);
+    if (inBounds(rx, ry) && isActiveSparxBorderCell(rx, ry, reachable)) {
+      sparx.cellX = rx;
+      sparx.cellY = ry;
+      return;
+    }
+
+    const cx = Math.round(sparx.cellX ?? sparx.x ?? 0);
+    const cy = Math.round(sparx.cellY ?? sparx.y ?? 0);
+    const best = findNearestActiveSparxCell(cx, cy, reachable);
     if (best) {
       sparx.cellX = best.x;
       sparx.cellY = best.y;
@@ -939,29 +966,36 @@ button.ghost{
     return list;
   }
 
-  function chooseNextSparxTarget(sparx) {
-    snapSparxToBorder(sparx);
-    const options = getBorderNeighbors(sparx.cellX, sparx.cellY);
+  function sideHasReachableOpen(x, y, dx, dy, turnBias, reachable) {
+    const side = turnBias >= 0 ? rotateRight(dx, dy) : rotateLeft(dx, dy);
+    return isReachableEmptyCell(x + side.dx, y + side.dy, reachable);
+  }
+
+  function chooseNextSparxTarget(sparx, reachable) {
+    snapSparxToBorder(sparx, reachable);
+    const options = getBorderNeighbors(sparx.cellX, sparx.cellY, reachable);
     if (!options.length) {
       sparx.targetX = sparx.cellX;
       sparx.targetY = sparx.cellY;
       return;
     }
 
-    const straight = {dx: sparx.dx || 1, dy: sparx.dy || 0};
-    const right = rotateRight(straight.dx, straight.dy);
-    const left = rotateLeft(straight.dx, straight.dy);
-    const reverse = {dx: -straight.dx, dy: -straight.dy};
-    const priority = sparx.turnBias >= 0
-      ? [right, straight, left, reverse]
-      : [left, straight, right, reverse];
-
-    let chosen = null;
-    for (const dir of priority) {
-      chosen = options.find((option) => option.dx === dir.dx && option.dy === dir.dy);
-      if (chosen) break;
+    let chosen = options[0];
+    let bestScore = -Infinity;
+    for (const option of options) {
+      let score = 0;
+      if (option.dx === sparx.dx && option.dy === sparx.dy) score += 3;
+      if (option.dx === -sparx.dx && option.dy === -sparx.dy) score -= 5;
+      if (!isOuterPerimeterCell(option.x, option.y)) score += 2.5;
+      if (sideHasReachableOpen(sparx.cellX, sparx.cellY, option.dx, option.dy, sparx.turnBias, reachable)) score += 4;
+      if (sideHasReachableOpen(option.x, option.y, option.dx, option.dy, sparx.turnBias, reachable)) score += 2;
+      const openAdj = Object.values(DIRS).reduce((sum, dir) => sum + (isReachableEmptyCell(option.x + dir.x, option.y + dir.y, reachable) ? 1 : 0), 0);
+      score += openAdj * 0.6;
+      if (score > bestScore) {
+        bestScore = score;
+        chosen = option;
+      }
     }
-    if (!chosen) chosen = options[0];
 
     sparx.targetX = chosen.x;
     sparx.targetY = chosen.y;
@@ -975,11 +1009,12 @@ button.ghost{
 
   function updateSparx(dt) {
     if (!state.sparx.length) return;
+    const reachable = computeReachableOpenMap();
     for (const sparx of state.sparx) {
       sparx.phase += dt * 12;
-      snapSparxToBorder(sparx);
-      if (sparx.targetX == null || sparx.targetY == null) {
-        chooseNextSparxTarget(sparx);
+      snapSparxToBorder(sparx, reachable);
+      if (sparx.targetX == null || sparx.targetY == null || !isActiveSparxBorderCell(Math.round(sparx.targetX), Math.round(sparx.targetY), reachable)) {
+        chooseNextSparxTarget(sparx, reachable);
       }
       let remaining = sparx.speed * dt;
       while (remaining > 0.0001) {
@@ -994,7 +1029,7 @@ button.ghost{
           sparx.y = ty;
           sparx.cellX = Math.round(tx);
           sparx.cellY = Math.round(ty);
-          chooseNextSparxTarget(sparx);
+          chooseNextSparxTarget(sparx, reachable);
           const stuck = Math.hypot((sparx.targetX ?? sparx.cellX) - sparx.x, (sparx.targetY ?? sparx.cellY) - sparx.y);
           if (stuck < 0.0001) break;
           continue;
@@ -1006,7 +1041,7 @@ button.ghost{
           sparx.cellX = Math.round(tx);
           sparx.cellY = Math.round(ty);
           remaining -= dist;
-          chooseNextSparxTarget(sparx);
+          chooseNextSparxTarget(sparx, reachable);
         } else {
           sparx.x += vx / dist * remaining;
           sparx.y += vy / dist * remaining;
@@ -1187,9 +1222,10 @@ button.ghost{
     playTone("capture");
     spawnCaptureEffect(captureRatio, captured);
     clearTrail();
+    const reachableAfterCapture = computeReachableOpenMap();
     for (const sparx of state.sparx) {
-      snapSparxToBorder(sparx);
-      chooseNextSparxTarget(sparx);
+      snapSparxToBorder(sparx, reachableAfterCapture);
+      chooseNextSparxTarget(sparx, reachableAfterCapture);
     }
     state.claimedRatio = calculateClaimedRatio();
     state.levelMessage = "Captured " + Math.round(captureRatio * 1000) / 10 + "% for +" + scoreGain + " points.";
