@@ -1549,10 +1549,13 @@ button.ghost{
   }
 
   function buildAttractScript() {
-    const leftSide = state.attractCycle % 2 === 0;
-    const entryX = leftSide ? 20 : GRID_W - 21;
-    const sweepX = leftSide ? 32 : GRID_W - 33;
-    const topY = 74;
+    const qixX = state.qix ? state.qix.x : GRID_W * 0.5;
+    const saferLeft = qixX > GRID_W * 0.5;
+    const alternate = state.attractCycle % 2 === 1;
+    const leftSide = alternate ? !saferLeft : saferLeft;
+    const entryX = leftSide ? 14 + (state.attractCycle % 3) * 4 : GRID_W - 15 - (state.attractCycle % 3) * 4;
+    const sweepX = leftSide ? entryX + 12 + (state.attractCycle % 2) * 4 : entryX - 12 - (state.attractCycle % 2) * 4;
+    const topY = 82 - (state.attractCycle % 3) * 6;
     return [
       {x: entryX, y: GRID_H - 1},
       {x: entryX, y: topY},
@@ -1620,8 +1623,7 @@ button.ghost{
     updateParticles(dt);
 
     if (qixHitsTrail()) {
-      resetAttractDemo();
-      return;
+      state.captureFlash = Math.max(state.captureFlash, 0.08);
     }
     if (!state.player.drawing && state.claimedRatio > 0.03 && state.attractStep >= state.attractScript.length) {
       resetAttractDemo();
@@ -2112,6 +2114,47 @@ button.ghost{
     if (!audioUnlocked || !audioCtx) return;
     ensureQixHum();
     const now = audioCtx.currentTime;
+
+    if (type === "sparx") {
+      const duration = 0.055;
+      const noiseBuffer = audioCtx.createBuffer(1, Math.max(1, Math.floor(audioCtx.sampleRate * duration)), audioCtx.sampleRate);
+      const data = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const env = 1 - i / data.length;
+        data[i] = (Math.random() * 2 - 1) * env;
+      }
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const noiseFilter = audioCtx.createBiquadFilter();
+      noiseFilter.type = "bandpass";
+      noiseFilter.frequency.value = 2800;
+      noiseFilter.Q.value = 2.8;
+      const noiseGain = audioCtx.createGain();
+      noiseGain.gain.setValueAtTime(0.0001, now);
+      noiseGain.gain.linearRampToValueAtTime(0.03, now + 0.004);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+      const zap = audioCtx.createOscillator();
+      const zapGain = audioCtx.createGain();
+      zap.type = "square";
+      zap.frequency.setValueAtTime(2200 + Math.random() * 500, now);
+      zap.frequency.exponentialRampToValueAtTime(620 + Math.random() * 120, now + duration);
+      zapGain.gain.setValueAtTime(0.0001, now);
+      zapGain.gain.linearRampToValueAtTime(0.018, now + 0.003);
+      zapGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(audioCtx.destination);
+      zap.connect(zapGain);
+      zapGain.connect(audioCtx.destination);
+      noise.start(now);
+      noise.stop(now + duration + 0.01);
+      zap.start(now);
+      zap.stop(now + duration + 0.01);
+      return;
+    }
+
     const oscA = audioCtx.createOscillator();
     const oscB = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
@@ -2143,7 +2186,6 @@ button.ghost{
     else if (type === "pause") duration = setPair(260, 170, 390, 128, 0.008, 0.18, 0.014, 720);
     else if (type === "qixBounce") duration = setPair(146, 102, 228, 166, 0.003, 0.11, 0.014, 860);
     else if (type === "attractGlitch") duration = setPair(118, 188, 174, 96, 0.002, 0.09, 0.01, 1040);
-    else if (type === "sparx") duration = setPair(164, 124, 512, 212, 0.002, 0.065, 0.007, 2200);
     else duration = setPair(320, 220, 480, 330, 0.008, 0.2, 0.014, 1100);
 
     oscA.detune.setValueAtTime((Math.random() - 0.5) * 34, now);
