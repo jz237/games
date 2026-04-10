@@ -550,9 +550,9 @@ button.ghost{
     };
   }
 
-  function qixShapeHitsWall(qix = state.qix) {
+  function qixShapeCollision(qix = state.qix) {
     const shape = getQixEndpoints(qix);
-    if (!shape) return {hitX:false,hitY:false,minX:0,maxX:0,minY:0,maxY:0};
+    if (!shape) return {blocked:false,minX:0,maxX:0,minY:0,maxY:0};
     const points = [shape.a, shape.b, shape.center];
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const p of points) {
@@ -562,11 +562,26 @@ button.ghost{
       maxY = Math.max(maxY, p.y);
     }
     const margin = 2.8;
-    return {
-      hitX: minX <= margin || maxX >= GRID_W - 1 - margin,
-      hitY: minY <= margin || maxY >= GRID_H - 1 - margin,
-      minX,maxX,minY,maxY
-    };
+    let blocked = minX <= margin || maxX >= GRID_W - 1 - margin || minY <= margin || maxY >= GRID_H - 1 - margin;
+
+    const sampleCount = 24;
+    for (let i = 0; i <= sampleCount && !blocked; i++) {
+      const t = i / sampleCount;
+      const sx = shape.a.x + (shape.b.x - shape.a.x) * t;
+      const sy = shape.a.y + (shape.b.y - shape.a.y) * t;
+      if (isQixBlocked(sx, sy)) blocked = true;
+    }
+
+    if (!blocked) {
+      for (const p of points) {
+        if (isQixBlocked(p.x, p.y)) {
+          blocked = true;
+          break;
+        }
+      }
+    }
+
+    return {blocked,minX,maxX,minY,maxY};
   }
 
   function resetPlayer() {
@@ -664,29 +679,25 @@ button.ghost{
     q.stretch += q.stretchV * dt * 14;
     q.length = q.baseLength + Math.sin(q.wanderX * 0.8) * 2.2;
 
-    const step = Math.min(0.01, dt);
+    const step = Math.min(0.008, dt);
     let remaining = dt;
     while (remaining > 0) {
       const slice = Math.min(step, remaining);
-      q.x += q.vx * slice;
-      q.y += q.vy * slice;
+      const prevX = q.x;
+      const prevY = q.y;
 
-      let shape = qixShapeHitsWall(q);
-      const margin = 2.8;
-      if (shape.minX <= margin) {
-        q.x += margin - shape.minX;
-        q.vx = Math.abs(q.vx);
-      } else if (shape.maxX >= GRID_W - 1 - margin) {
-        q.x -= shape.maxX - (GRID_W - 1 - margin);
-        q.vx = -Math.abs(q.vx);
+      q.x = prevX + q.vx * slice;
+      let shape = qixShapeCollision(q);
+      if (shape.blocked) {
+        q.x = prevX;
+        q.vx = -q.vx;
       }
-      shape = qixShapeHitsWall(q);
-      if (shape.minY <= margin) {
-        q.y += margin - shape.minY;
-        q.vy = Math.abs(q.vy);
-      } else if (shape.maxY >= GRID_H - 1 - margin) {
-        q.y -= shape.maxY - (GRID_H - 1 - margin);
-        q.vy = -Math.abs(q.vy);
+
+      q.y = prevY + q.vy * slice;
+      shape = qixShapeCollision(q);
+      if (shape.blocked) {
+        q.y = prevY;
+        q.vy = -q.vy;
       }
 
       clampQixPoint(q);
