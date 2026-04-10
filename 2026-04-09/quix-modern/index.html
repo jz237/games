@@ -1186,28 +1186,17 @@ button.ghost{
           const px = x * scale;
           const py = y * scale;
           if (y === 0 || y === GRID_H-1 || x === 0 || x === GRID_W-1) {
-            ctx.fillStyle = "rgba(40,92,180,0.95)";
-            ctx.fillRect(px, py, scale, scale);
+            ctx.fillStyle = "rgba(56,112,214,0.96)";
           } else {
-            ctx.fillStyle = `hsla(${hue}, 68%, ${30 + ((x + y) % 4) * 2}%, 0.96)`;
-            ctx.fillRect(px, py, scale, scale);
-            ctx.fillStyle = `hsla(${(hue + 18) % 360}, 82%, 62%, 0.18)`;
-            ctx.fillRect(px, py, scale, Math.max(1, scale * 0.24));
-            ctx.fillStyle = `hsla(${(hue + 36) % 360}, 88%, 70%, 0.12)`;
-            ctx.beginPath();
-            ctx.moveTo(px + scale * 0.18, py + scale);
-            ctx.lineTo(px + scale, py + scale * 0.18);
-            ctx.lineTo(px + scale, py + scale * 0.38);
-            ctx.lineTo(px + scale * 0.38, py + scale);
-            ctx.closePath();
-            ctx.fill();
+            ctx.fillStyle = `hsla(${hue}, 70%, ${34 + ((x + y) % 3) * 2}%, 0.97)`;
           }
+          ctx.fillRect(px, py, scale, scale);
         }
       }
     }
 
-    ctx.strokeStyle = "rgba(125,246,255,0.6)";
-    ctx.lineWidth = Math.max(1, scale * 0.14);
+    ctx.strokeStyle = "rgba(125,246,255,0.52)";
+    ctx.lineWidth = Math.max(0.8, scale * 0.08);
     ctx.strokeRect(0, 0, GRID_W * scale, GRID_H * scale);
 
     if (state.captureFlash > 0) {
@@ -1243,6 +1232,16 @@ button.ghost{
     const by = offsetY + (qixShape.b.y + 0.5) * scale;
 
     ctx.save();
+    ctx.beginPath();
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        if (getCell(x, y) !== CELL_SAFE) {
+          ctx.rect(offsetX + x * scale, offsetY + y * scale, scale, scale);
+        }
+      }
+    }
+    ctx.clip();
+
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
 
