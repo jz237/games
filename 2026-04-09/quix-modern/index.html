@@ -1215,6 +1215,25 @@ button.ghost{
     state.player.y = y;
   }
 
+  function relocatePlayerToNearestSafeEdge() {
+    if (isBorderSafeCell(state.player.x, state.player.y)) return;
+    let best = null;
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        if (!isBorderSafeCell(x, y)) continue;
+        const dist = Math.abs(x - state.player.x) + Math.abs(y - state.player.y);
+        if (!best || dist < best.dist) {
+          best = {x, y, dist};
+        }
+      }
+    }
+    if (best) {
+      movePlayerTo(best.x, best.y);
+    } else {
+      resetPlayer();
+    }
+  }
+
   function loseLife(message) {
     if (state.phase !== "playing") return;
     clearDeathTimer();
@@ -1308,6 +1327,7 @@ button.ghost{
     playTone("capture");
     spawnCaptureEffect(captureRatio, captured);
     clearTrail();
+    relocatePlayerToNearestSafeEdge();
     const cyclesAfterCapture = buildSparxCycles(computeReachableOpenMap());
     for (const sparx of state.sparx) {
       sparx.cycleIndex = -1;
