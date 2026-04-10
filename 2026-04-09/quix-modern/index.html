@@ -863,100 +863,65 @@ button.ghost{
     return false;
   }
 
-  function createSparx(x, y, dx, dy, turnBias = 1) {
-    return {x, y, dx, dy, turnBias, moveClock: Math.random() * 0.08, phase: Math.random() * Math.PI * 2};
+  function isOuterBorderCell(x, y) {
+    return x === 0 || y === 0 || x === GRID_W - 1 || y === GRID_H - 1;
+  }
+
+  function outerPerimeterLength() {
+    return 2 * ((GRID_W - 1) + (GRID_H - 1));
+  }
+
+  function sampleOuterPerimeter(progress) {
+    const length = outerPerimeterLength();
+    let p = ((progress % length) + length) % length;
+
+    if (p < GRID_W - 1) {
+      return {x: p, y: 0, dx: 1, dy: 0};
+    }
+    p -= GRID_W - 1;
+    if (p < GRID_H - 1) {
+      return {x: GRID_W - 1, y: p, dx: 0, dy: 1};
+    }
+    p -= GRID_H - 1;
+    if (p < GRID_W - 1) {
+      return {x: GRID_W - 1 - p, y: GRID_H - 1, dx: -1, dy: 0};
+    }
+    p -= GRID_W - 1;
+    return {x: 0, y: GRID_H - 1 - p, dx: 0, dy: -1};
+  }
+
+  function createSparx(progress, dir, speed) {
+    const pos = sampleOuterPerimeter(progress);
+    return {progress, dir, speed, phase: Math.random() * Math.PI * 2, x: pos.x, y: pos.y, dx: pos.dx, dy: pos.dy};
   }
 
   function createSparxWave(level, attractMode = false) {
-    const list = [
-      createSparx(Math.floor(GRID_W * 0.25), GRID_H - 1, 1, 0, 1)
-    ];
+    const length = outerPerimeterLength();
+    const speed = (attractMode ? 5.1 : 5.8) + level * 0.22;
+    const list = [createSparx(length * 0.18, 1, speed)];
     if (level >= 2 || attractMode) {
-      list.push(createSparx(Math.floor(GRID_W * 0.75), GRID_H - 1, -1, 0, -1));
+      list.push(createSparx(length * 0.67, -1, speed * 1.02));
     }
     return list;
   }
 
   function sparxAt(x, y) {
-    return state.sparx.some((sparx) => sparx.x === x && sparx.y === y);
-  }
-
-  function getBorderNeighbors(x, y) {
-    const neighbors = [];
-    for (const dir of Object.values(DIRS)) {
-      const nx = x + dir.x;
-      const ny = y + dir.y;
-      if (inBounds(nx, ny) && isBorderSafeCell(nx, ny)) {
-        neighbors.push({x: nx, y: ny, dx: dir.x, dy: dir.y});
-      }
-    }
-    return neighbors;
-  }
-
-  function rotateRight(dx, dy) {
-    return {dx: -dy, dy: dx};
-  }
-
-  function rotateLeft(dx, dy) {
-    return {dx: dy, dy: -dx};
-  }
-
-  function ensureSparxOnBorder(sparx) {
-    if (isBorderSafeCell(sparx.x, sparx.y)) return;
-    let best = null;
-    let bestDist = Infinity;
-    for (let y = 0; y < GRID_H; y++) {
-      for (let x = 0; x < GRID_W; x++) {
-        if (!isBorderSafeCell(x, y)) continue;
-        const dist = Math.abs(x - sparx.x) + Math.abs(y - sparx.y);
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = {x, y};
-        }
-      }
-    }
-    if (best) {
-      sparx.x = best.x;
-      sparx.y = best.y;
-    }
-  }
-
-  function stepSparx(sparx) {
-    ensureSparxOnBorder(sparx);
-    const options = getBorderNeighbors(sparx.x, sparx.y);
-    if (!options.length) return;
-
-    const straight = {dx: sparx.dx || 1, dy: sparx.dy || 0};
-    const right = rotateRight(straight.dx, straight.dy);
-    const left = rotateLeft(straight.dx, straight.dy);
-    const reverse = {dx: -straight.dx, dy: -straight.dy};
-    const priority = sparx.turnBias >= 0
-      ? [right, straight, left, reverse]
-      : [left, straight, right, reverse];
-
-    let chosen = null;
-    for (const dir of priority) {
-      chosen = options.find((option) => option.dx === dir.dx && option.dy === dir.dy);
-      if (chosen) break;
-    }
-    if (!chosen) chosen = options[0];
-    sparx.x = chosen.x;
-    sparx.y = chosen.y;
-    sparx.dx = chosen.dx;
-    sparx.dy = chosen.dy;
-    sparx.phase += 0.55;
+    if (!isOuterBorderCell(x, y)) return false;
+    return state.sparx.some((sparx) => Math.hypot(sparx.x - x, sparx.y - y) < 0.62);
   }
 
   function updateSparx(dt) {
     if (!state.sparx.length) return;
-    const moveInterval = Math.max(0.05, 0.115 - state.level * 0.006 + (state.phase === "title" ? 0.018 : 0));
     for (const sparx of state.sparx) {
-      sparx.moveClock += dt;
-      while (sparx.moveClock >= moveInterval) {
-        sparx.moveClock -= moveInterval;
-        stepSparx(sparx);
-      }
-      if (state.phase === "playing" && state.player.alive && !state.player.drawing && sparx.x === state.player.x && sparx.y === state.player.y) {
+      sparx.progress += sparx.dir * sparx.speed * dt;
+      sparx.phase += dt * 12;
+      const pos = sampleOuterPerimeter(sparx.progress);
+      sparx.x = pos.x;
+      sparx.y = pos.y;
+      sparx.dx = pos.dx * sparx.dir;
+      sparx.dy = pos.dy * sparx.dir;
+
+      if (state.phase === "playing" && state.player.alive && !state.player.drawing && isOuterBorderCell(state.player.x, state.player.y) && Math.hypot(sparx.x - state.player.x, sparx.y - state.player.y) < 0.58) {
         loseLife("A Sparx caught you on the wall.");
         return;
       }
@@ -1129,7 +1094,6 @@ button.ghost{
     playTone("capture");
     spawnCaptureEffect(captureRatio, captured);
     clearTrail();
-    for (const sparx of state.sparx) ensureSparxOnBorder(sparx);
     state.claimedRatio = calculateClaimedRatio();
     state.levelMessage = "Captured " + Math.round(captureRatio * 1000) / 10 + "% for +" + scoreGain + " points.";
     updateHud(true);
@@ -1625,43 +1589,52 @@ button.ghost{
     for (const sparx of state.sparx) {
       const px = offsetX + (sparx.x + 0.5) * scale;
       const py = offsetY + (sparx.y + 0.5) * scale;
-      const pulse = 0.8 + Math.sin(performance.now() * 0.018 + sparx.phase) * 0.18;
-      const size = Math.max(2.6, scale * 0.52 * pulse);
+      const pulse = 0.86 + Math.sin(performance.now() * 0.024 + sparx.phase) * 0.22;
+      const size = Math.max(3.2, scale * 0.66 * pulse);
       const moveAngle = Math.atan2(sparx.dy || 0, sparx.dx || 1);
-      const sparkLen = Math.max(4.2, scale * 0.9);
+      const sparkLen = Math.max(6.4, scale * 1.34);
 
-      ctx.shadowBlur = scale * 3.2;
+      ctx.shadowBlur = scale * 4.2;
       ctx.shadowColor = "rgba(255,213,106,0.98)";
 
-      ctx.strokeStyle = "rgba(255,213,106,0.95)";
-      ctx.lineWidth = Math.max(1.1, scale * 0.14);
+      ctx.strokeStyle = "rgba(255,186,72,0.92)";
+      ctx.lineWidth = Math.max(1.2, scale * 0.16);
       ctx.beginPath();
-      for (let i = 0; i < 8; i++) {
-        const angle = moveAngle + i * (Math.PI / 4) + Math.sin(sparx.phase + i) * 0.08;
-        const inner = size * (0.5 + (i % 2) * 0.18);
-        const outer = sparkLen * (i % 2 === 0 ? 1.05 : 0.68);
+      for (let i = 0; i < 10; i++) {
+        const angle = moveAngle + i * (Math.PI / 5) + Math.sin(sparx.phase * 1.3 + i * 0.9) * 0.14;
+        const inner = size * (0.45 + (i % 2) * 0.22);
+        const outer = sparkLen * (i % 2 === 0 ? 1.06 : 0.74);
         ctx.moveTo(px + Math.cos(angle) * inner, py + Math.sin(angle) * inner);
         ctx.lineTo(px + Math.cos(angle) * outer, py + Math.sin(angle) * outer);
       }
       ctx.stroke();
 
-      ctx.strokeStyle = "rgba(255,248,210,0.95)";
-      ctx.lineWidth = Math.max(0.9, scale * 0.11);
+      ctx.strokeStyle = "rgba(255,248,210,0.96)";
+      ctx.lineWidth = Math.max(0.95, scale * 0.12);
       ctx.beginPath();
-      ctx.moveTo(px - scale * 0.52, py);
-      ctx.lineTo(px + scale * 0.52, py);
-      ctx.moveTo(px, py - scale * 0.52);
-      ctx.lineTo(px, py + scale * 0.52);
+      ctx.moveTo(px - scale * 0.66, py);
+      ctx.lineTo(px + scale * 0.66, py);
+      ctx.moveTo(px, py - scale * 0.66);
+      ctx.lineTo(px, py + scale * 0.66);
       ctx.stroke();
 
-      ctx.fillStyle = "rgba(255,213,106,0.96)";
+      for (let i = 0; i < 4; i++) {
+        const flickerAngle = moveAngle + Math.PI + (i - 1.5) * 0.42 + Math.sin(sparx.phase * 1.9 + i) * 0.12;
+        const flickerDist = scale * (0.78 + i * 0.2);
+        ctx.fillStyle = "rgba(255,213,106," + (0.42 - i * 0.08) + ")";
+        ctx.beginPath();
+        ctx.arc(px + Math.cos(flickerAngle) * flickerDist, py + Math.sin(flickerAngle) * flickerDist, Math.max(0.8, scale * (0.12 + (3 - i) * 0.04)), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = "rgba(255,213,106,0.97)";
       ctx.beginPath();
       ctx.arc(px, py, size, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.fillStyle = "rgba(255,255,255,0.98)";
       ctx.beginPath();
-      ctx.arc(px, py, Math.max(1.1, size * 0.42), 0, Math.PI * 2);
+      ctx.arc(px, py, Math.max(1.25, size * 0.46), 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
