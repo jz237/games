@@ -143,7 +143,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.39';
+const GAME_VERSION='v0.4.40';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -180,7 +180,7 @@ let nextBossScore=300;
 let bossActive=false;
 let gameWon=false;
 let titleScene=[];
-let titleDemo={slash:0,bomb:0,target:2,nextSlashAt:0,nextBombAt:0,nextComboAt:0,lastTime:0,burst:0,popup:'',popupX:0,popupY:0,popupLife:0,combo:0};
+let titleDemo={slash:0,bomb:0,target:2,nextSlashAt:0,nextBombAt:0,nextComboAt:0,nextBeatAt:0,lastTime:0,burst:0,popup:'',popupX:0,popupY:0,popupLife:0,combo:0};
 let bossTrails=[];
 let fractureFlash=0;
 let fractureLines=[];
@@ -335,7 +335,7 @@ function initTitleScene(){
       bob:0.16+Math.random()*0.08
     });
   }
-  titleDemo={slash:0,bomb:0,target:2,nextSlashAt:0.8+Math.random()*1.6,nextBombAt:1.6+Math.random()*3,nextComboAt:1.2+Math.random()*2.4,lastTime:0,burst:0,popup:'',popupX:0,popupY:0,popupLife:0,combo:0};
+  titleDemo={slash:0,bomb:0,target:2,nextSlashAt:0.8+Math.random()*1.6,nextBombAt:1.6+Math.random()*3,nextComboAt:1.2+Math.random()*2.4,nextBeatAt:0.4,lastTime:0,burst:0,popup:'',popupX:0,popupY:0,popupLife:0,combo:0};
 }
 initTitleScene();
 
@@ -587,6 +587,29 @@ function playClick(){
     g.gain.exponentialRampToValueAtTime(0.001,now+0.04);
     osc.connect(g); g.connect(masterGain);
     osc.start(now); osc.stop(now+0.04);
+  }catch(e){}
+}
+
+function playDemoBeat(kind='tick'){
+  if(!audioReady||muted||gameActive) return;
+  try{
+    const now=audioCtx.currentTime;
+    const osc=audioCtx.createOscillator();
+    const osc2=audioCtx.createOscillator();
+    osc.type=kind==='bomb'?'sawtooth':kind==='slash'?'triangle':'square';
+    osc2.type='triangle';
+    const base=kind==='bomb'?140:kind==='slash'?620:220;
+    osc.frequency.setValueAtTime(base,now);
+    osc.frequency.exponentialRampToValueAtTime(kind==='bomb'?70:kind==='slash'?260:160,now+(kind==='bomb'?0.18:0.08));
+    osc2.frequency.setValueAtTime(base*1.5,now);
+    osc2.frequency.exponentialRampToValueAtTime(base*0.9,now+0.1);
+    const g=audioCtx.createGain();
+    g.gain.setValueAtTime(0.001,now);
+    g.gain.linearRampToValueAtTime(kind==='bomb'?0.08:0.045,now+0.01);
+    g.gain.exponentialRampToValueAtTime(0.001,now+(kind==='bomb'?0.2:0.11));
+    osc.connect(g); osc2.connect(g); g.connect(masterGain);
+    osc.start(now); osc2.start(now);
+    osc.stop(now+(kind==='bomb'?0.22:0.12)); osc2.stop(now+0.12);
   }catch(e){}
 }
 
@@ -921,6 +944,7 @@ function drawBackground(){
       }
       titleDemo.nextSlashAt=tt+0.7+Math.random()*2.6;
       if(Math.random()<0.32) titleDemo.nextSlashAt+=0.9+Math.random()*1.4;
+      playDemoBeat('slash');
     }
     if(tt>=titleDemo.nextBombAt){
       titleDemo.bomb=1;
@@ -931,6 +955,7 @@ function drawBackground(){
       titleDemo.popupLife=1;
       titleDemo.nextBombAt=tt+2.1+Math.random()*4.2;
       if(Math.random()<0.4) titleDemo.nextBombAt+=1.2+Math.random()*2.4;
+      playDemoBeat('bomb');
     }
     if(tt>=titleDemo.nextComboAt){
       titleDemo.combo=2+Math.floor(Math.random()*4);
@@ -939,6 +964,10 @@ function drawBackground(){
       titleDemo.popupY=H*(0.24+Math.random()*0.18);
       titleDemo.popupLife=0.9;
       titleDemo.nextComboAt=tt+1.6+Math.random()*3.8;
+    }
+    if(tt>=titleDemo.nextBeatAt){
+      playDemoBeat('tick');
+      titleDemo.nextBeatAt=tt+0.9+Math.random()*0.7;
     }
     ctx.save();
     ctx.globalAlpha=0.88;
@@ -1136,13 +1165,13 @@ function drawEnemies(){
     // Glow aura behind enemy
     ctx.save();
     ctx.globalCompositeOperation='lighter';
-    const auraGrad=ctx.createRadialGradient(0,0,e.r*0.15,0,0,e.r*1.15);
+    const auraGrad=ctx.createRadialGradient(0,0,e.r*0.15,0,0,e.r*1.32);
     auraGrad.addColorStop(0,'rgba(255,255,255,0.3)');
     auraGrad.addColorStop(0.28,ENEMY_COLORS[e.colorIdx]+'d0');
     auraGrad.addColorStop(0.58,ENEMY_GLOW[e.colorIdx]+'55');
     auraGrad.addColorStop(1,'transparent');
     ctx.fillStyle=auraGrad;
-    ctx.beginPath(); ctx.arc(0,0,e.r*1.15,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0,0,e.r*1.32,0,Math.PI*2); ctx.fill();
     if(demoFlash>0.08){
       ctx.globalAlpha=0.14+demoFlash*0.2;
       const flashGrad=ctx.createRadialGradient(0,0,e.r*0.08,0,0,e.r*0.95);
