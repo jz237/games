@@ -143,7 +143,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.38';
+const GAME_VERSION='v0.4.39';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -1127,7 +1127,7 @@ function drawEnemies(){
     if(!e.alive) return;
     e.rotation+=e.rotSpeed;
     const pulseBright=0.8+0.2*Math.sin(t*3+e.x*0.01);
-    const demoFlash=Math.max(0,Math.sin(t*2.8+e.spawnTime*0.002+e.x*0.01))*0.12;
+    const demoFlash=Math.max(0,Math.sin(t*2.8+e.spawnTime*0.002+e.x*0.01))*0.22;
     ctx.save();
     ctx.translate(e.x,e.y);
     ctx.rotate(e.rotation);
@@ -1136,21 +1136,21 @@ function drawEnemies(){
     // Glow aura behind enemy
     ctx.save();
     ctx.globalCompositeOperation='lighter';
-    const auraGrad=ctx.createRadialGradient(0,0,e.r*0.2,0,0,e.r*1.9);
-    auraGrad.addColorStop(0,'rgba(255,255,255,0.05)');
-    auraGrad.addColorStop(0.35,ENEMY_COLORS[e.colorIdx]+'30');
-    auraGrad.addColorStop(0.7,ENEMY_GLOW[e.colorIdx]+'18');
+    const auraGrad=ctx.createRadialGradient(0,0,e.r*0.15,0,0,e.r*1.15);
+    auraGrad.addColorStop(0,'rgba(255,255,255,0.3)');
+    auraGrad.addColorStop(0.28,ENEMY_COLORS[e.colorIdx]+'d0');
+    auraGrad.addColorStop(0.58,ENEMY_GLOW[e.colorIdx]+'55');
     auraGrad.addColorStop(1,'transparent');
     ctx.fillStyle=auraGrad;
-    ctx.beginPath(); ctx.arc(0,0,e.r*1.9,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0,0,e.r*1.15,0,Math.PI*2); ctx.fill();
     if(demoFlash>0.08){
-      ctx.globalAlpha=0.06+demoFlash*0.12;
-      const flashGrad=ctx.createRadialGradient(0,0,e.r*0.1,0,0,e.r*1.35);
-      flashGrad.addColorStop(0,'rgba(255,255,255,0.18)');
-      flashGrad.addColorStop(0.4,ENEMY_COLORS[e.colorIdx]+'28');
+      ctx.globalAlpha=0.14+demoFlash*0.2;
+      const flashGrad=ctx.createRadialGradient(0,0,e.r*0.08,0,0,e.r*0.95);
+      flashGrad.addColorStop(0,'rgba(255,255,255,0.42)');
+      flashGrad.addColorStop(0.4,ENEMY_COLORS[e.colorIdx]+'70');
       flashGrad.addColorStop(1,'transparent');
       ctx.fillStyle=flashGrad;
-      ctx.beginPath(); ctx.arc(0,0,e.r*1.35,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0,0,e.r*0.95,0,Math.PI*2); ctx.fill();
     }
     ctx.restore();
 
