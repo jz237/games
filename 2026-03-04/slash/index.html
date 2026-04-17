@@ -140,7 +140,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.21';
+const GAME_VERSION='v0.4.22';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -213,7 +213,16 @@ async function fetchGlobalScores(force=false){
   try{
     const res=await fetch(SCORES_API);
     if(res.ok){
-      globalScoresCache=await res.json();
+      const rows=await res.json();
+      globalScoresCache=(Array.isArray(rows)?rows:[])
+        .map(e=>({
+          ...e,
+          score:Number(e.score)||0,
+          level:Number(e.level)||0,
+          comboMax:Number(e.comboMax)||0,
+          ts:Number(e.ts)||0
+        }))
+        .sort((a,b)=>b.score-a.score || b.level-a.level || b.comboMax-a.comboMax || a.ts-b.ts);
       globalScoresCacheTime=now;
       return globalScoresCache;
     }
@@ -222,7 +231,10 @@ async function fetchGlobalScores(force=false){
 }
 async function submitGlobalScore(entry){
   if(globalScoresCache){
-    globalScoresCache=[...globalScoresCache,entry].sort((a,b)=>b.score-a.score).slice(0,50);
+    globalScoresCache=[...globalScoresCache,entry]
+      .map(e=>({...e,score:Number(e.score)||0,level:Number(e.level)||0,comboMax:Number(e.comboMax)||0,ts:Number(e.ts)||0}))
+      .sort((a,b)=>b.score-a.score || b.level-a.level || b.comboMax-a.comboMax || a.ts-b.ts)
+      .slice(0,50);
     globalScoresCacheTime=Date.now();
   }
   try{
