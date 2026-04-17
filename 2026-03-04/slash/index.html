@@ -127,7 +127,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.11';
+const GAME_VERSION='v0.4.12';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -164,6 +164,8 @@ let titleScene=[];
 let bossTrails=[];
 let fractureFlash=0;
 let fractureLines=[];
+let shieldImpact=0;
+let shieldImpactAngle=-Math.PI/2;
 const LEVEL_THEMES=[
   {bg:'#030008', grid:'#4020aa', swirl:'#6030aa', vignette:0.35, overlay:'rgba(120,40,220,0.06)'},
   {bg:'#04101a', grid:'#1d5aa8', swirl:'#1e7cd8', vignette:0.28, overlay:'rgba(70,180,255,0.07)'},
@@ -624,6 +626,7 @@ function initGame(){
   gameWon=false;
   bossTrails=[];
   fractureFlash=0; fractureLines=[];
+  shieldImpact=0; shieldImpactAngle=-Math.PI/2;
   pendingScoreSubmission=null;
   initBgParticles();
 }
@@ -674,6 +677,8 @@ function spawnEnemy(isEcho=false){
   const ci=Math.floor(Math.random()*(level===1?2:level===2?3:4));
   const shielded=!isEcho&&Math.random()<(level===1?0:level===2?0.2:0.4);
   const splitter=!isEcho&&level>=2&&Math.random()<(level===2?0.12:0.2);
+  const zigzag=!isEcho&&level>=4&&Math.random()<0.18;
+  const orbiter=!isEcho&&level>=5&&Math.random()<0.14;
   const speed=(0.4+Math.random()*0.3)*(1+level*0.2)*(isEcho?0.6:1);
   const angle=Math.atan2(H/2-y,W/2-x);
   enemies.push({
@@ -681,7 +686,8 @@ function spawnEnemy(isEcho=false){
     hp:shielded?2:1, maxHp:shielded?2:1, colorIdx:ci,
     r:18+Math.floor(Math.random()*6), sides:ENEMY_SHAPES[ci%4],
     rotation:Math.random()*Math.PI*2, rotSpeed:(Math.random()-0.5)*0.03,
-    isEcho, splitter, alive:true, alpha:isEcho?0.5:1, spawnTime:Date.now()
+    isEcho, splitter, zigzag, orbiter, alive:true, alpha:isEcho?0.5:1, spawnTime:Date.now(),
+    wavePhase:Math.random()*Math.PI*2, orbitDir:Math.random()<0.5?-1:1
   });
 }
 
@@ -950,6 +956,15 @@ function drawSeal(){
   ctx.beginPath();
   ctx.arc(0,0,36,0,Math.PI*2);
   ctx.stroke();
+  if(shieldImpact>0){
+    ctx.globalCompositeOperation='lighter';
+    ctx.strokeStyle='rgba(255,140,170,0.95)';
+    ctx.shadowColor='#ff8ca8'; ctx.shadowBlur=18;
+    ctx.lineWidth=10*shieldImpact;
+    ctx.beginPath();
+    ctx.arc(0,0,36,shieldImpactAngle-0.42,shieldImpactAngle+0.42);
+    ctx.stroke();
+  }
   ctx.restore();
   // Outer rings
   for(let ring=0;ring<3;ring++){
@@ -993,6 +1008,7 @@ function drawSeal(){
     ctx.lineWidth=2;
     ctx.beginPath(); ctx.arc(0,0,16+comboCount*2,0,Math.PI*2); ctx.stroke();
   }
+  shieldImpact=Math.max(0,shieldImpact-0.045);
   ctx.restore();
 }
 
@@ -1042,6 +1058,33 @@ function drawEnemies(){
       ctx.shadowColor='#ff9a4a'; ctx.shadowBlur=12;
       ctx.beginPath(); ctx.moveTo(-e.r*0.65,0); ctx.lineTo(e.r*0.65,0); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0,-e.r*0.65); ctx.lineTo(0,e.r*0.65); ctx.stroke();
+      ctx.restore();
+    }
+
+    if(e.zigzag){
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      ctx.strokeStyle='rgba(120,255,230,0.8)';
+      ctx.shadowColor='#73ffe7'; ctx.shadowBlur=12;
+      ctx.lineWidth=1.6;
+      ctx.beginPath();
+      ctx.moveTo(-e.r*0.7,-e.r*0.25);
+      ctx.lineTo(-e.r*0.15,-e.r*0.55);
+      ctx.lineTo(e.r*0.1,-e.r*0.05);
+      ctx.lineTo(e.r*0.55,-e.r*0.35);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if(e.orbiter){
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      ctx.strokeStyle='rgba(170,210,255,0.6)';
+      ctx.shadowColor='#a9d8ff'; ctx.shadowBlur=10;
+      ctx.lineWidth=1.4;
+      ctx.beginPath(); ctx.arc(0,0,e.r+10,0,Math.PI*2); ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,0.85)';
+      ctx.beginPath(); ctx.arc(Math.cos(t*3+e.x*0.02)*(e.r+10),Math.sin(t*3+e.y*0.02)*(e.r+10),2.4,0,Math.PI*2); ctx.fill();
       ctx.restore();
     }
 
@@ -1638,6 +1681,8 @@ function loop(ts){
       const d=Math.hypot(dx,dy);
       if(d<e.r+12){
         sealHP--;
+        shieldImpact=1;
+        shieldImpactAngle=Math.atan2(e.y-cy,e.x-cx);
         e.alive=false;
         if(e.isBoss) bossActive=false;
         shakeT=20;
@@ -1652,6 +1697,17 @@ function loop(ts){
         const tangential=0.0007*(Date.now()-e.spawnTime);
         e.vx+=(-dy/d||0)*tangential*0.01;
         e.vy+=(dx/d||0)*tangential*0.01;
+      }
+      if(e.zigzag){
+        const lateral=0.045*Math.sin((Date.now()-e.spawnTime)*0.012+e.wavePhase)*(level>=6?1.25:1);
+        e.vx+=(-dy/(d||1))*lateral;
+        e.vy+=(dx/(d||1))*lateral;
+      }
+      if(e.orbiter && d<Math.min(W,H)*0.32){
+        const pull=0.0065;
+        const tangent=e.orbitDir*0.06;
+        e.vx+=(dx/(d||1))*pull + (-dy/(d||1))*tangent;
+        e.vy+=(dy/(d||1))*pull + (dx/(d||1))*tangent;
       }
       if(e.isBoss){
         const prevX=e.x, prevY=e.y;
