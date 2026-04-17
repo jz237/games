@@ -143,7 +143,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.44';
+const GAME_VERSION='v0.4.45';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -659,6 +659,37 @@ function playDemoBeat(kind='tick'){
   }catch(e){}
 }
 
+function createSigilHum(){
+  if(!audioReady||muted) return null;
+  try{
+    const now=audioCtx.currentTime;
+    const oscA=audioCtx.createOscillator();
+    const oscB=audioCtx.createOscillator();
+    oscA.type='triangle';
+    oscB.type='sine';
+    oscA.frequency.setValueAtTime(260,now);
+    oscB.frequency.setValueAtTime(390,now);
+    const gain=audioCtx.createGain();
+    gain.gain.setValueAtTime(0.001,now);
+    gain.gain.linearRampToValueAtTime(0.06,now+0.04);
+    oscA.connect(gain); oscB.connect(gain); gain.connect(masterGain);
+    oscA.start(now); oscB.start(now);
+    return {oscA,oscB,gain};
+  }catch(e){ return null; }
+}
+
+function stopSigilHum(hum){
+  if(!hum) return;
+  try{
+    const now=audioCtx&&audioCtx.currentTime?audioCtx.currentTime:0;
+    hum.gain.gain.cancelScheduledValues(now);
+    hum.gain.gain.setValueAtTime(hum.gain.gain.value||0.03,now);
+    hum.gain.gain.exponentialRampToValueAtTime(0.001,now+0.08);
+    hum.oscA.stop(now+0.09);
+    hum.oscB.stop(now+0.09);
+  }catch(e){}
+}
+
 // Background music - rhythmic pulse
 let musicInterval=null;
 function startMusic(){
@@ -750,6 +781,7 @@ muteBtn.addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation();t
 
 // ==================== GAME STATE ====================
 function initGame(){
+  sigilLines.forEach(s=>{ if(s.hum) stopSigilHum(s.hum); });
   enemies=[]; particles=[]; slashes=[]; ripples=[]; scorePopups=[];
   sealHP=5; score=0; level=1; lastLevel=1; gameActive=true;
   bombCooldown=0; sigilCooldown=0; wellCooldown=0; drawing=false; slashPoints=[]; sigilCharge=0; sigilLines=[]; gravityWell=null; pointerStart=null; holdTriggered=false; holdTimer=null;
@@ -1848,7 +1880,7 @@ function triggerSigil(pts){
     vx:Math.cos(ang)*5.6,vy:Math.sin(ang)*5.6,
     life:1,duration:3200,maxDuration:3200,
     rot:0,rotSpeed:(Math.random()<0.5?-1:1)*0.11,
-    scale:78,trail:[],hitClock:0,hue:Math.random()*360
+    scale:78,trail:[],hitClock:0,hue:Math.random()*360,hum:createSigilHum()
   });
   shakeT=14;
   bombFlash=Math.max(bombFlash,0.45);
@@ -2114,6 +2146,13 @@ function loop(ts){
         x:s.x+(p.x*Math.cos(s.rot)-p.y*Math.sin(s.rot))*s.scale,
         y:s.y+(p.x*Math.sin(s.rot)+p.y*Math.cos(s.rot))*s.scale*0.72
       }));
+      if(s.hum && audioCtx && audioCtx.state==='running' && !muted){
+        const speed=Math.hypot(s.vx,s.vy);
+        const base=220+Math.sin(s.rot*2.2)*40+speed*12;
+        s.hum.oscA.frequency.setTargetAtTime(base,audioCtx.currentTime,0.04);
+        s.hum.oscB.frequency.setTargetAtTime(base*1.48,audioCtx.currentTime,0.05);
+        s.hum.gain.gain.setTargetAtTime(0.025+s.life*0.035,audioCtx.currentTime,0.05);
+      }
       s.trail.push({points:s.renderPoints.map(p=>({x:p.x,y:p.y}))});
       if(s.trail.length>7) s.trail.shift();
       if(s.hitClock<=0){
@@ -2145,7 +2184,10 @@ function loop(ts){
           }
         });
       }
-      if(s.life<=0) sigilLines.splice(i,1);
+      if(s.life<=0){
+        if(s.hum) stopSigilHum(s.hum);
+        sigilLines.splice(i,1);
+      }
     }
     enemies.forEach(e=>{
       if(!e.alive) return;
