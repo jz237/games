@@ -127,7 +127,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.5';
+const GAME_VERSION='v0.4.6';
 const GAME_BUILD='2026-04-17';
 const FINAL_TARGET_SCORE=1200;
 let W,H;
@@ -163,6 +163,8 @@ let bossActive=false;
 let gameWon=false;
 let titleScene=[];
 let bossTrails=[];
+let fractureFlash=0;
+let fractureLines=[];
 const LEVEL_THEMES=[
   {bg:'#030008', grid:'#4020aa', swirl:'#6030aa', vignette:0.35, overlay:'rgba(120,40,220,0.06)'},
   {bg:'#04101a', grid:'#1d5aa8', swirl:'#1e7cd8', vignette:0.28, overlay:'rgba(70,180,255,0.07)'},
@@ -611,8 +613,19 @@ function initGame(){
   nextBossScore=300; bossActive=false;
   gameWon=false;
   bossTrails=[];
+  fractureFlash=0; fractureLines=[];
   pendingScoreSubmission=null;
   initBgParticles();
+}
+
+function triggerFracture(x,y,intensity=1){
+  fractureFlash=Math.max(fractureFlash,0.45*intensity);
+  for(let i=0;i<7+Math.floor(intensity*5);i++){
+    const a=Math.random()*Math.PI*2;
+    const len=80+Math.random()*140*intensity;
+    fractureLines.push({x,y,x2:x+Math.cos(a)*len,y2:y+Math.sin(a)*len,life:1,width:1+Math.random()*2});
+  }
+  if(fractureLines.length>36) fractureLines.splice(0,fractureLines.length-36);
 }
 
 function hasLivingBoss(){ return enemies.some(e=>e.alive && e.isBoss); }
@@ -1143,6 +1156,35 @@ function drawBossTrails(){
   }
 }
 
+function drawFracture(){
+  if(fractureFlash>0){
+    ctx.save();
+    ctx.globalCompositeOperation='screen';
+    ctx.globalAlpha=fractureFlash;
+    const grad=ctx.createRadialGradient(W/2,H/2,10,W/2,H/2,Math.max(W,H)*0.8);
+    grad.addColorStop(0,'rgba(255,255,255,0.75)');
+    grad.addColorStop(0.3,'rgba(200,160,255,0.28)');
+    grad.addColorStop(1,'transparent');
+    ctx.fillStyle=grad;
+    ctx.fillRect(0,0,W,H);
+    ctx.restore();
+    fractureFlash-=0.035;
+  }
+  for(let i=fractureLines.length-1;i>=0;i--){
+    const f=fractureLines[i];
+    f.life-=0.04;
+    if(f.life<=0){fractureLines.splice(i,1);continue;}
+    ctx.save();
+    ctx.globalCompositeOperation='screen';
+    ctx.globalAlpha=f.life*0.8;
+    ctx.strokeStyle='rgba(235,220,255,0.95)';
+    ctx.shadowColor='#e0b0ff'; ctx.shadowBlur=10;
+    ctx.lineWidth=f.width*f.life;
+    ctx.beginPath(); ctx.moveTo(f.x,f.y); ctx.lineTo(f.x2,f.y2); ctx.stroke();
+    ctx.restore();
+  }
+}
+
 function drawRipples(){
   for(let i=ripples.length-1;i>=0;i--){
     const r=ripples[i]; r.radius+=4; r.life-=0.05;
@@ -1301,6 +1343,7 @@ function triggerBomb(){
   const cx=W/2,cy=H/2;
   let ring={x:cx,y:cy,radius:0,speed:isPerfect?18:12,alive:true};
   let frames=0;
+  playGhostEcho(isPerfect?880:720,0.02,isPerfect?0.16:0.1,isPerfect?1.15:0.75);
   const bombInterval=setInterval(()=>{
     ring.radius+=ring.speed;
     frames++;
@@ -1314,11 +1357,13 @@ function triggerBomb(){
             bossHits++;
             playHit(bossHits,'boss');
             spawnBurst(e.x,e.y,e.colorIdx,10);
+            triggerFracture(e.x,e.y,isPerfect?0.85:0.55);
             addScorePopup(e.x,e.y-28,isPerfect?'-2 BOSS':'-1 BOSS');
             if(e.hp<=0){
               e.alive=false;
               comboFlash=1;
               bombFlash=0.8;
+              triggerFracture(e.x,e.y,1.2);
               bossActive=false;
               score+=220;
               addStyle(55);
@@ -1331,6 +1376,7 @@ function triggerBomb(){
         e.alive=false;
         spawnBurst(e.x,e.y,e.colorIdx,18);
         spawnBurst(e.x,e.y,e.colorIdx,12);
+        if(isPerfect) triggerFracture(e.x,e.y,0.35);
         playHit(0,'bomb');
         score+=isPerfect?35:20;
       }
@@ -1344,13 +1390,20 @@ function triggerBomb(){
     ctx.save();
     ctx.globalCompositeOperation='lighter';
     ctx.globalAlpha=Math.max(0,1-frames/40);
-    ctx.strokeStyle='rgba(220,180,255,0.9)';
-    ctx.shadowColor='#e0a0ff'; ctx.shadowBlur=40;
-    ctx.lineWidth=8; ctx.beginPath(); ctx.arc(cx,cy,ring.radius,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle=isPerfect?'rgba(255,242,190,0.96)':'rgba(220,180,255,0.9)';
+    ctx.shadowColor=isPerfect?'#ffe28a':'#e0a0ff'; ctx.shadowBlur=isPerfect?56:40;
+    ctx.lineWidth=isPerfect?12:8; ctx.beginPath(); ctx.arc(cx,cy,ring.radius,0,Math.PI*2); ctx.stroke();
     // Inner bright ring
-    ctx.strokeStyle='rgba(255,255,255,0.7)';
-    ctx.lineWidth=2;
+    ctx.strokeStyle=isPerfect?'rgba(255,255,255,0.95)':'rgba(255,255,255,0.7)';
+    ctx.lineWidth=isPerfect?4:2;
     ctx.stroke();
+    if(isPerfect){
+      ctx.strokeStyle='rgba(255,214,120,0.55)';
+      ctx.lineWidth=2;
+      ctx.setLineDash([10,10]);
+      ctx.beginPath(); ctx.arc(cx,cy,ring.radius+14,0,Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]);
+    }
     ctx.restore();
     if(frames>(isPerfect?34:40)||ring.radius>Math.max(W,H)){clearInterval(bombInterval);}
   },16);
@@ -1384,6 +1437,7 @@ function resolveSlash(pts){
           if(e.isBoss){
             comboFlash=1;
             bombFlash=0.8;
+            triggerFracture(e.x,e.y,1.25);
             playBossDeath();
             bossActive=false;
             score+=220;
@@ -1571,6 +1625,7 @@ function loop(ts){
   drawParticles();
   drawRipples();
   drawComboFlash();
+  drawFracture();
   drawVignette();
   ctx.restore();
 
