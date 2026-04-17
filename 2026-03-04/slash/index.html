@@ -24,18 +24,21 @@
   #bombBar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; color:#8060aa; z-index:10; pointer-events:none; }
   #sigilBar { position:fixed; bottom:68px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; color:#76e8ff; z-index:10; pointer-events:none; }
   #chargeBar { position:fixed; bottom:44px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; color:#8cf5d4; z-index:10; pointer-events:none; }
+  #wellBar { position:fixed; bottom:92px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; color:#ff95d8; z-index:10; pointer-events:none; }
   #bombFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#8040cc,#e080ff); box-shadow:0 0 10px #a060ff; transition:width 0.1s; vertical-align:middle; }
   #sigilFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#3aa8ff,#8afff4); box-shadow:0 0 10px #66d8ff; transition:width 0.1s; vertical-align:middle; }
   #chargeFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#2fdc8f,#b8ffd8); box-shadow:0 0 10px #7fffc0; transition:width 0.1s; vertical-align:middle; }
+  #wellFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#ff5cb8,#ffd0f1); box-shadow:0 0 10px #ff95d8; transition:width 0.1s; vertical-align:middle; }
   #bombTrack { display:inline-block; width:140px; height:6px; background:rgba(80,40,120,0.3); border-radius:3px; vertical-align:middle; overflow:hidden; }
   #sigilTrack { display:inline-block; width:120px; height:6px; background:rgba(22,70,110,0.35); border-radius:3px; vertical-align:middle; overflow:hidden; }
   #chargeTrack { display:inline-block; width:120px; height:6px; background:rgba(20,70,48,0.35); border-radius:3px; vertical-align:middle; overflow:hidden; }
+  #wellTrack { display:inline-block; width:120px; height:6px; background:rgba(90,24,62,0.35); border-radius:3px; vertical-align:middle; overflow:hidden; }
   #overlay { position:fixed; inset:0; background:linear-gradient(to bottom,rgba(2,0,6,0.28),rgba(2,0,6,0.52)); display:flex; flex-direction:column; align-items:center; justify-content:flex-end; z-index:20; padding-bottom:34px; }
   #overlay h1 { font-size:52px; color:#e080ff; letter-spacing:8px; text-shadow:0 0 30px #c040ff,0 0 80px #6020aa; margin-bottom:auto; margin-top:56px; }
   #overlay p { color:#c7b6d7; font-size:12px; text-align:center; max-width:300px; line-height:1.55; margin-top:10px; }
   .menuBtns { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-top:18px; }
-  #tapBtn { margin-top:18px; padding:14px 48px; background:linear-gradient(135deg,#3010aa,#e080ff33); color:#e080ff; font-size:18px; letter-spacing:4px; border:1px solid #e080ff; border-radius:4px; animation:pulse 1.5s infinite; }
-  .secondaryBtn { padding:12px 22px; background:rgba(32,16,72,0.7); color:#d8b8ff; font-size:14px; letter-spacing:2px; border:1px solid rgba(224,128,255,0.6); border-radius:4px; }
+  #tapBtn { margin-top:14px; padding:10px 28px; background:linear-gradient(135deg,#3010aa,#e080ff33); color:#e080ff; font-size:15px; letter-spacing:3px; border:1px solid #e080ff; border-radius:4px; animation:pulse 1.5s infinite; }
+  .secondaryBtn { padding:9px 16px; background:rgba(32,16,72,0.7); color:#d8b8ff; font-size:12px; letter-spacing:1.5px; border:1px solid rgba(224,128,255,0.6); border-radius:4px; }
   @keyframes pulse { 0%,100%{box-shadow:0 0 20px #8040aa} 50%{box-shadow:0 0 50px #e080ff,0 0 80px #8040aa} }
   #endMsg { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; z-index:30; background:rgba(2,0,6,0.93); }
   #endMsg h2 { font-size:40px; letter-spacing:6px; margin-bottom:10px; }
@@ -77,6 +80,9 @@
 <div id="styleTxt">STYLE: CLEAN</div>
 <div id="goalTxt"></div>
 <div id="combo"></div>
+<div id="wellBar">
+  GRAVITY WELL: <span id="wellTrack"><span id="wellFill" style="width:100%"></span></span>&nbsp;<span id="wellStatus">READY</span>
+</div>
 <div id="sigilBar">
   QUIX SIGIL: <span id="sigilTrack"><span id="sigilFill" style="width:100%"></span></span>&nbsp;<span id="sigilStatus">READY</span>
 </div>
@@ -134,7 +140,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.26';
+const GAME_VERSION='v0.4.27';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -150,6 +156,7 @@ let enemies=[], particles=[], slashes=[], ripples=[], scorePopups=[], bgParticle
 let sealHP=5, score=0, level=1, gameActive=false;
 let bombCooldown=0, BOMB_MAX=7500;
 let sigilCooldown=0, SIGIL_MAX=3750;
+let wellCooldown=0, WELL_MAX=10000;
 let slashPoints=[], drawing=false;
 let sigilCharge=0;
 let shakeX=0,shakeY=0,shakeT=0;
@@ -177,6 +184,8 @@ let fractureLines=[];
 let shieldImpact=0;
 let shieldImpactAngle=-Math.PI/2;
 let sigilLines=[];
+let gravityWell=null;
+let pointerStart=null;
 const LEVEL_THEMES=[
   {bg:'#030008', grid:'#4020aa', swirl:'#6030aa', vignette:0.35, overlay:'rgba(120,40,220,0.06)'},
   {bg:'#04101a', grid:'#1d5aa8', swirl:'#1e7cd8', vignette:0.28, overlay:'rgba(70,180,255,0.07)'},
@@ -655,7 +664,7 @@ muteBtn.addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation();t
 function initGame(){
   enemies=[]; particles=[]; slashes=[]; ripples=[]; scorePopups=[];
   sealHP=5; score=0; level=1; lastLevel=1; gameActive=true;
-  bombCooldown=0; sigilCooldown=0; drawing=false; slashPoints=[]; sigilCharge=0; sigilLines=[];
+  bombCooldown=0; sigilCooldown=0; wellCooldown=0; drawing=false; slashPoints=[]; sigilCharge=0; sigilLines=[]; gravityWell=null; pointerStart=null;
   shakeT=0; spawnTimer=0; comboCount=0; comboTimer=0; maxCombo=1; slowMo=0;
   bombFlash=0; circleHint=0; circleHintData=null;
   stylePoints=0; styleRank='CLEAN'; perfectCircleWindow=0; perfectCircles=0;
@@ -1514,6 +1523,29 @@ function drawRipples(){
     ctx.beginPath(); ctx.arc(r.x,r.y,r.radius,0,Math.PI*2); ctx.stroke();
     ctx.restore();
   }
+
+  if(gravityWell){
+    gravityWell.pulse+=0.14;
+    const life=gravityWell.life/gravityWell.maxLife;
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    ctx.globalAlpha=0.75*life;
+    const rg=ctx.createRadialGradient(gravityWell.x,gravityWell.y,10,gravityWell.x,gravityWell.y,120);
+    rg.addColorStop(0,'rgba(255,255,255,0.85)');
+    rg.addColorStop(0.22,'rgba(255,120,210,0.35)');
+    rg.addColorStop(0.65,'rgba(120,80,255,0.12)');
+    rg.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=rg;
+    ctx.beginPath(); ctx.arc(gravityWell.x,gravityWell.y,120,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(255,170,230,0.85)';
+    ctx.shadowColor='#ff8fdc'; ctx.shadowBlur=18;
+    ctx.lineWidth=4;
+    ctx.beginPath(); ctx.arc(gravityWell.x,gravityWell.y,44+Math.sin(gravityWell.pulse)*8,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle='rgba(180,140,255,0.45)';
+    ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(gravityWell.x,gravityWell.y,82+Math.cos(gravityWell.pulse*0.8)*10,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawVignette(){
@@ -1665,6 +1697,14 @@ function addShieldCharge(amount){
     addScorePopup(W/2-70,H/2-84,'SHIELD RESTORED');
     comboFlash=1;
   }
+}
+
+function triggerGravityWell(x,y){
+  if(wellCooldown>0) return;
+  wellCooldown=WELL_MAX;
+  gravityWell={x,y,life:5000,maxLife:5000,pulse:0};
+  addScorePopup(x-54,y-36,'GRAVITY WELL');
+  playPowerup();
 }
 
 function triggerSigil(pts){
@@ -1913,6 +1953,7 @@ function loop(ts){
   if(gameActive){
     bombCooldown=Math.max(0,bombCooldown-dt*timeScale);
     sigilCooldown=Math.max(0,sigilCooldown-dt*timeScale);
+    wellCooldown=Math.max(0,wellCooldown-dt*timeScale);
     stylePoints=Math.max(0,stylePoints-0.04*dt);
     styleRank=getStyleRank(stylePoints);
     perfectCircleWindow=Math.max(0,perfectCircleWindow-1);
@@ -1921,6 +1962,10 @@ function loop(ts){
     const interval=Math.max(300,(bossActive?2200:1400)-level*200-(score*0.3));
     if(spawnTimer>interval){spawnTimer=0;spawnEnemy();}
     const cx=W/2,cy=H/2;
+    if(gravityWell){
+      gravityWell.life-=dt*timeScale;
+      if(gravityWell.life<=0) gravityWell=null;
+    }
     for(let i=sigilLines.length-1;i>=0;i--){
       const s=sigilLines[i];
       s.duration-=dt*timeScale;
@@ -1987,6 +2032,13 @@ function loop(ts){
       if(!e.alive) return;
       const dx=cx-e.x,dy=cy-e.y;
       const d=Math.hypot(dx,dy);
+      if(gravityWell){
+        const gx=gravityWell.x-e.x, gy=gravityWell.y-e.y;
+        const gd=Math.hypot(gx,gy)||1;
+        const pull=(e.isBoss?0.006:0.014)*(gd<180?1.3:1);
+        e.vx+=(gx/gd)*pull;
+        e.vy+=(gy/gd)*pull;
+      }
       if(d<e.r+12){
         sealHP--;
         shieldImpact=1;
@@ -2088,6 +2140,9 @@ function loop(ts){
   const sigilPct=(sigilCooldown<=0?1:1-sigilCooldown/SIGIL_MAX)*100;
   document.getElementById('sigilFill').style.width=sigilPct+'%';
   document.getElementById('sigilStatus').textContent=sigilCooldown<=0?'READY':`${(sigilCooldown/1000).toFixed(1)}s`;
+  const wellPct=(wellCooldown<=0?1:1-wellCooldown/WELL_MAX)*100;
+  document.getElementById('wellFill').style.width=wellPct+'%';
+  document.getElementById('wellStatus').textContent=wellCooldown<=0?'READY':`${(wellCooldown/1000).toFixed(1)}s`;
   document.getElementById('chargeFill').style.width=sigilCharge+'%';
   document.getElementById('chargeStatus').textContent=sigilCharge>=100&&sealHP>=5?'MAX':`${Math.floor(sigilCharge)}%`;
   const bombPct=(bombCooldown<=0?1:1-bombCooldown/BOMB_MAX)*100;
@@ -2149,6 +2204,7 @@ function isButton(e){return e.target&&e.target.closest&&e.target.closest('button
 canvas.addEventListener('pointerdown',e=>{
   if(isButton(e)) return;
   resumeAudio();
+  pointerStart={x:e.clientX,y:e.clientY,t:performance.now()};
   drawing=true; slashPoints=[{x:e.clientX,y:e.clientY}];
   circleHint=0; circleHintData=null;
   ripples.push({x:e.clientX,y:e.clientY,radius:5,life:1});
@@ -2163,9 +2219,17 @@ function finishSlash(){
   circleHint=0;
   circleHintData=null;
   const pts=[...slashPoints];
+  const start=pointerStart;
+  pointerStart=null;
   if(pts.length>2){
     slashes.push({points:pts,life:1});
     if(gameActive) resolveSlash(pts);
+  } else if(gameActive && start){
+    const dist=Math.hypot((pts[0]?.x??start.x)-start.x,(pts[0]?.y??start.y)-start.y);
+    const elapsed=performance.now()-start.t;
+    if(elapsed<180 && dist<16){
+      triggerGravityWell(start.x,start.y);
+    }
   }
   slashPoints=[];
 }
