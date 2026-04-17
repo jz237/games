@@ -22,11 +22,14 @@
   #styleTxt { position:fixed; top:42px; left:16px; font-size:12px; letter-spacing:2px; color:#ffd78a; text-shadow:0 0 10px #ffb85c; z-index:11; pointer-events:none; }
   #sealHp { font-size:18px; }
   #bombBar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; color:#8060aa; z-index:10; pointer-events:none; }
-  #sigilBar { position:fixed; bottom:44px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; color:#76e8ff; z-index:10; pointer-events:none; }
+  #sigilBar { position:fixed; bottom:68px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; color:#76e8ff; z-index:10; pointer-events:none; }
+  #chargeBar { position:fixed; bottom:44px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; color:#8cf5d4; z-index:10; pointer-events:none; }
   #bombFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#8040cc,#e080ff); box-shadow:0 0 10px #a060ff; transition:width 0.1s; vertical-align:middle; }
   #sigilFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#3aa8ff,#8afff4); box-shadow:0 0 10px #66d8ff; transition:width 0.1s; vertical-align:middle; }
+  #chargeFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#2fdc8f,#b8ffd8); box-shadow:0 0 10px #7fffc0; transition:width 0.1s; vertical-align:middle; }
   #bombTrack { display:inline-block; width:140px; height:6px; background:rgba(80,40,120,0.3); border-radius:3px; vertical-align:middle; overflow:hidden; }
   #sigilTrack { display:inline-block; width:120px; height:6px; background:rgba(22,70,110,0.35); border-radius:3px; vertical-align:middle; overflow:hidden; }
+  #chargeTrack { display:inline-block; width:120px; height:6px; background:rgba(20,70,48,0.35); border-radius:3px; vertical-align:middle; overflow:hidden; }
   #overlay { position:fixed; inset:0; background:rgba(2,0,6,0.72); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:20; backdrop-filter:blur(4px); }
   #overlay h1 { font-size:52px; color:#e080ff; letter-spacing:8px; text-shadow:0 0 30px #c040ff,0 0 80px #6020aa; }
   #overlay p { color:#a070c0; font-size:14px; text-align:center; max-width:340px; line-height:2; margin-top:16px; }
@@ -75,7 +78,10 @@
 <div id="goalTxt"></div>
 <div id="combo"></div>
 <div id="sigilBar">
-  SHIELD CHARGE: <span id="sigilTrack"><span id="sigilFill" style="width:0%"></span></span>&nbsp;<span id="sigilStatus">0%</span>
+  QUIX SIGIL: <span id="sigilTrack"><span id="sigilFill" style="width:100%"></span></span>&nbsp;<span id="sigilStatus">READY</span>
+</div>
+<div id="chargeBar">
+  SHIELD CHARGE: <span id="chargeTrack"><span id="chargeFill" style="width:0%"></span></span>&nbsp;<span id="chargeStatus">0%</span>
 </div>
 <div id="bombBar">
   CIRCLE BOMB: <span id="bombTrack"><span id="bombFill" style="width:100%"></span></span>&nbsp;<span id="bombStatus">READY</span>
@@ -134,7 +140,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.18';
+const GAME_VERSION='v0.4.19';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -149,6 +155,7 @@ const ENEMY_SHAPES=[3,4,5,6];
 let enemies=[], particles=[], slashes=[], ripples=[], scorePopups=[], bgParticles=[], bgGridPhase=0;
 let sealHP=5, score=0, level=1, gameActive=false;
 let bombCooldown=0, BOMB_MAX=15000;
+let sigilCooldown=0, SIGIL_MAX=7500;
 let slashPoints=[], drawing=false;
 let sigilCharge=0;
 let shakeX=0,shakeY=0,shakeT=0;
@@ -629,7 +636,7 @@ muteBtn.addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation();t
 function initGame(){
   enemies=[]; particles=[]; slashes=[]; ripples=[]; scorePopups=[];
   sealHP=5; score=0; level=1; lastLevel=1; gameActive=true;
-  bombCooldown=0; drawing=false; slashPoints=[]; sigilCharge=0; sigilLines=[];
+  bombCooldown=0; sigilCooldown=0; drawing=false; slashPoints=[]; sigilCharge=0; sigilLines=[];
   shakeT=0; spawnTimer=0; comboCount=0; comboTimer=0; maxCombo=1; slowMo=0;
   bombFlash=0; circleHint=0; circleHintData=null;
   stylePoints=0; styleRank='CLEAN'; perfectCircleWindow=0; perfectCircles=0;
@@ -1611,6 +1618,7 @@ function addShieldCharge(amount){
 }
 
 function triggerSigil(pts){
+  sigilCooldown=SIGIL_MAX;
   playPowerup();
   addStyle(24);
   const simplified=[];
@@ -1742,7 +1750,7 @@ function resolveSlash(pts){
     return;
   }
   if(isSGesture(pts)){
-    triggerSigil(pts);
+    if(sigilCooldown<=0) triggerSigil(pts);
     return;
   }
   playSlash();
@@ -1869,6 +1877,7 @@ function loop(ts){
 
   if(gameActive){
     bombCooldown=Math.max(0,bombCooldown-dt*timeScale);
+    sigilCooldown=Math.max(0,sigilCooldown-dt*timeScale);
     stylePoints=Math.max(0,stylePoints-0.04*dt);
     styleRank=getStyleRank(stylePoints);
     perfectCircleWindow=Math.max(0,perfectCircleWindow-1);
@@ -2041,8 +2050,11 @@ function loop(ts){
   document.getElementById('styleTxt').textContent=`STYLE: ${styleRank}${perfectCircleWindow>0?' ✦':''}`;
   document.getElementById('goalTxt').textContent=`NEXT LV ${Math.max(0,(level===1?200:level===2?500:500+(level-2)*400)-score)}`;
   document.getElementById('sealHp').textContent='\u{1F52E}'.repeat(sealHP)+'\u{1F480}'.repeat(5-sealHP);
-  document.getElementById('sigilFill').style.width=sigilCharge+'%';
-  document.getElementById('sigilStatus').textContent=sigilCharge>=100&&sealHP>=5?'MAX':`${Math.floor(sigilCharge)}%`;
+  const sigilPct=(sigilCooldown<=0?1:1-sigilCooldown/SIGIL_MAX)*100;
+  document.getElementById('sigilFill').style.width=sigilPct+'%';
+  document.getElementById('sigilStatus').textContent=sigilCooldown<=0?'READY':`${(sigilCooldown/1000).toFixed(1)}s`;
+  document.getElementById('chargeFill').style.width=sigilCharge+'%';
+  document.getElementById('chargeStatus').textContent=sigilCharge>=100&&sealHP>=5?'MAX':`${Math.floor(sigilCharge)}%`;
   const bombPct=(bombCooldown<=0?1:1-bombCooldown/BOMB_MAX)*100;
   document.getElementById('bombFill').style.width=bombPct+'%';
   document.getElementById('bombStatus').textContent=bombCooldown<=0?'READY':`${(bombCooldown/1000).toFixed(1)}s`;
