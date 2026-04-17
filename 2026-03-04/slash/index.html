@@ -143,7 +143,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.43';
+const GAME_VERSION='v0.4.44';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -368,44 +368,59 @@ function playSlash(){
   if(!audioReady||muted) return;
   try{
     const now=audioCtx.currentTime;
-    const variant=Math.floor(Math.random()*4);
-    const startFreq=[1240,980,1460,1120][variant]*(0.96+Math.random()*0.1);
-    const endFreq=[540,420,610,500][variant];
-    const wave=['triangle','sawtooth','triangle','square'][variant];
-    const echoBase=[640,520,760,600][variant];
+    const variant=Math.floor(Math.random()*7);
+    const startFreq=[1240,980,1460,1120,860,1540,1320][variant]*(0.9+Math.random()*0.18);
+    const endFreq=[540,420,610,500,360,720,460][variant];
+    const wave=['triangle','sawtooth','triangle','square','sine','sawtooth','triangle'][variant];
+    const echoBase=[640,520,760,600,440,820,560][variant];
     const tone=audioCtx.createOscillator();
     tone.type=wave;
     tone.frequency.setValueAtTime(startFreq,now);
-    tone.frequency.exponentialRampToValueAtTime(endFreq,now+0.09+variant*0.015);
+    tone.frequency.exponentialRampToValueAtTime(endFreq,now+0.08+variant*0.012);
     const tg=audioCtx.createGain();
     tg.gain.setValueAtTime(0.001,now);
-    tg.gain.linearRampToValueAtTime(0.13+variant*0.015,now+0.008);
-    tg.gain.exponentialRampToValueAtTime(0.001,now+0.11+variant*0.02);
+    tg.gain.linearRampToValueAtTime(0.11+variant*0.012,now+0.006+Math.random()*0.008);
+    tg.gain.exponentialRampToValueAtTime(0.001,now+0.1+variant*0.018);
     tone.connect(tg); tg.connect(masterGain);
-    tone.start(now); tone.stop(now+0.13+variant*0.02);
-    const tone2=audioCtx.createOscillator();
-    tone2.type=variant%2===0?'triangle':'sine';
-    tone2.frequency.setValueAtTime(startFreq*0.62,now+0.004);
-    tone2.frequency.exponentialRampToValueAtTime(endFreq*0.8,now+0.08);
-    const tg2=audioCtx.createGain();
-    tg2.gain.setValueAtTime(0.001,now);
-    tg2.gain.linearRampToValueAtTime(0.05,now+0.01);
-    tg2.gain.exponentialRampToValueAtTime(0.001,now+0.09);
-    tone2.connect(tg2); tg2.connect(masterGain);
-    tone2.start(now+0.004); tone2.stop(now+0.1);
+    tone.start(now); tone.stop(now+0.12+variant*0.02);
+    const harmonics=1+(variant%3);
+    for(let h=0;h<harmonics;h++){
+      const tone2=audioCtx.createOscillator();
+      tone2.type=(variant+h)%2===0?'triangle':'sine';
+      tone2.frequency.setValueAtTime(startFreq*(0.42+h*0.22),now+0.003*h);
+      tone2.frequency.exponentialRampToValueAtTime(endFreq*(0.72+h*0.08),now+0.06+h*0.015);
+      const tg2=audioCtx.createGain();
+      tg2.gain.setValueAtTime(0.001,now);
+      tg2.gain.linearRampToValueAtTime(0.018+(0.018*h),now+0.008);
+      tg2.gain.exponentialRampToValueAtTime(0.001,now+0.07+h*0.02);
+      tone2.connect(tg2); tg2.connect(masterGain);
+      tone2.start(now+0.003*h); tone2.stop(now+0.08+h*0.025);
+    }
     const noise=audioCtx.createBufferSource();
     const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*0.08,audioCtx.sampleRate);
     const d=buf.getChannelData(0);
-    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*(0.16+variant*0.02)));
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*(0.12+variant*0.018)));
     noise.buffer=buf;
     const bp=audioCtx.createBiquadFilter();
-    bp.type='bandpass'; bp.frequency.value=(2400+variant*420)+Math.random()*900; bp.Q.value=1.8+variant*0.25;
+    bp.type=variant%2===0?'bandpass':'highpass'; bp.frequency.value=(1800+variant*360)+Math.random()*1200; bp.Q.value=1.5+variant*0.22;
     const g=audioCtx.createGain();
-    g.gain.setValueAtTime(0.22+variant*0.025,now);
-    g.gain.exponentialRampToValueAtTime(0.001,now+0.1+variant*0.02);
+    g.gain.setValueAtTime(0.16+variant*0.02,now);
+    g.gain.exponentialRampToValueAtTime(0.001,now+0.08+variant*0.025);
     noise.connect(bp); bp.connect(g); g.connect(masterGain);
-    noise.start(now); noise.stop(now+0.11+variant*0.02);
-    playGhostEcho(echoBase,0.012+variant*0.004,0.08+variant*0.015,0.42+variant*0.08);
+    noise.start(now); noise.stop(now+0.1+variant*0.025);
+    if(Math.random()<0.35){
+      const chirp=audioCtx.createOscillator();
+      chirp.type='square';
+      chirp.frequency.setValueAtTime(startFreq*1.4,now+0.01);
+      chirp.frequency.exponentialRampToValueAtTime(endFreq*0.9,now+0.05);
+      const cg=audioCtx.createGain();
+      cg.gain.setValueAtTime(0.001,now+0.01);
+      cg.gain.linearRampToValueAtTime(0.03,now+0.015);
+      cg.gain.exponentialRampToValueAtTime(0.001,now+0.06);
+      chirp.connect(cg); cg.connect(masterGain);
+      chirp.start(now+0.01); chirp.stop(now+0.065);
+    }
+    playGhostEcho(echoBase,0.01+variant*0.003,0.07+variant*0.014,0.38+variant*0.09);
   }catch(e){}
 }
 
@@ -432,32 +447,45 @@ function playHit(comboIdx, kind='normal'){
   if(!audioReady||muted) return;
   try{
     const now=audioCtx.currentTime;
-    const baseFreq=(kind==='boss'?140:kind==='bomb'?360:kind==='normal'?260:220)+comboIdx*(kind==='bomb'?70:55);
+    const variant=Math.floor(Math.random()*5);
+    const baseFreq=(kind==='boss'?140:kind==='bomb'?360:kind==='normal'?260:220)+comboIdx*(kind==='bomb'?70:55)+(variant*18);
     const oscA=audioCtx.createOscillator();
     const oscB=audioCtx.createOscillator();
-    oscA.type=kind==='boss'?'sawtooth':kind==='bomb'?'triangle':'pulse' in OscillatorNode.prototype?'triangle':'triangle';
-    oscB.type='triangle';
+    oscA.type=kind==='boss'?(variant%2?'sawtooth':'triangle'):kind==='bomb'?(variant%2?'square':'triangle'):(variant%3===0?'sine':'triangle');
+    oscB.type=variant%2===0?'triangle':'square';
     oscA.frequency.setValueAtTime(baseFreq,now);
-    oscA.frequency.exponentialRampToValueAtTime(kind==='boss'?58:kind==='bomb'?140:110,now+(kind==='boss'?0.22:0.14));
-    oscB.frequency.setValueAtTime(baseFreq*1.5,now);
-    oscB.frequency.exponentialRampToValueAtTime(baseFreq*0.75,now+0.08);
+    oscA.frequency.exponentialRampToValueAtTime(kind==='boss'?58:kind==='bomb'?140:110,now+(kind==='boss'?0.22:0.14)+variant*0.01);
+    oscB.frequency.setValueAtTime(baseFreq*(1.2+variant*0.08),now);
+    oscB.frequency.exponentialRampToValueAtTime(baseFreq*(0.62+variant*0.04),now+0.06+variant*0.01);
     const mix=audioCtx.createGain();
-    mix.gain.setValueAtTime(kind==='boss'?0.28:kind==='bomb'?0.18:0.21,now);
-    mix.gain.exponentialRampToValueAtTime(0.001,now+(kind==='boss'?0.28:0.18));
+    mix.gain.setValueAtTime((kind==='boss'?0.24:kind==='bomb'?0.16:0.18)+(variant*0.01),now);
+    mix.gain.exponentialRampToValueAtTime(0.001,now+(kind==='boss'?0.28:0.18)+variant*0.015);
     oscA.connect(mix); oscB.connect(mix); mix.connect(masterGain);
     oscA.start(now); oscB.start(now);
-    oscA.stop(now+(kind==='boss'?0.26:0.16)); oscB.stop(now+0.12);
+    oscA.stop(now+(kind==='boss'?0.26:0.16)+variant*0.02); oscB.stop(now+0.1+variant*0.015);
     const noise=audioCtx.createBufferSource();
     const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*0.08,audioCtx.sampleRate);
     const d=buf.getChannelData(0);
-    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*0.15));
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*(0.11+variant*0.02)));
     noise.buffer=buf;
     const ng=audioCtx.createGain();
-    ng.gain.setValueAtTime(kind==='boss'?0.48:kind==='bomb'?0.26:0.34,now);
-    ng.gain.exponentialRampToValueAtTime(0.001,now+(kind==='boss'?0.24:kind==='bomb'?0.14:0.12));
+    ng.gain.setValueAtTime((kind==='boss'?0.34:kind==='bomb'?0.2:0.24)+(variant*0.018),now);
+    ng.gain.exponentialRampToValueAtTime(0.001,now+(kind==='boss'?0.24:kind==='bomb'?0.14:0.12)+variant*0.018);
     noise.connect(ng); ng.connect(masterGain);
-    noise.start(now); noise.stop(now+(kind==='boss'?0.24:kind==='bomb'?0.14:0.12));
-    playGhostEcho(baseFreq*(kind==='boss'?0.82:kind==='bomb'?1.02:0.94),0.025,kind==='boss'?0.12:kind==='bomb'?0.08:0.07,kind==='boss'?0.56:0.42);
+    noise.start(now); noise.stop(now+(kind==='boss'?0.24:kind==='bomb'?0.14:0.12)+variant*0.018);
+    if(Math.random()<0.3){
+      const pop=audioCtx.createOscillator();
+      pop.type='sine';
+      pop.frequency.setValueAtTime(baseFreq*2.2,now+0.008);
+      pop.frequency.exponentialRampToValueAtTime(baseFreq*1.1,now+0.03);
+      const pg=audioCtx.createGain();
+      pg.gain.setValueAtTime(0.001,now+0.008);
+      pg.gain.linearRampToValueAtTime(0.04,now+0.012);
+      pg.gain.exponentialRampToValueAtTime(0.001,now+0.04);
+      pop.connect(pg); pg.connect(masterGain);
+      pop.start(now+0.008); pop.stop(now+0.045);
+    }
+    playGhostEcho(baseFreq*(kind==='boss'?0.82:kind==='bomb'?1.02:0.94),0.02+variant*0.006,kind==='boss'?0.12:kind==='bomb'?0.08:0.07,0.36+variant*0.08);
   }catch(e){}
 }
 
