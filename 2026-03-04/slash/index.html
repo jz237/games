@@ -18,6 +18,7 @@
   #scoreTxt { color:#e0c0ff; text-shadow:0 0 10px #a060ff; transition:text-shadow 0.2s; }
   #scoreTxt.pulse { text-shadow:0 0 20px #e080ff, 0 0 40px #a060ff; }
   #lvlTxt { color:#c0a0ff; text-shadow:0 0 10px #8040cc; }
+  #styleTxt { position:fixed; top:42px; left:16px; font-size:12px; letter-spacing:2px; color:#ffd78a; text-shadow:0 0 10px #ffb85c; z-index:11; pointer-events:none; }
   #sealHp { font-size:18px; }
   #bombBar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; color:#8060aa; z-index:10; pointer-events:none; }
   #bombFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#8040cc,#e080ff); box-shadow:0 0 10px #a060ff; transition:width 0.1s; vertical-align:middle; }
@@ -25,7 +26,9 @@
   #overlay { position:fixed; inset:0; background:rgba(2,0,6,0.96); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:20; }
   #overlay h1 { font-size:52px; color:#e080ff; letter-spacing:8px; text-shadow:0 0 30px #c040ff,0 0 80px #6020aa; }
   #overlay p { color:#a070c0; font-size:14px; text-align:center; max-width:340px; line-height:2; margin-top:16px; }
+  .menuBtns { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-top:30px; }
   #tapBtn { margin-top:30px; padding:14px 48px; background:linear-gradient(135deg,#3010aa,#e080ff33); color:#e080ff; font-size:18px; letter-spacing:4px; border:1px solid #e080ff; border-radius:4px; animation:pulse 1.5s infinite; }
+  .secondaryBtn { padding:12px 22px; background:rgba(32,16,72,0.7); color:#d8b8ff; font-size:14px; letter-spacing:2px; border:1px solid rgba(224,128,255,0.6); border-radius:4px; }
   @keyframes pulse { 0%,100%{box-shadow:0 0 20px #8040aa} 50%{box-shadow:0 0 50px #e080ff,0 0 80px #8040aa} }
   #endMsg { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; z-index:30; background:rgba(2,0,6,0.93); }
   #endMsg h2 { font-size:40px; letter-spacing:6px; margin-bottom:10px; }
@@ -34,6 +37,24 @@
   #combo { position:fixed; top:50px; left:50%; transform:translateX(-50%); font-size:24px; letter-spacing:6px; pointer-events:none; z-index:15; opacity:0; transition:opacity 0.3s; color:#e0c0ff; text-shadow:0 0 20px #c060ff; }
   #muteBtn { position:fixed; top:10px; right:60px; z-index:25; background:none; border:none; font-size:22px; color:#a080c0; pointer-events:all; padding:4px 8px; }
   .scorePopup { position:fixed; pointer-events:none; z-index:16; font-size:18px; font-weight:bold; font-family:'Courier New',monospace; letter-spacing:2px; color:#ffe080; text-shadow:0 0 12px #ffa040; }
+  .panel { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:35; background:rgba(2,0,6,0.94); padding:24px; }
+  .panelCard { width:min(92vw,420px); max-height:90vh; overflow:auto; background:rgba(18,8,40,0.82); border:1px solid rgba(224,128,255,0.45); border-radius:14px; box-shadow:0 0 40px rgba(128,64,204,0.35); padding:22px 20px 18px; backdrop-filter:blur(10px); }
+  .panelCard h3 { color:#f0d8ff; letter-spacing:4px; text-align:center; margin-bottom:12px; }
+  .panelCard p { color:#b898d8; font-size:13px; line-height:1.6; text-align:center; }
+  .leaderboardBlock { margin-top:16px; font-size:13px; color:#e8d8ff; }
+  .leaderboardTitle { color:#ffd76a; letter-spacing:2px; font-size:12px; margin:12px 0 8px; }
+  .leaderboardTitle.local { color:#78ddff; }
+  .leaderboardRow { display:grid; grid-template-columns:36px 1fr auto auto; gap:10px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.06); align-items:center; }
+  .leaderboardRow span:last-child { color:#caa8ff; }
+  .leaderboardRow.newEntry { color:#ffe9a8; text-shadow:0 0 12px rgba(255,210,96,0.45); }
+  .entryWrap { display:none; margin-top:18px; }
+  .initialsRow { display:flex; justify-content:center; gap:12px; margin:14px 0; }
+  .initialCol { display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .initialBtn { width:48px; height:38px; font-size:22px; border-radius:8px; border:1px solid rgba(224,128,255,0.5); background:rgba(48,16,110,0.72); color:#fff; }
+  .initialChar { width:48px; text-align:center; font-size:28px; color:#fff0c8; text-shadow:0 0 16px rgba(255,224,128,0.55); }
+  .panelActions { display:flex; justify-content:center; gap:12px; margin-top:18px; flex-wrap:wrap; }
+  .tinyNote { font-size:12px; color:#8d72af; text-align:center; margin-top:10px; }
+  .versionTag { margin-top:10px; font-size:11px; letter-spacing:3px; color:#6e5a8f; text-shadow:0 0 8px rgba(128,96,180,0.35); }
 </style>
 </head>
 <body>
@@ -43,6 +64,7 @@
   <button id="muteBtn">&#x1F50A;</button>
   <span class="stat" id="lvlTxt">LEVEL 1</span>
 </div>
+<div id="styleTxt">STYLE: CLEAN</div>
 <div id="combo"></div>
 <div id="bombBar">
   CIRCLE BOMB: <span id="bombTrack"><span id="bombFill" style="width:100%"></span></span>&nbsp;READY
@@ -57,20 +79,51 @@
   Don't let them reach the center seal!<br><br>
   <span style="color:#b080e0">Glowing shields = needs 2 hits · Echo ghosts = still dangerous!</span></p>
   <p style="margin-top:12px;color:#40304a;font-size:12px">3 LEVELS · 500+ PTS TO MASTER</p>
-  <button id="tapBtn">TAP TO PLAY</button>
+  <div class="versionTag" id="versionTag">VERSION</div>
+  <div class="menuBtns">
+    <button id="tapBtn">TAP TO PLAY</button>
+    <button id="scoresBtn" class="secondaryBtn">HIGH SCORES</button>
+  </div>
 </div>
 <div id="endMsg">
   <h2 id="endTitle">SEAL BROKEN</h2>
   <p id="endSub"></p>
-  <button id="restartBtn">RESTART</button>
+  <div id="scoreEntry" class="entryWrap">
+    <p style="margin-top:16px">You carved a top score. Set your initials.</p>
+    <div class="initialsRow" id="initialsRow"></div>
+    <div class="panelActions">
+      <button id="submitScoreBtn">SUBMIT SCORE</button>
+    </div>
+  </div>
+  <div class="panelCard leaderboardBlock" style="margin-top:20px;width:min(92vw,420px)">
+    <div id="endLeaderboard"></div>
+  </div>
+  <div class="panelActions">
+    <button id="restartBtn">RESTART</button>
+    <button id="endScoresBtn" class="secondaryBtn">FULL SCORES</button>
+  </div>
+</div>
+
+<div id="scoresPanel" class="panel">
+  <div class="panelCard">
+    <h3>HIGH SCORES</h3>
+    <p>Local legends on this device, plus the shared global board.</p>
+    <div id="leaderboardPanelContent" class="leaderboardBlock"></div>
+    <div class="panelActions">
+      <button id="closeScoresBtn" class="secondaryBtn">BACK</button>
+    </div>
+    <div class="tinyNote">Global board syncs when you're online.</div>
+  </div>
 </div>
 
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
+const GAME_VERSION='v0.4.0';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
 resize();
+document.getElementById('versionTag').textContent=GAME_VERSION;
 
 const ENEMY_COLORS=['#b040ff','#40c0ff','#ff8040','#40ff90'];
 const ENEMY_GLOW  =['#8000ff','#0090ff','#ff4000','#00ff50'];
@@ -82,10 +135,98 @@ let bombCooldown=0, BOMB_MAX=15000;
 let slashPoints=[], drawing=false;
 let shakeX=0,shakeY=0,shakeT=0;
 let comboFlash=0, comboCount=0, comboTimer=0;
+let maxCombo=1;
 let slowMo=0;
 let vignetteAlpha=0.35;
 let lastLevel=1;
 let spawnTimer=0;
+let bombFlash=0;
+let circleHint=0;
+let circleHintData=null;
+let stylePoints=0;
+let styleRank='CLEAN';
+let perfectCircleWindow=0;
+let perfectCircles=0;
+const HS_KEY='slash_rune_cutter_highscores';
+const SCORES_API='https://game-scores.jez237.workers.dev/scores/slash-rune-cutter';
+const INITIAL_CHARS='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+let globalScoresCache=null, globalScoresCacheTime=0;
+let initialsIdx=[18,11,0];
+let pendingScoreSubmission=null;
+
+function loadHS(){try{return JSON.parse(localStorage.getItem(HS_KEY))||[]}catch(e){return[]}}
+function saveHSList(list){try{localStorage.setItem(HS_KEY,JSON.stringify(list.slice(0,10)))}catch(e){}}
+function isHighScore(sc){const list=loadHS(); return list.length<10 || sc > ((list[list.length-1]&&list[list.length-1].score)||0)}
+function upsertLocalScore(entry){
+  const list=loadHS();
+  list.push(entry);
+  list.sort((a,b)=>b.score-a.score || b.level-a.level || a.ts-b.ts);
+  if(list.length>10) list.length=10;
+  saveHSList(list);
+  return list;
+}
+async function fetchGlobalScores(force=false){
+  const now=Date.now();
+  if(!force && globalScoresCache && now-globalScoresCacheTime<30000) return globalScoresCache;
+  try{
+    const res=await fetch(SCORES_API);
+    if(res.ok){
+      globalScoresCache=await res.json();
+      globalScoresCacheTime=now;
+      return globalScoresCache;
+    }
+  }catch(e){}
+  return globalScoresCache||[];
+}
+async function submitGlobalScore(entry){
+  if(globalScoresCache){
+    globalScoresCache=[...globalScoresCache,entry].sort((a,b)=>b.score-a.score).slice(0,50);
+    globalScoresCacheTime=Date.now();
+  }
+  try{
+    const res=await fetch(SCORES_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)});
+    if(res.ok){globalScoresCache=null;globalScoresCacheTime=0;fetchGlobalScores(true);}
+  }catch(e){}
+}
+function renderRows(list, type, highlightTs){
+  if(!list.length) return '<div style="color:rgba(255,255,255,0.45);padding:4px 0">No scores yet</div>';
+  return list.slice(0,10).map((e,i)=>{
+    const newCls=e.ts&&highlightTs&&e.ts===highlightTs?' newEntry':'';
+    const levelLabel=`L${e.level||'?'}${e.comboMax?` · ${e.comboMax}x`:''}${e.styleRank?` · ${e.styleRank}`:''}`;
+    return `<div class="leaderboardRow${newCls}"><span>${String(i+1).padStart(2,'0')}</span><span>${e.initials||'???'}</span><span>${e.score}</span><span>${levelLabel}</span></div>`;
+  }).join('');
+}
+async function renderLeaderboard(container, highlightTs){
+  const local=loadHS();
+  container.innerHTML=`<div class="leaderboardTitle local">🏠 LOCAL HIGH SCORES</div>${renderRows(local,'local',highlightTs)}<div class="leaderboardTitle">🌐 GLOBAL HIGH SCORES</div><div style="color:rgba(255,255,255,0.45);padding:4px 0">Loading...</div>`;
+  const global=await fetchGlobalScores();
+  container.innerHTML=`<div class="leaderboardTitle local">🏠 LOCAL HIGH SCORES</div>${renderRows(local,'local',highlightTs)}<div class="leaderboardTitle">🌐 GLOBAL HIGH SCORES</div>${renderRows(global,'global',highlightTs)}`;
+}
+function currentInitials(){return initialsIdx.map(i=>INITIAL_CHARS[i]).join('')}
+function buildInitialsPicker(){
+  const row=document.getElementById('initialsRow');
+  row.innerHTML='';
+  initialsIdx.forEach((idx,col)=>{
+    const wrap=document.createElement('div');
+    wrap.className='initialCol';
+    wrap.innerHTML=`<button class="initialBtn" data-dir="-1" data-col="${col}">▲</button><div class="initialChar" id="initialChar${col}">${INITIAL_CHARS[idx]}</div><button class="initialBtn" data-dir="1" data-col="${col}">▼</button>`;
+    row.appendChild(wrap);
+  });
+}
+function updateInitialsUI(){initialsIdx.forEach((idx,col)=>{const el=document.getElementById(`initialChar${col}`); if(el) el.textContent=INITIAL_CHARS[idx];});}
+function openScoresPanel(){document.getElementById('scoresPanel').style.display='flex'; renderLeaderboard(document.getElementById('leaderboardPanelContent'), pendingScoreSubmission&&pendingScoreSubmission.ts);}
+function closeScoresPanel(){document.getElementById('scoresPanel').style.display='none';}
+function getStyleRank(points){
+  if(points>=210) return 'DIVINE';
+  if(points>=140) return 'SAVAGE';
+  if(points>=80) return 'ARCANE';
+  if(points>=35) return 'FIERCE';
+  return 'CLEAN';
+}
+function addStyle(points){
+  stylePoints=Math.max(0,Math.min(240,stylePoints+points));
+  styleRank=getStyleRank(stylePoints);
+}
 
 // Background drifting particles
 function initBgParticles(){
@@ -356,7 +497,10 @@ function initGame(){
   enemies=[]; particles=[]; slashes=[]; ripples=[]; scorePopups=[];
   sealHP=5; score=0; level=1; lastLevel=1; gameActive=true;
   bombCooldown=0; drawing=false; slashPoints=[];
-  shakeT=0; spawnTimer=0; comboCount=0; comboTimer=0; slowMo=0;
+  shakeT=0; spawnTimer=0; comboCount=0; comboTimer=0; maxCombo=1; slowMo=0;
+  bombFlash=0; circleHint=0; circleHintData=null;
+  stylePoints=0; styleRank='CLEAN'; perfectCircleWindow=0; perfectCircles=0;
+  pendingScoreSubmission=null;
   initBgParticles();
 }
 
@@ -370,6 +514,7 @@ function spawnEnemy(isEcho=false){
   else{x=-m;y=Math.random()*H;}
   const ci=Math.floor(Math.random()*(level===1?2:level===2?3:4));
   const shielded=!isEcho&&Math.random()<(level===1?0:level===2?0.2:0.4);
+  const splitter=!isEcho&&level>=2&&Math.random()<(level===2?0.12:0.2);
   const speed=(0.4+Math.random()*0.3)*(1+level*0.2)*(isEcho?0.6:1);
   const angle=Math.atan2(H/2-y,W/2-x);
   enemies.push({
@@ -377,8 +522,23 @@ function spawnEnemy(isEcho=false){
     hp:shielded?2:1, maxHp:shielded?2:1, colorIdx:ci,
     r:18+Math.floor(Math.random()*6), sides:ENEMY_SHAPES[ci%4],
     rotation:Math.random()*Math.PI*2, rotSpeed:(Math.random()-0.5)*0.03,
-    isEcho, alive:true, alpha:isEcho?0.5:1, spawnTime:Date.now()
+    isEcho, splitter, alive:true, alpha:isEcho?0.5:1, spawnTime:Date.now()
   });
+}
+
+function spawnSplitChildren(enemy){
+  for(let k=0;k<2;k++){
+    const angle=Math.atan2(H/2-enemy.y,W/2-enemy.x)+(k===0?-0.6:0.6);
+    const speed=(0.8+Math.random()*0.25)*(1+level*0.12);
+    enemies.push({
+      x:enemy.x,y:enemy.y,
+      vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,
+      hp:1,maxHp:1,colorIdx:enemy.colorIdx,
+      r:Math.max(11,enemy.r*0.58),sides:Math.max(3,enemy.sides-1),
+      rotation:Math.random()*Math.PI*2,rotSpeed:(Math.random()-0.5)*0.05,
+      isEcho:false,splitter:false,alive:true,alpha:0.95,spawnTime:Date.now(),isShard:true
+    });
+  }
 }
 
 function spawnBurst(x,y,ci,n){
@@ -568,6 +728,17 @@ function drawEnemies(){
       ctx.restore();
     }
 
+    if(e.splitter){
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      ctx.strokeStyle='rgba(255,160,90,0.75)';
+      ctx.lineWidth=1.5;
+      ctx.shadowColor='#ff9a4a'; ctx.shadowBlur=12;
+      ctx.beginPath(); ctx.moveTo(-e.r*0.65,0); ctx.lineTo(e.r*0.65,0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,-e.r*0.65); ctx.lineTo(0,e.r*0.65); ctx.stroke();
+      ctx.restore();
+    }
+
     // Polygon body with gradient
     ctx.beginPath();
     for(let i=0;i<e.sides;i++){
@@ -676,6 +847,26 @@ function drawSlashes(){
     ctx.shadowColor='#fff'; ctx.shadowBlur=10;
     ctx.lineWidth=2.5;
     ctx.stroke();
+
+    if(circleHint>0 && circleHintData){
+      ctx.globalAlpha=Math.min(1,circleHint)*0.75;
+      const perfectReady=circleHintData.quality>0.9 && bombCooldown<=0;
+      ctx.strokeStyle=perfectReady?'rgba(255,248,210,0.98)':bombCooldown<=0?'rgba(255,232,140,0.95)':'rgba(160,130,220,0.65)';
+      ctx.shadowColor=perfectReady?'#fff4ba':bombCooldown<=0?'#ffe27a':'#9f80ff';
+      ctx.shadowBlur=18;
+      ctx.lineWidth=perfectReady?4:3;
+      ctx.setLineDash([8,8]);
+      ctx.beginPath();
+      ctx.arc(circleHintData.cx,circleHintData.cy,circleHintData.r,0,Math.PI*2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if(perfectReady){
+        ctx.fillStyle='rgba(255,242,184,0.9)';
+        ctx.font='bold 14px Courier New';
+        ctx.textAlign='center';
+        ctx.fillText('SUPER BOMB',circleHintData.cx,circleHintData.cy-circleHintData.r-14);
+      }
+    }
     ctx.restore();
   }
 }
@@ -731,6 +922,21 @@ function drawComboFlash(){
     ctx.restore();
     comboFlash-=0.03;
   }
+
+  if(bombFlash>0){
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    ctx.globalAlpha=bombFlash*0.45;
+    const grad=ctx.createRadialGradient(W/2,H/2,10,W/2,H/2,Math.max(W,H)*0.7);
+    grad.addColorStop(0,'rgba(255,255,255,0.95)');
+    grad.addColorStop(0.18,'rgba(255,220,140,0.6)');
+    grad.addColorStop(0.45,'rgba(220,140,255,0.24)');
+    grad.addColorStop(1,'transparent');
+    ctx.fillStyle=grad;
+    ctx.fillRect(0,0,W,H);
+    ctx.restore();
+    bombFlash-=0.04;
+  }
 }
 
 function updateScorePopups(){
@@ -749,22 +955,92 @@ function updateScorePopups(){
 
 // ==================== CIRCLE DETECTION ====================
 function isCircleGesture(pts){
-  if(pts.length<20) return false;
-  const sx=pts[0].x,sy=pts[0].y,ex=pts[pts.length-1].x,ey=pts[pts.length-1].y;
-  if(Math.hypot(ex-sx,ey-sy)>60) return false;
+  if(pts.length<14) return false;
+  const start=pts[0], end=pts[pts.length-1];
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  let pathLen=0, totalTurn=0;
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    if(p.x<minX) minX=p.x; if(p.x>maxX) maxX=p.x;
+    if(p.y<minY) minY=p.y; if(p.y>maxY) maxY=p.y;
+    if(i>0) pathLen+=Math.hypot(p.x-pts[i-1].x,p.y-pts[i-1].y);
+    if(i>1){
+      const a1=Math.atan2(pts[i-1].y-pts[i-2].y,pts[i-1].x-pts[i-2].x);
+      const a2=Math.atan2(p.y-pts[i-1].y,p.x-pts[i-1].x);
+      let delta=a2-a1;
+      while(delta>Math.PI) delta-=Math.PI*2;
+      while(delta<-Math.PI) delta+=Math.PI*2;
+      totalTurn+=delta;
+    }
+  }
+  const width=maxX-minX, height=maxY-minY;
+  const closeDist=Math.hypot(end.x-start.x,end.y-start.y);
+  const avgRadius=(width+height)/4;
+  if(avgRadius<26) return false;
+  if(pathLen<avgRadius*4.5) return false;
+  if(closeDist>Math.max(42,avgRadius*0.9)) return false;
+  if(width<avgRadius*1.2 || height<avgRadius*1.2) return false;
+  const aspect=Math.min(width,height)/Math.max(width,height);
+  if(aspect<0.55) return false;
   let cx=0,cy=0; pts.forEach(p=>{cx+=p.x;cy+=p.y;}); cx/=pts.length;cy/=pts.length;
   const radii=pts.map(p=>Math.hypot(p.x-cx,p.y-cy));
-  const avgR=radii.reduce((a,b)=>a+b)/radii.length;
-  if(avgR<30) return false;
-  const variance=radii.reduce((a,r)=>a+Math.abs(r-avgR),0)/radii.length;
-  return variance/avgR < 0.35;
+  const mean=radii.reduce((a,b)=>a+b,0)/radii.length;
+  const variance=radii.reduce((a,r)=>a+Math.abs(r-mean),0)/radii.length;
+  return Math.abs(totalTurn) > Math.PI*1.35 && variance/mean < 0.42;
+}
+
+function getCircleMetrics(pts){
+  if(pts.length<10) return null;
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity,pathLen=0;
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    if(p.x<minX) minX=p.x; if(p.x>maxX) maxX=p.x;
+    if(p.y<minY) minY=p.y; if(p.y>maxY) maxY=p.y;
+    if(i>0) pathLen+=Math.hypot(p.x-pts[i-1].x,p.y-pts[i-1].y);
+  }
+  const width=maxX-minX, height=maxY-minY;
+  const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+  return {cx,cy,r:(width+height)/4,width,height,pathLen,closeDist:Math.hypot(pts[pts.length-1].x-pts[0].x,pts[pts.length-1].y-pts[0].y)};
+}
+
+function getPerfectCircleQuality(data){
+  if(!data) return 0;
+  const aspect=Math.min(data.width,data.height)/Math.max(data.width,data.height||1);
+  const closure=1-Math.min(1,data.closeDist/Math.max(40,data.r));
+  const circumferenceFit=Math.min(1,data.pathLen/(Math.PI*2*Math.max(1,data.r)));
+  return aspect*0.45 + closure*0.35 + circumferenceFit*0.2;
+}
+
+function updateCircleHint(){
+  if(!drawing || slashPoints.length<10){circleHint=Math.max(0,circleHint-0.08); return;}
+  const data=getCircleMetrics(slashPoints);
+  if(!data){circleHint=Math.max(0,circleHint-0.08); return;}
+  const aspect=Math.min(data.width,data.height)/Math.max(data.width,data.height||1);
+  const ready=data.r>22 && data.pathLen>data.r*3.7 && data.closeDist<Math.max(70,data.r*1.1) && aspect>0.5;
+  if(ready){
+    circleHint=Math.min(1,circleHint+0.14);
+    const quality=getPerfectCircleQuality(data);
+    circleHintData={...data, quality};
+    perfectCircleWindow=quality>0.9 && bombCooldown<=0 ? 12 : Math.max(0,perfectCircleWindow-1);
+  }
+  else{circleHint=Math.max(0,circleHint-0.08); if(circleHint<0.05) circleHintData=data;}
 }
 
 function triggerBomb(){
+  const isPerfect=perfectCircleWindow>0;
   bombCooldown=BOMB_MAX;
   playPowerup();
+  bombFlash=1;
+  shakeT=28;
+  if(isPerfect){
+    perfectCircles++;
+    addStyle(40);
+    addScorePopup(W/2-54,H/2-96,'PERFECT CIRCLE');
+  } else {
+    addStyle(18);
+  }
   const cx=W/2,cy=H/2;
-  let ring={x:cx,y:cy,radius:0,speed:12,alive:true};
+  let ring={x:cx,y:cy,radius:0,speed:isPerfect?18:12,alive:true};
   let frames=0;
   const bombInterval=setInterval(()=>{
     ring.radius+=ring.speed;
@@ -772,13 +1048,20 @@ function triggerBomb(){
     enemies.forEach(e=>{
       if(!e.alive) return;
       const d=Math.hypot(e.x-cx,e.y-cy);
-      if(Math.abs(d-ring.radius)<ring.speed*2){
+      if(Math.abs(d-ring.radius)<ring.speed*(isPerfect?3:2)){
         e.alive=false;
         spawnBurst(e.x,e.y,e.colorIdx,18);
+        spawnBurst(e.x,e.y,e.colorIdx,12);
         playHit(0);
-        score+=20;
+        score+=isPerfect?35:20;
       }
     });
+    if(frames%4===0){
+      for(let i=0;i<(isPerfect?20:12);i++){
+        const a=(i/(isPerfect?20:12))*Math.PI*2+frames*0.04;
+        particles.push({x:cx+Math.cos(a)*ring.radius,y:cy+Math.sin(a)*ring.radius,vx:Math.cos(a)*(isPerfect?3.4:2.2),vy:Math.sin(a)*(isPerfect?3.4:2.2),life:0.85,color:isPerfect?'#fff2b8':'#ffe28a',glow:isPerfect?'#ffd15c':'#ffb24d',size:(isPerfect?4:3)+Math.random()*3});
+      }
+    }
     ctx.save();
     ctx.globalCompositeOperation='lighter';
     ctx.globalAlpha=Math.max(0,1-frames/40);
@@ -790,8 +1073,9 @@ function triggerBomb(){
     ctx.lineWidth=2;
     ctx.stroke();
     ctx.restore();
-    if(frames>40||ring.radius>Math.max(W,H)){clearInterval(bombInterval);}
+    if(frames>(isPerfect?34:40)||ring.radius>Math.max(W,H)){clearInterval(bombInterval);}
   },16);
+  perfectCircleWindow=0;
 }
 
 function resolveSlash(pts){
@@ -801,6 +1085,7 @@ function resolveSlash(pts){
     return;
   }
   playSlash();
+  addStyle(4);
   spawnSlashSparks(pts);
   let killCount=0;
   enemies.forEach(e=>{
@@ -816,12 +1101,18 @@ function resolveSlash(pts){
         if(e.hp<=0){
           e.alive=false;
           spawnBurst(e.x,e.y,e.colorIdx,18);
+          if(e.splitter){
+            spawnSplitChildren(e);
+            addScorePopup(e.x,e.y-42,'SHATTER');
+            addStyle(10);
+          }
           if(!e.isEcho && Math.random()<0.3*(level-1)/2+0.1*(level>1?1:0)) {
             setTimeout(()=>spawnEchoAt(e.x,e.y,e.colorIdx),400);
           }
           killCount++;
           const pts_score=10;
           score+=pts_score;
+          addStyle(9);
           playHit(killCount);
           addScorePopup(e.x,e.y-20,'+'+pts_score);
           slowMo=6; // brief slowdown frames
@@ -839,7 +1130,9 @@ function resolveSlash(pts){
     showCombo(killCount);
     comboFlash=1;
     comboCount=killCount;
+    maxCombo=Math.max(maxCombo,killCount);
     comboTimer=120;
+    addStyle(12+killCount*6);
     addScorePopup(W/2-30,H/2-60,'+'+bonus+' COMBO');
   } else if(killCount===1){
     comboTimer=60;
@@ -894,6 +1187,10 @@ function loop(ts){
 
   if(gameActive){
     bombCooldown=Math.max(0,bombCooldown-dt*timeScale);
+    stylePoints=Math.max(0,stylePoints-0.04*dt);
+    styleRank=getStyleRank(stylePoints);
+    perfectCircleWindow=Math.max(0,perfectCircleWindow-1);
+    updateCircleHint();
     spawnTimer+=dt*timeScale;
     const interval=Math.max(300,1400-level*200-(score*0.3));
     if(spawnTimer>interval){spawnTimer=0;spawnEnemy();}
@@ -906,10 +1203,17 @@ function loop(ts){
         sealHP--;
         e.alive=false;
         shakeT=20;
+        stylePoints=Math.max(0,stylePoints-26);
+        styleRank=getStyleRank(stylePoints);
         spawnBurst(cx,cy,e.colorIdx,12);
         spawnDamageParticles();
         playDamage();
         if(sealHP<=0){gameOver();return;}
+      }
+      if(e.splitter && !e.isShard){
+        const tangential=0.0007*(Date.now()-e.spawnTime);
+        e.vx+=(-dy/d||0)*tangential*0.01;
+        e.vy+=(dx/d||0)*tangential*0.01;
       }
       e.x+=e.vx*timeScale; e.y+=e.vy*timeScale;
     });
@@ -933,6 +1237,7 @@ function loop(ts){
   scoreTxt.textContent=`SCORE: ${score}`;
   if(comboCount>1){scoreTxt.classList.add('pulse');} else {scoreTxt.classList.remove('pulse');}
   document.getElementById('lvlTxt').textContent=`LEVEL ${level}`;
+  document.getElementById('styleTxt').textContent=`STYLE: ${styleRank}${perfectCircleWindow>0?' ✦':''}`;
   document.getElementById('sealHp').textContent='\u{1F52E}'.repeat(sealHP)+'\u{1F480}'.repeat(5-sealHP);
   const bombPct=(bombCooldown<=0?1:1-bombCooldown/BOMB_MAX)*100;
   document.getElementById('bombFill').style.width=bombPct+'%';
@@ -947,7 +1252,10 @@ function gameOver(){
   playGameOver();
   document.getElementById('endTitle').textContent='SEAL BROKEN';
   document.getElementById('endTitle').style.color='#ff4060';
-  document.getElementById('endSub').textContent=`Score: ${score} \u00B7 Level ${level}`;
+  document.getElementById('endSub').textContent=`Score: ${score} \u00B7 Level ${level} \u00B7 Style ${styleRank} \u00B7 Perfect Circles ${perfectCircles}`;
+  pendingScoreSubmission=isHighScore(score)?{initials:currentInitials(),score,level,comboMax:maxCombo,styleRank,perfectCircles,ts:Date.now()}:null;
+  document.getElementById('scoreEntry').style.display=pendingScoreSubmission?'block':'none';
+  renderLeaderboard(document.getElementById('endLeaderboard'), pendingScoreSubmission&&pendingScoreSubmission.ts);
   document.getElementById('endMsg').style.display='flex';
 }
 
@@ -964,8 +1272,20 @@ function restartGame(){
   resumeAudio();
   playClick();
   document.getElementById('endMsg').style.display='none';
+  closeScoresPanel();
   initGame();
   startMusic();
+}
+
+async function submitScoreEntry(){
+  if(!pendingScoreSubmission) return;
+  const entry={...pendingScoreSubmission, initials:currentInitials()};
+  pendingScoreSubmission=entry;
+  upsertLocalScore(entry);
+  document.getElementById('scoreEntry').style.display='none';
+  renderLeaderboard(document.getElementById('endLeaderboard'), entry.ts);
+  renderLeaderboard(document.getElementById('leaderboardPanelContent'), entry.ts);
+  submitGlobalScore(entry);
 }
 
 // ==================== INPUT ====================
@@ -975,22 +1295,28 @@ canvas.addEventListener('pointerdown',e=>{
   if(isButton(e)) return;
   resumeAudio();
   drawing=true; slashPoints=[{x:e.clientX,y:e.clientY}];
+  circleHint=0; circleHintData=null;
   ripples.push({x:e.clientX,y:e.clientY,radius:5,life:1});
 });
 canvas.addEventListener('pointermove',e=>{
   if(!drawing) return;
   slashPoints.push({x:e.clientX,y:e.clientY});
 });
-canvas.addEventListener('pointerup',e=>{
+function finishSlash(){
   if(!drawing) return;
   drawing=false;
+  circleHint=0;
+  circleHintData=null;
   const pts=[...slashPoints];
   if(pts.length>2){
     slashes.push({points:pts,life:1});
     if(gameActive) resolveSlash(pts);
   }
   slashPoints=[];
-});
+}
+canvas.addEventListener('pointerup',finishSlash);
+canvas.addEventListener('pointercancel',finishSlash);
+canvas.addEventListener('pointerleave',e=>{if(drawing&&e.buttons===0) finishSlash();});
 
 // Prevent default on canvas touch but not buttons
 canvas.addEventListener('touchstart',e=>{if(!isButton(e))e.preventDefault();},{passive:false});
@@ -1004,6 +1330,33 @@ tapBtn.addEventListener('touchend',e=>{e.preventDefault();startGame();});
 const restartBtn=document.getElementById('restartBtn');
 restartBtn.addEventListener('click',restartGame);
 restartBtn.addEventListener('touchend',e=>{e.preventDefault();restartGame();});
+
+document.getElementById('scoresBtn').addEventListener('click',openScoresPanel);
+document.getElementById('scoresBtn').addEventListener('touchend',e=>{e.preventDefault();openScoresPanel();});
+document.getElementById('endScoresBtn').addEventListener('click',openScoresPanel);
+document.getElementById('endScoresBtn').addEventListener('touchend',e=>{e.preventDefault();openScoresPanel();});
+document.getElementById('closeScoresBtn').addEventListener('click',closeScoresPanel);
+document.getElementById('closeScoresBtn').addEventListener('touchend',e=>{e.preventDefault();closeScoresPanel();});
+document.getElementById('submitScoreBtn').addEventListener('click',submitScoreEntry);
+document.getElementById('submitScoreBtn').addEventListener('touchend',e=>{e.preventDefault();submitScoreEntry();});
+
+document.getElementById('initialsRow').addEventListener('click',e=>{
+  const btn=e.target.closest('.initialBtn');
+  if(!btn) return;
+  const col=Number(btn.dataset.col), dir=Number(btn.dataset.dir);
+  initialsIdx[col]=(initialsIdx[col]+dir+INITIAL_CHARS.length)%INITIAL_CHARS.length;
+  updateInitialsUI();
+});
+document.getElementById('initialsRow').addEventListener('touchend',e=>{
+  const btn=e.target.closest('.initialBtn');
+  if(!btn) return;
+  e.preventDefault();
+  const col=Number(btn.dataset.col), dir=Number(btn.dataset.dir);
+  initialsIdx[col]=(initialsIdx[col]+dir+INITIAL_CHARS.length)%INITIAL_CHARS.length;
+  updateInitialsUI();
+});
+
+buildInitialsPicker();
 
 window.addEventListener('resize',resize);
 </script>
