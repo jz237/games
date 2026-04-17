@@ -143,7 +143,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v1.0.1';
+const GAME_VERSION='v1.0.2';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -1476,12 +1476,12 @@ function drawSlashes(){
       `hsla(${(s.hue+90)%360},100%,62%,1)`
     ];
     s.trail.forEach((t,idx)=>{
-      const alpha=(idx+1)/Math.max(1,s.trail.length)*s.life*0.12;
+      const alpha=(idx+1)/Math.max(1,s.trail.length)*s.life*0.22;
       ctx.globalAlpha=alpha;
       colors.forEach((color,cIdx)=>{
         ctx.strokeStyle=color;
-        ctx.shadowColor=color; ctx.shadowBlur=14;
-        ctx.lineWidth=4-cIdx;
+        ctx.shadowColor=color; ctx.shadowBlur=18;
+        ctx.lineWidth=5-cIdx;
         drawQixPath(t.points);
         ctx.stroke();
       });
@@ -1490,8 +1490,8 @@ function drawSlashes(){
     ctx.globalAlpha=s.life;
     colors.forEach((color,cIdx)=>{
       ctx.strokeStyle=color;
-      ctx.shadowColor=color; ctx.shadowBlur=18-cIdx*2;
-      ctx.lineWidth=6-cIdx*2;
+      ctx.shadowColor=color; ctx.shadowBlur=21-cIdx*2;
+      ctx.lineWidth=7-cIdx*2;
       drawQixPath(s.renderPoints);
       ctx.stroke();
     });
@@ -2180,7 +2180,7 @@ function loop(ts){
         s.hum.gain.gain.setTargetAtTime(0.025+s.life*0.035,audioCtx.currentTime,0.05);
       }
       s.trail.push({points:s.renderPoints.map(p=>({x:p.x,y:p.y}))});
-      if(s.trail.length>7) s.trail.shift();
+      if(s.trail.length>12) s.trail.shift();
       if(s.hitClock<=0){
         let didHit=false;
         enemies.forEach(e=>{
