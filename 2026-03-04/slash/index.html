@@ -140,7 +140,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.22';
+const GAME_VERSION='v0.4.23';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -360,6 +360,16 @@ function playSlash(){
   if(!audioReady||muted) return;
   try{
     const now=audioCtx.currentTime;
+    const tone=audioCtx.createOscillator();
+    tone.type='square';
+    tone.frequency.setValueAtTime(1680,now);
+    tone.frequency.exponentialRampToValueAtTime(620,now+0.09);
+    const tg=audioCtx.createGain();
+    tg.gain.setValueAtTime(0.001,now);
+    tg.gain.linearRampToValueAtTime(0.18,now+0.008);
+    tg.gain.exponentialRampToValueAtTime(0.001,now+0.1);
+    tone.connect(tg); tg.connect(masterGain);
+    tone.start(now); tone.stop(now+0.11);
     const noise=audioCtx.createBufferSource();
     const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*0.08,audioCtx.sampleRate);
     const d=buf.getChannelData(0);
@@ -372,7 +382,7 @@ function playSlash(){
     g.gain.exponentialRampToValueAtTime(0.001,now+0.12);
     noise.connect(bp); bp.connect(g); g.connect(masterGain);
     noise.start(now); noise.stop(now+0.12);
-    playGhostEcho(520,0.015,0.07,0.34);
+    playGhostEcho(760,0.01,0.04,0.18);
   }catch(e){}
 }
 
@@ -399,8 +409,21 @@ function playHit(comboIdx, kind='normal'){
   if(!audioReady||muted) return;
   try{
     const now=audioCtx.currentTime;
-    const baseFreq=(kind==='boss'?110:kind==='bomb'?300:180)+comboIdx*(kind==='bomb'?55:45);
-    // Noise crunch
+    const baseFreq=(kind==='boss'?140:kind==='bomb'?360:kind==='normal'?260:220)+comboIdx*(kind==='bomb'?70:55);
+    const oscA=audioCtx.createOscillator();
+    const oscB=audioCtx.createOscillator();
+    oscA.type=kind==='boss'?'sawtooth':kind==='bomb'?'square':'triangle';
+    oscB.type='square';
+    oscA.frequency.setValueAtTime(baseFreq,now);
+    oscA.frequency.exponentialRampToValueAtTime(kind==='boss'?58:kind==='bomb'?140:110,now+(kind==='boss'?0.22:0.14));
+    oscB.frequency.setValueAtTime(baseFreq*1.5,now);
+    oscB.frequency.exponentialRampToValueAtTime(baseFreq*0.75,now+0.08);
+    const mix=audioCtx.createGain();
+    mix.gain.setValueAtTime(kind==='boss'?0.34:kind==='bomb'?0.2:0.24,now);
+    mix.gain.exponentialRampToValueAtTime(0.001,now+(kind==='boss'?0.24:0.15));
+    oscA.connect(mix); oscB.connect(mix); mix.connect(masterGain);
+    oscA.start(now); oscB.start(now);
+    oscA.stop(now+(kind==='boss'?0.26:0.16)); oscB.stop(now+0.12);
     const noise=audioCtx.createBufferSource();
     const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*0.08,audioCtx.sampleRate);
     const d=buf.getChannelData(0);
@@ -411,17 +434,7 @@ function playHit(comboIdx, kind='normal'){
     ng.gain.exponentialRampToValueAtTime(0.001,now+(kind==='boss'?0.24:kind==='bomb'?0.14:0.12));
     noise.connect(ng); ng.connect(masterGain);
     noise.start(now); noise.stop(now+(kind==='boss'?0.24:kind==='bomb'?0.14:0.12));
-    // Low thud
-    const osc=audioCtx.createOscillator();
-    osc.type=kind==='boss'?'sawtooth':kind==='bomb'?'triangle':'sine'; osc.frequency.setValueAtTime(baseFreq,now);
-    osc.frequency.exponentialRampToValueAtTime(kind==='bomb'?120:kind==='boss'?32:55,now+(kind==='boss'?0.28:kind==='bomb'?0.18:0.12));
-    const og=audioCtx.createGain();
-    og.gain.setValueAtTime(kind==='boss'?0.54:kind==='bomb'?0.22:0.32,now);
-    og.gain.exponentialRampToValueAtTime(0.001,now+(kind==='boss'?0.3:kind==='bomb'?0.18:0.12));
-    osc.connect(og); og.connect(masterGain);
-    osc.start(now); osc.stop(now+(kind==='boss'?0.32:kind==='bomb'?0.2:0.14));
-
-    playGhostEcho(baseFreq*(kind==='boss'?0.66:kind==='bomb'?1.18:0.92),0.02,kind==='boss'?0.2:kind==='bomb'?0.12:0.11,kind==='boss'?0.9:kind==='bomb'?0.55:0.58);
+    playGhostEcho(baseFreq*(kind==='boss'?0.72:kind==='bomb'?1.08:0.98),0.015,kind==='boss'?0.08:kind==='bomb'?0.05:0.04,kind==='boss'?0.34:0.22);
   }catch(e){}
 }
 
@@ -431,10 +444,10 @@ function playDamage(){
     const now=audioCtx.currentTime;
     // Harsh buzz
     const osc=audioCtx.createOscillator();
-    osc.type='sawtooth'; osc.frequency.value=80;
+    osc.type='square'; osc.frequency.value=96;
     const g=audioCtx.createGain();
     g.gain.setValueAtTime(0.4,now);
-    g.gain.exponentialRampToValueAtTime(0.001,now+0.3);
+    g.gain.exponentialRampToValueAtTime(0.001,now+0.18);
     const dist=audioCtx.createWaveShaperFunction?null:audioCtx.createWaveShaper();
     if(dist){
       const curve=new Float32Array(256);
@@ -443,15 +456,15 @@ function playDamage(){
       osc.connect(dist); dist.connect(g);
     } else { osc.connect(g); }
     g.connect(masterGain);
-    osc.start(now); osc.stop(now+0.3);
-    // Low rumble
+    osc.start(now); osc.stop(now+0.18);
     const osc2=audioCtx.createOscillator();
-    osc2.type='sine'; osc2.frequency.value=40;
+    osc2.type='triangle'; osc2.frequency.setValueAtTime(180,now);
+    osc2.frequency.exponentialRampToValueAtTime(70,now+0.22);
     const g2=audioCtx.createGain();
-    g2.gain.setValueAtTime(0.3,now);
-    g2.gain.exponentialRampToValueAtTime(0.001,now+0.4);
+    g2.gain.setValueAtTime(0.22,now);
+    g2.gain.exponentialRampToValueAtTime(0.001,now+0.22);
     osc2.connect(g2); g2.connect(masterGain);
-    osc2.start(now); osc2.stop(now+0.4);
+    osc2.start(now); osc2.stop(now+0.22);
   }catch(e){}
 }
 
@@ -462,12 +475,12 @@ function playLevelUp(){
     const notes=[523,659,784]; // C5 E5 G5
     notes.forEach((f,i)=>{
       const osc=audioCtx.createOscillator();
-      osc.type='sine';
+      osc.type=i===0?'square':'triangle';
       osc.frequency.setValueAtTime(f,now+i*0.1);
       const g=audioCtx.createGain();
       g.gain.setValueAtTime(0,now+i*0.1);
-      g.gain.linearRampToValueAtTime(0.3,now+i*0.1+0.02);
-      g.gain.exponentialRampToValueAtTime(0.001,now+i*0.1+0.3);
+      g.gain.linearRampToValueAtTime(0.22,now+i*0.1+0.01);
+      g.gain.exponentialRampToValueAtTime(0.001,now+i*0.1+0.22);
       osc.connect(g); g.connect(masterGain);
       osc.start(now+i*0.1); osc.stop(now+i*0.1+0.3);
     });
@@ -479,21 +492,21 @@ function playPowerup(){
   try{
     const now=audioCtx.currentTime;
     const osc=audioCtx.createOscillator();
-    osc.type='triangle';
-    osc.frequency.setValueAtTime(720,now);
-    osc.frequency.exponentialRampToValueAtTime(1480,now+0.32);
+    osc.type='square';
+    osc.frequency.setValueAtTime(540,now);
+    osc.frequency.exponentialRampToValueAtTime(1680,now+0.18);
     const lfo=audioCtx.createOscillator();
-    lfo.frequency.value=20;
+    lfo.frequency.value=28;
     const lfoG=audioCtx.createGain();
-    lfoG.gain.value=50;
+    lfoG.gain.value=72;
     lfo.connect(lfoG); lfoG.connect(osc.frequency);
     const g=audioCtx.createGain();
-    g.gain.setValueAtTime(0.3,now);
-    g.gain.exponentialRampToValueAtTime(0.001,now+0.36);
+    g.gain.setValueAtTime(0.22,now);
+    g.gain.exponentialRampToValueAtTime(0.001,now+0.22);
     osc.connect(g); g.connect(masterGain);
-    osc.start(now); osc.stop(now+0.36);
-    lfo.start(now); lfo.stop(now+0.36);
-    playGhostEcho(640,0.06,0.12,0.8);
+    osc.start(now); osc.stop(now+0.22);
+    lfo.start(now); lfo.stop(now+0.22);
+    playGhostEcho(980,0.03,0.06,0.24);
   }catch(e){}
 }
 
@@ -539,19 +552,19 @@ function playBossDeath(){
   if(!audioReady||muted) return;
   try{
     const now=audioCtx.currentTime;
-    [110,82,61].forEach((f,i)=>{
+    [180,132,96].forEach((f,i)=>{
       const osc=audioCtx.createOscillator();
-      osc.type='sawtooth';
+      osc.type=i===0?'square':'sawtooth';
       osc.frequency.setValueAtTime(f,now+i*0.05);
-      osc.frequency.exponentialRampToValueAtTime(28,now+i*0.05+0.35);
+      osc.frequency.exponentialRampToValueAtTime(42,now+i*0.04+0.24);
       const g=audioCtx.createGain();
       g.gain.setValueAtTime(0.001,now+i*0.05);
-      g.gain.linearRampToValueAtTime(0.25,now+i*0.05+0.02);
-      g.gain.exponentialRampToValueAtTime(0.001,now+i*0.05+0.4);
+      g.gain.linearRampToValueAtTime(0.22,now+i*0.04+0.012);
+      g.gain.exponentialRampToValueAtTime(0.001,now+i*0.04+0.26);
       osc.connect(g); g.connect(masterGain);
-      osc.start(now+i*0.05); osc.stop(now+i*0.05+0.42);
+      osc.start(now+i*0.04); osc.stop(now+i*0.04+0.28);
     });
-    playGhostEcho(180,0.08,0.24,1.3);
+    playGhostEcho(260,0.04,0.08,0.28);
   }catch(e){}
 }
 
