@@ -57,8 +57,6 @@
   .tinyNote { font-size:12px; color:#8d72af; text-align:center; margin-top:10px; }
   .versionTag { margin-top:10px; font-size:11px; letter-spacing:3px; color:#6e5a8f; text-shadow:0 0 8px rgba(128,96,180,0.35); }
   .buildTag { margin-top:6px; font-size:10px; letter-spacing:2px; color:#594774; }
-  .changelogList { margin-top:14px; text-align:left; color:#d8c6f2; font-size:12px; line-height:1.7; }
-  .changelogList li { margin-left:18px; }
   .medalLine { margin-top:10px; font-size:16px; letter-spacing:3px; color:#ffe9a8; text-shadow:0 0 16px rgba(255,214,96,0.55); }
   .victoryStats { margin-top:10px; text-align:center; color:#d8c6f2; line-height:1.8; font-size:13px; }
 </style>
@@ -91,7 +89,6 @@
   <div class="menuBtns">
     <button id="tapBtn">TAP TO PLAY</button>
     <button id="scoresBtn" class="secondaryBtn">HIGH SCORES</button>
-    <button id="changelogBtn" class="secondaryBtn">WHAT'S NEW</button>
   </div>
 </div>
 <div id="endMsg">
@@ -124,24 +121,6 @@
       <button id="closeScoresBtn" class="secondaryBtn">BACK</button>
     </div>
     <div class="tinyNote">Global board syncs when you're online.</div>
-  </div>
-</div>
-
-<div id="changelogPanel" class="panel">
-  <div class="panelCard">
-    <h3>WHAT'S NEW</h3>
-    <p>Recent upgrades to SLASH.</p>
-    <ul class="changelogList">
-      <li>v0.4.1, title-screen build info and changelog</li>
-      <li>Style ranks, from Clean to Divine</li>
-      <li>Perfect-circle super bombs</li>
-      <li>Live circle summon preview</li>
-      <li>Splitter enemies that burst into shards</li>
-      <li>Local plus global leaderboards</li>
-    </ul>
-    <div class="panelActions">
-      <button id="closeChangelogBtn" class="secondaryBtn">BACK</button>
-    </div>
   </div>
 </div>
 
@@ -251,8 +230,6 @@ function buildInitialsPicker(){
 function updateInitialsUI(){initialsIdx.forEach((idx,col)=>{const el=document.getElementById(`initialChar${col}`); if(el) el.textContent=INITIAL_CHARS[idx];});}
 function openScoresPanel(){document.getElementById('scoresPanel').style.display='flex'; renderLeaderboard(document.getElementById('leaderboardPanelContent'), pendingScoreSubmission&&pendingScoreSubmission.ts);}
 function closeScoresPanel(){document.getElementById('scoresPanel').style.display='none';}
-function openChangelogPanel(){document.getElementById('changelogPanel').style.display='flex';}
-function closeChangelogPanel(){document.getElementById('changelogPanel').style.display='none';}
 function getStyleRank(points){
   if(points>=210) return 'DIVINE';
   if(points>=140) return 'SAVAGE';
@@ -1529,7 +1506,6 @@ function restartGame(){
   document.getElementById('medalLine').style.display='none';
   document.getElementById('victoryStats').style.display='none';
   closeScoresPanel();
-  closeChangelogPanel();
   initGame();
   startMusic();
 }
@@ -1590,14 +1566,10 @@ restartBtn.addEventListener('touchend',e=>{e.preventDefault();restartGame();});
 
 document.getElementById('scoresBtn').addEventListener('click',openScoresPanel);
 document.getElementById('scoresBtn').addEventListener('touchend',e=>{e.preventDefault();openScoresPanel();});
-document.getElementById('changelogBtn').addEventListener('click',openChangelogPanel);
-document.getElementById('changelogBtn').addEventListener('touchend',e=>{e.preventDefault();openChangelogPanel();});
 document.getElementById('endScoresBtn').addEventListener('click',openScoresPanel);
 document.getElementById('endScoresBtn').addEventListener('touchend',e=>{e.preventDefault();openScoresPanel();});
 document.getElementById('closeScoresBtn').addEventListener('click',closeScoresPanel);
 document.getElementById('closeScoresBtn').addEventListener('touchend',e=>{e.preventDefault();closeScoresPanel();});
-document.getElementById('closeChangelogBtn').addEventListener('click',closeChangelogPanel);
-document.getElementById('closeChangelogBtn').addEventListener('touchend',e=>{e.preventDefault();closeChangelogPanel();});
 document.getElementById('submitScoreBtn').addEventListener('click',submitScoreEntry);
 document.getElementById('submitScoreBtn').addEventListener('touchend',e=>{e.preventDefault();submitScoreEntry();});
 
