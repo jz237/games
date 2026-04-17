@@ -134,7 +134,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.16';
+const GAME_VERSION='v0.4.17';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -1627,7 +1627,7 @@ function triggerSigil(pts){
     points:localPoints,
     x:cx,y:cy,
     vx:Math.cos(ang)*5.6,vy:Math.sin(ang)*5.6,
-    life:1,duration:360,maxDuration:360,
+    life:1,duration:3200,maxDuration:3200,
     rot:0,rotSpeed:(Math.random()<0.5?-1:1)*0.11,
     scale:78,trail:[],hitClock:0,hue:Math.random()*360
   });
@@ -1886,8 +1886,22 @@ function loop(ts){
       s.y+=s.vy*timeScale;
       s.rot+=s.rotSpeed*timeScale;
       const half=s.scale*0.9;
-      if(s.x<half||s.x>W-half){s.vx*=-1; s.x=Math.max(half,Math.min(W-half,s.x)); shakeT=Math.max(shakeT,6);}
-      if(s.y<half||s.y>H-half){s.vy*=-1; s.y=Math.max(half,Math.min(H-half,s.y)); shakeT=Math.max(shakeT,6);}
+      if(s.x<half||s.x>W-half){
+        s.vx*=-1;
+        s.rotSpeed*=-1;
+        s.hue=(s.hue+55)%360;
+        s.x=Math.max(half,Math.min(W-half,s.x));
+        shakeT=Math.max(shakeT,6);
+        bombFlash=Math.max(bombFlash,0.18);
+      }
+      if(s.y<half||s.y>H-half){
+        s.vy*=-1;
+        s.rotSpeed*=-1;
+        s.hue=(s.hue+85)%360;
+        s.y=Math.max(half,Math.min(H-half,s.y));
+        shakeT=Math.max(shakeT,6);
+        bombFlash=Math.max(bombFlash,0.18);
+      }
       s.renderPoints=s.points.map(p=>({
         x:s.x+(p.x*Math.cos(s.rot)-p.y*Math.sin(s.rot))*s.scale,
         y:s.y+(p.x*Math.sin(s.rot)+p.y*Math.cos(s.rot))*s.scale
