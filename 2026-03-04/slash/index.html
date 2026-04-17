@@ -18,6 +18,7 @@
   #scoreTxt { color:#e0c0ff; text-shadow:0 0 10px #a060ff; transition:text-shadow 0.2s; }
   #scoreTxt.pulse { text-shadow:0 0 20px #e080ff, 0 0 40px #a060ff; }
   #lvlTxt { color:#c0a0ff; text-shadow:0 0 10px #8040cc; }
+  #goalTxt { position:fixed; top:42px; right:16px; font-size:12px; letter-spacing:2px; color:#a8d8ff; text-shadow:0 0 10px #5ab8ff; z-index:11; pointer-events:none; }
   #styleTxt { position:fixed; top:42px; left:16px; font-size:12px; letter-spacing:2px; color:#ffd78a; text-shadow:0 0 10px #ffb85c; z-index:11; pointer-events:none; }
   #sealHp { font-size:18px; }
   #bombBar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; color:#8060aa; z-index:10; pointer-events:none; }
@@ -68,9 +69,10 @@
   <span class="stat" id="lvlTxt">LEVEL 1</span>
 </div>
 <div id="styleTxt">STYLE: CLEAN</div>
+<div id="goalTxt"></div>
 <div id="combo"></div>
 <div id="bombBar">
-  CIRCLE BOMB: <span id="bombTrack"><span id="bombFill" style="width:100%"></span></span>&nbsp;READY
+  CIRCLE BOMB: <span id="bombTrack"><span id="bombFill" style="width:100%"></span></span>&nbsp;<span id="bombStatus">READY</span>
 </div>
 <canvas id="c"></canvas>
 <div id="overlay">
@@ -144,6 +146,7 @@ const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
 const GAME_VERSION='v0.4.1';
 const GAME_BUILD='2026-04-17';
+const FINAL_TARGET_SCORE=1200;
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
 resize();
@@ -174,6 +177,7 @@ let perfectCircleWindow=0;
 let perfectCircles=0;
 let nextBossScore=300;
 let bossActive=false;
+let gameWon=false;
 const HS_KEY='slash_rune_cutter_highscores';
 const SCORES_API='https://game-scores.jez237.workers.dev/scores/slash-rune-cutter';
 const INITIAL_CHARS='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -530,8 +534,29 @@ function initGame(){
   bombFlash=0; circleHint=0; circleHintData=null;
   stylePoints=0; styleRank='CLEAN'; perfectCircleWindow=0; perfectCircles=0;
   nextBossScore=300; bossActive=false;
+  gameWon=false;
   pendingScoreSubmission=null;
   initBgParticles();
+}
+
+function hasLivingBoss(){ return enemies.some(e=>e.alive && e.isBoss); }
+
+function victoryGame(){
+  if(gameWon) return;
+  gameWon=true;
+  gameActive=false;
+  bossActive=false;
+  stopMusic();
+  playLevelUp();
+  comboFlash=1;
+  bombFlash=1;
+  document.getElementById('endTitle').textContent='SEAL PRESERVED';
+  document.getElementById('endTitle').style.color='#ffe28a';
+  document.getElementById('endSub').textContent=`Score: ${score} · Level ${level} Complete · Style ${styleRank} · Perfect Circles ${perfectCircles}`;
+  pendingScoreSubmission=isHighScore(score)?{initials:currentInitials(),score,level,comboMax:maxCombo,styleRank,perfectCircles,ts:Date.now()}:null;
+  document.getElementById('scoreEntry').style.display=pendingScoreSubmission?'block':'none';
+  renderLeaderboard(document.getElementById('endLeaderboard'), pendingScoreSubmission&&pendingScoreSubmission.ts);
+  document.getElementById('endMsg').style.display='flex';
 }
 
 function spawnEnemy(isEcho=false){
@@ -1195,6 +1220,7 @@ function resolveSlash(pts){
             addStyle(55);
             addScorePopup(e.x,e.y-54,'BOSS SLAIN');
             for(let b=0;b<3;b++) spawnBurst(e.x,e.y,e.colorIdx,22);
+            if(level===3 && score>=FINAL_TARGET_SCORE) addScorePopup(W/2-70,110,'FINAL SEAL PHASE');
           }
           if(e.splitter){
             spawnSplitChildren(e);
@@ -1269,6 +1295,9 @@ function updateLevel(){
     updateMusicTempo();
     // Level up flash
     comboFlash=1;
+  }
+  if(level===3 && score>=FINAL_TARGET_SCORE && !bossActive && !hasLivingBoss()){
+    victoryGame();
   }
 }
 
@@ -1372,10 +1401,11 @@ function loop(ts){
   if(comboCount>1){scoreTxt.classList.add('pulse');} else {scoreTxt.classList.remove('pulse');}
   document.getElementById('lvlTxt').textContent=`LEVEL ${level}`;
   document.getElementById('styleTxt').textContent=`STYLE: ${styleRank}${perfectCircleWindow>0?' ✦':''}`;
+  document.getElementById('goalTxt').textContent=level===3?`FINAL ${Math.max(0,FINAL_TARGET_SCORE-score)} TO GO`:'';
   document.getElementById('sealHp').textContent='\u{1F52E}'.repeat(sealHP)+'\u{1F480}'.repeat(5-sealHP);
   const bombPct=(bombCooldown<=0?1:1-bombCooldown/BOMB_MAX)*100;
   document.getElementById('bombFill').style.width=bombPct+'%';
-  document.getElementById('bombBar').lastChild.textContent=bombCooldown<=0?'READY':'CHARGING';
+  document.getElementById('bombStatus').textContent=bombCooldown<=0?'READY':`${(bombCooldown/1000).toFixed(1)}s`;
 
   requestAnimationFrame(loop);
 }
