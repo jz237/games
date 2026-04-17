@@ -143,7 +143,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.41';
+const GAME_VERSION='v0.4.42';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -390,7 +390,7 @@ function playSlash(){
     g.gain.exponentialRampToValueAtTime(0.001,now+0.12);
     noise.connect(bp); bp.connect(g); g.connect(masterGain);
     noise.start(now); noise.stop(now+0.12);
-    playGhostEcho(640,0.02,0.06,0.26);
+    playGhostEcho(640,0.015,0.11,0.52);
   }catch(e){}
 }
 
@@ -442,7 +442,7 @@ function playHit(comboIdx, kind='normal'){
     ng.gain.exponentialRampToValueAtTime(0.001,now+(kind==='boss'?0.24:kind==='bomb'?0.14:0.12));
     noise.connect(ng); ng.connect(masterGain);
     noise.start(now); noise.stop(now+(kind==='boss'?0.24:kind==='bomb'?0.14:0.12));
-    playGhostEcho(baseFreq*(kind==='boss'?0.82:kind==='bomb'?1.02:0.94),0.03,kind==='boss'?0.06:kind==='bomb'?0.04:0.035,kind==='boss'?0.28:0.2);
+    playGhostEcho(baseFreq*(kind==='boss'?0.82:kind==='bomb'?1.02:0.94),0.025,kind==='boss'?0.12:kind==='bomb'?0.08:0.07,kind==='boss'?0.56:0.42);
   }catch(e){}
 }
 
@@ -514,7 +514,7 @@ function playPowerup(){
     osc.connect(g); g.connect(masterGain);
     osc.start(now); osc.stop(now+0.22);
     lfo.start(now); lfo.stop(now+0.22);
-    playGhostEcho(720,0.04,0.08,0.34);
+    playGhostEcho(720,0.03,0.14,0.7);
   }catch(e){}
 }
 
@@ -572,7 +572,7 @@ function playBossDeath(){
       osc.connect(g); g.connect(masterGain);
       osc.start(now+i*0.04); osc.stop(now+i*0.04+0.28);
     });
-    playGhostEcho(220,0.06,0.12,0.42);
+    playGhostEcho(220,0.04,0.22,0.95);
   }catch(e){}
 }
 
@@ -597,19 +597,22 @@ function playDemoBeat(kind='tick'){
     const osc=audioCtx.createOscillator();
     const osc2=audioCtx.createOscillator();
     osc.type=kind==='bomb'?'sawtooth':kind==='slash'?'triangle':'square';
-    osc2.type='triangle';
-    const base=kind==='bomb'?140:kind==='slash'?620:220;
+    osc2.type=kind==='bomb'?'triangle':'sawtooth';
+    const base=kind==='bomb'?160:kind==='slash'?520:kind==='tick'?180:260;
     osc.frequency.setValueAtTime(base,now);
-    osc.frequency.exponentialRampToValueAtTime(kind==='bomb'?70:kind==='slash'?260:160,now+(kind==='bomb'?0.18:0.08));
-    osc2.frequency.setValueAtTime(base*1.5,now);
-    osc2.frequency.exponentialRampToValueAtTime(base*0.9,now+0.1);
+    osc.frequency.exponentialRampToValueAtTime(kind==='bomb'?82:kind==='slash'?210:120,now+(kind==='bomb'?0.26:0.14));
+    osc2.frequency.setValueAtTime(base*(kind==='tick'?1.333:1.5),now);
+    osc2.frequency.exponentialRampToValueAtTime(base*0.74,now+(kind==='bomb'?0.22:0.16));
     const g=audioCtx.createGain();
     g.gain.setValueAtTime(0.001,now);
-    g.gain.linearRampToValueAtTime(kind==='bomb'?0.08:0.045,now+0.01);
-    g.gain.exponentialRampToValueAtTime(0.001,now+(kind==='bomb'?0.2:0.11));
+    g.gain.linearRampToValueAtTime(kind==='bomb'?0.1:kind==='slash'?0.075:0.05,now+0.01);
+    g.gain.exponentialRampToValueAtTime(0.001,now+(kind==='bomb'?0.32:0.18));
     osc.connect(g); osc2.connect(g); g.connect(masterGain);
     osc.start(now); osc2.start(now);
-    osc.stop(now+(kind==='bomb'?0.22:0.12)); osc2.stop(now+0.12);
+    osc.stop(now+(kind==='bomb'?0.34:0.2)); osc2.stop(now+(kind==='bomb'?0.28:0.18));
+    if(kind==='tick') playGhostEcho(base*1.2,0.04,0.06,0.48);
+    if(kind==='slash') playGhostEcho(base*0.9,0.03,0.09,0.62);
+    if(kind==='bomb') playGhostEcho(base*0.78,0.05,0.12,0.88);
   }catch(e){}
 }
 
@@ -661,6 +664,20 @@ function startMusic(){
         g.gain.exponentialRampToValueAtTime(0.001,now+0.3);
         osc.connect(g); g.connect(musicGain);
         osc.start(now); osc.stop(now+0.3);
+      }
+      if(step%8===2 || step%8===5){
+        const pad=audioCtx.createOscillator();
+        pad.type='triangle';
+        const padFreq=[220,261.6,196][Math.floor(step/2)%3];
+        pad.frequency.setValueAtTime(padFreq,now);
+        pad.frequency.exponentialRampToValueAtTime(padFreq*0.98,now+0.5);
+        const pg=audioCtx.createGain();
+        pg.gain.setValueAtTime(0.001,now);
+        pg.gain.linearRampToValueAtTime(0.04,now+0.08);
+        pg.gain.exponentialRampToValueAtTime(0.001,now+0.6);
+        pad.connect(pg); pg.connect(musicGain);
+        pad.start(now); pad.stop(now+0.62);
+        playGhostEcho(padFreq*0.9,0.08,0.035,0.9);
       }
       step++;
     }catch(e){}
