@@ -120,7 +120,7 @@
     <div id="endLeaderboard"></div>
   </div>
   <div class="panelActions">
-    <button id="restartBtn">RESTART</button>
+    <button id="restartBtn">HOME</button>
     <button id="endScoresBtn" class="secondaryBtn">FULL SCORES</button>
   </div>
 </div>
@@ -140,7 +140,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.20';
+const GAME_VERSION='v0.4.21';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -154,8 +154,8 @@ const ENEMY_SHAPES=[3,4,5,6];
 
 let enemies=[], particles=[], slashes=[], ripples=[], scorePopups=[], bgParticles=[], bgGridPhase=0;
 let sealHP=5, score=0, level=1, gameActive=false;
-let bombCooldown=0, BOMB_MAX=15000;
-let sigilCooldown=0, SIGIL_MAX=7500;
+let bombCooldown=0, BOMB_MAX=7500;
+let sigilCooldown=0, SIGIL_MAX=3750;
 let slashPoints=[], drawing=false;
 let sigilCharge=0;
 let shakeX=0,shakeY=0,shakeT=0;
@@ -2091,8 +2091,9 @@ function restartGame(){
   document.getElementById('medalLine').style.display='none';
   document.getElementById('victoryStats').style.display='none';
   closeScoresPanel();
-  initGame();
-  startMusic();
+  stopMusic();
+  gameActive=false;
+  document.getElementById('overlay').style.display='flex';
 }
 
 async function submitScoreEntry(){
