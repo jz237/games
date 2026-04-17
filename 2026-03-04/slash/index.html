@@ -134,7 +134,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.17';
+const GAME_VERSION='v0.4.18';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -1257,12 +1257,12 @@ function drawSlashes(){
       `hsla(${(s.hue+145)%360},100%,62%,1)`
     ];
     s.trail.forEach((t,idx)=>{
-      const alpha=(idx+1)/Math.max(1,s.trail.length)*s.life*0.34;
+      const alpha=(idx+1)/Math.max(1,s.trail.length)*s.life*0.18;
       ctx.globalAlpha=alpha;
       colors.forEach((color,cIdx)=>{
         ctx.strokeStyle=color;
         ctx.shadowColor=color; ctx.shadowBlur=24;
-        ctx.lineWidth=12-cIdx*3;
+        ctx.lineWidth=9-cIdx*2;
         ctx.beginPath();
         t.points.forEach((p,j)=>j===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
         ctx.stroke();
@@ -1907,7 +1907,7 @@ function loop(ts){
         y:s.y+(p.x*Math.sin(s.rot)+p.y*Math.cos(s.rot))*s.scale
       }));
       s.trail.push({points:s.renderPoints.map(p=>({x:p.x,y:p.y}))});
-      if(s.trail.length>14) s.trail.shift();
+      if(s.trail.length>7) s.trail.shift();
       if(s.hitClock<=0){
         let didHit=false;
         enemies.forEach(e=>{
