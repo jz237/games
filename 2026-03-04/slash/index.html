@@ -127,7 +127,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.10';
+const GAME_VERSION='v0.4.11';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -291,7 +291,9 @@ function initTitleScene(){
       r:18+(i%3)*5,
       colorIdx:i%ENEMY_COLORS.length,
       phase:Math.random()*Math.PI*2,
-      speed:0.0012+Math.random()*0.0008
+      speed:0.0012+Math.random()*0.0008,
+      orbit:0.34+Math.random()*0.12,
+      bob:0.16+Math.random()*0.08
     });
   }
 }
@@ -841,12 +843,14 @@ function drawBackground(){
 
   if(!gameActive && document.getElementById('overlay').style.display!=='none'){
     const tt=Date.now()*0.001;
+    const demoSlash=tt%3.2;
+    const demoBomb=Math.max(0,1-Math.abs((tt%5.4)-2.7)/0.55);
     ctx.save();
-    ctx.globalAlpha=0.75;
+    ctx.globalAlpha=0.88;
     titleScene.forEach((e,idx)=>{
       const ang=e.phase+tt*e.speed*1000;
-      const x=W/2+Math.cos(ang)*(Math.min(W,H)*0.34+idx*4);
-      const y=H/2+Math.sin(ang*1.2)*(Math.min(W,H)*0.2+idx*3);
+      const x=W/2+Math.cos(ang)*(Math.min(W,H)*e.orbit+idx*4);
+      const y=H/2+Math.sin(ang*1.2)*(Math.min(W,H)*e.bob+idx*3);
       const grad=ctx.createRadialGradient(x,y,2,x,y,e.r*2.4);
       grad.addColorStop(0,'rgba(255,255,255,0.2)');
       grad.addColorStop(0.4,ENEMY_COLORS[e.colorIdx]+'aa');
@@ -857,10 +861,20 @@ function drawBackground(){
       ctx.lineWidth=2;
       ctx.beginPath();
       for(let s=0;s<6;s++){
-        const a=s/6*Math.PI*2+tt*0.4;
+        const a=s/6*Math.PI*2+tt*0.4+(idx%2?demoSlash*0.7:0);
         s===0?ctx.moveTo(x+e.r*Math.cos(a),y+e.r*Math.sin(a)):ctx.lineTo(x+e.r*Math.cos(a),y+e.r*Math.sin(a));
       }
       ctx.closePath(); ctx.stroke();
+      if(demoSlash>2.15 && demoSlash<2.55 && idx===2){
+        ctx.globalCompositeOperation='lighter';
+        ctx.strokeStyle='rgba(255,255,255,0.9)';
+        ctx.shadowColor='#9ce6ff'; ctx.shadowBlur=18;
+        ctx.lineWidth=3;
+        ctx.beginPath();
+        ctx.moveTo(x-e.r*2.2,y-e.r*1.6);
+        ctx.lineTo(x+e.r*2.1,y+e.r*1.5);
+        ctx.stroke();
+      }
     });
     const slashY=H*0.38+Math.sin(tt*1.4)*H*0.08;
     ctx.globalCompositeOperation='lighter';
@@ -878,6 +892,17 @@ function drawBackground(){
     ctx.lineWidth=4;
     ctx.shadowColor='#ffd76a'; ctx.shadowBlur=18;
     ctx.beginPath(); ctx.arc(W/2,H/2,34+Math.sin(tt*2)*4,0,Math.PI*2); ctx.stroke();
+    if(demoBomb>0){
+      const br=60+demoBomb*160;
+      ctx.globalAlpha=demoBomb*0.65;
+      ctx.strokeStyle='rgba(255,230,170,0.95)';
+      ctx.shadowColor='#ffd36a'; ctx.shadowBlur=28;
+      ctx.lineWidth=10;
+      ctx.beginPath(); ctx.arc(W/2,H/2,br,0,Math.PI*2); ctx.stroke();
+      ctx.strokeStyle='rgba(210,150,255,0.6)';
+      ctx.lineWidth=4;
+      ctx.beginPath(); ctx.arc(W/2,H/2,br+18,0,Math.PI*2); ctx.stroke();
+    }
     ctx.restore();
   }
 }
@@ -902,6 +927,15 @@ function drawSeal(){
 
   ctx.save();
   ctx.translate(cx,cy);
+  // Core plate
+  ctx.save();
+  const plate=ctx.createRadialGradient(0,0,4,0,0,30);
+  plate.addColorStop(0,'rgba(255,255,255,0.65)');
+  plate.addColorStop(0.45,'rgba(90,180,255,0.28)');
+  plate.addColorStop(1,'rgba(70,40,140,0.08)');
+  ctx.fillStyle=plate;
+  ctx.beginPath(); ctx.arc(0,0,30,0,Math.PI*2); ctx.fill();
+  ctx.restore();
   // Shield ring
   ctx.save();
   ctx.strokeStyle=`rgba(${Math.floor(80+hp*120)},${Math.floor(120+hp*90)},255,${0.45+hp*0.35})`;
@@ -910,6 +944,11 @@ function drawSeal(){
   ctx.lineWidth=8;
   ctx.beginPath();
   ctx.arc(0,0,36,-Math.PI/2,-Math.PI/2+Math.PI*2*hp);
+  ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,0.18)';
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.arc(0,0,36,0,Math.PI*2);
   ctx.stroke();
   ctx.restore();
   // Outer rings
@@ -926,24 +965,26 @@ function drawSeal(){
     }
     ctx.closePath(); ctx.stroke();
   }
-  // Center gem
+  // Center core ship
   ctx.shadowColor=`rgba(${255*(1-hp)},${100*hp},${255*hp},1)`; ctx.shadowBlur=25*pulse;
-  // Center ship body
   ctx.rotate(Math.sin(t*1.4)*0.08);
-  ctx.fillStyle=`rgba(${Math.floor(200*(1-hp)+55)},${Math.floor(130+80*hp)},${Math.floor(255*hp)},0.92)`;
+  ctx.fillStyle='rgba(180,235,255,0.95)';
   ctx.beginPath();
-  ctx.moveTo(0,-18);
-  ctx.lineTo(11,10);
-  ctx.lineTo(4,8);
+  ctx.moveTo(0,-16);
+  ctx.lineTo(12,-2);
+  ctx.lineTo(10,12);
   ctx.lineTo(0,18);
-  ctx.lineTo(-4,8);
-  ctx.lineTo(-11,10);
+  ctx.lineTo(-10,12);
+  ctx.lineTo(-12,-2);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle='rgba(255,255,255,0.85)';
-  ctx.beginPath(); ctx.arc(0,-4,4,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='rgba(120,220,255,0.8)';
-  ctx.beginPath(); ctx.moveTo(-4,15); ctx.lineTo(0,26+pulse*4); ctx.lineTo(4,15); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.95)';
+  ctx.beginPath(); ctx.arc(0,-3,4.5,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=hp>0.4?'rgba(120,255,220,0.85)':'rgba(255,120,160,0.92)';
+  ctx.beginPath(); ctx.moveTo(-3,14); ctx.lineTo(0,25+pulse*4); ctx.lineTo(3,14); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,0.35)';
+  ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(-7,4); ctx.lineTo(7,4); ctx.stroke();
 
   // Energy aura for combo
   if(comboCount>1){
