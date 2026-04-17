@@ -143,7 +143,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.46';
+const GAME_VERSION='v0.4.47';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -665,7 +665,7 @@ function createSigilHum(){
     const now=audioCtx.currentTime;
     const oscA=audioCtx.createOscillator();
     const oscB=audioCtx.createOscillator();
-    const drift=0.88+Math.random()*0.28;
+    const drift=0.78+Math.random()*0.44;
     oscA.type='triangle';
     oscB.type='sine';
     oscA.frequency.setValueAtTime(260*drift,now);
@@ -796,6 +796,29 @@ function initGame(){
   shieldImpact=0; shieldImpactAngle=-Math.PI/2;
   pendingScoreSubmission=null;
   initBgParticles();
+}
+
+function resetToHomeScene(){
+  sigilLines.forEach(s=>{ if(s.hum) stopSigilHum(s.hum); });
+  enemies=[];
+  particles=[];
+  slashes=[];
+  ripples=[];
+  scorePopups.forEach(sp=>sp.el&&sp.el.remove&&sp.el.remove());
+  scorePopups=[];
+  sigilLines=[];
+  bossTrails=[];
+  fractureLines=[];
+  fractureFlash=0;
+  gravityWell=null;
+  drawing=false;
+  slashPoints=[];
+  pointerStart=null;
+  holdTriggered=false;
+  if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; }
+  shakeT=0; shakeX=0; shakeY=0;
+  comboFlash=0; bombFlash=0; circleHint=0; circleHintData=null;
+  initTitleScene();
 }
 
 function triggerFracture(x,y,intensity=1){
@@ -2346,6 +2369,7 @@ function restartGame(){
   closeScoresPanel();
   stopMusic();
   gameActive=false;
+  resetToHomeScene();
   document.getElementById('overlay').style.display='flex';
 }
 
