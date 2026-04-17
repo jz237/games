@@ -22,8 +22,11 @@
   #styleTxt { position:fixed; top:42px; left:16px; font-size:12px; letter-spacing:2px; color:#ffd78a; text-shadow:0 0 10px #ffb85c; z-index:11; pointer-events:none; }
   #sealHp { font-size:18px; }
   #bombBar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; color:#8060aa; z-index:10; pointer-events:none; }
+  #sigilBar { position:fixed; bottom:44px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:3px; color:#76e8ff; z-index:10; pointer-events:none; }
   #bombFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#8040cc,#e080ff); box-shadow:0 0 10px #a060ff; transition:width 0.1s; vertical-align:middle; }
+  #sigilFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#3aa8ff,#8afff4); box-shadow:0 0 10px #66d8ff; transition:width 0.1s; vertical-align:middle; }
   #bombTrack { display:inline-block; width:140px; height:6px; background:rgba(80,40,120,0.3); border-radius:3px; vertical-align:middle; overflow:hidden; }
+  #sigilTrack { display:inline-block; width:120px; height:6px; background:rgba(22,70,110,0.35); border-radius:3px; vertical-align:middle; overflow:hidden; }
   #overlay { position:fixed; inset:0; background:rgba(2,0,6,0.72); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:20; backdrop-filter:blur(4px); }
   #overlay h1 { font-size:52px; color:#e080ff; letter-spacing:8px; text-shadow:0 0 30px #c040ff,0 0 80px #6020aa; }
   #overlay p { color:#a070c0; font-size:14px; text-align:center; max-width:340px; line-height:2; margin-top:16px; }
@@ -71,6 +74,9 @@
 <div id="styleTxt">STYLE: CLEAN</div>
 <div id="goalTxt"></div>
 <div id="combo"></div>
+<div id="sigilBar">
+  SHIELD CHARGE: <span id="sigilTrack"><span id="sigilFill" style="width:0%"></span></span>&nbsp;<span id="sigilStatus">0%</span>
+</div>
 <div id="bombBar">
   CIRCLE BOMB: <span id="bombTrack"><span id="bombFill" style="width:100%"></span></span>&nbsp;<span id="bombStatus">READY</span>
 </div>
@@ -81,8 +87,9 @@
   <b style="color:#e0b0ff">SWIPE</b> across enemies to cut them down.<br>
   Cut multiple in one stroke for combos!<br>
   <b style="color:#ffe080">Draw a CIRCLE</b> to summon a divine bomb.<br>
+  <b style="color:#8fefff">Draw an S</b> to cast a Quix sigil lash.<br>
   Don't let them reach the center seal!<br><br>
-  <span style="color:#b080e0">Glowing shields = needs 2 hits · Echo ghosts = still dangerous!</span></p>
+  <span style="color:#b080e0">Glowing shields = needs 2 hits · Echo ghosts = still dangerous · full shield charge restores 1 core HP</span></p>
   <p style="margin-top:12px;color:#40304a;font-size:12px">3 LEVELS · 500+ PTS TO MASTER</p>
   <div class="versionTag" id="versionTag">VERSION</div>
   <div class="buildTag" id="buildTag">BUILD</div>
@@ -127,7 +134,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.14';
+const GAME_VERSION='v0.4.15';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -143,6 +150,7 @@ let enemies=[], particles=[], slashes=[], ripples=[], scorePopups=[], bgParticle
 let sealHP=5, score=0, level=1, gameActive=false;
 let bombCooldown=0, BOMB_MAX=15000;
 let slashPoints=[], drawing=false;
+let sigilCharge=0;
 let shakeX=0,shakeY=0,shakeT=0;
 let comboFlash=0, comboCount=0, comboTimer=0;
 let maxCombo=1;
@@ -167,6 +175,7 @@ let fractureFlash=0;
 let fractureLines=[];
 let shieldImpact=0;
 let shieldImpactAngle=-Math.PI/2;
+let sigilLines=[];
 const LEVEL_THEMES=[
   {bg:'#030008', grid:'#4020aa', swirl:'#6030aa', vignette:0.35, overlay:'rgba(120,40,220,0.06)'},
   {bg:'#04101a', grid:'#1d5aa8', swirl:'#1e7cd8', vignette:0.28, overlay:'rgba(70,180,255,0.07)'},
@@ -620,7 +629,7 @@ muteBtn.addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation();t
 function initGame(){
   enemies=[]; particles=[]; slashes=[]; ripples=[]; scorePopups=[];
   sealHP=5; score=0; level=1; lastLevel=1; gameActive=true;
-  bombCooldown=0; drawing=false; slashPoints=[];
+  bombCooldown=0; drawing=false; slashPoints=[]; sigilCharge=0; sigilLines=[];
   shakeT=0; spawnTimer=0; comboCount=0; comboTimer=0; maxCombo=1; slowMo=0;
   bombFlash=0; circleHint=0; circleHintData=null;
   stylePoints=0; styleRank='CLEAN'; perfectCircleWindow=0; perfectCircles=0;
@@ -1237,6 +1246,26 @@ function drawEnemies(){
 }
 
 function drawSlashes(){
+  for(let i=sigilLines.length-1;i>=0;i--){
+    const s=sigilLines[i];
+    s.life-=0.03;
+    if(s.life<=0){sigilLines.splice(i,1);continue;}
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    ctx.globalAlpha=s.life*0.8;
+    ctx.strokeStyle='rgba(120,240,255,0.9)';
+    ctx.shadowColor='#7df4ff'; ctx.shadowBlur=24;
+    ctx.lineWidth=8; ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.beginPath();
+    s.points.forEach((p,idx)=>idx===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+    ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.95)';
+    ctx.lineWidth=2;
+    ctx.setLineDash([12,10]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
   for(let i=slashes.length-1;i>=0;i--){
     const s=slashes[i];
     s.life-=0.02;
@@ -1304,6 +1333,22 @@ function drawSlashes(){
         ctx.textAlign='center';
         ctx.fillText('SUPER BOMB',circleHintData.cx,circleHintData.cy-circleHintData.r-14);
       }
+    }
+    else if(isSGesture(slashPoints)){
+      const first=slashPoints[0], last=slashPoints[slashPoints.length-1];
+      ctx.strokeStyle='rgba(130,245,255,0.9)';
+      ctx.shadowColor='#7ef2ff'; ctx.shadowBlur=18;
+      ctx.lineWidth=3;
+      ctx.setLineDash([10,8]);
+      ctx.beginPath();
+      ctx.moveTo(first.x,first.y);
+      ctx.quadraticCurveTo((first.x+last.x)/2-20,(first.y+last.y)/2,last.x,last.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle='rgba(160,250,255,0.95)';
+      ctx.font='bold 14px Courier New';
+      ctx.textAlign='center';
+      ctx.fillText('QUIX SIGIL',(first.x+last.x)/2,Math.min(first.y,last.y)-12);
     }
     ctx.restore();
   }
@@ -1499,6 +1544,87 @@ function getPerfectCircleQuality(data){
   return aspect*0.45 + closure*0.35 + circumferenceFit*0.2;
 }
 
+function isSGesture(pts){
+  if(pts.length<8) return false;
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  let turnChanges=0, lastSign=0;
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    if(p.x<minX) minX=p.x; if(p.x>maxX) maxX=p.x;
+    if(p.y<minY) minY=p.y; if(p.y>maxY) maxY=p.y;
+    if(i>1){
+      const ax=pts[i-1].x-pts[i-2].x, ay=pts[i-1].y-pts[i-2].y;
+      const bx=p.x-pts[i-1].x, by=p.y-pts[i-1].y;
+      const cross=ax*by-ay*bx;
+      const sign=Math.sign(cross);
+      if(sign && lastSign && sign!==lastSign) turnChanges++;
+      if(sign) lastSign=sign;
+    }
+  }
+  const width=maxX-minX, height=maxY-minY;
+  if(width<38 || height<52) return false;
+  const start=pts[0], end=pts[pts.length-1];
+  const horizontalTravel=Math.abs(end.x-start.x);
+  const verticalTravel=Math.abs(end.y-start.y);
+  return turnChanges>=2 && height>width*0.8 && verticalTravel>height*0.55 && horizontalTravel>width*0.28;
+}
+
+function addShieldCharge(amount){
+  const prev=sigilCharge;
+  sigilCharge=Math.min(100,sigilCharge+amount);
+  if(prev<100 && sigilCharge>=100 && sealHP<5){
+    sealHP++;
+    sigilCharge=0;
+    shieldImpact=1;
+    shieldImpactAngle=-Math.PI/2;
+    addScorePopup(W/2-70,H/2-84,'SHIELD RESTORED');
+    comboFlash=1;
+  }
+}
+
+function triggerSigil(pts){
+  playPowerup();
+  addStyle(24);
+  const simplified=[];
+  const step=Math.max(1,Math.floor(pts.length/10));
+  for(let i=0;i<pts.length;i+=step) simplified.push(pts[i]);
+  if(simplified[simplified.length-1]!==pts[pts.length-1]) simplified.push(pts[pts.length-1]);
+  sigilLines.push({points:simplified,life:1});
+  let hits=0;
+  enemies.forEach(e=>{
+    if(!e.alive) return;
+    for(let i=1;i<simplified.length;i++){
+      const a=simplified[i-1], b=simplified[i];
+      const dx=b.x-a.x, dy=b.y-a.y;
+      const len=Math.hypot(dx,dy);
+      if(!len) continue;
+      const t=Math.max(0,Math.min(1,((e.x-a.x)*dx+(e.y-a.y)*dy)/(len*len)));
+      const nx=a.x+t*dx, ny=a.y+t*dy;
+      if(Math.hypot(e.x-nx,e.y-ny)<e.r+22){
+        e.hp-=e.isBoss?2:1;
+        hits++;
+        spawnBurst(e.x,e.y,e.colorIdx,e.isBoss?14:10);
+        if(e.hp<=0){
+          e.alive=false;
+          if(e.isBoss){ bossActive=false; playBossDeath(); score+=180; addStyle(38); }
+          else{ score+=14; }
+          addShieldCharge(e.isBoss?32:12);
+          addScorePopup(e.x,e.y-26,e.isBoss?'SIGIL BREAK':'SIGIL HIT');
+        }else{
+          playHit(hits,e.isBoss?'boss':'normal');
+        }
+        break;
+      }
+    }
+  });
+  if(hits>0){
+    shakeT=14;
+    bombFlash=Math.max(bombFlash,0.45);
+    addScorePopup(W/2-54,H/2-64,'QUIX SIGIL');
+    updateLevel();
+  }
+}
+
 function updateCircleHint(){
   if(!drawing || slashPoints.length<6){circleHint=Math.max(0,circleHint-0.08); return;}
   const data=getCircleMetrics(slashPoints);
@@ -1604,6 +1730,10 @@ function resolveSlash(pts){
     if(bombCooldown<=0) triggerBomb();
     return;
   }
+  if(isSGesture(pts)){
+    triggerSigil(pts);
+    return;
+  }
   playSlash();
   addStyle(4);
   spawnSlashSparks(pts);
@@ -1647,6 +1777,7 @@ function resolveSlash(pts){
           }
           const pts_score=e.isBoss?0:10;
           score+=pts_score;
+          addShieldCharge(e.isBoss?18:7);
           addStyle(9);
           playHit(killCount,e.isBoss?'boss':'normal');
           addScorePopup(e.x,e.y-20,'+'+pts_score);
@@ -1837,6 +1968,8 @@ function loop(ts){
   document.getElementById('styleTxt').textContent=`STYLE: ${styleRank}${perfectCircleWindow>0?' ✦':''}`;
   document.getElementById('goalTxt').textContent=`NEXT LV ${Math.max(0,(level===1?200:level===2?500:500+(level-2)*400)-score)}`;
   document.getElementById('sealHp').textContent='\u{1F52E}'.repeat(sealHP)+'\u{1F480}'.repeat(5-sealHP);
+  document.getElementById('sigilFill').style.width=sigilCharge+'%';
+  document.getElementById('sigilStatus').textContent=sigilCharge>=100&&sealHP>=5?'MAX':`${Math.floor(sigilCharge)}%`;
   const bombPct=(bombCooldown<=0?1:1-bombCooldown/BOMB_MAX)*100;
   document.getElementById('bombFill').style.width=bombPct+'%';
   document.getElementById('bombStatus').textContent=bombCooldown<=0?'READY':`${(bombCooldown/1000).toFixed(1)}s`;
