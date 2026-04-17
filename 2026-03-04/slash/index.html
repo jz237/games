@@ -1251,28 +1251,47 @@ function drawSlashes(){
     if(s.life<=0){sigilLines.splice(i,1);continue;}
     ctx.save();
     ctx.globalCompositeOperation='lighter';
+    const colors=[
+      `hsla(${(s.hue)%360},100%,62%,1)`,
+      `hsla(${(s.hue+70)%360},100%,62%,1)`,
+      `hsla(${(s.hue+145)%360},100%,62%,1)`
+    ];
     s.trail.forEach((t,idx)=>{
-      const alpha=(idx+1)/s.trail.length*s.life*0.2;
+      const alpha=(idx+1)/Math.max(1,s.trail.length)*s.life*0.34;
       ctx.globalAlpha=alpha;
-      ctx.strokeStyle='rgba(80,220,255,0.7)';
-      ctx.shadowColor='#58dfff'; ctx.shadowBlur=16;
-      ctx.lineWidth=6;
+      colors.forEach((color,cIdx)=>{
+        ctx.strokeStyle=color;
+        ctx.shadowColor=color; ctx.shadowBlur=24;
+        ctx.lineWidth=12-cIdx*3;
+        ctx.beginPath();
+        t.points.forEach((p,j)=>j===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+        ctx.stroke();
+      });
+    });
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.globalAlpha=s.life;
+    colors.forEach((color,cIdx)=>{
+      ctx.strokeStyle=color;
+      ctx.shadowColor=color; ctx.shadowBlur=30-cIdx*4;
+      ctx.lineWidth=16-cIdx*4;
       ctx.beginPath();
-      t.points.forEach((p,j)=>j===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+      s.renderPoints.forEach((p,idx)=>idx===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
       ctx.stroke();
     });
-    ctx.globalAlpha=s.life*0.95;
-    ctx.strokeStyle='rgba(120,240,255,0.95)';
-    ctx.shadowColor='#7df4ff'; ctx.shadowBlur=24;
-    ctx.lineWidth=8; ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.strokeStyle='rgba(255,255,255,0.98)';
+    ctx.shadowColor='#ffffff'; ctx.shadowBlur=12;
+    ctx.lineWidth=3;
+    ctx.setLineDash([16,10]);
     ctx.beginPath();
     s.renderPoints.forEach((p,idx)=>idx===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
     ctx.stroke();
-    ctx.strokeStyle='rgba(255,255,255,0.98)';
-    ctx.lineWidth=2;
-    ctx.setLineDash([12,10]);
-    ctx.stroke();
     ctx.setLineDash([]);
+    const core=ctx.createRadialGradient(s.x,s.y,8,s.x,s.y,s.scale*0.7);
+    core.addColorStop(0,'rgba(255,255,255,0.9)');
+    core.addColorStop(0.35,`hsla(${(s.hue+70)%360},100%,62%,0.45)`);
+    core.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=core;
+    ctx.beginPath(); ctx.arc(s.x,s.y,s.scale*0.7,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
   for(let i=slashes.length-1;i>=0;i--){
@@ -1607,10 +1626,10 @@ function triggerSigil(pts){
   sigilLines.push({
     points:localPoints,
     x:cx,y:cy,
-    vx:Math.cos(ang)*4.2,vy:Math.sin(ang)*4.2,
-    life:1,duration:210,
-    rot:0,rotSpeed:(Math.random()<0.5?-1:1)*0.08,
-    scale:42,trail:[],hitClock:0
+    vx:Math.cos(ang)*5.6,vy:Math.sin(ang)*5.6,
+    life:1,duration:360,maxDuration:360,
+    rot:0,rotSpeed:(Math.random()<0.5?-1:1)*0.11,
+    scale:78,trail:[],hitClock:0,hue:Math.random()*360
   });
   shakeT=14;
   bombFlash=Math.max(bombFlash,0.45);
@@ -1861,7 +1880,7 @@ function loop(ts){
     for(let i=sigilLines.length-1;i>=0;i--){
       const s=sigilLines[i];
       s.duration-=dt*timeScale;
-      s.life=Math.max(0,s.duration/210);
+      s.life=Math.max(0,s.duration/s.maxDuration);
       s.hitClock=Math.max(0,s.hitClock-dt*timeScale);
       s.x+=s.vx*timeScale;
       s.y+=s.vy*timeScale;
@@ -1874,7 +1893,7 @@ function loop(ts){
         y:s.y+(p.x*Math.sin(s.rot)+p.y*Math.cos(s.rot))*s.scale
       }));
       s.trail.push({points:s.renderPoints.map(p=>({x:p.x,y:p.y}))});
-      if(s.trail.length>8) s.trail.shift();
+      if(s.trail.length>14) s.trail.shift();
       if(s.hitClock<=0){
         let didHit=false;
         enemies.forEach(e=>{
@@ -1897,7 +1916,7 @@ function loop(ts){
                 addScorePopup(e.x,e.y-26,e.isBoss?'SIGIL BREAK':'SIGIL HIT');
                 updateLevel();
               }
-              s.hitClock=90;
+              s.hitClock=24;
               didHit=true;
               break;
             }
