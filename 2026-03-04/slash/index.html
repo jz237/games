@@ -143,7 +143,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.35';
+const GAME_VERSION='v0.4.36';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -1687,9 +1687,20 @@ function isSGesture(pts){
   const width=maxX-minX, height=maxY-minY;
   if(width<38 || height<52) return false;
   const start=pts[0], end=pts[pts.length-1];
+  const closeDist=Math.hypot(end.x-start.x,end.y-start.y);
   const horizontalTravel=Math.abs(end.x-start.x);
   const verticalTravel=Math.abs(end.y-start.y);
-  return turnChanges>=2 && height>width*0.8 && verticalTravel>height*0.55 && horizontalTravel>width*0.28;
+  const leftBand=minX+width*0.35;
+  const rightBand=maxX-width*0.35;
+  const startsLeft=start.x<=leftBand, startsRight=start.x>=rightBand;
+  const endsLeft=end.x<=leftBand, endsRight=end.x>=rightBand;
+  const oppositeSides=(startsLeft&&endsRight)||(startsRight&&endsLeft);
+  return turnChanges>=2
+    && height>width*0.8
+    && verticalTravel>height*0.55
+    && horizontalTravel>width*0.42
+    && closeDist>Math.max(56,width*0.6)
+    && oppositeSides;
 }
 
 function addShieldCharge(amount){
