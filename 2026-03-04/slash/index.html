@@ -127,13 +127,12 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.3';
+const GAME_VERSION='v0.4.4';
 const GAME_BUILD='2026-04-17';
 const FINAL_TARGET_SCORE=1200;
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
 resize();
-initTitleScene();
 document.getElementById('versionTag').textContent=GAME_VERSION;
 document.getElementById('buildTag').textContent=`BUILD ${GAME_BUILD}`;
 
