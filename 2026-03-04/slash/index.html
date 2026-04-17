@@ -326,6 +326,25 @@ function playSlash(){
   }catch(e){}
 }
 
+function playGhostEcho(baseFreq=320, startTime=0, gainAmount=0.08, duration=0.45){
+  if(!audioReady||muted) return;
+  try{
+    const now=audioCtx.currentTime+startTime;
+    [1,1.5,2.2].forEach((delayMul,idx)=>{
+      const osc=audioCtx.createOscillator();
+      osc.type=idx===2?'sine':'triangle';
+      osc.frequency.setValueAtTime(baseFreq*(0.7-idx*0.08+Math.random()*0.05),now+0.04*delayMul);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq*(0.32-idx*0.03),now+duration*delayMul*0.5);
+      const g=audioCtx.createGain();
+      g.gain.setValueAtTime(0.001,now+0.03*delayMul);
+      g.gain.linearRampToValueAtTime(gainAmount/(idx+1),now+0.08*delayMul);
+      g.gain.exponentialRampToValueAtTime(0.001,now+duration*delayMul);
+      osc.connect(g); g.connect(masterGain);
+      osc.start(now+0.03*delayMul); osc.stop(now+duration*delayMul+0.04);
+    });
+  }catch(e){}
+}
+
 function playHit(comboIdx, kind='normal'){
   if(!audioReady||muted) return;
   try{
@@ -352,17 +371,7 @@ function playHit(comboIdx, kind='normal'){
     osc.connect(og); og.connect(masterGain);
     osc.start(now); osc.stop(now+(kind==='boss'?0.2:0.1));
 
-    // Echo tail with pitch variation
-    const echoOsc=audioCtx.createOscillator();
-    echoOsc.type='triangle';
-    echoOsc.frequency.setValueAtTime(baseFreq*(0.65+Math.random()*0.18),now+0.06);
-    echoOsc.frequency.exponentialRampToValueAtTime(baseFreq*(0.35+Math.random()*0.12),now+(kind==='boss'?0.42:0.24));
-    const echoGain=audioCtx.createGain();
-    echoGain.gain.setValueAtTime(0.001,now+0.05);
-    echoGain.gain.linearRampToValueAtTime(kind==='boss'?0.18:0.1,now+0.08);
-    echoGain.gain.exponentialRampToValueAtTime(0.001,now+(kind==='boss'?0.45:0.28));
-    echoOsc.connect(echoGain); echoGain.connect(masterGain);
-    echoOsc.start(now+0.05); echoOsc.stop(now+(kind==='boss'?0.48:0.3));
+    playGhostEcho(baseFreq*(kind==='boss'?0.8:1),0.02,kind==='boss'?0.12:kind==='bomb'?0.09:0.07,kind==='boss'?0.62:0.42);
   }catch(e){}
 }
 
@@ -490,6 +499,7 @@ function playBossDeath(){
       osc.connect(g); g.connect(masterGain);
       osc.start(now+i*0.05); osc.stop(now+i*0.05+0.42);
     });
+    playGhostEcho(180,0.08,0.16,0.95);
   }catch(e){}
 }
 
@@ -669,9 +679,9 @@ function spawnBoss(){
   const angle=Math.atan2(H/2-y,W/2-x);
   enemies.push({
     x,y,vx:Math.cos(angle)*0.42,vy:Math.sin(angle)*0.42,
-    hp:10,maxHp:10,colorIdx:3,r:42,sides:8,
+    hp:8,maxHp:8,colorIdx:3,r:42,sides:8,
     rotation:0,rotSpeed:0.02,isEcho:false,splitter:false,alive:true,alpha:1,
-    spawnTime:Date.now(),isBoss:true,bossPhase:1,dashCooldown:150,summonCooldown:220,telegraph:0
+    spawnTime:Date.now(),isBoss:true,bossPhase:1,dashCooldown:180,summonCooldown:260,telegraph:0
   });
   bossActive=true;
   comboFlash=1;
@@ -1480,25 +1490,25 @@ function loop(ts){
           e.telegraph--;
           if(e.telegraph===1){
             const ang=Math.atan2(cy-e.y,cx-e.x);
-            const speed=3.8+e.bossPhase*0.35;
+            const speed=2.9+e.bossPhase*0.25;
             e.vx=Math.cos(ang)*speed;
             e.vy=Math.sin(ang)*speed;
             shakeT=16;
           }
         } else {
-          const desired=0.38+e.bossPhase*0.07;
-          e.vx+=(dx/(d||1))*0.012*e.bossPhase;
-          e.vy+=(dy/(d||1))*0.012*e.bossPhase;
+          const desired=0.31+e.bossPhase*0.05;
+          e.vx+=(dx/(d||1))*0.009*e.bossPhase;
+          e.vy+=(dy/(d||1))*0.009*e.bossPhase;
           const mag=Math.hypot(e.vx,e.vy)||1;
           if(mag>desired){ e.vx=(e.vx/mag)*desired; e.vy=(e.vy/mag)*desired; }
-          if(e.dashCooldown<=0 && d>110){
-            e.telegraph=26;
-            e.dashCooldown=150-e.bossPhase*18;
+          if(e.dashCooldown<=0 && d>135){
+            e.telegraph=34;
+            e.dashCooldown=185-e.bossPhase*12;
           }
           if(e.bossPhase>=2 && e.summonCooldown<=0){
             spawnBossMinions(e);
             addScorePopup(e.x,e.y-44,'SUMMON');
-            e.summonCooldown=220-e.bossPhase*35;
+            e.summonCooldown=280-e.bossPhase*25;
           }
         }
       }
