@@ -143,7 +143,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.45';
+const GAME_VERSION='v0.4.46';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -665,16 +665,17 @@ function createSigilHum(){
     const now=audioCtx.currentTime;
     const oscA=audioCtx.createOscillator();
     const oscB=audioCtx.createOscillator();
+    const drift=0.88+Math.random()*0.28;
     oscA.type='triangle';
     oscB.type='sine';
-    oscA.frequency.setValueAtTime(260,now);
-    oscB.frequency.setValueAtTime(390,now);
+    oscA.frequency.setValueAtTime(260*drift,now);
+    oscB.frequency.setValueAtTime(390*drift,now);
     const gain=audioCtx.createGain();
     gain.gain.setValueAtTime(0.001,now);
     gain.gain.linearRampToValueAtTime(0.06,now+0.04);
     oscA.connect(gain); oscB.connect(gain); gain.connect(masterGain);
     oscA.start(now); oscB.start(now);
-    return {oscA,oscB,gain};
+    return {oscA,oscB,gain,drift};
   }catch(e){ return null; }
 }
 
@@ -2148,7 +2149,7 @@ function loop(ts){
       }));
       if(s.hum && audioCtx && audioCtx.state==='running' && !muted){
         const speed=Math.hypot(s.vx,s.vy);
-        const base=220+Math.sin(s.rot*2.2)*40+speed*12;
+        const base=(220+Math.sin(s.rot*2.2)*40+speed*12)*(s.hum.drift||1);
         s.hum.oscA.frequency.setTargetAtTime(base,audioCtx.currentTime,0.04);
         s.hum.oscB.frequency.setTargetAtTime(base*1.48,audioCtx.currentTime,0.05);
         s.hum.gain.gain.setTargetAtTime(0.025+s.life*0.035,audioCtx.currentTime,0.05);
