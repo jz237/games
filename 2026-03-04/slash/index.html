@@ -81,16 +81,16 @@
 <div id="goalTxt"></div>
 <div id="combo"></div>
 <div id="wellBar">
-  GRAVITY WELL: <span id="wellTrack"><span id="wellFill" style="width:100%"></span></span>&nbsp;<span id="wellStatus">READY</span>
+  GRAVITY WELL: <span id="wellTrack"><span id="wellFill" style="width:100%"></span></span>&nbsp;<span id="wellStatus"></span>
 </div>
 <div id="sigilBar">
-  QUIX SIGIL: <span id="sigilTrack"><span id="sigilFill" style="width:100%"></span></span>&nbsp;<span id="sigilStatus">READY</span>
+  QUIX SIGIL: <span id="sigilTrack"><span id="sigilFill" style="width:100%"></span></span>&nbsp;<span id="sigilStatus"></span>
 </div>
 <div id="chargeBar">
   SHIELD CHARGE: <span id="chargeTrack"><span id="chargeFill" style="width:0%"></span></span>&nbsp;<span id="chargeStatus">0%</span>
 </div>
 <div id="bombBar">
-  CIRCLE BOMB: <span id="bombTrack"><span id="bombFill" style="width:100%"></span></span>&nbsp;<span id="bombStatus">READY</span>
+  CIRCLE BOMB: <span id="bombTrack"><span id="bombFill" style="width:100%"></span></span>&nbsp;<span id="bombStatus"></span>
 </div>
 <canvas id="c"></canvas>
 <div id="overlay">
@@ -140,7 +140,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.29';
+const GAME_VERSION='v0.4.30';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -2141,15 +2141,15 @@ function loop(ts){
   document.getElementById('sealHp').textContent='\u{1F52E}'.repeat(sealHP)+'\u{1F480}'.repeat(5-sealHP);
   const sigilPct=(sigilCooldown<=0?1:1-sigilCooldown/SIGIL_MAX)*100;
   document.getElementById('sigilFill').style.width=sigilPct+'%';
-  document.getElementById('sigilStatus').textContent=sigilCooldown<=0?'READY':`${(sigilCooldown/1000).toFixed(1)}s`;
+  document.getElementById('sigilStatus').textContent=sigilCooldown<=0?'':`${(sigilCooldown/1000).toFixed(1)}s`;
   const wellPct=(wellCooldown<=0?1:1-wellCooldown/WELL_MAX)*100;
   document.getElementById('wellFill').style.width=wellPct+'%';
-  document.getElementById('wellStatus').textContent=wellCooldown<=0?'READY':`${(wellCooldown/1000).toFixed(1)}s`;
+  document.getElementById('wellStatus').textContent=wellCooldown<=0?'':`${(wellCooldown/1000).toFixed(1)}s`;
   document.getElementById('chargeFill').style.width=sigilCharge+'%';
   document.getElementById('chargeStatus').textContent=sigilCharge>=100&&sealHP>=5?'MAX':`${Math.floor(sigilCharge)}%`;
   const bombPct=(bombCooldown<=0?1:1-bombCooldown/BOMB_MAX)*100;
   document.getElementById('bombFill').style.width=bombPct+'%';
-  document.getElementById('bombStatus').textContent=bombCooldown<=0?'READY':`${(bombCooldown/1000).toFixed(1)}s`;
+  document.getElementById('bombStatus').textContent=bombCooldown<=0?'':`${(bombCooldown/1000).toFixed(1)}s`;
 
   requestAnimationFrame(loop);
 }
@@ -2216,8 +2216,9 @@ canvas.addEventListener('pointerdown',e=>{
       drawing=false;
       slashPoints=[];
       pointerStart=null;
+      holdTimer=null;
     }
-  },340);
+  },280);
   drawing=true; slashPoints=[{x:e.clientX,y:e.clientY}];
   circleHint=0; circleHintData=null;
   ripples.push({x:e.clientX,y:e.clientY,radius:5,life:1});
@@ -2227,17 +2228,7 @@ canvas.addEventListener('pointermove',e=>{
   slashPoints.push({x:e.clientX,y:e.clientY});
   if(pointerStart && !holdTriggered){
     const dist=Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y);
-    const elapsed=performance.now()-pointerStart.t;
     if(dist>18){ pointerStart=null; if(holdTimer) { clearTimeout(holdTimer); holdTimer=null; } }
-    else if(elapsed>340 && slashPoints.length<5 && gameActive && wellCooldown<=0){
-      triggerGravityWell(pointerStart.x,pointerStart.y);
-      holdTriggered=true;
-      drawing=false;
-      slashPoints=[];
-      pointerStart=null;
-      if(holdTimer) { clearTimeout(holdTimer); holdTimer=null; }
-      return;
-    }
   }
 });
 function finishSlash(){
