@@ -59,6 +59,8 @@
   .buildTag { margin-top:6px; font-size:10px; letter-spacing:2px; color:#594774; }
   .changelogList { margin-top:14px; text-align:left; color:#d8c6f2; font-size:12px; line-height:1.7; }
   .changelogList li { margin-left:18px; }
+  .medalLine { margin-top:10px; font-size:16px; letter-spacing:3px; color:#ffe9a8; text-shadow:0 0 16px rgba(255,214,96,0.55); }
+  .victoryStats { margin-top:10px; text-align:center; color:#d8c6f2; line-height:1.8; font-size:13px; }
 </style>
 </head>
 <body>
@@ -95,6 +97,8 @@
 <div id="endMsg">
   <h2 id="endTitle">SEAL BROKEN</h2>
   <p id="endSub"></p>
+  <div id="medalLine" class="medalLine" style="display:none"></div>
+  <div id="victoryStats" class="victoryStats" style="display:none"></div>
   <div id="scoreEntry" class="entryWrap">
     <p style="margin-top:16px">You carved a top score. Set your initials.</p>
     <div class="initialsRow" id="initialsRow"></div>
@@ -259,6 +263,14 @@ function getStyleRank(points){
 function addStyle(points){
   stylePoints=Math.max(0,Math.min(240,stylePoints+points));
   styleRank=getStyleRank(stylePoints);
+}
+
+function getMedal(){
+  if(styleRank==='DIVINE' && perfectCircles>=2) return '👑 GODHAND';
+  if(styleRank==='DIVINE' || maxCombo>=5) return '🥇 MYTHIC';
+  if(styleRank==='SAVAGE' || maxCombo>=4) return '🥈 LEGEND';
+  if(styleRank==='ARCANE' || maxCombo>=3) return '🥉 ELITE';
+  return '✦ SURVIVOR';
 }
 
 // Background drifting particles
@@ -448,6 +460,44 @@ function playGameOver(){
   }catch(e){}
 }
 
+function playVictory(){
+  if(!audioReady||muted) return;
+  try{
+    const now=audioCtx.currentTime;
+    const notes=[523,659,784,1046,1318];
+    notes.forEach((f,i)=>{
+      const osc=audioCtx.createOscillator();
+      osc.type=i<3?'triangle':'sine';
+      osc.frequency.setValueAtTime(f,now+i*0.12);
+      const g=audioCtx.createGain();
+      g.gain.setValueAtTime(0.001,now+i*0.12);
+      g.gain.linearRampToValueAtTime(0.22,now+i*0.12+0.04);
+      g.gain.exponentialRampToValueAtTime(0.001,now+i*0.12+0.65);
+      osc.connect(g); g.connect(masterGain);
+      osc.start(now+i*0.12); osc.stop(now+i*0.12+0.7);
+    });
+  }catch(e){}
+}
+
+function playBossDeath(){
+  if(!audioReady||muted) return;
+  try{
+    const now=audioCtx.currentTime;
+    [110,82,61].forEach((f,i)=>{
+      const osc=audioCtx.createOscillator();
+      osc.type='sawtooth';
+      osc.frequency.setValueAtTime(f,now+i*0.05);
+      osc.frequency.exponentialRampToValueAtTime(28,now+i*0.05+0.35);
+      const g=audioCtx.createGain();
+      g.gain.setValueAtTime(0.001,now+i*0.05);
+      g.gain.linearRampToValueAtTime(0.25,now+i*0.05+0.02);
+      g.gain.exponentialRampToValueAtTime(0.001,now+i*0.05+0.4);
+      osc.connect(g); g.connect(masterGain);
+      osc.start(now+i*0.05); osc.stop(now+i*0.05+0.42);
+    });
+  }catch(e){}
+}
+
 function playClick(){
   if(!audioReady||muted) return;
   try{
@@ -559,12 +609,17 @@ function victoryGame(){
   gameActive=false;
   bossActive=false;
   stopMusic();
-  playLevelUp();
+  playVictory();
   comboFlash=1;
   bombFlash=1;
+  for(let i=0;i<6;i++) spawnBurst(W/2,H/2,i%ENEMY_COLORS.length,20);
   document.getElementById('endTitle').textContent='SEAL PRESERVED';
   document.getElementById('endTitle').style.color='#ffe28a';
   document.getElementById('endSub').textContent=`Score: ${score} · Level ${level} Complete · Style ${styleRank} · Perfect Circles ${perfectCircles}`;
+  document.getElementById('medalLine').style.display='block';
+  document.getElementById('medalLine').textContent=getMedal();
+  document.getElementById('victoryStats').style.display='block';
+  document.getElementById('victoryStats').innerHTML=`Max Combo ${maxCombo}x<br>Seal HP ${sealHP}/5<br>Final Target ${FINAL_TARGET_SCORE}`;
   pendingScoreSubmission=isHighScore(score)?{initials:currentInitials(),score,level,comboMax:maxCombo,styleRank,perfectCircles,ts:Date.now()}:null;
   document.getElementById('scoreEntry').style.display=pendingScoreSubmission?'block':'none';
   renderLeaderboard(document.getElementById('endLeaderboard'), pendingScoreSubmission&&pendingScoreSubmission.ts);
@@ -1247,6 +1302,7 @@ function resolveSlash(pts){
           if(e.isBoss){
             comboFlash=1;
             bombFlash=0.8;
+            playBossDeath();
             bossActive=false;
             score+=220;
             addStyle(55);
@@ -1448,6 +1504,8 @@ function gameOver(){
   playGameOver();
   document.getElementById('endTitle').textContent='SEAL BROKEN';
   document.getElementById('endTitle').style.color='#ff4060';
+  document.getElementById('medalLine').style.display='none';
+  document.getElementById('victoryStats').style.display='none';
   document.getElementById('endSub').textContent=`Score: ${score} \u00B7 Level ${level} \u00B7 Style ${styleRank} \u00B7 Perfect Circles ${perfectCircles}`;
   pendingScoreSubmission=isHighScore(score)?{initials:currentInitials(),score,level,comboMax:maxCombo,styleRank,perfectCircles,ts:Date.now()}:null;
   document.getElementById('scoreEntry').style.display=pendingScoreSubmission?'block':'none';
@@ -1468,6 +1526,8 @@ function restartGame(){
   resumeAudio();
   playClick();
   document.getElementById('endMsg').style.display='none';
+  document.getElementById('medalLine').style.display='none';
+  document.getElementById('victoryStats').style.display='none';
   closeScoresPanel();
   closeChangelogPanel();
   initGame();
