@@ -55,6 +55,9 @@
   .panelActions { display:flex; justify-content:center; gap:12px; margin-top:18px; flex-wrap:wrap; }
   .tinyNote { font-size:12px; color:#8d72af; text-align:center; margin-top:10px; }
   .versionTag { margin-top:10px; font-size:11px; letter-spacing:3px; color:#6e5a8f; text-shadow:0 0 8px rgba(128,96,180,0.35); }
+  .buildTag { margin-top:6px; font-size:10px; letter-spacing:2px; color:#594774; }
+  .changelogList { margin-top:14px; text-align:left; color:#d8c6f2; font-size:12px; line-height:1.7; }
+  .changelogList li { margin-left:18px; }
 </style>
 </head>
 <body>
@@ -80,9 +83,11 @@
   <span style="color:#b080e0">Glowing shields = needs 2 hits · Echo ghosts = still dangerous!</span></p>
   <p style="margin-top:12px;color:#40304a;font-size:12px">3 LEVELS · 500+ PTS TO MASTER</p>
   <div class="versionTag" id="versionTag">VERSION</div>
+  <div class="buildTag" id="buildTag">BUILD</div>
   <div class="menuBtns">
     <button id="tapBtn">TAP TO PLAY</button>
     <button id="scoresBtn" class="secondaryBtn">HIGH SCORES</button>
+    <button id="changelogBtn" class="secondaryBtn">WHAT'S NEW</button>
   </div>
 </div>
 <div id="endMsg">
@@ -116,14 +121,34 @@
   </div>
 </div>
 
+<div id="changelogPanel" class="panel">
+  <div class="panelCard">
+    <h3>WHAT'S NEW</h3>
+    <p>Recent upgrades to SLASH.</p>
+    <ul class="changelogList">
+      <li>v0.4.1, title-screen build info and changelog</li>
+      <li>Style ranks, from Clean to Divine</li>
+      <li>Perfect-circle super bombs</li>
+      <li>Live circle summon preview</li>
+      <li>Splitter enemies that burst into shards</li>
+      <li>Local plus global leaderboards</li>
+    </ul>
+    <div class="panelActions">
+      <button id="closeChangelogBtn" class="secondaryBtn">BACK</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.0';
+const GAME_VERSION='v0.4.1';
+const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
 resize();
 document.getElementById('versionTag').textContent=GAME_VERSION;
+document.getElementById('buildTag').textContent=`BUILD ${GAME_BUILD}`;
 
 const ENEMY_COLORS=['#b040ff','#40c0ff','#ff8040','#40ff90'];
 const ENEMY_GLOW  =['#8000ff','#0090ff','#ff4000','#00ff50'];
@@ -147,6 +172,8 @@ let stylePoints=0;
 let styleRank='CLEAN';
 let perfectCircleWindow=0;
 let perfectCircles=0;
+let nextBossScore=300;
+let bossActive=false;
 const HS_KEY='slash_rune_cutter_highscores';
 const SCORES_API='https://game-scores.jez237.workers.dev/scores/slash-rune-cutter';
 const INITIAL_CHARS='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -216,6 +243,8 @@ function buildInitialsPicker(){
 function updateInitialsUI(){initialsIdx.forEach((idx,col)=>{const el=document.getElementById(`initialChar${col}`); if(el) el.textContent=INITIAL_CHARS[idx];});}
 function openScoresPanel(){document.getElementById('scoresPanel').style.display='flex'; renderLeaderboard(document.getElementById('leaderboardPanelContent'), pendingScoreSubmission&&pendingScoreSubmission.ts);}
 function closeScoresPanel(){document.getElementById('scoresPanel').style.display='none';}
+function openChangelogPanel(){document.getElementById('changelogPanel').style.display='flex';}
+function closeChangelogPanel(){document.getElementById('changelogPanel').style.display='none';}
 function getStyleRank(points){
   if(points>=210) return 'DIVINE';
   if(points>=140) return 'SAVAGE';
@@ -500,6 +529,7 @@ function initGame(){
   shakeT=0; spawnTimer=0; comboCount=0; comboTimer=0; maxCombo=1; slowMo=0;
   bombFlash=0; circleHint=0; circleHintData=null;
   stylePoints=0; styleRank='CLEAN'; perfectCircleWindow=0; perfectCircles=0;
+  nextBossScore=300; bossActive=false;
   pendingScoreSubmission=null;
   initBgParticles();
 }
@@ -539,6 +569,27 @@ function spawnSplitChildren(enemy){
       isEcho:false,splitter:false,alive:true,alpha:0.95,spawnTime:Date.now(),isShard:true
     });
   }
+}
+
+function spawnBoss(){
+  const edge=Math.floor(Math.random()*4);
+  const m=90;
+  let x,y;
+  if(edge===0){x=Math.random()*W;y=-m;}
+  else if(edge===1){x=W+m;y=Math.random()*H;}
+  else if(edge===2){x=Math.random()*W;y=H+m;}
+  else{x=-m;y=Math.random()*H;}
+  const angle=Math.atan2(H/2-y,W/2-x);
+  enemies.push({
+    x,y,vx:Math.cos(angle)*0.42,vy:Math.sin(angle)*0.42,
+    hp:10,maxHp:10,colorIdx:3,r:42,sides:8,
+    rotation:0,rotSpeed:0.02,isEcho:false,splitter:false,alive:true,alpha:1,
+    spawnTime:Date.now(),isBoss:true
+  });
+  bossActive=true;
+  comboFlash=1;
+  shakeT=20;
+  addScorePopup(W/2-56,90,'BOSS WAVE');
 }
 
 function spawnBurst(x,y,ci,n){
@@ -736,6 +787,18 @@ function drawEnemies(){
       ctx.shadowColor='#ff9a4a'; ctx.shadowBlur=12;
       ctx.beginPath(); ctx.moveTo(-e.r*0.65,0); ctx.lineTo(e.r*0.65,0); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0,-e.r*0.65); ctx.lineTo(0,e.r*0.65); ctx.stroke();
+      ctx.restore();
+    }
+
+    if(e.isBoss){
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      ctx.strokeStyle='rgba(255,235,150,0.9)';
+      ctx.shadowColor='#ffd96a'; ctx.shadowBlur=18; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.arc(0,0,e.r+15+Math.sin(t*4)*3,0,Math.PI*2); ctx.stroke();
+      ctx.font='bold 12px Courier New';
+      ctx.fillStyle='rgba(255,240,190,0.95)';
+      ctx.textAlign='center'; ctx.fillText(`BOSS ${e.hp}`,0,-e.r-24);
       ctx.restore();
     }
 
@@ -1101,6 +1164,13 @@ function resolveSlash(pts){
         if(e.hp<=0){
           e.alive=false;
           spawnBurst(e.x,e.y,e.colorIdx,18);
+          if(e.isBoss){
+            bossActive=false;
+            score+=150;
+            addStyle(55);
+            addScorePopup(e.x,e.y-54,'BOSS SLAIN');
+            for(let b=0;b<3;b++) spawnBurst(e.x,e.y,e.colorIdx,22);
+          }
           if(e.splitter){
             spawnSplitChildren(e);
             addScorePopup(e.x,e.y-42,'SHATTER');
@@ -1110,7 +1180,7 @@ function resolveSlash(pts){
             setTimeout(()=>spawnEchoAt(e.x,e.y,e.colorIdx),400);
           }
           killCount++;
-          const pts_score=10;
+          const pts_score=e.isBoss?0:10;
           score+=pts_score;
           addStyle(9);
           playHit(killCount);
@@ -1162,6 +1232,10 @@ function updateLevel(){
   const prevLevel=level;
   if(level===1&&score>=200){level=2;}
   else if(level===2&&score>=500){level=3;}
+  if(score>=nextBossScore && !bossActive){
+    spawnBoss();
+    nextBossScore+=300;
+  }
   if(level!==prevLevel){
     playLevelUp();
     updateMusicTempo();
@@ -1192,7 +1266,7 @@ function loop(ts){
     perfectCircleWindow=Math.max(0,perfectCircleWindow-1);
     updateCircleHint();
     spawnTimer+=dt*timeScale;
-    const interval=Math.max(300,1400-level*200-(score*0.3));
+    const interval=Math.max(300,(bossActive?2200:1400)-level*200-(score*0.3));
     if(spawnTimer>interval){spawnTimer=0;spawnEnemy();}
     const cx=W/2,cy=H/2;
     enemies.forEach(e=>{
@@ -1202,6 +1276,7 @@ function loop(ts){
       if(d<e.r+12){
         sealHP--;
         e.alive=false;
+        if(e.isBoss) bossActive=false;
         shakeT=20;
         stylePoints=Math.max(0,stylePoints-26);
         styleRank=getStyleRank(stylePoints);
@@ -1273,6 +1348,7 @@ function restartGame(){
   playClick();
   document.getElementById('endMsg').style.display='none';
   closeScoresPanel();
+  closeChangelogPanel();
   initGame();
   startMusic();
 }
@@ -1333,10 +1409,14 @@ restartBtn.addEventListener('touchend',e=>{e.preventDefault();restartGame();});
 
 document.getElementById('scoresBtn').addEventListener('click',openScoresPanel);
 document.getElementById('scoresBtn').addEventListener('touchend',e=>{e.preventDefault();openScoresPanel();});
+document.getElementById('changelogBtn').addEventListener('click',openChangelogPanel);
+document.getElementById('changelogBtn').addEventListener('touchend',e=>{e.preventDefault();openChangelogPanel();});
 document.getElementById('endScoresBtn').addEventListener('click',openScoresPanel);
 document.getElementById('endScoresBtn').addEventListener('touchend',e=>{e.preventDefault();openScoresPanel();});
 document.getElementById('closeScoresBtn').addEventListener('click',closeScoresPanel);
 document.getElementById('closeScoresBtn').addEventListener('touchend',e=>{e.preventDefault();closeScoresPanel();});
+document.getElementById('closeChangelogBtn').addEventListener('click',closeChangelogPanel);
+document.getElementById('closeChangelogBtn').addEventListener('touchend',e=>{e.preventDefault();closeChangelogPanel();});
 document.getElementById('submitScoreBtn').addEventListener('click',submitScoreEntry);
 document.getElementById('submitScoreBtn').addEventListener('touchend',e=>{e.preventDefault();submitScoreEntry();});
 
