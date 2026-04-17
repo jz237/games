@@ -134,7 +134,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.15';
+const GAME_VERSION='v0.4.16';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -1248,18 +1248,27 @@ function drawEnemies(){
 function drawSlashes(){
   for(let i=sigilLines.length-1;i>=0;i--){
     const s=sigilLines[i];
-    s.life-=0.03;
     if(s.life<=0){sigilLines.splice(i,1);continue;}
     ctx.save();
     ctx.globalCompositeOperation='lighter';
-    ctx.globalAlpha=s.life*0.8;
-    ctx.strokeStyle='rgba(120,240,255,0.9)';
+    s.trail.forEach((t,idx)=>{
+      const alpha=(idx+1)/s.trail.length*s.life*0.2;
+      ctx.globalAlpha=alpha;
+      ctx.strokeStyle='rgba(80,220,255,0.7)';
+      ctx.shadowColor='#58dfff'; ctx.shadowBlur=16;
+      ctx.lineWidth=6;
+      ctx.beginPath();
+      t.points.forEach((p,j)=>j===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+      ctx.stroke();
+    });
+    ctx.globalAlpha=s.life*0.95;
+    ctx.strokeStyle='rgba(120,240,255,0.95)';
     ctx.shadowColor='#7df4ff'; ctx.shadowBlur=24;
     ctx.lineWidth=8; ctx.lineCap='round'; ctx.lineJoin='round';
     ctx.beginPath();
-    s.points.forEach((p,idx)=>idx===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+    s.renderPoints.forEach((p,idx)=>idx===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
     ctx.stroke();
-    ctx.strokeStyle='rgba(255,255,255,0.95)';
+    ctx.strokeStyle='rgba(255,255,255,0.98)';
     ctx.lineWidth=2;
     ctx.setLineDash([12,10]);
     ctx.stroke();
@@ -1589,40 +1598,23 @@ function triggerSigil(pts){
   const step=Math.max(1,Math.floor(pts.length/10));
   for(let i=0;i<pts.length;i+=step) simplified.push(pts[i]);
   if(simplified[simplified.length-1]!==pts[pts.length-1]) simplified.push(pts[pts.length-1]);
-  sigilLines.push({points:simplified,life:1});
-  let hits=0;
-  enemies.forEach(e=>{
-    if(!e.alive) return;
-    for(let i=1;i<simplified.length;i++){
-      const a=simplified[i-1], b=simplified[i];
-      const dx=b.x-a.x, dy=b.y-a.y;
-      const len=Math.hypot(dx,dy);
-      if(!len) continue;
-      const t=Math.max(0,Math.min(1,((e.x-a.x)*dx+(e.y-a.y)*dy)/(len*len)));
-      const nx=a.x+t*dx, ny=a.y+t*dy;
-      if(Math.hypot(e.x-nx,e.y-ny)<e.r+22){
-        e.hp-=e.isBoss?2:1;
-        hits++;
-        spawnBurst(e.x,e.y,e.colorIdx,e.isBoss?14:10);
-        if(e.hp<=0){
-          e.alive=false;
-          if(e.isBoss){ bossActive=false; playBossDeath(); score+=180; addStyle(38); }
-          else{ score+=14; }
-          addShieldCharge(e.isBoss?32:12);
-          addScorePopup(e.x,e.y-26,e.isBoss?'SIGIL BREAK':'SIGIL HIT');
-        }else{
-          playHit(hits,e.isBoss?'boss':'normal');
-        }
-        break;
-      }
-    }
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  simplified.forEach(p=>{if(p.x<minX)minX=p.x;if(p.x>maxX)maxX=p.x;if(p.y<minY)minY=p.y;if(p.y>maxY)maxY=p.y;});
+  const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+  const width=Math.max(40,maxX-minX), height=Math.max(60,maxY-minY);
+  const localPoints=simplified.map(p=>({x:(p.x-cx)/(width*0.5),y:(p.y-cy)/(height*0.5)}));
+  const ang=Math.random()*Math.PI*2;
+  sigilLines.push({
+    points:localPoints,
+    x:cx,y:cy,
+    vx:Math.cos(ang)*4.2,vy:Math.sin(ang)*4.2,
+    life:1,duration:210,
+    rot:0,rotSpeed:(Math.random()<0.5?-1:1)*0.08,
+    scale:42,trail:[],hitClock:0
   });
-  if(hits>0){
-    shakeT=14;
-    bombFlash=Math.max(bombFlash,0.45);
-    addScorePopup(W/2-54,H/2-64,'QUIX SIGIL');
-    updateLevel();
-  }
+  shakeT=14;
+  bombFlash=Math.max(bombFlash,0.45);
+  addScorePopup(W/2-54,H/2-64,'QUIX SIGIL');
 }
 
 function updateCircleHint(){
@@ -1866,6 +1858,54 @@ function loop(ts){
     const interval=Math.max(300,(bossActive?2200:1400)-level*200-(score*0.3));
     if(spawnTimer>interval){spawnTimer=0;spawnEnemy();}
     const cx=W/2,cy=H/2;
+    for(let i=sigilLines.length-1;i>=0;i--){
+      const s=sigilLines[i];
+      s.duration-=dt*timeScale;
+      s.life=Math.max(0,s.duration/210);
+      s.hitClock=Math.max(0,s.hitClock-dt*timeScale);
+      s.x+=s.vx*timeScale;
+      s.y+=s.vy*timeScale;
+      s.rot+=s.rotSpeed*timeScale;
+      const half=s.scale*0.9;
+      if(s.x<half||s.x>W-half){s.vx*=-1; s.x=Math.max(half,Math.min(W-half,s.x)); shakeT=Math.max(shakeT,6);}
+      if(s.y<half||s.y>H-half){s.vy*=-1; s.y=Math.max(half,Math.min(H-half,s.y)); shakeT=Math.max(shakeT,6);}
+      s.renderPoints=s.points.map(p=>({
+        x:s.x+(p.x*Math.cos(s.rot)-p.y*Math.sin(s.rot))*s.scale,
+        y:s.y+(p.x*Math.sin(s.rot)+p.y*Math.cos(s.rot))*s.scale
+      }));
+      s.trail.push({points:s.renderPoints.map(p=>({x:p.x,y:p.y}))});
+      if(s.trail.length>8) s.trail.shift();
+      if(s.hitClock<=0){
+        let didHit=false;
+        enemies.forEach(e=>{
+          if(!e.alive||didHit) return;
+          for(let j=1;j<s.renderPoints.length;j++){
+            const a=s.renderPoints[j-1], b=s.renderPoints[j];
+            const dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy);
+            if(!len) continue;
+            const t=Math.max(0,Math.min(1,((e.x-a.x)*dx+(e.y-a.y)*dy)/(len*len)));
+            const nx=a.x+t*dx, ny=a.y+t*dy;
+            if(Math.hypot(e.x-nx,e.y-ny)<e.r+18){
+              e.hp-=e.isBoss?2:1;
+              spawnBurst(e.x,e.y,e.colorIdx,e.isBoss?14:10);
+              playHit(1,e.isBoss?'boss':'normal');
+              if(e.hp<=0){
+                e.alive=false;
+                if(e.isBoss){ bossActive=false; playBossDeath(); score+=180; addStyle(38); }
+                else{ score+=14; }
+                addShieldCharge(e.isBoss?32:12);
+                addScorePopup(e.x,e.y-26,e.isBoss?'SIGIL BREAK':'SIGIL HIT');
+                updateLevel();
+              }
+              s.hitClock=90;
+              didHit=true;
+              break;
+            }
+          }
+        });
+      }
+      if(s.life<=0) sigilLines.splice(i,1);
+    }
     enemies.forEach(e=>{
       if(!e.alive) return;
       const dx=cx-e.x,dy=cy-e.y;
