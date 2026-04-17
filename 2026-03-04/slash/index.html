@@ -127,7 +127,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.9';
+const GAME_VERSION='v0.4.10';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -1299,7 +1299,7 @@ function updateScorePopups(){
 
 // ==================== CIRCLE DETECTION ====================
 function isCircleGesture(pts){
-  if(pts.length<14) return false;
+  if(pts.length<8) return false;
   const start=pts[0], end=pts[pts.length-1];
   let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
   let pathLen=0, totalTurn=0;
@@ -1321,20 +1321,20 @@ function isCircleGesture(pts){
   const closeDist=Math.hypot(end.x-start.x,end.y-start.y);
   const avgRadius=(width+height)/4;
   if(avgRadius<26) return false;
-  if(pathLen<avgRadius*4.5) return false;
-  if(closeDist>Math.max(42,avgRadius*0.9)) return false;
+  if(pathLen<avgRadius*3.6) return false;
+  if(closeDist>Math.max(54,avgRadius*1.05)) return false;
   if(width<avgRadius*1.2 || height<avgRadius*1.2) return false;
   const aspect=Math.min(width,height)/Math.max(width,height);
-  if(aspect<0.55) return false;
+  if(aspect<0.45) return false;
   let cx=0,cy=0; pts.forEach(p=>{cx+=p.x;cy+=p.y;}); cx/=pts.length;cy/=pts.length;
   const radii=pts.map(p=>Math.hypot(p.x-cx,p.y-cy));
   const mean=radii.reduce((a,b)=>a+b,0)/radii.length;
   const variance=radii.reduce((a,r)=>a+Math.abs(r-mean),0)/radii.length;
-  return Math.abs(totalTurn) > Math.PI*1.35 && variance/mean < 0.42;
+  return Math.abs(totalTurn) > Math.PI*1.15 && variance/mean < 0.5;
 }
 
 function getCircleMetrics(pts){
-  if(pts.length<10) return null;
+  if(pts.length<6) return null;
   let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity,pathLen=0;
   for(let i=0;i<pts.length;i++){
     const p=pts[i];
@@ -1356,11 +1356,11 @@ function getPerfectCircleQuality(data){
 }
 
 function updateCircleHint(){
-  if(!drawing || slashPoints.length<10){circleHint=Math.max(0,circleHint-0.08); return;}
+  if(!drawing || slashPoints.length<6){circleHint=Math.max(0,circleHint-0.08); return;}
   const data=getCircleMetrics(slashPoints);
   if(!data){circleHint=Math.max(0,circleHint-0.08); return;}
   const aspect=Math.min(data.width,data.height)/Math.max(data.width,data.height||1);
-  const ready=data.r>22 && data.pathLen>data.r*3.7 && data.closeDist<Math.max(70,data.r*1.1) && aspect>0.5;
+  const ready=data.r>20 && data.pathLen>data.r*3.1 && data.closeDist<Math.max(82,data.r*1.2) && aspect>0.42;
   if(ready){
     circleHint=Math.min(1,circleHint+0.14);
     const quality=getPerfectCircleQuality(data);
