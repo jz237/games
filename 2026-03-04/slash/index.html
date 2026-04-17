@@ -127,9 +127,8 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.7';
+const GAME_VERSION='v0.4.8';
 const GAME_BUILD='2026-04-17';
-const FINAL_TARGET_SCORE=900;
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
 resize();
@@ -165,8 +164,6 @@ let titleScene=[];
 let bossTrails=[];
 let fractureFlash=0;
 let fractureLines=[];
-let finalBossSpawned=false;
-let finalBossDefeated=false;
 const LEVEL_THEMES=[
   {bg:'#030008', grid:'#4020aa', swirl:'#6030aa', vignette:0.35, overlay:'rgba(120,40,220,0.06)'},
   {bg:'#04101a', grid:'#1d5aa8', swirl:'#1e7cd8', vignette:0.28, overlay:'rgba(70,180,255,0.07)'},
@@ -217,8 +214,16 @@ function renderRows(list, type, highlightTs){
   if(!list.length) return '<div style="color:rgba(255,255,255,0.45);padding:4px 0">No scores yet</div>';
   return list.slice(0,10).map((e,i)=>{
     const newCls=e.ts&&highlightTs&&e.ts===highlightTs?' newEntry':'';
+    const rankTitle=(rank=>{
+      if(rank===0) return 'Moon King';
+      if(rank===1) return 'Rune Lord';
+      if(rank===2) return 'Seal Warden';
+      if(rank<=4) return 'Void Reaper';
+      if(rank<=6) return 'Echo Hunter';
+      return 'Star Cutter';
+    })(i);
     const levelLabel=`L${e.level||'?'}${e.comboMax?` · ${e.comboMax}x`:''}${e.styleRank?` · ${e.styleRank}`:''}`;
-    return `<div class="leaderboardRow${newCls}"><span>${String(i+1).padStart(2,'0')}</span><span>${e.initials||'???'}</span><span>${e.score}</span><span>${levelLabel}</span></div>`;
+    return `<div class="leaderboardRow${newCls}"><span>${String(i+1).padStart(2,'0')}</span><span>${e.initials||'???'}${type==='global'?` · ${rankTitle}`:''}</span><span>${e.score}</span><span>${levelLabel}</span></div>`;
   }).join('');
 }
 async function renderLeaderboard(container, highlightTs){
@@ -616,7 +621,6 @@ function initGame(){
   gameWon=false;
   bossTrails=[];
   fractureFlash=0; fractureLines=[];
-  finalBossSpawned=false; finalBossDefeated=false;
   pendingScoreSubmission=null;
   initBgParticles();
 }
@@ -649,7 +653,7 @@ function victoryGame(){
   document.getElementById('medalLine').style.display='block';
   document.getElementById('medalLine').textContent=getMedal();
   document.getElementById('victoryStats').style.display='block';
-  document.getElementById('victoryStats').innerHTML=`Max Combo ${maxCombo}x<br>Seal HP ${sealHP}/5<br>Final Target ${FINAL_TARGET_SCORE}`;
+  document.getElementById('victoryStats').innerHTML=`Max Combo ${maxCombo}x<br>Shield ${sealHP}/5<br>Deepest Level ${level}`;
   pendingScoreSubmission=isHighScore(score)?{initials:currentInitials(),score,level,comboMax:maxCombo,styleRank,perfectCircles,ts:Date.now()}:null;
   document.getElementById('scoreEntry').style.display=pendingScoreSubmission?'block':'none';
   renderLeaderboard(document.getElementById('endLeaderboard'), pendingScoreSubmission&&pendingScoreSubmission.ts);
@@ -712,22 +716,6 @@ function spawnBoss(){
   comboFlash=1;
   shakeT=20;
   addScorePopup(W/2-56,90,'BOSS WAVE');
-}
-
-function spawnFinalBoss(){
-  const angle=-Math.PI/2;
-  enemies.push({
-    x:W/2+Math.cos(angle)*(Math.min(W,H)*0.55),y:H/2+Math.sin(angle)*(Math.min(W,H)*0.55),
-    vx:0,vy:0.34,
-    hp:12,maxHp:12,colorIdx:3,r:54,sides:10,
-    rotation:0,rotSpeed:0.018,isEcho:false,splitter:false,alive:true,alpha:1,
-    spawnTime:Date.now(),isBoss:true,isFinalBoss:true,bossPhase:1,dashCooldown:170,summonCooldown:220,telegraph:0
-  });
-  bossActive=true;
-  finalBossSpawned=true;
-  comboFlash=1;
-  shakeT=26;
-  addScorePopup(W/2-78,90,'FINAL BOSS');
 }
 
 function spawnBurst(x,y,ci,n){
@@ -1420,7 +1408,6 @@ function triggerBomb(){
               bombFlash=0.8;
               triggerFracture(e.x,e.y,1.2);
               bossActive=false;
-              if(e.isFinalBoss) finalBossDefeated=true;
               score+=220;
               addStyle(55);
               addScorePopup(e.x,e.y-54,'BOSS SLAIN');
@@ -1496,12 +1483,10 @@ function resolveSlash(pts){
             triggerFracture(e.x,e.y,1.25);
             playBossDeath();
             bossActive=false;
-            if(e.isFinalBoss) finalBossDefeated=true;
             score+=220;
             addStyle(55);
             addScorePopup(e.x,e.y-54,'BOSS SLAIN');
             for(let b=0;b<3;b++) spawnBurst(e.x,e.y,e.colorIdx,22);
-            if(level===3 && score>=FINAL_TARGET_SCORE) addScorePopup(W/2-70,110,'FINAL SEAL PHASE');
           }
           if(e.splitter){
             spawnSplitChildren(e);
@@ -1567,21 +1552,16 @@ function updateLevel(){
   const prevLevel=level;
   if(level===1&&score>=200){level=2;}
   else if(level===2&&score>=500){level=3;}
-  if(level<3 && score>=nextBossScore && !bossActive){
+  else if(level>=3){level=3+Math.floor((score-500)/400);}
+  if(score>=nextBossScore && !bossActive){
     spawnBoss();
     nextBossScore+=300;
-  }
-  if(level===3 && score>=FINAL_TARGET_SCORE && !finalBossSpawned && !bossActive){
-    spawnFinalBoss();
   }
   if(level!==prevLevel){
     playLevelUp();
     updateMusicTempo();
     // Level up flash
     comboFlash=1;
-  }
-  if(level===3 && finalBossSpawned && finalBossDefeated && !bossActive && !hasLivingBoss()){
-    victoryGame();
   }
 }
 
@@ -1697,7 +1677,7 @@ function loop(ts){
   if(comboCount>1){scoreTxt.classList.add('pulse');} else {scoreTxt.classList.remove('pulse');}
   document.getElementById('lvlTxt').textContent=`LEVEL ${level}`;
   document.getElementById('styleTxt').textContent=`STYLE: ${styleRank}${perfectCircleWindow>0?' ✦':''}`;
-  document.getElementById('goalTxt').textContent=level===3?(finalBossSpawned&&!finalBossDefeated?'DESTROY FLAGSHIP':`FINAL ${Math.max(0,FINAL_TARGET_SCORE-score)} TO GO`):'';
+  document.getElementById('goalTxt').textContent=`NEXT LV ${Math.max(0,(level===1?200:level===2?500:500+(level-2)*400)-score)}`;
   document.getElementById('sealHp').textContent='\u{1F52E}'.repeat(sealHP)+'\u{1F480}'.repeat(5-sealHP);
   const bombPct=(bombCooldown<=0?1:1-bombCooldown/BOMB_MAX)*100;
   document.getElementById('bombFill').style.width=bombPct+'%';
