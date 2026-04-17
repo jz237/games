@@ -21,10 +21,10 @@
   #goalTxt { position:fixed; top:42px; right:16px; font-size:12px; letter-spacing:2px; color:#a8d8ff; text-shadow:0 0 10px #5ab8ff; z-index:11; pointer-events:none; }
   #styleTxt { position:fixed; top:42px; left:16px; font-size:12px; letter-spacing:2px; color:#ffd78a; text-shadow:0 0 10px #ffb85c; z-index:11; pointer-events:none; }
   #sealHp { font-size:18px; }
-  #bombBar { position:fixed; bottom:20px; right:16px; font-size:11px; letter-spacing:3px; color:#8060aa; z-index:10; pointer-events:none; text-align:right; }
-  #sigilBar { position:fixed; bottom:44px; right:16px; font-size:11px; letter-spacing:3px; color:#76e8ff; z-index:10; pointer-events:none; text-align:right; }
-  #chargeBar { position:fixed; bottom:20px; left:16px; font-size:11px; letter-spacing:3px; color:#8cf5d4; z-index:10; pointer-events:none; text-align:left; }
-  #wellBar { position:fixed; bottom:44px; left:16px; font-size:11px; letter-spacing:3px; color:#ff95d8; z-index:10; pointer-events:none; text-align:left; }
+  #bombBar { position:fixed; bottom:16px; right:16px; font-size:11px; letter-spacing:2px; color:#8060aa; z-index:10; pointer-events:none; text-align:right; width:170px; }
+  #sigilBar { position:fixed; bottom:52px; right:16px; font-size:11px; letter-spacing:2px; color:#76e8ff; z-index:10; pointer-events:none; text-align:right; width:170px; }
+  #chargeBar { position:fixed; bottom:16px; left:16px; font-size:11px; letter-spacing:2px; color:#8cf5d4; z-index:10; pointer-events:none; text-align:left; width:170px; }
+  #wellBar { position:fixed; bottom:52px; left:16px; font-size:11px; letter-spacing:2px; color:#ff95d8; z-index:10; pointer-events:none; text-align:left; width:170px; }
   #bombFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#8040cc,#e080ff); box-shadow:0 0 10px #a060ff; transition:width 0.1s; vertical-align:middle; }
   #sigilFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#3aa8ff,#8afff4); box-shadow:0 0 10px #66d8ff; transition:width 0.1s; vertical-align:middle; }
   #chargeFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#2fdc8f,#b8ffd8); box-shadow:0 0 10px #7fffc0; transition:width 0.1s; vertical-align:middle; }
@@ -35,8 +35,8 @@
   #wellTrack { display:inline-block; width:120px; height:6px; background:rgba(90,24,62,0.35); border-radius:3px; vertical-align:middle; overflow:hidden; }
   #overlay { position:fixed; inset:0; background:linear-gradient(to bottom,rgba(2,0,6,0.28),rgba(2,0,6,0.52)); display:flex; flex-direction:column; align-items:center; justify-content:flex-end; z-index:20; padding-bottom:34px; }
   #overlay h1 { font-size:52px; color:#e080ff; letter-spacing:8px; text-shadow:0 0 30px #c040ff,0 0 80px #6020aa; margin-bottom:auto; margin-top:56px; }
-  #overlay p { color:#c7b6d7; font-size:12px; text-align:center; max-width:300px; line-height:1.55; margin-top:10px; margin-bottom:10px; }
-  .menuBtns { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:10px; }
+  #overlay p { color:#c7b6d7; font-size:12px; text-align:center; max-width:300px; line-height:1.55; margin-top:10px; margin-bottom:18px; }
+  .menuBtns { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:0; }
   #tapBtn { margin-top:8px; padding:8px 22px; background:linear-gradient(135deg,#3010aa,#e080ff33); color:#e080ff; font-size:14px; letter-spacing:2px; border:1px solid #e080ff; border-radius:4px; animation:pulse 1.5s infinite; }
   .secondaryBtn { padding:7px 13px; background:rgba(32,16,72,0.7); color:#d8b8ff; font-size:11px; letter-spacing:1.2px; border:1px solid rgba(224,128,255,0.6); border-radius:4px; }
   @keyframes pulse { 0%,100%{box-shadow:0 0 20px #8040aa} 50%{box-shadow:0 0 50px #e080ff,0 0 80px #8040aa} }
@@ -140,7 +140,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.28';
+const GAME_VERSION='v0.4.29';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -187,6 +187,7 @@ let sigilLines=[];
 let gravityWell=null;
 let pointerStart=null;
 let holdTriggered=false;
+let holdTimer=null;
 const LEVEL_THEMES=[
   {bg:'#030008', grid:'#4020aa', swirl:'#6030aa', vignette:0.35, overlay:'rgba(120,40,220,0.06)'},
   {bg:'#04101a', grid:'#1d5aa8', swirl:'#1e7cd8', vignette:0.28, overlay:'rgba(70,180,255,0.07)'},
@@ -665,7 +666,7 @@ muteBtn.addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation();t
 function initGame(){
   enemies=[]; particles=[]; slashes=[]; ripples=[]; scorePopups=[];
   sealHP=5; score=0; level=1; lastLevel=1; gameActive=true;
-  bombCooldown=0; sigilCooldown=0; wellCooldown=0; drawing=false; slashPoints=[]; sigilCharge=0; sigilLines=[]; gravityWell=null; pointerStart=null; holdTriggered=false;
+  bombCooldown=0; sigilCooldown=0; wellCooldown=0; drawing=false; slashPoints=[]; sigilCharge=0; sigilLines=[]; gravityWell=null; pointerStart=null; holdTriggered=false; holdTimer=null;
   shakeT=0; spawnTimer=0; comboCount=0; comboTimer=0; maxCombo=1; slowMo=0;
   bombFlash=0; circleHint=0; circleHintData=null;
   stylePoints=0; styleRank='CLEAN'; perfectCircleWindow=0; perfectCircles=0;
@@ -2207,25 +2208,37 @@ canvas.addEventListener('pointerdown',e=>{
   resumeAudio();
   pointerStart={x:e.clientX,y:e.clientY,t:performance.now()};
   holdTriggered=false;
+  if(holdTimer) clearTimeout(holdTimer);
+  holdTimer=setTimeout(()=>{
+    if(pointerStart && !holdTriggered && gameActive && wellCooldown<=0 && slashPoints.length<5){
+      triggerGravityWell(pointerStart.x,pointerStart.y);
+      holdTriggered=true;
+      drawing=false;
+      slashPoints=[];
+      pointerStart=null;
+    }
+  },340);
   drawing=true; slashPoints=[{x:e.clientX,y:e.clientY}];
   circleHint=0; circleHintData=null;
   ripples.push({x:e.clientX,y:e.clientY,radius:5,life:1});
 });
 canvas.addEventListener('pointermove',e=>{
   if(!drawing) return;
+  slashPoints.push({x:e.clientX,y:e.clientY});
   if(pointerStart && !holdTriggered){
     const dist=Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y);
     const elapsed=performance.now()-pointerStart.t;
-    if(elapsed>260 && dist<16 && gameActive && wellCooldown<=0){
+    if(dist>18){ pointerStart=null; if(holdTimer) { clearTimeout(holdTimer); holdTimer=null; } }
+    else if(elapsed>340 && slashPoints.length<5 && gameActive && wellCooldown<=0){
       triggerGravityWell(pointerStart.x,pointerStart.y);
       holdTriggered=true;
       drawing=false;
       slashPoints=[];
       pointerStart=null;
+      if(holdTimer) { clearTimeout(holdTimer); holdTimer=null; }
       return;
     }
   }
-  slashPoints.push({x:e.clientX,y:e.clientY});
 });
 function finishSlash(){
   if(!drawing) return;
@@ -2235,6 +2248,8 @@ function finishSlash(){
   const pts=[...slashPoints];
   const start=pointerStart;
   pointerStart=null;
+  if(holdTimer) { clearTimeout(holdTimer); holdTimer=null; }
+  holdTriggered=false;
   if(pts.length>2){
     slashes.push({points:pts,life:1});
     if(gameActive) resolveSlash(pts);
