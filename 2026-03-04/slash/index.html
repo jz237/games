@@ -140,7 +140,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.30';
+const GAME_VERSION='v0.4.31';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -2218,7 +2218,7 @@ canvas.addEventListener('pointerdown',e=>{
       pointerStart=null;
       holdTimer=null;
     }
-  },280);
+  },140);
   drawing=true; slashPoints=[{x:e.clientX,y:e.clientY}];
   circleHint=0; circleHintData=null;
   ripples.push({x:e.clientX,y:e.clientY,radius:5,life:1});
