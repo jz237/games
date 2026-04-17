@@ -319,11 +319,11 @@ function playSlash(){
   }catch(e){}
 }
 
-function playHit(comboIdx){
+function playHit(comboIdx, kind='normal'){
   if(!audioReady||muted) return;
   try{
     const now=audioCtx.currentTime;
-    const baseFreq=200+comboIdx*60;
+    const baseFreq=(kind==='boss'?140:kind==='bomb'?240:200)+comboIdx*(kind==='bomb'?40:60);
     // Noise crunch
     const noise=audioCtx.createBufferSource();
     const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*0.08,audioCtx.sampleRate);
@@ -331,19 +331,31 @@ function playHit(comboIdx){
     for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*0.15));
     noise.buffer=buf;
     const ng=audioCtx.createGain();
-    ng.gain.setValueAtTime(0.3,now);
-    ng.gain.exponentialRampToValueAtTime(0.001,now+0.08);
+    ng.gain.setValueAtTime(kind==='boss'?0.4:0.3,now);
+    ng.gain.exponentialRampToValueAtTime(0.001,now+(kind==='boss'?0.16:0.08));
     noise.connect(ng); ng.connect(masterGain);
-    noise.start(now); noise.stop(now+0.08);
+    noise.start(now); noise.stop(now+(kind==='boss'?0.16:0.08));
     // Low thud
     const osc=audioCtx.createOscillator();
-    osc.type='sine'; osc.frequency.setValueAtTime(baseFreq,now);
-    osc.frequency.exponentialRampToValueAtTime(40,now+0.08);
+    osc.type=kind==='boss'?'triangle':'sine'; osc.frequency.setValueAtTime(baseFreq,now);
+    osc.frequency.exponentialRampToValueAtTime(kind==='bomb'?70:40,now+(kind==='boss'?0.18:0.08));
     const og=audioCtx.createGain();
-    og.gain.setValueAtTime(0.35,now);
-    og.gain.exponentialRampToValueAtTime(0.001,now+0.08);
+    og.gain.setValueAtTime(kind==='boss'?0.42:0.35,now);
+    og.gain.exponentialRampToValueAtTime(0.001,now+(kind==='boss'?0.18:0.08));
     osc.connect(og); og.connect(masterGain);
-    osc.start(now); osc.stop(now+0.1);
+    osc.start(now); osc.stop(now+(kind==='boss'?0.2:0.1));
+
+    // Echo tail with pitch variation
+    const echoOsc=audioCtx.createOscillator();
+    echoOsc.type='triangle';
+    echoOsc.frequency.setValueAtTime(baseFreq*(0.65+Math.random()*0.18),now+0.06);
+    echoOsc.frequency.exponentialRampToValueAtTime(baseFreq*(0.35+Math.random()*0.12),now+(kind==='boss'?0.42:0.24));
+    const echoGain=audioCtx.createGain();
+    echoGain.gain.setValueAtTime(0.001,now+0.05);
+    echoGain.gain.linearRampToValueAtTime(kind==='boss'?0.18:0.1,now+0.08);
+    echoGain.gain.exponentialRampToValueAtTime(0.001,now+(kind==='boss'?0.45:0.28));
+    echoOsc.connect(echoGain); echoGain.connect(masterGain);
+    echoOsc.start(now+0.05); echoOsc.stop(now+(kind==='boss'?0.48:0.3));
   }catch(e){}
 }
 
@@ -1137,6 +1149,7 @@ function updateCircleHint(){
 
 function triggerBomb(){
   const isPerfect=perfectCircleWindow>0;
+  let bossHits=0;
   bombCooldown=BOMB_MAX;
   playPowerup();
   bombFlash=1;
@@ -1156,13 +1169,32 @@ function triggerBomb(){
     frames++;
     enemies.forEach(e=>{
       if(!e.alive) return;
-      if(e.isBoss) return;
       const d=Math.hypot(e.x-cx,e.y-cy);
       if(Math.abs(d-ring.radius)<ring.speed*(isPerfect?3:2)){
+        if(e.isBoss){
+          if(frames%3===0){
+            e.hp-=isPerfect?2:1;
+            bossHits++;
+            playHit(bossHits,'boss');
+            spawnBurst(e.x,e.y,e.colorIdx,10);
+            addScorePopup(e.x,e.y-28,isPerfect?'-2 BOSS':'-1 BOSS');
+            if(e.hp<=0){
+              e.alive=false;
+              comboFlash=1;
+              bombFlash=0.8;
+              bossActive=false;
+              score+=220;
+              addStyle(55);
+              addScorePopup(e.x,e.y-54,'BOSS SLAIN');
+              for(let b=0;b<3;b++) spawnBurst(e.x,e.y,e.colorIdx,22);
+            }
+          }
+          return;
+        }
         e.alive=false;
         spawnBurst(e.x,e.y,e.colorIdx,18);
         spawnBurst(e.x,e.y,e.colorIdx,12);
-        playHit(0);
+        playHit(0,'bomb');
         score+=isPerfect?35:20;
       }
     });
@@ -1237,12 +1269,12 @@ function resolveSlash(pts){
           const pts_score=e.isBoss?0:10;
           score+=pts_score;
           addStyle(9);
-          playHit(killCount);
+          playHit(killCount,e.isBoss?'boss':'normal');
           addScorePopup(e.x,e.y-20,'+'+pts_score);
           slowMo=6; // brief slowdown frames
         } else {
           spawnBurst(e.x,e.y,e.colorIdx,6);
-          playHit(0);
+          playHit(0,e.isBoss?'boss':'normal');
         }
         break;
       }
