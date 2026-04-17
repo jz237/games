@@ -140,7 +140,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v0.4.19';
+const GAME_VERSION='v0.4.20';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -1605,9 +1605,8 @@ function isSGesture(pts){
 }
 
 function addShieldCharge(amount){
-  const prev=sigilCharge;
   sigilCharge=Math.min(100,sigilCharge+amount);
-  if(prev<100 && sigilCharge>=100 && sealHP<5){
+  if(sigilCharge>=100 && sealHP<5){
     sealHP++;
     sigilCharge=0;
     shieldImpact=1;
