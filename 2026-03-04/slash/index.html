@@ -584,7 +584,7 @@ function spawnBoss(){
     x,y,vx:Math.cos(angle)*0.42,vy:Math.sin(angle)*0.42,
     hp:10,maxHp:10,colorIdx:3,r:42,sides:8,
     rotation:0,rotSpeed:0.02,isEcho:false,splitter:false,alive:true,alpha:1,
-    spawnTime:Date.now(),isBoss:true
+    spawnTime:Date.now(),isBoss:true,bossPhase:1,dashCooldown:150,summonCooldown:220,telegraph:0
   });
   bossActive=true;
   comboFlash=1;
@@ -596,6 +596,21 @@ function spawnBurst(x,y,ci,n){
   for(let i=0;i<n;i++){
     const a=Math.random()*Math.PI*2,sp=1.5+Math.random()*3.5;
     particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,color:ENEMY_COLORS[ci],glow:ENEMY_GLOW[ci],size:3+Math.random()*4});
+  }
+}
+
+function spawnBossMinions(boss){
+  for(let i=0;i<2;i++){
+    const a=Math.random()*Math.PI*2;
+    const x=boss.x+Math.cos(a)*(boss.r+30);
+    const y=boss.y+Math.sin(a)*(boss.r+30);
+    const ang=Math.atan2(H/2-y,W/2-x);
+    enemies.push({
+      x,y,vx:Math.cos(ang)*0.95,vy:Math.sin(ang)*0.95,
+      hp:1,maxHp:1,colorIdx:boss.colorIdx,r:14,sides:4,
+      rotation:Math.random()*Math.PI*2,rotSpeed:(Math.random()-0.5)*0.08,
+      isEcho:false,splitter:false,alive:true,alpha:0.95,spawnTime:Date.now(),isMinion:true
+    });
   }
 }
 
@@ -796,9 +811,15 @@ function drawEnemies(){
       ctx.strokeStyle='rgba(255,235,150,0.9)';
       ctx.shadowColor='#ffd96a'; ctx.shadowBlur=18; ctx.lineWidth=3;
       ctx.beginPath(); ctx.arc(0,0,e.r+15+Math.sin(t*4)*3,0,Math.PI*2); ctx.stroke();
+      if(e.telegraph>0){
+        ctx.globalAlpha=Math.min(1,e.telegraph/25)*0.85;
+        ctx.strokeStyle='rgba(255,120,120,0.95)';
+        ctx.shadowColor='#ff7070'; ctx.shadowBlur=20; ctx.lineWidth=5;
+        ctx.beginPath(); ctx.arc(0,0,e.r+28+Math.sin(t*10)*5,0,Math.PI*2); ctx.stroke();
+      }
       ctx.font='bold 12px Courier New';
       ctx.fillStyle='rgba(255,240,190,0.95)';
-      ctx.textAlign='center'; ctx.fillText(`BOSS ${e.hp}`,0,-e.r-24);
+      ctx.textAlign='center'; ctx.fillText(`BOSS ${e.hp} P${e.bossPhase}`,0,-e.r-24);
       ctx.restore();
     }
 
@@ -1110,6 +1131,7 @@ function triggerBomb(){
     frames++;
     enemies.forEach(e=>{
       if(!e.alive) return;
+      if(e.isBoss) return;
       const d=Math.hypot(e.x-cx,e.y-cy);
       if(Math.abs(d-ring.radius)<ring.speed*(isPerfect?3:2)){
         e.alive=false;
@@ -1160,13 +1182,16 @@ function resolveSlash(pts){
       const t2=Math.max(0,Math.min(1,((e.x-pts[i-1].x)*dx+(e.y-pts[i-1].y)*dy)/(len*len)));
       const nx=pts[i-1].x+t2*dx, ny=pts[i-1].y+t2*dy;
       if(Math.hypot(e.x-nx,e.y-ny)<e.r+10){
+        if(e.isBoss && e.telegraph>0) break;
         e.hp--;
         if(e.hp<=0){
           e.alive=false;
           spawnBurst(e.x,e.y,e.colorIdx,18);
           if(e.isBoss){
+            comboFlash=1;
+            bombFlash=0.8;
             bossActive=false;
-            score+=150;
+            score+=220;
             addStyle(55);
             addScorePopup(e.x,e.y-54,'BOSS SLAIN');
             for(let b=0;b<3;b++) spawnBurst(e.x,e.y,e.colorIdx,22);
@@ -1180,6 +1205,9 @@ function resolveSlash(pts){
             setTimeout(()=>spawnEchoAt(e.x,e.y,e.colorIdx),400);
           }
           killCount++;
+          if(e.isBoss){
+            addScorePopup(e.x,e.y-20,`PHASE ${Math.max(1,Math.ceil((e.hp/e.maxHp)*3))}`);
+          }
           const pts_score=e.isBoss?0:10;
           score+=pts_score;
           addStyle(9);
@@ -1289,6 +1317,37 @@ function loop(ts){
         const tangential=0.0007*(Date.now()-e.spawnTime);
         e.vx+=(-dy/d||0)*tangential*0.01;
         e.vy+=(dx/d||0)*tangential*0.01;
+      }
+      if(e.isBoss){
+        const hpRatio=e.hp/e.maxHp;
+        e.bossPhase=hpRatio>0.66?1:hpRatio>0.33?2:3;
+        e.dashCooldown--;
+        e.summonCooldown--;
+        if(e.telegraph>0){
+          e.telegraph--;
+          if(e.telegraph===1){
+            const ang=Math.atan2(cy-e.y,cx-e.x);
+            const speed=3.8+e.bossPhase*0.35;
+            e.vx=Math.cos(ang)*speed;
+            e.vy=Math.sin(ang)*speed;
+            shakeT=16;
+          }
+        } else {
+          const desired=0.38+e.bossPhase*0.07;
+          e.vx+=(dx/(d||1))*0.012*e.bossPhase;
+          e.vy+=(dy/(d||1))*0.012*e.bossPhase;
+          const mag=Math.hypot(e.vx,e.vy)||1;
+          if(mag>desired){ e.vx=(e.vx/mag)*desired; e.vy=(e.vy/mag)*desired; }
+          if(e.dashCooldown<=0 && d>110){
+            e.telegraph=26;
+            e.dashCooldown=150-e.bossPhase*18;
+          }
+          if(e.bossPhase>=2 && e.summonCooldown<=0){
+            spawnBossMinions(e);
+            addScorePopup(e.x,e.y-44,'SUMMON');
+            e.summonCooldown=220-e.bossPhase*35;
+          }
+        }
       }
       e.x+=e.vx*timeScale; e.y+=e.vy*timeScale;
     });
