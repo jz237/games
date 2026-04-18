@@ -45,6 +45,7 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
 <div id="ui">
   <div>⚡ <span id="scoreEl">0</span></div>
   <div>LV <span id="levelEl">1</span>/3</div>
+  <div>❤ <span id="livesEl">4</span></div>
   <div>🛡<span class="shield-bar"><span class="shield-fill" id="shieldBar" style="width:0%"></span></span></div>
   <div>⏱ <span id="timeEl">30</span></div>
 </div>
@@ -79,6 +80,7 @@ const scoresBtn = document.getElementById('scoresBtn');
 let scorePanel = document.getElementById('scorePanel');
 const scoreEl = document.getElementById('scoreEl');
 const levelEl = document.getElementById('levelEl');
+const livesEl = document.getElementById('livesEl');
 const timeEl = document.getElementById('timeEl');
 const shieldBar = document.getElementById('shieldBar');
 
@@ -554,6 +556,7 @@ let score = 0;
 let level = 1;
 let timer = 0;
 let shieldHP = 0; // 0-100
+let lives = 4;
 let shakeT = 0;
 let particles = [];
 let stars = [];
@@ -822,6 +825,34 @@ C.addEventListener('mousemove', e => {
 function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
 // ─── Start / Restart ───
+function respawnPlayer() {
+  player.x = W / 2;
+  player.y = H / 2;
+  player.tx = W / 2;
+  player.ty = H / 2;
+  shieldHP = 100;
+  nearMissPulse = 1;
+  shakeT = Math.max(shakeT, 0.28);
+  emitParticles(player.x, player.y, '#bff', 28, 140);
+  emitBurstRings(player.x, player.y, '#dfffff', 2);
+}
+
+function loseLife(color = '#f44', particleCount = 40, particleSpeed = 200) {
+  lives--;
+  emitParticles(player.x, player.y, color, particleCount, particleSpeed);
+  shakeT = 0.4;
+  playDeath();
+  if (lives <= 0) {
+    playGameOver();
+    showEnd(false);
+    draw();
+    return true;
+  }
+  announce(`SHIP FRACTURED  ${lives} LIFE${lives === 1 ? '' : 'S'} LEFT`);
+  respawnPlayer();
+  return false;
+}
+
 function startGame() {
   initAudio();
   resumeAudio();
@@ -831,6 +862,7 @@ function startGame() {
   comboCount = 0;
   comboTimer = 0;
   shieldHP = 0;
+  lives = 4;
   shakeT = 0;
   stormTimer = 8;
   stormFlash = 0;
@@ -861,6 +893,7 @@ scoresBtn.addEventListener('touchend', e => { e.preventDefault(); scorePanel.sty
 function updateUI() {
   scoreEl.textContent = score;
   levelEl.textContent = level <= 3 ? level : `${level}∞`;
+  livesEl.textContent = lives;
   timeEl.textContent = Math.ceil(timer);
   shieldBar.style.width = Math.min(100, shieldHP) + '%';
 }
@@ -872,7 +905,7 @@ function showEnd(won) {
   overlay.style.display = 'flex';
   overlay.innerHTML = `
     <div class="result">${won ? '🏆 YOU SURVIVED!' : '💀 DESTROYED'}</div>
-    <div class="score-final">Score: ${score}${won ? ' — All 3 levels cleared!' : ` — Reached Level ${level}`}</div>
+    <div class="score-final">Score: ${score}${won ? ' — All 3 levels cleared!' : ` — Reached Level ${level} • Lives spent: ${Math.max(0, 4 - lives)}`}</div>
     <div class="buttonRow"><button id="restartBtn">PLAY AGAIN</button><button id="endScoresBtn">HIGH SCORES</button></div>
     <div id="scorePanel" class="scorePanel"></div>
   `;
@@ -1005,12 +1038,7 @@ function update(dt) {
         playShieldBreak();
         shakeT = Math.max(shakeT, 0.35);
       } else {
-        emitParticles(player.x, player.y, '#f44', 50, 220);
-        playDeath();
-        playGameOver();
-        showEnd(false);
-        draw();
-        return;
+        if (loseLife('#f44', 50, 220)) return;
       }
     }
     for (let ai = asteroids.length - 1; ai >= 0; ai--) {
@@ -1065,14 +1093,8 @@ function update(dt) {
         e.x = player.x - (ex / ed) * 150;
         e.y = player.y - (ey / ed) * 150;
       } else {
-        emitParticles(player.x, player.y, '#f44', 40, 200);
-        shakeT = 0.4;
-        playDeath();
-        playGameOver();
-        showEnd(false);
-        // Do one more draw with particles
-        draw();
-        return;
+        if (loseLife('#f44', 40, 200)) return;
+        continue;
       }
     }
   }
@@ -1122,13 +1144,8 @@ function update(dt) {
         playHazard();
         continue;
       } else {
-        emitParticles(player.x, player.y, '#f80', 35, 180);
-        shakeT = 0.4;
-        playDeath();
-        playGameOver();
-        showEnd(false);
-        draw();
-        return;
+        if (loseLife('#f80', 35, 180)) return;
+        continue;
       }
     }
   }
