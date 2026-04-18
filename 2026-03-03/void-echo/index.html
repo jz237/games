@@ -64,14 +64,14 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   </div>
   <div id="scorePanel" class="scorePanel" style="display:none"></div>
 </div>
-<div class="versionTag" id="versionTag">v1.3.1</div>
+<div class="versionTag" id="versionTag">v1.4.0</div>
 <button id="muteBtn" aria-label="Toggle sound">🔊</button>
 <script>
 // ─── VOID ECHO: Space Survival ───
 const C = document.getElementById('c');
 const ctx = C.getContext('2d');
 const overlay = document.getElementById('overlay');
-const GAME_VERSION = 'v1.3.1';
+const GAME_VERSION = 'v1.4.0';
 const HS_KEY = 'void_echo_highscores';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/void-echo';
 const startBtn = document.getElementById('startBtn');
@@ -540,6 +540,7 @@ let particles = [];
 let stars = [];
 let voidBands = [];
 let wisps = [];
+let farStructures = [];
 let enemies = [];
 let asteroids = [];
 let crystals = [];
@@ -580,6 +581,7 @@ function initStars() {
 function initAtmosphere() {
   voidBands = Array.from({ length: 6 }, (_, i) => ({ y: H * (i + 0.5) / 6, phase: Math.random() * Math.PI * 2, speed: rand(0.2, 0.9), amp: rand(18, 42), width: rand(160, 280) }));
   wisps = Array.from({ length: 10 }, () => ({ x: Math.random() * W, y: Math.random() * H, r: rand(28, 70), vx: rand(-10, 10), vy: rand(-6, 6), a: rand(0.03, 0.08) }));
+  farStructures = Array.from({ length: 9 }, (_, i) => ({ x: (i + Math.random() * 0.4) * (W / 8), y: rand(H * 0.16, H * 0.78), w: rand(24, 80), h: rand(40, 140), glow: rand(0.03, 0.08), drift: rand(0.2, 0.9) }));
 }
 
 // ─── Init Level ───
@@ -1057,6 +1059,15 @@ function draw() {
     ctx.fill();
   }
 
+  for (const fs of farStructures) {
+    const alpha = fs.glow + Math.sin(atmosphereDrift * fs.drift + fs.x * 0.01) * 0.02;
+    const grad = ctx.createLinearGradient(fs.x, fs.y - fs.h, fs.x, fs.y + fs.h * 0.2);
+    grad.addColorStop(0, `rgba(90,140,255,${alpha})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(fs.x - fs.w * 0.5, fs.y - fs.h, fs.w, fs.h);
+  }
+
   // Stars
   for (const s of stars) {
     const b = 0.3 + Math.sin(s.b + performance.now() * 0.001 + atmosphereDrift * s.drift) * 0.3;
@@ -1095,11 +1106,24 @@ function draw() {
       else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
     }
     ctx.closePath();
-    ctx.fillStyle = '#3a3530';
+    const rockGrad = ctx.createRadialGradient(-a.r * 0.35, -a.r * 0.35, 0, 0, 0, a.r * 1.2);
+    rockGrad.addColorStop(0, '#7f776e');
+    rockGrad.addColorStop(0.45, '#4e4841');
+    rockGrad.addColorStop(1, '#231f1b');
+    ctx.fillStyle = rockGrad;
     ctx.fill();
-    ctx.strokeStyle = '#7a6e60';
+    ctx.strokeStyle = '#a79c8e';
     ctx.lineWidth = 1.5;
     ctx.stroke();
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = '#d7c8a6';
+    ctx.beginPath();
+    ctx.arc(-a.r * 0.18, -a.r * 0.2, Math.max(4, a.r * 0.22), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(a.r * 0.22, a.r * 0.1, Math.max(3, a.r * 0.16), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 
@@ -1108,21 +1132,31 @@ function draw() {
     ctx.save();
     ctx.translate(cr.x, cr.y);
     ctx.rotate(cr.rot);
-    // Glow
     ctx.shadowColor = '#0ff';
     ctx.shadowBlur = 12 + Math.sin(cr.sparkle) * 5;
-    // Diamond shape
+    const crystalGrad = ctx.createLinearGradient(0, -cr.r, 0, cr.r);
+    crystalGrad.addColorStop(0, '#f8ffff');
+    crystalGrad.addColorStop(0.35, '#7ffaff');
+    crystalGrad.addColorStop(1, '#0496b5');
     ctx.beginPath();
     ctx.moveTo(0, -cr.r);
     ctx.lineTo(cr.r * 0.6, 0);
     ctx.lineTo(0, cr.r);
     ctx.lineTo(-cr.r * 0.6, 0);
     ctx.closePath();
-    ctx.fillStyle = '#0ef';
+    ctx.fillStyle = crystalGrad;
     ctx.fill();
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 1;
     ctx.stroke();
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -cr.r * 0.7);
+    ctx.lineTo(cr.r * 0.2, 0);
+    ctx.lineTo(0, cr.r * 0.35);
+    ctx.strokeStyle = '#dfffff';
+    ctx.stroke();
+    ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
     ctx.restore();
   }
@@ -1136,6 +1170,12 @@ function draw() {
     ctx.shadowColor = glow;
     ctx.shadowBlur = 10 + Math.sin(e.pulse) * 6;
     if (e.kind === 'overseer') {
+      ctx.globalAlpha = 0.16;
+      ctx.beginPath();
+      ctx.arc(0, 0, e.r * 1.45, 0, Math.PI * 2);
+      ctx.fillStyle = '#7ef6ff';
+      ctx.fill();
+      ctx.globalAlpha = 1;
       ctx.rotate(e.aura * 0.15);
       ctx.beginPath();
       for (let i = 0; i < 8; i++) {
@@ -1152,6 +1192,12 @@ function draw() {
       ctx.fillStyle = '#eaffff';
       ctx.fill();
     } else if (e.kind === 'phantom') {
+      ctx.globalAlpha = 0.12;
+      ctx.beginPath();
+      ctx.arc(0, 0, e.r * 1.35, 0, Math.PI * 2);
+      ctx.fillStyle = '#b58cff';
+      ctx.fill();
+      ctx.globalAlpha = 1;
       ctx.rotate(e.aura * 0.2);
       ctx.beginPath();
       for (let i = 0; i < 6; i++) {
@@ -1164,9 +1210,13 @@ function draw() {
       ctx.fillStyle = `rgba(150,80,255,${0.62 + Math.sin(e.pulse) * 0.16})`;
       ctx.fill();
     } else {
+      const enemyGrad = ctx.createRadialGradient(-e.r * 0.25, -e.r * 0.3, 0, 0, 0, e.r * 1.2);
+      enemyGrad.addColorStop(0, '#ffb36b');
+      enemyGrad.addColorStop(0.42, '#ff4f45');
+      enemyGrad.addColorStop(1, '#7c0f0f');
       ctx.beginPath();
       ctx.arc(0, 0, e.r * pulse, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(220,40,30,${0.7 + Math.sin(e.pulse) * 0.2})`;
+      ctx.fillStyle = enemyGrad;
       ctx.fill();
     }
     ctx.beginPath();
@@ -1222,6 +1272,13 @@ function draw() {
     }
   }
 
+  ctx.globalAlpha = 0.14;
+  ctx.beginPath();
+  ctx.arc(0, 0, player.r + 22 + Math.sin(player.glow * 1.8) * 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#69d8ff';
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
   // Ship glow
   ctx.shadowColor = '#4af';
   ctx.shadowBlur = 18 + Math.sin(player.glow) * 6;
@@ -1246,6 +1303,16 @@ function draw() {
   ctx.arc(-player.r * 0.5, 0, 3 + Math.sin(player.glow * 3) * 1.5, 0, Math.PI * 2);
   ctx.fillStyle = '#0ff';
   ctx.fill();
+  ctx.globalAlpha = 0.42;
+  ctx.beginPath();
+  ctx.moveTo(-player.r * 0.7, 0);
+  ctx.lineTo(-player.r * 1.5 - Math.sin(player.glow * 4) * 3, -4);
+  ctx.lineTo(-player.r * 1.25, 0);
+  ctx.lineTo(-player.r * 1.5 - Math.sin(player.glow * 4) * 3, 4);
+  ctx.closePath();
+  ctx.fillStyle = '#4ff';
+  ctx.fill();
+  ctx.globalAlpha = 1;
 
   ctx.shadowBlur = 0;
   ctx.restore();
@@ -1315,6 +1382,14 @@ function menuDraw() {
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, y - band.width, W, band.width * 2);
+  }
+  for (const fs of farStructures) {
+    const alpha = fs.glow + Math.sin(atmosphereDrift * fs.drift + fs.x * 0.01) * 0.02;
+    const grad = ctx.createLinearGradient(fs.x, fs.y - fs.h, fs.x, fs.y + fs.h * 0.2);
+    grad.addColorStop(0, `rgba(90,140,255,${alpha})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(fs.x - fs.w * 0.5, fs.y - fs.h, fs.w, fs.h);
   }
   for (const w of wisps) {
     w.x += w.vx * 0.016; w.y += w.vy * 0.016;
