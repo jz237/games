@@ -143,7 +143,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v1.0.2';
+const GAME_VERSION='v1.0.3';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -184,6 +184,7 @@ let titleDemo={slash:0,bomb:0,target:2,nextSlashAt:0,nextBombAt:0,nextComboAt:0,
 let bossTrails=[];
 let fractureFlash=0;
 let fractureLines=[];
+let freezeWaves=[];
 let shieldImpact=0;
 let shieldImpactAngle=-Math.PI/2;
 let sigilLines=[];
@@ -793,6 +794,7 @@ function initGame(){
   gameWon=false;
   bossTrails=[];
   fractureFlash=0; fractureLines=[];
+  freezeWaves=[];
   shieldImpact=0; shieldImpactAngle=-Math.PI/2;
   pendingScoreSubmission=null;
   initBgParticles();
@@ -1711,6 +1713,26 @@ function drawRipples(){
     ctx.beginPath(); ctx.arc(gravityWell.x,gravityWell.y,82+Math.cos(gravityWell.pulse*0.8)*10,0,Math.PI*2); ctx.stroke();
     ctx.restore();
   }
+
+  for(let i=freezeWaves.length-1;i>=0;i--){
+    const w=freezeWaves[i];
+    w.radius+=w.speed;
+    w.life-=0.025;
+    if(w.life<=0){freezeWaves.splice(i,1);continue;}
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    ctx.globalAlpha=w.life*0.85;
+    ctx.strokeStyle='rgba(180,235,255,0.95)';
+    ctx.shadowColor='#8fe8ff'; ctx.shadowBlur=20;
+    ctx.lineWidth=8;
+    ctx.beginPath(); ctx.arc(w.x,w.y,w.radius,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.55)';
+    ctx.lineWidth=2;
+    ctx.setLineDash([12,10]);
+    ctx.beginPath(); ctx.arc(w.x,w.y,w.radius+10,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
 }
 
 function drawVignette(){
@@ -1883,6 +1905,11 @@ function triggerGravityWell(x,y){
   playPowerup();
 }
 
+function triggerBossFreezeWave(x,y){
+  freezeWaves.push({x,y,radius:0,speed:18,life:1,hitIds:new Set()});
+  addScorePopup(x-66,y-80,'FREEZE WAVE');
+}
+
 function triggerSigil(pts){
   sigilCooldown=SIGIL_MAX;
   playPowerup();
@@ -1967,6 +1994,7 @@ function triggerBomb(){
               bombFlash=0.8;
               triggerFracture(e.x,e.y,1.2);
               bossActive=false;
+              triggerBossFreezeWave(e.x,e.y);
               score+=220;
               addStyle(55);
               addScorePopup(e.x,e.y-54,'BOSS SLAIN');
@@ -2029,6 +2057,7 @@ function resolveSlash(pts){
             triggerFracture(e.x,e.y,1.25);
             playBossDeath();
             bossActive=false;
+            triggerBossFreezeWave(e.x,e.y);
             score+=220;
             addStyle(55);
             addScorePopup(e.x,e.y-54,'BOSS SLAIN');
@@ -2197,7 +2226,7 @@ function loop(ts){
               playHit(1,e.isBoss?'boss':'normal');
               if(e.hp<=0){
                 e.alive=false;
-                if(e.isBoss){ bossActive=false; playBossDeath(); score+=180; addStyle(38); }
+                if(e.isBoss){ bossActive=false; playBossDeath(); triggerBossFreezeWave(e.x,e.y); score+=180; addStyle(38); }
                 else{ score+=14; }
                 addShieldCharge(e.isBoss?32:12);
                 addScorePopup(e.x,e.y-26,e.isBoss?'SIGIL BREAK':'SIGIL HIT');
@@ -2217,8 +2246,22 @@ function loop(ts){
     }
     enemies.forEach(e=>{
       if(!e.alive) return;
+      if(e.freezeTimer&&e.freezeTimer>0){
+        e.freezeTimer=Math.max(0,e.freezeTimer-dt*timeScale);
+        return;
+      }
       const dx=cx-e.x,dy=cy-e.y;
       const d=Math.hypot(dx,dy);
+      freezeWaves.forEach((w,idx)=>{
+        if(e.isBoss||w.hitIds.has(e)) return;
+        const wd=Math.hypot(e.x-w.x,e.y-w.y);
+        if(Math.abs(wd-w.radius)<w.speed*1.8){
+          e.freezeTimer=2000;
+          w.hitIds.add(e);
+          addScorePopup(e.x,e.y-18,'FROZEN');
+          particles.push({x:e.x,y:e.y,vx:0,vy:0,life:0.5,color:'#d8f6ff',glow:'#8fe8ff',size:e.r*0.6});
+        }
+      });
       if(gravityWell){
         const gx=gravityWell.x-e.x, gy=gravityWell.y-e.y;
         const gd=Math.hypot(gx,gy)||1;
