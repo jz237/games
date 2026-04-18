@@ -64,14 +64,14 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   </div>
   <div id="scorePanel" class="scorePanel" style="display:none"></div>
 </div>
-<div class="versionTag" id="versionTag">v1.5.0</div>
+<div class="versionTag" id="versionTag">v1.6.0</div>
 <button id="muteBtn" aria-label="Toggle sound">🔊</button>
 <script>
 // ─── VOID ECHO: Space Survival ───
 const C = document.getElementById('c');
 const ctx = C.getContext('2d');
 const overlay = document.getElementById('overlay');
-const GAME_VERSION = 'v1.5.0';
+const GAME_VERSION = 'v1.6.0';
 const HS_KEY = 'void_echo_highscores';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/void-echo';
 const startBtn = document.getElementById('startBtn');
@@ -946,12 +946,23 @@ function update(dt) {
   if (shieldHP < 0) shieldHP = 0;
 
   if (stormBoss) {
-    stormBoss.pulse += dt * 2.6;
-    stormBoss.aura += dt * 1.4;
-    stormBoss.x += stormBoss.vx * dt;
-    stormBoss.y += stormBoss.vy * dt;
+    const titanMaxHp = 16 + level * 2;
+    const titanPhase = stormBoss.hp < titanMaxHp * 0.35 ? 3 : stormBoss.hp < titanMaxHp * 0.68 ? 2 : 1;
+    stormBoss.phase = titanPhase;
+    stormBoss.pulse += dt * (2.6 + titanPhase * 0.35);
+    stormBoss.aura += dt * (1.4 + titanPhase * 0.25);
+    stormBoss.x += stormBoss.vx * dt * (1 + titanPhase * 0.08);
+    stormBoss.y += stormBoss.vy * dt * (1 + titanPhase * 0.05);
     if (stormBoss.x < stormBoss.r || stormBoss.x > W - stormBoss.r) stormBoss.vx *= -1;
     if (stormBoss.y < stormBoss.r || stormBoss.y > H * 0.55) stormBoss.vy *= -1;
+    if (Math.random() < dt * (0.18 + titanPhase * 0.18)) {
+      stormArcs.push({ x1: stormBoss.x + rand(-stormBoss.r, stormBoss.r), y1: stormBoss.y, x2: player.x, y2: player.y, life: 0.16, color: titanPhase >= 3 ? '#ffffff' : '#aeefff' });
+      nearMissPulse = Math.max(nearMissPulse, 0.55 + titanPhase * 0.12);
+      if (dist(stormBoss, player) < stormBoss.r * (2.2 + titanPhase * 0.3) && shieldHP > 0) {
+        shieldHP = Math.max(0, shieldHP - (16 + titanPhase * 8));
+        playShieldBreak();
+      }
+    }
     const bdx = player.x - stormBoss.x;
     const bdy = player.y - stormBoss.y;
     const bdist = Math.hypot(bdx, bdy) || 1;
@@ -977,8 +988,9 @@ function update(dt) {
         destroyAsteroid(ai, (stormBoss.x + a.x) * 0.5, (stormBoss.y + a.y) * 0.5);
         stormBoss.hp -= 3;
         score += 35;
-        emitBurstRings(stormBoss.x, stormBoss.y, '#9ff', 2);
+        emitBurstRings(stormBoss.x, stormBoss.y, '#9ff', 2 + titanPhase);
         playImpactBurst('overseer');
+        if (titanPhase >= 2) stormArcs.push({ x1: a.x, y1: a.y, x2: stormBoss.x, y2: stormBoss.y, life: 0.2, color: titanPhase >= 3 ? '#fff' : '#b8f6ff' });
         if (stormBoss.hp <= 0) {
           emitParticles(stormBoss.x, stormBoss.y, '#aff', 80, 240);
           emitShardBurst(stormBoss.x, stormBoss.y, '#dfffff', 20, 220);
@@ -1334,10 +1346,11 @@ function draw() {
   if (stormBoss) {
     ctx.save();
     ctx.translate(stormBoss.x, stormBoss.y);
-    ctx.globalAlpha = 0.18;
+    const titanPhase = stormBoss.phase || 1;
+    ctx.globalAlpha = 0.14 + titanPhase * 0.04;
     ctx.beginPath();
-    ctx.arc(0, 0, stormBoss.r * 1.7 + Math.sin(stormBoss.pulse) * 6, 0, Math.PI * 2);
-    ctx.fillStyle = '#8ff';
+    ctx.arc(0, 0, stormBoss.r * (1.7 + titanPhase * 0.06) + Math.sin(stormBoss.pulse) * 6, 0, Math.PI * 2);
+    ctx.fillStyle = titanPhase >= 3 ? '#fff' : '#8ff';
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.rotate(stormBoss.aura);
@@ -1350,7 +1363,7 @@ function draw() {
         else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
       }
       ctx.closePath();
-      ctx.strokeStyle = i === 0 ? '#dfffff' : i === 1 ? '#7ef6ff' : '#a48dff';
+      ctx.strokeStyle = titanPhase >= 3 ? (i === 0 ? '#ffffff' : i === 1 ? '#c8ffff' : '#d7b1ff') : (i === 0 ? '#dfffff' : i === 1 ? '#7ef6ff' : '#a48dff');
       ctx.lineWidth = 2.4 - i * 0.5;
       ctx.stroke();
       ctx.rotate(0.5);
@@ -1359,8 +1372,12 @@ function draw() {
     ctx.arc(0, 0, stormBoss.r * 0.35, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
     ctx.fill();
-    ctx.fillStyle = 'rgba(220,245,255,0.9)';
+    ctx.fillStyle = titanPhase >= 3 ? 'rgba(255,255,255,0.95)' : 'rgba(220,245,255,0.9)';
     ctx.fillRect(-stormBoss.r, -stormBoss.r - 18, stormBoss.r * 2 * Math.max(0, stormBoss.hp / (16 + level * 2)), 6);
+    ctx.font = '12px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = titanPhase >= 3 ? '#ffffff' : '#dfffff';
+    ctx.fillText(titanPhase >= 3 ? 'TITAN PHASE III' : titanPhase === 2 ? 'TITAN PHASE II' : 'STORM TITAN', 0, -stormBoss.r - 26);
     ctx.restore();
   }
 
