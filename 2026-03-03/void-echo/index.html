@@ -64,14 +64,14 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   </div>
   <div id="scorePanel" class="scorePanel" style="display:none"></div>
 </div>
-<div class="versionTag" id="versionTag">v1.2.0</div>
+<div class="versionTag" id="versionTag">v1.3.0</div>
 <button id="muteBtn" aria-label="Toggle sound">🔊</button>
 <script>
 // ─── VOID ECHO: Space Survival ───
 const C = document.getElementById('c');
 const ctx = C.getContext('2d');
 const overlay = document.getElementById('overlay');
-const GAME_VERSION = 'v1.2.0';
+const GAME_VERSION = 'v1.3.0';
 const HS_KEY = 'void_echo_highscores';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/void-echo';
 const startBtn = document.getElementById('startBtn');
@@ -233,6 +233,26 @@ function playStormBlast(power = 1) {
   og.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
   osc.connect(og); connectEcho(og);
   osc.start(t); osc.stop(t + 0.45);
+}
+
+function playImpactBurst(kind = 'enemy') {
+  if (!audioReady || muted) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const osc2 = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = kind === 'asteroid' ? 'triangle' : kind === 'overseer' ? 'sawtooth' : 'square';
+  osc2.type = 'triangle';
+  const base = kind === 'asteroid' ? rand(70, 110) : kind === 'overseer' ? rand(180, 260) : rand(220, 360);
+  osc.frequency.setValueAtTime(base * 1.7, t);
+  osc.frequency.exponentialRampToValueAtTime(base * 0.6, t + 0.22);
+  osc2.frequency.setValueAtTime(base * 0.8, t);
+  osc2.frequency.exponentialRampToValueAtTime(base * 0.35, t + 0.28);
+  g.gain.setValueAtTime(0.22, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  osc.connect(g); osc2.connect(g); connectEcho(g);
+  osc.start(t); osc2.start(t);
+  osc.stop(t + 0.3); osc2.stop(t + 0.32);
 }
 
 muteBtn.addEventListener('click', () => {
@@ -635,15 +655,29 @@ function emitParticles(x, y, color, count, speed) {
     particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, color, r: 1.5 + Math.random() * 2.5 });
   }
 }
+function emitBurstRings(x, y, color, rings = 2) {
+  for (let i = 0; i < rings; i++) {
+    particles.push({ x, y, vx: 0, vy: 0, life: 1.1, color, r: 18 + i * 10, ring: true, grow: 48 + i * 18, width: 2.5 - i * 0.6 });
+  }
+}
+function emitShardBurst(x, y, color, count, speed) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = speed * (0.45 + Math.random() * 0.9);
+    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, color, r: 4 + Math.random() * 6, shard: true, rot: Math.random() * Math.PI * 2, rv: (Math.random() - 0.5) * 10 });
+  }
+}
 
 function killEnemy(index, reason = 'storm') {
   const e = enemies[index];
   if (!e) return;
   const color = e.kind === 'overseer' ? '#9ff' : e.kind === 'phantom' ? '#c7a6ff' : '#ff7a5f';
   emitParticles(e.x, e.y, color, e.kind === 'overseer' ? 36 : 22, e.kind === 'overseer' ? 220 : 150);
+  emitBurstRings(e.x, e.y, color, e.kind === 'overseer' ? 3 : 2);
+  emitShardBurst(e.x, e.y, color, e.kind === 'overseer' ? 12 : 7, e.kind === 'overseer' ? 180 : 120);
   score += e.kind === 'overseer' ? 60 : e.kind === 'phantom' ? 35 : 20;
   if (reason === 'storm') playStormBlast(e.kind === 'overseer' ? 2 : 1);
-  else playEnemyVoice(e.kind);
+  else playImpactBurst(e.kind);
   enemies.splice(index, 1);
 }
 
@@ -895,8 +929,11 @@ function update(dt) {
       if (shieldHP > 0) {
         shieldHP = 0;
         emitParticles(a.x, a.y, '#fa0', 15, 100);
+        emitBurstRings(a.x, a.y, '#ffd27a', 2);
+        emitShardBurst(a.x, a.y, '#ffb45c', 8, 110);
         shakeT = 0.2;
         nearMissPulse = 1;
+        playImpactBurst('asteroid');
         playEnemyVoice('asteroid');
         playShieldBreak();
         playHazard();
@@ -938,6 +975,8 @@ function update(dt) {
     const p = particles[i];
     p.x += p.vx * dt;
     p.y += p.vy * dt;
+    if (p.shard) p.rot += (p.rv || 0) * dt;
+    if (p.ring) p.r += (p.grow || 40) * dt;
     p.life -= dt * 2.5;
     if (p.life <= 0) particles.splice(i, 1);
   }
@@ -1180,7 +1219,24 @@ function draw() {
 
   // Particles
   for (const p of particles) {
-    ctx.globalAlpha = p.life;
+    ctx.globalAlpha = Math.max(0, p.life);
+    if (p.ring) {
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = p.width || 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.stroke();
+      continue;
+    }
+    if (p.shard) {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot || 0);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.r * 0.5, -p.r * 0.18, p.r, p.r * 0.36);
+      ctx.restore();
+      continue;
+    }
     ctx.fillStyle = p.color;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
