@@ -93,6 +93,9 @@ let nearMissPulse = 0;
 let atmosphereDrift = 0;
 let announceText = '';
 let announceTimer = 0;
+let stormTimer = 8;
+let stormFlash = 0;
+let stormArcs = [];
 function resize() { W = C.width = innerWidth; H = C.height = innerHeight; }
 resize();
 addEventListener('resize', resize);
@@ -205,6 +208,32 @@ function playComboTier(tier = 1) {
   });
 }
 
+function playStormBlast(power = 1) {
+  if (!audioReady || muted) return;
+  const t = audioCtx.currentTime;
+  const noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.22, audioCtx.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuf;
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 900 + power * 160;
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.24, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+  noise.connect(bp); bp.connect(g); connectEcho(g);
+  noise.start(t); noise.stop(t + 0.25);
+  const osc = audioCtx.createOscillator();
+  const og = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(220 + power * 40, t);
+  osc.frequency.exponentialRampToValueAtTime(55, t + 0.45);
+  og.gain.setValueAtTime(0.14, t);
+  og.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+  osc.connect(og); connectEcho(og);
+  osc.start(t); osc.stop(t + 0.45);
+}
 
 muteBtn.addEventListener('click', () => {
   muted = !muted;
@@ -607,6 +636,37 @@ function emitParticles(x, y, color, count, speed) {
   }
 }
 
+function killEnemy(index, reason = 'storm') {
+  const e = enemies[index];
+  if (!e) return;
+  const color = e.kind === 'overseer' ? '#9ff' : e.kind === 'phantom' ? '#c7a6ff' : '#ff7a5f';
+  emitParticles(e.x, e.y, color, e.kind === 'overseer' ? 36 : 22, e.kind === 'overseer' ? 220 : 150);
+  score += e.kind === 'overseer' ? 60 : e.kind === 'phantom' ? 35 : 20;
+  if (reason === 'storm') playStormBlast(e.kind === 'overseer' ? 2 : 1);
+  else playEnemyVoice(e.kind);
+  enemies.splice(index, 1);
+}
+
+function triggerStormEvent() {
+  if (state !== 'playing' || level < 3) return;
+  stormFlash = 1;
+  const hits = Math.min(enemies.length, 1 + Math.floor(level / 3));
+  stormArcs = [];
+  announce(level < 6 ? 'VOID SURGE' : 'STORM FRACTURE');
+  for (let i = 0; i < hits; i++) {
+    if (!enemies.length) break;
+    const idx = Math.random() * enemies.length | 0;
+    const e = enemies[idx];
+    stormArcs.push({ x1: rand(0, W), y1: -20, x2: e.x, y2: e.y, life: 0.22, color: e.kind === 'overseer' ? '#c8ffff' : '#9fd6ff' });
+    killEnemy(idx, 'storm');
+  }
+  if (level >= 5 && crystals.length && Math.random() < 0.6) {
+    const cr = crystals[Math.random() * crystals.length | 0];
+    emitParticles(cr.x, cr.y, '#8ff', 24, 120);
+    score += 25;
+  }
+}
+
 // ─── Input ───
 function setTarget(cx, cy) {
   player.tx = cx;
@@ -648,6 +708,9 @@ function startGame() {
   comboTimer = 0;
   shieldHP = 0;
   shakeT = 0;
+  stormTimer = 8;
+  stormFlash = 0;
+  stormArcs = [];
   player.x = W / 2;
   player.y = H / 2;
   player.tx = W / 2;
@@ -754,6 +817,16 @@ function update(dt) {
     if (comboTimer <= 0) comboCount = 0;
   }
   if (announceTimer > 0) announceTimer -= dt;
+  if (stormFlash > 0) stormFlash = Math.max(0, stormFlash - dt * 3.2);
+  for (let i = stormArcs.length - 1; i >= 0; i--) {
+    stormArcs[i].life -= dt;
+    if (stormArcs[i].life <= 0) stormArcs.splice(i, 1);
+  }
+  stormTimer -= dt;
+  if (stormTimer <= 0) {
+    triggerStormEvent();
+    stormTimer = Math.max(8, 16 - level * 0.45);
+  }
 
   player.glow += dt * 3;
 
@@ -931,6 +1004,10 @@ function draw() {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
   }
+  if (stormFlash > 0) {
+    ctx.fillStyle = `rgba(190,240,255,${0.16 * stormFlash})`;
+    ctx.fillRect(0, 0, W, H);
+  }
 
   // Asteroids
   for (const a of asteroids) {
@@ -1027,6 +1104,24 @@ function draw() {
     ctx.shadowBlur = 0;
     ctx.restore();
   }
+
+  for (const arc of stormArcs) {
+    ctx.save();
+    ctx.strokeStyle = arc.color;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = arc.color;
+    ctx.shadowBlur = 18;
+    ctx.globalAlpha = Math.max(0, arc.life / 0.22);
+    ctx.beginPath();
+    ctx.moveTo(arc.x1, arc.y1);
+    const midX = (arc.x1 + arc.x2) * 0.5 + Math.sin(arc.life * 40) * 24;
+    const midY = (arc.y1 + arc.y2) * 0.5;
+    ctx.lineTo(midX, midY);
+    ctx.lineTo(arc.x2, arc.y2);
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
 
   // Player
   ctx.save();
