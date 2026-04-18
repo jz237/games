@@ -64,14 +64,14 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   </div>
   <div id="scorePanel" class="scorePanel" style="display:none"></div>
 </div>
-<div class="versionTag" id="versionTag">v1.1.0</div>
+<div class="versionTag" id="versionTag">v1.2.0</div>
 <button id="muteBtn" aria-label="Toggle sound">🔊</button>
 <script>
 // ─── VOID ECHO: Space Survival ───
 const C = document.getElementById('c');
 const ctx = C.getContext('2d');
 const overlay = document.getElementById('overlay');
-const GAME_VERSION = 'v1.1.0';
+const GAME_VERSION = 'v1.2.0';
 const HS_KEY = 'void_echo_highscores';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/void-echo';
 const startBtn = document.getElementById('startBtn');
@@ -91,6 +91,8 @@ let pendingScoreSubmission = null;
 let globalScoresCache = [];
 let nearMissPulse = 0;
 let atmosphereDrift = 0;
+let announceText = '';
+let announceTimer = 0;
 function resize() { W = C.width = innerWidth; H = C.height = innerHeight; }
 resize();
 addEventListener('resize', resize);
@@ -502,6 +504,21 @@ const LEVELS = [
   { duration: 30, enemyCount: 6, enemySpeed: 100, asteroidCount: 7, crystalCount: 5 },
   { duration: 30, enemyCount: 12, enemySpeed: 140, asteroidCount: 10, crystalCount: 4 },
 ];
+function getLevelConfig(lvl) {
+  if (lvl <= LEVELS.length) return LEVELS[lvl - 1];
+  const extra = lvl - LEVELS.length;
+  return {
+    duration: Math.max(22, 28 - extra * 0.5),
+    enemyCount: 12 + extra * 2,
+    enemySpeed: 140 + extra * 16,
+    asteroidCount: 10 + Math.floor(extra * 1.5),
+    crystalCount: Math.max(3, 4 - Math.floor(extra / 4))
+  };
+}
+function announce(msg) {
+  announceText = msg;
+  announceTimer = 2.2;
+}
 
 // ─── Stars ───
 function initStars() {
@@ -518,8 +535,9 @@ function initAtmosphere() {
 
 // ─── Init Level ───
 function initLevel() {
-  const cfg = LEVELS[level - 1];
+  const cfg = getLevelConfig(level);
   timer = cfg.duration;
+  announce(level <= 3 ? `SECTOR ${level}` : `VOID STORM ${level}`);
   enemies = [];
   asteroids = [];
   crystals = [];
@@ -555,7 +573,9 @@ function spawnEnemy() {
   else if (side === 1) { x = W + 30; y = Math.random() * H; }
   else if (side === 2) { x = Math.random() * W; y = -30; }
   else { x = Math.random() * W; y = H + 30; }
-  enemies.push({ x, y, r: 12 + Math.random() * 6, pulse: Math.random() * Math.PI * 2, kind: Math.random() < 0.28 ? 'phantom' : 'chaser', aura: Math.random() * Math.PI * 2 });
+  const eliteChance = level >= 4 ? Math.min(0.16 + (level - 4) * 0.02, 0.34) : 0;
+  const elite = Math.random() < eliteChance;
+  enemies.push({ x, y, r: (elite ? 20 : 12) + Math.random() * (elite ? 8 : 6), pulse: Math.random() * Math.PI * 2, kind: elite ? 'overseer' : (Math.random() < 0.28 ? 'phantom' : 'chaser'), aura: Math.random() * Math.PI * 2, elite });
 }
 
 
@@ -651,7 +671,7 @@ scoresBtn.addEventListener('touchend', e => { e.preventDefault(); scorePanel.sty
 // ─── UI ───
 function updateUI() {
   scoreEl.textContent = score;
-  levelEl.textContent = level;
+  levelEl.textContent = level <= 3 ? level : `${level}∞`;
   timeEl.textContent = Math.ceil(timer);
   shieldBar.style.width = Math.min(100, shieldHP) + '%';
 }
@@ -690,22 +710,16 @@ function loop(now) {
 
 // ─── Update ───
 function update(dt) {
-  const cfg = LEVELS[level - 1];
+  const cfg = getLevelConfig(level);
 
   // Timer
   timer -= dt;
   if (timer <= 0) {
     timer = 0;
-    if (level >= 3) {
-      playLevelComplete();
-      showEnd(true);
-      return;
-    }
     level++;
     initLevel();
     playLevelComplete();
-    // Flash effect
-    emitParticles(player.x, player.y, '#0af', 30, 120);
+    emitParticles(player.x, player.y, level <= 3 ? '#0af' : '#b6f', level <= 3 ? 30 : 52, level <= 3 ? 120 : 190);
     return;
   }
 
@@ -739,6 +753,7 @@ function update(dt) {
     comboTimer -= dt;
     if (comboTimer <= 0) comboCount = 0;
   }
+  if (announceTimer > 0) announceTimer -= dt;
 
   player.glow += dt * 3;
 
@@ -751,13 +766,14 @@ function update(dt) {
     const ex = player.x - e.x;
     const ey = player.y - e.y;
     const ed = Math.hypot(ex, ey) || 1;
-    e.x += (ex / ed) * cfg.enemySpeed * dt;
-    e.y += (ey / ed) * cfg.enemySpeed * dt;
+    const speedMult = e.elite ? 1.18 : e.kind === 'overseer' ? 1.08 : e.kind === 'phantom' ? 0.96 : 1;
+    e.x += (ex / ed) * cfg.enemySpeed * speedMult * dt;
+    e.y += (ey / ed) * cfg.enemySpeed * speedMult * dt;
     e.pulse += dt * 5;
     e.aura += dt * (e.kind === 'phantom' ? 7 : 4);
     if (ed < player.r + e.r + 26 && ed > player.r + e.r + 2 && Math.random() < dt * 6) {
       nearMissPulse = Math.max(nearMissPulse, 0.5);
-      if (Math.random() < 0.2) playEnemyVoice(e.kind);
+      if (Math.random() < (e.elite ? 0.45 : 0.2)) playEnemyVoice(e.kind);
     }
 
     // Collision with player
@@ -787,7 +803,7 @@ function update(dt) {
 
   // Occasionally spawn new enemies in later levels
   if (level >= 2 && Math.random() < dt * 0.3) {
-    if (enemies.length < cfg.enemyCount + 4) spawnEnemy();
+    if (enemies.length < cfg.enemyCount + 4 + Math.floor(Math.max(0, level - 3) * 0.5)) spawnEnemy();
   }
 
   // Asteroids
@@ -829,7 +845,7 @@ function update(dt) {
     cr.rot += dt * 2;
     cr.sparkle += dt * 4;
     if (dist(player, cr) < player.r + cr.r + 8) {
-      score += 10 + Math.max(0, comboCount - 1) * 2;
+      score += 10 + Math.max(0, comboCount - 1) * 2 + Math.max(0, level - 3) * 3;
       shieldHP = Math.min(100, shieldHP + 35);
       emitParticles(cr.x, cr.y, '#0ff', 12, 80);
       playCollect();
@@ -967,10 +983,26 @@ function draw() {
     const pulse = 0.7 + Math.sin(e.pulse) * 0.3;
     ctx.save();
     ctx.translate(e.x, e.y);
-    const glow = e.kind === 'phantom' ? '#a56bff' : '#f33';
+    const glow = e.kind === 'overseer' ? '#7ef6ff' : e.kind === 'phantom' ? '#a56bff' : '#f33';
     ctx.shadowColor = glow;
     ctx.shadowBlur = 10 + Math.sin(e.pulse) * 6;
-    if (e.kind === 'phantom') {
+    if (e.kind === 'overseer') {
+      ctx.rotate(e.aura * 0.15);
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = i / 8 * Math.PI * 2;
+        const r = i % 2 ? e.r * 0.5 : e.r * (1.05 + Math.sin(e.pulse) * 0.12);
+        if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+        else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.closePath();
+      ctx.fillStyle = `rgba(90,240,255,${0.58 + Math.sin(e.pulse) * 0.14})`;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, e.r * 0.38, 0, Math.PI * 2);
+      ctx.fillStyle = '#eaffff';
+      ctx.fill();
+    } else if (e.kind === 'phantom') {
       ctx.rotate(e.aura * 0.2);
       ctx.beginPath();
       for (let i = 0; i < 6; i++) {
@@ -1061,7 +1093,21 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
-  // Level transition flash
+  if (announceTimer > 0 && announceText) {
+    ctx.globalAlpha = Math.min(1, announceTimer) * 0.92;
+    ctx.textAlign = 'center';
+    ctx.font = `700 ${Math.max(20, Math.min(W * 0.05, 42))}px Courier New`;
+    ctx.fillStyle = level <= 3 ? '#9fe8ff' : '#d9b3ff';
+    ctx.shadowColor = level <= 3 ? '#4ad8ff' : '#b56dff';
+    ctx.shadowBlur = 20;
+    ctx.fillText(announceText, W * 0.5, H * 0.22);
+    ctx.shadowBlur = 0;
+    ctx.font = `400 ${Math.max(11, Math.min(W * 0.018, 16))}px Courier New`;
+    ctx.fillStyle = 'rgba(230,245,255,0.9)';
+    ctx.fillText(level <= 3 ? 'SURVIVE THE SECTOR' : 'ENDLESS ESCALATION', W * 0.5, H * 0.22 + 24);
+    ctx.textAlign = 'start';
+    ctx.globalAlpha = 1;
+  }
   ctx.restore();
 }
 
