@@ -143,7 +143,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v1.0.5';
+const GAME_VERSION='v1.0.6';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -342,19 +342,49 @@ initTitleScene();
 // ==================== SOUND SYSTEM ====================
 let audioCtx=null, masterGain=null, musicGain=null;
 let muted=false, audioReady=false;
+let audioResetLock=false;
 
-function initAudio(){
-  if(audioCtx) return;
+function buildAudioGraph(){
+  masterGain=audioCtx.createGain();
+  masterGain.gain.value=0.8;
+  masterGain.connect(audioCtx.destination);
+  musicGain=audioCtx.createGain();
+  musicGain.gain.value=0.12;
+  musicGain.connect(masterGain);
+}
+
+function initAudio(force=false){
+  if(audioCtx && !force) return;
   try{
+    if(force && audioCtx){
+      try{ stopMusic(); }catch(e){}
+      try{ audioCtx.close(); }catch(e){}
+    }
     audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-    masterGain=audioCtx.createGain();
-    masterGain.gain.value=0.8;
-    masterGain.connect(audioCtx.destination);
-    musicGain=audioCtx.createGain();
-    musicGain.gain.value=0.12;
-    musicGain.connect(masterGain);
+    buildAudioGraph();
     audioReady=true;
   }catch(e){audioReady=false;}
+}
+
+function recoverAudio(reason='unknown'){
+  if(audioResetLock) return;
+  audioResetLock=true;
+  try{
+    initAudio(true);
+    if(gameActive && audioReady && !muted) startMusic();
+  }catch(e){}
+  audioResetLock=false;
+}
+
+function ensureAudioAlive(){
+  if(muted) return false;
+  if(!audioCtx || audioCtx.state==='closed' || !masterGain || !musicGain){
+    recoverAudio('missing-audio-graph');
+  }
+  if(audioCtx && audioCtx.state==='suspended'){
+    try{audioCtx.resume();}catch(e){}
+  }
+  return !!(audioReady && audioCtx && audioCtx.state!=='closed' && masterGain && musicGain);
 }
 
 function resumeAudio(){
@@ -362,6 +392,7 @@ function resumeAudio(){
   if(audioCtx&&audioCtx.state==='suspended'){
     try{audioCtx.resume();}catch(e){}
   }
+  ensureAudioAlive();
 }
 
 function playSlash(){
@@ -540,6 +571,7 @@ function playLevelUp(){
 
 function playPowerup(){
   if(!audioReady||muted) return;
+  if(!ensureAudioAlive()) return;
   try{
     const now=audioCtx.currentTime;
     const osc=audioCtx.createOscillator();
@@ -557,8 +589,12 @@ function playPowerup(){
     osc.connect(g); g.connect(masterGain);
     osc.start(now); osc.stop(now+0.22);
     lfo.start(now); lfo.stop(now+0.22);
+    osc.addEventListener('ended',()=>{ try{ osc.disconnect(); g.disconnect(); lfo.disconnect(); lfoG.disconnect(); }catch(e){} },{once:true});
+    lfo.addEventListener('ended',()=>{ try{ lfo.disconnect(); lfoG.disconnect(); }catch(e){} },{once:true});
     playGhostEcho(720,0.03,0.14,0.7);
-  }catch(e){}
+  }catch(e){
+    recoverAudio('playPowerup-failed');
+  }
 }
 
 function playGameOver(){
@@ -1898,9 +1934,20 @@ function addShieldCharge(amount){
 
 function triggerGravityWell(x,y){
   if(gravityWell) return;
+  resumeAudio();
+  ensureAudioAlive();
   gravityWell={x,y,life:5000,maxLife:5000,pulse:0};
   addScorePopup(x-54,y-36,'GRAVITY WELL');
   playPowerup();
+  if(audioCtx && audioCtx.state==='running' && musicGain){
+    try{
+      const now=audioCtx.currentTime;
+      musicGain.gain.cancelScheduledValues(now);
+      musicGain.gain.setValueAtTime(musicGain.gain.value||0.12,now);
+      musicGain.gain.linearRampToValueAtTime(0.18,now+0.06);
+      musicGain.gain.exponentialRampToValueAtTime(0.12,now+0.45);
+    }catch(e){ recoverAudio('gravity-well-music-duck'); }
+  }
 }
 
 function triggerBossFreezeWave(x,y){
