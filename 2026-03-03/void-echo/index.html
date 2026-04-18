@@ -65,14 +65,14 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   </div>
   <div id="scorePanel" class="scorePanel" style="display:none"></div>
 </div>
-<div class="versionTag" id="versionTag">v1.7.0</div>
+<div class="versionTag" id="versionTag">v1.8.0</div>
 <button id="muteBtn" aria-label="Toggle sound">🔊</button>
 <script>
 // ─── VOID ECHO: Space Survival ───
 const C = document.getElementById('c');
 const ctx = C.getContext('2d');
 const overlay = document.getElementById('overlay');
-const GAME_VERSION = 'v1.7.0';
+const GAME_VERSION = 'v1.8.0';
 const HS_KEY = 'void_echo_highscores';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/void-echo';
 const startBtn = document.getElementById('startBtn');
@@ -557,6 +557,7 @@ let level = 1;
 let timer = 0;
 let shieldHP = 0; // 0-100
 let lives = 4;
+let respawnInvuln = 0;
 let shakeT = 0;
 let particles = [];
 let stars = [];
@@ -831,6 +832,7 @@ function respawnPlayer() {
   player.tx = W / 2;
   player.ty = H / 2;
   shieldHP = 100;
+  respawnInvuln = 1.6;
   nearMissPulse = 1;
   shakeT = Math.max(shakeT, 0.28);
   emitParticles(player.x, player.y, '#bff', 28, 140);
@@ -863,6 +865,7 @@ function startGame() {
   comboTimer = 0;
   shieldHP = 0;
   lives = 4;
+  respawnInvuln = 0;
   shakeT = 0;
   stormTimer = 8;
   stormFlash = 0;
@@ -997,6 +1000,7 @@ function update(dt) {
   // Shield decay
   if (shieldHP > 0) shieldHP -= dt * 4;
   if (shieldHP < 0) shieldHP = 0;
+  if (respawnInvuln > 0) respawnInvuln = Math.max(0, respawnInvuln - dt);
 
   if (bossDeathFx) {
     bossDeathFx.t -= dt;
@@ -1030,7 +1034,7 @@ function update(dt) {
     const bdx = player.x - stormBoss.x;
     const bdy = player.y - stormBoss.y;
     const bdist = Math.hypot(bdx, bdy) || 1;
-    if (bdist < player.r + stormBoss.r * 0.68) {
+    if (respawnInvuln <= 0 && bdist < player.r + stormBoss.r * 0.68) {
       if (shieldHP > 0) {
         shieldHP = 0;
         emitParticles(stormBoss.x, stormBoss.y, '#9ff', 30, 180);
@@ -1081,7 +1085,7 @@ function update(dt) {
     }
 
     // Collision with player
-    if (dist(player, e) < player.r + e.r) {
+    if (respawnInvuln <= 0 && dist(player, e) < player.r + e.r) {
       if (shieldHP > 0) {
         shieldHP = 0;
         emitParticles(e.x, e.y, '#0ff', 20, 150);
@@ -1134,7 +1138,7 @@ function update(dt) {
     if (asteroidDestroyed) continue;
 
     // Collision
-    if (dist(player, a) < player.r + a.r * 0.7) {
+    if (respawnInvuln <= 0 && dist(player, a) < player.r + a.r * 0.7) {
       if (shieldHP > 0) {
         shieldHP = 0;
         destroyAsteroid(ai);
@@ -1471,13 +1475,15 @@ function draw() {
   ctx.translate(player.x, player.y);
 
   // Shield ring
-  if (shieldHP > 0) {
+  if (shieldHP > 0 || respawnInvuln > 0) {
     ctx.beginPath();
-    ctx.arc(0, 0, player.r + 8, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(0,200,255,${0.3 + shieldHP / 200})`;
-    ctx.lineWidth = 2.5;
-    ctx.shadowColor = '#0af';
-    ctx.shadowBlur = 15;
+    ctx.arc(0, 0, player.r + 8 + Math.sin(player.glow * 8) * (respawnInvuln > 0 ? 1.5 : 0), 0, Math.PI * 2);
+    ctx.strokeStyle = respawnInvuln > 0
+      ? `rgba(255,255,255,${0.45 + Math.sin(player.glow * 10) * 0.2})`
+      : `rgba(0,200,255,${0.3 + shieldHP / 200})`;
+    ctx.lineWidth = respawnInvuln > 0 ? 3.5 : 2.5;
+    ctx.shadowColor = respawnInvuln > 0 ? '#fff' : '#0af';
+    ctx.shadowBlur = respawnInvuln > 0 ? 22 : 15;
     ctx.stroke();
     ctx.shadowBlur = 0;
   }
@@ -1493,12 +1499,12 @@ function draw() {
     }
   }
 
-  ctx.globalAlpha = 0.14;
+  ctx.globalAlpha = respawnInvuln > 0 ? 0.22 + Math.sin(player.glow * 12) * 0.08 : 0.14;
   ctx.beginPath();
   ctx.arc(0, 0, player.r + 22 + Math.sin(player.glow * 1.8) * 4, 0, Math.PI * 2);
-  ctx.fillStyle = '#69d8ff';
+  ctx.fillStyle = respawnInvuln > 0 ? '#f8ffff' : '#69d8ff';
   ctx.fill();
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = respawnInvuln > 0 ? (0.55 + Math.sin(player.glow * 16) * 0.2) : 1;
 
   // Ship glow
   ctx.shadowColor = '#4af';
