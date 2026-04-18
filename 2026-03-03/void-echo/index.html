@@ -545,6 +545,8 @@ let farStructures = [];
 let enemies = [];
 let asteroids = [];
 let crystals = [];
+let stormBoss = null;
+let titleOrbs = [];
 let player = { x: 0, y: 0, tx: 0, ty: 0, r: 16, glow: 0 };
 let inputActive = false;
 let lastTime = 0;
@@ -583,6 +585,7 @@ function initAtmosphere() {
   voidBands = Array.from({ length: 6 }, (_, i) => ({ y: H * (i + 0.5) / 6, phase: Math.random() * Math.PI * 2, speed: rand(0.2, 0.9), amp: rand(18, 42), width: rand(160, 280) }));
   wisps = Array.from({ length: 10 }, () => ({ x: Math.random() * W, y: Math.random() * H, r: rand(28, 70), vx: rand(-10, 10), vy: rand(-6, 6), a: rand(0.03, 0.08) }));
   farStructures = Array.from({ length: 9 }, (_, i) => ({ x: (i + Math.random() * 0.4) * (W / 8), y: rand(H * 0.16, H * 0.78), w: rand(24, 80), h: rand(40, 140), glow: rand(0.03, 0.08), drift: rand(0.2, 0.9) }));
+  titleOrbs = Array.from({ length: 7 }, (_, i) => ({ ang: i / 7 * Math.PI * 2, dist: rand(Math.min(W,H)*0.12, Math.min(W,H)*0.3), r: rand(10, 26), speed: rand(0.15, 0.45), color: i % 2 ? '#7ef6ff' : '#b58cff' }));
 }
 
 // ─── Init Level ───
@@ -594,10 +597,16 @@ function initLevel() {
   asteroids = [];
   crystals = [];
   particles = [];
+  stormBoss = null;
 
   // Spawn enemies at edges
   for (let i = 0; i < cfg.enemyCount; i++) {
     spawnEnemy();
+  }
+  if (level >= 6 && level % 5 === 0) {
+    stormBoss = { x: W * 0.5, y: H * 0.2, r: 54, hp: 16 + level * 2, pulse: 0, aura: 0, vx: rand(-28, 28), vy: rand(8, 18) };
+    announce('STORM TITAN');
+    stormFlash = 1;
   }
   // Spawn asteroids
   for (let i = 0; i < cfg.asteroidCount; i++) {
@@ -935,6 +944,53 @@ function update(dt) {
   // Shield decay
   if (shieldHP > 0) shieldHP -= dt * 4;
   if (shieldHP < 0) shieldHP = 0;
+
+  if (stormBoss) {
+    stormBoss.pulse += dt * 2.6;
+    stormBoss.aura += dt * 1.4;
+    stormBoss.x += stormBoss.vx * dt;
+    stormBoss.y += stormBoss.vy * dt;
+    if (stormBoss.x < stormBoss.r || stormBoss.x > W - stormBoss.r) stormBoss.vx *= -1;
+    if (stormBoss.y < stormBoss.r || stormBoss.y > H * 0.55) stormBoss.vy *= -1;
+    const bdx = player.x - stormBoss.x;
+    const bdy = player.y - stormBoss.y;
+    const bdist = Math.hypot(bdx, bdy) || 1;
+    if (bdist < player.r + stormBoss.r * 0.68) {
+      if (shieldHP > 0) {
+        shieldHP = 0;
+        emitParticles(stormBoss.x, stormBoss.y, '#9ff', 30, 180);
+        emitBurstRings(stormBoss.x, stormBoss.y, '#cfffff', 3);
+        playShieldBreak();
+        shakeT = Math.max(shakeT, 0.35);
+      } else {
+        emitParticles(player.x, player.y, '#f44', 50, 220);
+        playDeath();
+        playGameOver();
+        showEnd(false);
+        draw();
+        return;
+      }
+    }
+    for (let ai = asteroids.length - 1; ai >= 0; ai--) {
+      const a = asteroids[ai];
+      if (dist(stormBoss, a) < stormBoss.r * 0.7 + a.r * 0.85) {
+        destroyAsteroid(ai, (stormBoss.x + a.x) * 0.5, (stormBoss.y + a.y) * 0.5);
+        stormBoss.hp -= 3;
+        score += 35;
+        emitBurstRings(stormBoss.x, stormBoss.y, '#9ff', 2);
+        playImpactBurst('overseer');
+        if (stormBoss.hp <= 0) {
+          emitParticles(stormBoss.x, stormBoss.y, '#aff', 80, 240);
+          emitShardBurst(stormBoss.x, stormBoss.y, '#dfffff', 20, 220);
+          stormFlash = 1;
+          announce('TITAN SHATTERED');
+          score += 300;
+          stormBoss = null;
+          break;
+        }
+      }
+    }
+  }
 
   // Enemies – chase player
   for (const e of enemies) {
@@ -1275,6 +1331,39 @@ function draw() {
     ctx.restore();
   }
 
+  if (stormBoss) {
+    ctx.save();
+    ctx.translate(stormBoss.x, stormBoss.y);
+    ctx.globalAlpha = 0.18;
+    ctx.beginPath();
+    ctx.arc(0, 0, stormBoss.r * 1.7 + Math.sin(stormBoss.pulse) * 6, 0, Math.PI * 2);
+    ctx.fillStyle = '#8ff';
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.rotate(stormBoss.aura);
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      for (let j = 0; j < 10; j++) {
+        const a = j / 10 * Math.PI * 2;
+        const r = j % 2 ? stormBoss.r * (0.58 + i * 0.1) : stormBoss.r * (1.02 + Math.sin(stormBoss.pulse + i) * 0.08);
+        if (j === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+        else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.closePath();
+      ctx.strokeStyle = i === 0 ? '#dfffff' : i === 1 ? '#7ef6ff' : '#a48dff';
+      ctx.lineWidth = 2.4 - i * 0.5;
+      ctx.stroke();
+      ctx.rotate(0.5);
+    }
+    ctx.beginPath();
+    ctx.arc(0, 0, stormBoss.r * 0.35, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.fillStyle = 'rgba(220,245,255,0.9)';
+    ctx.fillRect(-stormBoss.r, -stormBoss.r - 18, stormBoss.r * 2 * Math.max(0, stormBoss.hp / (16 + level * 2)), 6);
+    ctx.restore();
+  }
+
   for (const arc of stormArcs) {
     ctx.save();
     ctx.strokeStyle = arc.color;
@@ -1439,6 +1528,21 @@ function menuDraw() {
     ctx.fillStyle = grad;
     ctx.fillRect(fs.x - fs.w * 0.5, fs.y - fs.h, fs.w, fs.h);
   }
+  const cx = W * 0.5, cy = H * 0.46;
+  for (const orb of titleOrbs) {
+    const ang = orb.ang + atmosphereDrift * orb.speed;
+    const ox = cx + Math.cos(ang) * orb.dist;
+    const oy = cy + Math.sin(ang * 1.2) * orb.dist * 0.45;
+    const grad = ctx.createRadialGradient(ox, oy, 0, ox, oy, orb.r * 2.4);
+    grad.addColorStop(0, orb.color);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(ox, oy, orb.r * 2.4, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath(); ctx.arc(ox, oy, orb.r, 0, Math.PI * 2); ctx.fillStyle = orb.color; ctx.fill();
+  }
+  ctx.globalAlpha = 1;
   for (const w of wisps) {
     w.x += w.vx * 0.016; w.y += w.vy * 0.016;
     if (w.x < -120) w.x = W + 120; if (w.x > W + 120) w.x = -120;
