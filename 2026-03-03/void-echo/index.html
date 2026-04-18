@@ -45,6 +45,9 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
 .initialChar{width:52px;height:52px;border:1px solid rgba(140,205,255,.35);display:flex;align-items:center;justify-content:center;background:rgba(10,20,40,.55);font-size:28px;color:#eff8ff;text-shadow:0 0 10px rgba(120,200,255,.4)}
 #muteBtn{position:fixed;bottom:14px;right:14px;z-index:30;width:44px;height:44px;border-radius:50%;border:1px solid rgba(100,180,255,.4);background:rgba(10,15,30,.7);color:#b9ddff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);touch-action:manipulation}
 #muteBtn:hover,#muteBtn:active{background:rgba(100,180,255,.2)}
+#bombBtn{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:30;min-width:140px;min-height:46px;padding:10px 18px;border-radius:999px;border:1px solid rgba(170,230,255,.55);background:rgba(20,40,70,.72);color:#e9fbff;font-family:'Courier New',monospace;font-size:13px;letter-spacing:2px;cursor:pointer;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);touch-action:manipulation}
+#bombBtn:active,#bombBtn:hover{background:rgba(80,150,220,.28)}
+#bombBtn:disabled{opacity:.4;cursor:default}
 </style>
 </head>
 <body>
@@ -53,6 +56,7 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   <div>⚡ <span id="scoreEl">0</span></div>
   <div>LV <span id="levelEl">1</span>/3</div>
   <div>❤ <span id="livesEl">4</span></div>
+  <div>💣 <span id="bombsEl">1</span></div>
   <div>🛡<span class="shield-bar"><span class="shield-fill" id="shieldBar" style="width:0%"></span></span></div>
   <div>⏱ <span id="timeEl">30</span></div>
 </div>
@@ -72,14 +76,15 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   </div>
   <div id="scorePanel" class="scorePanel" style="display:none"></div>
 </div>
-<div class="versionTag" id="versionTag">v2.2.0</div>
+<div class="versionTag" id="versionTag">v2.3.0</div>
+<button id="bombBtn" aria-label="Smart bomb">SMART BOMB</button>
 <button id="muteBtn" aria-label="Toggle sound">🔊</button>
 <script>
 // ─── VOID ECHO: Space Survival ───
 const C = document.getElementById('c');
 const ctx = C.getContext('2d');
 const overlay = document.getElementById('overlay');
-const GAME_VERSION = 'v2.2.0';
+const GAME_VERSION = 'v2.3.0';
 const HS_KEY = 'void_echo_highscores';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/void-echo';
 const startBtn = document.getElementById('startBtn');
@@ -88,10 +93,12 @@ let scorePanel = document.getElementById('scorePanel');
 const scoreEl = document.getElementById('scoreEl');
 const levelEl = document.getElementById('levelEl');
 const livesEl = document.getElementById('livesEl');
+const bombsEl = document.getElementById('bombsEl');
 const timeEl = document.getElementById('timeEl');
 const shieldBar = document.getElementById('shieldBar');
 
 const muteBtn = document.getElementById('muteBtn');
+const bombBtn = document.getElementById('bombBtn');
 
 let W, H;
 let initials = [0,0,0];
@@ -539,7 +546,7 @@ function cycleInitial(slot, dir) {
 
 async function submitScoreEntry() {
   if (!pendingScoreSubmission) return;
-  const entry = { ...pendingScoreSubmission, initials: currentInitials() };
+  const entry = { ...pendingScoreSubmission, initials: normalizeInitials(currentInitials()) };
   const local = getHighScores();
   local.push(entry);
   local.sort((a,b)=> (b.score-a.score) || ((b.level||0)-(a.level||0)));
@@ -575,6 +582,7 @@ let level = 1;
 let timer = 0;
 let shieldHP = 0; // 0-100
 let lives = 4;
+let bombs = 1;
 let respawnInvuln = 0;
 let shakeT = 0;
 let particles = [];
@@ -861,6 +869,37 @@ function respawnPlayer() {
   emitBurstRings(player.x, player.y, '#dfffff', 2);
 }
 
+function triggerSmartBomb() {
+  if (state !== 'playing' || bombs <= 0) return;
+  bombs--;
+  score += enemies.length * 12;
+  announce('SMART BOMB');
+  stormFlash = Math.max(stormFlash, 0.95);
+  emitParticles(player.x, player.y, '#ffffff', 90, 240);
+  emitBurstRings(player.x, player.y, '#dfffff', 4);
+  for (let i = enemies.length - 1; i >= 0; i--) killEnemy(i, 'storm');
+  for (let i = asteroids.length - 1; i >= 0; i--) destroyAsteroid(i);
+  titanShots = [];
+  stormLanes = [];
+  if (stormBoss) {
+    stormBoss.hp -= 5;
+    emitBurstRings(stormBoss.x, stormBoss.y, '#ffffff', 3);
+    playStormBlast(3);
+    if (stormBoss.hp <= 0) {
+      emitParticles(stormBoss.x, stormBoss.y, '#aff', 80, 240);
+      emitShardBurst(stormBoss.x, stormBoss.y, '#dfffff', 20, 220);
+      bossDeathFx = { x: stormBoss.x, y: stormBoss.y, r: stormBoss.r * 1.3, t: 1.1, pulse: 0 };
+      announce('TITAN SHATTERED');
+      score += 300;
+      playTitanDeath();
+      stormBoss = null;
+    }
+  } else {
+    playStormBlast(2);
+  }
+  updateUI();
+}
+
 function loseLife(color = '#f44', particleCount = 40, particleSpeed = 200) {
   lives--;
   emitParticles(player.x, player.y, color, particleCount, particleSpeed);
@@ -887,6 +926,7 @@ function startGame() {
   comboTimer = 0;
   shieldHP = 0;
   lives = 4;
+  bombs = 1;
   respawnInvuln = 0;
   shakeT = 0;
   stormTimer = 8;
@@ -915,14 +955,19 @@ startBtn.addEventListener('click', startGame);
 startBtn.addEventListener('touchend', e => { e.preventDefault(); startGame(); });
 scoresBtn.addEventListener('click', () => { scorePanel.style.display = scorePanel.style.display === 'block' ? 'none' : 'block'; if (scorePanel.style.display === 'block') renderScorePanel(); });
 scoresBtn.addEventListener('touchend', e => { e.preventDefault(); scorePanel.style.display = scorePanel.style.display === 'block' ? 'none' : 'block'; if (scorePanel.style.display === 'block') renderScorePanel(); });
+bombBtn.addEventListener('click', triggerSmartBomb);
+bombBtn.addEventListener('touchend', e => { e.preventDefault(); triggerSmartBomb(); });
+addEventListener('keydown', e => { if ((e.code === 'Space' || e.key === 'b' || e.key === 'B') && state === 'playing') { e.preventDefault(); triggerSmartBomb(); } });
 
 // ─── UI ───
 function updateUI() {
   scoreEl.textContent = score;
   levelEl.textContent = level <= 3 ? level : `${level}∞`;
   livesEl.textContent = lives;
+  bombsEl.textContent = bombs;
   timeEl.textContent = Math.ceil(timer);
   shieldBar.style.width = Math.min(100, shieldHP) + '%';
+  bombBtn.disabled = state !== 'playing' || bombs <= 0;
 }
 
 function showEnd(won) {
@@ -1248,6 +1293,7 @@ function update(dt) {
     if (dist(player, cr) < player.r + cr.r + 8) {
       score += 10 + Math.max(0, comboCount - 1) * 2 + Math.max(0, level - 3) * 3;
       shieldHP = Math.min(100, shieldHP + 35);
+      if (Math.random() < 0.08 && bombs < 3) { bombs++; announce('SMART BOMB CHARGED'); }
       emitParticles(cr.x, cr.y, '#0ff', 12, 80);
       playCollect();
       playCombo();
