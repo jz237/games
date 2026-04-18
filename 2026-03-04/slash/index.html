@@ -143,7 +143,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v1.0.3';
+const GAME_VERSION='v1.0.4';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -2256,7 +2256,7 @@ function loop(ts){
         if(e.isBoss||w.hitIds.has(e)) return;
         const wd=Math.hypot(e.x-w.x,e.y-w.y);
         if(Math.abs(wd-w.radius)<w.speed*1.8){
-          e.freezeTimer=2000;
+          e.freezeTimer=3000;
           w.hitIds.add(e);
           addScorePopup(e.x,e.y-18,'FROZEN');
           particles.push({x:e.x,y:e.y,vx:0,vy:0,life:0.5,color:'#d8f6ff',glow:'#8fe8ff',size:e.r*0.6});
