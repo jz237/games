@@ -72,14 +72,14 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   </div>
   <div id="scorePanel" class="scorePanel" style="display:none"></div>
 </div>
-<div class="versionTag" id="versionTag">v2.0.0</div>
+<div class="versionTag" id="versionTag">v2.1.0</div>
 <button id="muteBtn" aria-label="Toggle sound">🔊</button>
 <script>
 // ─── VOID ECHO: Space Survival ───
 const C = document.getElementById('c');
 const ctx = C.getContext('2d');
 const overlay = document.getElementById('overlay');
-const GAME_VERSION = 'v2.0.0';
+const GAME_VERSION = 'v2.1.0';
 const HS_KEY = 'void_echo_highscores';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/void-echo';
 const startBtn = document.getElementById('startBtn');
@@ -586,6 +586,7 @@ let enemies = [];
 let asteroids = [];
 let crystals = [];
 let titanShots = [];
+let stormLanes = [];
 let stormBoss = null;
 let bossDeathFx = null;
 let titleOrbs = [];
@@ -640,6 +641,7 @@ function initLevel() {
   crystals = [];
   particles = [];
   titanShots = [];
+  stormLanes = [];
   stormBoss = null;
 
   // Spawn enemies at edges
@@ -898,6 +900,7 @@ function startGame() {
   player.glow = 0;
   particles = [];
   titanShots = [];
+  stormLanes = [];
   bossDeathFx = null;
   overlay.style.display = 'none';
   initStars();
@@ -1025,6 +1028,26 @@ function update(dt) {
       } else if (loseLife('#dff', 26, 150)) return;
     }
   }
+  for (let i = stormLanes.length - 1; i >= 0; i--) {
+    const lane = stormLanes[i];
+    lane.life -= dt;
+    lane.pulse += dt * 7;
+    if (lane.life <= 0) {
+      stormLanes.splice(i, 1);
+      continue;
+    }
+    const half = lane.w * 0.5;
+    const inLane = lane.axis === 'v'
+      ? Math.abs(player.x - lane.pos) < half + player.r
+      : Math.abs(player.y - lane.pos) < half + player.r;
+    if (respawnInvuln <= 0 && inLane && lane.life < lane.activeAt) {
+      emitParticles(player.x, player.y, '#cfffff', 12, 80);
+      if (shieldHP > 0) {
+        shieldHP = Math.max(0, shieldHP - 30 * dt);
+      } else if (Math.random() < dt * 1.4 && loseLife('#cfffff', 20, 120)) return;
+      nearMissPulse = Math.max(nearMissPulse, 0.55);
+    }
+  }
   stormTimer -= dt;
   if (stormTimer <= 0) {
     triggerStormEvent();
@@ -1071,6 +1094,14 @@ function update(dt) {
           shakeT = Math.max(shakeT, 0.18);
         }
       }
+    }
+    stormBoss.laneTimer = (stormBoss.laneTimer || (3.8 - titanPhase * 0.35)) - dt;
+    if (stormBoss.laneTimer <= 0) {
+      const vertical = Math.random() < 0.5;
+      stormLanes.push({ axis: vertical ? 'v' : 'h', pos: vertical ? player.x : player.y, w: titanPhase >= 3 ? 94 : titanPhase === 2 ? 78 : 64, life: 1.65, activeAt: 0.95, pulse: 0 });
+      announce(titanPhase >= 3 ? 'STORM WALL' : 'VOID RIFT');
+      playHazard();
+      stormBoss.laneTimer = Math.max(1.9, 4.4 - titanPhase * 0.42);
     }
     stormBoss.shotTimer = (stormBoss.shotTimer || (1.8 - titanPhase * 0.18)) - dt;
     if (stormBoss.shotTimer <= 0) {
@@ -1448,6 +1479,22 @@ function draw() {
     ctx.fillStyle = '#ffec9c';
     ctx.fill();
     ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  for (const lane of stormLanes) {
+    ctx.save();
+    const active = lane.life < lane.activeAt;
+    ctx.globalAlpha = active ? 0.2 + Math.sin(lane.pulse) * 0.08 : 0.1;
+    ctx.fillStyle = active ? '#dfffff' : 'rgba(160,220,255,0.35)';
+    ctx.shadowColor = '#dfffff';
+    ctx.shadowBlur = active ? 22 : 10;
+    if (lane.axis === 'v') ctx.fillRect(lane.pos - lane.w * 0.5, 0, lane.w, H);
+    else ctx.fillRect(0, lane.pos - lane.w * 0.5, W, lane.w);
+    ctx.globalAlpha = active ? 0.5 : 0.22;
+    ctx.fillStyle = '#ffffff';
+    if (lane.axis === 'v') ctx.fillRect(lane.pos - 2, 0, 4, H);
+    else ctx.fillRect(0, lane.pos - 2, W, 4);
     ctx.restore();
   }
 
