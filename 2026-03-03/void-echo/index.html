@@ -64,14 +64,14 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   </div>
   <div id="scorePanel" class="scorePanel" style="display:none"></div>
 </div>
-<div class="versionTag" id="versionTag">v1.6.0</div>
+<div class="versionTag" id="versionTag">v1.7.0</div>
 <button id="muteBtn" aria-label="Toggle sound">🔊</button>
 <script>
 // ─── VOID ECHO: Space Survival ───
 const C = document.getElementById('c');
 const ctx = C.getContext('2d');
 const overlay = document.getElementById('overlay');
-const GAME_VERSION = 'v1.6.0';
+const GAME_VERSION = 'v1.7.0';
 const HS_KEY = 'void_echo_highscores';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/void-echo';
 const startBtn = document.getElementById('startBtn');
@@ -254,6 +254,24 @@ function playImpactBurst(kind = 'enemy') {
   osc.connect(g); osc2.connect(g); connectEcho(g);
   osc.start(t); osc2.start(t);
   osc.stop(t + 0.3); osc2.stop(t + 0.32);
+}
+
+function playTitanDeath() {
+  if (!audioReady || muted) return;
+  const t = audioCtx.currentTime;
+  [220, 180, 140, 90].forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = i < 2 ? 'sawtooth' : 'triangle';
+    osc.frequency.setValueAtTime(freq * 1.4, t + i * 0.07);
+    osc.frequency.exponentialRampToValueAtTime(40, t + i * 0.07 + 0.45);
+    g.gain.setValueAtTime(0.001, t + i * 0.07);
+    g.gain.linearRampToValueAtTime(0.2, t + i * 0.07 + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.07 + 0.55);
+    osc.connect(g); connectEcho(g);
+    osc.start(t + i * 0.07); osc.stop(t + i * 0.07 + 0.56);
+  });
+  playStormBlast(3);
 }
 
 muteBtn.addEventListener('click', () => {
@@ -546,6 +564,7 @@ let enemies = [];
 let asteroids = [];
 let crystals = [];
 let stormBoss = null;
+let bossDeathFx = null;
 let titleOrbs = [];
 let player = { x: 0, y: 0, tx: 0, ty: 0, r: 16, glow: 0 };
 let inputActive = false;
@@ -823,6 +842,7 @@ function startGame() {
   player.ty = H / 2;
   player.glow = 0;
   particles = [];
+  bossDeathFx = null;
   overlay.style.display = 'none';
   initStars();
   initAtmosphere();
@@ -945,6 +965,12 @@ function update(dt) {
   if (shieldHP > 0) shieldHP -= dt * 4;
   if (shieldHP < 0) shieldHP = 0;
 
+  if (bossDeathFx) {
+    bossDeathFx.t -= dt;
+    bossDeathFx.pulse += dt * 5;
+    if (bossDeathFx.t <= 0) bossDeathFx = null;
+  }
+
   if (stormBoss) {
     const titanMaxHp = 16 + level * 2;
     const titanPhase = stormBoss.hp < titanMaxHp * 0.35 ? 3 : stormBoss.hp < titanMaxHp * 0.68 ? 2 : 1;
@@ -958,9 +984,14 @@ function update(dt) {
     if (Math.random() < dt * (0.18 + titanPhase * 0.18)) {
       stormArcs.push({ x1: stormBoss.x + rand(-stormBoss.r, stormBoss.r), y1: stormBoss.y, x2: player.x, y2: player.y, life: 0.16, color: titanPhase >= 3 ? '#ffffff' : '#aeefff' });
       nearMissPulse = Math.max(nearMissPulse, 0.55 + titanPhase * 0.12);
-      if (dist(stormBoss, player) < stormBoss.r * (2.2 + titanPhase * 0.3) && shieldHP > 0) {
-        shieldHP = Math.max(0, shieldHP - (16 + titanPhase * 8));
-        playShieldBreak();
+      if (dist(stormBoss, player) < stormBoss.r * (2.2 + titanPhase * 0.3)) {
+        if (shieldHP > 0) {
+          shieldHP = Math.max(0, shieldHP - (16 + titanPhase * 8));
+          playShieldBreak();
+        } else if (Math.random() < 0.18 + titanPhase * 0.08) {
+          emitParticles(player.x, player.y, '#9ff', 18, 120);
+          shakeT = Math.max(shakeT, 0.18);
+        }
       }
     }
     const bdx = player.x - stormBoss.x;
@@ -997,6 +1028,8 @@ function update(dt) {
           stormFlash = 1;
           announce('TITAN SHATTERED');
           score += 300;
+          bossDeathFx = { x: stormBoss.x, y: stormBoss.y, r: stormBoss.r * 1.3, t: 1.1, pulse: 0 };
+          playTitanDeath();
           stormBoss = null;
           break;
         }
@@ -1378,6 +1411,23 @@ function draw() {
     ctx.textAlign = 'center';
     ctx.fillStyle = titanPhase >= 3 ? '#ffffff' : '#dfffff';
     ctx.fillText(titanPhase >= 3 ? 'TITAN PHASE III' : titanPhase === 2 ? 'TITAN PHASE II' : 'STORM TITAN', 0, -stormBoss.r - 26);
+    ctx.restore();
+  }
+
+  if (bossDeathFx) {
+    ctx.save();
+    ctx.translate(bossDeathFx.x, bossDeathFx.y);
+    ctx.globalAlpha = Math.max(0, bossDeathFx.t * 0.7);
+    ctx.beginPath();
+    ctx.arc(0, 0, bossDeathFx.r + Math.sin(bossDeathFx.pulse) * 18, 0, Math.PI * 2);
+    ctx.fillStyle = '#dfffff';
+    ctx.fill();
+    ctx.globalAlpha = Math.max(0, bossDeathFx.t);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, bossDeathFx.r * (1.2 + (1 - bossDeathFx.t)), 0, Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
   }
 
