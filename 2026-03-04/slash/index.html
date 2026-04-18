@@ -143,7 +143,7 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v1.0.4';
+const GAME_VERSION='v1.0.5';
 const GAME_BUILD='2026-04-17';
 let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
@@ -159,7 +159,6 @@ let enemies=[], particles=[], slashes=[], ripples=[], scorePopups=[], bgParticle
 let sealHP=5, score=0, level=1, gameActive=false;
 let bombCooldown=0, BOMB_MAX=7500;
 let sigilCooldown=0, SIGIL_MAX=3750;
-let wellCooldown=0, WELL_MAX=10000;
 let slashPoints=[], drawing=false;
 let sigilCharge=0;
 let shakeX=0,shakeY=0,shakeT=0;
@@ -786,7 +785,7 @@ function initGame(){
   sigilLines.forEach(s=>{ if(s.hum) stopSigilHum(s.hum); });
   enemies=[]; particles=[]; slashes=[]; ripples=[]; scorePopups=[];
   sealHP=5; score=0; level=1; lastLevel=1; gameActive=true;
-  bombCooldown=0; sigilCooldown=0; wellCooldown=0; drawing=false; slashPoints=[]; sigilCharge=0; sigilLines=[]; gravityWell=null; pointerStart=null; holdTriggered=false; holdTimer=null;
+  bombCooldown=0; sigilCooldown=0; drawing=false; slashPoints=[]; sigilCharge=0; sigilLines=[]; gravityWell=null; pointerStart=null; holdTriggered=false; holdTimer=null;
   shakeT=0; spawnTimer=0; comboCount=0; comboTimer=0; maxCombo=1; slowMo=0;
   bombFlash=0; circleHint=0; circleHintData=null;
   stylePoints=0; styleRank='CLEAN'; perfectCircleWindow=0; perfectCircles=0;
@@ -1898,8 +1897,7 @@ function addShieldCharge(amount){
 }
 
 function triggerGravityWell(x,y){
-  if(wellCooldown>0) return;
-  wellCooldown=WELL_MAX;
+  if(gravityWell) return;
   gravityWell={x,y,life:5000,maxLife:5000,pulse:0};
   addScorePopup(x-54,y-36,'GRAVITY WELL');
   playPowerup();
@@ -2159,7 +2157,6 @@ function loop(ts){
   if(gameActive){
     bombCooldown=Math.max(0,bombCooldown-dt*timeScale);
     sigilCooldown=Math.max(0,sigilCooldown-dt*timeScale);
-    wellCooldown=Math.max(0,wellCooldown-dt*timeScale);
     stylePoints=Math.max(0,stylePoints-0.04*dt);
     styleRank=getStyleRank(stylePoints);
     perfectCircleWindow=Math.max(0,perfectCircleWindow-1);
@@ -2370,9 +2367,8 @@ function loop(ts){
   const sigilPct=(sigilCooldown<=0?1:1-sigilCooldown/SIGIL_MAX)*100;
   document.getElementById('sigilFill').style.width=sigilPct+'%';
   document.getElementById('sigilStatus').textContent=sigilCooldown<=0?'':`${(sigilCooldown/1000).toFixed(1)}s`;
-  const wellPct=(wellCooldown<=0?1:1-wellCooldown/WELL_MAX)*100;
-  document.getElementById('wellFill').style.width=wellPct+'%';
-  document.getElementById('wellStatus').textContent=wellCooldown<=0?'':`${(wellCooldown/1000).toFixed(1)}s`;
+  document.getElementById('wellFill').style.width=(gravityWell?100:0)+'%';
+  document.getElementById('wellStatus').textContent=gravityWell?'ACTIVE':'';
   document.getElementById('chargeFill').style.width=sigilCharge+'%';
   document.getElementById('chargeStatus').textContent=sigilCharge>=100&&sealHP>=5?'MAX':`${Math.floor(sigilCharge)}%`;
   const bombPct=(bombCooldown<=0?1:1-bombCooldown/BOMB_MAX)*100;
@@ -2439,7 +2435,7 @@ canvas.addEventListener('pointerdown',e=>{
   holdTriggered=false;
   if(holdTimer) clearTimeout(holdTimer);
   holdTimer=setTimeout(()=>{
-    if(pointerStart && !holdTriggered && gameActive && wellCooldown<=0 && slashPoints.length<5){
+    if(pointerStart && !holdTriggered && gameActive && !gravityWell && slashPoints.length<5){
       triggerGravityWell(pointerStart.x,pointerStart.y);
       holdTriggered=true;
       drawing=false;
