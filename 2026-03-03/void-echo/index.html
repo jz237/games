@@ -72,14 +72,14 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   </div>
   <div id="scorePanel" class="scorePanel" style="display:none"></div>
 </div>
-<div class="versionTag" id="versionTag">v1.9.0</div>
+<div class="versionTag" id="versionTag">v2.0.0</div>
 <button id="muteBtn" aria-label="Toggle sound">🔊</button>
 <script>
 // ─── VOID ECHO: Space Survival ───
 const C = document.getElementById('c');
 const ctx = C.getContext('2d');
 const overlay = document.getElementById('overlay');
-const GAME_VERSION = 'v1.9.0';
+const GAME_VERSION = 'v2.0.0';
 const HS_KEY = 'void_echo_highscores';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/void-echo';
 const startBtn = document.getElementById('startBtn');
@@ -585,6 +585,7 @@ let farStructures = [];
 let enemies = [];
 let asteroids = [];
 let crystals = [];
+let titanShots = [];
 let stormBoss = null;
 let bossDeathFx = null;
 let titleOrbs = [];
@@ -638,6 +639,7 @@ function initLevel() {
   asteroids = [];
   crystals = [];
   particles = [];
+  titanShots = [];
   stormBoss = null;
 
   // Spawn enemies at edges
@@ -895,6 +897,7 @@ function startGame() {
   player.ty = H / 2;
   player.glow = 0;
   particles = [];
+  titanShots = [];
   bossDeathFx = null;
   overlay.style.display = 'none';
   initStars();
@@ -1002,6 +1005,26 @@ function update(dt) {
     stormArcs[i].life -= dt;
     if (stormArcs[i].life <= 0) stormArcs.splice(i, 1);
   }
+  for (let i = titanShots.length - 1; i >= 0; i--) {
+    const s = titanShots[i];
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    s.life -= dt;
+    s.rot += dt * s.spin;
+    if (s.life <= 0 || s.x < -80 || s.x > W + 80 || s.y < -80 || s.y > H + 80) {
+      titanShots.splice(i, 1);
+      continue;
+    }
+    if (respawnInvuln <= 0 && dist(player, s) < player.r + s.r) {
+      emitParticles(s.x, s.y, '#dfffff', 18, 120);
+      emitBurstRings(s.x, s.y, '#ffffff', 1);
+      titanShots.splice(i, 1);
+      if (shieldHP > 0) {
+        shieldHP = Math.max(0, shieldHP - 45);
+        playShieldBreak();
+      } else if (loseLife('#dff', 26, 150)) return;
+    }
+  }
   stormTimer -= dt;
   if (stormTimer <= 0) {
     triggerStormEvent();
@@ -1048,6 +1071,19 @@ function update(dt) {
           shakeT = Math.max(shakeT, 0.18);
         }
       }
+    }
+    stormBoss.shotTimer = (stormBoss.shotTimer || (1.8 - titanPhase * 0.18)) - dt;
+    if (stormBoss.shotTimer <= 0) {
+      const aim = Math.atan2(player.y - stormBoss.y, player.x - stormBoss.x);
+      const count = titanPhase >= 3 ? 3 : titanPhase === 2 ? 2 : 1;
+      for (let i = 0; i < count; i++) {
+        const spread = count === 1 ? 0 : (i - (count - 1) / 2) * 0.24;
+        const ang = aim + spread;
+        const speed = 210 + titanPhase * 32 + i * 8;
+        titanShots.push({ x: stormBoss.x + Math.cos(ang) * stormBoss.r * 0.7, y: stormBoss.y + Math.sin(ang) * stormBoss.r * 0.7, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, r: titanPhase >= 3 ? 11 : 9, life: 3.2, spin: (i % 2 ? -1 : 1) * (4 + titanPhase) });
+      }
+      playStormBlast(1 + titanPhase);
+      stormBoss.shotTimer = Math.max(0.58, 1.85 - titanPhase * 0.26);
     }
     const bdx = player.x - stormBoss.x;
     const bdy = player.y - stormBoss.y;
@@ -1412,6 +1448,31 @@ function draw() {
     ctx.fillStyle = '#ffec9c';
     ctx.fill();
     ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  for (const s of titanShots) {
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(s.rot);
+    ctx.globalAlpha = Math.max(0.35, Math.min(1, s.life * 0.6));
+    ctx.shadowColor = '#dfffff';
+    ctx.shadowBlur = 16;
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      const a = i / 4 * Math.PI * 2 + Math.PI * 0.25;
+      const r = i % 2 ? s.r * 0.45 : s.r;
+      if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#f8ffff';
+    ctx.fill();
+    ctx.globalAlpha = 0.28;
+    ctx.beginPath();
+    ctx.arc(0, 0, s.r * 1.8, 0, Math.PI * 2);
+    ctx.fillStyle = '#aeefff';
+    ctx.fill();
     ctx.restore();
   }
 
