@@ -27,15 +27,22 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
 .versionTag{position:fixed;left:14px;bottom:14px;z-index:30;color:rgba(170,210,255,.6);font-size:12px;letter-spacing:2px;text-shadow:0 0 10px rgba(100,180,255,.25);pointer-events:none}
 .scorePanel{width:min(92vw,430px);margin-top:20px;padding:16px 16px 8px;border:1px solid rgba(130,190,255,.22);background:rgba(10,18,36,.48);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 0 30px rgba(30,80,160,.15) inset}
 .scorePanelTitle{font-size:12px;letter-spacing:2px;margin-bottom:8px;color:#9ed8ff}
+.scorePanelHint{font-size:11px;color:rgba(190,220,255,.62);margin-bottom:10px;letter-spacing:1px}
 .leaderboardTitle{color:#ffd86a;letter-spacing:2px;font-size:12px;margin:14px 0 8px}
 .leaderboardTitle.local{color:#78ddff}
-.leaderboardRow{display:grid;grid-template-columns:32px 1fr auto auto;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06);align-items:center;font-size:12px;color:#ddecff}
-.leaderboardRow span:last-child{color:#c7b7ff}
+.leaderboardHeader,.leaderboardRow{display:grid;grid-template-columns:36px 64px 1fr 56px;gap:8px;align-items:center}
+.leaderboardHeader{padding:0 0 6px;color:rgba(180,210,255,.48);font-size:10px;letter-spacing:1.5px;text-transform:uppercase}
+.leaderboardRow{padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:12px;color:#ddecff}
+.leaderboardRank{font-weight:700;color:#8ecbff}
+.leaderboardRank.top1{color:#ffe27a}.leaderboardRank.top2{color:#d6ecff}.leaderboardRank.top3{color:#e6c7ff}
+.leaderboardInitials{font-size:15px;letter-spacing:2px;font-weight:700}
+.leaderboardScore{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:#ffffff}
+.leaderboardMeta{color:#c7b7ff;text-align:right}
 .leaderboardRow.newEntry{color:#fff2b5;text-shadow:0 0 10px rgba(255,220,120,.35)}
 .initialsRow{display:flex;justify-content:center;gap:10px;margin:12px 0 14px}
 .initialCell{display:flex;flex-direction:column;align-items:center;gap:6px}
 .initialCell button{min-width:44px;min-height:36px;padding:0 10px;font-size:18px;letter-spacing:0;border-radius:8px}
-.initialChar{width:44px;height:44px;border:1px solid rgba(140,205,255,.35);display:flex;align-items:center;justify-content:center;background:rgba(10,20,40,.55);font-size:24px;color:#eff8ff;text-shadow:0 0 10px rgba(120,200,255,.4)}
+.initialChar{width:52px;height:52px;border:1px solid rgba(140,205,255,.35);display:flex;align-items:center;justify-content:center;background:rgba(10,20,40,.55);font-size:28px;color:#eff8ff;text-shadow:0 0 10px rgba(120,200,255,.4)}
 #muteBtn{position:fixed;bottom:14px;right:14px;z-index:30;width:44px;height:44px;border-radius:50%;border:1px solid rgba(100,180,255,.4);background:rgba(10,15,30,.7);color:#b9ddff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);touch-action:manipulation}
 #muteBtn:hover,#muteBtn:active{background:rgba(100,180,255,.2)}
 </style>
@@ -491,17 +498,28 @@ async function fetchGlobalScores() {
   return globalScoresCache;
 }
 
+function normalizeInitials(value) {
+  const clean = String(value || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+  return clean.padEnd(3, '?');
+}
+
 function renderRows(rows, highlightTs) {
   if (!rows.length) return '<div style="color:rgba(255,255,255,.5);padding:6px 0">No scores yet</div>';
-  return rows.map((e,i)=>`<div class="leaderboardRow${highlightTs && e.ts===highlightTs ? ' newEntry' : ''}"><span>${String(i+1).padStart(2,'0')}</span><span>${e.initials||'???'}</span><span>${e.score}</span><span>LV ${e.level||1}</span></div>`).join('');
+  const header = '<div class="leaderboardHeader"><span>Rank</span><span>Tag</span><span>Score</span><span>Wave</span></div>';
+  const body = rows.map((e,i)=>{
+    const rankClass = i === 0 ? ' top1' : i === 1 ? ' top2' : i === 2 ? ' top3' : '';
+    const rankIcon = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : '✦';
+    return `<div class="leaderboardRow${highlightTs && e.ts===highlightTs ? ' newEntry' : ''}"><span class="leaderboardRank${rankClass}">${rankIcon} ${String(i+1).padStart(2,'0')}</span><span class="leaderboardInitials">${normalizeInitials(e.initials)}</span><span class="leaderboardScore">${e.score}</span><span class="leaderboardMeta">LV ${e.level||1}</span></div>`;
+  }).join('');
+  return header + body;
 }
 
 function currentInitials() {
-  return initials.map(i => INITIAL_CHARS[i]).join('');
+  return normalizeInitials(initials.map(i => INITIAL_CHARS[i]).join(''));
 }
 
 function renderInitialPicker() {
-  return `<div class="scorePanelTitle">ENTER INITIALS</div><div class="initialsRow">${initials.map((idx, slot)=>`<div class="initialCell"><button data-initial="${slot}" data-dir="1">▲</button><div class="initialChar">${INITIAL_CHARS[idx]}</div><button data-initial="${slot}" data-dir="-1">▼</button></div>`).join('')}</div><div class="buttonRow" style="margin-top:0"><button id="submitScoreBtn">SUBMIT SCORE</button><button id="cancelScoreBtn">SKIP</button></div>`;
+  return `<div class="scorePanelTitle">ENTER 3-LETTER TAG</div><div class="scorePanelHint">LOCK IN YOUR THREE-LETTER HANDLE FOR THE TOP TEN</div><div class="initialsRow">${initials.map((idx, slot)=>`<div class="initialCell"><button data-initial="${slot}" data-dir="1">▲</button><div class="initialChar">${INITIAL_CHARS[idx]}</div><button data-initial="${slot}" data-dir="-1">▼</button></div>`).join('')}</div><div class="buttonRow" style="margin-top:0"><button id="submitScoreBtn">SUBMIT SCORE</button><button id="cancelScoreBtn">SKIP</button></div>`;
 }
 
 async function renderScorePanel(highlightTs = 0) {
@@ -509,7 +527,7 @@ async function renderScorePanel(highlightTs = 0) {
   const global = await fetchGlobalScores();
   let html = '';
   if (pendingScoreSubmission) html += renderInitialPicker();
-  html += `<div class="leaderboardTitle local">🏠 LOCAL HIGH SCORES</div>${renderRows(local, highlightTs)}<div class="leaderboardTitle">🌐 GLOBAL HIGH SCORES</div>${global.length ? renderRows(global, highlightTs) : '<div style="color:rgba(255,255,255,.5);padding:6px 0">Loading or unavailable</div>'}`;
+  html += `<div class="leaderboardTitle local">🏠 LOCAL TOP TEN</div>${renderRows(local, highlightTs)}<div class="leaderboardTitle">🌐 GLOBAL TOP TEN</div>${global.length ? renderRows(global, highlightTs) : '<div style="color:rgba(255,255,255,.5);padding:6px 0">Loading or unavailable</div>'}`;
   scorePanel.innerHTML = html;
   wireScorePanel();
 }
