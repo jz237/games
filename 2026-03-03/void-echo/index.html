@@ -77,7 +77,7 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   </div>
   <div id="scorePanel" class="scorePanel" style="display:none"></div>
 </div>
-<div class="versionTag" id="versionTag">v2.4.1</div>
+<div class="versionTag" id="versionTag">v2.5.0</div>
 <button id="bombBtn" aria-label="Smart bomb">SMART BOMB</button>
 <button id="muteBtn" aria-label="Toggle sound">🔊</button>
 <script>
@@ -85,7 +85,7 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
 const C = document.getElementById('c');
 const ctx = C.getContext('2d');
 const overlay = document.getElementById('overlay');
-const GAME_VERSION = 'v2.4.1';
+const GAME_VERSION = 'v2.5.0';
 const HS_KEY = 'void_echo_highscores';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/void-echo';
 const startBtn = document.getElementById('startBtn');
@@ -619,6 +619,7 @@ let asteroids = [];
 let crystals = [];
 let titanShots = [];
 let stormLanes = [];
+let titanMines = [];
 let stormBoss = null;
 let bossDeathFx = null;
 let titleOrbs = [];
@@ -674,6 +675,7 @@ function initLevel() {
   particles = [];
   titanShots = [];
   stormLanes = [];
+  titanMines = [];
   stormBoss = null;
 
   // Spawn enemies at edges
@@ -907,6 +909,7 @@ function triggerSmartBomb() {
   for (let i = asteroids.length - 1; i >= 0; i--) destroyAsteroid(i);
   titanShots = [];
   stormLanes = [];
+  titanMines = [];
   if (stormBoss) {
     stormBoss.hp -= 5;
     emitBurstRings(stormBoss.x, stormBoss.y, '#ffffff', 3);
@@ -965,6 +968,7 @@ function startGame() {
   particles = [];
   titanShots = [];
   stormLanes = [];
+  titanMines = [];
   bossDeathFx = null;
   overlay.style.display = 'none';
   initStars();
@@ -1119,6 +1123,30 @@ function update(dt) {
       nearMissPulse = Math.max(nearMissPulse, 0.55);
     }
   }
+  for (let i = titanMines.length - 1; i >= 0; i--) {
+    const m = titanMines[i];
+    m.life -= dt;
+    m.ang += dt * m.spin;
+    m.x = m.cx + Math.cos(m.ang) * m.dist;
+    m.y = m.cy + Math.sin(m.ang) * m.dist;
+    if (stormBoss) {
+      m.cx = stormBoss.x;
+      m.cy = stormBoss.y;
+    }
+    if (m.life <= 0 || !stormBoss) {
+      titanMines.splice(i, 1);
+      continue;
+    }
+    if (respawnInvuln <= 0 && dist(player, m) < player.r + m.r) {
+      emitParticles(m.x, m.y, '#ffd6ff', 22, 140);
+      emitBurstRings(m.x, m.y, '#ffffff', 2);
+      titanMines.splice(i, 1);
+      if (shieldHP > 0) {
+        shieldHP = Math.max(0, shieldHP - 60);
+        playShieldBreak();
+      } else if (loseLife('#fdf', 30, 170)) return;
+    }
+  }
   stormTimer -= dt;
   if (stormTimer <= 0) {
     triggerStormEvent();
@@ -1174,6 +1202,18 @@ function update(dt) {
       announce(titanPhase >= 3 ? 'STORM WALL' : 'VOID RIFT');
       playHazard();
       stormBoss.laneTimer = Math.max(1.9, 4.4 - titanPhase * 0.42);
+    }
+    if (titanPhase >= 2) {
+      stormBoss.mineTimer = (stormBoss.mineTimer || (4.8 - titanPhase * 0.45)) - dt;
+      if (stormBoss.mineTimer <= 0 && titanMines.length < (titanPhase >= 3 ? 5 : 3)) {
+        const mineCount = titanPhase >= 3 ? 2 : 1;
+        for (let i = 0; i < mineCount; i++) {
+          titanMines.push({ cx: stormBoss.x, cy: stormBoss.y, x: stormBoss.x, y: stormBoss.y, ang: Math.random() * Math.PI * 2, dist: stormBoss.r * (1.45 + i * 0.18), r: titanPhase >= 3 ? 12 : 10, life: 8.5, spin: (Math.random() < 0.5 ? -1 : 1) * (0.9 + titanPhase * 0.25) });
+        }
+        announce(titanPhase >= 3 ? 'VOID MINES' : 'ORBITAL MINES');
+        playHazard();
+        stormBoss.mineTimer = Math.max(2.8, 5.2 - titanPhase * 0.5);
+      }
     }
     stormBoss.shotTimer = (stormBoss.shotTimer || (1.8 - titanPhase * 0.18)) - dt;
     if (stormBoss.shotTimer <= 0) {
@@ -1568,6 +1608,31 @@ function draw() {
     ctx.fillStyle = '#ffffff';
     if (lane.axis === 'v') ctx.fillRect(lane.pos - 2, 0, 4, H);
     else ctx.fillRect(0, lane.pos - 2, W, 4);
+    ctx.restore();
+  }
+
+  for (const m of titanMines) {
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.rotate(m.ang * 2.4);
+    ctx.shadowColor = '#ffd6ff';
+    ctx.shadowBlur = 18;
+    ctx.globalAlpha = 0.92;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      const r = i % 2 ? m.r * 0.45 : m.r;
+      if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#fff0ff';
+    ctx.fill();
+    ctx.globalAlpha = 0.24;
+    ctx.beginPath();
+    ctx.arc(0, 0, m.r * 1.9, 0, Math.PI * 2);
+    ctx.fillStyle = '#d7b1ff';
+    ctx.fill();
     ctx.restore();
   }
 
