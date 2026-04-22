@@ -68,8 +68,8 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
     🚀 Drag or move mouse to pilot your ship<br>
     💎 Collect crystals for points + shield<br>
     🛡 Shield absorbs one hit<br>
-    ☠️ Dodge red enemies &amp; asteroids<br>
-    ⏱ Survive all 3 levels to win!
+    💣 Smart Bomb clears danger — tap button, press Space, or B<br>
+    ☠️ Dodge enemies, asteroids, and telegraphed storm hazards
   </div>
   <div class="buttonRow">
     <button id="startBtn">TAP TO PLAY</button>
@@ -77,7 +77,7 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   </div>
   <div id="scorePanel" class="scorePanel" style="display:none"></div>
 </div>
-<div class="versionTag" id="versionTag">v2.5.0</div>
+<div class="versionTag" id="versionTag">v2.6.0</div>
 <button id="bombBtn" aria-label="Smart bomb">SMART BOMB</button>
 <button id="muteBtn" aria-label="Toggle sound">🔊</button>
 <script>
@@ -85,7 +85,7 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
 const C = document.getElementById('c');
 const ctx = C.getContext('2d');
 const overlay = document.getElementById('overlay');
-const GAME_VERSION = 'v2.5.0';
+const GAME_VERSION = 'v2.6.0';
 const HS_KEY = 'void_echo_highscores';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/void-echo';
 const startBtn = document.getElementById('startBtn');
@@ -629,9 +629,9 @@ let lastTime = 0;
 
 // Level config: { duration, enemyCount, enemySpeed, asteroidCount, crystalCount }
 const LEVELS = [
-  { duration: 30, enemyCount: 3, enemySpeed: 60, asteroidCount: 4, crystalCount: 6 },
-  { duration: 30, enemyCount: 6, enemySpeed: 100, asteroidCount: 7, crystalCount: 5 },
-  { duration: 30, enemyCount: 12, enemySpeed: 140, asteroidCount: 10, crystalCount: 4 },
+  { duration: 34, enemyCount: 2, enemySpeed: 52, asteroidCount: 3, crystalCount: 7 },
+  { duration: 32, enemyCount: 4, enemySpeed: 82, asteroidCount: 5, crystalCount: 6 },
+  { duration: 30, enemyCount: 8, enemySpeed: 118, asteroidCount: 8, crystalCount: 5 },
 ];
 function getLevelConfig(lvl) {
   if (lvl <= LEVELS.length) return LEVELS[lvl - 1];
@@ -998,6 +998,7 @@ function updateUI() {
   bombBtn.disabled = state !== 'playing' || bombs <= 0;
   bombBtn.classList.toggle('ready', state === 'playing' && bombs > 0);
   bombBtn.textContent = bombs > 0 ? `SMART BOMB ×${bombs}` : 'NO BOMBS';
+  if (state === 'playing' && level <= 2 && bombs > 0) bombBtn.textContent += '  [SPACE]';
 }
 
 function showEnd(won) {
@@ -1126,6 +1127,7 @@ function update(dt) {
   for (let i = titanMines.length - 1; i >= 0; i--) {
     const m = titanMines[i];
     m.life -= dt;
+    m.arm = Math.max(0, (m.arm || 0) - dt);
     m.ang += dt * m.spin;
     m.x = m.cx + Math.cos(m.ang) * m.dist;
     m.y = m.cy + Math.sin(m.ang) * m.dist;
@@ -1137,7 +1139,7 @@ function update(dt) {
       titanMines.splice(i, 1);
       continue;
     }
-    if (respawnInvuln <= 0 && dist(player, m) < player.r + m.r) {
+    if (respawnInvuln <= 0 && m.arm <= 0 && dist(player, m) < player.r + m.r) {
       emitParticles(m.x, m.y, '#ffd6ff', 22, 140);
       emitBurstRings(m.x, m.y, '#ffffff', 2);
       titanMines.splice(i, 1);
@@ -1198,7 +1200,7 @@ function update(dt) {
     stormBoss.laneTimer = (stormBoss.laneTimer || (3.8 - titanPhase * 0.35)) - dt;
     if (stormBoss.laneTimer <= 0) {
       const vertical = Math.random() < 0.5;
-      stormLanes.push({ axis: vertical ? 'v' : 'h', pos: vertical ? player.x : player.y, w: titanPhase >= 3 ? 94 : titanPhase === 2 ? 78 : 64, life: 1.65, activeAt: 0.95, pulse: 0 });
+      stormLanes.push({ axis: vertical ? 'v' : 'h', pos: vertical ? player.x : player.y, w: titanPhase >= 3 ? 94 : titanPhase === 2 ? 78 : 64, life: 1.9, activeAt: 1.2, pulse: 0 });
       announce(titanPhase >= 3 ? 'STORM WALL' : 'VOID RIFT');
       playHazard();
       stormBoss.laneTimer = Math.max(1.9, 4.4 - titanPhase * 0.42);
@@ -1208,7 +1210,7 @@ function update(dt) {
       if (stormBoss.mineTimer <= 0 && titanMines.length < (titanPhase >= 3 ? 5 : 3)) {
         const mineCount = titanPhase >= 3 ? 2 : 1;
         for (let i = 0; i < mineCount; i++) {
-          titanMines.push({ cx: stormBoss.x, cy: stormBoss.y, x: stormBoss.x, y: stormBoss.y, ang: Math.random() * Math.PI * 2, dist: stormBoss.r * (1.45 + i * 0.18), r: titanPhase >= 3 ? 12 : 10, life: 8.5, spin: (Math.random() < 0.5 ? -1 : 1) * (0.9 + titanPhase * 0.25) });
+          titanMines.push({ cx: stormBoss.x, cy: stormBoss.y, x: stormBoss.x, y: stormBoss.y, ang: Math.random() * Math.PI * 2, dist: stormBoss.r * (1.45 + i * 0.18), r: titanPhase >= 3 ? 12 : 10, life: 8.5, arm: 0.75, spin: (Math.random() < 0.5 ? -1 : 1) * (0.9 + titanPhase * 0.25) });
         }
         announce(titanPhase >= 3 ? 'VOID MINES' : 'ORBITAL MINES');
         playHazard();
@@ -1615,9 +1617,10 @@ function draw() {
     ctx.save();
     ctx.translate(m.x, m.y);
     ctx.rotate(m.ang * 2.4);
-    ctx.shadowColor = '#ffd6ff';
-    ctx.shadowBlur = 18;
-    ctx.globalAlpha = 0.92;
+    const armed = (m.arm || 0) <= 0;
+    ctx.shadowColor = armed ? '#ffd6ff' : '#9ed8ff';
+    ctx.shadowBlur = armed ? 18 : 10;
+    ctx.globalAlpha = armed ? 0.92 : 0.48;
     ctx.beginPath();
     for (let i = 0; i < 6; i++) {
       const a = i / 6 * Math.PI * 2;
@@ -1626,12 +1629,12 @@ function draw() {
       else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
     }
     ctx.closePath();
-    ctx.fillStyle = '#fff0ff';
+    ctx.fillStyle = armed ? '#fff0ff' : '#d9f6ff';
     ctx.fill();
-    ctx.globalAlpha = 0.24;
+    ctx.globalAlpha = armed ? 0.24 : 0.14;
     ctx.beginPath();
     ctx.arc(0, 0, m.r * 1.9, 0, Math.PI * 2);
-    ctx.fillStyle = '#d7b1ff';
+    ctx.fillStyle = armed ? '#d7b1ff' : '#8fdcff';
     ctx.fill();
     ctx.restore();
   }
