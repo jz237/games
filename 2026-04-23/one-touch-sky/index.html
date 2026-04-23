@@ -40,7 +40,7 @@ h1{font-size:clamp(34px,9vw,54px);letter-spacing:4px;background:linear-gradient(
   <div><div class="small">WAVE</div><div id="wave">1</div></div>
 </div>
 <div id="reticle"></div>
-<div id="version" class="version" style="display:block">v1.2.1</div>
+<div id="version" class="version" style="display:block">v1.2.2</div>
 <div id="start">
   <div class="card" id="startCard">
     <h1>ONE TOUCH SKY</h1>
@@ -58,6 +58,7 @@ h1{font-size:clamp(34px,9vw,54px);letter-spacing:4px;background:linear-gradient(
 </div>
 <script>
 const C=document.getElementById('c'),X=C.getContext('2d');
+const canvas=C;
 let W,H,dpr=1;
 function resize(){dpr=Math.min(2,window.devicePixelRatio||1);W=innerWidth;H=innerHeight;C.width=W*dpr;C.height=H*dpr;C.style.width=W+'px';C.style.height=H+'px';X.setTransform(dpr,0,0,dpr,0,0);}
 addEventListener('resize',resize);resize();
