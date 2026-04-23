@@ -46,14 +46,14 @@ h1{font-size:clamp(34px,9vw,54px);letter-spacing:4px;background:linear-gradient(
   <div><div class="small">STANCE</div><div id="stance">MOVE</div></div>
   <div><div class="small">BUFFS</div><div id="buffs">—</div></div>
 </div>
-<div id="version" class="version" style="display:block">v3.2.0</div>
+<div id="version" class="version" style="display:block">v3.3.0</div>
 <div id="start">
   <div class="card" id="startCard">
     <h1>ONE TOUCH SWARM</h1>
     <div class="sub">A one-finger top-down survival game for phones.<br>Drag anywhere across the battlefield. The survivor auto-aims and fires at incoming insectoids.</div>
-    <div class="how">• One finger only<br>• Move freely across the whole kill zone<br>• Auto-fire prioritizes the nearest threat<br>• Field kits last the whole wave and now show up earlier<br>• Survive the swarm as long as possible</div>
+    <div class="how">• One finger only<br>• Move freely across the whole kill zone<br>• Auto-fire prioritizes the nearest threat<br>• Field kits now persist until the boss arrives<br>• Survive the swarm as long as possible</div>
     <button class="btn" id="play">BEGIN WATCH</button>
-    <div class="version">v3.2.0</div>
+    <div class="version">v3.3.0</div>
   </div>
 </div>
 <div id="gameover" style="display:none">
@@ -136,18 +136,18 @@ function makePlayer(){
   };
 }
 
-function clearWavePowers(nextWave){
+function clearWavePowers(){
   if(!player) return;
-  if(player.guardWave && player.guardWave<nextWave) player.guardWave=0;
-  if(player.rapidWave && player.rapidWave<nextWave) player.rapidWave=0;
-  if(player.spreadWave && player.spreadWave<nextWave) player.spreadWave=0;
-  if(player.furyWave && player.furyWave<nextWave) player.furyWave=0;
+  player.guardWave=0;
+  player.rapidWave=0;
+  player.spreadWave=0;
+  player.furyWave=0;
 }
 
-function hasGuard(){ return player && player.guardWave===wave; }
-function hasRapid(){ return player && player.rapidWave===wave; }
-function hasSpread(){ return player && player.spreadWave===wave; }
-function hasFury(){ return player && player.furyWave===wave; }
+function hasGuard(){ return player && !!player.guardWave; }
+function hasRapid(){ return player && !!player.rapidWave; }
+function hasSpread(){ return player && !!player.spreadWave; }
+function hasFury(){ return player && !!player.furyWave; }
 function updateBuffHud(){
   const buffs=[];
   if(hasGuard()) buffs.push('Guard');
@@ -211,7 +211,6 @@ function resetGame(){
 }
 
 function startWave(n){
-  clearWavePowers(n);
   wave=n;
   waveLeft=7+n*2;
   waveDelay=34;
@@ -262,11 +261,14 @@ function spawnEnemy(){
 }
 
 function startBoss(){
+  clearWavePowers();
+  updateBuffHud();
   boss={t:'queen',x:W*0.5,y:arena.top-90,r:50,hp:380+wave*80,max:380+wave*80,phase:0,shoot:38,spawn:64,contact:2,flash:0};
   bossIntro=90;
   screenFlash=10;
   shake=10;
   beep(72,.3,'sawtooth',.12);
+  beep(48,.24,'triangle',.08);
 }
 
 function addParticle(x,y,vx,vy,life,color,size,kind='spark',decay=.96,rot=0){
@@ -347,8 +349,9 @@ function fire(){
     addParticle(player.x+Math.cos(ejectAng)*10,player.y+Math.sin(ejectAng)*10,Math.cos(ejectAng)*rand(1.4,3.2),Math.sin(ejectAng)*rand(1.4,3.2),rand(.48,.8),'rgba(209,171,89,.95)',rand(2.6,4),'casing',.985,rand(0,TAU));
   }
   dirtBurst(player.x+Math.cos(ang)*12,player.y+Math.sin(ang)*12,.34,'rgba(110,80,54,.3)');
-  beep(420,.04,'square',.04);
+  beep(hasFury()?460:420,.04,'square',.05);
   beep(180,.05,'triangle',.03);
+  beep(920,.025,'sine',.022);
 }
 
 function findAimTarget(){
@@ -445,9 +448,15 @@ function damagePlayer(n){
 }
 
 function maybeDropPickup(x,y,guaranteed=false){
-  if(!guaranteed && Math.random()>.075) return;
   const types=['guard','rapid','spread','fury'];
-  pickups.push({x,y,vy:-.8,life:480,t:types[Math.random()*types.length|0],spin:rand(0,TAU)});
+  let count=0;
+  if(guaranteed) count=1+((Math.random()*2)|0);
+  else {
+    const r=Math.random();
+    if(r<.08) count=1;
+    if(r<.018) count=2;
+  }
+  for(let i=0;i<count;i++) pickups.push({x:x+rand(-14,14),y:y+rand(-14,14),vy:rand(-1.1,-.5),life:480,t:types[Math.random()*types.length|0],spin:rand(0,TAU)});
 }
 
 function killEnemy(index){
@@ -457,6 +466,9 @@ function killEnemy(index){
   goreBurst(e,e.t==='beetle');
   score+=enemyScore(e.t);
   maybeDropPickup(e.x,e.y,false);
+  beep(e.t==='beetle'?110:e.t==='spider'?150:e.t==='mantis'?190:230,.06,'square',.05);
+  beep(70,.09,'sawtooth',.03);
+  beep(980,.03,'sine',.02);
   enemies.splice(index,1);
 }
 
@@ -471,6 +483,8 @@ function killBoss(){
   screenFlash=12;
   shake=18;
   beep(70,.3,'sawtooth',.14);
+  beep(120,.2,'triangle',.08);
+  beep(960,.08,'sine',.04);
   wave+=1;
   startWave(wave);
 }
@@ -686,14 +700,15 @@ function updatePickups(dt){
     p.spin+=.07*dt;
     if(p.life<=0){ pickups.splice(i,1); continue; }
     if(dist(p.x,p.y,player.x,player.y)<28){
-      if(p.t==='guard') player.guardWave=wave;
-      if(p.t==='rapid') player.rapidWave=wave;
-      if(p.t==='spread') player.spreadWave=wave;
-      if(p.t==='fury') player.furyWave=wave;
+      if(p.t==='guard') player.guardWave=1;
+      if(p.t==='rapid') player.rapidWave=1;
+      if(p.t==='spread') player.spreadWave=1;
+      if(p.t==='fury') player.furyWave=1;
       score+=20;
       updateBuffHud();
       burst(p.x,p.y,['rgba(255,237,173,.88)','rgba(255,165,82,.8)']);
       beep(820,.06,'sine',.07);
+      beep(1240,.04,'triangle',.04);
       pickups.splice(i,1);
     }
   }
