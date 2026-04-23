@@ -29,6 +29,8 @@ h1{text-align:center;font-size:2em;margin:20px 0 5px;background:linear-gradient(
 .filters button:hover,.filters button.active{background:linear-gradient(135deg,#ff5fa2,#7f6bff 50%,#44d1ff);border-color:#ffd2f0;color:#fff;box-shadow:0 10px 24px rgba(133,96,255,.34)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;max-width:980px;margin:0 auto}
 .card{
+  width:100%;
+  cursor:pointer;
   border:1px solid #343064;
   border-radius:14px;
   padding:16px 14px;
@@ -38,7 +40,8 @@ h1{text-align:center;font-size:2em;margin:20px 0 5px;background:linear-gradient(
   display:flex;
   flex-direction:column;
   gap:6px;
-  box-shadow:0 14px 34px rgba(0,0,0,.22)}
+  box-shadow:0 14px 34px rgba(0,0,0,.22)
+}
 .card:hover{transform:translateY(-4px) scale(1.01);border-color:#ffffffaa;box-shadow:0 18px 40px rgba(90,95,255,.32)}
 .card:nth-child(6n+1){background:radial-gradient(circle at top right, rgba(77,150,255,.24), transparent 26%), radial-gradient(circle at bottom left, rgba(255,107,107,.18), transparent 28%), linear-gradient(145deg,#171733,#221b48)}
 .card:nth-child(6n+2){background:radial-gradient(circle at top right, rgba(255,217,61,.26), transparent 24%), radial-gradient(circle at bottom left, rgba(255,140,66,.18), transparent 30%), linear-gradient(145deg,#2c1a20,#4a2332)}
@@ -142,13 +145,13 @@ function render(){
   const grid=document.getElementById('grid');
   const filtered=currentFilter==='all'?games:games.filter(g=>g.tag===currentFilter||g.cat===currentFilter);
   grid.innerHTML=filtered.map(g=>`
-    <a class="card" href="${g.path}" data-tag="${g.tag}" data-cat="${g.cat}">
+    <div class="card" onclick="window.location='${g.path}'" data-tag="${g.tag}" data-cat="${g.cat}">
       <span class="icon-wrap"><span class="emoji">${g.emoji}</span></span>
       <span class="title">${g.title}</span>
       ${g.desc?`<span class="date">${g.desc}</span>`:''}
       <span class="date">${g.date}</span>
       <span class="tag ${g.tag}">${g.tag==='featured'?'⭐ Featured':g.tag==='classic'?'🎮 Classic':'🧪 Experimental'}</span>
-    </a>
+    </div>
   `).join('');
   document.getElementById('count').textContent=`${filtered.length} game${filtered.length!==1?'s':''}`;
 }
