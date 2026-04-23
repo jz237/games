@@ -53,7 +53,7 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 </div>
 <div id="activePowerups"></div>
 <button id="bombBtn" class="hidden"><span>💣</span><span class="bomb-count">x1</span></button>
-<div class="versionTag" id="versionTag">v2.8.4</div>
+<div class="versionTag" id="versionTag">v2.9.0</div>
 
 <div id="titleScreen" class="overlay">
   <div class="card">
@@ -94,7 +94,7 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 
 <script>
 // ===== CANVAS SETUP =====
-const GAME_VERSION='v2.8.4';
+const GAME_VERSION='v2.9.0';
 document.getElementById('versionTag').textContent=GAME_VERSION;
 const C=document.getElementById('c'),X=C.getContext('2d');
 let W,H;
@@ -771,11 +771,14 @@ function update(){
     const dx=moveTarget.x-player.x,dy=moveTarget.y-player.y,dist=Math.hypot(dx,dy);
     if(dist>4){player.x+=dx/dist*Math.min(moveSpeed,dist);player.y+=dy/dist*Math.min(moveSpeed,dist);}
   }
-  // auto-shoot nearest enemy
-  if(shootCooldown<=0&&enemies.length>0){
-    let nearest=null,nearDist=Infinity;
-    enemies.forEach(e=>{const d=Math.hypot(e.x-player.x,e.y-player.y);if(d<nearDist){nearDist=d;nearest=e;}});
-    if(nearest)fireBullet(nearest.x,nearest.y);
+  // auto-shoot toward the current pointer target
+  if(shootCooldown<=0){
+    if(moveTarget.active) fireBullet(moveTarget.x,moveTarget.y);
+    else if(enemies.length>0){
+      let nearest=null,nearDist=Infinity;
+      enemies.forEach(e=>{const d=Math.hypot(e.x-player.x,e.y-player.y);if(d<nearDist){nearDist=d;nearest=e;}});
+      if(nearest) fireBullet(nearest.x,nearest.y);
+    }
   }
   // dash movement
   if(dashTimer>0){
