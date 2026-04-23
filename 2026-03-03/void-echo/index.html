@@ -584,7 +584,7 @@ function handleTouchStart(e){
       const br=bombEl.getBoundingClientRect();
       if(t.clientX>=br.left&&t.clientX<=br.right&&t.clientY>=br.top&&t.clientY<=br.bottom)return;
 
-      if(t.clientX<W*0.4&&t.clientY>H*0.5&&!joystick.active){
+      if(t.clientX<W*0.5&&!joystick.active){
         joystick.active=true;joystick.id=t.identifier;
         joystick.ox=t.clientX;joystick.oy=t.clientY;joystick.dx=0;joystick.dy=0;
       }else{
@@ -599,7 +599,7 @@ function handleTouchStart(e){
       }
     });
   }else{
-    if(e.clientX<W*0.4&&e.clientY>H*0.5){
+    if(e.clientX<W*0.5){
       joystick.active=true;joystick.id=-1;joystick.ox=e.clientX;joystick.oy=e.clientY;joystick.dx=0;joystick.dy=0;
     }else{
       if(now-lastTapTime<300&&Math.hypot(e.clientX-lastTapX,e.clientY-lastTapY)<60){
