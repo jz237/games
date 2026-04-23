@@ -1002,15 +1002,18 @@ function update(){
   });
   enemies=enemies.filter(e=>e.hp>0);
 
-  // bullet-asteroid collision
+  // bullet-asteroid collision — bullets destroy asteroids
   bullets.forEach(b=>{
     asteroids.forEach(a=>{
-      if(Math.hypot(b.x-a.x,b.y-a.y)<a.r){
-        b.life=0;
-        spawnExplosion(b.x,b.y,3,false);
+      if(!a.dead&&Math.hypot(b.x-a.x,b.y-a.y)<a.r){
+        if(!b.piercing)b.life=0;
+        a.hp=(a.hp||3)-1;
+        spawnExplosion(b.x,b.y,6,false);
+        if(a.hp<=0){a.dead=true;spawnExplosion(a.x,a.y,20,false);sfxExplodeSmall();}
       }
     });
   });
+  asteroids=asteroids.filter(a=>!a.dead);
 
   // enemy bullet -> player
   enemyBullets.forEach(b=>{
