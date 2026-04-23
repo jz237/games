@@ -22,7 +22,7 @@ h1{font-size:clamp(34px,9vw,54px);letter-spacing:4px;background:linear-gradient(
 .how{color:#91b8e8;font-size:12px;line-height:1.7;margin:14px 0 18px}
 .btn{display:inline-block;min-width:180px;padding:14px 18px;border-radius:999px;border:1px solid rgba(120,220,255,.45);background:linear-gradient(135deg, rgba(28,86,162,.88), rgba(82,58,178,.88));color:#fff;font-size:15px;font-weight:800;letter-spacing:2px;cursor:pointer;box-shadow:0 0 24px rgba(80,150,255,.15)}
 .btn:active{transform:scale(.98)}
-.version{position:fixed;left:12px;bottom:12px;z-index:5;color:rgba(190,220,255,.65);font-size:12px;letter-spacing:2px;text-shadow:0 0 10px rgba(80,160,255,.35);pointer-events:none}
+.version{position:fixed;left:12px;bottom:12px;z-index:11;color:rgba(190,220,255,.75);font-size:12px;letter-spacing:2px;text-shadow:0 0 10px rgba(80,160,255,.45);pointer-events:none;font-weight:700}
 #reticle{position:fixed;left:0;top:0;width:26px;height:26px;border:1px solid rgba(130,220,255,.7);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:3;box-shadow:0 0 18px rgba(120,220,255,.35), inset 0 0 12px rgba(120,220,255,.18);display:none}
 #reticle::before,#reticle::after{content:'';position:absolute;inset:50%;background:rgba(130,220,255,.8);box-shadow:0 0 8px rgba(130,220,255,.8)}
 #reticle::before{width:12px;height:1px;transform:translate(-50%,-50%)}
@@ -38,7 +38,7 @@ h1{font-size:clamp(34px,9vw,54px);letter-spacing:4px;background:linear-gradient(
   <div><div class="small">WAVE</div><div id="wave">1</div></div>
 </div>
 <div id="reticle"></div>
-<div id="version" class="version">v1.0.0</div>
+<div id="version" class="version">v1.1.0</div>
 <div id="start">
   <div class="card">
     <h1>ONE TOUCH SKY</h1>
@@ -403,7 +403,6 @@ function gameOver(){
 }
 
 function start(){
-  initAudio();
   document.getElementById('start').style.display='none';
   document.getElementById('gameover').style.display='none';
   document.getElementById('hud').style.display='flex';
@@ -411,8 +410,12 @@ function start(){
   resetGame();
   beep(620,.08,'sine',.08);beep(920,.09,'sine',.06);
 }
-document.getElementById('play').onclick=start;
-document.getElementById('restart').onclick=start;
+function initAudio(){if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();}
+// ensure audio context on user gesture
+document.addEventListener('click',()=>{try{if(!audioCtx||audioCtx.state==='suspended')audioCtx.resume()}catch(e){}},{once:true});
+document.addEventListener('touchstart',()=>{try{if(!audioCtx||audioCtx.state==='suspended')audioCtx.resume()}catch(e){}},{once:true});
+document.getElementById('play').onclick=()=>{initAudio();start()};
+document.getElementById('restart').onclick=()=>{initAudio();start()};
 
 // start screen motion
 for(let i=0;i<40;i++) addP(Math.random()*W,Math.random()*H,0,0,999,'rgba(255,255,255,.02)',1,1);
