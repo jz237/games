@@ -66,10 +66,10 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   <div class="sub">Survive the void. Dodge enemies. Collect crystals.</div>
   <div class="how">
     🚀 Drag or move mouse to pilot your ship<br>
+    ✨ Tap to pulse — clears nearby threats and feels great<br>
     💎 Collect crystals for points + shield<br>
     🛡 Shield absorbs one hit<br>
-    💣 Smart Bomb clears danger — tap button, press Space, or B<br>
-    ☠️ Dodge enemies, asteroids, and telegraphed storm hazards
+    💣 Smart Bomb clears danger — tap button, press Space, or B
   </div>
   <div class="buttonRow">
     <button id="startBtn">TAP TO PLAY</button>
@@ -77,7 +77,7 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
   </div>
   <div id="scorePanel" class="scorePanel" style="display:none"></div>
 </div>
-<div class="versionTag" id="versionTag">v2.6.0</div>
+<div class="versionTag" id="versionTag">v2.7.0</div>
 <button id="bombBtn" aria-label="Smart bomb">SMART BOMB</button>
 <button id="muteBtn" aria-label="Toggle sound">🔊</button>
 <script>
@@ -85,7 +85,7 @@ canvas{display:block;position:fixed;inset:0;touch-action:none}
 const C = document.getElementById('c');
 const ctx = C.getContext('2d');
 const overlay = document.getElementById('overlay');
-const GAME_VERSION = 'v2.6.0';
+const GAME_VERSION = 'v2.7.0';
 const HS_KEY = 'void_echo_highscores';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/void-echo';
 const startBtn = document.getElementById('startBtn');
@@ -481,6 +481,7 @@ function playMovePing() {
 
 let comboCount = 0;
 let comboTimer = 0;
+let pulseCooldown = 0;
 function playCombo() {
   // Each successive hit echoes at higher pitch
   if (!audioReady || muted) return;
@@ -861,7 +862,7 @@ C.addEventListener('pointerdown', e => {
   if (state !== 'playing') return;
   inputActive = true;
   setTarget(e.clientX, e.clientY);
-  playPing();
+  triggerPulse();
 });
 C.addEventListener('pointermove', e => {
   if (state !== 'playing') return;
@@ -893,6 +894,39 @@ function respawnPlayer() {
   shakeT = Math.max(shakeT, 0.28);
   emitParticles(player.x, player.y, '#bff', 28, 140);
   emitBurstRings(player.x, player.y, '#dfffff', 2);
+}
+
+function triggerPulse() {
+  if (state !== 'playing' || pulseCooldown > 0) return;
+  pulseCooldown = 0.55;
+  nearMissPulse = 1;
+  shakeT = Math.max(shakeT, 0.14);
+  emitParticles(player.x, player.y, '#dfffff', 26, 120);
+  emitBurstRings(player.x, player.y, '#bff', 2);
+  playPing();
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    const d = dist(player, e);
+    if (d < 120 + e.r) {
+      if (d < 72 + e.r) {
+        killEnemy(i, 'storm');
+        score += 10;
+      } else {
+        const dx = e.x - player.x;
+        const dy = e.y - player.y;
+        const len = Math.hypot(dx, dy) || 1;
+        e.x += (dx / len) * 48;
+        e.y += (dy / len) * 48;
+      }
+    }
+  }
+  for (let i = titanShots.length - 1; i >= 0; i--) {
+    if (dist(player, titanShots[i]) < 140) {
+      emitParticles(titanShots[i].x, titanShots[i].y, '#dfffff', 10, 80);
+      titanShots.splice(i, 1);
+      score += 4;
+    }
+  }
 }
 
 function triggerSmartBomb() {
@@ -955,6 +989,7 @@ function startGame() {
   lives = 4;
   bombs = 1;
   respawnInvuln = 0;
+  pulseCooldown = 0;
   shakeT = 0;
   stormTimer = 8;
   stormFlash = 0;
@@ -1079,6 +1114,7 @@ function update(dt) {
     if (comboTimer <= 0) comboCount = 0;
   }
   if (announceTimer > 0) announceTimer -= dt;
+  if (pulseCooldown > 0) pulseCooldown = Math.max(0, pulseCooldown - dt);
   if (stormFlash > 0) stormFlash = Math.max(0, stormFlash - dt * 3.2);
   for (let i = stormArcs.length - 1; i >= 0; i--) {
     stormArcs[i].life -= dt;
@@ -1772,15 +1808,17 @@ function draw() {
   ctx.translate(player.x, player.y);
 
   // Shield ring
-  if (shieldHP > 0 || respawnInvuln > 0) {
+  if (shieldHP > 0 || respawnInvuln > 0 || pulseCooldown > 0.32) {
     ctx.beginPath();
     ctx.arc(0, 0, player.r + 8 + Math.sin(player.glow * 8) * (respawnInvuln > 0 ? 1.5 : 0), 0, Math.PI * 2);
     ctx.strokeStyle = respawnInvuln > 0
       ? `rgba(255,255,255,${0.45 + Math.sin(player.glow * 10) * 0.2})`
-      : `rgba(0,200,255,${0.3 + shieldHP / 200})`;
-    ctx.lineWidth = respawnInvuln > 0 ? 3.5 : 2.5;
-    ctx.shadowColor = respawnInvuln > 0 ? '#fff' : '#0af';
-    ctx.shadowBlur = respawnInvuln > 0 ? 22 : 15;
+      : pulseCooldown > 0.32
+        ? `rgba(220,255,255,${0.55 + Math.sin(player.glow * 16) * 0.15})`
+        : `rgba(0,200,255,${0.3 + shieldHP / 200})`;
+    ctx.lineWidth = respawnInvuln > 0 ? 3.5 : pulseCooldown > 0.32 ? 3 : 2.5;
+    ctx.shadowColor = respawnInvuln > 0 ? '#fff' : pulseCooldown > 0.32 ? '#dff' : '#0af';
+    ctx.shadowBlur = respawnInvuln > 0 ? 22 : pulseCooldown > 0.32 ? 20 : 15;
     ctx.stroke();
     ctx.shadowBlur = 0;
   }
