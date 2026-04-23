@@ -577,70 +577,45 @@ function spawnExplosion(x,y,count,big){
   if(big)screenFlash=8;
 }
 
-// ===== INPUT =====
+// ===== INPUT — tap/hold anywhere to move, auto-shoot nearest enemy =====
 function handleTouchStart(e){
   if(state!=='playing'||waveState==='upgrade')return;
   const now=performance.now();
   if(e.touches){
     Array.from(e.changedTouches).forEach(t=>{
-      // check if touching bomb button area
       const bombEl=document.getElementById('bombBtn');
       const br=bombEl.getBoundingClientRect();
       if(t.clientX>=br.left&&t.clientX<=br.right&&t.clientY>=br.top&&t.clientY<=br.bottom)return;
-
-      if(t.clientX<W*0.5&&!joystick.active){
-        joystick.active=true;joystick.id=t.identifier;
-        joystick.ox=t.clientX;joystick.oy=t.clientY;joystick.dx=0;joystick.dy=0;
-      }else{
-        // double-tap detection for dash
-        if(now-lastTapTime<300&&Math.hypot(t.clientX-lastTapX,t.clientY-lastTapY)<60){
-          triggerDash();
-          lastTapTime=0;
-        }else{
-          lastTapTime=now;lastTapX=t.clientX;lastTapY=t.clientY;
-          fireBullet(t.clientX,t.clientY);
-        }
-      }
-    });
-  }else{
-    if(e.clientX<W*0.5){
-      joystick.active=true;joystick.id=-1;joystick.ox=e.clientX;joystick.oy=e.clientY;joystick.dx=0;joystick.dy=0;
-    }else{
-      if(now-lastTapTime<300&&Math.hypot(e.clientX-lastTapX,e.clientY-lastTapY)<60){
+      // double-tap = dash
+      if(now-lastTapTime<300&&Math.hypot(t.clientX-lastTapX,t.clientY-lastTapY)<80){
         triggerDash();lastTapTime=0;
       }else{
-        lastTapTime=now;lastTapX=e.clientX;lastTapY=e.clientY;
-        fireBullet(e.clientX,e.clientY);
+        lastTapTime=now;lastTapX=t.clientX;lastTapY=t.clientY;
       }
-    }
+      if(!moveTarget.active){moveTarget.active=true;moveTarget.id=t.identifier;}
+      if(t.identifier===moveTarget.id){moveTarget.x=t.clientX;moveTarget.y=t.clientY;}
+    });
+  }else{
+    if(now-lastTapTime<300&&Math.hypot(e.clientX-lastTapX,e.clientY-lastTapY)<80){
+      triggerDash();lastTapTime=0;
+    }else{lastTapTime=now;lastTapX=e.clientX;lastTapY=e.clientY;}
+    moveTarget.active=true;moveTarget.id=-1;moveTarget.x=e.clientX;moveTarget.y=e.clientY;
   }
 }
 function handleTouchMove(e){
   if(state!=='playing')return;
   if(e.touches){
     Array.from(e.changedTouches).forEach(t=>{
-      if(joystick.active&&t.identifier===joystick.id){
-        const rawDx=t.clientX-joystick.ox,rawDy=t.clientY-joystick.oy;
-        const len=Math.hypot(rawDx,rawDy)||1;
-        const clamp=Math.min(joystick.max,len);
-        joystick.dx=rawDx/len*clamp;
-        joystick.dy=rawDy/len*clamp;
-      }
+      if(moveTarget.active&&t.identifier===moveTarget.id){moveTarget.x=t.clientX;moveTarget.y=t.clientY;}
     });
-  }else if(joystick.active){
-    const rawDx=e.clientX-joystick.ox,rawDy=e.clientY-joystick.oy;
-    const len=Math.hypot(rawDx,rawDy)||1;
-    const clamp=Math.min(joystick.max,len);
-    joystick.dx=rawDx/len*clamp;
-    joystick.dy=rawDy/len*clamp;
-  }
+  }else if(moveTarget.active){moveTarget.x=e.clientX;moveTarget.y=e.clientY;}
 }
 function handleTouchEnd(e){
   if(e.touches){
     Array.from(e.changedTouches).forEach(t=>{
-      if(joystick.active&&t.identifier===joystick.id){joystick.active=false;joystick.dx=0;joystick.dy=0}
+      if(moveTarget.active&&t.identifier===moveTarget.id)moveTarget.active=false;
     });
-  }else{joystick.active=false;joystick.dx=0;joystick.dy=0}
+  }else moveTarget.active=false;
 }
 
 C.addEventListener('touchstart',e=>{
@@ -787,15 +762,17 @@ function update(){
   if(state!=='playing')return;
   if(waveState==='upgrade')return;
 
-  // player movement
-  const moveSpeed=hasUpgrade('afterburner')?5.8:4.8;
-  if(joystick.active){
-    const len=Math.hypot(joystick.dx,joystick.dy);
-    if(len>joystick.dead){
-      const mag=Math.min(1,(len-joystick.dead)/(joystick.max-joystick.dead));
-      player.x+=joystick.dx/len*moveSpeed*mag;
-      player.y+=joystick.dy/len*moveSpeed*mag;
-    }
+  // player movement — follows touch/mouse anywhere on screen
+  const moveSpeed=hasUpgrade('afterburner')?7:5;
+  if(moveTarget.active){
+    const dx=moveTarget.x-player.x,dy=moveTarget.y-player.y,dist=Math.hypot(dx,dy);
+    if(dist>4){player.x+=dx/dist*Math.min(moveSpeed,dist);player.y+=dy/dist*Math.min(moveSpeed,dist);}
+  }
+  // auto-shoot nearest enemy
+  if(shootCooldown<=0&&enemies.length>0){
+    let nearest=null,nearDist=Infinity;
+    enemies.forEach(e=>{const d=Math.hypot(e.x-player.x,e.y-player.y);if(d<nearDist){nearDist=d;nearest=e;}});
+    if(nearest)fireBullet(nearest.x,nearest.y);
   }
   // dash movement
   if(dashTimer>0){
