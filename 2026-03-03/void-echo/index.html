@@ -1148,18 +1148,18 @@ function draw(){
     waveAnnounce.alpha-=0.008;
   }
 
-  // joystick visual
-  if(joystick.active){
-    X.strokeStyle='rgba(100,180,255,0.3)';X.lineWidth=2;
-    X.beginPath();X.arc(joystick.ox,joystick.oy,40,0,Math.PI*2);X.stroke();
-    X.fillStyle='rgba(100,180,255,0.4)';
-    X.beginPath();X.arc(joystick.ox+joystick.dx,joystick.oy+joystick.dy,14,0,Math.PI*2);X.fill();
-    // dash cooldown arc
-    if(dashCooldown>0){
-      const pct=dashCooldown/48;
-      X.strokeStyle='rgba(100,200,255,0.5)';X.lineWidth=3;
-      X.beginPath();X.arc(joystick.ox,joystick.oy,48,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-pct));X.stroke();
-    }
+  // move target indicator
+  if(moveTarget.active){
+    X.strokeStyle='rgba(100,180,255,0.4)';X.lineWidth=1.5;
+    X.beginPath();X.arc(moveTarget.x,moveTarget.y,16,0,Math.PI*2);X.stroke();
+    X.strokeStyle='rgba(100,180,255,0.15)';
+    X.beginPath();X.moveTo(player.x,player.y);X.lineTo(moveTarget.x,moveTarget.y);X.stroke();
+  }
+  // dash cooldown arc near player
+  if(dashCooldown>0){
+    const pct=dashCooldown/48;
+    X.strokeStyle='rgba(100,200,255,0.5)';X.lineWidth=3;
+    X.beginPath();X.arc(player.x,player.y,28,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-pct));X.stroke();
   }
 }
 
