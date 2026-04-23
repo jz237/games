@@ -53,7 +53,7 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 </div>
 <div id="activePowerups"></div>
 <button id="bombBtn" class="hidden"><span>💣</span><span class="bomb-count">x1</span></button>
-<div class="versionTag" id="versionTag">v2.9.1</div>
+<div class="versionTag" id="versionTag">v2.9.2</div>
 
 <div id="titleScreen" class="overlay">
   <div class="card">
@@ -94,7 +94,7 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 
 <script>
 // ===== CANVAS SETUP =====
-const GAME_VERSION='v2.9.1';
+const GAME_VERSION='v2.9.2';
 document.getElementById('versionTag').textContent=GAME_VERSION;
 const C=document.getElementById('c'),X=C.getContext('2d');
 let W,H;
@@ -240,7 +240,7 @@ function spawnAsteroids(){
     asteroids.push({
       x:Math.random()*W,y:-50-Math.random()*200,
       vx:(Math.random()-0.5)*1.5,vy:Math.random()*0.8+0.3,
-      r:20+Math.random()*20,hp:999,
+      r:20+Math.random()*20,hp:3,
       vertices:generateAsteroidVerts(6+Math.floor(Math.random()*4)),
       rot:Math.random()*Math.PI*2,rotSpeed:(Math.random()-0.5)*0.02
     });
