@@ -9,24 +9,73 @@
 <title>🎮 GameMaster Arcade</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0a0a1a;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;padding:20px}
-h1{text-align:center;font-size:2em;margin:20px 0 5px;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#9b59b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.subtitle{text-align:center;color:#666;font-size:0.9em;margin-bottom:30px}
+body{
+  background:
+    radial-gradient(circle at 8% 8%, rgba(255,107,107,.28), transparent 18%),
+    radial-gradient(circle at 24% 82%, rgba(255,217,61,.18), transparent 20%),
+    radial-gradient(circle at 88% 12%, rgba(77,150,255,.24), transparent 22%),
+    radial-gradient(circle at 78% 78%, rgba(107,203,119,.18), transparent 22%),
+    radial-gradient(circle at 52% 100%, rgba(198,107,255,.22), transparent 26%),
+    linear-gradient(180deg,#080814 0%,#100f24 42%,#15112b 100%);
+  color:#f2f4ff;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  min-height:100vh;
+  padding:20px
+}
+h1{text-align:center;font-size:2em;margin:20px 0 5px;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c66bff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:0 0 28px rgba(122,115,255,.18)}
+.subtitle{text-align:center;color:#d3dcff;font-size:0.95em;margin-bottom:30px;line-height:1.5}
 .filters{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:25px}
-.filters button{background:#1a1a2e;border:1px solid #333;color:#aaa;padding:6px 14px;border-radius:20px;font-size:0.85em;cursor:pointer;transition:all 0.2s}
-.filters button:hover,.filters button.active{background:#2a2a4e;border-color:#6b6bff;color:#fff}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;max-width:900px;margin:0 auto}
-.card{background:linear-gradient(145deg,#12122a,#1a1a35);border:1px solid #252545;border-radius:12px;padding:16px 14px;text-decoration:none;color:#e0e0e0;transition:all 0.2s;display:flex;flex-direction:column;gap:6px}
-.card:hover{transform:translateY(-3px);border-color:#6b6bff;box-shadow:0 8px 25px rgba(107,107,255,0.2)}
-.card .emoji{font-size:2em;margin-bottom:4px}
-.card .title{font-weight:600;font-size:0.95em;line-height:1.2}
-.card .date{font-size:0.75em;color:#555}
-.card .tag{display:inline-block;font-size:0.65em;padding:2px 8px;border-radius:10px;margin-top:4px;width:fit-content}
-.tag.featured{background:#6b6bff22;color:#8b8bff;border:1px solid #6b6bff44}
-.tag.classic{background:#ffd93d22;color:#ffd93d;border:1px solid #ffd93d44}
-.tag.retro70s{background:#ff6a0022;color:#ff9944;border:1px solid #ff6a0044}
-.tag.experimental{background:#66666622;color:#888;border:1px solid #66666644}
-.count{text-align:center;color:#444;font-size:0.8em;margin-top:25px;padding-bottom:20px}
+.filters button{background:linear-gradient(180deg,#1f1b3b,#18162f);border:1px solid #403b73;color:#cfd6ff;padding:7px 14px;border-radius:20px;font-size:0.85em;cursor:pointer;transition:all 0.2s;box-shadow:0 6px 18px rgba(0,0,0,.16)}
+.filters button:hover,.filters button.active{background:linear-gradient(135deg,#ff5fa2,#7f6bff 50%,#44d1ff);border-color:#ffd2f0;color:#fff;box-shadow:0 10px 24px rgba(133,96,255,.34)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;max-width:980px;margin:0 auto}
+.card{
+  border:1px solid #343064;
+  border-radius:14px;
+  padding:16px 14px;
+  text-decoration:none;
+  color:#eef2ff;
+  transition:all 0.2s;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  box-shadow:0 14px 34px rgba(0,0,0,.22)}
+.card:hover{transform:translateY(-4px) scale(1.01);border-color:#ffffffaa;box-shadow:0 18px 40px rgba(90,95,255,.32)}
+.card:nth-child(6n+1){background:radial-gradient(circle at top right, rgba(77,150,255,.24), transparent 26%), radial-gradient(circle at bottom left, rgba(255,107,107,.18), transparent 28%), linear-gradient(145deg,#171733,#221b48)}
+.card:nth-child(6n+2){background:radial-gradient(circle at top right, rgba(255,217,61,.26), transparent 24%), radial-gradient(circle at bottom left, rgba(255,140,66,.18), transparent 30%), linear-gradient(145deg,#2c1a20,#4a2332)}
+.card:nth-child(6n+3){background:radial-gradient(circle at top right, rgba(107,203,119,.24), transparent 24%), radial-gradient(circle at bottom left, rgba(68,209,255,.16), transparent 28%), linear-gradient(145deg,#14232b,#183b42)}
+.card:nth-child(6n+4){background:radial-gradient(circle at top right, rgba(198,107,255,.28), transparent 24%), radial-gradient(circle at bottom left, rgba(255,107,209,.16), transparent 28%), linear-gradient(145deg,#241336,#39214d)}
+.card:nth-child(6n+5){background:radial-gradient(circle at top right, rgba(255,122,0,.24), transparent 24%), radial-gradient(circle at bottom left, rgba(255,217,61,.16), transparent 28%), linear-gradient(145deg,#2c180f,#4a2a16)}
+.card:nth-child(6n+6){background:radial-gradient(circle at top right, rgba(68,209,255,.24), transparent 24%), radial-gradient(circle at bottom left, rgba(107,107,255,.18), transparent 28%), linear-gradient(145deg,#101e31,#1c2b52)}
+.card:nth-child(6n+1):hover{box-shadow:0 18px 40px rgba(77,150,255,.26)}
+.card:nth-child(6n+2):hover{box-shadow:0 18px 40px rgba(255,122,0,.24)}
+.card:nth-child(6n+3):hover{box-shadow:0 18px 40px rgba(107,203,119,.24)}
+.card:nth-child(6n+4):hover{box-shadow:0 18px 40px rgba(198,107,255,.28)}
+.card:nth-child(6n+5):hover{box-shadow:0 18px 40px rgba(255,190,80,.24)}
+.card:nth-child(6n+6):hover{box-shadow:0 18px 40px rgba(68,209,255,.24)}
+.card .icon-wrap{width:58px;height:58px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin-bottom:8px;border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 10px 24px rgba(0,0,0,.18)}
+.card:nth-child(6n+1) .icon-wrap{background:linear-gradient(135deg,#4d96ff,#7f6bff 58%,#ff6b6b)}
+.card:nth-child(6n+2) .icon-wrap{background:linear-gradient(135deg,#ffd93d,#ff9f43 58%,#ff6b6b)}
+.card:nth-child(6n+3) .icon-wrap{background:linear-gradient(135deg,#6bcb77,#2ed3c6 58%,#44d1ff)}
+.card:nth-child(6n+4) .icon-wrap{background:linear-gradient(135deg,#c66bff,#ff5fa2 58%,#7f6bff)}
+.card:nth-child(6n+5) .icon-wrap{background:linear-gradient(135deg,#ff7a00,#ffd93d 58%,#ff5f6d)}
+.card:nth-child(6n+6) .icon-wrap{background:linear-gradient(135deg,#44d1ff,#4d96ff 58%,#7f6bff)}
+.card .emoji{font-size:2em;line-height:1;filter:drop-shadow(0 3px 8px rgba(0,0,0,.18))}
+.card .title{font-weight:700;font-size:0.98em;line-height:1.25;color:#ffffff}
+.card .date{font-size:0.75em;color:#b7c3ea}
+.card .tag{display:inline-block;font-size:0.65em;padding:3px 9px;border-radius:999px;margin-top:6px;width:fit-content;font-weight:700;letter-spacing:.02em}
+.tag.featured{background:linear-gradient(135deg,#6b6bff33,#4d96ff33);color:#c8d1ff;border:1px solid #7f95ff66}
+.tag.classic{background:linear-gradient(135deg,#ffd93d33,#ffb34733);color:#ffe38a;border:1px solid #ffd93d66}
+.tag.retro70s{background:linear-gradient(135deg,#ff7a0033,#ff4d6d33);color:#ffb37f;border:1px solid #ff7a0066}
+.tag.experimental{background:linear-gradient(135deg,#9b59b633,#6666aa33);color:#d7b8ff;border:1px solid #a377d966}
+.count{text-align:center;color:#aab7e4;font-size:0.85em;margin-top:25px;padding-bottom:20px}
+@media (min-width: 900px){
+  h1{font-size:2.4em}
+  .subtitle{font-size:1em}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;max-width:1100px}
+  .card{padding:18px 16px;min-height:170px}
+  .card .icon-wrap{width:64px;height:64px;border-radius:18px}
+  .card .emoji{font-size:2.25em}
+}
 </style>
 </head>
 <body>
@@ -61,6 +110,8 @@ const games = [
   {title:"Lantern Creek",path:"2026-03-29/lantern-creek/",emoji:"🏮",date:"Mar 29",cat:"puzzle",tag:"featured",desc:"Guide glowing lanterns down a moonlit stream"},
   {title:"SUPER STAR TREK",path:"2026-03-27/star-trek/",emoji:"🖖",date:"Mar 27",cat:"retro70s",tag:"featured",desc:"The awesome 70s computer classic — reborn with LCARS visuals"},
   {title:"Asteroids",path:"2026-03-08/asteroids/",emoji:"☄️",date:"Mar 8",cat:"arcade",tag:"featured",desc:"Classic asteroids, mobile controls"},
+  {title:"Lunar Lander",path:"lunar-lander/lunar-lander.html",emoji:"🌕",date:"Apr 7",cat:"arcade",tag:"featured",desc:"Precision moon landing with retro vibes"},
+  {title:"Neon Qix",path:"2026-04-09/quix-modern/",emoji:"⚡",date:"Apr 9",cat:"arcade",tag:"featured",desc:"Modernized Qix with neon field capture and local high scores"},
 
   // === CLASSIC (solid games) ===
 
@@ -91,7 +142,7 @@ function render(){
   const filtered=currentFilter==='all'?games:games.filter(g=>g.tag===currentFilter||g.cat===currentFilter);
   grid.innerHTML=filtered.map(g=>`
     <a class="card" href="${g.path}" data-tag="${g.tag}" data-cat="${g.cat}">
-      <span class="emoji">${g.emoji}</span>
+      <span class="icon-wrap"><span class="emoji">${g.emoji}</span></span>
       <span class="title">${g.title}</span>
       ${g.desc?`<span class="date">${g.desc}</span>`:''}
       <span class="date">${g.date}</span>

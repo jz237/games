@@ -1,0 +1,2706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Neon Qix</title>
+<style>
+:root{
+  --bg-0:#050816;
+  --bg-1:#09142c;
+  --panel:rgba(8,16,36,0.82);
+  --panel-border:rgba(126,216,255,0.24);
+  --cyan:#7df6ff;
+  --teal:#2cf2ce;
+  --pink:#ff5ea8;
+  --violet:#9f7cff;
+  --gold:#ffd56a;
+  --danger:#ff6a7a;
+  --text:#eaf8ff;
+  --muted:#8da8c6;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{
+  margin:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at top, rgba(43,82,154,0.28), transparent 35%),
+    radial-gradient(circle at bottom, rgba(255,94,168,0.16), transparent 40%),
+    linear-gradient(180deg,var(--bg-1),var(--bg-0) 60%,#02040b);
+  color:var(--text);
+  font-family:Verdana, Geneva, Tahoma, sans-serif;
+}
+body{
+  position:fixed;
+  inset:0;
+  overscroll-behavior:none;
+}
+.app{
+  position:relative;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+}
+.chrome{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:
+    linear-gradient(180deg, rgba(125,246,255,0.04), transparent 20%, transparent 80%, rgba(255,94,168,0.04)),
+    repeating-linear-gradient(180deg, rgba(255,255,255,0.02) 0 1px, transparent 1px 4px);
+  mix-blend-mode:screen;
+}
+.shell{
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  padding:calc(env(safe-area-inset-top, 0px) + 6px) 6px calc(env(safe-area-inset-bottom, 0px) + 46px);
+  gap:6px;
+}
+.hud{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:6px;
+  pointer-events:none;
+}
+.hud-card{
+  background:linear-gradient(180deg, rgba(20,37,72,0.9), rgba(7,13,30,0.86));
+  border:1px solid var(--panel-border);
+  border-radius:14px;
+  padding:6px 8px;
+  box-shadow:0 0 0 1px rgba(255,255,255,0.03) inset, 0 10px 22px rgba(0,0,0,0.24);
+}
+.hud-label{
+  display:block;
+  font-size:9px;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+  color:var(--muted);
+  margin-bottom:3px;
+}
+.hud-value{
+  display:block;
+  font-size:15px;
+  font-weight:700;
+}
+.stage{
+  position:relative;
+  flex:1;
+  min-height:0;
+  background:linear-gradient(180deg, rgba(5,14,31,0.58), rgba(5,10,22,0.74));
+  border:1px solid rgba(125,246,255,0.18);
+  border-radius:24px;
+  overflow:hidden;
+  isolation:isolate;
+  box-shadow:0 0 0 1px rgba(255,255,255,0.03) inset, 0 24px 50px rgba(0,0,0,0.45);
+}
+.stage::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:3;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.05), transparent 16%, transparent 84%, rgba(0,0,0,0.18)),
+    radial-gradient(circle at 50% 45%, transparent 56%, rgba(0,0,0,0.22) 100%);
+  mix-blend-mode:screen;
+}
+.stage::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:4;
+  background:repeating-linear-gradient(180deg, rgba(255,255,255,0.02) 0 1px, rgba(0,0,0,0) 1px 4px);
+  opacity:0.45;
+}
+canvas{
+  display:block;
+  width:100%;
+  height:100%;
+  touch-action:none;
+  filter:saturate(1.06) contrast(1.04);
+}
+.overlay{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+  background:radial-gradient(circle at top, rgba(18,42,96,0.26), rgba(2,6,16,0.78) 58%, rgba(0,0,0,0.92));
+  backdrop-filter:blur(8px);
+  opacity:0;
+  visibility:hidden;
+  transition:opacity 180ms ease, visibility 180ms ease;
+  pointer-events:none;
+  z-index:8;
+}
+.overlay.show{
+  opacity:1;
+  visibility:visible;
+  pointer-events:auto;
+}
+#titleOverlay{
+  align-items:flex-start;
+  justify-content:center;
+  padding:calc(env(safe-area-inset-top, 0px) + 14px) 14px 14px;
+  background:linear-gradient(180deg, rgba(4,10,22,0.1), rgba(4,10,22,0.32) 34%, rgba(0,0,0,0.52));
+  backdrop-filter:blur(2px);
+}
+.panel{
+  width:min(100%, 440px);
+  background:linear-gradient(180deg, rgba(11,24,54,0.96), rgba(6,10,24,0.96));
+  border:1px solid rgba(125,246,255,0.25);
+  border-radius:24px;
+  padding:20px;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.03) inset,
+    0 0 40px rgba(61,182,255,0.14),
+    0 24px 60px rgba(0,0,0,0.55);
+}
+#titleOverlay .panel{
+  width:min(100%, 360px);
+  background:linear-gradient(180deg, rgba(11,24,54,0.78), rgba(6,10,24,0.8));
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.03) inset,
+    0 0 28px rgba(61,182,255,0.1),
+    0 14px 36px rgba(0,0,0,0.38);
+}
+.eyebrow{
+  display:inline-block;
+  margin-bottom:8px;
+  font-size:11px;
+  letter-spacing:0.24em;
+  text-transform:uppercase;
+  color:var(--cyan);
+}
+.title{
+  margin:0;
+  font-size:38px;
+  line-height:0.92;
+  text-transform:uppercase;
+  letter-spacing:0.04em;
+  text-shadow:0 0 18px rgba(125,246,255,0.42), 0 0 34px rgba(255,94,168,0.2);
+}
+.title span{
+  display:block;
+  color:var(--gold);
+}
+.lead{
+  margin:12px 0 14px;
+  color:#d8ebff;
+  line-height:1.5;
+  font-size:14px;
+}
+.howto{
+  display:grid;
+  gap:8px;
+  margin:14px 0 18px;
+}
+.howto div{
+  padding:10px 12px;
+  border-radius:14px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.06);
+  font-size:13px;
+  line-height:1.4;
+}
+.cta-row,.secondary-row,.entry-row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+button,.score-action,input{
+  font:inherit;
+}
+button,.score-action{
+  appearance:none;
+  border:none;
+  border-radius:16px;
+  padding:12px 16px;
+  min-height:48px;
+  background:linear-gradient(180deg, rgba(125,246,255,0.18), rgba(37,93,184,0.22));
+  color:var(--text);
+  border:1px solid rgba(125,246,255,0.28);
+  box-shadow:0 10px 24px rgba(0,0,0,0.3), 0 0 18px rgba(125,246,255,0.1) inset;
+  cursor:pointer;
+}
+button.primary{
+  background:linear-gradient(180deg, rgba(255,213,106,0.28), rgba(255,94,168,0.26));
+  border-color:rgba(255,213,106,0.38);
+  color:#fff9e6;
+}
+button.ghost{
+  background:rgba(255,255,255,0.04);
+}
+.secondary-row button,.cta-row button{
+  flex:1 1 140px;
+}
+.small-copy{
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.45;
+  margin-top:12px;
+}
+.score-list{
+  display:grid;
+  gap:8px;
+  margin:14px 0 0;
+}
+.score-group-title{
+  font-size:12px;
+  letter-spacing:0.16em;
+  text-transform:uppercase;
+  margin:10px 0 6px;
+}
+.score-note{
+  font-size:11px;
+  color:var(--muted);
+  margin:-2px 0 8px;
+}
+.score-row{
+  display:grid;
+  grid-template-columns:34px 1fr auto;
+  gap:8px;
+  align-items:center;
+  padding:10px 12px;
+  border-radius:14px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.06);
+}
+.score-row.local{
+  background:rgba(125,246,255,0.05);
+  border-color:rgba(125,246,255,0.1);
+}
+.score-row.global{
+  background:rgba(255,213,106,0.05);
+  border-color:rgba(255,213,106,0.12);
+}
+.score-row.highlight{
+  background:linear-gradient(180deg, rgba(255,213,106,0.16), rgba(255,94,168,0.12));
+  border-color:rgba(255,213,106,0.35);
+  box-shadow:0 0 18px rgba(255,213,106,0.14);
+}
+.score-row strong{
+  letter-spacing:0.16em;
+}
+.entry-field{
+  width:100%;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(125,246,255,0.24);
+  border-radius:16px;
+  color:var(--text);
+  padding:14px 16px;
+  min-height:52px;
+  text-transform:uppercase;
+  letter-spacing:0.38em;
+  text-align:center;
+  font-size:28px;
+  font-weight:700;
+}
+.entry-field::placeholder{
+  color:rgba(234,248,255,0.35);
+  letter-spacing:0.2em;
+}
+.status-bar{
+  min-width:0;
+  padding:8px 10px;
+  border-radius:16px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.06);
+  margin-top:2px;
+  position:absolute;
+  left:6px;
+  right:92px;
+  bottom:6px;
+  z-index:6;
+  pointer-events:none;
+  backdrop-filter:blur(6px);
+}
+.status-bar strong{
+  display:block;
+  color:var(--gold);
+  letter-spacing:0.16em;
+  font-size:10px;
+  margin-bottom:3px;
+  text-transform:uppercase;
+}
+.status-bar span{
+  display:block;
+  font-size:12px;
+  line-height:1.25;
+  color:#d0e6fb;
+}
+.footer-actions{
+  position:absolute;
+  right:6px;
+  bottom:6px;
+  display:flex;
+  gap:6px;
+  pointer-events:auto;
+  z-index:7;
+}
+.footer-actions button{
+  min-height:34px;
+  padding:8px 10px;
+  border-radius:12px;
+  font-size:12px;
+}
+@media (max-width:520px){
+  .status-bar{right:78px;bottom:4px;padding:7px 9px}
+  .status-bar span{font-size:11px}
+}
+@media (min-width:720px){
+  .shell{
+    max-width:560px;
+    margin:0 auto;
+  }
+  .title{
+    font-size:46px;
+  }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="chrome"></div>
+  <div class="shell">
+    <div class="hud">
+      <div class="hud-card"><span class="hud-label">Score</span><span class="hud-value" id="scoreValue">0</span></div>
+      <div class="hud-card"><span class="hud-label">Level</span><span class="hud-value" id="levelValue">1</span></div>
+      <div class="hud-card"><span class="hud-label">Claimed</span><span class="hud-value" id="claimValue">0%</span></div>
+      <div class="hud-card"><span class="hud-label">Lives</span><span class="hud-value" id="livesValue">3</span></div>
+    </div>
+    <div class="stage">
+      <canvas id="gameCanvas"></canvas>
+
+      <div class="overlay show" id="titleOverlay">
+        <div class="panel">
+          <span class="eyebrow">Vector Arcade / 1981 Reimagined</span>
+          <h1 class="title">Neon <span>Qix</span></h1>
+          <p class="lead">Cut fast, trap space, stay off the live line.</p>
+          <div class="cta-row">
+            <button class="primary" id="startButton">Start Game</button>
+            <button class="ghost" id="howButton">How To Play</button>
+          </div>
+          <div class="secondary-row" style="margin-top:10px">
+            <button id="scoresButton">High Scores</button>
+          </div>
+          <p class="small-copy" id="attractCopy">Fast demo play runs behind this panel. Audio wakes on your first tap because of browser rules. Use How To Play if you want the full rules.</p>
+        </div>
+      </div>
+
+      <div class="overlay" id="howOverlay">
+        <div class="panel">
+          <span class="eyebrow">How To Play</span>
+          <p class="lead">This version keeps the original Qix loop: safe movement on existing walls, dangerous movement while drawing, and area capture determined by which side traps the Qix.</p>
+          <div class="howto">
+            <div><strong>Controls:</strong> drag anywhere on the field. Your current direction stays active while you hold. On desktop, use arrow keys or WASD.</div>
+            <div><strong>Safe movement:</strong> move along glowing walls and captured territory edges with no risk from the Qix.</div>
+            <div><strong>Danger movement:</strong> when you leave safety, your tracer becomes vulnerable. If the Qix line touches it, you lose a life.</div>
+            <div><strong>Scoring:</strong> bigger captures score more, and each level raises Qix speed and the target percentage.</div>
+          </div>
+          <div class="cta-row">
+            <button class="primary" id="howCloseButton">Back</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="overlay" id="scoresOverlay">
+        <div class="panel">
+          <span class="eyebrow">Local + Global Scores</span>
+          <p class="lead">Local scores stay on your device. Global scores sync to the shared leaderboard.</p>
+          <div class="score-list" id="scoreList"></div>
+          <div class="cta-row" style="margin-top:14px">
+            <button class="primary" id="scoresCloseButton">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="overlay" id="gameOverOverlay">
+        <div class="panel">
+          <span class="eyebrow" id="gameOverEyebrow">Transmission Lost</span>
+          <p class="lead" id="gameOverText">The field collapsed.</p>
+          <div class="entry-row" id="initialsWrap" style="display:none;margin:12px 0 0">
+            <input class="entry-field" id="initialsInput" maxlength="3" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="AAA">
+          </div>
+          <div class="cta-row" style="margin-top:14px">
+            <button class="primary" id="saveScoreButton" style="display:none">Save Score</button>
+            <button class="primary" id="restartButton">Restart</button>
+            <button class="ghost" id="titleButton">Title Screen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <strong id="statusMode">Safe Edge</strong>
+      <span id="statusText">Drag on the field to move along the border, then cut inward to claim territory.</span>
+    </div>
+  </div>
+
+  <div class="footer-actions">
+    <button id="pauseButton">Pause</button>
+    <button id="miniScoresButton">Scores</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const GRID_W = 72;
+  const GRID_H = 116;
+  const CLAIM_GOAL_BASE = 0.72;
+  const SCORE_KEY = "neon-qix-highscores-v1";
+  const GLOBAL_SCORES_API = "https://game-scores.jez237.workers.dev/scores/neon-qix";
+  const CELL_EMPTY = 0;
+  const CELL_SAFE = 1;
+  const CELL_TRAIL = 2;
+  const DIRS = {
+    up: {x: 0, y: -1},
+    down: {x: 0, y: 1},
+    left: {x: -1, y: 0},
+    right: {x: 1, y: 0}
+  };
+
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+  const titleOverlay = document.getElementById("titleOverlay");
+  const howOverlay = document.getElementById("howOverlay");
+  const scoresOverlay = document.getElementById("scoresOverlay");
+  const gameOverOverlay = document.getElementById("gameOverOverlay");
+  const startButton = document.getElementById("startButton");
+  const howButton = document.getElementById("howButton");
+  const howCloseButton = document.getElementById("howCloseButton");
+  const scoresButton = document.getElementById("scoresButton");
+  const scoresCloseButton = document.getElementById("scoresCloseButton");
+  const miniScoresButton = document.getElementById("miniScoresButton");
+  const pauseButton = document.getElementById("pauseButton");
+  const restartButton = document.getElementById("restartButton");
+  const titleButton = document.getElementById("titleButton");
+  const saveScoreButton = document.getElementById("saveScoreButton");
+  const initialsInput = document.getElementById("initialsInput");
+  const initialsWrap = document.getElementById("initialsWrap");
+  const scoreList = document.getElementById("scoreList");
+  const scoreValue = document.getElementById("scoreValue");
+  const levelValue = document.getElementById("levelValue");
+  const claimValue = document.getElementById("claimValue");
+  const livesValue = document.getElementById("livesValue");
+  const statusMode = document.getElementById("statusMode");
+  const statusText = document.getElementById("statusText");
+  const gameOverText = document.getElementById("gameOverText");
+  const gameOverEyebrow = document.getElementById("gameOverEyebrow");
+  const attractCopy = document.getElementById("attractCopy");
+
+  let raf = 0;
+  let lastTime = 0;
+  let lastHudState = "";
+  let globalScoresCache = null;
+  let globalScoresCacheTime = 0;
+  let lastSavedLocalTs = 0;
+  let lastSubmittedGlobal = null;
+  let controlDir = null;
+  let controlSource = null;
+  let keyboardDir = null;
+  let canvasPointerId = null;
+  let canvasStartX = 0;
+  let canvasStartY = 0;
+  let canvasLastDir = null;
+  let attractDir = null;
+  let dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+  let audioCtx = null;
+  let audioUnlocked = false;
+  let qixHum = null;
+  let levelAdvanceTimer = 0;
+  let deathResolveTimer = 0;
+  let mouseDragActive = false;
+  let lastRenderError = "";
+
+  const state = {
+    phase: "title",
+    score: 0,
+    level: 1,
+    lives: 3,
+    claimedRatio: 0,
+    targetRatio: CLAIM_GOAL_BASE,
+    field: new Uint8Array(GRID_W * GRID_H),
+    fieldHue: new Uint16Array(GRID_W * GRID_H),
+    player: {x: 0, y: 0, alive: true, drawing: false, moveClock: 0, respawnFlash: 0},
+    trail: [],
+    sparx: [],
+    qix: null,
+    qixTrail: [],
+    particles: [],
+    pulses: [],
+    captureFlash: 0,
+    screenFlash: 0,
+    shake: 0,
+    pendingScore: null,
+    attractClock: 0,
+    attractCycle: 0,
+    attractStep: 0,
+    attractScript: [],
+    attractCooldown: 0,
+    attractStallClock: 0,
+    attractLastX: 0,
+    attractLastY: 0,
+    attractLastKey: "",
+    totalClaimedCells: 0,
+    levelMessage: "Trace into open space and close the cut."
+  };
+
+  function resizeCanvas() {
+    const bounds = canvas.getBoundingClientRect();
+    dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+    canvas.width = Math.max(1, Math.round(bounds.width * dpr));
+    canvas.height = Math.max(1, Math.round(bounds.height * dpr));
+  }
+
+  function safeFocus(el) {
+    if (!el || typeof el.focus !== "function") return;
+    try {
+      el.focus({preventScroll: true});
+    } catch (error) {
+      try {
+        el.focus();
+      } catch (error2) {
+      }
+    }
+  }
+
+  function idx(x, y) {
+    return y * GRID_W + x;
+  }
+
+  function inBounds(x, y) {
+    return x >= 0 && y >= 0 && x < GRID_W && y < GRID_H;
+  }
+
+  function getCell(x, y) {
+    if (!inBounds(x, y)) return CELL_SAFE;
+    return state.field[idx(x, y)];
+  }
+
+  function setCell(x, y, value, hue) {
+    if (inBounds(x, y)) {
+      const id = idx(x, y);
+      state.field[id] = value;
+      if (typeof hue === "number") state.fieldHue[id] = hue;
+      else if (value !== CELL_SAFE) state.fieldHue[id] = 0;
+    }
+  }
+
+  function getCellHue(x, y) {
+    if (!inBounds(x, y)) return 200;
+    return state.fieldHue[idx(x, y)] || 200;
+  }
+
+  function resetField() {
+    state.field.fill(CELL_EMPTY);
+    state.fieldHue.fill(0);
+    for (let x = 0; x < GRID_W; x++) {
+      setCell(x, 0, CELL_SAFE);
+      setCell(x, GRID_H - 1, CELL_SAFE);
+    }
+    for (let y = 0; y < GRID_H; y++) {
+      setCell(0, y, CELL_SAFE);
+      setCell(GRID_W - 1, y, CELL_SAFE);
+    }
+    state.totalClaimedCells = 0;
+  }
+
+  function levelGoal(level) {
+    return Math.min(0.82, CLAIM_GOAL_BASE + (level - 1) * 0.015);
+  }
+
+  function randomInt(min, max) {
+    return Math.floor(min + Math.random() * (max - min + 1));
+  }
+
+  function createQix(level) {
+    const speed = 10 + level * 1.15;
+    return {
+      x: GRID_W * 0.5,
+      y: GRID_H * 0.46,
+      vx: speed * 0.9,
+      vy: speed * 0.74,
+      phase: 0,
+      spin: 1.7 + level * 0.08,
+      length: 12 + level * 0.7,
+      baseLength: 12 + level * 0.7,
+      stretch: 0,
+      stretchV: 0,
+      wanderX: Math.random() * Math.PI * 2,
+      wanderY: Math.random() * Math.PI * 2,
+      width: 1.5 + Math.min(level * 0.06, 1),
+      hue: (195 + level * 14) % 360
+    };
+  }
+
+  function getQixEndpoints(qix = state.qix) {
+    if (!qix) return null;
+    const q = qix;
+    const wobble = Math.sin(q.phase * 1.7) * 2.8 + Math.sin(q.phase * 0.63) * 1.6;
+    const len = Math.max(6, q.length + wobble + q.stretch);
+    const skew = Math.sin(q.phase * 0.91) * 0.26;
+    const a1 = q.phase;
+    const a2 = q.phase * 1.37 + Math.PI * 0.72 + skew;
+    return {
+      a: {x: q.x + Math.cos(a1) * len, y: q.y + Math.sin(a1 * 1.18) * len * (0.72 + Math.sin(q.phase*0.6)*0.12)},
+      b: {x: q.x + Math.cos(a2) * len * (0.78 + Math.cos(q.phase*0.74)*0.2), y: q.y + Math.sin(a2 * 1.11) * len * (0.76 + Math.sin(q.phase*0.52)*0.16)},
+      center: {x: q.x, y: q.y}
+    };
+  }
+
+  function isQixForbiddenPoint(x, y) {
+    const ix = Math.floor(x);
+    const iy = Math.floor(y);
+    for (let oy = -1; oy <= 1; oy++) {
+      for (let ox = -1; ox <= 1; ox++) {
+        const cx = ix + ox;
+        const cy = iy + oy;
+        if (!inBounds(cx, cy)) return true;
+        if (getCell(cx, cy) === CELL_SAFE) return true;
+      }
+    }
+    return false;
+  }
+
+  function qixShapeCollision(qix = state.qix) {
+    const shape = getQixEndpoints(qix);
+    if (!shape) return {blocked:false,minX:0,maxX:0,minY:0,maxY:0};
+    const points = [shape.a, shape.b, shape.center];
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of points) {
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+    const margin = 4.1;
+    let blocked = minX <= margin || maxX >= GRID_W - 1 - margin || minY <= margin || maxY >= GRID_H - 1 - margin;
+
+    const dx = shape.b.x - shape.a.x;
+    const dy = shape.b.y - shape.a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    const sampleCount = Math.max(56, Math.ceil(len * 18));
+    const offsets = [-1.2, -0.6, 0, 0.6, 1.2];
+
+    for (let i = 0; i <= sampleCount && !blocked; i++) {
+      const t = i / sampleCount;
+      const baseX = shape.a.x + dx * t;
+      const baseY = shape.a.y + dy * t;
+      for (const off of offsets) {
+        const sx = baseX + nx * off;
+        const sy = baseY + ny * off;
+        if (isQixForbiddenPoint(sx, sy)) {
+          blocked = true;
+          break;
+        }
+      }
+    }
+
+    if (!blocked) {
+      for (const p of points) {
+        if (isQixForbiddenPoint(p.x, p.y)) {
+          blocked = true;
+          break;
+        }
+      }
+    }
+
+    return {blocked,minX,maxX,minY,maxY};
+  }
+
+  function resetPlayer() {
+    state.player.x = Math.floor(GRID_W / 2);
+    state.player.y = GRID_H - 1;
+    state.player.alive = true;
+    state.player.drawing = false;
+    state.player.moveClock = 0;
+    state.player.respawnFlash = 1.2;
+    clearTrail();
+  }
+
+  function clearDeathTimer() {
+    if (deathResolveTimer) {
+      clearTimeout(deathResolveTimer);
+      deathResolveTimer = 0;
+    }
+  }
+
+  function clearTrail() {
+    for (const cell of state.trail) {
+      if (getCell(cell.x, cell.y) === CELL_TRAIL) {
+        setCell(cell.x, cell.y, CELL_EMPTY);
+      }
+    }
+    state.trail.length = 0;
+    state.player.drawing = false;
+  }
+
+  function startLevel(level, keepScore) {
+    if (levelAdvanceTimer) {
+      clearTimeout(levelAdvanceTimer);
+      levelAdvanceTimer = 0;
+    }
+    clearDeathTimer();
+    state.level = level;
+    if (!keepScore) {
+      state.score = 0;
+      state.lives = 3;
+    }
+    state.targetRatio = levelGoal(level);
+    state.captureFlash = 0;
+    state.screenFlash = 0;
+    state.shake = 0;
+    state.particles.length = 0;
+    state.pulses.length = 0;
+    state.qixTrail.length = 0;
+    resetField();
+    resetPlayer();
+    state.sparx = createSparxWave(level, false);
+    state.qix = createQix(level);
+    state.claimedRatio = calculateClaimedRatio();
+    state.levelMessage = "Claim " + Math.round(state.targetRatio * 100) + "% to clear the field.";
+    updateHud(true);
+  }
+
+  function beginGame() {
+    unlockAudio();
+    hideAllOverlays();
+    pauseButton.textContent = "Pause";
+    state.phase = "playing";
+    startLevel(1, false);
+    playTone("start");
+  }
+
+  function restartGame() {
+    hideAllOverlays();
+    pauseButton.textContent = "Pause";
+    state.phase = "playing";
+    startLevel(1, false);
+    playTone("start");
+  }
+
+  function hideAllOverlays() {
+    titleOverlay.classList.remove("show");
+    howOverlay.classList.remove("show");
+    scoresOverlay.classList.remove("show");
+    gameOverOverlay.classList.remove("show");
+  }
+
+  function showOverlay(el) {
+    hideAllOverlays();
+    el.classList.add("show");
+  }
+
+  function clampQixPoint(point) {
+    point.x = Math.max(3.5, Math.min(GRID_W - 4.5, point.x));
+    point.y = Math.max(3.5, Math.min(GRID_H - 4.5, point.y));
+  }
+
+  function isQixBlocked(x, y) {
+    const ix = Math.floor(x);
+    const iy = Math.floor(y);
+    return getCell(ix, iy) === CELL_SAFE;
+  }
+
+  function updateQix(dt) {
+    if (!state.qix) return;
+    const q = state.qix;
+    q.phase += dt * q.spin * 2.6;
+    q.wanderX += dt * (0.9 + state.level * 0.03);
+    q.wanderY += dt * (1.1 + state.level * 0.035);
+    q.stretchV += (Math.sin(q.wanderX) * 7 + Math.cos(q.wanderY * 0.7) * 5 - q.stretch) * dt * 1.8;
+    q.stretchV *= 0.94;
+    q.stretch += q.stretchV * dt * 14;
+    q.length = q.baseLength + Math.sin(q.wanderX * 0.8) * 2.2;
+
+    let bounced = false;
+    const step = Math.min(0.005, dt);
+    let remaining = dt;
+    while (remaining > 0) {
+      const slice = Math.min(step, remaining);
+      const prevX = q.x;
+      const prevY = q.y;
+
+      q.x = prevX + q.vx * slice;
+      let shape = qixShapeCollision(q);
+      if (shape.blocked) {
+        q.x = prevX;
+        q.vx = -q.vx;
+        bounced = true;
+      }
+
+      q.y = prevY + q.vy * slice;
+      shape = qixShapeCollision(q);
+      if (shape.blocked) {
+        q.y = prevY;
+        q.vy = -q.vy;
+        bounced = true;
+      }
+
+      clampQixPoint(q);
+      remaining -= slice;
+    }
+
+    const t = performance.now() * 0.001;
+    q.vx += Math.sin(t * 1.17 + q.wanderX) * (0.22 + state.level * 0.01) * dt;
+    q.vy += Math.cos(t * 1.31 + q.wanderY) * (0.24 + state.level * 0.01) * dt;
+    q.vx += Math.sin(q.wanderY * 0.6) * 0.06 * dt;
+    q.vy += Math.cos(q.wanderX * 0.65) * 0.06 * dt;
+
+    const roamBiasX = (GRID_W * 0.5 - q.x) * 0.03 + Math.sin(q.wanderX * 0.35) * 0.04;
+    const roamBiasY = (GRID_H * 0.5 - q.y) * 0.03 + Math.cos(q.wanderY * 0.31) * 0.04;
+    q.vx += roamBiasX * dt;
+    q.vy += roamBiasY * dt;
+
+    const speed = Math.hypot(q.vx, q.vy) || 1;
+    const minSpeed = 8 + state.level * 0.9;
+    const maxSpeed = 16 + state.level * 1.2;
+    if (speed < minSpeed) {
+      const scale = minSpeed / speed;
+      q.vx *= scale;
+      q.vy *= scale;
+    } else if (speed > maxSpeed) {
+      const scale = maxSpeed / speed;
+      q.vx *= scale;
+      q.vy *= scale;
+    }
+
+    const shape = getQixEndpoints(q);
+    state.qixTrail.unshift({
+      ax: shape.a.x, ay: shape.a.y,
+      bx: shape.b.x, by: shape.b.y,
+      hue: (q.hue + Math.sin(q.phase * 1.3) * 40 + Math.cos(q.phase * 0.7) * 25 + 360) % 360,
+      life: 1
+    });
+    if (state.qixTrail.length > 22) state.qixTrail.length = 22;
+    if (bounced && Math.random() < 0.4) playTone("qixBounce");
+  }
+
+  function isBorderSafeCell(x, y) {
+    if (getCell(x, y) !== CELL_SAFE) return false;
+    if (x === 0 || y === 0 || x === GRID_W - 1 || y === GRID_H - 1) return true;
+    for (const dir of Object.values(DIRS)) {
+      const nx = x + dir.x;
+      const ny = y + dir.y;
+      if (!inBounds(nx, ny)) return true;
+      if (getCell(nx, ny) !== CELL_SAFE) return true;
+    }
+    return false;
+  }
+
+  function rotateRight(dx, dy) {
+    return {dx: -dy, dy: dx};
+  }
+
+  function rotateLeft(dx, dy) {
+    return {dx: dy, dy: -dx};
+  }
+
+  function computeReachableOpenMap() {
+    const shape = state.qix ? getQixEndpoints() : null;
+    const seeds = shape ? [shape.a, shape.b, shape.center] : [{x: GRID_W * 0.5, y: GRID_H * 0.5}];
+    return floodFillFromSeeds(seeds);
+  }
+
+  function isReachableSparxOpenCell(x, y, reachable) {
+    return inBounds(x, y) && getCell(x, y) !== CELL_SAFE && !!reachable[idx(x, y)];
+  }
+
+  function buildSparxCycles(reachable) {
+    const edges = [];
+    const pushEdge = (sx, sy, ex, ey) => edges.push({sx, sy, ex, ey});
+
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        if (!isReachableSparxOpenCell(x, y, reachable)) continue;
+        if (getCell(x, y - 1) === CELL_SAFE) pushEdge(x + 1, y, x, y);
+        if (getCell(x + 1, y) === CELL_SAFE) pushEdge(x + 1, y + 1, x + 1, y);
+        if (getCell(x, y + 1) === CELL_SAFE) pushEdge(x, y + 1, x + 1, y + 1);
+        if (getCell(x - 1, y) === CELL_SAFE) pushEdge(x, y, x, y + 1);
+      }
+    }
+
+    const startMap = new Map();
+    edges.forEach((edge, index) => {
+      const key = edge.sx + "," + edge.sy;
+      if (!startMap.has(key)) startMap.set(key, []);
+      startMap.get(key).push(index);
+    });
+
+    function pickNextEdge(edge, options, visited) {
+      const available = options.filter((idx2) => !visited[idx2]);
+      if (!available.length) return null;
+      const cdx = edge.ex - edge.sx;
+      const cdy = edge.ey - edge.sy;
+      let best = null;
+      let bestScore = -Infinity;
+      for (const idx2 of available) {
+        const next = edges[idx2];
+        const ndx = next.ex - next.sx;
+        const ndy = next.ey - next.sy;
+        const dot = cdx * ndx + cdy * ndy;
+        const cross = cdx * ndy - cdy * ndx;
+        let score = -100;
+        if (dot === 1) score = 4;
+        else if (cross === -1) score = 3;
+        else if (cross === 1) score = 1;
+        else if (dot === -1) score = -10;
+        if (score > bestScore) {
+          bestScore = score;
+          best = idx2;
+        }
+      }
+      return best;
+    }
+
+    const visited = new Array(edges.length).fill(false);
+    const cycles = [];
+
+    for (let i = 0; i < edges.length; i++) {
+      if (visited[i]) continue;
+      let current = i;
+      const points = [];
+      let guard = 0;
+      while (current != null && !visited[current] && guard < edges.length + 4) {
+        const edge = edges[current];
+        visited[current] = true;
+        if (!points.length) points.push({x: edge.sx, y: edge.sy});
+        points.push({x: edge.ex, y: edge.ey});
+        const nextKey = edge.ex + "," + edge.ey;
+        const nextOptions = startMap.get(nextKey) || [];
+        current = pickNextEdge(edge, nextOptions, visited);
+        guard += 1;
+      }
+      if (points.length >= 3) {
+        const first = points[0];
+        const last = points[points.length - 1];
+        if (first.x !== last.x || first.y !== last.y) {
+          points.push({x: first.x, y: first.y});
+        }
+        let total = 0;
+        const cumulative = [0];
+        for (let j = 1; j < points.length; j++) {
+          total += Math.hypot(points[j].x - points[j - 1].x, points[j].y - points[j - 1].y);
+          cumulative.push(total);
+        }
+        if (total > 0) cycles.push({points, cumulative, total});
+      }
+    }
+
+    return cycles;
+  }
+
+  function sampleSparxCycle(cycle, progress) {
+    let p = ((progress % cycle.total) + cycle.total) % cycle.total;
+    for (let i = 1; i < cycle.points.length; i++) {
+      const start = cycle.points[i - 1];
+      const end = cycle.points[i];
+      const segStart = cycle.cumulative[i - 1];
+      const segEnd = cycle.cumulative[i];
+      if (p <= segEnd || i === cycle.points.length - 1) {
+        const len = segEnd - segStart || 1;
+        const t = Math.max(0, Math.min(1, (p - segStart) / len));
+        return {
+          x: start.x + (end.x - start.x) * t,
+          y: start.y + (end.y - start.y) * t
+        };
+      }
+    }
+    return cycle.points[0];
+  }
+
+  function nearestProgressOnCycle(cycle, x, y) {
+    let bestDistSq = Infinity;
+    let bestProgress = 0;
+    for (let i = 1; i < cycle.points.length; i++) {
+      const start = cycle.points[i - 1];
+      const end = cycle.points[i];
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const lenSq = dx * dx + dy * dy || 1;
+      const t = Math.max(0, Math.min(1, ((x - start.x) * dx + (y - start.y) * dy) / lenSq));
+      const px = start.x + dx * t;
+      const py = start.y + dy * t;
+      const distSq = (x - px) * (x - px) + (y - py) * (y - py);
+      if (distSq < bestDistSq) {
+        bestDistSq = distSq;
+        bestProgress = cycle.cumulative[i - 1] + Math.sqrt(lenSq) * t;
+      }
+    }
+    return {progress: bestProgress, distance: Math.sqrt(bestDistSq)};
+  }
+
+  function createSparx(x, y, dir, speed) {
+    return {
+      x: x + 0.5,
+      y: y + 0.5,
+      hintX: x + 0.5,
+      hintY: y + 0.5,
+      dir,
+      speed,
+      cycleIndex: -1,
+      progress: null,
+      dx: dir,
+      dy: 0,
+      soundClock: Math.random() * 0.16,
+      soundInterval: 0.11 + Math.random() * 0.08,
+      phase: Math.random() * Math.PI * 2
+    };
+  }
+
+  function createSparxWave(level, attractMode = false) {
+    const speed = ((attractMode ? 4.8 : 5.6) + level * 0.2) * 1.5;
+    const list = [createSparx(Math.floor(GRID_W * 0.25), 0, 1, speed)];
+    if (level >= 2 || attractMode) {
+      list.push(createSparx(Math.floor(GRID_W * 0.75), 0, -1, speed * 1.03));
+    }
+    return list;
+  }
+
+  function createAttractSparxWave() {
+    const startLeft = Math.random() < 0.5;
+    return [createSparx(Math.floor(GRID_W * (startLeft ? 0.24 : 0.76)), 0, startLeft ? 1 : -1, 6.2)];
+  }
+
+  function projectSparxToCycles(sparx, cycles) {
+    let best = null;
+    for (let i = 0; i < cycles.length; i++) {
+      const projected = nearestProgressOnCycle(cycles[i], sparx.x ?? sparx.hintX, sparx.y ?? sparx.hintY);
+      if (!best || projected.distance < best.distance) {
+        best = {cycleIndex: i, progress: projected.progress, distance: projected.distance};
+      }
+    }
+    if (!best) return false;
+    sparx.cycleIndex = best.cycleIndex;
+    sparx.progress = best.progress;
+    const pos = sampleSparxCycle(cycles[best.cycleIndex], best.progress);
+    sparx.x = pos.x;
+    sparx.y = pos.y;
+    return true;
+  }
+
+  function sparxAt(x, y) {
+    const px = x + 0.5;
+    const py = y + 0.5;
+    return state.sparx.some((sparx) => Math.hypot(sparx.x - px, sparx.y - py) < 0.78);
+  }
+
+  function updateSparx(dt) {
+    if (!state.sparx.length) return;
+    const reachable = computeReachableOpenMap();
+    const cycles = buildSparxCycles(reachable);
+    if (!cycles.length) return;
+
+    for (const sparx of state.sparx) {
+      sparx.phase += dt * 12;
+      sparx.soundClock = (sparx.soundClock || 0) + dt;
+      const cycle = cycles[sparx.cycleIndex];
+      if (!cycle || sparx.progress == null) {
+        if (!projectSparxToCycles(sparx, cycles)) continue;
+      } else {
+        const projected = nearestProgressOnCycle(cycle, sparx.x, sparx.y);
+        if (projected.distance > 1.25) {
+          if (!projectSparxToCycles(sparx, cycles)) continue;
+        }
+      }
+
+      const activeCycle = cycles[sparx.cycleIndex];
+      sparx.progress = ((sparx.progress + sparx.dir * sparx.speed * dt) % activeCycle.total + activeCycle.total) % activeCycle.total;
+      const pos = sampleSparxCycle(activeCycle, sparx.progress);
+      const ahead = sampleSparxCycle(activeCycle, sparx.progress + sparx.dir * 0.2);
+      sparx.x = pos.x;
+      sparx.y = pos.y;
+      if ((state.phase === "playing" || state.phase === "title") && sparx.soundClock >= (sparx.soundInterval || 0.16)) {
+        sparx.soundClock = 0;
+        sparx.soundInterval = 0.1 + Math.random() * 0.1;
+        playTone("sparx");
+      }
+      const dirX = ahead.x - pos.x;
+      const dirY = ahead.y - pos.y;
+      const len = Math.hypot(dirX, dirY) || 1;
+      sparx.dx = dirX / len;
+      sparx.dy = dirY / len;
+
+      if (state.phase === "playing" && state.player.alive && !state.player.drawing && Math.hypot(sparx.x - (state.player.x + 0.5), sparx.y - (state.player.y + 0.5)) < 0.76) {
+        loseLife("A Sparx caught you on the wall.");
+        return;
+      }
+    }
+  }
+
+  function activeDirection() {
+    if (state.phase === "title") return attractDir;
+    return controlDir || keyboardDir;
+  }
+
+  function updatePlayer(dt) {
+    const dirName = activeDirection();
+    if (!dirName) return;
+    state.player.moveClock += dt;
+    const intervalBase = state.player.drawing ? Math.max(0.032, 0.056 - state.level * 0.002) : Math.max(0.026, 0.042 - state.level * 0.0015);
+    const interval = state.phase === "title" ? intervalBase * 0.55 : intervalBase;
+    while (state.player.moveClock >= interval) {
+      state.player.moveClock -= interval;
+      stepPlayer(dirName);
+      if (state.phase !== "playing" && state.phase !== "title") return;
+    }
+  }
+
+  function stepPlayer(dirName) {
+    const dir = DIRS[dirName];
+    if (!dir) return;
+    const nx = state.player.x + dir.x;
+    const ny = state.player.y + dir.y;
+    if (!inBounds(nx, ny)) return;
+
+    const nextCell = getCell(nx, ny);
+    const currentSafe = getCell(state.player.x, state.player.y) === CELL_SAFE;
+
+    if (!state.player.drawing) {
+      if (nextCell === CELL_SAFE && isBorderSafeCell(nx, ny)) {
+        if (sparxAt(nx, ny)) {
+          loseLife("A Sparx caught you on the wall.");
+          return;
+        }
+        movePlayerTo(nx, ny);
+        return;
+      }
+      if (currentSafe && isBorderSafeCell(state.player.x, state.player.y) && nextCell === CELL_EMPTY) {
+        state.player.drawing = true;
+        movePlayerTo(nx, ny);
+        setCell(nx, ny, CELL_TRAIL);
+        state.trail.push({x: nx, y: ny});
+        playTone("draw");
+      }
+      return;
+    }
+
+    if (nextCell === CELL_TRAIL) {
+      state.levelMessage = "You can't reverse through your live cut.";
+      updateHud(true);
+      return;
+    }
+
+    if (nextCell === CELL_EMPTY) {
+      movePlayerTo(nx, ny);
+      setCell(nx, ny, CELL_TRAIL);
+      state.trail.push({x: nx, y: ny});
+      return;
+    }
+
+    if (nextCell === CELL_SAFE) {
+      if (sparxAt(nx, ny)) {
+        loseLife("A Sparx was waiting on the wall.");
+        return;
+      }
+      movePlayerTo(nx, ny);
+      completeCapture();
+    }
+  }
+
+  function movePlayerTo(x, y) {
+    state.player.x = x;
+    state.player.y = y;
+  }
+
+  function relocatePlayerToNearestSafeEdge() {
+    if (isBorderSafeCell(state.player.x, state.player.y)) return;
+    let best = null;
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        if (!isBorderSafeCell(x, y)) continue;
+        const dist = Math.abs(x - state.player.x) + Math.abs(y - state.player.y);
+        if (!best || dist < best.dist) {
+          best = {x, y, dist};
+        }
+      }
+    }
+    if (best) {
+      movePlayerTo(best.x, best.y);
+    } else {
+      resetPlayer();
+    }
+  }
+
+  function loseLife(message) {
+    if (state.phase !== "playing") return;
+    clearDeathTimer();
+    state.lives -= 1;
+    state.phase = "dying";
+    state.player.alive = false;
+    state.player.drawing = false;
+    state.player.moveClock = 0;
+    state.shake = 0.95;
+    state.screenFlash = 1;
+    spawnBurst(state.player.x, state.player.y, 56, "danger", {speedMin: 7, speedMax: 30, lifeMin: 0.45, spread: Math.PI * 2});
+    spawnBurst(state.player.x, state.player.y, 30, "capture", {speedMin: 4, speedMax: 16, lifeMin: 0.38, spread: Math.PI * 2});
+    state.pulses.push({x: state.player.x + 0.5, y: state.player.y + 0.5, r: 0.8, maxR: 10, life: 0.72});
+    clearTrail();
+    playTone("hit");
+
+    const deathMessage = message || "Trace broken. Re-enter from a safe wall.";
+    deathResolveTimer = setTimeout(() => {
+      deathResolveTimer = 0;
+      if (state.lives <= 0) {
+        triggerGameOver(message || "The Qix line cut through your trace.");
+      } else {
+        resetPlayer();
+        state.phase = "playing";
+        state.levelMessage = deathMessage;
+        updateHud(true);
+      }
+    }, 720);
+  }
+
+  function floodFillFromSeeds(seeds) {
+    const visited = new Uint8Array(GRID_W * GRID_H);
+    const queue = [];
+    for (const seed of seeds) {
+      const sx = Math.max(1, Math.min(GRID_W - 2, Math.round(seed.x)));
+      const sy = Math.max(1, Math.min(GRID_H - 2, Math.round(seed.y)));
+      const id = idx(sx, sy);
+      if (visited[id] || getCell(sx, sy) === CELL_SAFE) continue;
+      visited[id] = 1;
+      queue.push({x: sx, y: sy});
+    }
+    for (let head = 0; head < queue.length; head++) {
+      const cell = queue[head];
+      for (const dir of Object.values(DIRS)) {
+        const nx = cell.x + dir.x;
+        const ny = cell.y + dir.y;
+        if (!inBounds(nx, ny)) continue;
+        const id = idx(nx, ny);
+        if (visited[id]) continue;
+        if (getCell(nx, ny) === CELL_SAFE) continue;
+        visited[id] = 1;
+        queue.push({x: nx, y: ny});
+      }
+    }
+    return visited;
+  }
+
+  function completeCapture() {
+    if (state.trail.length < 2) {
+      clearTrail();
+      return;
+    }
+    const captureHue = (state.qix.hue + Math.random() * 90 + capturedColorSeed()) % 360;
+    for (const cell of state.trail) {
+      setCell(cell.x, cell.y, CELL_SAFE, captureHue);
+    }
+
+    const qixShape = getQixEndpoints();
+    const seeds = [
+      qixShape.a,
+      qixShape.b,
+      qixShape.center
+    ];
+    const reachable = floodFillFromSeeds(seeds);
+    let captured = 0;
+    for (let y = 1; y < GRID_H - 1; y++) {
+      for (let x = 1; x < GRID_W - 1; x++) {
+        if (getCell(x, y) !== CELL_EMPTY) continue;
+        if (!reachable[idx(x, y)]) {
+          setCell(x, y, CELL_SAFE, captureHue);
+          captured += 1;
+        }
+      }
+    }
+
+    state.totalClaimedCells += captured + state.trail.length;
+    const captureRatio = captured / ((GRID_W - 2) * (GRID_H - 2));
+    const scoreGain = Math.max(250, Math.round(captured * (8 + state.level * 1.35) + state.trail.length * 22));
+    state.score += scoreGain;
+    state.captureFlash = 1;
+    playTone("capture");
+    spawnCaptureEffect(captureRatio, captured);
+    clearTrail();
+    relocatePlayerToNearestSafeEdge();
+    const cyclesAfterCapture = buildSparxCycles(computeReachableOpenMap());
+    for (const sparx of state.sparx) {
+      sparx.cycleIndex = -1;
+      sparx.progress = null;
+      if (cyclesAfterCapture.length) {
+        projectSparxToCycles(sparx, cyclesAfterCapture);
+      }
+    }
+    state.claimedRatio = calculateClaimedRatio();
+    state.levelMessage = "Captured " + Math.round(captureRatio * 1000) / 10 + "% for +" + scoreGain + " points.";
+    updateHud(true);
+
+    if (state.claimedRatio >= state.targetRatio) {
+      clearLevel();
+    }
+  }
+
+  function capturedColorSeed() {
+    return (state.level * 37 + state.score * 0.01) % 360;
+  }
+
+  function calculateClaimedRatio() {
+    let safeInterior = 0;
+    const total = (GRID_W - 2) * (GRID_H - 2);
+    for (let y = 1; y < GRID_H - 1; y++) {
+      for (let x = 1; x < GRID_W - 1; x++) {
+        if (getCell(x, y) === CELL_SAFE) safeInterior += 1;
+      }
+    }
+    return safeInterior / total;
+  }
+
+  function clearLevel() {
+    state.phase = "transition";
+    const bonus = 2000 + state.level * 600 + state.lives * 450;
+    state.score += bonus;
+    state.levelMessage = "Field cleared. Bonus +" + bonus + ".";
+    updateHud(true);
+    playTone("level");
+    levelAdvanceTimer = setTimeout(() => {
+      state.phase = "playing";
+      levelAdvanceTimer = 0;
+      startLevel(state.level + 1, true);
+    }, 1250);
+  }
+
+  function triggerGameOver(message) {
+    state.phase = "gameover";
+    gameOverEyebrow.textContent = "Game Over";
+    gameOverText.textContent = message + " Final score: " + state.score + ".";
+    const qualifies = qualifiesForHighScore(state.score);
+    state.pendingScore = qualifies ? {score: state.score, level: state.level} : null;
+    initialsWrap.style.display = qualifies ? "flex" : "none";
+    saveScoreButton.style.display = qualifies ? "inline-flex" : "none";
+    restartButton.style.display = qualifies ? "none" : "inline-flex";
+    initialsInput.value = "";
+    showOverlay(gameOverOverlay);
+    if (qualifies) {
+      safeFocus(initialsInput);
+    }
+    updateHud(true);
+  }
+
+  function qualifiesForHighScore(score) {
+    const scores = loadHighScores();
+    return scores.length < 10 || score > scores[scores.length - 1].score;
+  }
+
+  async function fetchGlobalScores() {
+    const now = Date.now();
+    if (globalScoresCache && now - globalScoresCacheTime < 30000) return globalScoresCache;
+    try {
+      const res = await fetch(GLOBAL_SCORES_API);
+      if (res.ok) {
+        globalScoresCache = await res.json();
+        globalScoresCacheTime = now;
+        return globalScoresCache;
+      }
+    } catch (error) {
+    }
+    return globalScoresCache || [];
+  }
+
+  async function submitGlobalScore(name, score, level) {
+    try {
+      await fetch(GLOBAL_SCORES_API, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({initials: name, score, level})
+      });
+      globalScoresCache = null;
+      globalScoresCacheTime = 0;
+    } catch (error) {
+    }
+  }
+
+  function loadHighScores() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(SCORE_KEY) || "[]");
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((entry) => entry && typeof entry.name === "string" && Number.isFinite(entry.score))
+        .slice(0, 10);
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function saveHighScore(name, score, level) {
+    const scores = loadHighScores();
+    const entry = {name, score, level, ts: Date.now()};
+    scores.push(entry);
+    scores.sort((a, b) => b.score - a.score);
+    const trimmed = scores.slice(0, 10);
+    localStorage.setItem(SCORE_KEY, JSON.stringify(trimmed));
+    lastSavedLocalTs = entry.ts;
+    lastSubmittedGlobal = {name, score, level};
+    renderHighScores();
+    return entry;
+  }
+
+  function renderHighScores() {
+    const scores = loadHighScores();
+    let html = '<div class="score-group-title" style="color:#7df6ff">🏠 Local Top 10</div>';
+    html += '<div class="score-note">Stored on this device.</div>';
+    if (!scores.length) {
+      html += '<div class="score-row local"><span>--</span><strong>AAA</strong><span>0</span></div>';
+    } else {
+      html += scores.map((entry, index) => {
+        const classes = 'score-row local' + (entry.ts === lastSavedLocalTs ? ' highlight' : '');
+        return '<div class="' + classes + '"><span>' + String(index + 1).padStart(2, "0") +
+          '</span><strong>' + entry.name +
+          '</strong><span>L' + (entry.level || 1) + ' · ' + entry.score.toLocaleString() + '</span></div>';
+      }).join("");
+    }
+    html += '<div class="score-group-title" style="color:#ffd56a;margin-top:18px">🌐 Global Top 10</div>';
+    html += '<div class="score-note">Shared cabinet board.</div>';
+    html += '<div id="globalScoreRows"><div class="score-row global"><span>..</span><strong>SYNC</strong><span>Loading</span></div></div>';
+    scoreList.innerHTML = html;
+
+    fetchGlobalScores().then((scores) => {
+      const rows = document.getElementById("globalScoreRows");
+      if (!rows) return;
+      if (!scores || !scores.length) {
+        rows.innerHTML = '<div class="score-row global"><span>--</span><strong>EMPTY</strong><span>No scores yet</span></div>';
+        return;
+      }
+      rows.innerHTML = scores.slice(0, 10).map((entry, index) => {
+        const same = lastSubmittedGlobal
+          && (entry.initials || entry.name || "AAA") === lastSubmittedGlobal.name
+          && Number(entry.score || 0) === Number(lastSubmittedGlobal.score || 0)
+          && Number(entry.level || entry.wave || 1) === Number(lastSubmittedGlobal.level || 1);
+        const classes = 'score-row global' + (same ? ' highlight' : '');
+        return '<div class="' + classes + '"><span>' + String(index + 1).padStart(2, "0") +
+          '</span><strong>' + (entry.initials || entry.name || "AAA") +
+          '</strong><span>L' + (entry.level || entry.wave || 1) + ' · ' + Number(entry.score || 0).toLocaleString() + '</span></div>';
+      }).join("");
+    }).catch(() => {
+      const rows = document.getElementById("globalScoreRows");
+      if (!rows) return;
+      rows.innerHTML = '<div class="score-row global"><span>--</span><strong>OFF</strong><span>Global unavailable</span></div>';
+    });
+  }
+
+  function updateHud(force) {
+    const modeLabel = state.player.drawing ? "Live Cut" : state.phase === "paused" ? "Paused" : "Safe Edge";
+    const modeText = state.phase === "title"
+      ? "Start a run, then cut inward from the border to trap empty space."
+      : state.phase === "gameover"
+        ? "Restart to send a new trace across the field."
+        : state.phase === "paused"
+          ? "Resume when you are ready."
+          : state.levelMessage;
+
+    const snapshot = [
+      state.score,
+      state.level,
+      state.lives,
+      Math.round(state.claimedRatio * 1000),
+      modeLabel,
+      modeText
+    ].join("|");
+    if (!force && snapshot === lastHudState) return;
+    lastHudState = snapshot;
+    scoreValue.textContent = state.score.toLocaleString();
+    levelValue.textContent = String(state.level);
+    claimValue.textContent = Math.round(state.claimedRatio * 1000) / 10 + "%";
+    livesValue.textContent = String(state.lives);
+    statusMode.textContent = modeLabel;
+    statusText.textContent = modeText;
+  }
+
+  function spawnParticle(x, y, vx, vy, life, kind) {
+    state.particles.push({x, y, vx, vy, life, maxLife: life, kind});
+  }
+
+  function spawnBurst(x, y, count, kind, options = {}) {
+    for (let i = 0; i < count; i++) {
+      const angleBase = options.angle ?? Math.random() * Math.PI * 2;
+      const spread = options.spread ?? Math.PI * 2;
+      const angle = angleBase + (Math.random() - 0.5) * spread;
+      const speedMin = options.speedMin ?? 4;
+      const speedMax = options.speedMax ?? 14;
+      const speed = speedMin + Math.random() * (speedMax - speedMin);
+      spawnParticle(x + 0.5, y + 0.5, Math.cos(angle) * speed, Math.sin(angle) * speed, options.lifeMin ?? 0.2 + Math.random() * 0.18, kind);
+    }
+  }
+
+  function spawnCaptureEffect(captureRatio, captured) {
+    const quantity = Math.min(120, 26 + Math.round(captureRatio * 240));
+    for (let i = 0; i < quantity; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 2 + Math.random() * 12;
+      const px = state.player.x + Math.cos(angle) * radius;
+      const py = state.player.y + Math.sin(angle) * radius;
+      spawnParticle(px, py, Math.cos(angle) * (2 + Math.random() * 10), Math.sin(angle) * (2 + Math.random() * 10), 0.7 + Math.random() * 0.8, "capture");
+    }
+    state.pulses.push({x: state.player.x + 0.5, y: state.player.y + 0.5, r: 1, maxR: 6 + captureRatio * 30 + captured / 200, life: 0.95});
+  }
+
+  function updateParticles(dt) {
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+      const p = state.particles[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 0.985;
+      p.vy *= 0.985;
+      p.life -= dt;
+      if (p.life <= 0) state.particles.splice(i, 1);
+    }
+    for (let i = state.pulses.length - 1; i >= 0; i--) {
+      const pulse = state.pulses[i];
+      pulse.life -= dt;
+      pulse.r += pulse.maxR * dt * 1.4;
+      if (pulse.life <= 0) state.pulses.splice(i, 1);
+    }
+  }
+
+  function distToSegment(px, py, ax, ay, bx, by) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lengthSq = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSq));
+    const ix = ax + dx * t;
+    const iy = ay + dy * t;
+    const sx = px - ix;
+    const sy = py - iy;
+    return Math.sqrt(sx * sx + sy * sy);
+  }
+
+  function qixHitsTrail() {
+    if (!state.player.drawing || !state.qix) return false;
+    const qixShape = getQixEndpoints();
+    const ax = qixShape.a.x + 0.5;
+    const ay = qixShape.a.y + 0.5;
+    const bx = qixShape.b.x + 0.5;
+    const by = qixShape.b.y + 0.5;
+    if (distToSegment(state.player.x + 0.5, state.player.y + 0.5, ax, ay, bx, by) < 1.1) {
+      return true;
+    }
+    for (let i = 0; i < state.trail.length; i++) {
+      const cell = state.trail[i];
+      if (distToSegment(cell.x + 0.5, cell.y + 0.5, ax, ay, bx, by) < 0.95) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function minQixDistanceToPoint(x, y) {
+    if (!state.qix) return 999;
+    const shape = getQixEndpoints();
+    const px = x + 0.5;
+    const py = y + 0.5;
+    const segment = distToSegment(px, py, shape.a.x + 0.5, shape.a.y + 0.5, shape.b.x + 0.5, shape.b.y + 0.5);
+    const center = Math.hypot(px - (shape.center.x + 0.5), py - (shape.center.y + 0.5));
+    return Math.min(segment, center * 0.9);
+  }
+
+  function minSparxDistanceToPoint(x, y) {
+    if (!state.sparx.length) return 999;
+    const px = x + 0.5;
+    const py = y + 0.5;
+    let best = Infinity;
+    for (const sparx of state.sparx) {
+      best = Math.min(best, Math.hypot(px - sparx.x, py - sparx.y));
+    }
+    return best;
+  }
+
+  function attractScriptKey(script) {
+    return script.map((point) => point.x + ":" + point.y).join("|");
+  }
+
+  function weightedWallPick(qixX, qixY) {
+    const choices = [
+      {wall: "left", weight: qixX > GRID_W * 0.5 ? 1.35 : 0.85},
+      {wall: "right", weight: qixX < GRID_W * 0.5 ? 1.35 : 0.85},
+      {wall: "bottom", weight: qixY < GRID_H * 0.58 ? 1.05 : 0.55}
+    ];
+    const total = choices.reduce((sum, item) => sum + item.weight, 0);
+    let roll = Math.random() * total;
+    for (const item of choices) {
+      roll -= item.weight;
+      if (roll <= 0) return item.wall;
+    }
+    return choices[0].wall;
+  }
+
+  function buildAttractCandidate() {
+    const qixX = state.qix ? state.qix.x : GRID_W * 0.5;
+    const qixY = state.qix ? state.qix.y : GRID_H * 0.45;
+    const wall = weightedWallPick(qixX, qixY);
+    const script = [];
+
+    if (wall === "left") {
+      const entryY = randomInt(52, GRID_H - 16);
+      const offsetY = randomInt(-16, 16) || 8;
+      const exitY = Math.max(24, Math.min(GRID_H - 8, entryY + offsetY));
+      const depth = randomInt(8, qixX > GRID_W * 0.45 ? 18 : 12);
+      if (state.player.x !== 0 || state.player.y !== entryY) {
+        script.push({x: 0, y: entryY});
+      }
+      script.push({x: depth, y: entryY}, {x: depth, y: exitY}, {x: 0, y: exitY});
+      return script;
+    }
+
+    if (wall === "right") {
+      const entryY = randomInt(52, GRID_H - 16);
+      const offsetY = randomInt(-16, 16) || -8;
+      const exitY = Math.max(24, Math.min(GRID_H - 8, entryY + offsetY));
+      const depth = randomInt(8, qixX < GRID_W * 0.55 ? 18 : 12);
+      if (state.player.x !== GRID_W - 1 || state.player.y !== entryY) {
+        script.push({x: GRID_W - 1, y: entryY});
+      }
+      script.push({x: GRID_W - 1 - depth, y: entryY}, {x: GRID_W - 1 - depth, y: exitY}, {x: GRID_W - 1, y: exitY});
+      return script;
+    }
+
+    const leftSide = qixX > GRID_W * 0.5;
+    const entryX = leftSide ? randomInt(7, 22) : randomInt(GRID_W - 23, GRID_W - 8);
+    const width = randomInt(10, 22);
+    const exitX = leftSide ? Math.min(GRID_W - 2, entryX + width) : Math.max(1, entryX - width);
+    const depth = randomInt(10, qixY > GRID_H * 0.65 ? 14 : 24);
+    const topY = Math.max(68, GRID_H - 1 - depth);
+    if (state.player.x !== entryX || state.player.y !== GRID_H - 1) {
+      script.push({x: entryX, y: GRID_H - 1});
+    }
+    script.push({x: entryX, y: topY}, {x: exitX, y: topY}, {x: exitX, y: GRID_H - 1});
+    return script;
+  }
+
+  function scoreAttractScript(script) {
+    if (!script.length) return -Infinity;
+    const points = [{x: state.player.x, y: state.player.y}, ...script];
+    let minQix = Infinity;
+    let minSparx = Infinity;
+    let widthMin = Infinity;
+    let widthMax = -Infinity;
+    let heightMin = Infinity;
+    let heightMax = -Infinity;
+    let totalLen = 0;
+
+    for (let i = 1; i < points.length; i++) {
+      const start = points[i - 1];
+      const end = points[i];
+      const len = Math.hypot(end.x - start.x, end.y - start.y);
+      totalLen += len;
+      const samples = Math.max(3, Math.ceil(len / 3));
+      for (let s = 0; s <= samples; s++) {
+        const t = s / samples;
+        const x = start.x + (end.x - start.x) * t;
+        const y = start.y + (end.y - start.y) * t;
+        minQix = Math.min(minQix, minQixDistanceToPoint(x, y));
+        minSparx = Math.min(minSparx, minSparxDistanceToPoint(x, y));
+        widthMin = Math.min(widthMin, x);
+        widthMax = Math.max(widthMax, x);
+        heightMin = Math.min(heightMin, y);
+        heightMax = Math.max(heightMax, y);
+      }
+    }
+
+    const width = Math.max(0, widthMax - widthMin);
+    const height = Math.max(0, heightMax - heightMin);
+    const areaScore = Math.min(14, width * height * 0.06);
+    const safetyScore = minQix * 2.6 + minSparx * 1.65;
+    const shapeScore = 7 - Math.abs(width - 12) * 0.18 - Math.abs(height - 14) * 0.14;
+    const travelPenalty = totalLen * 0.055;
+    const repeatPenalty = attractScriptKey(script) === state.attractLastKey ? 14 : 0;
+    return safetyScore + areaScore + shapeScore - travelPenalty - repeatPenalty + Math.random() * 0.9;
+  }
+
+  function buildAttractScript() {
+    let bestScript = null;
+    let bestScore = -Infinity;
+    for (let i = 0; i < 20; i++) {
+      const candidate = buildAttractCandidate();
+      const score = scoreAttractScript(candidate);
+      if (score > bestScore) {
+        bestScore = score;
+        bestScript = candidate;
+      }
+    }
+    return bestScript || [{x: state.player.x, y: GRID_H - 1}];
+  }
+
+  function queueAttractScript() {
+    state.attractCycle += 1;
+    state.attractStep = 0;
+    state.attractScript = buildAttractScript();
+    state.attractLastKey = attractScriptKey(state.attractScript);
+    state.attractCooldown = 0.12 + Math.random() * 0.12;
+    state.attractStallClock = 0;
+    state.attractLastX = state.player.x;
+    state.attractLastY = state.player.y;
+    attractDir = null;
+  }
+
+  function nearestSparxToPlayer() {
+    let best = null;
+    for (const sparx of state.sparx) {
+      const dist = Math.hypot((state.player.x + 0.5) - sparx.x, (state.player.y + 0.5) - sparx.y);
+      if (!best || dist < best.dist) best = {sparx, dist};
+    }
+    return best;
+  }
+
+  function attractEvadeWallThreat() {
+    if (state.player.drawing) return false;
+    const nearest = nearestSparxToPlayer();
+    if (!nearest || nearest.dist > 7) return false;
+    if (state.player.y === GRID_H - 1) {
+      attractDir = nearest.sparx.x < state.player.x + 0.5 ? "right" : "left";
+      return true;
+    }
+    if (state.player.x === 0 || state.player.x === GRID_W - 1) {
+      attractDir = nearest.sparx.y < state.player.y + 0.5 ? "down" : "up";
+      return true;
+    }
+    return false;
+  }
+
+  function attractTrailThreat() {
+    if (!state.player.drawing) return Infinity;
+    let best = minQixDistanceToPoint(state.player.x, state.player.y);
+    const stride = Math.max(1, Math.floor(state.trail.length / 6));
+    for (let i = 0; i < state.trail.length; i += stride) {
+      const cell = state.trail[i];
+      best = Math.min(best, minQixDistanceToPoint(cell.x, cell.y));
+    }
+    const tail = state.trail[state.trail.length - 1];
+    if (tail) best = Math.min(best, minQixDistanceToPoint(tail.x, tail.y));
+    return best;
+  }
+
+  function forceAttractCloseOut() {
+    if (!state.player.drawing) {
+      queueAttractScript();
+      return;
+    }
+    const exit = state.attractScript[state.attractScript.length - 1] || {x: state.player.x, y: GRID_H - 1};
+    state.attractScript = [{x: exit.x, y: exit.y}];
+    state.attractStep = 0;
+    state.attractCooldown = 0;
+    attractDir = null;
+  }
+
+  function updateAttractDirector() {
+    if (state.attractCooldown > 0) {
+      attractDir = null;
+      return;
+    }
+    const target = state.attractScript[state.attractStep];
+    if (!target) {
+      attractDir = null;
+      return;
+    }
+    if (state.player.x === target.x && state.player.y === target.y) {
+      state.attractStep += 1;
+      const next = state.attractScript[state.attractStep];
+      if (!next) {
+        attractDir = null;
+        return;
+      }
+      return updateAttractDirector();
+    }
+    const dx = target.x - state.player.x;
+    const dy = target.y - state.player.y;
+    attractDir = Math.abs(dx) > 0 ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
+  }
+
+  function resetAttractDemo() {
+    resetField();
+    resetPlayer();
+    state.sparx = createAttractSparxWave();
+    state.qix = createQix(1);
+    state.qixTrail.length = 0;
+    state.particles.length = 0;
+    state.pulses.length = 0;
+    state.captureFlash = 0;
+    state.screenFlash = 0;
+    state.shake = 0;
+    state.claimedRatio = calculateClaimedRatio();
+    state.targetRatio = levelGoal(1);
+    state.attractClock = 0;
+    state.attractStallClock = 0;
+    state.attractLastX = state.player.x;
+    state.attractLastY = state.player.y;
+    state.attractLastKey = "";
+    queueAttractScript();
+  }
+
+  function updateAttractMode(dt) {
+    if (!state.qix || !state.sparx.length || !state.attractScript.length) {
+      resetAttractDemo();
+    }
+    state.attractClock += dt;
+    state.captureFlash = Math.max(0, state.captureFlash - dt * 0.8);
+    state.attractCooldown = Math.max(0, state.attractCooldown - dt);
+
+    if (!state.player.drawing && (!isBorderSafeCell(state.player.x, state.player.y) || getCell(state.player.x, state.player.y) !== CELL_SAFE)) {
+      resetPlayer();
+      queueAttractScript();
+      return;
+    }
+
+    updateAttractDirector();
+    attractEvadeWallThreat();
+    updateQix(dt * 1.15);
+    if (state.player.drawing && attractTrailThreat() < 9.4) {
+      forceAttractCloseOut();
+    }
+    updatePlayer(dt * 1.18);
+    updateSparx(dt * 1.15);
+    updateParticles(dt);
+
+    if (state.player.x === state.attractLastX && state.player.y === state.attractLastY && attractDir) {
+      state.attractStallClock += dt;
+    } else {
+      state.attractStallClock = 0;
+      state.attractLastX = state.player.x;
+      state.attractLastY = state.player.y;
+    }
+
+    if (qixHitsTrail()) {
+      state.captureFlash = Math.max(state.captureFlash, 0.08);
+      clearTrail();
+      resetPlayer();
+      queueAttractScript();
+      return;
+    }
+
+    if (state.attractStallClock > 0.9) {
+      if (state.player.drawing) clearTrail();
+      resetPlayer();
+      queueAttractScript();
+      return;
+    }
+
+    if (!state.player.drawing && state.attractStep >= state.attractScript.length) {
+      if (state.claimedRatio >= 0.24 || state.attractClock >= 18) {
+        resetAttractDemo();
+      } else {
+        queueAttractScript();
+      }
+      return;
+    }
+
+    if (Math.random() < 0.24) {
+      spawnParticle(state.qix.x, state.qix.y, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, 0.65, "capture");
+    }
+    if (Math.random() < 0.04) {
+      state.pulses.push({x: state.qix.x + 0.5, y: state.qix.y + 0.5, r: 0.6, maxR: 5 + Math.random() * 4, life: 0.5});
+    }
+    if (Math.random() < 0.01) {
+      state.captureFlash = Math.max(state.captureFlash, 0.18);
+      playTone("attractGlitch");
+    }
+  }
+
+  function update(dt) {
+    if (state.phase === "title") {
+      updateAttractMode(dt);
+      updateQixHum(dt);
+      return;
+    }
+    if (state.phase === "paused" || state.phase === "gameover" || state.phase === "dying") {
+      updateParticles(dt);
+      if (state.player.respawnFlash > 0) state.player.respawnFlash = Math.max(0, state.player.respawnFlash - dt);
+      if (state.captureFlash > 0) state.captureFlash = Math.max(0, state.captureFlash - dt * 1.2);
+      if (state.screenFlash > 0) state.screenFlash = Math.max(0, state.screenFlash - dt * 2.8);
+      if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * (state.phase === "dying" ? 1.3 : 2.4));
+      updateQixHum(dt);
+      return;
+    }
+
+    if (state.player.respawnFlash > 0) state.player.respawnFlash = Math.max(0, state.player.respawnFlash - dt);
+    if (state.captureFlash > 0) state.captureFlash = Math.max(0, state.captureFlash - dt * 1.5);
+    if (state.screenFlash > 0) state.screenFlash = Math.max(0, state.screenFlash - dt * 3.2);
+    if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 2.4);
+
+    updateQix(dt);
+    updatePlayer(dt);
+    updateSparx(dt);
+    updateParticles(dt);
+    if (qixHitsTrail()) {
+      loseLife("The Qix line hit your live trace.");
+    }
+    updateHud(false);
+    updateQixHum(dt);
+  }
+
+  function drawBackground(w, h) {
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, "#071426");
+    grad.addColorStop(0.5, "#06111f");
+    grad.addColorStop(1, "#03070f");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    const nebula = ctx.createRadialGradient(w * 0.3, h * 0.18, 10, w * 0.3, h * 0.18, w * 0.55);
+    nebula.addColorStop(0, "rgba(96,176,255,0.2)");
+    nebula.addColorStop(1, "rgba(96,176,255,0)");
+    ctx.fillStyle = nebula;
+    ctx.fillRect(0, 0, w, h);
+
+    const glow = ctx.createRadialGradient(w * 0.68, h * 0.78, 8, w * 0.68, h * 0.78, w * 0.42);
+    glow.addColorStop(0, "rgba(255,94,168,0.15)");
+    glow.addColorStop(1, "rgba(255,94,168,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  function drawField(scale, offsetX, offsetY) {
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        const cell = getCell(x, y);
+        if (cell === CELL_SAFE && !isBorderSafeCell(x, y)) {
+          const hue = getCellHue(x, y);
+          const px = x * scale;
+          const py = y * scale;
+          ctx.fillStyle = `hsla(${hue}, 62%, 44%, 0.98)`;
+          ctx.fillRect(px, py, scale, scale);
+        }
+      }
+    }
+
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        if (!isBorderSafeCell(x, y)) continue;
+        const px = x * scale;
+        const py = y * scale;
+        ctx.fillStyle = (y === 0 || y === GRID_H - 1 || x === 0 || x === GRID_W - 1)
+          ? "rgba(18,42,84,0.985)"
+          : "rgba(8,16,30,0.985)";
+        ctx.fillRect(px, py, scale, scale);
+      }
+    }
+
+    ctx.strokeStyle = "rgba(125,246,255,0.42)";
+    ctx.lineWidth = Math.max(0.7, scale * 0.055);
+    ctx.strokeRect(0, 0, GRID_W * scale, GRID_H * scale);
+
+    if (state.captureFlash > 0) {
+      ctx.fillStyle = "rgba(255,213,106," + (state.captureFlash * 0.16) + ")";
+      ctx.fillRect(0, 0, GRID_W * scale, GRID_H * scale);
+    }
+
+    if (state.trail.length) {
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "rgba(255,94,168,0.95)";
+      ctx.lineWidth = Math.max(2, scale * 0.58);
+      ctx.shadowBlur = scale * 2.1;
+      ctx.shadowColor = "rgba(255,94,168,0.75)";
+      ctx.beginPath();
+      ctx.moveTo((state.player.x + 0.5) * scale, (state.player.y + 0.5) * scale);
+      for (let i = state.trail.length - 1; i >= 0; i--) {
+        const cell = state.trail[i];
+        ctx.lineTo((cell.x + 0.5) * scale, (cell.y + 0.5) * scale);
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    ctx.restore();
+  }
+
+  function drawQix(scale, offsetX, offsetY) {
+    if (!state.qix) return;
+    const qixShape = getQixEndpoints();
+    const ax = offsetX + (qixShape.a.x + 0.5) * scale;
+    const ay = offsetY + (qixShape.a.y + 0.5) * scale;
+    const bx = offsetX + (qixShape.b.x + 0.5) * scale;
+    const by = offsetY + (qixShape.b.y + 0.5) * scale;
+
+    ctx.save();
+    ctx.beginPath();
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        if (getCell(x, y) !== CELL_SAFE) {
+          ctx.rect(offsetX + x * scale, offsetY + y * scale, scale, scale);
+        }
+      }
+    }
+    ctx.clip();
+
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+
+    for (let i = state.qixTrail.length - 1; i >= 0; i--) {
+      const trail = state.qixTrail[i];
+      const alpha = (i + 1) / state.qixTrail.length * 0.45;
+      ctx.strokeStyle = `hsla(${trail.hue}, 95%, 70%, ${alpha})`;
+      ctx.lineWidth = Math.max(1, scale * 0.18);
+      ctx.beginPath();
+      ctx.moveTo(offsetX + (trail.ax + 0.5) * scale, offsetY + (trail.ay + 0.5) * scale);
+      ctx.lineTo(offsetX + (trail.bx + 0.5) * scale, offsetY + (trail.by + 0.5) * scale);
+      ctx.stroke();
+    }
+
+    const liveHue = (state.qix.hue + Math.sin(state.qix.phase * 1.3) * 40 + Math.cos(state.qix.phase * 0.7) * 25 + 360) % 360;
+    ctx.strokeStyle = "hsla(" + liveHue + ", 100%, 72%, 0.96)";
+    ctx.lineWidth = Math.max(3, scale * state.qix.width);
+    ctx.shadowBlur = scale * 1.6;
+    ctx.shadowColor = "hsla(" + ((liveHue + 24) % 360) + ", 100%, 66%, 0.7)";
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+
+    const coreGrad = ctx.createLinearGradient(ax, ay, bx, by);
+    coreGrad.addColorStop(0, "rgba(255,255,255,0.9)");
+    coreGrad.addColorStop(0.5, "rgba(255,213,106,0.95)");
+    coreGrad.addColorStop(1, "rgba(255,255,255,0.9)");
+    ctx.strokeStyle = coreGrad;
+    ctx.lineWidth = Math.max(1.2, scale * 0.26);
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawPlayer(scale, offsetX, offsetY) {
+    const px = offsetX + (state.player.x + 0.5) * scale;
+    const py = offsetY + (state.player.y + 0.5) * scale;
+    const pulse = 1 + Math.sin(performance.now() * 0.012) * 0.08;
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.scale(pulse, pulse);
+    const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(8, scale * 1.45));
+    if (state.player.drawing) {
+      halo.addColorStop(0, "rgba(255,213,106,0.34)");
+      halo.addColorStop(0.55, "rgba(255,94,168,0.22)");
+      halo.addColorStop(1, "rgba(255,94,168,0)");
+    } else {
+      halo.addColorStop(0, "rgba(242,251,255,0.34)");
+      halo.addColorStop(0.55, "rgba(125,246,255,0.22)");
+      halo.addColorStop(1, "rgba(125,246,255,0)");
+    }
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.max(8, scale * 1.45), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = scale * 2.2;
+    ctx.shadowColor = state.player.drawing ? "rgba(255,94,168,0.75)" : "rgba(125,246,255,0.75)";
+    ctx.fillStyle = state.player.drawing ? "#ffd56a" : "#f2fbff";
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.max(3.7, scale * 0.66), 0, Math.PI * 2);
+    ctx.fill();
+    if (state.player.respawnFlash > 0) {
+      ctx.globalAlpha = state.player.respawnFlash * 0.8;
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.lineWidth = Math.max(1.2, scale * 0.18);
+      ctx.beginPath();
+      ctx.arc(0, 0, Math.max(8.2, scale * 1.28), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawSparx(scale, offsetX, offsetY) {
+    if (!state.sparx.length) return;
+    ctx.save();
+    for (const sparx of state.sparx) {
+      const px = offsetX + sparx.x * scale;
+      const py = offsetY + sparx.y * scale;
+      const pulse = 0.86 + Math.sin(performance.now() * 0.024 + sparx.phase) * 0.22;
+      const size = Math.max(3.2, scale * 0.66 * pulse);
+      const moveAngle = Math.atan2(sparx.dy || 0, sparx.dx || 1);
+      const sparkLen = Math.max(6.4, scale * 1.34);
+
+      ctx.shadowBlur = scale * 4.2;
+      ctx.shadowColor = "rgba(255,213,106,0.98)";
+
+      ctx.strokeStyle = "rgba(255,186,72,0.92)";
+      ctx.lineWidth = Math.max(1.2, scale * 0.16);
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const angle = moveAngle + i * (Math.PI / 5) + Math.sin(sparx.phase * 1.3 + i * 0.9) * 0.14;
+        const inner = size * (0.45 + (i % 2) * 0.22);
+        const outer = sparkLen * (i % 2 === 0 ? 1.06 : 0.74);
+        ctx.moveTo(px + Math.cos(angle) * inner, py + Math.sin(angle) * inner);
+        ctx.lineTo(px + Math.cos(angle) * outer, py + Math.sin(angle) * outer);
+      }
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(255,248,210,0.96)";
+      ctx.lineWidth = Math.max(0.95, scale * 0.12);
+      ctx.beginPath();
+      ctx.moveTo(px - scale * 0.66, py);
+      ctx.lineTo(px + scale * 0.66, py);
+      ctx.moveTo(px, py - scale * 0.66);
+      ctx.lineTo(px, py + scale * 0.66);
+      ctx.stroke();
+
+      for (let i = 0; i < 4; i++) {
+        const flickerAngle = moveAngle + Math.PI + (i - 1.5) * 0.42 + Math.sin(sparx.phase * 1.9 + i) * 0.12;
+        const flickerDist = scale * (0.78 + i * 0.2);
+        ctx.fillStyle = "rgba(255,213,106," + (0.42 - i * 0.08) + ")";
+        ctx.beginPath();
+        ctx.arc(px + Math.cos(flickerAngle) * flickerDist, py + Math.sin(flickerAngle) * flickerDist, Math.max(0.8, scale * (0.12 + (3 - i) * 0.04)), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = "rgba(255,213,106,0.97)";
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(255,255,255,0.98)";
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(1.25, size * 0.46), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawParticles(scale, offsetX, offsetY) {
+    ctx.save();
+    for (const pulse of state.pulses) {
+      ctx.globalAlpha = pulse.life * 0.55;
+      ctx.strokeStyle = "rgba(255,213,106,0.75)";
+      ctx.lineWidth = Math.max(1.2, scale * 0.18);
+      ctx.beginPath();
+      ctx.arc(offsetX + pulse.x * scale, offsetY + pulse.y * scale, pulse.r * scale, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    for (const p of state.particles) {
+      if (p.kind === "spark") continue;
+      const alpha = Math.max(0, p.life / p.maxLife);
+      const color = p.kind === "danger" ? "255,106,122" : p.kind === "capture" ? "255,213,106" : "125,246,255";
+      const radius = p.kind === "danger"
+        ? Math.max(1.5, scale * (0.34 + alpha * 0.34))
+        : p.kind === "capture"
+          ? Math.max(1.2, scale * (0.26 + alpha * 0.18))
+          : Math.max(1, scale * 0.22);
+      ctx.fillStyle = "rgba(" + color + "," + alpha + ")";
+      ctx.shadowBlur = p.kind === "danger" ? scale * 2.6 : scale * 1.2;
+      ctx.shadowColor = "rgba(" + color + "," + Math.min(alpha * 1.2, 1) + ")";
+      ctx.beginPath();
+      ctx.arc(offsetX + p.x * scale, offsetY + p.y * scale, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function render() {
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    drawBackground(w, h);
+
+    const fieldW = GRID_W;
+    const fieldH = GRID_H;
+    const scale = Math.floor(Math.min(w / fieldW, h / fieldH));
+    const drawW = fieldW * scale;
+    const drawH = fieldH * scale;
+    const shakeX = state.shake > 0 ? (Math.random() - 0.5) * state.shake * 20 * dpr : 0;
+    const shakeY = state.shake > 0 ? (Math.random() - 0.5) * state.shake * 20 * dpr : 0;
+    const offsetX = Math.floor((w - drawW) * 0.5 + shakeX);
+    const offsetY = Math.floor((h - drawH) * 0.5 + shakeY);
+
+    drawField(scale, offsetX, offsetY);
+    drawQix(scale, offsetX, offsetY);
+    drawParticles(scale, offsetX, offsetY);
+    drawSparx(scale, offsetX, offsetY);
+    if (state.player.alive) {
+      drawPlayer(scale, offsetX, offsetY);
+    }
+
+    if (state.screenFlash > 0) {
+      ctx.save();
+      ctx.fillStyle = "rgba(255,255,255," + (state.screenFlash * 0.32) + ")";
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "rgba(255,94,168," + (state.screenFlash * 0.12) + ")";
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+
+    if (state.phase === "title") {
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.font = (10 * dpr) + "px Verdana";
+      ctx.fillStyle = "rgba(125,246,255,0.8)";
+      ctx.fillText(audioUnlocked ? "ATTRACT MODE ACTIVE, CABINET AUDIO LIVE" : "ATTRACT MODE ACTIVE, TAP ANY BUTTON TO WAKE AUDIO", w * 0.5, offsetY + drawH - 10 * dpr);
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.fillStyle = "rgba(255,255,255,0.04)";
+    ctx.font = (12 * dpr) + "px Verdana";
+    ctx.textAlign = "center";
+    ctx.fillText("Target " + Math.round(state.targetRatio * 100) + "%", w * 0.5, offsetY - 8 * dpr);
+    ctx.restore();
+  }
+
+  function tick(time) {
+    const dt = Math.min(0.033, (time - lastTime) / 1000 || 0.016);
+    lastTime = time;
+    try {
+      update(dt);
+      render();
+      lastRenderError = "";
+    } catch (error) {
+      const message = (error && error.message) ? error.message : String(error);
+      if (message !== lastRenderError) {
+        console.error("Neon Qix runtime error:", error);
+        lastRenderError = message;
+      }
+      try {
+        state.phase = "paused";
+        state.levelMessage = "Browser hit an error. Reload and it should recover.";
+        updateHud(true);
+      } catch (error2) {
+      }
+    }
+    raf = requestAnimationFrame(tick);
+  }
+
+  function normalizeInitials(value) {
+    return value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
+  }
+
+  function handleSaveScore() {
+    if (!state.pendingScore) return;
+    const name = normalizeInitials(initialsInput.value || "AAA");
+    if (name.length !== 3) {
+      initialsInput.value = name;
+      safeFocus(initialsInput);
+      return;
+    }
+    const pending = state.pendingScore;
+    saveHighScore(name, pending.score, pending.level);
+    submitGlobalScore(name, pending.score, pending.level).then(() => {
+      renderHighScores();
+    });
+    state.pendingScore = null;
+    initialsWrap.style.display = "none";
+    saveScoreButton.style.display = "none";
+    restartButton.style.display = "inline-flex";
+    gameOverEyebrow.textContent = "Score Saved";
+    gameOverText.textContent = "Stored " + name + " with " + state.score.toLocaleString() + " points and synced it to global scores.";
+  }
+
+  function togglePause() {
+    if (state.phase === "playing") {
+      state.phase = "paused";
+      pauseButton.textContent = "Resume";
+      playTone("pause");
+    } else if (state.phase === "paused") {
+      state.phase = "playing";
+      pauseButton.textContent = "Pause";
+      playTone("start");
+    }
+    updateHud(true);
+  }
+
+  function ensureQixHum() {
+    if (!audioUnlocked || !audioCtx || qixHum) return;
+    const oscA = audioCtx.createOscillator();
+    const oscB = audioCtx.createOscillator();
+    const filter = audioCtx.createBiquadFilter();
+    const gain = audioCtx.createGain();
+    const lfo = audioCtx.createOscillator();
+    const lfoGain = audioCtx.createGain();
+
+    oscA.type = "square";
+    oscB.type = "sawtooth";
+    oscA.frequency.value = 92;
+    oscB.frequency.value = 139;
+    filter.type = "bandpass";
+    filter.frequency.value = 420;
+    filter.Q.value = 7;
+    gain.gain.value = 0.00001;
+    lfo.type = "triangle";
+    lfo.frequency.value = 5.4;
+    lfoGain.gain.value = 18;
+
+    lfo.connect(lfoGain);
+    lfoGain.connect(oscA.detune);
+    lfoGain.connect(oscB.detune);
+    oscA.connect(filter);
+    oscB.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    oscA.start();
+    oscB.start();
+    lfo.start();
+
+    qixHum = {oscA, oscB, filter, gain, lfo, lfoGain};
+  }
+
+  function updateQixHum(dt) {
+    if (!audioUnlocked || !audioCtx) return;
+    ensureQixHum();
+    if (!qixHum) return;
+
+    const now = audioCtx.currentTime;
+    const active = state.phase === "playing" || state.phase === "title" || state.phase === "paused";
+    if (!state.qix) {
+      qixHum.gain.gain.setTargetAtTime(0.00001, now, 0.09);
+      return;
+    }
+
+    const speed = Math.hypot(state.qix.vx, state.qix.vy) || 0;
+    const qixShape = getQixEndpoints(state.qix);
+    const nearTrail = state.player.drawing
+      ? Math.max(0, 1 - distToSegment(state.player.x + 0.5, state.player.y + 0.5, qixShape.a.x + 0.5, qixShape.a.y + 0.5, qixShape.b.x + 0.5, qixShape.b.y + 0.5) / 13)
+      : 0;
+    const tension = nearTrail + (state.player.drawing ? 0.22 : 0) + (state.phase === "title" ? 0.14 : 0);
+    const targetGain = active ? 0.032 + tension * 0.03 + Math.min(0.016, speed * 0.0008) : 0.00001;
+    qixHum.gain.gain.setTargetAtTime(targetGain, now, 0.09);
+
+    const broken = Math.sin(state.qix.phase * 1.7) * 18 + Math.cos(state.qix.phase * 0.43) * 9 + Math.sin(performance.now() * 0.013) * 6;
+    const base = 72 + speed * 3.4 + broken + tension * 18;
+    qixHum.oscA.frequency.setTargetAtTime(Math.max(42, base), now, 0.05);
+    qixHum.oscB.frequency.setTargetAtTime(Math.max(56, base * 1.43 + Math.sin(state.qix.phase * 3.9) * (14 + tension * 10)), now, 0.07);
+    qixHum.filter.frequency.setTargetAtTime(250 + speed * 26 + Math.abs(Math.sin(state.qix.phase * 2.4)) * 170 + tension * 280, now, 0.08);
+    qixHum.filter.Q.setTargetAtTime(6 + tension * 6, now, 0.08);
+    qixHum.lfo.frequency.setTargetAtTime(4.4 + Math.abs(Math.sin(state.qix.phase * 0.52)) * 4.6 + tension * 2.6, now, 0.14);
+    qixHum.lfoGain.gain.setTargetAtTime(10 + Math.abs(Math.cos(state.qix.phase * 1.3)) * 28 + tension * 18, now, 0.14);
+  }
+
+  function unlockAudio() {
+    if (audioUnlocked) return;
+    try {
+      const AudioCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtor) return;
+      audioCtx = new AudioCtor();
+      if (audioCtx && audioCtx.state === "suspended") {
+        audioCtx.resume().catch?.(() => {});
+      }
+      audioUnlocked = true;
+      ensureQixHum();
+      if (attractCopy) attractCopy.textContent = "Attract mode is live, and the cabinet audio is awake. Tap Start when you want control.";
+    } catch (error) {
+      audioUnlocked = false;
+    }
+  }
+
+  function playTone(type) {
+    if (!audioUnlocked || !audioCtx) return;
+    ensureQixHum();
+    const now = audioCtx.currentTime;
+
+    if (type === "sparx") {
+      const duration = 0.1;
+      const pulse = audioCtx.createOscillator();
+      const sub = audioCtx.createOscillator();
+      const filter = audioCtx.createBiquadFilter();
+      const gain = audioCtx.createGain();
+      const lfo = audioCtx.createOscillator();
+      const lfoGain = audioCtx.createGain();
+
+      pulse.type = "sawtooth";
+      sub.type = "sawtooth";
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(360, now);
+      filter.frequency.exponentialRampToValueAtTime(240, now + duration);
+      filter.Q.value = 1.1;
+
+      pulse.frequency.setValueAtTime(168 + Math.random() * 16, now);
+      pulse.frequency.exponentialRampToValueAtTime(92 + Math.random() * 10, now + duration);
+      sub.frequency.setValueAtTime(88 + Math.random() * 10, now);
+      sub.frequency.exponentialRampToValueAtTime(54 + Math.random() * 8, now + duration);
+
+      lfo.type = "triangle";
+      lfo.frequency.setValueAtTime(13 + Math.random() * 5, now);
+      lfoGain.gain.setValueAtTime(28 + Math.random() * 8, now);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(0.012, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+      lfo.connect(lfoGain);
+      lfoGain.connect(pulse.detune);
+      lfoGain.connect(sub.detune);
+      pulse.connect(filter);
+      sub.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      pulse.start(now);
+      sub.start(now);
+      lfo.start(now);
+      pulse.stop(now + duration + 0.02);
+      sub.stop(now + duration + 0.02);
+      lfo.stop(now + duration + 0.02);
+      return;
+    }
+
+    const oscA = audioCtx.createOscillator();
+    const oscB = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
+
+    oscA.type = type === "capture" || type === "level" ? "square" : type === "hit" ? "sawtooth" : "triangle";
+    oscB.type = type === "hit" || type === "qixBounce" ? "square" : "sawtooth";
+    filter.type = type === "hit" ? "bandpass" : "lowpass";
+    filter.Q.value = type === "qixBounce" ? 10 : type === "hit" ? 8 : 5;
+
+    const setPair = (aStart, aEnd, bStart, bEnd, attack, decay, peak, cutoff) => {
+      oscA.frequency.setValueAtTime(aStart, now);
+      oscA.frequency.exponentialRampToValueAtTime(Math.max(30, aEnd), now + decay);
+      oscB.frequency.setValueAtTime(bStart, now);
+      oscB.frequency.exponentialRampToValueAtTime(Math.max(40, bEnd), now + decay * 0.92);
+      filter.frequency.setValueAtTime(cutoff, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(peak * 2.1, now + attack);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+      return decay;
+    };
+
+    let duration = 0.24;
+    if (type === "start") duration = setPair(210, 340, 315, 120, 0.01, 0.22, 0.022, 980);
+    else if (type === "draw") duration = setPair(880, 610, 442, 318, 0.004, 0.12, 0.012, 1400);
+    else if (type === "capture") duration = setPair(320, 1280, 480, 760, 0.008, 0.34, 0.028, 1800);
+    else if (type === "hit") duration = setPair(180, 58, 267, 91, 0.003, 0.28, 0.03, 520);
+    else if (type === "level") duration = setPair(460, 1240, 690, 930, 0.01, 0.4, 0.026, 1600);
+    else if (type === "pause") duration = setPair(260, 170, 390, 128, 0.008, 0.18, 0.014, 720);
+    else if (type === "qixBounce") duration = setPair(146, 102, 228, 166, 0.003, 0.11, 0.014, 860);
+    else if (type === "attractGlitch") duration = setPair(118, 188, 174, 96, 0.002, 0.09, 0.01, 1040);
+    else duration = setPair(320, 220, 480, 330, 0.008, 0.2, 0.014, 1100);
+
+    oscA.detune.setValueAtTime((Math.random() - 0.5) * 34, now);
+    oscB.detune.setValueAtTime((Math.random() - 0.5) * 60, now);
+    oscB.detune.linearRampToValueAtTime((Math.random() - 0.5) * 140, now + duration * 0.75);
+
+    oscA.connect(filter);
+    oscB.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    oscA.start(now);
+    oscB.start(now);
+    oscA.stop(now + duration + 0.03);
+    oscB.stop(now + duration + 0.03);
+  }
+
+  function setControlDirection(dir, source) {
+    controlDir = dir;
+    controlSource = dir ? source || controlSource : null;
+  }
+
+  function updatePadVisuals() {}
+
+  function bindCanvasDrag() {
+    function applyCanvasDirection(clientX, clientY) {
+      const dx = clientX - canvasStartX;
+      const dy = clientY - canvasStartY;
+      if (Math.abs(dx) < 14 && Math.abs(dy) < 14) return;
+      const dir = Math.abs(dx) > Math.abs(dy)
+        ? (dx > 0 ? "right" : "left")
+        : (dy > 0 ? "down" : "up");
+      if (dir !== canvasLastDir) {
+        canvasStartX = clientX;
+        canvasStartY = clientY;
+        canvasLastDir = dir;
+      }
+      setControlDirection(dir, "canvas");
+    }
+
+    function beginCanvasDrag(pointerId, clientX, clientY) {
+      if (state.phase !== "playing") return;
+      unlockAudio();
+      canvasPointerId = pointerId;
+      canvasStartX = clientX;
+      canvasStartY = clientY;
+      canvasLastDir = null;
+    }
+
+    function endCanvasDrag(pointerId = null) {
+      if (pointerId != null && canvasPointerId != null && canvasPointerId !== pointerId) return;
+      if (controlSource === "canvas") setControlDirection(null);
+      canvasPointerId = null;
+      canvasLastDir = null;
+      mouseDragActive = false;
+    }
+
+    canvas.addEventListener("pointerdown", (event) => {
+      if (state.phase !== "playing") return;
+      event.preventDefault();
+      beginCanvasDrag(event.pointerId, event.clientX, event.clientY);
+      try {
+        canvas.setPointerCapture?.(event.pointerId);
+      } catch (error) {
+      }
+    }, {passive:false});
+    canvas.addEventListener("pointermove", (event) => {
+      if (canvasPointerId !== event.pointerId || state.phase !== "playing") return;
+      event.preventDefault();
+      applyCanvasDirection(event.clientX, event.clientY);
+    }, {passive:false});
+    canvas.addEventListener("pointerup", (event) => {
+      endCanvasDrag(event.pointerId);
+    });
+    canvas.addEventListener("pointercancel", (event) => {
+      endCanvasDrag(event.pointerId);
+    });
+
+    canvas.addEventListener("mousedown", (event) => {
+      if (window.PointerEvent) return;
+      if (state.phase !== "playing") return;
+      event.preventDefault();
+      mouseDragActive = true;
+      beginCanvasDrag("mouse", event.clientX, event.clientY);
+    });
+    window.addEventListener("mousemove", (event) => {
+      if (window.PointerEvent || !mouseDragActive || state.phase !== "playing") return;
+      event.preventDefault();
+      applyCanvasDirection(event.clientX, event.clientY);
+    });
+    window.addEventListener("mouseup", () => {
+      if (window.PointerEvent || !mouseDragActive) return;
+      endCanvasDrag("mouse");
+    });
+
+    canvas.addEventListener("touchstart", (event) => {
+      if (window.PointerEvent) return;
+      if (state.phase !== "playing") return;
+      const touch = event.changedTouches && event.changedTouches[0];
+      if (!touch) return;
+      event.preventDefault();
+      beginCanvasDrag("touch", touch.clientX, touch.clientY);
+    }, {passive:false});
+    canvas.addEventListener("touchmove", (event) => {
+      if (window.PointerEvent || canvasPointerId !== "touch" || state.phase !== "playing") return;
+      const touch = event.changedTouches && event.changedTouches[0];
+      if (!touch) return;
+      event.preventDefault();
+      applyCanvasDirection(touch.clientX, touch.clientY);
+    }, {passive:false});
+    canvas.addEventListener("touchend", () => {
+      if (window.PointerEvent) return;
+      endCanvasDrag("touch");
+    });
+    canvas.addEventListener("touchcancel", () => {
+      if (window.PointerEvent) return;
+      endCanvasDrag("touch");
+    });
+  }
+
+  function bindKeyboard() {
+    window.addEventListener("keydown", (event) => {
+      const keyMap = {
+        ArrowUp: "up",
+        ArrowDown: "down",
+        ArrowLeft: "left",
+        ArrowRight: "right",
+        w: "up",
+        s: "down",
+        a: "left",
+        d: "right"
+      };
+      const mapped = keyMap[event.key];
+      if (mapped) {
+        keyboardDir = mapped;
+        event.preventDefault();
+      } else if (event.key === " ") {
+        if (state.phase === "playing" || state.phase === "paused") {
+          togglePause();
+          event.preventDefault();
+        }
+      }
+    });
+    window.addEventListener("keyup", (event) => {
+      const keyMap = {
+        ArrowUp: "up",
+        ArrowDown: "down",
+        ArrowLeft: "left",
+        ArrowRight: "right",
+        w: "up",
+        s: "down",
+        a: "left",
+        d: "right"
+      };
+      if (keyMap[event.key] && keyboardDir === keyMap[event.key]) {
+        keyboardDir = null;
+      }
+    });
+  }
+
+  function initUi() {
+    startButton.addEventListener("click", beginGame);
+    howButton.addEventListener("click", () => {
+      unlockAudio();
+      showOverlay(howOverlay);
+    });
+    howCloseButton.addEventListener("click", () => showOverlay(titleOverlay));
+    scoresButton.addEventListener("click", () => {
+      unlockAudio();
+      renderHighScores();
+      showOverlay(scoresOverlay);
+    });
+    miniScoresButton.addEventListener("click", () => {
+      renderHighScores();
+      showOverlay(scoresOverlay);
+    });
+    scoresCloseButton.addEventListener("click", () => {
+      if (state.phase === "title") showOverlay(titleOverlay);
+      else hideAllOverlays();
+    });
+    restartButton.addEventListener("click", restartGame);
+    titleButton.addEventListener("click", () => {
+      if (levelAdvanceTimer) {
+        clearTimeout(levelAdvanceTimer);
+        levelAdvanceTimer = 0;
+      }
+      clearDeathTimer();
+      state.phase = "title";
+      pauseButton.textContent = "Pause";
+      showOverlay(titleOverlay);
+      renderHighScores();
+      seedAttractState();
+    });
+    pauseButton.addEventListener("click", () => {
+      if (state.phase === "playing" || state.phase === "paused") {
+        togglePause();
+      }
+    });
+    saveScoreButton.addEventListener("click", handleSaveScore);
+    initialsInput.addEventListener("input", () => {
+      initialsInput.value = normalizeInitials(initialsInput.value);
+    });
+    initialsInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        handleSaveScore();
+      }
+    });
+  }
+
+  function seedAttractState() {
+    state.score = 0;
+    state.level = 2;
+    state.lives = 3;
+    state.levelMessage = "Demo play is live in the background.";
+    resetAttractDemo();
+    updateHud(true);
+    renderHighScores();
+  }
+
+  window.addEventListener("resize", resizeCanvas);
+  bindCanvasDrag();
+  bindKeyboard();
+  initUi();
+  resizeCanvas();
+  seedAttractState();
+  raf = requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
