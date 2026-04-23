@@ -53,7 +53,7 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 </div>
 <div id="activePowerups"></div>
 <button id="bombBtn" class="hidden"><span>💣</span><span class="bomb-count">x1</span></button>
-<div class="versionTag" id="versionTag">v2.8.2</div>
+<div class="versionTag" id="versionTag">v2.8.3</div>
 
 <div id="titleScreen" class="overlay">
   <div class="card">
@@ -94,7 +94,7 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 
 <script>
 // ===== CANVAS SETUP =====
-const GAME_VERSION='v2.8.2';
+const GAME_VERSION='v2.8.3';
 document.getElementById('versionTag').textContent=GAME_VERSION;
 const C=document.getElementById('c'),X=C.getContext('2d');
 let W,H;
@@ -771,11 +771,11 @@ function update(){
   if(waveState==='upgrade')return;
 
   // player movement
-  const moveSpeed=hasUpgrade('afterburner')?8.2:6.4;
+  const moveSpeed=hasUpgrade('afterburner')?10.4:8.2;
   const dx=player.tx-player.x,dy=player.ty-player.y;
   const len=Math.hypot(dx,dy);
   if(len>1.5){
-    const step=Math.min(moveSpeed,len*0.22);
+    const step=Math.min(moveSpeed,Math.max(2.8,len*0.3));
     player.x+=dx/len*step;
     player.y+=dy/len*step;
   }else{
