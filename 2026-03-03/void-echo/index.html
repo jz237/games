@@ -174,7 +174,7 @@ let score=0,wave=0,killStreak=0,multiplier=1,multDecayTimer=0,waveTimer=0,waveSt
 let spawnTimer=0,enemiesLeft=0,bossActive=false;
 let screenFlash=0,waveAnnounce={text:'',alpha:0,scale:0};
 let joystick={active:false,id:null,ox:0,oy:0,dx:0,dy:0,max:56,dead:6};
-let moveTarget={x:0,y:0,active:false};
+// moveTarget replaced by pointer above
 let newScoreId=null;
 let demoMode=true;
 
@@ -205,7 +205,7 @@ initStars();
 
 function initPlayer(){
   player={x:W/2,y:H*0.7,tx:W/2,ty:H*0.7,hp:100,maxHp:100,r:16,invuln:0,trail:[]};
-  moveTarget={x:player.x,y:player.y-80,active:true,id:null};
+  pointer={active:false,x:player.x,y:player.y};
 }
 
 // ===== SPAWNING =====
@@ -362,8 +362,8 @@ function triggerDash(){
   dashTimer=18; // 0.3s
   dashCooldown=48; // 0.8s
   player.invuln=Math.max(player.invuln,18);
-  dashDir.x=(player.tx??player.x)-player.x;
-  dashDir.y=(player.ty??player.y)-player.y;
+  dashDir.x=pointer.x-player.x;
+  dashDir.y=pointer.y-player.y;
   if(Math.hypot(dashDir.x,dashDir.y)<4){dashDir.x=0;dashDir.y=-20;}
   const len=Math.hypot(dashDir.x,dashDir.y)||1;
   dashDir.x/=len;dashDir.y/=len;
@@ -580,63 +580,40 @@ function spawnExplosion(x,y,count,big){
   if(big)screenFlash=8;
 }
 
-// ===== INPUT — tap/hold anywhere to move, auto-shoot nearest enemy =====
-function handleTouchStart(e){
+// ===== INPUT — hold/drag anywhere: ship follows finger, auto-fires =====
+// Single pointer tracked. Ship moves toward it. Auto-shoot handles firing.
+let pointer={active:false,x:W/2,y:H/2};
+
+function pointerDown(x,y){
   if(state!=='playing'||waveState==='upgrade')return;
-  const now=performance.now();
-  if(e.touches){
-    Array.from(e.changedTouches).forEach(t=>{
-      const bombEl=document.getElementById('bombBtn');
-      const br=bombEl.getBoundingClientRect();
-      if(t.clientX>=br.left&&t.clientX<=br.right&&t.clientY>=br.top&&t.clientY<=br.bottom)return;
-      // double-tap = dash
-      if(now-lastTapTime<300&&Math.hypot(t.clientX-lastTapX,t.clientY-lastTapY)<80){
-        triggerDash();lastTapTime=0;
-      }else{
-        lastTapTime=now;lastTapX=t.clientX;lastTapY=t.clientY;
-      }
-      if(!moveTarget.active){moveTarget.active=true;moveTarget.id=t.identifier;}
-      if(t.identifier===moveTarget.id){moveTarget.x=t.clientX;moveTarget.y=t.clientY;}
-    });
-  }else{
-    if(now-lastTapTime<300&&Math.hypot(e.clientX-lastTapX,e.clientY-lastTapY)<80){
-      triggerDash();lastTapTime=0;
-    }else{lastTapTime=now;lastTapX=e.clientX;lastTapY=e.clientY;}
-    moveTarget.active=true;moveTarget.id=-1;moveTarget.x=e.clientX;moveTarget.y=e.clientY;
-  }
+  pointer.active=true;pointer.x=x;pointer.y=y;
 }
-function handleTouchMove(e){
-  if(state!=='playing')return;
-  if(e.touches){
-    Array.from(e.changedTouches).forEach(t=>{
-      if(moveTarget.active&&t.identifier===moveTarget.id){moveTarget.x=t.clientX;moveTarget.y=t.clientY;}
-    });
-  }else if(moveTarget.active){moveTarget.x=e.clientX;moveTarget.y=e.clientY;}
+function pointerMove(x,y){
+  pointer.x=x;pointer.y=y;
 }
-function handleTouchEnd(e){
-  if(e.touches){
-    Array.from(e.changedTouches).forEach(t=>{
-      if(moveTarget.active&&t.identifier===moveTarget.id)moveTarget.id=null;
-    });
-  }else moveTarget.id=null;
+function pointerUp(){
+  pointer.active=false;
 }
 
 C.addEventListener('touchstart',e=>{
-  // don't prevent default on overlay buttons
-  if(e.target.closest('.overlay')||e.target.closest('.upgrade-overlay')||e.target.closest('#bombBtn'))return;
-  e.preventDefault();handleTouchStart(e);
+  if(e.target.closest('#bombBtn')||e.target.closest('.overlay')||e.target.closest('.upgrade-overlay'))return;
+  e.preventDefault();
+  const t=e.touches[0];
+  pointerDown(t.clientX,t.clientY);
 },{passive:false});
 C.addEventListener('touchmove',e=>{
   if(e.target.closest('.overlay')||e.target.closest('.upgrade-overlay'))return;
-  e.preventDefault();handleTouchMove(e);
+  e.preventDefault();
+  const t=e.touches[0];
+  pointerMove(t.clientX,t.clientY);
 },{passive:false});
 C.addEventListener('touchend',e=>{
-  if(e.target.closest('.overlay')||e.target.closest('.upgrade-overlay'))return;
-  e.preventDefault();handleTouchEnd(e);
+  e.preventDefault();
+  if(e.touches.length===0)pointerUp();
 },{passive:false});
-C.addEventListener('mousedown',handleTouchStart);
-C.addEventListener('mousemove',handleTouchMove);
-C.addEventListener('mouseup',handleTouchEnd);
+C.addEventListener('mousedown',e=>pointerDown(e.clientX,e.clientY));
+C.addEventListener('mousemove',e=>{if(pointer.active)pointerMove(e.clientX,e.clientY);});
+C.addEventListener('mouseup',()=>pointerUp());
 
 let shootCooldown=0;
 function fireBullet(tx,ty){
@@ -767,8 +744,8 @@ function update(){
 
   // player movement — follows touch/mouse anywhere on screen
   const moveSpeed=hasUpgrade('afterburner')?7:5;
-  if(moveTarget.active){
-    const dx=moveTarget.x-player.x,dy=moveTarget.y-player.y,dist=Math.hypot(dx,dy);
+  if(pointer.active){
+    const dx=pointer.x-player.x,dy=pointer.y-player.y,dist=Math.hypot(dx,dy);
     if(dist>4){player.x+=dx/dist*Math.min(moveSpeed,dist);player.y+=dy/dist*Math.min(moveSpeed,dist);}
   }
   // auto-shoot nearest enemy always (no touch required)
@@ -1081,7 +1058,7 @@ function draw(){
 
   // player
   if(player.invuln<=0||Math.floor(player.invuln/4)%2===0){
-    const aimA=Math.atan2((player.ty??player.y)-player.y,(player.tx??player.x)-player.x);
+    const aimA=Math.atan2(pointer.y-player.y,pointer.x-player.x);
     drawShipAt(player.x,player.y,Number.isFinite(aimA)?aimA:-Math.PI/2);
   }
 
@@ -1148,11 +1125,11 @@ function draw(){
   }
 
   // move target indicator
-  if(moveTarget.active){
+  if(pointer.active){
     X.strokeStyle='rgba(100,180,255,0.4)';X.lineWidth=1.5;
-    X.beginPath();X.arc(moveTarget.x,moveTarget.y,16,0,Math.PI*2);X.stroke();
+    X.beginPath();X.arc(pointer.x,pointer.y,16,0,Math.PI*2);X.stroke();
     X.strokeStyle='rgba(100,180,255,0.15)';
-    X.beginPath();X.moveTo(player.x,player.y);X.lineTo(moveTarget.x,moveTarget.y);X.stroke();
+    X.beginPath();X.moveTo(player.x,player.y);X.lineTo(pointer.x,pointer.y);X.stroke();
   }
   // dash cooldown arc near player
   if(dashCooldown>0){
