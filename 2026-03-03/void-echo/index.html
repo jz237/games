@@ -53,7 +53,7 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 </div>
 <div id="activePowerups"></div>
 <button id="bombBtn" class="hidden"><span>💣</span><span class="bomb-count">x1</span></button>
-<div class="versionTag" id="versionTag">v2.8.1</div>
+<div class="versionTag" id="versionTag">v2.8.4</div>
 
 <div id="titleScreen" class="overlay">
   <div class="card">
@@ -94,7 +94,7 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 
 <script>
 // ===== CANVAS SETUP =====
-const GAME_VERSION='v2.8.1';
+const GAME_VERSION='v2.8.4';
 document.getElementById('versionTag').textContent=GAME_VERSION;
 const C=document.getElementById('c'),X=C.getContext('2d');
 let W,H;
@@ -174,6 +174,7 @@ let score=0,wave=0,killStreak=0,multiplier=1,multDecayTimer=0,waveTimer=0,waveSt
 let spawnTimer=0,enemiesLeft=0,bossActive=false;
 let screenFlash=0,waveAnnounce={text:'',alpha:0,scale:0};
 let joystick={active:false,id:null,ox:0,oy:0,dx:0,dy:0,max:56,dead:6};
+let moveTarget={x:0,y:0,active:false};
 let newScoreId=null;
 let demoMode=true;
 
@@ -203,7 +204,8 @@ function initStars(){
 initStars();
 
 function initPlayer(){
-  player={x:W/2,y:H*0.7,hp:100,maxHp:100,r:16,invuln:0,trail:[]};
+  player={x:W/2,y:H*0.7,tx:W/2,ty:H*0.7,hp:100,maxHp:100,r:16,invuln:0,trail:[]};
+  moveTarget={x:player.x,y:player.y,active:false};
 }
 
 // ===== SPAWNING =====
@@ -360,8 +362,9 @@ function triggerDash(){
   dashTimer=18; // 0.3s
   dashCooldown=48; // 0.8s
   player.invuln=Math.max(player.invuln,18);
-  dashDir.x=joystick.active?joystick.dx:0;
-  dashDir.y=joystick.active?joystick.dy:-20;
+  dashDir.x=(player.tx??player.x)-player.x;
+  dashDir.y=(player.ty??player.y)-player.y;
+  if(Math.hypot(dashDir.x,dashDir.y)<4){dashDir.x=0;dashDir.y=-20;}
   const len=Math.hypot(dashDir.x,dashDir.y)||1;
   dashDir.x/=len;dashDir.y/=len;
   sfxDash();
@@ -1074,8 +1077,8 @@ function draw(){
 
   // player
   if(player.invuln<=0||Math.floor(player.invuln/4)%2===0){
-    const aimA=joystick.active?Math.atan2(joystick.dy,joystick.dx):(-Math.PI/2);
-    drawShipAt(player.x,player.y,aimA);
+    const aimA=Math.atan2((player.ty??player.y)-player.y,(player.tx??player.x)-player.x);
+    drawShipAt(player.x,player.y,Number.isFinite(aimA)?aimA:-Math.PI/2);
   }
 
   // HP bar
