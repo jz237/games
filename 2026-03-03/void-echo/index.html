@@ -53,7 +53,7 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 </div>
 <div id="activePowerups"></div>
 <button id="bombBtn" class="hidden"><span>💣</span><span class="bomb-count">x1</span></button>
-<div class="versionTag" id="versionTag">v2.9.2</div>
+<div class="versionTag" id="versionTag">v3.0.0</div>
 
 <div id="titleScreen" class="overlay">
   <div class="card">
@@ -94,7 +94,7 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 
 <script>
 // ===== CANVAS SETUP =====
-const GAME_VERSION='v2.9.2';
+const GAME_VERSION='v3.0.0';
 document.getElementById('versionTag').textContent=GAME_VERSION;
 const C=document.getElementById('c'),X=C.getContext('2d');
 let W,H;
@@ -173,8 +173,7 @@ let stars=[],nebulae=[];
 let score=0,wave=0,killStreak=0,multiplier=1,multDecayTimer=0,waveTimer=0,waveState='active';
 let spawnTimer=0,enemiesLeft=0,bossActive=false;
 let screenFlash=0,waveAnnounce={text:'',alpha:0,scale:0};
-let joystick={active:false,id:null,ox:0,oy:0,dx:0,dy:0,max:56,dead:6};
-// moveTarget replaced by pointer above
+// clean pointer controls
 let newScoreId=null;
 let demoMode=true;
 
@@ -205,7 +204,7 @@ initStars();
 
 function initPlayer(){
   player={x:W/2,y:H*0.7,tx:W/2,ty:H*0.7,hp:100,maxHp:100,r:16,invuln:0,trail:[]};
-  pointer={active:false,x:player.x,y:player.y};
+  pointer={active:false,x:player.x,y:player.y-120,id:null};
 }
 
 // ===== SPAWNING =====
@@ -580,40 +579,45 @@ function spawnExplosion(x,y,count,big){
   if(big)screenFlash=8;
 }
 
-// ===== INPUT — hold/drag anywhere: ship follows finger, auto-fires =====
-// Single pointer tracked. Ship moves toward it. Auto-shoot handles firing.
-let pointer={active:false,x:W/2,y:H/2};
+// ===== INPUT — hold/drag anywhere: ship follows finger, auto-fires at last aimed point =====
+let pointer={active:false,x:W/2,y:H/2,id:null};
 
-function pointerDown(x,y){
+function pointerDown(x,y,id=null){
   if(state!=='playing'||waveState==='upgrade')return;
-  pointer.active=true;pointer.x=x;pointer.y=y;
+  pointer.active=true;pointer.id=id;
+  pointer.x=Math.max(player.r,Math.min(W-player.r,x));
+  pointer.y=Math.max(player.r,Math.min(H-player.r,y));
 }
-function pointerMove(x,y){
-  pointer.x=x;pointer.y=y;
+function pointerMove(x,y,id=null){
+  if(id!==null && pointer.id!==null && id!==pointer.id) return;
+  pointer.x=Math.max(player.r,Math.min(W-player.r,x));
+  pointer.y=Math.max(player.r,Math.min(H-player.r,y));
 }
-function pointerUp(){
+function pointerUp(id=null){
+  if(id!==null && pointer.id!==null && id!==pointer.id) return;
   pointer.active=false;
+  pointer.id=null;
 }
 
 C.addEventListener('touchstart',e=>{
   if(e.target.closest('#bombBtn')||e.target.closest('.overlay')||e.target.closest('.upgrade-overlay'))return;
   e.preventDefault();
   const t=e.touches[0];
-  pointerDown(t.clientX,t.clientY);
+  pointerDown(t.clientX,t.clientY,t.identifier);
 },{passive:false});
 C.addEventListener('touchmove',e=>{
   if(e.target.closest('.overlay')||e.target.closest('.upgrade-overlay'))return;
   e.preventDefault();
   const t=e.touches[0];
-  pointerMove(t.clientX,t.clientY);
+  pointerMove(t.clientX,t.clientY,t.identifier);
 },{passive:false});
 C.addEventListener('touchend',e=>{
   e.preventDefault();
-  if(e.touches.length===0)pointerUp();
+  if(e.changedTouches && e.changedTouches[0]) pointerUp(e.changedTouches[0].identifier);
 },{passive:false});
-C.addEventListener('mousedown',e=>pointerDown(e.clientX,e.clientY));
-C.addEventListener('mousemove',e=>{if(pointer.active)pointerMove(e.clientX,e.clientY);});
-C.addEventListener('mouseup',()=>pointerUp());
+C.addEventListener('mousedown',e=>pointerDown(e.clientX,e.clientY,-1));
+C.addEventListener('mousemove',e=>{if(pointer.active&&pointer.id===-1)pointerMove(e.clientX,e.clientY,-1);});
+C.addEventListener('mouseup',()=>pointerUp(-1));
 
 let shootCooldown=0;
 function fireBullet(tx,ty){
@@ -748,12 +752,9 @@ function update(){
     const dx=pointer.x-player.x,dy=pointer.y-player.y,dist=Math.hypot(dx,dy);
     if(dist>4){player.x+=dx/dist*Math.min(moveSpeed,dist);player.y+=dy/dist*Math.min(moveSpeed,dist);}
   }
-  // auto-shoot nearest enemy always (no touch required)
+  // auto-shoot toward the last aimed point
   if(shootCooldown<=0){
-    let nearest=null,nearDist=Infinity;
-    enemies.forEach(e=>{const d=Math.hypot(e.x-player.x,e.y-player.y);if(d<nearDist){nearDist=d;nearest=e;}});
-    if(nearest){fireBullet(nearest.x,nearest.y);}
-    else if(enemies.length===0){shootCooldown=8;} // idle, don't spam
+    fireBullet(pointer.x,pointer.y);
   }
   // dash movement
   if(dashTimer>0){
@@ -1124,10 +1125,10 @@ function draw(){
     waveAnnounce.alpha-=0.008;
   }
 
-  // move target indicator
+  // aim / move indicator
+  X.strokeStyle=pointer.active?'rgba(100,180,255,0.4)':'rgba(100,180,255,0.22)';X.lineWidth=1.5;
+  X.beginPath();X.arc(pointer.x,pointer.y,16,0,Math.PI*2);X.stroke();
   if(pointer.active){
-    X.strokeStyle='rgba(100,180,255,0.4)';X.lineWidth=1.5;
-    X.beginPath();X.arc(pointer.x,pointer.y,16,0,Math.PI*2);X.stroke();
     X.strokeStyle='rgba(100,180,255,0.15)';
     X.beginPath();X.moveTo(player.x,player.y);X.lineTo(pointer.x,pointer.y);X.stroke();
   }
