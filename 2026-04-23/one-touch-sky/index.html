@@ -46,14 +46,14 @@ h1{font-size:clamp(34px,9vw,54px);letter-spacing:4px;background:linear-gradient(
   <div><div class="small">STANCE</div><div id="stance">MOVE</div></div>
   <div><div class="small">BUFFS</div><div id="buffs">—</div></div>
 </div>
-<div id="version" class="version" style="display:block">v3.3.0</div>
+<div id="version" class="version" style="display:block">v3.4.0</div>
 <div id="start">
   <div class="card" id="startCard">
     <h1>ONE TOUCH SWARM</h1>
     <div class="sub">A one-finger top-down survival game for phones.<br>Drag anywhere across the battlefield. The survivor auto-aims and fires at incoming insectoids.</div>
-    <div class="how">• One finger only<br>• Move freely across the whole kill zone<br>• Auto-fire prioritizes the nearest threat<br>• Field kits now persist until the boss arrives<br>• Survive the swarm as long as possible</div>
+    <div class="how">• One finger only<br>• Move freely across the whole kill zone<br>• Auto-fire prioritizes the nearest threat<br>• Field kits stack power and persist until the boss arrives<br>• Survive the swarm as long as possible</div>
     <button class="btn" id="play">BEGIN WATCH</button>
-    <div class="version">v3.3.0</div>
+    <div class="version">v3.4.0</div>
   </div>
 </div>
 <div id="gameover" style="display:none">
@@ -106,21 +106,31 @@ function resize(){
 }
 window.addEventListener('resize',resize);
 
-function beep(f,d,t='sine',v=.08){
+function beep(f,d,t='sine',v=.08,slide=0){
   try{
     if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
     const o=audioCtx.createOscillator();
     const g=audioCtx.createGain();
+    const filter=audioCtx.createBiquadFilter();
     o.type=t;
     o.frequency.value=f;
+    if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(40,f+slide),audioCtx.currentTime+d);
+    filter.type='lowpass';
+    filter.frequency.value=Math.min(6000,Math.max(220,f*6));
+    filter.Q.value=.8;
     g.gain.value=v;
-    o.connect(g);
+    o.connect(filter);
+    filter.connect(g);
     g.connect(audioCtx.destination);
     o.start();
     g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+d);
     o.stop(audioCtx.currentTime+d);
   }catch(e){}
 }
+function gunSound(power=1){ beep(180,.06,'sawtooth',.05*power,-70); beep(420,.045,'square',.035*power,-120); beep(980,.03,'triangle',.018*power,-180); }
+function pickupSound(){ beep(520,.08,'triangle',.05,260); beep(880,.12,'sine',.04,420); }
+function bugKillSound(size=1){ beep(140,.08,'square',.05*size,-60); beep(72,.12,'sawtooth',.04*size,-20); beep(620,.04,'triangle',.02*size,-180); }
+function bossSound(){ beep(58,.24,'sawtooth',.12,-10); beep(96,.18,'triangle',.08,20); beep(420,.12,'square',.03,-220); }
 
 function initAudio(){
   if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
@@ -144,16 +154,16 @@ function clearWavePowers(){
   player.furyWave=0;
 }
 
-function hasGuard(){ return player && !!player.guardWave; }
-function hasRapid(){ return player && !!player.rapidWave; }
-function hasSpread(){ return player && !!player.spreadWave; }
-function hasFury(){ return player && !!player.furyWave; }
+function hasGuard(){ return player && player.guardWave>0; }
+function hasRapid(){ return player && player.rapidWave>0; }
+function hasSpread(){ return player && player.spreadWave>0; }
+function hasFury(){ return player && player.furyWave>0; }
 function updateBuffHud(){
   const buffs=[];
-  if(hasGuard()) buffs.push('Guard');
-  if(hasRapid()) buffs.push('Rapid');
-  if(hasSpread()) buffs.push('Spread');
-  if(hasFury()) buffs.push('Fury');
+  if(hasGuard()) buffs.push('Guard x'+player.guardWave);
+  if(hasRapid()) buffs.push('Rapid x'+player.rapidWave);
+  if(hasSpread()) buffs.push('Spread x'+player.spreadWave);
+  if(hasFury()) buffs.push('Fury x'+player.furyWave);
   document.getElementById('buffs').textContent=buffs.length ? buffs.join(' · ') : '—';
 }
 
@@ -267,8 +277,7 @@ function startBoss(){
   bossIntro=90;
   screenFlash=10;
   shake=10;
-  beep(72,.3,'sawtooth',.12);
-  beep(48,.24,'triangle',.08);
+  bossSound();
 }
 
 function addParticle(x,y,vx,vy,life,color,size,kind='spark',decay=.96,rot=0){
@@ -335,12 +344,15 @@ function fire(){
   player.aim=ang;
   player.recoil=1;
   player.muzzle=1;
+  const rapidStacks=player.rapidWave||0;
+  const spreadStacks=player.spreadWave||0;
+  const furyStacks=player.furyWave||0;
   const spread=hasRapid()?.06:.024;
-  const rounds=(hasRapid()?2:1)+(hasSpread()?2:0);
-  const damage=hasFury()?1.5:1;
+  const rounds=1+rapidStacks+spreadStacks*2;
+  const damage=1+furyStacks*.45;
   for(let i=0;i<rounds;i++){
     const lane=rounds===1?0:(i-(rounds-1)/2);
-    const a=ang+lane*(hasSpread()?0.14:0.05)+rand(-spread,spread);
+    const a=ang+lane*(hasSpread()?(0.12+.02*spreadStacks):0.05)+rand(-spread,spread);
     bullets.push({x:player.x+Math.cos(a)*17,y:player.y+Math.sin(a)*17,vx:Math.cos(a)*11,vy:Math.sin(a)*11,life:44,dmg:damage});
   }
   for(let i=0;i<6;i++) addParticle(player.x+Math.cos(ang)*20,player.y+Math.sin(ang)*20,Math.cos(ang)*rand(1.6,4.2)+rand(-.8,.8),Math.sin(ang)*rand(1.6,4.2)+rand(-.8,.8),rand(.14,.3),i%2?'rgba(255,231,154,.95)':'rgba(255,133,78,.92)',rand(2,4.4),'ember',.92,rand(0,TAU));
@@ -349,9 +361,7 @@ function fire(){
     addParticle(player.x+Math.cos(ejectAng)*10,player.y+Math.sin(ejectAng)*10,Math.cos(ejectAng)*rand(1.4,3.2),Math.sin(ejectAng)*rand(1.4,3.2),rand(.48,.8),'rgba(209,171,89,.95)',rand(2.6,4),'casing',.985,rand(0,TAU));
   }
   dirtBurst(player.x+Math.cos(ang)*12,player.y+Math.sin(ang)*12,.34,'rgba(110,80,54,.3)');
-  beep(hasFury()?460:420,.04,'square',.05);
-  beep(180,.05,'triangle',.03);
-  beep(920,.025,'sine',.022);
+  gunSound(1+furyStacks*.18);
 }
 
 function findAimTarget(){
@@ -466,9 +476,7 @@ function killEnemy(index){
   goreBurst(e,e.t==='beetle');
   score+=enemyScore(e.t);
   maybeDropPickup(e.x,e.y,false);
-  beep(e.t==='beetle'?110:e.t==='spider'?150:e.t==='mantis'?190:230,.06,'square',.05);
-  beep(70,.09,'sawtooth',.03);
-  beep(980,.03,'sine',.02);
+  bugKillSound(e.t==='beetle'?1.4:e.t==='spider'?1.2:1);
   enemies.splice(index,1);
 }
 
@@ -482,9 +490,7 @@ function killBoss(){
   boss=null;
   screenFlash=12;
   shake=18;
-  beep(70,.3,'sawtooth',.14);
-  beep(120,.2,'triangle',.08);
-  beep(960,.08,'sine',.04);
+  bossSound();
   wave+=1;
   startWave(wave);
 }
@@ -700,15 +706,14 @@ function updatePickups(dt){
     p.spin+=.07*dt;
     if(p.life<=0){ pickups.splice(i,1); continue; }
     if(dist(p.x,p.y,player.x,player.y)<28){
-      if(p.t==='guard') player.guardWave=1;
-      if(p.t==='rapid') player.rapidWave=1;
-      if(p.t==='spread') player.spreadWave=1;
-      if(p.t==='fury') player.furyWave=1;
+      if(p.t==='guard') player.guardWave+=1;
+      if(p.t==='rapid') player.rapidWave+=1;
+      if(p.t==='spread') player.spreadWave+=1;
+      if(p.t==='fury') player.furyWave+=1;
       score+=20;
       updateBuffHud();
       burst(p.x,p.y,['rgba(255,237,173,.88)','rgba(255,165,82,.8)']);
-      beep(820,.06,'sine',.07);
-      beep(1240,.04,'triangle',.04);
+      pickupSound();
       pickups.splice(i,1);
     }
   }
