@@ -45,14 +45,14 @@ h1{font-size:clamp(34px,9vw,54px);letter-spacing:4px;background:linear-gradient(
   <div><div class="small">LIVES</div><div id="lives">3</div></div>
   <div><div class="small">STANCE</div><div id="stance">GUARD</div></div>
 </div>
-<div id="version" class="version" style="display:block">v2.2.0</div>
+<div id="version" class="version" style="display:block">v3.0.1</div>
 <div id="start">
   <div class="card" id="startCard">
     <h1>ONE TOUCH SWARM</h1>
     <div class="sub">A one-finger top-down survival defense game for phones.<br>Drag anywhere across the battlefield while the survivor auto-aims and fires into the swarm.</div>
     <div class="how">• One finger only<br>• Move anywhere across the whole battlefield<br>• Auto-fire prioritizes nearby threats<br>• Field kits are rarer, but last the whole wave<br>• Hold out as the swarm floods in from every side</div>
     <button class="btn" id="play">ENTER THE KILL ZONE</button>
-    <div class="version">v2.2.0</div>
+    <div class="version">v3.0.1</div>
   </div>
 </div>
 <div id="gameover" style="display:none">
@@ -110,7 +110,7 @@ const lerp=(a,b,t)=>a+(b-a)*t;
 const dist=(ax,ay,bx,by)=>Math.hypot(ax-bx,ay-by);
 
 let state='start';
-let score=0,wave=1,lives=3,waveLeft=0,waveDelay=0,spawnTimer=0,screenFlash=0,shake=0,boss=null,bossIntro=0,levelStartFlash=0;
+let score=0,wave=1,lives=4,waveLeft=0,waveDelay=0,spawnTimer=0,screenFlash=0,shake=0,boss=null,bossIntro=0,levelStartFlash=0;
 let groundY=0,safeTop=0;
 let pointer={active:false,id:null,x:0,y:0};
 let player=null;
@@ -142,7 +142,7 @@ function initField(){
 function resetGame(){
   score=0;
   wave=1;
-  lives=3;
+  lives=4;
   waveLeft=0;
   waveDelay=0;
   spawnTimer=0;
@@ -159,7 +159,7 @@ function resetGame(){
   pointer={active:false,id:null,x:player.x,y:player.y};
   document.getElementById('score').textContent='0';
   document.getElementById('wave').textContent='1';
-  document.getElementById('lives').textContent='3';
+  document.getElementById('lives').textContent='4';
   document.getElementById('stance').textContent='GUARD';
   initField();
   clearWavePowers();
@@ -169,8 +169,8 @@ function resetGame(){
 function startWave(n){
   if(player && n!==wave) clearWavePowers();
   wave=n;
-  waveLeft=6+n*2;
-  waveDelay=50;
+  waveLeft=4+Math.floor(n*1.5);
+  waveDelay=n===1?85:65;
   spawnTimer=0;
   levelStartFlash=18;
   document.getElementById('wave').textContent=String(n);
@@ -178,10 +178,10 @@ function startWave(n){
 
 function makeEnemy(type,x,y){
   const cfg={
-    tick:{r:15,hp:20+wave*2,speed:1.75,score:18,contact:1,legs:6,color:'#8f5b37',gait:8.2,lift:3.2},
-    mantis:{r:18,hp:24+wave*3,speed:2.15,score:32,contact:1,legs:6,color:'#8ebf72',gait:6.4,lift:4.4},
-    beetle:{r:24,hp:46+wave*6,speed:1.02,score:62,contact:2,legs:6,color:'#4f6ea7',gait:4.3,lift:2.2},
-    spider:{r:20,hp:31+wave*4,speed:1.25,score:46,contact:1,legs:8,color:'#7f564c',gait:5.6,lift:3.6}
+    tick:{r:15,hp:12+wave*1.5,speed:1.18,score:18,contact:1,legs:6,color:'#8f5b37',gait:8.2,lift:3.2},
+    mantis:{r:18,hp:16+wave*2,speed:1.42,score:32,contact:1,legs:6,color:'#8ebf72',gait:6.4,lift:4.4},
+    beetle:{r:24,hp:28+wave*4,speed:.82,score:62,contact:1,legs:6,color:'#4f6ea7',gait:4.3,lift:2.2},
+    spider:{r:20,hp:22+wave*3,speed:1.02,score:46,contact:1,legs:8,color:'#7f564c',gait:5.6,lift:3.6}
   }[type];
   return {
     t:type,x,y,baseY:y,hp:cfg.hp,max:cfg.hp,r:cfg.r,speed:cfg.speed,score:cfg.score,contact:cfg.contact,legs:cfg.legs,
@@ -198,7 +198,7 @@ function spawnEnemy(){
   else if(edge===2){x=rand(0,W);y=H+40;}
   else {x=-40;y=rand(0,H);}
   const roll=Math.random();
-  const t=wave>=8&&roll<.18?'spider':wave>=5&&roll<.4?'beetle':wave>=3&&roll<.72?'mantis':'tick';
+  const t=wave>=9&&roll<.14?'spider':wave>=6&&roll<.34?'beetle':wave>=4&&roll<.66?'mantis':'tick';
   enemies.push(makeEnemy(t,x,y));
 }
 
@@ -277,7 +277,7 @@ function fire(){
   const rounds=player.rapid>0?2:1;
   for(let i=0;i<rounds;i++){
     const a=ang+rand(-spread,spread);
-    bullets.push({x:player.x+Math.cos(a)*18,y:player.y+Math.sin(a)*18,vx:Math.cos(a)*10.8,vy:Math.sin(a)*10.8,life:46,dmg:1});
+    bullets.push({x:player.x+Math.cos(a)*18,y:player.y+Math.sin(a)*18,vx:Math.cos(a)*11.8,vy:Math.sin(a)*11.8,life:58,dmg:wave<3?2:1.6});
   }
   for(let i=0;i<6;i++) addParticle(player.x+Math.cos(ang)*26,player.y+Math.sin(ang)*26,Math.cos(ang)*rand(1.6,4.6)+rand(-.8,.8),Math.sin(ang)*rand(1.6,4.6)+rand(-.8,.8),rand(.16,.34),i%2?'rgba(255,231,154,.95)':'rgba(255,133,78,.92)',rand(2,4.8),'ember',.92);
   for(let i=0;i<rounds;i++){
@@ -1229,7 +1229,7 @@ function step(ts){
       if(waveLeft>0){
         spawnEnemy();
         waveLeft--;
-        waveDelay=wave>=8?18:wave>=5?24:30;
+        waveDelay=wave===1?48:wave<4?40:wave>=8?24:wave>=5?30:36;
       }else if(enemies.length===0){
         if(wave%4===0) startBoss();
         else startWave(wave+1);
