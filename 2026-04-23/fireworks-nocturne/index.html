@@ -45,8 +45,8 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
   box-shadow:0 20px 60px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.08);
 }
 .title-card{
-  padding:14px 16px 12px;
-  max-width:min(78vw, 480px);
+  padding:10px 12px 9px;
+  max-width:min(72vw, 420px);
 }
 .eyebrow{
   display:block;
@@ -58,15 +58,15 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
 }
 h1{
   margin:0;
-  font-size:clamp(24px, 4.6vw, 44px);
+  font-size:clamp(18px, 3.5vw, 30px);
   line-height:0.95;
   font-weight:700;
   letter-spacing:0.02em;
 }
 .meta{
-  margin-top:8px;
+  margin-top:6px;
   color:var(--muted);
-  font:500 13px/1.4 "Trebuchet MS",Verdana,sans-serif;
+  font:500 11px/1.35 "Trebuchet MS",Verdana,sans-serif;
 }
 .control-card{
   padding:10px;
@@ -123,10 +123,11 @@ button.active{
   <div class="title-card">
     <span class="eyebrow">Playable Demo</span>
     <h1>Night Fireworks Show</h1>
-    <div class="meta">v1.0.1 • autonomous fireworks at midnight • tap anywhere to add shells, drag to steer a launch</div>
+    <div class="meta">v1.0.2 • autonomous fireworks at midnight • tap anywhere to add shells, drag to steer a launch</div>
   </div>
   <div class="control-card">
     <button id="autoBtn" class="active" type="button">Auto Show</button>
+    <button id="shapeBtn" type="button">Shapes Mode</button>
     <button id="soundBtn" type="button">Enable Sound</button>
   </div>
 </div>
@@ -140,6 +141,7 @@ button.active{
   const canvas = document.getElementById("fx");
   const ctx = canvas.getContext("2d");
   const autoBtn = document.getElementById("autoBtn");
+  const shapeBtn = document.getElementById("shapeBtn");
   const soundBtn = document.getElementById("soundBtn");
 
   const TAU = Math.PI * 2;
@@ -157,6 +159,7 @@ button.active{
     stars: [],
     skyline: [],
     auto: true,
+    shapesMode: false,
     pointerDown: false,
     pointerStart: null,
     pointerCurrent: null,
@@ -449,9 +452,65 @@ button.active{
       trail: [],
       ember: config.ember || false,
       crackle: config.crackle || false,
+      kind: config.kind || "spark",
+      shape: config.shape || "hex",
+      points: config.points || 6,
+      rotate: config.rotate || 0,
+      spin: config.spin || 0,
+      stroke: config.stroke || 2,
       strobe: config.strobe || 0,
       fadeFloor: config.fadeFloor || 0.08
     });
+  }
+
+  function addShapeBurst(x, y, shellSize, palette, heavy) {
+    const shapes = ["triangle", "square", "diamond", "pentagon", "hex", "star", "ring"];
+    const count = heavy ? 3 : 2;
+    const base = shellSize * (heavy ? rand(14, 20) : rand(10, 15));
+    for (let i = 0; i < count; i += 1) {
+      const shape = pick(shapes);
+      const color = palette[i % palette.length];
+      const points = shape === "triangle" ? 3 : shape === "square" ? 4 : shape === "diamond" ? 4 : shape === "pentagon" ? 5 : shape === "hex" ? 6 : shape === "star" ? 5 : 8;
+      addSpark({
+        x,
+        y,
+        vx: rand(-26, 26),
+        vy: rand(-28, 26),
+        drag: 0.987,
+        gravity: 30,
+        radius: base * rand(0.45, 0.8),
+        color,
+        glow: base * 0.95,
+        ttl: heavy ? rand(1.15, 1.8) : rand(0.95, 1.45),
+        ember: false,
+        crackle: false,
+        kind: "shape",
+        shape,
+        points,
+        rotate: rand(0, TAU),
+        spin: rand(-1.2, 1.2),
+        stroke: rand(1.8, 3.2)
+      });
+    }
+    for (let i = 0; i < (heavy ? 18 : 10); i += 1) {
+      addSpark({
+        x,
+        y,
+        vx: Math.cos((i / (heavy ? 18 : 10)) * TAU) * rand(28, 88),
+        vy: Math.sin((i / (heavy ? 18 : 10)) * TAU) * rand(28, 88),
+        drag: 0.985,
+        gravity: 44,
+        radius: rand(0.7, 1.4) * shellSize,
+        color: pick(palette),
+        glow: rand(4, 10) * shellSize,
+        ttl: rand(0.55, 1.05),
+        ember: true,
+        crackle: false,
+        kind: "spark",
+        strobe: 0,
+        fadeFloor: 0.05
+      });
+    }
   }
 
   function createRocket(xRatio, targetX = null, targetY = null, heavy = false) {
@@ -508,6 +567,11 @@ button.active{
     addSmoke(x, y, 64 * shellSize, rocket.heavy ? 16 : 10, "232,236,244", 1);
     addSmoke(x, y, 34 * shellSize, rocket.heavy ? 8 : 5, "255,175,130", 0.55);
     audio.burst(shellSize, rand(900, 2600));
+
+    if (state.shapesMode) {
+      addShapeBurst(x, y, shellSize, palette, rocket.heavy);
+      return;
+    }
 
     if (style === "crackle") {
       audio.crackle(shellSize);
@@ -798,6 +862,54 @@ button.active{
   function drawSpark(spark) {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
+    if (spark.kind === "shape") {
+      const fade = Math.max(spark.fadeFloor, 1 - spark.life / spark.ttl);
+      const sides = spark.points || 6;
+      const radius = spark.radius;
+      const spin = spark.rotate + spark.life * spark.spin;
+      ctx.translate(spark.x, spark.y);
+      ctx.rotate(spin);
+      ctx.globalAlpha = fade;
+      const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, radius * 1.6);
+      glow.addColorStop(0, `${spark.color}80`);
+      glow.addColorStop(0.55, `${spark.color}26`);
+      glow.addColorStop(1, `${spark.color}00`);
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 1.6, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = hexToRgba(spark.color, fade * 0.92);
+      ctx.lineWidth = spark.stroke;
+      ctx.beginPath();
+      for (let i = 0; i <= sides; i += 1) {
+        const a = (i / sides) * TAU;
+        const r = i % 2 === 0 ? radius : radius * 0.56;
+        const px = Math.cos(a) * r;
+        const py = Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      if (spark.shape === "ring") {
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.74, 0, TAU);
+        ctx.stroke();
+      }
+      if (spark.shape === "star") {
+        ctx.beginPath();
+        for (let i = 0; i <= 10; i += 1) {
+          const a = (i / 10) * TAU;
+          const r = i % 2 === 0 ? radius : radius * 0.34;
+          const px = Math.cos(a) * r;
+          const py = Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
     for (let i = 1; i < spark.trail.length; i += 1) {
       const prev = spark.trail[i - 1];
       const point = spark.trail[i];
@@ -990,6 +1102,12 @@ button.active{
     } else {
       state.autoClock = 0.05;
     }
+  });
+
+  shapeBtn.addEventListener("click", () => {
+    state.shapesMode = !state.shapesMode;
+    shapeBtn.classList.toggle("active", state.shapesMode);
+    shapeBtn.textContent = state.shapesMode ? "Shapes On" : "Shapes Mode";
   });
 
   soundBtn.addEventListener("click", () => {
