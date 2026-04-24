@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Night Fireworks Show v1.0.1</title>
+<title>Night Fireworks Show v1.0.3</title>
 <style>
 :root{
   --bg-top:#06111f;
@@ -123,11 +123,11 @@ button.active{
   <div class="title-card">
     <span class="eyebrow">Playable Demo</span>
     <h1>Night Fireworks Show</h1>
-    <div class="meta">v1.0.2 • autonomous fireworks at midnight • tap anywhere to add shells, drag to steer a launch</div>
+    <div class="meta">v1.0.3 • autonomous fireworks at midnight • tap anywhere to add shells, drag to steer a launch • Shapes Mode makes geometric burst silhouettes</div>
   </div>
   <div class="control-card">
     <button id="autoBtn" class="active" type="button">Auto Show</button>
-    <button id="shapeBtn" type="button">Shapes Mode</button>
+    <button id="shapeBtn" type="button">Shapes: Off</button>
     <button id="soundBtn" type="button">Enable Sound</button>
   </div>
 </div>
@@ -1105,7 +1105,7 @@ button.active{
   shapeBtn.addEventListener("click", () => {
     state.shapesMode = !state.shapesMode;
     shapeBtn.classList.toggle("active", state.shapesMode);
-    shapeBtn.textContent = state.shapesMode ? "Shapes On" : "Shapes Mode";
+    shapeBtn.textContent = state.shapesMode ? "Shapes: On" : "Shapes: Off";
   });
 
   soundBtn.addEventListener("click", () => {
