@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Night Fireworks Show v1.0.6</title>
+<title>Night Fireworks Show v1.0.8</title>
 <style>
 :root{
   --bg-top:#06111f;
@@ -154,7 +154,7 @@ button.active{
 <div class="hud">
   <div class="title-card">
     <h1>Night Fireworks Show</h1>
-    <div class="meta">v1.0.7 • autonomous fireworks at midnight • drag and release to launch a shell • Shapes Mode now builds each burst from particles</div>
+    <div class="meta">v1.0.8 • autonomous fireworks at midnight • drag and release to launch a shell • Shapes Mode now builds each burst from particles</div>
   </div>
   <div class="control-card">
     <button id="autoBtn" class="active" type="button">Auto Show</button>
@@ -168,7 +168,7 @@ button.active{
   <div class="manual-actions"><button id="resetSlidersBtn" type="button">Default Mode</button></div>
   <div class="slider-wrap"><span>Particle Size</span><input id="sizeSlider" type="range" min="0.5" max="2" step="0.05" value="1"><span id="sizeValue">1.00×</span></div>
   <div class="slider-wrap"><span>Thickness</span><input id="thicknessSlider" type="range" min="0.4" max="2.2" step="0.05" value="1"><span id="thicknessValue">1.00×</span></div>
-  <div class="slider-wrap"><span>Spark Count</span><input id="countSlider" type="range" min="0.4" max="2.5" step="0.05" value="1"><span id="countValue">1.00×</span></div>
+  <div class="slider-wrap"><span>Spark Count</span><input id="countSlider" type="range" min="0.25" max="4" step="0.05" value="1"><span id="countValue">1.00×</span></div>
   <div class="slider-wrap"><span>Shape Hold</span><input id="holdSlider" type="range" min="0.4" max="2.5" step="0.05" value="1"><span id="holdValue">1.00×</span></div>
 </div>
 <script>
@@ -537,7 +537,7 @@ button.active{
     const diameter = maxDim * rand(0.1, 0.8);
     const radius = diameter * 0.5 * state.sizeScale;
     const points = shape === "triangle" ? 3 : shape === "square" ? 4 : shape === "diamond" ? 4 : shape === "pentagon" ? 5 : shape === "hex" ? 6 : shape === "heptagon" ? 7 : shape === "octagon" ? 8 : 5;
-    const particleCount = Math.round(clamp(radius * (shape === "ring" ? 2.2 : 3.2) * state.countScale, heavy ? 90 : 55, heavy ? 260 : 180));
+    const particleCount = Math.round(clamp(radius * (shape === "ring" ? 2.2 : 3.2) * Math.pow(state.countScale, 1.55), heavy ? 90 : 55, heavy ? 360 : 220));
     const baseColor = pick(palette);
     for (let i = 0; i < particleCount; i += 1) {
       const t = i / particleCount;
@@ -597,15 +597,16 @@ button.active{
     }
   }
 
-  function createRocket(xRatio, targetX = null, targetY = null, heavy = false) {
+  function createRocket(xRatio, targetX = null, targetY = null, heavy = false, configPower = 1) {
     const x = clamp((targetX ?? (state.width * xRatio)), 30, state.width - 30);
     const y = state.height + rand(8, 36);
     const arcTarget = targetX ?? lerp(state.width * 0.18, state.width * 0.82, xRatio);
     const apexY = targetY ?? rand(state.height * 0.14, state.height * 0.48);
     const dx = arcTarget - x;
-    const travel = Math.max(0.7, (y - apexY) / rand(330, 440));
-    const vx = dx / travel;
-    const vy = -rand(300, heavy ? 470 : 410);
+    const travel = Math.max(0.55, (y - apexY) / rand(330, 440));
+    const power = Math.max(0.45, configPower || 1);
+    const vx = (dx / travel) * power;
+    const vy = -rand(300, heavy ? 470 : 410) * power;
     const palette = pick(burstPalettes);
     const styleRoll = Math.random();
     let shell = "peony";
@@ -626,15 +627,15 @@ button.active{
       vy,
       life: 0,
       targetY: apexY,
-      fuse: rand(0.85, 1.35),
+      fuse: rand(0.7, 1.25) / (0.8 + configPower * 0.35),
       shell,
       palette,
-      size: heavy ? rand(1.1, 1.55) : rand(0.8, 1.25),
+      size: (heavy ? rand(1.1, 1.55) : rand(0.8, 1.25)) * (0.75 + configPower * 0.25),
       heavy,
       trail: [],
       whistle: rand(0.85, 1.2)
     });
-    audio.launch(heavy ? 1.12 : 0.85);
+    audio.launch((heavy ? 1.12 : 0.85) * (0.7 + configPower * 0.6));
   }
 
   function explodeRocket(rocket) {
@@ -644,7 +645,7 @@ button.active{
     const coreColor = palette[0];
     const shellSize = rocket.size;
     const style = rocket.shell;
-    const countBase = rocket.heavy ? rand(50, 90) : rand(30, 58);
+    const countBase = (rocket.heavy ? rand(50, 90) : rand(30, 58)) * Math.pow(state.countScale, 1.35);
     let layers = rocket.heavy ? 2 : 1;
 
     addFlash(x, y, rand(34, 84) * shellSize, coreColor, rocket.heavy ? 0.18 : 0.12);
@@ -1109,7 +1110,7 @@ button.active{
     ctx.font = '700 12px "Trebuchet MS",Verdana,sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,242,222,0.92)';
-    ctx.fillText(dist < 20 ? 'TAP = BURST' : 'RELEASE = LAUNCH', state.pointerCurrent.x, state.pointerCurrent.y - 18);
+    ctx.fillText(dist < 20 ? 'TAP = BURST' : `POWER ${Math.min(4, (0.8 + dist / 170).toFixed(1))}x`, state.pointerCurrent.x, state.pointerCurrent.y - 18);
     ctx.restore();
   }
 
@@ -1160,11 +1161,13 @@ button.active{
   }
 
   function launchFromGesture(start, end) {
-    const dx = clamp(end.x - start.x, -220, 220);
-    const dy = clamp(end.y - start.y, -420, 40);
-    const targetX = clamp(start.x + dx * 1.1, 40, state.width - 40);
-    const targetY = clamp(start.y + dy * 1.08, state.height * 0.1, state.height * 0.68);
-    createRocket(start.x / state.width, targetX, targetY, Math.abs(dy) > 170 || Math.abs(dx) > 120);
+    const dx = clamp(end.x - start.x, -320, 320);
+    const dy = clamp(end.y - start.y, -520, 40);
+    const dist = Math.hypot(dx, dy);
+    const targetX = clamp(start.x + dx * 1.12, 40, state.width - 40);
+    const targetY = clamp(start.y + dy * 1.06, state.height * 0.1, state.height * 0.68);
+    const power = clamp(0.85 + dist / 200, 0.85, 4);
+    createRocket(start.x / state.width, targetX, targetY, Math.abs(dy) > 170 || Math.abs(dx) > 120, power);
   }
 
   function onPointerStart(event) {
@@ -1199,7 +1202,7 @@ button.active{
     const start = state.pointerStart || end;
     const distance = Math.hypot(end.x - start.x, end.y - start.y);
     if (distance < 20) {
-      createRocket(end.x / state.width, end.x, rand(state.height * 0.14, state.height * 0.46), Math.random() > 0.5);
+      createRocket(end.x / state.width, end.x, rand(state.height * 0.16, state.height * 0.42), false, 0.55);
     } else {
       launchFromGesture(start, end);
     }
