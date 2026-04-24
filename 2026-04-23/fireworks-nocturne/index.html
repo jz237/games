@@ -99,9 +99,11 @@ input[type="range"]{width:100%;accent-color:#ffd48d}
 .manual-panel.show{display:flex}
 .manual-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .manual-head span{font:600 11px/1.1 "Trebuchet MS",Verdana,sans-serif;color:var(--accent);text-transform:uppercase;letter-spacing:0.16em}
-.manual-panel .slider-wrap{min-width:0;width:100%;padding:0}
-.manual-panel .slider-wrap span:first-child{min-width:92px}
-.manual-panel .slider-wrap span:last-child{min-width:42px;text-align:right;color:var(--text)}
+  .manual-panel .slider-wrap{min-width:0;width:100%;padding:0}
+  .manual-panel .slider-wrap span:first-child{min-width:92px}
+  .manual-panel .slider-wrap span:last-child{min-width:42px;text-align:right;color:var(--text)}
+  .manual-actions{display:flex;gap:8px;justify-content:space-between}
+  .manual-actions button{flex:1}
 @media (max-width: 720px){
   .slider-wrap{min-width:0;flex-basis:100%}
 }
@@ -151,9 +153,8 @@ button.active{
 <canvas id="fx"></canvas>
 <div class="hud">
   <div class="title-card">
-    <span class="eyebrow">Playable Demo</span>
     <h1>Night Fireworks Show</h1>
-    <div class="meta">v1.0.6 • autonomous fireworks at midnight • tap anywhere to add shells, drag to steer a launch • Shapes Mode now builds each burst from particles</div>
+    <div class="meta">v1.0.7 • autonomous fireworks at midnight • drag and release to launch a shell • Shapes Mode now builds each burst from particles</div>
   </div>
   <div class="control-card">
     <button id="autoBtn" class="active" type="button">Auto Show</button>
@@ -164,6 +165,7 @@ button.active{
 </div>
 <div id="manualPanel" class="manual-panel">
   <div class="manual-head"><span>Manual Mode</span><button id="manualCloseBtn" type="button">Hide Sliders</button></div>
+  <div class="manual-actions"><button id="resetSlidersBtn" type="button">Default Mode</button></div>
   <div class="slider-wrap"><span>Particle Size</span><input id="sizeSlider" type="range" min="0.5" max="2" step="0.05" value="1"><span id="sizeValue">1.00×</span></div>
   <div class="slider-wrap"><span>Thickness</span><input id="thicknessSlider" type="range" min="0.4" max="2.2" step="0.05" value="1"><span id="thicknessValue">1.00×</span></div>
   <div class="slider-wrap"><span>Spark Count</span><input id="countSlider" type="range" min="0.4" max="2.5" step="0.05" value="1"><span id="countValue">1.00×</span></div>
@@ -189,6 +191,7 @@ button.active{
   const soundBtn = document.getElementById("soundBtn");
   const manualPanel = document.getElementById("manualPanel");
   const manualCloseBtn = document.getElementById("manualCloseBtn");
+  const resetSlidersBtn = document.getElementById("resetSlidersBtn");
 
   const TAU = Math.PI * 2;
   const state = {
@@ -1081,18 +1084,32 @@ button.active{
       return;
     }
     ctx.save();
-    ctx.strokeStyle = "rgba(255,223,176,0.55)";
-    ctx.lineWidth = 2;
-    ctx.setLineDash([8, 8]);
+    const dx = state.pointerCurrent.x - state.pointerStart.x;
+    const dy = state.pointerCurrent.y - state.pointerStart.y;
+    const dist = Math.hypot(dx, dy);
+    ctx.strokeStyle = "rgba(255,223,176,0.82)";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 8]);
+    ctx.shadowColor = "rgba(255,200,110,0.65)";
+    ctx.shadowBlur = 16;
     ctx.beginPath();
     ctx.moveTo(state.pointerStart.x, state.pointerStart.y);
     ctx.lineTo(state.pointerCurrent.x, state.pointerCurrent.y);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(255,243,214,0.22)";
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(255,243,214,0.24)";
     ctx.beginPath();
-    ctx.arc(state.pointerStart.x, state.pointerStart.y, 18, 0, TAU);
+    ctx.arc(state.pointerStart.x, state.pointerStart.y, 16, 0, TAU);
     ctx.fill();
+    ctx.fillStyle = "rgba(255,240,210,0.92)";
+    ctx.beginPath();
+    ctx.arc(state.pointerCurrent.x, state.pointerCurrent.y, 10 + Math.min(dist * 0.08, 16), 0, TAU);
+    ctx.fill();
+    ctx.font = '700 12px "Trebuchet MS",Verdana,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255,242,222,0.92)';
+    ctx.fillText(dist < 20 ? 'TAP = BURST' : 'RELEASE = LAUNCH', state.pointerCurrent.x, state.pointerCurrent.y - 18);
     ctx.restore();
   }
 
@@ -1202,11 +1219,27 @@ button.active{
     }
   });
 
-  shapeBtn.addEventListener("click", () => {
-    state.shapesMode = !state.shapesMode;
-    shapeBtn.classList.toggle("active", state.shapesMode);
-    shapeBtn.textContent = state.shapesMode ? "Shapes: On" : "Shapes: Off";
-  });
+    shapeBtn.addEventListener("click", () => {
+      state.shapesMode = !state.shapesMode;
+      shapeBtn.classList.toggle("active", state.shapesMode);
+      shapeBtn.textContent = state.shapesMode ? "Shapes: On" : "Shapes: Off";
+    });
+
+  function resetManualDefaults(){
+    const defaults = {size:1, thickness:1, count:1, hold:1};
+    sizeSlider.value = defaults.size;
+    thicknessSlider.value = defaults.thickness;
+    countSlider.value = defaults.count;
+    holdSlider.value = defaults.hold;
+    state.sizeScale = defaults.size;
+    state.thicknessScale = defaults.thickness;
+    state.countScale = defaults.count;
+    state.holdScale = defaults.hold;
+    sizeValue.textContent = `${state.sizeScale.toFixed(2)}×`;
+    thicknessValue.textContent = `${state.thicknessScale.toFixed(2)}×`;
+    countValue.textContent = `${state.countScale.toFixed(2)}×`;
+    holdValue.textContent = `${state.holdScale.toFixed(2)}×`;
+  }
 
   manualBtn.addEventListener("click", () => {
     state.manualMode = !state.manualMode;
@@ -1237,6 +1270,8 @@ button.active{
     holdValue.textContent = `${state.holdScale.toFixed(2)}×`;
   });
 
+  resetSlidersBtn.addEventListener("click", resetManualDefaults);
+
   soundBtn.addEventListener("click", () => {
     if (!audio.ctx || !audio.unlocked) {
       audio.setEnabled(true);
@@ -1257,6 +1292,7 @@ button.active{
   });
 
   resize();
+  resetManualDefaults();
   for (let i = 0; i < 3; i += 1) {
     window.setTimeout(() => {
       createRocket(rand(0.2, 0.8), null, rand(state.height * 0.2, state.height * 0.5), i === 0);
