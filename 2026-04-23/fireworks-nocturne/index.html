@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Night Fireworks Show v1.0.0</title>
+<title>Night Fireworks Show v1.0.1</title>
 <style>
 :root{
   --bg-top:#06111f;
@@ -123,7 +123,7 @@ button.active{
   <div class="title-card">
     <span class="eyebrow">Playable Demo</span>
     <h1>Night Fireworks Show</h1>
-    <div class="meta">v1.0.0 • autonomous fireworks at midnight • tap anywhere to add shells, drag to steer a launch</div>
+    <div class="meta">v1.0.1 • autonomous fireworks at midnight • tap anywhere to add shells, drag to steer a launch</div>
   </div>
   <div class="control-card">
     <button id="autoBtn" class="active" type="button">Auto Show</button>
@@ -163,7 +163,8 @@ button.active{
     autoClock: 0,
     finaleClock: 0,
     wind: 3,
-    launchX: 0.5
+    launchX: 0.5,
+    burstLock: 0
   };
 
   const burstPalettes = [
@@ -307,7 +308,7 @@ button.active{
       body.frequency.setValueAtTime(130, now);
       body.frequency.exponentialRampToValueAtTime(58, now + 0.58);
       bodyGain.gain.setValueAtTime(0.0001, now);
-      bodyGain.gain.exponentialRampToValueAtTime(0.07 * depth, now + 0.02);
+      bodyGain.gain.exponentialRampToValueAtTime(0.05 * depth, now + 0.02);
       bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
       body.connect(bodyGain);
       bodyGain.connect(this.master);
@@ -324,7 +325,7 @@ button.active{
       lp.frequency.value = 3600;
       const hissGain = this.ctx.createGain();
       hissGain.gain.setValueAtTime(0.0001, now);
-      hissGain.gain.exponentialRampToValueAtTime(0.06 * depth, now + 0.03);
+      hissGain.gain.exponentialRampToValueAtTime(0.045 * depth, now + 0.03);
       hissGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.54);
       hiss.connect(hp);
       hp.connect(lp);
@@ -343,7 +344,7 @@ button.active{
       thump.frequency.setValueAtTime(96, now);
       thump.frequency.exponentialRampToValueAtTime(34, now + 0.28);
       thumpGain.gain.setValueAtTime(0.0001, now);
-      thumpGain.gain.exponentialRampToValueAtTime(0.22 * size, now + 0.008);
+      thumpGain.gain.exponentialRampToValueAtTime(0.14 * size, now + 0.008);
       thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.33);
       thump.connect(thumpGain);
       thumpGain.connect(this.master);
@@ -358,7 +359,7 @@ button.active{
       bp.Q.value = 1.2;
       const snapGain = this.ctx.createGain();
       snapGain.gain.setValueAtTime(0.0001, now);
-      snapGain.gain.exponentialRampToValueAtTime(0.26 * size, now + 0.006);
+      snapGain.gain.exponentialRampToValueAtTime(0.16 * size, now + 0.006);
       snapGain.gain.exponentialRampToValueAtTime(0.03 * size, now + 0.11);
       snapGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
       snap.connect(bp);
@@ -372,7 +373,7 @@ button.active{
       shimmer.frequency.setValueAtTime(colorBias * 0.7, now + 0.01);
       shimmer.frequency.exponentialRampToValueAtTime(colorBias * 0.28, now + 0.6);
       shimmerGain.gain.setValueAtTime(0.0001, now);
-      shimmerGain.gain.exponentialRampToValueAtTime(0.04 * size, now + 0.04);
+      shimmerGain.gain.exponentialRampToValueAtTime(0.025 * size, now + 0.04);
       shimmerGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
       shimmer.connect(shimmerGain);
       shimmerGain.connect(this.master);
@@ -411,7 +412,7 @@ button.active{
       color,
       alpha,
       life: 0,
-      ttl: rand(0.18, 0.42)
+      ttl: rand(0.12, 0.3)
     });
   }
 
@@ -500,19 +501,19 @@ button.active{
     const coreColor = palette[0];
     const shellSize = rocket.size;
     const style = rocket.shell;
-    const countBase = rocket.heavy ? rand(110, 180) : rand(70, 130);
-    let layers = 2;
+    const countBase = rocket.heavy ? rand(50, 90) : rand(30, 58);
+    let layers = rocket.heavy ? 2 : 1;
 
-    addFlash(x, y, rand(70, 140) * shellSize, coreColor, rocket.heavy ? 0.34 : 0.26);
-    addSmoke(x, y, 90 * shellSize, rocket.heavy ? 28 : 16, "232,236,244", 1);
-    addSmoke(x, y, 46 * shellSize, rocket.heavy ? 12 : 8, "255,175,130", 0.6);
+    addFlash(x, y, rand(34, 84) * shellSize, coreColor, rocket.heavy ? 0.18 : 0.12);
+    addSmoke(x, y, 64 * shellSize, rocket.heavy ? 16 : 10, "232,236,244", 1);
+    addSmoke(x, y, 34 * shellSize, rocket.heavy ? 8 : 5, "255,175,130", 0.55);
     audio.burst(shellSize, rand(900, 2600));
 
     if (style === "crackle") {
       audio.crackle(shellSize);
-      layers = 3;
+      layers = 2;
     }
-    if (rocket.heavy && Math.random() > 0.45) {
+    if (rocket.heavy && Math.random() > 0.55) {
       layers += 1;
     }
 
@@ -547,28 +548,28 @@ button.active{
           y,
           vx,
           vy,
-          drag: style === "willow" ? 0.988 : 0.982,
-          gravity: style === "willow" ? 88 : style === "palm" ? 110 : 98,
-          radius: rand(1.2, 2.8) * shellSize,
+          drag: style === "willow" ? 0.989 : 0.984,
+          gravity: style === "willow" ? 82 : style === "palm" ? 100 : 92,
+          radius: rand(0.9, 2.0) * shellSize,
           color,
-          glow: rand(14, 30) * shellSize,
-          ttl: style === "willow" ? rand(1.8, 2.8) : rand(1.2, 2.1),
-          ember: Math.random() > 0.35,
-          crackle: style === "crackle" && Math.random() > 0.72,
-          strobe: color === "#ffffff" ? rand(0, 15) : 0,
-          fadeFloor: rand(0.03, 0.12)
+          glow: rand(8, 18) * shellSize,
+          ttl: style === "willow" ? rand(1.2, 2.0) : rand(0.95, 1.65),
+          ember: Math.random() > 0.58,
+          crackle: style === "crackle" && Math.random() > 0.86,
+          strobe: color === "#ffffff" ? rand(0, 18) : 0,
+          fadeFloor: rand(0.02, 0.08)
         });
       }
     }
 
-    const embers = rocket.heavy ? 36 : 18;
+    const embers = rocket.heavy ? 18 : 10;
     for (let i = 0; i < embers; i += 1) {
       state.embers.push({
         x: x + rand(-16, 16),
         y: y + rand(-16, 16),
         vx: rand(-28, 28),
         vy: rand(6, 64),
-        radius: rand(1.2, 3.8) * shellSize,
+        radius: rand(0.8, 2.2) * shellSize,
         life: 0,
         ttl: rand(0.7, 1.9),
         color: pick(["#ffdf9b", "#ff9f50", "#ff7347", "#fff8db"])
@@ -675,9 +676,9 @@ button.active{
 
     if (state.finaleClock <= 0) {
       state.finaleClock = rand(6.5, 10.5);
-      const barrage = 5 + ((Math.random() * 5) | 0);
+      const barrage = 1 + ((Math.random() * 2) | 0);
       for (let i = 0; i < barrage; i += 1) {
-        const delay = i * rand(0.05, 0.12);
+        const delay = i * rand(0.12, 0.24);
         window.setTimeout(() => {
           createRocket(rand(0.14, 0.86), null, rand(state.height * 0.12, state.height * 0.42), Math.random() > 0.28);
         }, delay * 1000);
@@ -685,14 +686,16 @@ button.active{
     }
 
     if (state.autoClock <= 0) {
-      const density = state.width < 700 ? rand(0.24, 0.46) : rand(0.18, 0.38);
+      const density = state.width < 700 ? rand(0.64, 1.0) : rand(0.58, 0.92);
       state.autoClock = density;
       const chance = Math.random();
-      if (chance > 0.82) {
-        createRocket(rand(0.08, 0.92), null, rand(state.height * 0.16, state.height * 0.44), true);
-        createRocket(rand(0.1, 0.9), null, rand(state.height * 0.14, state.height * 0.38), false);
+      if (state.rockets.length > 3) {
+        return;
+      }
+      if (chance > 0.94) {
+        createRocket(rand(0.18, 0.82), null, rand(state.height * 0.2, state.height * 0.42), true);
       } else {
-        createRocket(rand(0.08, 0.92), null, rand(state.height * 0.18, state.height * 0.48), chance > 0.58);
+        createRocket(rand(0.16, 0.84), null, rand(state.height * 0.24, state.height * 0.52), chance > 0.82);
       }
     }
   }
@@ -769,8 +772,8 @@ button.active{
     for (let i = 0; i < rocket.trail.length; i += 1) {
       const point = rocket.trail[i];
       const ratio = i / rocket.trail.length;
-      const alpha = ratio * 0.28;
-      const radius = 4 + ratio * 12;
+      const alpha = ratio * 0.16;
+      const radius = 2 + ratio * 6;
       const gradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
       gradient.addColorStop(0, `rgba(255,246,219,${alpha})`);
       gradient.addColorStop(0.45, `rgba(255,169,89,${alpha * 0.7})`);
@@ -781,9 +784,9 @@ button.active{
       ctx.fill();
     }
     const glow = ctx.createRadialGradient(rocket.x, rocket.y, 0, rocket.x, rocket.y, 24);
-    glow.addColorStop(0, "rgba(255,255,240,0.95)");
-    glow.addColorStop(0.28, "rgba(255,200,110,0.85)");
-    glow.addColorStop(0.7, "rgba(255,110,48,0.12)");
+    glow.addColorStop(0, "rgba(255,255,240,0.55)");
+    glow.addColorStop(0.3, "rgba(255,200,110,0.28)");
+    glow.addColorStop(0.72, "rgba(255,110,48,0.05)");
     glow.addColorStop(1, "rgba(255,110,48,0)");
     ctx.fillStyle = glow;
     ctx.beginPath();
@@ -799,9 +802,9 @@ button.active{
       const prev = spark.trail[i - 1];
       const point = spark.trail[i];
       const ratio = i / spark.trail.length;
-      const alpha = ratio * 0.28;
+      const alpha = ratio * 0.12;
       ctx.strokeStyle = hexToRgba(spark.color, alpha);
-      ctx.lineWidth = Math.max(0.5, spark.radius * ratio * 1.2);
+      ctx.lineWidth = Math.max(0.35, spark.radius * ratio * 0.68);
       ctx.beginPath();
       ctx.moveTo(prev.x, prev.y);
       ctx.lineTo(point.x, point.y);
@@ -811,9 +814,9 @@ button.active{
     if (pulseVisible) {
       const fade = Math.max(spark.fadeFloor, 1 - spark.life / spark.ttl);
       const gradient = ctx.createRadialGradient(spark.x, spark.y, 0, spark.x, spark.y, spark.glow);
-      gradient.addColorStop(0, `${spark.color}f0`);
-      gradient.addColorStop(0.18, `${spark.color}c4`);
-      gradient.addColorStop(0.45, `${spark.color}40`);
+      gradient.addColorStop(0, `${spark.color}88`);
+      gradient.addColorStop(0.2, `${spark.color}44`);
+      gradient.addColorStop(0.48, `${spark.color}14`);
       gradient.addColorStop(1, `${spark.color}00`);
       ctx.fillStyle = gradient;
       ctx.beginPath();
@@ -832,8 +835,8 @@ button.active{
     ctx.save();
     ctx.globalCompositeOperation = "screen";
     const gradient = ctx.createRadialGradient(flash.x, flash.y, 0, flash.x, flash.y, flash.radius);
-    gradient.addColorStop(0, `${flash.color}cc`);
-    gradient.addColorStop(0.18, `${flash.color}66`);
+    gradient.addColorStop(0, `${flash.color}88`);
+    gradient.addColorStop(0.22, `${flash.color}2a`);
     gradient.addColorStop(1, `${flash.color}00`);
     ctx.fillStyle = gradient;
     ctx.globalAlpha = flash.alpha;
@@ -847,9 +850,9 @@ button.active{
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     const fade = 1 - ember.life / ember.ttl;
-    const gradient = ctx.createRadialGradient(ember.x, ember.y, 0, ember.x, ember.y, ember.radius * 6);
-    gradient.addColorStop(0, `${ember.color}cc`);
-    gradient.addColorStop(0.35, `${ember.color}44`);
+    const gradient = ctx.createRadialGradient(ember.x, ember.y, 0, ember.x, ember.y, ember.radius * 4);
+    gradient.addColorStop(0, `${ember.color}77`);
+    gradient.addColorStop(0.35, `${ember.color}1c`);
     gradient.addColorStop(1, `${ember.color}00`);
     ctx.fillStyle = gradient;
     ctx.globalAlpha = fade;
@@ -1005,10 +1008,10 @@ button.active{
   });
 
   resize();
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < 3; i += 1) {
     window.setTimeout(() => {
-      createRocket(rand(0.18, 0.82), null, rand(state.height * 0.16, state.height * 0.48), i % 2 === 0);
-    }, 200 + i * 180);
+      createRocket(rand(0.2, 0.8), null, rand(state.height * 0.2, state.height * 0.5), i === 0);
+    }, 260 + i * 260);
   }
   audio.enable();
   requestAnimationFrame(tick);
