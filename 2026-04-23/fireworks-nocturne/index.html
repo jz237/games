@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Night Fireworks Show v1.0.8</title>
+<title>Night Fireworks Show v1.0.9</title>
 <style>
 :root{
   --bg-top:#06111f;
@@ -154,7 +154,7 @@ button.active{
 <div class="hud">
   <div class="title-card">
     <h1>Night Fireworks Show</h1>
-    <div class="meta">v1.0.8 • autonomous fireworks at midnight • drag and release to launch a shell • Shapes Mode now builds each burst from particles</div>
+    <div class="meta">v1.0.9 • autonomous fireworks at midnight • drag and release to launch a shell • Shapes Mode now builds each burst from particles</div>
   </div>
   <div class="control-card">
     <button id="autoBtn" class="active" type="button">Auto Show</button>
@@ -531,23 +531,35 @@ button.active{
   }
 
   function addShapeBurst(x, y, shellSize, palette, heavy) {
-    const shapes = ["triangle", "square", "diamond", "pentagon", "hex", "heptagon", "octagon", "star", "ring"];
+    const shapes = ["triangle", "square", "diamond", "pentagon", "hex", "heptagon", "octagon", "star", "ring", "spiral", "mandala"];
     const shape = pick(shapes);
     const maxDim = Math.min(state.width, state.height);
     const diameter = maxDim * rand(0.1, 0.8);
     const radius = diameter * 0.5 * state.sizeScale;
-    const points = shape === "triangle" ? 3 : shape === "square" ? 4 : shape === "diamond" ? 4 : shape === "pentagon" ? 5 : shape === "hex" ? 6 : shape === "heptagon" ? 7 : shape === "octagon" ? 8 : 5;
+    const points = shape === "triangle" ? 3 : shape === "square" ? 4 : shape === "diamond" ? 4 : shape === "pentagon" ? 5 : shape === "hex" ? 6 : shape === "heptagon" ? 7 : shape === "octagon" ? 8 : shape === "spiral" ? 8 : shape === "mandala" ? 12 : 5;
     const particleCount = Math.round(clamp(radius * (shape === "ring" ? 2.2 : 3.2) * Math.pow(state.countScale, 1.55), heavy ? 90 : 55, heavy ? 360 : 220));
     const baseColor = pick(palette);
     for (let i = 0; i < particleCount; i += 1) {
       const t = i / particleCount;
-      const offset = rand(-0.02, 0.02);
-      const angle = t * TAU + offset;
+      const spin = rand(-0.18, 0.18);
+      const angle = t * TAU * (shape === "spiral" ? 2.4 : 1) + spin;
       let px = 0;
       let py = 0;
+      let radial = radius;
       if (shape === "ring") {
         px = Math.cos(angle) * radius;
         py = Math.sin(angle) * radius;
+      } else if (shape === "spiral") {
+        const r = radius * (0.14 + t * 0.86);
+        px = Math.cos(angle) * r;
+        py = Math.sin(angle) * r;
+        radial = r;
+      } else if (shape === "mandala") {
+        const petal = Math.sin(t * TAU * 6) * 0.22 + 0.78;
+        const r = radius * petal;
+        px = Math.cos(angle) * r;
+        py = Math.sin(angle) * r;
+        radial = r;
       } else if (shape === "star") {
         const spokes = points * 2;
         const seg = t * spokes;
@@ -559,6 +571,7 @@ button.active{
         const r1 = (idx + 1) % 2 === 0 ? radius : radius * 0.38;
         px = lerp(Math.cos(a0) * r0, Math.cos(a1) * r1, local);
         py = lerp(Math.sin(a0) * r0, Math.sin(a1) * r1, local);
+        radial = Math.hypot(px, py);
       } else {
         const seg = t * points;
         const idx = Math.floor(seg);
@@ -569,18 +582,22 @@ button.active{
         const r1 = (idx + 1) % 2 === 0 ? radius : radius * 0.56;
         px = lerp(Math.cos(a0) * r0, Math.cos(a1) * r1, local);
         py = lerp(Math.sin(a0) * r0, Math.sin(a1) * r1, local);
+        radial = Math.hypot(px, py);
       }
       const outward = Math.atan2(py, px);
-      const speed = rand(24, 88) + radius * 0.12;
+      const speed = rand(22, 84) + radius * 0.1;
       const burstColor = palette[i % palette.length] || baseColor;
+      const curve = rand(-0.45, 0.45) * (shape === "spiral" ? 1.6 : 1);
       addSpark({
         x: x + px,
         y: y + py,
-        vx: Math.cos(outward) * speed + rand(-10, 10),
-        vy: Math.sin(outward) * speed + rand(-20, 8),
-        drag: 0.987,
-        gravity: rand(68, 108),
-        radius: rand(0.85, 1.9) * state.thicknessScale,
+        vx: Math.cos(outward) * speed + rand(-12, 12),
+        vy: Math.sin(outward) * speed + rand(-22, 10),
+        drag: 0.989,
+        gravity: rand(56, 92),
+        curve,
+        orbit: shape === "spiral" ? rand(0.5, 1.2) : shape === "mandala" ? rand(0.2, 0.55) : 0,
+        radius: rand(0.7, 1.6) * state.thicknessScale,
         color: burstColor,
         glow: rand(8, 22) * state.thicknessScale,
         ttl: (heavy ? rand(1.0, 1.7) : rand(0.8, 1.4)) * state.holdScale,
@@ -589,10 +606,14 @@ button.active{
         kind: "shapeParticle",
         shape,
         points,
-        rotate: 0,
-        spin: rand(-0.25, 0.25),
-        stroke: rand(1.2, 2.2),
-        fadeFloor: 0.03
+        rotate: rand(0, TAU),
+        spin: rand(-0.35, 0.35),
+        stroke: rand(1.1, 2.4),
+        fadeFloor: 0.03,
+        twinkleRate: rand(8, 18),
+        trailGlow: rand(2, 6) * state.thicknessScale,
+        anchorRadius: radial,
+        fallCurve: rand(0.85, 1.25)
       });
     }
   }
@@ -764,10 +785,17 @@ button.active{
     spark.life += dt;
     spark.vx *= spark.drag;
     spark.vy = spark.vy * spark.drag + spark.gravity * dt;
+    if (spark.kind === "shapeParticle") {
+      const wobble = Math.sin(spark.life * spark.twinkleRate + spark.anchorRadius * 0.01) * spark.curve;
+      spark.vx += wobble * dt * 24;
+      spark.vy += Math.cos(spark.life * spark.twinkleRate * 0.8) * spark.orbit * dt * 20;
+      spark.vx += state.wind * dt * 0.25;
+      spark.vy += 32 * spark.fallCurve * dt;
+    }
     spark.x += spark.vx * dt;
     spark.y += spark.vy * dt;
     spark.trail.push({ x: spark.x, y: spark.y, age: 0 });
-    if (spark.trail.length > 14) {
+    if (spark.trail.length > 18) {
       spark.trail.shift();
     }
     for (const point of spark.trail) {
@@ -785,8 +813,8 @@ button.active{
         color: pick(["#fff5da", "#ffd15c", "#ff8a38"])
       });
     }
-    if (spark.ember && Math.random() > 0.93) {
-      addSmoke(spark.x, spark.y, spark.glow * 0.6, 1, "185,190,210", 0.35);
+    if (spark.ember && Math.random() > 0.78) {
+      addSmoke(spark.x, spark.y, spark.glow * 0.55, 1, "185,190,210", 0.3);
     }
     return spark.life < spark.ttl;
   }
@@ -951,16 +979,32 @@ button.active{
       const fade = Math.max(spark.fadeFloor, 1 - spark.life / spark.ttl);
       const fallFade = spark.vy > 0 ? Math.max(0.15, 1 - spark.vy / 220) : 1;
       const radius = spark.radius * state.sizeScale * state.thicknessScale;
-      const glow = ctx.createRadialGradient(spark.x, spark.y, 0, spark.x, spark.y, radius * 4);
-      glow.addColorStop(0, `${spark.color}c8`);
-      glow.addColorStop(0.35, `${spark.color}44`);
+      const trailAlpha = Math.min(0.8, fade * 0.6);
+      for (let i = 1; i < spark.trail.length; i += 1) {
+        const prev = spark.trail[i - 1];
+        const point = spark.trail[i];
+        const ratio = i / spark.trail.length;
+        const alpha = ratio * trailAlpha;
+        ctx.strokeStyle = hexToRgba(spark.color, alpha);
+        ctx.lineWidth = Math.max(0.35, radius * ratio * 0.45);
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y);
+        ctx.lineTo(point.x, point.y);
+        ctx.stroke();
+      }
+      const twinkle = 0.72 + Math.sin(spark.life * spark.twinkleRate + spark.anchorRadius * 0.05) * 0.28;
+      const glow = ctx.createRadialGradient(spark.x, spark.y, 0, spark.x, spark.y, radius * 4.2);
+      glow.addColorStop(0, `${spark.color}${Math.floor(220 * twinkle).toString(16).padStart(2, '0')}`);
+      glow.addColorStop(0.26, `${spark.color}66`);
+      glow.addColorStop(0.52, `${spark.color}24`);
       glow.addColorStop(1, `${spark.color}00`);
       ctx.fillStyle = glow;
       ctx.globalAlpha = fade * fallFade;
       ctx.beginPath();
-      ctx.arc(spark.x, spark.y, radius * 3.2, 0, TAU);
+      ctx.arc(spark.x, spark.y, radius * 3.0, 0, TAU);
       ctx.fill();
       ctx.fillStyle = spark.color;
+      ctx.globalAlpha = fade * fallFade * twinkle;
       ctx.beginPath();
       ctx.arc(spark.x, spark.y, radius, 0, TAU);
       ctx.fill();
