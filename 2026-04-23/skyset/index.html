@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
-<title>Skyset v1.0.0</title>
+<title>Skyset v1.0.1</title>
 <style>
   :root{
     --bg0:#060b16; --bg1:#111a32; --bg2:#1f1023; --panel:rgba(10,18,34,.54);
@@ -24,9 +24,12 @@
   .pill .v{display:block;font-size:16px;font-weight:700}
   #requestWrap{position:fixed;left:10px;right:10px;top:78px;z-index:5;display:flex;justify-content:center;pointer-events:none}
   #requestCard{min-width:min(540px,100%);max-width:740px;padding:12px 14px;border-radius:18px;border:1px solid var(--line);background:linear-gradient(180deg,rgba(22,28,48,.8),rgba(10,16,29,.66));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 18px 36px rgba(0,0,0,.28)}
+  #requestCard.challenge{border-color:rgba(255,220,136,.36);box-shadow:0 18px 36px rgba(0,0,0,.28),0 0 0 1px rgba(255,220,136,.12) inset}
   #requestTop{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
   #requestLabel{font-size:15px;font-weight:700;letter-spacing:.02em}
+  #requestCard.challenge #requestLabel{font-size:20px;line-height:1.1}
   #requestMeta{font-size:12px;color:var(--muted)}
+  #requestCard.challenge #requestMeta{font-size:15px;color:#f8f2e8;line-height:1.3;max-width:44ch}
   #timingBar{margin-top:10px;height:12px;border-radius:999px;background:linear-gradient(90deg,rgba(255,127,117,.18),rgba(255,203,122,.12),rgba(130,240,179,.22));border:1px solid rgba(255,255,255,.07);position:relative;overflow:hidden}
   #timingTarget{position:absolute;top:-2px;width:14px;height:16px;border-radius:8px;background:linear-gradient(180deg,#fff,#ffe4a5);box-shadow:0 0 18px rgba(255,220,136,.8)}
   #timingNow{position:absolute;top:0;width:4px;height:100%;background:linear-gradient(180deg,#fff,#7ce2ff);box-shadow:0 0 12px rgba(108,183,255,.8)}
@@ -115,7 +118,7 @@
       <button class="bigBtn" data-start="freestyle">Freestyle</button>
       <button class="bigBtn" data-start="challenge">Challenge Night</button>
     </div>
-    <p class="small">Request examples: <b>Blue Ring</b>, <b>Gold Spiral</b>, <b>Red Bloom</b>. High scores save locally. Version v1.0.0.</p>
+    <p class="small">Request examples: <b>Blue Ring</b>, <b>Gold Spiral</b>, <b>Red Bloom</b>. High scores save locally. Version v1.0.1.</p>
   </div>
 </div>
 
@@ -144,6 +147,7 @@ const ctx = canvas.getContext('2d');
 const overlay = document.getElementById('overlay');
 const endModal = document.getElementById('endModal');
 const nameModal = document.getElementById('nameModal');
+const requestCard = document.getElementById('requestCard');
 const endSummary = document.getElementById('endSummary');
 const nameInput = document.getElementById('nameInput');
 const scoreVal = document.getElementById('scoreVal');
@@ -202,6 +206,7 @@ const state = {
   requestBeat: 0.5,
   requestBeatSpeed: 1,
   shotLog: [],
+  audio: {ctx:null, unlocked:false},
   shells: [],
   sparks: [],
   smoke: [],
@@ -236,13 +241,42 @@ function ensureStars(){
 }
 function resize(){ state.w = canvas.width = innerWidth * devicePixelRatio; state.h = canvas.height = innerHeight * devicePixelRatio; canvas.style.width = innerWidth+'px'; canvas.style.height = innerHeight+'px'; ensureStars(); }
 addEventListener('resize', resize, {passive:true}); resize();
+function pointFromEvent(e){ const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
 
 function getHighScores(){ try{ return JSON.parse(localStorage.getItem(HS_KEY)) || []; }catch{ return []; } }
 function saveHighScores(list){ localStorage.setItem(HS_KEY, JSON.stringify(list.slice(0,10))); }
 function isHighScore(score){ const hs = getHighScores(); return hs.length < 10 || score > hs[hs.length-1].score; }
 function addHighScore(name, score){ const hs = getHighScores(); hs.push({name:name.toUpperCase().slice(0,3).padEnd(3,'A'), score, mode:state.mode, at: Date.now()}); hs.sort((a,b)=>b.score-a.score); saveHighScores(hs); return hs.slice(0,10); }
+function unlockAudio(){
+  if (state.audio.unlocked) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  state.audio.ctx = state.audio.ctx || new AC();
+  if (state.audio.ctx.state === 'suspended') state.audio.ctx.resume().catch(()=>{});
+  state.audio.unlocked = true;
+}
+function playTone(type='launch', strength=1){
+  const ctxA = state.audio.ctx;
+  if (!ctxA || !state.audio.unlocked) return;
+  const now = ctxA.currentTime;
+  const osc = ctxA.createOscillator();
+  const gain = ctxA.createGain();
+  const filt = ctxA.createBiquadFilter();
+  osc.type = type === 'burst' ? 'triangle' : type === 'crowd' ? 'sine' : 'sawtooth';
+  osc.frequency.setValueAtTime(type === 'burst' ? 220 : type === 'crowd' ? 330 : 140, now);
+  osc.frequency.exponentialRampToValueAtTime(type === 'burst' ? 720 : type === 'crowd' ? 540 : 260, now + (type === 'burst' ? 0.22 : 0.12));
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.12 * strength, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + (type === 'burst' ? 0.28 : 0.16));
+  filt.type = 'lowpass';
+  filt.frequency.value = type === 'burst' ? 1800 : 900;
+  osc.connect(filt).connect(gain).connect(ctxA.destination);
+  osc.start(now);
+  osc.stop(now + (type === 'burst' ? 0.32 : 0.18));
+}
 
 function modeSetup(mode){
+  unlockAudio();
   state.mode = mode;
   state.score = 0;
   state.combo = 1;
@@ -264,9 +298,12 @@ function modeSetup(mode){
   endModal.style.display = 'none';
   nameModal.style.display = 'none';
   modeLabel.textContent = MODE_NAMES[mode];
+  requestCard.classList.toggle('challenge', mode === 'challenge');
   requestMeta.textContent = mode === 'freestyle'
     ? 'Freestyle: no failures, no requests — just make the sky sing.'
-    : 'Match the request. Pick shape + color, then hit the beat.';
+    : mode === 'challenge'
+      ? 'Challenge: match the request exactly. Shape, color, size, and beat all matter.'
+      : 'Match the request. Pick shape + color, then hit the beat.';
   makeRequest();
 }
 
@@ -295,7 +332,9 @@ function makeRequest(){
   state.requestWindow = clamp(state.mode === 'challenge' ? 250 : 420 - state.act * 18, 180, 420);
   state.requestTarget = state.requestStart + rand(1200, 1900) - state.act * 45;
   requestLabel.textContent = request.label;
-  requestMeta.textContent = `Size ${request.size.toFixed(2)} × • Act ${state.act} • ${state.mode === 'challenge' ? 'tight timing' : 'hit the beat'}`;
+  requestMeta.textContent = mode === 'challenge'
+    ? `Target: ${request.label} • Size ${request.size.toFixed(2)}× • tight beat window`
+    : `Size ${request.size.toFixed(2)}× • Act ${state.act} • hit the beat`;
 }
 
 function popup(text, x, y, color='#fff'){
@@ -320,10 +359,11 @@ function launchFromGesture(start, end){
   if (!state.running) return;
   if (state.mode !== 'freestyle' && state.shellsLeft <= 0) { gameOver('Out of shells.'); return; }
   const s = chooseShellStrengthFromDrag(start, end);
+  const launchX = clamp((start.x + end.x) * 0.5, 20, state.w / devicePixelRatio - 20);
   const shell = {
-    x: clamp(start.x, 20, state.w / devicePixelRatio - 20),
+    x: launchX,
     y: state.h / devicePixelRatio + 18,
-    vx: s.dx * 1.8 * s.power,
+    vx: s.dx * 1.55 * s.power,
     vy: -clamp(320 + s.dist * 0.9, 320, 760) * s.power,
     gravity: 165,
     fuse: 2.6,
@@ -341,6 +381,7 @@ function launchFromGesture(start, end){
   if (state.mode !== 'freestyle') state.shellsLeft -= 1;
   state.lastBurst = null;
   state.finaleCharge = clamp(state.finaleCharge + 0.18, 0, 1);
+  playTone('launch', 0.8 + s.power * 0.2);
 }
 
 function burstShape(shell, x, y){
@@ -380,10 +421,12 @@ function burstShape(shell, x, y){
   }
   flash(x,y,base*0.9,c, shell.shape === 'finale' ? 0.18 : 0.11);
   smoke(x,y,base*0.45,'180,190,210',0.28);
+  playTone('burst', shell.shape === 'finale' ? 1.15 : 0.85);
   if (shell.shape === 'finale') {
     for (let i=0;i<3;i++) {
       smoke(x+rand(-18,18), y+rand(-18,18), base*0.18, '240,210,180', 0.2);
     }
+    playTone('crowd', 0.65);
   }
 }
 
@@ -434,6 +477,10 @@ function gameOver(msg){
   state.running = false;
   endSummary.textContent = `${msg} Final score ${state.score}. Best combo x${state.combo.toFixed(1)}.`;
   endModal.style.display = 'flex';
+  if (isHighScore(state.score)) {
+    nameInput.value = 'AAA';
+    nameModal.style.display = 'flex';
+  }
 }
 
 function updateShell(shell, dt){
@@ -612,48 +659,45 @@ saveScoreBtn.addEventListener('click', () => {
 });
 skipScoreBtn.addEventListener('click', () => { nameModal.style.display = 'none'; endModal.style.display = 'flex'; });
 
-function maybeHighScore(){
-  if (!isHighScore(state.score)) return;
-  nameInput.value = 'AAA';
-  nameModal.style.display = 'flex';
-  endModal.style.display = 'none';
-}
+// high score prompt is handled directly in gameOver()
 
-function endAndMaybeScore(msg){
-  endSummary.textContent = `${msg} Final score ${state.score}. Best combo x${state.combo.toFixed(1)}.`;
-  endModal.style.display = 'flex';
-  if (isHighScore(state.score)) maybeHighScore();
-}
-
-// Replace gameOver with high-score aware version.
-window.gameOver = (msg) => { if (!state.running) return; state.running = false; endAndMaybeScore(msg); };
-
-canvas.addEventListener('pointerdown', (e) => {
+function beginGesture(e){
   if (!state.running) return;
-  if (e.target.closest && e.target.closest('button,input')) return;
+  if (e.target && e.target.closest && e.target.closest('button,input')) return;
+  const p = pointFromEvent(e);
   state.pointerDown = true;
-  state.pointer = {x:e.clientX, y:e.clientY};
-  state.pointerStart = {x:e.clientX, y:e.clientY};
-  state.pointerCurrent = {x:e.clientX, y:e.clientY};
-  try { canvas.setPointerCapture(e.pointerId); } catch {}
-});
-canvas.addEventListener('pointermove', (e) => {
+  state.pointer = p;
+  state.pointerStart = p;
+  state.pointerCurrent = p;
+  try { canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId); } catch {}
+}
+function moveGesture(e){
   if (!state.pointerDown) return;
-  state.pointerCurrent = {x:e.clientX, y:e.clientY};
-});
-canvas.addEventListener('pointerup', (e) => {
+  state.pointerCurrent = pointFromEvent(e);
+}
+function endGesture(e){
   if (!state.pointerDown) return;
   state.pointerDown = false;
-  const start = state.pointerStart || {x:e.clientX,y:e.clientY};
-  const end = state.pointerCurrent || {x:e.clientX,y:e.clientY};
-  const dist = Math.hypot(end.x-start.x, end.y-start.y);
-  if (dist < 12) { end.x = start.x + rand(-24, 24); end.y = start.y + rand(-24, 24); }
-  launchFromGesture(start, end);
+  const p = pointFromEvent(e);
+  const start = state.pointerStart || p;
+  const end = state.pointerCurrent || p;
+  const dist = Math.hypot(end.x - start.x, end.y - start.y);
+  const finalEnd = dist < 12 ? { x: start.x + rand(-24, 24), y: start.y + rand(-24, 24) } : end;
+  launchFromGesture(start, finalEnd);
   state.pointerStart = null;
   state.pointerCurrent = null;
   if (state.mode !== 'freestyle' && !state.request && state.running) setTimeout(makeRequest, 650);
-});
+}
+canvas.addEventListener('pointerdown', beginGesture);
+canvas.addEventListener('pointermove', moveGesture);
+canvas.addEventListener('pointerup', endGesture);
 canvas.addEventListener('pointercancel', () => { state.pointerDown = false; state.pointerStart = null; state.pointerCurrent = null; });
+canvas.addEventListener('mousedown', beginGesture);
+canvas.addEventListener('mousemove', moveGesture);
+canvas.addEventListener('mouseup', endGesture);
+canvas.addEventListener('touchstart', (e) => { beginGesture(e.changedTouches[0]); }, {passive:true});
+canvas.addEventListener('touchmove', (e) => { moveGesture(e.changedTouches[0]); }, {passive:true});
+canvas.addEventListener('touchend', (e) => { endGesture(e.changedTouches[0]); }, {passive:true});
 
 window.addEventListener('keydown', (e) => {
   if (e.key === '1') state.selectedShape = 'bloom';
