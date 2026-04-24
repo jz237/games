@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Night Fireworks Show v1.0.3</title>
+<title>Night Fireworks Show v1.0.4</title>
 <style>
 :root{
   --bg-top:#06111f;
@@ -123,7 +123,7 @@ button.active{
   <div class="title-card">
     <span class="eyebrow">Playable Demo</span>
     <h1>Night Fireworks Show</h1>
-    <div class="meta">v1.0.3 • autonomous fireworks at midnight • tap anywhere to add shells, drag to steer a launch • Shapes Mode makes geometric burst silhouettes</div>
+    <div class="meta">v1.0.4 • autonomous fireworks at midnight • tap anywhere to add shells, drag to steer a launch • Shapes Mode now builds each burst from particles</div>
   </div>
   <div class="control-card">
     <button id="autoBtn" class="active" type="button">Auto Show</button>
@@ -470,46 +470,62 @@ button.active{
     const diameter = maxDim * rand(0.1, 0.8);
     const radius = diameter * 0.5;
     const points = shape === "triangle" ? 3 : shape === "square" ? 4 : shape === "diamond" ? 4 : shape === "pentagon" ? 5 : shape === "hex" ? 6 : shape === "heptagon" ? 7 : shape === "octagon" ? 8 : 5;
-    const color = pick(palette);
-    addSpark({
-      x,
-      y,
-      vx: rand(-18, 18),
-      vy: rand(-26, 8),
-      drag: 0.991,
-      gravity: 26,
-      radius,
-      color,
-      glow: radius * 0.42,
-      ttl: heavy ? rand(2.2, 3.4) : rand(1.8, 2.8),
-      ember: false,
-      crackle: false,
-      kind: "shape",
-      shape,
-      points,
-      rotate: rand(0, TAU),
-      spin: rand(-0.5, 0.5),
-      stroke: rand(2, 4)
-    });
-
-    for (let i = 0; i < (heavy ? 8 : 5); i += 1) {
-      const a = (i / (heavy ? 8 : 5)) * TAU + rand(-0.08, 0.08);
+    const particleCount = Math.round(clamp(radius * (shape === "ring" ? 2.2 : 3.2), heavy ? 90 : 55, heavy ? 260 : 180));
+    const baseColor = pick(palette);
+    for (let i = 0; i < particleCount; i += 1) {
+      const t = i / particleCount;
+      const offset = rand(-0.02, 0.02);
+      const angle = t * TAU + offset;
+      let px = 0;
+      let py = 0;
+      if (shape === "ring") {
+        px = Math.cos(angle) * radius;
+        py = Math.sin(angle) * radius;
+      } else if (shape === "star") {
+        const spokes = points * 2;
+        const seg = t * spokes;
+        const idx = Math.floor(seg);
+        const local = seg - idx;
+        const a0 = (idx / spokes) * TAU - Math.PI / 2;
+        const a1 = ((idx + 1) / spokes) * TAU - Math.PI / 2;
+        const r0 = idx % 2 === 0 ? radius : radius * 0.38;
+        const r1 = (idx + 1) % 2 === 0 ? radius : radius * 0.38;
+        px = lerp(Math.cos(a0) * r0, Math.cos(a1) * r1, local);
+        py = lerp(Math.sin(a0) * r0, Math.sin(a1) * r1, local);
+      } else {
+        const seg = t * points;
+        const idx = Math.floor(seg);
+        const local = seg - idx;
+        const a0 = (idx / points) * TAU - Math.PI / 2;
+        const a1 = ((idx + 1) / points) * TAU - Math.PI / 2;
+        const r0 = idx % 2 === 0 ? radius : radius * 0.56;
+        const r1 = (idx + 1) % 2 === 0 ? radius : radius * 0.56;
+        px = lerp(Math.cos(a0) * r0, Math.cos(a1) * r1, local);
+        py = lerp(Math.sin(a0) * r0, Math.sin(a1) * r1, local);
+      }
+      const outward = Math.atan2(py, px);
+      const speed = rand(24, 88) + radius * 0.12;
+      const burstColor = palette[i % palette.length] || baseColor;
       addSpark({
-        x,
-        y,
-        vx: Math.cos(a) * rand(12, 30),
-        vy: Math.sin(a) * rand(12, 30),
-        drag: 0.985,
-        gravity: 28,
-        radius: rand(0.4, 1.1) * shellSize,
-        color: pick(palette),
-        glow: rand(3, 8) * shellSize,
-        ttl: rand(0.45, 0.95),
+        x: x + px,
+        y: y + py,
+        vx: Math.cos(outward) * speed + rand(-10, 10),
+        vy: Math.sin(outward) * speed + rand(-20, 8),
+        drag: 0.987,
+        gravity: rand(68, 108),
+        radius: rand(0.85, 1.9),
+        color: burstColor,
+        glow: rand(8, 22),
+        ttl: heavy ? rand(1.0, 1.7) : rand(0.8, 1.4),
         ember: true,
         crackle: false,
-        kind: "spark",
-        strobe: 0,
-        fadeFloor: 0.04
+        kind: "shapeParticle",
+        shape,
+        points,
+        rotate: 0,
+        spin: rand(-0.25, 0.25),
+        stroke: rand(1.2, 2.2),
+        fadeFloor: 0.03
       });
     }
   }
@@ -863,6 +879,26 @@ button.active{
   function drawSpark(spark) {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
+    if (spark.kind === "shapeParticle") {
+      const fade = Math.max(spark.fadeFloor, 1 - spark.life / spark.ttl);
+      const fallFade = spark.vy > 0 ? Math.max(0.15, 1 - spark.vy / 220) : 1;
+      const radius = spark.radius;
+      const glow = ctx.createRadialGradient(spark.x, spark.y, 0, spark.x, spark.y, radius * 4);
+      glow.addColorStop(0, `${spark.color}c8`);
+      glow.addColorStop(0.35, `${spark.color}44`);
+      glow.addColorStop(1, `${spark.color}00`);
+      ctx.fillStyle = glow;
+      ctx.globalAlpha = fade * fallFade;
+      ctx.beginPath();
+      ctx.arc(spark.x, spark.y, radius * 3.2, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = spark.color;
+      ctx.beginPath();
+      ctx.arc(spark.x, spark.y, radius, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
     if (spark.kind === "shape") {
       const fade = Math.max(spark.fadeFloor, 1 - spark.life / spark.ttl);
       const fallFade = spark.vy > 0 ? Math.max(0.1, 1 - spark.vy / 180) : 1;
