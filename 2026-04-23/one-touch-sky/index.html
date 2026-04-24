@@ -46,14 +46,14 @@ h1{font-size:clamp(34px,9vw,54px);letter-spacing:4px;background:linear-gradient(
   <div><div class="small">STANCE</div><div id="stance">MOVE</div></div>
   <div><div class="small">BUFFS</div><div id="buffs">—</div></div>
 </div>
-<div id="version" class="version" style="display:block">v3.4.0</div>
+<div id="version" class="version" style="display:block">v3.5.0</div>
 <div id="start">
   <div class="card" id="startCard">
     <h1>ONE TOUCH SWARM</h1>
     <div class="sub">A one-finger top-down survival game for phones.<br>Drag anywhere across the battlefield. The survivor auto-aims and fires at incoming insectoids.</div>
-    <div class="how">• One finger only<br>• Move freely across the whole kill zone<br>• Auto-fire prioritizes the nearest threat<br>• Field kits stack power and persist until the boss arrives<br>• Survive the swarm as long as possible</div>
+    <div class="how">• One finger only<br>• Move freely across the whole kill zone<br>• Auto-fire prioritizes the nearest threat<br>• Field kits stack power and persist until the boss arrives<br>• This build has stronger hit feedback and easier early survival</div>
     <button class="btn" id="play">BEGIN WATCH</button>
-    <div class="version">v3.4.0</div>
+    <div class="version">v3.5.0</div>
   </div>
 </div>
 <div id="gameover" style="display:none">
@@ -76,7 +76,7 @@ let W=0,H=0,dpr=1,last=performance.now();
 let arena={left:22,right:22,top:90,bottom:30};
 let audioCtx=null;
 let state='start';
-let score=0,wave=1,lives=3,waveLeft=0,waveDelay=0,spawnTimer=0,screenFlash=0,shake=0,boss=null,bossIntro=0;
+let score=0,wave=1,lives=5,waveLeft=0,waveDelay=0,spawnTimer=0,screenFlash=0,shake=0,boss=null,bossIntro=0,hitFlash=0;
 let pointer={active:false,id:null,x:0,y:0};
 let player=null;
 let bullets=[],enemyShots=[],enemies=[],particles=[],pickups=[],decals=[],motes=[],props=[],grass=[],ruts=[];
@@ -127,10 +127,29 @@ function beep(f,d,t='sine',v=.08,slide=0){
     o.stop(audioCtx.currentTime+d);
   }catch(e){}
 }
-function gunSound(power=1){ beep(180,.06,'sawtooth',.05*power,-70); beep(420,.045,'square',.035*power,-120); beep(980,.03,'triangle',.018*power,-180); }
-function pickupSound(){ beep(520,.08,'triangle',.05,260); beep(880,.12,'sine',.04,420); }
-function bugKillSound(size=1){ beep(140,.08,'square',.05*size,-60); beep(72,.12,'sawtooth',.04*size,-20); beep(620,.04,'triangle',.02*size,-180); }
-function bossSound(){ beep(58,.24,'sawtooth',.12,-10); beep(96,.18,'triangle',.08,20); beep(420,.12,'square',.03,-220); }
+function noiseBurst(duration=.08,volume=.05,highpass=700){
+  try{
+    if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    const buffer=audioCtx.createBuffer(1, Math.max(1,Math.floor(audioCtx.sampleRate*duration)), audioCtx.sampleRate);
+    const data=buffer.getChannelData(0);
+    for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*(1-i/data.length);
+    const src=audioCtx.createBufferSource();
+    const filter=audioCtx.createBiquadFilter();
+    const gain=audioCtx.createGain();
+    src.buffer=buffer;
+    filter.type='highpass';
+    filter.frequency.value=highpass;
+    gain.gain.value=volume;
+    src.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+    src.start();
+    gain.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+duration);
+    src.stop(audioCtx.currentTime+duration);
+  }catch(e){}
+}
+function gunSound(power=1){ beep(120,.07,'sawtooth',.07*power,-50); beep(260,.05,'square',.05*power,-110); noiseBurst(.05,.045*power,1200); }
+function pickupSound(){ beep(620,.09,'triangle',.06,320); beep(1040,.14,'sine',.05,520); }
+function bugKillSound(size=1){ beep(96,.1,'square',.06*size,-40); noiseBurst(.07,.05*size,500); beep(420,.05,'triangle',.025*size,-160); }
+function bossSound(){ beep(52,.3,'sawtooth',.16,-10); beep(88,.22,'triangle',.1,10); noiseBurst(.12,.08,280); }
 
 function initAudio(){
   if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
@@ -196,7 +215,7 @@ function makeProp(kind){
 function resetGame(){
   score=0;
   wave=1;
-  lives=3;
+  lives=5;
   waveLeft=0;
   waveDelay=0;
   spawnTimer=0;
@@ -214,7 +233,7 @@ function resetGame(){
   initField();
   document.getElementById('score').textContent='0';
   document.getElementById('wave').textContent='1';
-  document.getElementById('lives').textContent='3';
+  document.getElementById('lives').textContent='5';
   document.getElementById('stance').textContent='MOVE';
   updateBuffHud();
   startWave(1);
@@ -222,8 +241,8 @@ function resetGame(){
 
 function startWave(n){
   wave=n;
-  waveLeft=7+n*2;
-  waveDelay=34;
+  waveLeft=4+n;
+  waveDelay=n===1?70:46;
   spawnTimer=0;
   screenFlash=5;
   shake=5;
@@ -234,11 +253,11 @@ function startWave(n){
 
 function makeEnemy(type,x,y){
   const cfg={
-    ant:{r:13,hp:18+wave*2,speed:1.9,score:18,contact:1,color:'#71462d',legs:6},
-    mantis:{r:17,hp:28+wave*3,speed:2.05,score:34,contact:1,color:'#7cab4a',legs:6},
-    beetle:{r:21,hp:54+wave*7,speed:1.08,score:64,contact:2,color:'#4d69ac',legs:6},
-    spider:{r:18,hp:34+wave*4,speed:1.32,score:46,contact:1,color:'#6d4d49',legs:8},
-    roach:{r:16,hp:24+wave*3,speed:2.35,score:28,contact:1,color:'#8a6539',legs:6}
+    ant:{r:13,hp:10+wave*1.2,speed:1.25,score:18,contact:1,color:'#71462d',legs:6},
+    mantis:{r:17,hp:18+wave*2,speed:1.45,score:34,contact:1,color:'#7cab4a',legs:6},
+    beetle:{r:21,hp:34+wave*4,speed:.82,score:64,contact:1,color:'#4d69ac',legs:6},
+    spider:{r:18,hp:22+wave*3,speed:1.02,score:46,contact:1,color:'#6d4d49',legs:8},
+    roach:{r:16,hp:16+wave*2,speed:1.55,score:28,contact:1,color:'#8a6539',legs:6}
   }[type];
   return {
     t:type,x,y,r:cfg.r,hp:cfg.hp,max:cfg.hp,speed:cfg.speed,score:cfg.score,contact:cfg.contact,color:cfg.color,legs:cfg.legs,
@@ -266,7 +285,7 @@ function pickSpawnPoint(){
 function spawnEnemy(){
   const p=pickSpawnPoint();
   const roll=Math.random();
-  const t=wave>=9&&roll<.16?'spider':wave>=7&&roll<.34?'beetle':wave>=5&&roll<.54?'mantis':wave>=3&&roll<.75?'roach':'ant';
+  const t=wave>=10&&roll<.12?'spider':wave>=8&&roll<.26?'beetle':wave>=5&&roll<.48?'mantis':wave>=3&&roll<.68?'roach':'ant';
   enemies.push(makeEnemy(t,p.x,p.y));
 }
 
@@ -439,17 +458,19 @@ function damagePlayer(n){
   if(player.inv>0 || state!=='playing') return;
   if(hasGuard()){
     player.guardWave=0;
-    player.inv=18;
-    screenFlash=5;
-    shake=7;
+    player.inv=24;
+    screenFlash=8;
+    shake=12;
+    hitFlash=16;
     burst(player.x,player.y,['rgba(255,220,180,.85)','rgba(255,137,86,.72)']);
     beep(90,.08,'sawtooth',.07);
     return;
   }
   lives-=n;
-  player.inv=50;
-  screenFlash=10;
-  shake=13;
+  player.inv=70;
+  screenFlash=18;
+  shake=24;
+  hitFlash=32;
   burst(player.x,player.y,['rgba(255,160,92,.92)','rgba(145,42,24,.78)','rgba(255,222,170,.7)'],true);
   addDecal(player.x+rand(-6,6),player.y+rand(-6,6),14,'rgba(111,51,39,.3)','blood');
   beep(60,.22,'sawtooth',.12);
@@ -1243,8 +1264,19 @@ function drawAimMarker(){
 
 function drawHudEffects(){
   if(screenFlash>0){
-    X.fillStyle=`rgba(255,235,210,${screenFlash/12*.18})`;
+    X.fillStyle=`rgba(255,235,210,${screenFlash/18*.22})`;
     X.fillRect(0,0,W,H);
+  }
+  if(hitFlash>0){
+    X.fillStyle=`rgba(255,40,20,${hitFlash/32*.22})`;
+    X.fillRect(0,0,W,H);
+    X.strokeStyle=`rgba(255,120,90,${hitFlash/32*.9})`;
+    X.lineWidth=14;
+    X.strokeRect(7,7,W-14,H-14);
+    X.fillStyle=`rgba(255,230,220,${hitFlash/32})`;
+    X.font='bold 28px system-ui';
+    X.textAlign='center';
+    X.fillText('HIT!',W/2,56);
   }
 }
 
@@ -1291,7 +1323,7 @@ function step(ts){
       if(waveLeft>0){
         spawnEnemy();
         waveLeft--;
-        waveDelay=wave>=9?14:wave>=6?19:24;
+        waveDelay=wave===1?54:wave<4?42:wave>=9?22:wave>=6?28:34;
       }else if(enemies.length===0){
         if(wave%4===0) startBoss();
         else startWave(wave+1);
@@ -1303,6 +1335,7 @@ function step(ts){
   document.getElementById('wave').textContent=String(wave);
   document.getElementById('lives').textContent=String(Math.max(0,lives));
   screenFlash=Math.max(0,screenFlash-.45*dt);
+  hitFlash=Math.max(0,hitFlash-.9*dt);
   shake*=.86;
   draw();
 }
