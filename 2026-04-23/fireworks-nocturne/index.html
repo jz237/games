@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Night Fireworks Show v1.0.4</title>
+<title>Night Fireworks Show v1.0.5</title>
 <style>
 :root{
   --bg-top:#06111f;
@@ -74,6 +74,14 @@ h1{
   gap:8px;
   pointer-events:auto;
   align-items:center;
+  flex-wrap:wrap;
+  max-width:min(42vw, 430px);
+}
+.slider-wrap{display:flex;align-items:center;gap:8px;padding:0 6px;min-width:170px;flex:1}
+.slider-wrap span{font:600 11px/1.1 "Trebuchet MS",Verdana,sans-serif;color:var(--muted);white-space:nowrap}
+input[type="range"]{width:100%;accent-color:#ffd48d}
+@media (max-width: 720px){
+  .slider-wrap{min-width:0;flex-basis:100%}
 }
 button{
   appearance:none;
@@ -123,12 +131,13 @@ button.active{
   <div class="title-card">
     <span class="eyebrow">Playable Demo</span>
     <h1>Night Fireworks Show</h1>
-    <div class="meta">v1.0.4 • autonomous fireworks at midnight • tap anywhere to add shells, drag to steer a launch • Shapes Mode now builds each burst from particles</div>
+    <div class="meta">v1.0.5 • autonomous fireworks at midnight • tap anywhere to add shells, drag to steer a launch • Shapes Mode now builds each burst from particles</div>
   </div>
   <div class="control-card">
     <button id="autoBtn" class="active" type="button">Auto Show</button>
     <button id="shapeBtn" type="button">Shapes: Off</button>
-    <button id="soundBtn" type="button">Enable Sound</button>
+    <div class="slider-wrap"><span>Particle Size</span><input id="sizeSlider" type="range" min="0.5" max="2" step="0.05" value="1"><span id="sizeValue">1.00×</span></div>
+    <button id="soundBtn" type="button">Sound: On</button>
   </div>
 </div>
 <div class="footer-note">
@@ -142,6 +151,8 @@ button.active{
   const ctx = canvas.getContext("2d");
   const autoBtn = document.getElementById("autoBtn");
   const shapeBtn = document.getElementById("shapeBtn");
+  const sizeSlider = document.getElementById("sizeSlider");
+  const sizeValue = document.getElementById("sizeValue");
   const soundBtn = document.getElementById("soundBtn");
 
   const TAU = Math.PI * 2;
@@ -160,6 +171,7 @@ button.active{
     skyline: [],
     auto: true,
     shapesMode: false,
+    sizeScale: 1,
     pointerDown: false,
     pointerStart: null,
     pointerCurrent: null,
@@ -257,7 +269,7 @@ button.active{
       }
       this.ctx = new AudioContextCtor();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.32;
+      this.master.gain.value = this.enabled ? 0.32 : 0;
       const compressor = this.ctx.createDynamicsCompressor();
       compressor.threshold.value = -18;
       compressor.knee.value = 10;
@@ -282,9 +294,22 @@ button.active{
       }
       this.enabled = true;
       this.unlocked = ctxRef.state === "running";
-      soundBtn.textContent = this.unlocked ? "Sound On" : "Tap For Sound";
-      soundBtn.classList.toggle("active", this.unlocked);
+      soundBtn.textContent = this.enabled ? "Sound: On" : "Sound: Off";
+      soundBtn.classList.add("active");
       return this.unlocked;
+    },
+    setEnabled(on) {
+      const ctxRef = this.init();
+      this.enabled = !!on;
+      if (ctxRef && this.master) {
+        this.master.gain.value = this.enabled ? 0.32 : 0;
+      }
+      soundBtn.textContent = this.enabled ? "Sound: On" : "Sound: Off";
+      soundBtn.classList.toggle("active", this.enabled);
+      if (this.enabled && ctxRef && ctxRef.state !== "running") {
+        ctxRef.resume().catch(() => {});
+      }
+      return this.enabled;
     },
     noiseBuffer(seconds = 2) {
       const key = seconds.toFixed(2);
@@ -301,7 +326,7 @@ button.active{
       return buffer;
     },
     launch(depth = 1) {
-      if (!this.unlocked) {
+      if (!this.unlocked || !this.enabled) {
         return;
       }
       const now = this.ctx.currentTime;
@@ -337,7 +362,7 @@ button.active{
       hiss.start(now);
     },
     burst(size = 1, colorBias = 1500) {
-      if (!this.unlocked) {
+      if (!this.unlocked || !this.enabled) {
         return;
       }
       const now = this.ctx.currentTime;
@@ -384,7 +409,7 @@ button.active{
       shimmer.stop(now + 0.58);
     },
     crackle(size = 1) {
-      if (!this.unlocked) {
+      if (!this.unlocked || !this.enabled) {
         return;
       }
       const now = this.ctx.currentTime;
@@ -468,7 +493,7 @@ button.active{
     const shape = pick(shapes);
     const maxDim = Math.min(state.width, state.height);
     const diameter = maxDim * rand(0.1, 0.8);
-    const radius = diameter * 0.5;
+    const radius = diameter * 0.5 * state.sizeScale;
     const points = shape === "triangle" ? 3 : shape === "square" ? 4 : shape === "diamond" ? 4 : shape === "pentagon" ? 5 : shape === "hex" ? 6 : shape === "heptagon" ? 7 : shape === "octagon" ? 8 : 5;
     const particleCount = Math.round(clamp(radius * (shape === "ring" ? 2.2 : 3.2), heavy ? 90 : 55, heavy ? 260 : 180));
     const baseColor = pick(palette);
@@ -854,7 +879,7 @@ button.active{
       const point = rocket.trail[i];
       const ratio = i / rocket.trail.length;
       const alpha = ratio * 0.16;
-      const radius = 2 + ratio * 6;
+      const radius = (2 + ratio * 6) * state.sizeScale;
       const gradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
       gradient.addColorStop(0, `rgba(255,246,219,${alpha})`);
       gradient.addColorStop(0.45, `rgba(255,169,89,${alpha * 0.7})`);
@@ -882,7 +907,7 @@ button.active{
     if (spark.kind === "shapeParticle") {
       const fade = Math.max(spark.fadeFloor, 1 - spark.life / spark.ttl);
       const fallFade = spark.vy > 0 ? Math.max(0.15, 1 - spark.vy / 220) : 1;
-      const radius = spark.radius;
+      const radius = spark.radius * state.sizeScale;
       const glow = ctx.createRadialGradient(spark.x, spark.y, 0, spark.x, spark.y, radius * 4);
       glow.addColorStop(0, `${spark.color}c8`);
       glow.addColorStop(0.35, `${spark.color}44`);
@@ -903,7 +928,7 @@ button.active{
       const fade = Math.max(spark.fadeFloor, 1 - spark.life / spark.ttl);
       const fallFade = spark.vy > 0 ? Math.max(0.1, 1 - spark.vy / 180) : 1;
       const sides = spark.points || 6;
-      const radius = spark.radius;
+      const radius = spark.radius * state.sizeScale;
       const spin = spark.rotate + spark.life * spark.spin;
       ctx.translate(spark.x, spark.y);
       ctx.rotate(spin);
@@ -1144,8 +1169,17 @@ button.active{
     shapeBtn.textContent = state.shapesMode ? "Shapes: On" : "Shapes: Off";
   });
 
+  sizeSlider.addEventListener("input", () => {
+    state.sizeScale = Number(sizeSlider.value);
+    sizeValue.textContent = `${state.sizeScale.toFixed(2)}×`;
+  });
+
   soundBtn.addEventListener("click", () => {
-    audio.enable();
+    if (!audio.ctx || !audio.unlocked) {
+      audio.setEnabled(true);
+    } else {
+      audio.setEnabled(!audio.enabled);
+    }
   });
 
   window.addEventListener("pointerdown", onPointerStart, { passive: true });
