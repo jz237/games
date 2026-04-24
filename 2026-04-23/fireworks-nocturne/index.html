@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Night Fireworks Show v1.0.9</title>
+<title>Night Fireworks Show v1.1.1</title>
 <style>
 :root{
   --bg-top:#06111f;
@@ -154,7 +154,7 @@ button.active{
 <div class="hud">
   <div class="title-card">
     <h1>Night Fireworks Show</h1>
-    <div class="meta">v1.0.9 • autonomous fireworks at midnight • drag and release to launch a shell • Shapes Mode now builds each burst from particles</div>
+    <div class="meta">v1.1.1 • autonomous fireworks at midnight • drag and release to launch a shell • Shapes Mode now builds each burst from particles</div>
   </div>
   <div class="control-card">
     <button id="autoBtn" class="active" type="button">Auto Show</button>
@@ -531,35 +531,20 @@ button.active{
   }
 
   function addShapeBurst(x, y, shellSize, palette, heavy) {
-    const shapes = ["triangle", "square", "diamond", "pentagon", "hex", "heptagon", "octagon", "star", "ring", "spiral", "mandala"];
+    const shapes = ["triangle", "square", "diamond", "pentagon", "hex", "heptagon", "octagon", "star", "ring"];
     const shape = pick(shapes);
-    const maxDim = Math.min(state.width, state.height);
-    const diameter = maxDim * rand(0.1, 0.8);
-    const radius = diameter * 0.5 * state.sizeScale;
-    const points = shape === "triangle" ? 3 : shape === "square" ? 4 : shape === "diamond" ? 4 : shape === "pentagon" ? 5 : shape === "hex" ? 6 : shape === "heptagon" ? 7 : shape === "octagon" ? 8 : shape === "spiral" ? 8 : shape === "mandala" ? 12 : 5;
-    const particleCount = Math.round(clamp(radius * (shape === "ring" ? 2.2 : 3.2) * Math.pow(state.countScale, 1.55), heavy ? 90 : 55, heavy ? 360 : 220));
+    const radius = rand(34, 84) * shellSize * state.sizeScale;
+    const points = shape === "triangle" ? 3 : shape === "square" ? 4 : shape === "diamond" ? 4 : shape === "pentagon" ? 5 : shape === "hex" ? 6 : shape === "heptagon" ? 7 : shape === "octagon" ? 8 : 5;
+    const particleCount = Math.round(clamp((8 + radius * 0.04) * Math.pow(Math.min(state.countScale, 1.5), 1.05), heavy ? 8 : 6, heavy ? 28 : 18));
     const baseColor = pick(palette);
     for (let i = 0; i < particleCount; i += 1) {
       const t = i / particleCount;
-      const spin = rand(-0.18, 0.18);
-      const angle = t * TAU * (shape === "spiral" ? 2.4 : 1) + spin;
+      const angle = t * TAU + rand(-0.08, 0.08);
       let px = 0;
       let py = 0;
-      let radial = radius;
       if (shape === "ring") {
         px = Math.cos(angle) * radius;
         py = Math.sin(angle) * radius;
-      } else if (shape === "spiral") {
-        const r = radius * (0.14 + t * 0.86);
-        px = Math.cos(angle) * r;
-        py = Math.sin(angle) * r;
-        radial = r;
-      } else if (shape === "mandala") {
-        const petal = Math.sin(t * TAU * 6) * 0.22 + 0.78;
-        const r = radius * petal;
-        px = Math.cos(angle) * r;
-        py = Math.sin(angle) * r;
-        radial = r;
       } else if (shape === "star") {
         const spokes = points * 2;
         const seg = t * spokes;
@@ -567,11 +552,10 @@ button.active{
         const local = seg - idx;
         const a0 = (idx / spokes) * TAU - Math.PI / 2;
         const a1 = ((idx + 1) / spokes) * TAU - Math.PI / 2;
-        const r0 = idx % 2 === 0 ? radius : radius * 0.38;
-        const r1 = (idx + 1) % 2 === 0 ? radius : radius * 0.38;
+        const r0 = idx % 2 === 0 ? radius : radius * 0.42;
+        const r1 = (idx + 1) % 2 === 0 ? radius : radius * 0.42;
         px = lerp(Math.cos(a0) * r0, Math.cos(a1) * r1, local);
         py = lerp(Math.sin(a0) * r0, Math.sin(a1) * r1, local);
-        radial = Math.hypot(px, py);
       } else {
         const seg = t * points;
         const idx = Math.floor(seg);
@@ -582,38 +566,32 @@ button.active{
         const r1 = (idx + 1) % 2 === 0 ? radius : radius * 0.56;
         px = lerp(Math.cos(a0) * r0, Math.cos(a1) * r1, local);
         py = lerp(Math.sin(a0) * r0, Math.sin(a1) * r1, local);
-        radial = Math.hypot(px, py);
       }
       const outward = Math.atan2(py, px);
-      const speed = rand(22, 84) + radius * 0.1;
-      const burstColor = palette[i % palette.length] || baseColor;
-      const curve = rand(-0.45, 0.45) * (shape === "spiral" ? 1.6 : 1);
+      const speed = rand(16, 40) + radius * 0.03;
       addSpark({
         x: x + px,
         y: y + py,
-        vx: Math.cos(outward) * speed + rand(-12, 12),
-        vy: Math.sin(outward) * speed + rand(-22, 10),
-        drag: 0.989,
-        gravity: rand(56, 92),
-        curve,
-        orbit: shape === "spiral" ? rand(0.5, 1.2) : shape === "mandala" ? rand(0.2, 0.55) : 0,
-        radius: rand(0.7, 1.6) * state.thicknessScale,
-        color: burstColor,
-        glow: rand(8, 22) * state.thicknessScale,
-        ttl: (heavy ? rand(1.0, 1.7) : rand(0.8, 1.4)) * state.holdScale,
-        ember: true,
+        vx: Math.cos(outward) * speed + rand(-6, 6),
+        vy: Math.sin(outward) * speed + rand(-10, 8),
+        drag: 0.993,
+        gravity: rand(36, 64),
+        radius: rand(0.55, 1.0) * state.thicknessScale,
+        color: palette[i % palette.length] || baseColor,
+        glow: rand(5, 11) * state.thicknessScale,
+        ttl: rand(0.65, 1.05) * state.holdScale,
+        ember: false,
         crackle: false,
         kind: "shapeParticle",
         shape,
         points,
         rotate: rand(0, TAU),
-        spin: rand(-0.35, 0.35),
-        stroke: rand(1.1, 2.4),
-        fadeFloor: 0.03,
-        twinkleRate: rand(8, 18),
-        trailGlow: rand(2, 6) * state.thicknessScale,
-        anchorRadius: radial,
-        fallCurve: rand(0.85, 1.25)
+        spin: rand(-0.2, 0.2),
+        stroke: rand(0.9, 1.4),
+        fadeFloor: 0.04,
+        twinkleRate: rand(7, 14),
+        anchorRadius: radius,
+        fallCurve: rand(0.82, 1.02)
       });
     }
   }
@@ -786,225 +764,19 @@ button.active{
     spark.vx *= spark.drag;
     spark.vy = spark.vy * spark.drag + spark.gravity * dt;
     if (spark.kind === "shapeParticle") {
-      const wobble = Math.sin(spark.life * spark.twinkleRate + spark.anchorRadius * 0.01) * spark.curve;
-      spark.vx += wobble * dt * 24;
-      spark.vy += Math.cos(spark.life * spark.twinkleRate * 0.8) * spark.orbit * dt * 20;
-      spark.vx += state.wind * dt * 0.25;
-      spark.vy += 32 * spark.fallCurve * dt;
-    }
-    spark.x += spark.vx * dt;
-    spark.y += spark.vy * dt;
-    spark.trail.push({ x: spark.x, y: spark.y, age: 0 });
-    if (spark.trail.length > 18) {
-      spark.trail.shift();
-    }
-    for (const point of spark.trail) {
-      point.age += dt;
-    }
-    if (spark.crackle && Math.random() > 0.84) {
-      state.embers.push({
-        x: spark.x,
-        y: spark.y,
-        vx: rand(-34, 34),
-        vy: rand(-10, 40),
-        radius: rand(0.8, 2.2),
-        life: 0,
-        ttl: rand(0.18, 0.55),
-        color: pick(["#fff5da", "#ffd15c", "#ff8a38"])
-      });
-    }
-    if (spark.ember && Math.random() > 0.78) {
-      addSmoke(spark.x, spark.y, spark.glow * 0.55, 1, "185,190,210", 0.3);
-    }
-    return spark.life < spark.ttl;
-  }
-
-  function updateSmoke(puff, dt) {
-    puff.life += dt;
-    puff.x += (puff.vx + state.wind * 2.6) * dt;
-    puff.y += puff.vy * dt;
-    puff.radius += puff.growth * dt;
-    puff.alpha *= 0.996;
-    return puff.life < puff.ttl && puff.alpha > 0.008;
-  }
-
-  function updateFlash(flash, dt) {
-    flash.life += dt;
-    flash.radius += flash.radius * 0.8 * dt;
-    flash.alpha *= 0.9;
-    return flash.life < flash.ttl && flash.alpha > 0.01;
-  }
-
-  function updateEmber(ember, dt) {
-    ember.life += dt;
-    ember.x += ember.vx * dt;
-    ember.y += ember.vy * dt;
-    ember.vx *= 0.985;
-    ember.vy += 62 * dt;
-    return ember.life < ember.ttl;
-  }
-
-  function scheduleAuto(dt) {
-    if (!state.auto) {
-      return;
-    }
-    state.autoClock -= dt;
-    state.finaleClock -= dt;
-
-    if (state.finaleClock <= 0) {
-      state.finaleClock = rand(6.5, 10.5);
-      const barrage = 1 + ((Math.random() * 2) | 0);
-      for (let i = 0; i < barrage; i += 1) {
-        const delay = i * rand(0.12, 0.24);
-        window.setTimeout(() => {
-          createRocket(rand(0.14, 0.86), null, rand(state.height * 0.12, state.height * 0.42), Math.random() > 0.28);
-        }, delay * 1000);
-      }
-    }
-
-    if (state.autoClock <= 0) {
-      const density = state.width < 700 ? rand(0.64, 1.0) : rand(0.58, 0.92);
-      state.autoClock = density;
-      const chance = Math.random();
-      if (state.rockets.length > 3) {
-        return;
-      }
-      if (chance > 0.94) {
-        createRocket(rand(0.18, 0.82), null, rand(state.height * 0.2, state.height * 0.42), true);
-      } else {
-        createRocket(rand(0.16, 0.84), null, rand(state.height * 0.24, state.height * 0.52), chance > 0.82);
-      }
-    }
-  }
-
-  function drawBackground(time) {
-    ctx.clearRect(0, 0, state.width, state.height);
-
-    const sky = ctx.createLinearGradient(0, 0, 0, state.height);
-    sky.addColorStop(0, "#04101d");
-    sky.addColorStop(0.54, "#09172a");
-    sky.addColorStop(1, "#14070d");
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, state.width, state.height);
-
-    const haze = ctx.createRadialGradient(state.width * 0.5, state.height * 0.9, 0, state.width * 0.5, state.height * 0.9, state.width * 0.7);
-    haze.addColorStop(0, "rgba(255,120,62,0.1)");
-    haze.addColorStop(0.55, "rgba(27,39,62,0.03)");
-    haze.addColorStop(1, "rgba(1,5,14,0)");
-    ctx.fillStyle = haze;
-    ctx.fillRect(0, 0, state.width, state.height);
-
-    for (const star of state.stars) {
-      const twinkle = 0.72 + Math.sin(time * star.twinkle + star.x * 0.01) * 0.28;
-      ctx.fillStyle = `rgba(255,255,255,${star.alpha * twinkle})`;
-      ctx.beginPath();
-      ctx.arc(star.x, star.y, star.size, 0, TAU);
-      ctx.fill();
-    }
-
-    const horizon = state.height * 0.83;
-    ctx.fillStyle = "rgba(8,10,18,0.94)";
-    ctx.beginPath();
-    ctx.moveTo(0, state.height);
-    ctx.lineTo(0, horizon);
-    for (const building of state.skyline) {
-      ctx.lineTo(building.x, horizon);
-      ctx.lineTo(building.x, horizon - building.height);
-      ctx.lineTo(building.x + building.width, horizon - building.height);
-      ctx.lineTo(building.x + building.width, horizon);
-    }
-    ctx.lineTo(state.width, horizon);
-    ctx.lineTo(state.width, state.height);
-    ctx.closePath();
-    ctx.fill();
-
-    for (const building of state.skyline) {
-      for (const light of building.lights) {
-        ctx.fillStyle = `rgba(255,200,120,${light.a})`;
-        ctx.fillRect(building.x + light.x, horizon - building.height + light.y, light.w, light.h);
-      }
-    }
-  }
-
-  function drawSmoke() {
-    ctx.save();
-    ctx.globalCompositeOperation = "source-over";
-    for (const puff of state.smoke) {
-      const fade = 1 - puff.life / puff.ttl;
-      const gradient = ctx.createRadialGradient(puff.x, puff.y, 0, puff.x, puff.y, puff.radius);
-      gradient.addColorStop(0, `rgba(${puff.tint},${puff.alpha * fade})`);
-      gradient.addColorStop(0.4, `rgba(${puff.tint},${puff.alpha * fade * 0.45})`);
-      gradient.addColorStop(1, "rgba(30,35,45,0)");
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(puff.x, puff.y, puff.radius, 0, TAU);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  function drawRocket(rocket) {
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    for (let i = 0; i < rocket.trail.length; i += 1) {
-      const point = rocket.trail[i];
-      const ratio = i / rocket.trail.length;
-      const alpha = ratio * 0.16;
-      const radius = (2 + ratio * 6) * state.sizeScale;
-      const gradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
-      gradient.addColorStop(0, `rgba(255,246,219,${alpha})`);
-      gradient.addColorStop(0.45, `rgba(255,169,89,${alpha * 0.7})`);
-      gradient.addColorStop(1, "rgba(255,80,25,0)");
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, radius, 0, TAU);
-      ctx.fill();
-    }
-    const glow = ctx.createRadialGradient(rocket.x, rocket.y, 0, rocket.x, rocket.y, 24);
-    glow.addColorStop(0, "rgba(255,255,240,0.55)");
-    glow.addColorStop(0.3, "rgba(255,200,110,0.28)");
-    glow.addColorStop(0.72, "rgba(255,110,48,0.05)");
-    glow.addColorStop(1, "rgba(255,110,48,0)");
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(rocket.x, rocket.y, 24, 0, TAU);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawSpark(spark) {
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    if (spark.kind === "shapeParticle") {
       const fade = Math.max(spark.fadeFloor, 1 - spark.life / spark.ttl);
-      const fallFade = spark.vy > 0 ? Math.max(0.15, 1 - spark.vy / 220) : 1;
       const radius = spark.radius * state.sizeScale * state.thicknessScale;
-      const trailAlpha = Math.min(0.8, fade * 0.6);
-      for (let i = 1; i < spark.trail.length; i += 1) {
-        const prev = spark.trail[i - 1];
-        const point = spark.trail[i];
-        const ratio = i / spark.trail.length;
-        const alpha = ratio * trailAlpha;
-        ctx.strokeStyle = hexToRgba(spark.color, alpha);
-        ctx.lineWidth = Math.max(0.35, radius * ratio * 0.45);
-        ctx.beginPath();
-        ctx.moveTo(prev.x, prev.y);
-        ctx.lineTo(point.x, point.y);
-        ctx.stroke();
-      }
-      const twinkle = 0.72 + Math.sin(spark.life * spark.twinkleRate + spark.anchorRadius * 0.05) * 0.28;
-      const glow = ctx.createRadialGradient(spark.x, spark.y, 0, spark.x, spark.y, radius * 4.2);
-      glow.addColorStop(0, `${spark.color}${Math.floor(220 * twinkle).toString(16).padStart(2, '0')}`);
-      glow.addColorStop(0.26, `${spark.color}66`);
-      glow.addColorStop(0.52, `${spark.color}24`);
+      const glow = ctx.createRadialGradient(spark.x, spark.y, 0, spark.x, spark.y, radius * 3.2);
+      glow.addColorStop(0, `${spark.color}d0`);
+      glow.addColorStop(0.35, `${spark.color}44`);
       glow.addColorStop(1, `${spark.color}00`);
       ctx.fillStyle = glow;
-      ctx.globalAlpha = fade * fallFade;
+      ctx.globalAlpha = fade;
       ctx.beginPath();
-      ctx.arc(spark.x, spark.y, radius * 3.0, 0, TAU);
+      ctx.arc(spark.x, spark.y, radius * 2.1, 0, TAU);
       ctx.fill();
       ctx.fillStyle = spark.color;
-      ctx.globalAlpha = fade * fallFade * twinkle;
+      ctx.globalAlpha = fade * 0.85;
       ctx.beginPath();
       ctx.arc(spark.x, spark.y, radius, 0, TAU);
       ctx.fill();
