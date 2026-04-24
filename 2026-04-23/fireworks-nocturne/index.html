@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Night Fireworks Show v1.0.9</title>
+<title>Night Fireworks Show v1.1.0</title>
 <style>
 :root{
   --bg-top:#06111f;
@@ -154,7 +154,7 @@ button.active{
 <div class="hud">
   <div class="title-card">
     <h1>Night Fireworks Show</h1>
-    <div class="meta">v1.0.9 • autonomous fireworks at midnight • drag and release to launch a shell • Shapes Mode now builds each burst from particles</div>
+    <div class="meta">v1.1.0 • autonomous fireworks at midnight • drag and release to launch a shell • Shapes Mode now builds each burst from particles</div>
   </div>
   <div class="control-card">
     <button id="autoBtn" class="active" type="button">Auto Show</button>
@@ -528,6 +528,7 @@ button.active{
       strobe: config.strobe || 0,
       fadeFloor: config.fadeFloor || 0.08
     });
+    if (state.sparks.length > 280) state.sparks.splice(0, state.sparks.length - 280);
   }
 
   function addShapeBurst(x, y, shellSize, palette, heavy) {
@@ -537,7 +538,7 @@ button.active{
     const diameter = maxDim * rand(0.1, 0.8);
     const radius = diameter * 0.5 * state.sizeScale;
     const points = shape === "triangle" ? 3 : shape === "square" ? 4 : shape === "diamond" ? 4 : shape === "pentagon" ? 5 : shape === "hex" ? 6 : shape === "heptagon" ? 7 : shape === "octagon" ? 8 : shape === "spiral" ? 8 : shape === "mandala" ? 12 : 5;
-    const particleCount = Math.round(clamp(radius * (shape === "ring" ? 2.2 : 3.2) * Math.pow(state.countScale, 1.55), heavy ? 90 : 55, heavy ? 360 : 220));
+    const particleCount = Math.round(clamp((20 + radius * 0.12) * Math.pow(state.countScale, 1.25), heavy ? 20 : 12, heavy ? 110 : 72));
     const baseColor = pick(palette);
     for (let i = 0; i < particleCount; i += 1) {
       const t = i / particleCount;
@@ -600,7 +601,7 @@ button.active{
         radius: rand(0.7, 1.6) * state.thicknessScale,
         color: burstColor,
         glow: rand(8, 22) * state.thicknessScale,
-        ttl: (heavy ? rand(1.0, 1.7) : rand(0.8, 1.4)) * state.holdScale,
+        ttl: (heavy ? rand(0.9, 1.4) : rand(0.7, 1.15)) * state.holdScale,
         ember: true,
         crackle: false,
         kind: "shapeParticle",
@@ -611,9 +612,9 @@ button.active{
         stroke: rand(1.1, 2.4),
         fadeFloor: 0.03,
         twinkleRate: rand(8, 18),
-        trailGlow: rand(2, 6) * state.thicknessScale,
+        trailGlow: rand(1.4, 4.2) * state.thicknessScale,
         anchorRadius: radial,
-        fallCurve: rand(0.85, 1.25)
+        fallCurve: rand(0.9, 1.25)
       });
     }
   }
@@ -795,7 +796,7 @@ button.active{
     spark.x += spark.vx * dt;
     spark.y += spark.vy * dt;
     spark.trail.push({ x: spark.x, y: spark.y, age: 0 });
-    if (spark.trail.length > 18) {
+    if (spark.trail.length > (spark.kind === "shapeParticle" ? 8 : 12)) {
       spark.trail.shift();
     }
     for (const point of spark.trail) {
@@ -813,8 +814,8 @@ button.active{
         color: pick(["#fff5da", "#ffd15c", "#ff8a38"])
       });
     }
-    if (spark.ember && Math.random() > 0.78) {
-      addSmoke(spark.x, spark.y, spark.glow * 0.55, 1, "185,190,210", 0.3);
+    if (spark.ember && Math.random() > 0.9) {
+      addSmoke(spark.x, spark.y, spark.glow * 0.35, 1, "185,190,210", 0.24);
     }
     return spark.life < spark.ttl;
   }
