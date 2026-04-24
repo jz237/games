@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Night Fireworks Show v1.0.0</title>
+<style>
+:root{
+  --bg-top:#06111f;
+  --bg-mid:#081a2d;
+  --bg-bottom:#10070f;
+  --panel:rgba(8, 18, 32, 0.56);
+  --panel-border:rgba(197, 225, 255, 0.24);
+  --text:#f7f3ea;
+  --muted:#c4d0df;
+  --accent:#ffd48d;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#02060d;color:var(--text)}
+body{
+  font-family:Georgia,"Times New Roman",serif;
+  touch-action:none;
+  background:
+    radial-gradient(circle at 50% 110%, rgba(255,137,66,0.12), transparent 36%),
+    radial-gradient(circle at 20% 15%, rgba(96,125,255,0.1), transparent 28%),
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 55%, var(--bg-bottom) 100%);
+}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.hud{
+  position:fixed;
+  left:12px;
+  right:12px;
+  top:calc(12px + env(safe-area-inset-top, 0px));
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  pointer-events:none;
+}
+.title-card,.control-card{
+  background:var(--panel);
+  border:1px solid var(--panel-border);
+  border-radius:18px;
+  backdrop-filter:blur(14px);
+  box-shadow:0 20px 60px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.title-card{
+  padding:14px 16px 12px;
+  max-width:min(78vw, 480px);
+}
+.eyebrow{
+  display:block;
+  font:600 12px/1.2 "Trebuchet MS",Verdana,sans-serif;
+  text-transform:uppercase;
+  letter-spacing:0.18em;
+  color:var(--accent);
+  margin-bottom:8px;
+}
+h1{
+  margin:0;
+  font-size:clamp(24px, 4.6vw, 44px);
+  line-height:0.95;
+  font-weight:700;
+  letter-spacing:0.02em;
+}
+.meta{
+  margin-top:8px;
+  color:var(--muted);
+  font:500 13px/1.4 "Trebuchet MS",Verdana,sans-serif;
+}
+.control-card{
+  padding:10px;
+  display:flex;
+  gap:8px;
+  pointer-events:auto;
+  align-items:center;
+}
+button{
+  appearance:none;
+  border:1px solid rgba(255,239,207,0.2);
+  background:linear-gradient(180deg, rgba(255,228,170,0.2), rgba(255,134,74,0.12));
+  color:var(--text);
+  border-radius:999px;
+  min-height:42px;
+  padding:0 14px;
+  font:600 13px/1 "Trebuchet MS",Verdana,sans-serif;
+  letter-spacing:0.04em;
+}
+button.active{
+  background:linear-gradient(180deg, rgba(255,217,135,0.38), rgba(255,108,47,0.18));
+  box-shadow:0 0 22px rgba(255,185,97,0.22);
+}
+.footer-note{
+  position:fixed;
+  left:12px;
+  right:12px;
+  bottom:calc(12px + env(safe-area-inset-bottom, 0px));
+  display:flex;
+  justify-content:center;
+  pointer-events:none;
+}
+.footer-note span{
+  background:rgba(6, 14, 24, 0.5);
+  border:1px solid rgba(197, 225, 255, 0.18);
+  border-radius:999px;
+  color:#dfe7f2;
+  padding:8px 14px;
+  font:500 12px/1.2 "Trebuchet MS",Verdana,sans-serif;
+  text-align:center;
+  backdrop-filter:blur(12px);
+}
+@media (max-width: 720px){
+  .hud{flex-direction:column;align-items:stretch}
+  .title-card{max-width:none}
+  .control-card{justify-content:space-between}
+  button{flex:1;padding:0 10px;font-size:12px}
+}
+</style>
+</head>
+<body>
+<canvas id="fx"></canvas>
+<div class="hud">
+  <div class="title-card">
+    <span class="eyebrow">Playable Demo</span>
+    <h1>Night Fireworks Show</h1>
+    <div class="meta">v1.0.0 • autonomous fireworks at midnight • tap anywhere to add shells, drag to steer a launch</div>
+  </div>
+  <div class="control-card">
+    <button id="autoBtn" class="active" type="button">Auto Show</button>
+    <button id="soundBtn" type="button">Enable Sound</button>
+  </div>
+</div>
+<div class="footer-note">
+  <span>Continuous show mode is always running. Mobile audio starts when the browser allows it.</span>
+</div>
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("fx");
+  const ctx = canvas.getContext("2d");
+  const autoBtn = document.getElementById("autoBtn");
+  const soundBtn = document.getElementById("soundBtn");
+
+  const TAU = Math.PI * 2;
+  const state = {
+    width: 0,
+    height: 0,
+    dpr: 1,
+    now: 0,
+    last: 0,
+    rockets: [],
+    sparks: [],
+    smoke: [],
+    flashes: [],
+    embers: [],
+    stars: [],
+    skyline: [],
+    auto: true,
+    pointerDown: false,
+    pointerStart: null,
+    pointerCurrent: null,
+    autoClock: 0,
+    finaleClock: 0,
+    wind: 3,
+    launchX: 0.5
+  };
+
+  const burstPalettes = [
+    ["#fff4c7", "#ffd766", "#ff9e42", "#ff5a36"],
+    ["#fefefe", "#ff8ac8", "#ff5f7a", "#d42b58"],
+    ["#f4ffda", "#b8ff7a", "#5bd368", "#1f9759"],
+    ["#ffffff", "#8fd9ff", "#59a8ff", "#4775ff"],
+    ["#ffffff", "#d7b0ff", "#af76ff", "#833dff"]
+  ];
+
+  const rand = (min, max) => Math.random() * (max - min) + min;
+  const pick = (array) => array[(Math.random() * array.length) | 0];
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const hexToRgba = (hex, alpha) => {
+    const clean = hex.replace("#", "");
+    const full = clean.length === 3 ? clean.split("").map((part) => part + part).join("") : clean;
+    const int = parseInt(full, 16);
+    const r = (int >> 16) & 255;
+    const g = (int >> 8) & 255;
+    const b = int & 255;
+    return `rgba(${r},${g},${b},${alpha})`;
+  };
+
+  function resize() {
+    state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    state.width = window.innerWidth;
+    state.height = window.innerHeight;
+    canvas.width = Math.floor(state.width * state.dpr);
+    canvas.height = Math.floor(state.height * state.dpr);
+    canvas.style.width = `${state.width}px`;
+    canvas.style.height = `${state.height}px`;
+    ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+    buildBackdrop();
+  }
+
+  function buildBackdrop() {
+    state.stars = [];
+    state.skyline = [];
+    const horizon = state.height * 0.83;
+
+    for (let i = 0; i < 110; i += 1) {
+      state.stars.push({
+        x: Math.random() * state.width,
+        y: Math.random() * horizon * 0.72,
+        size: rand(0.5, 2),
+        alpha: rand(0.25, 0.95),
+        twinkle: rand(0.4, 1.2)
+      });
+    }
+
+    let x = 0;
+    while (x < state.width + 50) {
+      const width = rand(32, 88);
+      const height = rand(state.height * 0.08, state.height * 0.22);
+      const lights = [];
+      const rows = Math.max(2, Math.floor(height / 18));
+      for (let row = 0; row < rows; row += 1) {
+        if (Math.random() > 0.34) {
+          lights.push({
+            x: 6 + (Math.random() * Math.max(6, width - 14)),
+            y: 10 + row * 16,
+            w: rand(2, 4),
+            h: rand(3, 6),
+            a: rand(0.08, 0.24)
+          });
+        }
+      }
+      state.skyline.push({ x, width, height, lights });
+      x += width - rand(6, 18);
+    }
+  }
+
+  const audio = {
+    ctx: null,
+    master: null,
+    enabled: false,
+    unlocked: false,
+    noiseCache: new Map(),
+    init() {
+      if (this.ctx) {
+        return this.ctx;
+      }
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextCtor) {
+        return null;
+      }
+      this.ctx = new AudioContextCtor();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.32;
+      const compressor = this.ctx.createDynamicsCompressor();
+      compressor.threshold.value = -18;
+      compressor.knee.value = 10;
+      compressor.ratio.value = 6;
+      compressor.attack.value = 0.005;
+      compressor.release.value = 0.18;
+      this.master.connect(compressor);
+      compressor.connect(this.ctx.destination);
+      return this.ctx;
+    },
+    async enable() {
+      const ctxRef = this.init();
+      if (!ctxRef) {
+        return false;
+      }
+      if (ctxRef.state !== "running") {
+        try {
+          await ctxRef.resume();
+        } catch (error) {
+          return false;
+        }
+      }
+      this.enabled = true;
+      this.unlocked = ctxRef.state === "running";
+      soundBtn.textContent = this.unlocked ? "Sound On" : "Tap For Sound";
+      soundBtn.classList.toggle("active", this.unlocked);
+      return this.unlocked;
+    },
+    noiseBuffer(seconds = 2) {
+      const key = seconds.toFixed(2);
+      if (this.noiseCache.has(key)) {
+        return this.noiseCache.get(key);
+      }
+      const length = Math.max(1, Math.floor(this.ctx.sampleRate * seconds));
+      const buffer = this.ctx.createBuffer(1, length, this.ctx.sampleRate);
+      const channel = buffer.getChannelData(0);
+      for (let i = 0; i < length; i += 1) {
+        channel[i] = (Math.random() * 2 - 1) * (1 - i / length);
+      }
+      this.noiseCache.set(key, buffer);
+      return buffer;
+    },
+    launch(depth = 1) {
+      if (!this.unlocked) {
+        return;
+      }
+      const now = this.ctx.currentTime;
+      const body = this.ctx.createOscillator();
+      const bodyGain = this.ctx.createGain();
+      body.type = "sawtooth";
+      body.frequency.setValueAtTime(130, now);
+      body.frequency.exponentialRampToValueAtTime(58, now + 0.58);
+      bodyGain.gain.setValueAtTime(0.0001, now);
+      bodyGain.gain.exponentialRampToValueAtTime(0.07 * depth, now + 0.02);
+      bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
+      body.connect(bodyGain);
+      bodyGain.connect(this.master);
+      body.start(now);
+      body.stop(now + 0.65);
+
+      const hiss = this.ctx.createBufferSource();
+      hiss.buffer = this.noiseBuffer(0.9);
+      const hp = this.ctx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 900;
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 3600;
+      const hissGain = this.ctx.createGain();
+      hissGain.gain.setValueAtTime(0.0001, now);
+      hissGain.gain.exponentialRampToValueAtTime(0.06 * depth, now + 0.03);
+      hissGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.54);
+      hiss.connect(hp);
+      hp.connect(lp);
+      lp.connect(hissGain);
+      hissGain.connect(this.master);
+      hiss.start(now);
+    },
+    burst(size = 1, colorBias = 1500) {
+      if (!this.unlocked) {
+        return;
+      }
+      const now = this.ctx.currentTime;
+      const thump = this.ctx.createOscillator();
+      const thumpGain = this.ctx.createGain();
+      thump.type = "triangle";
+      thump.frequency.setValueAtTime(96, now);
+      thump.frequency.exponentialRampToValueAtTime(34, now + 0.28);
+      thumpGain.gain.setValueAtTime(0.0001, now);
+      thumpGain.gain.exponentialRampToValueAtTime(0.22 * size, now + 0.008);
+      thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.33);
+      thump.connect(thumpGain);
+      thumpGain.connect(this.master);
+      thump.start(now);
+      thump.stop(now + 0.36);
+
+      const snap = this.ctx.createBufferSource();
+      snap.buffer = this.noiseBuffer(1.2);
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(colorBias, now);
+      bp.Q.value = 1.2;
+      const snapGain = this.ctx.createGain();
+      snapGain.gain.setValueAtTime(0.0001, now);
+      snapGain.gain.exponentialRampToValueAtTime(0.26 * size, now + 0.006);
+      snapGain.gain.exponentialRampToValueAtTime(0.03 * size, now + 0.11);
+      snapGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
+      snap.connect(bp);
+      bp.connect(snapGain);
+      snapGain.connect(this.master);
+      snap.start(now);
+
+      const shimmer = this.ctx.createOscillator();
+      const shimmerGain = this.ctx.createGain();
+      shimmer.type = "sine";
+      shimmer.frequency.setValueAtTime(colorBias * 0.7, now + 0.01);
+      shimmer.frequency.exponentialRampToValueAtTime(colorBias * 0.28, now + 0.6);
+      shimmerGain.gain.setValueAtTime(0.0001, now);
+      shimmerGain.gain.exponentialRampToValueAtTime(0.04 * size, now + 0.04);
+      shimmerGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+      shimmer.connect(shimmerGain);
+      shimmerGain.connect(this.master);
+      shimmer.start(now + 0.01);
+      shimmer.stop(now + 0.58);
+    },
+    crackle(size = 1) {
+      if (!this.unlocked) {
+        return;
+      }
+      const now = this.ctx.currentTime;
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = this.noiseBuffer(1.1);
+      const hp = this.ctx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 1800;
+      const crackleGain = this.ctx.createGain();
+      crackleGain.gain.setValueAtTime(0.0001, now);
+      for (let i = 0; i < 8; i += 1) {
+        const t = now + i * 0.045;
+        crackleGain.gain.linearRampToValueAtTime(rand(0.015, 0.08) * size, t + 0.01);
+        crackleGain.gain.linearRampToValueAtTime(0.0001, t + 0.04);
+      }
+      noise.connect(hp);
+      hp.connect(crackleGain);
+      crackleGain.connect(this.master);
+      noise.start(now);
+    }
+  };
+
+  function addFlash(x, y, radius, color, alpha) {
+    state.flashes.push({
+      x,
+      y,
+      radius,
+      color,
+      alpha,
+      life: 0,
+      ttl: rand(0.18, 0.42)
+    });
+  }
+
+  function addSmoke(x, y, radius, count, tint = "255,255,255", rise = 0.4) {
+    for (let i = 0; i < count; i += 1) {
+      state.smoke.push({
+        x: x + rand(-radius * 0.18, radius * 0.18),
+        y: y + rand(-radius * 0.12, radius * 0.12),
+        vx: rand(-16, 16),
+        vy: rand(-18, -6) * rise,
+        radius: rand(radius * 0.06, radius * 0.2),
+        growth: rand(12, 36),
+        alpha: rand(0.07, 0.2),
+        ttl: rand(1.8, 4.6),
+        life: 0,
+        tint
+      });
+    }
+  }
+
+  function addSpark(config) {
+    state.sparks.push({
+      x: config.x,
+      y: config.y,
+      vx: config.vx,
+      vy: config.vy,
+      drag: config.drag,
+      gravity: config.gravity,
+      radius: config.radius,
+      color: config.color,
+      glow: config.glow,
+      ttl: config.ttl,
+      life: 0,
+      trail: [],
+      ember: config.ember || false,
+      crackle: config.crackle || false,
+      strobe: config.strobe || 0,
+      fadeFloor: config.fadeFloor || 0.08
+    });
+  }
+
+  function createRocket(xRatio, targetX = null, targetY = null, heavy = false) {
+    const x = clamp((targetX ?? (state.width * xRatio)), 30, state.width - 30);
+    const y = state.height + rand(8, 36);
+    const arcTarget = targetX ?? lerp(state.width * 0.18, state.width * 0.82, xRatio);
+    const apexY = targetY ?? rand(state.height * 0.14, state.height * 0.48);
+    const dx = arcTarget - x;
+    const travel = Math.max(0.7, (y - apexY) / rand(330, 440));
+    const vx = dx / travel;
+    const vy = -rand(300, heavy ? 470 : 410);
+    const palette = pick(burstPalettes);
+    const styleRoll = Math.random();
+    let shell = "peony";
+    if (styleRoll > 0.78) {
+      shell = "willow";
+    } else if (styleRoll > 0.58) {
+      shell = "crackle";
+    } else if (styleRoll > 0.36) {
+      shell = "ring";
+    } else if (styleRoll > 0.18) {
+      shell = "palm";
+    }
+
+    state.rockets.push({
+      x,
+      y,
+      vx,
+      vy,
+      life: 0,
+      targetY: apexY,
+      fuse: rand(0.85, 1.35),
+      shell,
+      palette,
+      size: heavy ? rand(1.1, 1.55) : rand(0.8, 1.25),
+      heavy,
+      trail: [],
+      whistle: rand(0.85, 1.2)
+    });
+    audio.launch(heavy ? 1.12 : 0.85);
+  }
+
+  function explodeRocket(rocket) {
+    const x = rocket.x;
+    const y = rocket.y;
+    const palette = rocket.palette;
+    const coreColor = palette[0];
+    const shellSize = rocket.size;
+    const style = rocket.shell;
+    const countBase = rocket.heavy ? rand(110, 180) : rand(70, 130);
+    let layers = 2;
+
+    addFlash(x, y, rand(70, 140) * shellSize, coreColor, rocket.heavy ? 0.34 : 0.26);
+    addSmoke(x, y, 90 * shellSize, rocket.heavy ? 28 : 16, "232,236,244", 1);
+    addSmoke(x, y, 46 * shellSize, rocket.heavy ? 12 : 8, "255,175,130", 0.6);
+    audio.burst(shellSize, rand(900, 2600));
+
+    if (style === "crackle") {
+      audio.crackle(shellSize);
+      layers = 3;
+    }
+    if (rocket.heavy && Math.random() > 0.45) {
+      layers += 1;
+    }
+
+    for (let layer = 0; layer < layers; layer += 1) {
+      const layerRadius = (1 + layer * 0.28) * shellSize;
+      const count = Math.floor(countBase * (1 - layer * 0.18));
+      const speed = rand(62, 130) * layerRadius;
+      for (let i = 0; i < count; i += 1) {
+        const angle = rand(0, TAU);
+        let spread = 1;
+        if (style === "ring") {
+          spread = rand(0.75, 0.95);
+        } else if (style === "palm") {
+          spread = Math.pow(Math.random(), 1.9);
+        } else if (style === "willow") {
+          spread = Math.pow(Math.random(), 1.2);
+        } else {
+          spread = Math.pow(Math.random(), 0.72);
+        }
+        const shellSpeed = speed * spread;
+        const vx = Math.cos(angle) * shellSpeed + rand(-8, 8);
+        let vy = Math.sin(angle) * shellSpeed + rand(-8, 8);
+        if (style === "ring") {
+          vy *= 0.55;
+        }
+        if (style === "palm") {
+          vy = Math.sin(angle) * shellSpeed * 0.3 - shellSpeed * 0.42;
+        }
+        const color = palette[(Math.random() * palette.length) | 0];
+        addSpark({
+          x,
+          y,
+          vx,
+          vy,
+          drag: style === "willow" ? 0.988 : 0.982,
+          gravity: style === "willow" ? 88 : style === "palm" ? 110 : 98,
+          radius: rand(1.2, 2.8) * shellSize,
+          color,
+          glow: rand(14, 30) * shellSize,
+          ttl: style === "willow" ? rand(1.8, 2.8) : rand(1.2, 2.1),
+          ember: Math.random() > 0.35,
+          crackle: style === "crackle" && Math.random() > 0.72,
+          strobe: color === "#ffffff" ? rand(0, 15) : 0,
+          fadeFloor: rand(0.03, 0.12)
+        });
+      }
+    }
+
+    const embers = rocket.heavy ? 36 : 18;
+    for (let i = 0; i < embers; i += 1) {
+      state.embers.push({
+        x: x + rand(-16, 16),
+        y: y + rand(-16, 16),
+        vx: rand(-28, 28),
+        vy: rand(6, 64),
+        radius: rand(1.2, 3.8) * shellSize,
+        life: 0,
+        ttl: rand(0.7, 1.9),
+        color: pick(["#ffdf9b", "#ff9f50", "#ff7347", "#fff8db"])
+      });
+    }
+
+    if (rocket.heavy && Math.random() > 0.5) {
+      const secondary = 3 + ((Math.random() * 4) | 0);
+      for (let i = 0; i < secondary; i += 1) {
+        const a = (i / secondary) * TAU + rand(-0.12, 0.12);
+        createRocket(
+          x / state.width,
+          x + Math.cos(a) * rand(60, 150),
+          y + Math.sin(a) * rand(25, 95),
+          false
+        );
+      }
+    }
+  }
+
+  function updateRocket(rocket, dt) {
+    rocket.life += dt;
+    rocket.vx += state.wind * dt * 0.5;
+    rocket.x += rocket.vx * dt;
+    rocket.y += rocket.vy * dt;
+    rocket.vy += 120 * dt;
+    rocket.trail.push({ x: rocket.x, y: rocket.y, age: 0 });
+    if (rocket.trail.length > 18) {
+      rocket.trail.shift();
+    }
+    for (const point of rocket.trail) {
+      point.age += dt;
+    }
+    const shouldBurst = rocket.vy >= -22 || rocket.y <= rocket.targetY || rocket.life >= rocket.fuse + (rocket.heavy ? 0.12 : 0);
+    if (shouldBurst) {
+      explodeRocket(rocket);
+      return false;
+    }
+    return rocket.x > -120 && rocket.x < state.width + 120 && rocket.y < state.height + 80;
+  }
+
+  function updateSpark(spark, dt) {
+    spark.life += dt;
+    spark.vx *= spark.drag;
+    spark.vy = spark.vy * spark.drag + spark.gravity * dt;
+    spark.x += spark.vx * dt;
+    spark.y += spark.vy * dt;
+    spark.trail.push({ x: spark.x, y: spark.y, age: 0 });
+    if (spark.trail.length > 14) {
+      spark.trail.shift();
+    }
+    for (const point of spark.trail) {
+      point.age += dt;
+    }
+    if (spark.crackle && Math.random() > 0.84) {
+      state.embers.push({
+        x: spark.x,
+        y: spark.y,
+        vx: rand(-34, 34),
+        vy: rand(-10, 40),
+        radius: rand(0.8, 2.2),
+        life: 0,
+        ttl: rand(0.18, 0.55),
+        color: pick(["#fff5da", "#ffd15c", "#ff8a38"])
+      });
+    }
+    if (spark.ember && Math.random() > 0.93) {
+      addSmoke(spark.x, spark.y, spark.glow * 0.6, 1, "185,190,210", 0.35);
+    }
+    return spark.life < spark.ttl;
+  }
+
+  function updateSmoke(puff, dt) {
+    puff.life += dt;
+    puff.x += (puff.vx + state.wind * 2.6) * dt;
+    puff.y += puff.vy * dt;
+    puff.radius += puff.growth * dt;
+    puff.alpha *= 0.996;
+    return puff.life < puff.ttl && puff.alpha > 0.008;
+  }
+
+  function updateFlash(flash, dt) {
+    flash.life += dt;
+    flash.radius += flash.radius * 0.8 * dt;
+    flash.alpha *= 0.9;
+    return flash.life < flash.ttl && flash.alpha > 0.01;
+  }
+
+  function updateEmber(ember, dt) {
+    ember.life += dt;
+    ember.x += ember.vx * dt;
+    ember.y += ember.vy * dt;
+    ember.vx *= 0.985;
+    ember.vy += 62 * dt;
+    return ember.life < ember.ttl;
+  }
+
+  function scheduleAuto(dt) {
+    if (!state.auto) {
+      return;
+    }
+    state.autoClock -= dt;
+    state.finaleClock -= dt;
+
+    if (state.finaleClock <= 0) {
+      state.finaleClock = rand(6.5, 10.5);
+      const barrage = 5 + ((Math.random() * 5) | 0);
+      for (let i = 0; i < barrage; i += 1) {
+        const delay = i * rand(0.05, 0.12);
+        window.setTimeout(() => {
+          createRocket(rand(0.14, 0.86), null, rand(state.height * 0.12, state.height * 0.42), Math.random() > 0.28);
+        }, delay * 1000);
+      }
+    }
+
+    if (state.autoClock <= 0) {
+      const density = state.width < 700 ? rand(0.24, 0.46) : rand(0.18, 0.38);
+      state.autoClock = density;
+      const chance = Math.random();
+      if (chance > 0.82) {
+        createRocket(rand(0.08, 0.92), null, rand(state.height * 0.16, state.height * 0.44), true);
+        createRocket(rand(0.1, 0.9), null, rand(state.height * 0.14, state.height * 0.38), false);
+      } else {
+        createRocket(rand(0.08, 0.92), null, rand(state.height * 0.18, state.height * 0.48), chance > 0.58);
+      }
+    }
+  }
+
+  function drawBackground(time) {
+    ctx.clearRect(0, 0, state.width, state.height);
+
+    const sky = ctx.createLinearGradient(0, 0, 0, state.height);
+    sky.addColorStop(0, "#04101d");
+    sky.addColorStop(0.54, "#09172a");
+    sky.addColorStop(1, "#14070d");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, state.width, state.height);
+
+    const haze = ctx.createRadialGradient(state.width * 0.5, state.height * 0.9, 0, state.width * 0.5, state.height * 0.9, state.width * 0.7);
+    haze.addColorStop(0, "rgba(255,120,62,0.1)");
+    haze.addColorStop(0.55, "rgba(27,39,62,0.03)");
+    haze.addColorStop(1, "rgba(1,5,14,0)");
+    ctx.fillStyle = haze;
+    ctx.fillRect(0, 0, state.width, state.height);
+
+    for (const star of state.stars) {
+      const twinkle = 0.72 + Math.sin(time * star.twinkle + star.x * 0.01) * 0.28;
+      ctx.fillStyle = `rgba(255,255,255,${star.alpha * twinkle})`;
+      ctx.beginPath();
+      ctx.arc(star.x, star.y, star.size, 0, TAU);
+      ctx.fill();
+    }
+
+    const horizon = state.height * 0.83;
+    ctx.fillStyle = "rgba(8,10,18,0.94)";
+    ctx.beginPath();
+    ctx.moveTo(0, state.height);
+    ctx.lineTo(0, horizon);
+    for (const building of state.skyline) {
+      ctx.lineTo(building.x, horizon);
+      ctx.lineTo(building.x, horizon - building.height);
+      ctx.lineTo(building.x + building.width, horizon - building.height);
+      ctx.lineTo(building.x + building.width, horizon);
+    }
+    ctx.lineTo(state.width, horizon);
+    ctx.lineTo(state.width, state.height);
+    ctx.closePath();
+    ctx.fill();
+
+    for (const building of state.skyline) {
+      for (const light of building.lights) {
+        ctx.fillStyle = `rgba(255,200,120,${light.a})`;
+        ctx.fillRect(building.x + light.x, horizon - building.height + light.y, light.w, light.h);
+      }
+    }
+  }
+
+  function drawSmoke() {
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    for (const puff of state.smoke) {
+      const fade = 1 - puff.life / puff.ttl;
+      const gradient = ctx.createRadialGradient(puff.x, puff.y, 0, puff.x, puff.y, puff.radius);
+      gradient.addColorStop(0, `rgba(${puff.tint},${puff.alpha * fade})`);
+      gradient.addColorStop(0.4, `rgba(${puff.tint},${puff.alpha * fade * 0.45})`);
+      gradient.addColorStop(1, "rgba(30,35,45,0)");
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(puff.x, puff.y, puff.radius, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawRocket(rocket) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < rocket.trail.length; i += 1) {
+      const point = rocket.trail[i];
+      const ratio = i / rocket.trail.length;
+      const alpha = ratio * 0.28;
+      const radius = 4 + ratio * 12;
+      const gradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
+      gradient.addColorStop(0, `rgba(255,246,219,${alpha})`);
+      gradient.addColorStop(0.45, `rgba(255,169,89,${alpha * 0.7})`);
+      gradient.addColorStop(1, "rgba(255,80,25,0)");
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius, 0, TAU);
+      ctx.fill();
+    }
+    const glow = ctx.createRadialGradient(rocket.x, rocket.y, 0, rocket.x, rocket.y, 24);
+    glow.addColorStop(0, "rgba(255,255,240,0.95)");
+    glow.addColorStop(0.28, "rgba(255,200,110,0.85)");
+    glow.addColorStop(0.7, "rgba(255,110,48,0.12)");
+    glow.addColorStop(1, "rgba(255,110,48,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(rocket.x, rocket.y, 24, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawSpark(spark) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 1; i < spark.trail.length; i += 1) {
+      const prev = spark.trail[i - 1];
+      const point = spark.trail[i];
+      const ratio = i / spark.trail.length;
+      const alpha = ratio * 0.28;
+      ctx.strokeStyle = hexToRgba(spark.color, alpha);
+      ctx.lineWidth = Math.max(0.5, spark.radius * ratio * 1.2);
+      ctx.beginPath();
+      ctx.moveTo(prev.x, prev.y);
+      ctx.lineTo(point.x, point.y);
+      ctx.stroke();
+    }
+    const pulseVisible = !spark.strobe || ((spark.life * 1000 + spark.x) % spark.strobe > spark.strobe * 0.4);
+    if (pulseVisible) {
+      const fade = Math.max(spark.fadeFloor, 1 - spark.life / spark.ttl);
+      const gradient = ctx.createRadialGradient(spark.x, spark.y, 0, spark.x, spark.y, spark.glow);
+      gradient.addColorStop(0, `${spark.color}f0`);
+      gradient.addColorStop(0.18, `${spark.color}c4`);
+      gradient.addColorStop(0.45, `${spark.color}40`);
+      gradient.addColorStop(1, `${spark.color}00`);
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(spark.x, spark.y, spark.glow, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = spark.color;
+      ctx.globalAlpha = fade;
+      ctx.beginPath();
+      ctx.arc(spark.x, spark.y, spark.radius, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawFlash(flash) {
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    const gradient = ctx.createRadialGradient(flash.x, flash.y, 0, flash.x, flash.y, flash.radius);
+    gradient.addColorStop(0, `${flash.color}cc`);
+    gradient.addColorStop(0.18, `${flash.color}66`);
+    gradient.addColorStop(1, `${flash.color}00`);
+    ctx.fillStyle = gradient;
+    ctx.globalAlpha = flash.alpha;
+    ctx.beginPath();
+    ctx.arc(flash.x, flash.y, flash.radius, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawEmber(ember) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const fade = 1 - ember.life / ember.ttl;
+    const gradient = ctx.createRadialGradient(ember.x, ember.y, 0, ember.x, ember.y, ember.radius * 6);
+    gradient.addColorStop(0, `${ember.color}cc`);
+    gradient.addColorStop(0.35, `${ember.color}44`);
+    gradient.addColorStop(1, `${ember.color}00`);
+    ctx.fillStyle = gradient;
+    ctx.globalAlpha = fade;
+    ctx.beginPath();
+    ctx.arc(ember.x, ember.y, ember.radius * 6, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = ember.color;
+    ctx.beginPath();
+    ctx.arc(ember.x, ember.y, ember.radius, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawPointerGuide() {
+    if (!state.pointerDown || !state.pointerStart || !state.pointerCurrent) {
+      return;
+    }
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,223,176,0.55)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 8]);
+    ctx.beginPath();
+    ctx.moveTo(state.pointerStart.x, state.pointerStart.y);
+    ctx.lineTo(state.pointerCurrent.x, state.pointerCurrent.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(255,243,214,0.22)";
+    ctx.beginPath();
+    ctx.arc(state.pointerStart.x, state.pointerStart.y, 18, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function tick(timestamp) {
+    if (!state.last) {
+      state.last = timestamp;
+    }
+    const dt = Math.min(0.033, (timestamp - state.last) / 1000);
+    state.last = timestamp;
+    state.now += dt;
+    state.wind = Math.sin(state.now * 0.16) * 5 + Math.sin(state.now * 0.71) * 2;
+
+    scheduleAuto(dt);
+
+    state.rockets = state.rockets.filter((rocket) => updateRocket(rocket, dt));
+    state.sparks = state.sparks.filter((spark) => updateSpark(spark, dt));
+    state.smoke = state.smoke.filter((puff) => updateSmoke(puff, dt));
+    state.flashes = state.flashes.filter((flash) => updateFlash(flash, dt));
+    state.embers = state.embers.filter((ember) => updateEmber(ember, dt));
+
+    drawBackground(state.now);
+    drawSmoke();
+    for (const flash of state.flashes) {
+      drawFlash(flash);
+    }
+    for (const rocket of state.rockets) {
+      drawRocket(rocket);
+    }
+    for (const spark of state.sparks) {
+      drawSpark(spark);
+    }
+    for (const ember of state.embers) {
+      drawEmber(ember);
+    }
+    drawPointerGuide();
+
+    requestAnimationFrame(tick);
+  }
+
+  function pointerPoint(event) {
+    if (event.touches && event.touches[0]) {
+      return { x: event.touches[0].clientX, y: event.touches[0].clientY };
+    }
+    if (event.changedTouches && event.changedTouches[0]) {
+      return { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY };
+    }
+    return { x: event.clientX, y: event.clientY };
+  }
+
+  function launchFromGesture(start, end) {
+    const dx = clamp(end.x - start.x, -220, 220);
+    const dy = clamp(end.y - start.y, -420, 40);
+    const targetX = clamp(start.x + dx * 1.1, 40, state.width - 40);
+    const targetY = clamp(start.y + dy * 1.08, state.height * 0.1, state.height * 0.68);
+    createRocket(start.x / state.width, targetX, targetY, Math.abs(dy) > 170 || Math.abs(dx) > 120);
+  }
+
+  function onPointerStart(event) {
+    if (event.target.closest && event.target.closest(".control-card")) {
+      return;
+    }
+    const point = pointerPoint(event);
+    state.pointerDown = true;
+    state.pointerStart = point;
+    state.pointerCurrent = point;
+    audio.enable();
+  }
+
+  function onPointerMove(event) {
+    if (!state.pointerDown) {
+      return;
+    }
+    state.pointerCurrent = pointerPoint(event);
+  }
+
+  function onPointerEnd(event) {
+    if (!state.pointerDown) {
+      return;
+    }
+    if (event.target.closest && event.target.closest(".control-card")) {
+      state.pointerDown = false;
+      state.pointerStart = null;
+      state.pointerCurrent = null;
+      return;
+    }
+    const end = pointerPoint(event);
+    const start = state.pointerStart || end;
+    const distance = Math.hypot(end.x - start.x, end.y - start.y);
+    if (distance < 20) {
+      createRocket(end.x / state.width, end.x, rand(state.height * 0.14, state.height * 0.46), Math.random() > 0.5);
+    } else {
+      launchFromGesture(start, end);
+    }
+    state.pointerDown = false;
+    state.pointerStart = null;
+    state.pointerCurrent = null;
+  }
+
+  autoBtn.addEventListener("click", () => {
+    state.auto = !state.auto;
+    autoBtn.classList.toggle("active", state.auto);
+    autoBtn.textContent = state.auto ? "Auto Show" : "Paused";
+    if (!state.auto) {
+      state.autoClock = 999;
+    } else {
+      state.autoClock = 0.05;
+    }
+  });
+
+  soundBtn.addEventListener("click", () => {
+    audio.enable();
+  });
+
+  window.addEventListener("pointerdown", onPointerStart, { passive: true });
+  window.addEventListener("pointermove", onPointerMove, { passive: true });
+  window.addEventListener("pointerup", onPointerEnd, { passive: true });
+  window.addEventListener("pointercancel", onPointerEnd, { passive: true });
+  window.addEventListener("resize", resize);
+  window.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      state.last = 0;
+    }
+  });
+
+  resize();
+  for (let i = 0; i < 4; i += 1) {
+    window.setTimeout(() => {
+      createRocket(rand(0.18, 0.82), null, rand(state.height * 0.16, state.height * 0.48), i % 2 === 0);
+    }, 200 + i * 180);
+  }
+  audio.enable();
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
