@@ -44,7 +44,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 .initials{display:flex;justify-content:center;gap:10px;margin:12px 0}.slot{display:flex;flex-direction:column;gap:4px;align-items:center}.letter{width:48px;height:48px;border:1px solid rgba(130,255,235,.34);border-radius:8px;display:flex;align-items:center;justify-content:center;font:950 28px ui-monospace,monospace;background:rgba(0,0,0,.28)}
 .arrow{width:48px;height:38px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(130,255,235,.22);color:#dff;font-weight:950}
 .upgrades{display:grid;gap:9px;margin:12px 0}.upgradebtn{width:100%;min-height:68px;text-align:left;padding:10px 12px;border-radius:9px;background:linear-gradient(180deg,rgba(26,255,230,.16),rgba(255,78,191,.09));border:1px solid rgba(136,255,236,.34);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 18px rgba(30,255,224,.1)}.upgradebtn b{display:block;color:#fff;font:950 13px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}.upgradebtn span{display:block;margin-top:4px;color:#aee7e4;font-size:12px;line-height:1.3}
-.enemyguide{margin:10px 0 4px;padding:8px;border:1px solid rgba(135,255,235,.18);border-radius:8px;background:rgba(0,0,0,.18);display:grid;grid-template-columns:1fr 1fr;gap:5px;text-align:left}.enemyguide div{font:800 10px ui-monospace,monospace;color:#c6f4f0;letter-spacing:.04em}.enemyguide b{color:#fff}.enemyguide .wide{grid-column:1/-1;color:#8cf8e8;text-align:center;letter-spacing:.14em}
+.enemyguide{margin:10px 0 4px;padding:8px;border:1px solid rgba(135,255,235,.18);border-radius:8px;background:rgba(0,0,0,.18);display:grid;grid-template-columns:1fr 1fr;gap:6px;text-align:left}.enemyguide div{font:800 10px ui-monospace,monospace;color:#c6f4f0;letter-spacing:.04em;display:flex;align-items:center;gap:6px}.enemyguide b{color:#fff}.enemyguide .wide{grid-column:1/-1;color:#8cf8e8;text-align:center;justify-content:center;letter-spacing:.14em}.mini{position:relative;display:inline-block;width:22px;height:18px;flex:0 0 22px;filter:drop-shadow(0 0 5px currentColor)}.mini.ship{color:#61f7ff;clip-path:polygon(50% 0,92% 100%,50% 70%,8% 100%);background:linear-gradient(#eaffff,#14dff0)}.mini.milli{color:#54ffe2;background:repeating-radial-gradient(circle at 4px 9px,#fff 0 2px,#54ffe2 3px 6px,#073b35 7px 9px);border-radius:12px}.mini.queen{color:#ff4fc4;background:linear-gradient(90deg,#ffd96a,#ff4fc4);border-radius:12px}.mini.queen:before{content:'';position:absolute;left:5px;top:-5px;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:8px solid #ffd96a}.mini.swarm{color:#8cffea;background:#7bffdf;border-radius:10px;transform:scale(.75)}.mini.spider{color:#ff9b4b;background:#ff7a3b;border-radius:50%;box-shadow:-9px 3px 0 -6px #ffcf83,9px 3px 0 -6px #ffcf83}.mini.flea{color:#96ff5a;background:#96ff5a;border-radius:50% 50% 45% 45%;width:14px;margin-left:4px}.mini.scorpion{color:#ff47cc;background:#ff47cc;border-radius:12px}.mini.scorpion:after{content:'';position:absolute;right:-5px;top:-7px;width:12px;height:12px;border:3px solid #ff9ee7;border-left:0;border-bottom:0;border-radius:50%}.mini.power{color:#ffe66b;background:#071016;border:2px solid #ffe66b;box-shadow:inset 0 0 0 2px #56fff0}
 @media(max-width:370px){.scores{grid-template-columns:1fr}.panel{padding:14px 10px}.btn{min-width:142px}.title{font-size:2.35rem}}
 </style>
 </head>
@@ -60,17 +60,17 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.2</div>
+    <div class="version">v1.6.3</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
     <p class="small">Drag in the lower field to move. Auto-fire clears fungus and segments. Tap the pulse when the garden gets crowded.</p>
     <div class="enemyguide" aria-label="Enemy field guide">
       <div class="wide">FIELD GUIDE</div>
-      <div>🚀 <b>Shooter</b> your ship</div><div>🪲 <b>Millipede</b> crawler</div>
-      <div>👑 <b>Queen</b> boss swarm</div><div>⚡ <b>Swarmlet</b> queen fragment</div>
-      <div>🕷️ <b>Spider</b> side ambusher</div><div>🟢 <b>Flea</b> mushroom dropper</div>
-      <div>🦂 <b>Scorpion</b> poison runner</div><div>✦ <b>Power cells</b> upgrades</div>
+      <div><span class="mini ship"></span><b>Shooter</b> your ship</div><div><span class="mini milli"></span><b>Millipede</b> crawler</div>
+      <div><span class="mini queen"></span><b>Queen</b> boss swarm</div><div><span class="mini swarm"></span><b>Swarmlet</b> fragment</div>
+      <div><span class="mini spider"></span><b>Spider</b> side ambusher</div><div><span class="mini flea"></span><b>Flea</b> mushroom dropper</div>
+      <div><span class="mini scorpion"></span><b>Scorpion</b> poison runner</div><div><span class="mini power"></span><b>Power cells</b> upgrades</div>
     </div>
     <button id="startBtn" class="btn">Start</button>
     <button id="scoresBtn" class="btn secondary">Scores</button>
@@ -81,7 +81,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.2</div>
+    <div class="version">v1.6.3</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -91,7 +91,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="upgradeScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.2</div>
+    <div class="version">v1.6.3</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Choose an upgrade</h2>
     <p id="upgradeLine" class="small">The garden shifts. Pick one advantage for the next waves.</p>
     <div class="upgrades">
@@ -105,7 +105,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.2</div>
+    <div class="version">v1.6.3</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -121,13 +121,13 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.6.2';
+const VERSION = 'v1.6.3';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 let W = 0, H = 0, DPR = 1, last = 0, state = 'title', demo = true;
-let score = 0, lives = 3, wave = 1, bombs = 2, rank = 1, gameTime = 0, shake = 0, flash = 0;
+let score = 0, lives = 3, wave = 1, bombs = 2, rank = 1, gameTime = 0, shake = 0, flash = 0, pulseFlash = 0;
 let upgrades = {fire:0,spread:0,pulse:0};
 let player = {x:0,y:0,tx:0,ty:0,r:13,fire:0,dead:0,muzzle:0,recoil:0};
 let pointer = {active:false,id:null,x:0,y:0};
@@ -363,7 +363,7 @@ function damageSegment(s, c, play, amount){
   if(s.hp <= 0) s.hit = true;
 }
 function startGame(){
-  state='playing'; demo=false; score=0; lives=3; wave=1; bombs=2; rank=1; gameTime=0; shake=0; flash=0; upgrades={fire:0,spread:0,pulse:0};
+  state='playing'; demo=false; score=0; lives=3; wave=1; bombs=2; rank=1; gameTime=0; shake=0; flash=0; pulseFlash=0; upgrades={fire:0,spread:0,pulse:0};
   bullets=[]; enemies=[]; particles=[]; popups=[]; pickups=[]; crawlers=[];
   powers = {spread:0,laser:0,shield:0,frost:0,score:0}; laserTick = 0; pickupPity = 0;
   player={x:W/2,y:H-54,tx:W/2,ty:H-54,r:13,fire:0,dead:0,muzzle:0,recoil:0};
@@ -545,11 +545,17 @@ function shoot(){
 }
 function pulseBomb(){
   if(state !== 'playing' || bombs <= 0) return;
-  bombs--; shake = 16; flash = .32; updateHud(); sfx('bomb');
-  const pulseRange = 145 + upgrades.pulse * 22, crawlerRange = 180 + upgrades.pulse * 26;
-  for(let i=enemies.length-1;i>=0;i--){ addScore(enemies[i].x,enemies[i].y,150); burst(enemies[i].x,enemies[i].y,'#ffcf5c',18); maybeDropPickup(enemies[i].x,enemies[i].y); enemies.splice(i,1); }
-  crawlers.forEach(c=>{ c.segs.forEach(s=>{ if(dist(player.x,player.y,s.x,s.y)<crawlerRange) damageSegment(s, c, state === 'playing', c.queen ? 6 + upgrades.pulse*2 : 1 + Math.min(2,upgrades.pulse)); }); });
-  mushrooms.forEach(m=>{ if(dist(player.x,player.y,m.x,m.y)<pulseRange) chipMushroom(m, {x:m.x,y:m.y}, state === 'playing', false, 1 + Math.min(3,upgrades.pulse)); });
+  bombs--; shake = 28; flash = .62; pulseFlash = .55; updateHud(); sfx('bomb');
+  for(let i=enemies.length-1;i>=0;i--){ addScore(enemies[i].x,enemies[i].y,180); burst(enemies[i].x,enemies[i].y,'#ffcf5c',26); maybeDropPickup(enemies[i].x,enemies[i].y); enemies.splice(i,1); }
+  crawlers.forEach(c=>{ c.segs.forEach(s=>{
+    const dmg = s.queen ? 10 + upgrades.pulse*3 : 3 + Math.min(3,upgrades.pulse);
+    s.hp = (s.hp || 1) - dmg;
+    burst(s.x,s.y,s.queen?'#ffd96a':'#6fffe6',s.queen?18:10);
+    if(s.hp <= 0) s.hit = true;
+  }); });
+  mushrooms.forEach(m=>{ chipMushroom(m, {x:m.x,y:m.y}, state === 'playing', false, 3 + Math.min(4,upgrades.pulse)); });
+  for(let i=0;i<90;i++) particles.push({x:player.x,y:player.y,vx:rand(-280,280),vy:rand(-300,120),life:rand(.28,.9),max:1,r:rand(2,5.5),color:i%3?'#ffe66b':'#ffffff'});
+  popups.push({x:player.x-46,y:player.y-58,t:'SMART BOMB',life:1.1,color:'#ffffff'});
 }
 function addScore(x,y,v){
   const mult = powerMultiplier(), gain = v * mult;
@@ -610,7 +616,7 @@ function update(dt){
   bullets.forEach(b=>{ b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt; }); bullets = bullets.filter(b=>b.life>0 && b.y>-20 && b.x>-20 && b.x<W+20);
   updatePowerups(dt, play);
   updateCrawlers(dt, play); updateEnemies(dt, play); collisions(play);
-  particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=180*dt;p.life-=dt}); particles=particles.filter(p=>p.life>0);
+  particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=180*dt;p.life-=dt}); pulseFlash=Math.max(0,pulseFlash-dt*1.55); particles=particles.filter(p=>p.life>0);
   popups.forEach(p=>{p.y-=32*dt;p.life-=dt}); popups=popups.filter(p=>p.life>0);
   waveBanner.life = Math.max(0, waveBanner.life - dt);
   mushrooms = mushrooms.filter(m=>m.hp>0);
@@ -732,6 +738,7 @@ function draw(){
   if(powers.laser > 0) drawLaser();
   bullets.forEach(drawBolt);
   drawPlayer();
+  if(pulseFlash>0){ const a=pulseFlash/.55; ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.strokeStyle=`rgba(255,246,150,${a})`; ctx.lineWidth=5; ctx.beginPath(); ctx.arc(player.x,player.y,(1-a)*Math.max(W,H)*.9+38,0,7); ctx.stroke(); ctx.strokeStyle=`rgba(255,255,255,${a*.8})`; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(player.x,player.y,(1-a)*Math.max(W,H)*1.15+20,0,7); ctx.stroke(); ctx.restore(); }
   particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life/.8);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fill();}); ctx.globalAlpha=1;
   popups.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life/.8);ctx.fillStyle=p.color || '#ffe66b';ctx.font='900 13px ui-monospace,monospace';ctx.fillText(p.t,p.x,p.y);}); ctx.globalAlpha=1;
   ctx.restore();
