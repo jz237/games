@@ -43,6 +43,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 .muted{color:#90a3aa}.small{font-size:12px;color:#a9c8ca;line-height:1.45}.hidden{display:none!important}
 .initials{display:flex;justify-content:center;gap:10px;margin:12px 0}.slot{display:flex;flex-direction:column;gap:4px;align-items:center}.letter{width:48px;height:48px;border:1px solid rgba(130,255,235,.34);border-radius:8px;display:flex;align-items:center;justify-content:center;font:950 28px ui-monospace,monospace;background:rgba(0,0,0,.28)}
 .arrow{width:48px;height:38px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(130,255,235,.22);color:#dff;font-weight:950}
+.upgrades{display:grid;gap:9px;margin:12px 0}.upgradebtn{width:100%;min-height:68px;text-align:left;padding:10px 12px;border-radius:9px;background:linear-gradient(180deg,rgba(26,255,230,.16),rgba(255,78,191,.09));border:1px solid rgba(136,255,236,.34);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 18px rgba(30,255,224,.1)}.upgradebtn b{display:block;color:#fff;font:950 13px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}.upgradebtn span{display:block;margin-top:4px;color:#aee7e4;font-size:12px;line-height:1.3}
 @media(max-width:370px){.scores{grid-template-columns:1fr}.panel{padding:14px 10px}.btn{min-width:142px}.title{font-size:2.35rem}}
 </style>
 </head>
@@ -58,7 +59,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.6</div>
+    <div class="version">v1.6.0</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
@@ -72,17 +73,31 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.6</div>
+    <div class="version">v1.6.0</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
   </div>
 </section>
 
+<section id="upgradeScreen" class="overlay hidden">
+  <div class="shade"></div>
+  <div class="panel">
+    <div class="version">v1.6.0</div>
+    <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Choose an upgrade</h2>
+    <p id="upgradeLine" class="small">The garden shifts. Pick one advantage for the next waves.</p>
+    <div class="upgrades">
+      <button id="upFireBtn" class="upgradebtn"><b>Faster Shot</b><span>Autofire cycles quicker. More room to carve fungus before the swarm drops.</span></button>
+      <button id="upSpreadBtn" class="upgradebtn"><b>Wider Spread</b><span>Triple shot fans wider and lasts longer when active.</span></button>
+      <button id="upPulseBtn" class="upgradebtn"><b>Stronger Pulse</b><span>Pulse bomb reaches farther and hits queen armor harder.</span></button>
+    </div>
+  </div>
+</section>
+
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.6</div>
+    <div class="version">v1.6.0</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -98,13 +113,14 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.5.6';
+const VERSION = 'v1.6.0';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 let W = 0, H = 0, DPR = 1, last = 0, state = 'title', demo = true;
 let score = 0, lives = 3, wave = 1, bombs = 2, rank = 1, gameTime = 0, shake = 0, flash = 0;
+let upgrades = {fire:0,spread:0,pulse:0};
 let player = {x:0,y:0,tx:0,ty:0,r:13,fire:0,dead:0,muzzle:0,recoil:0};
 let pointer = {active:false,id:null,x:0,y:0};
 let mushrooms = [], crawlers = [], bullets = [], enemies = [], particles = [], popups = [], pickups = [], stars = [];
@@ -339,7 +355,7 @@ function damageSegment(s, c, play, amount){
   if(s.hp <= 0) s.hit = true;
 }
 function startGame(){
-  state='playing'; demo=false; score=0; lives=3; wave=1; bombs=2; rank=1; gameTime=0; shake=0; flash=0;
+  state='playing'; demo=false; score=0; lives=3; wave=1; bombs=2; rank=1; gameTime=0; shake=0; flash=0; upgrades={fire:0,spread:0,pulse:0};
   bullets=[]; enemies=[]; particles=[]; popups=[]; pickups=[]; crawlers=[];
   powers = {spread:0,laser:0,shield:0,frost:0,score:0}; laserTick = 0; pickupPity = 0;
   player={x:W/2,y:H-54,tx:W/2,ty:H-54,r:13,fire:0,dead:0,muzzle:0,recoil:0};
@@ -349,13 +365,13 @@ function startGame(){
   showOnly(null); updateHud(); sfx('start');
 }
 function seedDemo(){
-  demo = true; score = 12400; lives = 3; wave = 3; bombs = 2; rank = 2;
+  demo = true; score = 12400; lives = 3; wave = 3; bombs = 2; rank = 2; upgrades={fire:0,spread:0,pulse:0};
   player={x:W/2,y:H-58,tx:W/2,ty:H-58,r:13,fire:0,dead:0,muzzle:0,recoil:0};
   bullets=[]; enemies=[]; particles=[]; popups=[]; pickups=[]; crawlers=[]; powers = {spread:0,laser:0,shield:0,frost:0,score:0}; seedField(); makeCrawler(grid()*2, 12, 38);
 }
 
 function showOnly(id){
-  ['titleScreen','scoresScreen','gameOverScreen'].forEach(x=>document.getElementById(x).classList.toggle('hidden', x!==id));
+  ['titleScreen','scoresScreen','upgradeScreen','gameOverScreen'].forEach(x=>document.getElementById(x).classList.toggle('hidden', x!==id));
   document.getElementById('bombBtn').classList.toggle('show', state === 'playing');
   document.getElementById('pauseBtn').classList.toggle('hidden', state !== 'playing');
 }
@@ -459,7 +475,8 @@ function maybeDropPickup(x,y){
 }
 function applyPowerup(id){
   const def = powerDef(id);
-  powers[id] = id === 'shield' ? Math.max(powers[id], def.duration) : def.duration;
+  const bonus = id === 'spread' ? upgrades.spread * 1.5 : 0;
+  powers[id] = id === 'shield' ? Math.max(powers[id], def.duration) : def.duration + bonus;
   popups.push({x:player.x-18,y:player.y-34,t:def.label + ' ON',life:1,color:def.color});
   for(let i=0;i<22;i++) particles.push({x:player.x,y:player.y,vx:rand(-130,130),vy:rand(-150,65),life:rand(.22,.72),max:1,r:rand(1.4,3.2),color:def.color});
   flash = Math.max(flash,.08); updatePowerHud(); sfx('pickup');
@@ -509,8 +526,8 @@ function shoot(){
   if(bullets.length > 58) return;
   if(powers.spread > 0 && bullets.length < 55){
     bullets.push({x:player.x,y:player.y-19,vx:0,vy:-715,r:1.8,life:1.05,dmg:2,mushDmg:3});
-    bullets.push({x:player.x-7,y:player.y-15,vx:-130,vy:-680,r:1.55,life:.94,dmg:1,mushDmg:2});
-    bullets.push({x:player.x+7,y:player.y-15,vx:130,vy:-680,r:1.55,life:.94,dmg:1,mushDmg:2});
+    bullets.push({x:player.x-7,y:player.y-15,vx:-(130+upgrades.spread*28),vy:-680,r:1.55,life:.94,dmg:1,mushDmg:2});
+    bullets.push({x:player.x+7,y:player.y-15,vx:130+upgrades.spread*28,vy:-680,r:1.55,life:.94,dmg:1,mushDmg:2});
   }else{
     bullets.push({x:player.x,y:player.y-18,vx:0,vy:-710,r:1.8,life:1.08,dmg:1,mushDmg:2});
     if(rank > 3 && Math.random()<.32 && bullets.length < 56){ bullets.push({x:player.x-7,y:player.y-14,vx:-35,vy:-675,r:1.55,life:1,dmg:1,mushDmg:2}); bullets.push({x:player.x+7,y:player.y-14,vx:35,vy:-675,r:1.55,life:1,dmg:1,mushDmg:2}); }
@@ -521,9 +538,10 @@ function shoot(){
 function pulseBomb(){
   if(state !== 'playing' || bombs <= 0) return;
   bombs--; shake = 16; flash = .32; updateHud(); sfx('bomb');
+  const pulseRange = 145 + upgrades.pulse * 22, crawlerRange = 180 + upgrades.pulse * 26;
   for(let i=enemies.length-1;i>=0;i--){ addScore(enemies[i].x,enemies[i].y,150); burst(enemies[i].x,enemies[i].y,'#ffcf5c',18); maybeDropPickup(enemies[i].x,enemies[i].y); enemies.splice(i,1); }
-  crawlers.forEach(c=>{ c.segs.forEach(s=>{ if(dist(player.x,player.y,s.x,s.y)<180) damageSegment(s, c, state === 'playing', c.queen ? 6 : 1); }); });
-  mushrooms.forEach(m=>{ if(dist(player.x,player.y,m.x,m.y)<145) chipMushroom(m, {x:m.x,y:m.y}, state === 'playing'); });
+  crawlers.forEach(c=>{ c.segs.forEach(s=>{ if(dist(player.x,player.y,s.x,s.y)<crawlerRange) damageSegment(s, c, state === 'playing', c.queen ? 6 + upgrades.pulse*2 : 1 + Math.min(2,upgrades.pulse)); }); });
+  mushrooms.forEach(m=>{ if(dist(player.x,player.y,m.x,m.y)<pulseRange) chipMushroom(m, {x:m.x,y:m.y}, state === 'playing', false, 1 + Math.min(3,upgrades.pulse)); });
 }
 function addScore(x,y,v){
   const mult = powerMultiplier(), gain = v * mult;
@@ -533,6 +551,26 @@ function addScore(x,y,v){
 }
 function burst(x,y,color,n){
   for(let i=0;i<n;i++) particles.push({x,y,vx:rand(-130,130),vy:rand(-160,80),life:rand(.25,.8),max:1,r:rand(1.5,4),color});
+}
+function maybeOfferUpgrade(){
+  if(state !== 'playing') return false;
+  if(wave > 0 && wave % 2 === 0){
+    state = 'upgrade';
+    document.getElementById('upgradeLine').textContent = `WAVE ${wave} CLEARED · choose one advantage`;
+    showOnly('upgradeScreen');
+    sfx('pickup');
+    return true;
+  }
+  return false;
+}
+function applyUpgrade(id){
+  if(state !== 'upgrade') return;
+  upgrades[id] = (upgrades[id] || 0) + 1;
+  const names = {fire:'FASTER SHOT',spread:'WIDER SPREAD',pulse:'STRONGER PULSE'};
+  popups.push({x:W*.5-50,y:H*.32,t:names[id],life:1.1,color:id==='fire'?'#56fff0':id==='spread'?'#ff4fc4':'#ffe66b'});
+  state = 'playing';
+  showOnly(null);
+  nextWave();
 }
 function nextWave(){
   wave++; rank += .36; bombs = Math.min(4,bombs+1); seedField(); makeCrawler(grid()*1.5, Math.min(18,10+wave), 44+wave*9);
@@ -559,7 +597,7 @@ function update(dt){
   player.x += (player.tx-player.x)*Math.min(1,dt*12); player.y += (player.ty-player.y)*Math.min(1,dt*12);
   player.x = clamp(player.x, 18, W-18); player.y = clamp(player.y, H*.68, H-30);
   if(play) pushPlayerFromMushrooms();
-  player.fire -= dt; if(player.fire <= 0 && (play || state === 'title')){ player.fire = Math.max(.047,.069-rank*.0034); shoot(); }
+  player.fire -= dt; if(player.fire <= 0 && (play || state === 'title')){ player.fire = Math.max(.041,.069-rank*.0034-upgrades.fire*.0035); shoot(); }
   player.muzzle = Math.max(0, player.muzzle - dt); player.recoil = Math.max(0, player.recoil - dt);
   bullets.forEach(b=>{ b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt; }); bullets = bullets.filter(b=>b.life>0 && b.y>-20 && b.x>-20 && b.x<W+20);
   updatePowerups(dt, play);
@@ -573,7 +611,7 @@ function update(dt){
     if(wave >= 2 && spawn.spider<=0){ spawnSpider(); sfx('spider'); spawn.spider = rand(4.4,7.2)-Math.min(2.2,wave*.13); }
     if(wave >= 3 && spawn.flea<=0){ spawnFlea(); sfx('flea'); spawn.flea = rand(7,11)-Math.min(3,wave*.18); }
     if(wave >= 3 && spawn.scorpion<=0){ spawnScorpion(); sfx('scorpion'); spawn.scorpion = rand(10,15)-Math.min(4,wave*.2); }
-    if(crawlers.length === 0) nextWave();
+    if(crawlers.length === 0 && !maybeOfferUpgrade()) nextWave();
   }
   shake = Math.max(0, shake - dt*18); flash = Math.max(0, flash - dt*1.8);
 }
@@ -842,6 +880,9 @@ bindButton('againBtn', startGame);
 bindButton('menuBtn', ()=>{ state='title'; seedDemo(); showOnly('titleScreen'); renderScores('titleScores'); });
 bindButton('submitBtn', saveScore);
 bindButton('bombBtn', pulseBomb);
+bindButton('upFireBtn', ()=>applyUpgrade('fire'));
+bindButton('upSpreadBtn', ()=>applyUpgrade('spread'));
+bindButton('upPulseBtn', ()=>applyUpgrade('pulse'));
 bindButton('pauseBtn', ()=>{ if(state==='playing'){ state='paused'; document.querySelector('#titleScreen .title').innerHTML='Paused'; showOnly('titleScreen'); } else if(state==='paused'){ document.querySelector('#titleScreen .title').innerHTML='Millipede'; state='playing'; showOnly(null); } });
 
 window.__NEON_MYRIAPOD_TEST__ = {
@@ -852,7 +893,8 @@ window.__NEON_MYRIAPOD_TEST__ = {
   applyPowerup,
   triggerQueen(){ spawnQueenCrawler(); return crawlers.filter(c=>c.queen).length; },
   setWave(n){ wave = Math.max(1, Math.floor(n || 1)); showWaveIntro(); updateHud(); return wave; },
-  state(){ return {state,score,wave,lives,player:{x:player.x,y:player.y,tx:player.tx,ty:player.ty},powers:{...powers},pickups:pickups.length,bullets:bullets.length,crawlers:crawlers.length,queens:crawlers.filter(c=>c.queen).length,waveBanner:waveBanner.text}; },
+  state(){ return {state,score,wave,lives,upgrades:{...upgrades},player:{x:player.x,y:player.y,tx:player.tx,ty:player.ty},powers:{...powers},pickups:pickups.length,bullets:bullets.length,crawlers:crawlers.length,queens:crawlers.filter(c=>c.queen).length,waveBanner:waveBanner.text}; },
+  applyUpgrade,
   mushroomCheck(){
     const m = {x:60,y:60,hp:8,max:8,r:12,poison:false,pulse:0,chunks:[],seed:12345};
     chipMushroom(m, {x:64,y:54}, false, false, 2);
