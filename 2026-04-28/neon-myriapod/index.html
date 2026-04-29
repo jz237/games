@@ -22,7 +22,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 .byline{margin:-2px 0 8px;color:#8fb2bb;font:800 9px ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase}
 .subtitle{font-size:.76rem;letter-spacing:.27em;text-transform:uppercase;color:#8cf8e8;margin-bottom:10px}
 .version{position:absolute;top:10px;right:12px;color:#8fb2bb;font:700 11px ui-monospace,monospace;letter-spacing:.08em}
-.btn{min-height:48px;min-width:168px;margin:6px;padding:12px 18px;border-radius:8px;background:linear-gradient(180deg,#e9fff9 0,#1fffe3 36%,#0b9fbd 100%);color:#021016;font-weight:900;letter-spacing:.1em;text-transform:uppercase;box-shadow:0 3px 0 #07566b,0 0 18px rgba(16,245,220,.28)}
+.btn{min-height:48px;min-width:168px;margin:6px;padding:12px 18px;border-radius:8px;background:linear-gradient(180deg,#e9fff9 0,#1fffe3 36%,#0b9fbd 100%);color:#021016;font-weight:900;letter-spacing:.1em;text-transform:uppercase;box-shadow:0 3px 0 #07566b,0 0 18px rgba(16,245,220,.28)}.titleActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}.titleActions .btn{min-width:0;width:100%;margin:0;min-height:42px;padding:9px 8px;font-size:12px;letter-spacing:.08em}
 .btn.secondary{background:rgba(255,255,255,.06);color:#dff;border:1px solid rgba(135,255,235,.34);box-shadow:none}
 .btn.warn{background:linear-gradient(180deg,#ffd36b,#ff7a3d);color:#1f0900}
 .hud{position:absolute;inset:0;z-index:8;pointer-events:none;color:#dffffc;font-weight:900;text-shadow:0 0 8px rgba(0,255,220,.8)}
@@ -33,10 +33,10 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 #bombBtn{position:absolute;right:12px;bottom:16px;width:68px;height:68px;border-radius:50%;z-index:12;display:none;align-items:center;justify-content:center;background:radial-gradient(circle,#fff,#ffd45b 32%,#ff4a7e 70%);color:#23000b;font-size:24px;font-weight:950;box-shadow:0 0 22px rgba(255,80,125,.48);pointer-events:auto}
 #bombBtn.show{display:flex}
 #pauseBtn{position:absolute;left:12px;bottom:18px;width:46px;height:46px;border-radius:50%;z-index:12;background:rgba(4,16,25,.7);border:1px solid rgba(170,255,244,.32);color:#dffffc;pointer-events:auto}
-.scores{display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:left;margin:12px 0}
-.scorebox{border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:10px;background:rgba(0,0,0,.24)}
-.scoretitle{font:900 12px ui-monospace,monospace;letter-spacing:.14em;margin-bottom:8px}.local{color:#46f7ff}.global{color:#ffd66e}
-.row{display:grid;grid-template-columns:28px 1fr auto;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.06);font:800 12px ui-monospace,monospace}
+.scores{display:grid;grid-template-columns:1fr;gap:7px;text-align:left;margin:8px 0 0}
+.scorebox{border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:7px 8px;background:rgba(0,0,0,.24)}
+.scoretitle{font:900 10px ui-monospace,monospace;letter-spacing:.14em;margin-bottom:5px}.local{color:#46f7ff}.global{color:#ffd66e}
+.row{display:grid;grid-template-columns:22px 34px 1fr auto;gap:6px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06);font:800 10px ui-monospace,monospace;align-items:center}
 .row.new{color:#ffe56e;text-shadow:0 0 10px rgba(255,225,80,.65)}
 .champ{animation:champ .9s steps(4,end) 5;color:#fff;text-shadow:0 0 8px #fff,0 0 18px #ffe66b}
 @keyframes champ{50%{filter:brightness(1.8);transform:scale(1.02)}}
@@ -45,7 +45,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 .arrow{width:48px;height:38px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(130,255,235,.22);color:#dff;font-weight:950}
 .upgrades{display:grid;gap:9px;margin:12px 0}.upgradebtn{width:100%;min-height:68px;text-align:left;padding:10px 12px;border-radius:9px;background:linear-gradient(180deg,rgba(26,255,230,.16),rgba(255,78,191,.09));border:1px solid rgba(136,255,236,.34);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 18px rgba(30,255,224,.1)}.upgradebtn b{display:block;color:#fff;font:950 13px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}.upgradebtn span{display:block;margin-top:4px;color:#aee7e4;font-size:12px;line-height:1.3}
 .enemyguide{margin:10px 0 4px;padding:8px;border:1px solid rgba(135,255,235,.18);border-radius:8px;background:rgba(0,0,0,.18);display:grid;grid-template-columns:1fr 1fr;gap:6px;text-align:left}.enemyguide div{font:800 10px ui-monospace,monospace;color:#c6f4f0;letter-spacing:.04em;display:flex;align-items:center;gap:6px}.enemyguide b{color:#fff}.enemyguide .wide{grid-column:1/-1;color:#8cf8e8;text-align:center;justify-content:center;letter-spacing:.14em}.guideSprite{width:38px;height:28px;flex:0 0 38px;image-rendering:crisp-edges;filter:drop-shadow(0 0 5px rgba(120,255,236,.45))}
-@media(max-width:370px){.scores{grid-template-columns:1fr}.panel{padding:14px 10px}.btn{min-width:142px}.title{font-size:2.35rem}}
+@media(max-width:370px){.panel{padding:14px 10px}.btn{min-width:142px}.title{font-size:2.35rem}.row{font-size:9px;gap:4px;grid-template-columns:20px 30px 1fr auto}.titleActions .btn{font-size:11px}}
 </style>
 </head>
 <body>
@@ -60,7 +60,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.7</div>
+    <div class="version">v1.6.8</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
@@ -72,8 +72,10 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
       <div><canvas class="guideSprite" data-sprite="spider" width="76" height="56"></canvas><b>Spider</b> side ambusher</div><div><canvas class="guideSprite" data-sprite="flea" width="76" height="56"></canvas><b>Flea</b> mushroom dropper</div>
       <div><canvas class="guideSprite" data-sprite="scorpion" width="76" height="56"></canvas><b>Scorpion</b> poison runner</div><div><canvas class="guideSprite" data-sprite="power" width="76" height="56"></canvas><b>Power cells</b> upgrades</div>
     </div>
-    <button id="startBtn" class="btn">Start</button>
-    <button id="scoresBtn" class="btn secondary">Scores</button>
+    <div class="titleActions">
+      <button id="startBtn" class="btn">Start</button>
+      <button id="scoresBtn" class="btn secondary">Scores</button>
+    </div>
     <div id="titleScores" class="scores"></div>
   </div>
 </section>
@@ -81,7 +83,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.7</div>
+    <div class="version">v1.6.8</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -91,7 +93,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="upgradeScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.7</div>
+    <div class="version">v1.6.8</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Choose an upgrade</h2>
     <p id="upgradeLine" class="small">The garden shifts. Pick one advantage for the next waves.</p>
     <div class="upgrades">
@@ -105,7 +107,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.7</div>
+    <div class="version">v1.6.8</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -121,7 +123,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.6.7';
+const VERSION = 'v1.6.8';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const canvas = document.getElementById('game');
@@ -454,19 +456,21 @@ async function submitGlobalScore(initials, value, level){
     globalScoresCache = null; globalScoresTime = 0;
   }catch(e){}
 }
+function rewardName(i){ return ['CROWN','ACE','VENOM','BLADE','SPARK'][i] || 'RUNNER'; }
 function rowHtml(e,i,hi){
   const name = (e.initials || e.name || '???').slice(0,3).toUpperCase();
   const lvl = e.level || e.wave || 1;
   const isNew = hi && e.ts === hi;
-  return `<div class="row${isNew?' new':''}"><span>${String(i+1).padStart(2,'0')}</span><span>${name}</span><span>${Math.floor(e.score||0)} W${lvl}</span></div>`;
+  return `<div class="row${isNew?' new':''}"><span>${String(i+1).padStart(2,'0')}</span><span>${name}</span><span>${Math.floor(e.score||0)} W${lvl}</span><span>${rewardName(i)}</span></div>`;
 }
 async function renderScores(target, hi){
   const el = typeof target === 'string' ? document.getElementById(target) : target;
-  const local = loadLocalScores();
-  el.innerHTML = `<div class="scorebox"><div class="scoretitle local">LOCAL</div>${local.length?local.map((e,i)=>rowHtml(e,i,hi)).join(''):'<div class="muted row"><span>--</span><span>EMPTY</span><span>0</span></div>'}</div><div class="scorebox"><div class="scoretitle global">GLOBAL</div><div class="muted row"><span>--</span><span>LOADING</span><span></span></div></div>`;
+  const local = loadLocalScores().slice(0,5);
+  const empty = '<div class="muted row"><span>--</span><span>---</span><span>EMPTY</span><span>----</span></div>';
+  el.innerHTML = `<div class="scorebox"><div class="scoretitle local">LOCAL TOP 5</div>${local.length?local.map((e,i)=>rowHtml(e,i,hi)).join(''):empty}</div><div class="scorebox"><div class="scoretitle global">GLOBAL TOP 5</div><div class="muted row"><span>--</span><span>---</span><span>LOADING</span><span>----</span></div></div>`;
   const global = await fetchGlobalScores();
-  const ghtml = global.length ? global.slice(0,10).map((e,i)=>rowHtml(e,i,hi)).join('') : '<div class="muted row"><span>--</span><span>OFFLINE</span><span></span></div>';
-  el.innerHTML = `<div class="scorebox"><div class="scoretitle local">LOCAL</div>${local.length?local.map((e,i)=>rowHtml(e,i,hi)).join(''):'<div class="muted row"><span>--</span><span>EMPTY</span><span>0</span></div>'}</div><div class="scorebox"><div class="scoretitle global">GLOBAL</div>${ghtml}</div>`;
+  const ghtml = global.length ? global.slice(0,5).map((e,i)=>rowHtml(e,i,hi)).join('') : '<div class="muted row"><span>--</span><span>---</span><span>OFFLINE</span><span>----</span></div>';
+  el.innerHTML = `<div class="scorebox"><div class="scoretitle local">LOCAL TOP 5</div>${local.length?local.map((e,i)=>rowHtml(e,i,hi)).join(''):empty}</div><div class="scorebox"><div class="scoretitle global">GLOBAL TOP 5</div>${ghtml}</div>`;
 }
 function setupInitials(){
   const wrap = document.getElementById('initials'); wrap.innerHTML = '';
