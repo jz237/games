@@ -58,7 +58,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.1</div>
+    <div class="version">v1.5.2</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
@@ -72,7 +72,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.1</div>
+    <div class="version">v1.5.2</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -82,7 +82,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.1</div>
+    <div class="version">v1.5.2</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -98,7 +98,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.5.1';
+const VERSION = 'v1.5.2';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const canvas = document.getElementById('game');
@@ -238,7 +238,7 @@ function seedField(){
 }
 function grid(){return Math.max(19, Math.min(26, W / 15))}
 function addMushroom(x,y,hp,poison){
-  const max = Math.max(10, hp || 12);
+  const max = hp ? Math.max(6, hp * 2) : 8;
   mushrooms.push({x,y,hp:max,max,r:grid()*.46,poison:!!poison,pulse:Math.random()*6,chunks:[],seed:Math.floor(rand(1,999999))});
 }
 function mushroomChunk(m, b){
@@ -249,16 +249,36 @@ function mushroomChunk(m, b){
   const yBand = edge ? -m.r*.66 + a*m.r*.48 : -m.r*.42 + a*m.r*.96;
   return {x:dx + side*c*m.r*.16,y:yBand,r:m.r*(.105+c*.075),edge,stem:!edge && hit % 4 === 2};
 }
-function chipMushroom(m, b, play, quiet){
+function chipMushroom(m, b, play, quiet, amount){
   if(m.hp <= 0) return;
-  m.hp--;
-  m.chunks.push(mushroomChunk(m, b || {x:m.x,y:m.y}));
+  const dmg = Math.max(1, amount || 1);
+  const startHp = m.hp;
+  for(let k=0;k<dmg && m.hp>0;k++){
+    m.hp--;
+    m.chunks.push(mushroomChunk(m, b || {x:m.x,y:m.y}));
+  }
   const color = m.poison ? '#ff7cda' : '#aaffdf';
-  const n = m.hp <= 0 ? 18 : 4;
+  const broke = m.hp <= 0;
+  const n = broke ? 22 : 4 + (startHp - m.hp) * 3;
   for(let i=0;i<n;i++) particles.push({x:m.x+rand(-m.r*.45,m.r*.45),y:m.y+rand(-m.r*.55,m.r*.25),vx:rand(-58,58),vy:rand(-105,18),life:rand(.16,.46),max:1,r:rand(.8,2.2),color});
   if(!play) return;
-  if(m.hp <= 0){ addScore(m.x,m.y,5); burst(m.x,m.y,m.poison?'#ff4fc4':'#52ffba',18); if(!quiet) sfx('crumble'); }
+  if(broke){ addScore(m.x,m.y,5); burst(m.x,m.y,m.poison?'#ff4fc4':'#52ffba',18); if(!quiet) sfx('crumble'); }
   else if(!quiet) sfx('mushroom');
+}
+
+function pushPlayerFromMushrooms(){
+  const soft = player.r + grid()*.38;
+  for(let pass=0; pass<2; pass++){
+    mushrooms.forEach(m=>{
+      if(m.y < H*.64) return;
+      const dx = player.x - m.x, dy = player.y - m.y, d = Math.hypot(dx,dy), min = soft + m.r*.42;
+      if(d > 0 && d < min){
+        const push = (min - d) * .58;
+        player.x += dx / d * push; player.y += dy / d * push;
+      }
+    });
+    player.x = clamp(player.x, 18, W-18); player.y = clamp(player.y, H*.68, H-30);
+  }
 }
 function crawlerSegment(x,y,head,opts){
   const queen = !!opts.queen, child = !!opts.child;
@@ -473,12 +493,12 @@ function killEnemy(e){
 function shoot(){
   if(bullets.length > 58) return;
   if(powers.spread > 0 && bullets.length < 55){
-    bullets.push({x:player.x,y:player.y-19,vx:0,vy:-715,r:1.8,life:1.05,dmg:2});
-    bullets.push({x:player.x-7,y:player.y-15,vx:-130,vy:-680,r:1.55,life:.94,dmg:1});
-    bullets.push({x:player.x+7,y:player.y-15,vx:130,vy:-680,r:1.55,life:.94,dmg:1});
+    bullets.push({x:player.x,y:player.y-19,vx:0,vy:-715,r:1.8,life:1.05,dmg:2,mushDmg:3});
+    bullets.push({x:player.x-7,y:player.y-15,vx:-130,vy:-680,r:1.55,life:.94,dmg:1,mushDmg:2});
+    bullets.push({x:player.x+7,y:player.y-15,vx:130,vy:-680,r:1.55,life:.94,dmg:1,mushDmg:2});
   }else{
-    bullets.push({x:player.x,y:player.y-18,vx:0,vy:-710,r:1.8,life:1.08,dmg:1});
-    if(rank > 3 && Math.random()<.32 && bullets.length < 56){ bullets.push({x:player.x-7,y:player.y-14,vx:-35,vy:-675,r:1.55,life:1,dmg:1}); bullets.push({x:player.x+7,y:player.y-14,vx:35,vy:-675,r:1.55,life:1,dmg:1}); }
+    bullets.push({x:player.x,y:player.y-18,vx:0,vy:-710,r:1.8,life:1.08,dmg:1,mushDmg:2});
+    if(rank > 3 && Math.random()<.32 && bullets.length < 56){ bullets.push({x:player.x-7,y:player.y-14,vx:-35,vy:-675,r:1.55,life:1,dmg:1,mushDmg:2}); bullets.push({x:player.x+7,y:player.y-14,vx:35,vy:-675,r:1.55,life:1,dmg:1,mushDmg:2}); }
   }
   player.muzzle = .055; player.recoil = .08;
   sfx('shot');
@@ -523,6 +543,7 @@ function update(dt){
   }
   player.x += (player.tx-player.x)*Math.min(1,dt*12); player.y += (player.ty-player.y)*Math.min(1,dt*12);
   player.x = clamp(player.x, 18, W-18); player.y = clamp(player.y, H*.68, H-30);
+  if(play) pushPlayerFromMushrooms();
   player.fire -= dt; if(player.fire <= 0 && (play || state === 'title')){ player.fire = Math.max(.047,.069-rank*.0034); shoot(); }
   player.muzzle = Math.max(0, player.muzzle - dt); player.recoil = Math.max(0, player.recoil - dt);
   bullets.forEach(b=>{ b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt; }); bullets = bullets.filter(b=>b.life>0 && b.y>-20 && b.x>-20 && b.x<W+20);
@@ -600,7 +621,7 @@ function updateEnemies(dt, play){
 }
 function collisions(play){
   bullets.forEach(b=>{
-    mushrooms.forEach(m=>{ if(!b.dead && dist(b.x,b.y,m.x,m.y)<m.r){ b.dead=true; chipMushroom(m, b, play); } });
+    mushrooms.forEach(m=>{ if(!b.dead && dist(b.x,b.y,m.x,m.y)<m.r){ b.dead=true; chipMushroom(m, b, play, false, b.mushDmg || 1); } });
     crawlers.forEach(c=>c.segs.forEach(s=>{ const rr = grid()*(s.queen ? .58 : .43); if(!b.dead && dist(b.x,b.y,s.x,s.y)<rr){ b.dead=true; damageSegment(s, c, play, (b.dmg || 1) + (s.queen ? 1 : 0)); } }));
     enemies.forEach(e=>{ if(!b.dead && dist(b.x,b.y,e.x,e.y)<e.r+3){ b.dead=true; e.hp--; if(e.hp<=0 && play) killEnemy(e); } });
   });
@@ -783,14 +804,15 @@ window.__NEON_MYRIAPOD_TEST__ = {
   version: VERSION,
   powerTypes: POWERUP_TYPES.map(p=>p.id),
   queenBalance(){ const q={hp:5,maxHp:5,queen:true,head:true,x:80,y:80}; const c={dir:1}; damageSegment(q,c,false,2); return q.hp; },
+  mushroomBalance(){ const m={x:60,y:60,hp:8,max:8,r:12,poison:false,pulse:0,chunks:[],seed:12345}; chipMushroom(m,{x:64,y:54},false,false,2); return {hp:m.hp,chunks:m.chunks.length}; },
   applyPowerup,
   triggerQueen(){ spawnQueenCrawler(); return crawlers.filter(c=>c.queen).length; },
   setWave(n){ wave = Math.max(1, Math.floor(n || 1)); showWaveIntro(); updateHud(); return wave; },
   state(){ return {state,score,wave,lives,player:{x:player.x,y:player.y,tx:player.tx,ty:player.ty},powers:{...powers},pickups:pickups.length,bullets:bullets.length,crawlers:crawlers.length,queens:crawlers.filter(c=>c.queen).length,waveBanner:waveBanner.text}; },
   mushroomCheck(){
-    const m = {x:60,y:60,hp:12,max:12,r:12,poison:false,pulse:0,chunks:[],seed:12345};
-    chipMushroom(m, {x:64,y:54}, false);
-    return {initialHp:12,hp:m.hp,chunks:m.chunks.length,firstChunk:m.chunks[0]};
+    const m = {x:60,y:60,hp:8,max:8,r:12,poison:false,pulse:0,chunks:[],seed:12345};
+    chipMushroom(m, {x:64,y:54}, false, false, 2);
+    return {initialHp:8,hp:m.hp,chunks:m.chunks.length,firstChunk:m.chunks[0]};
   }
 };
 
