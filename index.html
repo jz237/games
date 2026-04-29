@@ -1,163 +1,25 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🎮 GameMaster Arcade</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{
-  background:
-    radial-gradient(circle at 8% 8%, rgba(255,107,107,.28), transparent 18%),
-    radial-gradient(circle at 24% 82%, rgba(255,217,61,.18), transparent 20%),
-    radial-gradient(circle at 88% 12%, rgba(77,150,255,.24), transparent 22%),
-    radial-gradient(circle at 78% 78%, rgba(107,203,119,.18), transparent 22%),
-    radial-gradient(circle at 52% 100%, rgba(198,107,255,.22), transparent 26%),
-    linear-gradient(180deg,#080814 0%,#100f24 42%,#15112b 100%);
-  color:#f2f4ff;
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-  min-height:100vh;
-  padding:20px
-}
-h1{text-align:center;font-size:2em;margin:20px 0 5px;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c66bff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:0 0 28px rgba(122,115,255,.18)}
-.subtitle{text-align:center;color:#d3dcff;font-size:0.95em;margin-bottom:30px;line-height:1.5}
-.filters{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:25px}
-.filters button{background:linear-gradient(180deg,#1f1b3b,#18162f);border:1px solid #403b73;color:#cfd6ff;padding:7px 14px;border-radius:20px;font-size:0.85em;cursor:pointer;transition:all 0.2s;box-shadow:0 6px 18px rgba(0,0,0,.16)}
-.filters button:hover,.filters button.active{background:linear-gradient(135deg,#ff5fa2,#7f6bff 50%,#44d1ff);border-color:#ffd2f0;color:#fff;box-shadow:0 10px 24px rgba(133,96,255,.34)}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;max-width:980px;margin:0 auto}
-.card{
-  width:100%;
-  cursor:pointer;
-  border:1px solid #343064;
-  border-radius:14px;
-  padding:16px 14px;
-  text-decoration:none;
-  color:#eef2ff;
-  transition:all 0.2s;
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  box-shadow:0 14px 34px rgba(0,0,0,.22)
-}
-.card:hover{transform:translateY(-4px) scale(1.01);border-color:#ffffffaa;box-shadow:0 18px 40px rgba(90,95,255,.32)}
-.card:nth-child(6n+1){background:radial-gradient(circle at top right, rgba(77,150,255,.24), transparent 26%), radial-gradient(circle at bottom left, rgba(255,107,107,.18), transparent 28%), linear-gradient(145deg,#171733,#221b48)}
-.card:nth-child(6n+2){background:radial-gradient(circle at top right, rgba(255,217,61,.26), transparent 24%), radial-gradient(circle at bottom left, rgba(255,140,66,.18), transparent 30%), linear-gradient(145deg,#2c1a20,#4a2332)}
-.card:nth-child(6n+3){background:radial-gradient(circle at top right, rgba(107,203,119,.24), transparent 24%), radial-gradient(circle at bottom left, rgba(68,209,255,.16), transparent 28%), linear-gradient(145deg,#14232b,#183b42)}
-.card:nth-child(6n+4){background:radial-gradient(circle at top right, rgba(198,107,255,.28), transparent 24%), radial-gradient(circle at bottom left, rgba(255,107,209,.16), transparent 28%), linear-gradient(145deg,#241336,#39214d)}
-.card:nth-child(6n+5){background:radial-gradient(circle at top right, rgba(255,122,0,.24), transparent 24%), radial-gradient(circle at bottom left, rgba(255,217,61,.16), transparent 28%), linear-gradient(145deg,#2c180f,#4a2a16)}
-.card:nth-child(6n+6){background:radial-gradient(circle at top right, rgba(68,209,255,.24), transparent 24%), radial-gradient(circle at bottom left, rgba(107,107,255,.18), transparent 28%), linear-gradient(145deg,#101e31,#1c2b52)}
-.card:nth-child(6n+1):hover{box-shadow:0 18px 40px rgba(77,150,255,.26)}
-.card:nth-child(6n+2):hover{box-shadow:0 18px 40px rgba(255,122,0,.24)}
-.card:nth-child(6n+3):hover{box-shadow:0 18px 40px rgba(107,203,119,.24)}
-.card:nth-child(6n+4):hover{box-shadow:0 18px 40px rgba(198,107,255,.28)}
-.card:nth-child(6n+5):hover{box-shadow:0 18px 40px rgba(255,190,80,.24)}
-.card:nth-child(6n+6):hover{box-shadow:0 18px 40px rgba(68,209,255,.24)}
-.card .icon-wrap{width:58px;height:58px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin-bottom:8px;border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 10px 24px rgba(0,0,0,.18)}
-.card:nth-child(6n+1) .icon-wrap{background:linear-gradient(135deg,#4d96ff,#7f6bff 58%,#ff6b6b)}
-.card:nth-child(6n+2) .icon-wrap{background:linear-gradient(135deg,#ffd93d,#ff9f43 58%,#ff6b6b)}
-.card:nth-child(6n+3) .icon-wrap{background:linear-gradient(135deg,#6bcb77,#2ed3c6 58%,#44d1ff)}
-.card:nth-child(6n+4) .icon-wrap{background:linear-gradient(135deg,#c66bff,#ff5fa2 58%,#7f6bff)}
-.card:nth-child(6n+5) .icon-wrap{background:linear-gradient(135deg,#ff7a00,#ffd93d 58%,#ff5f6d)}
-.card:nth-child(6n+6) .icon-wrap{background:linear-gradient(135deg,#44d1ff,#4d96ff 58%,#7f6bff)}
-.card .emoji{font-size:2em;line-height:1;filter:drop-shadow(0 3px 8px rgba(0,0,0,.18))}
-.card .title{font-weight:700;font-size:0.98em;line-height:1.25;color:#ffffff}
-.card .date{font-size:0.75em;color:#b7c3ea}
-.card .tag{display:inline-block;font-size:0.65em;padding:3px 9px;border-radius:999px;margin-top:6px;width:fit-content;font-weight:700;letter-spacing:.02em}
-.tag.featured{background:linear-gradient(135deg,#6b6bff33,#4d96ff33);color:#c8d1ff;border:1px solid #7f95ff66}
-.tag.classic{background:linear-gradient(135deg,#ffd93d33,#ffb34733);color:#ffe38a;border:1px solid #ffd93d66}
-.tag.retro70s{background:linear-gradient(135deg,#ff7a0033,#ff4d6d33);color:#ffb37f;border:1px solid #ff7a0066}
-.tag.experimental{background:linear-gradient(135deg,#9b59b633,#6666aa33);color:#d7b8ff;border:1px solid #a377d966}
-.count{text-align:center;color:#aab7e4;font-size:0.85em;margin-top:25px;padding-bottom:20px}
-@media (min-width: 900px){
-  h1{font-size:2.4em}
-  .subtitle{font-size:1em}
-  .grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;max-width:1100px}
-  .card{padding:18px 16px;min-height:170px}
-  .card .icon-wrap{width:64px;height:64px;border-radius:18px}
-  .card .emoji{font-size:2.25em}
-}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="0; url=https://jz237.github.io/jez237-site/games/">
+  <link rel="canonical" href="https://jz237.github.io/jez237-site/games/">
+  <title>Games index moved</title>
+  <script>location.replace('https://jz237.github.io/jez237-site/games/' + location.search + location.hash);</script>
+  <style>
+    *{box-sizing:border-box}
+    body{min-height:100vh;margin:0;display:grid;place-items:center;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#080814;color:#f2f4ff;padding:24px}
+    main{max-width:520px;padding:28px;border:1px solid rgba(255,255,255,.14);border-radius:18px;background:linear-gradient(145deg,#171733,#221b48);box-shadow:0 18px 44px rgba(0,0,0,.35)}
+    h1{margin:0 0 10px;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c66bff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+    a{color:#8fd8ff;font-weight:700}
+  </style>
 </head>
 <body>
-
-<h1>🎮 GameMaster Arcade</h1>
-<p class="subtitle">Mobile-first HTML5 games — tap to play<br><a href="https://jz237.github.io/jez237-site/" style="color:#6b6bff;text-decoration:none;font-size:0.9em">← Back to Homepage</a></p>
-
-<div class="filters">
-  <button class="active" onclick="filter('all')">All</button>
-  <button onclick="filter('featured')">⭐ Featured</button>
-  <button onclick="filter('arcade')">🕹️ Arcade</button>
-  <button onclick="filter('puzzle')">🧩 Puzzle</button>
-  <button onclick="filter('adventure')">🗺️ Adventure</button>
-  <button onclick="filter('retro70s')">📺 70s Classics</button>
-</div>
-
-<div class="grid" id="grid"></div>
-<p class="count" id="count"></p>
-
-<script>
-const games = [
-  // === FEATURED (polished, posted to #games) ===
-  {title:"Millipede",path:"2026-04-28/millipede/",emoji:"🪲",date:"Apr 28",cat:"arcade",tag:"featured",desc:"Touch-first fungal swarm shooter tuned for classic arcade crawler action"},
-  {title:"Night Fireworks Show",path:"2026-04-23/fireworks-nocturne/",emoji:"🎆",date:"Apr 23",cat:"arcade",tag:"featured",desc:"Realistic night fireworks with smoke, bloom, crackle, and touch launches"},
-  {title:"One Touch Sky",path:"2026-04-23/one-touch-sky/",emoji:"🚀",date:"Apr 23",cat:"arcade",tag:"featured",desc:"One-finger space fighter with auto-fire and cinematic glow"},
-  {title:"Hard Hat Mac",path:"hard-hat-mac/",emoji:"👷",date:"Mar 17",cat:"arcade",tag:"featured",desc:"Classic 1983 Apple II remake — 3 construction levels"},
-  {title:"Crystal Cavern",path:"2026-03-16/crystal-cavern/",emoji:"💎",date:"Mar 16",cat:"arcade",tag:"featured",desc:"Descend through dark crystal caves with dynamic lighting"},
-  {title:"Shatter Storm",path:"2026-03-11/shatter-storm/",emoji:"🧱",date:"Mar 11",cat:"arcade",tag:"featured",desc:"Stained-glass breakout"},
-  {title:"Plasma Pong",path:"2026-03-10/plasma-pong/",emoji:"🏓",date:"Mar 10",cat:"arcade",tag:"featured",desc:"Neon pong with plasma trails"},
-  {title:"Asteroids HD",path:"2026-03-09/asteroids-hd/",emoji:"🚀",date:"Mar 9",cat:"arcade",tag:"featured",desc:"3D asteroids, powerups, boost"},
-  {title:"Missile Command: Aurora Siege",path:"2026-03-08/missile-command/",emoji:"🎆",date:"Mar 8",cat:"arcade",tag:"featured",desc:"Defend cities from the sky"},
-  {title:"Missile Command (GPT)",path:"gpt-missile-command/",emoji:"🎇",date:"Mar 8",cat:"arcade",tag:"featured",desc:"GPT's take on Missile Command"},
-  {title:"Missile Command 3D",path:"2026-03-17/missile-command-3d/",emoji:"🚀",date:"Mar 17",cat:"arcade",tag:"featured",desc:"3D perspective with destructible cities"},
-  {title:"Stellar Drift",path:"2026-03-25/stellar-drift/",emoji:"✨",date:"Mar 25",cat:"arcade",tag:"featured",desc:"One-finger auto-fire space shooter"},
-  {title:"Lantern Creek",path:"2026-03-29/lantern-creek/",emoji:"🏮",date:"Mar 29",cat:"puzzle",tag:"featured",desc:"Guide glowing lanterns down a moonlit stream"},
-  {title:"SUPER STAR TREK",path:"2026-03-27/star-trek/",emoji:"🖖",date:"Mar 27",cat:"retro70s",tag:"featured",desc:"The awesome 70s computer classic — reborn with LCARS visuals"},
-  {title:"Asteroids",path:"2026-03-08/asteroids/",emoji:"☄️",date:"Mar 8",cat:"arcade",tag:"featured",desc:"Classic asteroids, mobile controls"},
-  {title:"Lunar Lander",path:"lunar-lander/lunar-lander.html",emoji:"🌕",date:"Apr 7",cat:"arcade",tag:"featured",desc:"Precision moon landing with retro vibes"},
-  {title:"Neon Qix",path:"2026-04-09/quix-modern/",emoji:"⚡",date:"Apr 9",cat:"arcade",tag:"featured",desc:"Modernized Qix with neon field capture and local high scores"},
-
-  // === CLASSIC (solid games) ===
-
-  {title:"Depth Charge",path:"2026-03-08/depth-charge/",emoji:"🌊",date:"Mar 8",cat:"arcade",tag:"classic",desc:"Sonar submarine hunt"},
-  {title:"Boulder Dash",path:"2026-03-05/boulder-dash/",emoji:"💎",date:"Mar 5",cat:"puzzle",tag:"classic",desc:"Diamond mine classic"},
-  {title:"Neon Serpent",path:"2026-03-05/neon-serpent/",emoji:"🐍",date:"Mar 5",cat:"arcade",tag:"classic",desc:"Snake with neon style"},
-  {title:"Ember Knight",path:"2026-03-06/ember-knight/",emoji:"⚔️",date:"Mar 6",cat:"adventure",tag:"classic",desc:"Dungeon crawler"},
-  {title:"Glassrail Bastion",path:"2026-03-06/glassrail-bastion/",emoji:"🚂",date:"Mar 6",cat:"arcade",tag:"classic",desc:"Rail defense"},
-
-  // === EXPERIMENTAL (early builds) ===
-  {title:"Vortex: Storm Eater",path:"2026-03-04/vortex/",emoji:"🌪️",date:"Mar 4",cat:"arcade",tag:"experimental"},
-  {title:"Runecaster",path:"2026-03-04/runecaster/",emoji:"🧙",date:"Mar 4",cat:"arcade",tag:"experimental"},
-  {title:"Tessera",path:"2026-03-04/tessera/",emoji:"⬡",date:"Mar 4",cat:"puzzle",tag:"experimental"},
-  {title:"Slash",path:"2026-03-04/slash/",emoji:"⚡",date:"Mar 4",cat:"arcade",tag:"experimental"},
-  {title:"Void Echo",path:"2026-03-03/void-echo/",emoji:"🌌",date:"Mar 3",cat:"arcade",tag:"experimental"},
-  {title:"Gravity Weaver",path:"2026-03-03/gravity-weaver/",emoji:"🕸️",date:"Mar 3",cat:"puzzle",tag:"experimental"},
-];
-
-let currentFilter='all';
-function filter(f){
-  currentFilter=f;
-  document.querySelectorAll('.filters button').forEach(b=>b.classList.remove('active'));
-  event.target.classList.add('active');
-  render();
-}
-function render(){
-  const grid=document.getElementById('grid');
-  const filtered=currentFilter==='all'?games:games.filter(g=>g.tag===currentFilter||g.cat===currentFilter);
-  grid.innerHTML=filtered.map(g=>`
-    <div class="card" onclick="window.location='${g.path}'" data-tag="${g.tag}" data-cat="${g.cat}">
-      <span class="icon-wrap"><span class="emoji">${g.emoji}</span></span>
-      <span class="title">${g.title}</span>
-      ${g.desc?`<span class="date">${g.desc}</span>`:''}
-      <span class="date">${g.date}</span>
-      <span class="tag ${g.tag}">${g.tag==='featured'?'⭐ Featured':g.tag==='classic'?'🎮 Classic':'🧪 Experimental'}</span>
-    </div>
-  `).join('');
-  document.getElementById('count').textContent=`${filtered.length} game${filtered.length!==1?'s':''}`;
-}
-render();
-</script>
+  <main>
+    <h1>Games index moved</h1>
+    <p>The main games index now lives on Jez’s personal site.</p>
+    <p><a href="https://jz237.github.io/jez237-site/games/">Open the games index</a></p>
+  </main>
 </body>
 </html>
