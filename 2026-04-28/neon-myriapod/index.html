@@ -60,7 +60,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.7.2</div>
+    <div class="version">v1.7.3</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
@@ -83,7 +83,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.7.2</div>
+    <div class="version">v1.7.3</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -93,13 +93,13 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="upgradeScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.7.2</div>
+    <div class="version">v1.7.3</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Choose an upgrade</h2>
     <p id="upgradeLine" class="small">The garden shifts. Pick one advantage for the next waves.</p>
     <div class="upgrades">
-      <button id="upFireBtn" class="upgradebtn"><b>Faster Shot</b><span>Autofire cycles quicker. More room to carve fungus before the swarm drops.</span></button>
-      <button id="upSpreadBtn" class="upgradebtn"><b>Wider Spread</b><span>Triple shot fans wider and lasts longer when active.</span></button>
-      <button id="upPulseBtn" class="upgradebtn"><b>Stronger Pulse</b><span>Pulse bomb reaches farther and hits queen armor harder.</span></button>
+      <button id="upFireBtn" class="upgradebtn" data-up="fire"><b>Faster Shot</b><span>Autofire cycles quicker. More room to carve fungus before the swarm drops.</span></button>
+      <button id="upSpreadBtn" class="upgradebtn" data-up="spread"><b>Wider Spread</b><span>Triple shot fans wider and lasts longer when active.</span></button>
+      <button id="upPulseBtn" class="upgradebtn" data-up="pulse"><b>Stronger Pulse</b><span>Pulse bomb reaches farther and hits queen armor harder.</span></button>
     </div>
   </div>
 </section>
@@ -107,7 +107,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.7.2</div>
+    <div class="version">v1.7.3</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -123,7 +123,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.7.2';
+const VERSION = 'v1.7.3';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const AUDIO_GAIN = 2.25;
@@ -398,6 +398,20 @@ function waveDanger(n){
 function showWaveIntro(){
   waveBanner = {text:waveTitle(wave),sub:waveDanger(wave),life:1.95,max:1.95};
 }
+function milestoneTier(){ return wave >= 32 ? 3 : wave >= 24 ? 2 : wave >= 16 ? 1 : 0; }
+function upgradePreview(id){
+  const lv = upgrades[id] || 0, next = lv + 1;
+  if(id==='fire') return `Lv.${lv} → Lv.${next} · fire delay -${Math.round(next*3.5)}ms`;
+  if(id==='spread') return `Lv.${lv} → Lv.${next} · wider fan +${(next*1.5).toFixed(1)}s spread`;
+  return `Lv.${lv} → Lv.${next} · pulse range/damage up`;
+}
+function refreshUpgradeButtons(){
+  document.querySelectorAll('.upgradebtn[data-up]').forEach(btn=>{
+    const id = btn.dataset.up, label = id==='fire'?'Faster Shot':id==='spread'?'Wider Spread':'Stronger Pulse';
+    btn.querySelector('b').textContent = `${label} Lv.${upgrades[id] || 0}`;
+    btn.querySelector('span').textContent = upgradePreview(id);
+  });
+}
 function damageSegment(s, c, play, amount){
   if(s.hit) return;
   const dmg = amount || 1;
@@ -634,7 +648,8 @@ function maybeOfferUpgrade(){
   if(state !== 'playing') return false;
   if(wave > 0 && wave % 4 === 0){
     state = 'upgrade';
-    document.getElementById('upgradeLine').textContent = `WAVE ${wave} CLEARED · choose one earned advantage`;
+    document.getElementById('upgradeLine').textContent = `WAVE ${wave} CLEARED · smart bomb recharged after choosing`;
+    refreshUpgradeButtons();
     showOnly('upgradeScreen');
     sfx('pickup');
     return true;
@@ -802,9 +817,13 @@ function collisions(play){
 function draw(){
   const ox = shake ? rand(-shake,shake) : 0, oy = shake ? rand(-shake,shake) : 0;
   ctx.save(); ctx.translate(ox,oy);
-  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#071026'); g.addColorStop(.62,'#061316'); g.addColorStop(1,'#09070d'); ctx.fillStyle=g; ctx.fillRect(-20,-20,W+40,H+40);
-  stars.forEach(s=>{ctx.globalAlpha=s.a;ctx.fillStyle='#b9ffff';ctx.fillRect(s.x,s.y,s.s,s.s)}); ctx.globalAlpha=1;
-  ctx.strokeStyle='rgba(71,255,224,.08)'; ctx.lineWidth=1; const cell=grid(); for(let y=cell;y<H;y+=cell){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  const tier=milestoneTier(); const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,tier>=3?'#23051f':tier>=2?'#171036':tier>=1?'#101d2d':'#071026');
+  g.addColorStop(.62,tier>=3?'#16100b':tier>=2?'#101727':tier>=1?'#071b1b':'#061316');
+  g.addColorStop(1,tier>=3?'#1c0710':tier>=2?'#120719':'#09070d'); ctx.fillStyle=g; ctx.fillRect(-20,-20,W+40,H+40);
+  stars.forEach(s=>{ctx.globalAlpha=s.a+(tier*.05);ctx.fillStyle=tier>=2?'#ffd7ff':'#b9ffff';ctx.fillRect(s.x,s.y,s.s,s.s)}); ctx.globalAlpha=1;
+  ctx.strokeStyle=tier>=3?'rgba(255,80,190,.15)':tier>=2?'rgba(180,120,255,.13)':tier>=1?'rgba(71,255,224,.12)':'rgba(71,255,224,.08)'; ctx.lineWidth=1; const cell=grid(); for(let y=cell;y<H;y+=cell){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  if(tier>0){ ctx.fillStyle=`rgba(${tier>=3?'255,42,144':tier>=2?'145,83,255':'44,255,221'},${.025+tier*.018})`; ctx.fillRect(-20,-20,W+40,H+40); ctx.font='900 10px ui-monospace,monospace'; ctx.fillStyle=tier>=3?'rgba(255,160,220,.35)':tier>=2?'rgba(190,160,255,.32)':'rgba(110,255,235,.28)'; ctx.fillText(tier>=3?'DEEP INFESTATION':tier>=2?'HIVE PRESSURE':'FIELD MUTATION',12,H-10); }
   if(powers.frost > 0){ ctx.fillStyle='rgba(160,220,255,.075)'; ctx.fillRect(-20,-20,W+40,H+40); ctx.strokeStyle='rgba(185,238,255,.16)'; for(let x=(gameTime*18)%cell;x<W;x+=cell*2){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x-cell,H);ctx.stroke();} }
   mushrooms.forEach(drawMushroom); crawlers.forEach(drawCrawler); enemies.forEach(drawEnemyTell); enemies.forEach(drawEnemy);
   pickups.forEach(drawPickup);
@@ -1023,7 +1042,8 @@ window.__NEON_MYRIAPOD_TEST__ = {
   triggerQueen(){ spawnQueenCrawler(); return crawlers.filter(c=>c.queen).length; },
   setWave(n){ wave = Math.max(1, Math.floor(n || 1)); showWaveIntro(); updateHud(); return wave; },
   difficulty(){ return {wave,late:latePressure(),difficulty:difficulty(),mushroomChance:.12 + Math.min(wave,8)*.006 + Math.min(.085, latePressure()*.0045)}; },
-  state(){ return {state,score,wave,lives,upgrades:{...upgrades},player:{x:player.x,y:player.y,tx:player.tx,ty:player.ty},powers:{...powers},pickups:pickups.length,bullets:bullets.length,crawlers:crawlers.length,queens:crawlers.filter(c=>c.queen).length,waveBanner:waveBanner.text,waveDanger:waveBanner.sub,deathMarker}; },
+  state(){ return {state,score,wave,lives,upgrades:{...upgrades},milestone:milestoneTier(),player:{x:player.x,y:player.y,tx:player.tx,ty:player.ty},powers:{...powers},pickups:pickups.length,bullets:bullets.length,crawlers:crawlers.length,queens:crawlers.filter(c=>c.queen).length,waveBanner:waveBanner.text,waveDanger:waveBanner.sub,deathMarker}; },
+  refreshUpgradeButtons,
   applyUpgrade,
   mushroomCheck(){
     const m = {x:60,y:60,hp:8,max:8,r:12,poison:false,pulse:0,chunks:[],seed:12345};
