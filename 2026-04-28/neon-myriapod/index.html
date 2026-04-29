@@ -60,7 +60,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.9</div>
+    <div class="version">v1.7.0</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
@@ -83,7 +83,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.9</div>
+    <div class="version">v1.7.0</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -93,7 +93,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="upgradeScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.9</div>
+    <div class="version">v1.7.0</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Choose an upgrade</h2>
     <p id="upgradeLine" class="small">The garden shifts. Pick one advantage for the next waves.</p>
     <div class="upgrades">
@@ -107,7 +107,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.9</div>
+    <div class="version">v1.7.0</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -123,7 +123,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.6.9';
+const VERSION = 'v1.7.0';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const AUDIO_GAIN = 2.25;
@@ -387,7 +387,7 @@ function showWaveIntro(){
 function damageSegment(s, c, play, amount){
   if(s.hit) return;
   const dmg = amount || 1;
-  s.hp = (s.hp || 1) - dmg;
+  s.hp = (s.hp || 1) - dmg; s.wound = .42;
   if(s.queen && play){
     sfx('queenHit');
     burst(s.x,s.y,s.head?'#ffd96a':'#ff5ad8',s.hp <= 0 ? 24 : 9);
@@ -594,11 +594,11 @@ function pulseBomb(){
   crawlers.forEach(c=>{ c.segs.forEach(s=>{
     if(!s.queen && dist(player.x,player.y,s.x,s.y) > blastRange) return;
     if(s.queen){
-      s.hp = Math.max(1, (s.hp || 1) - (1 + Math.min(2,upgrades.pulse)));
+      s.hp = Math.max(1, (s.hp || 1) - (1 + Math.min(2,upgrades.pulse))); s.wound = 1.25; s.cracked = true;
       burst(s.x,s.y,'#ffd96a',12); popups.push({x:s.x-8,y:s.y-12,t:'CRACK',life:.55,color:'#ffd96a'});
     }else{
       const dmg = 2 + Math.min(2,upgrades.pulse);
-      s.hp = (s.hp || 1) - dmg;
+      s.hp = (s.hp || 1) - dmg; s.wound = .65;
       burst(s.x,s.y,'#6fffe6',10);
       if(s.hp <= 0) s.hit = true;
     }
@@ -685,7 +685,7 @@ function updateCrawlers(dt, play){
   const frost = powers.frost > 0 ? .48 : 1;
   crawlers.forEach(c=>{
     c.wiggle += dt*8*frost; c.turnLock = Math.max(0, (c.turnLock || 0) - dt); c.scatter = Math.max(0, (c.scatter || 0) - dt);
-    c.segs.forEach(s=>{ s.grace = Math.max(0, (s.grace || 0) - dt); });
+    c.segs.forEach(s=>{ s.grace = Math.max(0, (s.grace || 0) - dt); s.wound = Math.max(0, (s.wound || 0) - dt); });
     const speed = (c.speed + rank*8) * dt * frost;
     let lead = c.segs[0]; if(!lead) return;
     const laneY = Math.round(lead.y / cell) * cell;
@@ -856,10 +856,12 @@ function drawCrawler(c){
     grad.addColorStop(1,queen ? (head?'#b56b00':'#7e0a67') : head?'#c58b00':`hsl(${c.hue+i*3},90%,34%)`);
     ctx.fillStyle=grad; ctx.beginPath(); ctx.ellipse(0,0,r*(head?1.16:1),r*(queen ? .92 : .88),0,0,7); ctx.fill();
     ctx.shadowBlur=0; ctx.strokeStyle='rgba(1,9,17,.95)'; ctx.lineWidth=queen?3:2; ctx.stroke();
+    if(s.wound > 0){ ctx.globalCompositeOperation='lighter'; ctx.strokeStyle=queen?'rgba(255,255,255,.9)':'rgba(190,255,245,.8)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,r+3+s.wound*4,0,7); ctx.stroke(); ctx.globalCompositeOperation='source-over'; }
     ctx.strokeStyle=queen?'rgba(255,238,150,.58)':'rgba(255,255,255,.38)'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.arc(-r*.12,-r*.23,r*.42,Math.PI,Math.PI*1.86); ctx.stroke();
+    if(queen && (s.cracked || s.hp < s.maxHp)){ ctx.strokeStyle=s.hp<=1?'#ffffff':'#2a071d'; ctx.lineWidth=s.hp<=1?2.2:1.6; ctx.beginPath(); ctx.moveTo(-r*.45,-r*.3); ctx.lineTo(-r*.12,r*.02); ctx.lineTo(-r*.28,r*.36); ctx.moveTo(r*.18,-r*.42); ctx.lineTo(r*.42,-r*.08); ctx.lineTo(r*.16,r*.28); ctx.stroke(); if(s.hp<=1){ ctx.fillStyle='rgba(255,255,255,.82)'; ctx.fillRect(Math.round(-r*.55),Math.round(-r*.58),3,3); ctx.fillRect(Math.round(r*.45),Math.round(r*.38),2,2); } }
     ctx.fillStyle=queen?'rgba(255,246,170,.92)':'rgba(229,255,255,.72)';
     ctx.fillRect(Math.round(-r*.36),Math.round(r*.18),Math.max(2,Math.round(r*.72)),queen?3:2);
-    if(queen && s.hp < s.maxHp){ ctx.fillStyle='#ffffff'; for(let k=0;k<s.hp;k++) ctx.fillRect(Math.round(-r*.35+k*4),Math.round(-r*.58),2,2); }
+    if(queen && s.hp < s.maxHp){ ctx.fillStyle=s.hp<=1?'#fffbdb':'#ffffff'; for(let k=0;k<s.hp;k++) ctx.fillRect(Math.round(-r*.35+k*4),Math.round(-r*.58),2,2); }
     if(head){
       if(queen){
         ctx.fillStyle='#ffd96a'; ctx.strokeStyle='#2a1200'; ctx.lineWidth=1.5; ctx.beginPath();
