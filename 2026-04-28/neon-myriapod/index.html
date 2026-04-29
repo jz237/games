@@ -58,7 +58,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.0</div>
+    <div class="version">v1.5.1</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
@@ -72,7 +72,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.0</div>
+    <div class="version">v1.5.1</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -82,7 +82,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.0</div>
+    <div class="version">v1.5.1</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -98,7 +98,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.5.0';
+const VERSION = 'v1.5.1';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const canvas = document.getElementById('game');
@@ -262,7 +262,7 @@ function chipMushroom(m, b, play, quiet){
 }
 function crawlerSegment(x,y,head,opts){
   const queen = !!opts.queen, child = !!opts.child;
-  const hp = queen ? (head ? 7 : 3) : child ? 1 : 1;
+  const hp = queen ? (head ? 5 : 2) : child ? 1 : 1;
   return {x, y, px:x, py:y, turn:0, blink:Math.random()*6, head, hp, maxHp:hp, queen, child};
 }
 function makeCrawler(y, len, speed, opts){
@@ -295,10 +295,12 @@ function showWaveIntro(){
 }
 function damageSegment(s, c, play, amount){
   if(s.hit) return;
-  s.hp = (s.hp || 1) - (amount || 1);
+  const dmg = amount || 1;
+  s.hp = (s.hp || 1) - dmg;
   if(s.queen && play){
     sfx('queenHit');
-    burst(s.x,s.y,s.head?'#ffd96a':'#ff5ad8',s.hp <= 0 ? 22 : 7);
+    burst(s.x,s.y,s.head?'#ffd96a':'#ff5ad8',s.hp <= 0 ? 24 : 9);
+    if(s.hp > 0 && dmg >= 2) popups.push({x:s.x-10,y:s.y-14,t:'-'+dmg,life:.42,color:'#ffd96a'});
     if(s.hp <= 0){
       const n = s.head ? 3 : 1;
       for(let k=0;k<n;k++) makeChildCrawler(s.x + rand(-8,8), s.y + rand(-6,6), (k % 2 ? 1 : -1) * (c.dir || 1));
@@ -455,7 +457,7 @@ function drillLaser(dt, play){
   mushrooms.forEach(m=>{
     if(chewed < 6 && m.y > top && m.y < bottom && Math.abs(m.x-x) < m.r + w){ chipMushroom(m,{x,y:m.y},play,true); chewed++; }
   });
-  crawlers.forEach(c=>c.segs.forEach(s=>{ if(s.y > top && s.y < bottom && Math.abs(s.x-x) < grid()*.34) damageSegment(s, c, play, 1); }));
+  crawlers.forEach(c=>c.segs.forEach(s=>{ if(s.y > top && s.y < bottom && Math.abs(s.x-x) < grid()*.34) damageSegment(s, c, play, s.queen ? 2 : 1); }));
   enemies.forEach(e=>{ if(e.y > top && e.y < bottom && Math.abs(e.x-x) < e.r+w){ e.hp -= 1; if(e.hp<=0 && play) killEnemy(e); } });
   if(play && chewed) sfx('laser');
   particles.push({x,y:rand(top,bottom),vx:rand(-20,20),vy:rand(-80,20),life:.18,max:1,r:rand(1.5,3),color:'#ffb8ef'});
@@ -471,12 +473,12 @@ function killEnemy(e){
 function shoot(){
   if(bullets.length > 58) return;
   if(powers.spread > 0 && bullets.length < 55){
-    bullets.push({x:player.x,y:player.y-19,vx:0,vy:-715,r:1.8,life:1.05});
-    bullets.push({x:player.x-7,y:player.y-15,vx:-130,vy:-680,r:1.55,life:.94});
-    bullets.push({x:player.x+7,y:player.y-15,vx:130,vy:-680,r:1.55,life:.94});
+    bullets.push({x:player.x,y:player.y-19,vx:0,vy:-715,r:1.8,life:1.05,dmg:2});
+    bullets.push({x:player.x-7,y:player.y-15,vx:-130,vy:-680,r:1.55,life:.94,dmg:1});
+    bullets.push({x:player.x+7,y:player.y-15,vx:130,vy:-680,r:1.55,life:.94,dmg:1});
   }else{
-    bullets.push({x:player.x,y:player.y-18,vx:0,vy:-710,r:1.8,life:1.08});
-    if(rank > 3 && Math.random()<.32 && bullets.length < 56){ bullets.push({x:player.x-7,y:player.y-14,vx:-35,vy:-675,r:1.55,life:1}); bullets.push({x:player.x+7,y:player.y-14,vx:35,vy:-675,r:1.55,life:1}); }
+    bullets.push({x:player.x,y:player.y-18,vx:0,vy:-710,r:1.8,life:1.08,dmg:1});
+    if(rank > 3 && Math.random()<.32 && bullets.length < 56){ bullets.push({x:player.x-7,y:player.y-14,vx:-35,vy:-675,r:1.55,life:1,dmg:1}); bullets.push({x:player.x+7,y:player.y-14,vx:35,vy:-675,r:1.55,life:1,dmg:1}); }
   }
   player.muzzle = .055; player.recoil = .08;
   sfx('shot');
@@ -485,7 +487,7 @@ function pulseBomb(){
   if(state !== 'playing' || bombs <= 0) return;
   bombs--; shake = 16; flash = .32; updateHud(); sfx('bomb');
   for(let i=enemies.length-1;i>=0;i--){ addScore(enemies[i].x,enemies[i].y,150); burst(enemies[i].x,enemies[i].y,'#ffcf5c',18); maybeDropPickup(enemies[i].x,enemies[i].y); enemies.splice(i,1); }
-  crawlers.forEach(c=>{ c.segs.forEach(s=>{ if(dist(player.x,player.y,s.x,s.y)<180) damageSegment(s, c, state === 'playing', c.queen ? 2 : 1); }); });
+  crawlers.forEach(c=>{ c.segs.forEach(s=>{ if(dist(player.x,player.y,s.x,s.y)<180) damageSegment(s, c, state === 'playing', c.queen ? 6 : 1); }); });
   mushrooms.forEach(m=>{ if(dist(player.x,player.y,m.x,m.y)<145) chipMushroom(m, {x:m.x,y:m.y}, state === 'playing'); });
 }
 function addScore(x,y,v){
@@ -599,7 +601,7 @@ function updateEnemies(dt, play){
 function collisions(play){
   bullets.forEach(b=>{
     mushrooms.forEach(m=>{ if(!b.dead && dist(b.x,b.y,m.x,m.y)<m.r){ b.dead=true; chipMushroom(m, b, play); } });
-    crawlers.forEach(c=>c.segs.forEach(s=>{ const rr = grid()*(s.queen ? .58 : .43); if(!b.dead && dist(b.x,b.y,s.x,s.y)<rr){ b.dead=true; damageSegment(s, c, play, 1); } }));
+    crawlers.forEach(c=>c.segs.forEach(s=>{ const rr = grid()*(s.queen ? .58 : .43); if(!b.dead && dist(b.x,b.y,s.x,s.y)<rr){ b.dead=true; damageSegment(s, c, play, (b.dmg || 1) + (s.queen ? 1 : 0)); } }));
     enemies.forEach(e=>{ if(!b.dead && dist(b.x,b.y,e.x,e.y)<e.r+3){ b.dead=true; e.hp--; if(e.hp<=0 && play) killEnemy(e); } });
   });
   bullets = bullets.filter(b=>!b.dead);
@@ -780,6 +782,7 @@ bindButton('pauseBtn', ()=>{ if(state==='playing'){ state='paused'; document.que
 window.__NEON_MYRIAPOD_TEST__ = {
   version: VERSION,
   powerTypes: POWERUP_TYPES.map(p=>p.id),
+  queenBalance(){ const q={hp:5,maxHp:5,queen:true,head:true,x:80,y:80}; const c={dir:1}; damageSegment(q,c,false,2); return q.hp; },
   applyPowerup,
   triggerQueen(){ spawnQueenCrawler(); return crawlers.filter(c=>c.queen).length; },
   setWave(n){ wave = Math.max(1, Math.floor(n || 1)); showWaveIntro(); updateHud(); return wave; },
