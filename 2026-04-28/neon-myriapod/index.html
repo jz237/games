@@ -44,7 +44,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 .initials{display:flex;justify-content:center;gap:10px;margin:12px 0}.slot{display:flex;flex-direction:column;gap:4px;align-items:center}.letter{width:48px;height:48px;border:1px solid rgba(130,255,235,.34);border-radius:8px;display:flex;align-items:center;justify-content:center;font:950 28px ui-monospace,monospace;background:rgba(0,0,0,.28)}
 .arrow{width:48px;height:38px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(130,255,235,.22);color:#dff;font-weight:950}
 .upgrades{display:grid;gap:9px;margin:12px 0}.upgradebtn{width:100%;min-height:68px;text-align:left;padding:10px 12px;border-radius:9px;background:linear-gradient(180deg,rgba(26,255,230,.16),rgba(255,78,191,.09));border:1px solid rgba(136,255,236,.34);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 18px rgba(30,255,224,.1)}.upgradebtn b{display:block;color:#fff;font:950 13px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}.upgradebtn span{display:block;margin-top:4px;color:#aee7e4;font-size:12px;line-height:1.3}
-.enemyguide{margin:10px 0 4px;padding:8px;border:1px solid rgba(135,255,235,.18);border-radius:8px;background:rgba(0,0,0,.18);display:grid;grid-template-columns:1fr 1fr;gap:6px;text-align:left}.enemyguide div{font:800 10px ui-monospace,monospace;color:#c6f4f0;letter-spacing:.04em;display:flex;align-items:center;gap:6px}.enemyguide b{color:#fff}.enemyguide .wide{grid-column:1/-1;color:#8cf8e8;text-align:center;justify-content:center;letter-spacing:.14em}.mini{position:relative;display:inline-block;width:22px;height:18px;flex:0 0 22px;filter:drop-shadow(0 0 5px currentColor)}.mini.ship{color:#61f7ff;clip-path:polygon(50% 0,92% 100%,50% 70%,8% 100%);background:linear-gradient(#eaffff,#14dff0)}.mini.milli{color:#54ffe2;background:repeating-radial-gradient(circle at 4px 9px,#fff 0 2px,#54ffe2 3px 6px,#073b35 7px 9px);border-radius:12px}.mini.queen{color:#ff4fc4;background:linear-gradient(90deg,#ffd96a,#ff4fc4);border-radius:12px}.mini.queen:before{content:'';position:absolute;left:5px;top:-5px;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:8px solid #ffd96a}.mini.swarm{color:#8cffea;background:#7bffdf;border-radius:10px;transform:scale(.75)}.mini.spider{color:#ff9b4b;background:#ff7a3b;border-radius:50%;box-shadow:-9px 3px 0 -6px #ffcf83,9px 3px 0 -6px #ffcf83}.mini.flea{color:#96ff5a;background:#96ff5a;border-radius:50% 50% 45% 45%;width:14px;margin-left:4px}.mini.scorpion{color:#ff47cc;background:#ff47cc;border-radius:12px}.mini.scorpion:after{content:'';position:absolute;right:-5px;top:-7px;width:12px;height:12px;border:3px solid #ff9ee7;border-left:0;border-bottom:0;border-radius:50%}.mini.power{color:#ffe66b;background:#071016;border:2px solid #ffe66b;box-shadow:inset 0 0 0 2px #56fff0}
+.enemyguide{margin:10px 0 4px;padding:8px;border:1px solid rgba(135,255,235,.18);border-radius:8px;background:rgba(0,0,0,.18);display:grid;grid-template-columns:1fr 1fr;gap:6px;text-align:left}.enemyguide div{font:800 10px ui-monospace,monospace;color:#c6f4f0;letter-spacing:.04em;display:flex;align-items:center;gap:6px}.enemyguide b{color:#fff}.enemyguide .wide{grid-column:1/-1;color:#8cf8e8;text-align:center;justify-content:center;letter-spacing:.14em}.guideSprite{width:38px;height:28px;flex:0 0 38px;image-rendering:crisp-edges;filter:drop-shadow(0 0 5px rgba(120,255,236,.45))}
 @media(max-width:370px){.scores{grid-template-columns:1fr}.panel{padding:14px 10px}.btn{min-width:142px}.title{font-size:2.35rem}}
 </style>
 </head>
@@ -60,17 +60,17 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.4</div>
+    <div class="version">v1.6.5</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
     <p class="small">Drag in the lower field to move. Auto-fire clears fungus and segments. Tap the pulse when the garden gets crowded.</p>
     <div class="enemyguide" aria-label="Enemy field guide">
       <div class="wide">FIELD GUIDE</div>
-      <div><span class="mini ship"></span><b>Shooter</b> your ship</div><div><span class="mini milli"></span><b>Millipede</b> crawler</div>
-      <div><span class="mini queen"></span><b>Queen</b> boss swarm</div><div><span class="mini swarm"></span><b>Swarmlet</b> fragment</div>
-      <div><span class="mini spider"></span><b>Spider</b> side ambusher</div><div><span class="mini flea"></span><b>Flea</b> mushroom dropper</div>
-      <div><span class="mini scorpion"></span><b>Scorpion</b> poison runner</div><div><span class="mini power"></span><b>Power cells</b> upgrades</div>
+      <div><canvas class="guideSprite" data-sprite="ship" width="76" height="56"></canvas><b>Shooter</b> your ship</div><div><canvas class="guideSprite" data-sprite="milli" width="76" height="56"></canvas><b>Millipede</b> crawler</div>
+      <div><canvas class="guideSprite" data-sprite="queen" width="76" height="56"></canvas><b>Queen</b> boss swarm</div><div><canvas class="guideSprite" data-sprite="swarm" width="76" height="56"></canvas><b>Swarmlet</b> fragment</div>
+      <div><canvas class="guideSprite" data-sprite="spider" width="76" height="56"></canvas><b>Spider</b> side ambusher</div><div><canvas class="guideSprite" data-sprite="flea" width="76" height="56"></canvas><b>Flea</b> mushroom dropper</div>
+      <div><canvas class="guideSprite" data-sprite="scorpion" width="76" height="56"></canvas><b>Scorpion</b> poison runner</div><div><canvas class="guideSprite" data-sprite="power" width="76" height="56"></canvas><b>Power cells</b> upgrades</div>
     </div>
     <button id="startBtn" class="btn">Start</button>
     <button id="scoresBtn" class="btn secondary">Scores</button>
@@ -81,7 +81,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.4</div>
+    <div class="version">v1.6.5</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -91,7 +91,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="upgradeScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.4</div>
+    <div class="version">v1.6.5</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Choose an upgrade</h2>
     <p id="upgradeLine" class="small">The garden shifts. Pick one advantage for the next waves.</p>
     <div class="upgrades">
@@ -105,7 +105,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.4</div>
+    <div class="version">v1.6.5</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -121,7 +121,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.6.4';
+const VERSION = 'v1.6.5';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const canvas = document.getElementById('game');
@@ -238,6 +238,42 @@ function bindButton(id, fn){
   el.addEventListener('click', run);
   el.addEventListener('touchend', run, {passive:false});
   return el;
+}
+
+function drawGuideSprites(){
+  document.querySelectorAll('.guideSprite').forEach(cv=>{
+    const g=cv.getContext('2d'), kind=cv.dataset.sprite;
+    g.clearRect(0,0,76,56); g.save(); g.translate(38,28); g.lineJoin='round'; g.lineCap='round';
+    if(kind==='ship'){
+      g.shadowColor='#61f7ff'; g.shadowBlur=9;
+      g.fillStyle='#061a27'; g.beginPath(); g.moveTo(0,-24); g.lineTo(20,19); g.lineTo(0,12); g.lineTo(-20,19); g.closePath(); g.fill();
+      g.shadowBlur=0; g.strokeStyle='#021016'; g.lineWidth=5; g.stroke();
+      g.fillStyle='#dfffff'; g.beginPath(); g.moveTo(0,-19); g.lineTo(13,13); g.lineTo(0,7); g.lineTo(-13,13); g.closePath(); g.fill();
+      g.fillStyle='#123d55'; g.fillRect(-10,9,20,4); g.fillStyle='#60f7ff'; g.fillRect(-2,-21,4,20); g.fillStyle='#021016'; g.fillRect(-1,-17,2,10);
+      g.fillStyle='#ff3f9d'; g.fillRect(-6,6,12,12); g.fillStyle='#ffe66b'; g.fillRect(-9,14,5,6); g.fillRect(4,14,5,6);
+    }
+    if(kind==='milli' || kind==='swarm'){
+      const n=kind==='swarm'?3:5, scale=kind==='swarm'?.72:1;
+      for(let i=n-1;i>=0;i--){ const x=(i-(n-1)/2)*10*scale, head=i===0, r=(head?8:7)*scale; g.shadowColor=head?'#f8ff6a':'#54ffe2'; g.shadowBlur=6; const grd=g.createRadialGradient(x-r*.35,-r*.35,1,x,0,r); grd.addColorStop(0,'#fff'); grd.addColorStop(.35,head?'#fff06b':'#54ffe2'); grd.addColorStop(1,head?'#c58b00':'#08715f'); g.fillStyle=grd; g.beginPath(); g.ellipse(x,0,r*(head?1.15:1),r*.88,0,0,7); g.fill(); g.shadowBlur=0; g.strokeStyle='#010911'; g.lineWidth=2; g.stroke(); if(head){ g.fillStyle='#071016'; g.beginPath(); g.arc(x-2.5,-1.5,1.8,0,7); g.arc(x+2.5,-1.5,1.8,0,7); g.fill(); }}
+    }
+    if(kind==='queen'){
+      for(let i=4;i>=0;i--){ const x=(i-2)*10, head=i===0, r=head?9:8; g.shadowColor=head?'#ffd96a':'#ff4fc4'; g.shadowBlur=7; const grd=g.createRadialGradient(x-3,-4,1,x,0,r); grd.addColorStop(0,'#fff'); grd.addColorStop(.35,head?'#ffe97a':'#ff8ee0'); grd.addColorStop(1,head?'#b56b00':'#7e0a67'); g.fillStyle=grd; g.beginPath(); g.ellipse(x,0,r*(head?1.18:1),r*.92,0,0,7); g.fill(); g.shadowBlur=0; g.strokeStyle='#010911'; g.lineWidth=2.4; g.stroke(); if(head){ g.fillStyle='#ffd96a'; g.strokeStyle='#2a1200'; g.lineWidth=1; g.beginPath(); g.moveTo(x-6,-7); g.lineTo(x-3,-15); g.lineTo(x,-8); g.lineTo(x+3,-15); g.lineTo(x+6,-7); g.closePath(); g.fill(); g.stroke(); }}
+    }
+    if(kind==='spider'){
+      g.shadowColor='#ff9b4b'; g.shadowBlur=8; g.strokeStyle='#ffcf83'; g.lineWidth=3; for(let side of [-1,1]) for(let k=0;k<4;k++){ g.beginPath(); g.moveTo(side*2,1); g.lineTo(side*(12+k*5),-5+k*5); g.stroke(); }
+      g.fillStyle='#3a1105'; g.beginPath(); g.ellipse(0,0,18,11,0,0,7); g.fill(); g.fillStyle='#ff7a3b'; g.beginPath(); g.ellipse(-2,-1,13,8,0,0,7); g.fill(); g.fillStyle='#fff3ba'; g.fillRect(-5,-4,3,3); g.fillRect(3,-4,3,3);
+    }
+    if(kind==='flea'){
+      g.shadowColor='#84ff4b'; g.shadowBlur=8; g.fillStyle='#173605'; g.beginPath(); g.ellipse(0,0,9,17,0,0,7); g.fill(); g.fillStyle='#96ff5a'; g.beginPath(); g.ellipse(0,-1,7,14,0,0,7); g.fill(); g.fillStyle='#e8ffd8'; g.fillRect(-3,-9,2,4); g.fillRect(2,-9,2,4); g.strokeStyle='#173605'; g.lineWidth=3; g.beginPath(); g.moveTo(-6,3); g.lineTo(-15,13); g.moveTo(6,3); g.lineTo(15,13); g.stroke();
+    }
+    if(kind==='scorpion'){
+      g.shadowColor='#ff47cc'; g.shadowBlur=8; g.strokeStyle='#ff9ee7'; g.lineWidth=4; g.beginPath(); g.arc(9,-10,10,Math.PI*.2,Math.PI*1.35); g.stroke(); g.fillStyle='#ff47cc'; g.beginPath(); g.ellipse(0,0,17,8,0,0,7); g.fill(); g.fillStyle='#4a0735'; g.fillRect(-12,-3,24,3); g.strokeStyle='#ff9ee7'; g.lineWidth=3; g.beginPath(); g.moveTo(-14,-2); g.lineTo(-24,-8); g.moveTo(14,-2); g.lineTo(24,-8); g.stroke(); g.fillStyle='#fff'; g.beginPath(); g.arc(14,-18,3,0,7); g.fill();
+    }
+    if(kind==='power'){
+      g.shadowColor='#ffe66b'; g.shadowBlur=10; g.fillStyle='rgba(4,12,22,.95)'; g.strokeStyle='#ffe66b'; g.lineWidth=4; g.fillRect(-14,-14,28,28); g.strokeRect(-14,-14,28,28); g.strokeStyle='#56fff0'; g.lineWidth=2; g.strokeRect(-9,-9,18,18); g.fillStyle='#fff'; g.font='900 16px monospace'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('S',0,1);
+    }
+    g.restore();
+  });
 }
 
 function resetStars(){
@@ -946,6 +982,7 @@ window.__NEON_MYRIAPOD_TEST__ = {
 };
 
 seedDemo();
+drawGuideSprites();
 renderScores('titleScores');
 </script>
 </body>
