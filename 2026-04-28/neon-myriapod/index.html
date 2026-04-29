@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <link rel="icon" href="data:,">
-<title>Neon Myriapod</title>
+<title>Millipede</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{position:fixed;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;background:#05070b;color:#eaffff;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;touch-action:none}
@@ -18,7 +18,8 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 .shade{position:absolute;inset:0;background:radial-gradient(circle at 50% 34%,rgba(13,255,220,.18),transparent 32%),radial-gradient(circle at 50% 78%,rgba(255,65,169,.1),transparent 35%),linear-gradient(180deg,rgba(0,0,0,.2),rgba(0,0,0,.82));backdrop-filter:blur(.6px)}
 .panel{position:relative;width:min(92vw,430px);max-height:92vh;overflow:auto;text-align:center;padding:18px 14px;border:1px solid rgba(120,255,230,.34);border-radius:8px;background:linear-gradient(180deg,rgba(9,19,32,.84),rgba(5,8,14,.94));box-shadow:0 0 0 2px rgba(255,72,190,.08),0 0 32px rgba(0,255,210,.2),inset 0 1px 0 rgba(255,255,255,.1),inset 0 -7px 0 rgba(0,0,0,.24)}
 .panel:before{content:"";position:absolute;inset:8px;border:1px solid rgba(255,255,255,.08);border-radius:6px;pointer-events:none}
-.title{font-size:clamp(2.45rem,12vw,4.9rem);line-height:.86;font-weight:950;letter-spacing:.02em;text-transform:uppercase;color:#fff;text-shadow:0 0 3px #fff,0 0 9px #8ffff4,0 0 22px #00f0c8,0 4px 0 #103a4c,0 7px 0 #310a31;margin-bottom:8px}
+.title{font-size:clamp(2.45rem,11vw,4.2rem);line-height:.86;font-weight:950;letter-spacing:.02em;text-transform:uppercase;color:#fff;text-shadow:0 0 3px #fff,0 0 9px #8ffff4,0 0 22px #00f0c8,0 4px 0 #103a4c,0 7px 0 #310a31;margin-bottom:8px}
+.byline{margin:-2px 0 8px;color:#8fb2bb;font:800 9px ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase}
 .subtitle{font-size:.76rem;letter-spacing:.27em;text-transform:uppercase;color:#8cf8e8;margin-bottom:10px}
 .version{position:absolute;top:10px;right:12px;color:#8fb2bb;font:700 11px ui-monospace,monospace;letter-spacing:.08em}
 .btn{min-height:48px;min-width:168px;margin:6px;padding:12px 18px;border-radius:8px;background:linear-gradient(180deg,#e9fff9 0,#1fffe3 36%,#0b9fbd 100%);color:#021016;font-weight:900;letter-spacing:.1em;text-transform:uppercase;box-shadow:0 3px 0 #07566b,0 0 18px rgba(16,245,220,.28)}
@@ -54,8 +55,9 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.2.0</div>
-    <h1 class="title">Neon<br>Myriapod</h1>
+    <div class="version">v1.3.0</div>
+    <h1 class="title">Millipede</h1>
+    <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
     <p class="small">Drag in the lower field to move. Auto-fire clears fungus and segments. Tap the pulse when the garden gets crowded.</p>
     <button id="startBtn" class="btn">Start</button>
@@ -67,7 +69,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.2.0</div>
+    <div class="version">v1.3.0</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -77,7 +79,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.2.0</div>
+    <div class="version">v1.3.0</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -93,14 +95,14 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.2.0';
+const VERSION = 'v1.3.0';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 let W = 0, H = 0, DPR = 1, last = 0, state = 'title', demo = true;
 let score = 0, lives = 3, wave = 1, bombs = 2, rank = 1, gameTime = 0, shake = 0, flash = 0;
-let player = {x:0,y:0,tx:0,ty:0,r:13,fire:0,dead:0};
+let player = {x:0,y:0,tx:0,ty:0,r:13,fire:0,dead:0,muzzle:0,recoil:0};
 let pointer = {active:false,id:null,x:0,y:0};
 let mushrooms = [], crawlers = [], bullets = [], enemies = [], particles = [], popups = [], stars = [];
 let spawn = {spider:3.5,flea:5.5,scorpion:9};
@@ -170,8 +172,8 @@ function noiseBurst(dur, gain, color){
 function sfx(name){
   if(!audioCtx || !audioReady) return;
   try{
-    if(name==='shot'){ tone(1240,.018,'square',.006,1640); }
-    if(name==='mushroom'){ tone(620,.024,'square',.008,420); tone(1860,.012,'triangle',.003,1460); }
+    if(name==='shot'){ tone(1280,.014,'square',.0042,1680); }
+    if(name==='mushroom'){ [0,12,24].forEach((d,i)=>setTimeout(()=>tone(720+i*55,.009,'triangle',.0019,620),d)); }
     if(name==='crumble'){ tone(190,.07,'triangle',.018,80); noiseBurst(.09,.018,'dark'); }
     if(name==='segment'){ tone(150,.045,'sawtooth',.018,90); tone(420,.026,'square',.01,250); }
     if(name==='enemy'){ tone(520,.06,'square',.022,180); noiseBurst(.08,.018); }
@@ -244,19 +246,19 @@ function makeCrawler(y, len, speed){
   const dir = Math.random() < .5 ? 1 : -1;
   const sx = dir > 0 ? grid() : W-grid();
   for(let i=0;i<len;i++) segs.push({x:sx - i*dir*grid()*.9,y:y || grid()*1.5,px:sx,py:y || grid()*1.5,turn:0,blink:Math.random()*6,head:i===0});
-  crawlers.push({segs,dir,speed,rowDir:1,dive:false,hue:rand(155,195),wiggle:0});
+  crawlers.push({segs,dir,speed,rowDir:1,dive:false,hue:rand(155,195),wiggle:0,turnLock:0});
 }
 function startGame(){
   state='playing'; demo=false; score=0; lives=3; wave=1; bombs=2; rank=1; gameTime=0; shake=0; flash=0;
   bullets=[]; enemies=[]; particles=[]; popups=[]; crawlers=[];
-  player={x:W/2,y:H-54,tx:W/2,ty:H-54,r:13,fire:0,dead:0};
-  spawn={spider:3.2,flea:5.2,scorpion:8.5};
+  player={x:W/2,y:H-54,tx:W/2,ty:H-54,r:13,fire:0,dead:0,muzzle:0,recoil:0};
+  spawn={spider:3.6,flea:5.8,scorpion:9.2};
   seedField(); makeCrawler(grid()*1.5, 10, 46);
   showOnly(null); updateHud(); sfx('start');
 }
 function seedDemo(){
   demo = true; score = 12400; lives = 3; wave = 3; bombs = 2; rank = 2;
-  player={x:W/2,y:H-58,tx:W/2,ty:H-58,r:13,fire:0,dead:0};
+  player={x:W/2,y:H-58,tx:W/2,ty:H-58,r:13,fire:0,dead:0,muzzle:0,recoil:0};
   bullets=[]; enemies=[]; particles=[]; popups=[]; crawlers=[]; seedField(); makeCrawler(grid()*2, 12, 38);
 }
 
@@ -343,6 +345,7 @@ function shoot(){
   if(bullets.length > 58) return;
   bullets.push({x:player.x,y:player.y-18,vx:0,vy:-710,r:1.8,life:1.08});
   if(rank > 3 && Math.random()<.32 && bullets.length < 56){ bullets.push({x:player.x-7,y:player.y-14,vx:-35,vy:-675,r:1.55,life:1}); bullets.push({x:player.x+7,y:player.y-14,vx:35,vy:-675,r:1.55,life:1}); }
+  player.muzzle = .055; player.recoil = .08;
   sfx('shot');
 }
 function pulseBomb(){
@@ -357,8 +360,8 @@ function burst(x,y,color,n){
   for(let i=0;i<n;i++) particles.push({x,y,vx:rand(-130,130),vy:rand(-160,80),life:rand(.25,.8),max:1,r:rand(1.5,4),color});
 }
 function nextWave(){
-  wave++; rank += .28; bombs = Math.min(4,bombs+1); seedField(); makeCrawler(grid()*1.5, Math.min(18,10+wave), 46+wave*8);
-  if(wave % 3 === 0) makeCrawler(grid()*3.2, 8+wave, 55+wave*7);
+  wave++; rank += .36; bombs = Math.min(4,bombs+1); seedField(); makeCrawler(grid()*1.5, Math.min(18,10+wave), 44+wave*9);
+  if(wave >= 3 || wave % 3 === 0) makeCrawler(grid()*3.2, 8+wave, 55+wave*8);
   flash=.18; updateHud(); sfx('wave');
 }
 function gameOver(){
@@ -377,7 +380,8 @@ function update(dt){
   }
   player.x += (player.tx-player.x)*Math.min(1,dt*12); player.y += (player.ty-player.y)*Math.min(1,dt*12);
   player.x = clamp(player.x, 18, W-18); player.y = clamp(player.y, H*.68, H-30);
-  player.fire -= dt; if(player.fire <= 0 && (play || state === 'title')){ player.fire = Math.max(.055,.082-rank*.004); shoot(); }
+  player.fire -= dt; if(player.fire <= 0 && (play || state === 'title')){ player.fire = Math.max(.047,.069-rank*.0034); shoot(); }
+  player.muzzle = Math.max(0, player.muzzle - dt); player.recoil = Math.max(0, player.recoil - dt);
   bullets.forEach(b=>{ b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt; }); bullets = bullets.filter(b=>b.life>0 && b.y>-20 && b.x>-20 && b.x<W+20);
   updateCrawlers(dt, play); updateEnemies(dt, play); collisions(play);
   particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=180*dt;p.life-=dt}); particles=particles.filter(p=>p.life>0);
@@ -395,12 +399,18 @@ function update(dt){
 function updateCrawlers(dt, play){
   const cell = grid();
   crawlers.forEach(c=>{
-    c.wiggle += dt*8; const speed = (c.speed + rank*8) * dt;
+    c.wiggle += dt*8; c.turnLock = Math.max(0, (c.turnLock || 0) - dt); const speed = (c.speed + rank*8) * dt;
     let lead = c.segs[0]; if(!lead) return;
-    const blocked = mushrooms.some(m=>Math.abs(m.x-lead.x)<cell*.7 && Math.abs(m.y-lead.y)<cell*.7);
-    if(blocked || lead.x < cell*.5 || lead.x > W-cell*.5){ c.dir *= -1; lead.y += cell; if(blocked && Math.random()<.35) lead.y += cell*.25; }
+    const laneY = Math.round(lead.y / cell) * cell;
+    const nextX = lead.x + c.dir * cell*.66;
+    const blocked = mushrooms.some(m=>Math.abs(m.x-nextX)<cell*.58 && Math.abs(m.y-laneY)<cell*.58);
+    const edge = nextX < cell*.45 || nextX > W-cell*.45;
+    if((blocked || edge) && c.turnLock <= 0){
+      c.dir *= -1; c.turnLock = .11; lead.y = laneY + cell*.96; lead.x = clamp(Math.round(lead.x / cell) * cell + cell*.5, cell*.45, W-cell*.45);
+      if(blocked) lead.y += cell*.12;
+    }
     if(c.dive || mushrooms.some(m=>m.poison && dist(m.x,m.y,lead.x,lead.y)<cell)){ lead.y += speed*1.55; lead.x += Math.sin(c.wiggle)*speed*.7; c.dive = true; }
-    else lead.x += c.dir * speed;
+    else { lead.x += c.dir * speed; lead.y += (laneY - lead.y) * Math.min(1, dt*9); }
     if(lead.y > H-48){ lead.y = cell; c.dive=false; }
     for(let i=1;i<c.segs.length;i++){
       const prev = c.segs[i-1], s = c.segs[i], dx=prev.x-s.x, dy=prev.y-s.y, d=Math.hypot(dx,dy)||1, target=cell*.82;
@@ -413,10 +423,10 @@ function splitHitCrawler(c, play){
   const out = [], segs = c.segs;
   let current = [];
   for(let i=0;i<segs.length;i++){
-    if(segs[i].hit){ if(play){ addScore(segs[i].x,segs[i].y,i===0?120:60); addMushroom(segs[i].x,segs[i].y,3,false); burst(segs[i].x,segs[i].y,'#6fffe6',14); sfx('segment'); } if(current.length) out.push({segs:current,dir:-c.dir,speed:c.speed+8,rowDir:1,dive:c.dive,hue:c.hue+18,wiggle:0}); current=[]; }
+    if(segs[i].hit){ if(play){ addScore(segs[i].x,segs[i].y,i===0?120:60); addMushroom(segs[i].x,segs[i].y,3,false); burst(segs[i].x,segs[i].y,'#6fffe6',14); sfx('segment'); } if(current.length) out.push({segs:current,dir:-c.dir,speed:c.speed+12,rowDir:1,dive:c.dive,hue:c.hue+18,wiggle:0,turnLock:.08}); current=[]; }
     else current.push(segs[i]);
   }
-  if(current.length) out.push({segs:current,dir:c.dir,speed:c.speed,rowDir:1,dive:c.dive,hue:c.hue,wiggle:c.wiggle});
+  if(current.length) out.push({segs:current,dir:c.dir,speed:c.speed + (out.length ? 6 : 0),rowDir:1,dive:c.dive,hue:c.hue,wiggle:c.wiggle,turnLock:c.turnLock || 0});
   out.forEach(o=>o.segs.forEach((s,i)=>s.head=i===0));
   return out;
 }
@@ -474,13 +484,16 @@ function drawMushroom(m){
   ctx.strokeStyle=m.poison?'#650044':'#063a2b'; ctx.lineWidth=1; ctx.strokeRect(Math.round(-r*.24)+.5,Math.round(-r*.04)+.5,Math.round(r*.48),Math.round(r*.84));
   ctx.fillStyle=m.poison?'#ffd8f6':'#ecfff9';
   for(let i=-2;i<=2;i++){ const spotR=r*(i%2?.075:.105); ctx.beginPath(); ctx.arc(i*r*.22,-r*.46+Math.abs(i)*r*.08,spotR,0,7); ctx.fill(); }
-  ctx.fillStyle='rgba(1,8,12,.9)'; ctx.strokeStyle=m.poison?'rgba(255,112,218,.8)':'rgba(89,255,204,.78)'; ctx.lineWidth=1;
+  ctx.fillStyle=m.poison?'rgba(18,0,18,.96)':'rgba(0,7,7,.96)'; ctx.strokeStyle=m.poison?'rgba(82,0,64,.95)':'rgba(0,35,28,.95)'; ctx.lineWidth=1.5;
   m.chunks.forEach(ch=>{
-    ctx.beginPath(); ctx.arc(ch.x,ch.y,ch.r,0,7); ctx.fill(); ctx.stroke();
-    if(ch.edge){ ctx.fillRect(Math.round(ch.x-ch.r*.7),Math.round(ch.y-ch.r*.45),Math.round(ch.r*1.4),Math.round(ch.r*.9)); }
+    ctx.beginPath(); ctx.arc(ch.x,ch.y,ch.r*1.35,0,7); ctx.fill(); ctx.stroke();
+    if(ch.edge){
+      ctx.fillRect(Math.round(ch.x-ch.r*1.05),Math.round(ch.y-ch.r*.72),Math.round(ch.r*2.1),Math.round(ch.r*1.25));
+      ctx.strokeRect(Math.round(ch.x-ch.r*1.05)+.5,Math.round(ch.y-ch.r*.72)+.5,Math.round(ch.r*2.1),Math.round(ch.r*1.25));
+    }
     if(ch.stem){ ctx.strokeStyle=m.poison?'#ffb4eb':'#dffff5'; ctx.beginPath(); ctx.moveTo(ch.x-r*.08,r*.06); ctx.lineTo(ch.x+r*.11,r*.5); ctx.stroke(); ctx.strokeStyle=m.poison?'rgba(255,112,218,.8)':'rgba(89,255,204,.78)'; }
   });
-  if(damage>.18){ ctx.strokeStyle=m.poison?'rgba(255,212,248,.65)':'rgba(225,255,248,.65)'; ctx.beginPath(); ctx.moveTo(-r*.5,-r*.18); ctx.lineTo(-r*.24,r*.18); ctx.moveTo(r*.18,-r*.36); ctx.lineTo(r*.52,r*.08); ctx.stroke(); }
+  if(damage>.18){ ctx.strokeStyle=m.poison?'rgba(80,0,60,.88)':'rgba(0,40,32,.88)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(-r*.5,-r*.18); ctx.lineTo(-r*.24,r*.18); ctx.moveTo(r*.18,-r*.36); ctx.lineTo(r*.52,r*.08); ctx.stroke(); }
   if(m.poison){ ctx.strokeStyle='rgba(255,68,206,.6)'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(0,-2,r+2+Math.sin(m.pulse)*2,0,7); ctx.stroke(); }
   ctx.restore();
 }
@@ -495,10 +508,12 @@ function drawEnemy(e){
   ctx.restore();
 }
 function drawPlayer(){
-  ctx.save(); ctx.translate(player.x,player.y); const inv = player.dead>0 && Math.floor(player.dead*12)%2===0; if(inv){ctx.globalAlpha=.35}
+  ctx.save(); ctx.translate(player.x,player.y + (player.recoil > 0 ? 2 : 0)); const inv = player.dead>0 && Math.floor(player.dead*12)%2===0; if(inv){ctx.globalAlpha=.35}
   ctx.shadowColor='#61f7ff'; ctx.shadowBlur=12; ctx.fillStyle='#061a27'; ctx.beginPath(); ctx.moveTo(0,-21); ctx.lineTo(18,17); ctx.lineTo(0,11); ctx.lineTo(-18,17); ctx.closePath(); ctx.fill();
   ctx.shadowBlur=0; ctx.fillStyle='#dfffff'; ctx.beginPath(); ctx.moveTo(0,-18); ctx.lineTo(13,13); ctx.lineTo(0,7); ctx.lineTo(-13,13); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#60f7ff'; ctx.fillRect(-2,-19,4,18); ctx.fillStyle='#ff3f9d'; ctx.fillRect(-6,6,12,12); ctx.fillStyle='#ffe66b'; ctx.fillRect(-9,14,5,6); ctx.fillRect(4,14,5,6); ctx.restore();
+  ctx.fillStyle=player.recoil > 0 ? '#ffffff' : '#60f7ff'; ctx.fillRect(-2,-19,4,18);
+  if(player.muzzle > 0){ ctx.globalAlpha=Math.min(1, player.muzzle/.055); ctx.fillStyle='#fff7b8'; ctx.shadowColor='#ffe66b'; ctx.shadowBlur=10; ctx.beginPath(); ctx.moveTo(0,-31); ctx.lineTo(5,-20); ctx.lineTo(0,-23); ctx.lineTo(-5,-20); ctx.closePath(); ctx.fill(); ctx.shadowBlur=0; ctx.globalAlpha=inv ? .35 : 1; }
+  ctx.fillStyle='#ff3f9d'; ctx.fillRect(-6,6,12,12); ctx.fillStyle='#ffe66b'; ctx.fillRect(-9,14,5,6); ctx.fillRect(4,14,5,6); ctx.restore();
 }
 
 function frame(t){
@@ -508,10 +523,17 @@ function frame(t){
 }
 requestAnimationFrame(frame);
 
+function aimPlayer(x,y){
+  player.tx = x; player.ty = y;
+}
 canvas.addEventListener('pointerdown', e=>{ if(state!=='playing') return; pointer={active:true,id:e.pointerId,x:e.clientX,y:e.clientY}; player.tx=e.clientX; player.ty=e.clientY; try{ canvas.setPointerCapture(e.pointerId); }catch(err){} });
-canvas.addEventListener('pointermove', e=>{ if(state!=='playing' || !pointer.active || e.pointerId!==pointer.id) return; player.tx=e.clientX; player.ty=e.clientY; });
+canvas.addEventListener('pointermove', e=>{ if(state!=='playing' || !pointer.active || e.pointerId!==pointer.id) return; aimPlayer(e.clientX,e.clientY); });
 canvas.addEventListener('pointerup', e=>{ if(e.pointerId===pointer.id) pointer.active=false; });
 canvas.addEventListener('pointercancel', e=>{ if(e.pointerId===pointer.id) pointer.active=false; });
+canvas.addEventListener('touchstart', e=>{ if(state!=='playing') return; const t=e.changedTouches[0]; if(!t) return; e.preventDefault(); pointer={active:true,id:t.identifier,x:t.clientX,y:t.clientY}; aimPlayer(t.clientX,t.clientY); }, {passive:false});
+canvas.addEventListener('touchmove', e=>{ if(state!=='playing' || !pointer.active) return; const t=[...e.changedTouches].find(x=>x.identifier===pointer.id) || e.changedTouches[0]; if(!t) return; e.preventDefault(); aimPlayer(t.clientX,t.clientY); }, {passive:false});
+canvas.addEventListener('touchend', e=>{ if([...e.changedTouches].some(t=>t.identifier===pointer.id)) pointer.active=false; }, {passive:false});
+canvas.addEventListener('touchcancel', e=>{ if([...e.changedTouches].some(t=>t.identifier===pointer.id)) pointer.active=false; }, {passive:false});
 
 bindButton('startBtn', startGame);
 bindButton('scoresBtn', ()=>{ state='scores'; showOnly('scoresScreen'); renderScores('scoreTables'); });
@@ -520,7 +542,7 @@ bindButton('againBtn', startGame);
 bindButton('menuBtn', ()=>{ state='title'; seedDemo(); showOnly('titleScreen'); renderScores('titleScores'); });
 bindButton('submitBtn', saveScore);
 bindButton('bombBtn', pulseBomb);
-bindButton('pauseBtn', ()=>{ if(state==='playing'){ state='paused'; document.querySelector('#titleScreen .title').innerHTML='Paused'; showOnly('titleScreen'); } else if(state==='paused'){ document.querySelector('#titleScreen .title').innerHTML='Neon<br>Myriapod'; state='playing'; showOnly(null); } });
+bindButton('pauseBtn', ()=>{ if(state==='playing'){ state='paused'; document.querySelector('#titleScreen .title').innerHTML='Paused'; showOnly('titleScreen'); } else if(state==='paused'){ document.querySelector('#titleScreen .title').innerHTML='Millipede'; state='playing'; showOnly(null); } });
 
 window.__NEON_MYRIAPOD_TEST__ = {
   version: VERSION,
