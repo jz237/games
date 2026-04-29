@@ -1,5 +1,12 @@
 [
   {
+    "slug": "neon-myriapod",
+    "name": "Neon Myriapod",
+    "url": "https://game-scores.jez237.workers.dev/scores/neon-myriapod",
+    "playUrl": "https://jz237.github.io/games/2026-04-28/neon-myriapod/",
+    "scoreLabel": "W"
+  },
+  {
     "slug": "lunar-lander",
     "name": "Lunar Lander",
     "url": "https://game-scores.jez237.workers.dev/scores/lunar-lander",
