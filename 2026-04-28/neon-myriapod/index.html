@@ -60,7 +60,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.3</div>
+    <div class="version">v1.6.4</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
@@ -81,7 +81,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.3</div>
+    <div class="version">v1.6.4</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -91,7 +91,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="upgradeScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.3</div>
+    <div class="version">v1.6.4</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Choose an upgrade</h2>
     <p id="upgradeLine" class="small">The garden shifts. Pick one advantage for the next waves.</p>
     <div class="upgrades">
@@ -105,7 +105,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.3</div>
+    <div class="version">v1.6.4</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -121,13 +121,13 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.6.3';
+const VERSION = 'v1.6.4';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 let W = 0, H = 0, DPR = 1, last = 0, state = 'title', demo = true;
-let score = 0, lives = 3, wave = 1, bombs = 2, rank = 1, gameTime = 0, shake = 0, flash = 0, pulseFlash = 0;
+let score = 0, lives = 3, wave = 1, bombs = 1, rank = 1, gameTime = 0, shake = 0, flash = 0, pulseFlash = 0;
 let upgrades = {fire:0,spread:0,pulse:0};
 let player = {x:0,y:0,tx:0,ty:0,r:13,fire:0,dead:0,muzzle:0,recoil:0};
 let pointer = {active:false,id:null,x:0,y:0};
@@ -363,7 +363,7 @@ function damageSegment(s, c, play, amount){
   if(s.hp <= 0) s.hit = true;
 }
 function startGame(){
-  state='playing'; demo=false; score=0; lives=3; wave=1; bombs=2; rank=1; gameTime=0; shake=0; flash=0; pulseFlash=0; upgrades={fire:0,spread:0,pulse:0};
+  state='playing'; demo=false; score=0; lives=3; wave=1; bombs=1; rank=1; gameTime=0; shake=0; flash=0; pulseFlash=0; upgrades={fire:0,spread:0,pulse:0};
   bullets=[]; enemies=[]; particles=[]; popups=[]; pickups=[]; crawlers=[];
   powers = {spread:0,laser:0,shield:0,frost:0,score:0}; laserTick = 0; pickupPity = 0;
   player={x:W/2,y:H-54,tx:W/2,ty:H-54,r:13,fire:0,dead:0,muzzle:0,recoil:0};
@@ -373,7 +373,7 @@ function startGame(){
   showOnly(null); updateHud(); sfx('start');
 }
 function seedDemo(){
-  demo = true; score = 12400; lives = 3; wave = 3; bombs = 2; rank = 2; upgrades={fire:0,spread:0,pulse:0};
+  demo = true; score = 12400; lives = 3; wave = 3; bombs = 1; rank = 2; upgrades={fire:0,spread:0,pulse:0};
   player={x:W/2,y:H-58,tx:W/2,ty:H-58,r:13,fire:0,dead:0,muzzle:0,recoil:0};
   bullets=[]; enemies=[]; particles=[]; popups=[]; pickups=[]; crawlers=[]; powers = {spread:0,laser:0,shield:0,frost:0,score:0}; seedField(); makeCrawler(grid()*2, 12, 38);
 }
@@ -386,7 +386,7 @@ function showOnly(id){
 function updateHud(){
   document.getElementById('scoreHud').textContent = String(score).padStart(6,'0');
   document.getElementById('waveHud').textContent = 'WAVE ' + wave + '  ' + VERSION;
-  document.getElementById('livesHud').textContent = 'LIVES ' + lives + '  PULSE ' + bombs;
+  document.getElementById('livesHud').textContent = 'LIVES ' + lives + '  SMART ' + (bombs > 0 ? 'READY' : 'EMPTY');
   updatePowerHud();
 }
 
@@ -587,7 +587,7 @@ function applyUpgrade(id){
   nextWave();
 }
 function nextWave(){
-  wave++; rank += .36; bombs = Math.min(4,bombs+1); seedField(); makeCrawler(grid()*1.5, Math.min(18,10+wave), 44+wave*9);
+  wave++; rank += .36; bombs = 1; seedField(); makeCrawler(grid()*1.5, Math.min(18,10+wave), 44+wave*9);
   if(wave >= 3 || wave % 3 === 0) makeCrawler(grid()*3.2, 8+wave, 55+wave*8);
   if(wave % 4 === 0) spawnQueenCrawler();
   if(wave === 2) dropPickup(W*.5, H*.42, 'spread');
