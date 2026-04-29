@@ -58,7 +58,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.5</div>
+    <div class="version">v1.5.6</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
@@ -72,7 +72,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.5</div>
+    <div class="version">v1.5.6</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -82,7 +82,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.5</div>
+    <div class="version">v1.5.6</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -98,7 +98,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.5.5';
+const VERSION = 'v1.5.6';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const canvas = document.getElementById('game');
@@ -112,11 +112,11 @@ let waveBanner = {text:'',life:0,max:1};
 let spawn = {spider:3.5,flea:5.5,scorpion:9};
 let audioCtx = null, audioReady = false, globalScoresCache = null, globalScoresTime = 0, pendingEntry = null, initials = ['A','A','A'];
 const POWERUP_TYPES = [
-  {id:'spread',label:'S',name:'SPREAD',color:'#56fff0',duration:8},
-  {id:'laser',label:'L',name:'LASER',color:'#ff4fc4',duration:5},
-  {id:'shield',label:'B',name:'BEETLE',color:'#ffe66b',duration:12},
-  {id:'frost',label:'F',name:'FROST',color:'#9fdcff',duration:6},
-  {id:'score',label:'2X',name:'SCORE',color:'#a7ff55',duration:10}
+  {id:'spread',label:'S',name:'SPREAD',color:'#56fff0',duration:10,weight:1.2},
+  {id:'laser',label:'L',name:'LASER',color:'#ff4fc4',duration:5,weight:1},
+  {id:'shield',label:'B',name:'BEETLE',color:'#ffe66b',duration:12,weight:1},
+  {id:'frost',label:'F',name:'FROST',color:'#9fdcff',duration:6,weight:1},
+  {id:'score',label:'2X',name:'SCORE',color:'#a7ff55',duration:10,weight:1}
 ];
 let powers = {spread:0,laser:0,shield:0,frost:0,score:0}, laserTick = 0, pickupPity = 0;
 
@@ -441,8 +441,14 @@ function updatePowerHud(){
   if(!hud) return;
   hud.innerHTML = POWERUP_TYPES.filter(p=>powers[p.id] > 0).map(p=>`<span class="powerpill" style="color:${p.color}">${p.label} ${Math.ceil(powers[p.id])}</span>`).join('');
 }
+function randomPowerup(){
+  const total = POWERUP_TYPES.reduce((sum,p)=>sum+(p.weight || 1),0);
+  let roll = Math.random() * total;
+  for(const p of POWERUP_TYPES){ roll -= (p.weight || 1); if(roll <= 0) return p; }
+  return POWERUP_TYPES[0];
+}
 function dropPickup(x,y,forceId){
-  const def = forceId ? powerDef(forceId) : POWERUP_TYPES[Math.floor(Math.random()*POWERUP_TYPES.length)];
+  const def = forceId ? powerDef(forceId) : randomPowerup();
   pickups.push({id:def.id,label:def.label,color:def.color,x,y,vx:rand(-18,18),vy:rand(18,42),life:8,spin:rand(0,7),r:def.label.length>1?17:15});
   burst(x,y,def.color,10);
 }
