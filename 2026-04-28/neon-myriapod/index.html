@@ -44,6 +44,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 .initials{display:flex;justify-content:center;gap:10px;margin:12px 0}.slot{display:flex;flex-direction:column;gap:4px;align-items:center}.letter{width:48px;height:48px;border:1px solid rgba(130,255,235,.34);border-radius:8px;display:flex;align-items:center;justify-content:center;font:950 28px ui-monospace,monospace;background:rgba(0,0,0,.28)}
 .arrow{width:48px;height:38px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(130,255,235,.22);color:#dff;font-weight:950}
 .upgrades{display:grid;gap:9px;margin:12px 0}.upgradebtn{width:100%;min-height:68px;text-align:left;padding:10px 12px;border-radius:9px;background:linear-gradient(180deg,rgba(26,255,230,.16),rgba(255,78,191,.09));border:1px solid rgba(136,255,236,.34);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 18px rgba(30,255,224,.1)}.upgradebtn b{display:block;color:#fff;font:950 13px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}.upgradebtn span{display:block;margin-top:4px;color:#aee7e4;font-size:12px;line-height:1.3}
+.enemyguide{margin:10px 0 4px;padding:8px;border:1px solid rgba(135,255,235,.18);border-radius:8px;background:rgba(0,0,0,.18);display:grid;grid-template-columns:1fr 1fr;gap:5px;text-align:left}.enemyguide div{font:800 10px ui-monospace,monospace;color:#c6f4f0;letter-spacing:.04em}.enemyguide b{color:#fff}.enemyguide .wide{grid-column:1/-1;color:#8cf8e8;text-align:center;letter-spacing:.14em}
 @media(max-width:370px){.scores{grid-template-columns:1fr}.panel{padding:14px 10px}.btn{min-width:142px}.title{font-size:2.35rem}}
 </style>
 </head>
@@ -59,11 +60,18 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.1</div>
+    <div class="version">v1.6.2</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
     <p class="small">Drag in the lower field to move. Auto-fire clears fungus and segments. Tap the pulse when the garden gets crowded.</p>
+    <div class="enemyguide" aria-label="Enemy field guide">
+      <div class="wide">FIELD GUIDE</div>
+      <div>🚀 <b>Shooter</b> your ship</div><div>🪲 <b>Millipede</b> crawler</div>
+      <div>👑 <b>Queen</b> boss swarm</div><div>⚡ <b>Swarmlet</b> queen fragment</div>
+      <div>🕷️ <b>Spider</b> side ambusher</div><div>🟢 <b>Flea</b> mushroom dropper</div>
+      <div>🦂 <b>Scorpion</b> poison runner</div><div>✦ <b>Power cells</b> upgrades</div>
+    </div>
     <button id="startBtn" class="btn">Start</button>
     <button id="scoresBtn" class="btn secondary">Scores</button>
     <div id="titleScores" class="scores"></div>
@@ -73,7 +81,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.1</div>
+    <div class="version">v1.6.2</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -83,7 +91,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="upgradeScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.1</div>
+    <div class="version">v1.6.2</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Choose an upgrade</h2>
     <p id="upgradeLine" class="small">The garden shifts. Pick one advantage for the next waves.</p>
     <div class="upgrades">
@@ -97,7 +105,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.1</div>
+    <div class="version">v1.6.2</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -113,7 +121,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.6.1';
+const VERSION = 'v1.6.2';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const canvas = document.getElementById('game');
@@ -646,6 +654,18 @@ function updateCrawlers(dt, play){
   });
   crawlers = crawlers.map(c=>splitHitCrawler(c, play)).flat().filter(c=>c.segs.length);
 }
+function chooseEdgeSide(y){
+  if(state === 'playing' && player.y > H*.62){
+    if(player.x < 96) return -1;
+    if(player.x > W - 96) return 1;
+  }
+  return Math.random() < .5 ? 1 : -1;
+}
+function safeTopX(){
+  let x = rand(28,W-28);
+  if(state === 'playing' && Math.abs(x-player.x) < 82) x = player.x < W*.5 ? rand(W*.56,W-28) : rand(28,W*.44);
+  return x;
+}
 function splitHitCrawler(c, play){
   const out = [], segs = c.segs;
   let current = [];
@@ -667,13 +687,16 @@ function splitHitCrawler(c, play){
   out.forEach(o=>o.segs.forEach((s,i)=>s.head=i===0));
   return out;
 }
-function spawnSpider(){ enemies.push({type:'spider',x:Math.random()<.5?-20:W+20,y:rand(H*.7,H-42),vx:Math.random()<.5?rand(80,140):-rand(80,140),vy:rand(-45,45),r:15,t:0,hp:2}); }
-function spawnFlea(){ enemies.push({type:'flea',x:rand(20,W-20),y:-24,vx:0,vy:rand(105,150)+wave*3,r:10,t:0,hp:1,drop:0}); }
-function spawnScorpion(){ enemies.push({type:'scorpion',x:Math.random()<.5?-24:W+24,y:rand(58,H*.55),vx:Math.random()<.5?rand(70,105):-rand(70,105),vy:0,r:13,t:0,hp:2}); }
+function spawnSpider(){ const side = chooseEdgeSide(H*.78), spd = rand(70,122); enemies.push({type:'spider',x:side>0?-22:W+22,y:rand(H*.7,H-48),vx:side*spd,vy:rand(-35,35),r:15,t:0,hp:2,warn:.85,safe:.55}); }
+function spawnFlea(){ enemies.push({type:'flea',x:safeTopX(),y:-24,vx:0,vy:rand(95,135)+wave*2,r:10,t:0,hp:1,drop:.42,warn:.7,safe:.45}); }
+function spawnScorpion(){ const side = chooseEdgeSide(H*.35), spd = rand(62,94); enemies.push({type:'scorpion',x:side>0?-26:W+26,y:rand(58,H*.55),vx:side*spd,vy:0,r:13,t:0,hp:2,warn:.9,safe:.65}); }
 function updateEnemies(dt, play){
   const frost = powers.frost > 0 ? .55 : 1;
   enemies.forEach(e=>{
-    e.t += dt*frost; e.x += e.vx*dt*frost; e.y += (e.vy + Math.sin(e.t*5)*28*(e.type==='spider'))*dt*frost;
+    e.t += dt*frost; e.warn = Math.max(0, (e.warn || 0) - dt);
+    if(e.warn > 0) return;
+    e.safe = Math.max(0, (e.safe || 0) - dt);
+    e.x += e.vx*dt*frost; e.y += (e.vy + Math.sin(e.t*5)*28*(e.type==='spider'))*dt*frost;
     if(e.type==='flea'){ e.drop-=dt; if(e.drop<=0){ e.drop=.32; addMushroom(e.x,e.y,3,false); } }
     if(e.type==='scorpion'){ mushrooms.forEach(m=>{ if(Math.abs(m.y-e.y)<14 && Math.abs(m.x-e.x)<18) m.poison=true; }); }
   });
@@ -687,7 +710,7 @@ function collisions(play){
   });
   bullets = bullets.filter(b=>!b.dead);
   if(!play) return;
-  let hit = enemies.some(e=>dist(e.x,e.y,player.x,player.y)<e.r+player.r) || crawlers.some(c=>c.segs.some(s=>(s.grace || 0) <= 0 && dist(s.x,s.y,player.x,player.y)<player.r+grid()*(s.queen ? .49 : c.child ? .24 : .38)));
+  let hit = enemies.some(e=>(e.warn || 0) <= 0 && (e.safe || 0) <= 0 && dist(e.x,e.y,player.x,player.y)<e.r+player.r) || crawlers.some(c=>c.segs.some(s=>(s.grace || 0) <= 0 && dist(s.x,s.y,player.x,player.y)<player.r+grid()*(s.queen ? .49 : c.child ? .24 : .38)));
   if(hit && player.dead<=0){
     if(powers.shield > 0){
       powers.shield = 0; player.dead=.55; shake=10; flash=.16; burst(player.x,player.y,'#ffe66b',34); updatePowerHud(); sfx('shield'); return;
@@ -704,7 +727,7 @@ function draw(){
   stars.forEach(s=>{ctx.globalAlpha=s.a;ctx.fillStyle='#b9ffff';ctx.fillRect(s.x,s.y,s.s,s.s)}); ctx.globalAlpha=1;
   ctx.strokeStyle='rgba(71,255,224,.08)'; ctx.lineWidth=1; const cell=grid(); for(let y=cell;y<H;y+=cell){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
   if(powers.frost > 0){ ctx.fillStyle='rgba(160,220,255,.075)'; ctx.fillRect(-20,-20,W+40,H+40); ctx.strokeStyle='rgba(185,238,255,.16)'; for(let x=(gameTime*18)%cell;x<W;x+=cell*2){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x-cell,H);ctx.stroke();} }
-  mushrooms.forEach(drawMushroom); crawlers.forEach(drawCrawler); enemies.forEach(drawEnemy);
+  mushrooms.forEach(drawMushroom); crawlers.forEach(drawCrawler); enemies.forEach(drawEnemyTell); enemies.forEach(drawEnemy);
   pickups.forEach(drawPickup);
   if(powers.laser > 0) drawLaser();
   bullets.forEach(drawBolt);
@@ -764,7 +787,9 @@ function drawCrawler(c){
   for(let i=c.segs.length-1;i>=0;i--){
     const s=c.segs[i], head=i===0, queen=!!s.queen;
     const r=grid()*(queen ? (head ? .66 : .58) : c.child ? .34 : .39), bob=Math.sin(c.wiggle+i*.7)*(queen?2.6:2);
-    ctx.save(); ctx.translate(Math.round(s.x),Math.round(s.y+bob)); ctx.rotate(Math.sin(c.wiggle+i*.5)*(queen ? .06 : .08));
+    ctx.save(); ctx.translate(Math.round(s.x),Math.round(s.y+bob));
+    if((s.grace || 0) > 0){ ctx.globalAlpha=.34 + Math.sin(gameTime*24)*.18; ctx.strokeStyle=queen?'#ffd96a':'#8cffea'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,r+7,0,7); ctx.stroke(); ctx.globalAlpha=.72; }
+    ctx.rotate(Math.sin(c.wiggle+i*.5)*(queen ? .06 : .08));
     ctx.shadowColor=queen ? (head?'#ffd96a':'#ff4fc4') : head?'#f8ff6a':'#54ffe2';
     ctx.shadowBlur=queen ? 10 : head?9:6;
     const grad=ctx.createRadialGradient(-r*.35,-r*.36,2,0,0,r);
@@ -789,8 +814,19 @@ function drawCrawler(c){
     ctx.restore();
   }
 }
+function drawEnemyTell(e){
+  if((e.warn || 0) <= 0) return;
+  const a = Math.min(.85, .25 + e.warn*.65), sideX = clamp(e.x, 18, W-18), y = clamp(e.y, 38, H-42);
+  ctx.save(); ctx.globalAlpha = a; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.strokeStyle = e.type==='scorpion' ? '#ff47cc' : e.type==='flea' ? '#96ff5a' : '#ffcf83';
+  ctx.fillStyle='rgba(2,8,17,.82)'; ctx.lineWidth=2; ctx.shadowColor=ctx.strokeStyle; ctx.shadowBlur=12;
+  ctx.beginPath(); ctx.arc(sideX,y,e.r+9+Math.sin(gameTime*14)*3,0,7); ctx.stroke();
+  ctx.font='950 10px ui-monospace,monospace'; ctx.fillText(e.type.toUpperCase(), sideX, y - e.r - 15);
+  ctx.restore();
+}
 function drawEnemy(e){
-  ctx.save(); ctx.translate(e.x,e.y); ctx.shadowBlur=14;
+  if((e.warn || 0) > 0) return;
+  ctx.save(); ctx.translate(e.x,e.y); ctx.globalAlpha = (e.safe || 0) > 0 ? .55 + Math.sin(gameTime*28)*.25 : 1; ctx.shadowBlur=14;
   if(e.type==='spider'){ctx.shadowColor='#ff9b4b';ctx.strokeStyle='#ffcf83';ctx.lineWidth=2;for(let i=-1;i<=1;i+=2){for(let k=0;k<4;k++){ctx.beginPath();ctx.moveTo(i*2,0);ctx.lineTo(i*(10+k*5),Math.sin(e.t*9+k)*7+k*3-4);ctx.stroke();}}ctx.fillStyle='#3a1105';ctx.beginPath();ctx.ellipse(0,0,17,11,0,0,7);ctx.fill();ctx.fillStyle='#ff7a3b';ctx.beginPath();ctx.ellipse(-2,-1,13,8,0,0,7);ctx.fill();ctx.fillStyle='#fff3ba';ctx.fillRect(-5,-4,3,3);ctx.fillRect(3,-4,3,3);}
   if(e.type==='flea'){ctx.shadowColor='#84ff4b';ctx.fillStyle='#173605';ctx.beginPath();ctx.ellipse(0,0,9,16,0,0,7);ctx.fill();ctx.fillStyle='#96ff5a';ctx.beginPath();ctx.ellipse(0,-1,7,14,0,0,7);ctx.fill();ctx.fillStyle='#e8ffd8';ctx.fillRect(-3,-9,2,4);ctx.fillRect(2,-9,2,4);ctx.strokeStyle='#173605';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-6,3);ctx.lineTo(-13,12);ctx.moveTo(6,3);ctx.lineTo(13,12);ctx.stroke();}
   if(e.type==='scorpion'){ctx.shadowColor='#ff47cc';ctx.strokeStyle='#ff9ee7';ctx.lineWidth=3;ctx.beginPath();ctx.arc(8,-10,10,Math.PI*.2,Math.PI*1.35);ctx.stroke();ctx.fillStyle='#ff47cc';ctx.beginPath();ctx.ellipse(0,0,16,8,0,0,7);ctx.fill();ctx.fillStyle='#4a0735';ctx.fillRect(-12,-3,24,3);ctx.strokeStyle='#ff9ee7';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-14,-2);ctx.lineTo(-22,-8);ctx.moveTo(14,-2);ctx.lineTo(22,-8);ctx.stroke();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(13,-18,2.5,0,7);ctx.fill();}
