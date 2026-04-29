@@ -60,7 +60,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.7.0</div>
+    <div class="version">v1.7.1</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
@@ -83,7 +83,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.7.0</div>
+    <div class="version">v1.7.1</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -93,7 +93,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="upgradeScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.7.0</div>
+    <div class="version">v1.7.1</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Choose an upgrade</h2>
     <p id="upgradeLine" class="small">The garden shifts. Pick one advantage for the next waves.</p>
     <div class="upgrades">
@@ -107,7 +107,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.7.0</div>
+    <div class="version">v1.7.1</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -123,7 +123,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.7.0';
+const VERSION = 'v1.7.1';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const AUDIO_GAIN = 2.25;
@@ -289,6 +289,8 @@ function resetStars(){
 function rand(a,b){return a + Math.random() * (b-a)}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function dist(a,b,c,d){return Math.hypot(a-c,b-d)}
+function latePressure(){ return Math.max(0, wave - 12); }
+function difficulty(){ return Math.min(1, (wave - 1) / 30); }
 
 function seedField(){
   mushrooms = [];
@@ -297,7 +299,7 @@ function seedField(){
   const cols = Math.floor(W / cell);
   for(let y=2;y<rows;y++){
     for(let x=0;x<cols;x++){
-      if(Math.random() < .12 + Math.min(wave,8)*.006 && y*cell < H-112) addMushroom((x+.5)*cell,(y+.5)*cell,3,false);
+      if(Math.random() < .12 + Math.min(wave,8)*.006 + Math.min(.085, latePressure()*.0045) && y*cell < H-112) addMushroom((x+.5)*cell,(y+.5)*cell,3,false);
     }
   }
 }
@@ -347,7 +349,7 @@ function pushPlayerFromMushrooms(){
 }
 function crawlerSegment(x,y,head,opts){
   const queen = !!opts.queen, child = !!opts.child;
-  const hp = queen ? (head ? 5 : 2) : child ? 1 : 1;
+  const hp = queen ? (head ? 5 : 2) + (opts.hpBoost || 0) : child ? 1 : 1;
   return {x, y, px:x, py:y, turn:0, blink:Math.random()*6, head, hp, maxHp:hp, queen, child};
 }
 function makeCrawler(y, len, speed, opts){
@@ -369,7 +371,8 @@ function makeChildCrawler(x,y,dir,opts){
   crawlers.push({segs,dir,speed:opts.speed || (34 + wave*2),rowDir:1,dive:false,hue:118 + rand(-12,18),wiggle:0,turnLock:.34,child:true,scatter:opts.scatter || 1.1});
 }
 function spawnQueenCrawler(){
-  makeCrawler(grid()*1.45, Math.min(20, 13 + Math.floor(wave*.7)), 34 + wave*4, {queen:true,hue:304});
+  const late = latePressure();
+  makeCrawler(grid()*1.45, Math.min(26, 13 + Math.floor(wave*.72) + Math.floor(late/5)), 34 + wave*4 + late*2.5, {queen:true,hue:304,hpBoost:Math.min(3,Math.floor(late/8))});
   shake = Math.max(shake,10); flash = Math.max(flash,.2);
   popups.push({x:W*.5-78,y:H*.24,t:'QUEEN ARRIVES',life:1.25,color:'#ffd96a'});
   if(state === 'playing') dropPickup(W*.5, H*.58, wave >= 8 ? 'shield' : 'frost');
@@ -638,8 +641,10 @@ function applyUpgrade(id){
   nextWave();
 }
 function nextWave(){
-  wave++; rank += .36; bombs = Math.min(bombs,1); seedField(); makeCrawler(grid()*1.5, Math.min(18,10+wave), 44+wave*9);
-  if(wave >= 3 || wave % 3 === 0) makeCrawler(grid()*3.2, 8+wave, 55+wave*8);
+  wave++; const late = latePressure(); rank += .36 + Math.min(.32, late*.018); bombs = Math.min(bombs,1); seedField(); makeCrawler(grid()*1.5, Math.min(24,10+wave+Math.floor(late/3)), 44+wave*8+late*4);
+  if(wave >= 3 || wave % 3 === 0) makeCrawler(grid()*3.2, Math.min(24,8+wave+Math.floor(late/4)), 55+wave*7+late*4);
+  if(wave >= 16) makeCrawler(grid()*5.0, Math.min(18,6+Math.floor(wave*.48)), 62+wave*5+late*4.5);
+  if(wave >= 26 && wave % 2 === 1) makeCrawler(grid()*6.4, Math.min(14,5+Math.floor(wave*.35)), 76+wave*5+late*5);
   if(wave % 4 === 0) spawnQueenCrawler();
   if(wave === 2) dropPickup(W*.5, H*.42, 'spread');
   showWaveIntro();
@@ -673,9 +678,9 @@ function update(dt){
   mushrooms = mushrooms.filter(m=>m.hp>0);
   if(play){
     spawn.spider -= dt; spawn.flea -= dt; spawn.scorpion -= dt;
-    if(wave >= 2 && spawn.spider<=0){ spawnSpider(); sfx('spider'); spawn.spider = rand(4.4,7.2)-Math.min(2.2,wave*.13); }
-    if(wave >= 3 && spawn.flea<=0){ spawnFlea(); sfx('flea'); spawn.flea = rand(7,11)-Math.min(3,wave*.18); }
-    if(wave >= 3 && spawn.scorpion<=0){ spawnScorpion(); sfx('scorpion'); spawn.scorpion = rand(10,15)-Math.min(4,wave*.2); }
+    if(wave >= 2 && spawn.spider<=0){ spawnSpider(); sfx('spider'); spawn.spider = Math.max(2.1, rand(4.4,7.2)-Math.min(2.2,wave*.13)-latePressure()*.045); }
+    if(wave >= 3 && spawn.flea<=0){ spawnFlea(); sfx('flea'); spawn.flea = Math.max(3.2, rand(7,11)-Math.min(3,wave*.18)-latePressure()*.07); }
+    if(wave >= 3 && spawn.scorpion<=0){ spawnScorpion(); sfx('scorpion'); spawn.scorpion = Math.max(4.2, rand(10,15)-Math.min(4,wave*.2)-latePressure()*.09); }
     if(crawlers.length === 0 && !maybeOfferUpgrade()) nextWave();
   }
   shake = Math.max(0, shake - dt*18); flash = Math.max(0, flash - dt*1.8);
@@ -744,9 +749,9 @@ function splitHitCrawler(c, play){
   out.forEach(o=>o.segs.forEach((s,i)=>s.head=i===0));
   return out;
 }
-function spawnSpider(){ const side = chooseEdgeSide(H*.78), spd = rand(70,122); enemies.push({type:'spider',x:side>0?-22:W+22,y:rand(H*.7,H-48),vx:side*spd,vy:rand(-35,35),r:15,t:0,hp:2,warn:.85,safe:.55}); }
-function spawnFlea(){ enemies.push({type:'flea',x:safeTopX(),y:-24,vx:0,vy:rand(95,135)+wave*2,r:10,t:0,hp:1,drop:.42,warn:.7,safe:.45}); }
-function spawnScorpion(){ const side = chooseEdgeSide(H*.35), spd = rand(62,94); enemies.push({type:'scorpion',x:side>0?-26:W+26,y:rand(58,H*.55),vx:side*spd,vy:0,r:13,t:0,hp:2,warn:.9,safe:.65}); }
+function spawnSpider(){ const side = chooseEdgeSide(H*.78), spd = rand(70,122) + latePressure()*3.2; enemies.push({type:'spider',x:side>0?-22:W+22,y:rand(H*.7,H-48),vx:side*spd,vy:rand(-35,35),r:15,t:0,hp:2,warn:.85,safe:.55}); }
+function spawnFlea(){ enemies.push({type:'flea',x:safeTopX(),y:-24,vx:0,vy:rand(95,135)+wave*2+latePressure()*3.5,r:10,t:0,hp:1,drop:.42,warn:.7,safe:.45}); }
+function spawnScorpion(){ const side = chooseEdgeSide(H*.35), spd = rand(62,94) + latePressure()*2.6; enemies.push({type:'scorpion',x:side>0?-26:W+26,y:rand(58,H*.55),vx:side*spd,vy:0,r:13,t:0,hp:2,warn:.9,safe:.65}); }
 function updateEnemies(dt, play){
   const frost = powers.frost > 0 ? .55 : 1;
   enemies.forEach(e=>{
@@ -989,6 +994,7 @@ window.__NEON_MYRIAPOD_TEST__ = {
   applyPowerup,
   triggerQueen(){ spawnQueenCrawler(); return crawlers.filter(c=>c.queen).length; },
   setWave(n){ wave = Math.max(1, Math.floor(n || 1)); showWaveIntro(); updateHud(); return wave; },
+  difficulty(){ return {wave,late:latePressure(),difficulty:difficulty(),mushroomChance:.12 + Math.min(wave,8)*.006 + Math.min(.085, latePressure()*.0045)}; },
   state(){ return {state,score,wave,lives,upgrades:{...upgrades},player:{x:player.x,y:player.y,tx:player.tx,ty:player.ty},powers:{...powers},pickups:pickups.length,bullets:bullets.length,crawlers:crawlers.length,queens:crawlers.filter(c=>c.queen).length,waveBanner:waveBanner.text}; },
   applyUpgrade,
   mushroomCheck(){
