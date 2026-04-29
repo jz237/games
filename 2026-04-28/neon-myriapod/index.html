@@ -60,11 +60,11 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.6</div>
+    <div class="version">v1.6.7</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
-    <p class="small">Drag in the lower field to move. Auto-fire clears fungus and segments. Smart bomb is precious: one recharge every 3 waves.</p>
+    <p class="small">Drag in the lower field to move. Auto-fire clears fungus and segments. Smart bomb is precious: one recharge at each 4-wave upgrade.</p>
     <div class="enemyguide" aria-label="Enemy field guide">
       <div class="wide">FIELD GUIDE</div>
       <div><canvas class="guideSprite" data-sprite="ship" width="76" height="56"></canvas><b>Shooter</b> your ship</div><div><canvas class="guideSprite" data-sprite="milli" width="76" height="56"></canvas><b>Millipede</b> crawler</div>
@@ -81,7 +81,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.6</div>
+    <div class="version">v1.6.7</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -91,7 +91,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="upgradeScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.6</div>
+    <div class="version">v1.6.7</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Choose an upgrade</h2>
     <p id="upgradeLine" class="small">The garden shifts. Pick one advantage for the next waves.</p>
     <div class="upgrades">
@@ -105,7 +105,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.6.6</div>
+    <div class="version">v1.6.7</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -121,7 +121,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.6.6';
+const VERSION = 'v1.6.7';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const canvas = document.getElementById('game');
@@ -604,7 +604,7 @@ function burst(x,y,color,n){
 }
 function maybeOfferUpgrade(){
   if(state !== 'playing') return false;
-  if(wave > 0 && wave % 3 === 0){
+  if(wave > 0 && wave % 4 === 0){
     state = 'upgrade';
     document.getElementById('upgradeLine').textContent = `WAVE ${wave} CLEARED · choose one earned advantage`;
     showOnly('upgradeScreen');
@@ -616,6 +616,7 @@ function maybeOfferUpgrade(){
 function applyUpgrade(id){
   if(state !== 'upgrade') return;
   upgrades[id] = (upgrades[id] || 0) + 1;
+  bombs = 1; updateHud();
   const names = {fire:'FASTER SHOT',spread:'WIDER SPREAD',pulse:'STRONGER PULSE'};
   popups.push({x:W*.5-50,y:H*.32,t:names[id],life:1.1,color:id==='fire'?'#56fff0':id==='spread'?'#ff4fc4':'#ffe66b'});
   state = 'playing';
@@ -623,7 +624,7 @@ function applyUpgrade(id){
   nextWave();
 }
 function nextWave(){
-  wave++; rank += .36; bombs = wave % 3 === 1 ? 1 : Math.min(bombs,1); seedField(); makeCrawler(grid()*1.5, Math.min(18,10+wave), 44+wave*9);
+  wave++; rank += .36; bombs = Math.min(bombs,1); seedField(); makeCrawler(grid()*1.5, Math.min(18,10+wave), 44+wave*9);
   if(wave >= 3 || wave % 3 === 0) makeCrawler(grid()*3.2, 8+wave, 55+wave*8);
   if(wave % 4 === 0) spawnQueenCrawler();
   if(wave === 2) dropPickup(W*.5, H*.42, 'spread');
