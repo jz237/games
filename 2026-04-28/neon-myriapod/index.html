@@ -58,7 +58,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.4</div>
+    <div class="version">v1.5.5</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
@@ -72,7 +72,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.4</div>
+    <div class="version">v1.5.5</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -82,7 +82,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.5.4</div>
+    <div class="version">v1.5.5</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -98,7 +98,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.5.4';
+const VERSION = 'v1.5.5';
 const SCORE_KEY = 'neon_myriapod_scores_v1';
 const GLOBAL_SCORES_API = 'https://game-scores.jez237.workers.dev/scores/neon-myriapod';
 const canvas = document.getElementById('game');
@@ -301,12 +301,13 @@ function makeChildCrawler(x,y,dir,opts){
     s.grace = opts.grace || .55;
     segs.push(s);
   }
-  crawlers.push({segs,dir,speed:opts.speed || (44 + wave*3),rowDir:1,dive:false,hue:118 + rand(-12,18),wiggle:0,turnLock:.22,child:true,scatter:opts.scatter || .72});
+  crawlers.push({segs,dir,speed:opts.speed || (34 + wave*2),rowDir:1,dive:false,hue:118 + rand(-12,18),wiggle:0,turnLock:.34,child:true,scatter:opts.scatter || 1.1});
 }
 function spawnQueenCrawler(){
   makeCrawler(grid()*1.45, Math.min(20, 13 + Math.floor(wave*.7)), 34 + wave*4, {queen:true,hue:304});
   shake = Math.max(shake,10); flash = Math.max(flash,.2);
   popups.push({x:W*.5-78,y:H*.24,t:'QUEEN ARRIVES',life:1.25,color:'#ffd96a'});
+  if(state === 'playing') dropPickup(W*.5, H*.58, wave >= 8 ? 'shield' : 'frost');
   sfx('queenWarn');
 }
 function waveTitle(n){
@@ -327,12 +328,12 @@ function damageSegment(s, c, play, amount){
     burst(s.x,s.y,s.head?'#ffd96a':'#ff5ad8',s.hp <= 0 ? 24 : 9);
     if(s.hp > 0 && dmg >= 2) popups.push({x:s.x-10,y:s.y-14,t:'-'+dmg,life:.42,color:'#ffd96a'});
     if(s.hp <= 0){
-      const n = s.head ? 2 : (Math.random() < .38 ? 1 : 0);
+      const n = s.head ? 1 : 0;
       for(let k=0;k<n;k++){
-        const fan = (k % 2 ? 1 : -1) * (s.head ? 1 : (c.dir || 1));
-        makeChildCrawler(s.x + rand(-12,12), s.y + rand(-8,8), fan, {speed:42 + wave*2.5, scatter:.9, grace:.7, len:s.head ? 3 : 2});
+        const fan = (Math.random() < .5 ? -1 : 1);
+        makeChildCrawler(s.x + rand(-16,16), s.y + rand(-10,10), fan, {speed:30 + wave*1.5, scatter:1.45, grace:1.15, len:2});
       }
-      if(Math.random() < .45) addMushroom(s.x,s.y,3,true);
+      if(Math.random() < (s.head ? .35 : .18)) addMushroom(s.x,s.y,3,true);
     }
   }
   if(s.hp <= 0) s.hit = true;
@@ -588,10 +589,10 @@ function updateCrawlers(dt, play){
     }
     if(c.child && c.scatter > 0){
       lead.x += c.dir * speed * 1.05;
-      lead.y += speed * .18;
+      lead.y += speed * .06;
       if(lead.x < cell*.6 || lead.x > W-cell*.6){ c.dir *= -1; lead.x = clamp(lead.x, cell*.6, W-cell*.6); }
     }
-    else if(c.dive || mushrooms.some(m=>m.poison && dist(m.x,m.y,lead.x,lead.y)<cell)){ lead.y += speed*(c.child ? .92 : 1.55); lead.x += Math.sin(c.wiggle)*speed*(c.child ? 1.05 : .7); c.dive = true; }
+    else if(c.dive || mushrooms.some(m=>m.poison && dist(m.x,m.y,lead.x,lead.y)<cell)){ lead.y += speed*(c.child ? .52 : 1.55); lead.x += Math.sin(c.wiggle)*speed*(c.child ? 1.18 : .7); c.dive = true; }
     else { lead.x += c.dir * speed; lead.y += (laneY - lead.y) * Math.min(1, dt*9); }
     if(lead.y > H-48){ lead.y = cell; c.dive=false; }
     for(let i=1;i<c.segs.length;i++){
@@ -613,7 +614,7 @@ function splitHitCrawler(c, play){
         burst(segs[i].x,segs[i].y,queen?'#ffd96a':'#6fffe6',queen?28:14);
         sfx(queen && c.segs.filter(s=>s.queen && !s.hit).length <= 1 ? 'queenDeath' : 'segment');
       }
-      if(current.length) out.push({segs:current,dir:-c.dir,speed:c.speed+(c.queen?6:12),rowDir:1,dive:c.queen ? false : c.dive,hue:c.hue+18,wiggle:0,turnLock:c.queen?.24:.08,queen:c.queen,child:c.child,scatter:c.queen?.45:(c.scatter||0)});
+      if(current.length) out.push({segs:current,dir:-c.dir,speed:c.queen ? Math.max(28,c.speed*.82) : c.speed+12,rowDir:1,dive:c.queen ? false : c.dive,hue:c.hue+18,wiggle:0,turnLock:c.queen?.45:.08,queen:c.queen,child:c.child,scatter:c.queen?1.05:(c.scatter||0)});
       current=[];
     }
     else current.push(segs[i]);
@@ -642,7 +643,7 @@ function collisions(play){
   });
   bullets = bullets.filter(b=>!b.dead);
   if(!play) return;
-  let hit = enemies.some(e=>dist(e.x,e.y,player.x,player.y)<e.r+player.r) || crawlers.some(c=>c.segs.some(s=>(s.grace || 0) <= 0 && dist(s.x,s.y,player.x,player.y)<player.r+grid()*(s.queen ? .52 : c.child ? .31 : .38)));
+  let hit = enemies.some(e=>dist(e.x,e.y,player.x,player.y)<e.r+player.r) || crawlers.some(c=>c.segs.some(s=>(s.grace || 0) <= 0 && dist(s.x,s.y,player.x,player.y)<player.r+grid()*(s.queen ? .49 : c.child ? .24 : .38)));
   if(hit && player.dead<=0){
     if(powers.shield > 0){
       powers.shield = 0; player.dead=.55; shake=10; flash=.16; burst(player.x,player.y,'#ffe66b',34); updatePowerHud(); sfx('shield'); return;
