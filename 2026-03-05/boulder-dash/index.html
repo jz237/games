@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.1.13</title>
+<title>Emerald Mine — Crystal Caves v2.1.15</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.1.13 — only boulders crush the miner; slower normal movement
+//  v2.1.15 — title music wake flow and mobile title readability
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.1.13';
+const VERSION = 'v2.1.15';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -188,6 +188,33 @@ function sfxHighScore() {
   [523,659,784,1047,1318].forEach((f,i) => setTimeout(() => playTone(f, 0.12, 'sine', 0.09), i*90));
 }
 
+let titleMusicTimer = null;
+let titleMusicBeat = 0;
+let titleMusicUnlocked = false;
+function stopTitleMusic() {
+  if (titleMusicTimer) { clearInterval(titleMusicTimer); titleMusicTimer = null; }
+}
+function playIntroArp() {
+  [196, 247, 294, 370, 494, 740].forEach((f, i) => setTimeout(() => playTone(f, 0.12, i % 2 ? 'triangle' : 'sine', 0.045), i * 80));
+}
+function startTitleMusic() {
+  if (titleMusicTimer || state !== 'title') return;
+  try { ensureAudio(); } catch(e) { return; }
+  titleMusicUnlocked = true;
+  playIntroArp();
+  const melody = [392, 494, 587, 740, 659, 587, 494, 370, 392, 494, 622, 784, 740, 587, 494, 330];
+  const bass = [98, 98, 123, 123, 147, 147, 123, 110];
+  titleMusicBeat = 0;
+  titleMusicTimer = setInterval(() => {
+    if (state !== 'title') { stopTitleMusic(); return; }
+    const step = titleMusicBeat++;
+    playTone(melody[step % melody.length], 0.10, 'sine', 0.035);
+    if (step % 2 === 0) playTone(bass[Math.floor(step / 2) % bass.length], 0.18, 'triangle', 0.028);
+    if (step % 4 === 3) playTone(1200 + (step % 8) * 30, 0.035, 'square', 0.012);
+  }, 260);
+}
+
+
 // ─── Run / High Scores ───
 const HS_KEY = 'diamond_mine_boulder_dash_v2_scores';
 const MAX_SCORES = 10;
@@ -195,6 +222,7 @@ let hsEntry = { active:false, initials:['A','A','A'], pos:0, score:0, level:1, n
 let showScores = false;
 
 function newGame() {
+  stopTitleMusic();
   level = 0;
   score = 0;
   runLives = 3;
@@ -207,6 +235,8 @@ function newGame() {
 }
 function returnToTitle() {
   state = 'title';
+  titleMusicUnlocked = true;
+  startTitleMusic();
   level = 0;
   score = 0;
   runLives = 3;
@@ -921,7 +951,8 @@ window.addEventListener('keydown', e => {
   if (handleHighScoreKey(e)) return;
   
   if (state === 'title') {
-    if (e.code === 'KeyH') { showScores = !showScores; return; }
+    if (e.code === 'KeyH') { showScores = !showScores; startTitleMusic(); return; }
+    if (!titleMusicUnlocked) { startTitleMusic(); return; }
     newGame(); return;
   }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
@@ -1008,7 +1039,7 @@ canvas.addEventListener('touchstart', e => {
     return;
   }
   if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.touches[0].clientX * DPR, e.touches[0].clientY * DPR); return; }
-  if (state === 'title') { newGame(); return; }
+  if (state === 'title') { if (!titleMusicUnlocked) { startTitleMusic(); return; } newGame(); return; }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
   if (state === 'win' && gameOverTimer > 2) { returnToTitle(); return; }
   
@@ -1131,7 +1162,7 @@ canvas.addEventListener('click', e => {
   updateRetryBtn();
   if (isRetryBtnTap(e.clientX * DPR, e.clientY * DPR)) { retryLevelAction(); return; }
   if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.clientX * DPR, e.clientY * DPR); return; }
-  if (state === 'title') { newGame(); return; }
+  if (state === 'title') { if (!titleMusicUnlocked) { startTitleMusic(); return; } newGame(); return; }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
   if (state === 'win' && gameOverTimer > 2) { returnToTitle(); return; }
 });
@@ -3846,116 +3877,159 @@ function drawTouchRipples() {
 // ─── Title Screen ───
 function drawTitle() {
   drawCaveBackground();
-  
-  // Floating emeralds on title screen
-  for (let i = 0; i < 12; i++) {
-    const x = W * (0.1 + (i * 0.17 + Math.sin(titleAnimT * 0.3 + i) * 0.05) % 0.9);
-    const y = H * (0.2 + (i * 0.13 + Math.sin(titleAnimT * 0.4 + i*2) * 0.08) % 0.7);
-    const r = W * 0.015;
-    const shimmer = titleAnimT * 2 + i;
-    // Mostly emerald green, occasional diamond blue
-    const isDiamond = i % 5 === 0;
-    const hue = isDiamond ? (200 + Math.sin(shimmer)*20) : (130 + Math.sin(shimmer)*15);
-    const sat = isDiamond ? 70 : 80;
-    
-    ctx.fillStyle = `hsla(${hue},${sat}%,${isDiamond ? 75 : 55}%,${0.2 + Math.sin(shimmer)*0.1})`;
+
+  const cx = W / 2;
+  const t = titleAnimT;
+  const cavePulse = 0.5 + Math.sin(t * 1.4) * 0.5;
+
+  // Cinematic emerald aurora spilling through the mine shaft.
+  const aurora = ctx.createRadialGradient(cx, H * 0.18, W * 0.04, cx, H * 0.18, Math.max(W, H) * 0.72);
+  aurora.addColorStop(0, `rgba(80,255,170,${0.22 + cavePulse * 0.08})`);
+  aurora.addColorStop(0.35, 'rgba(15,130,95,0.14)');
+  aurora.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = aurora;
+  ctx.fillRect(0, 0, W, H);
+
+  // Layered cave silhouettes.
+  for (let layer = 0; layer < 3; layer++) {
+    const yBase = H * (0.18 + layer * 0.06);
+    ctx.fillStyle = `rgba(${8 + layer*8},${18 + layer*12},${18 + layer*9},${0.34 - layer*0.06})`;
     ctx.beginPath();
-    // Hexagonal emerald shape
-    ctx.moveTo(x, y - r);
-    ctx.lineTo(x + r*0.5, y - r*0.35);
-    ctx.lineTo(x + r*0.6, y + r*0.2);
-    ctx.lineTo(x, y + r*0.8);
-    ctx.lineTo(x - r*0.6, y + r*0.2);
-    ctx.lineTo(x - r*0.5, y - r*0.35);
-    ctx.closePath();
-    ctx.fill();
-    
-    // Sparkle around floating gems
-    ctx.fillStyle = `rgba(150,255,200,${0.25 + Math.sin(shimmer*3)*0.15})`;
-    drawStar(ctx, x + r*0.8*Math.cos(shimmer*2), y + r*0.5*Math.sin(shimmer*2), 4, r*0.3, r*0.08);
+    ctx.moveTo(0, 0);
+    for (let i = 0; i <= 12; i++) {
+      const x = W * i / 12;
+      const y = yBase + Math.sin(i * 1.7 + t * (0.18 + layer*0.05)) * H * 0.025 + (i % 2) * H * 0.035;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, 0); ctx.closePath(); ctx.fill();
   }
-  
-  let titleSize = Math.min(W * 0.06, H * 0.075);
+
+  // Mine cart rail and tiny cart for attract-mode life.
+  const railY = H * 0.72;
+  ctx.strokeStyle = 'rgba(105,70,42,0.45)';
+  ctx.lineWidth = Math.max(2, DPR * 2);
+  ctx.beginPath(); ctx.moveTo(W*0.08, railY); ctx.lineTo(W*0.92, railY + Math.sin(t)*H*0.015); ctx.stroke();
+  ctx.strokeStyle = 'rgba(180,120,65,0.22)';
+  for (let i=0;i<12;i++) {
+    const x = W * (0.1 + i * 0.07);
+    ctx.beginPath(); ctx.moveTo(x, railY - 5*DPR); ctx.lineTo(x + 16*DPR, railY + 8*DPR); ctx.stroke();
+  }
+  const cartX = W * (0.18 + ((t * 0.035) % 0.64));
+  ctx.fillStyle = 'rgba(25,36,38,0.86)';
+  ctx.strokeStyle = 'rgba(110,175,140,0.45)';
+  ctx.lineWidth = Math.max(1, DPR);
+  ctx.beginPath(); ctx.roundRect(cartX - 26*DPR, railY - 28*DPR, 52*DPR, 25*DPR, 5*DPR); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(70,255,150,0.75)';
+  for (let i=0;i<3;i++) drawStar(ctx, cartX - 13*DPR + i*13*DPR, railY - 20*DPR - (i%2)*4*DPR, 5, 5*DPR, 1.5*DPR);
+
+  // Floating emeralds/diamonds, brighter and larger than before.
+  for (let i = 0; i < 18; i++) {
+    const x = W * (0.06 + (i * 0.113 + Math.sin(t * 0.16 + i) * 0.05) % 0.88);
+    const y = H * (0.12 + (i * 0.097 + Math.cos(t * 0.18 + i*1.7) * 0.05) % 0.62);
+    const r = Math.max(6 * DPR, Math.min(W, H) * (0.010 + (i % 4) * 0.002));
+    const shimmer = t * 2.2 + i;
+    const isDiamond = i % 6 === 0;
+    const hue = isDiamond ? (200 + Math.sin(shimmer)*18) : (136 + Math.sin(shimmer)*14);
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, r*3.2);
+    glow.addColorStop(0, `hsla(${hue},90%,65%,0.22)`);
+    glow.addColorStop(1, `hsla(${hue},90%,45%,0)`);
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(x, y, r*3.2, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = `hsla(${hue},${isDiamond ? 75 : 88}%,${isDiamond ? 76 : 52}%,${0.42 + Math.sin(shimmer)*0.15})`;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r); ctx.lineTo(x + r*0.58, y - r*0.32); ctx.lineTo(x + r*0.66, y + r*0.22);
+    ctx.lineTo(x, y + r*0.9); ctx.lineTo(x - r*0.66, y + r*0.22); ctx.lineTo(x - r*0.58, y - r*0.32);
+    ctx.closePath(); ctx.fill();
+    if (Math.sin(shimmer * 3) > 0.68) {
+      ctx.fillStyle = 'rgba(220,255,235,0.75)';
+      drawStar(ctx, x + r*0.9, y - r*0.25, 4, r*0.45, r*0.09);
+    }
+  }
+
+  // Backing glass card behind the title.
+  const cardW = Math.min(W * 0.88, 680 * DPR);
+  const cardH = Math.min(H * 0.43, 330 * DPR);
+  const cardY = H * 0.31;
+  ctx.fillStyle = 'rgba(2,10,8,0.54)';
+  ctx.strokeStyle = 'rgba(90,255,170,0.24)';
+  ctx.lineWidth = Math.max(1, DPR);
+  ctx.beginPath(); ctx.roundRect(cx - cardW/2, cardY - cardH/2, cardW, cardH, 22*DPR); ctx.fill(); ctx.stroke();
+
+  let titleSize = Math.min(W * 0.075, H * 0.092);
   const titleText = 'EMERALD MINE';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `bold ${titleSize}px 'Segoe UI', system-ui, sans-serif`;
-  while (ctx.measureText(titleText).width > W * 0.72 && titleSize > 16 * DPR) {
+  ctx.font = `900 ${titleSize}px 'Segoe UI', system-ui, sans-serif`;
+  while (ctx.measureText(titleText).width > W * 0.80 && titleSize > 16 * DPR) {
     titleSize *= 0.92;
-    ctx.font = `bold ${titleSize}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.font = `900 ${titleSize}px 'Segoe UI', system-ui, sans-serif`;
   }
-  
-  // Title shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillText(titleText, W/2 + 3, H*0.24 + 3);
-  
-  // Emerald green gradient title
-  const tgrd = ctx.createLinearGradient(W*0.2, H*0.19, W*0.8, H*0.29);
-  tgrd.addColorStop(0, '#20E080');
-  tgrd.addColorStop(0.3, '#60FFA0');
-  tgrd.addColorStop(0.5, '#A0FFD0');
-  tgrd.addColorStop(0.7, '#60FFA0');
-  tgrd.addColorStop(1, '#20E080');
+
+  ctx.shadowColor = 'rgba(0,255,150,0.6)';
+  ctx.shadowBlur = 18 * DPR;
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillText(titleText, cx + 3*DPR, H*0.235 + 4*DPR);
+  const tgrd = ctx.createLinearGradient(W*0.18, H*0.18, W*0.82, H*0.30);
+  tgrd.addColorStop(0, '#10B86C');
+  tgrd.addColorStop(0.28, '#73FFAD');
+  tgrd.addColorStop(0.48, '#E8FFF2');
+  tgrd.addColorStop(0.72, '#62F49C');
+  tgrd.addColorStop(1, '#00995C');
   ctx.fillStyle = tgrd;
-  ctx.fillText(titleText, W/2, H*0.24);
-  
-  // Subtitle
-  ctx.font = `${titleSize*0.32}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(200,255,220,0.7)';
-  ctx.fillText('Crystal Caves', W/2, H*0.31);
-  
-  ctx.font = `${titleSize*0.22}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(200,220,180,0.6)';
-  ctx.fillText('Inspired by the Amiga classic', W/2, H*0.36);
-  
+  ctx.fillText(titleText, cx, H*0.235 + Math.sin(t*1.2)*2*DPR);
+  ctx.shadowBlur = 0;
+
+  ctx.font = `700 ${titleSize*0.34}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(210,255,228,0.82)';
+  ctx.fillText('Crystal Caves', cx, H*0.31);
+  ctx.font = `700 ${Math.max(10*DPR, titleSize*0.22)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(205,235,205,0.78)';
+  ctx.fillText('falling rock danger • magic walls • glittering escape', cx, H*0.36);
+
   const instrSize = Math.max(11 * DPR, titleSize * 0.24);
-  ctx.font = `600 ${instrSize}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(235,255,238,0.9)';
-  const instructions = showScores ? [] : [
-    '⛏️ Dig emeralds',
-    '🪨 Dodge boulders',
-    '💎 Magic walls convert rocks',
-    '✨ Rare diamonds = bonus',
-    '🚪 Open the exit and escape'
-  ];
-  instructions.forEach((txt, i) => {
-    ctx.fillText(txt, W/2, H*0.42 + i * instrSize * 1.38);
-  });
-  
-  ctx.font = `${instrSize*0.82}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(210,255,225,0.75)';
-  if (!showScores) ctx.fillText('Swipe / D-pad / WASD', W/2, H*0.64);
-  
-  const pulse = 0.85 + Math.sin(titleAnimT * 3) * 0.15;
-  const btnW = W * 0.3 * pulse;
-  const btnH = H * 0.08 * pulse;
-  const btnY = H * 0.81;
-  
-  const bglow = ctx.createRadialGradient(W/2, btnY, 0, W/2, btnY, btnW);
-  bglow.addColorStop(0, 'rgba(0,200,120,0.15)');
-  bglow.addColorStop(1, 'rgba(0,200,120,0)');
+  if (!showScores) {
+    const tips = ['⛏️ dig emeralds', '🪨 boulders crush', '💎 diamonds sparkle', '↻ restart anytime'];
+    ctx.font = `700 ${instrSize}px 'Segoe UI', system-ui, sans-serif`;
+    tips.forEach((txt, i) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const x = cx + (col - 0.5) * Math.min(W*0.42, 210*DPR);
+      const y = H * 0.43 + row * Math.max(34*DPR, instrSize * 1.75);
+      const boxW = Math.min(W*0.38, 174*DPR);
+      const boxH = Math.max(28*DPR, instrSize * 1.55);
+      ctx.fillStyle = 'rgba(10,28,20,0.62)';
+      ctx.beginPath(); ctx.roundRect(x - boxW/2, y - boxH/2, boxW, boxH, 10*DPR); ctx.fill();
+      ctx.strokeStyle = 'rgba(120,255,180,0.24)'; ctx.stroke();
+      ctx.fillStyle = 'rgba(235,255,240,0.90)';
+      ctx.fillText(txt, x, y);
+    });
+  }
+
+  const pulse = 0.92 + Math.sin(t * 3.4) * 0.08;
+  const btnW = Math.min(W * 0.46, 300 * DPR) * pulse;
+  const btnH = Math.max(48 * DPR, H * 0.07) * pulse;
+  const btnY = H * 0.80;
+  const bglow = ctx.createRadialGradient(cx, btnY, 0, cx, btnY, btnW);
+  bglow.addColorStop(0, 'rgba(0,255,150,0.22)');
+  bglow.addColorStop(1, 'rgba(0,255,150,0)');
   ctx.fillStyle = bglow;
-  ctx.fillRect(W/2 - btnW, btnY - btnH, btnW*2, btnH*2);
-  
-  ctx.fillStyle = 'rgba(0,160,80,0.3)';
-  ctx.beginPath();
-  ctx.roundRect(W/2 - btnW/2, btnY - btnH/2, btnW, btnH, btnH*0.3);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(80,255,160,0.6)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  
-  ctx.font = `bold ${btnH*0.45}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = '#fff';
-  ctx.fillText('TAP TO PLAY', W/2, btnY);
-  ctx.font = `${Math.max(10*DPR, titleSize*0.16)}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(230,255,238,0.72)';
-  ctx.fillText(`${VERSION}  •  tap to start  •  H toggles scores`, W/2, H*0.94);
-  if (showScores) drawScoresPanel(W/2, H*0.58, Math.min(W*0.88, 440*DPR), Math.min(H*0.44, 300*DPR), -1);
-  
+  ctx.fillRect(cx - btnW, btnY - btnH, btnW*2, btnH*2);
+  const btnGrd = ctx.createLinearGradient(cx, btnY - btnH/2, cx, btnY + btnH/2);
+  btnGrd.addColorStop(0, 'rgba(35,210,125,0.62)');
+  btnGrd.addColorStop(1, 'rgba(0,95,60,0.64)');
+  ctx.fillStyle = btnGrd;
+  ctx.beginPath(); ctx.roundRect(cx - btnW/2, btnY - btnH/2, btnW, btnH, btnH*0.32); ctx.fill();
+  ctx.strokeStyle = 'rgba(155,255,195,0.72)'; ctx.lineWidth = Math.max(2, DPR*1.5); ctx.stroke();
+  ctx.font = `900 ${btnH*0.35}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = '#fff'; ctx.fillText(titleMusicUnlocked ? 'TAP TO PLAY' : 'TAP FOR MUSIC', cx, btnY - btnH*0.06);
+  ctx.font = `${Math.max(9*DPR, btnH*0.16)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(225,255,235,0.76)'; ctx.fillText(titleMusicUnlocked ? 'the mine is awake' : 'then tap again to descend', cx, btnY + btnH*0.30);
+
+  ctx.font = `${Math.max(9*DPR, titleSize*0.15)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(230,255,238,0.66)';
+  ctx.fillText(`${VERSION}  •  swipe / D-pad / WASD  •  H scores`, cx, H*0.94);
+  if (showScores) drawScoresPanel(cx, H*0.58, Math.min(W*0.88, 440*DPR), Math.min(H*0.44, 300*DPR), -1);
   drawVignette();
 }
-
 // ─── Level Clear Screen ───
 function drawLevelClear() {
   ctx.fillStyle = `rgba(0,0,0,${Math.min(levelClearTimer * 0.8, 0.6)})`;
