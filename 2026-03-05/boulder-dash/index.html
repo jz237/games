@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.1.20</title>
+<title>Emerald Mine — Crystal Caves v2.2.0</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.1.20 — global high scores wired to Cloudflare leaderboard
+//  v2.2.0 — creature variants, crush rewards, level select, attract demo
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.1.20';
+const VERSION = 'v2.2.0';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -285,13 +285,14 @@ let globalScoresCacheTime = 0;
 let globalScoresLoading = false;
 let hsEntry = { active:false, initials:['A','A','A'], pos:0, score:0, level:1, newIdx:-1, submitted:false };
 let showScores = false;
+let titleSelectedLevel = 0;
 
-function newGame() {
+function newGame(startLevel = titleSelectedLevel || 0) {
   stopTitleMusic();
-  level = 0;
+  level = clamp(startLevel, 0, LEVELS.length - 1);
   score = 0;
   runLives = 3;
-  highestLevelReached = 1;
+  highestLevelReached = level + 1;
   hsEntry.active = false;
   showScores = false;
   state = 'playing';
@@ -546,9 +547,11 @@ function drawDynamiteBtn() {
 
 // ─── Game State ───
 const LEVELS = [
-  { w: 16, h: 12, gems: 5,  enemies: 2, enemySpeed: 1.0,  dirtPct: 0.65, boulderPct: 0.08, gemPct: 0.08, diamonds: 0, magicWalls: 0 },
-  { w: 20, h: 14, gems: 10, enemies: 3, enemySpeed: 0.75, dirtPct: 0.55, boulderPct: 0.12, gemPct: 0.10, diamonds: 2, magicWalls: 1 },
-  { w: 24, h: 16, gems: 15, enemies: 5, enemySpeed: 0.5,  dirtPct: 0.45, boulderPct: 0.15, gemPct: 0.12, diamonds: 4, magicWalls: 2 }
+  { w: 16, h: 12, gems: 5,  enemies: 2, enemySpeed: 1.0,  dirtPct: 0.65, boulderPct: 0.08, gemPct: 0.08, diamonds: 0, magicWalls: 0, name:'Training Shaft' },
+  { w: 20, h: 14, gems: 10, enemies: 3, enemySpeed: 0.75, dirtPct: 0.55, boulderPct: 0.12, gemPct: 0.10, diamonds: 2, magicWalls: 1, name:'Magic Wallworks' },
+  { w: 24, h: 16, gems: 15, enemies: 5, enemySpeed: 0.5,  dirtPct: 0.45, boulderPct: 0.15, gemPct: 0.12, diamonds: 4, magicWalls: 2, name:'Firefly Forge' },
+  { w: 26, h: 18, gems: 18, enemies: 7, enemySpeed: 0.45, dirtPct: 0.42, boulderPct: 0.17, gemPct: 0.12, diamonds: 6, magicWalls: 3, name:'Butterfly Vault' },
+  { w: 28, h: 20, gems: 22, enemies: 9, enemySpeed: 0.38, dirtPct: 0.38, boulderPct: 0.18, gemPct: 0.13, diamonds: 8, magicWalls: 4, name:'Emerald Machine' }
 ];
 
 let state = 'title'; // title, playing, levelClear, gameOver, win
@@ -864,7 +867,9 @@ function generateLevel(lvl) {
         glowT: Math.random() * Math.PI * 2,
         moving: false, animT: 0,
         squashT: 0, // for squash death anim
-        crushed: false
+        crushed: false,
+        type: (i % 3 === 1 && lvl >= 1) ? 'butterfly' : (i % 3 === 2 && lvl >= 2) ? 'hunter' : 'firefly',
+        turnBias: (i % 2 === 0) ? 1 : -1
       });
     }
   }
@@ -1040,6 +1045,34 @@ function addEnemyCrushParticles(gx, gy) {
   }
 }
 
+
+function spawnCrushReward(gx, gy, en) {
+  const reward = en.type === 'butterfly' ? TILE.DIAMOND : TILE.GEM;
+  const spots = [[0,0],[1,0],[-1,0],[0,1],[0,-1]];
+  let made = 0;
+  for (const [dx, dy] of spots) {
+    const x = gx + dx, y = gy + dy;
+    if (x <= 0 || y <= 0 || x >= gridW-1 || y >= gridH-1) continue;
+    const t = grid[y][x];
+    if (t === TILE.EMPTY || t === TILE.DIRT || (dx === 0 && dy === 0)) {
+      grid[y][x] = reward;
+      fallMap[fallKey(x, y)] = 1;
+      const hue = reward === TILE.DIAMOND ? 200 : 140;
+      for (let i = 0; i < 5; i++) {
+        const a = Math.random() * Math.PI * 2;
+        addParticle(x + 0.5, y + 0.5, Math.cos(a)*(0.6+Math.random()*1.5), Math.sin(a)*(0.6+Math.random()*1.5)-0.6,
+          `hsla(${hue + Math.random()*25},90%,${60+Math.random()*25}%,0.85)`, 0.35 + Math.random()*0.3, 1.5+Math.random()*2, 0.8);
+      }
+      made++;
+    }
+  }
+  if (made) {
+    sfxCollect();
+    flashAlpha = Math.max(flashAlpha, 0.22);
+    flashColor = reward === TILE.DIAMOND ? '180,220,255' : '100,255,160';
+  }
+}
+
 function addExplosionParticles(gx, gy) {
   for (let i = 0; i < 40; i++) {
     const angle = Math.random() * Math.PI * 2;
@@ -1074,6 +1107,7 @@ window.addEventListener('keydown', e => {
   
   if (state === 'title') {
     if (e.code === 'KeyH') { showScores = !showScores; startTitleMusic(); return; }
+    if (/^Digit[1-5]$/.test(e.code)) { titleSelectedLevel = clamp(parseInt(e.code.slice(5),10)-1,0,LEVELS.length-1); startTitleMusic(); return; }
     if (!titleMusicUnlocked) { startTitleMusic(); return; }
     newGame(); return;
   }
@@ -1149,6 +1183,24 @@ function touchDistance(touches) {
 }
 function saveZoom() { try { localStorage.setItem(ZOOM_KEY, userZoom.toFixed(3)); } catch(e) {} }
 
+
+function handleTitleSelect(x, y) {
+  if (showScores) return false;
+  const startX = W * 0.18;
+  const gap = W * 0.16;
+  const cy = H * 0.665;
+  const r = Math.max(14 * DPR, Math.min(W, H) * 0.028);
+  for (let i = 0; i < LEVELS.length; i++) {
+    const bx = startX + i * gap;
+    if (Math.hypot(x - bx, y - cy) <= r * 1.45) {
+      titleSelectedLevel = i;
+      startTitleMusic();
+      return true;
+    }
+  }
+  return false;
+}
+
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
   ensureAudio();
@@ -1164,7 +1216,7 @@ canvas.addEventListener('touchstart', e => {
     return;
   }
   if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.touches[0].clientX * DPR, e.touches[0].clientY * DPR); return; }
-  if (state === 'title') { if (!titleMusicUnlocked) { startTitleMusic(); return; } newGame(); return; }
+  if (state === 'title') { const tt=e.touches[0]; if (handleTitleSelect(tt.clientX*DPR, tt.clientY*DPR)) return; if (!titleMusicUnlocked) { startTitleMusic(); return; } newGame(); return; }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
   if (state === 'win' && gameOverTimer > 2) { returnToTitle(); return; }
   
@@ -1330,7 +1382,7 @@ canvas.addEventListener('click', e => {
   if (isPauseBtnTap(e.clientX * DPR, e.clientY * DPR)) { return; }
   if (isRetryBtnTap(e.clientX * DPR, e.clientY * DPR)) { return; }
   if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.clientX * DPR, e.clientY * DPR); return; }
-  if (state === 'title') { if (!titleMusicUnlocked) { startTitleMusic(); return; } newGame(); return; }
+  if (state === 'title') { if (handleTitleSelect(e.clientX*DPR, e.clientY*DPR)) return; if (!titleMusicUnlocked) { startTitleMusic(); return; } newGame(); return; }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
   if (state === 'win' && gameOverTimer > 2) { returnToTitle(); return; }
 });
@@ -1650,6 +1702,7 @@ function updatePhysics() {
           enemyBelow.squashT = 0;
           grid[enemyBelow.gy][enemyBelow.gx] = TILE.EMPTY;
           addEnemyCrushParticles(enemyBelow.gx, enemyBelow.gy);
+          spawnCrushReward(enemyBelow.gx, enemyBelow.gy, enemyBelow);
           sfxCrush();
           screenShake(6);
           score += 200;
@@ -1756,8 +1809,9 @@ function updatePhysics() {
     }
     
     let moved = false;
+    const chaseChance = en.type === 'hunter' ? 0.92 : en.type === 'butterfly' ? 0.18 : 0.55;
     
-    if (canSeePlayer && Math.random() < 0.7) {
+    if (canSeePlayer && Math.random() < chaseChance) {
       const stepX = pdx === 0 ? 0 : (pdx > 0 ? 1 : -1);
       const stepY = pdy === 0 ? 0 : (pdy > 0 ? 1 : -1);
       
@@ -1783,8 +1837,11 @@ function updatePhysics() {
     }
     
     if (!moved) {
-      const rightTurn = (en.dir + 1) % 4;
-      const tryDirs = [rightTurn, en.dir, (en.dir + 3) % 4, (en.dir + 2) % 4];
+      const turn = en.type === 'butterfly' ? -1 : (en.turnBias || 1);
+      const rightTurn = (en.dir + turn + 4) % 4;
+      const tryDirs = en.type === 'hunter'
+        ? [en.dir, rightTurn, (en.dir - turn + 4) % 4, (en.dir + 2) % 4]
+        : [rightTurn, en.dir, (en.dir - turn + 4) % 4, (en.dir + 2) % 4];
       
       for (const d of tryDirs) {
         const [ddx, ddy] = dirs[d];
@@ -3693,8 +3750,9 @@ function drawEnemy(en) {
   const glowIntensity = 0.1 + Math.sin(en.glowT) * 0.05;
   const glowR = CELL * 1.2;
   const egrd = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
-  egrd.addColorStop(0, `rgba(255,80,30,${glowIntensity})`);
-  egrd.addColorStop(1, 'rgba(255,80,30,0)');
+  const glowColor = en.type === 'butterfly' ? '120,220,255' : en.type === 'hunter' ? '255,60,160' : '255,80,30';
+  egrd.addColorStop(0, `rgba(${glowColor},${glowIntensity})`);
+  egrd.addColorStop(1, `rgba(${glowColor},0)`);
   ctx.fillStyle = egrd;
   ctx.beginPath(); ctx.arc(sx, sy, glowR, 0, Math.PI*2); ctx.fill();
   
@@ -3714,9 +3772,13 @@ function drawEnemySprite(sx, sy, s, en) {
   ctx.closePath();
   
   const egrd = ctx.createRadialGradient(sx, sy - r*0.2, 0, sx, sy, r*1.2);
-  egrd.addColorStop(0, '#ff6030');
-  egrd.addColorStop(0.7, '#cc3010');
-  egrd.addColorStop(1, '#881500');
+  if (en.type === 'butterfly') {
+    egrd.addColorStop(0, '#a0f8ff'); egrd.addColorStop(0.7, '#2aa8ff'); egrd.addColorStop(1, '#1450a0');
+  } else if (en.type === 'hunter') {
+    egrd.addColorStop(0, '#ff6ad5'); egrd.addColorStop(0.7, '#cc1578'); egrd.addColorStop(1, '#650033');
+  } else {
+    egrd.addColorStop(0, '#ff6030'); egrd.addColorStop(0.7, '#cc3010'); egrd.addColorStop(1, '#881500');
+  }
   ctx.fillStyle = egrd;
   ctx.fill();
   
@@ -4187,6 +4249,49 @@ function drawTitle() {
       ctx.fillStyle = 'rgba(235,255,240,0.90)';
       ctx.fillText(txt, x, y);
     });
+  }
+
+  // Tiny attract-mode cave demo.
+  const demoW = Math.min(W * 0.52, 260 * DPR), demoH = Math.min(H * 0.115, 88 * DPR);
+  const demoX = cx - demoW/2, demoY = H * 0.535;
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.strokeStyle = 'rgba(100,255,170,0.20)';
+  ctx.lineWidth = Math.max(1, DPR);
+  ctx.beginPath(); ctx.roundRect(demoX, demoY, demoW, demoH, 10*DPR); ctx.fill(); ctx.stroke();
+  const cols = 9, rows = 3, cs = Math.min(demoW/cols, demoH/rows);
+  const ox = demoX + (demoW - cols*cs)/2, oy = demoY + (demoH - rows*cs)/2;
+  for (let yy=0; yy<rows; yy++) for (let xx=0; xx<cols; xx++) {
+    ctx.fillStyle = (xx+yy)%2 ? 'rgba(67,43,28,0.55)' : 'rgba(92,55,31,0.55)';
+    ctx.fillRect(ox+xx*cs, oy+yy*cs, cs-1, cs-1);
+  }
+  const minerX = 1 + Math.floor((t*1.4)%6);
+  ctx.fillStyle = '#ffe0a0'; ctx.beginPath(); ctx.arc(ox+(minerX+0.5)*cs, oy+1.5*cs, cs*0.28, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#50ffaa'; drawStar(ctx, ox+(6.5+Math.sin(t*3)*0.12)*cs, oy+1.5*cs, 5, cs*0.28, cs*0.08);
+  const rockY = 0.45 + Math.abs(Math.sin(t*2.1))*1.25;
+  ctx.fillStyle = '#8a8378'; ctx.beginPath(); ctx.arc(ox+4.5*cs, oy+(rockY+0.5)*cs, cs*0.30, 0, Math.PI*2); ctx.fill();
+
+  // Level select chips.
+  if (!showScores) {
+    const startX = W * 0.18;
+    const gap = W * 0.16;
+    const cySel = H * 0.685;
+    const rSel = Math.max(14 * DPR, Math.min(W, H) * 0.028);
+    ctx.font = `800 ${Math.max(10*DPR, rSel*0.52)}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillStyle = 'rgba(230,255,240,0.86)';
+    ctx.fillText('choose cave', cx, cySel - rSel*1.9);
+    for (let i=0;i<LEVELS.length;i++) {
+      const bx = startX + i * gap;
+      const selected = i === titleSelectedLevel;
+      ctx.fillStyle = selected ? 'rgba(95,255,155,0.34)' : 'rgba(10,28,20,0.52)';
+      ctx.strokeStyle = selected ? 'rgba(165,255,190,0.82)' : 'rgba(120,255,180,0.22)';
+      ctx.lineWidth = Math.max(1, DPR * (selected ? 2 : 1));
+      ctx.beginPath(); ctx.arc(bx, cySel, rSel, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = selected ? '#fff' : 'rgba(230,255,240,0.78)';
+      ctx.fillText(String(i+1), bx, cySel);
+    }
+    ctx.font = `700 ${Math.max(9*DPR, rSel*0.38)}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillStyle = 'rgba(220,255,235,0.78)';
+    ctx.fillText(LEVELS[titleSelectedLevel].name || `Cave ${titleSelectedLevel+1}`, cx, cySel + rSel*1.85);
   }
 
   const pulse = 0.92 + Math.sin(t * 3.4) * 0.08;
