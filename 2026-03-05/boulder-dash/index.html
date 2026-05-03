@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.1.1</title>
+<title>Emerald Mine — Crystal Caves v2.1.2</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.1.1 — Emerald Mine inspired: magic walls, diamonds, emerald palette
+//  v2.1.2 — Emerald Mine inspired: magic walls, diamonds, emerald palette
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.1.1';
+const VERSION = 'v2.1.2';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -59,18 +59,18 @@ function updateViewLayout() {
 
   HUD_H = Math.max((boardView.portrait ? 56 : 48) * DPR, H * (boardView.portrait ? 0.08 : 0.065));
   const margin = Math.max(8 * DPR, Math.min(W, H) * 0.015);
+  const controlSafe = boardView.portrait ? Math.max(118 * DPR, Math.min(W, H) * 0.21) : 0;
   boardView.x = margin;
   boardView.y = HUD_H + margin;
   boardView.w = Math.max(80 * DPR, W - margin * 2);
-  boardView.h = Math.max(80 * DPR, H - HUD_H - margin * 2);
+  boardView.h = Math.max(80 * DPR, H - HUD_H - margin * 2 - controlSafe);
 
   const fitW = boardView.w / gridW;
   const fitH = boardView.h / gridH;
 
   if (boardView.portrait) {
-    const heightDriven = fitH * (gridH <= 14 ? 0.95 : 0.9);
-    const widthDriven = fitW * (gridW <= 20 ? 1.12 : 1.04);
-    CELL = Math.max(heightDriven, widthDriven);
+    // Portrait keeps the whole cave readable and reserves a bottom lane for touch controls.
+    CELL = Math.min(fitW, fitH) * (gridW <= 18 && gridH <= 13 ? 0.98 : 0.94);
   } else {
     CELL = Math.min(fitW, fitH) * (gridW <= 18 && gridH <= 13 ? 1.08 : 1.0);
   }
@@ -228,9 +228,9 @@ function handleHighScoreKey(e) {
 const dpad = { cx:0, cy:0, r:0, visible:false, active:null };
 function updateDPad() {
   dpad.visible = state === 'playing';
-  dpad.r = Math.max(34 * DPR, Math.min(W, H) * 0.065);
-  dpad.cx = dpad.r * 2.0;
-  dpad.cy = H - dpad.r * 2.0;
+  dpad.r = Math.max(30 * DPR, Math.min(W, H) * 0.058);
+  dpad.cx = dpad.r * 1.95;
+  dpad.cy = H - dpad.r * 1.9;
 }
 function getDPadDir(x, y) {
   updateDPad();
