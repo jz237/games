@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.1.9</title>
+<title>Emerald Mine — Crystal Caves v2.1.10</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.1.9 — stricter boulder head-crush and smaller restart control
+//  v2.1.10 — safe restart and correct falling-only boulder crush
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.1.9';
+const VERSION = 'v2.1.10';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -325,16 +325,12 @@ function isDynamiteBtnTap(screenX, screenY) {
 }
 
 function retryLevelAction() {
-  if (state !== 'playing' || player.dead) return false;
-  player.lives--;
-  runLives = player.lives;
-  if (runLives <= 0) {
-    enterEndState('gameOver');
-  } else {
-    sfxDeath();
-    screenShake(5);
-    generateLevel(level);
-  }
+  if (state !== 'playing') return false;
+  // Restart is a convenience/reset, not a death or life penalty.
+  runLives = Math.max(1, player.lives || runLives || 1);
+  sfxUnlock();
+  screenShake(2);
+  generateLevel(level);
   return true;
 }
 
@@ -363,7 +359,7 @@ function drawRetryBtn() {
   ctx.beginPath(); ctx.roundRect(x - w/2, y - h/2, w, h, r * 0.35); ctx.fill(); ctx.stroke();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `600 ${Math.max(6 * DPR, r * 0.42)}px 'Segoe UI', sans-serif`;
+  ctx.font = `600 ${Math.max(5 * DPR, r * 0.36)}px 'Segoe UI', sans-serif`;
   ctx.fillStyle = 'rgba(215,240,255,0.62)';
   ctx.fillText('restart level', x, y);
   ctx.restore();
@@ -1426,13 +1422,16 @@ function updatePhysics() {
       
       // Fall straight down (also onto enemies when boulder has momentum)
       if (below === TILE.EMPTY || enemyBelow || playerBelow) {
-        // If physics wants a boulder/gem to move into the miner's square, it crushes him.
+        // A resting object above the miner is held safely. It only crushes him if it
+        // had already been falling before this physics step.
         if (playerBelow && !enemyBelow) {
-          sfxImpact(t, Math.max(1, wasFalling));
-          killPlayer();
-          grid[y][x] = TILE.EMPTY;
-          grid[y+1][x] = t;
-          screenShake(10);
+          if (wasFalling > 0) {
+            sfxImpact(t, wasFalling);
+            killPlayer();
+            grid[y][x] = TILE.EMPTY;
+            grid[y+1][x] = t;
+            screenShake(10);
+          }
           continue;
         }
         
