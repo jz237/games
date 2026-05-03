@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.2.0</title>
+<title>Emerald Mine — Crystal Caves v2.2.1</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.2.0 — creature variants, crush rewards, level select, attract demo
+//  v2.2.1 — expanded run to 10 caves
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.2.0';
+const VERSION = 'v2.2.1';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -547,11 +547,16 @@ function drawDynamiteBtn() {
 
 // ─── Game State ───
 const LEVELS = [
-  { w: 16, h: 12, gems: 5,  enemies: 2, enemySpeed: 1.0,  dirtPct: 0.65, boulderPct: 0.08, gemPct: 0.08, diamonds: 0, magicWalls: 0, name:'Training Shaft' },
-  { w: 20, h: 14, gems: 10, enemies: 3, enemySpeed: 0.75, dirtPct: 0.55, boulderPct: 0.12, gemPct: 0.10, diamonds: 2, magicWalls: 1, name:'Magic Wallworks' },
-  { w: 24, h: 16, gems: 15, enemies: 5, enemySpeed: 0.5,  dirtPct: 0.45, boulderPct: 0.15, gemPct: 0.12, diamonds: 4, magicWalls: 2, name:'Firefly Forge' },
-  { w: 26, h: 18, gems: 18, enemies: 7, enemySpeed: 0.45, dirtPct: 0.42, boulderPct: 0.17, gemPct: 0.12, diamonds: 6, magicWalls: 3, name:'Butterfly Vault' },
-  { w: 28, h: 20, gems: 22, enemies: 9, enemySpeed: 0.38, dirtPct: 0.38, boulderPct: 0.18, gemPct: 0.13, diamonds: 8, magicWalls: 4, name:'Emerald Machine' }
+  { w: 16, h: 12, gems: 5,  enemies: 2,  enemySpeed: 1.0,  dirtPct: 0.65, boulderPct: 0.08, gemPct: 0.08, diamonds: 0,  magicWalls: 0, name:'Training Shaft' },
+  { w: 20, h: 14, gems: 10, enemies: 3,  enemySpeed: 0.75, dirtPct: 0.55, boulderPct: 0.12, gemPct: 0.10, diamonds: 2,  magicWalls: 1, name:'Magic Wallworks' },
+  { w: 24, h: 16, gems: 15, enemies: 5,  enemySpeed: 0.5,  dirtPct: 0.45, boulderPct: 0.15, gemPct: 0.12, diamonds: 4,  magicWalls: 2, name:'Firefly Forge' },
+  { w: 26, h: 18, gems: 18, enemies: 7,  enemySpeed: 0.45, dirtPct: 0.42, boulderPct: 0.17, gemPct: 0.12, diamonds: 6,  magicWalls: 3, name:'Butterfly Vault' },
+  { w: 28, h: 20, gems: 22, enemies: 9,  enemySpeed: 0.38, dirtPct: 0.38, boulderPct: 0.18, gemPct: 0.13, diamonds: 8,  magicWalls: 4, name:'Emerald Machine' },
+  { w: 28, h: 20, gems: 25, enemies: 10, enemySpeed: 0.35, dirtPct: 0.36, boulderPct: 0.19, gemPct: 0.13, diamonds: 9,  magicWalls: 4, name:'Crystal Pressure' },
+  { w: 30, h: 21, gems: 28, enemies: 11, enemySpeed: 0.32, dirtPct: 0.34, boulderPct: 0.20, gemPct: 0.14, diamonds: 10, magicWalls: 5, name:'Hunter Warrens' },
+  { w: 30, h: 22, gems: 31, enemies: 12, enemySpeed: 0.30, dirtPct: 0.32, boulderPct: 0.21, gemPct: 0.14, diamonds: 12, magicWalls: 5, name:'Diamond Engine' },
+  { w: 32, h: 22, gems: 35, enemies: 14, enemySpeed: 0.28, dirtPct: 0.30, boulderPct: 0.22, gemPct: 0.15, diamonds: 14, magicWalls: 6, name:'Cave of Teeth' },
+  { w: 34, h: 24, gems: 40, enemies: 16, enemySpeed: 0.25, dirtPct: 0.28, boulderPct: 0.23, gemPct: 0.15, diamonds: 16, magicWalls: 7, name:'Emerald Inferno' }
 ];
 
 let state = 'title'; // title, playing, levelClear, gameOver, win
@@ -1107,7 +1112,7 @@ window.addEventListener('keydown', e => {
   
   if (state === 'title') {
     if (e.code === 'KeyH') { showScores = !showScores; startTitleMusic(); return; }
-    if (/^Digit[1-5]$/.test(e.code)) { titleSelectedLevel = clamp(parseInt(e.code.slice(5),10)-1,0,LEVELS.length-1); startTitleMusic(); return; }
+    if (/^Digit[0-9]$/.test(e.code)) { const n=parseInt(e.code.slice(5),10); titleSelectedLevel = n===0 ? 9 : clamp(n-1,0,LEVELS.length-1); startTitleMusic(); return; }
     if (!titleMusicUnlocked) { startTitleMusic(); return; }
     newGame(); return;
   }
@@ -1186,13 +1191,16 @@ function saveZoom() { try { localStorage.setItem(ZOOM_KEY, userZoom.toFixed(3));
 
 function handleTitleSelect(x, y) {
   if (showScores) return false;
+  const cols = 5;
   const startX = W * 0.18;
-  const gap = W * 0.16;
-  const cy = H * 0.665;
-  const r = Math.max(14 * DPR, Math.min(W, H) * 0.028);
+  const gapX = W * 0.16;
+  const startY = H * 0.665;
+  const gapY = Math.max(30 * DPR, H * 0.038);
+  const r = Math.max(12 * DPR, Math.min(W, H) * 0.024);
   for (let i = 0; i < LEVELS.length; i++) {
-    const bx = startX + i * gap;
-    if (Math.hypot(x - bx, y - cy) <= r * 1.45) {
+    const bx = startX + (i % cols) * gapX;
+    const by = startY + Math.floor(i / cols) * gapY;
+    if (Math.hypot(x - bx, y - by) <= r * 1.45) {
       titleSelectedLevel = i;
       startTitleMusic();
       return true;
@@ -4272,26 +4280,29 @@ function drawTitle() {
 
   // Level select chips.
   if (!showScores) {
+    const cols = 5;
     const startX = W * 0.18;
-    const gap = W * 0.16;
-    const cySel = H * 0.685;
-    const rSel = Math.max(14 * DPR, Math.min(W, H) * 0.028);
+    const gapX = W * 0.16;
+    const cySel = H * 0.655;
+    const gapY = Math.max(30 * DPR, H * 0.038);
+    const rSel = Math.max(12 * DPR, Math.min(W, H) * 0.024);
     ctx.font = `800 ${Math.max(10*DPR, rSel*0.52)}px 'Segoe UI', system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(230,255,240,0.86)';
     ctx.fillText('choose cave', cx, cySel - rSel*1.9);
     for (let i=0;i<LEVELS.length;i++) {
-      const bx = startX + i * gap;
+      const bx = startX + (i % cols) * gapX;
+      const by = cySel + Math.floor(i / cols) * gapY;
       const selected = i === titleSelectedLevel;
       ctx.fillStyle = selected ? 'rgba(95,255,155,0.34)' : 'rgba(10,28,20,0.52)';
       ctx.strokeStyle = selected ? 'rgba(165,255,190,0.82)' : 'rgba(120,255,180,0.22)';
       ctx.lineWidth = Math.max(1, DPR * (selected ? 2 : 1));
-      ctx.beginPath(); ctx.arc(bx, cySel, rSel, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(bx, by, rSel, 0, Math.PI*2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = selected ? '#fff' : 'rgba(230,255,240,0.78)';
-      ctx.fillText(String(i+1), bx, cySel);
+      ctx.fillText(String(i+1), bx, by);
     }
     ctx.font = `700 ${Math.max(9*DPR, rSel*0.38)}px 'Segoe UI', system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(220,255,235,0.78)';
-    ctx.fillText(LEVELS[titleSelectedLevel].name || `Cave ${titleSelectedLevel+1}`, cx, cySel + rSel*1.85);
+    ctx.fillText(LEVELS[titleSelectedLevel].name || `Cave ${titleSelectedLevel+1}`, cx, cySel + gapY + rSel*1.9);
   }
 
   const pulse = 0.92 + Math.sin(t * 3.4) * 0.08;
