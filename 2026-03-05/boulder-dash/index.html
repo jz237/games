@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Diamond Mine — Boulder Dash v2.0.0</title>
+<title>Emerald Mine — Crystal Caves v2.1.0</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -17,18 +17,18 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <canvas id="c"></canvas>
 <script>
 // ═══════════════════════════════════════════════════════════
-//  DIAMOND MINE — A Showcase Boulder Dash Clone
-//  v2.0.0 — High-res pixel polish, high scores, mobile controls
+//  EMERALD MINE — Crystal Caves
+//  v2.1.0 — Emerald Mine inspired: magic walls, diamonds, emerald palette
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.0.0';
+const VERSION = 'v2.1.0';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
 // ─── Constants ───
 const TILE = {
   EMPTY: 0, DIRT: 1, WALL: 2, BOULDER: 3, GEM: 4, PLAYER: 5, EXIT: 6, ENEMY: 7,
-  DYNAMITE: 8, SPEED_BOOTS: 9, GHOST_MODE: 10
+  DYNAMITE: 8, SPEED_BOOTS: 9, GHOST_MODE: 10, DIAMOND: 11, MAGIC_WALL: 12
 };
 const DPR = window.devicePixelRatio || 1;
 let W, H, CELL;
@@ -333,9 +333,9 @@ function drawDynamiteBtn() {
 
 // ─── Game State ───
 const LEVELS = [
-  { w: 16, h: 12, gems: 5,  enemies: 2, enemySpeed: 1.0,  dirtPct: 0.65, boulderPct: 0.08, gemPct: 0.08 },
-  { w: 20, h: 14, gems: 10, enemies: 3, enemySpeed: 0.75, dirtPct: 0.55, boulderPct: 0.12, gemPct: 0.10 },
-  { w: 24, h: 16, gems: 15, enemies: 5, enemySpeed: 0.5,  dirtPct: 0.45, boulderPct: 0.15, gemPct: 0.12 }
+  { w: 16, h: 12, gems: 5,  enemies: 2, enemySpeed: 1.0,  dirtPct: 0.65, boulderPct: 0.08, gemPct: 0.08, diamonds: 0, magicWalls: 0 },
+  { w: 20, h: 14, gems: 10, enemies: 3, enemySpeed: 0.75, dirtPct: 0.55, boulderPct: 0.12, gemPct: 0.10, diamonds: 2, magicWalls: 1 },
+  { w: 24, h: 16, gems: 15, enemies: 5, enemySpeed: 0.5,  dirtPct: 0.45, boulderPct: 0.15, gemPct: 0.12, diamonds: 4, magicWalls: 2 }
 ];
 
 let state = 'title'; // title, playing, levelClear, gameOver, win
@@ -371,6 +371,9 @@ let titleAnimT = 0;
 let slowMoTimer = 0; // death slow-mo
 let slowMoFactor = 1;
 let celebrationParticles = []; // level clear fountain
+let magicWallActive = false; // magic wall converter active
+let magicWallTimer = 0; // time remaining for magic wall effect
+const MAGIC_WALL_DURATION = 12; // seconds magic wall stays active after first trigger
 
 // Hold-to-move state
 let holdDir = { dx: 0, dy: 0 };
@@ -401,9 +404,9 @@ function genDirtPattern(i) {
   const oc = document.createElement('canvas');
   oc.width = oc.height = 64;
   const ox = oc.getContext('2d');
-  const baseH = 25 + (i % 5) * 3;
-  const baseS = 45 + (i % 3) * 8;
-  const baseL = 28 + (i % 7) * 2;
+  const baseH = 30 + (i % 5) * 4; // warmer brown with slight green
+  const baseS = 40 + (i % 3) * 10;
+  const baseL = 22 + (i % 7) * 2; // darker for cave feel
   ox.fillStyle = `hsl(${baseH},${baseS}%,${baseL}%)`;
   ox.fillRect(0, 0, 64, 64);
   for (let j = 0; j < 40; j++) {
@@ -434,7 +437,7 @@ function genWallPattern(i) {
   const oc = document.createElement('canvas');
   oc.width = oc.height = 64;
   const ox = oc.getContext('2d');
-  ox.fillStyle = `hsl(220,5%,${18 + (i%3)*2}%)`;
+  ox.fillStyle = `hsl(200,8%,${16 + (i%3)*2}%)`;
   ox.fillRect(0, 0, 64, 64);
   for (let j = 0; j < 30; j++) {
     const gx = Math.random() * 64, gy = Math.random() * 64;
@@ -557,6 +560,42 @@ function generateLevel(lvl) {
     }
   }
   
+  // Place diamonds (rare bonus gems worth 300)
+  const diamondCount = L.diamonds || 0;
+  for (let i = 0; i < diamondCount; i++) {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const dx = sRngInt(3, gridW-4);
+      const dy = sRngInt(3, gridH-4);
+      if (grid[dy][dx] === TILE.DIRT || grid[dy][dx] === TILE.EMPTY) {
+        grid[dy][dx] = TILE.DIAMOND;
+        break;
+      }
+    }
+  }
+  
+  // Place magic walls (convert boulders<->emeralds when active)
+  const magicWallCount = L.magicWalls || 0;
+  for (let i = 0; i < magicWallCount; i++) {
+    // Place magic walls in mid-cave horizontal strips
+    const mwy = sRngInt(Math.floor(gridH * 0.35), Math.floor(gridH * 0.65));
+    const mwxStart = sRngInt(3, Math.floor(gridW * 0.4));
+    const mwLen = sRngInt(3, 6);
+    for (let mx = mwxStart; mx < Math.min(mwxStart + mwLen, gridW - 2); mx++) {
+      if (grid[mwy][mx] === TILE.DIRT || grid[mwy][mx] === TILE.EMPTY || grid[mwy][mx] === TILE.WALL) {
+        grid[mwy][mx] = TILE.MAGIC_WALL;
+      }
+    }
+    // Ensure space above magic wall has boulders to drop through
+    for (let mx = mwxStart; mx < Math.min(mwxStart + mwLen, gridW - 2); mx++) {
+      if (mwy > 2 && (grid[mwy-1][mx] === TILE.DIRT || grid[mwy-1][mx] === TILE.EMPTY)) {
+        grid[mwy-1][mx] = TILE.EMPTY; // clear space above
+      }
+      if (mwy > 3 && grid[mwy-2][mx] === TILE.DIRT && sRng() < 0.5) {
+        grid[mwy-2][mx] = TILE.BOULDER; // boulders to feed the wall
+      }
+    }
+  }
+  
   // Player start
   const px = 2, py = 2;
   for (let dy = -1; dy <= 1; dy++) {
@@ -632,6 +671,8 @@ function generateLevel(lvl) {
   exitOpen = false;
   gemsNeeded = L.gems;
   displayGems = 0;
+  magicWallActive = false;
+  magicWallTimer = 0;
   flashAlpha = 0;
   flashColor = '255,255,255';
   particles = [];
@@ -708,21 +749,21 @@ function addDigParticles(gx, gy) {
 }
 
 function addGemCollectParticles(gx, gy) {
-  // Explosion of sparkles
+  // Emerald green sparkle explosion
   for (let i = 0; i < 25; i++) {
     const angle = Math.random() * Math.PI * 2;
     const speed = 1 + Math.random() * 4;
-    const hue = (globalTime * 50 + i * 30) % 360;
+    const hue = 120 + Math.random() * 40; // green range
     addParticle(gx + 0.5, gy + 0.5, Math.cos(angle)*speed, Math.sin(angle)*speed,
-      `hsl(${hue},90%,${70+Math.random()*25}%)`,
+      `hsl(${hue},85%,${60+Math.random()*30}%)`,
       0.4 + Math.random()*0.5, 1+Math.random()*3, 0.5);
   }
-  // White flash sparkles
+  // White-green flash sparkles
   for (let i = 0; i < 8; i++) {
     const angle = Math.random() * Math.PI * 2;
     const speed = 2 + Math.random() * 3;
     addParticle(gx + 0.5, gy + 0.5, Math.cos(angle)*speed, Math.sin(angle)*speed,
-      `rgba(255,255,255,0.9)`, 0.2 + Math.random()*0.2, 0.5+Math.random(), 0);
+      `rgba(200,255,220,0.9)`, 0.2 + Math.random()*0.2, 0.5+Math.random(), 0);
   }
 }
 
@@ -1000,7 +1041,7 @@ function tryMovePlayer(dx, dy) {
   const ny = player.gy + dy;
   const target = tileAt(nx, ny);
   
-  if (target === TILE.WALL) return false;
+  if (target === TILE.WALL || target === TILE.MAGIC_WALL) return false;
   
   // Ghost mode: can walk through boulders
   const isGhost = player.ghostTimer > 0;
@@ -1040,7 +1081,36 @@ function tryMovePlayer(dx, dy) {
     sfxCollect();
     addGemCollectParticles(nx, ny);
     flashAlpha = 0.3;
-    flashColor = '255,220,100'; // golden flash
+    flashColor = '100,255,160'; // emerald flash
+    flyGems.push({ x: nx + 0.5, y: ny + 0.5, t: 0 });
+    
+    if (player.gems >= gemsNeeded && !exitOpen) {
+      exitOpen = true;
+      sfxUnlock();
+      for (let i = 0; i < 20; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 0.5 + Math.random() * 2;
+        addParticle(exitPos.x + 0.5, exitPos.y + 0.5, Math.cos(angle)*speed, Math.sin(angle)*speed,
+          `hsl(45,100%,${60+Math.random()*30}%)`, 0.8 + Math.random()*0.5, 2+Math.random()*2, 0.3);
+      }
+    }
+  }
+  
+  // Collect diamond (rare bonus)
+  if (target === TILE.DIAMOND) {
+    player.gems++;
+    score += 300;
+    sfxCollect();
+    // Extra sparkly collect effect for diamonds
+    for (let i = 0; i < 30; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.5 + Math.random() * 4;
+      addParticle(nx + 0.5, ny + 0.5, Math.cos(angle)*speed, Math.sin(angle)*speed,
+        `hsl(${200 + Math.random()*40},90%,${70+Math.random()*25}%)`,
+        0.5 + Math.random()*0.5, 1.5+Math.random()*3, 0.5);
+    }
+    flashAlpha = 0.35;
+    flashColor = '180,220,255';
     flyGems.push({ x: nx + 0.5, y: ny + 0.5, t: 0 });
     
     if (player.gems >= gemsNeeded && !exitOpen) {
@@ -1143,10 +1213,19 @@ function killPlayer() {
 function updatePhysics() {
   const newFallMap = {};
   
+  // Update magic wall timer
+  if (magicWallActive) {
+    magicWallTimer -= PHYSICS_INTERVAL;
+    if (magicWallTimer <= 0) {
+      magicWallActive = false;
+      magicWallTimer = 0;
+    }
+  }
+  
   for (let y = gridH - 2; y >= 1; y--) {
     for (let x = 1; x < gridW - 1; x++) {
       const t = grid[y][x];
-      if (t !== TILE.BOULDER && t !== TILE.GEM) continue;
+      if (t !== TILE.BOULDER && t !== TILE.GEM && t !== TILE.DIAMOND) continue;
       
       const below = grid[y+1][x];
       const fk = fallKey(x, y);
@@ -1163,6 +1242,33 @@ function updatePhysics() {
         }
       }
 
+      // Magic wall conversion: falling item hits magic wall → convert and pass through
+      if (below === TILE.MAGIC_WALL && (wasFalling > 0 || t === TILE.BOULDER || t === TILE.GEM || t === TILE.DIAMOND)) {
+        // Check if space below magic wall is empty
+        const belowMagic = y + 2 < gridH ? grid[y+2][x] : TILE.WALL;
+        if (belowMagic === TILE.EMPTY) {
+          // Activate magic wall on first contact
+          if (!magicWallActive) {
+            magicWallActive = true;
+            magicWallTimer = MAGIC_WALL_DURATION;
+          }
+          if (magicWallActive) {
+            // Convert: boulder→gem, gem/diamond→boulder
+            const converted = (t === TILE.BOULDER) ? TILE.GEM : TILE.BOULDER;
+            grid[y][x] = TILE.EMPTY;
+            grid[y+2][x] = converted;
+            newFallMap[fallKey(x, y+2)] = 1;
+            // Sparkle effect at magic wall
+            addParticle(x + 0.5, y + 1 + 0.5, 0, 0, 'rgba(255,255,100,0.8)', 0.3, 2, 0);
+            addParticle(x + 0.3, y + 1 + 0.3, (Math.random()-0.5)*2, -1, 'rgba(100,255,200,0.7)', 0.4, 1.5, 0);
+            addParticle(x + 0.7, y + 1 + 0.3, (Math.random()-0.5)*2, -1, 'rgba(100,200,255,0.7)', 0.4, 1.5, 0);
+            continue;
+          }
+        }
+        // If below magic wall is not empty or wall not active, treat as solid
+        continue;
+      }
+      
       // Fall straight down (also onto enemies when boulder has momentum)
       if (below === TILE.EMPTY || enemyBelow) {
         // Player holds boulder above them
@@ -1202,8 +1308,8 @@ function updatePhysics() {
         continue;
       }
       
-      // Slide off boulders/gems (also allow sliding toward enemies below diagonal)
-      if (below === TILE.BOULDER || below === TILE.GEM || below === TILE.WALL) {
+      // Slide off boulders/gems/walls/magic walls
+      if (below === TILE.BOULDER || below === TILE.GEM || below === TILE.DIAMOND || below === TILE.WALL || below === TILE.MAGIC_WALL) {
         const leftEmpty = grid[y][x-1] === TILE.EMPTY;
         const rightEmpty = grid[y][x+1] === TILE.EMPTY;
         const leftBelowTile = (grid[y+1] ? grid[y+1][x-1] : TILE.WALL);
@@ -1338,7 +1444,7 @@ function detonateDynamite(dyn) {
       const nx = cx + dx, ny = cy + dy;
       if (nx <= 0 || ny <= 0 || nx >= gridW-1 || ny >= gridH-1) continue;
       const t = tileAt(nx, ny);
-      if (t === TILE.WALL || t === TILE.EXIT) continue;
+      if (t === TILE.WALL || t === TILE.MAGIC_WALL || t === TILE.EXIT) continue;
       if (t === TILE.PLAYER) {
         killPlayer();
         continue;
@@ -1635,7 +1741,7 @@ function update(dt) {
   if (state === 'playing') {
     for (let y = 1; y < gridH-1; y++) {
       for (let x = 1; x < gridW-1; x++) {
-        if (grid[y][x] === TILE.GEM && Math.random() < 0.03) {
+        if ((grid[y][x] === TILE.GEM || grid[y][x] === TILE.DIAMOND) && Math.random() < 0.03) {
           addSparkle(x + 0.5, y + 0.5);
         }
       }
@@ -1736,8 +1842,8 @@ function lightAtTile(x, y) {
 
 function drawCaveBackground() {
   const grd = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W*0.7);
-  grd.addColorStop(0, '#1a1510');
-  grd.addColorStop(1, '#0a0806');
+  grd.addColorStop(0, '#141a12'); // slight green tinge
+  grd.addColorStop(1, '#080a06');
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, W, H);
 }
@@ -2081,129 +2187,256 @@ function drawBoulder(gx, gy, isFalling) {
 }
 
 function drawGem(gx, gy, isFalling) {
+  // EMERALD — rich green hexagonal gem, Emerald Mine style
   const [sx, sy] = worldToScreen(gx + 0.5, gy + 0.5);
   if (sx < -CELL*2 || sx > W+CELL*2 || sy < -CELL*2 || sy > H+CELL*2) return;
 
-  const r = CELL * 0.33;
+  const r = CELL * 0.35;
   const t = globalTime * 2.5 + gx * 2.1 + gy * 3.7;
-  
-  // Rotating 3D effect — shifting facet widths over time
-  const rotPhase = t * 0.8;
-  const facetSkew = Math.sin(rotPhase) * 0.3; // simulates rotation perspective
+  const rotPhase = t * 0.6;
+  const facetSkew = Math.sin(rotPhase) * 0.25;
 
-  // Outer glow — large prismatic
-  const glowR = r * 3;
-  const hue1 = (t * 40) % 360;
+  // Outer emerald glow
+  const glowR = r * 2.8;
   const ggrd = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
-  ggrd.addColorStop(0, `hsla(${hue1},80%,70%,0.2)`);
-  ggrd.addColorStop(0.4, `hsla(${(hue1+60)%360},70%,60%,0.08)`);
-  ggrd.addColorStop(1, 'rgba(0,200,255,0)');
+  ggrd.addColorStop(0, `rgba(0,220,100,${0.18 + Math.sin(t)*0.06})`);
+  ggrd.addColorStop(0.5, 'rgba(0,180,80,0.06)');
+  ggrd.addColorStop(1, 'rgba(0,120,60,0)');
   ctx.fillStyle = ggrd;
   ctx.fillRect(sx - glowR, sy - glowR, glowR * 2, glowR * 2);
 
   ctx.save();
   ctx.translate(sx, sy);
-  
-  // Slight rotation oscillation
-  ctx.rotate(Math.sin(t * 0.35) * 0.08);
-  
-  // Scale X for 3D rotation illusion
-  const scaleX = 0.75 + Math.abs(Math.cos(rotPhase)) * 0.25;
+  ctx.rotate(Math.sin(t * 0.3) * 0.06);
+  const scaleX = 0.8 + Math.abs(Math.cos(rotPhase)) * 0.2;
   ctx.scale(scaleX, 1);
 
-  // Diamond shape with shifting facets
+  // Hexagonal emerald shape
   const topY = -r;
-  const botY = r * 0.9;
-  const midY = -r * 0.15;
-  const rightX = r * 0.75;
-  const leftX = -r * 0.75;
-  const facetOff = facetSkew * r * 0.2;
-  
+  const botY = r * 0.85;
+  const midY = -r * 0.1;
+  const rightX = r * 0.7;
+  const leftX = -r * 0.7;
+  const facetOff = facetSkew * r * 0.15;
+
   ctx.beginPath();
   ctx.moveTo(0, topY);
+  ctx.lineTo(rightX * 0.85, topY * 0.35);
   ctx.lineTo(rightX, midY);
-  ctx.lineTo(r * 0.55, botY * 0.7);
+  ctx.lineTo(rightX * 0.7, botY * 0.7);
   ctx.lineTo(0, botY);
-  ctx.lineTo(-r * 0.55, botY * 0.7);
+  ctx.lineTo(-rightX * 0.7, botY * 0.7);
   ctx.lineTo(leftX, midY);
+  ctx.lineTo(leftX * 0.85, topY * 0.35);
   ctx.closePath();
 
-  // Prismatic rainbow gradient that shifts over time
-  const hue = (t * 50) % 360;
-  const dgrd = ctx.createLinearGradient(-r, topY, r, botY);
-  dgrd.addColorStop(0, `hsl(${hue},85%,80%)`);
-  dgrd.addColorStop(0.25, `hsl(${(hue+40)%360},90%,70%)`);
-  dgrd.addColorStop(0.5, `hsl(${(hue+120)%360},85%,65%)`);
-  dgrd.addColorStop(0.75, `hsl(${(hue+200)%360},80%,60%)`);
-  dgrd.addColorStop(1, `hsl(${(hue+280)%360},75%,55%)`);
+  // Rich emerald gradient — deep green to bright green
+  const dgrd = ctx.createLinearGradient(-r, topY, r * 0.5, botY);
+  dgrd.addColorStop(0, '#40ff90');   // bright highlight
+  dgrd.addColorStop(0.2, '#20d070'); // medium green
+  dgrd.addColorStop(0.5, '#10a850'); // rich emerald
+  dgrd.addColorStop(0.75, '#088040'); // deep emerald
+  dgrd.addColorStop(1, '#065028');   // dark base
   ctx.fillStyle = dgrd;
   ctx.fill();
 
-  // Internal facet lines — shift with rotation
-  ctx.strokeStyle = `rgba(255,255,255,${0.25 + Math.sin(t * 2) * 0.1})`;
+  // Internal facet lines
+  ctx.strokeStyle = `rgba(150,255,200,${0.3 + Math.sin(t * 2) * 0.1})`;
   ctx.lineWidth = Math.max(0.5, CELL * 0.015);
   ctx.beginPath();
-  // Center line
   ctx.moveTo(facetOff, topY);
-  ctx.lineTo(facetOff * 0.5, botY);
-  // Cross facets
+  ctx.lineTo(facetOff * 0.3, botY);
   ctx.moveTo(leftX, midY);
-  ctx.lineTo(facetOff * 0.3, midY * 0.3 + botY * 0.1);
+  ctx.lineTo(facetOff * 0.2, midY * 0.2 + botY * 0.1);
   ctx.lineTo(rightX, midY);
-  // Lower facets
-  ctx.moveTo(-r * 0.55, botY * 0.7);
-  ctx.lineTo(facetOff * 0.3, midY * 0.3 + botY * 0.1);
-  ctx.lineTo(r * 0.55, botY * 0.7);
+  ctx.moveTo(-rightX * 0.7, botY * 0.7);
+  ctx.lineTo(facetOff * 0.2, midY * 0.2 + botY * 0.1);
+  ctx.lineTo(rightX * 0.7, botY * 0.7);
   ctx.stroke();
 
-  // Internal prismatic light — shifting rainbow reflection
-  const innerHue = (t * 70 + 180) % 360;
+  // Internal emerald light — shifting green reflection
   const innerGrd = ctx.createRadialGradient(facetOff * 2, midY * 0.5, 0, 0, 0, r * 0.6);
-  innerGrd.addColorStop(0, `hsla(${innerHue},100%,85%,${0.35 + Math.sin(t*3)*0.15})`);
-  innerGrd.addColorStop(0.5, `hsla(${(innerHue+90)%360},90%,70%,0.1)`);
-  innerGrd.addColorStop(1, 'rgba(255,255,255,0)');
+  innerGrd.addColorStop(0, `rgba(100,255,180,${0.35 + Math.sin(t*3)*0.15})`);
+  innerGrd.addColorStop(0.5, 'rgba(50,200,120,0.1)');
+  innerGrd.addColorStop(1, 'rgba(0,100,50,0)');
   ctx.fillStyle = innerGrd;
   ctx.fill();
 
-  // Top specular highlight — bright white glint
+  // Top specular highlight — bright white-green glint
   const specY = topY * 0.6 + midY * 0.4;
-  ctx.fillStyle = `rgba(255,255,255,${0.5 + Math.sin(t * 1.5) * 0.2})`;
+  ctx.fillStyle = `rgba(200,255,230,${0.5 + Math.sin(t * 1.5) * 0.2})`;
   ctx.beginPath();
-  ctx.ellipse(facetOff * 0.3, specY, r * 0.15, r * 0.08, 0.3, 0, Math.PI * 2);
+  ctx.ellipse(facetOff * 0.3, specY, r * 0.14, r * 0.07, 0.3, 0, Math.PI * 2);
   ctx.fill();
 
-  // Outline
-  ctx.strokeStyle = `rgba(255,255,255,${0.3 + Math.sin(t)*0.1})`;
+  // Outline — emerald edge
+  ctx.strokeStyle = `rgba(100,255,180,${0.35 + Math.sin(t)*0.1})`;
   ctx.lineWidth = Math.max(0.5, CELL * 0.02);
   ctx.beginPath();
   ctx.moveTo(0, topY);
+  ctx.lineTo(rightX * 0.85, topY * 0.35);
   ctx.lineTo(rightX, midY);
-  ctx.lineTo(r * 0.55, botY * 0.7);
+  ctx.lineTo(rightX * 0.7, botY * 0.7);
   ctx.lineTo(0, botY);
-  ctx.lineTo(-r * 0.55, botY * 0.7);
+  ctx.lineTo(-rightX * 0.7, botY * 0.7);
   ctx.lineTo(leftX, midY);
+  ctx.lineTo(leftX * 0.85, topY * 0.35);
   ctx.closePath();
   ctx.stroke();
 
   ctx.restore();
 
-  // Outer sparkle stars orbiting
+  // Orbiting sparkles — green tinted
   for (let i = 0; i < 3; i++) {
     const ang = t * (1.2 + i * 0.5) + i * Math.PI * 0.67;
     const orbit = r * (1 + 0.3 * i);
     const px = sx + Math.cos(ang) * orbit;
     const py = sy + Math.sin(ang) * orbit * 0.7;
     const alpha = 0.3 + 0.3 * Math.sin(t * 3 + i * 2);
-    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.fillStyle = `rgba(150,255,200,${alpha})`;
     drawStar(ctx, px, py, 4, r * 0.15, r * 0.04);
   }
 
   // Bright flash sparkle
   if (Math.sin(t * 1.6) > 0.9) {
     const ga = t * 2.4;
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fillStyle = 'rgba(200,255,230,0.9)';
     drawStar(ctx, sx + Math.cos(ga) * r * 0.8, sy + Math.sin(ga * 1.1) * r * 0.5, 4, r * 0.25, r * 0.07);
   }
+}
+
+function drawDiamondGem(gx, gy, isFalling) {
+  // DIAMOND — rare blue-white brilliant gem worth 300 pts
+  const [sx, sy] = worldToScreen(gx + 0.5, gy + 0.5);
+  if (sx < -CELL*2 || sx > W+CELL*2 || sy < -CELL*2 || sy > H+CELL*2) return;
+
+  const r = CELL * 0.3;
+  const t = globalTime * 3 + gx * 1.7 + gy * 2.9;
+  const rotPhase = t * 1.2;
+
+  // Brilliant white-blue glow
+  const glowR = r * 3.5;
+  const ggrd = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
+  ggrd.addColorStop(0, `rgba(180,220,255,${0.25 + Math.sin(t*2)*0.1})`);
+  ggrd.addColorStop(0.4, 'rgba(100,180,255,0.08)');
+  ggrd.addColorStop(1, 'rgba(60,120,255,0)');
+  ctx.fillStyle = ggrd;
+  ctx.fillRect(sx - glowR, sy - glowR, glowR * 2, glowR * 2);
+
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate(Math.sin(t * 0.5) * 0.1);
+  const scaleX = 0.75 + Math.abs(Math.cos(rotPhase)) * 0.25;
+  ctx.scale(scaleX, 1);
+
+  // Classic diamond shape
+  const topY = -r;
+  const botY = r * 0.95;
+  const midY = -r * 0.2;
+  const rightX = r * 0.8;
+  const leftX = -r * 0.8;
+
+  ctx.beginPath();
+  ctx.moveTo(0, topY);
+  ctx.lineTo(rightX, midY);
+  ctx.lineTo(r * 0.5, botY * 0.7);
+  ctx.lineTo(0, botY);
+  ctx.lineTo(-r * 0.5, botY * 0.7);
+  ctx.lineTo(leftX, midY);
+  ctx.closePath();
+
+  // Prismatic rainbow gradient — shifts over time (diamonds are prismatic)
+  const hue = (t * 60) % 360;
+  const dgrd = ctx.createLinearGradient(-r, topY, r, botY);
+  dgrd.addColorStop(0, `hsl(${hue},70%,88%)`);
+  dgrd.addColorStop(0.25, `hsl(${(hue+60)%360},80%,80%)`);
+  dgrd.addColorStop(0.5, `hsl(${(hue+180)%360},75%,75%)`);
+  dgrd.addColorStop(0.75, `hsl(${(hue+240)%360},70%,70%)`);
+  dgrd.addColorStop(1, `hsl(${(hue+300)%360},65%,65%)`);
+  ctx.fillStyle = dgrd;
+  ctx.fill();
+
+  // Facet lines
+  ctx.strokeStyle = `rgba(255,255,255,${0.35 + Math.sin(t * 2) * 0.15})`;
+  ctx.lineWidth = Math.max(0.5, CELL * 0.015);
+  ctx.beginPath();
+  ctx.moveTo(0, topY); ctx.lineTo(0, botY);
+  ctx.moveTo(leftX, midY); ctx.lineTo(0, botY * 0.3); ctx.lineTo(rightX, midY);
+  ctx.stroke();
+
+  // Brilliant specular
+  ctx.fillStyle = `rgba(255,255,255,${0.6 + Math.sin(t * 2) * 0.2})`;
+  ctx.beginPath();
+  ctx.ellipse(0, topY * 0.4, r * 0.2, r * 0.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outline
+  ctx.strokeStyle = `rgba(200,220,255,${0.4 + Math.sin(t)*0.15})`;
+  ctx.lineWidth = Math.max(0.5, CELL * 0.025);
+  ctx.beginPath();
+  ctx.moveTo(0, topY); ctx.lineTo(rightX, midY); ctx.lineTo(r*0.5, botY*0.7);
+  ctx.lineTo(0, botY); ctx.lineTo(-r*0.5, botY*0.7); ctx.lineTo(leftX, midY);
+  ctx.closePath(); ctx.stroke();
+
+  ctx.restore();
+
+  // Orbiting sparkles — white/blue
+  for (let i = 0; i < 4; i++) {
+    const ang = t * (1.5 + i * 0.4) + i * Math.PI * 0.5;
+    const orbit = r * (1.2 + 0.3 * i);
+    const px = sx + Math.cos(ang) * orbit;
+    const py = sy + Math.sin(ang) * orbit * 0.6;
+    const alpha = 0.35 + 0.3 * Math.sin(t * 4 + i * 2);
+    ctx.fillStyle = `rgba(200,220,255,${alpha})`;
+    drawStar(ctx, px, py, 4, r * 0.18, r * 0.05);
+  }
+}
+
+function drawMagicWall(x, y) {
+  const [sx, sy] = worldToScreen(x + 0.5, y + 0.5);
+  if (sx < -CELL*2 || sx > W+CELL*2 || sy < -CELL*2 || sy > H+CELL*2) return;
+  const s = CELL;
+  const left = sx - s / 2;
+  const top = sy - s / 2;
+
+  // Base wall tile (darker than normal wall)
+  const patIdx = (x * 3 + y * 11) % wallPatterns.length;
+  ctx.drawImage(wallPatterns[patIdx], left, top, s, s);
+
+  // Magic shimmer overlay
+  const active = magicWallActive;
+  const shimmerAlpha = active ? (0.25 + Math.sin(globalTime * 6 + x * 2) * 0.15) : (0.08 + Math.sin(globalTime * 2 + x * 1.5) * 0.04);
+  const shimmerColor = active ? `rgba(100,255,180,${shimmerAlpha})` : `rgba(80,180,120,${shimmerAlpha})`;
+  ctx.fillStyle = shimmerColor;
+  ctx.fillRect(left, top, s, s);
+
+  // Animated sparkle dots across the wall surface
+  const dotCount = active ? 6 : 3;
+  for (let i = 0; i < dotCount; i++) {
+    const phase = globalTime * (active ? 4 : 1.5) + i * 1.7 + x * 0.8;
+    const dx = (Math.sin(phase * 1.3 + i) * 0.5 + 0.5) * s;
+    const dy = (Math.sin(phase * 0.9 + i * 2.3) * 0.5 + 0.5) * s;
+    const dotAlpha = active ? (0.4 + Math.sin(phase * 3) * 0.3) : (0.15 + Math.sin(phase) * 0.1);
+    const dotR = (active ? 2.5 : 1.5) * DPR;
+    ctx.fillStyle = active ? `rgba(200,255,100,${dotAlpha})` : `rgba(100,200,150,${dotAlpha})`;
+    ctx.beginPath();
+    ctx.arc(left + dx, top + dy, dotR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Border glow when active
+  if (active) {
+    ctx.strokeStyle = `rgba(100,255,180,${0.3 + Math.sin(globalTime * 5 + x) * 0.2})`;
+    ctx.lineWidth = Math.max(2, s * 0.04);
+    ctx.strokeRect(left + 1, top + 1, s - 2, s - 2);
+  }
+
+  // "M" indicator — subtle
+  ctx.fillStyle = active ? 'rgba(200,255,150,0.35)' : 'rgba(120,200,160,0.15)';
+  ctx.font = `bold ${Math.max(8, s * 0.25)}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('M', sx, sy);
 }
 
 function drawStar(ctx, cx, cy, spikes, outerR, innerR) {
@@ -3217,13 +3450,19 @@ function drawDynamicLights() {
 
   for (let y = 1; y < gridH - 1; y++) {
     for (let x = 1; x < gridW - 1; x++) {
-      if (grid[y][x] !== TILE.GEM) continue;
+      const tileHere = grid[y][x];
+      if (tileHere !== TILE.GEM && tileHere !== TILE.DIAMOND) continue;
       const [gx, gy] = worldToScreen(x + 0.5, y + 0.5);
       if (gx < -CELL || gx > W + CELL || gy < -CELL || gy > H + CELL) continue;
       const pulse = 0.6 + 0.4 * Math.sin(globalTime * 3 + x * 0.7 + y * 0.8);
       const gLight = ctx.createRadialGradient(gx, gy, 0, gx, gy, CELL * 1.5);
-      gLight.addColorStop(0, `rgba(90,240,255,${0.07 * pulse})`);
-      gLight.addColorStop(1, 'rgba(70,170,255,0)');
+      if (tileHere === TILE.DIAMOND) {
+        gLight.addColorStop(0, `rgba(140,180,255,${0.09 * pulse})`);
+        gLight.addColorStop(1, 'rgba(100,140,255,0)');
+      } else {
+        gLight.addColorStop(0, `rgba(50,220,120,${0.08 * pulse})`);
+        gLight.addColorStop(1, 'rgba(30,160,80,0)');
+      }
       ctx.fillStyle = gLight;
       ctx.beginPath();
       ctx.arc(gx, gy, CELL * 1.5, 0, Math.PI * 2);
@@ -3254,18 +3493,19 @@ function drawHUD() {
   const gemY = barH / 2;
   const gemX = CELL * 0.6;
   
-  // Mini gem icon (prismatic)
+  // Mini emerald icon
   const gr = CELL * 0.15;
-  const gemHue = (globalTime * 50) % 360;
-  ctx.fillStyle = `hsl(${gemHue},80%,65%)`;
+  ctx.fillStyle = `hsl(${145 + Math.sin(globalTime*2)*10},80%,50%)`;
   ctx.beginPath();
   ctx.moveTo(gemX, gemY - gr);
-  ctx.lineTo(gemX + gr*0.6, gemY);
+  ctx.lineTo(gemX + gr*0.5, gemY - gr*0.35);
+  ctx.lineTo(gemX + gr*0.6, gemY + gr*0.2);
   ctx.lineTo(gemX, gemY + gr*0.7);
-  ctx.lineTo(gemX - gr*0.6, gemY);
+  ctx.lineTo(gemX - gr*0.6, gemY + gr*0.2);
+  ctx.lineTo(gemX - gr*0.5, gemY - gr*0.35);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fillStyle = 'rgba(200,255,230,0.35)';
   ctx.beginPath();
   ctx.moveTo(gemX - gr*0.1, gemY - gr*0.5);
   ctx.lineTo(gemX + gr*0.2, gemY);
@@ -3274,7 +3514,7 @@ function drawHUD() {
   ctx.fill();
   
   const gemCount = Math.floor(displayGems);
-  ctx.fillStyle = gemCount >= gemsNeeded ? '#FFD700' : '#fff';
+  ctx.fillStyle = gemCount >= gemsNeeded ? '#60FF90' : '#fff';
   ctx.textAlign = 'left';
   ctx.fillText(`${gemCount} / ${gemsNeeded}`, gemX + CELL*0.3, gemY);
   
@@ -3389,29 +3629,36 @@ function drawTouchRipples() {
 function drawTitle() {
   drawCaveBackground();
   
+  // Floating emeralds on title screen
   for (let i = 0; i < 12; i++) {
     const x = W * (0.1 + (i * 0.17 + Math.sin(titleAnimT * 0.3 + i) * 0.05) % 0.9);
     const y = H * (0.2 + (i * 0.13 + Math.sin(titleAnimT * 0.4 + i*2) * 0.08) % 0.7);
     const r = W * 0.015;
     const shimmer = titleAnimT * 2 + i;
-    const hue = (titleAnimT * 30 + i * 30) % 360;
+    // Mostly emerald green, occasional diamond blue
+    const isDiamond = i % 5 === 0;
+    const hue = isDiamond ? (200 + Math.sin(shimmer)*20) : (130 + Math.sin(shimmer)*15);
+    const sat = isDiamond ? 70 : 80;
     
-    ctx.fillStyle = `hsla(${hue},80%,60%,${0.15 + Math.sin(shimmer)*0.08})`;
+    ctx.fillStyle = `hsla(${hue},${sat}%,${isDiamond ? 75 : 55}%,${0.2 + Math.sin(shimmer)*0.1})`;
     ctx.beginPath();
+    // Hexagonal emerald shape
     ctx.moveTo(x, y - r);
-    ctx.lineTo(x + r*0.6, y);
+    ctx.lineTo(x + r*0.5, y - r*0.35);
+    ctx.lineTo(x + r*0.6, y + r*0.2);
     ctx.lineTo(x, y + r*0.8);
-    ctx.lineTo(x - r*0.6, y);
+    ctx.lineTo(x - r*0.6, y + r*0.2);
+    ctx.lineTo(x - r*0.5, y - r*0.35);
     ctx.closePath();
     ctx.fill();
     
     // Sparkle around floating gems
-    ctx.fillStyle = `rgba(255,255,255,${0.2 + Math.sin(shimmer*3)*0.15})`;
+    ctx.fillStyle = `rgba(150,255,200,${0.25 + Math.sin(shimmer*3)*0.15})`;
     drawStar(ctx, x + r*0.8*Math.cos(shimmer*2), y + r*0.5*Math.sin(shimmer*2), 4, r*0.3, r*0.08);
   }
   
   let titleSize = Math.min(W * 0.06, H * 0.075);
-  const titleText = 'DIAMOND MINE';
+  const titleText = 'EMERALD MINE';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = `bold ${titleSize}px 'Segoe UI', system-ui, sans-serif`;
@@ -3420,35 +3667,46 @@ function drawTitle() {
     ctx.font = `bold ${titleSize}px 'Segoe UI', system-ui, sans-serif`;
   }
   
+  // Title shadow
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillText(titleText, W/2 + 3, H*0.26 + 3);
+  ctx.fillText(titleText, W/2 + 3, H*0.24 + 3);
   
-  const tgrd = ctx.createLinearGradient(W*0.2, H*0.21, W*0.8, H*0.31);
-  tgrd.addColorStop(0, '#40E0FF');
-  tgrd.addColorStop(0.5, '#E0FFFF');
-  tgrd.addColorStop(1, '#40E0FF');
+  // Emerald green gradient title
+  const tgrd = ctx.createLinearGradient(W*0.2, H*0.19, W*0.8, H*0.29);
+  tgrd.addColorStop(0, '#20E080');
+  tgrd.addColorStop(0.3, '#60FFA0');
+  tgrd.addColorStop(0.5, '#A0FFD0');
+  tgrd.addColorStop(0.7, '#60FFA0');
+  tgrd.addColorStop(1, '#20E080');
   ctx.fillStyle = tgrd;
-  ctx.fillText(titleText, W/2, H*0.26);
+  ctx.fillText(titleText, W/2, H*0.24);
   
-  ctx.font = `${titleSize*0.34}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(235,210,160,0.85)';
-  ctx.fillText('High-res pixel Boulder Dash', W/2, H*0.34);
+  // Subtitle
+  ctx.font = `${titleSize*0.32}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(200,255,220,0.7)';
+  ctx.fillText('Crystal Caves', W/2, H*0.31);
   
-  const instrSize = Math.max(12 * DPR, titleSize * 0.25);
+  ctx.font = `${titleSize*0.22}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(200,220,180,0.6)';
+  ctx.fillText('Inspired by the Amiga classic', W/2, H*0.36);
+  
+  const instrSize = Math.max(10 * DPR, titleSize * 0.22);
   ctx.font = `${instrSize}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = 'rgba(255,255,255,0.78)';
   const instructions = showScores ? [] : [
-    '⛏️ Dig for gems  •  🪨 dodge falling boulders',
-    '💎 Open the exit  •  👾 crush cave creatures',
-    '🧨 Dynamite clears traps  •  🚪 escape the cave'
+    '⛏️ Dig emeralds',
+    '🪨 Dodge boulders',
+    '💎 Magic walls convert rocks',
+    '✨ Rare diamonds = bonus',
+    '🚪 Open the exit and escape'
   ];
   instructions.forEach((txt, i) => {
-    ctx.fillText(txt, W/2, H*0.45 + i * instrSize * 1.75);
+    ctx.fillText(txt, W/2, H*0.43 + i * instrSize * 1.45);
   });
   
   ctx.font = `${instrSize*0.82}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = 'rgba(220,230,255,0.58)';
-  if (!showScores) ctx.fillText('Swipe / D-pad / WASD to move', W/2, H*0.64);
+  if (!showScores) ctx.fillText('Swipe / D-pad / WASD', W/2, H*0.66);
   
   const pulse = 0.85 + Math.sin(titleAnimT * 3) * 0.15;
   const btnW = W * 0.3 * pulse;
@@ -3456,16 +3714,16 @@ function drawTitle() {
   const btnY = H * 0.85;
   
   const bglow = ctx.createRadialGradient(W/2, btnY, 0, W/2, btnY, btnW);
-  bglow.addColorStop(0, 'rgba(0,200,255,0.15)');
-  bglow.addColorStop(1, 'rgba(0,200,255,0)');
+  bglow.addColorStop(0, 'rgba(0,200,120,0.15)');
+  bglow.addColorStop(1, 'rgba(0,200,120,0)');
   ctx.fillStyle = bglow;
   ctx.fillRect(W/2 - btnW, btnY - btnH, btnW*2, btnH*2);
   
-  ctx.fillStyle = 'rgba(0,180,255,0.3)';
+  ctx.fillStyle = 'rgba(0,160,80,0.3)';
   ctx.beginPath();
   ctx.roundRect(W/2 - btnW/2, btnY - btnH/2, btnW, btnH, btnH*0.3);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(0,200,255,0.6)';
+  ctx.strokeStyle = 'rgba(80,255,160,0.6)';
   ctx.lineWidth = 2;
   ctx.stroke();
   
@@ -3529,11 +3787,11 @@ function drawScoresPanel(cx, cy, w, h, highlightIdx) {
   const scores = loadHighScores();
   ctx.save();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(5,8,18,0.72)';
-  ctx.strokeStyle = 'rgba(255,215,90,0.35)'; ctx.lineWidth = Math.max(1, DPR);
+  ctx.fillStyle = 'rgba(5,12,8,0.78)';
+  ctx.strokeStyle = 'rgba(80,220,140,0.35)'; ctx.lineWidth = Math.max(1, DPR);
   ctx.beginPath(); ctx.roundRect(cx-w/2, cy-h/2, w, h, 16*DPR); ctx.fill(); ctx.stroke();
   ctx.font = `bold ${Math.max(13*DPR, h*0.085)}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = '#ffd95c'; ctx.fillText('HIGH SCORES', cx, cy-h*0.38);
+  ctx.fillStyle = '#60ffa0'; ctx.fillText('HIGH SCORES', cx, cy-h*0.38);
   ctx.font = `${Math.max(10*DPR, h*0.062)}px monospace`;
   if (!scores.length) { ctx.fillStyle = 'rgba(255,255,255,0.62)'; ctx.fillText('No scores yet — mine the first legend.', cx, cy); ctx.restore(); return; }
   const startY = cy - h*0.25;
@@ -3588,6 +3846,7 @@ function drawGameOver() {
   ctx.fillRect(0, 0, W, H);
   
   const titleSize = Math.min(W * 0.07, H * 0.09);
+  if (hsEntry.active) { drawHighScoreEntry(); return; }
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   
@@ -3693,6 +3952,11 @@ function render() {
         drawGem(x, y, !!fallMap[fallKey(x,y)]);
       } else if (t === TILE.ENEMY) {
         drawTile(x, y, TILE.EMPTY);
+      } else if (t === TILE.DIAMOND) {
+        drawTile(x, y, TILE.EMPTY);
+        drawDiamondGem(x, y, !!fallMap[fallKey(x,y)]);
+      } else if (t === TILE.MAGIC_WALL) {
+        drawMagicWall(x, y);
       } else if (t === TILE.DYNAMITE || t === TILE.SPEED_BOOTS || t === TILE.GHOST_MODE) {
         drawTile(x, y, TILE.EMPTY);
         drawBonusItem(x, y, t);
