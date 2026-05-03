@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.1.8</title>
+<title>Emerald Mine — Crystal Caves v2.1.9</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.1.8 — boulder head-crush death plus trapped/retry handling
+//  v2.1.9 — stricter boulder head-crush and smaller restart control
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.1.8';
+const VERSION = 'v2.1.9';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -305,16 +305,16 @@ function updateDynamiteBtn() {
 
 function updateRetryBtn() {
   retryBtn.visible = state === 'playing' && !player.dead;
-  retryBtn.r = Math.max(30 * DPR, Math.min(W, H) * 0.047);
-  retryBtn.x = W - retryBtn.r * 1.55;
-  retryBtn.y = dynamiteBtn.visible ? H - retryBtn.r * 4.35 : H - retryBtn.r * 1.7;
+  retryBtn.r = Math.max(16 * DPR, Math.min(W, H) * 0.027);
+  retryBtn.x = W - retryBtn.r * 2.4;
+  retryBtn.y = dynamiteBtn.visible ? H - retryBtn.r * 8.0 : H - retryBtn.r * 2.35;
 }
 
 function isRetryBtnTap(screenX, screenY) {
   if (!retryBtn.visible) return false;
   const dx = screenX - retryBtn.x;
   const dy = screenY - retryBtn.y;
-  return dx*dx + dy*dy <= (retryBtn.r * 1.45) ** 2;
+  return Math.abs(dx) <= retryBtn.r * 2.2 && Math.abs(dy) <= retryBtn.r * 1.55;
 }
 
 function isDynamiteBtnTap(screenX, screenY) {
@@ -355,27 +355,17 @@ function drawRetryBtn() {
   if (!retryBtn.visible) return;
   const { x, y, r } = retryBtn;
   ctx.save();
-  const glow = ctx.createRadialGradient(x, y, r * 0.45, x, y, r * 1.35);
-  glow.addColorStop(0, 'rgba(120,210,255,0.22)');
-  glow.addColorStop(1, 'rgba(120,210,255,0)');
-  ctx.fillStyle = glow;
-  ctx.beginPath(); ctx.arc(x, y, r * 1.35, 0, Math.PI * 2); ctx.fill();
-  const grd = ctx.createRadialGradient(x - r*0.25, y - r*0.25, 0, x, y, r);
-  grd.addColorStop(0, 'rgba(65,95,125,0.92)');
-  grd.addColorStop(1, 'rgba(18,28,42,0.92)');
-  ctx.fillStyle = grd;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = 'rgba(165,225,255,0.68)';
-  ctx.lineWidth = Math.max(2, r * 0.07);
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+  const w = r * 4.1;
+  const h = r * 1.45;
+  ctx.fillStyle = 'rgba(10,18,28,0.42)';
+  ctx.strokeStyle = 'rgba(165,225,255,0.32)';
+  ctx.lineWidth = Math.max(1, DPR);
+  ctx.beginPath(); ctx.roundRect(x - w/2, y - h/2, w, h, r * 0.35); ctx.fill(); ctx.stroke();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `bold ${r * 0.78}px 'Segoe UI Symbol', sans-serif`;
-  ctx.fillStyle = 'rgba(235,250,255,0.95)';
-  ctx.fillText('↻', x, y - r * 0.05);
-  ctx.font = `bold ${Math.max(8 * DPR, r * 0.24)}px 'Segoe UI', sans-serif`;
-  ctx.fillStyle = 'rgba(210,240,255,0.78)';
-  ctx.fillText('-1', x, y + r * 0.58);
+  ctx.font = `600 ${Math.max(6 * DPR, r * 0.42)}px 'Segoe UI', sans-serif`;
+  ctx.fillStyle = 'rgba(215,240,255,0.62)';
+  ctx.fillText('restart level', x, y);
   ctx.restore();
 }
 
@@ -1436,15 +1426,13 @@ function updatePhysics() {
       
       // Fall straight down (also onto enemies when boulder has momentum)
       if (below === TILE.EMPTY || enemyBelow || playerBelow) {
-        // A stationary boulder can be held overhead, but a falling one crushes the miner.
+        // If physics wants a boulder/gem to move into the miner's square, it crushes him.
         if (playerBelow && !enemyBelow) {
-          if (wasFalling > 0) {
-            sfxImpact(t, wasFalling);
-            killPlayer();
-            grid[y][x] = TILE.EMPTY;
-            grid[y+1][x] = t;
-            screenShake(10);
-          }
+          sfxImpact(t, Math.max(1, wasFalling));
+          killPlayer();
+          grid[y][x] = TILE.EMPTY;
+          grid[y+1][x] = t;
+          screenShake(10);
           continue;
         }
         
