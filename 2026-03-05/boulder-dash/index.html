@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.2.3</title>
+<title>Emerald Mine — Crystal Caves v2.3.0</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,17 +18,17 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.2.3 — expanded run to 15 capped-size caves
+//  v2.3.0 — amoeba slime puzzle mechanic
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.2.3';
+const VERSION = 'v2.3.0';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
 // ─── Constants ───
 const TILE = {
   EMPTY: 0, DIRT: 1, WALL: 2, BOULDER: 3, GEM: 4, PLAYER: 5, EXIT: 6, ENEMY: 7,
-  DYNAMITE: 8, SPEED_BOOTS: 9, GHOST_MODE: 10, DIAMOND: 11, MAGIC_WALL: 12
+  DYNAMITE: 8, SPEED_BOOTS: 9, GHOST_MODE: 10, DIAMOND: 11, MAGIC_WALL: 12, AMOEBA: 13
 };
 const DPR = window.devicePixelRatio || 1;
 const ZOOM_KEY = 'emerald_mine_zoom_v216';
@@ -550,18 +550,18 @@ const LEVELS = [
   { w: 16, h: 12, gems: 5,  enemies: 2,  enemySpeed: 1.0,  dirtPct: 0.65, boulderPct: 0.08, gemPct: 0.08, diamonds: 0,  magicWalls: 0, name:'Training Shaft' },
   { w: 20, h: 14, gems: 10, enemies: 3,  enemySpeed: 0.75, dirtPct: 0.55, boulderPct: 0.12, gemPct: 0.10, diamonds: 2,  magicWalls: 1, name:'Magic Wallworks' },
   { w: 24, h: 16, gems: 15, enemies: 5,  enemySpeed: 0.5,  dirtPct: 0.45, boulderPct: 0.15, gemPct: 0.12, diamonds: 4,  magicWalls: 2, name:'Firefly Forge' },
-  { w: 26, h: 18, gems: 18, enemies: 7,  enemySpeed: 0.45, dirtPct: 0.42, boulderPct: 0.17, gemPct: 0.12, diamonds: 6,  magicWalls: 3, name:'Butterfly Vault' },
-  { w: 28, h: 20, gems: 22, enemies: 9,  enemySpeed: 0.38, dirtPct: 0.38, boulderPct: 0.18, gemPct: 0.13, diamonds: 8,  magicWalls: 4, name:'Emerald Machine' },
-  { w: 28, h: 20, gems: 25, enemies: 10, enemySpeed: 0.35, dirtPct: 0.36, boulderPct: 0.19, gemPct: 0.13, diamonds: 9,  magicWalls: 4, name:'Crystal Pressure' },
-  { w: 30, h: 21, gems: 28, enemies: 11, enemySpeed: 0.32, dirtPct: 0.34, boulderPct: 0.20, gemPct: 0.14, diamonds: 10, magicWalls: 5, name:'Hunter Warrens' },
-  { w: 30, h: 22, gems: 31, enemies: 12, enemySpeed: 0.30, dirtPct: 0.32, boulderPct: 0.21, gemPct: 0.14, diamonds: 12, magicWalls: 5, name:'Diamond Engine' },
-  { w: 30, h: 22, gems: 35, enemies: 14, enemySpeed: 0.28, dirtPct: 0.30, boulderPct: 0.22, gemPct: 0.15, diamonds: 14, magicWalls: 6, name:'Cave of Teeth' },
-  { w: 30, h: 22, gems: 40, enemies: 16, enemySpeed: 0.25, dirtPct: 0.28, boulderPct: 0.23, gemPct: 0.15, diamonds: 16, magicWalls: 7, name:'Emerald Inferno' },
-  { w: 30, h: 22, gems: 44, enemies: 17, enemySpeed: 0.24, dirtPct: 0.27, boulderPct: 0.235, gemPct: 0.155, diamonds: 17, magicWalls: 7, name:'Pressure Garden' },
-  { w: 30, h: 22, gems: 48, enemies: 18, enemySpeed: 0.23, dirtPct: 0.26, boulderPct: 0.24,  gemPct: 0.16,  diamonds: 18, magicWalls: 8, name:'Butterfly Cathedral' },
-  { w: 30, h: 22, gems: 52, enemies: 19, enemySpeed: 0.22, dirtPct: 0.25, boulderPct: 0.245, gemPct: 0.16,  diamonds: 20, magicWalls: 8, name:'Hunter Furnace' },
-  { w: 30, h: 22, gems: 56, enemies: 20, enemySpeed: 0.21, dirtPct: 0.24, boulderPct: 0.25,  gemPct: 0.165, diamonds: 22, magicWalls: 9, name:'Crystal Labyrinth' },
-  { w: 30, h: 22, gems: 60, enemies: 22, enemySpeed: 0.20, dirtPct: 0.23, boulderPct: 0.26,  gemPct: 0.17,  diamonds: 24, magicWalls: 10, name:'Final Emerald Mine' }
+  { w: 26, h: 18, gems: 18, enemies: 7,  enemySpeed: 0.45, dirtPct: 0.42, boulderPct: 0.17, gemPct: 0.12, diamonds: 6,  magicWalls: 3, name:'Butterfly Vault', amoebas:1 },
+  { w: 28, h: 20, gems: 22, enemies: 9,  enemySpeed: 0.38, dirtPct: 0.38, boulderPct: 0.18, gemPct: 0.13, diamonds: 8,  magicWalls: 4, name:'Emerald Machine', amoebas:1 },
+  { w: 28, h: 20, gems: 25, enemies: 10, enemySpeed: 0.35, dirtPct: 0.36, boulderPct: 0.19, gemPct: 0.13, diamonds: 9,  magicWalls: 4, name:'Crystal Pressure', amoebas:2 },
+  { w: 30, h: 21, gems: 28, enemies: 11, enemySpeed: 0.32, dirtPct: 0.34, boulderPct: 0.20, gemPct: 0.14, diamonds: 10, magicWalls: 5, name:'Hunter Warrens', amoebas:2 },
+  { w: 30, h: 22, gems: 31, enemies: 12, enemySpeed: 0.30, dirtPct: 0.32, boulderPct: 0.21, gemPct: 0.14, diamonds: 12, magicWalls: 5, name:'Diamond Engine', amoebas:2 },
+  { w: 30, h: 22, gems: 35, enemies: 14, enemySpeed: 0.28, dirtPct: 0.30, boulderPct: 0.22, gemPct: 0.15, diamonds: 14, magicWalls: 6, name:'Cave of Teeth', amoebas:3 },
+  { w: 30, h: 22, gems: 40, enemies: 16, enemySpeed: 0.25, dirtPct: 0.28, boulderPct: 0.23, gemPct: 0.15, diamonds: 16, magicWalls: 7, name:'Emerald Inferno', amoebas:3 },
+  { w: 30, h: 22, gems: 44, enemies: 17, enemySpeed: 0.24, dirtPct: 0.27, boulderPct: 0.235, gemPct: 0.155, diamonds: 17, magicWalls: 7, name:'Pressure Garden', amoebas:3 },
+  { w: 30, h: 22, gems: 48, enemies: 18, enemySpeed: 0.23, dirtPct: 0.26, boulderPct: 0.24,  gemPct: 0.16,  diamonds: 18, magicWalls: 8, name:'Butterfly Cathedral', amoebas:4 },
+  { w: 30, h: 22, gems: 52, enemies: 19, enemySpeed: 0.22, dirtPct: 0.25, boulderPct: 0.245, gemPct: 0.16,  diamonds: 20, magicWalls: 8, name:'Hunter Furnace', amoebas:4 },
+  { w: 30, h: 22, gems: 56, enemies: 20, enemySpeed: 0.21, dirtPct: 0.24, boulderPct: 0.25,  gemPct: 0.165, diamonds: 22, magicWalls: 9, name:'Crystal Labyrinth', amoebas:5 },
+  { w: 30, h: 22, gems: 60, enemies: 22, enemySpeed: 0.20, dirtPct: 0.23, boulderPct: 0.26,  gemPct: 0.17,  diamonds: 24, magicWalls: 10, name:'Final Emerald Mine', amoebas:5 }
 ];
 
 let state = 'title'; // title, playing, levelClear, gameOver, win
@@ -601,7 +601,11 @@ let trappedTimer = 0;
 let celebrationParticles = []; // level clear fountain
 let magicWallActive = false; // magic wall converter active
 let magicWallTimer = 0; // time remaining for magic wall effect
-const MAGIC_WALL_DURATION = 12; // seconds magic wall stays active after first trigger
+let amoebaTimer = 0;
+let amoebaFlashTimer = 0;
+const MAGIC_WALL_DURATION = 12;
+const AMOEBA_INTERVAL = 1.15;
+const AMOEBA_LIMIT = 48; // if slime grows this large, it hardens into boulders
 
 // Hold-to-move state
 let holdDir = { dx: 0, dy: 0 };
@@ -855,6 +859,23 @@ function generateLevel(lvl) {
   }
   grid[exitPos.y][exitPos.x] = TILE.EXIT;
   
+  // Place amoeba/slime patches in later caves. Box it in to turn it into diamonds;
+  // let it spread too far and it hardens into boulders.
+  const amoebaCount = L.amoebas || 0;
+  for (let i = 0; i < amoebaCount; i++) {
+    for (let attempt = 0; attempt < 160; attempt++) {
+      const ax = sRngInt(4, gridW-5);
+      const ay = sRngInt(4, gridH-5);
+      if (dist(ax, ay, px || 2, py || 2) < 6) continue;
+      if (grid[ay][ax] === TILE.DIRT || grid[ay][ax] === TILE.EMPTY) {
+        grid[ay][ax] = TILE.AMOEBA;
+        if (grid[ay][ax+1] === TILE.DIRT && sRng() < 0.55) grid[ay][ax+1] = TILE.AMOEBA;
+        if (grid[ay+1] && grid[ay+1][ax] === TILE.DIRT && sRng() < 0.55) grid[ay+1][ax] = TILE.AMOEBA;
+        break;
+      }
+    }
+  }
+
   // Place enemies far from player
   enemies = [];
   for (let i = 0; i < L.enemies; i++) {
@@ -909,6 +930,8 @@ function generateLevel(lvl) {
   displayGems = 0;
   magicWallActive = false;
   magicWallTimer = 0;
+  amoebaTimer = 0;
+  amoebaFlashTimer = 0;
   flashAlpha = 0;
   flashColor = '255,255,255';
   particles = [];
@@ -1436,7 +1459,7 @@ function canPlayerMove(dx, dy) {
   const nx = player.gx + dx;
   const ny = player.gy + dy;
   const target = tileAt(nx, ny);
-  if (target === TILE.WALL || target === TILE.MAGIC_WALL || target === TILE.ENEMY) return false;
+  if (target === TILE.WALL || target === TILE.MAGIC_WALL || target === TILE.AMOEBA || target === TILE.ENEMY) return false;
   for (const en of enemies) if (en.alive && en.gx === nx && en.gy === ny) return false;
   if (target === TILE.EXIT) return exitOpen;
   if (target === TILE.BOULDER) {
@@ -1457,7 +1480,7 @@ function tryMovePlayer(dx, dy) {
   const ny = player.gy + dy;
   const target = tileAt(nx, ny);
   
-  if (target === TILE.WALL || target === TILE.MAGIC_WALL) return false;
+  if (target === TILE.WALL || target === TILE.MAGIC_WALL || target === TILE.AMOEBA) return false;
   
   // Ghost mode: can walk through boulders
   const isGhost = player.ghostTimer > 0;
@@ -1629,10 +1652,64 @@ function killPlayer() {
   slowMoFactor = 0.3;
 }
 
+
+function transformAllAmoeba(toTile) {
+  let changed = 0;
+  for (let y = 1; y < gridH - 1; y++) {
+    for (let x = 1; x < gridW - 1; x++) {
+      if (grid[y][x] === TILE.AMOEBA) {
+        grid[y][x] = toTile;
+        if (toTile === TILE.DIAMOND || toTile === TILE.BOULDER) fallMap[fallKey(x, y)] = 1;
+        changed++;
+      }
+    }
+  }
+  if (changed) {
+    amoebaFlashTimer = 0.8;
+    flashAlpha = Math.max(flashAlpha, 0.22);
+    flashColor = toTile === TILE.DIAMOND ? '160,230,255' : '150,255,90';
+    toTile === TILE.DIAMOND ? sfxPowerup() : sfxCrush();
+  }
+}
+
+function updateAmoeba() {
+  const cells = [];
+  const spreadTargets = [];
+  for (let y = 1; y < gridH - 1; y++) {
+    for (let x = 1; x < gridW - 1; x++) {
+      if (grid[y][x] !== TILE.AMOEBA) continue;
+      cells.push([x, y]);
+      for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+        const nx = x + dx, ny = y + dy;
+        const t = grid[ny][nx];
+        if (t === TILE.EMPTY || t === TILE.DIRT) spreadTargets.push([nx, ny]);
+      }
+    }
+  }
+  if (!cells.length) return;
+  if (!spreadTargets.length) { transformAllAmoeba(TILE.DIAMOND); return; }
+  if (cells.length >= AMOEBA_LIMIT) { transformAllAmoeba(TILE.BOULDER); return; }
+  const growth = Math.max(1, Math.min(4, Math.floor(cells.length / 12) + 1));
+  for (let i = 0; i < growth && spreadTargets.length; i++) {
+    const idx = Math.floor(sRng() * spreadTargets.length);
+    const [x, y] = spreadTargets.splice(idx, 1)[0];
+    if (grid[y][x] === TILE.EMPTY || grid[y][x] === TILE.DIRT) {
+      grid[y][x] = TILE.AMOEBA;
+      addParticle(x + 0.5, y + 0.5, (Math.random()-0.5)*0.8, -0.4-Math.random()*0.6,
+        'rgba(120,255,80,0.72)', 0.35, 2, 0.4);
+    }
+  }
+  playTone(240 + Math.random()*80, 0.035, 'sawtooth', 0.012);
+}
+
 function updatePhysics() {
   const newFallMap = {};
   
   // Update magic wall timer
+  if (amoebaFlashTimer > 0) amoebaFlashTimer = Math.max(0, amoebaFlashTimer - PHYSICS_INTERVAL);
+  amoebaTimer += PHYSICS_INTERVAL;
+  if (amoebaTimer >= AMOEBA_INTERVAL) { amoebaTimer = 0; updateAmoeba(); }
+
   if (magicWallActive) {
     magicWallTimer -= PHYSICS_INTERVAL;
     if (magicWallTimer <= 0) {
@@ -2444,6 +2521,28 @@ function drawTile(x, y, type) {
       ctx.fillStyle = 'rgba(0,0,0,0.2)';
       ctx.fillRect(left, top + s - ao2, s, ao2);
       ctx.fillRect(left + s - ao2, top, ao2, s);
+      break;
+    }
+    case TILE.AMOEBA: {
+      drawTile(x, y, TILE.EMPTY);
+      const pulse = 0.65 + Math.sin(globalTime * 4 + x * 1.7 + y) * 0.25;
+      const grd = ctx.createRadialGradient(sx - s*0.15, sy - s*0.2, s*0.05, sx, sy, s*0.62);
+      grd.addColorStop(0, `rgba(190,255,115,${0.92 + pulse*0.05})`);
+      grd.addColorStop(0.55, `rgba(75,190,55,${0.86})`);
+      grd.addColorStop(1, `rgba(25,85,25,${0.92})`);
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.roundRect(left + s*0.12, top + s*0.13, s*0.76, s*0.74, s*0.24);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(210,255,120,${0.35 + pulse*0.25})`;
+      ctx.lineWidth = Math.max(1, s*0.035);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(230,255,180,${0.25 + pulse*0.25})`;
+      for (let i=0;i<4;i++) {
+        const bx = left + s*(0.25 + ((x*13+y*7+i*19)%45)/100);
+        const by = top + s*(0.25 + ((x*5+y*17+i*23)%45)/100);
+        ctx.beginPath(); ctx.arc(bx, by, s*(0.035+i*0.008), 0, Math.PI*2); ctx.fill();
+      }
       break;
     }
     case TILE.EXIT: {
@@ -4249,7 +4348,7 @@ function drawTitle() {
 
   const instrSize = Math.max(11 * DPR, titleSize * 0.24);
   if (!showScores) {
-    const tips = ['⛏️ dig emeralds', '🪨 boulders crush', '💎 diamonds sparkle', '↻ restart anytime'];
+    const tips = ['⛏️ dig emeralds', '🪨 boulders crush', '💎 diamonds sparkle', '🧫 slime mutates'];
     ctx.font = `700 ${instrSize}px 'Segoe UI', system-ui, sans-serif`;
     tips.forEach((txt, i) => {
       const col = i % 2;
@@ -4594,7 +4693,7 @@ function render() {
   for (let y = 0; y < gridH; y++) {
     for (let x = 0; x < gridW; x++) {
       const t = grid[y][x];
-      if (t === TILE.EMPTY || t === TILE.DIRT || t === TILE.WALL || t === TILE.EXIT) {
+      if (t === TILE.EMPTY || t === TILE.DIRT || t === TILE.WALL || t === TILE.EXIT || t === TILE.AMOEBA) {
         drawTile(x, y, t);
       } else if (t === TILE.PLAYER) {
         drawTile(x, y, TILE.EMPTY);
