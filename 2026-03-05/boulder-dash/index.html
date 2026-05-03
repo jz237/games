@@ -6,11 +6,11 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Diamond Mine — Boulder Dash</title>
+<title>Diamond Mine — Boulder Dash v2.0.0</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
-canvas{display:block;width:100%;height:100%;touch-action:none}
+canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pixelated;image-rendering:crisp-edges}
 </style>
 </head>
 <body>
@@ -18,9 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 <script>
 // ═══════════════════════════════════════════════════════════
 //  DIAMOND MINE — A Showcase Boulder Dash Clone
-//  Enhanced Edition: Stunning visuals, hold-to-move, bonus items
+//  v2.0.0 — High-res pixel polish, high scores, mobile controls
 // ═══════════════════════════════════════════════════════════
 'use strict';
+const VERSION = 'v2.0.0';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -38,7 +39,7 @@ const cameraBounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
 function resize() {
   W = canvas.width = window.innerWidth * DPR;
   H = canvas.height = window.innerHeight * DPR;
-  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingEnabled = false;
 }
 resize();
 window.addEventListener('resize', resize);
@@ -152,6 +153,113 @@ function sfxPowerup() {
 }
 function sfxFuse() { playTone(1200, 0.08, 'square', 0.04); }
 function sfxPlace() { playTone(200, 0.1, 'triangle', 0.08); }
+function sfxHighScore() {
+  [523,659,784,1047,1318].forEach((f,i) => setTimeout(() => playTone(f, 0.12, 'sine', 0.09), i*90));
+}
+
+// ─── Run / High Scores ───
+const HS_KEY = 'diamond_mine_boulder_dash_v2_scores';
+const MAX_SCORES = 10;
+let hsEntry = { active:false, initials:['A','A','A'], pos:0, score:0, level:1, newIdx:-1, submitted:false };
+let showScores = false;
+
+function newGame() {
+  level = 0;
+  score = 0;
+  runLives = 3;
+  highestLevelReached = 1;
+  hsEntry.active = false;
+  showScores = false;
+  state = 'playing';
+  ensureAudio();
+  generateLevel(level);
+}
+function returnToTitle() {
+  state = 'title';
+  level = 0;
+  score = 0;
+  runLives = 3;
+  highestLevelReached = 1;
+  hsEntry.active = false;
+  showScores = false;
+}
+function loadHighScores() {
+  try { const raw = localStorage.getItem(HS_KEY); const arr = raw ? JSON.parse(raw) : []; return Array.isArray(arr) ? arr.slice(0, MAX_SCORES) : []; } catch(e) { return []; }
+}
+function saveHighScores(scores) { try { localStorage.setItem(HS_KEY, JSON.stringify(scores.slice(0, MAX_SCORES))); } catch(e) {} }
+function isHighScore(v) { const hs = loadHighScores(); return v > 0 && (hs.length < MAX_SCORES || v > (hs[hs.length-1]?.score || 0)); }
+function startHighScoreEntry(finalScore) {
+  hsEntry = { active:true, initials:['A','A','A'], pos:0, score:finalScore, level:highestLevelReached, newIdx:-1, submitted:false };
+}
+function submitHighScore() {
+  if (!hsEntry.active || hsEntry.submitted) return;
+  const initials = hsEntry.initials.join('');
+  const entry = { initials, score:hsEntry.score, level:hsEntry.level, id:Date.now() + Math.random() };
+  const hs = loadHighScores();
+  hs.push(entry);
+  hs.sort((a,b)=>b.score-a.score);
+  const trimmed = hs.slice(0, MAX_SCORES);
+  saveHighScores(trimmed);
+  hsEntry.newIdx = trimmed.findIndex(e => e.id === entry.id);
+  hsEntry.submitted = true;
+  sfxHighScore();
+}
+function enterEndState(nextState) {
+  state = nextState;
+  gameOverTimer = 0;
+  if (isHighScore(score)) startHighScoreEntry(score);
+}
+function changeInitial(delta) {
+  const code = hsEntry.initials[hsEntry.pos].charCodeAt(0) - 65;
+  hsEntry.initials[hsEntry.pos] = String.fromCharCode(65 + ((code + delta + 26) % 26));
+}
+function handleHighScoreKey(e) {
+  if (!hsEntry.active || hsEntry.submitted) return false;
+  if (e.code === 'ArrowUp' || e.code === 'KeyW') { changeInitial(1); return true; }
+  if (e.code === 'ArrowDown' || e.code === 'KeyS') { changeInitial(-1); return true; }
+  if (e.code === 'ArrowLeft' || e.code === 'KeyA') { hsEntry.pos = (hsEntry.pos + 2) % 3; return true; }
+  if (e.code === 'ArrowRight' || e.code === 'KeyD') { hsEntry.pos = (hsEntry.pos + 1) % 3; return true; }
+  if (e.code === 'Enter' || e.code === 'Space') { submitHighScore(); return true; }
+  if (/^Key[A-Z]$/.test(e.code)) { hsEntry.initials[hsEntry.pos] = e.code.slice(3); hsEntry.pos = Math.min(2, hsEntry.pos + 1); return true; }
+  return false;
+}
+
+// ─── Mobile D-Pad ───
+const dpad = { cx:0, cy:0, r:0, visible:false, active:null };
+function updateDPad() {
+  dpad.visible = state === 'playing';
+  dpad.r = Math.max(34 * DPR, Math.min(W, H) * 0.065);
+  dpad.cx = dpad.r * 2.0;
+  dpad.cy = H - dpad.r * 2.0;
+}
+function getDPadDir(x, y) {
+  updateDPad();
+  const dx = x - dpad.cx, dy = y - dpad.cy;
+  const d = Math.sqrt(dx*dx + dy*dy);
+  if (d > dpad.r * 1.85) return null;
+  if (Math.abs(dx) < dpad.r * 0.35 && Math.abs(dy) < dpad.r * 0.35) return null;
+  return Math.abs(dx) > Math.abs(dy) ? { dx: dx > 0 ? 1 : -1, dy:0 } : { dx:0, dy: dy > 0 ? 1 : -1 };
+}
+function drawDPad() {
+  updateDPad();
+  if (!dpad.visible) return;
+  const {cx, cy, r} = dpad;
+  const pads = [
+    {x:cx, y:cy-r, label:'▲', dx:0, dy:-1}, {x:cx, y:cy+r, label:'▼', dx:0, dy:1},
+    {x:cx-r, y:cy, label:'◀', dx:-1, dy:0}, {x:cx+r, y:cy, label:'▶', dx:1, dy:0}
+  ];
+  ctx.save();
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font=`bold ${r*0.45}px monospace`;
+  for (const p of pads) {
+    const active = dpad.active && dpad.active.dx === p.dx && dpad.active.dy === p.dy;
+    ctx.fillStyle = active ? 'rgba(255,217,80,0.42)' : 'rgba(255,255,255,0.16)';
+    ctx.strokeStyle = active ? 'rgba(255,240,140,0.75)' : 'rgba(255,255,255,0.28)';
+    ctx.lineWidth = Math.max(1, DPR*1.5);
+    ctx.beginPath(); ctx.roundRect(p.x-r*0.36, p.y-r*0.36, r*0.72, r*0.72, r*0.12); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.82)'; ctx.fillText(p.label, p.x, p.y);
+  }
+  ctx.restore();
+}
 
 // ─── Dynamite Button (mobile) ───
 const dynamiteBtn = { x: 0, y: 0, r: 0, visible: false };
@@ -247,6 +355,8 @@ let exitOpen = false;
 let exitPos = { x: 0, y: 0 };
 let gemsNeeded = 5;
 let score = 0;
+let runLives = 3;
+let highestLevelReached = 1;
 let displayGems = 0;
 let levelClearTimer = 0;
 let gameOverTimer = 0;
@@ -507,7 +617,8 @@ function generateLevel(lvl) {
   player.dead = false;
   player.deadTimer = 0;
   player.gems = 0;
-  player.lives = 3;
+  player.lives = runLives;
+  highestLevelReached = Math.max(highestLevelReached, lvl + 1);
   player.dir = 0;
   player.frame = 0;
   player.animT = 0;
@@ -688,11 +799,15 @@ const keys = {};
 const keyHeld = {};
 
 window.addEventListener('keydown', e => {
-  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','KeyW','KeyA','KeyS','KeyD'].includes(e.code)) e.preventDefault();
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','KeyW','KeyA','KeyS','KeyD','Enter'].includes(e.code)) e.preventDefault();
+  if (handleHighScoreKey(e)) return;
   
-  if (state === 'title') { ensureAudio(); state = 'playing'; generateLevel(level); return; }
-  if (state === 'gameOver' && gameOverTimer > 2) { state = 'title'; return; }
-  if (state === 'win' && gameOverTimer > 2) { state = 'title'; return; }
+  if (state === 'title') {
+    if (e.code === 'KeyH') { showScores = !showScores; return; }
+    newGame(); return;
+  }
+  if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
+  if (state === 'win' && gameOverTimer > 2) { returnToTitle(); return; }
   
   if (e.code === 'Space' && state === 'playing') {
     placeDynamiteAction();
@@ -749,9 +864,10 @@ let touchRipples = [];
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
   ensureAudio();
-  if (state === 'title') { state = 'playing'; generateLevel(level); return; }
-  if (state === 'gameOver' && gameOverTimer > 2) { state = 'title'; return; }
-  if (state === 'win' && gameOverTimer > 2) { state = 'title'; return; }
+  if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.touches[0].clientX * DPR, e.touches[0].clientY * DPR); return; }
+  if (state === 'title') { newGame(); return; }
+  if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
+  if (state === 'win' && gameOverTimer > 2) { returnToTitle(); return; }
   
   const t = e.touches[0];
   
@@ -759,6 +875,17 @@ canvas.addEventListener('touchstart', e => {
   if (isDynamiteBtnTap(t.clientX * DPR, t.clientY * DPR)) {
     placeDynamiteAction();
     return; // Don't process as movement
+  }
+  const padDir = getDPadDir(t.clientX * DPR, t.clientY * DPR);
+  if (padDir) {
+    dpad.active = padDir;
+    inputQueue.push(padDir);
+    touchHoldDir = padDir;
+    touchHoldActive = true;
+    touchHoldTimer = TOUCH_MOVE_THRESHOLD;
+    touchStart = { x: t.clientX, y: t.clientY, time: Date.now() };
+    touchStartPos = { x: t.clientX, y: t.clientY };
+    return;
   }
   
   touchStart = { x: t.clientX, y: t.clientY, time: Date.now() };
@@ -825,15 +952,34 @@ canvas.addEventListener('touchend', e => {
   touchCurrentPos = null;
   touchHoldActive = false;
   touchHoldDir = { dx: 0, dy: 0 };
+  dpad.active = null;
 }, { passive: false });
 
 // Mouse click for desktop
 canvas.addEventListener('click', e => {
   ensureAudio();
-  if (state === 'title') { state = 'playing'; generateLevel(level); return; }
-  if (state === 'gameOver' && gameOverTimer > 2) { state = 'title'; return; }
-  if (state === 'win' && gameOverTimer > 2) { state = 'title'; return; }
+  if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.clientX * DPR, e.clientY * DPR); return; }
+  if (state === 'title') { newGame(); return; }
+  if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
+  if (state === 'win' && gameOverTimer > 2) { returnToTitle(); return; }
 });
+
+function handleHighScoreTouch(x, y) {
+  if (!hsEntry.active || hsEntry.submitted) return;
+  const cx = W / 2;
+  const baseY = H * 0.50;
+  const spacing = Math.min(W * 0.12, 70 * DPR);
+  for (let i = 0; i < 3; i++) {
+    const px = cx + (i - 1) * spacing;
+    if (Math.abs(x - px) < spacing * 0.45) {
+      hsEntry.pos = i;
+      if (y < baseY - 28 * DPR) changeInitial(1);
+      else if (y > baseY + 28 * DPR && y < baseY + 90 * DPR) changeInitial(-1);
+      return;
+    }
+  }
+  if (y > H * 0.68 && y < H * 0.82) submitHighScore();
+}
 
 // ─── Game Logic ───
 function tileAt(x, y) {
@@ -983,6 +1129,7 @@ function killPlayer() {
   player.dead = true;
   player.deadTimer = 0;
   player.lives--;
+  runLives = player.lives;
   sfxDeath();
   addDeathParticles(player.gx, player.gy);
   screenShake(8);
@@ -1261,10 +1408,10 @@ function update(dt) {
     if (levelClearTimer > 3.5) {
       level++;
       if (level >= LEVELS.length) {
-        state = 'win';
-        gameOverTimer = 0;
+        enterEndState('win');
       } else {
         state = 'playing';
+        runLives = player.lives;
         generateLevel(level);
       }
     }
@@ -1288,8 +1435,7 @@ function update(dt) {
     player.deadTimer += effectiveDt;
     if (player.deadTimer > 1.5) {
       if (player.lives <= 0) {
-        state = 'gameOver';
-        gameOverTimer = 0;
+        enterEndState('gameOver');
         return;
       }
       // Respawn
@@ -3149,6 +3295,10 @@ function drawHUD() {
   ctx.font = `${fontSize*0.7}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = 'rgba(255,220,100,0.8)';
   ctx.fillText(`Score: ${score}`, W - CELL * 0.4, gemY + fontSize * 0.4);
+  ctx.textAlign = 'right';
+  ctx.font = `${Math.max(9 * DPR, fontSize * 0.46)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(255,255,255,0.42)';
+  ctx.fillText(VERSION, W - CELL * 0.4, HUD_H - 8 * DPR);
   
   // Dynamite counter (if any)
   if (player.dynamite > 0) {
@@ -3260,43 +3410,45 @@ function drawTitle() {
     drawStar(ctx, x + r*0.8*Math.cos(shimmer*2), y + r*0.5*Math.sin(shimmer*2), 4, r*0.3, r*0.08);
   }
   
-  const titleSize = Math.min(W * 0.08, H * 0.1);
-  ctx.font = `bold ${titleSize}px 'Segoe UI', system-ui, sans-serif`;
+  let titleSize = Math.min(W * 0.06, H * 0.075);
+  const titleText = 'DIAMOND MINE';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  ctx.font = `bold ${titleSize}px 'Segoe UI', system-ui, sans-serif`;
+  while (ctx.measureText(titleText).width > W * 0.72 && titleSize > 16 * DPR) {
+    titleSize *= 0.92;
+    ctx.font = `bold ${titleSize}px 'Segoe UI', system-ui, sans-serif`;
+  }
   
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillText('💎 DIAMOND MINE 💎', W/2 + 3, H*0.3 + 3);
+  ctx.fillText(titleText, W/2 + 3, H*0.26 + 3);
   
-  const tgrd = ctx.createLinearGradient(W*0.2, H*0.25, W*0.8, H*0.35);
+  const tgrd = ctx.createLinearGradient(W*0.2, H*0.21, W*0.8, H*0.31);
   tgrd.addColorStop(0, '#40E0FF');
   tgrd.addColorStop(0.5, '#E0FFFF');
   tgrd.addColorStop(1, '#40E0FF');
   ctx.fillStyle = tgrd;
-  ctx.fillText('💎 DIAMOND MINE 💎', W/2, H*0.3);
+  ctx.fillText(titleText, W/2, H*0.26);
   
-  ctx.font = `${titleSize*0.3}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(200,180,140,0.7)';
-  ctx.fillText('A Boulder Dash Adventure', W/2, H*0.38);
+  ctx.font = `${titleSize*0.34}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(235,210,160,0.85)';
+  ctx.fillText('High-res pixel Boulder Dash', W/2, H*0.34);
   
-  const instrSize = titleSize * 0.28;
+  const instrSize = Math.max(12 * DPR, titleSize * 0.25);
   ctx.font = `${instrSize}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  const instructions = [
-    '⛏️  Dig through dirt to find gems',
-    '💎  Collect enough gems to open the exit',
-    '🪨  Boulders fall when unsupported — crush enemies!',
-    '👾  Avoid the cave creatures',
-    '🧨  Collect dynamite — SPACE / tap 🧨 button to place',
-    '🚪  Reach the exit to advance'
+  ctx.fillStyle = 'rgba(255,255,255,0.78)';
+  const instructions = showScores ? [] : [
+    '⛏️ Dig for gems  •  🪨 dodge falling boulders',
+    '💎 Open the exit  •  👾 crush cave creatures',
+    '🧨 Dynamite clears traps  •  🚪 escape the cave'
   ];
   instructions.forEach((txt, i) => {
-    ctx.fillText(txt, W/2, H*0.48 + i * instrSize * 1.8);
+    ctx.fillText(txt, W/2, H*0.45 + i * instrSize * 1.75);
   });
   
-  ctx.font = `${instrSize*0.9}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(200,200,200,0.5)';
-  ctx.fillText('Arrow Keys / WASD / Swipe to move  •  SPACE / 🧨 button = Place dynamite', W/2, H*0.78);
+  ctx.font = `${instrSize*0.82}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(220,230,255,0.58)';
+  if (!showScores) ctx.fillText('Swipe / D-pad / WASD to move', W/2, H*0.64);
   
   const pulse = 0.85 + Math.sin(titleAnimT * 3) * 0.15;
   const btnW = W * 0.3 * pulse;
@@ -3320,6 +3472,10 @@ function drawTitle() {
   ctx.font = `bold ${btnH*0.45}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = '#fff';
   ctx.fillText('TAP TO PLAY', W/2, btnY);
+  ctx.font = `${Math.max(10*DPR, titleSize*0.16)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillText(`${VERSION}  •  tap to start  •  H toggles scores`, W/2, H*0.94);
+  if (showScores) drawScoresPanel(W/2, H*0.58, Math.min(W*0.88, 440*DPR), Math.min(H*0.44, 300*DPR), -1);
   
   drawVignette();
 }
@@ -3330,6 +3486,7 @@ function drawLevelClear() {
   ctx.fillRect(0, 0, W, H);
   
   const titleSize = Math.min(W * 0.07, H * 0.09);
+  if (hsEntry.active) { drawHighScoreEntry(); return; }
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   
@@ -3368,6 +3525,63 @@ function drawLevelClear() {
   ctx.globalAlpha = 1;
 }
 
+function drawScoresPanel(cx, cy, w, h, highlightIdx) {
+  const scores = loadHighScores();
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(5,8,18,0.72)';
+  ctx.strokeStyle = 'rgba(255,215,90,0.35)'; ctx.lineWidth = Math.max(1, DPR);
+  ctx.beginPath(); ctx.roundRect(cx-w/2, cy-h/2, w, h, 16*DPR); ctx.fill(); ctx.stroke();
+  ctx.font = `bold ${Math.max(13*DPR, h*0.085)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = '#ffd95c'; ctx.fillText('HIGH SCORES', cx, cy-h*0.38);
+  ctx.font = `${Math.max(10*DPR, h*0.062)}px monospace`;
+  if (!scores.length) { ctx.fillStyle = 'rgba(255,255,255,0.62)'; ctx.fillText('No scores yet — mine the first legend.', cx, cy); ctx.restore(); return; }
+  const startY = cy - h*0.25;
+  for (let i=0; i<Math.min(scores.length, 10); i++) {
+    const e = scores[i];
+    const y = startY + i * h*0.06;
+    ctx.fillStyle = i === highlightIdx ? '#fff59a' : i === 0 ? '#ffd95c' : 'rgba(235,245,255,0.82)';
+    const rank = String(i+1).padStart(2,' ');
+    const sc = String(e.score).padStart(6,' ');
+    ctx.fillText(`${rank}. ${e.initials || '---'}  ${sc}  CAVE ${e.level || 1}`, cx, y);
+  }
+  ctx.restore();
+}
+function drawHighScoreEntry() {
+  if (!hsEntry.active) return;
+  const titleSize = Math.min(W * 0.07, H * 0.09);
+  if (hsEntry.submitted) {
+    drawScoresPanel(W/2, H*0.56, Math.min(W*0.82, 500*DPR), Math.min(H*0.46, 330*DPR), hsEntry.newIdx);
+    ctx.font = `${titleSize*0.25}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('Tap or press any key after the shimmer settles', W/2, H*0.84);
+    return;
+  }
+  ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='rgba(0,0,0,0.82)'; ctx.fillRect(0,0,W,H);
+  ctx.font = `bold ${titleSize*0.65}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle='#ffd95c'; ctx.fillText('NEW HIGH SCORE', W/2, H*0.24);
+  ctx.font = `${titleSize*0.32}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle='#fff'; ctx.fillText(`Score ${hsEntry.score}  •  Cave ${hsEntry.level}`, W/2, H*0.33);
+  const spacing = Math.min(W*0.12, 70*DPR);
+  for (let i=0; i<3; i++) {
+    const x = W/2 + (i-1)*spacing;
+    ctx.fillStyle = hsEntry.pos === i ? 'rgba(255,217,80,0.25)' : 'rgba(255,255,255,0.08)';
+    ctx.strokeStyle = hsEntry.pos === i ? '#ffd95c' : 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = Math.max(2, DPR*2);
+    ctx.beginPath(); ctx.roundRect(x-spacing*0.34, H*0.45, spacing*0.68, spacing*0.78, 8*DPR); ctx.fill(); ctx.stroke();
+    ctx.font = `bold ${spacing*0.54}px monospace`; ctx.fillStyle = '#fff'; ctx.fillText(hsEntry.initials[i], x, H*0.50);
+    ctx.font = `${spacing*0.22}px monospace`; ctx.fillStyle='rgba(255,255,255,0.65)'; ctx.fillText('▲', x, H*0.43); ctx.fillText('▼', x, H*0.59);
+  }
+  ctx.font = `bold ${titleSize*0.28}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle='rgba(0,180,255,0.35)'; ctx.beginPath(); ctx.roundRect(W/2-W*0.16, H*0.70, W*0.32, H*0.075, 14*DPR); ctx.fill();
+  ctx.strokeStyle='rgba(120,220,255,0.7)'; ctx.stroke(); ctx.fillStyle='#fff'; ctx.fillText('SAVE SCORE', W/2, H*0.738);
+  ctx.font = `${titleSize*0.20}px 'Segoe UI', system-ui, sans-serif`; ctx.fillStyle='rgba(255,255,255,0.55)';
+  ctx.fillText('Tap letters or use arrows/WASD. Enter/Space saves.', W/2, H*0.84);
+  ctx.restore();
+}
+
 // ─── Game Over / Win ───
 function drawGameOver() {
   ctx.fillStyle = `rgba(0,0,0,${Math.min(gameOverTimer * 0.5, 0.7)})`;
@@ -3399,6 +3613,7 @@ function drawWin() {
   ctx.fillRect(0, 0, W, H);
   
   const titleSize = Math.min(W * 0.06, H * 0.08);
+  if (hsEntry.active) { drawHighScoreEntry(); return; }
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   
@@ -3510,6 +3725,7 @@ function render() {
   drawHUD();
   updateDynamiteBtn();
   drawDynamiteBtn();
+  drawDPad();
   drawTouchRipples();
   
   // Overlays
