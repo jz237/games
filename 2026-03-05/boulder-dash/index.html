@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.1.15</title>
+<title>Emerald Mine — Crystal Caves v2.1.16</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.1.15 — title music wake flow and mobile title readability
+//  v2.1.16 — pause button, mouse control, richer title music
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.1.15';
+const VERSION = 'v2.1.16';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -202,16 +202,28 @@ function startTitleMusic() {
   try { ensureAudio(); } catch(e) { return; }
   titleMusicUnlocked = true;
   playIntroArp();
-  const melody = [392, 494, 587, 740, 659, 587, 494, 370, 392, 494, 622, 784, 740, 587, 494, 330];
-  const bass = [98, 98, 123, 123, 147, 147, 123, 110];
+  // Longer minor-key cave theme: bass ostinato + shifting melody + occasional sparkle/percussion.
+  const phrases = [
+    [392, 494, 587, 659, 740, 659, 587, 494, 440, 523, 659, 784, 740, 622, 523, 392],
+    [330, 392, 494, 587, 622, 587, 494, 392, 370, 466, 554, 698, 659, 554, 466, 370],
+    [294, 370, 440, 554, 587, 698, 587, 440, 330, 415, 523, 622, 740, 622, 523, 415],
+    [247, 330, 392, 494, 587, 494, 392, 330, 294, 370, 494, 587, 659, 587, 494, 370]
+  ];
+  const bass = [98, 98, 123, 98, 147, 147, 123, 110, 82, 82, 110, 123, 147, 165, 147, 123];
+  const harmony = [196, 247, 294, 330, 370, 330, 294, 247, 220, 262, 330, 392, 370, 311, 262, 196];
   titleMusicBeat = 0;
   titleMusicTimer = setInterval(() => {
     if (state !== 'title') { stopTitleMusic(); return; }
     const step = titleMusicBeat++;
-    playTone(melody[step % melody.length], 0.10, 'sine', 0.035);
-    if (step % 2 === 0) playTone(bass[Math.floor(step / 2) % bass.length], 0.18, 'triangle', 0.028);
-    if (step % 4 === 3) playTone(1200 + (step % 8) * 30, 0.035, 'square', 0.012);
-  }, 260);
+    const phrase = phrases[Math.floor(step / 16) % phrases.length];
+    const idx = step % phrase.length;
+    const swing = (step % 8 === 6) ? 1.5 : 1;
+    playTone(phrase[idx], 0.10 * swing, step % 5 === 0 ? 'triangle' : 'sine', 0.030 + (idx % 4 === 0 ? 0.010 : 0));
+    if (step % 2 === 0) playTone(bass[step % bass.length], 0.20, 'triangle', 0.026);
+    if (step % 4 === 2) playTone(harmony[step % harmony.length], 0.16, 'sine', 0.018);
+    if (step % 8 === 3 || step % 16 === 14) playTone(1300 + (step % 6) * 95, 0.04, 'square', 0.010);
+    if (step % 16 === 0) playTone(74, 0.08, 'sawtooth', 0.018);
+  }, 235);
 }
 
 
@@ -285,43 +297,54 @@ function handleHighScoreKey(e) {
   return false;
 }
 
-// ─── Mobile D-Pad ───
-const dpad = { cx:0, cy:0, r:0, visible:false, active:null };
-function updateDPad() {
-  dpad.visible = state === 'playing';
-  dpad.r = Math.max(25 * DPR, Math.min(W, H) * 0.048);
-  dpad.cx = dpad.r * 1.85;
-  dpad.cy = H - dpad.r * 1.75;
+// ─── Pause Button (replaces old D-pad) ───
+const pauseBtn = { x: 0, y: 0, r: 0, visible: false };
+function updatePauseBtn() {
+  pauseBtn.visible = state === 'playing' && !player.dead;
+  pauseBtn.r = Math.max(20 * DPR, Math.min(W, H) * 0.036);
+  pauseBtn.x = pauseBtn.r * 1.55;
+  pauseBtn.y = H - pauseBtn.r * 1.55;
 }
-function getDPadDir(x, y) {
-  updateDPad();
-  const dx = x - dpad.cx, dy = y - dpad.cy;
-  const d = Math.sqrt(dx*dx + dy*dy);
-  if (d > dpad.r * 1.85) return null;
-  if (Math.abs(dx) < dpad.r * 0.35 && Math.abs(dy) < dpad.r * 0.35) return null;
-  return Math.abs(dx) > Math.abs(dy) ? { dx: dx > 0 ? 1 : -1, dy:0 } : { dx:0, dy: dy > 0 ? 1 : -1 };
+function isPauseBtnTap(screenX, screenY) {
+  if (!pauseBtn.visible) return false;
+  const dx = screenX - pauseBtn.x;
+  const dy = screenY - pauseBtn.y;
+  return dx*dx + dy*dy <= (pauseBtn.r * 1.35) ** 2;
 }
-function drawDPad() {
-  updateDPad();
-  if (!dpad.visible) return;
-  const {cx, cy, r} = dpad;
-  const pads = [
-    {x:cx, y:cy-r, label:'▲', dx:0, dy:-1}, {x:cx, y:cy+r, label:'▼', dx:0, dy:1},
-    {x:cx-r, y:cy, label:'◀', dx:-1, dy:0}, {x:cx+r, y:cy, label:'▶', dx:1, dy:0}
-  ];
+function togglePause() {
+  if (state !== 'playing' || player.dead) return false;
+  paused = !paused;
+  touchHoldActive = false;
+  mouseHoldActive = false;
+  touchHoldDir = { dx: 0, dy: 0 };
+  mouseHoldDir = { dx: 0, dy: 0 };
+  inputQueue = [];
+  playTone(paused ? 260 : 520, 0.08, 'triangle', 0.055);
+  return true;
+}
+function drawPauseBtn() {
+  updatePauseBtn();
+  if (!pauseBtn.visible) return;
+  const { x, y, r } = pauseBtn;
   ctx.save();
-  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font=`bold ${r*0.45}px monospace`;
-  for (const p of pads) {
-    const active = dpad.active && dpad.active.dx === p.dx && dpad.active.dy === p.dy;
-    ctx.fillStyle = active ? 'rgba(255,217,80,0.42)' : 'rgba(255,255,255,0.16)';
-    ctx.strokeStyle = active ? 'rgba(255,240,140,0.75)' : 'rgba(255,255,255,0.28)';
-    ctx.lineWidth = Math.max(1, DPR*1.5);
-    ctx.beginPath(); ctx.roundRect(p.x-r*0.36, p.y-r*0.36, r*0.72, r*0.72, r*0.12); ctx.fill(); ctx.stroke();
-    ctx.fillStyle='rgba(255,255,255,0.82)'; ctx.fillText(p.label, p.x, p.y);
+  const glow = ctx.createRadialGradient(x, y, r * 0.35, x, y, r * 1.35);
+  glow.addColorStop(0, paused ? 'rgba(255,220,120,0.25)' : 'rgba(160,220,255,0.18)');
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(x, y, r * 1.35, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = paused ? 'rgba(95,72,25,0.78)' : 'rgba(10,18,28,0.62)';
+  ctx.strokeStyle = paused ? 'rgba(255,225,130,0.72)' : 'rgba(180,230,255,0.42)';
+  ctx.lineWidth = Math.max(1, DPR * 1.25);
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(235,250,255,0.88)';
+  if (paused) {
+    ctx.beginPath();
+    ctx.moveTo(x - r*0.22, y - r*0.34); ctx.lineTo(x - r*0.22, y + r*0.34); ctx.lineTo(x + r*0.34, y); ctx.closePath(); ctx.fill();
+  } else {
+    ctx.fillRect(x - r*0.28, y - r*0.36, r*0.18, r*0.72);
+    ctx.fillRect(x + r*0.10, y - r*0.36, r*0.18, r*0.72);
   }
   ctx.restore();
 }
-
 // ─── Dynamite Button (mobile) ───
 const dynamiteBtn = { x: 0, y: 0, r: 0, visible: false };
 const retryBtn = { x: 0, y: 0, r: 0, visible: false };
@@ -444,6 +467,7 @@ const LEVELS = [
 ];
 
 let state = 'title'; // title, playing, levelClear, gameOver, win
+let paused = false;
 let level = 0;
 let grid = [];
 let gridW, gridH;
@@ -494,6 +518,12 @@ let touchHoldActive = false;
 let touchStartPos = null;
 let touchCurrentPos = null;
 let touchHoldTimer = 0;
+let mouseHoldDir = { dx: 0, dy: 0 };
+let mouseHoldActive = false;
+let mouseHoldTimer = 0;
+let mouseStartPos = null;
+let mouseCurrentPos = null;
+let mouseDown = false;
 const TOUCH_MOVE_THRESHOLD = 25; // pixels to determine direction
 
 // Physics tick timing
@@ -790,6 +820,7 @@ function generateLevel(lvl) {
   celebrationParticles = [];
   fallMap = {};
   trappedTimer = 0;
+  paused = false;
   inputQueue = [];
   moveCD = 0;
   physicsTick = 0;
@@ -802,6 +833,12 @@ function generateLevel(lvl) {
   touchStartPos = null;
   touchCurrentPos = null;
   touchHoldTimer = 0;
+  mouseHoldDir = { dx: 0, dy: 0 };
+  mouseHoldActive = false;
+  mouseHoldTimer = 0;
+  mouseStartPos = null;
+  mouseCurrentPos = null;
+  mouseDown = false;
   slowMoTimer = 0;
   slowMoFactor = 1;
   
@@ -966,6 +1003,10 @@ window.addEventListener('keydown', e => {
     retryLevelAction();
     return;
   }
+  if (e.code === 'KeyP' && state === 'playing') {
+    togglePause();
+    return;
+  }
   
   if (!keys[e.code]) {
     keys[e.code] = true;
@@ -1035,7 +1076,6 @@ canvas.addEventListener('touchstart', e => {
     touchStart = null;
     touchStartPos = null;
     touchCurrentPos = null;
-    dpad.active = null;
     return;
   }
   if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.touches[0].clientX * DPR, e.touches[0].clientY * DPR); return; }
@@ -1045,9 +1085,15 @@ canvas.addEventListener('touchstart', e => {
   
   const t = e.touches[0];
   
-  // Check dynamite button tap FIRST (before movement handling)
+  // Check control buttons FIRST (before movement handling)
+  updatePauseBtn();
   updateDynamiteBtn();
   updateRetryBtn();
+  if (isPauseBtnTap(t.clientX * DPR, t.clientY * DPR)) {
+    togglePause();
+    return;
+  }
+  if (paused) return;
   if (isRetryBtnTap(t.clientX * DPR, t.clientY * DPR)) {
     retryLevelAction();
     return; // Don't process as movement
@@ -1055,17 +1101,6 @@ canvas.addEventListener('touchstart', e => {
   if (isDynamiteBtnTap(t.clientX * DPR, t.clientY * DPR)) {
     placeDynamiteAction();
     return; // Don't process as movement
-  }
-  const padDir = getDPadDir(t.clientX * DPR, t.clientY * DPR);
-  if (padDir) {
-    dpad.active = padDir;
-    inputQueue.push(padDir);
-    touchHoldDir = padDir;
-    touchHoldActive = true;
-    touchHoldTimer = TOUCH_MOVE_THRESHOLD;
-    touchStart = { x: t.clientX, y: t.clientY, time: Date.now() };
-    touchStartPos = { x: t.clientX, y: t.clientY };
-    return;
   }
   
   touchStart = { x: t.clientX, y: t.clientY, time: Date.now() };
@@ -1125,7 +1160,6 @@ canvas.addEventListener('touchend', e => {
       touchStartPos = null;
       touchCurrentPos = null;
       touchHoldDir = { dx: 0, dy: 0 };
-      dpad.active = null;
     }
     return;
   }
@@ -1152,15 +1186,64 @@ canvas.addEventListener('touchend', e => {
   touchCurrentPos = null;
   touchHoldActive = false;
   touchHoldDir = { dx: 0, dy: 0 };
-  dpad.active = null;
 }, { passive: false });
 
 // Mouse click for desktop
+canvas.addEventListener('mousedown', e => {
+  ensureAudio();
+  updatePauseBtn(); updateDynamiteBtn(); updateRetryBtn();
+  const sx = e.clientX * DPR, sy = e.clientY * DPR;
+  if (state === 'title' || hsEntry.active || state === 'gameOver' || state === 'win') return;
+  if (isPauseBtnTap(sx, sy)) { togglePause(); return; }
+  if (paused) return;
+  if (isRetryBtnTap(sx, sy)) { retryLevelAction(); return; }
+  if (isDynamiteBtnTap(sx, sy)) { placeDynamiteAction(); return; }
+  mouseDown = true;
+  mouseStartPos = { x: e.clientX, y: e.clientY };
+  mouseCurrentPos = { x: e.clientX, y: e.clientY };
+  mouseHoldActive = false;
+  mouseHoldTimer = 0;
+});
+
+window.addEventListener('mousemove', e => {
+  if (!mouseDown || !mouseStartPos || paused) return;
+  mouseCurrentPos = { x: e.clientX, y: e.clientY };
+  const dx = mouseCurrentPos.x - mouseStartPos.x;
+  const dy = mouseCurrentPos.y - mouseStartPos.y;
+  const d = Math.sqrt(dx*dx + dy*dy);
+  if (d > TOUCH_MOVE_THRESHOLD) {
+    const ndir = Math.abs(dx) > Math.abs(dy) ? { dx: dx > 0 ? 1 : -1, dy: 0 } : { dx: 0, dy: dy > 0 ? 1 : -1 };
+    if (!mouseHoldActive || mouseHoldDir.dx !== ndir.dx || mouseHoldDir.dy !== ndir.dy) {
+      if (!mouseHoldActive) inputQueue.push(ndir);
+      mouseHoldDir = ndir;
+      mouseHoldActive = true;
+      mouseHoldTimer = 0;
+    }
+  }
+});
+
+window.addEventListener('mouseup', e => {
+  if (!mouseDown) return;
+  mouseDown = false;
+  if (!mouseHoldActive && mouseStartPos && !paused) {
+    const dx = e.clientX - mouseStartPos.x;
+    const dy = e.clientY - mouseStartPos.y;
+    const d = Math.sqrt(dx*dx + dy*dy);
+    if (d > 20) inputQueue.push(Math.abs(dx) > Math.abs(dy) ? { dx: dx > 0 ? 1 : -1, dy: 0 } : { dx: 0, dy: dy > 0 ? 1 : -1 });
+  }
+  mouseHoldActive = false;
+  mouseHoldDir = { dx: 0, dy: 0 };
+  mouseStartPos = null;
+  mouseCurrentPos = null;
+});
+
 canvas.addEventListener('click', e => {
   ensureAudio();
+  updatePauseBtn();
   updateDynamiteBtn();
   updateRetryBtn();
-  if (isRetryBtnTap(e.clientX * DPR, e.clientY * DPR)) { retryLevelAction(); return; }
+  if (isPauseBtnTap(e.clientX * DPR, e.clientY * DPR)) { return; }
+  if (isRetryBtnTap(e.clientX * DPR, e.clientY * DPR)) { return; }
   if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.clientX * DPR, e.clientY * DPR); return; }
   if (state === 'title') { if (!titleMusicUnlocked) { startTitleMusic(); return; } newGame(); return; }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
@@ -1753,6 +1836,11 @@ function update(dt) {
   }
   
   // ── Playing state ──
+  if (paused) {
+    touchRipples.forEach(r => r.t += dt * 1.2);
+    touchRipples = touchRipples.filter(r => r.t < 1);
+    return;
+  }
   
   // Player death recovery
   if (player.dead) {
@@ -1796,7 +1884,7 @@ function update(dt) {
       // If a direction is being held, consume the next step immediately instead of pausing between tiles.
       const chained = touchHoldActive && (touchHoldDir.dx || touchHoldDir.dy)
         ? touchHoldDir
-        : (getContinuousInput() || inputQueue.shift());
+        : (mouseHoldActive && (mouseHoldDir.dx || mouseHoldDir.dy) ? mouseHoldDir : (getContinuousInput() || inputQueue.shift()));
       if (chained && !player.dead) {
         tryMovePlayer(chained.dx, chained.dy);
       }
@@ -1878,6 +1966,15 @@ function update(dt) {
     }
   }
   
+  // Hold-to-move (mouse drag on desktop)
+  if (mouseHoldActive && !player.dead && !player.moving) {
+    mouseHoldTimer += effectiveDt;
+    if (mouseHoldTimer >= moveRate) {
+      mouseHoldTimer = 0;
+      if (mouseHoldDir.dx || mouseHoldDir.dy) tryMovePlayer(mouseHoldDir.dx, mouseHoldDir.dy);
+    }
+  }
+
   // Process input queue
   moveCD -= effectiveDt;
   if (!player.dead && !player.moving && moveCD <= 0) {
@@ -4026,7 +4123,7 @@ function drawTitle() {
 
   ctx.font = `${Math.max(9*DPR, titleSize*0.15)}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = 'rgba(230,255,238,0.66)';
-  ctx.fillText(`${VERSION}  •  swipe / D-pad / WASD  •  H scores`, cx, H*0.94);
+  ctx.fillText(`${VERSION}  •  finger / mouse drag / WASD  •  H scores`, cx, H*0.94);
   if (showScores) drawScoresPanel(cx, H*0.58, Math.min(W*0.88, 440*DPR), Math.min(H*0.44, 300*DPR), -1);
   drawVignette();
 }
@@ -4201,6 +4298,23 @@ function drawWin() {
   }
 }
 
+function drawPauseOverlay() {
+  if (!paused || state !== 'playing') return;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const size = Math.min(W * 0.12, H * 0.09, 64 * DPR);
+  ctx.font = `900 ${size}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(235,255,245,0.94)';
+  ctx.fillText('PAUSED', W/2, H*0.44);
+  ctx.font = `600 ${Math.max(12 * DPR, size * 0.25)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(210,245,230,0.78)';
+  ctx.fillText('tap the pause button or press P', W/2, H*0.52);
+  ctx.restore();
+}
+
 // ─── Main Render ───
 function render() {
   ctx.clearRect(0, 0, W, H);
@@ -4285,14 +4399,16 @@ function render() {
   drawVignette();
   drawFlash();
   drawHUD();
+  updatePauseBtn();
   updateDynamiteBtn();
   updateRetryBtn();
+  drawPauseBtn();
   drawRetryBtn();
   drawDynamiteBtn();
-  drawDPad();
   drawTouchRipples();
   
   // Overlays
+  drawPauseOverlay();
   if (state === 'levelClear') drawLevelClear();
   if (state === 'gameOver') drawGameOver();
   if (state === 'win') drawWin();
