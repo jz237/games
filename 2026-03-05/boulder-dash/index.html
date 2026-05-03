@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.1.19</title>
+<title>Emerald Mine — Crystal Caves v2.1.20</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.1.19 — miner step sounds plus distinct dirt digging
+//  v2.1.20 — global high scores wired to Cloudflare leaderboard
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.1.19';
+const VERSION = 'v2.1.20';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -278,7 +278,11 @@ function startTitleMusic() {
 
 // ─── Run / High Scores ───
 const HS_KEY = 'diamond_mine_boulder_dash_v2_scores';
+const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/emerald-mine';
 const MAX_SCORES = 10;
+let globalScoresCache = null;
+let globalScoresCacheTime = 0;
+let globalScoresLoading = false;
 let hsEntry = { active:false, initials:['A','A','A'], pos:0, score:0, level:1, newIdx:-1, submitted:false };
 let showScores = false;
 
@@ -310,6 +314,37 @@ function loadHighScores() {
 }
 function saveHighScores(scores) { try { localStorage.setItem(HS_KEY, JSON.stringify(scores.slice(0, MAX_SCORES))); } catch(e) {} }
 function isHighScore(v) { const hs = loadHighScores(); return v > 0 && (hs.length < MAX_SCORES || v > (hs[hs.length-1]?.score || 0)); }
+async function fetchGlobalScores(force=false) {
+  const now = Date.now();
+  if (!force && globalScoresCache && now - globalScoresCacheTime < 30000) return globalScoresCache;
+  if (globalScoresLoading) return globalScoresCache || [];
+  globalScoresLoading = true;
+  try {
+    const res = await fetch(SCORES_API, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      globalScoresCache = Array.isArray(data) ? data : [];
+      globalScoresCacheTime = Date.now();
+    }
+  } catch(e) {}
+  globalScoresLoading = false;
+  return globalScoresCache || [];
+}
+function requestGlobalScores() { fetchGlobalScores(false); }
+async function submitGlobalScore(initials, sc, cave) {
+  const entry = { initials, score: sc, level: cave, cave, ts: Date.now() };
+  if (globalScoresCache) {
+    globalScoresCache = [...globalScoresCache, entry].sort((a,b) => b.score - a.score).slice(0, 50);
+    globalScoresCacheTime = Date.now();
+  }
+  try {
+    const res = await fetch(SCORES_API, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initials, score: sc, level: cave, cave })
+    });
+    if (res.ok) fetchGlobalScores(true);
+  } catch(e) {}
+}
 function startHighScoreEntry(finalScore) {
   hsEntry = { active:true, initials:['A','A','A'], pos:0, score:finalScore, level:highestLevelReached, newIdx:-1, submitted:false };
 }
@@ -324,6 +359,7 @@ function submitHighScore() {
   saveHighScores(trimmed);
   hsEntry.newIdx = trimmed.findIndex(e => e.id === entry.id);
   hsEntry.submitted = true;
+  submitGlobalScore(initials, hsEntry.score, hsEntry.level);
   sfxHighScore();
 }
 function enterEndState(nextState) {
@@ -4226,23 +4262,55 @@ function drawLevelClear() {
 
 function drawScoresPanel(cx, cy, w, h, highlightIdx) {
   const scores = loadHighScores();
+  requestGlobalScores();
+  const globalScores = globalScoresCache || [];
   ctx.save();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(5,12,8,0.78)';
+  ctx.fillStyle = 'rgba(5,12,8,0.82)';
   ctx.strokeStyle = 'rgba(80,220,140,0.35)'; ctx.lineWidth = Math.max(1, DPR);
   ctx.beginPath(); ctx.roundRect(cx-w/2, cy-h/2, w, h, 16*DPR); ctx.fill(); ctx.stroke();
-  ctx.font = `bold ${Math.max(13*DPR, h*0.085)}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = '#60ffa0'; ctx.fillText('HIGH SCORES', cx, cy-h*0.38);
-  ctx.font = `${Math.max(10*DPR, h*0.062)}px monospace`;
-  if (!scores.length) { ctx.fillStyle = 'rgba(255,255,255,0.62)'; ctx.fillText('No scores yet — mine the first legend.', cx, cy); ctx.restore(); return; }
-  const startY = cy - h*0.25;
-  for (let i=0; i<Math.min(scores.length, 10); i++) {
-    const e = scores[i];
-    const y = startY + i * h*0.06;
-    ctx.fillStyle = i === highlightIdx ? '#fff59a' : i === 0 ? '#ffd95c' : 'rgba(235,245,255,0.82)';
-    const rank = String(i+1).padStart(2,' ');
-    const sc = String(e.score).padStart(6,' ');
-    ctx.fillText(`${rank}. ${e.initials || '---'}  ${sc}  CAVE ${e.level || 1}`, cx, y);
+  const titleFont = Math.max(12*DPR, h*0.062);
+  const rowFont = Math.max(8.5*DPR, h*0.046);
+  ctx.font = `bold ${titleFont}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = '#60ffa0'; ctx.fillText('HIGH SCORES', cx, cy-h*0.42);
+
+  const leftX = cx - w * 0.25;
+  const rightX = cx + w * 0.25;
+  const topY = cy - h * 0.30;
+  ctx.font = `bold ${Math.max(9*DPR, rowFont*0.95)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = '#5be4ff'; ctx.fillText('🏠 LOCAL', leftX, topY);
+  ctx.fillStyle = '#ffd95c'; ctx.fillText('🌐 GLOBAL', rightX, topY);
+  ctx.font = `${rowFont}px monospace`;
+
+  if (!scores.length) {
+    ctx.fillStyle = 'rgba(255,255,255,0.52)';
+    ctx.fillText('No local scores', leftX, topY + h*0.11);
+  } else {
+    for (let i=0; i<Math.min(scores.length, 10); i++) {
+      const e = scores[i];
+      const y = topY + h*0.075 + i * h*0.052;
+      ctx.fillStyle = i === highlightIdx ? '#fff59a' : i === 0 ? '#8cf7ff' : 'rgba(210,245,255,0.82)';
+      const rank = String(i+1).padStart(2,' ');
+      const sc = String(e.score).padStart(6,' ');
+      ctx.fillText(`${rank}. ${e.initials || '---'} ${sc} C${e.level || e.cave || 1}`, leftX, y);
+    }
+  }
+
+  if (globalScoresLoading && !globalScores.length) {
+    ctx.fillStyle = 'rgba(255,255,255,0.52)';
+    ctx.fillText('Loading...', rightX, topY + h*0.11);
+  } else if (!globalScores.length) {
+    ctx.fillStyle = 'rgba(255,255,255,0.52)';
+    ctx.fillText('No global scores', rightX, topY + h*0.11);
+  } else {
+    for (let i=0; i<Math.min(globalScores.length, 10); i++) {
+      const e = globalScores[i];
+      const y = topY + h*0.075 + i * h*0.052;
+      ctx.fillStyle = i === 0 ? '#ffe082' : 'rgba(255,235,160,0.86)';
+      const rank = String(i+1).padStart(2,' ');
+      const sc = String(e.score || 0).padStart(6,' ');
+      ctx.fillText(`${rank}. ${e.initials || '---'} ${sc} C${e.level || e.cave || '?'}`, rightX, y);
+    }
   }
   ctx.restore();
 }

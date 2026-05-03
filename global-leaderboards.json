@@ -40,5 +40,12 @@
     "url": "https://game-scores.jez237.workers.dev/scores/neon-qix",
     "playUrl": "https://jz237.github.io/games/2026-04-09/quix-modern/",
     "scoreLabel": "LV"
+  },
+  {
+    "slug": "emerald-mine",
+    "name": "Emerald Mine: Crystal Caves",
+    "url": "https://game-scores.jez237.workers.dev/scores/emerald-mine",
+    "playUrl": "https://jz237.github.io/games/2026-03-05/boulder-dash/",
+    "scoreLabel": "C"
   }
 ]
