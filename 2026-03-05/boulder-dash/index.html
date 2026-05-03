@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.1.7</title>
+<title>Emerald Mine — Crystal Caves v2.1.8</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.1.7 — slower miner movement and stronger falling boulder impacts
+//  v2.1.8 — boulder head-crush death plus trapped/retry handling
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.1.7';
+const VERSION = 'v2.1.8';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -294,6 +294,7 @@ function drawDPad() {
 
 // ─── Dynamite Button (mobile) ───
 const dynamiteBtn = { x: 0, y: 0, r: 0, visible: false };
+const retryBtn = { x: 0, y: 0, r: 0, visible: false };
 
 function updateDynamiteBtn() {
   dynamiteBtn.visible = state === 'playing' && player.dynamite > 0 && !player.dead;
@@ -302,11 +303,39 @@ function updateDynamiteBtn() {
   dynamiteBtn.y = H - dynamiteBtn.r * 1.8;
 }
 
+function updateRetryBtn() {
+  retryBtn.visible = state === 'playing' && !player.dead;
+  retryBtn.r = Math.max(30 * DPR, Math.min(W, H) * 0.047);
+  retryBtn.x = W - retryBtn.r * 1.55;
+  retryBtn.y = dynamiteBtn.visible ? H - retryBtn.r * 4.35 : H - retryBtn.r * 1.7;
+}
+
+function isRetryBtnTap(screenX, screenY) {
+  if (!retryBtn.visible) return false;
+  const dx = screenX - retryBtn.x;
+  const dy = screenY - retryBtn.y;
+  return dx*dx + dy*dy <= (retryBtn.r * 1.45) ** 2;
+}
+
 function isDynamiteBtnTap(screenX, screenY) {
   if (!dynamiteBtn.visible) return false;
   const dx = screenX - dynamiteBtn.x;
   const dy = screenY - dynamiteBtn.y;
   return dx*dx + dy*dy <= (dynamiteBtn.r * 1.4) ** 2; // generous hit area
+}
+
+function retryLevelAction() {
+  if (state !== 'playing' || player.dead) return false;
+  player.lives--;
+  runLives = player.lives;
+  if (runLives <= 0) {
+    enterEndState('gameOver');
+  } else {
+    sfxDeath();
+    screenShake(5);
+    generateLevel(level);
+  }
+  return true;
 }
 
 function placeDynamiteAction() {
@@ -319,6 +348,35 @@ function placeDynamiteAction() {
     }
   }
   return false;
+}
+
+function drawRetryBtn() {
+  updateRetryBtn();
+  if (!retryBtn.visible) return;
+  const { x, y, r } = retryBtn;
+  ctx.save();
+  const glow = ctx.createRadialGradient(x, y, r * 0.45, x, y, r * 1.35);
+  glow.addColorStop(0, 'rgba(120,210,255,0.22)');
+  glow.addColorStop(1, 'rgba(120,210,255,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(x, y, r * 1.35, 0, Math.PI * 2); ctx.fill();
+  const grd = ctx.createRadialGradient(x - r*0.25, y - r*0.25, 0, x, y, r);
+  grd.addColorStop(0, 'rgba(65,95,125,0.92)');
+  grd.addColorStop(1, 'rgba(18,28,42,0.92)');
+  ctx.fillStyle = grd;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(165,225,255,0.68)';
+  ctx.lineWidth = Math.max(2, r * 0.07);
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold ${r * 0.78}px 'Segoe UI Symbol', sans-serif`;
+  ctx.fillStyle = 'rgba(235,250,255,0.95)';
+  ctx.fillText('↻', x, y - r * 0.05);
+  ctx.font = `bold ${Math.max(8 * DPR, r * 0.24)}px 'Segoe UI', sans-serif`;
+  ctx.fillStyle = 'rgba(210,240,255,0.78)';
+  ctx.fillText('-1', x, y + r * 0.58);
+  ctx.restore();
 }
 
 function drawDynamiteBtn() {
@@ -401,6 +459,7 @@ let fallMap = {};
 let titleAnimT = 0;
 let slowMoTimer = 0; // death slow-mo
 let slowMoFactor = 1;
+let trappedTimer = 0;
 let celebrationParticles = []; // level clear fountain
 let magicWallActive = false; // magic wall converter active
 let magicWallTimer = 0; // time remaining for magic wall effect
@@ -714,6 +773,7 @@ function generateLevel(lvl) {
   placedDynamite = [];
   celebrationParticles = [];
   fallMap = {};
+  trappedTimer = 0;
   inputQueue = [];
   moveCD = 0;
   physicsTick = 0;
@@ -885,6 +945,10 @@ window.addEventListener('keydown', e => {
     placeDynamiteAction();
     return;
   }
+  if (e.code === 'KeyR' && state === 'playing') {
+    retryLevelAction();
+    return;
+  }
   
   if (!keys[e.code]) {
     keys[e.code] = true;
@@ -965,6 +1029,12 @@ canvas.addEventListener('touchstart', e => {
   const t = e.touches[0];
   
   // Check dynamite button tap FIRST (before movement handling)
+  updateDynamiteBtn();
+  updateRetryBtn();
+  if (isRetryBtnTap(t.clientX * DPR, t.clientY * DPR)) {
+    retryLevelAction();
+    return; // Don't process as movement
+  }
   if (isDynamiteBtnTap(t.clientX * DPR, t.clientY * DPR)) {
     placeDynamiteAction();
     return; // Don't process as movement
@@ -1071,6 +1141,9 @@ canvas.addEventListener('touchend', e => {
 // Mouse click for desktop
 canvas.addEventListener('click', e => {
   ensureAudio();
+  updateDynamiteBtn();
+  updateRetryBtn();
+  if (isRetryBtnTap(e.clientX * DPR, e.clientY * DPR)) { retryLevelAction(); return; }
   if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.clientX * DPR, e.clientY * DPR); return; }
   if (state === 'title') { newGame(); return; }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
@@ -1105,6 +1178,25 @@ function setTile(x, y, t) {
 }
 
 function fallKey(x, y) { return x + ',' + y; }
+
+function canPlayerMove(dx, dy) {
+  if (player.dead || player.moving) return false;
+  const nx = player.gx + dx;
+  const ny = player.gy + dy;
+  const target = tileAt(nx, ny);
+  if (target === TILE.WALL || target === TILE.MAGIC_WALL || target === TILE.ENEMY) return false;
+  for (const en of enemies) if (en.alive && en.gx === nx && en.gy === ny) return false;
+  if (target === TILE.EXIT) return exitOpen;
+  if (target === TILE.BOULDER) {
+    if (player.ghostTimer > 0) return true;
+    return dy === 0 && tileAt(nx + dx, ny) === TILE.EMPTY;
+  }
+  return true;
+}
+
+function playerHasAnyMove() {
+  return canPlayerMove(1, 0) || canPlayerMove(-1, 0) || canPlayerMove(0, 1) || canPlayerMove(0, -1);
+}
 
 function tryMovePlayer(dx, dy) {
   if (player.dead || player.moving) return false;
@@ -1300,6 +1392,7 @@ function updatePhysics() {
       if (t !== TILE.BOULDER && t !== TILE.GEM && t !== TILE.DIAMOND) continue;
       
       const below = grid[y+1][x];
+      const playerBelow = player.gx === x && player.gy === y + 1 && !player.dead;
       const fk = fallKey(x, y);
       const wasFalling = fallMap[fk] || 0;
       
@@ -1342,9 +1435,18 @@ function updatePhysics() {
       }
       
       // Fall straight down (also onto enemies when boulder has momentum)
-      if (below === TILE.EMPTY || enemyBelow) {
-        // Player holds boulder above them
-        if (player.gx === x && player.gy === y + 1 && !player.dead && !enemyBelow) continue;
+      if (below === TILE.EMPTY || enemyBelow || playerBelow) {
+        // A stationary boulder can be held overhead, but a falling one crushes the miner.
+        if (playerBelow && !enemyBelow) {
+          if (wasFalling > 0) {
+            sfxImpact(t, wasFalling);
+            killPlayer();
+            grid[y][x] = TILE.EMPTY;
+            grid[y+1][x] = t;
+            screenShake(10);
+          }
+          continue;
+        }
         
         // Crush the enemy!
         if (enemyBelow) {
@@ -1702,6 +1804,17 @@ function update(dt) {
     }
   }
   
+  // Trapped soft-lock protection: if there is no legal move and no dynamite escape, lose a life.
+  if (!player.dead && !player.moving && player.dynamite <= 0 && player.ghostTimer <= 0 && !playerHasAnyMove()) {
+    trappedTimer += effectiveDt;
+    if (trappedTimer > 3.0) {
+      killPlayer();
+      flashColor = '255,140,40';
+    }
+  } else {
+    trappedTimer = 0;
+  }
+
   // Ghost timer
   if (player.ghostTimer > 0) {
     player.ghostTimer -= effectiveDt;
@@ -3642,6 +3755,13 @@ function drawHUD() {
     ctx.fillText(`Zoom ${Math.round(userZoom * 100)}%`, W / 2, HUD_H - 8 * DPR);
   }
   
+  if (trappedTimer > 0.8 && state === 'playing' && !player.dead) {
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${Math.max(10 * DPR, fontSize * 0.55)}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillStyle = `rgba(255,170,70,${0.65 + Math.sin(globalTime * 12) * 0.25})`;
+    ctx.fillText(`TRAPPED ${Math.max(0, Math.ceil(3 - trappedTimer))}`, W / 2, gemY + fontSize * 0.8);
+  }
+  
   // Dynamite counter (if any)
   if (player.dynamite > 0) {
     ctx.textAlign = 'left';
@@ -4096,6 +4216,8 @@ function render() {
   drawFlash();
   drawHUD();
   updateDynamiteBtn();
+  updateRetryBtn();
+  drawRetryBtn();
   drawDynamiteBtn();
   drawDPad();
   drawTouchRipples();
