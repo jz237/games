@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.1.4</title>
+<title>Emerald Mine — Crystal Caves v2.1.5</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.1.4 — Emerald Mine inspired: magic walls, diamonds, emerald palette
+//  v2.1.5 — Emerald Mine inspired: magic walls, diamonds, emerald palette
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.1.4';
+const VERSION = 'v2.1.5';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -379,8 +379,8 @@ const MAGIC_WALL_DURATION = 12; // seconds magic wall stays active after first t
 // Hold-to-move state
 let holdDir = { dx: 0, dy: 0 };
 let holdTimer = 0;
-const HOLD_INITIAL_DELAY = 0.18; // first repeat delay
-const HOLD_REPEAT_RATE = 0.25; // ~4 tiles/sec = 0.25s per tile
+const HOLD_INITIAL_DELAY = 0.04; // first repeat delay — snappy for mobile
+const HOLD_REPEAT_RATE = 0.115; // smooth continuous tile stepping
 let holdActive = false;
 
 // Touch hold-to-move
@@ -1569,15 +1569,22 @@ function update(dt) {
   
   // Player movement interpolation
   if (player.moving) {
-    const moveSpeed = player.speedTimer > 0 ? 14 : 8;
+    const moveSpeed = player.speedTimer > 0 ? 18 : 11.5;
     player.animT += effectiveDt * moveSpeed;
     if (player.animT >= 1) {
       player.x = player.gx;
       player.y = player.gy;
       player.moving = false;
       player.animT = 1;
+      // If a direction is being held, consume the next step immediately instead of pausing between tiles.
+      const chained = touchHoldActive && (touchHoldDir.dx || touchHoldDir.dy)
+        ? touchHoldDir
+        : (getContinuousInput() || inputQueue.shift());
+      if (chained && !player.dead) {
+        tryMovePlayer(chained.dx, chained.dy);
+      }
     } else {
-      const t = easeOut(player.animT);
+      const t = easeInOut(player.animT);
       player.x = lerp(player.prevX, player.gx, t);
       player.y = lerp(player.prevY, player.gy, t);
     }
@@ -1613,8 +1620,8 @@ function update(dt) {
     if (player.ghostTimer < 0) player.ghostTimer = 0;
   }
   
-  // Hold-to-move (keyboard)
-  const moveRate = player.speedTimer > 0 ? HOLD_REPEAT_RATE * 0.5 : HOLD_REPEAT_RATE;
+  // Hold-to-move (keyboard/touch) — short repeat keeps grid movement smooth without feeling slippery.
+  const moveRate = player.speedTimer > 0 ? HOLD_REPEAT_RATE * 0.55 : HOLD_REPEAT_RATE;
   if (holdActive && !player.dead && !player.moving) {
     holdTimer += effectiveDt;
     if (holdTimer >= HOLD_INITIAL_DELAY) {
@@ -1625,7 +1632,7 @@ function update(dt) {
         if (current) {
           holdDir = current;
           if (tryMovePlayer(holdDir.dx, holdDir.dy)) {
-            holdTimer = HOLD_INITIAL_DELAY; // reset to repeat rate
+            holdTimer = 0;
           }
         }
       }
@@ -1649,7 +1656,7 @@ function update(dt) {
     let input = inputQueue.shift();
     if (input) {
       if (tryMovePlayer(input.dx, input.dy)) {
-        moveCD = 0.06;
+        moveCD = 0.015;
       }
     }
   }
