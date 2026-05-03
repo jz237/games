@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.1.17</title>
+<title>Emerald Mine — Crystal Caves v2.1.18</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.1.17 — title attract sound effects instead of music
+//  v2.1.18 — denser patterned title sound-effects barrage
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.1.17';
+const VERSION = 'v2.1.18';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -200,30 +200,58 @@ function playIntroArp() {
   setTimeout(() => playTone(58, 0.35, 'sawtooth', 0.055), 170);
 }
 function titleAttractSfx(step) {
-  const scene = step % 24;
-  if (scene === 0) { // deep cave settling
-    playTone(52, 0.34, 'sawtooth', 0.040);
-    setTimeout(() => playTone(86, 0.16, 'triangle', 0.032), 80);
-  } else if (scene === 3 || scene === 14) { // emerald shimmer
-    const base = scene === 3 ? 920 : 1180;
-    playTone(base, 0.045, 'sine', 0.030);
-    setTimeout(() => playTone(base * 1.36, 0.055, 'triangle', 0.024), 42);
-    setTimeout(() => playTone(base * 1.78, 0.040, 'sine', 0.018), 92);
-  } else if (scene === 6) { // mine cart clack
-    playTone(180, 0.035, 'square', 0.030);
-    setTimeout(() => playTone(132, 0.035, 'square', 0.026), 70);
-    setTimeout(() => playTone(210, 0.032, 'square', 0.022), 150);
-  } else if (scene === 9 || scene === 21) { // boulder drop in the distance
-    playTone(88, 0.20, 'triangle', 0.060);
-    setTimeout(() => playTone(154, 0.055, 'square', 0.030), 35);
-    setTimeout(() => playTone(45, 0.12, 'sawtooth', 0.030), 75);
-  } else if (scene === 12) { // water drip echo
-    playTone(1450, 0.035, 'sine', 0.020);
-    setTimeout(() => playTone(980, 0.045, 'sine', 0.015), 120);
-  } else if (scene === 17) { // magic wall fizz
-    [700, 930, 1260, 1600].forEach((f, i) => setTimeout(() => playTone(f, 0.035, i % 2 ? 'square' : 'sine', 0.015), i * 34));
-  } else if (Math.random() < 0.22) { // occasional tiny cave ticks
-    playTone(260 + Math.random() * 900, 0.025 + Math.random() * 0.035, Math.random() < 0.5 ? 'triangle' : 'sine', 0.010 + Math.random() * 0.012);
+  // Dense arcade-attract pattern: every tick has a rhythmic bed, with layered cave events.
+  const scene = step % 32;
+  const bar = Math.floor(step / 8) % 4;
+
+  // Pattern bed: mine-cart clack / drip / crystal ping creates a recognizable pulse.
+  if (scene % 2 === 0) {
+    playTone(scene % 8 === 0 ? 132 : 176, 0.028, 'square', 0.018);
+    setTimeout(() => playTone(scene % 8 === 0 ? 82 : 118, 0.025, 'triangle', 0.012), 38);
+  } else {
+    playTone(980 + (scene % 5) * 85, 0.026, 'sine', 0.012);
+  }
+
+  // Backbeat rock knocks.
+  if (scene % 4 === 0) {
+    playTone(64 + bar * 7, 0.11, 'sawtooth', 0.030);
+    setTimeout(() => playTone(150 + scene * 2, 0.034, 'square', 0.018), 24);
+  }
+
+  // Frequent gem cascades — short, bright, not a melody line.
+  if ([1, 5, 10, 13, 18, 23, 27, 30].includes(scene)) {
+    const base = [760, 920, 1080, 1240][(scene + bar) % 4];
+    [1, 1.28, 1.62].forEach((m, i) => setTimeout(() => playTone(base * m, 0.032, i === 1 ? 'triangle' : 'sine', 0.018 - i*0.003), i * 34));
+  }
+
+  // Bigger set-piece effects in a repeating 32-step pattern.
+  if (scene === 0) { // cave wake + boulder
+    playTone(48, 0.38, 'sawtooth', 0.050);
+    setTimeout(() => playTone(92, 0.18, 'triangle', 0.040), 65);
+    setTimeout(() => playTone(154, 0.045, 'square', 0.028), 118);
+  }
+  if (scene === 4 || scene === 20) { // rolling stones
+    [120, 104, 88, 72].forEach((f, i) => setTimeout(() => playTone(f, 0.055, 'triangle', 0.026), i * 45));
+  }
+  if (scene === 7 || scene === 15 || scene === 31) { // magic wall fizz burst
+    [640, 840, 1120, 1480, 1880].forEach((f, i) => setTimeout(() => playTone(f, 0.026, i % 2 ? 'square' : 'sine', 0.012), i * 24));
+  }
+  if (scene === 11 || scene === 25) { // mine cart triple clack
+    [210, 150, 235, 170, 260].forEach((f, i) => setTimeout(() => playTone(f, 0.025, 'square', 0.020), i * 38));
+  }
+  if (scene === 16) { // distant cavern boom + falling dust
+    playTone(56, 0.32, 'triangle', 0.046);
+    [320, 260, 210, 180].forEach((f, i) => setTimeout(() => playTone(f, 0.022, 'sawtooth', 0.010), 80 + i * 36));
+  }
+  if (scene === 22 || scene === 29) { // drip echoes
+    playTone(1560, 0.026, 'sine', 0.014);
+    setTimeout(() => playTone(1120, 0.035, 'sine', 0.010), 95);
+    setTimeout(() => playTone(780, 0.044, 'sine', 0.008), 190);
+  }
+
+  // Extra tiny cave ticks for barrage density, controlled so it doesn't become pure noise.
+  if (scene % 3 === 2) {
+    setTimeout(() => playTone(360 + ((step * 137) % 900), 0.018, (step % 2) ? 'triangle' : 'sine', 0.007), 118);
   }
 }
 function startTitleMusic() {
@@ -235,7 +263,7 @@ function startTitleMusic() {
   titleMusicTimer = setInterval(() => {
     if (state !== 'title') { stopTitleMusic(); return; }
     titleAttractSfx(titleMusicBeat++);
-  }, 320);
+  }, 175);
 }
 
 // ─── Run / High Scores ───
@@ -4130,7 +4158,7 @@ function drawTitle() {
   ctx.font = `900 ${btnH*0.35}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = '#fff'; ctx.fillText(titleMusicUnlocked ? 'TAP TO PLAY' : 'TAP FOR SOUND FX', cx, btnY - btnH*0.06);
   ctx.font = `${Math.max(9*DPR, btnH*0.16)}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(225,255,235,0.76)'; ctx.fillText(titleMusicUnlocked ? 'the mine is awake' : 'cave rumbles, gems, carts, drips', cx, btnY + btnH*0.30);
+  ctx.fillStyle = 'rgba(225,255,235,0.76)'; ctx.fillText(titleMusicUnlocked ? 'the mine is awake' : 'barrage: gems, rocks, carts, drips', cx, btnY + btnH*0.30);
 
   ctx.font = `${Math.max(9*DPR, titleSize*0.15)}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = 'rgba(230,255,238,0.66)';
