@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.2.2</title>
+<title>Emerald Mine — Crystal Caves v2.2.3</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.2.2 — cap late-cave board size after cave 8
+//  v2.2.3 — expanded run to 15 capped-size caves
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.2.2';
+const VERSION = 'v2.2.3';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -556,7 +556,12 @@ const LEVELS = [
   { w: 30, h: 21, gems: 28, enemies: 11, enemySpeed: 0.32, dirtPct: 0.34, boulderPct: 0.20, gemPct: 0.14, diamonds: 10, magicWalls: 5, name:'Hunter Warrens' },
   { w: 30, h: 22, gems: 31, enemies: 12, enemySpeed: 0.30, dirtPct: 0.32, boulderPct: 0.21, gemPct: 0.14, diamonds: 12, magicWalls: 5, name:'Diamond Engine' },
   { w: 30, h: 22, gems: 35, enemies: 14, enemySpeed: 0.28, dirtPct: 0.30, boulderPct: 0.22, gemPct: 0.15, diamonds: 14, magicWalls: 6, name:'Cave of Teeth' },
-  { w: 30, h: 22, gems: 40, enemies: 16, enemySpeed: 0.25, dirtPct: 0.28, boulderPct: 0.23, gemPct: 0.15, diamonds: 16, magicWalls: 7, name:'Emerald Inferno' }
+  { w: 30, h: 22, gems: 40, enemies: 16, enemySpeed: 0.25, dirtPct: 0.28, boulderPct: 0.23, gemPct: 0.15, diamonds: 16, magicWalls: 7, name:'Emerald Inferno' },
+  { w: 30, h: 22, gems: 44, enemies: 17, enemySpeed: 0.24, dirtPct: 0.27, boulderPct: 0.235, gemPct: 0.155, diamonds: 17, magicWalls: 7, name:'Pressure Garden' },
+  { w: 30, h: 22, gems: 48, enemies: 18, enemySpeed: 0.23, dirtPct: 0.26, boulderPct: 0.24,  gemPct: 0.16,  diamonds: 18, magicWalls: 8, name:'Butterfly Cathedral' },
+  { w: 30, h: 22, gems: 52, enemies: 19, enemySpeed: 0.22, dirtPct: 0.25, boulderPct: 0.245, gemPct: 0.16,  diamonds: 20, magicWalls: 8, name:'Hunter Furnace' },
+  { w: 30, h: 22, gems: 56, enemies: 20, enemySpeed: 0.21, dirtPct: 0.24, boulderPct: 0.25,  gemPct: 0.165, diamonds: 22, magicWalls: 9, name:'Crystal Labyrinth' },
+  { w: 30, h: 22, gems: 60, enemies: 22, enemySpeed: 0.20, dirtPct: 0.23, boulderPct: 0.26,  gemPct: 0.17,  diamonds: 24, magicWalls: 10, name:'Final Emerald Mine' }
 ];
 
 let state = 'title'; // title, playing, levelClear, gameOver, win
@@ -1113,6 +1118,8 @@ window.addEventListener('keydown', e => {
   if (state === 'title') {
     if (e.code === 'KeyH') { showScores = !showScores; startTitleMusic(); return; }
     if (/^Digit[0-9]$/.test(e.code)) { const n=parseInt(e.code.slice(5),10); titleSelectedLevel = n===0 ? 9 : clamp(n-1,0,LEVELS.length-1); startTitleMusic(); return; }
+    if (e.code === 'BracketRight' || e.code === 'Equal') { titleSelectedLevel = (titleSelectedLevel + 1) % LEVELS.length; startTitleMusic(); return; }
+    if (e.code === 'BracketLeft' || e.code === 'Minus') { titleSelectedLevel = (titleSelectedLevel + LEVELS.length - 1) % LEVELS.length; startTitleMusic(); return; }
     if (!titleMusicUnlocked) { startTitleMusic(); return; }
     newGame(); return;
   }
@@ -1194,9 +1201,9 @@ function handleTitleSelect(x, y) {
   const cols = 5;
   const startX = W * 0.18;
   const gapX = W * 0.16;
-  const startY = H * 0.665;
-  const gapY = Math.max(30 * DPR, H * 0.038);
-  const r = Math.max(12 * DPR, Math.min(W, H) * 0.024);
+  const startY = H * 0.632;
+  const gapY = Math.max(24 * DPR, H * 0.031);
+  const r = Math.max(10 * DPR, Math.min(W, H) * 0.020);
   for (let i = 0; i < LEVELS.length; i++) {
     const bx = startX + (i % cols) * gapX;
     const by = startY + Math.floor(i / cols) * gapY;
@@ -4283,9 +4290,9 @@ function drawTitle() {
     const cols = 5;
     const startX = W * 0.18;
     const gapX = W * 0.16;
-    const cySel = H * 0.655;
-    const gapY = Math.max(30 * DPR, H * 0.038);
-    const rSel = Math.max(12 * DPR, Math.min(W, H) * 0.024);
+    const cySel = H * 0.630;
+    const gapY = Math.max(24 * DPR, H * 0.031);
+    const rSel = Math.max(10 * DPR, Math.min(W, H) * 0.020);
     ctx.font = `800 ${Math.max(10*DPR, rSel*0.52)}px 'Segoe UI', system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(230,255,240,0.86)';
     ctx.fillText('choose cave', cx, cySel - rSel*1.9);
@@ -4302,7 +4309,7 @@ function drawTitle() {
     }
     ctx.font = `700 ${Math.max(9*DPR, rSel*0.38)}px 'Segoe UI', system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(220,255,235,0.78)';
-    ctx.fillText(LEVELS[titleSelectedLevel].name || `Cave ${titleSelectedLevel+1}`, cx, cySel + gapY + rSel*1.9);
+    ctx.fillText(LEVELS[titleSelectedLevel].name || `Cave ${titleSelectedLevel+1}`, cx, cySel + gapY*2 + rSel*1.9);
   }
 
   const pulse = 0.92 + Math.sin(t * 3.4) * 0.08;
@@ -4327,7 +4334,7 @@ function drawTitle() {
 
   ctx.font = `${Math.max(9*DPR, titleSize*0.15)}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = 'rgba(230,255,238,0.66)';
-  ctx.fillText(`${VERSION}  •  finger / mouse drag / WASD  •  H scores`, cx, H*0.94);
+  ctx.fillText(`${VERSION}  •  drag/WASD  •  +/- cave  •  H scores`, cx, H*0.94);
   if (showScores) drawScoresPanel(cx, H*0.58, Math.min(W*0.88, 440*DPR), Math.min(H*0.44, 300*DPR), -1);
   drawVignette();
 }
