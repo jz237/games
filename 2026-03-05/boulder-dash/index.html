@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.1.0</title>
+<title>Emerald Mine — Crystal Caves v2.1.1</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.1.0 — Emerald Mine inspired: magic walls, diamonds, emerald palette
+//  v2.1.1 — Emerald Mine inspired: magic walls, diamonds, emerald palette
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.1.0';
+const VERSION = 'v2.1.1';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -3690,9 +3690,9 @@ function drawTitle() {
   ctx.fillStyle = 'rgba(200,220,180,0.6)';
   ctx.fillText('Inspired by the Amiga classic', W/2, H*0.36);
   
-  const instrSize = Math.max(10 * DPR, titleSize * 0.22);
-  ctx.font = `${instrSize}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(255,255,255,0.78)';
+  const instrSize = Math.max(11 * DPR, titleSize * 0.24);
+  ctx.font = `600 ${instrSize}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(235,255,238,0.9)';
   const instructions = showScores ? [] : [
     '⛏️ Dig emeralds',
     '🪨 Dodge boulders',
@@ -3701,17 +3701,17 @@ function drawTitle() {
     '🚪 Open the exit and escape'
   ];
   instructions.forEach((txt, i) => {
-    ctx.fillText(txt, W/2, H*0.43 + i * instrSize * 1.45);
+    ctx.fillText(txt, W/2, H*0.42 + i * instrSize * 1.38);
   });
   
   ctx.font = `${instrSize*0.82}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(220,230,255,0.58)';
-  if (!showScores) ctx.fillText('Swipe / D-pad / WASD', W/2, H*0.66);
+  ctx.fillStyle = 'rgba(210,255,225,0.75)';
+  if (!showScores) ctx.fillText('Swipe / D-pad / WASD', W/2, H*0.64);
   
   const pulse = 0.85 + Math.sin(titleAnimT * 3) * 0.15;
   const btnW = W * 0.3 * pulse;
   const btnH = H * 0.08 * pulse;
-  const btnY = H * 0.85;
+  const btnY = H * 0.81;
   
   const bglow = ctx.createRadialGradient(W/2, btnY, 0, W/2, btnY, btnW);
   bglow.addColorStop(0, 'rgba(0,200,120,0.15)');
@@ -3731,7 +3731,7 @@ function drawTitle() {
   ctx.fillStyle = '#fff';
   ctx.fillText('TAP TO PLAY', W/2, btnY);
   ctx.font = `${Math.max(10*DPR, titleSize*0.16)}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillStyle = 'rgba(230,255,238,0.72)';
   ctx.fillText(`${VERSION}  •  tap to start  •  H toggles scores`, W/2, H*0.94);
   if (showScores) drawScoresPanel(W/2, H*0.58, Math.min(W*0.88, 440*DPR), Math.min(H*0.44, 300*DPR), -1);
   
