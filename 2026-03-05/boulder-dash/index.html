@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.3.6</title>
+<title>Emerald Mine — Crystal Caves v2.3.7</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.3.6 — authored lesson caves, audio warnings, rougher boulders
+//  v2.3.7 — seven lesson caves, smoother random-cave ramp
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.3.6';
+const VERSION = 'v2.3.7';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -581,14 +581,14 @@ function drawDynamiteBtn() {
 
 // ─── Game State ───
 const LEVELS = [
-  { w: 16, h: 12, gems: 5,  enemies: 2,  enemySpeed: 1.0,  dirtPct: 0.65, boulderPct: 0.08, gemPct: 0.08, diamonds: 0,  magicWalls: 0, name:'Training Shaft' },
-  { w: 20, h: 14, gems: 10, enemies: 3,  enemySpeed: 0.75, dirtPct: 0.55, boulderPct: 0.12, gemPct: 0.10, diamonds: 2,  magicWalls: 1, name:'Magic Wallworks' },
-  { w: 24, h: 16, gems: 15, enemies: 5,  enemySpeed: 0.5,  dirtPct: 0.45, boulderPct: 0.15, gemPct: 0.12, diamonds: 4,  magicWalls: 2, name:'Firefly Forge' },
-  { w: 26, h: 18, gems: 18, enemies: 7,  enemySpeed: 0.45, dirtPct: 0.42, boulderPct: 0.17, gemPct: 0.12, diamonds: 6,  magicWalls: 3, name:'Butterfly Vault', amoebas:1 },
-  { w: 28, h: 20, gems: 22, enemies: 9,  enemySpeed: 0.38, dirtPct: 0.38, boulderPct: 0.18, gemPct: 0.13, diamonds: 8,  magicWalls: 4, name:'Emerald Machine', amoebas:1 },
-  { w: 28, h: 20, gems: 25, enemies: 10, enemySpeed: 0.35, dirtPct: 0.40, boulderPct: 0.15, gemPct: 0.13, diamonds: 9,  magicWalls: 4, name:'Crystal Pressure', amoebas:2 },
-  { w: 30, h: 21, gems: 28, enemies: 11, enemySpeed: 0.32, dirtPct: 0.40, boulderPct: 0.15, gemPct: 0.14, diamonds: 10, magicWalls: 5, name:'Hunter Warrens', amoebas:2 },
-  { w: 30, h: 22, gems: 31, enemies: 12, enemySpeed: 0.30, dirtPct: 0.42, boulderPct: 0.135, gemPct: 0.14, diamonds: 12, magicWalls: 5, name:'Diamond Engine', amoebas:2 },
+  { w: 16, h: 12, gems: 5,  enemies: 1,  enemySpeed: 1.0,  dirtPct: 0.65, boulderPct: 0.08, gemPct: 0.08, diamonds: 0,  magicWalls: 0, name:'Training Shaft' },
+  { w: 20, h: 14, gems: 10, enemies: 2,  enemySpeed: 0.75, dirtPct: 0.55, boulderPct: 0.12, gemPct: 0.10, diamonds: 2,  magicWalls: 1, name:'Magic Wallworks' },
+  { w: 24, h: 16, gems: 15, enemies: 3,  enemySpeed: 0.5,  dirtPct: 0.45, boulderPct: 0.15, gemPct: 0.12, diamonds: 4,  magicWalls: 2, name:'Firefly Forge' },
+  { w: 26, h: 18, gems: 18, enemies: 3,  enemySpeed: 0.45, dirtPct: 0.42, boulderPct: 0.17, gemPct: 0.12, diamonds: 6,  magicWalls: 3, name:'Butterfly Vault', amoebas:1 },
+  { w: 28, h: 20, gems: 22, enemies: 4,  enemySpeed: 0.38, dirtPct: 0.38, boulderPct: 0.18, gemPct: 0.13, diamonds: 8,  magicWalls: 4, name:'Emerald Machine', amoebas:1 },
+  { w: 28, h: 20, gems: 25, enemies: 5, enemySpeed: 0.35, dirtPct: 0.40, boulderPct: 0.15, gemPct: 0.13, diamonds: 9,  magicWalls: 4, name:'Crystal Pressure', amoebas:2 },
+  { w: 30, h: 21, gems: 28, enemies: 6, enemySpeed: 0.32, dirtPct: 0.40, boulderPct: 0.15, gemPct: 0.14, diamonds: 10, magicWalls: 5, name:'Hunter Warrens', amoebas:2 },
+  { w: 30, h: 22, gems: 30, enemies: 8, enemySpeed: 0.36, dirtPct: 0.43, boulderPct: 0.125, gemPct: 0.145, diamonds: 12, magicWalls: 4, name:'Diamond Engine', amoebas:2 },
   { w: 30, h: 22, gems: 35, enemies: 14, enemySpeed: 0.28, dirtPct: 0.43, boulderPct: 0.135, gemPct: 0.15, diamonds: 14, magicWalls: 6, name:'Cave of Teeth', amoebas:3 },
   { w: 30, h: 22, gems: 40, enemies: 16, enemySpeed: 0.25, dirtPct: 0.44, boulderPct: 0.135, gemPct: 0.15, diamonds: 16, magicWalls: 7, name:'Emerald Inferno', amoebas:3 },
   { w: 30, h: 22, gems: 44, enemies: 17, enemySpeed: 0.24, dirtPct: 0.45, boulderPct: 0.13, gemPct: 0.155, diamonds: 17, magicWalls: 7, name:'Pressure Garden', amoebas:3 },
@@ -761,7 +761,7 @@ function placeGemLine(points, tile=TILE.GEM) { for (const [x, y] of points) plac
 function placeEnemy(x, y, type='firefly') { authoredEnemySpawns.push({ x, y, type }); placeAuthored(x, y, TILE.EMPTY); }
 function applyAuthoredCave(lvl) {
   resetAuthoredCaveHelpers();
-  if (lvl > 4) return false;
+  if (lvl > 6) return false;
 
   // Start from clean authored dirt/wall canvas so the first caves feel designed, not sprinkled.
   for (let y = 0; y < gridH; y++) {
@@ -818,6 +818,35 @@ function applyAuthoredCave(lvl) {
     for (const [x,y] of [[8,7],[12,7],[17,7],[18,11],[24,8],[6,9]]) { placeAuthored(x,y,TILE.BOULDER); placeAuthored(x,y+1,TILE.DIRT); }
     placeEnemy(22,5,'butterfly'); placeEnemy(20,11,'hunter'); placeEnemy(11,10,'firefly'); placeEnemy(22,16,'butterfly');
     authoredExitPos = { x: 25, y: 17 };
+  } else if (lvl === 5) {
+    // Cave 6: controlled pressure — more space, two slime pockets, safe routes around the machine.
+    carveRoom(1,1,7,5); carveRoom(8,1,18,5); carveRoom(19,2,26,7);
+    carveRoom(3,7,12,12); carveRoom(13,7,26,13); carveRoom(4,14,14,18); carveRoom(17,15,26,18);
+    fillTileRect(8,6,15,6,TILE.MAGIC_WALL); fillTileRect(15,14,18,14,TILE.WALL); carveRoom(16,14,16,14);
+    for (const x of [8,10,12,14,15]) { placeAuthored(x,4,TILE.BOULDER); placeAuthored(x,5,TILE.EMPTY); }
+    for (const [x,y] of [[21,5],[22,5],[21,6],[8,15],[9,15]]) placeAuthored(x,y,TILE.AMOEBA);
+    placeAuthored(5,9,TILE.DYNAMITE); placeAuthored(12,17,TILE.DYNAMITE); placeAuthored(23,16,TILE.SPEED_BOOTS); placeAuthored(6,16,TILE.GHOST_MODE);
+    for (const [x,y] of [[5,2],[7,4],[10,2],[13,3],[16,4],[20,3],[24,6],[4,8],[6,11],[9,10],[11,12],[14,8],[16,11],[19,9],[22,12],[25,13],[6,15],[10,17],[13,16],[19,17],[22,16],[25,17],[15,12],[20,6],[24,4],[7,8],[17,3]]) placeAuthored(x,y,TILE.GEM);
+    for (const [x,y] of [[21,3],[22,4],[24,16],[11,16],[18,10]]) placeAuthored(x,y,TILE.DIAMOND);
+    for (const [x,y] of [[9,7],[12,7],[18,8],[21,8],[6,13],[13,13],[19,14],[24,10]]) { placeAuthored(x,y,TILE.BOULDER); placeAuthored(x,y+1,TILE.DIRT); }
+    placeEnemy(22,4,'butterfly'); placeEnemy(18,11,'hunter'); placeEnemy(10,9,'firefly'); placeEnemy(24,16,'butterfly'); placeEnemy(6,15,'hunter');
+    authoredExitPos = { x: 25, y: 17 };
+  } else if (lvl === 6) {
+    // Cave 7: final lesson before procedural caves — full-system remix, but with readable lanes and escape tools.
+    carveRoom(1,1,7,5); carveRoom(8,1,18,4); carveRoom(19,1,28,6);
+    carveRoom(2,7,11,13); carveRoom(12,6,20,12); carveRoom(21,7,28,14);
+    carveRoom(4,15,13,19); carveRoom(14,14,22,19); carveRoom(23,16,28,19);
+    fillTileRect(9,5,16,5,TILE.MAGIC_WALL); fillTileRect(18,13,22,13,TILE.MAGIC_WALL);
+    fillTileRect(11,14,14,14,TILE.WALL); carveRoom(12,14,12,14);
+    for (const x of [9,10,12,14,16]) { placeAuthored(x,3,TILE.BOULDER); placeAuthored(x,4,TILE.EMPTY); }
+    for (const x of [18,20,22]) { placeAuthored(x,11,TILE.BOULDER); placeAuthored(x,12,TILE.EMPTY); }
+    for (const [x,y] of [[24,9],[25,9],[24,10],[7,16],[8,16],[8,17]]) placeAuthored(x,y,TILE.AMOEBA);
+    placeAuthored(5,10,TILE.DYNAMITE); placeAuthored(16,17,TILE.DYNAMITE); placeAuthored(24,17,TILE.DYNAMITE); placeAuthored(6,3,TILE.SPEED_BOOTS); placeAuthored(19,16,TILE.GHOST_MODE);
+    for (const [x,y] of [[5,2],[8,2],[11,3],[15,2],[18,3],[21,2],[25,4],[27,5],[4,8],[7,12],[10,9],[13,7],[15,11],[18,9],[20,12],[23,8],[26,13],[5,16],[9,18],[12,17],[15,15],[18,18],[21,16],[24,18],[27,17],[14,3],[22,5],[6,9],[11,12],[17,7],[25,11]]) placeAuthored(x,y,TILE.GEM);
+    for (const [x,y] of [[22,3],[24,4],[20,10],[18,16],[26,18],[9,17]]) placeAuthored(x,y,TILE.DIAMOND);
+    for (const [x,y] of [[8,6],[12,6],[16,6],[20,7],[23,7],[6,14],[10,14],[15,13],[19,15],[25,15],[27,9]]) { placeAuthored(x,y,TILE.BOULDER); placeAuthored(x,y+1,TILE.DIRT); }
+    placeEnemy(23,4,'butterfly'); placeEnemy(17,10,'hunter'); placeEnemy(9,10,'firefly'); placeEnemy(25,12,'hunter'); placeEnemy(20,17,'butterfly'); placeEnemy(7,18,'firefly');
+    authoredExitPos = { x: 27, y: 18 };
   }
   return true;
 }
@@ -958,7 +987,7 @@ function generateLevel(lvl) {
     }
   }
 
-  applyAuthoredCave(lvl);
+  const authoredCave = applyAuthoredCave(lvl);
   
   // Player start
   const px = 2, py = 2;
@@ -987,7 +1016,7 @@ function generateLevel(lvl) {
   
   // Place amoeba/slime patches in later caves. Box it in to turn it into diamonds;
   // let it spread too far and it hardens into boulders.
-  const amoebaCount = L.amoebas || 0;
+  const amoebaCount = authoredCave ? 0 : (L.amoebas || 0);
   for (let i = 0; i < amoebaCount; i++) {
     for (let attempt = 0; attempt < 160; attempt++) {
       const ax = sRngInt(4, gridW-5);
@@ -1019,7 +1048,7 @@ function generateLevel(lvl) {
       });
     }
   }
-  for (let i = enemies.length; i < L.enemies; i++) {
+  for (let i = enemies.length; !authoredCave && i < L.enemies; i++) {
     let ex, ey, attempts = 0;
     do {
       ex = sRngInt(Math.floor(gridW/2), gridW-2);
