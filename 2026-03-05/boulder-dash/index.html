@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.3.3</title>
+<title>Emerald Mine — Crystal Caves v2.3.4</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.3.3 — slower slime, fewer late boulders, safer rock chases
+//  v2.3.4 — cave intros, warning cues, rougher boulders
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.3.3';
+const VERSION = 'v2.3.4';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -287,6 +287,40 @@ let hsEntry = { active:false, initials:['A','A','A'], pos:0, score:0, level:1, n
 let showScores = false;
 let titleSelectedLevel = 0;
 
+function caveBlurb(idx) {
+  const blurbs = [
+    'Loose stone wakes slowly. Learn its weight.',
+    'The wall eats rock and gives back glitter.',
+    'Fireflies patrol the seams. Let boulders do the arguing.',
+    'Butterflies glitter when crushed. Slime begins to breathe.',
+    'The machine wants emeralds and steady nerves.',
+    'Pressure builds above every tunnel.',
+    'Hunters circle the dirt veins. Stay moving.',
+    'Diamonds fall bright, but only stone kills.',
+    'Teeth in the dark. Listen for the warning knock.',
+    'Magic walls hum under a hot emerald sky.',
+    'The garden grows if you give it silence.',
+    'Cathedral wings, falling stone, one thin path.',
+    'The furnace rewards crushed hunters.',
+    'A maze of glitter, slime, and bad ceilings.',
+    'The mine closes its hand. Take only what shines.'
+  ];
+  return blurbs[idx] || 'The cave shifts. Watch the ceiling.';
+}
+function beginCaveIntro() {
+  state = 'caveIntro';
+  caveIntroTimer = 0;
+  dangerWarnTimer = 0;
+  dangerWarnings = [];
+}
+function startPlayingFromIntro() {
+  if (state !== 'caveIntro') return;
+  state = 'playing';
+  caveIntroTimer = 0;
+  playTone(180, 0.055, 'triangle', 0.045);
+  setTimeout(() => playTone(420, 0.06, 'sine', 0.035), 70);
+}
+
 function newGame(startLevel = titleSelectedLevel || 0) {
   stopTitleMusic();
   level = clamp(startLevel, 0, LEVELS.length - 1);
@@ -295,9 +329,9 @@ function newGame(startLevel = titleSelectedLevel || 0) {
   highestLevelReached = level + 1;
   hsEntry.active = false;
   showScores = false;
-  state = 'playing';
   ensureAudio();
   generateLevel(level);
+  beginCaveIntro();
 }
 function returnToTitle() {
   state = 'title';
@@ -564,7 +598,7 @@ const LEVELS = [
   { w: 30, h: 22, gems: 60, enemies: 22, enemySpeed: 0.20, dirtPct: 0.49, boulderPct: 0.12,  gemPct: 0.17,  diamonds: 24, magicWalls: 10, name:'Final Emerald Mine', amoebas:5 }
 ];
 
-let state = 'title'; // title, playing, levelClear, gameOver, win
+let state = 'title'; // title, caveIntro, playing, levelClear, gameOver, win
 let paused = false;
 let level = 0;
 let grid = [];
@@ -587,6 +621,10 @@ let highestLevelReached = 1;
 let displayGems = 0;
 let levelClearTimer = 0;
 let gameOverTimer = 0;
+let caveIntroTimer = 0;
+let dangerWarnTimer = 0;
+let lastDangerWarnAt = -99;
+let dangerWarnings = [];
 let flashAlpha = 0;
 let flashColor = '255,255,255'; // flash overlay color
 let globalTime = 0;
@@ -947,6 +985,8 @@ function generateLevel(lvl) {
   celebrationParticles = [];
   fallMap = {};
   trappedTimer = 0;
+  dangerWarnTimer = 0;
+  dangerWarnings = [];
   paused = false;
   inputQueue = [];
   moveCD = 0;
@@ -1150,6 +1190,7 @@ window.addEventListener('keydown', e => {
     if (!titleMusicUnlocked) { startTitleMusic(); return; }
     newGame(); return;
   }
+  if (state === 'caveIntro') { startPlayingFromIntro(); return; }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
   if (state === 'win' && gameOverTimer > 2) { returnToTitle(); return; }
   
@@ -1259,6 +1300,7 @@ canvas.addEventListener('touchstart', e => {
   }
   if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.touches[0].clientX * DPR, e.touches[0].clientY * DPR); return; }
   if (state === 'title') { const tt=e.touches[0]; if (handleTitleSelect(tt.clientX*DPR, tt.clientY*DPR)) return; if (!titleMusicUnlocked) { startTitleMusic(); return; } newGame(); return; }
+  if (state === 'caveIntro') { startPlayingFromIntro(); return; }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
   if (state === 'win' && gameOverTimer > 2) { returnToTitle(); return; }
   
@@ -1372,6 +1414,7 @@ canvas.addEventListener('mousedown', e => {
   ensureAudio();
   updatePauseBtn(); updateDynamiteBtn(); updateRetryBtn();
   const sx = e.clientX * DPR, sy = e.clientY * DPR;
+  if (state === 'caveIntro') { startPlayingFromIntro(); return; }
   if (state === 'title' || hsEntry.active || state === 'gameOver' || state === 'win') return;
   if (isPauseBtnTap(sx, sy)) { togglePause(); return; }
   if (paused) return;
@@ -1425,6 +1468,7 @@ canvas.addEventListener('click', e => {
   if (isRetryBtnTap(e.clientX * DPR, e.clientY * DPR)) { return; }
   if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.clientX * DPR, e.clientY * DPR); return; }
   if (state === 'title') { if (handleTitleSelect(e.clientX*DPR, e.clientY*DPR)) return; if (!titleMusicUnlocked) { startTitleMusic(); return; } newGame(); return; }
+  if (state === 'caveIntro') { startPlayingFromIntro(); return; }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
   if (state === 'win' && gameOverTimer > 2) { returnToTitle(); return; }
 });
@@ -2009,6 +2053,29 @@ function detonateDynamite(dyn) {
   }
 }
 
+
+function updateDangerWarnings() {
+  dangerWarnings = [];
+  if (state !== 'playing' || player.dead || player.moving) return;
+  const px = player.gx, py = player.gy;
+  for (let y = Math.max(1, py - 5); y <= py; y++) {
+    for (let x = Math.max(1, px - 1); x <= Math.min(gridW - 2, px + 1); x++) {
+      if (tileAt(x, y) !== TILE.BOULDER) continue;
+      const below = tileAt(x, y + 1);
+      const falling = !!fallMap[fallKey(x, y)];
+      const verticalThreat = x === px && y < py && (below === TILE.EMPTY || below === TILE.PLAYER || falling);
+      const nearThreat = Math.abs(x - px) <= 1 && y < py && (falling || below === TILE.EMPTY);
+      if (verticalThreat || nearThreat) dangerWarnings.push({ x, y, urgent: falling || y === py - 1 });
+    }
+  }
+  if (dangerWarnings.length && globalTime - lastDangerWarnAt > 0.72) {
+    lastDangerWarnAt = globalTime;
+    dangerWarnTimer = 0.42;
+    playTone(dangerWarnings.some(w => w.urgent) ? 140 : 210, 0.045, 'triangle', 0.040);
+    setTimeout(() => playTone(82, 0.055, 'sawtooth', 0.025), 52);
+  }
+}
+
 function update(dt) {
   // Slow-mo effect
   if (slowMoTimer > 0) {
@@ -2024,6 +2091,11 @@ function update(dt) {
   
   if (state === 'title') {
     titleAnimT += dt;
+    return;
+  }
+  if (state === 'caveIntro') {
+    caveIntroTimer += dt;
+    if (caveIntroTimer > 2.65) startPlayingFromIntro();
     return;
   }
   
@@ -2058,9 +2130,9 @@ function update(dt) {
       if (level >= LEVELS.length) {
         enterEndState('win');
       } else {
-        state = 'playing';
         runLives = player.lives;
         generateLevel(level);
+        beginCaveIntro();
       }
     }
     return;
@@ -2227,6 +2299,9 @@ function update(dt) {
     }
   }
   
+  updateDangerWarnings();
+  dangerWarnTimer = Math.max(0, dangerWarnTimer - effectiveDt);
+
   // Physics
   physicsTick += effectiveDt;
   if (physicsTick >= PHYSICS_INTERVAL) {
@@ -2604,182 +2679,125 @@ function drawBoulder(gx, gy, isFalling) {
   const [sx, sy] = worldToScreen(gx + 0.5, gy + 0.5);
   if (sx < -CELL*2 || sx > W+CELL*2 || sy < -CELL*2 || sy > H+CELL*2) return;
 
-  const r = CELL * 0.44;
+  const r = CELL * 0.43;
   const fk = fallKey(gx, gy);
   const fallDist = fallMap[fk] || 0;
+  const seedA = gx * 12.9898 + gy * 78.233;
+  const rotAngle = globalTime * (isFalling ? 2.4 + fallDist * 0.9 : 0.22) + seedA;
 
-  // ── Rotation speed: slow when stationary, fast when falling ──
-  // Stationary: ~1 revolution per 4 seconds = PI/2 rad/s
-  // Falling: speed increases with fall distance
-  const baseRotSpeed = Math.PI * 0.5; // 1 rev per 4 sec
-  const fallRotSpeed = baseRotSpeed + fallDist * Math.PI * 2; // faster spin when falling
-  const rotSpeed = isFalling ? fallRotSpeed : baseRotSpeed;
-  // Use a seeded phase offset per boulder so they don't all sync
-  const phaseOffset = gx * 3.7 + gy * 5.3;
-  const rotAngle = globalTime * rotSpeed + phaseOffset;
-
-  // ── Ground shadow — grows with fall distance, shifts with rotation ──
-  const shadowScale = 1 + fallDist * 0.15;
-  const shadowAlpha = 0.35 + fallDist * 0.06;
-  ctx.fillStyle = `rgba(0,0,0,${Math.min(shadowAlpha, 0.6)})`;
+  // Ground shadow: broad and dusty, not glossy.
+  const shadowScale = 1 + fallDist * 0.14;
+  ctx.fillStyle = `rgba(0,0,0,${Math.min(0.36 + fallDist * 0.06, 0.62)})`;
   ctx.beginPath();
-  ctx.ellipse(sx + Math.sin(rotAngle) * r * 0.05, sy + r * 0.88, r * 0.85 * shadowScale, r * (0.2 + fallDist * 0.04), 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Secondary softer shadow
-  ctx.fillStyle = `rgba(0,0,0,${Math.min(shadowAlpha * 0.4, 0.2)})`;
-  ctx.beginPath();
-  ctx.ellipse(sx, sy + r * 0.95, r * 1.1 * shadowScale, r * (0.12 + fallDist * 0.02), 0, 0, Math.PI * 2);
+  ctx.ellipse(sx, sy + r * 0.88, r * 0.92 * shadowScale, r * (0.22 + fallDist * 0.035), 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Motion blur streak when falling ──
   if (isFalling && fallDist > 0) {
-    const streakLen = Math.min(fallDist * 0.35, 0.9);
-    const streakGrd = ctx.createLinearGradient(sx, sy - r - streakLen * CELL, sx, sy - r);
-    streakGrd.addColorStop(0, 'rgba(120,108,90,0)');
-    streakGrd.addColorStop(1, `rgba(120,108,90,${0.15 * Math.min(fallDist, 3)})`);
+    const streakLen = Math.min(fallDist * 0.34, 0.85);
+    const streakGrd = ctx.createLinearGradient(sx, sy - r - streakLen * CELL, sx, sy - r * 0.25);
+    streakGrd.addColorStop(0, 'rgba(95,82,67,0)');
+    streakGrd.addColorStop(1, `rgba(95,82,67,${0.14 * Math.min(fallDist, 3)})`);
     ctx.fillStyle = streakGrd;
-    ctx.fillRect(sx - r * 0.6, sy - r - streakLen * CELL, r * 1.2, streakLen * CELL);
+    ctx.fillRect(sx - r * 0.72, sy - r - streakLen * CELL, r * 1.44, streakLen * CELL);
   }
 
   ctx.save();
   ctx.translate(sx, sy);
+  ctx.rotate(Math.sin(rotAngle) * 0.08);
 
-  // ── Main sphere body — dramatic 3D radial gradient ──
-  // Highlight top-left, deep shadow bottom-right
-  const hlX = -r * 0.3;
-  const hlY = -r * 0.35;
-  const sphereGrd = ctx.createRadialGradient(hlX, hlY, r * 0.05, r * 0.15, r * 0.2, r * 1.4);
-  sphereGrd.addColorStop(0, '#e8ddd0');   // bright highlight
-  sphereGrd.addColorStop(0.12, '#c8baa8');
-  sphereGrd.addColorStop(0.3, '#9a8e7e');
-  sphereGrd.addColorStop(0.55, '#6b6050');
-  sphereGrd.addColorStop(0.8, '#3a3228');
-  sphereGrd.addColorStop(1, '#1a1510');   // deep shadow
-  ctx.fillStyle = sphereGrd;
+  // Irregular lumpy silhouette — explicitly not a perfect sphere.
+  const pts = [];
+  const n = 15;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const wob = 0.88 + 0.09 * Math.sin(seedA + i * 1.91) + 0.045 * Math.sin(rotAngle * 0.7 + i * 2.7);
+    pts.push([Math.cos(a) * r * wob, Math.sin(a) * r * (0.92 + 0.06*Math.sin(seedA+i))]);
+  }
   ctx.beginPath();
-  ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[i], p1 = pts[(i + 1) % n];
+    ctx.quadraticCurveTo(p0[0], p0[1], (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2);
+  }
+  ctx.closePath();
+  ctx.clip();
 
-  // ── Secondary hemisphere shading for extra depth ──
-  const hemiGrd = ctx.createLinearGradient(-r, -r, r, r);
-  hemiGrd.addColorStop(0, 'rgba(255,240,220,0.12)');
-  hemiGrd.addColorStop(0.4, 'rgba(255,240,220,0)');
-  hemiGrd.addColorStop(0.6, 'rgba(0,0,0,0)');
-  hemiGrd.addColorStop(1, 'rgba(0,0,0,0.25)');
-  ctx.fillStyle = hemiGrd;
-  ctx.beginPath();
-  ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.fill();
+  const rockGrd = ctx.createLinearGradient(-r * 0.75, -r, r * 0.85, r);
+  rockGrd.addColorStop(0, '#b8ab98');
+  rockGrd.addColorStop(0.22, '#8f8372');
+  rockGrd.addColorStop(0.52, '#665b4d');
+  rockGrd.addColorStop(0.78, '#3d342a');
+  rockGrd.addColorStop(1, '#1f1914');
+  ctx.fillStyle = rockGrd;
+  ctx.fillRect(-r*1.12, -r*1.12, r*2.24, r*2.24);
 
-  // ── Rotating rock texture spots (3 darker patches) ──
-  // These spots rotate around the sphere surface using sin/cos
-  const spotData = [
-    { angOff: 0, latOff: 0.2, sizeF: 0.12 },
-    { angOff: 2.3, latOff: -0.15, sizeF: 0.09 },
-    { angOff: 4.1, latOff: 0.35, sizeF: 0.1 }
+  // Faceted planes and chips.
+  const facets = [
+    [[-0.72,-0.62],[-0.16,-0.82],[0.03,-0.28],[-0.46,-0.12],'rgba(230,215,190,0.18)'],
+    [[0.04,-0.74],[0.66,-0.45],[0.42,0.02],[-0.08,-0.18],'rgba(170,154,132,0.18)'],
+    [[-0.76,-0.04],[-0.24,-0.18],[-0.10,0.48],[-0.58,0.62],'rgba(45,38,30,0.20)'],
+    [[0.06,0.10],[0.68,-0.02],[0.56,0.62],[0.10,0.74],'rgba(30,25,20,0.24)'],
+    [[-0.18,-0.22],[0.26,-0.12],[0.10,0.22],[-0.28,0.18],'rgba(120,108,92,0.20)']
   ];
-  for (const spot of spotData) {
-    const spotAng = rotAngle + spot.angOff;
-    // Project 3D position onto 2D circle surface
-    const spotX3d = Math.cos(spotAng) * r * 0.55;
-    const spotY3d = spot.latOff * r + Math.sin(spotAng * 0.7) * r * 0.15;
-    const spotDepth = Math.sin(spotAng); // >0 = facing us
-    if (spotDepth > -0.2) { // only draw when visible (facing toward viewer)
-      const alpha = Math.max(0, (spotDepth + 0.2) * 0.4);
-      const spotR = r * spot.sizeF * (0.7 + spotDepth * 0.3);
-      ctx.fillStyle = `rgba(40,35,25,${alpha})`;
-      ctx.beginPath();
-      ctx.ellipse(spotX3d, spotY3d, spotR, spotR * 0.7, spotAng * 0.3, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  for (const f of facets) {
+    ctx.fillStyle = f[4];
+    ctx.beginPath();
+    ctx.moveTo(f[0][0]*r, f[0][1]*r);
+    for (let i=1;i<4;i++) ctx.lineTo(f[i][0]*r, f[i][1]*r);
+    ctx.closePath(); ctx.fill();
   }
 
-  // ── Rotating band/crack line across surface ──
-  // This is the key 3D rotation illusion: a line that wraps around the sphere
-  ctx.strokeStyle = 'rgba(30,25,18,0.45)';
-  ctx.lineWidth = Math.max(1.5, r * 0.06);
-  ctx.beginPath();
-  const bandSegments = 20;
-  for (let i = 0; i <= bandSegments; i++) {
-    const t = (i / bandSegments) * Math.PI - Math.PI / 2; // -PI/2 to PI/2 (visible hemisphere)
-    // The band goes around the equator, shifted by rotAngle
-    const bx = Math.sin(t) * r * 0.92;
-    // The y-position oscillates based on rotation, creating the wrap-around illusion
-    const by = Math.cos(rotAngle) * Math.cos(t) * r * 0.35 + Math.sin(rotAngle) * r * 0.08;
-    if (i === 0) ctx.moveTo(bx, by); else ctx.lineTo(bx, by);
+  // Cracks: angular, branching, matte.
+  ctx.lineCap = 'round';
+  const cracks = [
+    [[-0.55,-0.25],[-0.25,-0.12],[-0.04,-0.30],[0.20,-0.22]],
+    [[0.36,-0.42],[0.18,-0.10],[0.36,0.08],[0.28,0.34]],
+    [[-0.42,0.38],[-0.18,0.22],[0.02,0.34]],
+    [[-0.02,0.05],[-0.20,0.18],[-0.30,0.34]],
+  ];
+  for (const c of cracks) {
+    ctx.strokeStyle = 'rgba(18,14,10,0.46)';
+    ctx.lineWidth = Math.max(1, r * 0.045);
+    ctx.beginPath(); ctx.moveTo(c[0][0]*r, c[0][1]*r);
+    for (let i=1;i<c.length;i++) ctx.lineTo(c[i][0]*r, c[i][1]*r);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(210,190,160,0.08)';
+    ctx.lineWidth = Math.max(0.5, r * 0.018);
+    ctx.stroke();
   }
-  ctx.stroke();
 
-  // ── Secondary crack line (perpendicular to main band) ──
-  ctx.strokeStyle = 'rgba(30,25,18,0.3)';
-  ctx.lineWidth = Math.max(1, r * 0.04);
-  ctx.beginPath();
-  const crack2Segments = 14;
-  for (let i = 0; i <= crack2Segments; i++) {
-    const t = (i / crack2Segments) * Math.PI - Math.PI / 2;
-    const bx = Math.sin(rotAngle + Math.PI/2) * Math.cos(t) * r * 0.3 + Math.sin(t) * r * 0.15;
-    const by = Math.sin(t) * r * 0.85;
-    if (i === 0) ctx.moveTo(bx, by); else ctx.lineTo(bx, by);
+  // Speckles and chipped bright edges, deterministic per tile.
+  for (let i=0; i<18; i++) {
+    const a = Math.sin(seedA + i * 18.17) * 43758.5453;
+    const b = Math.sin(seedA + i * 7.91) * 24634.6345;
+    const px = ((a - Math.floor(a)) * 2 - 1) * r * 0.78;
+    const py = ((b - Math.floor(b)) * 2 - 1) * r * 0.70;
+    if (px*px + py*py > r*r*0.78) continue;
+    ctx.fillStyle = i % 3 === 0 ? 'rgba(230,215,190,0.18)' : 'rgba(25,20,16,0.22)';
+    ctx.beginPath(); ctx.arc(px, py, Math.max(0.7, r * (0.012 + (i%4)*0.004)), 0, Math.PI*2); ctx.fill();
   }
-  ctx.stroke();
 
-  // ── Small crack details (static, add rock texture) ──
-  ctx.strokeStyle = 'rgba(20,18,12,0.3)';
-  ctx.lineWidth = Math.max(1, r * 0.03);
+  // Small dusty highlight instead of marble shine.
+  ctx.fillStyle = 'rgba(235,225,205,0.16)';
   ctx.beginPath();
-  ctx.moveTo(-r * 0.15, -r * 0.25);
-  ctx.lineTo(r * 0.05, -r * 0.1);
-  ctx.lineTo(r * 0.2, -r * 0.2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(r * 0.1, r * 0.3);
-  ctx.lineTo(r * 0.3, r * 0.15);
-  ctx.stroke();
-
-  // ── Primary specular highlight (top-left, moves with rotation) ──
-  const specOffX = hlX + Math.sin(rotAngle * 0.5) * r * 0.08;
-  const specOffY = hlY + Math.cos(rotAngle * 0.5) * r * 0.06;
-  ctx.fillStyle = 'rgba(255,255,250,0.45)';
-  ctx.beginPath();
-  ctx.ellipse(specOffX, specOffY, r * 0.18, r * 0.12, -0.4 + Math.sin(rotAngle) * 0.1, 0, Math.PI * 2);
-  ctx.fill();
-  // Secondary smaller specular
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.beginPath();
-  ctx.arc(specOffX + r * 0.08, specOffY + r * 0.12, r * 0.07, 0, Math.PI * 2);
-  ctx.fill();
-  // Tiny pin highlight
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  ctx.beginPath();
-  ctx.arc(specOffX - r * 0.02, specOffY - r * 0.02, r * 0.04, 0, Math.PI * 2);
+  ctx.ellipse(-r*0.34, -r*0.42, r*0.24, r*0.10, -0.55, 0, Math.PI*2);
   ctx.fill();
 
-  // ── Moving specular highlight that follows rotation ──
-  const movSpecX = Math.cos(rotAngle * 1.3) * r * 0.25 - r * 0.1;
-  const movSpecY = Math.sin(rotAngle * 1.3) * r * 0.2 - r * 0.15;
-  const movSpecAlpha = Math.max(0, 0.2 + Math.cos(rotAngle * 1.3) * 0.15);
-  ctx.fillStyle = `rgba(255,250,230,${movSpecAlpha})`;
-  ctx.beginPath();
-  ctx.ellipse(movSpecX, movSpecY, r * 0.08, r * 0.05, rotAngle * 0.5, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.restore();
 
-  // ── Rim light (bottom edge, subtle reflected light) ──
-  const rimGrd = ctx.createRadialGradient(r * 0.15, r * 0.5, r * 0.1, 0, 0, r * 1.05);
-  rimGrd.addColorStop(0, 'rgba(180,160,130,0.15)');
-  rimGrd.addColorStop(0.5, 'rgba(180,160,130,0)');
-  rimGrd.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = rimGrd;
+  // Ragged dark outline follows the same lumpy profile.
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate(Math.sin(rotAngle) * 0.08);
+  ctx.strokeStyle = 'rgba(13,10,7,0.68)';
+  ctx.lineWidth = Math.max(1.5, r * 0.055);
   ctx.beginPath();
-  ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.fill();
-
-  // ── Dark outline ──
-  ctx.strokeStyle = 'rgba(15,12,8,0.55)';
-  ctx.lineWidth = Math.max(1.5, r * 0.06);
-  ctx.beginPath();
-  ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.stroke();
-
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[i], p1 = pts[(i + 1) % n];
+    ctx.quadraticCurveTo(p0[0], p0[1], (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2);
+  }
+  ctx.closePath(); ctx.stroke();
   ctx.restore();
 }
 
@@ -4644,6 +4662,73 @@ function drawWin() {
   }
 }
 
+function drawDangerWarnings() {
+  if (!dangerWarnings.length && dangerWarnTimer <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const pulse = 0.45 + Math.sin(globalTime * 18) * 0.35;
+  for (const w of dangerWarnings) {
+    const [sx, sy] = worldToScreen(w.x + 0.5, w.y + 0.5);
+    const rr = CELL * (w.urgent ? 0.62 : 0.50);
+    ctx.strokeStyle = `rgba(255,190,75,${0.28 + pulse * 0.38})`;
+    ctx.lineWidth = Math.max(2 * DPR, CELL * 0.035);
+    ctx.beginPath();
+    ctx.arc(sx, sy, rr, -Math.PI * 0.78, Math.PI * 0.78);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(255,210,90,${0.28 + pulse * 0.45})`;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy - rr * 1.12);
+    ctx.lineTo(sx - rr * 0.16, sy - rr * 0.78);
+    ctx.lineTo(sx + rr * 0.16, sy - rr * 0.78);
+    ctx.closePath();
+    ctx.fill();
+  }
+  if (dangerWarnTimer > 0) {
+    ctx.fillStyle = `rgba(255,165,55,${dangerWarnTimer * 0.10})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+  ctx.restore();
+}
+
+function drawCaveIntro() {
+  if (state !== 'caveIntro') return;
+  const L = LEVELS[level];
+  const t = Math.min(caveIntroTimer, 2.65);
+  const a = Math.min(1, t * 2.4) * Math.min(1, (2.75 - t) * 2.2);
+  ctx.save();
+  ctx.fillStyle = `rgba(0,0,0,${0.42 * a})`;
+  ctx.fillRect(0, 0, W, H);
+  const cx = W / 2, cy = H * 0.43;
+  const w = Math.min(W * 0.84, 520 * DPR);
+  const h = Math.min(H * 0.34, 230 * DPR);
+  ctx.globalAlpha = a;
+  const grd = ctx.createLinearGradient(cx - w/2, cy - h/2, cx + w/2, cy + h/2);
+  grd.addColorStop(0, 'rgba(8,28,20,0.88)');
+  grd.addColorStop(0.55, 'rgba(6,12,10,0.84)');
+  grd.addColorStop(1, 'rgba(42,28,16,0.88)');
+  ctx.fillStyle = grd;
+  ctx.strokeStyle = 'rgba(120,255,180,0.36)';
+  ctx.lineWidth = Math.max(1, DPR * 1.4);
+  ctx.beginPath(); ctx.roundRect(cx - w/2, cy - h/2, w, h, 18 * DPR); ctx.fill(); ctx.stroke();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `800 ${Math.max(12*DPR, h*0.105)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(145,255,185,0.95)';
+  ctx.fillText(`CAVE ${level + 1}`, cx, cy - h*0.29);
+  ctx.font = `900 ${Math.max(19*DPR, h*0.17)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = '#fff';
+  ctx.fillText(L.name || 'Emerald Mine', cx, cy - h*0.10);
+  ctx.font = `700 ${Math.max(12*DPR, h*0.075)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(255,228,138,0.92)';
+  ctx.fillText(`Target ${L.gems} emeralds  •  ${L.enemies} creatures`, cx, cy + h*0.10);
+  ctx.font = `600 ${Math.max(11*DPR, h*0.066)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(218,245,228,0.78)';
+  ctx.fillText(caveBlurb(level), cx, cy + h*0.27);
+  ctx.font = `600 ${Math.max(9*DPR, h*0.050)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = `rgba(220,255,235,${0.42 + Math.sin(globalTime * 5) * 0.18})`;
+  ctx.fillText('tap to enter', cx, cy + h*0.43);
+  ctx.restore();
+}
+
 function drawPauseOverlay() {
   if (!paused || state !== 'playing') return;
   ctx.save();
@@ -4735,10 +4820,11 @@ function render() {
   drawPlacedDynamite();
   
   // Player
-  if (state === 'playing' || state === 'levelClear') {
+  if (state === 'playing' || state === 'levelClear' || state === 'caveIntro') {
     drawPlayer(player.x, player.y);
   }
   
+  drawDangerWarnings();
   drawParticles();
   drawFlyGems();
   ctx.restore();
@@ -4755,6 +4841,7 @@ function render() {
   
   // Overlays
   drawPauseOverlay();
+  if (state === 'caveIntro') drawCaveIntro();
   if (state === 'levelClear') drawLevelClear();
   if (state === 'gameOver') drawGameOver();
   if (state === 'win') drawWin();
