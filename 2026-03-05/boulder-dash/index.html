@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.1.5</title>
+<title>Emerald Mine — Crystal Caves v2.1.6</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.1.5 — Emerald Mine inspired: magic walls, diamonds, emerald palette
+//  v2.1.6 — pinch zoom plus distinct falling rock/gem impact sounds
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.1.5';
+const VERSION = 'v2.1.6';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -31,6 +31,9 @@ const TILE = {
   DYNAMITE: 8, SPEED_BOOTS: 9, GHOST_MODE: 10, DIAMOND: 11, MAGIC_WALL: 12
 };
 const DPR = window.devicePixelRatio || 1;
+const ZOOM_KEY = 'emerald_mine_zoom_v216';
+let userZoom = 1;
+try { userZoom = clamp(parseFloat(localStorage.getItem(ZOOM_KEY)) || 1, 0.68, 1.85); } catch(e) {}
 let W, H, CELL;
 let HUD_H = 56;
 const boardView = { x: 0, y: 0, w: 0, h: 0, follow: false, portrait: false };
@@ -69,11 +72,11 @@ function updateViewLayout() {
   const fitH = boardView.h / gridH;
 
   if (boardView.portrait) {
-    // Portrait uses a larger camera-follow view; the board is clipped to its play window.
-    const zoom = gridW <= 18 ? 1.62 : gridW <= 20 ? 1.45 : 1.30;
-    CELL = Math.min(fitW * zoom, fitH * 1.08);
+    // Portrait uses a larger camera-follow view; pinch zoom lets the player tune the visible cave scale.
+    const zoom = (gridW <= 18 ? 1.62 : gridW <= 20 ? 1.45 : 1.30) * userZoom;
+    CELL = Math.min(fitW * zoom, fitH * 1.08 * userZoom);
   } else {
-    CELL = Math.min(fitW, fitH) * (gridW <= 18 && gridH <= 13 ? 1.08 : 1.0);
+    CELL = Math.min(fitW, fitH) * (gridW <= 18 && gridH <= 13 ? 1.08 : 1.0) * userZoom;
   }
 
   CELL = clamp(CELL, 14 * DPR, 88 * DPR);
@@ -129,6 +132,28 @@ function sfxCollect() {
   setTimeout(() => playTone(1760, 0.15, 'sine', 0.08), 120);
 }
 function sfxBoulder() { playTone(80, 0.2, 'triangle', 0.12); }
+const impactCooldown = { boulder: 0, gem: 0, diamond: 0 };
+function sfxImpact(tile, fallPower=1) {
+  try {
+    ensureAudio();
+    const now = audioCtx.currentTime;
+    const kind = tile === TILE.BOULDER ? 'boulder' : tile === TILE.DIAMOND ? 'diamond' : 'gem';
+    if (now - impactCooldown[kind] < 0.045) return;
+    impactCooldown[kind] = now;
+    const force = clamp(fallPower, 1, 6);
+    if (kind === 'boulder') {
+      playTone(74 - force * 3, 0.16 + force * 0.012, 'triangle', 0.09 + force * 0.012);
+      setTimeout(() => playTone(42, 0.08, 'sawtooth', 0.035), 28);
+    } else if (kind === 'gem') {
+      playTone(820 + force * 35, 0.055, 'sine', 0.07);
+      setTimeout(() => playTone(1230 + force * 45, 0.09, 'triangle', 0.045), 42);
+    } else {
+      playTone(1180 + force * 55, 0.05, 'sine', 0.065);
+      setTimeout(() => playTone(1680 + force * 70, 0.07, 'sine', 0.05), 35);
+      setTimeout(() => playTone(2320, 0.08, 'triangle', 0.035), 74);
+    }
+  } catch(e) {}
+}
 function sfxDig() { playTone(200, 0.06, 'sawtooth', 0.04); }
 function sfxDeath() {
   playTone(440, 0.15, 'sawtooth', 0.1);
@@ -902,10 +927,31 @@ function getContinuousInput() {
 // Touch/swipe + hold-to-move
 let touchStart = null;
 let touchRipples = [];
+let pinchActive = false;
+let pinchStartDist = 0;
+let pinchStartZoom = 1;
+let zoomToast = 0;
+function touchDistance(touches) {
+  const a = touches[0], b = touches[1];
+  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+}
+function saveZoom() { try { localStorage.setItem(ZOOM_KEY, userZoom.toFixed(3)); } catch(e) {} }
 
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
   ensureAudio();
+  if (e.touches.length >= 2 && state !== 'title') {
+    pinchActive = true;
+    pinchStartDist = Math.max(1, touchDistance(e.touches));
+    pinchStartZoom = userZoom;
+    zoomToast = 1.2;
+    touchHoldActive = false;
+    touchStart = null;
+    touchStartPos = null;
+    touchCurrentPos = null;
+    dpad.active = null;
+    return;
+  }
   if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.touches[0].clientX * DPR, e.touches[0].clientY * DPR); return; }
   if (state === 'title') { newGame(); return; }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
@@ -940,6 +986,13 @@ canvas.addEventListener('touchstart', e => {
 
 canvas.addEventListener('touchmove', e => {
   e.preventDefault();
+  if (pinchActive && e.touches.length >= 2) {
+    const d = Math.max(1, touchDistance(e.touches));
+    userZoom = clamp(pinchStartZoom * (d / pinchStartDist), 0.68, 1.85);
+    zoomToast = 1.2;
+    updateViewLayout();
+    return;
+  }
   if (!touchStartPos) return;
   const t = e.touches[0];
   touchCurrentPos = { x: t.clientX, y: t.clientY };
@@ -971,6 +1024,19 @@ canvas.addEventListener('touchmove', e => {
 
 canvas.addEventListener('touchend', e => {
   e.preventDefault();
+  if (pinchActive) {
+    if (e.touches.length < 2) {
+      pinchActive = false;
+      saveZoom();
+      touchHoldActive = false;
+      touchStart = null;
+      touchStartPos = null;
+      touchCurrentPos = null;
+      touchHoldDir = { dx: 0, dy: 0 };
+      dpad.active = null;
+    }
+    return;
+  }
   if (!touchStart) { touchHoldActive = false; touchStartPos = null; return; }
   
   // If we weren't in hold mode, treat as swipe
@@ -1299,10 +1365,16 @@ function updatePhysics() {
         
         // Landing effects
         if (grid[y+2] !== undefined && grid[y+2][x] !== TILE.EMPTY) {
-          if (wasFalling > 0 && t === TILE.BOULDER) {
-            sfxBoulder();
-            addBoulderDustParticles(x, y+1);
-            screenShake(wasFalling * 2);
+          if (wasFalling > 0) {
+            sfxImpact(t, wasFalling);
+            if (t === TILE.BOULDER) {
+              addBoulderDustParticles(x, y+1);
+              screenShake(wasFalling * 2);
+            } else {
+              const color = t === TILE.DIAMOND ? 'rgba(190,245,255,0.9)' : 'rgba(90,255,170,0.85)';
+              addParticle(x + 0.5, y + 1.5, -0.35, -0.6, color, 0.28, 1.7, 0);
+              addParticle(x + 0.5, y + 1.5, 0.35, -0.6, color, 0.28, 1.7, 0);
+            }
           }
         }
         
@@ -1824,6 +1896,7 @@ function update(dt) {
   if (flashAlpha > 0) flashAlpha -= dt * 3;
   
   // Touch ripples
+  if (zoomToast > 0) zoomToast = Math.max(0, zoomToast - dt);
   for (let i = touchRipples.length - 1; i >= 0; i--) {
     touchRipples[i].t += dt * 3;
     if (touchRipples[i].t >= 1) touchRipples.splice(i, 1);
@@ -3547,6 +3620,11 @@ function drawHUD() {
   ctx.font = `${Math.max(9 * DPR, fontSize * 0.46)}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = 'rgba(255,255,255,0.42)';
   ctx.fillText(VERSION, W - CELL * 0.4, HUD_H - 8 * DPR);
+  if (boardView.follow || zoomToast > 0) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = zoomToast > 0 ? 'rgba(170,255,210,0.9)' : 'rgba(255,255,255,0.34)';
+    ctx.fillText(`Zoom ${Math.round(userZoom * 100)}%`, W / 2, HUD_H - 8 * DPR);
+  }
   
   // Dynamite counter (if any)
   if (player.dynamite > 0) {
