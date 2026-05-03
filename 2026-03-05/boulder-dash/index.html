@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.1.6</title>
+<title>Emerald Mine — Crystal Caves v2.1.7</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.1.6 — pinch zoom plus distinct falling rock/gem impact sounds
+//  v2.1.7 — slower miner movement and stronger falling boulder impacts
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.1.6';
+const VERSION = 'v2.1.7';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -110,7 +110,10 @@ function sRngInt(a, b) { return Math.floor(sRng() * (b - a + 1)) + a; }
 // ─── Audio synthesis ───
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
 let audioCtx;
-function ensureAudio() { if (!audioCtx) audioCtx = new AudioCtx(); }
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new AudioCtx();
+  if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+}
 
 function playTone(freq, dur, type='square', vol=0.08) {
   try {
@@ -142,8 +145,10 @@ function sfxImpact(tile, fallPower=1) {
     impactCooldown[kind] = now;
     const force = clamp(fallPower, 1, 6);
     if (kind === 'boulder') {
-      playTone(74 - force * 3, 0.16 + force * 0.012, 'triangle', 0.09 + force * 0.012);
-      setTimeout(() => playTone(42, 0.08, 'sawtooth', 0.035), 28);
+      // Phone speakers often drop very low bass, so layer a wooden mid-click over the sub thunk.
+      playTone(92 - force * 4, 0.18 + force * 0.014, 'triangle', 0.13 + force * 0.014);
+      setTimeout(() => playTone(150 + force * 8, 0.055, 'square', 0.065), 18);
+      setTimeout(() => playTone(48, 0.09, 'sawtooth', 0.045), 34);
     } else if (kind === 'gem') {
       playTone(820 + force * 35, 0.055, 'sine', 0.07);
       setTimeout(() => playTone(1230 + force * 45, 0.09, 'triangle', 0.045), 42);
@@ -1356,7 +1361,8 @@ function updatePhysics() {
         
         grid[y][x] = TILE.EMPTY;
         grid[y+1][x] = t;
-        newFallMap[fallKey(x, y+1)] = wasFalling + 1;
+        const landedNow = grid[y+2] !== undefined && grid[y+2][x] !== TILE.EMPTY;
+        if (!landedNow) newFallMap[fallKey(x, y+1)] = wasFalling + 1;
         
         // Kill player with momentum
         if (player.gx === x && player.gy === y + 1 && !player.dead && wasFalling > 0) {
@@ -1364,7 +1370,7 @@ function updatePhysics() {
         }
         
         // Landing effects
-        if (grid[y+2] !== undefined && grid[y+2][x] !== TILE.EMPTY) {
+        if (landedNow) {
           if (wasFalling > 0) {
             sfxImpact(t, wasFalling);
             if (t === TILE.BOULDER) {
@@ -1381,6 +1387,16 @@ function updatePhysics() {
         continue;
       }
       
+      // A falling object that is now sitting on something solid has just landed.
+      // This catches edge cases where the previous tick did not emit the landing sound.
+      if (wasFalling > 0 && below !== TILE.EMPTY) {
+        sfxImpact(t, wasFalling);
+        if (t === TILE.BOULDER) {
+          addBoulderDustParticles(x, y);
+          screenShake(wasFalling * 1.5);
+        }
+      }
+
       // Slide off boulders/gems/walls/magic walls
       if (below === TILE.BOULDER || below === TILE.GEM || below === TILE.DIAMOND || below === TILE.WALL || below === TILE.MAGIC_WALL) {
         const leftEmpty = grid[y][x-1] === TILE.EMPTY;
@@ -1641,7 +1657,7 @@ function update(dt) {
   
   // Player movement interpolation
   if (player.moving) {
-    const moveSpeed = player.speedTimer > 0 ? 18 : 11.5;
+    const moveSpeed = player.speedTimer > 0 ? 18 : 9.2;
     player.animT += effectiveDt * moveSpeed;
     if (player.animT >= 1) {
       player.x = player.gx;
@@ -1693,7 +1709,7 @@ function update(dt) {
   }
   
   // Hold-to-move (keyboard/touch) — short repeat keeps grid movement smooth without feeling slippery.
-  const moveRate = player.speedTimer > 0 ? HOLD_REPEAT_RATE * 0.55 : HOLD_REPEAT_RATE;
+  const moveRate = player.speedTimer > 0 ? HOLD_REPEAT_RATE * 0.55 : HOLD_REPEAT_RATE * 1.2;
   if (holdActive && !player.dead && !player.moving) {
     holdTimer += effectiveDt;
     if (holdTimer >= HOLD_INITIAL_DELAY) {
