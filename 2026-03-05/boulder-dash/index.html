@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.13</title>
+<title>Emerald Mine — Crystal Caves v2.4.14</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.13 — organized non-overlapping top HUD
+//  v2.4.14 — visual polish: collection bursts, impact effects,
+//            magic-wall feedback, exit opening, hazard readability
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.13';
+const VERSION = 'v2.4.14';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -214,6 +215,16 @@ function sfxLevelClear() {
   [523,659,784,1047].forEach((f,i) => setTimeout(() => playTone(f, 0.2, 'sine', 0.1), i*120));
 }
 function sfxUnlock() { playTone(660, 0.15, 'sine', 0.08); setTimeout(() => playTone(880, 0.25, 'sine', 0.08), 100); }
+function sfxMagicActivate() {
+  playTone(440, 0.12, 'sine', 0.07);
+  setTimeout(() => playTone(660, 0.10, 'triangle', 0.06), 50);
+  setTimeout(() => playTone(880, 0.15, 'sine', 0.05), 110);
+  setTimeout(() => playTone(1320, 0.08, 'sine', 0.04), 170);
+}
+function sfxMagicConvert() {
+  playTone(520 + Math.random()*200, 0.06, 'sine', 0.04);
+  setTimeout(() => playTone(780 + Math.random()*300, 0.05, 'triangle', 0.03), 30);
+}
 function sfxPush() { playTone(120, 0.1, 'triangle', 0.06); }
 function sfxEnemyDie() { playTone(300, 0.1, 'square', 0.08); setTimeout(() => playTone(150, 0.2, 'square', 0.06), 80); }
 function sfxCrush() { playTone(100, 0.15, 'sawtooth', 0.12); setTimeout(() => playTone(60, 0.25, 'triangle', 0.1), 60); }
@@ -719,6 +730,7 @@ let authoredEnemySpawns = [];
 let authoredExitPos = null;
 let flashAlpha = 0;
 let flashColor = '255,255,255'; // flash overlay color
+let shockwaveRings = []; // {x, y, r, maxR, life, maxLife, color, lineWidth}
 let globalTime = 0;
 let inputQueue = [];
 let lastInput = 0;
@@ -1216,6 +1228,7 @@ function generateLevel(lvl) {
   flashColor = '255,255,255';
   particles = [];
   sparkleParticles = [];
+  shockwaveRings = [];
   dustMotes = [];
   dripParticles = [];
   enemyTrails = [];
@@ -1315,6 +1328,8 @@ function addGemCollectParticles(gx, gy) {
     addParticle(gx + 0.5, gy + 0.5, Math.cos(angle)*speed, Math.sin(angle)*speed,
       `rgba(200,255,220,0.9)`, 0.2 + Math.random()*0.2, 0.5+Math.random(), 0);
   }
+  // Collection shockwave ring
+  shockwaveRings.push({ x: gx + 0.5, y: gy + 0.5, r: 0, maxR: 1.8, life: 0.35, maxLife: 0.35, color: '100,255,160', lineWidth: 3 });
 }
 
 function addBoulderDustParticles(gx, gy) {
@@ -1330,6 +1345,8 @@ function addBoulderDustParticles(gx, gy) {
     addParticle(gx + 0.3 + Math.random()*0.4, gy + 0.9, (Math.random()-0.5)*0.5, -0.5-Math.random(),
       'rgba(160,140,120,0.6)', 0.2, 1, 2);
   }
+  // Ground-ripple ring on heavy impact
+  shockwaveRings.push({ x: gx + 0.5, y: gy + 0.95, r: 0, maxR: 1.2, life: 0.25, maxLife: 0.25, color: '180,160,130', lineWidth: 2.5 });
 }
 
 function addDeathParticles(gx, gy) {
@@ -1787,12 +1804,25 @@ function unlockExitBurst() {
   if (exitOpen) return;
   exitOpen = true;
   sfxUnlock();
-  for (let i = 0; i < 20; i++) {
+  // Golden particle explosion
+  for (let i = 0; i < 30; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = 0.5 + Math.random() * 2;
+    const speed = 0.5 + Math.random() * 3;
     addParticle(exitPos.x + 0.5, exitPos.y + 0.5, Math.cos(angle)*speed, Math.sin(angle)*speed,
-      `hsl(45,100%,${60+Math.random()*30}%)`, 0.8 + Math.random()*0.5, 2+Math.random()*2, 0.3);
+      `hsl(${40 + Math.random()*20},100%,${60+Math.random()*30}%)`, 0.8 + Math.random()*0.5, 2+Math.random()*2.5, 0.3);
   }
+  // Rising golden motes
+  for (let i = 0; i < 10; i++) {
+    addParticle(exitPos.x + 0.5 + (Math.random()-0.5)*0.8, exitPos.y + 0.5,
+      (Math.random()-0.5)*0.5, -1.5 - Math.random()*2,
+      `rgba(255,230,120,${0.6+Math.random()*0.3})`, 0.6 + Math.random()*0.6, 1+Math.random()*1.5, -0.5);
+  }
+  // Dramatic golden shockwave
+  shockwaveRings.push({ x: exitPos.x + 0.5, y: exitPos.y + 0.5, r: 0, maxR: 3.5, life: 0.6, maxLife: 0.6, color: '212,175,55', lineWidth: 4 });
+  // Screen flash + shake
+  flashAlpha = Math.max(flashAlpha, 0.35);
+  flashColor = '255,230,140';
+  screenShake(5);
 }
 
 function checkExitUnlock() {
@@ -1878,6 +1908,8 @@ function tryMovePlayer(dx, dy) {
         `hsl(${200 + Math.random()*40},90%,${70+Math.random()*25}%)`,
         0.5 + Math.random()*0.5, 1.5+Math.random()*3, 0.5);
     }
+    // Diamond collection shockwave — bigger and brighter
+    shockwaveRings.push({ x: nx + 0.5, y: ny + 0.5, r: 0, maxR: 2.2, life: 0.4, maxLife: 0.4, color: '180,220,255', lineWidth: 3.5 });
     flashAlpha = 0.35;
     flashColor = '180,220,255';
     flyGems.push({ x: nx + 0.5, y: ny + 0.5, t: 0 });
@@ -2067,6 +2099,24 @@ function updatePhysics() {
           if (!magicWallActive) {
             magicWallActive = true;
             magicWallTimer = MAGIC_WALL_DURATION;
+            // Activation flash — all magic walls pulse
+            flashAlpha = Math.max(flashAlpha, 0.18);
+            flashColor = '100,255,180';
+            screenShake(3);
+            sfxMagicActivate();
+            // Emit activation particles at every magic wall tile
+            for (let my = 1; my < gridH - 1; my++) {
+              for (let mx = 1; mx < gridW - 1; mx++) {
+                if (grid[my][mx] === TILE.MAGIC_WALL) {
+                  for (let ai = 0; ai < 4; ai++) {
+                    const aa = Math.random() * Math.PI * 2;
+                    addParticle(mx + 0.5, my + 0.5, Math.cos(aa)*1.5, Math.sin(aa)*1.5 - 0.5,
+                      `hsla(${140 + Math.random()*40},85%,${65+Math.random()*25}%,0.7)`,
+                      0.4 + Math.random()*0.3, 1.5+Math.random()*1.5, 0.3);
+                  }
+                }
+              }
+            }
           }
           if (magicWallActive) {
             // Convert: boulder→gem, gem/diamond→boulder
@@ -2074,10 +2124,25 @@ function updatePhysics() {
             grid[y][x] = TILE.EMPTY;
             grid[y+2][x] = converted;
             newFallMap[fallKey(x, y+2)] = 1;
-            // Sparkle effect at magic wall
-            addParticle(x + 0.5, y + 1 + 0.5, 0, 0, 'rgba(255,255,100,0.8)', 0.3, 2, 0);
-            addParticle(x + 0.3, y + 1 + 0.3, (Math.random()-0.5)*2, -1, 'rgba(100,255,200,0.7)', 0.4, 1.5, 0);
-            addParticle(x + 0.7, y + 1 + 0.3, (Math.random()-0.5)*2, -1, 'rgba(100,200,255,0.7)', 0.4, 1.5, 0);
+            // Conversion burst at magic wall — energy arc through the wall
+            const convHue = converted === TILE.GEM ? 140 : 30;
+            for (let ci = 0; ci < 12; ci++) {
+              const ca = Math.random() * Math.PI * 2;
+              const cs = 0.8 + Math.random() * 2.5;
+              addParticle(x + 0.5, y + 1 + 0.5, Math.cos(ca)*cs, Math.sin(ca)*cs,
+                `hsla(${convHue + Math.random()*30},90%,${60+Math.random()*30}%,0.85)`,
+                0.3 + Math.random()*0.3, 1.5+Math.random()*2, 0.5);
+            }
+            // Bright core flash
+            addParticle(x + 0.5, y + 1 + 0.5, 0, 0, 'rgba(255,255,200,0.95)', 0.2, 4, 0);
+            // Output sparkle below wall
+            for (let ci = 0; ci < 5; ci++) {
+              addParticle(x + 0.3 + Math.random()*0.4, y + 2 + 0.3, (Math.random()-0.5)*1.5, -0.5 - Math.random(),
+                `hsla(${convHue},80%,70%,0.7)`, 0.25, 1+Math.random(), 0.5);
+            }
+            // Conversion shockwave
+            shockwaveRings.push({ x: x + 0.5, y: y + 1 + 0.5, r: 0, maxR: 1.5, life: 0.3, maxLife: 0.3, color: converted === TILE.GEM ? '100,255,180' : '255,200,100', lineWidth: 2 });
+            sfxMagicConvert();
             continue;
           }
         }
@@ -2141,9 +2206,19 @@ function updatePhysics() {
               addBoulderDustParticles(x, y+1);
               screenShake(wasFalling * 2);
             } else {
-              const color = t === TILE.DIAMOND ? 'rgba(190,245,255,0.9)' : 'rgba(90,255,170,0.85)';
-              addParticle(x + 0.5, y + 1.5, -0.35, -0.6, color, 0.28, 1.7, 0);
-              addParticle(x + 0.5, y + 1.5, 0.35, -0.6, color, 0.28, 1.7, 0);
+              // Gem/diamond landing sparkle burst
+              const isD = t === TILE.DIAMOND;
+              const hue = isD ? 210 : 140;
+              for (let gi = 0; gi < 6; gi++) {
+                const ga = Math.random() * Math.PI - Math.PI; // upward hemisphere
+                const gs = 0.6 + Math.random() * 1.5;
+                addParticle(x + 0.5, y + 1.5, Math.cos(ga)*gs, Math.sin(ga)*gs - 0.3,
+                  `hsla(${hue + Math.random()*30},85%,${65+Math.random()*25}%,0.8)`,
+                  0.25 + Math.random()*0.2, 1+Math.random()*1.5, 0.5);
+              }
+              // Tiny impact ring
+              shockwaveRings.push({ x: x + 0.5, y: y + 1.5, r: 0, maxR: 0.8, life: 0.2, maxLife: 0.2, color: isD ? '190,245,255' : '90,255,170', lineWidth: 1.5 });
+              if (wasFalling >= 2) screenShake(wasFalling * 0.8);
             }
           }
         }
@@ -2678,6 +2753,15 @@ function update(dt) {
   }
   if (enemyTrails.length > 120) enemyTrails.splice(0, enemyTrails.length - 120);
 
+  // Shockwave rings
+  for (let i = shockwaveRings.length - 1; i >= 0; i--) {
+    const sw = shockwaveRings[i];
+    sw.life -= dt;
+    const progress = 1 - sw.life / sw.maxLife;
+    sw.r = sw.maxR * easeOut(progress);
+    if (sw.life <= 0) shockwaveRings.splice(i, 1);
+  }
+
   // Sparkle particles around gems
   // Spawn new sparkles near gems
   if (state === 'playing') {
@@ -2685,6 +2769,13 @@ function update(dt) {
       for (let x = 1; x < gridW-1; x++) {
         if ((grid[y][x] === TILE.GEM || grid[y][x] === TILE.DIAMOND) && Math.random() < 0.03) {
           addSparkle(x + 0.5, y + 0.5);
+        }
+        // Active magic wall ambient crackling sparks
+        if (grid[y][x] === TILE.MAGIC_WALL && magicWallActive && Math.random() < 0.06) {
+          addParticle(x + Math.random(), y + Math.random(),
+            (Math.random()-0.5)*1.2, -0.5 - Math.random()*0.8,
+            `hsla(${140 + Math.random()*40},80%,${60+Math.random()*30}%,0.7)`,
+            0.2 + Math.random()*0.2, 1+Math.random(), 0.3);
         }
       }
     }
@@ -4808,6 +4899,19 @@ function drawParticles() {
   ctx.globalAlpha = 1;
 }
 
+function drawShockwaveRings() {
+  for (const sw of shockwaveRings) {
+    const [sx, sy] = worldToScreen(sw.x, sw.y);
+    const alpha = (sw.life / sw.maxLife) * 0.7;
+    const r = sw.r * CELL;
+    ctx.strokeStyle = `rgba(${sw.color},${alpha})`;
+    ctx.lineWidth = sw.lineWidth * DPR * (sw.life / sw.maxLife);
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
 function drawSparkleParticles() {
   for (const s of sparkleParticles) {
     const [sx, sy] = worldToScreen(s.x, s.y);
@@ -5561,7 +5665,38 @@ function drawWin() {
 }
 
 function drawDangerWarnings() {
-  // Audio-only warning now: no boulder highlighting or screen flash.
+  if (state !== 'playing' || player.dead) return;
+  // Proximity danger halo: subtle red pulse when enemies are within 3 tiles
+  for (const en of enemies) {
+    if (!en.alive) continue;
+    const d = dist(player.gx, player.gy, en.gx, en.gy);
+    if (d > 3.5) continue;
+    const urgency = 1 - d / 3.5; // 0 at edge, 1 at adjacent
+    const pulse = 0.5 + Math.sin(globalTime * 8) * 0.5;
+    const alpha = urgency * pulse * 0.25;
+    if (alpha < 0.02) continue;
+    const [sx, sy] = worldToScreen(en.gx + 0.5, en.gy + 0.5);
+    const dangerGlow = ctx.createRadialGradient(sx, sy, 0, sx, sy, CELL * 1.8);
+    dangerGlow.addColorStop(0, `rgba(255,60,30,${alpha})`);
+    dangerGlow.addColorStop(0.5, `rgba(255,30,0,${alpha * 0.3})`);
+    dangerGlow.addColorStop(1, 'rgba(255,0,0,0)');
+    ctx.fillStyle = dangerGlow;
+    ctx.beginPath(); ctx.arc(sx, sy, CELL * 1.8, 0, Math.PI * 2); ctx.fill();
+  }
+  // Falling boulder danger: subtle warning glow on boulders directly above player
+  for (let checkY = player.gy - 1; checkY >= Math.max(1, player.gy - 4); checkY--) {
+    if (grid[checkY] && grid[checkY][player.gx] === TILE.BOULDER) {
+      const fk = fallKey(player.gx, checkY);
+      if (fallMap[fk] > 0) {
+        const [bsx, bsy] = worldToScreen(player.gx + 0.5, checkY + 0.5);
+        const warnPulse = 0.5 + Math.sin(globalTime * 10) * 0.5;
+        ctx.fillStyle = `rgba(255,100,50,${warnPulse * 0.12})`;
+        ctx.beginPath(); ctx.arc(bsx, bsy, CELL * 0.6, 0, Math.PI * 2); ctx.fill();
+      }
+      break; // only check first boulder above
+    }
+    if (grid[checkY] && grid[checkY][player.gx] !== TILE.EMPTY) break;
+  }
 }
 
 function drawCaveIntro() {
@@ -5727,6 +5862,7 @@ function render() {
   
   drawDangerWarnings();
   drawParticles();
+  drawShockwaveRings();
   drawFlyGems();
   ctx.restore();
   drawVignette();
