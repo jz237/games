@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.22</title>
+<title>Emerald Mine — Crystal Caves v2.4.23</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,11 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.22 — title preview is now a miniaturized
-//            gameplay scene with HUD, tiles, sprites, and effects
+//  v2.4.23 — miner sprite upgrade: cleaner proportions,
+//            sharper helmet/goggles, subtler walk, richer silhouette
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.22';
+const VERSION = 'v2.4.23';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -4283,7 +4283,7 @@ function drawPlayerSprite(sx, sy, s) {
   //  HD MINER CHARACTER — fills 88% of tile with full detail
   //  50+ canvas drawing calls for rich visual detail
   // ═══════════════════════════════════════════════════════════════
-  const S = s * 0.88; // character fills 88% of tile
+  const S = s * 0.82; // slightly smaller, cleaner silhouette with less goofy crowding
   const isWalking = player.moving;
   const walkSpeed = 10; // walk animation speed
   const walkCycle = globalTime * walkSpeed;
@@ -4333,7 +4333,7 @@ function drawPlayerSprite(sx, sy, s) {
 
   // Walk animation: legs alternate DRAMATICALLY
   // Amplitude = 25%+ of character height for obvious motion
-  const legAmplitude = S * 0.28; // 28% of char height — very obvious
+  const legAmplitude = S * 0.18; // cleaner arcade stride; less rubbery/goofy
   const leftLegSwing = isWalking ? Math.sin(walkCycle) * legAmplitude : 0;
   const rightLegSwing = isWalking ? Math.sin(walkCycle + Math.PI) * legAmplitude : 0;
 
@@ -4412,9 +4412,9 @@ function drawPlayerSprite(sx, sy, s) {
   // ══════════════════════════════
   //  BODY — Blue overalls with straps
   // ══════════════════════════════
-  const bodyW = S * 0.42;
-  const bodyH = S * 0.3;
-  const bodyTop = -S * 0.16;
+  const bodyW = S * 0.48;
+  const bodyH = S * 0.34;
+  const bodyTop = -S * 0.145;
 
   // Main body gradient — blue overalls
   const bodyGrd = ctx.createLinearGradient(-bodyW/2, bodyTop, bodyW/2, bodyTop + bodyH);
@@ -4496,7 +4496,7 @@ function drawPlayerSprite(sx, sy, s) {
   //  ARMS — swing opposite to legs
   // ══════════════════════════════
   // Arms swing opposite to legs: left arm forward when right leg forward
-  const armAmplitude = isWalking ? 0.9 : 0.06; // 15%+ char height swing
+  const armAmplitude = isWalking ? 0.42 : 0.045; // restrained swing: reads like a miner, not a windmill
   const leftArmSwing = isWalking ? Math.sin(walkCycle + Math.PI) * armAmplitude : Math.sin(globalTime * 0.8) * 0.06;
   const rightArmSwing = isWalking ? Math.sin(walkCycle) * armAmplitude : -Math.sin(globalTime * 0.8) * 0.06;
   const armLen = S * 0.22;
@@ -4563,8 +4563,8 @@ function drawPlayerSprite(sx, sy, s) {
   // ══════════════════════════════
   //  HEAD — detailed with gradients
   // ══════════════════════════════
-  const headR = S * 0.17;
-  const headY = -S * 0.3;
+  const headR = S * 0.145;
+  const headY = -S * 0.305;
 
   // Head shadow on body (neck shadow)
   ctx.fillStyle = 'rgba(0,0,0,0.15)'; // 84
@@ -4605,39 +4605,33 @@ function drawPlayerSprite(sx, sy, s) {
   const eyeOffX = eyeDir * S * 0.02;
   const eyeOffY = eyeDirY * S * 0.01;
   const eyeY = headY - headR * 0.08;
-  const eyeSpacing = S * 0.065;
+  const eyeSpacing = S * 0.055;
 
   if (!isBlinking) {
-    // Eye whites (larger, more visible)
-    ctx.fillStyle = '#fff'; // 99
-    ctx.beginPath(); ctx.ellipse(-eyeSpacing + eyeOffX, eyeY, S*0.038, S*0.032, 0, 0, Math.PI*2); ctx.fill(); // 100
-    ctx.beginPath(); ctx.ellipse(eyeSpacing + eyeOffX, eyeY, S*0.038, S*0.032, 0, 0, Math.PI*2); ctx.fill(); // 101
-    // Eye outlines
-    ctx.strokeStyle = 'rgba(80,50,30,0.5)';
-    ctx.lineWidth = Math.max(0.5, S * 0.012);
-    ctx.beginPath(); ctx.ellipse(-eyeSpacing + eyeOffX, eyeY, S*0.038, S*0.032, 0, 0, Math.PI*2); ctx.stroke(); // 102
-    ctx.beginPath(); ctx.ellipse(eyeSpacing + eyeOffX, eyeY, S*0.038, S*0.032, 0, 0, Math.PI*2); ctx.stroke(); // 103
-    // Iris (dark brown)
-    ctx.fillStyle = '#3a2818'; // 104
-    ctx.beginPath(); ctx.arc(-eyeSpacing + eyeOffX*1.8, eyeY + eyeOffY, S*0.02, 0, Math.PI*2); ctx.fill(); // 105
-    ctx.beginPath(); ctx.arc(eyeSpacing + eyeOffX*1.8, eyeY + eyeOffY, S*0.02, 0, Math.PI*2); ctx.fill(); // 106
-    // Pupils (black)
-    ctx.fillStyle = '#0a0a0a'; // 107
-    ctx.beginPath(); ctx.arc(-eyeSpacing + eyeOffX*2, eyeY + eyeOffY, S*0.012, 0, Math.PI*2); ctx.fill(); // 108
-    ctx.beginPath(); ctx.arc(eyeSpacing + eyeOffX*2, eyeY + eyeOffY, S*0.012, 0, Math.PI*2); ctx.fill(); // 109
-    // Eye sparkle highlights
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'; // 110
-    ctx.beginPath(); ctx.arc(-eyeSpacing + eyeOffX*1.2 - S*0.008, eyeY - S*0.01, S*0.009, 0, Math.PI*2); ctx.fill(); // 111
-    ctx.beginPath(); ctx.arc(eyeSpacing + eyeOffX*1.2 - S*0.008, eyeY - S*0.01, S*0.009, 0, Math.PI*2); ctx.fill(); // 112
-    // Secondary smaller highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.5)'; // 113
-    ctx.beginPath(); ctx.arc(-eyeSpacing + eyeOffX*1.5 + S*0.005, eyeY + S*0.005, S*0.005, 0, Math.PI*2); ctx.fill(); // 114
-    ctx.beginPath(); ctx.arc(eyeSpacing + eyeOffX*1.5 + S*0.005, eyeY + S*0.005, S*0.005, 0, Math.PI*2); ctx.fill(); // 115
-    // Eyebrows
-    ctx.strokeStyle = '#6a4a2a'; // 116
-    ctx.lineWidth = Math.max(1, S * 0.02);
-    ctx.beginPath(); ctx.moveTo(-eyeSpacing - S*0.03, eyeY - S*0.04); ctx.quadraticCurveTo(-eyeSpacing, eyeY - S*0.05, -eyeSpacing + S*0.03, eyeY - S*0.038); ctx.stroke(); // 117
-    ctx.beginPath(); ctx.moveTo(eyeSpacing - S*0.03, eyeY - S*0.038); ctx.quadraticCurveTo(eyeSpacing, eyeY - S*0.05, eyeSpacing + S*0.03, eyeY - S*0.04); ctx.stroke(); // 118
+    // Miner goggles/eyes — smaller and sharper so the face reads less goofy at tile scale.
+    const goggleGrd = ctx.createLinearGradient(-eyeSpacing - S*0.05, eyeY - S*0.03, eyeSpacing + S*0.05, eyeY + S*0.03);
+    goggleGrd.addColorStop(0, '#151a16');
+    goggleGrd.addColorStop(0.35, '#31443a');
+    goggleGrd.addColorStop(1, '#101411');
+    ctx.fillStyle = goggleGrd;
+    ctx.strokeStyle = 'rgba(20,15,10,0.72)';
+    ctx.lineWidth = Math.max(0.7, S * 0.014);
+    ctx.beginPath(); ctx.roundRect(-eyeSpacing - S*0.038, eyeY - S*0.026, S*0.075, S*0.052, S*0.018); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(eyeSpacing - S*0.038, eyeY - S*0.026, S*0.075, S*0.052, S*0.018); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(40,28,16,0.68)';
+    ctx.lineWidth = Math.max(0.6, S * 0.010);
+    ctx.beginPath(); ctx.moveTo(-eyeSpacing + S*0.038, eyeY); ctx.lineTo(eyeSpacing - S*0.038, eyeY); ctx.stroke();
+    // Warm eye glints under the goggles.
+    ctx.fillStyle = '#f5d68a';
+    ctx.beginPath(); ctx.arc(-eyeSpacing + eyeOffX*1.3, eyeY + eyeOffY, S*0.013, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(eyeSpacing + eyeOffX*1.3, eyeY + eyeOffY, S*0.013, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,220,0.7)';
+    ctx.beginPath(); ctx.arc(-eyeSpacing - S*0.017, eyeY - S*0.012, S*0.007, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(eyeSpacing - S*0.017, eyeY - S*0.012, S*0.007, 0, Math.PI*2); ctx.fill();
+    // Brow shadow tucked under helmet brim.
+    ctx.strokeStyle = 'rgba(70,44,24,0.55)';
+    ctx.lineWidth = Math.max(0.8, S * 0.014);
+    ctx.beginPath(); ctx.moveTo(-S*0.13, eyeY - S*0.045); ctx.quadraticCurveTo(0, eyeY - S*0.065, S*0.13, eyeY - S*0.045); ctx.stroke();
   } else {
     // Blinking — closed eyes (horizontal lines)
     ctx.strokeStyle = '#5a3a1a'; // 119
@@ -4660,18 +4654,13 @@ function drawPlayerSprite(sx, sy, s) {
   ctx.closePath();
   ctx.fill(); // 125
 
-  // Mouth — slight smile
-  ctx.strokeStyle = '#8b5a3a'; // 126
-  ctx.lineWidth = Math.max(1, S * 0.018);
-  ctx.beginPath(); // 127
-  ctx.arc(0, headY + headR * 0.42, S * 0.04, 0.15, Math.PI - 0.15);
-  ctx.stroke(); // 128
-  // Lower lip highlight
-  ctx.strokeStyle = 'rgba(200,140,100,0.3)'; // 129
-  ctx.lineWidth = Math.max(0.5, S * 0.01);
+  // Mouth — small determined line instead of a goofy smile
+  ctx.strokeStyle = '#7a4a2c';
+  ctx.lineWidth = Math.max(0.8, S * 0.014);
   ctx.beginPath();
-  ctx.arc(0, headY + headR * 0.42, S * 0.035, 0.3, Math.PI - 0.3);
-  ctx.stroke(); // 130
+  ctx.moveTo(-S*0.030, headY + headR * 0.44);
+  ctx.quadraticCurveTo(0, headY + headR * 0.47, S*0.035, headY + headR * 0.43);
+  ctx.stroke();
 
   // Chin shadow
   ctx.fillStyle = 'rgba(0,0,0,0.08)'; // 131
