@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.4</title>
+<title>Emerald Mine — Crystal Caves v2.4.5</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.4 — remove square empty-edge frame behind boulders
+//  v2.4.5 — clearer creature silhouettes and threat auras
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.4';
+const VERSION = 'v2.4.5';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -4308,89 +4308,160 @@ function drawEnemy(en) {
   const [sx, sy] = worldToScreen(en.x + 0.5, en.y + 0.5);
   if (sx < -CELL*2 || sx > W+CELL*2 || sy < -CELL*2 || sy > H+CELL*2) return;
   
-  const glowIntensity = en.type === 'firefly' ? 0.34 + Math.sin(en.glowT * 1.4) * 0.10 : 0.16 + Math.sin(en.glowT) * 0.06;
-  const glowR = CELL * (en.type === 'firefly' ? 1.85 : 1.25);
+  const pulse = Math.sin(en.glowT * 1.7 + globalTime * 0.4);
+  const glowIntensity = en.type === 'firefly' ? 0.38 + pulse * 0.10 : en.type === 'hunter' ? 0.25 + pulse * 0.08 : 0.22 + pulse * 0.07;
+  const glowR = CELL * (en.type === 'firefly' ? 1.95 : en.type === 'hunter' ? 1.55 : 1.42);
   const egrd = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
-  const glowColor = en.type === 'butterfly' ? '120,220,255' : en.type === 'hunter' ? '255,60,160' : '255,80,30';
+  const glowColor = en.type === 'butterfly' ? '105,225,255' : en.type === 'hunter' ? '255,35,125' : '255,112,24';
   egrd.addColorStop(0, `rgba(${glowColor},${glowIntensity})`);
+  egrd.addColorStop(0.42, `rgba(${glowColor},${glowIntensity * 0.32})`);
   egrd.addColorStop(1, `rgba(${glowColor},0)`);
   ctx.fillStyle = egrd;
   ctx.beginPath(); ctx.arc(sx, sy, glowR, 0, Math.PI*2); ctx.fill();
   
-  const bobY = sy + Math.sin(en.bobT) * CELL * 0.03;
+  const bobY = sy + Math.sin(en.bobT) * CELL * 0.035;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
   if (en.type === 'firefly') {
-    // Make patrol creatures readable at a glance: a warm lantern trail and tiny wing glints.
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = `rgba(255,190,55,${0.22 + Math.sin(globalTime * 4 + en.bobT) * 0.06})`;
-    ctx.lineWidth = Math.max(1.5 * DPR, CELL * 0.035);
+    // Orange patrol ring: reads as warm/fire danger.
+    ctx.strokeStyle = `rgba(255,190,45,${0.28 + Math.sin(globalTime * 4 + en.bobT) * 0.07})`;
+    ctx.lineWidth = Math.max(1.5 * DPR, CELL * 0.038);
     ctx.beginPath();
-    ctx.arc(sx, bobY, CELL * 0.45, globalTime * 1.4 + en.bobT, globalTime * 1.4 + en.bobT + Math.PI * 1.18);
+    ctx.arc(sx, bobY, CELL * 0.48, globalTime * 1.4 + en.bobT, globalTime * 1.4 + en.bobT + Math.PI * 1.20);
     ctx.stroke();
-    ctx.restore();
+  } else if (en.type === 'butterfly') {
+    // Blue prismatic trail: reads as fragile bonus creature.
+    for (let i = 0; i < 3; i++) {
+      ctx.strokeStyle = `rgba(${95+i*35},${215+i*10},255,${0.13 - i*0.025})`;
+      ctx.lineWidth = Math.max(1 * DPR, CELL * (0.022 - i*0.003));
+      ctx.beginPath();
+      const off = i * 0.18;
+      ctx.ellipse(sx, bobY, CELL*(0.45+off), CELL*(0.22+off*0.45), Math.sin(globalTime+en.bobT)*0.4, 0, Math.PI*2);
+      ctx.stroke();
+    }
+  } else if (en.type === 'hunter') {
+    // Magenta warning spikes: reads as aggressive threat.
+    ctx.strokeStyle = `rgba(255,42,118,${0.30 + Math.sin(globalTime * 7) * 0.08})`;
+    ctx.lineWidth = Math.max(1.4 * DPR, CELL * 0.035);
+    for (let i = 0; i < 6; i++) {
+      const a = globalTime * 1.8 + en.bobT + i * Math.PI / 3;
+      ctx.beginPath();
+      ctx.moveTo(sx + Math.cos(a)*CELL*0.43, bobY + Math.sin(a)*CELL*0.43);
+      ctx.lineTo(sx + Math.cos(a)*CELL*0.68, bobY + Math.sin(a)*CELL*0.68);
+      ctx.stroke();
+    }
   }
+  ctx.restore();
   drawEnemySprite(sx, bobY, CELL, en);
 }
 
 function drawEnemySprite(sx, sy, s, en) {
-  const r = s * 0.3;
-  
-  ctx.beginPath();
-  ctx.moveTo(sx, sy - r);
-  ctx.bezierCurveTo(sx + r*1.2, sy - r*0.5, sx + r*1.1, sy + r*0.8, sx + r*0.5, sy + r);
-  const wave = Math.sin(globalTime * 5 + en.bobT) * r * 0.1;
-  ctx.quadraticCurveTo(sx + r*0.25, sy + r*0.85 + wave, sx, sy + r*0.9);
-  ctx.quadraticCurveTo(sx - r*0.25, sy + r*0.85 - wave, sx - r*0.5, sy + r);
-  ctx.bezierCurveTo(sx - r*1.1, sy + r*0.8, sx - r*1.2, sy - r*0.5, sx, sy - r);
-  ctx.closePath();
-  
-  const egrd = ctx.createRadialGradient(sx, sy - r*0.2, 0, sx, sy, r*1.2);
-  if (en.type === 'butterfly') {
-    egrd.addColorStop(0, '#a0f8ff'); egrd.addColorStop(0.7, '#2aa8ff'); egrd.addColorStop(1, '#1450a0');
-  } else if (en.type === 'hunter') {
-    egrd.addColorStop(0, '#ff6ad5'); egrd.addColorStop(0.7, '#cc1578'); egrd.addColorStop(1, '#650033');
-  } else {
-    egrd.addColorStop(0, '#fff6a0'); egrd.addColorStop(0.32, '#ffb820'); egrd.addColorStop(0.72, '#ff5a16'); egrd.addColorStop(1, '#8a1900');
-  }
-  ctx.fillStyle = egrd;
-  ctx.fill();
+  const r = s * 0.31;
+  const flap = Math.sin(globalTime * (en.type === 'firefly' ? 20 : 13) + en.bobT);
+  ctx.save();
 
-  if (en.type === 'firefly') {
+  if (en.type === 'butterfly') {
+    // Butterfly: broad cyan wings + small dark body. Very different from firefly.
+    ctx.globalCompositeOperation = 'source-over';
+    const wingOpen = 0.74 + flap * 0.13;
+    const wingGrdL = ctx.createRadialGradient(sx-r*0.65, sy-r*0.28, 0, sx-r*0.42, sy, r*1.0);
+    wingGrdL.addColorStop(0, '#e7ffff'); wingGrdL.addColorStop(0.42, '#63eaff'); wingGrdL.addColorStop(1, '#1260ff');
+    const wingGrdR = ctx.createRadialGradient(sx+r*0.65, sy-r*0.28, 0, sx+r*0.42, sy, r*1.0);
+    wingGrdR.addColorStop(0, '#e7ffff'); wingGrdR.addColorStop(0.42, '#63eaff'); wingGrdR.addColorStop(1, '#1260ff');
+    ctx.strokeStyle = 'rgba(0,35,85,0.72)';
+    ctx.lineWidth = Math.max(1, s*0.025);
+    ctx.fillStyle = wingGrdL;
+    ctx.beginPath(); ctx.ellipse(sx-r*0.47, sy-r*0.12, r*0.62, r*wingOpen, -0.58, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = wingGrdR;
+    ctx.beginPath(); ctx.ellipse(sx+r*0.47, sy-r*0.12, r*0.62, r*wingOpen, 0.58, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.42)';
+    ctx.beginPath(); ctx.ellipse(sx-r*0.58, sy-r*0.23, r*0.18, r*0.28, -0.5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(sx+r*0.58, sy-r*0.23, r*0.18, r*0.28, 0.5, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(210,255,255,0.55)'; ctx.lineWidth = Math.max(0.7, s*0.012);
+    for (const side of [-1,1]) {
+      ctx.beginPath();
+      ctx.moveTo(sx, sy-r*0.1);
+      ctx.lineTo(sx + side*r*0.72, sy-r*0.38);
+      ctx.moveTo(sx, sy+r*0.08);
+      ctx.lineTo(sx + side*r*0.58, sy+r*0.32);
+      ctx.stroke();
+    }
+    const bodyGrd = ctx.createLinearGradient(sx, sy-r*0.48, sx, sy+r*0.52);
+    bodyGrd.addColorStop(0, '#113a78'); bodyGrd.addColorStop(1, '#06142f');
+    ctx.fillStyle = bodyGrd;
+    ctx.beginPath(); ctx.ellipse(sx, sy, r*0.22, r*0.68, 0, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.stroke();
+    ctx.strokeStyle = 'rgba(170,245,255,0.65)'; ctx.lineWidth = Math.max(0.7, s*0.014);
+    ctx.beginPath(); ctx.moveTo(sx-r*0.08, sy-r*0.5); ctx.lineTo(sx-r*0.28, sy-r*0.78); ctx.moveTo(sx+r*0.08, sy-r*0.5); ctx.lineTo(sx+r*0.28, sy-r*0.78); ctx.stroke();
+  } else if (en.type === 'hunter') {
+    // Hunter: angular magenta predator with claws and horned silhouette.
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    ctx.beginPath(); ctx.ellipse(sx, sy+r*0.78, r*0.78, r*0.20, 0, 0, Math.PI*2); ctx.fill();
+    const grd = ctx.createRadialGradient(sx-r*0.18, sy-r*0.34, 0, sx, sy, r*1.25);
+    grd.addColorStop(0, '#ffb3ea'); grd.addColorStop(0.22, '#ff3bb3'); grd.addColorStop(0.68, '#b80058'); grd.addColorStop(1, '#36001f');
+    ctx.fillStyle = grd;
+    ctx.strokeStyle = 'rgba(40,0,25,0.85)';
+    ctx.lineWidth = Math.max(1.2, s*0.035);
+    ctx.beginPath();
+    ctx.moveTo(sx, sy-r*0.92);
+    ctx.lineTo(sx+r*0.38, sy-r*0.32);
+    ctx.lineTo(sx+r*0.82, sy-r*0.15);
+    ctx.lineTo(sx+r*0.40, sy+r*0.18);
+    ctx.lineTo(sx+r*0.55, sy+r*0.78);
+    ctx.lineTo(sx, sy+r*0.48);
+    ctx.lineTo(sx-r*0.55, sy+r*0.78);
+    ctx.lineTo(sx-r*0.40, sy+r*0.18);
+    ctx.lineTo(sx-r*0.82, sy-r*0.15);
+    ctx.lineTo(sx-r*0.38, sy-r*0.32);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,140,205,0.45)'; ctx.lineWidth = Math.max(0.8, s*0.014);
+    ctx.beginPath(); ctx.moveTo(sx-r*0.18, sy-r*0.55); ctx.lineTo(sx, sy+r*0.42); ctx.lineTo(sx+r*0.18, sy-r*0.55); ctx.stroke();
+    ctx.fillStyle = `rgba(255,245,100,${0.9 + Math.sin(en.glowT*3)*0.08})`;
+    ctx.beginPath(); ctx.ellipse(sx-r*0.20, sy-r*0.22, r*0.15, r*0.11, -0.2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(sx+r*0.20, sy-r*0.22, r*0.15, r*0.11, 0.2, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#210010';
+    ctx.beginPath(); ctx.arc(sx-r*0.20, sy-r*0.20, r*0.055, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx+r*0.20, sy-r*0.20, r*0.055, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,230,245,0.55)'; ctx.lineWidth = Math.max(1, s*0.018);
+    for (const side of [-1,1]) {
+      ctx.beginPath();
+      ctx.moveTo(sx+side*r*0.43, sy+r*0.12);
+      ctx.lineTo(sx+side*r*0.78, sy+r*0.36);
+      ctx.lineTo(sx+side*r*0.56, sy+r*0.42);
+      ctx.stroke();
+    }
+  } else {
+    // Firefly: hot lantern core, small beetle body, bright flapping wings.
+    const bodyGrd = ctx.createRadialGradient(sx, sy-r*0.2, 0, sx, sy, r*1.15);
+    bodyGrd.addColorStop(0, '#fff9b5'); bodyGrd.addColorStop(0.26, '#ffc436'); bodyGrd.addColorStop(0.62, '#ff621b'); bodyGrd.addColorStop(1, '#641300');
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const wing = 0.55 + Math.sin(globalTime * 18 + en.bobT) * 0.18;
-    ctx.fillStyle = `rgba(255,225,105,${wing})`;
-    ctx.beginPath(); ctx.ellipse(sx - r*0.62, sy - r*0.08, r*0.34, r*0.18, -0.55, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(sx + r*0.62, sy - r*0.08, r*0.34, r*0.18, 0.55, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,245,170,0.55)';
-    ctx.beginPath(); ctx.arc(sx, sy + r*0.15, r*0.22, 0, Math.PI*2); ctx.fill();
+    const wing = 0.58 + Math.abs(flap) * 0.24;
+    ctx.fillStyle = `rgba(255,230,115,${wing})`;
+    ctx.beginPath(); ctx.ellipse(sx - r*0.58, sy - r*0.12, r*0.42, r*0.20, -0.55, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(sx + r*0.58, sy - r*0.12, r*0.42, r*0.20, 0.55, 0, Math.PI*2); ctx.fill();
     ctx.restore();
+    ctx.fillStyle = bodyGrd;
+    ctx.strokeStyle = 'rgba(65,18,0,0.78)';
+    ctx.lineWidth = Math.max(1, s*0.03);
+    ctx.beginPath();
+    ctx.moveTo(sx, sy-r*0.82);
+    ctx.bezierCurveTo(sx+r*0.70, sy-r*0.42, sx+r*0.66, sy+r*0.62, sx, sy+r*0.82);
+    ctx.bezierCurveTo(sx-r*0.66, sy+r*0.62, sx-r*0.70, sy-r*0.42, sx, sy-r*0.82);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = `rgba(255,252,178,${0.58 + Math.sin(en.glowT*2)*0.18})`;
+    ctx.beginPath(); ctx.arc(sx, sy+r*0.25, r*0.28, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,220,95,0.35)'; ctx.lineWidth = Math.max(0.7, s*0.012);
+    ctx.beginPath(); ctx.moveTo(sx-r*0.34, sy-r*0.06); ctx.lineTo(sx+r*0.34, sy-r*0.06); ctx.moveTo(sx-r*0.26, sy+r*0.18); ctx.lineTo(sx+r*0.26, sy+r*0.18); ctx.stroke();
+    const eyeGlow = 0.8 + Math.sin(en.glowT * 2) * 0.2;
+    ctx.fillStyle = `rgba(255,255,120,${eyeGlow})`;
+    ctx.beginPath(); ctx.ellipse(sx - r*0.22, sy - r*0.20, r*0.12, r*0.15, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(sx + r*0.22, sy - r*0.20, r*0.12, r*0.15, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#240600';
+    ctx.beginPath(); ctx.arc(sx - r*0.22, sy - r*0.18, r*0.055, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx + r*0.22, sy - r*0.18, r*0.055, 0, Math.PI*2); ctx.fill();
   }
-  
-  const eyeGlow = 0.8 + Math.sin(en.glowT * 2) * 0.2;
-  ctx.fillStyle = `rgba(255,255,100,${eyeGlow})`;
-  ctx.beginPath();
-  ctx.ellipse(sx - r*0.25, sy - r*0.15, r*0.15, r*0.18, 0, 0, Math.PI*2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(sx + r*0.25, sy - r*0.15, r*0.15, r*0.18, 0, 0, Math.PI*2);
-  ctx.fill();
-  
-  ctx.fillStyle = '#220000';
-  ctx.beginPath();
-  ctx.arc(sx - r*0.25, sy - r*0.12, r*0.07, 0, Math.PI*2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(sx + r*0.25, sy - r*0.12, r*0.07, 0, Math.PI*2);
-  ctx.fill();
-  
-  ctx.fillStyle = `rgba(255,200,50,${eyeGlow * 0.3})`;
-  ctx.beginPath();
-  ctx.arc(sx - r*0.25, sy - r*0.15, r*0.25, 0, Math.PI*2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(sx + r*0.25, sy - r*0.15, r*0.25, 0, Math.PI*2);
-  ctx.fill();
+  ctx.restore();
 }
 
 function drawParticles() {
