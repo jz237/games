@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.24</title>
+<title>Emerald Mine — Crystal Caves v2.4.25</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,11 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.24 — richer title-screen detail: crystals,
-//            mine supports, lamps, premium frames, cave depth
+//  v2.4.25 — title demo miner detail pass: tiny
+//            helmet, goggles, overalls, boots, pick, lamp beam
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.24';
+const VERSION = 'v2.4.25';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -5691,16 +5691,70 @@ function drawTitle() {
     ctx.fillStyle = bgrad; ctx.beginPath(); ctx.arc(bx, by, cs*0.34, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = '#59544d'; ctx.beginPath(); ctx.arc(bx-cs*0.12, by-cs*0.09, cs*0.075, 0, Math.PI*2); ctx.fill();
 
-    // Mini player sprite: lamp, helmet, body, pick.
+    // Mini player sprite: a compressed version of the real miner, with readable gear even at preview scale.
     let [pxm, pym] = tileCenter(2, 3);
-    const lamp = ctx.createRadialGradient(pxm, pym-cs*0.55, 0, pxm+cs*0.65, pym-cs*0.65, cs*1.3);
-    lamp.addColorStop(0, 'rgba(255,230,120,0.24)'); lamp.addColorStop(1, 'rgba(255,230,120,0)');
-    ctx.fillStyle = lamp; ctx.beginPath(); ctx.arc(pxm+cs*0.5, pym-cs*0.55, cs*1.2, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#f7d28a'; ctx.beginPath(); ctx.arc(pxm, pym-cs*0.18, cs*0.26, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#ffdc68'; ctx.beginPath(); ctx.arc(pxm, pym-cs*0.36, cs*0.28, Math.PI, 0); ctx.fill();
-    ctx.fillStyle = 'rgba(255,245,165,0.95)'; drawStar(ctx, pxm-cs*0.14, pym-cs*0.45, 5, cs*0.14, cs*0.045);
-    ctx.fillStyle = '#1c5743'; ctx.beginPath(); ctx.roundRect(pxm-cs*0.24, pym+cs*0.05, cs*0.48, cs*0.38, cs*0.08); ctx.fill();
-    ctx.strokeStyle = 'rgba(235,210,155,0.82)'; ctx.lineWidth = Math.max(1.2, cs*0.055); ctx.beginPath(); ctx.moveTo(pxm-cs*0.48, pym+cs*0.08); ctx.lineTo(pxm-cs*0.78, pym-cs*0.18); ctx.stroke();
+    const mS = cs * 0.92;
+    ctx.save();
+    ctx.translate(pxm, pym + cs*0.04);
+    // Lamp beam first, behind the sprite.
+    const lamp = ctx.createRadialGradient(0, -mS*0.62, 0, mS*0.80, -mS*0.70, mS*1.55);
+    lamp.addColorStop(0, 'rgba(255,232,120,0.28)');
+    lamp.addColorStop(0.42, 'rgba(255,215,90,0.09)');
+    lamp.addColorStop(1, 'rgba(255,230,120,0)');
+    ctx.fillStyle = lamp; ctx.beginPath(); ctx.ellipse(mS*0.58, -mS*0.58, mS*1.10, mS*0.48, -0.12, 0, Math.PI*2); ctx.fill();
+
+    // Boots and legs.
+    ctx.strokeStyle = 'rgba(0,0,0,0.70)';
+    ctx.lineWidth = Math.max(0.9, cs*0.045);
+    const stride = Math.sin(t*7) * mS*0.045;
+    const legGrd = ctx.createLinearGradient(0, -mS*0.05, 0, mS*0.42);
+    legGrd.addColorStop(0, '#315f96'); legGrd.addColorStop(1, '#17375e');
+    for (const side of [-1,1]) {
+      ctx.save(); ctx.translate(side*mS*0.105, mS*0.12 + side*stride);
+      ctx.fillStyle = legGrd; ctx.beginPath(); ctx.roundRect(-mS*0.055, 0, mS*0.11, mS*0.25, mS*0.025); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#4b2f1d'; ctx.beginPath(); ctx.roundRect(-mS*0.075, mS*0.22, mS*0.17, mS*0.075, mS*0.025); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.13)'; ctx.fillRect(-mS*0.042, mS*0.035, mS*0.030, mS*0.13);
+      ctx.restore();
+    }
+
+    // Body/overalls with straps, belt, and chest pocket.
+    const bodyGrd = ctx.createLinearGradient(-mS*0.26, -mS*0.20, mS*0.26, mS*0.22);
+    bodyGrd.addColorStop(0, '#3f7db7'); bodyGrd.addColorStop(0.55, '#245f98'); bodyGrd.addColorStop(1, '#153d67');
+    ctx.fillStyle = bodyGrd; ctx.beginPath(); ctx.roundRect(-mS*0.24, -mS*0.18, mS*0.48, mS*0.38, mS*0.055); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#234d7d'; ctx.fillRect(-mS*0.17, -mS*0.22, mS*0.055, mS*0.18); ctx.fillRect(mS*0.115, -mS*0.22, mS*0.055, mS*0.18);
+    ctx.fillStyle = '#d7a63b'; ctx.beginPath(); ctx.arc(-mS*0.142, -mS*0.055, mS*0.017, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(mS*0.142, -mS*0.055, mS*0.017, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#4b2e1c'; ctx.fillRect(-mS*0.22, mS*0.145, mS*0.44, mS*0.045);
+    ctx.fillStyle = '#e2bd46'; ctx.beginPath(); ctx.roundRect(-mS*0.035, mS*0.142, mS*0.070, mS*0.050, mS*0.010); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = Math.max(0.6, cs*0.018); ctx.beginPath(); ctx.roundRect(-mS*0.075, -mS*0.010, mS*0.105, mS*0.070, mS*0.012); ctx.stroke();
+
+    // Arms and pickaxe.
+    ctx.strokeStyle = 'rgba(0,0,0,0.68)'; ctx.lineWidth = Math.max(0.9, cs*0.040);
+    ctx.fillStyle = '#3c82b7';
+    ctx.save(); ctx.translate(-mS*0.27, -mS*0.08); ctx.rotate(-0.55); ctx.beginPath(); ctx.roundRect(-mS*0.040, 0, mS*0.080, mS*0.25, mS*0.030); ctx.fill(); ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.translate(mS*0.26, -mS*0.07); ctx.rotate(0.28); ctx.beginPath(); ctx.roundRect(-mS*0.040, 0, mS*0.080, mS*0.23, mS*0.030); ctx.fill(); ctx.stroke(); ctx.restore();
+    ctx.strokeStyle = '#805128'; ctx.lineWidth = Math.max(1.0, cs*0.038); ctx.beginPath(); ctx.moveTo(-mS*0.45, -mS*0.02); ctx.lineTo(-mS*0.73, -mS*0.34); ctx.stroke();
+    ctx.strokeStyle = '#c5d0cf'; ctx.lineWidth = Math.max(1.0, cs*0.038); ctx.beginPath(); ctx.moveTo(-mS*0.82, -mS*0.34); ctx.quadraticCurveTo(-mS*0.72, -mS*0.43, -mS*0.58, -mS*0.34); ctx.stroke();
+
+    // Head, hardhat, goggles, lamp housing.
+    const headY2 = -mS*0.36;
+    const skin = ctx.createRadialGradient(-mS*0.06, headY2-mS*0.06, mS*0.02, mS*0.06, headY2+mS*0.03, mS*0.23);
+    skin.addColorStop(0, '#ffe3bd'); skin.addColorStop(0.65, '#d9a06a'); skin.addColorStop(1, '#9e663d');
+    ctx.fillStyle = skin; ctx.beginPath(); ctx.arc(0, headY2, mS*0.17, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#151a16'; ctx.beginPath(); ctx.roundRect(-mS*0.115, headY2-mS*0.030, mS*0.095, mS*0.060, mS*0.018); ctx.fill(); ctx.beginPath(); ctx.roundRect(mS*0.020, headY2-mS*0.030, mS*0.095, mS*0.060, mS*0.018); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,28,16,0.70)'; ctx.lineWidth = Math.max(0.6, cs*0.018); ctx.beginPath(); ctx.moveTo(-mS*0.020, headY2); ctx.lineTo(mS*0.020, headY2); ctx.stroke();
+    ctx.fillStyle = '#ffe07a'; ctx.beginPath(); ctx.arc(-mS*0.070, headY2, mS*0.014, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(mS*0.070, headY2, mS*0.014, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#7a4a2c'; ctx.lineWidth = Math.max(0.7, cs*0.018); ctx.beginPath(); ctx.moveTo(-mS*0.035, headY2+mS*0.085); ctx.quadraticCurveTo(0, headY2+mS*0.100, mS*0.040, headY2+mS*0.078); ctx.stroke();
+
+    const helmetY2 = headY2 - mS*0.145;
+    const helmet = ctx.createRadialGradient(-mS*0.08, helmetY2-mS*0.05, 0, mS*0.05, helmetY2+mS*0.03, mS*0.28);
+    helmet.addColorStop(0, '#fff4a0'); helmet.addColorStop(0.35, '#ffd83e'); helmet.addColorStop(0.78, '#bd8b00'); helmet.addColorStop(1, '#805900');
+    ctx.fillStyle = helmet; ctx.beginPath(); ctx.ellipse(0, helmetY2+mS*0.03, mS*0.235, mS*0.125, 0, Math.PI, 0); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffd43e'; ctx.beginPath(); ctx.ellipse(0, helmetY2+mS*0.035, mS*0.285, mS*0.060, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(120,82,0,0.55)'; ctx.lineWidth = Math.max(0.7, cs*0.018); ctx.beginPath(); ctx.moveTo(0, helmetY2-mS*0.09); ctx.quadraticCurveTo(0, helmetY2-mS*0.01, 0, helmetY2+mS*0.04); ctx.stroke();
+    ctx.fillStyle = '#666'; ctx.beginPath(); ctx.roundRect(-mS*0.045, helmetY2+mS*0.012, mS*0.09, mS*0.048, mS*0.010); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,210,0.92)'; ctx.beginPath(); ctx.arc(0, helmetY2+mS*0.036, mS*0.023, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.42)'; ctx.beginPath(); ctx.ellipse(-mS*0.085, helmetY2-mS*0.055, mS*0.045, mS*0.020, -0.35, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
 
     // Mini emeralds and diamonds with glow.
     for (const [gx,gy,diamond] of [[8,2,false],[4,2,true],[9,4,false]]) {
