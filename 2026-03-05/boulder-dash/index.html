@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.7</title>
+<title>Emerald Mine — Crystal Caves v2.4.8</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.7 — enhanced visual layer for objects, hazards & creatures
+//  v2.4.8 — fixes cave targets and separates dynamite controls
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.7';
+const VERSION = 'v2.4.8';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -508,15 +508,16 @@ const menuBtn = { x: 0, y: 0, r: 0, visible: false };
 function updateDynamiteBtn() {
   dynamiteBtn.visible = state === 'playing' && player.dynamite > 0 && !player.dead;
   dynamiteBtn.r = Math.max(35 * DPR, Math.min(W, H) * 0.055);
-  dynamiteBtn.x = W - dynamiteBtn.r * 1.8;
-  dynamiteBtn.y = H - dynamiteBtn.r * 1.8;
+  // Keep the large bomb action away from the restart/menu stack on the lower right.
+  dynamiteBtn.x = dynamiteBtn.r * 1.85;
+  dynamiteBtn.y = H - dynamiteBtn.r * 1.75;
 }
 
 function updateRetryBtn() {
   retryBtn.visible = state === 'playing' && !player.dead;
   retryBtn.r = Math.max(16 * DPR, Math.min(W, H) * 0.027);
   retryBtn.x = W - retryBtn.r * 2.4;
-  retryBtn.y = dynamiteBtn.visible ? H - retryBtn.r * 8.0 : H - retryBtn.r * 2.35;
+  retryBtn.y = H - retryBtn.r * 2.35;
 }
 
 function updateMenuBtn() {
@@ -1187,7 +1188,9 @@ function generateLevel(lvl) {
   player.lampFlicker = 0;
   
   exitOpen = false;
-  gemsNeeded = L.gems;
+  // The exit clearing pass can erase authored crystals next to the door.
+  // Use the actual crystals left in the cave so clearing every visible crystal always opens it.
+  gemsNeeded = Math.min(L.gems, countCollectibleCrystals());
   displayGems = 0;
   magicWallActive = false;
   magicWallTimer = 0;
@@ -1754,6 +1757,39 @@ function playerHasAnyMove() {
   return canPlayerMove(1, 0) || canPlayerMove(-1, 0) || canPlayerMove(0, 1) || canPlayerMove(0, -1);
 }
 
+function countCollectibleCrystals() {
+  let total = 0;
+  for (let y = 0; y < gridH; y++) {
+    for (let x = 0; x < gridW; x++) {
+      if (grid[y][x] === TILE.GEM || grid[y][x] === TILE.DIAMOND) total++;
+    }
+  }
+  return total;
+}
+
+function unlockExitBurst() {
+  if (exitOpen) return;
+  exitOpen = true;
+  sfxUnlock();
+  for (let i = 0; i < 20; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 0.5 + Math.random() * 2;
+    addParticle(exitPos.x + 0.5, exitPos.y + 0.5, Math.cos(angle)*speed, Math.sin(angle)*speed,
+      `hsl(45,100%,${60+Math.random()*30}%)`, 0.8 + Math.random()*0.5, 2+Math.random()*2, 0.3);
+  }
+}
+
+function checkExitUnlock() {
+  if (!exitOpen && player.gems >= gemsNeeded) unlockExitBurst();
+}
+
+function reconcileCrystalTarget() {
+  const remaining = countCollectibleCrystals();
+  const reachableTotal = player.gems + remaining;
+  if (reachableTotal < gemsNeeded) gemsNeeded = reachableTotal;
+  checkExitUnlock();
+}
+
 function tryMovePlayer(dx, dy) {
   if (player.dead || player.moving) return false;
   
@@ -1809,16 +1845,7 @@ function tryMovePlayer(dx, dy) {
     flashColor = '100,255,160'; // emerald flash
     flyGems.push({ x: nx + 0.5, y: ny + 0.5, t: 0 });
     
-    if (player.gems >= gemsNeeded && !exitOpen) {
-      exitOpen = true;
-      sfxUnlock();
-      for (let i = 0; i < 20; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 0.5 + Math.random() * 2;
-        addParticle(exitPos.x + 0.5, exitPos.y + 0.5, Math.cos(angle)*speed, Math.sin(angle)*speed,
-          `hsl(45,100%,${60+Math.random()*30}%)`, 0.8 + Math.random()*0.5, 2+Math.random()*2, 0.3);
-      }
-    }
+    checkExitUnlock();
   }
   
   // Collect diamond (rare bonus)
@@ -1839,16 +1866,7 @@ function tryMovePlayer(dx, dy) {
     flashColor = '180,220,255';
     flyGems.push({ x: nx + 0.5, y: ny + 0.5, t: 0 });
     
-    if (player.gems >= gemsNeeded && !exitOpen) {
-      exitOpen = true;
-      sfxUnlock();
-      for (let i = 0; i < 20; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 0.5 + Math.random() * 2;
-        addParticle(exitPos.x + 0.5, exitPos.y + 0.5, Math.cos(angle)*speed, Math.sin(angle)*speed,
-          `hsl(45,100%,${60+Math.random()*30}%)`, 0.8 + Math.random()*0.5, 2+Math.random()*2, 0.3);
-      }
-    }
+    checkExitUnlock();
   }
   
   // Collect dynamite
@@ -2597,6 +2615,8 @@ function update(dt) {
     }
   }
   
+  reconcileCrystalTarget();
+
   // Player breathing
   player.breathT += dt * 2;
   
@@ -4915,6 +4935,53 @@ function drawDynamicLights() {
     }
   }
 
+  // Dynamic light from enemies
+  for (const en of enemies) {
+    if (!en.alive) continue;
+    const [ex, ey] = worldToScreen(en.x + 0.5, en.y + 0.5);
+    if (ex < -CELL*2 || ex > W+CELL*2 || ey < -CELL*2 || ey > H+CELL*2) continue;
+    const ePulse = 0.5 + 0.5 * Math.sin(globalTime * 4 + en.bobT);
+    const eR = CELL * 1.8;
+    const eLight = ctx.createRadialGradient(ex, ey, 0, ex, ey, eR);
+    if (en.type === 'firefly') {
+      eLight.addColorStop(0, `rgba(255,160,40,${0.06 * ePulse})`);
+      eLight.addColorStop(1, 'rgba(255,120,20,0)');
+    } else if (en.type === 'butterfly') {
+      eLight.addColorStop(0, `rgba(80,180,255,${0.04 * ePulse})`);
+      eLight.addColorStop(1, 'rgba(60,140,255,0)');
+    } else {
+      eLight.addColorStop(0, `rgba(255,40,100,${0.05 * ePulse})`);
+      eLight.addColorStop(1, 'rgba(255,20,80,0)');
+    }
+    ctx.fillStyle = eLight;
+    ctx.beginPath(); ctx.arc(ex, ey, eR, 0, Math.PI*2); ctx.fill();
+  }
+
+  // Dynamic light from powerups
+  for (let yy = 1; yy < gridH-1; yy++) {
+    for (let xx = 1; xx < gridW-1; xx++) {
+      const tt = grid[yy][xx];
+      if (tt !== TILE.DYNAMITE && tt !== TILE.SPEED_BOOTS && tt !== TILE.GHOST_MODE) continue;
+      const [bx, by] = worldToScreen(xx + 0.5, yy + 0.5);
+      if (bx < -CELL || bx > W+CELL || by < -CELL || by > H+CELL) continue;
+      const bPulse = 0.6 + 0.4 * Math.sin(globalTime * 3.5 + xx * 1.2 + yy * 0.8);
+      const bR = CELL * 1.2;
+      const bLight = ctx.createRadialGradient(bx, by, 0, bx, by, bR);
+      if (tt === TILE.DYNAMITE) {
+        bLight.addColorStop(0, `rgba(255,120,40,${0.06 * bPulse})`);
+        bLight.addColorStop(1, 'rgba(255,80,20,0)');
+      } else if (tt === TILE.SPEED_BOOTS) {
+        bLight.addColorStop(0, `rgba(60,130,255,${0.05 * bPulse})`);
+        bLight.addColorStop(1, 'rgba(40,100,255,0)');
+      } else {
+        bLight.addColorStop(0, `rgba(160,160,255,${0.05 * bPulse})`);
+        bLight.addColorStop(1, 'rgba(120,120,255,0)');
+      }
+      ctx.fillStyle = bLight;
+      ctx.beginPath(); ctx.arc(bx, by, bR, 0, Math.PI*2); ctx.fill();
+    }
+  }
+
   ctx.restore();
 }
 
@@ -5525,7 +5592,7 @@ function drawCaveIntro() {
   ctx.fillStyle = '#fff';
   ctx.fillText(caveName, cx, cy - h*0.16);
 
-  const target = `Target ${L.gems} emeralds  •  ${L.enemies} creatures`;
+  const target = `Target ${gemsNeeded} crystals  •  ${L.enemies} creatures`;
   setFitFont(target, 700, Math.max(11*DPR, h*0.073), 10*DPR, maxTextW);
   ctx.fillStyle = 'rgba(255,228,138,0.92)';
   ctx.fillText(target, cx, cy + h*0.03);
