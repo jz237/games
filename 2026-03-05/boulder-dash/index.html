@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.3.9</title>
+<title>Emerald Mine — Crystal Caves v2.4.0</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.3.9 — distinct visual themes for the lesson caves
+//  v2.4.0 — clearer fireflies and in-game menu button
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.3.9';
+const VERSION = 'v2.4.0';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -468,6 +468,7 @@ function drawPauseBtn() {
 // ─── Dynamite Button (mobile) ───
 const dynamiteBtn = { x: 0, y: 0, r: 0, visible: false };
 const retryBtn = { x: 0, y: 0, r: 0, visible: false };
+const menuBtn = { x: 0, y: 0, r: 0, visible: false };
 
 function updateDynamiteBtn() {
   dynamiteBtn.visible = state === 'playing' && player.dynamite > 0 && !player.dead;
@@ -483,6 +484,13 @@ function updateRetryBtn() {
   retryBtn.y = dynamiteBtn.visible ? H - retryBtn.r * 8.0 : H - retryBtn.r * 2.35;
 }
 
+function updateMenuBtn() {
+  menuBtn.visible = state === 'playing' && !player.dead;
+  menuBtn.r = Math.max(16 * DPR, Math.min(W, H) * 0.027);
+  menuBtn.x = W - menuBtn.r * 2.4;
+  menuBtn.y = retryBtn.visible ? retryBtn.y - menuBtn.r * 2.15 : H - menuBtn.r * 4.6;
+}
+
 function isRetryBtnTap(screenX, screenY) {
   if (!retryBtn.visible) return false;
   const dx = screenX - retryBtn.x;
@@ -490,11 +498,26 @@ function isRetryBtnTap(screenX, screenY) {
   return Math.abs(dx) <= retryBtn.r * 2.2 && Math.abs(dy) <= retryBtn.r * 1.55;
 }
 
+function isMenuBtnTap(screenX, screenY) {
+  if (!menuBtn.visible) return false;
+  const dx = screenX - menuBtn.x;
+  const dy = screenY - menuBtn.y;
+  return Math.abs(dx) <= menuBtn.r * 2.2 && Math.abs(dy) <= menuBtn.r * 1.55;
+}
+
 function isDynamiteBtnTap(screenX, screenY) {
   if (!dynamiteBtn.visible) return false;
   const dx = screenX - dynamiteBtn.x;
   const dy = screenY - dynamiteBtn.y;
   return dx*dx + dy*dy <= (dynamiteBtn.r * 1.4) ** 2; // generous hit area
+}
+
+function menuAction() {
+  if (state !== 'playing') return false;
+  suppressNextCanvasClickUntil = Date.now() + 500;
+  sfxUnlock();
+  returnToTitle();
+  return true;
 }
 
 function retryLevelAction() {
@@ -517,6 +540,24 @@ function placeDynamiteAction() {
     }
   }
   return false;
+}
+
+function drawMenuBtn() {
+  updateMenuBtn();
+  if (!menuBtn.visible) return;
+  const { x, y, r } = menuBtn;
+  ctx.save();
+  const w = r * 4.1;
+  const h = r * 1.45;
+  ctx.fillStyle = 'rgba(18,14,10,0.50)';
+  ctx.strokeStyle = 'rgba(255,220,150,0.38)';
+  ctx.lineWidth = Math.max(1, DPR);
+  ctx.beginPath(); ctx.roundRect(x - w/2, y - h/2, w, h, r * 0.35); ctx.fill(); ctx.stroke();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `700 ${Math.max(5 * DPR, r * 0.38)}px 'Segoe UI', sans-serif`;
+  ctx.fillStyle = 'rgba(255,235,185,0.78)';
+  ctx.fillText('menu', x, y);
+  ctx.restore();
 }
 
 function drawRetryBtn() {
@@ -646,6 +687,7 @@ let lastInput = 0;
 let moveCD = 0;
 let fallMap = {};
 let titleAnimT = 0;
+let suppressNextCanvasClickUntil = 0;
 let slowMoTimer = 0; // death slow-mo
 let slowMoFactor = 1;
 let trappedTimer = 0;
@@ -1343,6 +1385,10 @@ window.addEventListener('keydown', e => {
     retryLevelAction();
     return;
   }
+  if (e.code === 'KeyM' && state === 'playing') {
+    menuAction();
+    return;
+  }
   if (e.code === 'KeyP' && state === 'playing') {
     togglePause();
     return;
@@ -1451,6 +1497,7 @@ canvas.addEventListener('touchstart', e => {
   updatePauseBtn();
   updateDynamiteBtn();
   updateRetryBtn();
+  updateMenuBtn();
   if (isPauseBtnTap(t.clientX * DPR, t.clientY * DPR)) {
     togglePause();
     return;
@@ -1458,6 +1505,10 @@ canvas.addEventListener('touchstart', e => {
   if (paused) return;
   if (isRetryBtnTap(t.clientX * DPR, t.clientY * DPR)) {
     retryLevelAction();
+    return; // Don't process as movement
+  }
+  if (isMenuBtnTap(t.clientX * DPR, t.clientY * DPR)) {
+    menuAction();
     return; // Don't process as movement
   }
   if (isDynamiteBtnTap(t.clientX * DPR, t.clientY * DPR)) {
@@ -1553,13 +1604,14 @@ canvas.addEventListener('touchend', e => {
 // Mouse click for desktop
 canvas.addEventListener('mousedown', e => {
   ensureAudio();
-  updatePauseBtn(); updateDynamiteBtn(); updateRetryBtn();
+  updatePauseBtn(); updateDynamiteBtn(); updateRetryBtn(); updateMenuBtn();
   const sx = e.clientX * DPR, sy = e.clientY * DPR;
   if (state === 'caveIntro') { startPlayingFromIntro(); return; }
   if (state === 'title' || hsEntry.active || state === 'gameOver' || state === 'win') return;
   if (isPauseBtnTap(sx, sy)) { togglePause(); return; }
   if (paused) return;
   if (isRetryBtnTap(sx, sy)) { retryLevelAction(); return; }
+  if (isMenuBtnTap(sx, sy)) { menuAction(); return; }
   if (isDynamiteBtnTap(sx, sy)) { placeDynamiteAction(); return; }
   mouseDown = true;
   mouseStartPos = { x: e.clientX, y: e.clientY };
@@ -1601,12 +1653,15 @@ window.addEventListener('mouseup', e => {
 });
 
 canvas.addEventListener('click', e => {
+  if (Date.now() < suppressNextCanvasClickUntil) return;
   ensureAudio();
   updatePauseBtn();
   updateDynamiteBtn();
   updateRetryBtn();
+  updateMenuBtn();
   if (isPauseBtnTap(e.clientX * DPR, e.clientY * DPR)) { return; }
   if (isRetryBtnTap(e.clientX * DPR, e.clientY * DPR)) { return; }
+  if (isMenuBtnTap(e.clientX * DPR, e.clientY * DPR)) { return; }
   if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.clientX * DPR, e.clientY * DPR); return; }
   if (state === 'title') { if (handleTitleSelect(e.clientX*DPR, e.clientY*DPR)) return; if (!titleMusicUnlocked) { startTitleMusic(); return; } newGame(); return; }
   if (state === 'caveIntro') { startPlayingFromIntro(); return; }
@@ -4083,8 +4138,8 @@ function drawEnemy(en) {
   const [sx, sy] = worldToScreen(en.x + 0.5, en.y + 0.5);
   if (sx < -CELL*2 || sx > W+CELL*2 || sy < -CELL*2 || sy > H+CELL*2) return;
   
-  const glowIntensity = 0.1 + Math.sin(en.glowT) * 0.05;
-  const glowR = CELL * 1.2;
+  const glowIntensity = en.type === 'firefly' ? 0.34 + Math.sin(en.glowT * 1.4) * 0.10 : 0.16 + Math.sin(en.glowT) * 0.06;
+  const glowR = CELL * (en.type === 'firefly' ? 1.85 : 1.25);
   const egrd = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
   const glowColor = en.type === 'butterfly' ? '120,220,255' : en.type === 'hunter' ? '255,60,160' : '255,80,30';
   egrd.addColorStop(0, `rgba(${glowColor},${glowIntensity})`);
@@ -4092,7 +4147,19 @@ function drawEnemy(en) {
   ctx.fillStyle = egrd;
   ctx.beginPath(); ctx.arc(sx, sy, glowR, 0, Math.PI*2); ctx.fill();
   
-  drawEnemySprite(sx, sy + Math.sin(en.bobT) * CELL * 0.03, CELL, en);
+  const bobY = sy + Math.sin(en.bobT) * CELL * 0.03;
+  if (en.type === 'firefly') {
+    // Make patrol creatures readable at a glance: a warm lantern trail and tiny wing glints.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(255,190,55,${0.22 + Math.sin(globalTime * 4 + en.bobT) * 0.06})`;
+    ctx.lineWidth = Math.max(1.5 * DPR, CELL * 0.035);
+    ctx.beginPath();
+    ctx.arc(sx, bobY, CELL * 0.45, globalTime * 1.4 + en.bobT, globalTime * 1.4 + en.bobT + Math.PI * 1.18);
+    ctx.stroke();
+    ctx.restore();
+  }
+  drawEnemySprite(sx, bobY, CELL, en);
 }
 
 function drawEnemySprite(sx, sy, s, en) {
@@ -4113,10 +4180,22 @@ function drawEnemySprite(sx, sy, s, en) {
   } else if (en.type === 'hunter') {
     egrd.addColorStop(0, '#ff6ad5'); egrd.addColorStop(0.7, '#cc1578'); egrd.addColorStop(1, '#650033');
   } else {
-    egrd.addColorStop(0, '#ff6030'); egrd.addColorStop(0.7, '#cc3010'); egrd.addColorStop(1, '#881500');
+    egrd.addColorStop(0, '#fff6a0'); egrd.addColorStop(0.32, '#ffb820'); egrd.addColorStop(0.72, '#ff5a16'); egrd.addColorStop(1, '#8a1900');
   }
   ctx.fillStyle = egrd;
   ctx.fill();
+
+  if (en.type === 'firefly') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const wing = 0.55 + Math.sin(globalTime * 18 + en.bobT) * 0.18;
+    ctx.fillStyle = `rgba(255,225,105,${wing})`;
+    ctx.beginPath(); ctx.ellipse(sx - r*0.62, sy - r*0.08, r*0.34, r*0.18, -0.55, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(sx + r*0.62, sy - r*0.08, r*0.34, r*0.18, 0.55, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,245,170,0.55)';
+    ctx.beginPath(); ctx.arc(sx, sy + r*0.15, r*0.22, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
   
   const eyeGlow = 0.8 + Math.sin(en.glowT * 2) * 0.2;
   ctx.fillStyle = `rgba(255,255,100,${eyeGlow})`;
@@ -5011,7 +5090,9 @@ function render() {
   updatePauseBtn();
   updateDynamiteBtn();
   updateRetryBtn();
+  updateMenuBtn();
   drawPauseBtn();
+  drawMenuBtn();
   drawRetryBtn();
   drawDynamiteBtn();
   drawTouchRipples();
