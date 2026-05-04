@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.1</title>
+<title>Emerald Mine — Crystal Caves v2.4.2</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.1 — high-detail cave tile and edge rendering
+//  v2.4.2 — richer miner detail and first-cave zoom hint
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.1';
+const VERSION = 'v2.4.2';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -655,7 +655,7 @@ let paused = false;
 let level = 0;
 let grid = [];
 let gridW, gridH;
-let player = { gx: 1, gy: 1, x: 1, y: 1, prevX: 1, prevY: 1, vx: 0, vy: 0, moving: false, dir: 0, frame: 0, lives: 3, gems: 0, dead: false, deadTimer: 0, animT: 0, breathT: 0, dynamite: 0, speedTimer: 0, ghostTimer: 0, idleT: 0, lampFlicker: 0 };
+let player = { gx: 1, gy: 1, x: 1, y: 1, prevX: 1, prevY: 1, vx: 0, vy: 0, moving: false, dir: 0, frame: 0, lives: 3, gems: 0, dead: false, deadTimer: 0, animT: 0, breathT: 0, dynamite: 0, speedTimer: 0, ghostTimer: 0, idleT: 0, lampFlicker: 0, action: 'idle', actionT: -99, actionDx: 0, actionDy: 0 };
 let enemies = [];
 let particles = [];
 let sparkleParticles = []; // ambient gem sparkles
@@ -1735,6 +1735,7 @@ function tryMovePlayer(dx, dy) {
     if (tileAt(bx, ny) === TILE.EMPTY) {
       setTile(bx, ny, TILE.BOULDER);
       setTile(nx, ny, TILE.EMPTY);
+      player.action = 'push'; player.actionT = globalTime; player.actionDx = dx; player.actionDy = dy;
       sfxPush();
       addParticle(nx+0.5, ny+0.8, dx*0.5, 0, 'hsla(30,20%,50%,0.5)', 0.2, 2, 0);
     } else {
@@ -1755,12 +1756,14 @@ function tryMovePlayer(dx, dy) {
   
   // Dig dirt
   if (dugDirt) {
+    player.action = 'dig'; player.actionT = globalTime; player.actionDx = dx; player.actionDy = dy;
     addDigParticles(nx, ny);
     sfxDig();
   }
   
   // Collect gem
   if (target === TILE.GEM) {
+    player.action = 'collect'; player.actionT = globalTime; player.actionDx = dx; player.actionDy = dy;
     player.gems++;
     score += 100;
     sfxCollect();
@@ -1783,6 +1786,7 @@ function tryMovePlayer(dx, dy) {
   
   // Collect diamond (rare bonus)
   if (target === TILE.DIAMOND) {
+    player.action = 'collect'; player.actionT = globalTime; player.actionDx = dx; player.actionDy = dy;
     player.gems++;
     score += 300;
     sfxCollect();
@@ -3675,6 +3679,68 @@ function drawMinerDust() {
   }
 }
 
+function drawMinerToolAndGear(S, bodyTop, bodyW) {
+  const actionAge = globalTime - (player.actionT || -99);
+  const active = actionAge >= 0 && actionAge < 0.52;
+  const dirX = player.dir === 0 ? 1 : player.dir === 2 ? -1 : 0;
+  const dirY = player.dir === 3 ? -1 : player.dir === 1 ? 1 : 0;
+  const swing = active ? Math.sin((1 - actionAge / 0.52) * Math.PI) : 0;
+
+  // Satchel/backpack: small readable gear silhouette at high zoom.
+  ctx.save();
+  ctx.translate(-bodyW * 0.62, bodyTop + S * 0.04);
+  const bagGrd = ctx.createLinearGradient(-S*0.12, -S*0.08, S*0.06, S*0.18);
+  bagGrd.addColorStop(0, '#8a5a2b'); bagGrd.addColorStop(1, '#3f2615');
+  ctx.fillStyle = bagGrd;
+  ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+  ctx.lineWidth = Math.max(1, S*0.018);
+  ctx.beginPath(); ctx.roundRect(-S*0.08, -S*0.04, S*0.16, S*0.20, S*0.035); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = 'rgba(245,190,90,0.35)'; ctx.lineWidth = Math.max(0.7, S*0.01);
+  ctx.beginPath(); ctx.moveTo(-S*0.05, S*0.02); ctx.lineTo(S*0.05, S*0.02); ctx.stroke();
+  ctx.restore();
+
+  // Pickaxe / hand tool: idle on shoulder, swings when digging/pushing.
+  ctx.save();
+  const side = dirX || 1;
+  const baseX = side * S * 0.25;
+  const baseY = bodyTop - S * 0.03;
+  ctx.translate(baseX, baseY);
+  let rot = side * -0.75;
+  if (player.action === 'dig' && active) rot = side * (-1.25 + swing * 1.35) + dirY * -0.35;
+  if (player.action === 'push' && active) rot = side * (-0.15 + swing * 0.25);
+  if (player.action === 'collect' && active) rot = side * (-0.95 + swing * 0.45);
+  ctx.rotate(rot);
+  ctx.strokeStyle = '#7b4d28';
+  ctx.lineWidth = Math.max(1.4, S * 0.028);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -S * 0.30); ctx.stroke();
+  ctx.strokeStyle = '#b8c4c8';
+  ctx.lineWidth = Math.max(1.5, S * 0.030);
+  ctx.beginPath();
+  ctx.moveTo(-S * 0.095, -S * 0.30);
+  ctx.quadraticCurveTo(0, -S * 0.36, S * 0.115, -S * 0.30);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.beginPath(); ctx.arc(S*0.085, -S*0.305, S*0.012, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  if (active && (player.action === 'dig' || player.action === 'push')) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const fx = (dirX || side) * S * 0.46;
+    const fy = dirY * S * 0.34 - S * 0.05;
+    for (let i = 0; i < 5; i++) {
+      const a = -actionAge * 8 + i * 1.25;
+      ctx.strokeStyle = `rgba(255,210,120,${0.26 * (1 - actionAge/0.52)})`;
+      ctx.lineWidth = Math.max(0.7, S*0.010);
+      ctx.beginPath();
+      ctx.moveTo(fx, fy);
+      ctx.lineTo(fx + Math.cos(a)*S*0.12, fy + Math.sin(a)*S*0.12);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
 function drawPlayerSprite(sx, sy, s) {
   // ═══════════════════════════════════════════════════════════════
   //  HD MINER CHARACTER — fills 88% of tile with full detail
@@ -3886,6 +3952,8 @@ function drawPlayerSprite(sx, sy, s) {
   ctx.beginPath(); // 63
   ctx.roundRect(-bodyW/4 - S*0.01, bodyTop + S*0.04, S*0.08, S*0.06, S*0.01);
   ctx.stroke(); // 64
+  // Gear layer: backpack + pickaxe/tool, animated by dig/push/collect actions.
+  drawMinerToolAndGear(S, bodyTop, bodyW);
 
   // ══════════════════════════════
   //  ARMS — swing opposite to legs
@@ -5054,7 +5122,7 @@ function drawCaveIntro() {
   ctx.fillRect(0, 0, W, H);
   const cx = W / 2, cy = H * 0.43;
   const w = Math.min(W * 0.84, 520 * DPR);
-  const h = Math.min(H * 0.34, 230 * DPR);
+  const h = Math.min(H * 0.38, 258 * DPR);
   ctx.globalAlpha = a;
   const grd = ctx.createLinearGradient(cx - w/2, cy - h/2, cx + w/2, cy + h/2);
   grd.addColorStop(0, `rgba(${th.tint},0.42)`);
@@ -5078,8 +5146,12 @@ function drawCaveIntro() {
   ctx.fillStyle = 'rgba(218,245,228,0.78)';
   ctx.fillText(caveBlurb(level), cx, cy + h*0.27);
   ctx.font = `600 ${Math.max(9*DPR, h*0.050)}px 'Segoe UI', system-ui, sans-serif`;
+  if (level === 0) {
+    ctx.fillStyle = 'rgba(180,235,255,0.82)';
+    ctx.fillText('pinch to zoom in/out  •  drag or hold to move', cx, cy + h*0.405);
+  }
   ctx.fillStyle = `rgba(220,255,235,${0.42 + Math.sin(globalTime * 5) * 0.18})`;
-  ctx.fillText('tap to enter', cx, cy + h*0.43);
+  ctx.fillText('tap to enter', cx, cy + h*0.49);
   ctx.restore();
 }
 
