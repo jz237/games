@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.23</title>
+<title>Emerald Mine — Crystal Caves v2.4.24</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,11 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.23 — miner sprite upgrade: cleaner proportions,
-//            sharper helmet/goggles, subtler walk, richer silhouette
+//  v2.4.24 — richer title-screen detail: crystals,
+//            mine supports, lamps, premium frames, cave depth
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.23';
+const VERSION = 'v2.4.24';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -5441,6 +5441,71 @@ function drawTitle() {
     ctx.lineTo(W, 0); ctx.closePath(); ctx.fill();
   }
 
+  // Foreground mine dressing: timber supports, chains, lamps, and crystal clusters.
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  const timber = ctx.createLinearGradient(0, 0, 0, H);
+  timber.addColorStop(0, 'rgba(92,56,28,0.30)');
+  timber.addColorStop(1, 'rgba(45,25,13,0.50)');
+  ctx.fillStyle = timber;
+  ctx.strokeStyle = 'rgba(12,7,4,0.55)';
+  ctx.lineWidth = Math.max(1, DPR);
+  const postW = Math.max(10*DPR, W*0.026);
+  for (const side of [-1, 1]) {
+    const x = side < 0 ? W*0.055 : W*0.945 - postW;
+    ctx.beginPath(); ctx.roundRect(x, H*0.12, postW, H*0.74, 3*DPR); ctx.fill(); ctx.stroke();
+    for (let i=0;i<7;i++) {
+      const yy = H*(0.18+i*0.095);
+      ctx.strokeStyle = 'rgba(15,8,4,0.38)';
+      ctx.beginPath(); ctx.moveTo(x+postW*0.15, yy); ctx.lineTo(x+postW*0.85, yy+Math.sin(i)*4*DPR); ctx.stroke();
+    }
+  }
+  ctx.fillStyle = 'rgba(58,34,18,0.42)';
+  ctx.beginPath(); ctx.roundRect(W*0.065, H*0.103, W*0.87, Math.max(9*DPR, H*0.022), 4*DPR); ctx.fill(); ctx.stroke();
+
+  for (let i=0;i<4;i++) {
+    const lx = W*(0.18+i*0.21);
+    const chainTop = H*0.115;
+    const lampY = H*(0.165 + (i%2)*0.022);
+    ctx.strokeStyle = 'rgba(115,95,70,0.36)';
+    ctx.lineWidth = Math.max(1, DPR*1.2);
+    ctx.beginPath(); ctx.moveTo(lx, chainTop); ctx.lineTo(lx + Math.sin(t+i)*2*DPR, lampY); ctx.stroke();
+    const glow = ctx.createRadialGradient(lx, lampY, 0, lx, lampY, Math.max(W,H)*0.08);
+    glow.addColorStop(0, 'rgba(255,202,92,0.13)'); glow.addColorStop(1, 'rgba(255,180,60,0)');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(lx, lampY, Math.max(W,H)*0.08, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(52,38,26,0.78)'; ctx.strokeStyle = 'rgba(210,160,90,0.45)';
+    ctx.beginPath(); ctx.roundRect(lx-8*DPR, lampY-4*DPR, 16*DPR, 13*DPR, 3*DPR); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = `rgba(255,222,118,${0.48+Math.sin(t*5+i)*0.10})`;
+    ctx.beginPath(); ctx.arc(lx, lampY+2*DPR, 4*DPR, 0, Math.PI*2); ctx.fill();
+  }
+
+  const drawCrystalCluster = (baseX, baseY, scale, hueBase=145) => {
+    ctx.save(); ctx.translate(baseX, baseY); ctx.scale(scale, scale);
+    for (let k=0;k<5;k++) {
+      const off = (k-2)*8*DPR;
+      const h = (22 + (k%3)*12)*DPR;
+      const w = (7 + (k%2)*3)*DPR;
+      const hue = hueBase + k*7 + Math.sin(t+k)*6;
+      const cg = ctx.createLinearGradient(off, -h, off, 2*DPR);
+      cg.addColorStop(0, `hsla(${hue},95%,78%,0.86)`);
+      cg.addColorStop(0.45, `hsla(${hue},85%,48%,0.62)`);
+      cg.addColorStop(1, `hsla(${hue},90%,22%,0.38)`);
+      ctx.fillStyle = cg;
+      ctx.strokeStyle = `hsla(${hue},90%,78%,0.22)`;
+      ctx.lineWidth = Math.max(0.8, DPR*0.8);
+      ctx.beginPath();
+      ctx.moveTo(off, -h); ctx.lineTo(off+w, -h*0.35); ctx.lineTo(off+w*0.55, 0); ctx.lineTo(off-w*0.55, 0); ctx.lineTo(off-w, -h*0.35); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.moveTo(off-w*0.25, -h*0.72); ctx.lineTo(off+w*0.15, -h*0.40); ctx.lineTo(off, -h*0.08); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  };
+  drawCrystalCluster(W*0.12, H*0.88, 1.05, 142);
+  drawCrystalCluster(W*0.88, H*0.88, 1.12, 154);
+  drawCrystalCluster(W*0.20, H*0.77, 0.62, 198);
+  drawCrystalCluster(W*0.80, H*0.76, 0.58, 138);
+  ctx.restore();
+
   // Mine cart rail and tiny cart for attract-mode life.
   const railY = H * 0.72;
   ctx.strokeStyle = 'rgba(105,70,42,0.45)';
@@ -5494,6 +5559,18 @@ function drawTitle() {
   ctx.strokeStyle = 'rgba(105,255,175,0.30)';
   ctx.lineWidth = Math.max(1, DPR);
   ctx.beginPath(); ctx.roundRect(cx - cardW/2, cardY - cardH/2, cardW, cardH, 22*DPR); ctx.fill(); ctx.stroke();
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = 'rgba(130,255,185,0.18)';
+  ctx.lineWidth = Math.max(1, DPR*2);
+  ctx.beginPath(); ctx.roundRect(cx - cardW/2 + 5*DPR, cardY - cardH/2 + 5*DPR, cardW - 10*DPR, cardH - 10*DPR, 17*DPR); ctx.stroke();
+  for (let i=0;i<10;i++) {
+    const sx = cx - cardW*0.44 + i*(cardW*0.88/9);
+    const sy = cardY - cardH*0.43 + Math.sin(t*2+i)*2*DPR;
+    ctx.fillStyle = `rgba(120,255,175,${0.16 + (i%3)*0.035})`;
+    drawStar(ctx, sx, sy, 4, 3.2*DPR, 0.9*DPR);
+  }
+  ctx.restore();
 
   let titleSize = Math.min(W * 0.082, H * 0.074);
   const titleText = 'EMERALD MINE';
@@ -5536,6 +5613,18 @@ function drawTitle() {
     ctx.strokeStyle = 'rgba(130,255,185,0.34)';
     ctx.lineWidth = Math.max(1, DPR * 1.4);
     ctx.beginPath(); ctx.roundRect(heroX, heroY, heroW, heroH, 18*DPR); ctx.fill(); ctx.stroke();
+    ctx.save();
+    ctx.strokeStyle = 'rgba(180,125,70,0.25)';
+    ctx.lineWidth = Math.max(1, DPR);
+    ctx.beginPath(); ctx.moveTo(heroX + heroW*0.06, heroY + heroH*0.10); ctx.lineTo(heroX + heroW*0.94, heroY + heroH*0.10); ctx.stroke();
+    for (let i=0;i<8;i++) {
+      const rx = heroX + heroW*(0.08 + i*0.12);
+      ctx.fillStyle = 'rgba(210,160,90,0.34)';
+      ctx.beginPath(); ctx.arc(rx, heroY + heroH*0.10, Math.max(1.5*DPR, heroH*0.010), 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,235,160,0.18)';
+      ctx.beginPath(); ctx.arc(rx-1*DPR, heroY + heroH*0.10-1*DPR, Math.max(0.7*DPR, heroH*0.004), 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
 
     const miniPad = Math.max(8*DPR, heroW*0.025);
     const miniX = heroX + miniPad;
