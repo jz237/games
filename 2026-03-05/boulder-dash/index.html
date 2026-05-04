@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.3.8</title>
+<title>Emerald Mine — Crystal Caves v2.3.9</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.3.8 — tuned lesson ramp, clearer cave 8 transition
+//  v2.3.9 — distinct visual themes for the lesson caves
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.3.8';
+const VERSION = 'v2.3.9';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -580,6 +580,17 @@ function drawDynamiteBtn() {
 }
 
 // ─── Game State ───
+const CAVE_THEMES = [
+  { name:'Rootlit Amber', bg0:'#21180d', bg1:'#070503', tint:'180,118,42', dirt:'190,122,55', wall:'132,98,70', accent:'230,170,70', motif:'roots' },
+  { name:'Violet Wallworks', bg0:'#151326', bg1:'#05030b', tint:'115,80,210', dirt:'120,85,120', wall:'95,88,132', accent:'180,135,255', motif:'runes' },
+  { name:'Ember Forge', bg0:'#24110a', bg1:'#070201', tint:'235,82,28', dirt:'205,92,45', wall:'142,82,58', accent:'255,126,46', motif:'embers' },
+  { name:'Blue Butterfly Vault', bg0:'#0c1b25', bg1:'#02070c', tint:'70,170,230', dirt:'88,118,135', wall:'74,104,132', accent:'120,220,255', motif:'crystals' },
+  { name:'Emerald Machine', bg0:'#061e16', bg1:'#010806', tint:'40,210,125', dirt:'58,136,84', wall:'58,118,94', accent:'95,255,160', motif:'circuit' },
+  { name:'Rust Pressure Mine', bg0:'#21150d', bg1:'#070403', tint:'210,112,45', dirt:'170,94,55', wall:'128,96,72', accent:'255,150,70', motif:'vents' },
+  { name:'Hunter Red Warrens', bg0:'#200b10', bg1:'#060204', tint:'225,55,72', dirt:'150,70,70', wall:'120,72,78', accent:'255,85,100', motif:'claws' }
+];
+function caveTheme() { return CAVE_THEMES[level] || { name:'Deep Mine', bg0:'#141a12', bg1:'#080a06', tint:'120,100,80', dirt:'120,100,80', wall:'120,120,130', accent:'120,255,180', motif:'deep' }; }
+
 const LEVELS = [
   { w: 16, h: 12, gems: 5,  enemies: 1,  enemySpeed: 1.0,  dirtPct: 0.65, boulderPct: 0.08, gemPct: 0.08, diamonds: 0,  magicWalls: 0, name:'Training Shaft' },
   { w: 20, h: 14, gems: 10, enemies: 2,  enemySpeed: 0.75, dirtPct: 0.55, boulderPct: 0.12, gemPct: 0.10, diamonds: 2,  magicWalls: 1, name:'Magic Wallworks' },
@@ -2621,11 +2632,35 @@ function lightAtTile(x, y) {
 }
 
 function drawCaveBackground() {
-  const grd = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W*0.7);
-  grd.addColorStop(0, '#141a12'); // slight green tinge
-  grd.addColorStop(1, '#080a06');
+  const th = caveTheme();
+  const grd = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W*0.72);
+  grd.addColorStop(0, th.bg0);
+  grd.addColorStop(1, th.bg1);
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, W, H);
+
+  // Distinct cave identity layer for the authored lesson caves.
+  if (level < CAVE_THEMES.length) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(${th.tint},0.035)`;
+    for (let i = 0; i < 14; i++) {
+      const x = ((i * 137 + level * 53) % 1000) / 1000 * W;
+      const y = ((i * 271 + level * 91) % 1000) / 1000 * H;
+      const rr = Math.min(W,H) * (0.08 + (i % 4) * 0.025);
+      ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.strokeStyle = `rgba(${th.accent},0.06)`;
+    ctx.lineWidth = Math.max(1, DPR);
+    for (let i = 0; i < 9; i++) {
+      const y = H * ((i + 1) / 10) + Math.sin(globalTime * 0.25 + i + level) * 8 * DPR;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.bezierCurveTo(W*0.25, y - 22*DPR, W*0.62, y + 18*DPR, W, y - 8*DPR);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 }
 
 function drawTile(x, y, type) {
@@ -2638,6 +2673,7 @@ function drawTile(x, y, type) {
   
   // Apply distance-based dimming
   const light = lightAtTile(x, y);
+  const th = caveTheme();
 
   switch (type) {
     case TILE.EMPTY: {
@@ -2670,13 +2706,17 @@ function drawTile(x, y, type) {
       
       // Subtle ambient cave glow
       const caveGlow = 0.02 + Math.sin(globalTime * 0.5 + x * 0.3 + y * 0.7) * 0.01;
-      ctx.fillStyle = `rgba(120,100,80,${caveGlow})`;
+      ctx.fillStyle = `rgba(${th.tint},${caveGlow * (level < CAVE_THEMES.length ? 2.1 : 1)})`;
       ctx.fillRect(left, top, s, s);
       break;
     }
     case TILE.DIRT: {
       const patIdx = (x * 7 + y * 13) % dirtPatterns.length;
       ctx.drawImage(dirtPatterns[patIdx], left, top, s, s);
+      if (level < CAVE_THEMES.length) {
+        ctx.fillStyle = `rgba(${th.dirt},0.22)`;
+        ctx.fillRect(left, top, s, s);
+      }
 
       const bevel = Math.max(1, s * 0.08);
       ctx.fillStyle = 'rgba(255,220,170,0.12)';
@@ -2697,6 +2737,10 @@ function drawTile(x, y, type) {
     case TILE.WALL: {
       const patIdx = (x * 3 + y * 11) % wallPatterns.length;
       ctx.drawImage(wallPatterns[patIdx], left, top, s, s);
+      if (level < CAVE_THEMES.length) {
+        ctx.fillStyle = `rgba(${th.wall},0.24)`;
+        ctx.fillRect(left, top, s, s);
+      }
 
       const joints = Math.max(1, s * 0.03);
       ctx.strokeStyle = 'rgba(20,20,24,0.45)';
@@ -2758,6 +2802,32 @@ function drawTile(x, y, type) {
       drawExit(sx, sy, s);
       break;
     }
+  }
+  
+  if (level < CAVE_THEMES.length && (type === TILE.EMPTY || type === TILE.DIRT || type === TILE.WALL)) {
+    const motif = th.motif;
+    const mark = (x * 31 + y * 17 + level * 23) % 19;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(${th.accent},${type === TILE.EMPTY ? 0.10 : 0.055})`;
+    ctx.fillStyle = `rgba(${th.accent},${type === TILE.EMPTY ? 0.10 : 0.045})`;
+    ctx.lineWidth = Math.max(0.75, s * 0.018);
+    if (motif === 'roots' && mark < 3) {
+      ctx.beginPath(); ctx.moveTo(left+s*0.15, top+s*(0.25+mark*0.16)); ctx.quadraticCurveTo(left+s*0.45, top+s*0.10, left+s*0.86, top+s*(0.32+mark*0.08)); ctx.stroke();
+    } else if (motif === 'runes' && mark < 3) {
+      ctx.strokeRect(left+s*0.34, top+s*0.28, s*0.28, s*0.36); ctx.beginPath(); ctx.moveTo(left+s*0.34, top+s*0.46); ctx.lineTo(left+s*0.62, top+s*0.30); ctx.stroke();
+    } else if (motif === 'embers' && mark < 4) {
+      ctx.beginPath(); ctx.arc(left+s*(0.25+mark*0.13), top+s*(0.28+((x+y)%5)*0.1), s*0.035, 0, Math.PI*2); ctx.fill();
+    } else if (motif === 'crystals' && mark < 3) {
+      ctx.beginPath(); ctx.moveTo(left+s*0.50, top+s*0.18); ctx.lineTo(left+s*0.62, top+s*0.45); ctx.lineTo(left+s*0.50, top+s*0.76); ctx.lineTo(left+s*0.38, top+s*0.45); ctx.closePath(); ctx.stroke();
+    } else if (motif === 'circuit' && mark < 4) {
+      ctx.beginPath(); ctx.moveTo(left+s*0.18, top+s*0.35); ctx.lineTo(left+s*0.50, top+s*0.35); ctx.lineTo(left+s*0.50, top+s*0.66); ctx.lineTo(left+s*0.82, top+s*0.66); ctx.stroke();
+    } else if (motif === 'vents' && mark < 3) {
+      ctx.beginPath(); for (let i=0;i<3;i++){ ctx.moveTo(left+s*0.25, top+s*(0.32+i*0.14)); ctx.lineTo(left+s*0.75, top+s*(0.25+i*0.14)); } ctx.stroke();
+    } else if (motif === 'claws' && mark < 3) {
+      ctx.beginPath(); for (let i=0;i<3;i++){ ctx.moveTo(left+s*(0.28+i*0.16), top+s*0.22); ctx.lineTo(left+s*(0.18+i*0.18), top+s*0.78); } ctx.stroke();
+    }
+    ctx.restore();
   }
   
   // Apply fog dimming overlay
@@ -4799,6 +4869,7 @@ function drawDangerWarnings() {
 function drawCaveIntro() {
   if (state !== 'caveIntro') return;
   const L = LEVELS[level];
+  const th = caveTheme();
   const t = Math.min(caveIntroTimer, 2.65);
   const a = Math.min(1, t * 2.4) * Math.min(1, (2.75 - t) * 2.2);
   ctx.save();
@@ -4809,16 +4880,16 @@ function drawCaveIntro() {
   const h = Math.min(H * 0.34, 230 * DPR);
   ctx.globalAlpha = a;
   const grd = ctx.createLinearGradient(cx - w/2, cy - h/2, cx + w/2, cy + h/2);
-  grd.addColorStop(0, 'rgba(8,28,20,0.88)');
-  grd.addColorStop(0.55, 'rgba(6,12,10,0.84)');
-  grd.addColorStop(1, 'rgba(42,28,16,0.88)');
+  grd.addColorStop(0, `rgba(${th.tint},0.42)`);
+  grd.addColorStop(0.55, 'rgba(6,12,10,0.86)');
+  grd.addColorStop(1, `rgba(${th.wall},0.42)`);
   ctx.fillStyle = grd;
-  ctx.strokeStyle = 'rgba(120,255,180,0.36)';
+  ctx.strokeStyle = `rgba(${th.accent},0.44)`;
   ctx.lineWidth = Math.max(1, DPR * 1.4);
   ctx.beginPath(); ctx.roundRect(cx - w/2, cy - h/2, w, h, 18 * DPR); ctx.fill(); ctx.stroke();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = `800 ${Math.max(12*DPR, h*0.105)}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(145,255,185,0.95)';
+  ctx.fillStyle = `rgba(${th.accent},0.95)`;
   ctx.fillText(`CAVE ${level + 1}`, cx, cy - h*0.29);
   ctx.font = `900 ${Math.max(19*DPR, h*0.17)}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = '#fff';
