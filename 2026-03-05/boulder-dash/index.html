@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.0</title>
+<title>Emerald Mine — Crystal Caves v2.4.1</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.0 — clearer fireflies and in-game menu button
+//  v2.4.1 — high-detail cave tile and edge rendering
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.0';
+const VERSION = 'v2.4.1';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -2718,6 +2718,54 @@ function drawCaveBackground() {
   }
 }
 
+function isSolidTileForEdge(t) {
+  return t === TILE.DIRT || t === TILE.WALL || t === TILE.BOULDER || t === TILE.MAGIC_WALL || t === TILE.AMOEBA;
+}
+function noise01(x, y, salt=0) {
+  const v = Math.sin(x * 127.1 + y * 311.7 + salt * 74.7) * 43758.5453123;
+  return v - Math.floor(v);
+}
+function drawCrumbleEdge(left, top, s, side, th, strength=1) {
+  const n = 7;
+  ctx.save();
+  ctx.fillStyle = `rgba(${th.dirt},${0.40 * strength})`;
+  ctx.strokeStyle = `rgba(30,20,12,${0.30 * strength})`;
+  ctx.lineWidth = Math.max(1, s * 0.018);
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n;
+    const wob = (noise01(i, side.length, level) - 0.5) * s * 0.10;
+    let x = left, y = top, w = s * (0.06 + noise01(i, level, 3) * 0.10), h = s * (0.06 + noise01(i, level, 5) * 0.10);
+    if (side === 'top') { x = left + s * t + wob; y = top - s * 0.015; }
+    if (side === 'bottom') { x = left + s * t + wob; y = top + s - h + s * 0.015; }
+    if (side === 'left') { x = left - s * 0.015; y = top + s * t + wob; }
+    if (side === 'right') { x = left + s - w + s * 0.015; y = top + s * t + wob; }
+    ctx.beginPath();
+    ctx.ellipse(x + w*0.5, y + h*0.5, w, h, noise01(i, level, 9) * Math.PI, 0, Math.PI*2);
+    ctx.fill();
+    if (i % 2 === 0) ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawMineralVeins(left, top, s, x, y, th, dense=false) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const count = dense ? 5 : 3;
+  for (let i = 0; i < count; i++) {
+    const n = noise01(x + i*11, y - i*7, level);
+    if (n < (dense ? 0.18 : 0.32)) continue;
+    const sx0 = left + s * (0.12 + noise01(x, y, i) * 0.72);
+    const sy0 = top + s * (0.10 + noise01(y, x, i+2) * 0.74);
+    ctx.strokeStyle = `rgba(${th.accent},${dense ? 0.105 : 0.07})`;
+    ctx.lineWidth = Math.max(0.7, s * (dense ? 0.014 : 0.010));
+    ctx.beginPath();
+    ctx.moveTo(sx0, sy0);
+    ctx.lineTo(sx0 + s*(noise01(i,x,4)-0.5)*0.38, sy0 + s*(0.18 + noise01(i,y,8)*0.28));
+    ctx.lineTo(sx0 + s*(noise01(i,x,6)-0.5)*0.52, sy0 + s*(0.34 + noise01(i,y,12)*0.30));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawTile(x, y, type) {
   const [sx, sy] = worldToScreen(x + 0.5, y + 0.5);
   if (sx < -CELL*2 || sx > W+CELL*2 || sy < -CELL*2 || sy > H+CELL*2) return;
@@ -2733,32 +2781,43 @@ function drawTile(x, y, type) {
   switch (type) {
     case TILE.EMPTY: {
       const fgrd = ctx.createLinearGradient(left, top, left, top + s);
-      fgrd.addColorStop(0, '#1a140f');
-      fgrd.addColorStop(1, '#0f0b08');
+      fgrd.addColorStop(0, '#1b1510');
+      fgrd.addColorStop(0.55, '#100b08');
+      fgrd.addColorStop(1, '#080504');
       ctx.fillStyle = fgrd;
       ctx.fillRect(left, top, s, s);
 
-      ctx.strokeStyle = 'rgba(255,255,255,0.025)';
-      ctx.lineWidth = Math.max(1, s * 0.02);
-      for (let i = 0; i < 3; i++) {
-        const yy = top + s * (0.25 + i * 0.25) + Math.sin((x + i) * 2.7 + y * 1.4) * s * 0.03;
+      // High-res cave floor strata: multiple hairline layers instead of one flat square.
+      ctx.strokeStyle = 'rgba(255,240,210,0.030)';
+      ctx.lineWidth = Math.max(0.75, s * 0.012);
+      for (let i = 0; i < 5; i++) {
+        const yy = top + s * (0.16 + i * 0.17) + Math.sin((x + i) * 2.7 + y * 1.4) * s * 0.035;
         ctx.beginPath();
-        ctx.moveTo(left + s * 0.08, yy);
-        ctx.lineTo(left + s * 0.92, yy + s * 0.05);
+        ctx.moveTo(left + s * 0.06, yy);
+        ctx.bezierCurveTo(left+s*0.32, yy-s*0.05, left+s*0.60, yy+s*0.07, left+s*0.94, yy+s*0.02);
         ctx.stroke();
       }
 
-      const upSolid = tileAt(x, y - 1) !== TILE.EMPTY;
-      const dnSolid = tileAt(x, y + 1) !== TILE.EMPTY;
-      const lfSolid = tileAt(x - 1, y) !== TILE.EMPTY;
-      const rtSolid = tileAt(x + 1, y) !== TILE.EMPTY;
-      const ao = Math.max(1, s * 0.08);
-      ctx.fillStyle = 'rgba(0,0,0,0.24)';
-      if (upSolid) ctx.fillRect(left, top, s, ao);
-      if (dnSolid) ctx.fillRect(left, top + s - ao, s, ao);
-      if (lfSolid) ctx.fillRect(left, top, ao, s);
-      if (rtSolid) ctx.fillRect(left + s - ao, top, ao, s);
-      
+      // Pebbles and grit, deterministic per tile so the cave feels higher resolution without jitter.
+      for (let i = 0; i < 8; i++) {
+        const px = left + s * (0.10 + noise01(x+i*5, y, 1) * 0.80);
+        const py = top + s * (0.12 + noise01(x, y+i*7, 2) * 0.76);
+        const pr = s * (0.006 + noise01(x+i, y-i, 3) * 0.018);
+        ctx.fillStyle = i % 3 === 0 ? `rgba(${th.accent},0.045)` : 'rgba(0,0,0,0.18)';
+        ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI*2); ctx.fill();
+      }
+
+      const upSolid = isSolidTileForEdge(tileAt(x, y - 1));
+      const dnSolid = isSolidTileForEdge(tileAt(x, y + 1));
+      const lfSolid = isSolidTileForEdge(tileAt(x - 1, y));
+      const rtSolid = isSolidTileForEdge(tileAt(x + 1, y));
+      const ao = Math.max(1, s * 0.10);
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      if (upSolid) { ctx.fillRect(left, top, s, ao); drawCrumbleEdge(left, top, s, 'top', th, 0.75); }
+      if (dnSolid) { ctx.fillRect(left, top + s - ao, s, ao); drawCrumbleEdge(left, top, s, 'bottom', th, 0.70); }
+      if (lfSolid) { ctx.fillRect(left, top, ao, s); drawCrumbleEdge(left, top, s, 'left', th, 0.72); }
+      if (rtSolid) { ctx.fillRect(left + s - ao, top, ao, s); drawCrumbleEdge(left, top, s, 'right', th, 0.72); }
+
       // Subtle ambient cave glow
       const caveGlow = 0.02 + Math.sin(globalTime * 0.5 + x * 0.3 + y * 0.7) * 0.01;
       ctx.fillStyle = `rgba(${th.tint},${caveGlow * (level < CAVE_THEMES.length ? 2.1 : 1)})`;
@@ -2769,21 +2828,48 @@ function drawTile(x, y, type) {
       const patIdx = (x * 7 + y * 13) % dirtPatterns.length;
       ctx.drawImage(dirtPatterns[patIdx], left, top, s, s);
       if (level < CAVE_THEMES.length) {
-        ctx.fillStyle = `rgba(${th.dirt},0.22)`;
+        ctx.fillStyle = `rgba(${th.dirt},0.24)`;
         ctx.fillRect(left, top, s, s);
       }
 
-      const bevel = Math.max(1, s * 0.08);
-      ctx.fillStyle = 'rgba(255,220,170,0.12)';
+      // Layered soil clumps, roots, and mineral specks.
+      for (let i = 0; i < 10; i++) {
+        const px = left + s * noise01(x+i*2, y, 20);
+        const py = top + s * noise01(x, y+i*3, 21);
+        const rw = s * (0.025 + noise01(x+i, y, 22) * 0.085);
+        const rh = s * (0.014 + noise01(x, y+i, 23) * 0.050);
+        ctx.fillStyle = i % 4 === 0 ? `rgba(${th.accent},0.055)` : `rgba(25,15,8,${0.09 + noise01(i,x,y)*0.10})`;
+        ctx.beginPath(); ctx.ellipse(px, py, rw, rh, noise01(i,x,y)*Math.PI, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.strokeStyle = `rgba(${th.accent},0.060)`;
+      ctx.lineWidth = Math.max(0.7, s * 0.012);
+      for (let i = 0; i < 3; i++) {
+        const rx = left + s * (0.08 + noise01(x+i, y, 30) * 0.82);
+        const ry = top + s * (0.10 + noise01(y, x+i, 31) * 0.72);
+        ctx.beginPath();
+        ctx.moveTo(rx, ry);
+        ctx.quadraticCurveTo(rx + s*(noise01(i,x,32)-0.5)*0.28, ry + s*0.18, rx + s*(noise01(i,y,33)-0.5)*0.44, ry + s*0.38);
+        ctx.stroke();
+      }
+      drawMineralVeins(left, top, s, x, y, th, false);
+
+      const bevel = Math.max(1, s * 0.09);
+      ctx.fillStyle = 'rgba(255,230,180,0.13)';
       ctx.fillRect(left, top, s, bevel);
       ctx.fillRect(left, top, bevel, s);
-      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ctx.fillRect(left, top + s - bevel, s, bevel);
       ctx.fillRect(left + s - bevel, top, bevel, s);
 
+      // Irregular crumble lip where dirt borders dug-out space.
+      if (tileAt(x, y - 1) === TILE.EMPTY) drawCrumbleEdge(left, top, s, 'top', th, 1.0);
+      if (tileAt(x, y + 1) === TILE.EMPTY) drawCrumbleEdge(left, top, s, 'bottom', th, 0.92);
+      if (tileAt(x - 1, y) === TILE.EMPTY) drawCrumbleEdge(left, top, s, 'left', th, 0.95);
+      if (tileAt(x + 1, y) === TILE.EMPTY) drawCrumbleEdge(left, top, s, 'right', th, 0.95);
+
       const cAO = Math.max(1, s * 0.14);
       const cgrd = ctx.createRadialGradient(left + s, top + s, 0, left + s, top + s, cAO * 1.8);
-      cgrd.addColorStop(0, 'rgba(0,0,0,0.28)');
+      cgrd.addColorStop(0, 'rgba(0,0,0,0.30)');
       cgrd.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = cgrd;
       ctx.fillRect(left + s - cAO * 1.8, top + s - cAO * 1.8, cAO * 1.8, cAO * 1.8);
@@ -2796,6 +2882,18 @@ function drawTile(x, y, type) {
         ctx.fillStyle = `rgba(${th.wall},0.24)`;
         ctx.fillRect(left, top, s, s);
       }
+      // Faceted high-res rock plates and faint mineral seams.
+      for (let i = 0; i < 5; i++) {
+        const ax = left + s * noise01(x+i, y, 40);
+        const ay = top + s * noise01(x, y+i, 41);
+        ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.09)';
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ax + s*(0.12 + noise01(i,x,42)*0.18), ay + s*(noise01(i,y,43)-0.5)*0.18);
+        ctx.lineTo(ax + s*(0.08 + noise01(i,x,44)*0.16), ay + s*(0.12 + noise01(i,y,45)*0.20));
+        ctx.closePath(); ctx.fill();
+      }
+      drawMineralVeins(left, top, s, x, y, th, true);
 
       const joints = Math.max(1, s * 0.03);
       ctx.strokeStyle = 'rgba(20,20,24,0.45)';
