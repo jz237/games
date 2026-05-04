@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.26</title>
+<title>Emerald Mine — Crystal Caves v2.4.27</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,11 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.26 — title demo attract loop: miner walks,
-//            digs, throws dirt chips, scores, and feels playable
+//  v2.4.27 — title demo pathing polish: miner digs
+//            forward then walks toward the glowing exit
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.26';
+const VERSION = 'v2.4.27';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -5665,18 +5665,26 @@ function drawTitle() {
       'WDDDEDDDDDDDW',
       'WWWWWWWWWWWWW'
     ];
-    const miniLoop = (t * 0.28) % 1;
-    const walkOut = miniLoop < 0.56;
-    const holdDig = miniLoop >= 0.46 && miniLoop < 0.72;
-    const returnHome = miniLoop >= 0.76;
-    const walkProg = walkOut ? easeInOut(Math.min(1, miniLoop / 0.56)) : returnHome ? 1 - easeInOut((miniLoop - 0.76) / 0.24) : 1;
-    const minerTileX = 2 + walkProg * 2.35;
-    const dugAhead = miniLoop > 0.50;
-    const collectedGem = miniLoop > 0.62 && miniLoop < 0.88;
+    const miniLoop = (t * 0.20) % 1;
+    const approachDig = miniLoop < 0.26;
+    const holdDig = miniLoop >= 0.26 && miniLoop < 0.43;
+    const walkToExit = miniLoop >= 0.43 && miniLoop < 0.92;
+    const resetLoop = miniLoop >= 0.92;
+    const minerTileX = approachDig
+      ? lerp(2.0, 3.55, easeInOut(miniLoop / 0.26))
+      : holdDig
+        ? 3.55 + Math.sin(t * 12) * 0.025
+        : walkToExit
+          ? lerp(3.55, 10.55, easeInOut((miniLoop - 0.43) / 0.49))
+          : lerp(10.55, 2.0, easeInOut((miniLoop - 0.92) / 0.08));
+    const dugAhead = miniLoop > 0.36;
+    const collectedGem = miniLoop > 0.55 && miniLoop < 0.80;
+    const nearExitGlow = miniLoop > 0.74 && miniLoop < 0.94;
 
     for (let yy=0; yy<rows; yy++) for (let xx=0; xx<cols; xx++) {
       let ch = map[yy][xx];
-      if (yy === 3 && (xx === 2 || xx === 3 || (dugAhead && xx === 4))) ch = 'E';
+      if (yy === 3 && (xx >= 2 && xx <= Math.floor(minerTileX + 0.65))) ch = 'E';
+      if (yy === 3 && dugAhead && xx <= 10 && xx >= 4) ch = 'E';
       const x = ox + xx*cs, y = oy + yy*cs;
       if (ch === 'W') {
         const wg = ctx.createLinearGradient(x, y, x+cs, y+cs);
@@ -5704,17 +5712,17 @@ function drawTitle() {
     // Dirt chips and tiny feedback from the animated dig target.
     if (holdDig) {
       const [digX, digY] = tileCenter(4, 3);
-      for (let i=0;i<7;i++) {
-        const a = t*7 + i*0.9;
-        const rr = (0.10 + ((t*1.7+i*0.13)%0.34)) * cs;
-        ctx.fillStyle = `rgba(${150+i*9},${96+i*4},${48+i*2},${0.78 - i*0.055})`;
+      for (let i=0;i<9;i++) {
+        const a = t*8 + i*0.78;
+        const rr = (0.12 + ((t*1.9+i*0.11)%0.40)) * cs;
+        ctx.fillStyle = `rgba(${150+i*8},${96+i*4},${48+i*2},${0.82 - i*0.055})`;
         ctx.beginPath();
-        ctx.arc(digX + Math.cos(a)*rr - cs*0.22, digY + Math.sin(a*1.3)*rr*0.55, Math.max(1, cs*(0.030+i*0.002)), 0, Math.PI*2);
+        ctx.arc(digX + Math.cos(a)*rr + cs*0.18, digY + Math.sin(a*1.25)*rr*0.58, Math.max(1, cs*(0.030+i*0.002)), 0, Math.PI*2);
         ctx.fill();
       }
-      ctx.strokeStyle = 'rgba(255,220,120,0.42)';
+      ctx.strokeStyle = 'rgba(255,220,120,0.45)';
       ctx.lineWidth = Math.max(1, cs*0.030);
-      ctx.beginPath(); ctx.arc(digX-cs*0.24, digY, cs*(0.28+Math.sin(t*10)*0.04), -0.8, 0.8); ctx.stroke();
+      ctx.beginPath(); ctx.arc(digX+cs*0.18, digY, cs*(0.30+Math.sin(t*12)*0.04), Math.PI-0.8, Math.PI+0.8); ctx.stroke();
     }
 
     // Mini player sprite: a compressed version of the real miner, animated like it is actually playing.
@@ -5722,15 +5730,17 @@ function drawTitle() {
     pym += Math.abs(Math.sin(t*9)) * cs * (holdDig ? 0.015 : 0.035);
     const mS = cs * 0.92;
     const pickSwing = holdDig ? Math.sin(t * 18) : 0;
-    const walkAmount = holdDig ? 0.22 : Math.min(1, Math.abs(Math.sin(t * 7)));
+    const walkAmount = holdDig ? 0.18 : Math.min(1, Math.abs(Math.sin(t * 7)));
+    const facingRight = !resetLoop;
     ctx.save();
     ctx.translate(pxm, pym + cs*0.04);
     // Lamp beam first, behind the sprite.
-    const lamp = ctx.createRadialGradient(0, -mS*0.62, 0, mS*0.80, -mS*0.70, mS*1.55);
+    const lampDir = facingRight ? 1 : -1;
+    const lamp = ctx.createRadialGradient(0, -mS*0.62, 0, lampDir*mS*0.80, -mS*0.70, mS*1.55);
     lamp.addColorStop(0, 'rgba(255,232,120,0.28)');
     lamp.addColorStop(0.42, 'rgba(255,215,90,0.09)');
     lamp.addColorStop(1, 'rgba(255,230,120,0)');
-    ctx.fillStyle = lamp; ctx.beginPath(); ctx.ellipse(mS*0.58, -mS*0.58, mS*1.10, mS*0.48, -0.12, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = lamp; ctx.beginPath(); ctx.ellipse(lampDir*mS*0.58, -mS*0.58, mS*1.10, mS*0.48, lampDir*-0.12, 0, Math.PI*2); ctx.fill();
 
     // Boots and legs.
     ctx.strokeStyle = 'rgba(0,0,0,0.70)';
@@ -5756,16 +5766,16 @@ function drawTitle() {
     ctx.fillStyle = '#e2bd46'; ctx.beginPath(); ctx.roundRect(-mS*0.035, mS*0.142, mS*0.070, mS*0.050, mS*0.010); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = Math.max(0.6, cs*0.018); ctx.beginPath(); ctx.roundRect(-mS*0.075, -mS*0.010, mS*0.105, mS*0.070, mS*0.012); ctx.stroke();
 
-    // Arms and pickaxe. During the attract loop the pick actually swings into the dirt.
+    // Arms and pickaxe. During the attract loop the pick swings FORWARD into the tile ahead.
     ctx.strokeStyle = 'rgba(0,0,0,0.68)'; ctx.lineWidth = Math.max(0.9, cs*0.040);
     ctx.fillStyle = '#3c82b7';
-    ctx.save(); ctx.translate(-mS*0.27, -mS*0.08); ctx.rotate(-0.42 - pickSwing*0.22); ctx.beginPath(); ctx.roundRect(-mS*0.040, 0, mS*0.080, mS*0.25, mS*0.030); ctx.fill(); ctx.stroke(); ctx.restore();
-    ctx.save(); ctx.translate(mS*0.26, -mS*0.07); ctx.rotate(0.18 + pickSwing*0.12); ctx.beginPath(); ctx.roundRect(-mS*0.040, 0, mS*0.080, mS*0.23, mS*0.030); ctx.fill(); ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.translate(-mS*0.26, -mS*0.08); ctx.rotate(-0.15 - walkAmount*0.16); ctx.beginPath(); ctx.roundRect(-mS*0.040, 0, mS*0.080, mS*0.23, mS*0.030); ctx.fill(); ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.translate(mS*0.27, -mS*0.08); ctx.rotate(0.34 + pickSwing*0.22); ctx.beginPath(); ctx.roundRect(-mS*0.040, 0, mS*0.080, mS*0.25, mS*0.030); ctx.fill(); ctx.stroke(); ctx.restore();
     ctx.save();
-    ctx.translate(-mS*0.45, -mS*0.02);
-    ctx.rotate(holdDig ? -0.95 + pickSwing*0.75 : -0.58);
-    ctx.strokeStyle = '#805128'; ctx.lineWidth = Math.max(1.0, cs*0.038); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-mS*0.03, -mS*0.42); ctx.stroke();
-    ctx.strokeStyle = '#c5d0cf'; ctx.lineWidth = Math.max(1.0, cs*0.038); ctx.beginPath(); ctx.moveTo(-mS*0.14, -mS*0.43); ctx.quadraticCurveTo(-mS*0.03, -mS*0.52, mS*0.12, -mS*0.42); ctx.stroke();
+    ctx.translate(mS*0.40, -mS*0.04);
+    ctx.rotate(holdDig ? 0.78 + pickSwing*0.70 : 0.44);
+    ctx.strokeStyle = '#805128'; ctx.lineWidth = Math.max(1.0, cs*0.038); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(mS*0.03, -mS*0.42); ctx.stroke();
+    ctx.strokeStyle = '#c5d0cf'; ctx.lineWidth = Math.max(1.0, cs*0.038); ctx.beginPath(); ctx.moveTo(-mS*0.11, -mS*0.42); ctx.quadraticCurveTo(mS*0.03, -mS*0.53, mS*0.17, -mS*0.41); ctx.stroke();
     ctx.restore();
 
     // Head, hardhat, goggles, lamp housing.
@@ -5801,8 +5811,8 @@ function drawTitle() {
 
     // Mini exit portal.
     let [exx, exy] = tileCenter(11, 2.9);
-    const pulseP = 0.62 + 0.38*Math.sin(t*4);
-    const pg = ctx.createRadialGradient(exx, exy, 0, exx, exy, cs*1.05);
+    const pulseP = (0.62 + 0.38*Math.sin(t*4)) * (nearExitGlow ? 1.35 : 1);
+    const pg = ctx.createRadialGradient(exx, exy, 0, exx, exy, cs*(nearExitGlow ? 1.45 : 1.05));
     pg.addColorStop(0, `rgba(100,255,170,${0.34*pulseP})`); pg.addColorStop(1, 'rgba(20,180,100,0)');
     ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(exx, exy, cs*1.05, 0, Math.PI*2); ctx.fill();
     ctx.strokeStyle = `rgba(135,255,190,${0.55*pulseP})`; ctx.lineWidth = Math.max(1, cs*0.07); ctx.beginPath(); ctx.arc(exx, exy, cs*0.48, 0, Math.PI*2); ctx.stroke();
@@ -5822,7 +5832,10 @@ function drawTitle() {
       ctx.fillStyle = `rgba(110,255,170,${1-flyT*0.5})`;
       drawStar(ctx, fx, fy, 5, cs*0.18*(1-flyT*0.45), cs*0.055);
     } else {
-      ctx.strokeText('DIG!', ox+4.25*cs, oy+2.05*cs); ctx.fillText('DIG!', ox+4.25*cs, oy+2.05*cs);
+      const msg = nearExitGlow ? 'EXIT!' : holdDig ? 'DIG!' : 'GO →';
+      const msgX = nearExitGlow ? ox+10.65*cs : holdDig ? ox+4.25*cs : pxm+cs*0.35;
+      const msgY = nearExitGlow ? oy+1.55*cs : holdDig ? oy+2.05*cs : pym-cs*1.0;
+      ctx.strokeText(msg, msgX, msgY); ctx.fillText(msg, msgX, msgY);
     }
 
     ctx.restore();
