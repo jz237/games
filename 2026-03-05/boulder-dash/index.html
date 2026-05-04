@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.11</title>
+<title>Emerald Mine — Crystal Caves v2.4.12</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.11 — reserves portrait control shelf below cave board
+//  v2.4.12 — top controls and isolated transition tiles
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.11';
+const VERSION = 'v2.4.12';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -97,13 +97,11 @@ function updateViewLayout() {
 
   HUD_H = Math.max((boardView.portrait ? 56 : 48) * DPR, H * (boardView.portrait ? 0.08 : 0.065));
   const margin = Math.max(8 * DPR, Math.min(W, H) * 0.015);
-  // Portrait controls live on a dedicated lower shelf. Keep the playable cave above it
-  // so menu/restart/bomb never sit on top of ground tiles or steal board taps.
-  const controlSafe = boardView.portrait ? Math.max(150 * DPR, Math.min(W, H) * 0.30) : 0;
   boardView.x = margin;
   boardView.y = HUD_H + margin;
   boardView.w = Math.max(80 * DPR, W - margin * 2);
-  boardView.h = Math.max(80 * DPR, H - HUD_H - margin * 2 - controlSafe);
+  // Controls now live in the top HUD band, so portrait caves can use the full lower screen.
+  boardView.h = Math.max(80 * DPR, H - HUD_H - margin * 2);
 
   const fitW = boardView.w / gridW;
   const fitH = boardView.h / gridH;
@@ -458,9 +456,9 @@ function handleHighScoreKey(e) {
 const pauseBtn = { x: 0, y: 0, r: 0, visible: false };
 function updatePauseBtn() {
   pauseBtn.visible = state === 'playing' && !player.dead;
-  pauseBtn.r = Math.max(20 * DPR, Math.min(W, H) * 0.036);
-  pauseBtn.x = pauseBtn.r * 1.55;
-  pauseBtn.y = H - pauseBtn.r * 1.55;
+  pauseBtn.r = Math.max(16 * DPR, Math.min(W, H) * 0.028);
+  pauseBtn.x = pauseBtn.r * 1.45;
+  pauseBtn.y = HUD_H * 0.50;
 }
 function isPauseBtnTap(screenX, screenY) {
   if (!pauseBtn.visible) return false;
@@ -509,24 +507,23 @@ const menuBtn = { x: 0, y: 0, r: 0, visible: false };
 
 function updateDynamiteBtn() {
   dynamiteBtn.visible = state === 'playing' && player.dynamite > 0 && !player.dead;
-  dynamiteBtn.r = Math.max(30 * DPR, Math.min(W, H) * 0.050);
-  // Bottom-left control shelf, above the OS bar but below the board and pause button.
-  dynamiteBtn.x = dynamiteBtn.r * 1.55;
-  dynamiteBtn.y = H - dynamiteBtn.r * 1.30;
+  dynamiteBtn.r = Math.max(18 * DPR, Math.min(W, H) * 0.031);
+  dynamiteBtn.x = pauseBtn.visible ? pauseBtn.x + pauseBtn.r + dynamiteBtn.r + 8 * DPR : dynamiteBtn.r * 1.55;
+  dynamiteBtn.y = HUD_H * 0.50;
 }
 
 function updateRetryBtn() {
   retryBtn.visible = state === 'playing' && !player.dead;
-  retryBtn.r = Math.max(16 * DPR, Math.min(W, H) * 0.027);
-  retryBtn.x = W - retryBtn.r * 3.0;
-  retryBtn.y = H - retryBtn.r * 1.95;
+  retryBtn.r = Math.max(13 * DPR, Math.min(W, H) * 0.022);
+  retryBtn.x = W - retryBtn.r * 3.25;
+  retryBtn.y = HUD_H * 0.68;
 }
 
 function updateMenuBtn() {
   menuBtn.visible = state === 'playing' && !player.dead;
-  menuBtn.r = Math.max(16 * DPR, Math.min(W, H) * 0.027);
-  menuBtn.x = W - menuBtn.r * 3.0;
-  menuBtn.y = retryBtn.visible ? retryBtn.y - menuBtn.r * 2.25 : H - menuBtn.r * 4.6;
+  menuBtn.r = Math.max(13 * DPR, Math.min(W, H) * 0.022);
+  menuBtn.x = W - menuBtn.r * 3.25;
+  menuBtn.y = HUD_H * 0.28;
 }
 
 function isRetryBtnTap(screenX, screenY) {
@@ -849,6 +846,21 @@ function dirtRoom(x1, y1, x2, y2) { fillTileRect(x1, y1, x2, y2, TILE.DIRT); }
 function placeAuthored(x, y, tile) {
   if (x > 0 && y > 0 && x < gridW - 1 && y < gridH - 1) grid[y][x] = tile;
 }
+function placeTransitionTile(x, y) {
+  if (x <= 0 || y <= 0 || x >= gridW - 1 || y >= gridH - 1) return;
+  for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+    if (grid[y + dy] && grid[y + dy][x + dx] === TILE.MAGIC_WALL) return;
+  }
+  grid[y][x] = TILE.MAGIC_WALL;
+}
+function placeTransitionLine(x1, y1, x2, y2) {
+  for (let y = Math.max(1, y1); y <= Math.min(gridH - 2, y2); y++) {
+    for (let x = Math.max(1, x1); x <= Math.min(gridW - 2, x2); x++) {
+      // Checkerboard isolation: no side-adjacent transition tiles, so every tile works independently.
+      if (((x - x1) + (y - y1)) % 2 === 0) placeTransitionTile(x, y);
+    }
+  }
+}
 function placeGemLine(points, tile=TILE.GEM) { for (const [x, y] of points) placeAuthored(x, y, tile); }
 function placeEnemy(x, y, type='firefly') { authoredEnemySpawns.push({ x, y, type }); placeAuthored(x, y, TILE.EMPTY); }
 function applyAuthoredCave(lvl) {
@@ -874,7 +886,7 @@ function applyAuthoredCave(lvl) {
   } else if (lvl === 1) {
     // Cave 2: a readable magic-wall machine with boulders staged above it.
     carveRoom(1,1,6,4); carveRoom(7,1,12,4); carveRoom(3,6,17,8); carveRoom(13,9,18,12);
-    fillTileRect(7,5,12,5,TILE.MAGIC_WALL);
+    placeTransitionLine(7,5,12,5);
     for (let x = 7; x <= 12; x++) { placeAuthored(x,4,TILE.EMPTY); placeAuthored(x,3,TILE.BOULDER); }
     placeGemLine([[4,2],[5,3],[14,6],[16,7],[15,10],[17,11],[9,7],[11,7],[3,7],[10,2]]);
     placeAuthored(5,6,TILE.DYNAMITE); placeAuthored(15,3,TILE.DIAMOND); placeAuthored(16,3,TILE.DIAMOND);
@@ -903,7 +915,7 @@ function applyAuthoredCave(lvl) {
   } else if (lvl === 4) {
     // Cave 5: the first bigger “machine” — two routes, boulder shelves, magic wall, slime pressure.
     carveRoom(1,1,6,5); carveRoom(7,1,18,4); carveRoom(19,2,26,6); carveRoom(3,7,13,12); carveRoom(14,8,26,13); carveRoom(18,15,26,18);
-    fillTileRect(9,6,17,6,TILE.MAGIC_WALL); fillTileRect(13,14,17,14,TILE.WALL); carveRoom(15,14,15,14);
+    placeTransitionLine(9,6,17,6); fillTileRect(13,14,17,14,TILE.WALL); carveRoom(15,14,15,14);
     for (const x of [9,10,12,14,16,17]) { placeAuthored(x,4,TILE.BOULDER); placeAuthored(x,5,TILE.EMPTY); }
     placeAuthored(22,9,TILE.AMOEBA); placeAuthored(23,9,TILE.AMOEBA); placeAuthored(22,10,TILE.AMOEBA);
     placeAuthored(5,10,TILE.DYNAMITE); placeAuthored(11,11,TILE.DYNAMITE); placeAuthored(21,16,TILE.SPEED_BOOTS); placeAuthored(25,15,TILE.GHOST_MODE);
@@ -916,7 +928,7 @@ function applyAuthoredCave(lvl) {
     // Cave 6: controlled pressure — more space, two slime pockets, safe routes around the machine.
     carveRoom(1,1,7,5); carveRoom(8,1,18,5); carveRoom(19,2,26,7);
     carveRoom(3,7,12,12); carveRoom(13,7,26,13); carveRoom(4,14,14,18); carveRoom(17,15,26,18);
-    fillTileRect(8,6,15,6,TILE.MAGIC_WALL); fillTileRect(15,14,18,14,TILE.WALL); carveRoom(16,14,16,14);
+    placeTransitionLine(8,6,15,6); fillTileRect(15,14,18,14,TILE.WALL); carveRoom(16,14,16,14);
     for (const x of [8,10,12,14,15]) { placeAuthored(x,4,TILE.BOULDER); placeAuthored(x,5,TILE.EMPTY); }
     for (const [x,y] of [[21,5],[22,5],[21,6],[8,15],[9,15]]) placeAuthored(x,y,TILE.AMOEBA);
     placeAuthored(5,9,TILE.DYNAMITE); placeAuthored(12,17,TILE.DYNAMITE); placeAuthored(23,16,TILE.SPEED_BOOTS); placeAuthored(6,16,TILE.GHOST_MODE); placeAuthored(20,15,TILE.DYNAMITE);
@@ -930,7 +942,7 @@ function applyAuthoredCave(lvl) {
     carveRoom(1,1,7,5); carveRoom(8,1,18,4); carveRoom(19,1,28,6);
     carveRoom(2,7,11,13); carveRoom(12,6,20,12); carveRoom(21,7,28,14);
     carveRoom(4,15,13,19); carveRoom(14,14,22,19); carveRoom(23,16,28,19);
-    fillTileRect(9,5,16,5,TILE.MAGIC_WALL); fillTileRect(18,13,22,13,TILE.MAGIC_WALL);
+    placeTransitionLine(9,5,16,5); placeTransitionLine(18,13,22,13);
     fillTileRect(11,14,14,14,TILE.WALL); carveRoom(12,14,12,14);
     for (const x of [9,10,12,14,16]) { placeAuthored(x,3,TILE.BOULDER); placeAuthored(x,4,TILE.EMPTY); }
     for (const x of [18,20,22]) { placeAuthored(x,11,TILE.BOULDER); placeAuthored(x,12,TILE.EMPTY); }
@@ -1067,7 +1079,7 @@ function generateLevel(lvl) {
     const mwLen = sRngInt(3, 6);
     for (let mx = mwxStart; mx < Math.min(mwxStart + mwLen, gridW - 2); mx++) {
       if (grid[mwy][mx] === TILE.DIRT || grid[mwy][mx] === TILE.EMPTY || grid[mwy][mx] === TILE.WALL) {
-        grid[mwy][mx] = TILE.MAGIC_WALL;
+        placeTransitionTile(mx, mwy);
       }
     }
     // Ensure space above magic wall has boulders to drop through
