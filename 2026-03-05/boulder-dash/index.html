@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.17</title>
+<title>Emerald Mine — Crystal Caves v2.4.18</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,11 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.17 — bigger level-clear payoff with arcade fanfare,
-//            screen flash, camera kick, and exit shockwaves
+//  v2.4.18 — cave personality pass: signature hazards,
+//            motif glyphs, and stronger per-wave identity
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.17';
+const VERSION = 'v2.4.18';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -357,6 +357,30 @@ function caveBlurb(idx) {
     'The mine closes its hand. Take only what shines.'
   ];
   return blurbs[idx] || 'The cave shifts. Watch the ceiling.';
+}
+
+function cavePersonality(idx) {
+  const profiles = [
+    { sig:'TRAINING SEAM', icon:'◆', tags:['LOW PRESSURE','STONE LESSON','SAFE EXIT'] },
+    { sig:'CONVERTER HUM', icon:'◇', tags:['MAGIC WALL','BONUS DIAMONDS','WATCH DROPS'] },
+    { sig:'FIREFLY PATROL', icon:'✹', tags:['PATROL LOOPS','CRUSH BAIT','HOT ROCK'] },
+    { sig:'BUTTERFLY SPORES', icon:'✦', tags:['SLIME BREATH','WING BURSTS','SOFT WALLS'] },
+    { sig:'EMERALD MACHINE', icon:'▣', tags:['CIRCUIT CAVE','FAST READS','GREEN LIGHT'] },
+    { sig:'PRESSURE FAULT', icon:'▰', tags:['CEILING THREATS','DENSE ROCK','SHORT WINDOWS'] },
+    { sig:'HUNTER SCENT', icon:'▲', tags:['PREDATORS','DIRT VEINS','KEEP MOVING'] },
+    { sig:'DIAMOND ENGINE', icon:'◇', tags:['RICH VEINS','SHIFTING PATHS','GREED TEST'] },
+    { sig:'TEETH IN DARK', icon:'▼', tags:['HIGH DANGER','LISTEN HARD','CRUSH CHAINS'] },
+    { sig:'HOT WALL CHOIR', icon:'✺', tags:['MAGIC HUM','FIREFLY HEAT','EXIT RACE'] },
+    { sig:'GROWING GARDEN', icon:'☘', tags:['AMOEBA SPREAD','CONTROL SPACE','CUT PATHS'] },
+    { sig:'WING CATHEDRAL', icon:'✧', tags:['BUTTERFLIES','FALLING STONE','NARROW LUCK'] },
+    { sig:'HUNTER FURNACE', icon:'▲', tags:['RED HEAT','PREDATOR PACKS','KILL BONUS'] },
+    { sig:'CRYSTAL MAZE', icon:'✥', tags:['SLIME + GEMS','BAD CEILINGS','ROUTE MEMORY'] },
+    { sig:'FINAL HAND', icon:'⬟', tags:['EVERYTHING WAKES','NO WASTE','TAKE THE SHINE'] }
+  ];
+  return profiles[idx] || { sig:'DEEP SHIFT', icon:'◆', tags:['UNKNOWN PRESSURE','READ THE CAVE','MOVE CLEAN'] };
+}
+function caveMotifGlyph(motif) {
+  return ({ roots:'〰', runes:'ᚱ', embers:'✹', crystals:'✧', circuit:'▣', vents:'▰', claws:'▲', deep:'◆' })[motif] || '◆';
 }
 function beginCaveIntro() {
   state = 'caveIntro';
@@ -2934,6 +2958,22 @@ function drawCaveBackground() {
       ctx.moveTo(0, y);
       ctx.bezierCurveTo(W*0.25, y - 22*DPR, W*0.62, y + 18*DPR, W, y - 8*DPR);
       ctx.stroke();
+    }
+
+    // Large faint motif glyphs make each cave feel like a distinct chamber, not just a palette swap.
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `900 ${Math.max(42 * DPR, Math.min(W, H) * 0.115)}px 'Segoe UI Symbol','Segoe UI',system-ui,sans-serif`;
+    ctx.fillStyle = `rgba(${th.accent},0.035)`;
+    const glyph = caveMotifGlyph(th.motif);
+    for (let i = 0; i < 7; i++) {
+      const gx = ((i * 211 + level * 89) % 1000) / 1000 * W;
+      const gy = ((i * 157 + level * 131) % 1000) / 1000 * H;
+      ctx.save();
+      ctx.translate(gx, gy);
+      ctx.rotate(Math.sin(globalTime * 0.12 + i) * 0.08);
+      ctx.fillText(glyph, 0, 0);
+      ctx.restore();
     }
     ctx.restore();
   }
@@ -5802,15 +5842,34 @@ function drawCaveIntro() {
   ctx.fillStyle = '#fff';
   ctx.fillText(caveName, cx, cy - h*0.16);
 
+  const mood = cavePersonality(level);
   const target = `Target ${gemsNeeded} crystals  •  ${L.enemies} creatures`;
   setFitFont(target, 700, Math.max(11*DPR, h*0.073), 10*DPR, maxTextW);
   ctx.fillStyle = 'rgba(255,228,138,0.92)';
-  ctx.fillText(target, cx, cy + h*0.03);
+  ctx.fillText(target, cx, cy + h*0.005);
 
-  const wrapped = wrapTextToWidth(caveBlurb(level), maxTextW, 600, Math.max(11*DPR, h*0.062), 9*DPR);
+  const sigY = cy + h*0.115;
+  ctx.font = `900 ${Math.max(13*DPR, h*0.075)}px 'Segoe UI Symbol','Segoe UI',system-ui,sans-serif`;
+  ctx.fillStyle = `rgba(${th.accent},0.95)`;
+  ctx.fillText(`${mood.icon} ${mood.sig} ${mood.icon}`, cx, sigY);
+  const chipY = cy + h*0.205;
+  const chipGap = Math.min(w * 0.27, 150 * DPR);
+  ctx.font = `800 ${Math.max(7.5*DPR, h*0.038)}px 'Segoe UI', system-ui, sans-serif`;
+  for (let i = 0; i < mood.tags.length; i++) {
+    const tx = cx + (i - 1) * chipGap;
+    const tw = Math.min(chipGap * 0.88, ctx.measureText(mood.tags[i]).width + 22 * DPR);
+    ctx.fillStyle = `rgba(${th.tint},0.22)`;
+    ctx.strokeStyle = `rgba(${th.accent},0.34)`;
+    ctx.lineWidth = Math.max(1, DPR);
+    ctx.beginPath(); ctx.roundRect(tx - tw/2, chipY - h*0.035, tw, h*0.07, 999); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(235,255,240,0.82)';
+    ctx.fillText(mood.tags[i], tx, chipY);
+  }
+
+  const wrapped = wrapTextToWidth(caveBlurb(level), maxTextW, 600, Math.max(11*DPR, h*0.057), 9*DPR);
   ctx.fillStyle = 'rgba(218,245,228,0.82)';
-  const lineGap = wrapped.size * 1.22;
-  const startY = cy + h*0.19 - ((wrapped.lines.length - 1) * lineGap) / 2;
+  const lineGap = wrapped.size * 1.18;
+  const startY = cy + h*0.305 - ((wrapped.lines.length - 1) * lineGap) / 2;
   for (let i = 0; i < wrapped.lines.length; i++) {
     ctx.fillText(wrapped.lines[i], cx, startY + i * lineGap);
   }
@@ -5818,13 +5877,13 @@ function drawCaveIntro() {
   const hint = level === 0 ? 'pinch to zoom  •  drag or hold to move' : 'tap to enter';
   setFitFont(hint, 600, Math.max(9*DPR, h*0.052), 8*DPR, maxTextW);
   ctx.fillStyle = level === 0 ? 'rgba(180,235,255,0.82)' : `rgba(220,255,235,${0.42 + Math.sin(globalTime * 5) * 0.18})`;
-  ctx.fillText(hint, cx, cy + h*0.39);
+  ctx.fillText(hint, cx, cy + h*0.43);
 
   if (level === 0) {
     const enter = 'tap to enter';
     setFitFont(enter, 600, Math.max(9*DPR, h*0.047), 8*DPR, maxTextW);
     ctx.fillStyle = `rgba(220,255,235,${0.42 + Math.sin(globalTime * 5) * 0.18})`;
-    ctx.fillText(enter, cx, cy + h*0.48);
+    ctx.fillText(enter, cx, cy + h*0.50);
   }
   ctx.restore();
 }
