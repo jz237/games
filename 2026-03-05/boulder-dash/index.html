@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.12</title>
+<title>Emerald Mine — Crystal Caves v2.4.13</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,10 +18,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.12 — top controls and isolated transition tiles
+//  v2.4.13 — organized non-overlapping top HUD
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.12';
+const VERSION = 'v2.4.13';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -507,22 +507,24 @@ const menuBtn = { x: 0, y: 0, r: 0, visible: false };
 
 function updateDynamiteBtn() {
   dynamiteBtn.visible = state === 'playing' && player.dynamite > 0 && !player.dead;
-  dynamiteBtn.r = Math.max(18 * DPR, Math.min(W, H) * 0.031);
-  dynamiteBtn.x = pauseBtn.visible ? pauseBtn.x + pauseBtn.r + dynamiteBtn.r + 8 * DPR : dynamiteBtn.r * 1.55;
+  dynamiteBtn.r = Math.max(16 * DPR, Math.min(W, H) * 0.026);
+  dynamiteBtn.x = pauseBtn.visible ? pauseBtn.x + pauseBtn.r + dynamiteBtn.r + 10 * DPR : dynamiteBtn.r * 1.55;
   dynamiteBtn.y = HUD_H * 0.50;
 }
 
 function updateRetryBtn() {
   retryBtn.visible = state === 'playing' && !player.dead;
-  retryBtn.r = Math.max(13 * DPR, Math.min(W, H) * 0.022);
-  retryBtn.x = W - retryBtn.r * 3.25;
+  retryBtn.r = Math.max(12 * DPR, Math.min(W, H) * 0.020);
+  const w = retryBtn.r * 4.1;
+  retryBtn.x = W - w / 2 - 10 * DPR;
   retryBtn.y = HUD_H * 0.68;
 }
 
 function updateMenuBtn() {
   menuBtn.visible = state === 'playing' && !player.dead;
-  menuBtn.r = Math.max(13 * DPR, Math.min(W, H) * 0.022);
-  menuBtn.x = W - menuBtn.r * 3.25;
+  menuBtn.r = Math.max(12 * DPR, Math.min(W, H) * 0.020);
+  const w = menuBtn.r * 4.1;
+  menuBtn.x = W - w / 2 - 10 * DPR;
   menuBtn.y = HUD_H * 0.28;
 }
 
@@ -5002,27 +5004,38 @@ function drawDynamicLights() {
 }
 
 function drawHUD() {
+  updatePauseBtn();
+  updateDynamiteBtn();
+  updateRetryBtn();
+  updateMenuBtn();
+
   const barH = HUD_H;
-  
+  const pad = Math.max(8 * DPR, Math.min(W, H) * 0.012);
+
   // HUD background with gradient
   const hudGrd = ctx.createLinearGradient(0, 0, 0, barH);
-  hudGrd.addColorStop(0, 'rgba(0,0,0,0.7)');
-  hudGrd.addColorStop(1, 'rgba(0,0,0,0.4)');
+  hudGrd.addColorStop(0, 'rgba(0,0,0,0.76)');
+  hudGrd.addColorStop(1, 'rgba(0,0,0,0.48)');
   ctx.fillStyle = hudGrd;
   ctx.fillRect(0, 0, W, barH);
-  // Bottom border
   ctx.fillStyle = 'rgba(255,220,150,0.08)';
   ctx.fillRect(0, barH - 2, W, 2);
-  
-  const fontSize = clamp(CELL * 0.38, 13 * DPR, 24 * DPR);
+
+  const fontSize = clamp(CELL * 0.34, 12 * DPR, 22 * DPR);
   ctx.font = `bold ${fontSize}px 'Segoe UI', system-ui, sans-serif`;
   ctx.textBaseline = 'middle';
-  
-  const gemY = barH / 2;
-  const gemX = CELL * 0.6;
-  
-  // Mini emerald icon
-  const gr = CELL * 0.15;
+
+  const controlsRightW = (menuBtn.visible || retryBtn.visible) ? (menuBtn.r * 4.1 + pad * 2.8) : 0;
+  const statsRight = W - controlsRightW - pad;
+  const leftControlsRight = Math.max(
+    pauseBtn.visible ? pauseBtn.x + pauseBtn.r : 0,
+    dynamiteBtn.visible ? dynamiteBtn.x + dynamiteBtn.r : 0
+  ) + pad;
+
+  // Gems: always starts after pause/bomb controls so it never collides with icons.
+  const gemY = barH * 0.50;
+  const gemX = Math.max(CELL * 0.6, leftControlsRight + CELL * 0.18);
+  const gr = Math.max(4 * DPR, CELL * 0.13);
   ctx.fillStyle = `hsl(${145 + Math.sin(globalTime*2)*10},80%,50%)`;
   ctx.beginPath();
   ctx.moveTo(gemX, gemY - gr);
@@ -5031,77 +5044,54 @@ function drawHUD() {
   ctx.lineTo(gemX, gemY + gr*0.7);
   ctx.lineTo(gemX - gr*0.6, gemY + gr*0.2);
   ctx.lineTo(gemX - gr*0.5, gemY - gr*0.35);
-  ctx.closePath();
-  ctx.fill();
+  ctx.closePath(); ctx.fill();
   ctx.fillStyle = 'rgba(200,255,230,0.35)';
   ctx.beginPath();
   ctx.moveTo(gemX - gr*0.1, gemY - gr*0.5);
   ctx.lineTo(gemX + gr*0.2, gemY);
   ctx.lineTo(gemX - gr*0.3, gemY);
-  ctx.closePath();
-  ctx.fill();
-  
+  ctx.closePath(); ctx.fill();
+
   const gemCount = Math.floor(displayGems);
   ctx.fillStyle = gemCount >= gemsNeeded ? '#60FF90' : '#fff';
   ctx.textAlign = 'left';
-  ctx.fillText(`${gemCount} / ${gemsNeeded}`, gemX + CELL*0.3, gemY);
-  
-  // Hearts
-  const heartX = W / 2 - CELL * 0.5;
+  ctx.fillText(`${gemCount} / ${gemsNeeded}`, gemX + gr * 1.6, gemY);
+
+  // Hearts + zoom occupy the center lane, clamped away from left counters and right buttons.
+  const heartSpacing = Math.max(CELL * 0.44, 18 * DPR);
+  let centerX = W * 0.50;
+  const centerMin = gemX + gr * 1.6 + ctx.measureText(`${gemCount} / ${gemsNeeded}`).width + heartSpacing * 2.4;
+  const centerMax = statsRight - heartSpacing * 3.0;
+  if (centerMin < centerMax) centerX = clamp(centerX, centerMin, centerMax);
+  const heartX = centerX - heartSpacing;
   for (let i = 0; i < 3; i++) {
-    const hx = heartX + i * CELL * 0.5;
-    const filled = i < player.lives;
-    drawHeart(hx, gemY, CELL * 0.15, filled);
+    const hx = heartX + i * heartSpacing;
+    drawHeart(hx, barH * 0.36, Math.max(5 * DPR, CELL * 0.13), i < player.lives);
   }
-  
-  // Level
-  ctx.textAlign = 'right';
-  ctx.fillStyle = `rgba(255,255,255,${0.6 + Math.sin(globalTime*2)*0.1})`;
-  ctx.fillText(`Level ${level + 1}`, W - CELL * 0.4, gemY - fontSize * 0.3);
-  
-  // Score
-  ctx.font = `${fontSize*0.7}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(255,220,100,0.8)';
-  ctx.fillText(`Score: ${score}`, W - CELL * 0.4, gemY + fontSize * 0.4);
-  ctx.textAlign = 'right';
-  ctx.font = `${Math.max(9 * DPR, fontSize * 0.46)}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(255,255,255,0.42)';
-  ctx.fillText(VERSION, W - CELL * 0.4, HUD_H - 8 * DPR);
+
   if (boardView.follow || zoomToast > 0) {
     ctx.textAlign = 'center';
+    ctx.font = `${Math.max(9 * DPR, fontSize * 0.62)}px 'Segoe UI', system-ui, sans-serif`;
     ctx.fillStyle = zoomToast > 0 ? 'rgba(170,255,210,0.9)' : 'rgba(255,255,255,0.34)';
-    ctx.fillText(`Zoom ${Math.round(userZoom * 100)}%`, W / 2, HUD_H - 8 * DPR);
+    ctx.fillText(`Zoom ${Math.round(userZoom * 100)}%`, centerX, barH * 0.72);
   }
-  
+
+  // Stats live in their own right lane, left of the menu/restart rail.
+  ctx.textAlign = 'right';
+  ctx.font = `bold ${Math.max(11 * DPR, fontSize * 0.88)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = `rgba(255,255,255,${0.65 + Math.sin(globalTime*2)*0.1})`;
+  ctx.fillText(`Level ${level + 1}`, statsRight, barH * 0.30);
+  ctx.font = `${Math.max(9 * DPR, fontSize * 0.62)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(255,220,100,0.82)';
+  ctx.fillText(`Score: ${score}`, statsRight, barH * 0.56);
+  ctx.fillStyle = 'rgba(255,255,255,0.42)';
+  ctx.fillText(VERSION, statsRight, barH * 0.80);
+
   if (trappedTimer > 0.8 && state === 'playing' && !player.dead) {
     ctx.textAlign = 'center';
     ctx.font = `bold ${Math.max(10 * DPR, fontSize * 0.55)}px 'Segoe UI', system-ui, sans-serif`;
     ctx.fillStyle = `rgba(255,170,70,${0.65 + Math.sin(globalTime * 12) * 0.25})`;
-    ctx.fillText(`TRAPPED ${Math.max(0, Math.ceil(3 - trappedTimer))}`, W / 2, gemY + fontSize * 0.8);
-  }
-  
-  // Dynamite counter (if any)
-  if (player.dynamite > 0) {
-    ctx.textAlign = 'left';
-    ctx.font = `${fontSize*0.8}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillStyle = '#ff6633';
-    const dynX = gemX + CELL * 2.5;
-    ctx.fillText(`💥×${player.dynamite}`, dynX, gemY);
-  }
-  
-  // Powerup indicators
-  let indicatorX = CELL * 0.6;
-  const indicatorY = barH - fontSize * 0.4;
-  ctx.font = `${fontSize*0.55}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.textAlign = 'left';
-  if (player.speedTimer > 0) {
-    ctx.fillStyle = '#6699ff';
-    ctx.fillText(`⚡ ${player.speedTimer.toFixed(1)}s`, indicatorX, indicatorY);
-    indicatorX += CELL * 1.5;
-  }
-  if (player.ghostTimer > 0) {
-    ctx.fillStyle = '#bbbbff';
-    ctx.fillText(`👻 ${player.ghostTimer.toFixed(1)}s`, indicatorX, indicatorY);
+    ctx.fillText('No moves — tap restart level', W / 2, HUD_H + Math.max(14 * DPR, fontSize * 0.8));
   }
 }
 
