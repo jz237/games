@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.14</title>
+<title>Emerald Mine — Crystal Caves v2.4.15</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,11 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.14 — visual polish: collection bursts, impact effects,
-//            magic-wall feedback, exit opening, hazard readability
+//  v2.4.15 — visual polish: exit beacon, magic-wall glow,
+//            cave-object lighting, clearer active-goal feedback
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.14';
+const VERSION = 'v2.4.15';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -5079,15 +5079,38 @@ function drawDynamicLights() {
     ctx.beginPath(); ctx.arc(ex, ey, eR, 0, Math.PI*2); ctx.fill();
   }
 
-  // Dynamic light from powerups
+  // Exit beacon: once enough emeralds are collected, the open exit throws a visible green guidance glow.
+  if (exitOpen) {
+    const [ex, ey] = worldToScreen(exitPos.x + 0.5, exitPos.y + 0.5);
+    if (ex > -CELL * 4 && ex < W + CELL * 4 && ey > -CELL * 4 && ey < H + CELL * 4) {
+      const pulse = 0.72 + 0.28 * Math.sin(globalTime * 4.2);
+      const r0 = CELL * (2.2 + pulse * 0.7);
+      const exitGlow = ctx.createRadialGradient(ex, ey, 0, ex, ey, r0);
+      exitGlow.addColorStop(0, `rgba(80,255,150,${0.18 * pulse})`);
+      exitGlow.addColorStop(0.34, `rgba(30,210,110,${0.08 * pulse})`);
+      exitGlow.addColorStop(1, 'rgba(20,120,70,0)');
+      ctx.fillStyle = exitGlow;
+      ctx.beginPath(); ctx.arc(ex, ey, r0, 0, Math.PI * 2); ctx.fill();
+
+      ctx.strokeStyle = `rgba(140,255,190,${0.22 * pulse})`;
+      ctx.lineWidth = Math.max(1, CELL * 0.018);
+      for (let ring = 0; ring < 2; ring++) {
+        ctx.beginPath();
+        ctx.arc(ex, ey, CELL * (0.72 + ring * 0.42 + (globalTime * 0.28) % 0.42), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Magic walls and powerups get their own cave-object glows so interactive tiles read from the corner of the eye.
   for (let yy = 1; yy < gridH-1; yy++) {
     for (let xx = 1; xx < gridW-1; xx++) {
       const tt = grid[yy][xx];
-      if (tt !== TILE.DYNAMITE && tt !== TILE.SPEED_BOOTS && tt !== TILE.GHOST_MODE) continue;
+      if (tt !== TILE.DYNAMITE && tt !== TILE.SPEED_BOOTS && tt !== TILE.GHOST_MODE && tt !== TILE.MAGIC_WALL) continue;
       const [bx, by] = worldToScreen(xx + 0.5, yy + 0.5);
       if (bx < -CELL || bx > W+CELL || by < -CELL || by > H+CELL) continue;
       const bPulse = 0.6 + 0.4 * Math.sin(globalTime * 3.5 + xx * 1.2 + yy * 0.8);
-      const bR = CELL * 1.2;
+      const bR = CELL * (tt === TILE.MAGIC_WALL ? 1.7 : 1.2);
       const bLight = ctx.createRadialGradient(bx, by, 0, bx, by, bR);
       if (tt === TILE.DYNAMITE) {
         bLight.addColorStop(0, `rgba(255,120,40,${0.06 * bPulse})`);
@@ -5095,6 +5118,11 @@ function drawDynamicLights() {
       } else if (tt === TILE.SPEED_BOOTS) {
         bLight.addColorStop(0, `rgba(60,130,255,${0.05 * bPulse})`);
         bLight.addColorStop(1, 'rgba(40,100,255,0)');
+      } else if (tt === TILE.MAGIC_WALL) {
+        const activeBoost = magicWallActive ? 1.8 : 1;
+        bLight.addColorStop(0, `rgba(120,255,220,${0.07 * bPulse * activeBoost})`);
+        bLight.addColorStop(0.45, `rgba(90,130,255,${0.035 * bPulse * activeBoost})`);
+        bLight.addColorStop(1, 'rgba(80,120,255,0)');
       } else {
         bLight.addColorStop(0, `rgba(160,160,255,${0.05 * bPulse})`);
         bLight.addColorStop(1, 'rgba(120,120,255,0)');
