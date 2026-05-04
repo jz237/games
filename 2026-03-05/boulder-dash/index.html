@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.16</title>
+<title>Emerald Mine — Crystal Caves v2.4.17</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,11 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.16 — level-clear celebration now fills the whole screen
-//            with confetti, streamers, and edge bursts
+//  v2.4.17 — bigger level-clear payoff with arcade fanfare,
+//            screen flash, camera kick, and exit shockwaves
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.16';
+const VERSION = 'v2.4.17';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -212,7 +212,12 @@ function sfxDeath() {
   setTimeout(() => playTone(110, 0.3, 'sawtooth', 0.08), 200);
 }
 function sfxLevelClear() {
-  [523,659,784,1047].forEach((f,i) => setTimeout(() => playTone(f, 0.2, 'sine', 0.1), i*120));
+  // Big arcade cabinet fanfare: jewel arpeggio, bass bump, and bright final sparkle.
+  playTone(98, 0.18, 'triangle', 0.10);
+  [523,659,784,1047,1318,1568].forEach((f,i) => setTimeout(() => playTone(f, 0.15, i % 2 ? 'triangle' : 'sine', 0.085), 70 + i*78));
+  [196,262,330].forEach((f,i) => setTimeout(() => playTone(f, 0.10, 'square', 0.035), 120 + i*118));
+  setTimeout(() => playTone(2093, 0.16, 'sine', 0.060), 560);
+  setTimeout(() => playTone(2637, 0.18, 'triangle', 0.045), 650);
 }
 function sfxUnlock() { playTone(660, 0.15, 'sine', 0.08); setTimeout(() => playTone(880, 0.25, 'sine', 0.08), 100); }
 function sfxMagicActivate() {
@@ -1948,6 +1953,18 @@ function tryMovePlayer(dx, dy) {
   if (target === TILE.EXIT && exitOpen) {
     state = 'levelClear';
     levelClearTimer = 0;
+    flashAlpha = 0.55;
+    flashColor = '120,255,170';
+    camera.shakeVX += 7.5;
+    camera.shakeVY -= 5.5;
+    shockwaveRings.push({
+      x: exitPos.x + 0.5, y: exitPos.y + 0.5, r: 0.25, maxR: 5.8,
+      life: 0.9, maxLife: 0.9, color: '120,255,170', lineWidth: 5
+    });
+    shockwaveRings.push({
+      x: player.x + 0.5, y: player.y + 0.5, r: 0.15, maxR: 4.8,
+      life: 0.75, maxLife: 0.75, color: '255,230,90', lineWidth: 4
+    });
     sfxLevelClear();
     return true;
   }
