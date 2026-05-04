@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.31</title>
+<title>Emerald Mine — Crystal Caves v2.4.32</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,11 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.31 — real generated reveal images: digging
-//            dirt uncovers sepia cave photos beneath
+//  v2.4.32 — deluxe level-clear results with
+//            large readable stats and cave recap
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.31';
+const VERSION = 'v2.4.32';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -272,6 +272,8 @@ function collectGemCombo(nx, ny, baseScore, isDiamond=false) {
   comboTimer = COMBO_WINDOW;
   const bonus = Math.max(0, comboCount - 1) * (isDiamond ? 45 : 25);
   score += baseScore + bonus;
+  levelStats.bestCombo = Math.max(levelStats.bestCombo || 0, comboCount);
+  levelStats.comboBonus = (levelStats.comboBonus || 0) + bonus;
   if (comboCount >= 2 || bonus > 0) {
     comboPopups.push({
       x: nx + 0.5, y: ny + 0.18, t: 0, life: 0.9,
@@ -787,6 +789,9 @@ let comboCount = 0;
 let comboTimer = 0;
 let comboPopups = [];
 const COMBO_WINDOW = 2.15;
+let levelStartScore = 0;
+let levelStartTime = 0;
+let levelStats = { gems: 0, diamonds: 0, dirt: 0, powerups: 0, enemies: 0, bestCombo: 0, comboBonus: 0 };
 let runLives = 3;
 let highestLevelReached = 1;
 let displayGems = 0;
@@ -1274,6 +1279,9 @@ function generateLevel(lvl) {
   player.deadTimer = 0;
   player.gems = 0;
   player.lives = runLives;
+  levelStartScore = score;
+  levelStartTime = globalTime;
+  levelStats = { gems: 0, diamonds: 0, dirt: 0, powerups: 0, enemies: 0, bestCombo: 0, comboBonus: 0 };
   highestLevelReached = Math.max(highestLevelReached, lvl + 1);
   player.dir = 0;
   player.frame = 0;
@@ -1946,6 +1954,7 @@ function tryMovePlayer(dx, dy) {
   // Dig dirt
   if (dugDirt) {
     player.action = 'dig'; player.actionT = globalTime; player.actionDx = dx; player.actionDy = dy;
+    levelStats.dirt++;
     addDigParticles(nx, ny);
     sfxDig();
   }
@@ -1954,6 +1963,7 @@ function tryMovePlayer(dx, dy) {
   if (target === TILE.GEM) {
     player.action = 'collect'; player.actionT = globalTime; player.actionDx = dx; player.actionDy = dy;
     player.gems++;
+    levelStats.gems++;
     collectGemCombo(nx, ny, 100, false);
     sfxCollect();
     addGemCollectParticles(nx, ny);
@@ -1968,6 +1978,8 @@ function tryMovePlayer(dx, dy) {
   if (target === TILE.DIAMOND) {
     player.action = 'collect'; player.actionT = globalTime; player.actionDx = dx; player.actionDy = dy;
     player.gems++;
+    levelStats.gems++;
+    levelStats.diamonds++;
     collectGemCombo(nx, ny, 300, true);
     sfxCollect();
     // Extra sparkly collect effect for diamonds
@@ -1990,6 +2002,7 @@ function tryMovePlayer(dx, dy) {
   // Collect dynamite
   if (target === TILE.DYNAMITE) {
     player.dynamite++;
+    levelStats.powerups++;
     sfxPowerup();
     flashAlpha = 0.15;
     flashColor = '255,100,50';
@@ -1999,6 +2012,7 @@ function tryMovePlayer(dx, dy) {
   // Collect speed boots
   if (target === TILE.SPEED_BOOTS) {
     player.speedTimer = 10;
+    levelStats.powerups++;
     sfxPowerup();
     flashAlpha = 0.2;
     flashColor = '100,150,255';
@@ -2008,6 +2022,7 @@ function tryMovePlayer(dx, dy) {
   // Collect ghost mode
   if (target === TILE.GHOST_MODE) {
     player.ghostTimer = 5;
+    levelStats.powerups++;
     sfxPowerup();
     flashAlpha = 0.2;
     flashColor = '200,200,255';
@@ -2263,6 +2278,7 @@ function updatePhysics() {
           spawnCrushReward(enemyBelow.gx, enemyBelow.gy, enemyBelow);
           sfxCrush();
           screenShake(6);
+          levelStats.enemies++;
           score += 200;
         }
         
@@ -2471,6 +2487,7 @@ function detonateDynamite(dyn) {
           en.crushed = false;
           addEnemyCrushParticles(en.gx, en.gy);
           sfxEnemyDie();
+          levelStats.enemies++;
           score += 200;
         }
       }
@@ -6044,38 +6061,151 @@ function drawTitle() {
   drawVignette();
 }
 // ─── Level Clear Screen ───
+function formatClearTime(seconds) {
+  const t = Math.max(0, Math.floor(seconds || 0));
+  const m = Math.floor(t / 60);
+  const sec = String(t % 60).padStart(2, '0');
+  return `${m}:${sec}`;
+}
+
+function drawResultStatCard(x, y, w, h, icon, label, value, accent='255,215,95', delay=0) {
+  const pop = easeOut(Math.min(Math.max((levelClearTimer - delay) * 3.2, 0), 1));
+  if (pop <= 0) return;
+  const cy = y + h * (1 - pop) * 0.12;
+  ctx.save();
+  ctx.globalAlpha = pop;
+  const grd = ctx.createLinearGradient(x, cy, x, cy + h);
+  grd.addColorStop(0, `rgba(${accent},0.20)`);
+  grd.addColorStop(0.42, 'rgba(10,20,14,0.78)');
+  grd.addColorStop(1, 'rgba(2,8,5,0.88)');
+  ctx.fillStyle = grd;
+  ctx.strokeStyle = `rgba(${accent},0.58)`;
+  ctx.lineWidth = Math.max(1.4, DPR * 1.4);
+  ctx.beginPath(); ctx.roundRect(x, cy, w, h, Math.min(w,h)*0.15); ctx.fill(); ctx.stroke();
+  const shine = ctx.createLinearGradient(x, cy, x+w, cy+h);
+  shine.addColorStop(0, 'rgba(255,255,255,0.16)'); shine.addColorStop(0.28, 'rgba(255,255,255,0.035)'); shine.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = shine; ctx.beginPath(); ctx.roundRect(x+2*DPR, cy+2*DPR, w-4*DPR, h*0.42, Math.min(w,h)*0.13); ctx.fill();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `900 ${Math.max(18*DPR, h*0.36)}px 'Segoe UI Emoji','Segoe UI',sans-serif`;
+  ctx.fillText(icon, x + w*0.18, cy + h*0.50);
+  ctx.font = `1000 ${Math.max(18*DPR, h*0.34)}px 'Segoe UI',system-ui,sans-serif`;
+  ctx.fillStyle = `rgb(${accent})`;
+  ctx.shadowColor = `rgba(${accent},0.45)`; ctx.shadowBlur = 12*DPR;
+  ctx.fillText(String(value), x + w*0.62, cy + h*0.42);
+  ctx.shadowBlur = 0;
+  ctx.font = `800 ${Math.max(8*DPR, h*0.15)}px 'Segoe UI',system-ui,sans-serif`;
+  ctx.fillStyle = 'rgba(235,255,238,0.78)';
+  ctx.fillText(label.toUpperCase(), x + w*0.62, cy + h*0.72);
+  ctx.restore();
+}
+
+// ─── Level Clear Screen ───
 function drawLevelClear() {
-  ctx.fillStyle = `rgba(0,0,0,${Math.min(levelClearTimer * 0.8, 0.6)})`;
+  ctx.fillStyle = `rgba(0,0,0,${Math.min(levelClearTimer * 0.8, 0.68)})`;
   ctx.fillRect(0, 0, W, H);
-  
-  const titleSize = Math.min(W * 0.07, H * 0.09);
   if (hsEntry.active) { drawHighScoreEntry(); return; }
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  
-  if (levelClearTimer > 0.3) {
-    const t = easeOut(Math.min((levelClearTimer - 0.3) * 2, 1));
-    ctx.font = `bold ${titleSize * t}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillStyle = '#FFD700';
-    ctx.fillText('✨ LEVEL CLEAR! ✨', W/2, H*0.35);
+
+  const th = caveTheme();
+  const titleSize = Math.min(W * 0.075, H * 0.085);
+  const reveal = easeOut(Math.min(levelClearTimer * 1.7, 1));
+  const cardW = Math.min(W * 0.92, 720 * DPR);
+  const cardH = Math.min(H * 0.72, 520 * DPR);
+  const cardX = W/2 - cardW/2;
+  const cardY = H/2 - cardH/2 + (1 - reveal) * H * 0.08;
+
+  ctx.save();
+  ctx.globalAlpha = reveal;
+  const aura = ctx.createRadialGradient(W/2, H*0.42, 0, W/2, H*0.42, Math.max(W,H)*0.52);
+  aura.addColorStop(0, `rgba(${th.accent},0.24)`);
+  aura.addColorStop(0.45, 'rgba(40,110,70,0.08)');
+  aura.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = aura; ctx.fillRect(0,0,W,H);
+
+  const panel = ctx.createLinearGradient(cardX, cardY, cardX, cardY + cardH);
+  panel.addColorStop(0, 'rgba(18,34,22,0.90)');
+  panel.addColorStop(0.46, 'rgba(7,16,10,0.88)');
+  panel.addColorStop(1, 'rgba(2,8,5,0.94)');
+  ctx.fillStyle = panel;
+  ctx.strokeStyle = `rgba(${th.accent},0.52)`;
+  ctx.lineWidth = Math.max(2, DPR * 2.2);
+  ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, 24*DPR); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,235,150,0.20)';
+  ctx.lineWidth = Math.max(1, DPR);
+  ctx.beginPath(); ctx.roundRect(cardX+8*DPR, cardY+8*DPR, cardW-16*DPR, cardH-16*DPR, 18*DPR); ctx.stroke();
+
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  if (levelClearTimer > 0.22) {
+    const t = easeOut(Math.min((levelClearTimer - 0.22) * 2.4, 1));
+    ctx.font = `1000 ${titleSize * t}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillStyle = '#FFD76B';
+    ctx.shadowColor = 'rgba(255,220,90,0.60)'; ctx.shadowBlur = 18*DPR;
+    ctx.fillText('✨ CAVE CLEARED ✨', W/2, cardY + cardH*0.115);
+    ctx.shadowBlur = 0;
+    ctx.font = `800 ${Math.max(10*DPR, titleSize*0.28)}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillStyle = 'rgba(220,255,230,0.82)';
+    ctx.fillText(`${LEVELS[level]?.name || 'Deep Mine'}  •  Cave ${level + 1}`, W/2, cardY + cardH*0.19);
   }
-  
-  if (levelClearTimer > 1) {
-    const statSize = titleSize * 0.4;
-    ctx.font = `${statSize}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillStyle = '#fff';
-    
-    // Animated score tally
-    const tallyProgress = Math.min((levelClearTimer - 1) * 2, 1);
-    const displayScore = Math.floor(score * easeOut(tallyProgress));
-    
-    ctx.fillText(`Gems: ${player.gems}`, W/2, H*0.5);
-    ctx.fillStyle = '#FFD700';
-    ctx.fillText(`Score: ${displayScore}`, W/2, H*0.57);
-    ctx.fillStyle = '#fff';
-    ctx.fillText(`Lives remaining: ${player.lives}`, W/2, H*0.64);
+
+  const tallyProgress = Math.min(Math.max((levelClearTimer - 0.82) * 1.8, 0), 1);
+  const scoreGain = Math.max(0, score - levelStartScore);
+  const displayScore = Math.floor(score * easeOut(tallyProgress));
+  const displayGain = Math.floor(scoreGain * easeOut(tallyProgress));
+  const elapsed = globalTime - levelStartTime;
+  const required = Math.max(1, gemsNeeded || 1);
+  const gemPct = Math.round(Math.min(999, (player.gems / required) * 100));
+
+  const gap = Math.max(10*DPR, cardW*0.018);
+  const statW = (cardW - gap*4) / 3;
+  const statH = Math.min(cardH*0.18, 92*DPR);
+  const row1 = cardY + cardH*0.285;
+  const row2 = row1 + statH + gap;
+  drawResultStatCard(cardX+gap, row1, statW, statH, '💎', 'Gems', `${player.gems}/${required}`, '105,255,165', 0.78);
+  drawResultStatCard(cardX+gap*2+statW, row1, statW, statH, '🏆', 'Total Score', displayScore.toLocaleString(), '255,215,95', 0.90);
+  drawResultStatCard(cardX+gap*3+statW*2, row1, statW, statH, '❤️', 'Lives Left', player.lives, '255,105,120', 1.02);
+  drawResultStatCard(cardX+gap, row2, statW, statH, '⏱️', 'Clear Time', formatClearTime(elapsed), '135,210,255', 1.14);
+  drawResultStatCard(cardX+gap*2+statW, row2, statW, statH, '⛏️', 'Dirt Dug', levelStats.dirt || 0, '220,160,82', 1.26);
+  drawResultStatCard(cardX+gap*3+statW*2, row2, statW, statH, '🔥', 'Best Chain', `${levelStats.bestCombo || 1}x`, '255,150,65', 1.38);
+
+  if (levelClearTimer > 1.55) {
+    const a = easeOut(Math.min((levelClearTimer - 1.55) * 2.4, 1));
+    ctx.globalAlpha = reveal * a;
+    const stripX = cardX + gap;
+    const stripY = cardY + cardH*0.75;
+    const stripW = cardW - gap*2;
+    const stripH = cardH*0.155;
+    ctx.fillStyle = 'rgba(0,0,0,0.30)';
+    ctx.strokeStyle = `rgba(${th.accent},0.24)`;
+    ctx.beginPath(); ctx.roundRect(stripX, stripY, stripW, stripH, 16*DPR); ctx.fill(); ctx.stroke();
+    const extras = [
+      ['Score gained', `+${displayGain.toLocaleString()}`],
+      ['Diamonds', `${levelStats.diamonds || 0}`],
+      ['Powerups', `${levelStats.powerups || 0}`],
+      ['Enemies crushed', `${levelStats.enemies || 0}`],
+      ['Gem quota', `${gemPct}%`],
+      ['Combo bonus', `+${(levelStats.comboBonus || 0).toLocaleString()}`]
+    ];
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    const colW = stripW / 3;
+    for (let i=0;i<extras.length;i++) {
+      const col = i % 3, row = Math.floor(i / 3);
+      const tx = stripX + col*colW + colW*0.08;
+      const ty = stripY + stripH*(row ? 0.67 : 0.32);
+      ctx.font = `800 ${Math.max(8*DPR, stripH*0.115)}px 'Segoe UI',system-ui,sans-serif`;
+      ctx.fillStyle = 'rgba(190,225,200,0.62)';
+      ctx.fillText(extras[i][0].toUpperCase(), tx, ty - stripH*0.08);
+      ctx.font = `1000 ${Math.max(12*DPR, stripH*0.205)}px 'Segoe UI',system-ui,sans-serif`;
+      ctx.fillStyle = i === 0 ? '#FFD76B' : 'rgba(245,255,235,0.92)';
+      ctx.fillText(extras[i][1], tx, ty + stripH*0.11);
+    }
+
+    ctx.textAlign = 'center';
+    ctx.font = `800 ${Math.max(10*DPR, cardH*0.026)}px 'Segoe UI',system-ui,sans-serif`;
+    ctx.fillStyle = 'rgba(235,255,220,0.72)';
+    const next = level + 1 < LEVELS.length ? `Next: ${LEVELS[level+1].name}` : 'Final mine conquered';
+    ctx.fillText(next, W/2, cardY + cardH*0.955);
   }
-  
+  ctx.restore();
+
   // Full-screen celebration confetti
   for (const p of celebrationParticles) {
     const alpha = p.life / p.maxLife;
