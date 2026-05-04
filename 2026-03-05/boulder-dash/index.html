@@ -3067,6 +3067,98 @@ function drawMineralVeins(left, top, s, x, y, th, dense=false) {
   ctx.restore();
 }
 
+function drawRevealMuralFragment(left, top, s, x, y, th) {
+  // Sepia mural underneath the dirt. Empty/digged tiles reveal a coherent level-specific picture.
+  const mx = u => left + (u * gridW - x) * s;
+  const my = v => top + (v * gridH - y) * s;
+  const style = level % 6;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(left, top, s, s); ctx.clip();
+  ctx.globalAlpha = 0.74;
+
+  const u = (x + 0.5) / Math.max(1, gridW);
+  const v = (y + 0.5) / Math.max(1, gridH);
+  const sepia = ctx.createLinearGradient(left, top, left+s, top+s);
+  sepia.addColorStop(0, `rgba(${78 + u*24},${48 + v*18},${24},0.72)`);
+  sepia.addColorStop(0.55, `rgba(${48 + v*18},${30 + u*10},${15},0.78)`);
+  sepia.addColorStop(1, `rgba(${98 + u*20},${62 + v*12},${32},0.62)`);
+  ctx.fillStyle = sepia;
+  ctx.fillRect(left, top, s, s);
+
+  // parchment/canvas grain so the reveal feels like an image, not a flat color.
+  for (let i=0;i<5;i++) {
+    const px = left + s * noise01(x+i, y, 201);
+    const py = top + s * noise01(x, y+i, 202);
+    ctx.fillStyle = i % 2 ? 'rgba(255,220,150,0.045)' : 'rgba(20,9,2,0.08)';
+    ctx.beginPath(); ctx.arc(px, py, s*(0.012 + noise01(i,x,y)*0.030), 0, Math.PI*2); ctx.fill();
+  }
+
+  ctx.globalAlpha = 0.60;
+  ctx.strokeStyle = 'rgba(24,12,5,0.42)';
+  ctx.lineWidth = Math.max(1, s * 0.035);
+  ctx.fillStyle = 'rgba(180,120,55,0.18)';
+
+  if (style === 0) {
+    // Ancient idol face across the whole cave.
+    ctx.beginPath(); ctx.roundRect(mx(0.28), my(0.17), (gridW*s)*0.44, (gridH*s)*0.64, s*0.65); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(28,12,4,0.34)';
+    ctx.beginPath(); ctx.arc(mx(0.41), my(0.39), s*0.55, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(mx(0.59), my(0.39), s*0.55, 0, Math.PI*2); ctx.fill();
+    ctx.fillRect(mx(0.47), my(0.52), (gridW*s)*0.06, (gridH*s)*0.08);
+    ctx.fillRect(mx(0.40), my(0.66), (gridW*s)*0.20, s*0.22);
+    ctx.strokeStyle = `rgba(${th.accent},0.20)`;
+    ctx.beginPath(); ctx.arc(mx(0.50), my(0.50), (gridW*s)*0.22, Math.PI*0.12, Math.PI*0.88); ctx.stroke();
+  } else if (style === 1) {
+    // Giant fossil / rib cage mural.
+    ctx.strokeStyle = 'rgba(210,165,90,0.28)';
+    ctx.lineWidth = Math.max(1, s*0.050);
+    ctx.beginPath(); ctx.arc(mx(0.50), my(0.55), (gridW*s)*0.26, Math.PI*1.05, Math.PI*1.95); ctx.stroke();
+    for (let i=0;i<9;i++) {
+      const uu = 0.26 + i*0.06;
+      ctx.beginPath(); ctx.moveTo(mx(uu), my(0.34)); ctx.quadraticCurveTo(mx(uu+0.03), my(0.50), mx(uu+0.01), my(0.72)); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(230,190,120,0.16)'; ctx.beginPath(); ctx.ellipse(mx(0.70), my(0.35), (gridW*s)*0.08, (gridH*s)*0.07, -0.2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  } else if (style === 2) {
+    // Root tree silhouette.
+    ctx.strokeStyle = 'rgba(34,18,8,0.42)';
+    ctx.lineWidth = Math.max(1, s*0.09);
+    ctx.beginPath(); ctx.moveTo(mx(0.50), my(0.88)); ctx.bezierCurveTo(mx(0.46), my(0.65), mx(0.55), my(0.45), mx(0.50), my(0.18)); ctx.stroke();
+    ctx.lineWidth = Math.max(1, s*0.040);
+    for (let i=0;i<10;i++) {
+      const side = i % 2 ? 1 : -1;
+      const vv = 0.24 + i*0.055;
+      ctx.beginPath(); ctx.moveTo(mx(0.50), my(vv)); ctx.bezierCurveTo(mx(0.50+side*0.08), my(vv+0.02), mx(0.50+side*0.17), my(vv+0.08), mx(0.50+side*(0.25+0.03*Math.sin(i))), my(vv+0.02)); ctx.stroke();
+    }
+  } else if (style === 3) {
+    // Mine machinery / cog mural.
+    ctx.strokeStyle = 'rgba(205,145,70,0.28)';
+    ctx.lineWidth = Math.max(1, s*0.045);
+    for (const [cu,cv,r] of [[0.35,0.42,0.13],[0.62,0.55,0.17],[0.48,0.72,0.11]]) {
+      ctx.beginPath(); ctx.arc(mx(cu), my(cv), (gridW*s)*r, 0, Math.PI*2); ctx.stroke();
+      for (let i=0;i<12;i++) {
+        const a = i*Math.PI/6;
+        ctx.beginPath(); ctx.moveTo(mx(cu)+Math.cos(a)*(gridW*s)*r*0.72, my(cv)+Math.sin(a)*(gridW*s)*r*0.72); ctx.lineTo(mx(cu)+Math.cos(a)*(gridW*s)*r*1.10, my(cv)+Math.sin(a)*(gridW*s)*r*1.10); ctx.stroke();
+      }
+    }
+  } else if (style === 4) {
+    // Butterfly / wing sigil.
+    ctx.fillStyle = 'rgba(190,130,70,0.18)'; ctx.strokeStyle = 'rgba(240,190,105,0.22)'; ctx.lineWidth = Math.max(1, s*0.035);
+    ctx.beginPath(); ctx.ellipse(mx(0.39), my(0.50), (gridW*s)*0.16, (gridH*s)*0.28, -0.45, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(mx(0.61), my(0.50), (gridW*s)*0.16, (gridH*s)*0.28, 0.45, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(35,16,5,0.30)'; ctx.beginPath(); ctx.ellipse(mx(0.50), my(0.54), (gridW*s)*0.025, (gridH*s)*0.22, 0, 0, Math.PI*2); ctx.fill();
+  } else {
+    // Crystal cathedral / geometric mural.
+    ctx.strokeStyle = 'rgba(220,170,90,0.26)'; ctx.lineWidth = Math.max(1, s*0.035);
+    for (let i=0;i<5;i++) {
+      const cu = 0.22 + i*0.14;
+      ctx.beginPath(); ctx.moveTo(mx(cu), my(0.78)); ctx.lineTo(mx(cu+0.06), my(0.24)); ctx.lineTo(mx(cu+0.12), my(0.78)); ctx.closePath(); ctx.stroke();
+    }
+    ctx.fillStyle = `rgba(${th.accent},0.08)`; ctx.beginPath(); ctx.arc(mx(0.50), my(0.34), (gridW*s)*0.10, 0, Math.PI*2); ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 function drawTile(x, y, type) {
   const [sx, sy] = worldToScreen(x + 0.5, y + 0.5);
   if (sx < -CELL*2 || sx > W+CELL*2 || sy < -CELL*2 || sy > H+CELL*2) return;
@@ -3087,6 +3179,7 @@ function drawTile(x, y, type) {
       fgrd.addColorStop(1, '#080504');
       ctx.fillStyle = fgrd;
       ctx.fillRect(left, top, s, s);
+      drawRevealMuralFragment(left, top, s, x, y, th);
 
       // High-res cave floor strata: multiple hairline layers instead of one flat square.
       ctx.strokeStyle = 'rgba(255,240,210,0.030)';
