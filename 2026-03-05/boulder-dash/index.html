@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.18</title>
+<title>Emerald Mine — Crystal Caves v2.4.19</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,11 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.18 — cave personality pass: signature hazards,
-//            motif glyphs, and stronger per-wave identity
+//  v2.4.19 — gem-chain combo scoring for sharper
+//            arcade risk/reward and richer collection feedback
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.18';
+const VERSION = 'v2.4.19';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -249,6 +249,27 @@ function sfxHighScore() {
   [523,659,784,1047,1318].forEach((f,i) => setTimeout(() => playTone(f, 0.12, 'sine', 0.09), i*90));
 }
 
+function sfxCombo(count) {
+  const lift = Math.min(count, 8) * 54;
+  playTone(760 + lift, 0.045, 'sine', 0.038);
+  if (count >= 4) setTimeout(() => playTone(1120 + lift, 0.05, 'triangle', 0.026), 34);
+}
+function collectGemCombo(nx, ny, baseScore, isDiamond=false) {
+  if (comboTimer > 0) comboCount++; else comboCount = 1;
+  comboTimer = COMBO_WINDOW;
+  const bonus = Math.max(0, comboCount - 1) * (isDiamond ? 45 : 25);
+  score += baseScore + bonus;
+  if (comboCount >= 2 || bonus > 0) {
+    comboPopups.push({
+      x: nx + 0.5, y: ny + 0.18, t: 0, life: 0.9,
+      text: comboCount >= 3 ? `${comboCount} CHAIN +${bonus}` : `+${bonus}`,
+      color: isDiamond ? '180,230,255' : '120,255,170'
+    });
+    sfxCombo(comboCount);
+  }
+  return bonus;
+}
+
 let titleMusicTimer = null;
 let titleMusicBeat = 0;
 let titleMusicUnlocked = false;
@@ -400,6 +421,9 @@ function newGame(startLevel = titleSelectedLevel || 0) {
   stopTitleMusic();
   level = clamp(startLevel, 0, LEVELS.length - 1);
   score = 0;
+  comboCount = 0;
+  comboTimer = 0;
+  comboPopups = [];
   runLives = 3;
   highestLevelReached = level + 1;
   hsEntry.active = false;
@@ -746,6 +770,10 @@ let exitOpen = false;
 let exitPos = { x: 0, y: 0 };
 let gemsNeeded = 5;
 let score = 0;
+let comboCount = 0;
+let comboTimer = 0;
+let comboPopups = [];
+const COMBO_WINDOW = 2.15;
 let runLives = 3;
 let highestLevelReached = 1;
 let displayGems = 0;
@@ -1913,7 +1941,7 @@ function tryMovePlayer(dx, dy) {
   if (target === TILE.GEM) {
     player.action = 'collect'; player.actionT = globalTime; player.actionDx = dx; player.actionDy = dy;
     player.gems++;
-    score += 100;
+    collectGemCombo(nx, ny, 100, false);
     sfxCollect();
     addGemCollectParticles(nx, ny);
     flashAlpha = 0.3;
@@ -1927,7 +1955,7 @@ function tryMovePlayer(dx, dy) {
   if (target === TILE.DIAMOND) {
     player.action = 'collect'; player.actionT = globalTime; player.actionDx = dx; player.actionDy = dy;
     player.gems++;
-    score += 300;
+    collectGemCombo(nx, ny, 300, true);
     sfxCollect();
     // Extra sparkly collect effect for diamonds
     for (let i = 0; i < 30; i++) {
@@ -2899,6 +2927,16 @@ function update(dt) {
     if (flyGems[i].t >= 1) flyGems.splice(i, 1);
   }
   
+  if (comboTimer > 0) {
+    comboTimer = Math.max(0, comboTimer - dt);
+    if (comboTimer === 0) comboCount = 0;
+  }
+  for (let i = comboPopups.length - 1; i >= 0; i--) {
+    comboPopups[i].t += dt;
+    comboPopups[i].y -= dt * 0.42;
+    if (comboPopups[i].t >= comboPopups[i].life) comboPopups.splice(i, 1);
+  }
+
   // Display gems smooth
   displayGems += (player.gems - displayGems) * dt * 8;
   
@@ -5094,6 +5132,24 @@ function drawFlyGems() {
   }
 }
 
+function drawComboPopups() {
+  for (const cp of comboPopups) {
+    const [sx, sy] = worldToScreen(cp.x, cp.y);
+    const a = 1 - cp.t / cp.life;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `900 ${Math.max(10 * DPR, CELL * 0.24)}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.lineWidth = Math.max(2, CELL * 0.035);
+    ctx.strokeStyle = 'rgba(0,20,8,0.72)';
+    ctx.fillStyle = `rgba(${cp.color},${0.95})`;
+    ctx.strokeText(cp.text, sx, sy);
+    ctx.fillText(cp.text, sx, sy);
+    ctx.restore();
+  }
+}
+
 function drawDynamicLights() {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
@@ -5289,8 +5345,14 @@ function drawHUD() {
   ctx.font = `${Math.max(9 * DPR, fontSize * 0.62)}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = 'rgba(255,220,100,0.82)';
   ctx.fillText(`Score: ${score}`, statsRight, barH * 0.56);
-  ctx.fillStyle = 'rgba(255,255,255,0.42)';
-  ctx.fillText(VERSION, statsRight, barH * 0.80);
+  if (comboCount >= 2 && comboTimer > 0) {
+    const comboPulse = 0.72 + 0.28 * Math.sin(globalTime * 12);
+    ctx.fillStyle = `rgba(120,255,170,${comboPulse})`;
+    ctx.fillText(`${comboCount}x CHAIN`, statsRight, barH * 0.80);
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,0.42)';
+    ctx.fillText(VERSION, statsRight, barH * 0.80);
+  }
 
   if (trappedTimer > 0.8 && state === 'playing' && !player.dead) {
     ctx.textAlign = 'center';
@@ -5992,6 +6054,7 @@ function render() {
   drawParticles();
   drawShockwaveRings();
   drawFlyGems();
+  drawComboPopups();
   ctx.restore();
   drawVignette();
   drawFlash();
