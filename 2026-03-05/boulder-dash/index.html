@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.32</title>
+<title>Emerald Mine — Crystal Caves v2.4.33</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,11 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.32 — deluxe level-clear results with
-//            large readable stats and cave recap
+//  v2.4.33 — level-clear results wait for
+//            player tap before advancing
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.32';
+const VERSION = 'v2.4.33';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -1639,6 +1639,7 @@ canvas.addEventListener('touchstart', e => {
   if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.touches[0].clientX * DPR, e.touches[0].clientY * DPR); return; }
   if (state === 'title') { const tt=e.touches[0]; if (handleTitleSelect(tt.clientX*DPR, tt.clientY*DPR)) return; if (!titleMusicUnlocked) { startTitleMusic(); return; } newGame(); return; }
   if (state === 'caveIntro') { startPlayingFromIntro(); return; }
+  if (state === 'levelClear') { advanceLevelClear(); return; }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
   if (state === 'win' && gameOverTimer > 2) { returnToTitle(); return; }
   
@@ -1758,6 +1759,7 @@ canvas.addEventListener('mousedown', e => {
   updatePauseBtn(); updateDynamiteBtn(); updateRetryBtn(); updateMenuBtn();
   const sx = e.clientX * DPR, sy = e.clientY * DPR;
   if (state === 'caveIntro') { startPlayingFromIntro(); return; }
+  if (state === 'levelClear') { advanceLevelClear(); return; }
   if (state === 'title' || hsEntry.active || state === 'gameOver' || state === 'win') return;
   if (isPauseBtnTap(sx, sy)) { togglePause(); return; }
   if (paused) return;
@@ -1816,6 +1818,7 @@ canvas.addEventListener('click', e => {
   if (hsEntry.active && !hsEntry.submitted) { handleHighScoreTouch(e.clientX * DPR, e.clientY * DPR); return; }
   if (state === 'title') { if (handleTitleSelect(e.clientX*DPR, e.clientY*DPR)) return; if (!titleMusicUnlocked) { startTitleMusic(); return; } newGame(); return; }
   if (state === 'caveIntro') { startPlayingFromIntro(); return; }
+  if (state === 'levelClear') { advanceLevelClear(); return; }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
   if (state === 'win' && gameOverTimer > 2) { returnToTitle(); return; }
 });
@@ -2521,6 +2524,19 @@ function updateDangerWarnings() {
   }
 }
 
+function advanceLevelClear() {
+  if (state !== 'levelClear' || hsEntry.active || levelClearTimer < 1.35) return false;
+  level++;
+  if (level >= LEVELS.length) {
+    enterEndState('win');
+  } else {
+    runLives = player.lives;
+    generateLevel(level);
+    beginCaveIntro();
+  }
+  return true;
+}
+
 function update(dt) {
   // Slow-mo effect
   if (slowMoTimer > 0) {
@@ -2584,16 +2600,6 @@ function update(dt) {
       p.rot = (p.rot || 0) + (p.spin || 0) * dt;
       p.life -= dt;
       if (p.life <= 0) celebrationParticles.splice(i, 1);
-    }
-    if (levelClearTimer > 3.5) {
-      level++;
-      if (level >= LEVELS.length) {
-        enterEndState('win');
-      } else {
-        runLives = player.lives;
-        generateLevel(level);
-        beginCaveIntro();
-      }
     }
     return;
   }
@@ -6202,7 +6208,11 @@ function drawLevelClear() {
     ctx.font = `800 ${Math.max(10*DPR, cardH*0.026)}px 'Segoe UI',system-ui,sans-serif`;
     ctx.fillStyle = 'rgba(235,255,220,0.72)';
     const next = level + 1 < LEVELS.length ? `Next: ${LEVELS[level+1].name}` : 'Final mine conquered';
-    ctx.fillText(next, W/2, cardY + cardH*0.955);
+    ctx.fillText(next, W/2, cardY + cardH*0.935);
+    const pulse = 0.62 + Math.sin(globalTime * 5.2) * 0.18;
+    ctx.font = `1000 ${Math.max(11*DPR, cardH*0.031)}px 'Segoe UI',system-ui,sans-serif`;
+    ctx.fillStyle = `rgba(255,235,150,${pulse})`;
+    ctx.fillText(levelClearTimer >= 1.35 ? 'TAP TO CONTINUE' : 'REVIEWING CAVE REPORT…', W/2, cardY + cardH*0.982);
   }
   ctx.restore();
 
