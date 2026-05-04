@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.19</title>
+<title>Emerald Mine — Crystal Caves v2.4.20</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,11 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.19 — gem-chain combo scoring for sharper
-//            arcade risk/reward and richer collection feedback
+//  v2.4.20 — title screen upgrade: cinematic cave window,
+//            cleaner cave select, stronger arcade attract layout
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.19';
+const VERSION = 'v2.4.20';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -1586,9 +1586,9 @@ function handleTitleSelect(x, y) {
   const cols = 5;
   const startX = W * 0.18;
   const gapX = W * 0.16;
-  const startY = H * 0.632;
-  const gapY = Math.max(24 * DPR, H * 0.031);
-  const r = Math.max(10 * DPR, Math.min(W, H) * 0.020);
+  const startY = H * 0.635;
+  const gapY = Math.max(25 * DPR, H * 0.032);
+  const r = Math.max(11 * DPR, Math.min(W, H) * 0.021);
   for (let i = 0; i < LEVELS.length; i++) {
     const bx = startX + (i % cols) * gapX;
     const by = startY + Math.floor(i / cols) * gapY;
@@ -5493,130 +5493,163 @@ function drawTitle() {
     }
   }
 
-  // Backing glass card behind the title.
-  const cardW = Math.min(W * 0.88, 680 * DPR);
-  const cardH = Math.min(H * 0.43, 330 * DPR);
-  const cardY = H * 0.31;
-  ctx.fillStyle = 'rgba(2,10,8,0.54)';
-  ctx.strokeStyle = 'rgba(90,255,170,0.24)';
+  // Stronger arcade marquee: smaller glass frame, brighter title, more breathing room.
+  const cardW = Math.min(W * 0.90, 700 * DPR);
+  const cardH = Math.min(H * 0.165, 150 * DPR);
+  const cardY = H * 0.18;
+  const cardGrd = ctx.createLinearGradient(cx - cardW/2, cardY - cardH/2, cx + cardW/2, cardY + cardH/2);
+  cardGrd.addColorStop(0, 'rgba(5,28,18,0.48)');
+  cardGrd.addColorStop(0.55, 'rgba(2,10,8,0.64)');
+  cardGrd.addColorStop(1, 'rgba(0,42,24,0.44)');
+  ctx.fillStyle = cardGrd;
+  ctx.strokeStyle = 'rgba(105,255,175,0.30)';
   ctx.lineWidth = Math.max(1, DPR);
   ctx.beginPath(); ctx.roundRect(cx - cardW/2, cardY - cardH/2, cardW, cardH, 22*DPR); ctx.fill(); ctx.stroke();
 
-  let titleSize = Math.min(W * 0.075, H * 0.092);
+  let titleSize = Math.min(W * 0.082, H * 0.074);
   const titleText = 'EMERALD MINE';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = `900 ${titleSize}px 'Segoe UI', system-ui, sans-serif`;
-  while (ctx.measureText(titleText).width > W * 0.80 && titleSize > 16 * DPR) {
+  while (ctx.measureText(titleText).width > W * 0.82 && titleSize > 16 * DPR) {
     titleSize *= 0.92;
     ctx.font = `900 ${titleSize}px 'Segoe UI', system-ui, sans-serif`;
   }
 
-  ctx.shadowColor = 'rgba(0,255,150,0.6)';
-  ctx.shadowBlur = 18 * DPR;
-  ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.fillText(titleText, cx + 3*DPR, H*0.235 + 4*DPR);
-  const tgrd = ctx.createLinearGradient(W*0.18, H*0.18, W*0.82, H*0.30);
-  tgrd.addColorStop(0, '#10B86C');
-  tgrd.addColorStop(0.28, '#73FFAD');
-  tgrd.addColorStop(0.48, '#E8FFF2');
-  tgrd.addColorStop(0.72, '#62F49C');
-  tgrd.addColorStop(1, '#00995C');
+  ctx.shadowColor = 'rgba(0,255,150,0.72)';
+  ctx.shadowBlur = 20 * DPR;
+  ctx.fillStyle = 'rgba(0,0,0,0.70)';
+  ctx.fillText(titleText, cx + 3*DPR, cardY - cardH*0.08 + 4*DPR);
+  const tgrd = ctx.createLinearGradient(W*0.18, cardY - cardH*0.25, W*0.82, cardY + cardH*0.18);
+  tgrd.addColorStop(0, '#00AA62');
+  tgrd.addColorStop(0.25, '#67FFA8');
+  tgrd.addColorStop(0.50, '#F0FFF3');
+  tgrd.addColorStop(0.74, '#54E992');
+  tgrd.addColorStop(1, '#008A55');
   ctx.fillStyle = tgrd;
-  ctx.fillText(titleText, cx, H*0.235 + Math.sin(t*1.2)*2*DPR);
+  ctx.fillText(titleText, cx, cardY - cardH*0.08 + Math.sin(t*1.2)*1.6*DPR);
   ctx.shadowBlur = 0;
 
-  ctx.font = `700 ${titleSize*0.34}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(210,255,228,0.82)';
-  ctx.fillText('Crystal Caves', cx, H*0.31);
-  ctx.font = `700 ${Math.max(10*DPR, titleSize*0.22)}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(205,235,205,0.78)';
-  ctx.fillText('falling rock danger • magic walls • glittering escape', cx, H*0.36);
+  ctx.font = `800 ${Math.max(12*DPR, titleSize*0.25)}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.fillStyle = 'rgba(220,255,232,0.90)';
+  ctx.fillText('Crystal Caves', cx, cardY + cardH*0.30);
 
-  const instrSize = Math.max(11 * DPR, titleSize * 0.24);
   if (!showScores) {
-    const tips = ['⛏️ dig emeralds', '🪨 boulders crush', '💎 diamonds sparkle', '🧫 slime mutates'];
-    ctx.font = `700 ${instrSize}px 'Segoe UI', system-ui, sans-serif`;
-    tips.forEach((txt, i) => {
-      const col = i % 2;
-      const row = Math.floor(i / 2);
-      const x = cx + (col - 0.5) * Math.min(W*0.42, 210*DPR);
-      const y = H * 0.43 + row * Math.max(34*DPR, instrSize * 1.75);
-      const boxW = Math.min(W*0.38, 174*DPR);
-      const boxH = Math.max(28*DPR, instrSize * 1.55);
-      ctx.fillStyle = 'rgba(10,28,20,0.62)';
-      ctx.beginPath(); ctx.roundRect(x - boxW/2, y - boxH/2, boxW, boxH, 10*DPR); ctx.fill();
-      ctx.strokeStyle = 'rgba(120,255,180,0.24)'; ctx.stroke();
-      ctx.fillStyle = 'rgba(235,255,240,0.90)';
-      ctx.fillText(txt, x, y);
-    });
-  }
+    // Big animated cave-window instead of small cramped instruction buttons.
+    const heroW = Math.min(W * 0.82, 560 * DPR);
+    const heroH = Math.min(H * 0.255, 220 * DPR);
+    const heroX = cx - heroW/2;
+    const heroY = H * 0.285;
+    const heroGrd = ctx.createLinearGradient(heroX, heroY, heroX, heroY + heroH);
+    heroGrd.addColorStop(0, 'rgba(11,33,25,0.78)');
+    heroGrd.addColorStop(1, 'rgba(1,8,7,0.88)');
+    ctx.fillStyle = heroGrd;
+    ctx.strokeStyle = 'rgba(115,255,175,0.30)';
+    ctx.lineWidth = Math.max(1, DPR * 1.4);
+    ctx.beginPath(); ctx.roundRect(heroX, heroY, heroW, heroH, 18*DPR); ctx.fill(); ctx.stroke();
 
-  // Tiny attract-mode cave demo.
-  const demoW = Math.min(W * 0.52, 260 * DPR), demoH = Math.min(H * 0.115, 88 * DPR);
-  const demoX = cx - demoW/2, demoY = H * 0.535;
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.strokeStyle = 'rgba(100,255,170,0.20)';
-  ctx.lineWidth = Math.max(1, DPR);
-  ctx.beginPath(); ctx.roundRect(demoX, demoY, demoW, demoH, 10*DPR); ctx.fill(); ctx.stroke();
-  const cols = 9, rows = 3, cs = Math.min(demoW/cols, demoH/rows);
-  const ox = demoX + (demoW - cols*cs)/2, oy = demoY + (demoH - rows*cs)/2;
-  for (let yy=0; yy<rows; yy++) for (let xx=0; xx<cols; xx++) {
-    ctx.fillStyle = (xx+yy)%2 ? 'rgba(67,43,28,0.55)' : 'rgba(92,55,31,0.55)';
-    ctx.fillRect(ox+xx*cs, oy+yy*cs, cs-1, cs-1);
-  }
-  const minerX = 1 + Math.floor((t*1.4)%6);
-  ctx.fillStyle = '#ffe0a0'; ctx.beginPath(); ctx.arc(ox+(minerX+0.5)*cs, oy+1.5*cs, cs*0.28, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#50ffaa'; drawStar(ctx, ox+(6.5+Math.sin(t*3)*0.12)*cs, oy+1.5*cs, 5, cs*0.28, cs*0.08);
-  const rockY = 0.45 + Math.abs(Math.sin(t*2.1))*1.25;
-  ctx.fillStyle = '#8a8378'; ctx.beginPath(); ctx.arc(ox+4.5*cs, oy+(rockY+0.5)*cs, cs*0.30, 0, Math.PI*2); ctx.fill();
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(heroX + 2*DPR, heroY + 2*DPR, heroW - 4*DPR, heroH - 4*DPR, 16*DPR); ctx.clip();
+    const caveBg = ctx.createRadialGradient(cx, heroY + heroH*0.18, 0, cx, heroY + heroH*0.32, heroW*0.72);
+    caveBg.addColorStop(0, 'rgba(78,255,155,0.16)');
+    caveBg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = caveBg; ctx.fillRect(heroX, heroY, heroW, heroH);
+    const cols = 12, rows = 5;
+    const cs = Math.min(heroW / cols, heroH / rows);
+    const ox = heroX + (heroW - cols*cs)/2;
+    const oy = heroY + (heroH - rows*cs)/2;
+    for (let yy=0; yy<rows; yy++) for (let xx=0; xx<cols; xx++) {
+      const n = noise01(xx, yy, 21);
+      ctx.fillStyle = (xx+yy)%2 ? `rgba(${70+n*28},${42+n*16},${25+n*10},0.82)` : `rgba(${42+n*22},${31+n*12},${22+n*8},0.84)`;
+      ctx.fillRect(ox+xx*cs, oy+yy*cs, cs-1, cs-1);
+      if (n > 0.72) {
+        ctx.fillStyle = 'rgba(60,255,150,0.11)';
+        ctx.fillRect(ox+xx*cs+cs*0.18, oy+yy*cs+cs*0.12, cs*0.64, cs*0.16);
+      }
+    }
+    // Falling boulder, miner, emerald, exit portal — the game in one glance.
+    const minerX = 2 + Math.floor((t*1.35)%5);
+    ctx.fillStyle = '#ffe5a8'; ctx.beginPath(); ctx.arc(ox+(minerX+0.5)*cs, oy+3.45*cs, cs*0.28, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#24463a'; ctx.beginPath(); ctx.roundRect(ox+(minerX+0.28)*cs, oy+3.70*cs, cs*0.44, cs*0.35, cs*0.10); ctx.fill();
+    ctx.fillStyle = 'rgba(255,230,130,0.90)'; drawStar(ctx, ox+(minerX+0.33)*cs, oy+3.18*cs, 5, cs*0.18, cs*0.055);
+    const rockY = 0.25 + Math.abs(Math.sin(t*2.2))*2.1;
+    ctx.fillStyle = '#9b9588'; ctx.beginPath(); ctx.arc(ox+5.5*cs, oy+(rockY+0.5)*cs, cs*0.32, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#5b554c'; ctx.beginPath(); ctx.arc(ox+5.42*cs, oy+(rockY+0.42)*cs, cs*0.08, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#62ffad'; drawStar(ctx, ox+(8.5+Math.sin(t*3)*0.1)*cs, oy+2.5*cs, 5, cs*0.36, cs*0.10);
+    const portalPulse = 0.65 + 0.35*Math.sin(t*4);
+    const px = ox + 10.5*cs, py = oy + 3.5*cs;
+    const pg = ctx.createRadialGradient(px, py, 0, px, py, cs*0.88);
+    pg.addColorStop(0, `rgba(100,255,170,${0.34*portalPulse})`);
+    pg.addColorStop(1, 'rgba(20,180,100,0)');
+    ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(px, py, cs*0.88, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = `rgba(130,255,190,${0.42*portalPulse})`; ctx.lineWidth = Math.max(1, cs*0.06);
+    ctx.beginPath(); ctx.arc(px, py, cs*0.46, 0, Math.PI*2); ctx.stroke();
+    ctx.restore();
 
-  // Level select chips.
-  if (!showScores) {
-    const cols = 5;
+    // Clean instruction strip: one line, no chunky button grid.
+    const stripY = heroY + heroH + Math.max(17*DPR, H*0.022);
+    ctx.font = `800 ${Math.max(10*DPR, Math.min(W,H)*0.020)}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillStyle = 'rgba(214,250,224,0.86)';
+    ctx.fillText('DIG EMERALDS  •  DODGE FALLING ROCK  •  OPEN THE EXIT', cx, stripY);
+
+    // Cave selector becomes a tidy control panel with no overlap.
+    const selW = Math.min(W * 0.86, 540 * DPR);
+    const selH = Math.min(H * 0.165, 142 * DPR);
+    const selY = H * 0.635;
+    ctx.fillStyle = 'rgba(2,12,8,0.62)';
+    ctx.strokeStyle = 'rgba(115,255,175,0.22)';
+    ctx.beginPath(); ctx.roundRect(cx - selW/2, selY - selH*0.47, selW, selH, 16*DPR); ctx.fill(); ctx.stroke();
+    ctx.font = `900 ${Math.max(10*DPR, Math.min(W,H)*0.019)}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillStyle = 'rgba(230,255,240,0.88)';
+    ctx.fillText('CHOOSE CAVE', cx, selY - selH*0.31);
+
+    const colsSel = 5;
     const startX = W * 0.18;
     const gapX = W * 0.16;
-    const cySel = H * 0.630;
-    const gapY = Math.max(24 * DPR, H * 0.031);
-    const rSel = Math.max(10 * DPR, Math.min(W, H) * 0.020);
-    ctx.font = `800 ${Math.max(10*DPR, rSel*0.52)}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillStyle = 'rgba(230,255,240,0.86)';
-    ctx.fillText('choose cave', cx, cySel - rSel*1.9);
+    const gapY = Math.max(25 * DPR, H * 0.032);
+    const rSel = Math.max(11 * DPR, Math.min(W, H) * 0.021);
+    ctx.font = `900 ${Math.max(10*DPR, rSel*0.58)}px 'Segoe UI', system-ui, sans-serif`;
     for (let i=0;i<LEVELS.length;i++) {
-      const bx = startX + (i % cols) * gapX;
-      const by = cySel + Math.floor(i / cols) * gapY;
+      const bx = startX + (i % colsSel) * gapX;
+      const by = selY + Math.floor(i / colsSel) * gapY;
       const selected = i === titleSelectedLevel;
-      ctx.fillStyle = selected ? 'rgba(95,255,155,0.34)' : 'rgba(10,28,20,0.52)';
-      ctx.strokeStyle = selected ? 'rgba(165,255,190,0.82)' : 'rgba(120,255,180,0.22)';
+      if (selected) {
+        const sg = ctx.createRadialGradient(bx, by, 0, bx, by, rSel*2.4);
+        sg.addColorStop(0, 'rgba(95,255,155,0.30)');
+        sg.addColorStop(1, 'rgba(95,255,155,0)');
+        ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(bx, by, rSel*2.4, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.fillStyle = selected ? 'rgba(90,245,145,0.46)' : 'rgba(10,28,20,0.64)';
+      ctx.strokeStyle = selected ? 'rgba(185,255,205,0.92)' : 'rgba(120,255,180,0.25)';
       ctx.lineWidth = Math.max(1, DPR * (selected ? 2 : 1));
       ctx.beginPath(); ctx.arc(bx, by, rSel, 0, Math.PI*2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = selected ? '#fff' : 'rgba(230,255,240,0.78)';
       ctx.fillText(String(i+1), bx, by);
     }
-    ctx.font = `700 ${Math.max(9*DPR, rSel*0.38)}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillStyle = 'rgba(220,255,235,0.78)';
-    ctx.fillText(LEVELS[titleSelectedLevel].name || `Cave ${titleSelectedLevel+1}`, cx, cySel + gapY*2 + rSel*1.9);
+    ctx.font = `800 ${Math.max(10*DPR, rSel*0.48)}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillStyle = 'rgba(220,255,235,0.82)';
+    ctx.fillText(LEVELS[titleSelectedLevel].name || `Cave ${titleSelectedLevel+1}`, cx, selY + gapY*2.45);
   }
 
-  const pulse = 0.92 + Math.sin(t * 3.4) * 0.08;
-  const btnW = Math.min(W * 0.46, 300 * DPR) * pulse;
-  const btnH = Math.max(48 * DPR, H * 0.07) * pulse;
-  const btnY = H * 0.80;
+  const pulse = 0.94 + Math.sin(t * 3.4) * 0.06;
+  const btnW = Math.min(W * 0.56, 340 * DPR) * pulse;
+  const btnH = Math.max(50 * DPR, H * 0.074) * pulse;
+  const btnY = H * 0.825;
   const bglow = ctx.createRadialGradient(cx, btnY, 0, cx, btnY, btnW);
-  bglow.addColorStop(0, 'rgba(0,255,150,0.22)');
+  bglow.addColorStop(0, 'rgba(0,255,150,0.26)');
   bglow.addColorStop(1, 'rgba(0,255,150,0)');
   ctx.fillStyle = bglow;
   ctx.fillRect(cx - btnW, btnY - btnH, btnW*2, btnH*2);
   const btnGrd = ctx.createLinearGradient(cx, btnY - btnH/2, cx, btnY + btnH/2);
-  btnGrd.addColorStop(0, 'rgba(35,210,125,0.62)');
-  btnGrd.addColorStop(1, 'rgba(0,95,60,0.64)');
+  btnGrd.addColorStop(0, 'rgba(45,230,135,0.72)');
+  btnGrd.addColorStop(1, 'rgba(0,110,68,0.76)');
   ctx.fillStyle = btnGrd;
   ctx.beginPath(); ctx.roundRect(cx - btnW/2, btnY - btnH/2, btnW, btnH, btnH*0.32); ctx.fill();
-  ctx.strokeStyle = 'rgba(155,255,195,0.72)'; ctx.lineWidth = Math.max(2, DPR*1.5); ctx.stroke();
-  ctx.font = `900 ${btnH*0.35}px 'Segoe UI', system-ui, sans-serif`;
+  ctx.strokeStyle = 'rgba(175,255,205,0.82)'; ctx.lineWidth = Math.max(2, DPR*1.5); ctx.stroke();
+  ctx.font = `900 ${btnH*0.34}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = '#fff'; ctx.fillText('TAP TO PLAY', cx, btnY - btnH*0.06);
   ctx.font = `${Math.max(9*DPR, btnH*0.16)}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(225,255,235,0.76)'; ctx.fillText(titleMusicUnlocked ? 'the mine is awake' : 'tap once to wake the mine', cx, btnY + btnH*0.30);
+  ctx.fillStyle = 'rgba(225,255,235,0.78)'; ctx.fillText(titleMusicUnlocked ? 'the mine is awake' : 'tap once to wake the mine', cx, btnY + btnH*0.30);
 
   ctx.font = `${Math.max(9*DPR, titleSize*0.15)}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = 'rgba(230,255,238,0.66)';
