@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.33</title>
+<title>Emerald Mine — Crystal Caves v2.4.34</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,11 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.33 — level-clear results wait for
-//            player tap before advancing
+//  v2.4.34 — mobile text layout fit pass for
+//            title and cave intro screens
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.33';
+const VERSION = 'v2.4.34';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -5995,32 +5995,35 @@ function drawTitle() {
 
     ctx.restore();
 
-    // Short rules strip under the mini game scene.
-    const stripY = heroY + heroH + Math.max(14*DPR, H*0.018);
-    ctx.font = `800 ${Math.max(9*DPR, Math.min(W,H)*0.018)}px 'Segoe UI', system-ui, sans-serif`;
+    // Short rules strip under the mini game scene. Fit it instead of letting it clip on phones.
+    const stripY = Math.min(heroY + heroH + Math.max(14*DPR, H*0.018), H * 0.43);
+    setFitFont('Mini cave preview: dig, chain gems, avoid falling rocks, escape', 800, Math.max(9*DPR, Math.min(W,H)*0.018), 7*DPR, W * 0.88);
     ctx.fillStyle = 'rgba(214,250,224,0.86)';
     ctx.fillText('Mini cave preview: dig, chain gems, avoid falling rocks, escape', cx, stripY);
 
-    // Cave selector becomes a tidy control panel with no overlap.
+    // Cave selector becomes a fixed-grid control panel with all text kept inside the frame.
     const selW = Math.min(W * 0.86, 540 * DPR);
-    const selH = Math.min(H * 0.165, 142 * DPR);
-    const selY = H * 0.695;
+    const selH = Math.min(H * 0.19, 154 * DPR);
+    const selY = H * 0.665;
+    const selTop = selY - selH / 2;
+    const selBottom = selY + selH / 2;
     ctx.fillStyle = 'rgba(2,12,8,0.62)';
     ctx.strokeStyle = 'rgba(115,255,175,0.22)';
-    ctx.beginPath(); ctx.roundRect(cx - selW/2, selY - selH*0.47, selW, selH, 16*DPR); ctx.fill(); ctx.stroke();
-    ctx.font = `900 ${Math.max(10*DPR, Math.min(W,H)*0.019)}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.beginPath(); ctx.roundRect(cx - selW/2, selTop, selW, selH, 16*DPR); ctx.fill(); ctx.stroke();
+    setFitFont('CHOOSE CAVE', 900, Math.max(10*DPR, Math.min(W,H)*0.019), 8*DPR, selW * 0.72);
     ctx.fillStyle = 'rgba(230,255,240,0.88)';
-    ctx.fillText('CHOOSE CAVE', cx, selY - selH*0.31);
+    ctx.fillText('CHOOSE CAVE', cx, selTop + selH * 0.18);
 
     const colsSel = 5;
-    const startX = W * 0.18;
-    const gapX = W * 0.16;
-    const gapY = Math.max(25 * DPR, H * 0.032);
-    const rSel = Math.max(11 * DPR, Math.min(W, H) * 0.021);
-    ctx.font = `900 ${Math.max(10*DPR, rSel*0.58)}px 'Segoe UI', system-ui, sans-serif`;
+    const gapX = selW * 0.18;
+    const startX = cx - gapX * 2;
+    const gridTop = selTop + selH * 0.39;
+    const gapY = selH * 0.205;
+    const rSel = Math.min(gapX * 0.28, gapY * 0.38, Math.max(10 * DPR, Math.min(W, H) * 0.020));
+    ctx.font = `900 ${Math.max(8*DPR, rSel*0.58)}px 'Segoe UI', system-ui, sans-serif`;
     for (let i=0;i<LEVELS.length;i++) {
       const bx = startX + (i % colsSel) * gapX;
-      const by = selY + Math.floor(i / colsSel) * gapY;
+      const by = gridTop + Math.floor(i / colsSel) * gapY;
       const selected = i === titleSelectedLevel;
       if (selected) {
         const sg = ctx.createRadialGradient(bx, by, 0, bx, by, rSel*2.4);
@@ -6035,15 +6038,16 @@ function drawTitle() {
       ctx.fillStyle = selected ? '#fff' : 'rgba(230,255,240,0.78)';
       ctx.fillText(String(i+1), bx, by);
     }
-    ctx.font = `800 ${Math.max(10*DPR, rSel*0.48)}px 'Segoe UI', system-ui, sans-serif`;
+    const selectedName = LEVELS[titleSelectedLevel].name || `Cave ${titleSelectedLevel+1}`;
+    setFitFont(selectedName, 800, Math.max(9*DPR, selH*0.105), 7*DPR, selW * 0.82);
     ctx.fillStyle = 'rgba(220,255,235,0.82)';
-    ctx.fillText(LEVELS[titleSelectedLevel].name || `Cave ${titleSelectedLevel+1}`, cx, selY + gapY*2.45);
+    ctx.fillText(selectedName, cx, selBottom - selH*0.075);
   }
 
   const pulse = 0.94 + Math.sin(t * 3.4) * 0.06;
   const btnW = Math.min(W * 0.56, 340 * DPR) * pulse;
-  const btnH = Math.max(50 * DPR, H * 0.074) * pulse;
-  const btnY = H * 0.865;
+  const btnH = Math.max(46 * DPR, H * 0.068) * pulse;
+  const btnY = H * 0.875;
   const bglow = ctx.createRadialGradient(cx, btnY, 0, cx, btnY, btnW);
   bglow.addColorStop(0, 'rgba(0,255,150,0.26)');
   bglow.addColorStop(1, 'rgba(0,255,150,0)');
@@ -6437,10 +6441,10 @@ function drawCaveIntro() {
   ctx.save();
   ctx.fillStyle = `rgba(0,0,0,${0.48 * a})`;
   ctx.fillRect(0, 0, W, H);
-  const cx = W / 2, cy = H * 0.47;
+  const cx = W / 2, cy = H * 0.50;
   const w = Math.min(W * 0.90, 560 * DPR);
-  const h = Math.min(H * 0.56, 336 * DPR);
-  const padX = w * 0.06;
+  const h = Math.min(H * 0.70, 430 * DPR);
+  const padX = w * 0.065;
   const maxTextW = w - padX * 2;
   ctx.globalAlpha = a;
   const grd = ctx.createLinearGradient(cx - w/2, cy - h/2, cx + w/2, cy + h/2);
@@ -6454,57 +6458,69 @@ function drawCaveIntro() {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
 
   const caveLabel = `CAVE ${level + 1}`;
-  setFitFont(caveLabel, 800, Math.max(12*DPR, h*0.095), 10*DPR, maxTextW);
+  setFitFont(caveLabel, 800, Math.max(12*DPR, h*0.082), 9*DPR, maxTextW);
   ctx.fillStyle = `rgba(${th.accent},0.95)`;
-  ctx.fillText(caveLabel, cx, cy - h*0.33);
+  ctx.fillText(caveLabel, cx, cy - h*0.355);
 
   const caveName = L.name || 'Emerald Mine';
-  setFitFont(caveName, 900, Math.max(18*DPR, h*0.155), 17*DPR, maxTextW);
+  setFitFont(caveName, 900, Math.max(18*DPR, h*0.118), 13*DPR, maxTextW);
   ctx.fillStyle = '#fff';
-  ctx.fillText(caveName, cx, cy - h*0.16);
+  ctx.fillText(caveName, cx, cy - h*0.205);
 
   const mood = cavePersonality(level);
   const target = `Target ${gemsNeeded} crystals  •  ${L.enemies} creatures`;
-  setFitFont(target, 700, Math.max(11*DPR, h*0.073), 10*DPR, maxTextW);
+  setFitFont(target, 700, Math.max(11*DPR, h*0.055), 8*DPR, maxTextW);
   ctx.fillStyle = 'rgba(255,228,138,0.92)';
-  ctx.fillText(target, cx, cy + h*0.005);
+  ctx.fillText(target, cx, cy - h*0.055);
 
-  const sigY = cy + h*0.115;
-  ctx.font = `900 ${Math.max(13*DPR, h*0.075)}px 'Segoe UI Symbol','Segoe UI',system-ui,sans-serif`;
+  const sigY = cy + h*0.065;
+  setFitFont(`${mood.icon} ${mood.sig} ${mood.icon}`, 900, Math.max(13*DPR, h*0.063), 10*DPR, maxTextW, "'Segoe UI Symbol','Segoe UI',system-ui,sans-serif");
   ctx.fillStyle = `rgba(${th.accent},0.95)`;
   ctx.fillText(`${mood.icon} ${mood.sig} ${mood.icon}`, cx, sigY);
-  const chipY = cy + h*0.205;
-  const chipGap = Math.min(w * 0.27, 150 * DPR);
-  ctx.font = `800 ${Math.max(7.5*DPR, h*0.038)}px 'Segoe UI', system-ui, sans-serif`;
-  for (let i = 0; i < mood.tags.length; i++) {
-    const tx = cx + (i - 1) * chipGap;
-    const tw = Math.min(chipGap * 0.88, ctx.measureText(mood.tags[i]).width + 22 * DPR);
-    ctx.fillStyle = `rgba(${th.tint},0.22)`;
-    ctx.strokeStyle = `rgba(${th.accent},0.34)`;
-    ctx.lineWidth = Math.max(1, DPR);
-    ctx.beginPath(); ctx.roundRect(tx - tw/2, chipY - h*0.035, tw, h*0.07, 999); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = 'rgba(235,255,240,0.82)';
-    ctx.fillText(mood.tags[i], tx, chipY);
-  }
 
-  const wrapped = wrapTextToWidth(caveBlurb(level), maxTextW, 600, Math.max(11*DPR, h*0.057), 9*DPR);
+  const chipSize = setFitFont(mood.tags.join('   '), 800, Math.max(7.5*DPR, h*0.032), 6.5*DPR, maxTextW);
+  const chipY = cy + h*0.165;
+  const chipWidths = mood.tags.map(tag => Math.min(maxTextW * 0.46, ctx.measureText(tag).width + 18 * DPR));
+  const chipGap = 7 * DPR;
+  const totalChipW = chipWidths.reduce((sum, v) => sum + v, 0) + chipGap * (mood.tags.length - 1);
+  const rows = totalChipW <= maxTextW
+    ? [mood.tags.map((tag, i) => ({ tag, tw: chipWidths[i] }))]
+    : [mood.tags.slice(0, 2).map((tag, i) => ({ tag, tw: chipWidths[i] })), mood.tags.slice(2).map((tag, i) => ({ tag, tw: chipWidths[i + 2] }))];
+  rows.forEach((row, rowIdx) => {
+    const rowW = row.reduce((sum, chip) => sum + chip.tw, 0) + chipGap * Math.max(0, row.length - 1);
+    let x = cx - rowW / 2;
+    const y = chipY + rowIdx * chipSize * 1.55;
+    for (const chip of row) {
+      const tx = x + chip.tw / 2;
+      ctx.fillStyle = `rgba(${th.tint},0.22)`;
+      ctx.strokeStyle = `rgba(${th.accent},0.34)`;
+      ctx.lineWidth = Math.max(1, DPR);
+      ctx.beginPath(); ctx.roundRect(tx - chip.tw/2, y - chipSize*0.72, chip.tw, chipSize*1.42, 999); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(235,255,240,0.82)';
+      ctx.fillText(chip.tag, tx, y);
+      x += chip.tw + chipGap;
+    }
+  });
+
+  const wrapped = wrapTextToWidth(caveBlurb(level), maxTextW * 0.94, 600, Math.max(11*DPR, h*0.046), 8*DPR);
   ctx.fillStyle = 'rgba(218,245,228,0.82)';
-  const lineGap = wrapped.size * 1.18;
-  const startY = cy + h*0.305 - ((wrapped.lines.length - 1) * lineGap) / 2;
+  const lineGap = wrapped.size * 1.20;
+  const blurbY = cy + h*0.285;
+  const startY = blurbY - ((wrapped.lines.length - 1) * lineGap) / 2;
   for (let i = 0; i < wrapped.lines.length; i++) {
     ctx.fillText(wrapped.lines[i], cx, startY + i * lineGap);
   }
 
   const hint = level === 0 ? 'pinch to zoom  •  drag or hold to move' : 'tap to enter';
-  setFitFont(hint, 600, Math.max(9*DPR, h*0.052), 8*DPR, maxTextW);
+  setFitFont(hint, 600, Math.max(9*DPR, h*0.040), 7*DPR, maxTextW);
   ctx.fillStyle = level === 0 ? 'rgba(180,235,255,0.82)' : `rgba(220,255,235,${0.42 + Math.sin(globalTime * 5) * 0.18})`;
-  ctx.fillText(hint, cx, cy + h*0.43);
+  ctx.fillText(hint, cx, cy + h*0.405);
 
   if (level === 0) {
     const enter = 'tap to enter';
-    setFitFont(enter, 600, Math.max(9*DPR, h*0.047), 8*DPR, maxTextW);
+    setFitFont(enter, 600, Math.max(9*DPR, h*0.036), 7*DPR, maxTextW);
     ctx.fillStyle = `rgba(220,255,235,${0.42 + Math.sin(globalTime * 5) * 0.18})`;
-    ctx.fillText(enter, cx, cy + h*0.50);
+    ctx.fillText(enter, cx, cy + h*0.475);
   }
   ctx.restore();
 }
