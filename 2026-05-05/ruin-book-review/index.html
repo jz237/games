@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ruin Book v0.2.1-review</title>
+<title>Ruin Book v0.2.2-review</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; }
@@ -13,7 +13,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; }
 }
 canvas {
   display: block;
-  touch-action: none;
+  /* Keep native two-finger pinch zoom available while single-finger taps still drive the hero. */
+  touch-action: pinch-zoom;
 }
 #touch-controls {
   position: fixed; inset: 0;
@@ -21,14 +22,14 @@ canvas {
   font-family: system-ui, -apple-system, Segoe UI, sans-serif;
 }
 .touch-hint {
-  position: absolute; left: 18px; bottom: 18px;
+  position: absolute; right: 18px; bottom: 18px;
   padding: 10px 14px; border-radius: 999px;
   color: rgba(255,232,160,0.78); font-size: 12px; letter-spacing: 0.08em;
   background: rgba(20,12,4,0.28); border: 1px solid rgba(255,215,0,0.22);
   backdrop-filter: blur(5px); text-shadow: 0 1px 2px #000;
 }
 .touch-btn {
-  position: absolute; right: 22px; bottom: 24px;
+  position: absolute; left: 22px; bottom: 24px;
   width: 86px; height: 86px; border-radius: 50%;
   background: radial-gradient(circle at 34% 28%, rgba(255,248,190,0.55), rgba(255,185,40,0.28) 42%, rgba(60,32,5,0.48) 100%);
   border: 2px solid rgba(255,228,120,0.72);
@@ -52,12 +53,12 @@ canvas {
   <canvas id="gameCanvas"></canvas>
 </div>
 <div id="touch-controls" aria-hidden="true">
-  <div class="touch-hint">HOLD LEFT/RIGHT OF HERO TO MOVE · HOLD ABOVE ON LADDERS</div>
+  <div class="touch-hint">HOLD NEAR HERO TO MOVE · PINCH TO ZOOM</div>
   <button class="touch-btn" id="btn-jump" aria-label="Jump">JUMP</button>
 </div>
 <script>
 // =============================================
-// RUIN BOOK v0.2.1-review
+// RUIN BOOK v0.2.2-review
 // Art-first high-fidelity prototype
 // Uses generated high-res art as primary visual layer
 // =============================================
@@ -225,6 +226,7 @@ document.addEventListener('keyup', function(e) { keys[e.code] = false; });
 const touchState = {
   moving: false,
   pointerId: null,
+  activePointers: new Map(),
   baseX: 0,
   baseY: 0,
   left: false,
@@ -271,21 +273,33 @@ function clearTouchDirection() {
 
 canvas.addEventListener('pointerdown', function(e) {
   if (e.pointerType === 'mouse') return;
-  e.preventDefault();
+  touchState.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  // Two fingers belong to native browser pinch zoom. Stop steering immediately
+  // and do not capture/prevent the gesture.
+  if (touchState.activePointers.size > 1) {
+    clearTouchDirection();
+    return;
+  }
   touchState.moving = true;
   touchState.pointerId = e.pointerId;
-  canvas.setPointerCapture(e.pointerId);
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   updateTouchDirection(e.clientX, e.clientY);
 });
 canvas.addEventListener('pointermove', function(e) {
+  if (e.pointerType !== 'mouse' && touchState.activePointers.has(e.pointerId)) {
+    touchState.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  }
+  // Let native pinch zoom own two-finger movement.
+  if (touchState.activePointers.size > 1) return;
   if (!touchState.moving || e.pointerId !== touchState.pointerId) return;
-  e.preventDefault();
   updateTouchDirection(e.clientX, e.clientY);
 });
 canvas.addEventListener('pointerup', function(e) {
+  touchState.activePointers.delete(e.pointerId);
   if (e.pointerId === touchState.pointerId) clearTouchDirection();
 });
 canvas.addEventListener('pointercancel', function(e) {
+  touchState.activePointers.delete(e.pointerId);
   if (e.pointerId === touchState.pointerId) clearTouchDirection();
 });
 
@@ -910,7 +924,7 @@ function drawOverlayHUD() {
   ctx.font = '10px monospace';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText('v0.2.1-review', BASE_W - 12, BASE_H - 8);
+  ctx.fillText('v0.2.2-review', BASE_W - 12, BASE_H - 8);
 
   // Live score in top-right area (overlaid lightly, matching gold color)
   ctx.fillStyle = 'rgba(255,215,0,0.7)';
