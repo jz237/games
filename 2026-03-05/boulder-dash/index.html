@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.34</title>
+<title>Emerald Mine — Crystal Caves v2.4.35</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,11 +18,11 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.34 — mobile text layout fit pass for
-//            title and cave intro screens
+//  v2.4.35 — align mobile cave selector and
+//            high-score initials entry boxes
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.34';
+const VERSION = 'v2.4.35';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -1602,18 +1602,28 @@ function touchDistance(touches) {
 function saveZoom() { try { localStorage.setItem(ZOOM_KEY, userZoom.toFixed(3)); } catch(e) {} }
 
 
+function getTitleSelectorLayout() {
+  const selW = Math.min(W * 0.86, 540 * DPR);
+  const selH = Math.min(H * 0.19, 154 * DPR);
+  const selY = H * 0.665;
+  const selTop = selY - selH / 2;
+  const selBottom = selY + selH / 2;
+  const gapX = selW * 0.18;
+  const startX = W / 2 - gapX * 2;
+  const gridTop = selTop + selH * 0.39;
+  const gapY = selH * 0.205;
+  const r = Math.min(gapX * 0.28, gapY * 0.38, Math.max(10 * DPR, Math.min(W, H) * 0.020));
+  return { selW, selH, selY, selTop, selBottom, gapX, startX, gridTop, gapY, r };
+}
+
 function handleTitleSelect(x, y) {
   if (showScores) return false;
-  const cols = 5;
-  const startX = W * 0.18;
-  const gapX = W * 0.16;
-  const startY = H * 0.695;
-  const gapY = Math.max(25 * DPR, H * 0.032);
-  const r = Math.max(11 * DPR, Math.min(W, H) * 0.021);
+  const layout = getTitleSelectorLayout();
+  const hitR = Math.max(layout.r * 1.7, 18 * DPR);
   for (let i = 0; i < LEVELS.length; i++) {
-    const bx = startX + (i % cols) * gapX;
-    const by = startY + Math.floor(i / cols) * gapY;
-    if (Math.hypot(x - bx, y - by) <= r * 1.45) {
+    const bx = layout.startX + (i % 5) * layout.gapX;
+    const by = layout.gridTop + Math.floor(i / 5) * layout.gapY;
+    if (Math.hypot(x - bx, y - by) <= hitR) {
       titleSelectedLevel = i;
       startTitleMusic();
       return true;
@@ -1826,14 +1836,18 @@ canvas.addEventListener('click', e => {
 function handleHighScoreTouch(x, y) {
   if (!hsEntry.active || hsEntry.submitted) return;
   const cx = W / 2;
-  const baseY = H * 0.50;
   const spacing = Math.min(W * 0.12, 70 * DPR);
+  const boxW = spacing * 0.68;
+  const boxH = spacing * 0.78;
+  const boxY = H * 0.45;
   for (let i = 0; i < 3; i++) {
     const px = cx + (i - 1) * spacing;
-    if (Math.abs(x - px) < spacing * 0.45) {
+    const inColumn = Math.abs(x - px) < spacing * 0.48;
+    const inBoxOrArrows = y > boxY - spacing * 0.55 && y < boxY + boxH + spacing * 0.70;
+    if (inColumn && inBoxOrArrows) {
       hsEntry.pos = i;
-      if (y < baseY - 28 * DPR) changeInitial(1);
-      else if (y > baseY + 28 * DPR && y < baseY + 90 * DPR) changeInitial(-1);
+      if (y < boxY) changeInitial(1);
+      else if (y > boxY + boxH) changeInitial(-1);
       return;
     }
   }
@@ -6002,11 +6016,7 @@ function drawTitle() {
     ctx.fillText('Mini cave preview: dig, chain gems, avoid falling rocks, escape', cx, stripY);
 
     // Cave selector becomes a fixed-grid control panel with all text kept inside the frame.
-    const selW = Math.min(W * 0.86, 540 * DPR);
-    const selH = Math.min(H * 0.19, 154 * DPR);
-    const selY = H * 0.665;
-    const selTop = selY - selH / 2;
-    const selBottom = selY + selH / 2;
+    const { selW, selH, selTop, selBottom, gapX, startX, gridTop, gapY, r: rSel } = getTitleSelectorLayout();
     ctx.fillStyle = 'rgba(2,12,8,0.62)';
     ctx.strokeStyle = 'rgba(115,255,175,0.22)';
     ctx.beginPath(); ctx.roundRect(cx - selW/2, selTop, selW, selH, 16*DPR); ctx.fill(); ctx.stroke();
@@ -6014,16 +6024,10 @@ function drawTitle() {
     ctx.fillStyle = 'rgba(230,255,240,0.88)';
     ctx.fillText('CHOOSE CAVE', cx, selTop + selH * 0.18);
 
-    const colsSel = 5;
-    const gapX = selW * 0.18;
-    const startX = cx - gapX * 2;
-    const gridTop = selTop + selH * 0.39;
-    const gapY = selH * 0.205;
-    const rSel = Math.min(gapX * 0.28, gapY * 0.38, Math.max(10 * DPR, Math.min(W, H) * 0.020));
     ctx.font = `900 ${Math.max(8*DPR, rSel*0.58)}px 'Segoe UI', system-ui, sans-serif`;
     for (let i=0;i<LEVELS.length;i++) {
-      const bx = startX + (i % colsSel) * gapX;
-      const by = gridTop + Math.floor(i / colsSel) * gapY;
+      const bx = startX + (i % 5) * gapX;
+      const by = gridTop + Math.floor(i / 5) * gapY;
       const selected = i === titleSelectedLevel;
       if (selected) {
         const sg = ctx.createRadialGradient(bx, by, 0, bx, by, rSel*2.4);
@@ -6312,14 +6316,20 @@ function drawHighScoreEntry() {
   ctx.font = `${titleSize*0.32}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle='#fff'; ctx.fillText(`Score ${hsEntry.score}  •  Cave ${hsEntry.level}`, W/2, H*0.33);
   const spacing = Math.min(W*0.12, 70*DPR);
+  const boxW = spacing * 0.68;
+  const boxH = spacing * 0.78;
+  const boxY = H * 0.45;
+  const letterY = boxY + boxH * 0.52;
+  const arrowUpY = boxY - spacing * 0.25;
+  const arrowDownY = boxY + boxH + spacing * 0.35;
   for (let i=0; i<3; i++) {
     const x = W/2 + (i-1)*spacing;
     ctx.fillStyle = hsEntry.pos === i ? 'rgba(255,217,80,0.25)' : 'rgba(255,255,255,0.08)';
     ctx.strokeStyle = hsEntry.pos === i ? '#ffd95c' : 'rgba(255,255,255,0.25)';
     ctx.lineWidth = Math.max(2, DPR*2);
-    ctx.beginPath(); ctx.roundRect(x-spacing*0.34, H*0.45, spacing*0.68, spacing*0.78, 8*DPR); ctx.fill(); ctx.stroke();
-    ctx.font = `bold ${spacing*0.54}px monospace`; ctx.fillStyle = '#fff'; ctx.fillText(hsEntry.initials[i], x, H*0.50);
-    ctx.font = `${spacing*0.22}px monospace`; ctx.fillStyle='rgba(255,255,255,0.65)'; ctx.fillText('▲', x, H*0.43); ctx.fillText('▼', x, H*0.59);
+    ctx.beginPath(); ctx.roundRect(x-boxW/2, boxY, boxW, boxH, 8*DPR); ctx.fill(); ctx.stroke();
+    ctx.font = `bold ${Math.min(boxH*0.72, spacing*0.50)}px monospace`; ctx.fillStyle = '#fff'; ctx.fillText(hsEntry.initials[i], x, letterY);
+    ctx.font = `${spacing*0.22}px monospace`; ctx.fillStyle='rgba(255,255,255,0.65)'; ctx.fillText('▲', x, arrowUpY); ctx.fillText('▼', x, arrowDownY);
   }
   ctx.font = `bold ${titleSize*0.28}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle='rgba(0,180,255,0.35)'; ctx.beginPath(); ctx.roundRect(W/2-W*0.16, H*0.70, W*0.32, H*0.075, 14*DPR); ctx.fill();
