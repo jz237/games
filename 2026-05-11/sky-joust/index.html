@@ -687,7 +687,7 @@ function update(dt){
       // Collision with player
       if(player&&state==='playing'){
         const dx=player.x-ptero.x,dy=player.y-ptero.y;
-        if(Math.sqrt(dx*dx+dy*dy)<50){playerDie();return;}
+        if(Math.sqrt(dx*dx+dy*dy)<75){playerDie();return;}
       }
       // Off screen
       if((ptero.vx>0&&ptero.x>W+100)||(ptero.vx<0&&ptero.x<-100)){
@@ -876,63 +876,65 @@ function drawTrollHand(){
   if(!trollHand)return;
   const p=trollHand.progress;
   if(p<=0)return;
-  const handY=lavaY-p*90; // hand reaches up to 90px above lava
+  const handY=lavaY-p*120; // hand reaches up to 120px above lava
   const handX=trollHand.x;
-  // Arm from lava to hand
+  // Wider darker arm outline
+  ctx.strokeStyle='#5A2D0C';
+  ctx.lineWidth=18;
+  ctx.beginPath();
+  ctx.moveTo(handX,lavaY+10);
+  ctx.quadraticCurveTo(handX-12*p,lavaY-40*p,handX,handY);
+  ctx.stroke();
+  // Main arm
   ctx.strokeStyle='#8B4513';
+  ctx.lineWidth=14;
+  ctx.beginPath();
+  ctx.moveTo(handX,lavaY+10);
+  ctx.quadraticCurveTo(handX-12*p,lavaY-40*p,handX,handY);
+  ctx.stroke();
+  // Lighter arm center highlight
+  ctx.strokeStyle='#A0522D';
   ctx.lineWidth=8;
   ctx.beginPath();
   ctx.moveTo(handX,lavaY+10);
-  ctx.quadraticCurveTo(handX-5*p,lavaY-30*p,handX,handY);
+  ctx.quadraticCurveTo(handX-12*p,lavaY-40*p,handX,handY);
   ctx.stroke();
-  // Darker arm outline
-  ctx.strokeStyle='#5A2D0C';
-  ctx.lineWidth=10;
-  ctx.beginPath();
-  ctx.moveTo(handX,lavaY+10);
-  ctx.quadraticCurveTo(handX-5*p,lavaY-30*p,handX,handY);
-  ctx.stroke();
-  // Lighter arm center
-  ctx.strokeStyle='#A0522D';
-  ctx.lineWidth=6;
-  ctx.beginPath();
-  ctx.moveTo(handX,lavaY+10);
-  ctx.quadraticCurveTo(handX-5*p,lavaY-30*p,handX,handY);
-  ctx.stroke();
-  // Palm
+  // Palm — bigger
   ctx.fillStyle='#8B4513';
   ctx.beginPath();
-  ctx.ellipse(handX,handY,14*p,10*p,0,0,Math.PI*2);
+  ctx.ellipse(handX,handY,22*p,16*p,0,0,Math.PI*2);
   ctx.fill();
   ctx.strokeStyle='#5A2D0C';
-  ctx.lineWidth=2;
+  ctx.lineWidth=3;
   ctx.stroke();
-  // Fingers reaching up (open hand, trying to grab)
-  const fingerSpread=6*p;
-  const fingerLen=16*p;
+  // Fingers reaching up — bigger, wiggling
+  const fingerSpread=10*p;
+  const fingerLen=28*p;
   ctx.strokeStyle='#A0522D';
-  ctx.lineWidth=4;
+  ctx.lineWidth=6;
   for(let i=-2;i<=2;i++){
+    const wiggle=Math.sin(gameTime*6+i*1.3)*4*p;
     const fx=handX+i*fingerSpread;
-    const fy=handY-fingerLen;
+    const fy=handY-fingerLen+wiggle;
     ctx.beginPath();
-    ctx.moveTo(fx,handY-4*p);
-    ctx.quadraticCurveTo(fx+i*2,handY-fingerLen*0.5,fx+i,fy);
+    ctx.moveTo(fx,handY-6*p);
+    ctx.quadraticCurveTo(fx+i*3+wiggle*0.5,handY-fingerLen*0.5,fx+i*2+wiggle,fy);
     ctx.stroke();
-    // Fingernail
+    // Fingernail — bigger
     ctx.fillStyle='#DEB887';
     ctx.beginPath();
-    ctx.ellipse(fx+i,fy,2.5*p,1.5*p,0,0,Math.PI*2);
+    ctx.ellipse(fx+i*2+wiggle,fy,4*p,2.5*p,0,0,Math.PI*2);
     ctx.fill();
   }
-  // Glowing eyes in the lava below the hand
+  // Glowing eyes in the lava below the hand — bigger
   const eyeY=lavaY+20;
-  ctx.fillStyle='rgba(255,200,0,0.8)';
-  ctx.beginPath();ctx.arc(handX-8,eyeY,3,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.arc(handX+8,eyeY,3,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='rgba(255,50,0,0.6)';
-  ctx.beginPath();ctx.arc(handX-8,eyeY,2,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.arc(handX+8,eyeY,2,0,Math.PI*2);ctx.fill();
+  const eyePulse=0.7+0.3*Math.sin(gameTime*5);
+  ctx.fillStyle=`rgba(255,200,0,${0.8*eyePulse})`;
+  ctx.beginPath();ctx.arc(handX-14,eyeY,5,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(handX+14,eyeY,5,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=`rgba(255,50,0,${0.6*eyePulse})`;
+  ctx.beginPath();ctx.arc(handX-14,eyeY,3,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(handX+14,eyeY,3,0,Math.PI*2);ctx.fill();
 }
 
 function drawPlatform(p){
@@ -1047,9 +1049,14 @@ function drawBird(entity,isPlayer){
   ctx.translate(x,y+h/2);
   ctx.scale(f,1);
 
-  // Invincibility flash
-  if(isPlayer&&invincTimer>0&&Math.floor(invincTimer*10)%2===0){
-    ctx.globalAlpha=0.4;
+  // Invincibility flash (respawn blinking)
+  if(isPlayer&&invincTimer>0){
+    const blinkRate=invincTimer>1.0?10:16; // faster blink as it expires
+    if(Math.floor(invincTimer*blinkRate)%2===0){
+      ctx.globalAlpha=0.25;
+    } else {
+      ctx.globalAlpha=0.85;
+    }
   }
   ctx.shadowColor=entity.glowColor || entity.color;
   ctx.shadowBlur=14;
@@ -1077,7 +1084,9 @@ function drawBird(entity,isPlayer){
   // Dramatic wing angles: up=-1.0, mid=-0.2, down=0.6
   const wingAngle=wingUp?-1.0:(wingMid?-0.2:0.6);
   const wingLen=bw*0.8, wingThick=12;
-  ctx.fillStyle=wingColor;
+  // Enemy-specific wing colors
+  const actualWingColor=isPlayer?'#FFFFFF':entity.type==='bounder'?'#88CCFF':entity.type==='hunter'?'#FF6633':'#FF44FF';
+  ctx.fillStyle=actualWingColor;
   ctx.save();
   ctx.translate(-bw*0.1,-bh*0.25);
   ctx.rotate(wingAngle);
@@ -1089,12 +1098,12 @@ function drawBird(entity,isPlayer){
   ctx.lineTo(0,wingThick);
   ctx.closePath();
   ctx.fill();
-  // Wing outline for visibility
-  ctx.strokeStyle=entity.color;
-  ctx.lineWidth=2;
+  // Dark outline around wings so white wings are visible against bright backgrounds
+  ctx.strokeStyle=isPlayer?'rgba(40,40,40,0.7)':darken(entity.color,0.5);
+  ctx.lineWidth=2.5;
   ctx.stroke();
   // Wing tip feathers — larger, more dramatic
-  ctx.fillStyle=darken(entity.color,0.3);
+  ctx.fillStyle=darken(actualWingColor,0.2);
   ctx.beginPath();
   ctx.moveTo(-wingLen+2,-wingThick*(wingUp?1.8:0.4));
   ctx.lineTo(-wingLen-12,-wingThick*(wingUp?2.8:0));
@@ -1273,7 +1282,7 @@ function drawPtero(){
   ctx.beginPath();ctx.arc(px,py,80,0,Math.PI*2);ctx.fill();
 
   const dir=ptero.vx>0?1:-1;
-  ctx.save();ctx.translate(px,py);ctx.scale(dir,1);
+  ctx.save();ctx.translate(px,py);ctx.scale(dir*1.5,1.5); // 50% bigger
   const wingUp=ptero.wingFrame===0;
 
   // Wings - much bigger, leathery
@@ -1743,6 +1752,23 @@ function loop(ts){
   drawPtero();
   drawFeathers();
   drawExplosions();
+
+  // Red danger glow when player is near lava
+  if(player&&state==='playing'){
+    const distToLava=lavaY-(player.y+PLAYER_H);
+    if(distToLava<80&&distToLava>-20){
+      const intensity=Math.max(0,1-distToLava/80);
+      const dangerPulse=0.6+0.4*Math.sin(gameTime*8);
+      const dangerGrad=ctx.createLinearGradient(0,lavaY-80,0,lavaY);
+      dangerGrad.addColorStop(0,'rgba(255,0,0,0)');
+      dangerGrad.addColorStop(1,`rgba(255,0,0,${intensity*dangerPulse*0.35})`);
+      ctx.fillStyle=dangerGrad;
+      ctx.fillRect(0,lavaY-80,W,80);
+      // Screen edge red vignette
+      ctx.fillStyle=`rgba(255,0,0,${intensity*dangerPulse*0.12})`;
+      ctx.fillRect(0,0,W,H);
+    }
+  }
 
   // Kill flash overlay
   if(killFlashTimer>0){
