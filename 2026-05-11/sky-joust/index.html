@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v2.2.0';
+const VERSION = 'v2.2.1';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -1628,7 +1628,7 @@ function update(dt){
       // Idle wing flap when standing on platform (not touching)
       if(!touchDown && player.vy===0 && player.wingTimer<=0){
         player.wingFrame=(player.wingFrame+1)%3;
-        player.wingTimer=0.35; // slow idle flap
+        player.wingTimer=0.22; // faster idle wing bob
       }
 
       // Gravity
@@ -1705,36 +1705,57 @@ function update(dt){
       // AI
       e.ai.changeTimer-=dt;
       if(e.ai.changeTimer<=0){
-        e.ai.changeTimer=0.5+Math.random()*1.5;
-        if(e.type==='hunter'&&player){
-          // Hunters aggressively chase player X position
-          e.ai.targetVx=(player.x-e.x)*2;
+        e.ai.changeTimer=0.3+Math.random()*0.8;
+        if(player){
+          const dx=player.x-e.x;
+          if(e.type==='hunter'){
+            // Hunters: aggressive, directly chase and try to get above
+            e.ai.targetVx=dx*3;
+            e.ai.targetAlt=player.y-80-Math.random()*60;
+          } else if(e.type==='shadow'){
+            // Shadows: fast, swing wide then dive
+            const side=Math.sign(dx)||1;
+            e.ai.targetVx=side*HORIZ_SPEED*e.speed*1.2+dx*0.5;
+            e.ai.targetAlt=player.y-60-Math.random()*100;
+          } else {
+            // Bounders: moderate, approach player with some randomness
+            e.ai.targetVx=dx*1.5+(Math.random()-0.5)*HORIZ_SPEED*e.speed;
+            e.ai.targetAlt=player.y-50-Math.random()*80;
+          }
           e.ai.targetVx=Math.max(-HORIZ_SPEED*e.speed,Math.min(HORIZ_SPEED*e.speed,e.ai.targetVx));
-        } else if(e.type==='shadow'){
-          e.ai.targetVx=(Math.random()-0.5)*HORIZ_SPEED*e.speed*2;
-        } else {
-          e.ai.targetVx=(Math.random()-0.5)*HORIZ_SPEED*e.speed;
         }
       }
-      // Hunters continuously track player between AI ticks
       if(e.type==='hunter'&&player){
-        const chase=(player.x-e.x)*1.5;
+        const chase=(player.x-e.x)*2;
         e.ai.targetVx=Math.max(-HORIZ_SPEED*e.speed,Math.min(HORIZ_SPEED*e.speed,chase));
       }
-      e.vx+=(e.ai.targetVx-e.vx)*dt*3;
+      e.vx+=(e.ai.targetVx-e.vx)*dt*3.5;
 
-      // Flap
+      // Lava avoidance
+      const distToLava=lavaY-(e.y+PLAYER_H);
+      const lavaPanic=distToLava<120?1+(120-distToLava)/60:0;
+
+      // Smarter flapping — altitude management + lava avoidance
       e.flapCooldown-=dt;
-      if(e.flapCooldown<=0){
-        e.vy=FLAP_POWER*e.speed;
-        e.flapCooldown=e.flapRate+Math.random()*0.5;
+      const shouldFlap=e.flapCooldown<=0&&(
+        e.vy>150||
+        (e.ai.targetAlt!==undefined&&e.y>e.ai.targetAlt&&e.vy>-100)||
+        lavaPanic>1||
+        e.vy>50
+      );
+      if(shouldFlap){
+        e.vy=FLAP_POWER*e.speed*(lavaPanic>1?1.2:1);
+        e.flapCooldown=e.flapRate+Math.random()*0.3;
         e.wingFrame=(e.wingFrame+1)%3;
         trailFeather(e.x,e.y+PLAYER_H/2,e.color);
-        // Hunters try to match player altitude
-        if(e.type==='hunter'&&player&&e.y>player.y+20){
-          e.flapCooldown*=0.6;
-        }
+        if(e.ai.targetVx!==undefined)e.vx+=(e.ai.targetVx-e.vx)*0.15;
       }
+      // Idle wing bob when grounded
+      if(e.vy>-1&&e.vy<1&&e.wingTimer===undefined)e.wingTimer=0;
+      if(e.wingTimer!==undefined){e.wingTimer-=dt;if(e.wingTimer<=0){e.wingFrame=(e.wingFrame+1)%3;e.wingTimer=0.3;}}
+      // Steer away from lava edges
+      if(lavaPanic>0&&e.x<W*0.15)e.vx+=HORIZ_SPEED*dt*2;
+      if(lavaPanic>0&&e.x>W*0.85)e.vx-=HORIZ_SPEED*dt*2;
 
       // Gravity
       e.vy+=GRAVITY*dt;
