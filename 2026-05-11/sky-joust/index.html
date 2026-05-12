@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.0.3';
+const VERSION = 'v3.0.4';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -1710,63 +1710,61 @@ function update(dt){
       if(e.invincible!==undefined&&e.invincible>0){
         e.invincible-=dt;
       }
-      // AI — smarter arcade flapping with hard lava avoidance.
+      // AI — arcade flapping: patrol platforms, swoop at player, avoid lava.
       e.ai.changeTimer-=dt;
       if(e.ai.changeTimer<=0){
-        e.ai.changeTimer=0.25+Math.random()*0.65;
-        e.ai.wander=(Math.random()-0.5)*140;
+        e.ai.changeTimer=0.3+Math.random()*0.7;
+        e.ai.wander=(Math.random()-0.5)*160;
       }
       const dx=player?player.x-e.x:0;
+      const dy=player?player.y-e.y:0;
       const distToLava=lavaY-(e.y+PLAYER_H);
-      const tooLow=distToLava<150;
       const criticalLow=distToLava<80;
+      const tooLow=distToLava<120;
+      // Target altitude: patrol around platforms, dive at player when above
       let targetVx=e.ai.wander;
-      // Lava avoidance: steer toward nearest platform center when low
-      if(tooLow){
-        let nearestX=W/2, bestDist=Infinity;
-        for(const p of platforms){
-          if(p.broken)continue;
-          const px=p.x+p.w/2;
-          const d=Math.abs(px-e.x)+(p.y<lavaY?0:9999);
-          if(d<bestDist){bestDist=d;nearestX=px;}
+      let wantFlap=false;
+      if(player){
+        if(e.type==='bounder'){
+          // Bounders: drift toward player horizontally, stay at platform level
+          targetVx=dx*0.7+e.ai.wander;
+          // Flap to maintain altitude near platforms, not to camp at top
+          if(e.y>H*0.6)wantFlap=true; // too low, go up
+          if(dy<0&&e.y<player.y-120)wantFlap=false; // high above player, let gravity bring down
+        } else if(e.type==='hunter'){
+          // Hunters: chase player, try to stay slightly above
+          targetVx=dx*2.0;
+          if(e.y>player.y-30)wantFlap=true; // below player, flap up
+          if(e.y<player.y-150)wantFlap=false; // way above, dive
+        } else {
+          // Shadows: aggressive, swing wide then dive
+          targetVx=dx*2.5+Math.sign(dx||1)*100;
+          if(e.y>player.y+10)wantFlap=true; // below player, flap
+          if(e.y<player.y-100&&distToLava>200)wantFlap=false; // high up, let dive begin
         }
-        targetVx=(nearestX-e.x)*2.0;
-      } else if(player){
-        if(e.type==='bounder')targetVx=dx*0.6+e.ai.wander;
-        else if(e.type==='hunter')targetVx=dx*2.0;
-        else targetVx=dx*2.8+Math.sign(dx||1)*90;
       }
+      // Lava avoidance overrides everything
+      if(criticalLow){wantFlap=true;targetVx=(W/2-e.x)*2;}
+      else if(tooLow){wantFlap=true;let nearestX=W/2,bestDist=Infinity;for(const p of platforms){if(p.broken)continue;const px=p.x+p.w/2,d=Math.abs(px-e.x);if(d<bestDist){bestDist=d;nearestX=px;}}targetVx=(nearestX-e.x)*2;}
       targetVx=Math.max(-HORIZ_SPEED*e.speed,Math.min(HORIZ_SPEED*e.speed,targetVx));
       e.vx+=(targetVx-e.vx)*dt*(e.type==='bounder'?2.5:e.type==='hunter'?4.0:5.5);
 
-      // Flapping — all types flap more when low
+      // Flapping logic
       e.flapCooldown-=dt;
-      let needFlap=false;
-      // Always flap when flap cooldown is up
-      if(e.flapCooldown<=0)needFlap=true;
-      // Emergency flap when near lava
-      if(criticalLow)needFlap=true;
-      // Extra flaps to gain altitude when below screen center
-      if(tooLow&&e.vy>-100)needFlap=true;
-      // Type-specific: hunters and shadows try to stay above player
-      if(player&&e.type==='hunter'&&e.y>player.y-30&&e.vy>-160)needFlap=true;
-      if(player&&e.type==='shadow'&&e.y>player.y-80&&e.vy>-200)needFlap=true;
-      if(player&&e.type==='bounder'&&e.y>player.y+20&&e.vy>-120)needFlap=true;
-      // Bounders: flap more often when below player to stay competitive
-      if(player&&e.type==='bounder'&&e.y>H*0.55)needFlap=true;
-      
-      if(needFlap){
+      const flapReady=e.flapCooldown<=0;
+      const shouldFlap=flapReady&&(wantFlap||(!tooLow&&e.vy>80));
+      if(shouldFlap||criticalLow){
         const power=criticalLow?1.4:tooLow?1.2:1.0;
         e.vy=FLAP_POWER*(0.95+e.speed*0.18)*power;
-        const intervals={bounder:[0.45,0.75],hunter:[0.3,0.55],shadow:[0.25,0.45]};
+        const intervals={bounder:[0.5,0.9],hunter:[0.35,0.65],shadow:[0.28,0.5]};
         const iv=intervals[e.type]||intervals.bounder;
         e.flapCooldown=iv[0]+Math.random()*(iv[1]-iv[0]);
         e.wingFrame=(e.wingFrame+1)%3;
         spawnFlapFeathers(e,1+(Math.random()<0.35?1:0));
       }
-      // Shadows: deliberate dive attacks but only when safe altitude above lava
-      if(player&&e.type==='shadow'&&e.y<player.y-95&&distToLava>200)e.vy+=GRAVITY*dt*0.55;
-      // Hard floor — absolutely prevent falling into lava
+      // Shadows: gravity boost when diving at player from above
+      if(player&&e.type==='shadow'&&e.y<player.y-80&&distToLava>180)e.vy+=GRAVITY*dt*0.5;
+      // Hard lava floor
       if(e.y+PLAYER_H>lavaY-30){e.y=lavaY-30-PLAYER_H;e.vy=Math.min(e.vy,FLAP_POWER*1.3);}
 
       // Gravity
