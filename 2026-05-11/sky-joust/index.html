@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v1.9.0';
+const VERSION = 'v2.0.0';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -72,7 +72,7 @@ const PLAYER_H = 64;
 let state = 'title'; // title, playing, dying, waveTrans, gameOver, highscoreEntry, leaderboard
 let score = 0, lives = 0, wave = 0, extraLifeGiven = false;
 let player = null;
-let enemies = [], feathers = [], eggs = [], embers = [], explosions = [], platforms = [];
+let enemies = [], feathers = [], eggs = [], embers = [], explosions = [], platforms = [], scorePopups = [], lavaBursts = [], smokeWisps = [], waterDrops = [];
 let lavaY = 0, lavaBase = 0, lavaRiseRate = 0;
 let pteroTimer = 0, ptero = null;
 let waveTransTimer = 0, dyingTimer = 0;
@@ -124,17 +124,23 @@ loadLocalScores();
 fetchGlobalScores();
 
 // --- BG layers ---
+
 function generateBG(){
   bgLayers=[];
   for(let layer=0;layer<3;layer++){
-    const towers=[];
-    const count=4+layer*3;
+    const formations=[];
+    const count=10+layer*6;
     for(let i=0;i<count;i++){
-      const tw=30+Math.random()*60;
-      const th=80+Math.random()*200+layer*40;
-      towers.push({x:Math.random()*W,w:tw,h:th,hasTorch:Math.random()>0.5});
+      formations.push({
+        x:Math.random()*Math.max(W,1200),
+        w:30+Math.random()*90+layer*25,
+        h:80+Math.random()*230+layer*45,
+        top:Math.random()>0.45,
+        glow:Math.random(),
+        seed:Math.random()*1000
+      });
     }
-    bgLayers.push({towers,depth:0.08+layer*0.12,color:`rgba(${8+layer*8},${8+layer*8},${10+layer*7},${0.28+layer*0.08})`});
+    bgLayers.push({formations,depth:[0.05,0.12,0.20][layer],alpha:[0.22,0.32,0.46][layer]});
   }
 }
 generateBG();
@@ -351,7 +357,7 @@ canvas.addEventListener('touchend',(e)=>{
 // --- Start Game ---
 function startGame(){
   state='playing';score=0;lives=3;wave=0;extraLifeGiven=false;trollHand=null;
-  enemies=[];feathers=[];eggs=[];embers=[];explosions=[];ptero=null;pteroTimer=0;gameTime=0;invincTimer=0;
+  enemies=[];feathers=[];eggs=[];embers=[];explosions=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];ptero=null;pteroTimer=0;gameTime=0;invincTimer=0;
   generatePlatforms(1);
   player=createPlayer();
   nextWave();
@@ -422,6 +428,12 @@ function update(dt){
   if(Math.random()<dt*3){
     sfxLavaPop();
   }
+  if(Math.random()<dt*0.55){
+    const x=Math.random()*W;
+    lavaBursts.push({x,y:lavaY+18,r:8+Math.random()*18,life:0.7,maxLife:0.7,parts:Array.from({length:18},()=>({a:Math.random()*Math.PI*2,s:80+Math.random()*210,rr:2+Math.random()*4}))});
+  }
+  if(Math.random()<dt*2.2)smokeWisps.push({x:Math.random()*W,y:lavaY-8,vx:(Math.random()-0.5)*18,vy:-20-Math.random()*35,life:2.6,maxLife:2.6,r:18+Math.random()*26});
+  if(Math.random()<dt*1.2)waterDrops.push({x:Math.random()*W,y:Math.random()*H*0.45,vy:70+Math.random()*90,life:2,maxLife:2});
 
   // Lava troll hand
   updateTrollHand(dt);
@@ -626,6 +638,8 @@ function update(dt){
           if(player.y+PLAYER_H*0.5<e.y+PLAYER_H*0.5-4){
             // Player wins
             score+=e.scoreVal;
+            scorePopups.push({x:e.x,y:e.y,text:'+'+e.scoreVal,life:1,maxLife:1,color:'#FFD700'});
+            sfxScore();
             sfxKill();
             createExplosion(e.x,e.y,false);
             burstFeathers(e.x,e.y,e.color,40);
@@ -668,6 +682,8 @@ function update(dt){
         const dx=player.x-eg.x,dy=(player.y+PLAYER_H)-eg.y;
         if(Math.abs(dx)<20&&Math.abs(dy)<15&&player.vy>0){
           score+=250;
+          scorePopups.push({x:eg.x,y:eg.y,text:'+250',life:0.8,maxLife:0.8,color:'#FFE98A'});
+          sfxScore();
           sfxEggStomp();
           burstFeathers(eg.x,eg.y,'#FFEE88',25);
           eggs.splice(i,1);
@@ -728,6 +744,21 @@ function update(dt){
       if(em.life<=0)embers.splice(i,1);
     }
 
+
+    // Score popups / atmospheric particles
+    for(let i=scorePopups.length-1;i>=0;i--){
+      const sp=scorePopups[i]; sp.y-=55*dt; sp.life-=dt; if(sp.life<=0)scorePopups.splice(i,1);
+    }
+    for(let i=lavaBursts.length-1;i>=0;i--){
+      lavaBursts[i].life-=dt; if(lavaBursts[i].life<=0)lavaBursts.splice(i,1);
+    }
+    for(let i=smokeWisps.length-1;i>=0;i--){
+      const sm=smokeWisps[i]; sm.x+=sm.vx*dt; sm.y+=sm.vy*dt; sm.r+=10*dt; sm.life-=dt; if(sm.life<=0)smokeWisps.splice(i,1);
+    }
+    for(let i=waterDrops.length-1;i>=0;i--){
+      const wd=waterDrops[i]; wd.y+=wd.vy*dt; wd.life-=dt; if(wd.life<=0||wd.y>lavaY)waterDrops.splice(i,1);
+    }
+
     // Explosions
     for(let i=explosions.length-1;i>=0;i--){
       explosions[i].time+=dt;
@@ -754,31 +785,55 @@ function update(dt){
 }
 
 // --- Draw ---
-function drawBG(){
-  // Pure black dungeon/cave field — classic arcade bright-on-dark.
-  ctx.fillStyle='#000000';
-  ctx.fillRect(0,0,W,H);
 
-  // Barely-visible parallax castle/cavern silhouettes, dark gray on black.
-  for(const layer of bgLayers){
-    ctx.fillStyle=layer.color;
-    for(const t of layer.towers){
-      const ox=(player?player.x*layer.depth*0.018:0);
-      let tx=t.x-ox;
-      const baseY=H-t.h-lavaBase*0.08;
-      ctx.fillRect(tx,baseY,t.w,t.h);
-      for(let b=0;b<t.w;b+=10){
-        ctx.fillRect(tx+b,baseY-7,6,7);
-      }
-      // A few tiny sealed dungeon pinlights, kept subtle so gameplay stays dominant.
-      if(t.hasTorch){
-        const torchBri=0.35+0.25*Math.sin(gameTime*4+t.x);
-        ctx.fillStyle=`rgba(255,80,10,${torchBri*0.18})`;
-        ctx.beginPath();ctx.arc(tx+t.w/2,baseY+22,3,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle=layer.color;
+function drawBG(){
+  const sky=ctx.createLinearGradient(0,0,0,H);
+  sky.addColorStop(0,'#05020A'); sky.addColorStop(0.45,'#120716'); sky.addColorStop(0.78,'#210904'); sky.addColorStop(1,'#2A0600');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
+
+  // Distant lava glow wash from below.
+  const wash=ctx.createLinearGradient(0,H*0.25,0,H);
+  wash.addColorStop(0,'rgba(255,90,0,0)'); wash.addColorStop(1,'rgba(255,105,0,0.28)');
+  ctx.fillStyle=wash; ctx.fillRect(0,0,W,H);
+
+  for(let li=0;li<bgLayers.length;li++){
+    const layer=bgLayers[li];
+    const off=(gameTime*18 + (player?player.x*0.012:0))*layer.depth;
+    const color=[`rgba(12,9,16,${layer.alpha})`,`rgba(25,17,18,${layer.alpha})`,`rgba(42,25,20,${layer.alpha})`][li];
+    ctx.fillStyle=color;
+    for(const f of layer.formations){
+      let x=((f.x-off)%(W+220)); if(x<-120)x+=W+220;
+      const base=f.top?0:H;
+      const dir=f.top?1:-1;
+      const h=f.h, w=f.w;
+      ctx.beginPath();
+      ctx.moveTo(x-w/2,base);
+      ctx.lineTo(x-w*0.25,base+dir*h*(0.55+0.2*Math.sin(f.seed)));
+      ctx.lineTo(x,base+dir*h);
+      ctx.lineTo(x+w*0.28,base+dir*h*(0.48+0.2*Math.cos(f.seed)));
+      ctx.lineTo(x+w/2,base); ctx.closePath(); ctx.fill();
+      if(f.glow>0.64){
+        ctx.save(); ctx.globalCompositeOperation='lighter';
+        ctx.strokeStyle=f.glow>0.86?'rgba(120,255,150,0.22)':'rgba(255,145,40,0.30)';
+        ctx.lineWidth=1.2+li;
+        ctx.beginPath();
+        ctx.moveTo(x-w*.08,base+dir*h*.22); ctx.lineTo(x+w*.12,base+dir*h*.48); ctx.lineTo(x-w*.02,base+dir*h*.72);
+        ctx.stroke(); ctx.restore();
       }
     }
   }
+  // Far magma falls and wall cracks.
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  for(let i=0;i<7;i++){
+    const x=(i*211+Math.sin(gameTime*.15+i)*30)%W;
+    const alpha=0.16+0.08*Math.sin(gameTime*2+i);
+    ctx.strokeStyle=`rgba(255,92,12,${alpha})`; ctx.lineWidth=2+(i%3);
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.bezierCurveTo(x+10,H*.22,x-8,H*.44,x+4,H*.7); ctx.stroke();
+  }
+  ctx.restore();
+  // Drips and smoke.
+  for(const wd of waterDrops){ctx.strokeStyle=`rgba(155,220,255,${0.35*wd.life/wd.maxLife})`;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(wd.x,wd.y);ctx.lineTo(wd.x,wd.y+8);ctx.stroke();}
+  for(const sm of smokeWisps){ctx.fillStyle=`rgba(130,120,120,${0.12*sm.life/sm.maxLife})`;ctx.beginPath();ctx.ellipse(sm.x,sm.y,sm.r,sm.r*.45,Math.sin(gameTime+sm.x),0,Math.PI*2);ctx.fill();}
 }
 function drawLava(){
   const pulse=0.5+0.5*Math.sin(gameTime*4.2);
@@ -843,6 +898,23 @@ function drawLava(){
     ctx.beginPath();ctx.arc(bx-br*0.3,by-br*0.35,br*0.35,0,Math.PI*2);ctx.fill();
   }
 }
+
+  // Large lava bursts and heat distortion lines.
+  for(const b of lavaBursts){
+    const t=1-b.life/b.maxLife;
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    ctx.fillStyle=`rgba(255,230,80,${1-t})`;
+    ctx.beginPath();ctx.arc(b.x,b.y-b.r*t*3,b.r*(1-t*.25),0,Math.PI*2);ctx.fill();
+    for(const p of b.parts){
+      const px=b.x+Math.cos(p.a)*p.s*t*.55, py=b.y+Math.sin(p.a)*p.s*t*.55+90*t*t;
+      ctx.fillStyle=p.a%2>1?'#FFFF88':'#FF6A00';ctx.globalAlpha=1-t;
+      ctx.beginPath();ctx.arc(px,py,p.rr*(1-t),0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore(); ctx.globalAlpha=1;
+  }
+  ctx.strokeStyle='rgba(255,210,120,0.18)'; ctx.lineWidth=1;
+  for(let i=0;i<18;i++){const y=lavaY-8-i*6;ctx.beginPath();for(let x=0;x<W;x+=28){const yy=y+Math.sin(x*.035+gameTime*4+i)*3;if(x===0)ctx.moveTo(x,yy);else ctx.lineTo(x,yy);}ctx.stroke();}
+
 // Lava Troll Hand — reaches up from lava when player is near
 let trollHand = null;
 function updateTrollHand(dt){
@@ -1046,161 +1118,101 @@ function drawPlatform(p){
     ctx.beginPath();ctx.ellipse(p.x+p.w/2,p.y-5,9,4,0,0,Math.PI*2);ctx.stroke();
   }
 }
+
 function drawBird(entity,isPlayer){
-  const x=entity.x, y=entity.y, f=entity.facing;
-  const w=PLAYER_W, h=PLAYER_H;
+  const x=entity.x, y=entity.y, f=entity.facing||1;
+  const wingFrame=entity.wingFrame||0;
+  const phase=gameTime*7 + x*.01;
+  const bodyColor=isPlayer?'#CC8800':(entity.type==='bounder'?'#00A8FF':entity.type==='hunter'?'#FF2020':'#B000FF');
+  const armorColor=isPlayer?'#FFD35A':(entity.type==='bounder'?'#44D6FF':entity.type==='hunter'?'#FF6A00':'#D000FF');
+  const plumeColor=isPlayer?'#FF3030':(entity.type==='bounder'?'#AACCFF':entity.type==='hunter'?'#FFAA00':'#DD88FF');
+  const wingColor=isPlayer?'#FFFFFF':(entity.type==='bounder'?'#88CCFF':entity.type==='hunter'?'#FF6633':'#FF44FF');
+  const glow=isPlayer?'rgba(255,210,60,.78)':entity.glowColor||bodyColor;
+  ctx.save(); ctx.translate(x,y+PLAYER_H/2); ctx.scale(f,1);
+  if(isPlayer&&invincTimer>0)ctx.globalAlpha=(Math.floor(invincTimer*14)%2)?0.9:0.35;
+  ctx.shadowColor=glow; ctx.shadowBlur=isPlayer?22:18;
 
-  ctx.save();
-  ctx.translate(x,y+h/2);
-  ctx.scale(f,1);
-
-  // Invincibility flash (respawn blinking)
-  if(isPlayer&&invincTimer>0){
-    const blinkRate=invincTimer>1.0?10:16; // faster blink as it expires
-    if(Math.floor(invincTimer*blinkRate)%2===0){
-      ctx.globalAlpha=0.25;
-    } else {
-      ctx.globalAlpha=0.85;
+  // Three-frame feathered wing: up, mid, down. Draw behind body.
+  const wingAngles=[-1.18,-0.18,0.72];
+  const wingLift=[-20,-4,14][wingFrame%3];
+  ctx.save(); ctx.translate(-14,-11); ctx.rotate(wingAngles[wingFrame%3]);
+  const featherSets=[
+    {len:62,wide:18,c:wingColor,off:0},
+    {len:50,wide:14,c:isPlayer?'#EDEDED':lighten(bodyColor,.28),off:10},
+    {len:38,wide:10,c:isPlayer?'#F9F9F9':lighten(bodyColor,.42),off:19}
+  ];
+  for(const set of featherSets){
+    for(let i=0;i<5;i++){
+      const spread=(i-2)*7;
+      ctx.fillStyle=set.c;
+      ctx.beginPath();
+      ctx.moveTo(0,set.off*.25);
+      ctx.quadraticCurveTo(-set.len*.45,spread+wingLift*.35,-set.len,set.off+spread*.8+wingLift);
+      ctx.quadraticCurveTo(-set.len*.72,set.off+set.wide+spread*.35,-4,set.off+set.wide*.42);
+      ctx.closePath();ctx.fill();
+      ctx.strokeStyle=isPlayer?'rgba(20,20,20,.72)':darken(bodyColor,.45);ctx.lineWidth=1.4;ctx.stroke();
     }
   }
-  ctx.shadowColor=entity.glowColor || entity.color;
-  ctx.shadowBlur=14;
-
-  // --- BIRD BODY (large, 50px wide x 30px tall feel) ---
-  const bw=w*0.9, bh=h*0.55;
-  const bodyColor=isPlayer?'#CC8800':entity.color;
-  const wingColor=isPlayer?'#FFFFFF':darken(entity.color,0.15);
-  const bellyColor=isPlayer?'#FFE080':lighten(entity.color,0.3);
-  const bodyGrad=ctx.createRadialGradient(0,4,3,0,4,bw/2);
-  bodyGrad.addColorStop(0,bellyColor);
-  bodyGrad.addColorStop(0.6,bodyColor);
-  bodyGrad.addColorStop(1,darken(bodyColor,0.4));
-  ctx.fillStyle=bodyGrad;
-  ctx.beginPath();
-  ctx.ellipse(0,4,bw/2,bh/2,0,0,Math.PI*2);
-  ctx.fill();
-  ctx.strokeStyle=darken(bodyColor,0.5);
-  ctx.lineWidth=2;
-  ctx.stroke();
-
-  // --- WINGS (big, animated, dramatic flap) ---
-  const wingUp=entity.wingFrame===0;
-  const wingMid=entity.wingFrame===2;
-  // Dramatic wing angles: up=-1.0, mid=-0.2, down=0.6
-  const wingAngle=wingUp?-1.0:(wingMid?-0.2:0.6);
-  const wingLen=bw*0.8, wingThick=12;
-  // Enemy-specific wing colors
-  const actualWingColor=isPlayer?'#FFFFFF':entity.type==='bounder'?'#88CCFF':entity.type==='hunter'?'#FF6633':'#FF44FF';
-  ctx.fillStyle=actualWingColor;
-  ctx.save();
-  ctx.translate(-bw*0.1,-bh*0.25);
-  ctx.rotate(wingAngle);
-  // Main wing shape — bigger, broader
-  ctx.beginPath();
-  ctx.moveTo(0,0);
-  ctx.lineTo(-wingLen,-wingThick*(wingUp?2.2:0.6));
-  ctx.lineTo(-wingLen+6,wingThick*0.6);
-  ctx.lineTo(0,wingThick);
-  ctx.closePath();
-  ctx.fill();
-  // Dark outline around wings so white wings are visible against bright backgrounds
-  ctx.strokeStyle=isPlayer?'rgba(40,40,40,0.7)':darken(entity.color,0.5);
-  ctx.lineWidth=2.5;
-  ctx.stroke();
-  // Wing tip feathers — larger, more dramatic
-  ctx.fillStyle=darken(actualWingColor,0.2);
-  ctx.beginPath();
-  ctx.moveTo(-wingLen+2,-wingThick*(wingUp?1.8:0.4));
-  ctx.lineTo(-wingLen-12,-wingThick*(wingUp?2.8:0));
-  ctx.lineTo(-wingLen+8,0);
-  ctx.closePath();
-  ctx.fill();
-  // Secondary tip feather
-  ctx.beginPath();
-  ctx.moveTo(-wingLen+8,-wingThick*(wingUp?1.5:0.3));
-  ctx.lineTo(-wingLen-6,-wingThick*(wingUp?2.2:-0.2));
-  ctx.lineTo(-wingLen+14,wingThick*0.2);
-  ctx.closePath();
-  ctx.fill();
   ctx.restore();
 
-  // --- BIRD HEAD with beak (bigger) ---
-  const headX=bw*0.38, headY=-bh*0.15;
-  ctx.fillStyle=entity.color;
-  ctx.beginPath();ctx.arc(headX,headY,11,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle=darken(entity.color,0.3);
-  ctx.lineWidth=1.5;
-  ctx.stroke();
-  // Eye
-  ctx.fillStyle='#FFF';
-  ctx.beginPath();ctx.arc(headX+4,headY-3,4,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='#111';
-  ctx.beginPath();ctx.arc(headX+5,headY-3,2,0,Math.PI*2);ctx.fill();
-  // Beak
-  ctx.fillStyle='#FF9900';
-  ctx.beginPath();ctx.moveTo(headX+11,headY-2);ctx.lineTo(headX+22,headY+3);ctx.lineTo(headX+11,headY+6);ctx.closePath();ctx.fill();
+  // Tail feathers waving.
+  for(let i=0;i<3;i++){
+    ctx.fillStyle=i===1?darken(bodyColor,.12):lighten(bodyColor,.08);
+    ctx.beginPath();
+    const tw=-35-i*4, ty=8+(i-1)*6+Math.sin(phase+i)*2;
+    ctx.moveTo(-24,4+i*2); ctx.quadraticCurveTo(tw,ty-8,tw-22,ty); ctx.quadraticCurveTo(tw,ty+8,-25,10+i*2); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle=darken(bodyColor,.5);ctx.lineWidth=1.2;ctx.stroke();
+  }
 
-  // --- BIRD LEGS (tucked under) ---
-  ctx.strokeStyle=darken(entity.color,0.5);
-  ctx.lineWidth=2;
-  ctx.beginPath();ctx.moveTo(-4,bh/2+2);ctx.lineTo(-6,bh/2+10);ctx.lineTo(-10,bh/2+12);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(6,bh/2+2);ctx.lineTo(8,bh/2+10);ctx.lineTo(4,bh/2+12);ctx.stroke();
+  // Muscular ostrich body with rounded chest, tapered tail, cream belly.
+  const grad=ctx.createLinearGradient(-36,-16,30,24);
+  grad.addColorStop(0,lighten(bodyColor,.25)); grad.addColorStop(.46,bodyColor); grad.addColorStop(1,darken(bodyColor,.42));
+  ctx.fillStyle=grad; ctx.beginPath();
+  ctx.moveTo(-36,4); ctx.bezierCurveTo(-31,-20,-8,-29,17,-20); ctx.bezierCurveTo(42,-10,39,19,13,27); ctx.bezierCurveTo(-14,35,-40,24,-43,9); ctx.bezierCurveTo(-44,4,-40,3,-36,4); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle=darken(bodyColor,.55); ctx.lineWidth=3; ctx.stroke();
+  ctx.fillStyle=isPlayer?'#FFE080':lighten(bodyColor,.5); ctx.beginPath(); ctx.ellipse(7,10,22,13,-.08,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='rgba(60,30,0,.22)'; ctx.lineWidth=1; ctx.stroke();
 
-  // --- TAIL FEATHERS ---
-  ctx.fillStyle=darken(entity.color,0.2);
-  ctx.beginPath();ctx.moveTo(-bw*0.35,2);ctx.lineTo(-bw*0.55,6);ctx.lineTo(-bw*0.5,-2);ctx.closePath();ctx.fill();
-  ctx.beginPath();ctx.moveTo(-bw*0.35,5);ctx.lineTo(-bw*0.6,10);ctx.lineTo(-bw*0.52,2);ctx.closePath();ctx.fill();
-  ctx.beginPath();ctx.moveTo(-bw*0.3,0);ctx.lineTo(-bw*0.52,-4);ctx.lineTo(-bw*0.45,-1);ctx.closePath();ctx.fill();
+  // Thick legs: running stride on platform, tucked in flight.
+  const grounded=Math.abs(entity.vy||0)<1;
+  ctx.shadowBlur=0; ctx.lineCap='round'; ctx.lineJoin='round';
+  for(let i=0;i<2;i++){
+    const side=i?1:-1, stride=grounded?Math.sin(phase+i*Math.PI)*9:0;
+    const hipX=-4+side*9, hipY=23;
+    ctx.strokeStyle=isPlayer?'#9B5C00':darken(bodyColor,.45); ctx.lineWidth=5;
+    ctx.beginPath();ctx.moveTo(hipX,hipY);ctx.lineTo(hipX+side*3+stride*.25,hipY+13);ctx.lineTo(hipX+side*9+stride,hipY+(grounded?24:13));ctx.stroke();
+    ctx.strokeStyle='#3A2300';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(hipX+side*9+stride,hipY+(grounded?24:13));ctx.lineTo(hipX+side*19+stride,hipY+(grounded?25:16));ctx.moveTo(hipX+side*9+stride,hipY+(grounded?24:13));ctx.lineTo(hipX+side*14+stride,hipY+(grounded?20:10));ctx.moveTo(hipX+side*9+stride,hipY+(grounded?24:13));ctx.lineTo(hipX+side*8+stride,hipY+(grounded?29:18));ctx.stroke();
+  }
+  ctx.shadowColor=glow; ctx.shadowBlur=isPlayer?18:14;
 
-  // --- KNIGHT RIDER on top (bigger, more visible) ---
-  const riderColor=isPlayer?'#FFFFFF':entity.type==='bounder'?'#AEEBFF':entity.type==='hunter'?'#FF9A22':'#FF4DFF';
-  const armorColor=isPlayer?'#FFD700':entity.type==='bounder'?'#44D6FF':entity.type==='hunter'?'#FF6A00':'#D000FF';
+  // S-curved neck made of segments and fierce head.
+  for(let i=0;i<5;i++){
+    const t=i/4; const nx=20+t*25; const ny=-13-Math.sin(t*Math.PI)*17+t*3;
+    ctx.fillStyle=lighten(bodyColor,.06+t*.08);ctx.beginPath();ctx.ellipse(nx,ny,8-t*1.1,10,0.25,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=darken(bodyColor,.45);ctx.lineWidth=1;ctx.stroke();
+  }
+  ctx.fillStyle=lighten(bodyColor,.18);ctx.beginPath();ctx.ellipse(52,-22,17,11,-.1,0,Math.PI*2);ctx.fill();ctx.strokeStyle=darken(bodyColor,.5);ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle='#FFF';ctx.beginPath();ctx.ellipse(57,-26,5,4,0,0,Math.PI*2);ctx.fill();ctx.fillStyle=entity.type==='shadow'?'#FF66FF':'#111';ctx.beginPath();ctx.arc(59,-26,2.4,0,Math.PI*2);ctx.fill();ctx.fillStyle='#FFF';ctx.beginPath();ctx.arc(60,-27,1,0,Math.PI*2);ctx.fill();
+  const beak=ctx.createLinearGradient(62,-24,81,-20);beak.addColorStop(0,'#FFB000');beak.addColorStop(1,'#FF6A00');ctx.fillStyle=beak;ctx.beginPath();ctx.moveTo(64,-25);ctx.quadraticCurveTo(80,-26,84,-19);ctx.lineTo(63,-15);ctx.closePath();ctx.fill();ctx.strokeStyle='#5A2B00';ctx.lineWidth=1.5;ctx.stroke();
 
-  // Rider body (torso) — larger
-  ctx.fillStyle=riderColor;
-  ctx.beginPath();ctx.ellipse(0,-bh*0.5-11,9,13,0,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle=darken(riderColor,0.4);
-  ctx.lineWidth=1.5;
-  ctx.stroke();
+  // Knight rider: segmented armor, helmet variant, plume streamers.
+  ctx.shadowBlur=10;ctx.fillStyle=armorColor;ctx.strokeStyle=darken(armorColor,.45);ctx.lineWidth=1.7;
+  ctx.beginPath();ctx.roundRect(-10,-43,20,25,5);ctx.fill();ctx.stroke();
+  ctx.strokeStyle='rgba(0,0,0,.45)';ctx.beginPath();ctx.moveTo(-8,-33);ctx.lineTo(8,-33);ctx.moveTo(-6,-25);ctx.lineTo(6,-25);ctx.stroke();
+  ctx.fillStyle=lighten(armorColor,.2);ctx.beginPath();ctx.ellipse(-14,-35,6,8,-.5,0,Math.PI*2);ctx.ellipse(14,-35,6,8,.5,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=armorColor;ctx.beginPath();
+  if(entity.type==='hunter'){ctx.moveTo(-11,-49);ctx.lineTo(0,-64);ctx.lineTo(13,-49);ctx.quadraticCurveTo(9,-39,-9,-39);ctx.closePath();}
+  else if(entity.type==='shadow'){ctx.arc(0,-49,10,Math.PI,0);ctx.lineTo(11,-39);ctx.lineTo(-11,-39);ctx.closePath();ctx.moveTo(-8,-51);ctx.lineTo(-20,-61);ctx.lineTo(-10,-48);ctx.moveTo(8,-51);ctx.lineTo(20,-61);ctx.lineTo(10,-48);}
+  else {ctx.arc(0,-49,10,Math.PI,0);ctx.lineTo(10,-39);ctx.lineTo(-10,-39);ctx.closePath();}
+  ctx.fill();ctx.strokeStyle=darken(armorColor,.5);ctx.stroke();
+  ctx.fillStyle='rgba(0,0,0,.78)';ctx.fillRect(3,-51,10,4);
+  ctx.strokeStyle=plumeColor;ctx.lineWidth=4; for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(-2,-60+i*2);ctx.bezierCurveTo(-12,-70-i*3,-26+Math.sin(phase+i)*3,-64+i*7,-35,-57+i*5);ctx.stroke();}
 
-  // Armor chest plate — larger
-  ctx.fillStyle=armorColor;
-  ctx.beginPath();ctx.ellipse(0,-bh*0.5-11,8,11,0,0,Math.PI*2);ctx.fill();
-
-  // Helmet — larger
-  ctx.fillStyle=armorColor;
-  ctx.beginPath();ctx.arc(0,-bh*0.5-25,8,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle=darken(armorColor,0.3);
-  ctx.lineWidth=1.5;
-  ctx.stroke();
-  // Helmet visor
-  ctx.fillStyle='rgba(0,0,0,0.7)';
-  ctx.fillRect(3,-bh*0.5-28,7,5);
-  // Helmet plume — bigger
-  ctx.fillStyle=isPlayer?'#FF4444':entity.type==='bounder'?'#AACCFF':entity.type==='hunter'?'#FFAA00':'#DD88FF';
-  ctx.beginPath();ctx.moveTo(0,-bh*0.5-33);ctx.lineTo(-10,-bh*0.5-38);ctx.lineTo(-2,-bh*0.5-33);ctx.closePath();ctx.fill();
-  ctx.beginPath();ctx.moveTo(-2,-bh*0.5-35);ctx.lineTo(-15,-bh*0.5-36);ctx.lineTo(-4,-bh*0.5-32);ctx.closePath();ctx.fill();
-
-  // --- LANCE (longer, thicker) ---
-  ctx.strokeStyle=isPlayer?'#FFD700':armorColor;
-  ctx.lineWidth=5;
-  ctx.beginPath();
-  ctx.moveTo(4,-bh*0.5-8);
-  ctx.lineTo(bw*0.5+18,-bh*0.5-8);
-  ctx.stroke();
-  // Lance tip
-  ctx.fillStyle=isPlayer?'#FFF7A0':'#FFFFFF';
-  ctx.beginPath();
-  ctx.moveTo(bw*0.5+18,-bh*0.5-12);
-  ctx.lineTo(bw*0.5+28,-bh*0.5-8);
-  ctx.lineTo(bw*0.5+18,-bh*0.5-4);
-  ctx.closePath();ctx.fill();
-
-  // Rider arm holding lance
-  ctx.fillStyle=riderColor;
-  ctx.beginPath();ctx.ellipse(5,-bh*0.5-5,4,3,0.2,0,Math.PI*2);ctx.fill();
-
-  ctx.shadowBlur=0;
+  // Proper lance with pennant.
+  const lg=ctx.createLinearGradient(5,-33,88,-33);lg.addColorStop(0,'#6B3900');lg.addColorStop(.55,'#FFD783');lg.addColorStop(1,'#FFF0A8');ctx.strokeStyle=lg;ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(7,-33);ctx.lineTo(86,-33);ctx.stroke();
+  ctx.fillStyle='#FFF6B0';ctx.beginPath();ctx.moveTo(86,-38);ctx.lineTo(103,-33);ctx.lineTo(86,-28);ctx.closePath();ctx.fill();ctx.strokeStyle='#6B3900';ctx.lineWidth=1;ctx.stroke();
+  ctx.fillStyle=isPlayer?'#E51E2A':armorColor;ctx.beginPath();const flap=Math.sin(phase*1.4)*4;ctx.moveTo(60,-33);ctx.lineTo(76,-29+flap);ctx.lineTo(60,-23);ctx.closePath();ctx.fill();ctx.strokeStyle='rgba(0,0,0,.45)';ctx.stroke();
   ctx.restore();
 }
 
@@ -1368,30 +1380,22 @@ function drawExplosions(){
   }
 }
 
+
 function drawHUD(){
-  const fontSize=Math.max(16,W*0.03);
-  ctx.font=`bold ${fontSize}px monospace`;
-  ctx.textAlign='left';
-  ctx.lineWidth=4;
-  ctx.strokeStyle='rgba(0,0,0,0.9)';
-  ctx.fillStyle='#FFFFFF';
-  const hudText=[`SCORE: ${score}`,`WAVE: ${wave}`,`LIVES:`];
-  const hudY=[fontSize+10,fontSize*2+15,fontSize*3+20];
-  for(let i=0;i<hudText.length;i++){
-    ctx.strokeText(hudText[i],20,hudY[i]);
-    ctx.fillText(hudText[i],20,hudY[i]);
-  }
-  // Lives
-  for(let i=0;i<lives;i++){
-    const lx=20+fontSize*3.5+i*(fontSize+5), ly=fontSize*3+15;
-    ctx.shadowColor='#FFD700';ctx.shadowBlur=8;
-    ctx.fillStyle='#FFD700';
-    ctx.beginPath();ctx.arc(lx,ly,fontSize/3,0,Math.PI*2);ctx.fill();
-    ctx.shadowBlur=0;
-    ctx.strokeStyle='rgba(0,0,0,0.85)';ctx.lineWidth=2;
-    ctx.beginPath();ctx.arc(lx,ly,fontSize/3,0,Math.PI*2);ctx.stroke();
-  }
+  const barH=Math.max(54,H*.072);
+  ctx.save();
+  const g=ctx.createLinearGradient(0,0,0,barH);g.addColorStop(0,'rgba(10,5,0,.86)');g.addColorStop(1,'rgba(10,5,0,.24)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,barH);
+  ctx.strokeStyle='rgba(255,205,60,.35)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,barH);ctx.lineTo(W,barH);ctx.stroke();
+  const fs=Math.max(16,W*.025), big=Math.max(23,W*.038);
+  ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.textBaseline='middle';ctx.textAlign='left';
+  ctx.fillStyle='#FFE06A';ctx.shadowColor='#000';ctx.shadowBlur=5;ctx.fillText('LIVES',18,barH/2);
+  for(let i=0;i<lives;i++){ctx.save();ctx.translate(92+i*28,barH/2+2);ctx.scale(.34,.34);drawBird({x:0,y:-32,facing:1,wingFrame:1,type:'player',color:'#CC8800',glowColor:'rgba(255,215,0,.5)',vy:0},true);ctx.restore();}
+  ctx.textAlign='center';ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF1A8';ctx.fillText('WAVE',W/2-42,barH/2);ctx.fillStyle='#FFD700';ctx.font=`bold ${big}px Arial Black, Impact, sans-serif`;ctx.fillText(String(wave),W/2+28,barH/2);
+  ctx.textAlign='right';ctx.fillStyle='#FFF1A8';ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.fillText('SCORE',W-170,barH/2);ctx.fillStyle='#FFD700';ctx.font=`bold ${big}px Arial Black, Impact, sans-serif`;ctx.fillText(String(score).padStart(6,'0'),W-18,barH/2);
+  ctx.restore();
 }
+
 function drawTitle(){
   drawBG();
   drawLava();
@@ -1402,14 +1406,15 @@ function drawTitle(){
   const demoX1=W*0.35+Math.sin(t*0.8)*W*0.15;
   const demoX2=W*0.65+Math.sin(t*0.8+2)*W*0.15;
   drawBird({x:demoX1,y:demoY1,facing:1,wingFrame:Math.floor(t*5)%3,color:'#FFD700',glowColor:'rgba(255,215,0,0.3)'},true);
-  drawBird({x:demoX2,y:demoY2,facing:-1,wingFrame:Math.floor(t*5+1)%3,color:'#4488FF'},false);
+  drawBird({x:demoX2,y:demoY2,facing:-1,wingFrame:Math.floor(t*5+1)%3,type:'bounder',color:'#4488FF',glowColor:'rgba(0,168,255,.55)'},false);
 
-  // Demo feathers
-  if(Math.floor(t*3)%4===0){
-    burstFeathers(W*0.5,H*0.35,'#FFD700',3);
-    burstFeathers(W*0.5,H*0.35,'#4488FF',3);
+  // Painted feather confetti in the marquee scene (decorative, no particle buildup).
+  for(let i=0;i<18;i++){
+    ctx.save();
+    const fx=W*.5+Math.sin(t*1.7+i)*W*.18, fy=H*.30+Math.cos(t*1.3+i*2)*H*.10;
+    ctx.translate(fx,fy);ctx.rotate(t+i);ctx.globalAlpha=.35+.25*Math.sin(t*2+i);
+    ctx.fillStyle=i%2?'#FFFFFF':'#FFD05A';ctx.beginPath();ctx.ellipse(0,0,9,2.4,0,0,Math.PI*2);ctx.fill();ctx.restore();
   }
-  drawFeathers();
   drawEmbers();
 
   // Card
@@ -1433,7 +1438,7 @@ function drawTitle(){
 
   // Title
   const titleSize=Math.max(36,W*0.07);
-  ctx.font=`bold ${titleSize}px monospace`;
+  ctx.font=`900 ${titleSize}px Arial Black, Impact, sans-serif`;
   ctx.textAlign='center';
   ctx.fillStyle='#FFD700';
   ctx.shadowColor='#FF8800';ctx.shadowBlur=20;
@@ -1441,13 +1446,13 @@ function drawTitle(){
   ctx.shadowBlur=0;
 
   // Subtitle
-  ctx.font=`${Math.max(14,W*0.025)}px monospace`;
+  ctx.font=`${Math.max(14,W*0.025)}px Georgia, serif`;
   ctx.fillStyle='#CCC';
   ctx.fillText('Aerial Combat Over Molten Lava',W/2,cardY+titleSize+55);
 
   // Tap to start
   const pulse=0.5+0.5*Math.sin(t*3);
-  ctx.font=`bold ${Math.max(20,W*0.035)}px monospace`;
+  ctx.font=`900 ${Math.max(20,W*0.035)}px Arial Black, Impact, sans-serif`;
   ctx.fillStyle=`rgba(255,255,255,${0.5+pulse*0.5})`;
   ctx.fillText('TAP TO START',W/2,cardY+cardH+50);
 
@@ -1460,13 +1465,13 @@ function drawTitle(){
   ctx.strokeStyle='#FFD700';ctx.lineWidth=2;
   roundRect(ctx,btnX,btnY,btnW,btnH,10);ctx.stroke();
   ctx.fillStyle='#FFD700';
-  ctx.font=`bold ${Math.max(16,W*0.025)}px monospace`;
+  ctx.font=`900 ${Math.max(16,W*0.025)}px Arial Black, Impact, sans-serif`;
   ctx.fillText('HIGH SCORES',W/2,btnY+btnH/2+6);
   addButton('highscores',btnX,btnY,btnW,btnH,()=>{showingLeaderboard=true;state='leaderboard';fetchGlobalScores()});
 
   // Version — prominent bottom-right
   ctx.textAlign='right';
-  ctx.font=`bold ${Math.max(12,W*0.02)}px monospace`;
+  ctx.font=`900 ${Math.max(12,W*0.02)}px Arial Black, Impact, sans-serif`;
   ctx.fillStyle='rgba(255,215,0,0.7)';
   ctx.fillText(VERSION,W-12,H-12);
   ctx.textAlign='left';
@@ -1478,7 +1483,7 @@ function drawWaveTrans(){
   ctx.fillRect(0,0,W,H);
 
   const titleSize=Math.max(48,W*0.09);
-  ctx.font=`bold ${titleSize}px monospace`;
+  ctx.font=`900 ${titleSize}px Arial Black, Impact, sans-serif`;
   ctx.textAlign='center';
   const alpha=Math.min(waveTransTimer/1.5,1);
 
@@ -1509,7 +1514,7 @@ function drawGameOver(){
   ctx.fillRect(0,0,W,H);
 
   const titleSize=Math.max(32,W*0.06);
-  ctx.font=`bold ${titleSize}px monospace`;
+  ctx.font=`900 ${titleSize}px Arial Black, Impact, sans-serif`;
   ctx.textAlign='center';
   ctx.fillStyle='#FF4444';
   ctx.shadowColor='#FF0000';ctx.shadowBlur=15;
@@ -1545,7 +1550,7 @@ function drawHighscoreEntry(){
   ctx.fillRect(0,0,W,H);
 
   const titleSize=Math.max(28,W*0.045);
-  ctx.font=`bold ${titleSize}px monospace`;
+  ctx.font=`900 ${titleSize}px Arial Black, Impact, sans-serif`;
   ctx.textAlign='center';
   ctx.fillStyle='#FFD700';
   ctx.fillText('NEW HIGH SCORE!',W/2,H*0.12);
@@ -1625,6 +1630,8 @@ function drawDualLeaderboard(startY){
   ctx.fillStyle='#00DDFF';
   ctx.textAlign='center';
   ctx.fillText('🏠 LOCAL',localX+colW/2,startY);
+  ctx.font=`${Math.max(9,W*0.014)}px monospace`;ctx.fillText('[Sky Joust](https://jz237.github.io/games/2026-05-11/sky-joust/)',localX+colW/2,startY+headerSize*.8);
+  ctx.font=`${bodySize}px monospace`;
 
   ctx.font=`${bodySize}px monospace`;
   ctx.textAlign='left';
@@ -1650,6 +1657,8 @@ function drawDualLeaderboard(startY){
   ctx.fillStyle='#FFD700';
   ctx.textAlign='center';
   ctx.fillText('🌐 GLOBAL',globalX+colW/2,startY);
+  ctx.font=`${Math.max(9,W*0.014)}px monospace`;ctx.fillText('[Sky Joust](https://jz237.github.io/games/2026-05-11/sky-joust/)',globalX+colW/2,startY+headerSize*.8);
+  ctx.font=`${bodySize}px monospace`;
 
   ctx.font=`${bodySize}px monospace`;
   ctx.textAlign='left';
@@ -1671,7 +1680,7 @@ function drawLeaderboardScreen(){
   ctx.fillRect(0,0,W,H);
 
   const titleSize=Math.max(28,W*0.045);
-  ctx.font=`bold ${titleSize}px monospace`;
+  ctx.font=`900 ${titleSize}px Arial Black, Impact, sans-serif`;
   ctx.textAlign='center';
   ctx.fillStyle='#FFD700';
   ctx.fillText('HIGH SCORES',W/2,H*0.08);
@@ -1686,10 +1695,22 @@ function drawLeaderboardScreen(){
   ctx.strokeStyle='#FFF';ctx.lineWidth=2;
   roundRect(ctx,btnX,btnY,btnW,btnH,10);ctx.stroke();
   ctx.fillStyle='#FFF';
-  ctx.font=`bold ${Math.max(16,W*0.025)}px monospace`;
+  ctx.font=`900 ${Math.max(16,W*0.025)}px Arial Black, Impact, sans-serif`;
   ctx.fillText('BACK',W/2,btnY+btnH/2+6);
   addButton('back',btnX,btnY,btnW,btnH,()=>{state='title';buttons=[]});
   ctx.textAlign='left';
+}
+
+
+function drawScorePopups(){
+  ctx.save();ctx.textAlign='center';
+  for(const sp of scorePopups){
+    const a=Math.max(0,sp.life/sp.maxLife), scale=1+(1-a)*0.45;
+    ctx.globalAlpha=a;ctx.font=`bold ${Math.max(18,W*0.035)*scale}px Arial Black, Impact, sans-serif`;
+    ctx.lineWidth=5;ctx.strokeStyle='rgba(0,0,0,.85)';ctx.strokeText(sp.text,sp.x,sp.y);
+    ctx.fillStyle=sp.color||'#FFD700';ctx.shadowColor='#FF8A00';ctx.shadowBlur=12;ctx.fillText(sp.text,sp.x,sp.y);ctx.shadowBlur=0;
+  }
+  ctx.restore();ctx.globalAlpha=1;
 }
 
 // --- Helpers ---
@@ -1757,6 +1778,7 @@ function loop(ts){
   drawPtero();
   drawFeathers();
   drawExplosions();
+  drawScorePopups();
 
   // Red danger glow when player is near lava
   if(player&&state==='playing'){
