@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.0.4';
+const VERSION = 'v3.0.5';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -1666,6 +1666,7 @@ function update(dt){
       // Platform collision
       for(const p of platforms){
         if(p.broken)continue;
+        // Landing on top of platform (falling down)
         if(player.vy>0&&player.y+PLAYER_H>p.y&&player.y+PLAYER_H<p.y+p.h+player.vy*dt+5&&
            player.x+PLAYER_W/2>p.x&&player.x-PLAYER_W/2<p.x+p.w){
           player.y=p.y-PLAYER_H;
@@ -1677,6 +1678,13 @@ function update(dt){
             p.crackTimer+=dt;
             if(p.crackTimer>2){p.broken=true;burstFeathers(p.x+p.w/2,p.y,'#888',15);}
           }
+        }
+        // Bumping head on bottom of platform (rising up)
+        if(player.vy<0&&player.y>p.y&&player.y<p.y+p.h&&
+           player.y-player.vy*dt<=p.y+p.h&&
+           player.x+PLAYER_W/2>p.x&&player.x-PLAYER_W/2<p.x+p.w){
+          player.y=p.y+p.h;
+          player.vy=0;
         }
       }
 
@@ -1784,9 +1792,17 @@ function update(dt){
       // Platform collision
       for(const p of platforms){
         if(p.broken)continue;
+        // Landing on top
         if(e.vy>0&&e.y+PLAYER_H>p.y&&e.y+PLAYER_H<p.y+p.h+e.vy*dt+5&&
            e.x+PLAYER_W/2>p.x&&e.x-PLAYER_W/2<p.x+p.w){
           e.y=p.y-PLAYER_H;
+          e.vy=0;
+        }
+        // Bumping head on bottom
+        if(e.vy<0&&e.y>p.y&&e.y<p.y+p.h&&
+           e.y-e.vy*dt<=p.y+p.h&&
+           e.x+PLAYER_W/2>p.x&&e.x-PLAYER_W/2<p.x+p.w){
+          e.y=p.y+p.h;
           e.vy=0;
         }
       }
