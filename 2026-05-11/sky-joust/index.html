@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v1.1.0';
+const VERSION = 'v1.2.0';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -132,7 +132,7 @@ function generateBG(){
       const th=80+Math.random()*200+layer*40;
       towers.push({x:Math.random()*W,w:tw,h:th,hasTorch:Math.random()>0.5});
     }
-    bgLayers.push({towers,depth:0.1+layer*0.15,color:`rgba(${50+layer*20},${30+layer*12},${15+layer*8},0.6)`});
+    bgLayers.push({towers,depth:0.08+layer*0.12,color:`rgba(${8+layer*8},${8+layer*8},${10+layer*7},${0.28+layer*0.08})`});
   }
 }
 generateBG();
@@ -140,15 +140,27 @@ generateBG();
 // --- Platform generation ---
 function generatePlatforms(waveNum){
   platforms=[];
-  const count=5+Math.min(2,Math.floor(waveNum/3));
   const fragileStart = waveNum >= 5;
-  for(let i=0;i<count;i++){
-    const pw = 100 + Math.random()*70;
-    const px = 40 + Math.random()*(W-80-pw);
-    const py = H*0.25 + (i/(count-1))*(H*0.5);
-    const fragile = fragileStart && Math.random()>0.65;
-    platforms.push({x:px,y:py,w:pw,h:24,fragile,crackTimer:0,broken:false,hasNest:i<count-1&&Math.random()>0.4});
-  }
+  const lavaLine = H*0.84;
+  const clampX = (x,w)=>Math.max(18,Math.min(W-w-18,x));
+  const addPlat=(cx,cy,bw,fragile,nest=true)=>{
+    const variance=(Math.random()-0.5)*40;
+    const pw=Math.max(96,Math.min(W-36,bw+variance));
+    const px=clampX(cx-pw/2,pw);
+    platforms.push({x:px,y:Math.min(cy,lavaLine-70),w:pw,h:26+Math.floor(Math.random()*5),fragile,crackTimer:0,broken:false,hasNest:nest,seed:Math.random()*999});
+  };
+  const wide=Math.min(W*0.54,420);
+  const side=Math.min(W*0.32,190);
+  const top=Math.min(W*0.28,165);
+  // Dense Williams-Joust-inspired cave shelves: top pairs, side ledges, long center, low approach ledges.
+  addPlat(W*0.28,H*0.18,top,fragileStart&&Math.random()>0.75,true);
+  addPlat(W*0.72,H*0.18,top,fragileStart&&Math.random()>0.75,true);
+  addPlat(W*0.20,H*0.34,side,fragileStart&&Math.random()>0.68,true);
+  addPlat(W*0.80,H*0.34,side,fragileStart&&Math.random()>0.68,true);
+  addPlat(W*0.50,H*0.49,wide,fragileStart&&Math.random()>0.72,true);
+  addPlat(W*0.25,H*0.64,side+20,fragileStart&&Math.random()>0.62,true);
+  addPlat(W*0.75,H*0.64,side+20,fragileStart&&Math.random()>0.62,true);
+  addPlat(W*0.50,H*0.74,Math.min(W*0.36,250),fragileStart&&Math.random()>0.58,false);
 }
 
 // --- Entity factories ---
@@ -158,18 +170,18 @@ function createPlayer(){
     x:p?p.x+p.w/2:W/2, y:p?p.y-PLAYER_H:H*0.4,
     vx:0, vy:0, facing:1,
     wingFrame:0, wingTimer:0,
-    type:'player', color:'#FFD700', glowColor:'rgba(255,215,0,0.3)'
+    type:'player', color:'#FFD700', glowColor:'rgba(255,215,0,0.8)'
   };
 }
 
 function createEnemy(type,x,y){
-  const colors={bounder:'#5599FF',hunter:'#FF5544',shadow:'#9944DD'};
+  const colors={bounder:'#00A8FF',hunter:'#FF2020',shadow:'#B000FF'};
   const speeds={bounder:0.7,hunter:1.0,shadow:1.4};
   const flapRates={bounder:1.5,hunter:1.0,shadow:0.6};
   return {
     x,y,vx:(Math.random()>0.5?1:-1)*60*speeds[type],vy:0,
     facing:1,wingFrame:0,wingTimer:0,
-    type,color:colors[type],
+    type,color,glowColor:type==='bounder'?'rgba(0,168,255,0.75)':type==='hunter'?'rgba(255,32,32,0.75)':'rgba(190,0,255,0.8)',
     speed:speeds[type],flapRate:flapRates[type],
     flapCooldown:Math.random()*flapRates[type],
     ai:{changeTimer:1+Math.random()*2,targetVx:0},
@@ -221,7 +233,8 @@ function trailFeather(x,y,color){
 
 // --- Ember particles ---
 function spawnEmber(x,y){
-  embers.push({x,y,vx:(Math.random()-0.5)*30,vy:-40-Math.random()*80,life:1+Math.random()*1.5,maxLife:1+Math.random()*1.5,r:1+Math.random()*2});
+  const life=1.1+Math.random()*1.8;
+  embers.push({x,y,vx:(Math.random()-0.5)*55,vy:-70-Math.random()*150,life,maxLife:life,r:2+Math.random()*3.5});
 }
 
 // --- Explosion ---
@@ -318,7 +331,7 @@ function startGame(){
 
 function nextWave(){
   wave++;
-  lavaBase=H*0.88;
+  lavaBase=H*0.84;
   lavaY=lavaBase;
   lavaRiseRate=2+wave*0.8;
   if(wave>1){
@@ -373,7 +386,7 @@ function update(dt){
   if(shakeTimer>0)shakeTimer-=dt;
 
   // Lava embers
-  if(Math.random()<dt*12){
+  if(Math.random()<dt*30){
     spawnEmber(Math.random()*W,lavaY);
   }
 
@@ -664,177 +677,198 @@ function update(dt){
 
 // --- Draw ---
 function drawBG(){
-  // Sky gradient - warm medieval teal-to-brown
-  const skyGrad=ctx.createLinearGradient(0,0,0,H);
-  skyGrad.addColorStop(0,'#0a2a2e');
-  skyGrad.addColorStop(0.3,'#1a3a35');
-  skyGrad.addColorStop(0.6,'#2a3020');
-  skyGrad.addColorStop(0.85,'#3d2810');
-  skyGrad.addColorStop(1,'#4a2008');
-  ctx.fillStyle=skyGrad;
+  // Pure black dungeon/cave field — classic arcade bright-on-dark.
+  ctx.fillStyle='#000000';
   ctx.fillRect(0,0,W,H);
 
-  // Stars - sparse, warm amber
-  const seed=42;
-  for(let i=0;i<30;i++){
-    const sx=((seed*i*7+i*131)%1000)/1000*W;
-    const sy=((seed*i*13+i*97)%1000)/1000*H*0.4;
-    const bri=0.3+0.7*((Math.sin(gameTime*1.5+i)+1)/2);
-    ctx.fillStyle=`rgba(255,220,120,${bri*0.5})`;
-    ctx.beginPath();ctx.arc(sx,sy,1+((seed*i)%3)*0.4,0,Math.PI*2);ctx.fill();
-  }
-
-  // BG castle layers - warm brown/amber silhouettes
+  // Barely-visible parallax castle/cavern silhouettes, dark gray on black.
   for(const layer of bgLayers){
     ctx.fillStyle=layer.color;
     for(const t of layer.towers){
-      const ox=(player?player.x*layer.depth*0.02:0);
+      const ox=(player?player.x*layer.depth*0.018:0);
       let tx=t.x-ox;
-      ctx.fillRect(tx,H-t.h-lavaBase*0.1,t.w,t.h);
-      // Battlements
+      const baseY=H-t.h-lavaBase*0.08;
+      ctx.fillRect(tx,baseY,t.w,t.h);
       for(let b=0;b<t.w;b+=10){
-        ctx.fillRect(tx+b,H-t.h-lavaBase*0.1-8,6,8);
+        ctx.fillRect(tx+b,baseY-7,6,7);
       }
-      // Torch
+      // A few tiny sealed dungeon pinlights, kept subtle so gameplay stays dominant.
       if(t.hasTorch){
-        const torchBri=0.5+0.5*Math.sin(gameTime*4+t.x);
-        ctx.fillStyle=`rgba(255,160,40,${torchBri*0.9})`;
-        ctx.beginPath();ctx.arc(tx+t.w/2,H-t.h-lavaBase*0.1+20,4,0,Math.PI*2);ctx.fill();
-        // Torch glow
-        ctx.fillStyle=`rgba(255,120,20,${torchBri*0.3})`;
-        ctx.beginPath();ctx.arc(tx+t.w/2,H-t.h-lavaBase*0.1+20,12,0,Math.PI*2);ctx.fill();
+        const torchBri=0.35+0.25*Math.sin(gameTime*4+t.x);
+        ctx.fillStyle=`rgba(255,80,10,${torchBri*0.18})`;
+        ctx.beginPath();ctx.arc(tx+t.w/2,baseY+22,3,0,Math.PI*2);ctx.fill();
         ctx.fillStyle=layer.color;
       }
     }
   }
 }
-
 function drawLava(){
-  // Lava takes up more screen - multi-layered
+  const pulse=0.5+0.5*Math.sin(gameTime*4.2);
+  // Warm light cast upward about 100px before the lava body is drawn.
+  const glowH=Math.min(110,H*0.18);
+  const glowGrad=ctx.createLinearGradient(0,lavaY-glowH,0,lavaY);
+  glowGrad.addColorStop(0,'rgba(255,80,0,0)');
+  glowGrad.addColorStop(0.55,'rgba(255,90,0,0.10)');
+  glowGrad.addColorStop(1,`rgba(255,180,20,${0.28+pulse*0.12})`);
+  ctx.fillStyle=glowGrad;
+  ctx.fillRect(0,lavaY-glowH,W,glowH);
+
+  // Intense red/orange lava pool, bottom 15-18% of screen.
   const lavaGrad=ctx.createLinearGradient(0,lavaY,0,H);
-  lavaGrad.addColorStop(0,'#FFEE44');  // Yellow-white surface
-  lavaGrad.addColorStop(0.1,'#FFAA00'); // Bright orange
-  lavaGrad.addColorStop(0.35,'#FF6600');
-  lavaGrad.addColorStop(0.6,'#CC2200');
-  lavaGrad.addColorStop(1,'#440800'); // Dark red base
+  lavaGrad.addColorStop(0,`rgb(255,${210+Math.floor(pulse*35)},30)`);
+  lavaGrad.addColorStop(0.12,'#FF8A00');
+  lavaGrad.addColorStop(0.35,'#FF2600');
+  lavaGrad.addColorStop(0.72,'#B00000');
+  lavaGrad.addColorStop(1,'#430000');
   ctx.fillStyle=lavaGrad;
   ctx.fillRect(0,lavaY,W,H-lavaY);
 
-  // Animated surface flow - thicker waves
-  ctx.fillStyle='#FFCC00';
-  for(let x=0;x<W;x+=5){
-    const waveH=4*Math.sin(x*0.025+gameTime*3)+3*Math.sin(x*0.06+gameTime*5);
-    ctx.fillRect(x,lavaY+waveH-3,4,6);
+  // Shimmering white-hot/yellow surface waves.
+  for(let x=0;x<W;x+=4){
+    const waveH=5*Math.sin(x*0.025+gameTime*4)+3*Math.sin(x*0.075+gameTime*7);
+    ctx.fillStyle=(x%16<8)?'#FFFF66':'#FFCC00';
+    ctx.fillRect(x,lavaY+waveH-4,4,8);
   }
-  ctx.fillStyle='#FFEE88';
-  for(let x=0;x<W;x+=8){
-    const waveH=2*Math.sin(x*0.04+gameTime*4+1)+Math.sin(x*0.08+gameTime*6);
-    ctx.fillRect(x,lavaY+waveH-2,5,3);
-  }
-  // Dark underflow
-  ctx.fillStyle='#DD4400';
-  for(let x=0;x<W;x+=10){
-    const waveH=3*Math.sin(x*0.02+gameTime*2+2);
-    ctx.fillRect(x,lavaY+15+waveH,8,4);
+  ctx.fillStyle='#FF3300';
+  for(let x=0;x<W;x+=9){
+    const waveH=4*Math.sin(x*0.02+gameTime*2.5+2);
+    ctx.fillRect(x,lavaY+18+waveH,8,5);
   }
 
-  // Strong upward glow
-  const glowGrad=ctx.createLinearGradient(0,lavaY-H*0.25,0,lavaY);
-  glowGrad.addColorStop(0,'rgba(255,80,0,0)');
-  glowGrad.addColorStop(1,'rgba(255,100,0,0.25)');
-  ctx.fillStyle=glowGrad;
-  ctx.fillRect(0,lavaY-H*0.25,W,H*0.25);
+  // Actual flames rising from the surface — triangular/teardrop flicker layers.
+  const flameCount=Math.max(14,Math.floor(W/48));
+  for(let i=0;i<flameCount;i++){
+    const fx=(i+0.35+0.25*Math.sin(gameTime*1.7+i))*W/flameCount;
+    const fh=24+18*Math.abs(Math.sin(gameTime*3.1+i*1.9));
+    const fw=12+5*Math.sin(gameTime*4.3+i);
+    const base=lavaY+4*Math.sin(gameTime*5+i);
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    ctx.fillStyle='rgba(255,40,0,0.75)';
+    ctx.beginPath();ctx.moveTo(fx-fw,base+6);ctx.quadraticCurveTo(fx-fw*0.7,base-fh*0.45,fx,base-fh);ctx.quadraticCurveTo(fx+fw*0.8,base-fh*0.35,fx+fw,base+6);ctx.closePath();ctx.fill();
+    ctx.fillStyle='rgba(255,155,0,0.9)';
+    ctx.beginPath();ctx.moveTo(fx-fw*0.55,base+4);ctx.quadraticCurveTo(fx-fw*0.3,base-fh*0.35,fx+2,base-fh*0.78);ctx.quadraticCurveTo(fx+fw*0.45,base-fh*0.22,fx+fw*0.45,base+4);ctx.closePath();ctx.fill();
+    ctx.fillStyle='rgba(255,255,90,0.86)';
+    ctx.beginPath();ctx.moveTo(fx-3,base+2);ctx.quadraticCurveTo(fx-2,base-fh*0.24,fx+1,base-fh*0.46);ctx.quadraticCurveTo(fx+5,base-fh*0.16,fx+4,base+2);ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
 
-  // Radial glow from center
-  const glowRad=ctx.createRadialGradient(W/2,lavaY,0,W/2,lavaY,W*0.5);
-  glowRad.addColorStop(0,'rgba(255,120,0,0.2)');
-  glowRad.addColorStop(1,'rgba(255,60,0,0)');
-  ctx.fillStyle=glowRad;
-  ctx.fillRect(0,lavaY-H*0.3,W,H*0.3);
-
-  // Bubbles - larger and more visible
-  const bubbleCount=6;
+  // Bright bubbles/pops.
+  const bubbleCount=10;
   for(let i=0;i<bubbleCount;i++){
-    const bx=((gameTime*30+i*W/bubbleCount)%W);
-    const by=lavaY+8+Math.sin(gameTime*2.5+i*2.5)*10;
-    const br=5+Math.sin(gameTime*3+i*1.7)*3;
-    ctx.fillStyle='rgba(255,220,60,0.7)';
+    const bx=((gameTime*38+i*W/bubbleCount)%W);
+    const by=lavaY+10+Math.sin(gameTime*2.7+i*2.5)*12;
+    const br=4+Math.sin(gameTime*3.4+i*1.7)*2.5;
+    ctx.fillStyle='rgba(255,240,80,0.82)';
     ctx.beginPath();ctx.arc(bx,by,br,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='rgba(255,255,200,0.4)';
-    ctx.beginPath();ctx.arc(bx-br*0.3,by-br*0.3,br*0.3,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,220,0.45)';
+    ctx.beginPath();ctx.arc(bx-br*0.3,by-br*0.35,br*0.35,0,Math.PI*2);ctx.fill();
   }
 }
-
 function drawPlatform(p){
   if(p.broken)return;
-  // Drop shadow - thick and dark
-  ctx.fillStyle='rgba(0,0,0,0.5)';
-  ctx.fillRect(p.x+3,p.y+p.h,p.w,5);
+  const seed=p.seed||1;
+  const jag=(i)=>Math.sin(seed*7+i*1.73)*3+Math.sin(seed*3+i*0.61)*2;
 
-  // Platform body - thick stone slab
+  // Heavy dark brown/black drop shadow under thick ledge.
+  ctx.fillStyle='rgba(0,0,0,0.78)';
+  ctx.fillRect(p.x+5,p.y+p.h-1,p.w,7);
+  ctx.fillStyle='rgba(40,16,0,0.55)';
+  ctx.fillRect(p.x+2,p.y+p.h,p.w,4);
+
+  // Irregular stone shelf silhouette.
+  ctx.beginPath();
+  ctx.moveTo(p.x,p.y+3+jag(0));
+  const segs=Math.max(5,Math.floor(p.w/28));
+  for(let i=0;i<=segs;i++){
+    const xx=p.x+p.w*i/segs;
+    ctx.lineTo(xx,p.y+2+jag(i));
+  }
+  ctx.lineTo(p.x+p.w,p.y+p.h-3+jag(22));
+  for(let i=segs;i>=0;i--){
+    const xx=p.x+p.w*i/segs;
+    ctx.lineTo(xx,p.y+p.h-1+jag(i+30));
+  }
+  ctx.closePath();
+
   const pGrad=ctx.createLinearGradient(p.x,p.y,p.x,p.y+p.h);
   if(p.fragile){
-    pGrad.addColorStop(0,'#9B8365');
-    pGrad.addColorStop(0.3,'#8B7355');
-    pGrad.addColorStop(0.7,'#6B5335');
-    pGrad.addColorStop(1,'#4C3023');
+    pGrad.addColorStop(0,'#C09B68');
+    pGrad.addColorStop(0.28,'#9B7447');
+    pGrad.addColorStop(0.66,'#6D4B30');
+    pGrad.addColorStop(1,'#352018');
   } else {
-    pGrad.addColorStop(0,'#8A8A9A');
-    pGrad.addColorStop(0.2,'#6A6A7A');
-    pGrad.addColorStop(0.6,'#5A5A6A');
-    pGrad.addColorStop(1,'#3A3A4A');
+    pGrad.addColorStop(0,'#B6A27E');
+    pGrad.addColorStop(0.22,'#8D8676');
+    pGrad.addColorStop(0.58,'#655F55');
+    pGrad.addColorStop(1,'#332E2B');
   }
   ctx.fillStyle=pGrad;
-  ctx.fillRect(p.x,p.y,p.w,p.h);
+  ctx.fill();
 
-  // Top edge highlight
-  ctx.fillStyle='rgba(255,255,255,0.15)';
-  ctx.fillRect(p.x,p.y,p.w,2);
-
-  // Bottom edge dark
-  ctx.fillStyle='rgba(0,0,0,0.3)';
-  ctx.fillRect(p.x,p.y+p.h-2,p.w,2);
-
-  // Stone texture - mottled spots
-  ctx.fillStyle='rgba(0,0,0,0.08)';
-  for(let sx=p.x+8;sx<p.x+p.w-8;sx+=12){
-    const sy=p.y+4+((sx*7)%11);
-    ctx.beginPath();ctx.ellipse(sx,sy,3+((sx*3)%4),2,0,0,Math.PI*2);ctx.fill();
+  // Lava cast: nearby shelves catch warm orange/yellow light from below.
+  const lavaGlow=Math.max(0,1-(lavaY-(p.y+p.h))/110);
+  if(lavaGlow>0){
+    const warm=ctx.createLinearGradient(p.x,p.y,p.x,p.y+p.h);
+    warm.addColorStop(0,'rgba(255,190,60,0)');
+    warm.addColorStop(1,`rgba(255,125,0,${0.32*lavaGlow})`);
+    ctx.fillStyle=warm;
+    ctx.fill();
   }
 
-  // Vertical crack lines
-  ctx.strokeStyle='rgba(0,0,0,0.2)';
+  // Top standable highlight line and bright edge readability.
+  ctx.strokeStyle=p.fragile?'rgba(255,210,140,0.55)':'rgba(235,235,210,0.42)';
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  for(let i=0;i<=segs;i++){
+    const xx=p.x+p.w*i/segs;
+    const yy=p.y+2+jag(i);
+    if(i===0)ctx.moveTo(xx,yy);else ctx.lineTo(xx,yy);
+  }
+  ctx.stroke();
+
+  // Dark lower edge for slab thickness.
+  ctx.strokeStyle='rgba(0,0,0,0.52)';
+  ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(p.x+2,p.y+p.h-3);ctx.lineTo(p.x+p.w-2,p.y+p.h-3);ctx.stroke();
+
+  // Mottled stone texture: deterministic chips and flecks.
+  for(let i=0;i<Math.floor(p.w/10);i++){
+    const tx=p.x+8+((i*19+seed*37)%(Math.max(10,p.w-16)));
+    const ty=p.y+5+((i*13+seed*11)%(Math.max(8,p.h-9)));
+    const light=(i%3===0);
+    ctx.fillStyle=light?'rgba(255,235,180,0.12)':'rgba(0,0,0,0.20)';
+    ctx.beginPath();ctx.ellipse(tx,ty,2+(i%4),1.2+(i%2),0.25*i,0,Math.PI*2);ctx.fill();
+  }
+
+  // Block seams/chisel marks.
+  ctx.strokeStyle='rgba(0,0,0,0.25)';
   ctx.lineWidth=1;
-  for(let cx=p.x+18;cx<p.x+p.w-10;cx+=25){
-    ctx.beginPath();ctx.moveTo(cx,p.y+3);ctx.lineTo(cx+3,p.y+p.h-3);ctx.stroke();
+  for(let cx=p.x+22+(seed%8);cx<p.x+p.w-12;cx+=28){
+    ctx.beginPath();ctx.moveTo(cx,p.y+5);ctx.lineTo(cx+4*Math.sin(cx),p.y+p.h-5);ctx.stroke();
   }
 
-  // Left/right edge chisel
-  ctx.fillStyle='rgba(0,0,0,0.2)';
-  ctx.fillRect(p.x,p.y,2,p.h);
-  ctx.fillRect(p.x+p.w-2,p.y,2,p.h);
-
-  // Fragile cracks - more dramatic
-  if(p.fragile&&p.crackTimer>0){
-    const intensity=Math.min(p.crackTimer/2,1);
-    ctx.strokeStyle=`rgba(180,60,0,${intensity})`;
+  // Fragile platforms are always visibly cracked and browner/weathered.
+  if(p.fragile){
+    const intensity=0.65+Math.min(p.crackTimer/2,0.35);
+    ctx.strokeStyle=`rgba(45,18,8,${intensity})`;
     ctx.lineWidth=2.5;
-    const cx=p.x+p.w/2;
-    ctx.beginPath();
-    ctx.moveTo(cx-5,p.y);ctx.lineTo(cx-15*intensity,p.y+p.h*0.5);ctx.lineTo(cx-8*intensity,p.y+p.h);ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(cx+12,p.y+2);ctx.lineTo(cx+6,p.y+p.h*0.6);ctx.lineTo(cx+18*intensity,p.y+p.h);ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(cx-20,p.y+p.h*0.3);ctx.lineTo(cx+15,p.y+p.h*0.4);ctx.stroke();
+    const cx=p.x+p.w*0.52;
+    ctx.beginPath();ctx.moveTo(cx-4,p.y+2);ctx.lineTo(cx-16,p.y+p.h*0.42);ctx.lineTo(cx-8,p.y+p.h-3);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx+15,p.y+4);ctx.lineTo(cx+5,p.y+p.h*0.58);ctx.lineTo(cx+22,p.y+p.h-2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx-30,p.y+p.h*0.35);ctx.lineTo(cx+26,p.y+p.h*0.48);ctx.stroke();
+    ctx.strokeStyle='rgba(255,145,50,0.35)';
+    ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(cx-4,p.y+2);ctx.lineTo(cx-16,p.y+p.h*0.42);ctx.lineTo(cx-8,p.y+p.h-3);ctx.stroke();
   }
 
-  // Nest marker
+  // Nest marker: brighter straw ring, still small.
   if(p.hasNest){
-    ctx.fillStyle='rgba(255,200,100,0.5)';
-    ctx.beginPath();ctx.arc(p.x+p.w/2,p.y-5,6,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='rgba(255,210,80,0.75)';
+    ctx.lineWidth=2;
+    ctx.beginPath();ctx.ellipse(p.x+p.w/2,p.y-5,9,4,0,0,Math.PI*2);ctx.stroke();
   }
 }
-
 function drawBird(entity,isPlayer){
   const x=entity.x, y=entity.y, f=entity.facing;
   const w=PLAYER_W, h=PLAYER_H;
@@ -847,10 +881,8 @@ function drawBird(entity,isPlayer){
   if(isPlayer&&invincTimer>0&&Math.floor(invincTimer*10)%2===0){
     ctx.globalAlpha=0.4;
   }
-  if(isPlayer){
-    ctx.shadowColor=entity.glowColor;
-    ctx.shadowBlur=12;
-  }
+  ctx.shadowColor=entity.glowColor || entity.color;
+  ctx.shadowBlur=14;
 
   // --- BIRD BODY (large, 50px wide x 30px tall feel) ---
   const bw=w*0.9, bh=h*0.55;
@@ -861,6 +893,9 @@ function drawBird(entity,isPlayer){
   ctx.beginPath();
   ctx.ellipse(0,4,bw/2,bh/2,0,0,Math.PI*2);
   ctx.fill();
+  ctx.strokeStyle=entity.color;
+  ctx.lineWidth=2.5;
+  ctx.stroke();
 
   // --- WINGS (animated up/down stroke) ---
   const wingUp=entity.wingFrame===0;
@@ -879,6 +914,9 @@ function drawBird(entity,isPlayer){
   ctx.lineTo(0,wingThick);
   ctx.closePath();
   ctx.fill();
+  ctx.strokeStyle=entity.color;
+  ctx.lineWidth=2;
+  ctx.stroke();
   // Wing tip feathers
   ctx.fillStyle=darken(entity.color,0.35);
   ctx.beginPath();
@@ -915,8 +953,8 @@ function drawBird(entity,isPlayer){
   ctx.beginPath();ctx.moveTo(-bw*0.3,0);ctx.lineTo(-bw*0.52,-4);ctx.lineTo(-bw*0.45,-1);ctx.closePath();ctx.fill();
 
   // --- KNIGHT RIDER on top ---
-  const riderColor=isPlayer?'#F0E0B0':entity.type==='bounder'?'#334488':entity.type==='hunter'?'#882222':'#442266';
-  const armorColor=isPlayer?'#FFD700':entity.type==='bounder'?'#6688CC':entity.type==='hunter'?'#CC4444':'#7744AA';
+  const riderColor=isPlayer?'#FFFFFF':entity.type==='bounder'?'#AEEBFF':entity.type==='hunter'?'#FF9A22':'#FF4DFF';
+  const armorColor=isPlayer?'#FFD700':entity.type==='bounder'?'#44D6FF':entity.type==='hunter'?'#FF6A00':'#D000FF';
 
   // Rider body (torso)
   ctx.fillStyle=riderColor;
@@ -938,14 +976,14 @@ function drawBird(entity,isPlayer){
   ctx.beginPath();ctx.moveTo(-2,-bh*0.5-27);ctx.lineTo(-12,-bh*0.5-28);ctx.lineTo(-4,-bh*0.5-25);ctx.closePath();ctx.fill();
 
   // --- LANCE ---
-  ctx.strokeStyle=armorColor;
-  ctx.lineWidth=3;
+  ctx.strokeStyle=isPlayer?'#FFD700':armorColor;
+  ctx.lineWidth=4;
   ctx.beginPath();
   ctx.moveTo(4,-bh*0.5-6);
   ctx.lineTo(bw*0.5+12,-bh*0.5-6);
   ctx.stroke();
   // Lance tip
-  ctx.fillStyle='#DDDDDD';
+  ctx.fillStyle=isPlayer?'#FFF7A0':'#FFFFFF';
   ctx.beginPath();
   ctx.moveTo(bw*0.5+12,-bh*0.5-9);
   ctx.lineTo(bw*0.5+20,-bh*0.5-6);
@@ -983,10 +1021,12 @@ function drawFeathers(){
 function drawEmbers(){
   for(const em of embers){
     const alpha=em.life/em.maxLife;
-    const colors=['#FFDD44','#FF8800','#FF4400'];
-    ctx.fillStyle=colors[Math.floor(Math.random()*3)];
+    const colors=['#FFFF66','#FFB000','#FF4400','#FFFFFF'];
+    ctx.fillStyle=colors[Math.floor(Math.random()*4)];
     ctx.globalAlpha=alpha;
+    ctx.shadowColor='#FF7A00';ctx.shadowBlur=8;
     ctx.beginPath();ctx.arc(em.x,em.y,em.r,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;
     ctx.globalAlpha=1;
   }
 }
@@ -1037,7 +1077,7 @@ function drawPtero(){
   ctx.fillStyle='rgba(0,0,0,0.35)';
   ctx.beginPath();ctx.ellipse(px,lavaY-20,70,12,0,0,Math.PI*2);ctx.fill();
   // Menacing aura
-  ctx.fillStyle='rgba(60,0,0,0.15)';
+  ctx.fillStyle='rgba(255,0,70,0.12)';
   ctx.beginPath();ctx.arc(px,py,80,0,Math.PI*2);ctx.fill();
 
   const dir=ptero.vx>0?1:-1;
@@ -1045,7 +1085,8 @@ function drawPtero(){
   const wingUp=ptero.wingFrame===0;
 
   // Wings - much bigger, leathery
-  ctx.fillStyle='#3a2030';
+  ctx.shadowColor='#FF0040';ctx.shadowBlur=12;
+  ctx.fillStyle='#7A1238';
   ctx.beginPath();
   ctx.moveTo(-5,0);ctx.lineTo(-70,wingUp?-45:15);ctx.lineTo(-55,wingUp?-35:12);ctx.lineTo(-35,wingUp?-20:5);ctx.lineTo(-15,0);
   ctx.closePath();ctx.fill();
@@ -1053,7 +1094,7 @@ function drawPtero(){
   ctx.moveTo(5,0);ctx.lineTo(70,wingUp?-45:15);ctx.lineTo(55,wingUp?-35:12);ctx.lineTo(35,wingUp?-20:5);ctx.lineTo(15,0);
   ctx.closePath();ctx.fill();
   // Wing membrane detail
-  ctx.strokeStyle='rgba(80,30,50,0.5)';
+  ctx.strokeStyle='rgba(255,80,130,0.7)';
   ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(-10,0);ctx.lineTo(-55,wingUp?-35:10);ctx.stroke();
   ctx.beginPath();ctx.moveTo(-8,-2);ctx.lineTo(-40,wingUp?-30:8);ctx.stroke();
@@ -1061,25 +1102,27 @@ function drawPtero(){
   ctx.beginPath();ctx.moveTo(8,-2);ctx.lineTo(40,wingUp?-30:8);ctx.stroke();
 
   // Body - larger
-  ctx.fillStyle='#2a1020';
+  ctx.fillStyle='#5A0028';
   ctx.beginPath();ctx.ellipse(0,0,22,14,0,0,Math.PI*2);ctx.fill();
   // Head
   ctx.beginPath();ctx.arc(26,-6,11,0,Math.PI*2);ctx.fill();
   // Crest
-  ctx.fillStyle='#4a1830';
+  ctx.fillStyle='#C00058';
   ctx.beginPath();ctx.moveTo(22,-15);ctx.lineTo(14,-22);ctx.lineTo(26,-12);ctx.closePath();ctx.fill();
   // Beak - long and sharp
-  ctx.fillStyle='#CC4422';
+  ctx.fillStyle='#FF5A00';
   ctx.beginPath();ctx.moveTo(34,-6);ctx.lineTo(50,-3);ctx.lineTo(34,0);ctx.closePath();ctx.fill();
   // Teeth
   ctx.fillStyle='#EEE';
   ctx.beginPath();ctx.moveTo(36,-5);ctx.lineTo(38,-2);ctx.lineTo(40,-5);ctx.closePath();ctx.fill();
   ctx.beginPath();ctx.moveTo(42,-4);ctx.lineTo(44,-1);ctx.lineTo(46,-4);ctx.closePath();ctx.fill();
   // Eye - glowing
+  ctx.shadowColor='#FFFF00';ctx.shadowBlur=10;
   ctx.fillStyle='#FF2200';
   ctx.beginPath();ctx.arc(29,-9,3,0,Math.PI*2);ctx.fill();
   ctx.fillStyle='#FFFF00';
   ctx.beginPath();ctx.arc(29,-9,1.5,0,Math.PI*2);ctx.fill();
+  ctx.shadowBlur=0;
   ctx.restore();
 }
 
@@ -1123,18 +1166,26 @@ function drawHUD(){
   const fontSize=Math.max(16,W*0.03);
   ctx.font=`bold ${fontSize}px monospace`;
   ctx.textAlign='left';
-  ctx.fillStyle='#FFF';
-  ctx.fillText(`SCORE: ${score}`,20,fontSize+10);
-  ctx.fillText(`WAVE: ${wave}`,20,fontSize*2+15);
+  ctx.lineWidth=4;
+  ctx.strokeStyle='rgba(0,0,0,0.9)';
+  ctx.fillStyle='#FFFFFF';
+  const hudText=[`SCORE: ${score}`,`WAVE: ${wave}`,`LIVES:`];
+  const hudY=[fontSize+10,fontSize*2+15,fontSize*3+20];
+  for(let i=0;i<hudText.length;i++){
+    ctx.strokeText(hudText[i],20,hudY[i]);
+    ctx.fillText(hudText[i],20,hudY[i]);
+  }
   // Lives
-  ctx.fillText(`LIVES:`,20,fontSize*3+20);
   for(let i=0;i<lives;i++){
+    const lx=20+fontSize*3.5+i*(fontSize+5), ly=fontSize*3+15;
+    ctx.shadowColor='#FFD700';ctx.shadowBlur=8;
     ctx.fillStyle='#FFD700';
-    ctx.beginPath();ctx.arc(20+fontSize*3.5+i*(fontSize+5),fontSize*3+15,fontSize/3,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#FFF';
+    ctx.beginPath();ctx.arc(lx,ly,fontSize/3,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.strokeStyle='rgba(0,0,0,0.85)';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(lx,ly,fontSize/3,0,Math.PI*2);ctx.stroke();
   }
 }
-
 function drawTitle(){
   drawBG();
   drawLava();
@@ -1439,7 +1490,7 @@ function loop(ts){
   buttons = [];
 
   if(state==='title'){
-    lavaY=H*0.88;
+    lavaY=H*0.84;lavaBase=H*0.84;
     update(dt); // update feathers/embers for demo
     drawTitle();
     return;
@@ -1508,7 +1559,7 @@ document.addEventListener('keyup',(e)=>{
 });
 
 // Init lava for title
-lavaY=H*0.88;lavaBase=H*0.88;
+lavaY=H*0.84;lavaBase=H*0.84;
 
 requestAnimationFrame(loop);
 
