@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.0.1';
+const VERSION = 'v3.0.2';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -66,8 +66,8 @@ const FLAP_POWER = -340;
 const HORIZ_SPEED = 480;
 const FLAP_HORIZ_BOOST = 180;
 const MAX_VY = 600;
-const PLAYER_W = 104;
-const PLAYER_H = 83;
+const PLAYER_W = 88;
+const PLAYER_H = 70;
 
 // --- Pixel Sprite System ---
 // Every character is authored as a pixel-map array of strings, cached once to
@@ -1710,7 +1710,7 @@ function update(dt){
       if(e.invincible!==undefined&&e.invincible>0){
         e.invincible-=dt;
       }
-      // AI — simple arcade flapping with hard lava avoidance.
+      // AI — smarter arcade flapping with hard lava avoidance.
       e.ai.changeTimer-=dt;
       if(e.ai.changeTimer<=0){
         e.ai.changeTimer=0.25+Math.random()*0.65;
@@ -1718,45 +1718,56 @@ function update(dt){
       }
       const dx=player?player.x-e.x:0;
       const distToLava=lavaY-(e.y+PLAYER_H);
-      const belowCenter=(e.y+PLAYER_H*0.5)>H*0.5;
-      const lavaDanger=distToLava<100;
-      const hardFloor=(e.y+PLAYER_H)>lavaY-40;
+      const tooLow=distToLava<150;
+      const criticalLow=distToLava<80;
       let targetVx=e.ai.wander;
-      if(player){
-        if(e.type==='bounder')targetVx=dx*0.55+e.ai.wander;
-        else if(e.type==='hunter')targetVx=dx*2.0;
-        else targetVx=dx*2.8 + Math.sign(dx||1)*90;
-      }
-      if(lavaDanger){
-        let nearestX=W/2, best=Infinity;
+      // Lava avoidance: steer toward nearest platform center when low
+      if(tooLow){
+        let nearestX=W/2, bestDist=Infinity;
         for(const p of platforms){
           if(p.broken)continue;
-          const px=p.x+p.w/2, d=Math.abs(px-e.x)+(p.y<lavaY?Math.abs(p.y-e.y)*0.2:9999);
-          if(d<best){best=d;nearestX=px;}
+          const px=p.x+p.w/2;
+          const d=Math.abs(px-e.x)+(p.y<lavaY?0:9999);
+          if(d<bestDist){bestDist=d;nearestX=px;}
         }
-        targetVx=(nearestX-e.x)*1.25;
+        targetVx=(nearestX-e.x)*2.0;
+      } else if(player){
+        if(e.type==='bounder')targetVx=dx*0.6+e.ai.wander;
+        else if(e.type==='hunter')targetVx=dx*2.0;
+        else targetVx=dx*2.8+Math.sign(dx||1)*90;
       }
       targetVx=Math.max(-HORIZ_SPEED*e.speed,Math.min(HORIZ_SPEED*e.speed,targetVx));
-      e.vx+=(targetVx-e.vx)*dt*(e.type==='bounder'?2.2:e.type==='hunter'?4.0:5.5);
+      e.vx+=(targetVx-e.vx)*dt*(e.type==='bounder'?2.5:e.type==='hunter'?4.0:5.5);
 
+      // Flapping — all types flap more when low
       e.flapCooldown-=dt;
-      let needFlap=e.flapCooldown<=0;
-      if(lavaDanger||hardFloor)needFlap=true;
-      if(belowCenter&&e.vy>-220&&Math.random()<dt*(e.type==='shadow'?5:e.type==='hunter'?3.8:2.4))needFlap=true;
-      if(player&&e.type==='hunter'&&e.y>player.y-45&&e.vy>-160)needFlap=true;
-      if(player&&e.type==='shadow'&&e.y>player.y-90&&e.vy>-220)needFlap=true;
+      let needFlap=false;
+      // Always flap when flap cooldown is up
+      if(e.flapCooldown<=0)needFlap=true;
+      // Emergency flap when near lava
+      if(criticalLow)needFlap=true;
+      // Extra flaps to gain altitude when below screen center
+      if(tooLow&&e.vy>-100)needFlap=true;
+      // Type-specific: hunters and shadows try to stay above player
+      if(player&&e.type==='hunter'&&e.y>player.y-30&&e.vy>-160)needFlap=true;
+      if(player&&e.type==='shadow'&&e.y>player.y-80&&e.vy>-200)needFlap=true;
+      if(player&&e.type==='bounder'&&e.y>player.y+20&&e.vy>-120)needFlap=true;
+      // Bounders: flap more often when below player to stay competitive
+      if(player&&e.type==='bounder'&&e.y>H*0.55)needFlap=true;
+      
       if(needFlap){
-        const power=(hardFloor||lavaDanger)?1.35:(belowCenter?1.15:1.0);
+        const power=criticalLow?1.4:tooLow?1.2:1.0;
         e.vy=FLAP_POWER*(0.95+e.speed*0.18)*power;
-        const minmax=e.type==='bounder'?[0.6,1.0]:e.type==='hunter'?[0.4,0.7]:[0.3,0.5];
-        e.flapRate=minmax[0]+Math.random()*(minmax[1]-minmax[0]);
-        e.flapCooldown=e.flapRate*(belowCenter?0.75:1);
+        const intervals={bounder:[0.45,0.75],hunter:[0.3,0.55],shadow:[0.25,0.45]};
+        const iv=intervals[e.type]||intervals.bounder;
+        e.flapCooldown=iv[0]+Math.random()*(iv[1]-iv[0]);
         e.wingFrame=(e.wingFrame+1)%3;
         spawnFlapFeathers(e,1+(Math.random()<0.35?1:0));
       }
-      // Shadows deliberately get above and then slash down, but never inside the lava band.
-      if(player&&e.type==='shadow'&&e.y<player.y-95&&distToLava>180)e.vy+=GRAVITY*dt*0.55;
-      if(hardFloor){e.y=lavaY-40-PLAYER_H;e.vy=Math.min(e.vy,FLAP_POWER*1.25);}
+      // Shadows: deliberate dive attacks but only when safe altitude above lava
+      if(player&&e.type==='shadow'&&e.y<player.y-95&&distToLava>200)e.vy+=GRAVITY*dt*0.55;
+      // Hard floor — absolutely prevent falling into lava
+      if(e.y+PLAYER_H>lavaY-30){e.y=lavaY-30-PLAYER_H;e.vy=Math.min(e.vy,FLAP_POWER*1.3);}
 
       // Gravity
       e.vy+=GRAVITY*dt;
@@ -2259,8 +2270,8 @@ function drawBird(entity,isPlayer){
   const sx=1+(punch*1.2), sy=1-(punch*0.45);
   ctx.save();
   ctx.globalAlpha=alpha;
-  ctx.translate(entity.x,entity.y+42+bob);
-  ctx.scale(dir*sx*1.3,sy*1.3);
+  ctx.translate(entity.x,entity.y+36+bob);
+  ctx.scale(dir*sx*1.1,sy*1.1);
   ctx.shadowColor=isPlayer?'rgba(255,215,0,.82)':th.glow;
   ctx.shadowBlur=isPlayer?14:(type==='shadow'?16:11);
   ctx.lineJoin='round'; ctx.lineCap='round';
