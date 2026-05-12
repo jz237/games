@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v1.4.0';
+const VERSION = 'v1.5.0';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -170,7 +170,7 @@ function createPlayer(){
     x:p?p.x+p.w/2:W/2, y:p?p.y-PLAYER_H:H*0.4,
     vx:0, vy:0, facing:1,
     wingFrame:0, wingTimer:0,
-    type:'player', color:'#FFD700', glowColor:'rgba(255,215,0,0.8)'
+    type:'player', color:'#E8A800', glowColor:'rgba(255,215,0,0.8)'
   };
 }
 
@@ -199,11 +199,15 @@ function spawnWaveEnemies(){
   for(let i=0;i<hunters;i++)list.push('hunter');
   for(let i=0;i<shadows;i++)list.push('shadow');
   list.forEach((type,i)=>{
-    setTimeout(()=>{
-      if(state!=='playing')return;
-      const p=spawnable[i%spawnable.length]||platforms[0];
-      if(p)enemies.push(createEnemy(type,p.x+p.w/2,p.y-PLAYER_H));
-    },i*600);
+    const p=spawnable[i%spawnable.length]||platforms[0];
+    if(p){
+      const e=createEnemy(type,p.x+p.w/2,p.y-PLAYER_H);
+      // Stagger start: enemies start above screen and drop in
+      e.y=-PLAYER_H-i*40;
+      e.vy=60+i*15;
+      e.spawnDelay=i*0.4;
+      enemies.push(e);
+    }
   });
 }
 
@@ -343,7 +347,7 @@ canvas.addEventListener('touchend',(e)=>{
 
 // --- Start Game ---
 function startGame(){
-  state='playing';score=0;lives=3;wave=0;extraLifeGiven=false;
+  state='playing';score=0;lives=3;wave=0;extraLifeGiven=false;trollHand=null;
   enemies=[];feathers=[];eggs=[];embers=[];explosions=[];ptero=null;pteroTimer=0;gameTime=0;invincTimer=0;
   generatePlatforms(1);
   player=createPlayer();
@@ -415,6 +419,9 @@ function update(dt){
   if(Math.random()<dt*3){
     sfxLavaPop();
   }
+
+  // Lava troll hand
+  updateTrollHand(dt);
 
   if(state==='playing'||state==='waveTrans'){
     // Lava rise
@@ -523,6 +530,13 @@ function update(dt){
     // Enemy AI & physics
     for(let i=enemies.length-1;i>=0;i--){
       const e=enemies[i];
+      // Spawn delay: enemy hasn't entered yet
+      if(e.spawnDelay!==undefined&&e.spawnDelay>0){
+        e.spawnDelay-=dt;
+        // Still move them down toward screen during delay
+        e.y+=e.vy*dt;
+        if(e.y<-PLAYER_H){continue;}
+      }
       // AI
       e.ai.changeTimer-=dt;
       if(e.ai.changeTimer<=0){
@@ -581,8 +595,8 @@ function update(dt){
         continue;
       }
 
-      // Player collision
-      if(player&&state==='playing'&&invincTimer<=0){
+      // Player collision (skip if enemy still entering)
+      if(player&&state==='playing'&&invincTimer<=0&&!(e.spawnDelay!==undefined&&e.spawnDelay>0)){
         const dx=player.x-e.x, dy=player.y-e.y;
         const dist=Math.sqrt(dx*dx+dy*dy);
         if(dist<PLAYER_W*0.8){
@@ -667,7 +681,8 @@ function update(dt){
     }
 
     // Wave clear check
-    if(state==='playing'&&enemies.length===0&&eggs.length===0&&waveTransTimer<=0){
+    // Wave clear check (only after enemies have had time to spawn)
+    if(state==='playing'&&enemies.length===0&&eggs.length===0&&waveTransTimer<=-0.5){
       score+=500*wave;
       nextWave();
     }
@@ -806,6 +821,103 @@ function drawLava(){
     ctx.beginPath();ctx.arc(bx-br*0.3,by-br*0.35,br*0.35,0,Math.PI*2);ctx.fill();
   }
 }
+// Lava Troll Hand — reaches up from lava when player is near
+let trollHand = null;
+function updateTrollHand(dt){
+  if(!player||state!=='playing'){trollHand=null;return;}
+  const distToLava=player.y+PLAYER_H-lavaY;
+  // Activate when player is within 80px of lava
+  if(distToLava>-80&&distToLava<40&&player.vy>=0){
+    if(!trollHand){
+      trollHand={x:player.x,targetY:player.y+PLAYER_H-10,progress:0,grabbing:false,grabX:player.x};
+    }
+    // Track toward player
+    trollHand.grabX+=(player.x-trollHand.grabX)*dt*4;
+    trollHand.x=trollHand.grabX;
+    trollHand.targetY=player.y+PLAYER_H-10;
+    trollHand.progress=Math.min(1,trollHand.progress+dt*2.5);
+    // Check grab
+    if(trollHand.progress>0.7){
+      const dx=player.x-trollHand.x;
+      const dy=player.y-trollHand.targetY;
+      if(Math.abs(dx)<PLAYER_W&&Math.abs(dy)<PLAYER_H*0.5){
+        // Grabbed! Pull player down
+        player.vy=200;
+        player.vx*=0.3;
+        trollHand.progress=0;
+        trollHand=null;
+      }
+    }
+  } else {
+    if(trollHand){
+      trollHand.progress-=dt*3;
+      if(trollHand.progress<=0)trollHand=null;
+    }
+  }
+}
+function drawTrollHand(){
+  if(!trollHand)return;
+  const p=trollHand.progress;
+  if(p<=0)return;
+  const handY=lavaY-p*90; // hand reaches up to 90px above lava
+  const handX=trollHand.x;
+  // Arm from lava to hand
+  ctx.strokeStyle='#8B4513';
+  ctx.lineWidth=8;
+  ctx.beginPath();
+  ctx.moveTo(handX,lavaY+10);
+  ctx.quadraticCurveTo(handX-5*p,lavaY-30*p,handX,handY);
+  ctx.stroke();
+  // Darker arm outline
+  ctx.strokeStyle='#5A2D0C';
+  ctx.lineWidth=10;
+  ctx.beginPath();
+  ctx.moveTo(handX,lavaY+10);
+  ctx.quadraticCurveTo(handX-5*p,lavaY-30*p,handX,handY);
+  ctx.stroke();
+  // Lighter arm center
+  ctx.strokeStyle='#A0522D';
+  ctx.lineWidth=6;
+  ctx.beginPath();
+  ctx.moveTo(handX,lavaY+10);
+  ctx.quadraticCurveTo(handX-5*p,lavaY-30*p,handX,handY);
+  ctx.stroke();
+  // Palm
+  ctx.fillStyle='#8B4513';
+  ctx.beginPath();
+  ctx.ellipse(handX,handY,14*p,10*p,0,0,Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle='#5A2D0C';
+  ctx.lineWidth=2;
+  ctx.stroke();
+  // Fingers reaching up (open hand, trying to grab)
+  const fingerSpread=6*p;
+  const fingerLen=16*p;
+  ctx.strokeStyle='#A0522D';
+  ctx.lineWidth=4;
+  for(let i=-2;i<=2;i++){
+    const fx=handX+i*fingerSpread;
+    const fy=handY-fingerLen;
+    ctx.beginPath();
+    ctx.moveTo(fx,handY-4*p);
+    ctx.quadraticCurveTo(fx+i*2,handY-fingerLen*0.5,fx+i,fy);
+    ctx.stroke();
+    // Fingernail
+    ctx.fillStyle='#DEB887';
+    ctx.beginPath();
+    ctx.ellipse(fx+i,fy,2.5*p,1.5*p,0,0,Math.PI*2);
+    ctx.fill();
+  }
+  // Glowing eyes in the lava below the hand
+  const eyeY=lavaY+20;
+  ctx.fillStyle='rgba(255,200,0,0.8)';
+  ctx.beginPath();ctx.arc(handX-8,eyeY,3,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(handX+8,eyeY,3,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='rgba(255,50,0,0.6)';
+  ctx.beginPath();ctx.arc(handX-8,eyeY,2,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(handX+8,eyeY,2,0,Math.PI*2);ctx.fill();
+}
+
 function drawPlatform(p){
   if(p.broken)return;
   const seed=p.seed||1;
@@ -927,15 +1039,19 @@ function drawBird(entity,isPlayer){
 
   // --- BIRD BODY (large, 50px wide x 30px tall feel) ---
   const bw=w*0.9, bh=h*0.55;
+  const bodyColor=isPlayer?'#CC8800':entity.color;
+  const wingColor=isPlayer?'#FFFFFF':darken(entity.color,0.15);
+  const bellyColor=isPlayer?'#FFE080':lighten(entity.color,0.3);
   const bodyGrad=ctx.createRadialGradient(0,4,3,0,4,bw/2);
-  bodyGrad.addColorStop(0,entity.color);
-  bodyGrad.addColorStop(1,darken(entity.color,0.4));
+  bodyGrad.addColorStop(0,bellyColor);
+  bodyGrad.addColorStop(0.6,bodyColor);
+  bodyGrad.addColorStop(1,darken(bodyColor,0.4));
   ctx.fillStyle=bodyGrad;
   ctx.beginPath();
   ctx.ellipse(0,4,bw/2,bh/2,0,0,Math.PI*2);
   ctx.fill();
-  ctx.strokeStyle=entity.color;
-  ctx.lineWidth=2.5;
+  ctx.strokeStyle=darken(bodyColor,0.5);
+  ctx.lineWidth=2;
   ctx.stroke();
 
   // --- WINGS (big, animated, dramatic flap) ---
@@ -944,7 +1060,7 @@ function drawBird(entity,isPlayer){
   // Dramatic wing angles: up=-1.0, mid=-0.2, down=0.6
   const wingAngle=wingUp?-1.0:(wingMid?-0.2:0.6);
   const wingLen=bw*0.8, wingThick=12;
-  ctx.fillStyle=darken(entity.color,0.15);
+  ctx.fillStyle=wingColor;
   ctx.save();
   ctx.translate(-bw*0.1,-bh*0.25);
   ctx.rotate(wingAngle);
@@ -1533,6 +1649,11 @@ function darken(hex,amt){
   r=Math.floor(r*(1-amt));g=Math.floor(g*(1-amt));b=Math.floor(b*(1-amt));
   return `rgb(${r},${g},${b})`;
 }
+function lighten(hex,amt){
+  let r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  r=Math.min(255,Math.floor(r+(255-r)*amt));g=Math.min(255,Math.floor(g+(255-g)*amt));b=Math.min(255,Math.floor(b+(255-b)*amt));
+  return `rgb(${r},${g},${b})`;
+}
 function roundRect(ctx,x,y,w,h,r){
   ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
   ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);
@@ -1573,6 +1694,7 @@ function loop(ts){
 
   drawBG();
   drawLava();
+  drawTrollHand();
   for(const p of platforms)drawPlatform(p);
   drawEggs();
   drawEmbers();
