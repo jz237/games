@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.0.5';
+const VERSION = 'v3.0.6';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -1904,13 +1904,34 @@ function update(dt){
       ptero.y=ptero.baseY+Math.sin(ptero.phase)*80;
       ptero.wingTimer-=dt;
       if(ptero.wingTimer<=0){ptero.wingFrame=(ptero.wingFrame+1)%2;ptero.wingTimer=0.15;}
-      // Collision with player
-      if(player&&state==='playing'){
-        const dx=player.x-ptero.x,dy=player.y-ptero.y;
-        if(Math.sqrt(dx*dx+dy*dy)<75){playerDie();return;}
+      // Pterodactyl collision with player
+      if(ptero&&player&&state==='playing'){
+        const px=player.x-ptero.x,py=player.y-ptero.y;
+        if(Math.sqrt(px*px+py*py)<75){
+          // Joust rule: higher player kills pterodactyl
+          const playerMid=player.y+PLAYER_H*0.5;
+          const pteroMid=ptero.y+32; // approximate center of ptero
+          if(playerMid<pteroMid&&invincTimer<=0){
+            // Player wins — kill pterodactyl
+            score+=1000;
+            scorePopups.push({x:ptero.x,y:ptero.y,text:'+1000',life:2,maxLife:2,color:'#FF44FF'});
+            sfxKill();
+            createExplosion(ptero.x,ptero.y,true);
+            burstFeathers(ptero.x,ptero.y,'#FF6A00',50);
+            killFlashTimer=0.15;
+            shakeTimer=0.25;shakeMag=10;
+            ptero=null;
+            player.vy=FLAP_POWER*0.5; // bounce up like killing an enemy
+            // Next ptero spawns later
+            if(wave>=3)pteroTimer=8+Math.random()*6;
+          } else if(invincTimer<=0) {
+            // Pterodactyl kills player
+            playerDie();return;
+          }
+        }
       }
-      // Off screen
-      if((ptero.vx>0&&ptero.x>W+100)||(ptero.vx<0&&ptero.x<-100)){
+      // Off screen — ptero escaped, small dodge bonus
+      if(ptero&&((ptero.vx>0&&ptero.x>W+100)||(ptero.vx<0&&ptero.x<-100))){
         ptero=null;
         score+=100; // dodge bonus
         if(wave>=3)pteroTimer=6+Math.random()*8;
