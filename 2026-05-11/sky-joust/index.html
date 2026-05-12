@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v2.0.1';
+const VERSION = 'v2.0.2';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -214,7 +214,7 @@ function spawnWaveEnemies(){
       const e=createEnemy(type,p.x+p.w/2,p.y-PLAYER_H);
       // Spawn directly on platform, no drop-in delay
       e.vy=0;
-      e.invincible=1.0; // brief invincibility instead of spawnDelay
+      e.invincible=0.5; // brief invincibility on spawn
       enemies.push(e);
     }
   });
@@ -270,7 +270,8 @@ function dropEgg(x,y,type){
   for(const p of platforms){
     if(!p.broken&&x>p.x&&x<p.x+p.w&&p.y>y&&p.y<landY)landY=p.y;
   }
-  eggs.push({x,y,targetY:landY-14,vy:0,type,hatchTimer:8+Math.random()*4,pulsePhase:0,landed:false});
+  // Long hatch timer like arcade Joust — generous pickup window
+  eggs.push({x,y,targetY:landY-14,vy:0,type,hatchTimer:15+Math.random()*5,pulsePhase:0,landed:false});
 }
 
 // --- Pterodactyl ---
@@ -640,15 +641,17 @@ function update(dt){
           if(playerMid<enemyMid){
             // Player is higher → player wins the joust
             score+=e.scoreVal;
-            scorePopups.push({x:e.x,y:e.y,text:'+'+e.scoreVal,life:1,maxLife:1,color:'#FFD700'});
+            scorePopups.push({x:e.x,y:e.y,text:'+'+e.scoreVal,life:1.5,maxLife:1.5,color:'#FFD700'});
             sfxScore();
             sfxKill();
-            createExplosion(e.x,e.y,false);
-            burstFeathers(e.x,e.y,e.color,40);
+            createExplosion(e.x,e.y,true); // big explosion on kill
+            burstFeathers(e.x,e.y,e.color,50);
             dropEgg(e.x,e.y,e.type);
             enemies.splice(i,1);
             player.vy=FLAP_POWER*0.7;
-            killFlashTimer=0.1;
+            killFlashTimer=0.15;
+            // Brief freeze frame for impact
+            state='playing'; // stay playing, but add a micro-pause via shake
           } else if(enemyMid<playerMid){
             // Enemy is higher → enemy wins
             playerDie();return;
@@ -684,12 +687,13 @@ function update(dt){
         const dx=player.x-eg.x,dy=(player.y+PLAYER_H*0.5)-eg.y;
         if(Math.abs(dx)<40&&Math.abs(dy)<35){
           score+=250;
-          scorePopups.push({x:eg.x,y:eg.y,text:'+250',life:0.8,maxLife:0.8,color:'#FFE98A'});
+          scorePopups.push({x:eg.x,y:eg.y,text:'+250',life:1.2,maxLife:1.2,color:'#FFE98A'});
           sfxScore();
           sfxEggStomp();
-          burstFeathers(eg.x,eg.y,'#FFEE88',25);
+          createExplosion(eg.x,eg.y,false); // small pop on egg collect
+          burstFeathers(eg.x,eg.y,'#FFEE88',30);
           eggs.splice(i,1);
-          player.vy=FLAP_POWER*0.5;
+          player.vy=FLAP_POWER*0.4;
         }
       }
       // Lava
