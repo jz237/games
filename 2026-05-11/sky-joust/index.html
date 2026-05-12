@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v1.5.0';
+const VERSION = 'v1.9.0';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -528,6 +528,11 @@ function update(dt){
 
       // Ceiling
       if(player.y<0){player.y=0;player.vy=0;}
+
+      // Safety: if all platforms are broken, respawn them
+      if(platforms.every(p=>p.broken)){
+        generatePlatforms(wave);
+      }
 
       // Invincibility
       if(invincTimer>0)invincTimer-=dt;
