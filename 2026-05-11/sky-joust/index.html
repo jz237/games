@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v2.2.1';
+const VERSION = 'v3.0.0';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -1192,7 +1192,7 @@ const SPRITES = {
 };
 const spriteCache = {};
 function cacheSprite(name,pixels,palette,scale=SPRITE_SCALE){const h=pixels.length,w=pixels[0].length,c=document.createElement('canvas');c.width=w*scale;c.height=h*scale;const sx=c.getContext('2d');sx.imageSmoothingEnabled=false;for(let y=0;y<h;y++)for(let x=0;x<w;x++){const color=palette[pixels[y][x]];if(color){sx.fillStyle=color;sx.fillRect(x*scale,y*scale,scale,scale);}}spriteCache[name]={canvas:c,w,h,scale};}
-function cacheAllSprites(){for(const [name,pixels] of Object.entries(SPRITES)){let pal='player'; if(name.startsWith('bounder'))pal='bounder'; else if(name.startsWith('hunter'))pal='hunter'; else if(name.startsWith('shadow'))pal='shadow'; else if(name==='eggBounder')pal='eggBounder'; else if(name==='eggHunter')pal='eggHunter'; else if(name==='eggShadow')pal='eggShadow'; else if(name.startsWith('ptero'))pal='ptero'; else if(name==='trollHand')pal='troll'; cacheSprite(name,pixels,SPRITE_PALETTES[pal]);}}
+function cacheAllSprites(){for(const [name,pixels] of Object.entries(SPRITES)){let pal=null; if(name.startsWith('ptero'))pal='ptero'; else if(name==='trollHand')pal='troll'; if(pal)cacheSprite(name,pixels,SPRITE_PALETTES[pal]);}}
 function drawCachedSprite(name,x,y,displayW,displayH,flip=false,alpha=1){const s=spriteCache[name];if(!s)return;ctx.save();ctx.imageSmoothingEnabled=false;ctx.globalAlpha=alpha;if(flip){ctx.translate(x+displayW,y);ctx.scale(-1,1);ctx.drawImage(s.canvas,0,0,displayW,displayH);}else ctx.drawImage(s.canvas,x,y,displayW,displayH);ctx.restore();}
 cacheAllSprites();
 
@@ -1308,7 +1308,7 @@ function createPlayer(){
   return {
     x:p?p.x+p.w/2:W/2, y:p?p.y-PLAYER_H:H*0.4,
     vx:0, vy:0, facing:1,
-    wingFrame:0, wingTimer:0,
+    wingFrame:0, wingTimer:0, flapPunch:0,
     type:'player', color:'#E8A800', glowColor:'rgba(255,215,0,0.8)'
   };
 }
@@ -1316,14 +1316,14 @@ function createPlayer(){
 function createEnemy(type,x,y){
   const colors={bounder:'#00A8FF',hunter:'#FF2020',shadow:'#B000FF'};
   const speeds={bounder:0.7,hunter:1.0,shadow:1.4};
-  const flapRates={bounder:0.8,hunter:0.6,shadow:0.4};
+  const flapRates={bounder:0.6+Math.random()*0.4,hunter:0.4+Math.random()*0.3,shadow:0.3+Math.random()*0.2};
   return {
     x,y,vx:(Math.random()>0.5?1:-1)*60*speeds[type],vy:0,
     facing:1,wingFrame:0,wingTimer:0,
     type,color:colors[type],glowColor:type==='bounder'?'rgba(0,168,255,0.75)':type==='hunter'?'rgba(255,32,32,0.75)':'rgba(190,0,255,0.8)',
     speed:speeds[type],flapRate:flapRates[type],
     flapCooldown:Math.random()*flapRates[type],
-    ai:{changeTimer:1+Math.random()*2,targetVx:0},
+    ai:{changeTimer:1+Math.random()*2,targetVx:0,wander:(Math.random()-0.5)*160},
     scoreVal:type==='bounder'?500:type==='hunter'?750:1000
   };
 }
@@ -1361,9 +1361,16 @@ function burstFeathers(x,y,color,count){
       x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed-80,
       rot:Math.random()*Math.PI*2,rotSpeed:(Math.random()-0.5)*8,
       life:1.5+Math.random()*1.5,maxLife:1.5+Math.random()*1.5,
-      color,w:3+Math.random()*5,h:1.5+Math.random()*2
+      color,w:3+Math.random()*6,h:1.5+Math.random()*2.5
     });
   }
+}
+function spawnFlapFeathers(entity,count=1){
+  const dir=entity.facing||1;
+  const rootX=entity.x-dir*12, rootY=entity.y+PLAYER_H*0.48;
+  const angle=entity.wingFrame===0?-0.8:entity.wingFrame===1?0:0.6;
+  const tipX=rootX-dir*(30+Math.cos(angle)*8), tipY=rootY+Math.sin(angle)*28;
+  for(let i=0;i<count;i++)trailFeather(tipX+(Math.random()-0.5)*8,tipY+(Math.random()-0.5)*8,entity.color||'#FFF');
 }
 function trailFeather(x,y,color){
   feathers.push({
@@ -1371,7 +1378,7 @@ function trailFeather(x,y,color){
     vx:(Math.random()-0.5)*30,vy:-20-Math.random()*40,
     rot:Math.random()*Math.PI*2,rotSpeed:(Math.random()-0.5)*4,
     life:0.6+Math.random()*0.4,maxLife:0.6+Math.random()*0.4,
-    color,w:2+Math.random()*3,h:1+Math.random()*1.5
+    color,w:2+Math.random()*4,h:1+Math.random()*2
   });
 }
 
@@ -1384,12 +1391,12 @@ function spawnEmber(x,y){
 // --- Explosion ---
 function createExplosion(x,y,big){
   explosions.push({x,y,time:0,duration:big?0.6:0.4,big,r:big?90:60,particles:[]});
-  const pCount=big?60:50;
+  const pCount=big?76:50;
   const ex=explosions[explosions.length-1];
   for(let i=0;i<pCount;i++){
     const angle=Math.random()*Math.PI*2;
     const speed=40+Math.random()*200;
-    ex.particles.push({x:0,y:0,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed-60,life:0.3+Math.random()*0.5,maxLife:0.3+Math.random()*0.5,r:2+Math.random()*4,color:['#FFDD44','#FF8800','#FF4400','#FFFFFF','#FFD700'][Math.floor(Math.random()*5)]});
+    ex.particles.push({x:0,y:0,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed-60,life:0.3+Math.random()*0.5,maxLife:0.3+Math.random()*0.5,r:2+Math.random()*4,color:['#FFDD44','#FF8800','#FF4400','#FFFFFF','#FFD700','#FF2266','#9A5CFF'][Math.floor(Math.random()*5)]});
   }
   if(big){shakeTimer=0.25;shakeMag=10;}
 }
@@ -1517,7 +1524,7 @@ function nextWave(){
 function playerDie(){
   lives--;
   sfxDeath();
-  deathPieces=[{sprite:'playerFlapDown',x:player.x-45,y:player.y,vx:-120,vy:-220,rot:0,rs:-6},{sprite:'playerFlapUp',x:player.x+20,y:player.y-20,vx:130,vy:-180,rot:0,rs:7}];
+  deathPieces=[{type:'player',x:player.x-32,y:player.y+4,vx:-120,vy:-220,rot:0,rs:-6,facing:player.facing,wingFrame:2,color:player.color,glowColor:player.glowColor},{type:'player',x:player.x+28,y:player.y-18,vx:130,vy:-180,rot:0,rs:7,facing:player.facing,wingFrame:0,color:player.color,glowColor:player.glowColor}];
   shakeTimer=0.5;shakeMag=18;deathFlashTimer=0.45;
   createExplosion(player.x,lavaY-8,true);
   burstFeathers(player.x,player.y,player.color,60);
@@ -1611,9 +1618,9 @@ function update(dt){
           player.vy=FLAP_POWER;
           player.wingFrame=(player.wingFrame+1)%3;
           player.wingTimer=0.09;
+          player.flapPunch=0.12;
           sfxFlap();
-          trailFeather(player.x,player.y+PLAYER_H/2,player.color);
-          trailFeather(player.x,player.y+PLAYER_H/2,player.color);
+          spawnFlapFeathers(player,2);
           // horizontal boost in touch direction
           if(touchSide!==0){
             player.vx+=touchSide*FLAP_HORIZ_BOOST*dt*10;
@@ -1624,11 +1631,12 @@ function update(dt){
         // Horizontal drag when not touching
       }
       player.wingTimer-=dt;
+      if(player.flapPunch>0)player.flapPunch-=dt;
 
       // Idle wing flap when standing on platform (not touching)
       if(!touchDown && player.vy===0 && player.wingTimer<=0){
         player.wingFrame=(player.wingFrame+1)%3;
-        player.wingTimer=0.22; // faster idle wing bob
+        player.wingTimer=0.2; // visible idle wing bob
       }
 
       // Gravity
@@ -1702,60 +1710,53 @@ function update(dt){
       if(e.invincible!==undefined&&e.invincible>0){
         e.invincible-=dt;
       }
-      // AI
+      // AI — simple arcade flapping with hard lava avoidance.
       e.ai.changeTimer-=dt;
       if(e.ai.changeTimer<=0){
-        e.ai.changeTimer=0.3+Math.random()*0.8;
-        if(player){
-          const dx=player.x-e.x;
-          if(e.type==='hunter'){
-            // Hunters: aggressive, directly chase and try to get above
-            e.ai.targetVx=dx*3;
-            e.ai.targetAlt=player.y-80-Math.random()*60;
-          } else if(e.type==='shadow'){
-            // Shadows: fast, swing wide then dive
-            const side=Math.sign(dx)||1;
-            e.ai.targetVx=side*HORIZ_SPEED*e.speed*1.2+dx*0.5;
-            e.ai.targetAlt=player.y-60-Math.random()*100;
-          } else {
-            // Bounders: moderate, approach player with some randomness
-            e.ai.targetVx=dx*1.5+(Math.random()-0.5)*HORIZ_SPEED*e.speed;
-            e.ai.targetAlt=player.y-50-Math.random()*80;
-          }
-          e.ai.targetVx=Math.max(-HORIZ_SPEED*e.speed,Math.min(HORIZ_SPEED*e.speed,e.ai.targetVx));
-        }
+        e.ai.changeTimer=0.25+Math.random()*0.65;
+        e.ai.wander=(Math.random()-0.5)*140;
       }
-      if(e.type==='hunter'&&player){
-        const chase=(player.x-e.x)*2;
-        e.ai.targetVx=Math.max(-HORIZ_SPEED*e.speed,Math.min(HORIZ_SPEED*e.speed,chase));
-      }
-      e.vx+=(e.ai.targetVx-e.vx)*dt*3.5;
-
-      // Lava avoidance
+      const dx=player?player.x-e.x:0;
       const distToLava=lavaY-(e.y+PLAYER_H);
-      const lavaPanic=distToLava<120?1+(120-distToLava)/60:0;
-
-      // Smarter flapping — altitude management + lava avoidance
-      e.flapCooldown-=dt;
-      const shouldFlap=e.flapCooldown<=0&&(
-        e.vy>150||
-        (e.ai.targetAlt!==undefined&&e.y>e.ai.targetAlt&&e.vy>-100)||
-        lavaPanic>1||
-        e.vy>50
-      );
-      if(shouldFlap){
-        e.vy=FLAP_POWER*e.speed*(lavaPanic>1?1.2:1);
-        e.flapCooldown=e.flapRate+Math.random()*0.3;
-        e.wingFrame=(e.wingFrame+1)%3;
-        trailFeather(e.x,e.y+PLAYER_H/2,e.color);
-        if(e.ai.targetVx!==undefined)e.vx+=(e.ai.targetVx-e.vx)*0.15;
+      const belowCenter=(e.y+PLAYER_H*0.5)>H*0.5;
+      const lavaDanger=distToLava<100;
+      const hardFloor=(e.y+PLAYER_H)>lavaY-40;
+      let targetVx=e.ai.wander;
+      if(player){
+        if(e.type==='bounder')targetVx=dx*0.55+e.ai.wander;
+        else if(e.type==='hunter')targetVx=dx*2.0;
+        else targetVx=dx*2.8 + Math.sign(dx||1)*90;
       }
-      // Idle wing bob when grounded
-      if(e.vy>-1&&e.vy<1&&e.wingTimer===undefined)e.wingTimer=0;
-      if(e.wingTimer!==undefined){e.wingTimer-=dt;if(e.wingTimer<=0){e.wingFrame=(e.wingFrame+1)%3;e.wingTimer=0.3;}}
-      // Steer away from lava edges
-      if(lavaPanic>0&&e.x<W*0.15)e.vx+=HORIZ_SPEED*dt*2;
-      if(lavaPanic>0&&e.x>W*0.85)e.vx-=HORIZ_SPEED*dt*2;
+      if(lavaDanger){
+        let nearestX=W/2, best=Infinity;
+        for(const p of platforms){
+          if(p.broken)continue;
+          const px=p.x+p.w/2, d=Math.abs(px-e.x)+(p.y<lavaY?Math.abs(p.y-e.y)*0.2:9999);
+          if(d<best){best=d;nearestX=px;}
+        }
+        targetVx=(nearestX-e.x)*1.25;
+      }
+      targetVx=Math.max(-HORIZ_SPEED*e.speed,Math.min(HORIZ_SPEED*e.speed,targetVx));
+      e.vx+=(targetVx-e.vx)*dt*(e.type==='bounder'?2.2:e.type==='hunter'?4.0:5.5);
+
+      e.flapCooldown-=dt;
+      let needFlap=e.flapCooldown<=0;
+      if(lavaDanger||hardFloor)needFlap=true;
+      if(belowCenter&&e.vy>-220&&Math.random()<dt*(e.type==='shadow'?5:e.type==='hunter'?3.8:2.4))needFlap=true;
+      if(player&&e.type==='hunter'&&e.y>player.y-45&&e.vy>-160)needFlap=true;
+      if(player&&e.type==='shadow'&&e.y>player.y-90&&e.vy>-220)needFlap=true;
+      if(needFlap){
+        const power=(hardFloor||lavaDanger)?1.35:(belowCenter?1.15:1.0);
+        e.vy=FLAP_POWER*(0.95+e.speed*0.18)*power;
+        const minmax=e.type==='bounder'?[0.6,1.0]:e.type==='hunter'?[0.4,0.7]:[0.3,0.5];
+        e.flapRate=minmax[0]+Math.random()*(minmax[1]-minmax[0]);
+        e.flapCooldown=e.flapRate*(belowCenter?0.75:1);
+        e.wingFrame=(e.wingFrame+1)%3;
+        spawnFlapFeathers(e,1+(Math.random()<0.35?1:0));
+      }
+      // Shadows deliberately get above and then slash down, but never inside the lava band.
+      if(player&&e.type==='shadow'&&e.y<player.y-95&&distToLava>180)e.vy+=GRAVITY*dt*0.55;
+      if(hardFloor){e.y=lavaY-40-PLAYER_H;e.vy=Math.min(e.vy,FLAP_POWER*1.25);}
 
       // Gravity
       e.vy+=GRAVITY*dt;
@@ -1779,6 +1780,14 @@ function update(dt){
           e.y=p.y-PLAYER_H;
           e.vy=0;
         }
+      }
+
+      // Absolute lava floor: enemies are never allowed into the lava band.
+      if(e.y+PLAYER_H>lavaY-40){
+        e.y=lavaY-40-PLAYER_H;
+        e.vy=FLAP_POWER*1.25;
+        e.wingFrame=(e.wingFrame+1)%3;
+        spawnFlapFeathers(e,2);
       }
 
       // Lava death for enemies
@@ -2230,24 +2239,102 @@ function drawPlatform(p){
   }
 }
 
+const BIRD_THEMES={
+  player:{body:['#FFD700','#CC8800','#6B3300'],belly:'#FFE080',wings:['#FFFFFF','#C0C0C0','#808080'],helmet:'#FFD700',helmet2:'#B8860B',plume:['#FF4444','#FF7700','#FFAA00'],lance:'#FFD700',glow:'rgba(255,215,0,.75)',beak:'#FF9900'},
+  bounder:{body:['#60D0FF','#0088DD','#003366'],belly:'#B0E8FF',wings:['#90D0FF','#4090D0','#2060A0'],helmet:'#128CE6',helmet2:'#6EEBFF',plume:['#B0F4FF','#60D0FF','#1C8FFF'],lance:'#4BBEFF',glow:'rgba(0,168,255,.70)',beak:'#FFD05A'},
+  hunter:{body:['#FF9060','#DD3300','#660000'],belly:'#FFC0A0',wings:['#FF8040','#C04020','#801010'],helmet:'#DD3300',helmet2:'#FFB000',plume:['#FFAA00','#FF7700','#FFE066'],lance:'#FF3030',glow:'rgba(255,40,0,.70)',beak:'#FFCC33'},
+  shadow:{body:['#D080FF','#8820CC','#300066'],belly:'#E0B0FF',wings:['#C090E0','#8040A0','#401060'],helmet:'#7B22C8',helmet2:'#FF64FF',plume:['#D33CFF','#FF74D9','#9C6BFF'],lance:'#B45CFF',glow:'rgba(170,0,255,.82)',beak:'#DDA0FF'}
+};
+function pathFeather(ctx,x0,y0,x1,y1,x2,y2,x3,y3){ctx.beginPath();ctx.moveTo(x0,y0);ctx.bezierCurveTo(x1,y1,x2,y2,x3,y3);ctx.bezierCurveTo(x2+6,y2+10,x1+4,y1+8,x0,y0);ctx.closePath();}
 function drawBird(entity,isPlayer){
   const type=isPlayer?'player':(entity.type||'bounder');
-  let frameName;
+  const th=BIRD_THEMES[type]||BIRD_THEMES.bounder;
+  const dir=(entity.facing||1)<0?-1:1;
   const grounded=Math.abs(entity.vy||0)<1;
-  if(grounded){
-    const moving=Math.abs(entity.vx||0)>25;
-    frameName=`${type}${moving&&Math.floor(gameTime*9)%2===0?'FlapDown':'Idle'}`;
-  } else {
-    const idx=entity.wingFrame%3;
-    frameName=`${type}${idx===0?'FlapUp':idx===1?'FlapMid':'FlapDown'}`;
-  }
-  if(!spriteCache[frameName])frameName=`${type}FlapMid`;
-  const bob=grounded?Math.sin(gameTime*(Math.abs(entity.vx||0)>25?10:4))*3:0;
+  const bob=grounded?Math.sin(gameTime*(Math.abs(entity.vx||0)>25?10:5))*3:0;
   const alpha=(isPlayer&&invincTimer>0)?((Math.floor(invincTimer*14)%2)?0.92:0.38):1;
+  const wf=entity.wingFrame%3;
+  const wingAngle=wf===0?-0.8:wf===1?0:0.6;
+  const punch=isPlayer?Math.max(0,entity.flapPunch||0):0;
+  const sx=1+(punch*1.2), sy=1-(punch*0.45);
   ctx.save();
-  ctx.shadowColor=isPlayer?'rgba(255,215,0,.75)':(entity.glowColor||'rgba(255,255,255,.5)');
-  ctx.shadowBlur=isPlayer?16:12;
-  drawCachedSprite(frameName,entity.x-58,entity.y-18+bob,116,96,(entity.facing||1)<0,alpha);
+  ctx.globalAlpha=alpha;
+  ctx.translate(entity.x,entity.y+32+bob);
+  ctx.scale(dir*sx,sy);
+  ctx.shadowColor=isPlayer?'rgba(255,215,0,.82)':th.glow;
+  ctx.shadowBlur=isPlayer?14:(type==='shadow'?16:11);
+  ctx.lineJoin='round'; ctx.lineCap='round';
+
+  // Wings behind the body — three distinct feather groups, rotating from one root.
+  ctx.save();
+  ctx.translate(-8,4);
+  ctx.rotate(wingAngle);
+  const featherData=[[-4,-5,-28,-24,-53,-22,-67,-4],[-2,4,-28,-6,-54,2,-65,18],[2,12,-22,13,-43,23,-55,37]];
+  for(let i=2;i>=0;i--){
+    const d=featherData[i];
+    ctx.fillStyle=th.wings[i];ctx.strokeStyle='#333';ctx.lineWidth=2.2;
+    pathFeather(ctx,d[0],d[1],d[2],d[3],d[4],d[5],d[6],d[7]);ctx.fill();ctx.stroke();
+  }
+  ctx.restore();
+
+  // Tail feathers.
+  for(let i=0;i<3;i++){
+    ctx.fillStyle=i===0?th.body[1]:th.body[2];ctx.strokeStyle='rgba(30,15,5,.65)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(-35,-1+i*5);ctx.lineTo(-56,-12+i*11);ctx.lineTo(-40,12+i*3);ctx.closePath();ctx.fill();ctx.stroke();
+  }
+
+  // Ostrich body with rich gradient and cream belly.
+  const bg=ctx.createLinearGradient(-28,-22,30,28);bg.addColorStop(0,th.body[0]);bg.addColorStop(.48,th.body[1]);bg.addColorStop(1,th.body[2]);
+  ctx.fillStyle=bg;ctx.strokeStyle='rgba(25,18,8,.78)';ctx.lineWidth=2.4;
+  ctx.beginPath();ctx.ellipse(-2,8,35,23,-0.08,0,Math.PI*2);ctx.fill();ctx.stroke();
+  ctx.fillStyle=th.belly;ctx.globalAlpha=alpha*.82;ctx.beginPath();ctx.ellipse(6,19,24,8,-0.12,0,Math.PI*2);ctx.fill();ctx.globalAlpha=alpha;
+
+  // Legs visible when grounded, tucked when flying.
+  ctx.strokeStyle='#2A1607';ctx.lineWidth=2;
+  if(grounded){
+    ctx.beginPath();ctx.moveTo(-7,28);ctx.lineTo(-10,42);ctx.moveTo(12,28);ctx.lineTo(17,42);ctx.stroke();
+    ctx.fillStyle='#D71D1D';ctx.fillRect(-15,42,9,3);ctx.fillRect(14,42,9,3);
+  } else {
+    ctx.beginPath();ctx.moveTo(-6,25);ctx.lineTo(-14,31);ctx.moveTo(12,25);ctx.lineTo(5,31);ctx.stroke();
+  }
+
+  // Neck and head.
+  const ng=ctx.createLinearGradient(18,-28,41,-4);ng.addColorStop(0,th.body[0]);ng.addColorStop(.7,th.body[1]);ng.addColorStop(1,th.body[2]);
+  ctx.fillStyle=ng;ctx.strokeStyle='rgba(25,18,8,.74)';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(18,-8);ctx.bezierCurveTo(26,-23,36,-31,44,-29);ctx.bezierCurveTo(38,-20,32,-10,29,4);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.fillStyle=ng;ctx.beginPath();ctx.ellipse(47,-29,13,9,.2,0,Math.PI*2);ctx.fill();ctx.stroke();
+  ctx.fillStyle='white';ctx.beginPath();ctx.arc(52,-32,2.5,0,Math.PI*2);ctx.fill();ctx.fillStyle='#050505';ctx.beginPath();ctx.arc(53,-32,1.2,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=th.beak;ctx.beginPath();ctx.moveTo(58,-30);ctx.lineTo(74,-25);ctx.lineTo(58,-21);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(90,35,0,.65)';ctx.beginPath();ctx.moveTo(68,-25);ctx.lineTo(76,-24);ctx.lineTo(68,-22);ctx.closePath();ctx.fill();
+
+  // Rider armor body.
+  const torsoG=ctx.createLinearGradient(-5,-31,13,-8);torsoG.addColorStop(0,lighten(th.helmet,.35));torsoG.addColorStop(1,th.helmet2||darken(th.helmet,.35));
+  ctx.fillStyle=torsoG;ctx.strokeStyle='rgba(20,12,4,.85)';ctx.lineWidth=2;
+  ctx.beginPath();ctx.roundRect?ctx.roundRect(-11,-30,23,23,7):(roundRect(ctx,-11,-30,23,23,7));ctx.fill();ctx.stroke();
+  ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,-29);ctx.lineTo(0,-9);ctx.moveTo(-9,-18);ctx.lineTo(10,-18);ctx.stroke();
+
+  // Helmet variants.
+  ctx.fillStyle=torsoG;ctx.strokeStyle='rgba(18,10,4,.9)';ctx.lineWidth=2;
+  if(type==='hunter'){
+    ctx.beginPath();ctx.moveTo(-11,-34);ctx.lineTo(0,-48);ctx.lineTo(12,-34);ctx.lineTo(10,-24);ctx.lineTo(-10,-24);ctx.closePath();ctx.fill();ctx.stroke();
+  } else {
+    ctx.beginPath();ctx.ellipse(0,-34,13,11,0,Math.PI,Math.PI*2);ctx.lineTo(13,-25);ctx.lineTo(-13,-25);ctx.closePath();ctx.fill();ctx.stroke();
+    if(type==='shadow'){
+      ctx.fillStyle=th.helmet2;ctx.beginPath();ctx.moveTo(-10,-39);ctx.lineTo(-20,-50);ctx.lineTo(-15,-36);ctx.moveTo(10,-39);ctx.lineTo(20,-50);ctx.lineTo(15,-36);ctx.fill();
+    }
+  }
+  ctx.fillStyle='#050505';ctx.fillRect(-7,-32,14,3);
+  // Plume streamers.
+  for(let i=0;i<3;i++){
+    ctx.fillStyle=th.plume[i];ctx.beginPath();
+    const wave=Math.sin(gameTime*8+i)*3;
+    ctx.moveTo(-2+i*3,-43);ctx.quadraticCurveTo(-12-i*7,-53+wave,-24-i*8,-48+i*4);ctx.quadraticCurveTo(-13-i*6,-48+wave,-2+i*3,-41);ctx.closePath();ctx.fill();
+  }
+
+  // Lance and pennant.
+  ctx.strokeStyle=th.lance;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(8,-21);ctx.lineTo(83,-38);ctx.stroke();
+  ctx.strokeStyle='white';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(72,-36);ctx.lineTo(91,-41);ctx.stroke();
+  ctx.fillStyle=type==='player'?'#FF3333':th.plume[0];ctx.beginPath();ctx.moveTo(63,-35);ctx.lineTo(75,-30);ctx.lineTo(67,-22);ctx.closePath();ctx.fill();
+
   ctx.restore();
 }
 function drawFeathers(){
@@ -2287,10 +2374,19 @@ function drawEggs(){
   for(const eg of eggs){
     const pulse=1+0.08*Math.sin(eg.pulsePhase*2);
     const near=eg.hatchTimer<3;
-    const glow=near?0.35+0.25*Math.sin(gameTime*14):0.18;
-    ctx.save();ctx.globalCompositeOperation='lighter';ctx.fillStyle=`rgba(255,230,120,${glow})`;ctx.beginPath();ctx.arc(eg.x,eg.y,26*pulse,0,Math.PI*2);ctx.fill();ctx.restore();
-    const name=eg.type==='hunter'?'eggHunter':eg.type==='shadow'?'eggShadow':'eggBounder';
-    drawCachedSprite(name,eg.x-18*pulse,eg.y-21*pulse,36*pulse,42*pulse,false,1);
+    const speck=eg.type==='hunter'?'#E33114':eg.type==='shadow'?'#7A23D9':'#1E86FF';
+    const glow=near?0.42+0.28*Math.sin(gameTime*14):0.22+0.08*Math.sin(eg.pulsePhase);
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';ctx.fillStyle=`rgba(255,230,120,${glow})`;ctx.beginPath();ctx.arc(eg.x,eg.y,25*pulse,0,Math.PI*2);ctx.fill();ctx.restore();
+    ctx.save();ctx.translate(eg.x,eg.y);ctx.scale(pulse,pulse);
+    const g=ctx.createLinearGradient(-8,-16,9,15);g.addColorStop(0,'#FFFFFF');g.addColorStop(.45,'#FFF8DD');g.addColorStop(1,'#D9C784');
+    ctx.fillStyle=g;ctx.strokeStyle='#6A5B3E';ctx.lineWidth=2;
+    ctx.beginPath();ctx.ellipse(0,0,12,15,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,.62)';ctx.beginPath();ctx.ellipse(-4,-7,4,6,-.35,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=speck;
+    const dots=[[-4,-2,2.2],[4,-6,2],[-2,6,2.5],[6,4,1.8],[-6,-9,1.6]];
+    for(const d of dots){ctx.beginPath();ctx.arc(d[0],d[1],d[2],0,Math.PI*2);ctx.fill();}
+    ctx.restore();
   }
 }
 function drawPtero(){
@@ -2730,7 +2826,7 @@ function loop(ts){
 
   // Draw player
   if(player&&state!=='dying')drawBird(player,true);
-  if(state==='dying'){for(const dp of deathPieces){const sw=82,sh=68;ctx.save();ctx.translate(dp.x,dp.y);ctx.rotate(dp.rot);drawCachedSprite(dp.sprite,-sw/2,-sh/2,sw,sh,false,1);ctx.restore();}}
+  if(state==='dying'){for(const dp of deathPieces){ctx.save();ctx.translate(dp.x,dp.y);ctx.rotate(dp.rot);drawBird({x:0,y:-32,facing:dp.facing,wingFrame:dp.wingFrame,type:'player',color:dp.color,glowColor:dp.glowColor,vy:120,vx:dp.vx},true);ctx.restore();}}
 
   drawPtero();
   drawFeathers();
