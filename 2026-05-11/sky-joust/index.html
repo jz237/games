@@ -1317,11 +1317,11 @@ function drawTitle(){
   ctx.fillText('HIGH SCORES',W/2,btnY+btnH/2+6);
   addButton('highscores',btnX,btnY,btnW,btnH,()=>{showingLeaderboard=true;state='leaderboard';fetchGlobalScores()});
 
-  // Version
+  // Version — prominent bottom-right
   ctx.textAlign='right';
-  ctx.font=`${Math.max(10,W*0.015)}px monospace`;
-  ctx.fillStyle='rgba(255,255,255,0.3)';
-  ctx.fillText(VERSION,W-15,H-15);
+  ctx.font=`bold ${Math.max(12,W*0.02)}px monospace`;
+  ctx.fillStyle='rgba(255,215,0,0.7)';
+  ctx.fillText(VERSION,W-12,H-12);
   ctx.textAlign='left';
 }
 
