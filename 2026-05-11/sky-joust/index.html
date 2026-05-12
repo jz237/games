@@ -181,7 +181,7 @@ function createEnemy(type,x,y){
   return {
     x,y,vx:(Math.random()>0.5?1:-1)*60*speeds[type],vy:0,
     facing:1,wingFrame:0,wingTimer:0,
-    type,color,glowColor:type==='bounder'?'rgba(0,168,255,0.75)':type==='hunter'?'rgba(255,32,32,0.75)':'rgba(190,0,255,0.8)',
+    type,color:colors[type],glowColor:type==='bounder'?'rgba(0,168,255,0.75)':type==='hunter'?'rgba(255,32,32,0.75)':'rgba(190,0,255,0.8)',
     speed:speeds[type],flapRate:flapRates[type],
     flapCooldown:Math.random()*flapRates[type],
     ai:{changeTimer:1+Math.random()*2,targetVx:0},
@@ -189,8 +189,9 @@ function createEnemy(type,x,y){
   };
 }
 
+let waveStartTime = 0;
 function spawnWaveEnemies(){
-  const bounders=3+Math.floor(wave*0.5);
+  const bounders=Math.max(3,3+Math.floor(wave*0.5));
   const hunters=wave>=4?Math.floor((wave-3)*0.8):0;
   const shadows=wave>=7?Math.floor((wave-6)*0.5):0;
   const spawnable=platforms.filter(p=>!p.broken&&p.hasNest);
@@ -198,14 +199,14 @@ function spawnWaveEnemies(){
   for(let i=0;i<bounders;i++)list.push('bounder');
   for(let i=0;i<hunters;i++)list.push('hunter');
   for(let i=0;i<shadows;i++)list.push('shadow');
+  waveStartTime=gameTime;
   list.forEach((type,i)=>{
     const p=spawnable[i%spawnable.length]||platforms[0];
     if(p){
       const e=createEnemy(type,p.x+p.w/2,p.y-PLAYER_H);
-      // Stagger start: enemies start above screen and drop in
-      e.y=-PLAYER_H-i*40;
-      e.vy=60+i*15;
-      e.spawnDelay=i*0.4;
+      // Spawn directly on platform, no drop-in delay
+      e.vy=0;
+      e.invincible=1.0; // brief invincibility instead of spawnDelay
       enemies.push(e);
     }
   });
@@ -367,11 +368,6 @@ function nextWave(){
   }
   state='waveTrans';waveTransTimer=2.0;
   sfxWaveStart();
-  setTimeout(()=>{
-    if(state==='waveTrans'){state='playing';spawnWaveEnemies();}
-    // Ptero check
-    if(wave>=3){pteroTimer=8+Math.random()*6;}
-  },2000);
 }
 
 function playerDie(){
@@ -424,6 +420,15 @@ function update(dt){
   updateTrollHand(dt);
 
   if(state==='playing'||state==='waveTrans'){
+    // Wave transition countdown
+    if(state==='waveTrans'){
+      waveTransTimer-=dt;
+      if(waveTransTimer<=0){
+        state='playing';
+        spawnWaveEnemies();
+        if(wave>=3){pteroTimer=8+Math.random()*6;}
+      }
+    }
     // Lava rise
     if(state==='playing'){
       lavaY-=lavaRiseRate*dt;
@@ -530,12 +535,9 @@ function update(dt){
     // Enemy AI & physics
     for(let i=enemies.length-1;i>=0;i--){
       const e=enemies[i];
-      // Spawn delay: enemy hasn't entered yet
-      if(e.spawnDelay!==undefined&&e.spawnDelay>0){
-        e.spawnDelay-=dt;
-        // Still move them down toward screen during delay
-        e.y+=e.vy*dt;
-        if(e.y<-PLAYER_H){continue;}
+      // Invincibility countdown for freshly spawned enemies
+      if(e.invincible!==undefined&&e.invincible>0){
+        e.invincible-=dt;
       }
       // AI
       e.ai.changeTimer-=dt;
@@ -595,8 +597,8 @@ function update(dt){
         continue;
       }
 
-      // Player collision (skip if enemy still entering)
-      if(player&&state==='playing'&&invincTimer<=0&&!(e.spawnDelay!==undefined&&e.spawnDelay>0)){
+      // Player collision (skip if enemy still invincible from spawn)
+      if(player&&state==='playing'&&invincTimer<=0&&!(e.invincible>0)){
         const dx=player.x-e.x, dy=player.y-e.y;
         const dist=Math.sqrt(dx*dx+dy*dy);
         if(dist<PLAYER_W*0.8){
@@ -681,8 +683,8 @@ function update(dt){
     }
 
     // Wave clear check
-    // Wave clear check (only after enemies have had time to spawn)
-    if(state==='playing'&&enemies.length===0&&eggs.length===0&&waveTransTimer<=-0.5){
+    // Wave clear check (only after enemies have had time to spawn — at least 3s after wave start)
+    if(state==='playing'&&enemies.length===0&&eggs.length===0&&(gameTime-waveStartTime)>3.0){
       score+=500*wave;
       nextWave();
     }
@@ -1451,7 +1453,6 @@ function drawWaveTrans(){
   ctx.fillText(`WAVE ${wave}`,W/2,H/2);
   ctx.shadowBlur=0;
   ctx.textAlign='left';
-  waveTransTimer-=0.016;
 }
 
 function drawGameOver(){
