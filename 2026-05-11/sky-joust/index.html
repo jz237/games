@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v1.0.0';
+const VERSION = 'v1.1.0';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -65,8 +65,8 @@ const FLAP_POWER = -420;
 const HORIZ_SPEED = 220;
 const FLAP_HORIZ_BOOST = 40;
 const MAX_VY = 600;
-const PLAYER_W = 40;
-const PLAYER_H = 32;
+const PLAYER_W = 56;
+const PLAYER_H = 44;
 
 // --- Game State ---
 let state = 'title'; // title, playing, dying, waveTrans, gameOver, highscoreEntry, leaderboard
@@ -132,7 +132,7 @@ function generateBG(){
       const th=80+Math.random()*200+layer*40;
       towers.push({x:Math.random()*W,w:tw,h:th,hasTorch:Math.random()>0.5});
     }
-    bgLayers.push({towers,depth:0.1+layer*0.15,color:`rgba(${40+layer*15},${20+layer*10},${60+layer*20},0.6)`});
+    bgLayers.push({towers,depth:0.1+layer*0.15,color:`rgba(${50+layer*20},${30+layer*12},${15+layer*8},0.6)`});
   }
 }
 generateBG();
@@ -143,11 +143,11 @@ function generatePlatforms(waveNum){
   const count=5+Math.min(2,Math.floor(waveNum/3));
   const fragileStart = waveNum >= 5;
   for(let i=0;i<count;i++){
-    const pw = 80 + Math.random()*60;
+    const pw = 100 + Math.random()*70;
     const px = 40 + Math.random()*(W-80-pw);
     const py = H*0.25 + (i/(count-1))*(H*0.5);
     const fragile = fragileStart && Math.random()>0.65;
-    platforms.push({x:px,y:py,w:pw,h:14,fragile,crackTimer:0,broken:false,hasNest:i<count-1&&Math.random()>0.4});
+    platforms.push({x:px,y:py,w:pw,h:24,fragile,crackTimer:0,broken:false,hasNest:i<count-1&&Math.random()>0.4});
   }
 }
 
@@ -163,7 +163,7 @@ function createPlayer(){
 }
 
 function createEnemy(type,x,y){
-  const colors={bounder:'#4488FF',hunter:'#FF4444',shadow:'#AA44FF'};
+  const colors={bounder:'#5599FF',hunter:'#FF5544',shadow:'#9944DD'};
   const speeds={bounder:0.7,hunter:1.0,shadow:1.4};
   const flapRates={bounder:1.5,hunter:1.0,shadow:0.6};
   return {
@@ -197,6 +197,7 @@ function spawnWaveEnemies(){
 
 // --- Feather particles ---
 function burstFeathers(x,y,color,count){
+  count=Math.max(count,30);
   for(let i=0;i<count;i++){
     const angle=Math.random()*Math.PI*2;
     const speed=60+Math.random()*180;
@@ -225,8 +226,15 @@ function spawnEmber(x,y){
 
 // --- Explosion ---
 function createExplosion(x,y,big){
-  explosions.push({x,y,time:0,duration:big?0.5:0.3,big,r:big?60:40});
-  if(big){shakeTimer=0.2;shakeMag=8;}
+  explosions.push({x,y,time:0,duration:big?0.6:0.4,big,r:big?90:60,particles:[]});
+  const pCount=big?60:50;
+  const ex=explosions[explosions.length-1];
+  for(let i=0;i<pCount;i++){
+    const angle=Math.random()*Math.PI*2;
+    const speed=40+Math.random()*200;
+    ex.particles.push({x:0,y:0,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed-60,life:0.3+Math.random()*0.5,maxLife:0.3+Math.random()*0.5,r:2+Math.random()*4,color:['#FFDD44','#FF8800','#FF4400','#FFFFFF','#FFD700'][Math.floor(Math.random()*5)]});
+  }
+  if(big){shakeTimer=0.25;shakeMag=10;}
 }
 
 // --- Egg ---
@@ -236,14 +244,14 @@ function dropEgg(x,y,type){
   for(const p of platforms){
     if(!p.broken&&x>p.x&&x<p.x+p.w&&p.y>y&&p.y<landY)landY=p.y;
   }
-  eggs.push({x,y,targetY:landY-10,vy:0,type,hatchTimer:8+Math.random()*4,pulsePhase:0,landed:false});
+  eggs.push({x,y,targetY:landY-14,vy:0,type,hatchTimer:8+Math.random()*4,pulsePhase:0,landed:false});
 }
 
 // --- Pterodactyl ---
 function spawnPtero(){
   const fromLeft=Math.random()>0.5;
   ptero={
-    x:fromLeft?-80:W+80,y:H*0.2+Math.random()*H*0.2,
+    x:fromLeft?-120:W+120,y:H*0.2+Math.random()*H*0.2,
     vx:fromLeft?350:-350,baseY:0,phase:0,
     wingFrame:0,wingTimer:0,entering:true
   };
@@ -656,25 +664,27 @@ function update(dt){
 
 // --- Draw ---
 function drawBG(){
-  // Sky gradient
+  // Sky gradient - warm medieval teal-to-brown
   const skyGrad=ctx.createLinearGradient(0,0,0,H);
-  skyGrad.addColorStop(0,'#1a0a2e');
-  skyGrad.addColorStop(0.6,'#2d1b4e');
-  skyGrad.addColorStop(1,'#4a1a1a');
+  skyGrad.addColorStop(0,'#0a2a2e');
+  skyGrad.addColorStop(0.3,'#1a3a35');
+  skyGrad.addColorStop(0.6,'#2a3020');
+  skyGrad.addColorStop(0.85,'#3d2810');
+  skyGrad.addColorStop(1,'#4a2008');
   ctx.fillStyle=skyGrad;
   ctx.fillRect(0,0,W,H);
 
-  // Stars
+  // Stars - sparse, warm amber
   const seed=42;
-  for(let i=0;i<60;i++){
+  for(let i=0;i<30;i++){
     const sx=((seed*i*7+i*131)%1000)/1000*W;
-    const sy=((seed*i*13+i*97)%1000)/1000*H*0.6;
-    const bri=0.3+0.7*((Math.sin(gameTime*2+i)+1)/2);
-    ctx.fillStyle=`rgba(255,255,200,${bri*0.6})`;
-    ctx.beginPath();ctx.arc(sx,sy,1+Math.random()*0.5,0,Math.PI*2);ctx.fill();
+    const sy=((seed*i*13+i*97)%1000)/1000*H*0.4;
+    const bri=0.3+0.7*((Math.sin(gameTime*1.5+i)+1)/2);
+    ctx.fillStyle=`rgba(255,220,120,${bri*0.5})`;
+    ctx.beginPath();ctx.arc(sx,sy,1+((seed*i)%3)*0.4,0,Math.PI*2);ctx.fill();
   }
 
-  // BG castle layers
+  // BG castle layers - warm brown/amber silhouettes
   for(const layer of bgLayers){
     ctx.fillStyle=layer.color;
     for(const t of layer.towers){
@@ -688,8 +698,11 @@ function drawBG(){
       // Torch
       if(t.hasTorch){
         const torchBri=0.5+0.5*Math.sin(gameTime*4+t.x);
-        ctx.fillStyle=`rgba(255,150,50,${torchBri*0.8})`;
-        ctx.beginPath();ctx.arc(tx+t.w/2,H-t.h-lavaBase*0.1+20,3,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle=`rgba(255,160,40,${torchBri*0.9})`;
+        ctx.beginPath();ctx.arc(tx+t.w/2,H-t.h-lavaBase*0.1+20,4,0,Math.PI*2);ctx.fill();
+        // Torch glow
+        ctx.fillStyle=`rgba(255,120,20,${torchBri*0.3})`;
+        ctx.beginPath();ctx.arc(tx+t.w/2,H-t.h-lavaBase*0.1+20,12,0,Math.PI*2);ctx.fill();
         ctx.fillStyle=layer.color;
       }
     }
@@ -697,84 +710,128 @@ function drawBG(){
 }
 
 function drawLava(){
-  // Lava base
+  // Lava takes up more screen - multi-layered
   const lavaGrad=ctx.createLinearGradient(0,lavaY,0,H);
-  lavaGrad.addColorStop(0,'#FF6600');
-  lavaGrad.addColorStop(0.3,'#FF4400');
+  lavaGrad.addColorStop(0,'#FFEE44');  // Yellow-white surface
+  lavaGrad.addColorStop(0.1,'#FFAA00'); // Bright orange
+  lavaGrad.addColorStop(0.35,'#FF6600');
   lavaGrad.addColorStop(0.6,'#CC2200');
-  lavaGrad.addColorStop(1,'#661100');
+  lavaGrad.addColorStop(1,'#440800'); // Dark red base
   ctx.fillStyle=lavaGrad;
   ctx.fillRect(0,lavaY,W,H-lavaY);
 
-  // Animated surface
-  ctx.fillStyle='#FFAA00';
-  for(let x=0;x<W;x+=6){
-    const waveH=3*Math.sin(x*0.03+gameTime*3)+2*Math.sin(x*0.07+gameTime*5);
-    ctx.fillRect(x,lavaY+waveH-2,4,4);
+  // Animated surface flow - thicker waves
+  ctx.fillStyle='#FFCC00';
+  for(let x=0;x<W;x+=5){
+    const waveH=4*Math.sin(x*0.025+gameTime*3)+3*Math.sin(x*0.06+gameTime*5);
+    ctx.fillRect(x,lavaY+waveH-3,4,6);
   }
-  ctx.fillStyle='#FFDD44';
-  for(let x=0;x<W;x+=12){
-    const waveH=2*Math.sin(x*0.05+gameTime*4+1);
-    ctx.fillRect(x,lavaY+waveH-1,3,2);
+  ctx.fillStyle='#FFEE88';
+  for(let x=0;x<W;x+=8){
+    const waveH=2*Math.sin(x*0.04+gameTime*4+1)+Math.sin(x*0.08+gameTime*6);
+    ctx.fillRect(x,lavaY+waveH-2,5,3);
+  }
+  // Dark underflow
+  ctx.fillStyle='#DD4400';
+  for(let x=0;x<W;x+=10){
+    const waveH=3*Math.sin(x*0.02+gameTime*2+2);
+    ctx.fillRect(x,lavaY+15+waveH,8,4);
   }
 
-  // Glow
-  const glowGrad=ctx.createRadialGradient(W/2,lavaY,0,W/2,lavaY,H*0.4);
-  glowGrad.addColorStop(0,'rgba(255,100,0,0.15)');
-  glowGrad.addColorStop(1,'rgba(255,100,0,0)');
+  // Strong upward glow
+  const glowGrad=ctx.createLinearGradient(0,lavaY-H*0.25,0,lavaY);
+  glowGrad.addColorStop(0,'rgba(255,80,0,0)');
+  glowGrad.addColorStop(1,'rgba(255,100,0,0.25)');
   ctx.fillStyle=glowGrad;
-  ctx.fillRect(0,lavaY-H*0.4,W,H*0.4);
+  ctx.fillRect(0,lavaY-H*0.25,W,H*0.25);
 
-  // Bubbles
-  const bubbleCount=3;
+  // Radial glow from center
+  const glowRad=ctx.createRadialGradient(W/2,lavaY,0,W/2,lavaY,W*0.5);
+  glowRad.addColorStop(0,'rgba(255,120,0,0.2)');
+  glowRad.addColorStop(1,'rgba(255,60,0,0)');
+  ctx.fillStyle=glowRad;
+  ctx.fillRect(0,lavaY-H*0.3,W,H*0.3);
+
+  // Bubbles - larger and more visible
+  const bubbleCount=6;
   for(let i=0;i<bubbleCount;i++){
-    const bx=((gameTime*40+i*W/bubbleCount)%W);
-    const by=lavaY+5+Math.sin(gameTime*2+i*3)*8;
-    const br=3+Math.sin(gameTime*4+i)*2;
-    ctx.fillStyle='rgba(255,200,50,0.6)';
+    const bx=((gameTime*30+i*W/bubbleCount)%W);
+    const by=lavaY+8+Math.sin(gameTime*2.5+i*2.5)*10;
+    const br=5+Math.sin(gameTime*3+i*1.7)*3;
+    ctx.fillStyle='rgba(255,220,60,0.7)';
     ctx.beginPath();ctx.arc(bx,by,br,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,200,0.4)';
+    ctx.beginPath();ctx.arc(bx-br*0.3,by-br*0.3,br*0.3,0,Math.PI*2);ctx.fill();
   }
 }
 
 function drawPlatform(p){
   if(p.broken)return;
-  // Shadow
-  ctx.fillStyle='rgba(0,0,0,0.3)';
-  ctx.fillRect(p.x+4,p.y+4,p.w,p.h);
+  // Drop shadow - thick and dark
+  ctx.fillStyle='rgba(0,0,0,0.5)';
+  ctx.fillRect(p.x+3,p.y+p.h,p.w,5);
 
-  // Platform body
+  // Platform body - thick stone slab
   const pGrad=ctx.createLinearGradient(p.x,p.y,p.x,p.y+p.h);
   if(p.fragile){
-    pGrad.addColorStop(0,'#8B7355');pGrad.addColorStop(1,'#5C4033');
+    pGrad.addColorStop(0,'#9B8365');
+    pGrad.addColorStop(0.3,'#8B7355');
+    pGrad.addColorStop(0.7,'#6B5335');
+    pGrad.addColorStop(1,'#4C3023');
   } else {
-    pGrad.addColorStop(0,'#7A7A8A');pGrad.addColorStop(1,'#4A4A5A');
+    pGrad.addColorStop(0,'#8A8A9A');
+    pGrad.addColorStop(0.2,'#6A6A7A');
+    pGrad.addColorStop(0.6,'#5A5A6A');
+    pGrad.addColorStop(1,'#3A3A4A');
   }
   ctx.fillStyle=pGrad;
   ctx.fillRect(p.x,p.y,p.w,p.h);
 
-  // Stone texture cracks
-  ctx.strokeStyle='rgba(0,0,0,0.2)';
-  ctx.lineWidth=1;
-  for(let cx=p.x+10;cx<p.x+p.w-10;cx+=20){
-    ctx.beginPath();ctx.moveTo(cx,p.y+2);ctx.lineTo(cx+5,p.y+p.h-2);ctx.stroke();
+  // Top edge highlight
+  ctx.fillStyle='rgba(255,255,255,0.15)';
+  ctx.fillRect(p.x,p.y,p.w,2);
+
+  // Bottom edge dark
+  ctx.fillStyle='rgba(0,0,0,0.3)';
+  ctx.fillRect(p.x,p.y+p.h-2,p.w,2);
+
+  // Stone texture - mottled spots
+  ctx.fillStyle='rgba(0,0,0,0.08)';
+  for(let sx=p.x+8;sx<p.x+p.w-8;sx+=12){
+    const sy=p.y+4+((sx*7)%11);
+    ctx.beginPath();ctx.ellipse(sx,sy,3+((sx*3)%4),2,0,0,Math.PI*2);ctx.fill();
   }
 
-  // Fragile cracks
+  // Vertical crack lines
+  ctx.strokeStyle='rgba(0,0,0,0.2)';
+  ctx.lineWidth=1;
+  for(let cx=p.x+18;cx<p.x+p.w-10;cx+=25){
+    ctx.beginPath();ctx.moveTo(cx,p.y+3);ctx.lineTo(cx+3,p.y+p.h-3);ctx.stroke();
+  }
+
+  // Left/right edge chisel
+  ctx.fillStyle='rgba(0,0,0,0.2)';
+  ctx.fillRect(p.x,p.y,2,p.h);
+  ctx.fillRect(p.x+p.w-2,p.y,2,p.h);
+
+  // Fragile cracks - more dramatic
   if(p.fragile&&p.crackTimer>0){
     const intensity=Math.min(p.crackTimer/2,1);
-    ctx.strokeStyle=`rgba(100,30,0,${intensity})`;
-    ctx.lineWidth=2;
+    ctx.strokeStyle=`rgba(180,60,0,${intensity})`;
+    ctx.lineWidth=2.5;
     const cx=p.x+p.w/2;
     ctx.beginPath();
-    ctx.moveTo(cx,p.y);ctx.lineTo(cx-10*intensity,p.y+p.h);ctx.stroke();
+    ctx.moveTo(cx-5,p.y);ctx.lineTo(cx-15*intensity,p.y+p.h*0.5);ctx.lineTo(cx-8*intensity,p.y+p.h);ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(cx+15,p.y+2);ctx.lineTo(cx+5,p.y+p.h);ctx.stroke();
+    ctx.moveTo(cx+12,p.y+2);ctx.lineTo(cx+6,p.y+p.h*0.6);ctx.lineTo(cx+18*intensity,p.y+p.h);ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx-20,p.y+p.h*0.3);ctx.lineTo(cx+15,p.y+p.h*0.4);ctx.stroke();
   }
 
   // Nest marker
   if(p.hasNest){
     ctx.fillStyle='rgba(255,200,100,0.5)';
-    ctx.beginPath();ctx.arc(p.x+p.w/2,p.y-4,5,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(p.x+p.w/2,p.y-5,6,0,Math.PI*2);ctx.fill();
   }
 }
 
@@ -786,56 +843,118 @@ function drawBird(entity,isPlayer){
   ctx.translate(x,y+h/2);
   ctx.scale(f,1);
 
-  // Glow for player
+  // Invincibility flash
   if(isPlayer&&invincTimer>0&&Math.floor(invincTimer*10)%2===0){
-    ctx.globalAlpha=0.3;
+    ctx.globalAlpha=0.4;
   }
   if(isPlayer){
     ctx.shadowColor=entity.glowColor;
-    ctx.shadowBlur=15;
+    ctx.shadowBlur=12;
   }
 
-  // Body
-  const bodyGrad=ctx.createRadialGradient(0,-2,2,0,0,w/2);
+  // --- BIRD BODY (large, 50px wide x 30px tall feel) ---
+  const bw=w*0.9, bh=h*0.55;
+  const bodyGrad=ctx.createRadialGradient(0,4,3,0,4,bw/2);
   bodyGrad.addColorStop(0,entity.color);
   bodyGrad.addColorStop(1,darken(entity.color,0.4));
   ctx.fillStyle=bodyGrad;
   ctx.beginPath();
-  ctx.ellipse(0,2,w/2-4,h/2-4,0,0,Math.PI*2);
+  ctx.ellipse(0,4,bw/2,bh/2,0,0,Math.PI*2);
   ctx.fill();
 
-  // Wing
-  const wingAngle=entity.wingFrame===0?-0.4:entity.wingFrame===1?0.3:-0.2;
-  ctx.fillStyle=darken(entity.color,0.3);
+  // --- WINGS (animated up/down stroke) ---
+  const wingUp=entity.wingFrame===0;
+  const wingMid=entity.wingFrame===2;
+  const wingAngle=wingUp?-0.55:(wingMid?0.0:0.35);
+  const wingLen=bw*0.55, wingThick=8;
+  ctx.fillStyle=darken(entity.color,0.25);
   ctx.save();
+  ctx.translate(-bw*0.1,-bh*0.2);
   ctx.rotate(wingAngle);
+  // Main wing shape
   ctx.beginPath();
-  ctx.ellipse(-5,-h/2+6,w/2-2,6,0.2,0,Math.PI*2);
+  ctx.moveTo(0,0);
+  ctx.lineTo(-wingLen,-wingThick*(wingUp?1.5:0.5));
+  ctx.lineTo(-wingLen+8,wingThick*0.5);
+  ctx.lineTo(0,wingThick);
+  ctx.closePath();
+  ctx.fill();
+  // Wing tip feathers
+  ctx.fillStyle=darken(entity.color,0.35);
+  ctx.beginPath();
+  ctx.moveTo(-wingLen+2,-wingThick*(wingUp?1.3:0.3));
+  ctx.lineTo(-wingLen-8,-wingThick*(wingUp?2:0));
+  ctx.lineTo(-wingLen+5,0);
+  ctx.closePath();
   ctx.fill();
   ctx.restore();
 
-  // Head
+  // --- BIRD HEAD with beak ---
+  const headX=bw*0.38, headY=-bh*0.15;
   ctx.fillStyle=entity.color;
-  ctx.beginPath();ctx.arc(w/3-4,-h/4,7,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(headX,headY,8,0,Math.PI*2);ctx.fill();
   // Eye
-  ctx.fillStyle='#fff';
-  ctx.beginPath();ctx.arc(w/3-1,-h/4-1,3,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='#000';
-  ctx.beginPath();ctx.arc(w/3,-h/4-1,1.5,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#FFF';
+  ctx.beginPath();ctx.arc(headX+3,headY-2,3,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#111';
+  ctx.beginPath();ctx.arc(headX+4,headY-2,1.5,0,Math.PI*2);ctx.fill();
   // Beak
-  ctx.fillStyle='#FF8800';
-  ctx.beginPath();ctx.moveTo(w/3+3,-h/4);ctx.lineTo(w/3+10,-h/4+2);ctx.lineTo(w/3+3,-h/4+4);ctx.fill();
+  ctx.fillStyle='#FF9900';
+  ctx.beginPath();ctx.moveTo(headX+8,headY-1);ctx.lineTo(headX+16,headY+2);ctx.lineTo(headX+8,headY+4);ctx.closePath();ctx.fill();
 
-  // Rider silhouette
-  ctx.fillStyle='rgba(40,30,50,0.8)';
-  ctx.beginPath();ctx.ellipse(0,-h/2-2,6,8,0,0,Math.PI*2);ctx.fill();
-  // Rider head
-  ctx.beginPath();ctx.arc(0,-h/2-10,4,0,Math.PI*2);ctx.fill();
+  // --- BIRD LEGS (tucked under) ---
+  ctx.strokeStyle=darken(entity.color,0.5);
+  ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(-4,bh/2+2);ctx.lineTo(-6,bh/2+10);ctx.lineTo(-10,bh/2+12);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(6,bh/2+2);ctx.lineTo(8,bh/2+10);ctx.lineTo(4,bh/2+12);ctx.stroke();
 
-  // Tail feathers
+  // --- TAIL FEATHERS ---
   ctx.fillStyle=darken(entity.color,0.2);
-  ctx.beginPath();ctx.moveTo(-w/3,0);ctx.lineTo(-w/2-5,4);ctx.lineTo(-w/2-3,-2);ctx.fill();
-  ctx.beginPath();ctx.moveTo(-w/3,2);ctx.lineTo(-w/2-8,6);ctx.lineTo(-w/2-4,0);ctx.fill();
+  ctx.beginPath();ctx.moveTo(-bw*0.35,2);ctx.lineTo(-bw*0.55,6);ctx.lineTo(-bw*0.5,-2);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(-bw*0.35,5);ctx.lineTo(-bw*0.6,10);ctx.lineTo(-bw*0.52,2);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(-bw*0.3,0);ctx.lineTo(-bw*0.52,-4);ctx.lineTo(-bw*0.45,-1);ctx.closePath();ctx.fill();
+
+  // --- KNIGHT RIDER on top ---
+  const riderColor=isPlayer?'#F0E0B0':entity.type==='bounder'?'#334488':entity.type==='hunter'?'#882222':'#442266';
+  const armorColor=isPlayer?'#FFD700':entity.type==='bounder'?'#6688CC':entity.type==='hunter'?'#CC4444':'#7744AA';
+
+  // Rider body (torso)
+  ctx.fillStyle=riderColor;
+  ctx.beginPath();ctx.ellipse(0,-bh*0.5-8,7,10,0,0,Math.PI*2);ctx.fill();
+
+  // Armor chest plate
+  ctx.fillStyle=armorColor;
+  ctx.beginPath();ctx.ellipse(0,-bh*0.5-8,6,8,0,0,Math.PI*2);ctx.fill();
+
+  // Helmet
+  ctx.fillStyle=armorColor;
+  ctx.beginPath();ctx.arc(0,-bh*0.5-20,6,0,Math.PI*2);ctx.fill();
+  // Helmet visor
+  ctx.fillStyle='rgba(0,0,0,0.6)';
+  ctx.fillRect(2,-bh*0.5-22,5,4);
+  // Helmet plume
+  ctx.fillStyle=isPlayer?'#FF4444':entity.type==='bounder'?'#AACCFF':entity.type==='hunter'?'#FFAA00':'#DD88FF';
+  ctx.beginPath();ctx.moveTo(0,-bh*0.5-26);ctx.lineTo(-8,-bh*0.5-30);ctx.lineTo(-2,-bh*0.5-26);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(-2,-bh*0.5-27);ctx.lineTo(-12,-bh*0.5-28);ctx.lineTo(-4,-bh*0.5-25);ctx.closePath();ctx.fill();
+
+  // --- LANCE ---
+  ctx.strokeStyle=armorColor;
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.moveTo(4,-bh*0.5-6);
+  ctx.lineTo(bw*0.5+12,-bh*0.5-6);
+  ctx.stroke();
+  // Lance tip
+  ctx.fillStyle='#DDDDDD';
+  ctx.beginPath();
+  ctx.moveTo(bw*0.5+12,-bh*0.5-9);
+  ctx.lineTo(bw*0.5+20,-bh*0.5-6);
+  ctx.lineTo(bw*0.5+12,-bh*0.5-3);
+  ctx.closePath();ctx.fill();
+
+  // Rider arm holding lance
+  ctx.fillStyle=riderColor;
+  ctx.beginPath();ctx.ellipse(5,-bh*0.5-5,4,3,0.2,0,Math.PI*2);ctx.fill();
 
   ctx.shadowBlur=0;
   ctx.restore();
@@ -876,64 +995,127 @@ function drawEggs(){
   for(const eg of eggs){
     const pulse=0.5+0.5*Math.sin(eg.pulsePhase);
     const near=eg.hatchTimer<3;
-    // Glow
-    ctx.fillStyle=`rgba(255,255,200,${0.2+pulse*(near?0.4:0.15)})`;
-    ctx.beginPath();ctx.arc(eg.x,eg.y,15+pulse*5,0,Math.PI*2);ctx.fill();
-    // Egg
-    ctx.fillStyle=near?`rgb(255,${200+pulse*55},${150+pulse*105})`:'#FFFFCC';
-    ctx.beginPath();ctx.ellipse(eg.x,eg.y,8,11,0,0,Math.PI*2);ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.3)';ctx.lineWidth=1;
-    ctx.beginPath();ctx.ellipse(eg.x,eg.y,8,11,0,0,Math.PI*2);ctx.stroke();
+    // Outer glow
+    ctx.fillStyle=`rgba(255,255,150,${0.15+pulse*(near?0.45:0.2)})`;
+    ctx.beginPath();ctx.arc(eg.x,eg.y,22+pulse*8,0,Math.PI*2);ctx.fill();
+    // Inner glow
+    ctx.fillStyle=`rgba(255,240,180,${0.2+pulse*0.25})`;
+    ctx.beginPath();ctx.arc(eg.x,eg.y,16+pulse*4,0,Math.PI*2);ctx.fill();
+    // Egg body - big and visible
+    const eggGrad=ctx.createRadialGradient(eg.x-3,eg.y-4,2,eg.x,eg.y,14);
+    if(near){
+      eggGrad.addColorStop(0,`rgb(255,${220+pulse*35},${180+pulse*75})`);
+      eggGrad.addColorStop(1,`rgb(240,${160+pulse*40},${100+pulse*50})`);
+    } else {
+      eggGrad.addColorStop(0,'#FFFFF0');
+      eggGrad.addColorStop(1,'#EEE8AA');
+    }
+    ctx.fillStyle=eggGrad;
+    ctx.beginPath();ctx.ellipse(eg.x,eg.y,12,16,0,0,Math.PI*2);ctx.fill();
+    // Egg outline
+    ctx.strokeStyle=near?'rgba(255,100,0,0.6)':'rgba(120,100,60,0.4)';
+    ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.ellipse(eg.x,eg.y,12,16,0,0,Math.PI*2);ctx.stroke();
+    // Highlight
+    ctx.fillStyle='rgba(255,255,255,0.4)';
+    ctx.beginPath();ctx.ellipse(eg.x-3,eg.y-5,4,6,0.3,0,Math.PI*2);ctx.fill();
+    // Hatching warning flash
+    if(near&&eg.hatchTimer<1.5){
+      const flash=Math.sin(eg.hatchTimer*12);
+      if(flash>0){
+        ctx.fillStyle=`rgba(255,255,200,${flash*0.4})`;
+        ctx.beginPath();ctx.arc(eg.x,eg.y,25,0,Math.PI*2);ctx.fill();
+      }
+    }
   }
 }
 
 function drawPtero(){
   if(!ptero)return;
   const px=ptero.x, py=ptero.y;
-  // Shadow on platforms
-  ctx.fillStyle='rgba(0,0,0,0.2)';
-  ctx.beginPath();ctx.ellipse(px,lavaY-20,50,8,0,0,Math.PI*2);ctx.fill();
-  // Body
-  ctx.fillStyle='#2a1a3a';
+  // Shadow on platforms - larger, more visible
+  ctx.fillStyle='rgba(0,0,0,0.35)';
+  ctx.beginPath();ctx.ellipse(px,lavaY-20,70,12,0,0,Math.PI*2);ctx.fill();
+  // Menacing aura
+  ctx.fillStyle='rgba(60,0,0,0.15)';
+  ctx.beginPath();ctx.arc(px,py,80,0,Math.PI*2);ctx.fill();
+
   const dir=ptero.vx>0?1:-1;
   ctx.save();ctx.translate(px,py);ctx.scale(dir,1);
-  // Wings
   const wingUp=ptero.wingFrame===0;
-  ctx.fillStyle='#3a2a4a';
+
+  // Wings - much bigger, leathery
+  ctx.fillStyle='#3a2030';
   ctx.beginPath();
-  ctx.moveTo(0,0);ctx.lineTo(-50,wingUp?-30:10);ctx.lineTo(-30,0);ctx.fill();
+  ctx.moveTo(-5,0);ctx.lineTo(-70,wingUp?-45:15);ctx.lineTo(-55,wingUp?-35:12);ctx.lineTo(-35,wingUp?-20:5);ctx.lineTo(-15,0);
+  ctx.closePath();ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(0,0);ctx.lineTo(50,wingUp?-30:10);ctx.lineTo(30,0);ctx.fill();
-  // Body
-  ctx.fillStyle='#2a1a3a';
-  ctx.beginPath();ctx.ellipse(0,0,15,10,0,0,Math.PI*2);ctx.fill();
+  ctx.moveTo(5,0);ctx.lineTo(70,wingUp?-45:15);ctx.lineTo(55,wingUp?-35:12);ctx.lineTo(35,wingUp?-20:5);ctx.lineTo(15,0);
+  ctx.closePath();ctx.fill();
+  // Wing membrane detail
+  ctx.strokeStyle='rgba(80,30,50,0.5)';
+  ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(-10,0);ctx.lineTo(-55,wingUp?-35:10);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-8,-2);ctx.lineTo(-40,wingUp?-30:8);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(10,0);ctx.lineTo(55,wingUp?-35:10);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(8,-2);ctx.lineTo(40,wingUp?-30:8);ctx.stroke();
+
+  // Body - larger
+  ctx.fillStyle='#2a1020';
+  ctx.beginPath();ctx.ellipse(0,0,22,14,0,0,Math.PI*2);ctx.fill();
   // Head
-  ctx.beginPath();ctx.arc(18,-5,8,0,Math.PI*2);ctx.fill();
-  // Beak
-  ctx.fillStyle='#FF6644';
-  ctx.beginPath();ctx.moveTo(24,-5);ctx.lineTo(35,-3);ctx.lineTo(24,0);ctx.fill();
-  // Eye
-  ctx.fillStyle='#FF0';
-  ctx.beginPath();ctx.arc(20,-7,2,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(26,-6,11,0,Math.PI*2);ctx.fill();
+  // Crest
+  ctx.fillStyle='#4a1830';
+  ctx.beginPath();ctx.moveTo(22,-15);ctx.lineTo(14,-22);ctx.lineTo(26,-12);ctx.closePath();ctx.fill();
+  // Beak - long and sharp
+  ctx.fillStyle='#CC4422';
+  ctx.beginPath();ctx.moveTo(34,-6);ctx.lineTo(50,-3);ctx.lineTo(34,0);ctx.closePath();ctx.fill();
+  // Teeth
+  ctx.fillStyle='#EEE';
+  ctx.beginPath();ctx.moveTo(36,-5);ctx.lineTo(38,-2);ctx.lineTo(40,-5);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(42,-4);ctx.lineTo(44,-1);ctx.lineTo(46,-4);ctx.closePath();ctx.fill();
+  // Eye - glowing
+  ctx.fillStyle='#FF2200';
+  ctx.beginPath();ctx.arc(29,-9,3,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#FFFF00';
+  ctx.beginPath();ctx.arc(29,-9,1.5,0,Math.PI*2);ctx.fill();
   ctx.restore();
 }
 
 function drawExplosions(){
   for(const ex of explosions){
     const t=ex.time/ex.duration;
-    const r=ex.r*(0.5+t*0.5);
-    // White flash core
-    if(t<0.3){
-      ctx.fillStyle=`rgba(255,255,255,${1-t/0.3})`;
-      ctx.beginPath();ctx.arc(ex.x,ex.y,r*0.4,0,Math.PI*2);ctx.fill();
+    const r=ex.r*(0.3+t*0.7);
+    // Big white flash core
+    if(t<0.25){
+      const flashAlpha=1-t/0.25;
+      ctx.fillStyle=`rgba(255,255,255,${flashAlpha})`;
+      ctx.beginPath();ctx.arc(ex.x,ex.y,r*0.5,0,Math.PI*2);ctx.fill();
     }
-    // Fireball
+    // Fireball ring
     const fireGrad=ctx.createRadialGradient(ex.x,ex.y,0,ex.x,ex.y,r);
-    fireGrad.addColorStop(0,`rgba(255,255,100,${(1-t)*0.8})`);
-    fireGrad.addColorStop(0.4,`rgba(255,150,0,${(1-t)*0.6})`);
-    fireGrad.addColorStop(1,`rgba(255,50,0,0)`);
+    fireGrad.addColorStop(0,`rgba(255,255,150,${(1-t)*0.9})`);
+    fireGrad.addColorStop(0.3,`rgba(255,200,0,${(1-t)*0.7})`);
+    fireGrad.addColorStop(0.6,`rgba(255,100,0,${(1-t)*0.4})`);
+    fireGrad.addColorStop(1,`rgba(200,30,0,0)`);
     ctx.fillStyle=fireGrad;
     ctx.beginPath();ctx.arc(ex.x,ex.y,r,0,Math.PI*2);ctx.fill();
+    // Debris particles
+    if(ex.particles){
+      for(const p of ex.particles){
+        const pt=ex.time;
+        const px=ex.x+p.vx*pt;
+        const py=ex.y+p.vy*pt+100*pt*pt;
+        const pLife=p.life-ex.time;
+        if(pLife>0){
+          ctx.globalAlpha=pLife/p.maxLife;
+          ctx.fillStyle=p.color;
+          ctx.beginPath();ctx.arc(px,py,p.r*(pLife/p.maxLife),0,Math.PI*2);ctx.fill();
+          ctx.globalAlpha=1;
+        }
+      }
+    }
   }
 }
 
