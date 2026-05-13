@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.4';
+const VERSION = 'v3.1.5';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -1479,11 +1479,22 @@ function finishDeathSequence(){
   }else respawnPlayer();
 }
 // --- Egg ---
+function burnEggInLava(eg){
+  const bx=eg.x||0, by=Math.min(eg.y||lavaY,lavaY+4);
+  lavaSplash(bx,lavaY,false);
+  burstFeathers(bx,by,eg.type==='bounder'?'#4488FF':eg.type==='hunter'?'#FF6A00':'#AA44FF',18);
+  sfxLavaPop();
+}
 function dropEgg(x,y,type){
-  // find platform below
-  let landY=lavaY-10;
+  // find platform below; if none exists, the egg falls into lava and disintegrates.
+  let landY=null;
   for(const p of platforms){
-    if(!p.broken&&x>p.x&&x<p.x+p.w&&p.y>y&&p.y<landY)landY=p.y;
+    if(!p.broken&&x>p.x&&x<p.x+p.w&&p.y>y&&p.y<lavaY-18&&(landY===null||p.y<landY))landY=p.y;
+  }
+  if(landY===null){
+    const ghost={x,y,type};
+    burnEggInLava(ghost);
+    return;
   }
   // Long hatch timer like arcade Joust — generous pickup window
   eggs.push({x,y,targetY:landY-14,vy:0,type,hatchTimer:15+Math.random()*5,pulsePhase:0,landed:false});
@@ -1947,8 +1958,10 @@ function update(dt){
       if(!eg.landed){
         eg.vy+=GRAVITY*dt*0.5;
         eg.y+=eg.vy*dt;
+        if(eg.y>=lavaY-8){burnEggInLava(eg);eggs.splice(i,1);continue;}
         if(eg.y>=eg.targetY){eg.y=eg.targetY;eg.landed=true;eg.vy=0;}
       }
+      if(eg.landed&&eg.y>=lavaY-18){burnEggInLava(eg);eggs.splice(i,1);continue;}
       eg.pulsePhase+=dt*3;
       eg.hatchTimer-=dt;
       if(eg.hatchTimer<=0){
@@ -1972,8 +1985,8 @@ function update(dt){
           player.vy=FLAP_POWER*0.4;
         }
       }
-      // Lava
-      if(eg.y>lavaY){eggs.splice(i,1)}
+      // Lava safety: eggs touching the lava are destroyed so they cannot block wave clear.
+      if(eg.y>=lavaY-18){burnEggInLava(eg);eggs.splice(i,1);continue;}
     }
 
     // Pterodactyl
