@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.12';
+const VERSION = 'v3.1.13';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1247,6 +1247,7 @@ let waveCountdown = 0;
 let waveLastTick = 0, waveFlashTimer = 0, pendingGameOver = false;
 let waveKills = 0, waveEggs = 0, lastWaveStats = null;
 let emptyWaveClearTimer = 0, noEnemyEggGraceTimer = 0;
+let comboCount = 0, comboTimer = 0, bestCombo = 0, comboBannerTimer = 0;
 let pteroWarnTimer = 0, pteroWarnActive = false, titleClashTimer = 0;
 const FOREGROUND_PROPS = Array.from({length:20},(_,i)=>({x:(i*173+41)%1600,kind:i%5,scale:.75+(i%4)*.18,seed:i*9.731}));
 
@@ -1462,6 +1463,17 @@ function bumpScore(points,x,y,text,color){
   if(points>0)scoreFlashTimer=0.32;
   if(text&&x!==undefined&&y!==undefined)addScorePopup(x,y,text,color);
 }
+function registerJoustKill(x,y,type){
+  comboCount=(comboTimer>0)?comboCount+1:1;
+  comboTimer=4.2;
+  bestCombo=Math.max(bestCombo,comboCount);
+  comboBannerTimer=1.4;
+  if(comboCount>=2){
+    const bonus=Math.min(500,comboCount*75);
+    bumpScore(bonus,x,y-32,`COMBO x${comboCount} +${bonus}`,type==='shadow'?'#FF7CFF':'#FFF08A');
+    createImpactBurst(x,y,1,type==='hunter'?'#FF7A2A':type==='shadow'?'#D96CFF':'#72E7FF');
+  }
+}
 function goldenBurst(x,y){
   createExplosion(x,y,false);
   for(let i=0;i<42;i++){
@@ -1619,7 +1631,7 @@ canvas.addEventListener('touchend',(e)=>{
 // --- Start Game ---
 function startGame(){
   state='playing';score=0;lives=3;wave=0;extraLifeGiven=false;trollHand=null;
-  enemies=[];feathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;waveKills=0;waveEggs=0;lastWaveStats=null;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;
+  enemies=[];feathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;waveKills=0;waveEggs=0;lastWaveStats=null;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;comboCount=0;comboTimer=0;bestCombo=0;comboBannerTimer=0;
   generatePlatforms(1);
   player=createPlayer();
   nextWave();
@@ -1628,7 +1640,7 @@ function startGame(){
 function nextWave(){
   if(state==='playing'&&wave>0){lastWaveStats={wave,kills:waveKills,eggs:waveEggs,time:Math.max(0,gameTime-waveStartTime),bonus:500*wave};}
   wave++;
-  waveKills=0;waveEggs=0;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;
+  waveKills=0;waveEggs=0;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;comboCount=0;comboTimer=0;comboBannerTimer=0;bestCombo=0;
   lavaBase=H*0.84;
   lavaY=lavaBase;
   lavaRiseRate=0;
@@ -1653,6 +1665,7 @@ function playerDie(){
   pendingGameOver=lives<=0;
   state='dying';dyingTimer=1.5;
   invincTimer=2.0;
+  comboCount=0;comboTimer=0;comboBannerTimer=0;bestCombo=0;
 }
 
 function respawnPlayer(){
@@ -1677,6 +1690,8 @@ function update(dt){
   if(scoreFlashTimer>0)scoreFlashTimer-=dt;
   if(lifeFlashTimer>0)lifeFlashTimer-=dt;
   if(extraLifeBannerTimer>0)extraLifeBannerTimer-=dt;
+  if(comboTimer>0){comboTimer-=dt;if(comboTimer<=0)comboCount=0;}
+  if(comboBannerTimer>0)comboBannerTimer-=dt;
   for(const p of platforms){if(p.crackPulse>0)p.crackPulse-=dt;if(p.creakCooldown>0)p.creakCooldown-=dt;}
   // Wave countdown
   if(waveCountdown>0)waveCountdown-=dt;
@@ -1958,6 +1973,7 @@ function update(dt){
             // Player is higher → player wins the joust
             bumpScore(e.scoreVal,e.x,e.y,'+'+e.scoreVal,e.type==='shadow'?'#FF44FF':'#FFD700');
             waveKills++;
+            registerJoustKill(e.x,e.y,e.type);
             sfxScore();
             sfxKill();
             createImpactBurst((player.x+e.x)/2,(player.y+e.y)/2,player.facing||1,e.color);
@@ -2077,7 +2093,12 @@ function update(dt){
       }else noEnemyEggGraceTimer=0;
       if(waveAge>3&&enemies.length===0&&eggs.length===0){
         emptyWaveClearTimer+=dt;
-        if(emptyWaveClearTimer>0.25){bumpScore(500*wave);nextWave();return;}
+        if(emptyWaveClearTimer>0.25){
+          const clearBonus=500*wave+(bestCombo>=3?bestCombo*100:0);
+          bumpScore(clearBonus,player?player.x:W/2,player?Math.max(90,player.y-55):H*.32,`WAVE CLEAR +${clearBonus}`,'#FFF2A8');
+          if(bestCombo>=3)addScorePopup(player?player.x:W/2,player?Math.max(120,player.y-20):H*.38,`BEST COMBO x${bestCombo}`,'#7CFFEA');
+          nextWave();return;
+        }
       }else emptyWaveClearTimer=0;
     }
 
@@ -2916,6 +2937,20 @@ function drawWaveClarity(){
   }
 }
 
+function drawComboMeter(){
+  if(state!=='playing'||comboCount<2||comboTimer<=0)return;
+  ctx.save();
+  const t=Math.max(0,Math.min(1,comboTimer/4.2));
+  const y=Math.max(92,H*.15), w=Math.min(260,W*.48), h=24, x=W/2-w/2;
+  ctx.fillStyle='rgba(0,0,0,.45)';roundRect(ctx,x,y,w,h,10);ctx.fill();
+  const g=ctx.createLinearGradient(x,y,x+w,y);g.addColorStop(0,'rgba(255,115,0,.92)');g.addColorStop(.55,'rgba(255,236,90,.96)');g.addColorStop(1,'rgba(120,255,235,.88)');
+  ctx.fillStyle=g;roundRect(ctx,x+3,y+3,(w-6)*t,h-6,8);ctx.fill();
+  ctx.strokeStyle='rgba(255,235,160,.55)';ctx.lineWidth=2;roundRect(ctx,x,y,w,h,10);ctx.stroke();
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(14,W*.021)}px Arial Black, Impact, sans-serif`;
+  ctx.shadowColor='#FF7A00';ctx.shadowBlur=14;ctx.fillStyle='#FFF5C8';ctx.fillText(`JOUST COMBO x${comboCount}`,W/2,y+h/2+1);
+  ctx.restore();
+}
+
 function drawHUD(){
   const barH=Math.max(62,H*.082);
   ctx.save();
@@ -3447,7 +3482,7 @@ function loop(ts){
   }
 
   drawHUD();
-  if(state==='playing')drawWaveClarity();
+  if(state==='playing'){drawWaveClarity();drawComboMeter();}
 
   if(extraLifeBannerTimer>0){const a=Math.min(1,extraLifeBannerTimer/0.45);ctx.save();ctx.textAlign='center';ctx.font=`900 ${Math.max(30,W*.058)}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#7CFF8A';ctx.shadowBlur=30;ctx.fillStyle=`rgba(220,255,190,${a})`;ctx.fillText('EXTRA LIFE!',W/2,H*.20);ctx.restore();}
 
