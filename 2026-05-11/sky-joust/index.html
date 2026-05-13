@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.6';
+const VERSION = 'v3.1.7';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -2538,11 +2538,22 @@ function drawPlatform(p){
     if(p.crackTimer>1.15){ctx.fillStyle=`rgba(255,80,20,${0.10+0.18*Math.sin(gameTime*18)})`;ctx.fillRect(p.x,p.y,p.w,p.h);}
   }
 
-  // Nest marker: brighter straw ring, still small.
-  if(p.hasNest){
-    ctx.strokeStyle='rgba(255,210,80,0.75)';
-    ctx.lineWidth=2;
-    ctx.beginPath();ctx.ellipse(p.x+p.w/2,p.y-5,9,4,0,0,Math.PI*2);ctx.stroke();
+  // Spawn pads replace the old tiny nest rings: readable only during wave intro, then gone during play.
+  if(p.hasNest&&state==='waveTrans'){
+    const introA=Math.max(0,Math.min(1,waveTransTimer/3));
+    const pulse=0.72+0.28*Math.sin(gameTime*10+p.seed);
+    const cx=p.x+p.w/2, cy=p.y-7;
+    ctx.save();ctx.globalCompositeOperation='lighter';
+    const padW=Math.min(70,Math.max(38,p.w*.32)), padH=12;
+    const glow=ctx.createRadialGradient(cx,cy,1,cx,cy,padW*.75);
+    glow.addColorStop(0,`rgba(255,232,120,${0.42*introA*pulse})`);
+    glow.addColorStop(.45,`rgba(255,130,20,${0.24*introA})`);
+    glow.addColorStop(1,'rgba(255,90,0,0)');
+    ctx.fillStyle=glow;ctx.beginPath();ctx.ellipse(cx,cy,padW*.78,padH*2.2,0,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=`rgba(255,238,150,${0.82*introA})`;ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(cx,cy,padW*.48,padH,0,0,Math.PI*2);ctx.stroke();
+    ctx.strokeStyle=`rgba(255,106,18,${0.55*introA})`;ctx.lineWidth=1.5;
+    for(let i=0;i<5;i++){const a=i*Math.PI*2/5+gameTime*.8;ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*padW*.16,cy+Math.sin(a)*padH*.35);ctx.lineTo(cx+Math.cos(a)*padW*.42,cy+Math.sin(a)*padH*.9);ctx.stroke();}
+    ctx.restore();
   }
   ctx.restore();
 }
