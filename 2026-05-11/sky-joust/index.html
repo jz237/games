@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.16';
+const VERSION = 'v3.1.17';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -2275,6 +2275,17 @@ function drawBG(){
   ctx.restore();
   // highResolutionMineralDust: sub-pixel crystals that only read clearly at higher render scale.
   if(detailScale>1.05){ctx.save();ctx.globalCompositeOperation='lighter';for(let i=0;i<Math.floor(80*detailScale);i++){const x=((i*53+gameTime*6)%(W+120))-60,y=H*(.12+((i*37)%74)/100);const a=.035+.035*Math.sin(gameTime*1.7+i);ctx.fillStyle=i%5===0?`rgba(120,220,255,${a})`:`rgba(255,170,70,${a*.8})`;ctx.fillRect(x,y,Math.max(.7,renderScale*.42),Math.max(.7,renderScale*.42));}ctx.restore();}
+  // cabinetReliefMurals: faint ancient joust carvings in the cavern wall, readable in high-res mode.
+  ctx.save();
+  ctx.globalAlpha=.10+.035*Math.sin(gameTime*.8);ctx.strokeStyle='rgba(210,170,105,.55)';ctx.fillStyle='rgba(120,70,38,.10)';ctx.lineWidth=Math.max(.8,1.4/detailScale);
+  for(let i=0;i<Math.floor(5*detailScale);i++){
+    const mx=((i*W*.29-gameTime*3)%(W+220))-110, my=H*(.24+.09*(i%3));
+    ctx.beginPath();ctx.ellipse(mx,my,42,20,0,0,Math.PI*2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(mx-58,my+18);ctx.quadraticCurveTo(mx-18,my-22,mx+42,my-8);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(mx+16,my-20);ctx.lineTo(mx+74,my-36);ctx.moveTo(mx+53,my-31);ctx.lineTo(mx+67,my-20);ctx.stroke();
+    for(let r=0;r<3;r++){ctx.beginPath();ctx.arc(mx-26+r*22,my+28,5,0,Math.PI*2);ctx.stroke();}
+  }
+  ctx.restore();
   // Far magma falls and wall cracks.
   ctx.save(); ctx.globalCompositeOperation='lighter';
   for(let i=0;i<Math.floor(7*detailScale);i++){
@@ -2628,6 +2639,18 @@ function drawPlatform(p){
     if(i%4===0){ctx.save();ctx.globalCompositeOperation='lighter';ctx.strokeStyle='rgba(255,205,105,.22)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(cx-5,p.y+p.h*.5);ctx.lineTo(cx+5,p.y+p.h*.5);ctx.moveTo(cx,p.y+p.h*.5-5);ctx.lineTo(cx,p.y+p.h*.5+5);ctx.stroke();ctx.restore();}
   }
 
+  // ledgeMicroDetail: hanging roots, tiny skull chips, mineral glints, and loose rubble.
+  ctx.save();
+  for(let i=0;i<Math.max(4,Math.floor(p.w/(30/detailScale)));i++){
+    const rx=p.x+8+((i*29+seed*41)%(Math.max(12,p.w-16)));
+    const top=p.y+4+((i*7)%Math.max(6,p.h-8));
+    if(i%5===0){ctx.strokeStyle='rgba(62,38,24,.62)';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(rx,p.y+p.h-2);ctx.bezierCurveTo(rx-5,p.y+p.h+8,rx+5,p.y+p.h+14,rx-2,p.y+p.h+24+4*Math.sin(gameTime+i));ctx.stroke();}
+    else if(i%5===1){ctx.save();ctx.globalCompositeOperation='lighter';ctx.fillStyle=p.tier==='high'?'rgba(135,225,255,.55)':'rgba(255,175,65,.38)';ctx.beginPath();ctx.moveTo(rx,top-3);ctx.lineTo(rx+3,top+4);ctx.lineTo(rx-3,top+5);ctx.closePath();ctx.fill();ctx.restore();}
+    else if(i%5===2){ctx.fillStyle='rgba(215,195,150,.32)';ctx.beginPath();ctx.arc(rx,top,2.4,0,Math.PI*2);ctx.arc(rx+3,top+1,1.2,0,Math.PI*2);ctx.fill();}
+    else {ctx.fillStyle='rgba(0,0,0,.22)';ctx.fillRect(rx,top,3+(i%3),1.2);}
+  }
+  ctx.restore();
+
   // Fragile platforms are always visibly cracked and browner/weathered.
   if(p.fragile){
     const intensity=0.65+Math.min(p.crackTimer/2,0.35);
@@ -2804,6 +2827,14 @@ function drawBird(entity,isPlayer){
     const wave=Math.sin(gameTime*8+i)*3;
     ctx.moveTo(-2+i*3,-43);ctx.quadraticCurveTo(-12-i*7,-53+wave,-24-i*8,-48+i*4);ctx.quadraticCurveTo(-13-i*6,-48+wave,-2+i*3,-41);ctx.closePath();ctx.fill();
   }
+
+  // Extra cloth/sigils flutter from the rider so the character reads as a tiny armored jouster.
+  ctx.save();ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle=isPlayer?'rgba(255,42,42,.82)':(type==='hunter'?'rgba(255,110,30,.78)':type==='shadow'?'rgba(210,70,255,.72)':'rgba(90,215,255,.74)');
+  ctx.strokeStyle='rgba(20,8,4,.65)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(-9,-10);ctx.quadraticCurveTo(-24,-7+Math.sin(gameTime*8)*3,-33,2);ctx.lineTo(-18,5);ctx.quadraticCurveTo(-12,-1,-9,-10);ctx.fill();ctx.stroke();
+  ctx.strokeStyle='rgba(255,245,180,.55)';ctx.beginPath();ctx.moveTo(-19,-5);ctx.lineTo(-25,0);ctx.moveTo(-15,-7);ctx.lineTo(-22,3);ctx.stroke();
+  ctx.restore();
 
   // Lance and pennant.
   ctx.strokeStyle='rgba(0,0,0,.80)';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(7,-20);ctx.lineTo(96,-42);ctx.stroke();
