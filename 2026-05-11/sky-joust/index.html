@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.7';
+const VERSION = 'v3.1.8';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -2579,8 +2579,8 @@ function drawBird(entity,isPlayer){
   ctx.save();
   ctx.globalAlpha=alpha;
   ctx.translate(entity.x,entity.y+36+bob);
-  // Visual scale only: larger cabinet-art readability without touching collision boxes.
-  ctx.scale(dir*sx*1.22,sy*1.22);
+  // Visual scale only: chunkier/shorter cabinet-art riders without touching collision boxes.
+  ctx.scale(dir*sx*1.24,sy*1.06);
   ctx.shadowColor=isPlayer?'rgba(255,215,0,.82)':th.glow;
   ctx.shadowBlur=isPlayer?14:(type==='shadow'?16:11);
   ctx.lineJoin='round'; ctx.lineCap='round';
