@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.15';
+const VERSION = 'v3.1.16';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -2707,6 +2707,10 @@ function drawBird(entity,isPlayer){
     const d=featherData[i];
     ctx.fillStyle=th.wings[i];ctx.strokeStyle='#333';ctx.lineWidth=2.2;
     pathFeather(ctx,d[0],d[1],d[2],d[3],d[4],d[5],d[6],d[7]);ctx.fill();ctx.stroke();
+    // doubleCharacterDetail: individual barbs and bright feather spines at high resolution.
+    ctx.strokeStyle=i===0?'rgba(255,255,255,.52)':'rgba(15,20,30,.32)';ctx.lineWidth=Math.max(.7,1.15/detailScale);
+    for(let b=0;b<5;b++){const t=(b+1)/6;const sx=d[0]+(d[6]-d[0])*t*.86, sy=d[1]+(d[7]-d[1])*t*.86;ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(sx-8-5*i,sy-7+b*3);ctx.stroke();}
+    ctx.strokeStyle='rgba(255,245,190,.38)';ctx.beginPath();ctx.moveTo(d[0],d[1]);ctx.lineTo(d[6]*.82,d[7]*.82);ctx.stroke();
   }
   ctx.restore();
 
@@ -2721,6 +2725,12 @@ function drawBird(entity,isPlayer){
   ctx.fillStyle=bg;ctx.strokeStyle='rgba(25,18,8,.78)';ctx.lineWidth=2.4;
   ctx.beginPath();ctx.ellipse(-2,8,35,23,-0.08,0,Math.PI*2);ctx.fill();ctx.stroke();
   ctx.fillStyle=th.belly;ctx.globalAlpha=alpha*.82;ctx.beginPath();ctx.ellipse(6,19,24,8,-0.12,0,Math.PI*2);ctx.fill();ctx.globalAlpha=alpha;
+  // doubled character surface detail: scalloped feathers, scale speckles, saddle shadow.
+  ctx.save();ctx.clip();ctx.globalAlpha=alpha*.55;
+  for(let i=0;i<9;i++){ctx.strokeStyle=i%2?'rgba(255,245,190,.28)':'rgba(30,15,5,.24)';ctx.lineWidth=Math.max(.65,1/detailScale);ctx.beginPath();ctx.arc(-23+i*7,5+Math.sin(i)*7,8,Math.PI*.1,Math.PI*.88);ctx.stroke();}
+  for(let i=0;i<14;i++){ctx.fillStyle=i%3===0?'rgba(255,255,220,.38)':'rgba(0,0,0,.18)';ctx.beginPath();ctx.arc(-22+(i*9)%48,-7+((i*13)%28),1.1+(i%2)*.5,0,Math.PI*2);ctx.fill();}
+  ctx.restore();ctx.globalAlpha=alpha;
+  ctx.fillStyle='rgba(45,18,8,.76)';ctx.strokeStyle='rgba(255,205,100,.45)';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(-5,-8,21,8,-.1,0,Math.PI*2);ctx.fill();ctx.stroke();
 
   // Legs visible when grounded, tucked when flying.
   ctx.strokeStyle='#2A1607';ctx.lineWidth=2;
@@ -2736,14 +2746,22 @@ function drawBird(entity,isPlayer){
   ctx.fillStyle=ng;ctx.strokeStyle='rgba(25,18,8,.74)';ctx.lineWidth=2;
   ctx.beginPath();ctx.moveTo(18,-8);ctx.bezierCurveTo(26,-23,36,-31,44,-29);ctx.bezierCurveTo(38,-20,32,-10,29,4);ctx.closePath();ctx.fill();ctx.stroke();
   ctx.fillStyle=ng;ctx.beginPath();ctx.ellipse(47,-29,13,9,.2,0,Math.PI*2);ctx.fill();ctx.stroke();
-  ctx.fillStyle='white';ctx.beginPath();ctx.arc(52,-32,2.5,0,Math.PI*2);ctx.fill();ctx.fillStyle='#050505';ctx.beginPath();ctx.arc(53,-32,1.2,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='white';ctx.beginPath();ctx.arc(52,-32,2.8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#050505';ctx.beginPath();ctx.arc(53,-32,1.35,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(120,220,255,.9)';ctx.beginPath();ctx.arc(54,-33,0.7,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='rgba(20,10,4,.72)';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(41,-36);ctx.quadraticCurveTo(48,-40,56,-35);ctx.stroke();
   ctx.fillStyle=th.beak;ctx.beginPath();ctx.moveTo(58,-30);ctx.lineTo(74,-25);ctx.lineTo(58,-21);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(90,35,0,.65)';ctx.beginPath();ctx.moveTo(68,-25);ctx.lineTo(76,-24);ctx.lineTo(68,-22);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(80,34,0,.55)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(60,-26);ctx.lineTo(73,-25);ctx.stroke();
 
   // Rider armor body.
   const torsoG=ctx.createLinearGradient(-5,-31,13,-8);torsoG.addColorStop(0,lighten(th.helmet,.35));torsoG.addColorStop(1,th.helmet2||darken(th.helmet,.35));
   ctx.fillStyle=torsoG;ctx.strokeStyle='rgba(20,12,4,.85)';ctx.lineWidth=2;
   ctx.beginPath();ctx.roundRect?ctx.roundRect(-11,-30,23,23,7):(roundRect(ctx,-11,-30,23,23,7));ctx.fill();ctx.stroke();
   ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,-29);ctx.lineTo(0,-9);ctx.moveTo(-9,-18);ctx.lineTo(10,-18);ctx.stroke();
+  // Rider gets twice the readable armor: shoulder pads, belt, gloves, reins.
+  ctx.fillStyle=lighten(th.helmet,.48);ctx.strokeStyle='rgba(20,12,4,.85)';ctx.lineWidth=1.4;
+  ctx.beginPath();ctx.ellipse(-13,-22,7,5,-.35,0,Math.PI*2);ctx.ellipse(13,-22,7,5,.35,0,Math.PI*2);ctx.fill();ctx.stroke();
+  ctx.strokeStyle='rgba(255,245,175,.55)';ctx.lineWidth=1;for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(-7+i*7,-27);ctx.lineTo(-8+i*8,-11);ctx.stroke();}
+  ctx.strokeStyle='rgba(40,18,8,.8)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(7,-14);ctx.quadraticCurveTo(25,-12,43,-25);ctx.stroke();
+  ctx.fillStyle='rgba(20,8,4,.85)';ctx.fillRect(-10,-13,22,3);ctx.fillStyle=th.helmet2;ctx.fillRect(-1,-14,4,5);
 
   // Helmet variants.
   ctx.fillStyle=torsoG;ctx.strokeStyle='rgba(18,10,4,.9)';ctx.lineWidth=2;
@@ -2755,7 +2773,7 @@ function drawBird(entity,isPlayer){
       ctx.fillStyle=th.helmet2;ctx.beginPath();ctx.moveTo(-10,-39);ctx.lineTo(-20,-50);ctx.lineTo(-15,-36);ctx.moveTo(10,-39);ctx.lineTo(20,-50);ctx.lineTo(15,-36);ctx.fill();
     }
   }
-  ctx.fillStyle='#050505';ctx.fillRect(-7,-32,14,3);
+  ctx.fillStyle='#050505';ctx.fillRect(-8,-33,16,4);ctx.fillStyle='rgba(125,230,255,.55)';ctx.fillRect(-6,-32,10,1);
   // Stronger silhouette read: oversized visor, helmet brow, crest, and enemy color language.
   ctx.strokeStyle='rgba(0,0,0,.92)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-13,-31);ctx.lineTo(13,-31);ctx.stroke();
   ctx.fillStyle=th.helmet2||th.lance;ctx.beginPath();ctx.moveTo(-4,-44);ctx.lineTo(0,-57);ctx.lineTo(5,-44);ctx.closePath();ctx.fill();ctx.stroke();
@@ -2790,6 +2808,7 @@ function drawBird(entity,isPlayer){
   // Lance and pennant.
   ctx.strokeStyle='rgba(0,0,0,.80)';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(7,-20);ctx.lineTo(96,-42);ctx.stroke();
   ctx.strokeStyle=th.lance;ctx.lineWidth=4.5;ctx.beginPath();ctx.moveTo(8,-21);ctx.lineTo(91,-40);ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,.65)';ctx.lineWidth=1;for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(19+i*20,-24-i*4.5);ctx.lineTo(30+i*20,-26.5-i*4.5);ctx.stroke();}
   ctx.strokeStyle='white';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(72,-36);ctx.lineTo(101,-43);ctx.stroke();
   ctx.save();ctx.globalCompositeOperation='lighter';ctx.strokeStyle=th.glow;ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(18,-23);ctx.lineTo(98,-42);ctx.stroke();ctx.restore();
   ctx.fillStyle=type==='player'?'#FF3333':th.plume[0];ctx.beginPath();ctx.moveTo(63,-35);ctx.lineTo(75,-30);ctx.lineTo(67,-22);ctx.closePath();ctx.fill();
