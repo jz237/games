@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.0';
+const VERSION = 'v3.1.2';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -77,6 +77,10 @@ function sfxLavaPop(){playTone(1200,0.03,'sine',0.03,600)}
 function sfxWaveStart(){[262,330,392,523,659].forEach((f,i)=>playTone(f,0.08,'sine',0.10,f,i*0.08))}
 function sfxGameOver(){[220,175,131].forEach((f,i)=>playTone(f,0.25,'triangle',0.12,f,i*0.25));playTone(55,1.5,'sine',0.06,55,0)}
 function sfxPteroKill(){playTone(600,0.1,'sine',0.15,1500,0);[1200,1600,2000].forEach((f,i)=>playTone(f,0.04,'triangle',0.08,f,0.06+i*0.03))}
+function sfxExtraLife(){[784,988,1175,1568].forEach((f,i)=>playTone(f,0.09,'triangle',0.13,f,i*0.075));playTone(196,0.35,'sine',0.08,392,0)}
+function sfxCreak(){playTone(92,0.18,'sawtooth',0.055,54,0);playTone(310,0.06,'triangle',0.04,180,0.03)}
+function sfxTroll(){playTone(70,0.32,'sawtooth',0.11,38,0);playTone(180,0.2,'square',0.06,90,0.04)}
+function sfxPteroWarn(){playWarble(900,1900,620,0.32,'sawtooth',0.09,0);playTone(120,0.18,'sine',0.05,80,0.04)}
 // --- Constants ---
 const GRAVITY = 1200;
 const FLAP_POWER = -340;
@@ -1219,7 +1223,7 @@ let state = 'title'; // title, playing, dying, waveTrans, gameOver, highscoreEnt
 let score = 0, lives = 0, wave = 0, extraLifeGiven = false;
 let player = null;
 let enemies = [], feathers = [], eggs = [], embers = [], explosions = [], platforms = [], scorePopups = [], lavaBursts = [], smokeWisps = [], waterDrops = [], touchPulses = [];
-let lavaY = 0, lavaBase = 0, lavaRiseRate = 0;
+let lavaY = 0, lavaBase = 0, lavaRiseRate = 0, lavaSurgeTimer = 0, lavaSurging = false;
 let pteroTimer = 0, ptero = null;
 let waveTransTimer = 0, dyingTimer = 0;
 let deathPieces = [];
@@ -1230,8 +1234,11 @@ let shakeTimer = 0, shakeMag = 0;
 let invincTimer = 0;
 let killFlashTimer = 0;
 let deathFlashTimer = 0;
+let scoreFlashTimer = 0, lifeFlashTimer = 0, extraLifeBannerTimer = 0;
 let waveCountdown = 0;
 let waveLastTick = 0, waveFlashTimer = 0, pendingGameOver = false;
+let waveKills = 0, waveEggs = 0, lastWaveStats = null;
+let pteroWarnTimer = 0, pteroWarnActive = false, titleClashTimer = 0;
 
 // --- Leaderboard ---
 const LS_KEY = 'skyjoust_highscores';
@@ -1304,7 +1311,9 @@ function generatePlatforms(waveNum){
     const variance=(Math.random()-0.5)*40;
     const pw=Math.max(96,Math.min(W-36,bw+variance));
     const px=clampX(cx-pw/2,pw);
-    platforms.push({x:px,y:Math.min(cy,lavaLine-70),w:pw,h:26+Math.floor(Math.random()*5),fragile,crackTimer:0,broken:false,hasNest:nest,seed:Math.random()*999});
+    const py=Math.min(cy,lavaLine-70);
+    const tier=py<H*0.31?'high':py>H*0.61?'low':'mid';
+    platforms.push({x:px,y:py,w:pw,h:26+Math.floor(Math.random()*5),fragile,crackTimer:0,crackPulse:0,creakCooldown:0,broken:false,hasNest:nest,seed:Math.random()*999,tier});
   };
   const wide=Math.min(W*0.54,420);
   const side=Math.min(W*0.32,190);
@@ -1422,6 +1431,11 @@ function createExplosion(x,y,big){
 
 function addScorePopup(x,y,text,color){
   scorePopups.push({x,y,text,life:1.55,maxLife:1.55,color:color||'#FFD700',flash:0.18});
+}
+function bumpScore(points,x,y,text,color){
+  score+=points;
+  if(points>0)scoreFlashTimer=0.32;
+  if(text&&x!==undefined&&y!==undefined)addScorePopup(x,y,text,color);
 }
 function goldenBurst(x,y){
   createExplosion(x,y,false);
@@ -1562,17 +1576,21 @@ canvas.addEventListener('touchend',(e)=>{
 // --- Start Game ---
 function startGame(){
   state='playing';score=0;lives=3;wave=0;extraLifeGiven=false;trollHand=null;
-  enemies=[];feathers=[];eggs=[];embers=[];explosions=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];deathPieces=[];ptero=null;pteroTimer=0;gameTime=0;invincTimer=0;pendingGameOver=false;
+  enemies=[];feathers=[];eggs=[];embers=[];explosions=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;waveKills=0;waveEggs=0;lastWaveStats=null;
   generatePlatforms(1);
   player=createPlayer();
   nextWave();
 }
 
 function nextWave(){
+  if(state==='playing'&&wave>0){lastWaveStats={wave,kills:waveKills,eggs:waveEggs,time:Math.max(0,gameTime-waveStartTime),bonus:500*wave};}
   wave++;
+  waveKills=0;waveEggs=0;
   lavaBase=H*0.84;
   lavaY=lavaBase;
-  lavaRiseRate=2+wave*0.8;
+  lavaRiseRate=6+wave*2;
+  lavaSurging=false;
+  lavaSurgeTimer=Math.max(6,14-wave);
   if(wave>1){
     generatePlatforms(wave);
     // reposition player on a safe platform
@@ -1614,11 +1632,15 @@ function update(dt){
   // Kill flash
   if(killFlashTimer>0)killFlashTimer-=dt;
   if(deathFlashTimer>0)deathFlashTimer-=dt;
+  if(scoreFlashTimer>0)scoreFlashTimer-=dt;
+  if(lifeFlashTimer>0)lifeFlashTimer-=dt;
+  if(extraLifeBannerTimer>0)extraLifeBannerTimer-=dt;
+  for(const p of platforms){if(p.crackPulse>0)p.crackPulse-=dt;if(p.creakCooldown>0)p.creakCooldown-=dt;}
   // Wave countdown
   if(waveCountdown>0)waveCountdown-=dt;
 
   // Lava embers
-  if(Math.random()<dt*30){
+  if(Math.random()<dt*45){
     spawnEmber(Math.random()*W,lavaY);
   }
 
@@ -1646,12 +1668,15 @@ function update(dt){
       if(waveTransTimer<=0){
         state='playing';
         spawnWaveEnemies();
-        if(wave>=3){pteroTimer=8+Math.random()*6;}
+        if(wave>=3){pteroTimer=8+Math.random()*6;pteroWarnTimer=Math.max(0,pteroTimer-2.2);pteroWarnActive=false;}
       }
     }
-    // Lava rise
+    // Lava rise with periodic surges
     if(state==='playing'){
-      lavaY-=lavaRiseRate*dt;
+      lavaSurgeTimer-=dt;
+      if(!lavaSurging&&lavaSurgeTimer<=0){lavaSurging=true;lavaSurgeTimer=2+Math.random();}
+      else if(lavaSurging&&lavaSurgeTimer<=0){lavaSurging=false;lavaSurgeTimer=Math.max(4,11-wave*0.4)+Math.random()*3;}
+      lavaY-=lavaRiseRate*(lavaSurging?4:1)*dt;
       if(lavaY<H*0.5)lavaY=H*0.5; // cap
     }
 
@@ -1731,7 +1756,10 @@ function update(dt){
           // Fragile
           if(p.fragile){
             p.crackTimer+=dt;
-            if(p.crackTimer>2){p.broken=true;burstFeathers(p.x+p.w/2,p.y,'#888',15);}
+            p.crackPulse=0.18;
+            if(p.creakCooldown<=0){sfxCreak();p.creakCooldown=0.42;}
+            if(p.crackTimer>1.25){shakeTimer=Math.max(shakeTimer,0.08);shakeMag=Math.max(shakeMag,4);}
+            if(p.crackTimer>2){p.broken=true;shakeTimer=0.22;shakeMag=8;createExplosion(p.x+p.w/2,p.y,false);burstFeathers(p.x+p.w/2,p.y,'#888',28);}
           }
         }
         // Bumping head on bottom of platform (rising up)
@@ -1760,10 +1788,10 @@ function update(dt){
       if(invincTimer>0)invincTimer-=dt;
 
       // Score survival bonus
-      score+=Math.floor(dt*5);
+      bumpScore(Math.floor(dt*5));
 
       // Extra life
-      if(!extraLifeGiven&&score>=10000){lives++;extraLifeGiven=true;}
+      if(!extraLifeGiven&&score>=10000){lives++;extraLifeGiven=true;lifeFlashTimer=1.2;extraLifeBannerTimer=2.4;shakeTimer=0.28;shakeMag=7;sfxExtraLife();goldenBurst(player.x,player.y-20);addScorePopup(player.x,player.y-55,'EXTRA LIFE!','#7CFF8A');}
     }
 
     // Enemy AI & physics
@@ -1888,8 +1916,8 @@ function update(dt){
           const enemyMid=e.y+PLAYER_H*0.5;
           if(playerMid<enemyMid){
             // Player is higher → player wins the joust
-            score+=e.scoreVal;
-            addScorePopup(e.x,e.y,'+'+e.scoreVal,e.type==='shadow'?'#FF44FF':'#FFD700');
+            bumpScore(e.scoreVal,e.x,e.y,'+'+e.scoreVal,e.type==='shadow'?'#FF44FF':'#FFD700');
+            waveKills++;
             sfxScore();
             sfxKill();
             createExplosion(e.x,e.y,true); // big explosion on kill
@@ -1934,8 +1962,8 @@ function update(dt){
       if(eg.landed&&player&&state==='playing'){
         const dx=player.x-eg.x,dy=(player.y+PLAYER_H*0.5)-eg.y;
         if(Math.abs(dx)<40&&Math.abs(dy)<35){
-          score+=250;
-          addScorePopup(eg.x,eg.y,'+250','#FFE98A');
+          bumpScore(250,eg.x,eg.y,'+250','#FFE98A');
+          waveEggs++;
           sfxScore();
           sfxEggStomp();
           goldenBurst(eg.x,eg.y); // golden egg collect burst
@@ -1950,7 +1978,9 @@ function update(dt){
     // Pterodactyl
     if(pteroTimer>0&&state==='playing'){
       pteroTimer-=dt;
-      if(pteroTimer<=0)spawnPtero();
+      pteroWarnTimer-=dt;
+      if(!pteroWarnActive&&pteroWarnTimer<=0&&pteroTimer>0){pteroWarnActive=true;sfxPteroWarn();shakeTimer=Math.max(shakeTimer,0.12);shakeMag=Math.max(shakeMag,5);}
+      if(pteroTimer<=0){pteroWarnActive=false;spawnPtero();}
     }
     if(ptero){
       ptero.phase+=dt*2.5;
@@ -1967,8 +1997,7 @@ function update(dt){
           const pteroMid=ptero.y+32; // approximate center of ptero
           if(playerMid<pteroMid&&invincTimer<=0){
             // Player wins — kill pterodactyl
-            score+=1000;
-            addScorePopup(ptero.x,ptero.y,'+1000','#FF44FF');
+            bumpScore(1000,ptero.x,ptero.y,'+1000','#FF44FF');
             sfxPteroKill();
             createExplosion(ptero.x,ptero.y,true);
             burstFeathers(ptero.x,ptero.y,'#FF6A00',50);
@@ -1977,7 +2006,7 @@ function update(dt){
             ptero=null;
             player.vy=FLAP_POWER*0.5; // bounce up like killing an enemy
             // Next ptero spawns later
-            if(wave>=3)pteroTimer=8+Math.random()*6;
+            if(wave>=3){pteroTimer=8+Math.random()*6;pteroWarnTimer=Math.max(0,pteroTimer-2.2);pteroWarnActive=false;}
           } else if(invincTimer<=0) {
             // Pterodactyl kills player
             playerDie();return;
@@ -1987,15 +2016,15 @@ function update(dt){
       // Off screen — ptero escaped, small dodge bonus
       if(ptero&&((ptero.vx>0&&ptero.x>W+100)||(ptero.vx<0&&ptero.x<-100))){
         ptero=null;
-        score+=100; // dodge bonus
-        if(wave>=3)pteroTimer=6+Math.random()*8;
+        bumpScore(100); // dodge bonus
+        if(wave>=3){pteroTimer=6+Math.random()*8;pteroWarnTimer=Math.max(0,pteroTimer-2.2);pteroWarnActive=false;}
       }
     }
 
     // Wave clear check
     // Wave clear check (only after enemies have had time to spawn — at least 3s after wave start)
     if(state==='playing'&&enemies.length===0&&eggs.length===0&&(gameTime-waveStartTime)>3.0){
-      score+=500*wave;
+      bumpScore(500*wave);
       nextWave();
     }
 
@@ -2108,6 +2137,24 @@ function drawBG(){
     ctx.beginPath(); ctx.moveTo(x,0); ctx.bezierCurveTo(x+10,H*.22,x-8,H*.44,x+4,H*.7); ctx.stroke();
   }
   ctx.restore();
+  // Foreground stalactites, wet drips, smoke, and deeper cave motion.
+  ctx.save();
+  const fgOff=(player?player.x*0.018:0)+gameTime*7;
+  for(let i=0;i<18;i++){
+    const x=((i*97-fgOff)%(W+160));
+    const sx=x<-80?x+W+160:x;
+    const len=34+28*Math.abs(Math.sin(i*2.17));
+    ctx.fillStyle=i%3===0?'rgba(55,42,38,.58)':'rgba(32,27,32,.64)';
+    ctx.beginPath();ctx.moveTo(sx-12,0);ctx.lineTo(sx+12,0);ctx.lineTo(sx+Math.sin(gameTime+i)*4,len);ctx.closePath();ctx.fill();
+    if(i%4===0){ctx.strokeStyle='rgba(150,220,255,.22)';ctx.beginPath();ctx.moveTo(sx,len-3);ctx.lineTo(sx,len+12+8*Math.sin(gameTime*2+i));ctx.stroke();}
+  }
+  ctx.restore();
+  for(let i=0;i<5;i++){
+    const x=(W*(0.12+i*.21)+Math.sin(gameTime*.33+i)*22)%W;
+    const top=H*(0.16+(i%2)*.08), bottom=Math.min(lavaY-30,H*.86);
+    const grad=ctx.createLinearGradient(x,top,x,bottom);grad.addColorStop(0,'rgba(255,95,0,0.02)');grad.addColorStop(.55,'rgba(255,80,0,.13)');grad.addColorStop(1,'rgba(255,210,80,.28)');
+    ctx.fillStyle=grad;ctx.fillRect(x-3,top,6,bottom-top);
+  }
   // Drips and smoke.
   for(const wd of waterDrops){ctx.strokeStyle=`rgba(155,220,255,${0.35*wd.life/wd.maxLife})`;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(wd.x,wd.y);ctx.lineTo(wd.x,wd.y+8);ctx.stroke();}
   for(const sm of smokeWisps){ctx.fillStyle=`rgba(130,120,120,${0.12*sm.life/sm.maxLife})`;ctx.beginPath();ctx.ellipse(sm.x,sm.y,sm.r,sm.r*.45,Math.sin(gameTime+sm.x),0,Math.PI*2);ctx.fill();}
@@ -2174,7 +2221,6 @@ function drawLava(){
     ctx.fillStyle='rgba(255,255,220,0.45)';
     ctx.beginPath();ctx.arc(bx-br*0.3,by-br*0.35,br*0.35,0,Math.PI*2);ctx.fill();
   }
-}
 
   // Large lava bursts and heat distortion lines.
   for(const b of lavaBursts){
@@ -2191,6 +2237,7 @@ function drawLava(){
   }
   ctx.strokeStyle='rgba(255,210,120,0.18)'; ctx.lineWidth=1;
   for(let i=0;i<18;i++){const y=lavaY-8-i*6;ctx.beginPath();for(let x=0;x<W;x+=28){const yy=y+Math.sin(x*.035+gameTime*4+i)*3;if(x===0)ctx.moveTo(x,yy);else ctx.lineTo(x,yy);}ctx.stroke();}
+}
 
 // Lava Troll Hand — reaches up from lava when player is near
 let trollHand = null;
@@ -2198,23 +2245,26 @@ function updateTrollHand(dt){
   if(!player||state!=='playing'){trollHand=null;return;}
   const distToLava=player.y+PLAYER_H-lavaY;
   // Activate when player is within 80px of lava
-  if(distToLava>-80&&distToLava<40&&player.vy>=0){
+  if(distToLava>-130&&distToLava<55&&player.vy>=-40){
     if(!trollHand){
-      trollHand={x:player.x,targetY:player.y+PLAYER_H-10,progress:0,grabbing:false,grabX:player.x};
+      trollHand={x:player.x,targetY:player.y+PLAYER_H-10,progress:0,grabbing:false,grabX:player.x,warn:0.45};
+      sfxTroll();lavaSplash(player.x,lavaY,false);
     }
     // Track toward player
     trollHand.grabX+=(player.x-trollHand.grabX)*dt*4;
     trollHand.x=trollHand.grabX;
     trollHand.targetY=player.y+PLAYER_H-10;
-    trollHand.progress=Math.min(1,trollHand.progress+dt*2.5);
+    trollHand.progress=Math.min(1,trollHand.progress+dt*3.4);
+    if(trollHand.warn>0)trollHand.warn-=dt;
     // Check grab
     if(trollHand.progress>0.7){
       const dx=player.x-trollHand.x;
       const dy=player.y-trollHand.targetY;
       if(Math.abs(dx)<PLAYER_W&&Math.abs(dy)<PLAYER_H*0.5){
         // Grabbed! Pull player down
-        player.vy=200;
-        player.vx*=0.3;
+        player.vy=280;
+        player.vx*=0.2;
+        shakeTimer=0.35;shakeMag=12;lavaSplash(player.x,lavaY,true);
         trollHand.progress=0;
         trollHand=null;
       }
@@ -2230,14 +2280,23 @@ function drawTrollHand(){
   if(!trollHand)return;
   const p=trollHand.progress;
   if(p<=0)return;
-  const handY=lavaY-p*120;
+  const handY=lavaY-p*145;
   const handX=trollHand.x;
-  drawCachedSprite('trollHand',handX-48*p,handY-65*p,96*p,120*p,false,Math.min(1,p*1.4));
-  const eyeY=lavaY+20, eyePulse=0.7+0.3*Math.sin(gameTime*5);
-  ctx.fillStyle=`rgba(255,200,0,${0.8*eyePulse})`;ctx.beginPath();ctx.arc(handX-14,eyeY,5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(handX+14,eyeY,5,0,Math.PI*2);ctx.fill();
+  const warn=Math.max(0,trollHand.warn||0);
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  ctx.strokeStyle=`rgba(255,190,40,${0.35+0.35*Math.sin(gameTime*10)})`;ctx.lineWidth=2+p*5;
+  ctx.beginPath();ctx.ellipse(handX,lavaY-5,34+p*46,8+p*14,0,0,Math.PI*2);ctx.stroke();
+  if(warn>0){ctx.fillStyle=`rgba(255,60,0,${warn})`;ctx.beginPath();ctx.arc(handX,lavaY-20,26+20*Math.sin(gameTime*18),0,Math.PI*2);ctx.fill();}
+  ctx.restore();
+  drawCachedSprite('trollHand',handX-58*p,handY-76*p,116*p,145*p,false,Math.min(1,p*1.55));
+  const eyeY=lavaY+20, eyePulse=0.7+0.3*Math.sin(gameTime*7);
+  ctx.fillStyle=`rgba(255,230,40,${0.9*eyePulse})`;ctx.beginPath();ctx.arc(handX-17,eyeY,6,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(handX+17,eyeY,6,0,Math.PI*2);ctx.fill();
 }
 function drawPlatform(p){
   if(p.broken)return;
+  ctx.save();
+  const tremor=(p.crackPulse||0)>0?Math.sin(gameTime*70+(p.seed||0))*Math.min(8,2+p.crackTimer*3):0;
+  ctx.translate(tremor,0);
   const seed=p.seed||1;
   const jag=(i)=>Math.sin(seed*7+i*1.73)*3+Math.sin(seed*3+i*0.61)*2;
 
@@ -2268,11 +2327,12 @@ function drawPlatform(p){
     pGrad.addColorStop(0.28,'#9B7447');
     pGrad.addColorStop(0.66,'#6D4B30');
     pGrad.addColorStop(1,'#352018');
+  } else if(p.tier==='high'){
+    pGrad.addColorStop(0,'#D8D2B9');pGrad.addColorStop(0.24,'#AFA68F');pGrad.addColorStop(0.62,'#70695E');pGrad.addColorStop(1,'#3A3835');
+  } else if(p.tier==='low'){
+    pGrad.addColorStop(0,'#A66A42');pGrad.addColorStop(0.26,'#73422E');pGrad.addColorStop(0.64,'#3C2520');pGrad.addColorStop(1,'#170C0A');
   } else {
-    pGrad.addColorStop(0,'#B6A27E');
-    pGrad.addColorStop(0.22,'#8D8676');
-    pGrad.addColorStop(0.58,'#655F55');
-    pGrad.addColorStop(1,'#332E2B');
+    pGrad.addColorStop(0,'#8DB884');pGrad.addColorStop(0.22,'#657E5D');pGrad.addColorStop(0.58,'#4E5048');pGrad.addColorStop(1,'#2A2C28');
   }
   ctx.fillStyle=pGrad;
   ctx.fill();
@@ -2322,15 +2382,19 @@ function drawPlatform(p){
   // Fragile platforms are always visibly cracked and browner/weathered.
   if(p.fragile){
     const intensity=0.65+Math.min(p.crackTimer/2,0.35);
+    const spread=Math.min(1,p.crackTimer/2);
     ctx.strokeStyle=`rgba(45,18,8,${intensity})`;
-    ctx.lineWidth=2.5;
+    ctx.lineWidth=2.5+spread*2.2;
     const cx=p.x+p.w*0.52;
     ctx.beginPath();ctx.moveTo(cx-4,p.y+2);ctx.lineTo(cx-16,p.y+p.h*0.42);ctx.lineTo(cx-8,p.y+p.h-3);ctx.stroke();
     ctx.beginPath();ctx.moveTo(cx+15,p.y+4);ctx.lineTo(cx+5,p.y+p.h*0.58);ctx.lineTo(cx+22,p.y+p.h-2);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(cx-30,p.y+p.h*0.35);ctx.lineTo(cx+26,p.y+p.h*0.48);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx-30-spread*22,p.y+p.h*0.35);ctx.lineTo(cx+26+spread*28,p.y+p.h*0.48);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx-5,p.y+p.h*.18);ctx.lineTo(cx-42*spread,p.y+p.h*.72);ctx.lineTo(cx-72*spread,p.y+p.h*.52);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx+7,p.y+p.h*.22);ctx.lineTo(cx+48*spread,p.y+p.h*.76);ctx.lineTo(cx+78*spread,p.y+p.h*.34);ctx.stroke();
     ctx.strokeStyle='rgba(255,145,50,0.35)';
     ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(cx-4,p.y+2);ctx.lineTo(cx-16,p.y+p.h*0.42);ctx.lineTo(cx-8,p.y+p.h-3);ctx.stroke();
+    if(p.crackTimer>1.15){ctx.fillStyle=`rgba(255,80,20,${0.10+0.18*Math.sin(gameTime*18)})`;ctx.fillRect(p.x,p.y,p.w,p.h);}
   }
 
   // Nest marker: brighter straw ring, still small.
@@ -2339,6 +2403,7 @@ function drawPlatform(p){
     ctx.lineWidth=2;
     ctx.beginPath();ctx.ellipse(p.x+p.w/2,p.y-5,9,4,0,0,Math.PI*2);ctx.stroke();
   }
+  ctx.restore();
 }
 
 const BIRD_THEMES={
@@ -2537,6 +2602,17 @@ function drawExplosions(){
 }
 
 
+function drawKnightHeadIcon(x,y,s,flash){
+  ctx.save();ctx.translate(x,y);ctx.scale(s,s);
+  ctx.shadowColor=flash?'#7CFF8A':'rgba(255,215,0,.7)';ctx.shadowBlur=flash?18:8;
+  const g=ctx.createLinearGradient(-13,-14,14,16);g.addColorStop(0,'#FFF0A8');g.addColorStop(.45,'#FFD34D');g.addColorStop(1,'#8B5210');
+  ctx.fillStyle=g;ctx.strokeStyle='#2A1400';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(0,0,14,16,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+  ctx.fillStyle='#111';ctx.fillRect(-8,-3,16,4);
+  ctx.strokeStyle='#FFF5CC';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(0,-14);ctx.lineTo(0,15);ctx.moveTo(-10,5);ctx.lineTo(10,5);ctx.stroke();
+  for(let i=0;i<3;i++){ctx.fillStyle=['#FF3333','#FF7A00','#FFD700'][i];ctx.beginPath();ctx.moveTo(-2+i*2,-15);ctx.quadraticCurveTo(-13-i*5,-28,-28-i*5,-20+i*4);ctx.quadraticCurveTo(-14-i*4,-21,-2+i*2,-12);ctx.fill();}
+  ctx.restore();
+}
+
 function drawHUD(){
   const barH=Math.max(54,H*.072);
   ctx.save();
@@ -2546,9 +2622,12 @@ function drawHUD(){
   const fs=Math.max(16,W*.025), big=Math.max(23,W*.038);
   ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.textBaseline='middle';ctx.textAlign='left';
   ctx.fillStyle='#FFE06A';ctx.shadowColor='#000';ctx.shadowBlur=5;ctx.fillText('LIVES',18,barH/2);
-  for(let i=0;i<lives;i++){ctx.save();ctx.translate(92+i*28,barH/2+2);ctx.scale(.34,.34);drawBird({x:0,y:-32,facing:1,wingFrame:1,type:'player',color:'#CC8800',glowColor:'rgba(255,215,0,.5)',vy:0},true);ctx.restore();}
+  const lifePulse=lifeFlashTimer>0?(1+0.24*Math.sin(gameTime*24)):1;
+  for(let i=0;i<Math.min(lives,6);i++){drawKnightHeadIcon(96+i*31,barH/2+1,.72*lifePulse,lifeFlashTimer>0&&i===lives-1);}
+  if(lives>6){ctx.fillStyle='#FFF1A8';ctx.font=`900 ${Math.max(14,W*.021)}px Arial Black, Impact, sans-serif`;ctx.fillText('+'+(lives-6),96+6*31,barH/2+5);}
   ctx.textAlign='center';ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF1A8';ctx.fillText('WAVE',W/2-42,barH/2);ctx.fillStyle='#FFD700';ctx.font=`bold ${big}px Arial Black, Impact, sans-serif`;ctx.fillText(String(wave),W/2+28,barH/2);
-  ctx.textAlign='right';ctx.fillStyle='#FFF1A8';ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.fillText('SCORE',W-170,barH/2);ctx.fillStyle='#FFD700';ctx.font=`bold ${big}px Arial Black, Impact, sans-serif`;ctx.fillText(String(score).padStart(6,'0'),W-18,barH/2);
+  const scorePulse=scoreFlashTimer>0?(1+0.16*Math.sin(gameTime*32)):1;
+  ctx.textAlign='right';ctx.fillStyle='#FFF1A8';ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.fillText('SCORE',W-170,barH/2);ctx.save();ctx.translate(W-18,barH/2);ctx.scale(scorePulse,scorePulse);ctx.fillStyle=scoreFlashTimer>0?'#FFF7A8':'#FFD700';ctx.font=`bold ${big}px Arial Black, Impact, sans-serif`;ctx.fillText(String(score).padStart(6,'0'),0,0);ctx.restore();
   ctx.restore();
 }
 
@@ -2556,14 +2635,18 @@ function drawTitle(){
   drawBG();
   drawLava();
 
-  // Animated demo — two riders jousting
+  // Animated attract-mode joust — riders charge, clash, then wheel away.
   const t=gameTime;
-  const demoY1=H*0.38+Math.sin(t*2)*35;
-  const demoY2=H*0.32+Math.sin(t*2+1.5)*45;
-  const demoX1=W*0.3+Math.sin(t*0.8)*W*0.12;
-  const demoX2=W*0.7+Math.sin(t*0.8+2)*W*0.12;
-  drawBird({x:demoX1,y:demoY1,facing:1,wingFrame:Math.floor(t*5)%3,color:'#FFD700',glowColor:'rgba(255,215,0,0.3)'},true);
-  drawBird({x:demoX2,y:demoY2,facing:-1,wingFrame:Math.floor(t*5+1)%3,type:'bounder',color:'#4488FF',glowColor:'rgba(0,168,255,.55)'},false);
+  const cycle=(t%5.2)/5.2;
+  const charge=cycle<0.55?cycle/0.55:1-(cycle-0.55)/0.45;
+  const clash=Math.max(0,1-Math.abs(cycle-0.55)/0.055);
+  const demoY1=H*0.37+Math.sin(t*4)*22-clash*20;
+  const demoY2=H*0.35+Math.sin(t*4+1.5)*24+clash*18;
+  const demoX1=W*(0.16+0.34*charge);
+  const demoX2=W*(0.84-0.34*charge);
+  drawBird({x:demoX1,y:demoY1,facing:1,wingFrame:Math.floor(t*8)%3,color:'#FFD700',glowColor:'rgba(255,215,0,0.3)',vy:Math.sin(t*5)*20},true);
+  drawBird({x:demoX2,y:demoY2,facing:-1,wingFrame:Math.floor(t*8+1)%3,type:'bounder',color:'#4488FF',glowColor:'rgba(0,168,255,.55)',vy:Math.cos(t*5)*20},false);
+  if(clash>0){ctx.save();ctx.globalCompositeOperation='lighter';ctx.fillStyle=`rgba(255,245,160,${clash})`;ctx.beginPath();ctx.arc(W/2,H*.36,42*clash,0,Math.PI*2);ctx.fill();ctx.strokeStyle=`rgba(255,255,255,${clash})`;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(W/2-70*clash,H*.36-20);ctx.lineTo(W/2+70*clash,H*.36+20);ctx.moveTo(W/2-55*clash,H*.36+24);ctx.lineTo(W/2+55*clash,H*.36-24);ctx.stroke();ctx.restore();}
 
   // Feather confetti
   for(let i=0;i<18;i++){
@@ -2687,12 +2770,18 @@ function drawWaveTrans(){
   ctx.shadowColor='#FFD700';ctx.shadowBlur=25;ctx.fillStyle='#FFD700';ctx.fillText(`WAVE ${wave}`,W/2,H*0.39);
   ctx.shadowColor='#FFFFFF';ctx.shadowBlur=7;ctx.fillStyle='#FFF3B0';ctx.fillText(`WAVE ${wave}`,W/2,H*0.39);
   const countNum=Math.ceil(waveCountdown);
+  if(lastWaveStats){
+    ctx.shadowBlur=0;ctx.font=`800 ${Math.max(15,W*.024)}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(255,235,165,.92)';
+    ctx.fillText(`WAVE ${lastWaveStats.wave} CLEARED`,W/2,H*.52);
+    ctx.font=`700 ${Math.max(13,W*.020)}px Arial, sans-serif`;ctx.fillStyle='rgba(220,245,255,.86)';
+    ctx.fillText(`Kills ${lastWaveStats.kills}   Eggs ${lastWaveStats.eggs}   Time ${lastWaveStats.time.toFixed(1)}s   Bonus +${lastWaveStats.bonus}`,W/2,H*.565);
+  }
   if(countNum>0){
     const phase=waveCountdown-(countNum-1);
     const pulse=1.35-0.35*Math.max(0,Math.min(1,phase));
     const countSize=Math.max(88,W*0.16)*pulse;
     ctx.font=`900 ${countSize}px Arial Black, Impact, sans-serif`;
-    ctx.shadowColor='#FF8A00';ctx.shadowBlur=35;ctx.fillStyle='rgba(255,255,255,.94)';ctx.fillText(countNum,W/2,H*0.61);
+    ctx.shadowColor='#FF8A00';ctx.shadowBlur=35;ctx.fillStyle='rgba(255,255,255,.94)';ctx.fillText(countNum,W/2,H*0.68);
   }
   ctx.restore();
 }
@@ -2971,20 +3060,33 @@ function loop(ts){
   drawScorePopups();
   drawTouchPulses();
 
-  // Red danger glow when player is near lava
+  // Red/orange danger glow when player is near lava (intensified during surge)
   if(player&&state==='playing'){
+    const surgeZone=lavaSurging?160:80;
     const distToLava=lavaY-(player.y+PLAYER_H);
-    if(distToLava<80&&distToLava>-20){
-      const intensity=Math.max(0,1-distToLava/80);
-      const dangerPulse=0.6+0.4*Math.sin(gameTime*8);
-      const dangerGrad=ctx.createLinearGradient(0,lavaY-80,0,lavaY);
+    if(distToLava<surgeZone&&distToLava>-20){
+      const intensity=Math.max(0,1-distToLava/surgeZone);
+      const dangerPulse=lavaSurging?(0.7+0.3*Math.sin(gameTime*14)):(0.6+0.4*Math.sin(gameTime*8));
+      const dangerGrad=ctx.createLinearGradient(0,lavaY-surgeZone,0,lavaY);
       dangerGrad.addColorStop(0,'rgba(255,0,0,0)');
-      dangerGrad.addColorStop(1,`rgba(255,0,0,${intensity*dangerPulse*0.35})`);
+      dangerGrad.addColorStop(1,`rgba(255,${lavaSurging?60:0},0,${intensity*dangerPulse*(lavaSurging?0.55:0.35)})`);
       ctx.fillStyle=dangerGrad;
-      ctx.fillRect(0,lavaY-80,W,80);
-      // Screen edge red vignette
-      ctx.fillStyle=`rgba(255,0,0,${intensity*dangerPulse*0.12})`;
+      ctx.fillRect(0,lavaY-surgeZone,W,surgeZone);
+      // Screen edge vignette — brighter during surge
+      ctx.fillStyle=`rgba(255,${lavaSurging?40:0},0,${intensity*dangerPulse*(lavaSurging?0.22:0.12)})`;
       ctx.fillRect(0,0,W,H);
+    }
+    // Surge label — drawn in game space above lava, not HUD
+    if(lavaSurging){
+      const surgePulse=0.75+0.25*Math.sin(gameTime*10);
+      ctx.save();
+      ctx.globalAlpha=surgePulse;
+      const lblY=lavaY-22;
+      ctx.font=`bold ${Math.max(13,W*0.028)}px Arial, sans-serif`;
+      ctx.textAlign='center';
+      ctx.fillStyle='#FF2200';
+      ctx.fillText('▲ LAVA SURGE ▲',W/2,lblY);
+      ctx.restore();
     }
   }
 
@@ -3003,15 +3105,17 @@ function loop(ts){
 
   drawHUD();
 
+  if(extraLifeBannerTimer>0){const a=Math.min(1,extraLifeBannerTimer/0.45);ctx.save();ctx.textAlign='center';ctx.font=`900 ${Math.max(30,W*.058)}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#7CFF8A';ctx.shadowBlur=30;ctx.fillStyle=`rgba(220,255,190,${a})`;ctx.fillText('EXTRA LIFE!',W/2,H*.20);ctx.restore();}
+
   if(state==='waveTrans')drawWaveTrans();
   if(state==='gameOver')drawGameOver();
 
-  // Ptero warning darkening
-  if(ptero){
-    const edgeDark='rgba(0,0,0,0.15)';
-    ctx.fillStyle=edgeDark;
-    ctx.fillRect(0,0,W*0.05,H);
-    ctx.fillRect(W*0.95,0,W*0.05,H);
+  // Pterodactyl warning / presence edge treatment
+  if(pteroWarnActive&&state==='playing'){
+    const a=0.22+0.18*Math.sin(gameTime*18);ctx.fillStyle=`rgba(255,0,70,${a})`;ctx.fillRect(0,0,W*.075,H);ctx.fillRect(W*.925,0,W*.075,H);
+    ctx.save();ctx.textAlign='center';ctx.font=`900 ${Math.max(15,W*.026)}px Arial Black, Impact, sans-serif`;ctx.fillStyle=`rgba(255,230,240,${0.75+a})`;ctx.shadowColor='#FF0044';ctx.shadowBlur=18;ctx.fillText('SCREECH IN THE DARK',W/2,Math.max(72,H*.11));ctx.restore();
+  } else if(ptero){
+    ctx.fillStyle='rgba(0,0,0,0.15)';ctx.fillRect(0,0,W*0.05,H);ctx.fillRect(W*0.95,0,W*0.05,H);
   }
 
   ctx.restore();
