@@ -19,7 +19,15 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.5';
+const VERSION = 'v3.1.6';
+
+// Premium title cabinet art. If the generated art is missing or fails to load,
+// the procedural poster backdrop below remains the fallback.
+const TITLE_CABINET_ART_SRC = 'assets/title-cabinet-art.png';
+const titleCabinetArt = {img:new Image(),loaded:false,failed:false};
+titleCabinetArt.img.onload=()=>{titleCabinetArt.loaded=true;};
+titleCabinetArt.img.onerror=()=>{titleCabinetArt.failed=true;};
+titleCabinetArt.img.src=TITLE_CABINET_ART_SRC;
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -1222,7 +1230,7 @@ cacheAllSprites();
 let state = 'title'; // title, playing, dying, waveTrans, gameOver, highscoreEntry, leaderboard
 let score = 0, lives = 0, wave = 0, extraLifeGiven = false;
 let player = null;
-let enemies = [], feathers = [], eggs = [], embers = [], explosions = [], platforms = [], scorePopups = [], lavaBursts = [], smokeWisps = [], waterDrops = [], touchPulses = [], enemySpawnDramas = [];
+let enemies = [], feathers = [], eggs = [], embers = [], explosions = [], impactBursts = [], platforms = [], scorePopups = [], lavaBursts = [], smokeWisps = [], waterDrops = [], touchPulses = [], enemySpawnDramas = [];
 let lavaY = 0, lavaBase = 0, lavaRiseRate = 0, lavaSurgeTimer = 0, lavaSurging = false;
 let pteroTimer = 0, ptero = null;
 let waveTransTimer = 0, dyingTimer = 0;
@@ -1432,6 +1440,18 @@ function createExplosion(x,y,big){
   if(big){shakeTimer=0.25;shakeMag=10;}
 }
 
+function createImpactBurst(x,y,dir=1,color='#FFD700'){
+  // impactBurst: comic-book radial burst + white lance spark + feather shrapnel.
+  const rays=[];
+  for(let i=0;i<22;i++){
+    const a=(i/22)*Math.PI*2+(Math.random()-0.5)*0.18;
+    rays.push({a,len:34+Math.random()*78,w:2+Math.random()*5,c:i%3===0?'#FFFFFF':(i%3===1?'#FFE66D':color)});
+  }
+  impactBursts.push({x,y,dir,life:0.22,maxLife:0.22,rays,color,sparkLife:0.16});
+  killFlashTimer=Math.max(killFlashTimer,0.18);
+  shakeTimer=Math.max(shakeTimer,0.20);shakeMag=Math.max(shakeMag,13);
+}
+
 
 function addScorePopup(x,y,text,color){
   scorePopups.push({x,y,text,life:1.55,maxLife:1.55,color:color||'#FFD700',flash:0.18});
@@ -1591,7 +1611,7 @@ canvas.addEventListener('touchend',(e)=>{
 // --- Start Game ---
 function startGame(){
   state='playing';score=0;lives=3;wave=0;extraLifeGiven=false;trollHand=null;
-  enemies=[];feathers=[];eggs=[];embers=[];explosions=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;waveKills=0;waveEggs=0;lastWaveStats=null;
+  enemies=[];feathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;waveKills=0;waveEggs=0;lastWaveStats=null;
   generatePlatforms(1);
   player=createPlayer();
   nextWave();
@@ -1932,6 +1952,7 @@ function update(dt){
             waveKills++;
             sfxScore();
             sfxKill();
+            createImpactBurst((player.x+e.x)/2,(player.y+e.y)/2,player.facing||1,e.color);
             createExplosion(e.x,e.y,true); // big explosion on kill
             burstFeathers(e.x,e.y,e.color,50);
             dropEgg(e.x,e.y,e.type);
@@ -2014,9 +2035,10 @@ function update(dt){
             // Player wins — kill pterodactyl
             bumpScore(1000,ptero.x,ptero.y,'+1000','#FF44FF');
             sfxPteroKill();
+            createImpactBurst((player.x+ptero.x)/2,(player.y+ptero.y)/2,player.facing||1,'#FF44FF');
             createExplosion(ptero.x,ptero.y,true);
             burstFeathers(ptero.x,ptero.y,'#FF6A00',50);
-            killFlashTimer=0.15;
+            killFlashTimer=0.18;
             shakeTimer=0.25;shakeMag=10;
             ptero=null;
             player.vy=FLAP_POWER*0.5; // bounce up like killing an enemy
@@ -2078,6 +2100,7 @@ function update(dt){
     }
     for(let i=touchPulses.length-1;i>=0;i--){touchPulses[i].life-=dt;if(touchPulses[i].life<=0)touchPulses.splice(i,1);}
     for(let i=enemySpawnDramas.length-1;i>=0;i--){enemySpawnDramas[i].life-=dt;if(enemySpawnDramas[i].life<=0)enemySpawnDramas.splice(i,1);}
+    for(let i=impactBursts.length-1;i>=0;i--){impactBursts[i].life-=dt;if(impactBursts[i].life<=0)impactBursts.splice(i,1);}
 
     // Explosions
     for(let i=explosions.length-1;i>=0;i--){
@@ -2103,6 +2126,7 @@ function update(dt){
       explosions[i].time+=dt;if(explosions[i].time>=explosions[i].duration)explosions.splice(i,1);
     }
     for(let i=touchPulses.length-1;i>=0;i--){touchPulses[i].life-=dt;if(touchPulses[i].life<=0)touchPulses.splice(i,1);}
+    for(let i=impactBursts.length-1;i>=0;i--){impactBursts[i].life-=dt;if(impactBursts[i].life<=0)impactBursts.splice(i,1);}
   }
 }
 
@@ -2110,13 +2134,29 @@ function update(dt){
 
 function drawBG(){
   const sky=ctx.createLinearGradient(0,0,0,H);
-  sky.addColorStop(0,'#05020A'); sky.addColorStop(0.45,'#120716'); sky.addColorStop(0.78,'#210904'); sky.addColorStop(1,'#2A0600');
+  sky.addColorStop(0,'#02050B'); sky.addColorStop(0.34,'#071323'); sky.addColorStop(0.62,'#1B1420'); sky.addColorStop(0.82,'#230904'); sky.addColorStop(1,'#3A0800');
   ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
 
   // Distant lava glow wash from below.
   const wash=ctx.createLinearGradient(0,H*0.25,0,H);
   wash.addColorStop(0,'rgba(255,90,0,0)'); wash.addColorStop(1,'rgba(255,105,0,0.28)');
   ctx.fillStyle=wash; ctx.fillRect(0,0,W,H);
+
+  // Visual-bible blue cave opening: cold upper rim against molten underlight.
+  ctx.save();ctx.globalCompositeOperation='screen';
+  const blue=ctx.createRadialGradient(W*.58,H*.18,20,W*.58,H*.18,Math.max(W,H)*.55);
+  blue.addColorStop(0,'rgba(80,150,210,.20)');blue.addColorStop(.35,'rgba(28,74,112,.14)');blue.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=blue;ctx.fillRect(0,0,W,H*.62);ctx.restore();
+
+  // Painterly cavern ceiling silhouettes framing gameplay like the cabinet art.
+  ctx.save();
+  for(let i=0;i<11;i++){
+    const x=i*W/10+Math.sin(i*2.9+gameTime*.08)*24;
+    const h=H*(.13+.16*Math.abs(Math.sin(i*1.77)));
+    const grad=ctx.createLinearGradient(x,0,x,h);grad.addColorStop(0,'rgba(0,2,8,.96)');grad.addColorStop(1,'rgba(3,8,18,.18)');
+    ctx.fillStyle=grad;ctx.beginPath();ctx.moveTo(x-70,0);ctx.lineTo(x+72,0);ctx.lineTo(x+28,h*.72);ctx.lineTo(x+8,h);ctx.lineTo(x-18,h*.64);ctx.closePath();ctx.fill();
+  }
+  ctx.restore();
 
   for(let li=0;li<bgLayers.length;li++){
     const layer=bgLayers[li];
@@ -2187,6 +2227,11 @@ function drawForegroundDepth(){
   // near-camera chains, hanging bones/roots/stalactites, and fast smoke layers
   const off=gameTime*34+(player?player.x*.035:0);
   ctx.save();
+  // Dark poster-frame rocks at the corners: strong foreground depth, but outside play focus.
+  ctx.fillStyle='rgba(0,2,8,.72)';
+  ctx.beginPath();ctx.moveTo(0,H);ctx.lineTo(0,H*.68);ctx.quadraticCurveTo(W*.08,H*.78,W*.16,H);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(W,H);ctx.lineTo(W,H*.66);ctx.quadraticCurveTo(W*.90,H*.80,W*.82,H);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(255,112,24,.15)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(W*.03,H*.73);ctx.lineTo(W*.13,H*.96);ctx.moveTo(W*.96,H*.70);ctx.lineTo(W*.86,H*.98);ctx.stroke();
   for(const pr of FOREGROUND_PROPS){
     let x=((pr.x-off*pr.scale)%(W+260)); if(x<-130)x+=W+260;
     const sway=Math.sin(gameTime*1.8+pr.seed)*7*pr.scale;
@@ -2205,7 +2250,10 @@ function drawForegroundDepth(){
       ctx.fillStyle='rgba(26,21,24,.70)';ctx.beginPath();ctx.moveTo(x-15+sway,0);ctx.lineTo(x+18+sway,0);ctx.lineTo(x+sway,70*pr.scale);ctx.closePath();ctx.fill();
     }
   }
-  for(let i=0;i<8;i++){const x=((i*233+gameTime*72)%(W+220))-110;ctx.fillStyle='rgba(80,72,70,.075)';ctx.beginPath();ctx.ellipse(x,H*(.18+.08*(i%5)),90+20*i,20+4*i,Math.sin(gameTime+i),0,Math.PI*2);ctx.fill();}
+  for(let i=0;i<12;i++){const x=((i*197+gameTime*(46+i*5))%(W+260))-130;ctx.fillStyle=i%3===0?'rgba(35,75,105,.075)':'rgba(120,86,66,.085)';ctx.beginPath();ctx.ellipse(x,H*(.16+.07*(i%7)),100+18*i,22+4*i,Math.sin(gameTime*.7+i),0,Math.PI*2);ctx.fill();}
+  // Heavy vignette ties playfield to the darker, painterly title art.
+  const vg=ctx.createRadialGradient(W*.5,H*.42,Math.min(W,H)*.22,W*.5,H*.45,Math.max(W,H)*.78);
+  vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(.72,'rgba(0,0,0,.12)');vg.addColorStop(1,'rgba(0,2,8,.56)');ctx.fillStyle=vg;ctx.fillRect(0,0,W,H);
   ctx.restore();ctx.globalAlpha=1;
 }
 function drawLava(){
@@ -2392,16 +2440,16 @@ function drawPlatform(p){
 
   const pGrad=ctx.createLinearGradient(p.x,p.y,p.x,p.y+p.h);
   if(p.fragile){
-    pGrad.addColorStop(0,'#C09B68');
-    pGrad.addColorStop(0.28,'#9B7447');
-    pGrad.addColorStop(0.66,'#6D4B30');
-    pGrad.addColorStop(1,'#352018');
+    pGrad.addColorStop(0,'#B68C58');
+    pGrad.addColorStop(0.28,'#7E5436');
+    pGrad.addColorStop(0.66,'#38251D');
+    pGrad.addColorStop(1,'#12080A');
   } else if(p.tier==='high'){
-    pGrad.addColorStop(0,'#D8D2B9');pGrad.addColorStop(0.24,'#AFA68F');pGrad.addColorStop(0.62,'#70695E');pGrad.addColorStop(1,'#3A3835');
+    pGrad.addColorStop(0,'#6E8FA9');pGrad.addColorStop(0.24,'#38516B');pGrad.addColorStop(0.62,'#162338');pGrad.addColorStop(1,'#05070C');
   } else if(p.tier==='low'){
-    pGrad.addColorStop(0,'#A66A42');pGrad.addColorStop(0.26,'#73422E');pGrad.addColorStop(0.64,'#3C2520');pGrad.addColorStop(1,'#170C0A');
+    pGrad.addColorStop(0,'#B46A30');pGrad.addColorStop(0.26,'#693019');pGrad.addColorStop(0.64,'#23100E');pGrad.addColorStop(1,'#070203');
   } else {
-    pGrad.addColorStop(0,'#8DB884');pGrad.addColorStop(0.22,'#657E5D');pGrad.addColorStop(0.58,'#4E5048');pGrad.addColorStop(1,'#2A2C28');
+    pGrad.addColorStop(0,'#796C5B');pGrad.addColorStop(0.22,'#3B4144');pGrad.addColorStop(0.58,'#1B242B');pGrad.addColorStop(1,'#080A0E');
   }
   ctx.fillStyle=pGrad;
   ctx.fill();
@@ -2426,6 +2474,16 @@ function drawPlatform(p){
     if(i===0)ctx.moveTo(xx,yy);else ctx.lineTo(xx,yy);
   }
   ctx.stroke();
+
+  // Artwork-like molten seams: black rock with thin orange veins catches the lava light.
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  ctx.strokeStyle=p.tier==='high'?'rgba(105,190,255,.22)':'rgba(255,116,28,.34)';
+  ctx.lineWidth=1.2;
+  for(let i=0;i<Math.max(2,Math.floor(p.w/56));i++){
+    const sx=p.x+12+((i*43+seed*19)%(Math.max(16,p.w-24)));
+    ctx.beginPath();ctx.moveTo(sx,p.y+5+jag(i));ctx.lineTo(sx+10*Math.sin(seed+i),p.y+p.h-6);ctx.stroke();
+  }
+  ctx.restore();
 
   // Dark lower edge for slab thickness.
   ctx.strokeStyle='rgba(0,0,0,0.52)';
@@ -2510,7 +2568,8 @@ function drawBird(entity,isPlayer){
   ctx.save();
   ctx.globalAlpha=alpha;
   ctx.translate(entity.x,entity.y+36+bob);
-  ctx.scale(dir*sx*1.1,sy*1.1);
+  // Visual scale only: larger cabinet-art readability without touching collision boxes.
+  ctx.scale(dir*sx*1.22,sy*1.22);
   ctx.shadowColor=isPlayer?'rgba(255,215,0,.82)':th.glow;
   ctx.shadowBlur=isPlayer?14:(type==='shadow'?16:11);
   ctx.lineJoin='round'; ctx.lineCap='round';
@@ -2590,6 +2649,15 @@ function drawBird(entity,isPlayer){
   ctx.strokeStyle='white';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(72,-36);ctx.lineTo(101,-43);ctx.stroke();
   ctx.save();ctx.globalCompositeOperation='lighter';ctx.strokeStyle=th.glow;ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(18,-23);ctx.lineTo(98,-42);ctx.stroke();ctx.restore();
   ctx.fillStyle=type==='player'?'#FF3333':th.plume[0];ctx.beginPath();ctx.moveTo(63,-35);ctx.lineTo(75,-30);ctx.lineTo(67,-22);ctx.closePath();ctx.fill();
+
+  // Cabinet-art lighting pass on each mount: hot orange belly glow plus cold blue rim.
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  const underA=isPlayer?.34:.26;
+  const ug=ctx.createLinearGradient(-34,30,40,-8);ug.addColorStop(0,`rgba(255,118,15,${underA})`);ug.addColorStop(.55,'rgba(255,205,84,.10)');ug.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=ug;ctx.beginPath();ctx.ellipse(-2,12,42,30,-0.05,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=isPlayer?'rgba(255,226,125,.55)':'rgba(125,200,255,.40)';ctx.lineWidth=2.2;ctx.beginPath();ctx.moveTo(-44,-12);ctx.bezierCurveTo(-66,-34,-52,-52,-26,-54);ctx.stroke();
+  ctx.strokeStyle='rgba(120,205,255,.28)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(35,-39);ctx.lineTo(62,-33);ctx.stroke();
+  ctx.restore();
 
   ctx.restore();
 }
@@ -2677,8 +2745,8 @@ function drawPtero(){
 function drawCinematicLighting(){
   // cinematicLightingLayer: orange lava underlight, cool cave highlights, rim light, stronger impact flash support.
   ctx.save();ctx.globalCompositeOperation='lighter';
-  const under=ctx.createLinearGradient(0,H,0,0);under.addColorStop(0,'rgba(255,82,0,.26)');under.addColorStop(.45,'rgba(255,120,30,.08)');under.addColorStop(1,'rgba(255,120,30,0)');ctx.fillStyle=under;ctx.fillRect(0,0,W,H);
-  const cool=ctx.createLinearGradient(0,0,W,H*.5);cool.addColorStop(0,'rgba(105,190,255,.12)');cool.addColorStop(.45,'rgba(105,190,255,0)');cool.addColorStop(1,'rgba(120,255,220,.06)');ctx.fillStyle=cool;ctx.fillRect(0,0,W,H);
+  const under=ctx.createLinearGradient(0,H,0,0);under.addColorStop(0,'rgba(255,100,0,.42)');under.addColorStop(.28,'rgba(255,150,42,.18)');under.addColorStop(.62,'rgba(255,120,30,.055)');under.addColorStop(1,'rgba(255,120,30,0)');ctx.fillStyle=under;ctx.fillRect(0,0,W,H);
+  const cool=ctx.createLinearGradient(0,0,W,H*.5);cool.addColorStop(0,'rgba(105,190,255,.20)');cool.addColorStop(.45,'rgba(105,190,255,0)');cool.addColorStop(1,'rgba(120,255,220,.075)');ctx.fillStyle=cool;ctx.fillRect(0,0,W,H);
   for(const p of platforms){if(p.broken)continue;ctx.strokeStyle='rgba(255,196,85,.22)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(p.x+3,p.y+p.h+1);ctx.lineTo(p.x+p.w-3,p.y+p.h+1);ctx.stroke();}
   const riders=player?[player,...enemies]:enemies;
   for(const r of riders){ctx.strokeStyle='rgba(255,210,90,.28)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(r.x,r.y+36,48,Math.PI*.12,Math.PI*.88);ctx.stroke();ctx.strokeStyle='rgba(130,210,255,.16)';ctx.beginPath();ctx.arc(r.x,r.y+16,42,Math.PI*1.1,Math.PI*1.85);ctx.stroke();}
@@ -2720,6 +2788,30 @@ function drawExplosions(){
   }
 }
 
+function drawImpactBursts(){
+  for(const ib of impactBursts){
+    const a=Math.max(0,ib.life/ib.maxLife);
+    const grow=1+(1-a)*1.2;
+    ctx.save();
+    ctx.translate(ib.x,ib.y);
+    ctx.globalCompositeOperation='lighter';
+    ctx.globalAlpha=a;
+    const rg=ctx.createRadialGradient(0,0,0,0,0,84*grow);
+    rg.addColorStop(0,'rgba(255,255,255,0.95)');
+    rg.addColorStop(.18,'rgba(255,232,116,0.86)');
+    rg.addColorStop(.55,'rgba(255,96,0,0.30)');
+    rg.addColorStop(1,'rgba(255,40,0,0)');
+    ctx.fillStyle=rg;ctx.beginPath();ctx.arc(0,0,86*grow,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=`rgba(255,250,210,${a})`;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(-120,0);ctx.lineTo(120,0);ctx.stroke();
+    ctx.strokeStyle=`rgba(255,122,26,${a*.85})`;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-92,10);ctx.lineTo(92,-10);ctx.moveTo(-78,-18);ctx.lineTo(78,18);ctx.stroke();
+    for(const r of ib.rays){
+      ctx.strokeStyle=r.c;ctx.lineWidth=r.w*a;
+      ctx.beginPath();ctx.moveTo(Math.cos(r.a)*12,Math.sin(r.a)*12);ctx.lineTo(Math.cos(r.a)*r.len*grow,Math.sin(r.a)*r.len*grow);ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
 
 function drawKnightHeadIcon(x,y,s,flash){
   ctx.save();ctx.translate(x,y);ctx.scale(s,s);
@@ -2753,6 +2845,15 @@ function drawHUD(){
 function drawTitleCabinetArtBackdrop(){
   // cabinetArtBackdrop — illustrated flyer/cabinet style lava cavern with silhouettes and distant ptero.
   ctx.save();
+  if(titleCabinetArt.loaded){
+    const img=titleCabinetArt.img;
+    const s=Math.max(W/img.width,H/img.height);
+    const dw=img.width*s, dh=img.height*s;
+    ctx.imageSmoothingEnabled=true;
+    ctx.drawImage(img,(W-dw)/2,(H-dh)/2,dw,dh);
+    ctx.imageSmoothingEnabled=false;
+    ctx.fillStyle='rgba(0,0,0,.18)';ctx.fillRect(0,0,W,H);
+  }
   const grd=ctx.createRadialGradient(W*.5,H*.72,20,W*.5,H*.72,Math.max(W,H)*.78);grd.addColorStop(0,'rgba(255,205,50,.42)');grd.addColorStop(.28,'rgba(194,45,0,.30)');grd.addColorStop(.70,'rgba(36,6,14,.62)');grd.addColorStop(1,'rgba(0,0,0,.92)');ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
   ctx.globalAlpha=.68;ctx.fillStyle='#09030A';
   for(let i=0;i<9;i++){const x=i*W/8+Math.sin(i)*30;ctx.beginPath();ctx.moveTo(x-80,0);ctx.lineTo(x+40,0);ctx.lineTo(x+Math.sin(gameTime+i)*30,H*(.34+.18*Math.abs(Math.sin(i))));ctx.closePath();ctx.fill();}
@@ -3196,6 +3297,7 @@ function loop(ts){
   drawPtero();
   drawFeathers();
   drawExplosions();
+  drawImpactBursts();
   drawCinematicLighting();
   drawForegroundDepth();
   drawScorePopups();
