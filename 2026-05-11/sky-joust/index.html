@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.17';
+const VERSION = 'v3.1.18';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -2295,16 +2295,16 @@ function drawBG(){
     ctx.beginPath(); ctx.moveTo(x,0); ctx.bezierCurveTo(x+10,H*.22,x-8,H*.44,x+4,H*.7); ctx.stroke();
   }
   ctx.restore();
-  // Foreground stalactites, wet drips, smoke, and deeper cave motion.
+  // Foreground stalactites and mineral drip glints — short cave forms, not vine curtains.
   ctx.save();
   const fgOff=(player?player.x*0.018:0)+gameTime*7;
-  for(let i=0;i<Math.floor(18*detailScale);i++){
-    const x=((i*97-fgOff)%(W+160));
-    const sx=x<-80?x+W+160:x;
-    const len=34+28*Math.abs(Math.sin(i*2.17));
-    ctx.fillStyle=i%3===0?'rgba(55,42,38,.58)':'rgba(32,27,32,.64)';
-    ctx.beginPath();ctx.moveTo(sx-12,0);ctx.lineTo(sx+12,0);ctx.lineTo(sx+Math.sin(gameTime+i)*4,len);ctx.closePath();ctx.fill();
-    if(i%4===0){ctx.strokeStyle='rgba(150,220,255,.22)';ctx.beginPath();ctx.moveTo(sx,len-3);ctx.lineTo(sx,len+12+8*Math.sin(gameTime*2+i));ctx.stroke();}
+  for(let i=0;i<Math.floor(12*detailScale);i++){
+    const x=((i*143-fgOff)%(W+190));
+    const sx=x<-95?x+W+190:x;
+    const len=24+22*Math.abs(Math.sin(i*2.17));
+    ctx.fillStyle=i%3===0?'rgba(55,42,38,.48)':'rgba(32,27,32,.54)';
+    ctx.beginPath();ctx.moveTo(sx-16,0);ctx.lineTo(sx+16,0);ctx.lineTo(sx+Math.sin(gameTime+i)*3,len);ctx.closePath();ctx.fill();
+    if(i%5===0){ctx.strokeStyle='rgba(150,220,255,.16)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(sx,len-2);ctx.lineTo(sx+Math.sin(gameTime*2+i)*2,len+7);ctx.stroke();}
   }
   ctx.restore();
   for(let i=0;i<Math.floor(5*detailScale);i++){
@@ -2674,21 +2674,22 @@ function drawPlatform(p){
     }
   }
 
-  // Spawn pads replace the old tiny nest rings: readable only during wave intro, then gone during play.
+  // Spawn markers: angular hot rune slashes during wave intro only. No circular nest rings.
   if(p.hasNest&&state==='waveTrans'){
     const introA=Math.max(0,Math.min(1,waveTransTimer/3));
     const pulse=0.72+0.28*Math.sin(gameTime*10+p.seed);
     const cx=p.x+p.w/2, cy=p.y-7;
     ctx.save();ctx.globalCompositeOperation='lighter';
-    const padW=Math.min(70,Math.max(38,p.w*.32)), padH=12;
+    const padW=Math.min(74,Math.max(42,p.w*.34));
     const glow=ctx.createRadialGradient(cx,cy,1,cx,cy,padW*.75);
-    glow.addColorStop(0,`rgba(255,232,120,${0.42*introA*pulse})`);
-    glow.addColorStop(.45,`rgba(255,130,20,${0.24*introA})`);
+    glow.addColorStop(0,`rgba(255,232,120,${0.34*introA*pulse})`);
+    glow.addColorStop(.46,`rgba(255,96,18,${0.20*introA})`);
     glow.addColorStop(1,'rgba(255,90,0,0)');
-    ctx.fillStyle=glow;ctx.beginPath();ctx.ellipse(cx,cy,padW*.78,padH*2.2,0,0,Math.PI*2);ctx.fill();
-    ctx.strokeStyle=`rgba(255,238,150,${0.82*introA})`;ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(cx,cy,padW*.48,padH,0,0,Math.PI*2);ctx.stroke();
-    ctx.strokeStyle=`rgba(255,106,18,${0.55*introA})`;ctx.lineWidth=1.5;
-    for(let i=0;i<5;i++){const a=i*Math.PI*2/5+gameTime*.8;ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*padW*.16,cy+Math.sin(a)*padH*.35);ctx.lineTo(cx+Math.cos(a)*padW*.42,cy+Math.sin(a)*padH*.9);ctx.stroke();}
+    ctx.fillStyle=glow;ctx.beginPath();ctx.rect(cx-padW*.58,cy-11,padW*1.16,18);ctx.fill();
+    ctx.strokeStyle=`rgba(255,238,150,${0.86*introA})`;ctx.lineWidth=2.8;
+    ctx.beginPath();ctx.moveTo(cx-padW*.48,cy+4);ctx.lineTo(cx-padW*.16,cy-8);ctx.lineTo(cx+padW*.18,cy+2);ctx.lineTo(cx+padW*.50,cy-10);ctx.stroke();
+    ctx.strokeStyle=`rgba(255,106,18,${0.58*introA})`;ctx.lineWidth=1.5;
+    for(let i=-2;i<=2;i++){const xx=cx+i*padW*.17+Math.sin(gameTime*5+i)*2;ctx.beginPath();ctx.moveTo(xx-5,cy+7);ctx.lineTo(xx+4,cy-11-4*pulse);ctx.stroke();}
     ctx.restore();
   }
   ctx.restore();
