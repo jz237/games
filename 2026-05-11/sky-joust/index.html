@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.9';
+const VERSION = 'v3.1.10';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -2536,6 +2536,11 @@ function drawPlatform(p){
     ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(cx-4,p.y+2);ctx.lineTo(cx-16,p.y+p.h*0.42);ctx.lineTo(cx-8,p.y+p.h-3);ctx.stroke();
     if(p.crackTimer>1.15){ctx.fillStyle=`rgba(255,80,20,${0.10+0.18*Math.sin(gameTime*18)})`;ctx.fillRect(p.x,p.y,p.w,p.h);}
+    if(p.crackTimer>1.05){
+      ctx.save();ctx.textAlign='center';ctx.font=`900 ${Math.max(10,W*.014)}px Arial Black, Impact, sans-serif`;
+      ctx.shadowColor='#FF3A00';ctx.shadowBlur=10;ctx.fillStyle=`rgba(255,235,170,${0.58+0.28*Math.sin(gameTime*16)})`;
+      ctx.fillText('CRACK!',p.x+p.w/2,p.y-14-3*Math.sin(gameTime*18));ctx.restore();
+    }
   }
 
   // Spawn pads replace the old tiny nest rings: readable only during wave intro, then gone during play.
@@ -2647,6 +2652,26 @@ function drawBird(entity,isPlayer){
   ctx.strokeStyle='rgba(0,0,0,.92)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-13,-31);ctx.lineTo(13,-31);ctx.stroke();
   ctx.fillStyle=th.helmet2||th.lance;ctx.beginPath();ctx.moveTo(-4,-44);ctx.lineTo(0,-57);ctx.lineTo(5,-44);ctx.closePath();ctx.fill();ctx.stroke();
   ctx.save();ctx.globalCompositeOperation='lighter';ctx.strokeStyle=th.glow;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-12,-24);ctx.lineTo(12,-24);ctx.stroke();ctx.restore();
+
+  // enemySilhouettePolish: distinct shape language beyond color.
+  if(!isPlayer){
+    ctx.save();
+    if(type==='bounder'){
+      ctx.fillStyle='rgba(80,220,255,.78)';ctx.strokeStyle='rgba(8,28,55,.9)';ctx.lineWidth=2;
+      ctx.beginPath();ctx.ellipse(-17,-18,8,10,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+      ctx.fillStyle='rgba(180,245,255,.85)';ctx.beginPath();ctx.arc(-19,-21,2.5,0,Math.PI*2);ctx.fill();
+    }else if(type==='hunter'){
+      ctx.fillStyle='#FFB000';ctx.strokeStyle='rgba(40,8,0,.95)';ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(-10,-39);ctx.lineTo(-22,-56);ctx.lineTo(-15,-35);ctx.moveTo(10,-39);ctx.lineTo(22,-56);ctx.lineTo(15,-35);ctx.fill();ctx.stroke();
+      ctx.strokeStyle='rgba(255,70,0,.72)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-28,-13);ctx.lineTo(-44,-25);ctx.moveTo(-26,-5);ctx.lineTo(-48,-6);ctx.stroke();
+    }else if(type==='shadow'){
+      ctx.globalCompositeOperation='lighter';
+      ctx.strokeStyle='rgba(220,70,255,.72)';ctx.lineWidth=2.4;
+      for(let i=0;i<4;i++){const a=gameTime*2+i*Math.PI/2;ctx.beginPath();ctx.arc(-2+Math.cos(a)*3,-22+Math.sin(a)*2,22+i*3,Math.PI*.15,Math.PI*.9);ctx.stroke();}
+      ctx.fillStyle='rgba(255,80,255,.55)';ctx.beginPath();ctx.moveTo(-28,-34);ctx.lineTo(-42,-46);ctx.lineTo(-34,-24);ctx.moveTo(28,-34);ctx.lineTo(42,-46);ctx.lineTo(34,-24);ctx.fill();
+    }
+    ctx.restore();
+  }
   // Plume streamers.
   for(let i=0;i<3;i++){
     ctx.fillStyle=th.plume[i];ctx.beginPath();
@@ -2869,7 +2894,7 @@ function drawWaveClarity(){
   }
   if(state==='playing'){
     ctx.save();ctx.globalCompositeOperation='lighter';
-    for(const e of enemies){if(enemies.length<=2){ctx.strokeStyle=`rgba(255,226,90,${0.45+0.25*Math.sin(gameTime*8)})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(e.x,e.y+36,58,0,Math.PI*2);ctx.stroke();}}
+    for(const e of enemies){if(enemies.length<=2){ctx.strokeStyle=`rgba(255,226,90,${0.45+0.25*Math.sin(gameTime*8)})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(e.x,e.y+36,58,0,Math.PI*2);ctx.stroke();ctx.save();ctx.textAlign='center';ctx.font=`900 ${Math.max(10,W*.014)}px Arial Black, Impact, sans-serif`;ctx.shadowColor=enemyColor(e.type);ctx.shadowBlur=10;ctx.fillStyle='rgba(255,248,210,.9)';ctx.fillText(enemyLabel(e.type),e.x,e.y-28);ctx.restore();}}
     for(const eg of eggs){if(eggs.length<=2||eg.hatchTimer<3){ctx.strokeStyle=`rgba(255,120,30,${0.38+0.28*Math.sin(gameTime*12)})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(eg.x,eg.y,38,0,Math.PI*2);ctx.stroke();}}
     ctx.restore();
   }
