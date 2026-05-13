@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.3';
+const VERSION = 'v3.1.4';
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -1359,25 +1359,26 @@ function createEnemy(type,x,y){
 let waveStartTime = 0;
 function spawnWaveEnemies(){
   const bounders=Math.max(3,3+Math.floor(wave*0.5));
-  const hunters=wave>=4?Math.floor((wave-3)*0.8):0;
-  const shadows=wave>=7?Math.floor((wave-6)*0.5):0;
-  const spawnable=platforms.filter(p=>!p.broken&&p.hasNest);
+  const hunters=wave>=4?Math.max(1,Math.floor((wave-3)*0.8)):0;
+  const shadows=wave>=7?Math.max(1,Math.floor((wave-6)*0.5)):0;
+  let spawnable=platforms.filter(p=>!p.broken&&p.hasNest);
+  if(spawnable.length===0)spawnable=platforms.filter(p=>!p.broken);
+  if(spawnable.length===0){generatePlatforms(wave);spawnable=platforms.filter(p=>!p.broken);}
   let list=[];
   for(let i=0;i<bounders;i++)list.push('bounder');
   for(let i=0;i<hunters;i++)list.push('hunter');
   for(let i=0;i<shadows;i++)list.push('shadow');
   waveStartTime=gameTime;
   list.forEach((type,i)=>{
-    const p=spawnable[i%spawnable.length]||platforms[0];
-    if(p){
-      const e=createEnemy(type,p.x+p.w/2,p.y-PLAYER_H);
-      enemySpawnDramas.push({x:p.x+p.w/2,y:p.y-12,type,life:1.05,maxLife:1.05,seed:i*17+wave});
-      burstFeathers(p.x+p.w/2,p.y-18,type==='hunter'?'#FF7A2A':type==='shadow'?'#C55CFF':'#7FE7FF',14);
-      // Spawn directly on platform, no drop-in delay
-      e.vy=0;
-      e.invincible=0.5; // brief invincibility on spawn
-      enemies.push(e);
-    }
+    const p=spawnable.length?spawnable[i%spawnable.length]:null;
+    const sx=p?p.x+p.w/2:W*(0.25+0.5*((i%5)/4));
+    const sy=p?p.y-PLAYER_H:H*(0.22+0.18*((i%3)/2));
+    const e=createEnemy(type,sx,sy);
+    enemySpawnDramas.push({x:sx,y:sy+PLAYER_H-12,type,life:1.05,maxLife:1.05,seed:i*17+wave});
+    burstFeathers(sx,sy+PLAYER_H-18,type==='hunter'?'#FF7A2A':type==='shadow'?'#C55CFF':'#7FE7FF',14);
+    e.vy=0;
+    e.invincible=0.5; // brief invincibility on spawn
+    enemies.push(e);
   });
 }
 
@@ -1591,14 +1592,12 @@ function nextWave(){
   waveKills=0;waveEggs=0;
   lavaBase=H*0.84;
   lavaY=lavaBase;
-  lavaRiseRate=6+wave*2;
+  lavaRiseRate=0;
   lavaSurging=false;
-  lavaSurgeTimer=Math.max(6,14-wave);
+  lavaSurgeTimer=Infinity;
   if(wave>1){
     generatePlatforms(wave);
-    // reposition player on a safe platform
-    const safePlat=platforms.find(p=>!p.broken&&!p.fragile)||platforms[0];
-    if(safePlat&&player){player.x=safePlat.x+safePlat.w/2;player.y=safePlat.y-PLAYER_H;player.vx=0;player.vy=0;}
+    // Keep the player exactly where they cleared the last wave; only the new enemies reset.
   }
   state='waveTrans';waveTransTimer=3.0;
   waveCountdown=3.0; waveLastTick=4; waveFlashTimer=0.35;
@@ -1618,10 +1617,11 @@ function playerDie(){
 }
 
 function respawnPlayer(){
-  const safePlat=platforms.find(p=>!p.broken)||platforms[0];
-  if(safePlat){player.x=safePlat.x+safePlat.w/2;player.y=safePlat.y-PLAYER_H;}
-  else{player.x=W/2;player.y=H*0.3;}
+  // Respawn in open air near center instead of snapping to a platform.
+  player.x=W/2+(Math.random()-0.5)*Math.min(180,W*0.28);
+  player.y=H*0.34+(Math.random()-0.5)*Math.min(90,H*0.16);
   player.vx=0;player.vy=0;
+  invincTimer=2.0;
   state='playing';
 }
 
@@ -1675,13 +1675,10 @@ function update(dt){
         if(wave>=3){pteroTimer=8+Math.random()*6;pteroWarnTimer=Math.max(0,pteroTimer-2.2);pteroWarnActive=false;}
       }
     }
-    // Lava rise with periodic surges
+    // Lava resets at each wave start but no longer rises continuously during play.
     if(state==='playing'){
-      lavaSurgeTimer-=dt;
-      if(!lavaSurging&&lavaSurgeTimer<=0){lavaSurging=true;lavaSurgeTimer=2+Math.random();}
-      else if(lavaSurging&&lavaSurgeTimer<=0){lavaSurging=false;lavaSurgeTimer=Math.max(4,11-wave*0.4)+Math.random()*3;}
-      lavaY-=lavaRiseRate*(lavaSurging?4:1)*dt;
-      if(lavaY<H*0.5)lavaY=H*0.5; // cap
+      lavaSurging=false;
+      lavaY=lavaBase;
     }
 
     // Player physics
