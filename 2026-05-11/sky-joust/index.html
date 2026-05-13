@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.8';
+const VERSION = 'v3.1.9';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -2705,6 +2705,15 @@ function drawEmbers(){
   }
 }
 
+function enemyLabel(type){return type==='hunter'?'HUNTER':type==='shadow'?'SHADOW':'BOUNDER';}
+function enemyColor(type){return type==='hunter'?'#FF7A2A':type==='shadow'?'#D96CFF':'#72E7FF';}
+function upcomingEnemyMix(){
+  const bounders=Math.max(3,3+Math.floor(wave*0.5));
+  const hunters=wave>=4?Math.max(1,Math.floor((wave-3)*0.8)):0;
+  const shadows=wave>=7?Math.max(1,Math.floor((wave-6)*0.5)):0;
+  return [{type:'bounder',count:bounders},{type:'hunter',count:hunters},{type:'shadow',count:shadows}].filter(e=>e.count>0);
+}
+
 function drawEggs(){
   for(const eg of eggs){
     const near=eg.hatchTimer<3;
@@ -2722,7 +2731,8 @@ function drawEggs(){
     ctx.fillStyle='rgba(255,255,255,.58)';ctx.beginPath();ctx.ellipse(-5,-8,4.5,7,-.35,0,Math.PI*2);ctx.fill();
     const dots=[[-5,-3,2.2,speck],[4,-8,2.0,speck2],[-2,7,2.5,speck],[7,4,1.8,speck2],[-7,-11,1.6,speck],[2,0,1.5,speck2]];
     for(const d of dots){ctx.fillStyle=d[3];ctx.beginPath();ctx.arc(d[0],d[1],d[2],0,Math.PI*2);ctx.fill();}
-    if(near){ctx.strokeStyle=`rgba(255,120,40,${0.45+0.25*Math.sin(gameTime*22)})`;ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(-3,-15);ctx.lineTo(1,-8);ctx.lineTo(-2,-2);ctx.lineTo(3,5);ctx.stroke();}
+    if(near){ctx.strokeStyle=`rgba(255,120,40,${0.45+0.25*Math.sin(gameTime*22)})`;ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(-3,-15);ctx.lineTo(1,-8);ctx.lineTo(-2,-2);ctx.lineTo(3,5);ctx.stroke();ctx.strokeStyle='rgba(255,245,180,.75)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(5,-14);ctx.lineTo(0,-5);ctx.lineTo(6,2);ctx.stroke();}
+    if(near){ctx.restore();ctx.save();ctx.textAlign='center';ctx.font=`900 ${Math.max(10,W*.014)}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FF4A00';ctx.shadowBlur=10;ctx.fillStyle='rgba(255,240,190,.92)';ctx.fillText('HATCH!',eg.x,eg.y-30-5*Math.sin(gameTime*18));ctx.restore();continue;}
     ctx.restore();
   }
 }
@@ -2833,6 +2843,36 @@ function drawKnightHeadIcon(x,y,s,flash){
   ctx.strokeStyle='#FFF5CC';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(0,-14);ctx.lineTo(0,15);ctx.moveTo(-10,5);ctx.lineTo(10,5);ctx.stroke();
   for(let i=0;i<3;i++){ctx.fillStyle=['#FF3333','#FF7A00','#FFD700'][i];ctx.beginPath();ctx.moveTo(-2+i*2,-15);ctx.quadraticCurveTo(-13-i*5,-28,-28-i*5,-20+i*4);ctx.quadraticCurveTo(-14-i*4,-21,-2+i*2,-12);ctx.fill();}
   ctx.restore();
+}
+
+function drawWaveClarity(){
+  if(state==='waveTrans'){
+    const mix=upcomingEnemyMix();
+    ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+    const y=H*.73, cardW=Math.min(W*.78,520), cardH=Math.max(54,H*.075), x=W/2-cardW/2;
+    const cg=ctx.createLinearGradient(x,y-cardH/2,x,y+cardH/2);cg.addColorStop(0,'rgba(8,18,32,.72)');cg.addColorStop(1,'rgba(42,14,5,.58)');
+    ctx.fillStyle=cg;roundRect(ctx,x,y-cardH/2,cardW,cardH,14);ctx.fill();
+    ctx.strokeStyle='rgba(255,205,90,.42)';ctx.lineWidth=2;roundRect(ctx,x,y-cardH/2,cardW,cardH,14);ctx.stroke();
+    ctx.font=`900 ${Math.max(13,W*.021)}px Arial Black, Impact, sans-serif`;
+    ctx.fillStyle='#FFF2B8';ctx.shadowColor='#FF7A00';ctx.shadowBlur=12;ctx.fillText('INCOMING RIDERS',W/2,y-cardH*.22);
+    ctx.shadowBlur=0;ctx.font=`800 ${Math.max(12,W*.018)}px Arial, sans-serif`;
+    const text=mix.map(e=>`${enemyLabel(e.type)} ×${e.count}`).join('   ');
+    ctx.fillStyle='rgba(215,238,255,.92)';ctx.fillText(text,W/2,y+cardH*.22);
+    ctx.restore();
+  }
+  if(state==='playing'&&enemies.length+eggs.length>0&&enemies.length+eggs.length<=2){
+    const lastEnemy=enemies.length===1, lastEgg=eggs.length===1;
+    ctx.save();ctx.textAlign='center';ctx.font=`900 ${Math.max(15,W*.024)}px Arial Black, Impact, sans-serif`;ctx.shadowBlur=18;
+    const msg=lastEnemy&&lastEgg?'LAST RIDER + LAST EGG':lastEnemy?'LAST RIDER!':lastEgg?'LAST EGG!':'';
+    if(msg){ctx.shadowColor='#FFD700';ctx.fillStyle=`rgba(255,242,170,${0.72+0.18*Math.sin(gameTime*8)})`;ctx.fillText(msg,W/2,Math.max(80,H*.13));}
+    ctx.restore();
+  }
+  if(state==='playing'){
+    ctx.save();ctx.globalCompositeOperation='lighter';
+    for(const e of enemies){if(enemies.length<=2){ctx.strokeStyle=`rgba(255,226,90,${0.45+0.25*Math.sin(gameTime*8)})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(e.x,e.y+36,58,0,Math.PI*2);ctx.stroke();}}
+    for(const eg of eggs){if(eggs.length<=2||eg.hatchTimer<3){ctx.strokeStyle=`rgba(255,120,30,${0.38+0.28*Math.sin(gameTime*12)})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(eg.x,eg.y,38,0,Math.PI*2);ctx.stroke();}}
+    ctx.restore();
+  }
 }
 
 function drawHUD(){
@@ -3034,6 +3074,7 @@ function drawWaveTrans(){
     ctx.shadowColor='#FF8A00';ctx.shadowBlur=35;ctx.fillStyle='rgba(255,255,255,.94)';ctx.fillText(countNum,W/2,H*0.68);
   }
   ctx.restore();
+  drawWaveClarity();
 }
 
 function drawGameOver(){
@@ -3358,6 +3399,7 @@ function loop(ts){
   }
 
   drawHUD();
+  if(state==='playing')drawWaveClarity();
 
   if(extraLifeBannerTimer>0){const a=Math.min(1,extraLifeBannerTimer/0.45);ctx.save();ctx.textAlign='center';ctx.font=`900 ${Math.max(30,W*.058)}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#7CFF8A';ctx.shadowBlur=30;ctx.fillStyle=`rgba(220,255,190,${a})`;ctx.fillText('EXTRA LIFE!',W/2,H*.20);ctx.restore();}
 
