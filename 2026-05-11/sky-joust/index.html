@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.10';
+const VERSION = 'v3.1.11';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -2901,20 +2901,27 @@ function drawWaveClarity(){
 }
 
 function drawHUD(){
-  const barH=Math.max(54,H*.072);
+  const barH=Math.max(62,H*.082);
   ctx.save();
-  const g=ctx.createLinearGradient(0,0,0,barH);g.addColorStop(0,'rgba(10,5,0,.86)');g.addColorStop(1,'rgba(10,5,0,.24)');
+  // arcadeBezelHUD: carved dark metal/gold panel inspired by the cabinet art.
+  const g=ctx.createLinearGradient(0,0,0,barH);g.addColorStop(0,'rgba(4,9,18,.94)');g.addColorStop(.5,'rgba(25,13,8,.82)');g.addColorStop(1,'rgba(6,2,0,.42)');
   ctx.fillStyle=g;ctx.fillRect(0,0,W,barH);
-  ctx.strokeStyle='rgba(255,205,60,.35)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,barH);ctx.lineTo(W,barH);ctx.stroke();
-  const fs=Math.max(16,W*.025), big=Math.max(23,W*.038);
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  ctx.strokeStyle='rgba(255,158,42,.38)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(0,barH-2);ctx.lineTo(W,barH-2);ctx.stroke();
+  ctx.strokeStyle='rgba(90,190,255,.16)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,2);ctx.lineTo(W,2);ctx.stroke();ctx.restore();
+  const fs=Math.max(14,W*.021), big=Math.max(22,W*.035);
+  const panel=(x,y,w,h)=>{ctx.fillStyle='rgba(0,0,0,.26)';roundRect(ctx,x,y,w,h,10);ctx.fill();ctx.strokeStyle='rgba(255,214,100,.28)';ctx.lineWidth=1.5;roundRect(ctx,x,y,w,h,10);ctx.stroke();};
+  panel(10,8,Math.min(240,W*.31),barH-16);panel(W*.39,8,W*.22,barH-16);panel(W-Math.min(270,W*.35)-10,8,Math.min(270,W*.35),barH-16);
   ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.textBaseline='middle';ctx.textAlign='left';
-  ctx.fillStyle='#FFE06A';ctx.shadowColor='#000';ctx.shadowBlur=5;ctx.fillText('LIVES',18,barH/2);
+  ctx.fillStyle='#FFE06A';ctx.shadowColor='#000';ctx.shadowBlur=5;ctx.fillText('LIVES',20,barH/2);
   const lifePulse=lifeFlashTimer>0?(1+0.24*Math.sin(gameTime*24)):1;
-  for(let i=0;i<Math.min(lives,6);i++){drawKnightHeadIcon(96+i*31,barH/2+1,.72*lifePulse,lifeFlashTimer>0&&i===lives-1);}
-  if(lives>6){ctx.fillStyle='#FFF1A8';ctx.font=`900 ${Math.max(14,W*.021)}px Arial Black, Impact, sans-serif`;ctx.fillText('+'+(lives-6),96+6*31,barH/2+5);}
+  for(let i=0;i<Math.min(lives,6);i++){drawKnightHeadIcon(92+i*28,barH/2+1,.66*lifePulse,lifeFlashTimer>0&&i===lives-1);}
+  if(lives>6){ctx.fillStyle='#FFF1A8';ctx.font=`900 ${Math.max(13,W*.018)}px Arial Black, Impact, sans-serif`;ctx.fillText('+'+(lives-6),92+6*28,barH/2+5);}
   ctx.textAlign='center';ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF1A8';ctx.fillText('WAVE',W/2-42,barH/2);ctx.fillStyle='#FFD700';ctx.font=`bold ${big}px Arial Black, Impact, sans-serif`;ctx.fillText(String(wave),W/2+28,barH/2);
+  const remain=enemies.length+eggs.length;
+  ctx.font=`800 ${Math.max(10,W*.014)}px Arial, sans-serif`;ctx.fillStyle=remain<=2&&state==='playing'?'#FFF3A0':'rgba(190,230,255,.82)';ctx.fillText(`REMAIN ${remain}`,W/2,barH-13);
   const scorePulse=scoreFlashTimer>0?(1+0.16*Math.sin(gameTime*32)):1;
-  ctx.textAlign='right';ctx.fillStyle='#FFF1A8';ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.fillText('SCORE',W-170,barH/2);ctx.save();ctx.translate(W-18,barH/2);ctx.scale(scorePulse,scorePulse);ctx.fillStyle=scoreFlashTimer>0?'#FFF7A8':'#FFD700';ctx.font=`bold ${big}px Arial Black, Impact, sans-serif`;ctx.fillText(String(score).padStart(6,'0'),0,0);ctx.restore();
+  ctx.textAlign='right';ctx.fillStyle='#FFF1A8';ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.fillText('SCORE',W-172,barH/2);ctx.save();ctx.translate(W-22,barH/2);ctx.scale(scorePulse,scorePulse);ctx.fillStyle=scoreFlashTimer>0?'#FFF7A8':'#FFD700';ctx.font=`bold ${big}px Arial Black, Impact, sans-serif`;ctx.fillText(String(score).padStart(6,'0'),0,0);ctx.restore();
   ctx.restore();
 }
 
