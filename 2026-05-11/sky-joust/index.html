@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.13';
+const VERSION = 'v3.1.14';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -74,21 +74,37 @@ function playWarble(freqA,freqB,freqC,dur,type,vol,delay=0){
     o.connect(g);g.connect(audioCtx.destination);o.start(t);o.stop(t+dur+0.02);
   }catch(e){}
 }
-function sfxFlap(){playTone(220,0.04,'sine',0.06,440);playTone(6500,0.03,'sawtooth',0.04,1800)}
-function sfxKill(){playTone(500,0.08,'sine',0.15,1200,0);playTone(800,0.06,'triangle',0.12,2000,0.03);playTone(80,0.10,'sine',0.10,80,0.05)}
-function sfxDeath(){playTone(800,0.5,'sawtooth',0.15,60,0);playTone(60,0.4,'square',0.10,30,0);playTone(2000,0.15,'sine',0.08,400,0)}
-function sfxEggStomp(){playTone(1000,0.06,'sine',0.12,1800,0);playTone(2000,0.04,'triangle',0.06,3000,0.02)}
+function playNoise(dur=0.12,vol=0.06,filterFreq=1200,delay=0){
+  if(!audioCtx)return;
+  try{
+    const t=audioCtx.currentTime+delay,len=Math.max(1,Math.floor(audioCtx.sampleRate*dur));
+    const b=audioCtx.createBuffer(1,len,audioCtx.sampleRate),d=b.getChannelData(0);
+    for(let i=0;i<len;i++){const env=1-i/len;d[i]=(Math.random()*2-1)*env;}
+    const src=audioCtx.createBufferSource(),f=audioCtx.createBiquadFilter(),g=audioCtx.createGain();
+    src.buffer=b;f.type='bandpass';f.frequency.setValueAtTime(filterFreq,t);f.Q.setValueAtTime(0.8,t);
+    g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(vol,t+0.01);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    src.connect(f);f.connect(g);g.connect(audioCtx.destination);src.start(t);src.stop(t+dur+0.02);
+  }catch(e){}
+}
+function sfxFlap(){playTone(160,0.035,'sine',0.045,300);playNoise(0.055,0.035,1800,0.005);playTone(6200,0.025,'triangle',0.025,1400,0.01)}
+function sfxKill(){playTone(430,0.07,'square',0.13,1200,0);playTone(880,0.055,'triangle',0.11,2100,0.025);playTone(78,0.12,'sine',0.12,54,0.04);playNoise(0.10,0.065,2600,0.015)}
+function sfxDeath(){playTone(820,0.52,'sawtooth',0.14,62,0);playTone(55,0.6,'square',0.09,28,0.04);playNoise(0.38,0.06,700,0.06);playTone(2050,0.14,'sine',0.07,320,0)}
+function sfxEggStomp(){playTone(980,0.055,'triangle',0.11,1750,0);playTone(2260,0.035,'sine',0.06,3200,0.025);playNoise(0.06,0.035,3000,0.015)}
 function sfxScore(){playTone(1200,0.04,'sine',0.06,1200)}
-function sfxEggHatch(){playTone(400,0.08,'sine',0.10,800,0);playTone(600,0.08,'sine',0.10,1200,0.08);playTone(2000,0.05,'sawtooth',0.06,800,0.03)}
-function sfxPtero(){playTone(1800,0.35,'sawtooth',0.18,200,0);playWarble(1500,3000,1500,0.25,'sine',0.10,0)}
-function sfxLavaPop(){playTone(1200,0.03,'sine',0.03,600)}
-function sfxWaveStart(){[262,330,392,523,659].forEach((f,i)=>playTone(f,0.08,'sine',0.10,f,i*0.08))}
-function sfxGameOver(){[220,175,131].forEach((f,i)=>playTone(f,0.25,'triangle',0.12,f,i*0.25));playTone(55,1.5,'sine',0.06,55,0)}
-function sfxPteroKill(){playTone(600,0.1,'sine',0.15,1500,0);[1200,1600,2000].forEach((f,i)=>playTone(f,0.04,'triangle',0.08,f,0.06+i*0.03))}
-function sfxExtraLife(){[784,988,1175,1568].forEach((f,i)=>playTone(f,0.09,'triangle',0.13,f,i*0.075));playTone(196,0.35,'sine',0.08,392,0)}
-function sfxCreak(){playTone(92,0.18,'sawtooth',0.055,54,0);playTone(310,0.06,'triangle',0.04,180,0.03)}
-function sfxTroll(){playTone(70,0.32,'sawtooth',0.11,38,0);playTone(180,0.2,'square',0.06,90,0.04)}
-function sfxPteroWarn(){playWarble(900,1900,620,0.32,'sawtooth',0.09,0);playTone(120,0.18,'sine',0.05,80,0.04)}
+function sfxEggHatch(){playTone(360,0.08,'triangle',0.09,720,0);playNoise(0.12,0.05,1900,0.02);playTone(650,0.08,'sine',0.09,1300,0.08);playTone(2100,0.06,'sawtooth',0.055,760,0.04)}
+function sfxPtero(){playWarble(1900,3300,950,0.42,'sawtooth',0.16,0);playNoise(0.16,0.045,2400,0.05);playTone(92,0.20,'sine',0.05,70,0.03)}
+function sfxLavaPop(){playTone(1100,0.032,'sine',0.025,520);playNoise(0.055,0.018,460,0)}
+function sfxWaveStart(){[262,330,392,523,659].forEach((f,i)=>playTone(f,0.075,'square',0.085,f*1.5,i*0.07));playNoise(0.10,0.025,1200,0.18)}
+function sfxWaveClear(){[523,659,784,1046,1568].forEach((f,i)=>playTone(f,0.09,'triangle',0.11,f,i*0.065));playTone(196,0.38,'sine',0.055,392,0)}
+function sfxGameOver(){[220,175,131,98].forEach((f,i)=>playTone(f,0.25,'triangle',0.115,f,i*0.23));playNoise(0.55,0.045,420,0.18);playTone(55,1.5,'sine',0.06,42,0)}
+function sfxPteroKill(){playTone(600,0.1,'sine',0.15,1500,0);playNoise(0.10,0.055,3200,0.02);[1200,1600,2000].forEach((f,i)=>playTone(f,0.04,'triangle',0.08,f,0.06+i*0.03))}
+function sfxExtraLife(){[784,988,1175,1568,1976].forEach((f,i)=>playTone(f,0.085,'triangle',0.125,f,i*0.065));playTone(196,0.35,'sine',0.08,392,0);playNoise(0.18,0.035,4200,0.08)}
+function sfxCreak(){playTone(82,0.22,'sawtooth',0.05,45,0);playWarble(260,185,225,0.18,'triangle',0.034,0.02);playNoise(0.09,0.026,520,0.04)}
+function sfxFragileBreak(){playTone(58,0.22,'square',0.09,34,0);playNoise(0.18,0.075,360,0.02);playTone(440,0.05,'triangle',0.055,120,0.04)}
+function sfxTroll(){playTone(70,0.32,'sawtooth',0.11,38,0);playTone(180,0.2,'square',0.06,90,0.04);playNoise(0.16,0.04,260,0.03)}
+function sfxPteroWarn(){playWarble(900,2100,620,0.36,'sawtooth',0.085,0);playTone(120,0.2,'sine',0.05,80,0.04);playNoise(0.11,0.03,1800,0.05)}
+function sfxCombo(n){playTone(720+n*70,0.045,'square',0.07,1200+n*80,0);playTone(1080+n*90,0.05,'triangle',0.06,1700+n*100,0.035);if(n>=4)playNoise(0.08,0.035,3600,0.02)}
+function sfxLavaEggBurn(){playTone(260,0.09,'sawtooth',0.06,110,0);playNoise(0.16,0.055,520,0.01);playTone(980,0.04,'triangle',0.035,420,0.05)}
 // --- Constants ---
 const GRAVITY = 1200;
 const FLAP_POWER = -340;
@@ -1230,7 +1246,7 @@ cacheAllSprites();
 let state = 'title'; // title, playing, dying, waveTrans, gameOver, highscoreEntry, leaderboard
 let score = 0, lives = 0, wave = 0, extraLifeGiven = false;
 let player = null;
-let enemies = [], feathers = [], eggs = [], embers = [], explosions = [], impactBursts = [], platforms = [], scorePopups = [], lavaBursts = [], smokeWisps = [], waterDrops = [], touchPulses = [], enemySpawnDramas = [];
+let enemies = [], feathers = [], eggs = [], embers = [], explosions = [], impactBursts = [], platforms = [], scorePopups = [], lavaBursts = [], smokeWisps = [], waterDrops = [], touchPulses = [], enemySpawnDramas = [], lavaSparks = [];
 let lavaY = 0, lavaBase = 0, lavaRiseRate = 0, lavaSurgeTimer = 0, lavaSurging = false;
 let pteroTimer = 0, ptero = null;
 let waveTransTimer = 0, dyingTimer = 0;
@@ -1249,7 +1265,8 @@ let waveKills = 0, waveEggs = 0, lastWaveStats = null;
 let emptyWaveClearTimer = 0, noEnemyEggGraceTimer = 0;
 let comboCount = 0, comboTimer = 0, bestCombo = 0, comboBannerTimer = 0;
 let pteroWarnTimer = 0, pteroWarnActive = false, titleClashTimer = 0;
-const FOREGROUND_PROPS = Array.from({length:20},(_,i)=>({x:(i*173+41)%1600,kind:i%5,scale:.75+(i%4)*.18,seed:i*9.731}));
+const FOREGROUND_PROPS = Array.from({length:26},(_,i)=>({x:(i*173+41)%1600,kind:i%6,scale:.75+(i%4)*.18,seed:i*9.731}));
+const CAVERN_RUNES = Array.from({length:44},(_,i)=>({x:(i*127+33)%1800,y:.08+((i*73)%70)/100,seed:i*5.31,kind:i%4}));
 
 // --- Leaderboard ---
 const LS_KEY = 'skyjoust_highscores';
@@ -1469,6 +1486,7 @@ function registerJoustKill(x,y,type){
   bestCombo=Math.max(bestCombo,comboCount);
   comboBannerTimer=1.4;
   if(comboCount>=2){
+    sfxCombo(comboCount);
     const bonus=Math.min(500,comboCount*75);
     bumpScore(bonus,x,y-32,`COMBO x${comboCount} +${bonus}`,type==='shadow'?'#FF7CFF':'#FFF08A');
     createImpactBurst(x,y,1,type==='hunter'?'#FF7A2A':type==='shadow'?'#D96CFF':'#72E7FF');
@@ -1516,8 +1534,9 @@ function burnEggInLava(eg){
   const bx=Number.isFinite(eg.x)?eg.x:W/2, by=Math.min(Number.isFinite(eg.y)?eg.y:lavaY,lavaY+4);
   lavaSplash(bx,lavaY,false);
   burstFeathers(bx,by,eg.type==='bounder'?'#4488FF':eg.type==='hunter'?'#FF6A00':'#AA44FF',18);
-  sfxLavaPop();
+  sfxLavaEggBurn();
 }
+
 function clearStaleWaveBlockers(reason=''){
   // waveClearFailsafe: invisible/stale eggs or invalid enemies must never strand a wave.
   for(const eg of eggs)burnEggInLava(eg);
@@ -1631,7 +1650,7 @@ canvas.addEventListener('touchend',(e)=>{
 // --- Start Game ---
 function startGame(){
   state='playing';score=0;lives=3;wave=0;extraLifeGiven=false;trollHand=null;
-  enemies=[];feathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;waveKills=0;waveEggs=0;lastWaveStats=null;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;comboCount=0;comboTimer=0;bestCombo=0;comboBannerTimer=0;
+  enemies=[];feathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];lavaSparks=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;waveKills=0;waveEggs=0;lastWaveStats=null;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;comboCount=0;comboTimer=0;bestCombo=0;comboBannerTimer=0;
   generatePlatforms(1);
   player=createPlayer();
   nextWave();
@@ -1701,8 +1720,8 @@ function update(dt){
     spawnEmber(Math.random()*W,lavaY);
   }
 
-  // Lava bubbles
-  if(Math.random()<dt*3){
+  // Occasional lava bubble chirps; keep sparse so the arcade bed never becomes annoying.
+  if(Math.random()<dt*1.15){
     sfxLavaPop();
   }
   if(Math.random()<dt*0.55){
@@ -1814,7 +1833,7 @@ function update(dt){
             p.crackPulse=0.18;
             if(p.creakCooldown<=0){sfxCreak();p.creakCooldown=0.42;}
             if(p.crackTimer>1.25){shakeTimer=Math.max(shakeTimer,0.08);shakeMag=Math.max(shakeMag,4);}
-            if(p.crackTimer>2){p.broken=true;shakeTimer=0.22;shakeMag=8;createExplosion(p.x+p.w/2,p.y,false);burstFeathers(p.x+p.w/2,p.y,'#888',28);}
+            if(p.crackTimer>2){p.broken=true;shakeTimer=0.22;shakeMag=8;sfxFragileBreak();createExplosion(p.x+p.w/2,p.y,false);burstFeathers(p.x+p.w/2,p.y,'#888',28);}
           }
         }
         // Bumping head on bottom of platform (rising up)
@@ -2094,6 +2113,7 @@ function update(dt){
       if(waveAge>3&&enemies.length===0&&eggs.length===0){
         emptyWaveClearTimer+=dt;
         if(emptyWaveClearTimer>0.25){
+          sfxWaveClear();
           const clearBonus=500*wave+(bestCombo>=3?bestCombo*100:0);
           bumpScore(clearBonus,player?player.x:W/2,player?Math.max(90,player.y-55):H*.32,`WAVE CLEAR +${clearBonus}`,'#FFF2A8');
           if(bestCombo>=3)addScorePopup(player?player.x:W/2,player?Math.max(120,player.y-20):H*.38,`BEST COMBO x${bestCombo}`,'#7CFFEA');
@@ -2137,6 +2157,7 @@ function update(dt){
     }
     for(let i=touchPulses.length-1;i>=0;i--){touchPulses[i].life-=dt;if(touchPulses[i].life<=0)touchPulses.splice(i,1);}
     for(let i=enemySpawnDramas.length-1;i>=0;i--){enemySpawnDramas[i].life-=dt;if(enemySpawnDramas[i].life<=0)enemySpawnDramas.splice(i,1);}
+    for(let i=lavaSparks.length-1;i>=0;i--){const ls=lavaSparks[i];ls.x+=ls.vx*dt;ls.y+=ls.vy*dt;ls.vy+=180*dt;ls.life-=dt;if(ls.life<=0)lavaSparks.splice(i,1);}
     for(let i=impactBursts.length-1;i>=0;i--){impactBursts[i].life-=dt;if(impactBursts[i].life<=0)impactBursts.splice(i,1);}
 
     // Explosions
@@ -2221,6 +2242,23 @@ function drawBG(){
       }
     }
   }
+  // cavernRuneEtchings — slow parallax glyphs and mineral seams in the back wall.
+  ctx.save();
+  const runeOff=(gameTime*10+(player?player.x*.01:0));
+  for(const r of CAVERN_RUNES){
+    let x=((r.x-runeOff)%(W+240)); if(x<-120)x+=W+240;
+    const y=H*r.y+Math.sin(gameTime*.6+r.seed)*5;
+    const a=.06+.08*Math.sin(gameTime*1.4+r.seed);
+    ctx.strokeStyle=r.kind===0?`rgba(115,210,255,${a})`:r.kind===1?`rgba(255,120,34,${a*.9})`:`rgba(198,160,90,${a*.7})`;
+    ctx.lineWidth=1.2;
+    ctx.beginPath();
+    if(r.kind===0){ctx.moveTo(x-7,y+8);ctx.lineTo(x,y-8);ctx.lineTo(x+7,y+8);ctx.moveTo(x-4,y+1);ctx.lineTo(x+4,y+1);}
+    else if(r.kind===1){ctx.arc(x,y,8,Math.PI*.15,Math.PI*1.85);ctx.moveTo(x,y-10);ctx.lineTo(x,y+10);}
+    else if(r.kind===2){ctx.moveTo(x-10,y);ctx.lineTo(x+10,y);ctx.moveTo(x,y-10);ctx.lineTo(x,y+10);}
+    else {ctx.moveTo(x-9,y-6);ctx.lineTo(x+2,y+8);ctx.lineTo(x+10,y-5);}
+    ctx.stroke();
+  }
+  ctx.restore();
   // Far magma falls and wall cracks.
   ctx.save(); ctx.globalCompositeOperation='lighter';
   for(let i=0;i<7;i++){
@@ -2389,6 +2427,14 @@ function drawLava(){
     }
     ctx.restore(); ctx.globalAlpha=1;
   }
+  // lavaSparkSpray — hot flecks kicked up by egg burns, deaths, and troll splashes.
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  for(const ls of lavaSparks){
+    const a=Math.max(0,ls.life/ls.maxLife);
+    ctx.fillStyle=`rgba(255,${120+Math.floor(100*a)},30,${a})`;
+    ctx.beginPath();ctx.arc(ls.x,ls.y,ls.r*a,0,Math.PI*2);ctx.fill();
+  }
+  ctx.restore();
   ctx.strokeStyle='rgba(255,210,120,0.18)'; ctx.lineWidth=1;
   for(let i=0;i<18;i++){const y=lavaY-8-i*6;ctx.beginPath();for(let x=0;x<W;x+=28){const yy=y+Math.sin(x*.035+gameTime*4+i)*3;if(x===0)ctx.moveTo(x,yy);else ctx.lineTo(x,yy);}ctx.stroke();}
 }
@@ -2555,6 +2601,15 @@ function drawPlatform(p){
     ctx.save();ctx.globalCompositeOperation='lighter';ctx.strokeStyle=`rgba(255,76,0,${.35+.18*Math.sin(gameTime*5+seed)})`;ctx.lineWidth=1.8;
     for(let cx=p.x+10;cx<p.x+p.w-8;cx+=34){ctx.beginPath();ctx.moveTo(cx,p.y+p.h-3);ctx.lineTo(cx+13,p.y+p.h*.58);ctx.lineTo(cx+27,p.y+p.h-4);ctx.stroke();}
     ctx.restore();
+  }
+
+  // chippedEdgeRunesMossCrystals — extra hand-painted cabinet-art ledge detail.
+  for(let i=0;i<Math.max(3,Math.floor(p.w/38));i++){
+    const cx=p.x+10+((i*31+seed*23)%(Math.max(18,p.w-20)));
+    const cy=p.y+(i%2?p.h-5:6);
+    ctx.fillStyle='rgba(0,0,0,.36)';
+    ctx.beginPath();ctx.moveTo(cx-4,cy);ctx.lineTo(cx+3,cy-2);ctx.lineTo(cx+1,cy+4);ctx.closePath();ctx.fill();
+    if(i%4===0){ctx.save();ctx.globalCompositeOperation='lighter';ctx.strokeStyle='rgba(255,205,105,.22)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(cx-5,p.y+p.h*.5);ctx.lineTo(cx+5,p.y+p.h*.5);ctx.moveTo(cx,p.y+p.h*.5-5);ctx.lineTo(cx,p.y+p.h*.5+5);ctx.stroke();ctx.restore();}
   }
 
   // Fragile platforms are always visibly cracked and browner/weathered.
@@ -2793,7 +2848,11 @@ function drawEggs(){
     ctx.fillStyle='rgba(255,255,255,.58)';ctx.beginPath();ctx.ellipse(-5,-8,4.5,7,-.35,0,Math.PI*2);ctx.fill();
     const dots=[[-5,-3,2.2,speck],[4,-8,2.0,speck2],[-2,7,2.5,speck],[7,4,1.8,speck2],[-7,-11,1.6,speck],[2,0,1.5,speck2]];
     for(const d of dots){ctx.fillStyle=d[3];ctx.beginPath();ctx.arc(d[0],d[1],d[2],0,Math.PI*2);ctx.fill();}
-    if(near){ctx.strokeStyle=`rgba(255,120,40,${0.45+0.25*Math.sin(gameTime*22)})`;ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(-3,-15);ctx.lineTo(1,-8);ctx.lineTo(-2,-2);ctx.lineTo(3,5);ctx.stroke();ctx.strokeStyle='rgba(255,245,180,.75)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(5,-14);ctx.lineTo(0,-5);ctx.lineTo(6,2);ctx.stroke();}
+    if(near){ctx.strokeStyle=`rgba(255,120,40,${0.45+0.25*Math.sin(gameTime*22)})`;ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(-3,-15);ctx.lineTo(1,-8);ctx.lineTo(-2,-2);ctx.lineTo(3,5);ctx.stroke();ctx.strokeStyle='rgba(255,245,180,.75)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(5,-14);ctx.lineTo(0,-5);ctx.lineTo(6,2);ctx.stroke();
+      // eggHatchDetail: tiny shell plates lift and glow as the rider inside pecks out.
+      ctx.fillStyle='rgba(255,245,210,.85)';ctx.strokeStyle='rgba(92,68,36,.55)';ctx.lineWidth=.8;
+      for(let i=0;i<4;i++){const a=i*Math.PI*.55+gameTime*7, rr=15+2*Math.sin(gameTime*13+i);ctx.beginPath();ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr);ctx.lineTo(Math.cos(a+.22)*(rr+7),Math.sin(a+.22)*(rr+7));ctx.lineTo(Math.cos(a-.18)*(rr+5),Math.sin(a-.18)*(rr+5));ctx.closePath();ctx.fill();ctx.stroke();}
+      ctx.fillStyle=speck2;ctx.beginPath();ctx.arc(2,-2,3.5+Math.sin(gameTime*20),0,Math.PI*2);ctx.fill();}
     if(near){ctx.restore();ctx.save();ctx.textAlign='center';ctx.font=`900 ${Math.max(10,W*.014)}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FF4A00';ctx.shadowBlur=10;ctx.fillStyle='rgba(255,240,190,.92)';ctx.fillText('HATCH!',eg.x,eg.y-30-5*Math.sin(gameTime*18));ctx.restore();continue;}
     ctx.restore();
   }
