@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.11';
+const VERSION = 'v3.1.12';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1246,6 +1246,7 @@ let scoreFlashTimer = 0, lifeFlashTimer = 0, extraLifeBannerTimer = 0;
 let waveCountdown = 0;
 let waveLastTick = 0, waveFlashTimer = 0, pendingGameOver = false;
 let waveKills = 0, waveEggs = 0, lastWaveStats = null;
+let emptyWaveClearTimer = 0, noEnemyEggGraceTimer = 0;
 let pteroWarnTimer = 0, pteroWarnActive = false, titleClashTimer = 0;
 const FOREGROUND_PROPS = Array.from({length:20},(_,i)=>({x:(i*173+41)%1600,kind:i%5,scale:.75+(i%4)*.18,seed:i*9.731}));
 
@@ -1500,10 +1501,17 @@ function finishDeathSequence(){
 }
 // --- Egg ---
 function burnEggInLava(eg){
-  const bx=eg.x||0, by=Math.min(eg.y||lavaY,lavaY+4);
+  const bx=Number.isFinite(eg.x)?eg.x:W/2, by=Math.min(Number.isFinite(eg.y)?eg.y:lavaY,lavaY+4);
   lavaSplash(bx,lavaY,false);
   burstFeathers(bx,by,eg.type==='bounder'?'#4488FF':eg.type==='hunter'?'#FF6A00':'#AA44FF',18);
   sfxLavaPop();
+}
+function clearStaleWaveBlockers(reason=''){
+  // waveClearFailsafe: invisible/stale eggs or invalid enemies must never strand a wave.
+  for(const eg of eggs)burnEggInLava(eg);
+  eggs=[];
+  enemies=enemies.filter(e=>Number.isFinite(e.x)&&Number.isFinite(e.y)&&e.y<H+PLAYER_H*4&&e.y> -H);
+  if(reason&&player)addScorePopup(player.x,Math.max(80,player.y-40),reason,'#FFF2A8');
 }
 function dropEgg(x,y,type){
   // find platform below; if none exists, the egg falls into lava and disintegrates.
@@ -1611,7 +1619,7 @@ canvas.addEventListener('touchend',(e)=>{
 // --- Start Game ---
 function startGame(){
   state='playing';score=0;lives=3;wave=0;extraLifeGiven=false;trollHand=null;
-  enemies=[];feathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;waveKills=0;waveEggs=0;lastWaveStats=null;
+  enemies=[];feathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;waveKills=0;waveEggs=0;lastWaveStats=null;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;
   generatePlatforms(1);
   player=createPlayer();
   nextWave();
@@ -1620,7 +1628,7 @@ function startGame(){
 function nextWave(){
   if(state==='playing'&&wave>0){lastWaveStats={wave,kills:waveKills,eggs:waveEggs,time:Math.max(0,gameTime-waveStartTime),bonus:500*wave};}
   wave++;
-  waveKills=0;waveEggs=0;
+  waveKills=0;waveEggs=0;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;
   lavaBase=H*0.84;
   lavaY=lavaBase;
   lavaRiseRate=0;
@@ -2058,11 +2066,19 @@ function update(dt){
       }
     }
 
-    // Wave clear check
-    // Wave clear check (only after enemies have had time to spawn — at least 3s after wave start)
-    if(state==='playing'&&enemies.length===0&&eggs.length===0&&(gameTime-waveStartTime)>3.0){
-      bumpScore(500*wave);
-      nextWave();
+    // Wave clear check + hard failsafe for invisible egg/enemy blockers.
+    if(state==='playing'){
+      const waveAge=gameTime-waveStartTime;
+      enemies=enemies.filter(e=>Number.isFinite(e.x)&&Number.isFinite(e.y)&&e.y<H+PLAYER_H*4&&e.y>-H);
+      for(let i=eggs.length-1;i>=0;i--){const eg=eggs[i];if(!Number.isFinite(eg.x)||!Number.isFinite(eg.y)||eg.y>=lavaY-18||eg.y>H+80){burnEggInLava(eg);eggs.splice(i,1);}}
+      if(waveAge>3&&enemies.length===0&&eggs.length>0){
+        noEnemyEggGraceTimer+=dt;
+        if(noEnemyEggGraceTimer>6){clearStaleWaveBlockers('CAVE CLEARED');}
+      }else noEnemyEggGraceTimer=0;
+      if(waveAge>3&&enemies.length===0&&eggs.length===0){
+        emptyWaveClearTimer+=dt;
+        if(emptyWaveClearTimer>0.25){bumpScore(500*wave);nextWave();return;}
+      }else emptyWaveClearTimer=0;
     }
 
     // Feathers
