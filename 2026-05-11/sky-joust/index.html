@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.31';
+const VERSION = 'v3.1.32';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -110,14 +110,26 @@ function playNoise(dur=0.12,vol=0.06,filterFreq=1200,delay=0){
     src.connect(f);f.connect(g);g.connect(audioCtx.destination);src.start(t);src.stop(t+dur+0.02);
   }catch(e){}
 }
-function sfxFlap(){playTone(160,0.035,'sine',0.045,300);playNoise(0.055,0.035,1800,0.005);playTone(6200,0.025,'triangle',0.025,1400,0.01)}
-function sfxKill(){playTone(430,0.07,'square',0.13,1200,0);playTone(880,0.055,'triangle',0.11,2100,0.025);playTone(78,0.12,'sine',0.12,54,0.04);playNoise(0.10,0.065,2600,0.015)}
-function sfxDeath(){playTone(820,0.52,'sawtooth',0.14,62,0);playTone(55,0.6,'square',0.09,28,0.04);playNoise(0.38,0.06,700,0.06);playTone(2050,0.14,'sine',0.07,320,0)}
+function playNoiseSweep(dur=0.22,vol=0.05,startFreq=400,endFreq=2600,delay=0,type='bandpass'){
+  if(!audioCtx)return;
+  try{
+    const t=audioCtx.currentTime+delay,len=Math.max(1,Math.floor(audioCtx.sampleRate*dur));
+    const b=audioCtx.createBuffer(1,len,audioCtx.sampleRate),d=b.getChannelData(0);
+    for(let i=0;i<len;i++){const a=i/len, env=Math.sin(Math.PI*a);d[i]=(Math.random()*2-1)*env;}
+    const src=audioCtx.createBufferSource(),f=audioCtx.createBiquadFilter(),g=audioCtx.createGain();
+    src.buffer=b;f.type=type;f.frequency.setValueAtTime(startFreq,t);f.frequency.exponentialRampToValueAtTime(Math.max(40,endFreq),t+dur);f.Q.setValueAtTime(1.4,t);
+    g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(vol,t+0.018);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    src.connect(f);f.connect(g);g.connect(audioCtx.destination);src.start(t);src.stop(t+dur+0.03);
+  }catch(e){}
+}
+function sfxFlap(){playTone(118,0.045,'sine',0.035,205);playNoiseSweep(0.09,0.026,900,2600,0,'bandpass');playTone(3100,0.035,'triangle',0.022,820,0.012)}
+function sfxKill(){playTone(72,0.18,'sine',0.12,44,0);playTone(410,0.075,'square',0.10,980,0.01);playNoiseSweep(0.16,0.075,180,3600,0.012,'bandpass');playTone(1380,0.08,'triangle',0.075,420,0.045)}
+function sfxDeath(){playTone(720,0.72,'sawtooth',0.12,48,0);playTone(52,0.85,'sine',0.105,28,0.03);playNoiseSweep(0.50,0.065,2200,180,0.04,'lowpass');playTone(2100,0.16,'sine',0.055,260,0)}
 function sfxEggStomp(){playTone(980,0.055,'triangle',0.11,1750,0);playTone(2260,0.035,'sine',0.06,3200,0.025);playNoise(0.06,0.035,3000,0.015)}
 function sfxScore(){playTone(1200,0.04,'sine',0.06,1200)}
-function sfxEggHatch(){playTone(360,0.08,'triangle',0.09,720,0);playNoise(0.12,0.05,1900,0.02);playTone(650,0.08,'sine',0.09,1300,0.08);playTone(2100,0.06,'sawtooth',0.055,760,0.04)}
-function sfxPtero(){playWarble(1900,3300,950,0.42,'sawtooth',0.16,0);playNoise(0.16,0.045,2400,0.05);playTone(92,0.20,'sine',0.05,70,0.03)}
-function sfxLavaPop(){playTone(1100,0.032,'sine',0.025,520);playNoise(0.055,0.018,460,0)}
+function sfxEggHatch(){playNoiseSweep(0.18,0.052,600,2600,0,'bandpass');playTone(330,0.10,'triangle',0.07,820,0.015);playTone(780,0.13,'sawtooth',0.065,1380,0.08);playNoise(0.10,0.045,3200,0.12)}
+function sfxPtero(){playTone(48,0.75,'sine',0.11,36,0);playWarble(520,2800,740,0.88,'sawtooth',0.18,0.02);playWarble(940,3600,1200,0.62,'triangle',0.11,0.08);playNoiseSweep(0.52,0.09,420,5200,0.03,'bandpass');playNoiseSweep(0.38,0.055,180,900,0.18,'lowpass')}
+function sfxLavaPop(){playTone(190,0.055,'sine',0.028,80);playNoiseSweep(0.075,0.025,120,900,0,'lowpass');playTone(1120,0.028,'triangle',0.018,420,0.018)}
 function sfxWaveStart(){[262,330,392,523,659].forEach((f,i)=>playTone(f,0.075,'square',0.085,f*1.5,i*0.07));playNoise(0.10,0.025,1200,0.18)}
 function sfxWaveClear(){[523,659,784,1046,1568].forEach((f,i)=>playTone(f,0.09,'triangle',0.11,f,i*0.065));playTone(196,0.38,'sine',0.055,392,0)}
 function sfxGameOver(){[220,175,131,98].forEach((f,i)=>playTone(f,0.25,'triangle',0.115,f,i*0.23));playNoise(0.55,0.045,420,0.18);playTone(55,1.5,'sine',0.06,42,0)}
@@ -126,9 +138,9 @@ function sfxExtraLife(){[784,988,1175,1568,1976].forEach((f,i)=>playTone(f,0.085
 function sfxCreak(){playTone(82,0.22,'sawtooth',0.05,45,0);playWarble(260,185,225,0.18,'triangle',0.034,0.02);playNoise(0.09,0.026,520,0.04)}
 function sfxFragileBreak(){playTone(58,0.22,'square',0.09,34,0);playNoise(0.18,0.075,360,0.02);playTone(440,0.05,'triangle',0.055,120,0.04)}
 function sfxTroll(){playTone(70,0.32,'sawtooth',0.11,38,0);playTone(180,0.2,'square',0.06,90,0.04);playNoise(0.16,0.04,260,0.03)}
-function sfxPteroWarn(){playWarble(900,2100,620,0.36,'sawtooth',0.085,0);playTone(120,0.2,'sine',0.05,80,0.04);playNoise(0.11,0.03,1800,0.05)}
+function sfxPteroWarn(){playTone(55,0.55,'sine',0.075,42,0);playWarble(420,1450,260,0.68,'sawtooth',0.095,0.02);playWarble(1120,2400,760,0.46,'triangle',0.07,0.10);playNoiseSweep(0.42,0.072,240,3400,0.04,'bandpass');playNoiseSweep(0.24,0.04,90,420,0.08,'lowpass')}
 function sfxCombo(n){playTone(720+n*70,0.045,'square',0.07,1200+n*80,0);playTone(1080+n*90,0.05,'triangle',0.06,1700+n*100,0.035);if(n>=4)playNoise(0.08,0.035,3600,0.02)}
-function sfxLavaEggBurn(){playTone(260,0.09,'sawtooth',0.06,110,0);playNoise(0.16,0.055,520,0.01);playTone(980,0.04,'triangle',0.035,420,0.05)}
+function sfxLavaEggBurn(){playTone(210,0.12,'sawtooth',0.055,80,0);playNoiseSweep(0.24,0.075,90,1200,0.01,'lowpass');playNoise(0.10,0.045,2600,0.06);playTone(980,0.05,'triangle',0.028,360,0.08)}
 // --- Constants ---
 const GRAVITY = 1200;
 const FLAP_POWER = -340;
