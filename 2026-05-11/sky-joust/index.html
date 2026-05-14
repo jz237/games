@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.39';
+const VERSION = 'v3.1.40';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1946,28 +1946,40 @@ function update(dt){
       const distToLava=lavaY-(e.y+PLAYER_H);
       const criticalLow=distToLava<80;
       const tooLow=distToLava<120;
-      // Target altitude: patrol around platforms, dive at player when above
+      // Target altitude: every jouster slowly seeks altitude advantage, then dives once above you.
       let targetVx=e.ai.wander;
       let wantFlap=false;
+      let altitudePressure=0;
       if(player){
         if(e.type==='bounder'){
-          // Bounders: drift toward player horizontally, stay at platform level
-          targetVx=dx*0.7+e.ai.wander;
-          // Flap to maintain altitude near platforms, not to camp at top
-          if(e.y>H*0.6)wantFlap=true; // too low, go up
-          if(dy<0&&e.y<player.y-120)wantFlap=false; // high above player, let gravity bring down
+          // Bounders: basic jousters. They drift toward you and slowly try to get a modest height edge.
+          targetVx=dx*0.72+e.ai.wander;
+          const desiredAbove=34;
+          altitudePressure=(e.y-(player.y-desiredAbove))/120;
+          if(altitudePressure>0.18&&distToLava>105)wantFlap=true;
+          if(e.y>H*0.63)wantFlap=true; // too low, go up
+          if(e.y<player.y-92&&distToLava>145)wantFlap=false; // high enough: drop back into the joust
         } else if(e.type==='hunter'){
-          // Hunters: smarter red riders, but beatable — lead the player without camping impossible altitude.
-          const ahead=(player.x+player.vx*0.12)-e.x;
-          targetVx=ahead*1.28+Math.sign(ahead||dx||1)*18;
-          if(e.y>player.y+8)wantFlap=true; // clearly below: try to climb
-          if(e.y<player.y-76&&distToLava>145)wantFlap=false; // above enough: dive back in sooner
+          // Hunters: apply steady altitude pressure, but no longer snap/hover into unbeatable height.
+          const ahead=(player.x+player.vx*0.14)-e.x;
+          targetVx=ahead*1.34+Math.sign(ahead||dx||1)*24;
+          const desiredAbove=58;
+          altitudePressure=(e.y-(player.y-desiredAbove))/135;
+          if(altitudePressure>0.12&&distToLava>120)wantFlap=true;
+          if(e.y<player.y-96&&distToLava>155)wantFlap=false; // above enough: dive back in sooner
         } else {
-          // Shadows: late-game elites — wide intercepts, faster height corrections, nastier dives.
-          const ahead=(player.x+player.vx*0.42)-e.x;
-          targetVx=ahead*2.85+Math.sign(ahead||dx||1)*135;
-          if(e.y>player.y-25)wantFlap=true; // stay threateningly high
-          if(e.y<player.y-125&&distToLava>200)wantFlap=false; // high up, let dive begin
+          // Shadows: late-game elites — stronger altitude pressure and wider intercepts.
+          const ahead=(player.x+player.vx*0.38)-e.x;
+          targetVx=ahead*2.55+Math.sign(ahead||dx||1)*110;
+          const desiredAbove=76;
+          altitudePressure=(e.y-(player.y-desiredAbove))/125;
+          if(altitudePressure>0.05&&distToLava>135)wantFlap=true;
+          if(e.y<player.y-132&&distToLava>200)wantFlap=false; // high up, let dive begin
+        }
+        if(wantFlap&&altitudePressure>0){
+          // Add a little sideways commitment while climbing so enemies arc into position
+          // like jousters instead of bobbing vertically in place.
+          targetVx+=Math.sign(dx||e.ai.wander||1)*Math.min(95,altitudePressure*42);
         }
       }
       // Shelf-avoidance AI: if an enemy is trying to flap into the underside of a platform,
@@ -1997,7 +2009,7 @@ function update(dt){
       // Flapping logic
       e.flapCooldown-=dt;
       const flapReady=e.flapCooldown<=0;
-      const shouldFlap=flapReady&&(wantFlap||(!tooLow&&e.vy>80));
+      const shouldFlap=flapReady&&(wantFlap||(!tooLow&&e.vy>155));
       if(shouldFlap||criticalLow){
         const power=criticalLow?1.4:tooLow?1.2:1.0;
         e.vy=FLAP_POWER*(0.95+e.speed*0.18)*power;
