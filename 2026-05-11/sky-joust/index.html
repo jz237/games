@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.18';
+const VERSION = 'v3.1.19';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -2204,266 +2204,172 @@ function update(dt){
 
 // --- Draw ---
 
+
+function premiumPanelPath(x,y,w,h,cut=16){
+  ctx.beginPath();ctx.moveTo(x+cut,y);ctx.lineTo(x+w-cut,y);ctx.lineTo(x+w,y+cut);ctx.lineTo(x+w,y+h-cut);ctx.lineTo(x+w-cut,y+h);ctx.lineTo(x+cut,y+h);ctx.lineTo(x,y+h-cut);ctx.lineTo(x,y+cut);ctx.closePath();
+}
+function drawGlowLine(x1,y1,x2,y2,color,width=2,blur=10){
+  ctx.save();ctx.globalCompositeOperation='lighter';ctx.shadowColor=color;ctx.shadowBlur=blur;ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.restore();
+}
+function drawSoftDisc(x,y,r,color){ctx.save();ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,color);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.restore();}
+
 function drawBG(){
+  // Premium sci-fi cavern grade: near-black navy walls, hot lava bounce, restrained depth.
   const sky=ctx.createLinearGradient(0,0,0,H);
-  sky.addColorStop(0,'#02050B'); sky.addColorStop(0.34,'#071323'); sky.addColorStop(0.62,'#1B1420'); sky.addColorStop(0.82,'#230904'); sky.addColorStop(1,'#3A0800');
-  ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
+  sky.addColorStop(0,'#00030A');sky.addColorStop(.22,'#020916');sky.addColorStop(.55,'#07101C');sky.addColorStop(.78,'#120B12');sky.addColorStop(1,'#210602');
+  ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
 
-  // Distant lava glow wash from below.
-  const wash=ctx.createLinearGradient(0,H*0.25,0,H);
-  wash.addColorStop(0,'rgba(255,90,0,0)'); wash.addColorStop(1,'rgba(255,105,0,0.28)');
-  ctx.fillStyle=wash; ctx.fillRect(0,0,W,H);
+  // Deep central void so characters/platforms pop instead of reading as flat brown.
+  const voidG=ctx.createRadialGradient(W*.5,H*.36,Math.min(W,H)*.05,W*.5,H*.42,Math.max(W,H)*.62);
+  voidG.addColorStop(0,'rgba(4,14,27,.34)');voidG.addColorStop(.45,'rgba(0,3,8,.36)');voidG.addColorStop(1,'rgba(0,0,0,.72)');
+  ctx.fillStyle=voidG;ctx.fillRect(0,0,W,H);
 
-  // Visual-bible blue cave opening: cold upper rim against molten underlight.
-  ctx.save();ctx.globalCompositeOperation='screen';
-  const blue=ctx.createRadialGradient(W*.58,H*.18,20,W*.58,H*.18,Math.max(W,H)*.55);
-  blue.addColorStop(0,'rgba(80,150,210,.20)');blue.addColorStop(.35,'rgba(28,74,112,.14)');blue.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=blue;ctx.fillRect(0,0,W,H*.62);ctx.restore();
-
-  // Painterly cavern ceiling silhouettes framing gameplay like the cabinet art.
+  // Massive beveled sci-fi wall slabs at the sides; angular, not vine-like clutter.
   ctx.save();
-  for(let i=0;i<11;i++){
-    const x=i*W/10+Math.sin(i*2.9+gameTime*.08)*24;
-    const h=H*(.13+.16*Math.abs(Math.sin(i*1.77)));
-    const grad=ctx.createLinearGradient(x,0,x,h);grad.addColorStop(0,'rgba(0,2,8,.96)');grad.addColorStop(1,'rgba(3,8,18,.18)');
-    ctx.fillStyle=grad;ctx.beginPath();ctx.moveTo(x-70,0);ctx.lineTo(x+72,0);ctx.lineTo(x+28,h*.72);ctx.lineTo(x+8,h);ctx.lineTo(x-18,h*.64);ctx.closePath();ctx.fill();
-  }
-  ctx.restore();
-
-  for(let li=0;li<bgLayers.length;li++){
-    const layer=bgLayers[li];
-    const off=(gameTime*18 + (player?player.x*0.012:0))*layer.depth;
-    const color=[`rgba(12,9,16,${layer.alpha})`,`rgba(25,17,18,${layer.alpha})`,`rgba(42,25,20,${layer.alpha})`][li];
-    ctx.fillStyle=color;
-    for(const f of layer.formations){
-      let x=((f.x-off)%(W+220)); if(x<-120)x+=W+220;
-      const base=f.top?0:H;
-      const dir=f.top?1:-1;
-      const h=f.h, w=f.w;
-      ctx.beginPath();
-      ctx.moveTo(x-w/2,base);
-      ctx.lineTo(x-w*0.25,base+dir*h*(0.55+0.2*Math.sin(f.seed)));
-      ctx.lineTo(x,base+dir*h);
-      ctx.lineTo(x+w*0.28,base+dir*h*(0.48+0.2*Math.cos(f.seed)));
-      ctx.lineTo(x+w/2,base); ctx.closePath(); ctx.fill();
-      if(f.glow>0.64){
-        ctx.save(); ctx.globalCompositeOperation='lighter';
-        ctx.strokeStyle=f.glow>0.86?'rgba(120,255,150,0.22)':'rgba(255,145,40,0.30)';
-        ctx.lineWidth=1.2+li;
-        ctx.beginPath();
-        ctx.moveTo(x-w*.08,base+dir*h*.22); ctx.lineTo(x+w*.12,base+dir*h*.48); ctx.lineTo(x-w*.02,base+dir*h*.72);
-        ctx.stroke(); ctx.restore();
-      }
+  for(let side=0;side<2;side++){
+    const dir=side===0?1:-1, baseX=side===0?0:W;
+    for(let i=0;i<5;i++){
+      const y=-H*.04+i*H*.22+Math.sin(gameTime*.12+i)*8;
+      const w=W*(.15+.035*Math.sin(i*2.2));
+      const h=H*.26;
+      const x=baseX-dir*(w*.12);
+      const grd=ctx.createLinearGradient(baseX,y,baseX+dir*w,y+h);
+      grd.addColorStop(0,'rgba(1,6,14,.96)');grd.addColorStop(.55,'rgba(7,17,31,.86)');grd.addColorStop(1,'rgba(1,3,8,.18)');
+      ctx.fillStyle=grd;ctx.beginPath();ctx.moveTo(baseX,y);ctx.lineTo(baseX+dir*w,y+h*.08);ctx.lineTo(baseX+dir*w*.68,y+h);ctx.lineTo(baseX,y+h*.92);ctx.closePath();ctx.fill();
+      ctx.strokeStyle='rgba(85,185,255,.10)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(baseX+dir*w*.18,y+h*.08);ctx.lineTo(baseX+dir*w*.74,y+h*.14);ctx.stroke();
+      if(i%2===0)drawGlowLine(baseX+dir*w*.38,y+h*.24,baseX+dir*w*.20,y+h*.78,'rgba(88,205,255,.18)',1.2,5);
     }
   }
-  // cavernRuneEtchings — slow parallax glyphs and mineral seams in the back wall.
+  ctx.restore();
+
+  // Sparse distant architectural ribs and ledges.
+  ctx.save();ctx.globalAlpha=.72;
+  for(let i=0;i<9;i++){
+    const x=((i*W/8-gameTime*6)%(W+160))-80;
+    const top=H*(.05+.035*(i%3));
+    const bottom=H*(.76+.05*Math.sin(i));
+    ctx.strokeStyle=i%3===0?'rgba(88,190,255,.11)':'rgba(255,110,28,.08)';ctx.lineWidth=2+(i%3);
+    ctx.beginPath();ctx.moveTo(x,top);ctx.bezierCurveTo(x+26,bottom*.36,x-22,bottom*.62,x+8,bottom);ctx.stroke();
+  }
+  ctx.restore();
+
+  // Purposeful wall detail: inset panels, vents, and cyan/orange seams kept to the margins.
+  ctx.save();ctx.globalAlpha=.9;
+  for(let side=0;side<2;side++){
+    const dir=side===0?1:-1, margin=side===0?W*.055:W*.945;
+    for(let i=0;i<6;i++){
+      const y=H*(.15+i*.105)+Math.sin(gameTime*.25+i)*5;
+      const ww=W*(.075+.015*(i%2)), hh=H*.045;
+      const x=margin-dir*ww*.25;
+      ctx.fillStyle='rgba(2,8,16,.62)';premiumPanelPath(x,y,dir*ww,hh,8);ctx.fill();
+      ctx.strokeStyle='rgba(95,190,255,.12)';ctx.lineWidth=1.2;ctx.stroke();
+      if(i%2===0)drawGlowLine(x+dir*ww*.15,y+hh*.72,x+dir*ww*.82,y+hh*.72,'rgba(255,116,24,.18)',1.4,5);
+      else drawGlowLine(x+dir*ww*.22,y+hh*.28,x+dir*ww*.76,y+hh*.28,'rgba(92,210,255,.16)',1.2,5);
+    }
+  }
+  ctx.restore();
+
+  // Mid-depth bridge silhouettes and reactor alcoves give the arena a deliberate sci-fi composition.
   ctx.save();
-  const runeOff=(gameTime*10+(player?player.x*.01:0));
-  for(const r of CAVERN_RUNES){
-    let x=((r.x-runeOff)%(W+240)); if(x<-120)x+=W+240;
-    const y=H*r.y+Math.sin(gameTime*.6+r.seed)*5;
-    const a=.06+.08*Math.sin(gameTime*1.4+r.seed);
-    ctx.strokeStyle=r.kind===0?`rgba(115,210,255,${a})`:r.kind===1?`rgba(255,120,34,${a*.9})`:`rgba(198,160,90,${a*.7})`;
-    ctx.lineWidth=Math.max(.65,1.15/detailScale);
-    ctx.beginPath();
-    if(r.kind===0){ctx.moveTo(x-7,y+8);ctx.lineTo(x,y-8);ctx.lineTo(x+7,y+8);ctx.moveTo(x-4,y+1);ctx.lineTo(x+4,y+1);}
-    else if(r.kind===1){ctx.arc(x,y,8,Math.PI*.15,Math.PI*1.85);ctx.moveTo(x,y-10);ctx.lineTo(x,y+10);}
-    else if(r.kind===2){ctx.moveTo(x-10,y);ctx.lineTo(x+10,y);ctx.moveTo(x,y-10);ctx.lineTo(x,y+10);}
-    else {ctx.moveTo(x-9,y-6);ctx.lineTo(x+2,y+8);ctx.lineTo(x+10,y-5);}
-    ctx.stroke();
+  for(let i=0;i<5;i++){
+    const y=H*(.22+i*.115);
+    const x=W*.23+Math.sin(i*1.8)*W*.04;
+    const w=W*(.54-.035*(i%2));
+    ctx.fillStyle='rgba(0,3,8,.30)';premiumPanelPath(x,y,w,H*.036,10);ctx.fill();
+    ctx.strokeStyle='rgba(82,165,220,.10)';ctx.lineWidth=1.2;ctx.stroke();
+    ctx.save();ctx.globalCompositeOperation='lighter';
+    for(let n=0;n<5;n++){const lx=x+w*(.13+n*.18);ctx.fillStyle=n%2?'rgba(255,115,24,.14)':'rgba(80,205,255,.12)';ctx.fillRect(lx,y+H*.012,w*.055,Math.max(2,H*.004));}
+    ctx.restore();
   }
   ctx.restore();
-  // highResolutionMineralDust: sub-pixel crystals that only read clearly at higher render scale.
-  if(detailScale>1.05){ctx.save();ctx.globalCompositeOperation='lighter';for(let i=0;i<Math.floor(80*detailScale);i++){const x=((i*53+gameTime*6)%(W+120))-60,y=H*(.12+((i*37)%74)/100);const a=.035+.035*Math.sin(gameTime*1.7+i);ctx.fillStyle=i%5===0?`rgba(120,220,255,${a})`:`rgba(255,170,70,${a*.8})`;ctx.fillRect(x,y,Math.max(.7,renderScale*.42),Math.max(.7,renderScale*.42));}ctx.restore();}
-  // cabinetReliefMurals: faint ancient joust carvings in the cavern wall, readable in high-res mode.
-  ctx.save();
-  ctx.globalAlpha=.10+.035*Math.sin(gameTime*.8);ctx.strokeStyle='rgba(210,170,105,.55)';ctx.fillStyle='rgba(120,70,38,.10)';ctx.lineWidth=Math.max(.8,1.4/detailScale);
-  for(let i=0;i<Math.floor(5*detailScale);i++){
-    const mx=((i*W*.29-gameTime*3)%(W+220))-110, my=H*(.24+.09*(i%3));
-    ctx.beginPath();ctx.ellipse(mx,my,42,20,0,0,Math.PI*2);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(mx-58,my+18);ctx.quadraticCurveTo(mx-18,my-22,mx+42,my-8);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(mx+16,my-20);ctx.lineTo(mx+74,my-36);ctx.moveTo(mx+53,my-31);ctx.lineTo(mx+67,my-20);ctx.stroke();
-    for(let r=0;r<3;r++){ctx.beginPath();ctx.arc(mx-26+r*22,my+28,5,0,Math.PI*2);ctx.stroke();}
+
+  // Minimal atmosphere: few embers and blue motes, no screen-filling orange rain.
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  for(let i=0;i<Math.floor(38*detailScale);i++){
+    const x=((i*97+gameTime*(10+(i%5)*3))%(W+120))-60;
+    const y=H*(.12+((i*37)%74)/100);
+    const a=.045+.04*Math.sin(gameTime*1.5+i);
+    ctx.fillStyle=i%6===0?`rgba(120,220,255,${a})`:`rgba(255,138,36,${a*.9})`;
+    ctx.fillRect(x,y,Math.max(1,renderScale*.5),Math.max(1,renderScale*.5));
   }
   ctx.restore();
-  // Far magma falls and wall cracks.
-  ctx.save(); ctx.globalCompositeOperation='lighter';
-  for(let i=0;i<Math.floor(7*detailScale);i++){
-    const x=(i*211+Math.sin(gameTime*.15+i)*30)%W;
-    const alpha=0.16+0.08*Math.sin(gameTime*2+i);
-    ctx.strokeStyle=`rgba(255,92,12,${alpha})`; ctx.lineWidth=2+(i%3);
-    ctx.beginPath(); ctx.moveTo(x,0); ctx.bezierCurveTo(x+10,H*.22,x-8,H*.44,x+4,H*.7); ctx.stroke();
-  }
-  ctx.restore();
-  // Foreground stalactites and mineral drip glints — short cave forms, not vine curtains.
-  ctx.save();
-  const fgOff=(player?player.x*0.018:0)+gameTime*7;
-  for(let i=0;i<Math.floor(12*detailScale);i++){
-    const x=((i*143-fgOff)%(W+190));
-    const sx=x<-95?x+W+190:x;
-    const len=24+22*Math.abs(Math.sin(i*2.17));
-    ctx.fillStyle=i%3===0?'rgba(55,42,38,.48)':'rgba(32,27,32,.54)';
-    ctx.beginPath();ctx.moveTo(sx-16,0);ctx.lineTo(sx+16,0);ctx.lineTo(sx+Math.sin(gameTime+i)*3,len);ctx.closePath();ctx.fill();
-    if(i%5===0){ctx.strokeStyle='rgba(150,220,255,.16)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(sx,len-2);ctx.lineTo(sx+Math.sin(gameTime*2+i)*2,len+7);ctx.stroke();}
-  }
-  ctx.restore();
-  for(let i=0;i<Math.floor(5*detailScale);i++){
-    const x=(W*(0.12+i*.21)+Math.sin(gameTime*.33+i)*22)%W;
-    const top=H*(0.16+(i%2)*.08), bottom=Math.min(lavaY-30,H*.86);
-    const grad=ctx.createLinearGradient(x,top,x,bottom);grad.addColorStop(0,'rgba(255,95,0,0.02)');grad.addColorStop(.55,'rgba(255,80,0,.13)');grad.addColorStop(1,'rgba(255,210,80,.28)');
-    ctx.fillStyle=grad;ctx.fillRect(x-3,top,6,bottom-top);
-  }
-  // Drips, heat shimmer, ash columns, and smoke.
-  for(const wd of waterDrops){ctx.strokeStyle=`rgba(155,220,255,${0.35*wd.life/wd.maxLife})`;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(wd.x,wd.y);ctx.lineTo(wd.x,wd.y+8);ctx.stroke();}
-  for(const sm of smokeWisps){
-    const a=sm.life/sm.maxLife;
-    if(sm.ashColumn){
-      ctx.save();ctx.globalCompositeOperation='lighter';
-      ctx.fillStyle=`rgba(255,165,70,${0.10*a})`;ctx.beginPath();ctx.ellipse(sm.x,sm.y,sm.r*.85,sm.r*3.2,0,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle=`rgba(90,84,78,${0.28*a})`;ctx.beginPath();ctx.ellipse(sm.x+Math.sin(gameTime*5+sm.x)*8,sm.y,sm.r*1.6,sm.r*4.6,Math.sin(gameTime+sm.x),0,Math.PI*2);ctx.fill();ctx.restore();
-    }else{ctx.fillStyle=`rgba(130,120,120,${0.12*a})`;ctx.beginPath();ctx.ellipse(sm.x,sm.y,sm.r,sm.r*.45,Math.sin(gameTime+sm.x),0,Math.PI*2);ctx.fill();}
-  }
+
+  // Lava bounce light and cool top key light.
+  const warm=ctx.createLinearGradient(0,H*.42,0,H);warm.addColorStop(0,'rgba(255,90,0,0)');warm.addColorStop(.72,'rgba(255,95,0,.10)');warm.addColorStop(1,'rgba(255,128,28,.36)');ctx.fillStyle=warm;ctx.fillRect(0,0,W,H);
+  const cool=ctx.createRadialGradient(W*.5,H*.05,20,W*.5,H*.05,Math.max(W,H)*.56);cool.addColorStop(0,'rgba(75,175,255,.16)');cool.addColorStop(.5,'rgba(35,90,145,.06)');cool.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=cool;ctx.fillRect(0,0,W,H*.65);
 }
 
 function drawForegroundDepth(){
-  // near-camera chains, hanging bones/roots/stalactites, and fast smoke layers
-  const off=gameTime*34+(player?player.x*.035:0);
+  // Clean professional foreground framing: bevel rocks and a few heavy cables, not clutter.
   ctx.save();
-  // Dark poster-frame rocks at the corners: strong foreground depth, but outside play focus.
-  ctx.fillStyle='rgba(0,2,8,.72)';
-  ctx.beginPath();ctx.moveTo(0,H);ctx.lineTo(0,H*.68);ctx.quadraticCurveTo(W*.08,H*.78,W*.16,H);ctx.closePath();ctx.fill();
-  ctx.beginPath();ctx.moveTo(W,H);ctx.lineTo(W,H*.66);ctx.quadraticCurveTo(W*.90,H*.80,W*.82,H);ctx.closePath();ctx.fill();
-  ctx.strokeStyle='rgba(255,112,24,.15)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(W*.03,H*.73);ctx.lineTo(W*.13,H*.96);ctx.moveTo(W*.96,H*.70);ctx.lineTo(W*.86,H*.98);ctx.stroke();
-  for(const pr of FOREGROUND_PROPS){
-    let x=((pr.x-off*pr.scale)%(W+260)); if(x<-130)x+=W+260;
-    const sway=Math.sin(gameTime*1.8+pr.seed)*7*pr.scale;
-    ctx.globalAlpha=.42;
-    if(pr.kind===0){
-      ctx.strokeStyle='rgba(22,18,16,.82)';ctx.lineWidth=5*pr.scale;ctx.beginPath();for(let y=-20;y<H*.34;y+=16*pr.scale){ctx.ellipse(x+sway,y,6*pr.scale,9*pr.scale,.35,0,Math.PI*2);}ctx.stroke();
-      ctx.strokeStyle='rgba(245,140,55,.18)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x+sway,-10);ctx.lineTo(x+sway,H*.35);ctx.stroke();
-    }else if(pr.kind===1){
-      ctx.fillStyle='rgba(190,176,142,.52)';ctx.beginPath();ctx.moveTo(x+sway,H*.03);ctx.lineTo(x+12*pr.scale+sway,H*.25);ctx.lineTo(x-8*pr.scale+sway,H*.27);ctx.closePath();ctx.fill();
-      ctx.strokeStyle='rgba(48,30,24,.65)';ctx.lineWidth=2;ctx.stroke();
-    }else if(pr.kind===2){
-      ctx.strokeStyle='rgba(54,36,27,.72)';ctx.lineWidth=4*pr.scale;ctx.beginPath();ctx.moveTo(x+sway,-5);ctx.bezierCurveTo(x-25,H*.12,x+18,H*.20,x-7,H*.34);ctx.stroke();
-    }else if(pr.kind===3){
-      ctx.strokeStyle='rgba(210,195,160,.46)';ctx.lineWidth=3*pr.scale;ctx.beginPath();ctx.moveTo(x-18+sway,H*.12);ctx.lineTo(x+14+sway,H*.17);ctx.moveTo(x-5+sway,H*.10);ctx.lineTo(x-9+sway,H*.20);ctx.stroke();
-    }else{
-      ctx.fillStyle='rgba(26,21,24,.70)';ctx.beginPath();ctx.moveTo(x-15+sway,0);ctx.lineTo(x+18+sway,0);ctx.lineTo(x+sway,70*pr.scale);ctx.closePath();ctx.fill();
-    }
+  const vg=ctx.createRadialGradient(W*.5,H*.42,Math.min(W,H)*.20,W*.5,H*.46,Math.max(W,H)*.78);
+  vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(.72,'rgba(0,0,0,.10)');vg.addColorStop(1,'rgba(0,0,0,.70)');ctx.fillStyle=vg;ctx.fillRect(0,0,W,H);
+
+  ctx.fillStyle='rgba(0,2,8,.82)';
+  ctx.beginPath();ctx.moveTo(0,H);ctx.lineTo(0,H*.62);ctx.lineTo(W*.08,H*.70);ctx.lineTo(W*.16,H);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(W,H);ctx.lineTo(W,H*.60);ctx.lineTo(W*.91,H*.71);ctx.lineTo(W*.82,H);ctx.closePath();ctx.fill();
+  drawGlowLine(W*.035,H*.67,W*.125,H*.98,'rgba(255,112,24,.16)',3,8);
+  drawGlowLine(W*.965,H*.65,W*.875,H*.98,'rgba(90,190,255,.13)',3,8);
+
+  const off=gameTime*16+(player?player.x*.018:0);
+  for(let i=0;i<7;i++){
+    const x=((i*211-off)%(W+260))-130;
+    if(i%2===0){ctx.strokeStyle='rgba(7,9,13,.78)';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(x,-20);ctx.bezierCurveTo(x+18,H*.12,x-15,H*.22,x+4,H*.38);ctx.stroke();ctx.strokeStyle='rgba(95,190,255,.10)';ctx.lineWidth=1.5;ctx.stroke();}
+    else{ctx.fillStyle='rgba(14,19,25,.62)';ctx.beginPath();ctx.moveTo(x-14,0);ctx.lineTo(x+18,0);ctx.lineTo(x+4,44+18*Math.sin(i));ctx.closePath();ctx.fill();}
   }
-  for(let i=0;i<12;i++){const x=((i*197+gameTime*(46+i*5))%(W+260))-130;ctx.fillStyle=i%3===0?'rgba(35,75,105,.075)':'rgba(120,86,66,.085)';ctx.beginPath();ctx.ellipse(x,H*(.16+.07*(i%7)),100+18*i,22+4*i,Math.sin(gameTime*.7+i),0,Math.PI*2);ctx.fill();}
-  // Heavy vignette ties playfield to the darker, painterly title art.
-  const vg=ctx.createRadialGradient(W*.5,H*.42,Math.min(W,H)*.22,W*.5,H*.45,Math.max(W,H)*.78);
-  vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(.72,'rgba(0,0,0,.12)');vg.addColorStop(1,'rgba(0,2,8,.56)');ctx.fillStyle=vg;ctx.fillRect(0,0,W,H);
   ctx.restore();ctx.globalAlpha=1;
 }
 function drawLava(){
-  const pulse=0.5+0.5*Math.sin(gameTime*4.2);
-  // Warm light cast upward about 100px before the lava body is drawn.
-  const glowH=Math.min(110,H*0.18);
-  const glowGrad=ctx.createLinearGradient(0,lavaY-glowH,0,lavaY);
-  glowGrad.addColorStop(0,'rgba(255,80,0,0)');
-  glowGrad.addColorStop(0.55,'rgba(255,90,0,0.10)');
-  glowGrad.addColorStop(1,`rgba(255,180,20,${0.28+pulse*0.12})`);
-  ctx.fillStyle=glowGrad;
-  ctx.fillRect(0,lavaY-glowH,W,glowH);
+  const pulse=0.5+0.5*Math.sin(gameTime*3.8);
+  const glowH=Math.min(150,H*.22);
+  const glowGrad=ctx.createLinearGradient(0,lavaY-glowH,0,lavaY+24);
+  glowGrad.addColorStop(0,'rgba(255,80,0,0)');glowGrad.addColorStop(.55,'rgba(255,96,0,.12)');glowGrad.addColorStop(1,`rgba(255,190,40,${.42+pulse*.12})`);
+  ctx.fillStyle=glowGrad;ctx.fillRect(0,lavaY-glowH,W,glowH+28);
 
-  // Intense red/orange lava pool, bottom 15-18% of screen.
+  // Dark molten crust with orange/yellow veins, closer to the reference than flat neon bands.
   const lavaGrad=ctx.createLinearGradient(0,lavaY,0,H);
-  lavaGrad.addColorStop(0,`rgb(255,${210+Math.floor(pulse*35)},30)`);
-  lavaGrad.addColorStop(0.12,'#FF8A00');
-  lavaGrad.addColorStop(0.35,'#FF2600');
-  lavaGrad.addColorStop(0.72,'#B00000');
-  lavaGrad.addColorStop(1,'#430000');
-  ctx.fillStyle=lavaGrad;
-  ctx.fillRect(0,lavaY,W,H-lavaY);
+  lavaGrad.addColorStop(0,'#FFF05A');lavaGrad.addColorStop(.07,'#FF9B00');lavaGrad.addColorStop(.20,'#C72400');lavaGrad.addColorStop(.56,'#3C0503');lavaGrad.addColorStop(1,'#080000');
+  ctx.fillStyle=lavaGrad;ctx.fillRect(0,lavaY,W,H-lavaY);
 
-  // Shimmering white-hot/yellow surface waves.
-  for(let x=0;x<W;x+=4){
-    const waveH=5*Math.sin(x*0.025+gameTime*4)+3*Math.sin(x*0.075+gameTime*7);
-    ctx.fillStyle=(x%16<8)?'#FFFF66':'#FFCC00';
-    ctx.fillRect(x,lavaY+waveH-4,4,8);
-  }
-  ctx.fillStyle='#FF3300';
-  for(let x=0;x<W;x+=9){
-    const waveH=4*Math.sin(x*0.02+gameTime*2.5+2);
-    ctx.fillRect(x,lavaY+18+waveH,8,5);
-  }
-
-  // Actual flames rising from the surface — triangular/teardrop flicker layers.
-  const flameCount=Math.max(14,Math.floor(W/(48/detailScale))); // adaptiveHighResolution detail density
-  for(let i=0;i<flameCount;i++){
-    const fx=(i+0.35+0.25*Math.sin(gameTime*1.7+i))*W/flameCount;
-    const fh=24+18*Math.abs(Math.sin(gameTime*3.1+i*1.9));
-    const fw=12+5*Math.sin(gameTime*4.3+i);
-    const base=lavaY+4*Math.sin(gameTime*5+i);
-    ctx.save();
-    ctx.globalCompositeOperation='lighter';
-    ctx.fillStyle='rgba(255,40,0,0.75)';
-    ctx.beginPath();ctx.moveTo(fx-fw,base+6);ctx.quadraticCurveTo(fx-fw*0.7,base-fh*0.45,fx,base-fh);ctx.quadraticCurveTo(fx+fw*0.8,base-fh*0.35,fx+fw,base+6);ctx.closePath();ctx.fill();
-    ctx.fillStyle='rgba(255,155,0,0.9)';
-    ctx.beginPath();ctx.moveTo(fx-fw*0.55,base+4);ctx.quadraticCurveTo(fx-fw*0.3,base-fh*0.35,fx+2,base-fh*0.78);ctx.quadraticCurveTo(fx+fw*0.45,base-fh*0.22,fx+fw*0.45,base+4);ctx.closePath();ctx.fill();
-    ctx.fillStyle='rgba(255,255,90,0.86)';
-    ctx.beginPath();ctx.moveTo(fx-3,base+2);ctx.quadraticCurveTo(fx-2,base-fh*0.24,fx+1,base-fh*0.46);ctx.quadraticCurveTo(fx+5,base-fh*0.16,fx+4,base+2);ctx.closePath();ctx.fill();
-    ctx.restore();
-  }
-
-  // Bright bubbles/pops.
-  const bubbleCount=Math.floor(10*detailScale);
-  for(let i=0;i<bubbleCount;i++){
-    const bx=((gameTime*38+i*W/bubbleCount)%W);
-    const by=lavaY+10+Math.sin(gameTime*2.7+i*2.5)*12;
-    const br=4+Math.sin(gameTime*3.4+i*1.7)*2.5;
-    ctx.fillStyle='rgba(255,240,80,0.82)';
-    ctx.beginPath();ctx.arc(bx,by,br,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='rgba(255,255,220,0.45)';
-    ctx.beginPath();ctx.arc(bx-br*0.3,by-br*0.35,br*0.35,0,Math.PI*2);ctx.fill();
-  }
-
-  // lavaSkullHandShapes — the lava briefly forms faces and reaching fingers.
-  for(let i=0;i<5;i++){
-    const phase=(gameTime*.36+i*.19)%1;
-    if(phase<.28){
-      const a=Math.sin(phase/.28*Math.PI)*.32;
-      const x=(W*(.12+i*.21)+Math.sin(i*3.7)*44)%W, y=lavaY+38+Math.sin(gameTime*2+i)*12;
-      ctx.save();ctx.globalCompositeOperation='lighter';ctx.globalAlpha=a;
-      ctx.strokeStyle='rgba(255,235,130,.95)';ctx.lineWidth=2.2;
-      if(i%2===0){
-        ctx.beginPath();ctx.ellipse(x,y,23,17,0,0,Math.PI*2);ctx.stroke();
-        ctx.fillStyle='rgba(30,0,0,.75)';ctx.beginPath();ctx.arc(x-8,y-4,4,0,Math.PI*2);ctx.arc(x+8,y-4,4,0,Math.PI*2);ctx.fill();
-        ctx.beginPath();ctx.moveTo(x-10,y+8);ctx.quadraticCurveTo(x,y+15,x+12,y+7);ctx.stroke();
-      }else{
-        for(let f=-2;f<=2;f++){ctx.beginPath();ctx.moveTo(x+f*8,lavaY+22);ctx.quadraticCurveTo(x+f*11,y-18-Math.abs(f)*3,x+f*13,y-44+Math.sin(gameTime*8+f)*8);ctx.stroke();}
-        ctx.beginPath();ctx.ellipse(x,lavaY+30,28,9,0,0,Math.PI*2);ctx.stroke();
-      }
-      ctx.restore();ctx.globalAlpha=1;
-    }
-  }
-
-  // Large lava bursts and heat distortion lines.
-  for(const b of lavaBursts){
-    const t=1-b.life/b.maxLife;
-    ctx.save(); ctx.globalCompositeOperation='lighter';
-    ctx.fillStyle=`rgba(255,230,80,${1-t})`;
-    ctx.beginPath();ctx.arc(b.x,b.y-b.r*t*3,b.r*(1-t*.25),0,Math.PI*2);ctx.fill();
-    for(const p of b.parts){
-      const px=b.x+Math.cos(p.a)*p.s*t*.55, py=b.y+Math.sin(p.a)*p.s*t*.55+90*t*t;
-      ctx.fillStyle=p.c||(p.a%2>1?'#FFFF88':'#FF6A00');ctx.globalAlpha=1-t;
-      ctx.beginPath();ctx.arc(px,py,p.rr*(1-t),0,Math.PI*2);ctx.fill();
-    }
-    ctx.restore(); ctx.globalAlpha=1;
-  }
-  // lavaSparkSpray — hot flecks kicked up by egg burns, deaths, and troll splashes.
   ctx.save();ctx.globalCompositeOperation='lighter';
-  for(const ls of lavaSparks){
-    const a=Math.max(0,ls.life/ls.maxLife);
-    ctx.fillStyle=`rgba(255,${120+Math.floor(100*a)},30,${a})`;
-    ctx.beginPath();ctx.arc(ls.x,ls.y,ls.r*a,0,Math.PI*2);ctx.fill();
+  // Irregular liquid surface tongues.
+  for(let x=-20;x<W+24;x+=18){
+    const n=Math.sin(x*.022+gameTime*3.1)+.55*Math.sin(x*.061+gameTime*5.6);
+    const y=lavaY-2+n*7;
+    ctx.fillStyle=x%36<18?'rgba(255,226,72,.88)':'rgba(255,122,0,.78)';
+    ctx.beginPath();ctx.moveTo(x,y+10);ctx.quadraticCurveTo(x+8,y-10-7*Math.sin(gameTime*4+x),x+18,y+9);ctx.lineTo(x+18,lavaY+24);ctx.lineTo(x,lavaY+24);ctx.closePath();ctx.fill();
+  }
+  // Cracked vein network in dark crust.
+  for(let i=0;i<22;i++){
+    const x=((i*73+gameTime*20)%(W+100))-50;
+    const y=lavaY+18+((i*19)%Math.max(40,H-lavaY-24));
+    const len=34+((i*17)%48);
+    ctx.strokeStyle=i%4===0?'rgba(255,240,120,.72)':'rgba(255,84,8,.52)';ctx.lineWidth=i%4===0?2.2:1.3;
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+len*.35,y-7*Math.sin(i));ctx.lineTo(x+len,y+8*Math.cos(i));ctx.stroke();
+  }
+  // Fewer, larger flame tongues for cinematic readability.
+  const flameCount=Math.max(10,Math.floor(W/(72/detailScale)));
+  for(let i=0;i<flameCount;i++){
+    const fx=(i+.5+.18*Math.sin(gameTime*1.8+i))*W/flameCount;
+    const fh=34+30*Math.abs(Math.sin(gameTime*2.8+i*1.7));
+    const fw=14+8*Math.sin(gameTime*4.1+i);
+    const base=lavaY+6*Math.sin(gameTime*4+i);
+    const rg=ctx.createRadialGradient(fx,base-fh*.4,0,fx,base-fh*.15,fh*.9);rg.addColorStop(0,'rgba(255,255,172,.78)');rg.addColorStop(.38,'rgba(255,142,15,.58)');rg.addColorStop(1,'rgba(255,25,0,0)');ctx.fillStyle=rg;ctx.beginPath();ctx.arc(fx,base-fh*.28,fh*.72,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,96,0,.82)';ctx.beginPath();ctx.moveTo(fx-fw,base+8);ctx.quadraticCurveTo(fx-fw*.45,base-fh*.50,fx,base-fh);ctx.quadraticCurveTo(fx+fw*.65,base-fh*.22,fx+fw,base+8);ctx.closePath();ctx.fill();
+    ctx.fillStyle='rgba(255,240,90,.86)';ctx.beginPath();ctx.moveTo(fx-4,base+3);ctx.quadraticCurveTo(fx-1,base-fh*.27,fx+2,base-fh*.55);ctx.quadraticCurveTo(fx+6,base-fh*.16,fx+4,base+2);ctx.closePath();ctx.fill();
   }
   ctx.restore();
-  ctx.strokeStyle='rgba(255,210,120,0.18)'; ctx.lineWidth=1;
-  for(let i=0;i<Math.floor(18*detailScale);i++){const y=lavaY-8-i*(6/detailScale);ctx.beginPath();for(let x=0;x<W;x+=Math.max(12,28/detailScale)){const yy=y+Math.sin(x*.035+gameTime*4+i)*3;if(x===0)ctx.moveTo(x,yy);else ctx.lineTo(x,yy);}ctx.stroke();}
+
+  // Existing bursts/sparks kept, toned by draw order.
+  for(const b of lavaBursts){
+    const t=1-b.life/b.maxLife;ctx.save();ctx.globalCompositeOperation='lighter';ctx.fillStyle=`rgba(255,230,80,${1-t})`;ctx.beginPath();ctx.arc(b.x,b.y-b.r*t*3,b.r*(1-t*.25),0,Math.PI*2);ctx.fill();
+    for(const p of b.parts){const px=b.x+Math.cos(p.a)*p.s*t*.55, py=b.y+Math.sin(p.a)*p.s*t*.55+90*t*t;ctx.fillStyle=p.c||(p.a%2>1?'#FFFF88':'#FF6A00');ctx.globalAlpha=1-t;ctx.beginPath();ctx.arc(px,py,p.rr*(1-t),0,Math.PI*2);ctx.fill();}
+    ctx.restore();ctx.globalAlpha=1;
+  }
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  for(const ls of lavaSparks){const a=Math.max(0,ls.life/ls.maxLife);ctx.fillStyle=`rgba(255,${120+Math.floor(100*a)},30,${a})`;ctx.beginPath();ctx.arc(ls.x,ls.y,ls.r*a,0,Math.PI*2);ctx.fill();}
+  for(let i=0;i<Math.floor(18*detailScale);i++){const x=((i*61+gameTime*25)%(W+80))-40,y=lavaY-8-((i*37)%90);const a=.18*(1-(lavaY-y)/110);ctx.fillStyle=`rgba(255,142,36,${Math.max(0,a)})`;ctx.beginPath();ctx.arc(x,y,1.5+(i%3),0,Math.PI*2);ctx.fill();}
+  ctx.restore();
 }
 
 // Lava Troll Hand — reaches up from lava when player is near
@@ -2525,171 +2431,53 @@ function drawPlatform(p){
   const tremor=(p.crackPulse||0)>0?Math.sin(gameTime*70+(p.seed||0))*Math.min(8,2+p.crackTimer*3):0;
   ctx.translate(tremor,0);
   const seed=p.seed||1;
-  const jag=(i)=>Math.sin(seed*7+i*1.73)*3+Math.sin(seed*3+i*0.61)*2;
+  const cut=Math.min(18,Math.max(8,p.h*.42));
 
-  // Heavy dark brown/black drop shadow under thick ledge.
-  ctx.fillStyle='rgba(0,0,0,0.78)';
-  ctx.fillRect(p.x+5,p.y+p.h-1,p.w,7);
-  ctx.fillStyle='rgba(40,16,0,0.55)';
-  ctx.fillRect(p.x+2,p.y+p.h,p.w,4);
+  // Clean elliptical shadow and underglow.
+  ctx.fillStyle='rgba(0,0,0,.62)';ctx.beginPath();ctx.ellipse(p.x+p.w/2,p.y+p.h+13,p.w*.52,13,0,0,Math.PI*2);ctx.fill();
+  ctx.save();ctx.globalCompositeOperation='lighter';const ug=ctx.createLinearGradient(p.x,p.y+p.h-2,p.x,p.y+p.h+20);ug.addColorStop(0,p.tier==='high'?'rgba(80,205,255,.46)':'rgba(255,116,24,.52)');ug.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=ug;ctx.fillRect(p.x+8,p.y+p.h-2,p.w-16,22);ctx.restore();
 
-  // Irregular stone shelf silhouette.
-  ctx.beginPath();
-  ctx.moveTo(p.x,p.y+3+jag(0));
-  const segs=Math.max(5,Math.floor(p.w/28));
-  for(let i=0;i<=segs;i++){
-    const xx=p.x+p.w*i/segs;
-    ctx.lineTo(xx,p.y+2+jag(i));
-  }
-  ctx.lineTo(p.x+p.w,p.y+p.h-3+jag(22));
-  for(let i=segs;i>=0;i--){
-    const xx=p.x+p.w*i/segs;
-    ctx.lineTo(xx,p.y+p.h-1+jag(i+30));
-  }
-  ctx.closePath();
+  // Glossy beveled metal body.
+  const body=ctx.createLinearGradient(p.x,p.y,p.x,p.y+p.h);
+  if(p.fragile){body.addColorStop(0,'#7E6C56');body.addColorStop(.18,'#2B3136');body.addColorStop(.55,'#111821');body.addColorStop(1,'#05070A');}
+  else if(p.tier==='high'){body.addColorStop(0,'#85AFC9');body.addColorStop(.18,'#30475D');body.addColorStop(.56,'#111A27');body.addColorStop(1,'#05070C');}
+  else if(p.tier==='low'){body.addColorStop(0,'#6A4535');body.addColorStop(.18,'#2D2021');body.addColorStop(.58,'#0E1016');body.addColorStop(1,'#030407');}
+  else{body.addColorStop(0,'#6F808C');body.addColorStop(.18,'#2B3946');body.addColorStop(.58,'#101720');body.addColorStop(1,'#040609');}
+  ctx.fillStyle=body;premiumPanelPath(p.x,p.y,p.w,p.h,cut);ctx.fill();
+  const skirtH=Math.max(10,p.h*.55);const skirt=ctx.createLinearGradient(p.x,p.y+p.h-2,p.x,p.y+p.h+skirtH);skirt.addColorStop(0,'rgba(18,25,34,.92)');skirt.addColorStop(1,'rgba(1,2,5,.95)');ctx.fillStyle=skirt;premiumPanelPath(p.x+5,p.y+p.h-4,p.w-10,skirtH+6,8);ctx.fill();ctx.strokeStyle='rgba(0,0,0,.78)';ctx.lineWidth=2;ctx.stroke();
+  ctx.strokeStyle='rgba(0,0,0,.80)';ctx.lineWidth=4;ctx.stroke();
+  ctx.strokeStyle='rgba(210,240,255,.34)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(p.x+cut,p.y+3);ctx.lineTo(p.x+p.w-cut,p.y+3);ctx.stroke();
 
-  const pGrad=ctx.createLinearGradient(p.x,p.y,p.x,p.y+p.h);
-  if(p.fragile){
-    pGrad.addColorStop(0,'#B68C58');
-    pGrad.addColorStop(0.28,'#7E5436');
-    pGrad.addColorStop(0.66,'#38251D');
-    pGrad.addColorStop(1,'#12080A');
-  } else if(p.tier==='high'){
-    pGrad.addColorStop(0,'#6E8FA9');pGrad.addColorStop(0.24,'#38516B');pGrad.addColorStop(0.62,'#162338');pGrad.addColorStop(1,'#05070C');
-  } else if(p.tier==='low'){
-    pGrad.addColorStop(0,'#B46A30');pGrad.addColorStop(0.26,'#693019');pGrad.addColorStop(0.64,'#23100E');pGrad.addColorStop(1,'#070203');
-  } else {
-    pGrad.addColorStop(0,'#796C5B');pGrad.addColorStop(0.22,'#3B4144');pGrad.addColorStop(0.58,'#1B242B');pGrad.addColorStop(1,'#080A0E');
-  }
-  ctx.fillStyle=pGrad;
-  ctx.fill();
-
-  // Lava cast: nearby shelves catch warm orange/yellow light from below.
-  const lavaGlow=Math.max(0,1-(lavaY-(p.y+p.h))/110);
-  if(lavaGlow>0){
-    const warm=ctx.createLinearGradient(p.x,p.y,p.x,p.y+p.h);
-    warm.addColorStop(0,'rgba(255,190,60,0)');
-    warm.addColorStop(1,`rgba(255,125,0,${0.32*lavaGlow})`);
-    ctx.fillStyle=warm;
-    ctx.fill();
-  }
-
-  // Top standable highlight line and bright edge readability.
-  ctx.strokeStyle=p.fragile?'rgba(255,210,140,0.55)':'rgba(235,235,210,0.42)';
-  ctx.lineWidth=2;
-  ctx.beginPath();
-  for(let i=0;i<=segs;i++){
-    const xx=p.x+p.w*i/segs;
-    const yy=p.y+2+jag(i);
-    if(i===0)ctx.moveTo(xx,yy);else ctx.lineTo(xx,yy);
-  }
-  ctx.stroke();
-
-  // Artwork-like molten seams: black rock with thin orange veins catches the lava light.
+  // Edge light strips and tiny status LEDs.
   ctx.save();ctx.globalCompositeOperation='lighter';
-  ctx.strokeStyle=p.tier==='high'?'rgba(105,190,255,.22)':'rgba(255,116,28,.34)';
-  ctx.lineWidth=1.2;
-  for(let i=0;i<Math.max(2,Math.floor(p.w/56));i++){
-    const sx=p.x+12+((i*43+seed*19)%(Math.max(16,p.w-24)));
-    ctx.beginPath();ctx.moveTo(sx,p.y+5+jag(i));ctx.lineTo(sx+10*Math.sin(seed+i),p.y+p.h-6);ctx.stroke();
-  }
+  const edge=p.tier==='high'?'rgba(100,220,255,.92)':p.fragile?'rgba(255,205,115,.76)':'rgba(255,126,22,.92)';
+  ctx.strokeStyle=edge;ctx.lineWidth=3.2;ctx.shadowColor=edge;ctx.shadowBlur=14;ctx.beginPath();ctx.moveTo(p.x+12,p.y+p.h-5);ctx.lineTo(p.x+p.w-12,p.y+p.h-5);ctx.stroke();ctx.strokeStyle='rgba(255,255,255,.26)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p.x+18,p.y+6);ctx.lineTo(p.x+p.w-20,p.y+6);ctx.stroke();
+  for(let i=0;i<Math.max(2,Math.floor(p.w/64));i++){const lx=p.x+22+i*(p.w-44)/Math.max(1,Math.floor(p.w/64)-1);ctx.fillStyle=i%2?'rgba(255,170,48,.82)':'rgba(82,220,255,.82)';ctx.beginPath();ctx.arc(lx,p.y+p.h*.45,2.8,0,Math.PI*2);ctx.fill();}
+  // Premium end caps, bolt heads, and diagonal specular cuts make each ledge feel manufactured.
+  ctx.fillStyle='rgba(210,235,255,.16)';ctx.beginPath();ctx.moveTo(p.x+cut,p.y+2);ctx.lineTo(p.x+p.w-cut,p.y+2);ctx.lineTo(p.x+p.w-cut-18,p.y+8);ctx.lineTo(p.x+cut+18,p.y+8);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.22)';ctx.lineWidth=1;for(let b=0;b<4;b++){const bx=p.x+18+b*(p.w-36)/3;ctx.beginPath();ctx.arc(bx,p.y+p.h+3,3,0,Math.PI*2);ctx.stroke();}
   ctx.restore();
 
-  // Dark lower edge for slab thickness.
-  ctx.strokeStyle='rgba(0,0,0,0.52)';
-  ctx.lineWidth=3;
-  ctx.beginPath();ctx.moveTo(p.x+2,p.y+p.h-3);ctx.lineTo(p.x+p.w-2,p.y+p.h-3);ctx.stroke();
+  // Subtle panel seams instead of noisy stone flecks.
+  ctx.strokeStyle='rgba(0,0,0,.42)';ctx.lineWidth=1;
+  for(let cx=p.x+32+(seed%11);cx<p.x+p.w-18;cx+=46){ctx.beginPath();ctx.moveTo(cx,p.y+7);ctx.lineTo(cx+4*Math.sin(cx),p.y+p.h-8);ctx.stroke();}
 
-  // Mottled stone texture: deterministic chips and flecks.
-  for(let i=0;i<Math.floor(p.w/10);i++){
-    const tx=p.x+8+((i*19+seed*37)%(Math.max(10,p.w-16)));
-    const ty=p.y+5+((i*13+seed*11)%(Math.max(8,p.h-9)));
-    const light=(i%3===0);
-    ctx.fillStyle=light?'rgba(255,235,180,0.12)':'rgba(0,0,0,0.20)';
-    ctx.beginPath();ctx.ellipse(tx,ty,2+(i%4),1.2+(i%2),0.25*i,0,Math.PI*2);ctx.fill();
-  }
-
-  // Block seams/chisel marks.
-  ctx.strokeStyle='rgba(0,0,0,0.25)';
-  ctx.lineWidth=1;
-  for(let cx=p.x+22+(seed%8);cx<p.x+p.w-12;cx+=28){
-    ctx.beginPath();ctx.moveTo(cx,p.y+5);ctx.lineTo(cx+4*Math.sin(cx),p.y+p.h-5);ctx.stroke();
-  }
-
-  // Tier-specific material language: high pale carved ruins, middle moss/crystal stone, low blackened basalt seams.
-  if(p.tier==='high'){
-    ctx.strokeStyle='rgba(255,250,220,.34)';ctx.lineWidth=1.5;
-    for(let cx=p.x+18;cx<p.x+p.w-22;cx+=42){ctx.beginPath();ctx.arc(cx,p.y+p.h*.45,8,Math.PI*.15,Math.PI*.85);ctx.stroke();ctx.beginPath();ctx.moveTo(cx-10,p.y+7);ctx.lineTo(cx+10,p.y+7);ctx.stroke();}
-    ctx.fillStyle='rgba(255,255,235,.18)';for(let i=0;i<4;i++){ctx.fillRect(p.x+14+i*p.w/4,p.y+5,18,3);}
-  }else if(p.tier==='middle'){
-    ctx.fillStyle='rgba(78,170,88,.34)';for(let i=0;i<Math.max(3,p.w/55);i++){const mx=p.x+12+((i*47+seed*19)%(p.w-24));ctx.beginPath();ctx.ellipse(mx,p.y+4,13,3,0,0,Math.PI*2);ctx.fill();}
-    ctx.save();ctx.globalCompositeOperation='lighter';ctx.fillStyle='rgba(88,230,255,.50)';ctx.strokeStyle='rgba(175,255,255,.65)';for(let i=0;i<3;i++){const cx=p.x+p.w*(.25+i*.24)+Math.sin(seed+i)*12;ctx.beginPath();ctx.moveTo(cx,p.y+p.h-2);ctx.lineTo(cx+7,p.y+10);ctx.lineTo(cx+14,p.y+p.h-2);ctx.closePath();ctx.fill();ctx.stroke();}ctx.restore();
-  }else if(p.tier==='low'){
-    ctx.save();ctx.globalCompositeOperation='lighter';ctx.strokeStyle=`rgba(255,76,0,${.35+.18*Math.sin(gameTime*5+seed)})`;ctx.lineWidth=1.8;
-    for(let cx=p.x+10;cx<p.x+p.w-8;cx+=34){ctx.beginPath();ctx.moveTo(cx,p.y+p.h-3);ctx.lineTo(cx+13,p.y+p.h*.58);ctx.lineTo(cx+27,p.y+p.h-4);ctx.stroke();}
-    ctx.restore();
-  }
-
-  // chippedEdgeRunesMossCrystals — extra hand-painted cabinet-art ledge detail.
-  for(let i=0;i<Math.max(3,Math.floor(p.w/38));i++){
-    const cx=p.x+10+((i*31+seed*23)%(Math.max(18,p.w-20)));
-    const cy=p.y+(i%2?p.h-5:6);
-    ctx.fillStyle='rgba(0,0,0,.36)';
-    ctx.beginPath();ctx.moveTo(cx-4,cy);ctx.lineTo(cx+3,cy-2);ctx.lineTo(cx+1,cy+4);ctx.closePath();ctx.fill();
-    if(i%4===0){ctx.save();ctx.globalCompositeOperation='lighter';ctx.strokeStyle='rgba(255,205,105,.22)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(cx-5,p.y+p.h*.5);ctx.lineTo(cx+5,p.y+p.h*.5);ctx.moveTo(cx,p.y+p.h*.5-5);ctx.lineTo(cx,p.y+p.h*.5+5);ctx.stroke();ctx.restore();}
-  }
-
-  // ledgeMicroDetail: hanging roots, tiny skull chips, mineral glints, and loose rubble.
-  ctx.save();
-  for(let i=0;i<Math.max(4,Math.floor(p.w/(30/detailScale)));i++){
-    const rx=p.x+8+((i*29+seed*41)%(Math.max(12,p.w-16)));
-    const top=p.y+4+((i*7)%Math.max(6,p.h-8));
-    if(i%5===0){ctx.strokeStyle='rgba(62,38,24,.62)';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(rx,p.y+p.h-2);ctx.bezierCurveTo(rx-5,p.y+p.h+8,rx+5,p.y+p.h+14,rx-2,p.y+p.h+24+4*Math.sin(gameTime+i));ctx.stroke();}
-    else if(i%5===1){ctx.save();ctx.globalCompositeOperation='lighter';ctx.fillStyle=p.tier==='high'?'rgba(135,225,255,.55)':'rgba(255,175,65,.38)';ctx.beginPath();ctx.moveTo(rx,top-3);ctx.lineTo(rx+3,top+4);ctx.lineTo(rx-3,top+5);ctx.closePath();ctx.fill();ctx.restore();}
-    else if(i%5===2){ctx.fillStyle='rgba(215,195,150,.32)';ctx.beginPath();ctx.arc(rx,top,2.4,0,Math.PI*2);ctx.arc(rx+3,top+1,1.2,0,Math.PI*2);ctx.fill();}
-    else {ctx.fillStyle='rgba(0,0,0,.22)';ctx.fillRect(rx,top,3+(i%3),1.2);}
-  }
-  ctx.restore();
-
-  // Fragile platforms are always visibly cracked and browner/weathered.
   if(p.fragile){
-    const intensity=0.65+Math.min(p.crackTimer/2,0.35);
-    const spread=Math.min(1,p.crackTimer/2);
-    ctx.strokeStyle=`rgba(45,18,8,${intensity})`;
-    ctx.lineWidth=2.5+spread*2.2;
-    const cx=p.x+p.w*0.52;
-    ctx.beginPath();ctx.moveTo(cx-4,p.y+2);ctx.lineTo(cx-16,p.y+p.h*0.42);ctx.lineTo(cx-8,p.y+p.h-3);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(cx+15,p.y+4);ctx.lineTo(cx+5,p.y+p.h*0.58);ctx.lineTo(cx+22,p.y+p.h-2);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(cx-30-spread*22,p.y+p.h*0.35);ctx.lineTo(cx+26+spread*28,p.y+p.h*0.48);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(cx-5,p.y+p.h*.18);ctx.lineTo(cx-42*spread,p.y+p.h*.72);ctx.lineTo(cx-72*spread,p.y+p.h*.52);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(cx+7,p.y+p.h*.22);ctx.lineTo(cx+48*spread,p.y+p.h*.76);ctx.lineTo(cx+78*spread,p.y+p.h*.34);ctx.stroke();
-    ctx.strokeStyle='rgba(255,145,50,0.35)';
-    ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(cx-4,p.y+2);ctx.lineTo(cx-16,p.y+p.h*0.42);ctx.lineTo(cx-8,p.y+p.h-3);ctx.stroke();
-    if(p.crackTimer>1.15){ctx.fillStyle=`rgba(255,80,20,${0.10+0.18*Math.sin(gameTime*18)})`;ctx.fillRect(p.x,p.y,p.w,p.h);}
-    if(p.crackTimer>1.05){
-      ctx.save();ctx.textAlign='center';ctx.font=`900 ${Math.max(10,W*.014)}px Arial Black, Impact, sans-serif`;
-      ctx.shadowColor='#FF3A00';ctx.shadowBlur=10;ctx.fillStyle=`rgba(255,235,170,${0.58+0.28*Math.sin(gameTime*16)})`;
-      ctx.fillText('CRACK!',p.x+p.w/2,p.y-14-3*Math.sin(gameTime*18));ctx.restore();
-    }
+    const intensity=0.65+Math.min(p.crackTimer/2,0.35);const spread=Math.min(1,p.crackTimer/2);const cx=p.x+p.w*.52;
+    ctx.strokeStyle=`rgba(255,90,30,${.32+intensity*.28})`;ctx.lineWidth=2.4+spread*1.8;ctx.shadowColor='#FF3A00';ctx.shadowBlur=8;
+    ctx.beginPath();ctx.moveTo(cx-4,p.y+4);ctx.lineTo(cx-15,p.y+p.h*.45);ctx.lineTo(cx-4,p.y+p.h-5);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx+13,p.y+5);ctx.lineTo(cx+4,p.y+p.h*.58);ctx.lineTo(cx+24,p.y+p.h-6);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx-32-spread*20,p.y+p.h*.35);ctx.lineTo(cx+28+spread*24,p.y+p.h*.50);ctx.stroke();ctx.shadowBlur=0;
+    if(p.crackTimer>1.05){ctx.save();ctx.textAlign='center';ctx.font=`900 ${Math.max(10,W*.014)}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FF3A00';ctx.shadowBlur=12;ctx.fillStyle=`rgba(255,235,170,${.62+.25*Math.sin(gameTime*16)})`;ctx.fillText('CRACK!',p.x+p.w/2,p.y-14-3*Math.sin(gameTime*18));ctx.restore();}
   }
 
   // Spawn markers: angular hot rune slashes during wave intro only. No circular nest rings.
   if(p.hasNest&&state==='waveTrans'){
-    const introA=Math.max(0,Math.min(1,waveTransTimer/3));
-    const pulse=0.72+0.28*Math.sin(gameTime*10+p.seed);
-    const cx=p.x+p.w/2, cy=p.y-7;
+    const introA=Math.max(0,Math.min(1,waveTransTimer/3));const pulse=.72+.28*Math.sin(gameTime*10+p.seed);const cx=p.x+p.w/2,cy=p.y-7;const padW=Math.min(74,Math.max(42,p.w*.34));
     ctx.save();ctx.globalCompositeOperation='lighter';
-    const padW=Math.min(74,Math.max(42,p.w*.34));
-    const glow=ctx.createRadialGradient(cx,cy,1,cx,cy,padW*.75);
-    glow.addColorStop(0,`rgba(255,232,120,${0.34*introA*pulse})`);
-    glow.addColorStop(.46,`rgba(255,96,18,${0.20*introA})`);
-    glow.addColorStop(1,'rgba(255,90,0,0)');
-    ctx.fillStyle=glow;ctx.beginPath();ctx.rect(cx-padW*.58,cy-11,padW*1.16,18);ctx.fill();
-    ctx.strokeStyle=`rgba(255,238,150,${0.86*introA})`;ctx.lineWidth=2.8;
-    ctx.beginPath();ctx.moveTo(cx-padW*.48,cy+4);ctx.lineTo(cx-padW*.16,cy-8);ctx.lineTo(cx+padW*.18,cy+2);ctx.lineTo(cx+padW*.50,cy-10);ctx.stroke();
-    ctx.strokeStyle=`rgba(255,106,18,${0.58*introA})`;ctx.lineWidth=1.5;
-    for(let i=-2;i<=2;i++){const xx=cx+i*padW*.17+Math.sin(gameTime*5+i)*2;ctx.beginPath();ctx.moveTo(xx-5,cy+7);ctx.lineTo(xx+4,cy-11-4*pulse);ctx.stroke();}
+    const g=ctx.createLinearGradient(cx-padW*.65,cy,cx+padW*.65,cy);g.addColorStop(0,'rgba(255,90,0,0)');g.addColorStop(.48,`rgba(255,150,35,${.24*introA*pulse})`);g.addColorStop(1,'rgba(255,90,0,0)');ctx.fillStyle=g;ctx.fillRect(cx-padW*.70,cy-10,padW*1.4,18);
+    ctx.strokeStyle=`rgba(255,238,150,${.86*introA})`;ctx.lineWidth=2.8;ctx.beginPath();ctx.moveTo(cx-padW*.48,cy+4);ctx.lineTo(cx-padW*.16,cy-8);ctx.lineTo(cx+padW*.18,cy+2);ctx.lineTo(cx+padW*.50,cy-10);ctx.stroke();
+    ctx.strokeStyle=`rgba(255,106,18,${.55*introA})`;ctx.lineWidth=1.4;for(let i=-2;i<=2;i++){const xx=cx+i*padW*.17+Math.sin(gameTime*5+i)*2;ctx.beginPath();ctx.moveTo(xx-5,cy+7);ctx.lineTo(xx+4,cy-11-4*pulse);ctx.stroke();}
     ctx.restore();
   }
   ctx.restore();
@@ -2715,9 +2503,23 @@ function drawBird(entity,isPlayer){
   const sx=1+(punch*1.2), sy=1-(punch*0.45);
   ctx.save();
   ctx.globalAlpha=alpha;
+  // Strong premium character bloom/trails before local sprite transform.
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  const bloomColor=isPlayer?'rgba(255,218,64,.26)':(type==='hunter'?'rgba(255,70,16,.24)':type==='shadow'?'rgba(202,68,255,.27)':'rgba(74,210,255,.26)');
+  drawSoftDisc(entity.x,entity.y+38,60,bloomColor);
+  ctx.strokeStyle=isPlayer?'rgba(255,244,160,.55)':(type==='hunter'?'rgba(255,120,40,.48)':type==='shadow'?'rgba(220,110,255,.50)':'rgba(120,235,255,.50)');ctx.lineWidth=3;ctx.beginPath();ctx.arc(entity.x,entity.y+38,42,Math.PI*.15,Math.PI*1.85);ctx.stroke();
+  const tvx=entity.vx||0,tvy=entity.vy||0,trailLen=Math.min(95,Math.hypot(tvx,tvy)*.13);
+  if(trailLen>10){const tx=entity.x-Math.sign(tvx||dir)*trailLen,ty=entity.y+38-(tvy*.035);const tg=ctx.createLinearGradient(tx,ty,entity.x,entity.y+38);tg.addColorStop(0,'rgba(0,0,0,0)');tg.addColorStop(1,bloomColor);ctx.strokeStyle=tg;ctx.lineWidth=10;ctx.beginPath();ctx.moveTo(tx,ty);ctx.lineTo(entity.x,entity.y+38);ctx.stroke();}
+  ctx.restore();
   ctx.translate(entity.x,entity.y+36+bob);
   // Visual scale only: chunkier/shorter cabinet-art riders without touching collision boxes.
   ctx.scale(dir*sx*1.24,sy*1.06);
+  // Crisp dark backing silhouette keeps the jouster readable through bloom and lava light.
+  ctx.save();ctx.globalAlpha=alpha*.82;ctx.fillStyle='rgba(0,2,6,.86)';ctx.strokeStyle='rgba(0,0,0,.92)';ctx.lineWidth=8;ctx.lineJoin='round';ctx.lineCap='round';
+  ctx.beginPath();ctx.ellipse(-3,9,43,30,-.05,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.moveTo(14,-22);ctx.lineTo(104,-44);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-12,2);ctx.lineTo(-70,28);ctx.moveTo(-10,0);ctx.lineTo(-73,-9);ctx.stroke();
+  ctx.restore();
   ctx.shadowColor=isPlayer?'rgba(255,215,0,.82)':th.glow;
   ctx.shadowBlur=isPlayer?14:(type==='shadow'?16:11);
   ctx.lineJoin='round'; ctx.lineCap='round';
@@ -2926,7 +2728,7 @@ function drawEggs(){
 }
 
 function drawEnemySpawnDramas(){
-  // enemySpawnDramas — nest/egg pulse, crack burst, feathers, and a hot launch spotlight.
+  // enemySpawnDramas — egg pulse, crack burst, feathers, and a hot launch spotlight.
   for(const sp of enemySpawnDramas){
     const age=1-sp.life/sp.maxLife, a=Math.max(0,sp.life/sp.maxLife);
     const col=sp.type==='hunter'?'255,80,20':sp.type==='shadow'?'210,80,255':'80,220,255';
@@ -2954,8 +2756,8 @@ function drawPtero(){
 function drawCinematicLighting(){
   // cinematicLightingLayer: orange lava underlight, cool cave highlights, rim light, stronger impact flash support.
   ctx.save();ctx.globalCompositeOperation='lighter';
-  const under=ctx.createLinearGradient(0,H,0,0);under.addColorStop(0,'rgba(255,100,0,.42)');under.addColorStop(.28,'rgba(255,150,42,.18)');under.addColorStop(.62,'rgba(255,120,30,.055)');under.addColorStop(1,'rgba(255,120,30,0)');ctx.fillStyle=under;ctx.fillRect(0,0,W,H);
-  const cool=ctx.createLinearGradient(0,0,W,H*.5);cool.addColorStop(0,'rgba(105,190,255,.20)');cool.addColorStop(.45,'rgba(105,190,255,0)');cool.addColorStop(1,'rgba(120,255,220,.075)');ctx.fillStyle=cool;ctx.fillRect(0,0,W,H);
+  const under=ctx.createLinearGradient(0,H,0,0);under.addColorStop(0,'rgba(255,100,0,.26)');under.addColorStop(.28,'rgba(255,150,42,.11)');under.addColorStop(.62,'rgba(255,120,30,.025)');under.addColorStop(1,'rgba(255,120,30,0)');ctx.fillStyle=under;ctx.fillRect(0,0,W,H);
+  const cool=ctx.createLinearGradient(0,0,W,H*.5);cool.addColorStop(0,'rgba(105,190,255,.11)');cool.addColorStop(.45,'rgba(105,190,255,0)');cool.addColorStop(1,'rgba(120,255,220,.035)');ctx.fillStyle=cool;ctx.fillRect(0,0,W,H);
   for(const p of platforms){if(p.broken)continue;ctx.strokeStyle='rgba(255,196,85,.22)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(p.x+3,p.y+p.h+1);ctx.lineTo(p.x+p.w-3,p.y+p.h+1);ctx.stroke();}
   const riders=player?[player,...enemies]:enemies;
   for(const r of riders){ctx.strokeStyle='rgba(255,210,90,.28)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(r.x,r.y+36,48,Math.PI*.12,Math.PI*.88);ctx.stroke();ctx.strokeStyle='rgba(130,210,255,.16)';ctx.beginPath();ctx.arc(r.x,r.y+16,42,Math.PI*1.1,Math.PI*1.85);ctx.stroke();}
@@ -3078,27 +2880,32 @@ function drawComboMeter(){
 }
 
 function drawHUD(){
-  const barH=Math.max(62,H*.082);
+  const barH=Math.max(72,H*.094);
   ctx.save();
-  // arcadeBezelHUD: carved dark metal/gold panel inspired by the cabinet art.
-  const g=ctx.createLinearGradient(0,0,0,barH);g.addColorStop(0,'rgba(4,9,18,.94)');g.addColorStop(.5,'rgba(25,13,8,.82)');g.addColorStop(1,'rgba(6,2,0,.42)');
-  ctx.fillStyle=g;ctx.fillRect(0,0,W,barH);
-  ctx.save();ctx.globalCompositeOperation='lighter';
-  ctx.strokeStyle='rgba(255,158,42,.38)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(0,barH-2);ctx.lineTo(W,barH-2);ctx.stroke();
-  ctx.strokeStyle='rgba(90,190,255,.16)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,2);ctx.lineTo(W,2);ctx.stroke();ctx.restore();
-  const fs=Math.max(14,W*.021), big=Math.max(22,W*.035);
-  const panel=(x,y,w,h)=>{ctx.fillStyle='rgba(0,0,0,.26)';roundRect(ctx,x,y,w,h,10);ctx.fill();ctx.strokeStyle='rgba(255,214,100,.28)';ctx.lineWidth=1.5;roundRect(ctx,x,y,w,h,10);ctx.stroke();};
-  panel(10,8,Math.min(240,W*.31),barH-16);panel(W*.39,8,W*.22,barH-16);panel(W-Math.min(270,W*.35)-10,8,Math.min(270,W*.35),barH-16);
-  ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.textBaseline='middle';ctx.textAlign='left';
-  ctx.fillStyle='#FFE06A';ctx.shadowColor='#000';ctx.shadowBlur=5;ctx.fillText('LIVES',20,barH/2);
+  // Premium black beveled one-piece HUD: closer to the reference than separate rounded brown boxes.
+  const g=ctx.createLinearGradient(0,0,0,barH);g.addColorStop(0,'rgba(0,2,8,1)');g.addColorStop(.46,'rgba(2,7,14,.98)');g.addColorStop(1,'rgba(0,0,0,.88)');ctx.fillStyle=g;ctx.fillRect(0,0,W,barH);
+  ctx.fillStyle='rgba(255,255,255,.060)';ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(W,0);ctx.lineTo(W-42,barH*.52);ctx.lineTo(42,barH*.52);ctx.closePath();ctx.fill();
+  ctx.save();ctx.globalCompositeOperation='lighter';drawGlowLine(0,barH-2,W,barH-2,'rgba(255,132,28,.72)',4,14);drawGlowLine(W*.14,3,W*.86,3,'rgba(92,200,255,.36)',2.4,10);ctx.restore();
+
+  const panelH=barH-18, y=9;
+  const leftW=Math.min(250,W*.32), midW=Math.min(220,W*.25), rightW=Math.min(300,W*.36);
+  const panel=(x,w,accent)=>{ctx.fillStyle='rgba(0,0,0,.72)';premiumPanelPath(x,y,w,panelH,14);ctx.fill();ctx.strokeStyle='rgba(255,255,255,.24)';ctx.lineWidth=1.8;ctx.stroke();ctx.save();ctx.globalCompositeOperation='lighter';ctx.strokeStyle=accent;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+16,y+panelH-5);ctx.lineTo(x+w-16,y+panelH-5);ctx.stroke();ctx.restore();};
+  panel(10,leftW,'rgba(255,130,28,.55)');panel(W/2-midW/2,midW,'rgba(100,215,255,.50)');panel(W-rightW-10,rightW,'rgba(255,180,40,.55)');
+
+  const fs=Math.max(12,W*.018), big=Math.max(24,W*.035);
+  ctx.textBaseline='middle';ctx.shadowColor='rgba(0,0,0,.9)';ctx.shadowBlur=6;
+  ctx.textAlign='left';ctx.font=`900 ${fs}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(170,220,255,.88)';ctx.fillText('LIVES',24,y+panelH*.34);
   const lifePulse=lifeFlashTimer>0?(1+0.24*Math.sin(gameTime*24)):1;
-  for(let i=0;i<Math.min(lives,6);i++){drawKnightHeadIcon(92+i*28,barH/2+1,.66*lifePulse,lifeFlashTimer>0&&i===lives-1);}
-  if(lives>6){ctx.fillStyle='#FFF1A8';ctx.font=`900 ${Math.max(13,W*.018)}px Arial Black, Impact, sans-serif`;ctx.fillText('+'+(lives-6),92+6*28,barH/2+5);}
-  ctx.textAlign='center';ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF1A8';ctx.fillText('WAVE',W/2-42,barH/2);ctx.fillStyle='#FFD700';ctx.font=`bold ${big}px Arial Black, Impact, sans-serif`;ctx.fillText(String(wave),W/2+28,barH/2);
-  const remain=enemies.length+eggs.length;
-  ctx.font=`800 ${Math.max(10,W*.014)}px Arial, sans-serif`;ctx.fillStyle=remain<=2&&state==='playing'?'#FFF3A0':'rgba(190,230,255,.82)';ctx.fillText(`REMAIN ${remain}`,W/2,barH-13);
+  for(let i=0;i<Math.min(lives,6);i++){drawKnightHeadIcon(44+i*31,y+panelH*.68,.70*lifePulse,lifeFlashTimer>0&&i===lives-1);}
+  if(lives>6){ctx.fillStyle='#FFF1A8';ctx.font=`900 ${Math.max(13,W*.018)}px Arial Black, Impact, sans-serif`;ctx.fillText('+'+(lives-6),48+6*31,y+panelH*.73);}
+
+  ctx.textAlign='center';ctx.font=`900 ${Math.max(10,W*.014)}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(170,220,255,.82)';ctx.fillText('WAVE',W/2,y+panelH*.26);
+  ctx.font=`900 ${big}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF0A8';ctx.shadowColor='#FF8A00';ctx.shadowBlur=14;ctx.fillText(String(wave),W/2,y+panelH*.58);
+  const remain=enemies.length+eggs.length;ctx.shadowBlur=8;ctx.font=`900 ${Math.max(10,W*.014)}px Arial Black, Impact, sans-serif`;ctx.fillStyle=remain<=2&&state==='playing'?'#FFF36A':'rgba(120,225,255,.88)';ctx.fillText(`REMAIN ${remain}`,W/2,y+panelH*.86);
+
   const scorePulse=scoreFlashTimer>0?(1+0.16*Math.sin(gameTime*32)):1;
-  ctx.textAlign='right';ctx.fillStyle='#FFF1A8';ctx.font=`bold ${fs}px Arial Black, Impact, sans-serif`;ctx.fillText('SCORE',W-172,barH/2);ctx.save();ctx.translate(W-22,barH/2);ctx.scale(scorePulse,scorePulse);ctx.fillStyle=scoreFlashTimer>0?'#FFF7A8':'#FFD700';ctx.font=`bold ${big}px Arial Black, Impact, sans-serif`;ctx.fillText(String(score).padStart(6,'0'),0,0);ctx.restore();
+  ctx.textAlign='right';ctx.font=`900 ${fs}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(170,220,255,.84)';ctx.shadowBlur=6;ctx.fillText('SCORE',W-34,y+panelH*.30);
+  ctx.save();ctx.translate(W-28,y+panelH*.67);ctx.scale(scorePulse,scorePulse);ctx.textAlign='right';ctx.fillStyle=scoreFlashTimer>0?'#FFF7A8':'#FFD35A';ctx.shadowColor='#FF8A00';ctx.shadowBlur=15;ctx.font=`900 ${big}px Arial Black, Impact, sans-serif`;ctx.fillText(String(score).padStart(6,'0'),0,0);ctx.restore();
   ctx.restore();
 }
 
@@ -3257,17 +3064,17 @@ function drawTitle(){
 }
 
 function drawWaveTrans(){
-  if(waveFlashTimer>0){ctx.fillStyle=`rgba(255,255,255,${Math.min(0.75,waveFlashTimer/0.22)})`;ctx.fillRect(0,0,W,H);}
+  if(waveFlashTimer>0){ctx.fillStyle=`rgba(255,255,255,${Math.min(0.24,waveFlashTimer/0.22)})`;ctx.fillRect(0,0,W,H);}
   const dg=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.12,W/2,H/2,Math.max(W,H)*0.72);
-  dg.addColorStop(0,'rgba(0,0,0,0.22)');dg.addColorStop(1,'rgba(0,0,0,0.74)');ctx.fillStyle=dg;ctx.fillRect(0,0,W,H);
+  dg.addColorStop(0,'rgba(0,0,0,0.05)');dg.addColorStop(.62,'rgba(0,0,0,0.20)');dg.addColorStop(1,'rgba(0,0,0,0.56)');ctx.fillStyle=dg;ctx.fillRect(0,0,W,H);
   const elapsed=3-waveTransTimer;
   const burn=Math.max(0,1-Math.min(1,elapsed/0.75));
-  const titleSize=Math.max(58,W*0.105)*(1+burn*0.65);
+  const titleSize=Math.max(42,W*0.078)*(1+burn*0.38);
   ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.font=`900 ${titleSize}px Arial Black, Impact, sans-serif`;
-  ctx.shadowColor='#FF5A00';ctx.shadowBlur=45;ctx.fillStyle='#B45100';ctx.fillText(`WAVE ${wave}`,W/2,H*0.39);
-  ctx.shadowColor='#FFD700';ctx.shadowBlur=25;ctx.fillStyle='#FFD700';ctx.fillText(`WAVE ${wave}`,W/2,H*0.39);
-  ctx.shadowColor='#FFFFFF';ctx.shadowBlur=7;ctx.fillStyle='#FFF3B0';ctx.fillText(`WAVE ${wave}`,W/2,H*0.39);
+  ctx.shadowColor='#FF5A00';ctx.shadowBlur=22;ctx.fillStyle='#8B3100';ctx.fillText(`WAVE ${wave}`,W/2,H*0.34);
+  ctx.shadowColor='#FFD700';ctx.shadowBlur=12;ctx.fillStyle='#FFD700';ctx.fillText(`WAVE ${wave}`,W/2,H*0.34);
+  ctx.shadowColor='#FFFFFF';ctx.shadowBlur=3;ctx.fillStyle='#FFF3B0';ctx.fillText(`WAVE ${wave}`,W/2,H*0.34);
   const countNum=Math.ceil(waveCountdown);
   if(lastWaveStats){
     ctx.shadowBlur=0;ctx.font=`800 ${Math.max(15,W*.024)}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(255,235,165,.92)';
