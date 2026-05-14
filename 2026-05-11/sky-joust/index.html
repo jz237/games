@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.33';
+const VERSION = 'v3.1.34';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1412,7 +1412,7 @@ function createPlayer(){
 
 function createEnemy(type,x,y){
   const colors={bounder:'#00A8FF',hunter:'#FF2020',shadow:'#B000FF'};
-  const speeds={bounder:0.68,hunter:1.08,shadow:1.48};
+  const speeds={bounder:0.68,hunter:0.98,shadow:1.42};
   const flapRates={bounder:0.6+Math.random()*0.4,hunter:0.4+Math.random()*0.3,shadow:0.3+Math.random()*0.2};
   return {
     x,y,vx:(Math.random()>0.5?1:-1)*60*speeds[type],vy:0,
@@ -1951,11 +1951,11 @@ function update(dt){
           if(e.y>H*0.6)wantFlap=true; // too low, go up
           if(dy<0&&e.y<player.y-120)wantFlap=false; // high above player, let gravity bring down
         } else if(e.type==='hunter'){
-          // Hunters: smarter red riders — angle around shelves and try to hold the height advantage.
-          const ahead=(player.x+player.vx*0.28)-e.x;
-          targetVx=ahead*2.35+Math.sign(ahead||dx||1)*45;
-          if(e.y>player.y-55)wantFlap=true; // below or even: fight to get above
-          if(e.y<player.y-175&&distToLava>170)wantFlap=false; // way above, dive back in
+          // Hunters: smarter red riders, but beatable — lead the player without camping impossible altitude.
+          const ahead=(player.x+player.vx*0.18)-e.x;
+          targetVx=ahead*1.75+Math.sign(ahead||dx||1)*28;
+          if(e.y>player.y-18)wantFlap=true; // below or nearly even: try to climb
+          if(e.y<player.y-112&&distToLava>155)wantFlap=false; // above enough: dive back in sooner
         } else {
           // Shadows: late-game elites — wide intercepts, faster height corrections, nastier dives.
           const ahead=(player.x+player.vx*0.42)-e.x;
@@ -1986,7 +1986,7 @@ function update(dt){
       if(criticalLow){wantFlap=true;targetVx=(W/2-e.x)*2;}
       else if(tooLow){wantFlap=true;let nearestX=W/2,bestDist=Infinity;for(const p of platforms){if(p.broken)continue;const px=p.x+p.w/2,d=Math.abs(px-e.x);if(d<bestDist){bestDist=d;nearestX=px;}}targetVx=(nearestX-e.x)*2;}
       targetVx=Math.max(-HORIZ_SPEED*e.speed,Math.min(HORIZ_SPEED*e.speed,targetVx));
-      e.vx+=(targetVx-e.vx)*dt*(e.type==='bounder'?2.5:e.type==='hunter'?4.8:6.2);
+      e.vx+=(targetVx-e.vx)*dt*(e.type==='bounder'?2.5:e.type==='hunter'?3.55:5.7);
 
       // Flapping logic
       e.flapCooldown-=dt;
@@ -1995,7 +1995,7 @@ function update(dt){
       if(shouldFlap||criticalLow){
         const power=criticalLow?1.4:tooLow?1.2:1.0;
         e.vy=FLAP_POWER*(0.95+e.speed*0.18)*power;
-        const intervals={bounder:[0.5,0.9],hunter:[0.30,0.56],shadow:[0.24,0.44]};
+        const intervals={bounder:[0.5,0.9],hunter:[0.40,0.72],shadow:[0.26,0.48]};
         const iv=intervals[e.type]||intervals.bounder;
         e.flapCooldown=iv[0]+Math.random()*(iv[1]-iv[0]);
         e.wingFrame=(e.wingFrame+1)%3;
@@ -2019,6 +2019,8 @@ function update(dt){
       // Screen wrap
       if(e.x<-PLAYER_W)e.x=W+PLAYER_W;
       if(e.x>W+PLAYER_W)e.x=-PLAYER_W;
+      // offTopRecovery: enemies that fly off the top are forced back down so waves cannot stall off-screen.
+      if(e.y<-PLAYER_H*1.45){e.y=-PLAYER_H*1.45;e.vy=Math.max(e.vy,260);e.flapCooldown=Math.max(e.flapCooldown,0.42);e.ai.unstuckTimer=0;}
 
       // Platform collision
       for(const p of platforms){
