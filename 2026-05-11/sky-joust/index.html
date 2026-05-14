@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.34';
+const VERSION = 'v3.1.35';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -3043,12 +3043,12 @@ function drawTitle(){
   ctx.save();ctx.translate(rightX,joustY+46);ctx.scale(1.55,1.55);ctx.translate(-rightX,-joustY-46);drawBird({x:rightX,y:joustY+10,facing:-1,wingFrame:Math.floor(t*8+1)%3,type:'bounder',color:'#4488FF',glowColor:'rgba(0,168,255,.9)',vy:Math.cos(t*5)*20},false);ctx.restore();
   if(clash>0){ctx.save();ctx.globalCompositeOperation='lighter';ctx.strokeStyle=`rgba(255,245,180,${clash})`;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(W/2-90*clash,joustY-8);ctx.lineTo(W/2+90*clash,joustY+14);ctx.moveTo(W/2-70*clash,joustY+18);ctx.lineTo(W/2+70*clash,joustY-18);ctx.stroke();ctx.fillStyle=`rgba(255,236,140,${.8*clash})`;ctx.beginPath();ctx.arc(W/2,joustY,32*clash,0,Math.PI*2);ctx.fill();ctx.restore();}
 
-  const btnH=Math.max(70,Math.min(92,H*.083)), startW=Math.min(W*.76,470), scoreW=Math.min(W*.82,540), startX=(W-startW)/2, startY=H*.552;
+  const btnH=Math.max(74,Math.min(98,H*.088)), startW=Math.min(W*.76,470), scoreW=Math.min(W*.90,660), startX=(W-startW)/2, startY=H*.552;
   function titleButton(label,x,y,w,h,kind,cb){
     const grad=ctx.createLinearGradient(x,y,x,y+h);if(kind==='gold'){grad.addColorStop(0,'rgba(255,232,140,.48)');grad.addColorStop(.48,'rgba(138,77,14,.78)');grad.addColorStop(1,'rgba(42,18,4,.92)');}else{grad.addColorStop(0,'rgba(115,220,255,.42)');grad.addColorStop(.48,'rgba(14,64,95,.78)');grad.addColorStop(1,'rgba(3,14,28,.94)');}
     ctx.fillStyle='rgba(0,0,0,.62)';roundRect(ctx,x+5,y+6,w,h,16);ctx.fill();ctx.fillStyle=grad;roundRect(ctx,x,y,w,h,16);ctx.fill();ctx.strokeStyle=kind==='gold'?'rgba(255,230,145,.95)':'rgba(155,235,255,.90)';ctx.lineWidth=3.5;roundRect(ctx,x,y,w,h,16);ctx.stroke();ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=1;roundRect(ctx,x+7,y+7,w-14,h-14,11);ctx.stroke();
     // fitTitleButtonText: keep long labels centered inside beveled borders.
-    const fontPx=Math.max(22,Math.min(42,h*.48,(w-42)/(label.length*.58)));
+    const fontPx=Math.max(24,Math.min(label.includes('GLOBAL')?52:44,h*.56,(w-32)/(label.length*.50))); // largerTitleButtonText
     ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${fontPx}px Arial Black, Impact, sans-serif`;ctx.shadowColor=kind==='gold'?'#FFD461':'#00BFFF';ctx.shadowBlur=12;ctx.fillStyle=kind==='gold'?'#FFF2BF':'#E3FBFF';ctx.fillText(label,x+w/2,y+h/2+1);ctx.restore();addButton(label,x-12,y-12,w+24,h+24,cb);
   }
   titleButton('START GAME',startX,startY,startW,btnH,'gold',()=>startGame());
@@ -3057,24 +3057,15 @@ function drawTitle(){
   const preview=(globalScores&&globalScores.length?globalScores:localScores).slice(0,3), panelW=Math.min(W*.80,530), rowH=Math.max(23,Math.min(31,H*.028)), panelH=48+rowH*3, panelX=(W-panelW)/2, panelY=startY+btnH*2+38;
   ctx.fillStyle='rgba(15,8,4,.64)';roundRect(ctx,panelX,panelY,panelW,panelH,12);ctx.fill();ctx.strokeStyle='rgba(255,215,135,.58)';ctx.lineWidth=2.5;roundRect(ctx,panelX,panelY,panelW,panelH,12);ctx.stroke();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(16,Math.min(24,W*.024))}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFE3A4';ctx.fillText('TOP GLOBAL SCORES',W/2,panelY+23);ctx.font=`800 ${Math.max(15,Math.min(22,W*.021))}px Arial, sans-serif`;ctx.fillStyle='#F4E8D0';if(preview.length){for(let i=0;i<preview.length;i++){const e=preview[i];const row=`${i+1}.  ${(e.initials||'---').slice(0,10).toUpperCase()}     ${Number(e.score||0).toLocaleString()}`;ctx.fillText(row,W/2,panelY+50+i*rowH);}}else{ctx.fillStyle='rgba(244,232,208,.72)';ctx.fillText('No global scores yet',W/2,panelY+58);}
 
-  const icons=['🏆','🎖','⚙','?'], labels=['ACHIEVE','SCORES','SETTINGS','HELP'];
-  // readableFooterTiles: larger/wider bottom controls so mobile labels are actually legible.
-  const tileW=Math.min(128,Math.max(78,W*.18)), tileH=Math.min(78,Math.max(58,H*.07));
-  const gap=Math.min(18,Math.max(8,W*.018));
-  const totalTiles=tileW*4+gap*3, tileStart=(W-totalTiles)/2;
-  const iconY=Math.min(H-tileH-30,panelY+panelH+42);
-  ctx.textAlign='center';ctx.textBaseline='middle';
-  for(let i=0;i<4;i++){
-    const x=tileStart+i*(tileW+gap), cx=x+tileW/2;
-    const tg=ctx.createLinearGradient(x,iconY,x,iconY+tileH);tg.addColorStop(0,'rgba(255,220,145,.18)');tg.addColorStop(1,'rgba(0,0,0,.68)');ctx.fillStyle=tg;roundRect(ctx,x,iconY,tileW,tileH,14);ctx.fill();
-    ctx.strokeStyle='rgba(255,220,145,.55)';ctx.lineWidth=2.5;roundRect(ctx,x,iconY,tileW,tileH,14);ctx.stroke();
-    ctx.font=`${Math.max(24,Math.min(34,tileH*.42))}px Arial`;ctx.fillStyle='#FFE8B0';ctx.fillText(icons[i],cx,iconY+tileH*.34);
-    ctx.font=`900 ${Math.max(11,Math.min(17,tileW*.13))}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(255,238,210,.94)';ctx.fillText(labels[i],cx,iconY+tileH*.74);
-    if(labels[i]==='HELP')addButton('help',x-8,iconY-8,tileW+16,tileH+16,()=>{state='help';buttons=[];});
-    if(labels[i]==='SCORES')addButton('scoresFooter',x-8,iconY-8,tileW+16,tileH+16,()=>{state='leaderboard';fetchGlobalScores();});
-  }
+  // titleHelpButtonOnly: remove extra footer boxes and keep one large readable HELP control.
+  const helpW=Math.min(W*.54,360), helpH=Math.max(64,Math.min(86,H*.078));
+  const helpX=W/2-helpW/2, helpY=Math.min(H-helpH-34,panelY+panelH+38);
+  const hg=ctx.createLinearGradient(helpX,helpY,helpX,helpY+helpH);hg.addColorStop(0,'rgba(255,232,160,.30)');hg.addColorStop(1,'rgba(22,10,4,.82)');ctx.fillStyle=hg;roundRect(ctx,helpX,helpY,helpW,helpH,17);ctx.fill();
+  ctx.strokeStyle='rgba(255,224,145,.82)';ctx.lineWidth=3.2;roundRect(ctx,helpX,helpY,helpW,helpH,17);ctx.stroke();ctx.strokeStyle='rgba(255,255,255,.28)';ctx.lineWidth=1.2;roundRect(ctx,helpX+7,helpY+7,helpW-14,helpH-14,12);ctx.stroke();
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(30,Math.min(48,helpH*.52,W*.052))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FFD35A';ctx.shadowBlur=12;ctx.fillStyle='#FFF0B8';ctx.fillText('?  HELP',W/2,helpY+helpH/2+1);ctx.shadowBlur=0;
+  addButton('help',helpX-14,helpY-14,helpW+28,helpH+28,()=>{state='help';buttons=[];});
 
-  if(score>0){ctx.font=`700 ${Math.max(12,W*0.016)}px Arial, sans-serif`;ctx.fillStyle='rgba(255,220,150,0.72)';ctx.fillText(`Last: Score ${score} · Wave ${wave}`,W/2,Math.min(H-18,iconY+62));}
+  if(score>0){ctx.font=`700 ${Math.max(12,W*0.016)}px Arial, sans-serif`;ctx.fillStyle='rgba(255,220,150,0.72)';ctx.fillText(`Last: Score ${score} · Wave ${wave}`,W/2,Math.min(H-18,helpY+helpH+30));}
   ctx.textAlign='right';ctx.font=`600 ${Math.max(11,W*0.016)}px Arial, sans-serif`;ctx.fillStyle='rgba(255,215,0,0.5)';ctx.fillText(VERSION,W-14,H-14);ctx.textAlign='left';
 }
 
