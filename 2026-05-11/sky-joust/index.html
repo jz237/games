@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.38';
+const VERSION = 'v3.1.39';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -148,10 +148,11 @@ const HORIZ_SPEED = 480;
 const FLAP_HORIZ_BOOST = 180;
 // precisionPlayerControls: player uses gentler values than enemies for touch accuracy.
 const PLAYER_FLAP_POWER = -305;
-const PLAYER_HORIZ_SPEED = 320;
-const PLAYER_STEER_RESPONSE = 3.15;
-const PLAYER_RELEASE_DRAG = 0.935;
-const PLAYER_AIR_DRAG = 0.985;
+const PLAYER_HORIZ_SPEED = 405;
+const PLAYER_STEER_RESPONSE = 4.85;
+const PLAYER_FLAP_HORIZ_BOOST = 58;
+const PLAYER_RELEASE_DRAG = 0.930;
+const PLAYER_AIR_DRAG = 0.982;
 const MAX_VY = 600;
 const PLAYER_W = 88;
 const PLAYER_H = 70;
@@ -1416,8 +1417,8 @@ function createPlayer(){
 
 function createEnemy(type,x,y){
   const colors={bounder:'#00A8FF',hunter:'#FF2020',shadow:'#B000FF'};
-  const speeds={bounder:0.68,hunter:0.98,shadow:1.42};
-  const flapRates={bounder:0.6+Math.random()*0.4,hunter:0.4+Math.random()*0.3,shadow:0.3+Math.random()*0.2};
+  const speeds={bounder:0.68,hunter:0.88,shadow:1.42};
+  const flapRates={bounder:0.6+Math.random()*0.4,hunter:0.48+Math.random()*0.34,shadow:0.3+Math.random()*0.2};
   return {
     x,y,vx:(Math.random()>0.5?1:-1)*60*speeds[type],vy:0,
     facing:1,wingFrame:0,wingTimer:0,
@@ -1833,7 +1834,8 @@ function update(dt){
           player.flapPunch=0.12;
           sfxFlap();
           spawnFlapFeathers(player,2);
-          // No extra horizontal shove on flap; precision comes from held steering.
+          // Small horizontal punch restores enough lateral recovery to climb over hunters without making steering twitchy.
+          if(touchSide!==0)player.vx+=touchSide*PLAYER_FLAP_HORIZ_BOOST;
         }
       } else {
         flapping=false;
@@ -1956,10 +1958,10 @@ function update(dt){
           if(dy<0&&e.y<player.y-120)wantFlap=false; // high above player, let gravity bring down
         } else if(e.type==='hunter'){
           // Hunters: smarter red riders, but beatable — lead the player without camping impossible altitude.
-          const ahead=(player.x+player.vx*0.18)-e.x;
-          targetVx=ahead*1.75+Math.sign(ahead||dx||1)*28;
-          if(e.y>player.y-18)wantFlap=true; // below or nearly even: try to climb
-          if(e.y<player.y-112&&distToLava>155)wantFlap=false; // above enough: dive back in sooner
+          const ahead=(player.x+player.vx*0.12)-e.x;
+          targetVx=ahead*1.28+Math.sign(ahead||dx||1)*18;
+          if(e.y>player.y+8)wantFlap=true; // clearly below: try to climb
+          if(e.y<player.y-76&&distToLava>145)wantFlap=false; // above enough: dive back in sooner
         } else {
           // Shadows: late-game elites — wide intercepts, faster height corrections, nastier dives.
           const ahead=(player.x+player.vx*0.42)-e.x;
@@ -1990,7 +1992,7 @@ function update(dt){
       if(criticalLow){wantFlap=true;targetVx=(W/2-e.x)*2;}
       else if(tooLow){wantFlap=true;let nearestX=W/2,bestDist=Infinity;for(const p of platforms){if(p.broken)continue;const px=p.x+p.w/2,d=Math.abs(px-e.x);if(d<bestDist){bestDist=d;nearestX=px;}}targetVx=(nearestX-e.x)*2;}
       targetVx=Math.max(-HORIZ_SPEED*e.speed,Math.min(HORIZ_SPEED*e.speed,targetVx));
-      e.vx+=(targetVx-e.vx)*dt*(e.type==='bounder'?2.5:e.type==='hunter'?3.55:5.7);
+      e.vx+=(targetVx-e.vx)*dt*(e.type==='bounder'?2.5:e.type==='hunter'?2.75:5.7);
 
       // Flapping logic
       e.flapCooldown-=dt;
@@ -1999,7 +2001,7 @@ function update(dt){
       if(shouldFlap||criticalLow){
         const power=criticalLow?1.4:tooLow?1.2:1.0;
         e.vy=FLAP_POWER*(0.95+e.speed*0.18)*power;
-        const intervals={bounder:[0.5,0.9],hunter:[0.40,0.72],shadow:[0.26,0.48]};
+        const intervals={bounder:[0.5,0.9],hunter:[0.48,0.82],shadow:[0.26,0.48]};
         const iv=intervals[e.type]||intervals.bounder;
         e.flapCooldown=iv[0]+Math.random()*(iv[1]-iv[0]);
         e.wingFrame=(e.wingFrame+1)%3;
