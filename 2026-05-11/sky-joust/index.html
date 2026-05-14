@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.19';
+const VERSION = 'v3.1.20';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -124,6 +124,12 @@ const GRAVITY = 1200;
 const FLAP_POWER = -340;
 const HORIZ_SPEED = 480;
 const FLAP_HORIZ_BOOST = 180;
+// precisionPlayerControls: player uses gentler values than enemies for touch accuracy.
+const PLAYER_FLAP_POWER = -305;
+const PLAYER_HORIZ_SPEED = 320;
+const PLAYER_STEER_RESPONSE = 3.15;
+const PLAYER_RELEASE_DRAG = 0.935;
+const PLAYER_AIR_DRAG = 0.985;
 const MAX_VY = 600;
 const PLAYER_W = 88;
 const PLAYER_H = 70;
@@ -1775,28 +1781,24 @@ function update(dt){
         flapping=true;
       }
       if(touchDown){
-        // Touch-side directional steering
+        // Precision touch steering: ease toward a capped speed instead of instant arcade shove.
         if(touchSide!==0){
-          player.vx+=touchSide*HORIZ_SPEED*dt;
-          // Clamp horizontal speed
-          if(player.vx>HORIZ_SPEED)player.vx=HORIZ_SPEED;
-          if(player.vx<-HORIZ_SPEED)player.vx=-HORIZ_SPEED;
+          const targetVx=touchSide*PLAYER_HORIZ_SPEED;
+          player.vx+=(targetVx-player.vx)*Math.min(1,dt*PLAYER_STEER_RESPONSE);
         }
         if(player.wingTimer<=0){
-          player.vy=FLAP_POWER;
+          player.vy=PLAYER_FLAP_POWER;
           player.wingFrame=(player.wingFrame+1)%3;
           player.wingTimer=0.09;
           player.flapPunch=0.12;
           sfxFlap();
           spawnFlapFeathers(player,2);
-          // horizontal boost in touch direction
-          if(touchSide!==0){
-            player.vx+=touchSide*FLAP_HORIZ_BOOST*dt*10;
-          }
+          // No extra horizontal shove on flap; precision comes from held steering.
         }
       } else {
         flapping=false;
-        // Horizontal drag when not touching
+        // Stronger release drag gives the player a precise brake when they lift.
+        player.vx*=PLAYER_RELEASE_DRAG;
       }
       player.wingTimer-=dt;
       if(player.flapPunch>0)player.flapPunch-=dt;
@@ -1824,8 +1826,10 @@ function update(dt){
       player.x+=player.vx*dt;
       player.y+=player.vy*dt;
 
-      // Horizontal drag
-      player.vx*=0.995;
+      // Horizontal air drag
+      player.vx*=PLAYER_AIR_DRAG;
+      if(player.vx>PLAYER_HORIZ_SPEED)player.vx=PLAYER_HORIZ_SPEED;
+      if(player.vx<-PLAYER_HORIZ_SPEED)player.vx=-PLAYER_HORIZ_SPEED;
 
       // Screen wrap
       if(player.x<-PLAYER_W)player.x=W+PLAYER_W;
@@ -3122,74 +3126,73 @@ function drawGameOver(){
 }
 
 function drawHighscoreEntry(){
-  ctx.fillStyle='rgba(0,0,0,0.8)';
+  ctx.fillStyle='rgba(1,4,10,0.92)';
   ctx.fillRect(0,0,W,H);
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  const bg=ctx.createRadialGradient(W/2,H*.42,20,W/2,H*.42,Math.max(W,H)*.62);bg.addColorStop(0,'rgba(255,175,45,.13)');bg.addColorStop(.45,'rgba(0,170,255,.08)');bg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);ctx.restore();
 
-  const titleSize=Math.max(28,W*0.045);
+  const titleSize=Math.max(34,Math.min(64,W*0.065));
   ctx.font=`900 ${titleSize}px Arial Black, Impact, sans-serif`;
-  ctx.textAlign='center';
-  ctx.fillStyle='#FFD700';
-  ctx.fillText('NEW HIGH SCORE!',W/2,H*0.12);
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.shadowColor='#FFD35A';ctx.shadowBlur=22;ctx.fillStyle='#FFE796';
+  ctx.fillText('NEW HIGH SCORE!',W/2,H*0.13);
+  ctx.shadowBlur=0;
 
-  ctx.font=`${Math.max(20,W*0.035)}px monospace`;
-  ctx.fillStyle='#FFF';
-  ctx.fillText(`${score} pts  |  Wave ${wave}`,W/2,H*0.12+titleSize+10);
+  ctx.font=`800 ${Math.max(20,Math.min(34,W*0.036))}px Arial Black, Impact, sans-serif`;
+  ctx.fillStyle='#EAF8FF';
+  ctx.fillText(`${score} pts   •   Wave ${wave}`,W/2,H*0.205);
 
-  ctx.fillText('Enter Your Initials',W/2,H*0.3);
+  ctx.font=`800 ${Math.max(18,Math.min(30,W*0.03))}px Arial, sans-serif`;
+  ctx.fillStyle='rgba(255,245,200,.9)';
+  ctx.fillText('TAP BIG ARROWS TO SET INITIALS',W/2,H*0.275);
 
   buttons=[];
-  const letterSize=Math.max(40,W*0.07);
-  const spacing=letterSize*1.8;
-  const baseX=W/2-spacing;
-  const baseY=H*0.42;
+  const letterSize=Math.max(72,Math.min(128,W*0.13));
+  const boxW=Math.max(86,Math.min(150,W*0.16));
+  const boxH=Math.max(92,Math.min(150,H*0.135));
+  const arrowH=Math.max(62,Math.min(102,H*0.095));
+  const spacing=boxW*1.18;
+  const total=spacing*2+boxW;
+  const startX=W/2-total/2+boxW/2;
+  const baseY=H*0.49;
 
   for(let i=0;i<3;i++){
-    const lx=baseX+i*spacing;
-    // Up arrow
-    const arrowW=40,arrowH=36;
-    const upY=baseY-letterSize-arrowH;
-    ctx.fillStyle=i===hsPos?'rgba(255,215,0,0.3)':'rgba(255,255,255,0.1)';
-    roundRect(ctx,lx-arrowW/2,upY,arrowW,arrowH,6);ctx.fill();
-    ctx.fillStyle='#FFF';ctx.font=`${Math.max(20,W*0.03)}px monospace`;
-    ctx.fillText('▲',lx,upY+arrowH/2+7);
-    addButton('up'+i,lx-arrowW/2,upY,arrowW,arrowH,(function(idx){return function(){
-      hsInitials[idx]=String.fromCharCode(((hsInitials[idx].charCodeAt(0)-65+1)%26)+65);
-    }})(i));
+    const lx=startX+i*spacing;
+    const selected=i===hsPos;
+    const upY=baseY-boxH/2-arrowH-10;
+    const downY=baseY+boxH/2+10;
+    const cardG=ctx.createLinearGradient(lx-boxW/2,baseY-boxH/2,lx+boxW/2,baseY+boxH/2);cardG.addColorStop(0,selected?'rgba(255,210,80,.24)':'rgba(15,26,40,.88)');cardG.addColorStop(1,selected?'rgba(255,92,0,.18)':'rgba(3,8,16,.92)');
+    ctx.fillStyle=cardG;roundRect(ctx,lx-boxW/2,baseY-boxH/2,boxW,boxH,18);ctx.fill();
+    ctx.strokeStyle=selected?'rgba(255,220,95,.96)':'rgba(105,170,210,.42)';ctx.lineWidth=selected?4:2;roundRect(ctx,lx-boxW/2,baseY-boxH/2,boxW,boxH,18);ctx.stroke();
 
-    // Letter
-    ctx.font=`bold ${letterSize}px monospace`;
-    ctx.fillStyle=i===hsPos?'#FFD700':'#FFF';
-    ctx.fillText(hsInitials[i],lx,baseY);
+    function arrowButton(id,y,label,delta){
+      const g=ctx.createLinearGradient(lx-boxW/2,y,lx+boxW/2,y+arrowH);g.addColorStop(0,selected?'rgba(255,196,50,.34)':'rgba(0,170,255,.16)');g.addColorStop(1,'rgba(0,0,0,.58)');ctx.fillStyle=g;roundRect(ctx,lx-boxW/2,y,boxW,arrowH,16);ctx.fill();
+      ctx.strokeStyle=selected?'rgba(255,225,115,.9)':'rgba(120,210,255,.46)';ctx.lineWidth=3;roundRect(ctx,lx-boxW/2,y,boxW,arrowH,16);ctx.stroke();
+      ctx.font=`900 ${Math.max(34,arrowH*.55)}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF6D0';ctx.shadowColor=selected?'#FFD700':'#00BFFF';ctx.shadowBlur=14;ctx.fillText(label,lx,y+arrowH/2+2);ctx.shadowBlur=0;
+      addButton(id+i,lx-boxW/2-8,y-8,boxW+16,arrowH+16,()=>{hsPos=i;hsInitials[i]=String.fromCharCode(((hsInitials[i].charCodeAt(0)-65+delta+26)%26)+65);});
+    }
+    arrowButton('up',upY,'▲',1);
+    arrowButton('dn',downY,'▼',-1);
 
-    // Down arrow
-    const downY=baseY+15;
-    ctx.fillStyle=i===hsPos?'rgba(255,215,0,0.3)':'rgba(255,255,255,0.1)';
-    roundRect(ctx,lx-arrowW/2,downY,arrowW,arrowH,6);ctx.fill();
-    ctx.fillStyle='#FFF';ctx.font=`${Math.max(20,W*0.03)}px monospace`;
-    ctx.fillText('▼',lx,downY+arrowH/2+7);
-    addButton('dn'+i,lx-arrowW/2,downY,arrowW,arrowH,(function(idx){return function(){
-      hsInitials[idx]=String.fromCharCode(((hsInitials[idx].charCodeAt(0)-65+25)%26)+65);
-    }})(i));
+    ctx.font=`900 ${letterSize}px Arial Black, Impact, sans-serif`;
+    ctx.fillStyle=selected?'#FFD957':'#FFFFFF';ctx.shadowColor=selected?'#FFD700':'#00BFFF';ctx.shadowBlur=selected?22:10;
+    ctx.fillText(hsInitials[i],lx,baseY+4);ctx.shadowBlur=0;
+    addButton('sel'+i,lx-boxW/2,baseY-boxH/2,boxW,boxH,()=>{hsPos=i;});
   }
 
-  // Confirm button
-  const btnW=180,btnH=50;
-  const btnX=(W-btnW)/2,btnY=H*0.68;
-  ctx.fillStyle='rgba(0,255,100,0.15)';
-  roundRect(ctx,btnX,btnY,btnW,btnH,10);ctx.fill();
-  ctx.strokeStyle='#44FF88';ctx.lineWidth=2;
-  roundRect(ctx,btnX,btnY,btnW,btnH,10);ctx.stroke();
-  ctx.fillStyle='#44FF88';
-  ctx.font=`bold ${Math.max(18,W*0.03)}px monospace`;
-  ctx.fillText('CONFIRM',W/2,btnY+btnH/2+6);
-  addButton('confirm',btnX,btnY,btnW,btnH,()=>{
+  const btnW=Math.min(W*.62,360),btnH=Math.max(68,Math.min(96,H*.09));
+  const btnX=(W-btnW)/2,btnY=Math.min(H-btnH-34,H*0.78);
+  const cg=ctx.createLinearGradient(btnX,btnY,btnX,btnY+btnH);cg.addColorStop(0,'rgba(80,255,150,.32)');cg.addColorStop(1,'rgba(0,80,55,.60)');ctx.fillStyle=cg;roundRect(ctx,btnX,btnY,btnW,btnH,18);ctx.fill();
+  ctx.strokeStyle='rgba(120,255,175,.96)';ctx.lineWidth=4;roundRect(ctx,btnX,btnY,btnW,btnH,18);ctx.stroke();
+  ctx.fillStyle='#DFFFF0';ctx.font=`900 ${Math.max(26,Math.min(42,W*0.045))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#44FF88';ctx.shadowBlur=16;ctx.fillText('CONFIRM',W/2,btnY+btnH/2+2);ctx.shadowBlur=0;
+  addButton('confirm',btnX-10,btnY-10,btnW+20,btnH+20,()=>{
     const initials=hsInitials.join('');
     hsRank=addLocalScore(initials,score,wave);
     submitGlobalScore(initials,score,wave);
     state='gameOver';
   });
 
-  ctx.textAlign='left';
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';
 }
 
 function drawDualLeaderboard(startY){
