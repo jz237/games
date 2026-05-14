@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.28';
+const VERSION = 'v3.1.29';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1408,7 +1408,7 @@ function createEnemy(type,x,y){
     type,color:colors[type],glowColor:type==='bounder'?'rgba(0,168,255,0.75)':type==='hunter'?'rgba(255,32,32,0.75)':'rgba(190,0,255,0.8)',
     speed:speeds[type],flapRate:flapRates[type],
     flapCooldown:Math.random()*flapRates[type],
-    ai:{changeTimer:1+Math.random()*2,targetVx:0,wander:(Math.random()-0.5)*160},
+    ai:{changeTimer:1+Math.random()*2,targetVx:0,wander:(Math.random()-0.5)*160,unstuckTimer:0,unstuckDir:0},
     scoreVal:type==='bounder'?500:type==='hunter'?750:1000
   };
 }
@@ -1949,6 +1949,24 @@ function update(dt){
           if(e.y<player.y-100&&distToLava>200)wantFlap=false; // high up, let dive begin
         }
       }
+      // Shelf-avoidance AI: if an enemy is trying to flap into the underside of a platform,
+      // slide toward the nearest edge instead of hovering under it forever.
+      let overhead=null;
+      for(const p of platforms){
+        if(p.broken)continue;
+        const underShelf=e.x+PLAYER_W*.42>p.x&&e.x-PLAYER_W*.42<p.x+p.w&&e.y>p.y+p.h-10&&e.y<p.y+p.h+76;
+        if(underShelf){overhead=p;break;}
+      }
+      if(overhead&&wantFlap){
+        const center=overhead.x+overhead.w/2;
+        e.ai.unstuckDir=e.x<center?-1:1;
+        e.ai.unstuckTimer=Math.max(e.ai.unstuckTimer,0.9);
+      }
+      if(e.ai.unstuckTimer>0){
+        e.ai.unstuckTimer-=dt;
+        targetVx=e.ai.unstuckDir*HORIZ_SPEED*e.speed*1.15;
+        if(overhead&&Math.abs(e.x-(overhead.x+overhead.w/2))<overhead.w*.55)wantFlap=false;
+      }
       // Lava avoidance overrides everything
       if(criticalLow){wantFlap=true;targetVx=(W/2-e.x)*2;}
       else if(tooLow){wantFlap=true;let nearestX=W/2,bestDist=Infinity;for(const p of platforms){if(p.broken)continue;const px=p.x+p.w/2,d=Math.abs(px-e.x);if(d<bestDist){bestDist=d;nearestX=px;}}targetVx=(nearestX-e.x)*2;}
@@ -2002,6 +2020,8 @@ function update(dt){
            e.x+PLAYER_W/2>p.x&&e.x-PLAYER_W/2<p.x+p.w){
           e.y=p.y+p.h;
           e.vy=0;
+          e.ai.unstuckDir=e.x<(p.x+p.w/2)?-1:1;
+          e.ai.unstuckTimer=Math.max(e.ai.unstuckTimer,1.05);
         }
       }
 
