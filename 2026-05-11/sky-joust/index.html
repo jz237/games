@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.30';
+const VERSION = 'v3.1.31';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -2915,7 +2915,7 @@ function drawWaveClarity(){
     for(const e of enemies){if(enemies.length<=2){ctx.strokeStyle=`rgba(255,226,90,${0.45+0.25*Math.sin(gameTime*8)})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(e.x,e.y+36,58,0,Math.PI*2);ctx.stroke();ctx.save();ctx.textAlign='center';ctx.font=`900 ${Math.max(10,W*.014)}px Arial Black, Impact, sans-serif`;ctx.shadowColor=enemyColor(e.type);ctx.shadowBlur=10;ctx.fillStyle='rgba(255,248,210,.9)';ctx.fillText(enemyLabel(e.type),e.x,e.y-28);ctx.restore();}}
     for(const eg of eggs){if(eggs.length<=2||eg.hatchTimer<3){ctx.strokeStyle=`rgba(255,120,30,${0.38+0.28*Math.sin(gameTime*12)})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(eg.x,eg.y,38,0,Math.PI*2);ctx.stroke();}}
     // joustReadability: show altitude advantage in close jousts so the rule is readable.
-    if(player){let closest=null,best=999999;for(const e of enemies){const dx=e.x-player.x,dy=e.y-player.y,d=dx*dx+dy*dy;if(d<best&&Math.sqrt(d)<260){best=d;closest=e;}}if(closest){const playerMid=player.y+PLAYER_H*.5, enemyMid=closest.y+PLAYER_H*.5, winning=playerMid<enemyMid-6;ctx.textAlign='center';ctx.font=`900 ${Math.max(18,W*.024)}px Arial Black, Impact, sans-serif`;ctx.shadowBlur=16;ctx.shadowColor=winning?'#7CFF8A':'#FF3A30';ctx.fillStyle=winning?'rgba(190,255,180,.92)':'rgba(255,210,180,.94)';ctx.fillText(winning?'ALTITUDE ADVANTAGE':'GET ABOVE!',(player.x+closest.x)/2,Math.min(player.y,closest.y)-38);ctx.strokeStyle=winning?'rgba(124,255,138,.55)':'rgba(255,70,40,.55)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(player.x,playerMid);ctx.lineTo(closest.x,enemyMid);ctx.stroke();}}
+    if(player){let closest=null,best=999999;for(const e of enemies){const dx=e.x-player.x,dy=e.y-player.y,d=dx*dx+dy*dy;if(d<best&&Math.sqrt(d)<260){best=d;closest=e;}}if(closest){const playerMid=player.y+PLAYER_H*.5, enemyMid=closest.y+PLAYER_H*.5, diff=enemyMid-playerMid, winning=diff>6, urgent=diff<-6;const mx=(player.x+closest.x)/2,my=Math.min(player.y,closest.y)-38;ctx.textAlign='center';ctx.font=`900 ${Math.max(18,W*.024)}px Arial Black, Impact, sans-serif`;ctx.shadowBlur=16;ctx.shadowColor=winning?'#7CFF8A':urgent?'#FF3A30':'#FFD35A';ctx.fillStyle=winning?'rgba(190,255,180,.92)':urgent?'rgba(255,210,180,.94)':'rgba(255,242,170,.92)';ctx.fillText(winning?'ALTITUDE ADVANTAGE':urgent?'GET ABOVE!':'EVEN HEIGHT!',mx,my);ctx.strokeStyle=winning?'rgba(124,255,138,.55)':urgent?'rgba(255,70,40,.55)':'rgba(255,220,90,.50)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(player.x,playerMid);ctx.lineTo(closest.x,enemyMid);ctx.stroke();ctx.save();ctx.globalCompositeOperation='lighter';ctx.fillStyle=winning?'rgba(124,255,138,.42)':urgent?'rgba(255,70,40,.42)':'rgba(255,220,90,.35)';for(const [x,y,label] of [[player.x,playerMid,'YOU'],[closest.x,enemyMid,'FOE']]){ctx.beginPath();ctx.arc(x,y,22,0,Math.PI*2);ctx.fill();ctx.font=`900 ${Math.max(10,W*.013)}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(255,255,255,.92)';ctx.fillText(label,x,y-28);}ctx.restore();}}
     ctx.restore();
   }
 }
@@ -3086,9 +3086,9 @@ function drawWaveTrans(){
   if(countNum>0){
     const phase=waveCountdown-(countNum-1);
     const pulse=1.35-0.35*Math.max(0,Math.min(1,phase));
-    const countSize=Math.max(88,W*0.16)*pulse;
+    const countSize=Math.max(96,W*0.17)*pulse;
     ctx.font=`900 ${countSize}px Arial Black, Impact, sans-serif`;
-    ctx.shadowColor='#FF8A00';ctx.shadowBlur=35;ctx.fillStyle='rgba(255,255,255,.94)';ctx.fillText(countNum,W/2,H*0.68);
+    ctx.shadowColor='#FF8A00';ctx.shadowBlur=35;ctx.lineWidth=Math.max(4,countSize*.045);ctx.strokeStyle='rgba(80,28,0,.86)';ctx.strokeText(countNum,W/2,H*0.72);ctx.fillStyle='rgba(255,255,255,.96)';ctx.fillText(countNum,W/2,H*0.72);
   }
   ctx.restore();
   drawWaveClarity();
