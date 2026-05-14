@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.32';
+const VERSION = 'v3.1.33';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1412,7 +1412,7 @@ function createPlayer(){
 
 function createEnemy(type,x,y){
   const colors={bounder:'#00A8FF',hunter:'#FF2020',shadow:'#B000FF'};
-  const speeds={bounder:0.7,hunter:1.0,shadow:1.4};
+  const speeds={bounder:0.68,hunter:1.08,shadow:1.48};
   const flapRates={bounder:0.6+Math.random()*0.4,hunter:0.4+Math.random()*0.3,shadow:0.3+Math.random()*0.2};
   return {
     x,y,vx:(Math.random()>0.5?1:-1)*60*speeds[type],vy:0,
@@ -1427,9 +1427,10 @@ function createEnemy(type,x,y){
 
 let waveStartTime = 0;
 function spawnWaveEnemies(){
-  const bounders=Math.max(3,3+Math.floor(wave*0.5));
-  const hunters=wave>=4?Math.max(1,Math.floor((wave-3)*0.8)):0;
-  const shadows=wave>=7?Math.max(1,Math.floor((wave-6)*0.5)):0;
+  // enemyProgressionMix: blue bounders dominate early, red hunters take over mid-game, shadows become late-game elites.
+  const bounders=Math.max(1,5-Math.floor(wave/3));
+  const hunters=wave>=3?Math.min(6,Math.max(1,Math.floor((wave-1)*0.72))):0;
+  const shadows=wave>=7?Math.min(5,Math.max(1,Math.floor((wave-6)*0.45))):0;
   let spawnable=platforms.filter(p=>!p.broken&&p.hasNest);
   if(spawnable.length===0)spawnable=platforms.filter(p=>!p.broken);
   if(spawnable.length===0){generatePlatforms(wave);spawnable=platforms.filter(p=>!p.broken);}
@@ -1950,15 +1951,17 @@ function update(dt){
           if(e.y>H*0.6)wantFlap=true; // too low, go up
           if(dy<0&&e.y<player.y-120)wantFlap=false; // high above player, let gravity bring down
         } else if(e.type==='hunter'){
-          // Hunters: chase player, try to stay slightly above
-          targetVx=dx*2.0;
-          if(e.y>player.y-30)wantFlap=true; // below player, flap up
-          if(e.y<player.y-150)wantFlap=false; // way above, dive
+          // Hunters: smarter red riders — angle around shelves and try to hold the height advantage.
+          const ahead=(player.x+player.vx*0.28)-e.x;
+          targetVx=ahead*2.35+Math.sign(ahead||dx||1)*45;
+          if(e.y>player.y-55)wantFlap=true; // below or even: fight to get above
+          if(e.y<player.y-175&&distToLava>170)wantFlap=false; // way above, dive back in
         } else {
-          // Shadows: aggressive, swing wide then dive
-          targetVx=dx*2.5+Math.sign(dx||1)*100;
-          if(e.y>player.y+10)wantFlap=true; // below player, flap
-          if(e.y<player.y-100&&distToLava>200)wantFlap=false; // high up, let dive begin
+          // Shadows: late-game elites — wide intercepts, faster height corrections, nastier dives.
+          const ahead=(player.x+player.vx*0.42)-e.x;
+          targetVx=ahead*2.85+Math.sign(ahead||dx||1)*135;
+          if(e.y>player.y-25)wantFlap=true; // stay threateningly high
+          if(e.y<player.y-125&&distToLava>200)wantFlap=false; // high up, let dive begin
         }
       }
       // Shelf-avoidance AI: if an enemy is trying to flap into the underside of a platform,
@@ -1983,7 +1986,7 @@ function update(dt){
       if(criticalLow){wantFlap=true;targetVx=(W/2-e.x)*2;}
       else if(tooLow){wantFlap=true;let nearestX=W/2,bestDist=Infinity;for(const p of platforms){if(p.broken)continue;const px=p.x+p.w/2,d=Math.abs(px-e.x);if(d<bestDist){bestDist=d;nearestX=px;}}targetVx=(nearestX-e.x)*2;}
       targetVx=Math.max(-HORIZ_SPEED*e.speed,Math.min(HORIZ_SPEED*e.speed,targetVx));
-      e.vx+=(targetVx-e.vx)*dt*(e.type==='bounder'?2.5:e.type==='hunter'?4.0:5.5);
+      e.vx+=(targetVx-e.vx)*dt*(e.type==='bounder'?2.5:e.type==='hunter'?4.8:6.2);
 
       // Flapping logic
       e.flapCooldown-=dt;
@@ -1992,7 +1995,7 @@ function update(dt){
       if(shouldFlap||criticalLow){
         const power=criticalLow?1.4:tooLow?1.2:1.0;
         e.vy=FLAP_POWER*(0.95+e.speed*0.18)*power;
-        const intervals={bounder:[0.5,0.9],hunter:[0.35,0.65],shadow:[0.28,0.5]};
+        const intervals={bounder:[0.5,0.9],hunter:[0.30,0.56],shadow:[0.24,0.44]};
         const iv=intervals[e.type]||intervals.bounder;
         e.flapCooldown=iv[0]+Math.random()*(iv[1]-iv[0]);
         e.wingFrame=(e.wingFrame+1)%3;
@@ -2759,9 +2762,10 @@ function drawEmbers(){
 function enemyLabel(type){return type==='hunter'?'HUNTER':type==='shadow'?'SHADOW':'BOUNDER';}
 function enemyColor(type){return type==='hunter'?'#FF7A2A':type==='shadow'?'#D96CFF':'#72E7FF';}
 function upcomingEnemyMix(){
-  const bounders=Math.max(3,3+Math.floor(wave*0.5));
-  const hunters=wave>=4?Math.max(1,Math.floor((wave-3)*0.8)):0;
-  const shadows=wave>=7?Math.max(1,Math.floor((wave-6)*0.5)):0;
+  // enemyProgressionMix: blue bounders dominate early, red hunters take over mid-game, shadows become late-game elites.
+  const bounders=Math.max(1,5-Math.floor(wave/3));
+  const hunters=wave>=3?Math.min(6,Math.max(1,Math.floor((wave-1)*0.72))):0;
+  const shadows=wave>=7?Math.min(5,Math.max(1,Math.floor((wave-6)*0.45))):0;
   return [{type:'bounder',count:bounders},{type:'hunter',count:hunters},{type:'shadow',count:shadows}].filter(e=>e.count>0);
 }
 
