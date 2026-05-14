@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.27';
+const VERSION = 'v3.1.28';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -51,8 +51,8 @@ function resize(){
   detailScale=Math.max(1,Math.min(1.7,renderScale/1.55));
   canvasPixelW = canvas.width = Math.round(window.innerWidth * renderScale);
   canvasPixelH = canvas.height = Math.round(window.innerHeight * renderScale);
-  // gameplayWorldScale keeps the arena/sprites at the pre-2x visual size while output stays capped at 2x.
-  const gameplayWorldScale = 2.65;
+  // gameplayWorldScale keeps output capped at 2x while shrinking gameplay elements about 25% for more visible arena.
+  const gameplayWorldScale = 3.53;
   W = Math.round(window.innerWidth * gameplayWorldScale);
   H = Math.round(window.innerHeight * gameplayWorldScale);
   canvas.style.width = window.innerWidth+'px';
