@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.26';
+const VERSION = 'v3.1.27';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -36,7 +36,7 @@ titleVolcanoBg.img.src=TITLE_VOLCANO_BG_SRC;
 
 // --- Resize ---
 let W = 0, H = 0;
-let renderScale = 1, detailScale = 1;
+let renderScale = 1, detailScale = 1, canvasPixelW = 0, canvasPixelH = 0;
 function pickRenderScale(){
   const dpr=Math.max(1,window.devicePixelRatio||1);
   const mem=navigator.deviceMemory||4, cores=navigator.hardwareConcurrency||4;
@@ -49,10 +49,15 @@ function pickRenderScale(){
 function resize(){
   renderScale=pickRenderScale();
   detailScale=Math.max(1,Math.min(1.7,renderScale/1.55));
-  W = canvas.width = Math.round(window.innerWidth * renderScale);
-  H = canvas.height = Math.round(window.innerHeight * renderScale);
+  canvasPixelW = canvas.width = Math.round(window.innerWidth * renderScale);
+  canvasPixelH = canvas.height = Math.round(window.innerHeight * renderScale);
+  // gameplayWorldScale keeps the arena/sprites at the pre-2x visual size while output stays capped at 2x.
+  const gameplayWorldScale = 2.65;
+  W = Math.round(window.innerWidth * gameplayWorldScale);
+  H = Math.round(window.innerHeight * gameplayWorldScale);
   canvas.style.width = window.innerWidth+'px';
   canvas.style.height = window.innerHeight+'px';
+  ctx.setTransform(canvasPixelW/W,0,0,canvasPixelH/H,0,0);
   ctx.imageSmoothingEnabled = false;
 }
 resize();
@@ -3283,6 +3288,8 @@ function roundRect(ctx,x,y,w,h,r){
 let lastTime = 0;
 function loop(ts){
   requestAnimationFrame(loop);
+  // Restore logical game-world transform every frame in case canvas/image draws altered it.
+  if(canvasPixelW&&canvasPixelH)ctx.setTransform(canvasPixelW/W,0,0,canvasPixelH/H,0,0);
   const dt = lastTime ? Math.min((ts-lastTime)/1000, 0.05) : 0.016;
   lastTime = ts;
 
