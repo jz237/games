@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.25';
+const VERSION = 'v3.1.26';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -42,9 +42,9 @@ function pickRenderScale(){
   const mem=navigator.deviceMemory||4, cores=navigator.hardwareConcurrency||4;
   const tiny=Math.min(window.innerWidth,window.innerHeight)<390;
   const headroom=(mem>=8&&cores>=8&&!tiny)?0.85:(mem>=4&&cores>=4&&!tiny)?0.55:0.25;
-  const cap=(mem>=8&&cores>=8)?3:(mem>=4?2.65:2.15);
-  // adaptiveHighResolution: supersample a little above DPR when safe, but cap for mobile heat/battery.
-  return Math.min(cap,Math.max(dpr,Math.min(3,dpr+headroom)));
+  const cap=2;
+  // adaptiveHighResolution: cap at 2x for steadier mobile performance/battery.
+  return Math.min(cap,Math.max(1,Math.min(dpr+headroom,2)));
 }
 function resize(){
   renderScale=pickRenderScale();
