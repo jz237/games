@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.35';
+const VERSION = 'v3.1.36';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -3043,7 +3043,7 @@ function drawTitle(){
   ctx.save();ctx.translate(rightX,joustY+46);ctx.scale(1.55,1.55);ctx.translate(-rightX,-joustY-46);drawBird({x:rightX,y:joustY+10,facing:-1,wingFrame:Math.floor(t*8+1)%3,type:'bounder',color:'#4488FF',glowColor:'rgba(0,168,255,.9)',vy:Math.cos(t*5)*20},false);ctx.restore();
   if(clash>0){ctx.save();ctx.globalCompositeOperation='lighter';ctx.strokeStyle=`rgba(255,245,180,${clash})`;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(W/2-90*clash,joustY-8);ctx.lineTo(W/2+90*clash,joustY+14);ctx.moveTo(W/2-70*clash,joustY+18);ctx.lineTo(W/2+70*clash,joustY-18);ctx.stroke();ctx.fillStyle=`rgba(255,236,140,${.8*clash})`;ctx.beginPath();ctx.arc(W/2,joustY,32*clash,0,Math.PI*2);ctx.fill();ctx.restore();}
 
-  const btnH=Math.max(74,Math.min(98,H*.088)), startW=Math.min(W*.76,470), scoreW=Math.min(W*.90,660), startX=(W-startW)/2, startY=H*.552;
+  const btnH=Math.max(92,Math.min(124,H*.112)), startW=Math.min(W*.86,620), startX=(W-startW)/2, startY=H*.548;
   function titleButton(label,x,y,w,h,kind,cb){
     const grad=ctx.createLinearGradient(x,y,x,y+h);if(kind==='gold'){grad.addColorStop(0,'rgba(255,232,140,.48)');grad.addColorStop(.48,'rgba(138,77,14,.78)');grad.addColorStop(1,'rgba(42,18,4,.92)');}else{grad.addColorStop(0,'rgba(115,220,255,.42)');grad.addColorStop(.48,'rgba(14,64,95,.78)');grad.addColorStop(1,'rgba(3,14,28,.94)');}
     ctx.fillStyle='rgba(0,0,0,.62)';roundRect(ctx,x+5,y+6,w,h,16);ctx.fill();ctx.fillStyle=grad;roundRect(ctx,x,y,w,h,16);ctx.fill();ctx.strokeStyle=kind==='gold'?'rgba(255,230,145,.95)':'rgba(155,235,255,.90)';ctx.lineWidth=3.5;roundRect(ctx,x,y,w,h,16);ctx.stroke();ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=1;roundRect(ctx,x+7,y+7,w-14,h-14,11);ctx.stroke();
@@ -3052,14 +3052,17 @@ function drawTitle(){
     ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${fontPx}px Arial Black, Impact, sans-serif`;ctx.shadowColor=kind==='gold'?'#FFD461':'#00BFFF';ctx.shadowBlur=12;ctx.fillStyle=kind==='gold'?'#FFF2BF':'#E3FBFF';ctx.fillText(label,x+w/2,y+h/2+1);ctx.restore();addButton(label,x-12,y-12,w+24,h+24,cb);
   }
   titleButton('START GAME',startX,startY,startW,btnH,'gold',()=>startGame());
-  titleButton('GLOBAL HIGH SCORES',(W-scoreW)/2,startY+btnH+16,scoreW,btnH,'blue',()=>{showingLeaderboard=true;state='leaderboard';fetchGlobalScores()});
 
-  const preview=(globalScores&&globalScores.length?globalScores:localScores).slice(0,3), panelW=Math.min(W*.80,530), rowH=Math.max(23,Math.min(31,H*.028)), panelH=48+rowH*3, panelX=(W-panelW)/2, panelY=startY+btnH*2+38;
-  ctx.fillStyle='rgba(15,8,4,.64)';roundRect(ctx,panelX,panelY,panelW,panelH,12);ctx.fill();ctx.strokeStyle='rgba(255,215,135,.58)';ctx.lineWidth=2.5;roundRect(ctx,panelX,panelY,panelW,panelH,12);ctx.stroke();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(16,Math.min(24,W*.024))}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFE3A4';ctx.fillText('TOP GLOBAL SCORES',W/2,panelY+23);ctx.font=`800 ${Math.max(15,Math.min(22,W*.021))}px Arial, sans-serif`;ctx.fillStyle='#F4E8D0';if(preview.length){for(let i=0;i<preview.length;i++){const e=preview[i];const row=`${i+1}.  ${(e.initials||'---').slice(0,10).toUpperCase()}     ${Number(e.score||0).toLocaleString()}`;ctx.fillText(row,W/2,panelY+50+i*rowH);}}else{ctx.fillStyle='rgba(244,232,208,.72)';ctx.fillText('No global scores yet',W/2,panelY+58);}
+  const preview=(globalScores&&globalScores.length?globalScores:localScores).slice(0,5), panelW=Math.min(W*.90,720), rowH=Math.max(32,Math.min(46,H*.043)), panelH=70+rowH*5, panelX=(W-panelW)/2, panelY=startY+btnH+26;
+  // titleScoresPanelLarge: the score panel is now the only title-screen global scores affordance.
+  const pg=ctx.createLinearGradient(panelX,panelY,panelX,panelY+panelH);pg.addColorStop(0,'rgba(42,24,8,.78)');pg.addColorStop(1,'rgba(5,10,18,.82)');ctx.fillStyle=pg;roundRect(ctx,panelX,panelY,panelW,panelH,16);ctx.fill();ctx.strokeStyle='rgba(255,218,130,.72)';ctx.lineWidth=3.2;roundRect(ctx,panelX,panelY,panelW,panelH,16);ctx.stroke();ctx.strokeStyle='rgba(255,255,255,.22)';ctx.lineWidth=1.2;roundRect(ctx,panelX+8,panelY+8,panelW-16,panelH-16,11);ctx.stroke();
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(25,Math.min(40,W*.040))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FFD35A';ctx.shadowBlur=12;ctx.fillStyle='#FFE7A8';ctx.fillText('TOP GLOBAL SCORES',W/2,panelY+35);ctx.shadowBlur=0;
+  ctx.font=`900 ${Math.max(22,Math.min(34,W*.032))}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#F8ECD2';if(preview.length){for(let i=0;i<preview.length;i++){const e=preview[i];const row=`${i+1}.  ${(e.initials||'---').slice(0,10).toUpperCase()}     ${Number(e.score||0).toLocaleString()}`;ctx.fillText(row,W/2,panelY+74+i*rowH);}}else{ctx.fillStyle='rgba(244,232,208,.78)';ctx.fillText('No global scores yet',W/2,panelY+90);}
+  addButton('scoresPanel',panelX-12,panelY-12,panelW+24,panelH+24,()=>{showingLeaderboard=true;state='leaderboard';fetchGlobalScores()});
 
   // titleHelpButtonOnly: remove extra footer boxes and keep one large readable HELP control.
   const helpW=Math.min(W*.54,360), helpH=Math.max(64,Math.min(86,H*.078));
-  const helpX=W/2-helpW/2, helpY=Math.min(H-helpH-34,panelY+panelH+38);
+  const helpX=W/2-helpW/2, helpY=Math.min(H-helpH-24,panelY+panelH+24);
   const hg=ctx.createLinearGradient(helpX,helpY,helpX,helpY+helpH);hg.addColorStop(0,'rgba(255,232,160,.30)');hg.addColorStop(1,'rgba(22,10,4,.82)');ctx.fillStyle=hg;roundRect(ctx,helpX,helpY,helpW,helpH,17);ctx.fill();
   ctx.strokeStyle='rgba(255,224,145,.82)';ctx.lineWidth=3.2;roundRect(ctx,helpX,helpY,helpW,helpH,17);ctx.stroke();ctx.strokeStyle='rgba(255,255,255,.28)';ctx.lineWidth=1.2;roundRect(ctx,helpX+7,helpY+7,helpW-14,helpH-14,12);ctx.stroke();
   ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(30,Math.min(48,helpH*.52,W*.052))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FFD35A';ctx.shadowBlur=12;ctx.fillStyle='#FFF0B8';ctx.fillText('?  HELP',W/2,helpY+helpH/2+1);ctx.shadowBlur=0;
