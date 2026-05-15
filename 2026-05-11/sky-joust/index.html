@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.58';
+const VERSION = 'v3.1.59';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1481,6 +1481,45 @@ function waveTheme(w=wave){
   return {name:'SKY DUEL',sub:'Take the high lance.',color:'#72E7FF'};
 }
 
+function playerClearOfPlatform(x,y){
+  for(const p of platforms){
+    if(p.broken)continue;
+    const overlaps=x+PLAYER_W*.45>p.x&&x-PLAYER_W*.45<p.x+p.w&&y+PLAYER_H>p.y-8&&y<p.y+p.h+18;
+    if(overlaps)return false;
+  }
+  return true;
+}
+function enemySpawnClearanceScore(x,y){
+  let best=Infinity;
+  for(const e of enemies){
+    const dx=x-e.x, dy=y-e.y;
+    best=Math.min(best,dx*dx+dy*dy);
+  }
+  return best;
+}
+function movePlayerToSafeAir(reason=''){
+  if(!player)return;
+  const tooClose=enemies.some(e=>Math.hypot(player.x-e.x,player.y-e.y)<210);
+  if(!tooClose&&player.y+PLAYER_H<lavaY-135&&playerClearOfPlatform(player.x,player.y))return false;
+  const xs=[0.18,0.32,0.50,0.68,0.82], ys=[0.22,0.30,0.38,0.46];
+  let best={x:W/2,y:H*.31,score:-1};
+  for(const yy of ys){
+    for(const xx of xs){
+      const x=W*xx+(Math.random()-0.5)*28;
+      const y=Math.min(lavaY-PLAYER_H-150,H*yy+(Math.random()-0.5)*20);
+      if(!playerClearOfPlatform(x,y))continue;
+      const edgePenalty=Math.min(x,W-x)*12;
+      const lavaPenalty=Math.max(0,lavaY-(y+PLAYER_H)-110)*5;
+      const score=enemySpawnClearanceScore(x,y)+edgePenalty+lavaPenalty;
+      if(score>best.score)best={x,y,score};
+    }
+  }
+  player.x=best.x;player.y=best.y;player.vx=0;player.vy=0;
+  invincTimer=Math.max(invincTimer,2.0);
+  if(reason)addScorePopup(player.x,player.y-34,reason,'#B9F8FF');
+  return true;
+}
+
 // --- Feather particles ---
 function burstFeathers(x,y,color,count){
   count=Math.max(4,count||12);
@@ -1838,12 +1877,13 @@ function playerDie(){
 }
 
 function respawnPlayer(){
-  // Respawn in open air near center instead of snapping to a platform.
+  // Respawn in open air and away from active enemies.
   player.x=W/2+(Math.random()-0.5)*Math.min(180,W*0.28);
   player.y=H*0.34+(Math.random()-0.5)*Math.min(90,H*0.16);
   player.vx=0;player.vy=0;
   invincTimer=2.0;
   state='playing';
+  movePlayerToSafeAir('SAFE DROP');
 }
 
 // --- Update ---
@@ -1895,6 +1935,7 @@ function update(dt){
       if(waveTransTimer<=0){
         state='playing';
         spawnWaveEnemies();
+        movePlayerToSafeAir('CLEAR START');
         if(wave>=3){pteroTimer=8+Math.random()*6;pteroWarnTimer=Math.max(0,pteroTimer-2.2);pteroWarnActive=false;}
       }
     }
@@ -2073,6 +2114,14 @@ function update(dt){
           // like jousters instead of bobbing vertically in place.
           targetVx+=Math.sign(dx||e.ai.wander||1)*Math.min(95,altitudePressure*42);
         }
+        // Smarter passes: if an enemy already has height, it commits to a crossing
+        // lane instead of hovering straight below the player.
+        if(e.y<player.y-70&&Math.abs(dx)<180&&distToLava>160){
+          const passDir=Math.sign(dx||e.ai.ambushSide||e.ai.evadeDir||1);
+          const passPush=e.type==='bounder'?42:e.type==='hunter'?68:92;
+          targetVx+=passDir*passPush;
+          if(e.type!=='bounder')e.vy+=GRAVITY*dt*(e.type==='shadow'?0.16:0.08);
+        }
         // Subtle evasion: when the player is bearing down from above, enemies sidestep
         // just enough that they stop stacking directly underneath the player.
         const closeX=Math.abs(dx), closeY=Math.abs(dy);
@@ -2084,6 +2133,23 @@ function update(dt){
           const typeEvade=e.type==='bounder'?58:e.type==='hunter'?76:96;
           targetVx+=e.ai.evadeDir*typeEvade*(0.35+danger*0.65);
           if(e.type==='hunter')targetVx+=e.ai.evadeDir*22*Math.sin(gameTime*5+e.ai.personalityPhase);
+        }
+        // Mild flock spacing keeps enemies from clumping into one dumb stack.
+        for(const other of enemies){
+          if(other===e)continue;
+          const ox=e.x-other.x, oy=e.y-other.y;
+          if(Math.abs(ox)<82&&Math.abs(oy)<78){
+            targetVx+=Math.sign(ox||e.ai.evadeDir||1)*(e.type==='shadow'?46:34);
+            if(e.y>other.y-10&&distToLava>135)wantFlap=true;
+          }
+        }
+        // Hunters and shadows notice exposed eggs and bias toward defending that lane.
+        if(e.type!=='bounder'&&eggs.length>0){
+          let guarded=null,best=Infinity;
+          for(const eg of eggs){if(!eg.landed)continue;const d=Math.abs(eg.x-e.x)+Math.abs(eg.y-e.y)*0.35;if(d<best){best=d;guarded=eg;}}
+          if(guarded&&Math.abs(player.x-guarded.x)<190&&Math.abs(e.x-guarded.x)>58){
+            targetVx+=(guarded.x-e.x)*(e.type==='shadow'?0.62:0.42);
+          }
         }
       }
       // Shelf-avoidance AI: if an enemy is trying to flap into the underside of a platform,
