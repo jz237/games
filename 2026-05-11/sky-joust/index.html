@@ -19,12 +19,13 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.55';
+const VERSION = 'v3.1.56';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
 const TITLE_CABINET_ART_SRC = 'assets/title-cabinet-art.png';
 const TITLE_VOLCANO_BG_SRC = 'assets/title-volcano-bg.png';
+const GAMEPLAY_CAVERN_BG_SRC = 'assets/gameplay-cavern-bg.png';
 const titleCabinetArt = {img:new Image(),loaded:false,failed:false};
 titleCabinetArt.img.onload=()=>{titleCabinetArt.loaded=true;};
 titleCabinetArt.img.onerror=()=>{titleCabinetArt.failed=true;};
@@ -33,6 +34,10 @@ const titleVolcanoBg={img:new Image(),loaded:false,failed:false};
 titleVolcanoBg.img.onload=()=>{titleVolcanoBg.loaded=true;};
 titleVolcanoBg.img.onerror=()=>{titleVolcanoBg.failed=true;};
 titleVolcanoBg.img.src=TITLE_VOLCANO_BG_SRC;
+const gameplayCavernBg={img:new Image(),loaded:false,failed:false};
+gameplayCavernBg.img.onload=()=>{gameplayCavernBg.loaded=true;};
+gameplayCavernBg.img.onerror=()=>{gameplayCavernBg.failed=true;};
+gameplayCavernBg.img.src=GAMEPLAY_CAVERN_BG_SRC;
 
 // --- Resize ---
 let W = 0, H = 0;
@@ -2376,16 +2381,40 @@ function drawGlowLine(x1,y1,x2,y2,color,width=2,blur=10){
 }
 function drawSoftDisc(x,y,r,color){ctx.save();ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,color);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.restore();}
 
-function drawBG(){
-  // Premium sci-fi cavern grade: darker near-black navy walls with restrained lava bounce.
-  const sky=ctx.createLinearGradient(0,0,0,H);
-  sky.addColorStop(0,'#000105');sky.addColorStop(.24,'#01050D');sky.addColorStop(.58,'#020711');sky.addColorStop(.80,'#080609');sky.addColorStop(1,'#130302');
-  ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+function drawGameplayCavernBackdrop(){
+  if(!gameplayCavernBg.loaded)return false;
+  const img=gameplayCavernBg.img;
+  const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
+  if(!iw||!ih)return false;
+  ctx.save();
+  ctx.imageSmoothingEnabled=true;
+  const scale=Math.max(W/iw,H/ih);
+  const dw=iw*scale, dh=ih*scale;
+  // Keep the supplied lava lake low in the arena so platforms/readability stay centered.
+  ctx.drawImage(img,(W-dw)/2,(H-dh)*0.58,dw,dh);
+  // Gameplay grade: darker top/corners, subtle lava warmth, clear central playfield.
+  let g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'rgba(0,0,0,.58)');g.addColorStop(.30,'rgba(0,4,10,.22)');g.addColorStop(.64,'rgba(0,0,0,.10)');g.addColorStop(1,'rgba(0,0,0,.20)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  const vg=ctx.createRadialGradient(W*.5,H*.40,Math.min(W,H)*.16,W*.5,H*.44,Math.max(W,H)*.74);
+  vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(.70,'rgba(0,0,0,.10)');vg.addColorStop(1,'rgba(0,0,0,.62)');ctx.fillStyle=vg;ctx.fillRect(0,0,W,H);
+  const cool=ctx.createRadialGradient(W*.5,H*.14,20,W*.5,H*.18,Math.max(W,H)*.42);
+  cool.addColorStop(0,'rgba(95,170,190,.14)');cool.addColorStop(.48,'rgba(40,80,105,.06)');cool.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=cool;ctx.fillRect(0,0,W,H*.72);
+  ctx.restore();
+  return true;
+}
 
-  // Deep central void so characters/platforms pop against a darker, cleaner backdrop.
-  const voidG=ctx.createRadialGradient(W*.5,H*.36,Math.min(W,H)*.05,W*.5,H*.42,Math.max(W,H)*.66);
-  voidG.addColorStop(0,'rgba(1,8,18,.22)');voidG.addColorStop(.42,'rgba(0,2,7,.48)');voidG.addColorStop(1,'rgba(0,0,0,.86)');
-  ctx.fillStyle=voidG;ctx.fillRect(0,0,W,H);
+function drawBG(){
+  if(!drawGameplayCavernBackdrop()){
+    // Premium sci-fi cavern grade fallback: darker near-black navy walls with restrained lava bounce.
+    const sky=ctx.createLinearGradient(0,0,0,H);
+    sky.addColorStop(0,'#000105');sky.addColorStop(.24,'#01050D');sky.addColorStop(.58,'#020711');sky.addColorStop(.80,'#080609');sky.addColorStop(1,'#130302');
+    ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+
+    // Deep central void so characters/platforms pop against a darker, cleaner backdrop.
+    const voidG=ctx.createRadialGradient(W*.5,H*.36,Math.min(W,H)*.05,W*.5,H*.42,Math.max(W,H)*.66);
+    voidG.addColorStop(0,'rgba(1,8,18,.22)');voidG.addColorStop(.42,'rgba(0,2,7,.48)');voidG.addColorStop(1,'rgba(0,0,0,.86)');
+    ctx.fillStyle=voidG;ctx.fillRect(0,0,W,H);
+  }
 
   // Massive beveled sci-fi wall slabs at the sides; angular, not vine-like clutter.
   ctx.save();
