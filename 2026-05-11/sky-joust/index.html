@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.42';
+const VERSION = 'v3.1.43';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -3265,15 +3265,16 @@ function drawDualLeaderboard(startY,opts={}){
   const total=colW*2+gap, localX=(W-total)/2, globalX=localX+colW+gap;
   const rowH=large?Math.max(72,Math.min(105,H*0.052)):(compact?Math.max(30,Math.min(42,H*0.036)):Math.max(22,Math.min(30,H*0.032)));
   const headerSize=large?Math.max(48,Math.min(82,W*0.050)):(compact?Math.max(22,Math.min(34,W*0.032)):Math.max(16,W*0.024));
-  const bodySize=large?Math.max(34,Math.min(58,W*0.035)):(compact?Math.max(17,Math.min(25,W*0.024)):Math.max(12,Math.min(17,W*0.019)));
+  const bodySize=large?Math.max(30,Math.min(50,W*0.031)):(compact?Math.max(17,Math.min(25,W*0.024)):Math.max(12,Math.min(17,W*0.019)));
   const cardH=rowH*rows+headerSize*(large?1.85:1.65)+(large?42:30);
   function drawCard(x,title,color,list,isLocal){
     ctx.save();
-    const cg=ctx.createLinearGradient(x,startY-30,x,startY+cardH);cg.addColorStop(0,large?'rgba(18,30,46,.94)':'rgba(20,22,32,.92)');cg.addColorStop(.55,'rgba(7,10,20,.91)');cg.addColorStop(1,large?'rgba(16,5,5,.94)':'rgba(3,4,10,.88)');
-    ctx.fillStyle=cg;roundRect(ctx,x,startY-30,colW,cardH,large?24:18);ctx.fill();
-    ctx.save();ctx.globalCompositeOperation='lighter';ctx.shadowColor=color;ctx.shadowBlur=large?22:14;ctx.strokeStyle=color;ctx.globalAlpha=large?.72:.78;ctx.lineWidth=large?4:3;roundRect(ctx,x,startY-30,colW,cardH,large?24:18);ctx.stroke();ctx.restore();
-    ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1.5;roundRect(ctx,x+8,startY-22,colW-16,cardH-16,large?18:14);ctx.stroke();
-    if(large){const sheen=ctx.createLinearGradient(x,startY-28,x,startY+cardH*.34);sheen.addColorStop(0,'rgba(255,255,255,.10)');sheen.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=sheen;roundRect(ctx,x+10,startY-20,colW-20,cardH*.36,18);ctx.fill();}
+    const cardTop=startY-headerSize*(large?.70:.55);
+    const cg=ctx.createLinearGradient(x,cardTop,x,cardTop+cardH);cg.addColorStop(0,large?'rgba(18,30,46,.94)':'rgba(20,22,32,.92)');cg.addColorStop(.55,'rgba(7,10,20,.91)');cg.addColorStop(1,large?'rgba(16,5,5,.94)':'rgba(3,4,10,.88)');
+    ctx.fillStyle=cg;roundRect(ctx,x,cardTop,colW,cardH,large?24:18);ctx.fill();
+    ctx.save();ctx.globalCompositeOperation='lighter';ctx.shadowColor=color;ctx.shadowBlur=large?22:14;ctx.strokeStyle=color;ctx.globalAlpha=large?.72:.78;ctx.lineWidth=large?4:3;roundRect(ctx,x,cardTop,colW,cardH,large?24:18);ctx.stroke();ctx.restore();
+    ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1.5;roundRect(ctx,x+8,cardTop+8,colW-16,cardH-16,large?18:14);ctx.stroke();
+    if(large){const sheen=ctx.createLinearGradient(x,cardTop+2,x,cardTop+cardH*.34);sheen.addColorStop(0,'rgba(255,255,255,.10)');sheen.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=sheen;roundRect(ctx,x+10,cardTop+10,colW-20,cardH*.36,18);ctx.fill();}
     ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${headerSize}px Arial Black, Impact, sans-serif`;ctx.shadowColor=color;ctx.shadowBlur=large?24:14;ctx.fillStyle=color;ctx.fillText(title,x+colW/2,startY-6);
     ctx.shadowBlur=0;ctx.textAlign='left';ctx.font=`900 ${bodySize}px Arial, sans-serif`;
     const icons=['👑','🥈','🥉','✦','✦','✦','✦','✦','✦','✦'];
@@ -3288,9 +3289,17 @@ function drawDualLeaderboard(startY,opts={}){
       const rank=String(i+1).padStart(2,' ');
       if(e){
         const initials=(e.initials||'???').slice(0,3).toUpperCase();
-        const sc=Number(e.score||0).toLocaleString(), wv=e.wave||'?';
-        ctx.fillText(`${rank}. ${icons[i]}  ${initials}`,x+(large?28:14),y);
-        ctx.textAlign='right';ctx.fillText(`${sc}   W${wv}`,x+colW-(large?28:14),y);ctx.textAlign='left';
+        const leftText=`${rank}. ${icons[i]}  ${initials}`;
+        const rightText=`${Number(e.score||0).toLocaleString()}   W${e.wave||'?'}`;
+        const leftX=x+(large?26:14), rightX=x+colW-(large?22:14);
+        const available=Math.max(90,rightX-leftX-(large?18:10));
+        const startPx=bodySize, minPx=large?Math.max(24,bodySize*.66):Math.max(10,bodySize*.72);
+        let size=bodySize;
+        ctx.font=`900 ${size}px Arial, sans-serif`;
+        while(size>minPx&&ctx.measureText(leftText).width+ctx.measureText(rightText).width>available){size-=1;ctx.font=`900 ${size}px Arial, sans-serif`;}
+        ctx.fillText(leftText,leftX,y);
+        ctx.textAlign='right';ctx.fillText(rightText,rightX,y);ctx.textAlign='left';
+        ctx.font=`900 ${bodySize}px Arial, sans-serif`;
       }else ctx.fillText(`${rank}. ${icons[i]}  ---`,x+(large?28:14),y);
       ctx.shadowBlur=0;
     }
@@ -3319,18 +3328,23 @@ function drawHelpScreen(){
     ['⬅️ ➡️','Hold either side to flap and steer.'],
     ['⬆️','Higher rider wins. Get above enemies.'],
     ['🥚','Grab eggs before they hatch.'],
-    ['🔥','Avoid lava, pterodactyls, and fragile platforms.'],
+    ['🔥','Avoid lava, pterodactyls, and cracked ledges.'],
     ['⚔️','Chain quick kills for combo bonuses.']
   ];
   const rowH=Math.max(90,Math.min(142,panelH*.112));
   const listTop=y+panelH*.245;
-  const textSize=Math.max(42,Math.min(64,W*.040));
+  const textSize=Math.max(36,Math.min(58,W*.035));
   for(let i=0;i<rules.length;i++){
     const ry=listTop+i*rowH;
     const rx=x+panelW*.075, rw=panelW*.85;
     ctx.fillStyle=i%2?'rgba(255,255,255,.035)':'rgba(255,215,90,.055)';roundRect(ctx,rx,ry-rowH*.38,rw,rowH*.78,14);ctx.fill();
-    ctx.textAlign='center';ctx.font=`900 ${Math.max(42,Math.min(70,W*.045))}px Arial, sans-serif`;ctx.fillStyle='#FFD66D';ctx.fillText(rules[i][0],rx+rw*.10,ry);
-    ctx.textAlign='left';ctx.font=`850 ${textSize}px Arial, sans-serif`;ctx.fillStyle='#F2F7FF';ctx.shadowColor='rgba(0,0,0,.9)';ctx.shadowBlur=8;ctx.fillText(rules[i][1],rx+rw*.18,ry+2);ctx.shadowBlur=0;
+    const iconCx=rx+rw*.10;
+    ctx.textAlign='center';ctx.font=`900 ${Math.max(42,Math.min(70,W*.045))}px Arial, sans-serif`;ctx.fillStyle='#FFD66D';ctx.fillText(rules[i][0],iconCx,ry);
+    const tx=rx+rw*.18, maxTextW=rx+rw-tx-26;
+    let fs=textSize;ctx.textAlign='left';ctx.font=`850 ${fs}px Arial, sans-serif`;
+    while(fs>30&&ctx.measureText(rules[i][1]).width>maxTextW){fs-=1;ctx.font=`850 ${fs}px Arial, sans-serif`;}
+    ctx.save();ctx.beginPath();ctx.rect(tx-4,ry-rowH*.36,maxTextW+8,rowH*.72);ctx.clip();
+    ctx.fillStyle='#F2F7FF';ctx.shadowColor='rgba(0,0,0,.9)';ctx.shadowBlur=8;ctx.fillText(rules[i][1],tx,ry+2);ctx.restore();ctx.shadowBlur=0;
   }
   const btnW=Math.min(620,W*.58), btnH=Math.max(120,Math.min(170,H*.105)), bx=W/2-btnW/2, by=y+panelH-btnH-62;
   const bg=ctx.createLinearGradient(bx,by,bx,by+btnH);bg.addColorStop(0,'rgba(255,224,130,.46)');bg.addColorStop(1,'rgba(128,58,5,.78)');ctx.fillStyle=bg;roundRect(ctx,bx,by,btnW,btnH,20);ctx.fill();
@@ -3419,6 +3433,12 @@ function roundRect(ctx,x,y,w,h,r){
   ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
   ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);
   ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
+}
+function fitCanvasText(text,maxWidth,startPx,minPx,fontTail){
+  let size=startPx;
+  ctx.font=`900 ${size}px ${fontTail}`;
+  while(size>minPx&&ctx.measureText(text).width>maxWidth){size-=1;ctx.font=`900 ${size}px ${fontTail}`;}
+  return size;
 }
 
 // --- Main loop ---
