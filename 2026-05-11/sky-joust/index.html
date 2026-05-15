@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.57';
+const VERSION = 'v3.1.58';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -156,6 +156,7 @@ function sfxTroll(){playTone(70,0.32,'sawtooth',0.11,38,0);playTone(180,0.2,'squ
 function sfxPteroWarn(){playTone(55,0.55,'sine',0.075,42,0);playWarble(420,1450,260,0.68,'sawtooth',0.095,0.02);playWarble(1120,2400,760,0.46,'triangle',0.07,0.10);playNoiseSweep(0.42,0.072,240,3400,0.04,'bandpass');playNoiseSweep(0.24,0.04,90,420,0.08,'lowpass')}
 function sfxCombo(n){playTone(720+n*70,0.045,'square',0.07,1200+n*80,0);playTone(1080+n*90,0.05,'triangle',0.06,1700+n*100,0.035);if(n>=4)playNoise(0.08,0.035,3600,0.02)}
 function sfxLavaEggBurn(){playTone(210,0.12,'sawtooth',0.055,80,0);playNoiseSweep(0.24,0.075,90,1200,0.01,'lowpass');playNoise(0.10,0.045,2600,0.06);playTone(980,0.05,'triangle',0.028,360,0.08)}
+function sfxEggPanic(){playTone(1320,0.055,'triangle',0.045,1980,0);playTone(660,0.045,'square',0.032,440,0.045)}
 // --- Constants ---
 const GRAVITY = 1200;
 const FLAP_POWER = -340;
@@ -1440,7 +1441,7 @@ function createEnemy(type,x,y){
     type,color:colors[type],glowColor:type==='bounder'?'rgba(0,168,255,0.75)':type==='hunter'?'rgba(255,32,32,0.75)':'rgba(190,0,255,0.8)',
     speed:speeds[type],flapRate:flapRates[type],
     flapCooldown:Math.random()*flapRates[type],
-    ai:{changeTimer:1+Math.random()*2,targetVx:0,wander:(Math.random()-0.5)*160,unstuckTimer:0,unstuckDir:0,personalityPhase:Math.random()*Math.PI*2,ambushSide:Math.random()>0.5?1:-1},
+    ai:{changeTimer:1+Math.random()*2,targetVx:0,wander:(Math.random()-0.5)*160,unstuckTimer:0,unstuckDir:0,personalityPhase:Math.random()*Math.PI*2,ambushSide:Math.random()>0.5?1:-1,evadeDir:Math.random()>0.5?1:-1},
     scoreVal:type==='bounder'?500:type==='hunter'?750:1000
   };
 }
@@ -1470,6 +1471,14 @@ function spawnWaveEnemies(){
     e.invincible=0.5; // brief invincibility on spawn
     enemies.push(e);
   });
+}
+
+function waveTheme(w=wave){
+  if(w>=7&&w%4===0)return {name:'SHADOW DIVE',sub:'Purple riders cut wide angles.',color:'#D96CFF'};
+  if(w>=5&&w%5===0)return {name:'EMBER WAVE',sub:'Cracked ledges and hot rescues.',color:'#FF8A2A'};
+  if(w>=3&&w%3===0)return {name:'HUNTER PAIR',sub:'Red riders flank for height.',color:'#FF5A32'};
+  if(w%2===0)return {name:'EGG RAID',sub:'Rescue eggs before the cave wakes.',color:'#FFE98A'};
+  return {name:'SKY DUEL',sub:'Take the high lance.',color:'#72E7FF'};
 }
 
 // --- Feather particles ---
@@ -1690,7 +1699,7 @@ function dropEgg(x,y,type){
     return;
   }
   // Long hatch timer like arcade Joust — generous pickup window
-  eggs.push({x,y,targetY:landY-14,vy:0,type,hatchTimer:15+Math.random()*5,pulsePhase:0,landed:false});
+  eggs.push({x,y,targetY:landY-14,vy:0,type,hatchTimer:15+Math.random()*5,pulsePhase:0,landed:false,panicChime:0});
 }
 
 // --- Pterodactyl ---
@@ -2064,6 +2073,18 @@ function update(dt){
           // like jousters instead of bobbing vertically in place.
           targetVx+=Math.sign(dx||e.ai.wander||1)*Math.min(95,altitudePressure*42);
         }
+        // Subtle evasion: when the player is bearing down from above, enemies sidestep
+        // just enough that they stop stacking directly underneath the player.
+        const closeX=Math.abs(dx), closeY=Math.abs(dy);
+        const playerAbove=e.y>player.y-18;
+        const playerDropping=(player.vy||0)>-120;
+        if(playerAbove&&playerDropping&&closeX<125&&closeY<210&&!tooLow){
+          if(closeX>18)e.ai.evadeDir=-Math.sign(dx);
+          const danger=1-Math.min(1,closeX/125);
+          const typeEvade=e.type==='bounder'?58:e.type==='hunter'?76:96;
+          targetVx+=e.ai.evadeDir*typeEvade*(0.35+danger*0.65);
+          if(e.type==='hunter')targetVx+=e.ai.evadeDir*22*Math.sin(gameTime*5+e.ai.personalityPhase);
+        }
       }
       // Shelf-avoidance AI: if an enemy is trying to flap into the underside of a platform,
       // slide toward the nearest edge instead of hovering under it forever.
@@ -2172,6 +2193,7 @@ function update(dt){
             bumpScore(e.scoreVal,e.x,e.y,'+'+e.scoreVal,e.type==='shadow'?'#FF44FF':'#FFD700');
             waveKills++;
             registerJoustKill(e.x,e.y,e.type);
+            addScorePopup((player.x+e.x)/2,Math.min(player.y,e.y)-36,'HIGH HIT','#7CFF8A');
             sfxScore();
             sfxKill();
             createImpactBurst((player.x+e.x)/2,(player.y+e.y)/2,player.facing||1,e.color);
@@ -2186,9 +2208,12 @@ function update(dt){
             state='playing'; // stay playing, but add a micro-pause via shake
           } else if(enemyMid<playerMid){
             // Enemy is higher → enemy wins
+            createImpactBurst((player.x+e.x)/2,(player.y+e.y)/2,e.facing||1,'#FF3A30');
+            addScorePopup((player.x+e.x)/2,Math.min(player.y,e.y)-36,'LOW HIT','#FFB38A');
             playerDie();return;
           } else {
             // Same height → bounce apart
+            addScorePopup((player.x+e.x)/2,Math.min(player.y,e.y)-34,'EVEN','#FFF08A');
             player.vx+=dx*3;player.vy-=80;
             e.vx-=dx*3;e.vy-=80;
           }
@@ -2202,6 +2227,8 @@ function update(dt){
       if(!eg.landed){
         eg.vy+=GRAVITY*dt*0.5;
         eg.y+=eg.vy*dt;
+        if(eg.y>lavaY-155&&eg.panicChime<=0){eg.panicChime=0.8;sfxEggPanic();}
+        if(eg.panicChime>0)eg.panicChime-=dt;
         if(eg.y>=lavaY-8){burnEggInLava(eg);eggs.splice(i,1);continue;}
         if(eg.y>=eg.targetY){eg.y=eg.targetY;eg.landed=true;eg.vy=0;}
       }
@@ -2924,13 +2951,29 @@ function upcomingEnemyMix(){
 function drawEggs(){
   for(const eg of eggs){
     const near=eg.hatchTimer<3;
+    const falling=!eg.landed&&eg.y<lavaY-8;
+    const danger=falling?Math.max(0,1-(lavaY-eg.y)/170):0;
     const rate=near?18:4;
     const pulse=1+(near?0.13:0.06)*Math.sin(gameTime*rate+eg.pulsePhase);
     const speck=eg.type==='hunter'?'#E33114':eg.type==='shadow'?'#7A23D9':'#1E86FF';
     const speck2=eg.type==='hunter'?'#FF9C3B':eg.type==='shadow'?'#CA73FF':'#73CFFF';
     const glow=near?0.52+0.32*Math.sin(gameTime*18):0.18+0.08*Math.sin(eg.pulsePhase);
+    if(falling&&danger>0){
+      ctx.save();ctx.globalCompositeOperation='lighter';
+      const trail=ctx.createLinearGradient(eg.x,eg.y-10,eg.x,Math.min(lavaY,eg.y+115));
+      trail.addColorStop(0,`rgba(255,245,150,${0.34+danger*.28})`);
+      trail.addColorStop(1,'rgba(255,80,0,0)');
+      ctx.strokeStyle=trail;ctx.lineWidth=8+danger*8;ctx.beginPath();ctx.moveTo(eg.x,eg.y-4);ctx.quadraticCurveTo(eg.x+Math.sin(gameTime*12+eg.pulsePhase)*16,eg.y+45,eg.x,Math.min(lavaY,eg.y+110));ctx.stroke();
+      ctx.textAlign='center';ctx.font=`900 ${Math.max(11,W*.015)}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FF4A00';ctx.shadowBlur=12;ctx.fillStyle=`rgba(255,240,180,${0.75+0.22*Math.sin(gameTime*18)})`;ctx.fillText('SAVE!',eg.x,eg.y-34);
+      ctx.restore();
+    }
     ctx.save();
     ctx.globalCompositeOperation='lighter';ctx.fillStyle=`rgba(255,225,110,${Math.max(0,glow)})`;ctx.beginPath();ctx.arc(eg.x,eg.y,31*pulse,0,Math.PI*2);ctx.fill();ctx.restore();
+    if(eg.landed){
+      ctx.save();ctx.globalCompositeOperation='lighter';
+      ctx.strokeStyle=`rgba(255,232,115,${0.22+0.18*Math.sin(gameTime*8+eg.pulsePhase)})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(eg.x,eg.y,37+4*Math.sin(gameTime*5+eg.pulsePhase),0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+    }
     ctx.save();ctx.translate(eg.x,eg.y);ctx.scale(pulse,pulse);
     const g=ctx.createLinearGradient(-10,-18,12,18);g.addColorStop(0,'#FFF8DD');g.addColorStop(.55,'#F7EDC8');g.addColorStop(1,'#E6D8A6');
     ctx.fillStyle=g;ctx.strokeStyle='#6A5B3E';ctx.lineWidth=2.4;
@@ -3059,16 +3102,18 @@ function drawKnightHeadIcon(x,y,s,flash){
 function drawWaveClarity(){
   if(state==='waveTrans'){
     const mix=upcomingEnemyMix();
+    const theme=waveTheme();
     ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
     const y=H*.82, cardW=Math.min(W*.78,620), cardH=Math.max(76,H*.085), x=W/2-cardW/2;
     const cg=ctx.createLinearGradient(x,y-cardH/2,x,y+cardH/2);cg.addColorStop(0,'rgba(8,18,32,.72)');cg.addColorStop(1,'rgba(42,14,5,.58)');
     ctx.fillStyle=cg;roundRect(ctx,x,y-cardH/2,cardW,cardH,14);ctx.fill();
     ctx.strokeStyle='rgba(255,205,90,.42)';ctx.lineWidth=2;roundRect(ctx,x,y-cardH/2,cardW,cardH,14);ctx.stroke();
     ctx.font=`900 ${Math.max(13,W*.021)}px Arial Black, Impact, sans-serif`;
-    ctx.fillStyle='#FFF2B8';ctx.shadowColor='#FF7A00';ctx.shadowBlur=12;ctx.fillText('INCOMING RIDERS',W/2,y-cardH*.22);
-    ctx.shadowBlur=0;ctx.font=`800 ${Math.max(12,W*.018)}px Arial, sans-serif`;
+    ctx.fillStyle=theme.color;ctx.shadowColor=theme.color;ctx.shadowBlur=12;ctx.fillText(theme.name,W/2,y-cardH*.25);
+    ctx.shadowBlur=0;ctx.font=`800 ${Math.max(11,W*.016)}px Arial, sans-serif`;
     const text=mix.map(e=>`${enemyLabel(e.type)} ×${e.count}`).join('   ');
-    ctx.fillStyle='rgba(215,238,255,.92)';ctx.fillText(text,W/2,y+cardH*.22);
+    ctx.fillStyle='rgba(230,246,255,.88)';ctx.fillText(theme.sub,W/2,y+cardH*.08);
+    ctx.font=`900 ${Math.max(11,W*.016)}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(255,242,190,.92)';ctx.fillText(text,W/2,y+cardH*.34);
     ctx.restore();
   }
   if(state==='playing'&&enemies.length+eggs.length>0&&enemies.length+eggs.length<=2){
@@ -3280,6 +3325,7 @@ function drawWaveTrans(){
   const dg=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.12,W/2,H/2,Math.max(W,H)*0.72);
   dg.addColorStop(0,'rgba(0,0,0,0.05)');dg.addColorStop(.62,'rgba(0,0,0,0.20)');dg.addColorStop(1,'rgba(0,0,0,0.56)');ctx.fillStyle=dg;ctx.fillRect(0,0,W,H);
   const elapsed=3-waveTransTimer;
+  const theme=waveTheme();
   const burn=Math.max(0,1-Math.min(1,elapsed/0.75));
   const titleSize=Math.max(42,W*0.078)*(1+burn*0.38);
   ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
@@ -3287,6 +3333,10 @@ function drawWaveTrans(){
   ctx.shadowColor='#FF5A00';ctx.shadowBlur=22;ctx.fillStyle='#8B3100';ctx.fillText(`WAVE ${wave}`,W/2,H*0.34);
   ctx.shadowColor='#FFD700';ctx.shadowBlur=12;ctx.fillStyle='#FFD700';ctx.fillText(`WAVE ${wave}`,W/2,H*0.34);
   ctx.shadowColor='#FFFFFF';ctx.shadowBlur=3;ctx.fillStyle='#FFF3B0';ctx.fillText(`WAVE ${wave}`,W/2,H*0.34);
+  ctx.font=`900 ${Math.max(24,Math.min(42,W*.040))}px Arial Black, Impact, sans-serif`;
+  ctx.shadowColor=theme.color;ctx.shadowBlur=14;ctx.fillStyle=theme.color;ctx.fillText(theme.name,W/2,H*0.415);
+  ctx.font=`800 ${Math.max(14,Math.min(22,W*.022))}px Arial, sans-serif`;
+  ctx.shadowBlur=0;ctx.fillStyle='rgba(230,246,255,.88)';ctx.fillText(theme.sub,W/2,H*0.462);
   const countNum=Math.ceil(waveCountdown);
   if(lastWaveStats){
     // largeBetweenLevelStats: readable wave-clear card instead of tiny text above countdown.
