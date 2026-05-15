@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.43';
+const VERSION = 'v3.1.44';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1435,7 +1435,7 @@ function createEnemy(type,x,y){
     type,color:colors[type],glowColor:type==='bounder'?'rgba(0,168,255,0.75)':type==='hunter'?'rgba(255,32,32,0.75)':'rgba(190,0,255,0.8)',
     speed:speeds[type],flapRate:flapRates[type],
     flapCooldown:Math.random()*flapRates[type],
-    ai:{changeTimer:1+Math.random()*2,targetVx:0,wander:(Math.random()-0.5)*160,unstuckTimer:0,unstuckDir:0},
+    ai:{changeTimer:1+Math.random()*2,targetVx:0,wander:(Math.random()-0.5)*160,unstuckTimer:0,unstuckDir:0,personalityPhase:Math.random()*Math.PI*2,ambushSide:Math.random()>0.5?1:-1},
     scoreVal:type==='bounder'?500:type==='hunter'?750:1000
   };
 }
@@ -1596,9 +1596,8 @@ function burnEggInLava(eg){
 }
 
 function clearStaleWaveBlockers(reason=''){
-  // waveClearFailsafe: invisible/stale eggs or invalid enemies must never strand a wave.
-  for(const eg of eggs)burnEggInLava(eg);
-  eggs=[];
+  // waveClearFailsafe: never erase valid landed eggs. Eggs are objectives until collected or burned in lava.
+  for(let i=eggs.length-1;i>=0;i--){const eg=eggs[i];if(!Number.isFinite(eg.x)||!Number.isFinite(eg.y)||eg.y>=lavaY-18||eg.y>H+80){burnEggInLava(eg);eggs.splice(i,1);}}
   enemies=enemies.filter(e=>Number.isFinite(e.x)&&Number.isFinite(e.y)&&e.y<H+PLAYER_H*4&&e.y> -H);
   if(reason&&player)addScorePopup(player.x,Math.max(80,player.y-40),reason,'#FFF2A8');
 }
@@ -1963,7 +1962,7 @@ function update(dt){
       if(player){
         if(e.type==='bounder'){
           // Bounders: basic jousters. They drift toward you and slowly try to get a modest height edge.
-          targetVx=dx*0.72+e.ai.wander;
+          targetVx=dx*0.58+e.ai.wander*1.15+Math.sin(gameTime*.9+e.ai.personalityPhase)*34;
           const desiredAbove=34;
           altitudePressure=(e.y-(player.y-desiredAbove))/120;
           if(altitudePressure>0.18&&distToLava>105)wantFlap=true;
@@ -1971,7 +1970,8 @@ function update(dt){
           if(e.y<player.y-92&&distToLava>145)wantFlap=false; // high enough: drop back into the joust
         } else if(e.type==='hunter'){
           // Hunters: apply steady altitude pressure, but no longer snap/hover into unbeatable height.
-          const ahead=(player.x+player.vx*0.14)-e.x;
+          const flank=Math.sign(dx||e.ai.ambushSide||1)*Math.min(80,Math.abs(dx)*0.18);
+          const ahead=(player.x+player.vx*0.14+flank)-e.x;
           targetVx=ahead*1.34+Math.sign(ahead||dx||1)*24;
           const desiredAbove=58;
           altitudePressure=(e.y-(player.y-desiredAbove))/135;
@@ -1979,8 +1979,10 @@ function update(dt){
           if(e.y<player.y-96&&distToLava>155)wantFlap=false; // above enough: dive back in sooner
         } else {
           // Shadows: late-game elites — stronger altitude pressure and wider intercepts.
-          const ahead=(player.x+player.vx*0.38)-e.x;
-          targetVx=ahead*2.55+Math.sign(ahead||dx||1)*110;
+          if(Math.abs(dx)<95&&e.y<player.y-40)e.ai.ambushSide*=-1;
+          const ambushX=player.x+e.ai.ambushSide*(120+36*Math.sin(gameTime*1.2+e.ai.personalityPhase));
+          const ahead=(ambushX+player.vx*0.28)-e.x;
+          targetVx=ahead*2.35+Math.sign(ahead||dx||1)*100;
           const desiredAbove=76;
           altitudePressure=(e.y-(player.y-desiredAbove))/125;
           if(altitudePressure>0.05&&distToLava>135)wantFlap=true;
@@ -2151,6 +2153,9 @@ function update(dt){
           sfxScore();
           sfxEggStomp();
           goldenBurst(eg.x,eg.y); // golden egg collect burst
+          createImpactBurst(eg.x,eg.y,player.facing||1,'#FFE98A');
+          burstFeathers(eg.x,eg.y,eg.type==='hunter'?'#FF8A2A':eg.type==='shadow'?'#D96CFF':'#72E7FF',16);
+          addScorePopup(eg.x,eg.y-38,'EGG SECURED','#FFE98A');
           eggs.splice(i,1);
           player.vy=FLAP_POWER*0.4;
         }
@@ -2219,8 +2224,9 @@ function update(dt){
         if(visuallyEmptyWaveTimer>2.25){forceClearVisiblyEmptyWave('CAVE CLEARED');}
       }else visuallyEmptyWaveTimer=0;
       if(waveAge>3&&enemies.length===0&&eggs.length>0){
+        // EggObjectiveRule: landed eggs on platforms must be picked up; only lava/invalid eggs clear themselves.
         noEnemyEggGraceTimer+=dt;
-        if(noEnemyEggGraceTimer>2.5){clearStaleWaveBlockers('CAVE CLEARED');}
+        if(noEnemyEggGraceTimer>2.8){if(player)addScorePopup(player.x,Math.max(90,player.y-52),'COLLECT EGGS','#FFE98A');noEnemyEggGraceTimer=0;}
       }else noEnemyEggGraceTimer=0;
       if(waveAge>3&&enemies.length===0&&eggs.length===0){
         emptyWaveClearTimer+=dt;
@@ -2545,6 +2551,13 @@ function drawPlatform(p){
   const skirtH=Math.max(10,p.h*.55);const skirt=ctx.createLinearGradient(p.x,p.y+p.h-2,p.x,p.y+p.h+skirtH);skirt.addColorStop(0,'rgba(18,25,34,.92)');skirt.addColorStop(1,'rgba(1,2,5,.95)');ctx.fillStyle=skirt;premiumPanelPath(p.x+5,p.y+p.h-4,p.w-10,skirtH+6,8);ctx.fill();ctx.strokeStyle='rgba(0,0,0,.78)';ctx.lineWidth=2;ctx.stroke();
   ctx.strokeStyle='rgba(0,0,0,.80)';ctx.lineWidth=4;ctx.stroke();
   ctx.strokeStyle='rgba(210,240,255,.34)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(p.x+cut,p.y+3);ctx.lineTo(p.x+p.w-cut,p.y+3);ctx.stroke();
+  // safeTopEdge: bright readable landing lip so platforms are obvious during play.
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  const safe=p.fragile?'rgba(255,190,80,.95)':p.tier==='high'?'rgba(120,235,255,.92)':'rgba(255,170,65,.88)';
+  ctx.strokeStyle=safe;ctx.shadowColor=safe;ctx.shadowBlur=16;ctx.lineWidth=4.2;ctx.beginPath();ctx.moveTo(p.x+cut+4,p.y+2);ctx.lineTo(p.x+p.w-cut-4,p.y+2);ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,.60)';ctx.shadowBlur=0;ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(p.x+cut+10,p.y-2);ctx.lineTo(p.x+p.w-cut-10,p.y-2);ctx.stroke();
+  if(p.fragile){ctx.strokeStyle='rgba(255,74,28,.78)';ctx.lineWidth=3;for(let hx=p.x+cut+12;hx<p.x+p.w-cut-10;hx+=28){ctx.beginPath();ctx.moveTo(hx,p.y+6);ctx.lineTo(hx+14,p.y+p.h-4);ctx.stroke();}}
+  ctx.restore();
 
   // Edge light strips and tiny status LEDs.
   ctx.save();ctx.globalCompositeOperation='lighter';
