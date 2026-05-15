@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.49';
+const VERSION = 'v3.1.50';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1469,7 +1469,7 @@ function spawnWaveEnemies(){
 
 // --- Feather particles ---
 function burstFeathers(x,y,color,count){
-  count=Math.max(count,30);
+  count=Math.max(4,count||12);
   for(let i=0;i<count;i++){
     const angle=Math.random()*Math.PI*2;
     const speed=60+Math.random()*180;
@@ -1496,6 +1496,23 @@ function trailFeather(x,y,color){
     life:0.6+Math.random()*0.4,maxLife:0.6+Math.random()*0.4,
     color,w:2+Math.random()*4,h:1+Math.random()*2
   });
+}
+function updateFeathers(dt){
+  for(let i=feathers.length-1;i>=0;i--){
+    const f=feathers[i];
+    f.x+=f.vx*dt;f.y+=f.vy*dt;
+    f.vy+=200*dt;
+    f.vx*=0.98;
+    f.rot+=f.rotSpeed*dt;
+    f.life-=dt;
+    if(f.y>=lavaY-6){
+      // featherLavaReaction: fallen kill feathers hiss/spark when they touch lava.
+      lavaSplash(f.x,lavaY,false);
+      for(let k=0;k<3;k++)spawnEmber(f.x+(Math.random()-0.5)*18,lavaY+2);
+      feathers.splice(i,1);continue;
+    }
+    if(f.life<=0)feathers.splice(i,1);
+  }
 }
 
 // --- Ember particles ---
@@ -2105,7 +2122,7 @@ function update(dt){
             sfxKill();
             createImpactBurst((player.x+e.x)/2,(player.y+e.y)/2,player.facing||1,e.color);
             createExplosion(e.x,e.y,true); // big explosion on kill
-            burstFeathers(e.x,e.y,e.color,50);
+            burstFeathers(e.x,e.y,e.color,18);
             dropEgg(e.x,e.y,e.type);
             enemies.splice(i,1);
             player.vy=FLAP_POWER*0.7;
@@ -2241,15 +2258,7 @@ function update(dt){
     }
 
     // Feathers
-    for(let i=feathers.length-1;i>=0;i--){
-      const f=feathers[i];
-      f.x+=f.vx*dt;f.y+=f.vy*dt;
-      f.vy+=200*dt; // light gravity
-      f.vx*=0.98;
-      f.rot+=f.rotSpeed*dt;
-      f.life-=dt;
-      if(f.life<=0)feathers.splice(i,1);
-    }
+    updateFeathers(dt);
 
     // Embers
     for(let i=embers.length-1;i>=0;i--){
@@ -2290,10 +2299,7 @@ function update(dt){
     for(const dp of deathPieces){dp.x+=dp.vx*dt;dp.y+=dp.vy*dt;dp.vy+=GRAVITY*dt;dp.rot+=dp.rs*dt;if(!dp.hit&&dp.y>lavaY-8){dp.hit=true;lavaSplash(dp.x,lavaY,true);dp.vx*=0.35;dp.vy=-120-Math.random()*120;}}
     if(dyingTimer<=0)finishDeathSequence();
     // Still update feathers/embers
-    for(let i=feathers.length-1;i>=0;i--){
-      const f=feathers[i];f.x+=f.vx*dt;f.y+=f.vy*dt;f.vy+=200*dt;f.vx*=0.98;f.rot+=f.rotSpeed*dt;f.life-=dt;
-      if(f.life<=0)feathers.splice(i,1);
-    }
+    updateFeathers(dt);
     for(let i=embers.length-1;i>=0;i--){
       const em=embers[i];em.x+=em.vx*dt;em.y+=em.vy*dt;em.life-=dt;
       if(em.life<=0)embers.splice(i,1);
@@ -3049,20 +3055,22 @@ function drawHUD(){
   ornamentPanel(mx,midW,'rgba(90,230,255,.78)');
   ornamentPanel(rx,rightW,'rgba(255,158,38,.84)',true);
 
-  const label=Math.max(12,Math.min(19,W*.0135)), big=Math.max(27,Math.min(45,W*.031));
+  const label=Math.max(13,Math.min(21,W*.0145)), big=Math.max(30,Math.min(48,W*.033));
   ctx.textBaseline='middle';ctx.shadowColor='rgba(0,0,0,.95)';ctx.shadowBlur=6;
-  ctx.textAlign='left';ctx.font=`900 ${label}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(211,239,255,.92)';ctx.fillText('LIVES',lx+16,y+panelH*.29);
+  // One-line side panels: use horizontal space instead of stacking tiny text.
+  ctx.textAlign='left';ctx.font=`900 ${label}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(211,239,255,.92)';ctx.fillText('LIVES',lx+16,y+panelH*.54);
   const lifePulse=lifeFlashTimer>0?(1+0.22*Math.sin(gameTime*24)):1;
-  for(let i=0;i<Math.min(lives,6);i++){drawKnightHeadIcon(lx+35+i*30,y+panelH*.70,.62*lifePulse,lifeFlashTimer>0&&i===lives-1);}
-  if(lives>6){ctx.fillStyle='#FFF1A8';ctx.font=`900 ${Math.max(12,W*.014)}px Arial Black, Impact, sans-serif`;ctx.fillText('+'+(lives-6),lx+40+6*30,y+panelH*.72);}
+  const lifeStart=lx+Math.min(92,leftW*.36);
+  for(let i=0;i<Math.min(lives,6);i++){drawKnightHeadIcon(lifeStart+i*31,y+panelH*.56,.66*lifePulse,lifeFlashTimer>0&&i===lives-1);}
+  if(lives>6){ctx.fillStyle='#FFF1A8';ctx.font=`900 ${Math.max(12,W*.014)}px Arial Black, Impact, sans-serif`;ctx.fillText('+'+(lives-6),lifeStart+6*31,y+panelH*.57);}
 
-  ctx.textAlign='center';ctx.font=`900 ${label}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(190,240,255,.90)';ctx.fillText('WAVE',W/2,y+panelH*.25);
-  ctx.font=`900 ${big}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF0A8';ctx.shadowColor='#FFB11B';ctx.shadowBlur=13;ctx.fillText(String(wave),W/2,y+panelH*.58);
-  const remain=enemies.length+eggs.length;ctx.shadowBlur=7;ctx.font=`900 ${Math.max(11,Math.min(17,W*.0125))}px Arial Black, Impact, sans-serif`;ctx.fillStyle=remain<=2&&state==='playing'?'#FFF36A':'rgba(105,238,255,.96)';ctx.fillText(`REMAIN ${remain}`,W/2,y+panelH*.86);
+  ctx.textAlign='center';ctx.font=`900 ${label}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(190,240,255,.90)';ctx.fillText('WAVE',W/2,y+panelH*.23);
+  ctx.font=`900 ${big}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF0A8';ctx.shadowColor='#FFB11B';ctx.shadowBlur=13;ctx.fillText(String(wave),W/2,y+panelH*.57);
+  const remain=enemies.length+eggs.length;ctx.shadowBlur=7;ctx.font=`900 ${Math.max(12,Math.min(18,W*.0132))}px Arial Black, Impact, sans-serif`;ctx.fillStyle=remain<=2&&state==='playing'?'#FFF36A':'rgba(105,238,255,.96)';ctx.fillText(`REMAIN ${remain}`,W/2,y+panelH*.86);
 
   const scorePulse=scoreFlashTimer>0?(1+0.14*Math.sin(gameTime*32)):1;
-  ctx.textAlign='right';ctx.font=`900 ${label}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(214,238,255,.90)';ctx.shadowBlur=6;ctx.fillText('SCORE',rx+rightW-18,y+panelH*.31);
-  ctx.save();ctx.translate(rx+rightW-18,y+panelH*.66);ctx.scale(scorePulse,scorePulse);ctx.textAlign='right';ctx.fillStyle=scoreFlashTimer>0?'#FFF7A8':'#FFD35A';ctx.shadowColor='#FF9A19';ctx.shadowBlur=14;ctx.font=`900 ${big}px Arial Black, Impact, sans-serif`;ctx.fillText(String(score).padStart(6,'0'),0,0);ctx.restore();
+  ctx.textAlign='left';ctx.font=`900 ${label}px Arial Black, Impact, sans-serif`;ctx.fillStyle='rgba(214,238,255,.90)';ctx.shadowBlur=6;ctx.fillText('SCORE',rx+18,y+panelH*.54);
+  ctx.save();ctx.translate(rx+rightW-18,y+panelH*.56);ctx.scale(scorePulse,scorePulse);ctx.textAlign='right';ctx.fillStyle=scoreFlashTimer>0?'#FFF7A8':'#FFD35A';ctx.shadowColor='#FF9A19';ctx.shadowBlur=14;ctx.font=`900 ${big}px Arial Black, Impact, sans-serif`;ctx.fillText(String(score).padStart(6,'0'),0,0);ctx.restore();
   ctx.restore();
 }
 
