@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.53';
+const VERSION = 'v3.1.54';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1299,7 +1299,7 @@ cacheAllSprites();
 let state = 'title'; // title, playing, dying, waveTrans, gameOver, highscoreEntry, leaderboard, help
 let score = 0, lives = 0, wave = 0, extraLifeGiven = false;
 let player = null;
-let enemies = [], feathers = [], eggs = [], embers = [], explosions = [], impactBursts = [], platforms = [], scorePopups = [], lavaBursts = [], smokeWisps = [], waterDrops = [], touchPulses = [], enemySpawnDramas = [], lavaSparks = [];
+let enemies = [], feathers = [], largeFeathers = [], eggs = [], embers = [], explosions = [], impactBursts = [], platforms = [], scorePopups = [], lavaBursts = [], smokeWisps = [], waterDrops = [], touchPulses = [], enemySpawnDramas = [], lavaSparks = [];
 let lavaY = 0, lavaBase = 0, lavaRiseRate = 0, lavaSurgeTimer = 0, lavaSurging = false;
 let pteroTimer = 0, ptero = null;
 let waveTransTimer = 0, dyingTimer = 0;
@@ -1533,6 +1533,32 @@ function updateFeathers(dt){
   }
 }
 
+function burstLargeEnemyFeathers(x,y,color,dir=1,count=5){
+  // A few big readable plumes like the player's death feathers, not a cloud of tiny confetti.
+  for(let i=0;i<count;i++){
+    const side=(i%2===0?-1:1)*dir;
+    const life=2.6+Math.random()*1.1;
+    largeFeathers.push({
+      x:x+(Math.random()-0.5)*24,y:y+PLAYER_H*.18+(Math.random()-0.5)*18,
+      vx:side*(95+Math.random()*130)+(Math.random()-0.5)*45,
+      vy:-230-Math.random()*180,
+      rot:(side<0?-0.35:0.35)+Math.random()*0.7,
+      rs:side*(3.8+Math.random()*4.6),
+      life,maxLife:life,hit:false,
+      color:i%3===0?'#FFFFFF':(i%3===1?(color||'#C0C0C0'):'#D8E8FF'),
+      scale:0.82+Math.random()*0.42
+    });
+  }
+}
+function updateLargeFeathers(dt){
+  for(let i=largeFeathers.length-1;i>=0;i--){
+    const f=largeFeathers[i];
+    f.x+=f.vx*dt;f.y+=f.vy*dt;f.vy+=GRAVITY*dt;f.vx*=0.992;f.rot+=f.rs*dt;f.life-=dt;
+    if(!f.hit&&f.y>lavaY-8){f.hit=true;lavaSplash(f.x,lavaY,true);f.vx*=0.28;f.vy=-120-Math.random()*120;}
+    if(f.life<=0||f.y>H+160)largeFeathers.splice(i,1);
+  }
+}
+
 // --- Ember particles ---
 function spawnEmber(x,y){
   const life=1.1+Math.random()*1.8;
@@ -1755,7 +1781,7 @@ canvas.addEventListener('touchend',(e)=>{
 function startGame(){
   buttons=[];
   state='playing';score=0;lives=3;wave=0;extraLifeGiven=false;trollHand=null;
-  enemies=[];feathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];lavaSparks=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;waveKills=0;waveEggs=0;lastWaveStats=null;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;visuallyEmptyWaveTimer=0;comboCount=0;comboTimer=0;bestCombo=0;comboBannerTimer=0;
+  enemies=[];feathers=[];largeFeathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];lavaSparks=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;waveKills=0;waveEggs=0;lastWaveStats=null;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;visuallyEmptyWaveTimer=0;comboCount=0;comboTimer=0;bestCombo=0;comboBannerTimer=0;
   generatePlatforms(1);
   player=createPlayer();
   nextWave();
@@ -2140,7 +2166,8 @@ function update(dt){
             sfxKill();
             createImpactBurst((player.x+e.x)/2,(player.y+e.y)/2,player.facing||1,e.color);
             createExplosion(e.x,e.y,true); // big explosion on kill
-            burstKillFeathers(e.x,e.y,e.color,78);
+            burstKillFeathers(e.x,e.y,e.color,34);
+            burstLargeEnemyFeathers(e.x,e.y,e.color,e.facing||1,5);
             dropEgg(e.x,e.y,e.type);
             enemies.splice(i,1);
             player.vy=FLAP_POWER*0.7;
@@ -2226,7 +2253,8 @@ function update(dt){
             sfxPteroKill();
             createImpactBurst((player.x+ptero.x)/2,(player.y+ptero.y)/2,player.facing||1,'#FF44FF');
             createExplosion(ptero.x,ptero.y,true);
-            burstKillFeathers(ptero.x,ptero.y,'#FF6A00',90);
+            burstKillFeathers(ptero.x,ptero.y,'#FF6A00',42);
+            burstLargeEnemyFeathers(ptero.x,ptero.y,'#FF6A00',ptero.facing||1,6);
             killFlashTimer=0.18;
             shakeTimer=0.25;shakeMag=10;
             ptero=null;
@@ -2277,6 +2305,7 @@ function update(dt){
 
     // Feathers
     updateFeathers(dt);
+    updateLargeFeathers(dt);
 
     // Embers
     for(let i=embers.length-1;i>=0;i--){
@@ -2318,6 +2347,7 @@ function update(dt){
     if(dyingTimer<=0)finishDeathSequence();
     // Still update feathers/embers
     updateFeathers(dt);
+    updateLargeFeathers(dt);
     for(let i=embers.length-1;i>=0;i--){
       const em=embers[i];em.x+=em.vx*dt;em.y+=em.vy*dt;em.life-=dt;
       if(em.life<=0)embers.splice(i,1);
@@ -2808,6 +2838,19 @@ function drawFeathers(){
     ctx.lineWidth=0.5;
     ctx.beginPath();ctx.moveTo(-f.w,0);ctx.lineTo(f.w,0);ctx.stroke();
     ctx.globalAlpha=1;
+    ctx.restore();
+  }
+}
+
+function drawLargeFeathers(){
+  for(const f of largeFeathers){
+    const alpha=Math.max(0,Math.min(1,f.life/f.maxLife));
+    ctx.save();ctx.translate(f.x,f.y);ctx.rotate(f.rot);ctx.scale(f.scale,f.scale);ctx.globalAlpha=alpha;
+    ctx.shadowColor=f.color;ctx.shadowBlur=8;
+    ctx.fillStyle=f.color;ctx.strokeStyle='rgba(0,0,0,.62)';ctx.lineWidth=2.2;
+    pathFeather(ctx,0,-5,-22,-22,-48,-14,-62,3);
+    ctx.fill();ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.42)';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(0,-5);ctx.quadraticCurveTo(-24,-19,-58,-3);ctx.stroke();
     ctx.restore();
   }
 }
@@ -3596,6 +3639,7 @@ function loop(ts){
   drawExplosions();
   drawImpactBursts();
   drawFeathers();
+  drawLargeFeathers();
   drawCinematicLighting();
   drawForegroundDepth();
   drawScorePopups();
