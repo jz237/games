@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.41';
+const VERSION = 'v3.1.42';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -3258,36 +3258,40 @@ function drawHighscoreEntry(){
 function drawDualLeaderboard(startY,opts={}){
   const rows=opts.rows||10;
   const compact=!!opts.compact;
-  const gap=Math.max(18,W*0.030);
-  const maxCol=compact?420:335;
-  const colW=Math.min(W*0.425,maxCol);
+  const large=!!opts.large;
+  const gap=large?Math.max(34,W*0.045):Math.max(18,W*0.030);
+  const maxCol=large?900:(compact?420:335);
+  const colW=Math.min(W*(large?0.39:0.425),maxCol);
   const total=colW*2+gap, localX=(W-total)/2, globalX=localX+colW+gap;
-  const rowH=compact?Math.max(30,Math.min(42,H*0.036)):Math.max(22,Math.min(30,H*0.032));
-  const headerSize=compact?Math.max(22,Math.min(34,W*0.032)):Math.max(16,W*0.024);
-  const bodySize=compact?Math.max(17,Math.min(25,W*0.024)):Math.max(12,Math.min(17,W*0.019));
-  const cardH=rowH*rows+headerSize*1.65+30;
+  const rowH=large?Math.max(72,Math.min(105,H*0.052)):(compact?Math.max(30,Math.min(42,H*0.036)):Math.max(22,Math.min(30,H*0.032)));
+  const headerSize=large?Math.max(48,Math.min(82,W*0.050)):(compact?Math.max(22,Math.min(34,W*0.032)):Math.max(16,W*0.024));
+  const bodySize=large?Math.max(34,Math.min(58,W*0.035)):(compact?Math.max(17,Math.min(25,W*0.024)):Math.max(12,Math.min(17,W*0.019)));
+  const cardH=rowH*rows+headerSize*(large?1.85:1.65)+(large?42:30);
   function drawCard(x,title,color,list,isLocal){
     ctx.save();
-    const cg=ctx.createLinearGradient(x,startY-30,x,startY+cardH);cg.addColorStop(0,'rgba(20,22,32,.92)');cg.addColorStop(1,'rgba(3,4,10,.88)');
-    ctx.fillStyle=cg;roundRect(ctx,x,startY-30,colW,cardH,18);ctx.fill();
-    ctx.strokeStyle=color;ctx.globalAlpha=.78;ctx.lineWidth=3;roundRect(ctx,x,startY-30,colW,cardH,18);ctx.stroke();ctx.globalAlpha=1;
-    ctx.strokeStyle='rgba(255,255,255,.10)';ctx.lineWidth=1;roundRect(ctx,x+6,startY-24,colW-12,cardH-12,14);ctx.stroke();
-    ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${headerSize}px Arial Black, Impact, sans-serif`;ctx.shadowColor=color;ctx.shadowBlur=14;ctx.fillStyle=color;ctx.fillText(title,x+colW/2,startY-6);
+    const cg=ctx.createLinearGradient(x,startY-30,x,startY+cardH);cg.addColorStop(0,large?'rgba(18,30,46,.94)':'rgba(20,22,32,.92)');cg.addColorStop(.55,'rgba(7,10,20,.91)');cg.addColorStop(1,large?'rgba(16,5,5,.94)':'rgba(3,4,10,.88)');
+    ctx.fillStyle=cg;roundRect(ctx,x,startY-30,colW,cardH,large?24:18);ctx.fill();
+    ctx.save();ctx.globalCompositeOperation='lighter';ctx.shadowColor=color;ctx.shadowBlur=large?22:14;ctx.strokeStyle=color;ctx.globalAlpha=large?.72:.78;ctx.lineWidth=large?4:3;roundRect(ctx,x,startY-30,colW,cardH,large?24:18);ctx.stroke();ctx.restore();
+    ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1.5;roundRect(ctx,x+8,startY-22,colW-16,cardH-16,large?18:14);ctx.stroke();
+    if(large){const sheen=ctx.createLinearGradient(x,startY-28,x,startY+cardH*.34);sheen.addColorStop(0,'rgba(255,255,255,.10)');sheen.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=sheen;roundRect(ctx,x+10,startY-20,colW-20,cardH*.36,18);ctx.fill();}
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${headerSize}px Arial Black, Impact, sans-serif`;ctx.shadowColor=color;ctx.shadowBlur=large?24:14;ctx.fillStyle=color;ctx.fillText(title,x+colW/2,startY-6);
     ctx.shadowBlur=0;ctx.textAlign='left';ctx.font=`900 ${bodySize}px Arial, sans-serif`;
     const icons=['👑','🥈','🥉','✦','✦','✦','✦','✦','✦','✦'];
     for(let i=0;i<rows;i++){
-      const e=list[i], y=startY+headerSize*.82+12+i*rowH;
+      const e=list[i], y=startY+headerSize*.82+16+i*rowH;
       const fresh=isLocal&&i===hsRank&&state==='gameOver';
-      if(fresh){ctx.save();ctx.shadowColor='#FFD700';ctx.shadowBlur=18;ctx.fillStyle='rgba(255,215,0,.22)';roundRect(ctx,x+9,y-rowH*.70,colW-18,rowH*.88,8);ctx.fill();ctx.restore();}
-      const rowColor=fresh?'#FFF5B8':e?(isLocal?'#C9F8FF':'#FFE7A0'):'rgba(255,255,255,.28)';
+      const rowX=x+(large?18:9), rowW=colW-(large?36:18), rowY=y-rowH*.72;
+      if(e||large){ctx.fillStyle=i<3?'rgba(255,215,90,.055)':'rgba(255,255,255,.028)';roundRect(ctx,rowX,rowY,rowW,rowH*.88,large?10:8);ctx.fill();}
+      if(fresh){ctx.save();ctx.shadowColor='#FFD700';ctx.shadowBlur=18;ctx.fillStyle='rgba(255,215,0,.22)';roundRect(ctx,rowX,rowY,rowW,rowH*.88,10);ctx.fill();ctx.restore();}
+      const rowColor=fresh?'#FFF5B8':e?(isLocal?'#C9F8FF':'#FFE7A0'):'rgba(255,255,255,.30)';
       ctx.fillStyle=rowColor;ctx.shadowColor=fresh?'#FFD700':'transparent';ctx.shadowBlur=fresh?10:0;
       const rank=String(i+1).padStart(2,' ');
       if(e){
         const initials=(e.initials||'???').slice(0,3).toUpperCase();
-        const sc=String(e.score||0).padStart(compact?5:7,' '), wv=e.wave||'?';
-        ctx.fillText(`${rank}. ${icons[i]}  ${initials}`,x+14,y);
-        ctx.textAlign='right';ctx.fillText(`${sc}  W${wv}`,x+colW-14,y);ctx.textAlign='left';
-      }else ctx.fillText(`${rank}. ${icons[i]}  ---`,x+14,y);
+        const sc=Number(e.score||0).toLocaleString(), wv=e.wave||'?';
+        ctx.fillText(`${rank}. ${icons[i]}  ${initials}`,x+(large?28:14),y);
+        ctx.textAlign='right';ctx.fillText(`${sc}   W${wv}`,x+colW-(large?28:14),y);ctx.textAlign='left';
+      }else ctx.fillText(`${rank}. ${icons[i]}  ---`,x+(large?28:14),y);
       ctx.shadowBlur=0;
     }
     if(compact){
@@ -3304,42 +3308,60 @@ function drawDualLeaderboard(startY,opts={}){
 function drawHelpScreen(){
   buttons=[];
   if(titleVolcanoBg.loaded)drawCoverImage(titleVolcanoBg.img,1); else {drawBG();drawLava();}
-  ctx.fillStyle='rgba(0,0,0,.72)';ctx.fillRect(0,0,W,H);
-  const panelW=Math.min(W*.86,820), panelH=Math.min(H*.74,760), x=W/2-panelW/2, y=H*.13;
-  const g=ctx.createLinearGradient(x,y,x,y+panelH);g.addColorStop(0,'rgba(8,18,32,.92)');g.addColorStop(1,'rgba(42,15,5,.90)');ctx.fillStyle=g;roundRect(ctx,x,y,panelW,panelH,24);ctx.fill();ctx.strokeStyle='rgba(255,220,130,.82)';ctx.lineWidth=4;roundRect(ctx,x,y,panelW,panelH,24);ctx.stroke();
-  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(42,Math.min(74,W*.065))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FFD700';ctx.shadowBlur=20;ctx.fillStyle='#FFF0A8';ctx.fillText('HOW TO PLAY',W/2,y+panelH*.12);ctx.shadowBlur=0;
-  const lines=['Hold LEFT or RIGHT side to flap and steer.','Higher rider wins the joust. Get above enemies.','Grab eggs before they hatch into new riders.','Avoid lava, pterodactyls, and fragile platforms.','Chain kills quickly to build combo bonuses.'];
-  ctx.font=`800 ${Math.max(24,Math.min(38,W*.034))}px Arial, sans-serif`;ctx.fillStyle='#EAF8FF';for(let i=0;i<lines.length;i++){ctx.fillText(lines[i],W/2,y+panelH*(.27+i*.105));}
-  const btnW=Math.min(360,W*.56), btnH=Math.max(76,H*.08), bx=W/2-btnW/2, by=y+panelH-btnH-36;
-  const bg=ctx.createLinearGradient(bx,by,bx,by+btnH);bg.addColorStop(0,'rgba(255,220,120,.35)');bg.addColorStop(1,'rgba(120,50,0,.65)');ctx.fillStyle=bg;roundRect(ctx,bx,by,btnW,btnH,18);ctx.fill();ctx.strokeStyle='rgba(255,230,145,.95)';ctx.lineWidth=4;roundRect(ctx,bx,by,btnW,btnH,18);ctx.stroke();ctx.font=`900 ${Math.max(28,Math.min(44,W*.045))}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF2BF';ctx.fillText('BACK',W/2,by+btnH/2+2);ctx.restore();
-  addButton('backTitle',bx-12,by-12,btnW+24,btnH+24,()=>{state='title';buttons=[];});
+  const shade=ctx.createLinearGradient(0,0,0,H);shade.addColorStop(0,'rgba(0,3,10,.42)');shade.addColorStop(.45,'rgba(0,0,0,.56)');shade.addColorStop(1,'rgba(0,0,0,.76)');ctx.fillStyle=shade;ctx.fillRect(0,0,W,H);
+  const panelW=Math.min(W*.90,1800), panelH=Math.min(H*.78,2600), x=W/2-panelW/2, y=H*.09;
+  const g=ctx.createLinearGradient(x,y,x,y+panelH);g.addColorStop(0,'rgba(8,18,34,.88)');g.addColorStop(.56,'rgba(7,10,18,.86)');g.addColorStop(1,'rgba(52,19,5,.82)');ctx.fillStyle=g;roundRect(ctx,x,y,panelW,panelH,28);ctx.fill();
+  ctx.save();ctx.globalCompositeOperation='lighter';ctx.shadowColor='#FFD35A';ctx.shadowBlur=24;ctx.strokeStyle='rgba(255,225,145,.92)';ctx.lineWidth=4;roundRect(ctx,x,y,panelW,panelH,28);ctx.stroke();ctx.restore();
+  ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1.5;roundRect(ctx,x+10,y+10,panelW-20,panelH-20,22);ctx.stroke();
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font=`900 ${Math.max(48,Math.min(82,W*.066))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FFD700';ctx.shadowBlur=22;ctx.fillStyle='#FFF0A8';ctx.fillText('HOW TO PLAY',W/2,y+panelH*.13);ctx.shadowBlur=0;
+  const rules=[
+    ['⬅️ ➡️','Hold either side to flap and steer.'],
+    ['⬆️','Higher rider wins. Get above enemies.'],
+    ['🥚','Grab eggs before they hatch.'],
+    ['🔥','Avoid lava, pterodactyls, and fragile platforms.'],
+    ['⚔️','Chain quick kills for combo bonuses.']
+  ];
+  const rowH=Math.max(90,Math.min(142,panelH*.112));
+  const listTop=y+panelH*.245;
+  const textSize=Math.max(42,Math.min(64,W*.040));
+  for(let i=0;i<rules.length;i++){
+    const ry=listTop+i*rowH;
+    const rx=x+panelW*.075, rw=panelW*.85;
+    ctx.fillStyle=i%2?'rgba(255,255,255,.035)':'rgba(255,215,90,.055)';roundRect(ctx,rx,ry-rowH*.38,rw,rowH*.78,14);ctx.fill();
+    ctx.textAlign='center';ctx.font=`900 ${Math.max(42,Math.min(70,W*.045))}px Arial, sans-serif`;ctx.fillStyle='#FFD66D';ctx.fillText(rules[i][0],rx+rw*.10,ry);
+    ctx.textAlign='left';ctx.font=`850 ${textSize}px Arial, sans-serif`;ctx.fillStyle='#F2F7FF';ctx.shadowColor='rgba(0,0,0,.9)';ctx.shadowBlur=8;ctx.fillText(rules[i][1],rx+rw*.18,ry+2);ctx.shadowBlur=0;
+  }
+  const btnW=Math.min(620,W*.58), btnH=Math.max(120,Math.min(170,H*.105)), bx=W/2-btnW/2, by=y+panelH-btnH-62;
+  const bg=ctx.createLinearGradient(bx,by,bx,by+btnH);bg.addColorStop(0,'rgba(255,224,130,.46)');bg.addColorStop(1,'rgba(128,58,5,.78)');ctx.fillStyle=bg;roundRect(ctx,bx,by,btnW,btnH,20);ctx.fill();
+  ctx.save();ctx.globalCompositeOperation='lighter';ctx.shadowColor='#FFD35A';ctx.shadowBlur=18;ctx.strokeStyle='rgba(255,232,160,.96)';ctx.lineWidth=4;roundRect(ctx,bx,by,btnW,btnH,20);ctx.stroke();ctx.restore();
+  ctx.textAlign='center';ctx.font=`900 ${Math.max(48,Math.min(78,W*.050))}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF4C8';ctx.shadowColor='#000';ctx.shadowBlur=8;ctx.fillText('BACK',W/2,by+btnH/2+3);ctx.restore();
+  addButton('backTitle',bx-14,by-14,btnW+28,btnH+28,()=>{state='title';buttons=[];});
 }
 
 function drawLeaderboardScreen(){
-  ctx.fillStyle='rgba(0,0,0,0.85)';
-  ctx.fillRect(0,0,W,H);
-
-  const titleSize=Math.max(28,W*0.045);
-  ctx.font=`900 ${titleSize}px Arial Black, Impact, sans-serif`;
-  ctx.textAlign='center';
-  ctx.fillStyle='#FFD700';
-  ctx.fillText('HIGH SCORES',W/2,H*0.08);
-
-  drawDualLeaderboard(H*0.15);
-
   buttons=[];
-  const btnW=160,btnH=44;
-  const btnX=(W-btnW)/2,btnY=H*0.88;
-  ctx.fillStyle='rgba(255,255,255,0.1)';
-  roundRect(ctx,btnX,btnY,btnW,btnH,10);ctx.fill();
-  ctx.strokeStyle='#FFF';ctx.lineWidth=2;
-  roundRect(ctx,btnX,btnY,btnW,btnH,10);ctx.stroke();
-  ctx.fillStyle='#FFF';
-  ctx.font=`900 ${Math.max(16,W*0.025)}px Arial Black, Impact, sans-serif`;
-  ctx.fillText('BACK',W/2,btnY+btnH/2+6);
-  addButton('back',btnX,btnY,btnW,btnH,()=>{state='title';buttons=[]});
+  if(titleVolcanoBg.loaded)drawCoverImage(titleVolcanoBg.img,1); else {drawBG();drawLava();}
+  const shade=ctx.createLinearGradient(0,0,0,H);shade.addColorStop(0,'rgba(0,3,10,.60)');shade.addColorStop(.45,'rgba(0,0,0,.70)');shade.addColorStop(1,'rgba(0,0,0,.86)');ctx.fillStyle=shade;ctx.fillRect(0,0,W,H);
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+  const titleSize=Math.max(54,Math.min(96,W*0.072));
+  ctx.font=`900 ${titleSize}px Arial Black, Impact, sans-serif`;
+  ctx.shadowColor='#FFD700';ctx.shadowBlur=28;ctx.fillStyle='#FFF0A8';ctx.fillText('HIGH SCORES',W/2,H*0.105);
+  ctx.shadowColor='#FF7A00';ctx.shadowBlur=10;ctx.fillStyle='#FFD22A';ctx.fillText('HIGH SCORES',W/2,H*0.105);
+  ctx.font=`800 ${Math.max(20,Math.min(32,W*.026))}px Arial, sans-serif`;ctx.shadowBlur=0;ctx.fillStyle='rgba(230,246,255,.72)';ctx.fillText('Local legends and global champions',W/2,H*0.165);
+  ctx.restore();
+
+  drawDualLeaderboard(H*0.285,{rows:10,large:true});
+
+  const btnW=Math.min(620,W*.58),btnH=Math.max(112,Math.min(160,H*.095));
+  const btnX=(W-btnW)/2,btnY=H*0.875;
+  const bg=ctx.createLinearGradient(btnX,btnY,btnX,btnY+btnH);bg.addColorStop(0,'rgba(255,225,130,.34)');bg.addColorStop(1,'rgba(75,32,4,.74)');ctx.fillStyle=bg;roundRect(ctx,btnX,btnY,btnW,btnH,20);ctx.fill();
+  ctx.save();ctx.globalCompositeOperation='lighter';ctx.shadowColor='#FFD35A';ctx.shadowBlur=18;ctx.strokeStyle='rgba(255,232,160,.92)';ctx.lineWidth=4;roundRect(ctx,btnX,btnY,btnW,btnH,20);ctx.stroke();ctx.restore();
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(48,Math.min(76,W*.050))}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF4C8';ctx.shadowColor='#000';ctx.shadowBlur=8;ctx.fillText('BACK',W/2,btnY+btnH/2+2);ctx.restore();
+  addButton('back',btnX-14,btnY-14,btnW+28,btnH+28,()=>{state='title';buttons=[]});
   ctx.textAlign='left';
 }
+
 
 
 
