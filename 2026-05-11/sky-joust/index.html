@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.40';
+const VERSION = 'v3.1.41';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -36,25 +36,35 @@ titleVolcanoBg.img.src=TITLE_VOLCANO_BG_SRC;
 
 // --- Resize ---
 let W = 0, H = 0;
-let renderScale = 1, detailScale = 1, canvasPixelW = 0, canvasPixelH = 0;
+let renderScale = 1, detailScale = 1, canvasPixelW = 0, canvasPixelH = 0, logicalCssW = 0, logicalCssH = 0;
+const MAX_CANVAS_PIXELS = 2400000;
+const MAX_LOGICAL_CSS_PIXELS = 1500000;
 function pickRenderScale(){
   const dpr=Math.max(1,window.devicePixelRatio||1);
   const mem=navigator.deviceMemory||4, cores=navigator.hardwareConcurrency||4;
   const tiny=Math.min(window.innerWidth,window.innerHeight)<390;
   const headroom=(mem>=8&&cores>=8&&!tiny)?0.85:(mem>=4&&cores>=4&&!tiny)?0.55:0.25;
-  const cap=2;
-  // adaptiveHighResolution: cap at 2x for steadier mobile performance/battery.
-  return Math.min(cap,Math.max(1,Math.min(dpr+headroom,2)));
+  const preferred=Math.min(2,Math.max(1,Math.min(dpr+headroom,2)));
+  const cssPixels=Math.max(1,window.innerWidth*window.innerHeight);
+  const pixelBudgetScale=Math.sqrt(MAX_CANVAS_PIXELS/cssPixels);
+  // desktopPerformanceCap: large desktop windows/4K monitors can be far heavier than phones.
+  // Allow sub-1x backing buffers when needed; CSS still fills the screen, just upscaled.
+  return Math.max(0.55,Math.min(preferred,pixelBudgetScale));
 }
 function resize(){
   renderScale=pickRenderScale();
-  detailScale=Math.max(1,Math.min(1.7,renderScale/1.55));
-  canvasPixelW = canvas.width = Math.round(window.innerWidth * renderScale);
-  canvasPixelH = canvas.height = Math.round(window.innerHeight * renderScale);
+  detailScale=Math.max(0.85,Math.min(1.45,renderScale/1.55));
+  canvasPixelW = canvas.width = Math.max(1,Math.round(window.innerWidth * renderScale));
+  canvasPixelH = canvas.height = Math.max(1,Math.round(window.innerHeight * renderScale));
+  const cssPixels=Math.max(1,window.innerWidth*window.innerHeight);
+  const logicalCapScale=Math.min(1,Math.sqrt(MAX_LOGICAL_CSS_PIXELS/cssPixels));
+  logicalCssW=Math.round(window.innerWidth*logicalCapScale);
+  logicalCssH=Math.round(window.innerHeight*logicalCapScale);
   // gameplayWorldScale keeps output capped at 2x while shrinking gameplay elements about 25% for more visible arena.
+  // The logical CSS cap prevents 4K/ultrawide desktops from doing 5x-10x the simulation/draw work of mobile.
   const gameplayWorldScale = 3.53;
-  W = Math.round(window.innerWidth * gameplayWorldScale);
-  H = Math.round(window.innerHeight * gameplayWorldScale);
+  W = Math.round(logicalCssW * gameplayWorldScale);
+  H = Math.round(logicalCssH * gameplayWorldScale);
   canvas.style.width = window.innerWidth+'px';
   canvas.style.height = window.innerHeight+'px';
   ctx.setTransform(canvasPixelW/W,0,0,canvasPixelH/H,0,0);
