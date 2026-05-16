@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.59';
+const VERSION = 'v3.1.60';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -157,6 +157,13 @@ function sfxPteroWarn(){playTone(55,0.55,'sine',0.075,42,0);playWarble(420,1450,
 function sfxCombo(n){playTone(720+n*70,0.045,'square',0.07,1200+n*80,0);playTone(1080+n*90,0.05,'triangle',0.06,1700+n*100,0.035);if(n>=4)playNoise(0.08,0.035,3600,0.02)}
 function sfxLavaEggBurn(){playTone(210,0.12,'sawtooth',0.055,80,0);playNoiseSweep(0.24,0.075,90,1200,0.01,'lowpass');playNoise(0.10,0.045,2600,0.06);playTone(980,0.05,'triangle',0.028,360,0.08)}
 function sfxEggPanic(){playTone(1320,0.055,'triangle',0.045,1980,0);playTone(660,0.045,'square',0.032,440,0.045)}
+function sfxFeatherBurn(big=false){
+  playNoiseSweep(big?0.20:0.13,big?0.058:0.038,big?340:520,big?5000:4200,0,'highpass');
+  playNoise(big?0.14:0.09,big?0.040:0.028,big?3800:3100,0.018);
+  const pops=big?6:4;
+  for(let i=0;i<pops;i++)playTone(950+Math.random()*1750,0.022,'square',big?0.032:0.022,2600+Math.random()*900,i*0.024);
+  playTone(big?95:145,big?0.11:0.07,'sawtooth',big?0.040:0.024,big?48:76,0);
+}
 // --- Constants ---
 const GRAVITY = 1200;
 const FLAP_POWER = -340;
@@ -1317,6 +1324,7 @@ let shakeTimer = 0, shakeMag = 0;
 let invincTimer = 0;
 let killFlashTimer = 0;
 let deathFlashTimer = 0;
+let featherBurnSfxCooldown = 0;
 let scoreFlashTimer = 0, lifeFlashTimer = 0, extraLifeBannerTimer = 0;
 let waveCountdown = 0;
 let waveLastTick = 0, waveFlashTimer = 0, pendingGameOver = false;
@@ -1578,12 +1586,19 @@ function updateFeathers(dt){
     f.life-=dt;
     if(f.y>=lavaY-6){
       // featherLavaReaction: fallen kill feathers hiss/spark when they touch lava.
+      playFeatherBurnSfx(false);
       lavaSplash(f.x,lavaY,false);
       for(let k=0;k<3;k++)spawnEmber(f.x+(Math.random()-0.5)*18,lavaY+2);
       feathers.splice(i,1);continue;
     }
     if(f.life<=0)feathers.splice(i,1);
   }
+}
+
+function playFeatherBurnSfx(big=false){
+  if(featherBurnSfxCooldown>0)return;
+  sfxFeatherBurn(big);
+  featherBurnSfxCooldown=big?0.08:0.045;
 }
 
 function burstLargeEnemyFeathers(x,y,color,dir=1,count=5){
@@ -1609,6 +1624,7 @@ function updateLargeFeathers(dt){
     f.x+=f.vx*dt;f.y+=f.vy*dt;f.vy+=GRAVITY*dt;f.vx*=0.992;f.rot+=f.rs*dt;f.life-=dt;
     if(f.y+18*f.scale>=lavaY-4){
       // Large feathers are swallowed by the lava surface on contact; the lava reaction is the payoff.
+      playFeatherBurnSfx(true);
       lavaSplash(f.x,lavaY,true);
       for(let k=0;k<8;k++)spawnEmber(f.x+(Math.random()-0.5)*34,lavaY+2);
       largeFeathers.splice(i,1);continue;
@@ -1839,7 +1855,7 @@ canvas.addEventListener('touchend',(e)=>{
 function startGame(){
   buttons=[];
   state='playing';score=0;lives=3;wave=0;extraLifeGiven=false;trollHand=null;
-  enemies=[];feathers=[];largeFeathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];lavaSparks=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;waveKills=0;waveEggs=0;lastWaveStats=null;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;visuallyEmptyWaveTimer=0;comboCount=0;comboTimer=0;bestCombo=0;comboBannerTimer=0;
+  enemies=[];feathers=[];largeFeathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];lavaSparks=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;featherBurnSfxCooldown=0;waveKills=0;waveEggs=0;lastWaveStats=null;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;visuallyEmptyWaveTimer=0;comboCount=0;comboTimer=0;bestCombo=0;comboBannerTimer=0;
   generatePlatforms(1);
   player=createPlayer();
   nextWave();
@@ -1896,6 +1912,7 @@ function update(dt){
   // Kill flash
   if(killFlashTimer>0)killFlashTimer-=dt;
   if(deathFlashTimer>0)deathFlashTimer-=dt;
+  if(featherBurnSfxCooldown>0)featherBurnSfxCooldown-=dt;
   if(scoreFlashTimer>0)scoreFlashTimer-=dt;
   if(lifeFlashTimer>0)lifeFlashTimer-=dt;
   if(extraLifeBannerTimer>0)extraLifeBannerTimer-=dt;
