@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.60';
+const VERSION = 'v3.1.61';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -158,11 +158,11 @@ function sfxCombo(n){playTone(720+n*70,0.045,'square',0.07,1200+n*80,0);playTone
 function sfxLavaEggBurn(){playTone(210,0.12,'sawtooth',0.055,80,0);playNoiseSweep(0.24,0.075,90,1200,0.01,'lowpass');playNoise(0.10,0.045,2600,0.06);playTone(980,0.05,'triangle',0.028,360,0.08)}
 function sfxEggPanic(){playTone(1320,0.055,'triangle',0.045,1980,0);playTone(660,0.045,'square',0.032,440,0.045)}
 function sfxFeatherBurn(big=false){
-  playNoiseSweep(big?0.20:0.13,big?0.058:0.038,big?340:520,big?5000:4200,0,'highpass');
-  playNoise(big?0.14:0.09,big?0.040:0.028,big?3800:3100,0.018);
-  const pops=big?6:4;
-  for(let i=0;i<pops;i++)playTone(950+Math.random()*1750,0.022,'square',big?0.032:0.022,2600+Math.random()*900,i*0.024);
-  playTone(big?95:145,big?0.11:0.07,'sawtooth',big?0.040:0.024,big?48:76,0);
+  // Brief water-on-hot-metal scorch: dark steam and a low thump, no arcade chirps.
+  playNoiseSweep(big?0.18:0.115,big?0.070:0.048,big?1450:1200,big?300:360,0,'lowpass');
+  playNoise(big?0.12:0.075,big?0.052:0.036,big?520:680,0.012);
+  playNoiseSweep(big?0.10:0.065,big?0.038:0.027,big?900:760,big?180:220,0.035,'lowpass');
+  playTone(big?82:112,big?0.095:0.060,'sine',big?0.050:0.032,big?46:62,0);
 }
 // --- Constants ---
 const GRAVITY = 1200;
