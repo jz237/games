@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.61';
+const VERSION = 'v3.1.62';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -137,7 +137,13 @@ function playNoiseSweep(dur=0.22,vol=0.05,startFreq=400,endFreq=2600,delay=0,typ
     src.connect(f);f.connect(g);g.connect(audioCtx.destination);src.start(t);src.stop(t+dur+0.03);
   }catch(e){}
 }
-function sfxFlap(){playTone(118,0.045,'sine',0.035,205);playNoiseSweep(0.09,0.026,900,2600,0,'bandpass');playTone(3100,0.035,'triangle',0.022,820,0.012)}
+function sfxFlap(){
+  // Soft bird-wing whoof: low pressure pulse plus airy cloth/feather noise.
+  playNoiseSweep(0.115,0.046,720,180,0,'lowpass');
+  playNoiseSweep(0.095,0.030,420,120,0.018,'bandpass');
+  playNoise(0.070,0.020,260,0.034);
+  playTone(72,0.060,'sine',0.026,54,0);
+}
 function sfxKill(){playTone(72,0.18,'sine',0.12,44,0);playTone(410,0.075,'square',0.10,980,0.01);playNoiseSweep(0.16,0.075,180,3600,0.012,'bandpass');playTone(1380,0.08,'triangle',0.075,420,0.045)}
 function sfxDeath(){playTone(720,0.72,'sawtooth',0.12,48,0);playTone(52,0.85,'sine',0.105,28,0.03);playNoiseSweep(0.50,0.065,2200,180,0.04,'lowpass');playTone(2100,0.16,'sine',0.055,260,0)}
 function sfxEggStomp(){playTone(980,0.055,'triangle',0.11,1750,0);playTone(2260,0.035,'sine',0.06,3200,0.025);playNoise(0.06,0.035,3000,0.015)}
