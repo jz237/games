@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.64';
+const VERSION = 'v3.1.65';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -139,10 +139,10 @@ function playNoiseSweep(dur=0.22,vol=0.05,startFreq=400,endFreq=2600,delay=0,typ
 }
 function sfxFlap(){
   // Soft bird-wing whoof: low pressure pulse plus airy cloth/feather noise.
-  playNoiseSweep(0.125,0.074,720,180,0,'lowpass');
-  playNoiseSweep(0.105,0.049,420,120,0.014,'bandpass');
-  playNoise(0.080,0.033,260,0.030);
-  playTone(72,0.070,'sine',0.042,54,0);
+  playNoiseSweep(0.135,0.108,760,170,0,'lowpass');
+  playNoiseSweep(0.112,0.072,460,110,0.012,'bandpass');
+  playNoise(0.090,0.050,250,0.028);
+  playTone(72,0.078,'sine',0.060,50,0);
 }
 function sfxKill(){playTone(72,0.18,'sine',0.12,44,0);playTone(410,0.075,'square',0.10,980,0.01);playNoiseSweep(0.16,0.075,180,3600,0.012,'bandpass');playTone(1380,0.08,'triangle',0.075,420,0.045)}
 function sfxDeath(){playTone(720,0.72,'sawtooth',0.12,48,0);playTone(52,0.85,'sine',0.105,28,0.03);playNoiseSweep(0.50,0.065,2200,180,0.04,'lowpass');playTone(2100,0.16,'sine',0.055,260,0)}
@@ -150,14 +150,16 @@ function sfxEggStomp(){playTone(980,0.055,'triangle',0.11,1750,0);playTone(2260,
 function sfxScore(){playTone(1200,0.04,'sine',0.06,1200)}
 function sfxEggHatch(){playNoiseSweep(0.18,0.052,600,2600,0,'bandpass');playTone(330,0.10,'triangle',0.07,820,0.015);playTone(780,0.13,'sawtooth',0.065,1380,0.08);playNoise(0.10,0.045,3200,0.12)}
 function sfxPtero(){
-  // Sudden power-tool shriek: hard motor bite, abrasive blade noise, and sub impact.
-  playTone(42,0.52,'sine',0.18,32,0);
-  playWarble(86,132,92,0.42,'sawtooth',0.20,0);
-  playWarble(185,310,210,0.34,'square',0.16,0.018);
-  playNoiseSweep(0.30,0.155,900,6200,0,'bandpass');
-  playNoiseSweep(0.46,0.120,5200,680,0.035,'bandpass');
-  playNoise(0.18,0.080,2600,0.045);
-  playTone(1180,0.055,'sawtooth',0.095,520,0.02);
+  // Longer drill attack: instant bite, grinding motor sustain, and ripping blade noise.
+  playTone(38,0.90,'sine',0.20,29,0);
+  playWarble(82,150,96,0.88,'sawtooth',0.24,0);
+  playWarble(210,390,230,0.76,'square',0.20,0.012);
+  playWarble(540,920,620,0.52,'sawtooth',0.105,0.10);
+  playNoiseSweep(0.36,0.185,850,7200,0,'bandpass');
+  playNoiseSweep(0.82,0.160,5800,1150,0.035,'bandpass');
+  playNoise(0.56,0.105,3100,0.095);
+  playNoiseSweep(0.34,0.130,2200,6400,0.32,'bandpass');
+  playTone(1180,0.085,'sawtooth',0.125,480,0.018);
 }
 function sfxLavaPop(){playTone(190,0.055,'sine',0.028,80);playNoiseSweep(0.075,0.025,120,900,0,'lowpass');playTone(1120,0.028,'triangle',0.018,420,0.018)}
 function sfxWaveStart(){[262,330,392,523,659].forEach((f,i)=>playTone(f,0.075,'square',0.085,f*1.5,i*0.07));playNoise(0.10,0.025,1200,0.18)}
