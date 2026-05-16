@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.67';
+const VERSION = 'v3.1.68';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1773,8 +1773,11 @@ function dropEgg(x,y,type){
 // --- Pterodactyl ---
 function spawnPtero(){
   const fromLeft=Math.random()>0.5;
+  const fallbackY=H*0.18+Math.random()*H*0.22;
+  const targetY=player?player.y+PLAYER_H*0.5-32:fallbackY;
+  const attackY=Math.max(H*0.12,Math.min(lavaY-150,targetY));
   ptero={
-    x:fromLeft?-180:W+180,y:H*0.18+Math.random()*H*0.22,
+    x:fromLeft?-180:W+180,y:attackY,
     vx:fromLeft?520:-520,baseY:0,phase:0,
     wingFrame:0,wingTimer:0,entering:true,streakLife:0.8,fromLeft
   };
