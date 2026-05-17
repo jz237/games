@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.71';
+const VERSION = 'v3.1.72';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -2242,7 +2242,7 @@ function update(dt){
         const power=recovering?(criticalLow?0.98:0.74):(criticalLow?1.4:tooLow?1.2:1.0);
         const liftScale=e.type==='shadow'?(recovering?0.76:0.88):1;
         e.vy=FLAP_POWER*(0.95+e.speed*0.18)*power*liftScale;
-        if(recovering&&e.vy<-165)e.vy=-165;
+        // No vy cap during recovery — the climb boost in the post-flap section handles the ceiling.
         const intervals={bounder:[0.5,0.9],hunter:[0.48,0.82],shadow:[0.42,0.72]};
         const iv=intervals[e.type]||intervals.bounder;
         e.flapCooldown=iv[0]+Math.random()*(iv[1]-iv[0]);
