@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.69';
+const VERSION = 'v3.1.70';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1462,7 +1462,7 @@ function createEnemy(type,x,y){
     type,color:colors[type],glowColor:type==='bounder'?'rgba(0,168,255,0.75)':type==='hunter'?'rgba(255,32,32,0.75)':'rgba(190,0,255,0.8)',
     speed:speeds[type],flapRate:flapRates[type],
     flapCooldown:Math.random()*flapRates[type],
-    ai:{changeTimer:1+Math.random()*2,targetVx:0,wander:(Math.random()-0.5)*160,unstuckTimer:0,unstuckDir:0,personalityPhase:Math.random()*Math.PI*2,ambushSide:Math.random()>0.5?1:-1,evadeDir:Math.random()>0.5?1:-1,climbTimer:0,climbCooldown:1.2+Math.random()*3.2},
+    ai:{changeTimer:1+Math.random()*2,targetVx:0,wander:(Math.random()-0.5)*160,unstuckTimer:0,unstuckDir:0,personalityPhase:Math.random()*Math.PI*2,ambushSide:Math.random()>0.5?1:-1,evadeDir:Math.random()>0.5?1:-1,climbTimer:0,climbCooldown:1.2+Math.random()*3.2,recoverClimb:false},
     scoreVal:type==='bounder'?500:type==='hunter'?750:1000
   };
 }
@@ -2109,6 +2109,12 @@ function update(dt){
       const distToLava=lavaY-(e.y+PLAYER_H);
       const criticalLow=distToLava<80;
       const tooLow=distToLava<120;
+      const recoveryTargetX=W*(e.ai.ambushSide>0?0.72:0.28);
+      if(tooLow)e.ai.recoverClimb=true;
+      if(e.ai.recoverClimb&&e.y<H*0.27&&distToLava>H*0.50){
+        e.ai.recoverClimb=false;
+        e.ai.climbCooldown=1.4+Math.random()*2.2;
+      }
       if(e.ai.climbCooldown>0)e.ai.climbCooldown-=dt;
       if(e.ai.climbTimer>0)e.ai.climbTimer-=dt;
       const climbChance=e.type==='bounder'?0.58:e.type==='hunter'?0.72:0.46;
@@ -2216,9 +2222,14 @@ function update(dt){
         targetVx=e.ai.unstuckDir*HORIZ_SPEED*e.speed*1.15;
         if(overhead&&Math.abs(e.x-(overhead.x+overhead.w/2))<overhead.w*.55)wantFlap=false;
       }
-      // Lava avoidance overrides everything
-      if(criticalLow){wantFlap=true;targetVx=(W/2-e.x)*2;}
-      else if(tooLow){wantFlap=true;let nearestX=W/2,bestDist=Infinity;for(const p of platforms){if(p.broken)continue;const px=p.x+p.w/2,d=Math.abs(px-e.x);if(d<bestDist){bestDist=d;nearestX=px;}}targetVx=(nearestX-e.x)*2;}
+      // Lava recovery: once enemies reach the bottom danger zone, they slowly work
+      // back toward the upper arena before resuming normal downward attack passes.
+      if(criticalLow){e.ai.recoverClimb=true;wantFlap=true;targetVx=(recoveryTargetX-e.x)*1.15;}
+      else if(tooLow){e.ai.recoverClimb=true;wantFlap=true;targetVx=(recoveryTargetX-e.x)*0.95+e.ai.wander*0.35;}
+      else if(e.ai.recoverClimb){
+        wantFlap=true;
+        targetVx=(recoveryTargetX-e.x)*0.72+e.ai.wander*0.35;
+      }
       targetVx=Math.max(-HORIZ_SPEED*e.speed,Math.min(HORIZ_SPEED*e.speed,targetVx));
       e.vx+=(targetVx-e.vx)*dt*(e.type==='bounder'?2.5:e.type==='hunter'?2.75:3.45);
 
@@ -2227,9 +2238,11 @@ function update(dt){
       const flapReady=e.flapCooldown<=0;
       const shouldFlap=flapReady&&(wantFlap||(!tooLow&&e.vy>155));
       if(shouldFlap||criticalLow){
-        const power=criticalLow?1.4:tooLow?1.2:1.0;
-        const liftScale=e.type==='shadow'?0.88:1;
+        const recovering=e.ai.recoverClimb;
+        const power=recovering?(criticalLow?0.98:0.74):(criticalLow?1.4:tooLow?1.2:1.0);
+        const liftScale=e.type==='shadow'?(recovering?0.76:0.88):1;
         e.vy=FLAP_POWER*(0.95+e.speed*0.18)*power*liftScale;
+        if(recovering&&e.vy<-165)e.vy=-165;
         const intervals={bounder:[0.5,0.9],hunter:[0.48,0.82],shadow:[0.42,0.72]};
         const iv=intervals[e.type]||intervals.bounder;
         e.flapCooldown=iv[0]+Math.random()*(iv[1]-iv[0]);
@@ -2237,7 +2250,11 @@ function update(dt){
         spawnFlapFeathers(e,1+(Math.random()<0.35?1:0));
       }
       // Shadows: gravity boost when diving at player from above
-      if(player&&e.type==='shadow'&&e.y<player.y-80&&distToLava>180)e.vy+=GRAVITY*dt*0.5;
+      if(player&&e.type==='shadow'&&!e.ai.recoverClimb&&e.y<player.y-80&&distToLava>180)e.vy+=GRAVITY*dt*0.5;
+      if(e.ai.recoverClimb&&e.y>H*0.20&&distToLava>135){
+        e.vy-=GRAVITY*dt*1.18;
+        if(e.vy<-165)e.vy=-165;
+      }
       // Hard lava floor
       if(e.y+PLAYER_H>lavaY-30){e.y=lavaY-30-PLAYER_H;e.vy=Math.min(e.vy,FLAP_POWER*1.3);}
 
