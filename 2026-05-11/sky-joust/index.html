@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.68';
+const VERSION = 'v3.1.69';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1462,7 +1462,7 @@ function createEnemy(type,x,y){
     type,color:colors[type],glowColor:type==='bounder'?'rgba(0,168,255,0.75)':type==='hunter'?'rgba(255,32,32,0.75)':'rgba(190,0,255,0.8)',
     speed:speeds[type],flapRate:flapRates[type],
     flapCooldown:Math.random()*flapRates[type],
-    ai:{changeTimer:1+Math.random()*2,targetVx:0,wander:(Math.random()-0.5)*160,unstuckTimer:0,unstuckDir:0,personalityPhase:Math.random()*Math.PI*2,ambushSide:Math.random()>0.5?1:-1,evadeDir:Math.random()>0.5?1:-1},
+    ai:{changeTimer:1+Math.random()*2,targetVx:0,wander:(Math.random()-0.5)*160,unstuckTimer:0,unstuckDir:0,personalityPhase:Math.random()*Math.PI*2,ambushSide:Math.random()>0.5?1:-1,evadeDir:Math.random()>0.5?1:-1,climbTimer:0,climbCooldown:1.2+Math.random()*3.2},
     scoreVal:type==='bounder'?500:type==='hunter'?750:1000
   };
 }
@@ -2109,6 +2109,13 @@ function update(dt){
       const distToLava=lavaY-(e.y+PLAYER_H);
       const criticalLow=distToLava<80;
       const tooLow=distToLava<120;
+      if(e.ai.climbCooldown>0)e.ai.climbCooldown-=dt;
+      if(e.ai.climbTimer>0)e.ai.climbTimer-=dt;
+      const climbChance=e.type==='bounder'?0.58:e.type==='hunter'?0.72:0.46;
+      if(e.ai.climbCooldown<=0&&e.ai.climbTimer<=0&&!tooLow&&e.y>H*0.24&&distToLava>185&&Math.random()<dt*climbChance){
+        e.ai.climbTimer=e.type==='shadow'?0.8+Math.random()*0.45:1.0+Math.random()*0.7;
+        e.ai.climbCooldown=(e.type==='bounder'?3.2:e.type==='hunter'?2.6:3.8)+Math.random()*3.2;
+      }
       // Target altitude: every jouster slowly seeks altitude advantage, then dives once above you.
       let targetVx=e.ai.wander;
       let wantFlap=false;
@@ -2146,6 +2153,12 @@ function update(dt){
           // Add a little sideways commitment while climbing so enemies arc into position
           // like jousters instead of bobbing vertically in place.
           targetVx+=Math.sign(dx||e.ai.wander||1)*Math.min(95,altitudePressure*42);
+        }
+        if(e.ai.climbTimer>0&&e.y>H*0.18&&distToLava>155){
+          // Occasional climb bouts keep enemies cycling through the arena instead of
+          // always sinking toward the lava between attacks.
+          wantFlap=true;
+          targetVx+=Math.sign(dx||e.ai.wander||1)*(e.type==='bounder'?28:e.type==='hunter'?44:32);
         }
         // Smarter passes: if an enemy already has height, it commits to a crossing
         // lane instead of hovering straight below the player.
