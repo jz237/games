@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.73';
+const VERSION = 'v3.1.74';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -3715,24 +3715,27 @@ function drawHelpScreen(){
   ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.font=`900 ${Math.max(48,Math.min(82,W*.066))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FFD700';ctx.shadowBlur=22;ctx.fillStyle='#FFF0A8';ctx.fillText('HOW TO PLAY',W/2,y+panelH*.13);ctx.shadowBlur=0;
   const rules=[
-    ['⬅️ ➡️','Hold either side to flap and steer.'],
-    ['⬆️','Higher rider wins. Get above enemies.'],
-    ['🥚','Grab eggs before they hatch.'],
-    ['🔥','Avoid lava, pterodactyls, and cracked ledges.'],
-    ['⚔️','Chain quick kills for combo bonuses.']
+    ['⬅️ ➡️','Hold left or right side to flap and steer that direction.'],
+    ['⬆️','Higher rider wins every clash. Get above your opponent!'],
+    ['🥚','Grab eggs before they sink in lava. They hatch into new enemies.'],
+    ['🔥','Avoid rising lava, pterodactyl dives, and cracked ledges.'],
+    ['⚔️','Chain quick kills for combo multipliers and bonus points.'],
+    ['🦅','Watch for the pterodactyl — it screams in at your altitude!'],
+    ['🛡️','Land on platforms to rest, but they crack after a few seconds.'],
+    ['💀','Lose all 3 lives and it\'s game over. Beat your high score!']
   ];
-  const rowH=Math.max(90,Math.min(142,panelH*.112));
+  const rowH=Math.max(64,Math.min(100,panelH*.088));
   const listTop=y+panelH*.245;
-  const textSize=Math.max(36,Math.min(58,W*.035));
+  const textSize=Math.max(26,Math.min(42,W*.027));
   for(let i=0;i<rules.length;i++){
     const ry=listTop+i*rowH;
     const rx=x+panelW*.075, rw=panelW*.85;
     ctx.fillStyle=i%2?'rgba(255,255,255,.035)':'rgba(255,215,90,.055)';roundRect(ctx,rx,ry-rowH*.38,rw,rowH*.78,14);ctx.fill();
     const iconCx=rx+rw*.10;
-    ctx.textAlign='center';ctx.font=`900 ${Math.max(42,Math.min(70,W*.045))}px Arial, sans-serif`;ctx.fillStyle='#FFD66D';ctx.fillText(rules[i][0],iconCx,ry);
+    ctx.textAlign='center';ctx.font=`900 ${Math.max(32,Math.min(54,W*.036))}px Arial, sans-serif`;ctx.fillStyle='#FFD66D';ctx.fillText(rules[i][0],iconCx,ry);
     const tx=rx+rw*.18, maxTextW=rx+rw-tx-26;
-    let fs=textSize;ctx.textAlign='left';ctx.font=`850 ${fs}px Arial, sans-serif`;
-    while(fs>30&&ctx.measureText(rules[i][1]).width>maxTextW){fs-=1;ctx.font=`850 ${fs}px Arial, sans-serif`;}
+    let fs=textSize;ctx.textAlign='left';ctx.font=`700 ${fs}px Arial, sans-serif`;
+    while(fs>20&&ctx.measureText(rules[i][1]).width>maxTextW){fs-=1;ctx.font=`700 ${fs}px Arial, sans-serif`;}
     ctx.save();ctx.beginPath();ctx.rect(tx-4,ry-rowH*.36,maxTextW+8,rowH*.72);ctx.clip();
     ctx.fillStyle='#F2F7FF';ctx.shadowColor='rgba(0,0,0,.9)';ctx.shadowBlur=8;ctx.fillText(rules[i][1],tx,ry+2);ctx.restore();ctx.shadowBlur=0;
   }
