@@ -25,7 +25,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.75';
+const VERSION = 'v3.1.76';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -2264,6 +2264,9 @@ function update(dt){
         if(e.x<-PLAYER_W)e.x=W+PLAYER_W;
         if(e.x>W+PLAYER_W)e.x=-PLAYER_W;
         if(e.vx>5)e.facing=1;else if(e.vx<-5)e.facing=-1;
+        const recoveryCollision=resolveEnemyPlayerCollision(e,i);
+        if(recoveryCollision==='playerDead')return;
+        if(recoveryCollision==='enemyRemoved')continue;
         // Skip normal physics entirely for this frame
         continue;
       }
@@ -2339,45 +2342,9 @@ function update(dt){
       }
 
       // Player collision (skip if enemy still invincible from spawn)
-      if(player&&state==='playing'&&invincTimer<=0&&!(e.invincible>0)){
-        const dx=player.x-e.x, dy=player.y-e.y;
-        const dist=Math.sqrt(dx*dx+dy*dy);
-        const hitW=PLAYER_W*0.95, hitH=PLAYER_H*0.95;
-        if(Math.abs(dx)<hitW && Math.abs(dy)<hitH){
-          // Joust rule: whoever's center is higher wins
-          const playerMid=player.y+PLAYER_H*0.5;
-          const enemyMid=e.y+PLAYER_H*0.5;
-          if(playerMid<enemyMid){
-            // Player is higher → player wins the joust
-            bumpScore(e.scoreVal,e.x,e.y,'+'+e.scoreVal,e.type==='shadow'?'#FF44FF':'#FFD700');
-            waveKills++;
-            registerJoustKill(e.x,e.y,e.type);
-            addScorePopup((player.x+e.x)/2,Math.min(player.y,e.y)-36,'HIGH HIT','#7CFF8A');
-            sfxScore();
-            sfxKill();
-            createImpactBurst((player.x+e.x)/2,(player.y+e.y)/2,player.facing||1,e.color);
-            createExplosion(e.x,e.y,true); // big explosion on kill
-            burstKillFeathers(e.x,e.y,e.color,34);
-            burstLargeEnemyFeathers(e.x,e.y,e.color,e.facing||1,5);
-            dropEgg(e.x,e.y,e.type);
-            enemies.splice(i,1);
-            player.vy=FLAP_POWER*0.7;
-            killFlashTimer=0.15;
-            // Brief freeze frame for impact
-            state='playing'; // stay playing, but add a micro-pause via shake
-          } else if(enemyMid<playerMid){
-            // Enemy is higher → enemy wins
-            createImpactBurst((player.x+e.x)/2,(player.y+e.y)/2,e.facing||1,'#FF3A30');
-            addScorePopup((player.x+e.x)/2,Math.min(player.y,e.y)-36,'LOW HIT','#FFB38A');
-            playerDie();return;
-          } else {
-            // Same height → bounce apart
-            addScorePopup((player.x+e.x)/2,Math.min(player.y,e.y)-34,'EVEN','#FFF08A');
-            player.vx+=dx*3;player.vy-=80;
-            e.vx-=dx*3;e.vy-=80;
-          }
-        }
-      }
+      const enemyCollision=resolveEnemyPlayerCollision(e,i);
+      if(enemyCollision==='playerDead')return;
+      if(enemyCollision==='enemyRemoved')continue;
     }
 
     // Eggs
@@ -3099,6 +3066,41 @@ function drawEmbers(){
 
 function enemyLabel(type){return type==='hunter'?'HUNTER':type==='shadow'?'SHADOW':'BOUNDER';}
 function enemyColor(type){return type==='hunter'?'#FF7A2A':type==='shadow'?'#D96CFF':'#72E7FF';}
+function resolveEnemyPlayerCollision(e,i){
+  if(!(player&&state==='playing'&&invincTimer<=0&&!(e.invincible>0)))return 'none';
+  const dx=player.x-e.x, dy=player.y-e.y;
+  const hitW=PLAYER_W*0.95, hitH=PLAYER_H*0.95;
+  if(!(Math.abs(dx)<hitW&&Math.abs(dy)<hitH))return 'none';
+  const playerMid=player.y+PLAYER_H*0.5;
+  const enemyMid=e.y+PLAYER_H*0.5;
+  if(playerMid<enemyMid){
+    bumpScore(e.scoreVal,e.x,e.y,'+'+e.scoreVal,e.type==='shadow'?'#FF44FF':'#FFD700');
+    waveKills++;
+    registerJoustKill(e.x,e.y,e.type);
+    addScorePopup((player.x+e.x)/2,Math.min(player.y,e.y)-36,'HIGH HIT','#7CFF8A');
+    sfxScore();
+    sfxKill();
+    createImpactBurst((player.x+e.x)/2,(player.y+e.y)/2,player.facing||1,e.color);
+    createExplosion(e.x,e.y,true);
+    burstKillFeathers(e.x,e.y,e.color,34);
+    burstLargeEnemyFeathers(e.x,e.y,e.color,e.facing||1,5);
+    dropEgg(e.x,e.y,e.type);
+    enemies.splice(i,1);
+    player.vy=FLAP_POWER*0.7;
+    killFlashTimer=0.15;
+    return 'enemyRemoved';
+  }
+  if(enemyMid<playerMid){
+    createImpactBurst((player.x+e.x)/2,(player.y+e.y)/2,e.facing||1,'#FF3A30');
+    addScorePopup((player.x+e.x)/2,Math.min(player.y,e.y)-36,'LOW HIT','#FFB38A');
+    playerDie();
+    return 'playerDead';
+  }
+  addScorePopup((player.x+e.x)/2,Math.min(player.y,e.y)-34,'EVEN','#FFF08A');
+  player.vx+=dx*3;player.vy-=80;
+  e.vx-=dx*3;e.vy-=80;
+  return 'bounce';
+}
 function upcomingEnemyMix(){
   // enemyProgressionMix: blue bounders dominate early, red hunters take over mid-game, shadows become late-game elites.
   const bounders=Math.max(1,5-Math.floor(wave/3));
