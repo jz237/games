@@ -24,8 +24,14 @@ canvas{display:block;position:fixed;top:0;left:0;width:100vw;height:100vh;touch-
 #mute-btn{position:fixed;top:6px;right:10px;z-index:15;background:none;border:none;color:#aa88ff;font-size:1.4em;padding:8px;line-height:1;opacity:.7}
 #mute-btn:active{opacity:1}
 </style>
+<style>
+.game-home-btn{position:fixed;top:8px;left:8px;z-index:99999;background:rgba(0,0,0,.55);color:#FFD66D;border:2px solid rgba(255,214,109,.6);border-radius:8px;padding:6px 14px;font:bold 14px Arial,sans-serif;cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:5px;backdrop-filter:blur(4px);transition:background .2s,border-color .2s}
+.game-home-btn:hover{background:rgba(255,214,109,.18);border-color:#FFD66D}
+.game-home-btn svg{width:16px;height:16px;fill:#FFD66D}
+</style>
 </head>
 <body>
+<a href="https://jz237.github.io/games/" class="game-home-btn" title="Back to Games"><svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>Games</a>
 <div id="title-bar"><h1>⊕ GRAVITY WEAVER ⊕</h1></div>
 <div id="hud"><span>LVL <span id="lvl">1</span></span><span>LIVES <span id="lives">3</span></span><span>SCORE <span id="score">0</span></span><span>WELLS <span id="wells">3</span></span><span>FUEL <span id="fuel">0/0</span></span></div>
 <canvas id="c"></canvas>

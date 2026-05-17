@@ -70,8 +70,14 @@
   .medalLine { margin-top:10px; font-size:16px; letter-spacing:3px; color:#ffe9a8; text-shadow:0 0 16px rgba(255,214,96,0.55); }
   .victoryStats { margin-top:10px; text-align:center; color:#d8c6f2; line-height:1.8; font-size:13px; }
 </style>
+<style>
+.game-home-btn{position:fixed;top:8px;left:8px;z-index:99999;background:rgba(0,0,0,.55);color:#FFD66D;border:2px solid rgba(255,214,109,.6);border-radius:8px;padding:6px 14px;font:bold 14px Arial,sans-serif;cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:5px;backdrop-filter:blur(4px);transition:background .2s,border-color .2s}
+.game-home-btn:hover{background:rgba(255,214,109,.18);border-color:#FFD66D}
+.game-home-btn svg{width:16px;height:16px;fill:#FFD66D}
+</style>
 </head>
 <body>
+<a href="https://jz237.github.io/games/" class="game-home-btn" title="Back to Games"><svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>Games</a>
 <div id="hud">
   <span class="stat" id="scoreTxt">SCORE: 0</span>
   <span class="stat" id="sealHp">&#x1F52E;&#x1F52E;&#x1F52E;&#x1F52E;&#x1F52E;</span>
