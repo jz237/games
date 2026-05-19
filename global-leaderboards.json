@@ -47,5 +47,12 @@
     "url": "https://game-scores.jez237.workers.dev/scores/emerald-mine",
     "playUrl": "https://jz237.github.io/games/2026-03-05/boulder-dash/",
     "scoreLabel": "C"
+  },
+  {
+    "slug": "sky-joust",
+    "name": "Sky Joust",
+    "url": "https://game-scores.jez237.workers.dev/scores/sky-joust",
+    "playUrl": "https://jz237.github.io/games/2026-05-11/sky-joust/",
+    "scoreLabel": "W"
   }
 ]
