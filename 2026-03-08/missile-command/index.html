@@ -125,7 +125,7 @@ button:active { transform: translateY(1px) scale(.99); }
 <div id="tutorial">
   <div class="overlayCard">
     <h1>Aurora Siege</h1>
-    <div style="font-size:0.65rem;color:rgba(255,255,255,0.35);letter-spacing:0.15em;margin-top:-0.3em;margin-bottom:0.5em">v2.2</div>
+    <div style="font-size:0.65rem;color:rgba(255,255,255,0.35);letter-spacing:0.15em;margin-top:-0.3em;margin-bottom:0.5em">v2.3</div>
     <p>Defend the skyline. Tap or click where you want your interceptor to detonate. The nearest missile base with ammo fires automatically. Multi-touch lets you rapid-fire from multiple bases.</p>
     <div class="overlayGrid">
       <div class="tip"><b>Protect Cities</b>Lose all cities and the siege is over. Survive waves to reload bases and earn reconstruction bonuses.</div>
@@ -251,14 +251,14 @@ button:active { transform: translateY(1px) scale(.99); }
   let waveClearFX = []; // persistent particles that survive startWave()
   let tally = null; // wave-end bonus tally state
   const MUSIC_TRACKS = ['assets/last-life-ascent.mp3', 'assets/final-boss-approach.mp3'];
-  const MUSIC_ENABLED_KEY = 'auroraSiege_musicEnabled_v1';
-  const MUSIC_VOLUME_KEY = 'auroraSiege_musicVolume_v1';
+  const MUSIC_ENABLED_KEY = 'auroraSiege_musicEnabled_v2';
+  const MUSIC_VOLUME_KEY = 'auroraSiege_musicVolume_v2';
   const SFX_VOLUME_KEY = 'auroraSiege_sfxVolume_v1';
   const MUSIC_MAX_VOLUME = 0.42;
   const GAMEPLAY_MUSIC_DUCK = 0.12;
   const SFX_MASTER_GAIN = 0.55;
-  let musicEnabled = localStorage.getItem(MUSIC_ENABLED_KEY) === 'on';
-  let musicVolume = Math.max(0, Math.min(1, Number(localStorage.getItem(MUSIC_VOLUME_KEY) || 0.20)));
+  let musicEnabled = localStorage.getItem(MUSIC_ENABLED_KEY) !== 'off';
+  let musicVolume = Math.max(0, Math.min(1, Number(localStorage.getItem(MUSIC_VOLUME_KEY) || 0.40)));
   let sfxVolume = Math.max(0, Math.min(1, Number(localStorage.getItem(SFX_VOLUME_KEY) || 1)));
   let muted = false;
   let musicIndex = 0;
