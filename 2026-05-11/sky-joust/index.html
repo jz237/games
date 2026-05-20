@@ -25,7 +25,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.78';
+const VERSION = 'v3.1.79';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -109,10 +109,10 @@ function startTitleMusic(){
   if(p&&p.catch)p.catch(()=>{});
 }
 function stopTitleMusic(){
-  if(!titleMusic||titleMusicIntent==='stopped')return;
+  if(!titleMusic)return;
   titleMusicIntent='stopped';
   if(titleMusicFade)clearInterval(titleMusicFade);
-  const startVol=titleMusic.volume||0.42;
+  const startVol=titleMusic.volume||TITLE_MUSIC_VOLUME;
   const started=performance.now();
   titleMusicFade=setInterval(()=>{
     const a=Math.min(1,(performance.now()-started)/220);
@@ -1888,6 +1888,7 @@ canvas.addEventListener('mouseup',onUp);
 
 // --- Button handling ---
 let buttons = [];
+let buttonInputLockUntil = 0;
 function addButton(label,x,y,w,h,cb){
   buttons.push({label,x,y,w,h,cb});
 }
@@ -1898,7 +1899,12 @@ function enterTitle(){
 }
 function checkButtons(px,py){
   for(const b of buttons){
-    if(px>=b.x&&px<=b.x+b.w&&py>=b.y&&py<=b.y+b.h){b.cb();return true}
+    if(px>=b.x&&px<=b.x+b.w&&py>=b.y&&py<=b.y+b.h){
+      const now=performance.now();
+      if(now<buttonInputLockUntil)return true;
+      buttonInputLockUntil=now+420;
+      b.cb();return true
+    }
   }
   return false;
 }
@@ -1921,7 +1927,7 @@ canvas.addEventListener('touchend',(e)=>{
 
 // --- Start Game ---
 function startGame(){
-  stopTitleMusic();
+  startTitleMusic();
   buttons=[];
   state='playing';score=0;lives=3;wave=0;extraLifeGiven=false;trollHand=null;
   enemies=[];feathers=[];largeFeathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];lavaSparks=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;featherBurnSfxCooldown=0;waveKills=0;waveEggs=0;lastWaveStats=null;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;visuallyEmptyWaveTimer=0;comboCount=0;comboTimer=0;bestCombo=0;comboBannerTimer=0;
