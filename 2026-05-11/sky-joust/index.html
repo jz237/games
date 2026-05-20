@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.81';
+const VERSION = 'v3.1.82';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -88,10 +88,10 @@ titleMusic.loop = true;
 titleMusic.preload = 'auto';
 let titleMusicFade = null;
 let titleMusicIntent = 'stopped';
-const MUSIC_ENABLED_KEY = 'skyJoust_musicEnabled_v2';
+const MUSIC_ENABLED_KEY = 'skyJoust_musicEnabled_v3';
 const MUSIC_VOLUME_KEY = 'skyJoust_musicVolume_v1';
 const SFX_VOLUME_KEY = 'skyJoust_sfxVolume_v1';
-let musicEnabled = localStorage.getItem(MUSIC_ENABLED_KEY) === 'on';
+let musicEnabled = localStorage.getItem(MUSIC_ENABLED_KEY) !== 'off';
 let musicVolume = Math.max(0,Math.min(1,Number(localStorage.getItem(MUSIC_VOLUME_KEY) || 0.20)));
 let sfxVolume = Math.max(0,Math.min(1,Number(localStorage.getItem(SFX_VOLUME_KEY) || 1)));
 function effectiveMusicVolume(){
@@ -3878,7 +3878,7 @@ function drawOptionsScreen(){
 
   ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.font=`900 ${Math.max(46,Math.min(86,W*.070))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FFD700';ctx.shadowBlur=24;ctx.fillStyle='#FFF0A8';ctx.fillText('OPTIONS',W/2,y+panelH*.16);
-  ctx.font=`800 ${Math.max(17,Math.min(28,W*.024))}px Arial, sans-serif`;ctx.shadowBlur=0;ctx.fillStyle='rgba(230,246,255,.72)';ctx.fillText('Music defaults off. Gameplay music ducks under SFX.',W/2,y+panelH*.26);
+  ctx.font=`800 ${Math.max(17,Math.min(28,W*.024))}px Arial, sans-serif`;ctx.shadowBlur=0;ctx.fillStyle='rgba(230,246,255,.72)';ctx.fillText('Music defaults on. Gameplay music ducks under SFX.',W/2,y+panelH*.26);
   ctx.restore();
 
   const rowW=panelW*.78,rowH=Math.max(76,Math.min(106,panelH*.14)), rowX=W/2-rowW/2,rowY=y+panelH*.34;
