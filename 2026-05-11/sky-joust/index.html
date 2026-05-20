@@ -25,7 +25,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.77';
+const VERSION = 'v3.1.78';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -33,6 +33,7 @@ const TITLE_CABINET_ART_SRC = 'assets/title-cabinet-art.png';
 const TITLE_VOLCANO_BG_SRC = 'assets/title-volcano-bg.png';
 const GAMEPLAY_CAVERN_BG_SRC = 'assets/gameplay-cavern-bg.png';
 const TITLE_MUSIC_SRC = 'assets/quarter-in-the-slot.mp3';
+const TITLE_MUSIC_VOLUME = 0.084;
 const titleCabinetArt = {img:new Image(),loaded:false,failed:false};
 titleCabinetArt.img.onload=()=>{titleCabinetArt.loaded=true;};
 titleCabinetArt.img.onerror=()=>{titleCabinetArt.failed=true;};
@@ -90,19 +91,20 @@ let audioCtx = null;
 const titleMusic = new Audio(TITLE_MUSIC_SRC);
 titleMusic.loop = true;
 titleMusic.preload = 'auto';
-titleMusic.volume = 0.42;
+titleMusic.volume = TITLE_MUSIC_VOLUME;
 let titleMusicFade = null;
 let titleMusicIntent = 'stopped';
+let musicEnabled = localStorage.getItem('skyJoust_titleMusic') !== 'off';
 function ensureAudio(){
   if(!audioCtx){try{audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}
   if(audioCtx&&audioCtx.state==='suspended'){try{audioCtx.resume()}catch(e){}}
 }
 function startTitleMusic(){
-  if(!titleMusic||titleMusicIntent==='playing')return;
+  if(!titleMusic||!musicEnabled||titleMusicIntent==='playing')return;
   titleMusicIntent='playing';
   if(titleMusicFade){clearInterval(titleMusicFade);titleMusicFade=null;}
   titleMusic.loop=true;
-  titleMusic.volume=0.42;
+  titleMusic.volume=TITLE_MUSIC_VOLUME;
   const p=titleMusic.play();
   if(p&&p.catch)p.catch(()=>{});
 }
@@ -119,9 +121,14 @@ function stopTitleMusic(){
       clearInterval(titleMusicFade);titleMusicFade=null;
       titleMusic.pause();
       titleMusic.currentTime=0;
-      titleMusic.volume=0.42;
+      titleMusic.volume=TITLE_MUSIC_VOLUME;
     }
   },30);
+}
+function setMusicEnabled(on){
+  musicEnabled=!!on;
+  localStorage.setItem('skyJoust_titleMusic',musicEnabled?'on':'off');
+  if(musicEnabled)startTitleMusic(); else stopTitleMusic();
 }
 function playTone(freq,dur,type,vol,ramp,delay=0){
   if(!audioCtx)return;
@@ -1361,7 +1368,7 @@ cacheAllSprites();
 
 
 // --- Game State ---
-let state = 'title'; // title, playing, dying, waveTrans, gameOver, highscoreEntry, leaderboard, help
+let state = 'title'; // title, playing, dying, waveTrans, gameOver, highscoreEntry, leaderboard, help, options
 let score = 0, lives = 0, wave = 0, extraLifeGiven = false;
 let player = null;
 let enemies = [], feathers = [], largeFeathers = [], eggs = [], embers = [], explosions = [], impactBursts = [], platforms = [], scorePopups = [], lavaBursts = [], smokeWisps = [], waterDrops = [], touchPulses = [], enemySpawnDramas = [], lavaSparks = [];
@@ -1838,7 +1845,7 @@ function onDown(e){
   if(isInteractiveTouchTarget(e.target))return;
   if(e.cancelable)e.preventDefault();
   ensureAudio();
-  if(state==='title'||state==='leaderboard'||state==='help'||state==='gameOver')startTitleMusic();
+  if(state==='title'||state==='leaderboard'||state==='help'||state==='options'||state==='gameOver')startTitleMusic();
   touchDown=true;
   const pt=(e.changedTouches&&e.changedTouches.length>0)?e.changedTouches[0]:e;
   if(state==='playing'&&pt&&pt.clientX!==undefined)spawnTouchPulse(pt.clientX,pt.clientY);
@@ -1851,7 +1858,7 @@ function onDown(e){
     touchSide=1; // default right for keyboard
   }
   // Title has real buttons now; do not let a high-score tap accidentally start the game.
-  if((state==='title'||state==='leaderboard'||state==='help'||state==='gameOver'||state==='highscoreEntry')&&pt&&pt.clientX!==undefined){
+  if((state==='title'||state==='leaderboard'||state==='help'||state==='options'||state==='gameOver'||state==='highscoreEntry')&&pt&&pt.clientX!==undefined){
     const rect=canvas.getBoundingClientRect();
     const sx=(pt.clientX-rect.left)/rect.width*W, sy=(pt.clientY-rect.top)/rect.height*H;
     if(checkButtons(sx,sy)){touchDown=false;touchSide=0;return;}
@@ -3515,15 +3522,17 @@ function drawTitle(){
   ctx.font=`900 ${Math.max(22,Math.min(34,W*.032))}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#F8ECD2';if(preview.length){for(let i=0;i<preview.length;i++){const e=preview[i];const row=`${i+1}.  ${(e.initials||'---').slice(0,10).toUpperCase()}     ${Number(e.score||0).toLocaleString()}`;ctx.fillText(row,W/2,panelY+74+i*rowH);}}else{ctx.fillStyle='rgba(244,232,208,.78)';ctx.fillText(globalScoresLoading?'Loading global scores…':'No global scores yet',W/2,panelY+90);}
   addButton('scoresPanel',panelX-12,panelY-12,panelW+24,panelH+24,()=>{showingLeaderboard=true;state='leaderboard';fetchGlobalScores()});
 
-  // titleHelpButtonOnly: remove extra footer boxes and keep one large readable HELP control.
-  const helpW=Math.min(W*.54,360), helpH=Math.max(64,Math.min(86,H*.078));
-  const helpX=W/2-helpW/2, helpY=Math.min(H-helpH-24,panelY+panelH+24);
-  const hg=ctx.createLinearGradient(helpX,helpY,helpX,helpY+helpH);hg.addColorStop(0,'rgba(255,232,160,.30)');hg.addColorStop(1,'rgba(22,10,4,.82)');ctx.fillStyle=hg;roundRect(ctx,helpX,helpY,helpW,helpH,17);ctx.fill();
-  ctx.strokeStyle='rgba(255,224,145,.82)';ctx.lineWidth=3.2;roundRect(ctx,helpX,helpY,helpW,helpH,17);ctx.stroke();ctx.strokeStyle='rgba(255,255,255,.28)';ctx.lineWidth=1.2;roundRect(ctx,helpX+7,helpY+7,helpW-14,helpH-14,12);ctx.stroke();
-  ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(30,Math.min(48,helpH*.52,W*.052))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FFD35A';ctx.shadowBlur=12;ctx.fillStyle='#FFF0B8';ctx.fillText('?  HELP',W/2,helpY+helpH/2+1);ctx.shadowBlur=0;
-  addButton('help',helpX-14,helpY-14,helpW+28,helpH+28,()=>{state='help';buttons=[];});
+  const footerGap=Math.max(16,W*.030), footerH=Math.max(64,Math.min(86,H*.078)), footerW=Math.min((startW-footerGap)/2,300), footerTotal=footerW*2+footerGap, footerY=Math.min(H-footerH-24,panelY+panelH+24), helpX=W/2-footerTotal/2, optionsX=helpX+footerW+footerGap;
+  function footerButton(label,x,cb){
+    const fg=ctx.createLinearGradient(x,footerY,x,footerY+footerH);fg.addColorStop(0,'rgba(255,232,160,.30)');fg.addColorStop(1,'rgba(22,10,4,.82)');ctx.fillStyle=fg;roundRect(ctx,x,footerY,footerW,footerH,17);ctx.fill();
+    ctx.strokeStyle='rgba(255,224,145,.82)';ctx.lineWidth=3.2;roundRect(ctx,x,footerY,footerW,footerH,17);ctx.stroke();ctx.strokeStyle='rgba(255,255,255,.28)';ctx.lineWidth=1.2;roundRect(ctx,x+7,footerY+7,footerW-14,footerH-14,12);ctx.stroke();
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(24,Math.min(42,footerH*.50,footerW*.17))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FFD35A';ctx.shadowBlur=12;ctx.fillStyle='#FFF0B8';ctx.fillText(label,x+footerW/2,footerY+footerH/2+1);ctx.shadowBlur=0;
+    addButton(label,x-14,footerY-14,footerW+28,footerH+28,cb);
+  }
+  footerButton('?  HELP',helpX,()=>{state='help';buttons=[];});
+  footerButton('⚙  OPTIONS',optionsX,()=>{state='options';buttons=[];});
 
-  if(score>0){ctx.font=`700 ${Math.max(12,W*0.016)}px Arial, sans-serif`;ctx.fillStyle='rgba(255,220,150,0.72)';ctx.fillText(`Last: Score ${score} · Wave ${wave}`,W/2,Math.min(H-18,helpY+helpH+30));}
+  if(score>0){ctx.font=`700 ${Math.max(12,W*0.016)}px Arial, sans-serif`;ctx.fillStyle='rgba(255,220,150,0.72)';ctx.fillText(`Last: Score ${score} · Wave ${wave}`,W/2,Math.min(H-18,footerY+footerH+30));}
   ctx.textAlign='right';ctx.font=`600 ${Math.max(11,W*0.016)}px Arial, sans-serif`;ctx.fillStyle='rgba(255,215,0,0.5)';ctx.fillText(VERSION,W-14,H-14);ctx.textAlign='left';
 }
 
@@ -3794,6 +3803,40 @@ function drawHelpScreen(){
   addButton('backTitle',bx-14,by-14,btnW+28,btnH+28,()=>enterTitle());
 }
 
+function drawOptionsScreen(){
+  buttons=[];
+  if(titleVolcanoBg.loaded)drawCoverImage(titleVolcanoBg.img,1); else {drawBG();drawLava();}
+  const shade=ctx.createLinearGradient(0,0,0,H);shade.addColorStop(0,'rgba(0,3,10,.48)');shade.addColorStop(.50,'rgba(0,0,0,.62)');shade.addColorStop(1,'rgba(0,0,0,.78)');ctx.fillStyle=shade;ctx.fillRect(0,0,W,H);
+  const panelW=Math.min(W*.86,980), panelH=Math.min(H*.54,620), x=W/2-panelW/2, y=H*.20;
+  const g=ctx.createLinearGradient(x,y,x,y+panelH);g.addColorStop(0,'rgba(38,22,8,.86)');g.addColorStop(.55,'rgba(8,15,28,.88)');g.addColorStop(1,'rgba(34,10,4,.82)');ctx.fillStyle=g;roundRect(ctx,x,y,panelW,panelH,26);ctx.fill();
+  ctx.save();ctx.globalCompositeOperation='lighter';ctx.shadowColor='#FFD35A';ctx.shadowBlur=22;ctx.strokeStyle='rgba(255,225,145,.92)';ctx.lineWidth=4;roundRect(ctx,x,y,panelW,panelH,26);ctx.stroke();ctx.restore();
+  ctx.strokeStyle='rgba(255,255,255,.14)';ctx.lineWidth=1.5;roundRect(ctx,x+10,y+10,panelW-20,panelH-20,20);ctx.stroke();
+
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font=`900 ${Math.max(50,Math.min(92,W*.074))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#FFD700';ctx.shadowBlur=24;ctx.fillStyle='#FFF0A8';ctx.fillText('OPTIONS',W/2,y+panelH*.20);
+  ctx.font=`800 ${Math.max(18,Math.min(30,W*.026))}px Arial, sans-serif`;ctx.shadowBlur=0;ctx.fillStyle='rgba(230,246,255,.72)';ctx.fillText('Title music and arcade cabinet settings',W/2,y+panelH*.32);
+  ctx.restore();
+
+  const rowW=panelW*.76,rowH=Math.max(92,Math.min(124,panelH*.22)), rowX=W/2-rowW/2,rowY=y+panelH*.43;
+  ctx.fillStyle='rgba(0,0,0,.40)';roundRect(ctx,rowX,rowY,rowW,rowH,18);ctx.fill();
+  ctx.strokeStyle='rgba(255,224,145,.42)';ctx.lineWidth=2.4;roundRect(ctx,rowX,rowY,rowW,rowH,18);ctx.stroke();
+  ctx.save();ctx.textAlign='left';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(28,Math.min(44,W*.036))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#000';ctx.shadowBlur=8;ctx.fillStyle='#FFF0B8';ctx.fillText('MUSIC',rowX+rowW*.08,rowY+rowH/2);ctx.restore();
+
+  const toggleW=Math.min(rowW*.38,270), toggleH=Math.max(56,Math.min(76,rowH*.62)), toggleX=rowX+rowW-toggleW-rowW*.06, toggleY=rowY+rowH/2-toggleH/2;
+  const tg=ctx.createLinearGradient(toggleX,toggleY,toggleX,toggleY+toggleH);tg.addColorStop(0,musicEnabled?'rgba(124,255,138,.34)':'rgba(255,90,65,.30)');tg.addColorStop(1,'rgba(0,0,0,.72)');ctx.fillStyle=tg;roundRect(ctx,toggleX,toggleY,toggleW,toggleH,18);ctx.fill();
+  ctx.strokeStyle=musicEnabled?'rgba(124,255,138,.88)':'rgba(255,150,110,.78)';ctx.lineWidth=3;roundRect(ctx,toggleX,toggleY,toggleW,toggleH,18);ctx.stroke();
+  const knobR=toggleH*.36, knobX=musicEnabled?toggleX+toggleW-toggleH*.52:toggleX+toggleH*.52;
+  ctx.save();ctx.globalCompositeOperation='lighter';ctx.fillStyle=musicEnabled?'rgba(124,255,138,.88)':'rgba(255,170,120,.78)';ctx.beginPath();ctx.arc(knobX,toggleY+toggleH/2,knobR,0,Math.PI*2);ctx.fill();ctx.restore();
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(20,Math.min(34,toggleH*.40))}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#F8ECD2';ctx.shadowColor='#000';ctx.shadowBlur=7;ctx.fillText(musicEnabled?'ON':'OFF',toggleX+toggleW/2,toggleY+toggleH/2+1);ctx.restore();
+  addButton('musicToggle',toggleX-18,toggleY-18,toggleW+36,toggleH+36,()=>setMusicEnabled(!musicEnabled));
+
+  const btnW=Math.min(540,W*.56),btnH=Math.max(96,Math.min(136,H*.092)),btnX=W/2-btnW/2,btnY=y+panelH-btnH-42;
+  const bg=ctx.createLinearGradient(btnX,btnY,btnX,btnY+btnH);bg.addColorStop(0,'rgba(255,225,130,.34)');bg.addColorStop(1,'rgba(75,32,4,.74)');ctx.fillStyle=bg;roundRect(ctx,btnX,btnY,btnW,btnH,20);ctx.fill();
+  ctx.save();ctx.globalCompositeOperation='lighter';ctx.shadowColor='#FFD35A';ctx.shadowBlur=18;ctx.strokeStyle='rgba(255,232,160,.92)';ctx.lineWidth=4;roundRect(ctx,btnX,btnY,btnW,btnH,20);ctx.stroke();ctx.restore();
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(44,Math.min(72,W*.050))}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF4C8';ctx.shadowColor='#000';ctx.shadowBlur=8;ctx.fillText('BACK',W/2,btnY+btnH/2+2);ctx.restore();
+  addButton('back',btnX-14,btnY-14,btnW+28,btnH+28,()=>enterTitle());
+}
+
 function drawLeaderboardScreen(){
   buttons=[];
   if(titleVolcanoBg.loaded)drawCoverImage(titleVolcanoBg.img,1); else {drawBG();drawLava();}
@@ -3905,6 +3948,10 @@ function loop(ts){
   }
   if(state==='help'){
     drawHelpScreen();
+    return;
+  }
+  if(state==='options'){
+    drawOptionsScreen();
     return;
   }
   if(state==='highscoreEntry'){
