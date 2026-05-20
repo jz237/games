@@ -25,13 +25,14 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.76';
+const VERSION = 'v3.1.77';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
 const TITLE_CABINET_ART_SRC = 'assets/title-cabinet-art.png';
 const TITLE_VOLCANO_BG_SRC = 'assets/title-volcano-bg.png';
 const GAMEPLAY_CAVERN_BG_SRC = 'assets/gameplay-cavern-bg.png';
+const TITLE_MUSIC_SRC = 'assets/quarter-in-the-slot.mp3';
 const titleCabinetArt = {img:new Image(),loaded:false,failed:false};
 titleCabinetArt.img.onload=()=>{titleCabinetArt.loaded=true;};
 titleCabinetArt.img.onerror=()=>{titleCabinetArt.failed=true;};
@@ -86,9 +87,41 @@ window.addEventListener('resize', resize);
 
 // --- Audio ---
 let audioCtx = null;
+const titleMusic = new Audio(TITLE_MUSIC_SRC);
+titleMusic.loop = true;
+titleMusic.preload = 'auto';
+titleMusic.volume = 0.42;
+let titleMusicFade = null;
+let titleMusicIntent = 'stopped';
 function ensureAudio(){
   if(!audioCtx){try{audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}
   if(audioCtx&&audioCtx.state==='suspended'){try{audioCtx.resume()}catch(e){}}
+}
+function startTitleMusic(){
+  if(!titleMusic||titleMusicIntent==='playing')return;
+  titleMusicIntent='playing';
+  if(titleMusicFade){clearInterval(titleMusicFade);titleMusicFade=null;}
+  titleMusic.loop=true;
+  titleMusic.volume=0.42;
+  const p=titleMusic.play();
+  if(p&&p.catch)p.catch(()=>{});
+}
+function stopTitleMusic(){
+  if(!titleMusic||titleMusicIntent==='stopped')return;
+  titleMusicIntent='stopped';
+  if(titleMusicFade)clearInterval(titleMusicFade);
+  const startVol=titleMusic.volume||0.42;
+  const started=performance.now();
+  titleMusicFade=setInterval(()=>{
+    const a=Math.min(1,(performance.now()-started)/220);
+    titleMusic.volume=startVol*(1-a);
+    if(a>=1){
+      clearInterval(titleMusicFade);titleMusicFade=null;
+      titleMusic.pause();
+      titleMusic.currentTime=0;
+      titleMusic.volume=0.42;
+    }
+  },30);
 }
 function playTone(freq,dur,type,vol,ramp,delay=0){
   if(!audioCtx)return;
@@ -1805,6 +1838,7 @@ function onDown(e){
   if(isInteractiveTouchTarget(e.target))return;
   if(e.cancelable)e.preventDefault();
   ensureAudio();
+  if(state==='title'||state==='leaderboard'||state==='help'||state==='gameOver')startTitleMusic();
   touchDown=true;
   const pt=(e.changedTouches&&e.changedTouches.length>0)?e.changedTouches[0]:e;
   if(state==='playing'&&pt&&pt.clientX!==undefined)spawnTouchPulse(pt.clientX,pt.clientY);
@@ -1850,6 +1884,11 @@ let buttons = [];
 function addButton(label,x,y,w,h,cb){
   buttons.push({label,x,y,w,h,cb});
 }
+function enterTitle(){
+  buttons=[];
+  state='title';
+  startTitleMusic();
+}
 function checkButtons(px,py){
   for(const b of buttons){
     if(px>=b.x&&px<=b.x+b.w&&py>=b.y&&py<=b.y+b.h){b.cb();return true}
@@ -1875,6 +1914,7 @@ canvas.addEventListener('touchend',(e)=>{
 
 // --- Start Game ---
 function startGame(){
+  stopTitleMusic();
   buttons=[];
   state='playing';score=0;lives=3;wave=0;extraLifeGiven=false;trollHand=null;
   enemies=[];feathers=[];largeFeathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];lavaSparks=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;featherBurnSfxCooldown=0;waveKills=0;waveEggs=0;lastWaveStats=null;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;visuallyEmptyWaveTimer=0;comboCount=0;comboTimer=0;bestCombo=0;comboBannerTimer=0;
@@ -3578,8 +3618,8 @@ function drawGameOver(){
   const bg=ctx.createLinearGradient(btnX,btnY,btnX,btnY+btnH);bg.addColorStop(0,'rgba(255,225,120,0.42)');bg.addColorStop(1,'rgba(108,42,0,0.78)');ctx.fillStyle=bg;roundRect(ctx,btnX,btnY,btnW,btnH,20);ctx.fill();
   ctx.save();ctx.globalCompositeOperation='lighter';ctx.shadowColor='#FFD35A';ctx.shadowBlur=22*glow;ctx.strokeStyle=`rgba(255,232,150,${0.72+0.24*glow})`;ctx.lineWidth=5;roundRect(ctx,btnX,btnY,btnW,btnH,20);ctx.stroke();ctx.restore();
   ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(34,Math.min(58,W*0.044))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#000';ctx.shadowBlur=10;ctx.fillStyle='#FFF5CC';ctx.fillText('TAP TO RESTART',W/2,btnY+btnH/2+3);ctx.restore();
-  addButton('restart',btnX,btnY,btnW,btnH,()=>{state='title';buttons=[]});
-  addButton('restart2',0,btnY-24,W,H-btnY+24,()=>{state='title';buttons=[]});
+  addButton('restart',btnX,btnY,btnW,btnH,()=>enterTitle());
+  addButton('restart2',0,btnY-24,W,H-btnY+24,()=>enterTitle());
   ctx.textAlign='right';ctx.textBaseline='alphabetic';ctx.font=`700 ${Math.max(12,W*0.017)}px Arial, sans-serif`;ctx.fillStyle='rgba(255,215,0,.68)';ctx.fillText(VERSION,W-14,H-12);ctx.textAlign='left';
 }
 
@@ -3751,7 +3791,7 @@ function drawHelpScreen(){
   const bg=ctx.createLinearGradient(bx,by,bx,by+btnH);bg.addColorStop(0,'rgba(255,224,130,.46)');bg.addColorStop(1,'rgba(128,58,5,.78)');ctx.fillStyle=bg;roundRect(ctx,bx,by,btnW,btnH,20);ctx.fill();
   ctx.save();ctx.globalCompositeOperation='lighter';ctx.shadowColor='#FFD35A';ctx.shadowBlur=18;ctx.strokeStyle='rgba(255,232,160,.96)';ctx.lineWidth=4;roundRect(ctx,bx,by,btnW,btnH,20);ctx.stroke();ctx.restore();
   ctx.textAlign='center';ctx.font=`900 ${Math.max(48,Math.min(78,W*.050))}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF4C8';ctx.shadowColor='#000';ctx.shadowBlur=8;ctx.fillText('BACK',W/2,by+btnH/2+3);ctx.restore();
-  addButton('backTitle',bx-14,by-14,btnW+28,btnH+28,()=>{state='title';buttons=[];});
+  addButton('backTitle',bx-14,by-14,btnW+28,btnH+28,()=>enterTitle());
 }
 
 function drawLeaderboardScreen(){
@@ -3773,7 +3813,7 @@ function drawLeaderboardScreen(){
   const bg=ctx.createLinearGradient(btnX,btnY,btnX,btnY+btnH);bg.addColorStop(0,'rgba(255,225,130,.34)');bg.addColorStop(1,'rgba(75,32,4,.74)');ctx.fillStyle=bg;roundRect(ctx,btnX,btnY,btnW,btnH,20);ctx.fill();
   ctx.save();ctx.globalCompositeOperation='lighter';ctx.shadowColor='#FFD35A';ctx.shadowBlur=18;ctx.strokeStyle='rgba(255,232,160,.92)';ctx.lineWidth=4;roundRect(ctx,btnX,btnY,btnW,btnH,20);ctx.stroke();ctx.restore();
   ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(48,Math.min(76,W*.050))}px Arial Black, Impact, sans-serif`;ctx.fillStyle='#FFF4C8';ctx.shadowColor='#000';ctx.shadowBlur=8;ctx.fillText('BACK',W/2,btnY+btnH/2+2);ctx.restore();
-  addButton('back',btnX-14,btnY-14,btnW+28,btnH+28,()=>{state='title';buttons=[]});
+  addButton('back',btnX-14,btnY-14,btnW+28,btnH+28,()=>enterTitle());
   ctx.textAlign='left';
 }
 
