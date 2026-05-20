@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.82';
+const VERSION = 'v3.1.83';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -88,7 +88,7 @@ titleMusic.loop = true;
 titleMusic.preload = 'auto';
 let titleMusicFade = null;
 let titleMusicIntent = 'stopped';
-const MUSIC_ENABLED_KEY = 'skyJoust_musicEnabled_v3';
+const MUSIC_ENABLED_KEY = 'skyJoust_musicEnabled_v4';
 const MUSIC_VOLUME_KEY = 'skyJoust_musicVolume_v1';
 const SFX_VOLUME_KEY = 'skyJoust_sfxVolume_v1';
 let musicEnabled = localStorage.getItem(MUSIC_ENABLED_KEY) !== 'off';
