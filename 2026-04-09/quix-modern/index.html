@@ -249,6 +249,14 @@ button.ghost{
   line-height:1.45;
   margin-top:12px;
 }
+.version-chip{
+  margin-top:8px;
+  color:rgba(234,248,255,0.52);
+  font-size:10px;
+  letter-spacing:0.16em;
+  text-transform:uppercase;
+  text-align:right;
+}
 .score-list{
   display:grid;
   gap:8px;
@@ -392,7 +400,8 @@ button.ghost{
           <div class="secondary-row" style="margin-top:10px">
             <button id="scoresButton">High Scores</button>
           </div>
-          <p class="small-copy" id="attractCopy">Fast demo play runs behind this panel. Audio wakes on your first tap because of browser rules. Use How To Play if you want the full rules.</p>
+          <p class="small-copy" id="attractCopy">Fast demo play runs behind this panel. Soundtrack wakes on your first tap because of browser rules. Use How To Play if you want the full rules.</p>
+          <div class="version-chip" id="versionTag">VERSION</div>
         </div>
       </div>
 
@@ -455,9 +464,12 @@ button.ghost{
 (() => {
   const GRID_W = 72;
   const GRID_H = 116;
+  const GAME_VERSION = "v1.1.0";
   const CLAIM_GOAL_BASE = 0.72;
   const SCORE_KEY = "neon-qix-highscores-v1";
   const GLOBAL_SCORES_API = "https://game-scores.jez237.workers.dev/scores/neon-qix";
+  const MUSIC_TRACKS = ["assets/quarter-drop.mp3", "assets/one-life-left.mp3"];
+  const MUSIC_VOLUME = 0.32;
   const CELL_EMPTY = 0;
   const CELL_SAFE = 1;
   const CELL_TRAIL = 2;
@@ -496,6 +508,7 @@ button.ghost{
   const gameOverText = document.getElementById("gameOverText");
   const gameOverEyebrow = document.getElementById("gameOverEyebrow");
   const attractCopy = document.getElementById("attractCopy");
+  const versionTag = document.getElementById("versionTag");
 
   let raf = 0;
   let lastTime = 0;
@@ -516,6 +529,17 @@ button.ghost{
   let audioCtx = null;
   let audioUnlocked = false;
   let qixHum = null;
+  let musicIndex = 0;
+  let soundtrackStarted = false;
+  const soundtrack = new Audio(MUSIC_TRACKS[musicIndex]);
+  soundtrack.preload = "auto";
+  soundtrack.volume = MUSIC_VOLUME;
+  soundtrack.addEventListener("ended", () => {
+    musicIndex = (musicIndex + 1) % MUSIC_TRACKS.length;
+    soundtrack.src = MUSIC_TRACKS[musicIndex];
+    soundtrack.currentTime = 0;
+    startSoundtrack();
+  });
   let levelAdvanceTimer = 0;
   let deathResolveTimer = 0;
   let mouseDragActive = false;
@@ -775,6 +799,7 @@ button.ghost{
 
   function beginGame() {
     unlockAudio();
+    startSoundtrack();
     hideAllOverlays();
     pauseButton.textContent = "Pause";
     state.phase = "playing";
@@ -783,6 +808,8 @@ button.ghost{
   }
 
   function restartGame() {
+    unlockAudio();
+    startSoundtrack();
     hideAllOverlays();
     pauseButton.textContent = "Pause";
     state.phase = "playing";
@@ -2235,7 +2262,7 @@ button.ghost{
       ctx.textAlign = "center";
       ctx.font = (10 * dpr) + "px Verdana";
       ctx.fillStyle = "rgba(125,246,255,0.8)";
-      ctx.fillText(audioUnlocked ? "ATTRACT MODE ACTIVE, CABINET AUDIO LIVE" : "ATTRACT MODE ACTIVE, TAP ANY BUTTON TO WAKE AUDIO", w * 0.5, offsetY + drawH - 10 * dpr);
+      ctx.fillText(audioUnlocked ? "ATTRACT MODE ACTIVE, SOUNDTRACK LIVE" : "ATTRACT MODE ACTIVE, TAP ANY BUTTON TO WAKE SOUNDTRACK", w * 0.5, offsetY + drawH - 10 * dpr);
       ctx.restore();
     }
 
@@ -2376,7 +2403,10 @@ button.ghost{
   }
 
   function unlockAudio() {
-    if (audioUnlocked) return;
+    if (audioUnlocked) {
+      startSoundtrack();
+      return;
+    }
     try {
       const AudioCtor = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtor) return;
@@ -2386,10 +2416,18 @@ button.ghost{
       }
       audioUnlocked = true;
       ensureQixHum();
-      if (attractCopy) attractCopy.textContent = "Attract mode is live, and the cabinet audio is awake. Tap Start when you want control.";
+      startSoundtrack();
+      if (attractCopy) attractCopy.textContent = "Attract mode is live, and the soundtrack is awake. Tap Start when you want control.";
     } catch (error) {
       audioUnlocked = false;
     }
+  }
+
+  function startSoundtrack() {
+    if (!soundtrackStarted) soundtrackStarted = true;
+    soundtrack.volume = MUSIC_VOLUME;
+    const p = soundtrack.play();
+    if (p && p.catch) p.catch(() => { soundtrackStarted = false; });
   }
 
   function playTone(type) {
@@ -2634,6 +2672,7 @@ button.ghost{
   }
 
   function initUi() {
+    if (versionTag) versionTag.textContent = GAME_VERSION;
     startButton.addEventListener("click", beginGame);
     howButton.addEventListener("click", () => {
       unlockAudio();
