@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.85';
+const VERSION = 'v3.1.86';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -28,7 +28,7 @@ const TITLE_VOLCANO_BG_SRC = 'assets/title-volcano-bg.png';
 const GAMEPLAY_CAVERN_BG_SRC = 'assets/gameplay-cavern-bg.png';
 const TITLE_MUSIC_SRC = 'assets/obsidian-joust.mp3';
 const MUSIC_MAX_VOLUME = 0.42;
-const GAMEPLAY_MUSIC_DUCK = 0.40;
+const DEFAULT_MUSIC_VOLUME = 0.70;
 const titleCabinetArt = {img:new Image(),loaded:false,failed:false};
 titleCabinetArt.img.onload=()=>{titleCabinetArt.loaded=true;};
 titleCabinetArt.img.onerror=()=>{titleCabinetArt.failed=true;};
@@ -89,14 +89,13 @@ titleMusic.preload = 'auto';
 let titleMusicFade = null;
 let titleMusicIntent = 'stopped';
 const MUSIC_ENABLED_KEY = 'skyJoust_musicEnabled_v4';
-const MUSIC_VOLUME_KEY = 'skyJoust_musicVolume_v1';
+const MUSIC_VOLUME_KEY = 'skyJoust_musicVolume_v2';
 const SFX_VOLUME_KEY = 'skyJoust_sfxVolume_v1';
 let musicEnabled = localStorage.getItem(MUSIC_ENABLED_KEY) !== 'off';
-let musicVolume = Math.max(0,Math.min(1,Number(localStorage.getItem(MUSIC_VOLUME_KEY) || 0.20)));
+let musicVolume = Math.max(0,Math.min(1,Number(localStorage.getItem(MUSIC_VOLUME_KEY) || DEFAULT_MUSIC_VOLUME)));
 let sfxVolume = Math.max(0,Math.min(1,Number(localStorage.getItem(SFX_VOLUME_KEY) || 1)));
 function effectiveMusicVolume(){
-  const duck=(state==='playing'||state==='waveTrans'||state==='dying')?GAMEPLAY_MUSIC_DUCK:1;
-  return MUSIC_MAX_VOLUME*musicVolume*duck;
+  return MUSIC_MAX_VOLUME*musicVolume;
 }
 function applyMusicVolume(){
   if(titleMusic)titleMusic.volume=effectiveMusicVolume();
