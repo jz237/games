@@ -25,7 +25,7 @@ canvas{display:block;width:100%;height:100%;}
 <body>
 <canvas id="gc"></canvas>
 <div id="hud"><span id="scoreDisp">0</span><span id="livesDisp"></span><span id="levelDisp">LV 1</span></div>
-<div id="versionBadge">v3.1.89 particle physics</div>
+<div id="versionBadge">v3.1.90 3D tumble</div>
 <div class="overlay" id="startScreen">
 <h1>Asteroids HD</h1>
 <p>Touch to aim &bull; Tap to fire &bull; Swipe to thrust &bull; Double-swipe to boost!</p>
@@ -229,6 +229,22 @@ function makeCraters(r,count){
   }
   return craters;
 }
+function projectAsteroidSurface(theta,phi,rx,ry,rz,r,scale=0.78){
+  let x=Math.sin(phi)*Math.cos(theta);
+  let y=Math.cos(phi);
+  let z=Math.sin(phi)*Math.sin(theta);
+  let ny=y*Math.cos(rx)-z*Math.sin(rx);
+  let nz=y*Math.sin(rx)+z*Math.cos(rx);
+  y=ny;z=nz;
+  let nx=x*Math.cos(ry)+z*Math.sin(ry);
+  nz=-x*Math.sin(ry)+z*Math.cos(ry);
+  x=nx;z=nz;
+  nx=x*Math.cos(rz)-y*Math.sin(rz);
+  ny=x*Math.sin(rz)+y*Math.cos(rz);
+  x=nx;y=ny;
+  const depthScale=0.78+z*0.22;
+  return {x:x*r*scale*depthScale,y:y*r*scale*depthScale,z,nx:x,ny:y};
+}
 
 // --- Game State ---
 let ship=null,bullets=[],asteroids=[],ufos=[],ufoBullets=[],powerups=[];
@@ -392,6 +408,7 @@ function draw3DAsteroid(ast){
   ctx.save();ctx.translate(ast.x,ast.y);
   const pal=ast.palette;const r=ast.radius;
   const rx=ast.rotX,ry=ast.rotY;
+  const rz=ast.rot*0.55;
   const sinRx=Math.sin(rx),cosRx=Math.cos(rx),sinRy=Math.sin(ry),cosRy=Math.cos(ry);
 
   // Stable polygon outline — only slow spin, NO perspective squishing
@@ -434,50 +451,98 @@ function draw3DAsteroid(ast){
   termG.addColorStop(1,'rgba(0,0,0,0)');
   ctx.fillStyle=termG;ctx.fillRect(-r*1.5,-r*1.5,r*3,r*3);
 
+  // Rotating surface latitude and longitude bands make the tumble read as real 3D.
+  const drawSurfaceCurve=(points,color,width=0.75)=>{
+    let drawing=false;
+    ctx.beginPath();
+    for(const p of points){
+      if(p.z>-0.08){
+        if(!drawing){ctx.moveTo(p.x,p.y);drawing=true;}
+        else ctx.lineTo(p.x,p.y);
+      } else if(drawing){
+        ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();
+        ctx.beginPath();drawing=false;
+      }
+    }
+    if(drawing){ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();}
+  };
+  ctx.save();
+  ctx.globalCompositeOperation='screen';
+  for(let band=-2;band<=2;band++){
+    if(band===0)continue;
+    const phi=Math.PI/2+band*0.34;
+    const ptsBand=[];
+    for(let i=0;i<=72;i++)ptsBand.push(projectAsteroidSurface((i/72)*Math.PI*2,phi,rx,ry,rz,r,0.82));
+    drawSurfaceCurve(ptsBand,`rgba(255,255,255,${0.055+Math.abs(band)*0.012})`,0.7);
+  }
+  ctx.restore();
+  ctx.save();
+  for(let band=0;band<4;band++){
+    const theta=band*Math.PI/2+ast.rot*0.28;
+    const ptsBand=[];
+    for(let i=4;i<=68;i++)ptsBand.push(projectAsteroidSurface(theta,(i/72)*Math.PI,rx,ry,rz,r,0.82));
+    drawSurfaceCurve(ptsBand,'rgba(0,0,0,0.17)',1.15);
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.globalCompositeOperation='screen';
+  for(let band=0;band<4;band++){
+    const theta=band*Math.PI/2+ast.rot*0.28;
+    const ptsBand=[];
+    for(let i=4;i<=68;i++)ptsBand.push(projectAsteroidSurface(theta,(i/72)*Math.PI,rx,ry,rz,r,0.82));
+    drawSurfaceCurve(ptsBand,'rgba(255,255,255,0.045)',0.55);
+  }
+  ctx.restore();
+
   // Rocky surface bumps — noise dots that shift with rotation
   if(!ast._bumps){
     ast._bumps=[];
     for(let i=0;i<Math.floor(r*1.5);i++){
       ast._bumps.push({theta:rand(0,Math.PI*2),phi:rand(0.2,Math.PI-0.2),
-        size:rand(1,r*0.06),bright:rand(-0.15,0.15)});
+        size:rand(1,r*0.06),bright:rand(-0.15,0.15),ridge:Math.random()<0.38});
     }
   }
   for(const b of ast._bumps){
-    const bt=b.theta+ry, bp=b.phi+rx;
-    const bx=Math.sin(bp)*Math.cos(bt), by=Math.cos(bp), bz=Math.sin(bp)*Math.sin(bt);
-    if(bz>0){
-      const sx=bx*r*0.75, sy=by*r*0.75;
-      const a=bz*0.6;
-      ctx.beginPath();ctx.arc(sx,sy,b.size*(0.5+bz*0.5),0,Math.PI*2);
-      ctx.fillStyle=b.bright>0?`rgba(255,255,255,${b.bright*a})`:`rgba(0,0,0,${-b.bright*a})`;
-      ctx.fill();
+    const p=projectAsteroidSurface(b.theta,b.phi,rx,ry,rz,r,0.78);
+    if(p.z>0.02){
+      const a=p.z*0.65;
+      if(b.ridge){
+        const p2=projectAsteroidSurface(b.theta+0.09,b.phi+0.03,rx,ry,rz,r,0.78);
+        if(p2.z>0){
+          ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p2.x,p2.y);
+          ctx.strokeStyle=b.bright>0?`rgba(255,255,255,${Math.abs(b.bright)*a})`:`rgba(0,0,0,${Math.abs(b.bright)*a})`;
+          ctx.lineWidth=Math.max(0.5,b.size*0.45);ctx.stroke();
+        }
+      } else {
+        ctx.beginPath();ctx.ellipse(p.x,p.y,b.size*(0.55+p.z*0.45),b.size*(0.22+p.z*0.34),Math.atan2(p.ny,p.nx),0,Math.PI*2);
+        ctx.fillStyle=b.bright>0?`rgba(255,255,255,${b.bright*a})`:`rgba(0,0,0,${-b.bright*a})`;
+        ctx.fill();
+      }
     }
   }
 
   // Surface craters that orbit with 3D rotation
   for(const cr of ast.craters){
-    const ct=cr.theta+ry;
-    const cp=cr.phi+rx;
-    const cx3=Math.sin(cp)*Math.cos(ct);
-    const cy3=Math.cos(cp);
-    const cz3=Math.sin(cp)*Math.sin(ct);
-    if(cz3>0.05){
-      const csx=cx3*r*0.7;
-      const csy=cy3*r*0.7;
-      const visScale=0.3+cz3*0.7;
+    const p=projectAsteroidSurface(cr.theta,cr.phi,rx,ry,rz,r,0.76);
+    if(p.z>0.04){
+      const visScale=0.25+p.z*0.75;
       const crSize=cr.cr*visScale;
       if(crSize>1){
+        const tilt=Math.atan2(p.ny,p.nx)+Math.PI/2;
+        const squish=clamp(0.28+p.z*0.72,0.28,1);
+        ctx.save();ctx.translate(p.x,p.y);ctx.rotate(tilt);ctx.scale(1,squish);
         // Dark crater interior
-        const cg=ctx.createRadialGradient(csx+crSize*0.15*lnx,csy+crSize*0.15*lny,0,csx,csy,crSize);
+        const cg=ctx.createRadialGradient(crSize*0.15*lnx,crSize*0.15*lny,0,0,0,crSize);
         cg.addColorStop(0,`rgba(0,0,0,${cr.darkness*visScale*0.9})`);
         cg.addColorStop(0.6,`rgba(0,0,0,${cr.darkness*0.4*visScale})`);
         cg.addColorStop(1,'rgba(0,0,0,0)');
-        ctx.beginPath();ctx.arc(csx,csy,crSize,0,Math.PI*2);
+        ctx.beginPath();ctx.arc(0,0,crSize,0,Math.PI*2);
         ctx.fillStyle=cg;ctx.fill();
         // Rim highlight on light-facing edge
         ctx.beginPath();
-        ctx.arc(csx-crSize*0.3*lnx,csy-crSize*0.3*lny,crSize*0.95,0,Math.PI*2);
+        ctx.arc(-crSize*0.3*lnx,-crSize*0.3*lny,crSize*0.95,0,Math.PI*2);
         ctx.strokeStyle=`rgba(255,255,255,${0.12*visScale})`;ctx.lineWidth=0.7;ctx.stroke();
+        ctx.restore();
       }
     }
   }
