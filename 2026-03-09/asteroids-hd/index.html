@@ -25,7 +25,7 @@ canvas{display:block;width:100%;height:100%;}
 <body>
 <canvas id="gc"></canvas>
 <div id="hud"><span id="scoreDisp">0</span><span id="livesDisp"></span><span id="levelDisp">LV 1</span></div>
-<div id="versionBadge">v3.1.91 faceted 3D rocks</div>
+<div id="versionBadge">v3.1.92 no asteroid halos</div>
 <div class="overlay" id="startScreen">
 <h1>Asteroids HD</h1>
 <p>Touch to aim &bull; Tap to fire &bull; Swipe to thrust &bull; Double-swipe to boost!</p>
@@ -489,11 +489,6 @@ function draw3DAsteroid(ast){
   }
   faces.sort((a,b)=>a.depth-b.depth);
 
-  const shadowY=5+Math.sin(rx)*2,shadowX=5+Math.sin(ry)*2;
-  ctx.save();ctx.translate(shadowX,shadowY);ctx.scale(1.03,1.03);
-  ctx.beginPath();ctx.arc(0,0,r*.95,0,Math.PI*2);
-  ctx.fillStyle='rgba(0,0,0,0.34)';ctx.fill();ctx.restore();
-
   for(const face of faces){
     const a=verts[face.f[0]],b=verts[face.f[1]],c=verts[face.f[2]];
     const base=pal[Math.min(pal.length-1,Math.max(0,Math.floor(face.shade*pal.length*0.72)))];
@@ -503,14 +498,6 @@ function draw3DAsteroid(ast){
     ctx.strokeStyle=`rgba(255,255,255,${0.035+Math.max(0,face.nz)*0.055})`;
     ctx.lineWidth=0.45;ctx.stroke();
   }
-
-  ctx.save();
-  ctx.globalCompositeOperation='multiply';
-  const term=ctx.createRadialGradient(r*0.45,-r*0.35,r*0.1,r*0.08,0,r*1.12);
-  term.addColorStop(0,'rgba(255,255,255,0)');
-  term.addColorStop(0.58,'rgba(120,120,120,0.18)');
-  term.addColorStop(1,'rgba(0,0,0,0.55)');
-  ctx.fillStyle=term;ctx.beginPath();ctx.arc(0,0,r*1.02,0,Math.PI*2);ctx.fill();ctx.restore();
 
   for(const cr of ast.craters){
     const p=projectAsteroidSurface(cr.theta,cr.phi,rx,ry,rz,r,0.78);
@@ -530,9 +517,6 @@ function draw3DAsteroid(ast){
   const shine=ctx.createRadialGradient(-r*0.28,-r*0.34,0,-r*0.28,-r*0.34,r*.2);
   shine.addColorStop(0,'rgba(255,255,255,0.22)');shine.addColorStop(1,'rgba(255,255,255,0)');
   ctx.fillStyle=shine;ctx.fill();
-
-  ctx.beginPath();ctx.arc(0,0,r*1.01,0,Math.PI*2);
-  ctx.strokeStyle='rgba(220,235,255,0.18)';ctx.lineWidth=1.1;ctx.stroke();
 
   if(ast.size==='boss'){
     ctx.beginPath();ctx.arc(0,0,r*0.4,0,Math.PI*2);
