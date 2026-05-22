@@ -97,7 +97,7 @@ h1{margin:0 0 10px;font-size:clamp(38px,9vw,88px);line-height:.9;letter-spacing:
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.164.1/build/three.module.js';
 
-const VERSION='v4.0.0-physics3d';
+const VERSION='v4.0.5-mobile-visible';
 const HS_KEY='asteroids3d_gravity_shards_highscores';
 const stage=document.getElementById('stage');
 const scoreDisp=document.getElementById('scoreDisp'),livesDisp=document.getElementById('livesDisp'),hullDisp=document.getElementById('hullDisp'),zoneDisp=document.getElementById('zoneDisp'),comboDisp=document.getElementById('comboDisp');
@@ -105,7 +105,7 @@ const startScreen=document.getElementById('startScreen'),gameOverScreen=document
 const finalScore=document.getElementById('finalScore'),hsEntryArea=document.getElementById('hsEntryArea'),initialPickers=document.getElementById('initialPickers');
 const rand=(a,b)=>Math.random()*(b-a)+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 let W=innerWidth,H=innerHeight,gameState='title',last=performance.now()/1000,score=0,lives=4,level=1,hull=100,combo=1,comboTimer=0;
-let ship,scene,camera,renderer,shipGroup,shipFlame,shieldMesh,starField,nebula,clock=new THREE.Clock();
+let ship,scene,camera,renderer,shipGroup,shipFlame,shieldMesh,shipLight,starField,nebula,clock=new THREE.Clock();
 let asteroids=[],bullets=[],sparks=[],powerups=[],shockwaves=[],floatText=[];
 let fireCooldown=0,invuln=0,shieldTimer=0,rapidTimer=0,gravTimer=0,spawnPulse=0,shake=0,audioCtx=null;
 let keys={},touch={aim:false,angle:-Math.PI/2,thrust:false,brake:false,boost:false,fire:false};
@@ -113,23 +113,32 @@ let initials=['A','C','E'],pendingScore=null,newScoreIndex=-1;
 
 function init3D(){
   scene=new THREE.Scene();
-  scene.fog=new THREE.FogExp2(0x03050b,.018);
-  camera=new THREE.PerspectiveCamera(62,W/H,.1,2400);
-  camera.position.set(0,-360,620);
+  scene.fog=new THREE.FogExp2(0x03050b,.00045);
+  camera=new THREE.PerspectiveCamera(cameraFov(),W/H,.1,2600);
+  const home=baseCamera();
+  camera.position.set(0,home.y,home.z);
   camera.lookAt(0,0,0);
   renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
   renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
   renderer.setSize(W,H);
   renderer.outputColorSpace=THREE.SRGBColorSpace;
+  renderer.setClearColor(0x020713,1);
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure=1.65;
   stage.appendChild(renderer.domElement);
-  scene.add(new THREE.AmbientLight(0x89b8ff,.38));
-  const key=new THREE.DirectionalLight(0xffffff,2.1);key.position.set(-260,-380,680);scene.add(key);
-  const rim=new THREE.PointLight(0x55d8ff,2.6,1000);rim.position.set(280,260,240);scene.add(rim);
+  scene.add(new THREE.AmbientLight(0xaed4ff,.78));
+  const key=new THREE.DirectionalLight(0xffffff,2.7);key.position.set(-260,-380,680);scene.add(key);
+  const fill=new THREE.DirectionalLight(0x68d8ff,1.25);fill.position.set(360,220,360);scene.add(fill);
+  const rim=new THREE.PointLight(0x55d8ff,3.4,1300);rim.position.set(280,260,240);scene.add(rim);
   const sun=new THREE.PointLight(0xffcf8a,1.8,1200);sun.position.set(-440,360,260);scene.add(sun);
   makeStars();
   makeNebula();
   makeShip();
 }
+
+function isPortrait(){return H>W*1.08}
+function cameraFov(){return isPortrait()?84:62}
+function baseCamera(){return isPortrait()?{y:-520,z:880}:{y:-360,z:620}}
 
 function makeStars(){
   const geo=new THREE.BufferGeometry(),count=1100,pos=new Float32Array(count*3),col=new Float32Array(count*3);
@@ -139,13 +148,13 @@ function makeStars(){
     col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b;
   }
   geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.setAttribute('color',new THREE.BufferAttribute(col,3));
-  starField=new THREE.Points(geo,new THREE.PointsMaterial({size:2.2,vertexColors:true,sizeAttenuation:true,transparent:true,opacity:.9}));
+  starField=new THREE.Points(geo,new THREE.PointsMaterial({size:isPortrait()?3.4:2.4,vertexColors:true,sizeAttenuation:true,transparent:true,opacity:.95}));
   scene.add(starField);
 }
 
 function makeNebula(){
-  const geo=new THREE.PlaneGeometry(2200,2200,1,1);
-  const mat=new THREE.MeshBasicMaterial({color:0x12304d,transparent:true,opacity:.18,depthWrite:false});
+  const geo=new THREE.PlaneGeometry(6200,6200,1,1);
+  const mat=new THREE.MeshBasicMaterial({color:0x102a45,transparent:true,opacity:.2,depthWrite:false});
   nebula=new THREE.Mesh(geo,mat);nebula.position.z=-520;scene.add(nebula);
 }
 
@@ -153,14 +162,26 @@ function makeShip(){
   shipGroup=new THREE.Group();
   const body=new THREE.ConeGeometry(18,46,4,1);
   body.rotateX(Math.PI/2);
-  const mat=new THREE.MeshStandardMaterial({color:0xdaf7ff,metalness:.62,roughness:.22,emissive:0x102d3d,emissiveIntensity:.45});
+  const mat=new THREE.MeshBasicMaterial({color:0xf2fcff});
+  mat.fog=false;
   const mesh=new THREE.Mesh(body,mat);mesh.castShadow=false;shipGroup.add(mesh);
-  const wingGeo=new THREE.BoxGeometry(48,7,5),wingMat=new THREE.MeshStandardMaterial({color:0x5bd8ff,metalness:.5,roughness:.25,emissive:0x075b82,emissiveIntensity:.45});
+  const wingGeo=new THREE.BoxGeometry(48,7,5),wingMat=new THREE.MeshBasicMaterial({color:0x8fe9ff});
+  wingMat.fog=false;
   const wings=new THREE.Mesh(wingGeo,wingMat);wings.position.y=-7;shipGroup.add(wings);
   const flameGeo=new THREE.ConeGeometry(9,42,18),flameMat=new THREE.MeshBasicMaterial({color:0xffb13d,transparent:true,opacity:.75});
+  flameMat.fog=false;
   shipFlame=new THREE.Mesh(flameGeo,flameMat);shipFlame.rotateX(-Math.PI/2);shipFlame.position.y=-32;shipFlame.scale.set(1,1,0.1);shipGroup.add(shipFlame);
-  shieldMesh=new THREE.Mesh(new THREE.SphereGeometry(32,32,16),new THREE.MeshBasicMaterial({color:0x62dfff,transparent:true,opacity:.16,wireframe:true}));
+  const shieldMat=new THREE.MeshBasicMaterial({color:0x62dfff,transparent:true,opacity:.16,wireframe:true});
+  shieldMat.fog=false;
+  shieldMesh=new THREE.Mesh(new THREE.SphereGeometry(32,32,16),shieldMat);
   shieldMesh.visible=false;shipGroup.add(shieldMesh);
+  const beacon=new THREE.Mesh(new THREE.SphereGeometry(15,22,12),new THREE.MeshBasicMaterial({color:0xe9fbff,transparent:true,opacity:1}));
+  beacon.material.fog=false;
+  beacon.position.y=8;shipGroup.add(beacon);
+  const aura=new THREE.Mesh(new THREE.SphereGeometry(58,32,16),new THREE.MeshBasicMaterial({color:0x4edbff,transparent:true,opacity:.18,depthWrite:false}));
+  aura.material.fog=false;
+  shipGroup.add(aura);
+  shipLight=new THREE.PointLight(0x9ff2ff,2.6,360);scene.add(shipLight);
   scene.add(shipGroup);
 }
 
@@ -181,11 +202,19 @@ function createAsteroid(size,pos,vel){
     v.multiplyScalar(d);p.setXYZ(i,v.x,v.y,v.z);
   }
   geo.computeVertexNormals();
-  const color=[0x8d806f,0x6d7582,0x9d674c,0x596c65,0x756092][Math.floor(rand(0,5))];
-  const mat=new THREE.MeshStandardMaterial({color,roughness:.88,metalness:.06,flatShading:true});
+  const color=[0xc4aa82,0x9facbd,0xcf8661,0x8eaa9e,0xa184b0][Math.floor(rand(0,5))];
+  const mat=new THREE.MeshBasicMaterial({color});
+  mat.fog=false;
   const mesh=new THREE.Mesh(geo,mat);
   mesh.position.copy(pos);
+  mesh.renderOrder=2;
+  const edge=new THREE.Mesh(geo.clone(),new THREE.MeshBasicMaterial({color:0xd7fbff,transparent:true,opacity:size===3?.88:.72,wireframe:true,depthWrite:false}));
+  edge.material.fog=false;
+  edge.renderOrder=3;
+  edge.scale.setScalar(1.012);
+  mesh.add(edge);
   const craterMat=new THREE.MeshBasicMaterial({color:0x101318,transparent:true,opacity:.55});
+  craterMat.fog=false;
   const craterGroup=new THREE.Group();
   for(let i=0;i<Math.floor(radius/8);i++){
     const c=new THREE.Mesh(new THREE.CircleGeometry(rand(radius*.08,radius*.18),14),craterMat);
@@ -333,6 +362,7 @@ function update(dt){
   ship.vel.multiplyScalar(Math.pow(.985,dt*60));ship.vel.clampLength(0,boost?560:380);ship.pos.add(ship.vel.clone().multiplyScalar(dt));
   wrap(ship.pos,650,430);if((keys.KeyJ||touch.fire))shoot();
   shipGroup.position.copy(ship.pos);shipGroup.rotation.z=ship.angle-Math.PI/2;shipGroup.rotation.x=Math.sin(performance.now()/180)*.05;
+  shipLight.position.copy(ship.pos).add(new THREE.Vector3(0,0,90));
   shieldMesh.visible=shieldTimer>0||invuln>0;shieldMesh.material.opacity=shieldTimer>0?.22:.1;shieldMesh.rotation.x+=dt;shieldMesh.rotation.y+=dt*.7;
   updateObjects(dt);updateCollisions();updateCamera(dt);updateHud();
 }
@@ -388,9 +418,12 @@ function updateCollisions(){
 }
 
 function updateCamera(dt){
-  const desired=new THREE.Vector3(ship.pos.x*.45,ship.pos.y*.45-360,620+ship.vel.length()*.08);
+  const home=baseCamera();
+  camera.fov+=((cameraFov())-camera.fov)*(1-Math.pow(.04,dt));
+  camera.aspect=W/H;camera.updateProjectionMatrix();
+  const desired=new THREE.Vector3(ship.pos.x*.36,ship.pos.y*.36+home.y,home.z+ship.vel.length()*.08);
   if(shake>0){desired.x+=rand(-12,12)*shake;desired.y+=rand(-12,12)*shake;shake*=Math.pow(.08,dt)}
-  camera.position.lerp(desired,1-Math.pow(.02,dt));camera.lookAt(ship.pos.x*.35,ship.pos.y*.35,0);
+  camera.position.lerp(desired,1-Math.pow(.02,dt));camera.lookAt(ship.pos.x*.24,ship.pos.y*.24,0);
 }
 
 function wrap(v,xlim,ylim){
@@ -485,7 +518,7 @@ aimStick.addEventListener('touchend',e=>{e.preventDefault();touch.aim=false;cons
 addEventListener('keydown',e=>{keys[e.code]=true;unlockAudio();if(e.code==='Enter'&&gameState!=='play')startGame();});
 addEventListener('keyup',e=>{keys[e.code]=false});
 document.addEventListener('touchmove',e=>{if(e.target.closest('button')||e.target.closest('.overlay')||e.target.closest('#aimStick'))return;e.preventDefault()},{passive:false});
-addEventListener('resize',()=>{W=innerWidth;H=innerHeight;camera.aspect=W/H;camera.updateProjectionMatrix();renderer.setSize(W,H);renderer.setPixelRatio(Math.min(devicePixelRatio||1,2))});
+addEventListener('resize',()=>{W=innerWidth;H=innerHeight;camera.fov=cameraFov();camera.aspect=W/H;camera.updateProjectionMatrix();renderer.setSize(W,H);renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));if(starField)starField.material.size=isPortrait()?3.4:2.4});
 
 init3D();resetShip();updateHud();render();
 </script>
