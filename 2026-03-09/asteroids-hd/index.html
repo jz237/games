@@ -25,7 +25,7 @@ canvas{display:block;width:100%;height:100%;}
 <body>
 <canvas id="gc"></canvas>
 <div id="hud"><span id="scoreDisp">0</span><span id="livesDisp"></span><span id="levelDisp">LV 1</span></div>
-<div id="versionBadge">v3.1.90 3D tumble</div>
+<div id="versionBadge">v3.1.91 faceted 3D rocks</div>
 <div class="overlay" id="startScreen">
 <h1>Asteroids HD</h1>
 <p>Touch to aim &bull; Tap to fire &bull; Swipe to thrust &bull; Double-swipe to boost!</p>
@@ -245,6 +245,61 @@ function projectAsteroidSurface(theta,phi,rx,ry,rz,r,scale=0.78){
   const depthScale=0.78+z*0.22;
   return {x:x*r*scale*depthScale,y:y*r*scale*depthScale,z,nx:x,ny:y};
 }
+function makeAsteroidMesh(r,segments=12,rings=6){
+  const verts=[],faces=[];
+  const radiusAt=(theta,phi)=>{
+    return r*(0.72+0.2*Math.sin(theta*2.7+phi*1.9)+0.14*Math.sin(theta*5.1-phi*2.6)+rand(-0.1,0.12));
+  };
+  verts.push({x:0,y:-radiusAt(0,0),z:0});
+  for(let ring=1;ring<rings;ring++){
+    const phi=(ring/rings)*Math.PI;
+    for(let seg=0;seg<segments;seg++){
+      const theta=(seg/segments)*Math.PI*2;
+      const rr=radiusAt(theta,phi);
+      verts.push({
+        x:Math.sin(phi)*Math.cos(theta)*rr,
+        y:Math.cos(phi)*rr,
+        z:Math.sin(phi)*Math.sin(theta)*rr
+      });
+    }
+  }
+  const bottomIndex=verts.length;
+  verts.push({x:0,y:radiusAt(0,Math.PI),z:0});
+  const idx=(ring,seg)=>1+(ring-1)*segments+((seg+segments)%segments);
+  for(let seg=0;seg<segments;seg++)faces.push([0,idx(1,seg+1),idx(1,seg)]);
+  for(let ring=1;ring<rings-1;ring++){
+    for(let seg=0;seg<segments;seg++){
+      const a=idx(ring,seg),b=idx(ring,seg+1),c=idx(ring+1,seg+1),d=idx(ring+1,seg);
+      faces.push([a,b,c]);faces.push([a,c,d]);
+    }
+  }
+  for(let seg=0;seg<segments;seg++)faces.push([bottomIndex,idx(rings-1,seg),idx(rings-1,seg+1)]);
+  return {verts,faces};
+}
+function rotateVertex3D(v,rx,ry,rz){
+  let x=v.x,y=v.y,z=v.z;
+  let ny=y*Math.cos(rx)-z*Math.sin(rx),nz=y*Math.sin(rx)+z*Math.cos(rx);
+  y=ny;z=nz;
+  let nx=x*Math.cos(ry)+z*Math.sin(ry);
+  nz=-x*Math.sin(ry)+z*Math.cos(ry);
+  x=nx;z=nz;
+  nx=x*Math.cos(rz)-y*Math.sin(rz);
+  ny=x*Math.sin(rz)+y*Math.cos(rz);
+  return {x:nx,y:ny,z};
+}
+function hexToRgb(hex){
+  const h=hex.replace('#','');
+  const n=parseInt(h.length===3?h.split('').map(c=>c+c).join(''):h,16);
+  return {r:(n>>16)&255,g:(n>>8)&255,b:n&255};
+}
+function litColor(hex,light){
+  const c=hexToRgb(hex);
+  const tint=clamp(light,0,1.35);
+  const r=clamp(c.r*tint+22*Math.max(0,tint-0.75),0,255);
+  const g=clamp(c.g*tint+22*Math.max(0,tint-0.75),0,255);
+  const b=clamp(c.b*tint+28*Math.max(0,tint-0.75),0,255);
+  return `rgb(${r|0},${g|0},${b|0})`;
+}
 
 // --- Game State ---
 let ship=null,bullets=[],asteroids=[],ufos=[],ufoBullets=[],powerups=[];
@@ -322,6 +377,7 @@ function spawnAsteroid(size,x,y){
     rotX:rand(0,Math.PI*2),rotY:rand(0,Math.PI*2),
     rotXV:rand(-1.5,1.5),rotYV:rand(-1.2,1.2),
     craters:makeCraters(ar,Math.floor(rand(5,9))),
+    mesh:makeAsteroidMesh(ar,isBoss?15:(size==='large'?13:10),isBoss?7:6),
     palette:pal,hp:isBoss?5:1,
     mass:Math.max(1,(ar*ar)*(isBoss?0.018:0.012))
   };
@@ -409,6 +465,85 @@ function draw3DAsteroid(ast){
   const pal=ast.palette;const r=ast.radius;
   const rx=ast.rotX,ry=ast.rotY;
   const rz=ast.rot*0.55;
+  if(!ast.mesh)ast.mesh=makeAsteroidMesh(r,ast.size==='boss'?15:(ast.size==='large'?13:10),ast.size==='boss'?7:6);
+  const mesh=ast.mesh;
+  const verts=mesh.verts.map(v=>{
+    const p=rotateVertex3D(v,rx,ry,rz);
+    const perspective=1/(1-p.z/(r*5.8));
+    return {...p,sx:p.x*perspective,sy:p.y*perspective,scale:perspective};
+  });
+  const light={x:-0.45+Math.sin(ry)*0.22,y:-0.62+Math.sin(rx)*0.18,z:0.82};
+  const ll=Math.hypot(light.x,light.y,light.z);light.x/=ll;light.y/=ll;light.z/=ll;
+  const faces=[];
+  for(const f of mesh.faces){
+    const a=verts[f[0]],b=verts[f[1]],c=verts[f[2]];
+    let ux=b.x-a.x,uy=b.y-a.y,uz=b.z-a.z;
+    let vx=c.x-a.x,vy=c.y-a.y,vz=c.z-a.z;
+    let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+    const nl=Math.hypot(nx,ny,nz)||1;nx/=nl;ny/=nl;nz/=nl;
+    const cx=(a.x+b.x+c.x)/3,cy=(a.y+b.y+c.y)/3,cz=(a.z+b.z+c.z)/3;
+    if(nx*cx+ny*cy+nz*cz<0){nx=-nx;ny=-ny;nz=-nz;}
+    if(nz<-0.18)continue;
+    const shade=0.42+Math.max(0,nx*light.x+ny*light.y+nz*light.z)*0.78+Math.max(0,nz)*0.18;
+    faces.push({f,depth:(a.z+b.z+c.z)/3,shade,nx,ny,nz});
+  }
+  faces.sort((a,b)=>a.depth-b.depth);
+
+  const shadowY=5+Math.sin(rx)*2,shadowX=5+Math.sin(ry)*2;
+  ctx.save();ctx.translate(shadowX,shadowY);ctx.scale(1.03,1.03);
+  ctx.beginPath();ctx.arc(0,0,r*.95,0,Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,0.34)';ctx.fill();ctx.restore();
+
+  for(const face of faces){
+    const a=verts[face.f[0]],b=verts[face.f[1]],c=verts[face.f[2]];
+    const base=pal[Math.min(pal.length-1,Math.max(0,Math.floor(face.shade*pal.length*0.72)))];
+    ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);ctx.lineTo(c.sx,c.sy);ctx.closePath();
+    ctx.fillStyle=litColor(base,face.shade);
+    ctx.fill();
+    ctx.strokeStyle=`rgba(255,255,255,${0.035+Math.max(0,face.nz)*0.055})`;
+    ctx.lineWidth=0.45;ctx.stroke();
+  }
+
+  ctx.save();
+  ctx.globalCompositeOperation='multiply';
+  const term=ctx.createRadialGradient(r*0.45,-r*0.35,r*0.1,r*0.08,0,r*1.12);
+  term.addColorStop(0,'rgba(255,255,255,0)');
+  term.addColorStop(0.58,'rgba(120,120,120,0.18)');
+  term.addColorStop(1,'rgba(0,0,0,0.55)');
+  ctx.fillStyle=term;ctx.beginPath();ctx.arc(0,0,r*1.02,0,Math.PI*2);ctx.fill();ctx.restore();
+
+  for(const cr of ast.craters){
+    const p=projectAsteroidSurface(cr.theta,cr.phi,rx,ry,rz,r,0.78);
+    if(p.z>0.03){
+      const crSize=cr.cr*(0.25+p.z*0.72);
+      const squish=clamp(0.25+p.z*0.75,0.25,1);
+      ctx.save();ctx.translate(p.x,p.y);ctx.rotate(Math.atan2(p.ny,p.nx)+Math.PI/2);ctx.scale(1,squish);
+      ctx.beginPath();ctx.arc(0,0,crSize,0,Math.PI*2);
+      ctx.fillStyle=`rgba(0,0,0,${0.22+cr.darkness*0.7*p.z})`;ctx.fill();
+      ctx.beginPath();ctx.arc(-crSize*.25,-crSize*.18,crSize*.9,0,Math.PI*2);
+      ctx.strokeStyle=`rgba(255,255,255,${0.08+0.08*p.z})`;ctx.lineWidth=0.75;ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  ctx.beginPath();ctx.arc(-r*0.28+Math.sin(ry)*r*.18,-r*0.34+Math.sin(rx)*r*.12,r*.18,0,Math.PI*2);
+  const shine=ctx.createRadialGradient(-r*0.28,-r*0.34,0,-r*0.28,-r*0.34,r*.2);
+  shine.addColorStop(0,'rgba(255,255,255,0.22)');shine.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=shine;ctx.fill();
+
+  ctx.beginPath();ctx.arc(0,0,r*1.01,0,Math.PI*2);
+  ctx.strokeStyle='rgba(220,235,255,0.18)';ctx.lineWidth=1.1;ctx.stroke();
+
+  if(ast.size==='boss'){
+    ctx.beginPath();ctx.arc(0,0,r*0.4,0,Math.PI*2);
+    const cg=ctx.createRadialGradient(0,0,0,0,0,r*0.4);
+    cg.addColorStop(0,'rgba(255,50,50,0.5)');cg.addColorStop(1,'rgba(255,50,50,0)');
+    ctx.fillStyle=cg;ctx.fill();
+    ctx.fillStyle='#fff';ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(''+ast.hp,0,0);
+  }
+  ctx.restore();
+  return;
   const sinRx=Math.sin(rx),cosRx=Math.cos(rx),sinRy=Math.sin(ry),cosRy=Math.cos(ry);
 
   // Stable polygon outline — only slow spin, NO perspective squishing
@@ -875,6 +1010,7 @@ function update(dt){
         size:'boss',radius:80,shape:makeAstShape(80,16),rot:0,rotV:rand(-1,1),
         rotX:rand(0,6.28),rotY:rand(0,6.28),rotXV:rand(-1,1),rotYV:rand(-0.8,0.8),
         craters:makeCraters(80,7),
+        mesh:makeAsteroidMesh(80,15,7),
         palette:['#880000','#aa2222','#cc4444','#ff6666'],hp:5,mass:140});
     } else {
       spawnLevel();
