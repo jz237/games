@@ -150,7 +150,7 @@
 
 <div id="start-screen">
   <h1>Lunar Lander</h1>
-  <div class="subtitle">Enhanced Edition - v2.1 Apollo Readouts</div>
+  <div class="subtitle">Enhanced Edition - v2.2 Apollo Final</div>
   <div class="controls-info">
     <kbd>&uarr;</kbd> Thrust &nbsp;
     <kbd>&larr;</kbd><kbd>&rarr;</kbd> Rotate &nbsp;
@@ -218,7 +218,7 @@
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-const GAME_VERSION = 'v2.1 APOLLO READOUTS';
+const GAME_VERSION = 'v2.2 APOLLO FINAL';
 
 // --- Responsive canvas ---
 function resize() {
@@ -505,6 +505,24 @@ function playRadioChatter() {
   src.start();
 }
 
+function playRadarLockChirp() {
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  const freqs = [1040, 1320, 880];
+  freqs.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0.001, t + i * 0.075);
+    g.gain.exponentialRampToValueAtTime(0.055, t + i * 0.075 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.075 + 0.06);
+    osc.connect(g).connect(audioCtx.destination);
+    osc.start(t + i * 0.075);
+    osc.stop(t + i * 0.075 + 0.07);
+  });
+}
+
 // --- Fuel Pickup Sound ---
 function playPickupSound() {
   ensureAudio();
@@ -547,6 +565,7 @@ let altBeepTimer = 0;
 let altBeepOsc = null;
 let radioChatterTimer = 0;
 let gamepadIndex = null;
+let radarLockAnnounced = false;
 
 // Difficulty system
 let difficulty = 'commander'; // cadet, commander, apollo13
@@ -917,6 +936,7 @@ function init() {
 
   altBeepTimer = 0;
   radioChatterTimer = 60 + Math.random() * 120;
+  radarLockAnnounced = false;
 
   // Mission
   generateMission();
@@ -1209,6 +1229,10 @@ function update(dt) {
   // === ALTITUDE WARNING ===
   const alt = getTerrainY(lander.x) - lander.y - lander.height/2;
   if (audioCtx) updateAltitudeBeep(alt, dt);
+  if (audioCtx && !radarLockAnnounced && alt < 180 && alt > 25) {
+    radarLockAnnounced = true;
+    playRadarLockChirp();
+  }
 
   // === RADIO CHATTER (ambient) ===
   radioChatterTimer -= dt;
@@ -2016,6 +2040,8 @@ function draw() {
       ctx.fill();
     }
   }
+
+  drawLandingRadarCone();
 
   // Lander
   if (state === 'playing' || state === 'landed') {
@@ -3081,6 +3107,20 @@ function drawReadoutText(label, value, x, y, color = '#dff') {
   ctx.fillText(value, x + 48, y);
 }
 
+function drawStatusLamp(label, active, x, y, color = '#4f8') {
+  const lampAlpha = active ? 0.7 + 0.3 * Math.sin(time * 0.16) : 0.22;
+  ctx.fillStyle = active ? color : 'rgba(100, 120, 140, 0.35)';
+  ctx.globalAlpha = lampAlpha;
+  ctx.beginPath();
+  ctx.arc(x, y - 3, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = active ? color : 'rgba(160, 180, 200, 0.35)';
+  ctx.font = '7px "Courier New", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(label, x + 7, y);
+}
+
 function drawApolloReadouts() {
   const W = canvas.width;
   const H = canvas.height;
@@ -3097,6 +3137,8 @@ function drawApolloReadouts() {
   const vRate = lander.vy;
   const angleDeg = lander.angle * 180 / Math.PI;
   const levelErr = Math.abs(angleDeg);
+  const radarLock = alt < 220;
+  const program = alt < 80 ? 'P64' : alt < 220 ? 'P63' : 'P00';
   const onGlide = alt < 150 && Math.abs(vRate) < MAX_LAND_VY && Math.abs(hRate) < MAX_LAND_VX && levelErr < MAX_LAND_ANGLE * 180 / Math.PI;
   const danger = alt < 120 && (Math.abs(vRate) > MAX_LAND_VY || Math.abs(hRate) > MAX_LAND_VX || levelErr > 20);
 
@@ -3162,6 +3204,62 @@ function drawApolloReadouts() {
   ctx.fillStyle = onGlide ? '#4f8' : danger ? '#f66' : '#fa4';
   ctx.font = 'bold 9px "Courier New", monospace';
   ctx.fillText(onGlide ? 'GO' : danger ? 'ABORT RATE' : 'CORRECT', gaugeCX, gaugeCY + gaugeR + 13);
+
+  const lampY = compact ? panelY + 119 : panelY + 164;
+  if (compact) {
+    drawStatusLamp(program, true, panelX + 119, lampY, '#6af');
+    drawStatusLamp('LOCK', radarLock, panelX + 160, lampY, '#4f8');
+  } else {
+    const lampX = panelX + 162;
+    drawStatusLamp(program, true, lampX, lampY, '#6af');
+    drawStatusLamp('RADAR', radarLock, lampX + 42, lampY, '#4f8');
+    drawStatusLamp('RATE', danger, lampX + 96, lampY, '#f66');
+  }
+  ctx.restore();
+}
+
+function drawLandingRadarCone() {
+  if (state !== 'playing') return;
+  const footY = lander.y + lander.height / 2;
+  const terrainY = getTerrainY(lander.x);
+  const alt = Math.max(0, terrainY - footY);
+  if (alt > 240 || alt < 8) return;
+
+  const pulse = 0.45 + 0.25 * Math.sin(time * 0.22);
+  const coneLen = Math.min(alt, 190);
+  const coneHalfWidth = 18 + coneLen * 0.28;
+  const startX = lander.x;
+  const startY = footY - 4;
+  const endY = startY + coneLen;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const grad = ctx.createLinearGradient(startX, startY, startX, endY);
+  grad.addColorStop(0, `rgba(80, 220, 255, ${0.24 * pulse})`);
+  grad.addColorStop(0.55, `rgba(60, 180, 255, ${0.09 * pulse})`);
+  grad.addColorStop(1, 'rgba(60, 180, 255, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(startX - 8, startY);
+  ctx.lineTo(startX + 8, startY);
+  ctx.lineTo(startX + coneHalfWidth, endY);
+  ctx.lineTo(startX - coneHalfWidth, endY);
+  ctx.closePath();
+  ctx.fill();
+
+  const scanY = startY + ((time * 2.2) % Math.max(28, coneLen));
+  const scanWidth = 10 + (scanY - startY) * 0.28;
+  ctx.strokeStyle = `rgba(120, 240, 255, ${0.38 * pulse})`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(startX - scanWidth, scanY);
+  ctx.lineTo(startX + scanWidth, scanY);
+  ctx.stroke();
+
+  ctx.fillStyle = `rgba(80, 220, 255, ${0.45 * pulse})`;
+  ctx.font = '7px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('RADAR LOCK', startX, Math.min(terrainY - 8, endY + 10));
   ctx.restore();
 }
 
