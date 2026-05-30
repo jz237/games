@@ -150,7 +150,7 @@
 
 <div id="start-screen">
   <h1>Lunar Lander</h1>
-  <div class="subtitle">Enhanced Edition - v2.2 Apollo Final</div>
+  <div class="subtitle">Enhanced Edition - v2.3 Natural Pads</div>
   <div class="controls-info">
     <kbd>&uarr;</kbd> Thrust &nbsp;
     <kbd>&larr;</kbd><kbd>&rarr;</kbd> Rotate &nbsp;
@@ -218,7 +218,7 @@
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-const GAME_VERSION = 'v2.2 APOLLO FINAL';
+const GAME_VERSION = 'v2.3 NATURAL PADS';
 
 // --- Responsive canvas ---
 function resize() {
@@ -790,11 +790,22 @@ function generateTerrain() {
     } while (attempts < 100 && usedPositions.some(px => Math.abs(px - padX) < padWidth * 3));
     usedPositions.push(padX);
 
-    // Flatten terrain at pad
-    const padY = baseY + (Math.random() - 0.3) * 60;
+    // Flatten a local terrace into the existing ground and blend the shoulders
+    // back into the hill, instead of forcing every pad to an arbitrary height.
+    const halfPad = padWidth / 2;
+    const shoulder = Math.max(45, padWidth * 0.55);
+    const localSamples = pts.filter(pt => Math.abs(pt.x - padX) <= halfPad + shoulder * 0.35);
+    const localY = localSamples.reduce((sum, pt) => sum + pt.y, 0) / Math.max(1, localSamples.length);
+    const centerY = getTerrainYFromPts(padX, pts);
+    const padY = localY * 0.65 + centerY * 0.35;
     for (const pt of pts) {
-      if (pt.x >= padX - padWidth/2 && pt.x <= padX + padWidth/2) {
+      const dist = Math.abs(pt.x - padX);
+      if (dist <= halfPad) {
         pt.y = padY;
+      } else if (dist <= halfPad + shoulder) {
+        const t = (dist - halfPad) / shoulder;
+        const blend = t * t * (3 - 2 * t);
+        pt.y = padY * (1 - blend) + pt.y * blend;
       }
     }
     pads.push({ x: padX, y: padY, width: padWidth });
