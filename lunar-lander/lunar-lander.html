@@ -150,7 +150,7 @@
 
 <div id="start-screen">
   <h1>Lunar Lander</h1>
-  <div class="subtitle">Enhanced Edition</div>
+  <div class="subtitle">Enhanced Edition - v2.1 Apollo Readouts</div>
   <div class="controls-info">
     <kbd>&uarr;</kbd> Thrust &nbsp;
     <kbd>&larr;</kbd><kbd>&rarr;</kbd> Rotate &nbsp;
@@ -218,6 +218,7 @@
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+const GAME_VERSION = 'v2.1 APOLLO READOUTS';
 
 // --- Responsive canvas ---
 function resize() {
@@ -3057,18 +3058,127 @@ function drawLander() {
   ctx.restore();
 }
 
+function getNearestPad() {
+  let nearestPad = terrain.pads[0];
+  let minDist = Infinity;
+  for (const pad of terrain.pads) {
+    const d = Math.abs(pad.x - lander.x);
+    if (d < minDist) {
+      minDist = d;
+      nearestPad = pad;
+    }
+  }
+  return nearestPad;
+}
+
+function drawReadoutText(label, value, x, y, color = '#dff') {
+  ctx.fillStyle = 'rgba(100, 170, 255, 0.45)';
+  ctx.font = '10px "Courier New", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(label, x, y);
+  ctx.fillStyle = color;
+  ctx.font = 'bold 15px "Courier New", monospace';
+  ctx.fillText(value, x + 48, y);
+}
+
+function drawApolloReadouts() {
+  const W = canvas.width;
+  const H = canvas.height;
+  const compact = W < 720;
+  const panelW = compact ? Math.min(230, W - 24) : 278;
+  const panelH = compact ? 128 : 176;
+  const panelX = 12;
+  const panelY = compact ? Math.max(64, H - panelH - 72) : 72;
+  const nearestPad = getNearestPad();
+  const alt = Math.max(0, getTerrainY(lander.x) - lander.y - lander.height/2);
+  const range = Math.abs(nearestPad.x - lander.x);
+  const closing = -Math.sign(nearestPad.x - lander.x || 1) * lander.vx;
+  const hRate = lander.vx;
+  const vRate = lander.vy;
+  const angleDeg = lander.angle * 180 / Math.PI;
+  const levelErr = Math.abs(angleDeg);
+  const onGlide = alt < 150 && Math.abs(vRate) < MAX_LAND_VY && Math.abs(hRate) < MAX_LAND_VX && levelErr < MAX_LAND_ANGLE * 180 / Math.PI;
+  const danger = alt < 120 && (Math.abs(vRate) > MAX_LAND_VY || Math.abs(hRate) > MAX_LAND_VX || levelErr > 20);
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(0, 8, 18, 0.78)';
+  ctx.fillRect(panelX, panelY, panelW, panelH);
+  ctx.strokeStyle = danger ? 'rgba(255, 80, 70, 0.7)' : 'rgba(100, 170, 255, 0.48)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(panelX + 0.5, panelY + 0.5, panelW - 1, panelH - 1);
+
+  ctx.fillStyle = danger ? '#f66' : onGlide ? '#4f8' : '#6af';
+  ctx.font = 'bold 11px "Courier New", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('LM LANDING COMPUTER', panelX + 12, panelY + 17);
+  ctx.fillStyle = 'rgba(255,255,255,0.32)';
+  ctx.font = '9px "Courier New", monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText('DSKY / RADAR', panelX + panelW - 12, panelY + 17);
+
+  const rowX = panelX + 12;
+  drawReadoutText('ALT', `${alt.toFixed(0).padStart(4, ' ')} M`, rowX, panelY + 40, alt < 60 ? '#fa4' : '#dff');
+  drawReadoutText('V/R', `${vRate >= 0 ? '+' : ''}${vRate.toFixed(2)} M/S`, rowX, panelY + 62, Math.abs(vRate) < MAX_LAND_VY ? '#4f8' : '#f66');
+  drawReadoutText('H/R', `${hRate >= 0 ? '+' : ''}${hRate.toFixed(2)} M/S`, rowX, panelY + 84, Math.abs(hRate) < MAX_LAND_VX ? '#4f8' : '#f66');
+  drawReadoutText('RNG', `${range.toFixed(0).padStart(4, ' ')} M`, rowX, panelY + 106, range < 70 ? '#4f8' : '#dff');
+  if (!compact) {
+    drawReadoutText('CLS', `${closing >= 0 ? '+' : ''}${closing.toFixed(2)} M/S`, rowX, panelY + 128, '#dff');
+    drawReadoutText('LVL', `${angleDeg >= 0 ? '+' : ''}${angleDeg.toFixed(1)} DEG`, rowX, panelY + 150, levelErr < 20 ? '#4f8' : '#f66');
+  }
+
+  const gaugeCX = panelX + panelW - (compact ? 45 : 58);
+  const gaugeCY = panelY + (compact ? 74 : 99);
+  const gaugeR = compact ? 32 : 43;
+  ctx.strokeStyle = 'rgba(100, 170, 255, 0.32)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(gaugeCX, gaugeCY, gaugeR, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(gaugeCX - gaugeR, gaugeCY);
+  ctx.lineTo(gaugeCX + gaugeR, gaugeCY);
+  ctx.moveTo(gaugeCX, gaugeCY - gaugeR);
+  ctx.lineTo(gaugeCX, gaugeCY + gaugeR);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.font = '8px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('X-POINTER', gaugeCX, gaugeCY - gaugeR - 7);
+
+  const needleX = Math.max(-1, Math.min(1, hRate / MAX_LAND_VX)) * (gaugeR - 6);
+  const needleY = Math.max(-1, Math.min(1, vRate / MAX_LAND_VY)) * (gaugeR - 6);
+  ctx.strokeStyle = Math.abs(hRate) < MAX_LAND_VX ? '#4f8' : '#f66';
+  ctx.beginPath();
+  ctx.moveTo(gaugeCX + needleX, gaugeCY - gaugeR + 5);
+  ctx.lineTo(gaugeCX + needleX, gaugeCY + gaugeR - 5);
+  ctx.stroke();
+  ctx.strokeStyle = Math.abs(vRate) < MAX_LAND_VY ? '#4f8' : '#f66';
+  ctx.beginPath();
+  ctx.moveTo(gaugeCX - gaugeR + 5, gaugeCY + needleY);
+  ctx.lineTo(gaugeCX + gaugeR - 5, gaugeCY + needleY);
+  ctx.stroke();
+
+  ctx.fillStyle = onGlide ? '#4f8' : danger ? '#f66' : '#fa4';
+  ctx.font = 'bold 9px "Courier New", monospace';
+  ctx.fillText(onGlide ? 'GO' : danger ? 'ABORT RATE' : 'CORRECT', gaugeCX, gaugeCY + gaugeR + 13);
+  ctx.restore();
+}
+
 function drawHUD() {
   const W = canvas.width;
   const pad = 20;
+  const compactHud = W < 720;
+  const stripH = compactHud ? 58 : 50;
 
   // HUD background strip
   ctx.fillStyle = 'rgba(0, 5, 15, 0.6)';
-  ctx.fillRect(0, 0, W, 50);
+  ctx.fillRect(0, 0, W, stripH);
   ctx.strokeStyle = 'rgba(100, 170, 255, 0.3)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(0, 50);
-  ctx.lineTo(W, 50);
+  ctx.moveTo(0, stripH);
+  ctx.lineTo(W, stripH);
   ctx.stroke();
 
   ctx.font = '13px "Courier New", monospace';
@@ -3076,7 +3186,7 @@ function drawHUD() {
 
   // Fuel bar
   const fuelX = pad;
-  const fuelW = 140;
+  const fuelW = compactHud ? 120 : 140;
   ctx.fillStyle = '#6af';
   ctx.fillText('FUEL', fuelX, 18);
   ctx.fillStyle = 'rgba(255,255,255,0.1)';
@@ -3088,7 +3198,7 @@ function drawHUD() {
   ctx.fillText(`${lander.fuel.toFixed(0)}%`, fuelX + fuelW + 8, 33);
 
   // Velocity
-  const velX = fuelX + fuelW + 80;
+  const velX = compactHud ? fuelX + fuelW + 56 : fuelX + fuelW + 80;
   const speed = Math.sqrt(lander.vx**2 + lander.vy**2);
   const velColor = speed < 0.8 ? '#4f8' : speed < 1.5 ? '#fa4' : '#f44';
   ctx.fillStyle = '#6af';
@@ -3098,7 +3208,7 @@ function drawHUD() {
   ctx.fillText(`${speed.toFixed(1)} m/s`, velX, 36);
 
   // Vertical speed
-  const vyX = velX + 120;
+  const vyX = compactHud ? velX + 118 : velX + 120;
   ctx.font = '13px "Courier New", monospace';
   ctx.fillStyle = '#6af';
   ctx.fillText('V-SPD', vyX, 18);
@@ -3107,56 +3217,58 @@ function drawHUD() {
   ctx.font = '16px "Courier New", monospace';
   ctx.fillText(`${lander.vy.toFixed(2)}`, vyX, 36);
 
-  // Angle
-  const angX = vyX + 100;
-  ctx.font = '13px "Courier New", monospace';
-  ctx.fillStyle = '#6af';
-  ctx.fillText('ANGLE', angX, 18);
-  const angDeg = (lander.angle * 180 / Math.PI);
-  const angColor = Math.abs(lander.angle) < MAX_LAND_ANGLE ? '#4f8' : '#f44';
-  ctx.fillStyle = angColor;
-  ctx.font = '16px "Courier New", monospace';
-  ctx.fillText(`${angDeg.toFixed(1)}°`, angX, 36);
+  if (!compactHud) {
+    // Angle
+    const angX = vyX + 100;
+    ctx.font = '13px "Courier New", monospace';
+    ctx.fillStyle = '#6af';
+    ctx.fillText('ANGLE', angX, 18);
+    const angDeg = (lander.angle * 180 / Math.PI);
+    const angColor = Math.abs(lander.angle) < MAX_LAND_ANGLE ? '#4f8' : '#f44';
+    ctx.fillStyle = angColor;
+    ctx.font = '16px "Courier New", monospace';
+    ctx.fillText(`${angDeg.toFixed(1)}°`, angX, 36);
 
-  // Altitude
-  const altX = angX + 100;
-  const alt = Math.max(0, getTerrainY(lander.x) - lander.y - lander.height/2);
-  ctx.font = '13px "Courier New", monospace';
-  ctx.fillStyle = '#6af';
-  ctx.fillText('ALT', altX, 18);
-  ctx.fillStyle = '#fff';
-  ctx.font = '16px "Courier New", monospace';
-  ctx.fillText(`${alt.toFixed(0)}m`, altX, 36);
+    // Altitude
+    const altX = angX + 100;
+    const alt = Math.max(0, getTerrainY(lander.x) - lander.y - lander.height/2);
+    ctx.font = '13px "Courier New", monospace';
+    ctx.fillStyle = '#6af';
+    ctx.fillText('ALT', altX, 18);
+    ctx.fillStyle = '#fff';
+    ctx.font = '16px "Courier New", monospace';
+    ctx.fillText(`${alt.toFixed(0)}m`, altX, 36);
 
-  // Score
-  const scoreX = altX + 80;
-  ctx.font = '13px "Courier New", monospace';
-  ctx.fillStyle = '#6af';
-  ctx.fillText('SCORE', scoreX, 18);
-  ctx.fillStyle = '#fda';
-  ctx.font = '16px "Courier New", monospace';
-  ctx.fillText(`${score}`, scoreX, 36);
+    // Score
+    const scoreX = altX + 80;
+    ctx.font = '13px "Courier New", monospace';
+    ctx.fillStyle = '#6af';
+    ctx.fillText('SCORE', scoreX, 18);
+    ctx.fillStyle = '#fda';
+    ctx.font = '16px "Courier New", monospace';
+    ctx.fillText(`${score}`, scoreX, 36);
+  }
 
   // Level + Lives (right side)
   ctx.font = '13px "Courier New", monospace';
   ctx.fillStyle = '#6af';
   ctx.textAlign = 'right';
-  ctx.fillText(`LEVEL ${level}`, W - pad, 18);
+  ctx.fillText(compactHud ? `LVL ${level}` : `LEVEL ${level}`, W - pad, compactHud ? 48 : 18);
   // Lives as lander icons
   ctx.fillStyle = '#4f8';
   ctx.font = '14px "Courier New", monospace';
   let livesStr = '';
   for (let i = 0; i < lives; i++) livesStr += '\u25B2 '; // triangle icons
-  ctx.fillText(livesStr.trim(), W - pad, 36);
+  ctx.fillText(livesStr.trim(), W - pad, compactHud ? 32 : 36);
+  ctx.fillStyle = 'rgba(100,170,255,0.45)';
+  ctx.font = '9px "Courier New", monospace';
+  if (!compactHud) ctx.fillText(GAME_VERSION, W - pad, 48);
   ctx.textAlign = 'left';
 
+  drawApolloReadouts();
+
   // Landing guide arrows (point to nearest pad)
-  let nearestPad = terrain.pads[0];
-  let minDist = Infinity;
-  for (const pad of terrain.pads) {
-    const d = Math.abs(pad.x - lander.x);
-    if (d < minDist) { minDist = d; nearestPad = pad; }
-  }
+  const nearestPad = getNearestPad();
   const padScreenX = nearestPad.x - camera.x;
   if (padScreenX < 30 || padScreenX > W - 30) {
     const arrowX = padScreenX < 30 ? 15 : W - 15;
