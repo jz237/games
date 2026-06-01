@@ -24,16 +24,6 @@
       "oggBytes": 11045
     },
     {
-      "id": "03_spark_snap",
-      "durationSeconds": 0.54,
-      "suggestedUse": "spark enemy",
-      "description": "Electric snap explosion with bright static tail",
-      "wavFile": "sfx/explosions/03_spark_snap.wav",
-      "oggFile": "sfx/explosions/03_spark_snap.ogg",
-      "wavBytes": 47672,
-      "oggBytes": 9980
-    },
-    {
       "id": "04_brute_rupture",
       "durationSeconds": 0.82,
       "suggestedUse": "brute enemy",

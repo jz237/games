@@ -1,6 +1,6 @@
 # Subway Siege Explosion SFX Pack
 
-Ten generated mono explosion effects for Subway Siege.
+Nine generated mono explosion effects for Subway Siege.
 
 - WAV files are 44.1 kHz masters.
 - OGG files are smaller browser-ready versions.
@@ -12,7 +12,6 @@ Suggested mapping:
 | --- | --- |
 | `01_raider_pop` | small raider kill |
 | `02_drone_crunch` | drone kill |
-| `03_spark_snap` | spark/electric enemy kill |
 | `04_brute_rupture` | brute/heavy enemy kill |
 | `05_tunnel_thump` | wall or tunnel impact |
 | `06_train_car_split` | train destroyed |
