@@ -1,0 +1,67 @@
+{
+  "sampleRate": 44100,
+  "channels": 1,
+  "status": "approved set wired into Subway Siege v1.5",
+  "effects": [
+    {
+      "id": "01_arcade_zap",
+      "description": "Bright short arcade zap, classic cabinet laser",
+      "suggestedUse": "basic player shot",
+      "durationSeconds": 0.22,
+      "wavFile": "sfx/laser-drafts/01_arcade_zap.wav",
+      "oggFile": "sfx/laser-drafts/01_arcade_zap.ogg",
+      "wavBytes": 19448,
+      "oggBytes": 5554
+    },
+    {
+      "id": "02_rail_lance",
+      "description": "Hard rail-lance crack with low recoil thump",
+      "suggestedUse": "heavy shot",
+      "durationSeconds": 0.34,
+      "wavFile": "sfx/laser-drafts/02_rail_lance.wav",
+      "oggFile": "sfx/laser-drafts/02_rail_lance.ogg",
+      "wavBytes": 30032,
+      "oggBytes": 7437
+    },
+    {
+      "id": "03_plasma_pew",
+      "description": "Rounded plasma pew with warm falling tail",
+      "suggestedUse": "soft rapid fire",
+      "durationSeconds": 0.3,
+      "wavFile": "sfx/laser-drafts/03_plasma_pew.wav",
+      "oggFile": "sfx/laser-drafts/03_plasma_pew.ogg",
+      "wavBytes": 26504,
+      "oggBytes": 6120
+    },
+    {
+      "id": "05_tri_burst",
+      "description": "Three tiny blaster pulses in one trigger pull",
+      "suggestedUse": "triple shot",
+      "durationSeconds": 0.42,
+      "wavFile": "sfx/laser-drafts/05_tri_burst.wav",
+      "oggFile": "sfx/laser-drafts/05_tri_burst.ogg",
+      "wavBytes": 37088,
+      "oggBytes": 6789
+    },
+    {
+      "id": "08_heavy_blaster",
+      "description": "Chunky retro heavy blaster with bass body",
+      "suggestedUse": "power shot",
+      "durationSeconds": 0.48,
+      "wavFile": "sfx/laser-drafts/08_heavy_blaster.wav",
+      "oggFile": "sfx/laser-drafts/08_heavy_blaster.ogg",
+      "wavBytes": 42380,
+      "oggBytes": 7204
+    },
+    {
+      "id": "09_overheat_spit",
+      "description": "Dirty overheated spit-fire laser with noise",
+      "suggestedUse": "damaged weapon",
+      "durationSeconds": 0.36,
+      "wavFile": "sfx/laser-drafts/09_overheat_spit.wav",
+      "oggFile": "sfx/laser-drafts/09_overheat_spit.ogg",
+      "wavBytes": 31796,
+      "oggBytes": 7693
+    }
+  ]
+}

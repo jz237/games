@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#070a10">
 <link rel="icon" href="data:,">
-<title>Subway Siege v1.4</title>
+<title>Subway Siege v1.5</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{position:fixed;inset:0;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;background:#05070b;color:#eef8ff;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;touch-action:none}
@@ -54,7 +54,7 @@ h2{font-size:clamp(2rem,9vw,3.2rem);line-height:.9;text-transform:uppercase;font
 </div>
 <section id="titleScreen" class="overlay">
   <div class="shade"></div><div class="panel">
-    <div class="version">v1.4</div>
+    <div class="version">v1.5</div>
     <h1>Subway<br>Siege</h1>
     <div class="subtitle">tunnel defender</div>
     <p class="small">Drag anywhere to steer the rail drone. Hold or tap to fire. Grab shield and charge cells, dodge trains, and keep the tunnel alive.</p>
@@ -65,13 +65,13 @@ h2{font-size:clamp(2rem,9vw,3.2rem);line-height:.9;text-transform:uppercase;font
 </section>
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div><div class="panel">
-    <div class="version">v1.4</div><h2>Top Ten</h2><div id="scoreTables" class="scores"></div>
+    <div class="version">v1.5</div><h2>Top Ten</h2><div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
   </div>
 </section>
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div><div class="panel">
-    <div class="version">v1.4</div><h2>Game Over</h2>
+    <div class="version">v1.5</div><h2>Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden"><p class="small">Enter initials</p><div id="initials" class="initials"></div><button id="submitBtn" class="btn">Submit</button></div>
     <div id="overScores" class="scores"></div>
@@ -80,7 +80,7 @@ h2{font-size:clamp(2rem,9vw,3.2rem);line-height:.9;text-transform:uppercase;font
 </section>
 <script>
 (()=>{"use strict";
-const VERSION="v1.4",SCORE_KEY="subway_siege_scores_v1";
+const VERSION="v1.5",SCORE_KEY="subway_siege_scores_v1";
 const canvas=document.getElementById("game"),ctx=canvas.getContext("2d");
 const $=id=>document.getElementById(id);
 let W=0,H=0,DPR=1,last=0,state="title",running=true,audioCtx=null,masterGain=null,audioReady=false;
@@ -90,7 +90,8 @@ let pointer={active:false,id:null,x:0,y:0,firing:false};
 let bullets=[],enemies=[],particles=[],pickups=[],rails=[],lights=[],trains=[],sparks=[],shards=[],shockwaves=[],messages=[];
 let initials=["A","A","A"],pendingEntry=null;
 const BOOMS=["01_raider_pop","02_drone_crunch","03_spark_snap","04_brute_rupture","05_tunnel_thump","06_train_car_split","07_cluster_flak","08_charge_bloom","09_overload_bang","10_boss_collapse"];
-let boomBuffers={},boomLoading=false;
+const LASERS=["01_arcade_zap","02_rail_lance","03_plasma_pew","05_tri_burst","08_heavy_blaster","09_overheat_spit"];
+let boomBuffers={},boomLoading=false,laserBuffers={},laserLoading=false,nextLaser=0;
 function resize(){DPR=Math.min(devicePixelRatio||1,innerWidth*innerHeight>900000?2.6:3.5);W=innerWidth;H=innerHeight;canvas.width=Math.floor(W*DPR);canvas.height=Math.floor(H*DPR);canvas.style.width=W+"px";canvas.style.height=H+"px";ctx.setTransform(DPR,0,0,DPR,0,0);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";seedScene();if(state==="title")placePlayer()}
 addEventListener("resize",resize);addEventListener("orientationchange",()=>setTimeout(resize,180));
 function seedScene(){rails=[];lights=[];for(let i=0;i<42;i++)rails.push({z:i/42});for(let i=0;i<34;i++)lights.push({z:i/34,side:i%2?-1:1,flicker:Math.random()*9});}
@@ -107,10 +108,12 @@ function qualifies(){const list=scores();return score>0&&(list.length<10||score>
 function submitScore(){const entry={id:Date.now()+":"+Math.random().toString(36).slice(2),initials:initials.join(""),score,wave};const list=scores().concat(entry).sort((a,b)=>b.score-a.score);saveScores(list);pendingEntry=entry;$("initialBlock").classList.add("hidden");refreshScores(entry)}
 function buildInitials(){const wrap=$("initials");wrap.innerHTML="";initials.forEach((ch,i)=>{const slot=document.createElement("div");slot.className="slot";slot.innerHTML=`<button class="arrow" data-i="${i}" data-d="1">▲</button><div class="letter">${ch}</div><button class="arrow" data-i="${i}" data-d="-1">▼</button>`;wrap.appendChild(slot)})}
 function changeInitial(i,d){let n=initials[i].charCodeAt(0)-65+d;n=(n+26)%26;initials[i]=String.fromCharCode(65+n);buildInitials()}
-function unlockAudio(){try{if(!audioCtx){audioCtx=new(window.AudioContext||window.webkitAudioContext)();const comp=audioCtx.createDynamicsCompressor();comp.threshold.value=-18;comp.knee.value=10;comp.ratio.value=9;comp.attack.value=.003;comp.release.value=.18;masterGain=audioCtx.createGain();masterGain.gain.value=.72;masterGain.connect(comp);comp.connect(audioCtx.destination)}if(audioCtx.state==="suspended")audioCtx.resume();audioReady=true;loadBooms()}catch(e){}}
+function unlockAudio(){try{if(!audioCtx){audioCtx=new(window.AudioContext||window.webkitAudioContext)();const comp=audioCtx.createDynamicsCompressor();comp.threshold.value=-18;comp.knee.value=10;comp.ratio.value=9;comp.attack.value=.003;comp.release.value=.18;masterGain=audioCtx.createGain();masterGain.gain.value=.72;masterGain.connect(comp);comp.connect(audioCtx.destination)}if(audioCtx.state==="suspended")audioCtx.resume();audioReady=true;loadBooms();loadLasers()}catch(e){}}
 function out(){return masterGain||audioCtx.destination}
 function loadBooms(){if(!audioCtx||boomLoading)return;boomLoading=true;BOOMS.forEach(id=>fetch(`sfx/explosions/${id}.ogg`).then(r=>r.ok?r.arrayBuffer():Promise.reject()).then(b=>audioCtx.decodeAudioData(b)).then(buf=>boomBuffers[id]=buf).catch(()=>{}))}
+function loadLasers(){if(!audioCtx||laserLoading)return;laserLoading=true;LASERS.forEach(id=>fetch(`sfx/laser-drafts/${id}.ogg`).then(r=>r.ok?r.arrayBuffer():Promise.reject()).then(b=>audioCtx.decodeAudioData(b)).then(buf=>laserBuffers[id]=buf).catch(()=>{}))}
 function playBoom(id,vol=.72,rate=1){if(!audioCtx||!audioReady||!boomBuffers[id])return false;try{const src=audioCtx.createBufferSource(),g=audioCtx.createGain();src.buffer=boomBuffers[id];src.playbackRate.value=rate;g.gain.value=vol;src.connect(g);g.connect(out());src.start();return true}catch(e){return false}}
+function playLaser(){if(!audioCtx||!audioReady)return false;const loaded=LASERS.filter(id=>laserBuffers[id]);if(!loaded.length)return false;const id=player.charge>=100&&laserBuffers["08_heavy_blaster"]?"08_heavy_blaster":loaded[nextLaser++%loaded.length];try{const src=audioCtx.createBufferSource(),g=audioCtx.createGain();src.buffer=laserBuffers[id];src.playbackRate.value=rnd(.96,1.04);g.gain.value=id==="08_heavy_blaster"?.62:.5;src.connect(g);g.connect(out());src.start();return true}catch(e){return false}}
 function enemyBoom(e,charged=false){const id=charged?"08_charge_bloom":e.type==="brute"?"04_brute_rupture":e.type==="drone"?"02_drone_crunch":e.type==="spark"?"03_spark_snap":"01_raider_pop";if(!playBoom(id,charged?0.78:0.7,rnd(.94,1.08)))sfx("hit")}
 function tone(f,d,type="square",vol=.08,end=f,delay=0){if(!audioCtx||!audioReady)return;try{const t=audioCtx.currentTime+delay,o=audioCtx.createOscillator(),g=audioCtx.createGain(),filt=audioCtx.createBiquadFilter();o.type=type;o.frequency.setValueAtTime(Math.max(20,f),t);o.frequency.exponentialRampToValueAtTime(Math.max(20,end),t+d);filt.type="lowpass";filt.frequency.setValueAtTime(5200,t);filt.frequency.exponentialRampToValueAtTime(900,t+d);g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(vol,t+.006);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(filt);filt.connect(g);g.connect(out());o.start(t);o.stop(t+d+.04)}catch(e){}}
 function noise(d=.12,vol=.045,filter=1200,delay=0,type="bandpass"){if(!audioCtx||!audioReady)return;try{const t=audioCtx.currentTime+delay,len=Math.floor(audioCtx.sampleRate*d),b=audioCtx.createBuffer(1,len,audioCtx.sampleRate),data=b.getChannelData(0);for(let i=0;i<len;i++){const fade=1-i/len;data[i]=(Math.random()*2-1)*fade*fade}const src=audioCtx.createBufferSource(),f=audioCtx.createBiquadFilter(),g=audioCtx.createGain();src.buffer=b;f.type=type;f.frequency.setValueAtTime(filter,t);f.Q.value=type==="bandpass"?1.7:.8;g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(vol,t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+d);src.connect(f);f.connect(g);g.connect(out());src.start(t);src.stop(t+d+.02)}catch(e){}}
@@ -121,7 +124,7 @@ function showTitle(){state="title";hideOverlays();$("titleScreen").classList.rem
 function gameOver(){state="over";pendingEntry=null;hideOverlays();$("gameOverScreen").classList.remove("hidden");$("finalLine").textContent=`${String(score).padStart(6,"0")} · WAVE ${wave}`;if(qualifies()){$("initialBlock").classList.remove("hidden");buildInitials()}else $("initialBlock").classList.add("hidden");refreshScores()}
 function message(text,sub=""){messages.push({text,sub,t:2.2,max:2.2})}
 function spawnEnemy(){const lane=rnd(.18,.82),types=["raider","drone","spark"];let type=types[Math.floor(Math.random()*types.length)];if(wave>2&&Math.random()<.16)type="brute";if(wave>3&&Math.random()<.11)type="train";if(type==="train"){trains.push({x:lane*W,y:-80,w:rnd(56,88),h:rnd(145,220),speed:rnd(210,290)+wave*10,hp:4,side:Math.random()<.5?-1:1,flash:0});sfx("train");return}const hp=type==="brute"?4:type==="drone"?2:1;enemies.push({type,x:lane*W,y:-30,r:type==="brute"?23:type==="drone"?16:14,vx:rnd(-22,22),vy:rnd(70,120)+wave*9,hp,max:hp,fire:rnd(1.2,2.8),rot:rnd(0,6.28),value:type==="brute"?450:type==="drone"?250:type==="spark"?180:150})}
-function fire(){if(player.fire>0||player.dead>0)return;player.fire=.115;player.heat=1;const spread=player.charge>=100?.16:.08;bullets.push({x:player.x-8,y:player.y-18,vx:-spread*220,vy:-620,r:4,life:1.2,dmg:1});bullets.push({x:player.x+8,y:player.y-18,vx:spread*220,vy:-620,r:4,life:1.2,dmg:1});sfx("shot")}
+function fire(){if(player.fire>0||player.dead>0)return;player.fire=.115;player.heat=1;const spread=player.charge>=100?.16:.08;bullets.push({x:player.x-8,y:player.y-18,vx:-spread*220,vy:-620,r:4,life:1.2,dmg:1});bullets.push({x:player.x+8,y:player.y-18,vx:spread*220,vy:-620,r:4,life:1.2,dmg:1});if(!playLaser())sfx("shot")}
 function blast(){unlockAudio();if(player.charge<100||state!=="play")return;player.charge=0;flash=.5;shake=16;slowMo=.18;if(!playBoom("09_overload_bang",.86,.96))sfx("blast");for(const e of enemies){e.hp-=4;burst(e.x,e.y,"#ffdf79",18)}for(const t of trains){t.hp-=3;t.flash=.2}score+=enemies.length*35;enemies=enemies.filter(e=>{if(e.hp<=0){killEnemy(e,true);return false}return true})}
 function burst(x,y,color,n=12){for(let i=0;i<n;i++)particles.push({x,y,vx:rnd(-180,180),vy:rnd(-180,180),r:rnd(1,3.4),life:rnd(.35,.9),max:1,color})}
 function shockwave(x,y,color,scale=1,hot=false){shockwaves.push({x,y,r:12*scale,v:rnd(125,210)*scale,life:hot?.58:.42,max:hot?.58:.42,color,w:rnd(2.5,5.5)*scale})}
