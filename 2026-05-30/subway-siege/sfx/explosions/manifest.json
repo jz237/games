@@ -1,0 +1,107 @@
+{
+  "sampleRate": 44100,
+  "channels": 1,
+  "format": "wav+ogg",
+  "effects": [
+    {
+      "id": "01_raider_pop",
+      "durationSeconds": 0.48,
+      "suggestedUse": "small enemy",
+      "description": "Short arcade ship pop with glassy top crack",
+      "wavFile": "sfx/explosions/01_raider_pop.wav",
+      "oggFile": "sfx/explosions/01_raider_pop.ogg",
+      "wavBytes": 42380,
+      "oggBytes": 9527
+    },
+    {
+      "id": "02_drone_crunch",
+      "durationSeconds": 0.62,
+      "suggestedUse": "drone enemy",
+      "description": "Crunchy drone hull burst with metallic fizz",
+      "wavFile": "sfx/explosions/02_drone_crunch.wav",
+      "oggFile": "sfx/explosions/02_drone_crunch.ogg",
+      "wavBytes": 54728,
+      "oggBytes": 11045
+    },
+    {
+      "id": "03_spark_snap",
+      "durationSeconds": 0.54,
+      "suggestedUse": "spark enemy",
+      "description": "Electric snap explosion with bright static tail",
+      "wavFile": "sfx/explosions/03_spark_snap.wav",
+      "oggFile": "sfx/explosions/03_spark_snap.ogg",
+      "wavBytes": 47672,
+      "oggBytes": 9980
+    },
+    {
+      "id": "04_brute_rupture",
+      "durationSeconds": 0.82,
+      "suggestedUse": "brute enemy",
+      "description": "Heavier brute rupture with thick low body",
+      "wavFile": "sfx/explosions/04_brute_rupture.wav",
+      "oggFile": "sfx/explosions/04_brute_rupture.ogg",
+      "wavBytes": 72368,
+      "oggBytes": 12961
+    },
+    {
+      "id": "05_tunnel_thump",
+      "durationSeconds": 0.92,
+      "suggestedUse": "wall/tunnel impact",
+      "description": "Subway tunnel pressure thump and dust wash",
+      "wavFile": "sfx/explosions/05_tunnel_thump.wav",
+      "oggFile": "sfx/explosions/05_tunnel_thump.ogg",
+      "wavBytes": 81188,
+      "oggBytes": 14502
+    },
+    {
+      "id": "06_train_car_split",
+      "durationSeconds": 1.18,
+      "suggestedUse": "train destroyed",
+      "description": "Large railcar split with low slam and metal tear",
+      "wavFile": "sfx/explosions/06_train_car_split.wav",
+      "oggFile": "sfx/explosions/06_train_car_split.ogg",
+      "wavBytes": 104120,
+      "oggBytes": 17122
+    },
+    {
+      "id": "07_cluster_flak",
+      "durationSeconds": 0.74,
+      "suggestedUse": "chain kills",
+      "description": "Clustered flak pops for multi-kill chains",
+      "wavFile": "sfx/explosions/07_cluster_flak.wav",
+      "oggFile": "sfx/explosions/07_cluster_flak.ogg",
+      "wavBytes": 65312,
+      "oggBytes": 12618
+    },
+    {
+      "id": "08_charge_bloom",
+      "durationSeconds": 1.06,
+      "suggestedUse": "charged kill",
+      "description": "Rail-charge bloom with widening energy blast",
+      "wavFile": "sfx/explosions/08_charge_bloom.wav",
+      "oggFile": "sfx/explosions/08_charge_bloom.ogg",
+      "wavBytes": 93536,
+      "oggBytes": 15576
+    },
+    {
+      "id": "09_overload_bang",
+      "durationSeconds": 0.96,
+      "suggestedUse": "powerup blast",
+      "description": "Hot overdriven overload bang with falling debris",
+      "wavFile": "sfx/explosions/09_overload_bang.wav",
+      "oggFile": "sfx/explosions/09_overload_bang.ogg",
+      "wavBytes": 84716,
+      "oggBytes": 14668
+    },
+    {
+      "id": "10_boss_collapse",
+      "durationSeconds": 1.36,
+      "suggestedUse": "major enemy/boss",
+      "description": "Longest collapse explosion with bass hit and sparks",
+      "wavFile": "sfx/explosions/10_boss_collapse.wav",
+      "oggFile": "sfx/explosions/10_boss_collapse.ogg",
+      "wavBytes": 119996,
+      "oggBytes": 19524
+    }
+  ]
+}
