@@ -54,5 +54,12 @@
     "url": "https://game-scores.jez237.workers.dev/scores/sky-joust",
     "playUrl": "https://jz237.github.io/games/2026-05-11/sky-joust/",
     "scoreLabel": "W"
+  },
+  {
+    "slug": "subway-siege",
+    "name": "Subway Siege",
+    "url": "https://game-scores.jez237.workers.dev/scores/subway-siege",
+    "playUrl": "https://jz237.github.io/games/2026-05-30/subway-siege/",
+    "scoreLabel": "W"
   }
 ]
