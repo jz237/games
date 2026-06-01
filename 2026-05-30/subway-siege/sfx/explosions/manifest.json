@@ -34,24 +34,24 @@
       "oggBytes": 12961
     },
     {
-      "id": "05_tunnel_thump",
-      "durationSeconds": 0.92,
-      "suggestedUse": "wall/tunnel impact",
-      "description": "Subway tunnel pressure thump and dust wash",
-      "wavFile": "sfx/explosions/05_tunnel_thump.wav",
-      "oggFile": "sfx/explosions/05_tunnel_thump.ogg",
-      "wavBytes": 81188,
-      "oggBytes": 14502
+      "id": "05_metal_debris_explosion",
+      "durationSeconds": 3.0,
+      "suggestedUse": "brute enemy/train debris",
+      "description": "Spark-local metal debris explosion audition #5",
+      "wavFile": "sfx/explosions/05_metal_debris_explosion.wav",
+      "oggFile": "sfx/explosions/05_metal_debris_explosion.ogg",
+      "wavBytes": 529244,
+      "oggBytes": 45564
     },
     {
-      "id": "06_train_car_split",
-      "durationSeconds": 1.18,
-      "suggestedUse": "train destroyed",
-      "description": "Large railcar split with low slam and metal tear",
-      "wavFile": "sfx/explosions/06_train_car_split.wav",
-      "oggFile": "sfx/explosions/06_train_car_split.ogg",
-      "wavBytes": 104120,
-      "oggBytes": 17122
+      "id": "06_quick_crack_boom",
+      "durationSeconds": 3.0,
+      "suggestedUse": "drone/spark enemy",
+      "description": "Spark-local quick crack-boom explosion audition #6",
+      "wavFile": "sfx/explosions/06_quick_crack_boom.wav",
+      "oggFile": "sfx/explosions/06_quick_crack_boom.ogg",
+      "wavBytes": 529244,
+      "oggBytes": 49806
     },
     {
       "id": "07_cluster_flak",
@@ -74,24 +74,24 @@
       "oggBytes": 15576
     },
     {
-      "id": "09_overload_bang",
-      "durationSeconds": 0.96,
-      "suggestedUse": "powerup blast",
-      "description": "Hot overdriven overload bang with falling debris",
-      "wavFile": "sfx/explosions/09_overload_bang.wav",
-      "oggFile": "sfx/explosions/09_overload_bang.ogg",
-      "wavBytes": 84716,
-      "oggBytes": 14668
+      "id": "09_long_tunnel_rumble",
+      "durationSeconds": 3.0,
+      "suggestedUse": "charged blast/boss arrival",
+      "description": "Spark-local long tunnel rumble explosion audition #9",
+      "wavFile": "sfx/explosions/09_long_tunnel_rumble.wav",
+      "oggFile": "sfx/explosions/09_long_tunnel_rumble.ogg",
+      "wavBytes": 529244,
+      "oggBytes": 43600
     },
     {
-      "id": "10_boss_collapse",
-      "durationSeconds": 1.36,
-      "suggestedUse": "major enemy/boss",
-      "description": "Longest collapse explosion with bass hit and sparks",
-      "wavFile": "sfx/explosions/10_boss_collapse.wav",
-      "oggFile": "sfx/explosions/10_boss_collapse.ogg",
-      "wavBytes": 119996,
-      "oggBytes": 19524
+      "id": "10_hard_standard_kaboom",
+      "durationSeconds": 3.0,
+      "suggestedUse": "boss destroyed",
+      "description": "Spark-local hard standard kaboom audition #10",
+      "wavFile": "sfx/explosions/10_hard_standard_kaboom.wav",
+      "oggFile": "sfx/explosions/10_hard_standard_kaboom.ogg",
+      "wavBytes": 529244,
+      "oggBytes": 42359
     }
   ]
 }
