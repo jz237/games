@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#070a10">
 <link rel="icon" href="data:,">
-<title>Subway Siege v1.19</title>
+<title>Subway Siege v1.20</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{position:fixed;inset:0;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;background:#05070b;color:#eef8ff;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;touch-action:none}
@@ -85,7 +85,7 @@ h2{font-size:clamp(2rem,9vw,3.2rem);line-height:.9;text-transform:uppercase;font
 </div>
 <section id="titleScreen" class="overlay">
   <div class="shade"></div><div class="panel">
-    <div class="version">v1.19</div>
+    <div class="version">v1.20</div>
     <h1>Subway<br>Siege</h1>
     <div class="subtitle">tunnel defender</div>
     <p class="small">Drag anywhere to steer the rail drone. Hold or tap to fire. Grab shield and charge cells, dodge trains, and keep the tunnel alive.</p>
@@ -125,13 +125,13 @@ h2{font-size:clamp(2rem,9vw,3.2rem);line-height:.9;text-transform:uppercase;font
 </section>
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div><div class="panel">
-    <div class="version">v1.19</div><h2>Top Ten</h2><div id="scoreTables" class="scores"></div>
+    <div class="version">v1.20</div><h2>Top Ten</h2><div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
   </div>
 </section>
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div><div class="panel">
-    <div class="version">v1.19</div><h2>Game Over</h2>
+    <div class="version">v1.20</div><h2>Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden"><p class="small">Enter initials</p><div id="initials" class="initials"></div><button id="submitBtn" class="btn">Submit</button></div>
     <div id="overScores" class="scores"></div>
@@ -140,7 +140,7 @@ h2{font-size:clamp(2rem,9vw,3.2rem);line-height:.9;text-transform:uppercase;font
 </section>
 <script>
 (()=>{"use strict";
-const VERSION="v1.19",SCORE_KEY="subway_siege_scores_v1",MUSIC_KEY="subway_siege_music_on",SFX_KEY="subway_siege_sfx_on",GLOBAL_SCORES_API="https://game-scores.jez237.workers.dev/scores/subway-siege";
+const VERSION="v1.20",SCORE_KEY="subway_siege_scores_v1",MUSIC_KEY="subway_siege_music_on",SFX_KEY="subway_siege_sfx_on",GLOBAL_SCORES_API="https://game-scores.jez237.workers.dev/scores/subway-siege";
 const canvas=document.getElementById("game"),ctx=canvas.getContext("2d");
 const $=id=>document.getElementById(id);
 const TITLE_MUSIC_VOLUME=.46,PLAY_MUSIC_VOLUME=.055;
