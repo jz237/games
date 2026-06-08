@@ -136,6 +136,7 @@
     const bullets = [];
     const sparks = [];
     const decals = [];
+    const scorePops = [];
     const tunnelSegments = [];
     const flickers = [];
     const smokeSprites = [];
@@ -154,6 +155,8 @@
       cyan:new THREE.MeshStandardMaterial({ color:0x6beaff, roughness:.34, metalness:.28, emissive:0x0b7687, emissiveIntensity:.34 }),
       violet:new THREE.MeshStandardMaterial({ color:0x9b78ff, roughness:.46, metalness:.2, emissive:0x23105c, emissiveIntensity:.42 }),
       amber:new THREE.MeshStandardMaterial({ color:0xffb64b, roughness:.42, metalness:.22, emissive:0x5b2500, emissiveIntensity:.32 }),
+      blood:new THREE.MeshStandardMaterial({ color:0x7a0710, roughness:.8, metalness:.02, emissive:0x240004, emissiveIntensity:.08 }),
+      bone:new THREE.MeshStandardMaterial({ color:0xd4d0ba, roughness:.72, metalness:.02 }),
       black:new THREE.MeshStandardMaterial({ color:0x06080a, roughness:.82, metalness:.08 }),
       muzzle:new THREE.MeshBasicMaterial({ color:0xfff1b0, transparent:true, opacity:.9, depthWrite:false }),
       flare:new THREE.MeshBasicMaterial({ color:0x9ff2ff, transparent:true, opacity:.45, depthWrite:false })
@@ -199,6 +202,40 @@
       const mat = new THREE.SpriteMaterial({ map:tex, transparent:true, opacity, depthWrite:false, blending:THREE.AdditiveBlending });
       const s = new THREE.Sprite(mat);
       s.scale.set(size,size,size);
+      return s;
+    }
+    function makeRoundSprite(colorStops, opacity, size, additive=false){
+      const c = document.createElement("canvas");
+      c.width = c.height = 128;
+      const g = c.getContext("2d");
+      const grad = g.createRadialGradient(64,64,0,64,64,64);
+      colorStops.forEach(stop=>grad.addColorStop(stop[0], stop[1]));
+      g.fillStyle = grad;
+      g.fillRect(0,0,128,128);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const mat = new THREE.SpriteMaterial({ map:tex, transparent:true, opacity, depthWrite:false, blending:additive?THREE.AdditiveBlending:THREE.NormalBlending });
+      const s = new THREE.Sprite(mat);
+      s.scale.set(size,size,size);
+      return s;
+    }
+    function makeScoreSprite(text, color="#ffe08a"){
+      const c = document.createElement("canvas");
+      c.width = 256; c.height = 96;
+      const g = c.getContext("2d");
+      g.font = "900 44px Arial";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.lineWidth = 9;
+      g.strokeStyle = "rgba(0,0,0,.78)";
+      g.strokeText(text,128,50);
+      g.fillStyle = color;
+      g.fillText(text,128,50);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const mat = new THREE.SpriteMaterial({ map:tex, transparent:true, opacity:1, depthWrite:false, depthTest:false });
+      const s = new THREE.Sprite(mat);
+      s.scale.set(1.72,.65,1);
       return s;
     }
     function makeLabel(text, fg, bg){
@@ -301,15 +338,33 @@
         const ring = new THREE.Mesh(new THREE.TorusGeometry(.46,.035,8,28), mats.rail);
         const eye = new THREE.Mesh(new THREE.SphereGeometry(.08,12,8), mats.flare);
         ring.rotation.x = Math.PI/2; eye.position.set(0,0,.25);
-        group.add(body,ring,eye);
+        const tail = new THREE.Mesh(new THREE.ConeGeometry(.12,.34,8), mats.black);
+        tail.rotation.x = Math.PI/2; tail.position.z = -.36;
+        group.add(body,ring,eye,tail);
+        for(let i=0;i<4;i++){
+          const arm = new THREE.Mesh(new THREE.BoxGeometry(.5,.035,.035), mats.rail);
+          arm.rotation.z = i*Math.PI/2;
+          const rotor = new THREE.Mesh(new THREE.CylinderGeometry(.11,.11,.025,14), mats.black);
+          rotor.position.set(Math.cos(i*Math.PI/2)*.38, Math.sin(i*Math.PI/2)*.38, 0);
+          rotor.rotation.x = Math.PI/2;
+          group.add(arm,rotor);
+        }
       }else if(type==="spark"){
         const body = new THREE.Mesh(new THREE.DodecahedronGeometry(.28,0), colorMat);
         body.scale.set(1.15,.72,1.3);
-        group.add(body);
-        for(let i=0;i<4;i++){
+        const core = new THREE.Mesh(new THREE.SphereGeometry(.09,12,8), mats.flare);
+        core.position.set(0,.03,.26);
+        group.add(body,core);
+        for(let i=0;i<6;i++){
           const leg = new THREE.Mesh(new THREE.BoxGeometry(.46,.05,.05), mats.rail);
-          leg.position.set(i<2?-.3:.3,-.12,(i%2?-.18:.18)); leg.rotation.z = i<2?.55:-.55;
+          leg.position.set(i<3?-.3:.3,-.12,(i%3-1)*.16); leg.rotation.z = i<3?.55:-.55;
           group.add(leg);
+        }
+        for(let i=0;i<3;i++){
+          const spike = new THREE.Mesh(new THREE.ConeGeometry(.035,.22,6), mats.hazard);
+          spike.position.set((i-1)*.14,.2,-.1);
+          spike.rotation.x = -Math.PI*.45;
+          group.add(spike);
         }
       }else if(type==="brute"){
         const chest = new THREE.Mesh(new THREE.BoxGeometry(.55,.58,.42), colorMat);
@@ -318,6 +373,18 @@
         const shield = new THREE.Mesh(new THREE.BoxGeometry(.75,.18,.08), mats.hazard);
         shield.position.set(0,-.05,.32);
         group.add(chest,head,shield);
+        for(const side of [-1,1]){
+          const shoulder = new THREE.Mesh(new THREE.BoxGeometry(.2,.22,.28), mats.rail);
+          shoulder.position.set(side*.42,.2,.02);
+          const arm = new THREE.Mesh(new THREE.BoxGeometry(.14,.44,.16), colorMat);
+          arm.position.set(side*.53,-.15,.04);
+          const knee = new THREE.Mesh(new THREE.BoxGeometry(.18,.18,.18), mats.black);
+          knee.position.set(side*.2,-.52,.05);
+          group.add(shoulder,arm,knee);
+        }
+        const visor = new THREE.Mesh(new THREE.BoxGeometry(.2,.045,.03), mats.flare);
+        visor.position.set(0,.46,.17);
+        group.add(visor);
       }else{
         const torso = new THREE.Mesh(new THREE.CapsuleGeometry(.22,.42,6,10), colorMat);
         const head = new THREE.Mesh(new THREE.SphereGeometry(.15,12,8), mats.black);
@@ -325,6 +392,17 @@
         const rifle = new THREE.Mesh(new THREE.BoxGeometry(.48,.06,.09), mats.rail);
         rifle.position.set(.22,.14,.24);
         group.add(torso,head,rifle);
+        for(const side of [-1,1]){
+          const arm = new THREE.Mesh(new THREE.BoxGeometry(.09,.33,.08), colorMat);
+          arm.position.set(side*.25,.08,.04);
+          arm.rotation.z = side*.32;
+          const leg = new THREE.Mesh(new THREE.BoxGeometry(.1,.32,.1), mats.black);
+          leg.position.set(side*.12,-.48,.01);
+          group.add(arm,leg);
+        }
+        const mask = new THREE.Mesh(new THREE.BoxGeometry(.2,.06,.035), mats.flare);
+        mask.position.set(0,.46,.14);
+        group.add(mask);
       }
       group.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; } });
       const x = clamp(rand(-2.6,2.6)+sideBias,-3,3);
@@ -356,6 +434,8 @@
       enemies.splice(0).forEach(e=>world.remove(e.group));
       bullets.splice(0).forEach(b=>world.remove(b.mesh));
       sparks.splice(0).forEach(s=>world.remove(s.mesh));
+      scorePops.splice(0).forEach(p=>world.remove(p.mesh));
+      decals.splice(0).forEach(d=>world.remove(d.mesh));
     }
     function newGame(){
       clearWorldEnemies();
@@ -447,14 +527,18 @@
       void hud.reticle.offsetWidth;
       hud.reticle.classList.add("hit");
       burst(e.group.position, e.type==="brute"?0xff5f64:e.type==="drone"?0xa078ff:e.type==="spark"?0xffce5d:0x6beaff, 8);
+      bloodBurst(e.group.position, e.type==="drone"?.45:e.type==="spark"?.28:.8);
       if(e.hp<=0) killEnemy(e);
     }
     function killEnemy(e){
       if(e.dead) return;
       e.dead = true;
-      state.score += e.type==="brute"?250:e.type==="drone"?120:e.type==="spark"?90:100;
+      const points = e.type==="brute"?250:e.type==="drone"?120:e.type==="spark"?90:100;
+      state.score += points;
       state.charge = clamp(state.charge + 8, 0, 100);
       burst(e.group.position, 0xffd88a, e.type==="brute"?32:18);
+      bloodBurst(e.group.position, e.type==="brute"?1.8:e.type==="spark"?.75:1.2);
+      scorePopup(e.group.position, points);
       world.remove(e.group);
       if(enemies.every(x=>x.dead)){
         state.wave++;
@@ -471,6 +555,29 @@
         world.add(mesh);
         sparks.push({ mesh, life:rand(.35,.9), spin:rand(-5,5), drift:new THREE.Vector3(rand(-1.5,1.5),rand(.15,1.6),rand(-1.8,1.2)), fade:true });
       }
+    }
+    function bloodBurst(pos, strength=1){
+      const count = Math.floor(10 + strength*14);
+      const mat = new THREE.MeshBasicMaterial({ color:0x8f0713, transparent:true, opacity:.95 });
+      for(let i=0;i<count;i++){
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(rand(.018,.055)*strength,7,5), mat.clone());
+        mesh.position.copy(pos).add(new THREE.Vector3(rand(-.09,.09),rand(-.05,.12),rand(-.08,.08)));
+        world.add(mesh);
+        sparks.push({ mesh, life:rand(.4,.9), spin:rand(-3,3), drift:new THREE.Vector3(rand(-1.15,1.15),rand(.05,.95),rand(-.7,1.7)), fade:true });
+      }
+      for(let i=0;i<Math.ceil(strength*3);i++){
+        const splat = makeRoundSprite([[0,"rgba(140,0,12,1)"],[.35,"rgba(100,0,10,.78)"],[1,"rgba(40,0,4,0)"]], .72, rand(.24,.52)*strength, false);
+        splat.position.set(pos.x+rand(-.55,.55), .025, pos.z+rand(-.25,.65));
+        splat.rotation.z = rand(0,TAU);
+        world.add(splat);
+        decals.push({ mesh:splat, life:rand(3.2,5.4), start:splat.material.opacity });
+      }
+    }
+    function scorePopup(pos, points){
+      const mesh = makeScoreSprite("+" + points, points>=250?"#ffd15c":"#dffbff");
+      mesh.position.copy(pos).add(new THREE.Vector3(rand(-.18,.18), .88, .08));
+      world.add(mesh);
+      scorePops.push({ mesh, life:1.9, max:1.9, drift:new THREE.Vector3(rand(-.12,.12), .55, .16) });
     }
     function hurt(amount){
       const armorTake = Math.min(state.armor, amount*.65);
@@ -525,6 +632,19 @@
           world.remove(s.mesh);
           sparks.splice(i,1);
         }
+      }
+      for(let i=scorePops.length-1;i>=0;i--){
+        const p = scorePops[i];
+        p.life -= dt;
+        p.mesh.position.addScaledVector(p.drift, dt);
+        p.mesh.material.opacity = clamp(p.life/p.max,0,1);
+        if(p.life<=0){ world.remove(p.mesh); scorePops.splice(i,1); }
+      }
+      for(let i=decals.length-1;i>=0;i--){
+        const d = decals[i];
+        d.life -= dt;
+        d.mesh.material.opacity = d.start * clamp(d.life/5,0,1);
+        if(d.life<=0){ world.remove(d.mesh); decals.splice(i,1); }
       }
       for(let i=bullets.length-1;i>=0;i--){
         bullets[i].life -= dt;
