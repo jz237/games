@@ -29,6 +29,7 @@
     .msg{position:absolute;left:50%;top:20%;transform:translateX(-50%);width:min(660px,90vw);text-align:center;font:1000 clamp(22px,5vw,54px)/.9 ui-sans-serif,system-ui,sans-serif;text-transform:uppercase;letter-spacing:.02em;color:#fff;text-shadow:0 0 22px rgba(80,204,255,.75),0 4px 0 rgba(0,0,0,.8);opacity:0;transition:opacity .16s ease}
     .msg.show{opacity:1}
     .damage{position:absolute;inset:0;opacity:0;background:radial-gradient(circle at 50% 50%,transparent 42%,rgba(255,41,52,.34));transition:opacity .12s ease}.damage.on{opacity:1}
+    .film{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(circle at 50% 55%,transparent 42%,rgba(0,0,0,.34) 78%,rgba(0,0,0,.62)),repeating-linear-gradient(180deg,rgba(255,255,255,.025) 0 1px,transparent 1px 5px);mix-blend-mode:screen;opacity:.28}
     .controls{position:absolute;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0));display:flex;justify-content:space-between;gap:10px;pointer-events:none}
     .controls .group{display:flex;gap:10px;pointer-events:auto}.round{width:64px;height:56px;border-radius:8px;border:1px solid rgba(147,225,255,.32);background:linear-gradient(180deg,rgba(35,71,96,.88),rgba(5,16,28,.94));box-shadow:0 10px 30px rgba(0,0,0,.38),inset 0 1px rgba(255,255,255,.16);font:950 10px/1 ui-monospace,monospace;text-transform:uppercase;color:#eafaff}.round.fire{width:96px;background:linear-gradient(180deg,#ffdca3,#d64b43 48%,#2c0a12);color:#21060a;border-color:rgba(255,225,160,.8)}
     .overlay{position:fixed;inset:0;z-index:10;display:grid;place-items:center;padding:16px;background:radial-gradient(circle at 50% 36%,rgba(38,97,130,.35),rgba(3,8,16,.78) 56%,rgba(0,0,0,.94));pointer-events:auto}
@@ -44,6 +45,7 @@
 </head>
 <body>
   <div id="stage"></div>
+  <div class="film"></div>
   <div class="hud">
     <div class="top">
       <div class="stack">
@@ -51,7 +53,7 @@
         <div class="meter">Armor <b id="armor">45</b></div>
         <div class="meter">Ammo <b id="ammo">24/24</b></div>
       </div>
-      <div class="mark"><b>Subway Siege: Blackout</b><span>3JS v2.0</span></div>
+      <div class="mark"><b>Subway Siege: Blackout</b><span>3JS v2.2</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Wave <b id="wave">1</b></div>
@@ -72,7 +74,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Subway Siege:<br>Blackout</h1>
-      <span class="version">Three.js v2.0</span>
+      <span class="version">Three.js v2.2</span>
       <p class="dek">The tunnel is alive with emergency strobes, smoke, signal ghosts, and shapes moving between the rails. Hold the platform line until the blackout breaks.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -115,7 +117,7 @@
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x02050a);
-    scene.fog = new THREE.FogExp2(0x03070d, 0.048);
+    scene.fog = new THREE.FogExp2(0x03070d, 0.042);
 
     const camera = new THREE.PerspectiveCamera(67, innerWidth/innerHeight, 0.05, 95);
     camera.position.set(0,1.38,0.25);
@@ -127,7 +129,7 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.18;
+    renderer.toneMappingExposure = 1.28;
     stage.appendChild(renderer.domElement);
 
     const root = new THREE.Group();
@@ -140,16 +142,73 @@
     const tunnelSegments = [];
     const flickers = [];
     const smokeSprites = [];
+    const animParts = [];
     scene.add(root);
     root.add(world);
 
+    function makeSurfaceTexture(kind, base="#27303a", accent="#5a6872", repeatX=4, repeatY=4){
+      const c = document.createElement("canvas");
+      c.width = c.height = 256;
+      const g = c.getContext("2d");
+      g.fillStyle = base;
+      g.fillRect(0,0,256,256);
+      for(let i=0;i<2400;i++){
+        const v = Math.floor(rand(0,38));
+        g.fillStyle = `rgba(${v+18},${v+22},${v+26},${rand(.035,.12)})`;
+        g.fillRect(Math.random()*256,Math.random()*256,rand(1,4),rand(1,4));
+      }
+      if(kind==="tile"){
+        g.strokeStyle = "rgba(4,10,14,.58)";
+        g.lineWidth = 3;
+        for(let x=0;x<=256;x+=32){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,256); g.stroke(); }
+        for(let y=0;y<=256;y+=32){ g.beginPath(); g.moveTo(0,y); g.lineTo(256,y); g.stroke(); }
+        g.strokeStyle = "rgba(255,255,255,.1)";
+        g.lineWidth = 1;
+        for(let x=1;x<256;x+=32){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,256); g.stroke(); }
+        g.fillStyle = "rgba(25,42,48,.42)";
+        for(let i=0;i<34;i++) g.fillRect(rand(0,240),rand(0,240),rand(7,34),rand(3,13));
+      }else if(kind==="concrete"){
+        g.strokeStyle = "rgba(0,0,0,.28)";
+        for(let i=0;i<38;i++){
+          g.beginPath();
+          let x=rand(0,256), y=rand(0,256);
+          g.moveTo(x,y);
+          for(let j=0;j<rand(2,5);j++){ x+=rand(-24,24); y+=rand(-18,18); g.lineTo(x,y); }
+          g.stroke();
+        }
+      }else if(kind==="metal"){
+        g.strokeStyle = "rgba(255,255,255,.08)";
+        for(let y=0;y<256;y+=18){ g.beginPath(); g.moveTo(0,y); g.lineTo(256,y+rand(-3,3)); g.stroke(); }
+        g.fillStyle = accent;
+        for(let i=0;i<120;i++) g.fillRect(rand(0,256),rand(0,256),rand(1,3),rand(1,2));
+      }else if(kind==="wood"){
+        for(let y=0;y<256;y+=9){
+          g.strokeStyle = `rgba(${rand(60,105)},${rand(36,58)},${rand(22,38)},.38)`;
+          g.beginPath(); g.moveTo(0,y+rand(-2,2)); g.lineTo(256,y+rand(-2,2)); g.stroke();
+        }
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(repeatX,repeatY);
+      return tex;
+    }
+    const tex = {
+      concrete:makeSurfaceTexture("concrete","#26313b","#5c6b76",5,18),
+      darkConcrete:makeSurfaceTexture("concrete","#101820","#2b3942",4,18),
+      tile:makeSurfaceTexture("tile","#8d9a9d","#c5d1d2",5,16),
+      grimTile:makeSurfaceTexture("tile","#3f5058","#76848a",3,12),
+      rail:makeSurfaceTexture("metal","#5f696b","#c0cacd",1,18),
+      sleeper:makeSurfaceTexture("wood","#2c2117","#5b3a21",2,10)
+    };
+
     const mats = {
-      concrete:new THREE.MeshStandardMaterial({ color:0x27303a, roughness:.92, metalness:.02 }),
-      darkConcrete:new THREE.MeshStandardMaterial({ color:0x111820, roughness:.96, metalness:.02 }),
-      tile:new THREE.MeshStandardMaterial({ color:0xb9c3c4, roughness:.74, metalness:.02 }),
-      grimTile:new THREE.MeshStandardMaterial({ color:0x44535b, roughness:.9, metalness:.01 }),
-      rail:new THREE.MeshStandardMaterial({ color:0x7b8588, roughness:.42, metalness:.78 }),
-      sleeper:new THREE.MeshStandardMaterial({ color:0x2b221b, roughness:.95, metalness:.04 }),
+      concrete:new THREE.MeshStandardMaterial({ color:0x7c8b92, map:tex.concrete, bumpMap:tex.concrete, bumpScale:.045, roughness:.94, metalness:.02 }),
+      darkConcrete:new THREE.MeshStandardMaterial({ color:0x6a7a86, map:tex.darkConcrete, bumpMap:tex.darkConcrete, bumpScale:.038, roughness:.97, metalness:.02 }),
+      tile:new THREE.MeshStandardMaterial({ color:0xc8d4d5, map:tex.tile, bumpMap:tex.tile, bumpScale:.025, roughness:.78, metalness:.02 }),
+      grimTile:new THREE.MeshStandardMaterial({ color:0x8ca0a7, map:tex.grimTile, bumpMap:tex.grimTile, bumpScale:.032, roughness:.91, metalness:.01 }),
+      rail:new THREE.MeshStandardMaterial({ color:0xaeb8ba, map:tex.rail, bumpMap:tex.rail, bumpScale:.018, roughness:.36, metalness:.82 }),
+      sleeper:new THREE.MeshStandardMaterial({ color:0x5b3a22, map:tex.sleeper, bumpMap:tex.sleeper, bumpScale:.03, roughness:.96, metalness:.04 }),
       hazard:new THREE.MeshStandardMaterial({ color:0xffc340, roughness:.55, metalness:.1, emissive:0x5a2b00, emissiveIntensity:.12 }),
       red:new THREE.MeshStandardMaterial({ color:0xd64949, roughness:.54, metalness:.18, emissive:0x220000, emissiveIntensity:.25 }),
       cyan:new THREE.MeshStandardMaterial({ color:0x6beaff, roughness:.34, metalness:.28, emissive:0x0b7687, emissiveIntensity:.34 }),
@@ -158,6 +217,9 @@
       blood:new THREE.MeshStandardMaterial({ color:0x7a0710, roughness:.8, metalness:.02, emissive:0x240004, emissiveIntensity:.08 }),
       bone:new THREE.MeshStandardMaterial({ color:0xd4d0ba, roughness:.72, metalness:.02 }),
       black:new THREE.MeshStandardMaterial({ color:0x06080a, roughness:.82, metalness:.08 }),
+      rubber:new THREE.MeshStandardMaterial({ color:0x080b0d, roughness:.66, metalness:.05 }),
+      cable:new THREE.MeshStandardMaterial({ color:0x050709, roughness:.52, metalness:.18 }),
+      puddle:new THREE.MeshBasicMaterial({ color:0x5fc8ff, transparent:true, opacity:.18, depthWrite:false }),
       muzzle:new THREE.MeshBasicMaterial({ color:0xfff1b0, transparent:true, opacity:.9, depthWrite:false }),
       flare:new THREE.MeshBasicMaterial({ color:0x9ff2ff, transparent:true, opacity:.45, depthWrite:false })
     };
@@ -169,7 +231,7 @@
     moon.castShadow = true;
     moon.shadow.mapSize.set(1024,1024);
     scene.add(moon);
-    const playerLight = new THREE.SpotLight(0xdff8ff, 5.8, 34, .34, .75, 1.2);
+    const playerLight = new THREE.SpotLight(0xdff8ff, 6.8, 38, .36, .75, 1.2);
     playerLight.position.set(0,1.22,0.3);
     playerLight.target.position.set(0,1.05,-10);
     scene.add(playerLight, playerLight.target);
@@ -185,6 +247,31 @@
       mesh.position.set(x,y,z);
       mesh.castShadow = cast;
       mesh.receiveShadow = receive;
+      world.add(mesh);
+      return mesh;
+    }
+    function part(group, geometry, mat, x=0, y=0, z=0, rx=0, ry=0, rz=0, sx=1, sy=1, sz=1, tag=""){
+      const mesh = new THREE.Mesh(geometry, mat);
+      mesh.position.set(x,y,z);
+      mesh.rotation.set(rx,ry,rz);
+      mesh.scale.set(sx,sy,sz);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      if(tag){
+        mesh.userData.tag = tag;
+        mesh.userData.baseRX = rx;
+        mesh.userData.baseRY = ry;
+        mesh.userData.baseRZ = rz;
+      }
+      group.add(mesh);
+      return mesh;
+    }
+    function worldCylinder(radius, depth, mat, x, y, z, rx=0, ry=0, rz=0, radial=16){
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,depth,radial), mat);
+      mesh.position.set(x,y,z);
+      mesh.rotation.set(rx,ry,rz);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
       world.add(mesh);
       return mesh;
     }
@@ -268,6 +355,22 @@
       makeBox(.26, 3.4, 72, mats.darkConcrete, 4.05, 1.4, -34);
       makeBox(1.25, .16, 72, mats.concrete, -3.32, .04, -34);
       makeBox(1.25, .16, 72, mats.concrete, 3.32, .04, -34);
+      makeBox(.08,.045,72,mats.hazard,-2.72,.13,-34,true,true);
+      makeBox(.08,.045,72,mats.hazard,2.72,.13,-34,true,true);
+      for(const x of [-3.65,-3.43,3.43,3.65]){
+        worldCylinder(.045,71,mats.cable,x,2.63,-34,Math.PI/2,0,0,10);
+      }
+      for(const x of [-3.78,3.78]){
+        worldCylinder(.085,71,mats.rail,x,2.24,-34,Math.PI/2,0,0,14);
+      }
+      for(let z=-5;z>-68;z-=8.5){
+        const puddle = new THREE.Mesh(new THREE.PlaneGeometry(rand(.7,1.6),rand(.28,.7)), mats.puddle.clone());
+        puddle.position.set(rand(-1.7,1.7),.035,z+rand(-.8,.8));
+        puddle.rotation.x = -Math.PI/2;
+        puddle.rotation.z = rand(-.4,.4);
+        world.add(puddle);
+        decals.push({ mesh:puddle, life:999, start:puddle.material.opacity });
+      }
       for(let z=1;z>-70;z-=2.15){
         const seg = new THREE.Group();
         seg.position.z = z;
@@ -282,6 +385,16 @@
         }
         const sleeper = makeBox(5.6,.08,.16,mats.sleeper,0,-.01,z-.2,true,true);
         sleeper.rotation.y = rand(-.02,.02);
+        if(Math.abs(z%4.3)<.32){
+          makeBox(.045,.58,1.34,mats.tile,-3.88,.92,z-.25,true,true);
+          makeBox(.045,.58,1.34,mats.tile,3.88,.92,z-.25,true,true);
+        }
+        if(Math.abs(z%10.75)<.28){
+          const conduit = worldCylinder(.035,1.5,mats.cable,-3.7,1.95,z,0,0,Math.PI/2,8);
+          conduit.rotation.y = Math.PI/2;
+          const conduit2 = worldCylinder(.035,1.5,mats.cable,3.7,1.95,z,0,0,Math.PI/2,8);
+          conduit2.rotation.y = Math.PI/2;
+        }
         if(Math.abs(z%6)<.3){
           const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.55,.38), signMats[Math.floor(Math.random()*signMats.length)]);
           sign.position.set(Math.random()<.5?-3.88:3.88, rand(1.15,2.35), z-.7);
@@ -301,6 +414,41 @@
         makeBox(.36,1.08,.06,mats.black,-3.92,.78,z,true,true);
         makeBox(.36,1.08,.06,mats.black,3.92,.78,z-2.4,true,true);
       }
+      for(let z=-7;z>-66;z-=7.25){
+        const side = Math.random()<.5?-1:1;
+        const x = side*rand(2.85,3.42);
+        const crate = makeBox(rand(.26,.52),rand(.18,.42),rand(.28,.64),Math.random()<.5?mats.darkConcrete:mats.sleeper,x,rand(.18,.35),z,true,true);
+        crate.rotation.y = rand(-.4,.4);
+        if(Math.random()<.55){
+          const barrel = worldCylinder(rand(.1,.16),rand(.38,.62),mats.rail,x+side*rand(.25,.55),rand(.24,.36),z+rand(-.42,.42),0,0,rand(-.12,.12),14);
+          barrel.rotation.z = Math.PI/2 + rand(-.15,.15);
+        }
+      }
+      const carZ = -42;
+      makeBox(.88,1.28,10.8,mats.rail,-3.08,.78,carZ,true,true);
+      makeBox(.92,.12,10.9,mats.black,-3.08,1.48,carZ,true,true);
+      makeBox(.96,.18,10.9,mats.black,-3.08,.14,carZ,true,true);
+      for(let z=carZ+4.4;z>carZ-5;z-=1.15){
+        const win = makeBox(.035,.28,.55,Math.random()<.28?mats.flare:mats.black,-2.62,1.08,z,true,true);
+        win.rotation.y = Math.PI/2;
+        if(Math.random()<.35){
+          const door = makeBox(.04,.78,.08,mats.darkConcrete,-2.6,.72,z-.48,true,true);
+          door.rotation.y = Math.PI/2;
+        }
+      }
+      for(let z=-12;z>-64;z-=13){
+        makeBox(.38,.72,.18,mats.darkConcrete,3.7,.72,z,true,true);
+        makeBox(.04,.48,.28,mats.flare,3.58,.78,z,true,true);
+        for(let y=.35;y<1.2;y+=.18) worldCylinder(.012,.5,mats.cable,3.53,y,z,0,0,Math.PI/2,6);
+      }
+      for(let i=0;i<54;i++){
+        const chip = new THREE.Mesh(new THREE.TetrahedronGeometry(rand(.025,.085),0), Math.random()<.5?mats.concrete:mats.rail);
+        chip.position.set(rand(-3.25,3.25),rand(.03,.09),rand(-2,-68));
+        chip.rotation.set(rand(0,TAU),rand(0,TAU),rand(0,TAU));
+        chip.castShadow = true;
+        chip.receiveShadow = true;
+        world.add(chip);
+      }
       for(let i=0;i<72;i++){
         const s = makeTubeSprite("rgba(150,205,225,1)", rand(.08,.18), rand(.35,.9));
         s.position.set(rand(-3.7,3.7), rand(.15,2.8), rand(-4,-70));
@@ -313,15 +461,27 @@
     const weapon = new THREE.Group();
     camera.add(weapon);
     scene.add(camera);
-    const gunBody = new THREE.Mesh(new THREE.BoxGeometry(.34,.18,.58), mats.black);
+    const gunBody = new THREE.Mesh(new THREE.BoxGeometry(.38,.16,.64), mats.rail);
     gunBody.position.set(.34,-.28,-.72);
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(.04,.055,.55,16), mats.rail);
     barrel.rotation.x = Math.PI/2; barrel.position.set(.34,-.24,-1.04);
-    const sideLight = new THREE.Mesh(new THREE.BoxGeometry(.08,.04,.22), mats.cyan);
-    sideLight.position.set(.18,-.18,-.82);
+    const lowerBody = new THREE.Mesh(new THREE.BoxGeometry(.28,.1,.5), mats.black);
+    lowerBody.position.set(.31,-.34,-.72);
+    const sideLight = new THREE.Mesh(new THREE.BoxGeometry(.035,.022,.14), mats.cyan);
+    sideLight.position.set(.16,-.18,-.9);
     const muzzle = makeTubeSprite("rgba(255,209,126,1)", .0, .65);
     muzzle.position.set(.34,-.24,-1.36);
-    weapon.add(gunBody,barrel,sideLight,muzzle);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(.13,.28,.18), mats.rubber);
+    grip.position.set(.26,-.43,-.66);
+    grip.rotation.x = -.24;
+    const sight = new THREE.Mesh(new THREE.BoxGeometry(.22,.055,.18), mats.rail);
+    sight.position.set(.34,-.12,-.82);
+    const sightGlass = new THREE.Mesh(new THREE.BoxGeometry(.16,.035,.035), mats.flare);
+    sightGlass.position.set(.34,-.1,-.95);
+    const coil = new THREE.Mesh(new THREE.TorusGeometry(.16,.012,8,24), mats.cable);
+    coil.position.set(.34,-.22,-1.1);
+    coil.rotation.x = Math.PI/2;
+    weapon.add(gunBody,lowerBody,barrel,sideLight,muzzle,grip,sight,sightGlass,coil);
 
     const state = {
       mode:"title", time:0, last:0, score:0, wave:1, health:100, armor:45, ammo:24, maxAmmo:24,
@@ -334,75 +494,59 @@
       const group = new THREE.Group();
       const colorMat = type==="drone"?mats.violet:type==="spark"?mats.amber:type==="brute"?mats.red:mats.cyan;
       if(type==="drone"){
-        const body = new THREE.Mesh(new THREE.OctahedronGeometry(.34,1), colorMat);
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(.46,.035,8,28), mats.rail);
-        const eye = new THREE.Mesh(new THREE.SphereGeometry(.08,12,8), mats.flare);
-        ring.rotation.x = Math.PI/2; eye.position.set(0,0,.25);
-        const tail = new THREE.Mesh(new THREE.ConeGeometry(.12,.34,8), mats.black);
-        tail.rotation.x = Math.PI/2; tail.position.z = -.36;
-        group.add(body,ring,eye,tail);
+        part(group,new THREE.OctahedronGeometry(.34,2),colorMat,0,0,0,0,0,0,1.1,.8,1.25);
+        part(group,new THREE.TorusGeometry(.48,.035,8,32),mats.rail,0,0,0,Math.PI/2,0,0);
+        part(group,new THREE.TorusGeometry(.34,.018,8,24),mats.cable,0,0,.02,0,Math.PI/2,0);
+        part(group,new THREE.SphereGeometry(.08,14,10),mats.flare,0,0,.28);
+        part(group,new THREE.ConeGeometry(.12,.34,8),mats.black,0,0,-.36,Math.PI/2,0,0);
         for(let i=0;i<4;i++){
-          const arm = new THREE.Mesh(new THREE.BoxGeometry(.5,.035,.035), mats.rail);
-          arm.rotation.z = i*Math.PI/2;
-          const rotor = new THREE.Mesh(new THREE.CylinderGeometry(.11,.11,.025,14), mats.black);
-          rotor.position.set(Math.cos(i*Math.PI/2)*.38, Math.sin(i*Math.PI/2)*.38, 0);
-          rotor.rotation.x = Math.PI/2;
-          group.add(arm,rotor);
+          const a = i*Math.PI/2;
+          part(group,new THREE.BoxGeometry(.58,.035,.035),mats.rail,0,0,0,0,0,a);
+          const rotor = part(group,new THREE.CylinderGeometry(.12,.12,.025,14),mats.black,Math.cos(a)*.42,Math.sin(a)*.42,0,Math.PI/2,0,0,1,1,1,"rotor");
+          part(rotor,new THREE.BoxGeometry(.32,.018,.018),mats.rail,0,0,0,0,0,0);
+          part(rotor,new THREE.BoxGeometry(.018,.32,.018),mats.rail,0,0,0,0,0,0);
         }
       }else if(type==="spark"){
-        const body = new THREE.Mesh(new THREE.DodecahedronGeometry(.28,0), colorMat);
-        body.scale.set(1.15,.72,1.3);
-        const core = new THREE.Mesh(new THREE.SphereGeometry(.09,12,8), mats.flare);
-        core.position.set(0,.03,.26);
-        group.add(body,core);
+        part(group,new THREE.DodecahedronGeometry(.28,1),colorMat,0,0,0,0,0,0,1.2,.72,1.35);
+        part(group,new THREE.BoxGeometry(.5,.12,.34),mats.black,0,-.05,.02);
+        part(group,new THREE.SphereGeometry(.09,14,10),mats.flare,0,.05,.29);
         for(let i=0;i<6;i++){
-          const leg = new THREE.Mesh(new THREE.BoxGeometry(.46,.05,.05), mats.rail);
-          leg.position.set(i<3?-.3:.3,-.12,(i%3-1)*.16); leg.rotation.z = i<3?.55:-.55;
-          group.add(leg);
+          const side = i<3?-1:1;
+          const leg = part(group,new THREE.BoxGeometry(.52,.05,.05),mats.rail,side*.32,-.14,(i%3-1)*.17,0,0,side*.62,1,1,1,"leg");
+          leg.userData.phase = i*.75;
+          part(group,new THREE.SphereGeometry(.045,8,6),mats.black,side*.55,-.29,(i%3-1)*.2);
         }
         for(let i=0;i<3;i++){
-          const spike = new THREE.Mesh(new THREE.ConeGeometry(.035,.22,6), mats.hazard);
-          spike.position.set((i-1)*.14,.2,-.1);
-          spike.rotation.x = -Math.PI*.45;
-          group.add(spike);
+          part(group,new THREE.ConeGeometry(.035,.22,6),mats.hazard,(i-1)*.14,.22,-.12,-Math.PI*.45,0,0);
         }
       }else if(type==="brute"){
-        const chest = new THREE.Mesh(new THREE.BoxGeometry(.55,.58,.42), colorMat);
-        const head = new THREE.Mesh(new THREE.BoxGeometry(.28,.22,.3), mats.black);
-        head.position.y=.44;
-        const shield = new THREE.Mesh(new THREE.BoxGeometry(.75,.18,.08), mats.hazard);
-        shield.position.set(0,-.05,.32);
-        group.add(chest,head,shield);
+        part(group,new THREE.BoxGeometry(.62,.68,.48),colorMat,0,.03,0);
+        part(group,new THREE.BoxGeometry(.72,.18,.42),mats.rail,0,.32,.02);
+        part(group,new THREE.BoxGeometry(.3,.24,.32),mats.black,0,.52,.03);
+        part(group,new THREE.BoxGeometry(.82,.2,.1),mats.hazard,0,-.02,.36);
+        part(group,new THREE.BoxGeometry(.64,.055,.04),mats.flare,0,.55,.21);
+        part(group,new THREE.BoxGeometry(.18,.22,.1),mats.bone,-.14,.08,.31);
+        part(group,new THREE.BoxGeometry(.18,.22,.1),mats.bone,.14,.08,.31);
         for(const side of [-1,1]){
-          const shoulder = new THREE.Mesh(new THREE.BoxGeometry(.2,.22,.28), mats.rail);
-          shoulder.position.set(side*.42,.2,.02);
-          const arm = new THREE.Mesh(new THREE.BoxGeometry(.14,.44,.16), colorMat);
-          arm.position.set(side*.53,-.15,.04);
-          const knee = new THREE.Mesh(new THREE.BoxGeometry(.18,.18,.18), mats.black);
-          knee.position.set(side*.2,-.52,.05);
-          group.add(shoulder,arm,knee);
+          part(group,new THREE.BoxGeometry(.24,.24,.32),mats.rail,side*.48,.24,.02);
+          part(group,new THREE.BoxGeometry(.16,.48,.18),colorMat,side*.58,-.17,.04,0,0,side*.08);
+          part(group,new THREE.BoxGeometry(.18,.42,.18),mats.black,side*.22,-.54,.02,0,0,side*.04,1,1,1,"leg");
+          part(group,new THREE.BoxGeometry(.2,.16,.2),mats.rail,side*.22,-.84,.08);
         }
-        const visor = new THREE.Mesh(new THREE.BoxGeometry(.2,.045,.03), mats.flare);
-        visor.position.set(0,.46,.17);
-        group.add(visor);
       }else{
-        const torso = new THREE.Mesh(new THREE.CapsuleGeometry(.22,.42,6,10), colorMat);
-        const head = new THREE.Mesh(new THREE.SphereGeometry(.15,12,8), mats.black);
-        head.position.y=.45;
-        const rifle = new THREE.Mesh(new THREE.BoxGeometry(.48,.06,.09), mats.rail);
-        rifle.position.set(.22,.14,.24);
-        group.add(torso,head,rifle);
+        part(group,new THREE.CapsuleGeometry(.2,.46,7,12),colorMat,0,.03,0);
+        part(group,new THREE.BoxGeometry(.32,.34,.28),mats.black,0,.02,.05);
+        part(group,new THREE.SphereGeometry(.16,16,10),mats.black,0,.48,.02);
+        part(group,new THREE.CylinderGeometry(.18,.16,.08,16),mats.rail,0,.58,.02,0,0,0);
+        part(group,new THREE.BoxGeometry(.25,.055,.04),mats.flare,0,.49,.15);
+        part(group,new THREE.BoxGeometry(.62,.065,.1),mats.rail,.25,.14,.3,0,.12,0);
+        part(group,new THREE.CylinderGeometry(.025,.025,.46,8),mats.rail,.48,.14,.39,Math.PI/2,0,0);
+        part(group,new THREE.BoxGeometry(.18,.28,.08),mats.sleeper,-.22,-.03,.18,0,0,-.16);
         for(const side of [-1,1]){
-          const arm = new THREE.Mesh(new THREE.BoxGeometry(.09,.33,.08), colorMat);
-          arm.position.set(side*.25,.08,.04);
-          arm.rotation.z = side*.32;
-          const leg = new THREE.Mesh(new THREE.BoxGeometry(.1,.32,.1), mats.black);
-          leg.position.set(side*.12,-.48,.01);
-          group.add(arm,leg);
+          part(group,new THREE.BoxGeometry(.1,.35,.09),colorMat,side*.27,.08,.04,0,0,side*.34,1,1,1,"arm");
+          part(group,new THREE.BoxGeometry(.11,.34,.11),mats.black,side*.12,-.47,.01,0,0,side*.08,1,1,1,"leg");
+          part(group,new THREE.BoxGeometry(.13,.07,.16),mats.rail,side*.12,-.68,.08);
         }
-        const mask = new THREE.Mesh(new THREE.BoxGeometry(.2,.06,.035), mats.flare);
-        mask.position.set(0,.46,.14);
-        group.add(mask);
       }
       group.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; } });
       const x = clamp(rand(-2.6,2.6)+sideBias,-3,3);
@@ -597,7 +741,10 @@
         e.group.position.z += e.speed*dt*(state.flare>0?.48:1);
         e.group.rotation.y = Math.sin(e.sway*.7)*.22;
         e.group.rotation.z = Math.sin(e.sway*1.3)*.08;
-        e.group.children.forEach(child=>{
+        e.group.traverse(child=>{
+          if(child.userData.tag==="rotor") child.rotation.z += dt*28;
+          if(child.userData.tag==="leg") child.rotation.z = child.userData.baseRZ + Math.sin(e.sway*3 + (child.userData.phase || 0))*.18;
+          if(child.userData.tag==="arm") child.rotation.z = child.userData.baseRZ + Math.sin(e.sway*2.4)*.1;
           if(child.material && child.material.emissiveIntensity!==undefined) child.material.emissiveIntensity = e.hit>0 ? 1.2 : child.material===mats.black ? .05 : .34;
         });
         e.hit = Math.max(0,e.hit-dt);
