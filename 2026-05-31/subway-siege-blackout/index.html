@@ -53,7 +53,7 @@
         <div class="meter">Armor <b id="armor">45</b></div>
         <div class="meter">Ammo <b id="ammo">24/24</b></div>
       </div>
-      <div class="mark"><b>Subway Siege: Blackout</b><span>3JS v2.3</span></div>
+      <div class="mark"><b>Subway Siege: Blackout</b><span>3JS v2.4</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Wave <b id="wave">1</b></div>
@@ -67,14 +67,14 @@
     <div id="reticle" class="reticle"><i></i></div>
     <div id="damage" class="damage"></div>
     <div class="controls">
-      <div class="group"><button id="moveBtn" class="round move">Move</button><button id="fireBtn" class="round fire">Fire</button></div>
+      <div class="group"><button id="moveBtn" class="round move">Walk</button><button id="fireBtn" class="round fire">Fire</button></div>
       <div class="group"><button id="reloadBtn" class="round">Reload</button><button id="flareBtn" class="round">Flare</button></div>
     </div>
   </div>
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Subway Siege:<br>Blackout</h1>
-      <span class="version">Three.js v2.3</span>
+      <span class="version">Three.js v2.4</span>
       <p class="dek">The tunnel is alive with emergency strobes, smoke, signal ghosts, and shapes moving between the rails. Hold the platform line until the blackout breaks.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -144,7 +144,7 @@
     const smokeSprites = [];
     const animParts = [];
     const keysDown = new Set();
-    const player = { x:0, z:-2, yaw:0, pitch:0, bob:0, moveForward:0, moveSide:0, mobileMove:false };
+    const player = { x:0, z:-2, yaw:0, pitch:0, bob:0, moveForward:0, moveSide:0, viewMove:false, buttonMove:false };
     scene.add(root);
     root.add(world);
 
@@ -643,7 +643,7 @@
     function newGame(){
       clearWorldEnemies();
       Object.assign(state,{mode:"play",score:0,wave:1,health:100,armor:45,ammo:24,maxAmmo:24,reload:0,fireCd:0,charge:0,flare:0,shake:0,hitFlash:0,muzzle:0,aimX:0,aimY:0,targetAimX:0,targetAimY:0,pendingScore:false});
-      Object.assign(player,{x:0,z:-2,yaw:0,pitch:0,bob:0,mobileMove:false});
+      Object.assign(player,{x:0,z:-2,yaw:0,pitch:0,bob:0,viewMove:false,buttonMove:false});
       hud.overlay.hidden = true;
       spawnWave();
       updateHud();
@@ -869,7 +869,7 @@
       state.time += dt;
       const forwardKey = (keysDown.has("KeyW")||keysDown.has("ArrowUp")?1:0) - (keysDown.has("KeyS")||keysDown.has("ArrowDown")?1:0);
       const sideKey = (keysDown.has("KeyD")||keysDown.has("ArrowRight")?1:0) - (keysDown.has("KeyA")||keysDown.has("ArrowLeft")?1:0);
-      const mobileForward = player.mobileMove ? 1 : 0;
+      const mobileForward = (player.viewMove || player.buttonMove) ? 1 : 0;
       const moveF = clamp(forwardKey + mobileForward, -1, 1);
       const moveS = clamp(sideKey, -1, 1);
       const speed = (keysDown.has("ShiftLeft") || keysDown.has("ShiftRight")) ? 4.6 : 3.15;
@@ -1011,32 +1011,49 @@
       if(kind==="wave"){ tone(170,.14,"sawtooth",.06,280); setTimeout(()=>tone(260,.18,"triangle",.05,520),110); }
     }
 
-    let looking = false, lastLookX = 0, lastLookY = 0;
+    let looking = false, lookPointerId = null, lastLookX = 0, lastLookY = 0;
     function lookBy(dx,dy){
       player.yaw -= dx * .0042;
       player.pitch = clamp(player.pitch - dy * .0032, -.88, .82);
     }
     window.addEventListener("pointermove", e=>{
-      if(!looking || state.mode!=="play") return;
+      if(!looking || e.pointerId!==lookPointerId || state.mode!=="play") return;
       lookBy(e.clientX-lastLookX, e.clientY-lastLookY);
       lastLookX = e.clientX;
       lastLookY = e.clientY;
     }, { passive:true });
     renderer.domElement.addEventListener("pointerdown", e=>{
       if(state.mode!=="play") return;
+      e.preventDefault();
+      ensureAudio();
       looking = true;
+      lookPointerId = e.pointerId;
       lastLookX = e.clientX;
       lastLookY = e.clientY;
+      if(e.pointerType==="touch") player.viewMove = true;
       if(e.pointerType==="mouse") fire();
     });
-    window.addEventListener("pointerup",()=>{ looking=false; state.fireHeld=false; }, { passive:true });
+    window.addEventListener("pointerup",e=>{
+      if(e.pointerId===lookPointerId){
+        looking=false;
+        lookPointerId=null;
+        player.viewMove=false;
+      }
+    }, { passive:true });
+    window.addEventListener("pointercancel",e=>{
+      if(e.pointerId===lookPointerId){
+        looking=false;
+        lookPointerId=null;
+        player.viewMove=false;
+      }
+    }, { passive:true });
     buttons.fire.addEventListener("touchstart", e=>{ e.preventDefault(); ensureAudio(); state.fireHeld=true; fire(); }, { passive:false });
     buttons.fire.addEventListener("touchend", e=>{ e.preventDefault(); state.fireHeld=false; }, { passive:false });
     buttons.fire.addEventListener("click",()=>{ ensureAudio(); fire(); });
-    buttons.move.addEventListener("touchstart", e=>{ e.preventDefault(); player.mobileMove=true; }, { passive:false });
-    buttons.move.addEventListener("touchend", e=>{ e.preventDefault(); player.mobileMove=false; }, { passive:false });
-    buttons.move.addEventListener("mousedown",()=>{ player.mobileMove=true; });
-    buttons.move.addEventListener("mouseup",()=>{ player.mobileMove=false; });
+    buttons.move.addEventListener("touchstart", e=>{ e.preventDefault(); player.buttonMove=true; }, { passive:false });
+    buttons.move.addEventListener("touchend", e=>{ e.preventDefault(); player.buttonMove=false; }, { passive:false });
+    buttons.move.addEventListener("mousedown",()=>{ player.buttonMove=true; });
+    buttons.move.addEventListener("mouseup",()=>{ player.buttonMove=false; });
     buttons.reload.addEventListener("click",()=>{ ensureAudio(); reload(); });
     buttons.flare.addEventListener("click",()=>{ ensureAudio(); flare(); });
     buttons.start.addEventListener("click",()=>{ ensureAudio(); newGame(); });
