@@ -11,7 +11,7 @@
     [hidden]{display:none!important}
     html,body{position:fixed;inset:0;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;background:#02050a;color:#edf8ff;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;touch-action:none}
     canvas{display:block;width:100%;height:100%;touch-action:none}
-    button{font:inherit;color:inherit;border:0;touch-action:manipulation;user-select:none;cursor:pointer}
+    button{font:inherit;color:inherit;border:0;touch-action:none;user-select:none;cursor:pointer}
     .hud{position:fixed;inset:0;z-index:3;pointer-events:none;color:#e9f8ff;text-shadow:0 2px 12px rgba(0,0,0,.9)}
     .top{position:absolute;top:calc(10px + env(safe-area-inset-top,0));left:clamp(10px,2.4vw,28px);right:clamp(10px,2.4vw,28px);display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:start}
     .stack{display:flex;gap:8px;flex-wrap:wrap}.stack.right{justify-content:flex-end}
@@ -31,7 +31,7 @@
     .damage{position:absolute;inset:0;opacity:0;background:radial-gradient(circle at 50% 50%,transparent 42%,rgba(255,41,52,.34));transition:opacity .12s ease}.damage.on{opacity:1}
     .film{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(circle at 50% 55%,transparent 42%,rgba(0,0,0,.34) 78%,rgba(0,0,0,.62)),repeating-linear-gradient(180deg,rgba(255,255,255,.025) 0 1px,transparent 1px 5px);mix-blend-mode:screen;opacity:.28}
     .controls{position:absolute;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0));display:flex;justify-content:space-between;gap:10px;pointer-events:none}
-    .controls .group{display:flex;gap:10px;pointer-events:auto}.round{width:64px;height:56px;border-radius:8px;border:1px solid rgba(147,225,255,.32);background:linear-gradient(180deg,rgba(35,71,96,.88),rgba(5,16,28,.94));box-shadow:0 10px 30px rgba(0,0,0,.38),inset 0 1px rgba(255,255,255,.16);font:950 10px/1 ui-monospace,monospace;text-transform:uppercase;color:#eafaff}.round.fire{width:82px;background:linear-gradient(180deg,#ffdca3,#d64b43 48%,#2c0a12);color:#21060a;border-color:rgba(255,225,160,.8)}.round.move{width:82px;background:linear-gradient(180deg,#d8fff3,#3acfa6 52%,#0a4b43);color:#031916;border-color:rgba(175,255,232,.76)}
+    .controls .group{display:flex;gap:10px;pointer-events:auto}.round{width:64px;height:56px;border-radius:8px;border:1px solid rgba(147,225,255,.32);background:linear-gradient(180deg,rgba(35,71,96,.88),rgba(5,16,28,.94));box-shadow:0 10px 30px rgba(0,0,0,.38),inset 0 1px rgba(255,255,255,.16);font:950 10px/1 ui-monospace,monospace;text-transform:uppercase;color:#eafaff;touch-action:none}.round.fire{width:82px;background:linear-gradient(180deg,#ffdca3,#d64b43 48%,#2c0a12);color:#21060a;border-color:rgba(255,225,160,.8)}.round.move{width:82px;background:linear-gradient(180deg,#d8fff3,#3acfa6 52%,#0a4b43);color:#031916;border-color:rgba(175,255,232,.76)}
     .overlay{position:fixed;inset:0;z-index:10;display:grid;place-items:center;padding:16px;background:radial-gradient(circle at 50% 36%,rgba(38,97,130,.35),rgba(3,8,16,.78) 56%,rgba(0,0,0,.94));pointer-events:auto}
     .panel{position:relative;width:min(820px,94vw);max-height:92vh;overflow:auto;padding:22px;border:1px solid rgba(135,218,255,.25);border-radius:8px;background:linear-gradient(180deg,rgba(9,19,31,.86),rgba(2,6,13,.95));box-shadow:0 34px 100px rgba(0,0,0,.74),inset 0 1px rgba(255,255,255,.09)}
     h1{font-family:Georgia,serif;font-size:clamp(40px,8vw,84px);line-height:.88;font-weight:700;letter-spacing:0;color:#fff;text-shadow:0 0 30px rgba(56,174,255,.52);margin:0 0 8px}
@@ -1011,7 +1011,7 @@
       if(kind==="wave"){ tone(170,.14,"sawtooth",.06,280); setTimeout(()=>tone(260,.18,"triangle",.05,520),110); }
     }
 
-    let looking = false, lookPointerId = null, lastLookX = 0, lastLookY = 0;
+    let looking = false, lookPointerId = null, firePointerId = null, lastLookX = 0, lastLookY = 0;
     function lookBy(dx,dy){
       player.yaw -= dx * .0042;
       player.pitch = clamp(player.pitch - dy * .0032, -.88, .82);
@@ -1047,13 +1047,33 @@
         player.viewMove=false;
       }
     }, { passive:true });
-    buttons.fire.addEventListener("touchstart", e=>{ e.preventDefault(); ensureAudio(); state.fireHeld=true; fire(); }, { passive:false });
-    buttons.fire.addEventListener("touchend", e=>{ e.preventDefault(); state.fireHeld=false; }, { passive:false });
-    buttons.fire.addEventListener("click",()=>{ ensureAudio(); fire(); });
-    buttons.move.addEventListener("touchstart", e=>{ e.preventDefault(); player.buttonMove=true; }, { passive:false });
-    buttons.move.addEventListener("touchend", e=>{ e.preventDefault(); player.buttonMove=false; }, { passive:false });
-    buttons.move.addEventListener("mousedown",()=>{ player.buttonMove=true; });
-    buttons.move.addEventListener("mouseup",()=>{ player.buttonMove=false; });
+    buttons.fire.addEventListener("pointerdown", e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      ensureAudio();
+      firePointerId = e.pointerId;
+      state.fireHeld = true;
+      try{ buttons.fire.setPointerCapture(e.pointerId); }catch(err){}
+      fire();
+    }, { passive:false });
+    buttons.fire.addEventListener("pointerup", e=>{
+      if(firePointerId===null || e.pointerId===firePointerId){
+        e.preventDefault();
+        e.stopPropagation();
+        firePointerId = null;
+        state.fireHeld = false;
+      }
+    }, { passive:false });
+    buttons.fire.addEventListener("pointercancel", e=>{
+      if(firePointerId===null || e.pointerId===firePointerId){
+        firePointerId = null;
+        state.fireHeld = false;
+      }
+    });
+    buttons.fire.addEventListener("click",e=>{ e.preventDefault(); e.stopPropagation(); ensureAudio(); fire(); });
+    buttons.move.addEventListener("pointerdown", e=>{ e.preventDefault(); e.stopPropagation(); player.buttonMove=true; try{ buttons.move.setPointerCapture(e.pointerId); }catch(err){} }, { passive:false });
+    buttons.move.addEventListener("pointerup", e=>{ e.preventDefault(); e.stopPropagation(); player.buttonMove=false; }, { passive:false });
+    buttons.move.addEventListener("pointercancel",()=>{ player.buttonMove=false; });
     buttons.reload.addEventListener("click",()=>{ ensureAudio(); reload(); });
     buttons.flare.addEventListener("click",()=>{ ensureAudio(); flare(); });
     buttons.start.addEventListener("click",()=>{ ensureAudio(); newGame(); });
