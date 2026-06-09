@@ -55,7 +55,7 @@
         <div class="meter">Shells <b id="ammo">18</b></div>
         <div class="meter">Elev <b id="elev">0°</b></div>
       </div>
-      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.12</span></div>
+      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.13</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Targets <b id="targets">0</b></div>
@@ -75,7 +75,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Iron Ridge:<br>Turret Commander</h1>
-      <span class="version">Three.js v1.12</span>
+      <span class="version">Three.js v1.13</span>
       <p class="dek">Command a tank from the center of an open battlefield. Drag to traverse the turret 360 degrees and raise or lower the gun. Fire arcing shells across the hills, then move the hull in the direction your turret is pointing.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -433,17 +433,48 @@
     }
     placeTank();
 
-    function makeTree(x,z,scale=1){
+    function biomeAt(x,z){
+      if(z>Math.abs(x)*.72) return "pine";
+      if(x>Math.abs(z)*.72) return "burnt";
+      if(z<-Math.abs(x)*.72) return "rocky";
+      if(x<-Math.abs(z)*.72) return "supply";
+      return Math.hypot(x,z)>42 ? "mixed" : "field";
+    }
+    function makeTree(x,z,scale=1,kind=biomeAt(x,z)){
       const y=heightAt(x,z);
       const g=new THREE.Group(); g.position.set(x,y,z);
-      part(g,new THREE.CylinderGeometry(.08*scale,.13*scale,.85*scale,8),new THREE.MeshStandardMaterial({color:0x5a3f24,roughness:.9}),0,.43*scale,0);
+      const burnt=kind==="burnt";
+      const rocky=kind==="rocky";
+      const supply=kind==="supply";
+      const trunkMat=new THREE.MeshStandardMaterial({color:burnt?0x1e1b16:supply?0x684a28:0x5a3f24,roughness:.94});
+      const branchMat=new THREE.MeshStandardMaterial({color:burnt?0x171410:0x4b351f,roughness:.94});
+      const leafA=new THREE.MeshStandardMaterial({color:burnt?0x2a2a22:rocky?0x58723e:supply?0x5f7436:0x416b31,roughness:.88});
+      const leafB=new THREE.MeshStandardMaterial({color:burnt?0x3d3428:rocky?0x6f7b4a:supply?0x79894d:0x335b2a,roughness:.9});
+      part(g,new THREE.CylinderGeometry((burnt?.06:.08)*scale,(burnt?.16:.13)*scale,(burnt?1.15:.85)*scale,8),trunkMat,0,(burnt?.58:.43)*scale,0,rand(-.08,.08),0,rand(-.08,.08));
       for(let a=0;a<TAU;a+=TAU/4){
-        part(g,new THREE.CylinderGeometry(.025*scale,.045*scale,.46*scale,6),new THREE.MeshStandardMaterial({color:0x4b351f,roughness:.9}),Math.cos(a)*.11*scale,.78*scale,Math.sin(a)*.11*scale,rand(-.4,.4),0,a);
+        part(g,new THREE.CylinderGeometry(.025*scale,.045*scale,(burnt?.62:.46)*scale,6),branchMat,Math.cos(a)*.11*scale,(burnt?.92:.78)*scale,Math.sin(a)*.11*scale,rand(-.6,.45),0,a);
       }
-      for(let i=0;i<3;i++) part(g,new THREE.ConeGeometry((.48-i*.08)*scale,.9*scale,9),new THREE.MeshStandardMaterial({color:i%2?0x335b2a:0x416b31,roughness:.86}),0,(.9+i*.38)*scale,0);
-      part(g,new THREE.ConeGeometry(.28*scale,.42*scale,8),new THREE.MeshStandardMaterial({color:0x2c5224,roughness:.86}),rand(-.16,.16)*scale,1.54*scale,rand(-.16,.16)*scale,rand(-.25,.25),0,rand(-.25,.25));
+      if(burnt){
+        for(let i=0;i<3;i++) part(g,new THREE.CylinderGeometry(.018*scale,.028*scale,rand(.45,.85)*scale,5),branchMat,rand(-.18,.18)*scale,rand(.9,1.45)*scale,rand(-.18,.18)*scale,rand(-.8,.8),rand(0,TAU),rand(-.7,.7));
+      }else if(kind==="mixed"){
+        for(let i=0;i<4;i++) part(g,new THREE.SphereGeometry(rand(.18,.34)*scale,8,6),i%2?leafA:leafB,rand(-.22,.22)*scale,(.92+i*.18)*scale,rand(-.22,.22)*scale,0,0,0,1,rand(.75,1.25),1);
+      }else{
+        for(let i=0;i<3;i++) part(g,new THREE.ConeGeometry((.48-i*.08)*scale,.9*scale,9),i%2?leafB:leafA,0,(.9+i*.38)*scale,0);
+        part(g,new THREE.ConeGeometry(.28*scale,.42*scale,8),leafB,rand(-.16,.16)*scale,1.54*scale,rand(-.16,.16)*scale,rand(-.25,.25),0,rand(-.25,.25));
+      }
       g.rotation.y=rand(0,TAU); world.add(g);
       registerCrushable(g,x,z,.45*scale,"tree");
+    }
+    function makeScrubPatch(x,z,scale=1,kind=biomeAt(x,z)){
+      const y=heightAt(x,z), g=new THREE.Group(); g.position.set(x,y,z); g.rotation.y=rand(0,TAU);
+      const color=kind==="burnt"?0x373027:kind==="rocky"?0x707a54:kind==="supply"?0x6f6f3c:0x496a31;
+      const mat=new THREE.MeshStandardMaterial({color,roughness:.95});
+      for(let i=0;i<rand(5,9);i++) {
+        const r=rand(.08,.22)*scale;
+        part(g,new THREE.ConeGeometry(r,rand(.22,.55)*scale,5),mat,rand(-.45,.45)*scale,rand(.08,.22)*scale,rand(-.45,.45)*scale,rand(-.3,.3),rand(0,TAU),rand(-.25,.25));
+      }
+      world.add(g);
+      registerCrushable(g,x,z,.42*scale,"grass");
     }
     function makeRock(x,z,scale=1){
       const y=heightAt(x,z);
@@ -806,7 +837,26 @@
     function buildLandscape(){
       for(let i=0;i<180;i++){
         const a=rand(0,TAU), r=rand(14,72);
-        makeTree(Math.sin(a)*r+rand(-6,6),Math.cos(a)*r+rand(-6,6),rand(.55,1.45));
+        const x=Math.sin(a)*r+rand(-6,6), z=Math.cos(a)*r+rand(-6,6);
+        makeTree(x,z,rand(.55,1.45),biomeAt(x,z));
+      }
+      for(let i=0;i<70;i++){
+        const z=rand(20,72), x=rand(-34,34);
+        makeTree(x,z,rand(.85,1.8),"pine");
+      }
+      for(let i=0;i<44;i++){
+        const x=rand(22,72), z=rand(-35,35);
+        makeTree(x,z,rand(.75,1.55),"burnt");
+        if(Math.random()<.45) makeSmokeColumn(x+rand(-1.8,1.8),z+rand(-1.8,1.8),rand(.45,.9));
+      }
+      for(let i=0;i<58;i++){
+        const z=rand(-72,-18), x=rand(-40,40);
+        makeScrubPatch(x,z,rand(.65,1.45),"rocky");
+        if(Math.random()<.72) makeRock(x+rand(-1.2,1.2),z+rand(-1.2,1.2),rand(.28,.9));
+      }
+      for(let i=0;i<46;i++){
+        const x=rand(-72,-16), z=rand(-44,44);
+        if(Math.random()<.55) makeSupplyStack(x,z,rand(.5,1.05)); else makeBattlefieldClutter(x,z,rand(.7,1.25));
       }
       for(let i=0;i<80;i++){
         const a=rand(0,TAU), r=rand(8,70);
@@ -814,7 +864,8 @@
       }
       for(let i=0;i<320;i++){
         const a=rand(0,TAU), r=rand(6,68);
-        makeGrassTuft(Math.sin(a)*r+rand(-1.2,1.2),Math.cos(a)*r+rand(-1.2,1.2),rand(.5,1.25));
+        const x=Math.sin(a)*r+rand(-1.2,1.2), z=Math.cos(a)*r+rand(-1.2,1.2);
+        if(Math.random()<.24) makeScrubPatch(x,z,rand(.45,1),biomeAt(x,z)); else makeGrassTuft(x,z,rand(.5,1.25));
       }
       for(let i=0;i<34;i++){
         const a=rand(0,TAU), r=rand(12,66);
