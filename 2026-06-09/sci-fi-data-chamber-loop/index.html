@@ -3,15 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Sci-Fi Data Chamber Ray Traced Program</title>
+  <title>Ray Traced Fluid Dynamics Simulator</title>
   <style>
+    :root {
+      color-scheme: dark;
+      --panel: rgba(5, 10, 16, 0.74);
+      --line: rgba(145, 235, 255, 0.22);
+      --cyan: #57e5ff;
+      --amber: #ffb35d;
+      --violet: #b375ff;
+      --text: #e8f7ff;
+      --muted: #89a7b3;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     html,
     body {
       width: 100%;
       height: 100%;
       margin: 0;
       overflow: hidden;
-      background: #000;
+      background: #020408;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       overscroll-behavior: none;
     }
 
@@ -21,341 +38,791 @@
       width: 100vw;
       height: 100vh;
       display: block;
-      background: #000;
+      touch-action: none;
+      background: #020408;
+    }
+
+    .controls {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      width: min(360px, calc(100vw - 28px));
+      max-height: calc(100vh - 28px);
+      overflow: auto;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--panel) 92%, transparent);
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.36);
+      backdrop-filter: blur(18px);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 750;
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .readout {
+      min-width: 78px;
+      padding: 5px 8px;
+      border: 1px solid rgba(87, 229, 255, 0.22);
+      border-radius: 6px;
+      color: var(--cyan);
+      font-size: 12px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      background: rgba(0, 25, 34, 0.44);
+    }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    button,
+    select {
+      min-height: 34px;
+      border: 1px solid rgba(145, 235, 255, 0.24);
+      border-radius: 6px;
+      color: var(--text);
+      background: rgba(13, 32, 42, 0.82);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    button:hover,
+    select:hover {
+      border-color: rgba(87, 229, 255, 0.52);
+      background: rgba(17, 48, 62, 0.92);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    label.wide {
+      grid-column: 1 / -1;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    output {
+      color: var(--text);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--cyan);
+    }
+
+    input[type="color"] {
+      width: 100%;
+      height: 32px;
+      padding: 2px;
+      border: 1px solid rgba(145, 235, 255, 0.2);
+      border-radius: 6px;
+      background: rgba(13, 32, 42, 0.82);
+    }
+
+    .hint {
+      margin-top: 12px;
+      color: rgba(211, 239, 250, 0.76);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    @media (max-width: 720px) {
+      .controls {
+        top: auto;
+        right: 10px;
+        bottom: 10px;
+        left: 10px;
+        width: auto;
+        max-height: 45vh;
+        padding: 12px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
-<canvas id="screen"></canvas>
-
-<script id="vertexShader" type="x-shader/x-vertex">#version 300 es
-precision highp float;
-
-const vec2 positions[3] = vec2[3](
-  vec2(-1.0, -1.0),
-  vec2( 3.0, -1.0),
-  vec2(-1.0,  3.0)
-);
-
-void main() {
-  gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
-}
-</script>
-
-<script id="fragmentShader" type="x-shader/x-fragment">#version 300 es
-precision highp float;
-
-out vec4 fragColor;
-
-uniform vec2 uResolution;
-uniform float uTime;
-
-const float TAU = 6.28318530718;
-const float LOOP_SECONDS = 12.0;
-const float INF = 1.0e9;
-
-struct Hit {
-  float t;
-  float mat;
-  vec3 pos;
-  vec3 nor;
-  vec2 uv;
-};
-
-float hash11(float p) {
-  return fract(sin(p * 127.1) * 43758.5453123);
-}
-
-vec3 hash31(float p) {
-  return fract(sin(vec3(p * 127.1, p * 311.7, p * 74.7)) * 43758.5453123);
-}
-
-mat2 rot(float a) {
-  float s = sin(a);
-  float c = cos(a);
-  return mat2(c, -s, s, c);
-}
-
-vec3 env(vec3 rd, float phase) {
-  float h = clamp(rd.y * 0.5 + 0.5, 0.0, 1.0);
-  vec3 deep = mix(vec3(0.002, 0.004, 0.016), vec3(0.018, 0.022, 0.052), h);
-  float neb = pow(max(0.0, 0.5 + 0.5 * sin(rd.x * 4.2 + rd.y * 2.1 + sin(TAU * phase) * 1.7)), 7.0);
-  float horizon = exp(-abs(rd.y + 0.05) * 6.0);
-  return deep + vec3(0.20, 0.05, 0.34) * neb * 0.22 + vec3(0.0, 0.46, 0.58) * horizon * 0.18;
-}
-
-float sphereHit(vec3 ro, vec3 rd, vec3 ce, float r) {
-  vec3 oc = ro - ce;
-  float b = dot(oc, rd);
-  float c = dot(oc, oc) - r * r;
-  float h = b * b - c;
-  if (h < 0.0) return INF;
-  h = sqrt(h);
-  float t = -b - h;
-  if (t > 0.001) return t;
-  t = -b + h;
-  return t > 0.001 ? t : INF;
-}
-
-float boxFrame(vec2 uv, vec2 size, float width) {
-  vec2 d = abs(uv) - size;
-  float outer = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
-  vec2 di = abs(uv) - (size - width);
-  float inner = length(max(di, 0.0)) + min(max(di.x, di.y), 0.0);
-  return smoothstep(0.012, 0.0, abs(outer)) + smoothstep(0.012, 0.0, abs(inner));
-}
-
-float circuit(vec2 uv, float phase) {
-  uv *= vec2(4.0, 5.2);
-  vec2 cell = fract(uv) - 0.5;
-  vec2 id = floor(uv);
-  float seed = hash11(id.x + id.y * 17.0);
-  float lineH = 1.0 - smoothstep(0.012, 0.04, abs(cell.y + 0.18 * sin(TAU * phase + id.x)));
-  float lineV = 1.0 - smoothstep(0.012, 0.04, abs(cell.x + 0.15 * cos(TAU * phase + id.y)));
-  float node = 1.0 - smoothstep(0.045, 0.12, length(cell));
-  return (lineH + lineV + node * 1.8) * step(0.32, seed);
-}
-
-bool panelHit(vec3 ro, vec3 rd, float idx, float phase, inout Hit best) {
-  float a = idx * TAU / 7.0 + 0.45 + 0.08 * sin(TAU * phase + idx);
-  vec3 center = vec3(cos(a) * 2.7, 0.16 * sin(TAU * phase + idx * 1.6), sin(a) * 2.7);
-  vec3 n = normalize(vec3(cos(a), 0.0, sin(a)));
-  vec3 up = normalize(vec3(0.06 * sin(a + phase * TAU), 1.0, 0.02 * cos(a)));
-  vec3 side = normalize(cross(up, n));
-  up = normalize(cross(n, side));
-  float den = dot(rd, n);
-  if (abs(den) < 0.0005) return false;
-  float t = dot(center - ro, n) / den;
-  if (t <= 0.001 || t >= best.t) return false;
-  vec3 p = ro + rd * t;
-  vec2 uv = vec2(dot(p - center, side), dot(p - center, up));
-  if (abs(uv.x) > 0.58 || abs(uv.y) > 1.08) return false;
-  best = Hit(t, 3.0, p, den < 0.0 ? n : -n, uv);
-  return true;
-}
-
-Hit trace(vec3 ro, vec3 rd, float phase) {
-  Hit best = Hit(INF, 0.0, vec3(0.0), vec3(0.0, 1.0, 0.0), vec2(0.0));
-
-  float orbT = sphereHit(ro, rd, vec3(0.0, 0.02, 0.0), 0.72);
-  if (orbT < best.t) {
-    vec3 p = ro + rd * orbT;
-    vec3 n = normalize(p - vec3(0.0, 0.02, 0.0));
-    float facet = 0.04 * sin(18.0 * n.x + TAU * phase) * sin(16.0 * n.y - TAU * phase);
-    n = normalize(n + facet);
-    best = Hit(orbT, 1.0, p, n, vec2(atan(n.z, n.x) / TAU, asin(n.y) / 3.14159));
-  }
-
-  float floorT = (-1.14 - ro.y) / rd.y;
-  if (floorT > 0.001 && floorT < best.t) {
-    vec3 p = ro + rd * floorT;
-    if (length(p.xz) < 8.0) {
-      best = Hit(floorT, 2.0, p, vec3(0.0, 1.0, 0.0), p.xz);
-    }
-  }
-
-  for (int i = 0; i < 7; i++) {
-    panelHit(ro, rd, float(i), phase, best);
-  }
-
-  return best;
-}
-
-float shadow(vec3 p, vec3 ldir, float phase) {
-  Hit h = trace(p + ldir * 0.035, ldir, phase);
-  return h.t < 6.0 ? 0.28 : 1.0;
-}
-
-vec3 shade(Hit h, vec3 rd, float phase) {
-  vec3 cyan = normalize(vec3(-2.2, 2.9, -1.3));
-  vec3 amber = normalize(vec3(2.5, 1.45, 1.9));
-  vec3 violet = normalize(vec3(-0.4, 1.1, 2.1));
-  float fres = pow(1.0 - max(dot(-rd, h.nor), 0.0), 5.0);
-  float l1 = max(dot(h.nor, cyan), 0.0) * shadow(h.pos, cyan, phase);
-  float l2 = max(dot(h.nor, amber), 0.0) * shadow(h.pos, amber, phase);
-  float l3 = max(dot(h.nor, violet), 0.0);
-  vec3 light = vec3(0.05, 0.08, 0.12) + vec3(0.06, 0.82, 1.0) * l1 + vec3(1.0, 0.42, 0.12) * l2 * 0.72 + vec3(0.58, 0.14, 1.0) * l3 * 0.28;
-  vec3 refl = env(reflect(rd, h.nor), phase);
-  vec3 refr = env(refract(rd, h.nor, 0.72), phase);
-  float specC = pow(max(dot(reflect(-cyan, h.nor), -rd), 0.0), 96.0);
-  float specA = pow(max(dot(reflect(-amber, h.nor), -rd), 0.0), 58.0);
-
-  if (h.mat < 1.5) {
-    float caustic = pow(max(0.0, sin(22.0 * h.pos.x + 16.0 * h.pos.y + 12.0 * h.pos.z + TAU * phase)), 8.0);
-    vec3 core = vec3(0.08, 0.82, 1.0) * (0.36 + 0.64 * sin(h.uv.x * TAU * 6.0 + phase * TAU));
-    return mix(refr * vec3(0.8, 1.25, 1.35), refl * 1.7, 0.38 + fres * 0.55) + core * 0.38 + caustic * vec3(0.02, 0.75, 1.0) + specC * vec3(0.25, 0.95, 1.0);
-  }
-
-  if (h.mat < 2.5) {
-    float grid = boxFrame(fract(h.uv * 0.5) - 0.5, vec2(0.47), 0.018);
-    float ring = exp(-abs(length(h.pos.xz) - 2.4) * 3.2);
-    vec3 metal = vec3(0.004, 0.005, 0.007) + refl * (0.35 + fres * 0.6);
-    return metal * light + vec3(0.02, 0.58, 0.75) * grid * 0.16 + vec3(1.0, 0.38, 0.08) * ring * 0.06 + specC * vec3(0.14, 0.8, 1.0) + specA * vec3(1.0, 0.45, 0.12);
-  }
-
-  float traces = circuit(h.uv, phase);
-  float edge = boxFrame(h.uv, vec2(0.58, 1.08), 0.035);
-  vec3 glass = vec3(0.016, 0.09, 0.11) * light + refl * (0.18 + fres * 0.45);
-  vec3 traceColor = mix(vec3(0.0, 0.9, 1.0), vec3(1.0, 0.48, 0.12), smoothstep(0.2, 0.9, sin(TAU * phase + h.uv.y * 4.0) * 0.5 + 0.5));
-  return glass + traceColor * traces * 0.8 + vec3(0.04, 0.72, 1.0) * edge * 0.52;
-}
-
-vec3 particles(vec3 ro, vec3 rd, float phase) {
-  vec3 col = vec3(0.0);
-  float spin = TAU * phase;
-  for (int i = 0; i < 42; i++) {
-    vec3 h = hash31(float(i) + 9.1);
-    float radius = mix(1.0, 5.0, h.x);
-    float angle = h.y * TAU + spin * mix(-0.36, 0.42, h.z);
-    vec3 p = vec3(cos(angle) * radius, mix(-0.9, 1.65, hash11(float(i) + 31.0)) + 0.08 * sin(spin + h.x * TAU), sin(angle) * radius);
-    float along = dot(p - ro, rd);
-    vec3 q = ro + rd * along;
-    float d = length(p - q);
-    float g = exp(-d * d * 170.0) * smoothstep(0.0, 3.0, along) * (1.0 - smoothstep(2.0, 16.0, along));
-    vec3 pc = mix(vec3(0.0, 0.82, 1.0), vec3(1.0, 0.46, 0.12), h.x);
-    pc = mix(pc, vec3(0.58, 0.2, 1.0), smoothstep(0.68, 1.0, h.z));
-    col += pc * g;
-  }
-  return col;
-}
-
-vec3 camera(vec2 uv, float phase, out vec3 ro) {
-  float a = TAU * phase;
-  ro = vec3(cos(a) * 4.35, 0.38 + 0.18 * sin(a * 2.0), sin(a) * 4.35);
-  vec3 target = vec3(0.0, 0.05 + 0.07 * sin(a), 0.0);
-  vec3 ww = normalize(target - ro);
-  vec3 uu = normalize(cross(vec3(0.0, 1.0, 0.0), ww));
-  vec3 vv = cross(ww, uu);
-  return normalize(uu * uv.x + vv * uv.y + ww * 1.56);
-}
-
-vec3 render(vec2 uv, float phase) {
-  vec3 ro;
-  vec3 rd = camera(uv, phase, ro);
-  Hit h = trace(ro, rd, phase);
-  vec3 col = env(rd, phase);
-
-  if (h.t < INF * 0.5) {
-    col = shade(h, rd, phase);
-    if (h.mat < 3.5) {
-      vec3 rr = reflect(rd, h.nor);
-      Hit rh = trace(h.pos + h.nor * 0.035, rr, phase);
-      vec3 rc = rh.t < INF * 0.5 ? shade(rh, rr, phase) : env(rr, phase);
-      col += rc * (h.mat < 1.5 ? 0.24 : 0.16);
-    }
-  }
-
-  col += particles(ro, rd, phase);
-  float beam = pow(max(0.0, 1.0 - abs(uv.x * 0.21 + uv.y * 0.12)), 7.0);
-  col += vec3(0.0, 0.32, 0.5) * beam * 0.08;
-  col *= 1.0 - smoothstep(0.95, 1.7, length(uv)) * 0.58;
-  return col;
-}
-
-void main() {
-  vec2 uv = (gl_FragCoord.xy * 2.0 - uResolution.xy) / uResolution.y;
-  float phase = fract(uTime / LOOP_SECONDS);
-  vec3 col = render(uv, phase);
-  col = col / (col + vec3(1.0));
-  col = pow(col, vec3(0.454545));
-  float bloom = smoothstep(0.62, 1.0, max(col.r, max(col.g, col.b)));
-  col += bloom * vec3(0.04, 0.11, 0.15);
-  fragColor = vec4(col, 1.0);
-}
-</script>
+<canvas id="fluid"></canvas>
+<section class="controls" aria-label="Fluid simulator controls">
+  <div class="topbar">
+    <h1>Ray Fluid Lab</h1>
+    <div class="readout" id="fps">-- fps</div>
+  </div>
+  <div class="buttons">
+    <button id="pause" type="button">Pause</button>
+    <button id="reset" type="button">Reset</button>
+    <button id="burst" type="button">Burst</button>
+    <button id="hide" type="button">Hide</button>
+  </div>
+  <div class="grid" id="controls">
+    <label class="wide">Preset
+      <select id="preset">
+        <option value="nebula">Nebula Glass</option>
+        <option value="amber">Amber Reactor</option>
+        <option value="violet">Violet Cryo</option>
+        <option value="mono">Mercury Pool</option>
+      </select>
+    </label>
+    <label><span class="row">Simulation Scale <output for="simScale"></output></span><input id="simScale" type="range" min="0.35" max="1" step="0.05" value="0.72"></label>
+    <label><span class="row">Render Scale <output for="renderScale"></output></span><input id="renderScale" type="range" min="0.55" max="1.4" step="0.05" value="1"></label>
+    <label><span class="row">Time Step <output for="timeStep"></output></span><input id="timeStep" type="range" min="0.35" max="1.65" step="0.05" value="1"></label>
+    <label><span class="row">Pressure Iterations <output for="pressureIters"></output></span><input id="pressureIters" type="range" min="6" max="34" step="1" value="22"></label>
+    <label><span class="row">Viscosity <output for="viscosity"></output></span><input id="viscosity" type="range" min="0.985" max="0.9998" step="0.0001" value="0.9965"></label>
+    <label><span class="row">Dye Persistence <output for="dyeDecay"></output></span><input id="dyeDecay" type="range" min="0.985" max="0.9998" step="0.0001" value="0.9982"></label>
+    <label><span class="row">Vorticity <output for="vorticity"></output></span><input id="vorticity" type="range" min="0" max="70" step="1" value="32"></label>
+    <label><span class="row">Force <output for="force"></output></span><input id="force" type="range" min="120" max="1800" step="10" value="860"></label>
+    <label><span class="row">Emitter Size <output for="radius"></output></span><input id="radius" type="range" min="0.006" max="0.075" step="0.001" value="0.027"></label>
+    <label><span class="row">Auto Emitters <output for="autoFlow"></output></span><input id="autoFlow" type="range" min="0" max="1" step="0.01" value="0.55"></label>
+    <label><span class="row">Ray Depth <output for="rayDepth"></output></span><input id="rayDepth" type="range" min="0" max="1" step="0.01" value="0.72"></label>
+    <label><span class="row">Refraction <output for="refraction"></output></span><input id="refraction" type="range" min="0.35" max="1.8" step="0.01" value="1.18"></label>
+    <label><span class="row">Caustics <output for="caustics"></output></span><input id="caustics" type="range" min="0" max="2.5" step="0.05" value="1.2"></label>
+    <label><span class="row">Bloom <output for="bloom"></output></span><input id="bloom" type="range" min="0" max="2.2" step="0.05" value="1.05"></label>
+    <label><span class="row">Exposure <output for="exposure"></output></span><input id="exposure" type="range" min="0.45" max="2" step="0.05" value="1.1"></label>
+    <label><span class="row">Surface Detail <output for="surfaceDetail"></output></span><input id="surfaceDetail" type="range" min="0.3" max="2.4" step="0.05" value="1.25"></label>
+    <label>Fluid A<input id="colorA" type="color" value="#36e6ff"></label>
+    <label>Fluid B<input id="colorB" type="color" value="#ffb05c"></label>
+    <label>Accent<input id="colorC" type="color" value="#a468ff"></label>
+  </div>
+  <div class="hint">Drag through the fluid to inject velocity and dye. The render pass ray-lights the simulated density as reflective glass with refraction, caustics, and volumetric glow.</div>
+</section>
 
 <script>
 (() => {
+  const canvas = document.getElementById('fluid');
   const params = new URLSearchParams(location.search);
-  const debug = params.has('debug');
-  function state(value) {
-    document.documentElement.dataset.renderState = value;
+  const gl = canvas.getContext('webgl2', {
+    alpha: false,
+    antialias: false,
+    depth: false,
+    stencil: false,
+    preserveDrawingBuffer: false,
+    powerPreference: 'high-performance'
+  });
+
+  const state = {
+    paused: false,
+    last: performance.now(),
+    fpsLast: performance.now(),
+    frames: 0,
+    simW: 0,
+    simH: 0,
+    viewW: 0,
+    viewH: 0,
+    pointer: null,
+    burst: 0
+  };
+
+  const ui = Object.fromEntries([...document.querySelectorAll('input, select')].map((el) => [el.id, el]));
+  const fpsEl = document.getElementById('fps');
+  const controlsPanel = document.querySelector('.controls');
+  const pauseButton = document.getElementById('pause');
+  const resetButton = document.getElementById('reset');
+  const burstButton = document.getElementById('burst');
+  const hideButton = document.getElementById('hide');
+
+  if (!gl) {
+    document.documentElement.dataset.renderState = 'webgl2-unavailable';
+    fpsEl.textContent = 'no webgl2';
+    return;
+  }
+
+  const floatTargets = gl.getExtension('EXT_color_buffer_float');
+  if (!floatTargets) {
+    document.documentElement.dataset.renderState = 'float-targets-unavailable';
+    fpsEl.textContent = 'no float';
+    return;
+  }
+
+  const vert = `#version 300 es
+  precision highp float;
+  out vec2 vUv;
+  const vec2 p[3] = vec2[3](vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
+  void main() {
+    vUv = p[gl_VertexID] * 0.5 + 0.5;
+    gl_Position = vec4(p[gl_VertexID], 0.0, 1.0);
+  }`;
+
+  const common = `#version 300 es
+  precision highp float;
+  precision highp sampler2D;
+  in vec2 vUv;
+  out vec4 fragColor;
+  uniform vec2 uTexel;
+  uniform float uDt;
+  uniform sampler2D uVelocity;
+  uniform sampler2D uSource;
+  uniform sampler2D uPressure;
+  uniform sampler2D uDivergence;
+  uniform sampler2D uDye;
+  uniform vec2 uPoint;
+  uniform vec2 uDelta;
+  uniform vec3 uColor;
+  uniform float uRadius;
+  uniform float uAmount;
+  uniform float uDissipation;
+  uniform float uVorticity;
+  uniform float uTime;
+  uniform vec2 uResolution;
+  uniform vec3 uColorA;
+  uniform vec3 uColorB;
+  uniform vec3 uColorC;
+  uniform float uRayDepth;
+  uniform float uRefraction;
+  uniform float uCaustics;
+  uniform float uBloom;
+  uniform float uExposure;
+  uniform float uSurfaceDetail;
+
+  vec3 env(vec3 rd) {
+    float h = clamp(rd.y * 0.5 + 0.5, 0.0, 1.0);
+    vec3 base = mix(vec3(0.006,0.008,0.016), vec3(0.05,0.08,0.13), h);
+    float band = exp(-abs(rd.y + 0.08) * 8.0);
+    float aurora = pow(max(0.0, sin(rd.x * 4.0 + rd.y * 2.0 + uTime * 0.22) * 0.5 + 0.5), 6.0);
+    return base + uColorA * band * 0.22 + uColorC * aurora * 0.18;
+  }
+
+  vec4 bilerp(sampler2D tex, vec2 uv) {
+    return texture(tex, clamp(uv, vec2(0.001), vec2(0.999)));
+  }`;
+
+  const shaders = {
+    clear: `${common}
+    void main() { fragColor = vec4(0.0); }`,
+
+    splat: `${common}
+    void main() {
+      vec4 base = texture(uSource, vUv);
+      vec2 aspect = vec2(uResolution.x / uResolution.y, 1.0);
+      vec2 d = (vUv - uPoint) * aspect;
+      float falloff = exp(-dot(d, d) / max(0.00001, uRadius * uRadius));
+      fragColor = base + vec4(uColor, 1.0) * falloff * uAmount;
+    }`,
+
+    splatVelocity: `${common}
+    void main() {
+      vec4 base = texture(uVelocity, vUv);
+      vec2 aspect = vec2(uResolution.x / uResolution.y, 1.0);
+      vec2 d = (vUv - uPoint) * aspect;
+      float falloff = exp(-dot(d, d) / max(0.00001, uRadius * uRadius));
+      fragColor = vec4(base.xy + uDelta * falloff * uAmount, 0.0, 1.0);
+    }`,
+
+    advect: `${common}
+    void main() {
+      vec2 vel = texture(uVelocity, vUv).xy;
+      vec2 coord = vUv - vel * uDt * uTexel * 72.0;
+      fragColor = bilerp(uSource, coord) * uDissipation;
+    }`,
+
+    divergence: `${common}
+    void main() {
+      float l = texture(uVelocity, vUv - vec2(uTexel.x, 0.0)).x;
+      float r = texture(uVelocity, vUv + vec2(uTexel.x, 0.0)).x;
+      float b = texture(uVelocity, vUv - vec2(0.0, uTexel.y)).y;
+      float t = texture(uVelocity, vUv + vec2(0.0, uTexel.y)).y;
+      fragColor = vec4(0.5 * (r - l + t - b), 0.0, 0.0, 1.0);
+    }`,
+
+    pressure: `${common}
+    void main() {
+      float l = texture(uPressure, vUv - vec2(uTexel.x, 0.0)).x;
+      float r = texture(uPressure, vUv + vec2(uTexel.x, 0.0)).x;
+      float b = texture(uPressure, vUv - vec2(0.0, uTexel.y)).x;
+      float t = texture(uPressure, vUv + vec2(0.0, uTexel.y)).x;
+      float div = texture(uDivergence, vUv).x;
+      fragColor = vec4((l + r + b + t - div) * 0.25, 0.0, 0.0, 1.0);
+    }`,
+
+    gradient: `${common}
+    void main() {
+      float l = texture(uPressure, vUv - vec2(uTexel.x, 0.0)).x;
+      float r = texture(uPressure, vUv + vec2(uTexel.x, 0.0)).x;
+      float b = texture(uPressure, vUv - vec2(0.0, uTexel.y)).x;
+      float t = texture(uPressure, vUv + vec2(0.0, uTexel.y)).x;
+      vec2 vel = texture(uVelocity, vUv).xy - vec2(r - l, t - b) * 0.5;
+      fragColor = vec4(vel, 0.0, 1.0);
+    }`,
+
+    curl: `${common}
+    void main() {
+      float l = texture(uVelocity, vUv - vec2(uTexel.x, 0.0)).y;
+      float r = texture(uVelocity, vUv + vec2(uTexel.x, 0.0)).y;
+      float b = texture(uVelocity, vUv - vec2(0.0, uTexel.y)).x;
+      float t = texture(uVelocity, vUv + vec2(0.0, uTexel.y)).x;
+      fragColor = vec4(r - l - t + b, 0.0, 0.0, 1.0);
+    }`,
+
+    vorticity: `${common}
+    void main() {
+      float l = abs(texture(uSource, vUv - vec2(uTexel.x, 0.0)).x);
+      float r = abs(texture(uSource, vUv + vec2(uTexel.x, 0.0)).x);
+      float b = abs(texture(uSource, vUv - vec2(0.0, uTexel.y)).x);
+      float t = abs(texture(uSource, vUv + vec2(0.0, uTexel.y)).x);
+      float c = texture(uSource, vUv).x;
+      vec2 force = normalize(vec2(t - b, l - r) + 0.0001) * c * uVorticity * uDt;
+      vec2 vel = texture(uVelocity, vUv).xy + force;
+      fragColor = vec4(vel, 0.0, 1.0);
+    }`,
+
+    render: `${common}
+    void main() {
+      vec4 dye = texture(uDye, vUv);
+      vec2 vel = texture(uVelocity, vUv).xy;
+      float c = dot(dye.rgb, vec3(0.28, 0.55, 0.17));
+      float hL = dot(texture(uDye, vUv - vec2(uTexel.x, 0.0)).rgb, vec3(0.28,0.55,0.17));
+      float hR = dot(texture(uDye, vUv + vec2(uTexel.x, 0.0)).rgb, vec3(0.28,0.55,0.17));
+      float hB = dot(texture(uDye, vUv - vec2(0.0, uTexel.y)).rgb, vec3(0.28,0.55,0.17));
+      float hT = dot(texture(uDye, vUv + vec2(0.0, uTexel.y)).rgb, vec3(0.28,0.55,0.17));
+      vec3 n = normalize(vec3((hL - hR) * uSurfaceDetail * 3.2, (hB - hT) * uSurfaceDetail * 3.2, 1.0));
+      vec2 uv = (gl_FragCoord.xy * 2.0 - uResolution.xy) / uResolution.y;
+      vec3 ro = vec3(0.0, 0.0, 2.2);
+      vec3 rd = normalize(vec3(uv, -1.65));
+      vec3 light1 = normalize(vec3(-0.55, 0.72, 0.42));
+      vec3 light2 = normalize(vec3(0.62, 0.28, 0.73));
+      vec3 r = reflect(rd, n);
+      vec3 refr = refract(rd, n, 1.0 / max(0.35, uRefraction));
+      float fres = pow(1.0 - max(dot(-rd, n), 0.0), 5.0);
+      float spec1 = pow(max(dot(reflect(-light1, n), -rd), 0.0), 96.0);
+      float spec2 = pow(max(dot(reflect(-light2, n), -rd), 0.0), 54.0);
+      float caustic = pow(max(0.0, sin((vUv.x + vel.y * 0.018) * 85.0 + sin(vUv.y * 47.0 + uTime) * 2.3)), 9.0) * c;
+      float basin = smoothstep(1.35, 0.18, length(uv * vec2(1.0, 1.28)));
+      vec3 surface = mix(env(refr) * 0.65, env(r) * 1.45, fres * 0.8 + uRayDepth * 0.25);
+      vec3 body = dye.rgb * (0.55 + 1.8 * c) + mix(uColorA, uColorB, smoothstep(-0.4, 0.4, vel.x)) * c * 0.55;
+      vec3 floor = vec3(0.004, 0.006, 0.009) + env(reflect(vec3(uv * 0.22, -1.0), vec3(0.0,0.0,1.0))) * 0.22;
+      float grid = max(1.0 - smoothstep(0.002, 0.009, abs(fract(vUv.x * 18.0) - 0.5)), 1.0 - smoothstep(0.002, 0.009, abs(fract(vUv.y * 12.0) - 0.5)));
+      vec3 col = mix(floor + grid * uColorA * 0.035, surface + body, basin);
+      col += uColorA * spec1 * 0.9 + uColorB * spec2 * 0.65 + uColorC * caustic * uCaustics;
+      col += dye.rgb * c * uRayDepth * 1.2 + vec3(length(vel) * 0.025);
+      col *= uExposure;
+      col = col / (1.0 + col);
+      col = pow(col, vec3(0.454545));
+      float bloom = smoothstep(0.55, 1.0, max(col.r, max(col.g, col.b)));
+      col += bloom * uBloom * vec3(0.05, 0.13, 0.17);
+      fragColor = vec4(col, 1.0);
+    }`
+  };
+
+  function compile(type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      throw new Error(gl.getShaderInfoLog(shader) || 'shader compile failed');
+    }
+    return shader;
+  }
+
+  function program(fragment) {
+    const p = gl.createProgram();
+    gl.attachShader(p, compile(gl.VERTEX_SHADER, vert));
+    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fragment));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      throw new Error(gl.getProgramInfoLog(p) || 'program link failed');
+    }
+    return {
+      p,
+      uniforms: Object.fromEntries([...fragment.matchAll(/uniform\s+\w+\s+(u\w+)/g)].map((m) => [m[1], gl.getUniformLocation(p, m[1])]))
+    };
+  }
+
+  const progs = Object.fromEntries(Object.entries(shaders).map(([name, source]) => [name, program(source)]));
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  gl.disable(gl.BLEND);
+
+  function makeTarget(w, h) {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      throw new Error('framebuffer incomplete');
+    }
+    return { tex, fbo, w, h };
+  }
+
+  function makeDouble(w, h) {
+    return {
+      read: makeTarget(w, h),
+      write: makeTarget(w, h),
+      swap() {
+        const temp = this.read;
+        this.read = this.write;
+        this.write = temp;
+      }
+    };
+  }
+
+  let velocity;
+  let dye;
+  let pressure;
+  let divergence;
+  let curl;
+
+  function value(id) {
+    return ui[id].type === 'range' ? Number(ui[id].value) : ui[id].value;
+  }
+
+  function setOutput(input) {
+    const out = document.querySelector(`output[for="${input.id}"]`);
+    if (!out) return;
+    const n = Number(input.value);
+    out.value = n < 2 ? n.toFixed(input.step && Number(input.step) < 0.01 ? 4 : 2) : Math.round(n).toString();
+  }
+
+  function hexToRgb(hex) {
+    const n = Number.parseInt(hex.slice(1), 16);
+    return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+  }
+
+  function bindCommon(pr, w, h) {
+    gl.uniform2f(pr.uniforms.uTexel, 1 / w, 1 / h);
+    gl.uniform1f(pr.uniforms.uDt, 0.016 * value('timeStep'));
+    gl.uniform1f(pr.uniforms.uTime, performance.now() * 0.001);
+    gl.uniform2f(pr.uniforms.uResolution, w, h);
+  }
+
+  function draw(pr, target, w = state.simW, h = state.simH) {
+    gl.useProgram(pr.p);
+    bindCommon(pr, w, h);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fbo : null);
+    gl.viewport(0, 0, w, h);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  function bindTexture(location, tex, unit) {
+    if (!location) return;
+    gl.activeTexture(gl.TEXTURE0 + unit);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.uniform1i(location, unit);
+  }
+
+  function clearTarget(target) {
+    draw(progs.clear, target, target.w, target.h);
+  }
+
+  function resize() {
+    const renderScale = value('renderScale');
+    const dpr = Math.min(devicePixelRatio || 1, 1.5);
+    const viewW = Math.max(2, Math.floor(innerWidth * dpr * renderScale));
+    const viewH = Math.max(2, Math.floor(innerHeight * dpr * renderScale));
+    if (canvas.width !== viewW || canvas.height !== viewH) {
+      canvas.width = viewW;
+      canvas.height = viewH;
+      state.viewW = viewW;
+      state.viewH = viewH;
+    }
+
+    const simScale = value('simScale');
+    const maxSide = Math.max(viewW, viewH);
+    const simClamp = Math.min(1024, Math.max(256, Math.floor(maxSide * simScale)));
+    const aspect = viewW / viewH;
+    const simW = Math.max(192, Math.floor(aspect >= 1 ? simClamp : simClamp * aspect));
+    const simH = Math.max(192, Math.floor(aspect >= 1 ? simClamp / aspect : simClamp));
+    if (simW !== state.simW || simH !== state.simH) {
+      state.simW = simW;
+      state.simH = simH;
+      velocity = makeDouble(simW, simH);
+      dye = makeDouble(simW, simH);
+      pressure = makeDouble(simW, simH);
+      divergence = makeTarget(simW, simH);
+      curl = makeTarget(simW, simH);
+      resetFluid();
+    }
+  }
+
+  function resetFluid() {
+    [velocity.read, velocity.write, dye.read, dye.write, pressure.read, pressure.write, divergence, curl].forEach(clearTarget);
+    seedFluid(10);
+  }
+
+  function splat(x, y, dx, dy, color, radius, amount) {
+    const p = progs.splatVelocity;
+    gl.useProgram(p.p);
+    bindCommon(p, state.simW, state.simH);
+    bindTexture(p.uniforms.uVelocity, velocity.read.tex, 0);
+    gl.uniform2f(p.uniforms.uPoint, x, y);
+    gl.uniform2f(p.uniforms.uDelta, dx, dy);
+    gl.uniform3f(p.uniforms.uColor, 1, 1, 1);
+    gl.uniform1f(p.uniforms.uRadius, radius);
+    gl.uniform1f(p.uniforms.uAmount, amount);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, velocity.write.fbo);
+    gl.viewport(0, 0, state.simW, state.simH);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    velocity.swap();
+
+    const q = progs.splat;
+    gl.useProgram(q.p);
+    bindCommon(q, state.simW, state.simH);
+    bindTexture(q.uniforms.uSource, dye.read.tex, 0);
+    gl.uniform2f(q.uniforms.uPoint, x, y);
+    gl.uniform3f(q.uniforms.uColor, color[0], color[1], color[2]);
+    gl.uniform1f(q.uniforms.uRadius, radius);
+    gl.uniform1f(q.uniforms.uAmount, 0.78);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dye.write.fbo);
+    gl.viewport(0, 0, state.simW, state.simH);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    dye.swap();
+  }
+
+  function advect(target, source, dissipation) {
+    const p = progs.advect;
+    gl.useProgram(p.p);
+    bindCommon(p, state.simW, state.simH);
+    bindTexture(p.uniforms.uVelocity, velocity.read.tex, 0);
+    bindTexture(p.uniforms.uSource, source.read.tex, 1);
+    gl.uniform1f(p.uniforms.uDissipation, dissipation);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.write.fbo);
+    gl.viewport(0, 0, state.simW, state.simH);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    target.swap();
+  }
+
+  function singlePass(name, out, setup) {
+    const p = progs[name];
+    gl.useProgram(p.p);
+    bindCommon(p, state.simW, state.simH);
+    setup(p);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, out.fbo);
+    gl.viewport(0, 0, state.simW, state.simH);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  function stepFluid() {
+    advect(velocity, velocity, value('viscosity'));
+    advect(dye, dye, value('dyeDecay'));
+
+    singlePass('curl', curl, (p) => bindTexture(p.uniforms.uVelocity, velocity.read.tex, 0));
+    singlePass('vorticity', velocity.write, (p) => {
+      bindTexture(p.uniforms.uVelocity, velocity.read.tex, 0);
+      bindTexture(p.uniforms.uSource, curl.tex, 1);
+      gl.uniform1f(p.uniforms.uVorticity, value('vorticity'));
+    });
+    velocity.swap();
+
+    singlePass('divergence', divergence, (p) => bindTexture(p.uniforms.uVelocity, velocity.read.tex, 0));
+    clearTarget(pressure.read);
+    for (let i = 0; i < value('pressureIters'); i++) {
+      singlePass('pressure', pressure.write, (p) => {
+        bindTexture(p.uniforms.uPressure, pressure.read.tex, 0);
+        bindTexture(p.uniforms.uDivergence, divergence.tex, 1);
+      });
+      pressure.swap();
+    }
+    singlePass('gradient', velocity.write, (p) => {
+      bindTexture(p.uniforms.uVelocity, velocity.read.tex, 0);
+      bindTexture(p.uniforms.uPressure, pressure.read.tex, 1);
+    });
+    velocity.swap();
+  }
+
+  function render() {
+    const p = progs.render;
+    gl.useProgram(p.p);
+    bindCommon(p, state.viewW, state.viewH);
+    gl.uniform2f(p.uniforms.uTexel, 1 / state.simW, 1 / state.simH);
+    bindTexture(p.uniforms.uVelocity, velocity.read.tex, 0);
+    bindTexture(p.uniforms.uDye, dye.read.tex, 1);
+    const ca = hexToRgb(ui.colorA.value);
+    const cb = hexToRgb(ui.colorB.value);
+    const cc = hexToRgb(ui.colorC.value);
+    gl.uniform3f(p.uniforms.uColorA, ca[0], ca[1], ca[2]);
+    gl.uniform3f(p.uniforms.uColorB, cb[0], cb[1], cb[2]);
+    gl.uniform3f(p.uniforms.uColorC, cc[0], cc[1], cc[2]);
+    gl.uniform1f(p.uniforms.uRayDepth, value('rayDepth'));
+    gl.uniform1f(p.uniforms.uRefraction, value('refraction'));
+    gl.uniform1f(p.uniforms.uCaustics, value('caustics'));
+    gl.uniform1f(p.uniforms.uBloom, value('bloom'));
+    gl.uniform1f(p.uniforms.uExposure, value('exposure'));
+    gl.uniform1f(p.uniforms.uSurfaceDetail, value('surfaceDetail'));
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, state.viewW, state.viewH);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  function autoEmit(t) {
+    const strength = value('autoFlow') + state.burst;
+    if (strength <= 0.001) return;
+    const ca = hexToRgb(ui.colorA.value);
+    const cb = hexToRgb(ui.colorB.value);
+    const cc = hexToRgb(ui.colorC.value);
+    const colors = [ca, cb, cc];
+    for (let i = 0; i < 3; i++) {
+      const a = t * (0.38 + i * 0.08) + i * 2.1;
+      const x = 0.5 + Math.cos(a) * (0.22 + i * 0.035);
+      const y = 0.5 + Math.sin(a * 1.17) * (0.2 + i * 0.025);
+      const dx = -Math.sin(a) * 0.0016 * value('force') * strength;
+      const dy = Math.cos(a * 1.17) * 0.0012 * value('force') * strength;
+      splat(x, y, dx, dy, colors[i], value('radius') * (1.0 + i * 0.16), 0.06 + strength * 0.08);
+    }
+    state.burst *= 0.92;
+  }
+
+  function seedFluid(count) {
+    const ca = hexToRgb(ui.colorA.value);
+    const cb = hexToRgb(ui.colorB.value);
+    const cc = hexToRgb(ui.colorC.value);
+    const colors = [ca, cb, cc];
+    for (let i = 0; i < count; i++) {
+      const a = i * 2.399963;
+      splat(0.5 + Math.cos(a) * 0.24, 0.5 + Math.sin(a) * 0.2, Math.sin(a) * 520, -Math.cos(a) * 520, colors[i % 3], value('radius') * 1.8, 0.14);
+    }
+  }
+
+  function loop(now) {
+    resize();
+    const dt = Math.min(0.033, (now - state.last) / 1000);
+    state.last = now;
+    if (!state.paused) {
+      autoEmit(now * 0.001);
+      const steps = dt > 0.024 ? 2 : 1;
+      for (let i = 0; i < steps; i++) stepFluid();
+    }
+    render();
+    state.frames += 1;
+    if (now - state.fpsLast > 500) {
+      fpsEl.textContent = `${Math.round(state.frames * 1000 / (now - state.fpsLast))} fps`;
+      state.frames = 0;
+      state.fpsLast = now;
+    }
+    document.documentElement.dataset.renderState = 'frame-drawn';
+    requestAnimationFrame(loop);
+  }
+
+  function pointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return [(e.clientX - rect.left) / rect.width, 1 - (e.clientY - rect.top) / rect.height];
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const [x, y] = pointerPos(e);
+    state.pointer = { id: e.pointerId, x, y };
+    canvas.setPointerCapture(e.pointerId);
+    splat(x, y, 0, 0, hexToRgb(ui.colorC.value), value('radius') * 1.6, 0.28);
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!state.pointer || state.pointer.id !== e.pointerId) return;
+    const [x, y] = pointerPos(e);
+    const dx = (x - state.pointer.x) * value('force');
+    const dy = (y - state.pointer.y) * value('force');
+    const blend = Math.min(1, Math.hypot(dx, dy) / 14);
+    const ca = hexToRgb(ui.colorA.value);
+    const cb = hexToRgb(ui.colorB.value);
+    const color = ca.map((v, i) => v * (1 - blend) + cb[i] * blend);
+    splat(x, y, dx, dy, color, value('radius'), 0.16);
+    state.pointer.x = x;
+    state.pointer.y = y;
+  });
+
+  canvas.addEventListener('pointerup', () => { state.pointer = null; });
+  canvas.addEventListener('pointercancel', () => { state.pointer = null; });
+
+  pauseButton.addEventListener('click', () => {
+    state.paused = !state.paused;
+    pauseButton.textContent = state.paused ? 'Play' : 'Pause';
+  });
+  resetButton.addEventListener('click', resetFluid);
+  burstButton.addEventListener('click', () => { state.burst = 1.6; });
+  hideButton.addEventListener('click', () => {
+    controlsPanel.hidden = true;
+    setTimeout(() => { controlsPanel.hidden = false; }, 900);
+  });
+
+  ui.preset.addEventListener('change', () => {
+    const presets = {
+      nebula: ['#36e6ff', '#ffb05c', '#a468ff'],
+      amber: ['#00d7ff', '#ff8f31', '#ffd27a'],
+      violet: ['#75f3ff', '#795cff', '#ff79d8'],
+      mono: ['#d8f7ff', '#9de0ff', '#ffffff']
+    };
+    [ui.colorA.value, ui.colorB.value, ui.colorC.value] = presets[ui.preset.value];
+    state.burst = 1.2;
+  });
+
+  for (const input of Object.values(ui)) {
+    if (input.type === 'range') {
+      setOutput(input);
+      input.addEventListener('input', () => setOutput(input));
+    }
+  }
+
+  ui.simScale.addEventListener('change', () => {
+    state.simW = 0;
+    resize();
+  });
+
+  ui.renderScale.addEventListener('change', resize);
+  window.addEventListener('resize', resize, { passive: true });
+
+  if (params.has('selftest')) {
+    setTimeout(() => {
+      ui.preset.value = 'violet';
+      ui.preset.dispatchEvent(new Event('change', { bubbles: true }));
+      ui.vorticity.value = '48';
+      ui.vorticity.dispatchEvent(new Event('input', { bubbles: true }));
+      ui.rayDepth.value = '0.9';
+      ui.rayDepth.dispatchEvent(new Event('input', { bubbles: true }));
+      state.burst = 1.0;
+      splat(0.52, 0.48, 640, -280, hexToRgb(ui.colorC.value), value('radius') * 2.0, 0.34);
+      document.documentElement.dataset.selftest = 'controls-and-splat-ok';
+    }, 140);
   }
 
   try {
-    const canvas = document.getElementById('screen');
-    const gl = canvas.getContext('webgl2', {
-      antialias: false,
-      alpha: false,
-      depth: false,
-      stencil: false,
-      preserveDrawingBuffer: false,
-      powerPreference: 'high-performance'
-    });
-
-    if (!gl) {
-      state('webgl2-unavailable');
-      return;
-    }
-
-    const vertexSource = document.getElementById('vertexShader').textContent;
-    const fragmentSource = document.getElementById('fragmentShader').textContent;
-
-    function shader(type, source) {
-      const s = gl.createShader(type);
-      gl.shaderSource(s, source);
-      gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-        const log = gl.getShaderInfoLog(s) || '';
-        state((type === gl.VERTEX_SHADER ? 'vertex' : 'fragment') + '-compile-error');
-        if (debug) document.documentElement.dataset.renderLog = log;
-        throw new Error(log);
-      }
-      return s;
-    }
-
-    const program = gl.createProgram();
-    gl.attachShader(program, shader(gl.VERTEX_SHADER, vertexSource));
-    gl.attachShader(program, shader(gl.FRAGMENT_SHADER, fragmentSource));
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      const log = gl.getProgramInfoLog(program) || '';
-      state('program-link-error');
-      if (debug) document.documentElement.dataset.renderLog = log;
-      throw new Error(log);
-    }
-
-    gl.useProgram(program);
-    const uniforms = {
-      resolution: gl.getUniformLocation(program, 'uResolution'),
-      time: gl.getUniformLocation(program, 'uTime')
-    };
-    gl.bindVertexArray(gl.createVertexArray());
-
-    const fixedTime = params.has('t') ? Number(params.get('t')) : NaN;
-    const start = performance.now();
-    let lastW = 0;
-    let lastH = 0;
-
-    function resize() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.35);
-      const scale = Math.min(1, 1280 / Math.max(window.innerWidth * dpr, window.innerHeight * dpr));
-      const w = Math.max(2, Math.floor(window.innerWidth * dpr * scale));
-      const h = Math.max(2, Math.floor(window.innerHeight * dpr * scale));
-      if (w !== lastW || h !== lastH) {
-        lastW = w;
-        lastH = h;
-        canvas.width = w;
-        canvas.height = h;
-        gl.viewport(0, 0, w, h);
-      }
-    }
-
-    function frame(now) {
-      resize();
-      const t = Number.isFinite(fixedTime) ? ((fixedTime % 12) + 12) % 12 : ((now - start) * 0.001) % 12;
-      gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
-      gl.uniform1f(uniforms.time, t);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      state('frame-drawn');
-      requestAnimationFrame(frame);
-    }
-
-    window.addEventListener('resize', resize, { passive: true });
-    requestAnimationFrame(frame);
+    resize();
+    requestAnimationFrame(loop);
   } catch (error) {
-    state('runtime-error');
-    if (debug) document.documentElement.dataset.renderLog = String(error && error.message ? error.message : error);
+    document.documentElement.dataset.renderState = 'runtime-error';
+    document.documentElement.dataset.renderLog = String(error && error.message ? error.message : error);
     throw error;
   }
 })();
