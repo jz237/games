@@ -55,7 +55,7 @@
         <div class="meter">Shells <b id="ammo">18</b></div>
         <div class="meter">Elev <b id="elev">0°</b></div>
       </div>
-      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.6</span></div>
+      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.7</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Targets <b id="targets">0</b></div>
@@ -75,7 +75,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Iron Ridge:<br>Turret Commander</h1>
-      <span class="version">Three.js v1.6</span>
+      <span class="version">Three.js v1.7</span>
       <p class="dek">Command a tank from the center of an open battlefield. Drag to traverse the turret 360 degrees and raise or lower the gun. Fire arcing shells across the hills, then move the hull in the direction your turret is pointing.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -140,6 +140,7 @@
     const decals = [];
     const wrecks = [];
     const crushables = [];
+    const ambient = [];
 
     function makeTexture(kind, base, accent, repeatX=4, repeatY=4){
       const c = document.createElement("canvas");
@@ -517,6 +518,27 @@
         world.add(smoke);
       }
     }
+    function makeFogBank(x,z,scale=1){
+      const y=heightAt(x,z)+.16;
+      for(let i=0;i<5;i++){
+        const fog=makeRoundSprite([[0,"rgba(178,180,158,.24)"],[.56,"rgba(122,125,111,.12)"],[1,"rgba(74,78,70,0)"]],rand(.16,.3),rand(2.5,5.2)*scale,false);
+        fog.position.set(x+rand(-1.8,1.8)*scale,y+rand(.02,.36),z+rand(-1.8,1.8)*scale);
+        fog.material.rotation=rand(0,TAU);
+        world.add(fog);
+        ambient.push({mesh:fog,base:rand(.12,.24),phase:rand(0,TAU),speed:rand(.12,.24),drift:new THREE.Vector3(rand(-.018,.026),0,rand(-.022,.022))});
+      }
+    }
+    function makeDistantFlash(x,z,scale=1){
+      const y=heightAt(x,z)+.7;
+      const glow=makeRoundSprite([[0,"rgba(255,236,155,.9)"],[.22,"rgba(255,130,46,.36)"],[1,"rgba(255,70,20,0)"]],rand(.22,.42),rand(3.2,6.4)*scale,true);
+      glow.position.set(x,y,z); world.add(glow);
+      ambient.push({mesh:glow,base:rand(.08,.22),phase:rand(0,TAU),speed:rand(.55,1.1),pulse:rand(.25,.55)});
+      for(let i=0;i<6;i++){
+        const ember=makeRoundSprite([[0,"rgba(255,203,91,.85)"],[.45,"rgba(255,83,32,.5)"],[1,"rgba(255,40,18,0)"]],rand(.35,.58),rand(.14,.28)*scale,true);
+        ember.position.set(x+rand(-.7,.7)*scale,y+rand(.1,.8)*scale,z+rand(-.7,.7)*scale); world.add(ember);
+        ambient.push({mesh:ember,base:rand(.14,.38),phase:rand(0,TAU),speed:rand(.7,1.5),drift:new THREE.Vector3(rand(-.035,.035),rand(.018,.055),rand(-.035,.035)),wrapY:y+2.6*scale,resetY:y+.25*scale});
+      }
+    }
     function makeCloud(x,z,y,scale=1){
       const g=new THREE.Group(); g.position.set(x,y,z);
       for(let i=0;i<5;i++){
@@ -742,6 +764,14 @@
       for(let i=0;i<8;i++){
         const a=rand(0,TAU), r=rand(32,74);
         makeSmokeColumn(Math.sin(a)*r,Math.cos(a)*r,rand(.8,1.6));
+      }
+      for(let i=0;i<22;i++){
+        const a=rand(0,TAU), r=rand(12,68);
+        makeFogBank(Math.sin(a)*r,Math.cos(a)*r,rand(.7,1.55));
+      }
+      for(let i=0;i<10;i++){
+        const a=rand(0,TAU), r=rand(58,82);
+        makeDistantFlash(Math.sin(a)*r,Math.cos(a)*r,rand(.75,1.45));
       }
       for(let i=0;i<18;i++){
         const a=rand(0,TAU), r=rand(16,64);
@@ -983,6 +1013,16 @@
         if(p.life<=0){ world.remove(p.mesh); scorePops.splice(i,1); }
       }
     }
+    function updateAmbient(dt){
+      for(const a of ambient){
+        a.phase += dt*a.speed;
+        if(a.drift) {
+          a.mesh.position.addScaledVector(a.drift,dt);
+          if(a.wrapY && a.mesh.position.y>a.wrapY) a.mesh.position.y=a.resetY;
+        }
+        if(a.mesh.material) a.mesh.material.opacity = clamp(a.base + Math.sin(a.phase)*(a.pulse||a.base*.35),.03,.7);
+      }
+    }
     function updateTank(dt){
       tank.recoil=Math.max(0,tank.recoil-dt*2.7);
       tank.shake=Math.max(0,tank.shake-dt*2.6);
@@ -1032,7 +1072,7 @@
     }
     function updateWorld(dt){
       state.time+=dt;
-      updateTank(dt); updateShells(dt); updateTargets(dt); updateParticles(dt); updateCamera(dt); updateHud();
+      updateAmbient(dt); updateTank(dt); updateShells(dt); updateTargets(dt); updateParticles(dt); updateCamera(dt); updateHud();
     }
     function gameOver(){
       if(state.mode==="over") return;
@@ -1152,7 +1192,7 @@
 
     function loop(now){
       const dt=Math.min(.033,(now-state.last)/1000||.016); state.last=now;
-      if(state.mode==="play") updateWorld(dt); else { placeTank(); updateCamera(dt); }
+      if(state.mode==="play") updateWorld(dt); else { updateAmbient(dt); placeTank(); updateCamera(dt); }
       renderer.render(scene,camera);
       requestAnimationFrame(loop);
     }
