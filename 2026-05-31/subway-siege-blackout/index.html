@@ -55,7 +55,7 @@
         <div class="meter">Shells <b id="ammo">18</b></div>
         <div class="meter">Elev <b id="elev">0°</b></div>
       </div>
-      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.14</span></div>
+      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.15</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Targets <b id="targets">0</b></div>
@@ -75,7 +75,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Iron Ridge:<br>Turret Commander</h1>
-      <span class="version">Three.js v1.14</span>
+      <span class="version">Three.js v1.15</span>
       <p class="dek">Command a tank from the center of an open battlefield. Drag to traverse the turret 360 degrees and raise or lower the gun. Fire arcing shells across the hills, then move the hull in the direction your turret is pointing.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -451,6 +451,10 @@
       const leafA=new THREE.MeshStandardMaterial({color:burnt?0x2a2a22:rocky?0x58723e:supply?0x5f7436:0x416b31,roughness:.88});
       const leafB=new THREE.MeshStandardMaterial({color:burnt?0x3d3428:rocky?0x6f7b4a:supply?0x79894d:0x335b2a,roughness:.9});
       part(g,new THREE.CylinderGeometry((burnt?.06:.08)*scale,(burnt?.16:.13)*scale,(burnt?1.15:.85)*scale,8),trunkMat,0,(burnt?.58:.43)*scale,0,rand(-.08,.08),0,rand(-.08,.08));
+      for(let i=0;i<5;i++){
+        const a=i/5*TAU+rand(-.18,.18);
+        part(g,new THREE.CylinderGeometry(.022*scale,.04*scale,rand(.35,.62)*scale,6),trunkMat,Math.cos(a)*.17*scale,.06*scale,Math.sin(a)*.17*scale,Math.PI/2+rand(-.16,.16),0,a);
+      }
       for(let a=0;a<TAU;a+=TAU/4){
         part(g,new THREE.CylinderGeometry(.025*scale,.045*scale,(burnt?.62:.46)*scale,6),branchMat,Math.cos(a)*.11*scale,(burnt?.92:.78)*scale,Math.sin(a)*.11*scale,rand(-.6,.45),0,a);
       }
@@ -475,6 +479,23 @@
       }
       world.add(g);
       registerCrushable(g,x,z,.42*scale,"grass");
+    }
+    function makeFallenTree(x,z,scale=1,kind=biomeAt(x,z)){
+      const y=heightAt(x,z), g=new THREE.Group(); g.position.set(x,y+.08,z); g.rotation.y=rand(0,TAU);
+      const burnt=kind==="burnt";
+      const trunkMat=new THREE.MeshStandardMaterial({color:burnt?0x181510:0x5b3d22,roughness:.95});
+      part(g,new THREE.CylinderGeometry(.13*scale,.18*scale,rand(1.7,3.0)*scale,9),trunkMat,0,.18*scale,0,Math.PI/2+rand(-.08,.08),0,rand(-.18,.18));
+      for(let i=0;i<4;i++) part(g,new THREE.CylinderGeometry(.025*scale,.045*scale,rand(.35,.8)*scale,6),trunkMat,rand(-.8,.8)*scale,.22*scale,rand(-.16,.16)*scale,rand(-.5,.5),rand(0,TAU),rand(-.8,.8));
+      world.add(g);
+      registerCrushable(g,x,z,.95*scale,"tree");
+    }
+    function makeStump(x,z,scale=1,kind=biomeAt(x,z)){
+      const y=heightAt(x,z), g=new THREE.Group(); g.position.set(x,y,z);
+      const mat=new THREE.MeshStandardMaterial({color:kind==="burnt"?0x201a13:0x614225,roughness:.96});
+      part(g,new THREE.CylinderGeometry(.16*scale,.22*scale,.34*scale,9),mat,0,.17*scale,0,rand(-.08,.08),0,rand(-.08,.08));
+      for(let i=0;i<4;i++) part(g,new THREE.CylinderGeometry(.018*scale,.035*scale,.34*scale,5),mat,rand(-.18,.18)*scale,.07*scale,rand(-.18,.18)*scale,Math.PI/2,0,rand(0,TAU));
+      world.add(g);
+      registerCrushable(g,x,z,.38*scale,"tree");
     }
     function makeRock(x,z,scale=1){
       const y=heightAt(x,z);
@@ -868,10 +889,12 @@
       for(let i=0;i<70;i++){
         const z=rand(20,72), x=rand(-34,34);
         makeTree(x,z,rand(.85,1.8),"pine");
+        if(Math.random()<.18) makeFallenTree(x+rand(-2.5,2.5),z+rand(-2.5,2.5),rand(.55,1.05),"pine");
       }
       for(let i=0;i<44;i++){
         const x=rand(22,72), z=rand(-35,35);
         makeTree(x,z,rand(.75,1.55),"burnt");
+        if(Math.random()<.42) makeStump(x+rand(-2.2,2.2),z+rand(-2.2,2.2),rand(.65,1.2),"burnt");
         if(Math.random()<.45) makeSmokeColumn(x+rand(-1.8,1.8),z+rand(-1.8,1.8),rand(.45,.9));
       }
       for(let i=0;i<58;i++){
@@ -882,6 +905,11 @@
       for(let i=0;i<46;i++){
         const x=rand(-72,-16), z=rand(-44,44);
         if(Math.random()<.55) makeSupplyStack(x,z,rand(.5,1.05)); else makeBattlefieldClutter(x,z,rand(.7,1.25));
+      }
+      for(let i=0;i<46;i++){
+        const a=rand(0,TAU), r=rand(16,68), x=Math.sin(a)*r, z=Math.cos(a)*r;
+        if(biomeAt(x,z)==="rocky") makeStump(x,z,rand(.55,1.05),"rocky");
+        else makeFallenTree(x,z,rand(.45,.95),biomeAt(x,z));
       }
       for(let i=0;i<80;i++){
         const a=rand(0,TAU), r=rand(8,70);
