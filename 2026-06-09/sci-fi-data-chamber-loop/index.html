@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sci-Fi Data Chamber Loop</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sci-Fi Data Chamber Ray Traced Program</title>
   <style>
     html,
     body {
@@ -12,21 +12,353 @@
       margin: 0;
       overflow: hidden;
       background: #000;
+      overscroll-behavior: none;
     }
 
-    video {
+    canvas {
       position: fixed;
       inset: 0;
       width: 100vw;
       height: 100vh;
-      object-fit: cover;
+      display: block;
       background: #000;
     }
   </style>
 </head>
 <body>
-  <video autoplay muted loop playsinline preload="auto">
-    <source src="sci-fi-data-chamber-seamless-loop.mp4" type="video/mp4">
-  </video>
+<canvas id="screen"></canvas>
+
+<script id="vertexShader" type="x-shader/x-vertex">#version 300 es
+precision highp float;
+
+const vec2 positions[3] = vec2[3](
+  vec2(-1.0, -1.0),
+  vec2( 3.0, -1.0),
+  vec2(-1.0,  3.0)
+);
+
+void main() {
+  gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
+}
+</script>
+
+<script id="fragmentShader" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+
+out vec4 fragColor;
+
+uniform vec2 uResolution;
+uniform float uTime;
+
+const float TAU = 6.28318530718;
+const float LOOP_SECONDS = 12.0;
+const float INF = 1.0e9;
+
+struct Hit {
+  float t;
+  float mat;
+  vec3 pos;
+  vec3 nor;
+  vec2 uv;
+};
+
+float hash11(float p) {
+  return fract(sin(p * 127.1) * 43758.5453123);
+}
+
+vec3 hash31(float p) {
+  return fract(sin(vec3(p * 127.1, p * 311.7, p * 74.7)) * 43758.5453123);
+}
+
+mat2 rot(float a) {
+  float s = sin(a);
+  float c = cos(a);
+  return mat2(c, -s, s, c);
+}
+
+vec3 env(vec3 rd, float phase) {
+  float h = clamp(rd.y * 0.5 + 0.5, 0.0, 1.0);
+  vec3 deep = mix(vec3(0.002, 0.004, 0.016), vec3(0.018, 0.022, 0.052), h);
+  float neb = pow(max(0.0, 0.5 + 0.5 * sin(rd.x * 4.2 + rd.y * 2.1 + sin(TAU * phase) * 1.7)), 7.0);
+  float horizon = exp(-abs(rd.y + 0.05) * 6.0);
+  return deep + vec3(0.20, 0.05, 0.34) * neb * 0.22 + vec3(0.0, 0.46, 0.58) * horizon * 0.18;
+}
+
+float sphereHit(vec3 ro, vec3 rd, vec3 ce, float r) {
+  vec3 oc = ro - ce;
+  float b = dot(oc, rd);
+  float c = dot(oc, oc) - r * r;
+  float h = b * b - c;
+  if (h < 0.0) return INF;
+  h = sqrt(h);
+  float t = -b - h;
+  if (t > 0.001) return t;
+  t = -b + h;
+  return t > 0.001 ? t : INF;
+}
+
+float boxFrame(vec2 uv, vec2 size, float width) {
+  vec2 d = abs(uv) - size;
+  float outer = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+  vec2 di = abs(uv) - (size - width);
+  float inner = length(max(di, 0.0)) + min(max(di.x, di.y), 0.0);
+  return smoothstep(0.012, 0.0, abs(outer)) + smoothstep(0.012, 0.0, abs(inner));
+}
+
+float circuit(vec2 uv, float phase) {
+  uv *= vec2(4.0, 5.2);
+  vec2 cell = fract(uv) - 0.5;
+  vec2 id = floor(uv);
+  float seed = hash11(id.x + id.y * 17.0);
+  float lineH = 1.0 - smoothstep(0.012, 0.04, abs(cell.y + 0.18 * sin(TAU * phase + id.x)));
+  float lineV = 1.0 - smoothstep(0.012, 0.04, abs(cell.x + 0.15 * cos(TAU * phase + id.y)));
+  float node = 1.0 - smoothstep(0.045, 0.12, length(cell));
+  return (lineH + lineV + node * 1.8) * step(0.32, seed);
+}
+
+bool panelHit(vec3 ro, vec3 rd, float idx, float phase, inout Hit best) {
+  float a = idx * TAU / 7.0 + 0.45 + 0.08 * sin(TAU * phase + idx);
+  vec3 center = vec3(cos(a) * 2.7, 0.16 * sin(TAU * phase + idx * 1.6), sin(a) * 2.7);
+  vec3 n = normalize(vec3(cos(a), 0.0, sin(a)));
+  vec3 up = normalize(vec3(0.06 * sin(a + phase * TAU), 1.0, 0.02 * cos(a)));
+  vec3 side = normalize(cross(up, n));
+  up = normalize(cross(n, side));
+  float den = dot(rd, n);
+  if (abs(den) < 0.0005) return false;
+  float t = dot(center - ro, n) / den;
+  if (t <= 0.001 || t >= best.t) return false;
+  vec3 p = ro + rd * t;
+  vec2 uv = vec2(dot(p - center, side), dot(p - center, up));
+  if (abs(uv.x) > 0.58 || abs(uv.y) > 1.08) return false;
+  best = Hit(t, 3.0, p, den < 0.0 ? n : -n, uv);
+  return true;
+}
+
+Hit trace(vec3 ro, vec3 rd, float phase) {
+  Hit best = Hit(INF, 0.0, vec3(0.0), vec3(0.0, 1.0, 0.0), vec2(0.0));
+
+  float orbT = sphereHit(ro, rd, vec3(0.0, 0.02, 0.0), 0.72);
+  if (orbT < best.t) {
+    vec3 p = ro + rd * orbT;
+    vec3 n = normalize(p - vec3(0.0, 0.02, 0.0));
+    float facet = 0.04 * sin(18.0 * n.x + TAU * phase) * sin(16.0 * n.y - TAU * phase);
+    n = normalize(n + facet);
+    best = Hit(orbT, 1.0, p, n, vec2(atan(n.z, n.x) / TAU, asin(n.y) / 3.14159));
+  }
+
+  float floorT = (-1.14 - ro.y) / rd.y;
+  if (floorT > 0.001 && floorT < best.t) {
+    vec3 p = ro + rd * floorT;
+    if (length(p.xz) < 8.0) {
+      best = Hit(floorT, 2.0, p, vec3(0.0, 1.0, 0.0), p.xz);
+    }
+  }
+
+  for (int i = 0; i < 7; i++) {
+    panelHit(ro, rd, float(i), phase, best);
+  }
+
+  return best;
+}
+
+float shadow(vec3 p, vec3 ldir, float phase) {
+  Hit h = trace(p + ldir * 0.035, ldir, phase);
+  return h.t < 6.0 ? 0.28 : 1.0;
+}
+
+vec3 shade(Hit h, vec3 rd, float phase) {
+  vec3 cyan = normalize(vec3(-2.2, 2.9, -1.3));
+  vec3 amber = normalize(vec3(2.5, 1.45, 1.9));
+  vec3 violet = normalize(vec3(-0.4, 1.1, 2.1));
+  float fres = pow(1.0 - max(dot(-rd, h.nor), 0.0), 5.0);
+  float l1 = max(dot(h.nor, cyan), 0.0) * shadow(h.pos, cyan, phase);
+  float l2 = max(dot(h.nor, amber), 0.0) * shadow(h.pos, amber, phase);
+  float l3 = max(dot(h.nor, violet), 0.0);
+  vec3 light = vec3(0.05, 0.08, 0.12) + vec3(0.06, 0.82, 1.0) * l1 + vec3(1.0, 0.42, 0.12) * l2 * 0.72 + vec3(0.58, 0.14, 1.0) * l3 * 0.28;
+  vec3 refl = env(reflect(rd, h.nor), phase);
+  vec3 refr = env(refract(rd, h.nor, 0.72), phase);
+  float specC = pow(max(dot(reflect(-cyan, h.nor), -rd), 0.0), 96.0);
+  float specA = pow(max(dot(reflect(-amber, h.nor), -rd), 0.0), 58.0);
+
+  if (h.mat < 1.5) {
+    float caustic = pow(max(0.0, sin(22.0 * h.pos.x + 16.0 * h.pos.y + 12.0 * h.pos.z + TAU * phase)), 8.0);
+    vec3 core = vec3(0.08, 0.82, 1.0) * (0.36 + 0.64 * sin(h.uv.x * TAU * 6.0 + phase * TAU));
+    return mix(refr * vec3(0.8, 1.25, 1.35), refl * 1.7, 0.38 + fres * 0.55) + core * 0.38 + caustic * vec3(0.02, 0.75, 1.0) + specC * vec3(0.25, 0.95, 1.0);
+  }
+
+  if (h.mat < 2.5) {
+    float grid = boxFrame(fract(h.uv * 0.5) - 0.5, vec2(0.47), 0.018);
+    float ring = exp(-abs(length(h.pos.xz) - 2.4) * 3.2);
+    vec3 metal = vec3(0.004, 0.005, 0.007) + refl * (0.35 + fres * 0.6);
+    return metal * light + vec3(0.02, 0.58, 0.75) * grid * 0.16 + vec3(1.0, 0.38, 0.08) * ring * 0.06 + specC * vec3(0.14, 0.8, 1.0) + specA * vec3(1.0, 0.45, 0.12);
+  }
+
+  float traces = circuit(h.uv, phase);
+  float edge = boxFrame(h.uv, vec2(0.58, 1.08), 0.035);
+  vec3 glass = vec3(0.016, 0.09, 0.11) * light + refl * (0.18 + fres * 0.45);
+  vec3 traceColor = mix(vec3(0.0, 0.9, 1.0), vec3(1.0, 0.48, 0.12), smoothstep(0.2, 0.9, sin(TAU * phase + h.uv.y * 4.0) * 0.5 + 0.5));
+  return glass + traceColor * traces * 0.8 + vec3(0.04, 0.72, 1.0) * edge * 0.52;
+}
+
+vec3 particles(vec3 ro, vec3 rd, float phase) {
+  vec3 col = vec3(0.0);
+  float spin = TAU * phase;
+  for (int i = 0; i < 42; i++) {
+    vec3 h = hash31(float(i) + 9.1);
+    float radius = mix(1.0, 5.0, h.x);
+    float angle = h.y * TAU + spin * mix(-0.36, 0.42, h.z);
+    vec3 p = vec3(cos(angle) * radius, mix(-0.9, 1.65, hash11(float(i) + 31.0)) + 0.08 * sin(spin + h.x * TAU), sin(angle) * radius);
+    float along = dot(p - ro, rd);
+    vec3 q = ro + rd * along;
+    float d = length(p - q);
+    float g = exp(-d * d * 170.0) * smoothstep(0.0, 3.0, along) * (1.0 - smoothstep(2.0, 16.0, along));
+    vec3 pc = mix(vec3(0.0, 0.82, 1.0), vec3(1.0, 0.46, 0.12), h.x);
+    pc = mix(pc, vec3(0.58, 0.2, 1.0), smoothstep(0.68, 1.0, h.z));
+    col += pc * g;
+  }
+  return col;
+}
+
+vec3 camera(vec2 uv, float phase, out vec3 ro) {
+  float a = TAU * phase;
+  ro = vec3(cos(a) * 4.35, 0.38 + 0.18 * sin(a * 2.0), sin(a) * 4.35);
+  vec3 target = vec3(0.0, 0.05 + 0.07 * sin(a), 0.0);
+  vec3 ww = normalize(target - ro);
+  vec3 uu = normalize(cross(vec3(0.0, 1.0, 0.0), ww));
+  vec3 vv = cross(ww, uu);
+  return normalize(uu * uv.x + vv * uv.y + ww * 1.56);
+}
+
+vec3 render(vec2 uv, float phase) {
+  vec3 ro;
+  vec3 rd = camera(uv, phase, ro);
+  Hit h = trace(ro, rd, phase);
+  vec3 col = env(rd, phase);
+
+  if (h.t < INF * 0.5) {
+    col = shade(h, rd, phase);
+    if (h.mat < 3.5) {
+      vec3 rr = reflect(rd, h.nor);
+      Hit rh = trace(h.pos + h.nor * 0.035, rr, phase);
+      vec3 rc = rh.t < INF * 0.5 ? shade(rh, rr, phase) : env(rr, phase);
+      col += rc * (h.mat < 1.5 ? 0.24 : 0.16);
+    }
+  }
+
+  col += particles(ro, rd, phase);
+  float beam = pow(max(0.0, 1.0 - abs(uv.x * 0.21 + uv.y * 0.12)), 7.0);
+  col += vec3(0.0, 0.32, 0.5) * beam * 0.08;
+  col *= 1.0 - smoothstep(0.95, 1.7, length(uv)) * 0.58;
+  return col;
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - uResolution.xy) / uResolution.y;
+  float phase = fract(uTime / LOOP_SECONDS);
+  vec3 col = render(uv, phase);
+  col = col / (col + vec3(1.0));
+  col = pow(col, vec3(0.454545));
+  float bloom = smoothstep(0.62, 1.0, max(col.r, max(col.g, col.b)));
+  col += bloom * vec3(0.04, 0.11, 0.15);
+  fragColor = vec4(col, 1.0);
+}
+</script>
+
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const debug = params.has('debug');
+  function state(value) {
+    document.documentElement.dataset.renderState = value;
+  }
+
+  try {
+    const canvas = document.getElementById('screen');
+    const gl = canvas.getContext('webgl2', {
+      antialias: false,
+      alpha: false,
+      depth: false,
+      stencil: false,
+      preserveDrawingBuffer: false,
+      powerPreference: 'high-performance'
+    });
+
+    if (!gl) {
+      state('webgl2-unavailable');
+      return;
+    }
+
+    const vertexSource = document.getElementById('vertexShader').textContent;
+    const fragmentSource = document.getElementById('fragmentShader').textContent;
+
+    function shader(type, source) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, source);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        const log = gl.getShaderInfoLog(s) || '';
+        state((type === gl.VERTEX_SHADER ? 'vertex' : 'fragment') + '-compile-error');
+        if (debug) document.documentElement.dataset.renderLog = log;
+        throw new Error(log);
+      }
+      return s;
+    }
+
+    const program = gl.createProgram();
+    gl.attachShader(program, shader(gl.VERTEX_SHADER, vertexSource));
+    gl.attachShader(program, shader(gl.FRAGMENT_SHADER, fragmentSource));
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      const log = gl.getProgramInfoLog(program) || '';
+      state('program-link-error');
+      if (debug) document.documentElement.dataset.renderLog = log;
+      throw new Error(log);
+    }
+
+    gl.useProgram(program);
+    const uniforms = {
+      resolution: gl.getUniformLocation(program, 'uResolution'),
+      time: gl.getUniformLocation(program, 'uTime')
+    };
+    gl.bindVertexArray(gl.createVertexArray());
+
+    const fixedTime = params.has('t') ? Number(params.get('t')) : NaN;
+    const start = performance.now();
+    let lastW = 0;
+    let lastH = 0;
+
+    function resize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.35);
+      const scale = Math.min(1, 1280 / Math.max(window.innerWidth * dpr, window.innerHeight * dpr));
+      const w = Math.max(2, Math.floor(window.innerWidth * dpr * scale));
+      const h = Math.max(2, Math.floor(window.innerHeight * dpr * scale));
+      if (w !== lastW || h !== lastH) {
+        lastW = w;
+        lastH = h;
+        canvas.width = w;
+        canvas.height = h;
+        gl.viewport(0, 0, w, h);
+      }
+    }
+
+    function frame(now) {
+      resize();
+      const t = Number.isFinite(fixedTime) ? ((fixedTime % 12) + 12) % 12 : ((now - start) * 0.001) % 12;
+      gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
+      gl.uniform1f(uniforms.time, t);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      state('frame-drawn');
+      requestAnimationFrame(frame);
+    }
+
+    window.addEventListener('resize', resize, { passive: true });
+    requestAnimationFrame(frame);
+  } catch (error) {
+    state('runtime-error');
+    if (debug) document.documentElement.dataset.renderLog = String(error && error.message ? error.message : error);
+    throw error;
+  }
+})();
+</script>
 </body>
 </html>
