@@ -51,7 +51,7 @@
         <div class="meter">Shells <b id="ammo">18</b></div>
         <div class="meter">Elev <b id="elev">0°</b></div>
       </div>
-      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.3</span></div>
+      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.4</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Targets <b id="targets">0</b></div>
@@ -71,7 +71,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Iron Ridge:<br>Turret Commander</h1>
-      <span class="version">Three.js v1.3</span>
+      <span class="version">Three.js v1.4</span>
       <p class="dek">Command a tank from the center of an open battlefield. Drag to traverse the turret 360 degrees and raise or lower the gun. Fire arcing shells across the hills, then move the hull in the direction your turret is pointing.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -135,6 +135,7 @@
     const scorePops = [];
     const decals = [];
     const wrecks = [];
+    const crushables = [];
 
     function makeTexture(kind, base, accent, repeatX=4, repeatY=4){
       const c = document.createElement("canvas");
@@ -316,6 +317,10 @@
       part(g,geo,mat,0,0,0,rx,ry,rz,sx,sy,sz);
       g.position.set(x,y,z); world.add(g); return g;
     }
+    function registerCrushable(group,x,z,radius,kind){
+      crushables.push({group,x,z,radius,kind,crushed:false,basePos:group.position.clone(),baseRot:group.rotation.clone(),baseScale:group.scale.clone()});
+      return group;
+    }
     function makeLabel(text, fg, bg){
       const c=document.createElement("canvas"); c.width=512; c.height=128;
       const g=c.getContext("2d"); g.fillStyle=bg; g.fillRect(0,0,512,128);
@@ -423,10 +428,12 @@
       for(let i=0;i<3;i++) part(g,new THREE.ConeGeometry((.48-i*.08)*scale,.9*scale,9),new THREE.MeshStandardMaterial({color:i%2?0x335b2a:0x416b31,roughness:.86}),0,(.9+i*.38)*scale,0);
       part(g,new THREE.ConeGeometry(.28*scale,.42*scale,8),new THREE.MeshStandardMaterial({color:0x2c5224,roughness:.86}),rand(-.16,.16)*scale,1.54*scale,rand(-.16,.16)*scale,rand(-.25,.25),0,rand(-.25,.25));
       g.rotation.y=rand(0,TAU); world.add(g);
+      registerCrushable(g,x,z,.45*scale,"tree");
     }
     function makeRock(x,z,scale=1){
       const y=heightAt(x,z);
       const r=worldPart(new THREE.DodecahedronGeometry(scale,1),mats.rock,x,y+scale*.28,z,rand(0,TAU),rand(0,TAU),rand(0,TAU),1,rand(.55,1.1),rand(.7,1.4));
+      if(scale<.48) registerCrushable(r,x,z,.38+scale,"rock");
       return r;
     }
     function makeGrassTuft(x,z,scale=1){
@@ -437,6 +444,7 @@
         blade.castShadow=false;
       }
       world.add(g);
+      registerCrushable(g,x,z,.34*scale,"grass");
     }
     function makeCrater(x,z,scale=1){
       const y=heightAt(x,z)+.035, g=new THREE.Group(); g.position.set(x,y,z); g.rotation.y=rand(0,TAU);
@@ -447,6 +455,7 @@
         part(g,new THREE.DodecahedronGeometry(rand(.08,.18)*scale,0),mats.rock,Math.cos(a)*r,.08,Math.sin(a)*r,rand(0,TAU),rand(0,TAU),0);
       }
       world.add(g);
+      registerCrushable(g,x,z,1.05*scale,"sandbag");
     }
     function makeSandbagNest(x,z,scale=1){
       const y=heightAt(x,z), g=new THREE.Group(); g.position.set(x,y,z); g.rotation.y=rand(0,TAU);
@@ -462,6 +471,7 @@
       part(g,new THREE.BoxGeometry(.44*scale,.28*scale,.38*scale),mats.crate,.38*scale,.14*scale,.1*scale,0,rand(-.2,.2),0);
       part(g,new THREE.CylinderGeometry(.16*scale,.16*scale,.38*scale,12),mats.targetDark,-.34*scale,.19*scale,-.12*scale,0,0,Math.PI/2);
       world.add(g);
+      registerCrushable(g,x,z,.9*scale,"crate");
     }
     function makeRoadScar(x,z,angle,scale=1){
       const y=heightAt(x,z)+.045, g=new THREE.Group(); g.position.set(x,y,z); g.rotation.y=angle;
@@ -493,6 +503,7 @@
         part(g,new THREE.ConeGeometry(.08*scale,.18*scale,5),mats.rust,rand(-span/2,span/2),rand(.34,.6)*scale,rand(-.16,.16)*scale,rand(0,TAU),rand(0,TAU),rand(0,TAU));
       }
       world.add(g);
+      registerCrushable(g,x,z,1.85*scale,"wire");
     }
     function makeSmokeColumn(x,z,scale=1){
       const y=heightAt(x,z);
@@ -566,6 +577,72 @@
         mark.castShadow=false; mark.receiveShadow=false; world.add(mark); decals.push(mark);
       }
     }
+    function crushDust(pos,kind){
+      const colors = kind==="tree"
+        ? [[0,"rgba(82,64,37,.5)"],[.58,"rgba(58,73,34,.22)"],[1,"rgba(30,34,18,0)"]]
+        : [[0,"rgba(155,129,78,.52)"],[.6,"rgba(93,74,43,.25)"],[1,"rgba(58,44,24,0)"]];
+      for(let i=0;i<14;i++){
+        const dust=makeRoundSprite(colors,rand(.24,.45),rand(.35,.92),false);
+        dust.position.copy(pos).add(new THREE.Vector3(rand(-.45,.45),rand(.05,.42),rand(-.45,.45)));
+        world.add(dust);
+        particles.push({mesh:dust,life:rand(.55,1.2),max:1.2,vel:new THREE.Vector3(rand(-.75,.75),rand(.15,.72),rand(-.75,.75)),scale:1.45});
+      }
+    }
+    function crushDebris(pos,kind){
+      const mat = kind==="wire" ? mats.rust : kind==="tree" ? mats.crate : kind==="rock" ? mats.rock : mats.sandbag;
+      for(let i=0;i<9;i++){
+        const geo = kind==="wire" ? new THREE.BoxGeometry(rand(.16,.42),.035,.035) : new THREE.DodecahedronGeometry(rand(.04,.14),0);
+        const chip=new THREE.Mesh(geo,mat);
+        chip.position.copy(pos).add(new THREE.Vector3(rand(-.55,.55),rand(.08,.34),rand(-.55,.55)));
+        chip.rotation.set(rand(0,TAU),rand(0,TAU),rand(0,TAU));
+        chip.castShadow=true; chip.receiveShadow=true; world.add(chip);
+        particles.push({mesh:chip,life:rand(.75,1.45),max:1.45,vel:new THREE.Vector3(rand(-1.8,1.8),rand(.9,2.6),rand(-1.8,1.8)),scale:.18});
+      }
+    }
+    function crushObject(c){
+      if(c.crushed) return;
+      c.crushed=true;
+      const pos=new THREE.Vector3(c.x,heightAt(c.x,c.z)+.08,c.z);
+      makeScorchDecal(pos,c.kind==="wire"?1.4:.95);
+      makeTrackMark();
+      crushDust(pos,c.kind);
+      crushDebris(pos,c.kind);
+      if(c.kind==="grass"){
+        c.group.scale.y=.08;
+        c.group.position.y=heightAt(c.x,c.z)+.015;
+      }else if(c.kind==="tree"){
+        c.group.rotation.z += rand(.9,1.35) * (Math.random()<.5?-1:1);
+        c.group.rotation.x += rand(.15,.45);
+        c.group.position.y=heightAt(c.x,c.z)+.02;
+        c.group.scale.y=.5;
+      }else if(c.kind==="wire"){
+        c.group.rotation.z += rand(.25,.55) * (Math.random()<.5?-1:1);
+        c.group.scale.y=.22;
+        c.group.position.y=heightAt(c.x,c.z)+.03;
+      }else{
+        c.group.rotation.x += rand(.3,.8);
+        c.group.rotation.z += rand(.3,.9);
+        c.group.scale.y=.22;
+        c.group.position.y=heightAt(c.x,c.z)+.02;
+      }
+    }
+    function checkCrushables(){
+      const noseX=tank.x+Math.cos(tank.yaw)*.55;
+      const noseZ=tank.z-Math.sin(tank.yaw)*.55;
+      for(const c of crushables){
+        if(c.crushed) continue;
+        const d=Math.hypot(noseX-c.x,noseZ-c.z);
+        if(d<c.radius+1.05) crushObject(c);
+      }
+    }
+    function resetCrushables(){
+      crushables.forEach(c=>{
+        c.crushed=false;
+        c.group.position.copy(c.basePos);
+        c.group.rotation.copy(c.baseRot);
+        c.group.scale.copy(c.baseScale);
+      });
+    }
     function makeWreck(t){
       const g=new THREE.Group();
       const p=t.group.position.clone();
@@ -631,6 +708,11 @@
         const a=rand(0,TAU), r=rand(6,54);
         makePuddle(Math.sin(a)*r,Math.cos(a)*r,rand(.55,1.8));
       }
+      makeGrassTuft(3.6,-.8,1.25);
+      makeRock(4.6,.9,.32);
+      makeSupplyStack(6.3,-.65,.72);
+      makeSandbagNest(8.4,.72,.68);
+      makeObstacleLine(10.6,-.15,Math.PI/2,.76);
       for(let i=0;i<8;i++){
         const a=rand(0,TAU), r=rand(32,74);
         makeSmokeColumn(Math.sin(a)*r,Math.cos(a)*r,rand(.8,1.6));
@@ -696,6 +778,7 @@
       scorePops.splice(0).forEach(p=>world.remove(p.mesh));
       decals.splice(0).forEach(d=>world.remove(d));
       wrecks.splice(0).forEach(w=>world.remove(w));
+      resetCrushables();
       targets.splice(0).forEach(t=>world.remove(t.group));
       tank.x=0; tank.z=0; tank.yaw=0; tank.turretYaw=0; tank.elev=.08; tank.hull=100; tank.ammo=18; tank.reload=0; tank.score=0; tank.move=false; tank.fireHeld=false; tank.pendingScore=false;
       spawnTargets();
@@ -857,6 +940,7 @@
         tank.yaw += THREE.MathUtils.euclideanModulo(tank.turretYaw-tank.yaw+Math.PI,TAU)-Math.PI > 0 ? dt*1.8 : -dt*1.8;
         if(Math.random()<dt*16) trackDust();
         if(Math.random()<dt*4.5) makeTrackMark();
+        checkCrushables();
       }
       if(keysDown.has("ArrowLeft")||keysDown.has("KeyA")) tank.turretYaw += dt*1.5;
       if(keysDown.has("ArrowRight")||keysDown.has("KeyD")) tank.turretYaw -= dt*1.5;
