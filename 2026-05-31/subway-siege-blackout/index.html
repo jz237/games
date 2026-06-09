@@ -55,7 +55,7 @@
         <div class="meter">Shells <b id="ammo">18</b></div>
         <div class="meter">Elev <b id="elev">0°</b></div>
       </div>
-      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.13</span></div>
+      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.14</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Targets <b id="targets">0</b></div>
@@ -75,7 +75,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Iron Ridge:<br>Turret Commander</h1>
-      <span class="version">Three.js v1.13</span>
+      <span class="version">Three.js v1.14</span>
       <p class="dek">Command a tank from the center of an open battlefield. Drag to traverse the turret 360 degrees and raise or lower the gun. Fire arcing shells across the hills, then move the hull in the direction your turret is pointing.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -572,6 +572,31 @@
       world.add(g);
       if(scale>.8) registerCrushable(g,x,z,.8*scale,"crate");
     }
+    function makeDirectionalLandmark(kind,x,z,scale=1){
+      const y=heightAt(x,z), g=new THREE.Group(); g.position.set(x,y,z);
+      if(kind==="forest"){
+        for(let i=0;i<4;i++) part(g,new THREE.CylinderGeometry(.08*scale,.12*scale,2.1*scale,8),mats.crate,Math.cos(i*Math.PI/2)*.62*scale,1.05*scale,Math.sin(i*Math.PI/2)*.62*scale);
+        part(g,new THREE.BoxGeometry(1.65*scale,.16*scale,1.65*scale),mats.crate,0,2.04*scale,0);
+        part(g,new THREE.BoxGeometry(1.25*scale,.52*scale,.18*scale),mats.warning,0,2.38*scale,-.62*scale);
+        part(g,new THREE.CylinderGeometry(.025*scale,.025*scale,2.1*scale,8),mats.cable,.75*scale,2.65*scale,.18*scale,0,0,.28);
+        for(let i=0;i<5;i++) makeTree(x+rand(-4,4)*scale,z+rand(-4,4)*scale,rand(.9,1.6)*scale,"pine");
+      }else if(kind==="burnt"){
+        part(g,new THREE.CylinderGeometry(.08*scale,.1*scale,3.7*scale,8),mats.rust,0,1.85*scale,0,rand(-.08,.08),0,rand(.08,.18));
+        for(let h=.9;h<3.4;h+=.6) part(g,new THREE.BoxGeometry(1.7*scale,.045*scale,.045*scale),mats.cable,0,h*scale,0,0,0,rand(-.45,.45));
+        part(g,new THREE.BoxGeometry(.75*scale,.42*scale,.1*scale),mats.wreck,.28*scale,3.62*scale,0,0,0,rand(.15,.4));
+        makeSmokeColumn(x+1.3*scale,z-.9*scale,1.2*scale);
+        for(let i=0;i<7;i++) makeTree(x+rand(-4.5,4.5)*scale,z+rand(-4.5,4.5)*scale,rand(.65,1.25)*scale,"burnt");
+      }else if(kind==="ridge"){
+        for(let i=0;i<9;i++) makeRock(x+rand(-4.2,4.2)*scale,z+rand(-3.2,3.2)*scale,rand(.7,1.8)*scale);
+        part(g,new THREE.BoxGeometry(2.4*scale,.18*scale,.48*scale),mats.warning,0,.42*scale,0,rand(.1,.35),rand(-.35,.35),rand(-.12,.12));
+        part(g,new THREE.CylinderGeometry(.04*scale,.05*scale,1.2*scale,8),mats.rust,-1.1*scale,.62*scale,0,rand(.25,.6),0,rand(-.35,.35));
+      }else{
+        for(let i=0;i<7;i++) part(g,new THREE.BoxGeometry(rand(.48,.9)*scale,rand(.3,.6)*scale,rand(.42,.78)*scale),i%2?mats.crate:mats.warning,rand(-1.8,1.8)*scale,rand(.15,.45)*scale,rand(-1.4,1.4)*scale,0,rand(0,TAU),rand(-.08,.08));
+        for(let i=0;i<4;i++) part(g,new THREE.CylinderGeometry(.22*scale,.22*scale,.55*scale,14),mats.targetDark,rand(-1.6,1.6)*scale,.28*scale,rand(-1.2,1.2)*scale,0,0,Math.PI/2);
+        makeObstacleLine(x+2.8*scale,z,Math.PI/2,1.05*scale);
+      }
+      g.rotation.y=Math.atan2(-x,-z)+Math.PI; world.add(g);
+    }
     function makeSmokeColumn(x,z,scale=1){
       const y=heightAt(x,z);
       for(let i=0;i<7;i++){
@@ -896,6 +921,10 @@
       makeSupplyStack(6.3,-.65,.72);
       makeSandbagNest(8.4,.72,.68);
       makeObstacleLine(10.6,-.15,Math.PI/2,.76);
+      makeDirectionalLandmark("forest",-12,52,1.15);
+      makeDirectionalLandmark("burnt",52,10,1.1);
+      makeDirectionalLandmark("ridge",8,-54,1.22);
+      makeDirectionalLandmark("supply",-52,-6,1.12);
       for(let i=0;i<8;i++){
         const a=rand(0,TAU), r=rand(32,74);
         makeSmokeColumn(Math.sin(a)*r,Math.cos(a)*r,rand(.8,1.6));
