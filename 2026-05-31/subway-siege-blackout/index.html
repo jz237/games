@@ -55,7 +55,7 @@
         <div class="meter">Shells <b id="ammo">18</b></div>
         <div class="meter">Elev <b id="elev">0°</b></div>
       </div>
-      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.7</span></div>
+      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.8</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Targets <b id="targets">0</b></div>
@@ -75,7 +75,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Iron Ridge:<br>Turret Commander</h1>
-      <span class="version">Three.js v1.7</span>
+      <span class="version">Three.js v1.8</span>
       <p class="dek">Command a tank from the center of an open battlefield. Drag to traverse the turret 360 degrees and raise or lower the gun. Fire arcing shells across the hills, then move the hull in the direction your turret is pointing.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -803,7 +803,7 @@
       colorStops.forEach(s=>grad.addColorStop(s[0],s[1])); g.fillStyle=grad; g.fillRect(0,0,128,128);
       const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
       const mat=new THREE.SpriteMaterial({map:t,transparent:true,opacity,depthWrite:false,blending:additive?THREE.AdditiveBlending:THREE.NormalBlending});
-      const s=new THREE.Sprite(mat); s.scale.set(size,size,size); return s;
+      const s=new THREE.Sprite(mat); s.userData.baseOpacity=opacity; s.scale.set(size,size,size); return s;
     }
     function makeScoreSprite(text){
       const c=document.createElement("canvas"); c.width=256; c.height=96; const g=c.getContext("2d");
@@ -856,6 +856,8 @@
       const slug = new THREE.Mesh(new THREE.SphereGeometry(.16,16,12),mats.shell);
       const glow = new THREE.Sprite(new THREE.SpriteMaterial({map:makeRadialTexture([[0,"rgba(255,230,130,1)"],[.34,"rgba(255,117,36,.55)"],[1,"rgba(255,70,15,0)"]]),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.9}));
       glow.scale.set(1.55,1.55,1); mesh.add(slug); mesh.add(glow);
+      const shellLight=new THREE.PointLight(0xff9a38,1.9,7,2);
+      shellLight.position.set(0,0,0); mesh.add(shellLight);
       mesh.position.copy(origin); mesh.castShadow=true; world.add(mesh);
       shells.push({ mesh, vel:dir.multiplyScalar(33), life:5.2, smoke:0 });
       tank.recoil=1;
@@ -873,12 +875,18 @@
       const blastLight=new THREE.PointLight(0xffb45a,7.5,14,2);
       blastLight.position.copy(origin); world.add(blastLight);
       particles.push({mesh:blastLight,life:.13,max:.13,vel:new THREE.Vector3(),scale:0});
+      const bore=makeRoundSprite([[0,"rgba(255,255,245,1)"],[.18,"rgba(255,230,132,.88)"],[.55,"rgba(255,92,28,.38)"],[1,"rgba(255,80,20,0)"]],1,2.2,true);
+      bore.position.copy(origin).add(dir.clone().multiplyScalar(.7)); world.add(bore);
+      particles.push({mesh:bore,life:.16,max:.16,vel:dir.clone().multiplyScalar(1.4),scale:8});
       const flash=makeRoundSprite([[0,"rgba(255,255,235,1)"],[.2,"rgba(255,201,87,.95)"],[.52,"rgba(255,92,28,.54)"],[1,"rgba(255,70,15,0)"]],1,4.6,true);
       flash.position.copy(origin).add(dir.clone().multiplyScalar(.35)); world.add(flash);
       particles.push({mesh:flash,life:.42,max:.42,vel:dir.clone().multiplyScalar(.35),scale:3.4});
       const shock=makeRoundSprite([[0,"rgba(255,245,190,.55)"],[.38,"rgba(255,184,84,.24)"],[1,"rgba(255,120,40,0)"]],.78,6.6,true);
       shock.position.copy(origin).add(dir.clone().multiplyScalar(.15)); world.add(shock);
       particles.push({mesh:shock,life:.48,max:.48,vel:dir.clone().multiplyScalar(.08),scale:5.6});
+      const groundWave=makeRoundSprite([[0,"rgba(220,196,133,.34)"],[.5,"rgba(126,101,61,.16)"],[1,"rgba(72,54,30,0)"]],.42,4.8,false);
+      groundWave.position.set(tank.x,heightAt(tank.x,tank.z)+.18,tank.z); world.add(groundWave);
+      particles.push({mesh:groundWave,life:.52,max:.52,vel:new THREE.Vector3(),scale:6.2});
       for(let i=0;i<16;i++){
         const smoke=makeRoundSprite([[0,"rgba(148,137,112,.5)"],[.5,"rgba(91,83,67,.25)"],[1,"rgba(44,42,36,0)"]],rand(.32,.54),rand(.8,1.65),false);
         smoke.position.copy(origin).add(dir.clone().multiplyScalar(rand(-.15,.35))).add(new THREE.Vector3(rand(-.22,.22),rand(-.08,.22),rand(-.22,.22)));
@@ -909,14 +917,24 @@
     }
     function explode(pos, power=1, score=0){
       makeScorchDecal(pos,rand(1.4,2.4)*power);
+      const dist=Math.hypot(pos.x-tank.x,pos.z-tank.z);
+      if(state.mode==="play") tank.shake=Math.max(tank.shake,clamp((1-dist/62)*power*.85,0,.9));
       const shock=makeRoundSprite([[0,"rgba(255,238,170,.55)"],[.28,"rgba(255,141,50,.28)"],[1,"rgba(255,95,25,0)"]],.75,3.2*power,true);
       shock.position.copy(pos).add(new THREE.Vector3(0,.2,0)); world.add(shock);
       particles.push({mesh:shock,life:.34,max:.34,vel:new THREE.Vector3(0,.02,0),scale:6.5});
+      const pressure=makeRoundSprite([[0,"rgba(255,247,198,.34)"],[.44,"rgba(255,176,82,.16)"],[1,"rgba(255,95,25,0)"]],.46,2.2*power,true);
+      pressure.position.copy(pos).add(new THREE.Vector3(0,.34,0)); world.add(pressure);
+      particles.push({mesh:pressure,life:.55,max:.55,vel:new THREE.Vector3(0,.03,0),scale:10});
       const light=new THREE.PointLight(0xff8b32,5.2*power,11*power,2);
       light.position.copy(pos).add(new THREE.Vector3(0,.6,0)); world.add(light);
       particles.push({mesh:light,life:.3,max:.3,vel:new THREE.Vector3(),scale:0});
       const boom=makeRoundSprite([[0,"rgba(255,255,225,1)"],[.16,"rgba(255,198,82,.96)"],[.36,"rgba(255,83,26,.8)"],[.68,"rgba(83,53,30,.48)"],[1,"rgba(30,30,25,0)"]],1,3.8*power,true);
       boom.position.copy(pos); world.add(boom); particles.push({mesh:boom,life:.55,max:.55,vel:new THREE.Vector3(),scale:1});
+      for(let i=0;i<3;i++){
+        const flame=makeRoundSprite([[0,"rgba(255,245,185,.92)"],[.24,"rgba(255,124,38,.72)"],[.64,"rgba(114,57,30,.34)"],[1,"rgba(28,24,20,0)"]],rand(.62,.9),rand(.85,1.55)*power,true);
+        flame.position.copy(pos).add(new THREE.Vector3(rand(-.65,.65)*power,rand(.25,.9)*power,rand(-.65,.65)*power)); world.add(flame);
+        particles.push({mesh:flame,life:rand(.42,.9),max:.9,vel:new THREE.Vector3(rand(-.45,.45),rand(.4,1.4),rand(-.45,.45)),scale:2.4});
+      }
       for(let i=0;i<Math.floor(30*power);i++){
         const chip=new THREE.Mesh(new THREE.DodecahedronGeometry(rand(.035,.11)*power,0),i%3?mats.dirt:mats.rock);
         chip.position.copy(pos).add(new THREE.Vector3(rand(-.18,.18),rand(.05,.22),rand(-.18,.18)));
@@ -1004,7 +1022,7 @@
           targetHitFlash(tank.group.position.clone().add(new THREE.Vector3(0,1.1,0)),.65);
           explode(tank.group.position.clone().add(new THREE.Vector3(0,1,0)),.55,0); p.life=0; sfx("hit");
         }
-        if(p.mesh.material) p.mesh.material.opacity=clamp(p.life/p.max,0,1)*(p.mesh.material.opacity||1);
+        if(p.mesh.material) p.mesh.material.opacity=clamp(p.life/p.max,0,1)*(p.mesh.userData.baseOpacity || p.mesh.material.opacity || 1);
         if(p.scale) p.mesh.scale.multiplyScalar(1+dt*p.scale);
         if(p.life<=0){ world.remove(p.mesh); particles.splice(i,1); }
       }
@@ -1131,12 +1149,16 @@
         tone(44,.42,"sawtooth",.16,24);
         tone(78,.18,"square",.1,38);
         setTimeout(()=>tone(128,.12,"triangle",.06,62),42);
+        setTimeout(()=>noise(.16,.07,true),72);
+        setTimeout(()=>tone(210,.05,"square",.045,90),96);
       }
       if(kind==="boom"){
         noise(.46,.22,true);
         noise(.18,.09,false);
         tone(58,.36,"sawtooth",.13,24);
         tone(35,.5,"sine",.08,21);
+        setTimeout(()=>noise(.24,.08,true),80);
+        setTimeout(()=>tone(31,.62,"sine",.055,18),110);
       }
       if(kind==="hit"){
         noise(.16,.13,false);
