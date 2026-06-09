@@ -55,7 +55,7 @@
         <div class="meter">Shells <b id="ammo">18</b></div>
         <div class="meter">Elev <b id="elev">0°</b></div>
       </div>
-      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.10</span></div>
+      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.11</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Targets <b id="targets">0</b></div>
@@ -75,7 +75,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Iron Ridge:<br>Turret Commander</h1>
-      <span class="version">Three.js v1.10</span>
+      <span class="version">Three.js v1.11</span>
       <p class="dek">Command a tank from the center of an open battlefield. Drag to traverse the turret 360 degrees and raise or lower the gun. Fire arcing shells across the hills, then move the hull in the direction your turret is pointing.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -338,7 +338,7 @@
 
     const tank = {
       x:0,z:0,yaw:0,turretYaw:0,elev:.08,hull:100,ammo:18,maxAmmo:18,reload:0,score:0,move:false,fireHeld:false,viewMode:false,recoil:0,shake:0,
-      group:new THREE.Group(), hullGroup:new THREE.Group(), turret:new THREE.Group(), barrel:new THREE.Group(), initials:["A","A","A"], initialPos:0, pendingScore:false
+      drive:0, group:new THREE.Group(), hullGroup:new THREE.Group(), turret:new THREE.Group(), barrel:new THREE.Group(), initials:["A","A","A"], initialPos:0, pendingScore:false
     };
     world.add(tank.group);
     tank.group.add(tank.hullGroup);
@@ -419,6 +419,13 @@
       const y = heightAt(tank.x,tank.z);
       tank.group.position.set(tank.x,y,tank.z);
       tank.hullGroup.rotation.y = tank.yaw;
+      const slopeX=clamp((heightAt(tank.x+.85,tank.z)-heightAt(tank.x-.85,tank.z))*.035,-.07,.07);
+      const slopeZ=clamp((heightAt(tank.x,tank.z+.85)-heightAt(tank.x,tank.z-.85))*.035,-.07,.07);
+      const t=performance.now()*.001;
+      const driveRock=tank.drive*(Math.sin(t*12)*.014 + Math.sin(t*21)*.006);
+      tank.hullGroup.rotation.x = slopeZ + driveRock;
+      tank.hullGroup.rotation.z = -slopeX + Math.sin(t*15)*.01*tank.drive - tank.recoil*.035;
+      tank.hullGroup.position.y = Math.sin(t*18)*.018*tank.drive - Math.sin(tank.recoil*Math.PI)*.04;
       tank.turret.rotation.y = tank.turretYaw;
       tank.barrel.rotation.z = tank.elev;
     }
@@ -865,7 +872,7 @@
       fires.splice(0);
       resetCrushables();
       targets.splice(0).forEach(t=>world.remove(t.group));
-      tank.x=0; tank.z=0; tank.yaw=0; tank.turretYaw=0; tank.elev=.08; tank.hull=100; tank.ammo=18; tank.reload=0; tank.score=0; tank.move=false; tank.fireHeld=false; tank.recoil=0; tank.shake=0; tank.pendingScore=false;
+      tank.x=0; tank.z=0; tank.yaw=0; tank.turretYaw=0; tank.elev=.08; tank.hull=100; tank.ammo=18; tank.reload=0; tank.score=0; tank.move=false; tank.fireHeld=false; tank.recoil=0; tank.shake=0; tank.drive=0; tank.pendingScore=false;
       spawnTargets();
       state.mode="play";
       hud.overlay.hidden=true;
@@ -1102,6 +1109,7 @@
       }
       const keyMove=(keysDown.has("KeyW")||keysDown.has("ArrowUp"))?1:(keysDown.has("KeyS")||keysDown.has("ArrowDown"))?-1:0;
       const moving = tank.move ? 1 : keyMove;
+      tank.drive = Math.abs(moving);
       if(moving){
         const speed=keysDown.has("ShiftLeft")?7.5:4.6;
         tank.x += Math.cos(tank.turretYaw)*speed*dt*moving;
@@ -1112,6 +1120,7 @@
         if(Math.random()<dt*4.5) makeTrackMark();
         checkCrushables();
       }
+      updateEngine(tank.drive);
       if(keysDown.has("ArrowLeft")||keysDown.has("KeyA")) tank.turretYaw += dt*1.5;
       if(keysDown.has("ArrowRight")||keysDown.has("KeyD")) tank.turretYaw -= dt*1.5;
       tank.elev=clamp(tank.elev,-.08,.72);
@@ -1141,7 +1150,7 @@
     }
     function gameOver(){
       if(state.mode==="over") return;
-      state.mode="over"; hud.overlay.hidden=false; tank.pendingScore=qualifies(); hud.entry.hidden=!tank.pendingScore; renderScores(); updateHud();
+      state.mode="over"; updateEngine(0); hud.overlay.hidden=false; tank.pendingScore=qualifies(); hud.entry.hidden=!tank.pendingScore; renderScores(); updateHud();
     }
 
     function getScores(){ try{return JSON.parse(localStorage.getItem(SCORE_KEY))||[]}catch(e){return[]} }
@@ -1170,7 +1179,19 @@
         const AC=window.AudioContext||window.webkitAudioContext, ctx=new AC(), master=ctx.createGain();
         master.gain.value=.22; master.connect(ctx.destination); ensureAudio.ctx=ctx; ensureAudio.master=master;
         const hum=ctx.createOscillator(), hg=ctx.createGain(); hum.type="sawtooth"; hum.frequency.value=38; hg.gain.value=.018; hum.connect(hg); hg.connect(master); hum.start();
+        const engine=ctx.createOscillator(), eg=ctx.createGain(), ef=ctx.createBiquadFilter();
+        engine.type="sawtooth"; engine.frequency.value=42; ef.type="lowpass"; ef.frequency.value=150; eg.gain.value=0;
+        engine.connect(ef); ef.connect(eg); eg.connect(master); engine.start();
+        ensureAudio.engine={osc:engine,gain:eg,filter:ef};
       }catch(e){ ensureAudio.ctx=null; }
+    }
+    function updateEngine(moving){
+      const ctx=ensureAudio.ctx, engine=ensureAudio.engine;
+      if(!ctx || !engine) return;
+      const target=state.mode==="play" ? .011 + moving*.028 + tank.recoil*.012 : 0;
+      engine.gain.gain.setTargetAtTime(target,ctx.currentTime,.08);
+      engine.osc.frequency.setTargetAtTime(42 + moving*24 + tank.recoil*16,ctx.currentTime,.08);
+      engine.filter.frequency.setTargetAtTime(140 + moving*120 + tank.recoil*90,ctx.currentTime,.1);
     }
     function tone(f,d,type="sine",gain=.06,end=f){
       const ctx=ensureAudio.ctx; if(!ctx) return;
