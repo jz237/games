@@ -55,7 +55,7 @@
         <div class="meter">Shells <b id="ammo">18</b></div>
         <div class="meter">Elev <b id="elev">0°</b></div>
       </div>
-      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.8</span></div>
+      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.9</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Targets <b id="targets">0</b></div>
@@ -75,7 +75,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Iron Ridge:<br>Turret Commander</h1>
-      <span class="version">Three.js v1.8</span>
+      <span class="version">Three.js v1.9</span>
       <p class="dek">Command a tank from the center of an open battlefield. Drag to traverse the turret 360 degrees and raise or lower the gun. Fire arcing shells across the hills, then move the hull in the direction your turret is pointing.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -139,6 +139,7 @@
     const scorePops = [];
     const decals = [];
     const wrecks = [];
+    const fires = [];
     const crushables = [];
     const ambient = [];
 
@@ -688,10 +689,17 @@
       for(let i=0;i<5;i++){
         part(g,new THREE.DodecahedronGeometry(rand(.08,.2),0),i%2?mats.wreck:mats.rock,rand(-.9,.9),rand(.05,.28),rand(-.7,.7),rand(0,TAU),rand(0,TAU),0);
       }
+      for(let i=0;i<7;i++){
+        part(g,new THREE.BoxGeometry(rand(.18,.55),rand(.035,.09),rand(.12,.36)),i%2?mats.wreck:mats.rust,rand(-.95,.95),rand(.12,.52),rand(-.76,.76),rand(-.6,.6),rand(0,TAU),rand(-.8,.8));
+      }
+      for(let i=0;i<3;i++){
+        part(g,new THREE.CylinderGeometry(rand(.035,.06),rand(.04,.08),rand(.55,.95),8),i%2?mats.barrel:mats.cable,rand(-.8,.8),rand(.26,.68),rand(-.55,.55),rand(.45,1.5),rand(0,TAU),rand(0,TAU));
+      }
       const ember=makeRoundSprite([[0,"rgba(255,151,54,.9)"],[.32,"rgba(255,70,25,.45)"],[1,"rgba(255,40,10,0)"]],.65,.7,true);
       ember.position.copy(p).add(new THREE.Vector3(rand(-.18,.18),.55,rand(-.18,.18))); world.add(ember);
       particles.push({mesh:ember,life:4.2,max:4.2,vel:new THREE.Vector3(rand(-.04,.04),.04,rand(-.04,.04)),scale:.2});
       world.add(g); wrecks.push(g);
+      fires.push({pos:p.clone().add(new THREE.Vector3(rand(-.2,.2),.35,rand(-.2,.2))),life:15,power:t.type==="tower"?1.25:1,flame:0,smoke:0});
       while(wrecks.length>18) world.remove(wrecks.shift());
     }
     function targetHitFlash(pos,power=.75){
@@ -834,6 +842,7 @@
       scorePops.splice(0).forEach(p=>world.remove(p.mesh));
       decals.splice(0).forEach(d=>world.remove(d));
       wrecks.splice(0).forEach(w=>world.remove(w));
+      fires.splice(0);
       resetCrushables();
       targets.splice(0).forEach(t=>world.remove(t.group));
       tank.x=0; tank.z=0; tank.yaw=0; tank.turretYaw=0; tank.elev=.08; tank.hull=100; tank.ammo=18; tank.reload=0; tank.score=0; tank.move=false; tank.fireHeld=false; tank.recoil=0; tank.shake=0; tank.pendingScore=false;
@@ -1011,6 +1020,24 @@
         }
       }
     }
+    function updateFires(dt){
+      for(let i=fires.length-1;i>=0;i--){
+        const f=fires[i]; f.life-=dt; f.flame-=dt; f.smoke-=dt;
+        if(f.flame<=0){
+          f.flame=rand(.08,.16);
+          const flame=makeRoundSprite([[0,"rgba(255,236,122,.86)"],[.26,"rgba(255,101,34,.64)"],[.72,"rgba(119,45,24,.22)"],[1,"rgba(36,28,22,0)"]],rand(.42,.72),rand(.45,.9)*f.power,true);
+          flame.position.copy(f.pos).add(new THREE.Vector3(rand(-.34,.34)*f.power,rand(.08,.55)*f.power,rand(-.34,.34)*f.power)); world.add(flame);
+          particles.push({mesh:flame,life:rand(.72,1.35),max:1.35,vel:new THREE.Vector3(rand(-.1,.1),rand(.25,.72),rand(-.1,.1)),scale:1.1});
+        }
+        if(f.smoke<=0){
+          f.smoke=rand(.16,.32);
+          const smoke=makeRoundSprite([[0,"rgba(82,79,69,.48)"],[.55,"rgba(48,48,43,.25)"],[1,"rgba(24,24,22,0)"]],rand(.22,.36),rand(.75,1.55)*f.power,false);
+          smoke.position.copy(f.pos).add(new THREE.Vector3(rand(-.45,.45)*f.power,rand(.34,.95)*f.power,rand(-.45,.45)*f.power)); world.add(smoke);
+          particles.push({mesh:smoke,life:rand(2.2,4.4),max:4.4,vel:new THREE.Vector3(rand(-.15,.15),rand(.38,.82),rand(-.15,.15)),scale:1.4});
+        }
+        if(f.life<=0) fires.splice(i,1);
+      }
+    }
     function updateParticles(dt){
       for(let i=particles.length-1;i>=0;i--){
         const p=particles[i]; p.life-=dt;
@@ -1090,7 +1117,7 @@
     }
     function updateWorld(dt){
       state.time+=dt;
-      updateAmbient(dt); updateTank(dt); updateShells(dt); updateTargets(dt); updateParticles(dt); updateCamera(dt); updateHud();
+      updateAmbient(dt); updateTank(dt); updateShells(dt); updateTargets(dt); updateFires(dt); updateParticles(dt); updateCamera(dt); updateHud();
     }
     function gameOver(){
       if(state.mode==="over") return;
