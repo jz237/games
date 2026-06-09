@@ -51,7 +51,7 @@
         <div class="meter">Shells <b id="ammo">18</b></div>
         <div class="meter">Elev <b id="elev">0°</b></div>
       </div>
-      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.2</span></div>
+      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.3</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Targets <b id="targets">0</b></div>
@@ -71,7 +71,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Iron Ridge:<br>Turret Commander</h1>
-      <span class="version">Three.js v1.2</span>
+      <span class="version">Three.js v1.3</span>
       <p class="dek">Command a tank from the center of an open battlefield. Drag to traverse the turret 360 degrees and raise or lower the gun. Fire arcing shells across the hills, then move the hull in the direction your turret is pointing.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -230,7 +230,9 @@
       scorch:new THREE.MeshBasicMaterial({ map:scorchTex, transparent:true, opacity:.72, depthWrite:false }),
       puddle:new THREE.MeshBasicMaterial({ map:puddleTex, transparent:true, opacity:.66, depthWrite:false }),
       trackMark:new THREE.MeshBasicMaterial({ map:trackTex, transparent:true, opacity:.42, depthWrite:false }),
-      wreck:new THREE.MeshStandardMaterial({ color:0x1c1711, roughness:.92, metalness:.22 })
+      wreck:new THREE.MeshStandardMaterial({ color:0x1c1711, roughness:.92, metalness:.22 }),
+      cable:new THREE.MeshStandardMaterial({ color:0x161714, roughness:.86, metalness:.36 }),
+      rust:new THREE.MeshStandardMaterial({ color:0x8b4e26, roughness:.8, metalness:.2 })
     };
 
     scene.background = new THREE.Color(0x9eb8bc);
@@ -259,6 +261,11 @@
       sky.position.y=-12; scene.add(sky);
     }
     makeSky();
+    const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map:makeRadialTexture([[0,"rgba(255,241,179,.95)"],[.24,"rgba(255,190,88,.45)"],[1,"rgba(255,150,60,0)"]]),
+      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:.72
+    }));
+    sunGlow.position.set(-62,50,38); sunGlow.scale.set(18,18,1); scene.add(sunGlow);
 
     function heightAt(x,z){
       return Math.sin(x*.12)*1.1 + Math.cos(z*.1)*.8 + Math.sin((x+z)*.045)*2.2 + Math.cos(Math.hypot(x,z)*.14)*.7;
@@ -353,6 +360,17 @@
         part(tank.hullGroup,new THREE.BoxGeometry(.45,.035,.05),mats.darkArmor,.48,.78,z);
         part(tank.hullGroup,new THREE.SphereGeometry(.035,8,6),mats.glass,1.22,.56,z);
       }
+      for(let x=-1.12;x<=1.12;x+=.32) for(const z of [-.68,.68]) part(tank.hullGroup,new THREE.SphereGeometry(.025,8,6),mats.darkArmor,x,.67,z);
+      for(const z of [-.58,.58]){
+        part(tank.hullGroup,new THREE.CylinderGeometry(.12,.12,.62,14),mats.rust,-1.08,.72,z,0,0,Math.PI/2);
+        part(tank.hullGroup,new THREE.CylinderGeometry(.06,.06,.5,12),mats.darkArmor,-.42,.76,z,0,0,Math.PI/2);
+      }
+      part(tank.hullGroup,new THREE.BoxGeometry(.5,.05,.24),mats.darkArmor,.34,.82,.38,0,0,.18);
+      part(tank.hullGroup,new THREE.BoxGeometry(.62,.045,.08),mats.cable,.1,.86,.44,0,0,-.1);
+      const tow = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-1.2,.76,-.73),new THREE.Vector3(-.3,.88,-.86),new THREE.Vector3(.72,.82,-.78),new THREE.Vector3(1.12,.68,-.58)
+      ]),26,.026,6),mats.cable);
+      tow.castShadow=true; tow.receiveShadow=true; tank.hullGroup.add(tow);
       part(tank.turret,new THREE.CylinderGeometry(.74,.94,.52,32),mats.armor,0,.82,0,0,0,0,1,1,.76);
       part(tank.turret,new THREE.BoxGeometry(.9,.3,.7),mats.armor,.18,.88,0);
       part(tank.turret,new THREE.BoxGeometry(.52,.24,.88),mats.armor,-.34,.9,0,0,0,.08);
@@ -380,6 +398,9 @@
       part(tank.turret,new THREE.BoxGeometry(.14,.12,.26),mats.darkArmor,-.12,1.16,.42);
       part(tank.turret,new THREE.BoxGeometry(.14,.12,.26),mats.darkArmor,-.12,1.16,-.42);
       for(const z of [-.62,.62]) for(let x=-.52;x<=.46;x+=.32) part(tank.turret,new THREE.BoxGeometry(.18,.045,.12),mats.darkArmor,x,.58,z);
+      for(let x=-.48;x<=.54;x+=.26) for(const z of [-.34,.34]) part(tank.turret,new THREE.SphereGeometry(.024,8,6),mats.darkArmor,x,1.08,z);
+      part(tank.turret,new THREE.CylinderGeometry(.22,.22,.14,18),mats.darkArmor,-.36,1.16,0,0,0,0);
+      part(tank.turret,new THREE.BoxGeometry(.22,.05,.36),mats.darkArmor,-.36,1.28,0,0,0,.2);
     }
     buildTank();
 
@@ -455,6 +476,23 @@
       const m=new THREE.Mesh(new THREE.PlaneGeometry(1.6*scale,.72*scale),mats.puddle.clone());
       m.position.set(x,y,z); m.rotation.x=-Math.PI/2; m.rotation.z=rand(0,TAU);
       m.receiveShadow=false; m.castShadow=false; world.add(m);
+    }
+    function makeObstacleLine(x,z,angle,scale=1){
+      const y=heightAt(x,z), g=new THREE.Group();
+      g.position.set(x,y,z); g.rotation.y=angle;
+      const span=3.2*scale;
+      for(let i=-2;i<=2;i++){
+        const px=i*span/4;
+        part(g,new THREE.CylinderGeometry(.035*scale,.05*scale,.8*scale,6),mats.rust,px,.38*scale,0,rand(-.25,.25),0,rand(-.18,.18));
+      }
+      for(const h of [.34,.54]){
+        part(g,new THREE.BoxGeometry(span,.028*scale,.028*scale),mats.cable,0,h*scale,.02*scale);
+        part(g,new THREE.BoxGeometry(span,.028*scale,.028*scale),mats.cable,0,h*scale,-.09*scale,0,0,.04);
+      }
+      for(let i=0;i<7;i++){
+        part(g,new THREE.ConeGeometry(.08*scale,.18*scale,5),mats.rust,rand(-span/2,span/2),rand(.34,.6)*scale,rand(-.16,.16)*scale,rand(0,TAU),rand(0,TAU),rand(0,TAU));
+      }
+      world.add(g);
     }
     function makeSmokeColumn(x,z,scale=1){
       const y=heightAt(x,z);
@@ -547,6 +585,9 @@
       for(let i=0;i<5;i++){
         part(g,new THREE.DodecahedronGeometry(rand(.08,.2),0),i%2?mats.wreck:mats.rock,rand(-.9,.9),rand(.05,.28),rand(-.7,.7),rand(0,TAU),rand(0,TAU),0);
       }
+      const ember=makeRoundSprite([[0,"rgba(255,151,54,.9)"],[.32,"rgba(255,70,25,.45)"],[1,"rgba(255,40,10,0)"]],.65,.7,true);
+      ember.position.copy(p).add(new THREE.Vector3(rand(-.18,.18),.55,rand(-.18,.18))); world.add(ember);
+      particles.push({mesh:ember,life:4.2,max:4.2,vel:new THREE.Vector3(rand(-.04,.04),.04,rand(-.04,.04)),scale:.2});
       world.add(g); wrecks.push(g);
       while(wrecks.length>18) world.remove(wrecks.shift());
     }
@@ -593,6 +634,10 @@
       for(let i=0;i<8;i++){
         const a=rand(0,TAU), r=rand(32,74);
         makeSmokeColumn(Math.sin(a)*r,Math.cos(a)*r,rand(.8,1.6));
+      }
+      for(let i=0;i<18;i++){
+        const a=rand(0,TAU), r=rand(16,64);
+        makeObstacleLine(Math.sin(a)*r,Math.cos(a)*r,rand(0,TAU),rand(.7,1.35));
       }
       for(let i=0;i<12;i++){
         const a=rand(0,TAU), r=rand(55,95);
@@ -701,6 +746,9 @@
     }
     function explode(pos, power=1, score=0){
       makeScorchDecal(pos,rand(1.4,2.4)*power);
+      const light=new THREE.PointLight(0xff8b32,3.4*power,8*power,2);
+      light.position.copy(pos).add(new THREE.Vector3(0,.6,0)); world.add(light);
+      particles.push({mesh:light,life:.22,max:.22,vel:new THREE.Vector3(),scale:0});
       const boom=makeRoundSprite([[0,"rgba(255,245,180,1)"],[.22,"rgba(255,116,38,.88)"],[.55,"rgba(103,62,30,.5)"],[1,"rgba(30,30,25,0)"]],.9,2.8*power,true);
       boom.position.copy(pos); world.add(boom); particles.push({mesh:boom,life:.55,max:.55,vel:new THREE.Vector3(),scale:1});
       for(let i=0;i<Math.floor(18*power);i++){
