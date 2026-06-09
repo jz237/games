@@ -55,7 +55,7 @@
         <div class="meter">Shells <b id="ammo">18</b></div>
         <div class="meter">Elev <b id="elev">0°</b></div>
       </div>
-      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.11</span></div>
+      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.12</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Targets <b id="targets">0</b></div>
@@ -75,7 +75,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Iron Ridge:<br>Turret Commander</h1>
-      <span class="version">Three.js v1.11</span>
+      <span class="version">Three.js v1.12</span>
       <p class="dek">Command a tank from the center of an open battlefield. Drag to traverse the turret 360 degrees and raise or lower the gun. Fire arcing shells across the hills, then move the hull in the direction your turret is pointing.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -229,6 +229,8 @@
       crate:new THREE.MeshStandardMaterial({ color:0x72542d, roughness:.78, metalness:.05 }),
       target:new THREE.MeshStandardMaterial({ color:0xc15b34, roughness:.5, metalness:.28, emissive:0x361006, emissiveIntensity:.18 }),
       targetDark:new THREE.MeshStandardMaterial({ color:0x352722, roughness:.74, metalness:.18 }),
+      warning:new THREE.MeshStandardMaterial({ color:0xd6b451, roughness:.7, metalness:.12, emissive:0x2c1c04, emissiveIntensity:.08 }),
+      brass:new THREE.MeshStandardMaterial({ color:0xb68947, roughness:.45, metalness:.62 }),
       shell:new THREE.MeshStandardMaterial({ color:0xffd36a, roughness:.32, metalness:.6, emissive:0x6a3600, emissiveIntensity:.22 }),
       smoke:new THREE.MeshBasicMaterial({ color:0x575b50, transparent:true, opacity:.25, depthWrite:false }),
       flame:new THREE.MeshBasicMaterial({ color:0xffb452, transparent:true, opacity:.85, depthWrite:false }),
@@ -518,6 +520,27 @@
       world.add(g);
       registerCrushable(g,x,z,1.85*scale,"wire");
     }
+    function makeBattlefieldClutter(x,z,scale=1){
+      const y=heightAt(x,z), g=new THREE.Group(); g.position.set(x,y,z); g.rotation.y=rand(0,TAU);
+      const choice=Math.random();
+      if(choice<.36){
+        for(let i=0;i<rand(3,6);i++){
+          part(g,new THREE.CylinderGeometry(.055*scale,.06*scale,.28*scale,10),mats.brass,rand(-.55,.55)*scale,.05*scale,rand(-.45,.45)*scale,Math.PI/2+rand(-.28,.28),rand(0,TAU),rand(0,TAU));
+        }
+        part(g,new THREE.BoxGeometry(.62*scale,.24*scale,.34*scale),mats.crate,rand(-.18,.18)*scale,.12*scale,rand(-.14,.14)*scale,0,rand(-.2,.2),0);
+      }else if(choice<.72){
+        for(let i=0;i<4;i++){
+          part(g,new THREE.BoxGeometry(rand(.55,1.25)*scale,.055*scale,rand(.08,.18)*scale),i%2?mats.rust:mats.cable,rand(-.55,.55)*scale,.08*scale,rand(-.42,.42)*scale,rand(-.08,.08),rand(0,TAU),rand(-.18,.18));
+        }
+      }else{
+        for(let i=0;i<5;i++){
+          part(g,new THREE.DodecahedronGeometry(rand(.08,.18)*scale,0),i%2?mats.rock:mats.wreck,rand(-.55,.55)*scale,rand(.04,.18)*scale,rand(-.48,.48)*scale,rand(0,TAU),rand(0,TAU),0);
+        }
+        part(g,new THREE.BoxGeometry(.55*scale,.05*scale,.32*scale),mats.warning,0,.07*scale,0,0,rand(0,TAU),rand(-.22,.22));
+      }
+      world.add(g);
+      if(scale>.8) registerCrushable(g,x,z,.8*scale,"crate");
+    }
     function makeSmokeColumn(x,z,scale=1){
       const y=heightAt(x,z);
       for(let i=0;i<7;i++){
@@ -547,6 +570,12 @@
         ambient.push({mesh:ember,base:rand(.14,.38),phase:rand(0,TAU),speed:rand(.7,1.5),drift:new THREE.Vector3(rand(-.035,.035),rand(.018,.055),rand(-.035,.035)),wrapY:y+2.6*scale,resetY:y+.25*scale});
       }
     }
+    function makeAshDrift(x,z,scale=1){
+      const y=heightAt(x,z)+rand(.8,4.5)*scale;
+      const ash=makeRoundSprite([[0,"rgba(235,218,164,.32)"],[.45,"rgba(155,144,118,.16)"],[1,"rgba(90,84,72,0)"]],rand(.12,.28),rand(.12,.28)*scale,false);
+      ash.position.set(x,y,z); world.add(ash);
+      ambient.push({mesh:ash,base:rand(.08,.2),phase:rand(0,TAU),speed:rand(.2,.55),drift:new THREE.Vector3(rand(-.045,.045),rand(.006,.03),rand(-.055,.035)),wrapY:y+rand(4,8)*scale,resetY:y-rand(1.5,3.5)*scale});
+    }
     function makeCloud(x,z,y,scale=1){
       const g=new THREE.Group(); g.position.set(x,y,z);
       for(let i=0;i<5;i++){
@@ -554,6 +583,15 @@
         m.castShadow=false; m.receiveShadow=false;
       }
       world.add(g);
+    }
+    function addTargetDetails(g,type){
+      const panelMat = type==="truck" ? mats.warning : mats.target;
+      for(let i=0;i<5;i++){
+        part(g,new THREE.BoxGeometry(rand(.12,.28),.035,rand(.06,.16)),i%2?mats.darkArmor:panelMat,rand(-.52,.52),rand(.55,1.28),rand(-.52,.52),0,rand(0,TAU),0);
+      }
+      for(let i=0;i<6;i++) part(g,new THREE.SphereGeometry(.025,8,6),mats.darkArmor,rand(-.58,.58),rand(.46,1.42),rand(-.48,.48));
+      part(g,new THREE.CylinderGeometry(.012,.012,rand(.55,.95),6),mats.barrel,rand(-.35,.25),rand(1.32,1.9),rand(-.28,.28),rand(-.18,.18),rand(0,TAU),rand(-.18,.18));
+      part(g,new THREE.SphereGeometry(.04,8,6),mats.glass,rand(.12,.58),rand(.78,1.42),rand(-.36,.36));
     }
     function makeTarget(x,z,type="bunker"){
       const y=heightAt(x,z);
@@ -586,6 +624,7 @@
         part(g,new THREE.CylinderGeometry(.02,.02,.85,8),mats.barrel,-.18,1.42,-.22);
         part(g,new THREE.SphereGeometry(.055,10,8),mats.glass,.22,1.02,.32);
       }
+      addTargetDetails(g,type);
       g.rotation.y = Math.atan2(-x,-z)+rand(-.35,.35);
       world.add(g);
       const target = { group:g, x, z, radius:type==="tower"?1.1:type==="truck"?.9:1, hp:type==="tower"?3:type==="truck"?2:4, type, dead:false, cooldown:rand(1.2,4.0) };
@@ -733,6 +772,12 @@
       const flash=makeRoundSprite([[0,"rgba(255,255,210,1)"],[.22,"rgba(255,169,54,.75)"],[1,"rgba(255,62,18,0)"]],.85,1.4*power,true);
       flash.position.copy(pos); world.add(flash);
       particles.push({mesh:flash,life:.24,max:.24,vel:new THREE.Vector3(0,.08,0),scale:2.4});
+      const glow=new THREE.PointLight(0xffc66a,2.8*power,7*power,2);
+      glow.position.copy(pos); world.add(glow);
+      particles.push({mesh:glow,life:.18,max:.18,vel:new THREE.Vector3(),scale:0});
+      const puff=makeRoundSprite([[0,"rgba(214,176,102,.38)"],[.55,"rgba(94,72,44,.18)"],[1,"rgba(40,32,24,0)"]],.32,.75*power,false);
+      puff.position.copy(pos).add(new THREE.Vector3(0,.12,0)); world.add(puff);
+      particles.push({mesh:puff,life:.7,max:.7,vel:new THREE.Vector3(rand(-.25,.25),rand(.18,.6),rand(-.25,.25)),scale:2.1});
       for(let i=0;i<14;i++){
         const spark=makeRoundSprite([[0,"rgba(255,238,146,1)"],[.42,"rgba(255,119,36,.85)"],[1,"rgba(255,60,20,0)"]],.8,rand(.12,.28),true);
         spark.position.copy(pos).add(new THREE.Vector3(rand(-.18,.18),rand(-.12,.24),rand(-.18,.18))); world.add(spark);
@@ -783,6 +828,10 @@
         const a=rand(0,TAU), r=rand(10,62);
         makeSupplyStack(Math.sin(a)*r,Math.cos(a)*r,rand(.65,1.25));
       }
+      for(let i=0;i<52;i++){
+        const a=rand(0,TAU), r=rand(7,64);
+        makeBattlefieldClutter(Math.sin(a)*r+rand(-1.1,1.1),Math.cos(a)*r+rand(-1.1,1.1),rand(.55,1.15));
+      }
       for(let i=0;i<44;i++){
         const a=i/44*TAU+rand(-.08,.08), r=rand(3,62);
         makeRoadScar(Math.sin(a)*r,Math.cos(a)*r,-a+Math.PI/2,rand(.65,1.25));
@@ -803,6 +852,10 @@
       for(let i=0;i<22;i++){
         const a=rand(0,TAU), r=rand(12,68);
         makeFogBank(Math.sin(a)*r,Math.cos(a)*r,rand(.7,1.55));
+      }
+      for(let i=0;i<95;i++){
+        const a=rand(0,TAU), r=rand(8,72);
+        makeAshDrift(Math.sin(a)*r,Math.cos(a)*r,rand(.75,1.8));
       }
       for(let i=0;i<10;i++){
         const a=rand(0,TAU), r=rand(58,82);
@@ -955,6 +1008,9 @@
       makeScorchDecal(pos,rand(1.4,2.4)*power);
       const dist=Math.hypot(pos.x-tank.x,pos.z-tank.z);
       if(state.mode==="play") tank.shake=Math.max(tank.shake,clamp((1-dist/62)*power*.85,0,.9));
+      const groundFire=makeRoundSprite([[0,"rgba(255,233,142,.62)"],[.34,"rgba(255,99,29,.3)"],[.72,"rgba(96,46,21,.14)"],[1,"rgba(40,30,20,0)"]],.58,2.8*power,true);
+      groundFire.position.copy(pos).add(new THREE.Vector3(0,.12,0)); world.add(groundFire);
+      particles.push({mesh:groundFire,life:.7,max:.7,vel:new THREE.Vector3(0,.02,0),scale:4.6});
       const shock=makeRoundSprite([[0,"rgba(255,238,170,.55)"],[.28,"rgba(255,141,50,.28)"],[1,"rgba(255,95,25,0)"]],.75,3.2*power,true);
       shock.position.copy(pos).add(new THREE.Vector3(0,.2,0)); world.add(shock);
       particles.push({mesh:shock,life:.34,max:.34,vel:new THREE.Vector3(0,.02,0),scale:6.5});
@@ -966,6 +1022,11 @@
       particles.push({mesh:light,life:.3,max:.3,vel:new THREE.Vector3(),scale:0});
       const boom=makeRoundSprite([[0,"rgba(255,255,225,1)"],[.16,"rgba(255,198,82,.96)"],[.36,"rgba(255,83,26,.8)"],[.68,"rgba(83,53,30,.48)"],[1,"rgba(30,30,25,0)"]],1,3.8*power,true);
       boom.position.copy(pos); world.add(boom); particles.push({mesh:boom,life:.55,max:.55,vel:new THREE.Vector3(),scale:1});
+      for(let r=0;r<2;r++){
+        const ring=makeRoundSprite([[0,"rgba(255,236,176,.24)"],[.5,"rgba(255,142,58,.16)"],[1,"rgba(255,90,24,0)"]],.34,rand(2.5,3.8)*power,true);
+        ring.position.copy(pos).add(new THREE.Vector3(0,.2+r*.14,0)); world.add(ring);
+        particles.push({mesh:ring,life:rand(.45,.72),max:.72,vel:new THREE.Vector3(0,.018,0),scale:rand(8,12)});
+      }
       for(let i=0;i<3;i++){
         const flame=makeRoundSprite([[0,"rgba(255,245,185,.92)"],[.24,"rgba(255,124,38,.72)"],[.64,"rgba(114,57,30,.34)"],[1,"rgba(28,24,20,0)"]],rand(.62,.9),rand(.85,1.55)*power,true);
         flame.position.copy(pos).add(new THREE.Vector3(rand(-.65,.65)*power,rand(.25,.9)*power,rand(-.65,.65)*power)); world.add(flame);
@@ -981,6 +1042,11 @@
         const spark=makeRoundSprite([[0,"rgba(255,238,142,1)"],[.35,"rgba(255,121,35,.85)"],[1,"rgba(255,80,20,0)"]],.8,rand(.14,.32),true);
         spark.position.copy(pos).add(new THREE.Vector3(0,.24,0)); world.add(spark);
         particles.push({mesh:spark,life:rand(.24,.62),max:.62,vel:new THREE.Vector3(rand(-4.5,4.5),rand(.5,4.2),rand(-4.5,4.5)),scale:1.4});
+      }
+      for(let i=0;i<Math.floor(16*power);i++){
+        const ember=makeRoundSprite([[0,"rgba(255,214,91,1)"],[.38,"rgba(255,76,24,.78)"],[1,"rgba(255,35,12,0)"]],.72,rand(.18,.38),true);
+        ember.position.copy(pos).add(new THREE.Vector3(rand(-.2,.2),rand(.3,.95),rand(-.2,.2))); world.add(ember);
+        particles.push({mesh:ember,life:rand(.8,1.9),max:1.9,vel:new THREE.Vector3(rand(-2.6,2.6),rand(2.2,5.8),rand(-2.6,2.6)).multiplyScalar(power),scale:.9});
       }
       for(let i=0;i<Math.floor(52*power);i++){
         const smoke=makeRoundSprite([[0,"rgba(112,112,96,.7)"],[.55,"rgba(62,62,54,.35)"],[1,"rgba(40,40,35,0)"]],rand(.24,.45),rand(.4,1.1)*power,false);
@@ -1021,6 +1087,11 @@
           const trail=makeRoundSprite([[0,"rgba(95,92,80,.34)"],[.6,"rgba(68,66,58,.16)"],[1,"rgba(30,30,28,0)"]],.3,rand(.22,.42),false);
           trail.position.copy(s.mesh.position).add(new THREE.Vector3(rand(-.04,.04),rand(-.04,.04),rand(-.04,.04))); world.add(trail);
           particles.push({mesh:trail,life:rand(.55,1.0),max:1.0,vel:new THREE.Vector3(rand(-.08,.08),rand(.02,.16),rand(-.08,.08)),scale:1.1});
+          if(Math.random()<.42){
+            const hot=makeRoundSprite([[0,"rgba(255,230,129,.86)"],[.45,"rgba(255,94,26,.42)"],[1,"rgba(255,45,12,0)"]],.5,rand(.16,.28),true);
+            hot.position.copy(s.mesh.position); world.add(hot);
+            particles.push({mesh:hot,life:rand(.18,.36),max:.36,vel:new THREE.Vector3(rand(-.18,.18),rand(-.05,.16),rand(-.18,.18)),scale:1.7});
+          }
         }
         const y=heightAt(s.mesh.position.x,s.mesh.position.z);
         let hit=false;
@@ -1094,6 +1165,7 @@
         }
         if(a.mesh.material) a.mesh.material.opacity = clamp(a.base + Math.sin(a.phase)*(a.pulse||a.base*.35),.03,.7);
       }
+      if(state.mode==="play" && ensureAudio.ctx && Math.random()<dt*.055) sfx("distant");
     }
     function updateTank(dt){
       tank.recoil=Math.max(0,tank.recoil-dt*2.7);
@@ -1227,6 +1299,11 @@
         tone(35,.5,"sine",.08,21);
         setTimeout(()=>noise(.24,.08,true),80);
         setTimeout(()=>tone(31,.62,"sine",.055,18),110);
+      }
+      if(kind==="distant"){
+        noise(.55,.035,true);
+        tone(28,.7,"sine",.035,18);
+        setTimeout(()=>noise(.18,.022,true),140);
       }
       if(kind==="hit"){
         noise(.16,.13,false);
