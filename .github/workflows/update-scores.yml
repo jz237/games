@@ -13,40 +13,51 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Update score file
+        env:
+          GAME: ${{ github.event.client_payload.game }}
+          INITIALS: ${{ github.event.client_payload.initials }}
+          SCORE: ${{ github.event.client_payload.score }}
+          EXTRA: ${{ github.event.client_payload.extra }}
         run: |
-          GAME="${{ github.event.client_payload.game }}"
-          INITIALS="${{ github.event.client_payload.initials }}"
-          SCORE="${{ github.event.client_payload.score }}"
-          EXTRA="${{ github.event.client_payload.extra }}"
-          
-          FILE="scores/${GAME}.json"
-          
-          if [ -z "$GAME" ] || [ -z "$INITIALS" ] || [ -z "$SCORE" ]; then
-            echo "Missing required fields"
-            exit 0
-          fi
-          
-          INITIALS=$(echo "$INITIALS" | tr -cd 'A-Za-z0-9' | head -c 3 | tr 'a-z' 'A-Z')
-          
-          if [ ! -f "$FILE" ]; then
-            echo "[]" > "$FILE"
-          fi
-          
-          python3 -c "
+          python3 - <<'EOF'
           import json
-          with open('$FILE') as f:
-              scores = json.load(f)
-          scores.append({'initials': '$INITIALS', 'score': int('$SCORE'), 'extra': '$EXTRA'})
+          import os
+          import re
+          import sys
+
+          game = re.sub(r'[^A-Za-z0-9_-]', '', os.environ.get('GAME', ''))[:40]
+          initials = re.sub(r'[^A-Za-z0-9]', '', os.environ.get('INITIALS', '')).upper()[:3]
+          try:
+              score = int(os.environ.get('SCORE', ''))
+          except ValueError:
+              sys.exit('Invalid score')
+          extra = os.environ.get('EXTRA', '')[:100]
+
+          if not game or not initials:
+              sys.exit('Missing required fields')
+
+          os.makedirs('scores', exist_ok=True)
+          path = f'scores/{game}.json'
+          if os.path.exists(path):
+              with open(path) as f:
+                  scores = json.load(f)
+          else:
+              scores = []
+
+          scores.append({'initials': initials, 'score': score, 'extra': extra})
           scores.sort(key=lambda x: x['score'], reverse=True)
-          scores = scores[:10]
-          with open('$FILE', 'w') as f:
-              json.dump(scores, f, indent=2)
-          "
+          with open(path, 'w') as f:
+              json.dump(scores[:10], f, indent=2)
+              f.write('\n')
+
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write(f'GAME={game}\n')
+          EOF
           
       - name: Commit and push
         run: |
           git config user.name "GameMaster Bot"
           git config user.email "bot@gamemaster.arcade"
           git add scores/
-          git diff --cached --quiet || git commit -m "Update ${{ github.event.client_payload.game }} leaderboard"
+          git diff --cached --quiet || git commit -m "Update ${GAME:-game} leaderboard"
           git push
