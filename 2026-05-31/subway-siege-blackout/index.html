@@ -55,7 +55,7 @@
         <div class="meter">Shells <b id="ammo">18</b></div>
         <div class="meter">Elev <b id="elev">0°</b></div>
       </div>
-      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.9</span></div>
+      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.10</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Targets <b id="targets">0</b></div>
@@ -75,7 +75,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Iron Ridge:<br>Turret Commander</h1>
-      <span class="version">Three.js v1.9</span>
+      <span class="version">Three.js v1.10</span>
       <p class="dek">Command a tank from the center of an open battlefield. Drag to traverse the turret 360 degrees and raise or lower the gun. Fire arcing shells across the hills, then move the hull in the direction your turret is pointing.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -604,6 +604,15 @@
         mark.castShadow=false; mark.receiveShadow=false; world.add(mark); decals.push(mark);
       }
     }
+    function makeCrushMark(pos,kind){
+      const y=heightAt(pos.x,pos.z)+.064;
+      const size=kind==="tree"?1.8:kind==="wire"?1.55:kind==="crate"?1.35:1.05;
+      const mark=new THREE.Mesh(new THREE.PlaneGeometry(size*.72,size*1.75),mats.trackMark.clone());
+      mark.position.set(pos.x,y,pos.z); mark.rotation.x=-Math.PI/2; mark.rotation.z=tank.yaw+Math.PI/2+rand(-.15,.15);
+      mark.material.opacity=kind==="grass"?.34:.58;
+      mark.castShadow=false; mark.receiveShadow=false; world.add(mark); decals.push(mark);
+      while(decals.length>52) world.remove(decals.shift());
+    }
     function crushDust(pos,kind){
       const colors = kind==="tree"
         ? [[0,"rgba(82,64,37,.5)"],[.58,"rgba(58,73,34,.22)"],[1,"rgba(30,34,18,0)"]]
@@ -614,16 +623,24 @@
         world.add(dust);
         particles.push({mesh:dust,life:rand(.55,1.2),max:1.2,vel:new THREE.Vector3(rand(-.75,.75),rand(.15,.72),rand(-.75,.75)),scale:1.45});
       }
+      if(kind==="tree"){
+        for(let i=0;i<18;i++){
+          const leaf=makeRoundSprite([[0,"rgba(100,145,58,.62)"],[.5,"rgba(60,91,38,.34)"],[1,"rgba(24,42,18,0)"]],rand(.28,.46),rand(.18,.34),false);
+          leaf.position.copy(pos).add(new THREE.Vector3(rand(-.42,.42),rand(.28,1.15),rand(-.42,.42))); world.add(leaf);
+          particles.push({mesh:leaf,life:rand(.8,1.8),max:1.8,vel:new THREE.Vector3(rand(-1.2,1.2),rand(.35,1.7),rand(-1.2,1.2)),scale:.7});
+        }
+      }
     }
     function crushDebris(pos,kind){
       const mat = kind==="wire" ? mats.rust : kind==="tree" ? mats.crate : kind==="rock" ? mats.rock : mats.sandbag;
-      for(let i=0;i<9;i++){
-        const geo = kind==="wire" ? new THREE.BoxGeometry(rand(.16,.42),.035,.035) : new THREE.DodecahedronGeometry(rand(.04,.14),0);
+      const count = kind==="grass" ? 5 : kind==="tree" ? 17 : kind==="crate" ? 15 : 11;
+      for(let i=0;i<count;i++){
+        const geo = kind==="wire" ? new THREE.BoxGeometry(rand(.16,.55),.035,.035) : kind==="crate" ? new THREE.BoxGeometry(rand(.08,.22),rand(.035,.09),rand(.1,.28)) : new THREE.DodecahedronGeometry(rand(.04,.14),0);
         const chip=new THREE.Mesh(geo,mat);
         chip.position.copy(pos).add(new THREE.Vector3(rand(-.55,.55),rand(.08,.34),rand(-.55,.55)));
         chip.rotation.set(rand(0,TAU),rand(0,TAU),rand(0,TAU));
         chip.castShadow=true; chip.receiveShadow=true; world.add(chip);
-        particles.push({mesh:chip,life:rand(.75,1.45),max:1.45,vel:new THREE.Vector3(rand(-1.8,1.8),rand(.9,2.6),rand(-1.8,1.8)),scale:.18});
+        particles.push({mesh:chip,life:rand(.75,1.65),max:1.65,vel:new THREE.Vector3(rand(-2.4,2.4),rand(.9,3.2),rand(-2.4,2.4)),scale:.18});
       }
     }
     function crushObject(c){
@@ -631,9 +648,12 @@
       c.crushed=true;
       const pos=new THREE.Vector3(c.x,heightAt(c.x,c.z)+.08,c.z);
       makeScorchDecal(pos,c.kind==="wire"?1.4:.95);
+      makeCrushMark(pos,c.kind);
       makeTrackMark();
       crushDust(pos,c.kind);
       crushDebris(pos,c.kind);
+      tank.shake=Math.max(tank.shake,c.kind==="tree"?.48:c.kind==="crate"?.38:c.kind==="rock"?.34:.24);
+      sfx("crush");
       if(c.kind==="grass"){
         c.group.scale.y=.08;
         c.group.position.y=heightAt(c.x,c.z)+.015;
@@ -1191,6 +1211,12 @@
         noise(.16,.13,false);
         tone(118,.14,"square",.08,52);
         tone(42,.2,"sawtooth",.07,26);
+      }
+      if(kind==="crush"){
+        noise(.18,.12,false);
+        noise(.22,.09,true);
+        tone(84,.08,"square",.05,42);
+        setTimeout(()=>tone(54,.11,"sawtooth",.04,28),55);
       }
       if(kind==="reload"){ tone(170,.07,"square",.05,130); setTimeout(()=>tone(270,.06,"square",.04,360),100); }
     }
