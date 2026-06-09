@@ -55,7 +55,7 @@
         <div class="meter">Shells <b id="ammo">18</b></div>
         <div class="meter">Elev <b id="elev">0°</b></div>
       </div>
-      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.15</span></div>
+      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.16</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Targets <b id="targets">0</b></div>
@@ -75,7 +75,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Iron Ridge:<br>Turret Commander</h1>
-      <span class="version">Three.js v1.15</span>
+      <span class="version">Three.js v1.16</span>
       <p class="dek">Command a tank from the center of an open battlefield. Drag to traverse the turret 360 degrees and raise or lower the gun. Fire arcing shells across the hills, then move the hull in the direction your turret is pointing.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -618,6 +618,31 @@
       }
       g.rotation.y=Math.atan2(-x,-z)+Math.PI; world.add(g);
     }
+    function makeRegionSign(text,x,z,scale=1){
+      const y=heightAt(x,z), g=new THREE.Group(); g.position.set(x,y,z);
+      const mat=makeLabel(text,"#fff7c7","#3f3423");
+      part(g,new THREE.CylinderGeometry(.04*scale,.055*scale,1.35*scale,8),mats.cable,-.45*scale,.68*scale,0);
+      part(g,new THREE.CylinderGeometry(.04*scale,.055*scale,1.35*scale,8),mats.cable,.45*scale,.68*scale,0);
+      const sign=new THREE.Mesh(new THREE.PlaneGeometry(1.7*scale,.5*scale),mat);
+      sign.position.set(0,1.35*scale,0); sign.castShadow=true; sign.receiveShadow=true; g.add(sign);
+      part(g,new THREE.BoxGeometry(.18*scale,.34*scale,.035*scale),mats.warning,.78*scale,1.62*scale,0,0,0,.14);
+      g.rotation.y=Math.atan2(x,z); world.add(g);
+    }
+    function makeBiomeMist(x,z,kind,scale=1){
+      const y=heightAt(x,z)+.2;
+      const colors = kind==="pine"
+        ? [[0,"rgba(178,204,170,.24)"],[.55,"rgba(96,127,93,.12)"],[1,"rgba(52,74,55,0)"]]
+        : kind==="burnt"
+          ? [[0,"rgba(115,103,91,.28)"],[.55,"rgba(70,62,55,.15)"],[1,"rgba(30,28,25,0)"]]
+          : kind==="rocky"
+            ? [[0,"rgba(190,181,150,.18)"],[.55,"rgba(127,119,96,.1)"],[1,"rgba(70,65,52,0)"]]
+            : [[0,"rgba(160,156,130,.2)"],[.55,"rgba(99,97,78,.1)"],[1,"rgba(50,49,40,0)"]];
+      for(let i=0;i<4;i++){
+        const mist=makeRoundSprite(colors,rand(.14,.28),rand(2.4,5.4)*scale,false);
+        mist.position.set(x+rand(-1.7,1.7)*scale,y+rand(.02,.34),z+rand(-1.7,1.7)*scale); world.add(mist);
+        ambient.push({mesh:mist,base:rand(.1,.22),phase:rand(0,TAU),speed:rand(.08,.22),drift:new THREE.Vector3(rand(-.012,.018),0,rand(-.018,.014))});
+      }
+    }
     function makeSmokeColumn(x,z,scale=1){
       const y=heightAt(x,z);
       for(let i=0;i<7;i++){
@@ -953,6 +978,14 @@
       makeDirectionalLandmark("burnt",52,10,1.1);
       makeDirectionalLandmark("ridge",8,-54,1.22);
       makeDirectionalLandmark("supply",-52,-6,1.12);
+      makeRegionSign("PINE RIDGE",-8,34,1.05);
+      makeRegionSign("BURN LINE",34,8,1.0);
+      makeRegionSign("STONE GAP",8,-34,1.0);
+      makeRegionSign("SUPPLY CUT",-34,-4,1.0);
+      for(let i=0;i<14;i++) makeBiomeMist(rand(-30,26),rand(26,68),"pine",rand(.85,1.35));
+      for(let i=0;i<14;i++) makeBiomeMist(rand(28,70),rand(-28,32),"burnt",rand(.8,1.4));
+      for(let i=0;i<12;i++) makeBiomeMist(rand(-28,34),rand(-68,-24),"rocky",rand(.85,1.3));
+      for(let i=0;i<10;i++) makeBiomeMist(rand(-68,-22),rand(-34,34),"supply",rand(.75,1.2));
       for(let i=0;i<8;i++){
         const a=rand(0,TAU), r=rand(32,74);
         makeSmokeColumn(Math.sin(a)*r,Math.cos(a)*r,rand(.8,1.6));
