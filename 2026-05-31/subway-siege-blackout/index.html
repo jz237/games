@@ -30,6 +30,7 @@
     .controls{position:absolute;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0));display:flex;justify-content:space-between;gap:10px;pointer-events:none}
     .group{display:flex;gap:10px;pointer-events:auto}.round{width:72px;height:56px;border-radius:8px;border:1px solid rgba(220,255,174,.34);background:linear-gradient(180deg,rgba(61,78,40,.9),rgba(16,24,12,.94));box-shadow:0 10px 30px rgba(0,0,0,.38),inset 0 1px rgba(255,255,255,.15);font:950 10px/1 ui-monospace,monospace;text-transform:uppercase;color:#f0ffda}.round.fire{width:96px;background:linear-gradient(180deg,#fff0a7,#d86a34 52%,#2a0d07);color:#230b05;border-color:rgba(255,233,154,.84)}.round.move{width:92px;background:linear-gradient(180deg,#e9ffd1,#7bd355 52%,#214913);color:#081706;border-color:rgba(221,255,179,.78)}
     .blastwash{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;background:radial-gradient(circle at 50% 50%,rgba(255,245,190,.36),rgba(255,132,46,.18) 32%,rgba(255,92,28,.08) 58%,transparent 78%);mix-blend-mode:screen;transition:opacity .18s ease}.blastwash.on{opacity:1;transition:none}
+    .damagewash{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;background:radial-gradient(circle at 50% 55%,transparent 40%,rgba(255,46,28,.2) 78%,rgba(255,20,10,.36));transition:opacity .2s ease}.damagewash.on{opacity:1;transition:none}
     .film{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(circle at 50% 54%,transparent 48%,rgba(0,0,0,.18) 78%,rgba(0,0,0,.42)),repeating-linear-gradient(180deg,rgba(255,255,255,.018) 0 1px,transparent 1px 5px);opacity:.25;mix-blend-mode:screen}
     .overlay{position:fixed;inset:0;z-index:10;display:grid;place-items:center;padding:16px;background:radial-gradient(circle at 50% 36%,rgba(81,116,55,.38),rgba(10,15,10,.78) 56%,rgba(0,0,0,.92));pointer-events:auto}
     .panel{width:min(840px,94vw);max-height:92vh;overflow:auto;padding:22px;border:1px solid rgba(225,255,180,.24);border-radius:8px;background:linear-gradient(180deg,rgba(25,35,22,.86),rgba(7,11,8,.95));box-shadow:0 34px 100px rgba(0,0,0,.74),inset 0 1px rgba(255,255,255,.09)}
@@ -45,6 +46,7 @@
 <body>
   <div id="stage"></div>
   <div id="blastwash" class="blastwash"></div>
+  <div id="damagewash" class="damagewash"></div>
   <div class="film"></div>
   <div class="hud">
     <div class="top">
@@ -53,7 +55,7 @@
         <div class="meter">Shells <b id="ammo">18</b></div>
         <div class="meter">Elev <b id="elev">0°</b></div>
       </div>
-      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.5</span></div>
+      <div class="mark"><b>Iron Ridge: Turret Commander</b><span>3JS v1.6</span></div>
       <div class="stack right">
         <div class="meter">Score <b id="score">0</b></div>
         <div class="meter">Targets <b id="targets">0</b></div>
@@ -73,7 +75,7 @@
   <div id="overlay" class="overlay">
     <div class="panel">
       <h1>Iron Ridge:<br>Turret Commander</h1>
-      <span class="version">Three.js v1.5</span>
+      <span class="version">Three.js v1.6</span>
       <p class="dek">Command a tank from the center of an open battlefield. Drag to traverse the turret 360 degrees and raise or lower the gun. Fire arcing shells across the hills, then move the hull in the direction your turret is pointing.</p>
       <div class="actions">
         <button id="startBtn" class="btn primary">Start</button>
@@ -104,7 +106,7 @@
     const $ = id => document.getElementById(id);
     const hud = {
       hull:$("hull"), ammo:$("ammo"), elev:$("elev"), score:$("score"), targets:$("targets"),
-      hullBar:$("hullBar"), reloadBar:$("reloadBar"), message:$("message"), reticle:$("reticle"), blastwash:$("blastwash"),
+      hullBar:$("hullBar"), reloadBar:$("reloadBar"), message:$("message"), reticle:$("reticle"), blastwash:$("blastwash"), damagewash:$("damagewash"),
       overlay:$("overlay"), scoreList:$("scoreList"), entry:$("entry"), keys:$("keys"),
       letters:[$("l0"),$("l1"),$("l2")]
     };
@@ -670,6 +672,28 @@
       world.add(g); wrecks.push(g);
       while(wrecks.length>18) world.remove(wrecks.shift());
     }
+    function targetHitFlash(pos,power=.75){
+      const flash=makeRoundSprite([[0,"rgba(255,255,210,1)"],[.22,"rgba(255,169,54,.75)"],[1,"rgba(255,62,18,0)"]],.85,1.4*power,true);
+      flash.position.copy(pos); world.add(flash);
+      particles.push({mesh:flash,life:.24,max:.24,vel:new THREE.Vector3(0,.08,0),scale:2.4});
+      for(let i=0;i<14;i++){
+        const spark=makeRoundSprite([[0,"rgba(255,238,146,1)"],[.42,"rgba(255,119,36,.85)"],[1,"rgba(255,60,20,0)"]],.8,rand(.12,.28),true);
+        spark.position.copy(pos).add(new THREE.Vector3(rand(-.18,.18),rand(-.12,.24),rand(-.18,.18))); world.add(spark);
+        particles.push({mesh:spark,life:rand(.2,.48),max:.48,vel:new THREE.Vector3(rand(-2.8,2.8),rand(.3,2.7),rand(-2.8,2.8)),scale:1.3});
+      }
+    }
+    function burningWreckEffect(pos,power=1){
+      for(let i=0;i<9;i++){
+        const flame=makeRoundSprite([[0,"rgba(255,224,105,.9)"],[.28,"rgba(255,92,32,.62)"],[1,"rgba(255,30,10,0)"]],.7,rand(.45,.9)*power,true);
+        flame.position.copy(pos).add(new THREE.Vector3(rand(-.5,.5),rand(.25,1.0),rand(-.5,.5))); world.add(flame);
+        particles.push({mesh:flame,life:rand(1.4,2.8),max:2.8,vel:new THREE.Vector3(rand(-.12,.12),rand(.18,.58),rand(-.12,.12)),scale:.75});
+      }
+      for(let i=0;i<18;i++){
+        const smoke=makeRoundSprite([[0,"rgba(75,73,65,.55)"],[.52,"rgba(50,50,45,.28)"],[1,"rgba(25,25,22,0)"]],rand(.22,.42),rand(.65,1.6)*power,false);
+        smoke.position.copy(pos).add(new THREE.Vector3(rand(-.65,.65),rand(.45,1.35),rand(-.65,.65))); world.add(smoke);
+        particles.push({mesh:smoke,life:rand(3.0,5.4),max:5.4,vel:new THREE.Vector3(rand(-.18,.18),rand(.25,.85),rand(-.18,.18)),scale:1.25});
+      }
+    }
     function spawnTargets(){
       for(let i=0;i<28;i++){
         const a=i/28*TAU, r=rand(34,58);
@@ -889,11 +913,13 @@
       if(t.dead) return;
       t.hp-=amount;
       tank.score+=25;
+      targetHitFlash(pos,.8);
       hud.reticle.classList.remove("hit"); void hud.reticle.offsetWidth; hud.reticle.classList.add("hit");
       if(t.hp<=0){
         t.dead=true;
         tank.score += t.type==="tower"?350:t.type==="truck"?220:280;
         makeWreck(t);
+        burningWreckEffect(t.group.position.clone().add(new THREE.Vector3(0,.35,0)),t.type==="tower"?1.2:1);
         explode(t.group.position.clone().add(new THREE.Vector3(0,1,0)),1.4,t.type==="tower"?350:t.type==="truck"?220:280);
         world.remove(t.group);
         if(targets.every(x=>x.dead)){ showMessage("Range cleared"); gameOver(); }
@@ -941,7 +967,13 @@
       for(let i=particles.length-1;i>=0;i--){
         const p=particles[i]; p.life-=dt;
         if(p.vel) p.mesh.position.addScaledVector(p.vel,dt);
-        if(p.hostile && Math.hypot(p.mesh.position.x-tank.x,p.mesh.position.z-tank.z)<1.4){ tank.hull-=8; explode(tank.group.position.clone().add(new THREE.Vector3(0,1,0)),.55,0); p.life=0; }
+        if(p.hostile && Math.hypot(p.mesh.position.x-tank.x,p.mesh.position.z-tank.z)<1.4){
+          tank.hull-=8; tank.shake=Math.max(tank.shake,.55);
+          hud.damagewash.classList.remove("on"); void hud.damagewash.offsetWidth; hud.damagewash.classList.add("on");
+          clearTimeout(updateParticles.damageTimer); updateParticles.damageTimer=setTimeout(()=>hud.damagewash.classList.remove("on"),110);
+          targetHitFlash(tank.group.position.clone().add(new THREE.Vector3(0,1.1,0)),.65);
+          explode(tank.group.position.clone().add(new THREE.Vector3(0,1,0)),.55,0); p.life=0; sfx("hit");
+        }
         if(p.mesh.material) p.mesh.material.opacity=clamp(p.life/p.max,0,1)*(p.mesh.material.opacity||1);
         if(p.scale) p.mesh.scale.multiplyScalar(1+dt*p.scale);
         if(p.life<=0){ world.remove(p.mesh); particles.splice(i,1); }
@@ -1065,6 +1097,11 @@
         noise(.18,.09,false);
         tone(58,.36,"sawtooth",.13,24);
         tone(35,.5,"sine",.08,21);
+      }
+      if(kind==="hit"){
+        noise(.16,.13,false);
+        tone(118,.14,"square",.08,52);
+        tone(42,.2,"sawtooth",.07,26);
       }
       if(kind==="reload"){ tone(170,.07,"square",.05,130); setTimeout(()=>tone(270,.06,"square",.04,360),100); }
     }
