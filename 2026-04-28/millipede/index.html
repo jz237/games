@@ -9,9 +9,12 @@
 <link rel="icon" href="data:,">
 <title>Millipede</title>
 <style>
+:root{--gutter:0px}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{position:fixed;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;background:#05070b;color:#eaffff;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;touch-action:none}
 canvas{display:block;width:100%;height:100%;touch-action:none;background:#05070b;image-rendering:crisp-edges;cursor:crosshair}
+#game{position:absolute;top:0;left:0}
+#game.boxed{outline:1px solid rgba(120,255,232,.14);box-shadow:0 0 34px rgba(0,255,210,.12)}
 button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:inherit;color:inherit}
 .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;pointer-events:auto;padding:16px}
 .overlay.hidden{display:none;pointer-events:none}
@@ -26,16 +29,16 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 .btn.secondary{background:rgba(255,255,255,.06);color:#dff;border:1px solid rgba(135,255,235,.34);box-shadow:none}
 .btn.warn{background:linear-gradient(180deg,#ffd36b,#ff7a3d);color:#1f0900}
 .hud{position:absolute;inset:0;z-index:8;pointer-events:none;color:#dffffc;font-weight:900;text-shadow:0 0 8px rgba(0,255,220,.8)}
-.topbar{position:absolute;top:0;left:0;right:0;display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:start;padding:calc(8px + env(safe-area-inset-top)) 10px 8px;font:800 12px ui-monospace,monospace;letter-spacing:.06em;background:linear-gradient(180deg,rgba(0,0,0,.46),transparent)}
+.topbar{position:absolute;top:0;left:var(--gutter);right:var(--gutter);display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:start;padding:calc(8px + env(safe-area-inset-top)) 10px 8px;font:800 12px ui-monospace,monospace;letter-spacing:.06em;background:linear-gradient(180deg,rgba(0,0,0,.46),transparent)}
 .topbar div:nth-child(2){text-align:center}.topbar div:nth-child(3){text-align:right}
-.powerhud{position:absolute;top:32px;left:8px;right:8px;display:flex;justify-content:center;gap:6px;flex-wrap:wrap;font:900 10px ui-monospace,monospace;letter-spacing:.08em}
+.powerhud{position:absolute;top:32px;left:calc(8px + var(--gutter));right:calc(8px + var(--gutter));display:flex;justify-content:center;gap:6px;flex-wrap:wrap;font:900 10px ui-monospace,monospace;letter-spacing:.08em}
 .powerpill{min-width:44px;padding:4px 6px;border:1px solid currentColor;border-radius:4px;background:rgba(3,11,18,.72);box-shadow:0 0 12px currentColor,inset 0 0 10px rgba(255,255,255,.08);text-align:center}
-#bombBtn{position:absolute;right:calc(12px + env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));width:68px;height:68px;border-radius:50%;z-index:12;display:none;align-items:center;justify-content:center;background:radial-gradient(circle,#fff,#ffd45b 32%,#ff4a7e 70%);color:#23000b;font-size:24px;font-weight:950;box-shadow:0 0 22px rgba(255,80,125,.48);pointer-events:auto}
+#bombBtn{position:absolute;right:calc(12px + var(--gutter) + env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));width:68px;height:68px;border-radius:50%;z-index:12;display:none;align-items:center;justify-content:center;background:radial-gradient(circle,#fff,#ffd45b 32%,#ff4a7e 70%);color:#23000b;font-size:24px;font-weight:950;box-shadow:0 0 22px rgba(255,80,125,.48);pointer-events:auto}
 #bombBtn.show{display:flex;animation:bombReady 1.7s ease-in-out infinite}
 #bombBtn.spent{opacity:.35;animation:none}
 @keyframes bombReady{0%,100%{box-shadow:0 0 22px rgba(255,80,125,.48)}50%{box-shadow:0 0 36px rgba(255,130,170,.85)}}
-#pauseBtn{position:absolute;left:calc(12px + env(safe-area-inset-left));bottom:calc(18px + env(safe-area-inset-bottom));width:46px;height:46px;border-radius:50%;z-index:12;background:rgba(4,16,25,.7);border:1px solid rgba(170,255,244,.32);color:#dffffc;pointer-events:auto}
-#muteBtn{position:absolute;left:calc(12px + env(safe-area-inset-left));bottom:calc(74px + env(safe-area-inset-bottom));width:46px;height:46px;border-radius:50%;z-index:12;background:rgba(4,16,25,.7);border:1px solid rgba(170,255,244,.32);color:#dffffc;font-size:18px;pointer-events:auto}
+#pauseBtn{position:absolute;left:calc(12px + var(--gutter) + env(safe-area-inset-left));bottom:calc(18px + env(safe-area-inset-bottom));width:46px;height:46px;border-radius:50%;z-index:12;background:rgba(4,16,25,.7);border:1px solid rgba(170,255,244,.32);color:#dffffc;pointer-events:auto}
+#muteBtn{position:absolute;left:calc(12px + var(--gutter) + env(safe-area-inset-left));bottom:calc(74px + env(safe-area-inset-bottom));width:46px;height:46px;border-radius:50%;z-index:12;background:rgba(4,16,25,.7);border:1px solid rgba(170,255,244,.32);color:#dffffc;font-size:18px;pointer-events:auto}
 #muteBtn.muted{opacity:.45;text-decoration:line-through}
 .scores{display:grid;grid-template-columns:1fr;gap:7px;text-align:left;margin:8px 0 0}
 .scorebox{border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:7px 8px;background:rgba(0,0,0,.24)}
@@ -65,7 +68,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.8.1</div>
+    <div class="version">v1.8.2</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
@@ -88,7 +91,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.8.1</div>
+    <div class="version">v1.8.2</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -98,7 +101,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="upgradeScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.8.1</div>
+    <div class="version">v1.8.2</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Choose an upgrade</h2>
     <p id="upgradeLine" class="small">The garden shifts. Pick one advantage for the next waves.</p>
     <div class="upgrades">
@@ -112,7 +115,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="pauseScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.8.1</div>
+    <div class="version">v1.8.2</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.2rem)">Paused</h2>
     <div id="pauseLine" class="subtitle"></div>
     <p class="small" style="margin-bottom:8px">P / Esc / Enter resumes · M toggles sound</p>
@@ -125,7 +128,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.8.1</div>
+    <div class="version">v1.8.2</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -141,7 +144,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.8.1';
+const VERSION = 'v1.8.2';
 const SCORE_KEY = 'millipede_scores_v1';
 const LEGACY_SCORE_KEY = 'neon_myriapod_scores_v1';
 // Keep the original backing key so existing global scores remain associated after the URL rename.
@@ -156,7 +159,7 @@ try{ muted = localStorage.getItem(MUTE_KEY) === '1'; }catch(e){}
 let nextLifeAt = EXTRA_LIFE_EVERY;
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-let W = 0, H = 0, DPR = 1, last = 0, state = 'title', demo = true;
+let W = 0, H = 0, DPR = 1, last = 0, state = 'title', demo = true, canvasLeft = 0;
 let score = 0, lives = 3, wave = 1, bombs = 1, rank = 1, gameTime = 0, shake = 0, flash = 0, pulseFlash = 0;
 let upgrades = {fire:0,spread:0,pulse:0};
 let player = {x:0,y:0,tx:0,ty:0,r:13,fire:0,dead:0,muzzle:0,recoil:0};
@@ -177,10 +180,17 @@ const POWERUP_TYPES = [
 let powers = {spread:0,laser:0,shield:0,frost:0,score:0}, laserTick = 0, pickupPity = 0;
 
 function resize(){
-  const area = innerWidth * innerHeight;
-  DPR = Math.min(devicePixelRatio || 1, area > 900000 ? 2.75 : 3.5); W = innerWidth; H = innerHeight;
+  // Letterbox into a centered arcade column on wide screens; full-bleed on phones.
+  const vw = innerWidth, vh = innerHeight;
+  H = vh;
+  W = Math.min(vw, Math.max(560, Math.round(vh * .62)));
+  canvasLeft = Math.max(0, Math.round((vw - W) / 2));
+  const area = W * H;
+  DPR = Math.min(devicePixelRatio || 1, area > 900000 ? 2.75 : 3.5);
   canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR);
-  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px'; canvas.style.left = canvasLeft + 'px';
+  canvas.classList.toggle('boxed', canvasLeft > 0);
+  document.documentElement.style.setProperty('--gutter', canvasLeft + 'px');
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.imageSmoothingEnabled = false;
   resetStars();
@@ -320,6 +330,7 @@ function rand(a,b){return a + Math.random() * (b-a)}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function dist(a,b,c,d){return Math.hypot(a-c,b-d)}
 function latePressure(){ return Math.max(0, wave - 12); }
+function wf(){ return clamp(W / 430, 1, 1.4); }
 function difficulty(){ return Math.min(1, (wave - 1) / 30); }
 
 function seedField(){
@@ -785,9 +796,11 @@ function update(dt){
     if(kx || ky){
       player.tx = clamp(player.tx + kx*540*dt, 18, W-18);
       player.ty = clamp(player.ty + ky*430*dt, H*.68, H-30);
+      player.snap = 16;
     }
   }
-  player.x += (player.tx-player.x)*Math.min(1,dt*12); player.y += (player.ty-player.y)*Math.min(1,dt*12);
+  const snap = Math.min(1, dt*(player.snap || 12));
+  player.x += (player.tx-player.x)*snap; player.y += (player.ty-player.y)*snap;
   player.x = clamp(player.x, 18, W-18); player.y = clamp(player.y, H*.68, H-30);
   if(play) pushPlayerFromMushrooms();
   player.fire -= dt; if(player.fire <= 0 && (play || demoMode)){ player.fire = Math.max(.041,.069-rank*.0034-upgrades.fire*.0035); shoot(); }
@@ -819,7 +832,7 @@ function updateCrawlers(dt, play){
   crawlers.forEach(c=>{
     c.wiggle += dt*8*frost; c.turnLock = Math.max(0, (c.turnLock || 0) - dt); c.scatter = Math.max(0, (c.scatter || 0) - dt);
     c.segs.forEach(s=>{ s.grace = Math.max(0, (s.grace || 0) - dt); s.wound = Math.max(0, (s.wound || 0) - dt); });
-    const speed = (c.speed + rank*8) * dt * frost;
+    const speed = (c.speed + rank*8) * dt * frost * wf();
     let lead = c.segs[0]; if(!lead) return;
     const laneY = Math.round(lead.y / cell) * cell;
     const nextX = lead.x + c.dir * cell*.66;
@@ -877,9 +890,9 @@ function splitHitCrawler(c, play){
   out.forEach(o=>o.segs.forEach((s,i)=>s.head=i===0));
   return out;
 }
-function spawnSpider(){ const side = chooseEdgeSide(H*.78), spd = rand(70,122) + latePressure()*3.2; enemies.push({type:'spider',x:side>0?-22:W+22,y:rand(H*.7,H-48),vx:side*spd,vy:rand(-35,35),r:15,t:0,hp:2,warn:.85,safe:.55}); }
+function spawnSpider(){ const side = chooseEdgeSide(H*.78), spd = (rand(70,122) + latePressure()*3.2) * wf(); enemies.push({type:'spider',x:side>0?-22:W+22,y:rand(H*.7,H-48),vx:side*spd,vy:rand(-35,35),r:15,t:0,hp:2,warn:.85,safe:.55}); }
 function spawnFlea(){ enemies.push({type:'flea',x:safeTopX(),y:-24,vx:0,vy:rand(95,135)+wave*2+latePressure()*3.5,r:10,t:0,hp:1,drop:.42,warn:.7,safe:.45}); }
-function spawnScorpion(){ const side = chooseEdgeSide(H*.35), spd = rand(62,94) + latePressure()*2.6; enemies.push({type:'scorpion',x:side>0?-26:W+26,y:rand(58,H*.55),vx:side*spd,vy:0,r:13,t:0,hp:2,warn:.9,safe:.65}); }
+function spawnScorpion(){ const side = chooseEdgeSide(H*.35), spd = (rand(62,94) + latePressure()*2.6) * wf(); enemies.push({type:'scorpion',x:side>0?-26:W+26,y:rand(58,H*.55),vx:side*spd,vy:0,r:13,t:0,hp:2,warn:.9,safe:.65}); }
 function updateEnemies(dt, play){
   const frost = powers.frost > 0 ? .55 : 1;
   enemies.forEach(e=>{
@@ -1119,8 +1132,9 @@ requestAnimationFrame(frame);
 
 function aimPlayer(x,y,touch){
   // Touch steers from below the ship so the finger doesn't cover it.
-  player.tx = clamp(x, 18, W-18);
+  player.tx = clamp(x - canvasLeft, 18, W-18);
   player.ty = clamp(y - (touch ? TOUCH_OFFSET : 0), H*.68, H-30);
+  player.snap = touch ? 12 : 22;
 }
 canvas.addEventListener('pointerdown', e=>{ if(state!=='playing') return; pointer={active:true,id:e.pointerId,x:e.clientX,y:e.clientY}; aimPlayer(e.clientX,e.clientY,e.pointerType!=='mouse'); try{ canvas.setPointerCapture(e.pointerId); }catch(err){} });
 canvas.addEventListener('pointermove', e=>{
@@ -1131,8 +1145,7 @@ canvas.addEventListener('pointermove', e=>{
 });
 canvas.addEventListener('pointerup', e=>{ if(e.pointerId===pointer.id) pointer.active=false; });
 canvas.addEventListener('pointercancel', e=>{ if(e.pointerId===pointer.id) pointer.active=false; });
-canvas.addEventListener('touchstart', e=>{ if(state!=='playing') return; const t=e.changedTouches[0]; if(!t) return; e.preventDefault(); pointer={active:true,id:t.identifier,x:t.clientX,y:t.clientY}; aimPlayer(t.clientX,t.clientY,true); }, {passive:false});
-canvas.addEventListener('touchmove', e=>{ if(state!=='playing' || !pointer.active) return; const t=[...e.changedTouches].find(x=>x.identifier===pointer.id) || e.changedTouches[0]; if(!t) return; e.preventDefault(); aimPlayer(t.clientX,t.clientY,true); }, {passive:false});
+canvas.addEventListener('touchstart', e=>{ if(state!=='playing') return; const t=e.changedTouches[0]; if(!t) return; e.preventDefault(); pointer={active:true,id:t.identifier,x:t.clientX,y:t.clientY}; aimPlayer(t.clientX,t.clientY,true); }, {passive:false});canvas.addEventListener('touchmove', e=>{ if(state!=='playing' || !pointer.active) return; const t=[...e.changedTouches].find(x=>x.identifier===pointer.id) || e.changedTouches[0]; if(!t) return; e.preventDefault(); aimPlayer(t.clientX,t.clientY,true); }, {passive:false});
 canvas.addEventListener('touchend', e=>{ if([...e.changedTouches].some(t=>t.identifier===pointer.id)) pointer.active=false; }, {passive:false});
 canvas.addEventListener('touchcancel', e=>{ if([...e.changedTouches].some(t=>t.identifier===pointer.id)) pointer.active=false; }, {passive:false});
 canvas.addEventListener('contextmenu', e=>e.preventDefault());
