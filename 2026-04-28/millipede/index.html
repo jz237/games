@@ -68,7 +68,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="titleScreen" class="overlay">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.8.2</div>
+    <div class="version">v1.8.3</div>
     <h1 class="title">Millipede</h1>
     <div class="byline">by Jez &amp; Kosh</div>
     <div class="subtitle">fungal arcade swarm</div>
@@ -91,7 +91,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="scoresScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.8.2</div>
+    <div class="version">v1.8.3</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Leaderboards</h2>
     <div id="scoreTables" class="scores"></div>
     <button id="scoresBackBtn" class="btn secondary">Back</button>
@@ -101,7 +101,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="upgradeScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.8.2</div>
+    <div class="version">v1.8.3</div>
     <h2 class="subtitle" style="font-size:1rem;color:#fff;margin-top:4px">Choose an upgrade</h2>
     <p id="upgradeLine" class="small">The garden shifts. Pick one advantage for the next waves.</p>
     <div class="upgrades">
@@ -115,7 +115,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="pauseScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.8.2</div>
+    <div class="version">v1.8.3</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.2rem)">Paused</h2>
     <div id="pauseLine" class="subtitle"></div>
     <p class="small" style="margin-bottom:8px">P / Esc / Enter resumes · M toggles sound</p>
@@ -128,7 +128,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 <section id="gameOverScreen" class="overlay hidden">
   <div class="shade"></div>
   <div class="panel">
-    <div class="version">v1.8.2</div>
+    <div class="version">v1.8.3</div>
     <h2 class="title" style="font-size:clamp(2rem,9vw,3.4rem)">Game Over</h2>
     <div id="finalLine" class="subtitle"></div>
     <div id="initialBlock" class="hidden">
@@ -144,7 +144,7 @@ button{touch-action:manipulation;user-select:none;border:0;cursor:pointer;font:i
 
 <script>
 'use strict';
-const VERSION = 'v1.8.2';
+const VERSION = 'v1.8.3';
 const SCORE_KEY = 'millipede_scores_v1';
 const LEGACY_SCORE_KEY = 'neon_myriapod_scores_v1';
 // Keep the original backing key so existing global scores remain associated after the URL rename.
@@ -159,7 +159,7 @@ try{ muted = localStorage.getItem(MUTE_KEY) === '1'; }catch(e){}
 let nextLifeAt = EXTRA_LIFE_EVERY;
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-let W = 0, H = 0, DPR = 1, last = 0, state = 'title', demo = true, canvasLeft = 0;
+let W = 0, H = 0, DPR = 1, last = 0, state = 'title', demo = true, canvasLeft = 0, viewScale = 1;
 let score = 0, lives = 3, wave = 1, bombs = 1, rank = 1, gameTime = 0, shake = 0, flash = 0, pulseFlash = 0;
 let upgrades = {fire:0,spread:0,pulse:0};
 let player = {x:0,y:0,tx:0,ty:0,r:13,fire:0,dead:0,muzzle:0,recoil:0};
@@ -180,15 +180,17 @@ const POWERUP_TYPES = [
 let powers = {spread:0,laser:0,shield:0,frost:0,score:0}, laserTick = 0, pickupPity = 0;
 
 function resize(){
-  // Letterbox into a centered arcade column on wide screens; full-bleed on phones.
+  // Game logic runs at phone-ish dimensions (max 595x960) regardless of monitor;
+  // the canvas is scaled up to fill the window height and letterboxed on wide screens.
   const vw = innerWidth, vh = innerHeight;
-  H = vh;
-  W = Math.min(vw, Math.max(560, Math.round(vh * .62)));
-  canvasLeft = Math.max(0, Math.round((vw - W) / 2));
-  const area = W * H;
-  DPR = Math.min(devicePixelRatio || 1, area > 900000 ? 2.75 : 3.5);
+  H = Math.min(vh, 960);
+  viewScale = vh / H;
+  W = Math.min(Math.floor(vw / viewScale), Math.max(560, Math.round(H * .62)));
+  const cssW = Math.round(W * viewScale);
+  canvasLeft = Math.max(0, Math.round((vw - cssW) / 2));
+  DPR = Math.min(viewScale * (devicePixelRatio || 1), W * H > 500000 ? 2.4 : 3.2);
   canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR);
-  canvas.style.width = W + 'px'; canvas.style.height = H + 'px'; canvas.style.left = canvasLeft + 'px';
+  canvas.style.width = cssW + 'px'; canvas.style.height = vh + 'px'; canvas.style.left = canvasLeft + 'px';
   canvas.classList.toggle('boxed', canvasLeft > 0);
   document.documentElement.style.setProperty('--gutter', canvasLeft + 'px');
   ctx.setTransform(DPR,0,0,DPR,0,0);
@@ -1132,23 +1134,27 @@ requestAnimationFrame(frame);
 
 function aimPlayer(x,y,touch){
   // Touch steers from below the ship so the finger doesn't cover it.
-  player.tx = clamp(x - canvasLeft, 18, W-18);
-  player.ty = clamp(y - (touch ? TOUCH_OFFSET : 0), H*.68, H-30);
+  player.tx = clamp((x - canvasLeft) / viewScale, 18, W-18);
+  player.ty = clamp(y / viewScale - (touch ? TOUCH_OFFSET : 0), H*.68, H-30);
   player.snap = touch ? 12 : 22;
 }
-canvas.addEventListener('pointerdown', e=>{ if(state!=='playing') return; pointer={active:true,id:e.pointerId,x:e.clientX,y:e.clientY}; aimPlayer(e.clientX,e.clientY,e.pointerType!=='mouse'); try{ canvas.setPointerCapture(e.pointerId); }catch(err){} });
-canvas.addEventListener('pointermove', e=>{
-  if(state!=='playing') return;
+// Steering listens on the whole window so the ship keeps tracking when the
+// pointer crosses into the letterbox gutters; buttons and overlays opt out.
+function steerTarget(e){ return !(e.target && e.target.closest && e.target.closest('button,.overlay')); }
+addEventListener('pointerdown', e=>{ if(state!=='playing' || !steerTarget(e)) return; pointer={active:true,id:e.pointerId,x:e.clientX,y:e.clientY}; aimPlayer(e.clientX,e.clientY,e.pointerType!=='mouse'); });
+addEventListener('pointermove', e=>{
+  if(state!=='playing' || !steerTarget(e)) return;
   if(e.pointerType==='mouse'){ aimPlayer(e.clientX,e.clientY,false); return; }
   if(!pointer.active || e.pointerId!==pointer.id) return;
   aimPlayer(e.clientX,e.clientY,true);
 });
-canvas.addEventListener('pointerup', e=>{ if(e.pointerId===pointer.id) pointer.active=false; });
-canvas.addEventListener('pointercancel', e=>{ if(e.pointerId===pointer.id) pointer.active=false; });
-canvas.addEventListener('touchstart', e=>{ if(state!=='playing') return; const t=e.changedTouches[0]; if(!t) return; e.preventDefault(); pointer={active:true,id:t.identifier,x:t.clientX,y:t.clientY}; aimPlayer(t.clientX,t.clientY,true); }, {passive:false});canvas.addEventListener('touchmove', e=>{ if(state!=='playing' || !pointer.active) return; const t=[...e.changedTouches].find(x=>x.identifier===pointer.id) || e.changedTouches[0]; if(!t) return; e.preventDefault(); aimPlayer(t.clientX,t.clientY,true); }, {passive:false});
-canvas.addEventListener('touchend', e=>{ if([...e.changedTouches].some(t=>t.identifier===pointer.id)) pointer.active=false; }, {passive:false});
-canvas.addEventListener('touchcancel', e=>{ if([...e.changedTouches].some(t=>t.identifier===pointer.id)) pointer.active=false; }, {passive:false});
-canvas.addEventListener('contextmenu', e=>e.preventDefault());
+addEventListener('pointerup', e=>{ if(e.pointerId===pointer.id) pointer.active=false; });
+addEventListener('pointercancel', e=>{ if(e.pointerId===pointer.id) pointer.active=false; });
+document.addEventListener('touchstart', e=>{ if(state!=='playing' || !steerTarget(e)) return; const t=e.changedTouches[0]; if(!t) return; e.preventDefault(); pointer={active:true,id:t.identifier,x:t.clientX,y:t.clientY}; aimPlayer(t.clientX,t.clientY,true); }, {passive:false});
+document.addEventListener('touchmove', e=>{ if(state!=='playing' || !pointer.active || !steerTarget(e)) return; const t=[...e.changedTouches].find(x=>x.identifier===pointer.id) || e.changedTouches[0]; if(!t) return; e.preventDefault(); aimPlayer(t.clientX,t.clientY,true); }, {passive:false});
+document.addEventListener('touchend', e=>{ if([...e.changedTouches].some(t=>t.identifier===pointer.id)) pointer.active=false; }, {passive:false});
+document.addEventListener('touchcancel', e=>{ if([...e.changedTouches].some(t=>t.identifier===pointer.id)) pointer.active=false; }, {passive:false});
+document.addEventListener('contextmenu', e=>{ if(state==='playing') e.preventDefault(); });
 
 addEventListener('keydown', e=>{
   const k = e.key;
