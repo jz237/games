@@ -150,12 +150,13 @@
 
 <div id="start-screen">
   <h1>Lunar Lander</h1>
-  <div class="subtitle">Enhanced Edition - v2.3 Natural Pads</div>
+  <div class="subtitle">Enhanced Edition - v2.3.1 Desktop Controls</div>
   <div class="controls-info">
-    <kbd>&uarr;</kbd> Thrust &nbsp;
-    <kbd>&larr;</kbd><kbd>&rarr;</kbd> Rotate &nbsp;
+    <kbd>&uarr;</kbd>/<kbd>W</kbd>/<kbd>SPACE</kbd> Thrust &nbsp;
+    <kbd>&larr;</kbd><kbd>&rarr;</kbd>/<kbd>A</kbd><kbd>D</kbd> Rotate &nbsp;
     <kbd>SHIFT</kbd> Boost &nbsp;
-    <kbd>ESC</kbd> Pause<br>
+    <kbd>ENTER</kbd> Start &nbsp;
+    <kbd>P</kbd>/<kbd>ESC</kbd> Pause<br>
     <span style="color:#888; font-size:0.75rem;">Gamepad: A=thrust B=boost Stick=rotate &nbsp; Touch: tap to fly toward finger</span><br>
     Land on <span style="color:#4f8">pads</span> &bull;
     Collect <span style="color:#0cf">fuel</span> &bull;
@@ -175,7 +176,7 @@
 
 <div id="pause-screen" style="display:none; position:absolute; top:0; left:0; right:0; bottom:0; display:none; flex-direction:column; justify-content:center; align-items:center; z-index:25; pointer-events:all; background:rgba(0,0,0,0.75); color:#fff; text-align:center;">
   <div class="result-title" style="color:#6af; font-size:2rem;">PAUSED</div>
-  <div style="color:#8af; font-size:0.85rem; margin:1rem 0;">Press ESC to resume</div>
+  <div style="color:#8af; font-size:0.85rem; margin:1rem 0;">Press P or ESC to resume</div>
   <button class="btn" id="resume-btn">Resume</button>
   <button class="btn" id="pause-menu-btn" style="margin-top:0.6rem; padding:10px 32px; font-size:0.9rem; opacity:0.9;">Back to Main Menu</button>
 </div>
@@ -218,7 +219,7 @@
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-const GAME_VERSION = 'v2.3 NATURAL PADS';
+const GAME_VERSION = 'v2.3.1 DESKTOP CONTROLS';
 
 // --- Responsive canvas ---
 function resize() {
@@ -966,10 +967,18 @@ function init() {
 
 // --- Input ---
 window.addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT') return; // typing callsign
   keys[e.code] = true;
-  if (e.code === 'ArrowUp' || e.code === 'ArrowDown') e.preventDefault();
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
+window.addEventListener('blur', () => { keys = {}; }); // no stuck keys on alt-tab
+
+// Unified control reads — keyboard (arrows + WASD/Space), gamepad, touch
+function inputLeft()   { return keys['ArrowLeft']  || keys['KeyA'] || keys['_gpLeft']   || keys['_touchLeft']; }
+function inputRight()  { return keys['ArrowRight'] || keys['KeyD'] || keys['_gpRight']  || keys['_touchRight']; }
+function inputThrust() { return keys['ArrowUp']    || keys['KeyW'] || keys['Space']     || keys['_gpThrust'] || keys['_touchThrust']; }
+function inputBoost()  { return keys['ShiftLeft']  || keys['ShiftRight'] || keys['_gpBoost'] || keys['_touchBoost']; }
 
 // --- Touch Controls (point-to-fly) ---
 let touch = { active: false, x: 0, y: 0, fingers: 0, targetAngle: 0 };
@@ -1124,13 +1133,13 @@ function update(dt) {
   processTouch();
 
   // Rotation (keyboard, gamepad, or touch)
-  if (keys['ArrowLeft'] || keys['_gpLeft'] || keys['_touchLeft']) lander.angle -= ROTATE_SPEED * dt;
-  if (keys['ArrowRight'] || keys['_gpRight'] || keys['_touchRight']) lander.angle += ROTATE_SPEED * dt;
+  if (inputLeft()) lander.angle -= ROTATE_SPEED * dt;
+  if (inputRight()) lander.angle += ROTATE_SPEED * dt;
 
   // Thrust (keyboard, gamepad, or touch)
-  const boosting = keys['ShiftLeft'] || keys['ShiftRight'] || keys['_gpBoost'] || keys['_touchBoost'];
+  const boosting = inputBoost();
   const thrustMult = boosting ? BOOST_MULT : 1;
-  lander.thrusting = (keys['ArrowUp'] || keys['_gpThrust'] || keys['_touchThrust']) && lander.fuel > 0;
+  lander.thrusting = inputThrust() && lander.fuel > 0;
 
   if (lander.thrusting) {
     const thrust = THRUST * thrustMult * dt;
@@ -2708,7 +2717,7 @@ function drawLander() {
   const S = 1.6;
   ctx.scale(S, S);
 
-  const isBoosting = lander.thrusting && (keys['ShiftLeft'] || keys['ShiftRight'] || keys['_gpBoost'] || keys['_touchBoost']);
+  const isBoosting = lander.thrusting && inputBoost();
 
   // === ENGINE GLOW + HEAT DISTORTION ===
   if (lander.thrusting) {
@@ -3062,9 +3071,8 @@ function drawLander() {
   }
 
   // === RCS THRUSTER JETS (with visible cones) ===
-  const rotating = keys['ArrowLeft'] || keys['_gpLeft'] || keys['_touchLeft']
-                || keys['ArrowRight'] || keys['_gpRight'] || keys['_touchRight'];
-  if (keys['ArrowLeft'] || keys['_gpLeft'] || keys['_touchLeft']) {
+  const rotating = inputLeft() || inputRight();
+  if (inputLeft()) {
     // Right-side RCS fires to rotate left
     const rcsGrad = ctx.createRadialGradient(14, -6, 0, 14, -6, 5);
     rcsGrad.addColorStop(0, 'rgba(255, 220, 80, 0.7)');
@@ -3078,7 +3086,7 @@ function drawLander() {
     ctx.fillStyle = '#556';
     ctx.fillRect(12, -7, 2, 2);
   }
-  if (keys['ArrowRight'] || keys['_gpRight'] || keys['_touchRight']) {
+  if (inputRight()) {
     // Left-side RCS fires to rotate right
     const rcsGrad = ctx.createRadialGradient(-14, -6, 0, -14, -6, 5);
     rcsGrad.addColorStop(0, 'rgba(255, 220, 80, 0.7)');
@@ -3519,8 +3527,13 @@ document.getElementById('pause-menu-btn').addEventListener('touchend', (e) => {
   returnToMainMenu();
 });
 
+function screenVisible(id) {
+  return getComputedStyle(document.getElementById(id)).display !== 'none';
+}
+
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Escape') {
+  const inInput = e.target && e.target.tagName === 'INPUT';
+  if (e.code === 'Escape' || (e.code === 'KeyP' && !inInput)) {
     if (state === 'playing') {
       state = 'paused';
       playThrustSound(false, false);
@@ -3528,6 +3541,17 @@ window.addEventListener('keydown', (e) => {
     } else if (state === 'paused') {
       resumeGame();
     }
+  }
+  // Enter = start / restart / advance (desktop convenience)
+  if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+    if (inInput) return; // pilot-name input has its own Enter handler
+    if (e.target && e.target.tagName === 'BUTTON') return; // native Enter click
+    if (screenVisible('start-screen')) document.getElementById('start-btn').click();
+    else if (screenVisible('crash-screen')) document.getElementById('retry-btn-crash').click();
+    else if (screenVisible('win-screen')) document.getElementById('retry-btn-win').click();
+    else if (screenVisible('gameover-screen')) document.getElementById('submit-score-btn').click();
+    else if (screenVisible('leaderboard-screen')) document.getElementById('play-again-btn').click();
+    else if (state === 'paused') resumeGame();
   }
 });
 

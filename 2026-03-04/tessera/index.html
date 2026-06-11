@@ -21,7 +21,7 @@ canvas{display:block;width:100%;height:100%}
 .btn{display:inline-block;margin-top:16px;padding:14px 40px;font-size:1.2em;font-weight:700;border:none;border-radius:30px;cursor:pointer;background:linear-gradient(90deg,#4a90d9,#e94560);color:#fff;box-shadow:0 0 20px rgba(74,144,217,0.5);transition:transform 0.15s,box-shadow 0.15s}
 .btn:hover{transform:scale(1.05);box-shadow:0 0 30px rgba(74,144,217,0.7)}
 .btn:active{transform:scale(0.97)}
-#hud{position:fixed;top:0;left:0;right:0;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:linear-gradient(180deg,rgba(10,10,30,0.85),transparent);z-index:50;pointer-events:none}
+#hud{position:fixed;top:0;left:0;right:0;height:54px;max-width:920px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:linear-gradient(180deg,rgba(10,10,30,0.85),transparent);z-index:50;pointer-events:none}
 #hud.hidden{display:none}
 #hud>div{pointer-events:auto;font-size:0.85em}
 .hud-label{color:#8ec5fc;font-size:0.7em;text-transform:uppercase;letter-spacing:1px}
@@ -70,7 +70,10 @@ function resize(){
   C.width=W*dpr;C.height=H*dpr;
   C.style.width=W+'px';C.style.height=H+'px';
   X.setTransform(dpr,0,0,dpr,0,0);
-  if(gameState==='playing') calcGrid();
+  if(gameState==='playing'){
+    calcGrid();
+    for(const h of hexes){const p=hexCenter(h.col,h.row);h.x=p.x;h.y=p.y;}
+  }
 }
 window.addEventListener('resize',resize);
 resize();
@@ -82,7 +85,7 @@ function calcGrid(){
   const availW=W-padSide*2,availH=H-padTop-padBot;
   const sizeByW=availW/((gridCols+0.5)*SQRT3);
   const sizeByH=availH/(gridRows*1.5+0.5);
-  hexSize=Math.min(sizeByW,sizeByH);
+  hexSize=Math.min(sizeByW,sizeByH,72); // cap so hexes stay a sane size on big desktop monitors
   const totalW=(gridCols+0.5)*SQRT3*hexSize;
   const totalH=(gridRows*1.5+0.5)*hexSize;
   originX=(W-totalW)/2+hexSize*SQRT3/2;
@@ -358,6 +361,18 @@ function handleClick(mx,my){
 C.addEventListener('pointerdown',e=>{
   e.preventDefault();
   handleClick(e.clientX,e.clientY);
+});
+
+// Desktop keyboard: Enter/Space activates the menu button, Escape restarts the level
+window.addEventListener('keydown',e=>{
+  if(e.key==='Enter'||e.key===' '){
+    if(!overlay.classList.contains('hidden')){
+      const btn=document.getElementById('overlayBtn');
+      if(btn){e.preventDefault();btn.click();}
+    }
+  }else if(e.key==='Escape'&&gameState==='playing'){
+    startLevel(currentLevel);
+  }
 });
 
 function showOverlay(type,title,msg,btnText,btnAction){

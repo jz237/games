@@ -20,7 +20,8 @@ body::before {
   background: radial-gradient(circle at center, transparent 0, rgba(255,255,255,.02) 50%, rgba(255,255,255,.06) 100%);
   mix-blend-mode: screen;
 }
-#game { width: 100vw; height: 100vh; display: block; }
+#game { width: 100vw; height: 100vh; display: block; cursor: crosshair; }
+.hidden { display: none !important; }
 #hud, #titleBar, #waveBanner, #comboBurst, #tutorial, #gameOver, #pauseHint {
   position: fixed; left: 0; right: 0; pointer-events: none;
 }
@@ -119,13 +120,13 @@ button:active { transform: translateY(1px) scale(.99); }
 <div id="tutorial">
   <div class="overlayCard">
     <h1>Aurora Siege</h1>
-    <div style="font-size:0.65rem;color:rgba(255,255,255,0.35);letter-spacing:0.15em;margin-top:-0.3em;margin-bottom:0.5em">v2.6</div>
+    <div style="font-size:0.65rem;color:rgba(255,255,255,0.35);letter-spacing:0.15em;margin-top:-0.3em;margin-bottom:0.5em">v2.6.1</div>
     <p>Defend the skyline. Tap or click where you want your interceptor to detonate. The nearest missile base with ammo fires automatically. Multi-touch lets you rapid-fire from multiple bases.</p>
     <div class="overlayGrid">
       <div class="tip"><b>Protect Cities</b>Lose all cities and the siege is over. Survive waves to reload bases and earn reconstruction bonuses.</div>
       <div class="tip"><b>Chain Blasts</b>Catch multiple enemy missiles in one expanding explosion to stack combo multipliers and escalating audio pitch.</div>
       <div class="tip"><b>Enemy Types</b>MIRVs split midair, smart bombs jink sideways, and satellites skim the atmosphere in later waves.</div>
-      <div class="tip"><b>Mobile Ready</b>Full-screen touch controls with no scrolling, just tap the sky and paint it with fire.</div>
+      <div class="tip"><b>Desktop &amp; Mobile</b>Tap or click the sky to intercept. Keyboard: Enter start &bull; P/Space pause &bull; M mute &bull; R restart.</div>
     </div>
     <button id="startBtn">Begin Defense</button>
     <div class="title-actions">
@@ -178,7 +179,7 @@ button:active { transform: translateY(1px) scale(.99); }
 </div>
 <button id="pauseBtn" style="position:fixed;top:max(8px,env(safe-area-inset-top));right:8px;z-index:50;pointer-events:auto;background:rgba(255,255,255,0.15);border:none;border-radius:50%;width:36px;height:36px;font-size:18px;color:#fff;cursor:pointer;backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:0">⏸</button>
 <button id="muteBtn" style="position:fixed;top:max(8px,env(safe-area-inset-top));right:50px;z-index:50;pointer-events:auto;background:rgba(255,255,255,0.15);border:none;border-radius:50%;width:36px;height:36px;font-size:18px;color:#fff;cursor:pointer;backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:0">🔊</button>
-<div id="pauseHint">Space = pause • R = restart</div>
+<div id="pauseHint">Enter = start • P/Space = pause • M = mute • R = restart</div>
 <script>
 (() => {
   const canvas = document.getElementById('game');
@@ -240,7 +241,7 @@ button:active { transform: translateY(1px) scale(.99); }
     });
   }
 
-  let w = 0, h = 0, dpr = Math.min(2, window.devicePixelRatio || 1), last = 0;
+  let w = 0, h = 0, dpr = Math.min(2, window.devicePixelRatio || 1), viewScale = 1, last = 0;
   let shake = 0, flash = 0, paused = false, running = false, waveTransition = 0, comboTimer = 0;
   let waveClearFX = []; // persistent particles that survive startWave()
   let tally = null; // wave-end bonus tally state
@@ -473,10 +474,16 @@ button:active { transform: translateY(1px) scale(.99); }
   function lerp(a,b,t){ return a + (b-a)*t; }
 
   function resize() {
-    dpr = Math.min(2, window.devicePixelRatio || 1);
-    w = innerWidth; h = innerHeight;
+    // Game logic runs at phone-ish height (max 960 logical px) regardless of monitor;
+    // the canvas is scaled up to fill the window (fill-width, no letterbox).
+    const vw = innerWidth, vh = innerHeight;
+    h = Math.min(vh, 960);
+    viewScale = vh / h;
+    w = Math.floor(vw / viewScale);
+    // viewScale * native dpr, capped so phones (viewScale = 1) keep the old dpr <= 2 budget
+    dpr = Math.min(viewScale * (window.devicePixelRatio || 1), 2 * viewScale);
     canvas.width = Math.floor(w * dpr); canvas.height = Math.floor(h * dpr);
-    canvas.style.width = w + 'px'; canvas.style.height = h + 'px'; ctx.setTransform(dpr,0,0,dpr,0,0);
+    canvas.style.width = vw + 'px'; canvas.style.height = vh + 'px'; ctx.setTransform(dpr,0,0,dpr,0,0);
     makeStars(); layoutGround();
   }
 
@@ -2107,9 +2114,9 @@ button:active { transform: translateY(1px) scale(.99); }
     if (!running) return;
     const rect = canvas.getBoundingClientRect();
     if (e.changedTouches) {
-      for (const t of e.changedTouches) fireAt(t.clientX - rect.left, t.clientY - rect.top);
+      for (const t of e.changedTouches) fireAt((t.clientX - rect.left) / viewScale, (t.clientY - rect.top) / viewScale);
     } else {
-      fireAt(e.clientX - rect.left, e.clientY - rect.top);
+      fireAt((e.clientX - rect.left) / viewScale, (e.clientY - rect.top) / viewScale);
     }
   }
 
@@ -2222,8 +2229,39 @@ button:active { transform: translateY(1px) scale(.99); }
   muteBtn.addEventListener('click', toggleMute);
   muteBtn.addEventListener('touchend', toggleMute);
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') { paused = !paused; pauseBtn.textContent = paused ? '▶' : '⏸'; updateUI(); }
-    if (e.key.toLowerCase() === 'r') { running = true; resetGame(); }
+    const k = e.key;
+    if (e.code === 'Space') e.preventDefault();
+    // keep a focused button from also being activated by Enter/Space (double-trigger)
+    if ((k === 'Enter' || e.code === 'Space') && document.activeElement && document.activeElement.tagName === 'BUTTON') document.activeElement.blur();
+    // Escape closes the high-score / options overlays first
+    if (k === 'Escape') {
+      if (hsOverlay.style.display === 'flex') { closeHsOverlay(); return; }
+      if (optionsOverlay.style.display === 'flex') { closeOptionsOverlay(); return; }
+    }
+    const titleVisible = ui.tutorial.style.display !== 'none';
+    if (k === 'Enter') {
+      if (titleVisible) { document.getElementById('startBtn').click(); return; }
+      if (state.gameOver && ui.gameOver.classList.contains('show')) {
+        const hsInit = document.getElementById('hsInitialsSection');
+        if (!hsInit.classList.contains('hidden')) {
+          const ok = document.querySelector('#hsInitialsRow > button:last-of-type');
+          if (ok) ok.click(); // confirm initials
+        } else {
+          document.getElementById('restartBtn').click();
+        }
+      }
+      return;
+    }
+    if (k === 'p' || k === 'P' || k === 'Escape' || e.code === 'Space') {
+      if (!running || state.gameOver) return;
+      paused = !paused; pauseBtn.textContent = paused ? '▶' : '⏸'; updateUI();
+      return;
+    }
+    if (k === 'm' || k === 'M') { muted = !muted; applySfxVolume(); muteBtn.textContent = muted ? '🔇' : '🔊'; return; }
+    if (k === 'r' || k === 'R') {
+      if (titleVisible) return; // don't start a game behind the title card
+      running = true; resetGame();
+    }
   });
 
   if (localStorage.getItem('missile-command-tutorial-seen') === '1') {

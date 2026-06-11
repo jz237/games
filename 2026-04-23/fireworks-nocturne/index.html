@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Night Fireworks Show v1.0.8</title>
+<title>Night Fireworks Show v1.0.9</title>
 <style>
 :root{
   --bg-top:#06111f;
@@ -20,6 +20,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#02060d;color:var(--te
 body{
   font-family:Georgia,"Times New Roman",serif;
   touch-action:none;
+  -webkit-user-select:none;
+  user-select:none;
   background:
     radial-gradient(circle at 50% 110%, rgba(255,137,66,0.12), transparent 36%),
     radial-gradient(circle at 20% 15%, rgba(96,125,255,0.1), transparent 28%),
@@ -154,7 +156,7 @@ button.active{
 <div class="hud">
   <div class="title-card">
     <h1>Night Fireworks Show</h1>
-    <div class="meta">v1.0.8 • autonomous fireworks at midnight • drag and release to launch a shell • Shapes Mode now builds each burst from particles</div>
+    <div class="meta">v1.0.9 • autonomous fireworks at midnight • drag and release to launch a shell • Shapes Mode now builds each burst from particles</div>
   </div>
   <div class="control-card">
     <button id="autoBtn" class="active" type="button">Auto Show</button>
@@ -1171,7 +1173,7 @@ button.active{
   }
 
   function onPointerStart(event) {
-    if (event.target.closest && event.target.closest(".control-card")) {
+    if (event.target.closest && event.target.closest(".control-card, .manual-panel")) {
       return;
     }
     const point = pointerPoint(event);
@@ -1192,7 +1194,7 @@ button.active{
     if (!state.pointerDown) {
       return;
     }
-    if (event.target.closest && event.target.closest(".control-card")) {
+    if (event.target.closest && event.target.closest(".control-card, .manual-panel")) {
       state.pointerDown = false;
       state.pointerStart = null;
       state.pointerCurrent = null;

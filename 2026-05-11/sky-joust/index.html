@@ -19,7 +19,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const VERSION = 'v3.1.87';
+const VERSION = 'v3.1.88';
 
 // Premium title cabinet art. If the generated art is missing or fails to load,
 // the procedural poster backdrop below remains the fallback.
@@ -1411,6 +1411,17 @@ let waveKills = 0, waveEggs = 0, lastWaveStats = null;
 let emptyWaveClearTimer = 0, noEnemyEggGraceTimer = 0, visuallyEmptyWaveTimer = 0;
 let comboCount = 0, comboTimer = 0, bestCombo = 0, comboBannerTimer = 0;
 let pteroWarnTimer = 0, pteroWarnActive = false, titleClashTimer = 0;
+// desktopControls: keyboard/mouse niceties only light up on hover-capable fine pointers,
+// so phone/tablet behavior stays byte-for-byte identical.
+const DESKTOP_CONTROLS = (()=>{try{return window.matchMedia('(hover: hover) and (pointer: fine)').matches}catch(e){return false}})();
+// paused is a flag (not a state) so the title/menu state machine is untouched;
+// only keyboard (P/Escape) can pause, so mobile can never reach it.
+let paused = false;
+function canPause(){return state==='playing'||state==='waveTrans'||state==='dying';}
+function togglePause(){
+  if(paused){paused=false;return;}
+  if(canPause()){paused=true;releaseAllInput();}
+}
 const FOREGROUND_PROPS = Array.from({length:26},(_,i)=>({x:(i*173+41)%1600,kind:i%6,scale:.75+(i%4)*.18,seed:i*9.731}));
 const CAVERN_RUNES = Array.from({length:72},(_,i)=>({x:(i*127+33)%2400,y:.08+((i*73)%70)/100,seed:i*5.31,kind:i%4}));
 
@@ -1853,8 +1864,23 @@ function spawnPtero(){
 }
 
 // --- Input ---
+// touchDown/touchSide remain the single abstraction the player physics reads.
+// They are recomputed from two independent sources: a held pointer (touch/mouse)
+// and held keys, so keyboard and touch can never wedge each other's state.
 let touchDown = false;
 let touchSide = 0; // -1=left, 1=right, 0=none
+let pointerHeld = false;
+let pointerSide = 0;
+let keyLeft = false, keyRight = false, keyFlap = false;
+function syncPlayerInput(){
+  touchDown = pointerHeld || keyFlap;
+  touchSide = pointerHeld ? pointerSide : (keyLeft===keyRight ? 0 : (keyLeft ? -1 : 1));
+}
+function releaseAllInput(){
+  pointerHeld=false;pointerSide=0;keyLeft=false;keyRight=false;keyFlap=false;
+  activeOptionSlider=null;
+  syncPlayerInput();
+}
 function isInteractiveTouchTarget(target){return !!(target&&target.closest&&(target.closest('button')||target.closest('.overlay')));}
 document.addEventListener('touchmove',(e)=>{if(isInteractiveTouchTarget(e.target))return;if(e.cancelable)e.preventDefault();},{passive:false});
 function getTouchSide(clientX){
@@ -1870,26 +1896,28 @@ function onDown(e){
   if(isInteractiveTouchTarget(e.target))return;
   if(e.cancelable)e.preventDefault();
   wakeSoundtrackFromGesture();
-  touchDown=true;
+  if(paused){togglePause();return;}
+  pointerHeld=true;
   const pt=(e.changedTouches&&e.changedTouches.length>0)?e.changedTouches[0]:e;
   if(state==='options'&&pt&&pt.clientX!==undefined){
     const p=pointerToGame(pt.clientX,pt.clientY);
-    if(handleOptionSlider(p.x,p.y)){touchDown=false;touchSide=0;return;}
+    if(handleOptionSlider(p.x,p.y)){pointerHeld=false;pointerSide=0;syncPlayerInput();return;}
   }
   if(state==='playing'&&pt&&pt.clientX!==undefined)spawnTouchPulse(pt.clientX,pt.clientY);
   // Determine touch side
   if(e.changedTouches&&e.changedTouches.length>0){
-    touchSide=getTouchSide(e.changedTouches[0].clientX);
+    pointerSide=getTouchSide(e.changedTouches[0].clientX);
   } else if(e.clientX!==undefined){
-    touchSide=getTouchSide(e.clientX);
+    pointerSide=getTouchSide(e.clientX);
   } else {
-    touchSide=1; // default right for keyboard
+    pointerSide=1; // default right when no coordinates are available
   }
+  syncPlayerInput();
   // Title has real buttons now; do not let a high-score tap accidentally start the game.
   if((state==='title'||state==='leaderboard'||state==='help'||state==='options'||state==='gameOver'||state==='highscoreEntry')&&pt&&pt.clientX!==undefined){
     const rect=canvas.getBoundingClientRect();
     const sx=(pt.clientX-rect.left)/rect.width*W, sy=(pt.clientY-rect.top)/rect.height*H;
-    if(checkButtons(sx,sy)){touchDown=false;touchSide=0;return;}
+    if(checkButtons(sx,sy)){pointerHeld=false;pointerSide=0;syncPlayerInput();return;}
   }
   if(state==='title'){startGame();return}
   if(state==='gameOver'){
@@ -1900,8 +1928,9 @@ function onUp(e){
   if(isInteractiveTouchTarget(e.target))return;
   if(e.cancelable)e.preventDefault();
   activeOptionSlider=null;
-  touchDown=false;
-  touchSide=0;
+  pointerHeld=false;
+  pointerSide=0;
+  syncPlayerInput();
 }
 canvas.addEventListener('touchstart',onDown,{passive:false});
 canvas.addEventListener('touchmove',(e)=>{
@@ -1912,19 +1941,30 @@ canvas.addEventListener('touchmove',(e)=>{
     updateOptionSlider(p.x);
     return;
   }
-  if(e.changedTouches&&e.changedTouches.length>0&&touchDown){
-    touchSide=getTouchSide(e.changedTouches[0].clientX);
+  if(e.changedTouches&&e.changedTouches.length>0&&pointerHeld){
+    pointerSide=getTouchSide(e.changedTouches[0].clientX);
+    syncPlayerInput();
   }
 },{passive:false});
 canvas.addEventListener('touchend',onUp,{passive:false});
-canvas.addEventListener('mousedown',onDown);
-canvas.addEventListener('mousemove',(e)=>{
+// windowLevelMouse: desktop drags that wander off the canvas still steer, and a
+// release outside the window can't leave the bird stuck flapping. Touch synthesizes
+// no mouse events here (touchstart preventDefault), so mobile is unaffected.
+window.addEventListener('mousedown',onDown);
+window.addEventListener('mousemove',(e)=>{
   if(state==='options'&&activeOptionSlider){
     const p=pointerToGame(e.clientX,e.clientY);
     updateOptionSlider(p.x);
+    return;
+  }
+  // Mouse parity with touch-drag: while held, crossing the screen midline flips steer side.
+  if(pointerHeld&&e.clientX!==undefined){
+    pointerSide=getTouchSide(e.clientX);
+    syncPlayerInput();
   }
 });
-canvas.addEventListener('mouseup',onUp);
+window.addEventListener('mouseup',onUp);
+window.addEventListener('blur',releaseAllInput);
 
 // --- Button handling ---
 let buttons = [];
@@ -1956,6 +1996,7 @@ function handleOptionSlider(px,py){
 function enterTitle(){
   buttons=[];
   state='title';
+  paused=false;
   startTitleMusic(true);
 }
 function checkButtons(px,py){
@@ -1970,7 +2011,8 @@ function checkButtons(px,py){
   return false;
 }
 
-canvas.addEventListener('click',(e)=>{
+window.addEventListener('click',(e)=>{
+  if(isInteractiveTouchTarget(e.target))return;
   wakeSoundtrackFromGesture();
   const rect=canvas.getBoundingClientRect();
   const sx=(e.clientX-rect.left)/rect.width*W;
@@ -1992,6 +2034,7 @@ canvas.addEventListener('touchend',(e)=>{
 function startGame(){
   buttons=[];
   state='playing';score=0;lives=3;wave=0;extraLifeGiven=false;trollHand=null;
+  paused=false;
   wakeSoundtrackFromGesture();
   enemies=[];feathers=[];largeFeathers=[];eggs=[];embers=[];explosions=[];impactBursts=[];scorePopups=[];lavaBursts=[];smokeWisps=[];waterDrops=[];touchPulses=[];enemySpawnDramas=[];lavaSparks=[];deathPieces=[];ptero=null;pteroTimer=0;pteroWarnTimer=0;pteroWarnActive=false;gameTime=0;invincTimer=0;pendingGameOver=false;scoreFlashTimer=0;lifeFlashTimer=0;extraLifeBannerTimer=0;featherBurnSfxCooldown=0;waveKills=0;waveEggs=0;lastWaveStats=null;emptyWaveClearTimer=0;noEnemyEggGraceTimer=0;visuallyEmptyWaveTimer=0;comboCount=0;comboTimer=0;bestCombo=0;comboBannerTimer=0;
   generatePlatforms(1);
@@ -3607,6 +3650,7 @@ function drawTitle(){
   footerButton('⚙  OPTIONS',optionsX,()=>{state='options';buttons=[];});
 
   if(score>0){ctx.font=`700 ${Math.max(12,W*0.016)}px Arial, sans-serif`;ctx.fillStyle='rgba(255,220,150,0.72)';ctx.fillText(`Last: Score ${score} · Wave ${wave}`,W/2,Math.min(H-18,footerY+footerH+30));}
+  if(DESKTOP_CONTROLS){ctx.textAlign='left';ctx.font=`600 ${Math.max(11,W*0.016)}px Arial, sans-serif`;ctx.fillStyle='rgba(255,228,160,0.62)';ctx.fillText('KEYS: A/D or ◀ ▶ steer · SPACE/W flap · ENTER start · P pause',14,H-14);}
   ctx.textAlign='right';ctx.font=`600 ${Math.max(11,W*0.016)}px Arial, sans-serif`;ctx.fillStyle='rgba(255,215,0,0.5)';ctx.fillText(VERSION,W-14,H-14);ctx.textAlign='left';
 }
 
@@ -3700,10 +3744,19 @@ function drawGameOver(){
   const glow=0.55+0.45*Math.sin(gameTime*3.5);
   const bg=ctx.createLinearGradient(btnX,btnY,btnX,btnY+btnH);bg.addColorStop(0,'rgba(255,225,120,0.42)');bg.addColorStop(1,'rgba(108,42,0,0.78)');ctx.fillStyle=bg;roundRect(ctx,btnX,btnY,btnW,btnH,20);ctx.fill();
   ctx.save();ctx.globalCompositeOperation='lighter';ctx.shadowColor='#FFD35A';ctx.shadowBlur=22*glow;ctx.strokeStyle=`rgba(255,232,150,${0.72+0.24*glow})`;ctx.lineWidth=5;roundRect(ctx,btnX,btnY,btnW,btnH,20);ctx.stroke();ctx.restore();
-  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${Math.max(34,Math.min(58,W*0.044))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#000';ctx.shadowBlur=10;ctx.fillStyle='#FFF5CC';ctx.fillText('TAP TO RESTART',W/2,btnY+btnH/2+3);ctx.restore();
+  const restartLabel=DESKTOP_CONTROLS?'CLICK OR ENTER TO RESTART':'TAP TO RESTART';
+  const restartFontPx=Math.max(26,Math.min(58,W*0.044,(btnW-36)/(restartLabel.length*0.58)));
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`900 ${restartFontPx}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#000';ctx.shadowBlur=10;ctx.fillStyle='#FFF5CC';ctx.fillText(restartLabel,W/2,btnY+btnH/2+3);ctx.restore();
   addButton('restart',btnX,btnY,btnW,btnH,()=>enterTitle());
   addButton('restart2',0,btnY-24,W,H-btnY+24,()=>enterTitle());
   ctx.textAlign='right';ctx.textBaseline='alphabetic';ctx.font=`700 ${Math.max(12,W*0.017)}px Arial, sans-serif`;ctx.fillStyle='rgba(255,215,0,.68)';ctx.fillText(VERSION,W-14,H-12);ctx.textAlign='left';
+}
+
+function confirmHighscoreEntry(){
+  const initials=hsInitials.join('');
+  hsRank=addLocalScore(initials,score,wave);
+  submitGlobalScore(initials,score,wave);
+  state='gameOver';
 }
 
 function drawHighscoreEntry(){
@@ -3725,7 +3778,7 @@ function drawHighscoreEntry(){
 
   ctx.font=`800 ${Math.max(18,Math.min(30,W*0.03))}px Arial, sans-serif`;
   ctx.fillStyle='rgba(255,245,200,.9)';
-  ctx.fillText('TAP BIG ARROWS TO SET INITIALS',W/2,H*0.275);
+  ctx.fillText(DESKTOP_CONTROLS?'TYPE A–Z · ARROWS MOVE · ENTER CONFIRMS':'TAP BIG ARROWS TO SET INITIALS',W/2,H*0.275);
 
   buttons=[];
   const letterSize=Math.max(72,Math.min(128,W*0.13));
@@ -3766,12 +3819,7 @@ function drawHighscoreEntry(){
   const cg=ctx.createLinearGradient(btnX,btnY,btnX,btnY+btnH);cg.addColorStop(0,'rgba(80,255,150,.32)');cg.addColorStop(1,'rgba(0,80,55,.60)');ctx.fillStyle=cg;roundRect(ctx,btnX,btnY,btnW,btnH,18);ctx.fill();
   ctx.strokeStyle='rgba(120,255,175,.96)';ctx.lineWidth=4;roundRect(ctx,btnX,btnY,btnW,btnH,18);ctx.stroke();
   ctx.fillStyle='#DFFFF0';ctx.font=`900 ${Math.max(26,Math.min(42,W*0.045))}px Arial Black, Impact, sans-serif`;ctx.shadowColor='#44FF88';ctx.shadowBlur=16;ctx.fillText('CONFIRM',W/2,btnY+btnH/2+2);ctx.shadowBlur=0;
-  addButton('confirm',btnX-10,btnY-10,btnW+20,btnH+20,()=>{
-    const initials=hsInitials.join('');
-    hsRank=addLocalScore(initials,score,wave);
-    submitGlobalScore(initials,score,wave);
-    state='gameOver';
-  });
+  addButton('confirm',btnX-10,btnY-10,btnW+20,btnH+20,()=>confirmHighscoreEntry());
 
   ctx.textAlign='left';ctx.textBaseline='alphabetic';
 }
@@ -4049,7 +4097,7 @@ function loop(ts){
     return;
   }
 
-  update(dt);
+  if(!paused)update(dt); // pausedFreeze: keep drawing the last frame, just stop simulating
 
   // Apply shake
   ctx.save();
@@ -4148,25 +4196,74 @@ function loop(ts){
   }
 
   ctx.restore();
+
+  if(paused)drawPauseOverlay();
+}
+
+function drawPauseOverlay(){
+  ctx.fillStyle='rgba(2,6,14,0.66)';ctx.fillRect(0,0,W,H);
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font=`900 ${Math.max(54,Math.min(120,W*0.085))}px Arial Black, Impact, sans-serif`;
+  ctx.shadowColor='#FFD35A';ctx.shadowBlur=28;ctx.fillStyle='#FFE796';
+  ctx.fillText('PAUSED',W/2,H*0.42);
+  ctx.shadowBlur=0;ctx.font=`800 ${Math.max(18,Math.min(34,W*0.026))}px Arial, sans-serif`;
+  ctx.fillStyle='rgba(234,248,255,.88)';
+  ctx.fillText(DESKTOP_CONTROLS?'P · ESC · ENTER — OR CLICK — TO RESUME':'TAP TO RESUME',W/2,H*0.42+Math.max(64,H*0.06));
+  ctx.restore();
 }
 
 // --- Keyboard for desktop ---
-let keyLeft = false, keyRight = false;
+// Left/Right or A/D steer · Space/Up/W flap · Enter start/restart/confirm · P/Escape pause.
+// Keys map onto the same touchDown/touchSide abstraction touch uses (via syncPlayerInput),
+// so player physics is identical across input methods.
+function cycleHsInitial(delta){
+  hsInitials[hsPos]=String.fromCharCode(((hsInitials[hsPos].charCodeAt(0)-65+delta+26)%26)+65);
+}
 document.addEventListener('keydown',(e)=>{
+  const code=e.code;
+  if(code==='Space'||code==='ArrowUp'||code==='ArrowDown'||code==='ArrowLeft'||code==='ArrowRight')e.preventDefault();
   wakeSoundtrackFromGesture();
-  if(e.code==='Space'||e.code==='ArrowUp'){
-    touchDown=true;
-    if(!touchSide)touchSide=keyLeft?-1:keyRight?1:1;
-    if(state==='title')startGame();
-    e.preventDefault();
+  // Pause / resume; Escape also backs out of menu screens.
+  if(code==='KeyP'||code==='Escape'){
+    if(paused||canPause()){togglePause();return;}
+    if(code==='Escape'&&(state==='help'||state==='options'||state==='leaderboard')){enterTitle();return;}
+    return;
   }
-  if(e.code==='ArrowLeft'){keyLeft=true;if(touchDown)touchSide=-1;}
-  if(e.code==='ArrowRight'){keyRight=true;if(touchDown)touchSide=1;}
+  if(paused){
+    if(code==='Enter'||code==='NumpadEnter'||code==='Space'||code==='ArrowUp'||code==='KeyW')togglePause();
+    return;
+  }
+  // High-score initials typed directly on desktop.
+  if(state==='highscoreEntry'){
+    if(/^[a-zA-Z]$/.test(e.key)){hsInitials[hsPos]=e.key.toUpperCase();hsPos=Math.min(2,hsPos+1);return;}
+    if(code==='ArrowLeft'){hsPos=(hsPos+2)%3;return;}
+    if(code==='ArrowRight'){hsPos=(hsPos+1)%3;return;}
+    if(code==='ArrowUp'){cycleHsInitial(1);return;}
+    if(code==='ArrowDown'){cycleHsInitial(-1);return;}
+    if(code==='Backspace'){e.preventDefault();hsPos=(hsPos+2)%3;return;}
+    if((code==='Enter'||code==='NumpadEnter')&&!e.repeat){confirmHighscoreEntry();return;}
+    return; // swallow everything else so Space can't flap behind the entry screen
+  }
+  if((code==='Enter'||code==='NumpadEnter')&&!e.repeat){
+    if(state==='title'){startGame();return;}
+    if(state==='gameOver'){enterTitle();return;}
+    if(state==='help'||state==='options'||state==='leaderboard'){enterTitle();return;}
+    return;
+  }
+  // Flap — the genre's core verb. No forced side: Space alone is pure vertical lift.
+  if(code==='Space'||code==='ArrowUp'||code==='KeyW'){
+    keyFlap=true;syncPlayerInput();
+    if(state==='title'&&!e.repeat)startGame();
+    return;
+  }
+  if(code==='ArrowLeft'||code==='KeyA'){keyLeft=true;syncPlayerInput();return;}
+  if(code==='ArrowRight'||code==='KeyD'){keyRight=true;syncPlayerInput();return;}
 });
 document.addEventListener('keyup',(e)=>{
-  if(e.code==='Space'||e.code==='ArrowUp'){touchDown=false;touchSide=0;}
-  if(e.code==='ArrowLeft'){keyLeft=false;if(!keyRight&&touchSide===-1)touchSide=0;}
-  if(e.code==='ArrowRight'){keyRight=false;if(!keyLeft&&touchSide===1)touchSide=0;}
+  const code=e.code;
+  if(code==='Space'||code==='ArrowUp'||code==='KeyW'){keyFlap=false;syncPlayerInput();}
+  if(code==='ArrowLeft'||code==='KeyA'){keyLeft=false;syncPlayerInput();}
+  if(code==='ArrowRight'||code==='KeyD'){keyRight=false;syncPlayerInput();}
 });
 
 // Init lava for title

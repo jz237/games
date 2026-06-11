@@ -29,12 +29,13 @@ canvas{display:block;position:fixed;top:0;left:0;width:100vw;height:100vh;touch-
 <div id="hud"><span>LVL <span id="lvl">1</span></span><span>LIVES <span id="lives">3</span></span><span>SCORE <span id="score">0</span></span><span>WELLS <span id="wells">3</span></span><span>FUEL <span id="fuel">0/0</span></span></div>
 <canvas id="c"></canvas>
 <button id="mute-btn" aria-label="Toggle sound">🔊</button>
-<div id="status">Tap to place wells. Swipe to slingshot your ship.</div>
+<div id="status">Tap or click to place wells. Swipe or drag to slingshot your ship.</div>
 <div id="overlay">
   <h2>GRAVITY WEAVER</h2>
+  <div style="font-size:.75em;color:#665a99;margin-bottom:10px">v1.0.1</div>
   <ul style="list-style:none;max-width:340px;display:flex;flex-direction:column;gap:8px;color:rgba(185,165,255,.9);line-height:1.4">
     <li>🚀 Direct steering is impossible — gravity wells bend your path.</li>
-    <li>👆 Tap to drop wells. Swipe for one-time directional boosts.</li>
+    <li>👆 Tap or click to drop wells. Swipe or drag for one-time boosts.</li>
     <li>⛽ Collect all fuel shards, then reach the star gate.</li>
     <li>🤖 Enemy drones hunt predictive intercepts each level.</li>
     <li>🏆 3 levels: asteroid lanes, tractor fields, and wormholes.</li>
@@ -44,10 +45,16 @@ canvas{display:block;position:fixed;top:0;left:0;width:100vw;height:100vh;touch-
 <script>
 // --- Sizing ---
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
-let W,H;
+let W,H,viewScale=1;
 function resize(){
-  W=window.innerWidth;H=window.innerHeight;
-  canvas.width=W;canvas.height=H;
+  // Logic is tuned for phone-scale pixels; on big monitors cap the logical
+  // playfield and scale the canvas up. Phones keep viewScale=1 (unchanged).
+  // getPos() already maps client coords via W / rect width, so input follows.
+  const vw=window.innerWidth,vh=window.innerHeight;
+  viewScale=Math.max(1,Math.min(vw,vh)/720);
+  W=Math.ceil(vw/viewScale);H=Math.ceil(vh/viewScale);
+  canvas.width=vw;canvas.height=vh;
+  ctx.setTransform(viewScale,0,0,viewScale,0,0);
 }
 resize();
 window.addEventListener('resize',resize);
@@ -412,9 +419,26 @@ function getPos(e){
 }
 let swipeStart=null;
 
-canvas.addEventListener('click',e=>{
+// Desktop mouse parity with touch, window-wide: press drops a well,
+// drag + release slingshots (mirrors touchstart/touchend exactly).
+// On touch devices the touchstart preventDefault suppresses these.
+let mouseDown=false;
+window.addEventListener('mousedown',e=>{
+  if(e.button!==0||e.target.closest('button')||e.target.closest('#overlay'))return;
   initAudio();resumeAudio();
-  const p=getPos(e);placeWell(p.x,p.y);
+  const p=getPos(e);mouseDown=true;swipeStart={x:p.x,y:p.y};FX.spawn(p.x,p.y,'#c2a8ff');placeWell(p.x,p.y);
+});
+window.addEventListener('mousemove',e=>{
+  if(!mouseDown)return;
+  const p=getPos(e);FX.move(p.x,p.y);
+});
+window.addEventListener('mouseup',e=>{
+  if(!mouseDown)return;
+  mouseDown=false;
+  if(!state||!swipeStart)return;
+  const p=getPos(e),dx=p.x-swipeStart.x,dy=p.y-swipeStart.y,d=Math.hypot(dx,dy);
+  if(d>36){state.player.vx+=(dx/d)*Math.min(2.5,d/58);state.player.vy+=(dy/d)*Math.min(2.5,d/58);FX.spawn(p.x,p.y,'#aa88ff');sndSlingshot()}
+  swipeStart=null;
 });
 
 canvas.addEventListener('touchstart',e=>{
@@ -453,6 +477,18 @@ startBtn.addEventListener('touchend',e=>{e.stopPropagation();e.preventDefault();
 const muteBtn=document.getElementById('mute-btn');
 muteBtn.addEventListener('click',e=>{e.stopPropagation();toggleMute()});
 muteBtn.addEventListener('touchend',e=>{e.stopPropagation();e.preventDefault();toggleMute()});
+
+// Keyboard (desktop): Enter/Space activates the visible menu, M mutes.
+window.addEventListener('keydown',e=>{
+  if(e.key==='m'||e.key==='M'){toggleMute();return}
+  if(e.key==='Enter'||e.key===' '){
+    const ov=document.getElementById('overlay');
+    if(ov.style.display!=='none'){
+      const b=ov.querySelector('button');
+      if(b){e.preventDefault();b.click()}
+    }
+  }
+});
 </script>
 </body>
 </html>

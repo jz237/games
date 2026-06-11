@@ -8,18 +8,20 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
 <title>Depth Charge — Sonar Hunt</title>
 <style>
-:root{color-scheme:dark}
+:root{color-scheme:dark;--gutter:0px}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#020a18;font-family:Inter,system-ui,-apple-system,Segoe\ UI,Roboto,Arial,sans-serif;touch-action:none;overscroll-behavior:none;user-select:none}
-#game{width:100vw;height:100vh;display:block}
-#hud{position:fixed;top:0;left:0;right:0;padding:max(8px,env(safe-area-inset-top)) 14px 6px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;z-index:10}
+#game{position:absolute;top:0;left:0;display:block;cursor:crosshair}
+#game.boxed{outline:1px solid rgba(80,200,255,.16);box-shadow:0 0 34px rgba(60,180,255,.12)}
+#hud{position:fixed;top:0;left:var(--gutter);right:var(--gutter);padding:max(8px,env(safe-area-inset-top)) 14px 6px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;z-index:10}
 .hud-item{background:linear-gradient(180deg,rgba(4,16,34,.75),rgba(3,10,22,.5));border:1px solid rgba(80,200,255,.2);border-radius:12px;padding:6px 12px;backdrop-filter:blur(4px);box-shadow:inset 0 0 16px rgba(60,180,255,.06)}
 .hud-label{font-size:9px;opacity:.7;text-transform:uppercase;letter-spacing:.14em;color:#b0e8ff}
 .hud-value{font-size:clamp(14px,2vw,22px);font-weight:800;color:#e4f8ff;text-shadow:0 0 8px rgba(100,210,255,.4)}
 #overlay,#gameOver{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;z-index:20;background:rgba(1,6,16,.7);backdrop-filter:blur(6px)}
 #gameOver{display:none}
 #gameOver.show{display:flex}
-.card{width:min(680px,100%);background:linear-gradient(180deg,rgba(4,14,30,.94),rgba(3,10,20,.85));border:1px solid rgba(80,200,255,.22);border-radius:22px;padding:24px;box-shadow:0 16px 60px rgba(0,0,0,.5),inset 0 0 40px rgba(60,180,255,.05);color:#e0f6ff;text-align:center}
+.card{position:relative;width:min(680px,100%);background:linear-gradient(180deg,rgba(4,14,30,.94),rgba(3,10,20,.85));border:1px solid rgba(80,200,255,.22);border-radius:22px;padding:24px;box-shadow:0 16px 60px rgba(0,0,0,.5),inset 0 0 40px rgba(60,180,255,.05);color:#e0f6ff;text-align:center}
+.version{position:absolute;top:12px;right:16px;color:#7fb6c6;font:700 11px ui-monospace,monospace;letter-spacing:.08em}
 .card h1{margin:0 0 8px;font-size:clamp(26px,5.5vw,54px);text-transform:uppercase;letter-spacing:.06em;background:linear-gradient(180deg,#fff,#7dd8ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .card h2{margin:0 0 8px;font-size:clamp(20px,4vw,38px);color:#ffe87b}
 .card p{opacity:.85;line-height:1.45;font-size:clamp(12px,1.6vw,16px)}
@@ -32,7 +34,7 @@ button:active{transform:translateY(1px) scale(.98)}
 #waveBanner.show{opacity:1;transform:translateY(0) scale(1)}
 #waveBanner .big{font-size:clamp(28px,5vw,60px);font-weight:900;color:#ffe4a0;text-shadow:0 0 24px rgba(255,200,80,.6),0 0 50px rgba(255,120,40,.3);text-transform:uppercase;letter-spacing:.1em}
 #waveBanner .small{font-size:clamp(11px,1.8vw,18px);color:#c0ecff;margin-top:4px}
-#controls{position:fixed;bottom:max(10px,env(safe-area-inset-bottom));left:0;right:0;display:flex;justify-content:center;gap:12px;padding:0 14px;pointer-events:none;z-index:10}
+#controls{position:fixed;bottom:max(10px,env(safe-area-inset-bottom));left:var(--gutter);right:var(--gutter);display:flex;justify-content:center;gap:12px;padding:0 14px;pointer-events:none;z-index:10}
 .ctrl-btn{pointer-events:auto;width:64px;height:64px;border-radius:50%;border:2px solid rgba(80,200,255,.35);background:radial-gradient(circle at 40% 40%,rgba(40,120,180,.5),rgba(10,30,60,.7));color:#b0e8ff;font-size:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.4),inset 0 0 12px rgba(80,200,255,.1);backdrop-filter:blur(4px)}
 .ctrl-btn:active{transform:scale(.92);background:radial-gradient(circle at 40% 40%,rgba(60,160,220,.6),rgba(20,50,90,.8));border-color:rgba(100,220,255,.5)}
 .ctrl-btn.drop{width:72px;height:72px;border-color:rgba(255,180,80,.4);background:radial-gradient(circle at 40% 40%,rgba(180,100,30,.5),rgba(60,30,10,.7));color:#ffd080;font-size:28px}
@@ -56,22 +58,26 @@ button:active{transform:translateY(1px) scale(.98)}
 </div>
 <div id="overlay">
   <div class="card">
+    <div class="version"></div>
     <h1>Depth Charge</h1>
     <h2>Sonar Hunt</h2>
     <p>Command a destroyer on the surface. Drop depth charges to sink enemy submarines lurking below!</p>
     <div class="tips">
-      <tip class="tip"><b>🚢 Move</b>Arrow keys / A-D or tap ◀ ▶ to steer your destroyer</tip>
-      <tip class="tip"><b>💣 Drop</b>Space / tap 💣 to release a depth charge</tip>
+      <tip class="tip"><b>🚢 Move</b>Arrow keys / A-D, mouse, or tap ◀ ▶ to steer your destroyer</tip>
+      <tip class="tip"><b>💣 Drop</b>Space / click / tap 💣 to release a depth charge</tip>
       <tip class="tip"><b>📡 Sonar</b>Sonar pings reveal sub positions — watch the rings!</tip>
       <tip class="tip"><b>🎯 Goal</b>Sink all subs before running out of charges. 3 levels!</tip>
     </div>
+    <p style="opacity:.6;font-size:12px;margin:4px 0 0">Desktop: Enter starts · P / Esc pauses</p>
     <button id="startBtn">Dive In</button>
   </div>
 </div>
 <div id="gameOver">
   <div class="card">
+    <div class="version"></div>
     <h2 id="goTitle">Mission Complete</h2>
     <p id="goText"></p>
+    <p style="opacity:.6;font-size:12px;margin:4px 0 0">Press Enter to play again</p>
     <button id="restartBtn">Play Again</button>
   </div>
 </div>
@@ -79,7 +85,8 @@ button:active{transform:translateY(1px) scale(.98)}
 'use strict';
 const C=document.getElementById('game'),X=C.getContext('2d');
 const $=id=>document.getElementById(id);
-let W,H,dpr;
+const VERSION='v1.0.1';
+let W,H,dpr,viewScale=1,canvasLeft=0,paused=false;
 
 // Audio
 const AC=new(window.AudioContext||window.webkitAudioContext)();
@@ -103,10 +110,20 @@ function sfxWin(){playTone(523,.15,'square',.1);setTimeout(()=>playTone(659,.15,
 function sfxLose(){playTone(300,.3,'sawtooth',.1);setTimeout(()=>playTone(220,.5,'sawtooth',.1),250)}
 
 function resize(){
-  dpr=Math.min(window.devicePixelRatio||1,2);
-  W=window.innerWidth;H=window.innerHeight;
-  C.width=W*dpr;C.height=H*dpr;
-  C.style.width=W+'px';C.style.height=H+'px';
+  // Desktop: logical size is capped (H<=960, W<=1600) and the canvas is scaled
+  // up to fill the window height; ultra-wide screens get letterbox gutters.
+  // Phones land on viewScale=1 with full-window logical size, exactly as before.
+  const vw=window.innerWidth,vh=window.innerHeight;
+  H=Math.min(vh,960);
+  viewScale=vh/H;
+  W=Math.min(Math.floor(vw/viewScale),1600);
+  const cssW=Math.round(W*viewScale);
+  canvasLeft=Math.max(0,Math.round((vw-cssW)/2));
+  dpr=Math.min(viewScale*(window.devicePixelRatio||1),2);
+  C.width=Math.floor(W*dpr);C.height=Math.floor(H*dpr);
+  C.style.width=cssW+'px';C.style.height=vh+'px';C.style.left=canvasLeft+'px';
+  C.classList.toggle('boxed',canvasLeft>0);
+  document.documentElement.style.setProperty('--gutter',canvasLeft+'px');
   X.setTransform(dpr,0,0,dpr,0,0);
 }
 window.addEventListener('resize',resize);resize();
@@ -116,10 +133,13 @@ const SURFACE_Y=()=>H*.15;
 const SEABED_Y=()=>H*.92;
 let state='menu'; // menu, playing, levelClear, gameOver
 let lvl=1,score=0,charges=0,maxCharges=0;
-let ship={x:0,y:0,w:60,h:18,vx:0,speed:200};
+let ship={x:0,y:0,w:60,h:18,vx:0};
+// Phone widths keep the original 200px/s; wider desktop fields scale up so the
+// destroyer crosses the screen in roughly the same time as on a phone.
+const shipSpeed=()=>Math.max(200,W*.42);
 let subs=[],depthCharges=[],explosions=[],particles=[],sonarPings=[],bubbles=[];
 let shakeT=0,shakeX=0,shakeY=0;
-let keys={};
+let keys={},mouseTX=null;
 let sonarTimer=0,sonarInterval=2.5;
 let bannerTimer=0;
 
@@ -195,21 +215,70 @@ function spawnExplosion(x,y,big){
 }
 
 // Input
-document.addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key===' '&&state==='playing'){e.preventDefault();dropCharge()}});
+function startGame(){
+  resumeAudio();
+  $('overlay').style.display='none';
+  $('gameOver').classList.remove('show');
+  paused=false;mouseTX=null;
+  state='playing';lvl=1;score=0;initLevel();
+}
+function setPaused(p){
+  if(state!=='playing'||p===paused)return;
+  paused=p;
+  if(paused){
+    $('bannerBig').textContent='Paused';
+    $('bannerSmall').textContent='Tap / P / Esc / Enter to resume';
+    $('waveBanner').classList.add('show');
+  }else{
+    $('waveBanner').classList.remove('show');bannerTimer=0;
+  }
+}
+
+document.addEventListener('keydown',e=>{
+  const k=e.key,lk=k.toLowerCase();
+  if([' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(k))e.preventDefault();
+  if(lk==='p'||k==='Escape'){if(state==='playing')setPaused(!paused);return}
+  if(k==='Enter'){
+    if(state==='menu'||state==='gameOver')startGame();
+    else if(paused)setPaused(false);
+    return;
+  }
+  if(lk==='arrowleft'||lk==='arrowright'||lk==='a'||lk==='d')mouseTX=null;
+  keys[lk]=true;
+  if(k===' '&&state==='playing'&&!paused&&!e.repeat)dropCharge();
+});
 document.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});
+window.addEventListener('blur',()=>{keys={};setPaused(true)});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)setPaused(true)});
+
+// Window-level mouse/pen input (desktop parity with the touch buttons): the
+// pointer steers the destroyer, a click drops a charge. Coordinates map back
+// into logical space via the letterbox offset and view scale. Touch is left
+// entirely to the on-screen buttons so mobile behavior is unchanged.
+const pointerGuard=e=>!(e.target&&e.target.closest&&e.target.closest('button,.ctrl-btn,#overlay,#gameOver'));
+const pointerToGameX=e=>Math.max(ship.w/2,Math.min(W-ship.w/2,(e.clientX-canvasLeft)/viewScale));
+window.addEventListener('pointermove',e=>{
+  if(e.pointerType==='touch'||state!=='playing'||paused||!pointerGuard(e))return;
+  mouseTX=pointerToGameX(e);
+});
+window.addEventListener('pointerdown',e=>{
+  if(state!=='playing'||!pointerGuard(e))return;
+  if(paused){setPaused(false);return} // tap or click anywhere resumes
+  if(e.pointerType==='touch'||e.button!==0)return;
+  resumeAudio();
+  mouseTX=pointerToGameX(e);
+  dropCharge();
+});
+document.addEventListener('contextmenu',e=>{if(state==='playing')e.preventDefault()});
 
 $('btnLeft').addEventListener('touchstart',e=>{e.preventDefault();keys._left=true});
 $('btnLeft').addEventListener('touchend',e=>{keys._left=false});
 $('btnRight').addEventListener('touchstart',e=>{e.preventDefault();keys._right=true});
 $('btnRight').addEventListener('touchend',e=>{keys._right=false});
-$('btnDrop').addEventListener('touchstart',e=>{e.preventDefault();if(state==='playing')dropCharge()});
+$('btnDrop').addEventListener('touchstart',e=>{e.preventDefault();if(state==='playing'&&!paused)dropCharge()});
 
-$('startBtn').addEventListener('click',()=>{
-  resumeAudio();$('overlay').style.display='none';state='playing';lvl=1;score=0;initLevel();
-});
-$('restartBtn').addEventListener('click',()=>{
-  $('gameOver').classList.remove('show');state='playing';lvl=1;score=0;initLevel();
-});
+$('startBtn').addEventListener('click',startGame);
+$('restartBtn').addEventListener('click',startGame);
 
 // Main loop
 let lastT=0;
@@ -217,6 +286,7 @@ function loop(ts){
   requestAnimationFrame(loop);
   const dt=Math.min((ts-lastT)/1000,.05);lastT=ts;
   if(state==='menu')drawMenu(dt);
+  else if(paused)draw();
   else update(dt);
 }
 
@@ -296,11 +366,18 @@ function update(dt){
   if(shakeT>0){shakeT-=dt;shakeX=(Math.random()-.5)*8*(shakeT/.3);shakeY=(Math.random()-.5)*6*(shakeT/.3)}else{shakeX=0;shakeY=0}
 
   if(state==='playing'){
-    // Ship movement
+    // Ship movement — keyboard/touch buttons take priority, otherwise the
+    // ship eases toward the last mouse/pen position (desktop steering).
     let dir=0;
     if(keys.arrowleft||keys.a||keys._left)dir=-1;
     if(keys.arrowright||keys.d||keys._right)dir=1;
-    ship.vx+=(dir*ship.speed-ship.vx)*Math.min(1,dt*6);
+    const spd=shipSpeed();
+    let targetV=dir*spd;
+    if(dir===0&&mouseTX!=null){
+      const dx=mouseTX-ship.x;
+      targetV=Math.abs(dx)<3?0:Math.max(-spd,Math.min(spd,dx*6));
+    }
+    ship.vx+=(targetV-ship.vx)*Math.min(1,dt*6);
     ship.x+=ship.vx*dt;
     ship.x=Math.max(ship.w/2,Math.min(W-ship.w/2,ship.x));
     ship.y=SURFACE_Y();
@@ -583,7 +660,7 @@ function draw(){
   X.beginPath();X.arc(0,ship.h*.3,6,0,Math.PI*2);X.fill();
   // Wake
   X.save();X.globalAlpha=.3;
-  const wakeSpread=Math.abs(ship.vx)/ship.speed;
+  const wakeSpread=Math.abs(ship.vx)/shipSpeed();
   for(let i=1;i<6;i++){
     X.strokeStyle=`rgba(180,220,240,${.3-i*.05})`;X.lineWidth=1;
     X.beginPath();X.arc(0,ship.h*.3,4+i*5+wakeSpread*i*3,Math.PI*.3,Math.PI*.7);X.stroke();
@@ -629,6 +706,15 @@ function draw(){
 }
 
 requestAnimationFrame(loop);
+
+document.querySelectorAll('.version').forEach(el=>el.textContent=VERSION);
+window.__DC_TEST__={
+  version:VERSION,
+  startGame,
+  setPaused,
+  dropCharge,
+  state:()=>({state,paused,lvl,score,charges,W,H,viewScale,canvasLeft,mouseTX,ship:{x:ship.x,y:ship.y,vx:ship.vx},subs:subs.filter(s=>s.hp>0).length})
+};
 </script>
 </body>
 </html>

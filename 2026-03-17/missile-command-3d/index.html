@@ -171,9 +171,10 @@
         <li><strong>MIRVs</strong> split at mid-range from wave 3</li>
         <li><strong>Smart missiles</strong> and <strong>bombers</strong> from wave 5</li>
         <li>Buildings take persistent damage &mdash; protect them!</li>
+        <li>Desktop: <strong>click</strong> to fire &mdash; <strong>Enter</strong> starts, <strong>P</strong>/<strong>Esc</strong> pauses</li>
       </ul>
       <div class="row">
-        <span class="tiny">First tap unlocks sound.</span>
+        <span class="tiny">First tap unlocks sound. &middot; v1.0.1</span>
         <div class="row" style="margin-top:0">
           <button class="ghost" id="titleScoresBtn">High Scores</button>
           <button id="startBtn">Launch Defense</button>
@@ -278,6 +279,7 @@ function unproject(sx, sy, z3) {
 const S = {
   playing: false,
   gameOver: false,
+  paused: false,
   wave: 1,
   score: 0,
   time: 0,
@@ -1091,10 +1093,28 @@ function endGame() {
 }
 
 let pendingInitials = [0, 0, 0]; // A=0, B=1, ...
+let initialsCursor = 0;
 function showInitialsEntry() {
   pendingInitials = [0, 0, 0];
+  initialsCursor = 0;
   initialsEntry.classList.remove('hidden');
   renderInitials();
+}
+
+function updateInitialCursor() {
+  initialsRow.querySelectorAll('.letter').forEach((el, i) => {
+    el.style.borderBottom = i === initialsCursor ? '2px solid #ffd700' : '2px solid transparent';
+  });
+}
+
+function submitInitials() {
+  const initials = pendingInitials.map(i => String.fromCharCode(65 + i)).join('');
+  const rank = addScore(initials, S.score, S.wave);
+  submitGlobalScore(initials, S.score, {wave: S.wave});
+  const scores = loadScores();
+  const ts = scores[rank]?.ts;
+  initialsEntry.classList.add('hidden');
+  renderScores(goScores, ts);
 }
 
 function renderInitials() {
@@ -1115,13 +1135,17 @@ function renderInitials() {
     const idx = i;
     function upHandler(e) {
       e.stopPropagation();
+      initialsCursor = idx;
       pendingInitials[idx] = (pendingInitials[idx] + 1) % 26;
       letter.textContent = String.fromCharCode(65 + pendingInitials[idx]);
+      updateInitialCursor();
     }
     function downHandler(e) {
       e.stopPropagation();
+      initialsCursor = idx;
       pendingInitials[idx] = (pendingInitials[idx] + 25) % 26;
       letter.textContent = String.fromCharCode(65 + pendingInitials[idx]);
+      updateInitialCursor();
     }
     up.addEventListener('click', upHandler);
     up.addEventListener('touchend', upHandler);
@@ -1139,17 +1163,12 @@ function renderInitials() {
   submit.style.marginLeft = '10px';
   function submitHandler(e) {
     e.stopPropagation();
-    const initials = pendingInitials.map(i => String.fromCharCode(65 + i)).join('');
-    const rank = addScore(initials, S.score, S.wave);
-    submitGlobalScore(initials, S.score, {wave: S.wave});
-    const scores = loadScores();
-    const ts = scores[rank]?.ts;
-    initialsEntry.classList.add('hidden');
-    renderScores(goScores, ts);
+    submitInitials();
   }
   submit.addEventListener('click', submitHandler);
   submit.addEventListener('touchend', submitHandler);
   initialsRow.appendChild(submit);
+  updateInitialCursor();
 }
 
 // ============ DRAWING ============
@@ -1157,7 +1176,7 @@ function draw() {
   ctx.save();
 
   // Shake
-  if (S.shake > 0) {
+  if (S.shake > 0 && !S.paused) {
     ctx.translate(rand(-S.shake, S.shake), rand(-S.shake, S.shake));
   }
 
@@ -1273,6 +1292,21 @@ function draw() {
     ctx.arc(cx, cy, 2, 0, TAU);
     ctx.fillStyle = 'rgba(127,231,255,0.8)';
     ctx.fill();
+  }
+
+  // Pause overlay
+  if (S.paused) {
+    ctx.fillStyle = 'rgba(2,5,12,0.55)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#eef7ff';
+    ctx.font = "700 32px 'Segoe UI', system-ui, sans-serif";
+    ctx.fillText('PAUSED', VPX, H * 0.42);
+    ctx.globalAlpha = 0.75;
+    ctx.font = "14px 'Segoe UI', system-ui, sans-serif";
+    ctx.fillText('P / Esc / Enter to resume', VPX, H * 0.42 + 30);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
   }
 
   ctx.restore();
@@ -1729,7 +1763,7 @@ function gameLoop(ts) {
   const dt = Math.min((ts - S.lastTime) / 1000, 1 / 30);
   S.lastTime = ts;
 
-  if (S.playing && !S.gameOver) {
+  if (S.playing && !S.gameOver && !S.paused) {
     update(dt);
   }
   draw();
@@ -1739,7 +1773,7 @@ function gameLoop(ts) {
 let cursorPos = null;
 
 function handleInput(sx, sy) {
-  if (!S.playing || S.gameOver) return;
+  if (!S.playing || S.gameOver || S.paused) return;
   if (S.wavePhase !== 'active') return;
   // Don't shoot below ground
   if (sy > H * 0.85) return;
@@ -1772,6 +1806,7 @@ document.addEventListener('touchend', e => {
 
 // Mouse handling
 canvas.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
   initAudio();
   if (audio) audio.resume();
   handleInput(e.clientX, e.clientY);
@@ -1782,6 +1817,80 @@ canvas.addEventListener('mousemove', e => {
 });
 
 canvas.addEventListener('mouseleave', () => { cursorPos = null; });
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// ============ KEYBOARD (desktop) ============
+function togglePause() {
+  S.paused = !S.paused;
+  if (audio) {
+    if (S.paused) { audio.ac.suspend(); }
+    else { audio.resume(); }
+  }
+}
+
+document.addEventListener('keydown', e => {
+  const k = e.key;
+
+  if (!titleOverlay.classList.contains('hidden')) {
+    if (k === 'Enter' || k === ' ') {
+      e.preventDefault();
+      document.getElementById('startBtn').click();
+    }
+    return;
+  }
+
+  if (!scoresOverlay.classList.contains('hidden')) {
+    if (k === 'Enter' || k === 'Escape') {
+      e.preventDefault();
+      document.getElementById('scoresBackBtn').click();
+    }
+    return;
+  }
+
+  if (!gameOverOverlay.classList.contains('hidden')) {
+    if (!initialsEntry.classList.contains('hidden')) {
+      if (/^[a-zA-Z]$/.test(k)) {
+        e.preventDefault();
+        pendingInitials[initialsCursor] = k.toUpperCase().charCodeAt(0) - 65;
+        initialsCursor = Math.min(2, initialsCursor + 1);
+        renderInitials();
+      } else if (k === 'Backspace' || k === 'ArrowLeft') {
+        e.preventDefault();
+        initialsCursor = Math.max(0, initialsCursor - 1);
+        updateInitialCursor();
+      } else if (k === 'ArrowRight') {
+        e.preventDefault();
+        initialsCursor = Math.min(2, initialsCursor + 1);
+        updateInitialCursor();
+      } else if (k === 'ArrowUp' || k === 'ArrowDown') {
+        e.preventDefault();
+        const d = k === 'ArrowUp' ? 1 : 25;
+        pendingInitials[initialsCursor] = (pendingInitials[initialsCursor] + d) % 26;
+        renderInitials();
+      } else if (k === 'Enter') {
+        e.preventDefault();
+        submitInitials();
+      }
+      return;
+    }
+    if (k === 'Enter') {
+      e.preventDefault();
+      document.getElementById('restartBtn').click();
+    }
+    return;
+  }
+
+  if (S.playing && !S.gameOver) {
+    if (k === 'p' || k === 'P' || k === 'Escape') {
+      e.preventDefault();
+      togglePause();
+    } else if (k === 'Enter' && S.paused) {
+      e.preventDefault();
+      togglePause();
+    }
+  }
+});
 
 // ============ BUTTONS ============
 function btnHandler(el, fn) {
@@ -1795,6 +1904,7 @@ btnHandler(document.getElementById('startBtn'), () => {
   titleOverlay.classList.add('hidden');
   S.playing = true;
   S.gameOver = false;
+  S.paused = false;
   S.wave = 1;
   S.score = 0;
   S.time = 0;
@@ -1816,6 +1926,7 @@ btnHandler(document.getElementById('restartBtn'), () => {
   gameOverOverlay.classList.add('hidden');
   S.playing = true;
   S.gameOver = false;
+  S.paused = false;
   S.wave = 1;
   S.score = 0;
   S.time = 0;

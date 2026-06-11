@@ -9,22 +9,23 @@
 <title>SLASH – Rune Cutter</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
+  :root { --gutter:0px; } /* letterbox gutter width on wide desktop screens; 0 on phones */
   html, body { position:fixed; overflow:hidden; overscroll-behavior:none; width:100%; height:100%; }
   body { background:#030008; touch-action:none; font-family:'Courier New',monospace; }
-  canvas { display:block; width:100vw; height:100vh; }
+  canvas { display:block; position:fixed; top:0; left:0; width:100vw; height:100vh; }
   button { touch-action:manipulation; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-  #hud { position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:10px 16px; z-index:10; pointer-events:none; background:linear-gradient(to bottom,rgba(3,0,8,0.8),transparent); }
+  #hud { position:fixed; top:0; left:var(--gutter); right:var(--gutter); display:flex; justify-content:space-between; align-items:center; padding:10px 16px; z-index:10; pointer-events:none; background:linear-gradient(to bottom,rgba(3,0,8,0.8),transparent); }
   .stat { font-size:13px; letter-spacing:2px; }
   #scoreTxt { color:#e0c0ff; text-shadow:0 0 10px #a060ff; transition:text-shadow 0.2s; }
   #scoreTxt.pulse { text-shadow:0 0 20px #e080ff, 0 0 40px #a060ff; }
   #lvlTxt { color:#c0a0ff; text-shadow:0 0 10px #8040cc; }
-  #goalTxt { position:fixed; top:42px; right:16px; font-size:12px; letter-spacing:2px; color:#a8d8ff; text-shadow:0 0 10px #5ab8ff; z-index:11; pointer-events:none; }
-  #styleTxt { position:fixed; top:42px; left:16px; font-size:12px; letter-spacing:2px; color:#ffd78a; text-shadow:0 0 10px #ffb85c; z-index:11; pointer-events:none; }
+  #goalTxt { position:fixed; top:42px; right:calc(16px + var(--gutter)); font-size:12px; letter-spacing:2px; color:#a8d8ff; text-shadow:0 0 10px #5ab8ff; z-index:11; pointer-events:none; }
+  #styleTxt { position:fixed; top:42px; left:calc(16px + var(--gutter)); font-size:12px; letter-spacing:2px; color:#ffd78a; text-shadow:0 0 10px #ffb85c; z-index:11; pointer-events:none; }
   #sealHp { font-size:18px; }
-  #bombBar { position:fixed; bottom:16px; right:16px; font-size:11px; letter-spacing:2px; color:#8060aa; z-index:10; pointer-events:none; text-align:right; width:170px; }
-  #sigilBar { position:fixed; bottom:52px; right:16px; font-size:11px; letter-spacing:2px; color:#76e8ff; z-index:10; pointer-events:none; text-align:right; width:170px; }
-  #chargeBar { position:fixed; bottom:16px; left:16px; font-size:11px; letter-spacing:2px; color:#8cf5d4; z-index:10; pointer-events:none; text-align:left; width:170px; }
-  #wellBar { position:fixed; bottom:52px; left:16px; font-size:11px; letter-spacing:2px; color:#ff95d8; z-index:10; pointer-events:none; text-align:left; width:170px; }
+  #bombBar { position:fixed; bottom:16px; right:calc(16px + var(--gutter)); font-size:11px; letter-spacing:2px; color:#8060aa; z-index:10; pointer-events:none; text-align:right; width:170px; }
+  #sigilBar { position:fixed; bottom:52px; right:calc(16px + var(--gutter)); font-size:11px; letter-spacing:2px; color:#76e8ff; z-index:10; pointer-events:none; text-align:right; width:170px; }
+  #chargeBar { position:fixed; bottom:16px; left:calc(16px + var(--gutter)); font-size:11px; letter-spacing:2px; color:#8cf5d4; z-index:10; pointer-events:none; text-align:left; width:170px; }
+  #wellBar { position:fixed; bottom:52px; left:calc(16px + var(--gutter)); font-size:11px; letter-spacing:2px; color:#ff95d8; z-index:10; pointer-events:none; text-align:left; width:170px; }
   #bombFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#8040cc,#e080ff); box-shadow:0 0 10px #a060ff; transition:width 0.1s; vertical-align:middle; }
   #sigilFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#3aa8ff,#8afff4); box-shadow:0 0 10px #66d8ff; transition:width 0.1s; vertical-align:middle; }
   #chargeFill { display:inline-block; height:6px; border-radius:3px; background:linear-gradient(90deg,#2fdc8f,#b8ffd8); box-shadow:0 0 10px #7fffc0; transition:width 0.1s; vertical-align:middle; }
@@ -46,7 +47,7 @@
   #endMsg p { font-size:14px; color:#c090e0; }
   #endMsg button { margin-top:24px; padding:12px 36px; font-size:16px; letter-spacing:3px; border-radius:4px; background:transparent; color:#e080ff; border:1px solid #e080ff; }
   #combo { position:fixed; top:50px; left:50%; transform:translateX(-50%); font-size:24px; letter-spacing:6px; pointer-events:none; z-index:15; opacity:0; transition:opacity 0.3s; color:#e0c0ff; text-shadow:0 0 20px #c060ff; }
-  #muteBtn { position:fixed; top:10px; right:60px; z-index:25; background:none; border:none; font-size:22px; color:#a080c0; pointer-events:all; padding:4px 8px; }
+  #muteBtn { position:fixed; top:10px; right:calc(60px + var(--gutter)); z-index:25; background:none; border:none; font-size:22px; color:#a080c0; pointer-events:all; padding:4px 8px; }
   .scorePopup { position:fixed; pointer-events:none; z-index:16; font-size:18px; font-weight:bold; font-family:'Courier New',monospace; letter-spacing:2px; color:#ffe080; text-shadow:0 0 12px #ffa040; }
   .panel { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:35; background:rgba(2,0,6,0.94); padding:24px; }
   .panelCard { width:min(92vw,420px); max-height:90vh; overflow:auto; background:rgba(18,8,40,0.82); border:1px solid rgba(224,128,255,0.45); border-radius:14px; box-shadow:0 0 40px rgba(128,64,204,0.35); padding:22px 20px 18px; backdrop-filter:blur(10px); }
@@ -142,10 +143,22 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v1.0.6';
-const GAME_BUILD='2026-04-17';
-let W,H;
-function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+const GAME_VERSION='v1.0.7';
+const GAME_BUILD='2026-06-10';
+let W,H,viewScale=1,canvasLeft=0;
+function resize(){
+  // Desktop: cap the logical playfield at phone-ish dimensions and letterbox/scale it up.
+  // On phones viewScale=1 and canvasLeft=0, so behavior is unchanged.
+  const vw=window.innerWidth, vh=window.innerHeight;
+  H=Math.min(vh,960);
+  viewScale=vh/H;
+  W=Math.min(Math.floor(vw/viewScale), Math.max(640,Math.round(H*0.8)));
+  const cssW=Math.round(W*viewScale);
+  canvasLeft=Math.max(0,Math.round((vw-cssW)/2));
+  canvas.width=cssW; canvas.height=vh;
+  canvas.style.width=cssW+'px'; canvas.style.height=vh+'px'; canvas.style.left=canvasLeft+'px';
+  document.documentElement.style.setProperty('--gutter',canvasLeft+'px');
+}
 resize();
 document.getElementById('versionTag').textContent=GAME_VERSION;
 document.getElementById('buildTag').textContent=`BUILD ${GAME_BUILD}`;
@@ -1000,7 +1013,7 @@ function addScorePopup(x,y,text){
   const el=document.createElement('div');
   el.className='scorePopup';
   el.textContent=text;
-  el.style.left=x+'px'; el.style.top=y+'px';
+  el.style.left=(canvasLeft+x*viewScale)+'px'; el.style.top=(y*viewScale)+'px';
   document.body.appendChild(el);
   scorePopups.push({el,y,life:1});
 }
@@ -1816,7 +1829,7 @@ function updateScorePopups(){
     const sp=scorePopups[i];
     sp.life-=0.015;
     sp.y-=1.2;
-    sp.el.style.top=sp.y+'px';
+    sp.el.style.top=(sp.y*viewScale)+'px';
     sp.el.style.opacity=sp.life;
     if(sp.life<=0){
       sp.el.remove();
@@ -2197,7 +2210,7 @@ function loop(ts){
 
   if(shakeT>0){shakeX=(Math.random()-0.5)*12;shakeY=(Math.random()-0.5)*12;shakeT--;}
   else{shakeX=0;shakeY=0;}
-  ctx.save(); ctx.translate(shakeX,shakeY);
+  ctx.save(); ctx.setTransform(viewScale,0,0,viewScale,0,0); ctx.translate(shakeX,shakeY);
   drawBackground();
 
   if(gameActive){
@@ -2473,11 +2486,16 @@ async function submitScoreEntry(){
 
 // ==================== INPUT ====================
 function isButton(e){return e.target&&e.target.closest&&e.target.closest('button');}
+// Map client coords to game-logical coords (identity on phones)
+function evtPos(e){return {x:(e.clientX-canvasLeft)/viewScale, y:e.clientY/viewScale};}
 
-canvas.addEventListener('pointerdown',e=>{
+// Window-level so desktop mouse drags survive crossing HUD elements / leaving the canvas
+window.addEventListener('pointerdown',e=>{
   if(isButton(e)) return;
   resumeAudio();
-  pointerStart={x:e.clientX,y:e.clientY,t:performance.now()};
+  if(!gameActive) return;
+  const p=evtPos(e);
+  pointerStart={x:p.x,y:p.y,t:performance.now()};
   holdTriggered=false;
   if(holdTimer) clearTimeout(holdTimer);
   holdTimer=setTimeout(()=>{
@@ -2490,15 +2508,17 @@ canvas.addEventListener('pointerdown',e=>{
       holdTimer=null;
     }
   },140);
-  drawing=true; slashPoints=[{x:e.clientX,y:e.clientY}];
+  drawing=true; slashPoints=[{x:p.x,y:p.y}];
   circleHint=0; circleHintData=null;
-  ripples.push({x:e.clientX,y:e.clientY,radius:5,life:1});
+  ripples.push({x:p.x,y:p.y,radius:5,life:1});
 });
-canvas.addEventListener('pointermove',e=>{
+window.addEventListener('pointermove',e=>{
   if(!drawing) return;
-  slashPoints.push({x:e.clientX,y:e.clientY});
+  if(e.pointerType==='mouse'&&e.buttons===0){finishSlash();return;} // button released outside the window
+  const p=evtPos(e);
+  slashPoints.push(p);
   if(pointerStart && !holdTriggered){
-    const dist=Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y);
+    const dist=Math.hypot(p.x-pointerStart.x,p.y-pointerStart.y);
     if(dist>18){ pointerStart=null; if(holdTimer) { clearTimeout(holdTimer); holdTimer=null; } }
   }
 });
@@ -2518,9 +2538,9 @@ function finishSlash(){
   }
   slashPoints=[];
 }
-canvas.addEventListener('pointerup',finishSlash);
-canvas.addEventListener('pointercancel',finishSlash);
-canvas.addEventListener('pointerleave',e=>{if(drawing&&e.buttons===0) finishSlash();});
+window.addEventListener('pointerup',finishSlash);
+window.addEventListener('pointercancel',finishSlash);
+window.addEventListener('blur',()=>{if(drawing) finishSlash();});
 
 // Prevent default on canvas touch but not buttons
 canvas.addEventListener('touchstart',e=>{if(!isButton(e))e.preventDefault();},{passive:false});
@@ -2565,6 +2585,26 @@ document.getElementById('initialsRow').addEventListener('touchend',e=>{
 });
 
 buildInitialsPicker();
+
+// Desktop keyboard: Enter advances menus, Escape backs out
+window.addEventListener('keydown',e=>{
+  const scoresOpen=document.getElementById('scoresPanel').style.display==='flex';
+  const endOpen=document.getElementById('endMsg').style.display==='flex';
+  if(e.key==='Escape'){
+    if(scoresOpen){closeScoresPanel();return;}
+    if(endOpen){restartGame();return;}
+  }
+  if(e.key==='Enter'){
+    if(scoresOpen){e.preventDefault();closeScoresPanel();return;}
+    if(endOpen){
+      e.preventDefault();
+      if(pendingScoreSubmission&&document.getElementById('scoreEntry').style.display==='block') submitScoreEntry();
+      else restartGame();
+      return;
+    }
+    if(!gameActive&&overlay.style.display!=='none'){e.preventDefault();startGame();}
+  }
+});
 
 if(!animationStarted){
   animationStarted=true;

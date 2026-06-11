@@ -143,10 +143,10 @@
         <li>Destroy enemy warheads with blast waves and trigger chain reactions for bigger scores.</li>
         <li><strong>MIRVs</strong> arrive on wave 6, <strong>satellites</strong> on wave 8, and <strong>smart bombs</strong> on wave 10.</li>
         <li>Satellites take <strong>2 hits</strong>. Lose all cities and it’s over.</li>
-        <li>Play on mobile with rapid multi-touch barrages.</li>
+        <li>Mobile: rapid multi-touch barrages. Desktop: precise crosshair clicks — <strong>Enter</strong> starts, <strong>P</strong>/<strong>Esc</strong> pauses.</li>
       </ul>
       <div class="row">
-        <span class="tiny">First touch/click also unlocks sound.</span>
+        <span class="tiny">First touch/click also unlocks sound. · v1.0.1</span>
         <div class="row" style="margin-top:0">
           <button class="ghost" id="dismissTutorial">Practice</button>
           <button id="startButton">Start Defense</button>
@@ -166,7 +166,7 @@
       </div>
       <div id="hsScoresDisplay" style="margin:0.8em 0;max-height:40vh;overflow-y:auto;font-family:monospace;font-size:0.85rem"></div>
       <div class="row">
-        <span class="tiny">Tap anywhere or press the button to launch a new defense.</span>
+        <span class="tiny">Tap or click anywhere — or press Enter — to launch a new defense.</span>
         <button id="restartButton">Restart</button>
       </div>
     </div>
@@ -263,7 +263,6 @@
         row.appendChild(ok);
       }
 
-      const DPR = () => Math.min(window.devicePixelRatio || 1, 2);
       const TAU = Math.PI * 2;
       const SKYSETS = [
         {
@@ -288,6 +287,7 @@
         cityBandY: 0,
         playing: false,
         gameOver: false,
+        paused: false,
         wave: 1,
         score: 0,
         nextBonusScore: 12000,
@@ -440,14 +440,21 @@
       }
 
       function resize() {
-        const dpr = DPR();
-        canvas.width = Math.floor(window.innerWidth * dpr);
-        canvas.height = Math.floor(window.innerHeight * dpr);
-        canvas.style.width = window.innerWidth + 'px';
-        canvas.style.height = window.innerHeight + 'px';
+        // Desktop fill-width logical cap: game logic runs at phone-ish height
+        // (max 960 logical px) and the canvas is CSS-scaled up to fill the
+        // window. On phones (vh <= 960) this matches the old raw-pixel sizing.
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const h = Math.min(vh, 960);
+        const viewScale = vh / h;
+        const w = Math.floor(vw / viewScale);
+        const dpr = Math.min(viewScale * (window.devicePixelRatio || 1), viewScale > 1 ? 2.4 : 2);
+        canvas.width = Math.floor(w * dpr);
+        canvas.height = Math.floor(h * dpr);
+        canvas.style.width = vw + 'px';
+        canvas.style.height = vh + 'px';
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        state.width = window.innerWidth;
-        state.height = window.innerHeight;
+        state.width = w;
+        state.height = h;
         state.hudSafeTop = 16 + (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-top)')) || 0);
         state.groundY = state.height * 0.83;
         state.cityBandY = state.groundY + 8;
@@ -553,6 +560,7 @@
       function resetGame() {
         state.playing = true;
         state.gameOver = false;
+        state.paused = false;
         state.wave = 1;
         state.score = 0;
         state.nextBonusScore = 12000;
@@ -1368,7 +1376,7 @@
       function render() {
         ctx.clearRect(0, 0, state.width, state.height);
         let sx = 0, sy = 0;
-        if (state.shake > 0) {
+        if (state.shake > 0 && !state.paused) {
           sx = rand(-state.shake, state.shake);
           sy = rand(-state.shake * 0.6, state.shake * 0.6);
         }
@@ -1384,7 +1392,22 @@
         drawPrompts();
         drawFXOverlays();
         ctx.restore();
+        if (state.paused) drawPausedOverlay();
         updateHUD();
+      }
+
+      function drawPausedOverlay() {
+        ctx.save();
+        ctx.fillStyle = 'rgba(2,5,12,0.55)';
+        ctx.fillRect(0, 0, state.width, state.height);
+        ctx.textAlign = 'center';
+        ctx.font = '800 34px Inter, system-ui, sans-serif';
+        ctx.fillStyle = '#9be6ff';
+        ctx.fillText('PAUSED', state.width / 2, state.height * 0.42);
+        ctx.font = '600 15px Inter, system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(238,247,255,0.8)';
+        ctx.fillText('P / Esc or tap to resume', state.width / 2, state.height * 0.42 + 30);
+        ctx.restore();
       }
 
       function updateHUD() {
@@ -1398,14 +1421,18 @@
       function frame(now) {
         const dt = clamp((now - state.lastTime) / 1000, 0, 0.033);
         state.lastTime = now;
-        update(dt);
+        if (!state.paused) update(dt);
         render();
         requestAnimationFrame(frame);
       }
 
       function localPoint(clientX, clientY) {
+        // Map window coords to logical game coords (canvas is CSS-scaled on desktop).
         const rect = canvas.getBoundingClientRect();
-        return { x: clientX - rect.left, y: clientY - rect.top };
+        return {
+          x: (clientX - rect.left) * (state.width / rect.width),
+          y: (clientY - rect.top) * (state.height / rect.height)
+        };
       }
 
       async function unlockAudioAndMaybeStart() {
@@ -1426,9 +1453,20 @@
         resetGame();
       }
 
+      function setPaused(on) {
+        if (on && (!state.playing || state.gameOver)) return;
+        if (state.paused === on) return;
+        state.paused = on;
+        if (!on) state.lastTime = performance.now();
+      }
+
       function handlePointer(x, y) {
         unlockAudioAndMaybeStart();
         if (!tutorialOverlay.classList.contains('hidden')) return;
+        if (state.paused) {
+          setPaused(false);
+          return;
+        }
         if (state.gameOver) {
           restartGame();
           return;
@@ -1436,21 +1474,28 @@
         launchDefense(x, y);
       }
 
-      if ('ontouchstart' in window) {
-        canvas.addEventListener('touchstart', (e) => {
-          e.preventDefault();
-          for (const touch of e.changedTouches) {
-            const p = localPoint(touch.clientX, touch.clientY);
-            handlePointer(p.x, p.y);
-          }
-        }, { passive: false });
-      } else {
-        canvas.addEventListener('pointerdown', (e) => {
-          e.preventDefault();
-          const p = localPoint(e.clientX, e.clientY);
-          handlePointer(p.x, p.y);
-        }, { passive: false });
+      function gameTarget(e) {
+        return !(e.target && e.target.closest && e.target.closest('button, .overlay, #hsOverlay'));
       }
+
+      // Input listens on the whole window (buttons/overlays opt out) so aiming
+      // works edge to edge. Touch keeps the original multi-touch barrage path;
+      // pointerdown covers mouse and pen, including touch-capable laptops.
+      document.addEventListener('touchstart', (e) => {
+        if (!gameTarget(e)) return;
+        e.preventDefault();
+        for (const touch of e.changedTouches) {
+          const p = localPoint(touch.clientX, touch.clientY);
+          handlePointer(p.x, p.y);
+        }
+      }, { passive: false });
+      window.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'touch') return; // handled by touchstart above
+        if (!gameTarget(e)) return;
+        e.preventDefault();
+        const p = localPoint(e.clientX, e.clientY);
+        handlePointer(p.x, p.y);
+      });
 
       ['touchmove','touchcancel','gesturestart','gesturechange','gestureend'].forEach(evt => {
         document.addEventListener(evt, e => {
@@ -1496,12 +1541,30 @@
       }, { passive: false });
 
       window.addEventListener('resize', resize);
+      window.addEventListener('orientationchange', () => setTimeout(resize, 220));
       window.addEventListener('keydown', async (e) => {
-        if (e.code === 'Space') {
-          e.preventDefault();
-          if (!tutorialOverlay.classList.contains('hidden')) await startGame();
-          else if (state.gameOver) await restartGame();
+        const k = e.key;
+        const startKey = k === 'Enter' || e.code === 'Space';
+        if (e.code === 'Space') e.preventDefault();
+        if (hsOverlay.style.display === 'flex') {
+          if (k === 'Escape') closeHsOverlay();
+          return;
         }
+        if ((k === 'p' || k === 'P' || k === 'Escape') && state.playing && !state.gameOver) {
+          setPaused(!state.paused);
+          return;
+        }
+        if (!startKey) return;
+        const initialsOpen = state.gameOver && !document.getElementById('hsInitialsSection').classList.contains('hidden');
+        if (initialsOpen) return; // don't steal Enter/Space from initials entry
+        if (e.target && e.target.closest && e.target.closest('button')) e.preventDefault();
+        if (!tutorialOverlay.classList.contains('hidden')) await startGame();
+        else if (state.paused) setPaused(false);
+        else if (state.gameOver) await restartGame();
+      });
+      window.addEventListener('blur', () => setPaused(true));
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) setPaused(true);
       });
 
       resize();

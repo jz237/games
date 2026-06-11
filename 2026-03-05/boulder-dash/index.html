@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Emerald Mine — Crystal Caves v2.4.36</title>
+<title>Emerald Mine — Crystal Caves v2.4.37</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif}
@@ -18,13 +18,19 @@ canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pi
 <script>
 // ═══════════════════════════════════════════════════════════
 //  EMERALD MINE — Crystal Caves
-//  v2.4.36 — tame amoeba spread so later
-//            caves stay beatable
+//  v2.4.37 — desktop polish: Esc pauses, mouse-wheel
+//            zoom, keyboard advances level clear,
+//            auto-pause on blur, pointer-aware copy
 // ═══════════════════════════════════════════════════════════
 'use strict';
-const VERSION = 'v2.4.36';
+const VERSION = 'v2.4.37';
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
+
+// Coarse-pointer detection only swaps instruction copy; every input path
+// (touch, mouse, keyboard) stays live on every device.
+let COARSE_POINTER = false;
+try { COARSE_POINTER = window.matchMedia('(pointer: coarse)').matches; } catch(e) {}
 
 
 const REVEAL_BG_SOURCES = [
@@ -1525,9 +1531,10 @@ window.addEventListener('keydown', e => {
     newGame(); return;
   }
   if (state === 'caveIntro') { startPlayingFromIntro(); return; }
+  if (state === 'levelClear') { advanceLevelClear(); return; }
   if (state === 'gameOver' && gameOverTimer > 2) { returnToTitle(); return; }
   if (state === 'win' && gameOverTimer > 2) { returnToTitle(); return; }
-  
+
   if (e.code === 'Space' && state === 'playing') {
     placeDynamiteAction();
     return;
@@ -1540,7 +1547,7 @@ window.addEventListener('keydown', e => {
     menuAction();
     return;
   }
-  if (e.code === 'KeyP' && state === 'playing') {
+  if ((e.code === 'KeyP' || e.code === 'Escape') && state === 'playing') {
     togglePause();
     return;
   }
@@ -1813,6 +1820,27 @@ window.addEventListener('mouseup', e => {
   mouseHoldDir = { dx: 0, dy: 0 };
   mouseStartPos = null;
   mouseCurrentPos = null;
+});
+
+// Mouse-wheel zoom mirrors mobile pinch zoom for desktop players.
+window.addEventListener('wheel', e => {
+  if (state === 'title' || !gridW) return;
+  e.preventDefault();
+  userZoom = clamp(userZoom * (e.deltaY < 0 ? 1.07 : 1 / 1.07), 0.68, 1.85);
+  zoomToast = 1.2;
+  updateViewLayout();
+  saveZoom();
+}, { passive: false });
+
+// Auto-pause when the window loses focus (alt-tab on desktop, app switch on mobile).
+window.addEventListener('blur', () => {
+  for (const k in keys) keys[k] = false;
+  holdActive = false;
+  holdDir = { dx: 0, dy: 0 };
+  if (state === 'playing' && !paused) togglePause();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state === 'playing' && !paused) togglePause();
 });
 
 canvas.addEventListener('click', e => {
@@ -5446,7 +5474,7 @@ function drawHUD() {
     ctx.textAlign = 'center';
     ctx.font = `bold ${Math.max(10 * DPR, fontSize * 0.55)}px 'Segoe UI', system-ui, sans-serif`;
     ctx.fillStyle = `rgba(255,170,70,${0.65 + Math.sin(globalTime * 12) * 0.25})`;
-    ctx.fillText('No moves — tap restart level', W / 2, HUD_H + Math.max(14 * DPR, fontSize * 0.8));
+    ctx.fillText(COARSE_POINTER ? 'No moves — tap restart level' : 'No moves — press R to restart', W / 2, HUD_H + Math.max(14 * DPR, fontSize * 0.8));
   }
 }
 
@@ -6065,13 +6093,15 @@ function drawTitle() {
   ctx.beginPath(); ctx.roundRect(cx - btnW/2, btnY - btnH/2, btnW, btnH, btnH*0.32); ctx.fill();
   ctx.strokeStyle = 'rgba(175,255,205,0.82)'; ctx.lineWidth = Math.max(2, DPR*1.5); ctx.stroke();
   ctx.font = `900 ${btnH*0.34}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = '#fff'; ctx.fillText('TAP TO PLAY', cx, btnY - btnH*0.06);
+  ctx.fillStyle = '#fff'; ctx.fillText(COARSE_POINTER ? 'TAP TO PLAY' : 'CLICK TO PLAY', cx, btnY - btnH*0.06);
   ctx.font = `${Math.max(9*DPR, btnH*0.16)}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(225,255,235,0.78)'; ctx.fillText(titleMusicUnlocked ? 'the mine is awake' : 'tap once to wake the mine', cx, btnY + btnH*0.30);
+  ctx.fillStyle = 'rgba(225,255,235,0.78)'; ctx.fillText(titleMusicUnlocked ? 'the mine is awake' : (COARSE_POINTER ? 'tap once to wake the mine' : 'click or press a key to wake the mine'), cx, btnY + btnH*0.30);
 
   ctx.font = `${Math.max(9*DPR, titleSize*0.15)}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = 'rgba(230,255,238,0.66)';
-  ctx.fillText(`${VERSION}  •  drag/WASD  •  +/- cave  •  H scores`, cx, H*0.94);
+  ctx.fillText(COARSE_POINTER
+    ? `${VERSION}  •  drag/WASD  •  +/- cave  •  H scores`
+    : `${VERSION}  •  arrows/WASD move  •  space dynamite  •  +/- cave  •  H scores`, cx, H*0.94);
   if (showScores) drawScoresPanel(cx, H*0.58, Math.min(W*0.88, 440*DPR), Math.min(H*0.44, 300*DPR), -1);
   drawVignette();
 }
@@ -6221,7 +6251,7 @@ function drawLevelClear() {
     const pulse = 0.62 + Math.sin(globalTime * 5.2) * 0.18;
     ctx.font = `1000 ${Math.max(11*DPR, cardH*0.031)}px 'Segoe UI',system-ui,sans-serif`;
     ctx.fillStyle = `rgba(255,235,150,${pulse})`;
-    ctx.fillText(levelClearTimer >= 1.35 ? 'TAP TO CONTINUE' : 'REVIEWING CAVE REPORT…', W/2, cardY + cardH*0.982);
+    ctx.fillText(levelClearTimer >= 1.35 ? (COARSE_POINTER ? 'TAP TO CONTINUE' : 'CLICK OR PRESS A KEY') : 'REVIEWING CAVE REPORT…', W/2, cardY + cardH*0.982);
   }
   ctx.restore();
 
@@ -6522,16 +6552,19 @@ function drawCaveIntro() {
     ctx.fillText(wrapped.lines[i], cx, startY + i * lineGap);
   }
 
-  const hint = level === 0 ? 'pinch to zoom  •  drag or hold to move' : 'tap to enter';
+  const enterHint = COARSE_POINTER ? 'tap to enter' : 'click or press a key to enter';
+  const moveHint = COARSE_POINTER
+    ? 'pinch to zoom  •  drag or hold to move'
+    : 'scroll to zoom  •  arrows/WASD or drag to move';
+  const hint = level === 0 ? moveHint : enterHint;
   setFitFont(hint, 600, Math.max(9*DPR, h*0.040), 7*DPR, maxTextW);
   ctx.fillStyle = level === 0 ? 'rgba(180,235,255,0.82)' : `rgba(220,255,235,${0.42 + Math.sin(globalTime * 5) * 0.18})`;
   ctx.fillText(hint, cx, cy + h*0.405);
 
   if (level === 0) {
-    const enter = 'tap to enter';
-    setFitFont(enter, 600, Math.max(9*DPR, h*0.036), 7*DPR, maxTextW);
+    setFitFont(enterHint, 600, Math.max(9*DPR, h*0.036), 7*DPR, maxTextW);
     ctx.fillStyle = `rgba(220,255,235,${0.42 + Math.sin(globalTime * 5) * 0.18})`;
-    ctx.fillText(enter, cx, cy + h*0.475);
+    ctx.fillText(enterHint, cx, cy + h*0.475);
   }
   ctx.restore();
 }
@@ -6549,7 +6582,7 @@ function drawPauseOverlay() {
   ctx.fillText('PAUSED', W/2, H*0.44);
   ctx.font = `600 ${Math.max(12 * DPR, size * 0.25)}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = 'rgba(210,245,230,0.78)';
-  ctx.fillText('tap the pause button or press P', W/2, H*0.52);
+  ctx.fillText(COARSE_POINTER ? 'tap the pause button or press P' : 'press P or Esc to resume', W/2, H*0.52);
   ctx.restore();
 }
 

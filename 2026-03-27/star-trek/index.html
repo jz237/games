@@ -15,6 +15,7 @@ html,body{position:fixed;overflow:hidden;overscroll-behavior:none;width:100%;hei
 canvas{display:block;width:100%;height:100%}
 button{touch-action:manipulation;cursor:pointer;border:none;outline:none;font-family:'Courier New',monospace;font-weight:bold;font-size:12px;padding:6px 10px;border-radius:8px 0 8px 0;color:#000;background:#ff9900;transition:background .15s}
 button:active{background:#ffcc00}
+button:focus-visible,input[type=range]:focus-visible{outline:2px solid #ffcc00;outline-offset:1px}
 button.danger{background:#cc3333;color:#fff}
 button.blue{background:#5599ff;color:#000}
 button.green{background:#33cc66;color:#000}
@@ -112,9 +113,10 @@ function initGame(){
   // Enterprise
   enterprise={qr:Math.floor(Math.random()*8),qc:Math.floor(Math.random()*8),sr:Math.floor(Math.random()*8),sc:Math.floor(Math.random()*8),energy:3000,shields:0,torpedoes:10,damage:new Array(8).fill(0),heading:0};
   enterQuadrant();
-  addMsg("SUPER STAR TREK — STARDATE "+stardate);
+  addMsg("SUPER STAR TREK v1.0.1 — STARDATE "+stardate);
   addMsg("MISSION: DESTROY "+klingonsTotal+" KLINGON WARSHIPS");
   addMsg("TIME LIMIT: STARDATE "+stardateEnd);
+  addMsg("KEYS: [N]AV [P]HASERS [T]ORPEDO [S]HIELDS [L]RS — DIRECTION 1-9/ARROWS, ENTER CONFIRM, ESC CANCEL");
 }
 
 function enterQuadrant(){
@@ -581,6 +583,8 @@ function updateControls(){
   } else if(mode==='lrs'){
     showLRS();
   }
+  const sl=document.getElementById('phaser-slider')||document.getElementById('shield-slider')||document.getElementById('warp-slider');
+  if(sl)sl.focus();
 }
 
 function setMode(m){mode=m;navDir=-1;updateUI()}
@@ -629,6 +633,36 @@ function saveHS(){
   localStorage.setItem(HS_KEY,JSON.stringify(hs));
   document.getElementById('hs-display').innerHTML=hs.map((h,i)=>`<div>${i+1}. ${h.name} — ${h.score}</div>`).join('');
 }
+
+// ===================== KEYBOARD =====================
+const DIR_KEYS={'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'ArrowUp':8,'ArrowDown':2,'ArrowLeft':4,'ArrowRight':6};
+document.addEventListener('keydown',(e)=>{
+  unlockAudio();
+  const tgt=e.target,isRange=tgt&&tgt.tagName==='INPUT'&&tgt.type==='range';
+  if(tgt&&tgt.tagName==='INPUT'&&!isRange){if(e.key==='Enter'&&tgt.id==='hs-input')saveHS();return}
+  if(document.getElementById('go-overlay')){if(e.key==='Enter'||e.key==='n'||e.key==='N'){document.getElementById('go-overlay').remove();initGame();updateUI()}return}
+  const k=e.key.length===1?e.key.toLowerCase():e.key;
+  if(k==='Escape'){if(mode!=='play'){setMode('play');e.preventDefault()}return}
+  if(gameOver){if(k==='Enter'||k==='r')showGameOver();return}
+  if(mode==='play'){
+    if(k==='n')setMode('nav');else if(k==='p')setMode('phaser');else if(k==='t')setMode('torpedo');else if(k==='s')setMode('shields');else if(k==='l')setMode('lrs');
+    return;
+  }
+  const dir=DIR_KEYS[e.key];
+  if(mode==='nav'){
+    if(dir!==undefined&&!(isRange&&e.key.length>1)){pickNav(dir);e.preventDefault()}
+    else if(k==='Enter'&&navDir>=0)execNav();
+    else if(k==='i'&&navDir>=0)execImpulse();
+  }else if(mode==='torpedo'){
+    if(dir!==undefined){e.preventDefault();if(dir===5)setMode('play');else execTorpedo(dir)}
+  }else if(mode==='phaser'){
+    if(k==='Enter')execPhaser();
+  }else if(mode==='shields'){
+    if(k==='Enter')execShields();
+  }else if(mode==='lrs'){
+    if(k==='Enter')setMode('play');
+  }
+});
 
 // ===================== TOUCH =====================
 canvas.addEventListener('touchstart',(e)=>{

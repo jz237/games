@@ -367,7 +367,12 @@ button.ghost{
 }
 @media (min-width:720px){
   .shell{
+    /* Desktop: track the field's natural 72:116 aspect so the play area fills tall
+       monitors instead of staying phone width. render() still letterboxes inside the
+       canvas, so any rounding only leaves slim bands. Fixed 560px is the fallback for
+       browsers without dvh support. */
     max-width:560px;
+    max-width:clamp(420px, calc((100dvh - 112px) * 0.62), 920px);
     margin:0 auto;
   }
   .title{
@@ -410,7 +415,7 @@ button.ghost{
           <span class="eyebrow">How To Play</span>
           <p class="lead">This version keeps the original Qix loop: safe movement on existing walls, dangerous movement while drawing, and area capture determined by which side traps the Qix.</p>
           <div class="howto">
-            <div><strong>Controls:</strong> drag anywhere on the field. Your current direction stays active while you hold. On desktop, use arrow keys or WASD.</div>
+            <div><strong>Controls:</strong> drag anywhere on the field. Your current direction stays active while you hold. On desktop, use arrow keys / WASD, or hold the mouse button and drag anywhere in the window. Enter starts, P or Escape pauses.</div>
             <div><strong>Safe movement:</strong> move along glowing walls and captured territory edges with no risk from the Qix.</div>
             <div><strong>Danger movement:</strong> when you leave safety, your tracer becomes vulnerable. If the Qix line touches it, you lose a life.</div>
             <div><strong>Scoring:</strong> bigger captures score more, and each level raises Qix speed and the target percentage.</div>
@@ -464,7 +469,7 @@ button.ghost{
 (() => {
   const GRID_W = 72;
   const GRID_H = 116;
-  const GAME_VERSION = "v1.1.0";
+  const GAME_VERSION = "v1.1.1";
   const CLAIM_GOAL_BASE = 0.72;
   const SCORE_KEY = "neon-qix-highscores-v1";
   const GLOBAL_SCORES_API = "https://game-scores.jez237.workers.dev/scores/neon-qix";
@@ -2535,6 +2540,11 @@ button.ghost{
 
   function updatePadVisuals() {}
 
+  function steerTarget(event) {
+    const target = event.target;
+    return !(target && target.closest && target.closest("button, .overlay, input"));
+  }
+
   function bindCanvasDrag() {
     function applyCanvasDirection(clientX, clientY) {
       const dx = clientX - canvasStartX;
@@ -2569,6 +2579,7 @@ button.ghost{
     }
 
     canvas.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "mouse") return;
       if (state.phase !== "playing") return;
       event.preventDefault();
       beginCanvasDrag(event.pointerId, event.clientX, event.clientY);
@@ -2578,6 +2589,7 @@ button.ghost{
       }
     }, {passive:false});
     canvas.addEventListener("pointermove", (event) => {
+      if (event.pointerType === "mouse") return;
       if (canvasPointerId !== event.pointerId || state.phase !== "playing") return;
       event.preventDefault();
       applyCanvasDirection(event.clientX, event.clientY);
@@ -2588,6 +2600,30 @@ button.ghost{
     canvas.addEventListener("pointercancel", (event) => {
       endCanvasDrag(event.pointerId);
     });
+
+    if (window.PointerEvent) {
+      // Desktop: mouse drags steer from anywhere in the window (buttons/overlays
+      // excluded). Touch and pen keep the original canvas-only handlers above.
+      window.addEventListener("pointerdown", (event) => {
+        if (event.pointerType !== "mouse") return;
+        if (state.phase !== "playing" || !steerTarget(event)) return;
+        event.preventDefault();
+        beginCanvasDrag(event.pointerId, event.clientX, event.clientY);
+      });
+      window.addEventListener("pointermove", (event) => {
+        if (event.pointerType !== "mouse") return;
+        if (canvasPointerId !== event.pointerId || state.phase !== "playing") return;
+        applyCanvasDirection(event.clientX, event.clientY);
+      });
+      window.addEventListener("pointerup", (event) => {
+        if (event.pointerType !== "mouse") return;
+        endCanvasDrag(event.pointerId);
+      });
+      window.addEventListener("pointercancel", (event) => {
+        if (event.pointerType !== "mouse") return;
+        endCanvasDrag(event.pointerId);
+      });
+    }
 
     canvas.addEventListener("mousedown", (event) => {
       if (window.PointerEvent) return;
@@ -2632,40 +2668,61 @@ button.ghost{
   }
 
   function bindKeyboard() {
+    const keyMap = {
+      ArrowUp: "up",
+      ArrowDown: "down",
+      ArrowLeft: "left",
+      ArrowRight: "right",
+      w: "up",
+      s: "down",
+      a: "left",
+      d: "right"
+    };
+    const mapDirection = (key) => keyMap[key] || keyMap[String(key).toLowerCase()] || null;
+
     window.addEventListener("keydown", (event) => {
-      const keyMap = {
-        ArrowUp: "up",
-        ArrowDown: "down",
-        ArrowLeft: "left",
-        ArrowRight: "right",
-        w: "up",
-        s: "down",
-        a: "left",
-        d: "right"
-      };
-      const mapped = keyMap[event.key];
+      if (event.target === initialsInput) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const key = event.key;
+      const mapped = mapDirection(key);
       if (mapped) {
         keyboardDir = mapped;
         event.preventDefault();
-      } else if (event.key === " ") {
-        if (state.phase === "playing" || state.phase === "paused") {
+        return;
+      }
+      if (key === "Escape" && (howOverlay.classList.contains("show") || scoresOverlay.classList.contains("show"))) {
+        if (state.phase === "title") showOverlay(titleOverlay);
+        else hideAllOverlays();
+        event.preventDefault();
+        return;
+      }
+      if (key === "p" || key === "P" || key === "Escape" || key === " ") {
+        if (!event.repeat && (state.phase === "playing" || state.phase === "paused")) {
+          togglePause();
+          event.preventDefault();
+        } else if (key === " " && !event.repeat && state.phase === "title" && titleOverlay.classList.contains("show")) {
+          beginGame();
+          event.preventDefault();
+        }
+        return;
+      }
+      if (key === "Enter" && !event.repeat) {
+        if (state.phase === "title" && titleOverlay.classList.contains("show")) {
+          beginGame();
+          event.preventDefault();
+        } else if (state.phase === "gameover" && gameOverOverlay.classList.contains("show")) {
+          if (state.pendingScore) handleSaveScore();
+          else restartGame();
+          event.preventDefault();
+        } else if (state.phase === "paused") {
           togglePause();
           event.preventDefault();
         }
       }
     });
     window.addEventListener("keyup", (event) => {
-      const keyMap = {
-        ArrowUp: "up",
-        ArrowDown: "down",
-        ArrowLeft: "left",
-        ArrowRight: "right",
-        w: "up",
-        s: "down",
-        a: "left",
-        d: "right"
-      };
-      if (keyMap[event.key] && keyboardDir === keyMap[event.key]) {
+      const mapped = mapDirection(event.key);
+      if (mapped && keyboardDir === mapped) {
         keyboardDir = null;
       }
     });

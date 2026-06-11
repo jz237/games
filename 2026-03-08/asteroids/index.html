@@ -52,6 +52,9 @@ button{touch-action:manipulation;cursor:pointer}
 .hs-board .hs-wave{color:#f0f}
 .hs-board .hs-new{color:#ff0;text-shadow:0 0 10px #ff0,0 0 20px #fa0}
 .hs-board .hs-new .hs-name,.hs-board .hs-new .hs-score-col,.hs-board .hs-new .hs-wave{color:#ff0;text-shadow:0 0 10px #ff0,0 0 20px #fa0}
+.overlay .ver{margin-top:16px;font-size:12px;color:#066;letter-spacing:.12em;text-shadow:none}
+.deskOnly{display:none}
+body.desk .deskOnly{display:block}
 </style>
 </head>
 <body><div id="hud"><div class="score" id="score">0</div><div class="lives" id="lives"></div><div class="wave" id="wave"></div></div>
@@ -62,10 +65,13 @@ button{touch-action:manipulation;cursor:pointer}
 <div class="ctrl"><span class="icon">👆</span> <em>Hold anywhere</em> → Fly toward that point</div>
 <div class="ctrl"><span class="icon">💥</span> <em>Tap</em> → Aim &amp; shoot toward tap</div>
 <div class="ctrl" style="margin-top:12px;font-size:13px;color:#f0f">Hold to thrust, tap to aim+fire in any direction!</div>
+<div class="ctrl deskOnly" style="margin-top:16px"><span class="icon">⌨️</span> <em>A/D or ◀ ▶</em> rotate &middot; <em>W/▲</em> thrust</div>
+<div class="ctrl deskOnly"><em>SPACE</em> fire &middot; <em>SHIFT</em> hyperspace &middot; <em>P/ESC</em> pause &middot; <em>M</em> mute</div>
+<div class="ctrl deskOnly"><span class="icon">🖱️</span> <em>Hold mouse</em> fly toward cursor &middot; <em>Click</em> aim &amp; fire</div>
 <button id="tutorialBtn">GOT IT</button>
 </div>
 
-<div id="overlay" class="overlay hidden"><h1>ASTEROIDS</h1><div class="sub">NEON VECTOR EDITION</div><button id="startBtn">START</button><button id="hsBtn">HIGH SCORES</button></div>
+<div id="overlay" class="overlay hidden"><h1>ASTEROIDS</h1><div class="sub">NEON VECTOR EDITION</div><button id="startBtn">START</button><button id="hsBtn">HIGH SCORES</button><div class="ver">v1.0.1</div></div>
 <div id="hsOverlay" class="overlay hidden"></div>
 <canvas id="c"></canvas>
 
@@ -178,6 +184,11 @@ function playSound(type){
       for(let i=0;i<len;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/len,1.5);
       buf.buffer=buffer;const g=audioCtx.createGain();g.gain.setValueAtTime(0.3,t);
       buf.connect(g);g.connect(audioCtx.destination);buf.start(t);
+    }else if(type==='hyper'){
+      const osc=audioCtx.createOscillator(),g=audioCtx.createGain();
+      osc.type='sine';osc.frequency.setValueAtTime(1200,t);osc.frequency.exponentialRampToValueAtTime(150,t+0.25);
+      g.gain.setValueAtTime(0.15,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.25);
+      osc.connect(g);g.connect(audioCtx.destination);osc.start(t);osc.stop(t+0.25);
     }else if(type==='waveClear'){
       const osc=audioCtx.createOscillator(),g=audioCtx.createGain();
       osc.type='sine';osc.frequency.setValueAtTime(400,t);osc.frequency.exponentialRampToValueAtTime(1200,t+0.4);
@@ -220,22 +231,76 @@ document.addEventListener('gesturechange',e=>e.preventDefault());
 document.addEventListener('contextmenu',e=>e.preventDefault());
 
 let W,H,ship,asteroids,bullets,particles,score,lives,wave,gameOver,gameStarted,shakeTimer,shakeMag;
-let keys={};
+let keys={},paused=false,viewScale=1,DPR=1;
 const TAU=Math.PI*2;
+const FINE_POINTER=matchMedia('(pointer:fine)').matches;
+if(FINE_POINTER)document.body.classList.add('desk');
 
-function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
-window.addEventListener('resize',resize);resize();
+function resize(){
+  // Game logic runs at phone-ish height (max 960) regardless of monitor;
+  // the canvas fills the full window width (wrap-around space) and is CSS-scaled up.
+  const vw=window.innerWidth,vh=window.innerHeight;
+  H=Math.min(vh,960);
+  viewScale=vh/H;
+  W=Math.floor(vw/viewScale);
+  DPR=Math.min(viewScale*(window.devicePixelRatio||1),2);
+  canvas.width=Math.floor(W*DPR);canvas.height=Math.floor(H*DPR);
+  canvas.style.width=(W*viewScale)+'px';canvas.style.height=vh+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize',resize);
+window.addEventListener('orientationchange',()=>setTimeout(resize,220));
+resize();
 
-window.addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Space')e.preventDefault()});
+function setPaused(p){
+  if(!gameStarted||gameOver)return;
+  paused=p;
+  if(p){
+    stopThrust();prevThrust=false;keys={};
+    for(const k of Object.keys(touches))delete touches[k];
+    mouseDown=false;updateTouchTarget();
+  }
+}
+
+function hyperspace(){
+  if(!gameStarted||gameOver||paused||!ship||ship.hyperCd>0)return;
+  spawnParticles(ship.x,ship.y,'#0ff',16);
+  ship.x=50+Math.random()*(W-100);ship.y=50+Math.random()*(H-100);
+  ship.vx=0;ship.vy=0;ship.invuln=Math.max(ship.invuln,40);ship.hyperCd=45;
+  spawnParticles(ship.x,ship.y,'#f0f',16);
+  playSound('hyper');
+}
+
+window.addEventListener('keydown',e=>{
+  const k=e.key;
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(k))e.preventDefault();
+  if(k==='Enter'){
+    if(!tutorial.classList.contains('hidden')){tutorialBtn.click();return}
+    if(!hsOverlay.classList.contains('hidden')){const b=hsOverlay.querySelector('#hsSubmit,#hsBack');if(b)b.click();return}
+    if(!overlay.classList.contains('hidden')){startBtn.click();return}
+    if(paused)setPaused(false);
+    return;
+  }
+  if(k==='p'||k==='P'||k==='Escape'){
+    if(gameStarted&&!gameOver&&hsOverlay.classList.contains('hidden'))setPaused(!paused);
+    return;
+  }
+  if(k==='m'||k==='M'){initAudio();toggleMute();return}
+  if(k==='Shift'&&!e.repeat)hyperspace();
+  if(!paused)keys[e.code]=true;
+});
 window.addEventListener('keyup',e=>{keys[e.code]=false});
+window.addEventListener('blur',()=>{keys={};if(gameStarted&&!gameOver&&!paused)setPaused(true)});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&gameStarted&&!gameOver&&!paused)setPaused(true)});
 
 const touches={};
 let touchThrust=false,touchTargetA=null;
 
 canvas.addEventListener('touchstart',e=>{
   e.preventDefault();initAudio();
+  if(paused){setPaused(false);return}
   if(!gameStarted||gameOver)return;
-  for(const t of e.changedTouches)touches[t.identifier]={x:t.clientX,y:t.clientY,startTime:performance.now(),moved:false};
+  for(const t of e.changedTouches)touches[t.identifier]={x:t.clientX/viewScale,y:t.clientY/viewScale,startTime:performance.now(),moved:false};
   updateTouchTarget();
 },{passive:false});
 
@@ -243,8 +308,9 @@ canvas.addEventListener('touchmove',e=>{
   e.preventDefault();
   for(const t of e.changedTouches){
     const info=touches[t.identifier];if(!info)continue;
-    if(Math.abs(t.clientX-info.x)>8||Math.abs(t.clientY-info.y)>8)info.moved=true;
-    info.x=t.clientX;info.y=t.clientY;
+    const x=t.clientX/viewScale,y=t.clientY/viewScale;
+    if(Math.abs(x-info.x)>8||Math.abs(y-info.y)>8)info.moved=true;
+    info.x=x;info.y=y;
   }
   updateTouchTarget();
 },{passive:false});
@@ -270,6 +336,39 @@ canvas.addEventListener('touchcancel',e=>{
   updateTouchTarget();
 },{passive:false});
 
+// Desktop mouse: mirrors the touch scheme (hold = fly toward cursor, click = aim + fire).
+// Touch devices never reach these handlers: touchstart's preventDefault suppresses synthetic mouse events.
+let mouseDown=false;
+canvas.addEventListener('mousedown',e=>{
+  if(e.button!==0)return;
+  initAudio();
+  if(paused){setPaused(false);return}
+  if(!gameStarted||gameOver)return;
+  mouseDown=true;
+  touches.mouse={x:e.clientX/viewScale,y:e.clientY/viewScale,startTime:performance.now(),moved:false};
+  updateTouchTarget();
+});
+canvas.addEventListener('mousemove',e=>{
+  const info=touches.mouse;if(!mouseDown||!info)return;
+  const x=e.clientX/viewScale,y=e.clientY/viewScale;
+  if(Math.abs(x-info.x)>8||Math.abs(y-info.y)>8)info.moved=true;
+  info.x=x;info.y=y;
+  updateTouchTarget();
+});
+window.addEventListener('mouseup',e=>{
+  if(e.button!==0||!mouseDown)return;
+  mouseDown=false;
+  const info=touches.mouse;
+  if(info){
+    if(performance.now()-info.startTime<200&&!info.moved){
+      if(ship){ship.a=Math.atan2(info.y-ship.y,info.x-ship.x)}
+      keys._tapFire=true;setTimeout(()=>{keys._tapFire=false},50);
+    }
+    delete touches.mouse;
+  }
+  updateTouchTarget();
+});
+
 function updateTouchTarget(){
   const ids=Object.keys(touches);
   let oldest=null,oldestTime=Infinity;
@@ -292,7 +391,7 @@ function isKey(action){
   }
 }
 
-function makeShip(){return{x:W/2,y:H/2,a:-Math.PI/2,vx:0,vy:0,r:15,fireCd:0,invuln:120,thrustOn:false}}
+function makeShip(){return{x:W/2,y:H/2,a:-Math.PI/2,vx:0,vy:0,r:15,fireCd:0,hyperCd:0,invuln:120,thrustOn:false}}
 
 function makeAsteroid(x,y,size){
   const r=size===3?40:size===2?22:12;
@@ -323,7 +422,7 @@ function spawnParticles(x,y,color,count){
 }
 
 function initGame(){
-  ship=makeShip();asteroids=[];bullets=[];particles=[];score=0;lives=3;wave=0;gameOver=false;shakeTimer=0;shakeMag=0;
+  ship=makeShip();asteroids=[];bullets=[];particles=[];score=0;lives=3;wave=0;gameOver=false;paused=false;shakeTimer=0;shakeMag=0;
   spawnWave();updateHUD();
 }
 
@@ -356,6 +455,7 @@ function update(){
   wrap(ship);
   if(ship.invuln>0)ship.invuln--;
   if(ship.fireCd>0)ship.fireCd--;
+  if(ship.hyperCd>0)ship.hyperCd--;
   if(isKey('fire')&&ship.fireCd<=0){
     bullets.push({x:ship.x+Math.cos(ship.a)*18,y:ship.y+Math.sin(ship.a)*18,vx:Math.cos(ship.a)*7,vy:Math.sin(ship.a)*7,life:55});
     ship.fireCd=10;
@@ -469,12 +569,24 @@ addDualHandler(hsBtn,()=>{overlay.classList.add('hidden');showLeaderboard(false)
 
 let bgStars=[];for(let i=0;i<80;i++)bgStars.push({x:Math.random()*2000,y:Math.random()*2000,s:Math.random()*1.5+0.5});
 
+function drawPaused(){
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle='#0ff';ctx.shadowColor='#0ff';ctx.shadowBlur=16;
+  ctx.font='bold 42px "Courier New",monospace';ctx.fillText('PAUSED',W/2,H/2-22);
+  ctx.fillStyle='#f0f';ctx.shadowColor='#f0f';ctx.shadowBlur=10;
+  ctx.font='16px "Courier New",monospace';ctx.fillText('TAP / CLICK / P / ENTER TO RESUME',W/2,H/2+24);
+  ctx.restore();
+}
+
 function loop(){
   requestAnimationFrame(loop);
-  if(gameStarted&&!gameOver)update();
+  if(gameStarted&&!gameOver&&!paused)update();
   draw();
   ctx.fillStyle='#fff3';
   for(const s of bgStars)ctx.fillRect(s.x%W,s.y%H,s.s,s.s);
+  if(paused)drawPaused();
 }
 loop();
 </script>

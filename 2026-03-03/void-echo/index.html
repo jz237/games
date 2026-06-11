@@ -42,8 +42,9 @@ button{touch-action:manipulation}
 
 <div id="startScreen">
 <h1>VOID ECHO</h1>
-<p>Touch anywhere to pilot. Auto-fire engaged.</p>
+<p>Touch or mouse to pilot. Auto-fire engaged.<br>Desktop: WASD / arrows · Space = bomb · 1-3 = upgrade · Enter = start</p>
 <button class="btn" id="playBtn">▶ PLAY</button>
+<p style="margin:18px 0 0;font-size:0.8rem;color:#557;font-family:monospace">v1.0.1</p>
 </div>
 
 <div id="upgradeScreen">
@@ -67,10 +68,17 @@ button{touch-action:manipulation}
 // ── Canvas Setup ──
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-let W, H;
+let W, H, viewScale = 1;
 function resize() {
-  W = canvas.width = window.innerWidth;
-  H = canvas.height = window.innerHeight;
+  // Logic is tuned for phone-scale pixels; on big monitors cap the logical
+  // playfield and scale the canvas up so speeds/sizes stay sane. Phones keep
+  // viewScale = 1 (identical to the original behavior).
+  const vw = window.innerWidth, vh = window.innerHeight;
+  viewScale = Math.max(1, Math.min(vw, vh) / 720);
+  W = Math.ceil(vw / viewScale);
+  H = Math.ceil(vh / viewScale);
+  canvas.width = vw; canvas.height = vh;
+  ctx.setTransform(viewScale, 0, 0, viewScale, 0, 0);
 }
 resize();
 window.addEventListener('resize', resize);
@@ -701,7 +709,7 @@ canvas.addEventListener('touchstart', e => {
   if (state !== 'playing') return;
   for (const t of e.changedTouches) {
     if (!isBombBtn(t.target)) {
-      touching = true; touchX = t.clientX; touchY = t.clientY;
+      touching = true; touchX = t.clientX / viewScale; touchY = t.clientY / viewScale;
     }
   }
   e.preventDefault();
@@ -710,7 +718,7 @@ canvas.addEventListener('touchstart', e => {
 canvas.addEventListener('touchmove', e => {
   if (state !== 'playing') return;
   for (const t of e.changedTouches) {
-    touchX = t.clientX; touchY = t.clientY;
+    touchX = t.clientX / viewScale; touchY = t.clientY / viewScale;
   }
   e.preventDefault();
 }, { passive: false });
@@ -718,17 +726,50 @@ canvas.addEventListener('touchmove', e => {
 canvas.addEventListener('touchend', e => { touching = false; e.preventDefault(); }, { passive: false });
 canvas.addEventListener('touchcancel', e => { touching = false; }, { passive: false });
 
-// Mouse fallback
-canvas.addEventListener('mousedown', e => { if (state==='playing') { touching=true; touchX=e.clientX; touchY=e.clientY; } });
-canvas.addEventListener('mousemove', e => { if (touching) { touchX=e.clientX; touchY=e.clientY; } });
-canvas.addEventListener('mouseup', () => { touching=false; });
+// Desktop mouse parity: hover steers, window-wide (same as touch drag, no
+// button needed). Gated on a fine pointer so touch devices are untouched.
+const FINE_POINTER = window.matchMedia && matchMedia('(pointer:fine)').matches;
+function mouseSteer(e) {
+  if (!FINE_POINTER || state !== 'playing') return;
+  if (e.target && e.target.closest && e.target.closest('button')) return;
+  touching = true; touchX = e.clientX / viewScale; touchY = e.clientY / viewScale;
+}
+window.addEventListener('mousemove', mouseSteer);
+window.addEventListener('mousedown', mouseSteer);
 
 // Bomb button
 function bombHandler(e) { e.preventDefault(); e.stopPropagation(); useBomb(); }
 bombBtn.addEventListener('click', bombHandler);
 bombBtn.addEventListener('touchend', bombHandler);
 
+// ── Keyboard (desktop) ──
+let keys = {};
+window.addEventListener('keydown', e => {
+  const typing = document.activeElement === document.getElementById('initialsInput');
+  if (!typing && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key)) e.preventDefault();
+  if (state === 'playing') {
+    if (e.key === ' ') { if (!e.repeat) useBomb(); return; }
+    keys[e.code] = true;
+    return;
+  }
+  if (state === 'upgrading' && ['1','2','3'].includes(e.key)) {
+    const u = upgradePicks[+e.key - 1];
+    if (u) applyUpgrade(u.id);
+    return;
+  }
+  if (e.key === 'Enter') {
+    if (state === 'start') { startGame(); return; }
+    if (state === 'gameover') {
+      if (document.getElementById('initialsEntry').style.display === 'flex') submitScore();
+      else startGame();
+    }
+  }
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+window.addEventListener('blur', () => { keys = {}; touching = false; });
+
 // ── Upgrades ──
+let upgradePicks = [];
 function showUpgrades() {
   state = 'upgrading';
   const pool = [...UPGRADES];
@@ -737,6 +778,7 @@ function showUpgrades() {
     const idx = Math.floor(Math.random()*pool.length);
     picks.push(pool.splice(idx,1)[0]);
   }
+  upgradePicks = picks;
   const row = document.getElementById('cardRow');
   row.innerHTML = '';
   for (const u of picks) {
@@ -854,6 +896,15 @@ function loop(ts) {
   drawBg();
 
   if (state === 'playing') {
+    // Keyboard movement (desktop) overrides pointer chase while held
+    const kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+    const ky = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
+    if (kx || ky) {
+      touching = false;
+      const m = Math.hypot(kx, ky);
+      player.x += (kx / m) * shipSpeed * dt;
+      player.y += (ky / m) * shipSpeed * dt;
+    }
     // Move player toward touch
     if (touching) {
       const dx = touchX - player.x, dy = touchY - player.y;

@@ -9,9 +9,12 @@
 <title>Crystal Cavern</title>
 <style>
 /* No external dependencies - use system monospace with fallback */
+:root{--gutter:0px}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{position:fixed;overflow:hidden;overscroll-behavior:none;width:100%;height:100%;background:#000}
-canvas{display:block;width:100%;height:100%;touch-action:none}
+canvas{display:block;touch-action:none;background:#000}
+#gc{position:absolute;top:0;left:0}
+#gc.boxed{outline:1px solid rgba(79,195,247,.16);box-shadow:0 0 34px rgba(79,195,247,.10)}
 button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
 .overlay{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;pointer-events:auto}
 .overlay button{background:none;border:2px solid rgba(79,195,247,0.6);color:#4fc3f7;font-family:'Orbitron',monospace;font-size:18px;padding:12px 32px;margin:8px;border-radius:8px;transition:all 0.2s;pointer-events:auto}
@@ -39,13 +42,15 @@ const ctx = canvas.getContext('2d');
 const pauseOverlay = document.getElementById('pauseOverlay');
 
 // --- Constants ---
+const VERSION = 'v1.0.1';
 const LS_KEY = 'crystal_cavern_highscores';
 const MAX_SCORES = 10;
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
+const FINE_POINTER = matchMedia('(pointer:fine)').matches;
 
 // --- State ---
-let W = 0, H = 0;
+let W = 0, H = 0, viewScale = 1, canvasLeft = 0, DPR = 1;
 let state = 'TITLE'; // TITLE, PLAYING, GAMEOVER
 let transitionState = null; // 'title_to_play', 'play_to_over', 'over_to_play'
 let transitionTimer = 0;
@@ -62,6 +67,7 @@ let touchX = -1;
 let touchActive = false;
 let lastTapTime = 0;
 let doubleTapDetected = false;
+let keys = {};
 
 // Game
 let depth = 0;
@@ -143,6 +149,7 @@ let showHighScores = false;
 let hsInitials = [0, 0, 0]; // index into alphabet
 let hsEntryActive = false;
 let hsNewIndex = -1;
+let hsCursor = 0; // active slot for keyboard initials entry
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 // Leaderboard
@@ -375,18 +382,34 @@ function insertHighScore(initials, s, d) {
 // RESIZE
 // ============================================================
 function resize() {
-    W = window.innerWidth;
-    H = window.innerHeight;
-    canvas.width = W;
-    canvas.height = H;
+    // Game logic runs at phone-ish portrait dimensions (max ~595x960) regardless
+    // of monitor; the canvas scales up to fill the window height and is
+    // letterboxed (centered column) on wide desktop screens.
+    const vw = window.innerWidth, vh = window.innerHeight;
+    H = Math.min(vh, 960);
+    viewScale = vh / H;
+    W = Math.min(Math.floor(vw / viewScale), Math.max(560, Math.round(H * 0.62)));
+    const cssW = Math.round(W * viewScale);
+    canvasLeft = Math.max(0, Math.round((vw - cssW) / 2));
+    DPR = Math.min(viewScale * (window.devicePixelRatio || 1), W * H > 500000 ? 2.4 : 3.2);
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = cssW + 'px';
+    canvas.style.height = vh + 'px';
+    canvas.style.left = canvasLeft + 'px';
+    canvas.classList.toggle('boxed', canvasLeft > 0);
+    document.documentElement.style.setProperty('--gutter', canvasLeft + 'px');
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     if (!lightCanvas) {
         lightCanvas = document.createElement('canvas');
         lightCtx = lightCanvas.getContext('2d');
     }
+    // Lighting overlay stays at logical resolution (smooth gradients upscale fine)
     lightCanvas.width = W;
     lightCanvas.height = H;
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 220));
 
 // ============================================================
 // CAVE GENERATION
@@ -546,20 +569,21 @@ function initTitle() {
 // INPUT HANDLING
 // ============================================================
 function getCanvasPos(e) {
+    let cx, cy;
     if (e.touches && e.touches.length > 0) {
-        return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        cx = e.touches[0].clientX; cy = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length > 0) {
+        cx = e.changedTouches[0].clientX; cy = e.changedTouches[0].clientY;
+    } else {
+        cx = e.clientX; cy = e.clientY;
     }
-    if (e.changedTouches && e.changedTouches.length > 0) {
-        return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
-    }
-    return { x: e.clientX, y: e.clientY };
+    // Map window coords to logical game coords (letterbox offset + view scale)
+    return { x: (cx - canvasLeft) / viewScale, y: cy / viewScale };
 }
 
 function handleStart(pos) {
     if (paused) {
-        paused = false;
-        pauseOverlay.style.display = 'none';
-        lastTime = performance.now();
+        resumeGame();
         return;
     }
 
@@ -598,9 +622,16 @@ function handleEnd() {
     touchActive = false;
 }
 
-// Touch events on canvas
-canvas.addEventListener('touchstart', (e) => {
-    if (!e.target.closest('button') && !e.target.closest('.overlay')) {
+// Window-level input (Millipede pattern) — input keeps working when the
+// pointer crosses into the letterbox gutters; real DOM buttons opt out.
+// (Canvas-drawn buttons are handled via handleButtonTap in logical coords.)
+function inputTarget(e) {
+    return !(e.target && e.target.closest && e.target.closest('button'));
+}
+
+document.addEventListener('touchstart', (e) => {
+    if (!inputTarget(e)) return;
+    if (!e.target.closest('.overlay')) {
         e.preventDefault();
     }
     if (!audioCtx) initAudio();
@@ -608,12 +639,14 @@ canvas.addEventListener('touchstart', (e) => {
     handleStart(getCanvasPos(e));
 }, { passive: false });
 
-canvas.addEventListener('touchmove', (e) => {
-    e.preventDefault();
+document.addEventListener('touchmove', (e) => {
+    if (!inputTarget(e)) return;
+    if (!e.target.closest('.overlay')) e.preventDefault();
     handleMove(getCanvasPos(e));
 }, { passive: false });
 
-canvas.addEventListener('touchend', (e) => {
+document.addEventListener('touchend', (e) => {
+    if (!inputTarget(e)) return;
     const pos = getCanvasPos(e);
     if (state === 'GAMEOVER' || showHighScores) {
         handleButtonTap(pos);
@@ -621,37 +654,103 @@ canvas.addEventListener('touchend', (e) => {
     handleEnd();
 }, { passive: false });
 
-// Mouse fallback
-canvas.addEventListener('mousedown', (e) => {
+// Mouse (desktop) — window-level so steering works from the gutters
+window.addEventListener('mousedown', (e) => {
+    if (!inputTarget(e)) return;
     if (!audioCtx) initAudio();
     else if (audioCtx.state === 'suspended') audioCtx.resume();
     handleStart(getCanvasPos(e));
 });
-canvas.addEventListener('mousemove', (e) => {
-    if (e.buttons > 0) handleMove(getCanvasPos(e));
+window.addEventListener('mousemove', (e) => {
+    if (paused) return;
+    if (state === 'PLAYING' && orbAlive) {
+        // Hover steering on desktop — no button hold needed
+        const pos = getCanvasPos(e);
+        touchX = pos.x;
+        orbTargetX = pos.x;
+        touchActive = true;
+    }
 });
-canvas.addEventListener('mouseup', () => handleEnd());
+window.addEventListener('mouseup', () => handleEnd());
 
 // Click for button taps (mouse only - touch uses touchend above, debounce prevents double-fire)
-canvas.addEventListener('click', (e) => {
+window.addEventListener('click', (e) => {
+    if (!inputTarget(e)) return;
     const pos = getCanvasPos(e);
     if (state === 'GAMEOVER' || showHighScores) {
         handleButtonTap(pos);
     }
 });
 
-// Keyboard
-document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && state === 'PLAYING' && orbAlive) {
-        triggerPulse();
+// Keyboard (desktop): arrows/A-D steer, Space pulse, P/Escape pause, Enter start/restart
+window.addEventListener('keydown', (e) => {
+    const k = e.key;
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(k)) e.preventDefault();
+    if (k === 'Enter' || k === ' ') {
+        if (!audioCtx) initAudio();
+        else if (audioCtx.state === 'suspended') audioCtx.resume();
     }
+    if (k === 'p' || k === 'P' || k === 'Escape') {
+        if (state === 'PLAYING') {
+            if (paused) resumeGame();
+            else if (orbAlive) pauseGame();
+            return;
+        }
+        if (k === 'Escape' && showHighScores) { showHighScores = false; return; }
+    }
+    if (paused) {
+        if (k === 'Enter' || k === ' ') resumeGame();
+        return;
+    }
+    if (state === 'PLAYING') {
+        if (e.code === 'Space' && !e.repeat && orbAlive) triggerPulse();
+        keys[e.code] = true;
+        return;
+    }
+    if (state === 'TITLE') {
+        if (showHighScores) {
+            if (k === 'Enter') showHighScores = false;
+            return;
+        }
+        if (k === 'Enter' || k === ' ') startGame();
+        return;
+    }
+    if (state === 'GAMEOVER') {
+        if (hsEntryActive) {
+            if (/^[a-zA-Z]$/.test(k)) {
+                hsInitials[hsCursor] = ALPHABET.indexOf(k.toUpperCase());
+                hsCursor = Math.min(hsCursor + 1, 2);
+            } else if (k === 'ArrowLeft' || k === 'Backspace') {
+                hsCursor = Math.max(0, hsCursor - 1);
+            } else if (k === 'ArrowRight') {
+                hsCursor = Math.min(2, hsCursor + 1);
+            } else if (k === 'ArrowUp') {
+                hsInitials[hsCursor] = (hsInitials[hsCursor] + 1) % 26;
+            } else if (k === 'ArrowDown') {
+                hsInitials[hsCursor] = (hsInitials[hsCursor] + 25) % 26;
+            } else if (k === 'Enter') {
+                insertHighScore(hsInitials.map(i => ALPHABET[i]).join(''), score, Math.floor(depth));
+                hsEntryActive = false;
+            }
+            return;
+        }
+        if (k === 'Enter') {
+            state = 'PLAYING';
+            initGame();
+        }
+        return;
+    }
+});
+window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+window.addEventListener('blur', () => {
+    keys = {};
+    if (state === 'PLAYING' && !paused) pauseGame();
 });
 
 // Pause on visibility change
 document.addEventListener('visibilitychange', () => {
     if (document.hidden && state === 'PLAYING') {
-        paused = true;
-        pauseOverlay.style.display = 'flex';
+        pauseGame();
     }
 });
 
@@ -664,6 +763,19 @@ function startGame() {
     transitionTimer = 0;
     transitionDuration = 60;
     initGame();
+}
+
+function pauseGame() {
+    if (paused || state !== 'PLAYING') return;
+    paused = true;
+    pauseOverlay.style.display = 'flex';
+}
+
+function resumeGame() {
+    if (!paused) return;
+    paused = false;
+    pauseOverlay.style.display = 'none';
+    lastTime = performance.now();
 }
 
 function triggerPulse() {
@@ -823,7 +935,13 @@ function update() {
 
     // Orb movement
     orbY = H * 0.35;
-    if (orbTargetX >= 0 && touchActive) {
+    // Keyboard steering (desktop) — overrides pointer target while held
+    const kbDir = ((keys.ArrowLeft || keys.KeyA) ? -1 : 0) + ((keys.ArrowRight || keys.KeyD) ? 1 : 0);
+    if (kbDir !== 0) {
+        orbTargetX = -1;
+        touchActive = false;
+        orbX = clamp(orbX + kbDir * 6, 12, W - 12);
+    } else if (orbTargetX >= 0 && touchActive) {
         orbX = lerp(orbX, orbTargetX, 0.08);
     } else {
         // Drift toward center
@@ -1042,6 +1160,7 @@ function updateDeath() {
         if (qualifiesForHighScore(score)) {
             hsEntryActive = true;
             hsInitials = [0, 0, 0];
+            hsCursor = 0;
         } else {
             hsEntryActive = false;
         }
@@ -1223,8 +1342,27 @@ function drawTitle() {
     ctx.shadowColor = '#4fc3f7';
     ctx.globalAlpha = pulse;
     ctx.fillStyle = '#4fc3f7';
-    ctx.fillText('TAP TO DESCEND', W / 2, H * 0.6);
+    ctx.fillText(FINE_POINTER ? 'CLICK OR PRESS ENTER TO DESCEND' : 'TAP TO DESCEND', W / 2, H * 0.6);
     ctx.globalAlpha = 1;
+
+    // Desktop control hints
+    if (FINE_POINTER) {
+        ctx.font = '12px Orbitron, monospace';
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = '#e0f7fa';
+        ctx.fillText('MOVE: MOUSE OR ← → / A D', W / 2, H * 0.6 + 32);
+        ctx.fillText('PULSE: SPACE OR DOUBLE-CLICK · PAUSE: P / ESC', W / 2, H * 0.6 + 52);
+        ctx.globalAlpha = 1;
+    }
+
+    // Version
+    ctx.font = '11px Orbitron, monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(143,178,187,0.8)';
+    ctx.fillText(VERSION, 10, H - 12);
     ctx.restore();
 
     // High Scores button (uses unified button system)
@@ -1793,12 +1931,26 @@ function drawInitialsEntry() {
     ctx.font = '14px Orbitron, monospace';
     ctx.shadowBlur = 0;
     ctx.fillText('ENTER INITIALS', W / 2, y + 30);
+    if (FINE_POINTER) {
+        ctx.font = '11px Orbitron, monospace';
+        ctx.fillStyle = 'rgba(224,247,250,0.6)';
+        ctx.fillText('TYPE LETTERS · ARROWS ADJUST · ENTER SAVES', W / 2, y + 50);
+    }
     ctx.restore();
 
     // Draw letter selectors
     const letterY = y + 70;
     const spacing = 60;
     const startX = W / 2 - spacing;
+
+    // Keyboard cursor indicator (desktop)
+    if (FINE_POINTER) {
+        const cx = startX + hsCursor * spacing;
+        ctx.save();
+        ctx.fillStyle = 'rgba(255,215,64,0.9)';
+        ctx.fillRect(cx - 16, letterY + 28, 32, 3);
+        ctx.restore();
+    }
 
     for (let i = 0; i < 3; i++) {
         const lx = startX + i * spacing;
@@ -1929,6 +2081,16 @@ function drawGameOverButtons() {
 
     const btnW = 180, btnH = 48;
 
+    if (FINE_POINTER) {
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillStyle = 'rgba(79,195,247,0.6)';
+        ctx.font = '11px Orbitron, monospace';
+        ctx.fillText('ENTER — DESCEND AGAIN', W / 2, H - 122);
+        ctx.restore();
+    }
+
     drawTouchButton(W / 2 - btnW / 2, H - 110, btnW, btnH, 'DESCEND AGAIN', () => {
         state = 'PLAYING';
         initGame();
@@ -1984,9 +2146,24 @@ function init() {
     resize();
     loadHighScores();
     initTitle();
+    if (FINE_POINTER) {
+        pauseOverlay.querySelector('p').textContent = 'PAUSED — CLICK OR PRESS P / ENTER';
+    }
     lastTime = performance.now();
     requestAnimationFrame(gameLoop);
 }
+
+window.__CRYSTAL_CAVERN_TEST__ = {
+    version: VERSION,
+    state() {
+        return { state, paused, score, depth: Math.floor(depth), orbAlive, orbX, orbY,
+                 W, H, viewScale, canvasLeft, DPR, finePointer: FINE_POINTER };
+    },
+    startGame,
+    pauseGame,
+    resumeGame,
+    triggerPulse
+};
 
 init();
 </script>

@@ -43,7 +43,8 @@
   <span style="background:#40ff60;display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:middle"></span> Storm &nbsp;
   <span style="background:#ffcc40;display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:middle"></span> Void
   </p>
-  <p style="margin-top:12px;color:#504060;font-size:12px">3 LEVELS · SCORE 100/250 TO ADVANCE</p>
+  <p style="margin-top:12px;color:#504060;font-size:12px">DESKTOP: MOVE WITH MOUSE · CLICK / SPACE = COLOR · ENTER = START</p>
+  <p style="margin-top:8px;color:#504060;font-size:12px">3 LEVELS · SCORE 100/250 TO ADVANCE · v1.0.1</p>
   <button id="tapBtn" onclick="startGame()">TAP TO PLAY</button>
 </div>
 <div id="endMsg">
@@ -55,8 +56,16 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-let W,H;
-function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+let W,H,viewScale=1;
+function resize(){
+  // Gameplay sizes are phone-tuned: cap the logical resolution on big desktop
+  // monitors and let the canvas CSS (100vw/100vh) scale it back up uniformly.
+  // Phones/tablets (min dimension <= 768) keep viewScale 1 — identical to before.
+  const vw=window.innerWidth,vh=window.innerHeight;
+  viewScale=Math.min(1,768/Math.min(vw,vh));
+  W=canvas.width=Math.round(vw*viewScale);
+  H=canvas.height=Math.round(vh*viewScale);
+}
 resize();
 
 const ORB_COLORS=['#ff4040','#40a0ff','#40ff60','#ffcc40'];
@@ -291,7 +300,7 @@ function loop(ts) {
           vortex.r=Math.max(30,vortex.r-2);
           spawnBurst(o.x,o.y,o.color,4);
           comboCount=0;
-          if(vortex.health<=0){gameOver();return;}
+          if(vortex.health<=0){gameOver();break;} // break (not return) so the rAF loop survives for RESTART
         }
         updateLevel();
       }
@@ -318,10 +327,11 @@ function gameOver() {
   el.style.display='flex';
 }
 
+let loopRunning=false;
 function startGame() {
   document.getElementById('overlay').style.display='none';
   initGame();
-  requestAnimationFrame(loop);
+  if(!loopRunning){loopRunning=true;requestAnimationFrame(loop);}
 }
 
 function restartGame() {
@@ -329,30 +339,55 @@ function restartGame() {
   initGame();
 }
 
-// Touch handling
+// Pointer handling (touch drag + desktop mouse) — window-wide so the vortex
+// keeps tracking past the canvas edge; buttons and overlays opt out.
 let touchStart={x:0,y:0,t:0};
-canvas.addEventListener('pointerdown',e=>{
+function toGame(e){return{x:e.clientX*viewScale,y:e.clientY*viewScale};}
+function gameTarget(e){return !(e.target&&e.target.closest&&e.target.closest('button,#overlay,#endMsg'));}
+function cycleMode(){
+  const numColors=vortex.level===1?2:vortex.level===2?3:4;
+  vortex.mode=(vortex.mode+1)%numColors;
+  autoModeTimer=0;
+  // Ring burst
+  for(let i=0;i<20;i++){const a=i/20*Math.PI*2;particles.push({x:vortex.x,y:vortex.y,vx:Math.cos(a)*3,vy:Math.sin(a)*3,life:0.8,color:ORB_COLORS[vortex.mode],glow:ORB_GLOW[vortex.mode],size:3});}
+}
+window.addEventListener('pointerdown',e=>{
+  if(!gameTarget(e)) return;
+  const p=toGame(e);
   dragActive=true;
-  lastDrag={x:e.clientX,y:e.clientY};
-  touchStart={x:e.clientX,y:e.clientY,t:Date.now()};
-  ripples.push({x:e.clientX,y:e.clientY,r:5,life:1});
+  lastDrag={x:p.x,y:p.y};
+  touchStart={x:p.x,y:p.y,t:Date.now()};
+  ripples.push({x:p.x,y:p.y,r:5,life:1});
 });
-canvas.addEventListener('pointermove',e=>{
+window.addEventListener('pointermove',e=>{
+  if(!gameTarget(e)) return;
+  const p=toGame(e);
+  // Desktop mouse steers without holding the button down
+  if(e.pointerType==='mouse'&&!dragActive){if(gameActive){vortex.x=p.x;vortex.y=p.y;}return;}
   if(!dragActive) return;
-  if(gameActive){vortex.x=e.clientX;vortex.y=e.clientY;}
-  lastDrag={x:e.clientX,y:e.clientY};
+  if(gameActive){vortex.x=p.x;vortex.y=p.y;}
+  lastDrag={x:p.x,y:p.y};
 });
-canvas.addEventListener('pointerup',e=>{
+window.addEventListener('pointerup',e=>{
   dragActive=false;
-  // Tap to cycle color?
-  const dx=e.clientX-touchStart.x, dy=e.clientY-touchStart.y;
+  if(!gameTarget(e)) return;
+  // Tap/click to cycle color?
+  const p=toGame(e);
+  const dx=p.x-touchStart.x, dy=p.y-touchStart.y;
   const dt=Date.now()-touchStart.t;
-  if(Math.hypot(dx,dy)<20 && dt<200 && gameActive) {
-    const numColors=vortex.level===1?2:vortex.level===2?3:4;
-    vortex.mode=(vortex.mode+1)%numColors;
-    autoModeTimer=0;
-    // Ring burst
-    for(let i=0;i<20;i++){const a=i/20*Math.PI*2;particles.push({x:vortex.x,y:vortex.y,vx:Math.cos(a)*3,vy:Math.sin(a)*3,life:0.8,color:ORB_COLORS[vortex.mode],glow:ORB_GLOW[vortex.mode],size:3});}
+  if(Math.hypot(dx,dy)<20 && dt<200 && gameActive) cycleMode();
+});
+
+// Desktop keys: Enter = start/restart, Space = cycle color
+window.addEventListener('keydown',e=>{
+  if(e.repeat) return;
+  if(e.target&&e.target.closest&&e.target.closest('button')) return; // let focused buttons handle Enter natively
+  if(e.key==='Enter'){
+    if(document.getElementById('overlay').style.display!=='none') startGame();
+    else if(document.getElementById('endMsg').style.display==='flex') restartGame();
+  } else if(e.key===' '&&gameActive){
+    e.preventDefault();
+    cycleMode();
   }
 });
 

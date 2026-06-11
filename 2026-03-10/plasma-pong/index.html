@@ -46,14 +46,16 @@ function sndScore(){playSound(300,0.4,'sine',0.3,800)}
 function sndPowerup(){playSound(1200,0.05,'sine',0.2);setTimeout(()=>playSound(1600,0.05,'sine',0.2),50);setTimeout(()=>playSound(2000,0.08,'sine',0.2),100)}
 
 // Game constants
+const VERSION='v1.0.1';
+const DESKTOP=window.matchMedia&&window.matchMedia('(hover:hover) and (pointer:fine)').matches;
 const WINNING_SCORE=11;const BEST_OF=3;
 const PADDLE_W_R=0.015;const PADDLE_H_R=0.12;
 const BALL_R_R=0.008;const BALL_SPEED_R=0.45;
 const AI_SPEEDS=[0.3,0.45,0.6];
 
 // State
-let W,H,dpr;
-let state='title'; // title|playing|roundEnd|gameOver
+let W,H,dpr,viewScale=1;
+let state='title'; // title|playing|paused|roundEnd|gameOver
 let balls=[];let particles=[];let trails=[];let powerups=[];let bgParticles=[];
 let playerScore=0,aiScore=0,playerRounds=0,aiRounds=0,currentRound=0;
 let hitCount=0;
@@ -67,10 +69,18 @@ let roundEndMsg='';let roundEndTimer=0;
 let touchActive=false;
 
 function resize(){
+// Desktop: cap the logical resolution so fixed-pixel tuning (paddle deflection,
+// magnet pull, fonts) plays the same on big monitors. Landscape game -> fill the
+// window (same aspect), scaled up by viewScale. Caps are orientation-agnostic and
+// above every phone/tablet size, so mobile keeps viewScale=1 (unchanged).
+const vw=window.innerWidth,vh=window.innerHeight;
+viewScale=Math.max(1,Math.min(vw,vh)/1100,Math.max(vw,vh)/1500);
+W=Math.round(vw/viewScale);H=Math.round(vh/viewScale);
 dpr=window.devicePixelRatio||1;
-W=window.innerWidth;H=window.innerHeight;
-canvas.width=W*dpr;canvas.height=H*dpr;
-ctx.setTransform(dpr,0,0,dpr,0,0);
+let rs=dpr*viewScale;
+if(viewScale>1)rs=Math.min(rs,3);
+canvas.width=Math.round(W*rs);canvas.height=Math.round(H*rs);
+ctx.setTransform(rs,0,0,rs,0,0);
 }
 window.addEventListener('resize',resize);
 resize();
@@ -129,17 +139,38 @@ powerups.push({x:W/2,y:Math.random()*(H-100)+50,vx:(Math.random()-0.5)*60,vy:(Ma
 
 // Input
 let keys={};
-document.addEventListener('keydown',e=>{keys[e.key]=true});
+function pauseGame(){if(state==='playing')state='paused'}
+function resumeGame(){if(state==='paused'){state='playing';lastTime=0}}
+// Buttons/overlays opt out of window-level steering (none in DOM today, but keeps parity with other games).
+function steerTarget(e){return !(e.target&&e.target.closest&&e.target.closest('button,.overlay'))}
+
+document.addEventListener('keydown',e=>{
+const k=e.key;
+if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(k))e.preventDefault();
+if(k==='p'||k==='P'||k==='Escape'){
+if(state==='playing'){pauseGame();return}
+if(state==='paused'){resumeGame();return}
+}
+if((k===' '||k==='Enter')&&!e.repeat){
+initAudio();
+if(state==='title'||state==='gameOver'){startGame();return}
+if(state==='paused'){resumeGame();return}
+}
+keys[k]=true;
+});
 document.addEventListener('keyup',e=>{keys[e.key]=false});
+window.addEventListener('blur',()=>{keys={};if(state==='playing')pauseGame()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='playing')pauseGame()});
 
 document.addEventListener('touchstart',e=>{
 if(e.target.closest('button'))return;
 initAudio();
 if(state==='title'){startGame();e.preventDefault();return}
 if(state==='gameOver'){startGame();e.preventDefault();return}
+if(state==='paused'){resumeGame();e.preventDefault();return}
 if(state==='roundEnd')return;
 const t=e.touches[0];
-if(t.clientX<W*0.6){touchActive=true;playerY=t.clientY/H}
+if(t.clientX/viewScale<W*0.6){touchActive=true;playerY=t.clientY/viewScale/H}
 e.preventDefault();
 },{passive:false});
 
@@ -147,7 +178,7 @@ document.addEventListener('touchmove',e=>{
 if(e.target.closest('button'))return;
 if(state==='playing'&&touchActive){
 const t=e.touches[0];
-playerY=t.clientY/H;
+playerY=t.clientY/viewScale/H;
 }
 e.preventDefault();
 },{passive:false});
@@ -159,13 +190,15 @@ if(state==='title'){initAudio();startGame();return}
 if(state==='gameOver'){startGame();return}
 },{passive:false});
 
-canvas.addEventListener('mousemove',e=>{
-if(state==='playing')playerY=e.clientY/H;
+// Window-level so the mouse keeps driving the paddle anywhere in the window.
+window.addEventListener('mousemove',e=>{
+if(state==='playing'&&steerTarget(e))playerY=e.clientY/viewScale/H;
 });
-canvas.addEventListener('click',()=>{
+window.addEventListener('click',e=>{
+if(!steerTarget(e))return;
 initAudio();
-if(state==='title')startGame();
-if(state==='gameOver')startGame();
+if(state==='title'||state==='gameOver'){startGame();return}
+if(state==='paused')resumeGame();
 });
 
 // Update
@@ -476,7 +509,7 @@ ctx.fillRect(-5,-5,W+10,H+10);
 }
 
 // HUD
-if(state==='playing'||state==='roundEnd'||state==='gameOver'){
+if(state==='playing'||state==='paused'||state==='roundEnd'||state==='gameOver'){
 ctx.textAlign='center';ctx.textBaseline='top';
 ctx.font='bold 48px "Courier New",monospace';
 ctx.shadowColor='#00ffff';ctx.shadowBlur=10;
@@ -504,8 +537,17 @@ ctx.shadowBlur=0;
 ctx.font='18px "Courier New",monospace';
 ctx.globalAlpha=0.5+Math.sin(titleTime*3)*0.5;
 ctx.fillStyle='#fff';
-ctx.fillText('TAP TO START',W/2,H/2+40);
+ctx.fillText(DESKTOP?'CLICK OR PRESS SPACE TO START':'TAP TO START',W/2,H/2+40);
 ctx.globalAlpha=1;
+if(DESKTOP){
+ctx.font='14px "Courier New",monospace';
+ctx.fillStyle='rgba(255,255,255,0.45)';
+ctx.fillText('MOUSE OR W/S · ARROWS MOVE · P PAUSE',W/2,H/2+80);
+}
+ctx.font='12px "Courier New",monospace';
+ctx.fillStyle='rgba(255,255,255,0.35)';
+ctx.textAlign='right';ctx.textBaseline='bottom';
+ctx.fillText(VERSION,W-10,H-10);
 }
 
 // Round end
@@ -534,8 +576,23 @@ ctx.shadowBlur=0;
 ctx.font='18px "Courier New",monospace';
 ctx.globalAlpha=0.5+Math.sin(Date.now()/300)*0.5;
 ctx.fillStyle='#fff';
-ctx.fillText('TAP TO PLAY AGAIN',W/2,H/2+40);
+ctx.fillText(DESKTOP?'CLICK OR PRESS ENTER TO PLAY AGAIN':'TAP TO PLAY AGAIN',W/2,H/2+40);
 ctx.globalAlpha=1;
+}
+
+// Paused
+if(state==='paused'){
+ctx.fillStyle='rgba(10,10,26,0.6)';
+ctx.fillRect(-5,-5,W+10,H+10);
+ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.font='bold 44px "Courier New",monospace';
+ctx.shadowColor='#00ffff';ctx.shadowBlur=25;
+ctx.fillStyle='#00ffff';
+ctx.fillText('PAUSED',W/2,H/2-10);
+ctx.shadowBlur=0;
+ctx.font='16px "Courier New",monospace';
+ctx.fillStyle='rgba(255,255,255,0.6)';
+ctx.fillText(DESKTOP?'P / ESC OR CLICK TO RESUME':'TAP TO RESUME',W/2,H/2+40);
 }
 
 ctx.restore();

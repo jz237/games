@@ -8,9 +8,12 @@
 <meta http-equiv="Expires" content="0">
 <title>STELLAR DRIFT</title>
 <style>
+:root{--gutter:0px}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{position:fixed;overflow:hidden;overscroll-behavior:none;width:100%;height:100%;background:#000;touch-action:none}
 canvas{display:block;touch-action:none}
+#c{position:absolute;top:0;left:0;cursor:crosshair}
+#c.boxed{outline:1px solid rgba(0,255,255,.16);box-shadow:0 0 34px rgba(0,255,255,.12)}
 button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
 .overlay{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;pointer-events:auto}
 .overlay.hidden{display:none;pointer-events:none}
@@ -28,8 +31,12 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 .diff-btn.diff-hard.selected{border-color:#f44;color:#fff;background:rgba(255,68,68,0.15);box-shadow:0 0 16px rgba(255,68,68,0.35)}
 .diff-btn.diff-normal.selected{border-color:#ffd700;color:#fff;background:rgba(255,215,0,0.12);box-shadow:0 0 16px rgba(255,215,0,0.3)}
 .hud-btn{position:absolute;z-index:20;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.2);color:#fff;font-size:1.3rem;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0}
-#pauseBtn{top:10px;left:10px}
-#muteBtn{top:10px;right:10px}
+#pauseBtn{top:10px;left:calc(10px + var(--gutter))}
+#muteBtn{top:10px;right:calc(10px + var(--gutter))}
+.initial-col.active .letter{color:#ffd700;text-shadow:0 0 10px rgba(255,215,0,.6)}
+.version-tag{position:absolute;top:8px;right:12px;color:rgba(0,255,255,.4);font:700 11px monospace;letter-spacing:.08em;z-index:2}
+.ctrl-hint{font-size:clamp(0.65rem,1.8vw,0.8rem);color:rgba(174,238,255,.55);letter-spacing:.06em;margin:-0.6em 0 1em;line-height:1.5}
+.ctrl-hint.hidden,#goNewHS.hidden,#initialsSection.hidden{display:none}
 .hud-btn.hidden{display:none}
 #highScoreList{list-style:none;padding:0;margin:1em 0;max-height:50vh;overflow-y:auto}
 #highScoreList li{font-size:clamp(0.8rem,2.5vw,1rem);padding:0.3em 0.8em;color:#aef;font-family:monospace;letter-spacing:0.05em}
@@ -63,9 +70,11 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 <div class="overlay-bg"></div>
 <canvas id="titleCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0"></canvas>
 <div class="overlay-content" style="z-index:1;width:100%;max-width:500px;padding:0 16px;position:relative">
+  <div class="version-tag" id="versionTag"></div>
   <div class="title-glow-ring"></div>
   <div class="game-title" style="margin-bottom:0">STELLAR DRIFT</div>
   <div class="game-subtitle" style="margin-bottom:1.2em">ONE-FINGER SPACE SHOOTER</div>
+  <div class="ctrl-hint hidden" id="ctrlHint">Mouse steers · WASD / arrows fly · auto-fire is always on<br>P / Esc pause · Enter start · 1-3 pick upgrades</div>
   <div id="enemyShowcase" style="display:flex;justify-content:center;gap:clamp(8px,3vw,20px);margin-bottom:1.4em;align-items:flex-end"></div>
   <div class="title-separator"></div>
   <div class="diff-row" style="margin-bottom:1em">
@@ -112,7 +121,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 <div class="overlay-bg"></div>
 <div class="overlay-content">
 <div style="font-size:clamp(1.2rem,4vw,2rem);color:#f90;letter-spacing:0.15em;margin-bottom:0.3em;font-family:monospace">▣ SYSTEM UPGRADE ▣</div>
-<div style="color:rgba(255,160,0,0.6);font-size:0.8rem;margin-bottom:1.2em">SELECT ONE ENHANCEMENT</div>
+<div id="upgradeSub" style="color:rgba(255,160,0,0.6);font-size:0.8rem;margin-bottom:1.2em">SELECT ONE ENHANCEMENT</div>
 <div id="upgradeOptions" style="display:flex;flex-direction:column;gap:0.6em;align-items:center"></div>
 </div>
 </div>
@@ -132,6 +141,7 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 <div class="overlay-bg"></div>
 <div class="overlay-content">
 <div style="font-size:clamp(1.5rem,5vw,2.5rem);color:#0ff;letter-spacing:0.15em;margin-bottom:0.5em">PAUSED</div>
+<div class="ctrl-hint hidden" id="pauseHint">P / Esc / Enter resumes</div>
 <button class="btn" id="resumeBtn">RESUME</button>
 <button class="btn" id="pauseQuitBtn">QUIT</button>
 </div>
@@ -142,12 +152,23 @@ button{touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:tran
 // ===== CANVAS SETUP =====
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-let W, H, DPR;
+const VERSION = 'v1.0.1';
+const FINE_POINTER = matchMedia('(pointer:fine)').matches;
+let W, H, DPR, viewScale = 1, canvasLeft = 0;
 function resize() {
-  DPR = Math.min(window.devicePixelRatio || 1, 3);
-  W = window.innerWidth; H = window.innerHeight;
-  canvas.width = W * DPR; canvas.height = H * DPR;
-  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  // Game logic runs at phone-ish dimensions (max ~595x960) regardless of monitor;
+  // the canvas is scaled up to fill the window height and letterboxed on wide screens.
+  const vw = window.innerWidth, vh = window.innerHeight;
+  H = Math.min(vh, 960);
+  viewScale = vh / H;
+  W = Math.min(Math.floor(vw / viewScale), Math.max(560, Math.round(H * .62)));
+  const cssW = Math.round(W * viewScale);
+  canvasLeft = Math.max(0, Math.round((vw - cssW) / 2));
+  DPR = Math.min(viewScale * (window.devicePixelRatio || 1), W * H > 500000 ? 2.4 : 3.2);
+  canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR);
+  canvas.style.width = cssW + 'px'; canvas.style.height = vh + 'px'; canvas.style.left = canvasLeft + 'px';
+  canvas.classList.toggle('boxed', canvasLeft > 0);
+  document.documentElement.style.setProperty('--gutter', canvasLeft + 'px');
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 }
 resize();
@@ -674,6 +695,7 @@ function buildInitialsUI() {
       return function(e) {
         e.stopPropagation();
         e.preventDefault();
+        setInitialCursor(idx);
         initials[idx] = (initials[idx] + dir + 26) % 26;
         letter.textContent = String.fromCharCode(65 + initials[idx]);
       };
@@ -688,6 +710,7 @@ function buildInitialsUI() {
     initialsEntry.appendChild(col);
   }
   initialsBuilt = true;
+  setInitialCursor(0);
 }
 
 // ===== BUTTON HANDLERS =====
@@ -702,11 +725,7 @@ btnHandler(document.getElementById('hsBackBtn'), () => { showScreen('titleScreen
 btnHandler(pauseBtn, () => { if (state === 'playing') { state = 'paused'; showScreen('pauseScreen'); } });
 btnHandler(document.getElementById('resumeBtn'), () => { state = 'playing'; showScreen(null); });
 btnHandler(document.getElementById('pauseQuitBtn'), () => { stopDrone(); state = 'title'; showScreen('titleScreen'); showHUD(false); });
-btnHandler(muteBtn, () => {
-  muted = !muted;
-  muteBtn.textContent = muted ? '🔇' : '🔊';
-  if (droneGain) droneGain.gain.value = muted ? 0 : 0.03;
-});
+btnHandler(muteBtn, () => toggleMute());
 btnHandler(goSubmitBtn, () => {
   const ini = initials.map(i => String.fromCharCode(65 + i)).join('');
   addHS(ini, score, wave);
@@ -734,6 +753,15 @@ diffBtns.forEach(b => {
   const d = b.id.replace('diff', '').toLowerCase();
   btnHandler(b, () => selectDifficulty(d));
 });
+
+// ===== VERSION + DESKTOP COPY =====
+document.getElementById('versionTag').textContent = VERSION;
+if (FINE_POINTER) {
+  document.getElementById('ctrlHint').classList.remove('hidden');
+  document.getElementById('pauseHint').classList.remove('hidden');
+  document.getElementById('startBtn').textContent = 'START';
+  document.getElementById('upgradeSub').textContent = 'SELECT ONE ENHANCEMENT · PRESS 1 / 2 / 3';
+}
 
 // Stats continue button
 const statsScreen = document.getElementById('statsScreen');
@@ -822,9 +850,17 @@ function getInputPos(e) {
   }
   return { x: e.clientX, y: e.clientY };
 }
+// Buttons and overlays opt out of steering/preventDefault.
 function shouldPreventDefault(e) {
   if (e.target && (e.target.closest('button') || e.target.closest('.overlay'))) return false;
   return true;
+}
+// Steering listens on the whole window so the ship keeps tracking when the
+// pointer crosses into the letterbox gutters; map client px -> game coords.
+function aimPlayer(cx, cy) {
+  inputX = (cx - canvasLeft) / viewScale;
+  inputY = cy / viewScale;
+  inputActive = true;
 }
 
 document.addEventListener('touchstart', e => {
@@ -832,31 +868,98 @@ document.addEventListener('touchstart', e => {
   if (state !== 'playing') return;
   ensureAudio(); resumeAudio();
   const pos = getInputPos(e);
-  inputX = pos.x; inputY = pos.y;
-  inputActive = true;
+  aimPlayer(pos.x, pos.y);
 }, { passive: false });
 document.addEventListener('touchmove', e => {
   if (shouldPreventDefault(e)) e.preventDefault();
   if (state !== 'playing') return;
   const pos = getInputPos(e);
-  inputX = pos.x; inputY = pos.y;
-  inputActive = true;
+  aimPlayer(pos.x, pos.y);
 }, { passive: false });
 document.addEventListener('touchend', e => {
   if (shouldPreventDefault(e)) e.preventDefault();
   if (e.touches.length === 0) inputActive = false;
 }, { passive: false });
 
+// Desktop: mouse-follow without holding a button.
 document.addEventListener('mousemove', e => {
-  if (state !== 'playing') return;
-  inputX = e.clientX; inputY = e.clientY;
-  inputActive = true;
+  if (state !== 'playing' || !shouldPreventDefault(e)) return;
+  aimPlayer(e.clientX, e.clientY);
 });
 document.addEventListener('mousedown', e => {
-  if (state !== 'playing') return;
+  if (state !== 'playing' || !shouldPreventDefault(e)) return;
   ensureAudio(); resumeAudio();
-  inputX = e.clientX; inputY = e.clientY;
-  inputActive = true;
+  aimPlayer(e.clientX, e.clientY);
+});
+
+// ===== KEYBOARD (desktop) =====
+const keys = {};
+function togglePause() {
+  if (upgradeActive || showingStats) return;
+  if (state === 'playing') { state = 'paused'; showScreen('pauseScreen'); }
+  else if (state === 'paused') { state = 'playing'; showScreen(null); }
+}
+function toggleMute() {
+  muted = !muted;
+  muteBtn.textContent = muted ? '🔇' : '🔊';
+  if (droneGain) droneGain.gain.value = muted ? 0 : 0.03;
+}
+let initialsCursor = 0;
+function setInitialCursor(i) {
+  initialsCursor = Math.max(0, Math.min(2, i));
+  const cols = initialsEntry.children;
+  for (let c = 0; c < cols.length; c++) cols[c].classList.toggle('active', c === initialsCursor);
+}
+function cycleInitialKey(dir) {
+  initials[initialsCursor] = (initials[initialsCursor] + dir + 26) % 26;
+  const el = document.getElementById('init_' + initialsCursor);
+  if (el) el.textContent = String.fromCharCode(65 + initials[initialsCursor]);
+}
+window.addEventListener('keydown', e => {
+  const k = e.key;
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(k)) e.preventDefault();
+  const enteringInitials = state === 'gameover' && !showingStats && !initialsSection.classList.contains('hidden');
+  if (k === 'p' || k === 'P' || k === 'Escape') {
+    if (state === 'highscores') { showScreen('titleScreen'); state = 'title'; return; }
+    if (state === 'playing' || state === 'paused') { togglePause(); return; }
+    if (k === 'Escape') return;
+  }
+  if ((k === 'm' || k === 'M') && !enteringInitials) { toggleMute(); return; }
+  if (upgradeActive) {
+    if (k === '1' || k === '2' || k === '3') {
+      const btns = document.querySelectorAll('#upgradeOptions button');
+      const b = btns[Number(k) - 1];
+      if (b) b.click();
+    }
+    return;
+  }
+  if (state === 'playing') {
+    if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyW','KeyS'].includes(e.code)) {
+      keys[e.code] = true;
+      inputActive = false; // keyboard takes over from stale pointer target
+    }
+    return;
+  }
+  if (state === 'title' && (k === 'Enter' || k === ' ')) { ensureAudio(); resumeAudio(); startGame(); return; }
+  if (state === 'paused' && k === 'Enter') { togglePause(); return; }
+  if (state === 'highscores' && k === 'Enter') { showScreen('titleScreen'); state = 'title'; return; }
+  if (state === 'gameover') {
+    if (showingStats) { if (k === 'Enter') document.getElementById('statsContinueBtn').click(); return; }
+    if (enteringInitials) {
+      if (/^[a-z]$/i.test(k)) { initials[initialsCursor] = k.toUpperCase().charCodeAt(0) - 65; cycleInitialKey(0); setInitialCursor(initialsCursor + 1); return; }
+      if (k === 'Backspace') { e.preventDefault(); setInitialCursor(initialsCursor - 1); return; }
+      if (k === 'ArrowLeft') return setInitialCursor(initialsCursor - 1);
+      if (k === 'ArrowRight') return setInitialCursor(initialsCursor + 1);
+      if (k === 'ArrowUp') return cycleInitialKey(1);
+      if (k === 'ArrowDown') return cycleInitialKey(-1);
+      if (k === 'Enter') { goSubmitBtn.click(); return; }
+    } else if (k === 'Enter') { startGame(); return; }
+  }
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+window.addEventListener('blur', () => { for (const c in keys) keys[c] = false; });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state === 'playing' && !upgradeActive) { state = 'paused'; showScreen('pauseScreen'); }
 });
 
 // ===== GAME INIT =====
@@ -1182,6 +1285,14 @@ function update() {
   if (inputActive) {
     player.targetX = inputX;
     player.targetY = inputY;
+  }
+  // Keyboard steering (desktop) — nudges the lerp target directly
+  const kdx = ((keys.ArrowRight || keys.KeyD) ? 1 : 0) - ((keys.ArrowLeft || keys.KeyA) ? 1 : 0);
+  const kdy = ((keys.ArrowDown || keys.KeyS) ? 1 : 0) - ((keys.ArrowUp || keys.KeyW) ? 1 : 0);
+  if ((kdx || kdy) && !upgradeActive) {
+    const kSpd = (player.speedBoost > 0 ? 760 : 580) * dt;
+    player.targetX = Math.max(player.size, Math.min(W - player.size, player.targetX + kdx * kSpd));
+    player.targetY = Math.max(player.size, Math.min(H - player.size, player.targetY + kdy * kSpd));
   }
   const lerpFactor = player.speedBoost > 0 ? 0.25 : LERP;
   player.prevX = player.x; player.prevY = player.y;
