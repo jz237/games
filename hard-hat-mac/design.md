@@ -1,172 +1,105 @@
-# Hard Hat Mac — Mobile Remake Design Doc
+# Hard Hat Mac — Remastered (v2.0) Design Doc
 
 ## Overview
-A faithful mobile remake of the 1983 Apple II classic "Hard Hat Mack" by Electronic Arts. All original gameplay elements preserved — 3 distinct levels that loop with increasing difficulty. Graphics upgraded from Apple II lo-res to modern pixel-art style with lighting, particles, and smooth animation. Controls redesigned for touch.
+Complete modern rewrite of the 1983 Apple II classic "Hard Hat Mack" by Electronic Arts.
+All original gameplay preserved (3 levels, vandal/OSHA enemies, full hazard set, bonus
+timer, looping rounds) plus a brand-new fourth level, power-ups, combo scoring,
+procedural music, global leaderboards, and modern platformer game-feel. Single-file
+`index.html`, canvas 2D, no dependencies, runs on desktop + mobile + gamepad.
 
-## Original Game Elements (ALL preserved)
+## Levels
 
-### Core Mechanics
-- **3 Lives** — lose one when hit by hazard, falling off edge, or timer runs out
-- **Bonus Timer** — counts down each level; reaching zero = lose a life
-- **Movement** — walk left/right, climb up/down ladders/chains, jump
-- **Springboards** — bounce Mack upward to higher platforms
-- **Conveyor Belts** — push Mack in a direction, requiring timing
-- **Elevators** — ride between platform levels
-- **Score** — points for collecting items, completing levels, time bonus
+### Level 1 — Building Framework (dawn)
+- 5 girder floors connected by zig-zag ladders; elevator shaft on the left edge.
+- Objective: carry 4 loose girders to the marked floor gaps, then **hold ▼ to
+  jackhammer** each one tight (progress bar, sparks).
+- Hazards: falling bolts (rain from above, aimed loosely at the player), the Vandal,
+  the OSHA inspector (extra vandal at round 3+).
+- Springboard at lower right launches through an open gap to floor 2.
 
-### Enemies & Hazards (ALL preserved)
-- **The Vandal** — circulates through the building, tags Mack on contact
-- **OSHA Inspector** — patrols construction sites, acts as moving obstacle
-- **Thrown Bolts** — rain down from above in Level 1
-- **Pincers** — snap hazard to jump over (Level 2)
-- **Dynamite** — explosive obstacle (Level 2)
-- **Poison Boxes** — avoid on contact (Level 2)
-- **Ceiling Squasher** — must duck under (Level 2)
-- **Concrete Spigot** — dripping blobs to dodge
-- **Falling** — death from falling off edges or through gaps
+### Level 2 — Construction Site (dusk)
+- 4 floors, central elevator in an open 2-column shaft cut through every floor.
+- Objective: collect 5 lunchboxes → the electromagnet powers up → ride the top
+  conveyor under the magnet, which grabs Mack and lifts him out (level-end sequence).
+- Hazards: 2 pincers (snap cycle — jump when open), dynamite (periodic explosion with
+  blast radius), poison box, ceiling squasher (**duck with ▼** to pass), concrete
+  spigot dripping blobs, Vandal + OSHA.
 
-### Level 1: Building Framework
-- **Layout:** 5 horizontal girders connected by chain ladders
-- **Springboard** on the right edge, **elevator** on the left
-- **Objective:** Pick up 4 loose girder pieces and place them in floor holes
-- **Drill:** Moves in a pattern; once a girder is placed in a hole, ride the drill over it to secure it
-- **Hazards:** Thrown bolts from above, Vandal circulating, OSHA Inspector patrolling
-- **Completion:** All 4 girders placed and drilled
+### Level 3 — The Factory (night interior)
+- Factory backdrop: big windows w/ night sky, furnace glow, hanging work lamps.
+- Objective: carry 5 crates (one at a time, overhead) to the processor hopper.
+- The left conveyor belt feeds toward the **drowning pool** at bottom-left
+  (the floor above the pool is open — fall in and you drown).
+- Springboards for vertical shortcuts. Hazards: OSHA, vandals, spigot.
 
-### Level 2: Construction Site
-- **Layout:** 4-level construction site with central girder-elevator
-- **Objective:** Collect 5 lunchboxes scattered across the levels
-- **Mechanics:** Jump over pincers, dynamite, poison boxes; duck under ceiling squasher
-- **Completion:** After all lunchboxes collected, ride a conveyor belt to be grabbed by an overhead electromagnet
-- **Hazards:** Vandal, OSHA Inspector, pincers, dynamite, poison box, squasher, fall hazards
+### Level 4 — Crane Heights (NEW, golden hour)
+- Two rooftop towers separated by a wide gap, high above the city.
+- **Crane hook pendulum** ferries between the two tower TOPS — ride it across.
+- **Wrecking ball** swings low through the gap; **two rising steel beams**
+  (opposite phases) are the lower crossing route — time your hops.
+- Objective: carry 4 steel plates to the marked sockets and jackhammer them in.
+- Completion: flag raise + fireworks → "SHIFT COMPLETE" (round complete).
 
-### Level 3: Factory / Rivet Machine
-- **Layout:** Central circular conveyor with steps, surrounding platforms
-- **Objective:** Collect 5 boxes/iron bars and drop each into a processor/rivet machine
-- **Mechanics:** Jump on/off the circular conveyor, grab boxes, drop into corner processor
-- **Springboards** from girders to reach tricky spots
-- **Hazards:** OSHA Inspector near boxes, fall into pool/drowning hazard at bottom-left of conveyor
-- **Completion:** All 5 boxes processed
+### Rounds
+After L4 the game loops (round++): enemies +22%/round (cap ~2×), timers −9%/round
+(floor 62%), extra vandals appear at rounds 2–3.
 
-### Looping & Difficulty
-- After completing all 3 levels = 1 round
-- Game loops with increased speed and difficulty each round
-- Enemy patterns become faster and more aggressive
-- Timer becomes tighter
-- Endless play until all lives lost
+## Systems
 
-## Mobile Controls
+- **Physics/feel**: accel-based movement, coyote time (0.09s), jump buffering (0.12s),
+  variable jump height, squash & stretch, hit-stop on death, screen shake, camera
+  smoothing with facing look-ahead.
+- **Ladders**: pass through the upper floor; the topmost ladder tile is a one-way
+  platform (walk across it, climb up/down through it).
+- **Power-ups** (spawn every ~16–26 s, despawn in 9 s): ☕ coffee (+42% speed, 10 s),
+  ⛑️ golden hat (one free hit), ⏱️ stopwatch (+20 s clock & freezes enemies 5 s),
+  💰 cash (+500).
+- **Combo**: pickups/placements within 5 s chain a ×1…×5 multiplier.
+- **Lives**: 3 to start, extra life at 10 k / 25 k / then every 25 k (cap 5).
+- **Death**: keeps collection progress (girders stay riveted, boxes stay collected,
+  a carried item respawns at its original spot); timer refills.
+- **Medals**: per-level gold/silver/bronze by remaining clock (≥55% / ≥32%), best
+  stored in localStorage.
+- **Foreman radio**: personality toasts on level start, deaths, combos, low clock,
+  power-ups.
+- **First-run hints**: contextual floating tips (movement, climbing, jackhammer,
+  squasher duck, crane hook), suppressed after the first session.
 
-### Option A: Virtual D-Pad + Buttons (Recommended)
-```
-┌──────────────────────────┐
-│                          │
-│     [GAME AREA]          │
-│                          │
-│                          │
-├──────────────────────────┤
-│  [←] [→]   [↑][↓]  [JUMP] │
-│   D-pad    Ladder   Action │
-└──────────────────────────┘
-```
-- **Left/Right arrows** — walk
-- **Up/Down arrows** — climb ladders/chains, duck (for squasher)
-- **Jump button** — jump (also activates springboards)
-- Buttons are semi-transparent, overlaid on game area bottom
-- Haptic feedback on button press (if available)
+## Presentation
 
-### Touch Zones
-- Left third: D-pad (left/right/up/down)
-- Right third: Jump button
-- Tap up near a ladder = auto-climb
+- Per-level parallax backdrops: gradient sky, sun, drifting clouds, twinkling stars,
+  two layers of skyline with lit windows, crane silhouettes; L3 is a factory interior.
+- Procedural art, no assets: I-beam tiles w/ rivets + cross-bracing, animated conveyor
+  chevrons, springboards, hazard-striped machinery.
+- Characters are runtime-drawn puppets with smooth limb animation (Mack walk/climb/
+  jump/duck/carry/jackhammer/death poses; hoodie Vandal with glowing eyes & spray can;
+  OSHA inspector with hi-vis vest, clipboard and check-pause animation).
+- Lighting: additive glows, work lamps with light cones and flicker, vignette.
+- Particles: dust, sparks, explosions, splashes, confetti, magnet arcs, score popups.
 
-## Visual Upgrade Plan
+## Audio (all Web Audio, no samples)
+- Master compressor → SFX bus + music bus (separate toggles, persisted).
+- ~30 synthesized SFX (jump/land/steps, jackhammer, rivet, magnet hum, explosion,
+  splash, springs, pickups w/ combo pitch, jingles…).
+- **Procedural music sequencer**: per-level 2-bar chiptune tracks (title, L1 upbeat,
+  L2 tense, L3 industrial, L4 golden-hour w/ pads), swing, echo on lead, kick/hats;
+  switches to a "danger" hat pattern when the clock drops below 25%.
 
-### From Apple II → Modern Pixel Art
-- **Resolution:** Full device resolution with pixel-art sprites scaled up (32x32 base tiles)
-- **Mack:** Animated walk cycle, climb animation, jump animation, hard hat with subtle shine
-- **Girders:** Metallic with rivets, slight 3D bevel, rust accents
-- **Ladders/Chains:** Detailed metallic with shadow
-- **Background:** Construction site skyline, clouds, parallax layers
-- **Enemies:**
-  - Vandal: Distinct color, menacing walk cycle, slight glow
-  - OSHA Inspector: Clipboard-carrying figure, different color scheme
-- **Hazards:** Animated bolts with spin, sparking pincers, fizzing dynamite, glowing poison
-- **Particles:** Sparks on girder placement, dust on landing, bolt impact flashes
-- **Lighting:** Warm construction-site amber tones, subtle shadow under platforms
-- **Screen shake** on death, girder placement
-- **Smooth scrolling** camera if level is larger than viewport
+## Controls
+- **Desktop**: WASD/arrows, SPACE/Z jump, S/▼ duck + jackhammer, P/Esc pause (auto on
+  blur), Enter start/advance, M mute, typed initials.
+- **Touch**: D-pad + JUMP overlay (multi-touch, haptics via `navigator.vibrate`).
+- **Gamepad**: stick/d-pad, A/B jump, Start pause — hot-pluggable.
+- Millipede desktop pass: logical-res cap (H≤960), letterboxed column, window-wide
+  input, DPR cap 2.4. Mobile path identical (viewScale=1).
 
-### HUD
-- Top-left: Score
-- Top-center: Bonus timer (with color change yellow→red as it runs low)
-- Top-right: Lives (hard hat icons)
-- Current round indicator
-- Level name subtitle on entry ("BUILDING FRAMEWORK", "CONSTRUCTION SITE", "FACTORY")
+## Scores
+- Global leaderboard: Cloudflare Worker, namespace `hard-hat-mac`
+  (`GET/POST https://game-scores.jez237.workers.dev/scores/hard-hat-mac`,
+  `{initials, score, extra:'R<round>'}`), localStorage fallback + local top-10.
+- Submitting is optional (PUNCH IN / SKIP).
 
-### Audio (Web Audio synthesized)
-- **Jump** — short bounce boing
-- **Walk** — subtle footstep tick
-- **Climb** — metallic ladder clink
-- **Collect item** — cheerful pickup ding
-- **Place girder** — heavy metallic clank
-- **Drill** — buzzing drill sound
-- **Enemy contact/death** — crash/zap
-- **Bolt impact** — metallic ping
-- **Springboard** — sproing bounce
-- **Conveyor** — mechanical hum
-- **Electromagnet** — electric buzz
-- **Timer warning** — beeping when low
-- **Level complete** — victory jingle
-- **Game over** — descending tones
-- **Mute toggle** 🔊/🔇
-
-### High Score System
-- localStorage key: `hard_hat_mac_highscores`
-- Top 10: 3-letter initials + score + round reached
-- Show on game over + title screen button
-- Touch-friendly ▲/▼ initials entry
-
-## UI Flow
-1. **Title Screen** — "HARD HAT MAC" with construction site art, START + HIGH SCORES buttons
-2. **Level Intro** — Brief "LEVEL 1: BUILDING FRAMEWORK" splash (1.5s)
-3. **Gameplay** — with HUD overlay
-4. **Level Complete** — Score tally + time bonus animation
-5. **Round Complete** — "ROUND X COMPLETE!" after all 3 levels
-6. **Game Over** → High score entry if qualifying → Leaderboard
-7. **Loop** — back to Level 1 with harder difficulty
-
-## Technical Notes
-- Single HTML file, canvas-based
-- Tile-based collision (each level is a predefined tile map)
-- 60fps with proper dt calculation
-- All mobile fix checklist applied (touch handling, viewport, etc.)
-- Level data stored as arrays of tile types
-- Entity system for enemies, hazards, pickups
-- State machine: title → playing → levelComplete → gameOver
-
-## Level Data Structure
-```
-Tile types:
-0 = empty/air
-1 = solid platform/girder
-2 = ladder
-3 = chain
-4 = conveyor left
-5 = conveyor right
-6 = springboard
-7 = elevator rail
-8 = hole (to fill, Level 1)
-9 = hazard zone
-```
-
-Each level: 2D array + entity spawn list (enemies, pickups, hazards with positions and behavior patterns)
-
-## Difficulty Scaling Per Round
-| Round | Enemy Speed | Timer | Bolt Freq | Extra |
-|-------|-----------|-------|-----------|-------|
-| 1     | 1.0x      | 100%  | Normal    | Base  |
-| 2     | 1.2x      | 90%   | +20%      | —     |
-| 3     | 1.4x      | 80%   | +40%      | Extra vandal |
-| 4     | 1.6x      | 70%   | +60%      | Faster conveyors |
-| 5+    | 1.8x      | 60%   | +80%      | Max difficulty |
+## Debug
+`window.__g` exposes state/score/lives/player/entities, `skipToLevel(n)`,
+`winLevel()`, `kill()`, `give(kind)`, `step(ms)` (manual frame for headless tests),
+`snap(w)` (canvas JPEG data-URL).
