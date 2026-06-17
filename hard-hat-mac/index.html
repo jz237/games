@@ -788,6 +788,7 @@ function drawMack(px, py, o) {
   const duck = o.ducking ? 0.58 : 1;
   const wp = o.walkPhase || 0;
   const moving = o.moving;
+  const rearView = o.climbing;
   let legA1 = 0, legA2 = 0, armA1 = 0.25, armA2 = -0.25;
   if (o.climbing) {
     legA1 = Math.sin(o.climbPhase)*0.55; legA2 = -Math.sin(o.climbPhase)*0.55;
@@ -820,11 +821,26 @@ function drawMack(px, py, o) {
   ctx.fillStyle = shirt;
   rr(ctx, -10, shY - 4, 20, (shY*-1 + hipY) * -0.1 + 16*duck, 5); ctx.fill();
   ctx.fillStyle = overall;
-  rr(ctx, -10, shY + 7*duck, 20, 15*duck, 3); ctx.fill();
-  ctx.fillRect(-8, shY - 2, 4, 11*duck); ctx.fillRect(4, shY - 2, 4, 11*duck);
+  if (rearView) {
+    rr(ctx, -11, shY + 4*duck, 22, 19*duck, 3); ctx.fill();
+    ctx.fillStyle = 'rgba(16,34,80,0.28)';
+    ctx.fillRect(-1, shY + 7*duck, 2, 13*duck);
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-8, shY + 6*duck);
+    ctx.lineTo(0, shY + 10*duck);
+    ctx.lineTo(8, shY + 6*duck);
+    ctx.stroke();
+  } else {
+    rr(ctx, -10, shY + 7*duck, 20, 15*duck, 3); ctx.fill();
+    ctx.fillRect(-8, shY - 2, 4, 11*duck); ctx.fillRect(4, shY - 2, 4, 11*duck);
+  }
   // tool belt
   ctx.fillStyle = '#7a5c38'; ctx.fillRect(-10, hipY - 4*duck, 20, 4);
-  ctx.fillStyle = '#c8a45c'; ctx.fillRect(-2, hipY - 4*duck, 4, 4);
+  if (!rearView) {
+    ctx.fillStyle = '#c8a45c'; ctx.fillRect(-2, hipY - 4*duck, 4, 4);
+  }
   // back arm
   ctx.strokeStyle = '#c8651f'; ctx.lineWidth = 7;
   ctx.beginPath(); ctx.moveTo(-5, shY+1); ctx.lineTo(-5 + Math.sin(armA1)*12, shY+1 + Math.cos(armA1)*13); ctx.stroke();
@@ -833,8 +849,16 @@ function drawMack(px, py, o) {
   // head
   ctx.fillStyle = skin;
   ctx.beginPath(); ctx.arc(2, headY, 8.5, 0, TAU); ctx.fill();
+  if (rearView) {
+    ctx.fillStyle = 'rgba(110,70,42,0.42)';
+    ctx.beginPath();
+    ctx.arc(2, headY - 0.5, 7.2, Math.PI*0.06, Math.PI*0.94);
+    ctx.lineTo(-4.5, headY + 0.5);
+    ctx.closePath();
+    ctx.fill();
+  }
   // face
-  if (!o.climbing) {
+  if (!rearView) {
     ctx.fillStyle = o.dead ? '#902020' : '#2a2a30';
     if (o.dead) { // X eyes
       ctx.strokeStyle = '#902020'; ctx.lineWidth = 1.6;
@@ -849,8 +873,12 @@ function drawMack(px, py, o) {
   ctx.fillStyle = hatC;
   ctx.beginPath(); ctx.arc(2, headY - 3, 9.5, Math.PI, 0); ctx.fill();
   rr(ctx, -9.5, headY - 5, 23, 4, 2); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.beginPath(); ctx.arc(2, headY-3, 9.5, Math.PI*1.2, Math.PI*1.5); ctx.lineTo(2, headY-3); ctx.fill();
+  ctx.fillStyle = rearView ? 'rgba(110,84,0,0.22)' : 'rgba(255,255,255,0.5)';
+  if (rearView) {
+    rr(ctx, -3, headY - 12, 6, 7, 2); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.arc(2, headY-3, 9.5, Math.PI*1.2, Math.PI*1.5); ctx.lineTo(2, headY-3); ctx.fill();
+  }
   if (o.shield) glow(2, headY - 4, 22, '#ffd24a', 0.4 + 0.15*Math.sin(gameTime*6));
   // front arm
   ctx.strokeStyle = shirt; ctx.lineWidth = 7;
@@ -1989,15 +2017,27 @@ function drawTiles() {
             for (const rx of [10, 24, 38]) { ctx.beginPath(); ctx.arc(x+rx, y+8, 2.6, 0, TAU); ctx.fill(); }
           }
         } else {
-          // open gap with hazard stripes on edges
-          ctx.fillStyle = 'rgba(0,0,0,0.3)';
-          ctx.fillRect(x, y, TILE, 8);
+          // Open hole: keep the girder scenery intact, then cut a local shadow into it.
+          ctx.drawImage(ART.girder, x, y);
           if (h && h.c === c) {
             ctx.save();
-            ctx.translate(x - 4, y - 3);
+            const hw = TILE * 2;
+            ctx.beginPath();
+            ctx.ellipse(x + hw/2, y + TILE*0.44, hw*0.33, TILE*0.17, 0, 0, TAU);
+            ctx.clip();
+            const pit = ctx.createRadialGradient(x + hw/2, y + TILE*0.36, 1, x + hw/2, y + TILE*0.44, hw*0.34);
+            pit.addColorStop(0, '#1c2030');
+            pit.addColorStop(0.62, '#080a10');
+            pit.addColorStop(1, '#000');
+            ctx.fillStyle = pit;
+            ctx.fillRect(x + 10, y + 6, hw - 20, TILE - 10);
+            ctx.restore();
+
+            ctx.save();
+            ctx.translate(x + 7, y + 2);
             for (let i = 0; i < 13; i++) {
               ctx.fillStyle = i % 2 ? '#ffc116' : '#1c1c22';
-              ctx.fillRect(i*8, 0, 8, 5);
+              ctx.fillRect(i*7, 0, 7, 4);
             }
             ctx.restore();
           }
