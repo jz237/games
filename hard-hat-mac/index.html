@@ -450,15 +450,22 @@ function pointerToLogical(e) {
   return { x: (e.clientX - canvasLeft) / viewScale, y: e.clientY / viewScale };
 }
 let lastPointer = {x:-99, y:-99};
+function stateHasCanvasButtons() {
+  return state === 'title' || state === 'paused' || state === 'levelComplete' ||
+    state === 'roundComplete' || state === 'gameOver' || state === 'hsEntry' ||
+    state === 'hsView' || state === 'howto';
+}
 window.addEventListener('pointerdown', e => {
   if (e.target.closest && e.target.closest('.ctrl-btn')) return;
   initAudio();
   const p = pointerToLogical(e);
   lastPointer = p;
-  for (const b of uiButtons) {
-    if (p.x >= b.x && p.x <= b.x+b.w && p.y >= b.y && p.y <= b.y+b.h) {
-      handleUIButton(b.id);
-      return;
+  if (stateHasCanvasButtons()) {
+    for (const b of uiButtons) {
+      if (p.x >= b.x && p.x <= b.x+b.w && p.y >= b.y && p.y <= b.y+b.h) {
+        handleUIButton(b.id);
+        return;
+      }
     }
   }
   // tap-anywhere advances on simple screens
@@ -1940,6 +1947,7 @@ function advanceLevel() {
 }
 function startLevel() {
   genLevel(level, true);
+  uiButtons = [];
   state = 'levelIntro';
   levelIntroT = 0;
   startMusic('l' + level);
@@ -2641,6 +2649,7 @@ function drawLevelIntro(dt) {
   ctx.fillText(line, viewW/2, ly);
   ctx.globalAlpha = 1;
   if (levelIntroT > 2.2) {
+    uiButtons = [];
     state = 'playing';
     if (level === 1 && round === 1) toast('📻 ' + FOREMAN.l1);
     else toast('📻 ' + FOREMAN['l' + level]);
@@ -3036,6 +3045,7 @@ function pauseGame(silent) {
   if (!silent) SFX.ui();
 }
 function resumeGame() {
+  uiButtons = [];
   state = 'playing';
   SFX.ui();
 }
