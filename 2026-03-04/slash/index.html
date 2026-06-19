@@ -39,6 +39,9 @@
   #overlay p { color:#c7b6d7; font-size:12px; text-align:center; max-width:300px; line-height:1.55; margin-top:0; margin-bottom:14px; }
   .menuBtns { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:0; }
   .homeInfo { display:flex; flex-direction:column; align-items:center; gap:0; margin-top:280px; }
+  .homeInstructions { width:min(440px,calc(100vw - 36px)); margin:0 0 14px; padding:12px 16px; border:1px solid rgba(255,224,128,0.38); border-radius:12px; background:linear-gradient(180deg,rgba(20,8,42,0.86),rgba(7,2,18,0.76)); box-shadow:0 0 28px rgba(128,64,204,0.26), inset 0 1px 0 rgba(255,255,255,0.12); color:#fff4ff; font-size:clamp(14px,2.7vw,18px); font-weight:900; line-height:1.42; letter-spacing:0.8px; text-align:center; text-shadow:0 0 12px rgba(224,128,255,0.68),0 2px 8px rgba(0,0,0,0.9); }
+  .homeInstructions div { margin:2px 0; }
+  .homeInstructions b { color:#ffe080; text-shadow:0 0 16px rgba(255,224,128,0.82); }
   #tapBtn { margin-top:8px; padding:8px 22px; background:linear-gradient(135deg,#3010aa,#e080ff33); color:#e080ff; font-size:14px; letter-spacing:2px; border:1px solid #e080ff; border-radius:4px; animation:pulse 1.5s infinite; }
   .secondaryBtn { padding:7px 13px; background:rgba(32,16,72,0.7); color:#d8b8ff; font-size:11px; letter-spacing:1.2px; border:1px solid rgba(224,128,255,0.6); border-radius:4px; }
   @keyframes pulse { 0%,100%{box-shadow:0 0 20px #8040aa} 50%{box-shadow:0 0 50px #e080ff,0 0 80px #8040aa} }
@@ -97,8 +100,12 @@
 <div id="overlay">
   <h1>&#x2694;&#xFE0F; SLASH</h1>
   <div class="homeInfo">
-    <p><b style="color:#e0b0ff">SWIPE</b> to cut, <b style="color:#ffe080">CIRCLE</b> for bomb, <b style="color:#8fefff">S</b> for Quix.<br>
-    Hold in place for a gravity well.</p>
+    <div class="homeInstructions" aria-label="How to play">
+      <div><b>SWIPE</b> through enemies to cut them.</div>
+      <div><b>CIRCLE</b> enemies for a bomb.</div>
+      <div>Draw an <b>S</b> for Quix Sigil.</div>
+      <div><b>HOLD</b> in place for a gravity well.</div>
+    </div>
     <div class="menuBtns">
       <button id="tapBtn">TAP TO PLAY</button>
       <button id="scoresBtn" class="secondaryBtn">HIGH SCORES</button>
@@ -143,8 +150,8 @@
 <script>
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-const GAME_VERSION='v1.0.7';
-const GAME_BUILD='2026-06-10';
+const GAME_VERSION='v1.0.8';
+const GAME_BUILD='2026-06-18';
 let W,H,viewScale=1,canvasLeft=0;
 function resize(){
   // Desktop: cap the logical playfield at phone-ish dimensions and letterbox/scale it up.
