@@ -1,5 +1,47 @@
 [
   {
+    "slug": "steel-duel",
+    "name": "Steel Duel",
+    "url": "https://game-scores.jez237.workers.dev/scores/steel-duel",
+    "playUrl": "https://jez237.com/games/2026-06-14/steel-duel/",
+    "scoreLabel": "LV"
+  },
+  {
+    "slug": "pay-dirt",
+    "name": "Pay Dirt",
+    "url": "https://game-scores.jez237.workers.dev/scores/pay-dirt",
+    "playUrl": "https://jez237.com/games/2026-06-12/pay-dirt/",
+    "scoreLabel": "CL"
+  },
+  {
+    "slug": "corner-pocket",
+    "name": "Corner Pocket",
+    "url": "https://game-scores.jez237.workers.dev/scores/corner-pocket",
+    "playUrl": "https://jez237.com/games/2026-06-11/corner-pocket/",
+    "scoreLabel": "R"
+  },
+  {
+    "slug": "eddy",
+    "name": "Eddy",
+    "url": "https://game-scores.jez237.workers.dev/scores/eddy",
+    "playUrl": "https://jez237.com/games/2026-06-10/eddy/",
+    "scoreLabel": "T"
+  },
+  {
+    "slug": "iron-ridge",
+    "name": "Iron Ridge",
+    "url": "https://game-scores.jez237.workers.dev/scores/iron-ridge",
+    "playUrl": "https://jez237.com/games/2026-06-10/iron-ridge/",
+    "scoreLabel": "W"
+  },
+  {
+    "slug": "hollow-deep",
+    "name": "Hollow Deep",
+    "url": "https://game-scores.jez237.workers.dev/scores/hollow-deep",
+    "playUrl": "https://jez237.com/games/2026-06-10/hollow-deep/",
+    "scoreLabel": "M"
+  },
+  {
     "slug": "millipede",
     "name": "Millipede",
     "url": "https://game-scores.jez237.workers.dev/scores/neon-myriapod",
@@ -7,17 +49,38 @@
     "scoreLabel": "W"
   },
   {
-    "slug": "lunar-lander",
-    "name": "Lunar Lander",
-    "url": "https://game-scores.jez237.workers.dev/scores/lunar-lander",
-    "playUrl": "https://jz237.github.io/games/lunar-lander/lunar-lander.html",
-    "scoreLabel": "LV"
+    "slug": "emerald-mine",
+    "name": "Emerald Mine: Crystal Caves",
+    "url": "https://game-scores.jez237.workers.dev/scores/emerald-mine",
+    "playUrl": "https://jz237.github.io/games/2026-03-05/boulder-dash/",
+    "scoreLabel": "C"
+  },
+  {
+    "slug": "neon-vector-arena",
+    "name": "Neon Vector Arena",
+    "url": "https://game-scores.jez237.workers.dev/scores/neon-vector-arena",
+    "playUrl": "https://jez237.com/games/2026-06-19/neon-vector-arena/",
+    "scoreLabel": "W"
+  },
+  {
+    "slug": "hard-hat-mac",
+    "name": "Hard Hat Mac",
+    "url": "https://game-scores.jez237.workers.dev/scores/hard-hat-mac",
+    "playUrl": "https://jez237.com/games/hard-hat-mac/",
+    "scoreLabel": "R"
   },
   {
     "slug": "missile-command",
     "name": "Missile Command: Aurora Siege",
     "url": "https://game-scores.jez237.workers.dev/scores/missile-command-v2",
     "playUrl": "https://jz237.github.io/games/2026-03-08/missile-command/",
+    "scoreLabel": "W"
+  },
+  {
+    "slug": "gpt-missile-command",
+    "name": "Missile Command (GPT)",
+    "url": "https://game-scores.jez237.workers.dev/scores/gpt-missile-command",
+    "playUrl": "https://jz237.github.io/games/gpt-missile-command/",
     "scoreLabel": "W"
   },
   {
@@ -28,11 +91,25 @@
     "scoreLabel": "W"
   },
   {
+    "slug": "neon-invaders",
+    "name": "Invaders",
+    "url": "https://game-scores.jez237.workers.dev/scores/neon-invaders",
+    "playUrl": "https://jez237.com/games/2026-06-05/invaders/",
+    "scoreLabel": "W"
+  },
+  {
     "slug": "stellar-drift",
     "name": "Stellar Drift",
     "url": "https://game-scores.jez237.workers.dev/scores/stellar-drift",
     "playUrl": "https://jz237.github.io/games/2026-03-25/stellar-drift/",
     "scoreLabel": "W"
+  },
+  {
+    "slug": "lunar-lander",
+    "name": "Lunar Lander",
+    "url": "https://game-scores.jez237.workers.dev/scores/lunar-lander",
+    "playUrl": "https://jz237.github.io/games/lunar-lander/lunar-lander.html",
+    "scoreLabel": "LV"
   },
   {
     "slug": "neon-qix",
@@ -42,13 +119,6 @@
     "scoreLabel": "LV"
   },
   {
-    "slug": "emerald-mine",
-    "name": "Emerald Mine: Crystal Caves",
-    "url": "https://game-scores.jez237.workers.dev/scores/emerald-mine",
-    "playUrl": "https://jz237.github.io/games/2026-03-05/boulder-dash/",
-    "scoreLabel": "C"
-  },
-  {
     "slug": "sky-joust",
     "name": "Sky Joust",
     "url": "https://game-scores.jez237.workers.dev/scores/sky-joust",
@@ -56,10 +126,24 @@
     "scoreLabel": "W"
   },
   {
+    "slug": "choplifter",
+    "name": "Choplifter: Rescue Run",
+    "url": "https://game-scores.jez237.workers.dev/scores/choplifter",
+    "playUrl": "https://jez237.com/games/2026-06-09/choplifter/",
+    "scoreLabel": "R"
+  },
+  {
     "slug": "subway-siege",
     "name": "Subway Siege",
     "url": "https://game-scores.jez237.workers.dev/scores/subway-siege",
     "playUrl": "https://jz237.github.io/games/2026-05-30/subway-siege/",
     "scoreLabel": "W"
+  },
+  {
+    "slug": "slash-rune-cutter",
+    "name": "Slash",
+    "url": "https://game-scores.jez237.workers.dev/scores/slash-rune-cutter",
+    "playUrl": "https://jz237.github.io/games/2026-03-04/slash/",
+    "scoreLabel": "LV"
   }
 ]
