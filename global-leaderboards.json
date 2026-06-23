@@ -14,6 +14,13 @@
     "scoreLabel": "CL"
   },
   {
+    "slug": "snake-awakening",
+    "name": "Snake Awakening",
+    "url": "https://game-scores.jez237.workers.dev/scores/snake-awakening",
+    "playUrl": "https://jez237.com/games/2026-06-22/snake-awakening/",
+    "scoreLabel": "ST"
+  },
+  {
     "slug": "corner-pocket",
     "name": "Corner Pocket",
     "url": "https://game-scores.jez237.workers.dev/scores/corner-pocket",
