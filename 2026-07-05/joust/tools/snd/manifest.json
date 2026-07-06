@@ -1,0 +1,186 @@
+[
+  {
+    "name": "flap_down",
+    "cmd": 32,
+    "file": "flap_down.wav",
+    "durationSec": 0.2688,
+    "rms": 0.3282,
+    "peakHz": 275
+  },
+  {
+    "name": "flap_up",
+    "cmd": 33,
+    "file": "flap_up.wav",
+    "durationSec": 0.1285,
+    "rms": 0.423,
+    "peakHz": 264
+  },
+  {
+    "name": "run1",
+    "cmd": 34,
+    "file": "run1.wav",
+    "durationSec": 0.0412,
+    "rms": 0.409,
+    "peakHz": 340
+  },
+  {
+    "name": "run2",
+    "cmd": 35,
+    "file": "run2.wav",
+    "durationSec": 0.0318,
+    "rms": 0.447,
+    "peakHz": 220
+  },
+  {
+    "name": "skid",
+    "cmd": 38,
+    "file": "skid.wav",
+    "durationSec": 0.891,
+    "rms": 0.6077,
+    "peakHz": 789
+  },
+  {
+    "name": "skid_end",
+    "cmd": 39,
+    "file": "skid_end.wav",
+    "durationSec": 0.4312,
+    "rms": 0.6079,
+    "peakHz": 789
+  },
+  {
+    "name": "thud",
+    "cmd": 8,
+    "file": "thud.wav",
+    "durationSec": 3.0374,
+    "rms": 0.3707,
+    "peakHz": 1319
+  },
+  {
+    "name": "cliff_thud",
+    "cmd": 6,
+    "file": "cliff_thud.wav",
+    "durationSec": 0.1489,
+    "rms": 0.8815,
+    "peakHz": 376
+  },
+  {
+    "name": "egg",
+    "cmd": 3,
+    "file": "egg.wav",
+    "durationSec": 0.2259,
+    "rms": 0.6145,
+    "peakHz": 487
+  },
+  {
+    "name": "egg_hatch",
+    "cmd": 2,
+    "file": "egg_hatch.wav",
+    "durationSec": 1.0507,
+    "rms": 0.5884,
+    "peakHz": 1277
+  },
+  {
+    "name": "die",
+    "cmd": 22,
+    "file": "die.wav",
+    "durationSec": 0.6956,
+    "rms": 0.8874,
+    "peakHz": 276
+  },
+  {
+    "name": "ptero_scream",
+    "cmd": 36,
+    "file": "ptero_scream.wav",
+    "durationSec": 0.7276,
+    "rms": 0.6814,
+    "peakHz": 1170
+  },
+  {
+    "name": "ptero_intro",
+    "cmd": 37,
+    "file": "ptero_intro.wav",
+    "durationSec": 0.3922,
+    "rms": 0.7661,
+    "peakHz": 992
+  },
+  {
+    "name": "troll",
+    "cmd": 9,
+    "file": "troll.wav",
+    "durationSec": 0.3219,
+    "rms": 0.6627,
+    "peakHz": 2420
+  },
+  {
+    "name": "lava",
+    "cmd": 13,
+    "file": "lava.wav",
+    "durationSec": 0.6006,
+    "rms": 0.6234,
+    "peakHz": 140
+  },
+  {
+    "name": "transporter_enemy",
+    "cmd": 7,
+    "file": "transporter_enemy.wav",
+    "durationSec": 2.7194,
+    "rms": 0.5981,
+    "peakHz": 274
+  },
+  {
+    "name": "transporter_player",
+    "cmd": 18,
+    "file": "transporter_player.wav",
+    "durationSec": 2.079,
+    "rms": 0.6188,
+    "peakHz": 296
+  },
+  {
+    "name": "mount",
+    "cmd": 12,
+    "file": "mount.wav",
+    "durationSec": 0.2471,
+    "rms": 0.5966,
+    "peakHz": 235
+  },
+  {
+    "name": "bounty",
+    "cmd": 28,
+    "file": "bounty.wav",
+    "durationSec": 3.1253,
+    "rms": 0.8986,
+    "peakHz": 1474
+  },
+  {
+    "name": "cliff",
+    "cmd": 25,
+    "file": "cliff.wav",
+    "durationSec": 5.282,
+    "rms": 0.1949,
+    "peakHz": 25
+  },
+  {
+    "name": "extra_man",
+    "cmd": 11,
+    "file": "extra_man.wav",
+    "durationSec": 1.2503,
+    "rms": 0.3721,
+    "peakHz": 1575
+  },
+  {
+    "name": "game_start",
+    "cmd": 27,
+    "file": "game_start.wav",
+    "durationSec": 1.8374,
+    "rms": 0.5423,
+    "peakHz": 1567
+  },
+  {
+    "name": "credit",
+    "cmd": 10,
+    "file": "credit.wav",
+    "durationSec": 0.5573,
+    "rms": 0.3555,
+    "peakHz": 230
+  }
+]

@@ -1,2 +1,4 @@
 notes/joust-src/
 tools/shots/
+tools/snd/*.wav
+tools/snd/plots.png

@@ -2,7 +2,7 @@
 // Engine (engine.js) is headless & authoritative; this owns everything user-facing.
 'use strict';
 
-const VERSION = 'v1.0.0';
+const VERSION = 'v1.2.0';
 const ASSET_Q = '?v=' + VERSION;
 const STEP_MS = 1000 / 60;
 const LB_URL = 'https://game-scores.jez237.workers.dev/scores/joust';
@@ -103,10 +103,11 @@ function readInputs() {
 }
 
 // ─── touch controls ───
-const touch = { active: false, left: false, right: false };
+const touch = { active: false, device: false, left: false, right: false };
 function setupTouch() {
   const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
   if (!isTouch) return;
+  touch.active = true; touch.device = true;   // touch device — enable touch input + show controls
   const bar = document.createElement('div'); bar.id = 'touchbar';
   bar.innerHTML = `<button id="tL">◀</button><button id="tR">▶</button><div class="sp"></div><button id="tF">FLAP</button>`;
   document.body.appendChild(bar);
@@ -124,7 +125,9 @@ function setupTouch() {
   // show only in gameplay
   window._touchbar = bar;
 }
-function updateTouchVis() { if (window._touchbar) window._touchbar.style.display = (touch.active && (state === 'playing' || state === 'intro')) ? 'flex' : 'none'; }
+function updateTouchVis() { if (window._touchbar) window._touchbar.style.display = (touch.device && (state === 'playing' || state === 'intro')) ? 'flex' : 'none'; }
+// map a pointer event to canvas pixel coords
+function evToCanvas(e) { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) }; }
 
 // ─── leaderboard ───
 async function fetchGlobal() {
@@ -542,7 +545,29 @@ function handleKeyUI(e) {
 function bumpInitial(d) { const c = (hsInitials.charCodeAt(hsPos) - 65 + d + 26) % 26; hsInitials = hsInitials.slice(0, hsPos) + String.fromCharCode(65 + c) + hsInitials.slice(hsPos + 1); }
 
 // touch on title
-canvas.addEventListener('pointerdown', () => { audio.init(); audio.resume(); if (state === 'title') { /* handled by menu; tap starts 1p */ } });
+canvas.addEventListener('pointerdown', e => {
+  audio.init(); audio.resume();
+  const c = evToCanvas(e), s = canvas.height, w = canvas.width;
+  if (state === 'title') {
+    const y0 = s * 0.44, dy = s * 0.075, idx = Math.round((c.y - y0) / dy);
+    if (idx >= 0 && idx < 6) { menuIdx = idx; menuAction(idx); }
+  } else if (state === 'help' || state === 'scores' || state === 'gameover') { backToTitle(); }
+  else if (state === 'intro') { introTimer = 0; }
+  else if (state === 'options') {
+    const rows = OPT_ROWS(), y0 = s * 0.24, dy = s * 0.072, idx = Math.round((c.y - y0) / dy);
+    if (idx >= 0 && idx < rows.length) { optIdx = idx; rows[idx][2](c.x < w * 0.4 ? -1 : 1); persist(); }
+    else if (c.y > s * 0.9) backToTitle();
+  } else if (state === 'waveselect') {
+    // tap a wave cell (5 cols grid) or bottom to go back
+    if (c.y > s * 0.86) { backToTitle(); return; }
+    const cols = 5, col = Math.floor((c.x - w * 0.2) / (w * 0.15)), row = Math.round((c.y - s * 0.28) / (s * 0.1));
+    if (col >= 0 && col < cols && row >= 0) { const n = wsPage * 25 + row * cols + col + 1; const maxW = save.unlockAll ? 99 : save.maxWave; if (n >= 1 && n <= maxW) { pendingMode = '1p'; startRun(n); } }
+  } else if (state === 'hsentry') {
+    // tap left/right third to move, upper/lower to change letter, center-bottom to confirm
+    if (c.y > s * 0.65) { commitHs(); return; }
+    if (c.x < w * 0.4) hsPos = Math.max(0, hsPos - 1); else if (c.x > w * 0.6) hsPos = Math.min(2, hsPos + 1); else bumpInitial(c.y < s * 0.45 ? 1 : -1);
+  }
+});
 
 // boot
 setupTouch();
