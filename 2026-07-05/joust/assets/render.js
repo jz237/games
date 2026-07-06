@@ -129,6 +129,13 @@ class Renderer {
     }
   }
 
+  // draw a sprite as a small HUD icon of pixel-height h, centered at screen (cx), bottom at by
+  drawSpriteIcon(name, cx, by, h) {
+    const s = this.spr[name]; if (!s) return;
+    const w = h * (s._ww / s._wh);
+    this.ctx.drawImage(s, Math.round(cx - w / 2), Math.round(by - h), Math.round(w), Math.round(h));
+  }
+
   render(snap) {
     const ctx = this.ctx, sc = this.scale;
     ctx.setTransform(1, 0, 0, 1, 0, 0);

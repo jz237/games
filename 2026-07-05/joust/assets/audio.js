@@ -5,7 +5,7 @@
 'use strict';
 (function () {
 const AC = window.AudioContext || window.webkitAudioContext;
-const VER = (window.JOUST_AUDIO_VER || '1.3.0');
+const VER = (window.JOUST_AUDIO_VER || '1.3.1');
 
 // ROM SOUND-TABLE priorities (higher wins preemption)
 const PRIO = {

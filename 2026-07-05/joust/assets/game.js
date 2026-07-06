@@ -2,7 +2,7 @@
 // Engine (engine.js) is headless & authoritative; this owns everything user-facing.
 'use strict';
 
-const VERSION = 'v1.3.0';
+const VERSION = 'v1.3.1';
 const ASSET_Q = '?v=' + VERSION;
 const STEP_MS = 1000 / 60;
 const LB_URL = 'https://game-scores.jez237.workers.dev/scores/joust';
@@ -321,21 +321,32 @@ function drawTitle(now) {
 }
 
 function drawHUD() {
-  const w = canvas.width, sc = renderer.scale;
+  const sc = renderer.scale;
   const P = engine.players;
   txt('1UP', renderer.sx(24), renderer.sy(8), Math.round(6 * sc), '#ffd23a', 'center');
   txt('' + P[0].score, renderer.sx(24), renderer.sy(18), Math.round(7 * sc), '#fff', 'center');
-  // lives icons P1
-  for (let i = 0; i < Math.min(P[0].lives, 6); i++) drawLifeIcon(renderer.sx(6 + i * 9), renderer.sy(26), sc, false);
   if (mode === '2p') {
     txt('2UP', renderer.sx(WORLD.VIEW_W - 24), renderer.sy(8), Math.round(6 * sc), '#7fd4ff', 'center');
     txt('' + P[1].score, renderer.sx(WORLD.VIEW_W - 24), renderer.sy(18), Math.round(7 * sc), '#fff', 'center');
-    for (let i = 0; i < Math.min(P[1].lives, 6); i++) drawLifeIcon(renderer.sx(WORLD.VIEW_W - 12 - i * 9), renderer.sy(26), sc, true);
   }
   txt('WAVE ' + engine.wave, renderer.sx(WORLD.VIEW_W / 2), renderer.sy(9), Math.round(6 * sc), '#c9c9d6');
+  drawBaseLives();
   // next special wave letter
   const nxt = nextSpecial(engine.wave);
   if (nxt) txt(nxt, renderer.sx(WORLD.VIEW_W - 8), renderer.sy(WORLD.VIEW_H - 8), Math.round(8 * sc), '#ff8a00', 'right');
+}
+// remaining mounts shown in a recessed band in the base centre (like the arcade)
+function drawBaseLives() {
+  const sc = renderer.scale, P = engine.players, iconH = 8 * sc, by = 222, mid = WORLD.VIEW_W / 2;
+  const bx1 = renderer.sx(mid - 66), bx2 = renderer.sx(mid + 66);
+  ctx.fillStyle = 'rgba(0,0,0,0.62)'; ctx.fillRect(bx1, renderer.sy(213), bx2 - bx1, 10 * sc);
+  if (mode === '2p') {
+    for (let i = 0; i < Math.min(P[0].lives, 5); i++) renderer.drawSpriteIcon('ORUN4R', renderer.sx(mid - 12 - i * 11), renderer.sy(by), iconH);
+    for (let i = 0; i < Math.min(P[1].lives, 5); i++) renderer.drawSpriteIcon('SRUN4R', renderer.sx(mid + 12 + i * 11), renderer.sy(by), iconH);
+  } else {
+    const n = Math.min(P[0].lives, 5), tot = (n - 1) * 11;
+    for (let i = 0; i < n; i++) renderer.drawSpriteIcon('ORUN4R', renderer.sx(mid - tot / 2 + i * 11), renderer.sy(by), iconH);
+  }
 }
 function nextSpecial(wv) {
   for (let n = wv + 1; n <= wv + 5; n++) { const t = waveInfo(n).type; if (t === 'survival') return 'S'; if (t === 'gladiator') return 'G'; if (t === 'egg') return 'E'; if (t === 'ptero') return 'P'; }
