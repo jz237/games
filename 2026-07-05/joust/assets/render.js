@@ -42,11 +42,29 @@ class Renderer {
   }
   _rnd() { let x = this.rng; x ^= x << 13; x ^= x >>> 17; x ^= x << 5; this.rng = x >>> 0; return (this.rng % 100000) / 100000; }
 
-  // decode a sprite's base64 rgba into an offscreen canvas
+  // EPX/scale2x pixel-art upscaler — doubles sprite resolution, smooths diagonals, stays crisp
+  scale2x(bytes, w, h) {
+    const W = w * 2, out = new Uint8ClampedArray(W * h * 2 * 4);
+    const idx = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? -1 : (y * w + x) * 4;
+    const eq = (i, j) => i >= 0 && j >= 0 && bytes[i] === bytes[j] && bytes[i + 1] === bytes[j + 1] && bytes[i + 2] === bytes[j + 2] && bytes[i + 3] === bytes[j + 3];
+    const put = (ox, oy, s) => { const o = (oy * W + ox) * 4; if (s < 0) { out[o + 3] = 0; return; } out[o] = bytes[s]; out[o + 1] = bytes[s + 1]; out[o + 2] = bytes[s + 2]; out[o + 3] = bytes[s + 3]; };
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const P = idx(x, y), A = idx(x, y - 1), B = idx(x + 1, y), C = idx(x - 1, y), D = idx(x, y + 1);
+      let e0 = P, e1 = P, e2 = P, e3 = P;
+      if (eq(C, A) && !eq(C, D) && !eq(A, B)) e0 = A;
+      if (eq(A, B) && !eq(A, C) && !eq(B, D)) e1 = B;
+      if (eq(D, C) && !eq(D, B) && !eq(C, A)) e2 = C;
+      if (eq(B, D) && !eq(B, A) && !eq(D, C)) e3 = D;
+      put(x * 2, y * 2, e0); put(x * 2 + 1, y * 2, e1); put(x * 2, y * 2 + 1, e2); put(x * 2 + 1, y * 2 + 1, e3);
+    }
+    return out;
+  }
+  // decode a sprite's rgba into an offscreen canvas at 2x resolution; world size stored on _ww/_wh
   mkCanvas(w, h, bytes) {
-    const c = document.createElement('canvas'); c.width = w; c.height = h;
-    const g = c.getContext('2d'); const img = g.createImageData(w, h);
-    img.data.set(bytes); g.putImageData(img, 0, 0); return c;
+    const up = this.scale2x(bytes, w, h), W = w * 2, H = h * 2;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d'); const img = g.createImageData(W, H);
+    img.data.set(up); g.putImageData(img, 0, 0); c._ww = w; c._wh = h; return c;
   }
   b64bytes(d) { const bin = atob(d); const u = new Uint8ClampedArray(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
   recolorBytes(bytes, tint) {
@@ -103,8 +121,8 @@ class Renderer {
   // blit sprite `name` with bottom-center anchored at native (nx, ny); wrap-duplicated
   blit(name, nx, ny, ax) {
     const s = this.spr[name]; if (!s) return;
-    const sc = this.scale, w = s.width * sc, h = s.height * sc;
-    const bx = nx - (ax != null ? ax : s.width / 2), by = ny - s.height;
+    const ww = s._ww, wh = s._wh, sc = this.scale, w = ww * sc, h = wh * sc;
+    const bx = nx - (ax != null ? ax : ww / 2), by = ny - wh;
     for (const off of [0, -WRAP, WRAP]) {
       const scr = this.sx(bx + off);
       if (scr > -w - 2 && scr < this.canvas.width + 2) this.ctx.drawImage(s, Math.round(scr), Math.round(this.sy(by)), Math.round(w), Math.round(h));
@@ -149,32 +167,53 @@ class Renderer {
 
   drawPlatforms(plats) {
     const ctx = this.ctx, sc = this.scale;
+    const rnd = (n) => ((n >>> 0) % 1000) / 1000;
     for (const p of plats || []) {
+      const isBase = p.y > 200;
       for (const off of [0, -WRAP, WRAP]) {
         const x1 = this.sx(p.x1 + off), x2 = this.sx(p.x2 + off);
         if (x2 < this.ox - 2 || x1 > this.ox + WORLD.VIEW_W * sc + 2) continue;
-        const w = x2 - x1, top = this.sy(p.y), isBase = p.y > 200;
-        const gT = 2.5 * sc;                                   // grey top thickness
-        const bodyH = (isBase ? (WORLD.FLOOR - p.y - 3) : 8) * sc;
-        // brown rocky body
-        const g = ctx.createLinearGradient(0, top + gT, 0, top + gT + bodyH);
-        g.addColorStop(0, PAL.rockLt); g.addColorStop(0.4, PAL.rockMd); g.addColorStop(1, PAL.rockDk);
-        ctx.fillStyle = g; ctx.fillRect(x1, top + gT, w, bodyH);
-        // vertical rocky crevices + a few lit flecks (deterministic per column)
-        for (let rx = 0; rx < w; rx += 5 * sc) {
-          const seed = ((x1 + rx) * 2654435761) >>> 0;
-          ctx.fillStyle = PAL.rockDk; ctx.fillRect(x1 + rx + (seed % 3) * sc, top + gT + (seed % 4) * 0.4 * sc, 1.4 * sc, bodyH * 0.7);
-          if ((seed >> 3) % 4 === 0) { ctx.fillStyle = PAL.rockHi; ctx.globalAlpha = 0.45; ctx.fillRect(x1 + rx, top + gT + 1 * sc, 1.4 * sc, 1.4 * sc); ctx.globalAlpha = 1; }
+        const w = x2 - x1, top = this.sy(p.y), gT = 3 * sc;
+        const bodyH = (isBase ? (WORLD.FLOOR - p.y - 4) : 9) * sc;
+        const bTop = top + gT, bBot = bTop + bodyH;
+        // ── organic rocky body with a lumpy/knobbly bottom edge (not comb-teeth) ──
+        ctx.beginPath();
+        ctx.moveTo(x1, bTop); ctx.lineTo(x2, bTop); ctx.lineTo(x2, bBot - 1 * sc);
+        const step = 8 * sc;   // gentle rounded lumps (cobbled-stone look, not stalactites)
+        for (let px = x2; px > x1; px -= step) {
+          const s = rnd(((px | 0) * 2654435761));
+          const bump = (0.6 + s * 1.6) * sc;
+          ctx.quadraticCurveTo(px - step / 2, bBot + bump, Math.max(x1, px - step), bBot - (s < 0.5 ? 0.4 : 1.2) * sc);
         }
-        // jagged rocky bottom edge (notches to black)
-        ctx.fillStyle = '#000';
-        for (let rx = 0; rx < w; rx += 6 * sc) { const seed = ((x1 + rx + 91) * 40503) >>> 0; ctx.fillRect(x1 + rx, top + gT + bodyH - (1 + seed % 2) * sc, 3 * sc, (1 + seed % 2) * sc); }
-        // base roots dripping toward the lava
-        if (isBase) { ctx.fillStyle = PAL.rockDk; for (let rx = 3 * sc; rx < w; rx += 14 * sc) { const seed = ((x1 + rx) * 2246822519) >>> 0; ctx.fillRect(x1 + rx, top + gT + bodyH - 1 * sc, 2.5 * sc, (3 + seed % 4) * sc); } }
-        // grey landing top + lit edge
+        ctx.lineTo(x1, bTop); ctx.closePath();
+        const g = ctx.createLinearGradient(0, bTop, 0, bBot);
+        g.addColorStop(0, PAL.rockLt); g.addColorStop(0.35, PAL.rockMd); g.addColorStop(1, PAL.rockDk);
+        ctx.fillStyle = g; ctx.fill();
+        // mottled rock texture (clipped to the body)
+        ctx.save(); ctx.clip();
+        for (let ry = bTop; ry < bBot + 4 * sc; ry += 3 * sc) for (let rx = x1; rx < x2; rx += 4 * sc) {
+          const seed = (((rx | 0) * 73856093) ^ ((ry | 0) * 19349663)) >>> 0, s = seed % 100;
+          if (s < 20) { ctx.fillStyle = PAL.rockDk; ctx.fillRect(rx + (seed % 2) * sc, ry, 2.2 * sc, 2.2 * sc); }
+          else if (s < 30) { ctx.fillStyle = PAL.rockLt; ctx.fillRect(rx, ry, 1.6 * sc, 1.6 * sc); }
+          else if (s === 44) { ctx.fillStyle = PAL.rockHi; ctx.globalAlpha = 0.5; ctx.fillRect(rx, ry, 1.6 * sc, 1.6 * sc); ctx.globalAlpha = 1; }
+        }
+        ctx.restore();
+        // ── base roots reaching down into the lava (wide, rounded stump-roots) ──
+        if (isBase) {
+          for (let rx = x1 + 12 * sc; rx < x2 - 6 * sc; rx += 22 * sc) {
+            const s = rnd(((rx | 0) * 2246822519)), rw = (7 + s * 4) * sc, rh = (4 + s * 5) * sc;
+            const rg = ctx.createLinearGradient(0, bBot, 0, bBot + rh);
+            rg.addColorStop(0, PAL.rockMd); rg.addColorStop(1, PAL.rockDk);
+            ctx.fillStyle = rg; ctx.beginPath();
+            ctx.moveTo(rx - rw / 2, bBot - 2 * sc);
+            ctx.quadraticCurveTo(rx, bBot + rh * 1.4, rx + rw / 2, bBot - 2 * sc);
+            ctx.closePath(); ctx.fill();
+          }
+        }
+        // ── grey landing top + lit edge + shadow ──
         ctx.fillStyle = PAL.rockTop; ctx.fillRect(x1, top, w, gT);
         ctx.fillStyle = PAL.rockTopLit; ctx.fillRect(x1, top, w, 1 * sc);
-        ctx.fillStyle = PAL.rockDk; ctx.fillRect(x1, top + gT - 0.5 * sc, w, 0.6 * sc); // shadow under top
+        ctx.fillStyle = PAL.rockDk; ctx.fillRect(x1, bTop - 0.5 * sc, w, 0.7 * sc);
       }
     }
   }

@@ -19,15 +19,20 @@ const WORLD = {
 
 // ─── physics constants (all ROM-exact unless noted) ───
 const PHYS = {
-  GRAV_DOWN: 4 / 256,     // wings-down gravity accel (px/frame^2)
-  GRAV_UP: 8 / 256,       // wings-up (gliding) gravity — 2x
-  TAKEOFF_VY: -0x80 / 256, // -0.5 px/frame initial takeoff
-  FLAP_BASE: 96,          // ADDFLP: impulse = floor(ptimup*96/256) - 96  (units 1/256 px)
-  MAXVX_IDX: 8,           // PVELX index cap ±8 (step 2)
-  // FLYX table: index (0..±8 step 2) -> px/frame
-  FLYX: { 0: 0, 2: 0.25, 4: 0.5, 6: 1.0, 8: 2.0 },
-  MAX_FALL: 16,           // MAXVY $1000 design ref (safety clamp)
-  MAX_RISE: 4,            // MINVY $0400 design ref (safety clamp)
+  // Tuned for playability (not strict ROM values) — see SPEC decision 18.
+  GRAV_DOWN: 0.042,       // wings-down (flapping) gravity accel (px/frame^2)
+  GRAV_UP: 0.075,         // wings-up (gliding) gravity — heavier so you sink when idle
+  FLAP_DV: -0.95,         // upward velocity added per flap (strong, satisfying lift)
+  FLAP_REPEAT: 7,         // frames between auto-flaps while the flap key is HELD
+  MAX_FALL: 5.5,          // clamp downward vy (gentler than ROM's 16)
+  MAX_RISE: 3.2,          // clamp upward vy
+  AIR_ACCEL: 0.085,       // horizontal accel while holding a direction in the air
+  MAX_H: 1.7,             // max horizontal speed (player)
+  AIR_DRAG: 0.93,         // horizontal drag when not pressing (keeps a little momentum)
+  GROUND_ACCEL: 0.13, GROUND_MAX: 2.1, GROUND_DRAG: 0.7,
+  ENEMY_MAX_H: 1.4,       // enemies a touch slower horizontally
+  TAKEOFF_VY: -0.5,       // ground takeoff pop
+  FLYX: { 0: 0, 2: 0.25, 4: 0.5, 6: 1.0, 8: 2.0 }, // (legacy, unused)
   // lava troll
   TROLL_BREAKFREE: -0x180 / 256, // -1.5 px/frame: rising faster escapes
   TROLL_PULL_BASE: 4 / 256,      // starts ~ gravity

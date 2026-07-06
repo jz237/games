@@ -215,51 +215,41 @@ class JoustEngine {
     if (!p.alive) return;
     const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
     if (dir !== 0) p.face = dir;
-    // flap is edge-triggered (one impulse per press)
+    p.flapT = (p.flapT || 0) - 1;
+    // flap on press, AND auto-repeat while the key is held (holding = steady climb, tapping = control)
     if (inp.flap) this.doFlap(p, dir);
-    // ground movement
-    if (p.onGround) this.groundMove(p, dir);
+    else if (inp.flapHeld && !p.onGround && p.flapT <= 0) this.doFlap(p, dir);
+    // horizontal: continuous & responsive (fixes the old per-flap "inverted/twitchy" feel)
+    if (p.onGround) this.groundMove(p, dir); else this.airMove(p, dir, PHYS.MAX_H);
   }
 
   doFlap(b, dir) {
-    // ADDFLP: impulse = floor(ptimup*96/256) - 96  (units 1/256 px), always upward
-    if (b.grabbed) { /* still flaps while grabbed */ }
-    if (b.onGround) {
-      // takeoff
-      b.onGround = false; b.vy = PHYS.TAKEOFF_VY; b.y -= 1;
-      b.vxi = b.runTier;   // carry run speed into air (FRCONV)
-      if (dir < 0) b.vxi = -Math.abs(b.vxi); else if (dir > 0) b.vxi = Math.abs(b.vxi);
-      b.wingDown = 5; b.ptimup = 0;
-      this.emit('flap', { x: b.x, y: b.y, player: b.kind === 'player' });
-      return;
-    }
-    const impulse = (Math.floor((b.ptimup * 96) / 256) - PHYS.FLAP_BASE) / 256;
-    b.vy += impulse;
-    if (b.vy < PHYS.TAKEOFF_VY - PHYS.MAX_RISE) b.vy = PHYS.TAKEOFF_VY - PHYS.MAX_RISE; // gentle rise clamp
-    b.ptimup = 0;
-    b.wingDown = 5; // wings-down minimum time (PACCX=5)
-    // horizontal: step index toward held direction
-    if (dir !== 0) {
-      b.vxi = Math.max(-PHYS.MAXVX_IDX, Math.min(PHYS.MAXVX_IDX, b.vxi + dir * 2));
-    }
+    if (b.onGround) { b.onGround = false; b.y -= 1; }      // takeoff pop
+    b.vy += PHYS.FLAP_DV;                                   // strong upward impulse
+    if (b.vy < -PHYS.MAX_RISE) b.vy = -PHYS.MAX_RISE;
+    b.wingDown = 6; b.flapT = PHYS.FLAP_REPEAT;
     this.emit('flap', { x: b.x, y: b.y, player: b.kind === 'player' });
   }
 
+  // continuous horizontal accel/drag (players & enemies) — direction is 1=right,-1=left
+  airMove(b, dir, maxH) {
+    if (dir !== 0) {
+      const a = (dir * (b.vx || 0) < 0) ? PHYS.AIR_ACCEL * 2.6 : PHYS.AIR_ACCEL; // brake hard when reversing → responsive
+      b.vx = Math.max(-maxH, Math.min(maxH, (b.vx || 0) + dir * a));
+    } else b.vx = (b.vx || 0) * PHYS.AIR_DRAG;
+  }
+
   groundMove(b, dir) {
-    if (dir === 0) { b.runTier = 0; b.skid = 0; return; }
-    // skid if reversing while moving
-    if (b.runTier > 0 && Math.sign(b.runFace || b.face) !== dir && b.runFace !== undefined) {
-      if (b.skid <= 0) { b.skid = 10; this.emit('skid', { x: b.x, y: b.y }); }
+    if (dir === 0) { b.vx = (b.vx || 0) * PHYS.GROUND_DRAG; if (Math.abs(b.vx) < 0.06) b.vx = 0; b.skid = 0; }
+    else {
+      if ((b.vx || 0) * dir < -0.15 && (b.skid || 0) <= 0) { b.skid = 8; this.emit('skid', { x: b.x, y: b.y }); }
+      b.vx = Math.max(-PHYS.GROUND_MAX, Math.min(PHYS.GROUND_MAX, (b.vx || 0) + dir * PHYS.GROUND_ACCEL));
+      if (b.skid > 0) b.skid--;
+      b.runFace = dir;
+      if (Math.abs(b.vx) > 0.3 && this.rng() < 0.2) this.emit('walk', { x: b.x, y: b.y });
     }
-    b.runFace = dir;
-    // ramp run tier (8 frames per tier step)
-    b.runStep = (b.runStep || 0) + 1;
-    if (b.runStep >= 8 && b.runTier < 8) { b.runTier += 2; b.runStep = 0; }
-    // move: pixels/frame from run tier (ORRUN-ish): tier 2→~0.6, 4→1.2, 6→1.8, 8→2.5
-    const spd = (b.skid > 0) ? -0.3 : (b.runTier * 0.32);
-    b.x = wrapX(b.x + spd * dir);
-    if (b.skid > 0) b.skid--;
-    this.emit('walk', { x: b.x, y: b.y });
+    b.runTier = Math.min(8, Math.abs(b.vx || 0) * 4);
+    b.x = wrapX(b.x + (b.vx || 0));
   }
 
   // ─── enemy AI ───
@@ -301,14 +291,15 @@ class JoustEngine {
     // steer away from lava columns when low (don't suicide into the lava)
     const overLava = this.overLava(e.x);
     if ((overLava || nearLava) && e.y > 150) { e.face = wrapDelta(e.x, 147) >= 0 ? 1 : -1; }
-    // flap cadence — MUST hover fast enough to beat gravity (rapid-flap model needs ~1 flap/11f).
-    // faster climbers keep altitude tighter → harder to out-fly.
-    const climbP = def.climb >= 0.9 ? 5 : def.climb >= 0.75 ? 6 : 8;
+    // horizontal drift toward facing (continuous, matches the player model)
+    this.airMove(e, e.face, PHYS.ENEMY_MAX_H);
+    // flap cadence — tuned for the new flap strength: hover ≈ 1 flap / 13f, climb faster.
+    const climbP = def.climb >= 0.9 ? 7 : def.climb >= 0.75 ? 8 : 10;
     let period;
-    if (nearLava || overLava) period = 3;             // escape lava
+    if (nearLava || overLava) period = 5;             // escape lava
     else if (e.y > desiredY + 4) period = climbP;     // below desired → climb
     else if (e.y < desiredY - 12) period = 0;         // too high → glide down
-    else period = 10;                                  // hover (holds altitude)
+    else period = 13;                                  // hover (holds altitude)
     if (period > 0 && e.flapClock <= 0) { this.doFlap(e, e.face); e.flapClock = period; }
   }
 
@@ -316,30 +307,19 @@ class JoustEngine {
   integrate(b) {
     if (b.materializing > 0) return;
     if (b.onGround) {
-      // walking off an edge?
-      if (!this.platformUnder(b)) { b.onGround = false; b.vy = 0.2; b.vxi = b.runTier * (b.runFace || b.face); }
+      // walking off an edge? (keep horizontal momentum)
+      if (!this.platformUnder(b)) { b.onGround = false; b.vy = 0.2; }
       else { b.wingDown = Math.max(0, b.wingDown - 1); return; }
     }
-    // gravity (wings-up = 2x)
-    if (b.grabbed) {
-      // lava troll pull replaces normal gravity; X frozen
-      b.vy += b.grabbed.pull;
-      b.vx = 0;
-    } else {
-      const g = b.wingDown > 0 ? PHYS.GRAV_DOWN : PHYS.GRAV_UP;
-      b.vy += g;
-      if (b.wingDown > 0) b.wingDown--;
-      // horizontal from FLYX index
-      const ai = Math.abs(b.vxi);
-      const spd = PHYS.FLYX[ai] != null ? PHYS.FLYX[ai] : (ai / 8) * 2;
-      b.vx = Math.sign(b.vxi) * spd;
-    }
-    // clamp fall
+    // gravity (wings-up glide = heavier so idle sinks)
+    if (b.grabbed) { b.vy += b.grabbed.pull; b.vx = 0; }   // lava troll pull; X frozen
+    else { b.vy += (b.wingDown > 0 ? PHYS.GRAV_DOWN : PHYS.GRAV_UP); if (b.wingDown > 0) b.wingDown--; }
+    // clamp vertical
     if (b.vy > PHYS.MAX_FALL) b.vy = PHYS.MAX_FALL;
-    // integrate
+    if (b.vy < -PHYS.MAX_RISE) b.vy = -PHYS.MAX_RISE;
+    // integrate (vx set by airMove/groundMove)
     b.y += b.vy;
-    if (!b.grabbed) b.x = wrapX(b.x + b.vx);
-    b.ptimup = Math.min(255, b.ptimup + 1);
+    if (!b.grabbed) b.x = wrapX(b.x + (b.vx || 0));
 
     // ceiling
     if (b.y < WORLD.CEIL) { b.y = WORLD.CEIL; if (b.vy < 0) b.vy = 0; }
@@ -347,10 +327,10 @@ class JoustEngine {
     if (b.vy >= 0 && !b.grabbed) {
       const plat = this.landingPlatform(b);
       if (plat) {
-        // convert air speed to run tier BEFORE zeroing the air index (FRCONV)
-        b.runTier = Math.min(8, Math.abs(b.vxi));
-        b.runFace = b.vxi < 0 ? -1 : 1;
-        b.y = plat.y; b.vy = 0; b.onGround = true; b.vxi = 0;
+        b.runTier = Math.min(8, Math.abs(b.vx || 0) * 4);
+        b.runFace = (b.vx || 0) < 0 ? -1 : 1;
+        b.y = plat.y; b.vy = 0; b.onGround = true;
+        b.vx = (b.vx || 0) * 0.6;   // keep some run momentum on landing
         b.wingDown = 0;
         this.emit('thud', { x: b.x, y: b.y, player: b.kind === 'player' });
       }
@@ -602,11 +582,10 @@ class JoustEngine {
     upper.y -= 2; lower.y += 2;
     if (upper.vy > 0) upper.vy = -upper.vy * 0.5;
     if (lower.vy < 0) lower.vy = -lower.vy * 0.5;
-    // separate horizontally, faces away
+    // separate horizontally, faces away (knock apart along vx)
     const d = wrapDelta(a.x, b.x);
     const af = d >= 0 ? -1 : 1, bf = -af;
-    a.vxi = Math.max(-PHYS.MAXVX_IDX, Math.min(PHYS.MAXVX_IDX, -a.vxi + af * 2));
-    b.vxi = Math.max(-PHYS.MAXVX_IDX, Math.min(PHYS.MAXVX_IDX, -b.vxi + bf * 2));
+    a.vx = af * 1.3; b.vx = bf * 1.3;
     a.face = af; b.face = bf;
     a.x = wrapX(a.x + af * 2); b.x = wrapX(b.x + bf * 2);
     this.emit('bounce', { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });

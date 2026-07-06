@@ -77,34 +77,34 @@ console.log('flap impulse');
 {
   const e = eng();
   const p = e.players[0];
-  p.onGround = false; p.vy = 0; p.ptimup = 0;
+  p.onGround = false; p.vy = 0;
   e.doFlap(p, 0);
-  approx(p.vy, -96 / 256, 1e-9, 'flap at ptimup=0 gives -96/256');
-  // large ptimup → weak impulse
-  p.vy = 0; p.ptimup = 255;
-  e.doFlap(p, 0);
-  const imp = (Math.floor(255 * 96 / 256) - 96) / 256;
-  approx(p.vy, imp, 1e-9, 'flap at ptimup=255 gives ~0 impulse');
-  ok(imp > -0.02, 'ptimup=255 impulse near zero');
+  approx(p.vy, DATA.PHYS.FLAP_DV, 1e-9, 'one flap adds FLAP_DV upward (strong lift)');
+  ok(DATA.PHYS.FLAP_DV < -0.6, 'flap is a satisfying lift (not the old weak -0.36)');
+  // repeated flaps clamp at MAX_RISE
+  for (let i = 0; i < 12; i++) e.doFlap(p, 0);
+  approx(p.vy, -DATA.PHYS.MAX_RISE, 1e-6, 'rapid flaps clamp upward speed at MAX_RISE');
 }
 
 // ── PHYSICS: horizontal FLYX table ──
-console.log('horizontal FLYX');
+console.log('horizontal control (continuous, correct direction)');
 {
   const e = eng();
   const p = e.players[0];
-  // place airborne, clear of all platforms
-  p.x = 60; p.y = 95; p.onGround = false; p.vxi = 8; p.wingDown = 0; p.vy = 0;
-  e.integrate(p);
-  approx(Math.abs(p.vx), 2.0, 1e-9, 'FLYX index 8 = 2.0 px/frame');
-  p.x = 60; p.y = 95; p.onGround = false; p.vxi = 4; p.vy = 0;
-  e.integrate(p);
-  approx(Math.abs(p.vx), 0.5, 1e-9, 'FLYX index 4 = 0.5 px/frame');
-  // flap steps index by ±2, clamp ±8
-  p.vxi = 0; p.onGround = false;
-  e.doFlap(p, 1); ok(p.vxi === 2, 'flap+right steps vxi to 2');
-  e.doFlap(p, 1); e.doFlap(p, 1); e.doFlap(p, 1); e.doFlap(p, 1);
-  ok(p.vxi === 8, 'vxi clamps at 8');
+  const MH = DATA.PHYS.MAX_H;
+  // hold RIGHT → +vx, capped at MAX_H
+  p.vx = 0; for (let i = 0; i < 80; i++) e.airMove(p, 1, MH);
+  ok(p.vx > 0 && Math.abs(p.vx - MH) < 1e-6, 'hold right → +vx (not inverted), capped at MAX_H');
+  // hold LEFT → -vx
+  p.vx = 0; for (let i = 0; i < 80; i++) e.airMove(p, -1, MH);
+  ok(p.vx < 0 && Math.abs(p.vx + MH) < 1e-6, 'hold left → -vx (not inverted)');
+  // release → drag toward 0
+  p.vx = 1.5; for (let i = 0; i < 50; i++) e.airMove(p, 0, MH);
+  ok(Math.abs(p.vx) < 0.25, 'release → drag decays speed');
+  // reversing brakes harder than plain accel (responsive turns)
+  p.vx = 1.4; e.airMove(p, -1, MH); const brakeStep = 1.4 - p.vx;
+  p.vx = 0; e.airMove(p, 1, MH); const accelStep = p.vx;
+  ok(brakeStep > accelStep * 1.5, 'reversing brakes harder than accelerating');
 }
 
 // ── WRAP ──
