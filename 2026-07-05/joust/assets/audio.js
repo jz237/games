@@ -5,7 +5,7 @@
 'use strict';
 (function () {
 const AC = window.AudioContext || window.webkitAudioContext;
-const VER = (window.JOUST_AUDIO_VER || '1.3.1');
+const VER = (window.JOUST_AUDIO_VER || '1.4.0');
 
 // ROM SOUND-TABLE priorities (higher wins preemption)
 const PRIO = {
@@ -50,6 +50,8 @@ class AudioSys {
       await Promise.all(man.samples.map(async s => {
         try { const ab = await (await fetch('assets/audio/' + s.file + q)).arrayBuffer(); this.buffers[s.name] = await this.ac.decodeAudioData(ab); } catch (e) {}
       }));
+      // original title/menu theme (menus only; gameplay stays SFX-only)
+      try { const ab = await (await fetch('assets/audio/title-theme.ogg' + q)).arrayBuffer(); this.titleBuf = await this.ac.decodeAudioData(ab); if (this._wantMusic) this.startMusic(); } catch (e) {}
     } catch (e) { /* keep synth fallback */ }
   }
   resume() { if (this.ac && this.ac.state === 'suspended') this.ac.resume(); }
@@ -100,9 +102,15 @@ class AudioSys {
     }
   }
 
-  // ─── original title theme (self-contained chiptune loop; menus only) ───
+  // ─── original title theme (menus only) — plays the generated loop if loaded, else synth ───
   startMusic() {
-    if (!this.ready || this.music) return; this.resume();
+    if (!this.ready) return; this._wantMusic = true; this.resume();
+    if (this.titleSrc) return;                     // already playing the theme
+    if (this.titleBuf) {                           // generated ElevenLabs loop
+      const src = this.ac.createBufferSource(); src.buffer = this.titleBuf; src.loop = true;
+      src.connect(this.musGain); src.start(); this.titleSrc = src; return;
+    }
+    if (this.music) return;
     const bpm = 132, beat = 60 / bpm, step = beat / 2;
     const N = { A2: 110, C3: 130.8, D3: 146.8, E3: 164.8, F3: 174.6, G3: 196, A3: 220, C4: 261.6, D4: 293.7, E4: 329.6, F4: 349.2, G4: 392, A4: 440, B4: 493.9, C5: 523.3, E5: 659.3 };
     const lead = ['A4','C5','E5','C5','B4','G4','A4','_','E4','G4','A4','B4','C5','_','A4','_','F4','A4','C5','A4','G4','E4','F4','_','D4','F4','A4','G4','E4','_','A4','_'];
@@ -121,7 +129,7 @@ class AudioSys {
     this._mt = setTimeout(() => this._musicLoop(), 60);
   }
   _note(type, f, t, dur, gain, bass) { const o = this.ac.createOscillator(), g = this.ac.createGain(); o.type = type; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(gain, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); if (bass) { const fl = this.ac.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 400; o.connect(fl); fl.connect(g); } else o.connect(g); g.connect(this.musGain); o.start(t); o.stop(t + dur + 0.02); }
-  stopMusic() { if (this.music) { this.music.stop = true; clearTimeout(this._mt); this.music = null; } }
+  stopMusic() { this._wantMusic = false; if (this.titleSrc) { try { this.titleSrc.stop(); } catch (e) {} this.titleSrc = null; } if (this.music) { this.music.stop = true; clearTimeout(this._mt); this.music = null; } }
 }
 
 window.JOUST_AUDIO = { AudioSys };

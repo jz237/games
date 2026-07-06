@@ -69,6 +69,7 @@ class JoustEngine {
     this.wave = opts.wave || 1;
     this.started = false;
     this.gameOver = false;
+    this.freezeFrames = 0;      // hit-stop: pauses the sim for a few frames on a kill
     this.startWave(this.wave);
   }
 
@@ -160,6 +161,8 @@ class JoustEngine {
     this.events.length = 0;
     inputs = inputs || [];
     if (this.gameOver) return this.snapshot();
+    // hit-stop: pause the sim briefly so kills land with impact (render keeps animating)
+    if (this.freezeFrames > 0) { this.freezeFrames--; return this.snapshot(); }
 
     if (!this.started) {
       // hold physics until first input (no instant deaths)
@@ -439,6 +442,7 @@ class JoustEngine {
     this.addScore(player, pts);
     egg.dead = true;
     this.emit('eggCollect', { x: egg.x, y: egg.y, points: pts, air });
+    if (player.eggStreak >= 2) this.emit('combo', { x: egg.x, y: egg.y, level: player.eggStreak, pi: player.pi });
   }
 
   // ─── pterodactyl ───
@@ -593,7 +597,7 @@ class JoustEngine {
 
   unseatEnemy(enemy, winner) {
     enemy.alive = false;
-    if (winner && winner.kind === 'player') this.addScore(winner, ENEMY[enemy.type].points);
+    if (winner && winner.kind === 'player') { this.addScore(winner, ENEMY[enemy.type].points); this.freezeFrames = Math.max(this.freezeFrames, 3); }
     this.spawnEgg(enemy.x, enemy.y, enemy.vx * 0.5, -1);
     this.emit('enemyDie', { x: enemy.x, y: enemy.y, etype: enemy.type, points: ENEMY[enemy.type].points });
   }
@@ -619,6 +623,7 @@ class JoustEngine {
     if (oppFacing && onBeakSide && Math.abs(lanceY - beakY) <= win) {
       pt.alive = false;
       this.addScore(player, SCORE.PTERO);
+      this.freezeFrames = 6;   // bigger hit-stop — pterodactyl kills are a big deal
       this.emit('pteroDie', { x: pt.x, y: pt.y, points: SCORE.PTERO });
       if (pt.ptKind === 'baiter') this.baiterCount = Math.max(0, this.baiterCount - 1);
     } else {

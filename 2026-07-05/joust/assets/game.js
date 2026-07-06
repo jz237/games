@@ -2,7 +2,7 @@
 // Engine (engine.js) is headless & authoritative; this owns everything user-facing.
 'use strict';
 
-const VERSION = 'v1.3.1';
+const VERSION = 'v1.4.0';
 const ASSET_Q = '?v=' + VERSION;
 const STEP_MS = 1000 / 60;
 const LB_URL = 'https://game-scores.jez237.workers.dev/scores/joust';
@@ -94,8 +94,9 @@ function readInputs() {
     const kk = i === 0 ? k.p1 : k.p2;
     let left = keys[kk.left], right = keys[kk.right], held = keys[kk.flap];
     if (i === 0) { left = left || keys['KeyA'] && mode === '1p'; right = right || keys['KeyD'] && mode === '1p'; if (mode === '1p') held = held || keys['Space']; }
-    // touch
-    if (touch.active) { if (i === 0) { left = left || touch.left; right = right || touch.right; } }
+    // touch + gamepad (P1)
+    if (touch.active && i === 0) { left = left || touch.left; right = right || touch.right; }
+    if (pad.on && i === 0) { left = left || pad.left; right = right || pad.right; held = held || pad.flapHeld; }
     const flap = flapQueue[i]; flapQueue[i] = false;
     out.push({ left: !!left, right: !!right, flap: !!flap, flapHeld: !!held });
   }
@@ -128,6 +129,31 @@ function setupTouch() {
 function updateTouchVis() { if (window._touchbar) window._touchbar.style.display = (touch.device && (state === 'playing' || state === 'intro')) ? 'flex' : 'none'; }
 // map a pointer event to canvas pixel coords
 function evToCanvas(e) { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) }; }
+
+// ─── gamepad ─── (stick/d-pad = move, A/B/RT = flap, Start/Y = confirm/pause, d-pad up/down = menu)
+const pad = { on: false, left: false, right: false, flapHeld: false, _flap: false, _up: false, _down: false, _ok: false, _esc: false };
+window.addEventListener('gamepadconnected', () => { pad.on = true; });
+function pollGamepad() {
+  if (!navigator.getGamepads) return;
+  let gp = null; for (const g of navigator.getGamepads()) { if (g && g.connected) { gp = g; break; } }
+  if (!gp) { pad.left = pad.right = pad.flapHeld = false; return; }
+  pad.on = true;
+  const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0, B = i => gp.buttons[i] && gp.buttons[i].pressed;
+  pad.left = ax < -0.35 || B(14); pad.right = ax > 0.35 || B(15);
+  pad.flapHeld = B(0) || B(1) || B(7) || B(12);           // A/B/RT/d-pad-up all flap
+  const edge = (now, key) => { const was = pad['_' + key]; pad['_' + key] = now; return now && !was; };
+  const flapNow = pad.flapHeld;
+  if (edge(flapNow, 'flap') && state === 'playing') flapQueue[0] = true;
+  // menu navigation
+  const upNow = ay < -0.5 || B(12), downNow = ay > 0.5 || B(13), okNow = B(0) || B(9), escNow = B(1) || B(8) || B(3);
+  const up = edge(upNow, 'up'), down = edge(downNow, 'down'), ok = edge(okNow, 'ok'), esc = edge(escNow, 'esc');
+  if (state !== 'playing') {
+    if (up) handleKeyUI({ code: 'ArrowUp' }); if (down) handleKeyUI({ code: 'ArrowDown' });
+    if (pad.left && !pad._padLeftWas) handleKeyUI({ code: 'ArrowLeft' }); if (pad.right && !pad._padRightWas) handleKeyUI({ code: 'ArrowRight' });
+    if (ok) { audio.init(); handleKeyUI({ code: 'Enter' }); } if (esc) handleKeyUI({ code: 'Escape' });
+  } else if (esc && !escDownAt) { escDownAt = performance.now(); }
+  pad._padLeftWas = pad.left; pad._padRightWas = pad.right;
+}
 
 // ─── leaderboard ───
 async function fetchGlobal() {
@@ -192,19 +218,21 @@ function flash(msg) { flashMsg = msg; flashUntil = performance.now() + 1600; }
 
 // ─── event → sound/particle bridge ───
 const SND = { flap:'flap', thud:'thud', skid:'skid', walk:'walk', eggDrop:'eggDrop', eggCollect:'eggCollect', eggHatch:'eggHatch', eggLand:'thud', enemyDie:'enemyDie', playerDie:'playerDie', ptero:'ptero', pteroDie:'pteroDie', troll:'troll', bounce:'bounce', bounty:'bounty', extraMan:'extraMan', bait:'bait', spawn:'spawn', mount:'mount', materialized:'materialized', waveClear:'waveClear' };
+const POOF = ['FL1', 'FL2', 'FL3'];
 function processEvents(evs) {
   for (const e of evs) {
     const s = SND[e.type]; if (s) audio.play(s);
     switch (e.type) {
-      case 'enemyDie': renderer.burst('feather', e.x, e.y, { n: 10, col: '#ffe14d' }); if (e.points) renderer.float('+' + e.points, e.x, e.y - 14, '#ffd23a'); break;
+      case 'enemyDie': renderer.addEffect(POOF, e.x, e.y - 8, 1.4, 16); renderer.burst('feather', e.x, e.y, { n: 10, col: '#ffe14d' }); if (e.points) { renderer.float('+' + e.points, e.x, e.y - 14, '#ffd23a'); renderer.shakeBy(2); } break;
       case 'eggCollect': renderer.burst('spark', e.x, e.y, { n: 8, col: e.air ? '#7fd4ff' : '#f3ead0', up: true }); renderer.float('+' + e.points, e.x, e.y - 12, e.air ? '#7fd4ff' : '#ffe14d'); break;
-      case 'pteroDie': renderer.burst('feather', e.x, e.y, { n: 14, col: '#39c06a' }); renderer.float('+' + e.points, e.x, e.y - 14, '#39c06a'); break;
-      case 'playerDie': renderer.burst('ash', e.x, e.y, { n: 16, col: '#cccccc', life: 45 }); break;
-      case 'bounty': renderer.float('BOUNTY +' + e.points, e.x, e.y - 16, '#ff5f5f'); break;
-      case 'bonus': renderer.float('+' + e.points, WORLD.VIEW_W / 2, 120, '#ffd23a'); break;
+      case 'combo': { const col = ['#ffe14d', '#ffd23a', '#ff8a00', '#ff4d4d'][Math.min(3, e.level - 1)]; renderer.float('CHAIN x' + e.level, e.x, e.y - 22, col, e.level >= 3); renderer.burst('spark', e.x, e.y - 6, { n: 6 + e.level * 3, col, up: true }); if (e.level >= 3) audio.play('bounty'); break; }
+      case 'pteroDie': renderer.addEffect(POOF, e.x, e.y, 2.2, 22); renderer.burst('feather', e.x, e.y, { n: 18, col: '#39c06a' }); renderer.float('+' + e.points, e.x, e.y - 16, '#39c06a', true); renderer.shakeBy(7); flash('NICE JOUSTING!'); break;
+      case 'playerDie': renderer.addEffect(POOF, e.x, e.y - 8, 1.8, 22); renderer.burst('ash', e.x, e.y, { n: 16, col: '#cccccc', life: 45 }); renderer.shakeBy(6); break;
+      case 'bounty': renderer.float('BOUNTY +' + e.points, e.x, e.y - 16, '#ff5f5f', true); renderer.shakeBy(3); break;
+      case 'bonus': renderer.float('+' + e.points + (e.kind === 'survival' ? ' SURVIVAL' : e.kind === 'team' ? ' TEAM' : ''), WORLD.VIEW_W / 2, 110 + (e.pi || 0) * 16, '#ffd23a', true); break;
       case 'extraMan': flash('EXTRA MOUNT!'); break;
       case 'spawn': renderer.burst('spark', e.x, e.y, { n: 10, col: '#66ccff', up: true }); break;
-      case 'bounce': renderer.burst('spark', e.x, e.y, { n: 5, col: '#ffffff' }); break;
+      case 'bounce': renderer.burst('spark', e.x, e.y, { n: 5, col: '#ffffff' }); renderer.shakeBy(1.5); break;
       case 'troll': renderer.burst('spark', e.x, WORLD.FLOOR, { n: 6, col: '#ff6a00' }); break;
     }
   }
@@ -215,6 +243,7 @@ let acc = 0, lastT = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
   let dt = now - lastT; lastT = now; if (dt > 200) dt = 200;
+  pollGamepad();
   renderer.resize();
   renderer.updateFx();
 
@@ -330,6 +359,8 @@ function drawHUD() {
     txt('' + P[1].score, renderer.sx(WORLD.VIEW_W - 24), renderer.sy(18), Math.round(7 * sc), '#fff', 'center');
   }
   txt('WAVE ' + engine.wave, renderer.sx(WORLD.VIEW_W / 2), renderer.sy(9), Math.round(6 * sc), '#c9c9d6');
+  // egg-chain badge (next egg value grows with the streak)
+  if (P[0].eggStreak >= 2) { const col = ['#ffe14d', '#ffd23a', '#ff8a00', '#ff4d4d'][Math.min(3, P[0].eggStreak - 1)]; txt('CHAIN x' + P[0].eggStreak, renderer.sx(24), renderer.sy(34), Math.round(6 * sc), col, 'center'); }
   drawBaseLives();
   // next special wave letter
   const nxt = nextSpecial(engine.wave);

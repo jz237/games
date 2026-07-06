@@ -36,6 +36,7 @@ class Renderer {
   constructor(canvas) {
     this.canvas = canvas; this.ctx = canvas.getContext('2d');
     this.spr = {}; this.particles = []; this.floats = []; this.crt = false; this.time = 0;
+    this.shake = 0; this.effects = []; this.burns = []; this.prevPlats = null;   // juice: shake, death sprites, platform burns
     this.stars = []; this.rng = 0x2545F491;
     for (let i = 0; i < 60; i++) this.stars.push({ x: this._rnd() * WORLD.VIEW_W, y: WORLD.CEIL + this._rnd() * (WORLD.FLOOR - WORLD.CEIL), s: this._rnd() < 0.2 ? 2 : 1 });
     this.buildSprites();
@@ -109,13 +110,21 @@ class Renderer {
     opts = opts || {}; const n = opts.n || 8; const col = opts.col || '#ffdb00';
     for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, sp = 0.4 + Math.random() * 1.6; this.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - (opts.up ? 1 : 0), life: opts.life || 30, max: opts.life || 30, col, size: opts.size || 1.5, grav: opts.grav != null ? opts.grav : 0.06 }); }
   }
-  float(text, x, y, col) { this.floats.push({ text, x, y, life: 60, col: col || '#fff' }); }
+  float(text, x, y, col, big) { this.floats.push({ text, x, y, life: big ? 90 : 60, col: col || '#fff', big: !!big }); }
+  shakeBy(amt) { this.shake = Math.max(this.shake, amt); }
+  // a short sprite-frame animation at (x,y): frames = ['FL1','FL2','FL3'], sizeMul scales it
+  addEffect(frames, x, y, sizeMul, dur) { this.effects.push({ frames, x, y, sizeMul: sizeMul || 1, t: 0, dur: dur || 18 }); }
   updateFx() {
     this.time++;
+    if (this.shake > 0) this.shake = Math.max(0, this.shake - 0.5);
     for (const p of this.particles) { p.x += p.vx; p.y += p.vy; p.vy += p.grav; p.life--; }
     this.particles = this.particles.filter(p => p.life > 0);
     for (const f of this.floats) { f.y -= 0.4; f.life--; }
     this.floats = this.floats.filter(f => f.life > 0);
+    for (const e of this.effects) e.t++;
+    this.effects = this.effects.filter(e => e.t < e.dur);
+    for (const b of this.burns) b.t++;
+    this.burns = this.burns.filter(b => b.t < b.dur);
   }
 
   // blit sprite `name` with bottom-center anchored at native (nx, ny); wrap-duplicated
@@ -136,6 +145,20 @@ class Renderer {
     this.ctx.drawImage(s, Math.round(cx - w / 2), Math.round(by - h), Math.round(w), Math.round(h));
   }
 
+  // detect platforms that vanished since last frame (bridge burns wave 3, cliffs erode) → burn fx
+  detectBurns(plats) {
+    if (this.prevPlats) {
+      for (const op of this.prevPlats) {
+        if (!plats.some(p => p.id === op.id)) {
+          this.burns.push({ x1: op.x1, x2: op.x2, y: op.y, t: 0, dur: 70 });
+          this.shakeBy(6);
+          for (let i = 0; i < 24; i++) this.burst('fire', op.x1 + (op.x2 - op.x1) * Math.random(), op.y + 4, { n: 1, col: ['#ff3b1a', '#ff8a00', '#ffd21a'][i % 3], up: true, life: 40, grav: -0.02, size: 2 });
+        }
+      }
+    }
+    this.prevPlats = plats.map(p => ({ id: p.id, x1: p.x1, x2: p.x2, y: p.y }));
+  }
+
   render(snap) {
     const ctx = this.ctx, sc = this.scale;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -143,16 +166,43 @@ class Renderer {
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.save();
     ctx.beginPath(); ctx.rect(this.ox, this.oy, WORLD.VIEW_W * sc, WORLD.VIEW_H * sc); ctx.clip();
-    ctx.fillStyle = '#000'; ctx.fillRect(this.ox, this.oy, WORLD.VIEW_W * sc, WORLD.VIEW_H * sc);
+    // screen shake
+    if (this.shake > 0) ctx.translate((Math.random() - 0.5) * this.shake * sc, (Math.random() - 0.5) * this.shake * sc);
+    ctx.fillStyle = '#000'; ctx.fillRect(this.ox - 20, this.oy - 20, WORLD.VIEW_W * sc + 40, WORLD.VIEW_H * sc + 40);
     // very faint stars (arcade is black; keep subtle)
     ctx.fillStyle = PAL.star;
     for (const st of this.stars) { ctx.globalAlpha = 0.35; ctx.fillRect(this.sx(st.x), this.sy(st.y), st.s * sc * 0.8, st.s * sc * 0.8); }
     ctx.globalAlpha = 1;
     this.drawLava();
-    if (snap) { this.drawPlatforms(snap.platforms); this.drawEntities(snap); }
+    if (snap) { this.detectBurns(snap.platforms); this.drawBurns(); this.drawPlatforms(snap.platforms); this.drawEntities(snap); }
+    this.drawEffects();
     this.drawParticles();
     ctx.restore();
     if (this.crt) this.drawCRT();
+  }
+
+  // fading rock ghost of a burned platform (drawn behind the live platforms)
+  drawBurns() {
+    const ctx = this.ctx, sc = this.scale;
+    for (const b of this.burns) {
+      const k = 1 - b.t / b.dur; ctx.globalAlpha = k * 0.8;
+      const x1 = this.sx(b.x1), w = (b.x2 - b.x1) * sc, top = this.sy(b.y) + b.t * 0.3 * sc;
+      const g = ctx.createLinearGradient(0, top, 0, top + 10 * sc); g.addColorStop(0, PAL.rockMd); g.addColorStop(1, PAL.rockDk);
+      ctx.fillStyle = g; ctx.fillRect(x1, top, w, 9 * sc);
+      ctx.fillStyle = '#ff6a1a'; ctx.globalAlpha = k * 0.5; ctx.fillRect(x1, top, w, 2 * sc);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  drawEffects() {
+    for (const e of this.effects) {
+      const fi = Math.min(e.frames.length - 1, Math.floor(e.t / e.dur * e.frames.length));
+      const s = this.spr[e.frames[fi]]; if (!s) continue;
+      const sc = this.scale, w = s._ww * e.sizeMul * sc, h = s._wh * e.sizeMul * sc;
+      this.ctx.globalAlpha = 1 - Math.max(0, (e.t / e.dur - 0.6) / 0.4);
+      this.ctx.drawImage(s, Math.round(this.sx(e.x) - w / 2), Math.round(this.sy(e.y) - h / 2), Math.round(w), Math.round(h));
+    }
+    this.ctx.globalAlpha = 1;
   }
 
   drawLava() {
@@ -233,9 +283,29 @@ class Renderer {
     return prefix + 'RUN4' + f;
   }
 
+  // transporter materialization beam (a bright pulsing column down to the bird)
+  drawBeam(x, y) {
+    const ctx = this.ctx, sc = this.scale, top = WORLD.CEIL, w = 6 * sc;
+    const a = 0.35 + 0.35 * Math.sin(this.time * 0.6);
+    for (const off of [0, -WRAP, WRAP]) {
+      const cx = this.sx(x + off); if (cx < -w || cx > this.canvas.width + w) continue;
+      const g = ctx.createLinearGradient(cx, this.sy(top), cx, this.sy(y));
+      g.addColorStop(0, 'rgba(150,150,210,0)'); g.addColorStop(1, 'rgba(200,220,255,' + a.toFixed(2) + ')');
+      ctx.fillStyle = g; ctx.fillRect(cx - w / 2, this.sy(top), w, (y - top) * sc);
+      ctx.fillStyle = 'rgba(255,255,255,' + (a * 0.8).toFixed(2) + ')'; ctx.fillRect(cx - 1 * sc, this.sy(top), 2 * sc, (y - top) * sc);
+    }
+  }
+
   drawEntities(snap) {
-    // trolls (behind)
-    for (const t of snap.trolls) { const gi = Math.min(5, 1 + ((this.time >> 2) % 6)); this.blit('GRAB' + gi, t.bird.x, WORLD.FLOOR + 6, undefined); }
+    // trolls (behind) — GRAB frame ramps with the pull so the hand visibly grips harder
+    for (const t of snap.trolls) {
+      const g = t.bird.grabbed, frac = g ? Math.min(1, Math.max(0, (g.pull - 0.016) / (5 - 0.016))) : 0;
+      this.blit('GRAB' + (1 + Math.min(5, Math.round(frac * 5))), t.bird.x, WORLD.FLOOR + 6, undefined);
+    }
+    // transporter spawn beams for materializing birds
+    for (const b of [...snap.enemies, ...snap.players]) {
+      if (b.materializing > 0) this.drawBeam(b.x, b.y);
+    }
     // eggs
     for (const egg of snap.eggs) {
       let nm = 'EGGUP';
@@ -272,7 +342,7 @@ class Renderer {
   }
   drawFloats(font) {
     const ctx = this.ctx, sc = this.scale;
-    for (const f of this.floats) { ctx.globalAlpha = Math.min(1, f.life / 30); font(f.text, this.sx(f.x), this.sy(f.y), Math.round(7 * sc), f.col, 'center'); }
+    for (const f of this.floats) { ctx.globalAlpha = Math.min(1, f.life / 30); font(f.text, this.sx(f.x), this.sy(f.y), Math.round((f.big ? 12 : 7) * sc), f.col, 'center'); }
     ctx.globalAlpha = 1;
   }
   drawCRT() {
