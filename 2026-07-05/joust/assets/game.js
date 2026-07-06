@@ -2,7 +2,7 @@
 // Engine (engine.js) is headless & authoritative; this owns everything user-facing.
 'use strict';
 
-const VERSION = 'v1.4.0';
+const VERSION = 'v1.4.1';
 const ASSET_Q = '?v=' + VERSION;
 const STEP_MS = 1000 / 60;
 const LB_URL = 'https://game-scores.jez237.workers.dev/scores/joust';
@@ -347,6 +347,7 @@ function drawTitle(now) {
   }
   txt('HI ' + save.hi, w / 2, s * 0.9, Math.round(s / 30), '#39c06a');
   if (Math.floor(now / 600) % 2 === 0) txt('© WILLIAMS 1982 — FAITHFUL BROWSER REMAKE', w / 2, s * 0.96, Math.round(s / 40), '#6f6f82');
+  txt(VERSION, w - Math.round(s / 40), s - Math.round(s / 40), Math.round(s / 46), '#5a5a70', 'right');
 }
 
 function drawHUD() {
