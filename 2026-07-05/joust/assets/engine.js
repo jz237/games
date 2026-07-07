@@ -221,25 +221,33 @@ class JoustEngine {
     p.flapT = (p.flapT || 0) - 1;
     // flap on press, AND auto-repeat while the key is held (holding = steady climb, tapping = control)
     if (inp.flap) this.doFlap(p, dir);
-    else if (inp.flapHeld && !p.onGround && p.flapT <= 0) this.doFlap(p, dir);
-    // horizontal: continuous & responsive (fixes the old per-flap "inverted/twitchy" feel)
-    if (p.onGround) this.groundMove(p, dir); else this.airMove(p, dir, PHYS.MAX_H);
+    else if (inp.flapHeld && !p.onGround && p.flapT <= 0) this.doFlap(p, dir); // hold = auto-flap (comfort)
+    // ground uses the run state-machine approx; AIR horizontal is set only by doFlap (FLYX index) and
+    // then coasts — authentic Joust momentum, no per-frame air drag.
+    if (p.onGround) this.groundMove(p, dir);
   }
 
+  // ROM flap (ADDFLP): edge-triggered discrete impulse whose strength DECAYS with time since the
+  // last flap (ptimup), so rapid tapping climbs and a lone flap after a glide barely slows a fall.
+  // Horizontal is a per-flap ±2 step of the PVELX index mapped through FLYX; momentum persists.
   doFlap(b, dir) {
-    if (b.onGround) { b.onGround = false; b.y -= 1; }      // takeoff pop
-    b.vy += PHYS.FLAP_DV;                                   // strong upward impulse
-    if (b.vy < -PHYS.MAX_RISE) b.vy = -PHYS.MAX_RISE;
+    if (b.onGround) {
+      // ground takeoff (STFLY): leave the platform at the ROM's fixed launch velocity…
+      b.onGround = false; b.y -= 1; b.vy = PHYS.TAKEOFF_VY; b.ptimup = 0;
+      // …and convert run speed into the nearest FLYX index so a running takeoff keeps drifting
+      const av = Math.abs(b.vx || 0);
+      const idx = av >= 1.5 ? 8 : av >= 0.75 ? 6 : av >= 0.375 ? 4 : av >= 0.12 ? 2 : 0;
+      b.vxi = Math.sign(b.vx || 0) * idx;
+    } else {
+      const imp = (Math.floor((b.ptimup || 0) * PHYS.FLAP_BASE / 256) - PHYS.FLAP_BASE) / 256; // −0.375 → 0
+      b.vy += imp;
+      b.ptimup = 0;
+      if (b.vy < -PHYS.MAX_RISE) b.vy = -PHYS.MAX_RISE;
+      if (dir !== 0) b.vxi = Math.max(-PHYS.MAXVX, Math.min(PHYS.MAXVX, (b.vxi || 0) + dir * 2));
+    }
+    b.vx = Math.sign(b.vxi || 0) * PHYS.FLYX[Math.abs(b.vxi || 0)]; // FLYX table → px/frame
     b.wingDown = 6; b.flapT = PHYS.FLAP_REPEAT;
     this.emit('flap', { x: b.x, y: b.y, player: b.kind === 'player' });
-  }
-
-  // continuous horizontal accel/drag (players & enemies) — direction is 1=right,-1=left
-  airMove(b, dir, maxH) {
-    if (dir !== 0) {
-      const a = (dir * (b.vx || 0) < 0) ? PHYS.AIR_ACCEL * 2.6 : PHYS.AIR_ACCEL; // brake hard when reversing → responsive
-      b.vx = Math.max(-maxH, Math.min(maxH, (b.vx || 0) + dir * a));
-    } else b.vx = (b.vx || 0) * PHYS.AIR_DRAG;
   }
 
   groundMove(b, dir) {
@@ -269,8 +277,8 @@ class JoustEngine {
     }
     e.decision--;
     if (e.decision <= 0) {
-      // re-decide periodically; higher tiers react faster (imperfect → beatable)
-      e.decision = Math.max(8, 26 - tier - (this.rng() * 12 | 0));
+      // re-decide periodically; higher tiers react faster via per-type aggression (imperfect → beatable)
+      e.decision = Math.max(6, 26 - tier - Math.round(def.aggr * 10) - (this.rng() * 10 | 0));
       e.aim = target;
       e.wantFace = target ? (wrapDelta(e.x, target.x) >= 0 ? 1 : -1) : (this.rng() < 0.5 ? 1 : -1);
       e.wander = this.rng() < 0.25 ? (this.rng() * 40 - 20) : 0; // altitude jitter
@@ -294,15 +302,14 @@ class JoustEngine {
     // steer away from lava columns when low (don't suicide into the lava)
     const overLava = this.overLava(e.x);
     if ((overLava || nearLava) && e.y > 150) { e.face = wrapDelta(e.x, 147) >= 0 ? 1 : -1; }
-    // horizontal drift toward facing (continuous, matches the player model)
-    this.airMove(e, e.face, PHYS.ENEMY_MAX_H);
-    // flap cadence — tuned for the new flap strength: hover ≈ 1 flap / 13f, climb faster.
-    const climbP = def.climb >= 0.9 ? 7 : def.climb >= 0.75 ? 8 : 10;
+    // flap cadence for the authentic (weaker, decaying) flap vs the ~2× lighter ROM gravity.
+    // Each flap also steps the enemy's FLYX horizontal index toward e.face, so flapping = steering.
+    const climbP = def.climb >= 0.9 ? 6 : def.climb >= 0.75 ? 7 : 9;
     let period;
-    if (nearLava || overLava) period = 5;             // escape lava
+    if (nearLava || overLava) period = 4;             // escape lava (frequent flaps + steer away)
     else if (e.y > desiredY + 4) period = climbP;     // below desired → climb
     else if (e.y < desiredY - 12) period = 0;         // too high → glide down
-    else period = 13;                                  // hover (holds altitude)
+    else period = 11;                                  // hover (holds altitude at authentic flap/grav ratio)
     if (period > 0 && e.flapClock <= 0) { this.doFlap(e, e.face); e.flapClock = period; }
   }
 
@@ -311,9 +318,10 @@ class JoustEngine {
     if (b.materializing > 0) return;
     if (b.onGround) {
       // walking off an edge? (keep horizontal momentum)
-      if (!this.platformUnder(b)) { b.onGround = false; b.vy = 0.2; }
+      if (!this.platformUnder(b)) { b.onGround = false; b.vy = 0.2; b.ptimup = 0; }
       else { b.wingDown = Math.max(0, b.wingDown - 1); return; }
     }
+    b.ptimup = Math.min(255, (b.ptimup || 0) + 1); // frames since last flap → ADDFLP decay input
     // gravity (wings-up glide = heavier so idle sinks)
     if (b.grabbed) { b.vy += b.grabbed.pull; b.vx = 0; }   // lava troll pull; X frozen
     else { b.vy += (b.wingDown > 0 ? PHYS.GRAV_DOWN : PHYS.GRAV_UP); if (b.wingDown > 0) b.wingDown--; }
@@ -338,8 +346,8 @@ class JoustEngine {
         this.emit('thud', { x: b.x, y: b.y, player: b.kind === 'player' });
       }
     }
-    // lava / floor death
-    if (b.y >= WORLD.FLOOR) {
+    // lava / floor death (a troll-grabbed bird is owned by updateTrolls, which kills at FLOOR+7)
+    if (b.y >= WORLD.FLOOR && !b.grabbed) {
       if (this.overLava(b.x)) { this.killBird(b, 'lava'); }
       else { b.y = WORLD.FLOOR; b.vy = 0; b.onGround = true; } // shouldn't happen (platform caught)
     }
@@ -379,10 +387,10 @@ class JoustEngine {
   }
 
   // ─── eggs ───
-  spawnEgg(x, y, vx, vy) {
+  spawnEgg(x, y, vx, vy, origin) {
     this.eggs.push({
       kind: 'egg', x: wrapX(x), y, vx: vx || 0, vy: vy || 0, landed: false, touched: false,
-      hatch: this.hatchBase, state: 'egg', anim: 0, dead: false, id: _id++,
+      hatch: this.hatchBase, state: 'egg', anim: 0, dead: false, origin: origin || 'bounder', id: _id++,
     });
     this.emit('eggDrop', { x, y });
   }
@@ -421,8 +429,10 @@ class JoustEngine {
       if (egg.anim > 120) { egg.state = 'mounting'; egg.anim = 0; this.emit('mount', { x: egg.x, y: egg.y }); }
     } else if (egg.state === 'mounting') {
       if (egg.anim > 40) {
-        // becomes an active enemy (reanimated); type escalates with wave
-        const type = this.wave >= 16 ? 'shadow' : (this.wave >= 4 ? 'hunter' : 'bounder');
+        // becomes an active enemy; the remounted rider returns ONE tier tougher (research §5)
+        const order = ['bounder', 'hunter', 'shadow'];
+        const oi = order.indexOf(egg.origin || 'bounder');
+        const type = order[Math.min(order.length - 1, (oi < 0 ? 0 : oi) + 1)];
         this.enemies.push({
           kind: 'enemy', type, x: egg.x, y: egg.y, vx: 0, vy: 0, vxi: 0,
           face: egg.walkFace || 1, wingDown: 0, ptimup: 0, onGround: true, alive: true,
@@ -598,7 +608,7 @@ class JoustEngine {
   unseatEnemy(enemy, winner) {
     enemy.alive = false;
     if (winner && winner.kind === 'player') { this.addScore(winner, ENEMY[enemy.type].points); this.freezeFrames = Math.max(this.freezeFrames, 3); }
-    this.spawnEgg(enemy.x, enemy.y, enemy.vx * 0.5, -1);
+    this.spawnEgg(enemy.x, enemy.y, enemy.vx * 0.5, -1, enemy.type);
     this.emit('enemyDie', { x: enemy.x, y: enemy.y, etype: enemy.type, points: ENEMY[enemy.type].points });
   }
 
@@ -619,7 +629,7 @@ class JoustEngine {
     const oppFacing = player.face !== pt.face;
     const onBeakSide = (pt.face === 1 && wrapDelta(pt.x, player.x) > 0) || (pt.face === -1 && wrapDelta(pt.x, player.x) < 0);
     let win = this.difficulty === 'easy' ? 4 : 2;
-    if (pt.attack > 0) win += 2; // open-beak attack frame widens
+    if (pt.attack > 0) win += 1; // open-beak attack frame widens to ~3px (ROM within-3)
     if (oppFacing && onBeakSide && Math.abs(lanceY - beakY) <= win) {
       pt.alive = false;
       this.addScore(player, SCORE.PTERO);
@@ -635,7 +645,7 @@ class JoustEngine {
   killBird(b, cause) {
     if (b.kind === 'enemy') {
       b.alive = false;
-      this.spawnEgg(b.x, b.y, 0, -1);
+      this.spawnEgg(b.x, b.y, 0, -1, b.type);
       this.emit('enemyDie', { x: b.x, y: b.y, etype: b.type, points: 0 });
       return;
     }
@@ -649,6 +659,7 @@ class JoustEngine {
     if (b.lives <= 0) {
       b.out = true;
       if (this.players.every(p => p.out)) { this.gameOver = true; this.emit('gameOver', {}); }
+      else if (this.numPlayers > 1) this.emit('playerOut', { pi: b.pi });
     } else {
       // respawn after a short delay via materialization on a pad
       b.respawn = 60;

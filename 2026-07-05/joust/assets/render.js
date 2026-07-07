@@ -70,21 +70,54 @@ class Renderer {
   b64bytes(d) { const bin = atob(d); const u = new Uint8ClampedArray(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
   recolorBytes(bytes, tint) {
     // remap any green-dominant pixel (the buzzard body) to the tint hue, keeping brightness;
-    // leaves the rider/beak/legs untouched.
+    // leaves the rider/beak/legs untouched. (lum keyed to the actual mid-value body green so the
+    // red/grey/blue tiers read vividly, not muddy.)
     const out = new Uint8ClampedArray(bytes);
     for (let i = 0; i < out.length; i += 4) {
       if (!out[i + 3]) continue;
       const r = out[i], g = out[i + 1], b = out[i + 2];
       if (g > r + 30 && g > b + 20) {
-        const lum = Math.min(1, g / 219);
+        const lum = Math.min(1, 0.35 + g / 170);
         out[i] = Math.round(tint[0] * lum); out[i + 1] = Math.round(tint[1] * lum); out[i + 2] = Math.round(tint[2] * lum);
+      }
+    }
+    return out;
+  }
+  // The ROM ships ONE default colour table (COLOR1), so the player mounts come out mis-hued — the
+  // OSTRICH body/wings render blue. Re-hue them to the intended P1=yellow / P2=blue-green (SPEC
+  // §11/§13; matches the favicon, the base life icons, and the classic "yellow knight" of Joust).
+  recolorOstrich(bytes) {
+    const out = new Uint8ClampedArray(bytes);
+    for (let i = 0; i < out.length; i += 4) {
+      if (!out[i + 3]) continue;
+      const r = out[i], g = out[i + 1], b = out[i + 2];
+      if (b > r + 24 && b >= g) {                 // blue-dominant body/wing pixel → warm yellow ramp
+        const lum = Math.min(1, (b + g) / 2 / 200);
+        out[i] = Math.round(60 + 195 * lum); out[i + 1] = Math.round(30 + 130 * lum); out[i + 2] = Math.round(10 + 30 * lum);
+      }
+    }
+    return out;
+  }
+  recolorStork(bytes) {
+    const out = new Uint8ClampedArray(bytes);
+    for (let i = 0; i < out.length; i += 4) {
+      if (!out[i + 3]) continue;
+      const r = out[i], g = out[i + 1], b = out[i + 2];
+      // the desaturated blue-grey body → a clear teal/blue-green (distinct from the yellow ostrich)
+      if (b >= r && b >= g && b > 120 && (Math.max(r, g, b) - Math.min(r, g, b)) < 60) {
+        const lum = Math.min(1, (r + g + b) / 3 / 190);
+        out[i] = Math.round(20 + 60 * lum); out[i + 1] = Math.round(80 + 150 * lum); out[i + 2] = Math.round(70 + 120 * lum);
       }
     }
     return out;
   }
   buildSprites() {
     for (const [name, s] of Object.entries(SPR)) {
-      const bytes = this.b64bytes(s.d);
+      let bytes = this.b64bytes(s.d);
+      // re-hue the player mounts (see recolorOstrich/recolorStork) — covers RUN/FLY frames AND the
+      // ORUN4R/SRUN4R frames used for the base life icons, so in-play bird and icon always match.
+      if (/^O(RUN|FLY)/.test(name)) bytes = this.recolorOstrich(bytes);
+      else if (/^S(RUN|FLY)/.test(name)) bytes = this.recolorStork(bytes);
       this.spr[name] = this.mkCanvas(s.w, s.h, bytes);
       // enemy-recolored buzzard variants
       if (/^B(RUN|FLY|2)/.test(name)) {
@@ -98,6 +131,8 @@ class Renderer {
   resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    if (this._lw === w && this._lh === h && this._ldpr === dpr) return; // only rebuild on real change
+    this._lw = w; this._lh = h; this._ldpr = dpr;
     this.canvas.width = Math.round(w * dpr); this.canvas.height = Math.round(h * dpr);
     const sc = Math.min(this.canvas.width / WORLD.VIEW_W, this.canvas.height / WORLD.VIEW_H);
     this.scale = sc; this.ox = (this.canvas.width - WORLD.VIEW_W * sc) / 2; this.oy = (this.canvas.height - WORLD.VIEW_H * sc) / 2;

@@ -17,22 +17,26 @@ const WORLD = {
   SPAWN_Y: 210,      // LAND5 — player spawn Y (feet)
 };
 
-// ─── physics constants (all ROM-exact unless noted) ───
+// ─── physics constants — ROM-exact (JOUSTRV4.ASM), native 1/256-px → px/frame ───
+// See SPEC §2 and decision #18. Values verified against the disassembly AND an independent
+// research cross-check (both agree, zero disagreements).
 const PHYS = {
-  // Tuned for playability (not strict ROM values) — see SPEC decision 18.
-  GRAV_DOWN: 0.042,       // wings-down (flapping) gravity accel (px/frame^2)
-  GRAV_UP: 0.075,         // wings-up (gliding) gravity — heavier so you sink when idle
-  FLAP_DV: -0.95,         // upward velocity added per flap (strong, satisfying lift)
-  FLAP_REPEAT: 7,         // frames between auto-flaps while the flap key is HELD
-  MAX_FALL: 5.5,          // clamp downward vy (gentler than ROM's 16)
-  MAX_RISE: 3.2,          // clamp upward vy
-  AIR_ACCEL: 0.085,       // horizontal accel while holding a direction in the air
-  MAX_H: 1.7,             // max horizontal speed (player)
-  AIR_DRAG: 0.93,         // horizontal drag when not pressing (keeps a little momentum)
-  GROUND_ACCEL: 0.13, GROUND_MAX: 2.1, GROUND_DRAG: 0.7,
-  ENEMY_MAX_H: 1.4,       // enemies a touch slower horizontally
-  TAKEOFF_VY: -0.5,       // ground takeoff pop
-  FLYX: { 0: 0, 2: 0.25, 4: 0.5, 6: 1.0, 8: 2.0 }, // (legacy, unused)
+  GRAV_DOWN: 4 / 256,     // +0.015625 wings-down (flapping) — GRAV=4, ADDGRA
+  GRAV_UP: 8 / 256,       // +0.03125 wings-up (gliding), exactly 2× down — FLIPS2 LDB #4
+  // Flap = discrete impulse per press: raw = floor(ptimup*96/256) − 96, then /256 (ADDFLP).
+  // Fresh flap (ptimup≈0) = −96/256 = −0.375 px/f; diminishes to 0 as time since last flap grows.
+  FLAP_BASE: 96,          // the 96 in ADDFLP's decay curve
+  FLAP_REPEAT: 6,         // hold-to-auto-flap cadence (comfort layer; each auto-flap still
+                          // uses the authentic decay curve) — the one intentional add, decision #18
+  TAKEOFF_VY: -0x80 / 256, // −0.5 first flap off a platform — STFLY LDD #-$0080
+  MAX_FALL: 16,           // MAXVY $1000 (reference cap; effectively never binds)
+  MAX_RISE: 4,            // MINVY $0400 (reference cap)
+  // horizontal AIR model: PVELX is an index (−8..+8 step 2), stepped ±2 only ON a flap-with-
+  // direction, mapped through the non-linear FLYX table; momentum PERSISTS between flaps (no drag).
+  FLYX: [0, 0, 0.25, 0, 0.5, 0, 1.0, 0, 2.0], // index |vxi| 0..8 → px/f (max 2.0 = index 8)
+  MAXVX: 8,               // MAXVX EQU 8 — max PVELX index
+  GROUND_ACCEL: 0.13, GROUND_MAX: 2.0, GROUND_DRAG: 0.7, // ground = animation-state approx (§2.4)
+  ENEMY_MAX_H: 1.4,       // (legacy; enemies now use the FLYX index model too)
   // lava troll
   TROLL_BREAKFREE: -0x180 / 256, // -1.5 px/frame: rising faster escapes
   TROLL_PULL_BASE: 4 / 256,      // starts ~ gravity

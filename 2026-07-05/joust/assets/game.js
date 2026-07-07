@@ -2,8 +2,8 @@
 // Engine (engine.js) is headless & authoritative; this owns everything user-facing.
 'use strict';
 
-const VERSION = 'v1.4.1';
-const ASSET_Q = '?v=' + VERSION;
+const VERSION = 'v' + (window.__V || '1.5.0');   // single source: window.__V (index.html)
+const ASSET_Q = '?v=' + (window.__V || '1.5.0');
 const STEP_MS = 1000 / 60;
 const LB_URL = 'https://game-scores.jez237.workers.dev/scores/joust';
 const DATA = window.JOUST_DATA;
@@ -39,6 +39,7 @@ let globalScores = null, globalFetchedAt = -1e9;
 let hsInitials = 'AAA', hsPos = 0, hsScore = 0, hsWave = 1, hsPending = false;
 let rebindTarget = null;   // {player,action}
 let escDownAt = 0;
+let paused = false;        // in-play pause (P / auto on tab-hide)
 let attract = null, attractAI = [{}, {}];
 
 // input
@@ -60,10 +61,22 @@ window.addEventListener('keydown', e => {
   }
   keys[e.code] = true;
   handleKeyUI(e);
-  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+  // stop the page acting on any active game key (arrows/space + both players' mapped keys)
+  const kk = save.opts.keys;
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code) ||
+      e.code === kk.p1.left || e.code === kk.p1.right || e.code === kk.p1.flap ||
+      e.code === kk.p2.left || e.code === kk.p2.right || e.code === kk.p2.flap) e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'Escape') escDownAt = 0; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; escDownAt = 0; });
+// auto-pause + mute when the tab is hidden (prompt requirement)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (state === 'playing') paused = true;
+    for (const k in keys) keys[k] = false; escDownAt = 0;
+    if (audio.stopMusic) audio.stopMusic();
+  } else if (state === 'title' && audio.startMusic) audio.startMusic();
+});
 
 function qaBotInput() {
   const { wrapDelta } = window.JOUST_ENGINE;
@@ -74,16 +87,16 @@ function qaBotInput() {
   const fe = n => { if (p._fc % n === 0) inp.flap = true; };
   const nearLava = p.y > WORLD.FLOOR - 52;
   const pt = engine.pteros.find(x => x.alive && Math.abs(wrapDelta(p.x, x.x)) < 46 && Math.abs(x.y - p.y) < 40);
-  if (pt) { const dx = wrapDelta(p.x, pt.x); inp.left = dx > 0; inp.right = dx < 0; if (p.y > pt.y) fe(4); else fe(14); if (nearLava) fe(4); return inp; }
+  if (pt) { const dx = wrapDelta(p.x, pt.x); inp.left = dx > 0; inp.right = dx < 0; if (p.y > pt.y) fe(3); else fe(9); if (nearLava) fe(3); return inp; }
   const threat = engine.enemies.find(en => en.alive && en.materializing <= 0 && Math.abs(wrapDelta(p.x, en.x)) < 26 && en.y < p.y + 2 && p.y - en.y < 30);
-  if (threat && !nearLava) { const dx = wrapDelta(p.x, threat.x); inp.left = dx > 0; inp.right = dx < 0; fe(4); return inp; }
+  if (threat && !nearLava) { const dx = wrapDelta(p.x, threat.x); inp.left = dx > 0; inp.right = dx < 0; fe(3); return inp; }
   const eggs = engine.eggs.filter(g => !g.dead && ['egg', 'shake', 'walking', 'mounting', 'hatching'].includes(g.state) && g.y < WORLD.FLOOR - 6);
   let tgt = null, m = null;
   if (eggs.length) { eggs.sort((a, b) => Math.abs(wrapDelta(p.x, a.x)) - Math.abs(wrapDelta(p.x, b.x))); tgt = eggs[0]; m = 'egg'; }
   else { const foes = engine.enemies.filter(en => en.alive && en.materializing <= 0 && en.y > p.y - 10); if (foes.length) { foes.sort((a, b) => Math.abs(wrapDelta(p.x, a.x)) - Math.abs(wrapDelta(p.x, b.x))); tgt = foes[0]; m = 'joust'; } }
-  if (nearLava) { const dx = tgt ? wrapDelta(p.x, tgt.x) : 0; inp.left = dx < -3; inp.right = dx > 3; fe(4); return inp; }
-  if (tgt) { const dx = wrapDelta(p.x, tgt.x); inp.left = dx < -3; inp.right = dx > 3; const aim = m === 'joust' ? tgt.y - 15 : tgt.y - 2; if (p.y > aim + 3) fe(5); else if (p.y < aim - 5) {} else fe(m === 'joust' ? 9 : 12); }
-  else { if (p.y > 120) fe(8); else if (p.y < 90) {} else fe(16); }
+  if (nearLava) { const dx = tgt ? wrapDelta(p.x, tgt.x) : 0; inp.left = dx < -3; inp.right = dx > 3; fe(3); return inp; }
+  if (tgt) { const dx = wrapDelta(p.x, tgt.x); inp.left = dx < -3; inp.right = dx > 3; const aim = m === 'joust' ? tgt.y - 16 : tgt.y - 2; if (p.y > aim + 3) fe(3); else if (p.y < aim - 5) {} else fe(m === 'joust' ? 6 : 8); }
+  else { if (p.y > 120) fe(5); else if (p.y < 90) {} else fe(9); }
   return inp;
 }
 function readInputs() {
@@ -162,7 +175,7 @@ async function fetchGlobal() {
   catch (e) { globalScores = globalScores || []; }
 }
 async function postGlobal(initials, sc, wv) {
-  try { await fetch(LB_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initials, score: sc, level: wv }) }); globalFetchedAt = 0; fetchGlobal(); } catch (e) {}
+  try { await fetch(LB_URL + ASSET_Q, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initials, score: sc, level: wv }) }); globalFetchedAt = 0; fetchGlobal(); } catch (e) {}
 }
 
 // ─── run control ───
@@ -170,6 +183,7 @@ function startRun(wv) {
   mode = pendingMode || '1p';
   engine = new JoustEngine({ mode, wave: wv || 1, lives: save.opts.lives, difficulty: save.opts.difficulty, seed: (Date.now() & 0xffff) ^ 0x1234, holdUntilInput: true });
   audio.init(); audio.stopMusic();
+  paused = false; acc = 0;
   gotoIntro();
 }
 function gotoIntro() {
@@ -231,6 +245,7 @@ function processEvents(evs) {
       case 'bounty': renderer.float('BOUNTY +' + e.points, e.x, e.y - 16, '#ff5f5f', true); renderer.shakeBy(3); break;
       case 'bonus': renderer.float('+' + e.points + (e.kind === 'survival' ? ' SURVIVAL' : e.kind === 'team' ? ' TEAM' : ''), WORLD.VIEW_W / 2, 110 + (e.pi || 0) * 16, '#ffd23a', true); break;
       case 'extraMan': flash('EXTRA MOUNT!'); break;
+      case 'playerOut': flash('PLAYER ' + ((e.pi || 0) + 1) + ' OUT'); break;
       case 'spawn': renderer.burst('spark', e.x, e.y, { n: 10, col: '#66ccff', up: true }); break;
       case 'bounce': renderer.burst('spark', e.x, e.y, { n: 5, col: '#ffffff' }); renderer.shakeBy(1.5); break;
       case 'troll': renderer.burst('spark', e.x, WORLD.FLOOR, { n: 6, col: '#ff6a00' }); break;
@@ -247,7 +262,7 @@ function frame(now) {
   renderer.resize();
   renderer.updateFx();
 
-  if (state === 'playing') {
+  if (state === 'playing' && !paused) {
     acc += dt;
     while (acc >= STEP_MS) {
       acc -= STEP_MS;
@@ -271,8 +286,13 @@ function frame(now) {
 }
 
 function restartWaveCostLife() {
-  const alive = engine.players.filter(p => !p.out);
-  for (const p of alive) { if (p.alive || !p.out) { p.lives--; p.eggStreak = 0; if (p.lives <= 0) p.out = true; } }
+  // softlock escape hatch: each still-in player pays exactly one life to restart the wave
+  for (const p of engine.players) {
+    if (p.out) continue;
+    p.lives--; p.eggStreak = 0;
+    if (p.lives <= 0) p.out = true;
+  }
+  paused = false;
   if (engine.players.every(p => p.out)) { onGameOver(); return; }
   engine.startWave(engine.wave);
   flash('RESTARTING WAVE');
@@ -298,8 +318,8 @@ function stepAttract() {
     const d = window.JOUST_ENGINE.wrapDelta(p.x, tx);
     if (d > 4) inp.right = true; else if (d < -4) inp.left = true;
     attract._fc = (attract._fc || 0) + 1;
-    if (p.y > targetY + 6 || p.y > WORLD.FLOOR - 45) { if (attract._fc % 8 === 0) inp.flap = true; }
-    else if (attract._fc % 20 === 0) inp.flap = true;
+    if (p.y > targetY + 6 || p.y > WORLD.FLOOR - 45) { if (attract._fc % 5 === 0) inp.flap = true; }
+    else if (attract._fc % 10 === 0) inp.flap = true;
   }
   attract.tick([inp]);
   processEventsQuiet(attract.events);
@@ -323,7 +343,7 @@ function draw(now) {
   else if (state === 'scores') { drawScreenBg(); drawScores(); }
   else if (state === 'hsentry') { drawScreenBg(); drawHsEntry(); }
   else if (state === 'intro') { renderer.render(engine.snapshot()); drawHUD(); drawBanner(); }
-  else if (state === 'playing') { renderer.render(engine.snapshot()); renderer.drawFloats(txt); drawHUD(); drawEscHold(now); if (!engine.started) drawStartPrompt(now); }
+  else if (state === 'playing') { renderer.render(engine.snapshot()); renderer.drawFloats(txt); drawHUD(); drawEscHold(now); if (!engine.started) drawStartPrompt(now); if (paused) drawPause(); }
   else if (state === 'clear') { renderer.render(engine.snapshot()); drawHUD(); drawClear(); }
   else if (state === 'gameover') { renderer.render(engine ? engine.snapshot() : null); drawGameOver(); }
   // flash
@@ -409,6 +429,14 @@ function drawClear() {
   const P = engine.players;
   txt('WAVE ' + engine.wave + ' CLEARED', w / 2, s * 0.52, Math.round(s / 26), '#7fd4ff');
 }
+function drawPause() {
+  const w = canvas.width, s = canvas.height;
+  ctx.fillStyle = 'rgba(2,3,12,0.72)'; ctx.fillRect(0, 0, w, s);
+  txt('PAUSED', w / 2, s * 0.42, Math.round(s / 12), '#ffd23a');
+  txt('P / ESC  RESUME', w / 2, s * 0.56, Math.round(s / 26), '#7fd4ff');
+  txt('Q  QUIT TO TITLE', w / 2, s * 0.62, Math.round(s / 26), '#7fd4ff');
+  txt('HOLD ESC  RESTART WAVE (−1 LIFE)', w / 2, s * 0.68, Math.round(s / 30), '#c9c9d6');
+}
 function drawEscHold(now) {
   if (!escDownAt) return;
   const t = Math.min(1, (now - escDownAt) / 800); if (t < 0.12) return;
@@ -438,7 +466,7 @@ function drawHelp() {
     'PTERODACTYL 1000 — invulnerable except a lance in its open beak!',
     'Beware the LAVA TROLL\'s hand — flap hard to break free.',
     '',
-    'Extra mount every 20,000. Hold ESC to restart a wave (−1 life).',
+    'Extra mount every 20,000. P pauses; hold ESC restarts a wave (−1 life).',
   ];
   const fs = Math.round(s / 34);
   for (let i = 0; i < lines.length; i++) txt(lines[i], w / 2, s * 0.16 + i * (s * 0.045), fs, i === 0 ? '#fff' : '#c9d0e0');
@@ -540,15 +568,19 @@ function menuAction(i) {
   else if (i === 5) { state = 'scores'; fetchGlobal(); }
 }
 function advanceScreen() { if (state === 'gameover') backToTitle(); else if (state === 'help' || state === 'scores') backToTitle(); }
-function backToTitle() { state = 'title'; menuIdx = 0; if (!attract) startAttract(); audio.init(); audio.startMusic(); }
+function backToTitle() { state = 'title'; menuIdx = 0; paused = false; if (!attract) startAttract(); audio.init(); audio.startMusic(); }
 
 function handleKeyUI(e) {
   const code = e.code;
   if (e.repeat && ['Enter', 'Escape', 'Space'].includes(code)) return;
   if (state === 'playing') {
+    if (paused) {
+      if (code === 'KeyP' || code === 'Escape' || code === 'Enter') paused = false;
+      else if (code === 'KeyQ') { paused = false; backToTitle(); }
+      return;
+    }
     if (code === 'Escape' && !escDownAt) escDownAt = performance.now();
-    if (code === 'KeyP') { /* pause could go here */ }
-    if (code === 'KeyM') backToTitle();
+    if (code === 'KeyP') paused = true;
     return;
   }
   if (state === 'title') {
