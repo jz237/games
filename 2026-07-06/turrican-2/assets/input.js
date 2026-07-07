@@ -7,6 +7,8 @@
   function createInput(target) {
     const keys = Object.create(null);
     const touch = Object.create(null);
+    let tapped = Object.create(null); // keydowns latched until next frame() —
+                                      // a tap released between frames still registers
     let prev = Object.create(null);
     let pad = null;
 
@@ -32,16 +34,29 @@
     }
     const onKeyDown = (e) => {
       if (down(e.code)) e.preventDefault();
+      if (!keys[e.code] && !e.repeat) tapped[e.code] = true;
       keys[e.code] = true;
     };
     const onKeyUp = (e) => { keys[e.code] = false; };
+    // alt-tab / focus loss: release everything so keys never stick
+    const onBlur = () => {
+      for (const k in keys) keys[k] = false;
+      for (const k in touch) touch[k] = false;
+    };
     (target || window).addEventListener('keydown', onKeyDown);
     (target || window).addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) onBlur(); });
 
     function held(action) {
       const codes = MAP[action] || [];
       for (const c of codes) if (keys[c]) return true;
       if (touch[action]) return true;
+      return false;
+    }
+    function tappedAction(action) {
+      const codes = MAP[action] || [];
+      for (const c of codes) if (tapped[c]) return true;
       return false;
     }
 
@@ -76,31 +91,47 @@
       const beamAiming = (window.__tBeamAim === true);
       for (const k in MAP) cur[k] = held(k) || padHeld(k);
       // Up should not jump; jump only via jump keys/pad. (Beam aim uses up/down.)
+      const edge = (k) => (cur[k] && !prev[k]) || tappedAction(k);
       const inp = {
         left: cur.left, right: cur.right, up: cur.up, down: cur.down,
         jump: cur.jump, fire: cur.fire, morph: cur.morph,
-        jumpPressed: cur.jump && !prev.jump,
+        jumpPressed: edge('jump'),
         jumpReleased: !cur.jump && prev.jump,
-        firePressed: cur.fire && !prev.fire,
-        morphPressed: cur.morph && !prev.morph,
-        switchPressed: cur.switch && !prev.switch,
-        bombPressed: cur.bomb && !prev.bomb,
-        linePressed: cur.line && !prev.line,
-        pausePressed: cur.pause && !prev.pause,
-        mutePressed: cur.mute && !prev.mute,
-        startPressed: (cur.start && !prev.start) || (cur.jump && !prev.jump),
+        upPressed: edge('up'),
+        downPressed: edge('down'),
+        leftPressed: edge('left'),
+        rightPressed: edge('right'),
+        firePressed: edge('fire'),
+        morphPressed: edge('morph'),
+        switchPressed: edge('switch'),
+        bombPressed: edge('bomb'),
+        linePressed: edge('line'),
+        pausePressed: edge('pause'),
+        mutePressed: edge('mute'),
+        startPressed: edge('start') || edge('jump'),
       };
       prev = cur;
+      tapped = Object.create(null);
       return inp;
     }
 
-    function setTouch(action, on) { touch[action] = on; }
+    function setTouch(action, on) {
+      if (on && !touch[action]) tapped[(MAP[action] || [])[0] || action] = true;
+      touch[action] = on;
+    }
+    // gamepad haptics (best effort)
+    function rumble(strength, ms) {
+      if (!pad || !pad.vibrationActuator || !pad.vibrationActuator.playEffect) return;
+      pad.vibrationActuator.playEffect('dual-rumble', {
+        duration: ms, strongMagnitude: strength, weakMagnitude: strength * 0.6,
+      }).catch(() => {});
+    }
     function destroy() {
       (target || window).removeEventListener('keydown', onKeyDown);
       (target || window).removeEventListener('keyup', onKeyUp);
     }
 
-    return { frame, setTouch, destroy, MAP };
+    return { frame, setTouch, rumble, destroy, MAP };
   }
 
   return { createInput };

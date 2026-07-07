@@ -17,12 +17,14 @@
   canvas#game { position:absolute; inset:0; width:100%; height:100%; display:block; image-rendering:auto; }
   /* touch controls */
   #touch { display:none; position:absolute; inset:0; pointer-events:none; }
-  #touch .pad { position:absolute; bottom:14px; display:flex; gap:10px; pointer-events:auto; }
-  #touch .left { left:14px; }
-  #touch .right { right:14px; flex-wrap:wrap; width:150px; justify-content:flex-end; }
+  #touch .pad { position:absolute; bottom:14px; display:flex; gap:8px; pointer-events:auto; }
+  #touch .left { left:14px; flex-direction:column; align-items:center; }
+  #touch .left .row { display:flex; gap:44px; }
+  #touch .right { right:14px; flex-wrap:wrap; width:170px; justify-content:flex-end; align-items:flex-end; }
   #touch button { width:52px; height:52px; border-radius:50%; border:1px solid rgba(160,180,255,0.4);
     background:rgba(20,20,50,0.5); color:#cfe0ff; font-size:18px; font-weight:bold; backdrop-filter:blur(4px); }
   #touch button.down { background:rgba(120,160,255,0.5); }
+  #touch .right button.small { width:44px; height:44px; font-size:14px; opacity:0.9; }
   #hint { position:absolute; top:8px; left:50%; transform:translateX(-50%); font-size:11px; color:rgba(200,210,255,0.5);
     pointer-events:none; }
 </style>
@@ -33,25 +35,29 @@
     <canvas id="game" width="960" height="540"></canvas>
     <div id="touch">
       <div class="pad left">
-        <button id="t-left">◀</button>
         <button id="t-up">▲</button>
+        <div class="row">
+          <button id="t-left">◀</button>
+          <button id="t-right">▶</button>
+        </div>
         <button id="t-down">▼</button>
-        <button id="t-right">▶</button>
       </div>
       <div class="pad right">
+        <button id="t-bomb" class="small">❄</button>
+        <button id="t-morph" class="small">◉</button>
+        <button id="t-switch" class="small">⟳</button>
+        <button id="t-pause" class="small">⏸</button>
         <button id="t-fire">✦</button>
         <button id="t-jump">⭡</button>
-        <button id="t-morph">◉</button>
-        <button id="t-switch">⟳</button>
       </div>
     </div>
   </div>
 </div>
-<script src="assets/data.js?v=0.2.0"></script>
-<script src="assets/engine.js?v=0.2.0"></script>
-<script src="assets/render.js?v=0.2.0"></script>
-<script src="assets/audio.js?v=0.2.0"></script>
-<script src="assets/input.js?v=0.2.0"></script>
-<script src="assets/game.js?v=0.2.0"></script>
+<script src="assets/data.js?v=1.0.0"></script>
+<script src="assets/engine.js?v=1.0.0"></script>
+<script src="assets/render.js?v=1.0.0"></script>
+<script src="assets/audio.js?v=1.0.0"></script>
+<script src="assets/input.js?v=1.0.0"></script>
+<script src="assets/game.js?v=1.0.0"></script>
 </body>
 </html>

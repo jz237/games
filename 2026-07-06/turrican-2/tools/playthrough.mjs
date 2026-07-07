@@ -11,11 +11,53 @@ function solid(lv, tx, ty) {
   if (tx < 0 || tx >= lv.cols) return true;
   if (ty < 0) return false;
   if (ty >= lv.rows) return false;
-  return lv.tiles[ty * lv.cols + tx] === D.T.SOLID;
+  const t = lv.tiles[ty * lv.cols + tx];
+  return t === D.T.SOLID || t === D.T.CRATE;
 }
 
 function botInput(s, m) {
   const p = s.player, lv = s.level;
+
+  // boss duel: face the boss and hold fire until it falls
+  const b = s.boss;
+  const isShmup = s.level.type === 'shmup';
+  if (b && b.alive && b.awake) {
+    const bx = b.x + b.w / 2, px = p.x + p.w / 2;
+    const toward = bx > px ? 1 : -1;
+    // keep a mid distance so shots connect but contact is minimized
+    const dist = Math.abs(bx - px);
+    const move = dist > 120 ? toward : dist < 60 ? -toward : 0;
+    const dy = (b.y + b.h / 2) - (p.y + p.h / 2);
+    const inp = {
+      right: move > 0, left: move < 0,
+      up: isShmup && dy < -8, down: isShmup && dy > 8,
+      fire: true, firePressed: (s.frame % 6) === 0,
+      jump: false, jumpPressed: false, jumpReleased: m.pj,
+      morph: false, morphPressed: false, switchPressed: false,
+      // bomb while the core is guarded: freeze locks it open (dps windfall)
+      bombPressed: !b.open && (s.frame % 420) === 0, linePressed: false,
+    };
+    m.pj = false;
+    // face the boss even when holding position
+    if (move === 0) { if (toward > 0) inp.right = true; else inp.left = true; }
+    return inp;
+  }
+
+  // shmup cruise: hug the middle of the tunnel gap ahead, keep firing
+  if (isShmup) {
+    const col = Math.max(0, Math.min(lv.cols - 1, Math.floor((p.x + 70) / TILE)));
+    let topY = 0; while (topY < lv.rows && lv.tiles[topY * lv.cols + col] !== 0) topY++;
+    let botY = lv.rows - 1; while (botY >= 0 && lv.tiles[botY * lv.cols + col] !== 0) botY--;
+    const midY = topY <= botY ? ((topY + botY) / 2 + 0.5) * TILE : (lv.rows / 2) * TILE;
+    const dy = midY - (p.y + p.h / 2);
+    m.pj = false;
+    return {
+      right: true, left: false, up: dy < -8, down: dy > 8,
+      fire: true, firePressed: (s.frame % 6) === 0,
+      jump: false, jumpPressed: false, jumpReleased: false,
+      morph: false, morphPressed: false, switchPressed: false, bombPressed: false, linePressed: false,
+    };
+  }
   const ft = Math.floor((p.y + p.h + 2) / TILE);
   const px = Math.floor((p.x + p.w / 2) / TILE);
   const midTy = Math.floor((p.y + p.h / 2) / TILE);
@@ -62,7 +104,8 @@ for (const [w, st] of plan) {
   s.godMode = true;
   const m = { hold: 0, cool: 0, pj: false, stuck: 0, lastX: s.player.x };
   let maxX = s.player.x, won = false, frames = 0, respawns = 0;
-  const maxFrames = 60 * 180;
+  // boss stages get more headroom: the dumb bot duels far below player skill
+  const maxFrames = 60 * (lv.bossSpawn ? 300 : 180);
   const exitX = lv.exit.x;
   let lastGood = { x: s.player.x, y: s.player.y };
   while (frames < maxFrames) {

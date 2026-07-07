@@ -267,15 +267,27 @@ Ducking: lower music under boss/large SFX. Loop world themes seamlessly.
 
 ## 7. DECISIONS log
 
-> Append decisions here as they are made during the build. Start empty.
-
-_(none yet)_
-
-Open items to resolve early (candidates for DECISIONS):
-- Weapon-upgrade persistence model (per-weapon persist vs shared reset).
-- Death penalty (drop one level vs reset to L1).
-- Exact per-stage timer seconds; number of continues; starting lives.
-- Whether to add coyote-time/jump-buffer (recommended yes).
+- **Weapon upgrades persist per-weapon across switches; no level loss on death**
+  (forgiving model — deaths already cost a life + position).
+- **Timers:** 300 s platform stages, 200 s shmup stages, 420 s boss stages
+  (300 s shmup boss). Timer refills on respawn (one timeout costs exactly one
+  life). Difficulty scales the clock (×1.25 easy / ×0.85 hard).
+- **Lives/continues:** start 3 lives; 3 continues per run (continue keeps
+  score + weapons, restarts the current stage with 3 lives). 1-UP every 50
+  gems, via pickups, and one guaranteed on each stage's highest platform.
+- **Coyote time (0.09 s) + jump buffer (0.10 s): yes** (SPEC recommendation).
+- **Checkpoints:** one per stage at ~55%, arms on first crossing.
+- **Boss guard:** body takes 22% weapon damage; open core 100%. Freeze bomb
+  deals 8% max-HP AND locks the core open for the freeze duration (makes the
+  smart-bomb the strategic boss tool SPEC §2.4 wanted).
+- **W3 shmup:** ship is dragged by the auto-scroll; wall contact = 10 damage
+  crush-sting; blockade boss halts the camera; destructible crate barriers.
+- **Power line** implemented as a consumable vertical energy discharge
+  (SPEC's held rotating beam role is covered by the BEAM weapon's sweep).
+- **Difficulty** easy/normal/hard scales damage-to-player, enemy/boss HP, and
+  the clock at a single choke point (`DIFFICULTY` in data.js).
+- **Secrets:** buried crate-plugged vaults (open with down-aimed fire, ≤4
+  tiles deep so a standing jump always escapes; never adjacent to pits).
 
 ---
 
