@@ -222,32 +222,24 @@ class JoustEngine {
     // flap on press, AND auto-repeat while the key is held (holding = steady climb, tapping = control)
     if (inp.flap) this.doFlap(p, dir);
     else if (inp.flapHeld && !p.onGround && p.flapT <= 0) this.doFlap(p, dir); // hold = auto-flap (comfort)
-    // ground uses the run state-machine approx; AIR horizontal is set only by doFlap (FLYX index) and
-    // then coasts — authentic Joust momentum, no per-frame air drag.
-    if (p.onGround) this.groundMove(p, dir);
+    if (p.onGround) this.groundMove(p, dir); else this.airMove(p, dir, PHYS.MAX_H);
   }
 
-  // ROM flap (ADDFLP): edge-triggered discrete impulse whose strength DECAYS with time since the
-  // last flap (ptimup), so rapid tapping climbs and a lone flap after a glide barely slows a fall.
-  // Horizontal is a per-flap ±2 step of the PVELX index mapped through FLYX; momentum persists.
   doFlap(b, dir) {
-    if (b.onGround) {
-      // ground takeoff (STFLY): leave the platform at the ROM's fixed launch velocity…
-      b.onGround = false; b.y -= 1; b.vy = PHYS.TAKEOFF_VY; b.ptimup = 0;
-      // …and convert run speed into the nearest FLYX index so a running takeoff keeps drifting
-      const av = Math.abs(b.vx || 0);
-      const idx = av >= 1.5 ? 8 : av >= 0.75 ? 6 : av >= 0.375 ? 4 : av >= 0.12 ? 2 : 0;
-      b.vxi = Math.sign(b.vx || 0) * idx;
-    } else {
-      const imp = (Math.floor((b.ptimup || 0) * PHYS.FLAP_BASE / 256) - PHYS.FLAP_BASE) / 256; // −0.375 → 0
-      b.vy += imp;
-      b.ptimup = 0;
-      if (b.vy < -PHYS.MAX_RISE) b.vy = -PHYS.MAX_RISE;
-      if (dir !== 0) b.vxi = Math.max(-PHYS.MAXVX, Math.min(PHYS.MAXVX, (b.vxi || 0) + dir * 2));
-    }
-    b.vx = Math.sign(b.vxi || 0) * PHYS.FLYX[Math.abs(b.vxi || 0)]; // FLYX table → px/frame
+    if (b.onGround) { b.onGround = false; b.y -= 1; }      // takeoff pop
+    b.vy += PHYS.FLAP_DV;                                   // punchy upward impulse
+    if (b.vy < -PHYS.MAX_RISE) b.vy = -PHYS.MAX_RISE;
     b.wingDown = 6; b.flapT = PHYS.FLAP_REPEAT;
     this.emit('flap', { x: b.x, y: b.y, player: b.kind === 'player' });
+  }
+
+  // continuous horizontal accel with settling — tuned to the cabinet's feel (players & enemies).
+  // dir 1=right,-1=left; reversing brakes harder for responsive turns; releasing settles via drag.
+  airMove(b, dir, maxH) {
+    if (dir !== 0) {
+      const a = (dir * (b.vx || 0) < 0) ? PHYS.AIR_ACCEL * 2.6 : PHYS.AIR_ACCEL;
+      b.vx = Math.max(-maxH, Math.min(maxH, (b.vx || 0) + dir * a));
+    } else b.vx = (b.vx || 0) * PHYS.AIR_DRAG;
   }
 
   groundMove(b, dir) {
@@ -302,14 +294,15 @@ class JoustEngine {
     // steer away from lava columns when low (don't suicide into the lava)
     const overLava = this.overLava(e.x);
     if ((overLava || nearLava) && e.y > 150) { e.face = wrapDelta(e.x, 147) >= 0 ? 1 : -1; }
-    // flap cadence for the authentic (weaker, decaying) flap vs the ~2× lighter ROM gravity.
-    // Each flap also steps the enemy's FLYX horizontal index toward e.face, so flapping = steering.
-    const climbP = def.climb >= 0.9 ? 6 : def.climb >= 0.75 ? 7 : 9;
+    // horizontal drift toward facing (continuous, matches the player model)
+    this.airMove(e, e.face, PHYS.ENEMY_MAX_H);
+    // flap cadence tuned to the punchy flap: hover ≈ 1 flap / 13f, climb faster.
+    const climbP = def.climb >= 0.9 ? 7 : def.climb >= 0.75 ? 8 : 10;
     let period;
-    if (nearLava || overLava) period = 4;             // escape lava (frequent flaps + steer away)
+    if (nearLava || overLava) period = 5;             // escape lava
     else if (e.y > desiredY + 4) period = climbP;     // below desired → climb
     else if (e.y < desiredY - 12) period = 0;         // too high → glide down
-    else period = 11;                                  // hover (holds altitude at authentic flap/grav ratio)
+    else period = 13;                                  // hover (holds altitude)
     if (period > 0 && e.flapClock <= 0) { this.doFlap(e, e.face); e.flapClock = period; }
   }
 
@@ -318,10 +311,9 @@ class JoustEngine {
     if (b.materializing > 0) return;
     if (b.onGround) {
       // walking off an edge? (keep horizontal momentum)
-      if (!this.platformUnder(b)) { b.onGround = false; b.vy = 0.2; b.ptimup = 0; }
+      if (!this.platformUnder(b)) { b.onGround = false; b.vy = 0.2; }
       else { b.wingDown = Math.max(0, b.wingDown - 1); return; }
     }
-    b.ptimup = Math.min(255, (b.ptimup || 0) + 1); // frames since last flap → ADDFLP decay input
     // gravity (wings-up glide = heavier so idle sinks)
     if (b.grabbed) { b.vy += b.grabbed.pull; b.vx = 0; }   // lava troll pull; X frozen
     else { b.vy += (b.wingDown > 0 ? PHYS.GRAV_DOWN : PHYS.GRAV_UP); if (b.wingDown > 0) b.wingDown--; }

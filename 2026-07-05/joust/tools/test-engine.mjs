@@ -72,43 +72,35 @@ console.log('gravity');
   approx(p.vy - vy1, DATA.PHYS.GRAV_DOWN, 1e-9, 'wings-down gravity = 4/256');
 }
 
-// ── PHYSICS: flap impulse decay (ROM ADDFLP) ──
-console.log('flap impulse (PTIMUP decay)');
+// ── PHYSICS: flap impulse (tuned punchy lift) ──
+console.log('flap impulse');
 {
   const e = eng();
   const p = e.players[0];
-  // fresh flap (ptimup=0) gives the full −96/256 = −0.375 px/f
-  p.onGround = false; p.vy = 0; p.ptimup = 0;
+  p.onGround = false; p.vy = 0;
   e.doFlap(p, 0);
-  approx(p.vy, -96 / 256, 1e-9, 'fresh flap (ptimup=0) = -96/256 = -0.375');
-  // a flap after a long glide (large ptimup) is much weaker (decays toward 0)
-  p.vy = 0; p.ptimup = 255;
-  e.doFlap(p, 0);
-  ok(p.vy > -0.02, 'stale flap (ptimup=255) decays to ~0 (barely any lift)');
-  // rapid flaps (ptimup reset each) clamp upward speed at MAX_RISE
-  p.vy = 0; for (let i = 0; i < 40; i++) { p.ptimup = 0; e.doFlap(p, 0); }
+  approx(p.vy, DATA.PHYS.FLAP_DV, 1e-9, 'one flap adds FLAP_DV upward (punchy lift)');
+  ok(DATA.PHYS.FLAP_DV < -0.6, 'flap is a satisfying lift');
+  // repeated flaps clamp at MAX_RISE
+  for (let i = 0; i < 12; i++) e.doFlap(p, 0);
   approx(p.vy, -DATA.PHYS.MAX_RISE, 1e-6, 'rapid flaps clamp upward speed at MAX_RISE');
 }
 
-// ── PHYSICS: horizontal FLYX table (per-flap index; momentum persists, no air drag) ──
-console.log('horizontal FLYX (per-flap index, no air drag)');
+// ── PHYSICS: horizontal control (continuous accel + settle, correct direction) ──
+console.log('horizontal control (continuous, correct direction)');
 {
   const e = eng();
   const p = e.players[0];
-  p.onGround = false; p.y = 120; p.vx = 0; p.vxi = 0; p.ptimup = 0; p.grabbed = null;
-  // each rightward flap steps the PVELX index +2 → FLYX speeds 0.25/0.5/1.0/2.0, capped at 2.0
-  const seen = [];
-  for (let i = 0; i < 6; i++) { p.ptimup = 0; e.doFlap(p, 1); seen.push(+p.vx.toFixed(3)); }
-  ok(p.vx > 0, 'rightward flaps → +vx (not inverted)');
-  approx(p.vx, 2.0, 1e-9, 'four+ rightward flaps reach FLYX max 2.0 px/f');
-  ok(seen[0] === 0.25 && seen[1] === 0.5 && seen[2] === 1.0 && seen[3] === 2.0, 'FLYX ramp 0.25/0.5/1.0/2.0');
-  // NO air drag: integrating without flapping keeps vx constant (authentic momentum)
-  const vxHold = p.vx;
-  for (let i = 0; i < 20; i++) e.integrate(p);
-  approx(p.vx, vxHold, 1e-9, 'no air drag — horizontal momentum persists between flaps');
-  // the only way to brake/reverse in the air is an opposite-direction flap
-  p.vxi = 8; p.vx = 2.0; p.ptimup = 0; e.doFlap(p, -1);
-  ok(p.vx < 2.0, 'opposite flap steps the index back down (in-air braking)');
+  const MH = DATA.PHYS.MAX_H;
+  p.vx = 0; for (let i = 0; i < 80; i++) e.airMove(p, 1, MH);
+  ok(p.vx > 0 && Math.abs(p.vx - MH) < 1e-6, 'hold right → +vx (not inverted), capped at MAX_H');
+  p.vx = 0; for (let i = 0; i < 80; i++) e.airMove(p, -1, MH);
+  ok(p.vx < 0 && Math.abs(p.vx + MH) < 1e-6, 'hold left → -vx (not inverted)');
+  p.vx = 1.5; for (let i = 0; i < 50; i++) e.airMove(p, 0, MH);
+  ok(Math.abs(p.vx) < 0.25, 'release → drag settles speed');
+  p.vx = 1.4; e.airMove(p, -1, MH); const brakeStep = 1.4 - p.vx;
+  p.vx = 0; e.airMove(p, 1, MH); const accelStep = p.vx;
+  ok(brakeStep > accelStep * 1.5, 'reversing brakes harder than accelerating');
 }
 
 // ── WRAP ──

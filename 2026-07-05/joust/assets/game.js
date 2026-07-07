@@ -87,16 +87,16 @@ function qaBotInput() {
   const fe = n => { if (p._fc % n === 0) inp.flap = true; };
   const nearLava = p.y > WORLD.FLOOR - 52;
   const pt = engine.pteros.find(x => x.alive && Math.abs(wrapDelta(p.x, x.x)) < 46 && Math.abs(x.y - p.y) < 40);
-  if (pt) { const dx = wrapDelta(p.x, pt.x); inp.left = dx > 0; inp.right = dx < 0; if (p.y > pt.y) fe(3); else fe(9); if (nearLava) fe(3); return inp; }
+  if (pt) { const dx = wrapDelta(p.x, pt.x); inp.left = dx > 0; inp.right = dx < 0; if (p.y > pt.y) fe(4); else fe(14); if (nearLava) fe(4); return inp; }
   const threat = engine.enemies.find(en => en.alive && en.materializing <= 0 && Math.abs(wrapDelta(p.x, en.x)) < 26 && en.y < p.y + 2 && p.y - en.y < 30);
-  if (threat && !nearLava) { const dx = wrapDelta(p.x, threat.x); inp.left = dx > 0; inp.right = dx < 0; fe(3); return inp; }
+  if (threat && !nearLava) { const dx = wrapDelta(p.x, threat.x); inp.left = dx > 0; inp.right = dx < 0; fe(4); return inp; }
   const eggs = engine.eggs.filter(g => !g.dead && ['egg', 'shake', 'walking', 'mounting', 'hatching'].includes(g.state) && g.y < WORLD.FLOOR - 6);
   let tgt = null, m = null;
   if (eggs.length) { eggs.sort((a, b) => Math.abs(wrapDelta(p.x, a.x)) - Math.abs(wrapDelta(p.x, b.x))); tgt = eggs[0]; m = 'egg'; }
   else { const foes = engine.enemies.filter(en => en.alive && en.materializing <= 0 && en.y > p.y - 10); if (foes.length) { foes.sort((a, b) => Math.abs(wrapDelta(p.x, a.x)) - Math.abs(wrapDelta(p.x, b.x))); tgt = foes[0]; m = 'joust'; } }
-  if (nearLava) { const dx = tgt ? wrapDelta(p.x, tgt.x) : 0; inp.left = dx < -3; inp.right = dx > 3; fe(3); return inp; }
-  if (tgt) { const dx = wrapDelta(p.x, tgt.x); inp.left = dx < -3; inp.right = dx > 3; const aim = m === 'joust' ? tgt.y - 16 : tgt.y - 2; if (p.y > aim + 3) fe(3); else if (p.y < aim - 5) {} else fe(m === 'joust' ? 6 : 8); }
-  else { if (p.y > 120) fe(5); else if (p.y < 90) {} else fe(9); }
+  if (nearLava) { const dx = tgt ? wrapDelta(p.x, tgt.x) : 0; inp.left = dx < -3; inp.right = dx > 3; fe(4); return inp; }
+  if (tgt) { const dx = wrapDelta(p.x, tgt.x); inp.left = dx < -3; inp.right = dx > 3; const aim = m === 'joust' ? tgt.y - 15 : tgt.y - 2; if (p.y > aim + 3) fe(5); else if (p.y < aim - 5) {} else fe(m === 'joust' ? 9 : 12); }
+  else { if (p.y > 120) fe(8); else if (p.y < 90) {} else fe(16); }
   return inp;
 }
 function readInputs() {
@@ -318,8 +318,8 @@ function stepAttract() {
     const d = window.JOUST_ENGINE.wrapDelta(p.x, tx);
     if (d > 4) inp.right = true; else if (d < -4) inp.left = true;
     attract._fc = (attract._fc || 0) + 1;
-    if (p.y > targetY + 6 || p.y > WORLD.FLOOR - 45) { if (attract._fc % 5 === 0) inp.flap = true; }
-    else if (attract._fc % 10 === 0) inp.flap = true;
+    if (p.y > targetY + 6 || p.y > WORLD.FLOOR - 45) { if (attract._fc % 8 === 0) inp.flap = true; }
+    else if (attract._fc % 20 === 0) inp.flap = true;
   }
   attract.tick([inp]);
   processEventsQuiet(attract.events);

@@ -18,16 +18,14 @@ function botInput(e) {
   const nearLava = p.y > WORLD.FLOOR - 52;
   const flapEvery = (n) => { if (p._fc % n === 0) inp.flap = true; };
 
-  // cadences tuned for the authentic (weaker, decaying) flap vs the ~2× lighter ROM gravity:
-  // flapping every 3 frames climbs, every ~7 hovers.
   // 0) dodge pterodactyls (deadly unless a precise beak hit — bot just flees)
   const pt = e.pteros.find(x => x.alive && Math.abs(wrapDelta(p.x, x.x)) < 46 && Math.abs(x.y - p.y) < 40);
-  if (pt) { const dx = wrapDelta(p.x, pt.x); inp.left = dx > 0; inp.right = dx < 0; if (p.y > pt.y) flapEvery(3); else flapEvery(9); if (nearLava) flapEvery(3); return inp; }
+  if (pt) { const dx = wrapDelta(p.x, pt.x); inp.left = dx > 0; inp.right = dx < 0; if (p.y > pt.y) flapEvery(4); else flapEvery(14); if (nearLava) flapEvery(4); return inp; }
   // 1) danger: an enemy above me & close → I lose. Climb hard / slide away.
   const threat = e.enemies.find(en => en.alive && en.materializing <= 0 && Math.abs(wrapDelta(p.x, en.x)) < 26 && en.y < p.y + 2 && p.y - en.y < 30);
   if (threat && !nearLava) {
     const dx = wrapDelta(p.x, threat.x); inp.left = dx > 0; inp.right = dx < 0; // slide away
-    flapEvery(3); return inp;
+    flapEvery(4); return inp;
   }
   // 2) eggs to collect (safe, quick points)
   const eggs = e.eggs.filter(g => !g.dead && ['egg', 'shake', 'walking', 'mounting', 'hatching'].includes(g.state) && g.y < WORLD.FLOOR - 6);
@@ -38,17 +36,17 @@ function botInput(e) {
     const foes = e.enemies.filter(en => en.alive && en.materializing <= 0 && en.y > p.y - 10);
     if (foes.length) { foes.sort((a, b) => Math.abs(wrapDelta(p.x, a.x)) - Math.abs(wrapDelta(p.x, b.x))); tgt = foes[0]; mode = 'joust'; }
   }
-  if (nearLava) { const dx = tgt ? wrapDelta(p.x, tgt.x) : 0; inp.left = dx < -3; inp.right = dx > 3; flapEvery(3); return inp; }
+  if (nearLava) { const dx = tgt ? wrapDelta(p.x, tgt.x) : 0; inp.left = dx < -3; inp.right = dx > 3; flapEvery(4); return inp; }
   if (tgt) {
     const dx = wrapDelta(p.x, tgt.x);
     inp.left = dx < -3; inp.right = dx > 3;
-    const aim = mode === 'joust' ? tgt.y - 16 : tgt.y - 2;
-    if (p.y > aim + 3) flapEvery(3);         // climb to just above target
+    const aim = mode === 'joust' ? tgt.y - 15 : tgt.y - 2;
+    if (p.y > aim + 3) flapEvery(5);         // climb to just above target
     else if (p.y < aim - 5) { /* glide down onto it */ }
-    else flapEvery(mode === 'joust' ? 6 : 8);
+    else flapEvery(mode === 'joust' ? 9 : 12);
   } else {
     // cruise at a safe mid altitude
-    if (p.y > 120) flapEvery(5); else if (p.y < 90) { } else flapEvery(9);
+    if (p.y > 120) flapEvery(8); else if (p.y < 90) { } else flapEvery(16);
   }
   return inp;
 }
