@@ -76,5 +76,29 @@ for (let y = 0; y < flat.rows; y++) flat.tiles[y * flat.cols + col] = D.T.SOLID;
 const info = E.moveBox(flat, box, 200, 0);
 ok(info.hitX === true && box.x + box.w <= col * D.TILE + 0.5, 'moveBox blocked by wall');
 
+// 7. one-way platform: a descending player lands on top
+{
+  const lv = D.buildLevel(0, 0);
+  lv.platforms = [{ x: 5, y: 8, w: 5 }];
+  const s = E.createGame(lv, null);
+  const p = s.player; p.x = 6 * D.TILE; p.y = 4 * D.TILE; p.vx = 0; p.vy = 0;
+  let landed = false;
+  for (let f = 0; f < 90; f++) { E.step(s, {}, D.VIEW_W, D.VIEW_H);
+    if (p.onGround && Math.abs((p.y + p.h) - 8 * D.TILE) < 3) { landed = true; break; } }
+  ok(landed, 'player lands on top of a one-way platform');
+}
+
+// 8. one-way platform: jumping up passes THROUGH (no bonk)
+{
+  const lv = D.buildLevel(0, 0);
+  lv.platforms = [{ x: 4, y: 8, w: 8 }];
+  const s = E.createGame(lv, null);
+  const p = s.player; p.x = 6 * D.TILE; p.y = 11 * D.TILE; p.vx = 0; p.vy = -560;
+  let passed = false;
+  for (let f = 0; f < 25; f++) { E.step(s, { jump: true }, D.VIEW_W, D.VIEW_H);
+    if (p.y < 8 * D.TILE - 6) { passed = true; break; } }
+  ok(passed, 'jumping up passes through a one-way platform (no bonk)');
+}
+
 console.log(`\nEngine tests: ${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

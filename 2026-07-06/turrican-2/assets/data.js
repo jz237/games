@@ -165,60 +165,99 @@
     const set = (x, y, v) => { if (x >= 0 && x < cols && y >= 0 && y < rows) tiles[idx(x, y)] = v; };
     const get = (x, y) => (x < 0 || x >= cols || y < 0 || y >= rows) ? T.SOLID : tiles[idx(x, y)];
 
-    // rolling ground height per column
-    let h = g.floor;
-    const groundH = new Array(cols);
-    const pitCols = new Set();
-    // choose pit locations
-    for (let p = 0; p < g.pits; p++) {
-      const start = 12 + Math.floor(rnd() * (cols - 24));
-      const width = 2 + Math.floor(rnd() * 4);
-      for (let w = 0; w < width; w++) pitCols.add(start + w);
-    }
+    // ---- GUARANTEED-TRAVERSABLE terrain --------------------------------
+    // Interior platform worlds get a thin ceiling; we always keep >=6 tiles of
+    // headroom above the ground so the critical path is walkable + jumpable
+    // WITHOUT needing morph (morph is reserved for optional secret routes).
+    const ceilH = (world.type === 'platform' && worldIndex >= 1) ? 1 : 0;
+    for (let x = 0; x < cols; x++) for (let y = 0; y < ceilH; y++) set(x, y, T.SOLID);
+
+    // Keep ground in the lower third so the upper zone is reserved for
+    // floating platforms — they then never pinch the walkable ground path.
+    const maxTop = rows - 2;           // lowest ground (always >=1 tile of floor)
+    const minTop = Math.max(ceilH + 5, rows - 9); // highest the ground may rise
+    const clampTop = (v) => Math.max(minTop, Math.min(maxTop, v));
+
+    // pass 1: ground top as flat runs joined by SINGLE-tile steps only, so every
+    // adjacent column differs by <=1 tile — always jumpable, never a cliff.
+    const groundTop = new Array(cols);
+    let top = clampTop(g.floor);
+    let run = 0;
     for (let x = 0; x < cols; x++) {
-      if (x % 4 === 0) h += Math.round((rnd() - 0.5) * g.roughness);
-      h = Math.max(9, Math.min(rows - 3, h));
-      groundH[x] = h;
-      const isPit = pitCols.has(x) && x > 8 && x < cols - 8;
-      if (!isPit) {
-        for (let y = h; y < rows; y++) set(x, y, T.SOLID);
-      } else {
-        // spikes at the bottom of some pits
-        if (rnd() < 0.5) set(x, rows - 1, T.SPIKE);
+      if (run <= 0) {
+        run = 6 + Math.floor(rnd() * 8);                 // long flat run of 6-13 cols
+        const r = rnd();
+        top = clampTop(top + (r < 0.35 ? -1 : r < 0.7 ? 1 : 0)); // step at most +-1
       }
+      groundTop[x] = top; run--;
+    }
+    // flat safe zones so spawn + exit are always clean, level ground
+    for (let x = 0; x <= 6; x++) groundTop[x] = groundTop[6];
+    for (let x = cols - 8; x < cols; x++) groundTop[x] = groundTop[cols - 9];
+
+    // pass 2: carve jumpable pits (width 2-3) ONLY where both lips are already
+    // level (<=1 tile apart). No height edits -> no manufactured cliffs.
+    // Carve pits ONLY inside genuinely flat stretches: require 3 equal-height
+    // columns of clean approach + landing on each side, so there are never
+    // adjacent tall walls or 1-wide ledges to fall into.
+    const isPit = new Array(cols).fill(false);
+    let placed = 0, guard = 0;
+    while (placed < g.pits && guard++ < g.pits * 30) {
+      const w = 2 + Math.floor(rnd() * 2);               // 2..3 tiles
+      const sx = 16 + Math.floor(rnd() * (cols - 40));
+      const h0 = groundTop[sx - 1];
+      let ok = sx > 10 && sx + w < cols - 10;
+      for (let k = -3; k < w + 3 && ok; k++) {
+        const c = sx + k;
+        if (c < 0 || c >= cols || isPit[c]) { ok = false; break; }
+        if ((k < 0 || k >= w) && groundTop[c] !== h0) ok = false; // lips must be flat & equal
+      }
+      if (!ok) continue;
+      for (let k = 0; k < w; k++) isPit[sx + k] = true;
+      placed++;
     }
 
-    // ceiling in interior worlds
-    if (world.type === 'platform' && worldIndex >= 1) {
-      for (let x = 0; x < cols; x++) {
-        const ch = 1 + (rnd() < 0.3 ? 1 : 0);
-        for (let y = 0; y < ch; y++) set(x, y, T.SOLID);
-      }
+    // build ground tiles
+    for (let x = 0; x < cols; x++) {
+      if (isPit[x]) { if (rnd() < 0.5) set(x, rows - 1, T.SPIKE); continue; }
+      for (let y = groundTop[x]; y < rows; y++) set(x, y, T.SOLID);
     }
 
-    // floating platforms
+    const surfaceTop = (x) => {
+      x = Math.max(0, Math.min(cols - 1, x));
+      return isPit[x] ? rows : groundTop[x];
+    };
+
+    // floating platforms: 1 tall, kept well above the ground path (never block
+    // ground traversal) — they're optional upper routes / gem shelves
+    // one-way floating platforms — stored SEPARATELY (not solid tiles). The
+    // player lands on top but jumps/moves pass through, so they never bonk a
+    // ground jump (which used to drop the player into pits).
     const platforms = [];
     for (let p = 0; p < g.plats; p++) {
       const px = 10 + Math.floor(rnd() * (cols - 20));
-      const py = 5 + Math.floor(rnd() * (rows - 10));
-      const pw = 2 + Math.floor(rnd() * 5);
-      // avoid overwriting the ground column tops
-      let ok = true;
-      for (let w = 0; w < pw; w++) if (py >= groundH[Math.min(cols - 1, px + w)] - 1) ok = false;
-      if (!ok) continue;
-      for (let w = 0; w < pw; w++) set(px + w, py, T.SOLID);
+      const pw = 2 + Math.floor(rnd() * 4);
+      let gTop = rows;
+      for (let w = 0; w < pw; w++) gTop = Math.min(gTop, groundTop[Math.min(cols - 1, px + w)]);
+      const hiLimit = ceilH + 2;
+      const loLimit = gTop - 3;                          // reachable, above the ground
+      if (loLimit <= hiLimit) continue;
+      const py = hiLimit + Math.floor(rnd() * (loLimit - hiLimit + 1));
       platforms.push({ x: px, y: py, w: pw });
     }
 
     // ---- entities ---------------------------------------------------------
     const entities = [];
     const surfaceY = (x) => {
-      for (let y = 0; y < rows; y++) if (get(x, y) === T.SOLID) return y;
-      return rows - 1;
+      for (let y = ceilH; y < rows; y++) if (get(x, y) === T.SOLID) return y;
+      return rows;
     };
     const addOnSurface = (x, type) => {
-      const sy = surfaceY(x);
-      entities.push({ type, tx: x, ty: sy - 1 });
+      let cx = Math.max(1, Math.min(cols - 2, x)), tries = 0;
+      while (isPit[cx] && tries++ < 8) cx = (cx + 1) % cols;
+      const sy = surfaceY(cx);
+      if (sy >= rows) return;
+      entities.push({ type, tx: cx, ty: sy - 1 });
     };
 
     // enemies on platforms + ground
@@ -255,8 +294,15 @@
     for (let p = 0; p < puCount; p++) {
       const x = 16 + Math.floor(rnd() * (cols - 30));
       const kind = powers[Math.floor(rnd() * powers.length)];
-      const sy = surfaceY(x);
-      entities.push({ type: kind, tx: x, ty: sy - 1 });
+      addOnSurface(x, kind);
+    }
+
+    // reward reaching platforms with a gem or weapon orb on top
+    for (const pl of platforms) {
+      if (rnd() < 0.6) {
+        const gx = pl.x + Math.floor(pl.w / 2);
+        entities.push({ type: rnd() < 0.3 ? 'pu_weapon' : 'gem', tx: gx, ty: pl.y - 1 });
+      }
     }
 
     // player start (left) and exit (right)
@@ -270,7 +316,7 @@
     return {
       world: world.id, worldIndex, stageIndex, name: world.name, type: world.type,
       theme: world.theme, palette: world.palette, boss: !!g.boss,
-      cols, rows, tile: TILE, tiles, entities, playerStart, exit,
+      cols, rows, tile: TILE, tiles, platforms, entities, playerStart, exit,
       timeLimit: 300,
     };
   }
@@ -279,6 +325,6 @@
     TILE, VIEW_W, VIEW_H, FPS, DT, PHYS, T, SOLID_TILES,
     WEAPONS, WEAPON_ORDER, ENEMIES, WORLDS,
     mulberry32, buildLevel,
-    VERSION: '0.1.0',
+    VERSION: '0.2.0',
   };
 });

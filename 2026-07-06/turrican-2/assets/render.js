@@ -173,6 +173,24 @@
       bx.fillRect(sx, sy + TILE - 2, TILE, 2);
     }
 
+    // ---- one-way platforms -----------------------------------------------
+    function drawPlatforms(cam) {
+      if (!level.platforms) return;
+      for (const pl of level.platforms) {
+        const sx = Math.round(pl.x * TILE - cam.x), sy = Math.round(pl.y * TILE - cam.y);
+        const w = pl.w * TILE;
+        if (sx + w < 0 || sx > VIEW_W) continue;
+        // slim metallic ledge with a lit top edge + support struts
+        bx.fillStyle = pal.blockEdge; bx.fillRect(sx, sy + 3, w, 6);
+        bx.fillStyle = pal.block; bx.fillRect(sx, sy + 2, w, 4);
+        bx.fillStyle = pal.blockTop; bx.fillRect(sx, sy, w, 3);
+        bx.fillStyle = 'rgba(255,255,255,0.18)'; bx.fillRect(sx, sy, w, 1);
+        bx.fillStyle = pal.accent; bx.globalAlpha = 0.5;
+        for (let i = 4; i < w; i += 10) bx.fillRect(sx + i, sy + 8, 2, 2);
+        bx.globalAlpha = 1;
+      }
+    }
+
     // ---- exit -------------------------------------------------------------
     function drawExit(cam) {
       const e = level.exit; const sx = e.x - cam.x, sy = e.y - cam.y;
@@ -445,6 +463,7 @@
 
       drawBackground(cam);
       drawTiles(cam);
+      drawPlatforms(cam);
       drawExit(cam);
       drawPickups(s.pickups, cam);
       drawEnemies(s.enemies, cam, s.freeze);

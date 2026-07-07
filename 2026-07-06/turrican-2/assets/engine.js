@@ -319,6 +319,7 @@
 
   function hurtPlayer(s, dmg) {
     const p = s.player;
+    if (s.godMode) return;
     if (p.invuln > 0) return;
     p.energy -= dmg;
     p.invuln = 1.1;
@@ -329,6 +330,7 @@
 
   function killPlayer(s) {
     const p = s.player;
+    if (s.godMode) return;
     if (p.dead) return;
     p.dead = true; p.deathTimer = 1.4; p.lives -= 1;
     emit(s, 'explosion', p.x + p.w / 2, p.y + p.h / 2);
@@ -434,16 +436,41 @@
     if (!input.jump && p.vy < 0) p.vy *= Math.pow(PHYS.jumpCut, dt * 60 > 1 ? 1 : 1); // light cut
     if (input.jumpReleased && p.vy < 0) p.vy *= PHYS.jumpCut;
 
+    // auto step-up: smoothly mount ledges up to ~1 tile without jumping (feel
+    // + reliable traversal). A 2-tile wall stays a real wall (must jump).
+    if (p.onGround && move !== 0 && !p.morph) {
+      const aheadX = move > 0 ? p.x + p.w + 2 : p.x - 2;
+      const footY = p.y + p.h - 3;
+      const ledge = solidAtPx(s.level, aheadX, footY);
+      const oneTall = !solidAtPx(s.level, aheadX, footY - TILE - 2);
+      const headroom = !solidAtPx(s.level, p.x + 2, p.y - TILE - 2) &&
+                       !solidAtPx(s.level, p.x + p.w - 2, p.y - TILE - 2);
+      if (ledge && oneTall && headroom) p.y -= (TILE + 2);
+    }
+
     // gravity
     p.vy += PHYS.gravity * dt;
     p.vy = Math.min(p.vy, PHYS.maxFall);
 
     // integrate + collide
+    const prevBottom = p.y + p.h;
     const info = moveBox(s.level, p, p.vx * dt, p.vy * dt);
     if (info.hitX) p.vx = 0;
     if (info.hitY) { if (info.onGround) p.onGround = true; p.vy = 0; }
     p.onGround = info.onGround || (p.onGround && !info.hitY && p.vy >= 0 && onFloor(s.level, p));
     if (!info.onGround) p.onGround = onFloor(s.level, p);
+
+    // one-way platforms: land on top only while descending; jumps/moves pass
+    // through from below (so they never bonk a jump). Drop through with Down.
+    if (!p.morph && p.vy >= 0 && !input.down && s.level.platforms) {
+      const feet = p.y + p.h;
+      for (const pl of s.level.platforms) {
+        const plx = pl.x * TILE, ply = pl.y * TILE, plw = pl.w * TILE;
+        if (p.x + p.w > plx + 2 && p.x < plx + plw - 2 && prevBottom <= ply + 3 && feet >= ply) {
+          p.y = ply - p.h; p.vy = 0; p.onGround = true; break;
+        }
+      }
+    }
 
     // spikes / fall out
     if (spikeOverlap(s.level, p) && p.invuln <= 0) hurtPlayer(s, 30);
