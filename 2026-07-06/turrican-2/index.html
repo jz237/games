@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Turrican II — The Final Fight · Enhanced Tribute</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23140d33'/%3E%3Cpath d='M16 5l8 4v7c0 6-4 9-8 11-4-2-8-5-8-11V9z' fill='%232559c8' stroke='%236cf3ff' stroke-width='1.5'/%3E%3Crect x='13' y='12' width='7' height='4' fill='%238be9ff'/%3E%3C/svg%3E">
+<meta name="description" content="A faithful, enhanced-graphics browser tribute to Turrican II: The Final Fight — run, gun, morph and explore.">
+<style>
+  :root { --bg:#05030f; --panel:#0c0820; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:radial-gradient(120% 120% at 50% 0%, #170d33 0%, #05030f 70%); color:#dfe4ff;
+    font-family:"Trebuchet MS", system-ui, sans-serif; overflow:hidden; -webkit-tap-highlight-color:transparent; }
+  #wrap { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+  #stage { position:relative; width:min(100vw, 177.78vh); aspect-ratio:16/9; box-shadow:0 0 60px rgba(120,80,255,0.25), 0 0 0 1px rgba(140,120,255,0.2);
+    border-radius:8px; overflow:hidden; background:#000; }
+  canvas#game { position:absolute; inset:0; width:100%; height:100%; display:block; image-rendering:auto; }
+  /* touch controls */
+  #touch { display:none; position:absolute; inset:0; pointer-events:none; }
+  #touch .pad { position:absolute; bottom:14px; display:flex; gap:10px; pointer-events:auto; }
+  #touch .left { left:14px; }
+  #touch .right { right:14px; flex-wrap:wrap; width:150px; justify-content:flex-end; }
+  #touch button { width:52px; height:52px; border-radius:50%; border:1px solid rgba(160,180,255,0.4);
+    background:rgba(20,20,50,0.5); color:#cfe0ff; font-size:18px; font-weight:bold; backdrop-filter:blur(4px); }
+  #touch button.down { background:rgba(120,160,255,0.5); }
+  #hint { position:absolute; top:8px; left:50%; transform:translateX(-50%); font-size:11px; color:rgba(200,210,255,0.5);
+    pointer-events:none; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="game" width="960" height="540"></canvas>
+    <div id="touch">
+      <div class="pad left">
+        <button id="t-left">◀</button>
+        <button id="t-up">▲</button>
+        <button id="t-down">▼</button>
+        <button id="t-right">▶</button>
+      </div>
+      <div class="pad right">
+        <button id="t-fire">✦</button>
+        <button id="t-jump">⭡</button>
+        <button id="t-morph">◉</button>
+        <button id="t-switch">⟳</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="assets/data.js"></script>
+<script src="assets/engine.js"></script>
+<script src="assets/render.js"></script>
+<script src="assets/audio.js"></script>
+<script src="assets/input.js"></script>
+<script src="assets/game.js"></script>
+</body>
+</html>
