@@ -6,15 +6,17 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Missile Command (GPT)</title>
+  <title>Missile Command Vector</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/brand.svg">
   <style>
     :root {
       color-scheme: dark;
-      --hud-bg: rgba(6, 12, 24, 0.58);
-      --hud-border: rgba(255,255,255,0.14);
+      --panel: #1b2a4a;
+      --panel-deep: #16233f;
+      --line: #0c1526;
       --text: #eef7ff;
-      --accent: #7fe7ff;
-      --hot: #ffbf66;
+      --accent: #33c6f2;
+      --gold: #ffd23f;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -39,22 +41,22 @@
       height: 100vh;
       touch-action: none;
       cursor: crosshair;
-      background: radial-gradient(circle at 50% 120%, #0d1322 0%, #04070e 55%, #02040a 100%);
+      background: linear-gradient(180deg, #37a2f2 0%, #8fd3ff 78%, #4db35e 78%, #4db35e 100%);
     }
     .hud {
       position: fixed;
       left: 8px;
-      right: 8px;
+      right: 58px;
       top: env(safe-area-inset-top, 0px);
       margin-top: 8px;
-      padding: 6px 10px;
-      border: 1px solid var(--hud-border);
-      background: linear-gradient(180deg, rgba(18,26,42,0.72), var(--hud-bg));
+      padding: 7px 12px;
+      border: 2px solid var(--line);
+      background: var(--panel-deep);
       color: var(--text);
       font-size: clamp(11px, 1.8vw, 14px);
-      letter-spacing: 0.04em;
-      border-radius: 999px;
-      backdrop-filter: blur(10px);
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      border-radius: 12px;
       display: flex;
       gap: 10px;
       justify-content: space-between;
@@ -62,28 +64,64 @@
       white-space: nowrap;
       z-index: 5;
       pointer-events: none;
-      box-shadow: 0 8px 30px rgba(0,0,0,0.28);
+      box-shadow: 0 3px 0 rgba(0,0,0,0.25);
     }
-    .hud span { opacity: 0.94; }
+    .hud span { opacity: 0.97; }
+    @media (max-width: 480px) {
+      .hud { white-space: normal; font-size: 11px; line-height: 1.35; letter-spacing: 0.02em; }
+    }
+    #pauseBtn {
+      position: fixed;
+      top: calc(env(safe-area-inset-top, 0px) + 8px);
+      right: 8px;
+      width: 42px;
+      height: 38px;
+      padding: 0;
+      display: none;
+      z-index: 6;
+      font-size: 15px;
+      line-height: 1;
+      border-radius: 12px;
+      background: var(--panel-deep);
+      color: var(--accent);
+      border: 2px solid var(--line);
+      box-shadow: 0 3px 0 rgba(0,0,0,0.25);
+    }
     .overlay {
       position: fixed;
       inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: radial-gradient(circle at 50% 30%, rgba(40,70,110,0.28), rgba(2,4,10,0.88));
+      background: rgba(9, 16, 32, 0.72);
       z-index: 10;
       padding: 18px;
+      overflow-y: auto;
     }
+    #hsOverlay, #optOverlay { overflow-y: auto; padding: 18px; }
     .panel {
       width: min(92vw, 620px);
-      border-radius: 22px;
-      border: 1px solid rgba(180,220,255,0.18);
-      background: linear-gradient(180deg, rgba(13,22,36,0.94), rgba(6,12,22,0.90));
+      margin: auto;
+      max-height: none;
+      border-radius: 18px;
+      border: 3px solid var(--line);
+      background: var(--panel);
       color: var(--text);
-      box-shadow: 0 24px 80px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.04);
+      box-shadow: 0 8px 0 rgba(0,0,0,0.30);
       padding: 22px 22px 18px;
     }
+    .backlink {
+      display: inline-block;
+      margin-bottom: 8px;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      opacity: 0.85;
+    }
+    .backlink:hover { opacity: 1; text-decoration: underline; }
     h1 {
       margin: 0 0 10px;
       font-size: clamp(24px, 5vw, 40px);
@@ -107,49 +145,94 @@
       margin-top: 16px;
     }
     button {
-      border: 0;
-      border-radius: 999px;
-      padding: 12px 18px;
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      padding: 11px 18px;
       touch-action: manipulation;
       cursor: pointer;
-      color: #04111c;
-      background: linear-gradient(180deg, #9ff6ff, #57d4ff);
+      color: #0b1730;
+      background: var(--accent);
       font-weight: 800;
       letter-spacing: 0.06em;
       text-transform: uppercase;
-      box-shadow: 0 14px 34px rgba(87,212,255,0.34);
+      box-shadow: 0 4px 0 var(--line);
     }
+    button:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--line); }
     .ghost {
-      background: rgba(255,255,255,0.06);
+      background: #2a3f66;
       color: var(--text);
-      box-shadow: none;
-      border: 1px solid rgba(255,255,255,0.12);
+      border: 2px solid var(--line);
+      box-shadow: 0 4px 0 var(--line);
     }
     .hidden { display: none; }
     .tiny { font-size: 12px; opacity: 0.75; }
+    /* Lighter scrim on the title screen so the auto-demo shows through */
+    #tutorialOverlay { background: rgba(9, 16, 32, 0.38); }
+    #demoBadge {
+      position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+      z-index: 11; pointer-events: none; display: none;
+      padding: 6px 14px; border-radius: 10px;
+      background: var(--panel-deep); color: #9fefff;
+      font: 800 13px Inter, system-ui, sans-serif; letter-spacing: 0.09em;
+      border: 2px solid var(--accent);
+      box-shadow: 0 3px 0 rgba(0,0,0,0.3);
+    }
+    .optrow {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; padding: 9px 2px; border-top: 2px solid rgba(12,21,38,0.6);
+    }
+    .optrow:first-child { border-top: 0; }
+    .optrow .lab { font-size: 14px; letter-spacing: 0.02em; font-weight: 700; }
+    .optrow .sub { font-size: 11px; opacity: 0.6; }
+    .seg { display: inline-flex; border-radius: 10px; overflow: hidden; border: 2px solid var(--line); }
+    .seg button {
+      border: 0; border-radius: 0; padding: 7px 13px; font-size: 12px; letter-spacing: 0.04em;
+      text-transform: uppercase; font-weight: 700; cursor: pointer;
+      background: #2a3f66; color: var(--text); box-shadow: none;
+    }
+    .seg button:active { transform: none; }
+    .seg button.on { background: var(--accent); color: #0b1730; }
+    /* Compact layout for short viewports (phone landscape) and narrow portrait phones */
+    @media (max-height: 600px), (max-width: 420px) {
+      .panel { padding: 12px 16px 12px; }
+      h1 { font-size: 22px; margin-bottom: 6px; }
+      .panel p { margin: 6px 0; font-size: 13px; }
+      .panel ul { margin: 6px 0 10px; font-size: 12px; line-height: 1.35; }
+      .row { margin-top: 8px; }
+      button { padding: 9px 14px; font-size: 12px; }
+      .backlink { margin-bottom: 4px; }
+    }
+    @media (max-width: 700px), (max-height: 600px) {
+      .hide-sm { display: none; }
+    }
   </style>
 </head>
 <body>  <canvas id="game"></canvas>
   <div class="hud" id="hud">
     <span id="hudLine">W1 | Score 0 | Cities 6 | Ammo 15/15/15 | Combo x1 | Bonus @ 12000</span>
   </div>
+  <button id="pauseBtn" aria-label="Pause">⏸</button>
+  <div id="demoBadge">▶ AUTO-DEMO</div>
 
   <div class="overlay" id="tutorialOverlay">
     <div class="panel">
-      <h1>Missile Command</h1>
+      <a class="backlink" href="/games/missile-command/">◂ all editions</a>
+      <h1>Missile Command Vector</h1>
       <p>Defend the skyline. Tap or click anywhere in the sky and the nearest armed base will launch a counter-missile to that point.</p>
       <ul>
         <li>Three bases. Each starts with <strong>15 missiles</strong>.</li>
         <li>Destroy enemy warheads with blast waves and trigger chain reactions for bigger scores.</li>
         <li><strong>MIRVs</strong> arrive on wave 6, <strong>satellites</strong> on wave 8, and <strong>smart bombs</strong> on wave 10.</li>
-        <li>Satellites take <strong>2 hits</strong>. Lose all cities and it’s over.</li>
+        <li>Every <strong>5th wave</strong> is a <strong>★ special wave</strong> — MIRV storms, satellite swarms, smart-bomb blitzes, meteor showers — with a big clear bonus.</li>
+        <li>Satellites take <strong>2 hits</strong>. Lose all cities and it’s over. Scores post to the <strong>global leaderboard</strong>.</li>
         <li>Mobile: rapid multi-touch barrages. Desktop: precise crosshair clicks — <strong>Enter</strong> starts, <strong>P</strong>/<strong>Esc</strong> pauses.</li>
       </ul>
       <div class="row">
-        <span class="tiny">First touch/click also unlocks sound. · v1.0.1</span>
+        <span class="tiny"><span class="hide-sm">Watch the auto-demo behind this panel. </span>First touch/click unlocks sound &amp; music. · v1.3.0</span>
         <div class="row" style="margin-top:0">
           <button class="ghost" id="dismissTutorial">Practice</button>
           <button id="startButton">Start Defense</button>
+          <button class="ghost" id="titleOptBtn">Options</button>
           <button class="ghost" id="titleHsBtn" style="color:#ffd700;border-color:#ffd700">High Scores</button>
         </div>
       </div>
@@ -178,6 +261,16 @@
       <button id="hsOverlayClose">Back</button>
     </div>
   </div>
+  <div id="optOverlay" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.85);align-items:center;justify-content:center">
+    <div class="panel" style="max-width:440px;width:92%">
+      <h1 style="color:#7fe7ff">OPTIONS</h1>
+      <div id="optRows" style="margin:0.6em 0 0.2em"></div>
+      <div class="row" style="justify-content:space-between">
+        <span class="tiny">Settings are saved on this device.</span>
+        <button id="optClose">Done</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     (() => {
@@ -191,6 +284,9 @@
       const startButton = document.getElementById('startButton');
       const dismissTutorial = document.getElementById('dismissTutorial');
       const restartButton = document.getElementById('restartButton');
+      const demoBadge = document.getElementById('demoBadge');
+      const pauseBtn = document.getElementById('pauseBtn');
+      function setDemoBadge(on) { demoBadge.style.display = on ? 'block' : 'none'; }
 
       // ===== HIGH SCORES & GLOBAL LEADERBOARD =====
       const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/gpt-missile-command';
@@ -210,14 +306,20 @@
         try { const res = await fetch(SCORES_API); if (res.ok) { globalScoresCache = await res.json(); globalScoresCacheTime = now; return globalScoresCache; } } catch(e) {}
         return globalScoresCache || [];
       }
+      // Escape any server-returned string before it touches innerHTML.
+      const escHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       async function submitGlobalScore(initials, score, extras) {
-        try { await fetch(SCORES_API, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({initials, score, ...extras}) }); globalScoresCache = null; } catch(e) {}
+        // Clamp outgoing payload: sanitized initials, finite ints, sane caps.
+        const ini = String(initials).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'AAA';
+        const sc = Math.max(0, Math.min(9999999, Math.floor(Number(score) || 0)));
+        const wv = Math.max(1, Math.min(999, Math.floor(Number(extras?.wave) || 1)));
+        try { await fetch(SCORES_API, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({initials: ini, score: sc, wave: wv}) }); globalScoresCache = null; } catch(e) {}
       }
       function renderHSBoth(container) {
         const list = loadHS();
         let html = '<div style="color:#5be4ff;font-size:0.9em;letter-spacing:0.1em;margin-bottom:0.3em">🏠 LOCAL HIGH SCORES</div>';
         if (!list.length) html += '<div style="color:rgba(255,255,255,0.4);padding:0.2em 0">No scores yet</div>';
-        else list.forEach((e,i) => { html += `<div style="color:#aef;padding:0.15em 0">${String(i+1).padStart(2,' ')}. ${e.initials}  ${String(e.score).padStart(8,' ')}  W${e.wave}</div>`; });
+        else list.forEach((e,i) => { html += `<div style="color:#aef;padding:0.15em 0">${String(i+1).padStart(2,' ')}. ${escHtml(e.initials)}  ${String(Math.floor(Number(e.score)||0)).padStart(8,' ')}  W${Math.floor(Number(e.wave)||1)}</div>`; });
         html += '<div style="color:#ffd700;font-size:0.9em;letter-spacing:0.1em;margin:0.6em 0 0.3em">🌐 GLOBAL HIGH SCORES</div>';
         html += '<div id="globalInner_' + container.id + '"><div style="color:rgba(255,255,255,0.4)">Loading...</div></div>';
         container.innerHTML = html;
@@ -225,7 +327,7 @@
           const el = document.getElementById('globalInner_' + container.id);
           if (!el) return;
           if (!gs || !gs.length) { el.innerHTML = '<div style="color:rgba(255,255,255,0.4)">No scores yet</div>'; return; }
-          el.innerHTML = gs.slice(0,20).map((e,i) => `<div style="color:#ffe082;padding:0.15em 0">${String(i+1).padStart(2,' ')}. ${e.initials}  ${String(e.score).padStart(8,' ')}  W${e.wave||'?'}</div>`).join('');
+          el.innerHTML = gs.slice(0,20).map((e,i) => `<div style="color:#ffe082;padding:0.15em 0">${String(i+1).padStart(2,' ')}. ${escHtml(e.initials)}  ${String(Math.floor(Number(e.score)||0)).padStart(8,' ')}  W${escHtml(e.wave||'?')}</div>`).join('');
         });
       }
       let pendingInitials = [0,0,0];
@@ -243,14 +345,16 @@
           const dn = document.createElement('button');
           dn.textContent = '▼'; dn.style.cssText = 'background:transparent;border:none;color:#ffd700;font-size:1.2rem;cursor:pointer';
           const idx = i;
+          // addTouchAndClick preventDefaults touchend, so each tap steps exactly once
+          // (no synthetic click double-advance).
           function upH(e) { e.stopPropagation(); pendingInitials[idx] = (pendingInitials[idx]+1)%26; letter.textContent = String.fromCharCode(65+pendingInitials[idx]); }
           function dnH(e) { e.stopPropagation(); pendingInitials[idx] = (pendingInitials[idx]+25)%26; letter.textContent = String.fromCharCode(65+pendingInitials[idx]); }
-          up.addEventListener('click', upH); up.addEventListener('touchend', upH);
-          dn.addEventListener('click', dnH); dn.addEventListener('touchend', dnH);
+          addTouchAndClick(up, upH);
+          addTouchAndClick(dn, dnH);
           col.appendChild(up); col.appendChild(letter); col.appendChild(dn); row.appendChild(col);
         }
         const ok = document.createElement('button');
-        ok.textContent = 'OK'; ok.style.cssText = 'margin-left:0.8em;padding:0.3em 1em;cursor:pointer;font-size:1rem;background:#ffd700;border:none;color:#000;border-radius:4px';
+        ok.textContent = 'OK'; ok.style.cssText = 'margin-left:0.8em;padding:0.3em 1em;cursor:pointer;font-size:1rem;background:#ffd700;color:#000';
         function submitH(e) {
           e.stopPropagation();
           const ini = pendingInitials.map(i => String.fromCharCode(65+i)).join('');
@@ -259,35 +363,106 @@
           document.getElementById('hsInitialsSection').classList.add('hidden');
           renderHSBoth(scoreContainer);
         }
-        ok.addEventListener('click', submitH); ok.addEventListener('touchend', submitH);
+        addTouchAndClick(ok, submitH);
         row.appendChild(ok);
       }
 
+      // ===== SETTINGS (persisted per device) =====
+      const SETTINGS_KEY = 'gpt_missile_command_settings';
+      const DEFAULT_SETTINGS = { sound: true, difficulty: 'normal', shake: true, effects: true, demo: true };
+      function loadSettings() {
+        try { return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}); }
+        catch (e) { return { ...DEFAULT_SETTINGS }; }
+      }
+      function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) {} }
+      let settings = loadSettings();
+      const AUDIO_V = '3';       // bump to cache-bust audio files
+      const MUSIC_VOL = 0.5;     // background music level when sound is on
+      const DIFF = {
+        easy:   { speed: 0.82, budget: 0.82, ammo: 18, label: 'Easy' },
+        normal: { speed: 1.0,  budget: 1.0,  ammo: 15, label: 'Normal' },
+        hard:   { speed: 1.24, budget: 1.30, ammo: 12, label: 'Hard' },
+      };
+      function diff() { return DIFF[settings.difficulty] || DIFF.normal; }
+      function maxAmmo() { return Math.round(diff().ammo * (state.practice ? 1.5 : 1)); }
+      function applyAudioSettings() { if (audio && audio.setVolume) audio.setVolume(settings.sound ? 0.32 : 0); }
+
+      // ===== SPECIAL WAVES — every 5th wave is a themed challenge with a big bonus =====
+      const SPECIALS = [
+        { key: 'mirv',   name: 'MIRV STORM',       color: '#ffb347' },
+        { key: 'swarm',  name: 'SATELLITE SWARM',  color: '#8ff2ff' },
+        { key: 'blitz',  name: 'SMART-BOMB BLITZ', color: '#ff7db4' },
+        { key: 'meteor', name: 'METEOR SHOWER',    color: '#ff6b52' },
+      ];
+      function specialFor(wave) { return (wave % 5 === 0) ? SPECIALS[(wave / 5 - 1) % SPECIALS.length] : null; }
+
       const TAU = Math.PI * 2;
+      // Flat-vector palettes — one per wave (cycled). Saturated, confident,
+      // poster-flat fills: vivid skies, bright stepped greens, colourful (not
+      // near-black) three-tone skylines. windowsLit picks lit vs punched slots.
       const SKYSETS = [
-        {
-          top: '#3a2a66', mid: '#f06d62', low: '#ffb96c', glow: 'rgba(255,152,96,0.22)', aurora: ['rgba(118,255,244,0.12)','rgba(161,126,255,0.11)']
+        { // DAY — vivid azure, poster greens, cobalt/plum/teal skyline
+          skyTop: '#37a2f2', skyBot: '#8fd3ff', night: false, windowsLit: false,
+          sun: '#ffd23f', sunRing: '#ff9f1c', sunRay: '#ffb830',
+          cloud: '#ffffff', cloudShade: '#d8ecfa',
+          hillBack: '#86dd8d', hillFront: '#6bcf74', ground: '#4db35e', groundLine: '#3b9a4c',
+          building: '#35549e', buildingDark: '#463f96', building3: '#2c6f9e', window: '#ffd36b', windowSlot: '#22376b'
         },
-        {
-          top: '#08111f', mid: '#11284d', low: '#183e6d', glow: 'rgba(88,148,255,0.12)', aurora: ['rgba(94,255,215,0.13)','rgba(119,171,255,0.10)']
+        { // SUNSET — bold coral/amber, plum skyline with lit windows
+          skyTop: '#ff6b4a', skyBot: '#ffc655', night: false, windowsLit: true,
+          sun: '#ff4f2e', sunRing: '#ffe08a', sunRay: '#ff9f1c',
+          cloud: '#ffddc2', cloudShade: '#f6bb92',
+          hillBack: '#67b381', hillFront: '#4d9a68', ground: '#3a8354', groundLine: '#2d6a43',
+          building: '#5a3a78', buildingDark: '#46295e', building3: '#31456e', window: '#ffd36b', windowSlot: '#2c1e42'
         },
-        {
-          top: '#132243', mid: '#67408e', low: '#ff8c6b', glow: 'rgba(255,188,118,0.16)', aurora: ['rgba(138,255,177,0.11)','rgba(81,220,255,0.10)']
+        { // NIGHT — deep indigo, crisp stars, saturated dark-cobalt skyline
+          skyTop: '#171e56', skyBot: '#2f3f86', night: true, windowsLit: true,
+          sun: '#f2f6ff', sunRing: '#8fa8e8', sunRay: '#c7d8ff',
+          cloud: '#3b4f8f', cloudShade: '#2e3f78',
+          hillBack: '#2f7a4a', hillFront: '#256540', ground: '#1d5233', groundLine: '#164227',
+          building: '#232e6b', buildingDark: '#1a2354', building3: '#173d5c', window: '#ffdf8a', windowSlot: '#131b42'
         },
-        {
-          top: '#1a254b', mid: '#385b93', low: '#ffcf8a', glow: 'rgba(255,220,155,0.18)', aurora: ['rgba(89,255,209,0.11)','rgba(196,142,255,0.09)']
+        { // DAWN / TEAL — bright minty morning
+          skyTop: '#2f8fb0', skyBot: '#a5e8d4', night: false, windowsLit: false,
+          sun: '#ffcf4d', sunRing: '#ff8a5c', sunRay: '#ffb069',
+          cloud: '#f4fffa', cloudShade: '#cdeee0',
+          hillBack: '#7fd9a8', hillFront: '#5cc389', ground: '#46a86f', groundLine: '#378a59',
+          building: '#226a80', buildingDark: '#3d4d86', building3: '#1f5c66', window: '#ffcf6b', windowSlot: '#153e4c'
         }
       ];
+      // Quick 0.5s palette crossfade between waves instead of a hard snap.
+      function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+      function mixHex(a, b, t) {
+        const A = hexRgb(a), B = hexRgb(b);
+        return `rgb(${Math.round(A[0] + (B[0] - A[0]) * t)},${Math.round(A[1] + (B[1] - A[1]) * t)},${Math.round(A[2] + (B[2] - A[2]) * t)})`;
+      }
+      let palCache = null, palCacheT = -1, palCacheIdx = -1;
+      function currentSet() {
+        const idx = state.palIdx;
+        if (state.palT >= 1 || !state.palFrom) return SKYSETS[idx];
+        if (palCacheT === state.palT && palCacheIdx === idx) return palCache;
+        const from = state.palFrom, to = SKYSETS[idx], t = state.palT, o = {};
+        for (const k in to) {
+          const tv = to[k], fv = from[k];
+          o[k] = (typeof tv === 'string' && tv[0] === '#' && typeof fv === 'string' && fv[0] === '#') ? mixHex(fv, tv, t) : tv;
+        }
+        palCache = o; palCacheT = t; palCacheIdx = idx;
+        return o;
+      }
 
       const state = {
         width: 0,
         height: 0,
-        hudSafeTop: 0,
         groundY: 0,
         cityBandY: 0,
         playing: false,
         gameOver: false,
+        gameOverAt: 0,
         paused: false,
+        practice: false,
+        palIdx: 0,
+        palFrom: null,
+        palT: 1,
         wave: 1,
         score: 0,
         nextBonusScore: 12000,
@@ -302,10 +477,17 @@
         waveCooldown: 0,
         spawnBudget: 0,
         spawnedThisWave: 0,
-        enemyClearedBonusTimer: 0,
+        attract: false,
+        special: null,
+        speedMul: 1,
+        aiCool: 0,
+        bannerTimer: 0,
+        bannerText: '',
+        bannerColor: '#9be6ff',
         stars: [],
         skyline: [],
-        mountains: [],
+        clouds: [],
+        hills: [],
         bases: [],
         cities: [],
         enemyMissiles: [],
@@ -315,29 +497,37 @@
         smoke: [],
         satellites: [],
         embers: [],
-        fires: [],
         prompts: [],
         destroyedThisWave: 0,
         audioUnlocked: false,
-        pendingTouches: new Map(),
-        atmosphereSeed: Math.random() * 9999,
       };
 
       let audio = null;
 
       function rand(min, max) { return min + Math.random() * (max - min); }
       function randi(min, max) { return Math.floor(rand(min, max + 1)); }
+      // Seeded PRNG so resize() regenerates the SAME backdrop layout at the new size.
+      function mulberry32(a) {
+        return function() {
+          a |= 0; a = a + 0x6D2B79F5 | 0;
+          let t = Math.imul(a ^ a >>> 15, 1 | a);
+          t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+          return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+      }
+      let backdropSeed = (Math.random() * 2 ** 31) | 0;
       function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
       function lerp(a, b, t) { return a + (b - a) * t; }
       function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
 
       function initAudio() {
+        if (state.attract) return; // stay silent during the title auto-demo
         if (audio) return;
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return;
         const ac = new AC();
         const master = ac.createGain();
-        master.gain.value = 0.32;
+        master.gain.value = settings.sound ? 0.32 : 0;
         master.connect(ac.destination);
 
         const hum = ac.createGain();
@@ -406,13 +596,36 @@
         audio = {
           ac,
           hum,
+          sfx: {},          // ElevenLabs sample buffers (loaded async below)
+          music: null,      // HTMLAudioElement background loop
+          setVolume(v) {
+            master.gain.cancelScheduledValues(ac.currentTime); master.gain.value = v;
+            if (audio.music) audio.music.volume = settings.sound ? MUSIC_VOL : 0;
+          },
+          playSample(key, gain = 0.9) {
+            const buf = audio.sfx[key];
+            if (!buf) return false;
+            const src = ac.createBufferSource(); src.buffer = buf;
+            const g = ac.createGain(); g.gain.value = gain;
+            src.connect(g); g.connect(master); src.start();
+            return true;
+          },
+          startMusic() {
+            if (!audio.music) {
+              const a = new Audio('audio/music.mp3?v=' + AUDIO_V);
+              a.loop = true; a.preload = 'auto';
+              audio.music = a;
+            }
+            audio.music.volume = settings.sound ? MUSIC_VOL : 0;
+            audio.music.play().catch(() => {});
+          },
           resume: async () => {
             if (ac.state !== 'running') await ac.resume();
             state.audioUnlocked = true;
-            hum.gain.cancelScheduledValues(ac.currentTime);
-            hum.gain.linearRampToValueAtTime(0.06, ac.currentTime + 1.4);
+            audio.startMusic();
           },
           missileLaunch() {
+            if (audio.playSample('launch', 0.42)) return;
             tone('triangle', 460, 140, 0.22, 0.045, 0.003, 0.09);
             burstNoise({ duration: 0.15, gain: 0.035, filter: 'highpass', freq: 900, decay: 0.08 });
           },
@@ -420,23 +633,37 @@
             tone('sawtooth', 220 + speed * 30, 120 + speed * 18, 0.35, 0.012, 0.003, 0.18);
           },
           explosion(power = 1) {
+            if (audio.playSample('explode', 0.7 * power)) return;
             burstNoise({ duration: 0.45, gain: 0.22 * power, filter: 'bandpass', freq: 280, q: 0.7, decay: 0.32 });
             burstNoise({ duration: 0.18, gain: 0.12 * power, filter: 'highpass', freq: 900, q: 0.8, decay: 0.14 });
             tone('sine', 95 * power + 10, 32, 0.42, 0.08 * power, 0.002, 0.24);
           },
           cityCrash() {
+            if (audio.playSample('citylost', 0.9)) return;
             burstNoise({ duration: 0.5, gain: 0.28, filter: 'lowpass', freq: 420, q: 0.6, decay: 0.45 });
             tone('square', 120, 50, 0.24, 0.03, 0.001, 0.2);
           },
           waveClear() {
+            if (audio.playSample('waveclear', 0.7)) return;
             tone('triangle', 392, 392, 0.11, 0.04);
             setTimeout(() => tone('triangle', 523, 523, 0.12, 0.04), 120);
             setTimeout(() => tone('triangle', 659, 659, 0.15, 0.045), 240);
           },
+          special(key) { if (audio.playSample('special_' + key, 0.75)) return; tone('square', 320, 180, 0.5, 0.05, 0.005, 0.1); },
+          uiClick() { tone('square', 720, 680, 0.05, 0.035, 0.001, 0.03); }, // crisp procedural blip
           combo(level) {
             tone('sine', 420 + level * 45, 320 + level * 30, 0.12, 0.03 + Math.min(0.02, level * 0.002));
           }
         };
+
+        // Load ElevenLabs SFX into decoded buffers (fire-and-forget)
+        ['launch', 'explode', 'citylost', 'waveclear', 'special_mirv', 'special_swarm', 'special_blitz', 'special_meteor'].forEach(key => {
+          fetch('audio/' + key + '.mp3?v=' + AUDIO_V)
+            .then(r => r.arrayBuffer())
+            .then(b => ac.decodeAudioData(b))
+            .then(buf => { audio.sfx[key] = buf; })
+            .catch(() => {});
+        });
       }
 
       function resize() {
@@ -453,9 +680,10 @@
         canvas.style.width = vw + 'px';
         canvas.style.height = vh + 'px';
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        compactHud = vw <= 520;
+        lastHudText = ''; // force HUD re-render in the new format
         state.width = w;
         state.height = h;
-        state.hudSafeTop = 16 + (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-top)')) || 0);
         state.groundY = state.height * 0.83;
         state.cityBandY = state.groundY + 8;
         generateBackdrop();
@@ -463,44 +691,85 @@
       }
 
       function generateBackdrop() {
+        // Seeded: the same seed regenerates the same layout at any size, so a
+        // mid-game resize/URL-bar toggle doesn't re-randomize the world.
+        // Each section gets its own stream so size-dependent counts (stars,
+        // clouds) can't shift the sequence for the sections after them.
+        const streams = [0x9e37, 0x79b9, 0x85eb, 0xca6b].map(k => mulberry32(backdropSeed ^ k));
+        let sr = streams[0];
+        const srand = (a, b) => a + sr() * (b - a);
+        const srandi = (a, b) => Math.floor(srand(a, b + 1));
         state.stars = [];
         state.skyline = [];
-        state.mountains = [];
+        state.clouds = [];
+        state.hills = [];
         const isMobile = state.width < 768;
-        const starCount = Math.floor(state.width * state.height / (isMobile ? 14000 : 7000));
+        // Flat stars (only rendered on night palettes)
+        const starCount = Math.floor(state.width * state.height / (isMobile ? 16000 : 9000));
         for (let i = 0; i < starCount; i++) {
-          state.stars.push({ x: Math.random() * state.width, y: Math.random() * state.groundY * 0.72, r: Math.random() * 1.8 + 0.2, a: rand(0.35, 0.95), tw: rand(0.5, 1.8) });
+          state.stars.push({ x: sr() * state.width, y: sr() * state.groundY * 0.6, r: sr() < 0.85 ? 1.4 : 2.4, a: srand(0.5, 1) });
         }
-        for (let i = 0; i < 7; i++) {
-          state.mountains.push({
-            x: i / 6 * state.width,
-            h: rand(state.height * 0.09, state.height * 0.18),
-            w: rand(state.width * 0.13, state.width * 0.24)
-          });
+        // Puffy flat clouds drifting slowly
+        sr = streams[1];
+        const cloudCount = isMobile ? 4 : 6;
+        for (let i = 0; i < cloudCount; i++) {
+          const cx = srand(0, state.width);
+          const cy = srand(state.height * 0.06, state.groundY * 0.5);
+          const s = srand(0.7, 1.5);
+          const puffs = [];
+          const n = srandi(4, 6);
+          let px = 0;
+          for (let p = 0; p < n; p++) {
+            puffs.push({ ox: px, oy: srand(-6, 4) * s, r: srand(16, 30) * s });
+            px += srand(16, 26) * s;
+          }
+          state.clouds.push({ x: cx, y: cy, w: px, speed: srand(3, 9) * (sr() < 0.5 ? 1 : -1), puffs });
+        }
+        // Two layers of rolling hills (polyline sampled by sine)
+        sr = streams[2];
+        for (let layer = 0; layer < 2; layer++) {
+          const baseY = state.groundY - (layer === 0 ? state.height * 0.05 : state.height * 0.015);
+          const amp = layer === 0 ? state.height * 0.05 : state.height * 0.03;
+          const freq = layer === 0 ? 0.6 : 1.0;
+          const phase = srand(0, TAU);
+          const pts = [];
+          const step = Math.max(24, state.width / 26);
+          for (let x = -step; x <= state.width + step; x += step) {
+            pts.push({ x, y: baseY + Math.sin(x / state.width * TAU * freq + phase) * amp + Math.cos(x / state.width * TAU * freq * 2.3 + phase) * amp * 0.35 });
+          }
+          state.hills.push({ pts, back: layer === 0 });
         }
 
+        sr = streams[3];
         let x = 0;
         while (x < state.width) {
-          const w = rand(20, 62);
-          const h = rand(state.height * 0.06, state.height * 0.18);
+          const w = srand(24, 64);
+          const h = srand(state.height * 0.05, state.height * 0.16);
+          const roof = sr();
+          const tone = srandi(0, 2);
+          // Windows use a per-building sub-stream: their (height-dependent)
+          // draw count can't shift the sequence for later buildings.
+          const wr = mulberry32((sr() * 2 ** 31) | 0);
+          const wrand = (a, b) => a + wr() * (b - a);
           const windows = [];
-          const cols = Math.max(1, Math.floor(w / rand(5, 8)));
-          const rows = Math.max(2, Math.floor(h / rand(8, 12)));
+          const cols = Math.max(1, Math.floor(w / wrand(9, 12)));
+          const rows = Math.max(2, Math.floor(h / wrand(12, 16)));
+          const cellW = (w - 8) / cols, cellH = (h - 12) / rows;
           for (let cx = 0; cx < cols; cx++) {
             for (let cy = 0; cy < rows; cy++) {
-              if (Math.random() < 0.78) {
+              if (wr() < 0.9) {
                 windows.push({
-                  x: 4 + cx * ((w - 8) / cols),
-                  y: 5 + cy * ((h - 10) / rows),
-                  w: rand(2, 4),
-                  h: rand(3, 6),
-                  lit: Math.random() < 0.45
+                  x: 5 + cx * cellW,
+                  y: 7 + cy * cellH,
+                  w: Math.min(4, cellW * 0.55),
+                  h: Math.min(6, cellH * 0.55),
+                  lit: wr() < 0.55
                 });
               }
             }
           }
-          state.skyline.push({ x, w, h, roof: Math.random(), windows, tone: rand(0.1, 0.32) });
-          x += w + rand(4, 12);
+          state.skyline.push({ x, w, h, roof, windows, tone });
+          x += w + srand(6, 14);
         }
       }
 
@@ -508,7 +777,7 @@
         const baseY = state.groundY;
         const positions = [0.16, 0.5, 0.84].map(p => p * state.width);
         if (!state.bases.length) {
-          state.bases = positions.map((x, i) => ({ id: i, x, y: baseY, ammo: 15, alive: true, flash: 0 }));
+          state.bases = positions.map((x, i) => ({ id: i, x, y: baseY, ammo: maxAmmo(), alive: true, flash: 0 }));
         } else {
           state.bases.forEach((b, i) => { b.x = positions[i]; b.y = baseY; });
         }
@@ -522,27 +791,24 @@
       }
 
       function createCity(x, slot) {
-        const silhouette = Array.from({ length: randi(4, 7) }, (_, i) => ({
-          ox: i * rand(8, 12),
-          w: rand(8, 16),
-          h: rand(18, 42)
-        }));
-        // Pre-generate stable window patterns (avoid per-frame randomization)
-        for (const s of silhouette) {
-          const cols = Math.max(1, Math.floor(s.w / 6));
-          const rows = Math.max(2, Math.floor(s.h / 8));
-          s.windows = [];
+        // A small cluster of flat towers with stable (non-flickering) windows.
+        const n = randi(3, 5);
+        const silhouette = [];
+        let ox = 0;
+        for (let i = 0; i < n; i++) {
+          const w = rand(14, 20);
+          const h = rand(24, 46);
+          const windows = [];
+          const cols = Math.max(1, Math.floor(w / 7));
+          const rows = Math.max(2, Math.floor(h / 10));
+          const cw = (w - 6) / cols, ch = (h - 10) / rows;
           for (let cx = 0; cx < cols; cx++) {
             for (let ry = 0; ry < rows; ry++) {
-              if (Math.random() < 0.5) {
-                s.windows.push({
-                  ox: cx * 4,
-                  oy: 4 + ry * 6,
-                  color: `rgba(255, ${170 + Math.floor(Math.random() * 50)}, 105, ${0.35 + Math.random() * 0.35})`
-                });
-              }
+              if (Math.random() < 0.7) windows.push({ ox: 4 + cx * cw, oy: 6 + ry * ch, lit: Math.random() < 0.7 });
             }
           }
+          silhouette.push({ ox, w, h, roof: Math.random(), windows });
+          ox += w + rand(1, 3);
         }
         return {
           slot,
@@ -553,14 +819,22 @@
           crumble: 0,
           fire: 0,
           smoke: 0,
+          totalW: ox,
           silhouette
         };
       }
 
-      function resetGame() {
+      function resetGame(practice = false) {
         state.playing = true;
         state.gameOver = false;
+        state.gameOverAt = 0;
         state.paused = false;
+        state.practice = practice;
+        state.palIdx = 0;
+        state.palFrom = null;
+        state.palT = 1;
+        backdropSeed = (Math.random() * 2 ** 31) | 0;
+        generateBackdrop();
         state.wave = 1;
         state.score = 0;
         state.nextBonusScore = 12000;
@@ -574,7 +848,11 @@
         state.waveIntroTimer = 3.4;
         state.waveCooldown = 0;
         state.spawnedThisWave = 0;
-        state.enemyClearedBonusTimer = 0;
+        state.attract = false;
+        state.special = null;
+        state.speedMul = 1;
+        state.aiCool = 0;
+        state.bannerTimer = 0;
         state.enemyMissiles.length = 0;
         state.playerMissiles.length = 0;
         state.explosions.length = 0;
@@ -582,16 +860,60 @@
         state.smoke.length = 0;
         state.satellites.length = 0;
         state.embers.length = 0;
-        state.fires.length = 0;
         state.prompts.length = 0;
         state.destroyedThisWave = 0;
         state.bases = [];
         state.cities = [];
         layoutDefenses();
-        state.bases.forEach(base => { base.ammo = 15; base.alive = true; base.flash = 0; });
+        state.bases.forEach(base => { base.ammo = maxAmmo(); base.alive = true; base.flash = 0; });
         state.cities.forEach((city, i) => Object.assign(city, createCity(city.x, i)));
         prepareWave(); // set up wave 1 spawn budget
         gameOverOverlay.classList.add('hidden');
+      }
+
+      // Auto-playing demo shown behind the title screen.
+      function startAttract() {
+        if (!settings.demo) return;
+        resetGame();          // fresh game...
+        state.attract = true; // ...driven by the AI, silent, self-restarting
+        state.aiCool = 0.5;
+        setDemoBadge(true);
+      }
+
+      function stopAttract() {
+        if (!state.attract) return;
+        state.attract = false;
+        state.playing = false;
+        setDemoBadge(false);
+        state.enemyMissiles.length = 0; state.playerMissiles.length = 0;
+        state.satellites.length = 0; state.explosions.length = 0;
+        state.particles.length = 0; state.smoke.length = 0; state.embers.length = 0;
+      }
+
+      // Simple defensive AI: intercept the most urgent threat, keep bases stocked.
+      function aiDefend(dt) {
+        state.bases.forEach(b => { if (b.alive) b.ammo = maxAmmo(); });
+        state.aiCool -= dt;
+        if (state.aiCool > 0 || state.playerMissiles.length > 7) return;
+        state.aiCool = rand(0.16, 0.3);
+        let best = null, bestScore = -Infinity;
+        for (const m of state.enemyMissiles) {
+          const s = m.y + (m.type === 'smart' ? 40 : 0); // closer to ground = more urgent
+          if (s > bestScore) { bestScore = s; best = m; }
+        }
+        for (const sat of state.satellites) {
+          const s = sat.y * 0.5 + 30;
+          if (s > bestScore) { bestScore = s; best = sat; }
+        }
+        if (!best) return;
+        let lx = best.x, ly = best.y;
+        if (best.tx !== undefined) { // lead a little along its heading
+          const dx = best.tx - best.sx, dy = best.ty - best.sy, d = Math.hypot(dx, dy) || 1;
+          lx = best.x + dx / d * 42; ly = best.y + dy / d * 42;
+        }
+        ly = clamp(ly, state.groundY * 0.3, state.groundY - 60);
+        if (state.playerMissiles.some(pm => dist(pm.tx, pm.ty, lx, ly) < 55)) return; // already handled
+        launchDefense(lx, ly);
       }
 
       function nearestBase(targetX) {
@@ -628,7 +950,17 @@
       }
 
       function queuePrompt(text, x, y, color = '#ffffff') {
-        state.prompts.push({ text, x, y, color, life: 1.2 });
+        // Stagger overlapping chain popups so they don't overprint each other.
+        let guard = 0, adjusted = true;
+        while (adjusted && guard++ < 12) {
+          adjusted = false;
+          for (const q of state.prompts) {
+            if (Math.abs(q.x - x) < 40 && Math.abs(q.y - y) < 16) { y = q.y - 18; adjusted = true; }
+          }
+        }
+        // age:0 is required — updateParticles ages/removes prompts by age>=life.
+        state.prompts.push({ text, x, y, color, life: 1.2, age: 0 });
+        if (state.prompts.length > 60) state.prompts.splice(0, state.prompts.length - 60);
       }
 
       function createExplosion(x, y, radius, kind = 'defense', source = null) {
@@ -644,7 +976,8 @@
         });
 
         const isMobile = state.width < 768;
-        const burst = isMobile ? (radius < 40 ? 6 : radius < 70 ? 10 : 14) : (radius < 40 ? 12 : radius < 70 ? 18 : 24);
+        let burst = isMobile ? (radius < 40 ? 6 : radius < 70 ? 10 : 14) : (radius < 40 ? 12 : radius < 70 ? 18 : 24);
+        if (!settings.effects) burst = Math.ceil(burst * 0.45);
         for (let i = 0; i < burst; i++) {
           const a = Math.random() * TAU;
           const sp = rand(40, radius * 2.2);
@@ -663,7 +996,7 @@
 
         state.flash = Math.min(1, state.flash + radius / 140);
         state.tint = Math.min(1, state.tint + radius / 220);
-        state.shake = Math.min(18, state.shake + radius / 9);
+        if (settings.shake) state.shake = Math.min(18, state.shake + radius / 9);
         initAudio();
         audio?.explosion(Math.min(1.25, radius / 70));
       }
@@ -694,8 +1027,8 @@
             deadCity.smoke = 0;
             queuePrompt('BONUS CITY', deadCity.x, deadCity.y - 36, '#8fffc9');
           } else {
-            const weakestBase = state.bases.find(b => b.alive && b.ammo < 15);
-            if (weakestBase) weakestBase.ammo = Math.min(15, weakestBase.ammo + 6);
+            const weakestBase = state.bases.find(b => b.alive && b.ammo < maxAmmo());
+            if (weakestBase) weakestBase.ammo = Math.min(maxAmmo(), weakestBase.ammo + 6);
             queuePrompt('BONUS SUPPLY', state.width * 0.5, 70, '#8fffc9');
           }
           state.nextBonusScore += 12000;
@@ -743,13 +1076,17 @@
         return targets.length ? targets[randi(0, targets.length - 1)] : { x: rand(state.width * 0.08, state.width * 0.92), y: state.groundY };
       }
 
-      function spawnEnemyMissile(type = 'normal', fromX = null, fromY = null, forcedTarget = null) {
+      function spawnEnemyMissile(type = 'normal', fromX = null, fromY = null, forcedTarget = null, forceSplit = false) {
         const t = forcedTarget || randomTarget();
         const sx = fromX ?? rand(state.width * 0.05, state.width * 0.95);
         const sy = fromY ?? rand(20, state.height * 0.14);
-        const speedBase = 38 + state.wave * 3.6;
+        const speedBase = (38 + state.wave * 3.6) * diff().speed * state.speedMul * (state.practice ? 0.85 : 1);
+        const willSplit = (forceSplit && type === 'normal') ||
+          (state.wave >= 6 && type === 'normal' && Math.random() < Math.min(0.6, 0.14 + state.wave * 0.03));
         const missile = {
           type,
+          // METEOR SHOWER warheads get distinct flat-fireball art
+          skin: (state.special && state.special.key === 'meteor' && type === 'normal') ? 'meteor' : null,
           x: sx,
           y: sy,
           sx, sy,
@@ -759,9 +1096,8 @@
           age: 0,
           trail: [],
           smoked: 0,
-          splitAt: (state.wave >= 6 && type === 'normal' && Math.random() < Math.min(0.6, 0.14 + state.wave * 0.03)) ? rand(0.35, 0.6) : null,
+          splitY: willSplit ? rand(0.34, 0.5) * state.groundY : null,
           splitDone: false,
-          hp: type === 'smart' ? 1 : 1,
           smart: type === 'smart',
           dead: false
         };
@@ -778,7 +1114,7 @@
           type: 'satellite',
           x: fromLeft ? -60 : state.width + 60,
           y: rand(state.height * 0.13, state.height * 0.32),
-          vx: fromLeft ? rand(34, 60) : -rand(34, 60),
+          vx: (fromLeft ? rand(34, 60) : -rand(34, 60)) * (state.practice ? 0.85 : 1),
           wobble: rand(0, 10),
           hp: 2,
           cool: rand(1.8, 3.4),
@@ -788,38 +1124,84 @@
         });
       }
 
+      function showBanner(text, color) { state.bannerText = text; state.bannerColor = color; state.bannerTimer = 2.6; }
+
       function prepareWave() {
         state.spawnedThisWave = 0;
-        state.spawnBudget = Math.round(10 + state.wave * 1.75 + Math.floor(state.wave * 0.3));
+        // 0.5s palette crossfade into this wave's sky set
+        const palIdx = (state.wave - 1) % SKYSETS.length;
+        if (palIdx !== state.palIdx) {
+          state.palFrom = currentSet();
+          state.palIdx = palIdx;
+          state.palT = 0;
+        }
+        const special = specialFor(state.wave);
+        state.special = special;
+        state.speedMul = (special && special.key === 'meteor') ? 1.28 : 1;
+        let budget = 10 + state.wave * 1.75 + Math.floor(state.wave * 0.3);
+        budget *= diff().budget;
+        if (special) budget *= 1.3;
+        state.spawnBudget = Math.round(budget);
         state.destroyedThisWave = 0;
-        state.waveIntroTimer = 2.6;
+        state.waveIntroTimer = special ? 3.0 : 2.6;
+        // Arcade-faithful: destroyed batteries are REBUILT (alive + full ammo)
+        // at the start of every wave. Cities stay dead.
+        let rebuilt = 0;
         state.bases.forEach(base => {
-          if (base.alive) base.ammo = Math.min(15, base.ammo + 6);
+          if (!base.alive) { base.alive = true; base.ammo = maxAmmo(); base.flash = 0; rebuilt++; }
+          else base.ammo = Math.min(maxAmmo(), base.ammo + (special ? 9 : 6));
         });
-        queuePrompt('WAVE ' + state.wave, state.width / 2, 100, '#9be6ff');
+        if (rebuilt > 0 && state.wave > 1) queuePrompt('BATTERIES REBUILT', state.width / 2, 140, '#8fffc9');
+        if (special) {
+          showBanner('★ ' + special.name + ' ★', special.color);
+          audio?.special(special.key);
+          if (special.key === 'swarm') { spawnSatellite(); spawnSatellite(); }
+        } else {
+          queuePrompt('WAVE ' + state.wave, state.width / 2, 100, '#9be6ff');
+        }
       }
 
       function updateWave(dt) {
+        if (state.bannerTimer > 0) state.bannerTimer -= dt;
         if (state.waveIntroTimer > 0) {
           state.waveIntroTimer -= dt;
           return;
         }
         if (state.spawnedThisWave < state.spawnBudget) {
-          const rate = Math.max(0.24, 1.1 - state.wave * 0.045);
+          const sp = state.special;
+          let rate = Math.max(0.2, 1.1 - state.wave * 0.045);
+          if (sp && sp.key === 'meteor') rate *= 0.55;
+          else if (sp && sp.key === 'swarm') rate *= 0.85;
           state.waveCooldown -= dt;
           if (state.waveCooldown <= 0) {
             state.spawnedThisWave++;
-            const smart = state.wave >= 10 && Math.random() < Math.min(0.35, 0.08 + state.wave * 0.015);
-            spawnEnemyMissile(smart ? 'smart' : 'normal');
-            if (state.wave >= 8 && Math.random() < Math.min(0.22, 0.06 + state.wave * 0.01) && state.satellites.length < 2) spawnSatellite();
+            if (sp) {
+              if (sp.key === 'mirv') spawnEnemyMissile('normal', null, null, null, true);
+              else if (sp.key === 'blitz') spawnEnemyMissile(Math.random() < 0.7 ? 'smart' : 'normal');
+              else if (sp.key === 'swarm') {
+                spawnEnemyMissile('normal');
+                if (state.satellites.length < 4 && Math.random() < 0.45) spawnSatellite();
+              } else spawnEnemyMissile('normal'); // meteor
+            } else {
+              const smart = state.wave >= 10 && Math.random() < Math.min(0.35, 0.08 + state.wave * 0.015);
+              spawnEnemyMissile(smart ? 'smart' : 'normal');
+              if (state.wave >= 8 && Math.random() < Math.min(0.22, 0.06 + state.wave * 0.01) && state.satellites.length < 2) spawnSatellite();
+            }
             state.waveCooldown = rate + rand(0.05, 0.32);
           }
         } else if (!state.enemyMissiles.length && !state.satellites.length && !state.explosions.length) {
-          state.score += 400 + state.cities.filter(c => c.alive).length * 100 + state.bases.reduce((n, b) => n + b.ammo * 6, 0);
+          let clearBonus = 400 + state.cities.filter(c => c.alive).length * 100 + state.bases.reduce((n, b) => n + b.ammo * 6, 0);
+          if (state.special) {
+            const specialBonus = 1500 + state.wave * 120;
+            clearBonus += specialBonus;
+            queuePrompt('SPECIAL CLEARED  +' + specialBonus.toLocaleString(), state.width / 2, 150, state.special.color);
+          }
+          state.score += clearBonus;
           grantBonusCityIfNeeded();
           queuePrompt('WAVE CLEAR', state.width / 2, 120, '#b8ffb3');
           audio?.waveClear();
           state.wave++;
+          if (state.attract && state.wave > 15) { startAttract(); return; } // cycle the demo
           prepareWave();
         }
       }
@@ -869,31 +1251,37 @@
           m.trail.push({ x: m.x, y: m.y, s: rand(1.5, 4) });
           if (m.trail.length > 30) m.trail.shift();
 
-          if (m.splitAt && !m.splitDone && m.age > m.splitAt) {
-            m.splitDone = true;
+          // MIRV split: partway down, the warhead FORKS into fanning children.
+          // No blast here — a blast at this point would instantly detonate the
+          // children spawned at the same spot (the "blew up immediately" bug).
+          if (m.splitY && !m.splitDone && m.y >= m.splitY) {
             const kids = randi(2, 3);
             for (let k = 0; k < kids; k++) {
               const target = randomTarget();
               state.enemyMissiles.push({
                 type: 'mirvChild',
-                x: m.x,
+                x: m.x + rand(-4, 4),
                 y: m.y,
                 sx: m.x,
                 sy: m.y,
-                tx: target.x + rand(-12, 12),
+                tx: target.x + rand(-30, 30),
                 ty: target.y,
-                speed: m.speed * rand(1.12, 1.28),
+                speed: m.speed * rand(1.05, 1.2),
                 age: 0,
                 trail: [],
                 smoked: 0,
-                splitAt: null,
+                splitY: null,
                 splitDone: true,
-                hp: 1,
                 smart: false,
                 dead: false
               });
             }
-            createExplosion(m.x, m.y, 28, 'small', m);
+            // harmless spark puff to sell the split (particles don't collide)
+            for (let p = 0; p < 6; p++) {
+              state.particles.push({ x: m.x, y: m.y, vx: rand(-34, 34), vy: rand(-12, 26), life: rand(0.3, 0.55), age: 0, size: rand(1.5, 3), hue: rand(20, 45), glow: true, gravity: 40 });
+            }
+            state.enemyMissiles.splice(i, 1); // parent becomes its children
+            continue;
           }
 
           if (d <= step) {
@@ -906,7 +1294,8 @@
           m.y += (m.ty - m.y) / d * step;
 
           m.smoked -= dt;
-          if (m.smoked <= 0 && state.smoke.length < 200) {
+          // Meteors skip the white smoke — their dotted ember trail is the look.
+          if (m.smoked <= 0 && !m.skin && state.smoke.length < 200) {
             m.smoked = 0.04;
             state.smoke.push({ x: m.x, y: m.y, vx: rand(-10, 10), vy: rand(-8, 6), age: 0, life: rand(0.45, 0.9), size: rand(5, 11), dark: 0.5 + Math.random() * 0.5 });
           }
@@ -936,8 +1325,11 @@
             const target = randomTarget();
             spawnEnemyMissile(Math.random() < 0.3 && state.wave >= 10 ? 'smart' : 'normal', s.x, s.y + 6, target);
           }
-          if ((s.vx > 0 && s.x > state.width + 80) || (s.vx < 0 && s.x < -80)) state.satellites.splice(i, 1);
-          if (s.dead) state.satellites.splice(i, 1);
+          // Single splice guard: off-screen AND dead in the same frame must not
+          // remove two entries.
+          if (s.dead || (s.vx > 0 && s.x > state.width + 80) || (s.vx < 0 && s.x < -80)) {
+            state.satellites.splice(i, 1);
+          }
         }
       }
 
@@ -998,7 +1390,6 @@
         if (state.particles.length > 400) state.particles.splice(0, state.particles.length - 400);
         if (state.smoke.length > 200) state.smoke.splice(0, state.smoke.length - 200);
         if (state.embers.length > 150) state.embers.splice(0, state.embers.length - 150);
-        if (state.fires.length > 30) state.fires.splice(0, state.fires.length - 30);
 
         for (const city of state.cities) {
           if (!city.alive) {
@@ -1015,11 +1406,8 @@
       }
 
       function updatePrompts(dt) {
-        for (let i = state.prompts.length - 1; i >= 0; i--) {
-          const p = state.prompts[i];
-          p.y -= 24 * dt;
-          if (p.life <= 0) state.prompts.splice(i, 1);
-        }
+        // Drift upward; removal happens in updateParticles (age >= life).
+        for (const p of state.prompts) p.y -= 24 * dt;
       }
 
       function updateCombos(dt) {
@@ -1036,16 +1424,22 @@
       function checkGameOver() {
         const aliveCities = state.cities.some(c => c.alive);
         if (!aliveCities && !state.gameOver) {
+          if (state.attract) { startAttract(); return; } // loop the demo instead of ending
           state.gameOver = true;
           state.playing = false;
-          const survived = Math.max(1, state.wave - 1);
+          state.gameOverAt = performance.now(); // arms the tap-to-restart delay
+          // Convention: "Reached Wave N" is the wave you died in, and the same
+          // N goes to local + global records.
+          const reached = state.wave;
           gameOverTitle.textContent = 'All Cities Lost';
-          gameOverText.textContent = `Final Score ${state.score.toLocaleString()} · Reached Wave ${survived}`;
+          gameOverText.textContent = state.practice
+            ? `Practice run · Score ${state.score.toLocaleString()} · Reached Wave ${reached} · not recorded`
+            : `Final Score ${state.score.toLocaleString()} · Reached Wave ${reached}`;
           const hsInit = document.getElementById('hsInitialsSection');
           const hsDisp = document.getElementById('hsScoresDisplay');
-          if (isHighScore(state.score) && state.score > 0) {
+          if (!state.practice && isHighScore(state.score) && state.score > 0) {
             hsInit.classList.remove('hidden');
-            buildHSInitials(state.score, state.wave, hsDisp);
+            buildHSInitials(state.score, reached, hsDisp);
           } else {
             hsInit.classList.add('hidden');
             renderHSBoth(hsDisp);
@@ -1056,6 +1450,7 @@
 
       function update(dt) {
         state.time += dt;
+        if (state.palT < 1) state.palT = Math.min(1, state.palT + dt * 2); // 0.5s palette crossfade
         if (!state.playing || state.gameOver) {
           updateParticles(dt);
           updatePrompts(dt);
@@ -1063,6 +1458,7 @@
           return;
         }
         updateWave(dt);
+        if (state.attract) aiDefend(dt);
         updatePlayerMissiles(dt);
         updateEnemyMissiles(dt);
         updateSatellites(dt);
@@ -1074,271 +1470,432 @@
       }
 
       function drawSky() {
-        const set = SKYSETS[(state.wave - 1) % SKYSETS.length];
-        const g = ctx.createLinearGradient(0, 0, 0, state.groundY + 80);
-        g.addColorStop(0, set.top);
-        g.addColorStop(0.48, set.mid);
-        g.addColorStop(1, set.low);
+        const set = currentSet();
+        // Flat two-band sky (gentle vertical gradient reads as flat colour fields).
+        // Overscan by 60px so the screen-shake translate never exposes the canvas
+        // CSS background at the edges.
+        const g = ctx.createLinearGradient(0, 0, 0, state.groundY);
+        g.addColorStop(0, set.skyTop);
+        g.addColorStop(1, set.skyBot);
         ctx.fillStyle = g;
-        ctx.fillRect(0, 0, state.width, state.height);
+        ctx.fillRect(-60, -60, state.width + 120, state.groundY + 62);
 
-        const horizon = ctx.createRadialGradient(state.width * 0.5, state.groundY + 10, 30, state.width * 0.5, state.groundY + 10, state.width * 0.7);
-        horizon.addColorStop(0, set.glow);
-        horizon.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = horizon;
-        ctx.fillRect(0, 0, state.width, state.height);
-
-        for (const star of state.stars) {
-          const tw = 0.65 + 0.35 * Math.sin(state.time * star.tw + star.x * 0.05);
-          ctx.globalAlpha = star.a * tw;
+        // Stars on night palettes
+        if (set.night) {
           ctx.fillStyle = '#ffffff';
-          ctx.fillRect(star.x, star.y, star.r, star.r);
-        }
-        ctx.globalAlpha = 1;
-
-        for (let i = 0; i < 2; i++) {
-          ctx.save();
-          ctx.globalCompositeOperation = 'screen';
-          ctx.globalAlpha = 0.75;
-          ctx.beginPath();
-          for (let x = -50; x <= state.width + 50; x += 24) {
-            const y = state.height * (0.14 + i * 0.08) + Math.sin(x * 0.008 + state.time * 0.2 + i * 0.7) * 18 + Math.cos(x * 0.013 + i * 2.8) * 10;
-            if (x === -50) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
+          for (const star of state.stars) {
+            ctx.globalAlpha = star.a;
+            ctx.fillRect(star.x, star.y, star.r, star.r);
           }
-          ctx.lineTo(state.width + 50, state.height * 0.05);
-          ctx.lineTo(-50, state.height * 0.05);
-          ctx.closePath();
-          const ag = ctx.createLinearGradient(0, state.height * 0.05, 0, state.height * 0.28);
-          ag.addColorStop(0, 'rgba(0,0,0,0)');
-          ag.addColorStop(0.3, set.aurora[i]);
-          ag.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx.fillStyle = ag;
-          ctx.fill();
-          ctx.restore();
+          ctx.globalAlpha = 1;
         }
 
-        ctx.fillStyle = 'rgba(9,12,20,0.38)';
-        for (const m of state.mountains) {
+        // Sun / moon — bold flat disc with crisp ring; day suns get flat
+        // triangular ray spikes (same star-polygon language as the blasts).
+        const sunX = state.width * 0.8, sunY = state.groundY * 0.26, sunR = Math.max(26, state.width * 0.035);
+        if (!set.night) {
+          ctx.fillStyle = set.sunRay;
+          starPath(sunX, sunY, 12, sunR * 1.72, sunR * 1.26, state.time * 0.04);
+          ctx.fill();
+        }
+        ctx.fillStyle = set.sunRing;
+        ctx.beginPath(); ctx.arc(sunX, sunY, sunR * 1.2, 0, TAU); ctx.fill();
+        ctx.fillStyle = set.sun;
+        ctx.beginPath(); ctx.arc(sunX, sunY, sunR * 0.96, 0, TAU); ctx.fill();
+        if (set.night) { // carve a crescent for the moon + a crisp offset halo
+          ctx.fillStyle = set.skyTop;
+          ctx.beginPath(); ctx.arc(sunX + sunR * 0.5, sunY - sunR * 0.35, sunR * 1.08, 0, TAU); ctx.fill();
+          ctx.strokeStyle = set.sunRing;
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(sunX, sunY, sunR * 1.55, 0, TAU); ctx.stroke();
+        }
+
+        // Clouds (flat puffs with a subtle shade band)
+        for (const c of state.clouds) {
+          const cx = ((c.x + state.time * c.speed) % (state.width + c.w + 120) + state.width + c.w + 120) % (state.width + c.w + 120) - c.w - 60;
+          ctx.fillStyle = set.cloudShade;
+          for (const p of c.puffs) { ctx.beginPath(); ctx.arc(cx + p.ox, c.y + p.oy + p.r * 0.28, p.r, 0, TAU); ctx.fill(); }
+          ctx.fillStyle = set.cloud;
+          for (const p of c.puffs) { ctx.beginPath(); ctx.arc(cx + p.ox, c.y + p.oy, p.r, 0, TAU); ctx.fill(); }
+        }
+
+        // Back hill layer (distant, slightly lighter)
+        const back = state.hills.find(h => h.back);
+        if (back) {
+          ctx.fillStyle = set.hillBack;
           ctx.beginPath();
-          ctx.moveTo(m.x - m.w, state.groundY);
-          ctx.lineTo(m.x, state.groundY - m.h);
-          ctx.lineTo(m.x + m.w, state.groundY);
+          ctx.moveTo(-40, state.height);
+          for (const pt of back.pts) ctx.lineTo(pt.x, pt.y);
+          ctx.lineTo(state.width + 40, state.height);
           ctx.closePath();
           ctx.fill();
         }
       }
 
       function drawSkyline() {
+        const set = currentSet();
+        const tones = [set.building, set.buildingDark, set.building3];
         for (const b of state.skyline) {
-          ctx.fillStyle = `rgba(8, 14, 24, ${0.72 + b.tone})`;
+          ctx.fillStyle = tones[b.tone % 3];
           ctx.fillRect(b.x, state.groundY - b.h, b.w, b.h);
-          if (b.roof > 0.66) ctx.fillRect(b.x + b.w * 0.25, state.groundY - b.h - 10, b.w * 0.18, 10);
-          else if (b.roof > 0.33) {
-            ctx.beginPath();
-            ctx.moveTo(b.x + b.w * 0.14, state.groundY - b.h);
-            ctx.lineTo(b.x + b.w * 0.5, state.groundY - b.h - 12);
-            ctx.lineTo(b.x + b.w * 0.86, state.groundY - b.h);
-            ctx.closePath();
-            ctx.fill();
+          if (b.roof > 0.7) { // antenna/box roof
+            ctx.fillRect(b.x + b.w * 0.42, state.groundY - b.h - 12, Math.max(2, b.w * 0.1), 12);
+          } else if (b.roof > 0.4) { // stepped parapet
+            ctx.fillRect(b.x + b.w * 0.2, state.groundY - b.h - 6, b.w * 0.6, 6);
           }
+          // Day palettes: crisp punched-slot windows. Night/sunset: lit yellow.
           for (const w of b.windows) {
-            ctx.fillStyle = w.lit ? `rgba(255, ${190 + Math.floor(Math.random() * 20)}, 110, ${0.3 + Math.random() * 0.3})` : 'rgba(25,35,55,0.35)';
+            ctx.fillStyle = set.windowsLit
+              ? (w.lit ? set.window : set.windowSlot)
+              : set.windowSlot;
             ctx.fillRect(b.x + w.x, state.groundY - b.h + w.y, w.w, w.h);
           }
         }
       }
 
+      // Flat friendly palette for the cities you defend — warm white + teal
+      // towers with coral roofs and the same dark keyline the rockets use.
+      const CITY_BODY = '#f4f7ff', CITY_BODY2 = '#57c9d5', CITY_ROOF = '#ff5f4d', CITY_WIN = '#33507e';
+      const KEYLINE = 'rgba(22,26,38,0.6)';
+
+      function drawGround() {
+        const set = currentSet();
+        // Solid green ground band (overscanned for screen-shake)
+        ctx.fillStyle = set.ground;
+        ctx.fillRect(-60, state.groundY, state.width + 120, state.height - state.groundY + 60);
+        // A rolling front hill for depth (slightly lighter)
+        ctx.fillStyle = set.hillFront;
+        const front = state.hills.find(h => !h.back);
+        if (front) {
+          ctx.beginPath();
+          ctx.moveTo(-60, state.height + 60);
+          for (const pt of front.pts) ctx.lineTo(pt.x, pt.y);
+          ctx.lineTo(state.width + 60, state.height + 60);
+          ctx.closePath();
+          ctx.fill();
+        }
+        // Ground seam highlight
+        ctx.fillStyle = set.groundLine;
+        ctx.fillRect(-60, state.groundY, state.width + 120, 3);
+      }
+
+      function groundShadow(x, w) {
+        ctx.fillStyle = 'rgba(0,0,0,0.16)';
+        ctx.beginPath();
+        ctx.ellipse(x, state.groundY + 4, w, 5, 0, 0, TAU);
+        ctx.fill();
+      }
+
       function drawCitiesAndBases() {
+        drawGround();
+
         for (const city of state.cities) {
+          if (city.alive) groundShadow(city.x, city.totalW * 0.62);
           ctx.save();
-          ctx.translate(city.x, city.y);
-          if (!city.alive) ctx.globalAlpha = 0.35;
-          for (let i = 0; i < city.silhouette.length; i++) {
-            const s = city.silhouette[i];
-            const crumble = !city.alive ? Math.sin(state.time * 8 + i) * city.crumble * 2 : 0;
-            ctx.fillStyle = !city.alive ? 'rgba(70,52,46,0.7)' : 'rgba(16,21,35,0.95)';
-            ctx.fillRect(-28 + s.ox + crumble, -s.h, s.w, s.h);
-            if (city.alive && s.windows) {
+          ctx.translate(city.x - city.totalW / 2, city.y);
+          if (!city.alive) {
+            // Rubble: short broken stubs
+            for (let i = 0; i < city.silhouette.length; i++) {
+              const s = city.silhouette[i];
+              const hh = Math.min(s.h, 8 + (i % 3) * 4);
+              ctx.fillStyle = '#5f5048';
+              ctx.fillRect(s.ox, -hh, s.w, hh);
+              ctx.fillStyle = '#4a3d37';
+              ctx.fillRect(s.ox, -hh, s.w, 3);
+            }
+          } else {
+            ctx.strokeStyle = KEYLINE;
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
+            for (let i = 0; i < city.silhouette.length; i++) {
+              const s = city.silhouette[i];
+              // keyline outline first so blocks read like the outlined rockets
+              ctx.strokeRect(s.ox, -s.h, s.w, s.h);
+              ctx.fillStyle = (i % 2) ? CITY_BODY2 : CITY_BODY;
+              ctx.fillRect(s.ox, -s.h, s.w, s.h);
+              // coral roof cap on every block so the protected cities pop
+              ctx.strokeRect(s.ox - 1, -s.h - 4, s.w + 2, 4);
+              ctx.fillStyle = CITY_ROOF;
+              ctx.fillRect(s.ox - 1, -s.h - 4, s.w + 2, 4);
               for (const win of s.windows) {
-                ctx.fillStyle = win.color;
-                ctx.fillRect(-27 + s.ox + win.ox + crumble, -s.h + win.oy, 2, 3);
+                ctx.fillStyle = win.lit ? CITY_WIN : 'rgba(41,64,107,0.45)';
+                ctx.fillRect(s.ox + win.ox, -s.h + win.oy, 3, 3.5);
               }
             }
-          }
-          if (!city.alive) {
-            ctx.fillStyle = 'rgba(255,120,48,0.55)';
-            ctx.beginPath();
-            ctx.ellipse(0, -12, 18, 8, 0, 0, TAU);
-            ctx.fill();
           }
           ctx.restore();
         }
 
         for (const base of state.bases) {
+          groundShadow(base.x, 32);
           ctx.save();
           ctx.translate(base.x, base.y);
-          const glow = base.flash * 0.8;
-          ctx.fillStyle = base.alive ? `rgba(${Math.floor(90 + glow * 160)}, ${Math.floor(180 + glow * 70)}, 255, 0.95)` : 'rgba(76,58,58,0.6)';
-          ctx.beginPath();
-          ctx.moveTo(-22, 0);
-          ctx.lineTo(-10, -12);
-          ctx.lineTo(10, -12);
-          ctx.lineTo(22, 0);
-          ctx.closePath();
-          ctx.fill();
-          ctx.fillStyle = base.alive ? 'rgba(25,42,68,0.95)' : 'rgba(46,32,32,0.8)';
-          ctx.fillRect(-18, 0, 36, 10);
+          drawBunker(base);
           ctx.restore();
         }
+      }
 
-        ctx.fillStyle = 'rgba(9, 14, 24, 1)';
-        ctx.fillRect(0, state.groundY, state.width, state.height - state.groundY);
+      // Cream dome bunker with red top — the flat-vector launch base.
+      function drawBunker(base) {
+        const alive = base.alive;
+        const body = alive ? '#e9e3d2' : '#8f8577';
+        const bodyShade = alive ? '#cdc4ad' : '#736a5e';
+        const dome = alive ? '#dc5340' : '#7a5148';
+        const domeShade = alive ? '#c3452f' : '#664239';
+        const W = 30, baseH = 16;
+        const domeW = W * 0.82, domeH = W * 0.6; // flatter half-ellipse dome
+        ctx.strokeStyle = KEYLINE;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        // Dome keyline (drawn first so the body keyline overlaps cleanly)
+        ctx.beginPath(); ctx.ellipse(0, -baseH, domeW, domeH, 0, Math.PI, TAU); ctx.closePath(); ctx.stroke();
+        // Body (rounded platform sitting on the ground)
+        ctx.fillStyle = bodyShade;
+        roundRect(-W, -baseH + 2, W * 2, baseH, 6); ctx.stroke(); ctx.fill();
+        ctx.fillStyle = body;
+        roundRect(-W, -baseH, W * 2, baseH - 2, 6); ctx.stroke(); ctx.fill();
+        // Dome (flattened)
+        ctx.fillStyle = domeShade;
+        ctx.beginPath(); ctx.ellipse(0, -baseH + 1, domeW, domeH, 0, Math.PI, TAU); ctx.fill();
+        ctx.fillStyle = dome;
+        ctx.beginPath(); ctx.ellipse(0, -baseH, domeW, domeH, 0, Math.PI, TAU); ctx.fill();
+        // Dome highlight + firing flash
+        ctx.fillStyle = alive ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)';
+        ctx.beginPath(); ctx.ellipse(-domeW * 0.32, -baseH - domeH * 0.42, domeW * 0.26, domeH * 0.34, 0, 0, TAU); ctx.fill();
+        if (alive && base.flash > 0) {
+          ctx.fillStyle = `rgba(255,240,190,${base.flash})`;
+          ctx.beginPath(); ctx.ellipse(0, -baseH, domeW, domeH, 0, Math.PI, TAU); ctx.fill();
+        }
+        // Dark doorway + side vents
+        ctx.fillStyle = alive ? '#2c3550' : '#3a342c';
+        roundRect(-6, -baseH + 2, 12, baseH - 4, 2); ctx.fill();
+        ctx.fillStyle = alive ? '#8fb4d8' : '#6b6357';
+        ctx.fillRect(-W + 7, -baseH + 4, 5, 5);
+        ctx.fillRect(W - 12, -baseH + 4, 5, 5);
+      }
+
+      function roundRect(x, y, w, h, r) {
+        r = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      }
+
+      // Draw a flat rocket pointing along `ang` (tail→nose direction), with a
+      // dark outline so it reads clearly against clouds and bright sky.
+      function drawRocket(x, y, ang, len, w, body, nose, fin) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(ang);
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgba(22,26,38,0.6)';
+        ctx.lineWidth = Math.max(1.5, w * 0.34);
+        // Fins
+        ctx.beginPath();
+        ctx.moveTo(-len * 0.32, -w * 0.5); ctx.lineTo(-len * 0.56, -w * 1.05); ctx.lineTo(-len * 0.16, -w * 0.5); ctx.closePath();
+        ctx.moveTo(-len * 0.32, w * 0.5); ctx.lineTo(-len * 0.56, w * 1.05); ctx.lineTo(-len * 0.16, w * 0.5); ctx.closePath();
+        ctx.stroke(); ctx.fillStyle = fin; ctx.fill();
+        // Body
+        roundRect(-len * 0.45, -w * 0.5, len * 0.82, w, w * 0.45);
+        ctx.stroke(); ctx.fillStyle = body; ctx.fill();
+        // Nose
+        ctx.beginPath();
+        ctx.moveTo(len * 0.37, -w * 0.5); ctx.lineTo(len * 0.66, 0); ctx.lineTo(len * 0.37, w * 0.5); ctx.closePath();
+        ctx.stroke(); ctx.fillStyle = nose; ctx.fill();
+        ctx.restore();
+      }
+
+      // Puffy smoke trail from a list of trail points (oldest first).
+      function drawSmokeTrail(trail, baseR, tint) {
+        for (let i = 0; i < trail.length; i++) {
+          const t = trail[i];
+          const a = i / Math.max(1, trail.length - 1);      // 0 tail → 1 head
+          ctx.globalAlpha = 0.28 + a * 0.55;
+          ctx.fillStyle = tint;
+          ctx.beginPath();
+          ctx.arc(t.x, t.y, baseR * (0.55 + a * 0.85), 0, TAU);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      // Flat fireball wedge + spark line — the METEOR SHOWER's distinct skin.
+      function drawMeteor(m, ang) {
+        // dotted ember trail
+        for (let i = 0; i < m.trail.length; i += 3) {
+          const p = m.trail[i];
+          const a = i / Math.max(1, m.trail.length);
+          ctx.globalAlpha = 0.25 + a * 0.6;
+          ctx.fillStyle = (i % 2) ? '#ffd23f' : '#ff8a1c';
+          ctx.beginPath(); ctx.arc(p.x, p.y, 1.6 + a * 2, 0, TAU); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.save();
+        ctx.translate(m.x, m.y);
+        ctx.rotate(ang);
+        // flame wedge behind the rock
+        ctx.fillStyle = '#ff8a1c';
+        ctx.beginPath(); ctx.moveTo(-6, -7); ctx.lineTo(-27, 0); ctx.lineTo(-6, 7); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ffd23f';
+        ctx.beginPath(); ctx.moveTo(-5, -4); ctx.lineTo(-17, 0); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill();
+        // rocky flat polygon with keyline
+        ctx.strokeStyle = KEYLINE;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.fillStyle = '#8a6248';
+        ctx.beginPath();
+        ctx.moveTo(9, 0); ctx.lineTo(5, -6); ctx.lineTo(-2, -7); ctx.lineTo(-8, -3);
+        ctx.lineTo(-7, 4); ctx.lineTo(-1, 7); ctx.lineTo(6, 5);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#6b4936'; // facet shading
+        ctx.beginPath(); ctx.moveTo(2, -3); ctx.lineTo(-3, -4); ctx.lineTo(-4, 1); ctx.lineTo(0, 2); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ffb03a'; // hot leading rim
+        ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(5, -6); ctx.lineTo(6, 5); ctx.closePath(); ctx.fill();
+        ctx.restore();
       }
 
       function drawMissiles() {
         for (const m of state.enemyMissiles) {
-          ctx.save();
-          ctx.strokeStyle = m.type === 'smart' ? 'rgba(255,120,180,0.95)' : (m.type === 'mirvChild' ? 'rgba(255,208,120,0.95)' : 'rgba(255,110,92,0.98)');
-          ctx.lineWidth = m.type === 'smart' ? 2.6 : 1.6;
-          ctx.beginPath();
-          ctx.moveTo(m.sx, m.sy);
-          ctx.lineTo(m.x, m.y);
-          ctx.stroke();
-          for (let i = 0; i < m.trail.length; i++) {
-            const t = m.trail[i];
-            const a = i / m.trail.length;
-            ctx.fillStyle = `rgba(80,80,80,${a * 0.14})`;
-            ctx.beginPath();
-            ctx.arc(t.x, t.y, t.s || (2 + a * 4), 0, TAU);
-            ctx.fill();
-          }
-          ctx.fillStyle = '#fff3d8';
-          ctx.beginPath();
-          ctx.arc(m.x, m.y, m.type === 'smart' ? 3.2 : 2.2, 0, TAU);
-          ctx.fill();
+          const ang = Math.atan2(m.y - m.sy, m.x - m.sx) || (Math.PI / 2);
+          if (m.skin === 'meteor') { drawMeteor(m, ang); continue; }
+          drawSmokeTrail(m.trail, 3.4, 'rgba(240,244,250,1)');
+          let body = '#dc4a38', nose = '#f4b9ae', fin = '#a8331f';
+          if (m.type === 'mirvChild') { body = '#f0872e'; nose = '#ffd9a8'; fin = '#c25f17'; }
+          if (m.type === 'smart') { body = '#c94bd6'; nose = '#f3c6f7'; fin = '#8f2e9c'; }
           if (m.type === 'smart') {
-            ctx.strokeStyle = 'rgba(255,120,180,0.35)';
-            ctx.beginPath();
-            ctx.arc(m.x, m.y, 7 + Math.sin(state.time * 18) * 1.5, 0, TAU);
-            ctx.stroke();
+            ctx.strokeStyle = 'rgba(201,75,214,0.5)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(m.x, m.y, 8 + Math.sin(state.time * 16) * 1.5, 0, TAU); ctx.stroke();
           }
-          ctx.restore();
+          const len = m.type === 'smart' ? 21 : 18;
+          drawRocket(m.x, m.y, ang, len, len * 0.46, body, nose, fin);
         }
 
         for (const m of state.playerMissiles) {
-          ctx.save();
-          ctx.lineCap = 'round';
-          for (let i = 1; i < m.trail.length; i++) {
-            const p0 = m.trail[i - 1], p1 = m.trail[i];
-            const a = i / m.trail.length;
-            ctx.strokeStyle = `rgba(110, 230, 255, ${a * 0.55})`;
-            ctx.lineWidth = 1 + a * 3;
-            ctx.beginPath();
-            ctx.moveTo(p0.x, p0.y);
-            ctx.lineTo(p1.x, p1.y);
-            ctx.stroke();
-          }
-          ctx.strokeStyle = 'rgba(166,244,255,0.95)';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(m.sx, m.sy);
-          ctx.lineTo(m.x, m.y);
-          ctx.stroke();
-          ctx.fillStyle = '#ffffff';
-          ctx.beginPath();
-          ctx.arc(m.x, m.y, 2.5, 0, TAU);
-          ctx.fill();
+          const ang = Math.atan2(m.y - m.sy, m.x - m.sx) || (-Math.PI / 2);
+          drawSmokeTrail(m.trail, 3.0, 'rgba(255,255,255,1)');
+          // tail flame so the rising interceptor reads instantly
+          ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(ang);
+          ctx.fillStyle = '#ffd23f';
+          ctx.beginPath(); ctx.moveTo(-8.2, -2.4); ctx.lineTo(-13, 0); ctx.lineTo(-8.2, 2.4); ctx.closePath(); ctx.fill();
           ctx.restore();
+          // bold cyan interceptor rocket
+          drawRocket(m.x, m.y, ang, 18, 7.5, '#33c6f2', '#eafcff', '#1c86b8');
         }
       }
 
       function drawSatellites() {
         for (const s of state.satellites) {
+          // dotted flat path so incoming satellites telegraph their track
+          for (let i = 0; i < s.trail.length; i += 3) {
+            const p = s.trail[i];
+            const a = i / Math.max(1, s.trail.length);
+            ctx.globalAlpha = 0.15 + a * 0.4;
+            ctx.fillStyle = '#8ff2ff';
+            ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, TAU); ctx.fill();
+          }
+          ctx.globalAlpha = 1;
           ctx.save();
           ctx.translate(s.x, s.y);
-          for (let i = 1; i < s.trail.length; i++) {
-            const p0 = s.trail[i - 1], p1 = s.trail[i];
-            const a = i / s.trail.length;
-            ctx.strokeStyle = `rgba(130,230,255,${a * 0.18})`;
-            ctx.lineWidth = 1.2 + a;
-            ctx.beginPath();
-            ctx.moveTo(p0.x - s.x, p0.y - s.y);
-            ctx.lineTo(p1.x - s.x, p1.y - s.y);
-            ctx.stroke();
-          }
-          ctx.fillStyle = s.flash > 0 ? 'rgba(210,250,255,0.95)' : 'rgba(140,208,235,0.95)';
-          ctx.beginPath();
-          ctx.ellipse(0, 0, 18, 6, 0, 0, TAU);
-          ctx.fill();
-          ctx.fillStyle = 'rgba(190,235,255,0.8)';
-          ctx.fillRect(-26, -2, 14, 4);
-          ctx.fillRect(12, -2, 14, 4);
-          ctx.fillStyle = s.hp === 1 ? 'rgba(255,120,80,0.9)' : 'rgba(35,52,76,0.95)';
-          ctx.fillRect(-4, -5, 8, 4);
-          if (s.hp === 1) {
-            ctx.strokeStyle = 'rgba(255,90,50,0.95)';
-            ctx.beginPath();
-            ctx.moveTo(-6, -1);
-            ctx.lineTo(7, 3);
-            ctx.stroke();
-          }
+          ctx.strokeStyle = KEYLINE;
+          ctx.lineWidth = 2;
+          ctx.lineJoin = 'round';
+          // Solar panels
+          ctx.fillStyle = '#3a6ea8';
+          roundRect(-30, -6, 16, 12, 2); ctx.stroke(); ctx.fill();
+          roundRect(14, -6, 16, 12, 2); ctx.stroke(); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,0.25)';
+          ctx.fillRect(-30, -1, 16, 2); ctx.fillRect(14, -1, 16, 2);
+          // Booms
+          ctx.fillStyle = '#b9c3cf';
+          ctx.fillRect(-14, -1.5, 6, 3); ctx.fillRect(8, -1.5, 6, 3);
+          // Body
+          ctx.fillStyle = s.hp === 1 ? '#e0503a' : '#cfd8e2';
+          roundRect(-9, -8, 18, 16, 3); ctx.stroke(); ctx.fill();
+          ctx.fillStyle = s.flash > 0 ? '#ffffff' : (s.hp === 1 ? '#ffd0c4' : '#8fb4d8');
+          ctx.beginPath(); ctx.arc(0, 0, 3.4, 0, TAU); ctx.fill();
           ctx.restore();
         }
       }
 
+      // Flat spiky sunburst — layered star polygons, no gradient/glow.
+      function starPath(cx, cy, spikes, outer, inner, rot) {
+        ctx.beginPath();
+        for (let i = 0; i < spikes * 2; i++) {
+          const r = (i % 2 === 0) ? outer : inner;
+          const a = rot + i * Math.PI / spikes;
+          const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+      }
+
       function drawExplosions() {
         for (const e of state.explosions) {
-          const t = e.age / e.life;
-          const alpha = 1 - t;
+          const t = clamp(e.age / e.life, 0, 1);
+          const r = e.r;
+          if (r < 0.5) continue;
+          const rot = (e.source && e.source.sx ? e.source.sx : e.x) * 0.05; // stable per-explosion angle
           ctx.save();
-          ctx.globalCompositeOperation = 'screen';
-          const rg = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.r);
-          rg.addColorStop(0, `rgba(255,255,255,${alpha * 0.95})`);
-          rg.addColorStop(0.15, `rgba(255,244,170,${alpha * 0.9})`);
-          rg.addColorStop(0.45, `rgba(255,168,70,${alpha * 0.72})`);
-          rg.addColorStop(0.7, `rgba(255,82,22,${alpha * 0.42})`);
-          rg.addColorStop(1, 'rgba(255,0,0,0)');
-          ctx.fillStyle = rg;
-          ctx.beginPath();
-          ctx.arc(e.x, e.y, e.r, 0, TAU);
+          // Crisp poster pop: solid fills, stepped opacity only at the very end
+          // (no muddy alpha decay). The radius grow+collapse sells the motion.
+          ctx.globalAlpha = t < 0.7 ? 1 : (t < 0.85 ? 0.6 : 0.3);
+          // Big (city/base) blasts open with a crisp white flash ring
+          if (e.kind === 'big' && t < 0.35) {
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.arc(e.x, e.y, r * 1.3, 0, TAU); ctx.stroke();
+          }
+          const spikes = e.maxR > 60 ? 12 : 10;
+          // Outer orange burst
+          ctx.fillStyle = '#ff8a1c';
+          starPath(e.x, e.y, spikes, r, r * 0.52, rot);
           ctx.fill();
-          ctx.strokeStyle = `rgba(255,240,220,${alpha * 0.8})`;
-          ctx.lineWidth = Math.max(1, e.maxR * 0.06 * alpha);
-          ctx.beginPath();
-          ctx.arc(e.x, e.y, e.r * 0.74, 0, TAU);
-          ctx.stroke();
-          ctx.strokeStyle = `rgba(255,120,50,${alpha * 0.48})`;
-          ctx.lineWidth = Math.max(1, e.maxR * 0.1 * alpha);
-          ctx.beginPath();
-          ctx.arc(e.x, e.y, e.r * 0.96, 0, TAU);
-          ctx.stroke();
+          // Mid yellow burst
+          ctx.fillStyle = '#ffd23f';
+          starPath(e.x, e.y, spikes, r * 0.72, r * 0.36, rot + 0.28);
+          ctx.fill();
+          // White-hot core
+          ctx.fillStyle = '#fff6de';
+          ctx.beginPath(); ctx.arc(e.x, e.y, r * 0.34, 0, TAU); ctx.fill();
           ctx.restore();
         }
       }
 
       function drawParticles() {
+        // Soft light smoke puffs (kept subtle so the white contrails read)
         for (const s of state.smoke) {
           const a = 1 - s.age / s.life;
-          ctx.fillStyle = `rgba(${20 + s.dark * 40}, ${22 + s.dark * 35}, ${28 + s.dark * 30}, ${a * 0.24})`;
+          const g = Math.floor(198 + s.dark * 30);
+          ctx.fillStyle = `rgba(${g},${g},${g + 6},${a * 0.32})`;
           ctx.beginPath();
-          ctx.arc(s.x, s.y, s.size * (0.55 + s.age / s.life), 0, TAU);
+          ctx.arc(s.x, s.y, s.size * (0.5 + s.age / s.life * 0.8), 0, TAU);
           ctx.fill();
         }
+        // Flat debris sparks (orange/yellow squares)
         for (const p of state.particles) {
           const a = 1 - p.age / p.life;
-          ctx.fillStyle = p.glow ? `hsla(${p.hue}, 100%, 65%, ${a})` : `rgba(255,255,255,${a})`;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size * a + 0.4, 0, TAU);
-          ctx.fill();
+          ctx.globalAlpha = a;
+          ctx.fillStyle = p.hue > 45 ? '#ffd23f' : '#ff8a1c';
+          const sz = p.size * (0.6 + a * 0.6);
+          ctx.fillRect(p.x - sz / 2, p.y - sz / 2, sz, sz);
         }
+        ctx.globalAlpha = 1;
+        // Flat embers (small orange dots)
         for (const e of state.embers) {
           const a = 1 - e.age / e.life;
-          ctx.fillStyle = `rgba(255,${120 + Math.floor(a * 90)},60,${a})`;
+          ctx.globalAlpha = a;
+          ctx.fillStyle = a > 0.5 ? '#ffb03a' : '#e0503a';
           ctx.beginPath();
           ctx.arc(e.x, e.y, e.size * a, 0, TAU);
           ctx.fill();
         }
+        ctx.globalAlpha = 1;
       }
 
       function drawPrompts() {
@@ -1356,7 +1913,8 @@
 
       function drawFXOverlays() {
         if (state.comboCount > 1 && state.comboTimer > 0) {
-          const a = Math.min(0.22, state.tint * 0.18 + 0.06);
+          // keep the tint light so the flat poster colors stay saturated
+          const a = Math.min(0.10, state.tint * 0.10 + 0.03);
           ctx.fillStyle = `rgba(255, 120, 64, ${a})`;
           ctx.fillRect(0, 0, state.width, state.height);
 
@@ -1368,9 +1926,30 @@
           ctx.restore();
         }
         if (state.flash > 0) {
-          ctx.fillStyle = `rgba(255,245,220,${state.flash * 0.18})`;
+          ctx.fillStyle = `rgba(255,245,220,${state.flash * 0.12})`;
           ctx.fillRect(0, 0, state.width, state.height);
         }
+      }
+
+      function drawBanner() {
+        if (state.bannerTimer <= 0) return;
+        const a = clamp(state.bannerTimer / 0.6, 0, 1);
+        const y = state.height * 0.3;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.globalAlpha = a;
+        const size = Math.round(clamp(state.width * 0.055, 22, 48));
+        ctx.font = '800 ' + size + 'px Inter, system-ui, sans-serif';
+        ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineJoin = 'round';
+        ctx.strokeText(state.bannerText, state.width / 2, y);
+        ctx.fillStyle = state.bannerColor;
+        ctx.fillText(state.bannerText, state.width / 2, y);
+        ctx.font = '700 14px Inter, system-ui, sans-serif';
+        ctx.lineWidth = 3;
+        ctx.strokeText('SPECIAL WAVE', state.width / 2, y + 26);
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.fillText('SPECIAL WAVE', state.width / 2, y + 26);
+        ctx.restore();
       }
 
       function render() {
@@ -1384,14 +1963,26 @@
         ctx.translate(sx, sy);
         drawSky();
         drawSkyline();
+        // Ground + cities/bases BEFORE explosions/particles so ground-impact
+        // sunbursts render on top of them (the old order hid every ground blast).
+        drawCitiesAndBases();
         drawMissiles();
         drawSatellites();
         drawExplosions();
         drawParticles();
-        drawCitiesAndBases();
         drawPrompts();
         drawFXOverlays();
         ctx.restore();
+        drawBanner();
+        if (state.practice && state.playing && !state.attract) {
+          ctx.save();
+          ctx.textAlign = 'center';
+          ctx.font = '800 16px Inter, system-ui, sans-serif';
+          ctx.globalAlpha = 0.55;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText('PRACTICE', state.width / 2, state.height - 14);
+          ctx.restore();
+        }
         if (state.paused) drawPausedOverlay();
         updateHUD();
       }
@@ -1410,18 +2001,48 @@
         ctx.restore();
       }
 
+      let lastHudText = '';
+      let lastPauseVis = null;
+      let compactHud = window.innerWidth <= 520;
       function updateHUD() {
         const aliveCities = state.cities.filter(c => c.alive).length;
         const ammoText = state.bases.map(b => b.alive ? b.ammo : 'X').join('/');
         const combo = state.comboCount > 1 && state.comboTimer > 0 ? `x${(1 + (state.comboCount - 1) * 0.18).toFixed(1)}` : 'x1';
-        const waveStatus = state.waveIntroTimer > 0 ? `W${state.wave} incoming` : `W${state.wave}`;
-        hudLine.textContent = `${waveStatus} | Score ${state.score.toLocaleString()} | Cities ${aliveCities} | Ammo ${ammoText} | Combo ${combo} | Bonus @ ${state.nextBonusScore.toLocaleString()}`;
+        let text;
+        if (compactHud) {
+          // Narrow phones: shorter labels, drop the Bonus segment so
+          // Score/Cities/Ammo/Combo always fit at 390px.
+          const waveStatus = `W${state.wave}${state.special ? '★' : ''}${state.waveIntroTimer > 0 ? '…' : ''}`;
+          text = `${waveStatus} · ${state.score.toLocaleString()} · C${aliveCities} · A ${ammoText} · ${combo}`;
+        } else {
+          const waveStatus = state.waveIntroTimer > 0 ? `W${state.wave} incoming` : (state.special ? `W${state.wave} ★` : `W${state.wave}`);
+          text = `${waveStatus} | Score ${state.score.toLocaleString()} | Cities ${aliveCities} | Ammo ${ammoText} | Combo ${combo} | Bonus @ ${state.nextBonusScore.toLocaleString()}`;
+        }
+        if (text !== lastHudText) { lastHudText = text; hudLine.textContent = text; }
+        // Touch-reachable pause chip, only during real play
+        const pauseVis = state.playing && !state.gameOver && !state.attract && tutorialOverlay.classList.contains('hidden');
+        if (pauseVis !== lastPauseVis) { lastPauseVis = pauseVis; pauseBtn.style.display = pauseVis ? 'block' : 'none'; }
       }
 
+      // Fixed-timestep accumulator: slow rendering skips frames instead of
+      // dilating time (no slow-mo on weak devices).
+      const SIM_STEP = 1 / 60;
+      let simAcc = 0;
       function frame(now) {
-        const dt = clamp((now - state.lastTime) / 1000, 0, 0.033);
+        let dt = (now - state.lastTime) / 1000;
         state.lastTime = now;
-        if (!state.paused) update(dt);
+        if (dt < 0) dt = 0;
+        if (dt > 0.25) dt = 0.25;
+        if (!state.paused) {
+          simAcc += dt;
+          let steps = 0;
+          while (simAcc >= SIM_STEP && steps < 4) {
+            update(SIM_STEP);
+            simAcc -= SIM_STEP;
+            steps++;
+          }
+          if (simAcc >= SIM_STEP) simAcc = 0; // drop the remainder
+        }
         render();
         requestAnimationFrame(frame);
       }
@@ -1442,22 +2063,37 @@
         }
       }
 
-      async function startGame() {
+      async function startGame(practice = false) {
+        state.attract = false; // clear before audio unlock so the gesture initialises sound
+        setDemoBadge(false);
         await unlockAudioAndMaybeStart();
         tutorialOverlay.classList.add('hidden');
-        resetGame();
+        resetGame(practice === true);
       }
 
       async function restartGame() {
         await unlockAudioAndMaybeStart();
-        resetGame();
+        resetGame(state.practice); // keep the mode of the run being restarted
       }
 
       function setPaused(on) {
         if (on && (!state.playing || state.gameOver)) return;
         if (state.paused === on) return;
         state.paused = on;
+        pauseBtn.textContent = on ? '▶' : '⏸';
+        // Pause/resume the music with the game
+        if (audio && audio.music) {
+          if (on) audio.music.pause();
+          else if (settings.sound && state.audioUnlocked) audio.music.play().catch(() => {});
+        }
         if (!on) state.lastTime = performance.now();
+      }
+
+      // Restart from the game-over screen is disabled while the initials
+      // spinner is open, and for 1.5s after death (no accidental restarts).
+      function canRestartFromOverlay() {
+        const initialsOpen = !document.getElementById('hsInitialsSection').classList.contains('hidden');
+        return !initialsOpen && performance.now() - state.gameOverAt > 1500;
       }
 
       function handlePointer(x, y) {
@@ -1468,14 +2104,14 @@
           return;
         }
         if (state.gameOver) {
-          restartGame();
+          if (canRestartFromOverlay()) restartGame();
           return;
         }
         launchDefense(x, y);
       }
 
       function gameTarget(e) {
-        return !(e.target && e.target.closest && e.target.closest('button, .overlay, #hsOverlay'));
+        return !(e.target && e.target.closest && e.target.closest('button, .overlay, #hsOverlay, #optOverlay'));
       }
 
       // Input listens on the whole window (buttons/overlays opt out) so aiming
@@ -1523,20 +2159,54 @@
       addTouchAndClick(titleHsBtn, openHsOverlay);
       addTouchAndClick(document.getElementById('hsOverlayClose'), closeHsOverlay);
 
-      addTouchAndClick(startButton, startGame);
-      addTouchAndClick(dismissTutorial, async () => {
-        await unlockAudioAndMaybeStart();
-        tutorialOverlay.classList.add('hidden');
-        resetGame();
-      });
+      // Options overlay
+      const optOverlay = document.getElementById('optOverlay');
+      const tutorialHidden = () => tutorialOverlay.classList.contains('hidden');
+      function buildOptions() {
+        const host = document.getElementById('optRows');
+        host.innerHTML = '';
+        const seg = (label, sub, options, get, set) => {
+          const row = document.createElement('div'); row.className = 'optrow';
+          const left = document.createElement('div');
+          left.innerHTML = `<div class="lab">${label}</div>` + (sub ? `<div class="sub">${sub}</div>` : '');
+          const segEl = document.createElement('div'); segEl.className = 'seg';
+          const btns = [];
+          options.forEach(opt => {
+            const b = document.createElement('button');
+            b.textContent = opt.label;
+            if (get() === opt.value) b.classList.add('on');
+            const h = (e) => { e.stopPropagation(); e.preventDefault(); set(opt.value); saveSettings(); audio?.uiClick(); btns.forEach(x => x.classList.remove('on')); b.classList.add('on'); };
+            b.addEventListener('click', h); b.addEventListener('touchend', h);
+            btns.push(b); segEl.appendChild(b);
+          });
+          row.appendChild(left); row.appendChild(segEl); host.appendChild(row);
+        };
+        const onoff = [{ label: 'On', value: true }, { label: 'Off', value: false }];
+        seg('Sound', 'Music & effects', onoff, () => settings.sound, v => { settings.sound = v; applyAudioSettings(); });
+        seg('Difficulty', 'Enemy speed & count', [{ label: 'Easy', value: 'easy' }, { label: 'Normal', value: 'normal' }, { label: 'Hard', value: 'hard' }], () => settings.difficulty, v => { settings.difficulty = v; });
+        seg('Screen shake', 'Camera kick on hits', onoff, () => settings.shake, v => { settings.shake = v; if (!v) state.shake = 0; });
+        seg('Extra effects', 'Debris & particles', onoff, () => settings.effects, v => { settings.effects = v; });
+        seg('Title auto-demo', 'Play behind the menu', onoff, () => settings.demo, v => { settings.demo = v; if (v && !tutorialHidden()) startAttract(); else if (!v) stopAttract(); });
+      }
+      function openOptOverlay() { buildOptions(); optOverlay.style.display = 'flex'; }
+      function closeOptOverlay() { optOverlay.style.display = 'none'; }
+      addTouchAndClick(document.getElementById('titleOptBtn'), openOptOverlay);
+      addTouchAndClick(document.getElementById('optClose'), closeOptOverlay);
+
+      addTouchAndClick(startButton, () => startGame(false));
+      // Practice is a real mode: +50% ammo, 0.85x enemy speed, no leaderboard.
+      addTouchAndClick(dismissTutorial, () => startGame(true));
       addTouchAndClick(restartButton, restartGame);
+      addTouchAndClick(pauseBtn, () => {
+        if (state.playing && !state.gameOver && !state.attract) setPaused(!state.paused);
+      });
       gameOverOverlay.addEventListener('click', (e) => {
-        if (!e.target.closest('button')) restartGame();
+        if (!e.target.closest('button') && canRestartFromOverlay()) restartGame();
       });
       gameOverOverlay.addEventListener('touchend', (e) => {
         if (!e.target.closest('button')) {
           e.preventDefault();
-          restartGame();
+          if (canRestartFromOverlay()) restartGame();
         }
       }, { passive: false });
 
@@ -1550,6 +2220,10 @@
           if (k === 'Escape') closeHsOverlay();
           return;
         }
+        if (optOverlay.style.display === 'flex') {
+          if (k === 'Escape') closeOptOverlay();
+          return;
+        }
         if ((k === 'p' || k === 'P' || k === 'Escape') && state.playing && !state.gameOver) {
           setPaused(!state.paused);
           return;
@@ -1558,17 +2232,35 @@
         const initialsOpen = state.gameOver && !document.getElementById('hsInitialsSection').classList.contains('hidden');
         if (initialsOpen) return; // don't steal Enter/Space from initials entry
         if (e.target && e.target.closest && e.target.closest('button')) e.preventDefault();
-        if (!tutorialOverlay.classList.contains('hidden')) await startGame();
+        if (!tutorialOverlay.classList.contains('hidden')) await startGame(false);
         else if (state.paused) setPaused(false);
-        else if (state.gameOver) await restartGame();
+        else if (state.gameOver && canRestartFromOverlay()) await restartGame();
       });
       window.addEventListener('blur', () => setPaused(true));
+      window.addEventListener('focus', () => { if (state.attract) setPaused(false); });
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) setPaused(true);
+        else if (state.attract) setPaused(false); // auto-resume the title demo
       });
+
+      // QA hook, only with ?qa=1
+      if (location.search.includes('qa=1')) {
+        window.__mcQA = {
+          state,
+          fireAt: launchDefense,
+          startGame,
+          resetGame,
+          prepareWave,
+          spawnEnemyMissile,
+          spawnSatellite,
+          setPaused,
+          endGame() { state.cities.forEach(c => { c.alive = false; }); state.attract = false; checkGameOver(); },
+        };
+      }
 
       resize();
       updateHUD();
+      startAttract(); // self-playing demo behind the title screen
       requestAnimationFrame((t) => {
         state.lastTime = t;
         requestAnimationFrame(frame);

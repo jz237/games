@@ -1,0 +1,2671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Missile Command Clay</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/brand.svg">
+  <style>
+    :root {
+      color-scheme: dark;
+      --clay-ink: #3a2c1c;
+      --text: #f0e6d2;
+      --accent: #7fe7ff;
+      --hot: #ffbf66;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #02050c;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      touch-action: none;
+      overscroll-behavior: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      position: fixed;
+      inset: 0;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      touch-action: none;
+      cursor: crosshair;
+      background: linear-gradient(180deg, #5a86b8 0%, #78a3cb 76%, #537a3a 76%, #537a3a 100%);
+    }
+    /* Molded plasticine HUD tablet: lit top rim, pressed lower edge */
+    .hud {
+      position: fixed;
+      left: 8px;
+      right: 8px;
+      top: env(safe-area-inset-top, 0px);
+      margin-top: 8px;
+      padding: 8px 14px;
+      border: 0;
+      background: linear-gradient(180deg, #ecddb6 0%, #decb9e 55%, #c9b287 100%);
+      color: var(--clay-ink);
+      font-size: clamp(11px, 1.8vw, 14px);
+      letter-spacing: 0.04em;
+      border-radius: 15px;
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+      white-space: nowrap;
+      z-index: 5;
+      pointer-events: none;
+      box-shadow: inset 0 2px 0 rgba(255,248,228,0.8), inset 0 -3px 4px rgba(122,92,52,0.38), 0 5px 12px rgba(30,18,8,0.35);
+    }
+    @media (max-width: 640px) { .hud { font-size: 10.5px; padding: 7px 9px; letter-spacing: 0.02em; gap: 6px; } }
+    .hud span { opacity: 0.94; font-weight: 700; }
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+      background: radial-gradient(circle at 50% 30%, rgba(40,70,110,0.28), rgba(2,4,10,0.88));
+      z-index: 10;
+      padding: 18px;
+    }
+    /* Clay-tablet panel: molded slab with a lit rim and a pressed base */
+    .panel {
+      width: min(92vw, 620px);
+      margin: auto; /* stays centered, and scrolls instead of clipping when taller than the viewport */
+      border-radius: 22px;
+      border: 0;
+      background: linear-gradient(168deg, #57452f 0%, #493a27 48%, #382c1d 100%);
+      color: #f0e6d2;
+      box-shadow: inset 0 3px 2px rgba(255,232,190,0.16), inset 0 -7px 12px rgba(0,0,0,0.38), inset 2px 0 2px rgba(255,232,190,0.05), 0 18px 48px rgba(0,0,0,0.5);
+      padding: 22px 22px 18px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(24px, 5vw, 40px);
+      line-height: 1;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #f2e8d0;
+      /* soft double shadow = clay letters pressed onto the tablet */
+      text-shadow: 2px 3px 0 rgba(0,0,0,0.42), 3px 5px 0 rgba(0,0,0,0.16);
+      transform: rotate(-1.2deg);
+      transform-origin: left center;
+    }
+    .backlink {
+      display: inline-block;
+      color: #d8c9a4;
+      opacity: 0.7;
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-decoration: none;
+      margin-bottom: 7px;
+    }
+    .backlink:hover { opacity: 1; text-decoration: underline; }
+    p { margin: 10px 0; opacity: 0.9; line-height: 1.45; }
+    ul {
+      margin: 10px 0 18px;
+      padding-left: 18px;
+      line-height: 1.5;
+      opacity: 0.95;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 16px;
+    }
+    /* Rounded plasticine buttons: specular top light, molded sides, real pressed state */
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 18px;
+      touch-action: manipulation;
+      cursor: pointer;
+      color: var(--clay-ink);
+      background: linear-gradient(180deg, #eedfb6 0%, #ddc998 58%, #c6ae7f 100%);
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      box-shadow: inset 0 2px 1px rgba(255,250,235,0.85), inset 0 -3px 3px rgba(115,85,48,0.42), 0 4px 9px rgba(28,18,8,0.35);
+      transition: transform 0.06s ease, box-shadow 0.06s ease;
+    }
+    button:active {
+      transform: translateY(2px) scale(0.98);
+      box-shadow: inset 0 3px 6px rgba(90,60,30,0.5), inset 0 -1px 1px rgba(255,250,235,0.3), 0 1px 3px rgba(28,18,8,0.3);
+    }
+    #startButton {
+      background: linear-gradient(180deg, #ef9f68 0%, #dd8250 58%, #bd6a3e 100%);
+      color: #38200f;
+      box-shadow: inset 0 2px 1px rgba(255,226,196,0.8), inset 0 -3px 3px rgba(126,58,26,0.45), 0 4px 9px rgba(28,18,8,0.35);
+    }
+    .ghost { background: linear-gradient(180deg, #dbcfa9 0%, #c9ba90 58%, #b1a075 100%); color: #3f3222; }
+    .gold  { background: linear-gradient(180deg, #ecc65e 0%, #d9ad42 58%, #b98f2f 100%); color: #3a2c10; }
+    .hidden { display: none; }
+    .tiny { font-size: 12px; opacity: 0.75; }
+    /* Lighter scrim on the title screen so the auto-demo shows through */
+    #tutorialOverlay { background: radial-gradient(circle at 50% 42%, rgba(4,10,20,0.12), rgba(3,6,14,0.5)); }
+    #demoBadge {
+      position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%) rotate(-1.5deg);
+      z-index: 8; pointer-events: none; display: none; /* sits behind overlays so it never covers buttons */
+      padding: 7px 16px; border-radius: 12px;
+      background: linear-gradient(180deg, #e9c25b 0%, #d8ac41 60%, #bd9232 100%);
+      color: #3a2c10;
+      font: 800 13px Inter, system-ui, sans-serif; letter-spacing: 0.09em;
+      border: 0;
+      box-shadow: inset 0 2px 1px rgba(255,240,200,0.75), inset 0 -2px 2px rgba(120,85,25,0.45), 0 5px 12px rgba(0,0,0,0.3);
+    }
+    /* Round clay pause pebble — touch users need a reachable pause during play */
+    #pauseBtn {
+      position: fixed;
+      right: 10px;
+      top: calc(env(safe-area-inset-top, 0px) + 56px);
+      width: 46px; height: 46px;
+      padding: 0;
+      border-radius: 50%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      z-index: 6;
+    }
+    .optrow {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; padding: 9px 2px; border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .optrow:first-child { border-top: 0; }
+    .optrow .lab { font-size: 14px; letter-spacing: 0.02em; }
+    .optrow .sub { font-size: 11px; opacity: 0.6; }
+    .seg { display: inline-flex; border-radius: 11px; overflow: hidden; border: 1px solid rgba(240,230,210,0.22); }
+    .seg button {
+      border: 0; border-radius: 0; padding: 7px 13px; font-size: 12px; letter-spacing: 0.04em;
+      text-transform: uppercase; font-weight: 700; cursor: pointer;
+      background: rgba(240,230,210,0.06); color: #f0e6d2; box-shadow: none; transition: none;
+    }
+    .seg button:active { transform: none; }
+    .seg button.on { background: linear-gradient(180deg, #ef9f68, #cd7644); color: #3a1f10; box-shadow: inset 0 1px 1px rgba(255,226,196,0.6); }
+    /* Compact layout for short (landscape-phone) viewports and narrow portrait phones so Start is always reachable */
+    @media (max-height: 540px), (max-width: 420px) {
+      .overlay { align-items: flex-start; padding: 10px; }
+      .panel { padding: 12px 16px 12px; border-radius: 16px; }
+      h1 { font-size: 21px; margin-bottom: 6px; }
+      p { margin: 6px 0; font-size: 13px; }
+      ul { margin: 6px 0 10px; line-height: 1.35; font-size: 12.5px; }
+      .mq-x { display: none; }
+      button { padding: 9px 14px; }
+      .row { margin-top: 10px; }
+      .backlink { margin-bottom: 2px; }
+    }
+  </style>
+</head>
+<body>  <canvas id="game"></canvas>
+  <div class="hud" id="hud">
+    <span id="hudLine">W1 | Score 0 | Cities 6 | Ammo 15/15/15 | Combo x1 | Bonus @ 12000</span>
+  </div>
+  <div id="demoBadge">▶ AUTO-DEMO</div>
+  <button id="pauseBtn" aria-label="Pause">⏸</button>
+
+  <div class="overlay" id="tutorialOverlay">
+    <div class="panel">
+      <a class="backlink" href="/games/missile-command/">◂ all editions</a>
+      <h1>Missile Command Clay</h1>
+      <p>Defend the skyline. Tap or click anywhere in the sky and the nearest armed base will launch a counter-missile to that point.</p>
+      <ul>
+        <li>Three bases. Each starts with <strong>15 missiles</strong>. Destroyed batteries are rebuilt every wave.</li>
+        <li>Destroy enemy warheads with blast waves and trigger chain reactions for bigger scores.</li>
+        <li class="mq-x"><strong>MIRVs</strong> arrive on wave 6, <strong>satellites</strong> on wave 8, and <strong>smart bombs</strong> on wave 10.</li>
+        <li class="mq-x">Every <strong>5th wave</strong> is a <strong>★ special wave</strong> — MIRV storms, satellite swarms, smart-bomb blitzes, meteor showers — with a big clear bonus.</li>
+        <li class="mq-x">Satellites take <strong>2 hits</strong>. Lose all cities and it’s over. Scores post to the <strong>global leaderboard</strong>.</li>
+        <li>Mobile: rapid multi-touch barrages. Desktop: precise crosshair clicks — <strong>Enter</strong> starts, <strong>P</strong>/<strong>Esc</strong> pauses.</li>
+      </ul>
+      <div class="row">
+        <span class="tiny">Claymation edition. Watch the auto-demo behind this panel. First touch/click unlocks sound &amp; music. · v1.1.0</span>
+        <div class="row" style="margin-top:0">
+          <button class="ghost" id="dismissTutorial">Practice</button>
+          <button id="startButton">Start Defense</button>
+          <button class="ghost" id="titleOptBtn">Options</button>
+          <button class="gold" id="titleHsBtn">High Scores</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="pauseOverlay" style="z-index:9">
+    <div class="panel" style="max-width:380px;text-align:center">
+      <h1 style="transform:none">Paused</h1>
+      <p class="tiny">Tap anywhere here (or press P / Esc) to resume.</p>
+      <div class="row" style="justify-content:center">
+        <button id="resumeBtn">Resume</button>
+        <button class="ghost" id="pauseOptBtn">Options</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="gameOverOverlay">
+    <div class="panel">
+      <h1 id="gameOverTitle">Cities Lost</h1>
+      <p id="gameOverText">The skyline burned out.</p>
+      <div id="hsInitialsSection" class="hidden" style="text-align:center;margin:0.8em 0">
+        <div style="color:#ffd700;font-size:0.9rem;margin-bottom:0.4em">NEW HIGH SCORE! ENTER INITIALS</div>
+        <div id="hsInitialsRow" style="display:flex;align-items:center;justify-content:center;gap:0.5em"></div>
+      </div>
+      <div id="hsScoresDisplay" style="margin:0.8em 0;max-height:40vh;overflow-y:auto;font-family:monospace;font-size:0.85rem"></div>
+      <div class="row">
+        <span class="tiny">Tap or click anywhere — or press Enter — to launch a new defense.</span>
+        <button id="restartButton">Restart</button>
+      </div>
+    </div>
+  </div>
+  <div id="hsOverlay" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;overflow-y:auto;padding:12px">
+    <div class="panel" style="max-width:420px;width:90%">
+      <h1 style="color:#ffd700">HIGH SCORES</h1>
+      <div id="hsOverlayScores" style="margin:0.8em 0;max-height:50vh;overflow-y:auto;font-family:monospace;font-size:0.85rem"></div>
+      <button id="hsOverlayClose">Back</button>
+    </div>
+  </div>
+  <div id="optOverlay" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;overflow-y:auto;padding:12px">
+    <div class="panel" style="max-width:440px;width:92%">
+      <h1 style="color:#7fe7ff">OPTIONS</h1>
+      <div id="optRows" style="margin:0.6em 0 0.2em"></div>
+      <div class="row" style="justify-content:space-between">
+        <span class="tiny">Settings are saved on this device.</span>
+        <button id="optClose">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const canvas = document.getElementById('game');
+      const mainCtx = canvas.getContext('2d');
+      // All draw helpers target `ctx`; usingCtx() temporarily retargets them at an
+      // offscreen context so the clay backdrop can be baked once instead of
+      // repainted (gradients + shadowBlur) every frame.
+      let ctx = mainCtx;
+      function usingCtx(c, fn) { const prev = ctx; ctx = c; try { fn(); } finally { ctx = prev; } }
+      const hudLine = document.getElementById('hudLine');
+      const tutorialOverlay = document.getElementById('tutorialOverlay');
+      const gameOverOverlay = document.getElementById('gameOverOverlay');
+      const gameOverTitle = document.getElementById('gameOverTitle');
+      const gameOverText = document.getElementById('gameOverText');
+      const startButton = document.getElementById('startButton');
+      const dismissTutorial = document.getElementById('dismissTutorial');
+      const restartButton = document.getElementById('restartButton');
+      const demoBadge = document.getElementById('demoBadge');
+      const pauseOverlay = document.getElementById('pauseOverlay');
+      const pauseBtn = document.getElementById('pauseBtn');
+      function setDemoBadge(on) { demoBadge.style.display = on ? 'block' : 'none'; }
+
+      // ===== HIGH SCORES & GLOBAL LEADERBOARD =====
+      const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/missile-command-clay';
+      const HS_KEY = 'missile_command_clay_highscores';
+      let globalScoresCache = null, globalScoresCacheTime = 0;
+      function loadHS() { try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; } catch(e) { return []; } }
+      function saveHSList(list) { try { localStorage.setItem(HS_KEY, JSON.stringify(list)); } catch(e) {} }
+      function addHS(initials, sc, w) {
+        const list = loadHS(); list.push({initials, score:sc, wave:w});
+        list.sort((a,b) => b.score - a.score); if (list.length > 10) list.length = 10;
+        saveHSList(list); return list;
+      }
+      function isHighScore(sc) { const list = loadHS(); return list.length < 10 || sc > (list[list.length-1]?.score || 0); }
+      async function fetchGlobalScores() {
+        const now = Date.now();
+        if (globalScoresCache && now - globalScoresCacheTime < 30000) return globalScoresCache;
+        try { const res = await fetch(SCORES_API); if (res.ok) { globalScoresCache = await res.json(); globalScoresCacheTime = now; return globalScoresCache; } } catch(e) {}
+        return globalScoresCache || [];
+      }
+      // Never trust server/local strings in innerHTML — escape everything rendered.
+      const escHTML = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+      async function submitGlobalScore(initials, score, extras) {
+        // Clamp outgoing payload: initials A-Z (1-3), finite sane ints only.
+        const ini = String(initials).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'AAA';
+        const sc = Math.max(0, Math.min(99999999, Math.floor(Number(score) || 0)));
+        const wv = Math.max(1, Math.min(999, Math.floor(Number(extras?.wave) || 1)));
+        try { await fetch(SCORES_API, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ initials: ini, score: sc, wave: wv }) }); globalScoresCache = null; } catch(e) {}
+      }
+      function hsRow(e, i, color) {
+        const ini = escHTML(String(e.initials ?? '???').slice(0, 3));
+        const sc = Number.isFinite(+e.score) ? Math.floor(+e.score) : 0;
+        const wv = Number.isFinite(+e.wave) ? Math.floor(+e.wave) : '?';
+        return `<div style="color:${color};padding:0.15em 0">${String(i+1).padStart(2,' ')}. ${ini}  ${String(sc).padStart(8,' ')}  W${wv}</div>`;
+      }
+      function renderHSBoth(container) {
+        const list = loadHS();
+        let html = '<div style="color:#5be4ff;font-size:0.9em;letter-spacing:0.1em;margin-bottom:0.3em">🏠 LOCAL HIGH SCORES</div>';
+        if (!list.length) html += '<div style="color:rgba(255,255,255,0.4);padding:0.2em 0">No scores yet</div>';
+        else list.forEach((e,i) => { html += hsRow(e, i, '#aef'); });
+        html += '<div style="color:#ffd700;font-size:0.9em;letter-spacing:0.1em;margin:0.6em 0 0.3em">🌐 GLOBAL HIGH SCORES</div>';
+        html += '<div id="globalInner_' + container.id + '"><div style="color:rgba(255,255,255,0.4)">Loading...</div></div>';
+        container.innerHTML = html;
+        fetchGlobalScores().then(gs => {
+          const el = document.getElementById('globalInner_' + container.id);
+          if (!el) return;
+          if (!gs || !gs.length) { el.innerHTML = '<div style="color:rgba(255,255,255,0.4)">No scores yet</div>'; return; }
+          el.innerHTML = gs.slice(0,20).map((e,i) => hsRow(e, i, '#ffe082')).join('');
+        });
+      }
+      let pendingInitials = [0,0,0];
+      function buildHSInitials(sc, wv, scoreContainer) {
+        pendingInitials = [0,0,0];
+        const row = document.getElementById('hsInitialsRow');
+        row.innerHTML = '';
+        for (let i = 0; i < 3; i++) {
+          const col = document.createElement('div');
+          col.style.cssText = 'display:flex;flex-direction:column;align-items:center';
+          const up = document.createElement('button');
+          up.textContent = '▲'; up.style.cssText = 'background:transparent;border:none;color:#ffd700;font-size:1.2rem;cursor:pointer';
+          const letter = document.createElement('div');
+          letter.textContent = 'A'; letter.style.cssText = 'font-size:1.5rem;color:#fff;font-family:monospace;width:1.5em;text-align:center';
+          const dn = document.createElement('button');
+          dn.textContent = '▼'; dn.style.cssText = 'background:transparent;border:none;color:#ffd700;font-size:1.2rem;cursor:pointer';
+          const idx = i;
+          // addTouchAndClick preventDefaults touchend, so one tap = one step
+          // (touchend + synthesized click double-fired before).
+          function upH(e) { e.stopPropagation(); pendingInitials[idx] = (pendingInitials[idx]+1)%26; letter.textContent = String.fromCharCode(65+pendingInitials[idx]); }
+          function dnH(e) { e.stopPropagation(); pendingInitials[idx] = (pendingInitials[idx]+25)%26; letter.textContent = String.fromCharCode(65+pendingInitials[idx]); }
+          addTouchAndClick(up, upH);
+          addTouchAndClick(dn, dnH);
+          col.appendChild(up); col.appendChild(letter); col.appendChild(dn); row.appendChild(col);
+        }
+        const ok = document.createElement('button');
+        ok.textContent = 'OK'; ok.style.cssText = 'margin-left:0.8em;padding:0.3em 1em;cursor:pointer;font-size:1rem;background:#ffd700;border:none;color:#000;border-radius:8px';
+        let submitted = false; // guard: OK must submit exactly once
+        function submitH(e) {
+          e.stopPropagation();
+          if (submitted) return;
+          submitted = true;
+          const ini = pendingInitials.map(i => String.fromCharCode(65+i)).join('');
+          addHS(ini, sc, wv);
+          submitGlobalScore(ini, sc, {wave:wv});
+          document.getElementById('hsInitialsSection').classList.add('hidden');
+          renderHSBoth(scoreContainer);
+        }
+        addTouchAndClick(ok, submitH);
+        row.appendChild(ok);
+      }
+
+      // ===== SETTINGS (persisted per device) =====
+      const SETTINGS_KEY = 'missile_command_clay_settings';
+      const DEFAULT_SETTINGS = { sound: true, difficulty: 'normal', shake: true, effects: true, demo: true, cadence: 12 };
+      function loadSettings() {
+        try { return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}); }
+        catch (e) { return { ...DEFAULT_SETTINGS }; }
+      }
+      function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) {} }
+      let settings = loadSettings();
+      const AUDIO_V = '3';       // bump to cache-bust audio files
+      const MUSIC_VOL = 0.5;     // background music level when sound is on
+      const DIFF = {
+        easy:   { speed: 0.82, budget: 0.82, ammo: 18, label: 'Easy' },
+        normal: { speed: 1.0,  budget: 1.0,  ammo: 15, label: 'Normal' },
+        hard:   { speed: 1.24, budget: 1.30, ammo: 12, label: 'Hard' },
+      };
+      function diff() { return DIFF[settings.difficulty] || DIFF.normal; }
+      function maxAmmo() { return diff().ammo; }
+      function applyAudioSettings() { if (audio && audio.setVolume) audio.setVolume(settings.sound ? 0.32 : 0); }
+
+      // ===== SPECIAL WAVES — every 5th wave is a themed challenge with a big bonus =====
+      const SPECIALS = [
+        { key: 'mirv',   name: 'MIRV STORM',       color: '#ffb347' },
+        { key: 'swarm',  name: 'SATELLITE SWARM',  color: '#8ff2ff' },
+        { key: 'blitz',  name: 'SMART-BOMB BLITZ', color: '#ff7db4' },
+        { key: 'meteor', name: 'METEOR SHOWER',    color: '#ff6b52' },
+      ];
+      function specialFor(wave) { return (wave % 5 === 0) ? SPECIALS[(wave / 5 - 1) % SPECIALS.length] : null; }
+
+      const TAU = Math.PI * 2;
+      // Claymation palettes — one per wave (cycled). Base clay colours; the molded
+      // 3D look (highlights, soft shade, rounded forms) comes from the clay helpers.
+      const SKYSETS = [
+        { // DAY (reference: blue clay sky, green clay hills)
+          skyTop: '#5a86b8', skyBot: '#78a3cb', night: false,
+          sun: '#e8b45a', sunRing: '#d4913a',
+          cloud: '#e4d9bf', cloudShade: '#cabf9f',
+          hillBack: '#6f9a4e', hillFront: '#5c8442', ground: '#537a3a', groundLine: '#456630',
+          building: '#5f7f96', buildingDark: '#4a6b82', window: '#37505f'
+        },
+        { // DUSK (warm clay)
+          skyTop: '#cf8a5e', skyBot: '#e3ac74', night: false,
+          sun: '#f0cf82', sunRing: '#e0a94e',
+          cloud: '#ecdcc0', cloudShade: '#d3c09c',
+          hillBack: '#628349', hillFront: '#4f6d3c', ground: '#465f34', groundLine: '#3a5230',
+          building: '#7a655f', buildingDark: '#5f4e49', window: '#453a37'
+        },
+        { // NIGHT (dark clay)
+          skyTop: '#2c3f60', skyBot: '#405780', night: true,
+          sun: '#dbe4f0', sunRing: '#c2cde0',
+          cloud: '#566084', cloudShade: '#434d6c',
+          hillBack: '#3f5a3a', hillFront: '#33482f', ground: '#2b3d28', groundLine: '#243421',
+          building: '#3a4666', buildingDark: '#2c3650', window: '#6a78a0'
+        },
+        { // DAWN (cool clay)
+          skyTop: '#6a90a4', skyBot: '#a6cac2', night: false,
+          sun: '#eecf8e', sunRing: '#dcb066',
+          cloud: '#e8e2cf', cloudShade: '#cfc8b0',
+          hillBack: '#5f8a6a', hillFront: '#4d7259', ground: '#446249', groundLine: '#3a5540',
+          building: '#5a7382', buildingDark: '#465a68', window: '#38505c'
+        }
+      ];
+      function currentSet() { return SKYSETS[(state.wave - 1 + SKYSETS.length * 100) % SKYSETS.length]; }
+
+      // ===== CLAYMATION RENDER HELPERS =====
+      // Soft warm drop shadow → clay pieces pressed onto each other.
+      function shadowOn(blur, dy, alpha) {
+        if (!settings.effects) return;
+        ctx.shadowColor = 'rgba(28,18,12,' + (alpha == null ? 0.32 : alpha) + ')';
+        ctx.shadowBlur = blur;
+        ctx.shadowOffsetX = Math.max(1, Math.round(blur * 0.3));
+        ctx.shadowOffsetY = dy;
+      }
+      function shadowOff() { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; }
+
+      // Lighten (amt>0 → toward white) / darken (amt<0 → toward black).
+      // Accepts #rrggbb OR rgb(r,g,b) so shaded colours can be re-shaded safely.
+      function shade(c, amt) {
+        let r, g, b;
+        if (typeof c !== 'string') return '#888888';
+        if (c[0] === '#') { r = parseInt(c.slice(1, 3), 16); g = parseInt(c.slice(3, 5), 16); b = parseInt(c.slice(5, 7), 16); }
+        else { const m = c.match(/\d+/g); if (!m || m.length < 3) return c; r = +m[0]; g = +m[1]; b = +m[2]; }
+        const t = amt < 0 ? 0 : 255, p = Math.min(1, Math.abs(amt));
+        const f = v => Math.round(v + (t - v) * p);
+        return 'rgb(' + f(r) + ',' + f(g) + ',' + f(b) + ')';
+      }
+
+      // Cheap clay dab for tiny/numerous bits (grass, sparks, embers) — flat fill
+      // + a highlight cap, no per-call gradient (keeps hundreds/frame affordable).
+      function clayDot(x, y, r, base, hi) {
+        ctx.fillStyle = base;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = hi;
+        ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.32, r * 0.5, 0, TAU); ctx.fill();
+      }
+
+      // Molded clay ball — radial gradient: top-left highlight → base → shaded rim.
+      function clayBall(x, y, r, hex, hi, lo) {
+        const g = ctx.createRadialGradient(x - r * 0.34, y - r * 0.4, r * 0.06, x, y, r * 1.1);
+        g.addColorStop(0, shade(hex, hi == null ? 0.42 : hi));
+        g.addColorStop(0.55, hex);
+        g.addColorStop(1, shade(hex, lo == null ? -0.3 : lo));
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+      }
+
+      // Rounded clay slab — vertical gradient: lit top → base → shaded bottom.
+      function clayRound(x, y, w, h, rad, hex) {
+        const g = ctx.createLinearGradient(x, y, x + w * 0.35, y + h);
+        g.addColorStop(0, shade(hex, 0.36));
+        g.addColorStop(0.5, hex);
+        g.addColorStop(1, shade(hex, -0.3));
+        ctx.fillStyle = g;
+        roundRect(x, y, w, h, rad); ctx.fill();
+      }
+
+      // Alpha-ize a '#rrggbb' or 'rgb(...)' colour.
+      function withAlpha(c, a) {
+        const s = shade(c, 0); // normalises to 'rgb(r,g,b)'
+        return s.replace('rgb(', 'rgba(').replace(')', ',' + a + ')');
+      }
+
+      // Deterministic PRNG so a resize re-lays the SAME backdrop instead of
+      // re-rolling a new skyline mid-game.
+      function mulberry32(seed) {
+        let a = seed >>> 0;
+        return function () {
+          a |= 0; a = (a + 0x6D2B79F5) | 0;
+          let t = Math.imul(a ^ (a >>> 15), 1 | a);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      // Faint fingerprint/knead ridges — a few concentric arcs at very low alpha
+      // on the LARGE clay forms only, so surfaces read as thumbed plasticine.
+      function fingerprint(x, y, r, rot, rng, alpha = 0.055) {
+        const R = rng || Math.random;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rot);
+        ctx.lineCap = 'round';
+        for (let i = 1; i <= 4; i++) {
+          const rr = r * (0.28 + i * 0.19);
+          const a0 = R() * TAU, span = 1.1 + R() * 1.7;
+          ctx.lineWidth = 1.1;
+          ctx.strokeStyle = 'rgba(58,40,24,' + alpha + ')';
+          ctx.beginPath(); ctx.arc(0, 0, rr, a0, a0 + span); ctx.stroke();
+          ctx.strokeStyle = 'rgba(255,242,216,' + (alpha * 0.85) + ')';
+          ctx.beginPath(); ctx.arc(0, 0, rr + 1.1, a0 + 0.12, a0 + span - 0.1); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // Broad soft tonal mottling — big low-alpha radial blobs, like unevenly
+      // kneaded clay (NOT film grain). Baked into the backdrop, never per-frame.
+      function mottle(x0, y0, x1, y1, n, baseCol, rng, alphaMax = 0.09) {
+        for (let i = 0; i < n; i++) {
+          const x = x0 + rng() * (x1 - x0);
+          const y = y0 + rng() * (y1 - y0);
+          const r = (0.07 + rng() * 0.14) * Math.max(state.width, 480);
+          const amt = (rng() * 2 - 1) * 0.12;
+          const a = (0.4 + rng() * 0.6) * alphaMax;
+          const g = ctx.createRadialGradient(x, y, r * 0.1, x, y, r);
+          g.addColorStop(0, withAlpha(shade(baseCol, amt), a));
+          g.addColorStop(1, withAlpha(shade(baseCol, amt), 0));
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+        }
+      }
+
+      // Rounded lumpy clay bush/tree (stacked shaded balls) on the ground line.
+      function drawTree(x, baseY, scale, hex) {
+        ctx.fillStyle = shade(hex, -0.45);
+        ctx.fillRect(x - 2.5 * scale, baseY - 9 * scale, 5 * scale, 11 * scale); // trunk
+        clayBall(x - 6 * scale, baseY - 9 * scale, 6.5 * scale, hex);
+        clayBall(x + 6 * scale, baseY - 9 * scale, 6.5 * scale, hex);
+        clayBall(x, baseY - 13 * scale, 8 * scale, hex);
+        clayBall(x, baseY - 22 * scale, 6.5 * scale, hex);
+      }
+
+      // Full-frame soft clay-matte speckle, built once, overlaid each frame.
+      let grainPattern = null;
+      function buildGrain() {
+        const g = document.createElement('canvas'); g.width = 150; g.height = 150;
+        const gc = g.getContext('2d');
+        const img = gc.createImageData(150, 150);
+        for (let i = 0; i < img.data.length; i += 4) {
+          const v = 128 + (Math.random() * 2 - 1) * 32;
+          img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+          img.data[i + 3] = 255;
+        }
+        gc.putImageData(img, 0, 0);
+        grainPattern = ctx.createPattern(g, 'repeat');
+      }
+
+      const state = {
+        width: 0,
+        height: 0,
+        hudSafeTop: 0,
+        groundY: 0,
+        cityBandY: 0,
+        playing: false,
+        gameOver: false,
+        paused: false,
+        wave: 1,
+        score: 0,
+        nextBonusScore: 12000,
+        comboCount: 0,
+        comboTimer: 0,
+        flash: 0,
+        tint: 0,
+        shake: 0,
+        time: 0,
+        lastTime: 0,
+        waveIntroTimer: 3.8,
+        waveCooldown: 0,
+        spawnBudget: 0,
+        spawnedThisWave: 0,
+        attract: false,
+        special: null,
+        speedMul: 1,
+        aiCool: 0,
+        bannerTimer: 0,
+        bannerText: '',
+        bannerColor: '#9be6ff',
+        stars: [],
+        skyline: [],
+        clouds: [],
+        hills: [],
+        trees: [],
+        bases: [],
+        cities: [],
+        enemyMissiles: [],
+        playerMissiles: [],
+        explosions: [],
+        particles: [],
+        smoke: [],
+        satellites: [],
+        embers: [],
+        prompts: [],
+        destroyedThisWave: 0,
+        audioUnlocked: false,
+        practice: false,
+        goArmedAt: 0,
+        ammoStampCool: 0,
+        backdropSeed: (Math.random() * 2 ** 31) | 0,
+        dpr: 1,
+      };
+
+      let audio = null;
+
+      function rand(min, max) { return min + Math.random() * (max - min); }
+      function randi(min, max) { return Math.floor(rand(min, max + 1)); }
+      function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+      function lerp(a, b, t) { return a + (b - a) * t; }
+      function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
+
+      function initAudio() {
+        if (state.attract) return; // stay silent during the title auto-demo
+        if (audio) return;
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        const ac = new AC();
+        const master = ac.createGain();
+        master.gain.value = settings.sound ? 0.32 : 0;
+        master.connect(ac.destination);
+
+        const hum = ac.createGain();
+        hum.gain.value = 0;
+        hum.connect(master);
+
+        const humOscA = ac.createOscillator();
+        const humOscB = ac.createOscillator();
+        const humLfo = ac.createOscillator();
+        const humLfoGain = ac.createGain();
+        const humFilter = ac.createBiquadFilter();
+        humFilter.type = 'lowpass';
+        humFilter.frequency.value = 240;
+        humFilter.Q.value = 0.3;
+        humOscA.type = 'sawtooth';
+        humOscB.type = 'triangle';
+        humOscA.frequency.value = 42;
+        humOscB.frequency.value = 58;
+        humLfo.type = 'sine';
+        humLfo.frequency.value = 0.11;
+        humLfoGain.gain.value = 8;
+        humLfo.connect(humLfoGain);
+        humLfoGain.connect(humFilter.frequency);
+        humOscA.connect(humFilter);
+        humOscB.connect(humFilter);
+        humFilter.connect(hum);
+        humOscA.start(); humOscB.start(); humLfo.start();
+
+        function noiseBuffer(seconds = 1) {
+          const len = Math.max(1, Math.floor(ac.sampleRate * seconds));
+          const buffer = ac.createBuffer(1, len, ac.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len * 0.35);
+          return buffer;
+        }
+
+        function burstNoise({ duration = 0.28, gain = 0.24, filter = 'bandpass', freq = 640, q = 1.2, decay = 0.16 } = {}) {
+          const src = ac.createBufferSource();
+          src.buffer = noiseBuffer(duration);
+          const f = ac.createBiquadFilter();
+          f.type = filter;
+          f.frequency.value = freq;
+          f.Q.value = q;
+          const g = ac.createGain();
+          g.gain.setValueAtTime(gain, ac.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + decay);
+          src.connect(f); f.connect(g); g.connect(master);
+          src.start();
+          src.stop(ac.currentTime + duration);
+        }
+
+        function tone(type, freqA, freqB, duration, gain, attack = 0.005, release = 0.12) {
+          const osc = ac.createOscillator();
+          const g = ac.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freqA, ac.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(Math.max(1, freqB), ac.currentTime + duration);
+          g.gain.setValueAtTime(0.0001, ac.currentTime);
+          g.gain.exponentialRampToValueAtTime(gain, ac.currentTime + attack);
+          g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + release + duration);
+          osc.connect(g); g.connect(master);
+          osc.start();
+          osc.stop(ac.currentTime + duration + release + 0.02);
+        }
+
+        audio = {
+          ac,
+          hum,
+          sfx: {},          // ElevenLabs sample buffers (loaded async below)
+          music: null,      // HTMLAudioElement background loop
+          setVolume(v) {
+            master.gain.cancelScheduledValues(ac.currentTime); master.gain.value = v;
+            if (audio.music) audio.music.volume = settings.sound ? MUSIC_VOL : 0;
+          },
+          playSample(key, gain = 0.9) {
+            const buf = audio.sfx[key];
+            if (!buf) return false;
+            const src = ac.createBufferSource(); src.buffer = buf;
+            const g = ac.createGain(); g.gain.value = gain;
+            src.connect(g); g.connect(master); src.start();
+            return true;
+          },
+          startMusic() {
+            if (!audio.music) {
+              const a = new Audio('audio/music.mp3?v=' + AUDIO_V);
+              a.loop = true; a.preload = 'auto';
+              audio.music = a;
+            }
+            audio.music.volume = settings.sound ? MUSIC_VOL : 0;
+            audio.music.play().catch(() => {});
+          },
+          resume: async () => {
+            if (ac.state !== 'running') await ac.resume();
+            state.audioUnlocked = true;
+            audio.startMusic();
+          },
+          missileLaunch() {
+            if (audio.playSample('launch', 0.42)) return;
+            tone('triangle', 460, 140, 0.22, 0.045, 0.003, 0.09);
+            burstNoise({ duration: 0.15, gain: 0.035, filter: 'highpass', freq: 900, decay: 0.08 });
+          },
+          enemyWhine(speed = 1) {
+            tone('sawtooth', 220 + speed * 30, 120 + speed * 18, 0.35, 0.012, 0.003, 0.18);
+          },
+          explosion(power = 1) {
+            if (audio.playSample('explode', 0.7 * power)) return;
+            burstNoise({ duration: 0.45, gain: 0.22 * power, filter: 'bandpass', freq: 280, q: 0.7, decay: 0.32 });
+            burstNoise({ duration: 0.18, gain: 0.12 * power, filter: 'highpass', freq: 900, q: 0.8, decay: 0.14 });
+            tone('sine', 95 * power + 10, 32, 0.42, 0.08 * power, 0.002, 0.24);
+          },
+          cityCrash() {
+            if (audio.playSample('citylost', 0.9)) return;
+            burstNoise({ duration: 0.5, gain: 0.28, filter: 'lowpass', freq: 420, q: 0.6, decay: 0.45 });
+            tone('square', 120, 50, 0.24, 0.03, 0.001, 0.2);
+          },
+          waveClear() {
+            if (audio.playSample('waveclear', 0.7)) return;
+            tone('triangle', 392, 392, 0.11, 0.04);
+            setTimeout(() => tone('triangle', 523, 523, 0.12, 0.04), 120);
+            setTimeout(() => tone('triangle', 659, 659, 0.15, 0.045), 240);
+          },
+          special(key) { if (audio.playSample('special_' + key, 0.75)) return; tone('square', 320, 180, 0.5, 0.05, 0.005, 0.1); },
+          uiClick() { tone('square', 720, 680, 0.05, 0.035, 0.001, 0.03); }, // crisp procedural blip
+          combo(level) {
+            tone('sine', 420 + level * 45, 320 + level * 30, 0.12, 0.03 + Math.min(0.02, level * 0.002));
+          }
+        };
+
+        // Load ElevenLabs SFX into decoded buffers (fire-and-forget)
+        ['launch', 'explode', 'citylost', 'waveclear', 'special_mirv', 'special_swarm', 'special_blitz', 'special_meteor'].forEach(key => {
+          fetch('audio/' + key + '.mp3?v=' + AUDIO_V)
+            .then(r => r.arrayBuffer())
+            .then(b => ac.decodeAudioData(b))
+            .then(buf => { audio.sfx[key] = buf; })
+            .catch(() => {});
+        });
+      }
+
+      function resize() {
+        // Desktop fill-width logical cap: game logic runs at phone-ish height
+        // (max 960 logical px) and the canvas is CSS-scaled up to fill the
+        // window. On phones (vh <= 960) this matches the old raw-pixel sizing.
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const h = Math.min(vh, 960);
+        const viewScale = vh / h;
+        const w = Math.floor(vw / viewScale);
+        const dpr = Math.min(viewScale * (window.devicePixelRatio || 1), viewScale > 1 ? 2.4 : 2);
+        canvas.width = Math.floor(w * dpr);
+        canvas.height = Math.floor(h * dpr);
+        canvas.style.width = vw + 'px';
+        canvas.style.height = vh + 'px';
+        mainCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        state.width = w;
+        state.height = h;
+        state.dpr = dpr;
+        // Real HUD-safe band, measured from the DOM HUD bar and mapped to logical
+        // coords — enemies spawn (and the CHAIN readout sits) below it.
+        const hudEl = document.getElementById('hud');
+        const hudRect = hudEl ? hudEl.getBoundingClientRect() : { bottom: 44 };
+        state.hudSafeTop = clamp((hudRect.bottom + 6) * (h / Math.max(1, vh)), 34, 150);
+        state.groundY = state.height * 0.83;
+        state.cityBandY = state.groundY + 8;
+        generateBackdrop();
+        layoutDefenses();
+      }
+
+      function generateBackdrop() {
+        // Seeded layout: resize rebuilds the SAME world at the new size instead
+        // of re-randomizing mid-game. resetGame() rolls a fresh seed.
+        const R = mulberry32(state.backdropSeed);
+        const rr = (a, b) => a + R() * (b - a);
+        const ri = (a, b) => Math.floor(rr(a, b + 1));
+        state.stars = [];
+        state.skyline = [];
+        state.clouds = [];
+        state.hills = [];
+        const isMobile = state.width < 768;
+        // Flat stars (only rendered on night palettes)
+        const starCount = Math.floor(state.width * state.height / (isMobile ? 16000 : 9000));
+        for (let i = 0; i < starCount; i++) {
+          state.stars.push({ x: R() * state.width, y: R() * state.groundY * 0.6, r: R() < 0.85 ? 1.4 : 2.4, a: rr(0.5, 1) });
+        }
+        // Puffy clay clouds drifting slowly (baked to sprites per palette)
+        const cloudCount = isMobile ? 4 : 6;
+        for (let i = 0; i < cloudCount; i++) {
+          const cx = rr(0, state.width);
+          const cy = rr(state.height * 0.06, state.groundY * 0.5);
+          const s = rr(0.7, 1.5);
+          const puffs = [];
+          const n = ri(4, 6);
+          let px = 0;
+          for (let p = 0; p < n; p++) {
+            puffs.push({ ox: px, oy: rr(-6, 4) * s, r: rr(16, 30) * s });
+            px += rr(16, 26) * s;
+          }
+          state.clouds.push({ x: cx, y: cy, w: px, speed: rr(3, 9) * (R() < 0.5 ? 1 : -1), puffs, seed: (R() * 2 ** 31) | 0 });
+        }
+        // Two layers of rolling hills (polyline sampled by sine)
+        for (let layer = 0; layer < 2; layer++) {
+          const baseY = state.groundY - (layer === 0 ? state.height * 0.05 : state.height * 0.015);
+          const amp = layer === 0 ? state.height * 0.05 : state.height * 0.03;
+          const freq = layer === 0 ? 0.6 : 1.0;
+          const phase = rr(0, TAU);
+          const pts = [];
+          const step = Math.max(24, state.width / 26);
+          for (let x = -step; x <= state.width + step; x += step) {
+            pts.push({ x, y: baseY + Math.sin(x / state.width * TAU * freq + phase) * amp + Math.cos(x / state.width * TAU * freq * 2.3 + phase) * amp * 0.35 });
+          }
+          state.hills.push({ pts, back: layer === 0 });
+        }
+
+        let x = 0;
+        while (x < state.width) {
+          const w = rr(24, 64);
+          const h = rr(state.height * 0.05, state.height * 0.16);
+          const windows = [];
+          const cols = Math.max(1, Math.floor(w / rr(9, 12)));
+          const rows = Math.max(2, Math.floor(h / rr(12, 16)));
+          const cellW = (w - 8) / cols, cellH = (h - 12) / rows;
+          for (let cx = 0; cx < cols; cx++) {
+            for (let cy = 0; cy < rows; cy++) {
+              if (R() < 0.9) {
+                windows.push({
+                  x: 5 + cx * cellW,
+                  y: 7 + cy * cellH,
+                  w: Math.min(4, cellW * 0.55),
+                  h: Math.min(6, cellH * 0.55),
+                  lit: R() < 0.5
+                });
+              }
+            }
+          }
+          state.skyline.push({ x, w, h, roof: R(), windows, tone: R() < 0.5, seed: (R() * 2 ** 31) | 0 });
+          x += w + rr(6, 14);
+        }
+
+        // Foreground clay bushes
+        state.trees = [];
+        const treeCount = isMobile ? 5 : 9;
+        for (let i = 0; i < treeCount; i++) {
+          state.trees.push({ x: rr(state.width * 0.02, state.width * 0.98), scale: rr(1.1, 1.95), tone: R() < 0.5 });
+        }
+        invalidateBackdrop();
+      }
+
+      // ===== BAKED CLAY BACKDROP =====
+      // Sky, sun/moon, back hill, skyline, ground, front hill, grass and trees
+      // are molded once per palette/size into offscreen canvases. This is where
+      // the fingerprint/knead texture and tonal mottling live, and it removes
+      // nearly all per-frame gradients + shadowBlur (big win on weak phones).
+      let bgSky = null, bgGround = null, bgPalette = -1, bgW = 0, bgH = 0;
+      const BG_OVER = 60; // overscan so screen shake / boil never reveals edges
+      function invalidateBackdrop() { bgPalette = -1; }
+
+      function mkBakeCanvas() {
+        const dpr = state.dpr || 1;
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.ceil((state.width + BG_OVER * 2) * dpr));
+        cv.height = Math.max(1, Math.ceil((state.height + BG_OVER * 2) * dpr));
+        const c = cv.getContext('2d');
+        c.setTransform(dpr, 0, 0, dpr, BG_OVER * dpr, BG_OVER * dpr);
+        return [cv, c];
+      }
+
+      function bakeMoonOrSun(sc, set, rng) {
+        const sunX = state.width * 0.8, sunY = state.groundY * 0.24, sunR = Math.max(24, state.width * 0.032);
+        if (!set.night) {
+          shadowOn(9, 5, 0.22);
+          clayBall(sunX, sunY, sunR, set.sun, 0.45, -0.22);
+          shadowOff();
+          fingerprint(sunX, sunY, sunR * 0.8, rng() * TAU, rng);
+          return;
+        }
+        // Crescent moon: molded ball on its own canvas, crescent PUNCHED OUT with
+        // destination-out compositing, then blitted — never a sky-colored occluder.
+        const dpr = state.dpr || 1;
+        const pad = 8, S = Math.ceil((sunR + pad) * 2 * dpr);
+        const mc = document.createElement('canvas');
+        mc.width = S; mc.height = S;
+        const mctx = mc.getContext('2d');
+        mctx.setTransform(dpr, 0, 0, dpr, (sunR + pad) * dpr, (sunR + pad) * dpr);
+        usingCtx(mctx, () => {
+          clayBall(0, 0, sunR, set.sun, 0.45, -0.22);
+          fingerprint(0, 0, sunR * 0.75, rng() * TAU, rng, 0.07);
+          mctx.globalCompositeOperation = 'destination-out';
+          mctx.fillStyle = '#000';
+          mctx.beginPath(); mctx.arc(sunR * 0.5, -sunR * 0.4, sunR * 1.05, 0, TAU); mctx.fill();
+          mctx.globalCompositeOperation = 'source-over';
+        });
+        sc.save();
+        if (settings.effects) {
+          sc.shadowColor = 'rgba(28,18,12,0.22)';
+          sc.shadowBlur = 9; sc.shadowOffsetX = 3; sc.shadowOffsetY = 5;
+        }
+        sc.drawImage(mc, sunX - sunR - pad, sunY - sunR - pad, (sunR + pad) * 2, (sunR + pad) * 2);
+        sc.restore();
+      }
+
+      // Slightly irregular molded-slab outline for a skyline tower.
+      function towerPath(x, y, w, h, rng) {
+        const r = Math.min(7, w * 0.3);
+        const wob = () => (rng() * 2 - 1) * 1.7;
+        const raw = [];
+        const step = 9;
+        for (let yy = y + h; yy >= y + r; yy -= step) raw.push([x + wob(), yy]);       // left edge up
+        raw.push([x + r * 0.35, y + r * 0.35]);                                        // top-left corner
+        for (let xx = x + r; xx <= x + w - r; xx += step) raw.push([xx, y + wob()]);   // top edge
+        raw.push([x + w - r * 0.35, y + r * 0.35]);                                    // top-right corner
+        for (let yy = y + r; yy <= y + h; yy += step) raw.push([x + w + wob(), yy]);   // right edge down
+        ctx.beginPath();
+        ctx.moveTo(raw[0][0], raw[0][1]);
+        for (let i = 1; i < raw.length - 1; i++) {
+          const mx = (raw[i][0] + raw[i + 1][0]) / 2, my = (raw[i][1] + raw[i + 1][1]) / 2;
+          ctx.quadraticCurveTo(raw[i][0], raw[i][1], mx, my);
+        }
+        ctx.lineTo(raw[raw.length - 1][0], raw[raw.length - 1][1]);
+        ctx.closePath();
+      }
+
+      function bakeSkyline(set) {
+        // Soft contact shadow under each slab (bake-time only, so shadowBlur is free)
+        shadowOn(9, 5, 0.28);
+        ctx.fillStyle = set.buildingDark;
+        for (const b of state.skyline) { roundRect(b.x, state.groundY - b.h, b.w, b.h + 12, 7); ctx.fill(); }
+        shadowOff();
+        for (const b of state.skyline) {
+          const rng = mulberry32(b.seed);
+          const col = b.tone ? set.building : set.buildingDark;
+          const ty = state.groundY - b.h;
+          // Molded slab: irregular outline + diagonal top-left key light
+          towerPath(b.x, ty, b.w, b.h + 12, rng);
+          const g = ctx.createLinearGradient(b.x, ty, b.x + b.w * 0.9, ty + b.h);
+          g.addColorStop(0, shade(col, 0.3));
+          g.addColorStop(0.45, col);
+          g.addColorStop(1, shade(col, -0.26));
+          ctx.fillStyle = g;
+          ctx.fill();
+          ctx.save();
+          towerPath(b.x, ty, b.w, b.h + 12, mulberry32(b.seed)); // same path again for clip
+          ctx.clip();
+          // Specular top band + lit left edge (light from upper-left, like the foreground)
+          ctx.fillStyle = withAlpha(shade(col, 0.5), 0.5);
+          roundRect(b.x + 1.5, ty + 1.2, b.w - 4, 4.5, 3); ctx.fill();
+          ctx.fillStyle = withAlpha(shade(col, 0.36), 0.35);
+          roundRect(b.x + 1, ty + 4, 3.2, b.h * 0.55, 2); ctx.fill();
+          // Pressed right/base shade
+          ctx.fillStyle = withAlpha(shade(col, -0.38), 0.3);
+          roundRect(b.x + b.w - 4, ty + 6, 3, b.h - 8, 2); ctx.fill();
+          ctx.fillStyle = withAlpha(shade(col, -0.32), 0.32);
+          roundRect(b.x + 1, state.groundY - 7, b.w - 2, 7, 2); ctx.fill();
+          // Gentle thumb-dent irregularities: 2-3 soft radial darker/lighter blobs
+          const dents = 2 + Math.floor(rng() * 2);
+          for (let d = 0; d < dents; d++) {
+            const dx = b.x + 4 + rng() * (b.w - 8);
+            const dy = ty + 8 + rng() * Math.max(8, b.h - 16);
+            const dr = 5 + rng() * 9;
+            const amt = (rng() < 0.5 ? -1 : 1) * (0.08 + rng() * 0.08);
+            const dg = ctx.createRadialGradient(dx, dy, dr * 0.15, dx, dy, dr);
+            dg.addColorStop(0, withAlpha(shade(col, amt), 0.5));
+            dg.addColorStop(1, withAlpha(shade(col, amt), 0));
+            ctx.fillStyle = dg;
+            ctx.beginPath(); ctx.arc(dx, dy, dr, 0, TAU); ctx.fill();
+          }
+          // Fingerprint knead on the larger slabs
+          if (b.w > 34 && b.h > state.height * 0.09) {
+            fingerprint(b.x + b.w * (0.3 + rng() * 0.4), ty + b.h * (0.3 + rng() * 0.35), Math.min(b.w, 26), rng() * TAU, rng, 0.05);
+          }
+          ctx.restore();
+          // Rounded clay roof caps
+          if (b.roof > 0.7) clayRound(b.x + b.w * 0.4, ty - 12, Math.max(4, b.w * 0.14), 14, 3, shade(col, 0.12));
+          else if (b.roof > 0.4) clayRound(b.x + b.w * 0.16, ty - 6, b.w * 0.68, 9, 4, shade(col, 0.1));
+          // Windows as pressed-in clay pellets (size/offset jitter, dark press rim above)
+          const wlit = set.night ? '#e9c86a' : shade(set.window, 0.12);
+          const wcol = set.night ? shade(set.window, -0.1) : shade(set.window, -0.15);
+          for (const w of b.windows) {
+            const jx = (rng() * 2 - 1) * 0.9, jy = (rng() * 2 - 1) * 0.9;
+            const sw = w.w * (0.8 + rng() * 0.5), sh = w.h * (0.8 + rng() * 0.5);
+            const wx = b.x + w.x + jx, wy = ty + w.y + jy;
+            ctx.fillStyle = withAlpha(shade(col, -0.42), 0.75);
+            roundRect(wx - 0.4, wy - 0.8, sw + 0.8, sh + 0.8, 1.6); ctx.fill();
+            ctx.fillStyle = w.lit ? wlit : wcol;
+            roundRect(wx, wy, sw, sh, 1.3); ctx.fill();
+            ctx.fillStyle = withAlpha(shade(w.lit ? wlit : wcol, 0.45), 0.75);
+            roundRect(wx + sw * 0.16, wy + sh * 0.14, sw * 0.55, Math.max(0.8, sh * 0.26), 0.8); ctx.fill();
+          }
+        }
+      }
+
+      function bakeCloudSprites(set) {
+        const dpr = state.dpr || 1;
+        for (const c of state.clouds) {
+          const rng = mulberry32(c.seed);
+          let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+          for (const p of c.puffs) {
+            minX = Math.min(minX, p.ox - p.r); maxX = Math.max(maxX, p.ox + p.r);
+            minY = Math.min(minY, p.oy - p.r); maxY = Math.max(maxY, p.oy + p.r);
+          }
+          const pad = 16;
+          c.sprOx = minX - pad; c.sprOy = minY - pad;
+          c.sprW = maxX - minX + pad * 2; c.sprH = maxY - minY + pad * 2;
+          const cv = document.createElement('canvas');
+          cv.width = Math.max(1, Math.ceil(c.sprW * dpr));
+          cv.height = Math.max(1, Math.ceil(c.sprH * dpr));
+          const cc = cv.getContext('2d');
+          cc.setTransform(dpr, 0, 0, dpr, -c.sprOx * dpr, -c.sprOy * dpr);
+          usingCtx(cc, () => {
+            shadowOn(8, 5, 0.2);
+            ctx.fillStyle = shade(set.cloud, -0.16);
+            for (const p of c.puffs) { ctx.beginPath(); ctx.arc(p.ox, p.oy, p.r, 0, TAU); ctx.fill(); }
+            shadowOff();
+            let big = c.puffs[0];
+            for (const p of c.puffs) { clayBall(p.ox, p.oy, p.r, set.cloud, 0.32, -0.14); if (p.r > big.r) big = p; }
+            fingerprint(big.ox, big.oy, big.r * 0.7, rng() * TAU, rng, 0.05);
+          });
+          c.sprite = cv;
+        }
+      }
+
+      function buildBackdrop() {
+        const idx = (state.wave - 1 + SKYSETS.length * 100) % SKYSETS.length;
+        const set = SKYSETS[idx];
+        const R = mulberry32((state.backdropSeed ^ (idx * 2654435761)) >>> 0);
+        const w = state.width, h = state.height;
+
+        // --- Sky layer: gradient, mottling, stars, sun/moon, back hill, skyline
+        const [skyCv, sc] = mkBakeCanvas();
+        usingCtx(sc, () => {
+          const g = ctx.createLinearGradient(0, 0, 0, state.groundY);
+          g.addColorStop(0, set.skyTop);
+          g.addColorStop(1, set.skyBot);
+          ctx.fillStyle = g;
+          ctx.fillRect(-BG_OVER, -BG_OVER, w + BG_OVER * 2, state.groundY + BG_OVER + 2);
+          // Broad kneaded-clay tonal mottling over the flat gradient
+          mottle(-BG_OVER, -BG_OVER, w + BG_OVER, state.groundY * 0.9, 16, set.skyTop, R, 0.085);
+          if (set.night) {
+            ctx.fillStyle = '#ece4d0';
+            for (const star of state.stars) { ctx.globalAlpha = star.a; ctx.beginPath(); ctx.arc(star.x, star.y, star.r * 0.6 + 0.6, 0, TAU); ctx.fill(); }
+            ctx.globalAlpha = 1;
+          }
+          bakeMoonOrSun(sc, set, R);
+          // Distant clay hill with molded shading, mottle and a knead mark
+          const back = state.hills.find(hh => hh.back);
+          if (back) {
+            shadowOn(12, 6, 0.2);
+            const hg = ctx.createLinearGradient(0, state.groundY - h * 0.12, 0, h);
+            hg.addColorStop(0, shade(set.hillBack, 0.22));
+            hg.addColorStop(0.6, set.hillBack);
+            hg.addColorStop(1, shade(set.hillBack, -0.18));
+            ctx.fillStyle = hg;
+            ctx.beginPath();
+            ctx.moveTo(-BG_OVER, h + BG_OVER);
+            for (const pt of back.pts) ctx.lineTo(pt.x, pt.y);
+            ctx.lineTo(w + BG_OVER, h + BG_OVER);
+            ctx.closePath(); ctx.fill();
+            shadowOff();
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(-BG_OVER, h + BG_OVER);
+            for (const pt of back.pts) ctx.lineTo(pt.x, pt.y);
+            ctx.lineTo(w + BG_OVER, h + BG_OVER);
+            ctx.closePath(); ctx.clip();
+            mottle(0, state.groundY - h * 0.1, w, state.groundY, 7, set.hillBack, R, 0.1);
+            fingerprint(w * (0.2 + R() * 0.6), state.groundY - h * 0.045, 26, R() * TAU, R, 0.05);
+            ctx.restore();
+          }
+          bakeSkyline(set);
+        });
+        bgSky = skyCv;
+
+        // --- Ground layer: band, mottle, coil ridges, front hill, grass, trees
+        const [gCv, gc] = mkBakeCanvas();
+        usingCtx(gc, () => {
+          const gg = ctx.createLinearGradient(0, state.groundY, 0, h);
+          gg.addColorStop(0, shade(set.ground, 0.16));
+          gg.addColorStop(0.35, set.ground);
+          gg.addColorStop(1, shade(set.ground, -0.16));
+          ctx.fillStyle = gg;
+          ctx.fillRect(-BG_OVER, state.groundY, w + BG_OVER * 2, h - state.groundY + BG_OVER);
+          mottle(-BG_OVER, state.groundY, w + BG_OVER, h, 9, set.ground, R, 0.1);
+          // Rolled-clay coil ridges across the foreground band
+          const bandH = h - state.groundY;
+          for (let k = 1; k <= 3; k++) {
+            const ry = state.groundY + bandH * (k / 3.6) + (R() * 2 - 1) * 4;
+            ctx.fillStyle = withAlpha(shade(set.ground, 0.14), 0.16);
+            ctx.fillRect(-BG_OVER, ry, w + BG_OVER * 2, 2.2);
+            ctx.fillStyle = withAlpha(shade(set.ground, -0.2), 0.14);
+            ctx.fillRect(-BG_OVER, ry + 2.2, w + BG_OVER * 2, 2.6);
+          }
+          const front = state.hills.find(hh => !hh.back);
+          if (front) {
+            shadowOn(9, -4, 0.14);
+            const fg = ctx.createLinearGradient(0, state.groundY - 20, 0, h);
+            fg.addColorStop(0, shade(set.hillFront, 0.2));
+            fg.addColorStop(0.6, set.hillFront);
+            fg.addColorStop(1, shade(set.hillFront, -0.14));
+            ctx.fillStyle = fg;
+            ctx.beginPath();
+            ctx.moveTo(-BG_OVER, h + BG_OVER);
+            for (const pt of front.pts) ctx.lineTo(pt.x, pt.y);
+            ctx.lineTo(w + BG_OVER, h + BG_OVER);
+            ctx.closePath(); ctx.fill();
+            shadowOff();
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(-BG_OVER, h + BG_OVER);
+            for (const pt of front.pts) ctx.lineTo(pt.x, pt.y);
+            ctx.lineTo(w + BG_OVER, h + BG_OVER);
+            ctx.closePath(); ctx.clip();
+            mottle(0, state.groundY - 30, w, h, 6, set.hillFront, R, 0.11);
+            fingerprint(w * (0.15 + R() * 0.7), state.groundY + bandH * 0.4, 24, R() * TAU, R, 0.05);
+            ctx.restore();
+          }
+          // Hand-placed grass beads: jittered size/spacing/hue, irregular overlap
+          let gx = -30;
+          while (gx < w + 30) {
+            const r = 4.5 + R() * 5;
+            const tone = -0.12 + R() * 0.2;
+            clayDot(gx, state.groundY + 2 + (R() * 2 - 1) * 1.6, r, shade(set.hillBack, tone), shade(set.hillBack, tone + 0.3));
+            gx += r * 1.5 + R() * 9;
+          }
+          // Foreground clay bushes
+          for (const t of state.trees) {
+            groundShadow(t.x, 12 * t.scale);
+            drawTree(t.x, state.groundY + 6, t.scale, t.tone ? '#5c8a46' : '#4c7a3a');
+          }
+        });
+        bgGround = gCv;
+
+        bakeCloudSprites(set);
+        bgPalette = idx; bgW = w; bgH = h;
+      }
+
+      function ensureBackdrop() {
+        const idx = (state.wave - 1 + SKYSETS.length * 100) % SKYSETS.length;
+        if (bgSky && bgPalette === idx && bgW === state.width && bgH === state.height) return;
+        buildBackdrop();
+      }
+
+      function layoutDefenses() {
+        const baseY = state.groundY;
+        const positions = [0.16, 0.5, 0.84].map(p => p * state.width);
+        if (!state.bases.length) {
+          state.bases = positions.map((x, i) => ({ id: i, x, y: baseY, ammo: maxAmmo(), alive: true, flash: 0 }));
+        } else {
+          state.bases.forEach((b, i) => { b.x = positions[i]; b.y = baseY; });
+        }
+
+        const citySlots = [0.08, 0.23, 0.36, 0.64, 0.77, 0.92].map(p => p * state.width);
+        if (!state.cities.length) {
+          state.cities = citySlots.map((x, i) => createCity(x, i));
+        } else {
+          state.cities.forEach((c, i) => { c.x = citySlots[i]; c.y = state.cityBandY; });
+        }
+      }
+
+      function createCity(x, slot) {
+        // A small cluster of flat towers with stable (non-flickering) windows.
+        const n = randi(3, 5);
+        const silhouette = [];
+        let ox = 0;
+        for (let i = 0; i < n; i++) {
+          const w = rand(12, 18);
+          const h = rand(20, 40);
+          const windows = [];
+          const cols = Math.max(1, Math.floor(w / 7));
+          const rows = Math.max(2, Math.floor(h / 10));
+          const cw = (w - 6) / cols, ch = (h - 10) / rows;
+          for (let cx = 0; cx < cols; cx++) {
+            for (let ry = 0; ry < rows; ry++) {
+              if (Math.random() < 0.7) windows.push({ ox: 4 + cx * cw, oy: 6 + ry * ch, lit: Math.random() < 0.7 });
+            }
+          }
+          silhouette.push({ ox, w, h, roof: Math.random(), windows });
+          ox += w + rand(1, 3);
+        }
+        return {
+          slot,
+          x,
+          y: state.cityBandY,
+          alive: true,
+          damage: 0,
+          crumble: 0,
+          fire: 0,
+          smoke: 0,
+          totalW: ox,
+          silhouette
+        };
+      }
+
+      function resetGame(practice = false) {
+        state.playing = true;
+        state.gameOver = false;
+        state.paused = false;
+        pauseOverlay.classList.add('hidden');
+        state.practice = practice;
+        state.wave = 1;
+        state.score = 0;
+        state.nextBonusScore = 12000;
+        state.comboCount = 0;
+        state.comboTimer = 0;
+        state.flash = 0;
+        state.tint = 0;
+        state.shake = 0;
+        state.time = 0;
+        state.lastTime = performance.now();
+        state.simAcc = 0;
+        state.waveIntroTimer = 3.4;
+        state.waveCooldown = 0;
+        state.spawnedThisWave = 0;
+        state.attract = false;
+        state.special = null;
+        state.speedMul = 1;
+        state.aiCool = 0;
+        state.bannerTimer = 0;
+        state.ammoStampCool = 0;
+        state.enemyMissiles.length = 0;
+        state.playerMissiles.length = 0;
+        state.explosions.length = 0;
+        state.particles.length = 0;
+        state.smoke.length = 0;
+        state.satellites.length = 0;
+        state.embers.length = 0;
+        state.prompts.length = 0;
+        state.destroyedThisWave = 0;
+        state.bases = [];
+        state.cities = [];
+        state.backdropSeed = (Math.random() * 2 ** 31) | 0; // fresh molded world per run
+        generateBackdrop();
+        layoutDefenses();
+        state.bases.forEach(base => { base.ammo = ammoCap(); base.alive = true; base.flash = 0; base.rebuildFlash = 0; });
+        state.cities.forEach((city, i) => Object.assign(city, createCity(city.x, i)));
+        prepareWave(); // set up wave 1 spawn budget
+        gameOverOverlay.classList.add('hidden');
+      }
+
+      // Practice runs are a real sandbox mode: more ammo, slower enemies,
+      // watermark on screen, and scores never recorded locally or globally.
+      function ammoCap() { return Math.round(maxAmmo() * (state.practice ? 1.5 : 1)); }
+
+      // Auto-playing demo shown behind the title screen.
+      function startAttract() {
+        if (!settings.demo) return;
+        resetGame();          // fresh game...
+        state.attract = true; // ...driven by the AI, silent, self-restarting
+        state.aiCool = 0.5;
+        setDemoBadge(true);
+      }
+
+      function stopAttract() {
+        if (!state.attract) return;
+        state.attract = false;
+        state.playing = false;
+        setDemoBadge(false);
+        state.enemyMissiles.length = 0; state.playerMissiles.length = 0;
+        state.satellites.length = 0; state.explosions.length = 0;
+        state.particles.length = 0; state.smoke.length = 0; state.embers.length = 0;
+      }
+
+      // Simple defensive AI: intercept the most urgent threat, keep bases stocked.
+      function aiDefend(dt) {
+        state.bases.forEach(b => { if (b.alive) b.ammo = ammoCap(); });
+        state.aiCool -= dt;
+        if (state.aiCool > 0 || state.playerMissiles.length > 7) return;
+        state.aiCool = rand(0.16, 0.3);
+        let best = null, bestScore = -Infinity;
+        for (const m of state.enemyMissiles) {
+          const s = m.y + (m.type === 'smart' ? 40 : 0); // closer to ground = more urgent
+          if (s > bestScore) { bestScore = s; best = m; }
+        }
+        for (const sat of state.satellites) {
+          const s = sat.y * 0.5 + 30;
+          if (s > bestScore) { bestScore = s; best = sat; }
+        }
+        if (!best) return;
+        let lx = best.x, ly = best.y;
+        if (best.tx !== undefined) { // lead a little along its heading
+          const dx = best.tx - best.sx, dy = best.ty - best.sy, d = Math.hypot(dx, dy) || 1;
+          lx = best.x + dx / d * 42; ly = best.y + dy / d * 42;
+        }
+        ly = clamp(ly, state.groundY * 0.3, state.groundY - 60);
+        if (state.playerMissiles.some(pm => dist(pm.tx, pm.ty, lx, ly) < 55)) return; // already handled
+        launchDefense(lx, ly);
+      }
+
+      function nearestBase(targetX) {
+        let best = null;
+        for (const base of state.bases) {
+          if (!base.alive || base.ammo <= 0) continue;
+          const d = Math.abs(base.x - targetX);
+          if (!best || d < best.d) best = { base, d };
+        }
+        return best?.base || null;
+      }
+
+      function launchDefense(x, y) {
+        if (!state.playing || state.gameOver || state.paused) return; // no firing while paused
+        y = Math.min(y, state.groundY - 26);
+        const base = nearestBase(x);
+        if (!base) {
+          // Pressed-clay stamp so taps never feel silently swallowed
+          if (!state.attract && state.ammoStampCool <= 0) {
+            state.ammoStampCool = 0.8;
+            state.prompts.push({ text: 'OUT OF AMMO', x: clamp(x, 70, state.width - 70), y: Math.min(y, state.groundY - 40), color: '#a83a24', life: 1.0, age: 0, stamp: true });
+            audio?.uiClick();
+          }
+          return;
+        }
+        base.ammo -= 1;
+        base.flash = 0.18;
+        state.playerMissiles.push({
+          x: base.x,
+          y: base.y - 10,
+          sx: base.x,
+          sy: base.y - 10,
+          tx: x,
+          ty: y,
+          speed: Math.max(320, state.height * 0.65),
+          done: false,
+          trail: [],
+          spark: 0
+        });
+        initAudio();
+        audio?.missileLaunch();
+      }
+
+      function queuePrompt(text, x, y, color = '#ffffff') {
+        // age:0 is required — updateParticles ages/removes prompts by age>=life.
+        state.prompts.push({ text, x, y, color, life: 1.2, age: 0 });
+        if (state.prompts.length > 60) state.prompts.splice(0, state.prompts.length - 60);
+      }
+
+      function createExplosion(x, y, radius, kind = 'defense', source = null) {
+        state.explosions.push({
+          x, y,
+          r: 2,
+          maxR: radius,
+          age: 0,
+          life: kind === 'big' ? 1.0 : 0.82,
+          kind,
+          source,
+          hitSet: new Set(),
+        });
+
+        const isMobile = state.width < 768;
+        let burst = isMobile ? (radius < 40 ? 6 : radius < 70 ? 10 : 14) : (radius < 40 ? 12 : radius < 70 ? 18 : 24);
+        if (!settings.effects) burst = Math.ceil(burst * 0.45);
+        for (let i = 0; i < burst; i++) {
+          const a = Math.random() * TAU;
+          const sp = rand(40, radius * 2.2);
+          state.particles.push({
+            x, y,
+            vx: Math.cos(a) * sp,
+            vy: Math.sin(a) * sp - rand(8, 50),
+            life: rand(0.35, 0.9),
+            age: 0,
+            size: rand(1.4, 4.5),
+            hue: rand(20, 58),
+            glow: true,
+            gravity: 60
+          });
+        }
+
+        state.flash = Math.min(1, state.flash + radius / 140);
+        state.tint = Math.min(1, state.tint + radius / 220);
+        if (settings.shake) state.shake = Math.min(18, state.shake + radius / 9);
+        initAudio();
+        audio?.explosion(Math.min(1.25, radius / 70));
+      }
+
+      function scoreEnemy(enemy, epicenterX, epicenterY) {
+        if (state.gameOver) return; // final score is frozen at endGame
+        let base = 100;
+        if (enemy.type === 'smart') base = 180;
+        if (enemy.type === 'mirvChild') base = 130;
+        if (enemy.type === 'meteor') base = 120;
+        if (enemy.type === 'satellite') base = 750;
+        state.comboCount = Math.min(12, state.comboCount + 1);
+        state.comboTimer = 1.4;
+        const mult = 1 + (state.comboCount - 1) * 0.18;
+        const earned = Math.round(base * mult);
+        state.score += earned;
+        queuePrompt('+' + earned + (state.comboCount > 1 ? '  x' + mult.toFixed(1) : ''), epicenterX, epicenterY, enemy.type === 'satellite' ? '#8ff2ff' : '#ffd884');
+        audio?.combo(state.comboCount);
+        grantBonusCityIfNeeded();
+      }
+
+      function grantBonusCityIfNeeded() {
+        while (state.score >= state.nextBonusScore) {
+          const deadCity = state.cities.find(c => !c.alive);
+          if (deadCity) {
+            deadCity.alive = true;
+            deadCity.damage = 0;
+            deadCity.crumble = 0;
+            deadCity.fire = 0;
+            deadCity.smoke = 0;
+            queuePrompt('BONUS CITY', deadCity.x, deadCity.y - 36, '#8fffc9');
+          } else {
+            const weakestBase = state.bases.find(b => b.alive && b.ammo < ammoCap());
+            if (weakestBase) weakestBase.ammo = Math.min(ammoCap(), weakestBase.ammo + 6);
+            queuePrompt('BONUS SUPPLY', state.width * 0.5, state.hudSafeTop + 30, '#8fffc9');
+          }
+          state.nextBonusScore += 12000;
+        }
+      }
+
+      function killCity(city) {
+        if (!city || !city.alive) return;
+        city.alive = false;
+        city.crumble = 1;
+        city.fire = 1.8;
+        city.smoke = 2.5;
+        const emberBurst = state.width < 768 ? 16 : 32;
+        for (let i = 0; i < emberBurst; i++) {
+          state.embers.push({
+            x: city.x + rand(-26, 26),
+            y: city.y - rand(6, 40),
+            vx: rand(-40, 40),
+            vy: rand(-120, -20),
+            age: 0,
+            life: rand(1.4, 2.4),
+            size: rand(2, 5)
+          });
+        }
+        createExplosion(city.x, city.y - 18, 58, 'big', city);
+        initAudio();
+        audio?.cityCrash();
+      }
+
+      function killBase(base) {
+        if (!base || !base.alive) return;
+        base.alive = false;
+        base.ammo = 0;
+        createExplosion(base.x, base.y - 12, 68, 'big', base);
+      }
+
+      function enemyTargets() {
+        const aliveCities = state.cities.filter(c => c.alive);
+        const aliveBases = state.bases.filter(b => b.alive);
+        return [...aliveCities, ...aliveBases];
+      }
+
+      function randomTarget() {
+        const targets = enemyTargets();
+        return targets.length ? targets[randi(0, targets.length - 1)] : { x: rand(state.width * 0.08, state.width * 0.92), y: state.groundY };
+      }
+
+      function spawnEnemyMissile(type = 'normal', fromX = null, fromY = null, forcedTarget = null, forceSplit = false) {
+        const t = forcedTarget || randomTarget();
+        const sx = fromX ?? rand(state.width * 0.05, state.width * 0.95);
+        // Spawn below the HUD-safe band so warheads never materialise hidden under the HUD bar
+        const spawnTop = state.hudSafeTop + 6;
+        const sy = fromY ?? rand(spawnTop, Math.max(spawnTop + 34, state.height * 0.14));
+        let speedBase = (38 + state.wave * 3.6) * diff().speed * state.speedMul;
+        if (state.practice) speedBase *= 0.85;
+        const willSplit = (forceSplit && type === 'normal') ||
+          (state.wave >= 6 && type === 'normal' && Math.random() < Math.min(0.6, 0.14 + state.wave * 0.03));
+        // Meteor showers rain rolled-clay space rocks, not ordinary red rockets
+        if (type === 'normal' && !willSplit && state.special?.key === 'meteor') type = 'meteor';
+        const missile = {
+          type,
+          x: sx,
+          y: sy,
+          sx, sy,
+          tx: t.x + rand(-22, 22),
+          ty: t.y - rand(0, 10),
+          speed: type === 'smart' ? speedBase * 1.5 : speedBase + rand(0, 20),
+          age: 0,
+          trail: [],
+          smoked: 0,
+          splitY: willSplit ? rand(0.34, 0.5) * state.groundY : null,
+          splitDone: false,
+          hp: type === 'smart' ? 1 : 1,
+          smart: type === 'smart',
+          dead: false
+        };
+        state.enemyMissiles.push(missile);
+        if (Math.random() < 0.4) {
+          initAudio();
+          audio?.enemyWhine(missile.speed / 70);
+        }
+      }
+
+      function spawnSatellite() {
+        const fromLeft = Math.random() < 0.5;
+        state.satellites.push({
+          type: 'satellite',
+          x: fromLeft ? -60 : state.width + 60,
+          y: rand(Math.max(state.hudSafeTop + 14, state.height * 0.13), state.height * 0.32),
+          vx: fromLeft ? rand(34, 60) : -rand(34, 60),
+          wobble: rand(0, 10),
+          hp: 2,
+          cool: rand(1.8, 3.4),
+          dead: false,
+          flash: 0,
+          trail: []
+        });
+      }
+
+      function showBanner(text, color) { state.bannerText = text; state.bannerColor = color; state.bannerTimer = 2.6; }
+
+      function prepareWave() {
+        state.spawnedThisWave = 0;
+        const special = specialFor(state.wave);
+        state.special = special;
+        state.speedMul = (special && special.key === 'meteor') ? 1.28 : 1;
+        let budget = 10 + state.wave * 1.75 + Math.floor(state.wave * 0.3);
+        budget *= diff().budget;
+        if (special) budget *= 1.3;
+        state.spawnBudget = Math.round(budget);
+        state.destroyedThisWave = 0;
+        state.waveIntroTimer = special ? 3.0 : 2.6;
+        // Arcade-faithful: destroyed batteries are REBUILT (alive, full ammo) at
+        // the start of every wave — cities stay dead (the 12k bonus revives those).
+        let rebuilt = 0;
+        state.bases.forEach(base => {
+          if (!base.alive && state.wave > 1) {
+            base.alive = true;
+            base.rebuildFlash = 2.2; // fresh-clay pop-in cue
+            rebuilt++;
+          }
+          if (base.alive) base.ammo = ammoCap();
+        });
+        if (rebuilt > 0 && !state.attract) {
+          queuePrompt('BATTERIES REBUILT', state.width / 2, state.groundY - 110, '#b8ffb3');
+        }
+        if (special) {
+          showBanner('★ ' + special.name + ' ★', special.color);
+          audio?.special(special.key);
+          if (special.key === 'swarm') { spawnSatellite(); spawnSatellite(); }
+        } else {
+          queuePrompt('WAVE ' + state.wave, state.width / 2, 100, '#9be6ff');
+        }
+      }
+
+      function updateWave(dt) {
+        if (state.bannerTimer > 0) state.bannerTimer -= dt;
+        if (state.waveIntroTimer > 0) {
+          state.waveIntroTimer -= dt;
+          return;
+        }
+        if (state.spawnedThisWave < state.spawnBudget) {
+          const sp = state.special;
+          let rate = Math.max(0.2, 1.1 - state.wave * 0.045);
+          if (sp && sp.key === 'meteor') rate *= 0.55;
+          else if (sp && sp.key === 'swarm') rate *= 0.85;
+          state.waveCooldown -= dt;
+          if (state.waveCooldown <= 0) {
+            state.spawnedThisWave++;
+            if (sp) {
+              if (sp.key === 'mirv') spawnEnemyMissile('normal', null, null, null, true);
+              else if (sp.key === 'blitz') spawnEnemyMissile(Math.random() < 0.7 ? 'smart' : 'normal');
+              else if (sp.key === 'swarm') {
+                spawnEnemyMissile('normal');
+                if (state.satellites.length < 4 && Math.random() < 0.45) spawnSatellite();
+              } else spawnEnemyMissile('normal'); // meteor
+            } else {
+              const smart = state.wave >= 10 && Math.random() < Math.min(0.35, 0.08 + state.wave * 0.015);
+              spawnEnemyMissile(smart ? 'smart' : 'normal');
+              if (state.wave >= 8 && Math.random() < Math.min(0.22, 0.06 + state.wave * 0.01) && state.satellites.length < 2) spawnSatellite();
+            }
+            state.waveCooldown = rate + rand(0.05, 0.32);
+          }
+        } else if (!state.enemyMissiles.length && !state.satellites.length && !state.explosions.length) {
+          let clearBonus = 400 + state.cities.filter(c => c.alive).length * 100 + state.bases.reduce((n, b) => n + b.ammo * 6, 0);
+          if (state.special) {
+            const specialBonus = 1500 + state.wave * 120;
+            clearBonus += specialBonus;
+            queuePrompt('SPECIAL CLEARED  +' + specialBonus.toLocaleString(), state.width / 2, 150, state.special.color);
+          }
+          state.score += clearBonus;
+          grantBonusCityIfNeeded();
+          queuePrompt('WAVE CLEAR', state.width / 2, 120, '#b8ffb3');
+          audio?.waveClear();
+          state.wave++;
+          if (state.attract && state.wave > 15) { startAttract(); return; } // cycle the demo
+          prepareWave();
+        }
+      }
+
+      function updatePlayerMissiles(dt) {
+        for (let i = state.playerMissiles.length - 1; i >= 0; i--) {
+          const m = state.playerMissiles[i];
+          const dx = m.tx - m.x;
+          const dy = m.ty - m.y;
+          const d = Math.hypot(dx, dy);
+          const step = m.speed * dt;
+          m.trail.push({ x: m.x, y: m.y, a: 1 });
+          if (m.trail.length > 24) m.trail.shift();
+          if (d <= step) {
+            m.x = m.tx; m.y = m.ty;
+            createExplosion(m.x, m.y, rand(48, 78), 'defense', m);
+            state.playerMissiles.splice(i, 1);
+            continue;
+          }
+          m.x += dx / d * step;
+          m.y += dy / d * step;
+          m.spark -= dt;
+          if (m.spark <= 0 && state.particles.length < 400) {
+            m.spark = 0.02;
+            state.particles.push({ x: m.x, y: m.y, vx: rand(-10, 10), vy: rand(-12, 18), life: 0.32, age: 0, size: rand(1, 3), hue: rand(180, 205), glow: true, gravity: 0 });
+          }
+        }
+      }
+
+      function updateEnemyMissiles(dt) {
+        for (let i = state.enemyMissiles.length - 1; i >= 0; i--) {
+          const m = state.enemyMissiles[i];
+          m.age += dt;
+          const dx = m.tx - m.x;
+          const dy = m.ty - m.y;
+          let d = Math.hypot(dx, dy) || 1;
+
+          if (m.smart && m.age > 0.35) {
+            const nearestExplosion = state.explosions.find(e => dist(m.x, m.y, e.x, e.y) < e.r + 80);
+            if (nearestExplosion) {
+              m.tx += (m.x < state.width / 2 ? 1 : -1) * 40 * dt;
+            }
+          }
+
+          d = Math.hypot(m.tx - m.x, m.ty - m.y) || 1;
+          const step = m.speed * dt;
+          m.trail.push({ x: m.x, y: m.y, s: rand(1.5, 4) });
+          if (m.trail.length > 30) m.trail.shift();
+
+          // MIRV split: partway down, the warhead FORKS into fanning children.
+          // No blast here — a blast at this point would instantly detonate the
+          // children spawned at the same spot (the "blew up immediately" bug).
+          if (m.splitY && !m.splitDone && m.y >= m.splitY) {
+            const kids = randi(2, 3);
+            for (let k = 0; k < kids; k++) {
+              const target = randomTarget();
+              state.enemyMissiles.push({
+                type: 'mirvChild',
+                x: m.x + rand(-4, 4),
+                y: m.y,
+                sx: m.x,
+                sy: m.y,
+                tx: target.x + rand(-30, 30),
+                ty: target.y,
+                speed: m.speed * rand(1.05, 1.2),
+                age: 0,
+                trail: [],
+                smoked: 0,
+                splitY: null,
+                splitDone: true,
+                hp: 1,
+                smart: false,
+                dead: false
+              });
+            }
+            // harmless spark puff to sell the split (particles don't collide)
+            for (let p = 0; p < 6; p++) {
+              state.particles.push({ x: m.x, y: m.y, vx: rand(-34, 34), vy: rand(-12, 26), life: rand(0.3, 0.55), age: 0, size: rand(1.5, 3), hue: rand(20, 45), glow: true, gravity: 40 });
+            }
+            state.enemyMissiles.splice(i, 1); // parent becomes its children
+            continue;
+          }
+
+          if (d <= step) {
+            m.x = m.tx; m.y = m.ty;
+            impactGround(m.x, m.y, m);
+            state.enemyMissiles.splice(i, 1);
+            continue;
+          }
+          m.x += (m.tx - m.x) / d * step;
+          m.y += (m.ty - m.y) / d * step;
+
+          m.smoked -= dt;
+          if (m.smoked <= 0 && state.smoke.length < 200) {
+            m.smoked = 0.04;
+            state.smoke.push({ x: m.x, y: m.y, vx: rand(-10, 10), vy: rand(-8, 6), age: 0, life: rand(0.45, 0.9), size: rand(5, 11), dark: 0.5 + Math.random() * 0.5 });
+          }
+        }
+      }
+
+      function impactGround(x, y, source) {
+        createExplosion(x, y, source.type === 'smart' ? 72 : 52, source.type === 'smart' ? 'big' : 'enemy', source);
+        const victims = [
+          ...state.cities.filter(c => c.alive && Math.abs(c.x - x) < 40),
+          ...state.bases.filter(b => b.alive && Math.abs(b.x - x) < 34)
+        ];
+        victims.forEach(v => ('ammo' in v ? killBase(v) : killCity(v)));
+      }
+
+      function updateSatellites(dt) {
+        for (let i = state.satellites.length - 1; i >= 0; i--) {
+          const s = state.satellites[i];
+          s.x += s.vx * dt;
+          s.y += Math.sin(state.time * 2 + s.wobble) * 12 * dt;
+          s.flash = Math.max(0, s.flash - dt * 2.6);
+          s.trail.push({ x: s.x, y: s.y, a: 1 });
+          if (s.trail.length > 24) s.trail.shift();
+          s.cool -= dt;
+          if (s.cool <= 0 && state.playing && !state.gameOver) {
+            s.cool = rand(1.6, 3.1);
+            const target = randomTarget();
+            spawnEnemyMissile(Math.random() < 0.3 && state.wave >= 10 ? 'smart' : 'normal', s.x, s.y + 6, target);
+          }
+          // single guarded splice (off-screen + dead in the same tick must not double-splice)
+          if (s.dead || (s.vx > 0 && s.x > state.width + 80) || (s.vx < 0 && s.x < -80)) {
+            state.satellites.splice(i, 1);
+          }
+        }
+      }
+
+      function updateExplosions(dt) {
+        for (let i = state.explosions.length - 1; i >= 0; i--) {
+          const e = state.explosions[i];
+          e.age += dt;
+          const t = e.age / e.life;
+          e.r = e.maxR * Math.sin(Math.min(1, t) * Math.PI);
+          if (e.r < 0) e.r = 0;
+
+          for (let j = state.enemyMissiles.length - 1; j >= 0; j--) {
+            const m = state.enemyMissiles[j];
+            if (e.hitSet.has(m)) continue;
+            const hitRadius = m.type === 'smart' ? e.r * 0.75 : e.r;
+            if (dist(e.x, e.y, m.x, m.y) <= hitRadius) {
+              e.hitSet.add(m);
+              scoreEnemy(m, m.x, m.y);
+              createExplosion(m.x, m.y, m.type === 'smart' ? 65 : 48, m.type === 'smart' ? 'big' : 'enemy', m);
+              state.enemyMissiles.splice(j, 1);
+            }
+          }
+
+          for (let j = state.satellites.length - 1; j >= 0; j--) {
+            const s = state.satellites[j];
+            if (e.hitSet.has(s)) continue;
+            if (dist(e.x, e.y, s.x, s.y) <= e.r + 18) {
+              e.hitSet.add(s);
+              s.hp -= 1;
+              s.flash = 1;
+              if (s.hp <= 0) {
+                scoreEnemy({ type: 'satellite' }, s.x, s.y);
+                createExplosion(s.x, s.y, 82, 'big', s);
+                s.dead = true;
+              } else {
+                queuePrompt('SATELLITE HIT', s.x, s.y - 18, '#8ff2ff');
+              }
+            }
+          }
+
+          if (t >= 1) state.explosions.splice(i, 1);
+        }
+      }
+
+      function updateParticles(dt) {
+        const all = [state.particles, state.smoke, state.embers, state.prompts];
+        for (const list of all) {
+          for (let i = list.length - 1; i >= 0; i--) {
+            const p = list[i];
+            p.age += dt;
+            if ('vx' in p) p.x += p.vx * dt;
+            if ('vy' in p) p.y += p.vy * dt;
+            if ('gravity' in p) p.vy += p.gravity * dt;
+            if (p.life && p.age >= p.life) list.splice(i, 1);
+          }
+        }
+        // Cap particle counts to prevent mobile lockup
+        if (state.particles.length > 400) state.particles.splice(0, state.particles.length - 400);
+        if (state.smoke.length > 200) state.smoke.splice(0, state.smoke.length - 200);
+        if (state.embers.length > 150) state.embers.splice(0, state.embers.length - 150);
+
+        for (const city of state.cities) {
+          if (!city.alive) {
+            city.fire = Math.max(0, city.fire - dt * 0.08);
+            city.smoke = Math.max(0, city.smoke - dt * 0.06);
+            if (city.smoke > 0 && Math.random() < 6 * dt && state.smoke.length < 200) {
+              state.smoke.push({ x: city.x + rand(-16, 16), y: city.y - rand(18, 42), vx: rand(-8, 8), vy: rand(-16, -4), age: 0, life: rand(1.2, 2.1), size: rand(10, 20), dark: 0.9 });
+            }
+            if (city.fire > 0 && Math.random() < 12 * dt && state.embers.length < 150) {
+              state.embers.push({ x: city.x + rand(-18, 18), y: city.y - rand(6, 24), vx: rand(-15, 15), vy: rand(-40, -10), age: 0, life: rand(0.8, 1.4), size: rand(2, 4) });
+            }
+          }
+        }
+      }
+
+      function updatePrompts(dt) {
+        for (let i = state.prompts.length - 1; i >= 0; i--) {
+          const p = state.prompts[i];
+          if (!p.stamp) p.y -= 24 * dt; // stamps stay pressed in place
+        }
+      }
+
+      function updateCombos(dt) {
+        if (state.comboTimer > 0) {
+          state.comboTimer -= dt;
+          if (state.comboTimer <= 0) state.comboCount = 0;
+        }
+        state.flash = Math.max(0, state.flash - dt * 1.8);
+        state.tint = Math.max(0, state.tint - dt * 0.8);
+        state.shake = Math.max(0, state.shake - dt * 28);
+        state.ammoStampCool = Math.max(0, state.ammoStampCool - dt);
+        state.bases.forEach(b => {
+          b.flash = Math.max(0, b.flash - dt * 5);
+          b.rebuildFlash = Math.max(0, (b.rebuildFlash || 0) - dt);
+        });
+      }
+
+      function checkGameOver() {
+        const aliveCities = state.cities.some(c => c.alive);
+        if (!aliveCities && !state.gameOver) {
+          if (state.attract) { startAttract(); return; } // loop the demo instead of ending
+          state.gameOver = true;
+          state.playing = false;
+          state.goArmedAt = performance.now(); // arm the tap-to-restart delay
+          // "Reached Wave N" = the wave you died in, and the SAME N is recorded
+          // to both the local list and the global board.
+          const reached = state.wave;
+          gameOverTitle.textContent = state.practice ? 'Practice Over' : 'All Cities Lost';
+          gameOverText.textContent = `Final Score ${state.score.toLocaleString()} · Reached Wave ${reached}` +
+            (state.practice ? ' · Practice scores are not recorded' : '');
+          const hsInit = document.getElementById('hsInitialsSection');
+          const hsDisp = document.getElementById('hsScoresDisplay');
+          if (!state.practice && isHighScore(state.score) && state.score > 0) {
+            hsInit.classList.remove('hidden');
+            buildHSInitials(state.score, reached, hsDisp);
+          } else {
+            hsInit.classList.add('hidden');
+            renderHSBoth(hsDisp);
+          }
+          gameOverOverlay.classList.remove('hidden');
+        }
+      }
+
+      function update(dt) {
+        state.time += dt;
+        if (!state.playing || state.gameOver) {
+          // Keep the scene alive behind overlays: in-flight missiles land,
+          // explosions bloom and decay — but nothing new spawns and the score
+          // is frozen (scoreEnemy no-ops after endGame).
+          updatePlayerMissiles(dt);
+          updateEnemyMissiles(dt);
+          updateSatellites(dt);
+          updateExplosions(dt);
+          updateParticles(dt);
+          updatePrompts(dt);
+          updateCombos(dt);
+          return;
+        }
+        updateWave(dt);
+        if (state.attract) aiDefend(dt);
+        updatePlayerMissiles(dt);
+        updateEnemyMissiles(dt);
+        updateSatellites(dt);
+        updateExplosions(dt);
+        updateParticles(dt);
+        updatePrompts(dt);
+        updateCombos(dt);
+        checkGameOver();
+      }
+
+      function drawSky() {
+        // Baked molded-clay sky + skyline (see buildBackdrop); clouds drift live
+        // as pre-baked sprites so the parallax survives without per-frame gradients.
+        ensureBackdrop();
+        ctx.drawImage(bgSky, -BG_OVER, -BG_OVER, state.width + BG_OVER * 2, state.height + BG_OVER * 2);
+        for (const c of state.clouds) {
+          if (!c.sprite) continue;
+          const cx = ((c.x + state.time * c.speed) % (state.width + c.w + 120) + state.width + c.w + 120) % (state.width + c.w + 120) - c.w - 60;
+          ctx.drawImage(c.sprite, cx + c.sprOx, c.y + c.sprOy, c.sprW, c.sprH);
+        }
+      }
+
+      // Clay "cottages" you defend — cream clay body, red clay roof.
+      const CITY_BODY = '#d8c5a2', CITY_BODY2 = '#c8b48d', CITY_ROOF = '#bc4d34', CITY_WIN = '#5a4632';
+
+      function drawGround() {
+        // Baked: ground band, coil ridges, front hill, jittered grass beads, bushes.
+        if (bgGround) ctx.drawImage(bgGround, -BG_OVER, -BG_OVER, state.width + BG_OVER * 2, state.height + BG_OVER * 2);
+      }
+
+      function groundShadow(x, w) {
+        ctx.fillStyle = 'rgba(28,22,16,0.2)';
+        ctx.beginPath();
+        ctx.ellipse(x, state.groundY + 5, w, 5, 0, 0, TAU);
+        ctx.fill();
+      }
+
+      function drawCitiesAndBases() {
+        drawGround(); // baked layer already includes the clay bushes
+
+        for (const city of state.cities) {
+          if (city.alive) groundShadow(city.x, city.totalW * 0.6);
+          ctx.save();
+          ctx.translate(city.x - city.totalW / 2, city.y);
+          if (!city.alive) {
+            for (let i = 0; i < city.silhouette.length; i++) {
+              const s = city.silhouette[i];
+              const hh = Math.min(s.h, 8 + (i % 3) * 4);
+              clayRound(s.ox, -hh, s.w, hh, 3, '#7a6653');
+            }
+          } else {
+            shadowOn(6, 4, 0.26);
+            for (let i = 0; i < city.silhouette.length; i++) {
+              const s = city.silhouette[i];
+              clayRound(s.ox, -s.h, s.w, s.h, 3, (i % 2) ? CITY_BODY2 : CITY_BODY);
+            }
+            shadowOff();
+            for (let i = 0; i < city.silhouette.length; i++) {
+              const s = city.silhouette[i];
+              if (s.roof > 0.4) clayRound(s.ox - 1, -s.h - 4, s.w + 2, 6, 2, CITY_ROOF);
+              ctx.fillStyle = CITY_WIN;
+              for (const win of s.windows) { roundRect(s.ox + win.ox, -s.h + win.oy, 2.6, 3.2, 1); ctx.fill(); }
+            }
+          }
+          ctx.restore();
+        }
+
+        for (const base of state.bases) {
+          groundShadow(base.x, 32);
+          ctx.save();
+          ctx.translate(base.x, base.y);
+          drawBunker(base);
+          ctx.restore();
+        }
+      }
+
+      // Clay dome hut: molded tan dome + red clay cap + dark arched doorway.
+      function drawBunker(base) {
+        const alive = base.alive;
+        const tan = alive ? '#d8bd8f' : '#9c927e';
+        const red = alive ? '#c0472f' : '#7a5148';
+        const W = 30, H = 22;
+        // Fresh-clay rebuild pop: the new dome squashes up out of the ground
+        if (alive && base.rebuildFlash > 0) {
+          const t = 1 - base.rebuildFlash / 2.2; // 0 → 1 over the cue
+          const grow = Math.min(1, t / 0.28);
+          const overshoot = grow >= 1 ? 1 + Math.sin(Math.min(1, (t - 0.28) / 0.3) * Math.PI) * 0.1 * (1 - t) : grow;
+          ctx.scale(1 + (1 - overshoot) * 0.7, Math.max(0.12, overshoot));
+        }
+        // Molded tan dome-hut (rounded top) with a single soft shadow
+        shadowOn(7, 4, 0.3);
+        const g = ctx.createRadialGradient(-W * 0.3, -H * 0.75, 3, 0, -H * 0.35, W * 1.15);
+        g.addColorStop(0, shade(tan, 0.42)); g.addColorStop(0.6, tan); g.addColorStop(1, shade(tan, -0.28));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(-W, 0);
+        ctx.lineTo(-W, -H * 0.42);
+        ctx.quadraticCurveTo(-W, -H, 0, -H);
+        ctx.quadraticCurveTo(W, -H, W, -H * 0.42);
+        ctx.lineTo(W, 0);
+        ctx.closePath(); ctx.fill();
+        shadowOff();
+        // Faint thumb-knead ridges on the dome (stable per base)
+        if (settings.effects) fingerprint(-W * 0.18, -H * 0.55, 9, base.id * 2.1, mulberry32(1234 + base.id * 77), 0.06);
+        // Red clay cap on top
+        const rg = ctx.createRadialGradient(-4, -H - 3, 2, 0, -H + 1, 13);
+        rg.addColorStop(0, shade(red, 0.4)); rg.addColorStop(0.6, red); rg.addColorStop(1, shade(red, -0.3));
+        ctx.fillStyle = rg;
+        ctx.beginPath(); ctx.ellipse(0, -H + 2, 12, 9, 0, Math.PI, TAU); ctx.fill();
+        if (alive && base.flash > 0) {
+          ctx.fillStyle = `rgba(255,244,205,${base.flash})`;
+          ctx.beginPath(); ctx.ellipse(0, -H + 2, 12, 9, 0, Math.PI, TAU); ctx.fill();
+        }
+        // Dark arched doorway
+        ctx.fillStyle = alive ? '#4a3324' : '#3f3a30';
+        ctx.beginPath();
+        ctx.moveTo(-6, 0); ctx.lineTo(-6, -9);
+        ctx.quadraticCurveTo(-6, -14, 0, -14);
+        ctx.quadraticCurveTo(6, -14, 6, -9);
+        ctx.lineTo(6, 0); ctx.closePath(); ctx.fill();
+        // Side arch vents
+        ctx.fillStyle = alive ? '#5a4632' : '#4a453b';
+        for (const sx of [-20, 13]) {
+          ctx.beginPath();
+          ctx.moveTo(sx, 0); ctx.lineTo(sx, -5);
+          ctx.quadraticCurveTo(sx, -9, sx + 3.5, -9);
+          ctx.quadraticCurveTo(sx + 7, -9, sx + 7, -5);
+          ctx.lineTo(sx + 7, 0); ctx.closePath(); ctx.fill();
+        }
+      }
+
+      function roundRect(x, y, w, h, r) {
+        r = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      }
+
+      // Clay rocket: rounded body with cylindrical clay shading, cream nose cone,
+      // clay fins, and a soft drop shadow.
+      function drawRocket(x, y, ang, len, w, body, nose, fin, stripe) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(ang);
+        ctx.lineJoin = 'round';
+        // Fins
+        ctx.fillStyle = shade(fin, -0.05);
+        ctx.beginPath();
+        ctx.moveTo(-len * 0.30, -w * 0.5); ctx.lineTo(-len * 0.58, -w * 1.05); ctx.lineTo(-len * 0.14, -w * 0.5); ctx.closePath();
+        ctx.moveTo(-len * 0.30, w * 0.5); ctx.lineTo(-len * 0.58, w * 1.05); ctx.lineTo(-len * 0.14, w * 0.5); ctx.closePath();
+        ctx.fill();
+        // Body — cylindrical clay shading (lit centre band, shaded top/bottom)
+        shadowOn(5, 3, 0.38);
+        const bg = ctx.createLinearGradient(0, -w * 0.5, 0, w * 0.5);
+        bg.addColorStop(0, shade(body, -0.24)); bg.addColorStop(0.42, shade(body, 0.32)); bg.addColorStop(1, shade(body, -0.28));
+        ctx.fillStyle = bg;
+        roundRect(-len * 0.45, -w * 0.5, len * 0.82, w, w * 0.42); ctx.fill();
+        shadowOff();
+        // Cream clay stripe band
+        if (stripe) { ctx.fillStyle = shade(stripe, 0.06); ctx.fillRect(-len * 0.02, -w * 0.5, len * 0.18, w); }
+        // Nose cone (shaded clay)
+        const ng = ctx.createLinearGradient(0, -w * 0.5, 0, w * 0.5);
+        ng.addColorStop(0, shade(nose, -0.16)); ng.addColorStop(0.42, shade(nose, 0.24)); ng.addColorStop(1, shade(nose, -0.2));
+        ctx.fillStyle = ng;
+        ctx.beginPath();
+        ctx.moveTo(len * 0.37, -w * 0.5); ctx.lineTo(len * 0.68, 0); ctx.lineTo(len * 0.37, w * 0.5); ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Clay smoke trail — a chain of molded clay beads (rolled-plasticine look).
+      function drawSmokeTrail(trail, baseR, tint) {
+        for (let i = trail.length - 1; i >= 0; i -= 2) {
+          const t = trail[i];
+          const a = i / Math.max(1, trail.length - 1);      // 0 tail → 1 head
+          ctx.globalAlpha = 0.45 + a * 0.5;
+          clayBall(t.x, t.y, baseR * (0.5 + a * 0.85), tint, 0.34, -0.2);
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      // Rolled-clay meteor: lumpy rock cluster + flattened teardrop bead tail.
+      function drawMeteor(m, ang) {
+        drawSmokeTrail(m.trail, 6.5, '#dd8a3c'); // ember bead trail
+        ctx.save();
+        ctx.translate(m.x, m.y);
+        ctx.rotate(ang);
+        // flattened teardrop tail of hot clay beads directly behind the rock
+        ctx.save();
+        ctx.scale(1, 0.72);
+        for (let i = 0; i < 4; i++) {
+          ctx.globalAlpha = 0.85 - i * 0.17;
+          clayBall(-9 - i * 6.5, 0, 6.2 - i * 1.1, i < 2 ? '#e8963a' : '#d9612a', 0.36, -0.2);
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+        // lumpy grey-brown rock cluster
+        shadowOn(5, 3, 0.34);
+        clayBall(0, 0, 9, '#8a7566', 0.3, -0.3);
+        shadowOff();
+        clayBall(4.5, -4, 5.6, '#7a6758', 0.3, -0.26);
+        clayBall(-3.5, 4.5, 5, '#93806f', 0.32, -0.24);
+        clayBall(3.5, 4, 3.8, '#6f5d4f', 0.3, -0.26);
+        // hot leading edge
+        ctx.globalAlpha = 0.5;
+        clayBall(6.5, 0, 3.4, '#f0a83e', 0.4, -0.1);
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
+
+      function drawMissiles() {
+        for (const m of state.enemyMissiles) {
+          const ang = Math.atan2(m.y - m.sy, m.x - m.sx) || (Math.PI / 2);
+          if (m.type === 'meteor') { drawMeteor(m, ang); continue; }
+          drawSmokeTrail(m.trail, 5.5, '#e6dcc4');
+          let body = '#c0392b', nose = '#ece0c8', fin = '#8f2a20', stripe = '#ece0c8';
+          if (m.type === 'mirvChild') { body = '#d1762e'; nose = '#efe2cd'; fin = '#9c5220'; stripe = '#efe2cd'; }
+          if (m.type === 'smart') { body = '#8e5aa8'; nose = '#e6dced'; fin = '#653f7a'; stripe = '#e6dced'; }
+          if (m.type === 'smart') {
+            ctx.strokeStyle = 'rgba(142,90,168,0.45)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(m.x, m.y, 8 + Math.sin(state.time * 16) * 1.5, 0, TAU); ctx.stroke();
+          }
+          const len = m.type === 'smart' ? 21 : 18;
+          drawRocket(m.x, m.y, ang, len, len * 0.46, body, nose, fin, stripe);
+        }
+
+        for (const m of state.playerMissiles) {
+          const ang = Math.atan2(m.y - m.sy, m.x - m.sx) || (-Math.PI / 2);
+          // Pressed-X dimple marking the interceptor's detonation point
+          ctx.save();
+          ctx.translate(m.tx, m.ty);
+          ctx.lineCap = 'round';
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = 'rgba(255,244,220,0.5)'; // lit lower lip of the groove
+          ctx.beginPath();
+          ctx.moveTo(-4.2, -3.2); ctx.lineTo(5.8, 6.8);
+          ctx.moveTo(5.8, -3.2); ctx.lineTo(-4.2, 6.8);
+          ctx.stroke();
+          ctx.strokeStyle = 'rgba(58,36,20,0.55)'; // pressed-in groove
+          ctx.beginPath();
+          ctx.moveTo(-5, -4); ctx.lineTo(5, 6);
+          ctx.moveTo(5, -4); ctx.lineTo(-5, 6);
+          ctx.stroke();
+          ctx.restore();
+          drawSmokeTrail(m.trail, 6, '#efe7d6');
+          // clay tail flame so the rising interceptor reads instantly
+          ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(ang);
+          ctx.fillStyle = '#e8a53a';
+          ctx.beginPath(); ctx.moveTo(-8.2, -2.4); ctx.lineTo(-13, 0); ctx.lineTo(-8.2, 2.4); ctx.closePath(); ctx.fill();
+          ctx.restore();
+          // teal clay interceptor rocket with a cream stripe
+          drawRocket(m.x, m.y, ang, 18, 7.5, '#2f8f8a', '#ece0c8', '#1f6b66', '#ece0c8');
+        }
+      }
+
+      function drawSatellites() {
+        for (const s of state.satellites) {
+          // rolled-clay bead trail (recorded per-frame, drawn pale + small)
+          drawSmokeTrail(s.trail, 3.4, '#cdd6df');
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          shadowOn(6, 3, 0.32);
+          // Clay solar panels
+          clayRound(-30, -6, 16, 12, 2, '#4a6a8e');
+          clayRound(14, -6, 16, 12, 2, '#4a6a8e');
+          // Clay body (shadow-casting mass)
+          clayRound(-9, -8, 18, 16, 3, s.hp === 1 ? '#c0392b' : '#cfc3a8');
+          shadowOff();
+          ctx.fillStyle = '#8a7a5c'; // booms
+          ctx.fillRect(-14, -1.5, 6, 3); ctx.fillRect(8, -1.5, 6, 3);
+          clayBall(0, 0, 3.6, s.flash > 0 ? '#fff6de' : (s.hp === 1 ? '#e7ddca' : '#8fb4d8'));
+          ctx.restore();
+        }
+      }
+
+      // Star polygon path (used by the clay starburst, filled with a radial gradient).
+      function starPath(cx, cy, spikes, outer, inner, rot) {
+        ctx.beginPath();
+        for (let i = 0; i < spikes * 2; i++) {
+          const r = (i % 2 === 0) ? outer : inner;
+          const a = rot + i * Math.PI / spikes;
+          const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+      }
+
+      function drawExplosions() {
+        for (const e of state.explosions) {
+          const t = clamp(e.age / e.life, 0, 1);
+          const r = e.r;
+          if (r < 0.5) continue;
+          const rot = (e.source && e.source.sx ? e.source.sx : e.x) * 0.05; // stable per-explosion angle
+          ctx.save();
+          // clay impact squash-and-stretch: a quick wide splat that settles (volume-conserving)
+          if (t < 0.28) { const p = t / 0.28, over = Math.sin(p * Math.PI) * 0.16;
+            ctx.translate(e.x, e.y); ctx.scale(1 + over, 1 - over * 0.8); ctx.translate(-e.x, -e.y); }
+          ctx.globalAlpha = 1 - t * t; // fade only late
+          // Molded clay fireball: a cluster of rounded plasticine lobes around a hot core
+          // (each lobe is a gradient-shaded clayBall, like the rest of the game — no sharp spikes).
+          const lobes = e.maxR > 60 ? 9 : 7;
+          shadowOn(6, 3, 0.28);
+          for (let i = 0; i < lobes; i++) {
+            const a = (i / lobes) * TAU + rot * 3;
+            const rad = r * (0.56 + ((i * 7) % 5) * 0.05);        // uneven distances → lumpy clay
+            const lx = e.x + Math.cos(a) * rad, ly = e.y + Math.sin(a) * rad;
+            const lr = r * (0.36 + ((i * 3) % 4) * 0.05);
+            const col = (i % 3 === 0) ? '#d9612a' : (i % 3 === 1 ? '#e8863a' : '#c24422');
+            clayBall(lx, ly, lr, col, 0.34, -0.22);
+          }
+          shadowOff();
+          // molten inner mass + hot cream clay core
+          clayBall(e.x, e.y, r * 0.62, '#f0a83e', 0.40, -0.16);
+          clayBall(e.x, e.y, r * 0.34, '#f7eccf', 0.42, -0.06);
+          // faint knead ridges on the big molten lobe (stable angles per explosion)
+          if (settings.effects && e.maxR > 55 && r > 24) {
+            ctx.lineWidth = 1.2;
+            ctx.lineCap = 'round';
+            for (let k = 1; k <= 3; k++) {
+              const rr2 = r * 0.6 * k / 3.4;
+              ctx.strokeStyle = 'rgba(90,45,20,0.06)';
+              ctx.beginPath(); ctx.arc(e.x, e.y, rr2, rot * 2 + k, rot * 2 + k + 1.9); ctx.stroke();
+              ctx.strokeStyle = 'rgba(255,240,210,0.05)';
+              ctx.beginPath(); ctx.arc(e.x, e.y, rr2 + 1.2, rot * 2 + k + 0.15, rot * 2 + k + 1.75); ctx.stroke();
+            }
+          }
+          ctx.restore();
+        }
+      }
+
+      function drawParticles() {
+        // Soft clay smoke puffs (rounded, subtle)
+        for (const s of state.smoke) {
+          const a = 1 - s.age / s.life;
+          const g = Math.floor(214 + s.dark * 22);
+          ctx.fillStyle = `rgba(${g},${g - 6},${g - 20},${a * 0.32})`;
+          ctx.beginPath(); ctx.arc(s.x, s.y, s.size * (0.5 + s.age / s.life * 0.8), 0, TAU); ctx.fill();
+        }
+        // Clay debris nuggets — cheap clay dabs (no per-bit gradient)
+        const pB1 = shade('#e8b84a', -0.14), pH1 = shade('#e8b84a', 0.36);
+        const pB2 = shade('#d9612a', -0.14), pH2 = shade('#d9612a', 0.36);
+        for (const p of state.particles) {
+          const a = 1 - p.age / p.life;
+          ctx.globalAlpha = a;
+          const r = (p.size * (0.7 + a * 0.6)) * 0.7 + 0.6;
+          if (p.hue > 45) clayDot(p.x, p.y, r, pB1, pH1); else clayDot(p.x, p.y, r, pB2, pH2);
+        }
+        ctx.globalAlpha = 1;
+        // Clay embers — cheap clay dabs
+        const eB1 = shade('#e09a3a', -0.14), eH1 = shade('#e09a3a', 0.36);
+        const eB2 = shade('#c0392b', -0.14), eH2 = shade('#c0392b', 0.36);
+        for (const e of state.embers) {
+          const a = 1 - e.age / e.life;
+          ctx.globalAlpha = a;
+          const r = e.size * a * 0.9 + 0.5;
+          if (a > 0.5) clayDot(e.x, e.y, r, eB1, eH1); else clayDot(e.x, e.y, r, eB2, eH2);
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      function drawPrompts() {
+        ctx.save();
+        ctx.textAlign = 'center';
+        for (const p of state.prompts) {
+          const a = Math.max(0, p.life - p.age) / p.life;
+          ctx.globalAlpha = a;
+          if (p.stamp) {
+            // pressed-clay stamp: dark letters sunk in, lit lower-right lip
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(-0.12);
+            ctx.font = '800 17px Inter, system-ui, sans-serif';
+            ctx.fillStyle = 'rgba(255,240,215,0.6)';
+            ctx.fillText(p.text, 1.2, 1.5);
+            ctx.fillStyle = p.color;
+            ctx.fillText(p.text, 0, 0);
+            ctx.restore();
+          } else {
+            ctx.font = '700 15px Inter, system-ui, sans-serif';
+            ctx.fillStyle = p.color;
+            ctx.fillText(p.text, p.x, p.y);
+          }
+        }
+        ctx.restore();
+      }
+
+      function drawFXOverlays() {
+        if (state.comboCount > 1 && state.comboTimer > 0) {
+          const a = Math.min(0.22, state.tint * 0.18 + 0.06);
+          ctx.fillStyle = `rgba(255, 120, 64, ${a})`;
+          ctx.fillRect(0, 0, state.width, state.height);
+
+          ctx.save();
+          ctx.textAlign = 'left';
+          ctx.font = '800 18px Inter, system-ui, sans-serif';
+          ctx.fillStyle = `rgba(255,224,154,${0.7 + Math.sin(state.time * 20) * 0.2})`;
+          // left side, below the HUD-safe band (the pause pebble owns the top-right)
+          ctx.fillText(`CHAIN x${state.comboCount}`, 18, state.hudSafeTop + 22);
+          ctx.restore();
+        }
+        if (state.flash > 0) {
+          ctx.fillStyle = `rgba(255,245,220,${state.flash * 0.18})`;
+          ctx.fillRect(0, 0, state.width, state.height);
+        }
+        // Practice sandbox watermark — molded into the scene, unmistakable but calm
+        if (state.practice && (state.playing || state.gameOver)) {
+          ctx.save();
+          ctx.globalAlpha = 0.12;
+          ctx.translate(state.width / 2, state.height * 0.4);
+          ctx.rotate(-0.16);
+          ctx.textAlign = 'center';
+          ctx.font = '800 ' + Math.round(clamp(state.width * 0.09, 42, 84)) + 'px Inter, system-ui, sans-serif';
+          ctx.fillStyle = '#2c1f12';
+          ctx.fillText('PRACTICE', 0, 0);
+          ctx.globalAlpha = 0.10;
+          ctx.fillStyle = '#fff4dc';
+          ctx.fillText('PRACTICE', 2, 2.4);
+          ctx.restore();
+        }
+      }
+
+      function drawBanner() {
+        if (state.bannerTimer <= 0) return;
+        const a = clamp(state.bannerTimer / 0.6, 0, 1);
+        const y = state.height * 0.3;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.globalAlpha = a;
+        const size = Math.round(clamp(state.width * 0.055, 22, 48));
+        ctx.font = '800 ' + size + 'px Inter, system-ui, sans-serif';
+        ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineJoin = 'round';
+        ctx.strokeText(state.bannerText, state.width / 2, y);
+        ctx.fillStyle = state.bannerColor;
+        ctx.fillText(state.bannerText, state.width / 2, y);
+        ctx.font = '700 14px Inter, system-ui, sans-serif';
+        ctx.lineWidth = 3;
+        ctx.strokeText('SPECIAL WAVE', state.width / 2, y + 26);
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.fillText('SPECIAL WAVE', state.width / 2, y + 26);
+        ctx.restore();
+      }
+
+      function render() {
+        ctx.clearRect(0, 0, state.width, state.height);
+        let sx = 0, sy = 0;
+        if (state.shake > 0 && !state.paused) {
+          sx = rand(-state.shake, state.shake);
+          sy = rand(-state.shake * 0.6, state.shake * 0.6);
+        }
+        // "boil": tiny rig-weave reseeded each 12fps step (held within the held frame),
+        // mimicking a physical stop-motion camera/armature never landing identically.
+        if (settings.effects && !state.paused && (settings.cadence || 0) > 0) {
+          sx += rand(-0.9, 0.9);
+          sy += rand(-0.9, 0.9);
+        }
+        ctx.save();
+        ctx.translate(sx, sy);
+        drawSky();
+        drawMissiles();
+        drawSatellites();
+        drawExplosions();
+        drawParticles();
+        drawCitiesAndBases();
+        drawPrompts();
+        drawFXOverlays();
+        // Clay-matte grain over the whole frame (kept — part of the stop-motion look)
+        if (settings.effects) {
+          if (!grainPattern) buildGrain();
+          ctx.globalCompositeOperation = 'soft-light';
+          ctx.globalAlpha = 0.32;
+          ctx.fillStyle = grainPattern;
+          ctx.fillRect(-60, -60, state.width + 120, state.height + 120);
+          ctx.globalAlpha = 1;
+          ctx.globalCompositeOperation = 'source-over';
+        }
+        ctx.restore();
+        drawBanner();
+        updateHUD();
+      }
+
+      function updateHUD() {
+        const aliveCities = state.cities.filter(c => c.alive).length;
+        const ammoText = state.bases.map(b => b.alive ? b.ammo : 'X').join('/');
+        const combo = state.comboCount > 1 && state.comboTimer > 0 ? `x${(1 + (state.comboCount - 1) * 0.18).toFixed(1)}` : 'x1';
+        const waveStatus = state.waveIntroTimer > 0 ? `W${state.wave} incoming` : (state.special ? `W${state.wave} ★` : `W${state.wave}`);
+        // Narrow phones get a short format so nothing clips off the right edge
+        hudLine.textContent = window.innerWidth < 640
+          ? `${waveStatus} | ${state.score.toLocaleString()} | C${aliveCities} | ${ammoText} | ${combo}`
+          : `${waveStatus} | Score ${state.score.toLocaleString()} | Cities ${aliveCities} | Ammo ${ammoText} | Combo ${combo} | Bonus @ ${state.nextBonusScore.toLocaleString()}`;
+        const showPause = state.playing && !state.gameOver && !state.attract;
+        const disp = showPause ? 'flex' : 'none';
+        if (pauseBtn.style.display !== disp) pauseBtn.style.display = disp;
+      }
+
+      // Stop-motion cadence: the SIM runs on a fixed 1/60s accumulator (max 4
+      // substeps, remainder dropped) so slow devices skip frames instead of
+      // dilating time — while the RENDER still snaps on the intentional 12fps
+      // "on twos" grid, the single biggest hand-shot-claymation cue.
+      const SIM_STEP = 1 / 60;
+      function frame(now) {
+        let frameDt = (now - state.lastTime) / 1000;
+        state.lastTime = now;
+        if (!(frameDt >= 0)) frameDt = 0;
+        if (frameDt > 0.25) frameDt = 0.25; // tab-switch / long-hitch guard
+        if (!state.paused) {
+          state.simAcc = (state.simAcc || 0) + frameDt;
+          let steps = 0;
+          while (state.simAcc >= SIM_STEP && steps < 4) {
+            update(SIM_STEP);
+            state.simAcc -= SIM_STEP;
+            steps++;
+          }
+          if (steps === 4) state.simAcc = 0; // overloaded: drop the remainder, never slow-mo
+        }
+        const fps = settings.cadence || 0;   // 0 = smooth 60fps; 12 = on twos; 8 = heavy puppet
+        if (fps <= 0) { render(); requestAnimationFrame(frame); return; }
+        const step = 1 / fps;
+        state.renderAcc = (state.renderAcc || 0) + frameDt;
+        if (state.firstDraw !== false || state.renderAcc >= step) {
+          state.renderAcc %= step;
+          state.firstDraw = false;
+          render();
+        }
+        requestAnimationFrame(frame);
+      }
+
+      function localPoint(clientX, clientY) {
+        // Map window coords to logical game coords (canvas is CSS-scaled on desktop).
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: (clientX - rect.left) * (state.width / rect.width),
+          y: (clientY - rect.top) * (state.height / rect.height)
+        };
+      }
+
+      async function unlockAudioAndMaybeStart() {
+        initAudio();
+        if (audio && !state.audioUnlocked) {
+          try { await audio.resume(); } catch (e) {}
+        }
+      }
+
+      async function startGame(practice = false) {
+        state.attract = false; // clear before audio unlock so the gesture initialises sound
+        setDemoBadge(false);
+        await unlockAudioAndMaybeStart();
+        tutorialOverlay.classList.add('hidden');
+        resetGame(practice);
+      }
+
+      async function restartGame() {
+        await unlockAudioAndMaybeStart();
+        resetGame(state.practice); // restart keeps the current mode
+      }
+
+      // Tap-to-restart from the game-over screen is ARMED after a short delay and
+      // never fires while the initials entry is open — no more accidentally
+      // discarding an unsubmitted high score.
+      function tryRestartFromGameOver() {
+        if (!state.gameOver) return;
+        const initialsOpen = !document.getElementById('hsInitialsSection').classList.contains('hidden');
+        if (initialsOpen) return;
+        if (performance.now() - (state.goArmedAt || 0) < 1500) return;
+        restartGame();
+      }
+
+      function setPaused(on) {
+        if (on && (!state.playing || state.gameOver)) return;
+        if (state.paused === on) return;
+        state.paused = on;
+        // DOM pause overlay: visible PAUSED indicator + reachable Options/Sound.
+        // Hidden during the attract demo (the title panel already covers it).
+        pauseOverlay.classList.toggle('hidden', !on || state.attract);
+        // Music ducks with the pause
+        if (audio?.music) {
+          if (on) audio.music.pause();
+          else if (settings.sound && state.audioUnlocked) audio.music.play().catch(() => {});
+        }
+        if (!on) state.lastTime = performance.now();
+      }
+
+      function handlePointer(x, y) {
+        unlockAudioAndMaybeStart();
+        if (!tutorialOverlay.classList.contains('hidden')) return;
+        if (state.paused) {
+          setPaused(false);
+          return;
+        }
+        if (state.gameOver) {
+          tryRestartFromGameOver();
+          return;
+        }
+        launchDefense(x, y);
+      }
+
+      function gameTarget(e) {
+        return !(e.target && e.target.closest && e.target.closest('button, a, .overlay, #hsOverlay, #optOverlay'));
+      }
+
+      // Input listens on the whole window (buttons/overlays opt out) so aiming
+      // works edge to edge. Touch keeps the original multi-touch barrage path;
+      // pointerdown covers mouse and pen, including touch-capable laptops.
+      document.addEventListener('touchstart', (e) => {
+        if (!gameTarget(e)) return;
+        e.preventDefault();
+        for (const touch of e.changedTouches) {
+          const p = localPoint(touch.clientX, touch.clientY);
+          handlePointer(p.x, p.y);
+        }
+      }, { passive: false });
+      window.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'touch') return; // handled by touchstart above
+        if (!gameTarget(e)) return;
+        e.preventDefault();
+        const p = localPoint(e.clientX, e.clientY);
+        handlePointer(p.x, p.y);
+      });
+
+      ['touchmove','touchcancel','gesturestart','gesturechange','gestureend'].forEach(evt => {
+        document.addEventListener(evt, e => {
+          if (!e.target.closest('button') && !e.target.closest('.overlay')) e.preventDefault();
+        }, { passive: false });
+      });
+      document.addEventListener('touchend', e => {
+        if (!e.target.closest('button') && !e.target.closest('.overlay')) e.preventDefault();
+      }, { passive: false });
+
+      function addTouchAndClick(el, handler) {
+        el.addEventListener('click', handler);
+        el.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handler(e);
+        }, { passive: false });
+      }
+
+      // HS overlay handlers
+      const hsOverlay = document.getElementById('hsOverlay');
+      const titleHsBtn = document.getElementById('titleHsBtn');
+      function openHsOverlay() { hsOverlay.style.display = 'flex'; renderHSBoth(document.getElementById('hsOverlayScores')); }
+      function closeHsOverlay() { hsOverlay.style.display = 'none'; }
+      addTouchAndClick(titleHsBtn, openHsOverlay);
+      addTouchAndClick(document.getElementById('hsOverlayClose'), closeHsOverlay);
+
+      // Options overlay
+      const optOverlay = document.getElementById('optOverlay');
+      const tutorialHidden = () => tutorialOverlay.classList.contains('hidden');
+      function buildOptions() {
+        const host = document.getElementById('optRows');
+        host.innerHTML = '';
+        const seg = (label, sub, options, get, set) => {
+          const row = document.createElement('div'); row.className = 'optrow';
+          const left = document.createElement('div');
+          left.innerHTML = `<div class="lab">${label}</div>` + (sub ? `<div class="sub">${sub}</div>` : '');
+          const segEl = document.createElement('div'); segEl.className = 'seg';
+          const btns = [];
+          options.forEach(opt => {
+            const b = document.createElement('button');
+            b.textContent = opt.label;
+            if (get() === opt.value) b.classList.add('on');
+            const h = (e) => { e.stopPropagation(); e.preventDefault(); set(opt.value); saveSettings(); audio?.uiClick(); btns.forEach(x => x.classList.remove('on')); b.classList.add('on'); };
+            b.addEventListener('click', h); b.addEventListener('touchend', h);
+            btns.push(b); segEl.appendChild(b);
+          });
+          row.appendChild(left); row.appendChild(segEl); host.appendChild(row);
+        };
+        const onoff = [{ label: 'On', value: true }, { label: 'Off', value: false }];
+        seg('Sound', 'Music & effects', onoff, () => settings.sound, v => { settings.sound = v; applyAudioSettings(); });
+        seg('Difficulty', 'Enemy speed & count', [{ label: 'Easy', value: 'easy' }, { label: 'Normal', value: 'normal' }, { label: 'Hard', value: 'hard' }], () => settings.difficulty, v => { settings.difficulty = v; });
+        seg('Screen shake', 'Camera kick on hits', onoff, () => settings.shake, v => { settings.shake = v; if (!v) state.shake = 0; });
+        seg('Extra effects', 'Debris & particles', onoff, () => settings.effects, v => { settings.effects = v; invalidateBackdrop(); });
+        seg('Title auto-demo', 'Play behind the menu', onoff, () => settings.demo, v => { settings.demo = v; if (v && !tutorialHidden()) startAttract(); else if (!v) stopAttract(); });
+        seg('Film cadence', 'Stop-motion frame rate', [{ label: '12fps', value: 12 }, { label: '8fps', value: 8 }, { label: 'Smooth', value: 0 }], () => settings.cadence, v => { settings.cadence = v; state.renderAcc = 0; });
+      }
+      function openOptOverlay() { buildOptions(); optOverlay.style.display = 'flex'; }
+      function closeOptOverlay() { optOverlay.style.display = 'none'; }
+      addTouchAndClick(document.getElementById('titleOptBtn'), openOptOverlay);
+      addTouchAndClick(document.getElementById('optClose'), closeOptOverlay);
+
+      addTouchAndClick(startButton, () => startGame(false));
+      addTouchAndClick(dismissTutorial, () => startGame(true)); // Practice: real sandbox mode
+      addTouchAndClick(restartButton, restartGame);
+      // Pause pebble + pause overlay
+      addTouchAndClick(pauseBtn, () => setPaused(!state.paused));
+      addTouchAndClick(document.getElementById('resumeBtn'), () => setPaused(false));
+      addTouchAndClick(document.getElementById('pauseOptBtn'), openOptOverlay);
+      pauseOverlay.addEventListener('click', (e) => { if (!e.target.closest('button')) setPaused(false); });
+      pauseOverlay.addEventListener('touchend', (e) => {
+        if (!e.target.closest('button')) { e.preventDefault(); setPaused(false); }
+      }, { passive: false });
+      gameOverOverlay.addEventListener('click', (e) => {
+        if (!e.target.closest('button')) tryRestartFromGameOver();
+      });
+      gameOverOverlay.addEventListener('touchend', (e) => {
+        if (!e.target.closest('button')) {
+          e.preventDefault();
+          tryRestartFromGameOver();
+        }
+      }, { passive: false });
+
+      window.addEventListener('resize', resize);
+      window.addEventListener('orientationchange', () => setTimeout(resize, 220));
+      window.addEventListener('keydown', async (e) => {
+        const k = e.key;
+        const startKey = k === 'Enter' || e.code === 'Space';
+        if (e.code === 'Space') e.preventDefault();
+        if (hsOverlay.style.display === 'flex') {
+          if (k === 'Escape') closeHsOverlay();
+          return;
+        }
+        if (optOverlay.style.display === 'flex') {
+          if (k === 'Escape') closeOptOverlay();
+          return;
+        }
+        if ((k === 'p' || k === 'P' || k === 'Escape') && state.playing && !state.gameOver) {
+          setPaused(!state.paused);
+          return;
+        }
+        if (!startKey) return;
+        const initialsOpen = state.gameOver && !document.getElementById('hsInitialsSection').classList.contains('hidden');
+        if (initialsOpen) return; // don't steal Enter/Space from initials entry
+        if (e.target && e.target.closest && e.target.closest('button')) e.preventDefault();
+        if (!tutorialOverlay.classList.contains('hidden')) await startGame();
+        else if (state.paused) setPaused(false);
+        else if (state.gameOver) tryRestartFromGameOver();
+      });
+      window.addEventListener('blur', () => setPaused(true));
+      window.addEventListener('focus', () => { if (state.attract) setPaused(false); });
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) setPaused(true);
+        else if (state.attract) setPaused(false); // auto-resume the title demo
+      });
+
+
+      // QA hook, only with ?qa=1
+      if (location.search.indexOf('qa=1') !== -1) {
+        window.__mcQA = {
+          state,
+          settings,
+          fireAt: (x, y) => launchDefense(x, y),
+          startGame: (p) => startGame(!!p),
+          resetGame: (p) => resetGame(!!p),
+          spawnEnemy: (type, x, y) => spawnEnemyMissile(type || 'normal', x ?? null, y ?? null),
+          spawnSatellite,
+          prepareWave,
+          setPaused,
+          forceGameOver: () => { state.cities.forEach(c => { c.alive = false; }); checkGameOver(); },
+          rebuildBackdrop: () => { invalidateBackdrop(); ensureBackdrop(); },
+        };
+      }
+
+      resize();
+      updateHUD();
+      startAttract(); // self-playing demo behind the title screen
+      requestAnimationFrame((t) => {
+        state.lastTime = t;
+        requestAnimationFrame(frame);
+      });
+    })();
+  </script>
+</body>
+</html>

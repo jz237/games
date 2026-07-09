@@ -1,0 +1,2523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <link rel="icon" type="image/svg+xml" href="/assets/brand.svg">
+  <title>Missile Command Paper</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --hud-bg: rgba(6, 12, 24, 0.58);
+      --hud-border: rgba(255,255,255,0.14);
+      --text: #eef7ff;
+      --accent: #7fe7ff;
+      --hot: #ffbf66;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #02050c;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      touch-action: none;
+      overscroll-behavior: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      position: fixed;
+      inset: 0;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      touch-action: none;
+      cursor: crosshair;
+      background: linear-gradient(180deg, #4a76a8 0%, #5d88b8 76%, #4f763a 76%, #4f763a 100%);
+    }
+    .hud {
+      position: fixed;
+      left: 8px;
+      right: 8px;
+      top: env(safe-area-inset-top, 0px);
+      margin-top: 8px;
+      padding: 7px 12px;
+      border: 1px solid #b39a68;
+      background: #e0cfa4;
+      color: #3a2c1c;
+      font-size: clamp(11px, 1.8vw, 14px);
+      letter-spacing: 0.04em;
+      border-radius: 4px;
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+      white-space: nowrap;
+      z-index: 5;
+      pointer-events: none;
+      box-shadow: 0 3px 0 #b39a68, 0 6px 14px rgba(0,0,0,0.3);
+    }
+    .hud span { opacity: 0.94; font-weight: 700; }
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 30%, rgba(40,70,110,0.28), rgba(2,4,10,0.88));
+      z-index: 10;
+      padding: 18px;
+      overflow-y: auto;
+    }
+    .panel {
+      width: min(92vw, 620px);
+      margin: auto; /* keeps top reachable when panel is taller than a landscape phone */
+      max-height: none;
+      border-radius: 10px;
+      border: 2px solid #6b5636;
+      background: linear-gradient(180deg, #4a3b2a, #382b1d);
+      color: #f0e6d2;
+      box-shadow: 0 18px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,240,210,0.06);
+      padding: 22px 22px 18px;
+    }
+    #backLink {
+      color: #e0cfa4; opacity: 0.7; font-size: 12px; letter-spacing: 0.05em;
+      text-decoration: none; font-weight: 700;
+    }
+    #backLink:hover { opacity: 1; text-decoration: underline; }
+    #pauseBtn {
+      position: fixed;
+      right: 8px;
+      top: calc(env(safe-area-inset-top, 0px) + 52px);
+      z-index: 6;
+      width: 44px;
+      height: 44px;
+      display: none;
+      padding: 0;
+      font-size: 17px;
+      line-height: 1;
+      border-radius: 6px;
+      border: 1px solid #b39a68;
+      background: #e0cfa4;
+      color: #3a2c1c;
+      box-shadow: 0 3px 0 #b39a68, 0 5px 10px rgba(0,0,0,0.25);
+      transform: rotate(1.4deg);
+    }
+    @media (max-width: 430px) {
+      .hud { font-size: 10px; gap: 6px; padding: 6px 8px; letter-spacing: 0.02em; }
+      .optrow { flex-wrap: wrap; }
+      .seg button { padding: 6px 8px; font-size: 11px; }
+    }
+    @media (max-height: 520px), (max-width: 420px) {
+      .panel { padding: 12px 16px 10px; }
+      .panel h1 { font-size: 20px; margin-bottom: 4px; }
+      .panel p { margin: 5px 0; font-size: 12px; }
+      .panel ul { margin: 5px 0 8px; line-height: 1.3; font-size: 12px; }
+      .panel .row { margin-top: 8px; }
+      .panel button { padding: 8px 12px; font-size: 12px; }
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(24px, 5vw, 40px);
+      line-height: 1;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #f2e8d0;
+      /* stacked drop shadow = cut-paper thickness */
+      text-shadow: 2px 3px 0 rgba(0,0,0,0.42), 3px 5px 0 rgba(0,0,0,0.16);
+      transform: rotate(-1.2deg);
+      transform-origin: left center;
+    }
+    p { margin: 10px 0; opacity: 0.9; line-height: 1.45; }
+    ul {
+      margin: 10px 0 18px;
+      padding-left: 18px;
+      line-height: 1.5;
+      opacity: 0.95;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 16px;
+    }
+    /* Matte cut-paper buttons (kraft stock), not glossy */
+    button {
+      border: 0;
+      border-radius: 6px;
+      padding: 12px 18px;
+      touch-action: manipulation;
+      cursor: pointer;
+      color: #3a2c1c;
+      background: #e0cfa4;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      box-shadow: 0 3px 0 #b39a68, 0 6px 12px rgba(0,0,0,0.3);
+    }
+    #startButton { background: #d98a5a; color: #3a1f10; box-shadow: 0 3px 0 #a5623a, 0 6px 12px rgba(0,0,0,0.3); }
+    .ghost {
+      background: #cdbf9c;
+      color: #3f3222;
+      box-shadow: 0 3px 0 #a8996f, 0 5px 10px rgba(0,0,0,0.25);
+      border: 0;
+    }
+    .hidden { display: none; }
+    .tiny { font-size: 12px; opacity: 0.75; }
+    /* Lighter scrim on the title screen so the auto-demo shows through */
+    #tutorialOverlay { background: radial-gradient(circle at 50% 42%, rgba(4,10,20,0.12), rgba(3,6,14,0.5)); }
+    #demoBadge {
+      position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%) rotate(-1.5deg);
+      z-index: 9; pointer-events: none; display: none; /* below overlays so it can't cover buttons */
+      padding: 6px 15px; border-radius: 3px;
+      background: #d8b24a; color: #3a2c10;
+      font: 800 13px Inter, system-ui, sans-serif; letter-spacing: 0.09em;
+      border: 1px solid #b6902f;
+      box-shadow: 0 3px 0 #ab8a34, 0 6px 14px rgba(0,0,0,0.3);
+    }
+    .optrow {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; padding: 9px 2px; border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .optrow:first-child { border-top: 0; }
+    .optrow .lab { font-size: 14px; letter-spacing: 0.02em; }
+    .optrow .sub { font-size: 11px; opacity: 0.6; }
+    .seg { display: inline-flex; border-radius: 6px; overflow: hidden; border: 1px solid rgba(240,230,210,0.22); }
+    .seg button {
+      border: 0; border-radius: 0; padding: 7px 13px; font-size: 12px; letter-spacing: 0.04em;
+      text-transform: uppercase; font-weight: 700; cursor: pointer;
+      background: rgba(240,230,210,0.06); color: #f0e6d2; box-shadow: none;
+    }
+    .seg button.on { background: #d98a5a; color: #3a1f10; }
+  </style>
+</head>
+<body>  <canvas id="game"></canvas>
+  <div class="hud" id="hud">
+    <span id="hudLine">W1 | Score 0 | Cities 6 | Ammo 15/15/15 | Combo x1 | Bonus @ 12000</span>
+  </div>
+  <div id="demoBadge">▶ AUTO-DEMO</div>
+  <button id="pauseBtn" aria-label="Pause">⏸</button>
+
+  <div class="overlay" id="tutorialOverlay">
+    <div class="panel">
+      <h1>Missile Command Paper</h1>
+      <p>Defend the skyline. Tap or click anywhere in the sky and the nearest armed base will launch a counter-missile to that point.</p>
+      <ul>
+        <li>Three bases. Each starts with <strong>15 missiles</strong>.</li>
+        <li>Destroy enemy warheads with blast waves and trigger chain reactions for bigger scores.</li>
+        <li><strong>MIRVs</strong> arrive on wave 6, <strong>satellites</strong> on wave 8, and <strong>smart bombs</strong> on wave 10.</li>
+        <li>Every <strong>5th wave</strong> is a <strong>★ special wave</strong> — MIRV storms, satellite swarms, smart-bomb blitzes, meteor showers — with a big clear bonus.</li>
+        <li>Satellites take <strong>2 hits</strong>. Lose all cities and it’s over. Scores post to the <strong>global leaderboard</strong>.</li>
+        <li>Mobile: rapid multi-touch barrages. Desktop: precise crosshair clicks — <strong>Enter</strong> starts, <strong>P</strong>/<strong>Esc</strong> pauses.</li>
+      </ul>
+      <div class="row">
+        <span class="tiny"><a id="backLink" href="/games/missile-command/">◂ all editions</a> · Cut-paper collage edition. Watch the auto-demo behind this panel. First touch/click unlocks sound &amp; music. · v1.1.0 · <span id="modeLine"></span></span>
+        <div class="row" style="margin-top:0">
+          <button class="ghost" id="dismissTutorial">Practice</button>
+          <button id="startButton">Start Defense</button>
+          <button class="ghost" id="titleOptBtn">Options</button>
+          <button class="ghost" id="titleHsBtn" style="background:#d8b24a;color:#3a2c10;box-shadow:0 3px 0 #ab8a34,0 5px 10px rgba(0,0,0,0.25)">High Scores</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="gameOverOverlay">
+    <div class="panel">
+      <h1 id="gameOverTitle">Cities Lost</h1>
+      <p id="gameOverText">The skyline burned out.</p>
+      <div id="hsInitialsSection" class="hidden" style="text-align:center;margin:0.8em 0">
+        <div style="color:#ffd700;font-size:0.9rem;margin-bottom:0.4em">NEW HIGH SCORE! ENTER INITIALS</div>
+        <div id="hsInitialsRow" style="display:flex;align-items:center;justify-content:center;gap:0.5em"></div>
+      </div>
+      <div id="hsScoresDisplay" style="margin:0.8em 0;max-height:40vh;overflow-y:auto;font-family:monospace;font-size:0.85rem"></div>
+      <div class="row">
+        <span class="tiny">Tap or click anywhere — or press Enter — to launch a new defense.</span>
+        <button id="restartButton">Restart</button>
+      </div>
+    </div>
+  </div>
+  <div id="hsOverlay" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;overflow-y:auto;padding:16px">
+    <div class="panel" style="max-width:420px;width:90%">
+      <h1 style="color:#ffd700">HIGH SCORES</h1>
+      <div id="hsOverlayScores" style="margin:0.8em 0;max-height:50vh;overflow-y:auto;font-family:monospace;font-size:0.85rem"></div>
+      <button id="hsOverlayClose">Back</button>
+    </div>
+  </div>
+  <div id="optOverlay" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;overflow-y:auto;padding:16px">
+    <div class="panel" style="max-width:440px;width:92%">
+      <h1 style="color:#7fe7ff">OPTIONS</h1>
+      <div id="optRows" style="margin:0.6em 0 0.2em"></div>
+      <div class="row" style="justify-content:space-between">
+        <span class="tiny">Settings are saved on this device.</span>
+        <button id="optClose">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d');
+      const hudLine = document.getElementById('hudLine');
+      const tutorialOverlay = document.getElementById('tutorialOverlay');
+      const gameOverOverlay = document.getElementById('gameOverOverlay');
+      const gameOverTitle = document.getElementById('gameOverTitle');
+      const gameOverText = document.getElementById('gameOverText');
+      const startButton = document.getElementById('startButton');
+      const dismissTutorial = document.getElementById('dismissTutorial');
+      const restartButton = document.getElementById('restartButton');
+      const demoBadge = document.getElementById('demoBadge');
+      function setDemoBadge(on) { demoBadge.style.display = on ? 'block' : 'none'; }
+
+      // ===== HIGH SCORES & GLOBAL LEADERBOARD =====
+      const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/missile-command-paper';
+      const HS_KEY = 'missile_command_paper_highscores';
+      let globalScoresCache = null, globalScoresCacheTime = 0;
+      function loadHS() { try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; } catch(e) { return []; } }
+      function saveHSList(list) { try { localStorage.setItem(HS_KEY, JSON.stringify(list)); } catch(e) {} }
+      function addHS(initials, sc, w) {
+        const list = loadHS(); list.push({initials, score:sc, wave:w});
+        list.sort((a,b) => b.score - a.score); if (list.length > 10) list.length = 10;
+        saveHSList(list); return list;
+      }
+      function isHighScore(sc) { const list = loadHS(); return list.length < 10 || sc > (list[list.length-1]?.score || 0); }
+      async function fetchGlobalScores() {
+        const now = Date.now();
+        if (globalScoresCache && now - globalScoresCacheTime < 30000) return globalScoresCache;
+        try { const res = await fetch(SCORES_API); if (res.ok) { globalScoresCache = await res.json(); globalScoresCacheTime = now; return globalScoresCache; } } catch(e) {}
+        return globalScoresCache || [];
+      }
+      // Leaderboard safety: escape anything server-returned, clamp everything outgoing.
+      function escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
+      function cleanInitials(s) { return (String(s).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3)) || 'AAA'; }
+      function cleanInt(v, lo, hi) { v = Math.floor(Number(v)); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
+      async function submitGlobalScore(initials, score, extras) {
+        const body = { initials: cleanInitials(initials), score: cleanInt(score, 0, 99999999), wave: cleanInt(extras && extras.wave, 1, 999) };
+        try { await fetch(SCORES_API, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }); globalScoresCache = null; } catch(e) {}
+      }
+      function renderHSBoth(container) {
+        const list = loadHS();
+        let html = '<div style="color:#5be4ff;font-size:0.9em;letter-spacing:0.1em;margin-bottom:0.3em">🏠 LOCAL HIGH SCORES</div>';
+        if (!list.length) html += '<div style="color:rgba(255,255,255,0.4);padding:0.2em 0">No scores yet</div>';
+        else list.forEach((e,i) => { html += `<div style="color:#aef;padding:0.15em 0">${String(i+1).padStart(2,' ')}. ${escHtml(e.initials)}  ${String(cleanInt(e.score, 0, 99999999)).padStart(8,' ')}  W${cleanInt(e.wave, 1, 999)}</div>`; });
+        html += '<div style="color:#ffd700;font-size:0.9em;letter-spacing:0.1em;margin:0.6em 0 0.3em">🌐 GLOBAL HIGH SCORES</div>';
+        html += '<div id="globalInner_' + container.id + '"><div style="color:rgba(255,255,255,0.4)">Loading...</div></div>';
+        container.innerHTML = html;
+        fetchGlobalScores().then(gs => {
+          const el = document.getElementById('globalInner_' + container.id);
+          if (!el) return;
+          if (!gs || !gs.length) { el.innerHTML = '<div style="color:rgba(255,255,255,0.4)">No scores yet</div>'; return; }
+          el.innerHTML = gs.slice(0,20).map((e,i) => `<div style="color:#ffe082;padding:0.15em 0">${String(i+1).padStart(2,' ')}. ${escHtml(e.initials)}  ${String(cleanInt(e.score, 0, 99999999)).padStart(8,' ')}  W${e.wave != null ? cleanInt(e.wave, 1, 999) : '?'}</div>`).join('');
+        });
+      }
+      let pendingInitials = [0,0,0];
+      function buildHSInitials(sc, wv, scoreContainer) {
+        pendingInitials = [0,0,0];
+        const row = document.getElementById('hsInitialsRow');
+        row.innerHTML = '';
+        for (let i = 0; i < 3; i++) {
+          const col = document.createElement('div');
+          col.style.cssText = 'display:flex;flex-direction:column;align-items:center';
+          const up = document.createElement('button');
+          up.textContent = '▲'; up.style.cssText = 'background:transparent;border:none;color:#ffd700;font-size:1.2rem;cursor:pointer';
+          const letter = document.createElement('div');
+          letter.textContent = 'A'; letter.style.cssText = 'font-size:1.5rem;color:#fff;font-family:monospace;width:1.5em;text-align:center';
+          const dn = document.createElement('button');
+          dn.textContent = '▼'; dn.style.cssText = 'background:transparent;border:none;color:#ffd700;font-size:1.2rem;cursor:pointer';
+          const idx = i;
+          function upH(e) { e.stopPropagation(); pendingInitials[idx] = (pendingInitials[idx]+1)%26; letter.textContent = String.fromCharCode(65+pendingInitials[idx]); }
+          function dnH(e) { e.stopPropagation(); pendingInitials[idx] = (pendingInitials[idx]+25)%26; letter.textContent = String.fromCharCode(65+pendingInitials[idx]); }
+          // addTouchAndClick preventDefaults touchend so taps don't double-fire via synthetic click
+          addTouchAndClick(up, upH); addTouchAndClick(dn, dnH);
+          col.appendChild(up); col.appendChild(letter); col.appendChild(dn); row.appendChild(col);
+        }
+        const ok = document.createElement('button');
+        ok.textContent = 'OK'; ok.style.cssText = 'margin-left:0.8em;padding:0.3em 1em;cursor:pointer;font-size:1rem;background:#ffd700;border:none;color:#000;border-radius:4px';
+        function submitH(e) {
+          e.stopPropagation();
+          if (ok.disabled) return; // guard against any double submit
+          ok.disabled = true;
+          const ini = pendingInitials.map(i => String.fromCharCode(65+i)).join('');
+          addHS(ini, sc, wv);
+          submitGlobalScore(ini, sc, {wave:wv});
+          document.getElementById('hsInitialsSection').classList.add('hidden');
+          renderHSBoth(scoreContainer);
+        }
+        addTouchAndClick(ok, submitH);
+        row.appendChild(ok);
+      }
+
+      // ===== SETTINGS (persisted per device) =====
+      const SETTINGS_KEY = 'missile_command_paper_settings';
+      const DEFAULT_SETTINGS = { sound: true, difficulty: 'normal', shake: true, effects: true, demo: true, cadence: 12 };
+      function loadSettings() {
+        try { return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}); }
+        catch (e) { return { ...DEFAULT_SETTINGS }; }
+      }
+      function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) {} refreshModeLine(); }
+      function refreshModeLine() {
+        const el = document.getElementById('modeLine');
+        if (el) el.textContent = diff().label + ' · ' + (settings.cadence ? settings.cadence + 'fps film' : 'smooth');
+      }
+      let settings = loadSettings();
+      const AUDIO_V = '3';       // bump to cache-bust audio files
+      const MUSIC_VOL = 0.5;     // background music level when sound is on
+      const DIFF = {
+        easy:   { speed: 0.82, budget: 0.82, ammo: 18, label: 'Easy' },
+        normal: { speed: 1.0,  budget: 1.0,  ammo: 15, label: 'Normal' },
+        hard:   { speed: 1.24, budget: 1.30, ammo: 12, label: 'Hard' },
+      };
+      function diff() { return DIFF[settings.difficulty] || DIFF.normal; }
+      function maxAmmo() { return diff().ammo; }
+      function ammoCap() { return Math.round(maxAmmo() * (state.practice ? 1.5 : 1)); } // Practice carries +50% ammo
+      function applyAudioSettings() { if (audio && audio.setVolume) audio.setVolume(settings.sound ? 0.32 : 0); }
+
+      // ===== SPECIAL WAVES — every 5th wave is a themed challenge with a big bonus =====
+      const SPECIALS = [
+        { key: 'mirv',   name: 'MIRV STORM',       color: '#ffb347' },
+        { key: 'swarm',  name: 'SATELLITE SWARM',  color: '#8ff2ff' },
+        { key: 'blitz',  name: 'SMART-BOMB BLITZ', color: '#ff7db4' },
+        { key: 'meteor', name: 'METEOR SHOWER',    color: '#ff6b52' },
+      ];
+      function specialFor(wave) { return (wave % 5 === 0) ? SPECIALS[(wave / 5 - 1) % SPECIALS.length] : null; }
+
+      const TAU = Math.PI * 2;
+      // Cut-paper collage palettes — one per wave (cycled). Muted construction-paper
+      // tones; matte colours — grain/shadow/torn-edges come from the paper render helpers.
+      const SKYSETS = [
+        { // DAY (reference: blue paper sky, green paper hills)
+          skyTop: '#4a76a8', skyBot: '#5d88b8', night: false,
+          sun: '#ecd79c', sunRing: '#dcc282',
+          cloud: '#e9e0cd', cloudShade: '#cfc2a6',
+          hillBack: '#6f9a52', hillFront: '#5a8442', ground: '#4f763a', groundLine: '#456831',
+          building: '#5f7086', buildingDark: '#4b5a70', buildingAlt: '#6e6a84', buildingLite: '#8592a6', window: '#3c4a60'
+        },
+        { // DUSK (warm kraft paper)
+          skyTop: '#c98a6a', skyBot: '#e0b98a', night: false,
+          sun: '#f0d59a', sunRing: '#e3bd7c',
+          cloud: '#efe2cc', cloudShade: '#dbc7a3',
+          hillBack: '#5f8048', hillFront: '#4e6c3c', ground: '#445f34', groundLine: '#3a5230',
+          building: '#6a5c6e', buildingDark: '#54485a', buildingAlt: '#7a6357', buildingLite: '#8b7c90', window: '#42384c'
+        },
+        { // NIGHT (dark paper)
+          skyTop: '#2a3a5a', skyBot: '#3b4e73', night: true,
+          sun: '#d8e0ee', sunRing: '#c2cde0',
+          cloud: '#5e6a88', cloudShade: '#49546f',
+          hillBack: '#3d5738', hillFront: '#33482f', ground: '#2b3d28', groundLine: '#243421',
+          building: '#38425c', buildingDark: '#2b3349', buildingAlt: '#413a5e', buildingLite: '#4c587a', window: '#5b6890'
+        },
+        { // DAWN (cool teal paper)
+          skyTop: '#5f86a0', skyBot: '#9cc0c0', night: false,
+          sun: '#efdca6', sunRing: '#e0c886',
+          cloud: '#e7e6d8', cloudShade: '#cfcdb8',
+          hillBack: '#5e8a6e', hillFront: '#4d7259', ground: '#446249', groundLine: '#3a5540',
+          building: '#566878', buildingDark: '#445260', buildingAlt: '#617a6e', buildingLite: '#71879b', window: '#3a4856'
+        }
+      ];
+      function currentSet() { return SKYSETS[(state.wave - 1 + SKYSETS.length * 100) % SKYSETS.length]; }
+
+      // ===== CUT-PAPER COLLAGE RENDER HELPERS =====
+      // Paper identity (shadows, keylines, grain, boil) is ALWAYS on — the
+      // "Debris & particles" toggle only thins heavy particle showers.
+      // Soft drop shadow → the layered "pieces of paper stacked" look.
+      function shadowOn(blur, dy, alpha) {
+        ctx.shadowColor = 'rgba(32,24,18,' + (alpha == null ? 0.34 : alpha) + ')';
+        ctx.shadowBlur = blur;
+        ctx.shadowOffsetX = Math.max(1, Math.round(blur * 0.35));
+        ctx.shadowOffsetY = dy;
+      }
+      function shadowOff() { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; }
+      // Altitude-scaled shadow: pieces held higher above the ground sheet cast a
+      // larger-offset, softer, fainter shadow (consistent down-right light).
+      function altShadow(y, base) {
+        const alt = clamp((state.groundY - y) / state.groundY, 0, 1);
+        ctx.shadowColor = 'rgba(32,24,18,' + ((base == null ? 0.36 : base) * (1 - alt * 0.45)).toFixed(3) + ')';
+        ctx.shadowBlur = 4 + alt * 9;
+        ctx.shadowOffsetX = 2 + alt * 4;
+        ctx.shadowOffsetY = 3 + alt * 7;
+      }
+
+      // Slightly irregular circle → a hand-torn paper puff (deterministic per x,y so it doesn't flicker).
+      function tornPuffPath(x, y, r) {
+        const n = 11;
+        ctx.beginPath();
+        for (let i = 0; i <= n; i++) {
+          const a = i / n * TAU;
+          const rr = r * (0.74 + 0.26 * Math.abs(Math.sin(a * 3.4 + x * 0.11 + y * 0.07)));
+          const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+      }
+
+      // Slightly wonky cut rectangle (stable jitter from position).
+      function paperRectPath(x, y, w, h, j) {
+        j = j == null ? 1.4 : j;
+        const s = x * 0.7 + y * 0.31;
+        const d = (o) => Math.sin(s + o * 1.7) * j;
+        ctx.beginPath();
+        ctx.moveTo(x + d(0), y + d(1));
+        ctx.lineTo(x + w + d(2), y + d(3));
+        ctx.lineTo(x + w + d(4), y + h + d(5));
+        ctx.lineTo(x + d(6), y + h + d(7));
+        ctx.closePath();
+        // dark keyline — the shadowed cut-face of the paper edge (research's top 'real paper' cue).
+        // Stroked under the caller's fill so only the thin outer edge survives; shadow paused so it's crisp.
+        {
+          const sc = ctx.shadowColor, sb = ctx.shadowBlur, sox = ctx.shadowOffsetX, soy = ctx.shadowOffsetY;
+          ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+          ctx.lineJoin = 'round'; ctx.lineWidth = 1.3; ctx.strokeStyle = 'rgba(48,32,22,0.4)';
+          ctx.stroke();
+          ctx.shadowColor = sc; ctx.shadowBlur = sb; ctx.shadowOffsetX = sox; ctx.shadowOffsetY = soy;
+        }
+      }
+
+      // Torn-edged horizontal strip (banner ribbons, chain flourish) — long edges
+      // get intermediate wobble vertices so they read as hand-torn, not die-cut.
+      function tornStripPath(x, y, w, h, amp) {
+        amp = amp == null ? 3 : amp;
+        const n = Math.max(4, Math.floor(w / 26));
+        ctx.beginPath();
+        for (let i = 0; i <= n; i++) {
+          const px = x + w * i / n;
+          const py = y + Math.sin(px * 0.37 + y * 0.7) * amp;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        for (let i = n; i >= 0; i--) {
+          const px = x + w * i / n;
+          ctx.lineTo(px, y + h + Math.sin(px * 0.29 + y * 1.3 + 2) * amp);
+        }
+        ctx.closePath();
+      }
+
+      // Small kraft-paper tag with stamped text — the edition's UI voice.
+      function drawPaperTag(x, y, text, opts) {
+        opts = opts || {};
+        ctx.save();
+        ctx.font = opts.font || '800 13px Inter, system-ui, sans-serif';
+        const tw = ctx.measureText(text).width;
+        const padX = opts.padX == null ? 9 : opts.padX;
+        const w = tw + padX * 2, h = opts.h == null ? 23 : opts.h;
+        ctx.translate(x, y);
+        ctx.rotate(opts.rot || 0);
+        ctx.globalAlpha = opts.alpha == null ? 1 : opts.alpha;
+        // hard offset shadow = paper lifted off the collage
+        ctx.fillStyle = 'rgba(32,24,18,0.28)';
+        ctx.fillRect(-w / 2 + 2.5, -h / 2 + 3, w, h);
+        ctx.fillStyle = opts.bg || '#e0cfa4';
+        paperRectPath(-w / 2, -h / 2, w, h, 1.2);
+        ctx.fill();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = opts.fg || '#3a2c1c';
+        ctx.fillText(text, 0, 1);
+        ctx.restore();
+      }
+
+      // Stacked-triangle paper pine tree sitting on the ground line.
+      // Each triangle is slightly asymmetric — hand-cut, not die-cut.
+      function drawTree(x, baseY, scale, color, shade, asym) {
+        const w = 16 * scale, h = 30 * scale;
+        const a = asym || [0, 0, 0];
+        ctx.fillStyle = '#7a5a3c'; // trunk
+        ctx.fillRect(x - 2 * scale, baseY - 6 * scale, 4 * scale, 8 * scale);
+        for (let i = 0; i < 3; i++) {
+          const ty = baseY - 4 * scale - i * (h * 0.28);
+          const tw = w * (1 - i * 0.22);
+          const th = h * 0.42;
+          const wob = a[i] * scale;
+          ctx.fillStyle = i === 1 ? shade : color;
+          ctx.beginPath();
+          ctx.moveTo(x + wob, ty - th + wob * 0.4);
+          ctx.lineTo(x + tw / 2 + a[(i + 1) % 3] * scale * 0.7, ty);
+          ctx.lineTo(x - tw / 2 + a[(i + 2) % 3] * scale * 0.5, ty + wob * 0.3);
+          ctx.closePath();
+          ctx.fill();
+          ctx.lineJoin = 'round'; ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(48,32,22,0.22)';
+          ctx.stroke();
+        }
+      }
+
+      // Full-frame paper grain, built once, overlaid each frame.
+      // Desktop: soft-light blend. Mobile: pre-baked alpha noise drawn source-over
+      // (far cheaper on weak GPUs — the blend-mode composite dominated paint cost).
+      let grainPattern = null, grainPatternCheap = null;
+      function buildGrain() {
+        const g = document.createElement('canvas'); g.width = 150; g.height = 150;
+        const gc = g.getContext('2d');
+        const img = gc.createImageData(150, 150);
+        for (let i = 0; i < img.data.length; i += 4) {
+          const v = 128 + (Math.random() * 2 - 1) * 48;
+          img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+          img.data[i + 3] = 255;
+        }
+        gc.putImageData(img, 0, 0);
+        grainPattern = ctx.createPattern(g, 'repeat');
+        const c = document.createElement('canvas'); c.width = 150; c.height = 150;
+        const cc = c.getContext('2d');
+        const im2 = cc.createImageData(150, 150);
+        for (let i = 0; i < im2.data.length; i += 4) {
+          const dark = Math.random() < 0.5;
+          im2.data[i] = dark ? 52 : 246; im2.data[i + 1] = dark ? 40 : 240; im2.data[i + 2] = dark ? 28 : 226;
+          im2.data[i + 3] = Math.random() * 26;
+        }
+        cc.putImageData(im2, 0, 0);
+        grainPatternCheap = ctx.createPattern(c, 'repeat');
+      }
+
+      const state = {
+        width: 0,
+        height: 0,
+        groundY: 0,
+        cityBandY: 0,
+        playing: false,
+        gameOver: false,
+        paused: false,
+        wave: 1,
+        score: 0,
+        nextBonusScore: 12000,
+        comboCount: 0,
+        comboTimer: 0,
+        flash: 0,
+        tint: 0,
+        shake: 0,
+        time: 0,
+        lastTime: 0,
+        waveIntroTimer: 3.8,
+        waveCooldown: 0,
+        spawnBudget: 0,
+        spawnedThisWave: 0,
+        attract: false,
+        practice: false,
+        special: null,
+        speedMul: 1,
+        aiCool: 0,
+        bannerTimer: 0,
+        bannerText: '',
+        bannerColor: '#9be6ff',
+        stars: [],
+        skyline: [],
+        clouds: [],
+        hills: [],
+        trees: [],
+        tufts: [],
+        sunRays: [],
+        vign: null,
+        bases: [],
+        cities: [],
+        enemyMissiles: [],
+        playerMissiles: [],
+        explosions: [],
+        particles: [],
+        smoke: [],
+        satellites: [],
+        embers: [],
+        prompts: [],
+        destroyedThisWave: 0,
+        audioUnlocked: false,
+        backdropSeed: (Math.random() * 0x7fffffff) | 0, // stable across resizes → no mid-game reshuffle
+      };
+
+      let audio = null;
+
+      function rand(min, max) { return min + Math.random() * (max - min); }
+      function randi(min, max) { return Math.floor(rand(min, max + 1)); }
+      function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+      function lerp(a, b, t) { return a + (b - a) * t; }
+      function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
+
+      function initAudio() {
+        if (state.attract) return; // stay silent during the title auto-demo
+        if (audio) return;
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        const ac = new AC();
+        const master = ac.createGain();
+        master.gain.value = settings.sound ? 0.32 : 0;
+        master.connect(ac.destination);
+
+        const hum = ac.createGain();
+        hum.gain.value = 0;
+        hum.connect(master);
+
+        const humOscA = ac.createOscillator();
+        const humOscB = ac.createOscillator();
+        const humLfo = ac.createOscillator();
+        const humLfoGain = ac.createGain();
+        const humFilter = ac.createBiquadFilter();
+        humFilter.type = 'lowpass';
+        humFilter.frequency.value = 240;
+        humFilter.Q.value = 0.3;
+        humOscA.type = 'sawtooth';
+        humOscB.type = 'triangle';
+        humOscA.frequency.value = 42;
+        humOscB.frequency.value = 58;
+        humLfo.type = 'sine';
+        humLfo.frequency.value = 0.11;
+        humLfoGain.gain.value = 8;
+        humLfo.connect(humLfoGain);
+        humLfoGain.connect(humFilter.frequency);
+        humOscA.connect(humFilter);
+        humOscB.connect(humFilter);
+        humFilter.connect(hum);
+        humOscA.start(); humOscB.start(); humLfo.start();
+
+        function noiseBuffer(seconds = 1) {
+          const len = Math.max(1, Math.floor(ac.sampleRate * seconds));
+          const buffer = ac.createBuffer(1, len, ac.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len * 0.35);
+          return buffer;
+        }
+
+        function burstNoise({ duration = 0.28, gain = 0.24, filter = 'bandpass', freq = 640, q = 1.2, decay = 0.16 } = {}) {
+          const src = ac.createBufferSource();
+          src.buffer = noiseBuffer(duration);
+          const f = ac.createBiquadFilter();
+          f.type = filter;
+          f.frequency.value = freq;
+          f.Q.value = q;
+          const g = ac.createGain();
+          g.gain.setValueAtTime(gain, ac.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + decay);
+          src.connect(f); f.connect(g); g.connect(master);
+          src.start();
+          src.stop(ac.currentTime + duration);
+        }
+
+        function tone(type, freqA, freqB, duration, gain, attack = 0.005, release = 0.12) {
+          const osc = ac.createOscillator();
+          const g = ac.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freqA, ac.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(Math.max(1, freqB), ac.currentTime + duration);
+          g.gain.setValueAtTime(0.0001, ac.currentTime);
+          g.gain.exponentialRampToValueAtTime(gain, ac.currentTime + attack);
+          g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + release + duration);
+          osc.connect(g); g.connect(master);
+          osc.start();
+          osc.stop(ac.currentTime + duration + release + 0.02);
+        }
+
+        audio = {
+          ac,
+          hum,
+          sfx: {},          // ElevenLabs sample buffers (loaded async below)
+          music: null,      // HTMLAudioElement background loop
+          setVolume(v) {
+            master.gain.cancelScheduledValues(ac.currentTime); master.gain.value = v;
+            if (audio.music) audio.music.volume = settings.sound ? MUSIC_VOL : 0;
+          },
+          playSample(key, gain = 0.9) {
+            const buf = audio.sfx[key];
+            if (!buf) return false;
+            const src = ac.createBufferSource(); src.buffer = buf;
+            const g = ac.createGain(); g.gain.value = gain;
+            src.connect(g); g.connect(master); src.start();
+            return true;
+          },
+          startMusic() {
+            if (!audio.music) {
+              const a = new Audio('audio/music.mp3?v=' + AUDIO_V);
+              a.loop = true; a.preload = 'auto';
+              audio.music = a;
+            }
+            audio.music.volume = settings.sound ? MUSIC_VOL : 0;
+            audio.music.play().catch(() => {});
+          },
+          resume: async () => {
+            if (ac.state !== 'running') await ac.resume();
+            state.audioUnlocked = true;
+            audio.startMusic();
+          },
+          missileLaunch() {
+            if (audio.playSample('launch', 0.42)) return;
+            tone('triangle', 460, 140, 0.22, 0.045, 0.003, 0.09);
+            burstNoise({ duration: 0.15, gain: 0.035, filter: 'highpass', freq: 900, decay: 0.08 });
+          },
+          enemyWhine(speed = 1) {
+            tone('sawtooth', 220 + speed * 30, 120 + speed * 18, 0.35, 0.012, 0.003, 0.18);
+          },
+          explosion(power = 1) {
+            if (audio.playSample('explode', 0.7 * power)) return;
+            burstNoise({ duration: 0.45, gain: 0.22 * power, filter: 'bandpass', freq: 280, q: 0.7, decay: 0.32 });
+            burstNoise({ duration: 0.18, gain: 0.12 * power, filter: 'highpass', freq: 900, q: 0.8, decay: 0.14 });
+            tone('sine', 95 * power + 10, 32, 0.42, 0.08 * power, 0.002, 0.24);
+          },
+          cityCrash() {
+            if (audio.playSample('citylost', 0.9)) return;
+            burstNoise({ duration: 0.5, gain: 0.28, filter: 'lowpass', freq: 420, q: 0.6, decay: 0.45 });
+            tone('square', 120, 50, 0.24, 0.03, 0.001, 0.2);
+          },
+          waveClear() {
+            if (audio.playSample('waveclear', 0.7)) return;
+            tone('triangle', 392, 392, 0.11, 0.04);
+            setTimeout(() => tone('triangle', 523, 523, 0.12, 0.04), 120);
+            setTimeout(() => tone('triangle', 659, 659, 0.15, 0.045), 240);
+          },
+          special(key) { if (audio.playSample('special_' + key, 0.75)) return; tone('square', 320, 180, 0.5, 0.05, 0.005, 0.1); },
+          uiClick() { tone('square', 720, 680, 0.05, 0.035, 0.001, 0.03); }, // crisp procedural blip
+          combo(level) {
+            tone('sine', 420 + level * 45, 320 + level * 30, 0.12, 0.03 + Math.min(0.02, level * 0.002));
+          }
+        };
+
+        // Load ElevenLabs SFX into decoded buffers (fire-and-forget)
+        ['launch', 'explode', 'citylost', 'waveclear', 'special_mirv', 'special_swarm', 'special_blitz', 'special_meteor'].forEach(key => {
+          fetch('audio/' + key + '.mp3?v=' + AUDIO_V)
+            .then(r => r.arrayBuffer())
+            .then(b => ac.decodeAudioData(b))
+            .then(buf => { audio.sfx[key] = buf; })
+            .catch(() => {});
+        });
+      }
+
+      function resize() {
+        // Desktop fill-width logical cap: game logic runs at phone-ish height
+        // (max 960 logical px) and the canvas is CSS-scaled up to fill the
+        // window. On phones (vh <= 960) this matches the old raw-pixel sizing.
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const h = Math.min(vh, 960);
+        const viewScale = vh / h;
+        const w = Math.floor(vw / viewScale);
+        const dpr = Math.min(viewScale * (window.devicePixelRatio || 1), viewScale > 1 ? 2.4 : 2);
+        canvas.width = Math.floor(w * dpr);
+        canvas.height = Math.floor(h * dpr);
+        canvas.style.width = vw + 'px';
+        canvas.style.height = vh + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        state.width = w;
+        state.height = h;
+        state.groundY = state.height * 0.83;
+        state.cityBandY = state.groundY + 8;
+        generateBackdrop();
+        layoutDefenses();
+      }
+
+      // Deterministic PRNG so a resize (URL bar, rotation) rebuilds the SAME
+      // backdrop at the new proportions instead of reshuffling the world.
+      function mulberry32(a) {
+        return function () {
+          a |= 0; a = a + 0x6D2B79F5 | 0;
+          let t = Math.imul(a ^ a >>> 15, 1 | a);
+          t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+          return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+      }
+
+      function generateBackdrop() {
+        // Each section (and each skyline tower) gets its OWN seeded stream: section
+        // draw-counts depend on viewport size (stars on area, windows on height), so a
+        // shared stream would reshuffle everything downstream on a URL-bar height change.
+        let R = mulberry32(state.backdropSeed);
+        const stream = (k) => { R = mulberry32((state.backdropSeed ^ Math.imul(k, 0x9E3779B9)) | 0); };
+        const srand = (a, b) => a + R() * (b - a);
+        const srandi = (a, b) => Math.floor(srand(a, b + 1));
+        state.stars = [];
+        state.skyline = [];
+        state.clouds = [];
+        state.hills = [];
+        state.tufts = [];
+        state.sunRays = [];
+        const isMobile = state.width < 768;
+        // Flat stars (only rendered on night palettes)
+        stream(1);
+        const starCount = Math.floor(state.width * state.height / (isMobile ? 16000 : 9000));
+        for (let i = 0; i < starCount; i++) {
+          state.stars.push({ x: R() * state.width, y: R() * state.groundY * 0.6, r: R() < 0.85 ? 1.4 : 2.4, a: srand(0.5, 1) });
+        }
+        // Puffy flat clouds drifting slowly
+        stream(2);
+        const cloudCount = isMobile ? 4 : 6;
+        for (let i = 0; i < cloudCount; i++) {
+          const cx = srand(0, state.width);
+          const cy = srand(state.height * 0.06, state.groundY * 0.5);
+          const s = srand(0.7, 1.5);
+          const puffs = [];
+          const n = srandi(4, 6);
+          let px = 0;
+          for (let p = 0; p < n; p++) {
+            puffs.push({ ox: px, oy: srand(-6, 4) * s, r: srand(16, 30) * s });
+            px += srand(16, 26) * s;
+          }
+          state.clouds.push({ x: cx, y: cy, w: px, speed: srand(3, 9) * (R() < 0.5 ? 1 : -1), puffs });
+        }
+        // Two torn-sheet hills: deckled top edge sampled at short irregular facets
+        for (let layer = 0; layer < 2; layer++) {
+          stream(3 + layer);
+          const baseY = state.groundY - (layer === 0 ? state.height * 0.05 : state.height * 0.015);
+          const amp = layer === 0 ? state.height * 0.05 : state.height * 0.03;
+          const freq = layer === 0 ? 0.6 : 1.0;
+          const phase = srand(0, TAU);
+          const pts = [];
+          let hx = -60;
+          while (hx <= state.width + 60) {
+            const y = baseY
+              + Math.sin(hx / state.width * TAU * freq + phase) * amp
+              + Math.cos(hx / state.width * TAU * freq * 2.3 + phase) * amp * 0.35
+              + srand(-3.5, 3.5); // deckle
+            pts.push({ x: hx, y });
+            hx += srand(9, 16);
+          }
+          state.hills.push({ pts, back: layer === 0 });
+        }
+
+        // Construction-paper skyline: every tower is its own hand-cut piece —
+        // torn silhouette, one of 3 paper tints, small off-rotation, hard offset
+        // shadow onto whatever sits behind it, and pasted-bit windows.
+        let x = -12, towerI = 0;
+        while (x < state.width + 6) {
+          stream(100 + towerI++);   // per-tower stream: window rows depend on height, so counts must not bleed across towers
+          // Identity attributes FIRST in fixed draw order (tint/rot/roof/spacing), because the
+          // silhouette+window draw counts below depend on h — anything drawn after them would
+          // reshuffle on a URL-bar height change.
+          const w = srand(26, 64);
+          const h = srand(state.height * 0.05, state.height * 0.16);
+          const tint = srandi(0, 2);
+          const rot = srand(-0.026, 0.026);
+          const roofType = R();
+          const shOff = srand(2.5, 4.2);
+          const stepA = srand(0.62, 1.0), stepB = srand(2, 10);
+          // silhouette polygon in local coords (origin bottom-left, y up = negative)
+          const pts = [];
+          const wob = () => srand(-2.6, 2.6);
+          const eN = Math.max(2, Math.floor(h / 26));
+          const topN = Math.max(3, Math.floor(w / 11));
+          pts.push({ x: wob() * 0.4, y: 0 });
+          for (let i = 1; i < eN; i++) pts.push({ x: wob(), y: -h * i / eN });                     // left edge wobble
+          for (let i = 0; i <= topN; i++) pts.push({ x: w * i / topN + wob(), y: -h + srand(-4.5, 3) }); // jagged torn top
+          for (let i = eN - 1; i >= 1; i--) pts.push({ x: w + wob(), y: -h * i / eN });            // right edge wobble
+          pts.push({ x: w + wob() * 0.4, y: 0 });
+          // windows: pasted paper bits — imperfect grid, per-bit jitter/rotation/size
+          const windows = [];
+          const cols = Math.max(1, Math.floor(w / srand(10, 14)));
+          const rows = Math.max(2, Math.floor(h / srand(13, 17)));
+          const cellW = (w - 8) / cols, cellH = (h - 14) / rows;
+          for (let cx = 0; cx < cols; cx++) {
+            for (let cy = 0; cy < rows; cy++) {
+              if (R() < 0.82) {
+                windows.push({
+                  x: 4 + cx * cellW + srand(-1.5, 1.5),
+                  y: 9 + cy * cellH + srand(-1.8, 1.8),
+                  w: clamp(cellW * srand(0.4, 0.62), 2.5, 5.5),
+                  h: clamp(cellH * srand(0.42, 0.68), 3, 7),
+                  rot: srand(-0.09, 0.09),
+                  lit: R() < 0.5
+                });
+              }
+            }
+          }
+          state.skyline.push({ x, w, h, pts, windows, tint, rot, roofType, shOff });
+          x += w * stepA + stepB; // overlapping towers → visible layered shadows
+        }
+
+        // Irregular hand-cut grass tufts along the ground seam (gaps included)
+        stream(5);
+        let tx = -40;
+        while (tx < state.width + 40) {
+          if (R() < 0.13) { tx += srand(8, 22); continue; } // occasional bare gap
+          const tw = srand(7, 22), th = srand(3, 11);
+          state.tufts.push({ x: tx, w: tw, h: th, skew: srand(-4.5, 4.5), tone: R() < 0.28 });
+          tx += tw * srand(0.7, 1.05);
+        }
+
+        // Hand-cut sun rays: varied length / width / angle per ray
+        stream(6);
+        for (let i = 0; i < 12; i++) {
+          state.sunRays.push({ a: i / 12 * TAU + 0.15 + srand(-0.07, 0.07), r1: srand(1.3, 1.66), hw: srand(0.085, 0.165) });
+        }
+
+        // Torn-paper vignette: wobbly inner edges for the stacked frame strips
+        const mkEdge = (len) => {
+          const pts = [];
+          let p = 0;
+          while (p < len) { pts.push({ p, d: srand(3.5, 8) }); p += srand(10, 26); }
+          pts.push({ p: len, d: srand(3.5, 8) });
+          return pts;
+        };
+        state.vign = { top: mkEdge(state.width), bot: mkEdge(state.width), left: mkEdge(state.height), right: mkEdge(state.height) };
+
+        // Foreground paper pine trees (asymmetric hand-cut triangles)
+        state.trees = [];
+        const treeCount = isMobile ? 5 : 9;
+        for (let i = 0; i < treeCount; i++) {
+          state.trees.push({
+            x: srand(state.width * 0.02, state.width * 0.98),
+            scale: srand(1.1, 1.95),
+            tone: R() < 0.5,
+            asym: [srand(-1.8, 1.8), srand(-1.8, 1.8), srand(-1.8, 1.8)]
+          });
+        }
+      }
+
+      function layoutDefenses() {
+        const baseY = state.groundY;
+        const positions = [0.16, 0.5, 0.84].map(p => p * state.width);
+        if (!state.bases.length) {
+          state.bases = positions.map((x, i) => ({ id: i, x, y: baseY, ammo: maxAmmo(), alive: true, flash: 0 }));
+        } else {
+          state.bases.forEach((b, i) => { b.x = positions[i]; b.y = baseY; });
+        }
+
+        const citySlots = [0.08, 0.23, 0.36, 0.64, 0.77, 0.92].map(p => p * state.width);
+        if (!state.cities.length) {
+          state.cities = citySlots.map((x, i) => createCity(x, i));
+        } else {
+          state.cities.forEach((c, i) => { c.x = citySlots[i]; c.y = state.cityBandY; });
+        }
+      }
+
+      function createCity(x, slot) {
+        // A small cluster of flat towers with stable (non-flickering) windows.
+        // Narrow phones get tighter 2-3 tower clusters so cities/bunkers stay separable.
+        const compact = state.width < 500;
+        const n = compact ? randi(2, 3) : randi(3, 5);
+        const silhouette = [];
+        let ox = 0;
+        for (let i = 0; i < n; i++) {
+          const w = compact ? rand(9, 13) : rand(12, 18);
+          const h = rand(20, 40);
+          const windows = [];
+          const cols = Math.max(1, Math.floor(w / 7));
+          const rows = Math.max(2, Math.floor(h / 10));
+          const cw = (w - 6) / cols, ch = (h - 10) / rows;
+          for (let cx = 0; cx < cols; cx++) {
+            for (let ry = 0; ry < rows; ry++) {
+              if (Math.random() < 0.7) windows.push({ ox: 4 + cx * cw, oy: 6 + ry * ch, lit: Math.random() < 0.7 });
+            }
+          }
+          silhouette.push({ ox, w, h, roof: Math.random(), windows });
+          ox += w + rand(1, 3);
+        }
+        return {
+          slot,
+          x,
+          y: state.cityBandY,
+          alive: true,
+          damage: 0,
+          crumble: 0,
+          fire: 0,
+          smoke: 0,
+          totalW: ox,
+          silhouette
+        };
+      }
+
+      function resetGame() {
+        state.playing = true;
+        state.gameOver = false;
+        state.paused = false;
+        state.wave = 1;
+        state.score = 0;
+        state.nextBonusScore = 12000;
+        state.comboCount = 0;
+        state.comboTimer = 0;
+        state.flash = 0;
+        state.tint = 0;
+        state.shake = 0;
+        state.time = 0;
+        state.lastTime = performance.now();
+        state.waveIntroTimer = 3.4;
+        state.waveCooldown = 0;
+        state.spawnedThisWave = 0;
+        state.attract = false;
+        state.special = null;
+        state.speedMul = 1;
+        state.aiCool = 0;
+        state.bannerTimer = 0;
+        state.enemyMissiles.length = 0;
+        state.playerMissiles.length = 0;
+        state.explosions.length = 0;
+        state.particles.length = 0;
+        state.smoke.length = 0;
+        state.satellites.length = 0;
+        state.embers.length = 0;
+        state.prompts.length = 0;
+        state.destroyedThisWave = 0;
+        state.bases = [];
+        state.cities = [];
+        layoutDefenses();
+        state.bases.forEach(base => { base.ammo = ammoCap(); base.alive = true; base.flash = 0; });
+        state.cities.forEach((city, i) => Object.assign(city, createCity(city.x, i)));
+        prepareWave(); // set up wave 1 spawn budget
+        gameOverOverlay.classList.add('hidden');
+      }
+
+      // Auto-playing demo shown behind the title screen.
+      function startAttract() {
+        if (!settings.demo) return;
+        state.practice = false;
+        resetGame();          // fresh game...
+        state.attract = true; // ...driven by the AI, silent, self-restarting
+        state.aiCool = 0.5;
+        setDemoBadge(true);
+      }
+
+      function stopAttract() {
+        if (!state.attract) return;
+        state.attract = false;
+        state.playing = false;
+        setDemoBadge(false);
+        state.enemyMissiles.length = 0; state.playerMissiles.length = 0;
+        state.satellites.length = 0; state.explosions.length = 0;
+        state.particles.length = 0; state.smoke.length = 0; state.embers.length = 0;
+      }
+
+      // Simple defensive AI: intercept the most urgent threat, keep bases stocked.
+      function aiDefend(dt) {
+        state.bases.forEach(b => { if (b.alive) b.ammo = ammoCap(); });
+        state.aiCool -= dt;
+        if (state.aiCool > 0 || state.playerMissiles.length > 7) return;
+        state.aiCool = rand(0.16, 0.3);
+        let best = null, bestScore = -Infinity;
+        for (const m of state.enemyMissiles) {
+          const s = m.y + (m.type === 'smart' ? 40 : 0); // closer to ground = more urgent
+          if (s > bestScore) { bestScore = s; best = m; }
+        }
+        for (const sat of state.satellites) {
+          const s = sat.y * 0.5 + 30;
+          if (s > bestScore) { bestScore = s; best = sat; }
+        }
+        if (!best) return;
+        let lx = best.x, ly = best.y;
+        if (best.tx !== undefined) { // lead a little along its heading
+          const dx = best.tx - best.sx, dy = best.ty - best.sy, d = Math.hypot(dx, dy) || 1;
+          lx = best.x + dx / d * 42; ly = best.y + dy / d * 42;
+        }
+        ly = clamp(ly, state.groundY * 0.3, state.groundY - 60);
+        if (state.playerMissiles.some(pm => dist(pm.tx, pm.ty, lx, ly) < 55)) return; // already handled
+        launchDefense(lx, ly);
+      }
+
+      function nearestBase(targetX) {
+        let best = null;
+        for (const base of state.bases) {
+          if (!base.alive || base.ammo <= 0) continue;
+          const d = Math.abs(base.x - targetX);
+          if (!best || d < best.d) best = { base, d };
+        }
+        return best?.base || null;
+      }
+
+      function launchDefense(x, y) {
+        if (!state.playing || state.gameOver) return;
+        y = Math.min(y, state.groundY - 26);
+        const base = nearestBase(x);
+        if (!base) return;
+        base.ammo -= 1;
+        base.flash = 0.18;
+        state.playerMissiles.push({
+          x: base.x,
+          y: base.y - 10,
+          sx: base.x,
+          sy: base.y - 10,
+          tx: x,
+          ty: y,
+          speed: Math.max(320, state.height * 0.65),
+          done: false,
+          trail: [],
+          spark: 0
+        });
+        initAudio();
+        audio?.missileLaunch();
+      }
+
+      function queuePrompt(text, x, y, color = '#ffffff') {
+        // age:0 is required — updateParticles ages/removes prompts by age>=life.
+        state.prompts.push({ text, x, y, color, life: 1.2, age: 0 });
+        if (state.prompts.length > 60) state.prompts.splice(0, state.prompts.length - 60);
+      }
+
+      function createExplosion(x, y, radius, kind = 'defense', source = null) {
+        state.explosions.push({
+          x, y,
+          r: 2,
+          maxR: radius,
+          age: 0,
+          life: kind === 'big' ? 1.0 : 0.82,
+          kind,
+          source,
+          hitSet: new Set(),
+        });
+
+        const isMobile = state.width < 768;
+        let burst = isMobile ? (radius < 40 ? 6 : radius < 70 ? 10 : 14) : (radius < 40 ? 12 : radius < 70 ? 18 : 24);
+        if (!settings.effects) burst = Math.ceil(burst * 0.45);
+        for (let i = 0; i < burst; i++) {
+          const a = Math.random() * TAU;
+          const sp = rand(40, radius * 2.2);
+          state.particles.push({
+            x, y,
+            vx: Math.cos(a) * sp,
+            vy: Math.sin(a) * sp - rand(8, 50),
+            life: rand(0.35, 0.9),
+            age: 0,
+            size: rand(1.4, 4.5),
+            hue: rand(20, 58),
+            glow: true,
+            gravity: 60
+          });
+        }
+
+        state.flash = Math.min(1, state.flash + radius / 140);
+        state.tint = Math.min(1, state.tint + radius / 220);
+        if (settings.shake) state.shake = Math.min(18, state.shake + radius / 9);
+        initAudio();
+        audio?.explosion(Math.min(1.25, radius / 70));
+      }
+
+      function scoreEnemy(enemy, epicenterX, epicenterY) {
+        let base = 100;
+        if (enemy.type === 'smart') base = 180;
+        if (enemy.type === 'mirvChild') base = 130;
+        if (enemy.type === 'satellite') base = 750;
+        state.comboCount = Math.min(12, state.comboCount + 1);
+        state.comboTimer = 1.4;
+        const mult = 1 + (state.comboCount - 1) * 0.18;
+        const earned = Math.round(base * mult);
+        state.score += earned;
+        queuePrompt('+' + earned + (state.comboCount > 1 ? '  x' + mult.toFixed(1) : ''), epicenterX, epicenterY, enemy.type === 'satellite' ? '#8ff2ff' : '#ffd884');
+        audio?.combo(state.comboCount);
+        grantBonusCityIfNeeded();
+      }
+
+      function grantBonusCityIfNeeded() {
+        while (state.score >= state.nextBonusScore) {
+          const deadCity = state.cities.find(c => !c.alive);
+          if (deadCity) {
+            deadCity.alive = true;
+            deadCity.damage = 0;
+            deadCity.crumble = 0;
+            deadCity.fire = 0;
+            deadCity.smoke = 0;
+            queuePrompt('BONUS CITY', deadCity.x, deadCity.y - 36, '#8fffc9');
+          } else {
+            const weakestBase = state.bases.find(b => b.alive && b.ammo < ammoCap());
+            if (weakestBase) weakestBase.ammo = Math.min(ammoCap(), weakestBase.ammo + 6);
+            queuePrompt('BONUS SUPPLY', state.width * 0.5, 70, '#8fffc9');
+          }
+          state.nextBonusScore += 12000;
+        }
+      }
+
+      function killCity(city) {
+        if (!city || !city.alive) return;
+        city.alive = false;
+        city.crumble = 1;
+        city.fire = 1.8;
+        city.smoke = 2.5;
+        const emberBurst = state.width < 768 ? 16 : 32;
+        for (let i = 0; i < emberBurst; i++) {
+          state.embers.push({
+            x: city.x + rand(-26, 26),
+            y: city.y - rand(6, 40),
+            vx: rand(-40, 40),
+            vy: rand(-120, -20),
+            age: 0,
+            life: rand(1.4, 2.4),
+            size: rand(2, 5)
+          });
+        }
+        createExplosion(city.x, city.y - 18, 58, 'big', city);
+        initAudio();
+        audio?.cityCrash();
+      }
+
+      function killBase(base) {
+        if (!base || !base.alive) return;
+        base.alive = false;
+        base.ammo = 0;
+        createExplosion(base.x, base.y - 12, 68, 'big', base);
+      }
+
+      function enemyTargets() {
+        const aliveCities = state.cities.filter(c => c.alive);
+        const aliveBases = state.bases.filter(b => b.alive);
+        return [...aliveCities, ...aliveBases];
+      }
+
+      function randomTarget() {
+        const targets = enemyTargets();
+        return targets.length ? targets[randi(0, targets.length - 1)] : { x: rand(state.width * 0.08, state.width * 0.92), y: state.groundY };
+      }
+
+      function spawnEnemyMissile(type = 'normal', fromX = null, fromY = null, forcedTarget = null, forceSplit = false) {
+        const t = forcedTarget || randomTarget();
+        const sx = fromX ?? rand(state.width * 0.05, state.width * 0.95);
+        const sy = fromY ?? rand(20, state.height * 0.14);
+        const speedBase = (38 + state.wave * 3.6) * diff().speed * state.speedMul * (state.practice ? 0.85 : 1);
+        const willSplit = (forceSplit && type === 'normal') ||
+          (state.wave >= 6 && type === 'normal' && Math.random() < Math.min(0.6, 0.14 + state.wave * 0.03));
+        const missile = {
+          type,
+          x: sx,
+          y: sy,
+          sx, sy,
+          tx: t.x + rand(-22, 22),
+          ty: t.y - rand(0, 10),
+          speed: type === 'smart' ? speedBase * 1.5 : speedBase + rand(0, 20),
+          age: 0,
+          trail: [],
+          smoked: 0,
+          splitY: willSplit ? rand(0.34, 0.5) * state.groundY : null,
+          splitDone: false,
+          hp: type === 'smart' ? 1 : 1,
+          smart: type === 'smart',
+          dead: false
+        };
+        state.enemyMissiles.push(missile);
+        if (Math.random() < 0.4) {
+          initAudio();
+          audio?.enemyWhine(missile.speed / 70);
+        }
+      }
+
+      function spawnSatellite() {
+        const fromLeft = Math.random() < 0.5;
+        const spd = state.practice ? 0.85 : 1;
+        state.satellites.push({
+          type: 'satellite',
+          x: fromLeft ? -60 : state.width + 60,
+          y: rand(state.height * 0.13, state.height * 0.32),
+          vx: (fromLeft ? rand(34, 60) : -rand(34, 60)) * spd,
+          wobble: rand(0, 10),
+          hp: 2,
+          cool: rand(1.8, 3.4),
+          dead: false,
+          flash: 0
+        });
+      }
+
+      function showBanner(text, color) { state.bannerText = text; state.bannerColor = color; state.bannerTimer = 2.6; }
+
+      function prepareWave() {
+        state.spawnedThisWave = 0;
+        const special = specialFor(state.wave);
+        state.special = special;
+        state.speedMul = (special && special.key === 'meteor') ? 1.28 : 1;
+        let budget = 10 + state.wave * 1.75 + Math.floor(state.wave * 0.3);
+        budget *= diff().budget;
+        if (special) budget *= 1.3;
+        state.spawnBudget = Math.round(budget);
+        state.destroyedThisWave = 0;
+        state.waveIntroTimer = special ? 3.0 : 2.6;
+        // Arcade-faithful: destroyed batteries are REBUILT and every battery is
+        // fully restocked at the start of each wave (cities stay dead).
+        let rebuilt = 0;
+        state.bases.forEach(base => {
+          if (!base.alive) { base.alive = true; base.flash = 0.35; rebuilt++; }
+          base.ammo = ammoCap();
+        });
+        if (rebuilt > 0 && state.wave > 1 && !state.attract) {
+          queuePrompt('BATTERIES REBUILT', state.width / 2, state.height * 0.36, '#cfe0b8');
+        }
+        if (special) {
+          showBanner('★ ' + special.name + ' ★', special.color);
+          audio?.special(special.key);
+          if (special.key === 'swarm') { spawnSatellite(); spawnSatellite(); }
+        } else {
+          queuePrompt('WAVE ' + state.wave, state.width / 2, 100, '#9be6ff');
+        }
+      }
+
+      function updateWave(dt) {
+        if (state.bannerTimer > 0) state.bannerTimer -= dt;
+        if (state.waveIntroTimer > 0) {
+          state.waveIntroTimer -= dt;
+          return;
+        }
+        if (state.spawnedThisWave < state.spawnBudget) {
+          const sp = state.special;
+          let rate = Math.max(0.2, 1.1 - state.wave * 0.045);
+          if (sp && sp.key === 'meteor') rate *= 0.55;
+          else if (sp && sp.key === 'swarm') rate *= 0.85;
+          state.waveCooldown -= dt;
+          if (state.waveCooldown <= 0) {
+            state.spawnedThisWave++;
+            if (sp) {
+              if (sp.key === 'mirv') spawnEnemyMissile('normal', null, null, null, true);
+              else if (sp.key === 'blitz') spawnEnemyMissile(Math.random() < 0.7 ? 'smart' : 'normal');
+              else if (sp.key === 'swarm') {
+                spawnEnemyMissile('normal');
+                if (state.satellites.length < 4 && Math.random() < 0.45) spawnSatellite();
+              } else spawnEnemyMissile('normal'); // meteor
+            } else {
+              const smart = state.wave >= 10 && Math.random() < Math.min(0.35, 0.08 + state.wave * 0.015);
+              spawnEnemyMissile(smart ? 'smart' : 'normal');
+              if (state.wave >= 8 && Math.random() < Math.min(0.22, 0.06 + state.wave * 0.01) && state.satellites.length < 2) spawnSatellite();
+            }
+            state.waveCooldown = rate + rand(0.05, 0.32);
+          }
+        } else if (!state.enemyMissiles.length && !state.satellites.length && !state.explosions.length) {
+          let clearBonus = 400 + state.cities.filter(c => c.alive).length * 100 + state.bases.reduce((n, b) => n + b.ammo * 6, 0);
+          if (state.special) {
+            const specialBonus = 1500 + state.wave * 120;
+            clearBonus += specialBonus;
+            queuePrompt('SPECIAL CLEARED  +' + specialBonus.toLocaleString(), state.width / 2, 150, state.special.color);
+          }
+          state.score += clearBonus;
+          grantBonusCityIfNeeded();
+          queuePrompt('WAVE CLEAR', state.width / 2, 120, '#b8ffb3');
+          audio?.waveClear();
+          state.wave++;
+          if (state.attract && state.wave > 15) { startAttract(); return; } // cycle the demo
+          prepareWave();
+        }
+      }
+
+      function updatePlayerMissiles(dt) {
+        for (let i = state.playerMissiles.length - 1; i >= 0; i--) {
+          const m = state.playerMissiles[i];
+          const dx = m.tx - m.x;
+          const dy = m.ty - m.y;
+          const d = Math.hypot(dx, dy);
+          const step = m.speed * dt;
+          m.trail.push({ x: m.x, y: m.y, a: 1 });
+          if (m.trail.length > 24) m.trail.shift();
+          if (d <= step) {
+            m.x = m.tx; m.y = m.ty;
+            createExplosion(m.x, m.y, rand(48, 78), 'defense', m);
+            state.playerMissiles.splice(i, 1);
+            continue;
+          }
+          m.x += dx / d * step;
+          m.y += dy / d * step;
+          m.spark -= dt;
+          if (m.spark <= 0 && state.particles.length < 400) {
+            m.spark = 0.02;
+            state.particles.push({ x: m.x, y: m.y, vx: rand(-10, 10), vy: rand(-12, 18), life: 0.32, age: 0, size: rand(1, 3), hue: rand(180, 205), glow: true, gravity: 0 });
+          }
+        }
+      }
+
+      function updateEnemyMissiles(dt) {
+        for (let i = state.enemyMissiles.length - 1; i >= 0; i--) {
+          const m = state.enemyMissiles[i];
+          m.age += dt;
+          const dx = m.tx - m.x;
+          const dy = m.ty - m.y;
+          let d = Math.hypot(dx, dy) || 1;
+
+          if (m.smart && m.age > 0.35) {
+            const nearestExplosion = state.explosions.find(e => dist(m.x, m.y, e.x, e.y) < e.r + 80);
+            if (nearestExplosion) {
+              m.tx += (m.x < state.width / 2 ? 1 : -1) * 40 * dt;
+            }
+          }
+
+          d = Math.hypot(m.tx - m.x, m.ty - m.y) || 1;
+          const step = m.speed * dt;
+          m.trail.push({ x: m.x, y: m.y, s: rand(1.5, 4) });
+          if (m.trail.length > 30) m.trail.shift();
+
+          // MIRV split: partway down, the warhead FORKS into fanning children.
+          // No blast here — a blast at this point would instantly detonate the
+          // children spawned at the same spot (the "blew up immediately" bug).
+          if (m.splitY && !m.splitDone && m.y >= m.splitY) {
+            const kids = randi(2, 3);
+            for (let k = 0; k < kids; k++) {
+              const target = randomTarget();
+              state.enemyMissiles.push({
+                type: 'mirvChild',
+                x: m.x + rand(-4, 4),
+                y: m.y,
+                sx: m.x,
+                sy: m.y,
+                tx: target.x + rand(-30, 30),
+                ty: target.y,
+                speed: m.speed * rand(1.05, 1.2),
+                age: 0,
+                trail: [],
+                smoked: 0,
+                splitY: null,
+                splitDone: true,
+                hp: 1,
+                smart: false,
+                dead: false
+              });
+            }
+            // harmless spark puff to sell the split (particles don't collide)
+            for (let p = 0; p < 6; p++) {
+              state.particles.push({ x: m.x, y: m.y, vx: rand(-34, 34), vy: rand(-12, 26), life: rand(0.3, 0.55), age: 0, size: rand(1.5, 3), hue: rand(20, 45), glow: true, gravity: 40 });
+            }
+            state.enemyMissiles.splice(i, 1); // parent becomes its children
+            continue;
+          }
+
+          if (d <= step) {
+            m.x = m.tx; m.y = m.ty;
+            impactGround(m.x, m.y, m);
+            state.enemyMissiles.splice(i, 1);
+            continue;
+          }
+          m.x += (m.tx - m.x) / d * step;
+          m.y += (m.ty - m.y) / d * step;
+
+          m.smoked -= dt;
+          if (m.smoked <= 0 && state.smoke.length < 200) {
+            m.smoked = 0.04;
+            state.smoke.push({ x: m.x, y: m.y, vx: rand(-10, 10), vy: rand(-8, 6), age: 0, life: rand(0.45, 0.9), size: rand(5, 11), dark: 0.5 + Math.random() * 0.5 });
+          }
+        }
+      }
+
+      function impactGround(x, y, source) {
+        createExplosion(x, y, source.type === 'smart' ? 72 : 52, source.type === 'smart' ? 'big' : 'enemy', source);
+        const victims = [
+          ...state.cities.filter(c => c.alive && Math.abs(c.x - x) < 40),
+          ...state.bases.filter(b => b.alive && Math.abs(b.x - x) < 34)
+        ];
+        victims.forEach(v => ('ammo' in v ? killBase(v) : killCity(v)));
+      }
+
+      function updateSatellites(dt) {
+        for (let i = state.satellites.length - 1; i >= 0; i--) {
+          const s = state.satellites[i];
+          s.x += s.vx * dt;
+          s.y += Math.sin(state.time * 2 + s.wobble) * 12 * dt;
+          s.flash = Math.max(0, s.flash - dt * 2.6);
+          s.cool -= dt;
+          if (s.cool <= 0) {
+            s.cool = rand(1.6, 3.1);
+            const target = randomTarget();
+            spawnEnemyMissile(Math.random() < 0.3 && state.wave >= 10 ? 'smart' : 'normal', s.x, s.y + 6, target);
+          }
+          // single splice per pass — dead OR offscreen (never both)
+          if (s.dead || (s.vx > 0 && s.x > state.width + 80) || (s.vx < 0 && s.x < -80)) state.satellites.splice(i, 1);
+        }
+      }
+
+      function updateExplosions(dt) {
+        for (let i = state.explosions.length - 1; i >= 0; i--) {
+          const e = state.explosions[i];
+          e.age += dt;
+          const t = e.age / e.life;
+          e.r = e.maxR * Math.sin(Math.min(1, t) * Math.PI);
+          if (e.r < 0) e.r = 0;
+
+          for (let j = state.enemyMissiles.length - 1; j >= 0; j--) {
+            const m = state.enemyMissiles[j];
+            if (e.hitSet.has(m)) continue;
+            const hitRadius = m.type === 'smart' ? e.r * 0.75 : e.r;
+            if (dist(e.x, e.y, m.x, m.y) <= hitRadius) {
+              e.hitSet.add(m);
+              scoreEnemy(m, m.x, m.y);
+              createExplosion(m.x, m.y, m.type === 'smart' ? 65 : 48, m.type === 'smart' ? 'big' : 'enemy', m);
+              state.enemyMissiles.splice(j, 1);
+            }
+          }
+
+          for (let j = state.satellites.length - 1; j >= 0; j--) {
+            const s = state.satellites[j];
+            if (e.hitSet.has(s)) continue;
+            if (dist(e.x, e.y, s.x, s.y) <= e.r + 18) {
+              e.hitSet.add(s);
+              s.hp -= 1;
+              s.flash = 1;
+              if (s.hp <= 0) {
+                scoreEnemy({ type: 'satellite' }, s.x, s.y);
+                createExplosion(s.x, s.y, 82, 'big', s);
+                s.dead = true;
+              } else {
+                queuePrompt('SATELLITE HIT', s.x, s.y - 18, '#8ff2ff');
+              }
+            }
+          }
+
+          if (t >= 1) state.explosions.splice(i, 1);
+        }
+      }
+
+      function updateParticles(dt) {
+        const all = [state.particles, state.smoke, state.embers, state.prompts];
+        for (const list of all) {
+          for (let i = list.length - 1; i >= 0; i--) {
+            const p = list[i];
+            p.age += dt;
+            if ('vx' in p) p.x += p.vx * dt;
+            if ('vy' in p) p.y += p.vy * dt;
+            if ('gravity' in p) p.vy += p.gravity * dt;
+            if (p.life && p.age >= p.life) list.splice(i, 1);
+          }
+        }
+        // Cap particle counts to prevent mobile lockup
+        if (state.particles.length > 400) state.particles.splice(0, state.particles.length - 400);
+        if (state.smoke.length > 200) state.smoke.splice(0, state.smoke.length - 200);
+        if (state.embers.length > 150) state.embers.splice(0, state.embers.length - 150);
+
+        for (const city of state.cities) {
+          if (!city.alive) {
+            city.fire = Math.max(0, city.fire - dt * 0.08);
+            city.smoke = Math.max(0, city.smoke - dt * 0.06);
+            if (city.smoke > 0 && Math.random() < 6 * dt && state.smoke.length < 200) {
+              state.smoke.push({ x: city.x + rand(-16, 16), y: city.y - rand(18, 42), vx: rand(-8, 8), vy: rand(-16, -4), age: 0, life: rand(1.2, 2.1), size: rand(10, 20), dark: 0.9 });
+            }
+            if (city.fire > 0 && Math.random() < 12 * dt && state.embers.length < 150) {
+              state.embers.push({ x: city.x + rand(-18, 18), y: city.y - rand(6, 24), vx: rand(-15, 15), vy: rand(-40, -10), age: 0, life: rand(0.8, 1.4), size: rand(2, 4) });
+            }
+          }
+        }
+      }
+
+      function updatePrompts(dt) {
+        // float the tags upward; aging/removal happens in updateParticles
+        for (const p of state.prompts) p.y -= 24 * dt;
+      }
+
+      function updateCombos(dt) {
+        if (state.comboTimer > 0) {
+          state.comboTimer -= dt;
+          if (state.comboTimer <= 0) state.comboCount = 0;
+        }
+        state.flash = Math.max(0, state.flash - dt * 1.8);
+        state.tint = Math.max(0, state.tint - dt * 0.8);
+        state.shake = Math.max(0, state.shake - dt * 28);
+        state.bases.forEach(b => b.flash = Math.max(0, b.flash - dt * 5));
+      }
+
+      let gameOverArmedAt = 0; // background-tap restart is disarmed briefly after death
+      function restartAllowed() {
+        if (performance.now() < gameOverArmedAt) return false;
+        if (!document.getElementById('hsInitialsSection').classList.contains('hidden')) return false; // initials entry open
+        return true;
+      }
+      function checkGameOver() {
+        const aliveCities = state.cities.some(c => c.alive);
+        if (!aliveCities && !state.gameOver) {
+          if (state.attract) { startAttract(); return; } // loop the demo instead of ending
+          state.gameOver = true;
+          state.playing = false;
+          gameOverArmedAt = performance.now() + 1500;
+          // "Reached Wave N" = the wave you died in — same N recorded locally + globally.
+          gameOverTitle.textContent = 'All Cities Lost';
+          gameOverText.textContent = `Final Score ${state.score.toLocaleString()} · Reached Wave ${state.wave}` +
+            (state.practice ? ' · Practice run — score not recorded' : '');
+          const hsInit = document.getElementById('hsInitialsSection');
+          const hsDisp = document.getElementById('hsScoresDisplay');
+          if (!state.practice && isHighScore(state.score) && state.score > 0) {
+            hsInit.classList.remove('hidden');
+            buildHSInitials(state.score, state.wave, hsDisp);
+          } else {
+            hsInit.classList.add('hidden');
+            renderHSBoth(hsDisp);
+          }
+          gameOverOverlay.classList.remove('hidden');
+        }
+      }
+
+      function update(dt) {
+        state.time += dt;
+        if (!state.playing || state.gameOver) {
+          // Let leftover blasts decay WITHOUT collision scoring — the final
+          // score is frozen the moment the game ends.
+          for (let i = state.explosions.length - 1; i >= 0; i--) {
+            const e = state.explosions[i];
+            e.age += dt;
+            e.r = Math.max(0, e.maxR * Math.sin(Math.min(1, e.age / e.life) * Math.PI));
+            if (e.age >= e.life) state.explosions.splice(i, 1);
+          }
+          updateParticles(dt);
+          updatePrompts(dt);
+          updateCombos(dt);
+          return;
+        }
+        updateWave(dt);
+        if (state.attract) aiDefend(dt);
+        updatePlayerMissiles(dt);
+        updateEnemyMissiles(dt);
+        updateSatellites(dt);
+        updateExplosions(dt);
+        updateParticles(dt);
+        updatePrompts(dt);
+        updateCombos(dt);
+        checkGameOver();
+      }
+
+      function drawSky() {
+        const set = currentSet();
+        // Matte paper sky (grain + texture come from the render() grain overlay)
+        const g = ctx.createLinearGradient(0, 0, 0, state.groundY);
+        g.addColorStop(0, set.skyTop);
+        g.addColorStop(1, set.skyBot);
+        ctx.fillStyle = g;
+        ctx.fillRect(-60, -60, state.width + 120, state.groundY + 62);
+
+        // Stars (night) as tiny cut-paper squares
+        if (set.night) {
+          ctx.fillStyle = '#ece4d0';
+          for (const star of state.stars) { ctx.globalAlpha = star.a; ctx.fillRect(star.x, star.y, star.r + 0.5, star.r + 0.5); }
+          ctx.globalAlpha = 1;
+        }
+
+        // Paper sun / moon — torn disc with hand-cut rays (varied length/width/angle)
+        const sunX = state.width * 0.8, sunY = state.groundY * 0.24, sunR = Math.max(24, state.width * 0.032);
+        shadowOn(9, 5, 0.22);
+        if (!set.night) { // glued-on paper ray triangles behind the disc
+          ctx.fillStyle = set.sunRing;
+          for (const ray of state.sunRays) {
+            const a = ray.a;
+            const r0 = sunR * 1.02, r1 = sunR * ray.r1, hw = ray.hw;
+            ctx.beginPath();
+            ctx.moveTo(sunX + Math.cos(a - hw) * r0, sunY + Math.sin(a - hw) * r0);
+            ctx.lineTo(sunX + Math.cos(a) * r1, sunY + Math.sin(a) * r1);
+            ctx.lineTo(sunX + Math.cos(a + hw) * r0, sunY + Math.sin(a + hw) * r0);
+            ctx.closePath(); ctx.fill();
+          }
+        }
+        ctx.fillStyle = set.sun;
+        tornPuffPath(sunX, sunY, sunR); ctx.fill();
+        shadowOff();
+        ctx.fillStyle = set.sunRing; // torn inner ring accent
+        tornPuffPath(sunX, sunY, sunR * 0.68); ctx.fill();
+        if (set.night) { ctx.fillStyle = set.skyTop; ctx.beginPath(); ctx.arc(sunX + sunR * 0.5, sunY - sunR * 0.4, sunR * 1.05, 0, TAU); ctx.fill(); }
+
+        // Distant torn-sheet hill
+        const back = state.hills.find(h => h.back);
+        if (back) drawHillSheet(back.pts, set.hillBack);
+
+        // Torn paper clouds — shade layer casts the shadow, light layer sits on top
+        for (const c of state.clouds) {
+          const cx = ((c.x + state.time * c.speed) % (state.width + c.w + 120) + state.width + c.w + 120) % (state.width + c.w + 120) - c.w - 60;
+          shadowOn(7, 4, 0.2);
+          ctx.fillStyle = set.cloudShade;
+          for (const p of c.puffs) { tornPuffPath(cx + p.ox, c.y + p.oy + p.r * 0.26, p.r); ctx.fill(); }
+          shadowOff();
+          ctx.fillStyle = set.cloud;
+          for (const p of c.puffs) { tornPuffPath(cx + p.ox, c.y + p.oy - p.r * 0.06, p.r * 0.94); ctx.fill(); }
+        }
+      }
+
+      // Each tower is its own construction-paper cutout: torn silhouette, one of
+      // three paper tints, ±1.5° rotation, a hard offset shadow onto the tower
+      // behind it, an overhanging pasted roof strip and wonky pasted-bit windows.
+      function drawSkyline() {
+        const set = currentSet();
+        const tints = [set.building, set.buildingDark, set.buildingAlt];
+        const wcol = set.night ? set.window : 'rgba(20,24,34,0.30)';
+        const wlit = set.night ? '#e9dcae' : set.window;
+        for (const b of state.skyline) {
+          ctx.save();
+          ctx.translate(b.x + b.w / 2, state.groundY + 2);
+          ctx.rotate(b.rot);
+          ctx.translate(-b.w / 2, 0);
+          // hard offset shadow — separates overlapping sheets
+          ctx.fillStyle = 'rgba(32,24,18,0.25)';
+          ctx.beginPath();
+          for (let i = 0; i < b.pts.length; i++) {
+            const p = b.pts[i];
+            if (i === 0) ctx.moveTo(p.x - b.shOff, p.y + b.shOff * 0.7);
+            else ctx.lineTo(p.x - b.shOff, p.y + b.shOff * 0.7);
+          }
+          ctx.closePath(); ctx.fill();
+          // torn paper face + keyline
+          ctx.fillStyle = tints[b.tint];
+          ctx.beginPath();
+          for (let i = 0; i < b.pts.length; i++) {
+            const p = b.pts[i];
+            if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+          }
+          ctx.closePath(); ctx.fill();
+          ctx.lineJoin = 'round'; ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(48,32,22,0.32)';
+          ctx.stroke();
+          // pasted roof strip — lighter stock, overhangs the torn top by ~2px
+          if (b.roofType > 0.35) {
+            ctx.fillStyle = set.buildingLite;
+            paperRectPath(-2, -b.h - 5.5, b.w + 4, 7, 1.4); ctx.fill();
+          }
+          if (b.roofType > 0.78) { // little rooftop box
+            ctx.fillStyle = tints[(b.tint + 1) % 3];
+            paperRectPath(b.w * 0.4, -b.h - 14, Math.max(4, b.w * 0.14), 10, 1); ctx.fill();
+          }
+          // windows: pasted paper bits with per-bit jitter + rotation
+          for (const w of b.windows) {
+            ctx.save();
+            ctx.translate(w.x + w.w / 2, -b.h + w.y + w.h / 2);
+            ctx.rotate(w.rot);
+            ctx.fillStyle = w.lit ? wlit : wcol;
+            ctx.fillRect(-w.w / 2, -w.h / 2, w.w, w.h);
+            ctx.restore();
+          }
+          ctx.restore();
+        }
+      }
+
+      // Warm paper "cottages" you defend — cream body, muted-red paper roof.
+      const CITY_BODY = '#d3c6ac', CITY_BODY2 = '#c2b393', CITY_ROOF = '#b0503c', CITY_WIN = '#574734';
+
+      // Torn paper sheet: hard offset under-shadow + soft shadow + deckled top
+      // edge with a lighter torn-fiber rim, so stacked hills read as separate sheets.
+      function drawHillSheet(pts, color) {
+        // solid offset layer-shadow under the sheet
+        ctx.fillStyle = 'rgba(32,24,18,0.16)';
+        ctx.beginPath();
+        ctx.moveTo(-60, state.height + 60);
+        for (const pt of pts) ctx.lineTo(pt.x, pt.y + 5);
+        ctx.lineTo(state.width + 60, state.height + 60);
+        ctx.closePath(); ctx.fill();
+        shadowOn(9, 5, 0.16);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(-60, state.height + 60);
+        for (const pt of pts) ctx.lineTo(pt.x, pt.y);
+        ctx.lineTo(state.width + 60, state.height + 60);
+        ctx.closePath(); ctx.fill();
+        shadowOff();
+        // lighter torn-fiber rim along the deckled top edge
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 1.7;
+        ctx.strokeStyle = 'rgba(255,252,238,0.28)';
+        ctx.beginPath();
+        for (let i = 0; i < pts.length; i++) {
+          const pt = pts[i];
+          if (i === 0) ctx.moveTo(pt.x, pt.y - 0.9); else ctx.lineTo(pt.x, pt.y - 0.9);
+        }
+        ctx.stroke();
+      }
+
+      function drawGround() {
+        const set = currentSet();
+        // Green paper ground band (overscanned for screen-shake)
+        ctx.fillStyle = set.ground;
+        ctx.fillRect(-60, state.groundY, state.width + 120, state.height - state.groundY + 60);
+        // Rolling front hill — separate torn sheet
+        const front = state.hills.find(h => !h.back);
+        if (front) drawHillSheet(front.pts, set.hillFront);
+        ctx.fillStyle = set.groundLine;
+        ctx.fillRect(-60, state.groundY, state.width + 120, 2);
+        // Irregular hand-cut grass tufts (varying width/height/skew, occasional gap)
+        for (const tf of state.tufts) {
+          ctx.fillStyle = tf.tone ? set.hillFront : set.hillBack;
+          ctx.beginPath();
+          ctx.moveTo(tf.x, state.groundY + 1.5);
+          ctx.lineTo(tf.x + tf.w * 0.5 + tf.skew, state.groundY - tf.h);
+          ctx.lineTo(tf.x + tf.w, state.groundY + 1.5);
+          ctx.closePath(); ctx.fill();
+        }
+      }
+
+      // Ground contact shadow, stretched slightly away from the paper sun.
+      function groundShadow(x, w) {
+        const sunX = state.width * 0.8;
+        const skew = clamp((x - sunX) / state.width, -1, 1) * 7;
+        ctx.fillStyle = 'rgba(28,22,16,0.2)';
+        ctx.beginPath();
+        ctx.ellipse(x + skew, state.groundY + 5, w + Math.abs(skew) * 0.7, 5, 0, 0, TAU);
+        ctx.fill();
+      }
+
+      function drawCitiesAndBases() {
+        drawGround();
+
+        // Foreground paper pine trees (grounded with a soft shadow ellipse)
+        for (const t of state.trees) {
+          groundShadow(t.x, 12 * t.scale);
+          drawTree(t.x, state.groundY + 8, t.scale, t.tone ? '#527f42' : '#456e37', t.tone ? '#3f6633' : '#375a2c', t.asym);
+        }
+
+        for (const city of state.cities) {
+          if (city.alive) groundShadow(city.x, city.totalW * 0.6);
+          ctx.save();
+          ctx.translate(city.x - city.totalW / 2, city.y);
+          if (!city.alive) {
+            for (let i = 0; i < city.silhouette.length; i++) {
+              const s = city.silhouette[i];
+              const hh = Math.min(s.h, 8 + (i % 3) * 4);
+              ctx.fillStyle = '#7a6653';
+              paperRectPath(s.ox, -hh, s.w, hh, 1.3); ctx.fill();
+              ctx.fillStyle = '#5f4d3d';
+              ctx.fillRect(s.ox, -hh, s.w, 3);
+            }
+          } else {
+            shadowOn(6, 4, 0.26);
+            for (let i = 0; i < city.silhouette.length; i++) {
+              const s = city.silhouette[i];
+              ctx.fillStyle = (i % 2) ? CITY_BODY2 : CITY_BODY;
+              paperRectPath(s.ox, -s.h, s.w, s.h, 1.2); ctx.fill();
+            }
+            shadowOff();
+            for (let i = 0; i < city.silhouette.length; i++) {
+              const s = city.silhouette[i];
+              if (s.roof > 0.4) { ctx.fillStyle = CITY_ROOF; paperRectPath(s.ox - 1, -s.h - 4, s.w + 2, 5, 1); ctx.fill(); }
+              ctx.fillStyle = CITY_WIN;
+              for (const win of s.windows) ctx.fillRect(s.ox + win.ox, -s.h + win.oy, 2.5, 3);
+            }
+          }
+          ctx.restore();
+        }
+
+        for (const base of state.bases) {
+          groundShadow(base.x, 32);
+          ctx.save();
+          ctx.translate(base.x, base.y);
+          drawBunker(base);
+          ctx.restore();
+        }
+      }
+
+      // Kraft-paper dome bunker: cream cut base + tan paper dome, layered with shadow.
+      function drawBunker(base) {
+        const alive = base.alive;
+        const body = alive ? '#e3d6b8' : '#9c927e';
+        const dome = alive ? '#c9a86e' : '#847559';
+        const domeShade = alive ? '#b2915a' : '#6f6249';
+        const W = 30, baseH = 16;
+        const domeW = W * 0.82, domeH = W * 0.62;
+        // Cast a single shadow for the whole bunker footprint
+        shadowOn(7, 4, 0.3);
+        ctx.fillStyle = body;
+        paperRectPath(-W, -baseH, W * 2, baseH, 2); ctx.fill();
+        shadowOff();
+        // Dome (torn half-ellipse) with an underside shade
+        ctx.fillStyle = domeShade;
+        ctx.beginPath(); ctx.ellipse(0, -baseH + 2, domeW, domeH, 0, Math.PI, TAU); ctx.fill();
+        ctx.fillStyle = dome;
+        ctx.beginPath(); ctx.ellipse(0, -baseH, domeW, domeH, 0, Math.PI, TAU); ctx.fill();
+        // Paper highlight cut on the dome
+        ctx.fillStyle = alive ? 'rgba(255,250,235,0.35)' : 'rgba(255,255,255,0.08)';
+        ctx.beginPath(); ctx.ellipse(-domeW * 0.34, -baseH - domeH * 0.4, domeW * 0.24, domeH * 0.32, 0, 0, TAU); ctx.fill();
+        if (alive && base.flash > 0) {
+          ctx.fillStyle = `rgba(255,244,205,${base.flash})`;
+          ctx.beginPath(); ctx.ellipse(0, -baseH, domeW, domeH, 0, Math.PI, TAU); ctx.fill();
+        }
+        // Cut doorway + side vents
+        ctx.fillStyle = alive ? '#5a4a34' : '#3f3a30';
+        paperRectPath(-6, -baseH + 2, 12, baseH - 4, 1); ctx.fill();
+        ctx.fillStyle = alive ? '#7a6748' : '#5f584b';
+        ctx.fillRect(-W + 8, -baseH + 5, 5, 4);
+        ctx.fillRect(W - 13, -baseH + 5, 5, 4);
+      }
+
+      function roundRect(x, y, w, h, r) {
+        r = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      }
+
+      // Draw a flat rocket pointing along `ang` (tail→nose direction), with a
+      // dark outline so it reads clearly against clouds and bright sky.
+      // Cut-paper rocket: body + nose cone + fins, with a white paper stripe band
+      // and a single soft drop shadow (the "paper piece" look).
+      function drawRocket(x, y, ang, len, w, body, nose, fin, stripe) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(ang);
+        ctx.lineJoin = 'round';
+        // Fins (paper)
+        ctx.fillStyle = fin;
+        ctx.beginPath();
+        ctx.moveTo(-len * 0.30, -w * 0.5); ctx.lineTo(-len * 0.58, -w * 1.05); ctx.lineTo(-len * 0.14, -w * 0.5); ctx.closePath();
+        ctx.moveTo(-len * 0.30, w * 0.5); ctx.lineTo(-len * 0.58, w * 1.05); ctx.lineTo(-len * 0.14, w * 0.5); ctx.closePath();
+        ctx.fill();
+        // Body (the shadow-casting mass) — shadow scales with altitude
+        altShadow(y, 0.4);
+        ctx.fillStyle = body;
+        roundRect(-len * 0.45, -w * 0.5, len * 0.82, w, w * 0.4); ctx.fill();
+        shadowOff();
+        // White paper stripe band
+        if (stripe) { ctx.fillStyle = stripe; ctx.fillRect(-len * 0.02, -w * 0.5, len * 0.2, w); }
+        // Nose cone (paper cut)
+        ctx.fillStyle = nose;
+        ctx.beginPath();
+        ctx.moveTo(len * 0.37, -w * 0.5); ctx.lineTo(len * 0.68, 0); ctx.lineTo(len * 0.37, w * 0.5); ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Torn-paper smoke trail from a list of trail points (oldest first).
+      // Chunky torn-paper smoke: each puff is a two-tone cut-paper blob (shade
+      // underside + light top) so the trail reads as layered paper, not dots.
+      function drawSmokeTrail(trail, baseR, tint, shade) {
+        for (let i = 0; i < trail.length; i++) {
+          const t = trail[i];
+          const a = i / Math.max(1, trail.length - 1);      // 0 tail → 1 head
+          const r = baseR * (0.6 + a * 0.95);
+          ctx.globalAlpha = 0.34 + a * 0.6;
+          if (shade) { ctx.fillStyle = shade; tornPuffPath(t.x, t.y + r * 0.3, r); ctx.fill(); }
+          ctx.fillStyle = tint;
+          tornPuffPath(t.x, t.y - r * 0.05, r * 0.9);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      function drawMissiles() {
+        for (const m of state.enemyMissiles) {
+          const ang = Math.atan2(m.y - m.sy, m.x - m.sx) || (Math.PI / 2);
+          drawSmokeTrail(m.trail, 6, '#ece2cf', '#d6cab0');
+          let body = '#c0392b', nose = '#e7ddca', fin = '#8f2a20', stripe = '#e7ddca';
+          if (m.type === 'mirvChild') { body = '#d1762e'; nose = '#efe2cd'; fin = '#9c5220'; stripe = '#efe2cd'; }
+          if (m.type === 'smart') { body = '#8e5aa8'; nose = '#e6dced'; fin = '#653f7a'; stripe = '#e6dced'; }
+          if (m.type === 'smart') {
+            ctx.strokeStyle = 'rgba(142,90,168,0.45)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(m.x, m.y, 8 + Math.sin(state.time * 16) * 1.5, 0, TAU); ctx.stroke();
+          }
+          const len = m.type === 'smart' ? 21 : 18;
+          drawRocket(m.x, m.y, ang, len, len * 0.46, body, nose, fin, stripe);
+        }
+
+        for (const m of state.playerMissiles) {
+          const ang = Math.atan2(m.y - m.sy, m.x - m.sx) || (-Math.PI / 2);
+          drawSmokeTrail(m.trail, 6.5, '#f2ece0', '#ddd4c2');
+          // tail flame so the rising interceptor reads instantly
+          ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(ang);
+          ctx.fillStyle = '#e8a53a';
+          ctx.beginPath(); ctx.moveTo(-8.2, -2.4); ctx.lineTo(-13, 0); ctx.lineTo(-8.2, 2.4); ctx.closePath(); ctx.fill();
+          ctx.restore();
+          // blue paper interceptor rocket with a cream stripe
+          drawRocket(m.x, m.y, ang, 18, 7.5, '#3f6f96', '#e7ddca', '#2c5270', '#e7ddca');
+        }
+      }
+
+      function drawSatellites() {
+        for (const s of state.satellites) {
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          altShadow(s.y, 0.34);
+          // Solar panels (paper cut)
+          ctx.fillStyle = '#4a6a8e';
+          paperRectPath(-30, -6, 16, 12, 1); ctx.fill();
+          paperRectPath(14, -6, 16, 12, 1); ctx.fill();
+          // Body (the shadow-casting mass)
+          ctx.fillStyle = s.hp === 1 ? '#c0392b' : '#cfc3a8';
+          paperRectPath(-9, -8, 18, 16, 1); ctx.fill();
+          shadowOff();
+          ctx.fillStyle = 'rgba(255,250,235,0.3)';
+          ctx.fillRect(-30, -1, 16, 2); ctx.fillRect(14, -1, 16, 2);
+          ctx.fillStyle = '#8a7a5c'; // booms
+          ctx.fillRect(-14, -1.5, 6, 3); ctx.fillRect(8, -1.5, 6, 3);
+          ctx.fillStyle = s.flash > 0 ? '#fff6de' : (s.hp === 1 ? '#e7ddca' : '#6a7f9c');
+          ctx.beginPath(); ctx.arc(0, 0, 3.4, 0, TAU); ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // Flat spiky sunburst — layered star polygons, no gradient/glow.
+      function starPath(cx, cy, spikes, outer, inner, rot) {
+        ctx.beginPath();
+        for (let i = 0; i < spikes * 2; i++) {
+          const r = (i % 2 === 0) ? outer : inner;
+          const a = rot + i * Math.PI / spikes;
+          const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+      }
+
+      function drawExplosions() {
+        for (const e of state.explosions) {
+          const t = clamp(e.age / e.life, 0, 1);
+          const r = e.r;
+          if (r < 0.5) continue;
+          const rot = (e.source && e.source.sx ? e.source.sx : e.x) * 0.05; // stable per-explosion angle
+          ctx.save();
+          ctx.globalAlpha = 1 - t * t; // fade only late
+          const spikes = e.maxR > 60 ? 11 : 9;
+          // Outer orange paper star cutout — shadow offset/blur follow altitude
+          altShadow(e.y, 0.3);
+          ctx.fillStyle = '#d9722e';
+          starPath(e.x, e.y, spikes, r, r * 0.5, rot);
+          ctx.fill();
+          shadowOff();
+          // Mid yellow paper star
+          ctx.fillStyle = '#e8b84a';
+          starPath(e.x, e.y, spikes, r * 0.72, r * 0.34, rot + 0.3);
+          ctx.fill();
+          // Cream paper core
+          ctx.fillStyle = '#efe6d0';
+          starPath(e.x, e.y, spikes, r * 0.42, r * 0.24, rot + 0.15);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      function drawParticles() {
+        // Cream paper smoke puffs (torn), kept subtle
+        for (const s of state.smoke) {
+          const a = 1 - s.age / s.life;
+          const g = Math.floor(214 + s.dark * 22);
+          ctx.fillStyle = `rgba(${g},${g - 6},${g - 20},${a * 0.3})`;
+          tornPuffPath(s.x, s.y, s.size * (0.5 + s.age / s.life * 0.8));
+          ctx.fill();
+        }
+        // Paper confetti debris — tiny rotated cut squares in warm tones
+        for (const p of state.particles) {
+          const a = 1 - p.age / p.life;
+          ctx.globalAlpha = a;
+          ctx.fillStyle = p.hue > 45 ? '#e8b84a' : '#d9722e';
+          const sz = p.size * (0.7 + a * 0.6);
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate((p.x + p.y) * 0.3 + p.age * 6);
+          ctx.fillRect(-sz / 2, -sz * 0.35, sz, sz * 0.7);
+          ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+        // Paper embers (small muted dots)
+        for (const e of state.embers) {
+          const a = 1 - e.age / e.life;
+          ctx.globalAlpha = a;
+          ctx.fillStyle = a > 0.5 ? '#e09a3a' : '#c0392b';
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, e.size * a, 0, TAU);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      // Score prompts as little kraft-paper price tags — pasted, slightly rotated.
+      function drawPrompts() {
+        for (const p of state.prompts) {
+          const a = clamp((p.life - p.age) / p.life, 0, 1);
+          const rot = Math.sin(p.x * 0.71 + p.y * 0.13) * 0.055;
+          drawPaperTag(p.x, Math.max(p.y, 62), p.text, {
+            alpha: Math.min(1, a * 1.5),
+            rot,
+            bg: p.color || '#e6d7ae',
+            fg: '#3a2c1c',
+            font: '800 13px Inter, system-ui, sans-serif'
+          });
+        }
+      }
+
+      function drawFXOverlays() {
+        if (state.comboCount > 1 && state.comboTimer > 0) {
+          // torn-paper strip flourish down both side edges (replaces the old
+          // full-screen orange wash that muddied the whole collage)
+          const a = Math.min(0.5, 0.22 + state.tint * 0.3);
+          ctx.save();
+          ctx.globalAlpha = a;
+          ctx.fillStyle = '#d9722e';
+          ctx.save();
+          ctx.translate(0, state.height / 2); ctx.rotate(Math.PI / 2);
+          tornStripPath(-state.height / 2, -22, state.height, 24, 4); ctx.fill();
+          ctx.restore();
+          ctx.save();
+          ctx.translate(state.width, state.height / 2); ctx.rotate(Math.PI / 2);
+          tornStripPath(-state.height / 2, -2, state.height, 24, 4); ctx.fill();
+          ctx.restore();
+          ctx.restore();
+          // CHAIN counter as a pasted paper tag (kept clear of HUD + pause button)
+          drawPaperTag(state.width - 84, 112, `CHAIN x${state.comboCount}`, {
+            rot: 0.05, bg: '#e8b84a', font: '800 15px Inter, system-ui, sans-serif', h: 27
+          });
+        }
+        if (state.flash > 0) {
+          ctx.fillStyle = `rgba(255,245,220,${state.flash * 0.18})`;
+          ctx.fillRect(0, 0, state.width, state.height);
+        }
+      }
+
+      // Wave banner on a torn construction-paper ribbon.
+      function drawBanner() {
+        if (state.bannerTimer <= 0) return;
+        const a = clamp(state.bannerTimer / 0.6, 0, 1);
+        const y = state.height * 0.3;
+        ctx.save();
+        ctx.globalAlpha = a;
+        const size = Math.round(clamp(state.width * 0.05, 20, 42));
+        ctx.font = '800 ' + size + 'px Inter, system-ui, sans-serif';
+        const tw = ctx.measureText(state.bannerText).width;
+        const w = Math.min(state.width - 24, tw + 64), h = size + 34;
+        ctx.translate(state.width / 2, y);
+        ctx.rotate(-0.014);
+        ctx.fillStyle = 'rgba(32,24,18,0.3)';                       // lifted-paper shadow
+        ctx.fillRect(-w / 2 + 4, -h / 2 + 5, w, h);
+        ctx.fillStyle = state.bannerColor;                          // torn ribbon
+        tornStripPath(-w / 2, -h / 2, w, h, 3.5); ctx.fill();
+        ctx.lineJoin = 'round'; ctx.lineWidth = 1.4; ctx.strokeStyle = 'rgba(48,32,22,0.4)';
+        ctx.stroke();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#3a2417';                                   // stamped dark text
+        ctx.fillText(state.bannerText, 0, -6);
+        ctx.font = '700 12px Inter, system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(58,36,23,0.75)';
+        ctx.fillText('SPECIAL WAVE', 0, size * 0.62);
+        ctx.restore();
+      }
+
+      // Torn construction-paper frame around the whole collage (static, subtle).
+      function drawVignette() {
+        const v = state.vign;
+        if (!v) return;
+        const strip = (pts, map) => {
+          ctx.beginPath();
+          let c = map(0, 0); ctx.moveTo(c[0], c[1]);
+          for (const q of pts) { c = map(q.p, q.d); ctx.lineTo(c[0], c[1]); }
+          c = map(pts[pts.length - 1].p, 0); ctx.lineTo(c[0], c[1]);
+          ctx.closePath(); ctx.fill();
+        };
+        ctx.save();
+        ctx.fillStyle = 'rgba(44,32,18,0.42)'; // deeper offset strip
+        strip(v.top, (p, d) => [p, d * 1.6]);
+        strip(v.bot, (p, d) => [state.width - p, state.height - d * 1.6]);
+        strip(v.left, (p, d) => [d * 1.6, state.height - p]);
+        strip(v.right, (p, d) => [state.width - d * 1.6, p]);
+        ctx.fillStyle = 'rgba(138,111,77,0.55)'; // kraft strip on top
+        strip(v.top, (p, d) => [p, d]);
+        strip(v.bot, (p, d) => [state.width - p, state.height - d]);
+        strip(v.left, (p, d) => [d, state.height - p]);
+        strip(v.right, (p, d) => [state.width - d, p]);
+        ctx.restore();
+      }
+
+      function render() {
+        ctx.clearRect(0, 0, state.width, state.height);
+        let sx = 0, sy = 0;
+        if (state.shake > 0 && !state.paused) {
+          sx = rand(-state.shake, state.shake);
+          sy = rand(-state.shake * 0.6, state.shake * 0.6);
+        }
+        // "boil": tiny hand-repositioned-paper weave reseeded each 12fps step and held
+        // within the frame — real cut-out layers never land in exactly the same spot.
+        // Part of the paper identity: always on when the film cadence is active.
+        if (!state.paused && (settings.cadence || 0) > 0) {
+          sx += rand(-0.9, 0.9);
+          sy += rand(-0.9, 0.9);
+        }
+        ctx.save();
+        ctx.translate(sx, sy);
+        drawSky();
+        drawSkyline();
+        drawMissiles();
+        drawSatellites();
+        drawExplosions();
+        drawParticles();
+        drawCitiesAndBases();
+        drawPrompts();
+        drawFXOverlays();
+        // Paper grain over the whole collage — always on (it IS the paper).
+        // Mobile uses a pre-baked alpha-noise tile (source-over) — much cheaper.
+        if (!grainPattern) buildGrain();
+        if (state.width < 768) {
+          ctx.fillStyle = grainPatternCheap;
+          ctx.fillRect(-60, -60, state.width + 120, state.height + 120);
+        } else {
+          ctx.globalCompositeOperation = 'soft-light';
+          ctx.globalAlpha = 0.6;
+          ctx.fillStyle = grainPattern;
+          ctx.fillRect(-60, -60, state.width + 120, state.height + 120);
+          ctx.globalAlpha = 1;
+          ctx.globalCompositeOperation = 'source-over';
+        }
+        ctx.restore();
+        drawVignette();
+        if (state.practice && state.playing && !state.attract) {
+          drawPaperTag(74, 66, 'PRACTICE', { rot: -0.04, bg: '#cdbf9c', alpha: 0.92, font: '800 12px Inter, system-ui, sans-serif' });
+        }
+        drawBanner();
+        if (state.paused) drawPausedOverlay();
+        updateHUD();
+      }
+
+      function drawPausedOverlay() {
+        ctx.save();
+        ctx.fillStyle = 'rgba(20,15,8,0.45)';
+        ctx.fillRect(0, 0, state.width, state.height);
+        ctx.restore();
+        // cut-paper letter tags instead of glowing digital text
+        drawPaperTag(state.width / 2, state.height * 0.40, 'PAUSED', {
+          font: '800 30px Inter, system-ui, sans-serif', h: 54, padX: 24, rot: -0.02, bg: '#e0cfa4'
+        });
+        drawPaperTag(state.width / 2, state.height * 0.40 + 48, 'P / Esc or tap to resume', {
+          font: '600 13px Inter, system-ui, sans-serif', h: 25, rot: 0.016, bg: '#cdbf9c'
+        });
+      }
+
+      let pauseBtnShown = null;
+      function syncPauseBtn() {
+        const show = state.playing && !state.gameOver && !state.attract && tutorialOverlay.classList.contains('hidden');
+        if (show !== pauseBtnShown) { pauseBtnShown = show; pauseBtn.style.display = show ? 'block' : 'none'; }
+      }
+      function updateHUD() {
+        const aliveCities = state.cities.filter(c => c.alive).length;
+        const ammoText = state.bases.map(b => b.alive ? b.ammo : 'X').join('/');
+        const combo = state.comboCount > 1 && state.comboTimer > 0 ? `x${(1 + (state.comboCount - 1) * 0.18).toFixed(1)}` : 'x1';
+        const waveStatus = state.waveIntroTimer > 0 ? `W${state.wave} incoming` : (state.special ? `W${state.wave} ★` : `W${state.wave}`);
+        if (state.width < 520) {
+          // compact HUD for narrow phones — no clipped tail
+          hudLine.textContent = `${waveStatus} | ${state.score.toLocaleString()} | C${aliveCities} | A ${ammoText} | ${combo}`;
+        } else {
+          hudLine.textContent = `${waveStatus} | Score ${state.score.toLocaleString()} | Cities ${aliveCities} | Ammo ${ammoText} | Combo ${combo} | Bonus @ ${state.nextBonusScore.toLocaleString()}`;
+        }
+        syncPauseBtn();
+      }
+
+      // Stop-motion cadence: simulate at a FIXED 60Hz timestep (accurate collisions,
+      // no slow-mo on weak devices — slow rendering drops sim frames instead of
+      // dilating time), but only REDRAW on a 12fps "on twos" grid so cut-outs snap
+      // between held poses like real construction-paper animation.
+      const SIM_STEP = 1 / 60;
+      const SIM_MAX_STEPS = 30; // sim steps are trivial vs paint cost — a generous 0.5s cap
+                                // keeps real time even at 2-3fps rendering, remainder dropped
+                                // (no spiral risk: update() is microseconds, paint is the bottleneck)
+      let simAcc = 0;
+      function frame(now) {
+        let elapsed = (now - state.lastTime) / 1000;
+        state.lastTime = now;
+        if (!(elapsed > 0)) elapsed = 0;
+        if (!state.paused) {
+          simAcc = Math.min(simAcc + elapsed, SIM_STEP * SIM_MAX_STEPS);
+          while (simAcc >= SIM_STEP) { update(SIM_STEP); simAcc -= SIM_STEP; }
+        } else {
+          simAcc = 0;
+        }
+        const fps = settings.cadence || 0;   // 0 = smooth 60fps; 12 = on twos; 8 = heavy puppet
+        if (fps <= 0) { render(); requestAnimationFrame(frame); return; }
+        const step = 1 / fps;
+        state.renderAcc = (state.renderAcc || 0) + elapsed;
+        if (state.firstDraw !== false || state.renderAcc >= step) {
+          state.renderAcc %= step;
+          state.firstDraw = false;
+          render();
+        }
+        requestAnimationFrame(frame);
+      }
+
+      function localPoint(clientX, clientY) {
+        // Map window coords to logical game coords (canvas is CSS-scaled on desktop).
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: (clientX - rect.left) * (state.width / rect.width),
+          y: (clientY - rect.top) * (state.height / rect.height)
+        };
+      }
+
+      async function unlockAudioAndMaybeStart() {
+        initAudio();
+        if (audio && !state.audioUnlocked) {
+          // never let a stalled AudioContext.resume() block the game from starting
+          try { await Promise.race([audio.resume(), new Promise(res => setTimeout(res, 400))]); } catch (e) {}
+        }
+      }
+
+      async function startGame() {
+        state.attract = false; // clear before audio unlock so the gesture initialises sound
+        state.practice = false;
+        setDemoBadge(false);
+        await unlockAudioAndMaybeStart();
+        tutorialOverlay.classList.add('hidden');
+        resetGame();
+      }
+
+      async function restartGame() {
+        await unlockAudioAndMaybeStart();
+        // restart keeps the current mode (practice stays practice, like the sibling editions);
+        // the PRACTICE watermark shows whenever it applies
+        resetGame();
+      }
+
+      function setPaused(on) {
+        if (on && (!state.playing || state.gameOver)) return;
+        if (state.paused === on) return;
+        state.paused = on;
+        pauseBtn.textContent = on ? '▶' : '⏸';
+        // music pauses with the game
+        if (audio && audio.music) {
+          if (on) audio.music.pause();
+          else if (state.audioUnlocked && settings.sound) audio.music.play().catch(() => {});
+        }
+        if (!on) state.lastTime = performance.now();
+      }
+
+      function handlePointer(x, y) {
+        unlockAudioAndMaybeStart();
+        if (!tutorialOverlay.classList.contains('hidden')) return;
+        if (state.paused) {
+          setPaused(false);
+          return;
+        }
+        if (state.gameOver) {
+          if (restartAllowed()) restartGame();
+          return;
+        }
+        launchDefense(x, y);
+      }
+
+      function gameTarget(e) {
+        return !(e.target && e.target.closest && e.target.closest('button, .overlay, #hsOverlay, #optOverlay'));
+      }
+
+      // Input listens on the whole window (buttons/overlays opt out) so aiming
+      // works edge to edge. Touch keeps the original multi-touch barrage path;
+      // pointerdown covers mouse and pen, including touch-capable laptops.
+      document.addEventListener('touchstart', (e) => {
+        if (!gameTarget(e)) return;
+        if (e.cancelable) e.preventDefault();
+        for (const touch of e.changedTouches) {
+          const p = localPoint(touch.clientX, touch.clientY);
+          handlePointer(p.x, p.y);
+        }
+      }, { passive: false });
+      window.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'touch') return; // handled by touchstart above
+        if (!gameTarget(e)) return;
+        e.preventDefault();
+        const p = localPoint(e.clientX, e.clientY);
+        handlePointer(p.x, p.y);
+      });
+
+      ['touchmove','touchcancel','gesturestart','gesturechange','gestureend'].forEach(evt => {
+        document.addEventListener(evt, e => {
+          if (!e.target.closest('button') && !e.target.closest('.overlay') && e.cancelable) e.preventDefault();
+        }, { passive: false });
+      });
+      document.addEventListener('touchend', e => {
+        if (!e.target.closest('button') && !e.target.closest('.overlay') && e.cancelable) e.preventDefault();
+      }, { passive: false });
+
+      function addTouchAndClick(el, handler) {
+        el.addEventListener('click', handler);
+        el.addEventListener('touchend', (e) => {
+          if (e.cancelable) e.preventDefault();
+          e.stopPropagation();
+          handler(e);
+        }, { passive: false });
+      }
+
+      // HS overlay handlers
+      const hsOverlay = document.getElementById('hsOverlay');
+      const titleHsBtn = document.getElementById('titleHsBtn');
+      function openHsOverlay() { hsOverlay.style.display = 'flex'; renderHSBoth(document.getElementById('hsOverlayScores')); }
+      function closeHsOverlay() { hsOverlay.style.display = 'none'; }
+      addTouchAndClick(titleHsBtn, openHsOverlay);
+      addTouchAndClick(document.getElementById('hsOverlayClose'), closeHsOverlay);
+
+      // Options overlay
+      const optOverlay = document.getElementById('optOverlay');
+      const tutorialHidden = () => tutorialOverlay.classList.contains('hidden');
+      function buildOptions() {
+        const host = document.getElementById('optRows');
+        host.innerHTML = '';
+        const seg = (label, sub, options, get, set) => {
+          const row = document.createElement('div'); row.className = 'optrow';
+          const left = document.createElement('div');
+          left.innerHTML = `<div class="lab">${label}</div>` + (sub ? `<div class="sub">${sub}</div>` : '');
+          const segEl = document.createElement('div'); segEl.className = 'seg';
+          const btns = [];
+          options.forEach(opt => {
+            const b = document.createElement('button');
+            b.textContent = opt.label;
+            if (get() === opt.value) b.classList.add('on');
+            const h = (e) => { e.stopPropagation(); e.preventDefault(); set(opt.value); saveSettings(); audio?.uiClick(); btns.forEach(x => x.classList.remove('on')); b.classList.add('on'); };
+            b.addEventListener('click', h); b.addEventListener('touchend', h);
+            btns.push(b); segEl.appendChild(b);
+          });
+          row.appendChild(left); row.appendChild(segEl); host.appendChild(row);
+        };
+        const onoff = [{ label: 'On', value: true }, { label: 'Off', value: false }];
+        seg('Sound', 'Music & effects', onoff, () => settings.sound, v => { settings.sound = v; applyAudioSettings(); });
+        seg('Difficulty', 'Enemy speed & count', [{ label: 'Easy', value: 'easy' }, { label: 'Normal', value: 'normal' }, { label: 'Hard', value: 'hard' }], () => settings.difficulty, v => { settings.difficulty = v; });
+        seg('Screen shake', 'Camera kick on hits', onoff, () => settings.shake, v => { settings.shake = v; if (!v) state.shake = 0; });
+        // Paper identity (grain/shadows/keyline/boil) is always on; this only thins particles.
+        seg('Debris & particles', 'Heavy particle showers', onoff, () => settings.effects, v => { settings.effects = v; });
+        seg('Title auto-demo', 'Play behind the menu', onoff, () => settings.demo, v => { settings.demo = v; if (v && !tutorialHidden()) startAttract(); else if (!v) stopAttract(); });
+        seg('Film cadence', 'Stop-motion frame rate', [{ label: '12fps', value: 12 }, { label: '8fps', value: 8 }, { label: 'Smooth', value: 0 }], () => settings.cadence, v => { settings.cadence = v; state.renderAcc = 0; });
+      }
+      function openOptOverlay() { buildOptions(); optOverlay.style.display = 'flex'; }
+      function closeOptOverlay() { optOverlay.style.display = 'none'; }
+      addTouchAndClick(document.getElementById('titleOptBtn'), openOptOverlay);
+      addTouchAndClick(document.getElementById('optClose'), closeOptOverlay);
+
+      addTouchAndClick(startButton, startGame);
+      addTouchAndClick(dismissTutorial, async () => {
+        // Practice: a real sandbox — slower enemies, +50% ammo, watermark, no leaderboard.
+        state.attract = false;
+        state.practice = true;
+        setDemoBadge(false);
+        await unlockAudioAndMaybeStart();
+        tutorialOverlay.classList.add('hidden');
+        resetGame();
+      });
+      addTouchAndClick(restartButton, restartGame);
+      const pauseBtn = document.getElementById('pauseBtn');
+      addTouchAndClick(pauseBtn, () => { setPaused(!state.paused); });
+      gameOverOverlay.addEventListener('click', (e) => {
+        if (!e.target.closest('button') && restartAllowed()) restartGame();
+      });
+      gameOverOverlay.addEventListener('touchend', (e) => {
+        if (!e.target.closest('button')) {
+          if (e.cancelable) e.preventDefault();
+          if (restartAllowed()) restartGame();
+        }
+      }, { passive: false });
+
+      window.addEventListener('resize', resize);
+      window.addEventListener('orientationchange', () => setTimeout(resize, 220));
+      window.addEventListener('keydown', async (e) => {
+        const k = e.key;
+        const startKey = k === 'Enter' || e.code === 'Space';
+        if (e.code === 'Space') e.preventDefault();
+        if (hsOverlay.style.display === 'flex') {
+          if (k === 'Escape') closeHsOverlay();
+          return;
+        }
+        if (optOverlay.style.display === 'flex') {
+          if (k === 'Escape') closeOptOverlay();
+          return;
+        }
+        if ((k === 'p' || k === 'P' || k === 'Escape') && state.playing && !state.gameOver) {
+          setPaused(!state.paused);
+          return;
+        }
+        if (!startKey) return;
+        const initialsOpen = state.gameOver && !document.getElementById('hsInitialsSection').classList.contains('hidden');
+        if (initialsOpen) return; // don't steal Enter/Space from initials entry
+        if (e.target && e.target.closest && e.target.closest('button')) e.preventDefault();
+        if (!tutorialOverlay.classList.contains('hidden')) await startGame();
+        else if (state.paused) setPaused(false);
+        else if (state.gameOver && restartAllowed()) await restartGame();
+      });
+      window.addEventListener('blur', () => setPaused(true));
+      window.addEventListener('focus', () => { if (state.attract) setPaused(false); });
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          setPaused(true);
+          audio?.music?.pause(); // silence even on title/game-over screens
+        } else {
+          if (state.attract) setPaused(false); // auto-resume the title demo
+          if (!state.paused && state.audioUnlocked && settings.sound) audio?.music?.play().catch(() => {});
+        }
+      });
+
+
+      // QA hook, only with ?qa=1
+      if (location.search.includes('qa=1')) {
+        window.__mcQA = {
+          state, settings,
+          fireAt: launchDefense,
+          startGame, restartGame, resetGame,
+          spawnEnemy: spawnEnemyMissile,
+          spawnSatellite,
+          setPaused,
+          endGame: () => { state.cities.forEach(c => { c.alive = false; }); checkGameOver(); }
+        };
+      }
+
+      resize();
+      refreshModeLine();
+      updateHUD();
+      startAttract(); // self-playing demo behind the title screen
+      requestAnimationFrame((t) => {
+        state.lastTime = t;
+        requestAnimationFrame(frame);
+      });
+    })();
+  </script>
+</body>
+</html>
