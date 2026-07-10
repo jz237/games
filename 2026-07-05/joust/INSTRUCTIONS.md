@@ -9,8 +9,9 @@ jousting foes, swooping eggs, and killing pterodactyls. You get an extra mount e
 **Player 2:** **A / D** to steer, **W** to flap.
 **Mobile:** on-screen ◀ ▶ + big **FLAP** button.
 
-- **Flap** is a tap, not a hold — tap rapidly to climb, stop to glide down. Momentum carries you;
-  flap the opposite way to change direction. The screen wraps left↔right.
+- **Flap** once for one immediate wing stroke, or hold it for a steady automatic rhythm. Release
+  to glide down. Momentum carries you; flap the opposite way to change direction. The screen wraps
+  left↔right.
 - **P** — pause (then **Q** to quit) · **Hold ESC ~1s** — restart the wave (costs a life).
 - Physics don't start until your first input each life ("FLAP TO START") — no cheap deaths.
 

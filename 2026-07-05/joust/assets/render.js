@@ -259,19 +259,6 @@ class Renderer {
     return prefix + 'RUN4' + f;
   }
 
-  // transporter materialization beam (a bright pulsing column down to the bird)
-  drawBeam(x, y) {
-    const ctx = this.ctx, top = WORLD.CEIL, w = 6 * this.scaleX;
-    const bright = ((this.time >> 1) & 1) === 0;
-    for (const off of [0, -WRAP, WRAP]) {
-      const cx = this.sx(x + off); if (cx < -w || cx > this.canvas.width + w) continue;
-      ctx.fillStyle = bright ? '#9292aa' : '#364955';
-      ctx.fillRect(cx - w / 2, this.sy(top), 2 * this.scaleX, (y - top) * this.scaleY);
-      ctx.fillRect(cx + w / 2 - this.scaleX, this.sy(top), this.scaleX, (y - top) * this.scaleY);
-      ctx.fillStyle = '#ffffff'; ctx.fillRect(cx, this.sy(top), this.scaleX, (y - top) * this.scaleY);
-    }
-  }
-
   drawMountedBird(b, prefix, riderNo) {
     const mount = this.birdFrame(prefix, b), f = b.face > 0 ? 'R' : 'L';
     const wingsDown = b.wingDown > 0 || !!b.flapHeld;
@@ -294,10 +281,6 @@ class Renderer {
     for (const t of snap.trolls) {
       const g = t.bird.grabbed, frac = g ? Math.min(1, Math.max(0, (g.pull - 0.016) / (5 - 0.016))) : 0;
       this.blit('GRAB' + (1 + Math.min(5, Math.round(frac * 5))), t.bird.x, WORLD.FLOOR + 6, undefined);
-    }
-    // transporter spawn beams for materializing birds
-    for (const b of [...snap.enemies, ...snap.players]) {
-      if (b.materializing > 0) this.drawBeam(b.x, b.y);
     }
     // eggs
     for (const egg of snap.eggs) {

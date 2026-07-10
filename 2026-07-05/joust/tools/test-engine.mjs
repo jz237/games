@@ -118,8 +118,8 @@ console.log('gravity');
   approx(p.vy, 1 - DATA.PHYS.GRAV_UP, 1e-9, 'ceiling fully inverts upward velocity');
 }
 
-// ── PHYSICS: Rev.4 edge-triggered flap ──
-console.log('flap impulse and edge semantics');
+// ── PHYSICS: Rev.4 stroke with browser hold-repeat convenience ──
+console.log('flap impulse and hold-repeat semantics');
 {
   const e = eng();
   const p = e.players[0];
@@ -136,11 +136,20 @@ console.log('flap impulse and edge semantics');
   p.vy = 0; p.ptimup = 255;
   e.doFlap(p, 0);
   approx(p.vy, -1 / 256, 1e-9, 'fully aged PTIMUP=255 stroke still adds exactly -1/256');
-  p.vy = 0; p.ptimup = 0; p.onGround = false;
-  e.controlPlayer(p, { flap: true, flapHeld: true });
-  const oneStroke = p.vy;
-  for (let i = 0; i < 20; i++) e.controlPlayer(p, { flapHeld: true });
-  approx(p.vy, oneStroke, 1e-9, 'holding flap never auto-repeats thrust');
+  p.x = 146; p.y = 100; p.vy = 0; p.ptimup = 0; p.onGround = false; p.flapRepeat = 0;
+  const strokeFrames = [], releaseFrames = [];
+  for (let frame = 0; frame <= DATA.PHYS.HOLD_FLAP_REPEAT * 2; frame++) {
+    e.events.length = 0;
+    e.controlPlayer(p, { flap: frame === 0, flapHeld: true });
+    if (e.events.some(ev => ev.type === 'flap')) strokeFrames.push(frame);
+    if (!p.flapHeld && p.wingDown === 0) releaseFrames.push(frame);
+    e.animFrame++; e.integrate(p);
+  }
+  ok(JSON.stringify(strokeFrames) === JSON.stringify([0, 6, 12]), 'holding flap strokes immediately and every six active ticks');
+  ok(JSON.stringify(releaseFrames) === JSON.stringify([5, 11]), 'hold-repeat includes one visible wings-up/gravity tick before each new stroke');
+  e.events.length = 0; e.controlPlayer(p, { flapHeld: false });
+  e.controlPlayer(p, { flapHeld: true });
+  ok(e.events.filter(ev => ev.type === 'flap').length === 1, 're-holding after release strokes immediately');
 }
 
 // ── PHYSICS: horizontal FLYX state changes only on flap strokes ──
@@ -226,6 +235,18 @@ console.log('pixel-mask collision narrow phase');
   ok(e.birdsOverlap(p, q), 'adjacent discovered dx=15 opaque pixels collide');
   p.x = -8; q.x = 290;
   ok(e.birdsOverlap(p, q), 'opaque bird masks collide correctly across the horizontal wrap seam');
+}
+
+console.log('ordinary platform landings are silent');
+{
+  const e = eng({ wave: 1, seed: 1 });
+  for (const b of [e.players[0], e.enemies[0]]) {
+    Object.assign(b, { x: 120, y: 73, vx: 0, vy: 0.8, vxi: 0, onGround: false,
+      materializing: 0, alive: true, grabbed: null, wingDown: 0, flapHeld: false, ptimup: 0 });
+    e.events.length = 0; e.integrate(b);
+    ok(b.onGround && b.y === 74, `${b.kind} lands on the platform top`);
+    ok(!e.events.some(ev => ev.type === 'thud' || ev.type === 'cthud'), `${b.kind} top-surface landing makes no collision sound`);
+  }
 }
 
 console.log('enemy cliff collision recovery');

@@ -39,6 +39,33 @@ try {
 
   await page.screenshot({ path: join(shotDir, '01-title.png') });
 
+  // A materializing enemy may blink locally, but must never paint the old full-height grey beam.
+  await page.evaluate(() => {
+    window.__joustQA.start(1, '1p');
+    const foe = window.__joustQA.engine().enemies[0];
+    if (foe) Object.assign(foe, { x: 146, y: 204, materializing: 60 });
+  });
+  await new Promise(r => setTimeout(r, 80));
+  const spawnBarRun = await page.evaluate(() => {
+    const c = document.getElementById('c'), g = c.getContext('2d');
+    const { data, width, height } = g.getImageData(0, 0, c.width, c.height);
+    let longest = 0;
+    for (let x = 0; x < width; x++) {
+      let run = 0;
+      for (let y = 0; y < height; y++) {
+        const i = (y * width + x) * 4, r = data[i], gg = data[i + 1], b = data[i + 2];
+        const beam = (r === 146 && gg === 146 && b === 170) ||
+          (r === 54 && gg === 73 && b === 85) || (r === 255 && gg === 255 && b === 255);
+        run = beam ? run + 1 : 0; longest = Math.max(longest, run);
+      }
+    }
+    return { longest, height };
+  });
+  const spawnClean = spawnBarRun.longest < spawnBarRun.height / 2;
+  console.log(spawnClean ? 'OK  transporter emergence has no full-height video bars' : `FAIL transporter bar spans ${spawnBarRun.longest}/${spawnBarRun.height}px`);
+  if (!spawnClean) failed++;
+  await page.screenshot({ path: join(shotDir, 'spawn-materialize.png') });
+
   // drive each wave type, tick 500 frames, ensure no crash and entities render
   const waveByType = { normal: 1, survival: 2, gladiator: 4, egg: 5, ptero: 8 };
   for (const [type, wv] of Object.entries(waveByType)) {

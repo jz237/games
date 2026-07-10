@@ -117,7 +117,7 @@ class JoustEngine {
     for (let i = 0; i < this.numPlayers; i++) {
       this.players.push({
         kind: 'player', pi: i, x: 0, y: 0, vx: 0, vy: 0, vxi: 0, face: 1,
-        wingDown: 0, flapHeld: false, ptimup: 0, onGround: true, alive: false, materializing: 0,
+        wingDown: 0, flapHeld: false, flapRepeat: 0, ptimup: 0, onGround: true, alive: false, materializing: 0,
         lives: this.startLives, score: 0, nextExtra: this.extraManEvery,
         eggStreak: 0, deathsThisWave: 0, out: false, skid: 0, runTier: 0, runStep: 0,
         grabbed: null, gladKilled: false, safe: false, safeTimer: 0, id: _id++,
@@ -195,7 +195,7 @@ class JoustEngine {
 
   placeBird(b, x, y, face) {
     b.x = wrapX(x); b.y = y; b.vx = 0; b.vy = 0; b.vxi = 0; b.face = face || 1;
-    b.wingDown = 0; b.flapHeld = false; b.ptimup = 0; b.onGround = true; b.skid = 0; b.runTier = 0; b.runStep = 0;
+    b.wingDown = 0; b.flapHeld = false; b.flapRepeat = 0; b.ptimup = 0; b.onGround = true; b.skid = 0; b.runTier = 0; b.runStep = 0;
   }
 
   seedEggWave() {
@@ -326,8 +326,26 @@ class JoustEngine {
     }
     const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
     if (dir !== 0) p.face = dir;
-    p.flapHeld = !!inp.flapHeld;
-    if (inp.flap) this.doFlap(p, dir);
+    const held = !!inp.flapHeld;
+    let flap = !!inp.flap;
+    let releaseFrame = false;
+    if (flap) p.flapRepeat = PHYS.HOLD_FLAP_REPEAT;
+    else if (held) {
+      // The cabinet still supplies one ADDFLP stroke per press. For keyboard/touch/gamepad
+      // accessibility, synthesize a fresh press after the five-frame down-wing animation plus
+      // one release-equivalent tick while the button remains held.
+      if ((p.flapRepeat || 0) <= 0) flap = true;
+      else {
+        p.flapRepeat--;
+        releaseFrame = p.flapRepeat === 1;
+        if (p.flapRepeat <= 0) flap = true;
+      }
+      if (flap) p.flapRepeat = PHYS.HOLD_FLAP_REPEAT;
+    } else p.flapRepeat = 0;
+    // Drive the actual wing/gravity/mask state up for one tick before each synthesized press.
+    // The raw control remains held, so the following tick automatically starts a new stroke.
+    p.flapHeld = held && !releaseFrame;
+    if (flap) this.doFlap(p, dir);
     if (p.onGround) this.groundMove(p, dir);
     else this.airMove(p, dir, PHYS.MAX_H);
   }
@@ -462,7 +480,7 @@ class JoustEngine {
         b.y = plat.y; b.vy = 0; b.onGround = true;
         b.vx = (b.vx || 0) * 0.6;   // keep some run momentum on landing
         b.wingDown = 0;
-        this.emit('thud', { x: b.x, y: b.y, player: b.kind === 'player' });
+        // STLAN is silent in Rev.4. The low thud belongs to bird-vs-bird collisions, not feet.
       }
     }
     // The ROM follows broad platform bounds with bitmap collision. This preserves cliff sides,

@@ -28,6 +28,7 @@ const PHYS = {
   FLAP_BASE: -96 / 256,
   FLAP_TIME_SCALE: 96 / 256,
   WING_DOWN_FRAMES: 5,
+  HOLD_FLAP_REPEAT: 6, // browser convenience: one release-equivalent tick after the 5-frame stroke
   MAX_FALL: 16,
   MAX_RISE: 4,
   MAX_H: 2,

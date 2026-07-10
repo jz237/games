@@ -50,9 +50,11 @@ Per frame, add to Y-velocity: **+4/256 = +0.015625 px/frame² when wings are DOW
 **+8/256 = +0.03125 px/frame² when wings are UP (gliding)**. You fall twice as fast gliding.
 (`ADDGRA`: `ADDB GRAV`; caller passes B=0 wings-down / B=4 wings-up.) No per-wave change.
 
-### 2.2 Flap — the heart of flight (`ADDFLP`), edge-triggered
-Flap is **one impulse per button press** (release→press edge; holding does nothing until
-re-pressed). On each flap:
+### 2.2 Flap — the heart of flight (`ADDFLP`), edge-triggered with hold-repeat convenience
+The simulation still applies **one impulse per press**. A fresh press responds immediately; for
+keyboard/touch/gamepad accessibility, holding the button synthesizes another press every **6 active
+ticks (~100 ms)**: the original 5-frame down-wing animation plus one release-equivalent tick. On
+each flap:
 - **Vertical impulse** = `floor(PTIMUP*96/256) − 96` in 1/256 px/frame units, added to `PVELY`.
   `PTIMUP` = frames since the previous flap (0..255, reset to 0 on each flap, +1 each air frame).
   So a flap right after another (PTIMUP≈0) gives ≈ **−96/256 = −0.375 px/frame upward** (max);
@@ -249,8 +251,9 @@ is **SFX-only**.
 - **SFX** are reproduced by emulating `VSNDRM4` and pre-rendering the authentic 8-bit DAC output
   to compact local Ogg samples; the WebAudio synthesis paths remain fallback-only. The exact
   **command→event map with priority-based preemption** from the ROM SOUND TABLE remains intact:
-  flap wing-up/down (noise burst, pitched), walk clip/clop (two alt noise ticks), thud (low
-  click), skid start/end (swept tonal noise), egg hit/hatch (descending square blips),
+  flap wing-up/down (noise burst, pitched), walk clip/clop (two alt noise ticks), bird-collision
+  thud and side/underside cliff thud (ordinary top-surface landings are silent), skid start/end,
+  egg hit/hatch (descending square blips),
   enemy/player die (short "$16" percussive hit, shared), pterodactyl scream (harsh Walsh-style
   swept buzz ~2 s), lava-troll grab, in-lava, transporter spawn (rising→fading tone), mount,
   bounty, cliff-destroyer, extra-life chime, game-start sting, high-score jingle. Priority bytes
@@ -293,8 +296,8 @@ is **SFX-only**.
   CORS `*`), 3-initial entry.
 - **Modes:** 1 PLAYER / 2 PLAYERS (simultaneous, one keyboard: P1 ◀▶+Flap, P2 A D + remappable
   flap). Pause (P / auto-pause on blur).
-- **Touch controls (mobile):** left / right buttons + a big FLAP button (tap = one flap, matching
-  edge-triggered arcade flap). Landscape-friendly.
+- **Touch controls (mobile):** left / right buttons + a big FLAP button (tap once or hold for the
+  6-tick auto-repeat cadence). Landscape-friendly.
 - **Cache-busting from day one:** a `VERSION` constant; every asset fetch and `<script>` tag
   carries `?v=VERSION`; bump on every deploy that replaces same-named assets.
 - **CSP:** vendor everything locally, no external requests (strict site CSP).
@@ -317,7 +320,7 @@ is **SFX-only**.
 | # | Decision | Why |
 |---|---|---|
 | 1 | Native-unit deterministic engine at fixed 60 Hz; render scales native→canvas | Bit-faithful physics from ROM constants; resolution-independent; headless-testable |
-| 2 | Flap is **edge-triggered** (one impulse per press), impulse decays with `PTIMUP` per ROM `ADDFLP` | Authentic "rapid-flap to climb" skill; matches source exactly |
+| 2 | Each flap uses the edge-triggered ROM `ADDFLP` impulse; browser controls also synthesize a new edge every 6 ticks while held | Keeps the authentic stroke model while offering the owner's requested hold-to-flap convenience across keyboard, touch, and gamepad |
 | 3 | Wings-up gravity (2×) vs wings-down; `FLYX` non-linear H-table; no air drag | Exact ROM behavior; central to Joust feel |
 | 4 | Joust resolution = higher `PPOSY+PLANTZ` wins, exact tie = bounce (no tolerance); bounce = ±2 px + reflect/halve `PVELY` | Exact `OSTBO` logic |
 | 5 | Shadow Lord = **1500** (attract text `ATX8`), not 1000 | Two sources conflicted; disassembly/attract text wins |
@@ -339,3 +342,4 @@ is **SFX-only**.
 | 20 | **v1.5.0 — audit polish.** Working **pause** (P; auto-pause + mute on tab-hide via `visibilitychange`); 2P hold-ESC restart charges each in-player exactly one life (was a misleading double-charge); leaderboard POST carries `?v=`; `preventDefault` covers both players' mapped keys; removed the bare **M**-to-title footgun (quit now via the pause overlay's Q); single-source version (`window.__V`); ptero open-beak window tightened to ~3 px (ROM within-3); **hatch→remount returns one tier tougher** (origin-based, not wave-based); troll owns the `FLOOR+7` lava-death line; enemy tier recolor brightened for vivid red/grey/blue | Multi-agent audit (6 dimensions, findings adversarially verified) — each fix traced to a confirmed defect and re-tested (76 engine tests + browser + playthrough) |
 | 22 | **v2.0.0 — arcade-emulation restoration.** Restored Rev.4 edge-triggered flight, released-vs-held gravity, FLYX momentum/no drag, full ceiling rebound, exact tie separation, pixel-mask bird/cliff collisions, four transporters, full rider counts, 12-egg waves with `WENEMY` hatch caps, non-gating scheduled pterodactyls, ±2/±3 beak window, one lava-troll hand, side-pit geometry, indefinite first-input safety, 5 mounts, and 60.096154 Hz. Presentation now uses raw ROM mounts plus separately composed colored riders, exact cliffs/compressed CLIF5, 5x7 ROM font, vector title logo, black sky, and 4:3 pixel aspect. Existing sound-ROM Ogg output is unchanged. | Direct Rev.4 source audit plus browser/playthrough feedback; supersedes #14/#18/#19/#21 where they conflict |
 | 23 | **v2.0.1 — enemy ledge recovery.** Pixel-mask cliff contacts now resolve their actual X/Y normal, preserve tangential motion, and apply Rev.4's ±2 px separation on vertical contacts instead of rewinding both axes into an endless re-collision. Enemy lava panic now requires both an exposed lava gap and the original below-CLIF5 threshold. Cliff contacts use the authentic `cliff_thud` sound path. | Owner playtest plus deterministic all-tier regression: the reported trap fell from 181 contacts/893 stuck frames per 1000 ticks to 4 contacts/15 frames; 150,000 stress ticks had no contact loop longer than two frames. |
+| 24 | **v2.0.2 — landing audio, transporter rendering, hold-to-flap.** Ordinary platform-top landings no longer trigger the bird-collision thud; genuine footfalls and side/underside cliff contacts remain. Removed the fabricated ceiling-to-bird spawn columns and retained a local blink/spark transporter arrival. Holding flap now repeats every 6 active ticks after the immediate first stroke. | Owner playtest and screenshot; Rev.4 `STLAN` is silent and its transporter effect is local rather than a full-height beam. |

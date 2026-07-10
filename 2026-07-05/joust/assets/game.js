@@ -2,8 +2,8 @@
 // Engine (engine.js) is headless & authoritative; this owns everything user-facing.
 'use strict';
 
-const VERSION = 'v' + (window.__V || '2.0.1');   // single source: window.__V (index.html)
-const ASSET_Q = '?v=' + (window.__V || '2.0.1');
+const VERSION = 'v' + (window.__V || '2.0.2');   // single source: window.__V (index.html)
+const ASSET_Q = '?v=' + (window.__V || '2.0.2');
 const STEP_MS = 1000 / (window.JOUST_DATA.PHYS.TICK_HZ || 60.096154);
 const LB_URL = 'https://game-scores.jez237.workers.dev/scores/joust';
 const DATA = window.JOUST_DATA;
