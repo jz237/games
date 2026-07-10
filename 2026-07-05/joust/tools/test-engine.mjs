@@ -228,6 +228,76 @@ console.log('pixel-mask collision narrow phase');
   ok(e.birdsOverlap(p, q), 'opaque bird masks collide correctly across the horizontal wrap seam');
 }
 
+console.log('enemy cliff collision recovery');
+{
+  for (const [idx, type] of ['bounder', 'hunter', 'shadow'].entries()) {
+    const e = eng({ wave: 1, seed: 1 });
+    const p = e.players[0];
+    Object.assign(p, { x: 127, y: 203, vx: 0, vy: 0, vxi: 0, alive: true,
+      materializing: 0, out: false, safe: true, onGround: true });
+    const foe = {
+      kind: 'enemy', type, x: 267, y: 138, vx: -2, vy: -0.5, vxi: -8, face: -1,
+      wingDown: 0, ptimup: 0, onGround: false, alive: true, materializing: 0,
+      decision: 0, aim: null, wantFace: -1, wander: 0, flapClock: 0,
+      skid: 0, runTier: 0, runStep: 0, grabbed: null, lineage: 0, id: 9100 + idx,
+    };
+    e.enemies = [foe]; e.pool = []; e.eggs = []; e.pteros = []; e.pteroPool = 0;
+    let escaped = false, contactRun = 0, maxContactRun = 0, contacts = 0, contactOrigin = null;
+    const contactCells = new Map();
+    for (let frame = 0; frame < 300; frame++) {
+      const s = tick(e);
+      const hits = s.events.filter(ev => ev.type === 'cthud' && ev.birdId === foe.id).length;
+      contacts += hits;
+      contactRun = hits ? contactRun + 1 : 0; maxContactRun = Math.max(maxContactRun, contactRun);
+      if (hits) {
+        if (!contactOrigin) contactOrigin = { x: foe.x, y: foe.y };
+        const key = `${Math.round(foe.x)},${Math.round(foe.y)}`;
+        contactCells.set(key, (contactCells.get(key) || 0) + hits);
+      }
+      if (contactOrigin && foe.alive && (foe.onGround || Math.abs(wrapDelta(contactOrigin.x, foe.x)) > 18 || Math.abs(foe.y - contactOrigin.y) > 18)) escaped = true;
+    }
+    const sameSpotContacts = Math.max(0, ...contactCells.values());
+    ok(contacts > 0, `${type} registers an authentic cliff-thud contact`);
+    ok(escaped, `${type} recovers after meeting the upper-right ledge`);
+    ok(maxContactRun <= 4, `${type} does not collide on every simulation frame`);
+    ok(sameSpotContacts <= 4, `${type} does not spam cliff-thuds from one ledge point`);
+  }
+}
+
+console.log('player cliff collision recovery');
+{
+  const e = eng({ wave: 1, seed: 1 });
+  const p = e.players[0];
+  Object.assign(p, { x: 45.89178861266035, y: 137.1640625, vx: -2, vy: 0.3828125,
+    vxi: -8, face: 1, wingDown: 0, flapHeld: false, ptimup: 100, onGround: false,
+    alive: true, materializing: 0, safe: false, skid: 0, runTier: 0 });
+  const startY = p.y;
+  e.animFrame = 2077; e.events.length = 0; e.integrate(p);
+  ok(e.events.some(ev => ev.type === 'cthud' && ev.player && ev.birdId === p.id), 'player cliff contact uses the cliff-thud event');
+  ok(p.y <= startY - 2 && p.vy < 0, 'descending player separates upward and rebounds from the cliff');
+  let run = 1, maxRun = 1;
+  for (let i = 0; i < 20; i++) {
+    e.events.length = 0; e.animFrame++; e.integrate(p);
+    run = e.events.some(ev => ev.type === 'cthud' && ev.birdId === p.id) ? run + 1 : 0;
+    maxRun = Math.max(maxRun, run);
+  }
+  ok(maxRun <= 4, 'player does not enter a repeated cliff-contact loop');
+}
+
+console.log('enemy lava emergency is local to exposed lava');
+{
+  const e = eng({ wave: 3, seed: 2 });
+  const foe = e.enemies[0];
+  Object.assign(foe, { materializing: 0, onGround: false, x: 127, y: 178, vy: 0,
+    vxi: 0, vx: 0, face: 1, decision: 999, aim: e.players[0], wander: 0, flapClock: 0 });
+  e.controlEnemy(foe);
+  ok(foe.flapClock === 10, 'solid lower playfield uses normal Bounder climb cadence, not lava panic');
+  Object.assign(foe, { x: 20, y: DATA.WORLD.FLOOR - 12, vy: 0, vxi: 0, vx: 0,
+    face: 1, decision: 999, aim: e.players[0], wander: 0, flapClock: 0 });
+  e.controlEnemy(foe);
+  ok(foe.flapClock === 5, 'enemy uses emergency flap cadence only low over an exposed lava gap');
+}
+
 // ── EGG ladder + reset + mid-air bonus ──
 console.log('egg scoring');
 {

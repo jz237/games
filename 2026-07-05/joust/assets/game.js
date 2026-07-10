@@ -2,8 +2,8 @@
 // Engine (engine.js) is headless & authoritative; this owns everything user-facing.
 'use strict';
 
-const VERSION = 'v' + (window.__V || '2.0.0');   // single source: window.__V (index.html)
-const ASSET_Q = '?v=' + (window.__V || '2.0.0');
+const VERSION = 'v' + (window.__V || '2.0.1');   // single source: window.__V (index.html)
+const ASSET_Q = '?v=' + (window.__V || '2.0.1');
 const STEP_MS = 1000 / (window.JOUST_DATA.PHYS.TICK_HZ || 60.096154);
 const LB_URL = 'https://game-scores.jez237.workers.dev/scores/joust';
 const DATA = window.JOUST_DATA;
@@ -265,7 +265,7 @@ function commitHs() {
 function flash(msg) { flashMsg = msg; flashUntil = performance.now() + 1600; }
 
 // ─── event → sound/particle bridge ───
-const SND = { flap:'flap', thud:'thud', skid:'skid', walk:'walk', eggDrop:'eggDrop', eggCollect:'eggCollect', eggHatch:'eggHatch', eggLand:'thud', enemyDie:'enemyDie', playerDie:'playerDie', ptero:'ptero', pteroDie:'pteroDie', troll:'troll', bounce:'bounce', bounty:'bounty', extraMan:'extraMan', bait:'bait', spawn:'spawn', mount:'mount', materialized:'materialized', waveClear:'waveClear' };
+const SND = { flap:'flap', thud:'thud', cthud:'cthud', skid:'skid', walk:'walk', eggDrop:'eggDrop', eggCollect:'eggCollect', eggHatch:'eggHatch', eggLand:'thud', enemyDie:'enemyDie', playerDie:'playerDie', ptero:'ptero', pteroDie:'pteroDie', troll:'troll', bounce:'bounce', bounty:'bounty', extraMan:'extraMan', bait:'bait', spawn:'spawn', mount:'mount', materialized:'materialized', waveClear:'waveClear' };
 const POOF = ['FL1', 'FL2', 'FL3'];
 function processEvents(evs) {
   for (const e of evs) {

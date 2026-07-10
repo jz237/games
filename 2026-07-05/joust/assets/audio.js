@@ -5,7 +5,7 @@
 'use strict';
 (function () {
 const AC = window.AudioContext || window.webkitAudioContext;
-const VER = (window.__V || window.JOUST_AUDIO_VER || '2.0.0'); // single source: window.__V (index.html)
+const VER = (window.__V || window.JOUST_AUDIO_VER || '2.0.1'); // single source: window.__V (index.html)
 
 // ROM SOUND-TABLE priorities (higher wins preemption)
 const PRIO = {
@@ -83,7 +83,7 @@ class AudioSys {
     switch (name) {
       case 'flap': this.noise(t, 0.09, 0.25, 480, 0.9, 1100); return 0.09;
       case 'walk': this.noise(t, 0.045, 0.14, 320, 1.2); return 0.05;
-      case 'thud': case 'bounce': case 'eggLand': case 'eggDrop': this.noise(t, 0.08, 0.3, 260, 1); this.osc('sine', 120, t, 0.09, 0.18, 60); return 0.1;
+      case 'thud': case 'cthud': case 'bounce': case 'eggLand': case 'eggDrop': this.noise(t, 0.08, 0.3, 260, 1); this.osc('sine', 120, t, 0.09, 0.18, 60); return 0.1;
       case 'skid': this.noise(t, 0.22, 0.2, 900, 3, 300); return 0.22;
       case 'eggCollect': this.osc('square', 700, t, 0.06, 0.16, 900); this.osc('square', 1200, t + 0.06, 0.1, 0.18, 1800); return 0.18;
       case 'eggHatch': this.osc('square', 900, t, 0.14, 0.16, 300); return 0.14;

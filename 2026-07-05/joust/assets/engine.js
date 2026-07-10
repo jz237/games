@@ -403,17 +403,18 @@ class JoustEngine {
       else this.groundMove(e, this.rng() < def.aggr ? e.face : 0);
       return;
     }
-    const nearLava = e.y > WORLD.FLOOR - 48;
     e.flapClock = (e.flapClock || 0) - 1;
-    // steer away from lava columns when low (don't suicide into the lava)
+    // Rev.4 only enters the emergency climb below CLIF5 and over a real lava gap.
+    // Treating the whole lower playfield as lava made riders chirp/flap into solid ledges.
     const overLava = this.overLava(e.x);
-    if ((overLava || nearLava) && e.y > 150) { e.face = wrapDelta(e.x, 147) >= 0 ? 1 : -1; }
+    const lavaDanger = overLava && e.y >= WORLD.FLOOR - 12;
+    if (lavaDanger) { e.face = wrapDelta(e.x, 147) >= 0 ? 1 : -1; }
     // horizontal drift toward facing (continuous, matches the player model)
     this.airMove(e, e.face, PHYS.ENEMY_MAX_H);
     // flap cadence tuned to the punchy flap: hover ≈ 1 flap / 13f, climb faster.
     const climbP = def.climb >= 0.9 ? 7 : def.climb >= 0.75 ? 8 : 10;
     let period;
-    if (nearLava || overLava) period = 5;             // escape lava
+    if (lavaDanger) period = 5;                       // escape lava
     else if (e.y > desiredY + 4) period = climbP;     // below desired → climb
     else if (e.y < desiredY - 12) period = 0;         // too high → glide down
     else period = 13;                                  // hover (holds altitude)
@@ -470,12 +471,24 @@ class JoustEngine {
       const prevBird = Object.assign({}, b, { x: prevX, y: prevY });
       const solid = this.platforms.find(p => birdPlatformOverlap(b, p, this.animFrame) && !birdPlatformOverlap(prevBird, p, this.animFrame));
       if (solid) {
-        b.x = prevX; b.y = prevY;
-        if (b.vy < 0) b.vy = Math.abs(b.vy) * 0.5;
-        else {
+        // Resolve the contact normal instead of rewinding both axes. BCKCOL in Rev.4
+        // preserves tangential travel and gives vertical contacts a PBUMPY +/-2 separation;
+        // without it an AI rider re-entered the same cliff pixel forever and sounded every tick.
+        const hitX = birdPlatformOverlap(Object.assign({}, b, { y: prevY }), solid, this.animFrame);
+        const hitY = birdPlatformOverlap(Object.assign({}, b, { x: prevX }), solid, this.animFrame);
+        const vertical = (hitY && !hitX) || (hitX === hitY && Math.abs(b.vy) >= Math.abs(b.vx || 0));
+        if (vertical) {
+          if (hitX) b.x = prevX; // ambiguous corner: the X-only pose is not clear
+          const rising = b.vy < 0;
+          b.y = prevY + (rising ? 2 : -2);
+          b.vy = rising ? Math.abs(b.vy) * 0.5 : -Math.abs(b.vy) * 0.5;
+        } else {
+          b.x = prevX;
+          if (hitY) b.y = prevY; // ambiguous corner: restore the known-safe Y too
           b.vxi = -(b.vxi || 0); b.vx = flySpeed(b.vxi) * 0.5; b.face = -b.face;
+          if (b.vy < -0.25) b.vy = -0.25; // BCLFT/BCRIT wall-scrape rise cap (-$0040)
         }
-        this.emit('thud', { x: b.x, y: b.y, player: b.kind === 'player' });
+        this.emit('cthud', { x: b.x, y: b.y, player: b.kind === 'player', birdId: b.id, platform: solid.id });
       }
     }
     // lava / floor death (a troll-grabbed bird is owned by updateTrolls, which kills at FLOOR+7)
