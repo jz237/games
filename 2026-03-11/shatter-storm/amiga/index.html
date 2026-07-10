@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#050817">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="description" content="Play Shatter Storm: Amiga Edition v3.0.4, an enhanced mobile-friendly brick breaker with real Amiga game music and genuine Paula sound effects.">
+  <link rel="canonical" href="https://jez237.com/games/2026-03-11/shatter-storm/amiga/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Shatter Storm: Amiga Edition">
+  <meta property="og:description" content="A real Amiga soundtrack playlist and genuine Paula sound effects meet neon bricks, handcrafted rounds, lasers and multiball.">
+  <meta property="og:url" content="https://jez237.com/games/2026-03-11/shatter-storm/amiga/">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <title>Shatter Storm: Amiga Edition</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="game-shell">
+    <header class="topbar" aria-label="Game status">
+      <div><span>SCORE</span><strong id="score">000000</strong></div>
+      <div><span>HIGH</span><strong id="high-score">000000</strong></div>
+      <div><span>ROUND</span><strong id="round">01</strong></div>
+      <div><span>VAUS</span><strong id="lives">●●●</strong></div>
+    </header>
+
+    <section id="stage-wrap">
+      <canvas id="game" width="960" height="720" aria-label="Shatter Storm Amiga Edition game area"></canvas>
+      <div id="crt" aria-hidden="true"></div>
+      <nav id="title-menu" aria-label="Shatter Storm Amiga Edition title menu">
+        <button id="title-start" type="button">START GAME</button>
+        <button id="title-options" type="button">OPTIONS</button>
+        <a href="../">SHATTER STORM</a>
+      </nav>
+    </section>
+
+    <footer class="controls">
+      <span class="desktop-help">MOVE <b>Mouse / ← →</b></span>
+      <span class="desktop-help">LAUNCH / FIRE <b>Click / Space</b></span>
+      <span class="touch-help">DRAG TO MOVE · TAP TO LAUNCH / FIRE</span>
+      <button id="pause-button" type="button" aria-label="Pause or resume game">PAUSE</button>
+      <button id="settings-button" type="button" aria-label="Open game settings">SETTINGS</button>
+      <a class="menu-link" href="../" aria-label="Return to Shatter Storm edition menu">SHATTER STORM</a>
+      <button id="fullscreen-button" type="button" aria-label="Toggle full screen">FULLSCREEN</button>
+      <button id="music" type="button" aria-label="Toggle authentic Amiga music">MUSIC ON</button>
+      <button id="mute" type="button" aria-label="Toggle sound">SOUND ON</button>
+    </footer>
+
+    <section id="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+      <form id="settings-form" class="settings-card">
+        <div class="settings-heading">
+          <p>SHATTER STORM · AMIGA EDITION v3.0.4</p>
+          <h1 id="settings-title">GAME SETTINGS</h1>
+          <span>Configure the cabinet, then launch.</span>
+        </div>
+
+        <div class="settings-grid">
+          <label class="setting setting-wide" for="difficulty">
+            <span>DIFFICULTY</span>
+            <select id="difficulty" name="difficulty">
+              <option value="relaxed">Relaxed — wider Vaus, slower ball</option>
+              <option value="classic" selected>Classic — intended balance</option>
+              <option value="expert">Expert — fast ball, fewer bonuses</option>
+            </select>
+          </label>
+
+          <label class="setting setting-wide" for="resolution">
+            <span>RENDER RESOLUTION</span>
+            <select id="resolution" name="resolution">
+              <option value="auto" selected>Auto — match this display</option>
+              <option value="720">Classic — 960 × 720</option>
+              <option value="1080">HD — 1440 × 1080</option>
+              <option value="1440">Ultra — 1920 × 1440</option>
+            </select>
+          </label>
+
+          <label class="setting" for="master-volume">
+            <span>MASTER VOLUME <output id="master-value" for="master-volume">85%</output></span>
+            <input id="master-volume" name="masterVolume" type="range" min="0" max="100" value="85">
+          </label>
+
+          <label class="setting" for="music-volume">
+            <span>MUSIC VOLUME <output id="music-value" for="music-volume">95%</output></span>
+            <input id="music-volume" name="musicVolume" type="range" min="0" max="100" value="95">
+          </label>
+
+          <label class="setting" for="sfx-volume">
+            <span>SOUND EFFECTS <output id="sfx-value" for="sfx-volume">82%</output></span>
+            <input id="sfx-volume" name="sfxVolume" type="range" min="0" max="100" value="82">
+          </label>
+
+          <div class="setting toggles" aria-label="Display and audio options">
+            <label><input id="music-enabled" type="checkbox" checked> AMIGA MUSIC</label>
+            <label><input id="sfx-enabled" type="checkbox" checked> GAME SFX</label>
+            <label><input id="scanlines-enabled" type="checkbox" checked> CRT SCANLINES</label>
+            <label><input id="shake-enabled" type="checkbox" checked> SCREEN SHAKE</label>
+          </div>
+        </div>
+
+        <p class="settings-note">AMIGA MIX: Pinball Dreams · Lotus Turbo Challenge 2 · Xenon 2 · Jim Power. Four eye-verified music tracks play in sequence; effects are genuine Amiga Paula captures.</p>
+        <div class="settings-actions">
+          <button id="settings-cancel" type="button">CANCEL</button>
+          <button id="settings-start" type="submit">SAVE SETTINGS</button>
+        </div>
+      </form>
+    </section>
+  </main>
+  <script src="game.js?v=304"></script>
+</body>
+</html>

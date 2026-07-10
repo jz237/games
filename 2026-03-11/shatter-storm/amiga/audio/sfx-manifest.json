@@ -1,0 +1,27 @@
+{
+  "version": "3.0.4",
+  "generator": "FS-UAE Paula-emulator captures (Amiga 500) peak-normalized to -1.5 dBFS; music loudness-normalized to -14 LUFS (two-pass loudnorm, linear). Encoded with libmp3lame 128k CBR, 44.1 kHz.",
+  "verification": "Every file eye-verified via full-length spectrogram (harmonic/rhythmic structure required; sweeps and broadband wash rejected). Spectral-flatness metrics are NOT used - swept tones fooled them in v3.0.1-v3.0.3.",
+  "noiseSources": false,
+  "format": "MP3",
+  "sampleRate": 44100,
+  "effects": {
+    "brick-a-v304.mp3": { "seconds": 0.63, "source": "games-source/2026-07-09/arkanoid-recoded/audio/brick-1.ogg", "description": "Paula brick impact, variant A" },
+    "brick-b-v304.mp3": { "seconds": 0.18, "source": "games-source/2026-07-09/arkanoid-recoded/audio/brick-2.ogg", "description": "Paula brick impact, variant B" },
+    "brick-c-v304.mp3": { "seconds": 0.31, "source": "games-source/2026-07-09/arkanoid-recoded/audio/brick-3.ogg", "description": "Paula brick impact, variant C" },
+    "paddle-v304.mp3": { "seconds": 0.42, "source": "games-source/2026-07-09/arkanoid-recoded/audio/paddle.ogg", "description": "Paula paddle bounce" },
+    "wall-v304.mp3": { "seconds": 0.60, "source": "games-source/2026-07-09/arkanoid-recoded/audio/wall.ogg", "description": "Paula wall tick" },
+    "launch-v304.mp3": { "seconds": 0.39, "source": "games-source/2026-07-09/arkanoid-recoded/audio/launch.ogg", "description": "Paula ball launch" },
+    "laser-v304.mp3": { "seconds": 1.28, "source": "games-source/2026-07-09/arkanoid-recoded/audio/laser.ogg", "description": "Paula laser burst" },
+    "bonus-v304.mp3": { "seconds": 0.89, "source": "games-source/2026-07-09/arkanoid-recoded/audio/bonus.ogg", "description": "Paula capsule pickup" },
+    "death-v304.mp3": { "seconds": 0.97, "source": "games-source/2026-07-09/arkanoid-recoded/audio/death.ogg", "description": "Paula ball lost" },
+    "round-v304.mp3": { "seconds": 0.84, "source": "games-source/2026-07-09/arkanoid-recoded/audio/round-clear.ogg", "description": "Paula round fanfare" }
+  },
+  "music": [
+    { "file": "pinball-dreams-ignition-v304.mp3", "seconds": 83, "title": "Pinball Dreams - Ignition", "source": "experiments/amiga-mod-player/audio/Pinball_Dreams/02_ignition.mp3 (trimmed before the 84s section gap)" },
+    { "file": "lotus-2-title-v304.mp3", "seconds": 150, "title": "Lotus Turbo Challenge 2 - Title", "source": "experiments/amiga-mod-player/audio/Lotus_Turbo_Challenge_2/01_title_screen.mp3" },
+    { "file": "xenon-2-megablast-v304.mp3", "seconds": 150, "title": "Xenon 2 - Megablast (In-Game)", "source": "experiments/amiga-mod-player/audio/Xenon_2/02_in_game_bgm.mp3" },
+    { "file": "jim-power-title-v304.mp3", "seconds": 150, "title": "Jim Power - Title Theme", "source": "experiments/amiga-mod-player/audio/Jim_Power/01_title.mp3" }
+  ],
+  "warning": "Do NOT source replacements from experiments/amiga-mod-player/audio/{Project-X,Apidya,Turrican_II} - those render folders are malformed (wind-like sweeps/noise)."
+}
