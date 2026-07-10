@@ -11,7 +11,7 @@ jousting foes, swooping eggs, and killing pterodactyls. You get an extra mount e
 
 - **Flap** is a tap, not a hold — tap rapidly to climb, stop to glide down. Momentum carries you;
   flap the opposite way to change direction. The screen wraps left↔right.
-- **P** — (reserved) · **M** — back to title · **Hold ESC ~1s** — restart the wave (costs a life).
+- **P** — pause (then **Q** to quit) · **Hold ESC ~1s** — restart the wave (costs a life).
 - Physics don't start until your first input each life ("FLAP TO START") — no cheap deaths.
 
 ## The joust
@@ -30,9 +30,10 @@ height = you both bounce. So the whole game is about getting **above** your oppo
 
 ## Waves
 Every 5th block cycles through special waves: **Survival** (no-death 3000 bonus, "Team" in 2P),
-**Gladiator** (3000 bounty for unseating your partner), **Egg**, and **Pterodactyl**. The bridge
-over the central lava burns away on wave 3, and the **Lava Troll's** hand starts grabbing low
-flyers from wave 4 — flap hard to break free before it drags you under.
+**Gladiator** (3000 bounty for unseating your partner), **Egg**, and **Pterodactyl**. The thin
+outer floor bridges burn away on wave 3, exposing lava at both sides of the permanent lower
+island. From wave 4 the **Lava Troll's** single hand can grab a low flyer over either side pit —
+flap hard to break free before it drags you under.
 
 ## Options
 Separate SFX/Music volume, CRT filter, difficulty, starting men, key remap, and **Wave Select**

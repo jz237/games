@@ -10,8 +10,8 @@ const DATA = require(join(root, 'assets/data.js'));
 const { JoustEngine, wrapDelta } = require(join(root, 'assets/engine.js'));
 const { WORLD } = DATA;
 
-function botInput(e) {
-  const p = e.players[0];
+function botInput(e, pi = 0) {
+  const p = e.players[pi];
   if (!p || !p.alive || p.materializing > 0) return { left: false, right: false, flap: false };
   p._fc = (p._fc || 0) + 1;
   const inp = { left: false, right: false, flap: false };
@@ -66,7 +66,7 @@ function run(startWave, waves, mode) {
   let ticks = 0, waveTicks = 0, prevWave = e.wave;
   const cap = waves * 5000;
   while (ticks < cap && !e.gameOver && e.wave < startWave + waves) {
-    const snap = e.tick([botInput(e)]);
+    const snap = e.tick(e.players.map((_, pi) => botInput(e, pi)));
     for (const ev of snap.events) {
       if (ev.type === 'enemyDie' && ev.points) stat.kills++;
       if (ev.type === 'eggCollect') stat.eggs++;

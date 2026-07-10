@@ -6,36 +6,35 @@
 
 // ─── world constants (JOUSTRV4.ASM EQU) ───
 const WORLD = {
-  CEIL: 32,          // CEILNG $20 — top clamp
-  FLOOR: 223,        // FLOOR $DF — floor / lava death line
-  LAVA_Y: 223,       // lava surface = floor
+  CEIL: 25,          // visible raster starts seven source lines below the framebuffer origin
+  FLOOR: 216,        // FLOOR $DF in visible-window coordinates
+  LAVA_Y: 216,       // lava surface = floor
   WRAP_MIN: -10,     // ELEFT
   WRAP_MAX: 292,     // ERIGHT
   WRAP_SPAN: 302,    // ERIGHT - ELEFT
   VIEW_W: 292,       // visible raster width
   VIEW_H: 240,       // visible raster height
-  SPAWN_Y: 210,      // LAND5 — player spawn Y (feet)
+  DISPLAY_W: 320,    // physical 4:3 CRT presentation width
+  PIXEL_ASPECT: 320 / 292,
+  SPAWN_Y: 204,      // LAND5 in visible-window coordinates
 };
 
-// ─── physics constants — TUNED BY FEEL against the owner's real Williams Joust cabinet ───
-// v1.5.1: reverted from the "ROM-exact px/frame" values (decision #18) — those, applied at 60 Hz,
-// moved & accelerated noticeably FASTER than the actual arcade machine (per the owner, who owns
-// one). The paper-exact fixed-point numbers did NOT reproduce the felt hardware; the hand-tuned
-// feel below (the previously-accepted baseline) is the reference. Calibrate against the cabinet.
+// ─── green-label Rev.4 flight constants (8.8 fixed point at 60.096 Hz) ───
+// Flap is a RELEASE→PRESS edge. Horizontal momentum changes only on a stroke and persists in air.
 const PHYS = {
-  GRAV_DOWN: 0.042,       // wings-down (flapping) gravity accel
-  GRAV_UP: 0.075,         // wings-up (gliding) gravity — heavier so you sink when idle
-  FLAP_DV: -0.95,         // upward velocity added per flap (punchy, not floaty)
-  FLAP_REPEAT: 7,         // frames between auto-flaps while the flap key is HELD
-  MAX_FALL: 5.5,          // clamp downward vy
-  MAX_RISE: 3.2,          // clamp upward vy
-  AIR_ACCEL: 0.085,       // horizontal accel while holding a direction in the air (gradual)
-  MAX_H: 1.7,             // max horizontal speed (player)
-  AIR_DRAG: 0.93,         // horizontal settling when not pressing (the machine settles; do NOT remove)
+  TICK_HZ: 60.096154,
+  GRAV_DOWN: 4 / 256,
+  GRAV_UP: 8 / 256,
+  FLAP_BASE: -96 / 256,
+  FLAP_TIME_SCALE: 96 / 256,
+  WING_DOWN_FRAMES: 5,
+  MAX_FALL: 16,
+  MAX_RISE: 4,
+  MAX_H: 2,
   GROUND_ACCEL: 0.13, GROUND_MAX: 2.1, GROUND_DRAG: 0.7,
-  ENEMY_MAX_H: 1.4,       // enemies a touch slower horizontally
-  TAKEOFF_VY: -0.5,       // ground takeoff pop
-  FLYX: { 0: 0, 2: 0.25, 4: 0.5, 6: 1.0, 8: 2.0 }, // (legacy, unused)
+  ENEMY_MAX_H: 2,
+  TAKEOFF_VY: -0.5,
+  FLYX: { 0: 0, 2: 0.25, 4: 0.5, 6: 1.0, 8: 2.0 },
   // lava troll
   TROLL_BREAKFREE: -0x180 / 256, // -1.5 px/frame: rising faster escapes
   TROLL_PULL_BASE: 4 / 256,      // starts ~ gravity
@@ -73,20 +72,18 @@ const ENEMY = {
 // id, x1, x2 (inclusive-ish), y (top surface where feet rest), erodeBit (or null = permanent)
 // Erosion bits: WBCL1L $10, WBCL1R $20, WBCL2 $40, WBCL4 $80.
 const PLATFORMS = [
-  // base (CLIF5) split into left/right + a burnable central BRIDGE over the lava pit
-  { id: 'baseL',  x1: 54,  x2: 128, y: 211, erodeBit: null },
-  { id: 'baseR',  x1: 164, x2: 240, y: 211, erodeBit: null },
-  { id: 'bridge', x1: 128, x2: 164, y: 211, erodeBit: null, bridge: true }, // gone from wave TBRIDGE(3)
-  // center floating island (CLIF4, y162)
-  { id: 'center', x1: 104, x2: 152, y: 162, erodeBit: 0x80 }, // WBCL4
-  // upper-left-center platform (CLIF2, y80)
-  { id: 'upperL', x1: 80,  x2: 126, y: 80,  erodeBit: 0x40 }, // WBCL2
-  // top edge ledges (CLIF1L / CLIF1R, y68) — near the wrap seam
-  { id: 'topL',   x1: -10, x2: 34,  y: 68,  erodeBit: 0x10 }, // WBCL1L
-  { id: 'topR',   x1: 250, x2: 294, y: 68,  erodeBit: 0x20 }, // WBCL1R
-  // mid edge ledges (CLIF3L / CLIF3R) — permanent, span the seam
-  { id: 'midL',   x1: -10, x2: 36,  y: 137, erodeBit: null },
-  { id: 'midR',   x1: 200, x2: 258, y: 130, erodeBit: null },
+  // Wave 3 burns the thin OUTER floor, leaving the permanent central CLIF5 island.
+  { id: 'floorL', x1: -10, x2: 48,  y: 204, erodeBit: null, bridge: true },
+  { id: 'base',   x1: 48,  x2: 234, y: 204, erodeBit: null, sprite: 'CSRC5FULL', drawX: 48 },
+  { id: 'floorR', x1: 234, x2: 292, y: 204, erodeBit: null, bridge: true },
+  // ROM cliff DMA positions converted from framebuffer to the visible 292×240 window.
+  { id: 'lowerMid', x1: 100, x2: 164, y: 156, erodeBit: 0x80, sprite: 'CSRC4',  drawX: 100 },
+  { id: 'midTop',   x1: 80,  x2: 168, y: 74,  erodeBit: 0x40, sprite: 'CSRC2',  drawX: 80 },
+  { id: 'topL',     x1: -10, x2: 30,  y: 62,  erodeBit: 0x10, sprite: 'CSRC1L', drawX: -4 },
+  { id: 'topR',     x1: 246, x2: 294, y: 62,  erodeBit: 0x20, sprite: 'CSRC1R', drawX: 246 },
+  { id: 'midWrapL', x1: -4,  x2: 60,  y: 131, erodeBit: null, sprite: 'CSRC3L', drawX: -4 },
+  { id: 'upperR',   x1: 196, x2: 254, y: 122, erodeBit: null, sprite: 'CSRC3U', drawX: 196 },
+  { id: 'midWrapR', x1: 248, x2: 296, y: 131, erodeBit: null, sprite: 'CSRC3R', drawX: 248 },
 ];
 
 const TBRIDGE = 3;  // wave the bridge burns
@@ -94,13 +91,33 @@ const TTROLL = 4;   // wave the lava troll first appears
 
 // spawn pads (transporters) — where players/enemies materialize (feet Y = platform top)
 const SPAWN_PADS = [
-  { x: 92,  y: 211 }, { x: 200, y: 211 },  // on the base
-  { x: 128, y: 162 },                       // center island
-  { x: 103, y: 80 },                        // upper-left
-  { x: 12,  y: 68 },  { x: 272, y: 68 },    // top ledges
+  // TR1ID..TR4ID / PPOS anchors, with the framebuffer's seven hidden scanlines removed.
+  { x: 113, y: 73 }, { x: 231, y: 121 },
+  { x: 23,  y: 130 }, { x: 127, y: 203 },
 ];
-const P1_SPAWN = { x: 100, y: 211, face: 1 };
-const P2_SPAWN = { x: 196, y: 211, face: -1 };
+const P1_SPAWN = { x: 100, y: 204, face: 1 };
+const P2_SPAWN = { x: 196, y: 204, face: -1 };
+
+// X offsets from the ROM's _OSTRICH/_STORK/_BUZARD composition pointer tables, converted
+// from DMA bytes to pixels. Right-facing riders start at +4px; left-facing riders at 0.
+function mountXOffset(prefix, mount, face) {
+  if (face > 0) return 0;
+  if (prefix === 'O') {
+    if (mount.includes('RUNS')) return 2;
+    if (mount.includes('RUN2') || mount.includes('RUN3')) return 4;
+    if (mount.includes('RUN')) return 2;
+    return 0;
+  }
+  if (prefix === 'S') {
+    if (mount.includes('RUNS')) return 4;
+    if (mount.includes('RUN1')) return 0;
+    if (mount.includes('RUN')) return 2;
+    if (mount.includes('FLY1')) return 2;
+    return 0;
+  }
+  if (mount.includes('RUNS') || mount.includes('RUN2') || mount.includes('RUN3')) return 2;
+  return 0;
+}
 
 // ─── wave table (JOUSTRV4.ASM WAVTBL, waves 1..90; loops 81..90 thereafter) ───
 // each row = [byte0, byte1, byte2, byte3]
@@ -207,7 +224,7 @@ const BAITER = {
   maxOnScreen: 3,
 };
 
-const DATA = { WORLD, PHYS, SCORE, ENEMY, PLATFORMS, SPAWN_PADS, P1_SPAWN, P2_SPAWN, TBRIDGE, TTROLL, WAVTBL, WAVE_TYPE, waveInfo, platformsForWave, PHRASES, BAITER };
+const DATA = { WORLD, PHYS, SCORE, ENEMY, PLATFORMS, SPAWN_PADS, P1_SPAWN, P2_SPAWN, mountXOffset, TBRIDGE, TTROLL, WAVTBL, WAVE_TYPE, waveInfo, platformsForWave, PHRASES, BAITER };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = DATA;
 if (typeof window !== 'undefined') window.JOUST_DATA = DATA;

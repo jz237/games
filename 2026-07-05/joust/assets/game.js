@@ -2,9 +2,9 @@
 // Engine (engine.js) is headless & authoritative; this owns everything user-facing.
 'use strict';
 
-const VERSION = 'v' + (window.__V || '1.5.0');   // single source: window.__V (index.html)
-const ASSET_Q = '?v=' + (window.__V || '1.5.0');
-const STEP_MS = 1000 / 60;
+const VERSION = 'v' + (window.__V || '2.0.0');   // single source: window.__V (index.html)
+const ASSET_Q = '?v=' + (window.__V || '2.0.0');
+const STEP_MS = 1000 / (window.JOUST_DATA.PHYS.TICK_HZ || 60.096154);
 const LB_URL = 'https://game-scores.jez237.workers.dev/scores/joust';
 const DATA = window.JOUST_DATA;
 const { JoustEngine } = window.JOUST_ENGINE;
@@ -18,15 +18,29 @@ const renderer = new Renderer(canvas);
 const audio = new AudioSys();
 
 // ─── save / options ───
-const SAVE_KEY = 'joust_save_v1';
+const SAVE_KEY = 'joust_save_v2';
 const defaultKeys = () => ({
   p1: { left: 'ArrowLeft', right: 'ArrowRight', flap: 'ArrowUp' },
   p2: { left: 'KeyA', right: 'KeyD', flap: 'KeyW' },
 });
 let save = { hi: 0, scores: [], maxWave: 1, unlockAll: false,
-  opts: { sfx: 0.7, mus: 0.5, crt: false, difficulty: 'normal', lives: 3, keys: defaultKeys() } };
-try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.opts) { save = Object.assign(save, s); if (!save.opts.keys) save.opts.keys = defaultKeys(); } } catch (e) {}
+  opts: { sfx: 0.7, mus: 0.5, crt: false, difficulty: 'normal', lives: 5, keys: defaultKeys() } };
+let migratedSave = false;
+try {
+  const currentRaw = localStorage.getItem(SAVE_KEY);
+  const legacyRaw = localStorage.getItem('joust_save_v1');
+  const raw = currentRaw || legacyRaw;
+  const s = JSON.parse(raw);
+  if (s && s.opts) {
+    save = Object.assign(save, s, { opts: Object.assign({}, save.opts, s.opts) });
+    if (!save.opts.keys) save.opts.keys = defaultKeys();
+    migratedSave = !currentRaw && !!legacyRaw;
+    // v1's three-mount value was the old default; adopt Rev. 4's authentic five on upgrade.
+    if (migratedSave && save.opts.lives === 3) save.opts.lives = 5;
+  }
+} catch (e) {}
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
+if (migratedSave) persist();
 audio.setSfx(save.opts.sfx); audio.setMus(save.opts.mus); renderer.crt = save.opts.crt;
 
 // ─── state ───
@@ -55,9 +69,15 @@ window.addEventListener('keydown', e => {
   if (rebindTarget) { if (e.code === 'Escape') { rebindTarget = null; flash('CANCELLED'); } else doRebind(e.code); e.preventDefault(); return; }
   if (!e.repeat) {
     const p = pi_for(e.code);
-    if (p >= 0 && (state === 'playing')) flapQueue[p] = true;
-    // Space is a P1 flap in 1-player mode (edge-triggered impulse, not just un-freeze)
-    if (e.code === 'Space' && mode === '1p' && state === 'playing') flapQueue[0] = true;
+    if (p >= 0 && (state === 'playing' || state === 'intro')) {
+      flapQueue[p] = true;
+      if (state === 'intro') introTimer = 0;
+    }
+    // Space is a P1 flap in 1-player mode, including the stroke that dismisses the wave card.
+    if (e.code === 'Space' && mode === '1p' && (state === 'playing' || state === 'intro')) {
+      flapQueue[0] = true;
+      if (state === 'intro') introTimer = 0;
+    }
   }
   keys[e.code] = true;
   handleKeyUI(e);
@@ -68,7 +88,7 @@ window.addEventListener('keydown', e => {
       e.code === kk.p2.left || e.code === kk.p2.right || e.code === kk.p2.flap) e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'Escape') escDownAt = 0; });
-window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; escDownAt = 0; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; escDownAt = 0; touch.left = touch.right = touch.flapHeld = false; });
 // auto-pause + mute when the tab is hidden (prompt requirement)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
@@ -108,7 +128,7 @@ function readInputs() {
     let left = keys[kk.left], right = keys[kk.right], held = keys[kk.flap];
     if (i === 0) { left = left || keys['KeyA'] && mode === '1p'; right = right || keys['KeyD'] && mode === '1p'; if (mode === '1p') held = held || keys['Space']; }
     // touch + gamepad (P1)
-    if (touch.active && i === 0) { left = left || touch.left; right = right || touch.right; }
+    if (touch.active && i === 0) { left = left || touch.left; right = right || touch.right; held = held || touch.flapHeld; }
     if (pad.on && i === 0) { left = left || pad.left; right = right || pad.right; held = held || pad.flapHeld; }
     const flap = flapQueue[i]; flapQueue[i] = false;
     out.push({ left: !!left, right: !!right, flap: !!flap, flapHeld: !!held });
@@ -117,7 +137,7 @@ function readInputs() {
 }
 
 // ─── touch controls ───
-const touch = { active: false, device: false, left: false, right: false };
+const touch = { active: false, device: false, left: false, right: false, flapHeld: false };
 function setupTouch() {
   const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
   if (!isTouch) return;
@@ -135,7 +155,15 @@ function setupTouch() {
   bind('tL', () => touch.left = true, () => touch.left = false);
   bind('tR', () => touch.right = true, () => touch.right = false);
   const f = document.getElementById('tF');
-  f.addEventListener('pointerdown', e => { e.preventDefault(); touch.active = true; audio.init(); if (state === 'title') startFromTitle(); else if (state === 'playing') flapQueue[0] = true; else advanceScreen(); });
+  f.addEventListener('pointerdown', e => {
+    e.preventDefault(); touch.active = true; touch.flapHeld = true; audio.init();
+    if (state === 'title') startFromTitle();
+    else if (state === 'intro') { introTimer = 0; flapQueue[0] = true; }
+    else if (state === 'playing') flapQueue[0] = true;
+    else advanceScreen();
+  });
+  const flapUp = e => { e.preventDefault(); touch.flapHeld = false; };
+  f.addEventListener('pointerup', flapUp); f.addEventListener('pointerleave', flapUp); f.addEventListener('pointercancel', flapUp);
   // show only in gameplay
   window._touchbar = bar;
 }
@@ -144,7 +172,7 @@ function updateTouchVis() { if (window._touchbar) window._touchbar.style.display
 function evToCanvas(e) { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) }; }
 
 // ─── gamepad ─── (stick/d-pad = move, A/B/RT = flap, Start/Y = confirm/pause, d-pad up/down = menu)
-const pad = { on: false, left: false, right: false, flapHeld: false, _flap: false, _up: false, _down: false, _ok: false, _esc: false };
+const pad = { on: false, left: false, right: false, flapHeld: false, _flap: false, _up: false, _down: false, _ok: false, _esc: false, _pause: false };
 window.addEventListener('gamepadconnected', () => { pad.on = true; });
 function pollGamepad() {
   if (!navigator.getGamepads) return;
@@ -156,15 +184,21 @@ function pollGamepad() {
   pad.flapHeld = B(0) || B(1) || B(7) || B(12);           // A/B/RT/d-pad-up all flap
   const edge = (now, key) => { const was = pad['_' + key]; pad['_' + key] = now; return now && !was; };
   const flapNow = pad.flapHeld;
-  if (edge(flapNow, 'flap') && state === 'playing') flapQueue[0] = true;
+  if (edge(flapNow, 'flap') && (state === 'playing' || state === 'intro')) {
+    flapQueue[0] = true; if (state === 'intro') introTimer = 0;
+  }
   // menu navigation
   const upNow = ay < -0.5 || B(12), downNow = ay > 0.5 || B(13), okNow = B(0) || B(9), escNow = B(1) || B(8) || B(3);
-  const up = edge(upNow, 'up'), down = edge(downNow, 'down'), ok = edge(okNow, 'ok'), esc = edge(escNow, 'esc');
+  const pauseNow = B(9), up = edge(upNow, 'up'), down = edge(downNow, 'down'), ok = edge(okNow, 'ok'), esc = edge(escNow, 'esc'), pauseEdge = edge(pauseNow, 'pause');
   if (state !== 'playing') {
     if (up) handleKeyUI({ code: 'ArrowUp' }); if (down) handleKeyUI({ code: 'ArrowDown' });
     if (pad.left && !pad._padLeftWas) handleKeyUI({ code: 'ArrowLeft' }); if (pad.right && !pad._padRightWas) handleKeyUI({ code: 'ArrowRight' });
     if (ok) { audio.init(); handleKeyUI({ code: 'Enter' }); } if (esc) handleKeyUI({ code: 'Escape' });
-  } else if (esc && !escDownAt) { escDownAt = performance.now(); }
+  } else {
+    if (pauseEdge) paused = !paused;
+    if (esc && !escDownAt) escDownAt = performance.now();
+    if (!escNow) escDownAt = 0;
+  }
   pad._padLeftWas = pad.left; pad._padRightWas = pad.right;
 }
 
@@ -187,13 +221,13 @@ function startRun(wv) {
   gotoIntro();
 }
 function gotoIntro() {
-  state = 'intro'; introTimer = 150;
+  state = 'intro'; introTimer = 210;
   bannerLines = bannerForWave(engine.wave, engine.waveType);
   audio.play('start');
 }
 function bannerForWave(wv, type) {
   const lines = [];
-  if (wv === 1) lines.push(PHRASES.prepare);
+  if (wv === 1) lines.push('WAVE 1', PHRASES.prepare, 'BUZZARD BAIT!');
   else lines.push('WAVE ' + wv);
   if (type === 'survival') lines.push(mode === '2p' ? PHRASES.team : PHRASES.survival, mode === '2p' ? PHRASES.teamCoop : PHRASES.survivalGet);
   else if (type === 'gladiator') lines.push(PHRASES.gladiator, mode === '2p' ? PHRASES.bounty : PHRASES.prepare);
@@ -260,7 +294,8 @@ function frame(now) {
   let dt = now - lastT; lastT = now; if (dt > 200) dt = 200;
   pollGamepad();
   renderer.resize();
-  renderer.updateFx();
+  const frameUnits = Math.min(4, dt / STEP_MS);
+  renderer.updateFx(frameUnits);
 
   if (state === 'playing' && !paused) {
     acc += dt;
@@ -276,9 +311,9 @@ function frame(now) {
   } else if (state === 'title' || state === 'attract') {
     acc += dt; while (acc >= STEP_MS) { acc -= STEP_MS; stepAttract(); }
   } else if (state === 'intro') {
-    introTimer--; if (introTimer <= 0) state = 'playing';
+    introTimer -= frameUnits; if (introTimer <= 0) state = 'playing';
   } else if (state === 'clear') {
-    clearTimer--; if (clearTimer <= 0) advanceAfterClear();
+    clearTimer -= frameUnits; if (clearTimer <= 0) advanceAfterClear();
   }
 
   draw(now);
@@ -333,6 +368,35 @@ function txt(s, x, y, size, col, align) {
   ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillText(s, x + 1.5, y + 1.5);
   ctx.fillStyle = col || '#fff'; ctx.fillText(s, x, y);
 }
+function ntxt(s, x, y, size, col, align) {
+  const font = window.JOUST_FONT;
+  if (!font) { txt(s, renderer.sx(x), renderer.sy(y), Math.max(8, Math.round(size * renderer.scaleY)), col, align); return; }
+  s = String(s).toUpperCase();
+  const unit = Math.max(0.5, size / 7);
+  const glyphs = [...s].map(ch => font[ch] || font['?']);
+  const total = Math.max(0, glyphs.reduce((n, g) => n + (g.w + 1) * unit, 0) - unit);
+  let left = x;
+  if ((align || 'center') === 'center') left -= total / 2;
+  else if (align === 'right') left -= total;
+  ctx.fillStyle = col || '#fff';
+  let pen = left;
+  for (const g of glyphs) {
+    const top = y - g.h * unit / 2;
+    for (let gy = 0; gy < g.h; gy++) for (let gx = 0; gx < g.w; gx++) {
+      if (g.rows[gy][gx] !== '1') continue;
+      const x0 = Math.round(renderer.sx(pen + gx * unit));
+      const x1 = Math.round(renderer.sx(pen + (gx + 1) * unit));
+      const y0 = Math.round(renderer.sy(top + gy * unit));
+      const y1 = Math.round(renderer.sy(top + (gy + 1) * unit));
+      ctx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
+    }
+    pen += (g.w + 1) * unit;
+  }
+}
+function shadeView(alpha) {
+  ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+  ctx.fillRect(renderer.ox, renderer.oy, WORLD.VIEW_W * renderer.scaleX, WORLD.VIEW_H * renderer.scaleY);
+}
 const CX = () => canvas.width / 2;
 
 function draw(now) {
@@ -343,7 +407,7 @@ function draw(now) {
   else if (state === 'scores') { drawScreenBg(); drawScores(); }
   else if (state === 'hsentry') { drawScreenBg(); drawHsEntry(); }
   else if (state === 'intro') { renderer.render(engine.snapshot()); drawHUD(); drawBanner(); }
-  else if (state === 'playing') { renderer.render(engine.snapshot()); renderer.drawFloats(txt); drawHUD(); drawEscHold(now); if (!engine.started) drawStartPrompt(now); if (paused) drawPause(); }
+  else if (state === 'playing') { renderer.render(engine.snapshot()); renderer.drawFloats(txt); drawHUD(); drawEscHold(now); if (!engine.started || engine.players.some(p => p.safe)) drawStartPrompt(now); if (paused) drawPause(); }
   else if (state === 'clear') { renderer.render(engine.snapshot()); drawHUD(); drawClear(); }
   else if (state === 'gameover') { renderer.render(engine ? engine.snapshot() : null); drawGameOver(); }
   // flash
@@ -355,49 +419,67 @@ function drawScreenBg() {
 }
 
 function drawTitle(now) {
-  ctx.fillStyle = 'rgba(2,3,12,0.55)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  const w = canvas.width, s = canvas.height;
-  txt('JOUST', w / 2, s * 0.2, Math.round(s / 6), '#ffd23a');
-  txt('KNIGHTS ON FLYING BUZZARDS', w / 2, s * 0.31, Math.round(s / 34), '#7fd4ff');
+  shadeView(1);
+  drawTitleBorder(now);
+  if (renderer.get('TITLE_LOGO')) {
+    ctx.save(); ctx.beginPath();
+    ctx.rect(renderer.ox, renderer.oy, WORLD.VIEW_W * renderer.scaleX, WORLD.VIEW_H * renderer.scaleY); ctx.clip();
+    renderer.blitWorld('TITLE_LOGO', 8, 36); ctx.restore();
+  }
+  else {
+    ntxt('JOUST', 149, 67, 52, '#f82400');
+    ntxt('JOUST', 146, 64, 52, '#ffff00');
+  }
+  ntxt('PRESENTED BY WILLIAMS ELECTRONICS INC.', 146, 126, 5, '#00b6ff');
   const items = ['1 PLAYER', '2 PLAYERS', 'HOW TO PLAY', 'OPTIONS', 'WAVE SELECT', 'HIGH SCORES'];
-  const y0 = s * 0.44, dy = s * 0.075;
   for (let i = 0; i < items.length; i++) {
     const sel = i === menuIdx;
-    txt((sel ? '▶ ' : '') + items[i] + (sel ? ' ◀' : ''), w / 2, y0 + i * dy, Math.round(s / 22), sel ? '#ffe14d' : '#c9c9d6');
+    const x = i % 2 ? 216 : 76, y = 146 + Math.floor(i / 2) * 17;
+    ntxt((sel ? '> ' : '') + items[i] + (sel ? ' <' : ''), x, y, 6, sel ? '#ffff00' : '#ffffff');
   }
-  txt('HI ' + save.hi, w / 2, s * 0.9, Math.round(s / 30), '#39c06a');
-  if (Math.floor(now / 600) % 2 === 0) txt('© WILLIAMS 1982 — FAITHFUL BROWSER REMAKE', w / 2, s * 0.96, Math.round(s / 40), '#6f6f82');
-  txt(VERSION, w - Math.round(s / 40), s - Math.round(s / 40), Math.round(s / 46), '#5a5a70', 'right');
+  ntxt('EXTRA MOUNT EVERY 20,000 POINTS', 146, 200, 5, '#ffff00');
+  ntxt('HIGH SCORE  ' + save.hi, 146, 211, 5, '#00db55');
+  if (Math.floor(now / 600) % 2 === 0) ntxt('(C) 1982 WILLIAMS ELECTRONICS INC.', 146, 222, 5, '#ffffff');
+  ntxt(VERSION, 285, 228, 4, '#9292aa', 'right');
+}
+
+function drawTitleBorder(now) {
+  const phase = ((now / 120) | 0) & 7;
+  ctx.save(); ctx.beginPath();
+  ctx.rect(renderer.ox, renderer.oy, WORLD.VIEW_W * renderer.scaleX, WORLD.VIEW_H * renderer.scaleY); ctx.clip();
+  ctx.fillStyle = '#6d1000';
+  ctx.fillRect(renderer.sx(1), renderer.sy(1), 290 * renderer.scaleX, 7 * renderer.scaleY);
+  ctx.fillRect(renderer.sx(1), renderer.sy(232), 290 * renderer.scaleX, 7 * renderer.scaleY);
+  ctx.fillRect(renderer.sx(1), renderer.sy(1), 7 * renderer.scaleX, 238 * renderer.scaleY);
+  ctx.fillRect(renderer.sx(284), renderer.sy(1), 7 * renderer.scaleX, 238 * renderer.scaleY);
+  ctx.fillStyle = '#f82400';
+  for (let y = 1; y < 8; y += 2) for (let x = -8; x < 292; x += 8) {
+    ctx.fillRect(renderer.sx(x + ((y + phase) & 7)), renderer.sy(y), 4 * renderer.scaleX, 2 * renderer.scaleY);
+    ctx.fillRect(renderer.sx(x + ((7 - y + phase) & 7)), renderer.sy(232 + y - 1), 4 * renderer.scaleX, 2 * renderer.scaleY);
+  }
+  for (let x = 1; x < 8; x += 2) for (let y = -8; y < 240; y += 8) {
+    ctx.fillRect(renderer.sx(x), renderer.sy(y + ((x + phase) & 7)), 2 * renderer.scaleX, 4 * renderer.scaleY);
+    ctx.fillRect(renderer.sx(284 + x - 1), renderer.sy(y + ((7 - x + phase) & 7)), 2 * renderer.scaleX, 4 * renderer.scaleY);
+  }
+  ctx.restore();
 }
 
 function drawHUD() {
-  const sc = renderer.scale;
   const P = engine.players;
-  txt('1UP', renderer.sx(24), renderer.sy(8), Math.round(6 * sc), '#ffd23a', 'center');
-  txt('' + P[0].score, renderer.sx(24), renderer.sy(18), Math.round(7 * sc), '#fff', 'center');
+  ntxt(String(P[0].score).padStart(6, '0'), 68, 222, 6, '#ffff00', 'left');
   if (mode === '2p') {
-    txt('2UP', renderer.sx(WORLD.VIEW_W - 24), renderer.sy(8), Math.round(6 * sc), '#7fd4ff', 'center');
-    txt('' + P[1].score, renderer.sx(WORLD.VIEW_W - 24), renderer.sy(18), Math.round(7 * sc), '#fff', 'center');
+    ntxt(String(P[1].score).padStart(6, '0'), 214, 222, 6, '#00b6ff', 'right');
   }
-  txt('WAVE ' + engine.wave, renderer.sx(WORLD.VIEW_W / 2), renderer.sy(9), Math.round(6 * sc), '#c9c9d6');
-  // egg-chain badge (next egg value grows with the streak)
-  if (P[0].eggStreak >= 2) { const col = ['#ffe14d', '#ffd23a', '#ff8a00', '#ff4d4d'][Math.min(3, P[0].eggStreak - 1)]; txt('CHAIN x' + P[0].eggStreak, renderer.sx(24), renderer.sy(34), Math.round(6 * sc), col, 'center'); }
   drawBaseLives();
-  // next special wave letter
-  const nxt = nextSpecial(engine.wave);
-  if (nxt) txt(nxt, renderer.sx(WORLD.VIEW_W - 8), renderer.sy(WORLD.VIEW_H - 8), Math.round(8 * sc), '#ff8a00', 'right');
 }
 // remaining mounts shown in a recessed band in the base centre (like the arcade)
 function drawBaseLives() {
-  const sc = renderer.scale, P = engine.players, iconH = 8 * sc, by = 222, mid = WORLD.VIEW_W / 2;
-  const bx1 = renderer.sx(mid - 66), bx2 = renderer.sx(mid + 66);
-  ctx.fillStyle = 'rgba(0,0,0,0.62)'; ctx.fillRect(bx1, renderer.sy(213), bx2 - bx1, 10 * sc);
+  const sc = renderer.scale, P = engine.players, iconH = 7 * sc, by = 233;
+  const p1n = Math.max(0, Math.min(P[0].lives - 1, 5));
+  for (let i = 0; i < p1n; i++) renderer.drawSpriteIcon('ORUN4R', renderer.sx(96 + i * 8), renderer.sy(by), iconH);
   if (mode === '2p') {
-    for (let i = 0; i < Math.min(P[0].lives, 5); i++) renderer.drawSpriteIcon('ORUN4R', renderer.sx(mid - 12 - i * 11), renderer.sy(by), iconH);
-    for (let i = 0; i < Math.min(P[1].lives, 5); i++) renderer.drawSpriteIcon('SRUN4R', renderer.sx(mid + 12 + i * 11), renderer.sy(by), iconH);
-  } else {
-    const n = Math.min(P[0].lives, 5), tot = (n - 1) * 11;
-    for (let i = 0; i < n; i++) renderer.drawSpriteIcon('ORUN4R', renderer.sx(mid - tot / 2 + i * 11), renderer.sy(by), iconH);
+    const p2n = Math.max(0, Math.min(P[1].lives - 1, 5));
+    for (let i = 0; i < p2n; i++) renderer.drawSpriteIcon('SRUN4R', renderer.sx(194 - i * 8), renderer.sy(by), iconH);
   }
 }
 function nextSpecial(wv) {
@@ -414,20 +496,16 @@ function drawLifeIcon(x, y, sc, stork) {
 }
 
 function drawBanner() {
-  const w = canvas.width, s = canvas.height;
-  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, s * 0.33, w, s * 0.34);
-  for (let i = 0; i < bannerLines.length; i++) txt(bannerLines[i], w / 2, s * 0.42 + i * (s * 0.08), Math.round(s / (i === 0 ? 14 : 24)), i === 0 ? '#ffd23a' : '#7fd4ff');
+  const startY = 91 - Math.max(0, bannerLines.length - 2) * 6;
+  for (let i = 0; i < bannerLines.length; i++) ntxt(bannerLines[i], 146, startY + i * 15, i === 0 ? 9 : 7, i === 0 ? '#ffff00' : '#ffffff');
 }
 function drawStartPrompt(now) {
   if (Math.floor(now / 400) % 2) return;
-  const w = canvas.width, s = canvas.height;
-  txt(touch.active ? 'TAP FLAP TO START' : 'FLAP TO START', w / 2, s * 0.72, Math.round(s / 22), '#aaffaa');
+  ntxt(touch.active ? 'TAP FLAP TO START' : 'FLAP TO START', 146, 174, 7, '#ffff00');
 }
 function drawClear() {
-  const w = canvas.width, s = canvas.height;
-  txt(PHRASES.nice, w / 2, s * 0.4, Math.round(s / 14), '#ffd23a');
-  const P = engine.players;
-  txt('WAVE ' + engine.wave + ' CLEARED', w / 2, s * 0.52, Math.round(s / 26), '#7fd4ff');
+  ntxt(PHRASES.nice, 146, 94, 10, '#ffff00');
+  ntxt('WAVE ' + engine.wave + ' CLEARED', 146, 114, 7, '#00b6ff');
 }
 function drawPause() {
   const w = canvas.width, s = canvas.height;
@@ -451,9 +529,9 @@ function drawHelp() {
   const w = canvas.width, s = canvas.height;
   txt('HOW TO PLAY', w / 2, s * 0.08, Math.round(s / 16), '#ffd23a');
   const lines = [
-    'You ride a flying buzzard. TAP FLAP repeatedly to climb;',
-    'stop flapping to glide down. Momentum carries you — flap the',
-    'opposite way to turn. The screen wraps left↔right.',
+    'You ride a flying mount. RELEASE and TAP FLAP repeatedly to climb;',
+    'holding gives only one stroke. Air momentum persists — each flap',
+    'with the stick held changes speed. The screen wraps left↔right.',
     '',
     'JOUST: when you collide, the HIGHER LANCE wins and unseats',
     'the other. Equal height = you both bounce. Ride ABOVE your foe.',
@@ -479,7 +557,7 @@ function OPT_ROWS() {
     ['MUSIC VOLUME', () => Math.round(save.opts.mus * 100) + '%', d => { save.opts.mus = Math.max(0, Math.min(1, save.opts.mus + d * 0.1)); audio.setMus(save.opts.mus); }],
     ['CRT FILTER', () => save.opts.crt ? 'ON' : 'OFF', () => { save.opts.crt = !save.opts.crt; renderer.crt = save.opts.crt; }],
     ['DIFFICULTY', () => save.opts.difficulty.toUpperCase(), d => { const o = ['easy', 'normal', 'hard']; let i = (o.indexOf(save.opts.difficulty) + (d > 0 ? 1 : o.length - 1)) % o.length; save.opts.difficulty = o[i]; }],
-    ['STARTING MEN', () => '' + save.opts.lives, d => { save.opts.lives = Math.max(3, Math.min(5, save.opts.lives + d)); }],
+    ['STARTING MOUNTS', () => '' + save.opts.lives, d => { save.opts.lives = Math.max(1, Math.min(9, save.opts.lives + d)); }],
     ['REMAP P1 FLAP', () => keyName(save.opts.keys.p1.flap), () => rebindTarget = { player: 'p1', action: 'flap' }],
     ['REMAP P2 FLAP', () => keyName(save.opts.keys.p2.flap), () => rebindTarget = { player: 'p2', action: 'flap' }],
     ['ALL WAVES (PASS:1234)', () => save.unlockAll ? 'UNLOCKED' : 'LOCKED', () => { promptUnlock(); }],
@@ -624,7 +702,10 @@ canvas.addEventListener('pointerdown', e => {
   audio.init(); audio.resume();
   const c = evToCanvas(e), s = canvas.height, w = canvas.width;
   if (state === 'title') {
-    const y0 = s * 0.44, dy = s * 0.075, idx = Math.round((c.y - y0) / dy);
+    const nativeX = (c.x - renderer.ox) / renderer.scaleX;
+    const nativeY = (c.y - renderer.oy) / renderer.scaleY;
+    const row = Math.round((nativeY - 146) / 17);
+    const idx = row * 2 + (nativeX >= 146 ? 1 : 0);
     if (idx >= 0 && idx < 6) { menuIdx = idx; menuAction(idx); }
   } else if (state === 'help' || state === 'scores' || state === 'gameover') { backToTitle(); }
   else if (state === 'intro') { introTimer = 0; }

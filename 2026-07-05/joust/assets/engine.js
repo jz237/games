@@ -5,7 +5,8 @@
 (function () {
 
 const DATA = (typeof require !== 'undefined') ? require('./data.js') : window.JOUST_DATA;
-const { WORLD, PHYS, SCORE, ENEMY, SPAWN_PADS, P1_SPAWN, P2_SPAWN, waveInfo, platformsForWave, BAITER } = DATA;
+const SPRITES = (typeof require !== 'undefined') ? require('./sprites.js') : window.JOUST_SPRITES;
+const { WORLD, PHYS, SCORE, ENEMY, SPAWN_PADS, P1_SPAWN, P2_SPAWN, mountXOffset, waveInfo, platformsForWave, BAITER } = DATA;
 
 // ─── deterministic RNG (mulberry32) ───
 function mulberry32(a) {
@@ -21,7 +22,69 @@ function mulberry32(a) {
 const BODY_W = 16, BODY_H = 19;
 const RIDER_LANCE = 15;   // lance/rider-top offset above feet (for joust height compare)
 const PTE_LANCE = 140;    // pterodactyl's artificially high lance
-const MAX_ONSCREEN = 5;   // simultaneous enemies from the pool
+
+function flySpeed(vxi) {
+  const sign = Math.sign(vxi || 0);
+  return sign * (PHYS.FLYX[Math.min(8, Math.abs(vxi || 0))] || 0);
+}
+
+const SPRITE_MASKS = new Map();
+function spriteMask(name) {
+  if (SPRITE_MASKS.has(name)) return SPRITE_MASKS.get(name);
+  const s = SPRITES && SPRITES[name];
+  if (!s) return null;
+  let rgba;
+  if (typeof Buffer !== 'undefined') rgba = Buffer.from(s.d, 'base64');
+  else { const bin = atob(s.d); rgba = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) rgba[i] = bin.charCodeAt(i); }
+  const alpha = new Uint8Array(s.w * s.h);
+  for (let i = 0; i < alpha.length; i++) alpha[i] = rgba[i * 4 + 3] ? 1 : 0;
+  const out = { w: s.w, h: s.h, alpha }; SPRITE_MASKS.set(name, out); return out;
+}
+
+function birdParts(b, frame) {
+  const f = b.face > 0 ? 'R' : 'L';
+  let prefix, rider;
+  if (b.kind === 'player') { prefix = b.pi === 1 ? 'S' : 'O'; rider = 'PLY' + (b.pi + 1) + f; }
+  else { prefix = 'B'; rider = 'PLY' + (b.type === 'bounder' ? 3 : b.type === 'hunter' ? 4 : 5) + f; }
+  let mount;
+  const wingsDown = b.wingDown > 0 || !!b.flapHeld;
+  if (!b.onGround) mount = prefix + (wingsDown ? 'FLY1' : 'FLY3') + f;
+  else if (b.skid > 0) mount = prefix + 'RUNS' + f;
+  else if (b.runTier > 0) mount = prefix + 'RUN' + (1 + ((frame >> 2) % 4)) + f;
+  else mount = prefix + 'RUN4' + f;
+  let mountTop;
+  if (prefix === 'B') mountTop = b.onGround ? (b.skid > 0 ? -12 : -13) : (wingsDown ? -14 : -19);
+  else mountTop = b.onGround && b.skid > 0 ? (prefix === 'S' ? -18 : -17) : -19;
+  const specs = [
+    { name: rider, dx: b.face > 0 ? 4 : 0, top: b.skid > 0 ? -17 : -19 },
+    { name: mount, dx: mountXOffset(prefix, mount, b.face), top: mountTop },
+  ].map(p => ({ ...p, mask: spriteMask(p.name) })).filter(p => p.mask);
+  const left = Math.min(...specs.map(p => p.dx));
+  const right = Math.max(...specs.map(p => p.dx + p.mask.w));
+  const origin = Math.round(b.x - (left + right) / 2);
+  return specs.map(p => ({ name: p.name, mask: p.mask, x: origin + p.dx, y: Math.round(b.y + p.top) }));
+}
+
+function pixelPartsOverlap(aParts, bParts) {
+  for (const a of aParts) for (const b of bParts) for (const wrap of [-WORLD.WRAP_SPAN, 0, WORLD.WRAP_SPAN]) {
+    const bx = b.x + wrap;
+    const x0 = Math.max(a.x, bx), y0 = Math.max(a.y, b.y);
+    const x1 = Math.min(a.x + a.mask.w, bx + b.mask.w), y1 = Math.min(a.y + a.mask.h, b.y + b.mask.h);
+    if (x0 >= x1 || y0 >= y1) continue;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const ai = (y - a.y) * a.mask.w + (x - a.x);
+      const bi = (y - b.y) * b.mask.w + (x - bx);
+      if (a.mask.alpha[ai] && b.mask.alpha[bi]) return true;
+    }
+  }
+  return false;
+}
+
+function birdPlatformOverlap(b, p, frame) {
+  if (!p.sprite) return false;
+  const mask = spriteMask(p.sprite); if (!mask) return false;
+  return pixelPartsOverlap(birdParts(b, frame), [{ mask, x: Math.round(p.drawX), y: Math.round(p.y) }]);
+}
 
 // wrap helpers
 function wrapX(x) {
@@ -44,7 +107,7 @@ class JoustEngine {
   constructor(opts = {}) {
     this.mode = opts.mode || '1p';           // '1p' | '2p'
     this.numPlayers = this.mode === '2p' ? 2 : 1;
-    this.startLives = opts.lives != null ? opts.lives : 3;
+    this.startLives = opts.lives != null ? opts.lives : 5;
     this.rng = mulberry32(opts.seed != null ? opts.seed : 0x10457);
     this.extraManEvery = opts.extraManEvery || SCORE.EXTRA_MAN_EVERY;
     this.difficulty = opts.difficulty || 'normal'; // 'easy'|'normal'|'hard' — widens ptero window etc.
@@ -54,10 +117,10 @@ class JoustEngine {
     for (let i = 0; i < this.numPlayers; i++) {
       this.players.push({
         kind: 'player', pi: i, x: 0, y: 0, vx: 0, vy: 0, vxi: 0, face: 1,
-        wingDown: 0, ptimup: 0, onGround: true, alive: false, materializing: 0,
+        wingDown: 0, flapHeld: false, ptimup: 0, onGround: true, alive: false, materializing: 0,
         lives: this.startLives, score: 0, nextExtra: this.extraManEvery,
         eggStreak: 0, deathsThisWave: 0, out: false, skid: 0, runTier: 0, runStep: 0,
-        grabbed: null, gladKilled: false, id: _id++,
+        grabbed: null, gladKilled: false, safe: false, safeTimer: 0, id: _id++,
       });
     }
     this.enemies = [];
@@ -70,6 +133,8 @@ class JoustEngine {
     this.started = false;
     this.gameOver = false;
     this.freezeFrames = 0;      // hit-stop: pauses the sim for a few frames on a kill
+    this.inputBuffer = this.players.map(() => ({ flap: false }));
+    this.animFrame = 0;
     this.startWave(this.wave);
   }
 
@@ -93,16 +158,22 @@ class JoustEngine {
     this.started = !this.holdUntilInput;
     this.waveCleared = false;
     this.clearTimer = 0;
-    this.hatchBase = Math.max(180, 480 - n * 6); // frames to hatch, shortens with wave
+    const hatchSeconds = info.type === 'egg' ? Math.max(4.5, 11.2 - Math.max(0, n - 5) * 0.12)
+      : Math.max(5, 12.8 - Math.max(0, n - 1) * 0.12);
+    this.hatchBase = Math.round(hatchSeconds * PHYS.TICK_HZ / (this.mode === '2p' && info.type === 'egg' ? 2 : 1));
+    this.spawnCooldown = 0;
 
     // build enemy pool
     this.pool = [];
-    for (let i = 0; i < info.bounders; i++) this.pool.push('bounder');
-    for (let i = 0; i < info.hunters; i++) this.pool.push('hunter');
-    for (let i = 0; i < info.shadowLords; i++) this.pool.push('shadow');
+    if (info.type !== 'egg') {
+      for (let i = 0; i < info.bounders; i++) this.pool.push('bounder');
+      for (let i = 0; i < info.hunters; i++) this.pool.push('hunter');
+      for (let i = 0; i < info.shadowLords; i++) this.pool.push('shadow');
+    }
     // scheduled pterodactyls (ptero waves): queue them
     this.pteroPool = info.type === 'ptero' ? info.pteros : 0;
     this.speedTier = info.speed;
+    this.enemyCap = Math.max(1, info.bounders + info.hunters + info.shadowLords);
 
     this.teamKilled = false; // reset per wave (voids team bonus if a player unseats a player)
     // reset per-wave player state; place players
@@ -115,28 +186,53 @@ class JoustEngine {
       const sp = p.pi === 0 ? P1_SPAWN : P2_SPAWN;
       this.placeBird(p, sp.x, sp.y, sp.face);
       p.alive = true; p.materializing = 0; p.onGround = true;
+      p.safe = this.holdUntilInput; p.safeTimer = 0;
     }
-    // initial enemy spawns
-    this.spawnFromPool();
+    if (info.type === 'egg') this.seedEggWave();
+    else this.spawnFromPool();
     this.emit('waveStart', { wave: n, wtype: info.type });
   }
 
   placeBird(b, x, y, face) {
     b.x = wrapX(x); b.y = y; b.vx = 0; b.vy = 0; b.vxi = 0; b.face = face || 1;
-    b.wingDown = 0; b.ptimup = 0; b.onGround = true; b.skid = 0; b.runTier = 0; b.runStep = 0;
+    b.wingDown = 0; b.flapHeld = false; b.ptimup = 0; b.onGround = true; b.skid = 0; b.runTier = 0; b.runStep = 0;
+  }
+
+  seedEggWave() {
+    const origin = this.info.shadowLords > 0 ? 'shadow' : this.info.hunters > 0 ? 'hunter' : 'bounder';
+    const spots = [
+      [12, 62], [270, 62], [94, 74], [124, 74], [156, 74], [210, 122],
+      [240, 122], [20, 131], [270, 131], [116, 156], [150, 156], [146, 204],
+    ];
+    for (let i = 0; i < spots.length; i++) {
+      const [x, y] = spots[i];
+      this.eggs.push({
+        kind: 'egg', x, y, vx: 0, vy: 0, landed: true, touched: true,
+        hatch: Math.max(90, this.hatchBase - (i < 2 ? Math.round(this.rng() * 150) : 0)),
+        state: 'egg', anim: 0, dead: false, origin, lineage: 0, id: _id++,
+      });
+    }
+  }
+
+  activeSpawnPads() {
+    const pads = SPAWN_PADS.filter(pad => this.platforms.some(p => Math.abs(p.y - pad.y) < 2 && this.xInPlat(pad.x, p)));
+    return pads.length ? pads : [{ x: 146, y: 204 }];
   }
 
   spawnFromPool() {
-    while (this.enemies.filter(e => e.alive).length < MAX_ONSCREEN && this.pool.length) {
+    if (this.spawnCooldown > 0) this.spawnCooldown--;
+    if (this.pool.length && this.spawnCooldown <= 0) {
       const type = this.pool.shift();
-      const pad = SPAWN_PADS[(this.rng() * SPAWN_PADS.length) | 0];
+      const pads = this.activeSpawnPads();
+      const pad = pads[(this.rng() * pads.length) | 0];
       const e = {
         kind: 'enemy', type, x: wrapX(pad.x), y: pad.y, vx: 0, vy: 0, vxi: 0,
         face: this.rng() < 0.5 ? 1 : -1, wingDown: 0, ptimup: 0, onGround: true,
         alive: true, materializing: 60, decision: 0, target: 0, mount: null,
-        skid: 0, runTier: 0, runStep: 0, grabbed: null, id: _id++,
+        skid: 0, runTier: 0, runStep: 0, grabbed: null, lineage: 0, id: _id++,
       };
       this.enemies.push(e);
+      this.spawnCooldown = 61;
       this.emit('spawn', { x: e.x, y: e.y, enemy: true });
     }
     // scheduled pterodactyls for ptero waves — release gradually
@@ -149,8 +245,8 @@ class JoustEngine {
     const fromLeft = this.rng() < 0.5;
     const p = {
       kind: 'ptero', ptKind: kind, x: fromLeft ? WORLD.WRAP_MIN : WORLD.WRAP_MAX - 1,
-      y: WORLD.CEIL + 20 + this.rng() * 80, vx: 0, vy: 0, face: fromLeft ? 1 : -1,
-      attack: 0, attackTimer: 60 + (this.rng() * 90 | 0), alive: true, id: _id++,
+      y: WORLD.CEIL + 20 + this.rng() * 80, vx: fromLeft ? 1.2 : -1.2, vy: 0, face: fromLeft ? 1 : -1,
+      attack: 0, phase: 'align', phaseTimer: 70, alive: true, id: _id++,
     };
     this.pteros.push(p);
     this.emit('ptero', { x: p.x, y: p.y });
@@ -161,6 +257,8 @@ class JoustEngine {
     this.events.length = 0;
     inputs = inputs || [];
     if (this.gameOver) return this.snapshot();
+    this.animFrame++;
+    for (let i = 0; i < this.players.length; i++) if ((inputs[i] || {}).flap) this.inputBuffer[i].flap = true;
     // hit-stop: pause the sim briefly so kills land with impact (render keeps animating)
     if (this.freezeFrames > 0) { this.freezeFrames--; return this.snapshot(); }
 
@@ -168,7 +266,7 @@ class JoustEngine {
       // hold physics until first input (no instant deaths)
       for (let i = 0; i < this.players.length; i++) {
         const inp = inputs[i] || {};
-        if (inp.left || inp.right || inp.flap || inp.flapHeld) { this.started = true; break; }
+        if (inp.left || inp.right || inp.flap || inp.flapHeld || this.inputBuffer[i].flap) { this.started = true; break; }
       }
       if (!this.started) return this.snapshot();
     }
@@ -179,7 +277,10 @@ class JoustEngine {
     for (let i = 0; i < this.players.length; i++) {
       const p = this.players[i];
       if (p.out) continue;
-      this.controlPlayer(p, inputs[i] || {});
+      const inp = Object.assign({}, inputs[i] || {});
+      inp.flap = !!(inp.flap || this.inputBuffer[i].flap);
+      this.inputBuffer[i].flap = false;
+      this.controlPlayer(p, inp);
     }
     // enemies AI
     for (const e of this.enemies) if (e.alive) this.controlEnemy(e);
@@ -214,32 +315,45 @@ class JoustEngine {
 
   // ─── player control ───
   controlPlayer(p, inp) {
-    if (p.materializing > 0) { p.materializing--; if (p.materializing === 0) this.emit('materialized', { x: p.x, y: p.y }); return; }
+    if (p.materializing > 0) {
+      if (inp.flap) this.inputBuffer[p.pi].flap = true;
+      p.materializing--; if (p.materializing === 0) this.emit('materialized', { x: p.x, y: p.y }); return;
+    }
     if (!p.alive) return;
+    if (p.safe) {
+      if (inp.left || inp.right || inp.flap || inp.flapHeld) p.safe = false;
+      else return;
+    }
     const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
     if (dir !== 0) p.face = dir;
-    p.flapT = (p.flapT || 0) - 1;
-    // flap on press, AND auto-repeat while the key is held (holding = steady climb, tapping = control)
+    p.flapHeld = !!inp.flapHeld;
     if (inp.flap) this.doFlap(p, dir);
-    else if (inp.flapHeld && !p.onGround && p.flapT <= 0) this.doFlap(p, dir); // hold = auto-flap (comfort)
-    if (p.onGround) this.groundMove(p, dir); else this.airMove(p, dir, PHYS.MAX_H);
+    if (p.onGround) this.groundMove(p, dir);
+    else this.airMove(p, dir, PHYS.MAX_H);
   }
 
   doFlap(b, dir) {
-    if (b.onGround) { b.onGround = false; b.y -= 1; }      // takeoff pop
-    b.vy += PHYS.FLAP_DV;                                   // punchy upward impulse
+    const wasGround = b.onGround;
+    if (wasGround) {
+      const av = Math.abs(b.vx || 0);
+      b.vxi = Math.sign(b.vx || b.face) * (av >= 1.5 ? 8 : av >= 0.75 ? 6 : av >= 0.375 ? 4 : av >= 0.125 ? 2 : 0);
+      b.onGround = false; b.y -= 1; b.vy = PHYS.TAKEOFF_VY;
+    } else {
+      const impulseUnits = Math.floor(Math.min(255, b.ptimup || 0) * 96 / 256) - 96;
+      b.vy += impulseUnits / 256;
+    }
+    // STFLY takeoff preserves the ground run; ADDFLP changes horizontal flight only in air.
+    if (!wasGround && dir) b.vxi = Math.max(-8, Math.min(8, (b.vxi || 0) + dir * 2));
+    b.vx = flySpeed(b.vxi);
     if (b.vy < -PHYS.MAX_RISE) b.vy = -PHYS.MAX_RISE;
-    b.wingDown = 6; b.flapT = PHYS.FLAP_REPEAT;
+    b.wingDown = PHYS.WING_DOWN_FRAMES; b.ptimup = 0;
     this.emit('flap', { x: b.x, y: b.y, player: b.kind === 'player' });
   }
 
-  // continuous horizontal accel with settling — tuned to the cabinet's feel (players & enemies).
-  // dir 1=right,-1=left; reversing brakes harder for responsive turns; releasing settles via drag.
+  // The stick turns the sprite immediately, but airborne velocity changes only inside doFlap().
   airMove(b, dir, maxH) {
-    if (dir !== 0) {
-      const a = (dir * (b.vx || 0) < 0) ? PHYS.AIR_ACCEL * 2.6 : PHYS.AIR_ACCEL;
-      b.vx = Math.max(-maxH, Math.min(maxH, (b.vx || 0) + dir * a));
-    } else b.vx = (b.vx || 0) * PHYS.AIR_DRAG;
+    if (dir) b.face = dir;
+    b.vx = Math.max(-maxH, Math.min(maxH, flySpeed(b.vxi)));
   }
 
   groundMove(b, dir) {
@@ -309,14 +423,26 @@ class JoustEngine {
   // ─── integrate one bird (players + enemies) ───
   integrate(b) {
     if (b.materializing > 0) return;
+    const prevX = b.x, prevY = b.y;
     if (b.onGround) {
       // walking off an edge? (keep horizontal momentum)
-      if (!this.platformUnder(b)) { b.onGround = false; b.vy = 0.2; }
+      if (!this.platformUnder(b)) {
+        const av = Math.abs(b.vx || 0);
+        b.vxi = Math.sign(b.vx || b.face) * (av >= 1.5 ? 8 : av >= 0.75 ? 6 : av >= 0.375 ? 4 : av >= 0.125 ? 2 : 0);
+        b.onGround = false; b.vy = 0.2;
+      }
       else { b.wingDown = Math.max(0, b.wingDown - 1); return; }
     }
-    // gravity (wings-up glide = heavier so idle sinks)
+    // Wings-up gravity is exactly double wings-down gravity in the Rev.4 source.
     if (b.grabbed) { b.vy += b.grabbed.pull; b.vx = 0; }   // lava troll pull; X frozen
-    else { b.vy += (b.wingDown > 0 ? PHYS.GRAV_DOWN : PHYS.GRAV_UP); if (b.wingDown > 0) b.wingDown--; }
+    else {
+      // PACCX keeps the down-wing picture visible, but released player controls immediately use
+      // FLIPS2's stronger gravity. Enemy AI has no physical button, so its stroke timer stands in.
+      const wingsDown = b.kind === 'player' ? !!b.flapHeld : b.wingDown > 0;
+      b.vy += wingsDown ? PHYS.GRAV_DOWN : PHYS.GRAV_UP;
+      if (b.wingDown > 0) b.wingDown--;
+      if (!wingsDown) b.ptimup = Math.min(255, (b.ptimup || 0) + 1);
+    }
     // clamp vertical
     if (b.vy > PHYS.MAX_FALL) b.vy = PHYS.MAX_FALL;
     if (b.vy < -PHYS.MAX_RISE) b.vy = -PHYS.MAX_RISE;
@@ -325,7 +451,7 @@ class JoustEngine {
     if (!b.grabbed) b.x = wrapX(b.x + (b.vx || 0));
 
     // ceiling
-    if (b.y < WORLD.CEIL) { b.y = WORLD.CEIL; if (b.vy < 0) b.vy = 0; }
+    if (b.y < WORLD.CEIL) { b.y = WORLD.CEIL; if (b.vy < 0) b.vy = -b.vy; }
     // landing on platforms (only when descending)
     if (b.vy >= 0 && !b.grabbed) {
       const plat = this.landingPlatform(b);
@@ -335,6 +461,20 @@ class JoustEngine {
         b.y = plat.y; b.vy = 0; b.onGround = true;
         b.vx = (b.vx || 0) * 0.6;   // keep some run momentum on landing
         b.wingDown = 0;
+        this.emit('thud', { x: b.x, y: b.y, player: b.kind === 'player' });
+      }
+    }
+    // The ROM follows broad platform bounds with bitmap collision. This preserves cliff sides,
+    // undersides, and the famous tight passage between the two right-hand ledges.
+    if (!b.onGround && !b.grabbed) {
+      const prevBird = Object.assign({}, b, { x: prevX, y: prevY });
+      const solid = this.platforms.find(p => birdPlatformOverlap(b, p, this.animFrame) && !birdPlatformOverlap(prevBird, p, this.animFrame));
+      if (solid) {
+        b.x = prevX; b.y = prevY;
+        if (b.vy < 0) b.vy = Math.abs(b.vy) * 0.5;
+        else {
+          b.vxi = -(b.vxi || 0); b.vx = flySpeed(b.vxi) * 0.5; b.face = -b.face;
+        }
         this.emit('thud', { x: b.x, y: b.y, player: b.kind === 'player' });
       }
     }
@@ -353,7 +493,7 @@ class JoustEngine {
         // handle wrap for edge platforms
         if (!this.xInPlat(b.x, p)) continue;
       }
-      if (prevY <= p.y + 2 && b.y >= p.y - 1 && b.y <= p.y + 8) return p;
+      if (prevY <= p.y + 2 && b.y >= p.y - 1) return p;
     }
     return null;
   }
@@ -379,10 +519,11 @@ class JoustEngine {
   }
 
   // ─── eggs ───
-  spawnEgg(x, y, vx, vy, origin) {
+  spawnEgg(x, y, vx, vy, origin, lineage) {
     this.eggs.push({
       kind: 'egg', x: wrapX(x), y, vx: vx || 0, vy: vy || 0, landed: false, touched: false,
-      hatch: this.hatchBase, state: 'egg', anim: 0, dead: false, origin: origin || 'bounder', id: _id++,
+      hatch: this.hatchBase, state: 'egg', anim: 0, dead: false, origin: origin || 'bounder',
+      lineage: lineage || 0, id: _id++,
     });
     this.emit('eggDrop', { x, y });
   }
@@ -409,10 +550,14 @@ class JoustEngine {
         }
       }
       if (egg.y >= WORLD.FLOOR) { if (this.overLava(egg.x)) { egg.dead = true; this.emit('eggBurn', { x: egg.x }); return; } egg.y = WORLD.FLOOR; egg.landed = true; egg.touched = true; egg.vy = 0; }
-      // hatch countdown once (starts immediately; shakes near the end)
-      egg.hatch--;
-      if (egg.hatch < 90) egg.state = 'shake';
-      if (egg.hatch <= 0 && egg.landed) { egg.state = 'hatching'; egg.anim = 0; this.emit('eggHatch', { x: egg.x, y: egg.y }); }
+      // The hatch clock starts only after the egg has settled on a ledge.
+      if (egg.landed && Math.abs(egg.vy) < 0.01) {
+        egg.hatch--;
+        if (egg.hatch < 90) egg.state = 'shake';
+        if (egg.hatch <= 0 && this.hatchingRiderCount() < this.enemyCap) {
+          egg.state = 'hatching'; egg.anim = 0; this.emit('eggHatch', { x: egg.x, y: egg.y });
+        }
+      }
     } else if (egg.state === 'hatching') {
       if (egg.anim > 70) { egg.state = 'walking'; egg.anim = 0; egg.walkFace = this.rng() < 0.5 ? 1 : -1; }
     } else if (egg.state === 'walking') {
@@ -428,7 +573,8 @@ class JoustEngine {
         this.enemies.push({
           kind: 'enemy', type, x: egg.x, y: egg.y, vx: 0, vy: 0, vxi: 0,
           face: egg.walkFace || 1, wingDown: 0, ptimup: 0, onGround: true, alive: true,
-          materializing: 0, decision: 0, mount: null, skid: 0, runTier: 0, runStep: 0, grabbed: null, id: _id++,
+          materializing: 0, decision: 0, mount: null, skid: 0, runTier: 0, runStep: 0,
+          grabbed: null, lineage: egg.lineage || 0, id: _id++,
         });
         egg.dead = true;
       }
@@ -449,30 +595,40 @@ class JoustEngine {
 
   // ─── pterodactyl ───
   updatePtero(p) {
-    // home on nearest player
+    // Rev.4-style horizontal passes: align to a player's legs, then commit instead of homing.
     let target = null, best = 1e9;
     for (const pl of this.players) {
       if (pl.out || !pl.alive) continue;
       const d = Math.abs(wrapDelta(p.x, pl.x));
       if (d < best) { best = d; target = pl; }
     }
-    if (target) {
-      const dx = wrapDelta(p.x, target.x);
-      p.face = dx >= 0 ? 1 : -1;
-      p.vx = Math.max(-1.2, Math.min(1.2, p.vx + p.face * 0.05));
-      const dy = target.y - p.y;
-      p.vy = Math.max(PHYS.PTE_UP, Math.min(PHYS.PTE_DN, p.vy + Math.sign(dy) * 0.04));
+    if (p.phase === 'align') {
+      p.vx = p.face * 1.2;
+      if (target) {
+        const desiredY = Math.max(WORLD.CEIL + 8, Math.min(WORLD.FLOOR - 16, target.y - 9));
+        p.vy = Math.max(PHYS.PTE_UP, Math.min(PHYS.PTE_DN, p.vy + Math.sign(desiredY - p.y) * 0.035));
+      }
+      if (--p.phaseTimer <= 0 || (target && Math.abs(wrapDelta(p.x, target.x)) < 52)) {
+        p.phase = 'charge'; p.phaseTimer = 85; p.attack = 34; p.vx = p.face * 2;
+      }
     } else {
-      p.vx = p.face * 1.0;
+      p.vx = p.face * 2; p.vy *= 0.97;
+      if (--p.phaseTimer <= 0) { p.phase = 'align'; p.phaseTimer = 70; p.attack = 0; }
     }
+    const oldX = p.x;
     p.x = wrapX(p.x + p.vx);
     p.y += p.vy;
     if (p.y < WORLD.CEIL) { p.y = WORLD.CEIL; p.vy = Math.abs(p.vy); }
     if (p.y > WORLD.FLOOR - 12) { p.y = WORLD.FLOOR - 12; p.vy = -Math.abs(p.vy); }
-    // attack (open beak) cycle
-    p.attackTimer--;
-    if (p.attackTimer <= 0) { p.attack = p.attack > 0 ? 0 : 40; p.attackTimer = p.attack > 0 ? 40 : 60 + (this.rng() * 90 | 0); }
     if (p.attack > 0) p.attack--;
+    const wrapped = (p.face > 0 && p.x < oldX) || (p.face < 0 && p.x > oldX);
+    if (wrapped) { p.phase = 'align'; p.phaseTimer = 70; p.attack = 0; }
+  }
+
+  hatchingRiderCount() {
+    const mounted = this.enemies.reduce((n, e) => n + (e.alive ? 1 : 0), 0);
+    const unmounted = this.eggs.reduce((n, e) => n + (!e.dead && ['hatching', 'walking', 'mounting'].includes(e.state) ? 1 : 0), 0);
+    return mounted + unmounted;
   }
 
   updateBaiters() {
@@ -491,12 +647,13 @@ class JoustEngine {
   // ─── lava troll ───
   updateTrolls() {
     const grabZone = WORLD.FLOOR - 25;
+    this.trolls = this.trolls.filter(t => t.bird.grabbed);
     for (const b of [...this.players, ...this.enemies]) {
       if (b.out || !b.alive || b.materializing > 0 || b.onGround) { if (b.grabbed) this.releaseTroll(b); continue; }
       const low = b.y >= grabZone;
       const overLava = this.overLava(b.x);
       if (!b.grabbed) {
-        if (low && overLava && b.y < WORLD.FLOOR + 6) {
+        if (low && overLava && b.y < WORLD.FLOOR + 6 && this.trolls.length === 0) {
           b.grabbed = { pull: PHYS.TROLL_PULL_BASE, t: 0, x: b.x };
           this.trolls.push({ kind: 'troll', bird: b, x: b.x, y: WORLD.FLOOR, id: _id++ });
           this.emit('troll', { x: b.x, y: WORLD.FLOOR });
@@ -519,7 +676,7 @@ class JoustEngine {
 
   // ─── collisions ───
   resolveCollisions() {
-    const players = this.players.filter(p => !p.out && p.alive && p.materializing <= 0);
+    const players = this.players.filter(p => !p.out && p.alive && p.materializing <= 0 && !p.safe);
     const enemies = this.enemies.filter(e => e.alive && e.materializing <= 0);
     // player vs enemy joust
     for (const p of players) {
@@ -554,8 +711,8 @@ class JoustEngine {
   }
 
   birdsOverlap(a, b) {
-    if (!xOverlap(a.x, b.x, BODY_W)) return false;
-    return Math.abs(a.y - b.y) < BODY_H;
+    if (!xOverlap(a.x, b.x, 20) || Math.abs(a.y - b.y) >= BODY_H) return false;
+    return pixelPartsOverlap(birdParts(a, this.animFrame), birdParts(b, this.animFrame));
   }
   pointOverlap(a, o, r) {
     return xOverlap(a.x, o.x, r) && Math.abs(a.y - o.y) < r;
@@ -566,8 +723,8 @@ class JoustEngine {
 
   joust(a, b) {
     // lance heights (smaller y = higher = wins); integer compare (ROM uses pixel Y)
-    const la = Math.round(a.y - RIDER_LANCE);
-    const lb = Math.round(b.y - RIDER_LANCE);
+    const la = Math.round(a.y - RIDER_LANCE + (a.skid > 0 ? 2 : 0));
+    const lb = Math.round(b.y - RIDER_LANCE + (b.skid > 0 ? 2 : 0));
     if (la === lb) { this.bounce(a, b); return; }
     const winner = la < lb ? a : b;
     const loser = la < lb ? b : a;
@@ -591,16 +748,21 @@ class JoustEngine {
     // separate horizontally, faces away (knock apart along vx)
     const d = wrapDelta(a.x, b.x);
     const af = d >= 0 ? -1 : 1, bf = -af;
-    a.vx = af * 1.3; b.vx = bf * 1.3;
+    a.vxi = af * 8; b.vxi = bf * 8;
+    a.vx = flySpeed(a.vxi); b.vx = flySpeed(b.vxi);
     a.face = af; b.face = bf;
-    a.x = wrapX(a.x + af * 2); b.x = wrapX(b.x + bf * 2);
+    // Exact-height contacts must not resolve again as a lethal joust on the next tick.
+    // Walk the two pixel masks apart, bounded well beyond their widest possible overlap.
+    for (let i = 0; i < 24 && this.birdsOverlap(a, b); i++) {
+      a.x = wrapX(a.x + af); b.x = wrapX(b.x + bf);
+    }
     this.emit('bounce', { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
   }
 
   unseatEnemy(enemy, winner) {
     enemy.alive = false;
     if (winner && winner.kind === 'player') { this.addScore(winner, ENEMY[enemy.type].points); this.freezeFrames = Math.max(this.freezeFrames, 3); }
-    this.spawnEgg(enemy.x, enemy.y, enemy.vx * 0.5, -1, enemy.type);
+    if ((enemy.lineage || 0) < 4) this.spawnEgg(enemy.x, enemy.y, enemy.vx * 0.5, -1, enemy.type, (enemy.lineage || 0) + 1);
     this.emit('enemyDie', { x: enemy.x, y: enemy.y, etype: enemy.type, points: ENEMY[enemy.type].points });
   }
 
@@ -620,8 +782,9 @@ class JoustEngine {
     const lanceY = player.y - RIDER_LANCE;
     const oppFacing = player.face !== pt.face;
     const onBeakSide = (pt.face === 1 && wrapDelta(pt.x, player.x) > 0) || (pt.face === -1 && wrapDelta(pt.x, player.x) < 0);
-    let win = this.difficulty === 'easy' ? 4 : 2;
-    if (pt.attack > 0) win += 1; // open-beak attack frame widens to ~3px (ROM within-3)
+    let win = 2 + (pt.attack > 0 ? 1 : 0);
+    if (this.difficulty === 'easy') win++;
+    else if (this.difficulty === 'hard') win = Math.max(1, win - 1);
     if (oppFacing && onBeakSide && Math.abs(lanceY - beakY) <= win) {
       pt.alive = false;
       this.addScore(player, SCORE.PTERO);
@@ -637,7 +800,7 @@ class JoustEngine {
   killBird(b, cause) {
     if (b.kind === 'enemy') {
       b.alive = false;
-      this.spawnEgg(b.x, b.y, 0, -1, b.type);
+      if (cause !== 'lava' && (b.lineage || 0) < 4) this.spawnEgg(b.x, b.y, 0, -1, b.type, (b.lineage || 0) + 1);
       this.emit('enemyDie', { x: b.x, y: b.y, etype: b.type, points: 0 });
       return;
     }
@@ -673,8 +836,10 @@ class JoustEngine {
       if (p.respawn != null) {
         p.respawn--;
         if (p.respawn <= 0) {
-          const pad = SPAWN_PADS[(this.rng() * SPAWN_PADS.length) | 0];
+          const pads = this.activeSpawnPads();
+          const pad = pads[(this.rng() * pads.length) | 0];
           this.placeBird(p, pad.x, pad.y, 1); p.alive = true; p.materializing = 60; p.respawn = null;
+          p.safe = true; p.safeTimer = 0;
           this.emit('spawn', { x: pad.x, y: pad.y, player: true });
         }
       }
@@ -685,11 +850,11 @@ class JoustEngine {
     }
     const enemiesLeft = this.enemies.some(e => e.alive) || this.pool.length > 0;
     const eggsLeft = this.eggs.some(e => !e.dead);
-    const scheduledPteroLeft = (this.waveType === 'ptero') && (this.pteroPool > 0 || this.pteros.some(p => p.ptKind === 'scheduled' && p.alive));
     const anyPlayerAlive = this.players.some(p => !p.out);
-    if (!enemiesLeft && !eggsLeft && !scheduledPteroLeft && anyPlayerAlive) {
+    if (!enemiesLeft && !eggsLeft && anyPlayerAlive) {
       this.waveCleared = true;
       this.clearTimer = 120;
+      this.pteros = []; this.pteroPool = 0; this.baiterCount = 0;
       this.awardWaveBonus();
       this.emit('waveClear', { wave: this.wave });
     }
@@ -714,7 +879,7 @@ class JoustEngine {
   snapshot() {
     return {
       wave: this.wave, waveType: this.waveType, started: this.started, gameOver: this.gameOver,
-      waveCleared: this.waveCleared, clearTimer: this.clearTimer, waveTime: this.waveTime,
+      waveCleared: this.waveCleared, clearTimer: this.clearTimer, waveTime: this.waveTime, animFrame: this.animFrame,
       players: this.players, enemies: this.enemies, eggs: this.eggs, pteros: this.pteros,
       trolls: this.trolls, platforms: this.platforms, info: this.info, events: this.events,
     };

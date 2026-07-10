@@ -1,6 +1,6 @@
 # Joust — Concept
 
-A faithful, graphically-enhanced browser remake of **Joust** (Williams Electronics, arcade, 1982;
+A faithful browser remake of **Joust** (Williams Electronics, arcade, 1982;
 designed by John Newcomer, programmed by Bill Pfutzenreuter). This is a NEW game — it does not
 replace the separate, unrelated "Sky Joust" (2026-05-11).
 
@@ -22,9 +22,10 @@ bridge burning on wave 3 and the lava troll from wave 4, and the horizontal cyli
 See `SPEC.md` for the full authoritative rules + decisions log and `notes/` for the research
 bundle and the cloned original source.
 
-## Enhancements (over the raw arcade)
-HD procedural sprites + animated lava + starfield + CRT-filter option; attract mode; wave
-announcements; separate SFX/Music volume, key remap, difficulty, wave-select with saved progress
-and a `1234` all-waves unlock; local + global leaderboards; touch controls; 2-player on one
-keyboard; hold-ESC wave restart. Audio is faithful SFX-only synthesis (the arcade had no music by
-design) plus an original title theme.
+## Presentation and browser shell
+The playfield uses the original ROM sprites, riders, cliff bitmaps, compressed lower island,
+Williams 5x7 font, palette, and vector-drawn title logo at the arcade's 292x240 raster and 4:3
+pixel aspect. The authentic Williams sound-ROM output remains intact. Browser additions are kept
+outside the core rules: CRT option, key remap, difficulty, wave select with saved progress and a
+`1234` unlock, local/global scores, touch controls, simultaneous local 2-player, pause, and a
+hold-ESC wave restart escape hatch.

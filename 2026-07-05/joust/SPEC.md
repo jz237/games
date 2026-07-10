@@ -1,9 +1,9 @@
 # Joust — Browser Remake SPEC
 
-A faithful, graphically-enhanced browser remake of **Joust** (Williams Electronics, arcade, 1982;
-game designer John Newcomer, main programmer Bill Pfutzenreuter). Arcade gameplay/timing is the
-source of truth; the Amiga/Atari-ST home port informs only enhanced sprite art and the optional
-title theme. This is a NEW game — it does **not** replace the existing "Sky Joust" (2026-05-11),
+A faithful browser remake of **Joust** (Williams Electronics, arcade, 1982;
+game designer John Newcomer, main programmer Bill Pfutzenreuter). Arcade gameplay/timing and the
+original Williams display data are the source of truth; the optional title theme is the only
+presentation addition. This is a NEW game — it does **not** replace the existing "Sky Joust" (2026-05-11),
 which is a separate, unrelated game.
 
 Deployed path: `games/2026-07-05/joust/`. Leaderboard namespace: `joust`.
@@ -28,14 +28,15 @@ When sources disagreed, the byte-matching disassembly won (logged in §16).
 
 ## 1. Fundamental units & tick rate
 
-- **Physics tick = 60 Hz.** The 6809 runs a cooperative process executive paced to the once-per-
+- **Physics tick = 60.096154 Hz.** The 6809 runs a cooperative process executive paced to the once-per-
   frame video interrupt (line-240 IRQ, 16 ms). `SYSTEM.ASM`: "SERVICED EVERY 1/60 SEC";
   `LDD #60*60 ;NBR OF INTERUPTS UNTIL 1 MINUTE`. All object movement/gravity/timers advance once
   per 1/60 s. (The 4 ms IRQ is only for beam-synced sprite DMA — not a logic rate.)
-  Real hardware is 60.096 Hz; we use exactly **1/60 s** fixed timestep.
+  Real hardware is 60.096 Hz; the remake uses that measured hardware cadence.
 - **Coordinate space (native Joust pixels):** X wraps over `ELEFT=-10 .. ERIGHT=292` (period 302).
-  Y: `CEILNG=$20=32` (top clamp) .. `FLOOR=$DF=223` (floor/lava death line). Player spawn Y
-  `LAND5=210`. Visible raster ≈ 292×240. **The engine runs in these native units**; rendering
+  The visible framebuffer crop removes 6 left pixels and 7 top scanlines, so engine/render Y is
+  `CEIL=25`, lower-island top/spawn `204`, and floor/lava `216`. Visible raster is **292×240**.
+  **The engine runs in these native units**; rendering
   scales native→canvas. This makes physics bit-faithful and resolution-independent.
 - **Fixed-point:** position `PPOSx` is 3 bytes `[pixel][frac_hi][frac_lo]`; velocity `PVELY` is
   signed 16-bit **8.8 fixed point** (high byte = whole px/frame, low = 1/256 px). Integration is
@@ -59,7 +60,8 @@ re-pressed). On each flap:
   slow flapping hovers/sinks.** No explicit upward cap.
 - **Horizontal:** if a direction is held, step the X-velocity index `PVELX` by ±2 (`CURJOY*2`),
   clamped to ±`MAXVX=8`. Air horizontal accel is therefore **per-flap, not per-frame**.
-- **Ground takeoff** (`STFLY`): sets `PVELY=−$0080=−0.5 px/frame` and hops up 1 px.
+- **Ground takeoff** (`STFLY`): sets `PVELY=−$0080=−0.5 px/frame`, hops up 1 px, and preserves
+  existing run momentum; it does not execute the airborne horizontal `ADDFLP` step.
 
 ### 2.3 Horizontal air model — `FLYX` table (momentum, no air drag)
 `PVELX` index (−8..+8 step 2) → speed px/frame: `0:0, ±2:0.25, ±4:0.5, ±6:1.0, ±8:2.0`.
@@ -78,7 +80,7 @@ this as: ground accel to a top run speed with a short skid-to-turn; tuned to mat
 (category (d) approximation of the animation machine, since it isn't a physics integrator).
 
 ### 2.5 Terminal / boundary behavior
-- Ceiling `y=32`: clamp/bounce. Floor/lava `y=223`: death.
+- Visible-space ceiling `y=25`: clamp and fully invert upward velocity. Floor/lava `y=216`: death.
 - Design-reference caps `MAXVY=$1000 (16 px/f fall)`, `MINVY=$0400 (4 px/f rise)` are **defined
   but never referenced** in player code — real terminal velocity emerges from gravity vs flap.
   We add gentle clamps at these reference values as a safety net (prevents runaway on a modern
@@ -143,6 +145,8 @@ matches Sean Riddle's `jwaves.html`.
   left, a buzzard swoops in and the rider **remounts** to become an active enemy again. Hatch
   timing shortens in later waves (more urgency). (Exact hatch frame counts pulled from source at
   build; tuned to arcade cadence otherwise.)
+- **Egg waves:** begin with exactly 12 settled eggs. Concurrent hatches are capped by that wave's
+  rider count (`WENEMY`: 6 on wave 5, 8 on wave 10); a newly freed slot admits the next egg.
 
 ## 6. Pterodactyl (1000 pts) — two systems
 
@@ -165,10 +169,11 @@ matches Sean Riddle's `jwaves.html`.
 
 ## 7. Lava troll & lava
 
-- **Onset:** the central **bridge burns out on wave 3** (`TBRIDGE=3`); the **Lava Troll hand
-  appears on wave 4** (`TTROLL=1` wave after). Grabs players AND enemies.
-- **Grab:** when a bird flies **low over the lava** (within ~25 px of the floor, `y ≥ FLOOR+7−32
-  = 198`, and horizontally over the pit ≈ x 40..240), the hand rises and grabs at the legs, plays
+- **Onset:** the thin **outer floor bridges burn out on wave 3** (`TBRIDGE=3`), leaving the central
+  CLIF5 island permanent; the **Lava Troll hand appears on wave 4** (`TTROLL=1` wave after).
+  Grabs players AND enemies.
+- **Grab:** when a bird flies **low over the side lava** (within ~25 px of the floor and at
+  approximately `x<48` or `x>234`), the single `LAVNBR`-gated hand rises and grabs at the legs, plays
   the troll SFX, and switches the victim's gravity to `ADDLAV` (drags down; X velocity zeroed).
 - **Escape (velocity-based, not mash-count):** each frame `velY += trollPull (CLVGRA)`; the
   player's flaps still add upward. If net `velY < −$0180 (−1.5 px/frame)` ("break-free velocity")
@@ -181,13 +186,13 @@ matches Sean Riddle's `jwaves.html`.
 
 ## 8. Platforms, waves, erosion, wrap
 
-- **Layout:** 5 landing structures over a lava floor. Platform top Y-heights (`LNDBn`): top-left &
-  top-right cliffs `$44=68`; a mid cliff `$50=80`; top-middle `$80/$89=128/137`; center floating
-  `$A2=162`; the always-present **base cliff (CLIF5)** ≈ `$D3=211`. Lava/floor at `y=223`.
+- **Layout (visible coordinates):** top wrap cliffs `y=62`, upper middle `y=74`, right ledge
+  `y=122`, middle wrap cliffs `y=131`, lower middle `y=156`, and permanent **CLIF5** island
+  `x=48..234, y=204`; lava/floor begins at `y=216`.
   Platform numbering (Sean Riddle): 1=top-left, 2=top-right, 3=top-middle, 4=center-floating,
   5=base(permanent). Exact X-extents extracted from the background-build code at build time.
 - **Erosion (per-wave enable/disable via wave-status bits `WBCL1L/1R/2/4`; CLIF5 never
-  disabled):** the bridge over the lava is gone from wave 3; individual cliffs disappear on a
+  disabled):** the outer floor bridges are gone from wave 3; individual cliffs disappear on a
   ROM-tabulated schedule (e.g. W6: plat 3 gone; W7–8: 1,2,3 gone; W9: 1,2,3,4 gone (only base);
   **egg waves (every 5th) always restore the full board**). Erosion is **not monotonic** — it
   cycles with wave type. Full per-wave table taken from the ROM/`jwaves.html` at build.
@@ -195,7 +200,7 @@ matches Sean Riddle's `jwaves.html`.
   `1→Normal, 2→Survival(1P)/Team(2P), 3→Pterodactyl (only from wave 8; wave 3 itself Normal),
   4→Gladiator, 0→Egg`. So: W1 Normal, W2 Survival, W3 Normal, W4 Gladiator, W5 Egg, W6 Normal,
   W7 Survival, **W8 Pterodactyl**, W9 Gladiator, W10 Egg, … The next special wave is telegraphed
-  by a letter bottom-right (S/G/E/P). Table loops at wave 81 while wave numbering keeps climbing.
+  on its intro card. Table loops at wave 81 while wave numbering keeps climbing.
 - **Wave banners** (exact strings from PHRASE/MESSAGE): "PREPARE TO JOUST", "SURVIVAL WAVE",
   "COLLECT 3000 SURVIVAL POINTS", "NO SURVIVAL POINTS AWARDED", "GLADIATOR WAVE", "3000 POINT
   BOUNTY", "NO BOUNTY AWARDED", "PLAYER CO-OPERATION - EACH PLAYER 3000 POINTS", "EGG WAVE",
@@ -208,9 +213,8 @@ matches Sean Riddle's `jwaves.html`.
 - Bounder 500, Hunter 750, Shadow Lord 1500, Pterodactyl 1000; egg 250/500/750/1000 (+500 mid-
   air); survival/team/gladiator bonus 3000 each (§10/§11).
 - **Lives:** arcade factory default **5** (CMOS `NSHIP`, operator-adjustable 1–99; MAME has no
-  lives/bonus DIP — they're CMOS). **The remake shell uses 3 to start** per the project brief
-  (with the arcade's every-20,000 extra man), matching the site's other remakes; a "starting men"
-  option is exposed. **Extra man every 20,000 points, repeating** (`REPLAY`/`LEVPAS`).
+  lives/bonus DIP — they're CMOS). The remake defaults to the authentic **5**, with a 1–9
+  starting-mount option. **Extra man every 20,000 points, repeating** (`REPLAY`/`LEVPAS`).
 - **Survival-wave no-death bonus = 3000**, awarded only if the player took **zero** deaths during
   the wave and still has a life; else "NO SURVIVAL POINTS AWARDED". Per-wave death counter resets
   at wave start.
@@ -242,10 +246,9 @@ SFX-only, prioritizing the wing-flap sound. The only multi-note cue is the high-
 jingle (`SNHIGH`) and a single short "game start" sting (`SNGS`, 1 frame). We honor this: gameplay
 is **SFX-only**.
 
-- **SFX** are reproduced by **WebAudio procedural synthesis** matching the original synthesis
-  families (all arcade audio was real-time synthesized to an 8-bit DAC — there were no PCM
-  samples, so synthesis *is* the faithful method; also CSP-clean and tiny). We implement the exact
-  **command→event map with priority-based preemption** from the ROM SOUND TABLE:
+- **SFX** are reproduced by emulating `VSNDRM4` and pre-rendering the authentic 8-bit DAC output
+  to compact local Ogg samples; the WebAudio synthesis paths remain fallback-only. The exact
+  **command→event map with priority-based preemption** from the ROM SOUND TABLE remains intact:
   flap wing-up/down (noise burst, pitched), walk clip/clop (two alt noise ticks), thud (low
   click), skid start/end (swept tonal noise), egg hit/hatch (descending square blips),
   enemy/player die (short "$16" percussive hit, shared), pterodactyl scream (harsh Walsh-style
@@ -259,18 +262,17 @@ is **SFX-only**.
   stays SFX-only/authentic). Separate SFX and Music volume sliders (music slider governs only the
   title theme).
 
-## 13. Graphics (enhanced, faithful)
+## 13. Graphics (source-extracted, arcade-faithful)
 
-- Engine in native Joust units; render scaled to the canvas with integer-ish scaling and optional
-  smoothing off for crispness. Hand-drawn **procedural canvas sprites** pre-rendered to offscreen
-  atlases: knight-on-ostrich (yellow) / knight-on-stork (blue-green), the three enemy buzzard-
-  riders (red/grey/blue), pterodactyl (flap + open-beak attack frames), egg (+ hatching + walking
-  rider), lava troll hand, platforms/cliffs with rocky tops, glowing animated **lava** at the
-  bottom, **starfield** background, lance sprites, spawn/transporter effect, HUD (score, wave,
-  lives as little buzzard icons, next-special-wave letter). Flap animation = wings up/down synced
-  to flap state.
+- Engine in native Joust units; render at the original **292×240** visible raster with a `320/292`
+  CRT pixel-aspect stretch, nearest-neighbor scaling, and a black sky. `extract-sprites.mjs`
+  decodes the original 4bpp ostrich/stork/buzzard, riders/lances, eggs, troll, flames,
+  pterodactyls, cliff bitmaps, and the compressed 186×33 CLIF5 island from `JOUSTI.ASM`.
+  It also extracts `MESSAGE.ASM`'s Williams 5x7 font and rasterizes the original 875-byte
+  `ATT.ASM` vector/fill command stream into the exact JOUST title logo. Rider/mount composition
+  keeps the ROM display-list X/Y offsets, and collision uses the same pixel masks.
 - **CRT filter** option (scanlines + vignette), off by default on mobile.
-- Particles/juice: feathers on unseat, egg-collect sparkle, screen-edge wrap continuity, lava
+- Optional browser juice: feathers on unseat, egg-collect sparkle, screen-edge wrap continuity, lava
   glow flicker, death "ashes", pterodactyl approach slow-mo tell.
 - Exact platform X-geometry + wave enemy table are extracted from `notes/joust-src` at build and
   recorded in `assets/data.js` with source citations.
@@ -279,7 +281,7 @@ is **SFX-only**.
 
 - **Attract mode** (title with AI demo joust), HOW TO PLAY screen, wave announcements
   ("PREPARE TO JOUST", etc.).
-- **Lives:** 3 to start (option 3–5) + extra man every 20,000. **Hold-ESC ~0.8 s restarts the
+- **Lives:** 5 to start (option 1–9) + extra man every 20,000. **Hold-ESC ~0.8 s restarts the
   current wave at the cost of a life** (softlock escape hatch; always available).
 - **Physics held until first input** each wave/life ("FLAP TO START") — no instant deaths.
 - **Options:** separate Music/SFX volume, CRT toggle, key remap (P1+P2), starting men,
@@ -325,13 +327,14 @@ is **SFX-only**.
 | 9 | Wave-type cycle mod-5 (Ptero only from W8); erosion non-monotonic, egg waves restore full board; cylinder wrap | Exact `WAVTBL`/`WBCLx`/wrap code |
 | 10 | 3000 for survival/team/gladiator; stork = ostrich mechanically | Exact `WSUSCR`/`WCOSCR`/`SPDGLA`; global movement equates |
 | 11 | **Audio SFX-only**, reproduced by **emulating the Williams sound ROM `VSNDRM4`** (`tools/sndemu.mjs`) and pre-rendering each effect to a compact CSP-clean `.ogg` (a WebAudio synth set is kept as a runtime fallback); exact command→sample + priority-preemption map; **original** title theme added (title/menu only, separate Music slider) | Arcade had no music by design; owner pre-authorized original audio (EM2 precedent); ROM-emulation renders the *true* DAC-synth output — more faithful than hand-tuned live synthesis |
-| 12 | Shell: 3 lives (option 3–5), hold-ESC wave restart, physics held until first input, wave-select + `1234` unlock, local+global scores | Project brief + site conventions over authentic engine |
+| 12 | Historical v1.x shell: 3 lives (option 3–5), hold-ESC restart, first-input safety, wave-select + scores; default lives superseded by #22 | Original site-shell brief |
 | 13 | Keep existing "Sky Joust" untouched; new game at `2026-07-05/joust/` | Brief: replace nothing |
-| 14 | Ship starting lives 3 (not arcade 5) as the default | Brief specifies "3 to start + extra life per 20,000"; arcade default 5 exposed as an option |
+| 14 | Historical 3-mount default, superseded by the arcade 5-mount default in #22 | Original site-shell brief |
 | 15 | Enemy AI = heuristic (per-type cruise/chase/altitude-hold) matching the documented aggression gradient (Bounder beatable → Shadow Lord flies above you) | The original's exact per-frame enemy decision tables weren't fully ported; the heuristic reproduces the observable behavior & difficulty, tuned via headless playthroughs |
-| 16 | Platform Y-heights are ROM-exact (`LNDBn`); X-extents reconstructed from the cliff DMA records + canonical arcade layout and visually verified | The exact X-bitmask landing tables are runtime-built; reconstructed geometry is faithful and gameplay-critical physics are exact |
+| 16 | Platform geometry comes directly from the cliff DMA records/landing tables in visible-raster coordinates | The source records are authoritative and now drive both rendering and pixel-mask collision |
 | 17 | Adversarial code review (multi-agent) fixed 5 verified bugs before ship: team-bonus voided on any partner-unseat (not just gladiator flag); egg mid-air +500 gated on a `touched` flag (no bonus after a bounce); Space is a real edge-triggered P1 flap; Escape cancels key-rebind (can't bind ESC); `escDownAt` cleared on ESC keyup/blur (a tap no longer restarts the wave) | Correctness pass; each finding traced to a concrete failure and regression-tested |
-| 18 | **v1.5.0 — flight physics made truly ROM-exact.** The v1.4.x engine had silently drifted to a *tuned* model (constant −0.95 flap, ~2.7× gravity, per-frame air-accel **with** drag, FLYX unused) contradicting decisions #2/#3. Restored: gravity `4/256` down / `8/256` up; edge-triggered flap with the `ADDFLP` decay `floor(ptimup·96/256)−96` (fresh −0.375 → 0); horizontal = per-flap ±2 `PVELX` index through the non-linear `FLYX` table `{0,.25,.5,1,2}`, momentum persists (**no air drag**). One intentional add: **holding** flap auto-repeats every 6 frames (comfort), each auto-flap still using the authentic decay. Ground stays an animation-state approximation (§2.4). Enemy flap cadences + AI bots retuned to the authentic flap/grav ratio | Prompt + decisions #2/#3 demand ROM-exact flight; independent disassembly + research cross-check agreed on every constant (zero disagreements); verified winnable & softlock-free via headless AI playthroughs |
-| 19 | **v1.5.0 — player-mount recolor.** The ROM ships ONE default colour table (`COLOR1`), so the extracted mounts are mis-hued — the **ostrich renders blue**. Re-hue at sprite-build: P1 ostrich → warm **yellow**, P2 stork → **teal/blue-green** (covers RUN/FLY frames and the base life icons) | Every design-intent artifact (SPEC §11/§13, favicon, life icons, the classic "yellow knight") says P1 is yellow; the blue in-play bird read as an enemy. Fix is a targeted body-pixel re-hue, shapes untouched |
+| 18 | Historical v1.5.0 restoration attempt; later tuned/reverted in #21 and fully superseded by #22 | Kept for release-history context |
+| 19 | Historical v1.5.0 mount recolor, superseded by #22's unmodified source palette and separate rider colors | The raw ROM art is now the visual source of truth |
 | 21 | **v1.5.1 — reverted decision #18.** The owner OWNS a real Williams Joust cabinet and reports the v1.5.0 "ROM-exact px/frame" flight moved & accelerated **too fast** vs the machine. The paper-exact fixed-point constants (even cross-checked) did NOT reproduce the felt hardware — likely a fixed-point unit/scaling mismatch in how per-frame velocity maps to perceived motion. **The cabinet's feel is the ground truth, above the disassembly.** Restored the previously-accepted hand-tuned flight model (punchy `FLAP_DV=-0.95`, gravity 0.042/0.075, continuous air-accel 0.085 + settle drag 0.93, `MAX_H` 1.7). All non-physics v1.5.0 fixes (§#19/#20) retained. Next: calibrate remaining feel against the cabinet | Empirical hardware feedback from the owner beats theoretical ROM fidelity; §2's "ROM-exact" now applies to collision/scoring/waves, NOT the tuned flight feel |
 | 20 | **v1.5.0 — audit polish.** Working **pause** (P; auto-pause + mute on tab-hide via `visibilitychange`); 2P hold-ESC restart charges each in-player exactly one life (was a misleading double-charge); leaderboard POST carries `?v=`; `preventDefault` covers both players' mapped keys; removed the bare **M**-to-title footgun (quit now via the pause overlay's Q); single-source version (`window.__V`); ptero open-beak window tightened to ~3 px (ROM within-3); **hatch→remount returns one tier tougher** (origin-based, not wave-based); troll owns the `FLOOR+7` lava-death line; enemy tier recolor brightened for vivid red/grey/blue | Multi-agent audit (6 dimensions, findings adversarially verified) — each fix traced to a confirmed defect and re-tested (76 engine tests + browser + playthrough) |
+| 22 | **v2.0.0 — arcade-emulation restoration.** Restored Rev.4 edge-triggered flight, released-vs-held gravity, FLYX momentum/no drag, full ceiling rebound, exact tie separation, pixel-mask bird/cliff collisions, four transporters, full rider counts, 12-egg waves with `WENEMY` hatch caps, non-gating scheduled pterodactyls, ±2/±3 beak window, one lava-troll hand, side-pit geometry, indefinite first-input safety, 5 mounts, and 60.096154 Hz. Presentation now uses raw ROM mounts plus separately composed colored riders, exact cliffs/compressed CLIF5, 5x7 ROM font, vector title logo, black sky, and 4:3 pixel aspect. Existing sound-ROM Ogg output is unchanged. | Direct Rev.4 source audit plus browser/playthrough feedback; supersedes #14/#18/#19/#21 where they conflict |
