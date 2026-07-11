@@ -9,9 +9,9 @@ const require = createRequire(import.meta.url);
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const gRoot = execSync('npm root -g').toString().trim();
 const puppeteer = require(join(gRoot, 'puppeteer'));
-const PORT = 8099;
+const PORT = 8252;
 
-const srv = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: root, stdio: 'ignore' });
+const srv = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1', '--directory', root], { stdio: 'ignore' });
 await new Promise(r => setTimeout(r, 900));
 
 let failed = 0;
@@ -27,7 +27,7 @@ page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.
 page.on('pageerror', e => errors.push('pageerror: ' + e.message));
 
 try {
-  await page.goto(`http://localhost:${PORT}/index.html`, { waitUntil: 'networkidle2', timeout: 15000 });
+  await page.goto(`http://localhost:${PORT}/retro/index.html`, { waitUntil: 'networkidle2', timeout: 15000 });
   await new Promise(r => setTimeout(r, 1200));
 
   // boot hidden?

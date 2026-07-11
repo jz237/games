@@ -2,53 +2,127 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Joust — Faithful Browser Remake</title>
-<meta name="description" content="A source-faithful browser remake of Williams' 1982 arcade classic Joust — original pixel art and sound, ROM-accurate flap physics, waves, eggs, pterodactyl, lava troll, and 2-player play.">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Joust — Choose Your Arena</title>
+<meta name="description" content="Joust two ways: the faithful 1982 Williams arcade remake with ROM-exact physics and bit-exact sound, or the fully modernized 3D edition — same gameplay, new world.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><ellipse cx='7' cy='9' rx='5' ry='4' fill='%23ffe14d'/><path d='M9 7 Q13 4 14 2' stroke='%23ffe14d' stroke-width='2' fill='none'/><rect x='5' y='2' width='3' height='4' fill='%23ffd23a'/><line x1='6' y1='3' x2='15' y2='1' stroke='%23e8e8f0' stroke-width='1'/></svg>">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Courier New',monospace;
-  overscroll-behavior:none;-webkit-user-select:none;user-select:none;touch-action:none}
-canvas{display:block;width:100%;height:100%;touch-action:none;image-rendering:pixelated;image-rendering:crisp-edges}
-#boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;
-  color:#ffd23a;background:#05060f;z-index:10;font-weight:700;letter-spacing:3px}
-#boot small{color:#7a6a2a;margin-top:12px;font-weight:400;letter-spacing:1px}
-#touchbar{position:fixed;left:0;right:0;bottom:0;display:none;justify-content:space-between;align-items:flex-end;
-  padding:14px 18px;gap:10px;z-index:20;pointer-events:none}
-#touchbar button{pointer-events:auto;width:72px;height:72px;border-radius:50%;font-family:inherit;font-weight:700;
-  font-size:15px;color:#ffe8a0;background:radial-gradient(circle at 35% 30%,rgba(90,70,30,.85),rgba(30,24,12,.85));
-  border:2px solid rgba(255,210,60,.5);backdrop-filter:blur(2px);-webkit-tap-highlight-color:transparent}
-#touchbar #tF{width:96px;height:96px;font-size:18px;color:#fff;
-  background:radial-gradient(circle at 35% 30%,rgba(120,40,40,.9),rgba(60,16,16,.9));border-color:rgba(255,120,120,.6)}
-#touchbar button:active{filter:brightness(1.5)}
-#touchbar .sp{flex:1}
-#touchbar > #tL,#touchbar > #tR{margin-right:8px}
-#rotate{display:none}
-@media (orientation:portrait) and (pointer:coarse){
-  #rotate{display:flex;align-items:center;gap:8px;position:fixed;top:8px;left:50%;transform:translateX(-50%);
-    background:rgba(0,0,0,.72);color:#ffd23a;padding:7px 14px;border-radius:10px;font-size:13px;font-weight:700;
-    letter-spacing:1px;z-index:30;pointer-events:none;border:1px solid rgba(255,210,60,.35)}
-}
+html,body{width:100%;min-height:100%;background:#05060f;color:#e8e8f0;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;overflow-x:hidden}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:28px 16px;position:relative}
+#embers{position:fixed;inset:0;z-index:0;pointer-events:none}
+.wrap{position:relative;z-index:1;width:100%;max-width:980px;display:flex;flex-direction:column;align-items:center}
+h1{font-family:'Courier New',monospace;font-weight:900;font-size:clamp(52px,11vw,104px);letter-spacing:.06em;line-height:1;
+  background:linear-gradient(180deg,#fff2b0 0%,#ffd23a 45%,#c47a12 78%,#8a4a08 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 3px 0 rgba(0,0,0,.55)) drop-shadow(0 0 26px rgba(255,160,40,.28))}
+.sub{margin-top:8px;color:#9aa3b8;letter-spacing:.34em;font-size:clamp(10px,1.7vw,14px);text-transform:uppercase;text-align:center}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:22px;width:100%;margin-top:38px}
+@media (max-width:720px){.cards{grid-template-columns:1fr}}
+a.card{display:flex;flex-direction:column;text-decoration:none;color:inherit;border-radius:18px;overflow:hidden;position:relative;
+  background:linear-gradient(180deg,#0d1020,#080a16);border:1px solid rgba(255,255,255,.08);
+  transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;outline:none}
+a.card:hover,a.card:focus-visible{transform:translateY(-5px)}
+a.card.retro:hover,a.card.retro:focus-visible{border-color:rgba(255,210,58,.7);box-shadow:0 10px 44px rgba(255,170,40,.18),0 0 0 1px rgba(255,210,58,.35)}
+a.card.modern:hover,a.card.modern:focus-visible{border-color:rgba(127,212,255,.7);box-shadow:0 10px 44px rgba(80,160,255,.2),0 0 0 1px rgba(127,212,255,.35)}
+.art{height:190px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.art img{width:100%;height:100%;object-fit:cover;object-position:center 32%}
+.retro .art{background:
+  radial-gradient(ellipse 120% 55% at 50% 118%, rgba(255,60,10,.5), transparent 60%),
+  linear-gradient(180deg,#03040c 55%,#160a08 100%)}
+.modern .art{background:
+  radial-gradient(ellipse 130% 70% at 50% 125%, rgba(255,90,20,.45), transparent 62%),
+  radial-gradient(ellipse 60% 45% at 78% 18%, rgba(120,170,255,.22), transparent 70%),
+  linear-gradient(180deg,#0a0d22 40%,#241017 100%)}
+.art svg{width:78%;height:86%}
+.retro .art::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.32) 0 2px,transparent 2px 4px);pointer-events:none}
+.badge{position:absolute;top:12px;left:12px;font-size:11px;font-weight:800;letter-spacing:.18em;padding:5px 10px;border-radius:99px}
+.retro .badge{background:rgba(255,210,58,.14);color:#ffd23a;border:1px solid rgba(255,210,58,.45)}
+.modern .badge{background:rgba(127,212,255,.12);color:#7fd4ff;border:1px solid rgba(127,212,255,.45)}
+.body{padding:18px 20px 20px;display:flex;flex-direction:column;gap:10px;flex:1}
+.body h2{font-size:24px;letter-spacing:.04em}
+.retro .body h2{font-family:'Courier New',monospace;color:#ffd23a}
+.modern .body h2{color:#bfe6ff}
+.tag{color:#8a93a8;font-size:13.5px;line-height:1.45}
+ul.feats{list-style:none;margin-top:2px;display:flex;flex-direction:column;gap:5px}
+ul.feats li{font-size:12.5px;color:#aab3c6;padding-left:16px;position:relative}
+ul.feats li::before{content:'▸';position:absolute;left:0;top:0}
+.retro ul.feats li::before{color:#ffd23a}.modern ul.feats li::before{color:#7fd4ff}
+.play{margin-top:auto;align-self:flex-start;font-weight:800;font-size:13px;letter-spacing:.22em;padding:11px 26px;border-radius:10px}
+.retro .play{background:linear-gradient(180deg,#ffd23a,#d99a16);color:#241a02}
+.modern .play{background:linear-gradient(180deg,#7fd4ff,#2f8fc4);color:#04121e}
+.foot{margin-top:34px;display:flex;gap:26px;align-items:center;color:#59617a;font-size:12.5px}
+.foot a{color:#8a93a8;text-decoration:none}.foot a:hover{color:#cdd5e8}
+.hint{color:#59617a;font-size:11.5px;letter-spacing:.12em;margin-top:12px}
+@media (max-width:720px){.hint{display:none}.art{height:150px}}
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
-<div id="rotate">↻ ROTATE TO LANDSCAPE</div>
-<div id="boot">LOADING JOUST…<small>Williams 1982 — faithful remake</small></div>
+<canvas id="embers"></canvas>
+<div class="wrap">
+  <h1>JOUST</h1>
+  <div class="sub">Williams 1982 · Two ways to fly</div>
+
+  <div class="cards">
+    <a class="card retro" href="retro/" id="cardRetro">
+      <div class="art">
+        <span class="badge">RETRO ARCADE</span>
+        <img src="art/retro.webp" alt="Retro Joust title screen" loading="lazy">
+      </div>
+      <div class="body">
+        <h2>RETRO</h2>
+        <div class="tag">The faithful remake — physics ported from the original 6809 source, real ROM sprites, bit-exact emulated arcade sound.</div>
+        <ul class="feats">
+          <li>ROM-exact flap physics &amp; wave tables</li>
+          <li>Bit-exact Williams sound-board audio</li>
+          <li>CRT filter · 2-player · global scores</li>
+        </ul>
+        <span class="play">PLAY RETRO</span>
+      </div>
+    </a>
+
+    <a class="card modern" href="modern/" id="cardModern">
+      <div class="art">
+        <span class="badge">MODERN 3D</span>
+        <img src="art/modern.webp" alt="Modern 3D Joust title screen" loading="lazy">
+      </div>
+      <div class="body">
+        <h2>MODERN&nbsp;3D</h2>
+        <div class="tag">The same game, re-imagined — a real-time 3D volcanic arena driven by the very same ROM-faithful engine underneath.</div>
+        <ul class="feats">
+          <li>Full 3D world · dynamic light &amp; lava</li>
+          <li>Achievements, stats &amp; kill-cam</li>
+          <li>Own global leaderboard · gamepad rumble</li>
+        </ul>
+        <span class="play">PLAY MODERN</span>
+      </div>
+    </a>
+  </div>
+
+  <div class="hint">← → CHOOSE · ENTER PLAY</div>
+  <div class="foot">
+    <a href="../../">← All games</a>
+    <span>Same rules · same physics · one legend</span>
+  </div>
+</div>
 <script>
-window.__V = '2.0.2';   // single source of truth for the cache-buster; keep the ?v= tags below in sync
-window.addEventListener('error', e => { const b = document.getElementById('boot'); if (b && b.style.display !== 'none') b.innerHTML = 'LOAD ERROR:<br><small>' + (e.message || e.type) + '</small>'; });
+(function(){
+  // ember particles
+  const cv=document.getElementById('embers'),cx=cv.getContext('2d');let W,H,ps=[];
+  function rs(){W=cv.width=innerWidth;H=cv.height=innerHeight}rs();addEventListener('resize',rs);
+  for(let i=0;i<46;i++)ps.push({x:Math.random()*1,y:Math.random()*1,s:.6+Math.random()*1.8,v:.12+Math.random()*.5,w:Math.random()*6.28,o:.14+Math.random()*.4});
+  (function anim(){requestAnimationFrame(anim);cx.clearRect(0,0,W,H);
+    for(const p of ps){p.y-=p.v*.0016;p.w+=.014;if(p.y<-.02){p.y=1.04;p.x=Math.random()}
+      const x=(p.x+Math.sin(p.w)*.012)*W,y=p.y*H;
+      cx.globalAlpha=p.o*(.6+.4*Math.sin(p.w*1.7));cx.fillStyle='#ff9a3c';
+      cx.beginPath();cx.arc(x,y,p.s,0,6.28);cx.fill()}
+    cx.globalAlpha=1})();
+  // keyboard nav
+  const cards=[document.getElementById('cardRetro'),document.getElementById('cardModern')];let idx=-1;
+  addEventListener('keydown',e=>{
+    if(e.code==='ArrowLeft'||e.code==='ArrowRight'){idx=idx<0?(e.code==='ArrowRight'?1:0):(idx+1)%2;cards[idx].focus();e.preventDefault()}
+    else if(e.code==='Enter'&&idx>=0){cards[idx].click()}
+  });
+})();
 </script>
-<script src="assets/data.js?v=2.0.2"></script>
-<script src="assets/sprites.js?v=2.0.2"></script>
-<script src="assets/font.js?v=2.0.2"></script>
-<script src="assets/engine.js?v=2.0.2"></script>
-<script src="assets/render.js?v=2.0.2"></script>
-<script src="assets/audio.js?v=2.0.2"></script>
-<script src="assets/game.js?v=2.0.2"></script>
 </body>
 </html>

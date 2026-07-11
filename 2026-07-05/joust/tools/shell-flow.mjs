@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const puppeteer = require(join(execSync('npm root -g').toString().trim(), 'puppeteer'));
 const PORT = 8096;
-const srv = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: root, stdio: 'ignore' });
+const srv = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1', '--directory', root], { stdio: 'ignore' });
 await new Promise(r => setTimeout(r, 900));
 let failed = 0;
 const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-gpu', '--window-size=880,720'] });
@@ -19,7 +19,7 @@ const errors = [];
 page.on('pageerror', e => errors.push('pageerror: ' + e.message));
 page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 try {
-  await page.goto(`http://localhost:${PORT}/index.html`, { waitUntil: 'networkidle2', timeout: 15000 });
+  await page.goto(`http://localhost:${PORT}/retro/index.html`, { waitUntil: 'networkidle2', timeout: 15000 });
   await new Promise(r => setTimeout(r, 800));
   await page.evaluate(() => { window.__joustQA.playReal(1, '1p'); window.__joustQA.engine().players[0].lives = 40; });
   // poll for wave advancement (bot clears waves) — proves intro→play→clear→next has no softlock
