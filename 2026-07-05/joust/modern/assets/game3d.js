@@ -42,6 +42,8 @@ let save = {
   opts: { sfx: 0.7, mus: 0.5, quality: 'high', camShake: true, rumble: true, difficulty: 'normal', lives: 5, keys: defaultKeys() },
 };
 try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.opts) { save = Object.assign(save, s); if (!save.opts.keys) save.opts.keys = defaultKeys(); if (!save.stats) save.stats = { games: 0, kills: 0, pteroKills: 0, eggs: 0, maxChain: 0, waves: 0, deaths: 0 }; if (!save.feats) save.feats = {}; } } catch (e) {}
+// one-time migration: v1.0.0 saves persisted the old 3-mount default; Rev.4-authentic is 5
+if (!save._rev2) { if (save.opts.lives === 3) save.opts.lives = 5; save._rev2 = true; }
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
 audio.setSfx(save.opts.sfx); audio.setMus(save.opts.mus);
 renderer.setQuality(save.opts.quality);
@@ -227,8 +229,10 @@ function pollGamepad() {
     if (ok) { audio.init(); handleKeyUI({ code: 'Enter' }); } if (esc) handleKeyUI({ code: 'Escape' });
   } else {
     if (pauseEdge) paused = !paused;
-    if (esc && !escDownAt) escDownAt = performance.now();
-    if (!escNow) escDownAt = 0;
+    if (esc && !escDownAt) { escDownAt = performance.now(); pad._escOwned = true; }
+    // only release a PAD-initiated hold — clearing unconditionally would wipe the
+    // keyboard's hold-ESC every frame whenever any gamepad is connected
+    if (!escNow && pad._escOwned) { escDownAt = 0; pad._escOwned = false; }
   }
   pad._padLeftWas = pad.left; pad._padRightWas = pad.right;
 }

@@ -196,8 +196,10 @@ function pollGamepad() {
     if (ok) { audio.init(); handleKeyUI({ code: 'Enter' }); } if (esc) handleKeyUI({ code: 'Escape' });
   } else {
     if (pauseEdge) paused = !paused;
-    if (esc && !escDownAt) escDownAt = performance.now();
-    if (!escNow) escDownAt = 0;
+    if (esc && !escDownAt) { escDownAt = performance.now(); pad._escOwned = true; }
+    // only release a PAD-initiated hold — clearing unconditionally wipes the keyboard's
+    // hold-ESC every frame whenever any gamepad is connected
+    if (!escNow && pad._escOwned) { escDownAt = 0; pad._escOwned = false; }
   }
   pad._padLeftWas = pad.left; pad._padRightWas = pad.right;
 }
