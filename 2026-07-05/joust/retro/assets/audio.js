@@ -110,6 +110,8 @@ class AudioSys {
     if (!this.ready) return; this._wantMusic = true; this.resume();
     if (this.titleSrc) return;                     // already playing the theme
     if (this.titleBuf) {                           // generated ElevenLabs loop
+      // the synth fallback may already be running (the theme decodes async) — silence it first
+      if (this.music) { this.music.stop = true; clearTimeout(this._mt); this.music = null; }
       const src = this.ac.createBufferSource(); src.buffer = this.titleBuf; src.loop = true;
       src.connect(this.musGain); src.start(); this.titleSrc = src; return;
     }

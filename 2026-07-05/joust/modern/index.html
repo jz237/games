@@ -39,17 +39,19 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 <div id="rotate">↻ ROTATE TO LANDSCAPE</div>
 <div id="boot">LOADING JOUST 3D…<small>same game · new world</small></div>
 <script>
-window.__V3 = '1.0.0';                              // modern edition version (cache-buster)
-window.__V  = '2.0.2';                              // shared retro-engine assets version
+window.__V3 = '1.1.0';                              // modern edition version (cache-buster)
+window.__V  = '2.0.3';                              // shared retro-engine assets version
 window.__JOUST_AUDIO_BASE = '../retro/assets/audio/'; // reuse the bit-exact arcade SFX
 window.__JOUST_THEME = 'assets/audio/theme.ogg';       // original modern title theme (menus only)
 window.addEventListener('error', e => { const b = document.getElementById('boot'); if (b && b.style.display !== 'none') b.innerHTML = 'LOAD ERROR:<br><small>' + (e.message || e.type) + '</small>'; });
 </script>
-<script src="../retro/assets/data.js?v=2.0.2"></script>
-<script src="../retro/assets/engine.js?v=2.0.2"></script>
-<script src="../retro/assets/audio.js?v=2.0.2"></script>
-<script src="vendor/three.min.js?v=1.0.0"></script>
-<script src="assets/render3d.js?v=1.0.0"></script>
-<script src="assets/game3d.js?v=1.0.0"></script>
+<script src="../retro/assets/data.js?v=2.0.3"></script>
+<!-- sprites.js MUST precede engine.js: the v2 engine uses the sprite pixel masks for ALL collision -->
+<script src="../retro/assets/sprites.js?v=2.0.3"></script>
+<script src="../retro/assets/engine.js?v=2.0.3"></script>
+<script src="../retro/assets/audio.js?v=2.0.3"></script>
+<script src="vendor/three.min.js?v=1.1.0"></script>
+<script src="assets/render3d.js?v=1.1.0"></script>
+<script src="assets/game3d.js?v=1.1.0"></script>
 </body>
 </html>

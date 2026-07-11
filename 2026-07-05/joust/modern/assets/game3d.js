@@ -5,17 +5,27 @@
 
 const VERSION = 'v' + (window.__V3 || '0.9.0');
 const ASSET_Q = '?v=' + (window.__V3 || '0.9.0');
-const STEP_MS = 1000 / 60;
-const LB_URL = 'https://game-scores.jez237.workers.dev/scores/joust-modern';
 const DATA = window.JOUST_DATA;
 const { JoustEngine } = window.JOUST_ENGINE;
 const { Renderer3D } = window.JOUST_RENDER3D;
 const { AudioSys } = window.JOUST_AUDIO;
-const { WORLD, PHRASES, waveInfo } = DATA;
+const { WORLD, PHRASES, waveInfo, PHYS } = DATA;
+const STEP_MS = 1000 / (PHYS.TICK_HZ || 60.096154);   // v2 physics are calibrated for the real 60.096 Hz tick
+const LB_URL = 'https://game-scores.jez237.workers.dev/scores/joust-modern';
 
 const glCanvas = document.getElementById('gl');
 const hudCanvas = document.getElementById('hud');
 const ctx = hudCanvas.getContext('2d');
+// roundRect is missing on older Firefox/Safari — without this every panel() throws and the HUD goes blank
+if (!ctx.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+    r = Math.min(Math.abs(r || 0), Math.abs(w) / 2, Math.abs(h) / 2);
+    this.moveTo(x + r, y);
+    this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r);
+    this.arcTo(x, y + h, x, y, r); this.arcTo(x, y, x + w, y, r);
+    this.closePath(); return this;
+  };
+}
 const renderer = new Renderer3D(glCanvas, hudCanvas);
 const audio = new AudioSys();
 
@@ -29,7 +39,7 @@ let save = {
   hi: 0, scores: [], maxWave: 1, unlockAll: false,
   stats: { games: 0, kills: 0, pteroKills: 0, eggs: 0, maxChain: 0, waves: 0, deaths: 0 },
   feats: {},
-  opts: { sfx: 0.7, mus: 0.5, quality: 'high', camShake: true, rumble: true, difficulty: 'normal', lives: 3, keys: defaultKeys() },
+  opts: { sfx: 0.7, mus: 0.5, quality: 'high', camShake: true, rumble: true, difficulty: 'normal', lives: 5, keys: defaultKeys() },
 };
 try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.opts) { save = Object.assign(save, s); if (!save.opts.keys) save.opts.keys = defaultKeys(); if (!save.stats) save.stats = { games: 0, kills: 0, pteroKills: 0, eggs: 0, maxChain: 0, waves: 0, deaths: 0 }; if (!save.feats) save.feats = {}; } } catch (e) {}
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
@@ -74,6 +84,7 @@ let paused = false;
 let attract = null;
 let killCam = 0;           // slow-mo frames remaining on the final death
 let noDeathStreak = 0;     // consecutive waves cleared without dying
+let _lastSnap = null;      // cached snapshot for static screens (no re-snapshot behind menus)
 
 // input
 const keys = {};
@@ -88,8 +99,15 @@ window.addEventListener('keydown', e => {
   if (rebindTarget) { if (e.code === 'Escape') { rebindTarget = null; flash('CANCELLED'); } else doRebind(e.code); e.preventDefault(); return; }
   if (!e.repeat) {
     const p = pi_for(e.code);
-    if (p >= 0 && (state === 'playing')) flapQueue[p] = true;
-    if (e.code === 'Space' && mode === '1p' && state === 'playing') flapQueue[0] = true;
+    if (p >= 0 && (state === 'playing' || state === 'intro')) {
+      flapQueue[p] = true;
+      if (state === 'intro') introTimer = 0;
+    }
+    // Space is a P1 flap in 1-player mode, including the stroke that dismisses the wave card
+    if (e.code === 'Space' && mode === '1p' && (state === 'playing' || state === 'intro')) {
+      flapQueue[0] = true;
+      if (state === 'intro') introTimer = 0;
+    }
   }
   keys[e.code] = true;
   handleKeyUI(e);
@@ -99,7 +117,7 @@ window.addEventListener('keydown', e => {
       e.code === kk.p2.left || e.code === kk.p2.right || e.code === kk.p2.flap) e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'Escape') escDownAt = 0; });
-window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; escDownAt = 0; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; escDownAt = 0; touch.left = touch.right = touch.flapHeld = false; });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     if (state === 'playing') paused = true;
@@ -137,7 +155,7 @@ function readInputs() {
     const kk = i === 0 ? k.p1 : k.p2;
     let left = keys[kk.left], right = keys[kk.right], held = keys[kk.flap];
     if (i === 0) { left = left || keys['KeyA'] && mode === '1p'; right = right || keys['KeyD'] && mode === '1p'; if (mode === '1p') held = held || keys['Space']; }
-    if (touch.active && i === 0) { left = left || touch.left; right = right || touch.right; }
+    if (touch.active && i === 0) { left = left || touch.left; right = right || touch.right; held = held || touch.flapHeld; }
     if (pad.on && i === 0) { left = left || pad.left; right = right || pad.right; held = held || pad.flapHeld; }
     const flap = flapQueue[i]; flapQueue[i] = false;
     out.push({ left: !!left, right: !!right, flap: !!flap, flapHeld: !!held });
@@ -146,7 +164,7 @@ function readInputs() {
 }
 
 // ─── touch ───
-const touch = { active: false, device: false, left: false, right: false };
+const touch = { active: false, device: false, left: false, right: false, flapHeld: false };
 function setupTouch() {
   const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
   if (!isTouch) return;
@@ -164,14 +182,22 @@ function setupTouch() {
   bind('tL', () => touch.left = true, () => touch.left = false);
   bind('tR', () => touch.right = true, () => touch.right = false);
   const f = document.getElementById('tF');
-  f.addEventListener('pointerdown', e => { e.preventDefault(); touch.active = true; audio.init(); if (state === 'title') startFromTitle(); else if (state === 'playing') flapQueue[0] = true; else advanceScreen(); });
+  f.addEventListener('pointerdown', e => {
+    e.preventDefault(); touch.active = true; touch.flapHeld = true; audio.init();
+    if (state === 'title') startFromTitle();
+    else if (state === 'intro') { introTimer = 0; flapQueue[0] = true; }
+    else if (state === 'playing') flapQueue[0] = true;
+    else advanceScreen();
+  });
+  const flapUp = e => { e.preventDefault(); touch.flapHeld = false; };
+  f.addEventListener('pointerup', flapUp); f.addEventListener('pointerleave', flapUp); f.addEventListener('pointercancel', flapUp);
   window._touchbar = bar;
 }
 function updateTouchVis() { if (window._touchbar) window._touchbar.style.display = (touch.device && (state === 'playing' || state === 'intro')) ? 'flex' : 'none'; }
 function evToCanvas(e) { const r = hudCanvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * (hudCanvas.width / r.width), y: (e.clientY - r.top) * (hudCanvas.height / r.height) }; }
 
 // ─── gamepad (+ rumble) ───
-const pad = { on: false, left: false, right: false, flapHeld: false, _flap: false, _up: false, _down: false, _ok: false, _esc: false };
+const pad = { on: false, left: false, right: false, flapHeld: false, _flap: false, _up: false, _down: false, _ok: false, _esc: false, _pause: false };
 window.addEventListener('gamepadconnected', () => { pad.on = true; });
 let _gpRef = null;
 function rumble(strong, weak, ms) {
@@ -190,14 +216,20 @@ function pollGamepad() {
   pad.flapHeld = B(0) || B(1) || B(7) || B(12);
   const edge = (now, key) => { const was = pad['_' + key]; pad['_' + key] = now; return now && !was; };
   const flapNow = pad.flapHeld;
-  if (edge(flapNow, 'flap') && state === 'playing') flapQueue[0] = true;
+  if (edge(flapNow, 'flap') && (state === 'playing' || state === 'intro')) {
+    flapQueue[0] = true; if (state === 'intro') introTimer = 0;
+  }
   const upNow = ay < -0.5 || B(12), downNow = ay > 0.5 || B(13), okNow = B(0) || B(9), escNow = B(1) || B(8) || B(3);
-  const up = edge(upNow, 'up'), down = edge(downNow, 'down'), ok = edge(okNow, 'ok'), esc = edge(escNow, 'esc');
+  const pauseNow = B(9), up = edge(upNow, 'up'), down = edge(downNow, 'down'), ok = edge(okNow, 'ok'), esc = edge(escNow, 'esc'), pauseEdge = edge(pauseNow, 'pause');
   if (state !== 'playing') {
     if (up) handleKeyUI({ code: 'ArrowUp' }); if (down) handleKeyUI({ code: 'ArrowDown' });
     if (pad.left && !pad._padLeftWas) handleKeyUI({ code: 'ArrowLeft' }); if (pad.right && !pad._padRightWas) handleKeyUI({ code: 'ArrowRight' });
     if (ok) { audio.init(); handleKeyUI({ code: 'Enter' }); } if (esc) handleKeyUI({ code: 'Escape' });
-  } else if (esc && !escDownAt) { escDownAt = performance.now(); }
+  } else {
+    if (pauseEdge) paused = !paused;
+    if (esc && !escDownAt) escDownAt = performance.now();
+    if (!escNow) escDownAt = 0;
+  }
   pad._padLeftWas = pad.left; pad._padRightWas = pad.right;
 }
 
@@ -223,13 +255,13 @@ function startRun(wv) {
   gotoIntro();
 }
 function gotoIntro() {
-  state = 'intro'; introTimer = 150;
+  state = 'intro'; introTimer = 210;
   bannerLines = bannerForWave(engine.wave, engine.waveType);
   audio.play('start');
 }
 function bannerForWave(wv, type) {
   const lines = [];
-  if (wv === 1) lines.push(PHRASES.prepare);
+  if (wv === 1) lines.push('WAVE 1', PHRASES.prepare, 'BUZZARD BAIT!');
   else lines.push('WAVE ' + wv);
   if (type === 'survival') lines.push(mode === '2p' ? PHRASES.team : PHRASES.survival, mode === '2p' ? PHRASES.teamCoop : PHRASES.survivalGet);
   else if (type === 'gladiator') lines.push(PHRASES.gladiator, mode === '2p' ? PHRASES.bounty : PHRASES.prepare);
@@ -275,7 +307,7 @@ function commitHs() {
 function flash(msg) { flashMsg = msg; flashUntil = performance.now() + 1600; }
 
 // ─── event → fx/sound/achievement bridge ───
-const SND = { flap: 'flap', thud: 'thud', skid: 'skid', walk: 'walk', eggDrop: 'eggDrop', eggCollect: 'eggCollect', eggHatch: 'eggHatch', eggLand: 'thud', enemyDie: 'enemyDie', playerDie: 'playerDie', ptero: 'ptero', pteroDie: 'pteroDie', troll: 'troll', bounce: 'bounce', bounty: 'bounty', extraMan: 'extraMan', bait: 'bait', spawn: 'spawn', mount: 'mount', materialized: 'materialized', waveClear: 'waveClear' };
+const SND = { flap: 'flap', thud: 'thud', cthud: 'cthud', skid: 'skid', walk: 'walk', eggDrop: 'eggDrop', eggCollect: 'eggCollect', eggHatch: 'eggHatch', eggLand: 'thud', enemyDie: 'enemyDie', playerDie: 'playerDie', ptero: 'ptero', pteroDie: 'pteroDie', troll: 'troll', bounce: 'bounce', bounty: 'bounty', extraMan: 'extraMan', bait: 'bait', spawn: 'spawn', mount: 'mount', materialized: 'materialized', waveClear: 'waveClear' };
 function processEvents(evs, quiet) {
   for (const e of evs) {
     if (!quiet) { const s = SND[e.type]; if (s) audio.play(s); }
@@ -339,12 +371,13 @@ function frame(now) {
   let dt = now - lastT; lastT = now; if (dt > 200) dt = 200;
   pollGamepad();
   renderer.resize();
-  renderer.updateFx();
+  const frameUnits = Math.min(4, dt / STEP_MS);   // 60Hz-normalized so timers are FPS-independent
+  renderer.updateFx(frameUnits);
 
   if (state === 'playing' && !paused) {
     const rate = killCam > 0 ? 0.32 : 1;      // kill-cam slow-mo
     acc += dt * rate;
-    if (killCam > 0) { killCam--; renderer.punchT = Math.max(renderer.punchT, 0.7); }
+    if (killCam > 0) { killCam -= frameUnits; renderer.punchT = Math.max(renderer.punchT, 0.7); }
     while (acc >= STEP_MS) {
       acc -= STEP_MS;
       const snap = engine.tick(readInputs());
@@ -357,9 +390,9 @@ function frame(now) {
   } else if (state === 'title' || state === 'attract') {
     acc += dt; while (acc >= STEP_MS) { acc -= STEP_MS; stepAttract(); }
   } else if (state === 'intro') {
-    introTimer--; if (introTimer <= 0) state = 'playing';
+    introTimer -= frameUnits; if (introTimer <= 0) state = 'playing';
   } else if (state === 'clear') {
-    clearTimer--; if (clearTimer <= 0) advanceAfterClear();
+    clearTimer -= frameUnits; if (clearTimer <= 0) advanceAfterClear();
   }
 
   draw(now, dt);
@@ -422,8 +455,11 @@ function panel(x, y, w, h, r) {
 function draw(now, dt) {
   const W = hudCanvas.width, H = hudCanvas.height;
   ctx.clearRect(0, 0, W, H);
-  const snap = (state === 'title' || state === 'attract') ? (attract ? attract.snapshot() : null)
-    : engine ? engine.snapshot() : null;
+  // fresh snapshots only for live sims; static screens (paused/menus/gameover) reuse the last one
+  let snap;
+  if (state === 'title' || state === 'attract') snap = _lastSnap = (attract ? attract.snapshot() : null);
+  else if (engine && (state === 'playing' || state === 'intro' || state === 'clear') && !paused) snap = _lastSnap = engine.snapshot();
+  else snap = _lastSnap;
   renderer.render(snap, dt);
 
   if (state === 'title' || state === 'attract') drawTitle(now);
@@ -434,7 +470,7 @@ function draw(now, dt) {
   else if (state === 'feats') { dim(); drawFeats(); }
   else if (state === 'hsentry') { dim(); drawHsEntry(); }
   else if (state === 'intro') { drawHUD(); drawBanner(); }
-  else if (state === 'playing') { renderer.drawFloats(txt); drawHUD(); drawEscHold(now); if (!engine.started) drawStartPrompt(now); if (paused) drawPause(); if (killCam > 0) drawKillCam(); }
+  else if (state === 'playing') { renderer.drawFloats(txt); drawHUD(); drawEscHold(now); if (!engine.started || engine.players.some(p => p.safe)) drawStartPrompt(now); if (paused) drawPause(); if (killCam > 0) drawKillCam(); }
   else if (state === 'clear') { drawHUD(); drawClear(); }
   else if (state === 'gameover') drawGameOver();
 
@@ -449,16 +485,17 @@ function drawVignette(W, H) {
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
 function drawToasts(W, H) {
+  const u = H / 720;
   let y = H * 0.2;
   for (const t of featToasts) {
     t.t++;
     const a = t.t < 20 ? t.t / 20 : t.t > 160 ? 1 - (t.t - 160) / 30 : 1;
     ctx.globalAlpha = Math.max(0, a);
-    panel(W - 340, y, 300, 54, 12);
-    txt('🏆 ' + t.name, W - 190, y + 20, 17, '#ffd23a');
-    txt('ACHIEVEMENT UNLOCKED', W - 190, y + 39, 10.5, '#8a93a8', 'center', 600);
+    panel(W - 340 * u, y, 300 * u, 54 * u, 12 * u);
+    txt('🏆 ' + t.name, W - 190 * u, y + 20 * u, 17 * u, '#ffd23a');
+    txt('ACHIEVEMENT UNLOCKED', W - 190 * u, y + 39 * u, 10.5 * u, '#8a93a8', 'center', 600);
     ctx.globalAlpha = 1;
-    y += 64;
+    y += 64 * u;
   }
   featToasts = featToasts.filter(t => t.t < 190);
 }
@@ -492,40 +529,43 @@ function drawTitle(now) {
 
 function drawHUD() {
   const W = hudCanvas.width, H = hudCanvas.height;
+  const u = H / 720;                 // scale factor: HUD layout was designed at 720p
   const P = engine.players;
   const fs = Math.round(H / 34);
   // P1 score card
-  panel(14, 12, 190, 58, 12);
-  txt('P1', 34, 30, fs * 0.8, '#ffd23a', 'left');
-  txt(P[0].score.toLocaleString(), 34, 52, fs, '#fff', 'left');
-  drawLivesGlyphs(120, 30, P[0].lives, '#ffd23a');
-  if (P[0].eggStreak >= 2) { const col = ['#ffe14d', '#ffd23a', '#ff8a00', '#ff4d4d'][Math.min(3, P[0].eggStreak - 1)]; txt('CHAIN x' + P[0].eggStreak, 34, 82, fs * 0.72, col, 'left'); }
+  panel(14 * u, 12 * u, 200 * u, 58 * u, 12 * u);
+  txt('P1', 34 * u, 28 * u, fs * 0.66, '#ffd23a', 'left');
+  txt(P[0].score.toLocaleString(), 34 * u, 51 * u, fs * 0.92, '#fff', 'left');
+  drawLivesGlyphs(128 * u, 28 * u, P[0].lives, '#ffd23a', u);
+  if (P[0].eggStreak >= 2) { const col = ['#ffe14d', '#ffd23a', '#ff8a00', '#ff4d4d'][Math.min(3, P[0].eggStreak - 1)]; txt('CHAIN x' + P[0].eggStreak, 34 * u, 84 * u, fs * 0.66, col, 'left'); }
   if (mode === '2p') {
-    panel(W - 204, 12, 190, 58, 12);
-    txt('P2', W - 184, 30, fs * 0.8, '#7fd4ff', 'left');
-    txt(P[1].score.toLocaleString(), W - 184, 52, fs, '#fff', 'left');
-    drawLivesGlyphs(W - 96, 30, P[1].lives, '#7fd4ff');
-    if (P[1].eggStreak >= 2) txt('CHAIN x' + P[1].eggStreak, W - 184, 82, fs * 0.72, '#ff8a00', 'left');
+    panel(W - 214 * u, 12 * u, 200 * u, 58 * u, 12 * u);
+    txt('P2', W - 194 * u, 28 * u, fs * 0.66, '#7fd4ff', 'left');
+    txt(P[1].score.toLocaleString(), W - 194 * u, 51 * u, fs * 0.92, '#fff', 'left');
+    drawLivesGlyphs(W - 100 * u, 28 * u, P[1].lives, '#7fd4ff', u);
+    if (P[1].eggStreak >= 2) txt('CHAIN x' + P[1].eggStreak, W - 194 * u, 84 * u, fs * 0.66, '#ff8a00', 'left');
   }
   // wave pill (hidden while the kill-cam letterbox owns the top of the screen)
   if (killCam <= 0) {
-    panel(W / 2 - 74, 12, 148, 34, 17);
+    panel(W / 2 - 84 * u, 12 * u, 168 * u, 34 * u, 17 * u);
     const wt = engine.waveType;
     const wl = wt === 'survival' ? ' · SURVIVAL' : wt === 'gladiator' ? ' · GLADIATOR' : wt === 'egg' ? ' · EGG' : wt === 'ptero' ? ' · PTERO' : '';
-    txt('WAVE ' + engine.wave + wl, W / 2, 29, fs * 0.78, '#dfe6f5');
+    txt('WAVE ' + engine.wave + wl, W / 2, 29 * u, fs * 0.7, '#dfe6f5');
   }
   // next special
   const nxt = nextSpecial(engine.wave);
-  if (nxt) txt(nxt, W - 22, H - 24, fs * 1.1, '#ff8a00', 'right');
+  if (nxt) txt(nxt, W - 22 * u, H - 24 * u, fs * 1.1, '#ff8a00', 'right');
 }
-function drawLivesGlyphs(x, y, lives, col) {
+// spare mounts (the one you ride isn't a spare — mirror the retro HUD semantics)
+function drawLivesGlyphs(x, y, lives, col, u) {
+  u = u || 1;
   ctx.fillStyle = col;
-  for (let i = 0; i < Math.min(lives, 5); i++) {
-    const gx = x + i * 15;
+  for (let i = 0; i < Math.min(lives - 1, 5); i++) {
+    const gx = x + i * 15 * u;
     ctx.beginPath();
-    ctx.ellipse(gx, y + 3, 4.4, 3.2, 0, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(gx + 2, y + 1); ctx.quadraticCurveTo(gx + 6, y - 4, gx + 7, y - 6);
-    ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.stroke();
+    ctx.ellipse(gx, y + 3 * u, 4.4 * u, 3.2 * u, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(gx + 2 * u, y + 1 * u); ctx.quadraticCurveTo(gx + 6 * u, y - 4 * u, gx + 7 * u, y - 6 * u);
+    ctx.strokeStyle = col; ctx.lineWidth = 1.6 * u; ctx.stroke();
   }
 }
 function nextSpecial(wv) {
@@ -563,11 +603,11 @@ function drawPause() {
 function drawEscHold(now) {
   if (!escDownAt) return;
   const t = Math.min(1, (now - escDownAt) / 800); if (t < 0.12) return;
-  const W = hudCanvas.width, cx = W / 2, y = hudCanvas.height * 0.1;
-  panel(cx - 140, y, 280, 40, 10);
-  ctx.fillStyle = '#333'; ctx.fillRect(cx - 116, y + 24, 232, 7);
-  ctx.fillStyle = '#ff5555'; ctx.fillRect(cx - 116, y + 24, 232 * t, 7);
-  txt('HOLD ESC — RESTART WAVE (−1 LIFE)', cx, y + 12, 12, '#ffaaaa');
+  const W = hudCanvas.width, cx = W / 2, y = hudCanvas.height * 0.1, u = hudCanvas.height / 720;
+  panel(cx - 140 * u, y, 280 * u, 40 * u, 10 * u);
+  ctx.fillStyle = '#333'; ctx.fillRect(cx - 116 * u, y + 24 * u, 232 * u, 7 * u);
+  ctx.fillStyle = '#ff5555'; ctx.fillRect(cx - 116 * u, y + 24 * u, 232 * u * t, 7 * u);
+  txt('HOLD ESC — RESTART WAVE (−1 LIFE)', cx, y + 12 * u, 12 * u, '#ffaaaa');
 }
 function drawHelp() {
   const W = hudCanvas.width, H = hudCanvas.height;
@@ -601,7 +641,7 @@ function OPT_ROWS() {
     ['CAMERA SHAKE', () => save.opts.camShake ? 'ON' : 'OFF', () => save.opts.camShake = !save.opts.camShake],
     ['GAMEPAD RUMBLE', () => save.opts.rumble ? 'ON' : 'OFF', () => save.opts.rumble = !save.opts.rumble],
     ['DIFFICULTY', () => save.opts.difficulty.toUpperCase(), d => { const o = ['easy', 'normal', 'hard']; let i = (o.indexOf(save.opts.difficulty) + (d > 0 ? 1 : o.length - 1)) % o.length; save.opts.difficulty = o[i]; }],
-    ['STARTING MEN', () => '' + save.opts.lives, d => { save.opts.lives = Math.max(3, Math.min(5, save.opts.lives + d)); }],
+    ['STARTING MOUNTS', () => '' + save.opts.lives, d => { save.opts.lives = Math.max(1, Math.min(9, save.opts.lives + d)); }],
     ['REMAP P1 FLAP', () => keyName(save.opts.keys.p1.flap), () => rebindTarget = { player: 'p1', action: 'flap' }],
     ['REMAP P2 FLAP', () => keyName(save.opts.keys.p2.flap), () => rebindTarget = { player: 'p2', action: 'flap' }],
     ['ALL WAVES (PASS:1234)', () => save.unlockAll ? 'UNLOCKED' : 'LOCKED', () => { promptUnlock(); }],

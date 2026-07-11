@@ -174,9 +174,9 @@ function scaleUV(geo, s) {
 }
 
 // ═══ platform rock geometry ═══
-function platformMesh(def, seed, rockTex) {
+function platformMesh(def, seed, texReg) {
   const w = def.x2 - def.x1;
-  const isBase = def.y >= 200;
+  const isBase = def.y >= WORLD.LAVA_Y - 20;   // data-driven: "base" = platforms sitting just above the lava
   const depth = isBase ? 34 : 26;
   const hgt = isBase ? Y3(def.y) - (LAVA_Y - 16) : 14 + hash(seed) * 10; // base roots into lava
   const sh = new T.Shape();
@@ -206,13 +206,14 @@ function platformMesh(def, seed, rockTex) {
   }
   geo.computeVertexNormals();
   scaleUV(geo, 1 / 46);
-  const mat = new T.MeshStandardMaterial({ color: isBase ? 0xb09a88 : 0xb8aca2, map: rockTex, roughness: 0.95, flatShading: true });
+  // maps are assigned later, in the texture loader's onLoad — cloning an unloaded texture
+  // leaves the clone permanently imageless (flat-color platforms; bit us on real GPUs)
+  const mat = new T.MeshStandardMaterial({ color: isBase ? 0xb09a88 : 0xb8aca2, roughness: 0.95, flatShading: true });
+  texReg.push({ mat, kind: 'body' });
   const mesh = new T.Mesh(geo, mat);
-  // walkable top lip — its own texture clone so the tiling matches its dimensions
-  const lipTex = rockTex ? rockTex.clone() : null;
-  if (lipTex) { lipTex.repeat.set((w + 3) / 46, (depth + 3) / 46); lipTex.needsUpdate = true; }
-  const lip = new T.Mesh(new T.BoxGeometry(w + 3, 2.4, depth + 3),
-    new T.MeshStandardMaterial({ color: 0xfff2e2, map: lipTex, roughness: 0.85, flatShading: true }));
+  const lipMat = new T.MeshStandardMaterial({ color: 0xfff2e2, roughness: 0.85, flatShading: true });
+  texReg.push({ mat: lipMat, kind: 'lip', w: w + 3, d: depth + 3 });
+  const lip = new T.Mesh(new T.BoxGeometry(w + 3, 2.4, depth + 3), lipMat);
   lip.position.set(w / 2, -0.1, 0);
   const grp = new T.Group(); grp.add(mesh); grp.add(lip);
   if (isBase) { // emissive cracks near the lava line
@@ -270,6 +271,9 @@ class Particles {
     }
   }
   update() {
+    // no live particles and buffers already flushed → skip the per-frame GPU upload entirely
+    if (!this.live.length && !this._dirty) return;
+    this._dirty = this.live.length > 0;
     const drop = [];
     for (const p of this.live) {
       p.t++;
@@ -300,7 +304,8 @@ varying vec2 vUv; varying float vDist; uniform float uT;
 float h(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 float n(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
   return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y); }
-float fbm(vec2 p){ float v=0.0,a=0.5; for(int i=0;i<4;i++){ v+=a*n(p); p*=2.13; a*=0.5; } return v; }
+uniform int uOct;
+float fbm(vec2 p){ float v=0.0,a=0.5; for(int i=0;i<4;i++){ if(i>=uOct) break; v+=a*n(p); p*=2.13; a*=0.5; } return v; }
 void main(){
   vec2 uv = vUv*vec2(26.0,7.0);
   float f = fbm(uv + vec2(uT*0.14, uT*0.05));
@@ -361,6 +366,7 @@ class Renderer3D {
     const pr = q === 'high' ? Math.min(window.devicePixelRatio || 1, 2) : q === 'medium' ? 1.25 : 1;
     this.gl.setPixelRatio(pr);
     this.stars.visible = q !== 'low';
+    if (this.lavaMat) this.lavaMat.uniforms.uOct.value = q === 'high' ? 4 : q === 'medium' ? 3 : 2;
     this._resizeNow();
   }
 
@@ -416,7 +422,7 @@ class Renderer3D {
   }
 
   buildLava() {
-    this.lavaMat = new T.ShaderMaterial({ vertexShader: LAVA_VS, fragmentShader: LAVA_FS, uniforms: { uT: { value: 0 } } });
+    this.lavaMat = new T.ShaderMaterial({ vertexShader: LAVA_VS, fragmentShader: LAVA_FS, uniforms: { uT: { value: 0 }, uOct: { value: 4 } } });
     // an endless molten sea reaching the horizon ridges
     const lava = new T.Mesh(new T.PlaneGeometry(SPAN * 5, 830, 130, 42), this.lavaMat);
     lava.rotation.x = -Math.PI / 2; lava.position.set(0, LAVA_Y, -275);
@@ -425,19 +431,26 @@ class Renderer3D {
 
   buildPlatforms() {
     this.platGroups = {};
-    const loader = new T.TextureLoader();
-    this.rockTex = loader.load('assets/tex/rock.jpg');
-    this.rockTex.wrapS = this.rockTex.wrapT = T.RepeatWrapping;
-    this.rockTex.colorSpace = T.SRGBColorSpace;
+    const texReg = [];
     let seed = 7;
     for (const def of PLATFORMS) {
-      const base = platformMesh(def, seed += 13, this.rockTex);
+      const base = platformMesh(def, seed += 13, texReg);
       const g = new T.Group();
       for (const off of [-SPAN, 0, SPAN]) { const c = base.clone(); c.position.x += off; g.add(c); }
       this.scene.add(g);
       this.platGroups[def.id] = g;
       this.platVisible[def.id] = true;
     }
+    // assign rock maps only once the image exists (clones of an unloaded texture stay blank)
+    new T.TextureLoader().load('assets/tex/rock.jpg', tex => {
+      tex.wrapS = tex.wrapT = T.RepeatWrapping;
+      tex.colorSpace = T.SRGBColorSpace;
+      for (const r of texReg) {
+        let m = tex;
+        if (r.kind === 'lip') { m = tex.clone(); m.repeat.set(r.w / 46, r.d / 46); m.needsUpdate = true; }
+        r.mat.map = m; r.mat.needsUpdate = true;
+      }
+    });
     // spawn pad glow discs
     for (const p of SPAWN_PADS) {
       const d = new T.Mesh(new T.CircleGeometry(9, 20),
@@ -450,18 +463,22 @@ class Renderer3D {
   // ─── sizing ───
   resize() {
     const w = this.canvas.clientWidth || innerWidth, h = this.canvas.clientHeight || innerHeight;
-    if (w === this._lw && h === this._lh) return;
-    this._lw = w; this._lh = h;
+    const dpr = window.devicePixelRatio || 1;
+    if (w === this._lw && h === this._lh && dpr === this._ldpr) return;
+    this._lw = w; this._lh = h; this._ldpr = dpr;
     this._resizeNow();
   }
   _resizeNow() {
     const w = this._lw || innerWidth, h = this._lh || innerHeight;
+    // re-apply pixel ratio here too — the window may have moved to a different-DPI display
+    const q = this.quality;
+    this.gl.setPixelRatio(q === 'high' ? Math.min(window.devicePixelRatio || 1, 2) : q === 'medium' ? 1.25 : 1);
     this.gl.setSize(w, h, false);
     this.hud.width = w * (window.devicePixelRatio > 1.4 ? 1.5 : 1); this.hud.height = h * (window.devicePixelRatio > 1.4 ? 1.5 : 1);
     this.camera.aspect = w / h;
-    // fit playfield: x ±(146+14), y −112..+96 (+ margin)
+    // fit the playfield with headroom for lances/heads (~20 units above feet-origin)
     const fov = this.camera.fov * Math.PI / 180;
-    const needH = 116, needW = 165;
+    const needH = HALF_H + 6, needW = HALF_W + 22;
     const dH = needH / Math.tan(fov / 2);
     const dW = needW / (Math.tan(fov / 2) * this.camera.aspect);
     this.camDist = Math.max(dH, dW) + 20;
@@ -491,11 +508,12 @@ class Renderer3D {
       this.hctx.globalAlpha = 1;
     }
   }
-  updateFx() {
-    for (const f of this.floats) f.t++;
+  updateFx(fu) {
+    fu = fu || 1;   // 60Hz-normalized frame units so fx age at the same speed on any refresh rate
+    for (const f of this.floats) f.t += fu;
     this.floats = this.floats.filter(f => f.t < 65);
-    this.shake *= 0.88; if (this.shake < 0.05) this.shake = 0;
-    this.punchT *= 0.9;
+    this.shake *= Math.pow(0.88, fu); if (this.shake < 0.05) this.shake = 0;
+    this.punchT *= Math.pow(0.9, fu);
   }
 
   // ─── entity views ───
@@ -519,9 +537,9 @@ class Renderer3D {
     const camYaw = 0.30;
     g.rotation.y = e.face === 1 ? -camYaw : Math.PI + camYaw;
     g.rotation.z = Math.max(-0.3, Math.min(0.3, -(e.vx || 0) * 0.07 * (e.face || 1)));
-    // wings
+    // wings — v2 engine: players signal wings-down via flapHeld, not just the wingDown timer
     const s = bv.state;
-    const target = e.wingDown > 0 ? 1.05 : (e.onGround ? 0.12 : -0.38);
+    const target = (e.wingDown > 0 || e.flapHeld) ? 1.05 : (e.onGround ? 0.12 : -0.38);
     s.wingA += (target - s.wingA) * 0.38;
     for (const w of bv.wings) w.wg.rotation.x = w.side * s.wingA;
     // legs
