@@ -6,8 +6,8 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 const require = createRequire(import.meta.url);
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const DATA = require(join(root, 'assets/data.js'));
-const { JoustEngine, wrapDelta, wrapX } = require(join(root, 'assets/engine.js'));
+const DATA = require(join(root, 'retro/assets/data.js'));
+const { JoustEngine, wrapDelta, wrapX } = require(join(root, 'retro/assets/engine.js'));
 
 let pass = 0, fail = 0;
 const fails = [];

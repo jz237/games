@@ -44,14 +44,17 @@ class AudioSys {
   }
   async loadSamples() {
     if (this.loaded) return; this.loaded = true;
+    // base + theme are overridable so the modern 3D edition can reuse this system from its own dir
+    const BASE = (typeof window !== 'undefined' && window.__JOUST_AUDIO_BASE) || 'assets/audio/';
+    const THEME = (typeof window !== 'undefined' && window.__JOUST_THEME) || (BASE + 'title-theme.ogg');
     try {
       const q = '?v=' + VER;
-      const man = await (await fetch('assets/audio/manifest.json' + q)).json();
+      const man = await (await fetch(BASE + 'manifest.json' + q)).json();
       await Promise.all(man.samples.map(async s => {
-        try { const ab = await (await fetch('assets/audio/' + s.file + q)).arrayBuffer(); this.buffers[s.name] = await this.ac.decodeAudioData(ab); } catch (e) {}
+        try { const ab = await (await fetch(BASE + s.file + q)).arrayBuffer(); this.buffers[s.name] = await this.ac.decodeAudioData(ab); } catch (e) {}
       }));
       // original title/menu theme (menus only; gameplay stays SFX-only)
-      try { const ab = await (await fetch('assets/audio/title-theme.ogg' + q)).arrayBuffer(); this.titleBuf = await this.ac.decodeAudioData(ab); if (this._wantMusic) this.startMusic(); } catch (e) {}
+      try { const ab = await (await fetch(THEME + q)).arrayBuffer(); this.titleBuf = await this.ac.decodeAudioData(ab); if (this._wantMusic) this.startMusic(); } catch (e) {}
     } catch (e) { /* keep synth fallback */ }
   }
   resume() { if (this.ac && this.ac.state === 'suspended') this.ac.resume(); }

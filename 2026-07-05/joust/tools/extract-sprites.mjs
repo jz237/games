@@ -129,8 +129,8 @@ console.log('');
 // ── emit sprites.js (base64 rgba) ──
 const out = {};
 for (const [nm, s] of Object.entries(sprites)) out[nm] = { w: s.w, h: s.h, d: s.rgba.toString('base64') };
-writeFileSync(join(root, 'assets/sprites.js'),
+writeFileSync(join(root, 'retro/assets/sprites.js'),
   '// AUTO-GENERATED from the original Joust ROM sprite data (JOUSTI.ASM) — do not hand-edit.\n' +
   "'use strict';(function(){var S=" + JSON.stringify(out) + ';\n' +
   'if(typeof module!=="undefined"&&module.exports)module.exports=S;if(typeof window!=="undefined")window.JOUST_SPRITES=S;})();\n');
-console.log('wrote assets/sprites.js');
+console.log('wrote retro/assets/sprites.js');
