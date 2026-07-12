@@ -527,15 +527,20 @@ function drawTitle(now) {
   const W = hudCanvas.width, H = hudCanvas.height;
   ctx.fillStyle = 'rgba(3,4,12,0.42)'; ctx.fillRect(0, 0, W, H);
   // wordmark (clamped by width so portrait phones don't overflow)
-  const ts = Math.round(Math.min(H / 5.6, W / 4.6));
-  ctx.font = `900 ${ts}px 'Courier New',monospace`;
+  const ts = Math.round(Math.min(H / 5.2, W / 4.5));
+  ctx.font = `900 ${ts}px 'Arial Black',Arial,'Segoe UI',sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const gy = H * 0.185;
+  try { ctx.letterSpacing = Math.round(ts * 0.05) + 'px'; } catch (e) {}
   const grad = ctx.createLinearGradient(0, gy - ts / 2, 0, gy + ts / 2);
-  grad.addColorStop(0, '#fff2b0'); grad.addColorStop(0.45, '#ffd23a'); grad.addColorStop(1, '#8a4a08');
-  ctx.shadowColor = 'rgba(255,150,30,.45)'; ctx.shadowBlur = 28;
+  grad.addColorStop(0, '#fff6c8'); grad.addColorStop(0.5, '#ffcf35'); grad.addColorStop(1, '#a04a0a');
+  ctx.shadowColor = 'rgba(255,140,30,.55)'; ctx.shadowBlur = 34;
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(12,7,2,0.85)'; ctx.lineWidth = Math.max(3, ts * 0.05);
+  ctx.strokeText('JOUST', W / 2, gy);
   ctx.fillStyle = grad; ctx.fillText('JOUST', W / 2, gy);
   ctx.shadowBlur = 0;
+  try { ctx.letterSpacing = '0px'; } catch (e) {}
   txt('M O D E R N   3 D', W / 2, H * 0.30, Math.round(H / 30), '#7fd4ff', 'center', 700);
   const items = ['1 PLAYER', '2 PLAYERS', 'HOW TO PLAY', 'OPTIONS', 'WAVE SELECT', 'HIGH SCORES', 'ACHIEVEMENTS'];
   const y0 = H * 0.42, dy = H * 0.066;

@@ -124,8 +124,8 @@ function birdView(kind, variant) {
       const f = new T.Mesh(new T.BoxGeometry(1.7 - i * 0.16, 0.34, len), i >= 3 ? mats.trim : mats.body);
       f.position.set(-1.1 - i * 1.35, -0.1 - i * 0.16, side * (len / 2 + 0.6));
       const fg = new T.Group(); fg.add(f);
-      fg.rotation.y = side * (-0.10 - i * 0.16);   // sweep back
-      fg.rotation.x = side * (i * 0.05);           // slight fan spread
+      fg.rotation.y = side * (-0.09 - i * 0.13);   // sweep back
+      fg.rotation.x = side * (i * 0.025);          // slight fan spread (subtle — splays when folded)
       wg.add(fg);
     }
     g.add(sh); wings.push({ sh, wg, side });
@@ -812,8 +812,11 @@ class Renderer3D {
   shakeBy(n) { this.shake = Math.min(14, this.shake + n); if (n >= 5) this.punchT = 1; }
   addEffect(frames, ex, ey, sizeMul, dur) {
     const x = X3(ex), y = Y3(ey);
-    this.particles.burst(x, y, 'poof', { n: Math.round(14 * (sizeMul || 1)), col: '#ffd9a0' });
+    // layered kill-pop: white-hot core, warm body, ember risers (bloom does the rest)
+    this.particles.burst(x, y, 'poof', { n: Math.round(4 * (sizeMul || 1)), col: '#fff3d0' });
+    this.particles.burst(x, y, 'poof', { n: Math.round(12 * (sizeMul || 1)), col: '#ffd9a0' });
     this.particles.burst(x, y, 'poof', { n: Math.round(8 * (sizeMul || 1)), col: '#ff8a3c' });
+    this.particles.burst(x, y, 'spark', { n: Math.round(6 * (sizeMul || 1)), col: '#ffe98a', up: true });
   }
   burst(kind, ex, ey, opts) { this.particles.burst(X3(ex), Y3(ey), kind, opts); }
   float(text, ex, ey, col, big) { this.floats.push({ text, ex, ey, col: col || '#fff', big: !!big, t: 0 }); }
