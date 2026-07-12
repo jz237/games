@@ -38,20 +38,27 @@ cool-blue palette. Concept image: `modern/assets/tex/concept.jpg` (gpt-image-2).
       redesign (shaped wings, visible knight+lance, rim light). (fixes 5,6,8)
 - [ ] C: embers/atmosphere polish, spawn pads, title/HUD art pass, ambient loop (optional),
       LOW/MED/HIGH gating, mobile landscape + touch verify, 60fps check.
-- [ ] SHIP: bump __V3 + all ?v=, re-render art/modern.webp hub card, run all suites
-      (engine, retro browser, modern smoke), deploy jez237 + github mirror, verify live
-      (wrangler list + hardened probe), update joust memory note.
+- [x] SHIP (2026-07-12): __V3 1.2.0 + ?v= bumped, art/modern.webp re-rendered, all suites
+      green, deployed — site commit 86d72bf00 (Cloudflare deploy 7b80e9bd, top Production row
+      verified mine), games repo 4877a0e (github.io mirror "built"). Live probes: HTML __V3
+      1.2.0 ×3, pano/render3d/ambience/hubcard all 200, live headless render clean (no CSP
+      errors), live QA hook v1.2.0. Memory note updated.
 
 ## Assets (generate ONCE, reuse forever)
 
 | asset | file | status |
 |---|---|---|
-| concept north star | modern/assets/tex/concept.jpg | pending |
-| cavern equirect pano | modern/assets/tex/cavern-pano.jpg | pending |
-| rock albedo (tileable) | modern/assets/tex/rock2.jpg | pending (keep old rock.jpg until replaced) |
-| rock normal map | modern/assets/tex/rock2-n.jpg | derive from albedo in code (Sobel), not AI |
-| lava crack emissive | modern/assets/tex/lava-cracks.jpg | pending |
-| ember sprite | procedural (softDotTexture) unless it looks cheap | n/a |
+| concept north star | modern/assets/tex/concept.jpg | DONE (gpt-image-2) |
+| cavern equirect pano | modern/assets/tex/cavern-pano.jpg | DONE (gpt-image-2 21:9→2:1 stretch, seam-blend, bottom fade) |
+| rock albedo (tileable) | modern/assets/tex/rock2.jpg | DONE (gpt-image-2, seam-blend; old rock.jpg deleted) |
+| rock normal maps | rock2-n.jpg / rock-top-n.jpg | DONE (Sobel-derived in tex-prep, not AI) |
+| walkway albedo | modern/assets/tex/rock-top.jpg | DONE (contrast-lifted derivative, no API spend) |
+| lava crack emissive | modern/assets/tex/lava-cracks.jpg | DONE (gpt-image-2, seam-blend) |
+| ambience loop | modern/assets/audio/ambience.ogg | DONE (ElevenLabs SFX 5s seamless, 22KB) |
+| ember sprite | procedural softDotTexture + bloom | kept procedural (looks right) |
+
+Raw AI outputs live in notes/art-raw/ (committed for provenance / future edit-endpoint input).
+Regeneration prompts are in the tex-prep header + this file's history.
 
 ## Iteration log
 
