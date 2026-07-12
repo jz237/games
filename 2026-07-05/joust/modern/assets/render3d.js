@@ -1,12 +1,17 @@
 // Joust MODERN 3D — renderer. Three.js scene driven by the SAME deterministic engine as the
 // retro remake (../retro/assets/engine.js is authoritative; this file only draws).
 // Engine coords: x 0..292 (wraps at ±302 span), y grows DOWN, feet-origin. Scene: 1 unit = 1 px.
+// ART DIRECTION (v1.2 "volcanic cavern" overhaul): near-black basalt cave, lava lights the
+// scene from below, cool-blue skylight rim from above, warm-vs-cool palette, HDR bloom on
+// emissives. North star: assets/tex/concept.jpg. All post-processing is a small local
+// composer (strict CSP — no CDN addons).
 'use strict';
 (function () {
 
 const DATA = window.JOUST_DATA;
 const { WORLD, PLATFORMS, SPAWN_PADS } = DATA;
 const T = window.THREE;
+const Q = '?v=' + (window.__V3 || '0');
 
 const HALF_W = WORLD.VIEW_W / 2;          // 146
 const HALF_H = WORLD.VIEW_H / 2;          // 120
@@ -18,120 +23,213 @@ const LAVA_Y = Y3(WORLD.LAVA_Y);          // -103
 // deterministic hash noise for geometry jitter
 function hash(n) { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
 
-// ─── palette ───
+// ─── palette (locked to assets/tex/concept.jpg) ───
 const COL = {
-  rock: 0x7d746c, rockDark: 0x3a3432, rockTop: 0x958a7e, rockGlow: 0xff5a1a,
-  lavaDeep: 0x36030b, sky: 0x070512, horizon: 0x54160a,
-  p1Body: 0xf5c62e, p1Trim: 0xb8860b, p1Rider: 0x3878c0, p1Helm: 0xdfe8f5,
-  p2Body: 0x9fc7e8, p2Trim: 0x4a7ea8, p2Rider: 0xc03878, p2Helm: 0xdfe8f5,
-  bounder: 0xd23c28, hunter: 0x9aa0ac, shadow: 0x4a58d8,
-  buzzard: 0x4c8a3f, beak: 0xff8a00, legs: 0xc47612,
-  lance: 0xd8dde8, egg: 0xf2e7c8, ptero: 0x7ba05a,
+  rockTint: 0xcfc6bc, lipTint: 0x9fb2c8, rockGlow: 0xff5a1a,
+  lavaDeep: 0x2a0404, fogCol: 0x0a0508,
+  keyLight: 0xa8c4ff, rimLight: 0x5d8cff, bounceWarm: 0xff5a14, lavaLight: 0xff5512,
+  p1Body: 0xffc93a, p1Trim: 0x8a5a10, p1Rider: 0x3878d8, p1Helm: 0xe8eef8,
+  p2Body: 0x9fc7e8, p2Trim: 0x4a7ea8, p2Rider: 0xc03878, p2Helm: 0xe8eef8,
+  buzzard: 0x515e56, beak: 0xff9a1a, legs: 0xd08018,
+  lance: 0xe8eef8, egg: 0xf2e7c8, ptero: 0x6a8a52,
 };
-const ENEMY_COL = { bounder: { body: 0x8a9c46, rider: 0xd23c28 }, hunter: { body: 0x8a9c46, rider: 0xb9bfc9 }, shadow: { body: 0x3c465a, rider: 0x5a6ae8 } };
+const ENEMY_COL = {
+  bounder: { body: 0x687452, rider: 0xe83c22 },
+  hunter: { body: 0x5a645c, rider: 0xb8c2d2 },
+  shadow: { body: 0x3a4560, rider: 0x6a7aff },
+};
+
+function castAll(g) { g.traverse(o => { if (o.isMesh) { o.castShadow = true; } }); return g; }
 
 // ═══ procedural bird (mount + rider), feet at origin, faces +x ═══
+// war-ostrich redesign: feathered fan wings + tail, curved neck, armored knight with
+// plume, shield and a real lance — silhouettes read at gameplay distance (concept.jpg).
 function birdView(kind, variant) {
-  const g = new T.Group();
+  // inner group carries a fixed 1.12 read-size boost; poseBird owns the OUTER group's
+  // scale (materialize squash) so the boost must not live there
+  const outer = new T.Group();
+  const g = new T.Group(); g.scale.setScalar(1.12); outer.add(g);
   const mats = {};
-  const M = (c, o) => new T.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.82, flatShading: true }, o));
+  const M = (c, o) => new T.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.78, flatShading: true }, o));
   let bodyC = COL.p1Body, trimC = COL.p1Trim, riderC = COL.p1Rider, helmC = COL.p1Helm, emis = 0;
   if (kind === 'player' && variant === 1) { bodyC = COL.p2Body; trimC = COL.p2Trim; riderC = COL.p2Rider; }
-  if (kind === 'enemy') { const e = ENEMY_COL[variant] || ENEMY_COL.bounder; bodyC = e.body; riderC = e.rider; trimC = 0x2e3620; helmC = 0x767c88; if (variant === 'shadow') emis = 0.55; }
-  mats.body = M(bodyC); mats.trim = M(trimC); mats.beak = M(COL.beak);
+  if (kind === 'enemy') { const e = ENEMY_COL[variant] || ENEMY_COL.bounder; bodyC = e.body; riderC = e.rider; trimC = 0x2a3024; helmC = 0x6a727e; if (variant === 'shadow') emis = 0.9; }
+  mats.body = M(bodyC);
+  mats.trim = M(trimC);
+  mats.beak = M(COL.beak, { emissive: COL.beak, emissiveIntensity: 0.22, roughness: 0.5 });
   mats.rider = M(riderC, variant === 'shadow' ? { emissive: riderC, emissiveIntensity: emis } : {});
-  mats.helm = M(helmC, { roughness: 0.35, metalness: 0.55 });
-  mats.lance = M(COL.lance, { roughness: 0.3, metalness: 0.7 });
-  mats.leg = M(0xc47612);
+  mats.armor = M(0x8a919e, { roughness: 0.34, metalness: 0.85 });
+  mats.helm = M(helmC, { roughness: 0.28, metalness: 0.8 });
+  mats.lance = M(0xcfd6e2, { roughness: 0.3, metalness: 0.85, emissive: 0x9ab4e8, emissiveIntensity: 0.18 });
+  mats.leg = M(COL.legs, { roughness: 0.6 });
 
-  // body
-  const body = new T.Mesh(new T.IcosahedronGeometry(4.6, 1), mats.body);
-  body.scale.set(1.35, 1, 0.92); body.position.set(0, 9.6, 0); g.add(body);
-  // tail
-  const tail = new T.Mesh(new T.ConeGeometry(2.3, 5.5, 5), mats.trim);
-  tail.rotation.z = Math.PI / 2 + 0.5; tail.position.set(-6.2, 10.8, 0); g.add(tail);
-  // neck + head
-  const neckG = new T.Group(); neckG.position.set(3.4, 12.2, 0);
-  const neck = new T.Mesh(new T.CylinderGeometry(1.1, 1.5, 5.4, 6), mats.body);
-  neck.rotation.z = -0.42; neck.position.set(1.1, 2.2, 0); neckG.add(neck);
-  const head = new T.Mesh(new T.IcosahedronGeometry(1.9, 1), mats.body); head.position.set(2.3, 4.7, 0); neckG.add(head);
-  const beak = new T.Mesh(new T.ConeGeometry(0.9, 3.1, 5), mats.beak);
-  beak.rotation.z = -Math.PI / 2; beak.position.set(4.5, 4.6, 0); neckG.add(beak);
-  const eyeM = new T.MeshBasicMaterial({ color: 0x0a0d18 });
-  const eye = new T.Mesh(new T.SphereGeometry(0.42, 6, 6), eyeM); eye.position.set(2.9, 5.2, 1.5); neckG.add(eye);
+  // ── mount ──
+  // teardrop torso: chunky faceted sphere + chest keel
+  const body = new T.Mesh(new T.SphereGeometry(4.9, 10, 7), mats.body);
+  body.scale.set(1.42, 1.04, 0.95); body.position.set(0.2, 9.9, 0); g.add(body);
+  const chest = new T.Mesh(new T.SphereGeometry(3.0, 8, 6), mats.body);
+  chest.scale.set(1.0, 1.15, 0.85); chest.position.set(4.6, 8.9, 0); g.add(chest);
+  const rump = new T.Mesh(new T.SphereGeometry(3.2, 8, 6), mats.trim);
+  rump.scale.set(1.15, 0.9, 0.85); rump.position.set(-4.4, 10.6, 0); g.add(rump);
+  // tail fan — five tapered feathers
+  const tail = new T.Group(); tail.position.set(-7.6, 11.2, 0);
+  for (let i = -2; i <= 2; i++) {
+    const f = new T.Mesh(new T.BoxGeometry(6.4 - Math.abs(i) * 0.8, 0.4, 1.5), Math.abs(i) === 2 ? mats.trim : mats.body);
+    f.position.set(-(3.0 - Math.abs(i) * 0.35), Math.abs(i) * -0.12, 0);
+    const fg = new T.Group(); fg.add(f);
+    fg.rotation.y = i * 0.22; fg.rotation.z = 0.5 + Math.abs(i) * 0.05;
+    tail.add(fg);
+  }
+  g.add(tail);
+  // saddle barding where the knight sits
+  const saddle = new T.Mesh(new T.SphereGeometry(3.4, 8, 5), mats.armor);
+  saddle.scale.set(1.05, 0.5, 0.9); saddle.position.set(-0.8, 13.0, 0); g.add(saddle);
+  // curved neck: two segments + head with crest and long beak
+  const neckG = new T.Group(); neckG.position.set(4.0, 12.0, 0);
+  const neck1 = new T.Mesh(new T.CylinderGeometry(1.15, 1.65, 4.4, 7), mats.body);
+  neck1.rotation.z = -0.55; neck1.position.set(0.9, 1.7, 0); neckG.add(neck1);
+  const neck2 = new T.Mesh(new T.CylinderGeometry(0.95, 1.2, 4.2, 7), mats.body);
+  neck2.rotation.z = -0.12; neck2.position.set(2.2, 5.2, 0); neckG.add(neck2);
+  const head = new T.Mesh(new T.SphereGeometry(2.15, 9, 7), mats.body); head.position.set(2.6, 7.6, 0); neckG.add(head);
+  const beak = new T.Mesh(new T.ConeGeometry(0.95, 3.9, 6), mats.beak);
+  beak.rotation.z = -Math.PI / 2; beak.position.set(5.2, 7.35, 0); neckG.add(beak);
+  for (const cz of [-0.5, 0.5]) {   // head crest feathers
+    const cr = new T.Mesh(new T.ConeGeometry(0.5, 2.6, 5), mats.trim);
+    cr.rotation.z = 0.75; cr.rotation.x = cz * 0.5; cr.position.set(1.5, 9.3, cz); neckG.add(cr);
+  }
+  const eyeM = new T.MeshStandardMaterial({ color: 0x11131c, roughness: 0.25, metalness: 0.4, emissive: kind === 'enemy' && variant === 'shadow' ? 0x5a6aff : 0x000000, emissiveIntensity: 1.2 });
+  for (const ez of [-1.7, 1.7]) { const eye = new T.Mesh(new T.SphereGeometry(0.5, 7, 6), eyeM); eye.position.set(3.6, 8.1, ez); neckG.add(eye); }
   g.add(neckG);
   // legs (hip-pivoted groups so they can run)
   const legs = [];
   for (const side of [-1, 1]) {
-    const hip = new T.Group(); hip.position.set(0.4, 7.0, side * 2.0);
-    const thigh = new T.Mesh(new T.CylinderGeometry(0.75, 0.6, 3.6, 5), mats.leg); thigh.position.y = -1.8; hip.add(thigh);
-    const kneeG = new T.Group(); kneeG.position.y = -3.6; hip.add(kneeG);
-    const shin = new T.Mesh(new T.CylinderGeometry(0.55, 0.45, 3.6, 5), mats.leg); shin.position.y = -1.7; kneeG.add(shin);
-    const foot = new T.Mesh(new T.BoxGeometry(2.3, 0.6, 1.1), mats.beak); foot.position.set(0.7, -3.5, 0); kneeG.add(foot);
+    const hip = new T.Group(); hip.position.set(0.4, 7.2, side * 2.1);
+    const thigh = new T.Mesh(new T.CylinderGeometry(0.95, 0.65, 3.8, 6), mats.leg); thigh.position.y = -1.9; hip.add(thigh);
+    const kneeG = new T.Group(); kneeG.position.y = -3.8; hip.add(kneeG);
+    const shin = new T.Mesh(new T.CylinderGeometry(0.55, 0.42, 3.7, 5), mats.leg); shin.position.y = -1.75; kneeG.add(shin);
+    const foot = new T.Mesh(new T.BoxGeometry(2.5, 0.65, 1.2), mats.beak); foot.position.set(0.8, -3.6, 0); kneeG.add(foot);
     g.add(hip); legs.push({ hip, knee: kneeG });
   }
-  // wings — layered feather planes, shoulder pivot
+  // wings — fanned feather planes on a shoulder pivot; big readable span
   const wings = [];
   for (const side of [-1, 1]) {
-    const sh = new T.Group(); sh.position.set(-0.5, 11.6, side * 3.1);
+    const sh = new T.Group(); sh.position.set(-0.4, 12.0, side * 3.4);
     const wg = new T.Group(); sh.add(wg);
-    for (let i = 0; i < 3; i++) {
-      const fw = 7.5 - i * 1.6, fl = 4.6 - i * 0.7;
-      const f = new T.Mesh(new T.BoxGeometry(fw, 0.5, fl), i === 0 ? mats.body : mats.trim);
-      f.position.set(-1 - i * 1.9, -i * 0.22, side * (fl / 2 + i * 0.5));
-      wg.add(f);
+    // wing cover plate at the shoulder
+    const cover = new T.Mesh(new T.SphereGeometry(2.1, 7, 5), mats.trim);
+    cover.scale.set(1.25, 0.55, 0.9); cover.position.set(-0.6, 0.2, side * 1.0); wg.add(cover);
+    // primaries: five tapered feathers fanning back and outward
+    for (let i = 0; i < 5; i++) {
+      const len = 9.6 - i * 1.15;
+      const f = new T.Mesh(new T.BoxGeometry(1.7 - i * 0.16, 0.34, len), i >= 3 ? mats.trim : mats.body);
+      f.position.set(-1.1 - i * 1.35, -0.1 - i * 0.16, side * (len / 2 + 0.6));
+      const fg = new T.Group(); fg.add(f);
+      fg.rotation.y = side * (-0.10 - i * 0.16);   // sweep back
+      fg.rotation.x = side * (i * 0.05);           // slight fan spread
+      wg.add(fg);
     }
     g.add(sh); wings.push({ sh, wg, side });
   }
-  // rider
-  const rider = new T.Group(); rider.position.set(-0.8, 13.2, 0); rider.scale.setScalar(1.18);
-  const torso = new T.Mesh(new T.CylinderGeometry(1.6, 2.0, 4.4, 6), mats.rider); torso.position.y = 2.0; rider.add(torso);
-  const helm = new T.Mesh(new T.IcosahedronGeometry(1.55, 1), mats.helm); helm.position.y = 5.1; rider.add(helm);
-  const crest = new T.Mesh(new T.BoxGeometry(2.6, 1.2, 0.4), mats.rider); crest.position.set(-0.4, 6.2, 0); rider.add(crest);
-  const arm = new T.Mesh(new T.CylinderGeometry(0.55, 0.55, 3.4, 5), mats.rider);
-  arm.rotation.z = -1.15; arm.position.set(1.8, 3.1, 0.9); rider.add(arm);
-  const lanceG = new T.Group(); lanceG.position.set(3.2, 3.6, 0.9);
-  const lance = new T.Mesh(new T.CylinderGeometry(0.34, 0.2, 15, 6), mats.lance);
-  lance.rotation.z = -Math.PI / 2 + 0.06; lance.position.x = 5.6; lanceG.add(lance);
-  const lTip = new T.Mesh(new T.ConeGeometry(0.55, 1.8, 6), mats.lance);
-  lTip.rotation.z = -Math.PI / 2; lTip.position.set(13.4, 0.47, 0); lanceG.add(lTip);
+  // ── knight ──
+  const rider = new T.Group(); rider.position.set(-0.9, 13.6, 0); rider.scale.setScalar(1.32);
+  const torso = new T.Mesh(new T.CylinderGeometry(1.5, 2.0, 4.2, 7), mats.rider); torso.position.y = 1.9; rider.add(torso);
+  const cuirass = new T.Mesh(new T.CylinderGeometry(1.7, 2.05, 2.6, 7), mats.armor); cuirass.position.y = 2.6; rider.add(cuirass);
+  for (const side of [-1, 1]) {   // pauldrons
+    const p = new T.Mesh(new T.SphereGeometry(0.95, 7, 6), mats.armor); p.position.set(0, 3.9, side * 1.55); rider.add(p);
+  }
+  const helm = new T.Mesh(new T.SphereGeometry(1.5, 8, 7), mats.helm); helm.scale.y = 1.15; helm.position.y = 5.3; rider.add(helm);
+  const visor = new T.Mesh(new T.BoxGeometry(1.1, 0.55, 2.3), new T.MeshStandardMaterial({ color: 0x090b12, roughness: 0.4 }));
+  visor.position.set(1.05, 5.35, 0); rider.add(visor);
+  // plume: arc of small fins in the rider colour — the team read from any distance
+  const plume = new T.Group();
+  for (let i = 0; i < 4; i++) {
+    const pf = new T.Mesh(new T.BoxGeometry(1.5 - i * 0.18, 1.35 - i * 0.16, 0.34), mats.rider);
+    pf.position.set(-0.5 - i * 0.85, 6.6 - i * 0.28, 0); pf.rotation.z = -0.28 - i * 0.24;
+    plume.add(pf);
+  }
+  rider.add(plume);
+  // shield on the camera side, tilted; emblem dot in team colour
+  const shield = new T.Mesh(new T.CylinderGeometry(1.9, 1.9, 0.4, 9), mats.armor);
+  shield.rotation.x = Math.PI / 2; shield.rotation.z = 0.12; shield.position.set(0.4, 2.4, 2.2); rider.add(shield);
+  const emblem = new T.Mesh(new T.CylinderGeometry(0.85, 0.85, 0.44, 9), mats.rider);
+  emblem.rotation.x = Math.PI / 2; emblem.position.set(0.4, 2.4, 2.28); rider.add(emblem);
+  // lance arm + heavy lance with guard cone and pennant
+  const arm = new T.Mesh(new T.CylinderGeometry(0.55, 0.55, 3.2, 5), mats.rider);
+  arm.rotation.z = -1.15; arm.position.set(1.7, 3.0, 0.9); rider.add(arm);
+  const lanceG = new T.Group(); lanceG.position.set(3.1, 3.5, 0.9);
+  const lance = new T.Mesh(new T.CylinderGeometry(0.42, 0.24, 16.5, 7), mats.lance);
+  lance.rotation.z = -Math.PI / 2 + 0.06; lance.position.x = 6.0; lanceG.add(lance);
+  const guard = new T.Mesh(new T.ConeGeometry(1.05, 1.6, 8), mats.armor);
+  guard.rotation.z = -Math.PI / 2; guard.position.set(1.6, 0.15, 0); lanceG.add(guard);
+  const lTip = new T.Mesh(new T.ConeGeometry(0.6, 2.2, 7), mats.lance);
+  lTip.rotation.z = -Math.PI / 2; lTip.position.set(14.9, 0.5, 0); lanceG.add(lTip);
+  const pennant = new T.Mesh(new T.BoxGeometry(2.6, 1.0, 0.16), mats.rider);
+  pennant.position.set(3.6, 1.1, 0); pennant.rotation.z = 0.1; lanceG.add(pennant);
   rider.add(lanceG);
   g.add(rider);
 
-  return { group: g, legs, wings, neckG, rider, tail, state: { wingA: 0, runP: 0 } };
+  castAll(outer);
+  return { group: outer, legs, wings, neckG, rider, tail, state: { wingA: 0, runP: 0 } };
 }
 
 // ═══ pterodactyl — feet(ish) origin, faces +x ═══
+// leathery membrane wings (shaped, not boxes), long crest, ember eyes — the wave boss
+// should read as a different SPECIES, not another bird.
 function pteroView() {
-  const g = new T.Group();
+  const outer = new T.Group();
+  const g = new T.Group(); g.scale.setScalar(1.15); outer.add(g);
   const M = (c, o) => new T.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.85, flatShading: true }, o));
-  const bodyM = M(COL.ptero), memM = M(0x5c7a44, { side: T.DoubleSide }), jawM = M(0x8aa06a);
-  const body = new T.Mesh(new T.IcosahedronGeometry(4.2, 1), bodyM); body.scale.set(1.7, 0.85, 0.8); body.position.y = 10; g.add(body);
-  const neck = new T.Mesh(new T.CylinderGeometry(1.1, 1.7, 5.5, 6), bodyM); neck.rotation.z = -0.6; neck.position.set(6.2, 12.2, 0); g.add(neck);
-  const headG = new T.Group(); headG.position.set(8.6, 14.2, 0);
-  const skull = new T.Mesh(new T.IcosahedronGeometry(1.8, 1), bodyM); headG.add(skull);
-  const crest = new T.Mesh(new T.ConeGeometry(0.9, 4.2, 5), jawM); crest.rotation.z = 2.4; crest.position.set(-2.2, 1.2, 0); headG.add(crest);
-  const beakTop = new T.Mesh(new T.ConeGeometry(0.75, 5.4, 5), jawM); beakTop.rotation.z = -Math.PI / 2; beakTop.position.set(3.6, 0.4, 0); headG.add(beakTop);
+  const bodyM = M(0x5c5a4c), memM = M(0x74584a, { side: T.DoubleSide, roughness: 0.7 }), jawM = M(0x9a9070);
+  const bellyM = M(0x8a7a5c);
+  const body = new T.Mesh(new T.SphereGeometry(4.0, 9, 7), bodyM); body.scale.set(1.85, 0.8, 0.75); body.position.y = 10; g.add(body);
+  const belly = new T.Mesh(new T.SphereGeometry(2.9, 8, 6), bellyM); belly.scale.set(1.5, 0.7, 0.7); belly.position.set(1.0, 8.7, 0); g.add(belly);
+  const neck = new T.Mesh(new T.CylinderGeometry(1.0, 1.6, 5.8, 6), bodyM); neck.rotation.z = -0.6; neck.position.set(6.4, 12.3, 0); g.add(neck);
+  const headG = new T.Group(); headG.position.set(8.8, 14.4, 0);
+  const skull = new T.Mesh(new T.SphereGeometry(1.7, 8, 6), bodyM); skull.scale.set(1.25, 0.95, 0.85); headG.add(skull);
+  const crest = new T.Mesh(new T.ConeGeometry(1.0, 6.2, 5), jawM); crest.rotation.z = 2.55; crest.position.set(-3.0, 1.6, 0); headG.add(crest);
+  const beakTop = new T.Mesh(new T.ConeGeometry(0.8, 6.4, 5), jawM); beakTop.rotation.z = -Math.PI / 2; beakTop.position.set(4.1, 0.4, 0); headG.add(beakTop);
   const jawG = new T.Group(); jawG.position.set(0.6, -0.6, 0);
-  const beakBot = new T.Mesh(new T.ConeGeometry(0.6, 4.6, 5), jawM); beakBot.rotation.z = -Math.PI / 2; beakBot.position.set(2.8, 0, 0); jawG.add(beakBot);
+  const beakBot = new T.Mesh(new T.ConeGeometry(0.62, 5.4, 5), jawM); beakBot.rotation.z = -Math.PI / 2; beakBot.position.set(3.2, 0, 0); jawG.add(beakBot);
   headG.add(jawG); g.add(headG);
-  const tail = new T.Mesh(new T.ConeGeometry(1.3, 7, 5), bodyM); tail.rotation.z = Math.PI / 2 + 0.25; tail.position.set(-8.4, 9.4, 0); g.add(tail);
+  const eyeM = new T.MeshStandardMaterial({ color: 0x160c04, emissive: 0xff7a1a, emissiveIntensity: 1.6, roughness: 0.4 });
+  for (const ez of [-1.25, 1.25]) { const eye = new T.Mesh(new T.SphereGeometry(0.42, 7, 6), eyeM); eye.position.set(1.2, 0.5, ez); headG.add(eye); }
+  const tail = new T.Mesh(new T.ConeGeometry(1.2, 8.5, 5), bodyM); tail.rotation.z = Math.PI / 2 + 0.22; tail.position.set(-9.2, 9.2, 0); g.add(tail);
+  // membrane wing: inner arm + elbow-pivoted outer sail, each a tapered SHAPE with struts
+  const wingShape = (len, chord) => {
+    const s = new T.Shape();
+    s.moveTo(0, 0);
+    s.quadraticCurveTo(-chord * 0.35, len * 0.35, -chord * 0.25, len);      // leading edge out
+    s.quadraticCurveTo(-chord * 0.9, len * 0.62, -chord, len * 0.30);       // scalloped trailing edge
+    s.quadraticCurveTo(-chord * 0.72, len * 0.12, 0, 0);
+    const geo = new T.ExtrudeGeometry(s, { depth: 0.28, bevelEnabled: false });
+    return geo;
+  };
   const wings = [];
   for (const side of [-1, 1]) {
-    const sh = new T.Group(); sh.position.set(0, 12.4, side * 2.6);
-    const inner = new T.Mesh(new T.BoxGeometry(3.5, 0.5, 9), memM); inner.position.set(-0.8, 0, side * 4.5); sh.add(inner);
-    const elbow = new T.Group(); elbow.position.set(0, 0, side * 9); sh.add(elbow);
-    const outer = new T.Mesh(new T.BoxGeometry(2.6, 0.4, 10), memM); outer.position.set(-1.4, 0, side * 5); elbow.add(outer);
-    const tip = new T.Mesh(new T.ConeGeometry(0.5, 3.4, 4), jawM); tip.rotation.x = side * Math.PI / 2; tip.position.set(-1.2, 0, side * 10.6); elbow.add(tip);
+    const sh = new T.Group(); sh.position.set(0.4, 12.6, side * 2.4);
+    const inner = new T.Mesh(wingShape(8.5, 5.2), memM);
+    inner.rotation.x = side * Math.PI / 2;
+    sh.add(inner);
+    const armBone = new T.Mesh(new T.CylinderGeometry(0.5, 0.42, 8.8, 5), bodyM);
+    armBone.rotation.x = side * Math.PI / 2; armBone.position.set(0.4, 0.15, side * 4.2); sh.add(armBone);
+    const elbow = new T.Group(); elbow.position.set(0, 0, side * 8.6); sh.add(elbow);
+    const sail = new T.Mesh(wingShape(10.5, 6.4), memM);
+    sail.rotation.x = side * Math.PI / 2;
+    elbow.add(sail);
+    const fingerBone = new T.Mesh(new T.CylinderGeometry(0.4, 0.28, 10.4, 5), bodyM);
+    fingerBone.rotation.x = side * Math.PI / 2; fingerBone.position.set(0.3, 0.1, side * 5.0); elbow.add(fingerBone);
+    const tip = new T.Mesh(new T.ConeGeometry(0.45, 3.2, 4), jawM);
+    tip.rotation.x = side * Math.PI / 2; tip.position.set(0.2, 0, side * 11.4); elbow.add(tip);
     g.add(sh); wings.push({ sh, elbow, side });
   }
-  return { group: g, wings, headG, jawG, state: { ph: Math.random() * 6.28 } };
+  castAll(outer);
+  return { group: outer, wings, headG, jawG, state: { ph: Math.random() * 6.28 } };
 }
 
 // ═══ egg / hatchling ═══
 function eggView() {
   const g = new T.Group();
-  const eggM = new T.MeshStandardMaterial({ color: COL.egg, roughness: 0.4, emissive: 0x332a10, emissiveIntensity: 0.4 });
+  const eggM = new T.MeshStandardMaterial({ color: COL.egg, roughness: 0.4, emissive: 0x604818, emissiveIntensity: 0.5 });
   const egg = new T.Mesh(new T.SphereGeometry(3.1, 10, 8), eggM); egg.scale.y = 1.22; egg.position.y = 3.6; g.add(egg);
   // hatchling (hidden until walking)
   const hg = new T.Group(); hg.visible = false;
@@ -142,13 +240,14 @@ function eggView() {
   const hl1 = new T.Mesh(new T.CylinderGeometry(0.35, 0.3, 3.4, 4), hm); hl1.position.set(0.5, 1.8, 0.9); hg.add(hl1);
   const hl2 = hl1.clone(); hl2.position.z = -0.9; hg.add(hl2);
   g.add(hg);
+  castAll(g);
   return { group: g, egg, hatch: hg };
 }
 
 // ═══ lava troll — magma hand ═══
 function trollView() {
   const g = new T.Group();
-  const m = new T.MeshStandardMaterial({ color: 0x501005, roughness: 0.6, emissive: 0xff3c00, emissiveIntensity: 0.9, flatShading: true });
+  const m = new T.MeshStandardMaterial({ color: 0x501005, roughness: 0.6, emissive: 0xff3c00, emissiveIntensity: 1.1, flatShading: true });
   const palm = new T.Mesh(new T.BoxGeometry(6.5, 7, 3.4), m); palm.position.y = 3; g.add(palm);
   const fingers = [];
   for (let i = 0; i < 4; i++) {
@@ -173,54 +272,102 @@ function scaleUV(geo, s) {
   uv.needsUpdate = true;
 }
 
+// bake cheap AO into vertex colors: full-bright tops fading darker toward the underside
+function bakeAO(geo, hgt) {
+  const pos = geo.attributes.position;
+  const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    const k = Math.max(0.58, Math.min(1, 1 + y / (hgt * 1.9)));   // y is 0 at top, -hgt at bottom
+    col[i * 3] = k; col[i * 3 + 1] = k; col[i * 3 + 2] = k;
+  }
+  geo.setAttribute('color', new T.BufferAttribute(col, 3));
+}
+
 // ═══ platform rock geometry ═══
 function platformMesh(def, seed, texReg) {
   const w = def.x2 - def.x1;
   const isBase = def.y >= WORLD.LAVA_Y - 20;   // data-driven: "base" = platforms sitting just above the lava
   const depth = isBase ? 34 : 26;
-  const hgt = isBase ? Y3(def.y) - (LAVA_Y - 16) : 14 + hash(seed) * 10; // base roots into lava
+  const hgt = isBase ? Y3(def.y) - (LAVA_Y - 16) : 15 + hash(seed) * 9;
+  // smooth lobed underside — cosine arcs between anchor points (NO needle spikes)
   const sh = new T.Shape();
   sh.moveTo(0, 0);
   sh.lineTo(w, 0);
-  // right side tapers in, lumpy bottom, left side back up
-  const bumps = Math.max(3, Math.round(w / 22));
-  sh.lineTo(w - 2 - hash(seed + 1) * 5, -hgt * (0.45 + hash(seed + 2) * 0.3));
-  for (let i = bumps; i >= 0; i--) {
-    const bx = (i / bumps) * (w * 0.86) + w * 0.07;
-    const by = -hgt * (0.72 + hash(seed + 3 + i) * 0.55);
-    sh.quadraticCurveTo(bx + w * 0.04, by + 5, bx, by);
+  const lobes = Math.max(2, Math.round(w / 34));
+  let px = w - 1.5 - hash(seed + 1) * 4, py = -hgt * (0.5 + hash(seed + 2) * 0.25);
+  sh.lineTo(px, py);
+  for (let i = 0; i < lobes; i++) {
+    const nx = (1 - (i + 1) / lobes) * (w * 0.82) + w * 0.06 + (hash(seed + 30 + i) - 0.5) * 8;
+    const ny = -hgt * (0.7 + hash(seed + 3 + i) * 0.35);
+    const mx = (px + nx) / 2, my = Math.min(py, ny) - hgt * (0.16 + hash(seed + 60 + i) * 0.18);
+    sh.quadraticCurveTo(mx, my, nx, ny);
+    px = nx; py = ny;
   }
-  sh.lineTo(2 + hash(seed + 9) * 5, -hgt * (0.4 + hash(seed + 10) * 0.3));
+  sh.lineTo(1.5 + hash(seed + 9) * 4, -hgt * (0.45 + hash(seed + 10) * 0.25));
   sh.closePath();
-  const geo = new T.ExtrudeGeometry(sh, { depth, bevelEnabled: true, bevelThickness: 2.2, bevelSize: 2.4, bevelSegments: 1, curveSegments: 5 });
+  const geo = new T.ExtrudeGeometry(sh, { depth, bevelEnabled: true, bevelThickness: 1.5, bevelSize: 1.7, bevelSegments: 1, curveSegments: 5 });
   geo.translate(0, 0, -depth / 2);
-  // jitter non-top verts for rocky feel
+  // gentle jitter on non-top verts — too much twists the flat-shaded facets into
+  // bright slivers wherever a triangle happens to face a lava light
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i);
     if (y < -2.5) {
-      pos.setX(i, pos.getX(i) + (hash(i * 3 + seed) - 0.5) * 2.6);
-      pos.setY(i, y + (hash(i * 5 + seed) - 0.5) * 2.2);
-      pos.setZ(i, pos.getZ(i) + (hash(i * 7 + seed) - 0.5) * 2.4);
+      pos.setX(i, pos.getX(i) + (hash(i * 3 + seed) - 0.5) * 1.5);
+      pos.setY(i, y + (hash(i * 5 + seed) - 0.5) * 1.3);
+      pos.setZ(i, pos.getZ(i) + (hash(i * 7 + seed) - 0.5) * 1.5);
     }
   }
   geo.computeVertexNormals();
   scaleUV(geo, 1 / 46);
+  bakeAO(geo, hgt);
   // maps are assigned later, in the texture loader's onLoad — cloning an unloaded texture
   // leaves the clone permanently imageless (flat-color platforms; bit us on real GPUs)
-  const mat = new T.MeshStandardMaterial({ color: isBase ? 0xb09a88 : 0xb8aca2, roughness: 0.95, flatShading: true });
+  const mat = new T.MeshStandardMaterial({ color: COL.rockTint, roughness: 0.92, flatShading: true, vertexColors: true });
   texReg.push({ mat, kind: 'body' });
   const mesh = new T.Mesh(geo, mat);
-  const lipMat = new T.MeshStandardMaterial({ color: 0xfff2e2, roughness: 0.85, flatShading: true });
-  texReg.push({ mat: lipMat, kind: 'lip', w: w + 3, d: depth + 3 });
-  const lip = new T.Mesh(new T.BoxGeometry(w + 3, 2.4, depth + 3), lipMat);
-  lip.position.set(w / 2, -0.1, 0);
-  const grp = new T.Group(); grp.add(mesh); grp.add(lip);
-  if (isBase) { // emissive cracks near the lava line
-    const glow = new T.Mesh(new T.BoxGeometry(w * 0.96, 2, depth * 0.9),
-      new T.MeshStandardMaterial({ color: 0x300a00, emissive: COL.rockGlow, emissiveIntensity: 0.55, roughness: 1 }));
-    glow.position.set(w / 2, -(hgt - 4), 0); grp.add(glow);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  const grp = new T.Group(); grp.add(mesh);
+  // walkway lip: weathered stone. The rock texture is dark, so the tint over-compensates
+  // brighter — otherwise the top face flattens into featureless lit plastic.
+  const lipMat = new T.MeshStandardMaterial({ color: 0x9a958a, roughness: 0.9, metalness: 0.03, flatShading: true });
+  texReg.push({ mat: lipMat, kind: 'lip' });
+  const lw = w + 3, lh = 2.2, ld = depth + 3;
+  const lipGeo = new T.BoxGeometry(lw, lh, ld);
+  // per-face world-scale UVs (BoxGeometry faces: +x -x +y -y +z -z, 4 verts each) so one
+  // shared texture tiles correctly everywhere — per-material clones w/ repeat render flat
+  {
+    const luv = lipGeo.attributes.uv, s = 1 / 46;
+    const dims = [[ld, lh], [ld, lh], [lw, ld], [lw, ld], [lw, lh], [lw, lh]];
+    for (let f = 0; f < 6; f++) for (let vi = f * 4; vi < f * 4 + 4; vi++)
+      luv.setXY(vi, luv.getX(vi) * dims[f][0] * s, luv.getY(vi) * dims[f][1] * s);
   }
+  const lip = new T.Mesh(lipGeo, lipMat);
+  lip.position.set(w / 2, -0.1, 0);
+  lip.castShadow = true; lip.receiveShadow = true;
+  grp.add(lip);
+  // cool worn top edge — the readable "you stand here" line (retro's bright walkway, cave-style).
+  // broken into weathered segments so it reads as caught light, not neon trim.
+  const edgeMat = new T.MeshStandardMaterial({ color: 0x3a4658, emissive: 0x9ec6ff, emissiveIntensity: 0.42, roughness: 0.6 });
+  const nSeg = Math.max(1, Math.min(4, Math.round(lw / 40)));
+  for (let si = 0; si < nSeg; si++) {
+    const segW = lw / nSeg - 2.6 - hash(seed + 80 + si) * 2.2;
+    const edgeF = new T.Mesh(new T.BoxGeometry(segW, 0.4, 0.55), edgeMat);
+    edgeF.position.set((si + 0.5) * (lw / nSeg) - 1.5 + (hash(seed + 90 + si) - 0.5) * 2, 0.85, ld / 2 - 0.2);
+    grp.add(edgeF);
+  }
+  // hot rim: faint lava-lit edge under the slab's front face (an accent, not neon trim)
+  const rimMat = new T.MeshStandardMaterial({ color: 0x140802, emissive: 0xff6a1c, emissiveIntensity: 0.3, roughness: 1 });
+  const rimStrip = new T.Mesh(new T.BoxGeometry(w + 3.2, 0.45, 0.4), rimMat);
+  rimStrip.position.set(w / 2, -1.0, (depth + 3) / 2 + 0.02);
+  grp.add(rimStrip);
+  // molten underglow: kept INSIDE the jittered rock profile (poking out reads as slash artifacts)
+  const glowMat = new T.MeshStandardMaterial({
+    color: 0x200600, emissive: COL.rockGlow, emissiveIntensity: isBase ? 1.5 : 0.5, roughness: 1,
+  });
+  const glow = new T.Mesh(new T.BoxGeometry(w * 0.84, isBase ? 2.4 : 1.4, depth * 0.6), glowMat);
+  glow.position.set(w / 2, -(hgt - (isBase ? 5 : 3.4)), 0); grp.add(glow);
   grp.position.set(X3(def.x1), Y3(def.y) - 1.2, 0);
   return grp;
 }
@@ -241,7 +388,7 @@ class Particles {
     this.pos = new Float32Array(PMAX * 3); this.col = new Float32Array(PMAX * 3);
     this.geo.setAttribute('position', new T.BufferAttribute(this.pos, 3));
     this.geo.setAttribute('color', new T.BufferAttribute(this.col, 3));
-    this.mat = new T.PointsMaterial({ size: 3.4, map: softDotTexture(), vertexColors: true, transparent: true, opacity: 0.95, sizeAttenuation: true, depthWrite: false, blending: T.AdditiveBlending });
+    this.mat = new T.PointsMaterial({ size: 4.6, map: softDotTexture(), vertexColors: true, transparent: true, opacity: 0.95, sizeAttenuation: true, depthWrite: false, blending: T.AdditiveBlending });
     this.pts = new T.Points(this.geo, this.mat); this.pts.frustumCulled = false;
     scene.add(this.pts);
     this.live = []; this.free = []; for (let i = PMAX - 1; i >= 0; i--) this.free.push(i);
@@ -266,8 +413,15 @@ class Particles {
       if (kind === 'spark') this.spawn(x, y, 4, { sp: 1.6, up: opt.up, c, life: 26 + Math.random() * 14, g: -0.06 });
       else if (kind === 'feather') this.spawn(x, y, 3, { sp: 1.1, c, life: 44, g: -0.02 });
       else if (kind === 'ash') this.spawn(x, y, 3, { sp: 0.9, c: 0x999999, life: opt.life || 46, g: -0.015 });
-      else if (kind === 'poof') this.spawn(x, y, 5, { sp: 2.3, c, life: 22 + Math.random() * 12, g: 0 });
-      else if (kind === 'ember') this.spawn(x, y, (Math.random() - 0.5) * 60, { sp: 0.35, up: true, vy: 0.5 + Math.random() * 0.5, c: 0xff7722, life: 60, g: 0.004 });
+      else if (kind === 'poof') this.spawn(x, y, 5, { sp: 2.0, c, life: 26 + Math.random() * 14, g: 0 });
+      else if (kind === 'ember') {
+        const hot = Math.random();
+        this.spawn(x, y, (Math.random() - 0.5) * 130 + 10, {
+          sp: 0.3, up: true, vy: 0.45 + Math.random() * 0.6,
+          c: hot > 0.72 ? 0xffd27a : (hot > 0.3 ? 0xff8a2a : 0xff5511),
+          life: 70 + Math.random() * 40, g: 0.004,
+        });
+      }
     }
   }
   update() {
@@ -290,7 +444,7 @@ class Particles {
   }
 }
 
-// ═══ lava shader ═══
+// ═══ lava shader — dark cooling crust + glowing crack network (texture-driven, HDR for bloom) ═══
 const LAVA_VS = `
 varying vec2 vUv; varying float vDist;
 uniform float uT;
@@ -300,41 +454,140 @@ void main(){ vUv=uv; vec3 p=position;
   vDist = -mv.z;
   gl_Position = projectionMatrix*mv; }`;
 const LAVA_FS = `
-varying vec2 vUv; varying float vDist; uniform float uT;
-float h(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
-float n(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
-  return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y); }
-uniform int uOct;
-float fbm(vec2 p){ float v=0.0,a=0.5; for(int i=0;i<4;i++){ if(i>=uOct) break; v+=a*n(p); p*=2.13; a*=0.5; } return v; }
+varying vec2 vUv; varying float vDist;
+uniform float uT; uniform float uBoost; uniform sampler2D uTex;
 void main(){
-  vec2 uv = vUv*vec2(26.0,7.0);
-  float f = fbm(uv + vec2(uT*0.14, uT*0.05));
-  float r = fbm(uv*1.7 - vec2(uT*0.09, 0.0));
-  float crack = smoothstep(0.48,0.58,abs(r-0.5)*2.0);
-  vec3 deep = vec3(0.16,0.008,0.012);
-  vec3 mid  = vec3(0.86,0.16,0.02);
-  vec3 hot  = vec3(1.0,0.82,0.25);
-  vec3 c = mix(deep, mid, smoothstep(0.32,0.72,f));
-  c = mix(c, hot, (1.0-crack)*smoothstep(0.35,0.8,f)*0.9);
-  c += hot * pow(max(0.0,f-0.78)*4.4, 2.0) * 0.6;
-  // distance haze: cool the molten sea into the dark horizon so depth reads
-  c = mix(c, vec3(0.14,0.03,0.015), smoothstep(340.0, 760.0, vDist));
+  // two drifting samples of the crack texture at different scales — plates slide slowly
+  vec2 uvA = vUv*vec2(3.2,1.15) + vec2(uT*0.006, uT*0.003);
+  vec2 uvB = vUv*vec2(8.5,3.0)  - vec2(uT*0.011, 0.0);
+  vec3 a = texture2D(uTex, uvA).rgb;
+  vec3 b = texture2D(uTex, uvB).rgb;
+  float la = dot(a, vec3(0.34,0.5,0.16));
+  float lb = dot(b, vec3(0.34,0.5,0.16));
+  float crack = max(la, lb*0.72);
+  // large-scale pool mask — most of the sea is dark cooling crust, a few regions run molten
+  float pool = sin(vUv.x*9.0+1.7)*sin(vUv.y*4.6-0.6) + 0.55*sin(vUv.x*17.0-uT*0.05);
+  pool = smoothstep(0.05, 0.9, pool*0.4+0.5);
+  // slow living pulse, varied across the sea
+  float pulse = 0.82 + 0.28*sin(uT*0.8 + vUv.x*21.0) * sin(uT*0.53 + vUv.y*13.0);
+  // dark crust plates with warm undertone
+  vec3 c = mix(vec3(0.030,0.007,0.005), vec3(0.10,0.022,0.010), crack);
+  // molten cracks ramp: deep orange -> yellow-white, pushed into HDR for bloom
+  float hot = pow(max(crack-0.20,0.0)*1.3, 1.9) * (0.18 + 0.95*pool);
+  vec3 molten = mix(vec3(1.0,0.22,0.02), vec3(1.0,0.86,0.38), min(hot*1.4,1.0));
+  c += molten * hot * (1.5 + 0.9*pulse) * uBoost;
+  // distance: die into the dark horizon quickly so the sea reads as depth, not a bright wall
+  c = mix(c, vec3(0.016,0.004,0.003), smoothstep(170.0, 480.0, vDist));
   gl_FragColor = vec4(c,1.0);
 }`;
 
-// ═══ sky dome shader ═══
-const SKY_VS = `varying vec3 vW; void main(){ vW=(modelMatrix*vec4(position,1.0)).xyz; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`;
-const SKY_FS = `
-varying vec3 vW;
+// ═══ PostFX — tiny local composer: HDR scene RT → threshold → blurred mip chain → ACES composite.
+// (strict CSP: the official three addons are ESM-only for this revision, so this stays hand-rolled)
+const FSQ_VS = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`;
+const BRIGHT_FS = `
+varying vec2 vUv; uniform sampler2D tD; uniform float uTh; uniform float uExp;
 void main(){
-  float hgt = normalize(vW).y*0.5+0.5;
-  vec3 top = vec3(0.016,0.012,0.05);
-  vec3 mid = vec3(0.10,0.035,0.10);
-  vec3 hor = vec3(0.34,0.10,0.05);
-  vec3 c = mix(hor, mid, smoothstep(0.02,0.34,hgt));
-  c = mix(c, top, smoothstep(0.3,0.75,hgt));
-  gl_FragColor = vec4(c,1.0);
+  vec3 c = texture2D(tD, vUv).rgb * uExp;
+  float l = dot(c, vec3(0.2126,0.7152,0.0722));
+  gl_FragColor = vec4(c * smoothstep(uTh, uTh+0.45, l), 1.0);
 }`;
+const BLUR_FS = `
+varying vec2 vUv; uniform sampler2D tD; uniform vec2 uDir;
+void main(){
+  vec3 c = texture2D(tD, vUv).rgb * 0.227027;
+  vec2 o1 = uDir * 1.3846153846, o2 = uDir * 3.2307692308;
+  c += (texture2D(tD, vUv+o1).rgb + texture2D(tD, vUv-o1).rgb) * 0.3162162162;
+  c += (texture2D(tD, vUv+o2).rgb + texture2D(tD, vUv-o2).rgb) * 0.0702702703;
+  gl_FragColor = vec4(c, 1.0);
+}`;
+const COMP_FS = `
+varying vec2 vUv;
+uniform sampler2D tS; uniform sampler2D tB0; uniform sampler2D tB1; uniform sampler2D tB2; uniform sampler2D tB3;
+uniform float uExp; uniform float uStr;
+vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1.0); }
+void main(){
+  vec3 c = texture2D(tS, vUv).rgb * uExp;
+  vec3 bloom = texture2D(tB0, vUv).rgb * 1.0
+             + texture2D(tB1, vUv).rgb * 0.8
+             + texture2D(tB2, vUv).rgb * 0.6
+             + texture2D(tB3, vUv).rgb * 0.45;
+  c = aces(c + bloom * uStr);
+  gl_FragColor = vec4(pow(c, vec3(1.0/2.2)), 1.0);
+}`;
+
+class PostFX {
+  constructor(gl) {
+    this.gl = gl;
+    this.enabled = false;
+    this.exposure = 1.2; this.threshold = 0.62; this.strength = 0.9;
+    this.MIPS = 4;
+    const sm = (fs, un) => new T.ShaderMaterial({ vertexShader: FSQ_VS, fragmentShader: fs, uniforms: un, depthTest: false, depthWrite: false });
+    this.brightU = { tD: { value: null }, uTh: { value: this.threshold }, uExp: { value: this.exposure } };
+    this.blurU = { tD: { value: null }, uDir: { value: new T.Vector2() } };
+    this.compU = { tS: { value: null }, tB0: { value: null }, tB1: { value: null }, tB2: { value: null }, tB3: { value: null }, uExp: { value: this.exposure }, uStr: { value: this.strength } };
+    this.brightM = sm(BRIGHT_FS, this.brightU);
+    this.blurM = sm(BLUR_FS, this.blurU);
+    this.compM = sm(COMP_FS, this.compU);
+    this.quad = new T.Mesh(new T.PlaneGeometry(2, 2), this.compM);
+    this.quad.frustumCulled = false;
+    this.scene = new T.Scene(); this.scene.add(this.quad);
+    this.cam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this.rtScene = null; this.mips = [];
+    this._w = 0; this._h = 0; this._samples = 4;
+  }
+  _rt(w, h, opts) {
+    return new T.WebGLRenderTarget(Math.max(4, w | 0), Math.max(4, h | 0), Object.assign({
+      minFilter: T.LinearFilter, magFilter: T.LinearFilter,
+      type: this.gl.capabilities.isWebGL2 ? T.HalfFloatType : T.UnsignedByteType,
+      depthBuffer: false, stencilBuffer: false,
+    }, opts));
+  }
+  setSize(w, h, samples) {
+    if (w === this._w && h === this._h && samples === this._samples) return;
+    this._w = w; this._h = h; this._samples = samples;
+    this.dispose();
+    this.rtScene = this._rt(w, h, { depthBuffer: true, samples: this.gl.capabilities.isWebGL2 ? samples : 0 });
+    this.mips = [];
+    let mw = w / 2, mh = h / 2;
+    for (let i = 0; i < this.MIPS; i++) {
+      this.mips.push({ a: this._rt(mw, mh), b: this._rt(mw, mh), w: mw, h: mh });
+      mw /= 2; mh /= 2;
+    }
+  }
+  dispose() {
+    if (this.rtScene) this.rtScene.dispose();
+    for (const m of this.mips) { m.a.dispose(); m.b.dispose(); }
+    this.rtScene = null; this.mips = [];
+  }
+  _pass(mat, rt) {
+    this.quad.material = mat;
+    this.gl.setRenderTarget(rt);
+    this.gl.render(this.scene, this.cam);
+  }
+  render(scene, camera) {
+    const gl = this.gl;
+    gl.setRenderTarget(this.rtScene);
+    gl.render(scene, camera);
+    // threshold into mip0, then blur+downsample down the chain
+    let src = this.rtScene.texture;
+    for (let i = 0; i < this.MIPS; i++) {
+      const m = this.mips[i];
+      if (i === 0) { this.brightU.tD.value = src; this._pass(this.brightM, m.a); }
+      else { this.blurU.tD.value = src; this.blurU.uDir.value.set(0, 0); this._pass(this.blurM, m.a); }
+      this.blurU.tD.value = m.a.texture; this.blurU.uDir.value.set(1.2 / m.w, 0); this._pass(this.blurM, m.b);
+      this.blurU.tD.value = m.b.texture; this.blurU.uDir.value.set(0, 1.2 / m.h); this._pass(this.blurM, m.a);
+      src = m.a.texture;
+    }
+    this.compU.tS.value = this.rtScene.texture;
+    this.compU.tB0.value = this.mips[0].a.texture;
+    this.compU.tB1.value = this.mips[1].a.texture;
+    this.compU.tB2.value = this.mips[2].a.texture;
+    this.compU.tB3.value = this.mips[3].a.texture;
+    gl.setRenderTarget(null);
+    this.quad.material = this.compM;
+    gl.render(this.scene, this.cam);
+  }
+}
 
 // ═══ Renderer3D ═══
 class Renderer3D {
@@ -343,9 +596,11 @@ class Renderer3D {
     this.gl = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.gl.outputColorSpace = T.SRGBColorSpace;
     this.gl.toneMapping = T.ACESFilmicToneMapping; this.gl.toneMappingExposure = 1.12;
+    this.gl.shadowMap.enabled = true;
+    this.gl.shadowMap.type = T.PCFSoftShadowMap;
     this.scene = new T.Scene();
-    this.scene.fog = new T.Fog(0x1a0808, 380, 900);
-    this.camera = new T.PerspectiveCamera(42, 1, 10, 2000);
+    this.scene.fog = new T.Fog(0x050302, 470, 1080);
+    this.camera = new T.PerspectiveCamera(42, 1, 10, 2400);
     this.time = 0; this.quality = 'high';
     this.shake = 0; this.swayX = 0; this.punchT = 0;
     this.floats = [];
@@ -353,6 +608,7 @@ class Renderer3D {
 
     this.views = new Map();       // entity id → view
     this.platVisible = {};        // platform id → bool (burn detection)
+    this.post = new PostFX(this.gl);
     this.buildLights();
     this.buildSky();
     this.buildLava();
@@ -363,66 +619,107 @@ class Renderer3D {
 
   setQuality(q) {
     this.quality = q;
-    const pr = q === 'high' ? Math.min(window.devicePixelRatio || 1, 2) : q === 'medium' ? 1.25 : 1;
+    const pr = q === 'high' ? Math.min(window.devicePixelRatio || 1, 2) : q === 'medium' ? Math.min(window.devicePixelRatio || 1, 1.25) : 1;
     this.gl.setPixelRatio(pr);
-    this.stars.visible = q !== 'low';
-    if (this.lavaMat) this.lavaMat.uniforms.uOct.value = q === 'high' ? 4 : q === 'medium' ? 3 : 2;
+    // shadows: off on LOW, 1k MED, 2k HIGH
+    this.gl.shadowMap.enabled = q !== 'low';
+    if (this.keyLight) {
+      const sz = q === 'high' ? 2048 : 1024;
+      if (this.keyLight.shadow.mapSize.x !== sz) {
+        this.keyLight.shadow.mapSize.set(sz, sz);
+        if (this.keyLight.shadow.map) { this.keyLight.shadow.map.dispose(); this.keyLight.shadow.map = null; }
+      }
+      this.keyLight.castShadow = q !== 'low';
+    }
+    // post: bloom on MED/HIGH, direct ACES render on LOW
+    this.post.enabled = q !== 'low';
+    this.gl.toneMapping = this.post.enabled ? T.NoToneMapping : T.ACESFilmicToneMapping;
+    if (this.lavaMat) this.lavaMat.uniforms.uBoost.value = this.post.enabled ? 1.0 : 0.75;
+    this.emberEvery = q === 'high' ? 5 : q === 'medium' ? 8 : 14;
+    this.scene.traverse(o => { if (o.material && !o.material.isShaderMaterial) o.material.needsUpdate = true; });
     this._resizeNow();
   }
 
   buildLights() {
-    this.scene.add(new T.HemisphereLight(0x3a447e, 0x6a2408, 1.25));
-    const key = new T.DirectionalLight(0xbcc8ff, 1.1); key.position.set(-120, 260, 210); this.scene.add(key);
-    const fill = new T.DirectionalLight(0x9aa6cc, 0.62); fill.position.set(40, 60, 320); this.scene.add(fill);
-    const warm = new T.DirectionalLight(0xff6a22, 0.75); warm.position.set(60, -180, 120); this.scene.add(warm);
+    // dim cool ambient — the cave is DARK; lava + skylight do the talking
+    this.scene.add(new T.HemisphereLight(0x25335c, 0x7a2606, 0.4));
+    // cool skylight key from the ceiling crack (casts the arena's shadows)
+    const key = new T.DirectionalLight(COL.keyLight, 1.05); key.position.set(-150, 330, 170);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.left = -230; key.shadow.camera.right = 230;
+    key.shadow.camera.top = 190; key.shadow.camera.bottom = -170;
+    key.shadow.camera.near = 60; key.shadow.camera.far = 900;
+    key.shadow.bias = -0.0006; key.shadow.normalBias = 1.6; key.shadow.radius = 5;
+    this.scene.add(key); this.keyLight = key;
+    // cool rim/backlight — separates silhouettes from the dark cave
+    const rim = new T.DirectionalLight(COL.rimLight, 1.25); rim.position.set(90, 60, -260); this.scene.add(rim);
+    // warm lava bounce from below
+    const warm = new T.DirectionalLight(COL.bounceWarm, 0.85); warm.position.set(30, -220, 140); this.scene.add(warm);
+    // soft camera-side fill so front faces show their rock texture instead of dropping to black
+    const fill = new T.DirectionalLight(0x8a96b8, 0.3); fill.position.set(30, 50, 400); this.scene.add(fill);
+    // flickering lava point lights
     this.lavaLights = [];
-    for (let i = 0; i < 3; i++) {
-      const pl = new T.PointLight(0xff5512, 30, 260, 1.8);
-      pl.position.set(-120 + i * 120, LAVA_Y + 14, 30);
+    for (let i = 0; i < 4; i++) {
+      const pl = new T.PointLight(COL.lavaLight, 34, 300, 1.8);
+      pl.position.set(-160 + i * 108, LAVA_Y + 14, 34);
       this.scene.add(pl); this.lavaLights.push(pl);
     }
   }
 
   buildSky() {
-    const dome = new T.Mesh(new T.SphereGeometry(1200, 24, 16),
-      new T.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_FS, side: T.BackSide, fog: false, depthWrite: false }));
-    this.scene.add(dome);
-    // stars
-    const N = 420, sp = new Float32Array(N * 3);
-    for (let i = 0; i < N; i++) {
-      const a = Math.random() * Math.PI * 2, e = Math.random() * 0.42 + 0.08, r = 1050;
-      sp[i * 3] = Math.cos(a) * Math.cos(e) * r; sp[i * 3 + 1] = Math.sin(e) * r; sp[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r;
-    }
-    const sg = new T.BufferGeometry(); sg.setAttribute('position', new T.BufferAttribute(sp, 3));
-    this.stars = new T.Points(sg, new T.PointsMaterial({ color: 0xcdd6ff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0.8, fog: false }));
-    this.scene.add(this.stars);
-    // moon + soft sprite halo (a halo sphere would show a hard rim)
-    const moon = new T.Mesh(new T.SphereGeometry(30, 18, 14), new T.MeshBasicMaterial({ color: 0xf2e2c4, fog: false }));
-    moon.position.set(290, 300, -860); this.scene.add(moon);
-    const haloSp = new T.Sprite(new T.SpriteMaterial({ map: softDotTexture(), color: 0xf2e2c4, transparent: true, opacity: 0.32, fog: false, depthWrite: false }));
-    haloSp.scale.set(150, 150, 1); haloSp.position.copy(moon.position); this.scene.add(haloSp);
+    // volcanic cavern panorama (gpt-image-2) on an inward sphere; the blue shaft is part of it.
+    // seam parked behind the camera (fixed yaw), so approximate tileability is invisible.
+    this.skyMat = new T.MeshBasicMaterial({ color: 0x8a8f9c, side: T.BackSide, fog: false, depthWrite: false });
+    const dome = new T.Mesh(new T.SphereGeometry(1300, 36, 22), this.skyMat);
+    dome.rotation.y = 0;   // pano shaft (u≈0.63) lands upper-left of the fixed camera
+    this.scene.add(dome); this.sky = dome;
+    new T.TextureLoader().load('assets/tex/cavern-pano.jpg' + Q, tex => {
+      tex.colorSpace = T.SRGBColorSpace;
+      tex.wrapS = T.RepeatWrapping;
+      this.skyMat.map = tex; this.skyMat.color.set(0xffffff); this.skyMat.needsUpdate = true;
+    });
     // horizon lava glow behind the ridges — vertical-gradient shader so there is no hard band
     const glowMat = new T.ShaderMaterial({
       transparent: true, depthWrite: false, fog: false,
       vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-      fragmentShader: `varying vec2 vUv; void main(){ float a = pow(1.0-vUv.y, 2.6)*0.55; gl_FragColor = vec4(1.0,0.32,0.06, a); }`,
+      fragmentShader: `varying vec2 vUv; void main(){ float a = pow(1.0-vUv.y, 2.6)*0.26; gl_FragColor = vec4(1.0,0.30,0.05, a); }`,
     });
-    const hor = new T.Mesh(new T.PlaneGeometry(3200, 240), glowMat);
-    hor.position.set(0, LAVA_Y + 92, -620); this.scene.add(hor);
-    // distant volcanic ridges (2 parallax layers) rising clear of the molten sea
-    for (const [z, h, c] of [[-660, 130, 0x1a1220], [-780, 190, 0x100a16]]) {
-      const pts = []; pts.push(new T.Vector2(-1600, LAVA_Y - 80));
-      let x = -1600;
-      while (x < 1600) { x += 130 + hash(x + z) * 180; pts.push(new T.Vector2(x, LAVA_Y + 24 + hash(x * 2 + z) * h)); }
-      pts.push(new T.Vector2(1600, LAVA_Y - 80));
-      const sh = new T.Shape(pts);
-      const m = new T.Mesh(new T.ShapeGeometry(sh), new T.MeshBasicMaterial({ color: c, fog: false }));
+    const hor = new T.Mesh(new T.PlaneGeometry(3400, 230), glowMat);
+    hor.position.set(0, LAVA_Y + 86, -640); this.scene.add(hor);
+    // jagged basalt ridges rising out of the molten sea (parallax layers, concept-style).
+    // irregular polyline peaks — never clean triangles, they read as paper cutouts.
+    // the near layer breaks up the distance-faded sea so it doesn't read as a flat wall.
+    for (const [z, hMax, c] of [[-450, 46, 0x170e0b], [-620, 150, 0x0b070b], [-750, 230, 0x050406]]) {
+      const pts = [new T.Vector2(-1700, LAVA_Y - 90)];
+      let x = -1700, k = 0;
+      while (x < 1700) {
+        const w = (z === -450 ? 90 : 48) + hash(x * 1.7 + z) * (z === -450 ? 260 : 130);
+        const peak = LAVA_Y + 20 + hash(x * 2.3 + z) * hMax * (0.55 + 0.45 * Math.sin(k * 1.7 + z));
+        // ragged ascent: shoulder, notch, peak, spur, foot
+        pts.push(new T.Vector2(x + w * (0.16 + hash(x + 11) * 0.1), LAVA_Y + 8 + (peak - LAVA_Y) * 0.35));
+        pts.push(new T.Vector2(x + w * 0.3, LAVA_Y + 4 + (peak - LAVA_Y) * (0.2 + hash(x + 5) * 0.2)));
+        pts.push(new T.Vector2(x + w * (0.42 + hash(x + 3) * 0.14), peak));
+        pts.push(new T.Vector2(x + w * (0.62 + hash(x + 7) * 0.1), LAVA_Y + 6 + (peak - LAVA_Y) * (0.3 + hash(x + 9) * 0.25)));
+        pts.push(new T.Vector2(x + w * (0.85 + hash(x + 13) * 0.12), LAVA_Y + 2 + hash(x * 3.1) * 12));
+        x += w; k++;
+      }
+      pts.push(new T.Vector2(1700, LAVA_Y - 90));
+      const m = new T.Mesh(new T.ShapeGeometry(new T.Shape(pts)), new T.MeshBasicMaterial({ color: c, fog: false }));
       m.position.z = z; this.scene.add(m);
     }
   }
 
   buildLava() {
-    this.lavaMat = new T.ShaderMaterial({ vertexShader: LAVA_VS, fragmentShader: LAVA_FS, uniforms: { uT: { value: 0 }, uOct: { value: 4 } } });
+    this.lavaMat = new T.ShaderMaterial({
+      vertexShader: LAVA_VS, fragmentShader: LAVA_FS,
+      uniforms: { uT: { value: 0 }, uBoost: { value: 1.0 }, uTex: { value: null } },
+    });
+    new T.TextureLoader().load('assets/tex/lava-cracks.jpg' + Q, tex => {
+      tex.wrapS = tex.wrapT = T.RepeatWrapping;
+      tex.anisotropy = Math.min(8, this.gl.capabilities.getMaxAnisotropy());
+      this.lavaMat.uniforms.uTex.value = tex;
+    });
     // an endless molten sea reaching the horizon ridges
     const lava = new T.Mesh(new T.PlaneGeometry(SPAN * 5, 830, 130, 42), this.lavaMat);
     lava.rotation.x = -Math.PI / 2; lava.position.set(0, LAVA_Y, -275);
@@ -441,22 +738,41 @@ class Renderer3D {
       this.platGroups[def.id] = g;
       this.platVisible[def.id] = true;
     }
-    // assign rock maps only once the image exists (clones of an unloaded texture stay blank)
-    new T.TextureLoader().load('assets/tex/rock.jpg', tex => {
-      tex.wrapS = tex.wrapT = T.RepeatWrapping;
-      tex.colorSpace = T.SRGBColorSpace;
-      for (const r of texReg) {
-        let m = tex;
-        if (r.kind === 'lip') { m = tex.clone(); m.repeat.set(r.w / 46, r.d / 46); m.needsUpdate = true; }
-        r.mat.map = m; r.mat.needsUpdate = true;
-      }
-    });
-    // spawn pad glow discs
+    // assign rock maps only once the images exist (clones of an unloaded texture stay blank).
+    // bodies use the dark basalt; lips use the contrast-lifted walkway variant.
+    const loader = new T.TextureLoader();
+    const maps = {};
+    const want = [['rock', 'assets/tex/rock2.jpg', true], ['rockN', 'assets/tex/rock2-n.jpg', false],
+                  ['top', 'assets/tex/rock-top.jpg', true], ['topN', 'assets/tex/rock-top-n.jpg', false]];
+    let got = 0;
+    const maxAniso = this.gl.capabilities.getMaxAnisotropy();
+    for (const [key, url, srgb] of want) {
+      loader.load(url + Q, tex => {
+        tex.wrapS = tex.wrapT = T.RepeatWrapping;
+        if (srgb) tex.colorSpace = T.SRGBColorSpace;
+        // platform tops are seen at grazing angles — without anisotropy they mush flat
+        tex.anisotropy = Math.min(8, maxAniso);
+        maps[key] = tex;
+        if (++got < want.length) return;
+        for (const r of texReg) {
+          if (r.kind === 'lip') {
+            r.mat.map = maps.top; r.mat.normalMap = maps.topN;
+            r.mat.normalScale = new T.Vector2(1.4, 1.4);
+          } else {
+            r.mat.map = maps.rock; r.mat.normalMap = maps.rockN;
+            r.mat.normalScale = new T.Vector2(1.25, 1.25);
+          }
+          r.mat.needsUpdate = true;
+        }
+      });
+    }
+    // spawn pad glow rings (subtle — a marker, not a UI decal)
+    this.pads = [];
     for (const p of SPAWN_PADS) {
-      const d = new T.Mesh(new T.CircleGeometry(9, 20),
-        new T.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.10, depthWrite: false }));
+      const d = new T.Mesh(new T.RingGeometry(6.5, 9.5, 28),
+        new T.MeshBasicMaterial({ color: 0x4ab0ff, transparent: true, opacity: 0.12, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide }));
       d.rotation.x = -Math.PI / 2; d.position.set(X3(p.x), Y3(p.y) + 0.4, 0);
-      this.scene.add(d);
+      this.scene.add(d); this.pads.push(d);
     }
   }
 
@@ -472,8 +788,10 @@ class Renderer3D {
     const w = this._lw || innerWidth, h = this._lh || innerHeight;
     // re-apply pixel ratio here too — the window may have moved to a different-DPI display
     const q = this.quality;
-    this.gl.setPixelRatio(q === 'high' ? Math.min(window.devicePixelRatio || 1, 2) : q === 'medium' ? 1.25 : 1);
+    this.gl.setPixelRatio(q === 'high' ? Math.min(window.devicePixelRatio || 1, 2) : q === 'medium' ? Math.min(window.devicePixelRatio || 1, 1.25) : 1);
     this.gl.setSize(w, h, false);
+    const db = this.gl.getDrawingBufferSize(new T.Vector2());
+    this.post.setSize(db.x, db.y, q === 'high' ? 4 : 2);
     this.hud.width = w * (window.devicePixelRatio > 1.4 ? 1.5 : 1); this.hud.height = h * (window.devicePixelRatio > 1.4 ? 1.5 : 1);
     this.camera.aspect = w / h;
     // fit the playfield with headroom for lances/heads (~20 units above feet-origin)
@@ -584,9 +902,11 @@ class Renderer3D {
     this.lavaMat.uniforms.uT.value = t;
     // flicker lava lights + ambient embers
     let li = 0;
-    for (const pl of this.lavaLights) pl.intensity = 26 + Math.sin(t * (3.1 + li) + li * 2.4) * 6 + hash((t * 6 | 0) + li++) * 5;
-    if ((this._embT = (this._embT || 0) + 1) % 9 === 0 && this.quality !== 'low')
-      this.particles.burst((Math.random() - 0.5) * 300, LAVA_Y + 2, 'ember', { n: 1 });
+    for (const pl of this.lavaLights) pl.intensity = 30 + Math.sin(t * (3.1 + li) + li * 2.4) * 7 + hash((t * 6 | 0) + li++) * 6;
+    // spawn pads breathe
+    if (this.pads) { let pi = 0; for (const d of this.pads) d.material.opacity = 0.08 + 0.06 * (0.5 + 0.5 * Math.sin(t * 2.1 + pi++ * 1.7)); }
+    if ((this._embT = (this._embT || 0) + 1) % (this.emberEvery || 6) === 0)
+      this.particles.burst((Math.random() - 0.5) * 320, LAVA_Y + 2, 'ember', { n: 1 });
     this.particles.update();
 
     const seen = new Set();
@@ -672,7 +992,8 @@ class Renderer3D {
     const dist = this.camDist * (1 - this.punchT * 0.045);
     this.camera.position.set(this.swayX + shx, 6 + shy, dist);
     this.camera.lookAt(this.swayX * 0.55, -6, 0);
-    this.gl.render(this.scene, this.camera);
+    if (this.post.enabled && this.post.rtScene) this.post.render(this.scene, this.camera);
+    else this.gl.render(this.scene, this.camera);
   }
 
   _ghost(v, e, t, kind) {

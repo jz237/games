@@ -29,6 +29,16 @@ if (!ctx.roundRect) {
 const renderer = new Renderer3D(glCanvas, hudCanvas);
 const audio = new AudioSys();
 
+// quiet volcanic-cavern ambience (lava rumble / cave air) behind everything — art overhaul
+const amb = new Audio('assets/audio/ambience.ogg' + ASSET_Q);
+amb.loop = true; amb.volume = 0; amb._started = false;
+function kickAmbience() {
+  if (amb._started) return;
+  amb.play().then(() => { amb._started = true; }).catch(() => {});
+}
+document.addEventListener('pointerdown', kickAmbience);
+document.addEventListener('keydown', kickAmbience);
+
 // ─── save / options / stats ───
 const SAVE_KEY = 'joust3d_save_v1';
 const defaultKeys = () => ({
@@ -125,7 +135,11 @@ document.addEventListener('visibilitychange', () => {
     if (state === 'playing') paused = true;
     for (const k in keys) keys[k] = false; escDownAt = 0;
     if (audio.stopMusic) audio.stopMusic();
-  } else if (state === 'title' && audio.startMusic) audio.startMusic();
+    if (amb._started) amb.pause();
+  } else {
+    if (state === 'title' && audio.startMusic) audio.startMusic();
+    if (amb._started) amb.play().catch(() => {});
+  }
 });
 
 function qaBotInput() {
@@ -377,6 +391,11 @@ function frame(now) {
   renderer.resize();
   const frameUnits = Math.min(4, dt / STEP_MS);   // 60Hz-normalized so timers are FPS-independent
   renderer.updateFx(frameUnits);
+  // ambience swells during play, sits low behind menus, ducks out when paused
+  if (amb._started) {
+    const ambT = paused ? 0 : (state === 'playing' || state === 'intro' || state === 'clear') ? 0.32 * save.opts.sfx : 0.10 * save.opts.sfx;
+    amb.volume += (ambT - amb.volume) * Math.min(1, 0.045 * frameUnits);
+  }
 
   if (state === 'playing' && !paused) {
     const rate = killCam > 0 ? 0.32 : 1;      // kill-cam slow-mo
