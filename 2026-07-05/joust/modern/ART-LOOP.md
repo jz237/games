@@ -135,3 +135,11 @@ folded-wing pose slightly splayed, title wordmark is plain Courier.
   HIGH 4.8→11.6, LOW 12→21 (cards are 2.4x cheaper than extruded rock). Bird sprite style
   test at notes/art-raw/bird-sprite-test.png — NOT integrated, owner decides. All suites
   green. API spend total: 8 calls.
+
+- **it8 (v1.5 bird sprites — APPROVED by owner "approved, continue")**: convert birds to
+  painted sprites in the master2 style. Plan: export birdView/pteroView builders → tools/
+  bird-sheet.mjs poses variants on a black stage (3 sheets: p1+p2 6 cells, enemies 9 cells,
+  ptero 4 cells incl OPEN-BEAK frames — the open beak is a gameplay tell, must stay readable)
+  → fal edit repaint + mask per sheet (6 API calls) → slice frames → sprite views in
+  render3d (frame swap from poseBird's existing state signals; scale.x flip for facing,
+  retro-authentic lance mirroring). Ship as v1.5.0 with full protocol.
