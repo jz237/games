@@ -111,3 +111,18 @@ folded-wing pose slightly splayed, title wordmark is plain Courier.
   mid-band (ridges 0x100c12/0x090710/0x040309, horizon glow 0.13, warm light 0.68), hotter
   near lava, vendored Cinzel (assets/fonts/cinzel.woff2) for wordmark/headings/FLAP TO START
   with gold rule + chevron ornament. All suites green.
+
+- **it7 (v1.4 billboard repaint — IN PROGRESS)**: owner-reference.png stand-in generated
+  (owner's mockup not saved to disk; drop the real file in notes/art-raw/ to supersede).
+  Pipeline PROVEN: plate-shot.mjs (empty-arena plate via null-snap render patch + per-platform
+  screen rects + world boxes) → fal-edit.mjs (REST openai/gpt-image-2/edit, image_urls data
+  URIs + image_size 1280x720 — layout held almost pixel-perfect BOTH masters) → full-plate
+  platform MASK via the same edit endpoint (BiRefNet FAILED on dark-slab-vs-dark-scene; the
+  mask trick keeps master pixels untouched) → slice-plate2.mjs (local crop+matte all 10,
+  339KB total, plat-cards inline meta). Master1 had dark caps (readability regression) →
+  master2 regenerated with pale-caps enforced = the keeper. render3d.buildPlatforms now
+  builds unlit painted cards (z −8, wrap clones inside platGroups so burn-visibility works);
+  platformMesh/bakeAO/scaleUV + rock/stone texture loads REMOVED. API spend: 6 calls.
+  TODO next: LUT grade (histogram-match to master2/reference), egg/ptero/LOW/mobile checks,
+  delete unused tex files (rock2*, stone-top*, concept? keep concept), suites, bump 1.4.0,
+  hub card, deploy, verify, memory. Bird sprite side-by-side test frame for the owner.
