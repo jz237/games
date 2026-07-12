@@ -82,6 +82,12 @@ Regeneration prompts are in the tex-prep header + this file's history.
   fps SwiftShader: high 4.8 / med 4.0 / low 12 — presets scale; real-GPU 60fps expected but
   NOT verifiable on this box (no GPU).
 
+- **it5 (v1.2.1 polish, user "continue")**: Arial Black outlined wordmark w/ tracking + hotter
+  gradient, folded-wing splay halved, layered kill-pop (white core + warm body + ember risers).
+  Shipped + live-verified. GOTCHA: `| tail -0` SIGPIPE-kills ffmpeg mid-encode — the v1.2.1 hub
+  card initially shipped stale; re-encoded + re-pushed (site card md5 a289c108…, verify vs edge
+  300s cache with the HTML page or after TTL).
+
 **Verdict vs retro**: wave/egg/joust/title shots now read as a polished stylized remaster —
 layered cavern depth, god rays, structured glowing lava, rim-lit readable silhouettes. Better
 than retro to my eye. Remaining nits (diminishing returns): poof particles still dot-confetti,
