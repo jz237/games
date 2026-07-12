@@ -152,3 +152,17 @@ folded-wing pose slightly splayed, title wordmark is plain Courier.
   poseBird/posePtero swap materials by state; facing flips via rotation.y=PI on DoubleSide
   planes. 3D bird/ptero builders REMOVED (re-stage sheets from the pre-sprite commit
   ac73e9f-era). API total this loop: 17 of 25.
+
+- **it9 (v1.6.0, owner playtest feedback)**: (1) mid-field AIRED OUT — lowerMid + upperR
+  platforms and the upperR spawn pad removed MODERN-ONLY via an in-place splice in
+  index.html after data.js loads (platformsForWave closes over the arrays — reassignment
+  does nothing; retro untouched; engine Node tests unaffected). (2) Sprite glitches fixed
+  by a rebuilt slicer: pure LUMA KEY (measured: repainted bg ≤8 max-channel, figures ≥15 —
+  masks deleted from the pipeline entirely; the mask model was the failure source), Voronoi
+  cell assignment, keep-largest-component (lances cross midlines; luma figures are one blob),
+  morphological close r2 for armor pinholes, pad 90 (repaints GROW figures ~35% past staged
+  cells). NO centroid shift (repaint mass differs; it clipped heads). (3) birds -20%
+  (plane meta x0.8). (4) materialize = flicker only (Y-squash on a sprite reads as a glitch).
+  GOTCHA: tools/shots is gitignored — bird sheets died with the old worktree; re-staged via
+  `git show 89cf140:...render3d.js` (3D builders) + re-repainted (5 API calls, total 22).
+  Sheets NOW archived in notes/art-raw/.

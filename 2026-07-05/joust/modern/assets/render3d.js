@@ -55,8 +55,8 @@ const PLAT_CARDS = {
 // models (tools/bird-sheet → fal-edit → slice-birds). Unlit DoubleSide planes: facing
 // flips via rotation.y=PI showing the mirrored back face (retro-authentic lance swap).
 // To RE-STAGE sheets, check out the pre-sprite commit — these builders replaced the 3D ones.
-const BIRD_SPRITE = { planeW: 48.889, planeH: 42.222, feetFrac: 0.8947 };
-const PTERO_SPRITE = { planeW: 103.226, planeH: 80, feetFrac: 0.71 };
+const BIRD_SPRITE = { planeW: 68.455, planeH: 63.151, feetFrac: 0.7111 };  // padded-crop mapping x0.8 (owner: -20%)
+const PTERO_SPRITE = { planeW: 116.710, planeH: 98.138, feetFrac: 0.6367 };
 const _birdMats = {};
 function birdMat(key) {
   if (_birdMats[key]) return _birdMats[key];
@@ -672,12 +672,9 @@ class Renderer3D {
     } else frame = (e.wingDown > 0 || e.flapHeld) ? 'down' : 'up';
     if (e.skid > 0) { g.rotation.z = 0.2 * (e.face || 1); frame = 'stand'; }
     if (frame !== s.frame) { s.frame = frame; bv.spritePlane.material = birdMat(bv.spritePre + '-' + frame); }
-    // materialize flicker
-    if (e.materializing > 0) {
-      g.visible = (Math.floor(t * 30) % 2) === 0;
-      const k = 1 - e.materializing / 60;
-      g.scale.set(1, 0.35 + 0.65 * k, 1);
-    } else g.scale.set(1, 1, 1);
+    // materialize: flicker only — Y-squashing a painted sprite reads as a glitch
+    if (e.materializing > 0) g.visible = (Math.floor(t * 30) % 2) === 0;
+    g.scale.set(1, 1, 1);
   }
 
   posePtero(pv, e, t, xOff) {
