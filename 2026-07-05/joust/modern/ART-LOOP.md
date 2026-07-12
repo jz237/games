@@ -174,3 +174,15 @@ folded-wing pose slightly splayed, title wordmark is plain Courier.
   held 130ms down-beat, min 90ms hold on all other transitions, and landing requires 70ms
   of stable ground contact. NOTE for future traces: SwiftShader renders ~10fps so holds
   expire between samples — trace validates logic, not felt cadence.
+
+- **it11 (v1.6.2, owner round 2)**: (1) wings now actually FLAP — flap OSCILLATOR (fixed
+  ~7.7Hz down/up while flap activity within 240ms) replaces edge-held beats: engine flap
+  cadence (67-117ms) is FASTER than any watchable hold, so the previous beat never released.
+  Airborne swaps exempt from the 90ms hold. (2) player sprites x0.8 (sheet1 was painted
+  ~20% larger than sheet2). (3) "standing in lava" — bottom row floorL/floorR cards only
+  contained the master plate's on-screen paint; their outer collision extent was invisible.
+  They now borrow UV slices of plat-base.png (u 0.02-0.34 / 0.66-0.98, geometry UV remap —
+  NEVER texture clones) spanning full collision width, tucked at z -8.6 under the base card.
+  Also raised the visual lava surface to the engine stand line (FLOOR) — the walkable shore
+  is ROM behaviour, troll punishes from W4. (4) collision = authentic ROM pixel masks; the
+  player size fix narrows the visual/hitbox gap.

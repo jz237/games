@@ -71,8 +71,10 @@ function birdView(kind, variant) {
   const pre = kind === 'player' ? (variant === 1 ? 'p2' : 'p1')
     : (variant === 'hunter' ? 'hunter' : variant === 'shadow' ? 'shadow' : 'bounder');
   const outer = new T.Group();
-  const plane = new T.Mesh(new T.PlaneGeometry(BIRD_SPRITE.planeW, BIRD_SPRITE.planeH), birdMat(pre + '-up'));
-  plane.position.y = (BIRD_SPRITE.feetFrac - 0.5) * BIRD_SPRITE.planeH;   // feet land on y=0
+  // the player sheet was painted with ~20% larger figures than the enemy sheet
+  const sc = kind === 'player' ? 0.8 : 1;
+  const plane = new T.Mesh(new T.PlaneGeometry(BIRD_SPRITE.planeW * sc, BIRD_SPRITE.planeH * sc), birdMat(pre + '-up'));
+  plane.position.y = (BIRD_SPRITE.feetFrac - 0.5) * BIRD_SPRITE.planeH * sc;   // feet land on y=0
   plane.renderOrder = 2;
   outer.add(plane);
   return { group: outer, spritePlane: plane, spritePre: pre, wings: [], legs: [],
@@ -533,7 +535,7 @@ class Renderer3D {
     });
     // an endless molten sea reaching the horizon ridges
     const lava = new T.Mesh(new T.PlaneGeometry(SPAN * 5, 830, 130, 42), this.lavaMat);
-    lava.rotation.x = -Math.PI / 2; lava.position.set(0, LAVA_Y, -275);
+    lava.rotation.x = -Math.PI / 2; lava.position.set(0, Y3(WORLD.FLOOR) - 1.2, -275);   // engine stand line = ROM lava shore
     this.scene.add(lava);
   }
 
@@ -550,21 +552,41 @@ class Renderer3D {
       const card = PLAT_CARDS[def.id];
       const g = new T.Group();
       if (card) {
+        // floorL/floorR: the master plate only painted their on-screen part, leaving the
+        // outer collision extent INVISIBLE ("standing on lava"). They borrow slices of the
+        // base slab texture instead, UV-remapped (never texture clones — those render flat).
+        const BORROW = { floorL: { key: 'base', u: [0.02, 0.34] }, floorR: { key: 'base', u: [0.66, 0.98] } };
+        const bor = BORROW[def.id];
+        const srcCard = bor ? PLAT_CARDS[bor.key] : card;
         const [wx0, wy0, wx1, wy1] = card.w;
         const bw = wx1 - wx0, bh = wy1 - wy0;
-        const cw = bw / card.fw, ch = bh / card.fh;
-        const left = wx0 - card.fx * cw, top = wy1 + card.fy * ch;
+        let cw, ch, left, top, uvs = null;
+        if (bor) {
+          // full collision box, extended toward the base slab so the joint tucks UNDER it
+          const ext = def.id === 'floorL' ? [2, 12] : [12, 2];
+          cw = bw + ext[0] + ext[1]; ch = (bh / srcCard.fh);
+          left = wx0 - ext[0]; top = wy1 + srcCard.fy * ch;
+          uvs = [bor.u[0], bor.u[1]];
+        } else {
+          cw = bw / card.fw; ch = bh / card.fh;
+          left = wx0 - card.fx * cw; top = wy1 + card.fy * ch;
+        }
         const mat = new T.MeshBasicMaterial({ transparent: true, depthWrite: false, opacity: 0 });
-        loader.load(`assets/tex/plat-${def.id}.png` + Q, tex => {
+        loader.load(`assets/tex/plat-${bor ? bor.key : def.id}.png` + Q, tex => {
           tex.colorSpace = T.SRGBColorSpace;
           tex.anisotropy = Math.min(4, maxAniso);
           mat.map = tex; mat.opacity = 1; mat.needsUpdate = true;
         });
         for (const off of [-SPAN, 0, SPAN]) {
-          const p = new T.Mesh(new T.PlaneGeometry(cw, ch), mat);
+          const geo = new T.PlaneGeometry(cw, ch);
+          if (uvs) {
+            const uv = geo.attributes.uv;
+            for (let i = 0; i < uv.count; i++) uv.setX(i, uvs[0] + uv.getX(i) * (uvs[1] - uvs[0]));
+          }
+          const p = new T.Mesh(geo, mat);
           // z −8: just behind the gameplay plane so birds pass in front, painted top
           // edge still lands exactly on the collision surface
-          p.position.set(left + cw / 2 + off, top - ch / 2, -8);
+          p.position.set(left + cw / 2 + off, top - ch / 2, bor ? -8.6 : -8);   // borrowed slices tuck behind
           p.renderOrder = 1;
           g.add(p);
         }
@@ -669,19 +691,23 @@ class Renderer3D {
     // STROBES three very different paintings. Instead: a fresh flap triggers a held
     // down-beat, and every other transition needs a minimum hold.
     const s = bv.state;
-    if (!e.onGround && e.wingDown > (s.lastWd || 0)) s.flapUntil = t + 0.13;  // new flap edge
+    // flap OSCILLATOR: engine flap cadence (67-117ms) is faster than any watchable
+    // down-beat, so holding a beat per edge pins the wings. Instead: any flap edge marks
+    // activity, and while active the wings oscillate at a fixed readable ~7.7Hz.
+    if (!e.onGround && e.wingDown > (s.lastWd || 0)) s.lastFlapAt = t;
     s.lastWd = e.wingDown;
+    const flapActive = t - (s.lastFlapAt || -9) < 0.24;
     // skimming birds touch ground for single ticks — require stable contact before landing
     if (e.onGround) { if (!s.gSince) s.gSince = t; } else s.gSince = 0;
     const grounded = s.gSince && t - s.gSince > 0.07;
     let frame;
-    if (!grounded) frame = t < (s.flapUntil || 0) ? 'down' : 'up';
+    if (!grounded) frame = flapActive ? (Math.floor(t / 0.065) % 2 === 0 ? 'down' : 'up') : 'up';
     else if (Math.abs(e.vx || 0) > 0.12) { s.runP += Math.abs(e.vx) * 0.3; frame = Math.sin(s.runP * 1.6) > 0 ? 'stand' : 'down'; }
     else frame = 'stand';
     if (e.skid > 0) { g.rotation.z = 0.2 * (e.face || 1); frame = 'stand'; }
     if (frame !== s.frame) {
-      const immediate = frame === 'down' && !grounded;   // flap response stays snappy
-      if (immediate || t - (s.since || 0) > 0.09) {
+      const airborneSwap = !grounded && s.frame !== 'stand';   // oscillator runs free
+      if (airborneSwap || t - (s.since || 0) > 0.09) {
         s.frame = frame; s.since = t;
         bv.spritePlane.material = birdMat(bv.spritePre + '-' + frame);
       }
