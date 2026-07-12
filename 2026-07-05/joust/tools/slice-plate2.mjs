@@ -37,12 +37,46 @@ const out = await page.evaluate(async (masterB64, maskB64, meta, ids, PAD) => {
     const cx2 = c.getContext('2d');
     cx2.drawImage(mask, x, y, w, h, 0, 0, w, h);
     const md = cx2.getImageData(0, 0, w, h);
+    // mask luminance grid, then a 1px ERODE (kills pale halo fringes on the caps)
+    const lum = new Float32Array(w * h);
+    for (let py = 0; py < h; py++) for (let px2 = 0; px2 < w; px2++) {
+      const i = (py * w + px2) * 4;
+      lum[py * w + px2] = (md.data[i] + md.data[i + 1] + md.data[i + 2]) / 3;
+    }
+    const er = new Float32Array(w * h);
+    for (let py = 0; py < h; py++) for (let px2 = 0; px2 < w; px2++) {
+      let mn = 255;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const yy = Math.min(h - 1, Math.max(0, py + dy)), xx = Math.min(w - 1, Math.max(0, px2 + dx));
+        mn = Math.min(mn, lum[yy * w + xx]);
+      }
+      er[py * w + px2] = mn;
+    }
     cx2.clearRect(0, 0, w, h);
     cx2.drawImage(master, x, y, w, h, 0, 0, w, h);
     const cd = cx2.getImageData(0, 0, w, h);
-    for (let i = 0; i < cd.data.length; i += 4) {
-      const m = (md.data[i] + md.data[i + 1] + md.data[i + 2]) / 3;
-      cd.data[i + 3] = m < 40 ? 0 : m > 215 ? 255 : Math.round((m - 40) * (255 / 175));
+    // connected-component filter: the padding can contain OTHER platforms' mask pixels
+    // and stray white smears (lava bands) — keep only pixels flood-connected to the
+    // platform blob inside this platform's own collision rect
+    const keep = new Uint8Array(w * h);
+    const stack = [];
+    const ox0 = Math.max(0, Math.round(r.x * sx - x)), oy0 = Math.max(0, Math.round(r.y * sy - y));
+    const ox1 = Math.min(w - 1, Math.round((r.x + r.w) * sx - x)), oy1 = Math.min(h - 1, Math.round((r.y + r.h) * sy - y));
+    for (let py = oy0; py <= oy1; py++) for (let px2 = ox0; px2 <= ox1; px2++) {
+      if (er[py * w + px2] > 128 && !keep[py * w + px2]) { keep[py * w + px2] = 1; stack.push(py * w + px2); }
+    }
+    while (stack.length) {
+      const q = stack.pop(); const qy = (q / w) | 0, qx = q % w;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx2 = qx + dx, ny2 = qy + dy;
+        if (nx2 < 0 || ny2 < 0 || nx2 >= w || ny2 >= h) continue;
+        const n = ny2 * w + nx2;
+        if (!keep[n] && er[n] > 40) { keep[n] = 1; stack.push(n); }
+      }
+    }
+    for (let i2 = 0; i2 < w * h; i2++) {
+      const m = keep[i2] ? er[i2] : 0;
+      cd.data[i2 * 4 + 3] = m < 40 ? 0 : m > 215 ? 255 : Math.round((m - 40) * (255 / 175));
     }
     cx2.putImageData(cd, 0, 0);
     // crop fractions of where the GEOMETRY rect sits inside this padded crop

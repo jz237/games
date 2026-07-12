@@ -126,3 +126,12 @@ folded-wing pose slightly splayed, title wordmark is plain Courier.
   TODO next: LUT grade (histogram-match to master2/reference), egg/ptero/LOW/mobile checks,
   delete unused tex files (rock2*, stone-top*, concept? keep concept), suites, bump 1.4.0,
   hub card, deploy, verify, memory. Bird sprite side-by-side test frame for the owner.
+  **it7 SHIPPED as v1.4.0**: LUT grade (tools/grade-lut.mjs — per-channel histogram match
+  toward master2, 256x1 grade.png, applied post-gamma in COMP_FS; identity DataTexture until
+  load; LOW = ungraded by design). Slicing gotchas fixed: neighbour rects overlap padding →
+  connected-component flood filter (keep only pixels connected to the blob inside own rect)
+  killed a stray lava-band bar that per-rect suppression missed; 1px mask erode kills cap
+  halos. Unused rock2*/stone-top* deleted (tex payload 972K incl. concept+grade). fps proxy:
+  HIGH 4.8→11.6, LOW 12→21 (cards are 2.4x cheaper than extruded rock). Bird sprite style
+  test at notes/art-raw/bird-sprite-test.png — NOT integrated, owner decides. All suites
+  green. API spend total: 8 calls.

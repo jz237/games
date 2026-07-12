@@ -413,6 +413,7 @@ void main(){
 const COMP_FS = `
 varying vec2 vUv;
 uniform sampler2D tS; uniform sampler2D tB0; uniform sampler2D tB1; uniform sampler2D tB2; uniform sampler2D tB3;
+uniform sampler2D tG;
 uniform float uExp; uniform float uStr;
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1.0); }
 void main(){
@@ -422,7 +423,12 @@ void main(){
              + texture2D(tB2, vUv).rgb * 0.6
              + texture2D(tB3, vUv).rgb * 0.45;
   c = aces(c + bloom * uStr);
-  gl_FragColor = vec4(pow(c, vec3(1.0/2.2)), 1.0);
+  c = pow(c, vec3(1.0/2.2));
+  // baked colour grade: per-channel histogram match toward the repainted master plate
+  c = vec3(texture2D(tG, vec2(c.r, 0.5)).r,
+           texture2D(tG, vec2(c.g, 0.5)).g,
+           texture2D(tG, vec2(c.b, 0.5)).b);
+  gl_FragColor = vec4(c, 1.0);
 }`;
 // FXAA (compact 3.11-style). AA lives HERE, not in a multisampled RT — MSAA resolve of
 // HalfFloat targets produced transient black-rectangle artifacts on the owner's GPU.
@@ -458,7 +464,12 @@ class PostFX {
     const sm = (fs, un) => new T.ShaderMaterial({ vertexShader: FSQ_VS, fragmentShader: fs, uniforms: un, depthTest: false, depthWrite: false });
     this.brightU = { tD: { value: null }, uTh: { value: this.threshold }, uExp: { value: this.exposure } };
     this.blurU = { tD: { value: null }, uDir: { value: new T.Vector2() } };
-    this.compU = { tS: { value: null }, tB0: { value: null }, tB1: { value: null }, tB2: { value: null }, tB3: { value: null }, uExp: { value: this.exposure }, uStr: { value: this.strength } };
+    // identity grade ramp until assets/tex/grade.png lands
+    const idData = new Uint8Array(256 * 4);
+    for (let v = 0; v < 256; v++) { idData[v * 4] = v; idData[v * 4 + 1] = v; idData[v * 4 + 2] = v; idData[v * 4 + 3] = 255; }
+    const idTex = new T.DataTexture(idData, 256, 1, T.RGBAFormat);
+    idTex.needsUpdate = true; idTex.minFilter = idTex.magFilter = T.LinearFilter;
+    this.compU = { tS: { value: null }, tB0: { value: null }, tB1: { value: null }, tB2: { value: null }, tB3: { value: null }, tG: { value: idTex }, uExp: { value: this.exposure }, uStr: { value: this.strength } };
     this.fxaaU = { tD: { value: null }, uInv: { value: new T.Vector2() } };
     this.brightM = sm(BRIGHT_FS, this.brightU);
     this.blurM = sm(BLUR_FS, this.blurU);
@@ -552,6 +563,12 @@ class Renderer3D {
     this.views = new Map();       // entity id → view
     this.platVisible = {};        // platform id → bool (burn detection)
     this.post = new PostFX(this.gl);
+    new T.TextureLoader().load('assets/tex/grade.png' + Q, tex => {
+      tex.minFilter = tex.magFilter = T.LinearFilter;
+      tex.wrapS = tex.wrapT = T.ClampToEdgeWrapping;
+      tex.colorSpace = T.NoColorSpace;   // raw curve data, not colour
+      this.post.compU.tG.value = tex;
+    });
     this.buildLights();
     this.buildSky();
     this.buildLava();
