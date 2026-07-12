@@ -14,6 +14,7 @@ const gRoot = execSync('npm root -g').toString().trim();
 const puppeteer = require(join(gRoot, 'puppeteer'));
 const PORT = 8256;
 const PREFIX = process.env.ART_PREFIX || 'art';
+const VW = parseInt(process.env.ART_W || '1280', 10), VH = parseInt(process.env.ART_H || '720', 10);
 
 const srv = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1', '--directory', root], { stdio: 'ignore' });
 await new Promise(r => setTimeout(r, 800));
@@ -21,10 +22,10 @@ const shotDir = join(root, 'tools', 'shots');
 fs.mkdirSync(shotDir, { recursive: true });
 const browser = await puppeteer.launch({
   headless: 'new',
-  args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--window-size=1280,720'],
+  args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', `--window-size=${VW},${VH}`],
 });
 const page = await browser.newPage();
-await page.setViewport({ width: 1280, height: 720 });
+await page.setViewport({ width: VW, height: VH });
 const errors = [];
 page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 page.on('pageerror', e => errors.push('pageerror: ' + e.message));

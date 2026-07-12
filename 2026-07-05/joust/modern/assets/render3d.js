@@ -272,14 +272,15 @@ function scaleUV(geo, s) {
   uv.needsUpdate = true;
 }
 
-// bake cheap AO into vertex colors: full-bright tops fading darker toward the underside
+// bake cheap AO into vertex colors: full-bright tops fading toward a WARM dark at the
+// underside (the lava's bounce means shadowed rock never goes neutral grey)
 function bakeAO(geo, hgt) {
   const pos = geo.attributes.position;
   const col = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i);
     const k = Math.max(0.58, Math.min(1, 1 + y / (hgt * 1.9)));   // y is 0 at top, -hgt at bottom
-    col[i * 3] = k; col[i * 3 + 1] = k; col[i * 3 + 2] = k;
+    col[i * 3] = k; col[i * 3 + 1] = k * (0.8 + 0.2 * k); col[i * 3 + 2] = k * (0.66 + 0.34 * k);
   }
   geo.setAttribute('color', new T.BufferAttribute(col, 3));
 }
@@ -329,11 +330,10 @@ function platformMesh(def, seed, texReg) {
   const mesh = new T.Mesh(geo, mat);
   mesh.castShadow = true; mesh.receiveShadow = true;
   const grp = new T.Group(); grp.add(mesh);
-  // walkway lip: weathered stone. The rock texture is dark, so the tint over-compensates
-  // brighter — otherwise the top face flattens into featureless lit plastic.
-  const lipMat = new T.MeshStandardMaterial({ color: 0x9a958a, roughness: 0.9, metalness: 0.03, flatShading: true });
+  // walkway cap: pale worn stone slab (owner's reference) — bright top with a cool sheen
+  const lipMat = new T.MeshStandardMaterial({ color: 0xc2c8d2, roughness: 0.52, metalness: 0.08, flatShading: true });
   texReg.push({ mat: lipMat, kind: 'lip' });
-  const lw = w + 3, lh = 2.2, ld = depth + 3;
+  const lw = w + 3, lh = 3.0, ld = depth + 3;
   const lipGeo = new T.BoxGeometry(lw, lh, ld);
   // per-face world-scale UVs (BoxGeometry faces: +x -x +y -y +z -z, 4 verts each) so one
   // shared texture tiles correctly everywhere — per-material clones w/ repeat render flat
@@ -349,7 +349,7 @@ function platformMesh(def, seed, texReg) {
   grp.add(lip);
   // cool worn top edge — the readable "you stand here" line (retro's bright walkway, cave-style).
   // broken into weathered segments so it reads as caught light, not neon trim.
-  const edgeMat = new T.MeshStandardMaterial({ color: 0x3a4658, emissive: 0x9ec6ff, emissiveIntensity: 0.42, roughness: 0.6 });
+  const edgeMat = new T.MeshStandardMaterial({ color: 0x3a4658, emissive: 0x9ec6ff, emissiveIntensity: 0.28, roughness: 0.6 });
   const nSeg = Math.max(1, Math.min(4, Math.round(lw / 40)));
   for (let si = 0; si < nSeg; si++) {
     const segW = lw / nSeg - 2.6 - hash(seed + 80 + si) * 2.2;
@@ -368,6 +368,20 @@ function platformMesh(def, seed, texReg) {
   });
   const glow = new T.Mesh(new T.BoxGeometry(w * 0.84, isBase ? 2.4 : 1.4, depth * 0.6), glowMat);
   glow.position.set(w / 2, -(hgt - (isBase ? 5 : 3.4)), 0); grp.add(glow);
+  // molten drips streaking off the underside (reference look), base platforms only
+  if (isBase) {
+    const dripMat = new T.MeshStandardMaterial({ color: 0x300a00, emissive: 0xff7a1c, emissiveIntensity: 1.6, roughness: 1 });
+    const nDrip = Math.max(2, Math.round(w / 60));
+    for (let di = 0; di < nDrip; di++) {
+      const dx = (di + 0.5) / nDrip * w + (hash(seed + 40 + di) - 0.5) * 14;
+      const dl = 3.5 + hash(seed + 50 + di) * 5;
+      const drip = new T.Mesh(new T.ConeGeometry(0.55, dl, 5), dripMat);
+      drip.rotation.x = Math.PI;   // point down
+      // sits proud of the beveled front face, or it hides inside the rock
+      drip.position.set(dx, -(hgt * (0.35 + hash(seed + 70 + di) * 0.3)) - dl / 2, depth / 2 + 2.2);
+      grp.add(drip);
+    }
+  }
   grp.position.set(X3(def.x1), Y3(def.y) - 1.2, 0);
   return grp;
 }
@@ -474,10 +488,10 @@ void main(){
   vec3 c = mix(vec3(0.030,0.007,0.005), vec3(0.10,0.022,0.010), crack);
   // molten cracks ramp: deep orange -> yellow-white, pushed into HDR for bloom
   float hot = pow(max(crack-0.20,0.0)*1.3, 1.9) * (0.18 + 0.95*pool);
-  vec3 molten = mix(vec3(1.0,0.22,0.02), vec3(1.0,0.86,0.38), min(hot*1.4,1.0));
-  c += molten * hot * (1.5 + 0.9*pulse) * uBoost;
+  vec3 molten = mix(vec3(1.0,0.18,0.015), vec3(1.0,0.86,0.38), min(hot*1.4,1.0));
+  c += molten * hot * (1.75 + 0.95*pulse) * uBoost;
   // distance: die into the dark horizon quickly so the sea reads as depth, not a bright wall
-  c = mix(c, vec3(0.016,0.004,0.003), smoothstep(170.0, 480.0, vDist));
+  c = mix(c, vec3(0.011,0.003,0.003), smoothstep(160.0, 460.0, vDist));
   gl_FragColor = vec4(c,1.0);
 }`;
 
@@ -514,6 +528,30 @@ void main(){
   c = aces(c + bloom * uStr);
   gl_FragColor = vec4(pow(c, vec3(1.0/2.2)), 1.0);
 }`;
+// FXAA (compact 3.11-style). AA lives HERE, not in a multisampled RT — MSAA resolve of
+// HalfFloat targets produced transient black-rectangle artifacts on the owner's GPU.
+const FXAA_FS = `
+varying vec2 vUv; uniform sampler2D tD; uniform vec2 uInv;
+void main(){
+  vec3 rgbNW = texture2D(tD, vUv + vec2(-1.0,-1.0)*uInv).rgb;
+  vec3 rgbNE = texture2D(tD, vUv + vec2( 1.0,-1.0)*uInv).rgb;
+  vec3 rgbSW = texture2D(tD, vUv + vec2(-1.0, 1.0)*uInv).rgb;
+  vec3 rgbSE = texture2D(tD, vUv + vec2( 1.0, 1.0)*uInv).rgb;
+  vec4 cM = texture2D(tD, vUv); vec3 rgbM = cM.rgb;
+  vec3 luma = vec3(0.299, 0.587, 0.114);
+  float lNW = dot(rgbNW, luma), lNE = dot(rgbNE, luma);
+  float lSW = dot(rgbSW, luma), lSE = dot(rgbSE, luma), lM = dot(rgbM, luma);
+  float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
+  float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+  vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), ((lNW + lSW) - (lNE + lSE)));
+  float dirReduce = max((lNW + lNE + lSW + lSE) * 0.03125, 0.0078125);
+  float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
+  dir = clamp(dir * rcpDirMin, vec2(-8.0), vec2(8.0)) * uInv;
+  vec3 rgbA = 0.5 * (texture2D(tD, vUv + dir * (1.0/3.0 - 0.5)).rgb + texture2D(tD, vUv + dir * (2.0/3.0 - 0.5)).rgb);
+  vec3 rgbB = rgbA * 0.5 + 0.25 * (texture2D(tD, vUv + dir * -0.5).rgb + texture2D(tD, vUv + dir * 0.5).rgb);
+  float lB = dot(rgbB, luma);
+  gl_FragColor = vec4((lB < lMin || lB > lMax) ? rgbA : rgbB, cM.a);
+}`;
 
 class PostFX {
   constructor(gl) {
@@ -525,9 +563,11 @@ class PostFX {
     this.brightU = { tD: { value: null }, uTh: { value: this.threshold }, uExp: { value: this.exposure } };
     this.blurU = { tD: { value: null }, uDir: { value: new T.Vector2() } };
     this.compU = { tS: { value: null }, tB0: { value: null }, tB1: { value: null }, tB2: { value: null }, tB3: { value: null }, uExp: { value: this.exposure }, uStr: { value: this.strength } };
+    this.fxaaU = { tD: { value: null }, uInv: { value: new T.Vector2() } };
     this.brightM = sm(BRIGHT_FS, this.brightU);
     this.blurM = sm(BLUR_FS, this.blurU);
     this.compM = sm(COMP_FS, this.compU);
+    this.fxaaM = sm(FXAA_FS, this.fxaaU);
     this.quad = new T.Mesh(new T.PlaneGeometry(2, 2), this.compM);
     this.quad.frustumCulled = false;
     this.scene = new T.Scene(); this.scene.add(this.quad);
@@ -546,7 +586,10 @@ class PostFX {
     if (w === this._w && h === this._h && samples === this._samples) return;
     this._w = w; this._h = h; this._samples = samples;
     this.dispose();
-    this.rtScene = this._rt(w, h, { depthBuffer: true, samples: this.gl.capabilities.isWebGL2 ? samples : 0 });
+    // no MSAA on the scene RT — multisample resolve of HalfFloat targets black-boxed on
+    // the owner's GPU; FXAA (final pass) provides the AA instead
+    this.rtScene = this._rt(w, h, { depthBuffer: true });
+    this.rtLDR = this._rt(w, h, { type: T.UnsignedByteType });
     this.mips = [];
     let mw = w / 2, mh = h / 2;
     for (let i = 0; i < this.MIPS; i++) {
@@ -556,8 +599,9 @@ class PostFX {
   }
   dispose() {
     if (this.rtScene) this.rtScene.dispose();
+    if (this.rtLDR) this.rtLDR.dispose();
     for (const m of this.mips) { m.a.dispose(); m.b.dispose(); }
-    this.rtScene = null; this.mips = [];
+    this.rtScene = null; this.rtLDR = null; this.mips = [];
   }
   _pass(mat, rt) {
     this.quad.material = mat;
@@ -583,8 +627,11 @@ class PostFX {
     this.compU.tB1.value = this.mips[1].a.texture;
     this.compU.tB2.value = this.mips[2].a.texture;
     this.compU.tB3.value = this.mips[3].a.texture;
+    this._pass(this.compM, this.rtLDR);          // tonemapped LDR
+    this.fxaaU.tD.value = this.rtLDR.texture;    // then FXAA to the screen
+    this.fxaaU.uInv.value.set(1 / this._w, 1 / this._h);
     gl.setRenderTarget(null);
-    this.quad.material = this.compM;
+    this.quad.material = this.fxaaM;
     gl.render(this.scene, this.cam);
   }
 }
@@ -655,7 +702,7 @@ class Renderer3D {
     // cool rim/backlight — separates silhouettes from the dark cave
     const rim = new T.DirectionalLight(COL.rimLight, 1.25); rim.position.set(90, 60, -260); this.scene.add(rim);
     // warm lava bounce from below
-    const warm = new T.DirectionalLight(COL.bounceWarm, 0.85); warm.position.set(30, -220, 140); this.scene.add(warm);
+    const warm = new T.DirectionalLight(COL.bounceWarm, 0.68); warm.position.set(30, -220, 140); this.scene.add(warm);
     // soft camera-side fill so front faces show their rock texture instead of dropping to black
     const fill = new T.DirectionalLight(0x8a96b8, 0.3); fill.position.set(30, 50, 400); this.scene.add(fill);
     // flickering lava point lights
@@ -683,14 +730,14 @@ class Renderer3D {
     const glowMat = new T.ShaderMaterial({
       transparent: true, depthWrite: false, fog: false,
       vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-      fragmentShader: `varying vec2 vUv; void main(){ float a = pow(1.0-vUv.y, 2.6)*0.26; gl_FragColor = vec4(1.0,0.30,0.05, a); }`,
+      fragmentShader: `varying vec2 vUv; void main(){ float a = pow(1.0-vUv.y, 2.8)*0.13; gl_FragColor = vec4(1.0,0.30,0.05, a); }`,
     });
     const hor = new T.Mesh(new T.PlaneGeometry(3400, 230), glowMat);
     hor.position.set(0, LAVA_Y + 86, -640); this.scene.add(hor);
     // jagged basalt ridges rising out of the molten sea (parallax layers, concept-style).
     // irregular polyline peaks — never clean triangles, they read as paper cutouts.
     // the near layer breaks up the distance-faded sea so it doesn't read as a flat wall.
-    for (const [z, hMax, c] of [[-450, 46, 0x170e0b], [-620, 150, 0x0b070b], [-750, 230, 0x050406]]) {
+    for (const [z, hMax, c] of [[-450, 46, 0x100c12], [-620, 150, 0x090710], [-750, 230, 0x040309]]) {
       const pts = [new T.Vector2(-1700, LAVA_Y - 90)];
       let x = -1700, k = 0;
       while (x < 1700) {
@@ -743,7 +790,7 @@ class Renderer3D {
     const loader = new T.TextureLoader();
     const maps = {};
     const want = [['rock', 'assets/tex/rock2.jpg', true], ['rockN', 'assets/tex/rock2-n.jpg', false],
-                  ['top', 'assets/tex/rock-top.jpg', true], ['topN', 'assets/tex/rock-top-n.jpg', false]];
+                  ['top', 'assets/tex/stone-top.jpg', true], ['topN', 'assets/tex/stone-top-n.jpg', false]];
     let got = 0;
     const maxAniso = this.gl.capabilities.getMaxAnisotropy();
     for (const [key, url, srgb] of want) {
@@ -758,9 +805,18 @@ class Renderer3D {
           if (r.kind === 'lip') {
             r.mat.map = maps.top; r.mat.normalMap = maps.topN;
             r.mat.normalScale = new T.Vector2(1.4, 1.4);
+            // texture-preserving ambient lift: cap faces get almost no direct light and
+            // would crush into the ACES toe — emissiveMap keeps the stone detail visible
+            r.mat.emissive = new T.Color(0x707a88);
+            r.mat.emissiveIntensity = 1.3;
+            r.mat.emissiveMap = maps.top;
           } else {
             r.mat.map = maps.rock; r.mat.normalMap = maps.rockN;
             r.mat.normalScale = new T.Vector2(1.25, 1.25);
+            // warm lava-bounce lift so the rocky mass reads brown, not black
+            r.mat.emissive = new T.Color(0x51301c);
+            r.mat.emissiveIntensity = 1.15;
+            r.mat.emissiveMap = maps.rock;
           }
           r.mat.needsUpdate = true;
         }

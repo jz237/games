@@ -8,6 +8,7 @@
 <meta name="description" content="Joust re-imagined in real-time 3D — the same ROM-faithful engine as the retro remake driving a volcanic 3D arena, with achievements, kill-cam, gamepad rumble and its own global leaderboard.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%23ffe999'/><stop offset='1' stop-color='%23d98f16'/></linearGradient></defs><polygon points='3,10 11,7 10,12 4,13' fill='url(%23g)'/><polygon points='9,7 12,3 13,5 10,8' fill='%23eebc2e'/><polygon points='10,5 15,4 15,5 11,6' fill='%23e8ecf5'/></svg>">
 <style>
+@font-face{font-family:'Cinzel';src:url('assets/fonts/cinzel.woff2') format('woff2');font-weight:400 900;font-display:swap}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
   overscroll-behavior:none;-webkit-user-select:none;user-select:none;touch-action:none}
@@ -39,7 +40,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 <div id="rotate">↻ ROTATE TO LANDSCAPE</div>
 <div id="boot">LOADING JOUST 3D…<small>same game · new world</small></div>
 <script>
-window.__V3 = '1.2.1';                              // modern edition version (cache-buster)
+window.__V3 = '1.3.0';                              // modern edition version (cache-buster)
 window.__V  = '2.0.4';                              // shared retro-engine assets version
 window.__JOUST_AUDIO_BASE = '../retro/assets/audio/'; // reuse the bit-exact arcade SFX
 window.__JOUST_THEME = 'assets/audio/theme.ogg';       // original modern title theme (menus only)
@@ -50,8 +51,8 @@ window.addEventListener('error', e => { const b = document.getElementById('boot'
 <script src="../retro/assets/sprites.js?v=2.0.4"></script>
 <script src="../retro/assets/engine.js?v=2.0.4"></script>
 <script src="../retro/assets/audio.js?v=2.0.4"></script>
-<script src="vendor/three.min.js?v=1.2.1"></script>
-<script src="assets/render3d.js?v=1.2.1"></script>
-<script src="assets/game3d.js?v=1.2.1"></script>
+<script src="vendor/three.min.js?v=1.3.0"></script>
+<script src="assets/render3d.js?v=1.3.0"></script>
+<script src="assets/game3d.js?v=1.3.0"></script>
 </body>
 </html>

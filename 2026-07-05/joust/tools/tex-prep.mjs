@@ -17,7 +17,8 @@ const gRoot = execSync('npm root -g').toString().trim();
 const puppeteer = require(join(gRoot, 'puppeteer'));
 const PORT = 8254;
 
-const srv = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1', '--directory', tex], { stdio: 'ignore' });
+const raws = join(root, 'notes', 'art-raw');   // raw AI outputs live outside the deployed tree
+const srv = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1', '--directory', raws], { stdio: 'ignore' });
 await new Promise(r => setTimeout(r, 800));
 const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
 const page = await browser.newPage();
@@ -108,9 +109,13 @@ const result = await page.evaluate(async () => {
   out.rock = rc.toDataURL('image/jpeg', 0.86);
   out.rockN = normalMap(rc, 2.4).toDataURL('image/jpeg', 0.92);
   // ── walkway variant: brighter + higher contrast so platform TOPS read under flat light ──
-  const rt = contrastLift(rc, 2.1, 118);
-  out.rockTop = rt.toDataURL('image/jpeg', 0.86);
-  out.rockTopN = normalMap(rt, 3.2).toDataURL('image/jpeg', 0.92);
+  // pale worn stone slab caps (owner's reference look) — generated, not contrast-lifted
+  const stone = await load('stone-raw.png');
+  const sc = cv(1024, 1024); sc.getContext('2d').drawImage(stone, 0, 0, 1024, 1024);
+  seamBlend(sc, 56, { x: true, y: true });
+  out.stone = sc.toDataURL('image/jpeg', 0.85);
+  out.stoneN = normalMap(sc, 2.0).toDataURL('image/jpeg', 0.9);
+  void contrastLift;   // kept for future variants
   // ── lava cracks ──
   const lava = await load('lava-raw.png');
   const lc = cv(1024, 1024); lc.getContext('2d').drawImage(lava, 0, 0, 1024, 1024);
@@ -135,8 +140,8 @@ const result = await page.evaluate(async () => {
 
 save('rock2.jpg', result.rock);
 save('rock2-n.jpg', result.rockN);
-save('rock-top.jpg', result.rockTop);
-save('rock-top-n.jpg', result.rockTopN);
+save('stone-top.jpg', result.stone);
+save('stone-top-n.jpg', result.stoneN);
 save('lava-cracks.jpg', result.lava);
 save('cavern-pano.jpg', result.pano);
 save('concept.jpg', result.concept);

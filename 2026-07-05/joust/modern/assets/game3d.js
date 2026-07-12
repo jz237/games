@@ -463,11 +463,24 @@ function stepAttract() {
 
 // ─── drawing (HUD canvas over the 3D view) ───
 const FONT = `'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif`;
+const DFONT = `Cinzel,'Times New Roman',serif`;   // vendored knightly display face
+try { document.fonts.load('900 100px Cinzel'); document.fonts.load('700 100px Cinzel'); } catch (e) {}
 function txt(s, x, y, size, col, align, weight) {
   ctx.font = `${weight || 800} ${size}px ${FONT}`;
   ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillText(s, x + 1.5, y + 2);
   ctx.fillStyle = col || '#fff'; ctx.fillText(s, x, y);
+}
+// display text: Cinzel caps with a dark outline and optional warm glow (headings/banners)
+function txtD(s, x, y, size, col, glow) {
+  ctx.font = `800 ${size}px ${DFONT}`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  if (glow) { ctx.shadowColor = 'rgba(255,170,50,.45)'; ctx.shadowBlur = Math.max(10, size * 0.35); }
+  ctx.strokeStyle = 'rgba(12,7,2,0.8)'; ctx.lineWidth = Math.max(2, size * 0.06);
+  ctx.strokeText(s, x, y);
+  ctx.fillStyle = col || '#ffd23a'; ctx.fillText(s, x, y);
+  ctx.shadowBlur = 0;
 }
 function panel(x, y, w, h, r) {
   ctx.beginPath(); ctx.roundRect(x, y, w, h, r || 14);
@@ -528,7 +541,7 @@ function drawTitle(now) {
   ctx.fillStyle = 'rgba(3,4,12,0.42)'; ctx.fillRect(0, 0, W, H);
   // wordmark (clamped by width so portrait phones don't overflow)
   const ts = Math.round(Math.min(H / 5.2, W / 4.5));
-  ctx.font = `900 ${ts}px 'Arial Black',Arial,'Segoe UI',sans-serif`;
+  ctx.font = `900 ${ts}px ${DFONT}`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const gy = H * 0.185;
   try { ctx.letterSpacing = Math.round(ts * 0.05) + 'px'; } catch (e) {}
@@ -541,7 +554,7 @@ function drawTitle(now) {
   ctx.fillStyle = grad; ctx.fillText('JOUST', W / 2, gy);
   ctx.shadowBlur = 0;
   try { ctx.letterSpacing = '0px'; } catch (e) {}
-  txt('M O D E R N   3 D', W / 2, H * 0.30, Math.round(H / 30), '#7fd4ff', 'center', 700);
+  txtD('MODERN 3D', W / 2, H * 0.30, Math.round(H / 30), '#8fc6ff');
   const items = ['1 PLAYER', '2 PLAYERS', 'HOW TO PLAY', 'OPTIONS', 'WAVE SELECT', 'HIGH SCORES', 'ACHIEVEMENTS'];
   const y0 = H * 0.42, dy = H * 0.066;
   for (let i = 0; i < items.length; i++) {
@@ -603,27 +616,50 @@ function nextSpecial(wv) {
 function drawBanner() {
   const W = hudCanvas.width, H = hudCanvas.height;
   panel(W * 0.18, H * 0.34, W * 0.64, H * 0.3, 18);
-  for (let i = 0; i < bannerLines.length; i++) txt(bannerLines[i], W / 2, H * 0.43 + i * (H * 0.08), Math.round(H / (i === 0 ? 15 : 26)), i === 0 ? '#ffd23a' : '#7fd4ff');
+  for (let i = 0; i < bannerLines.length; i++) {
+    if (i === 0) txtD(bannerLines[i], W / 2, H * 0.43, Math.round(H / 14), '#ffd23a', true);
+    else txt(bannerLines[i], W / 2, H * 0.43 + i * (H * 0.08), Math.round(H / 26), '#7fd4ff');
+  }
 }
 function drawStartPrompt(now) {
-  if (Math.floor(now / 400) % 2) return;
-  txt(touch.active ? 'TAP FLAP TO START' : 'FLAP TO START', hudCanvas.width / 2, hudCanvas.height * 0.72, Math.round(hudCanvas.height / 22), '#aaffaa');
+  // reference styling: gold engraved caps over a thin rule with a centre chevron
+  const W = hudCanvas.width, H = hudCanvas.height;
+  const s = Math.round(H / 17), cx = W / 2, y = H * 0.70;
+  const msg = touch.active ? 'TAP FLAP TO START' : 'FLAP TO START';
+  ctx.globalAlpha = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(now / 300));
+  ctx.font = `700 ${s}px ${DFONT}`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  const grad = ctx.createLinearGradient(0, y - s / 2, 0, y + s / 2);
+  grad.addColorStop(0, '#ffeaa6'); grad.addColorStop(0.55, '#ffb825'); grad.addColorStop(1, '#c06a10');
+  ctx.shadowColor = 'rgba(255,160,40,.5)'; ctx.shadowBlur = 22;
+  ctx.strokeStyle = 'rgba(20,10,2,0.8)'; ctx.lineWidth = Math.max(2, s * 0.05);
+  ctx.strokeText(msg, cx, y);
+  ctx.fillStyle = grad; ctx.fillText(msg, cx, y);
+  ctx.shadowBlur = 0;
+  const tw = ctx.measureText(msg).width, ly = y + s * 0.8, half = tw * 0.56, gap = s * 0.4;
+  ctx.strokeStyle = 'rgba(255,190,80,0.85)'; ctx.lineWidth = Math.max(1.5, s * 0.03);
+  ctx.beginPath();
+  ctx.moveTo(cx - half, ly); ctx.lineTo(cx - gap, ly);
+  ctx.moveTo(cx + gap, ly); ctx.lineTo(cx + half, ly);
+  ctx.moveTo(cx - gap * 0.5, ly - s * 0.05); ctx.lineTo(cx, ly + s * 0.17); ctx.lineTo(cx + gap * 0.5, ly - s * 0.05);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
 }
 function drawClear() {
   const W = hudCanvas.width, H = hudCanvas.height;
-  txt(PHRASES.nice, W / 2, H * 0.4, Math.round(H / 14), '#ffd23a');
+  txtD(PHRASES.nice, W / 2, H * 0.4, Math.round(H / 13), '#ffd23a', true);
   txt('WAVE ' + engine.wave + ' CLEARED', W / 2, H * 0.52, Math.round(H / 26), '#7fd4ff');
 }
 function drawKillCam() {
   const W = hudCanvas.width, H = hudCanvas.height;
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.fillRect(0, 0, W, H * 0.09); ctx.fillRect(0, H * 0.91, W, H * 0.09);
-  txt('F I N A L   F L I G H T', W / 2, H * 0.055, Math.round(H / 34), '#ff9a9a');
+  txtD('FINAL FLIGHT', W / 2, H * 0.055, Math.round(H / 32), '#ff9a9a');
 }
 function drawPause() {
   const W = hudCanvas.width, H = hudCanvas.height;
   dim();
-  txt('PAUSED', W / 2, H * 0.42, Math.round(H / 12), '#ffd23a');
+  txtD('PAUSED', W / 2, H * 0.42, Math.round(H / 12), '#ffd23a', true);
   txt('P / ESC  RESUME', W / 2, H * 0.56, Math.round(H / 26), '#7fd4ff');
   txt('Q  QUIT TO TITLE', W / 2, H * 0.62, Math.round(H / 26), '#7fd4ff');
   txt('HOLD ESC  RESTART WAVE (−1 LIFE)', W / 2, H * 0.68, Math.round(H / 30), '#c9c9d6');
@@ -639,7 +675,7 @@ function drawEscHold(now) {
 }
 function drawHelp() {
   const W = hudCanvas.width, H = hudCanvas.height;
-  txt('HOW TO PLAY', W / 2, H * 0.08, Math.round(H / 16), '#ffd23a');
+  txtD('HOW TO PLAY', W / 2, H * 0.08, Math.round(H / 16), '#ffd23a', true);
   const lines = [
     'You ride a war-bird over a lava arena. TAP or HOLD FLAP to climb;',
     'release to glide. Momentum carries you — push the opposite way to brake.',
@@ -681,7 +717,7 @@ function doRebind(code) { const t = rebindTarget; save.opts.keys[t.player][t.act
 function promptUnlock() { const p = prompt('Enter unlock password:'); if (p === '1234') { save.unlockAll = true; persist(); flash('ALL WAVES UNLOCKED'); } else if (p != null) flash('WRONG PASSWORD'); }
 function drawOptions() {
   const W = hudCanvas.width, H = hudCanvas.height;
-  txt('OPTIONS', W / 2, H * 0.08, Math.round(H / 15), '#ffd23a');
+  txtD('OPTIONS', W / 2, H * 0.08, Math.round(H / 15), '#ffd23a', true);
   const rows = OPT_ROWS(), y0 = H * 0.19, dy = H * 0.066;
   for (let i = 0; i < rows.length; i++) {
     const sel = i === optIdx, y = y0 + i * dy;
@@ -693,7 +729,7 @@ function drawOptions() {
 }
 function drawWaveSelect() {
   const W = hudCanvas.width, H = hudCanvas.height;
-  txt('WAVE SELECT', W / 2, H * 0.1, Math.round(H / 15), '#ffd23a');
+  txtD('WAVE SELECT', W / 2, H * 0.1, Math.round(H / 15), '#ffd23a', true);
   const maxW = save.unlockAll ? 99 : save.maxWave;
   const perPage = 25, cols = 5;
   const start = wsPage * perPage;
@@ -711,7 +747,7 @@ function drawWaveSelect() {
 let wsInput = '';
 function drawScores() {
   const W = hudCanvas.width, H = hudCanvas.height;
-  txt(PHRASES.champions, W / 2, H * 0.09, Math.round(H / 16), '#ffd23a');
+  txtD(PHRASES.champions, W / 2, H * 0.09, Math.round(H / 16), '#ffd23a', true);
   txt('LOCAL', W * 0.27, H * 0.2, Math.round(H / 26), '#7fd4ff');
   txt('GLOBAL (MODERN)', W * 0.73, H * 0.2, Math.round(H / 26), '#39c06a');
   for (let i = 0; i < 10; i++) {
@@ -725,7 +761,7 @@ function drawScores() {
 }
 function drawFeats() {
   const W = hudCanvas.width, H = hudCanvas.height;
-  txt('ACHIEVEMENTS', W / 2, H * 0.08, Math.round(H / 16), '#ffd23a');
+  txtD('ACHIEVEMENTS', W / 2, H * 0.08, Math.round(H / 16), '#ffd23a', true);
   const s = save.stats;
   txt(`GAMES ${s.games} · KILLS ${s.kills} · PTEROS ${s.pteroKills} · EGGS ${s.eggs} · BEST CHAIN x${s.maxChain} · WAVES ${s.waves}`,
     W / 2, H * 0.155, Math.round(H / 42), '#8a93a8', 'center', 600);
@@ -746,7 +782,7 @@ function drawFeats() {
 }
 function drawHsEntry() {
   const W = hudCanvas.width, H = hudCanvas.height;
-  txt(PHRASES.enterName, W / 2, H * 0.2, Math.round(H / 18), '#ffd23a');
+  txtD(PHRASES.enterName, W / 2, H * 0.2, Math.round(H / 18), '#ffd23a', true);
   txt('SCORE ' + hsScore.toLocaleString() + '  ·  WAVE ' + hsWave, W / 2, H * 0.32, Math.round(H / 28), '#7fd4ff');
   for (let i = 0; i < 3; i++) {
     const x = W / 2 + (i - 1) * (H * 0.1);
@@ -758,7 +794,7 @@ function drawHsEntry() {
 function drawGameOver() {
   const W = hudCanvas.width, H = hudCanvas.height;
   ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, W, H);
-  txt(PHRASES.gameOver, W / 2, H * 0.36, Math.round(H / 12), '#ff5f5f');
+  txtD(PHRASES.gameOver, W / 2, H * 0.36, Math.round(H / 11), '#ff6a5a', true);
   txt('SCORE ' + hsScore.toLocaleString(), W / 2, H * 0.5, Math.round(H / 22), '#ffe14d');
   txt('WAVE ' + hsWave, W / 2, H * 0.58, Math.round(H / 28), '#7fd4ff');
   if (Math.floor(performance.now() / 500) % 2) txt('PRESS ENTER', W / 2, H * 0.72, Math.round(H / 24), '#fff');

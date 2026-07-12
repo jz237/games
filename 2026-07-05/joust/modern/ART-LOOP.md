@@ -101,3 +101,13 @@ folded-wing pose slightly splayed, title wordmark is plain Courier.
 - Equirect pano seam: camera yaw is fixed (slight sway) — rotate dome so the seam sits behind camera.
 - SwiftShader headless fps is CPU-bound (~31 baseline) — use as relative regression signal only.
 - Retro suite must stay green (shared files untouched; modern-only changes).
+
+- **it6 (v1.3.0, owner feedback round)**: owner hit transient BLACK RECTANGLES on his GPU →
+  root-caused to MSAA resolve of the HalfFloat scene RT; replaced with an FXAA final pass
+  (samples:0, tonemap→LDR RT→FXAA). New reference image supplied by owner: pale worn-stone
+  platform caps (gpt-image-2 stone-top.jpg + Sobel normals; rock-top.* deleted), warm rocky
+  undersides via emissiveMap lifts (hex emissives are sRGB→linear — 0x3d454f ≈ 0.05 linear,
+  useless; needed 0x707a88 @1.3), molten under-drips (z must clear the beveled face), cooler
+  mid-band (ridges 0x100c12/0x090710/0x040309, horizon glow 0.13, warm light 0.68), hotter
+  near lava, vendored Cinzel (assets/fonts/cinzel.woff2) for wordmark/headings/FLAP TO START
+  with gold rule + chevron ornament. All suites green.
