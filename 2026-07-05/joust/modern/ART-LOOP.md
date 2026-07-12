@@ -143,3 +143,12 @@ folded-wing pose slightly splayed, title wordmark is plain Courier.
   → fal edit repaint + mask per sheet (6 API calls) → slice frames → sprite views in
   render3d (frame swap from poseBird's existing state signals; scale.x flip for facing,
   retro-authentic lance mirroring). Ship as v1.5.0 with full protocol.
+  **it8 SHIPPED as v1.5.0**: all birds + ptero are painted sprites (19 frames, 691KB).
+  GOTCHAS: (1) ptero wingspans overflow tight staging cells → per-sheet layout (2x2 wide);
+  (2) the mask model HALLUCINATED knight-shaped masks for the riderless ptero sheet — luma-key
+  mode (bright-on-black, hi=90 band) mattes pteros without a mask call; (3) repaint model added
+  riders to pteros until the prompt screamed WILD/NO RIDERS. Frame set: {p1,p2,bounder,hunter,
+  shadow}×{up,down,stand} + ptero×{up,down}×{closed,open} — open beak = kill tell preserved.
+  poseBird/posePtero swap materials by state; facing flips via rotation.y=PI on DoubleSide
+  planes. 3D bird/ptero builders REMOVED (re-stage sheets from the pre-sprite commit
+  ac73e9f-era). API total this loop: 17 of 25.

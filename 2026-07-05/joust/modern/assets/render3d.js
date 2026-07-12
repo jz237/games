@@ -33,11 +33,6 @@ const COL = {
   buzzard: 0x515e56, beak: 0xff9a1a, legs: 0xd08018,
   lance: 0xe8eef8, egg: 0xf2e7c8, ptero: 0x6a8a52,
 };
-const ENEMY_COL = {
-  bounder: { body: 0x687452, rider: 0xe83c22 },
-  hunter: { body: 0x5a645c, rider: 0xb8c2d2 },
-  shadow: { body: 0x3a4560, rider: 0x6a7aff },
-};
 
 function castAll(g) { g.traverse(o => { if (o.isMesh) { o.castShadow = true; } }); return g; }
 
@@ -56,190 +51,46 @@ const PLAT_CARDS = {
   midWrapR: { fx: 0.0778, fy: 0.0814, fw: 0.8403, fh: 0.5688, w: [100.1774, -32.9964, 151.905, -10.6322] },
 };
 
-// ═══ procedural bird (mount + rider), feet at origin, faces +x ═══
-// war-ostrich redesign: feathered fan wings + tail, curved neck, armored knight with
-// plume, shield and a real lance — silhouettes read at gameplay distance (concept.jpg).
+// ═══ painted bird sprites (v1.5) — frames sliced from gpt-image-2 repaints of the 3D
+// models (tools/bird-sheet → fal-edit → slice-birds). Unlit DoubleSide planes: facing
+// flips via rotation.y=PI showing the mirrored back face (retro-authentic lance swap).
+// To RE-STAGE sheets, check out the pre-sprite commit — these builders replaced the 3D ones.
+const BIRD_SPRITE = { planeW: 48.889, planeH: 42.222, feetFrac: 0.8947 };
+const PTERO_SPRITE = { planeW: 103.226, planeH: 80, feetFrac: 0.71 };
+const _birdMats = {};
+function birdMat(key) {
+  if (_birdMats[key]) return _birdMats[key];
+  const m = new T.MeshBasicMaterial({ transparent: true, depthWrite: false, side: T.DoubleSide, opacity: 0 });
+  new T.TextureLoader().load(`assets/tex/bird-${key}.png` + Q, tex => {
+    tex.colorSpace = T.SRGBColorSpace;
+    m.map = tex; m.opacity = 1; m.needsUpdate = true;
+  });
+  return _birdMats[key] = m;
+}
 function birdView(kind, variant) {
-  // inner group carries a fixed 1.12 read-size boost; poseBird owns the OUTER group's
-  // scale (materialize squash) so the boost must not live there
+  const pre = kind === 'player' ? (variant === 1 ? 'p2' : 'p1')
+    : (variant === 'hunter' ? 'hunter' : variant === 'shadow' ? 'shadow' : 'bounder');
   const outer = new T.Group();
-  const g = new T.Group(); g.scale.setScalar(1.12); outer.add(g);
-  const mats = {};
-  const M = (c, o) => new T.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.78, flatShading: true }, o));
-  let bodyC = COL.p1Body, trimC = COL.p1Trim, riderC = COL.p1Rider, helmC = COL.p1Helm, emis = 0;
-  if (kind === 'player' && variant === 1) { bodyC = COL.p2Body; trimC = COL.p2Trim; riderC = COL.p2Rider; }
-  if (kind === 'enemy') { const e = ENEMY_COL[variant] || ENEMY_COL.bounder; bodyC = e.body; riderC = e.rider; trimC = 0x2a3024; helmC = 0x6a727e; if (variant === 'shadow') emis = 0.9; }
-  mats.body = M(bodyC);
-  mats.trim = M(trimC);
-  mats.beak = M(COL.beak, { emissive: COL.beak, emissiveIntensity: 0.22, roughness: 0.5 });
-  mats.rider = M(riderC, variant === 'shadow' ? { emissive: riderC, emissiveIntensity: emis } : {});
-  mats.armor = M(0x8a919e, { roughness: 0.34, metalness: 0.85 });
-  mats.helm = M(helmC, { roughness: 0.28, metalness: 0.8 });
-  mats.lance = M(0xcfd6e2, { roughness: 0.3, metalness: 0.85, emissive: 0x9ab4e8, emissiveIntensity: 0.18 });
-  mats.leg = M(COL.legs, { roughness: 0.6 });
-
-  // ── mount ──
-  // teardrop torso: chunky faceted sphere + chest keel
-  const body = new T.Mesh(new T.SphereGeometry(4.9, 10, 7), mats.body);
-  body.scale.set(1.42, 1.04, 0.95); body.position.set(0.2, 9.9, 0); g.add(body);
-  const chest = new T.Mesh(new T.SphereGeometry(3.0, 8, 6), mats.body);
-  chest.scale.set(1.0, 1.15, 0.85); chest.position.set(4.6, 8.9, 0); g.add(chest);
-  const rump = new T.Mesh(new T.SphereGeometry(3.2, 8, 6), mats.trim);
-  rump.scale.set(1.15, 0.9, 0.85); rump.position.set(-4.4, 10.6, 0); g.add(rump);
-  // tail fan — five tapered feathers
-  const tail = new T.Group(); tail.position.set(-7.6, 11.2, 0);
-  for (let i = -2; i <= 2; i++) {
-    const f = new T.Mesh(new T.BoxGeometry(6.4 - Math.abs(i) * 0.8, 0.4, 1.5), Math.abs(i) === 2 ? mats.trim : mats.body);
-    f.position.set(-(3.0 - Math.abs(i) * 0.35), Math.abs(i) * -0.12, 0);
-    const fg = new T.Group(); fg.add(f);
-    fg.rotation.y = i * 0.22; fg.rotation.z = 0.5 + Math.abs(i) * 0.05;
-    tail.add(fg);
-  }
-  g.add(tail);
-  // saddle barding where the knight sits
-  const saddle = new T.Mesh(new T.SphereGeometry(3.4, 8, 5), mats.armor);
-  saddle.scale.set(1.05, 0.5, 0.9); saddle.position.set(-0.8, 13.0, 0); g.add(saddle);
-  // curved neck: two segments + head with crest and long beak
-  const neckG = new T.Group(); neckG.position.set(4.0, 12.0, 0);
-  const neck1 = new T.Mesh(new T.CylinderGeometry(1.15, 1.65, 4.4, 7), mats.body);
-  neck1.rotation.z = -0.55; neck1.position.set(0.9, 1.7, 0); neckG.add(neck1);
-  const neck2 = new T.Mesh(new T.CylinderGeometry(0.95, 1.2, 4.2, 7), mats.body);
-  neck2.rotation.z = -0.12; neck2.position.set(2.2, 5.2, 0); neckG.add(neck2);
-  const head = new T.Mesh(new T.SphereGeometry(2.15, 9, 7), mats.body); head.position.set(2.6, 7.6, 0); neckG.add(head);
-  const beak = new T.Mesh(new T.ConeGeometry(0.95, 3.9, 6), mats.beak);
-  beak.rotation.z = -Math.PI / 2; beak.position.set(5.2, 7.35, 0); neckG.add(beak);
-  for (const cz of [-0.5, 0.5]) {   // head crest feathers
-    const cr = new T.Mesh(new T.ConeGeometry(0.5, 2.6, 5), mats.trim);
-    cr.rotation.z = 0.75; cr.rotation.x = cz * 0.5; cr.position.set(1.5, 9.3, cz); neckG.add(cr);
-  }
-  const eyeM = new T.MeshStandardMaterial({ color: 0x11131c, roughness: 0.25, metalness: 0.4, emissive: kind === 'enemy' && variant === 'shadow' ? 0x5a6aff : 0x000000, emissiveIntensity: 1.2 });
-  for (const ez of [-1.7, 1.7]) { const eye = new T.Mesh(new T.SphereGeometry(0.5, 7, 6), eyeM); eye.position.set(3.6, 8.1, ez); neckG.add(eye); }
-  g.add(neckG);
-  // legs (hip-pivoted groups so they can run)
-  const legs = [];
-  for (const side of [-1, 1]) {
-    const hip = new T.Group(); hip.position.set(0.4, 7.2, side * 2.1);
-    const thigh = new T.Mesh(new T.CylinderGeometry(0.95, 0.65, 3.8, 6), mats.leg); thigh.position.y = -1.9; hip.add(thigh);
-    const kneeG = new T.Group(); kneeG.position.y = -3.8; hip.add(kneeG);
-    const shin = new T.Mesh(new T.CylinderGeometry(0.55, 0.42, 3.7, 5), mats.leg); shin.position.y = -1.75; kneeG.add(shin);
-    const foot = new T.Mesh(new T.BoxGeometry(2.5, 0.65, 1.2), mats.beak); foot.position.set(0.8, -3.6, 0); kneeG.add(foot);
-    g.add(hip); legs.push({ hip, knee: kneeG });
-  }
-  // wings — fanned feather planes on a shoulder pivot; big readable span
-  const wings = [];
-  for (const side of [-1, 1]) {
-    const sh = new T.Group(); sh.position.set(-0.4, 12.0, side * 3.4);
-    const wg = new T.Group(); sh.add(wg);
-    // wing cover plate at the shoulder
-    const cover = new T.Mesh(new T.SphereGeometry(2.1, 7, 5), mats.trim);
-    cover.scale.set(1.25, 0.55, 0.9); cover.position.set(-0.6, 0.2, side * 1.0); wg.add(cover);
-    // primaries: five tapered feathers fanning back and outward
-    for (let i = 0; i < 5; i++) {
-      const len = 9.6 - i * 1.15;
-      const f = new T.Mesh(new T.BoxGeometry(1.7 - i * 0.16, 0.34, len), i >= 3 ? mats.trim : mats.body);
-      f.position.set(-1.1 - i * 1.35, -0.1 - i * 0.16, side * (len / 2 + 0.6));
-      const fg = new T.Group(); fg.add(f);
-      fg.rotation.y = side * (-0.09 - i * 0.13);   // sweep back
-      fg.rotation.x = side * (i * 0.025);          // slight fan spread (subtle — splays when folded)
-      wg.add(fg);
-    }
-    g.add(sh); wings.push({ sh, wg, side });
-  }
-  // ── knight ──
-  const rider = new T.Group(); rider.position.set(-0.9, 13.6, 0); rider.scale.setScalar(1.32);
-  const torso = new T.Mesh(new T.CylinderGeometry(1.5, 2.0, 4.2, 7), mats.rider); torso.position.y = 1.9; rider.add(torso);
-  const cuirass = new T.Mesh(new T.CylinderGeometry(1.7, 2.05, 2.6, 7), mats.armor); cuirass.position.y = 2.6; rider.add(cuirass);
-  for (const side of [-1, 1]) {   // pauldrons
-    const p = new T.Mesh(new T.SphereGeometry(0.95, 7, 6), mats.armor); p.position.set(0, 3.9, side * 1.55); rider.add(p);
-  }
-  const helm = new T.Mesh(new T.SphereGeometry(1.5, 8, 7), mats.helm); helm.scale.y = 1.15; helm.position.y = 5.3; rider.add(helm);
-  const visor = new T.Mesh(new T.BoxGeometry(1.1, 0.55, 2.3), new T.MeshStandardMaterial({ color: 0x090b12, roughness: 0.4 }));
-  visor.position.set(1.05, 5.35, 0); rider.add(visor);
-  // plume: arc of small fins in the rider colour — the team read from any distance
-  const plume = new T.Group();
-  for (let i = 0; i < 4; i++) {
-    const pf = new T.Mesh(new T.BoxGeometry(1.5 - i * 0.18, 1.35 - i * 0.16, 0.34), mats.rider);
-    pf.position.set(-0.5 - i * 0.85, 6.6 - i * 0.28, 0); pf.rotation.z = -0.28 - i * 0.24;
-    plume.add(pf);
-  }
-  rider.add(plume);
-  // shield on the camera side, tilted; emblem dot in team colour
-  const shield = new T.Mesh(new T.CylinderGeometry(1.9, 1.9, 0.4, 9), mats.armor);
-  shield.rotation.x = Math.PI / 2; shield.rotation.z = 0.12; shield.position.set(0.4, 2.4, 2.2); rider.add(shield);
-  const emblem = new T.Mesh(new T.CylinderGeometry(0.85, 0.85, 0.44, 9), mats.rider);
-  emblem.rotation.x = Math.PI / 2; emblem.position.set(0.4, 2.4, 2.28); rider.add(emblem);
-  // lance arm + heavy lance with guard cone and pennant
-  const arm = new T.Mesh(new T.CylinderGeometry(0.55, 0.55, 3.2, 5), mats.rider);
-  arm.rotation.z = -1.15; arm.position.set(1.7, 3.0, 0.9); rider.add(arm);
-  const lanceG = new T.Group(); lanceG.position.set(3.1, 3.5, 0.9);
-  const lance = new T.Mesh(new T.CylinderGeometry(0.42, 0.24, 16.5, 7), mats.lance);
-  lance.rotation.z = -Math.PI / 2 + 0.06; lance.position.x = 6.0; lanceG.add(lance);
-  const guard = new T.Mesh(new T.ConeGeometry(1.05, 1.6, 8), mats.armor);
-  guard.rotation.z = -Math.PI / 2; guard.position.set(1.6, 0.15, 0); lanceG.add(guard);
-  const lTip = new T.Mesh(new T.ConeGeometry(0.6, 2.2, 7), mats.lance);
-  lTip.rotation.z = -Math.PI / 2; lTip.position.set(14.9, 0.5, 0); lanceG.add(lTip);
-  const pennant = new T.Mesh(new T.BoxGeometry(2.6, 1.0, 0.16), mats.rider);
-  pennant.position.set(3.6, 1.1, 0); pennant.rotation.z = 0.1; lanceG.add(pennant);
-  rider.add(lanceG);
-  g.add(rider);
-
-  castAll(outer);
-  return { group: outer, legs, wings, neckG, rider, tail, state: { wingA: 0, runP: 0 } };
+  const plane = new T.Mesh(new T.PlaneGeometry(BIRD_SPRITE.planeW, BIRD_SPRITE.planeH), birdMat(pre + '-up'));
+  plane.position.y = (BIRD_SPRITE.feetFrac - 0.5) * BIRD_SPRITE.planeH;   // feet land on y=0
+  plane.renderOrder = 2;
+  outer.add(plane);
+  return { group: outer, spritePlane: plane, spritePre: pre, wings: [], legs: [],
+    neckG: new T.Group(), rider: new T.Group(), tail: null, state: { wingA: 0, runP: 0, frame: '' } };
 }
 
-// ═══ pterodactyl — feet(ish) origin, faces +x ═══
-// leathery membrane wings (shaped, not boxes), long crest, ember eyes — the wave boss
-// should read as a different SPECIES, not another bird.
+
+// ═══ pterodactyl sprite — wild riderless monster; open-beak frames are the kill tell ═══
 function pteroView() {
   const outer = new T.Group();
-  const g = new T.Group(); g.scale.setScalar(1.15); outer.add(g);
-  const M = (c, o) => new T.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.85, flatShading: true }, o));
-  const bodyM = M(0x5c5a4c), memM = M(0x74584a, { side: T.DoubleSide, roughness: 0.7 }), jawM = M(0x9a9070);
-  const bellyM = M(0x8a7a5c);
-  const body = new T.Mesh(new T.SphereGeometry(4.0, 9, 7), bodyM); body.scale.set(1.85, 0.8, 0.75); body.position.y = 10; g.add(body);
-  const belly = new T.Mesh(new T.SphereGeometry(2.9, 8, 6), bellyM); belly.scale.set(1.5, 0.7, 0.7); belly.position.set(1.0, 8.7, 0); g.add(belly);
-  const neck = new T.Mesh(new T.CylinderGeometry(1.0, 1.6, 5.8, 6), bodyM); neck.rotation.z = -0.6; neck.position.set(6.4, 12.3, 0); g.add(neck);
-  const headG = new T.Group(); headG.position.set(8.8, 14.4, 0);
-  const skull = new T.Mesh(new T.SphereGeometry(1.7, 8, 6), bodyM); skull.scale.set(1.25, 0.95, 0.85); headG.add(skull);
-  const crest = new T.Mesh(new T.ConeGeometry(1.0, 6.2, 5), jawM); crest.rotation.z = 2.55; crest.position.set(-3.0, 1.6, 0); headG.add(crest);
-  const beakTop = new T.Mesh(new T.ConeGeometry(0.8, 6.4, 5), jawM); beakTop.rotation.z = -Math.PI / 2; beakTop.position.set(4.1, 0.4, 0); headG.add(beakTop);
-  const jawG = new T.Group(); jawG.position.set(0.6, -0.6, 0);
-  const beakBot = new T.Mesh(new T.ConeGeometry(0.62, 5.4, 5), jawM); beakBot.rotation.z = -Math.PI / 2; beakBot.position.set(3.2, 0, 0); jawG.add(beakBot);
-  headG.add(jawG); g.add(headG);
-  const eyeM = new T.MeshStandardMaterial({ color: 0x160c04, emissive: 0xff7a1a, emissiveIntensity: 1.6, roughness: 0.4 });
-  for (const ez of [-1.25, 1.25]) { const eye = new T.Mesh(new T.SphereGeometry(0.42, 7, 6), eyeM); eye.position.set(1.2, 0.5, ez); headG.add(eye); }
-  const tail = new T.Mesh(new T.ConeGeometry(1.2, 8.5, 5), bodyM); tail.rotation.z = Math.PI / 2 + 0.22; tail.position.set(-9.2, 9.2, 0); g.add(tail);
-  // membrane wing: inner arm + elbow-pivoted outer sail, each a tapered SHAPE with struts
-  const wingShape = (len, chord) => {
-    const s = new T.Shape();
-    s.moveTo(0, 0);
-    s.quadraticCurveTo(-chord * 0.35, len * 0.35, -chord * 0.25, len);      // leading edge out
-    s.quadraticCurveTo(-chord * 0.9, len * 0.62, -chord, len * 0.30);       // scalloped trailing edge
-    s.quadraticCurveTo(-chord * 0.72, len * 0.12, 0, 0);
-    const geo = new T.ExtrudeGeometry(s, { depth: 0.28, bevelEnabled: false });
-    return geo;
-  };
-  const wings = [];
-  for (const side of [-1, 1]) {
-    const sh = new T.Group(); sh.position.set(0.4, 12.6, side * 2.4);
-    const inner = new T.Mesh(wingShape(8.5, 5.2), memM);
-    inner.rotation.x = side * Math.PI / 2;
-    sh.add(inner);
-    const armBone = new T.Mesh(new T.CylinderGeometry(0.5, 0.42, 8.8, 5), bodyM);
-    armBone.rotation.x = side * Math.PI / 2; armBone.position.set(0.4, 0.15, side * 4.2); sh.add(armBone);
-    const elbow = new T.Group(); elbow.position.set(0, 0, side * 8.6); sh.add(elbow);
-    const sail = new T.Mesh(wingShape(10.5, 6.4), memM);
-    sail.rotation.x = side * Math.PI / 2;
-    elbow.add(sail);
-    const fingerBone = new T.Mesh(new T.CylinderGeometry(0.4, 0.28, 10.4, 5), bodyM);
-    fingerBone.rotation.x = side * Math.PI / 2; fingerBone.position.set(0.3, 0.1, side * 5.0); elbow.add(fingerBone);
-    const tip = new T.Mesh(new T.ConeGeometry(0.45, 3.2, 4), jawM);
-    tip.rotation.x = side * Math.PI / 2; tip.position.set(0.2, 0, side * 11.4); elbow.add(tip);
-    g.add(sh); wings.push({ sh, elbow, side });
-  }
-  castAll(outer);
-  return { group: outer, wings, headG, jawG, state: { ph: Math.random() * 6.28 } };
+  const plane = new T.Mesh(new T.PlaneGeometry(PTERO_SPRITE.planeW, PTERO_SPRITE.planeH), birdMat('ptero-up'));
+  plane.position.y = (PTERO_SPRITE.feetFrac - 0.5) * PTERO_SPRITE.planeH;
+  plane.renderOrder = 2;
+  outer.add(plane);
+  return { group: outer, spritePlane: plane, wings: [],
+    headG: new T.Group(), jawG: new T.Group(), state: { ph: Math.random() * 6.28, frame: '' } };
 }
+
 
 // ═══ egg / hatchling ═══
 function eggView() {
@@ -811,28 +662,16 @@ class Renderer3D {
     g.visible = alive !== false;
     if (!g.visible) return;
     g.position.set(X3(e.x) + xOff, Y3(e.y), 0);
-    const camYaw = 0.30;
-    g.rotation.y = e.face === 1 ? -camYaw : Math.PI + camYaw;
-    g.rotation.z = Math.max(-0.3, Math.min(0.3, -(e.vx || 0) * 0.07 * (e.face || 1)));
-    // wings — v2 engine: players signal wings-down via flapHeld, not just the wingDown timer
+    g.rotation.y = e.face === 1 ? 0 : Math.PI;   // sprite flip via back face (DoubleSide)
+    g.rotation.z = Math.max(-0.22, Math.min(0.22, -(e.vx || 0) * 0.05 * (e.face || 1)));
     const s = bv.state;
-    const target = (e.wingDown > 0 || e.flapHeld) ? 1.05 : (e.onGround ? 0.12 : -0.38);
-    s.wingA += (target - s.wingA) * 0.38;
-    for (const w of bv.wings) w.wg.rotation.x = w.side * s.wingA;
-    // legs
-    if (e.onGround && Math.abs(e.vx) > 0.12) {
-      s.runP += Math.abs(e.vx) * 0.32;
-      let i = 0;
-      for (const l of bv.legs) { const ph = s.runP + (i++ ? Math.PI : 0); l.hip.rotation.z = Math.sin(ph) * 0.7; l.knee.rotation.z = Math.max(0, -Math.sin(ph + 0.9)) * 0.9; }
-    } else if (e.onGround) {
-      for (const l of bv.legs) { l.hip.rotation.z += (0 - l.hip.rotation.z) * 0.3; l.knee.rotation.z += (0 - l.knee.rotation.z) * 0.3; }
-    } else {
-      for (const l of bv.legs) { l.hip.rotation.z += (0.85 - l.hip.rotation.z) * 0.2; l.knee.rotation.z += (1.15 - l.knee.rotation.z) * 0.2; }
-    }
-    // neck bobs on run, stretches in flight
-    bv.neckG.rotation.z = e.onGround ? Math.sin(s.runP) * 0.08 : -0.12 + Math.min(0.3, Math.max(-0.3, e.vy * 0.05));
-    // skid brace
-    if (e.skid > 0) g.rotation.z = 0.22 * (e.face || 1);
+    let frame;
+    if (e.onGround) {
+      if (Math.abs(e.vx || 0) > 0.12) { s.runP += Math.abs(e.vx) * 0.32; frame = Math.sin(s.runP) > 0 ? 'stand' : 'down'; }
+      else frame = 'stand';
+    } else frame = (e.wingDown > 0 || e.flapHeld) ? 'down' : 'up';
+    if (e.skid > 0) { g.rotation.z = 0.2 * (e.face || 1); frame = 'stand'; }
+    if (frame !== s.frame) { s.frame = frame; bv.spritePlane.material = birdMat(bv.spritePre + '-' + frame); }
     // materialize flicker
     if (e.materializing > 0) {
       g.visible = (Math.floor(t * 30) % 2) === 0;
@@ -845,13 +684,11 @@ class Renderer3D {
     const g = pv.group;
     g.visible = true;
     g.position.set(X3(e.x) + xOff, Y3(e.y), 0);
-    const camYaw = 0.24;
-    g.rotation.y = e.face === 1 ? -camYaw : Math.PI + camYaw;
+    g.rotation.y = e.face === 1 ? 0 : Math.PI;
     const s = pv.state; s.ph += 0.09;
-    const a = Math.sin(s.ph) * 0.55;
-    for (const w of pv.wings) { w.sh.rotation.x = w.side * a; w.elbow.rotation.x = w.side * a * 0.8; }
-    pv.jawG.rotation.z = e.attack ? -0.55 : -0.06; // open beak on attack
     g.rotation.z = -(e.vy || 0) * 0.05;
+    const frame = 'ptero-' + (Math.sin(s.ph) > 0 ? 'up' : 'down') + (e.attack ? '-open' : '');
+    if (frame !== s.frame) { s.frame = frame; pv.spritePlane.material = birdMat(frame); }
   }
 
   // ─── main render ───
@@ -980,7 +817,7 @@ class Renderer3D {
   }
 }
 
-const API = { Renderer3D, X3, Y3 };
+const API = { Renderer3D, X3, Y3, birdView, pteroView };   // builders exported for tools/bird-sheet.mjs
 if (typeof window !== 'undefined') window.JOUST_RENDER3D = API;
 
 })();
