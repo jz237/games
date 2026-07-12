@@ -166,3 +166,11 @@ folded-wing pose slightly splayed, title wordmark is plain Courier.
   GOTCHA: tools/shots is gitignored — bird sheets died with the old worktree; re-staged via
   `git show 89cf140:...render3d.js` (3D builders) + re-repainted (5 API calls, total 22).
   Sheets NOW archived in notes/art-raw/.
+
+- **it10 (v1.6.1, owner: "wings don't flap, jousters flicker")**: root cause via per-frame
+  trace — raw engine signals churn (wingDown lasts 6 ticks; skimming birds alternate
+  grounded/airborne every 1-3 ticks) so the 3 very different painted frames STROBED at up
+  to 30Hz. Fix: sprite animation STATE MACHINE in poseBird — a fresh flap edge triggers a
+  held 130ms down-beat, min 90ms hold on all other transitions, and landing requires 70ms
+  of stable ground contact. NOTE for future traces: SwiftShader renders ~10fps so holds
+  expire between samples — trace validates logic, not felt cadence.

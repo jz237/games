@@ -664,14 +664,28 @@ class Renderer3D {
     g.position.set(X3(e.x) + xOff, Y3(e.y), 0);
     g.rotation.y = e.face === 1 ? 0 : Math.PI;   // sprite flip via back face (DoubleSide)
     g.rotation.z = Math.max(-0.22, Math.min(0.22, -(e.vx || 0) * 0.05 * (e.face || 1)));
+    // animation state machine: the raw engine signals churn every few ticks (wingDown
+    // lasts 6 ticks; skimming birds bounce grounded/airborne) — honouring them per-frame
+    // STROBES three very different paintings. Instead: a fresh flap triggers a held
+    // down-beat, and every other transition needs a minimum hold.
     const s = bv.state;
+    if (!e.onGround && e.wingDown > (s.lastWd || 0)) s.flapUntil = t + 0.13;  // new flap edge
+    s.lastWd = e.wingDown;
+    // skimming birds touch ground for single ticks — require stable contact before landing
+    if (e.onGround) { if (!s.gSince) s.gSince = t; } else s.gSince = 0;
+    const grounded = s.gSince && t - s.gSince > 0.07;
     let frame;
-    if (e.onGround) {
-      if (Math.abs(e.vx || 0) > 0.12) { s.runP += Math.abs(e.vx) * 0.32; frame = Math.sin(s.runP) > 0 ? 'stand' : 'down'; }
-      else frame = 'stand';
-    } else frame = (e.wingDown > 0 || e.flapHeld) ? 'down' : 'up';
+    if (!grounded) frame = t < (s.flapUntil || 0) ? 'down' : 'up';
+    else if (Math.abs(e.vx || 0) > 0.12) { s.runP += Math.abs(e.vx) * 0.3; frame = Math.sin(s.runP * 1.6) > 0 ? 'stand' : 'down'; }
+    else frame = 'stand';
     if (e.skid > 0) { g.rotation.z = 0.2 * (e.face || 1); frame = 'stand'; }
-    if (frame !== s.frame) { s.frame = frame; bv.spritePlane.material = birdMat(bv.spritePre + '-' + frame); }
+    if (frame !== s.frame) {
+      const immediate = frame === 'down' && !grounded;   // flap response stays snappy
+      if (immediate || t - (s.since || 0) > 0.09) {
+        s.frame = frame; s.since = t;
+        bv.spritePlane.material = birdMat(bv.spritePre + '-' + frame);
+      }
+    }
     // materialize: flicker only — Y-squashing a painted sprite reads as a glitch
     if (e.materializing > 0) g.visible = (Math.floor(t * 30) % 2) === 0;
     g.scale.set(1, 1, 1);
