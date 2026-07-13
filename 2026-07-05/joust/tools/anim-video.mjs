@@ -35,13 +35,18 @@ await new Promise(r => setTimeout(r, 2600));
 
 await page.evaluate(() => {
   window.requestAnimationFrame = () => 0;    // starve the live loop — we drive manually
+  document.getElementById('hud').style.display = 'none';   // HUD freezes stale otherwise
   const qa = window.__joustQA;
   qa.bot = true;
   qa.start(3, '1p');
   qa.tick(120);                               // settle into mid-wave flight
   window.__animLog = [];
 });
-await new Promise(r => setTimeout(r, 300));
+// flush the straggler live frame (still scheduled pre-override; fires on next paint
+// with a huge real dt and would gulp a chunk of wing beat mid-capture)
+await page.screenshot({ path: join(outDir, 'warm.png') });
+await new Promise(r => setTimeout(r, 250));
+fs.rmSync(join(outDir, 'warm.png'), { force: true });
 
 for (let i = 0; i < FRAMES; i++) {
   await page.evaluate(() => {

@@ -66,6 +66,7 @@ const VARIANTS = [
 ];
 
 const META = {};
+let CONTENT_TARGET = 0;
 let texTotal = 0;
 for (const V of VARIANTS) {
   const full = sharp(join(shots, `pup-${V.name}.png`));
@@ -361,15 +362,19 @@ for (const V of VARIANTS) {
   // across the cycle × the legacy plane constants (incl. the ×0.8 player / ×0.7 ptero
   // relative sizes he tuned). Per-frame sc jitter (0.61–0.88!) also means v1.7 birds
   // were size-pulsing frame to frame — K + one art frame kills that too.
-  const LEGACY = V.atk ? 148.945 * 0.7 : (V.name === 'p1' || V.name === 'p2') ? 85.45 * 0.8 : 85.45;
+  // v1.9: ALL jousters get the SAME content-width target (the player's) — owner:
+  // "enemy jousters should be the same size as you". Ptero keeps its own boss target.
+  const LEGACY = V.atk ? 148.945 * 0.7 : 85.45 * 0.8;
   const contentW = (P) => {
     let x0 = P.w, x1 = 0;
     for (let p = 0; p < P.w * P.h; p++) if (P.painted.data[p * 4 + 3] > 60) { const x = p % P.w; x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
     return Math.max(1, x1 - x0);
   };
   const v17meanW = cyc.reduce((s2, P) => s2 + LEGACY * contentW(P) / P.w, 0) / cyc.length;
+  if (V.name === 'p1') CONTENT_TARGET = v17meanW;          // players painted ~uniform; p1 defines the size
+  const target = V.atk ? v17meanW : (CONTENT_TARGET || v17meanW);
   const rawPlaneW = A.cell.planeW * A.w * A.sc / A.cell.w;
-  const K = v17meanW / (rawPlaneW * contentW(A) / A.w);
+  const K = target / (rawPlaneW * contentW(A) / A.w);
   const metrics = (P) => ({
     w: P.w, h: P.h,
     planeW: +(P.cell.planeW * P.w * P.sc / P.cell.w * K).toFixed(3),
@@ -391,6 +396,10 @@ for (const V of VARIANTS) {
     body: metrics(A),
     wing: { x: wx0, y: wy0, w: ww, h: wh },
     pivot: { x: +hingeX.toFixed(1), y: +hingeY.toFixed(1) },
+    // ptero: rigid membrane reads flag-like at full analytic sweep — damp rotation and
+    // length modulation, and render the sail BEHIND the body (paintings show it rising
+    // from behind the torso; in front it hides the head)
+    ...(V.atk ? { gain: 0.6, lDamp: 0.35, wingBehind: true } : {}),
     // analytic bone sweep, normalised to the art phase; runtime samples this cyclically
     curve: bone.curve.map(c => ({ a: c.a, l: +(c.l / bone.curve[artK].l).toFixed(3) })),
   };

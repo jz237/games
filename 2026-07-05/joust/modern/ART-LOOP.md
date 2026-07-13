@@ -187,6 +187,29 @@ folded-wing pose slightly splayed, title wordmark is plain Courier.
   is ROM behaviour, troll punishes from W4. (4) collision = authentic ROM pixel masks; the
   player size fix narrows the visual/hitbox gap.
 
+- **it14 (v1.9.0, owner: "flapping ok now; ptero looks bad; enemy sizes; no feet on landing;
+  smoother walking; lava fire should reach up like the original")**: (1) FEET — the stand
+  frames NEVER had them: the v1.5 slicer's hard Voronoi zeroed the foot (the painted leg
+  dangles past the staged cell midline — p1's foot sat 16px into the next row's territory)
+  and keep-largest-component dropped what survived. tools/restand.mjs re-slices from the
+  ARCHIVED sheets: soft Voronoi (foreign cell must win by >25px), close r4 BEFORE labelling,
+  keep components ≤40px from the largest (≥60px size). All five stands now have clawed feet.
+  (2) SIZES — one CONTENT-width target (the player's) for all five jousters; K per variant.
+  (3) PTERO — sail rendered BEHIND the body (in front it hides the head; the paintings show
+  it rising from behind), sweep gain 0.6 + length-stretch damp 0.35 (rigid membrane at full
+  analytic sweep reads flag-like), cadence 1.05s/beat. Meta flags: gain/lDamp/wingBehind.
+  (4) SMOOTHNESS — per-view cloned materials (birdMatOwn; shared cached mats can't animate
+  opacity per bird) drive a ground/air CROSSFADE (eased blend, debounced target — no pops at
+  touchdown/takeoff); trot bob is 1−cos (C¹ — the |sin| hop had a kink every stride) with
+  stride-scaled amplitude; velocity lean + skid tilt share one eased channel (no snaps).
+  (5) LAVA TROLL — renderer-side REACH: when a bird skims open lava (info.trollActive,
+  gap from live floor spans, y within FLOOR−52), a magma hand rises under it, fingers
+  grasping, ember spray + light — pure art, engine stays authoritative; the engine-grab
+  hand now clenches ON the bird, rises with it, fire + shake ramp with pull. trollView
+  1.25×, molten-basalt material. Scenario proof: tools/anim-scenario.mjs (walk → land →
+  dive → grab → escape at exact 60fps steps) asserts crossfade Δopacity smooth, wing
+  continuity, reach>0.5, ≥1 grab, alive at end. API spend: 0 (total stays 28).
+
 - **it13 (v1.8.0, owner: "still a flickering mess — take a different approach")**: PUPPET RIG.
   Frame-flipping AI-painted frames can never be temporally coherent — post-mortem found THREE
   stacked flicker sources in v1.7: (1) paint incoherence between frames, (2) the repaint
