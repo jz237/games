@@ -187,6 +187,24 @@ folded-wing pose slightly splayed, title wordmark is plain Courier.
   is ROM behaviour, troll punishes from W4. (4) collision = authentic ROM pixel masks; the
   player size fix narrows the visual/hitbox gap.
 
+- **it15 (v1.10.0, owner: "version on title; no lava troll at all; hops on 1 leg not
+  walking; spawn just flickers")**: (1) VERSION stamp brightened+enlarged (was #5a6378
+  dim slate at H/48 — invisible on the dark title). (2) TROLL WAS INVISIBLE for two
+  reasons: the v1.9 span filter matched `p.y === WORLD.FLOOR` but floor platforms sit at
+  y=204 (their TOP) vs FLOOR=216 — filter by the `bridge:true` flag instead; and the
+  engine only arms trolls from wave 4, so casual play never met one. Added IDLE POKES:
+  every 3.5-8.5s a hand crests ~55% from a random lava gap, grasps, sinks (renderer-only
+  ambience; target-reach band widened to FLOOR−70). (3) WALK: tools/legcut.mjs splits
+  each stand frame into a legless body + LEG layer (bottom-up SEGMENT trace from the
+  foot — row-width tests fail when tail plumage hangs beside the leg; skip the first
+  16px, the claw foot itself is wide). Two leg planes (near + tinted far) scissor at the
+  hip (sin swing ±0.52 rad, stride-scaled), double-frequency bob; at rest both align =
+  the painted one-leg stance. p2's leg is genuinely a short shin under hanging plumage —
+  its cut is small and that's correct. (4) MATERIALIZE: no more visibility flicker —
+  per-view mats ramp opacity 0.25→1 with a 24Hz shimmer + cool blue tint fading out +
+  rising sparkle motes (skipped on LOW). Reset mat colors when done (shared textures,
+  per-view materials). API spend: 0 (total 28).
+
 - **it14 (v1.9.0, owner: "flapping ok now; ptero looks bad; enemy sizes; no feet on landing;
   smoother walking; lava fire should reach up like the original")**: (1) FEET — the stand
   frames NEVER had them: the v1.5 slicer's hard Voronoi zeroed the foot (the painted leg

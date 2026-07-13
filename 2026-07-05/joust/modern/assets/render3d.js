@@ -62,6 +62,7 @@ const BIRD_SPRITE = { planeW: 68.455, planeH: 63.151, feetFrac: 0.7111 };  // st
 // smooth function of time: no texture swaps, no frame flips — it cannot flicker.
 // Layers cut from the owner-approved paintings by tools/puppet-slice.mjs.
 const PUPPET = {"p1":{"art":0,"n":8,"artK":0,"body":{"w":421,"h":388,"planeW":69.925,"planeH":64.44,"feetFrac":0.5042},"wing":{"x":133,"y":84,"w":70,"h":82},"pivot":{"x":195.9,"y":117.1},"curve":[{"a":2.519,"l":1},{"a":2.5695,"l":0.98},{"a":2.7278,"l":0.924},{"a":3.0055,"l":0.858},{"a":3.3754,"l":0.829},{"a":3.7339,"l":0.865},{"a":3.992,"l":0.928},{"a":4.1374,"l":0.975},{"a":4.1838,"l":0.991},{"a":4.1374,"l":0.975},{"a":3.992,"l":0.928},{"a":3.7339,"l":0.865},{"a":3.3754,"l":0.829},{"a":3.0055,"l":0.858},{"a":2.7278,"l":0.924},{"a":2.5695,"l":0.98}]},"p2":{"art":0,"n":8,"artK":0,"body":{"w":422,"h":389,"planeW":69.73,"planeH":64.276,"feetFrac":0.5357},"wing":{"x":139,"y":82,"w":72,"h":87},"pivot":{"x":192,"y":123.5},"curve":[{"a":2.519,"l":1},{"a":2.5695,"l":0.98},{"a":2.7278,"l":0.924},{"a":3.0055,"l":0.858},{"a":3.3754,"l":0.829},{"a":3.7339,"l":0.865},{"a":3.992,"l":0.928},{"a":4.1374,"l":0.975},{"a":4.1838,"l":0.991},{"a":4.1374,"l":0.975},{"a":3.992,"l":0.928},{"a":3.7339,"l":0.865},{"a":3.3754,"l":0.829},{"a":3.0055,"l":0.858},{"a":2.7278,"l":0.924},{"a":2.5695,"l":0.98}]},"bounder":{"art":0,"n":8,"artK":0,"body":{"w":420,"h":387,"planeW":66.651,"planeH":61.413,"feetFrac":0.5196},"wing":{"x":130,"y":75,"w":74,"h":92},"pivot":{"x":202.6,"y":102.8},"curve":[{"a":2.519,"l":1},{"a":2.5695,"l":0.98},{"a":2.7278,"l":0.924},{"a":3.0055,"l":0.858},{"a":3.3754,"l":0.829},{"a":3.7339,"l":0.865},{"a":3.992,"l":0.928},{"a":4.1374,"l":0.975},{"a":4.1838,"l":0.991},{"a":4.1374,"l":0.975},{"a":3.992,"l":0.928},{"a":3.7339,"l":0.865},{"a":3.3754,"l":0.829},{"a":3.0055,"l":0.858},{"a":2.7278,"l":0.924},{"a":2.5695,"l":0.98}]},"hunter":{"art":0,"n":8,"artK":0,"body":{"w":420,"h":387,"planeW":73.171,"planeH":67.417,"feetFrac":0.5259},"wing":{"x":148,"y":89,"w":63,"h":82},"pivot":{"x":202.2,"y":109.2},"curve":[{"a":2.519,"l":1},{"a":2.5695,"l":0.98},{"a":2.7278,"l":0.924},{"a":3.0055,"l":0.858},{"a":3.3754,"l":0.829},{"a":3.7339,"l":0.865},{"a":3.992,"l":0.928},{"a":4.1374,"l":0.975},{"a":4.1838,"l":0.991},{"a":4.1374,"l":0.975},{"a":3.992,"l":0.928},{"a":3.7339,"l":0.865},{"a":3.3754,"l":0.829},{"a":3.0055,"l":0.858},{"a":2.7278,"l":0.924},{"a":2.5695,"l":0.98}]},"shadow":{"art":1,"n":8,"artK":2,"body":{"w":419,"h":387,"planeW":68.879,"planeH":63.052,"feetFrac":0.4986},"wing":{"x":135,"y":88,"w":63,"h":78},"pivot":{"x":222.9,"y":118.5},"curve":[{"a":2.519,"l":1.082},{"a":2.5695,"l":1.06},{"a":2.7278,"l":1},{"a":3.0055,"l":0.928},{"a":3.3754,"l":0.897},{"a":3.7339,"l":0.936},{"a":3.992,"l":1.004},{"a":4.1374,"l":1.055},{"a":4.1838,"l":1.072},{"a":4.1374,"l":1.055},{"a":3.992,"l":1.004},{"a":3.7339,"l":0.936},{"a":3.3754,"l":0.897},{"a":3.0055,"l":0.928},{"a":2.7278,"l":1},{"a":2.5695,"l":1.06}]},"pteroAtk":{"w":501,"h":381,"planeW":111.855,"planeH":86.442,"feetFrac":0.6981},"ptero":{"art":1,"n":6,"artK":2,"body":{"w":506,"h":453,"planeW":112.047,"planeH":99.483,"feetFrac":0.3521},"wing":{"x":256,"y":103,"w":67,"h":95},"pivot":{"x":249.6,"y":101.1},"gain":0.6,"lDamp":0.35,"wingBehind":true,"curve":[{"a":2.8145,"l":1.036},{"a":3.3169,"l":0.951},{"a":3.6885,"l":1},{"a":3.8101,"l":1.038},{"a":3.6885,"l":1},{"a":3.3169,"l":0.951},{"a":2.8145,"l":1.036},{"a":2.4351,"l":1.24},{"a":2.2341,"l":1.406},{"a":2.1722,"l":1.462},{"a":2.2341,"l":1.406},{"a":2.4351,"l":1.24}]}};
+const STAND_LEG = {"p1":{"hipX":315,"hipY":228,"leg":{"x":299,"y":224,"w":45,"h":60},"w":417,"h":388},"p2":{"hipX":318.5,"hipY":367,"leg":{"x":293,"y":363,"w":54,"h":22},"w":416,"h":385},"bounder":{"hipX":231.5,"hipY":173,"leg":{"x":221,"y":169,"w":30,"h":48},"w":417,"h":388},"hunter":{"hipX":235,"hipY":206,"leg":{"x":215,"y":202,"w":37,"h":51},"w":415,"h":385},"shadow":{"hipX":241,"hipY":207,"leg":{"x":222,"y":203,"w":44,"h":54},"w":414,"h":337}};
 const _birdTex = {};
 function birdTex(key, cb) {
   const e = _birdTex[key];
@@ -144,12 +145,36 @@ function birdView(kind, variant) {
   // stand frame unchanged from v1.6 (owner-approved grounded look; ×0.8 player baked)
   const sc = kind === 'player' ? 0.8 : 1;
   const mStand = birdMatOwn(pre + '-stand');
+  const standG = new T.Group();
   const stand = new T.Mesh(new T.PlaneGeometry(BIRD_SPRITE.planeW * sc, BIRD_SPRITE.planeH * sc), mStand);
   stand.position.y = (BIRD_SPRITE.feetFrac - 0.5) * BIRD_SPRITE.planeH * sc;
   stand.renderOrder = 2;
-  stand.visible = false;
-  rig.add(stand);
-  return { group: outer, rig, ...parts, stand, mStand, meta: P, spritePre: pre,
+  standG.add(stand);
+  // two puppet LEGS (cut from the stand painting) scissor at the hip while running;
+  // at rest they align — the far one hides behind the near, the painted stance returns
+  const L = STAND_LEG[pre];
+  const upp2 = BIRD_SPRITE.planeW * sc / L.w;
+  const hipWX = (L.hipX / L.w - 0.5) * BIRD_SPRITE.planeW * sc;
+  const hipWY = stand.position.y + (0.5 - L.hipY / L.h) * BIRD_SPRITE.planeH * sc;
+  const legGeo = new T.PlaneGeometry(L.leg.w * upp2, L.leg.h * upp2);
+  const legOff = [((L.leg.x + L.leg.w / 2) - L.hipX) * upp2, (L.hipY - (L.leg.y + L.leg.h / 2)) * upp2];
+  const mkLeg = (tint, dz, ro) => {
+    const m = birdMatOwn(pre + '-leg', tint);
+    const pv = new T.Group();
+    pv.position.set(hipWX, hipWY, dz);
+    const pl = new T.Mesh(legGeo, m);
+    pl.position.set(legOff[0], legOff[1], 0);
+    pl.renderOrder = ro;
+    pv.add(pl);
+    standG.add(pv);
+    return { pv, m };
+  };
+  const legFar = mkLeg(0x8f97ab, -0.2, 1.8);
+  legFar.pv.position.x -= 1.2;
+  const legNear = mkLeg(0, 0.2, 2.5);
+  standG.visible = false;
+  rig.add(standG);
+  return { group: outer, rig, ...parts, stand: standG, mStand, legNear, legFar, meta: P, spritePre: pre,
     state: { c: 0, rate: 0, lastWd: 0, lastFlapAt: -9, gSince: 0, runP: 0, gb: -1, lean: 0 } };
 }
 
@@ -798,26 +823,45 @@ class Renderer3D {
     if (s.gb < 0) s.gb = grounded ? 1 : 0;
     s.gb += ((grounded ? 1 : 0) - s.gb) * Math.min(1, dt * 16);
     const air = 1 - s.gb;
-    bv.mBody.opacity = air * bv.mBody.userData.ld;
-    bv.mWing.opacity = air * bv.mWing.userData.ld;
-    if (bv.mFar) bv.mFar.opacity = air * 0.9 * bv.mFar.userData.ld;
-    bv.mStand.opacity = s.gb * bv.mStand.userData.ld;
+    // MATERIALIZE: smooth energize — translucent shimmer ramping solid with a cool tint
+    // (the old visibility flicker read as a glitch, and hard flicker is banned anyway)
+    let matO = 1;
+    if (e.materializing > 0) {
+      const mp = 1 - Math.min(1, e.materializing / 60);
+      matO = Math.max(0.18, 0.25 + 0.72 * mp + 0.12 * Math.sin(t * 24));
+      const cool = (1 - mp) * 0.55;
+      for (const m of [bv.mBody, bv.mWing, bv.mStand, bv.legNear.m])
+        m.color.setRGB(1 - cool * 0.35, 1 - cool * 0.18, 1);
+    } else if (s.wasMat) {
+      for (const m of [bv.mBody, bv.mWing, bv.mStand, bv.legNear.m]) m.color.setRGB(1, 1, 1);
+    }
+    s.wasMat = e.materializing > 0;
+    bv.mBody.opacity = matO * air * bv.mBody.userData.ld;
+    bv.mWing.opacity = matO * air * bv.mWing.userData.ld;
+    if (bv.mFar) bv.mFar.opacity = matO * air * 0.9 * bv.mFar.userData.ld;
+    bv.mStand.opacity = matO * s.gb * bv.mStand.userData.ld;
+    bv.legNear.m.opacity = matO * s.gb * bv.legNear.m.userData.ld;
+    bv.legFar.m.opacity = matO * s.gb * 0.9 * bv.legFar.m.userData.ld;
     bv.body.visible = air > 0.02;
     bv.pivot.visible = air > 0.02;
     if (bv.farP) bv.farP.visible = air > 0.02;
     bv.stand.visible = s.gb > 0.02;
-    // secondary motion sells the beat: body dips against the downstroke; ground = smooth
-    // trot (1−cos is C¹ — the old |sin| hop had a kink every stride)
-    let bobY = 0, bobR = 0;
+    // secondary motion sells the beat: body dips against the downstroke. On the ground a
+    // WALK GAIT: the two cut legs scissor at the hip (two footfalls per stride), gentle bob.
+    let bobY = 0, bobR = 0, swing = 0;
+    const spd = Math.abs(e.vx || 0);
     if (air > 0.5) {
       bobY = Math.cos((s.c % 1) * Math.PI * 2) * -0.9 * env;
       bobR = Math.sin((s.c % 1) * Math.PI * 2) * 0.028 * env;
-    } else if (Math.abs(e.vx || 0) > 0.12) {
-      s.runP += Math.abs(e.vx) * dt * 5.2;
-      const stride = Math.min(1, Math.abs(e.vx) / 0.4);
-      bobY = 0.45 * (1 - Math.cos(s.runP * Math.PI * 2)) * stride;
-      bobR = Math.sin(s.runP * Math.PI * 2) * 0.03 * stride;
+    } else if (spd > 0.12) {
+      s.runP += spd * dt * 4.6;
+      const stride = Math.min(1, spd / 0.4);
+      swing = Math.sin(s.runP * Math.PI * 2) * 0.52 * stride;
+      bobY = (1 - Math.cos(s.runP * Math.PI * 4)) * 0.12 * stride;
+      bobR = Math.sin(s.runP * Math.PI * 2) * 0.022 * stride;
     }
+    bv.legNear.pv.rotation.z = swing;
+    bv.legFar.pv.rotation.z = -swing;
     bv.rig.position.y = bobY;
     bv.rig.rotation.z = bobR;
     // eased body lean: velocity lean and skid share one smoothed channel — no snaps
@@ -825,9 +869,7 @@ class Renderer3D {
       : Math.max(-0.22, Math.min(0.22, -(e.vx || 0) * 0.05 * (e.face || 1)));
     s.lean += (leanT - s.lean) * Math.min(1, dt * 10);
     g.rotation.z = s.lean;
-    // materialize: flicker only — Y-squashing a painted sprite reads as a glitch
-    if (e.materializing > 0) { g.visible = (Math.floor(t * 30) % 2) === 0; g.scale.set(1, 1, 1); }
-    else if (grounded && Math.abs(e.vx || 0) <= 0.12) g.scale.set(1, 1 + Math.sin(t * 2.4) * 0.012, 1);  // idle breathing
+    if (grounded && spd <= 0.12 && !e.materializing) g.scale.set(1, 1 + Math.sin(t * 2.4) * 0.012, 1);  // idle breathing
     else g.scale.set(1, 1, 1);
   }
 
@@ -912,6 +954,7 @@ class Renderer3D {
         const v = this.getView(p, 'player' + p.pi, () => birdView('player', p.pi));
         this.poseBird(v.main, p, t, 0, p.alive, dt);
         this._ghost(v, p, t, 'bird', dt);
+        this._spawnSparkle(p);
       }
       // enemies
       for (const e of snap.enemies) {
@@ -920,6 +963,7 @@ class Renderer3D {
         const v = this.getView(e, 'enemy' + e.type, () => birdView('enemy', e.type));
         this.poseBird(v.main, e, t, 0, true, dt);
         this._ghost(v, e, t, 'bird', dt);
+        this._spawnSparkle(e);
       }
       // pteros
       for (const p of snap.pteros) {
@@ -996,29 +1040,64 @@ class Renderer3D {
       else this.posePtero(v.ghost, e, t, near, dt);
     } else if (v.ghost) v.ghost.group.visible = false;
   }
+  // energize sparkles during materialize — cool motes rising through the forming bird
+  _spawnSparkle(e) {
+    if (!(e.materializing > 0) || this.quality === 'low' || this._embT % 3 !== 0) return;
+    this.particles.spawn(X3(e.x) + (Math.random() - 0.5) * 18, Y3(e.y) + 2 + Math.random() * 34, 2,
+      { sp: 0.35, vy: 0.5 + Math.random() * 0.4, c: 0x9fd4ff, life: 26, g: -0.02 });
+  }
+
   // magma hand rises under a bird skimming open lava — pure renderer state, no gameplay.
   // Engine truth stays authoritative: the reach only appears while info.trollActive and
-  // stands down the moment a real grab exists (the grab hand takes over).
+  // stands down the moment a real grab exists (the grab hand takes over). Between
+  // targets, the troll POKES up from random lava gaps every few seconds so the menace
+  // reads even when nobody flies low (the original's lava feels alive the same way).
   _reachUpdate(snap, t, dt) {
     if (!this.reachV) {
       this.reachV = trollView();
       this.reachV.group.visible = false;
       this.scene.add(this.reachV.group);
       this.reachX = 0; this.reachAmt = 0;
+      this.pokeT = 2.5; this.pokePh = -1; this.pokeX = 0;
     }
-    let target = null;
-    if (snap && snap.info && snap.info.trollActive && (!snap.trolls || snap.trolls.length === 0) && snap.platforms) {
-      const spans = snap.platforms.filter(p => p.y === WORLD.FLOOR).map(p => [p.x1, p.x2]);
+    let target = null, gaps = null;
+    const activeTroll = snap && snap.info && snap.info.trollActive && (!snap.trolls || snap.trolls.length === 0) && snap.platforms;
+    if (activeTroll) {
+      // the FLOOR row platforms carry bridge:true — their y is the platform TOP, not
+      // WORLD.FLOOR, so never match on y (that filter silently found nothing in v1.9)
+      const spans = snap.platforms.filter(p => p.bridge).map(p => [p.x1, p.x2]).sort((a2, b2) => a2[0] - b2[0]);
       const overLava = x => !spans.some(sp => x >= sp[0] - 2 && x <= sp[1] + 2);
+      gaps = [];
+      let cur = 0;
+      for (const sp of spans) { if (sp[0] - cur > 26) gaps.push([cur, sp[0]]); cur = Math.max(cur, sp[1]); }
+      if (WORLD.VIEW_W - cur > 26) gaps.push([cur, WORLD.VIEW_W]);
+      if (!gaps.length) gaps.push([0, WORLD.VIEW_W]);
       for (const b of [...snap.players, ...snap.enemies]) {
         if (b.out || !b.alive || (b.materializing || 0) > 0 || b.onGround) continue;
-        if (b.y < WORLD.FLOOR - 52 || !overLava(b.x)) continue;
+        if (b.y < WORLD.FLOOR - 70 || !overLava(b.x)) continue;
         if (!target || b.y > target.y) target = b;
       }
     }
-    const amtT = target ? Math.min(1, (target.y - (WORLD.FLOOR - 52)) / 27) : 0;
+    // idle pokes: a hand crests from a random gap, grasps at nothing, sinks back
+    let pokeAmt = 0;
+    if (activeTroll && !target) {
+      if (this.pokePh < 0) {
+        this.pokeT -= dt;
+        if (this.pokeT <= 0 && gaps && gaps.length) {
+          const gp = gaps[(Math.random() * gaps.length) | 0];
+          this.pokeX = gp[0] + 6 + Math.random() * Math.max(4, gp[1] - gp[0] - 12);
+          this.pokePh = 0;
+        }
+      } else {
+        this.pokePh += dt / 1.7;
+        pokeAmt = Math.sin(Math.PI * Math.min(1, this.pokePh)) * 0.55;
+        if (this.pokePh >= 1) { this.pokePh = -1; this.pokeT = 3.5 + Math.random() * 5; }
+      }
+    } else if (this.pokePh >= 0) { this.pokePh = -1; this.pokeT = 3 + Math.random() * 4; }
+    const amtT = target ? Math.min(1, (target.y - (WORLD.FLOOR - 70)) / 40) : pokeAmt;
+    const tx = target ? target.x : (this.pokePh >= 0 ? this.pokeX : this.reachX);
     this.reachAmt += (amtT - this.reachAmt) * Math.min(1, dt * (amtT > this.reachAmt ? 5 : 3.5));
-    if (target) this.reachX += (target.x - this.reachX) * Math.min(1, dt * 6);
+    this.reachX += (tx - this.reachX) * Math.min(1, dt * (target ? 6 : 20));
     const v = this.reachV, a = this.reachAmt;
     if (a < 0.03) { v.group.visible = false; return; }
     v.group.visible = true;
@@ -1027,7 +1106,7 @@ class Renderer3D {
     for (let i = 0; i < v.fingers.length; i++)
       v.fingers[i].rotation.x = -0.15 - a * 0.45 + Math.sin(t * 7 + i * 1.3) * 0.18 * a;
     v.light.intensity = a * 24 + Math.sin(t * 17) * 4 * a;
-    if (this.quality !== 'low' && a > 0.35 && (this._embT % 5) === 0)
+    if (this.quality !== 'low' && a > 0.3 && (this._embT % 5) === 0)
       this.particles.spawn(v.group.position.x + (Math.random() - 0.5) * 10, v.group.position.y + 10, 2,
         { sp: 0.3, vy: 0.5, c: 0xff7a22, life: 22, g: -0.04 });
   }

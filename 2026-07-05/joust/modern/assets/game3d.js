@@ -565,7 +565,8 @@ function drawTitle(now) {
   txt('HI ' + save.hi.toLocaleString(), W / 2, H * 0.925, Math.round(H / 30), '#39c06a');
   if (W > 760 && Math.floor(now / 600) % 2 === 0) txt('SAME GAME · NEW WORLD — THE ROM-FAITHFUL ENGINE IN FULL 3D', W / 2, H * 0.965, Math.round(H / 46), '#6f7690', 'center', 600);
   if (W > 760) txt('RETRO EDITION ⇦ H', Math.round(H / 40) + 8, H - Math.round(H / 40), Math.round(H / 48), '#5a6378', 'left', 700);
-  txt(VERSION, W - Math.round(H / 40), H - Math.round(H / 40), Math.round(H / 48), '#5a6378', 'right');
+  // version stamp: bright enough to actually read (owner request) — cache disputes end here
+  txt(VERSION, W - Math.round(H / 40), H - Math.round(H / 40), Math.round(H / 34), '#d9b476', 'right', 700);
 }
 
 function drawHUD() {
