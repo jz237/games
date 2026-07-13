@@ -187,6 +187,39 @@ folded-wing pose slightly splayed, title wordmark is plain Courier.
   is ROM behaviour, troll punishes from W4. (4) collision = authentic ROM pixel masks; the
   player size fix narrows the visual/hitbox gap.
 
+- **it13 (v1.8.0, owner: "still a flickering mess — take a different approach")**: PUPPET RIG.
+  Frame-flipping AI-painted frames can never be temporally coherent — post-mortem found THREE
+  stacked flicker sources in v1.7: (1) paint incoherence between frames, (2) the repaint
+  DRIFTED content inside the sheet up to ~43px per frame (position jitter — slice boxes
+  assumed staged layout), (3) per-frame painted content size wobbled (sc 0.85–1.03 → size
+  pulsing). New approach: ONE body layer + ONE wing layer per variant (cutout animation),
+  wing rotates continuously about a measured hinge along the ANALYTIC projected sweep of the
+  3D rig's wing bone — smooth function of time, zero swaps in flight, cannot flicker.
+  Pipeline (all local, ZERO new API images): puppet-stage.mjs (re-stage 89cf140 rig, 3 passes:
+  full / rear-mass hidden / rider hidden too; live game EVICTED into a detached limbo group —
+  visible=false is NOT enough, the attract demo re-shows its views every frame and one wandered
+  into the v1.7 ptero sheet) → puppet-bones.mjs (projected shoulder→tip bone per phase; tips
+  from farthest GEOMETRY CORNERS, mesh centres sit halfway down feathers; mask-derived angles
+  are noise) → puppet-slice.mjs (per-frame IoU-scored similarity registration — hit-count
+  scores COLLAPSE the scale term; wing seeds = staged wing CLEAR of the rear-less silhouette
+  only (where the wing merely occludes body the paint shows body); body seeds = silhouette
+  minus wing; GEODESIC labelling through painted alpha so the fan resolves along artwork
+  connectivity; wing+TAIL cut as one mass — the paintings fuse them; knight+lance zone from
+  the rider pass = hard veto; body holes filled from opposite phase then dilation-smeared;
+  largest-component ghost filter; hinge = seam centroid). Sizes calibrated to v1.7 approved
+  visuals via mean content width (×0.8 player / ×0.7 ptero preserved). Renderer: puppetParts
+  body+wing+far-wing echo (tinted, lagged 0.05 cycles, skipped on LOW), flap oscillator
+  (rate ease to 6.9Hz on flap edges, settle-forward to glide top when idle — NO phase snapping,
+  it read as a 1.5-rad jump in the trace), body bob counter-phase, grounded = stand frame +
+  procedural trot (no frame swaps), ptero attack = open-beak BODY plane toggle (wing keeps
+  beating). Verify: tools/anim-video.mjs freezes rAF and drives sim+render at exact 60fps
+  steps → anim.mp4 IS what a player sees (SwiftShader wall-clock irrelevant); continuity
+  assert: max wing Δangle 0.674 rad/frame = the physical max of a 6.9Hz beat at 60fps
+  (curve slope 5.74 rad/cycle × 0.115 cycles/frame), swaps 0, page errors 0. Tex payload
+  2.9M → 1.5M (48 frame PNGs deleted). Pipeline artifacts COMMITTED to notes/art-raw/
+  (pup-*.png, cells, bones, meta — tools/shots is gitignored; v1.7's sheets died with its
+  worktree). All suites green. API spend this round: 0 (total stays 28).
+
 - **it12 (v1.7.0, owner: "should be smooth flapping with many frames, like playing a video")**:
   8-PHASE FLAP CYCLES — tools/bird-flap-sheet.mjs stages every variant's wings on a cosine
   cycle from the pre-sprite 3D rig (swaps render3d in/out automatically), one sheet per

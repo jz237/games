@@ -56,52 +56,105 @@ const PLAT_CARDS = {
 // flips via rotation.y=PI showing the mirrored back face (retro-authentic lance swap).
 // To RE-STAGE sheets, check out the pre-sprite commit — these builders replaced the 3D ones.
 const BIRD_SPRITE = { planeW: 68.455, planeH: 63.151, feetFrac: 0.7111 };  // stand frames (x0.8 baked)
-const BIRD_FLAP = { planeW: 85.450, planeH: 78.784, feetFrac: 0.7115 };    // 8-phase flap cycle frames
-const PTERO_FLAP = { planeW: 148.945, planeH: 132.933, feetFrac: 0.6805 };
-const PTERO_SPRITE = { planeW: 116.710, planeH: 98.138, feetFrac: 0.6367 };
-const _birdMats = {};
-function birdMat(key) {
-  if (_birdMats[key]) return _birdMats[key];
-  const m = new T.MeshBasicMaterial({ transparent: true, depthWrite: false, side: T.DoubleSide, opacity: 0 });
+// ═══ painted PUPPET rig (v1.8) — one body layer + one wing layer per variant ═══
+// The wing rotates continuously about the measured hinge along the ANALYTIC apparent
+// sweep of the 3D rig's wing bone (tools/puppet-bones.mjs), so flight animation is a
+// smooth function of time: no texture swaps, no frame flips — it cannot flicker.
+// Layers cut from the owner-approved paintings by tools/puppet-slice.mjs.
+const PUPPET = {"p1":{"art":0,"n":8,"artK":0,"body":{"w":421,"h":388,"planeW":69.925,"planeH":64.44,"feetFrac":0.5042},"wing":{"x":133,"y":84,"w":70,"h":82},"pivot":{"x":195.9,"y":117.1},"curve":[{"a":2.519,"l":1},{"a":2.5695,"l":0.98},{"a":2.7278,"l":0.924},{"a":3.0055,"l":0.858},{"a":3.3754,"l":0.829},{"a":3.7339,"l":0.865},{"a":3.992,"l":0.928},{"a":4.1374,"l":0.975},{"a":4.1838,"l":0.991},{"a":4.1374,"l":0.975},{"a":3.992,"l":0.928},{"a":3.7339,"l":0.865},{"a":3.3754,"l":0.829},{"a":3.0055,"l":0.858},{"a":2.7278,"l":0.924},{"a":2.5695,"l":0.98}]},"p2":{"art":0,"n":8,"artK":0,"body":{"w":422,"h":389,"planeW":73.65,"planeH":67.89,"feetFrac":0.5357},"wing":{"x":139,"y":82,"w":72,"h":87},"pivot":{"x":192,"y":123.5},"curve":[{"a":2.519,"l":1},{"a":2.5695,"l":0.98},{"a":2.7278,"l":0.924},{"a":3.0055,"l":0.858},{"a":3.3754,"l":0.829},{"a":3.7339,"l":0.865},{"a":3.992,"l":0.928},{"a":4.1374,"l":0.975},{"a":4.1838,"l":0.991},{"a":4.1374,"l":0.975},{"a":3.992,"l":0.928},{"a":3.7339,"l":0.865},{"a":3.3754,"l":0.829},{"a":3.0055,"l":0.858},{"a":2.7278,"l":0.924},{"a":2.5695,"l":0.98}]},"bounder":{"art":0,"n":8,"artK":0,"body":{"w":420,"h":387,"planeW":92.38,"planeH":85.12,"feetFrac":0.5196},"wing":{"x":130,"y":75,"w":74,"h":92},"pivot":{"x":202.6,"y":102.8},"curve":[{"a":2.519,"l":1},{"a":2.5695,"l":0.98},{"a":2.7278,"l":0.924},{"a":3.0055,"l":0.858},{"a":3.3754,"l":0.829},{"a":3.7339,"l":0.865},{"a":3.992,"l":0.928},{"a":4.1374,"l":0.975},{"a":4.1838,"l":0.991},{"a":4.1374,"l":0.975},{"a":3.992,"l":0.928},{"a":3.7339,"l":0.865},{"a":3.3754,"l":0.829},{"a":3.0055,"l":0.858},{"a":2.7278,"l":0.924},{"a":2.5695,"l":0.98}]},"hunter":{"art":0,"n":8,"artK":0,"body":{"w":420,"h":387,"planeW":92.256,"planeH":85.001,"feetFrac":0.5259},"wing":{"x":148,"y":89,"w":63,"h":82},"pivot":{"x":202.2,"y":109.2},"curve":[{"a":2.519,"l":1},{"a":2.5695,"l":0.98},{"a":2.7278,"l":0.924},{"a":3.0055,"l":0.858},{"a":3.3754,"l":0.829},{"a":3.7339,"l":0.865},{"a":3.992,"l":0.928},{"a":4.1374,"l":0.975},{"a":4.1838,"l":0.991},{"a":4.1374,"l":0.975},{"a":3.992,"l":0.928},{"a":3.7339,"l":0.865},{"a":3.3754,"l":0.829},{"a":3.0055,"l":0.858},{"a":2.7278,"l":0.924},{"a":2.5695,"l":0.98}]},"shadow":{"art":1,"n":8,"artK":2,"body":{"w":419,"h":387,"planeW":84.523,"planeH":77.372,"feetFrac":0.4986},"wing":{"x":135,"y":88,"w":63,"h":78},"pivot":{"x":222.9,"y":118.5},"curve":[{"a":2.519,"l":1.082},{"a":2.5695,"l":1.06},{"a":2.7278,"l":1},{"a":3.0055,"l":0.928},{"a":3.3754,"l":0.897},{"a":3.7339,"l":0.936},{"a":3.992,"l":1.004},{"a":4.1374,"l":1.055},{"a":4.1838,"l":1.072},{"a":4.1374,"l":1.055},{"a":3.992,"l":1.004},{"a":3.7339,"l":0.936},{"a":3.3754,"l":0.897},{"a":3.0055,"l":0.928},{"a":2.7278,"l":1},{"a":2.5695,"l":1.06}]},"pteroAtk":{"w":501,"h":381,"planeW":111.855,"planeH":86.442,"feetFrac":0.6981},"ptero":{"art":1,"n":6,"artK":2,"body":{"w":506,"h":453,"planeW":112.047,"planeH":99.483,"feetFrac":0.3521},"wing":{"x":256,"y":103,"w":67,"h":95},"pivot":{"x":249.6,"y":101.1},"curve":[{"a":2.8145,"l":1.036},{"a":3.3169,"l":0.951},{"a":3.6885,"l":1},{"a":3.8101,"l":1.038},{"a":3.6885,"l":1},{"a":3.3169,"l":0.951},{"a":2.8145,"l":1.036},{"a":2.4351,"l":1.24},{"a":2.2341,"l":1.406},{"a":2.1722,"l":1.462},{"a":2.2341,"l":1.406},{"a":2.4351,"l":1.24}]}};
+const _birdTex = {};
+function birdTex(key, cb) {
+  const e = _birdTex[key];
+  if (e) { if (e.tex) cb(e.tex); else e.cbs.push(cb); return; }
+  const ent = _birdTex[key] = { tex: null, cbs: [cb] };
   new T.TextureLoader().load(`assets/tex/bird-${key}.png` + Q, tex => {
     tex.colorSpace = T.SRGBColorSpace;
-    m.map = tex; m.opacity = 1; m.needsUpdate = true;
+    ent.tex = tex;
+    for (const f of ent.cbs) f(tex);
+    ent.cbs.length = 0;
   });
-  return _birdMats[key] = m;
+}
+const _birdMats = {};
+function birdMat(key, tint) {
+  const ck = key + (tint || '');
+  if (_birdMats[ck]) return _birdMats[ck];
+  const m = new T.MeshBasicMaterial({ transparent: true, depthWrite: false, side: T.DoubleSide, opacity: 0 });
+  if (tint) m.color.setHex(tint);
+  birdTex(key, tex => { m.map = tex; m.opacity = 1; m.needsUpdate = true; });
+  return _birdMats[ck] = m;
+}
+let PUPPET_LOWQ = false;   // set by Renderer3D init — LOW skips the far-wing echo
+function puppetSample(P, c) {
+  const n = P.curve.length;
+  const f = ((c % 1) + 1) % 1 * n;
+  const i0 = Math.floor(f) % n, i1 = (i0 + 1) % n, u = f - Math.floor(f);
+  return { a: P.curve[i0].a + (P.curve[i1].a - P.curve[i0].a) * u,
+           l: P.curve[i0].l + (P.curve[i1].l - P.curve[i0].l) * u };
+}
+function puppetParts(P, pre, rig) {
+  const upp = P.body.planeW / P.body.w;   // world units per painted px
+  const body = new T.Mesh(new T.PlaneGeometry(P.body.planeW, P.body.planeH), birdMat(pre + '-body'));
+  body.position.y = (P.body.feetFrac - 0.5) * P.body.planeH;   // feet land on y=0
+  body.renderOrder = 2;
+  rig.add(body);
+  const hingeX = (P.pivot.x / P.body.w - 0.5) * P.body.planeW;
+  const hingeY = body.position.y + (0.5 - P.pivot.y / P.body.h) * P.body.planeH;
+  const wingGeo = new T.PlaneGeometry(P.wing.w * upp, P.wing.h * upp);
+  const wingOff = [((P.wing.x + P.wing.w / 2) - P.pivot.x) * upp, (P.pivot.y - (P.wing.y + P.wing.h / 2)) * upp];
+  const pivot = new T.Group();
+  pivot.position.set(hingeX, hingeY, 0.5);
+  const wing = new T.Mesh(wingGeo, birdMat(pre + '-wing'));
+  wing.position.set(wingOff[0], wingOff[1], 0);
+  wing.renderOrder = 3;
+  pivot.add(wing);
+  rig.add(pivot);
+  let farP = null;
+  if (!PUPPET_LOWQ) {   // far-wing echo: same art, darkened, behind the body, slight lag
+    farP = new T.Group();
+    farP.position.set(hingeX - 1.4, hingeY + 0.6, -0.6);
+    const far = new T.Mesh(wingGeo, birdMat(pre + '-wing', 0x8a93a8));
+    far.position.set(wingOff[0], wingOff[1], 0);
+    far.renderOrder = 1;
+    farP.add(far);
+    rig.add(farP);
+  }
+  return { body, pivot, farP };
 }
 function birdView(kind, variant) {
   const pre = kind === 'player' ? (variant === 1 ? 'p2' : 'p1')
     : (variant === 'hunter' ? 'hunter' : variant === 'shadow' ? 'shadow' : 'bounder');
+  const P = PUPPET[pre];
   const outer = new T.Group();
-  // the player sheets were painted ~20% larger than the enemy sheets
+  const rig = new T.Group();   // secondary motion (bob/lean) without touching outer scale
+  outer.add(rig);
+  const parts = puppetParts(P, pre, rig);
+  // stand frame unchanged from v1.6 (owner-approved grounded look; ×0.8 player baked)
   const sc = kind === 'player' ? 0.8 : 1;
-  const mk = (meta, key) => {
-    const pl = new T.Mesh(new T.PlaneGeometry(meta.planeW * sc, meta.planeH * sc), birdMat(key));
-    pl.position.y = (meta.feetFrac - 0.5) * meta.planeH * sc;   // feet land on y=0
-    pl.renderOrder = 2;
-    outer.add(pl);
-    return pl;
-  };
-  const flapPlane = mk(BIRD_FLAP, pre + '-f1');
-  const standPlane = mk(BIRD_SPRITE, pre + '-stand');
-  standPlane.visible = false;
-  for (let i = 0; i < 8; i++) birdMat(pre + '-f' + i);   // warm the cycle so playback never pops
-  return { group: outer, flapPlane, standPlane, spritePre: pre, wings: [], legs: [],
-    neckG: new T.Group(), rider: new T.Group(), tail: null, state: { runP: 0, lastWd: 0, key: '' } };
+  const stand = new T.Mesh(new T.PlaneGeometry(BIRD_SPRITE.planeW * sc, BIRD_SPRITE.planeH * sc), birdMat(pre + '-stand'));
+  stand.position.y = (BIRD_SPRITE.feetFrac - 0.5) * BIRD_SPRITE.planeH * sc;
+  stand.renderOrder = 2;
+  stand.visible = false;
+  rig.add(stand);
+  return { group: outer, rig, ...parts, stand, meta: P, spritePre: pre,
+    state: { c: 0, rate: 0, lastWd: 0, lastFlapAt: -9, gSince: 0, runP: 0 } };
 }
 
 
-// ═══ pterodactyl sprite — wild riderless monster; open-beak frames are the kill tell ═══
+// ═══ pterodactyl puppet — wild riderless monster; the open-beak body is the kill tell ═══
 function pteroView() {
+  const P = PUPPET.ptero, AK = PUPPET.pteroAtk;
   const outer = new T.Group();
-  const sc = 0.7;   // staged large for repaint detail; boss reads right at ~104 world units
-  const plane = new T.Mesh(new T.PlaneGeometry(PTERO_FLAP.planeW * sc, PTERO_FLAP.planeH * sc), birdMat('ptero-f0'));
-  plane.position.y = (PTERO_FLAP.feetFrac - 0.5) * PTERO_FLAP.planeH * sc;
-  plane.renderOrder = 2;
-  outer.add(plane);
-  for (let i = 0; i < 8; i++) birdMat('ptero-f' + i);
-  return { group: outer, spritePlane: plane, wings: [],
-    headG: new T.Group(), jawG: new T.Group(), state: { key: '' } };
+  const rig = new T.Group();
+  outer.add(rig);
+  const parts = puppetParts(P, 'ptero', rig);
+  // attack body (open beak): own plane with its own metrics, toggled per attack state
+  const atk = new T.Mesh(new T.PlaneGeometry(AK.planeW, AK.planeH), birdMat('ptero-body-atk'));
+  atk.position.y = (AK.feetFrac - 0.5) * AK.planeH;
+  atk.renderOrder = 2;
+  atk.visible = false;
+  rig.add(atk);
+  return { group: outer, rig, ...parts, atk, meta: P,
+    state: { c: Math.random(), atk: false } };
 }
 
 
@@ -443,6 +496,7 @@ class Renderer3D {
 
   setQuality(q) {
     this.quality = q;
+    PUPPET_LOWQ = q === 'low';   // views built after this skip the far-wing echo
     const pr = q === 'high' ? Math.min(window.devicePixelRatio || 1, 2) : q === 'medium' ? Math.min(window.devicePixelRatio || 1, 1.25) : 1;
     this.gl.setPixelRatio(pr);
     // shadows: off on LOW, 1k MED, 2k HIGH
@@ -691,54 +745,84 @@ class Renderer3D {
     return v;
   }
 
-  poseBird(bv, e, t, xOff, alive) {
-    const g = bv.group;
+  poseBird(bv, e, t, xOff, alive, dt) {
+    const g = bv.group, s = bv.state, P = bv.meta;
     g.visible = alive !== false;
     if (!g.visible) return;
+    dt = dt || 0.0166;
     g.position.set(X3(e.x) + xOff, Y3(e.y), 0);
     g.rotation.y = e.face === 1 ? 0 : Math.PI;   // sprite flip via back face (DoubleSide)
     g.rotation.z = Math.max(-0.22, Math.min(0.22, -(e.vx || 0) * 0.05 * (e.face || 1)));
-    // animation state machine: the raw engine signals churn every few ticks (wingDown
-    // lasts 6 ticks; skimming birds bounce grounded/airborne) — honouring them per-frame
-    // STROBES three very different paintings. Instead: a fresh flap triggers a held
-    // down-beat, and every other transition needs a minimum hold.
-    const s = bv.state;
-    // continuous flap playback: any flap edge marks activity; while active the 8-phase
-    // cycle plays at ~18ms/frame (full beat ~144ms) — smooth, video-like motion.
+    // PUPPET flap: a continuous cycle position c drives the wing angle along the rig's
+    // analytic sweep. Flap edges push the beat rate up; idling settles the wing forward
+    // to the next glide top. Everything is a smooth function of time — no swaps, ever.
     if (!e.onGround && e.wingDown > (s.lastWd || 0)) s.lastFlapAt = t;
     s.lastWd = e.wingDown;
-    const flapActive = t - (s.lastFlapAt || -9) < 0.26;
+    const active = t - (s.lastFlapAt || -9) < 0.30;
+    s.rate += ((active ? 6.9 : 0) - s.rate) * Math.min(1, dt * 16);
+    s.c += s.rate * dt;
+    if (!active && s.rate < 1) {   // finish the stroke, ease back to the glide pose
+      const rest = Math.ceil(s.c);
+      if (rest - s.c > 0.0005) s.c = Math.min(rest, s.c + dt * 2.4);
+    }
+    const env = Math.min(1, s.rate / 6.9);
+    const cEff = s.c + Math.sin(t * 2.2 + (e.id || 0) * 1.7) * 0.022;   // alive micro-sway at rest
+    const smp = puppetSample(P, cEff);
+    const dth = smp.a - P.curve[P.artK].a;
+    const ls = Math.max(0.55, smp.l);
+    bv.pivot.rotation.z = dth;
+    bv.pivot.scale.setScalar(ls);
+    if (bv.farP) {
+      const fs = puppetSample(P, cEff - 0.05);
+      bv.farP.rotation.z = (fs.a - P.curve[P.artK].a) * 0.94;
+      bv.farP.scale.setScalar(Math.max(0.55, fs.l) * 0.96);
+    }
+    // grounded (debounced): the ONLY visibility switch — one swap at touchdown/takeoff
     if (e.onGround) { if (!s.gSince) s.gSince = t; } else s.gSince = 0;
-    const grounded = s.gSince && t - s.gSince > 0.07;
-    let key, useStand = false;
-    if (!grounded) key = bv.spritePre + '-f' + (flapActive ? Math.floor(t / 0.018) % 8 : 1);
-    else if (Math.abs(e.vx || 0) > 0.12) {
-      s.runP += Math.abs(e.vx) * 0.3;
-      if (Math.sin(s.runP * 1.6) > 0) { useStand = true; key = bv.spritePre + '-stand'; }
-      else key = bv.spritePre + '-f4';   // wing push as the run beat
-    } else { useStand = true; key = bv.spritePre + '-stand'; }
-    if (e.skid > 0) { g.rotation.z = 0.2 * (e.face || 1); useStand = true; key = bv.spritePre + '-stand'; }
-    bv.flapPlane.visible = !useStand;
-    bv.standPlane.visible = useStand;
-    const plane = useStand ? bv.standPlane : bv.flapPlane;
-    if (s.key !== key) { s.key = key; plane.material = birdMat(key); }
+    const grounded = !!(s.gSince && t - s.gSince > 0.07);
+    bv.body.visible = !grounded;
+    bv.pivot.visible = !grounded;
+    if (bv.farP) bv.farP.visible = !grounded;
+    bv.stand.visible = grounded;
+    // secondary motion sells the beat: body dips against the downstroke; ground = smooth trot
+    if (!grounded) {
+      bv.rig.position.y = Math.cos((s.c % 1) * Math.PI * 2) * -0.9 * env;
+      bv.rig.rotation.z = Math.sin((s.c % 1) * Math.PI * 2) * 0.028 * env;
+    } else if (Math.abs(e.vx || 0) > 0.12) {
+      s.runP += Math.abs(e.vx) * dt * 18;
+      bv.rig.position.y = Math.abs(Math.sin(s.runP * Math.PI)) * 1.2;
+      bv.rig.rotation.z = Math.sin(s.runP * Math.PI * 2) * 0.05;
+    } else { bv.rig.position.y = 0; bv.rig.rotation.z = 0; }
+    if (e.skid > 0) g.rotation.z = 0.2 * (e.face || 1);
     // materialize: flicker only — Y-squashing a painted sprite reads as a glitch
     if (e.materializing > 0) { g.visible = (Math.floor(t * 30) % 2) === 0; g.scale.set(1, 1, 1); }
-    else if (useStand && Math.abs(e.vx || 0) <= 0.12) g.scale.set(1, 1 + Math.sin(t * 2.4) * 0.012, 1);  // idle breathing
+    else if (grounded && Math.abs(e.vx || 0) <= 0.12) g.scale.set(1, 1 + Math.sin(t * 2.4) * 0.012, 1);  // idle breathing
     else g.scale.set(1, 1, 1);
   }
 
-  posePtero(pv, e, t, xOff) {
-    const g = pv.group;
+  posePtero(pv, e, t, xOff, dt) {
+    const g = pv.group, s = pv.state, P = pv.meta;
     g.visible = true;
+    dt = dt || 0.0166;
     g.position.set(X3(e.x) + xOff, Y3(e.y), 0);
     g.rotation.y = e.face === 1 ? 0 : Math.PI;
     g.rotation.z = -(e.vy || 0) * 0.05;
-    const s = pv.state;
-    // slow majestic 6-frame cycle; attack swaps to the open-beak extremes
-    const key = e.attack ? 'ptero-f' + (6 + (Math.floor(t / 0.15) % 2))
-                         : 'ptero-f' + (Math.floor(t / 0.13) % 6);
-    if (s.key !== key) { s.key = key; pv.spritePlane.material = birdMat(key); }
+    // slow majestic continuous beat; the attack swaps to the open-beak body ONCE per state
+    s.c += dt / 0.78;
+    const smp = puppetSample(P, s.c);
+    pv.pivot.rotation.z = smp.a - P.curve[P.artK].a;
+    pv.pivot.scale.setScalar(Math.max(0.55, smp.l));
+    if (pv.farP) {
+      const fs = puppetSample(P, s.c - 0.05);
+      pv.farP.rotation.z = (fs.a - P.curve[P.artK].a) * 0.94;
+      pv.farP.scale.setScalar(Math.max(0.55, fs.l) * 0.96);
+    }
+    if (!!e.attack !== s.atk) {
+      s.atk = !!e.attack;
+      pv.body.visible = !s.atk;
+      pv.atk.visible = s.atk;
+    }
+    pv.rig.position.y = Math.cos((s.c % 1) * Math.PI * 2) * -1.4;
   }
 
 
@@ -746,6 +830,7 @@ class Renderer3D {
   render(snap, dtMs) {
     this.time += (dtMs || 16.6) / 1000;
     const t = this.time;
+    const dt = Math.min(0.05, (dtMs || 16.6) / 1000);   // puppet integration step
     this.lavaMat.uniforms.uT.value = t;
     // flicker lava lights + ambient embers
     let li = 0;
@@ -788,24 +873,24 @@ class Renderer3D {
         if (p.out) continue;
         seen.add(p.id);
         const v = this.getView(p, 'player' + p.pi, () => birdView('player', p.pi));
-        this.poseBird(v.main, p, t, 0, p.alive);
-        this._ghost(v, p, t, 'bird');
+        this.poseBird(v.main, p, t, 0, p.alive, dt);
+        this._ghost(v, p, t, 'bird', dt);
       }
       // enemies
       for (const e of snap.enemies) {
         if (!e.alive) continue;
         seen.add(e.id);
         const v = this.getView(e, 'enemy' + e.type, () => birdView('enemy', e.type));
-        this.poseBird(v.main, e, t, 0, true);
-        this._ghost(v, e, t, 'bird');
+        this.poseBird(v.main, e, t, 0, true, dt);
+        this._ghost(v, e, t, 'bird', dt);
       }
       // pteros
       for (const p of snap.pteros) {
         if (!p.alive) continue;
         seen.add(p.id);
         const v = this.getView(p, 'ptero', () => pteroView());
-        this.posePtero(v.main, p, t, 0);
-        this._ghost(v, p, t, 'ptero');
+        this.posePtero(v.main, p, t, 0, dt);
+        this._ghost(v, p, t, 'ptero', dt);
       }
       // eggs
       for (const eg of snap.eggs) {
@@ -854,13 +939,13 @@ class Renderer3D {
     else this.gl.render(this.scene, this.camera);
   }
 
-  _ghost(v, e, t, kind) {
+  _ghost(v, e, t, kind, dt) {
     // wrap ghost: duplicate near the seam so entities never pop at the edges
     const near = e.x < 30 ? SPAN : (e.x > WORLD.VIEW_W - 30 ? -SPAN : 0);
     if (near && v.main.group.visible) {
       v.ghost.group.visible = true;
-      if (kind === 'bird') this.poseBird(v.ghost, e, t, near, true);
-      else this.posePtero(v.ghost, e, t, near);
+      if (kind === 'bird') this.poseBird(v.ghost, e, t, near, true, dt);
+      else this.posePtero(v.ghost, e, t, near, dt);
     } else if (v.ghost) v.ghost.group.visible = false;
   }
   _ghostSimple(v, ex) {
