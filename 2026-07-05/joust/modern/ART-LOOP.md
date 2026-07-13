@@ -186,3 +186,15 @@ folded-wing pose slightly splayed, title wordmark is plain Courier.
   Also raised the visual lava surface to the engine stand line (FLOOR) — the walkable shore
   is ROM behaviour, troll punishes from W4. (4) collision = authentic ROM pixel masks; the
   player size fix narrows the visual/hitbox gap.
+
+- **it12 (v1.7.0, owner: "should be smooth flapping with many frames, like playing a video")**:
+  8-PHASE FLAP CYCLES — tools/bird-flap-sheet.mjs stages every variant's wings on a cosine
+  cycle from the pre-sprite 3D rig (swaps render3d in/out automatically), one sheet per
+  variant so the repaint keeps the bird pixel-consistent across frames (it did — excellent
+  consistency), tools/slice-flap.mjs luma-slices 48 frames (+ flap-meta inline). Playback:
+  continuous ~18ms/frame cycle while flapActive(260ms), glide=f1, run alternates stand/f4,
+  ptero 6-frame slow cycle + f6/f7 open-beak on attack, all mats warmed at view build (no
+  load pops). Dual planes per bird (flap meta + stand meta). Ptero plane x0.7 (staging scale
+  changed). Ambient motion: sky dome yaw drift, ridge sway, idle-bird breathing, falling
+  platform drips (all skipped on LOW). Superseded up/down frames deleted (tex 2.9M).
+  6 repaint calls, running total 28.

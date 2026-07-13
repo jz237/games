@@ -55,7 +55,9 @@ const PLAT_CARDS = {
 // models (tools/bird-sheet → fal-edit → slice-birds). Unlit DoubleSide planes: facing
 // flips via rotation.y=PI showing the mirrored back face (retro-authentic lance swap).
 // To RE-STAGE sheets, check out the pre-sprite commit — these builders replaced the 3D ones.
-const BIRD_SPRITE = { planeW: 68.455, planeH: 63.151, feetFrac: 0.7111 };  // padded-crop mapping x0.8 (owner: -20%)
+const BIRD_SPRITE = { planeW: 68.455, planeH: 63.151, feetFrac: 0.7111 };  // stand frames (x0.8 baked)
+const BIRD_FLAP = { planeW: 85.450, planeH: 78.784, feetFrac: 0.7115 };    // 8-phase flap cycle frames
+const PTERO_FLAP = { planeW: 148.945, planeH: 132.933, feetFrac: 0.6805 };
 const PTERO_SPRITE = { planeW: 116.710, planeH: 98.138, feetFrac: 0.6367 };
 const _birdMats = {};
 function birdMat(key) {
@@ -71,26 +73,35 @@ function birdView(kind, variant) {
   const pre = kind === 'player' ? (variant === 1 ? 'p2' : 'p1')
     : (variant === 'hunter' ? 'hunter' : variant === 'shadow' ? 'shadow' : 'bounder');
   const outer = new T.Group();
-  // the player sheet was painted with ~20% larger figures than the enemy sheet
+  // the player sheets were painted ~20% larger than the enemy sheets
   const sc = kind === 'player' ? 0.8 : 1;
-  const plane = new T.Mesh(new T.PlaneGeometry(BIRD_SPRITE.planeW * sc, BIRD_SPRITE.planeH * sc), birdMat(pre + '-up'));
-  plane.position.y = (BIRD_SPRITE.feetFrac - 0.5) * BIRD_SPRITE.planeH * sc;   // feet land on y=0
-  plane.renderOrder = 2;
-  outer.add(plane);
-  return { group: outer, spritePlane: plane, spritePre: pre, wings: [], legs: [],
-    neckG: new T.Group(), rider: new T.Group(), tail: null, state: { wingA: 0, runP: 0, frame: '' } };
+  const mk = (meta, key) => {
+    const pl = new T.Mesh(new T.PlaneGeometry(meta.planeW * sc, meta.planeH * sc), birdMat(key));
+    pl.position.y = (meta.feetFrac - 0.5) * meta.planeH * sc;   // feet land on y=0
+    pl.renderOrder = 2;
+    outer.add(pl);
+    return pl;
+  };
+  const flapPlane = mk(BIRD_FLAP, pre + '-f1');
+  const standPlane = mk(BIRD_SPRITE, pre + '-stand');
+  standPlane.visible = false;
+  for (let i = 0; i < 8; i++) birdMat(pre + '-f' + i);   // warm the cycle so playback never pops
+  return { group: outer, flapPlane, standPlane, spritePre: pre, wings: [], legs: [],
+    neckG: new T.Group(), rider: new T.Group(), tail: null, state: { runP: 0, lastWd: 0, key: '' } };
 }
 
 
 // ═══ pterodactyl sprite — wild riderless monster; open-beak frames are the kill tell ═══
 function pteroView() {
   const outer = new T.Group();
-  const plane = new T.Mesh(new T.PlaneGeometry(PTERO_SPRITE.planeW, PTERO_SPRITE.planeH), birdMat('ptero-up'));
-  plane.position.y = (PTERO_SPRITE.feetFrac - 0.5) * PTERO_SPRITE.planeH;
+  const sc = 0.7;   // staged large for repaint detail; boss reads right at ~104 world units
+  const plane = new T.Mesh(new T.PlaneGeometry(PTERO_FLAP.planeW * sc, PTERO_FLAP.planeH * sc), birdMat('ptero-f0'));
+  plane.position.y = (PTERO_FLAP.feetFrac - 0.5) * PTERO_FLAP.planeH * sc;
   plane.renderOrder = 2;
   outer.add(plane);
+  for (let i = 0; i < 8; i++) birdMat('ptero-f' + i);
   return { group: outer, spritePlane: plane, wings: [],
-    headG: new T.Group(), jawG: new T.Group(), state: { ph: Math.random() * 6.28, frame: '' } };
+    headG: new T.Group(), jawG: new T.Group(), state: { key: '' } };
 }
 
 
@@ -520,6 +531,7 @@ class Renderer3D {
       pts.push(new T.Vector2(1700, LAVA_Y - 90));
       const m = new T.Mesh(new T.ShapeGeometry(new T.Shape(pts)), new T.MeshBasicMaterial({ color: c, fog: false }));
       m.position.z = z; this.scene.add(m);
+      (this.ridges = this.ridges || []).push(m);
     }
   }
 
@@ -691,30 +703,29 @@ class Renderer3D {
     // STROBES three very different paintings. Instead: a fresh flap triggers a held
     // down-beat, and every other transition needs a minimum hold.
     const s = bv.state;
-    // flap OSCILLATOR: engine flap cadence (67-117ms) is faster than any watchable
-    // down-beat, so holding a beat per edge pins the wings. Instead: any flap edge marks
-    // activity, and while active the wings oscillate at a fixed readable ~7.7Hz.
+    // continuous flap playback: any flap edge marks activity; while active the 8-phase
+    // cycle plays at ~18ms/frame (full beat ~144ms) — smooth, video-like motion.
     if (!e.onGround && e.wingDown > (s.lastWd || 0)) s.lastFlapAt = t;
     s.lastWd = e.wingDown;
-    const flapActive = t - (s.lastFlapAt || -9) < 0.24;
-    // skimming birds touch ground for single ticks — require stable contact before landing
+    const flapActive = t - (s.lastFlapAt || -9) < 0.26;
     if (e.onGround) { if (!s.gSince) s.gSince = t; } else s.gSince = 0;
     const grounded = s.gSince && t - s.gSince > 0.07;
-    let frame;
-    if (!grounded) frame = flapActive ? (Math.floor(t / 0.065) % 2 === 0 ? 'down' : 'up') : 'up';
-    else if (Math.abs(e.vx || 0) > 0.12) { s.runP += Math.abs(e.vx) * 0.3; frame = Math.sin(s.runP * 1.6) > 0 ? 'stand' : 'down'; }
-    else frame = 'stand';
-    if (e.skid > 0) { g.rotation.z = 0.2 * (e.face || 1); frame = 'stand'; }
-    if (frame !== s.frame) {
-      const airborneSwap = !grounded && s.frame !== 'stand';   // oscillator runs free
-      if (airborneSwap || t - (s.since || 0) > 0.09) {
-        s.frame = frame; s.since = t;
-        bv.spritePlane.material = birdMat(bv.spritePre + '-' + frame);
-      }
-    }
+    let key, useStand = false;
+    if (!grounded) key = bv.spritePre + '-f' + (flapActive ? Math.floor(t / 0.018) % 8 : 1);
+    else if (Math.abs(e.vx || 0) > 0.12) {
+      s.runP += Math.abs(e.vx) * 0.3;
+      if (Math.sin(s.runP * 1.6) > 0) { useStand = true; key = bv.spritePre + '-stand'; }
+      else key = bv.spritePre + '-f4';   // wing push as the run beat
+    } else { useStand = true; key = bv.spritePre + '-stand'; }
+    if (e.skid > 0) { g.rotation.z = 0.2 * (e.face || 1); useStand = true; key = bv.spritePre + '-stand'; }
+    bv.flapPlane.visible = !useStand;
+    bv.standPlane.visible = useStand;
+    const plane = useStand ? bv.standPlane : bv.flapPlane;
+    if (s.key !== key) { s.key = key; plane.material = birdMat(key); }
     // materialize: flicker only — Y-squashing a painted sprite reads as a glitch
-    if (e.materializing > 0) g.visible = (Math.floor(t * 30) % 2) === 0;
-    g.scale.set(1, 1, 1);
+    if (e.materializing > 0) { g.visible = (Math.floor(t * 30) % 2) === 0; g.scale.set(1, 1, 1); }
+    else if (useStand && Math.abs(e.vx || 0) <= 0.12) g.scale.set(1, 1 + Math.sin(t * 2.4) * 0.012, 1);  // idle breathing
+    else g.scale.set(1, 1, 1);
   }
 
   posePtero(pv, e, t, xOff) {
@@ -722,11 +733,14 @@ class Renderer3D {
     g.visible = true;
     g.position.set(X3(e.x) + xOff, Y3(e.y), 0);
     g.rotation.y = e.face === 1 ? 0 : Math.PI;
-    const s = pv.state; s.ph += 0.09;
     g.rotation.z = -(e.vy || 0) * 0.05;
-    const frame = 'ptero-' + (Math.sin(s.ph) > 0 ? 'up' : 'down') + (e.attack ? '-open' : '');
-    if (frame !== s.frame) { s.frame = frame; pv.spritePlane.material = birdMat(frame); }
+    const s = pv.state;
+    // slow majestic 6-frame cycle; attack swaps to the open-beak extremes
+    const key = e.attack ? 'ptero-f' + (6 + (Math.floor(t / 0.15) % 2))
+                         : 'ptero-f' + (Math.floor(t / 0.13) % 6);
+    if (s.key !== key) { s.key = key; pv.spritePlane.material = birdMat(key); }
   }
+
 
   // ─── main render ───
   render(snap, dtMs) {
@@ -740,6 +754,17 @@ class Renderer3D {
     if (this.pads) { let pi = 0; for (const d of this.pads) d.material.opacity = 0.08 + 0.06 * (0.5 + 0.5 * Math.sin(t * 2.1 + pi++ * 1.7)); }
     if ((this._embT = (this._embT || 0) + 1) % (this.emberEvery || 6) === 0)
       this.particles.burst((Math.random() - 0.5) * 320, LAVA_Y + 2, 'ember', { n: 1 });
+    // ambient world motion — the cave breathes (skipped on LOW along with other extras)
+    if (this.sky) this.sky.rotation.y = Math.sin(t * 0.02) * 0.012;
+    if (this.ridges && this.quality !== 'low') {
+      let ri = 0;
+      for (const m of this.ridges) m.position.x = Math.sin(t * 0.045 + ri++ * 2.1) * 5;
+    }
+    if (this.quality !== 'low' && this._embT % 97 === 0) {
+      const d = PLATFORMS[(Math.random() * PLATFORMS.length) | 0];
+      if (d) this.particles.spawn(X3(d.x1 + Math.random() * (d.x2 - d.x1)), Y3(d.y) - 9, -6,
+        { sp: 0.04, vy: -0.55, c: 0xff7a22, life: 46, g: -0.035 });
+    }
     this.particles.update();
 
     const seen = new Set();
