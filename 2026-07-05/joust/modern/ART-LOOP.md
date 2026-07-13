@@ -272,3 +272,9 @@ folded-wing pose slightly splayed, title wordmark is plain Courier.
   changed). Ambient motion: sky dome yaw drift, ridge sway, idle-bird breathing, falling
   platform drips (all skipped on LOW). Superseded up/down frames deleted (tex 2.9M).
   6 repaint calls, running total 28.
+
+- **it15b (v1.10.1, owner: "1 ptero wing disconnected")**: the sail's hinge was the SEAM
+  CENTROID (250,101) — right for broad bird fans, wrong for the slim ptero: at down-sweep
+  angles the narrow root swung clear of the tube body (visible gap). Pivot moved to the
+  STAGED SHOULDER (274,76 — inside the torso, so the root can never leave the silhouette),
+  sweep gain 0.6→0.5. Meta-only patch; verified across 6 stepped cycle positions.
