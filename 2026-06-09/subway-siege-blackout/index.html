@@ -471,7 +471,7 @@ const ARENA_W = 1900, ARENA_H = 1500;
 const P_RADIUS = 20, SHELL_SPEED = 9.5;
 let P_SPEED = 2.6, P_FIRE_CD = 26;
 let CONE_LEN = 470, CONE_HALF = 0.42;
-const SETTINGS_KEY='ssb_settings_v2', TANK_KEY='ssb_tank', ACH_KEY='ssb_ach', LIFE_KEY='ssb_life', AUDIO_V='2.0.0';
+const SETTINGS_KEY='ssb_settings_v2', TANK_KEY='ssb_tank', ACH_KEY='ssb_ach', LIFE_KEY='ssb_life', WEAPON_KEY='ssb_weapon', AUDIO_V='2.0.0';
 // ===== SETTINGS =====
 const settings = { musicVol: .8, sfxVol: 1, shake: 'full', particles: 'auto', showFps: false };
 try { const o = JSON.parse(localStorage.getItem(SETTINGS_KEY)); if (o && typeof o==='object') Object.assign(settings, o);
@@ -487,6 +487,23 @@ const TANKS = [
 ];
 let tankIdx = 0; try { const i = TANKS.findIndex(t=>t.id===localStorage.getItem(TANK_KEY)); if(i>=0)tankIdx=i; } catch(e){}
 function curTank(){ return TANKS[tankIdx]; }
+// ===== WEAPONS (primary turret armament; CANNON = exact v2.0 behavior) =====
+const WEAPONS = [
+  { id:'cannon', name:'CANNON', desc:'Standard patrol gun. Dependable.', cdMul:1, dmg:1, shots:1, spread:0, speed:SHELL_SPEED, life:80, pierce:0, kick:1, sfx:'fire',
+    shell:{ len:15, w:4, fill:'#fff3d2', glow:'#ffd98c', holeR:38 }, muzzle:{ r:90, n:4 } },
+];
+const FALLBACK_SHELL = WEAPONS[0].shell;
+let weaponIdx = 0; try { const i = WEAPONS.findIndex(w=>w.id===localStorage.getItem(WEAPON_KEY)); if(i>=0)weaponIdx=i; } catch(e){}
+let curWeaponIdx = weaponIdx; // in-run weapon (pickups may swap it mid-run); startGame resets it to the loadout
+function curWeapon(){ return WEAPONS[curWeaponIdx]; }
+function fireWeapon(wp, a, bx, by) {
+  const n = wp.shots || 1;
+  for (let k = 0; k < n; k++) {
+    const aa = a + (n > 1 ? (k / (n - 1) - 0.5) * wp.spread : 0);
+    bullets.push({ x: bx, y: by, vx: Math.cos(aa) * wp.speed, vy: Math.sin(aa) * wp.speed, enemy: false,
+      dmg: wp.dmg, life: wp.life, pierce: (wp.pierce || 0) + (player.overdrive > 0 ? 2 : 0), hitSet: null, shell: wp.shell });
+  }
+}
 // ===== DISTRICTS (sector themes) =====
 const DISTRICTS = [
   { name:'STATION PLAZA', ground:'#262030', grid:'200,170,120', fog:'3,4,10', lamp:'255,238,200', tint:'#ffb84d' },
@@ -1004,18 +1021,19 @@ function updatePlayer() {
   const wantFire = best && Math.abs(angDiff(player.turret, Math.atan2(best.y - player.y, best.x - player.x))) < 0.13;
   const manualFire = keys[' '] || keys['f'] || mouse.down;
   if ((wantFire || manualFire) && player.fireCd <= 0) {
-    const cd = (player.overdrive > 0 ? P_FIRE_CD / 2 : P_FIRE_CD) * Math.pow(0.88, runUp.reload || 0);
+    const wp = curWeapon();
+    const cd = (player.overdrive > 0 ? P_FIRE_CD / 2 : P_FIRE_CD) * (wp.cdMul || 1) * Math.pow(0.88, runUp.reload || 0);
     player.fireCd = cd;
     const a = player.turret;
     const bx = player.x + Math.cos(a) * 34, by = player.y + Math.sin(a) * 34;
-    bullets.push({ x: bx, y: by, vx: Math.cos(a) * SHELL_SPEED, vy: Math.sin(a) * SHELL_SPEED, enemy: false, dmg: 1, life: 80, pierce: player.overdrive > 0 ? 2 : 0, hitSet: null });
-    player.recoil = 1;
-    flashes.push({ x: bx, y: by, r: 90, life: 7, max: 7 });
-    spawnParticles(bx, by, 4, { angle: a, spread: 0.4, smax: 3, lmax: 12, color: '#ffe9b8' });
+    fireWeapon(wp, a, bx, by);
+    player.recoil = wp.kick || 1;
+    flashes.push({ x: bx, y: by, r: wp.muzzle.r, life: 7, max: 7 });
+    spawnParticles(bx, by, wp.muzzle.n, { angle: a, spread: 0.4, smax: 3, lmax: 12, color: '#ffe9b8' });
     // shell casing
     spawnParticles(player.x, player.y, 1, { angle: a + Math.PI / 2, spread: 0.3, smin: 1.4, smax: 2.4, color: '#d8a85a', fade: 'spark', lmax: 30 });
-    shake(2, 4);
-    Snd.fire();
+    shake(2 * (wp.kick || 1), 4);
+    (Snd[wp.sfx] || Snd.fire).call(Snd);
   }
   if (player.overdrive > 0) { player.overdrive--; if (player.overdrive === 0) document.getElementById('od-badge').classList.remove('show'); }
 }
@@ -1184,7 +1202,7 @@ function startGame() {
   const tk = curTank();
   P_SPEED = tk.speed; P_FIRE_CD = tk.fireCd; CONE_LEN = tk.cone; CONE_HALF = tk.coneHalf;
   player.hpMax = 100 + 0; player.hp = tk.hp; player.hpMax = tk.hp; player.shield = tk.shield; player.alive = true;
-  player.fireCd = 0; player.overdrive = 0; player.target = null;
+  player.fireCd = 0; player.overdrive = 0; player.target = null; curWeaponIdx = weaponIdx;
   G.combo = 0; G.comboTimer = 0; G.comboMax = 0; G.overdriveArmed = true; G.waveHit = false; G.hitStop = 0; G.upgradePending = false;
   runUp = { reload:0, armor:0, shieldRegen:0, magnet:0, crit:0, splash:0, light:0 };
   barrelKills = 0; curDistrict = districtFor(1); districtBanner = null; G.intermission = 0; mortarMarks = []; qaGod = false;
@@ -1628,9 +1646,10 @@ function drawBullets() {
       ctx.fillStyle = '#ffb09a';
       ctx.fillRect(-7, -(b.big ? 2.6 : 1.8), 12, (b.big ? 5.2 : 3.6));
     } else {
-      ctx.shadowColor = '#ffd98c'; ctx.shadowBlur = 10;
-      ctx.fillStyle = '#fff3d2';
-      ctx.fillRect(-9, -2, 15, 4);
+      const sh = b.shell || FALLBACK_SHELL;
+      ctx.shadowColor = sh.glow; ctx.shadowBlur = 10;
+      ctx.fillStyle = sh.fill;
+      ctx.fillRect(-9, -sh.w / 2, sh.len, sh.w);
     }
     ctx.restore();
   }
@@ -1704,7 +1723,7 @@ function renderLights(sx, sy) {
     hole(l.x, l.y, l.subway ? 210 : 150, 0.75 * fl);
   }
   // bullets glow
-  for (const b of bullets) hole(b.x, b.y, b.enemy ? 30 : 38, 0.8);
+  for (const b of bullets) hole(b.x, b.y, b.enemy ? 30 : (b.shell || FALLBACK_SHELL).holeR, 0.8);
   // flashes (muzzle, explosions)
   for (const f of flashes) hole(f.x, f.y, f.r * (f.life / f.max), 0.9);
   // pickups glow softly
@@ -2011,7 +2030,7 @@ function loop(ts) {
 document.querySelectorAll('.version').forEach(el => { el.textContent = VERSION; });
 
 window.__blackoutQA = {
-  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), slug: SCORES_API }; },
+  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), slug: SCORES_API }; },
   tick(n) { n = n || 1; const wr = window.__blackoutQA._noloop; for (let i = 0; i < n; i++) update(); render(); return this.snapshot(); },
   start() { Snd.resume(); startGame(); qaGod = true; return this.snapshot(); },
   setWave(w) { enemies = []; bullets = []; G.pending = []; G.intermission = 0; startWave(w); return this.snapshot(); },
@@ -2021,6 +2040,8 @@ window.__blackoutQA = {
   grantOverdrive() { G.combo = 12; G.overdriveArmed = true; engageOverdrive(); return this.snapshot(); },
   setCombo(n) { G.combo = n; G.comboTimer = 150; return this.snapshot(); },
   selectTank(i) { tankIdx = ((i % TANKS.length) + TANKS.length) % TANKS.length; try { localStorage.setItem(TANK_KEY, curTank().id); } catch (e) {} return curTank().id; },
+  selectWeapon(i) { weaponIdx = ((i % WEAPONS.length) + WEAPONS.length) % WEAPONS.length; curWeaponIdx = weaponIdx; try { localStorage.setItem(WEAPON_KEY, curWeapon().id); } catch (e) {} return curWeapon().id; },
+  grantWeapon(i) { curWeaponIdx = ((i % WEAPONS.length) + WEAPONS.length) % WEAPONS.length; return curWeapon().id; },
   god(v) { qaGod = v !== false; },
   bootAudio() { Snd.resume(); },
   clickBtnMusic() { updateMusic(); },

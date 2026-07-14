@@ -10,8 +10,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 00 DONE (2026-07-14) — survey + baselines + this ledger + test rig.
-- **Suite:** 24/24 green (2 consecutive runs). Run: `node tests/run.mjs suite` (exit 0 = green).
+- **Iteration:** 01 DONE (2026-07-14) — weapon framework in. Game still at v2.0.0 behavior parity.
+- **Suite:** 27/27 green (2 consecutive runs). Run: `node tests/run.mjs suite` (exit 0 = green).
+  Also: `node tests/run.mjs probe '<js expr>'` evaluates any expression in the booted game (debug).
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
 - **Perf baseline** (`node tests/run.mjs perf`, wave 20, ~26 enemies):
@@ -21,7 +22,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 01 (weapon framework).
+- **Next:** item 02 (SCATTER — plus the armory/garage UI + weapon-crate pickup split from 01).
 
 ## Iteration log
 
@@ -29,6 +30,14 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   DevToolsActivePort → no port collisions). Suite 24/24. Baselines captured. Survey findings below.
   4 initial test failures were all wrong test assumptions (title-vs-menu state, audio boots on
   resume, overdriveArmed semantics, boss pending-queue + setTimeout(700) upgrade), not game bugs.
+- **01** (2026-07-14): Weapon framework. WEAPONS table (data-driven: cdMul/dmg/shots/spread/speed/
+  life/pierce/kick/sfx/shell{len,w,fill,glow,holeR}/muzzle{r,n}), CANNON def = exact v2 numbers.
+  `weaponIdx` (persisted loadout, `ssb_weapon`) vs `curWeaponIdx` (in-run, reset in startGame) —
+  pickups later swap only the in-run one. `fireWeapon()` handles shots/spread; bullets carry
+  `shell` (shared ref — no per-frame alloc); drawBullets + renderLights read per-bullet shell
+  (holeR). QA: selectWeapon/grantWeapon + snapshot.weapon/.weapons. Suite 24→27 (framework
+  defaults/persist, loadout-on-start, auto-fire-kills). Perf 0.085/2.248 ms — within gate.
+  SPLIT: armory UI (garage) + weapon-crate pickup drops deferred to 02 (need a 2nd weapon).
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -58,11 +67,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 ## Backlog (one per iteration; split when big)
 
 - [x] 00 survey + baselines + rig + ledger
-- [ ] 01 **weapon framework**: data-driven weapon defs; CANNON refactored in as default; loadout
-      persisted `ssb_weapon` (additive — never break ssb_tank/ach/life); pickup + post-boss-upgrade
-      integration; QA hooks `selectWeapon/grantWeapon`; suite items for framework. No new weapons.
-      Regression 24/24 proves the refactor.
-- [ ] 02 SCATTER (spread shot)
+- [x] 01 weapon framework (see log; armory UI + weapon-crate pickups split forward into 02)
+- [ ] 02 SCATTER (spread shot) + ARMORY select UI in garage + weapon-crate pickup that grants
+      the run-weapon (uses grantWeapon path; drops gated to waves with >1 weapon unlocked)
 - [ ] 03 RAILGUN (instant piercing beam — MUST dedupe across the 2 substeps, hitSet pattern :1057)
 - [ ] 04 INCINERATOR (short cone + burn DoT — DoT deaths still via killEnemy())
 - [ ] 05 TESLA (chain-arc between REVEALED enemies — define stalker interaction)
@@ -145,3 +152,10 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - District shots carry lingering medal-toast overlays (setWave jumps unlock wave medals) —
   deterministic, fine for like-for-like diffs; don't chase them as regressions.
 - Suite checks 20/21 assert tank stats (scout 70hp, bulwark 140hp/2sh) — update if rebalanced.
+- **Spawn geometry**: `spawn()` drops enemies at player.x+300 — that spot is LOS-BLOCKED by a world
+  obstacle from the default player spawn, and N/NE/NW/S at 150px are blocked too (station structure
+  above, wall below). For tests needing turret lock: place enemies at player.x+150 (east) and pin
+  `e.reveal=200` each few ticks (idle sweep won't reveal them reliably). Probed 2026-07-14.
+- **Validate NEW tests against the pre-change build** before blaming a refactor — check 26 "failed"
+  on geometry that would have failed on v2 too (it had never run on v2). `git stash` + suite run,
+  or reason it out (does the change touch that path at all?).
