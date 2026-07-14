@@ -10,9 +10,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 06 DONE (2026-07-14) — ordnance framework + FLARE. Last ship: **v3.1.0 LIVE**
-  (site aeed7c2d1, mirror e0e7345). Unshipped since: item 06.
-- **Suite:** 35/35 green (2 consecutive runs). Run: `node tests/run.mjs suite`.
+- **Iteration:** 07 DONE (2026-07-14) — EMP ordnance. Last ship: **v3.1.0 LIVE**
+  (site aeed7c2d1, mirror e0e7345). Unshipped since: items 06, 07.
+- **Suite:** 37/37 green. Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
@@ -23,7 +23,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 07 (EMP — screen-wide reveal + brief stun; stalker interaction + per-run reset).
+- **Next:** item 08 (weapon VFX pass 1: muzzle light punches, tracers, impact sparks, casings —
+  pooled, no hot-loop alloc). Plan: ship batch 2 (v3.2.0) after item 10 (audio) lands.
 
 ## Iteration log
 
@@ -97,6 +98,15 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   cap). Placeholder SFX = ui('pickup') until item 10. Test gotcha again: flare lobs along the
   IDLE TURRET (points up into blocked station) — set q.player.turret=0 (east) before
   q.fireOrdnance() in tests. Perf 2.38 in gate. Shot flare-pool.png.
+- **07** (2026-07-14): EMP as second ordnance slot (Q=flare, E=EMP; separate `G.empAmmo` start
+  1/cap 3; #btn-emp cyan button above flare btn). fireEmp: ALL live enemies get reveal≥240
+  (**cloak is electronics — stalkers revealed too**) + `e.stun` 90 (boss 45); stun block in
+  updateEnemies skips movement/fire, crackles cyan sparks, reveal still decays. Visual: empFx
+  shockwave ring on main canvas + **expanding hole in renderLights that lifts the whole blackout
+  then lets it crush back** (40→1400px, alpha fades as it grows). 'emp' pickup in rare 2% band
+  above flare band. QA fireEmp/addEmp + snapshot.empAmmo/.empActive. Suite 35→37 (arena-wide
+  reveal+stun with movement-freeze/resume assertions; ammo gate/resupply/cap). Placeholder SFX
+  ui('overdrive') until item 10. Perf 0.072/2.112 — best yet. Shot emp-wave.png.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -133,7 +143,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 05 TESLA chain arc; cloak rule matches turret; burning stalkers arc-able (see log)
 - [x] 05b SHIPPED v3.1.0 LIVE 2026-07-14 (site aeed7c2d1 + mirror e0e7345; see log)
 - [x] 06 ordnance framework + FLARE (real touch button shipped early, not a placeholder; see log)
-- [ ] 07 EMP: screen-wide reveal + brief stun; stalker interaction; per-run state reset.
+- [x] 07 EMP: arena-wide reveal (cloak-piercing) + stun; per-run resets (see log)
 - [ ] 08 weapon VFX pass 1: muzzle-flash light punches, tracers/beam glow, impact sparks, casings
       — pooled, zero per-frame allocation in hot loop; perf gate applies.
 - [ ] 09 weapon VFX pass 2: explosion light blooms, scorch/debris decals (capped pool, reset per
