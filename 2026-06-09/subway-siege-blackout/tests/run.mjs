@@ -345,7 +345,15 @@ async function suite() {
     if (r.a2 !== 1) throw new Error('resupply: ' + JSON.stringify(r));
     if (r.cap !== 3) throw new Error('cap: ' + JSON.stringify(r));
   });
-  await check('37 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('37 flash FX setting persists + render survives all levels', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};const out={};
+      for(const v of ['reduced','off','full']){q.opt('flash',v);q.start();q.god(true);q.killAll();q.spawn('scout');
+        const e=q.enemies.filter(x=>!x.dead)[0];e.x=q.player.x+150;e.y=q.player.y;e.reveal=200;
+        q.tick(30);out[v]=JSON.parse(localStorage.getItem('ssb_settings_v2')).flash;}
+      return out;})()`);
+    if (r.reduced !== 'reduced' || r.off !== 'off' || r.full !== 'full') throw new Error(JSON.stringify(r));
+  });
+  await check('38 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;
