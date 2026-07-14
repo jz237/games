@@ -356,7 +356,7 @@
    WASD + mouse on desktop. Darkness/searchlight lighting engine.
    ========================================================================== */
 (function () {
-const VERSION = 'v3.1.0';
+const VERSION = 'v3.2.0';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/subway-siege-blackout';
 const HS_KEY = 'ssb_tank_highscores_v1';
 const MUTE_KEY = 'ssb_tank_muted';
@@ -473,7 +473,7 @@ const Snd = (function () {
     boom() { if (!playBuf('explode_small', .7, .08)) { noise(0.6, 0.55, 800); blip(75, 0.55, 'sawtooth', 0.32, 26); } },
     bigBoom() { if (!playBuf('explode_big', .85, .05)) { noise(0.9, 0.65, 650); blip(60, 0.8, 'sawtooth', 0.4, 22); } },
     barrelBoom() { musicDuck = .35; musicDuckT = 70; if (!playBuf('barrel', .95)) { noise(0.9, 0.65, 650); blip(60, 0.8, 'sawtooth', 0.4, 22); } },
-    ping() { if (G.t - (this._pt || 0) < 5) return; this._pt = G.t; if (!playBuf('impact_metal', .3, .12)) blip(2300, 0.07, 'square', 0.14, 950); },
+    ping() { const dt = G.t - (this._pt || 0); if (dt >= 0 && dt < 5) return; this._pt = G.t; if (!playBuf('impact_metal', .3, .12)) blip(2300, 0.07, 'square', 0.14, 950); }, // negative dt = new run (G.t reset) — play, don't mute
     hitMe() { if (!playBuf('player_hit', .7)) { noise(0.24, 0.45, 520); blip(150, 0.2, 'square', 0.28, 60); } },
     pickup() { if (!playBuf('pickup', .7, .05)) { blip(740, 0.09, 'triangle', 0.24); setTimeout(() => blip(1180, 0.13, 'triangle', 0.24), 85); } },
     horn() { if (!playBuf('boss_horn', .8)) { blip(208, 0.32, 'sawtooth', 0.26); setTimeout(() => blip(156, 0.5, 'sawtooth', 0.28), 260); } },
