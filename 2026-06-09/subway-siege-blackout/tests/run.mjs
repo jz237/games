@@ -114,10 +114,10 @@ async function suite() {
   await check('01 boot title state', async () => { const s = await snap(); if (s.state !== 'title') throw new Error('state=' + s.state); return s.version; });
   await check('02 version format', async () => { const s = await snap(); if (!/^v\d+\.\d+\.\d+$/.test(s.version)) throw new Error(s.version); return s.version; });
   await check('03 leaderboard slug unchanged', async () => { const s = await snap(); if (!s.slug.endsWith('/scores/subway-siege-blackout')) throw new Error(s.slug); });
-  await check('04 audio buffers decode (>=12/14)', async () => {
+  await check('04 audio buffers decode (>=18/21)', async () => {
     await c.eval(`${QA}.bootAudio()`); // buffers only fetch/decode once the ctx exists
-    let n = 0; for (let i = 0; i < 50; i++) { n = (await snap()).audioBuffers; if (n >= 12) break; await sleep(200); }
-    if (n < 12) throw new Error('buffers=' + n); return n + '/14';
+    let n = 0; for (let i = 0; i < 50; i++) { n = (await snap()).audioBuffers; if (n >= 18) break; await sleep(200); }
+    if (n < 18) throw new Error('buffers=' + n); return n + '/21';
   });
   await check('05 start -> play wave1', async () => { const s = await c.eval(`${QA}.start()`); if (s.state !== 'play' || s.wave !== 1 || !s.alive) throw new Error(JSON.stringify({ state: s.state, wave: s.wave, alive: s.alive })); });
   await check('06 tick(120) advances clean', async () => { const s = await c.eval(`${QA}.tick(120)`); if (s.state !== 'play') throw new Error('state=' + s.state); });

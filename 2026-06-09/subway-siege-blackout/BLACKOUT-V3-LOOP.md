@@ -10,9 +10,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 09 DONE (2026-07-14) — VFX pass 2 + Flash FX accessibility. Last ship: **v3.1.0
-  LIVE** (site aeed7c2d1, mirror e0e7345). Unshipped since: items 06–09.
-- **Suite:** 38/38 green. Run: `node tests/run.mjs suite`.
+- **Iteration:** 10 DONE (2026-07-14) — weapon/ordnance ElevenLabs audio (7 new SFX, 21 total).
+  Last ship: **v3.1.0 LIVE** (site aeed7c2d1, mirror e0e7345). Unshipped: items 06–10.
+- **Suite:** 38/38 green (21/21 buffers decode). Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
@@ -23,11 +23,11 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 10 — **the audio batch** (ElevenLabs MCP): per-weapon fire+impact SFX, flare
-  sizzle, EMP thump, overdrive riser, boss stinger; flat in audio/, ogg; bump AUDIO_V;
-  listen/spectrogram-check every render; synth fallback per sound; wire wp.sfx keys + ordnance
-  sounds; drop the sfxEvery=6 flame hack for a proper loopable-ish flame sound.
-  THEN ship batch 2 (v3.2.0, items 06–10).
+- **Next:** **SHIP BATCH 2 as v3.2.0** (items 06–10: flare+EMP ordnance, VFX passes, weapon
+  audio). Ship protocol per 05b: adversarial review of `git diff 275c20d..HEAD -- index.html`
+  (+ audio adds), bump VERSION to v3.2.0 (AUDIO_V already 3.2.0), copy index.html **+ 7 new
+  audio/*.ogg** to deploy, land+deploy from clean worktree, verify live (audio requests too!),
+  mirror cherry-pick `275c20d..HEAD`, memory refresh.
 
 ## Iteration log
 
@@ -130,6 +130,18 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   fighting). Perf 0.125/2.27 in gate (msPerUpdate creeping up 0.07→0.125 over the loop — burn/
   stun/flare/emp blocks; fine vs budget but WATCH it). Probe gotcha: camera lerps from origin at
   start() — tick(60+) before staging screenshots or the action lands off-frame. Shot vfx-pass2b.png.
+- **10** (2026-07-14): Weapon/ordnance audio — 7 ElevenLabs SFX (fire_scatter/_railgun/_flame/
+  _tesla, flare_launch, emp_blast, impact_metal), ogg q4 in audio/ (~118KB). ALL renders were
+  peak-normalized near 0dB vs v2's quiet mix (fire.ogg max −12.6dB) — re-encoded from mp3 masters
+  with per-file −5..−14dB gain to land peaks −8..−12dB. Spectrogram-eyeballed all 7 (clean:
+  transients, sustained flare sizzle, EMP sub+static, metallic partials on impact). Snd methods
+  fireScatter/fireRail/fireFlame/fireTesla/flareLaunch/empBlast (playBuf||synth fallback idiom;
+  empBlast ducks music like barrelBoom); ping() now impact_metal buffer with a 5-tick throttle
+  (it fires per non-kill hit — incinerator would spam). Weapon sfx keys wired (grep-asserted
+  every key has a method — silent Snd.fire fallback would hide typos); flame sfxEvery 6→4.
+  AUDIO_V 2.0.0→3.2.0 (cache-bust). Suite check 04 → ≥18/21 (21/21 in practice); 38/38 green.
+  Perf: msPerUpdate 0.244 (audio-node churn from buffered ping, headless artifact — absolute
+  cost trivial; render gate 2.39 ✓).
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -169,9 +181,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 07 EMP: arena-wide reveal (cloak-piercing) + stun; per-run resets (see log)
 - [x] 08 weapon VFX pass 1: tinted flash glows, tracers, directional sparks, gated casings (see log)
 - [x] 09 VFX pass 2: blooms, debris decals, Flash FX setting + reduced-motion default (see log)
-- [ ] 10 weapon/ordnance SFX (ElevenLabs MCP, all-original): per-weapon fire + impact variants,
-      flare sizzle, EMP thump, overdrive riser, boss stinger. Flat in `audio/`, ogg SFX; bump
-      AUDIO_V; listen/spectrogram-eyeball every render; synth fallback for every new sound.
+- [x] 10 weapon/ordnance SFX — 7 new, loudness-matched, spectrogram-checked (see log; overdrive
+      riser + boss stinger already existed from v2, not duplicated)
 - [ ] 11 district engine: data-driven defs — ground art, prop set, ambient light sources punching
       darkness holes (flicker streetlights, fires, neon), fog tint, ambient loop, weather layer.
 - [ ] 12 rebuild existing 5 districts as real environments (props + ambient lights, not swaps)
