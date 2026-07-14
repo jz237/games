@@ -10,9 +10,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 08 DONE (2026-07-14) — weapon VFX pass 1. Last ship: **v3.1.0 LIVE**
-  (site aeed7c2d1, mirror e0e7345). Unshipped since: items 06, 07, 08.
-- **Suite:** 37/37 green. Run: `node tests/run.mjs suite`.
+- **Iteration:** 09 DONE (2026-07-14) — VFX pass 2 + Flash FX accessibility. Last ship: **v3.1.0
+  LIVE** (site aeed7c2d1, mirror e0e7345). Unshipped since: items 06–09.
+- **Suite:** 38/38 green. Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
@@ -23,9 +23,11 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 09 (VFX pass 2: explosion light blooms, scorch/debris decals capped+reset,
-  hit-stop tuning, **flash-intensity setting + prefers-reduced-motion default**).
-  Then 10 (audio) → ship batch 2 (v3.2.0).
+- **Next:** item 10 — **the audio batch** (ElevenLabs MCP): per-weapon fire+impact SFX, flare
+  sizzle, EMP thump, overdrive riser, boss stinger; flat in audio/, ogg; bump AUDIO_V;
+  listen/spectrogram-check every render; synth fallback per sound; wire wp.sfx keys + ordnance
+  sounds; drop the sfxEvery=6 flame hack for a proper loopable-ish flame sound.
+  THEN ship batch 2 (v3.2.0, items 06–10).
 
 ## Iteration log
 
@@ -117,6 +119,17 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   spread 1.1). Casings + muzzle smoke gated to `casing:true` (cannon/scatter only — energy
   weapons no longer eject brass). No new suite checks (visual pass; error check + screenshot
   eyeball). Suite 37/37, perf 0.11/2.18 in gate. Shot vfx-pass1.png.
+- **09** (2026-07-14): VFX pass 2. Scorch pool ALREADY existed (cap 50, reset via buildWorld) —
+  extended with 2–4 static wreckage `deb` chunks per explosion (drawn in drawScorch, zero
+  per-frame alloc). Explosion light BLOOMS: `f.grow` flashes expand as they fade in renderLights
+  (muzzles still shrink). **Flash FX setting** (`settings.flash` full/reduced/off = Min;
+  flashMul 1/0.55/0.25 — never 0, light is gameplay info): applied to flash light-holes, tinted
+  glow layer (skipped entirely at Min), and the EMP blackout-lift pulse. **prefers-reduced-motion
+  → defaults shake+flash to 'reduced' when no saved settings** (never overrides user choice).
+  Options row + segInit('opt-flash'). Suite 37→38 (setting persists across all 3 levels while
+  fighting). Perf 0.125/2.27 in gate (msPerUpdate creeping up 0.07→0.125 over the loop — burn/
+  stun/flare/emp blocks; fine vs budget but WATCH it). Probe gotcha: camera lerps from origin at
+  start() — tick(60+) before staging screenshots or the action lands off-frame. Shot vfx-pass2b.png.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -155,9 +168,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 06 ordnance framework + FLARE (real touch button shipped early, not a placeholder; see log)
 - [x] 07 EMP: arena-wide reveal (cloak-piercing) + stun; per-run resets (see log)
 - [x] 08 weapon VFX pass 1: tinted flash glows, tracers, directional sparks, gated casings (see log)
-- [ ] 09 weapon VFX pass 2: explosion light blooms, scorch/debris decals (capped pool, reset per
-      run), micro hit-stop tuning; **flash-intensity setting** + prefers-reduced-motion default
-      (shake setting already exists).
+- [x] 09 VFX pass 2: blooms, debris decals, Flash FX setting + reduced-motion default (see log)
 - [ ] 10 weapon/ordnance SFX (ElevenLabs MCP, all-original): per-weapon fire + impact variants,
       flare sizzle, EMP thump, overdrive riser, boss stinger. Flat in `audio/`, ogg SFX; bump
       AUDIO_V; listen/spectrogram-eyeball every render; synth fallback for every new sound.
