@@ -224,7 +224,27 @@ async function suite() {
     if (r.dk < 1) throw new Error('auto-fire killed nothing: ' + JSON.stringify(r));
     return `+${r.dk} kills`;
   });
-  await check('27 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('27 scatter fires and kills up close', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};const id=q.selectWeapon(1);q.start();q.god(true);q.killAll();const k0=q.snapshot().kills;
+      for(let i=0;i<3;i++)q.spawn('scout');
+      for(const e of q.enemies)if(!e.dead){e.x=q.player.x+150;e.y=q.player.y;}
+      for(let i=0;i<60;i++){for(const e of q.enemies)if(!e.dead)e.reveal=200;q.tick(10);}
+      const dk=q.snapshot().kills-k0;q.selectWeapon(0);return {id,dk,weapon:q.snapshot().weapon};})()`);
+    if (r.id !== 'scatter' || r.dk < 1) throw new Error(JSON.stringify(r));
+    return `+${r.dk} kills`;
+  });
+  await check('28 weapon crate swaps run-weapon; restart restores loadout', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};q.selectWeapon(0);q.start();q.god(true);q.addPickup('weapon');q.tick(30);
+      const inRun=q.snapshot().weapon;const after=q.start().weapon;return {inRun,after};})()`);
+    if (r.inRun !== 'scatter') throw new Error('crate gave ' + r.inRun);
+    if (r.after !== 'cannon') throw new Error('restart kept ' + r.after);
+  });
+  await check('29 armory UI selects + persists', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};q.endGame();q.clickBtn('btn-garage');const ok1=q.clickBtn('wpn-card-1');const ls1=localStorage.getItem('ssb_weapon');
+      const ok0=q.clickBtn('wpn-card-0');const ls0=localStorage.getItem('ssb_weapon');q.clickBtn('btn-garage-back');return {ok1,ls1,ok0,ls0};})()`);
+    if (!r.ok1 || r.ls1 !== 'scatter' || !r.ok0 || r.ls0 !== 'cannon') throw new Error(JSON.stringify(r));
+  });
+  await check('30 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;
@@ -264,10 +284,13 @@ async function perf() {
   console.log(JSON.stringify(r));
 }
 
-// ---------- probe: node tests/run.mjs probe '<js expr evaluated in page>' ----------
+// ---------- probe: node tests/run.mjs probe '<js expr evaluated in page>' [shot.png] ----------
 async function probe() {
   const { c, cleanup } = await boot();
-  try { console.log(JSON.stringify(await c.eval(process.argv[3] || `${QA}.snapshot()`), null, 1)); }
+  try {
+    console.log(JSON.stringify(await c.eval(process.argv[3] || `${QA}.snapshot()`), null, 1));
+    if (process.argv[4]) { await sleep(250); await c.shot(process.argv[4]); console.log('shot ->', process.argv[4]); }
+  }
   finally { if (c.errors.length) console.error('PAGE ERRORS:', c.errors.slice(0, 5)); await cleanup(); }
 }
 
