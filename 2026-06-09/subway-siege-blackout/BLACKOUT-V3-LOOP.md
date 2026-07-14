@@ -10,8 +10,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 11 DONE (2026-07-14) — district engine (props/ambient lights/weather layers).
-  Last ship: **v3.2.0 LIVE** (site 9f51391c3, mirror b5a8650). Unshipped: item 11.
+- **Iteration:** 12 DONE (2026-07-14) — five districts rebuilt with real environmental character.
+  Last ship: **v3.2.0 LIVE** (site 9f51391c3, mirror b5a8650). Unshipped: items 11, 12.
 - **Suite:** 39/39 green. Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
@@ -23,9 +23,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 12 (rebuild the 5 districts as REAL environments: richer per-district prop
-  mixes/kinds, ambient-light placement character, weather assignments finalized — engine from 11
-  makes this data-tuning + a few new prop kinds).
+- **Next:** item 13 (add 3–5 NEW districts using the engine: new palettes + prop mixes + weather;
+  wave rotation auto-extends via districtFor modulo). Update suite check 14 (district rotation
+  expects the 5-name cycle — new list changes wave→district mapping!) and check 39's weather map.
 
 ## Iteration log
 
@@ -161,6 +161,13 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   embers; runs in render so it drifts even in pause — intended ambience). Weather live: CRIMSON
   embers, COLD rain. snapshot.dProps/.dLights/.weather. Suite 38→39 (per-district layer counts +
   weather map). Perf 0.23/2.42 in gate. Shot district-rain.png.
+- **12** (2026-07-14): Districts get CHARACTER — 6 new prop kinds (bench+kiosk STATION; freight
+  container CRIMSON; reflective puddle COLD; hazard drum w/ green glow TOXIC; flickering NEON
+  panel VIOLET) + 'motes' weather (toxic spores, slow green drift) on TOXIC. Axis-snapped
+  rotation for benches/kiosks/containers (yard-jitter on containers); per-kind placement
+  clearance. QA `districtFx` getter (used to teleport-and-screenshot props: find prop, set
+  player.x/y beside it, tick 140 for cam). Suite 39/39 (weather map updated TOXIC→motes).
+  Perf 0.077/2.33. Shots district-violet/violet-neon.png.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -204,7 +211,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
       riser + boss stinger already existed from v2, not duplicated)
 - [x] 10b SHIPPED v3.2.0 LIVE 2026-07-14 (site 9f51391c3 + mirror b5a8650; revert survived — log)
 - [x] 11 district engine: props/ambient-light/weather layers, data-driven per district (see log)
-- [ ] 12 rebuild existing 5 districts as real environments (props + ambient lights, not swaps)
+- [x] 12 five districts rebuilt: bench/kiosk/container/puddle/drum/neon + motes weather (see log)
 - [ ] 13 add 3–5 NEW districts (weather: rain streaks, fog banks, embers)
 - [ ] 14 district hazards/events (≤1 per district: steam vents, blackout surge shrinking the cone)
 - [ ] 15 district ambient audio loops wired into existing pause/mute/duck paths.
