@@ -10,9 +10,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 14 DONE (2026-07-14) — district hazards (steam vents + blackout surges).
-  Last ship: **v3.2.0 LIVE**. Unshipped: items 11–14.
-- **Suite:** 40/40 green. Run: `node tests/run.mjs suite`.
+- **Iteration:** 15 DONE (2026-07-14) — district ambient audio loops (3 shared ElevenLabs beds).
+  Last ship: **v3.2.0 LIVE**. Unshipped: items 11–15 → READY TO SHIP batch 3.
+- **Suite:** 41/41 green (24/24 buffers). Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
@@ -23,9 +23,10 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 15 (district ambient audio loops via ElevenLabs — a few shared short loops
-  mapped per district, wired through existing pause/mute/duck paths; bump AUDIO_V).
-  Then SHIP batch 3 (v3.3.0, items 11–15).
+- **Next:** **SHIP BATCH 3 as v3.3.0** (items 11–15: district engine, character, 4 new districts,
+  hazards, ambience). Protocol per 10b: adversarial review of the batch diff, VERSION→v3.3.0
+  (AUDIO_V already 3.3.0), copy index.html + 3 amb_*.ogg to deploy, temp-worktree landing,
+  verify live ×3 + audio 200s, mirror cherry-pick by EXPLICIT COMMIT LIST, memory refresh.
 
 ## Iteration log
 
@@ -183,6 +184,16 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   hard-flicker) → ON 160t (cone len ×0.55 via surgeK() at reveal+cone-render+player-hole sites,
   district wells OUT) → restore + toast. QA triggerSurge/ventBurst + snapshot hazard/surgeState/
   vents. Suite 39→40 (full surge lifecycle + drone scalded dead). Perf 0.062/2.33.
+- **15** (2026-07-14): District ambience — 3 shared 5s SEAMLESS loops (ElevenLabs `loop:true`):
+  amb_city (STATION/VIOLET/GHOST/AZURE), amb_rain (COLD/HARBOR), amb_industrial (CRIMSON/TOXIC/
+  EMBER) via `ambKey` def field. amb_city render came out near-silent (max −32dB raw) — needed
+  +14dB corrective gain vs −13/−14 attenuation for the others; targets max −18..−26 (ambience
+  sits UNDER the SFX bed). Playback: looping WebAudio source → ambGain(0.42) → master (inherits
+  sfxVol+mute free); tickDuck picks up late-decoded buffers; updateAmbient() hooked into
+  updateMusic() (startWave already ends with updateMusic → district switches covered) + endGame
+  (which does NOT call updateMusic — found via failing test, ambience kept playing after death).
+  Ambience persists through pause (matches music behavior). AUDIO_V→3.3.0. Suite 40→41
+  (mapping city→rain→industrial + stops on over; buffers 24/24). Perf 0.071/2.31.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -229,7 +240,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 12 five districts rebuilt: bench/kiosk/container/puddle/drum/neon + motes weather (see log)
 - [x] 13 four new districts, 9-district rotation, fog weather + wcol tinting (see log)
 - [x] 14 hazards: steam vents (scald+slow) + blackout surges (cone shrink, city dark) — see log
-- [ ] 15 district ambient audio loops wired into existing pause/mute/duck paths.
+- [x] 15 district ambience: 3 shared seamless loops, ambKey mapping, stops on over (see log)
 - [ ] 16 balance pass: DPS parity matrix vs CANNON across tanks×weapons; score economy comparable
       (leaderboard history persists — don't inflate); perfect-wave + combo achievable per loadout.
 - [ ] 17 touch/mobile: ordnance buttons; single-fire-per-tap via CDP touch emulation; portrait ok.

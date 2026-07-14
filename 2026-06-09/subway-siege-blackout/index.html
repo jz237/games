@@ -399,9 +399,11 @@ const Snd = (function () {
   let muted = localStorage.getItem(MUTE_KEY) === '1';
   const buffers = {}; let loaded = false; const lastPlayed = {};
   const SFX = ['fire','explode_small','explode_big','barrel','pickup','player_hit','wave_clear','boss_horn','upgrade','achievement','menu_click','combo','overdrive','perfect',
-    'fire_scatter','fire_railgun','fire_flame','fire_tesla','flare_launch','emp_blast','impact_metal'];
+    'fire_scatter','fire_railgun','fire_flame','fire_tesla','flare_launch','emp_blast','impact_metal',
+    'amb_city','amb_rain','amb_industrial'];
   const MUSIC = { title:{el:null,file:'music_title.mp3',base:.55}, patrol:{el:null,file:'music_patrol.mp3',base:.45}, boss:{el:null,file:'music_boss.mp3',base:.62} };
   let curMusic = null, musicDuck = 1, musicDuckT = 0;
+  let ambSrc = null, ambWant = null, ambGain = null;
   function ensure() {
     if (ac) return;
     ac = new (window.AudioContext || window.webkitAudioContext)();
@@ -484,7 +486,18 @@ const Snd = (function () {
     playMusic, stopMusic, applyVolumes, applyMusicVol,
     loadedCount() { return Object.keys(buffers).length; },
     curMusic() { return curMusic; },
-    tickDuck() { if (musicDuckT > 0) { musicDuckT--; musicDuck = Math.min(1, musicDuck + 0.012); applyMusicVol(); if (musicDuckT <= 0) musicDuck = 1; } },
+    tickDuck() { if (musicDuckT > 0) { musicDuckT--; musicDuck = Math.min(1, musicDuck + 0.012); applyMusicVol(); if (musicDuckT <= 0) musicDuck = 1; }
+      if (ambWant && (!ambSrc || ambSrc._id !== ambWant) && ac && buffers[ambWant]) this.startAmbient(ambWant); }, // late-decoded loop pickup
+    startAmbient(id) {
+      ambWant = id;
+      if (!ac || !buffers[id] || (ambSrc && ambSrc._id === id)) return;
+      if (ambSrc) { try { ambSrc.stop(); } catch (e) {} ambSrc = null; }
+      if (!ambGain) { ambGain = ac.createGain(); ambGain.gain.value = 0.42; ambGain.connect(master); }
+      const s = ac.createBufferSource(); s.buffer = buffers[id]; s.loop = true; s._id = id; s.connect(ambGain); s.start();
+      ambSrc = s;
+    },
+    stopAmbient() { ambWant = null; if (ambSrc) { try { ambSrc.stop(); } catch (e) {} ambSrc = null; } },
+    curAmbient() { return ambWant; },
     toggleMute() { muted = !muted; localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); applyVolumes(); if (muted) stopMusic(); else updateMusic(); return muted; },
     isMuted() { return muted; }
   };
@@ -497,7 +510,7 @@ const ARENA_W = 1900, ARENA_H = 1500;
 const P_RADIUS = 20, SHELL_SPEED = 9.5;
 let P_SPEED = 2.6, P_FIRE_CD = 26;
 let CONE_LEN = 470, CONE_HALF = 0.42;
-const SETTINGS_KEY='ssb_settings_v2', TANK_KEY='ssb_tank', ACH_KEY='ssb_ach', LIFE_KEY='ssb_life', WEAPON_KEY='ssb_weapon', AUDIO_V='3.2.0';
+const SETTINGS_KEY='ssb_settings_v2', TANK_KEY='ssb_tank', ACH_KEY='ssb_ach', LIFE_KEY='ssb_life', WEAPON_KEY='ssb_weapon', AUDIO_V='3.3.0';
 // ===== SETTINGS =====
 const settings = { musicVol: .8, sfxVol: 1, shake: 'full', particles: 'auto', showFps: false, flash: 'full' };
 try { const o = JSON.parse(localStorage.getItem(SETTINGS_KEY)); if (o && typeof o==='object') Object.assign(settings, o);
@@ -683,23 +696,23 @@ function fireArc(wp, a, bx, by) {
 // ===== DISTRICTS (sector themes) =====
 const DISTRICTS = [
   { name:'STATION PLAZA', ground:'#262030', grid:'200,170,120', fog:'3,4,10', lamp:'255,238,200', tint:'#ffb84d',
-    props:{bench:6,kiosk:3,sign:4,crate:4,vent:2},  amb:{count:7,r:120,alpha:0.5},  weather:'none' },
+    props:{bench:6,kiosk:3,sign:4,crate:4,vent:2},  amb:{count:7,r:120,alpha:0.5},  weather:'none', ambKey:'city' },
   { name:'CRIMSON YARD',  ground:'#2a1c22', grid:'220,120,110', fog:'12,3,7',  lamp:'255,150,150', tint:'#ff6a6a',
-    props:{container:7,crate:8,drum:2,sign:2},      amb:{count:5,r:95,alpha:0.5},   weather:'embers', hazard:'surge' },
+    props:{container:7,crate:8,drum:2,sign:2},      amb:{count:5,r:95,alpha:0.5},   weather:'embers', hazard:'surge', ambKey:'industrial' },
   { name:'COLD TERMINAL', ground:'#1c2630', grid:'130,180,210', fog:'3,7,14',  lamp:'170,220,255', tint:'#6ec8ff',
-    props:{puddle:9,vent:5,sign:3,crate:3},         amb:{count:6,r:110,alpha:0.5},  weather:'rain', hazard:'steam' },
+    props:{puddle:9,vent:5,sign:3,crate:3},         amb:{count:6,r:110,alpha:0.5},  weather:'rain', hazard:'steam', ambKey:'rain' },
   { name:'TOXIC SIDING',  ground:'#202a1c', grid:'150,200,120', fog:'4,10,4',  lamp:'190,255,150', tint:'#9dff6a',
-    props:{drum:9,vent:6,crate:3,sign:2},           amb:{count:5,r:100,alpha:0.45}, weather:'motes', hazard:'steam' },
+    props:{drum:9,vent:6,crate:3,sign:2},           amb:{count:5,r:100,alpha:0.45}, weather:'motes', hazard:'steam', ambKey:'industrial' },
   { name:'VIOLET DEPOT',  ground:'#241c30', grid:'170,130,220', fog:'8,4,14',  lamp:'200,160,255', tint:'#b46cff',
-    props:{neon:6,sign:5,kiosk:3,crate:3},          amb:{count:9,r:115,alpha:0.55}, weather:'none', hazard:'surge' },
+    props:{neon:6,sign:5,kiosk:3,crate:3},          amb:{count:9,r:115,alpha:0.55}, weather:'none', hazard:'surge', ambKey:'city' },
   { name:'HARBOR GATE',   ground:'#1a2828', grid:'110,190,180', fog:'3,9,9',   lamp:'150,240,220', tint:'#5fe0c8',
-    props:{container:8,puddle:6,crate:4,sign:3},    amb:{count:4,r:130,alpha:0.45}, weather:'fog' },
+    props:{container:8,puddle:6,crate:4,sign:3},    amb:{count:4,r:130,alpha:0.45}, weather:'fog', ambKey:'rain' },
   { name:'EMBER WORKS',   ground:'#2b201a', grid:'235,150,90',  fog:'10,5,2',  lamp:'255,180,110', tint:'#ff9a4c',
-    props:{drum:7,vent:6,container:4,crate:3},      amb:{count:6,r:90,alpha:0.55},  weather:'embers', hazard:'steam' },
+    props:{drum:7,vent:6,container:4,crate:3},      amb:{count:6,r:90,alpha:0.55},  weather:'embers', hazard:'steam', ambKey:'industrial' },
   { name:'GHOST MARKET',  ground:'#242220', grid:'190,180,160', fog:'6,6,5',   lamp:'235,225,200', tint:'#d8cba8',
-    props:{kiosk:7,bench:5,sign:4,crate:3},         amb:{count:4,r:110,alpha:0.35}, weather:'motes', wcol:'#cfc4a8', hazard:'surge' },
+    props:{kiosk:7,bench:5,sign:4,crate:3},         amb:{count:4,r:110,alpha:0.35}, weather:'motes', wcol:'#cfc4a8', hazard:'surge', ambKey:'city' },
   { name:'AZURE CIRCUIT', ground:'#1a2032', grid:'120,160,240', fog:'3,5,14',  lamp:'150,190,255', tint:'#6a9aff',
-    props:{neon:7,sign:5,vent:4,crate:3},           amb:{count:10,r:110,alpha:0.55},weather:'none' },
+    props:{neon:7,sign:5,vent:4,crate:3},           amb:{count:10,r:110,alpha:0.55},weather:'none', ambKey:'city' },
 ];
 function districtFor(w){ return DISTRICTS[Math.floor(Math.max(0,w-1)/5)%DISTRICTS.length]; }
 // ===== DISTRICT LAYER (engine): decor props, ambient light wells, weather — rebuilt per district
@@ -1441,7 +1454,11 @@ function updateParticles() {
 // ===========================================================================
 function isBossWave() { return G.wave % 5 === 0 && (enemies.some(e => e.type === 'boss' && !e.dead) || G.pending.includes('boss')); }
 function musicForState() { return (G.state === 'play' || G.state === 'pause') ? (isBossWave() ? 'boss' : 'patrol') : 'title'; }
-function updateMusic() { if (settings.musicVol > 0 && !Snd.isMuted()) Snd.playMusic(musicForState()); else Snd.stopMusic(); }
+function updateMusic() { if (settings.musicVol > 0 && !Snd.isMuted()) Snd.playMusic(musicForState()); else Snd.stopMusic(); updateAmbient(); }
+function updateAmbient() { // district ambience rides the sfx bus; stays up through pause, stops on title/over
+  if (G.state === 'play' || G.state === 'pause') Snd.startAmbient('amb_' + (curDistrict.ambKey || 'city'));
+  else Snd.stopAmbient();
+}
 function applyVolumes() { Snd.applyVolumes(); if ($('od-badge')) {} }
 function $(id){ return document.getElementById(id); }
 function addCombo(x, y) {
@@ -1501,6 +1518,7 @@ function endGame() {
   if (G.state === 'over') return;
   G.state = 'over';
   updateOrdHud();
+  updateAmbient();
   G.elapsed = Math.floor((Date.now() - G.startT) / 1000);
   lifetime.kills += G.kills; lifetime.time += G.elapsed;
   if (G.wave > lifetime.bestWave) lifetime.bestWave = G.wave;
@@ -2535,7 +2553,7 @@ function loop(ts) {
 document.querySelectorAll('.version').forEach(el => { el.textContent = VERSION; });
 
 window.__blackoutQA = {
-  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, beams: beams.length, flares: flares.length, ordAmmo: G.ordAmmo, empAmmo: G.empAmmo, empActive: !!empFx, dProps: districtFx.props.length, dLights: districtFx.lights.length, weather: districtFx.weather, hazard: curDistrict.hazard || 'none', surgeState: districtFx.surgeState, vents: districtFx.vents.length, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), slug: SCORES_API }; },
+  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, beams: beams.length, flares: flares.length, ordAmmo: G.ordAmmo, empAmmo: G.empAmmo, empActive: !!empFx, dProps: districtFx.props.length, dLights: districtFx.lights.length, weather: districtFx.weather, hazard: curDistrict.hazard || 'none', surgeState: districtFx.surgeState, vents: districtFx.vents.length, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), ambient: Snd.curAmbient(), slug: SCORES_API }; },
   tick(n) { n = n || 1; const wr = window.__blackoutQA._noloop; for (let i = 0; i < n; i++) update(); render(); return this.snapshot(); },
   start() { Snd.resume(); startGame(); qaGod = true; return this.snapshot(); },
   setWave(w) { enemies = []; bullets = []; beams = []; flares = []; G.pending = []; G.intermission = 0; startWave(w); return this.snapshot(); },
