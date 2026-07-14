@@ -241,6 +241,8 @@
     <div class="result-title" style="font-size:1.6rem;color:#ffb84d;filter:none;margin-bottom:2px">GARAGE</div>
     <p class="muted" style="letter-spacing:3px;margin-bottom:2px">SELECT YOUR TANK</p>
     <div class="garage-row" id="garage-row"></div>
+    <p class="muted" style="letter-spacing:3px;margin:8px 0 2px">ARMAMENT</p>
+    <div class="garage-row" id="armory-row"></div>
     <button class="btn secondary" id="btn-garage-back">BACK</button>
   </div>
 
@@ -491,6 +493,8 @@ function curTank(){ return TANKS[tankIdx]; }
 const WEAPONS = [
   { id:'cannon', name:'CANNON', desc:'Standard patrol gun. Dependable.', cdMul:1, dmg:1, shots:1, spread:0, speed:SHELL_SPEED, life:80, pierce:0, kick:1, sfx:'fire',
     shell:{ len:15, w:4, fill:'#fff3d2', glow:'#ffd98c', holeR:38 }, muzzle:{ r:90, n:4 } },
+  { id:'scatter', name:'SCATTER', desc:'Five-pellet burst. Brutal up close, thin at range.', cdMul:1.65, dmg:0.55, shots:5, spread:0.42, speed:8.2, life:34, pierce:0, kick:1.5, sfx:'fire',
+    shell:{ len:9, w:3, fill:'#ffd9a8', glow:'#ffb36b', holeR:26 }, muzzle:{ r:120, n:8 } },
 ];
 const FALLBACK_SHELL = WEAPONS[0].shell;
 let weaponIdx = 0; try { const i = WEAPONS.findIndex(w=>w.id===localStorage.getItem(WEAPON_KEY)); if(i>=0)weaponIdx=i; } catch(e){}
@@ -918,7 +922,7 @@ function killEnemy(e, silentScore) {
   const boss = e.type === 'boss';
   addCombo(e.x, e.y);
   G.score += Math.round(e.score * (1 + Math.min(G.combo, 30) * 0.05));
-  lifetime.kills; if (!unlockedAch.first_kill) unlockAch('first_kill');
+  if (!unlockedAch.first_kill) unlockAch('first_kill');
   G.hitStop = Math.max(G.hitStop, boss ? 5 : (e.type === 'brute' ? 3 : 2));
   if (curBarrelKill) barrelKills++;
   explosion(e.x, e.y, boss || e.type === 'brute');
@@ -930,6 +934,7 @@ function killEnemy(e, silentScore) {
     const roll = Math.random();
     const chance = e.type === 'brute' ? 0.55 : 0.16;
     if (roll < chance) { const types = ['repair', 'shield', 'overdrive']; dropPickup(e.x, e.y, types[Math.floor(Math.random() * 3)]); }
+    else if (WEAPONS.length > 1 && roll < chance + 0.05) dropPickup(e.x, e.y, 'weapon'); // weapon crate: own 5% band, doesn't eat the base drops
   }
 }
 let curBarrelKill = false;
@@ -1130,10 +1135,14 @@ function updatePickups() {
     if (d2v < (P_RADIUS + 14) * (P_RADIUS + 14) && player.alive) {
       if (p.type === 'repair') { player.hp = Math.min(player.hpMax || 100, player.hp + 35); toast('+ ARMOR REPAIRED', 60); }
       else if (p.type === 'shield') { player.shield = Math.min(3, player.shield + 3); updateShieldPips(); toast('+ SHIELD ONLINE', 60); }
+      else if (p.type === 'weapon') {
+        const opts = WEAPONS.map((w, ix) => ix).filter(ix => ix !== curWeaponIdx);
+        if (opts.length) { curWeaponIdx = opts[Math.floor(Math.random() * opts.length)]; toast('+ ' + curWeapon().name + ' EQUIPPED', 80); }
+      }
       else { player.overdrive = 480; document.getElementById('od-badge').classList.add('show'); toast('+ OVERDRIVE', 60); }
       G.score += 25;
       Snd.pickup();
-      spawnParticles(p.x, p.y, 12, { color: p.type === 'shield' ? '#9adcff' : p.type === 'repair' ? '#9aff9d' : '#ffd98c', smax: 3.4, fade: 'spark' });
+      spawnParticles(p.x, p.y, 12, { color: p.type === 'shield' ? '#9adcff' : p.type === 'repair' ? '#9aff9d' : p.type === 'weapon' ? '#ffb36b' : '#ffd98c', smax: 3.4, fade: 'spark' });
       pickups.splice(i, 1);
     }
   }
@@ -1505,7 +1514,7 @@ function drawPickups() {
     const blink = p.t < 240 && Math.floor(p.t / 12) % 2 === 0;
     if (blink) continue;
     ctx.save(); ctx.translate(p.x, y);
-    const col = p.type === 'repair' ? '#9aff9d' : p.type === 'shield' ? '#9adcff' : '#ffd98c';
+    const col = p.type === 'repair' ? '#9aff9d' : p.type === 'shield' ? '#9adcff' : p.type === 'weapon' ? '#ffb36b' : '#ffd98c';
     ctx.shadowColor = col; ctx.shadowBlur = 12;
     ctx.fillStyle = 'rgba(16,14,20,0.9)';
     ctx.beginPath(); ctx.arc(0, 0, 13, 0, 6.283); ctx.fill();
@@ -1515,6 +1524,7 @@ function drawPickups() {
     ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
     if (p.type === 'repair') { ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(5, 0); ctx.moveTo(0, -5); ctx.lineTo(0, 5); ctx.stroke(); }
     else if (p.type === 'shield') { ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(5, -2); ctx.lineTo(5, 3); ctx.lineTo(0, 6); ctx.lineTo(-5, 3); ctx.lineTo(-5, -2); ctx.closePath(); ctx.stroke(); }
+    else if (p.type === 'weapon') { ctx.beginPath(); ctx.moveTo(-5, -3); ctx.lineTo(1, -3); ctx.lineTo(5, 0); ctx.lineTo(1, 3); ctx.lineTo(-5, 3); ctx.closePath(); ctx.stroke(); }
     else { ctx.beginPath(); ctx.moveTo(2, -6); ctx.lineTo(-3, 1); ctx.lineTo(0, 1); ctx.lineTo(-2, 6); ctx.lineTo(3, -1); ctx.lineTo(0, -1); ctx.closePath(); ctx.stroke(); }
     ctx.restore();
   }
@@ -1857,6 +1867,20 @@ function renderGarage() {
     card.appendChild(bars);
     card.onclick = () => { tankIdx = i; try { localStorage.setItem(TANK_KEY, tk.id); } catch (e) {} click(); renderGarage(); };
     row.appendChild(card);
+  });
+  const arow = document.getElementById('armory-row'); arow.innerHTML = '';
+  WEAPONS.forEach((wp, i) => {
+    const card = document.createElement('div'); card.className = 'tank-card' + (i === weaponIdx ? ' sel' : ''); card.id = 'wpn-card-' + i;
+    const nm = document.createElement('div'); nm.className = 'tank-name'; nm.style.color = wp.shell.glow; nm.textContent = wp.name; card.appendChild(nm);
+    const ds = document.createElement('div'); ds.className = 'tank-desc'; ds.textContent = wp.desc; card.appendChild(ds);
+    const bars = document.createElement('div'); bars.className = 'stat-bars';
+    [['RATE', Math.min(1, 1 / (wp.cdMul || 1))], ['PWR', Math.min(1, wp.dmg * (wp.shots || 1) / 3)], ['RNG', Math.min(1, wp.speed * wp.life / 800)]].forEach(([l, v]) => {
+      const b = document.createElement('div'); b.className = 'stat-bar';
+      b.innerHTML = '<span>' + l + '</span><div class="bar2"><i style="width:' + Math.round(v * 100) + '%"></i></div>'; bars.appendChild(b);
+    });
+    card.appendChild(bars);
+    card.onclick = () => { weaponIdx = i; curWeaponIdx = i; try { localStorage.setItem(WEAPON_KEY, wp.id); } catch (e) {} click(); renderGarage(); };
+    arow.appendChild(card);
   });
 }
 function segInit(id, key) {

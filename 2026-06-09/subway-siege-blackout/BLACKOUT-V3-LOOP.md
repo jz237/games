@@ -10,9 +10,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 01 DONE (2026-07-14) — weapon framework in. Game still at v2.0.0 behavior parity.
-- **Suite:** 27/27 green (2 consecutive runs). Run: `node tests/run.mjs suite` (exit 0 = green).
-  Also: `node tests/run.mjs probe '<js expr>'` evaluates any expression in the booted game (debug).
+- **Iteration:** 02 DONE (2026-07-14) — SCATTER + armory UI + weapon crate. First gameplay addition.
+- **Suite:** 30/30 green. Run: `node tests/run.mjs suite` (exit 0 = green).
+  Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
 - **Perf baseline** (`node tests/run.mjs perf`, wave 20, ~26 enemies):
@@ -22,7 +22,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 02 (SCATTER — plus the armory/garage UI + weapon-crate pickup split from 01).
+- **Next:** item 03 (RAILGUN — instant piercing beam; substep hitSet dedupe is the trap).
 
 ## Iteration log
 
@@ -38,6 +38,15 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (holeR). QA: selectWeapon/grantWeapon + snapshot.weapon/.weapons. Suite 24→27 (framework
   defaults/persist, loadout-on-start, auto-fire-kills). Perf 0.085/2.248 ms — within gate.
   SPLIT: armory UI (garage) + weapon-crate pickup drops deferred to 02 (need a 2nd weapon).
+- **02** (2026-07-14): SCATTER (5×0.55dmg pellets, spread 0.42, cd×1.65, range ~280px, holeR 26,
+  amber shells) + ARMAMENT row in garage (reuses tank-card CSS; ids `wpn-card-<i>`; RATE/PWR/RNG
+  bars; screenshot-verified) + weapon-crate pickup ('weapon' type, own 5% drop band above the base
+  roll so it never cannibalizes repair/shield/overdrive, gated WEAPONS.length>1; collect = random
+  OTHER weapon in-run via curWeaponIdx + toast; drawn as amber shell glyph). Removed dead
+  `lifetime.kills;` statement (kills batch into lifetime at endGame :1220 — verified BEFORE
+  removing; a ++ "fix" would have double-counted). Suite 27→30 (scatter kills, crate swap +
+  restart-restores-loadout, armory click persistence). Perf 0.083/2.283 — in gate.
+  Polish idea for 18: weapon cards could get small canvas previews like tank cards.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -68,8 +77,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 - [x] 00 survey + baselines + rig + ledger
 - [x] 01 weapon framework (see log; armory UI + weapon-crate pickups split forward into 02)
-- [ ] 02 SCATTER (spread shot) + ARMORY select UI in garage + weapon-crate pickup that grants
-      the run-weapon (uses grantWeapon path; drops gated to waves with >1 weapon unlocked)
+- [x] 02 SCATTER + armory UI + weapon-crate pickup (see log)
 - [ ] 03 RAILGUN (instant piercing beam — MUST dedupe across the 2 substeps, hitSet pattern :1057)
 - [ ] 04 INCINERATOR (short cone + burn DoT — DoT deaths still via killEnemy())
 - [ ] 05 TESLA (chain-arc between REVEALED enemies — define stalker interaction)
