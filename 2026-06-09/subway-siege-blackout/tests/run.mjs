@@ -148,10 +148,10 @@ async function suite() {
     const seen = await c.eval(`(()=>{const q=${QA};q.killAll();q.spawn('mortar');let seen=0;for(let i=0;i<10;i++){q.tick(45);seen=Math.max(seen,q.snapshot().mortarMarks);if(seen)break;}return seen;})()`);
     if (seen < 1) throw new Error('no mortar mark after 450 ticks'); return 'marks=' + seen;
   });
-  await check('14 district rotation by wave', async () => {
-    const got = await c.eval(`(()=>{const q=${QA};return [1,6,11,16,21,26].map(w=>q.setWave(w).district);})()`);
-    const want = ['STATION PLAZA', 'CRIMSON YARD', 'COLD TERMINAL', 'TOXIC SIDING', 'VIOLET DEPOT', 'STATION PLAZA'];
-    for (let i = 0; i < want.length; i++) if (got[i] !== want[i]) throw new Error(`wave->district ${got[i]} != ${want[i]}`); return got.join('|');
+  await check('14 district rotation by wave (9 districts)', async () => {
+    const got = await c.eval(`(()=>{const q=${QA};return [1,6,11,16,21,26,31,36,41,46].map(w=>q.setWave(w).district);})()`);
+    const want = ['STATION PLAZA', 'CRIMSON YARD', 'COLD TERMINAL', 'TOXIC SIDING', 'VIOLET DEPOT', 'HARBOR GATE', 'EMBER WORKS', 'GHOST MARKET', 'AZURE CIRCUIT', 'STATION PLAZA'];
+    for (let i = 0; i < want.length; i++) if (got[i] !== want[i]) throw new Error(`wave->district ${got[i]} != ${want[i]}`); return got.length + ' waves cycled';
   });
   await check('15 wave 5 is boss wave', async () => {
     const s = await c.eval(`(()=>{const q=${QA};q.setWave(5);q.tick(30);return q.snapshot();})()`);
@@ -355,9 +355,10 @@ async function suite() {
   });
   await check('39 district layer rebuilds per district (props/lights/weather)', async () => {
     const r = await c.eval(`(()=>{const q=${QA};q.start();const out=[];
-      for(const w of [1,6,11,16,21]){const s=q.setWave(w);out.push({d:s.district,p:s.dProps,l:s.dLights,w:s.weather});}
+      for(const w of [1,6,11,16,21,26,31,36,41]){const s=q.setWave(w);out.push({d:s.district,p:s.dProps,l:s.dLights,w:s.weather});}
       return out;})()`);
-    const wantWeather = { 'STATION PLAZA': 'none', 'CRIMSON YARD': 'embers', 'COLD TERMINAL': 'rain', 'TOXIC SIDING': 'motes', 'VIOLET DEPOT': 'none' };
+    const wantWeather = { 'STATION PLAZA': 'none', 'CRIMSON YARD': 'embers', 'COLD TERMINAL': 'rain', 'TOXIC SIDING': 'motes', 'VIOLET DEPOT': 'none',
+      'HARBOR GATE': 'fog', 'EMBER WORKS': 'embers', 'GHOST MARKET': 'motes', 'AZURE CIRCUIT': 'none' };
     for (const row of r) {
       if (row.p < 8 || row.l < 3) throw new Error('sparse layer: ' + JSON.stringify(row));
       if (row.w !== wantWeather[row.d]) throw new Error('weather mismatch: ' + JSON.stringify(row));
