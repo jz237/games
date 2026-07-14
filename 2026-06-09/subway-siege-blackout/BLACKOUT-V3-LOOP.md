@@ -10,8 +10,11 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 15 DONE (2026-07-14) — district ambient audio loops (3 shared ElevenLabs beds).
-  Last ship: **v3.2.0 LIVE**. Unshipped: items 11–15 → READY TO SHIP batch 3.
+- **Iteration:** 15b DONE (2026-07-14) — **v3.3.0 SHIPPED LIVE** (batch 3: districts arc, items
+  11–15). Site df3081c81 (clean rebase+push this time — no OpenClaw litter, no revert); mirror
+  1d10ca5 (explicit-list cherry-pick incl. acd4bf4). Verified ×3 + all 3 amb files 200 on both
+  hosts (amb_industrial 404'd ~60s on the pages.dev alias — the documented new-asset propagation;
+  poll-retried to 200, byte-exact).
 - **Suite:** 41/41 green (24/24 buffers). Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
@@ -23,10 +26,10 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** **SHIP BATCH 3 as v3.3.0** (items 11–15: district engine, character, 4 new districts,
-  hazards, ambience). Protocol per 10b: adversarial review of the batch diff, VERSION→v3.3.0
-  (AUDIO_V already 3.3.0), copy index.html + 3 amb_*.ogg to deploy, temp-worktree landing,
-  verify live ×3 + audio 200s, mirror cherry-pick by EXPLICIT COMMIT LIST, memory refresh.
+- **Next:** item 16 — **balance pass**: DPS parity matrix vs CANNON across tanks×weapons (use the
+  rig: scripted DPS probes per weapon at close/mid range), score economy comparable (leaderboard
+  persists), perfect-wave + combo achievable per loadout; revisit the railgun blind-fire note
+  from 05b and incinerator face-time value. Data-tune WEAPONS numbers only — no new systems.
 
 ## Iteration log
 
