@@ -148,6 +148,13 @@
   #btn-ord.show { display: grid; }
   #btn-ord.empty { opacity: .38; box-shadow: none; }
   #btn-ord b { font-size: .95rem; display: block; }
+  #btn-emp { position: absolute; z-index: 14; right: 14px; bottom: max(160px, calc(env(safe-area-inset-bottom) + 152px));
+    pointer-events: auto; background: rgba(10,24,30,.78); border: 1px solid rgba(125,232,255,.45); color: #b9f0ff;
+    width: 56px; height: 56px; border-radius: 50%; cursor: pointer; display: none; place-items: center;
+    font: 800 .58rem/1.1 inherit; letter-spacing: 1px; text-align: center; box-shadow: 0 0 14px rgba(90,210,255,.25); }
+  #btn-emp.show { display: grid; }
+  #btn-emp.empty { opacity: .38; box-shadow: none; }
+  #btn-emp b { font-size: .95rem; display: block; }
   .spin { display:inline-block; width:18px;height:18px;border:2px solid #ffffff33;border-top-color:#ffb84d;border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle}
   @keyframes sp { to { transform: rotate(360deg); } }
   .hint-line { position: absolute; bottom: max(86px, calc(env(safe-area-inset-bottom) + 76px)); left: 50%; transform: translateX(-50%);
@@ -226,6 +233,7 @@
   <button class="topbtn" id="btn-mute" aria-label="Mute"><svg viewBox="0 0 24 24" fill="none" stroke="#f0dcc0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path id="snd-on" d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14"/></svg></button>
   <button class="topbtn" id="btn-pause" aria-label="Pause"><svg viewBox="0 0 24 24" fill="#f0dcc0"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
   <button id="btn-ord" aria-label="Fire flare">FLARE<b id="ord-n">2</b></button>
+  <button id="btn-emp" aria-label="Fire EMP">EMP<b id="emp-n">1</b></button>
 
   <div id="ach-toast"><div class="ah">◆ MEDAL EARNED ◆</div><div class="aname" id="ach-toast-name"></div></div>
 
@@ -560,10 +568,28 @@ function fireBeam(wp, a, bx, by) {
 // ===== ORDNANCE: FLARE — lobbed sustained light well. Reveals EVERYTHING in its pool,
 // including cloaked stalkers (the designed cloak counter). Manual trigger: Q/E or #btn-ord.
 function updateOrdHud() {
-  const b = document.getElementById('btn-ord'); if (!b) return;
-  document.getElementById('ord-n').textContent = G.ordAmmo;
-  b.classList.toggle('show', G.state === 'play' || G.state === 'pause');
-  b.classList.toggle('empty', (G.ordAmmo | 0) <= 0);
+  const show = G.state === 'play' || G.state === 'pause';
+  const b = document.getElementById('btn-ord');
+  if (b) { document.getElementById('ord-n').textContent = G.ordAmmo; b.classList.toggle('show', show); b.classList.toggle('empty', (G.ordAmmo | 0) <= 0); }
+  const m = document.getElementById('btn-emp');
+  if (m) { document.getElementById('emp-n').textContent = G.empAmmo; m.classList.toggle('show', show); m.classList.toggle('empty', (G.empAmmo | 0) <= 0); }
+}
+// EMP: arena-wide electronic burst — reveals EVERYTHING (cloak is electronics: stalkers too)
+// for ~4s of decay and stuns enemies 1.5s (boss 0.75s). The blackout itself lifts for a beat.
+function fireEmp() {
+  if (G.state !== 'play' || !player.alive || G.upgradePending) return;
+  if ((G.empAmmo | 0) <= 0) { Snd.ui('menu_click', .35); toast('NO EMP CHARGE', 40); return; }
+  G.empAmmo--;
+  empFx = { t: 30, max: 30 };
+  for (const e of enemies) {
+    if (e.dead || e.dormant > 0) continue;
+    e.reveal = Math.max(e.reveal, 240);
+    e.stun = Math.max(e.stun || 0, e.type === 'boss' ? 45 : 90);
+  }
+  shake(5, 10);
+  Snd.ui('overdrive', .5); // placeholder zap until item 10 records real ordnance SFX
+  toast('EMP DISCHARGED', 60);
+  updateOrdHud();
 }
 function fireOrdnance() {
   if (G.state !== 'play' || !player.alive || G.upgradePending) return;
@@ -687,7 +713,7 @@ const G = {
   intermission: 0,        // frames until next wave starts
   pending: [],            // queued spawns for current wave
   spawnTick: 0,
-  combo: 0, comboTimer: 0, comboMax: 0, overdriveArmed: true, waveHit: false, hitStop: 0, upgradePending: false, ordAmmo: 0,
+  combo: 0, comboTimer: 0, comboMax: 0, overdriveArmed: true, waveHit: false, hitStop: 0, upgradePending: false, ordAmmo: 0, empAmmo: 0,
 };
 
 const player = {
@@ -700,6 +726,7 @@ const player = {
 };
 
 let enemies = [], bullets = [], beams = [], flares = [], particles = [], pickups = [], barrels = [];
+let empFx = null; // active EMP shockwave visual {t,max}
 let obstacles = [];     // {x,y,w,h} rects
 let pillars = [];       // {x,y,r} circles
 let lamps = [], treads = [], scorch = [], motes = [];
@@ -723,7 +750,8 @@ window.addEventListener('keydown', (e) => {
   keys[k] = true;
   if (e.key === 'Escape' || k === 'p') { togglePause(); return; }
   if (k === 'm') { document.getElementById('btn-mute').click(); return; }
-  if (k === 'q' || k === 'e') { fireOrdnance(); return; }
+  if (k === 'q') { fireOrdnance(); return; }
+  if (k === 'e') { fireEmp(); return; }
   if (e.key === 'Enter') {
     if (!document.getElementById('screen-howto').classList.contains('hidden')) document.getElementById('btn-howback').click();
     else if (G.state === 'title' && !document.getElementById('screen-title').classList.contains('hidden')) document.getElementById('btn-start').click();
@@ -987,6 +1015,11 @@ function updateEnemies() {
       if (e.burnT % 9 === 0) spawnParticles(e.x + rnd(-e.r * 0.5, e.r * 0.5), e.y + rnd(-e.r * 0.5, e.r * 0.5), 1, { color: '#ff9a4c', smax: 2.2, lmax: 14, fade: 'spark' });
       if (e.hp <= 0) { killEnemy(e); continue; }
     }
+    if (e.stun > 0) { // EMP-stunned: no movement, no firing; crackles cyan
+      e.stun--;
+      if (e.stun % 6 === 0) spawnParticles(e.x + rnd(-e.r * 0.6, e.r * 0.6), e.y + rnd(-e.r * 0.6, e.r * 0.6), 1, { color: '#7de8ff', smax: 1.8, lmax: 10, fade: 'spark' });
+      continue;
+    }
 
     const dx = player.x - e.x, dy = player.y - e.y;
     const d = Math.hypot(dx, dy) || 1;
@@ -1078,6 +1111,7 @@ function killEnemy(e, silentScore) {
     if (roll < chance) { const types = ['repair', 'shield', 'overdrive']; dropPickup(e.x, e.y, types[Math.floor(Math.random() * 3)]); }
     else if (WEAPONS.length > 1 && roll < chance + 0.05) dropPickup(e.x, e.y, 'weapon'); // weapon crate: own 5% band, doesn't eat the base drops
     else if (roll < chance + 0.09) dropPickup(e.x, e.y, 'flare'); // flare resupply: next 4% band
+    else if (roll < chance + 0.11) dropPickup(e.x, e.y, 'emp'); // EMP charge: rare 2% band
   }
 }
 let curBarrelKill = false;
@@ -1285,10 +1319,11 @@ function updatePickups() {
         if (opts.length) { curWeaponIdx = opts[Math.floor(Math.random() * opts.length)]; toast('+ ' + curWeapon().name + ' EQUIPPED', 80); }
       }
       else if (p.type === 'flare') { G.ordAmmo = Math.min(5, (G.ordAmmo | 0) + 1); updateOrdHud(); toast('+ FLARE', 60); }
+      else if (p.type === 'emp') { G.empAmmo = Math.min(3, (G.empAmmo | 0) + 1); updateOrdHud(); toast('+ EMP CHARGE', 60); }
       else { player.overdrive = 480; document.getElementById('od-badge').classList.add('show'); toast('+ OVERDRIVE', 60); }
       G.score += 25;
       Snd.pickup();
-      spawnParticles(p.x, p.y, 12, { color: p.type === 'shield' ? '#9adcff' : p.type === 'repair' ? '#9aff9d' : p.type === 'weapon' ? '#ffb36b' : p.type === 'flare' ? '#ffd35e' : '#ffd98c', smax: 3.4, fade: 'spark' });
+      spawnParticles(p.x, p.y, 12, { color: p.type === 'shield' ? '#9adcff' : p.type === 'repair' ? '#9aff9d' : p.type === 'weapon' ? '#ffb36b' : p.type === 'flare' ? '#ffd35e' : p.type === 'emp' ? '#7de8ff' : '#ffd98c', smax: 3.4, fade: 'spark' });
       pickups.splice(i, 1);
     }
   }
@@ -1351,7 +1386,7 @@ function showUpgrade() {
 function startGame() {
   G.state = 'play'; G.t = 0; G.score = 0; G.kills = 0; G.startT = Date.now();
   enemies = []; bullets = []; beams = []; flares = []; particles = []; pickups = []; flashes = []; spawnFlashes = [];
-  G.ordAmmo = 2; updateOrdHud();
+  G.ordAmmo = 2; G.empAmmo = 1; empFx = null; updateOrdHud();
   buildWorld();
   player.x = ARENA_W / 2; player.y = ARENA_H - 280;
   player.hull = -Math.PI / 2; player.turret = -Math.PI / 2;
@@ -1402,6 +1437,7 @@ function update() {
   updateEnemies();
   updateBullets();
   for (let i = beams.length - 1; i >= 0; i--) if (--beams[i].life <= 0) beams.splice(i, 1);
+  if (empFx && --empFx.t <= 0) empFx = null;
   updateFlares();
   updatePickups();
 
@@ -1448,6 +1484,14 @@ function render() {
   if (player.alive || G.state === 'play') drawPlayer();
   drawBullets();
   drawBeams();
+  if (empFx) { // expanding shockwave ring
+    const p = 1 - empFx.t / empFx.max;
+    ctx.save();
+    ctx.strokeStyle = '#7de8ff'; ctx.globalAlpha = (1 - p) * 0.8; ctx.lineWidth = 3 + 6 * (1 - p);
+    ctx.shadowColor = '#7de8ff'; ctx.shadowBlur = 16;
+    ctx.beginPath(); ctx.arc(player.x, player.y, 40 + p * 1100, 0, 6.283); ctx.stroke();
+    ctx.restore();
+  }
   drawParticles();
   drawMotes();
   ctx.restore();
@@ -1666,7 +1710,7 @@ function drawPickups() {
     const blink = p.t < 240 && Math.floor(p.t / 12) % 2 === 0;
     if (blink) continue;
     ctx.save(); ctx.translate(p.x, y);
-    const col = p.type === 'repair' ? '#9aff9d' : p.type === 'shield' ? '#9adcff' : p.type === 'weapon' ? '#ffb36b' : p.type === 'flare' ? '#ffd35e' : '#ffd98c';
+    const col = p.type === 'repair' ? '#9aff9d' : p.type === 'shield' ? '#9adcff' : p.type === 'weapon' ? '#ffb36b' : p.type === 'flare' ? '#ffd35e' : p.type === 'emp' ? '#7de8ff' : '#ffd98c';
     ctx.shadowColor = col; ctx.shadowBlur = 12;
     ctx.fillStyle = 'rgba(16,14,20,0.9)';
     ctx.beginPath(); ctx.arc(0, 0, 13, 0, 6.283); ctx.fill();
@@ -1678,6 +1722,7 @@ function drawPickups() {
     else if (p.type === 'shield') { ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(5, -2); ctx.lineTo(5, 3); ctx.lineTo(0, 6); ctx.lineTo(-5, 3); ctx.lineTo(-5, -2); ctx.closePath(); ctx.stroke(); }
     else if (p.type === 'weapon') { ctx.beginPath(); ctx.moveTo(-5, -3); ctx.lineTo(1, -3); ctx.lineTo(5, 0); ctx.lineTo(1, 3); ctx.lineTo(-5, 3); ctx.closePath(); ctx.stroke(); }
     else if (p.type === 'flare') { ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4.5, 3.5); ctx.lineTo(-4.5, 3.5); ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 1, 1.4, 0, 6.283); ctx.stroke(); }
+    else if (p.type === 'emp') { ctx.beginPath(); ctx.arc(0, 0, 2, 0, 6.283); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, 5.5, -0.6, 1.8); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, 5.5, 2.6, 5); ctx.stroke(); }
     else { ctx.beginPath(); ctx.moveTo(2, -6); ctx.lineTo(-3, 1); ctx.lineTo(0, 1); ctx.lineTo(-2, 6); ctx.lineTo(3, -1); ctx.lineTo(0, -1); ctx.closePath(); ctx.stroke(); }
     ctx.restore();
   }
@@ -1927,6 +1972,10 @@ function renderLights(sx, sy) {
     const fade = Math.min(1, f.t / 80);
     hole(f.x, f.y, (150 + Math.sin(G.t * 0.26 + f.bob) * 12) * (0.35 + 0.65 * fade), 0.85 * fade);
   }
+  if (empFx) { // the blackout itself lifts in an expanding wave, then crushes back in
+    const p = 1 - empFx.t / empFx.max;
+    hole(player.x, player.y, 40 + p * 1400, 0.9 * (1 - p));
+  }
   // flashes (muzzle, explosions)
   for (const f of flashes) hole(f.x, f.y, f.r * (f.life / f.max), 0.9);
   // pickups glow softly
@@ -2023,6 +2072,7 @@ document.getElementById('btn-howback').onclick = () => { click(); showScreen('sc
 document.getElementById('btn-resume').onclick = () => togglePause();
 document.getElementById('btn-quit').onclick = () => { Snd.ui('menu_click'); G.state = 'title'; Snd.setEngine(0); updateMusic(); showScreen('screen-title'); updateBestLine(); updateOrdHud(); };
 document.getElementById('btn-ord').addEventListener('pointerdown', ev => { ev.preventDefault(); Snd.resume(); fireOrdnance(); });
+document.getElementById('btn-emp').addEventListener('pointerdown', ev => { ev.preventDefault(); Snd.resume(); fireEmp(); });
 document.getElementById('btn-pause').onclick = () => togglePause();
 document.getElementById('btn-again').onclick = () => { Snd.resume(); click(); startGame(); };
 document.getElementById('btn-title').onclick = () => { Snd.ui('menu_click'); G.state = 'title'; updateMusic(); showScreen('screen-title'); updateBestLine(); updateOrdHud(); };
@@ -2253,12 +2303,14 @@ function loop(ts) {
 document.querySelectorAll('.version').forEach(el => { el.textContent = VERSION; });
 
 window.__blackoutQA = {
-  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, beams: beams.length, flares: flares.length, ordAmmo: G.ordAmmo, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), slug: SCORES_API }; },
+  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, beams: beams.length, flares: flares.length, ordAmmo: G.ordAmmo, empAmmo: G.empAmmo, empActive: !!empFx, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), slug: SCORES_API }; },
   tick(n) { n = n || 1; const wr = window.__blackoutQA._noloop; for (let i = 0; i < n; i++) update(); render(); return this.snapshot(); },
   start() { Snd.resume(); startGame(); qaGod = true; return this.snapshot(); },
   setWave(w) { enemies = []; bullets = []; beams = []; flares = []; G.pending = []; G.intermission = 0; startWave(w); return this.snapshot(); },
   fireOrdnance() { fireOrdnance(); return this.snapshot(); },
   addOrdnance(n) { G.ordAmmo = Math.min(5, (G.ordAmmo | 0) + (n || 1)); updateOrdHud(); return G.ordAmmo; },
+  fireEmp() { fireEmp(); return this.snapshot(); },
+  addEmp(n) { G.empAmmo = Math.min(3, (G.empAmmo | 0) + (n || 1)); updateOrdHud(); return G.empAmmo; },
   spawn(type) { const e = mkEnemy(type, clamp(player.x + 300, 60, ARENA_W - 60), player.y); e.dormant = 0; enemies.push(e); return type; },
   killAll(end) { for (const e of enemies.slice()) if (!e.dead) killEnemy(e); G.pending = []; if (end) endGame(); return this.snapshot(); },
   endGame() { endGame(); return this.snapshot(); },

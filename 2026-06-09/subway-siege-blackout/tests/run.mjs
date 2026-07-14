@@ -317,7 +317,35 @@ async function suite() {
     if (r.a2 !== 1) throw new Error('resupply failed: ' + JSON.stringify(r));
     if (r.cap !== 5) throw new Error('cap failed: ' + JSON.stringify(r));
   });
-  await check('35 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('35 EMP reveals everything (cloaked incl.) + stuns', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};q.start();q.god(true);q.killAll();
+      q.spawn('stalker');q.spawn('scout');
+      const es=q.enemies.filter(e=>!e.dead);
+      const st=es.find(e=>e.type==='stalker'),sc=es.find(e=>e.type==='scout');
+      st.x=q.player.x+700;st.y=q.player.y+300;st.reveal=0; // far, cloaked, out of any light
+      sc.x=q.player.x-500;sc.y=q.player.y-100;sc.reveal=0;
+      const s=q.fireEmp();
+      const rev={st:st.reveal,sc:sc.reveal,stun:{st:st.stun,sc:sc.stun},active:s.empActive,ammo:s.empAmmo};
+      const px=sc.x,py=sc.y;q.tick(40);const moved=Math.hypot(sc.x-px,sc.y-py);
+      q.tick(120);const px2=sc.x,py2=sc.y;q.tick(40);const moved2=Math.hypot(sc.x-px2,sc.y-py2);
+      return {...rev,moved:+moved.toFixed(1),moved2:+moved2.toFixed(1)};})()`);
+    if (r.st < 200 || r.sc < 200) throw new Error('reveal failed: ' + JSON.stringify(r));
+    if (!(r.stun.st >= 80 && r.stun.sc >= 80)) throw new Error('stun not applied: ' + JSON.stringify(r));
+    if (!r.active || r.ammo !== 0) throw new Error('fx/ammo wrong: ' + JSON.stringify(r));
+    if (r.moved > 2) throw new Error('stunned scout moved ' + r.moved + 'px');
+    if (r.moved2 < 5) throw new Error('scout still frozen after stun expiry: ' + JSON.stringify(r));
+    return `stun held (${r.moved}px), resumed (${r.moved2}px)`;
+  });
+  await check('36 EMP ammo gates + resupply + cap', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};q.start();q.god(true); // empAmmo 1
+      q.fireEmp();const s1=q.fireEmp(); // 2nd shot dry
+      q.addPickup('emp');q.tick(30);const a2=q.snapshot().empAmmo;
+      const cap=q.addEmp(9);return {a1:s1.empAmmo,a2,cap};})()`);
+    if (r.a1 !== 0) throw new Error('gate: ' + JSON.stringify(r));
+    if (r.a2 !== 1) throw new Error('resupply: ' + JSON.stringify(r));
+    if (r.cap !== 3) throw new Error('cap: ' + JSON.stringify(r));
+  });
+  await check('37 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;
