@@ -244,7 +244,21 @@ async function suite() {
       const ok0=q.clickBtn('wpn-card-0');const ls0=localStorage.getItem('ssb_weapon');q.clickBtn('btn-garage-back');return {ok1,ls1,ok0,ls0};})()`);
     if (!r.ok1 || r.ls1 !== 'scatter' || !r.ok0 || r.ls0 !== 'cannon') throw new Error(JSON.stringify(r));
   });
-  await check('30 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('30 railgun beam skewers an aligned line', async () => {
+    // 3 scouts in a row east; one 3-dmg hitscan beam should pierce and kill all of them at once
+    const r = await c.eval(`(()=>{const q=${QA};const id=q.selectWeapon(2);q.start();q.god(true);q.killAll();const k0=q.snapshot().kills;
+      for(let i=0;i<3;i++)q.spawn('scout');
+      const es=q.enemies.filter(e=>!e.dead);let sawBeam=0;
+      for(let i=0;i<40;i++){
+        es.forEach((e,ix)=>{if(!e.dead){e.x=q.player.x+150+ix*55;e.y=q.player.y;e.reveal=200;}});
+        q.tick(10);sawBeam=Math.max(sawBeam,q.snapshot().beams);
+        if(q.snapshot().kills-k0>=3)break;
+      }
+      const dk=q.snapshot().kills-k0;q.selectWeapon(0);return {id,dk,sawBeam};})()`);
+    if (r.id !== 'railgun' || r.dk < 3 || r.sawBeam < 1) throw new Error(JSON.stringify(r));
+    return `+${r.dk} kills, beams seen=${r.sawBeam}`;
+  });
+  await check('31 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;

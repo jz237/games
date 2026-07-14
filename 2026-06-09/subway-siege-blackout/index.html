@@ -495,18 +495,53 @@ const WEAPONS = [
     shell:{ len:15, w:4, fill:'#fff3d2', glow:'#ffd98c', holeR:38 }, muzzle:{ r:90, n:4 } },
   { id:'scatter', name:'SCATTER', desc:'Five-pellet burst. Brutal up close, thin at range.', cdMul:1.65, dmg:0.55, shots:5, spread:0.42, speed:8.2, life:34, pierce:0, kick:1.5, sfx:'fire',
     shell:{ len:9, w:3, fill:'#ffd9a8', glow:'#ffb36b', holeR:26 }, muzzle:{ r:120, n:8 } },
+  { id:'railgun', name:'RAILGUN', desc:'Instant rail lance. Skewers the whole line.', cdMul:2.3, dmg:3, shots:1, spread:0, speed:0, life:0, pierce:0, kick:2, sfx:'fire', beam:true, range:700, beamW:6,
+    shell:{ len:0, w:0, fill:'#e8f8ff', glow:'#6ec8ff', holeR:0 }, muzzle:{ r:130, n:10 } },
 ];
 const FALLBACK_SHELL = WEAPONS[0].shell;
 let weaponIdx = 0; try { const i = WEAPONS.findIndex(w=>w.id===localStorage.getItem(WEAPON_KEY)); if(i>=0)weaponIdx=i; } catch(e){}
 let curWeaponIdx = weaponIdx; // in-run weapon (pickups may swap it mid-run); startGame resets it to the loadout
 function curWeapon(){ return WEAPONS[curWeaponIdx]; }
 function fireWeapon(wp, a, bx, by) {
+  if (wp.beam) return fireBeam(wp, a, bx, by);
   const n = wp.shots || 1;
   for (let k = 0; k < n; k++) {
     const aa = a + (n > 1 ? (k / (n - 1) - 0.5) * wp.spread : 0);
     bullets.push({ x: bx, y: by, vx: Math.cos(aa) * wp.speed, vy: Math.sin(aa) * wp.speed, enemy: false,
       dmg: wp.dmg, life: wp.life, pierce: (wp.pierce || 0) + (player.overdrive > 0 ? 2 : 0), hitSet: null, shell: wp.shell });
   }
+}
+function segDist2(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const L2 = dx * dx + dy * dy || 1;
+  let t = ((px - x1) * dx + (py - y1) * dy) / L2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return dist2(px, py, x1 + dx * t, y1 + dy * t);
+}
+// Hitscan beam: resolved instantly at fire time — every enemy on the line is hit exactly once
+// (no bullet, so the substep re-hit problem can't apply). Stopped by world geometry, not enemies.
+function fireBeam(wp, a, bx, by) {
+  const dx = Math.cos(a), dy = Math.sin(a);
+  let end = wp.range;
+  outer:
+  for (let t = 12; t < wp.range; t += 8) {
+    const x = bx + dx * t, y = by + dy * t;
+    for (const o of obstacles) if (x > o.x && x < o.x + o.w && y > o.y && y < o.y + o.h) { end = t; break outer; }
+    for (const p of pillars) if (dist2(x, y, p.x, p.y) < p.r * p.r) { end = t; break outer; }
+  }
+  const ex = bx + dx * end, ey = by + dy * end;
+  for (const e of enemies) {
+    if (e.dead || e.dormant > 0) continue;
+    if (segDist2(e.x, e.y, bx, by, ex, ey) < (e.r + wp.beamW) * (e.r + wp.beamW)) {
+      let dmg = wp.dmg;
+      if ((runUp.crit || 0) > 0 && Math.random() < 0.12 * runUp.crit) { dmg *= 3; spawnParticles(e.x, e.y, 5, { color: '#ff5b5b', smax: 3.4, fade: 'spark' }); }
+      e.hp -= dmg; e.reveal = Math.max(e.reveal, 130);
+      spawnParticles(e.x, e.y, 6, { color: wp.shell.glow, smax: 3.2, lmax: 16 });
+      if (e.hp <= 0) killEnemy(e); else Snd.ping();
+    }
+  }
+  for (const br of barrels) if (br.alive && segDist2(br.x, br.y, bx, by, ex, ey) < (br.r + wp.beamW) * (br.r + wp.beamW)) blowBarrel(br);
+  beams.push({ x1: bx, y1: by, x2: ex, y2: ey, life: 14, max: 14, glow: wp.shell.glow, fill: wp.shell.fill, w: wp.beamW });
 }
 // ===== DISTRICTS (sector themes) =====
 const DISTRICTS = [
@@ -565,7 +600,7 @@ const player = {
   target: null, scanPhase: 0,
 };
 
-let enemies = [], bullets = [], particles = [], pickups = [], barrels = [];
+let enemies = [], bullets = [], beams = [], particles = [], pickups = [], barrels = [];
 let obstacles = [];     // {x,y,w,h} rects
 let pillars = [];       // {x,y,r} circles
 let lamps = [], treads = [], scorch = [], motes = [];
@@ -1204,7 +1239,7 @@ function showUpgrade() {
 }
 function startGame() {
   G.state = 'play'; G.t = 0; G.score = 0; G.kills = 0; G.startT = Date.now();
-  enemies = []; bullets = []; particles = []; pickups = []; flashes = []; spawnFlashes = [];
+  enemies = []; bullets = []; beams = []; particles = []; pickups = []; flashes = []; spawnFlashes = [];
   buildWorld();
   player.x = ARENA_W / 2; player.y = ARENA_H - 280;
   player.hull = -Math.PI / 2; player.turret = -Math.PI / 2;
@@ -1253,6 +1288,7 @@ function update() {
   updateSpawning();
   updateEnemies();
   updateBullets();
+  for (let i = beams.length - 1; i >= 0; i--) if (--beams[i].life <= 0) beams.splice(i, 1);
   updatePickups();
 
   // camera (centers the arena if the view is wider than it — ultrawide desktops)
@@ -1296,6 +1332,7 @@ function render() {
   drawEnemies();
   if (player.alive || G.state === 'play') drawPlayer();
   drawBullets();
+  drawBeams();
   drawParticles();
   drawMotes();
   ctx.restore();
@@ -1664,6 +1701,20 @@ function drawBullets() {
     ctx.restore();
   }
 }
+function drawBeams() {
+  for (const b of beams) {
+    const k = b.life / b.max;
+    ctx.save();
+    ctx.globalAlpha = k;
+    ctx.strokeStyle = b.glow; ctx.lineWidth = b.w * 2.6 * k + 1; ctx.lineCap = 'round';
+    ctx.shadowColor = b.glow; ctx.shadowBlur = 18;
+    ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = b.fill; ctx.lineWidth = Math.max(1, b.w * k * 0.7);
+    ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
+    ctx.restore();
+  }
+}
 function drawParticles() {
   for (const p of particles) {
     const t = p.life / p.maxLife;
@@ -1734,6 +1785,10 @@ function renderLights(sx, sy) {
   }
   // bullets glow
   for (const b of bullets) hole(b.x, b.y, b.enemy ? 30 : (b.shell || FALLBACK_SHELL).holeR, 0.8);
+  for (const b of beams) { // the beam is a light source along its whole length
+    const k = b.life / b.max, n = Math.max(2, Math.ceil(Math.hypot(b.x2 - b.x1, b.y2 - b.y1) / 60));
+    for (let i = 0; i <= n; i++) hole(b.x1 + (b.x2 - b.x1) * i / n, b.y1 + (b.y2 - b.y1) * i / n, 24 + 22 * k, 0.75 * k);
+  }
   // flashes (muzzle, explosions)
   for (const f of flashes) hole(f.x, f.y, f.r * (f.life / f.max), 0.9);
   // pickups glow softly
@@ -1874,7 +1929,7 @@ function renderGarage() {
     const nm = document.createElement('div'); nm.className = 'tank-name'; nm.style.color = wp.shell.glow; nm.textContent = wp.name; card.appendChild(nm);
     const ds = document.createElement('div'); ds.className = 'tank-desc'; ds.textContent = wp.desc; card.appendChild(ds);
     const bars = document.createElement('div'); bars.className = 'stat-bars';
-    [['RATE', Math.min(1, 1 / (wp.cdMul || 1))], ['PWR', Math.min(1, wp.dmg * (wp.shots || 1) / 3)], ['RNG', Math.min(1, wp.speed * wp.life / 800)]].forEach(([l, v]) => {
+    [['RATE', Math.min(1, 1 / (wp.cdMul || 1))], ['PWR', Math.min(1, wp.dmg * (wp.shots || 1) / 3)], ['RNG', Math.min(1, (wp.beam ? wp.range : wp.speed * wp.life) / 800)]].forEach(([l, v]) => {
       const b = document.createElement('div'); b.className = 'stat-bar';
       b.innerHTML = '<span>' + l + '</span><div class="bar2"><i style="width:' + Math.round(v * 100) + '%"></i></div>'; bars.appendChild(b);
     });
@@ -2054,10 +2109,10 @@ function loop(ts) {
 document.querySelectorAll('.version').forEach(el => { el.textContent = VERSION; });
 
 window.__blackoutQA = {
-  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), slug: SCORES_API }; },
+  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, beams: beams.length, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), slug: SCORES_API }; },
   tick(n) { n = n || 1; const wr = window.__blackoutQA._noloop; for (let i = 0; i < n; i++) update(); render(); return this.snapshot(); },
   start() { Snd.resume(); startGame(); qaGod = true; return this.snapshot(); },
-  setWave(w) { enemies = []; bullets = []; G.pending = []; G.intermission = 0; startWave(w); return this.snapshot(); },
+  setWave(w) { enemies = []; bullets = []; beams = []; G.pending = []; G.intermission = 0; startWave(w); return this.snapshot(); },
   spawn(type) { const e = mkEnemy(type, clamp(player.x + 300, 60, ARENA_W - 60), player.y); e.dormant = 0; enemies.push(e); return type; },
   killAll(end) { for (const e of enemies.slice()) if (!e.dead) killEnemy(e); G.pending = []; if (end) endGame(); return this.snapshot(); },
   endGame() { endGame(); return this.snapshot(); },

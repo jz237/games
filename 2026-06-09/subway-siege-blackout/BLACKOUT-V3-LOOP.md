@@ -10,8 +10,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 02 DONE (2026-07-14) — SCATTER + armory UI + weapon crate. First gameplay addition.
-- **Suite:** 30/30 green. Run: `node tests/run.mjs suite` (exit 0 = green).
+- **Iteration:** 03 DONE (2026-07-14) — RAILGUN hitscan beam. 3 weapons live.
+- **Suite:** 31/31 green. Run: `node tests/run.mjs suite` (exit 0 = green).
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
@@ -22,7 +22,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 03 (RAILGUN — instant piercing beam; substep hitSet dedupe is the trap).
+- **Next:** item 04 (INCINERATOR — cone + burn DoT; DoT deaths must route through killEnemy()).
 
 ## Iteration log
 
@@ -47,6 +47,14 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   removing; a ++ "fix" would have double-counted). Suite 27→30 (scatter kills, crate swap +
   restart-restores-loadout, armory click persistence). Perf 0.083/2.283 — in gate.
   Polish idea for 18: weapon cards could get small canvas previews like tank cards.
+- **03** (2026-07-14): RAILGUN as true HITSCAN (`beam:true` in def → `fireBeam()`): raycast 8px
+  steps stopped by obstacles/pillars (range 700, beamW 6, dmg 3, cd×2.3, kick 2), damages every
+  enemy along the segment exactly once (segDist2 helper) — the substep/hitSet trap can't apply
+  because there is no bullet. Pierces barrels (blowBarrel chains). Crit + reveal-130 match bullet
+  logic. Visual: `beams[]` (14-frame fade, glow+core lines, drawBeams after drawBullets); light
+  holes punched every 60px along the beam in renderLights. beams cleared in startGame + QA
+  setWave; `snapshot.beams`. Armory RNG bar reads wp.range for beams. Suite 30→31 (aligned-line
+  3-kill pierce + beam observed). Perf 0.07/2.357 — in gate. Screenshot-verified (beam2.png).
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -78,7 +86,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 00 survey + baselines + rig + ledger
 - [x] 01 weapon framework (see log; armory UI + weapon-crate pickups split forward into 02)
 - [x] 02 SCATTER + armory UI + weapon-crate pickup (see log)
-- [ ] 03 RAILGUN (instant piercing beam — MUST dedupe across the 2 substeps, hitSet pattern :1057)
+- [x] 03 RAILGUN — implemented as hitscan beam, dedupe trap structurally avoided (see log)
 - [ ] 04 INCINERATOR (short cone + burn DoT — DoT deaths still via killEnemy())
 - [ ] 05 TESLA (chain-arc between REVEALED enemies — define stalker interaction)
       (each of 02–05: distinct rate/dmg/range vs 3 tanks, own suite items, overdrive-pierce note)
@@ -167,3 +175,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - **Validate NEW tests against the pre-change build** before blaming a refactor — check 26 "failed"
   on geometry that would have failed on v2 too (it had never run on v2). `git stash` + suite run,
   or reason it out (does the change touch that path at all?).
+- **Screenshotting transient VFX** (beams, flashes — anything that fades in <20 ticks): fire it,
+  then set `q.G.hitStop = 500` — update() freezes (hit-stop early-return) while rAF keeps
+  rendering, so the effect holds on screen through the probe's 250ms shot delay. Without this the
+  page's own loop fades the effect before Page.captureScreenshot runs.
