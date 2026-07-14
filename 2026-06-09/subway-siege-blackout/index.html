@@ -356,7 +356,7 @@
    WASD + mouse on desktop. Darkness/searchlight lighting engine.
    ========================================================================== */
 (function () {
-const VERSION = 'v3.2.0';
+const VERSION = 'v3.3.0';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/subway-siege-blackout';
 const HS_KEY = 'ssb_tank_highscores_v1';
 const MUTE_KEY = 'ssb_tank_muted';
@@ -716,7 +716,7 @@ const DISTRICTS = [
 ];
 function districtFor(w){ return DISTRICTS[Math.floor(Math.max(0,w-1)/5)%DISTRICTS.length]; }
 // ===== DISTRICT LAYER (engine): decor props, ambient light wells, weather — rebuilt per district
-let districtFx = { props: [], lights: [], weather: 'none', wp: [] };
+let districtFx = { props: [], lights: [], weather: 'none', wp: [], vents: [], surgeState: 0, surgeT: -1 };
 function buildDistrictLayer() {
   const d = curDistrict;
   districtFx = { props: [], lights: [], weather: (d.weather || 'none'), wp: [] };
