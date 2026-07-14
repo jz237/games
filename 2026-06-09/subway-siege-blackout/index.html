@@ -692,6 +692,14 @@ const DISTRICTS = [
     props:{drum:9,vent:6,crate:3,sign:2},           amb:{count:5,r:100,alpha:0.45}, weather:'motes' },
   { name:'VIOLET DEPOT',  ground:'#241c30', grid:'170,130,220', fog:'8,4,14',  lamp:'200,160,255', tint:'#b46cff',
     props:{neon:6,sign:5,kiosk:3,crate:3},          amb:{count:9,r:115,alpha:0.55}, weather:'none' },
+  { name:'HARBOR GATE',   ground:'#1a2828', grid:'110,190,180', fog:'3,9,9',   lamp:'150,240,220', tint:'#5fe0c8',
+    props:{container:8,puddle:6,crate:4,sign:3},    amb:{count:4,r:130,alpha:0.45}, weather:'fog' },
+  { name:'EMBER WORKS',   ground:'#2b201a', grid:'235,150,90',  fog:'10,5,2',  lamp:'255,180,110', tint:'#ff9a4c',
+    props:{drum:7,vent:6,container:4,crate:3},      amb:{count:6,r:90,alpha:0.55},  weather:'embers' },
+  { name:'GHOST MARKET',  ground:'#242220', grid:'190,180,160', fog:'6,6,5',   lamp:'235,225,200', tint:'#d8cba8',
+    props:{kiosk:7,bench:5,sign:4,crate:3},         amb:{count:4,r:110,alpha:0.35}, weather:'motes', wcol:'#cfc4a8' },
+  { name:'AZURE CIRCUIT', ground:'#1a2032', grid:'120,160,240', fog:'3,5,14',  lamp:'150,190,255', tint:'#6a9aff',
+    props:{neon:7,sign:5,vent:4,crate:3},           amb:{count:10,r:110,alpha:0.55},weather:'none' },
 ];
 function districtFor(w){ return DISTRICTS[Math.floor(Math.max(0,w-1)/5)%DISTRICTS.length]; }
 // ===== DISTRICT LAYER (engine): decor props, ambient light wells, weather — rebuilt per district
@@ -717,7 +725,10 @@ function buildDistrictLayer() {
     const x = rnd(80, ARENA_W - 80), y = rnd(80, ARENA_H - 80);
     if (free(x, y, 10)) { districtFx.lights.push({ x, y, r: d.amb.r * rnd(0.8, 1.2), alpha: d.amb.alpha, ph: rnd(0, 6.283), sp: rnd(0.05, 0.16) }); break; }
   }
-  if (districtFx.weather !== 'none') for (let i = 0; i < 42; i++)
+  districtFx.wcol = d.wcol || null;
+  if (districtFx.weather === 'fog') for (let i = 0; i < 10; i++)
+    districtFx.wp.push({ x: Math.random() * VW, y: Math.random() * VH, r: rnd(160, 300), v: rnd(0.15, 0.45), ph: rnd(0, 6.28) });
+  else if (districtFx.weather !== 'none') for (let i = 0; i < 42; i++)
     districtFx.wp.push({ x: Math.random() * VW, y: Math.random() * VH, v: rnd(2.5, 6), l: rnd(8, 18), ph: rnd(0, 6.28) });
 }
 // ===== ACHIEVEMENTS =====
@@ -1773,16 +1784,23 @@ function drawWeather() { // screen-space, above the darkness pass
       w.y -= w.v * 0.4; w.x += Math.sin(w.ph += 0.02) * 0.6;
       if (w.y < -12) { w.y = VH + 10; w.x = Math.random() * VW; }
       ctx.globalAlpha = 0.28 + 0.22 * Math.sin(w.ph * 3);
-      ctx.fillStyle = '#ff9a4c';
+      ctx.fillStyle = districtFx.wcol || '#ff9a4c';
       ctx.beginPath(); ctx.arc(w.x, w.y, 1.6, 0, 6.283); ctx.fill();
     }
-  } else if (districtFx.weather === 'motes') { // toxic spores: slow, wandering, sickly green
+  } else if (districtFx.weather === 'motes') { // drifting particulate (spores, dust — wcol tints it)
     for (const w of districtFx.wp) {
       w.y -= w.v * 0.12; w.x += Math.sin(w.ph += 0.011) * 0.9;
       if (w.y < -10) { w.y = VH + 8; w.x = Math.random() * VW; }
       ctx.globalAlpha = 0.16 + 0.12 * Math.sin(w.ph * 2.2);
-      ctx.fillStyle = '#9dff6a';
+      ctx.fillStyle = districtFx.wcol || '#9dff6a';
       ctx.beginPath(); ctx.arc(w.x, w.y, 1.9, 0, 6.283); ctx.fill();
+    }
+  } else if (districtFx.weather === 'fog') { // slow rolling banks, screen-space
+    for (const w of districtFx.wp) {
+      w.x += w.v; if (w.x - w.r > VW) w.x = -w.r;
+      const g = ctx.createRadialGradient(w.x, w.y, w.r * 0.2, w.x, w.y, w.r);
+      g.addColorStop(0, 'rgba(150,190,185,0.055)'); g.addColorStop(1, 'rgba(150,190,185,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, 6.283); ctx.fill();
     }
   }
   ctx.restore();

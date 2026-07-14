@@ -10,9 +10,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 12 DONE (2026-07-14) — five districts rebuilt with real environmental character.
-  Last ship: **v3.2.0 LIVE** (site 9f51391c3, mirror b5a8650). Unshipped: items 11, 12.
-- **Suite:** 39/39 green. Run: `node tests/run.mjs suite`.
+- **Iteration:** 13 DONE (2026-07-14) — 4 NEW districts (9 total: +HARBOR GATE fog, EMBER WORKS,
+  GHOST MARKET dust, AZURE CIRCUIT). Last ship: **v3.2.0 LIVE**. Unshipped: items 11–13.
+- **Suite:** 39/39 green (checks 14+39 walk all 9 districts). Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
@@ -23,9 +23,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 13 (add 3–5 NEW districts using the engine: new palettes + prop mixes + weather;
-  wave rotation auto-extends via districtFor modulo). Update suite check 14 (district rotation
-  expects the 5-name cycle — new list changes wave→district mapping!) and check 39's weather map.
+- **Next:** item 14 (district hazards/events, ≤1 per district: e.g. steam vents that vent on a
+  cycle, blackout surge shrinking the searchlight cone). Keep them LIGHT — ambience with teeth,
+  not new enemy systems. Then 15 (ambient loops) → ship batch 3 (v3.3.0, items 11–15).
 
 ## Iteration log
 
@@ -168,6 +168,12 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   clearance. QA `districtFx` getter (used to teleport-and-screenshot props: find prop, set
   player.x/y beside it, tick 140 for cam). Suite 39/39 (weather map updated TOXIC→motes).
   Perf 0.077/2.33. Shots district-violet/violet-neon.png.
+- **13** (2026-07-14): 4 new districts → 9-district rotation (waves 26–45 before wrap): HARBOR
+  GATE (teal docks, containers+puddles, NEW 'fog' weather — 10 drifting radial-gradient banks),
+  EMBER WORKS (foundry rust, drums+vents, embers, tight warm amb r90), GHOST MARKET (sepia
+  bazaar, kiosks+benches, motes with NEW per-district `wcol` dust tint, sparse dim amb), AZURE
+  CIRCUIT (electric blue, dense neon, 10 amb lights). Suite checks 14 (10-wave rotation incl.
+  wrap at 46) + 39 (9-district weather map) updated. Perf 0.083/2.218. Shot harbor-fog.png.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -212,7 +218,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 10b SHIPPED v3.2.0 LIVE 2026-07-14 (site 9f51391c3 + mirror b5a8650; revert survived — log)
 - [x] 11 district engine: props/ambient-light/weather layers, data-driven per district (see log)
 - [x] 12 five districts rebuilt: bench/kiosk/container/puddle/drum/neon + motes weather (see log)
-- [ ] 13 add 3–5 NEW districts (weather: rain streaks, fog banks, embers)
+- [x] 13 four new districts, 9-district rotation, fog weather + wcol tinting (see log)
 - [ ] 14 district hazards/events (≤1 per district: steam vents, blackout surge shrinking the cone)
 - [ ] 15 district ambient audio loops wired into existing pause/mute/duck paths.
 - [ ] 16 balance pass: DPS parity matrix vs CANNON across tanks×weapons; score economy comparable
