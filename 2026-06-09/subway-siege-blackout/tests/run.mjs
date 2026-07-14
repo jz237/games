@@ -114,10 +114,10 @@ async function suite() {
   await check('01 boot title state', async () => { const s = await snap(); if (s.state !== 'title') throw new Error('state=' + s.state); return s.version; });
   await check('02 version format', async () => { const s = await snap(); if (!/^v\d+\.\d+\.\d+$/.test(s.version)) throw new Error(s.version); return s.version; });
   await check('03 leaderboard slug unchanged', async () => { const s = await snap(); if (!s.slug.endsWith('/scores/subway-siege-blackout')) throw new Error(s.slug); });
-  await check('04 audio buffers decode (>=18/21)', async () => {
+  await check('04 audio buffers decode (>=21/24)', async () => {
     await c.eval(`${QA}.bootAudio()`); // buffers only fetch/decode once the ctx exists
-    let n = 0; for (let i = 0; i < 50; i++) { n = (await snap()).audioBuffers; if (n >= 18) break; await sleep(200); }
-    if (n < 18) throw new Error('buffers=' + n); return n + '/21';
+    let n = 0; for (let i = 0; i < 50; i++) { n = (await snap()).audioBuffers; if (n >= 21) break; await sleep(200); }
+    if (n < 21) throw new Error('buffers=' + n); return n + '/24';
   });
   await check('05 start -> play wave1', async () => { const s = await c.eval(`${QA}.start()`); if (s.state !== 'play' || s.wave !== 1 || !s.alive) throw new Error(JSON.stringify({ state: s.state, wave: s.wave, alive: s.alive })); });
   await check('06 tick(120) advances clean', async () => { const s = await c.eval(`${QA}.tick(120)`); if (s.state !== 'play') throw new Error('state=' + s.state); });
@@ -383,7 +383,15 @@ async function suite() {
     if (r.h2 !== 'steam' || !r.dead) throw new Error('steam: ' + JSON.stringify(r));
     return `surge 0→1→2→0, vents=${r.nv}, drone scalded`;
   });
-  await check('41 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('41 district ambience maps + stops on game over', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};q.start();q.tick(5);const a1=q.snapshot().ambient;
+      const a2=q.setWave(11).ambient;const a3=q.setWave(31).ambient;
+      q.endGame();const a4=q.snapshot().ambient;return {a1,a2,a3,a4};})()`);
+    if (r.a1 !== 'amb_city' || r.a2 !== 'amb_rain' || r.a3 !== 'amb_industrial') throw new Error(JSON.stringify(r));
+    if (r.a4 !== null) throw new Error('ambience kept playing after game over: ' + JSON.stringify(r));
+    return `${r.a1}→${r.a2}→${r.a3}→stopped`;
+  });
+  await check('42 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;
