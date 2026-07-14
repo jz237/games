@@ -507,9 +507,9 @@ let tankIdx = 0; try { const i = TANKS.findIndex(t=>t.id===localStorage.getItem(
 function curTank(){ return TANKS[tankIdx]; }
 // ===== WEAPONS (primary turret armament; CANNON = exact v2.0 behavior) =====
 const WEAPONS = [
-  { id:'cannon', name:'CANNON', desc:'Standard patrol gun. Dependable.', cdMul:1, dmg:1, shots:1, spread:0, speed:SHELL_SPEED, life:80, pierce:0, kick:1, sfx:'fire',
+  { id:'cannon', name:'CANNON', desc:'Standard patrol gun. Dependable.', cdMul:1, dmg:1, shots:1, spread:0, speed:SHELL_SPEED, life:80, pierce:0, kick:1, sfx:'fire', casing:true,
     shell:{ len:15, w:4, fill:'#fff3d2', glow:'#ffd98c', holeR:38 }, muzzle:{ r:90, n:4 } },
-  { id:'scatter', name:'SCATTER', desc:'Five-pellet burst. Brutal up close, thin at range.', cdMul:1.65, dmg:0.55, shots:5, spread:0.42, speed:8.2, life:34, pierce:0, kick:1.5, sfx:'fire',
+  { id:'scatter', name:'SCATTER', desc:'Five-pellet burst. Brutal up close, thin at range.', cdMul:1.65, dmg:0.55, shots:5, spread:0.42, speed:8.2, life:34, pierce:0, kick:1.5, sfx:'fire', casing:true,
     shell:{ len:9, w:3, fill:'#ffd9a8', glow:'#ffb36b', holeR:26 }, muzzle:{ r:120, n:8 } },
   { id:'railgun', name:'RAILGUN', desc:'Instant rail lance. Skewers the whole line.', cdMul:2.3, dmg:3, shots:1, spread:0, speed:0, life:0, pierce:0, kick:2, sfx:'fire', beam:true, range:700, beamW:6,
     shell:{ len:0, w:0, fill:'#e8f8ff', glow:'#6ec8ff', holeR:0 }, muzzle:{ r:130, n:10 } },
@@ -891,7 +891,7 @@ function explosion(x, y, big) {
   spawnParticles(x, y, big ? 12 : 6, { color: 'rgba(60,52,46,0.6)', smin: 0.3, smax: 1.4, lmin: 40, lmax: 80, rmin: 4, rmax: 9, fade: 'smoke' });
   if (scorch.length > 50) scorch.shift();
   scorch.push({ x, y, r: big ? 34 : 20 });
-  flashes.push({ x, y, r: big ? 200 : 120, life: big ? 22 : 14, max: big ? 22 : 14 });
+  flashes.push({ x, y, r: big ? 200 : 120, life: big ? 22 : 14, max: big ? 22 : 14, c: '#ffc06a' });
   shake(big ? 16 : 8, big ? 24 : 14);
   if (big) Snd.bigBoom(); else Snd.boom();
 }
@@ -1056,7 +1056,7 @@ function updateEnemies() {
           bullets.push({ x: e.x, y: e.y, vx: (tx - e.x) / dd * spd, vy: (ty - e.y) / dd * spd, enemy: true, dmg: e.dmg, life: flight, big: true, splash: 1 });
           mortarMarks.push({ x: tx, y: ty, t: flight, max: flight });
           e.fireCd = rnd(150, 230); e.reveal = Math.max(e.reveal, 180);
-          flashes.push({ x: e.x, y: e.y, r: 90, life: 10, max: 10 });
+          flashes.push({ x: e.x, y: e.y, r: 90, life: 10, max: 10, c: '#ff9a6a' });
           Snd.enemyFire();
         } else {
           const a = e.turret + rnd(-0.05, 0.05);
@@ -1068,7 +1068,7 @@ function updateEnemies() {
           }
           e.fireCd = e.type === 'scout' ? rnd(120, 180) : e.type === 'boss' ? rnd(95, 130) : e.type === 'stalker' ? rnd(90, 150) : rnd(150, 220);
           e.reveal = Math.max(e.reveal, 150);
-          flashes.push({ x: e.x + Math.cos(a) * (e.r + 10), y: e.y + Math.sin(a) * (e.r + 10), r: 70, life: 8, max: 8 });
+          flashes.push({ x: e.x + Math.cos(a) * (e.r + 10), y: e.y + Math.sin(a) * (e.r + 10), r: 70, life: 8, max: 8, c: '#ff9a6a' });
           Snd.enemyFire();
         }
       }
@@ -1210,10 +1210,12 @@ function updatePlayer() {
     const bx = player.x + Math.cos(a) * 34, by = player.y + Math.sin(a) * 34;
     fireWeapon(wp, a, bx, by);
     player.recoil = wp.kick || 1;
-    flashes.push({ x: bx, y: by, r: wp.muzzle.r, life: 7, max: 7 });
+    flashes.push({ x: bx, y: by, r: wp.muzzle.r, life: 7, max: 7, c: wp.shell.glow });
     spawnParticles(bx, by, wp.muzzle.n, { angle: a, spread: 0.4, smax: 3, lmax: 12, color: '#ffe9b8' });
-    // shell casing
-    spawnParticles(player.x, player.y, 1, { angle: a + Math.PI / 2, spread: 0.3, smin: 1.4, smax: 2.4, color: '#d8a85a', fade: 'spark', lmax: 30 });
+    if (wp.casing) { // ballistic weapons only: ejected brass + a muzzle smoke puff
+      spawnParticles(player.x, player.y, 1, { angle: a + Math.PI / 2, spread: 0.3, smin: 1.4, smax: 2.4, color: '#d8a85a', fade: 'spark', lmax: 30 });
+      spawnParticles(bx, by, 1, { angle: a, spread: 0.5, smin: 0.4, smax: 1.1, color: '#8a8478', lmax: 26 });
+    }
     shake(2 * (wp.kick || 1), 4);
     player.shotCount = (player.shotCount || 0) + 1;
     if (!wp.sfxEvery || player.shotCount % wp.sfxEvery === 0) (Snd[wp.sfx] || Snd.fire).call(Snd);
@@ -1259,7 +1261,7 @@ function updateBullets() {
             let dmg = b.dmg; if ((runUp.crit||0) > 0 && Math.random() < 0.12 * runUp.crit) { dmg *= 3; spawnParticles(b.x, b.y, 5, { color: '#ff5b5b', smax: 3.4, fade: 'spark' }); }
             if (b.burn) e.burnT = Math.min(240, (e.burnT || 0) + b.burn);
             e.hp -= dmg; e.reveal = Math.max(e.reveal, 130);
-            spawnParticles(b.x, b.y, 7, { color: '#ffd98c', smax: 3.4, lmax: 18 });
+            spawnParticles(b.x, b.y, 7, { color: (b.shell || FALLBACK_SHELL).glow, smax: 3.4, lmax: 18, angle: Math.atan2(-b.vy, -b.vx), spread: 1.1 });
             if (e.hp <= 0) killEnemy(e); else Snd.ping();
             if ((b.pierce || 0) > 0) { b.pierce--; hit = false; continue; }
             break;
@@ -1490,6 +1492,14 @@ function render() {
     ctx.strokeStyle = '#7de8ff'; ctx.globalAlpha = (1 - p) * 0.8; ctx.lineWidth = 3 + 6 * (1 - p);
     ctx.shadowColor = '#7de8ff'; ctx.shadowBlur = 16;
     ctx.beginPath(); ctx.arc(player.x, player.y, 40 + p * 1100, 0, 6.283); ctx.stroke();
+    ctx.restore();
+  }
+  for (const f of flashes) { // tinted visible glow — the light-canvas hole only lifts darkness, this adds color
+    const k = f.life / f.max;
+    ctx.save();
+    ctx.globalAlpha = 0.5 * k;
+    ctx.fillStyle = f.c || '#ffd98c'; ctx.shadowColor = f.c || '#ffd98c'; ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 0.22 * (0.6 + 0.4 * k), 0, 6.283); ctx.fill();
     ctx.restore();
   }
   drawParticles();
@@ -1855,6 +1865,13 @@ function drawBullets() {
       ctx.fillRect(-7, -(b.big ? 2.6 : 1.8), 12, (b.big ? 5.2 : 3.6));
     } else {
       const sh = b.shell || FALLBACK_SHELL;
+      const sp = Math.hypot(b.vx, b.vy);
+      if (sp > 6 && sh.len > 0) { // tracer trail, scaled to velocity
+        ctx.globalAlpha = 0.32;
+        ctx.fillStyle = sh.glow;
+        ctx.fillRect(-9 - sp * 2.2, -sh.w * 0.32, sp * 2.2, sh.w * 0.64);
+        ctx.globalAlpha = 1;
+      }
       ctx.shadowColor = sh.glow; ctx.shadowBlur = 10;
       ctx.fillStyle = sh.fill;
       ctx.fillRect(-9, -sh.w / 2, sh.len, sh.w);
