@@ -10,8 +10,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 07 DONE (2026-07-14) — EMP ordnance. Last ship: **v3.1.0 LIVE**
-  (site aeed7c2d1, mirror e0e7345). Unshipped since: items 06, 07.
+- **Iteration:** 08 DONE (2026-07-14) — weapon VFX pass 1. Last ship: **v3.1.0 LIVE**
+  (site aeed7c2d1, mirror e0e7345). Unshipped since: items 06, 07, 08.
 - **Suite:** 37/37 green. Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
@@ -23,8 +23,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 08 (weapon VFX pass 1: muzzle light punches, tracers, impact sparks, casings —
-  pooled, no hot-loop alloc). Plan: ship batch 2 (v3.2.0) after item 10 (audio) lands.
+- **Next:** item 09 (VFX pass 2: explosion light blooms, scorch/debris decals capped+reset,
+  hit-stop tuning, **flash-intensity setting + prefers-reduced-motion default**).
+  Then 10 (audio) → ship batch 2 (v3.2.0).
 
 ## Iteration log
 
@@ -107,6 +108,15 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   above flare band. QA fireEmp/addEmp + snapshot.empAmmo/.empActive. Suite 35→37 (arena-wide
   reveal+stun with movement-freeze/resume assertions; ammo gate/resupply/cap). Placeholder SFX
   ui('overdrive') until item 10. Perf 0.072/2.112 — best yet. Shot emp-wave.png.
+- **08** (2026-07-14): VFX pass 1. SURVEY FIRST paid off: enemy muzzle flashes + fire-reveal
+  already existed in v2 (manual even documents it) — didn't rebuild. Added: per-flash COLOR
+  (`f.c`) + a tinted visible glow pass in render() (light holes are colorless destination-out —
+  color must come from the main canvas); player flash = wp.shell.glow, enemy fire red-orange,
+  explosions warm amber. Velocity-scaled tracer trails on fast shells (>6 px/t so flame slugs
+  don't streak). Impact sparks now per-weapon color + directional (reverse bullet heading,
+  spread 1.1). Casings + muzzle smoke gated to `casing:true` (cannon/scatter only — energy
+  weapons no longer eject brass). No new suite checks (visual pass; error check + screenshot
+  eyeball). Suite 37/37, perf 0.11/2.18 in gate. Shot vfx-pass1.png.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -144,8 +154,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 05b SHIPPED v3.1.0 LIVE 2026-07-14 (site aeed7c2d1 + mirror e0e7345; see log)
 - [x] 06 ordnance framework + FLARE (real touch button shipped early, not a placeholder; see log)
 - [x] 07 EMP: arena-wide reveal (cloak-piercing) + stun; per-run resets (see log)
-- [ ] 08 weapon VFX pass 1: muzzle-flash light punches, tracers/beam glow, impact sparks, casings
-      — pooled, zero per-frame allocation in hot loop; perf gate applies.
+- [x] 08 weapon VFX pass 1: tinted flash glows, tracers, directional sparks, gated casings (see log)
 - [ ] 09 weapon VFX pass 2: explosion light blooms, scorch/debris decals (capped pool, reset per
       run), micro hit-stop tuning; **flash-intensity setting** + prefers-reduced-motion default
       (shake setting already exists).
