@@ -289,7 +289,35 @@ async function suite() {
     if (r.id !== 'tesla' || r.dk < 3 || r.sawArc < 1 || !r.stAlive) throw new Error(JSON.stringify(r));
     return `+${r.dk} kills, arcs=${r.sawArc}, cloaked survived=${r.stAlive}`;
   });
-  await check('33 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('33 flare lands, reveals cloaked stalker, turret finishes it', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};q.selectWeapon(0);q.start();q.god(true);q.killAll();
+      const a0=q.snapshot().ordAmmo;
+      q.player.turret=0; // aim east: LOS-clear zone (idle sweep points up into the blocked station)
+      q.fireOrdnance();q.tick(40); // lob + land
+      const f=q.flares[0];if(!f)return {err:'no flare after fire',a0};
+      q.spawn('stalker');const st=q.enemies.filter(e=>!e.dead&&e.type==='stalker')[0];
+      st.x=f.x+20;st.y=f.y;st.reveal=0;
+      q.tick(10);const rev=st.reveal;
+      let dead=false;const k0=q.snapshot().kills;
+      for(let i=0;i<60&&!dead;i++){if(!st.dead){st.x=f.x+20;st.y=f.y;}q.tick(5);dead=st.dead;}
+      return {a0,a1:q.snapshot().ordAmmo,fl:q.snapshot().flares,rev,dead,dk:q.snapshot().kills-k0};})()`);
+    if (r.err) throw new Error(JSON.stringify(r));
+    if (r.a0 !== 2 || r.a1 !== 1) throw new Error('ammo ' + JSON.stringify(r));
+    if (!(r.rev >= 40)) throw new Error('flare did not reveal cloaked stalker: rev=' + r.rev);
+    if (!r.dead || r.dk < 1) throw new Error('revealed stalker not killed: ' + JSON.stringify(r));
+    return `rev=${r.rev}, stalker killed in flare light`;
+  });
+  await check('34 flare ammo gates + resupply pickup + cap', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};q.start();q.god(true);
+      q.fireOrdnance();q.fireOrdnance();const s1=q.fireOrdnance(); // 3rd shot has no ammo
+      q.addPickup('flare');q.tick(30);const a2=q.snapshot().ordAmmo;
+      const cap=q.addOrdnance(9);
+      return {fl:s1.flares,a1:s1.ordAmmo,a2,cap};})()`);
+    if (r.fl !== 2 || r.a1 !== 0) throw new Error('gate failed: ' + JSON.stringify(r));
+    if (r.a2 !== 1) throw new Error('resupply failed: ' + JSON.stringify(r));
+    if (r.cap !== 5) throw new Error('cap failed: ' + JSON.stringify(r));
+  });
+  await check('35 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;
