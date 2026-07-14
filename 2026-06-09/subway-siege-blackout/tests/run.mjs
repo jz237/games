@@ -204,7 +204,27 @@ async function suite() {
     if (s.mortarMarks !== 0) bad.push('marks=' + s.mortarMarks); if (s.upgradePending) bad.push('upgPending');
     if (bad.length) throw new Error(bad.join(','));
   });
-  await check('24 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('24 weapon framework defaults + persist', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};const s=q.snapshot();const sel=q.selectWeapon(0);return {weapon:s.weapon,count:s.weapons,sel,ls:localStorage.getItem('ssb_weapon')};})()`);
+    if (r.weapon !== 'cannon' || r.count < 1 || r.sel !== 'cannon' || r.ls !== 'cannon') throw new Error(JSON.stringify(r));
+    return 'weapons=' + r.count;
+  });
+  await check('25 start() applies persisted weapon loadout', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};const s=q.start();return {weapon:s.weapon,ls:localStorage.getItem('ssb_weapon')};})()`);
+    if (r.weapon !== r.ls) throw new Error(JSON.stringify(r));
+  });
+  await check('26 auto-fire kills through weapon framework', async () => {
+    // place 150px east of the player (probed: clear LOS there; default spawn spot at +300x is
+    // LOS-blocked by a world obstacle) and pin reveal so the turret can lock
+    const r = await c.eval(`(()=>{const q=${QA};q.start();q.god(true);q.killAll();const k0=q.snapshot().kills;
+      for(let i=0;i<3;i++)q.spawn('scout');
+      for(const e of q.enemies)if(!e.dead){e.x=q.player.x+150;e.y=q.player.y;}
+      for(let i=0;i<60;i++){for(const e of q.enemies)if(!e.dead)e.reveal=200;q.tick(10);}
+      return {dk:q.snapshot().kills-k0};})()`);
+    if (r.dk < 1) throw new Error('auto-fire killed nothing: ' + JSON.stringify(r));
+    return `+${r.dk} kills`;
+  });
+  await check('27 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;
@@ -244,4 +264,11 @@ async function perf() {
   console.log(JSON.stringify(r));
 }
 
-({ suite, shots, perf }[MODE] || (() => { console.error('unknown mode ' + MODE); process.exit(2); }))();
+// ---------- probe: node tests/run.mjs probe '<js expr evaluated in page>' ----------
+async function probe() {
+  const { c, cleanup } = await boot();
+  try { console.log(JSON.stringify(await c.eval(process.argv[3] || `${QA}.snapshot()`), null, 1)); }
+  finally { if (c.errors.length) console.error('PAGE ERRORS:', c.errors.slice(0, 5)); await cleanup(); }
+}
+
+({ suite, shots, perf, probe }[MODE] || (() => { console.error('unknown mode ' + MODE); process.exit(2); }))();
