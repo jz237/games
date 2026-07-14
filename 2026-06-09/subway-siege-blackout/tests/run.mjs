@@ -160,8 +160,10 @@ async function suite() {
   await check('16 boss kill -> upgrade offer -> pick works', async () => {
     // boss must actually SPAWN before killAll (else it dies in the pending queue and never counts),
     // and showUpgrade fires via a real-time setTimeout(700ms) after the kill — wait wall-clock.
+    // spawns are strictly 1-per-68-ticks with no concurrency cap; wave 5's queue is ~13 deep,
+    // so a boss shuffled last needs ~950 ticks — give it 1800
     const s1 = await c.eval(`(()=>{const q=${QA};q.setWave(5);let s=q.snapshot();
-      for(let i=0;i<30&&!s.enemyTypes.includes('boss');i++){q.tick(30);s=q.snapshot();}
+      for(let i=0;i<60&&!s.enemyTypes.includes('boss');i++){q.tick(30);s=q.snapshot();}
       if(!s.enemyTypes.includes('boss'))return {err:'boss never spawned',types:s.enemyTypes};
       q.killAll(); return {ok:1};})()`);
     if (s1.err) throw new Error(JSON.stringify(s1));
@@ -271,7 +273,23 @@ async function suite() {
     if (r.err) throw new Error(JSON.stringify(r));
     if (r.id !== 'incinerator' || !r.dead || r.dk < 1) throw new Error(JSON.stringify(r));
   });
-  await check('32 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('32 tesla chains revealed enemies, skips cloaked stalker', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};const id=q.selectWeapon(4);q.start();q.god(true);q.killAll();const k0=q.snapshot().kills;
+      for(let i=0;i<3;i++)q.spawn('drone');q.spawn('stalker');
+      const es=q.enemies.filter(e=>!e.dead);
+      const drones=es.filter(e=>e.type==='drone'),st=es.find(e=>e.type==='stalker');
+      let sawArc=0;
+      for(let i=0;i<80;i++){
+        drones.forEach((e,ix)=>{if(!e.dead){e.x=q.player.x+150+ix*40;e.y=q.player.y;e.reveal=200;}});
+        if(!st.dead){st.x=q.player.x+170;st.y=q.player.y+40;st.reveal=0;} // inside chainR but cloaked
+        q.tick(4);sawArc=Math.max(sawArc,q.snapshot().beams);
+        if(q.snapshot().kills-k0>=3)break;
+      }
+      const dk=q.snapshot().kills-k0;const stAlive=!st.dead;q.selectWeapon(0);return {id,dk,sawArc,stAlive};})()`);
+    if (r.id !== 'tesla' || r.dk < 3 || r.sawArc < 1 || !r.stAlive) throw new Error(JSON.stringify(r));
+    return `+${r.dk} kills, arcs=${r.sawArc}, cloaked survived=${r.stAlive}`;
+  });
+  await check('33 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;

@@ -10,8 +10,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 04 DONE (2026-07-14) — INCINERATOR + burn DoT. 4 weapons live.
-- **Suite:** 32/32 green (3 consecutive runs after deflaking). Run: `node tests/run.mjs suite`.
+- **Iteration:** 05 DONE (2026-07-14) — TESLA chain arc. ALL FIVE WEAPONS IN.
+- **Suite:** 33/33 green (2 consecutive runs). Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
@@ -22,7 +22,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 05 (TESLA — chain-arc between revealed enemies; then SHIP BATCH 1 as v3.1.0).
+- **Next:** SHIP BATCH 1 as **v3.1.0** (items 01–05: five weapons + armory + crate). Full ship
+  protocol: adversarial self-review of the whole batch diff (git diff 964576a..HEAD -- index.html),
+  version bump, copy to deploy, land+deploy, verify live, mirror sync, memory refresh.
 
 ## Iteration log
 
@@ -63,6 +65,15 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   Suite 29→32 after DEFLAKING: scouts retreat to a 300px standoff → pin position+reveal every
   4-5 ticks (not 10) or they drift out of scatter range / off the railgun corridor; crate check
   now asserts != cannon (random among 3 others). 3 consecutive green runs. Perf 0.087/2.18.
+- **05** (2026-07-14): TESLA chain arc (`arc:true` → fireArc): first hop = nearest revealed enemy
+  in a 0.6-rad aim cone within 520px, then chains to ≤4 nearest revealed within 190px, dmg 1.4
+  ×0.75 falloff per hop, deaths via killEnemy. Same reveal<40 cloak rule as the turret (cloaked
+  stalker un-arc-able; BURNING stalker arc-able — incinerator+tesla synergy). Arc visuals reuse
+  beams[] with `jag:true` — drawBeams re-jitters the polyline every frame (crackle); light holes
+  along arcs come free from the beam hole path. Suite 32→33 (chain-kills 3 drones + cloaked
+  stalker survives inside chain range). Check 16 budget doubled to 1800 ticks — spawns are
+  strictly 1-per-68-ticks, wave-5 queue ~13 deep, so a last-shuffled boss needs ~950. Perf
+  0.072/2.15. Screenshot tesla-arc.png.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -96,8 +107,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 02 SCATTER + armory UI + weapon-crate pickup (see log)
 - [x] 03 RAILGUN — implemented as hitscan beam, dedupe trap structurally avoided (see log)
 - [x] 04 INCINERATOR + burn DoT via killEnemy; burning breaks stalker cloak (see log)
-- [ ] 05 TESLA (chain-arc between REVEALED enemies — define stalker interaction)
-      (each of 02–05: distinct rate/dmg/range vs 3 tanks, own suite items, overdrive-pierce note)
+- [x] 05 TESLA chain arc; cloak rule matches turret; burning stalkers arc-able (see log)
+- [ ] 05b SHIP BATCH 1 → v3.1.0 (adversarial review of full batch diff first)
 - [ ] 06 **ordnance framework + FLARE**: manual slot, limited ammo via pickups, lobbed sustained
       light well; define stalker-cloak interaction; touch button placeholder ok until 17.
 - [ ] 07 EMP: screen-wide reveal + brief stun; stalker interaction; per-run state reset.
