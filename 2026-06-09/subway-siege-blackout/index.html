@@ -141,6 +141,13 @@
   #btn-pause { right: 14px; }
   #btn-mute { right: 60px; }
   .topbtn svg { width: 20px; height: 20px; }
+  #btn-ord { position: absolute; z-index: 14; right: 14px; bottom: max(96px, calc(env(safe-area-inset-bottom) + 88px));
+    pointer-events: auto; background: rgba(34,20,8,.78); border: 1px solid rgba(255,190,90,.45); color: #ffd98c;
+    width: 56px; height: 56px; border-radius: 50%; cursor: pointer; display: none; place-items: center;
+    font: 800 .58rem/1.1 inherit; letter-spacing: 1px; text-align: center; box-shadow: 0 0 14px rgba(255,160,60,.25); }
+  #btn-ord.show { display: grid; }
+  #btn-ord.empty { opacity: .38; box-shadow: none; }
+  #btn-ord b { font-size: .95rem; display: block; }
   .spin { display:inline-block; width:18px;height:18px;border:2px solid #ffffff33;border-top-color:#ffb84d;border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle}
   @keyframes sp { to { transform: rotate(360deg); } }
   .hint-line { position: absolute; bottom: max(86px, calc(env(safe-area-inset-bottom) + 76px)); left: 50%; transform: translateX(-50%);
@@ -218,6 +225,7 @@
 
   <button class="topbtn" id="btn-mute" aria-label="Mute"><svg viewBox="0 0 24 24" fill="none" stroke="#f0dcc0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path id="snd-on" d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14"/></svg></button>
   <button class="topbtn" id="btn-pause" aria-label="Pause"><svg viewBox="0 0 24 24" fill="#f0dcc0"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+  <button id="btn-ord" aria-label="Fire flare">FLARE<b id="ord-n">2</b></button>
 
   <div id="ach-toast"><div class="ah">◆ MEDAL EARNED ◆</div><div class="aname" id="ach-toast-name"></div></div>
 
@@ -549,6 +557,57 @@ function fireBeam(wp, a, bx, by) {
   for (const br of barrels) if (br.alive && segDist2(br.x, br.y, bx, by, ex, ey) < (br.r + wp.beamW) * (br.r + wp.beamW)) blowBarrel(br);
   beams.push({ x1: bx, y1: by, x2: ex, y2: ey, life: 14, max: 14, glow: wp.shell.glow, fill: wp.shell.fill, w: wp.beamW });
 }
+// ===== ORDNANCE: FLARE — lobbed sustained light well. Reveals EVERYTHING in its pool,
+// including cloaked stalkers (the designed cloak counter). Manual trigger: Q/E or #btn-ord.
+function updateOrdHud() {
+  const b = document.getElementById('btn-ord'); if (!b) return;
+  document.getElementById('ord-n').textContent = G.ordAmmo;
+  b.classList.toggle('show', G.state === 'play' || G.state === 'pause');
+  b.classList.toggle('empty', (G.ordAmmo | 0) <= 0);
+}
+function fireOrdnance() {
+  if (G.state !== 'play' || !player.alive || G.upgradePending) return;
+  if ((G.ordAmmo | 0) <= 0) { Snd.ui('menu_click', .35); toast('NO FLARES', 40); return; }
+  G.ordAmmo--;
+  const a = player.turret, d = 240;
+  flares.push({ sx: player.x, sy: player.y, x: player.x, y: player.y,
+    tx: clamp(player.x + Math.cos(a) * d, 40, ARENA_W - 40), ty: clamp(player.y + Math.sin(a) * d, 40, ARENA_H - 40),
+    flight: 36, t: 480, max: 480, bob: rnd(0, 6.28) });
+  Snd.ui('pickup', .5); // placeholder whoosh until item 10 records real ordnance SFX
+  updateOrdHud();
+}
+function updateFlares() {
+  for (let i = flares.length - 1; i >= 0; i--) {
+    const f = flares[i];
+    if (f.flight > 0) {
+      f.flight--;
+      const p = 1 - f.flight / 36;
+      f.x = f.sx + (f.tx - f.sx) * p; f.y = f.sy + (f.ty - f.sy) * p;
+      if (f.flight === 0) spawnParticles(f.x, f.y, 8, { color: '#ffd35e', smax: 2.8, lmax: 16, fade: 'spark' });
+      continue;
+    }
+    f.t--;
+    if (f.t <= 0) { flares.splice(i, 1); continue; }
+    if (f.t % 3 === 0) for (const e of enemies) {
+      if (!e.dead && e.dormant <= 0 && dist2(e.x, e.y, f.x, f.y) < 170 * 170) e.reveal = Math.max(e.reveal, 90);
+    }
+    if (f.t % 14 === 0) spawnParticles(f.x + rnd(-4, 4), f.y + rnd(-4, 4), 1, { color: '#ffe9a8', smax: 1.6, lmax: 18, fade: 'spark' });
+  }
+}
+function drawFlares() {
+  for (const f of flares) {
+    const air = f.flight > 0, p = air ? 1 - f.flight / 36 : 0;
+    const y = f.y - (air ? Math.sin(p * Math.PI) * 42 : 0);
+    const fade = air ? 1 : Math.min(1, f.t / 80);
+    ctx.save(); ctx.translate(f.x, y);
+    ctx.globalAlpha = fade;
+    ctx.shadowColor = '#ffd35e'; ctx.shadowBlur = 16;
+    ctx.fillStyle = '#fff6d8';
+    ctx.beginPath(); ctx.arc(0, 0, air ? 3.5 : 5 + Math.sin(G.t * 0.32 + f.bob) * 1.2, 0, 6.283); ctx.fill();
+    if (!air) { ctx.globalAlpha = fade * 0.55; ctx.fillStyle = '#ffb84d'; ctx.beginPath(); ctx.arc(0, 0, 9 + Math.sin(G.t * 0.21 + f.bob) * 2, 0, 6.283); ctx.fill(); }
+    ctx.restore();
+  }
+}
 // Chain lightning: instant hops between REVEALED enemies (same reveal<40 cloak rule as the
 // turret — a burning stalker IS arc-able). Damage falls off per hop; deaths via killEnemy.
 function fireArc(wp, a, bx, by) {
@@ -628,7 +687,7 @@ const G = {
   intermission: 0,        // frames until next wave starts
   pending: [],            // queued spawns for current wave
   spawnTick: 0,
-  combo: 0, comboTimer: 0, comboMax: 0, overdriveArmed: true, waveHit: false, hitStop: 0, upgradePending: false,
+  combo: 0, comboTimer: 0, comboMax: 0, overdriveArmed: true, waveHit: false, hitStop: 0, upgradePending: false, ordAmmo: 0,
 };
 
 const player = {
@@ -640,7 +699,7 @@ const player = {
   target: null, scanPhase: 0,
 };
 
-let enemies = [], bullets = [], beams = [], particles = [], pickups = [], barrels = [];
+let enemies = [], bullets = [], beams = [], flares = [], particles = [], pickups = [], barrels = [];
 let obstacles = [];     // {x,y,w,h} rects
 let pillars = [];       // {x,y,r} circles
 let lamps = [], treads = [], scorch = [], motes = [];
@@ -664,6 +723,7 @@ window.addEventListener('keydown', (e) => {
   keys[k] = true;
   if (e.key === 'Escape' || k === 'p') { togglePause(); return; }
   if (k === 'm') { document.getElementById('btn-mute').click(); return; }
+  if (k === 'q' || k === 'e') { fireOrdnance(); return; }
   if (e.key === 'Enter') {
     if (!document.getElementById('screen-howto').classList.contains('hidden')) document.getElementById('btn-howback').click();
     else if (G.state === 'title' && !document.getElementById('screen-title').classList.contains('hidden')) document.getElementById('btn-start').click();
@@ -1017,6 +1077,7 @@ function killEnemy(e, silentScore) {
     const chance = e.type === 'brute' ? 0.55 : 0.16;
     if (roll < chance) { const types = ['repair', 'shield', 'overdrive']; dropPickup(e.x, e.y, types[Math.floor(Math.random() * 3)]); }
     else if (WEAPONS.length > 1 && roll < chance + 0.05) dropPickup(e.x, e.y, 'weapon'); // weapon crate: own 5% band, doesn't eat the base drops
+    else if (roll < chance + 0.09) dropPickup(e.x, e.y, 'flare'); // flare resupply: next 4% band
   }
 }
 let curBarrelKill = false;
@@ -1223,10 +1284,11 @@ function updatePickups() {
         const opts = WEAPONS.map((w, ix) => ix).filter(ix => ix !== curWeaponIdx);
         if (opts.length) { curWeaponIdx = opts[Math.floor(Math.random() * opts.length)]; toast('+ ' + curWeapon().name + ' EQUIPPED', 80); }
       }
+      else if (p.type === 'flare') { G.ordAmmo = Math.min(5, (G.ordAmmo | 0) + 1); updateOrdHud(); toast('+ FLARE', 60); }
       else { player.overdrive = 480; document.getElementById('od-badge').classList.add('show'); toast('+ OVERDRIVE', 60); }
       G.score += 25;
       Snd.pickup();
-      spawnParticles(p.x, p.y, 12, { color: p.type === 'shield' ? '#9adcff' : p.type === 'repair' ? '#9aff9d' : p.type === 'weapon' ? '#ffb36b' : '#ffd98c', smax: 3.4, fade: 'spark' });
+      spawnParticles(p.x, p.y, 12, { color: p.type === 'shield' ? '#9adcff' : p.type === 'repair' ? '#9aff9d' : p.type === 'weapon' ? '#ffb36b' : p.type === 'flare' ? '#ffd35e' : '#ffd98c', smax: 3.4, fade: 'spark' });
       pickups.splice(i, 1);
     }
   }
@@ -1288,7 +1350,8 @@ function showUpgrade() {
 }
 function startGame() {
   G.state = 'play'; G.t = 0; G.score = 0; G.kills = 0; G.startT = Date.now();
-  enemies = []; bullets = []; beams = []; particles = []; pickups = []; flashes = []; spawnFlashes = [];
+  enemies = []; bullets = []; beams = []; flares = []; particles = []; pickups = []; flashes = []; spawnFlashes = [];
+  G.ordAmmo = 2; updateOrdHud();
   buildWorld();
   player.x = ARENA_W / 2; player.y = ARENA_H - 280;
   player.hull = -Math.PI / 2; player.turret = -Math.PI / 2;
@@ -1309,6 +1372,7 @@ function startGame() {
 function endGame() {
   if (G.state === 'over') return;
   G.state = 'over';
+  updateOrdHud();
   G.elapsed = Math.floor((Date.now() - G.startT) / 1000);
   lifetime.kills += G.kills; lifetime.time += G.elapsed;
   if (G.wave > lifetime.bestWave) lifetime.bestWave = G.wave;
@@ -1338,6 +1402,7 @@ function update() {
   updateEnemies();
   updateBullets();
   for (let i = beams.length - 1; i >= 0; i--) if (--beams[i].life <= 0) beams.splice(i, 1);
+  updateFlares();
   updatePickups();
 
   // camera (centers the arena if the view is wider than it — ultrawide desktops)
@@ -1378,6 +1443,7 @@ function render() {
   drawObstacles();
   drawBarrels();
   drawPickups();
+  drawFlares();
   drawEnemies();
   if (player.alive || G.state === 'play') drawPlayer();
   drawBullets();
@@ -1600,7 +1666,7 @@ function drawPickups() {
     const blink = p.t < 240 && Math.floor(p.t / 12) % 2 === 0;
     if (blink) continue;
     ctx.save(); ctx.translate(p.x, y);
-    const col = p.type === 'repair' ? '#9aff9d' : p.type === 'shield' ? '#9adcff' : p.type === 'weapon' ? '#ffb36b' : '#ffd98c';
+    const col = p.type === 'repair' ? '#9aff9d' : p.type === 'shield' ? '#9adcff' : p.type === 'weapon' ? '#ffb36b' : p.type === 'flare' ? '#ffd35e' : '#ffd98c';
     ctx.shadowColor = col; ctx.shadowBlur = 12;
     ctx.fillStyle = 'rgba(16,14,20,0.9)';
     ctx.beginPath(); ctx.arc(0, 0, 13, 0, 6.283); ctx.fill();
@@ -1611,6 +1677,7 @@ function drawPickups() {
     if (p.type === 'repair') { ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(5, 0); ctx.moveTo(0, -5); ctx.lineTo(0, 5); ctx.stroke(); }
     else if (p.type === 'shield') { ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(5, -2); ctx.lineTo(5, 3); ctx.lineTo(0, 6); ctx.lineTo(-5, 3); ctx.lineTo(-5, -2); ctx.closePath(); ctx.stroke(); }
     else if (p.type === 'weapon') { ctx.beginPath(); ctx.moveTo(-5, -3); ctx.lineTo(1, -3); ctx.lineTo(5, 0); ctx.lineTo(1, 3); ctx.lineTo(-5, 3); ctx.closePath(); ctx.stroke(); }
+    else if (p.type === 'flare') { ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4.5, 3.5); ctx.lineTo(-4.5, 3.5); ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 1, 1.4, 0, 6.283); ctx.stroke(); }
     else { ctx.beginPath(); ctx.moveTo(2, -6); ctx.lineTo(-3, 1); ctx.lineTo(0, 1); ctx.lineTo(-2, 6); ctx.lineTo(3, -1); ctx.lineTo(0, -1); ctx.closePath(); ctx.stroke(); }
     ctx.restore();
   }
@@ -1855,6 +1922,11 @@ function renderLights(sx, sy) {
     const k = b.life / b.max, n = Math.max(2, Math.ceil(Math.hypot(b.x2 - b.x1, b.y2 - b.y1) / 60));
     for (let i = 0; i <= n; i++) hole(b.x1 + (b.x2 - b.x1) * i / n, b.y1 + (b.y2 - b.y1) * i / n, 24 + 22 * k, 0.75 * k);
   }
+  for (const f of flares) { // flare: a thrown pool of light, flickering, fading out at the end
+    if (f.flight > 0) { hole(f.x, f.y, 40, 0.7); continue; }
+    const fade = Math.min(1, f.t / 80);
+    hole(f.x, f.y, (150 + Math.sin(G.t * 0.26 + f.bob) * 12) * (0.35 + 0.65 * fade), 0.85 * fade);
+  }
   // flashes (muzzle, explosions)
   for (const f of flashes) hole(f.x, f.y, f.r * (f.life / f.max), 0.9);
   // pickups glow softly
@@ -1949,10 +2021,11 @@ document.getElementById('btn-start').onclick = () => { Snd.resume(); click(); st
 document.getElementById('btn-howto').onclick = () => { click(); showScreen('screen-howto'); };
 document.getElementById('btn-howback').onclick = () => { click(); showScreen('screen-title'); };
 document.getElementById('btn-resume').onclick = () => togglePause();
-document.getElementById('btn-quit').onclick = () => { Snd.ui('menu_click'); G.state = 'title'; Snd.setEngine(0); updateMusic(); showScreen('screen-title'); updateBestLine(); };
+document.getElementById('btn-quit').onclick = () => { Snd.ui('menu_click'); G.state = 'title'; Snd.setEngine(0); updateMusic(); showScreen('screen-title'); updateBestLine(); updateOrdHud(); };
+document.getElementById('btn-ord').addEventListener('pointerdown', ev => { ev.preventDefault(); Snd.resume(); fireOrdnance(); });
 document.getElementById('btn-pause').onclick = () => togglePause();
 document.getElementById('btn-again').onclick = () => { Snd.resume(); click(); startGame(); };
-document.getElementById('btn-title').onclick = () => { Snd.ui('menu_click'); G.state = 'title'; updateMusic(); showScreen('screen-title'); updateBestLine(); };
+document.getElementById('btn-title').onclick = () => { Snd.ui('menu_click'); G.state = 'title'; updateMusic(); showScreen('screen-title'); updateBestLine(); updateOrdHud(); };
 document.getElementById('btn-mute').onclick = () => { const m = Snd.toggleMute(); document.getElementById('snd-on').style.opacity = m ? '0.2' : '1'; };
 if (Snd.isMuted()) document.getElementById('snd-on').style.opacity = '0.2';
 
@@ -2180,10 +2253,12 @@ function loop(ts) {
 document.querySelectorAll('.version').forEach(el => { el.textContent = VERSION; });
 
 window.__blackoutQA = {
-  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, beams: beams.length, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), slug: SCORES_API }; },
+  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, beams: beams.length, flares: flares.length, ordAmmo: G.ordAmmo, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), slug: SCORES_API }; },
   tick(n) { n = n || 1; const wr = window.__blackoutQA._noloop; for (let i = 0; i < n; i++) update(); render(); return this.snapshot(); },
   start() { Snd.resume(); startGame(); qaGod = true; return this.snapshot(); },
-  setWave(w) { enemies = []; bullets = []; beams = []; G.pending = []; G.intermission = 0; startWave(w); return this.snapshot(); },
+  setWave(w) { enemies = []; bullets = []; beams = []; flares = []; G.pending = []; G.intermission = 0; startWave(w); return this.snapshot(); },
+  fireOrdnance() { fireOrdnance(); return this.snapshot(); },
+  addOrdnance(n) { G.ordAmmo = Math.min(5, (G.ordAmmo | 0) + (n || 1)); updateOrdHud(); return G.ordAmmo; },
   spawn(type) { const e = mkEnemy(type, clamp(player.x + 300, 60, ARENA_W - 60), player.y); e.dormant = 0; enemies.push(e); return type; },
   killAll(end) { for (const e of enemies.slice()) if (!e.dead) killEnemy(e); G.pending = []; if (end) endGame(); return this.snapshot(); },
   endGame() { endGame(); return this.snapshot(); },
@@ -2200,7 +2275,7 @@ window.__blackoutQA = {
   opt(k, v) { settings[k] = v; saveSettings(); Snd.applyVolumes(); },
   recTab(w) { setRecTab(w); },
   clickBtn(id) { const b = document.getElementById(id); if (b) b.click(); return !!b; },
-  get enemies() { return enemies; }, get player() { return player; }, get settings() { return settings; }, get G() { return G; }
+  get enemies() { return enemies; }, get player() { return player; }, get settings() { return settings; }, get G() { return G; }, get flares() { return flares; }
 };
 resize();
 buildWorld();

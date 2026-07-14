@@ -10,10 +10,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 05b DONE (2026-07-14) — **v3.1.0 SHIPPED LIVE** (batch 1: items 01–05).
-  Site commit aeed7c2d1 (deployed from clean worktree, verified on pages.dev ×3 probes);
-  mirror jz237/games e0e7345 (cherry-pick worktree pattern, Pages built, verified v3.1.0).
-- **Suite:** 33/33 green. Run: `node tests/run.mjs suite`.
+- **Iteration:** 06 DONE (2026-07-14) — ordnance framework + FLARE. Last ship: **v3.1.0 LIVE**
+  (site aeed7c2d1, mirror e0e7345). Unshipped since: item 06.
+- **Suite:** 35/35 green (2 consecutive runs). Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
@@ -24,8 +23,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 06 (ordnance framework + FLARE — manual slot, limited ammo, lobbed light well,
-  stalker-cloak interaction defined; touch button placeholder OK until 17).
+- **Next:** item 07 (EMP — screen-wide reveal + brief stun; stalker interaction + per-run reset).
 
 ## Iteration log
 
@@ -88,6 +86,17 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   jz237/games — `worktree --detach origin/main` + `cherry-pick 964576a^..275c20d` + push e0e7345,
   Pages built ~45s, github.io serves v3.1.0. VERSION bumped only (AUDIO_V still 2.0.0 — no new
   audio this batch).
+- **06** (2026-07-14): Ordnance framework + FLARE. `G.ordAmmo` (start 2, cap 5, reset in
+  startGame), fire via Q/E or `#btn-ord` (56px round DOM button, bottom-right above stick,
+  pointerdown → works touch+mouse NOW, shown in play/pause via updateOrdHud). Flare: lobbed along
+  player.turret 240px (36-tick arc flight), then 480-tick ground light well — renderLights hole
+  150px flickering (fades last 80t), **pins reveal≥90 within 170px every 3 ticks → REVEALS CLOAKED
+  STALKERS (the designed cloak counter)**. 'flare' pickup resupply in its own 4% drop band above
+  the weapon-crate band. QA: fireOrdnance/addOrdnance hooks, flares getter, snapshot.flares/
+  .ordAmmo. Suite 33→35 (flare lifecycle incl. cloak-reveal-then-turret-kill; ammo gate/resupply/
+  cap). Placeholder SFX = ui('pickup') until item 10. Test gotcha again: flare lobs along the
+  IDLE TURRET (points up into blocked station) — set q.player.turret=0 (east) before
+  q.fireOrdnance() in tests. Perf 2.38 in gate. Shot flare-pool.png.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -123,8 +132,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 04 INCINERATOR + burn DoT via killEnemy; burning breaks stalker cloak (see log)
 - [x] 05 TESLA chain arc; cloak rule matches turret; burning stalkers arc-able (see log)
 - [x] 05b SHIPPED v3.1.0 LIVE 2026-07-14 (site aeed7c2d1 + mirror e0e7345; see log)
-- [ ] 06 **ordnance framework + FLARE**: manual slot, limited ammo via pickups, lobbed sustained
-      light well; define stalker-cloak interaction; touch button placeholder ok until 17.
+- [x] 06 ordnance framework + FLARE (real touch button shipped early, not a placeholder; see log)
 - [ ] 07 EMP: screen-wide reveal + brief stun; stalker interaction; per-run state reset.
 - [ ] 08 weapon VFX pass 1: muzzle-flash light punches, tracers/beam glow, impact sparks, casings
       — pooled, zero per-frame allocation in hot loop; perf gate applies.
