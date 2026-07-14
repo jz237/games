@@ -398,7 +398,8 @@ const Snd = (function () {
   let ac = null, master = null, engGain = null;
   let muted = localStorage.getItem(MUTE_KEY) === '1';
   const buffers = {}; let loaded = false; const lastPlayed = {};
-  const SFX = ['fire','explode_small','explode_big','barrel','pickup','player_hit','wave_clear','boss_horn','upgrade','achievement','menu_click','combo','overdrive','perfect'];
+  const SFX = ['fire','explode_small','explode_big','barrel','pickup','player_hit','wave_clear','boss_horn','upgrade','achievement','menu_click','combo','overdrive','perfect',
+    'fire_scatter','fire_railgun','fire_flame','fire_tesla','flare_launch','emp_blast','impact_metal'];
   const MUSIC = { title:{el:null,file:'music_title.mp3',base:.55}, patrol:{el:null,file:'music_patrol.mp3',base:.45}, boss:{el:null,file:'music_boss.mp3',base:.62} };
   let curMusic = null, musicDuck = 1, musicDuckT = 0;
   function ensure() {
@@ -462,11 +463,17 @@ const Snd = (function () {
     resume() { ensure(); if (ac.state === 'suspended') ac.resume(); },
     setEngine(v) { if (engGain && ac) engGain.gain.setTargetAtTime(muted ? 0 : (0.015 + v * 0.075) * Math.min(1, settings.sfxVol * 1.4), ac.currentTime, 0.1); },
     fire() { if (!playBuf('fire', .5, .09)) { blip(120, 0.22, 'sine', 0.5, 38); noise(0.12, 0.32, 2600); } },
+    fireScatter() { if (!playBuf('fire_scatter', .6, .07)) { noise(0.2, 0.5, 1400); blip(90, 0.24, 'sawtooth', 0.4, 30); } },
+    fireRail() { if (!playBuf('fire_railgun', .7, .04)) { blip(1800, 0.28, 'sawtooth', 0.3, 90); noise(0.3, 0.4, 900); } },
+    fireFlame() { if (!playBuf('fire_flame', .45, .1)) { noise(0.35, 0.3, 700); } },
+    fireTesla() { if (!playBuf('fire_tesla', .55, .08)) { blip(2600, 0.16, 'square', 0.22, 400); noise(0.14, 0.25, 3000); } },
+    flareLaunch() { if (!playBuf('flare_launch', .6)) { blip(220, 0.18, 'sine', 0.3, 60); noise(0.5, 0.2, 2000); } },
+    empBlast() { musicDuck = .3; musicDuckT = 60; if (!playBuf('emp_blast', .85)) { noise(0.8, 0.6, 300); blip(48, 0.9, 'sine', 0.5, 20); } },
     enemyFire() { blip(95, 0.2, 'sine', 0.26, 30); noise(0.1, 0.18, 1500); },
     boom() { if (!playBuf('explode_small', .7, .08)) { noise(0.6, 0.55, 800); blip(75, 0.55, 'sawtooth', 0.32, 26); } },
     bigBoom() { if (!playBuf('explode_big', .85, .05)) { noise(0.9, 0.65, 650); blip(60, 0.8, 'sawtooth', 0.4, 22); } },
     barrelBoom() { musicDuck = .35; musicDuckT = 70; if (!playBuf('barrel', .95)) { noise(0.9, 0.65, 650); blip(60, 0.8, 'sawtooth', 0.4, 22); } },
-    ping() { blip(2300, 0.07, 'square', 0.14, 950); },
+    ping() { if (G.t - (this._pt || 0) < 5) return; this._pt = G.t; if (!playBuf('impact_metal', .3, .12)) blip(2300, 0.07, 'square', 0.14, 950); },
     hitMe() { if (!playBuf('player_hit', .7)) { noise(0.24, 0.45, 520); blip(150, 0.2, 'square', 0.28, 60); } },
     pickup() { if (!playBuf('pickup', .7, .05)) { blip(740, 0.09, 'triangle', 0.24); setTimeout(() => blip(1180, 0.13, 'triangle', 0.24), 85); } },
     horn() { if (!playBuf('boss_horn', .8)) { blip(208, 0.32, 'sawtooth', 0.26); setTimeout(() => blip(156, 0.5, 'sawtooth', 0.28), 260); } },
@@ -490,7 +497,7 @@ const ARENA_W = 1900, ARENA_H = 1500;
 const P_RADIUS = 20, SHELL_SPEED = 9.5;
 let P_SPEED = 2.6, P_FIRE_CD = 26;
 let CONE_LEN = 470, CONE_HALF = 0.42;
-const SETTINGS_KEY='ssb_settings_v2', TANK_KEY='ssb_tank', ACH_KEY='ssb_ach', LIFE_KEY='ssb_life', WEAPON_KEY='ssb_weapon', AUDIO_V='2.0.0';
+const SETTINGS_KEY='ssb_settings_v2', TANK_KEY='ssb_tank', ACH_KEY='ssb_ach', LIFE_KEY='ssb_life', WEAPON_KEY='ssb_weapon', AUDIO_V='3.2.0';
 // ===== SETTINGS =====
 const settings = { musicVol: .8, sfxVol: 1, shake: 'full', particles: 'auto', showFps: false, flash: 'full' };
 try { const o = JSON.parse(localStorage.getItem(SETTINGS_KEY)); if (o && typeof o==='object') Object.assign(settings, o);
@@ -514,13 +521,13 @@ function curTank(){ return TANKS[tankIdx]; }
 const WEAPONS = [
   { id:'cannon', name:'CANNON', desc:'Standard patrol gun. Dependable.', cdMul:1, dmg:1, shots:1, spread:0, speed:SHELL_SPEED, life:80, pierce:0, kick:1, sfx:'fire', casing:true,
     shell:{ len:15, w:4, fill:'#fff3d2', glow:'#ffd98c', holeR:38 }, muzzle:{ r:90, n:4 } },
-  { id:'scatter', name:'SCATTER', desc:'Five-pellet burst. Brutal up close, thin at range.', cdMul:1.65, dmg:0.55, shots:5, spread:0.42, speed:8.2, life:34, pierce:0, kick:1.5, sfx:'fire', casing:true,
+  { id:'scatter', name:'SCATTER', desc:'Five-pellet burst. Brutal up close, thin at range.', cdMul:1.65, dmg:0.55, shots:5, spread:0.42, speed:8.2, life:34, pierce:0, kick:1.5, sfx:'fireScatter', casing:true,
     shell:{ len:9, w:3, fill:'#ffd9a8', glow:'#ffb36b', holeR:26 }, muzzle:{ r:120, n:8 } },
-  { id:'railgun', name:'RAILGUN', desc:'Instant rail lance. Skewers the whole line.', cdMul:2.3, dmg:3, shots:1, spread:0, speed:0, life:0, pierce:0, kick:2, sfx:'fire', beam:true, range:700, beamW:6,
+  { id:'railgun', name:'RAILGUN', desc:'Instant rail lance. Skewers the whole line.', cdMul:2.3, dmg:3, shots:1, spread:0, speed:0, life:0, pierce:0, kick:2, sfx:'fireRail', beam:true, range:700, beamW:6,
     shell:{ len:0, w:0, fill:'#e8f8ff', glow:'#6ec8ff', holeR:0 }, muzzle:{ r:130, n:10 } },
-  { id:'incinerator', name:'INCINERATOR', desc:'Flame cone. Sets hostiles alight.', cdMul:0.27, dmg:0.08, shots:3, spread:0.26, jitter:0.2, speed:5.5, life:38, pierce:0, kick:0.15, sfx:'fire', sfxEvery:6, burn:70,
+  { id:'incinerator', name:'INCINERATOR', desc:'Flame cone. Sets hostiles alight.', cdMul:0.27, dmg:0.08, shots:3, spread:0.26, jitter:0.2, speed:5.5, life:38, pierce:0, kick:0.15, sfx:'fireFlame', sfxEvery:4, burn:70,
     shell:{ len:7, w:5, fill:'#ffd27a', glow:'#ff8a3c', holeR:30, holeEvery:2 }, muzzle:{ r:70, n:2 } },
-  { id:'tesla', name:'TESLA', desc:'Arc lance. Chains through revealed hostiles.', cdMul:1.35, dmg:1.4, chains:4, falloff:0.75, chainR:190, arc:true, range:520, shots:1, spread:0, speed:0, life:0, pierce:0, kick:0.8, sfx:'fire',
+  { id:'tesla', name:'TESLA', desc:'Arc lance. Chains through revealed hostiles.', cdMul:1.35, dmg:1.4, chains:4, falloff:0.75, chainR:190, arc:true, range:520, shots:1, spread:0, speed:0, life:0, pierce:0, kick:0.8, sfx:'fireTesla',
     shell:{ len:0, w:0, fill:'#eafcff', glow:'#7de8ff', holeR:0 }, muzzle:{ r:95, n:5 } },
 ];
 const FALLBACK_SHELL = WEAPONS[0].shell;
@@ -592,7 +599,7 @@ function fireEmp() {
     e.stun = Math.max(e.stun || 0, e.type === 'boss' ? 45 : 90);
   }
   shake(5, 10);
-  Snd.ui('overdrive', .5); // placeholder zap until item 10 records real ordnance SFX
+  Snd.empBlast();
   toast('EMP DISCHARGED', 60);
   updateOrdHud();
 }
@@ -604,7 +611,7 @@ function fireOrdnance() {
   flares.push({ sx: player.x, sy: player.y, x: player.x, y: player.y,
     tx: clamp(player.x + Math.cos(a) * d, 40, ARENA_W - 40), ty: clamp(player.y + Math.sin(a) * d, 40, ARENA_H - 40),
     flight: 36, t: 480, max: 480, bob: rnd(0, 6.28) });
-  Snd.ui('pickup', .5); // placeholder whoosh until item 10 records real ordnance SFX
+  Snd.flareLaunch();
   updateOrdHud();
 }
 function updateFlares() {
