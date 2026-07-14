@@ -683,15 +683,15 @@ function fireArc(wp, a, bx, by) {
 // ===== DISTRICTS (sector themes) =====
 const DISTRICTS = [
   { name:'STATION PLAZA', ground:'#262030', grid:'200,170,120', fog:'3,4,10', lamp:'255,238,200', tint:'#ffb84d',
-    props:{crate:8,vent:4,sign:4},  amb:{count:7,r:120,alpha:0.5},  weather:'none' },
+    props:{bench:6,kiosk:3,sign:4,crate:4,vent:2},  amb:{count:7,r:120,alpha:0.5},  weather:'none' },
   { name:'CRIMSON YARD',  ground:'#2a1c22', grid:'220,120,110', fog:'12,3,7',  lamp:'255,150,150', tint:'#ff6a6a',
-    props:{crate:12,vent:2,sign:2}, amb:{count:5,r:100,alpha:0.45}, weather:'embers' },
+    props:{container:7,crate:8,drum:2,sign:2},      amb:{count:5,r:95,alpha:0.5},   weather:'embers' },
   { name:'COLD TERMINAL', ground:'#1c2630', grid:'130,180,210', fog:'3,7,14',  lamp:'170,220,255', tint:'#6ec8ff',
-    props:{crate:6,vent:6,sign:3},  amb:{count:6,r:110,alpha:0.5},  weather:'rain' },
+    props:{puddle:9,vent:5,sign:3,crate:3},         amb:{count:6,r:110,alpha:0.5},  weather:'rain' },
   { name:'TOXIC SIDING',  ground:'#202a1c', grid:'150,200,120', fog:'4,10,4',  lamp:'190,255,150', tint:'#9dff6a',
-    props:{crate:7,vent:7,sign:2},  amb:{count:5,r:105,alpha:0.45}, weather:'none' },
+    props:{drum:9,vent:6,crate:3,sign:2},           amb:{count:5,r:100,alpha:0.45}, weather:'motes' },
   { name:'VIOLET DEPOT',  ground:'#241c30', grid:'170,130,220', fog:'8,4,14',  lamp:'200,160,255', tint:'#b46cff',
-    props:{crate:9,vent:3,sign:5},  amb:{count:8,r:115,alpha:0.5},  weather:'none' },
+    props:{neon:6,sign:5,kiosk:3,crate:3},          amb:{count:9,r:115,alpha:0.55}, weather:'none' },
 ];
 function districtFor(w){ return DISTRICTS[Math.floor(Math.max(0,w-1)/5)%DISTRICTS.length]; }
 // ===== DISTRICT LAYER (engine): decor props, ambient light wells, weather — rebuilt per district
@@ -705,10 +705,11 @@ function buildDistrictLayer() {
     for (const p of pillars) if (dist2(x, y, p.x, p.y) < (p.r + r) * (p.r + r)) return false;
     return true;
   };
+  const CLEAR = { container: 38, kiosk: 32, neon: 30, bench: 28, puddle: 30 };
   const place = (kind, n) => {
     for (let i = 0; i < n; i++) for (let t = 0; t < 14; t++) {
       const x = rnd(60, ARENA_W - 60), y = rnd(60, ARENA_H - 60);
-      if (free(x, y, 26)) { districtFx.props.push({ kind, x, y, a: rnd(0, 6.283), s: rnd(0.8, 1.3) }); break; }
+      if (free(x, y, CLEAR[kind] || 26)) { districtFx.props.push({ kind, x, y, a: rnd(0, 6.283), s: rnd(0.8, 1.3) }); break; }
     }
   };
   if (d.props) for (const k in d.props) place(k, d.props[k]);
@@ -1705,6 +1706,47 @@ function drawDistrictProps() {
       ctx.fillStyle = 'rgba(18,16,14,0.95)'; ctx.beginPath(); ctx.arc(0, 0, 11 * p.s, 0, 6.283); ctx.fill();
       ctx.strokeStyle = 'rgba(' + curDistrict.grid + ',0.3)'; ctx.lineWidth = 1.4;
       for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(-7 * p.s, i * 4.5 * p.s); ctx.lineTo(7 * p.s, i * 4.5 * p.s); ctx.stroke(); }
+    } else if (p.kind === 'bench') {
+      ctx.rotate(Math.round(p.a / 1.5708) * 1.5708);
+      ctx.fillStyle = 'rgba(26,22,18,0.95)';
+      ctx.fillRect(-12 * p.s, -4, 24 * p.s, 3); ctx.fillRect(-12 * p.s, 1, 24 * p.s, 3);
+      ctx.strokeStyle = 'rgba(' + curDistrict.grid + ',0.22)'; ctx.lineWidth = 1;
+      ctx.strokeRect(-12 * p.s, -4, 24 * p.s, 8);
+    } else if (p.kind === 'kiosk') {
+      ctx.rotate(Math.round(p.a / 1.5708) * 1.5708);
+      const w = 26 * p.s, h = 18 * p.s;
+      ctx.fillStyle = 'rgba(24,20,26,0.95)'; ctx.fillRect(-w / 2, -h / 2, w, h);
+      ctx.fillStyle = 'rgba(' + curDistrict.grid + ',0.30)'; ctx.fillRect(-w / 2, -h / 2, w, 3.5);
+      ctx.shadowColor = 'rgb(' + curDistrict.lamp + ')'; ctx.shadowBlur = 7;
+      ctx.fillStyle = 'rgba(' + curDistrict.lamp + ',0.55)'; ctx.fillRect(-w * 0.22, -1, w * 0.44, h * 0.28);
+    } else if (p.kind === 'container') {
+      ctx.rotate(Math.round(p.a / 1.5708) * 1.5708 + (p.a % 0.14) - 0.07);
+      const w = 46 * p.s, h = 18 * p.s;
+      ctx.fillStyle = 'rgba(34,22,22,0.95)'; ctx.fillRect(-w / 2, -h / 2, w, h);
+      ctx.strokeStyle = 'rgba(' + curDistrict.grid + ',0.3)'; ctx.lineWidth = 1.3;
+      ctx.strokeRect(-w / 2, -h / 2, w, h);
+      for (let i = 1; i < 5; i++) { const x = -w / 2 + w * i / 5; ctx.beginPath(); ctx.moveTo(x, -h / 2); ctx.lineTo(x, h / 2); ctx.stroke(); }
+    } else if (p.kind === 'puddle') {
+      ctx.rotate(p.a);
+      ctx.scale(1, 0.55);
+      ctx.fillStyle = 'rgba(90,140,190,0.12)';
+      ctx.beginPath(); ctx.arc(0, 0, 15 * p.s, 0, 6.283); ctx.fill();
+      ctx.strokeStyle = 'rgba(170,220,255,0.15)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(0, 0, 15 * p.s, 0, 6.283); ctx.stroke();
+    } else if (p.kind === 'drum') {
+      ctx.fillStyle = 'rgba(24,30,20,0.95)';
+      ctx.shadowColor = 'rgb(' + curDistrict.grid + ')'; ctx.shadowBlur = 5;
+      ctx.beginPath(); ctx.arc(0, 0, 8.5 * p.s, 0, 6.283); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(' + curDistrict.grid + ',0.45)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, 5.5 * p.s, p.a, p.a + 2.4); ctx.stroke();
+    } else if (p.kind === 'neon') {
+      ctx.rotate((p.a - 3.14) * 0.04);
+      const fl = 0.75 + Math.sin(G.t * 0.31 + p.a * 7) * 0.25;
+      ctx.fillStyle = '#131017'; ctx.fillRect(-2, -18 * p.s, 4, 18 * p.s);
+      ctx.shadowColor = 'rgb(' + curDistrict.lamp + ')'; ctx.shadowBlur = 16 * fl;
+      ctx.fillStyle = 'rgba(' + curDistrict.lamp + ',' + (0.85 * fl).toFixed(2) + ')';
+      ctx.fillRect(-13 * p.s, -30 * p.s, 26 * p.s, 13 * p.s);
     } else { // sign: lit head on a post — a tiny landmark in the dark
       ctx.rotate((p.a - 3.14) * 0.05);
       ctx.fillStyle = '#131017'; ctx.fillRect(-1.6, -16 * p.s, 3.2, 16 * p.s);
@@ -1733,6 +1775,14 @@ function drawWeather() { // screen-space, above the darkness pass
       ctx.globalAlpha = 0.28 + 0.22 * Math.sin(w.ph * 3);
       ctx.fillStyle = '#ff9a4c';
       ctx.beginPath(); ctx.arc(w.x, w.y, 1.6, 0, 6.283); ctx.fill();
+    }
+  } else if (districtFx.weather === 'motes') { // toxic spores: slow, wandering, sickly green
+    for (const w of districtFx.wp) {
+      w.y -= w.v * 0.12; w.x += Math.sin(w.ph += 0.011) * 0.9;
+      if (w.y < -10) { w.y = VH + 8; w.x = Math.random() * VW; }
+      ctx.globalAlpha = 0.16 + 0.12 * Math.sin(w.ph * 2.2);
+      ctx.fillStyle = '#9dff6a';
+      ctx.beginPath(); ctx.arc(w.x, w.y, 1.9, 0, 6.283); ctx.fill();
     }
   }
   ctx.restore();
@@ -2453,7 +2503,7 @@ window.__blackoutQA = {
   opt(k, v) { settings[k] = v; saveSettings(); Snd.applyVolumes(); },
   recTab(w) { setRecTab(w); },
   clickBtn(id) { const b = document.getElementById(id); if (b) b.click(); return !!b; },
-  get enemies() { return enemies; }, get player() { return player; }, get settings() { return settings; }, get G() { return G; }, get flares() { return flares; }
+  get enemies() { return enemies; }, get player() { return player; }, get settings() { return settings; }, get G() { return G; }, get flares() { return flares; }, get districtFx() { return districtFx; }
 };
 resize();
 buildWorld();

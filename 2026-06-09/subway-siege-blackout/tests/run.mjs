@@ -357,7 +357,7 @@ async function suite() {
     const r = await c.eval(`(()=>{const q=${QA};q.start();const out=[];
       for(const w of [1,6,11,16,21]){const s=q.setWave(w);out.push({d:s.district,p:s.dProps,l:s.dLights,w:s.weather});}
       return out;})()`);
-    const wantWeather = { 'STATION PLAZA': 'none', 'CRIMSON YARD': 'embers', 'COLD TERMINAL': 'rain', 'TOXIC SIDING': 'none', 'VIOLET DEPOT': 'none' };
+    const wantWeather = { 'STATION PLAZA': 'none', 'CRIMSON YARD': 'embers', 'COLD TERMINAL': 'rain', 'TOXIC SIDING': 'motes', 'VIOLET DEPOT': 'none' };
     for (const row of r) {
       if (row.p < 8 || row.l < 3) throw new Error('sparse layer: ' + JSON.stringify(row));
       if (row.w !== wantWeather[row.d]) throw new Error('weather mismatch: ' + JSON.stringify(row));
