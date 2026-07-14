@@ -10,8 +10,10 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 05 DONE (2026-07-14) — TESLA chain arc. ALL FIVE WEAPONS IN.
-- **Suite:** 33/33 green (2 consecutive runs). Run: `node tests/run.mjs suite`.
+- **Iteration:** 05b DONE (2026-07-14) — **v3.1.0 SHIPPED LIVE** (batch 1: items 01–05).
+  Site commit aeed7c2d1 (deployed from clean worktree, verified on pages.dev ×3 probes);
+  mirror jz237/games e0e7345 (cherry-pick worktree pattern, Pages built, verified v3.1.0).
+- **Suite:** 33/33 green. Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
@@ -22,9 +24,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** SHIP BATCH 1 as **v3.1.0** (items 01–05: five weapons + armory + crate). Full ship
-  protocol: adversarial self-review of the whole batch diff (git diff 964576a..HEAD -- index.html),
-  version bump, copy to deploy, land+deploy, verify live, mirror sync, memory refresh.
+- **Next:** item 06 (ordnance framework + FLARE — manual slot, limited ammo, lobbed light well,
+  stalker-cloak interaction defined; touch button placeholder OK until 17).
 
 ## Iteration log
 
@@ -74,6 +75,19 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   stalker survives inside chain range). Check 16 budget doubled to 1800 ticks — spawns are
   strictly 1-per-68-ticks, wave-5 queue ~13 deep, so a last-shuffled boss needs ~950. Perf
   0.072/2.15. Screenshot tesla-arc.png.
+- **05b SHIP v3.1.0** (2026-07-14): adversarial review of full batch diff found: armory PWR bar
+  ignored burn/chain value (fixed — formula now adds burn 1.3 / chains×dmg×0.35), shotCount not
+  reset per run (fixed), and **incinerator worst-case perf 3.43ms > 3.0 gate** (fixed: shell
+  `holeEvery:2` — dense flame swarms share light holes in renderLights — + embers %6→%9 →
+  2.997ms). DESIGN NOTE deferred to item 16: railgun blind-fire physically clips unrevealed/
+  cloaked enemies along the line (intended lance semantics; watch for stalker cheese).
+  Ship mechanics that worked: website tree was clean-at-origin + untracked OpenClaw flyers →
+  committed only our file, pushed aeed7c2d1, deployed from `git worktree add <tmp> origin/main`
+  (script self-guard passed); single-probe grep returned a false 0 on live HTML — full-download
+  re-probe showed all content (single probes lie; 2–3 before believing). Mirror: games-source IS
+  jz237/games — `worktree --detach origin/main` + `cherry-pick 964576a^..275c20d` + push e0e7345,
+  Pages built ~45s, github.io serves v3.1.0. VERSION bumped only (AUDIO_V still 2.0.0 — no new
+  audio this batch).
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -108,7 +122,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 03 RAILGUN — implemented as hitscan beam, dedupe trap structurally avoided (see log)
 - [x] 04 INCINERATOR + burn DoT via killEnemy; burning breaks stalker cloak (see log)
 - [x] 05 TESLA chain arc; cloak rule matches turret; burning stalkers arc-able (see log)
-- [ ] 05b SHIP BATCH 1 → v3.1.0 (adversarial review of full batch diff first)
+- [x] 05b SHIPPED v3.1.0 LIVE 2026-07-14 (site aeed7c2d1 + mirror e0e7345; see log)
 - [ ] 06 **ordnance framework + FLARE**: manual slot, limited ammo via pickups, lobbed sustained
       light well; define stalker-cloak interaction; touch button placeholder ok until 17.
 - [ ] 07 EMP: screen-wide reveal + brief stun; stalker interaction; per-run state reset.
