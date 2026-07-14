@@ -10,10 +10,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 10b DONE (2026-07-14) — **v3.2.0 SHIPPED LIVE** (batch 2: items 06–10).
-  Site commit 9f51391c3 (cherry-picked from local 23f90cc; survived one real OpenClaw revert —
-  see log); mirror jz237/games b5a8650 (explicit-list cherry-pick). Verified ×3 both hosts.
-- **Suite:** 38/38 green (21/21 buffers decode). Run: `node tests/run.mjs suite`.
+- **Iteration:** 11 DONE (2026-07-14) — district engine (props/ambient lights/weather layers).
+  Last ship: **v3.2.0 LIVE** (site 9f51391c3, mirror b5a8650). Unshipped: item 11.
+- **Suite:** 39/39 green. Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
@@ -24,10 +23,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 11 (district engine — data-driven defs: ground art, props, ambient light
-  sources punching darkness holes, fog tint, ambient loop hook, weather layer). FIRST ACTION
-  next iteration: one live probe of pages.dev (expect v3.2.0; OpenClaw deploys converged but
-  cheap to confirm).
+- **Next:** item 12 (rebuild the 5 districts as REAL environments: richer per-district prop
+  mixes/kinds, ambient-light placement character, weather assignments finalized — engine from 11
+  makes this data-tuning + a few new prop kinds).
 
 ## Iteration log
 
@@ -154,6 +152,15 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   local main now contains origin-side merge ancestry — `cherry-pick <old>..main` DRAGS IN FOREIGN
   COMMITS (hit 1dcf2f5 mid-sequence; aborted). **Always cherry-pick the mirror by EXPLICIT
   commit list**, not ancestry range. Mirror b5a8650 built + verified (v3.2.0 + emp_blast 200).
+- **11** (2026-07-14): District ENGINE. DISTRICTS defs gain `props:{crate,vent,sign}, amb:{count,
+  r,alpha}, weather`. `districtFx` layer (props/lights/weather particles) rebuilt by
+  buildDistrictLayer() at boot, startGame, and startWave district change (QA setWave included);
+  rejection-sampled placement avoiding obstacles/pillars/player spawn. drawDistrictProps (camera-
+  culled; crates/vents tinted by district grid color, SIGNS glow in lamp color), district light
+  wells flicker in renderLights, drawWeather screen-space above darkness (rain streaks / drifting
+  embers; runs in render so it drifts even in pause — intended ambience). Weather live: CRIMSON
+  embers, COLD rain. snapshot.dProps/.dLights/.weather. Suite 38→39 (per-district layer counts +
+  weather map). Perf 0.23/2.42 in gate. Shot district-rain.png.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -196,8 +203,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 10 weapon/ordnance SFX — 7 new, loudness-matched, spectrogram-checked (see log; overdrive
       riser + boss stinger already existed from v2, not duplicated)
 - [x] 10b SHIPPED v3.2.0 LIVE 2026-07-14 (site 9f51391c3 + mirror b5a8650; revert survived — log)
-- [ ] 11 district engine: data-driven defs — ground art, prop set, ambient light sources punching
-      darkness holes (flicker streetlights, fires, neon), fog tint, ambient loop, weather layer.
+- [x] 11 district engine: props/ambient-light/weather layers, data-driven per district (see log)
 - [ ] 12 rebuild existing 5 districts as real environments (props + ambient lights, not swaps)
 - [ ] 13 add 3–5 NEW districts (weather: rain streaks, fog banks, embers)
 - [ ] 14 district hazards/events (≤1 per district: steam vents, blackout surge shrinking the cone)
