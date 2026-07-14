@@ -10,8 +10,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 10 DONE (2026-07-14) — weapon/ordnance ElevenLabs audio (7 new SFX, 21 total).
-  Last ship: **v3.1.0 LIVE** (site aeed7c2d1, mirror e0e7345). Unshipped: items 06–10.
+- **Iteration:** 10b DONE (2026-07-14) — **v3.2.0 SHIPPED LIVE** (batch 2: items 06–10).
+  Site commit 9f51391c3 (cherry-picked from local 23f90cc; survived one real OpenClaw revert —
+  see log); mirror jz237/games b5a8650 (explicit-list cherry-pick). Verified ×3 both hosts.
 - **Suite:** 38/38 green (21/21 buffers decode). Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
@@ -23,11 +24,10 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** **SHIP BATCH 2 as v3.2.0** (items 06–10: flare+EMP ordnance, VFX passes, weapon
-  audio). Ship protocol per 05b: adversarial review of `git diff 275c20d..HEAD -- index.html`
-  (+ audio adds), bump VERSION to v3.2.0 (AUDIO_V already 3.2.0), copy index.html **+ 7 new
-  audio/*.ogg** to deploy, land+deploy from clean worktree, verify live (audio requests too!),
-  mirror cherry-pick `275c20d..HEAD`, memory refresh.
+- **Next:** item 11 (district engine — data-driven defs: ground art, props, ambient light
+  sources punching darkness holes, fog tint, ambient loop hook, weather layer). FIRST ACTION
+  next iteration: one live probe of pages.dev (expect v3.2.0; OpenClaw deploys converged but
+  cheap to confirm).
 
 ## Iteration log
 
@@ -142,6 +142,18 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   AUDIO_V 2.0.0→3.2.0 (cache-bust). Suite check 04 → ≥18/21 (21/21 in practice); 38/38 green.
   Perf: msPerUpdate 0.244 (audio-node churn from buffered ping, headless artifact — absolute
   cost trivial; render gate 2.39 ✓).
+- **10b SHIP v3.2.0** (2026-07-14): batch review found 1 real bug — **ping throttle vs G.t reset**
+  (new run → negative delta → impacts muted for thousands of ticks; fixed: negative dt plays).
+  Ship mechanics: website tree had OpenClaw's hollow-deep file DIRTY + behind 1 → used the
+  temp-worktree cherry-pick landing (local commit 23f90cc → origin 9f51391c3), deployed from
+  worktree. **REAL REVERT observed** (first since the 07-07 guard): OpenClaw deployed its
+  trailing checkout (e4f59a0, pre-my-push) ~2 min after my deploy — its path evidently bypasses
+  BLOCKED_STALE_DEPLOY. Diagnosed per protocol (deployment list showed foreign SUCCESSFUL deploy
+  from e4f59a0; 3 consecutive v3.1.0 probes), redeployed origin/main (by then a26a5f482 =
+  OpenClaw's work ON TOP of mine → converged), verified v3.2.0 ×3. MIRROR GOTCHA: games-source
+  local main now contains origin-side merge ancestry — `cherry-pick <old>..main` DRAGS IN FOREIGN
+  COMMITS (hit 1dcf2f5 mid-sequence; aborted). **Always cherry-pick the mirror by EXPLICIT
+  commit list**, not ancestry range. Mirror b5a8650 built + verified (v3.2.0 + emp_blast 200).
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -183,6 +195,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 09 VFX pass 2: blooms, debris decals, Flash FX setting + reduced-motion default (see log)
 - [x] 10 weapon/ordnance SFX — 7 new, loudness-matched, spectrogram-checked (see log; overdrive
       riser + boss stinger already existed from v2, not duplicated)
+- [x] 10b SHIPPED v3.2.0 LIVE 2026-07-14 (site 9f51391c3 + mirror b5a8650; revert survived — log)
 - [ ] 11 district engine: data-driven defs — ground art, prop set, ambient light sources punching
       darkness holes (flicker streetlights, fires, neon), fog tint, ambient loop, weather layer.
 - [ ] 12 rebuild existing 5 districts as real environments (props + ambient lights, not swaps)
