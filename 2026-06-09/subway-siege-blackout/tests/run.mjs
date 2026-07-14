@@ -225,10 +225,11 @@ async function suite() {
     return `+${r.dk} kills`;
   });
   await check('27 scatter fires and kills up close', async () => {
+    // pin PLACE+reveal every 5 ticks — scouts retreat toward a 300px standoff, which is outside
+    // scatter's ~280px range; looser pinning lets them drift out and the check flakes
     const r = await c.eval(`(()=>{const q=${QA};const id=q.selectWeapon(1);q.start();q.god(true);q.killAll();const k0=q.snapshot().kills;
       for(let i=0;i<3;i++)q.spawn('scout');
-      for(const e of q.enemies)if(!e.dead){e.x=q.player.x+150;e.y=q.player.y;}
-      for(let i=0;i<60;i++){for(const e of q.enemies)if(!e.dead)e.reveal=200;q.tick(10);}
+      for(let i=0;i<120;i++){for(const e of q.enemies)if(!e.dead){e.x=q.player.x+130;e.y=q.player.y;e.reveal=200;}q.tick(5);}
       const dk=q.snapshot().kills-k0;q.selectWeapon(0);return {id,dk,weapon:q.snapshot().weapon};})()`);
     if (r.id !== 'scatter' || r.dk < 1) throw new Error(JSON.stringify(r));
     return `+${r.dk} kills`;
@@ -236,7 +237,7 @@ async function suite() {
   await check('28 weapon crate swaps run-weapon; restart restores loadout', async () => {
     const r = await c.eval(`(()=>{const q=${QA};q.selectWeapon(0);q.start();q.god(true);q.addPickup('weapon');q.tick(30);
       const inRun=q.snapshot().weapon;const after=q.start().weapon;return {inRun,after};})()`);
-    if (r.inRun !== 'scatter') throw new Error('crate gave ' + r.inRun);
+    if (r.inRun === 'cannon') throw new Error('crate gave nothing (still cannon)'); // random among the OTHER weapons
     if (r.after !== 'cannon') throw new Error('restart kept ' + r.after);
   });
   await check('29 armory UI selects + persists', async () => {
@@ -249,16 +250,28 @@ async function suite() {
     const r = await c.eval(`(()=>{const q=${QA};const id=q.selectWeapon(2);q.start();q.god(true);q.killAll();const k0=q.snapshot().kills;
       for(let i=0;i<3;i++)q.spawn('scout');
       const es=q.enemies.filter(e=>!e.dead);let sawBeam=0;
-      for(let i=0;i<40;i++){
-        es.forEach((e,ix)=>{if(!e.dead){e.x=q.player.x+150+ix*55;e.y=q.player.y;e.reveal=200;}});
-        q.tick(10);sawBeam=Math.max(sawBeam,q.snapshot().beams);
+      for(let i=0;i<100;i++){ // pin tight (4 ticks): strafe drift >21px breaks the beam corridor
+        es.forEach((e,ix)=>{if(!e.dead){e.x=q.player.x+150+ix*50;e.y=q.player.y;e.reveal=200;}});
+        q.tick(4);sawBeam=Math.max(sawBeam,q.snapshot().beams);
         if(q.snapshot().kills-k0>=3)break;
       }
       const dk=q.snapshot().kills-k0;q.selectWeapon(0);return {id,dk,sawBeam};})()`);
     if (r.id !== 'railgun' || r.dk < 3 || r.sawBeam < 1) throw new Error(JSON.stringify(r));
     return `+${r.dk} kills, beams seen=${r.sawBeam}`;
   });
-  await check('31 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('31 incinerator ignites; burn alone kills via killEnemy', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};const id=q.selectWeapon(3);q.start();q.god(true);q.killAll();const k0=q.snapshot().kills;
+      q.spawn('brute');const e=q.enemies.filter(x=>!x.dead)[0];
+      let burned=false;
+      for(let i=0;i<30&&!burned;i++){if(!e.dead){e.x=q.player.x+120;e.y=q.player.y;e.reveal=200;}q.tick(10);burned=(e.burnT||0)>0;}
+      if(!burned){q.selectWeapon(0);return {err:'never ignited',hp:e.hp};}
+      e.x=q.player.x+780;e.y=q.player.y;e.hp=Math.min(e.hp,1.5); // out of turret range: burn is the only damage source left
+      for(let i=0;i<40&&!e.dead;i++){e.burnT=Math.max(e.burnT||0,80);q.tick(10);}
+      const dk=q.snapshot().kills-k0;q.selectWeapon(0);return {id,dk,dead:e.dead};})()`);
+    if (r.err) throw new Error(JSON.stringify(r));
+    if (r.id !== 'incinerator' || !r.dead || r.dk < 1) throw new Error(JSON.stringify(r));
+  });
+  await check('32 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;

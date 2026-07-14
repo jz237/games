@@ -497,6 +497,8 @@ const WEAPONS = [
     shell:{ len:9, w:3, fill:'#ffd9a8', glow:'#ffb36b', holeR:26 }, muzzle:{ r:120, n:8 } },
   { id:'railgun', name:'RAILGUN', desc:'Instant rail lance. Skewers the whole line.', cdMul:2.3, dmg:3, shots:1, spread:0, speed:0, life:0, pierce:0, kick:2, sfx:'fire', beam:true, range:700, beamW:6,
     shell:{ len:0, w:0, fill:'#e8f8ff', glow:'#6ec8ff', holeR:0 }, muzzle:{ r:130, n:10 } },
+  { id:'incinerator', name:'INCINERATOR', desc:'Flame cone. Sets hostiles alight.', cdMul:0.27, dmg:0.08, shots:3, spread:0.26, jitter:0.2, speed:5.5, life:38, pierce:0, kick:0.15, sfx:'fire', sfxEvery:6, burn:70,
+    shell:{ len:7, w:5, fill:'#ffd27a', glow:'#ff8a3c', holeR:30 }, muzzle:{ r:70, n:2 } },
 ];
 const FALLBACK_SHELL = WEAPONS[0].shell;
 let weaponIdx = 0; try { const i = WEAPONS.findIndex(w=>w.id===localStorage.getItem(WEAPON_KEY)); if(i>=0)weaponIdx=i; } catch(e){}
@@ -506,9 +508,10 @@ function fireWeapon(wp, a, bx, by) {
   if (wp.beam) return fireBeam(wp, a, bx, by);
   const n = wp.shots || 1;
   for (let k = 0; k < n; k++) {
-    const aa = a + (n > 1 ? (k / (n - 1) - 0.5) * wp.spread : 0);
+    let aa = a + (n > 1 ? (k / (n - 1) - 0.5) * wp.spread : 0);
+    if (wp.jitter) aa += (Math.random() - 0.5) * wp.jitter;
     bullets.push({ x: bx, y: by, vx: Math.cos(aa) * wp.speed, vy: Math.sin(aa) * wp.speed, enemy: false,
-      dmg: wp.dmg, life: wp.life, pierce: (wp.pierce || 0) + (player.overdrive > 0 ? 2 : 0), hitSet: null, shell: wp.shell });
+      dmg: wp.dmg, life: wp.life, pierce: (wp.pierce || 0) + (player.overdrive > 0 ? 2 : 0), hitSet: null, shell: wp.shell, burn: wp.burn || 0 });
   }
 }
 function segDist2(px, py, x1, y1, x2, y2) {
@@ -880,6 +883,13 @@ function updateEnemies() {
     if (e.dead) { e.alpha -= 0.05; if (e.alpha <= 0) enemies.splice(i, 1); continue; }
     if (e.dormant > 0) { e.dormant--; continue; }
     if (e.reveal > 0) e.reveal--;
+    if (e.burnT > 0) { // burning: DoT through killEnemy, stays lit (fire is light), sheds embers
+      e.burnT--;
+      e.hp -= 0.02;
+      e.reveal = Math.max(e.reveal, 60);
+      if (e.burnT % 6 === 0) spawnParticles(e.x + rnd(-e.r * 0.5, e.r * 0.5), e.y + rnd(-e.r * 0.5, e.r * 0.5), 1, { color: '#ff9a4c', smax: 2.2, lmax: 14, fade: 'spark' });
+      if (e.hp <= 0) { killEnemy(e); continue; }
+    }
 
     const dx = player.x - e.x, dy = player.y - e.y;
     const d = Math.hypot(dx, dy) || 1;
@@ -1073,7 +1083,8 @@ function updatePlayer() {
     // shell casing
     spawnParticles(player.x, player.y, 1, { angle: a + Math.PI / 2, spread: 0.3, smin: 1.4, smax: 2.4, color: '#d8a85a', fade: 'spark', lmax: 30 });
     shake(2 * (wp.kick || 1), 4);
-    (Snd[wp.sfx] || Snd.fire).call(Snd);
+    player.shotCount = (player.shotCount || 0) + 1;
+    if (!wp.sfxEvery || player.shotCount % wp.sfxEvery === 0) (Snd[wp.sfx] || Snd.fire).call(Snd);
   }
   if (player.overdrive > 0) { player.overdrive--; if (player.overdrive === 0) document.getElementById('od-badge').classList.remove('show'); }
 }
@@ -1114,6 +1125,7 @@ function updateBullets() {
             hit = true;
             if ((b.pierce || 0) > 0) { b.hitSet = b.hitSet || []; if (b.hitSet.indexOf(e) !== -1) continue; b.hitSet.push(e); }
             let dmg = b.dmg; if ((runUp.crit||0) > 0 && Math.random() < 0.12 * runUp.crit) { dmg *= 3; spawnParticles(b.x, b.y, 5, { color: '#ff5b5b', smax: 3.4, fade: 'spark' }); }
+            if (b.burn) e.burnT = Math.min(240, (e.burnT || 0) + b.burn);
             e.hp -= dmg; e.reveal = Math.max(e.reveal, 130);
             spawnParticles(b.x, b.y, 7, { color: '#ffd98c', smax: 3.4, lmax: 18 });
             if (e.hp <= 0) killEnemy(e); else Snd.ping();
@@ -1795,8 +1807,11 @@ function renderLights(sx, sy) {
   for (const p of pickups) hole(p.x, p.y, 44, 0.5);
   // barrels faint
   for (const b of barrels) if (b.alive) hole(b.x, b.y, 30, 0.3);
-  // enemy rear lights tiny
-  for (const e of enemies) if (!e.dead && e.dormant <= 0) hole(e.x, e.y, 16, 0.35);
+  // enemy rear lights tiny; burning enemies blaze and flicker
+  for (const e of enemies) if (!e.dead && e.dormant <= 0) {
+    if (e.burnT > 0) hole(e.x, e.y, 28 + (e.burnT % 7) * 2, 0.6);
+    else hole(e.x, e.y, 16, 0.35);
+  }
   // spawn warnings
   for (const f of spawnFlashes) hole(f.x, f.y, 60, 0.5);
   // boss spotlight

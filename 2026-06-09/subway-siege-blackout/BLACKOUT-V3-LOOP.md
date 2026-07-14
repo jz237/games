@@ -10,8 +10,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 03 DONE (2026-07-14) — RAILGUN hitscan beam. 3 weapons live.
-- **Suite:** 31/31 green. Run: `node tests/run.mjs suite` (exit 0 = green).
+- **Iteration:** 04 DONE (2026-07-14) — INCINERATOR + burn DoT. 4 weapons live.
+- **Suite:** 32/32 green (3 consecutive runs after deflaking). Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
@@ -22,7 +22,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 04 (INCINERATOR — cone + burn DoT; DoT deaths must route through killEnemy()).
+- **Next:** item 05 (TESLA — chain-arc between revealed enemies; then SHIP BATCH 1 as v3.1.0).
 
 ## Iteration log
 
@@ -55,6 +55,14 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   holes punched every 60px along the beam in renderLights. beams cleared in startGame + QA
   setWave; `snapshot.beams`. Armory RNG bar reads wp.range for beams. Suite 30→31 (aligned-line
   3-kill pierce + beam observed). Perf 0.07/2.357 — in gate. Screenshot-verified (beam2.png).
+- **04** (2026-07-14): INCINERATOR (cd×0.27 rapid, 3 jittered flame slugs 0.08dmg, range ~210,
+  `burn:70` per hit → e.burnT stacks cap 240) + burn status in updateEnemies: 0.02 hp/tick
+  **through killEnemy()**, pins reveal≥60 (burning STALKER loses cloak — intended flavor), sheds
+  ember particles, and gets a flickering light hole (28+(burnT%7)*2) in renderLights. fireWeapon
+  gained `jitter` + `sfxEvery` (flame plays 'fire' every 6th shot until item 10 records real SFX).
+  Suite 29→32 after DEFLAKING: scouts retreat to a 300px standoff → pin position+reveal every
+  4-5 ticks (not 10) or they drift out of scatter range / off the railgun corridor; crate check
+  now asserts != cannon (random among 3 others). 3 consecutive green runs. Perf 0.087/2.18.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -87,7 +95,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 01 weapon framework (see log; armory UI + weapon-crate pickups split forward into 02)
 - [x] 02 SCATTER + armory UI + weapon-crate pickup (see log)
 - [x] 03 RAILGUN — implemented as hitscan beam, dedupe trap structurally avoided (see log)
-- [ ] 04 INCINERATOR (short cone + burn DoT — DoT deaths still via killEnemy())
+- [x] 04 INCINERATOR + burn DoT via killEnemy; burning breaks stalker cloak (see log)
 - [ ] 05 TESLA (chain-arc between REVEALED enemies — define stalker interaction)
       (each of 02–05: distinct rate/dmg/range vs 3 tanks, own suite items, overdrive-pierce note)
 - [ ] 06 **ordnance framework + FLARE**: manual slot, limited ammo via pickups, lobbed sustained
