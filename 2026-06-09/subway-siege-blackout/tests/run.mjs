@@ -365,7 +365,25 @@ async function suite() {
     }
     return r.map(x => `${x.d.split(' ')[0]}:${x.p}p/${x.l}l/${x.w}`).join(' ');
   });
-  await check('40 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('40 hazards: surge lifecycle + steam vent scalds', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};q.start();q.god(true);q.setWave(6);
+      const h1=q.snapshot().hazard;
+      q.triggerSurge();q.tick(2);const warn=q.snapshot().surgeState;
+      q.tick(95);const on=q.snapshot().surgeState;
+      q.tick(165);const off=q.snapshot().surgeState;
+      q.setWave(11);const h2=q.snapshot().hazard,nv=q.snapshot().vents;
+      if(!nv)return {err:'no vents on COLD',h2};
+      q.ventBurst();q.tick(45);
+      const v=q.districtFx.vents[0];q.killAll();q.spawn('drone');
+      const e=q.enemies.filter(x=>!x.dead&&x.type==='drone')[0];
+      let dead=false;for(let i=0;i<20&&!dead;i++){if(!e.dead){e.x=v.x;e.y=v.y;e.reveal=0;}q.tick(6);dead=e.dead;}
+      return {h1,warn,on,off,h2,nv,dead};})()`);
+    if (r.err) throw new Error(JSON.stringify(r));
+    if (r.h1 !== 'surge' || r.warn !== 1 || r.on !== 2 || r.off !== 0) throw new Error('surge: ' + JSON.stringify(r));
+    if (r.h2 !== 'steam' || !r.dead) throw new Error('steam: ' + JSON.stringify(r));
+    return `surge 0→1→2→0, vents=${r.nv}, drone scalded`;
+  });
+  await check('41 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;

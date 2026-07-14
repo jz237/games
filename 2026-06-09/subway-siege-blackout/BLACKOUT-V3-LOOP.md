@@ -10,9 +10,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 13 DONE (2026-07-14) — 4 NEW districts (9 total: +HARBOR GATE fog, EMBER WORKS,
-  GHOST MARKET dust, AZURE CIRCUIT). Last ship: **v3.2.0 LIVE**. Unshipped: items 11–13.
-- **Suite:** 39/39 green (checks 14+39 walk all 9 districts). Run: `node tests/run.mjs suite`.
+- **Iteration:** 14 DONE (2026-07-14) — district hazards (steam vents + blackout surges).
+  Last ship: **v3.2.0 LIVE**. Unshipped: items 11–14.
+- **Suite:** 40/40 green. Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
   Baseline set: `loop-shots/baseline-v2.0.0/` (9 shots, 430×880 dpr2 mobile emulation).
@@ -23,9 +23,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 14 (district hazards/events, ≤1 per district: e.g. steam vents that vent on a
-  cycle, blackout surge shrinking the searchlight cone). Keep them LIGHT — ambience with teeth,
-  not new enemy systems. Then 15 (ambient loops) → ship batch 3 (v3.3.0, items 11–15).
+- **Next:** item 15 (district ambient audio loops via ElevenLabs — a few shared short loops
+  mapped per district, wired through existing pause/mute/duck paths; bump AUDIO_V).
+  Then SHIP batch 3 (v3.3.0, items 11–15).
 
 ## Iteration log
 
@@ -174,6 +174,15 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   bazaar, kiosks+benches, motes with NEW per-district `wcol` dust tint, sparse dim amb), AZURE
   CIRCUIT (electric blue, dense neon, 10 amb lights). Suite checks 14 (10-wave rotation incl.
   wrap at 46) + 39 (9-district weather map) updated. Perf 0.083/2.218. Shot harbor-fog.png.
+- **14** (2026-07-14): District HAZARDS — two shared systems, ≤1/district. STEAM VENTS
+  (COLD/TOXIC/EMBER, `hazard:'steam'`): up to 3 placed vents cycle (t 400–800 idle → ph 100:
+  40-tick hiss telegraph then 60-tick burst) — burst scalds machines 0.35/12t via killEnemy +
+  reveals them, SLOWS player 45% inside (deliberately NOT damagePlayer — it would void
+  perfect-wave/combo for chip damage), steam catches light (hole 42/0.28). BLACKOUT SURGE
+  (CRIMSON/VIOLET/GHOST, `hazard:'surge'`): idle 900–1400t → WARN 90t (toast + district wells
+  hard-flicker) → ON 160t (cone len ×0.55 via surgeK() at reveal+cone-render+player-hole sites,
+  district wells OUT) → restore + toast. QA triggerSurge/ventBurst + snapshot hazard/surgeState/
+  vents. Suite 39→40 (full surge lifecycle + drone scalded dead). Perf 0.062/2.33.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -219,7 +228,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 11 district engine: props/ambient-light/weather layers, data-driven per district (see log)
 - [x] 12 five districts rebuilt: bench/kiosk/container/puddle/drum/neon + motes weather (see log)
 - [x] 13 four new districts, 9-district rotation, fog weather + wcol tinting (see log)
-- [ ] 14 district hazards/events (≤1 per district: steam vents, blackout surge shrinking the cone)
+- [x] 14 hazards: steam vents (scald+slow) + blackout surges (cone shrink, city dark) — see log
 - [ ] 15 district ambient audio loops wired into existing pause/mute/duck paths.
 - [ ] 16 balance pass: DPS parity matrix vs CANNON across tanks×weapons; score economy comparable
       (leaderboard history persists — don't inflate); perfect-wave + combo achievable per loadout.

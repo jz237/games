@@ -685,19 +685,19 @@ const DISTRICTS = [
   { name:'STATION PLAZA', ground:'#262030', grid:'200,170,120', fog:'3,4,10', lamp:'255,238,200', tint:'#ffb84d',
     props:{bench:6,kiosk:3,sign:4,crate:4,vent:2},  amb:{count:7,r:120,alpha:0.5},  weather:'none' },
   { name:'CRIMSON YARD',  ground:'#2a1c22', grid:'220,120,110', fog:'12,3,7',  lamp:'255,150,150', tint:'#ff6a6a',
-    props:{container:7,crate:8,drum:2,sign:2},      amb:{count:5,r:95,alpha:0.5},   weather:'embers' },
+    props:{container:7,crate:8,drum:2,sign:2},      amb:{count:5,r:95,alpha:0.5},   weather:'embers', hazard:'surge' },
   { name:'COLD TERMINAL', ground:'#1c2630', grid:'130,180,210', fog:'3,7,14',  lamp:'170,220,255', tint:'#6ec8ff',
-    props:{puddle:9,vent:5,sign:3,crate:3},         amb:{count:6,r:110,alpha:0.5},  weather:'rain' },
+    props:{puddle:9,vent:5,sign:3,crate:3},         amb:{count:6,r:110,alpha:0.5},  weather:'rain', hazard:'steam' },
   { name:'TOXIC SIDING',  ground:'#202a1c', grid:'150,200,120', fog:'4,10,4',  lamp:'190,255,150', tint:'#9dff6a',
-    props:{drum:9,vent:6,crate:3,sign:2},           amb:{count:5,r:100,alpha:0.45}, weather:'motes' },
+    props:{drum:9,vent:6,crate:3,sign:2},           amb:{count:5,r:100,alpha:0.45}, weather:'motes', hazard:'steam' },
   { name:'VIOLET DEPOT',  ground:'#241c30', grid:'170,130,220', fog:'8,4,14',  lamp:'200,160,255', tint:'#b46cff',
-    props:{neon:6,sign:5,kiosk:3,crate:3},          amb:{count:9,r:115,alpha:0.55}, weather:'none' },
+    props:{neon:6,sign:5,kiosk:3,crate:3},          amb:{count:9,r:115,alpha:0.55}, weather:'none', hazard:'surge' },
   { name:'HARBOR GATE',   ground:'#1a2828', grid:'110,190,180', fog:'3,9,9',   lamp:'150,240,220', tint:'#5fe0c8',
     props:{container:8,puddle:6,crate:4,sign:3},    amb:{count:4,r:130,alpha:0.45}, weather:'fog' },
   { name:'EMBER WORKS',   ground:'#2b201a', grid:'235,150,90',  fog:'10,5,2',  lamp:'255,180,110', tint:'#ff9a4c',
-    props:{drum:7,vent:6,container:4,crate:3},      amb:{count:6,r:90,alpha:0.55},  weather:'embers' },
+    props:{drum:7,vent:6,container:4,crate:3},      amb:{count:6,r:90,alpha:0.55},  weather:'embers', hazard:'steam' },
   { name:'GHOST MARKET',  ground:'#242220', grid:'190,180,160', fog:'6,6,5',   lamp:'235,225,200', tint:'#d8cba8',
-    props:{kiosk:7,bench:5,sign:4,crate:3},         amb:{count:4,r:110,alpha:0.35}, weather:'motes', wcol:'#cfc4a8' },
+    props:{kiosk:7,bench:5,sign:4,crate:3},         amb:{count:4,r:110,alpha:0.35}, weather:'motes', wcol:'#cfc4a8', hazard:'surge' },
   { name:'AZURE CIRCUIT', ground:'#1a2032', grid:'120,160,240', fog:'3,5,14',  lamp:'150,190,255', tint:'#6a9aff',
     props:{neon:7,sign:5,vent:4,crate:3},           amb:{count:10,r:110,alpha:0.55},weather:'none' },
 ];
@@ -726,10 +726,43 @@ function buildDistrictLayer() {
     if (free(x, y, 10)) { districtFx.lights.push({ x, y, r: d.amb.r * rnd(0.8, 1.2), alpha: d.amb.alpha, ph: rnd(0, 6.283), sp: rnd(0.05, 0.16) }); break; }
   }
   districtFx.wcol = d.wcol || null;
+  districtFx.vents = [];
+  if (d.hazard === 'steam') {
+    const vs = districtFx.props.filter(p => p.kind === 'vent').slice(0, 3);
+    for (const v of vs) districtFx.vents.push({ x: v.x, y: v.y, t: rnd(400, 800), ph: 0 });
+  }
+  districtFx.surgeState = 0;
+  districtFx.surgeT = d.hazard === 'surge' ? rnd(900, 1400) : -1;
   if (districtFx.weather === 'fog') for (let i = 0; i < 10; i++)
     districtFx.wp.push({ x: Math.random() * VW, y: Math.random() * VH, r: rnd(160, 300), v: rnd(0.15, 0.45), ph: rnd(0, 6.28) });
   else if (districtFx.weather !== 'none') for (let i = 0; i < 42; i++)
     districtFx.wp.push({ x: Math.random() * VW, y: Math.random() * VH, v: rnd(2.5, 6), l: rnd(8, 18), ph: rnd(0, 6.28) });
+}
+function surgeK() { return districtFx.surgeState === 2 ? 0.55 : 1; }
+// District hazards: steam vents scald machines and slow the tank; power surges shrink the light.
+function updateDistrictHazards() {
+  for (const v of districtFx.vents) {
+    if (v.ph > 0) {
+      v.ph--;
+      if (v.ph % 4 === 0) spawnParticles(v.x + rnd(-8, 8), v.y + rnd(-8, 8), 1, { color: '#cfd8d4', smin: 0.5, smax: 1.6, lmin: 20, lmax: 40, fade: 'smoke' });
+      if (v.ph < 60) { // full burst (first 40 ticks are the hiss telegraph)
+        if (v.ph % 12 === 0) for (const e of enemies) {
+          if (!e.dead && e.dormant <= 0 && dist2(e.x, e.y, v.x, v.y) < 55 * 55) { e.hp -= 0.35; e.reveal = Math.max(e.reveal, 60); if (e.hp <= 0) killEnemy(e); }
+        }
+        if (player.alive && dist2(player.x, player.y, v.x, v.y) < 62 * 62) player.steamSlow = 8;
+      }
+      if (v.ph <= 0) v.t = rnd(500, 900);
+    } else if (--v.t <= 0) { v.ph = 100; Snd.ui('wave_clear', .12); }
+  }
+  if (districtFx.surgeT > 0) {
+    districtFx.surgeT--;
+    if (districtFx.surgeT === 0) {
+      if (districtFx.surgeState === 0) { districtFx.surgeState = 1; districtFx.surgeT = 90; toast('POWER SURGE INBOUND', 80); Snd.ui('boss_horn', .22); }
+      else if (districtFx.surgeState === 1) { districtFx.surgeState = 2; districtFx.surgeT = 160; shake(3, 8); }
+      else { districtFx.surgeState = 0; districtFx.surgeT = rnd(1100, 1600); toast('POWER RESTORED', 60); }
+    }
+  }
+  if (player.steamSlow > 0) player.steamSlow--;
 }
 // ===== ACHIEVEMENTS =====
 const ACH = [
@@ -1141,7 +1174,7 @@ function updateEnemies() {
     // reveal check: player's light cone / proximity (stalkers stay cloaked longer)
     const revCone = e.cloak ? CONE_HALF * 0.45 : CONE_HALF + 0.1;
     const revProx = e.cloak ? 95 : 175;
-    const inCone = d < CONE_LEN && Math.abs(angDiff(Math.atan2(e.y - player.y, e.x - player.x), player.turret)) < revCone;
+    const inCone = d < CONE_LEN * surgeK() && Math.abs(angDiff(Math.atan2(e.y - player.y, e.x - player.x), player.turret)) < revCone * (districtFx.surgeState === 2 ? 0.85 : 1);
     if ((inCone && losClear(player.x, player.y, e.x, e.y)) || d < revProx) e.reveal = Math.max(e.reveal, 24);
   }
   // spawn flashes decay
@@ -1210,7 +1243,7 @@ function updatePlayer() {
     const wantA = Math.atan2(mv.y, mv.x);
     player.hull = turnToward(player.hull, wantA, 0.09);
     const align = 0.45 + 0.55 * Math.max(0, Math.cos(angDiff(wantA, player.hull)));
-    const sp = P_SPEED * mv.m * align;
+    const sp = P_SPEED * mv.m * align * (player.steamSlow > 0 ? 0.55 : 1);
     const nx = player.x + Math.cos(wantA) * sp, ny = player.y + Math.sin(wantA) * sp;
     const c = circleVsRects(nx, ny, P_RADIUS);
     player.x = c.x; player.y = c.y;
@@ -1499,6 +1532,7 @@ function update() {
   for (let i = beams.length - 1; i >= 0; i--) if (--beams[i].life <= 0) beams.splice(i, 1);
   if (empFx && --empFx.t <= 0) empFx = null;
   updateFlares();
+  updateDistrictHazards();
   updatePickups();
 
   // camera (centers the arena if the view is wider than it — ultrawide desktops)
@@ -2122,19 +2156,21 @@ function renderLights(sx, sy) {
 
   // player searchlight cone + ambient
   if (player.alive && G.state !== 'over') {
-    hole(player.x, player.y, 165, 1);
+    const sk = surgeK();
+    hole(player.x, player.y, 165 * (0.75 + 0.25 * sk), 1);
     lctx.save();
     lctx.translate(player.x + ox, player.y + oy);
     lctx.rotate(player.turret);
-    const g = lctx.createLinearGradient(0, 0, CONE_LEN, 0);
+    const CL = CONE_LEN * sk;
+    const g = lctx.createLinearGradient(0, 0, CL, 0);
     g.addColorStop(0, 'rgba(255,255,255,1)');
     g.addColorStop(0.6, 'rgba(255,255,255,0.88)');
     g.addColorStop(1, 'rgba(255,255,255,0)');
     lctx.fillStyle = g;
     lctx.beginPath();
     lctx.moveTo(8, 0);
-    lctx.lineTo(CONE_LEN, -Math.tan(CONE_HALF) * CONE_LEN);
-    lctx.lineTo(CONE_LEN, Math.tan(CONE_HALF) * CONE_LEN);
+    lctx.lineTo(CL, -Math.tan(CONE_HALF) * CL);
+    lctx.lineTo(CL, Math.tan(CONE_HALF) * CL);
     lctx.closePath(); lctx.fill();
     lctx.restore();
   }
@@ -2158,10 +2194,12 @@ function renderLights(sx, sy) {
     const fade = Math.min(1, f.t / 80);
     hole(f.x, f.y, (150 + Math.sin(G.t * 0.26 + f.bob) * 12) * (0.35 + 0.65 * fade), 0.85 * fade);
   }
-  for (const L of districtFx.lights) { // district ambient light wells — the city is alive out there
-    const fl = 0.8 + Math.sin(G.t * L.sp + L.ph) * 0.2;
+  if (districtFx.surgeState !== 2) for (const L of districtFx.lights) { // surge = the city goes DARK
+    let fl = 0.8 + Math.sin(G.t * L.sp + L.ph) * 0.2;
+    if (districtFx.surgeState === 1 && Math.random() < 0.18) fl *= 0.25; // warn: hard flicker
     hole(L.x, L.y, L.r * fl, L.alpha * fl);
   }
+  for (const v of districtFx.vents) if (v.ph > 0 && v.ph < 60) hole(v.x, v.y, 42, 0.28); // steam catches light
   if (empFx) { // the blackout itself lifts in an expanding wave, then crushes back in
     const p = 1 - empFx.t / empFx.max;
     hole(player.x, player.y, 40 + p * 1400, 0.9 * (1 - p) * flashMul());
@@ -2497,7 +2535,7 @@ function loop(ts) {
 document.querySelectorAll('.version').forEach(el => { el.textContent = VERSION; });
 
 window.__blackoutQA = {
-  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, beams: beams.length, flares: flares.length, ordAmmo: G.ordAmmo, empAmmo: G.empAmmo, empActive: !!empFx, dProps: districtFx.props.length, dLights: districtFx.lights.length, weather: districtFx.weather, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), slug: SCORES_API }; },
+  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, beams: beams.length, flares: flares.length, ordAmmo: G.ordAmmo, empAmmo: G.empAmmo, empActive: !!empFx, dProps: districtFx.props.length, dLights: districtFx.lights.length, weather: districtFx.weather, hazard: curDistrict.hazard || 'none', surgeState: districtFx.surgeState, vents: districtFx.vents.length, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), slug: SCORES_API }; },
   tick(n) { n = n || 1; const wr = window.__blackoutQA._noloop; for (let i = 0; i < n; i++) update(); render(); return this.snapshot(); },
   start() { Snd.resume(); startGame(); qaGod = true; return this.snapshot(); },
   setWave(w) { enemies = []; bullets = []; beams = []; flares = []; G.pending = []; G.intermission = 0; startWave(w); return this.snapshot(); },
@@ -2505,6 +2543,8 @@ window.__blackoutQA = {
   addOrdnance(n) { G.ordAmmo = Math.min(5, (G.ordAmmo | 0) + (n || 1)); updateOrdHud(); return G.ordAmmo; },
   fireEmp() { fireEmp(); return this.snapshot(); },
   addEmp(n) { G.empAmmo = Math.min(3, (G.empAmmo | 0) + (n || 1)); updateOrdHud(); return G.empAmmo; },
+  triggerSurge() { if (districtFx.surgeT > 0) districtFx.surgeT = 1; return districtFx.surgeT; },
+  ventBurst() { const v = districtFx.vents[0]; if (v && v.ph <= 0) v.t = 1; return districtFx.vents.length; },
   spawn(type) { const e = mkEnemy(type, clamp(player.x + 300, 60, ARENA_W - 60), player.y); e.dormant = 0; enemies.push(e); return type; },
   killAll(end) { for (const e of enemies.slice()) if (!e.dead) killEnemy(e); G.pending = []; if (end) endGame(); return this.snapshot(); },
   endGame() { endGame(); return this.snapshot(); },
