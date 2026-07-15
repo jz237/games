@@ -10,8 +10,14 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** S3 DONE (2026-07-15) — daily seed mode. Unshipped: S1, S2, S3 → READY TO SHIP
-  batch 5 (v3.5.0), the stretch batch.
+- **Iteration:** S4 DONE (2026-07-15) — **v3.5.0 SHIPPED LIVE. LOOP COMPLETE** (planned 00–18 +
+  stretch S1–S3 all built and live). Site 222d01948 (temp-worktree cherry-pick from local
+  23729a1cb; one stale-edge v3.4.0 reading during settle — full-payload verify + 3 consecutive
+  v3.5.0 probes confirmed, Daily Patrol button + both music files 200); mirror 060f214
+  (GOTCHA: cherry-pick chains must include INTERMEDIATE ledger commits — skipping ed794cc
+  conflicted; abort + full-chain pick worked). games/index card mentions light-hunters + Daily
+  Patrol. AUDIO_V 3.5.0 (26 audio files). Suite 47/47 at ship.
+  **Total loop output: 24 iterations, 5 ships (v3.1.0→v3.5.0), suite 0→47 checks.**
 - Previous milestone: 18b — **v3.4.0 SHIPPED LIVE. PLANNED BACKLOG (00–18) COMPLETE.**
   Site e4a763c06 (deploy list confirmed own commit; 4 consecutive v3.4.0 probes — one early
   v3.3.0 reading was edge settling, NOT a revert; games/index card updated to featured + v3
@@ -32,10 +38,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** **S4 — SHIP BATCH 5 as v3.5.0** (S1 hunter/smasher, S2 patrol variants, S3 daily).
-  Protocol: adversarial review of diff since v3.4.0 ship commit (ffda771..HEAD), VERSION→v3.5.0
-  AND **AUDIO_V→3.5.0** (2 new music files!), copy index.html + music_patrol_b/c.mp3 to deploy,
-  land, verify ×3 + music 200s, mirror explicit-list, memory refresh. Then loop COMPLETE — stop.
+- **Next:** NOTHING — loop complete and stopped 2026-07-15. To do more, re-run the /loop prompt
+  with new goals; this ledger carries all engine facts, protocols, and gotchas.
 
 ## Iteration log
 
@@ -292,7 +296,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
       via scoresUrl() (worker accepts arbitrary slugs — probed [], no backend change; MAIN slug
       untouched per protocol). snapshot.daily/.dailySeed, QA daily(v), obstacles getter.
       Suite 46→47 (identical sig across attempts, differs unseeded).
-- [ ] S4 SHIP batch 5 → v3.5.0 (S1–S3)
+- [x] S4 SHIPPED v3.5.0 LIVE 2026-07-15 (site 222d01948 + mirror 060f214)
 
 ## Ship protocol (batch every 3–5 items → v3.1.0, v3.2.0, …)
 
