@@ -10,8 +10,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 16 DONE (2026-07-14) — balance pass (data-only tuning). Last ship: **v3.3.0
-  LIVE** (site df3081c81, mirror 1d10ca5). Unshipped: item 16.
+- **Iteration:** 17 DONE (2026-07-14) — touch/mobile pass (rig touch tooling + coverage; zero
+  game-code changes needed). Last ship: **v3.3.0 LIVE**. Unshipped: items 16, 17.
 - **Suite:** 41/41 green (24/24 buffers). Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
@@ -23,9 +23,11 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 17 — touch/mobile pass: verify ordnance buttons on touch (CDP touch emulation,
-  single-fire-per-tap), portrait sanity, button placement vs drive-stick space; keep existing
-  touch paths intact. Then 18 (polish/docs/?qa=1 gating) → ship batch 4 (v3.4.0, items 16–18).
+- **Next:** item 18 — final polish/docs: new achievements for weapons/ordnance/districts,
+  PROMPT.md v3 rewrite, games/index.html card blurb, **?qa=1 gating for __blackoutQA** (rig must
+  add ?qa=1 to its URL!), FIELD MANUAL brief for weapons/ordnance/hazards, HUD-overlap check from
+  iteration 00 survey. Then SHIP batch 4 (v3.4.0, items 16–18) — likely the final planned ship;
+  stretch items (S1–S3) need user approval per protocol.
 
 ## Iteration log
 
@@ -205,6 +207,12 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   niche. DECISION: railgun blind-fire through darkness KEPT (physical-lance identity; cd-60 cost
   makes speculative spam unprofitable; stalkers self-reveal at 95px prox + when burning). Score
   economy untouched (per-enemy scores; weapon choice = clear speed only). Suite 41/41.
+- **17** (2026-07-14): Touch pass — ZERO game-code changes needed (buttons were touch-first from
+  06/07). Rig gained real touch tooling: Emulation.setTouchEmulationEnabled at boot, tap()/
+  touchDrag()/touchEndAll() via Input.dispatchTouchEvent, SSB_VIEW=WxH env for viewport. Suite
+  41→42: one tap = exactly one flare / one EMP (button rects from getBoundingClientRect), and
+  the floating drive-stick drove 126px while buttons coexist. Landscape 880×430 probe: buttons
+  right-middle, clear of minimap/HUD (shot landscape.png).
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -253,7 +261,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 14 hazards: steam vents (scald+slow) + blackout surges (cone shrink, city dark) — see log
 - [x] 15 district ambience: 3 shared seamless loops, ambKey mapping, stops on over (see log)
 - [x] 16 balance pass: DPS matrix, railgun/incinerator tuned, blind-fire decision (see log)
-- [ ] 17 touch/mobile: ordnance buttons; single-fire-per-tap via CDP touch emulation; portrait ok.
+- [x] 17 touch pass: tap/drag emulation in rig, single-fire verified, landscape clean (see log)
 - [ ] 18 polish + docs: new achievements; PROMPT.md v3 rewrite; games/index.html blurb; **gate QA
       hooks behind ?qa=1**; HUD overlap check (see survey); version + FIELD MANUAL updates.
 - [ ] STRETCH (propose to user at a ship milestone first): S1 light-interacting enemies

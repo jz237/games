@@ -69,6 +69,15 @@ class CDP {
   // NOTE: evaluate value is two levels deep (result.result.value); screenshot data is ONE level (result.data)
   async eval(expr) { const r = await this.send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) throw new Error('page threw: ' + (r.exceptionDetails.exception?.description || r.exceptionDetails.text).split('\n').slice(0, 3).join(' | ')); return r.result.value; }
   async shot(file) { const r = await this.send('Page.captureScreenshot', { format: 'png' }); await writeFile(file, Buffer.from(r.data, 'base64')); }
+  async tap(x, y) { // a real touch tap
+    await this.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    await this.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  }
+  async touchDrag(x1, y1, x2, y2) { // touchStart + move, WITHOUT end (caller ends via touchEndAll)
+    await this.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x1, y: y1 }] });
+    await this.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x2, y: y2 }] });
+  }
+  async touchEndAll() { await this.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); }
 }
 
 async function connect(port) {
@@ -90,7 +99,9 @@ async function boot() {
   process.on('exit', () => { try { proc.kill('SIGKILL'); } catch {} });
   try {
     const c = await connect(port);
-    await c.send('Emulation.setDeviceMetricsOverride', { width: 430, height: 880, deviceScaleFactor: 2, mobile: true });
+    const [vw, vh] = (process.env.SSB_VIEW || '430x880').split('x').map(Number);
+    await c.send('Emulation.setDeviceMetricsOverride', { width: vw, height: vh, deviceScaleFactor: 2, mobile: true });
+    await c.send('Emulation.setTouchEmulationEnabled', { enabled: true });
     const url = `http://127.0.0.1:${srv.address().port}/index.html?cb=${Math.random().toString(36).slice(2)}`;
     await c.send('Page.navigate', { url }); // always navigate w/ buster, never reload (stale-cache gotcha)
     for (let i = 0; i < 60; i++) { await sleep(100); try { if (await c.eval('!!window.__blackoutQA')) break; } catch {} }
@@ -391,7 +402,25 @@ async function suite() {
     if (r.a4 !== null) throw new Error('ambience kept playing after game over: ' + JSON.stringify(r));
     return `${r.a1}→${r.a2}→${r.a3}→stopped`;
   });
-  await check('42 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('42 touch: one tap = one flare/EMP; stick still drives', async () => {
+    await c.eval(`(()=>{const q=${QA};q.start();q.god(true);q.killAll();return 1;})()`);
+    const rects = await c.eval(`(()=>{const o=document.getElementById('btn-ord').getBoundingClientRect(),m=document.getElementById('btn-emp').getBoundingClientRect();return {ox:o.x+o.width/2,oy:o.y+o.height/2,mx:m.x+m.width/2,my:m.y+m.height/2};})()`);
+    const before = await snap();
+    await c.tap(rects.ox, rects.oy); await sleep(150);
+    const afterFlare = await snap();
+    if (afterFlare.ordAmmo !== before.ordAmmo - 1) throw new Error(`tap fired ${before.ordAmmo - afterFlare.ordAmmo} flares`);
+    await c.tap(rects.mx, rects.my); await sleep(150);
+    const afterEmp = await snap();
+    if (afterEmp.empAmmo !== before.empAmmo - 1 || !afterEmp.empActive) throw new Error('EMP tap failed: ' + JSON.stringify({ e: afterEmp.empAmmo, a: afterEmp.empActive }));
+    const px = await c.eval(`${QA}.player.x`);
+    await c.touchDrag(120, 700, 190, 700); // floating stick: press left side, drag east
+    await c.eval(`${QA}.tick(45)`);
+    const dx = (await c.eval(`${QA}.player.x`)) - px;
+    await c.touchEndAll();
+    if (dx < 15) throw new Error('stick drag moved only ' + dx.toFixed(1) + 'px');
+    return `flare+EMP taps clean, stick drove ${dx.toFixed(0)}px`;
+  });
+  await check('43 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;
