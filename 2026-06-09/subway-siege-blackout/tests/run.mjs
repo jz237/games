@@ -420,13 +420,42 @@ async function suite() {
     if (dx < 15) throw new Error('stick drag moved only ' + dx.toFixed(1) + 'px');
     return `flare+EMP taps clean, stick drove ${dx.toFixed(0)}px`;
   });
-  await check('43 QA hooks gated: absent without ?qa=1', async () => {
+  await check('43 hunter: charges when lit, moths to flares', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};q.start();q.god(true);q.killAll();
+      const run=(rev)=>{q.killAll();q.spawn('hunter');const h=q.enemies.filter(e=>!e.dead&&e.type==='hunter')[0];
+        h.x=q.player.x+420;h.y=q.player.y;const x0=h.x;
+        for(let i=0;i<30;i++){if(!h.dead){h.reveal=rev;h.y=q.player.y;}q.tick(3);}
+        return x0-h.x;};
+      const dark=run(0),lit=run(200);
+      q.killAll();q.player.turret=0;q.fireOrdnance();q.tick(40);const f=q.flares[0];
+      q.spawn('hunter');const h=q.enemies.filter(e=>!e.dead&&e.type==='hunter')[0];
+      h.x=q.player.x+400;h.y=q.player.y;h.reveal=0;
+      for(let i=0;i<50;i++){if(!h.dead){h.reveal=0;}q.tick(3);}
+      const dFlare=Math.hypot(h.x-f.x,h.y-f.y),dPlayer=Math.hypot(h.x-q.player.x,h.y-q.player.y);
+      return {dark:+dark.toFixed(0),lit:+lit.toFixed(0),dFlare:+dFlare.toFixed(0),dPlayer:+dPlayer.toFixed(0)};})()`);
+    if (!(r.lit > r.dark * 1.25)) throw new Error('lit-charge weak: ' + JSON.stringify(r));
+    if (!(r.dFlare < 230 && r.dPlayer > 260)) throw new Error('moth behavior off: ' + JSON.stringify(r));
+    return `dark ${r.dark}px vs lit ${r.lit}px; parked at flare (${r.dFlare} vs player ${r.dPlayer})`;
+  });
+  await check('44 smasher stomps flares out', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};q.start();q.god(true);q.killAll();
+      q.player.turret=0;q.fireOrdnance();q.tick(40);const f=q.flares[0];const f0=q.snapshot().flares;
+      q.spawn('smasher');const s=q.enemies.filter(e=>!e.dead&&e.type==='smasher')[0];
+      s.x=f.x+15;s.y=f.y;
+      let t=0;for(;t<180&&q.snapshot().flares>0;t+=5){if(!s.dead){s.x=f.x+15;s.y=f.y;}q.tick(5);}
+      return {f0,fl:q.snapshot().flares,alive:!s.dead,t};})()`);
+    if (r.f0 !== 1) throw new Error('flare setup failed: ' + JSON.stringify(r));
+    if (r.fl !== 0) throw new Error('flare survived the smasher: ' + JSON.stringify(r));
+    if (!r.alive) throw new Error('smasher died stomping (should survive)');
+    return `stomped out in ${r.t} ticks`;
+  });
+  await check('45 QA hooks gated: absent without ?qa=1', async () => {
     // must run LAST before the error check — it navigates away from the qa page
     await c.send('Page.navigate', { url: (await c.eval('location.href')).replace('qa=1&', '') });
     let t = null; for (let i = 0; i < 30; i++) { await sleep(150); t = await c.eval('typeof window.__blackoutQA').catch(() => null); if (t === 'undefined') break; }
     if (t !== 'undefined') throw new Error('__blackoutQA present without ?qa=1 (typeof=' + t + ')');
   });
-  await check('44 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('46 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;

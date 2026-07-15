@@ -10,7 +10,10 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 18b DONE (2026-07-14) — **v3.4.0 SHIPPED LIVE. PLANNED BACKLOG (00–18) COMPLETE.**
+- **Iteration:** S1 DONE (2026-07-14) — light-interacting enemies (HUNTER + SMASHER). **STRETCH
+  S1–S3 ALL APPROVED BY USER 2026-07-14** — loop RESUMED. Unshipped: S1. Next: S2 then S3, then
+  ship batch 5 (v3.5.0, S1–S3).
+- Previous milestone: 18b — **v3.4.0 SHIPPED LIVE. PLANNED BACKLOG (00–18) COMPLETE.**
   Site e4a763c06 (deploy list confirmed own commit; 4 consecutive v3.4.0 probes — one early
   v3.3.0 reading was edge settling, NOT a revert; games/index card updated to featured + v3
   blurb in same commit). Mirror fc90751 (github.io "built" status LAGS a fresh push — poll
@@ -30,7 +33,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** NOTHING PLANNED — loop paused. Stretch S1–S3 pending user approval (see above).
+- **Next:** S2 — district patrol-music variants: 2 new ElevenLabs patrol tracks; district bands
+  rotate patrol music (e.g. bands of 3 districts each get their own track; boss music unchanged);
+  wire into musicForState/playMusic crossfade; AUDIO_V bump comes with S-batch ship.
 
 ## Iteration log
 
