@@ -10,9 +10,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** S1 DONE (2026-07-14) — light-interacting enemies (HUNTER + SMASHER). **STRETCH
-  S1–S3 ALL APPROVED BY USER 2026-07-14** — loop RESUMED. Unshipped: S1. Next: S2 then S3, then
-  ship batch 5 (v3.5.0, S1–S3).
+- **Iteration:** S2 DONE (2026-07-15) — district patrol-music variants. Unshipped: S1, S2.
+  Stretch approved by user 2026-07-14; next S3, then ship batch 5 (v3.5.0).
 - Previous milestone: 18b — **v3.4.0 SHIPPED LIVE. PLANNED BACKLOG (00–18) COMPLETE.**
   Site e4a763c06 (deploy list confirmed own commit; 4 consecutive v3.4.0 probes — one early
   v3.3.0 reading was edge settling, NOT a revert; games/index card updated to featured + v3
@@ -33,9 +32,13 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** S2 — district patrol-music variants: 2 new ElevenLabs patrol tracks; district bands
-  rotate patrol music (e.g. bands of 3 districts each get their own track; boss music unchanged);
-  wire into musicForState/playMusic crossfade; AUDIO_V bump comes with S-batch ship.
+- **Next:** S3 — daily seed mode: shared daily arena/wave seed for leaderboard rivalry. Design
+  notes: seeded PRNG (mulberry32 per family convention) replacing Math.random in buildWorld/
+  startWave-shuffle/districtLayer WHEN daily mode on; seed = UTC date string; title-screen DAILY
+  button; separate leaderboard slug suffix or name prefix (decide: name prefix '[D] ' keeps one
+  board; family precedent: invaders daily challenge — check its approach if unsure); daily runs
+  fixed tank+weapon? Keep loadout free, seed only the WORLD. Suite: two boots same seed → same
+  obstacle layout; different seed → different.
 
 ## Iteration log
 
@@ -281,7 +284,10 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
       games/index.html blurb applies AT SHIP in the website repo)
 - [x] S1 HUNTER (lit→1.55x charge; moths to flares ≤420px) + SMASHER (hunts flares, stomps them
       to t=40, survives) — waves 7+/9+, manual brief, suite 43→45. APPROVED + DONE 2026-07-14.
-- [ ] S2 patrol-music variants per district band (APPROVED)
+- [x] S2 patrol-music variants: music_patrol_b (cold/industrial, bands TOXIC/VIOLET/HARBOR) +
+      music_patrol_c (electric/driving, EMBER/GHOST/AZURE), composed 85s each via compose_music,
+      gain-matched to −15dB mean like music_patrol; patrolFor() band = floor(districtIdx/3);
+      boss/title unchanged; crossfade free via existing playMusic-at-startWave. Suite 45→46.
 - [ ] S3 daily-challenge seed mode (APPROVED)
 - [ ] S4 SHIP batch 5 → v3.5.0 (S1–S3)
 

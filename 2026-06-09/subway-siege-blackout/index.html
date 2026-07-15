@@ -401,7 +401,9 @@ const Snd = (function () {
   const SFX = ['fire','explode_small','explode_big','barrel','pickup','player_hit','wave_clear','boss_horn','upgrade','achievement','menu_click','combo','overdrive','perfect',
     'fire_scatter','fire_railgun','fire_flame','fire_tesla','flare_launch','emp_blast','impact_metal',
     'amb_city','amb_rain','amb_industrial'];
-  const MUSIC = { title:{el:null,file:'music_title.mp3',base:.55}, patrol:{el:null,file:'music_patrol.mp3',base:.45}, boss:{el:null,file:'music_boss.mp3',base:.62} };
+  const MUSIC = { title:{el:null,file:'music_title.mp3',base:.55}, patrol:{el:null,file:'music_patrol.mp3',base:.45},
+    patrol_b:{el:null,file:'music_patrol_b.mp3',base:.45}, patrol_c:{el:null,file:'music_patrol_c.mp3',base:.45},
+    boss:{el:null,file:'music_boss.mp3',base:.62} };
   let curMusic = null, musicDuck = 1, musicDuckT = 0;
   let ambSrc = null, ambWant = null, ambGain = null;
   function ensure() {
@@ -1485,7 +1487,8 @@ function updateParticles() {
 //  GAME FLOW
 // ===========================================================================
 function isBossWave() { return G.wave % 5 === 0 && (enemies.some(e => e.type === 'boss' && !e.dead) || G.pending.includes('boss')); }
-function musicForState() { return (G.state === 'play' || G.state === 'pause') ? (isBossWave() ? 'boss' : 'patrol') : 'title'; }
+function patrolFor() { return ['patrol', 'patrol_b', 'patrol_c'][Math.floor(Math.max(0, DISTRICTS.indexOf(curDistrict)) / 3) % 3]; }
+function musicForState() { return (G.state === 'play' || G.state === 'pause') ? (isBossWave() ? 'boss' : patrolFor()) : 'title'; }
 function updateMusic() { if (settings.musicVol > 0 && !Snd.isMuted()) Snd.playMusic(musicForState()); else Snd.stopMusic(); updateAmbient(); }
 function updateAmbient() { // district ambience rides the sfx bus; stays up through pause, stops on title/over
   if (G.state === 'play' || G.state === 'pause') Snd.startAmbient('amb_' + (curDistrict.ambKey || 'city'));

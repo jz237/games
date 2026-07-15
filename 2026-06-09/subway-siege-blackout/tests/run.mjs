@@ -449,13 +449,21 @@ async function suite() {
     if (!r.alive) throw new Error('smasher died stomping (should survive)');
     return `stomped out in ${r.t} ticks`;
   });
-  await check('45 QA hooks gated: absent without ?qa=1', async () => {
+  await check('45 patrol music rotates by district band', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};q.start();q.tick(3);
+      const m1=q.setWave(1).music,m2=q.setWave(16).music,m3=q.setWave(31).music,mb=q.setWave(5).music;
+      q.setWave(2);return {m1,m2,m3,mb,back:q.snapshot().music};})()`);
+    if (r.m1 !== 'patrol' || r.m2 !== 'patrol_b' || r.m3 !== 'patrol_c') throw new Error(JSON.stringify(r));
+    if (r.mb !== 'boss' || r.back !== 'patrol') throw new Error('boss/back transition: ' + JSON.stringify(r));
+    return `${r.m1}→${r.m2}→${r.m3}, boss + back ok`;
+  });
+  await check('46 QA hooks gated: absent without ?qa=1', async () => {
     // must run LAST before the error check — it navigates away from the qa page
     await c.send('Page.navigate', { url: (await c.eval('location.href')).replace('qa=1&', '') });
     let t = null; for (let i = 0; i < 30; i++) { await sleep(150); t = await c.eval('typeof window.__blackoutQA').catch(() => null); if (t === 'undefined') break; }
     if (t !== 'undefined') throw new Error('__blackoutQA present without ?qa=1 (typeof=' + t + ')');
   });
-  await check('46 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('47 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;
