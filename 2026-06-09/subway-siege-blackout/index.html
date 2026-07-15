@@ -1068,6 +1068,8 @@ function mkEnemy(type, x, y) {
   if (type === 'boss') return Object.assign(base, { hp: 60, r: 34, speed: 0.7, dmg: 14, range: 560, score: 1500, hue: '#5c3a78' });
   if (type === 'stalker') return Object.assign(base, { hp: 2, r: 14, speed: 2.35, dmg: 14, range: 300, score: 260, hue: '#8a4fb0', cloak: true });
   if (type === 'mortar') return Object.assign(base, { hp: 4, r: 20, speed: 0.85, dmg: 22, range: 640, score: 320, hue: '#c8a04a', mortar: true, fireCd: rnd(90, 150) });
+  if (type === 'hunter') return Object.assign(base, { hp: 3, r: 16, speed: 2.0, dmg: 16, range: 260, score: 300, hue: '#d84fd8' });
+  if (type === 'smasher') return Object.assign(base, { hp: 5, r: 19, speed: 1.7, dmg: 14, range: 220, score: 340, hue: '#4f8ad8' });
   return base;
 }
 
@@ -1079,11 +1081,15 @@ function startWave(n) {
   const drones = n >= 3 ? Math.min(n - 2, 6) : 0;
   const stalkers = n >= 3 ? Math.min(1 + Math.floor((n - 3) / 2), 4) : 0;
   const mortars = n >= 4 ? Math.min(1 + Math.floor((n - 4) / 3), 3) : 0;
+  const hunters = n >= 7 ? Math.min(1 + Math.floor((n - 7) / 3), 4) : 0;
+  const smashers = n >= 9 ? Math.min(1 + Math.floor((n - 9) / 4), 3) : 0;
   for (let i = 0; i < scouts; i++) list.push('scout');
   for (let i = 0; i < brutes; i++) list.push('brute');
   for (let i = 0; i < drones; i++) list.push('drone');
   for (let i = 0; i < stalkers; i++) list.push('stalker');
   for (let i = 0; i < mortars; i++) list.push('mortar');
+  for (let i = 0; i < hunters; i++) list.push('hunter');
+  for (let i = 0; i < smashers; i++) list.push('smasher');
   if (n % 5 === 0) list.push('boss');
   // shuffle
   for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
@@ -1148,18 +1154,32 @@ function updateEnemies() {
       }
     } else {
       // tanks: approach to preferred range, then hold & fire
-      const want = e.type === 'scout' ? 300 : e.type === 'boss' ? 380 : e.type === 'stalker' ? 190 : e.type === 'mortar' ? 560 : 360;
-      let moveDir = toPlayer;
-      if (d < want - 60) moveDir = toPlayer + Math.PI;            // back off
-      else if (d < want + 60) moveDir = toPlayer + Math.PI / 2;   // strafe orbit
+      let want = e.type === 'scout' ? 300 : e.type === 'boss' ? 380 : e.type === 'stalker' ? 190 : e.type === 'mortar' ? 560 : e.type === 'hunter' ? 130 : e.type === 'smasher' ? 150 : 360;
+      let aimA = toPlayer, aimD = d;
+      if ((e.type === 'hunter' || e.type === 'smasher') && flares.length) { // light-interacting: moths and lamp-killers
+        let bf = null, bd = Infinity;
+        for (const f of flares) { if (f.flight > 0) continue; const fd = Math.hypot(f.x - e.x, f.y - e.y); if (fd < (e.type === 'hunter' ? 420 : 1e9) && fd < bd) { bd = fd; bf = f; } }
+        if (bf) { aimA = Math.atan2(bf.y - e.y, bf.x - e.x); aimD = bd; if (e.type === 'smasher') want = 10; }
+      }
+      let moveDir = aimA;
+      if (aimD < want - 60) moveDir = aimA + Math.PI;            // back off
+      else if (aimD < want + 60) moveDir = aimA + Math.PI / 2;   // strafe orbit
       e.hull = turnToward(e.hull, moveDir, e.type === 'stalker' ? 0.08 : 0.05);
-      const sp = e.speed * (d > want + 60 ? 1 : 0.55) * (e.type === 'mortar' ? 0.4 : 1);
+      const lit = (e.type === 'hunter' && e.reveal > 40) ? 1.55 : 1; // your light makes it FASTER
+      const sp = e.speed * (aimD > want + 60 ? 1 : 0.55) * (e.type === 'mortar' ? 0.4 : 1) * lit;
       const nx = e.x + Math.cos(e.hull) * sp, ny = e.y + Math.sin(e.hull) * sp;
       const c = circleVsRects(nx, ny, e.r); e.x = c.x; e.y = c.y;
       e.dist += sp;
       // aim & fire
       e.turret = turnToward(e.turret, toPlayer, 0.04);
       e.fireCd--;
+      if (e.type === 'smasher') for (const f of flares) { // stomp lights out
+        if (f.flight <= 0 && f.t > 45 && dist2(e.x, e.y, f.x, f.y) < 34 * 34) {
+          f.t = 40;
+          spawnParticles(f.x, f.y, 10, { color: '#3a3430', smax: 2.6, lmax: 20, fade: 'smoke' });
+          Snd.ping();
+        }
+      }
       const canFire = e.type === 'mortar' ? (d < e.range && d > 120) : (d < e.range && Math.abs(angDiff(e.turret, toPlayer)) < 0.2 && losClear(e.x, e.y, player.x, player.y));
       if (e.fireCd <= 0 && canFire && player.alive) {
         if (e.type === 'mortar') {
@@ -1179,7 +1199,7 @@ function updateEnemies() {
               vx: Math.cos(a + off) * (e.type === 'brute' ? 5.2 : 6.4), vy: Math.sin(a + off) * (e.type === 'brute' ? 5.2 : 6.4),
               enemy: true, dmg: e.dmg, life: 130, big: e.type !== 'scout' && e.type !== 'stalker' });
           }
-          e.fireCd = e.type === 'scout' ? rnd(120, 180) : e.type === 'boss' ? rnd(95, 130) : e.type === 'stalker' ? rnd(90, 150) : rnd(150, 220);
+          e.fireCd = e.type === 'scout' ? rnd(120, 180) : e.type === 'boss' ? rnd(95, 130) : e.type === 'stalker' ? rnd(90, 150) : e.type === 'hunter' ? rnd(110, 170) : e.type === 'smasher' ? rnd(170, 230) : rnd(150, 220);
           e.reveal = Math.max(e.reveal, 150);
           flashes.push({ x: e.x + Math.cos(a) * (e.r + 10), y: e.y + Math.sin(a) * (e.r + 10), r: 70, life: 8, max: 8, c: '#ff9a6a' });
           Snd.enemyFire();
@@ -2464,6 +2484,7 @@ document.getElementById('howto-body').innerHTML =
   + '<br><br>🔫 <b>Armament:</b> pick your gun in the GARAGE — CANNON all-round, SCATTER up close, RAILGUN skewers lines, INCINERATOR sets packs alight, TESLA chains crowds. Weapon crates swap your gun mid-patrol.'
   + '<br><br>🧨 <b>Ordnance:</b> Q lobs a FLARE (a pool of light that exposes cloaked stalkers), E fires the EMP (reveals and stuns everything — the whole blackout lifts for a beat). Watch the buttons bottom-right on touch.'
   + '<br><br>⚠️ <b>District hazards:</b> steam vents scald anything standing in them and slow your treads; power surges shrink your searchlight while the city goes dark. Flares still burn through a surge.'
+  + '<br><br>🦋 <b>Light-feeders:</b> HUNTERS charge harder the moment your beam touches them, and swarm to flares like moths — bait them away. SMASHERS hunt your flares and stomp them dark — guard your light or drop a fresh one.'
   + '<br>⛓️ <b>Combo:</b> chain kills to build a multiplier. Hit <b>×12</b> to trigger <b style="color:#9adcff">OVERDRIVE</b> — piercing rapid fire.'
   + '<br>🏙️ <b>Districts:</b> the map shifts every 5 waves. Every 5th wave a <b style="color:#d8a8ff">boss</b> rolls in; beat it to pick a permanent upgrade.'
   + '<br>🎖️ Clear a wave without losing armor for a <b>FLAWLESS</b> bonus.'
