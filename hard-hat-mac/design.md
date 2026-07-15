@@ -1,105 +1,158 @@
-# Hard Hat Mac — Remastered (v2.0) Design Doc
+# Hard Hat Mac - Remastered (v2.2) Design Doc
 
 ## Overview
-Complete modern rewrite of the 1983 Apple II classic "Hard Hat Mack" by Electronic Arts.
-All original gameplay preserved (3 levels, vandal/OSHA enemies, full hazard set, bonus
-timer, looping rounds) plus a brand-new fourth level, power-ups, combo scoring,
-procedural music, global leaderboards, and modern platformer game-feel. Single-file
-`index.html`, canvas 2D, no dependencies, runs on desktop + mobile + gamepad.
+
+Hard Hat Mac is a modern canvas-platformer reinterpretation of the 1983 Apple II
+game. It preserves the construction-site objectives, hazards, timer pressure, and
+looping rounds while adding a fourth level, seeded runs, daily shifts, three
+difficulty modes, power-ups, combo scoring, achievements, replay ghosts, procedural
+audio, responsive controls, and optional global scores.
+
+The game is dependency-free and runs from static files on desktop, touch devices,
+and gamepads. `index.html` owns the renderer and simulation, while
+`game-support.js` contains reusable validation, daily-seed, quality, replay, resume,
+and PWA helpers.
 
 ## Levels
 
-### Level 1 — Building Framework (dawn)
-- 5 girder floors connected by zig-zag ladders; elevator shaft on the left edge.
-- Objective: carry 4 loose girders to the marked floor gaps, then **hold ▼ to
-  jackhammer** each one tight (progress bar, sparks).
-- Hazards: falling bolts (rain from above, aimed loosely at the player), the Vandal,
-  the OSHA inspector (extra vandal at round 3+).
-- Springboard at lower right launches through an open gap to floor 2.
+### Level 1 - Building Framework (dawn)
 
-### Level 2 — Construction Site (dusk)
-- 4 floors, central elevator in an open 2-column shaft cut through every floor.
-- Objective: collect 5 lunchboxes → the electromagnet powers up → ride the top
-  conveyor under the magnet, which grabs Mack and lifts him out (level-end sequence).
-- Hazards: 2 pincers (snap cycle — jump when open), dynamite (periodic explosion with
-  blast radius), poison box, ceiling squasher (**duck with ▼** to pass), concrete
-  spigot dripping blobs, Vandal + OSHA.
+- Carry four girders to marked gaps, then hold Down to jackhammer each one tight.
+- Five connected floors, ladders, an elevator shaft, and a springboard shortcut.
+- Falling bolts, the Vandal, and the inspector pressure the route.
 
-### Level 3 — The Factory (night interior)
-- Factory backdrop: big windows w/ night sky, furnace glow, hanging work lamps.
-- Objective: carry 5 crates (one at a time, overhead) to the processor hopper.
-- The left conveyor belt feeds toward the **drowning pool** at bottom-left
-  (the floor above the pool is open — fall in and you drown).
-- Springboards for vertical shortcuts. Hazards: OSHA, vandals, spigot.
+### Level 2 - Construction Site (dusk)
 
-### Level 4 — Crane Heights (NEW, golden hour)
-- Two rooftop towers separated by a wide gap, high above the city.
-- **Crane hook pendulum** ferries between the two tower TOPS — ride it across.
-- **Wrecking ball** swings low through the gap; **two rising steel beams**
-  (opposite phases) are the lower crossing route — time your hops.
-- Objective: carry 4 steel plates to the marked sockets and jackhammer them in.
-- Completion: flag raise + fireworks → "SHIFT COMPLETE" (round complete).
+- Collect five lunchboxes, power the electromagnet, and ride the conveyor below it.
+- Pincers, dynamite, poison, a duckable squasher, and concrete drips create timing
+  challenges around a central elevator shaft.
+
+### Level 3 - The Factory (night)
+
+- Carry five crates, one at a time, to the processor hopper.
+- Conveyors feed toward a drowning pool and springboards create vertical shortcuts.
+- Electrical arc vents telegraph before energizing, adding a readable route hazard
+  without creating unfair spawn damage.
+
+### Level 4 - Crane Heights (golden hour)
+
+- Carry four plates to sockets and jackhammer them in.
+- A crane-hook pendulum crosses the roof gap; a wrecking ball and rising beams form
+  alternate timed routes.
+- Electrical arc vents increase later-round pressure.
+- Completion raises the flag and ends the shift with fireworks.
 
 ### Rounds
-After L4 the game loops (round++): enemies +22%/round (cap ~2×), timers −9%/round
-(floor 62%), extra vandals appear at rounds 2–3.
 
-## Systems
+After Level 4, the game loops into a harder round. Enemies gain awareness and pace,
+timers shorten, and extra vandals appear. Scaling is capped to keep late rounds
+possible rather than merely fast.
 
-- **Physics/feel**: accel-based movement, coyote time (0.09s), jump buffering (0.12s),
-  variable jump height, squash & stretch, hit-stop on death, screen shake, camera
-  smoothing with facing look-ahead.
-- **Ladders**: pass through the upper floor; the topmost ladder tile is a one-way
-  platform (walk across it, climb up/down through it).
-- **Power-ups** (spawn every ~16–26 s, despawn in 9 s): ☕ coffee (+42% speed, 10 s),
-  ⛑️ golden hat (one free hit), ⏱️ stopwatch (+20 s clock & freezes enemies 5 s),
-  💰 cash (+500).
-- **Combo**: pickups/placements within 5 s chain a ×1…×5 multiplier.
-- **Lives**: 3 to start, extra life at 10 k / 25 k / then every 25 k (cap 5).
-- **Death**: keeps collection progress (girders stay riveted, boxes stay collected,
-  a carried item respawns at its original spot); timer refills.
-- **Medals**: per-level gold/silver/bronze by remaining clock (≥55% / ≥32%), best
-  stored in localStorage.
-- **Foreman radio**: personality toasts on level start, deaths, combos, low clock,
-  power-ups.
-- **First-run hints**: contextual floating tips (movement, climbing, jackhammer,
-  squasher duck, crane hook), suppressed after the first session.
+## Run modes and difficulty
 
-## Presentation
+- New Shift: random seeded run.
+- Daily Shift: one deterministic seed per UTC date, suitable for fair comparison.
+- Practice: four lives, longer timers, fewer enemies, and a 0.75 score multiplier.
+- Standard: baseline balance, three lives, and normal scoring.
+- Foreman: two lives, shorter timers, denser enemies, and a 1.25 score multiplier.
+- A safe checkpoint is saved during active play and on pause/page exit. Resume
+  restores objective state at a safe level start; resumed runs cannot submit global
+  scores.
 
-- Per-level parallax backdrops: gradient sky, sun, drifting clouds, twinkling stars,
-  two layers of skyline with lit windows, crane silhouettes; L3 is a factory interior.
-- Procedural art, no assets: I-beam tiles w/ rivets + cross-bracing, animated conveyor
-  chevrons, springboards, hazard-striped machinery.
-- Characters are runtime-drawn puppets with smooth limb animation (Mack walk/climb/
-  jump/duck/carry/jackhammer/death poses; hoodie Vandal with glowing eyes & spray can;
-  OSHA inspector with hi-vis vest, clipboard and check-pause animation).
-- Lighting: additive glows, work lamps with light cones and flicker, vignette.
-- Particles: dust, sparks, explosions, splashes, confetti, magnet arcs, score popups.
+## Simulation and game logic
 
-## Audio (all Web Audio, no samples)
-- Master compressor → SFX bus + music bus (separate toggles, persisted).
-- ~30 synthesized SFX (jump/land/steps, jackhammer, rivet, magnet hum, explosion,
-  splash, springs, pickups w/ combo pitch, jingles…).
-- **Procedural music sequencer**: per-level 2-bar chiptune tracks (title, L1 upbeat,
-  L2 tense, L3 industrial, L4 golden-hour w/ pads), swing, echo on lead, kick/hats;
-  switches to a "danger" hat pattern when the clock drops below 25%.
+- Deterministic 60 Hz fixed-step simulation with a seeded PRNG.
+- Acceleration movement, coyote time, jump buffering, variable jump height, moving
+  platform deltas, ladders, one-way surfaces, and squash/stretch feedback.
+- Enemy agents patrol, inspect, alert, chase, recover, seek ladders, and climb between
+  connected navigation floors.
+- The navigation graph includes reachable walking, climbing, elevator, springboard,
+  and short-jump links. Objective and power-up spawns are checked against connected
+  components and hazard clearance.
+- Per-level objective state survives deaths; carried objects safely respawn.
+- Power-ups include coffee, gold hard hat, stopwatch/freeze, and cash.
+- Rapid actions chain up to a x5 combo. Extra lives are awarded at score thresholds.
+- Eight local achievements cover first points, combo mastery, clean clears, medals,
+  full and daily shifts, Level 4, and shield use.
+
+## Presentation and adaptive quality
+
+- Procedural vector-style construction art, animated machinery, character puppets,
+  parallax skies, skyline windows, lighting, telegraphs, particles, and indicators.
+- Auto graphics quality samples frame rate and adjusts DPR, particle density, glow,
+  skyline detail, stars, and clouds. Manual Low/Medium/High overrides are available.
+- Particle pools and render-detail caps protect long mobile sessions.
+- Normal, deuteranopia, tritanopia, and monochrome color modes are available alongside
+  high contrast, reduced flash, reduced motion, and scalable HUD settings.
+- Level briefing and menu headings measure their text to fit narrow displays.
+
+## Audio
+
+- Synthesized Web Audio SFX and procedural per-level chiptune music; no sample files.
+- Independent SFX and music volume controls, plus mute toggles.
+- Sound captions announce explosions, electrical arcs, clock warnings, magnet action,
+  and crane movement.
+- Resumed shifts restart the correct level music.
 
 ## Controls
-- **Desktop**: WASD/arrows, SPACE/Z jump, S/▼ duck + jackhammer, P/Esc pause (auto on
-  blur), Enter start/advance, M mute, typed initials.
-- **Touch**: D-pad + JUMP overlay (multi-touch, haptics via `navigator.vibrate`).
-- **Gamepad**: stick/d-pad, A/B jump, Start pause — hot-pluggable.
-- Millipede desktop pass: logical-res cap (H≤960), letterboxed column, window-wide
-  input, DPR cap 2.4. Mobile path identical (viewScale=1).
+
+- Desktop: remappable arrows/WASD, Space/Z jump, Down work/duck, P/Escape pause, and
+  M mute. Canvas menus support keyboard focus and semantic button activation.
+- Touch: multi-touch D-pad and Jump, pointer capture, slide-between-button input,
+  haptics, pause, size/opacity controls, and a drag editor. Portrait and landscape
+  positions are saved independently.
+- Gamepad: analog stick/D-pad, A/B jump, Start pause, menu navigation, adjustable
+  deadzone, disconnect cleanup, and supported vibration.
+- Portrait reserves a control shelf. Landscape touch uses side gutters so controls
+  do not cover the playfield.
+
+## Accessibility
+
+- Semantic mirror buttons expose every canvas menu to assistive technology.
+- Focused mirror buttons activate their matching canvas action without bubbling into
+  the canvas-level keyboard handler.
+- Dynamic application labels and live regions report menu state, gameplay objectives,
+  captions, achievements, pause, resume, and errors.
+- High contrast, four color modes, reduced motion, reduced flash, screen-shake toggle,
+  captions, scalable HUD, and adjustable controls are persisted locally.
+- Blur and visibility loss clear held input and pause active play.
+
+## Replay and progression
+
+- Input frames are run-length encoded and checksummed.
+- The best local run stores sparse ghost positions and can be shown as a translucent
+  competitor on a matching seed.
+- Medals, achievements, settings, bindings, touch layouts, best replay, local scores,
+  and resumable progress use versioned/sanitized local storage.
 
 ## Scores
-- Global leaderboard: Cloudflare Worker, namespace `hard-hat-mac`
-  (`GET/POST https://game-scores.jez237.workers.dev/scores/hard-hat-mac`,
-  `{initials, score, extra:'R<round>'}`), localStorage fallback + local top-10.
-- Submitting is optional (PUNCH IN / SKIP).
 
-## Debug
-`window.__g` exposes state/score/lives/player/entities, `skipToLevel(n)`,
-`winLevel()`, `kill()`, `give(kind)`, `step(ms)` (manual frame for headless tests),
-`snap(w)` (canvas JPEG data-URL).
+- Global endpoint: `https://game-scores.jez237.workers.dev/scores/hard-hat-mac`.
+- Client submissions include initials, score, round, seed, mode, difficulty, elapsed
+  time, replay checksum, and a proof record.
+- Payload shape, ranges, runtime, checksum, mode, and difficulty are validated before
+  sending. Practice and resumed runs stay local.
+- Responses are sanitized and requests use timeouts, duplicate-submit protection,
+  and a local top-10 fallback.
+- The score Worker source is not part of this repository, so equivalent validation
+  must also be enforced by that service for authoritative anti-cheat protection.
+
+## PWA and offline support
+
+- `manifest.webmanifest` provides fullscreen standalone metadata and the hard-hat
+  icon.
+- `sw.js` precaches core game files, uses network-first navigation, and serves cached
+  local assets offline.
+- Settings expose fullscreen and the browser install prompt when available.
+
+## Verification and debug
+
+`window.__g` exposes diagnostics including state, score, lives, player, entities,
+seed, navigation spots, `skipToLevel(n)`, `winLevel()`, `kill()`, `give(kind)`,
+`step(ms)`, `snap(w)`, `selfTest()`, and `soak()`.
+
+- `?selftest=1` runs focused browser regressions.
+- `?soak=100` runs 100 deterministic seeds across all four levels and varied rounds/
+  difficulties. It checks objective reachability, fair spawns, finite simulation
+  values, first-frame rendering, and completion invariants.
+- `?preview=...` exposes responsive score-entry and completion states for visual QA.
