@@ -457,13 +457,25 @@ async function suite() {
     if (r.mb !== 'boss' || r.back !== 'patrol') throw new Error('boss/back transition: ' + JSON.stringify(r));
     return `${r.m1}→${r.m2}→${r.m3}, boss + back ok`;
   });
-  await check('46 QA hooks gated: absent without ?qa=1', async () => {
+  await check('46 daily seed: same world every attempt, differs unseeded', async () => {
+    const r = await c.eval(`(()=>{const q=${QA};
+      const sig=()=>JSON.stringify(q.obstacles.map(o=>[o.x|0,o.y|0,o.w|0]))+'|'+JSON.stringify(q.districtFx.props.map(p=>[p.kind,p.x|0,p.y|0]))+'|'+q.G.pending.join();
+      q.daily(true);q.start();const a=sig();const seed=q.snapshot().dailySeed;const dm=q.snapshot().daily;
+      q.start();const b=sig();
+      q.daily(false);q.start();const c2=sig();
+      return {same:a===b,diff:a!==c2,seed,dm};})()`);
+    if (!r.dm) throw new Error('daily flag not set');
+    if (!r.same) throw new Error('two daily runs differ — seed not deterministic');
+    if (!r.diff) throw new Error('unseeded run identical to daily');
+    return `seed ${r.seed}: world+waves identical across attempts`;
+  });
+  await check('47 QA hooks gated: absent without ?qa=1', async () => {
     // must run LAST before the error check — it navigates away from the qa page
     await c.send('Page.navigate', { url: (await c.eval('location.href')).replace('qa=1&', '') });
     let t = null; for (let i = 0; i < 30; i++) { await sleep(150); t = await c.eval('typeof window.__blackoutQA').catch(() => null); if (t === 'undefined') break; }
     if (t !== 'undefined') throw new Error('__blackoutQA present without ?qa=1 (typeof=' + t + ')');
   });
-  await check('47 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('48 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;
