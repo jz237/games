@@ -102,7 +102,7 @@ async function boot() {
     const [vw, vh] = (process.env.SSB_VIEW || '430x880').split('x').map(Number);
     await c.send('Emulation.setDeviceMetricsOverride', { width: vw, height: vh, deviceScaleFactor: 2, mobile: true });
     await c.send('Emulation.setTouchEmulationEnabled', { enabled: true });
-    const url = `http://127.0.0.1:${srv.address().port}/index.html?cb=${Math.random().toString(36).slice(2)}`;
+    const url = `http://127.0.0.1:${srv.address().port}/index.html?qa=1&cb=${Math.random().toString(36).slice(2)}`;
     await c.send('Page.navigate', { url }); // always navigate w/ buster, never reload (stale-cache gotcha)
     for (let i = 0; i < 60; i++) { await sleep(100); try { if (await c.eval('!!window.__blackoutQA')) break; } catch {} }
     if (!await c.eval('!!window.__blackoutQA')) throw new Error('__blackoutQA never appeared');
@@ -420,7 +420,13 @@ async function suite() {
     if (dx < 15) throw new Error('stick drag moved only ' + dx.toFixed(1) + 'px');
     return `flare+EMP taps clean, stick drove ${dx.toFixed(0)}px`;
   });
-  await check('43 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
+  await check('43 QA hooks gated: absent without ?qa=1', async () => {
+    // must run LAST before the error check — it navigates away from the qa page
+    await c.send('Page.navigate', { url: (await c.eval('location.href')).replace('qa=1&', '') });
+    let t = null; for (let i = 0; i < 30; i++) { await sleep(150); t = await c.eval('typeof window.__blackoutQA').catch(() => null); if (t === 'undefined') break; }
+    if (t !== 'undefined') throw new Error('__blackoutQA present without ?qa=1 (typeof=' + t + ')');
+  });
+  await check('44 no console/page errors (whole run)', async () => { if (c.errors.length) throw new Error(c.errors.slice(0, 5).join(' || ')); });
 
   await cleanup();
   const pass = results.filter(r => r.ok).length;

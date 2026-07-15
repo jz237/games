@@ -10,8 +10,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 17 DONE (2026-07-14) — touch/mobile pass (rig touch tooling + coverage; zero
-  game-code changes needed). Last ship: **v3.3.0 LIVE**. Unshipped: items 16, 17.
+- **Iteration:** 18 DONE (2026-07-14) — final polish/docs. Last ship: **v3.3.0 LIVE**.
+  Unshipped: items 16–18 → READY TO SHIP batch 4 (v3.4.0), the final planned batch.
 - **Suite:** 41/41 green (24/24 buffers). Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
@@ -23,11 +23,13 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 18 — final polish/docs: new achievements for weapons/ordnance/districts,
-  PROMPT.md v3 rewrite, games/index.html card blurb, **?qa=1 gating for __blackoutQA** (rig must
-  add ?qa=1 to its URL!), FIELD MANUAL brief for weapons/ordnance/hazards, HUD-overlap check from
-  iteration 00 survey. Then SHIP batch 4 (v3.4.0, items 16–18) — likely the final planned ship;
-  stretch items (S1–S3) need user approval per protocol.
+- **Next:** **SHIP BATCH 4 as v3.4.0** (items 16–18: balance, touch coverage, polish/docs/QA
+  gating) — the FINAL PLANNED batch. Protocol as before (review diff acd4bf4..HEAD, VERSION→
+  v3.4.0, AUDIO_V unchanged 3.3.0 — no new audio, index.html only to deploy). ALSO at ship:
+  update games/index.html Blackout card blurb in the website repo (same commit): suggested text —
+  "Patrol nine blacked-out districts with five weapons, flares and EMPs — the dark answers back."
+  After ship: propose STRETCH items S1–S3 to the user (per protocol) and pause/stop the loop
+  pending their call.
 
 ## Iteration log
 
@@ -213,6 +215,13 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   41→42: one tap = exactly one flare / one EMP (button rects from getBoundingClientRect), and
   the floating drive-stick drove 126px while buttons coexist. Landscape 880×430 probe: buttons
   right-middle, clear of minimap/HUD (shot landscape.png).
+- **18** (2026-07-14): Final polish. +4 achievements → 16 (QUARTERMASTER via lifetime.wfired
+  additive schema; NOWHERE TO HIDE hook in flare reveal; GRID KILLER count in fireEmp; END OF THE
+  LINE wave 41). **__blackoutQA gated behind ?qa=1** (single-statement if; rig URL +qa=1; suite
+  check 43 navigates WITHOUT qa and asserts undefined — must stay last-before-errors). FIELD
+  MANUAL: +3 briefs (armament/ordnance/hazards). HUD overlap from 00 survey fixed (district-label
+  top 52→66px). PROMPT.md fully rewritten as the v3.x spec. Suite 42→43 (label numbering has
+  cosmetic drift vs count — results.length is truth). Perf 0.068/2.15.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -262,8 +271,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 15 district ambience: 3 shared seamless loops, ambKey mapping, stops on over (see log)
 - [x] 16 balance pass: DPS matrix, railgun/incinerator tuned, blind-fire decision (see log)
 - [x] 17 touch pass: tap/drag emulation in rig, single-fire verified, landscape clean (see log)
-- [ ] 18 polish + docs: new achievements; PROMPT.md v3 rewrite; games/index.html blurb; **gate QA
-      hooks behind ?qa=1**; HUD overlap check (see survey); version + FIELD MANUAL updates.
+- [x] 18 polish: 16 achievements, ?qa=1 gating, manual briefs, HUD fix, PROMPT.md v3 (see log;
+      games/index.html blurb applies AT SHIP in the website repo)
 - [ ] STRETCH (propose to user at a ship milestone first): S1 light-interacting enemies
       (light-hunter, bulb-smasher); S2 patrol-music variants per district band; S3 daily seed mode.
 

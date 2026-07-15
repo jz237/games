@@ -1,59 +1,65 @@
-# SUBWAY SIEGE: BLACKOUT v2.0 — Full Enhancement Prompt
+# SUBWAY SIEGE: BLACKOUT v3.x — Immersion Overhaul (the /loop build)
 
-> Same treatment as the shipped Stellar Drift v2 / Subway Siege v2: enhance the base game
-> graphically and functionally into a full-featured game — ElevenLabs audio, elaborate title
-> + options, deep gameplay — then test, self-critique, iterate, and ship. Adapted to Blackout's
-> top-down blackout tank-survival identity (searchlight/darkness engine, auto-aim turret,
-> camera-follow arena, one-finger drive-stick).
+> v2.0 gave the game its identity: top-down blackout tank survival — searchlight/darkness engine,
+> auto-aim turret, camera-follow arena, one-finger drive-stick, ElevenLabs audio, tanks, districts.
+> v3.x (built 2026-07-14 by the self-paced immersion /loop; ledger: BLACKOUT-V3-LOOP.md) turned it
+> into a full arsenal-and-city game. Design thesis: **in a blackout, every effect is a light source.**
 
-## The Prompt (executed)
+## v3.1.0 — The Arsenal
+- **5 weapons** (data-driven WEAPONS defs; garage ARMAMENT row; persisted `ssb_weapon`):
+  CANNON (all-round, v2-exact baseline) · SCATTER (5-pellet close burst) · RAILGUN (instant
+  hitscan lance, raycast vs world, pierces the whole line) · INCINERATOR (jittered flame cone +
+  stacking burn DoT through killEnemy; burning enemies glow, flicker, and lose stalker cloak) ·
+  TESLA (chain arc, ≤4 hops between REVEALED enemies, turret cloak rule, per-frame crackle render).
+- **Weapon crates**: own 5% drop band; grant a random other weapon for the run (loadout restored
+  on restart).
 
-### 1. Audio — ElevenLabs (the game had NONE; synth-only)
-- 3 music tracks (title / patrol / boss) crossfaded on state changes, over the existing
-  `Snd` module (now: WebAudio SFX buffers + HTMLAudio music + the synth as fallback).
-- 14 real SFX: cannon fire, small/big explosion, barrel chain, pickup, player hit, wave clear,
-  boss horn, upgrade, achievement, menu click, combo, overdrive, perfect.
-- Mixer: music + SFX volume sliders (Options), music duck under barrel blasts, kept the looped
-  engine drone; the mute button still works.
+## v3.2.0 — Ordnance + Feel + Voice
+- **FLARE (Q / touch button)**: lobbed 8s pool of light — pins reveal≥90 in 170px, THE cloak
+  counter. Ammo 2/run cap 5, resupply pickups.
+- **EMP (E / touch button)**: arena-wide reveal (cloak-piercing) + 1.5s stun (boss 0.75s); the
+  whole blackout lifts in an expanding wave and crushes back. Ammo 1/run cap 3, rare pickups.
+- **VFX**: tinted muzzle/explosion glows (light holes are colorless — color lives on the main
+  canvas), velocity tracers, per-weapon directional impact sparks, casings+smoke only on ballistic
+  guns, explosion light BLOOMS (grow-as-fade), persistent scorch + wreckage debris (capped pool).
+- **Accessibility**: Flash FX setting (Full/Low/Min — floor 0.25, light is information) applied to
+  flashes/glows/EMP pulse; prefers-reduced-motion defaults shake+flash to reduced on first run.
+- **Audio**: 7 ElevenLabs SFX (per-weapon fire, flare launch, EMP blast w/ music duck, metal
+  impact ping w/ throttle), loudness-matched to the v2 bed, synth fallbacks kept.
 
-### 2. Title & all options
-- Menu: **DEPLOY · GARAGE · OPTIONS · RECORDS · FIELD MANUAL**.
-- **Garage**: 3 selectable tanks — RANGER balanced / SCOUT fast-fragile / BULWARK heavy-shielded —
-  distinct top-down silhouettes, stat bars, persisted; each maps onto speed / fire cadence / armor /
-  starting shield / searchlight width+range / turret turn.
-- **Options**: music + SFX sliders, screen shake (full/low/off), particles (auto/high/low),
-  show FPS, reset local scores (double-tap). Persisted.
-- **Field Manual**: device-aware controls + combo/overdrive/districts/new-enemy briefing.
-- **Records** tabs: Scores / Medals / Service (lifetime stats).
-- **Pause** menu with live stats + Options.
+## v3.3.0 — The Living City
+- **9 districts** (waves 1–45 then wrap): STATION PLAZA, CRIMSON YARD, COLD TERMINAL, TOXIC
+  SIDING, VIOLET DEPOT + new HARBOR GATE, EMBER WORKS, GHOST MARKET, AZURE CIRCUIT.
+- **District engine** (`districtFx`, rebuilt per district): prop layer (crates, vents, glowing
+  signs, benches, kiosks, freight containers, puddles, hazard drums, neon panels — camera-culled),
+  flickering ambient light wells, weather (rain / embers / tinted motes / rolling fog banks).
+- **Hazards** (≤1 per district): STEAM VENTS (COLD/TOXIC/EMBER — telegraphed bursts scald machines
+  via killEnemy and slow the tank 45%; deliberately NOT damagePlayer, preserving perfect-wave) ·
+  POWER SURGES (CRIMSON/VIOLET/GHOST — warn, then searchlight −45% and city lights out ~2.7s).
+- **Ambience**: 3 seamless 5s loops (city hum / rain / industrial) mapped via ambKey, on the sfx
+  bus, stops on game over.
 
-### 3. Gameplay depth
-- **Combo** chain (kills within a window) multiplies score; **Overdrive** at combo ×12 grants
-  piercing rapid fire (plus the existing overdrive pickup).
-- **Two new enemies**: STALKER (cloaked ambusher, only reveals point-blank; turret can't auto-lock
-  it until it commits) and MORTAR (stationary, lobs telegraphed splash shells you dodge off the reticle).
-- **Perfect wave** bonus (clear a wave without losing armor).
-- **Post-boss upgrade**: pick 1 of 3 permanent modules (autoloader, plating, shield cell, scavenger
-  magnet, hollow-point crit, floodlight searchlight).
-- **12 achievements** (toast + gallery) + **lifetime stats**.
+## v3.4.0 — Balance + Polish
+- **Balance from a measured DPS matrix** (rig probes; ticks-to-kill single brute / 4-drone line):
+  railgun 3→2.5 dmg (still one-shots scouts/drones; generalist dominance removed), incinerator
+  0.11 dmg + burn 80 (was weakest). Final spread 1.7×, every weapon top-2 in its niche. Railgun
+  blind-fire through darkness KEPT (physical lance; cd-60 makes spam unprofitable).
+- **16 achievements** (+QUARTERMASTER fire all 5, NOWHERE TO HIDE flare-expose a stalker,
+  GRID KILLER 6+ stunned by one EMP, END OF THE LINE reach wave 41).
+- **QA hooks gated behind `?qa=1`** (family convention). FIELD MANUAL covers armament/ordnance/
+  hazards. Touch verified end-to-end (tap = one shot; stick coexists; landscape clean).
 
-### 4. Graphics & feel
-- **5 named DISTRICT themes** (Station Plaza / Crimson Yard / Cold Terminal / Toxic Siding /
-  Violet Depot) that recolor the ground + darkness fog every 5 waves, with an "entering district"
-  banner. Adaptive-quality FPS watchdog, hit-stop on kills, combo/district HUD, mortar telegraph reticles.
+## Engine invariants (violating these caused real bugs — see ledger)
+- Fixed timestep (accumulator, spiral guard steps<5); piercing/multi-hit dedupe via b.hitSet
+  across the 2 substeps; enemies die ONLY via killEnemy(); stalker turret rule reveal<40;
+  mortar `!b.splash` guard; every `el.volume` write clamped [0,1]; all per-run state reset in
+  startGame; `?v=AUDIO_V` on every audio URL (AUDIO_V 3.3.0, 24 files).
 
-### 5. Robustness & QA
-- `window.__blackoutQA` hooks (snapshot / tick / setWave / spawn / killAll / grantOverdrive /
-  setCombo / selectTank / god / addPickup / recTab / bootAudio …). Kept the global leaderboard
-  slug `subway-siege-blackout` and local top-10.
+## Tooling
+- `tests/run.mjs`: 43-check suite / shots / perf (gate ≤3.0ms worst-case) / probe '<expr>' [shot]
+  — self-managed server+chrome (PID-killed, DevToolsActivePort), touch emulation, SSB_VIEW=WxH.
+- Leaderboard slug unchanged: `game-scores.jez237.workers.dev/scores/subway-siege-blackout`.
 
-## Shipped (2026-07-06, v2.0.0)
-- No source folder existed — established `games-source/2026-06-09/subway-siege-blackout/` from the
-  deployed copy. Built via a design workflow (7 designers + parity critic) then an adversarial
-  review workflow. The design synthesis flagged real correctness items folded in first: an
-  accumulator **spiral guard** (the fixed-timestep loop, needed before hit-stop could safely
-  early-return), hp-max scatter (Bulwark's 140 armor), and stalker turret fairness.
-- Audio in `audio/`: 3 music (112k mp3) + 14 SFX (ogg), ~3.3 MB, `?v=` cache-busted.
-- 22/22 headless CDP checks green, no console errors; every screen verified at 430×880.
-- Notable engine facts: enemies die ONLY via `killEnemy()` (no hp-sweep); the darkness engine
-  punches destination-out holes into an offscreen light canvas.
+## Shipped
+- v3.1.0 / v3.2.0 / v3.3.0 LIVE 2026-07-14 (site + jz237.github.io mirror); v3.4.0 ships with
+  this batch. One real OpenClaw deploy revert observed and survived (~2min; redeploy converges).
