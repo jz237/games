@@ -10,8 +10,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** S2 DONE (2026-07-15) — district patrol-music variants. Unshipped: S1, S2.
-  Stretch approved by user 2026-07-14; next S3, then ship batch 5 (v3.5.0).
+- **Iteration:** S3 DONE (2026-07-15) — daily seed mode. Unshipped: S1, S2, S3 → READY TO SHIP
+  batch 5 (v3.5.0), the stretch batch.
 - Previous milestone: 18b — **v3.4.0 SHIPPED LIVE. PLANNED BACKLOG (00–18) COMPLETE.**
   Site e4a763c06 (deploy list confirmed own commit; 4 consecutive v3.4.0 probes — one early
   v3.3.0 reading was edge settling, NOT a revert; games/index card updated to featured + v3
@@ -32,13 +32,10 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** S3 — daily seed mode: shared daily arena/wave seed for leaderboard rivalry. Design
-  notes: seeded PRNG (mulberry32 per family convention) replacing Math.random in buildWorld/
-  startWave-shuffle/districtLayer WHEN daily mode on; seed = UTC date string; title-screen DAILY
-  button; separate leaderboard slug suffix or name prefix (decide: name prefix '[D] ' keeps one
-  board; family precedent: invaders daily challenge — check its approach if unsure); daily runs
-  fixed tank+weapon? Keep loadout free, seed only the WORLD. Suite: two boots same seed → same
-  obstacle layout; different seed → different.
+- **Next:** **S4 — SHIP BATCH 5 as v3.5.0** (S1 hunter/smasher, S2 patrol variants, S3 daily).
+  Protocol: adversarial review of diff since v3.4.0 ship commit (ffda771..HEAD), VERSION→v3.5.0
+  AND **AUDIO_V→3.5.0** (2 new music files!), copy index.html + music_patrol_b/c.mp3 to deploy,
+  land, verify ×3 + music 200s, mirror explicit-list, memory refresh. Then loop COMPLETE — stop.
 
 ## Iteration log
 
@@ -288,7 +285,13 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
       music_patrol_c (electric/driving, EMBER/GHOST/AZURE), composed 85s each via compose_music,
       gain-matched to −15dB mean like music_patrol; patrolFor() band = floor(districtIdx/3);
       boss/title unchanged; crossfade free via existing playMusic-at-startWave. Suite 45→46.
-- [ ] S3 daily-challenge seed mode (APPROVED)
+- [x] S3 daily seed mode: DAILY PATROL title button; scoped-swap RNG (rnd() routes via `RNG`;
+      seedStream = mulberry32(hash('SSB-'+UTCdate)); swapped inside startGame bootstrap +
+      startWave incl. placeBarrels/district changes; combat jitter stays live-random). Retry
+      replays the identical world. Daily scores → SEPARATE per-day slug `…-daily-YYYY-MM-DD`
+      via scoresUrl() (worker accepts arbitrary slugs — probed [], no backend change; MAIN slug
+      untouched per protocol). snapshot.daily/.dailySeed, QA daily(v), obstacles getter.
+      Suite 46→47 (identical sig across attempts, differs unseeded).
 - [ ] S4 SHIP batch 5 → v3.5.0 (S1–S3)
 
 ## Ship protocol (batch every 3–5 items → v3.1.0, v3.2.0, …)

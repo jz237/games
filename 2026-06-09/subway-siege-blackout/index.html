@@ -243,6 +243,7 @@
     <p class="tagline" style="margin-bottom:18px">The grid is down. Raider armor is rolling on the station. Sweep your searchlight, hunt them in the dark, and hold the line.</p>
     <div class="menu-col">
       <button class="btn" id="btn-start">▶ DEPLOY</button>
+      <button class="btn secondary" id="btn-daily">📅 DAILY PATROL</button>
       <button class="btn secondary" id="btn-garage">GARAGE</button>
       <button class="btn secondary" id="btn-options">OPTIONS</button>
       <button class="btn secondary" id="btn-records">RECORDS</button>
@@ -755,9 +756,9 @@ function buildDistrictLayer() {
   districtFx.surgeState = 0;
   districtFx.surgeT = d.hazard === 'surge' ? rnd(900, 1400) : -1;
   if (districtFx.weather === 'fog') for (let i = 0; i < 10; i++)
-    districtFx.wp.push({ x: Math.random() * VW, y: Math.random() * VH, r: rnd(160, 300), v: rnd(0.15, 0.45), ph: rnd(0, 6.28) });
+    districtFx.wp.push({ x: RNG() * VW, y: RNG() * VH, r: rnd(160, 300), v: rnd(0.15, 0.45), ph: rnd(0, 6.28) });
   else if (districtFx.weather !== 'none') for (let i = 0; i < 42; i++)
-    districtFx.wp.push({ x: Math.random() * VW, y: Math.random() * VH, v: rnd(2.5, 6), l: rnd(8, 18), ph: rnd(0, 6.28) });
+    districtFx.wp.push({ x: RNG() * VW, y: RNG() * VH, v: rnd(2.5, 6), l: rnd(8, 18), ph: rnd(0, 6.28) });
 }
 function surgeK() { return districtFx.surgeState === 2 ? 0.55 : 1; }
 // District hazards: steam vents scald machines and slow the tank; power surges shrink the light.
@@ -932,7 +933,14 @@ function moveInput() {
 // ===========================================================================
 //  HELPERS
 // ===========================================================================
-function rnd(a, b) { return a + Math.random() * (b - a); }
+let RNG = Math.random; // world-gen randomness routes through this; daily mode swaps in a seeded stream
+function rnd(a, b) { return a + RNG() * (b - a); }
+// ===== DAILY PATROL: everyone gets the same city + wave order for the UTC day =====
+let dailyMode = false, dailySeedStr = '', seedStream = null;
+function todayUTC() { const d = new Date(); return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0'); }
+function seedHash(s) { let h = 1779033703 ^ s.length; for (let i = 0; i < s.length; i++) { h = Math.imul(h ^ s.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); } return h >>> 0; }
+function mulberry32(a) { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function scoresUrl() { return SCORES_API + (dailyMode ? '-daily-' + dailySeedStr : ''); }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 function dist2(ax, ay, bx, by) { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
 function angDiff(a, b) { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
@@ -1076,6 +1084,7 @@ function mkEnemy(type, x, y) {
 }
 
 function startWave(n) {
+  const _R = RNG; if (seedStream) RNG = seedStream;
   G.wave = n;
   const list = [];
   const scouts = 2 + n;
@@ -1094,7 +1103,7 @@ function startWave(n) {
   for (let i = 0; i < smashers; i++) list.push('smasher');
   if (n % 5 === 0) list.push('boss');
   // shuffle
-  for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+  for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(RNG() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
   G.pending = list; G.spawnTick = 0;
   placeBarrels();
   G.waveHit = false;
@@ -1103,6 +1112,7 @@ function startWave(n) {
   toast('WAVE ' + n + (n % 5 === 0 ? ' — HEAVY ARMOR INBOUND' : ''), 110);
   if (n % 5 === 0) Snd.horn(); else Snd.ui('boss_horn', .35);
   updateMusic();
+  RNG = _R;
 }
 
 function updateSpawning() {
@@ -1528,6 +1538,9 @@ function showUpgrade() {
   showScreen('screen-upgrade');
 }
 function startGame() {
+  dailySeedStr = todayUTC();
+  seedStream = dailyMode ? mulberry32(seedHash('SSB-' + dailySeedStr)) : null;
+  if (seedStream) RNG = seedStream;
   G.state = 'play'; G.t = 0; G.score = 0; G.kills = 0; G.startT = Date.now();
   enemies = []; bullets = []; beams = []; flares = []; particles = []; pickups = []; flashes = []; spawnFlashes = [];
   G.ordAmmo = 2; G.empAmmo = 1; empFx = null; updateOrdHud();
@@ -1548,6 +1561,8 @@ function startGame() {
   hideAllScreens();
   Snd.resume(); updateMusic();
   startWave(1);
+  RNG = Math.random;
+  if (dailyMode) toast('DAILY PATROL — ' + dailySeedStr, 130);
 }
 function endGame() {
   if (G.state === 'over') return;
@@ -2351,7 +2366,8 @@ function togglePause() {
   else if (G.state === 'pause') { G.state = 'play'; updateMusic(); hideAllScreens(); }
 }
 
-document.getElementById('btn-start').onclick = () => { Snd.resume(); click(); startGame(); };
+document.getElementById('btn-start').onclick = () => { Snd.resume(); click(); dailyMode = false; startGame(); };
+document.getElementById('btn-daily').onclick = () => { Snd.resume(); click(); dailyMode = true; startGame(); };
 document.getElementById('btn-howto').onclick = () => { click(); showScreen('screen-howto'); };
 document.getElementById('btn-howback').onclick = () => { click(); showScreen('screen-title'); };
 document.getElementById('btn-resume').onclick = () => togglePause();
@@ -2528,7 +2544,7 @@ document.getElementById('btn-submit').onclick = async () => {
   document.getElementById('lb-block').classList.remove('hidden');
   document.getElementById('lb-list').innerHTML = '<div style="text-align:center;padding:20px"><span class="spin"></span></div>';
   try {
-    await fetch(SCORES_API, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    await fetch(scoresUrl(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ initials: name, score: pendingScore, extra: 'w' + G.wave + ' k' + G.kills }) });
     globalCache = null;
   } catch (e) {}
@@ -2537,7 +2553,7 @@ document.getElementById('btn-submit').onclick = async () => {
 async function fetchGlobal() {
   if (globalCache) return globalCache;
   try {
-    const r = await fetch(SCORES_API);
+    const r = await fetch(scoresUrl());
     const data = await r.json();
     globalCache = Array.isArray(data) ? data : (data.scores || []);
   } catch (e) { globalCache = null; }
@@ -2592,7 +2608,7 @@ function loop(ts) {
 document.querySelectorAll('.version').forEach(el => { el.textContent = VERSION; });
 
 if (new URLSearchParams(location.search).has('qa')) window.__blackoutQA = { // family convention: QA hooks gated behind ?qa=1
-  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, beams: beams.length, flares: flares.length, ordAmmo: G.ordAmmo, empAmmo: G.empAmmo, empActive: !!empFx, dProps: districtFx.props.length, dLights: districtFx.lights.length, weather: districtFx.weather, hazard: curDistrict.hazard || 'none', surgeState: districtFx.surgeState, vents: districtFx.vents.length, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), ambient: Snd.curAmbient(), slug: SCORES_API }; },
+  snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, beams: beams.length, flares: flares.length, ordAmmo: G.ordAmmo, empAmmo: G.empAmmo, empActive: !!empFx, dProps: districtFx.props.length, dLights: districtFx.lights.length, weather: districtFx.weather, hazard: curDistrict.hazard || 'none', surgeState: districtFx.surgeState, vents: districtFx.vents.length, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), ambient: Snd.curAmbient(), daily: dailyMode, dailySeed: dailySeedStr, slug: SCORES_API }; },
   tick(n) { n = n || 1; const wr = window.__blackoutQA._noloop; for (let i = 0; i < n; i++) update(); render(); return this.snapshot(); },
   start() { Snd.resume(); startGame(); qaGod = true; return this.snapshot(); },
   setWave(w) { enemies = []; bullets = []; beams = []; flares = []; G.pending = []; G.intermission = 0; startWave(w); return this.snapshot(); },
@@ -2601,6 +2617,7 @@ if (new URLSearchParams(location.search).has('qa')) window.__blackoutQA = { // f
   fireEmp() { fireEmp(); return this.snapshot(); },
   addEmp(n) { G.empAmmo = Math.min(3, (G.empAmmo | 0) + (n || 1)); updateOrdHud(); return G.empAmmo; },
   triggerSurge() { if (districtFx.surgeT > 0) districtFx.surgeT = 1; return districtFx.surgeT; },
+  daily(v) { dailyMode = v !== false; return dailyMode; },
   ventBurst() { const v = districtFx.vents[0]; if (v && v.ph <= 0) v.t = 1; return districtFx.vents.length; },
   spawn(type) { const e = mkEnemy(type, clamp(player.x + 300, 60, ARENA_W - 60), player.y); e.dormant = 0; enemies.push(e); return type; },
   killAll(end) { for (const e of enemies.slice()) if (!e.dead) killEnemy(e); G.pending = []; if (end) endGame(); return this.snapshot(); },
@@ -2618,7 +2635,7 @@ if (new URLSearchParams(location.search).has('qa')) window.__blackoutQA = { // f
   opt(k, v) { settings[k] = v; saveSettings(); Snd.applyVolumes(); },
   recTab(w) { setRecTab(w); },
   clickBtn(id) { const b = document.getElementById(id); if (b) b.click(); return !!b; },
-  get enemies() { return enemies; }, get player() { return player; }, get settings() { return settings; }, get G() { return G; }, get flares() { return flares; }, get districtFx() { return districtFx; }
+  get enemies() { return enemies; }, get player() { return player; }, get settings() { return settings; }, get G() { return G; }, get flares() { return flares; }, get districtFx() { return districtFx; }, get obstacles() { return obstacles; }
 };
 resize();
 buildWorld();
