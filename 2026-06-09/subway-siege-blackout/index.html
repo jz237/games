@@ -224,7 +224,7 @@
     </div>
     <div class="od-badge" id="od-badge">⚡ OVERDRIVE</div>
     <div class="od-badge" id="combo-badge" style="top:80px;color:#ffd98c;text-shadow:0 0 10px rgba(255,200,80,.85);display:none"></div>
-    <div class="hud-label" id="district-label" style="position:absolute;top:max(52px,calc(env(safe-area-inset-top) + 44px));left:50%;transform:translateX(-50%);color:#a58c68;letter-spacing:3px"></div>
+    <div class="hud-label" id="district-label" style="position:absolute;top:max(66px,calc(env(safe-area-inset-top) + 58px));left:50%;transform:translateX(-50%);color:#a58c68;letter-spacing:3px"></div>
     <div class="msg-toast" id="toast"></div>
     <canvas id="minimap"></canvas>
     <div class="hint-line" id="hint-line"></div>
@@ -606,11 +606,14 @@ function fireEmp() {
   if ((G.empAmmo | 0) <= 0) { Snd.ui('menu_click', .35); toast('NO EMP CHARGE', 40); return; }
   G.empAmmo--;
   empFx = { t: 30, max: 30 };
+  let stunned = 0;
   for (const e of enemies) {
     if (e.dead || e.dormant > 0) continue;
     e.reveal = Math.max(e.reveal, 240);
     e.stun = Math.max(e.stun || 0, e.type === 'boss' ? 45 : 90);
+    stunned++;
   }
+  if (stunned >= 6) unlockAch('gridkill');
   shake(5, 10);
   Snd.empBlast();
   toast('EMP DISCHARGED', 60);
@@ -640,7 +643,10 @@ function updateFlares() {
     f.t--;
     if (f.t <= 0) { flares.splice(i, 1); continue; }
     if (f.t % 3 === 0) for (const e of enemies) {
-      if (!e.dead && e.dormant <= 0 && dist2(e.x, e.y, f.x, f.y) < 170 * 170) e.reveal = Math.max(e.reveal, 90);
+      if (!e.dead && e.dormant <= 0 && dist2(e.x, e.y, f.x, f.y) < 170 * 170) {
+        if (e.type === 'stalker' && e.reveal < 40) unlockAch('nowhere');
+        e.reveal = Math.max(e.reveal, 90);
+      }
     }
     if (f.t % 14 === 0) spawnParticles(f.x + rnd(-4, 4), f.y + rnd(-4, 4), 1, { color: '#ffe9a8', smax: 1.6, lmax: 18, fade: 'spark' });
   }
@@ -791,6 +797,10 @@ const ACH = [
   { id:'barrel', name:'DEMOLITION',  desc:'Kill 3+ with one barrel blast' },
   { id:'overdrive',name:'OVERDRIVEN',desc:'Trigger overdrive' },
   { id:'noHit',  name:'GHOST TANK',  desc:'Clear wave 5 untouched' },
+  { id:'arsenal', name:'QUARTERMASTER', desc:'Fire all five weapon types' },
+  { id:'nowhere', name:'NOWHERE TO HIDE', desc:'Expose a cloaked stalker with a flare' },
+  { id:'gridkill',name:'GRID KILLER', desc:'Stun 6+ hostiles with one EMP' },
+  { id:'endline', name:'END OF THE LINE', desc:'Reach AZURE CIRCUIT (wave 41)' },
 ];
 let unlockedAch = {}; try { unlockedAch = JSON.parse(localStorage.getItem(ACH_KEY)) || {}; } catch(e){}
 const achQueue = []; let achToastT = 0;
@@ -1080,7 +1090,7 @@ function startWave(n) {
   G.pending = list; G.spawnTick = 0;
   placeBarrels();
   G.waveHit = false;
-  if (n >= 5) unlockAch('wave5'); if (n >= 10) unlockAch('wave10'); if (n >= 15) unlockAch('wave15');
+  if (n >= 5) unlockAch('wave5'); if (n >= 10) unlockAch('wave10'); if (n >= 15) unlockAch('wave15'); if (n >= 41) unlockAch('endline');
   const nd = districtFor(n); if (nd !== curDistrict) { curDistrict = nd; districtBanner = { name: nd.name, t: 190 }; buildDistrictLayer(); }
   toast('WAVE ' + n + (n % 5 === 0 ? ' — HEAVY ARMOR INBOUND' : ''), 110);
   if (n % 5 === 0) Snd.horn(); else Snd.ui('boss_horn', .35);
@@ -1322,6 +1332,8 @@ function updatePlayer() {
     shake(2 * (wp.kick || 1), 4);
     player.shotCount = (player.shotCount || 0) + 1;
     if (!wp.sfxEvery || player.shotCount % wp.sfxEvery === 0) (Snd[wp.sfx] || Snd.fire).call(Snd);
+    if (!lifetime.wfired) lifetime.wfired = {};
+    if (!lifetime.wfired[wp.id]) { lifetime.wfired[wp.id] = 1; saveLifetime(); if (Object.keys(lifetime.wfired).length >= WEAPONS.length) unlockAch('arsenal'); }
   }
   if (player.overdrive > 0) { player.overdrive--; if (player.overdrive === 0) document.getElementById('od-badge').classList.remove('show'); }
 }
@@ -2449,6 +2461,9 @@ document.getElementById('howto-body').innerHTML =
     ? '<b>Drive:</b> touch anywhere and drag — a stick drives the tank.<br><b>Fire:</b> your turret auto-aims and auto-fires at anything caught in your searchlight.'
     : '<b>Drive:</b> <kbd>WASD</kbd>/arrows or mouse-drag · mouse steers the searchlight · hold <kbd>Click</kbd>/<kbd>Space</kbd> to force-fire · <kbd>P</kbd> pause · <kbd>M</kbd> mute.<br><b>Fire:</b> the turret auto-fires at anything in your light.')
   + '<br><br>🔦 <b>Blackout:</b> enemies hide in the dark — sweep your light and watch for running lights and muzzle flashes.'
+  + '<br><br>🔫 <b>Armament:</b> pick your gun in the GARAGE — CANNON all-round, SCATTER up close, RAILGUN skewers lines, INCINERATOR sets packs alight, TESLA chains crowds. Weapon crates swap your gun mid-patrol.'
+  + '<br><br>🧨 <b>Ordnance:</b> Q lobs a FLARE (a pool of light that exposes cloaked stalkers), E fires the EMP (reveals and stuns everything — the whole blackout lifts for a beat). Watch the buttons bottom-right on touch.'
+  + '<br><br>⚠️ <b>District hazards:</b> steam vents scald anything standing in them and slow your treads; power surges shrink your searchlight while the city goes dark. Flares still burn through a surge.'
   + '<br>⛓️ <b>Combo:</b> chain kills to build a multiplier. Hit <b>×12</b> to trigger <b style="color:#9adcff">OVERDRIVE</b> — piercing rapid fire.'
   + '<br>🏙️ <b>Districts:</b> the map shifts every 5 waves. Every 5th wave a <b style="color:#d8a8ff">boss</b> rolls in; beat it to pick a permanent upgrade.'
   + '<br>🎖️ Clear a wave without losing armor for a <b>FLAWLESS</b> bonus.'
@@ -2552,7 +2567,7 @@ function loop(ts) {
 
 document.querySelectorAll('.version').forEach(el => { el.textContent = VERSION; });
 
-window.__blackoutQA = {
+if (new URLSearchParams(location.search).has('qa')) window.__blackoutQA = { // family convention: QA hooks gated behind ?qa=1
   snapshot() { return { version: VERSION, state: G.state, score: G.score, wave: G.wave, kills: G.kills, combo: G.combo, comboMax: G.comboMax, overdrive: player.overdrive, overdriveArmed: G.overdriveArmed, hitStop: G.hitStop, hp: player.hp, hpMax: player.hpMax, shield: player.shield, alive: player.alive, waveHit: G.waveHit, upgradePending: G.upgradePending, tank: curTank().id, weapon: curWeapon().id, weapons: WEAPONS.length, district: curDistrict.name, enemies: enemies.filter(e => !e.dead).length, enemyTypes: enemies.filter(e=>!e.dead).map(e=>e.type), pending: G.pending.length, bossActive: isBossWave(), fxLow: fxLow, fps: Math.round(fpsAvg), ach: Object.keys(unlockedAch), medals: Object.keys(unlockedAch).length, lifetime: lifetime, mortarMarks: mortarMarks.length, beams: beams.length, flares: flares.length, ordAmmo: G.ordAmmo, empAmmo: G.empAmmo, empActive: !!empFx, dProps: districtFx.props.length, dLights: districtFx.lights.length, weather: districtFx.weather, hazard: curDistrict.hazard || 'none', surgeState: districtFx.surgeState, vents: districtFx.vents.length, audioBuffers: Snd.loadedCount(), music: Snd.curMusic(), ambient: Snd.curAmbient(), slug: SCORES_API }; },
   tick(n) { n = n || 1; const wr = window.__blackoutQA._noloop; for (let i = 0; i < n; i++) update(); render(); return this.snapshot(); },
   start() { Snd.resume(); startGame(); qaGod = true; return this.snapshot(); },
