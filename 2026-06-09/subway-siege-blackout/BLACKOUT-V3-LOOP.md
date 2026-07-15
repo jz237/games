@@ -10,11 +10,8 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 15b DONE (2026-07-14) — **v3.3.0 SHIPPED LIVE** (batch 3: districts arc, items
-  11–15). Site df3081c81 (clean rebase+push this time — no OpenClaw litter, no revert); mirror
-  1d10ca5 (explicit-list cherry-pick incl. acd4bf4). Verified ×3 + all 3 amb files 200 on both
-  hosts (amb_industrial 404'd ~60s on the pages.dev alias — the documented new-asset propagation;
-  poll-retried to 200, byte-exact).
+- **Iteration:** 16 DONE (2026-07-14) — balance pass (data-only tuning). Last ship: **v3.3.0
+  LIVE** (site df3081c81, mirror 1d10ca5). Unshipped: item 16.
 - **Suite:** 41/41 green (24/24 buffers). Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
@@ -26,10 +23,9 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** item 16 — **balance pass**: DPS parity matrix vs CANNON across tanks×weapons (use the
-  rig: scripted DPS probes per weapon at close/mid range), score economy comparable (leaderboard
-  persists), perfect-wave + combo achievable per loadout; revisit the railgun blind-fire note
-  from 05b and incinerator face-time value. Data-tune WEAPONS numbers only — no new systems.
+- **Next:** item 17 — touch/mobile pass: verify ordnance buttons on touch (CDP touch emulation,
+  single-fire-per-tap), portrait sanity, button placement vs drive-stick space; keep existing
+  touch paths intact. Then 18 (polish/docs/?qa=1 gating) → ship batch 4 (v3.4.0, items 16–18).
 
 ## Iteration log
 
@@ -197,6 +193,18 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (which does NOT call updateMusic — found via failing test, ambience kept playing after death).
   Ambience persists through pause (matches music behavior). AUDIO_V→3.3.0. Suite 40→41
   (mapping city→rain→industrial + stops on over; buffers 24/24). Perf 0.071/2.31.
+- **15b SHIP v3.3.0** (2026-07-14): clean landing (no litter, no revert). amb_industrial 404'd
+  ~60s on pages.dev alias (documented new-asset propagation) — poll-retried to byte-exact 200.
+  Site df3081c81, mirror 1d10ca5 (explicit list incl. acd4bf4). Both hosts verified.
+- **16** (2026-07-14): BALANCE via rig DPS matrix (ticks-to-kill: brute@135px single / 4-drone
+  east-ray line multi — MULTI PROBE GOTCHA: rows at y±30 are LOS-blocked, place multi targets on
+  the pure-east ray x+130..238 only). Pre: cannon 201/123, scatter 117/264, railgun 93/84 (+range
+  +pierce = mild dominance), incin 192/210 (weakest both), tesla 165/60. TUNED (defs only):
+  railgun dmg 3→2.5 (still one-shots scouts/drones; brute 3 shots → 159 single, line 63 kept);
+  incinerator dmg 0.08→0.11 + burn 70→80 (→132/138). Post spread 1.7×, every weapon top-2 in its
+  niche. DECISION: railgun blind-fire through darkness KEPT (physical-lance identity; cd-60 cost
+  makes speculative spam unprofitable; stalkers self-reveal at 95px prox + when burning). Score
+  economy untouched (per-enemy scores; weapon choice = clear speed only). Suite 41/41.
 
 ## Survey findings (2026-07-14, v2.0.0 @ 2045 lines)
 
@@ -244,8 +252,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 13 four new districts, 9-district rotation, fog weather + wcol tinting (see log)
 - [x] 14 hazards: steam vents (scald+slow) + blackout surges (cone shrink, city dark) — see log
 - [x] 15 district ambience: 3 shared seamless loops, ambKey mapping, stops on over (see log)
-- [ ] 16 balance pass: DPS parity matrix vs CANNON across tanks×weapons; score economy comparable
-      (leaderboard history persists — don't inflate); perfect-wave + combo achievable per loadout.
+- [x] 16 balance pass: DPS matrix, railgun/incinerator tuned, blind-fire decision (see log)
 - [ ] 17 touch/mobile: ordnance buttons; single-fire-per-tap via CDP touch emulation; portrait ok.
 - [ ] 18 polish + docs: new achievements; PROMPT.md v3 rewrite; games/index.html blurb; **gate QA
       hooks behind ?qa=1**; HUD overlap check (see survey); version + FIELD MANUAL updates.
