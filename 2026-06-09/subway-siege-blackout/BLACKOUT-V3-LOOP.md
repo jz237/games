@@ -10,8 +10,15 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 
 ## State
 
-- **Iteration:** 18 DONE (2026-07-14) — final polish/docs. Last ship: **v3.3.0 LIVE**.
-  Unshipped: items 16–18 → READY TO SHIP batch 4 (v3.4.0), the final planned batch.
+- **Iteration:** 18b DONE (2026-07-14) — **v3.4.0 SHIPPED LIVE. PLANNED BACKLOG (00–18) COMPLETE.**
+  Site e4a763c06 (deploy list confirmed own commit; 4 consecutive v3.4.0 probes — one early
+  v3.3.0 reading was edge settling, NOT a revert; games/index card updated to featured + v3
+  blurb in same commit). Mirror fc90751 (github.io "built" status LAGS a fresh push — poll
+  CONTENT not build status; v3.4.0 after 4×10s polls).
+  **LOOP PAUSED 2026-07-14 after 4 ships (v3.1.0→v3.4.0) — everything planned is live.**
+  TO RESUME: stretch items S1 (light-interacting enemies) / S2 (district patrol-music variants) /
+  S3 (daily seed mode) await USER APPROVAL per protocol — re-run the /loop prompt and pick
+  approved items into the backlog. All trees clean, suite 43/43 at ship.
 - **Suite:** 41/41 green (24/24 buffers). Run: `node tests/run.mjs suite`.
   Also: `node tests/run.mjs probe '<js expr>' [shot.png]` — evaluate in the booted game, optional screenshot.
 - **Shots:** `node tests/run.mjs shots <set>` → `loop-shots/<set>/` (gitignored).
@@ -23,13 +30,7 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
   (main ahead 2/behind 27, many foreign staged deletions). Rules: `git add` ONLY
   `2026-06-09/subway-siege-blackout/` paths, commit locally, do NOT push / rebase / touch
   anything else in this repo. First commit of this folder made at iteration 00.
-- **Next:** **SHIP BATCH 4 as v3.4.0** (items 16–18: balance, touch coverage, polish/docs/QA
-  gating) — the FINAL PLANNED batch. Protocol as before (review diff acd4bf4..HEAD, VERSION→
-  v3.4.0, AUDIO_V unchanged 3.3.0 — no new audio, index.html only to deploy). ALSO at ship:
-  update games/index.html Blackout card blurb in the website repo (same commit): suggested text —
-  "Patrol nine blacked-out districts with five weapons, flares and EMPs — the dark answers back."
-  After ship: propose STRETCH items S1–S3 to the user (per protocol) and pause/stop the loop
-  pending their call.
+- **Next:** NOTHING PLANNED — loop paused. Stretch S1–S3 pending user approval (see above).
 
 ## Iteration log
 
