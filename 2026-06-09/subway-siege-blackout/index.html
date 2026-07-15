@@ -357,7 +357,7 @@
    WASD + mouse on desktop. Darkness/searchlight lighting engine.
    ========================================================================== */
 (function () {
-const VERSION = 'v3.4.0';
+const VERSION = 'v3.5.0';
 const SCORES_API = 'https://game-scores.jez237.workers.dev/scores/subway-siege-blackout';
 const HS_KEY = 'ssb_tank_highscores_v1';
 const MUTE_KEY = 'ssb_tank_muted';
@@ -513,7 +513,7 @@ const ARENA_W = 1900, ARENA_H = 1500;
 const P_RADIUS = 20, SHELL_SPEED = 9.5;
 let P_SPEED = 2.6, P_FIRE_CD = 26;
 let CONE_LEN = 470, CONE_HALF = 0.42;
-const SETTINGS_KEY='ssb_settings_v2', TANK_KEY='ssb_tank', ACH_KEY='ssb_ach', LIFE_KEY='ssb_life', WEAPON_KEY='ssb_weapon', AUDIO_V='3.3.0';
+const SETTINGS_KEY='ssb_settings_v2', TANK_KEY='ssb_tank', ACH_KEY='ssb_ach', LIFE_KEY='ssb_life', WEAPON_KEY='ssb_weapon', AUDIO_V='3.5.0';
 // ===== SETTINGS =====
 const settings = { musicVol: .8, sfxVol: 1, shake: 'full', particles: 'auto', showFps: false, flash: 'full' };
 try { const o = JSON.parse(localStorage.getItem(SETTINGS_KEY)); if (o && typeof o==='object') Object.assign(settings, o);
