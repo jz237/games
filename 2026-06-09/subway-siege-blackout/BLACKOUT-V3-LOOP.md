@@ -279,8 +279,11 @@ the darkness engine (`renderLights`, offscreen light canvas, destination-out hol
 - [x] 17 touch pass: tap/drag emulation in rig, single-fire verified, landscape clean (see log)
 - [x] 18 polish: 16 achievements, ?qa=1 gating, manual briefs, HUD fix, PROMPT.md v3 (see log;
       games/index.html blurb applies AT SHIP in the website repo)
-- [ ] STRETCH (propose to user at a ship milestone first): S1 light-interacting enemies
-      (light-hunter, bulb-smasher); S2 patrol-music variants per district band; S3 daily seed mode.
+- [x] S1 HUNTER (lit→1.55x charge; moths to flares ≤420px) + SMASHER (hunts flares, stomps them
+      to t=40, survives) — waves 7+/9+, manual brief, suite 43→45. APPROVED + DONE 2026-07-14.
+- [ ] S2 patrol-music variants per district band (APPROVED)
+- [ ] S3 daily-challenge seed mode (APPROVED)
+- [ ] S4 SHIP batch 5 → v3.5.0 (S1–S3)
 
 ## Ship protocol (batch every 3–5 items → v3.1.0, v3.2.0, …)
 
