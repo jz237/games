@@ -52,7 +52,7 @@ button{touch-action:manipulation;cursor:pointer;border:none;outline:none;font-fa
 </head>
 <body>
 <button id="muteBtn">🔊</button>
-<div class="version" id="versionTag">v1.2.0</div>
+<div class="version" id="versionTag">v1.3.0</div>
 
 <div id="titleScreen" class="overlay">
   <div class="title-text">GLASSRAIL<br>BASTION</div>
@@ -177,11 +177,11 @@ if(FINE_POINTER)document.getElementById('desktopHowto').style.display='';
 
 // ============ GAME STATE ============
 let state='title'; // title,tutorial,playing,upgrade,gameover
-let score=0,shards=0,wave=1,bastionHp=100,bastionMaxHp=100,shield=50,maxShield=50;
+let score=0,shards=0,wave=1,bastionHp=120,bastionMaxHp=120,shield=70,maxShield=70;
 let turretAngle=0,aiming=false,aimX=0,aimY=0;
 let dashCooldown=0,dashActive=0,invuln=0;
 let laneIndex=1,trainX=0,targetTrainX=0,trackSwitchCooldown=0;
-let fireRate=5,fireDmg=10,fireTimer=0,spreadCount=1,piercing=false,shieldRegen=.5;
+let fireRate=6.25,fireDmg=12,fireTimer=0,spreadCount=1,piercing=false,shieldRegen=.9;
 let enemies=[],bullets=[],particles=[],shockwaves=[],shardItems=[],stars=[],floatingTexts=[],eventTexts=[];
 let scrollOffset=0,shakeTimer=0,shakeIntensity=0;
 let spawnTimer=0,enemiesRemaining=0,waveActive=false,bossAlive=false;
@@ -210,6 +210,9 @@ function rgba(hex,a){
   const {r,g,b}=hexToRgb(hex);
   return `rgba(${r},${g},${b},${a})`;
 }
+
+function expEase(rate,dt){return 1-Math.exp(-rate*dt)}
+function shortestAngle(from,to){return Math.atan2(Math.sin(to-from),Math.cos(to-from))}
 
 const WAVE_THEMES=[
   {name:'Aurora Crossing', skyTop:'#06111f', skyBottom:'#102b44', fog:'#38c6ff', rail:'#8ef3ff', accent:'#7cf7ff', sleeper:'#204257', hazard:'#89e6ff', event:'Aurora surge brightens the railglass', vista:'aurora'},
@@ -256,27 +259,31 @@ function announceEvent(title,subtitle,color){
 
 function getWaveDef(w){
   const isBoss=w===3||w===6||w===9||w===12;
-  let count=4+w*3;
-  let types=['interceptor'];
-  let spawnRate=Math.max(.24,1.3-w*.07);
-  if(w>=2)types.push('bulwark');
+  let count=w===1?4:w===2?6:4+w*3;
+  let types=w===2?['interceptor','interceptor','interceptor','bulwark']:['interceptor'];
+  let spawnRate=w===1?1.65:w===2?1.45:Math.max(.24,1.3-w*.07);
+  if(w>=3)types.push('bulwark');
   if(w>=4)types.push('gunship');
   if(w>=5)types.push('carrier');
   if(w>=7)types.push('wraith');
   if(w>=8)types.push('bomber');
   if(w>=10){count+=6;types=['interceptor','bulwark','gunship','carrier','wraith','bomber'];spawnRate-=.05}
   const eventType = w===2?'comet':w===4?'signal':w===5?'surge':w===7?'freight':w===8?'storm':w===10?'swarm':w===11?'phantom':null;
-  let hpMul=1+w*.1;
-  let spdMul=1+w*.045;
+  let hpMul=w===1?.72:w===2?.82:1+w*.1;
+  let spdMul=w===1?.62:w===2?.68:1+w*.045;
+  let damageMul=w===1?.45:w===2?.55:w===3?.72:Math.min(1.12,.78+w*.035);
+  let shieldMul=w===1?.4:w===2?.45:w===3?.72:1;
+  let maxConcurrent=w===1?2:w===2?3:99;
   if(eventType==='storm') spdMul+=.1;
   if(eventType==='freight') hpMul+=.12;
   if(eventType==='swarm'){count+=8;spawnRate-=.03;spdMul+=.04}
-  return{count:isBoss?count+4:count,types,hpMul,spdMul,boss:isBoss,spawnRate,eventType,theme:getWaveTheme(w)};
+  return{count:isBoss?count+4:count,types,hpMul,spdMul,damageMul,shieldMul,maxConcurrent,boss:isBoss,spawnRate,eventType,theme:getWaveTheme(w)};
 }
 
 function spawnEnemy(type,hpMul,spdMul,isBoss,origin=null){
   const typeKey=isBoss?'boss':type;
   const spec=ENEMY_ARCHETYPES[typeKey]||ENEMY_ARCHETYPES.interceptor;
+  const balance=getWaveDef(wave);
   const laneOffsets=[-TRACK_RAIL_GAUGE,0,TRACK_RAIL_GAUGE];
   const lane=laneOffsets[Math.random()*laneOffsets.length|0];
   const side=Math.random()*4|0;
@@ -287,12 +294,15 @@ function spawnEnemy(type,hpMul,spdMul,isBoss,origin=null){
   else if(side===2){x=W/2+lane+(Math.random()-.5)*26;y=H+40}
   else{x=-40;y=Math.random()*H}
   const hp=spec.hp*hpMul;
-  const maxShield=(spec.shield||0)*hpMul;
+  const maxShield=(spec.shield||0)*hpMul*balance.shieldMul;
+  const launchHeading=origin?(origin.heading||0):Math.atan2(H/2-y,W/2-x);
+  const launchSpeed=spec.spd*spdMul*(origin?.45:.28);
   enemies.push({
-    x,y,hp,maxHp:hp,shield:maxShield,maxShield,spd:spec.spd*spdMul,r:spec.r,
-    color:spec.color,accent:spec.accent,core:spec.core,dmg:spec.dmg,type:typeKey,shape:typeKey,
+    x,y,vx:Math.cos(launchHeading)*launchSpeed,vy:Math.sin(launchHeading)*launchSpeed,
+    hp,maxHp:hp,shield:maxShield,maxShield,spd:spec.spd*spdMul,r:spec.r,
+    color:spec.color,accent:spec.accent,core:spec.core,dmg:spec.dmg*balance.damageMul,type:typeKey,shape:typeKey,
     flash:0,shieldFlash:0,shootTimer:.45+Math.random()*1.4,abilityTimer:1.6+Math.random()*2.2,
-    heading:0,bank:0,age:0,phaseSeed:Math.random()*Math.PI*2,trailSeed:Math.random()*10,
+    heading:launchHeading,aimHeading:launchHeading,bank:0,thrust:.28,age:0,phaseSeed:Math.random()*Math.PI*2,trailSeed:Math.random()*10,
     detailSeed:Math.random()*1000,trailTimer:Math.random()*.08,damageTimer:Math.random()*.3,
     laneHint:lane,launches:0,maxLaunches:typeKey==='boss'?8:3,cloaked:false,chargeLevel:0
   });
@@ -478,8 +488,8 @@ window.addEventListener('keydown',e=>{
 });
 
 function resetGame(){
-  score=0;shards=0;wave=1;bastionHp=bastionMaxHp=100;shield=maxShield=50;
-  fireRate=5;fireDmg=10;fireTimer=0;spreadCount=1;piercing=false;shieldRegen=.5;
+  score=0;shards=0;wave=1;bastionHp=bastionMaxHp=120;shield=maxShield=70;
+  fireRate=6.25;fireDmg=12;fireTimer=0;spreadCount=1;piercing=false;shieldRegen=.9;
   magnetRadius=300;dashCdMax=3;dashCooldown=0;dashActive=0;invuln=0;
   enemies=[];bullets=[];particles=[];shockwaves=[];shardItems=[];floatingTexts=[];eventTexts=[];
   turretAngle=0;aiming=false;shakeTimer=0;zoneFlash=0;ambientPulse=0;surgeTimer=0;
@@ -612,20 +622,20 @@ function update(dt){
   // Enemies
   if(waveActive&&enemiesRemaining>0){
     spawnTimer-=dt;
-    if(spawnTimer<=0){
+    if(spawnTimer<=0&&enemies.length<def.maxConcurrent){
       spawnTimer=def.spawnRate;
       const forcedType = def.eventType==='freight'&&Math.random()<.35?'bulwark':def.eventType==='signal'&&Math.random()<.35?'gunship':def.eventType==='swarm'&&Math.random()<.55?'microfighter':def.eventType==='phantom'&&Math.random()<.45?'wraith':null;
       const t=forcedType||def.types[Math.random()*def.types.length|0];
       spawnEnemy(t,def.hpMul,def.spdMul,false);
       enemiesRemaining--;
-      if(Math.random()<Math.min(.42,.08+wave*.025) && enemiesRemaining>0){
+      if(wave>=4&&Math.random()<Math.min(.42,.08+wave*.025) && enemiesRemaining>0){
         spawnEnemy(def.types[Math.random()*def.types.length|0],def.hpMul*(def.eventType==='swarm'?0.85:1),def.spdMul*(def.eventType==='swarm'?1.1:1),false);
         enemiesRemaining--;
       }
       if(def.eventType==='comet'&&Math.random()<.18){
         spawnParticles(Math.random()*W,-10,def.theme.hazard,18,220,{life:1.2,maxR:4,glow:8,fade:1.3});
       }
-    }
+    }else if(spawnTimer<=0){spawnTimer=.12}
   }
 
   if(waveActive && surgeTimer>0){
@@ -645,38 +655,53 @@ function update(dt){
     const dx=cx-e.x,dy=cy-e.y,dist=Math.sqrt(dx*dx+dy*dy);
     const nx=dist>1?dx/dist:0,ny=dist>1?dy/dist:0,tx=-ny,ty=nx;
     e.age+=dt;
-    e.heading=Math.atan2(dy,dx);
+    e.aimHeading=Math.atan2(dy,dx);
     if(e.flash>0)e.flash-=dt;
     if(e.shieldFlash>0)e.shieldFlash-=dt;
     e.shootTimer-=dt;e.abilityTimer-=dt;
 
-    let forward=1,strafe=0,speedMul=1;
+    let forward=1,strafe=0,speedMul=1,bankTarget=0;
     if(e.type==='interceptor'){
       strafe=Math.sin(e.age*6.8+e.phaseSeed)*.55;
       speedMul=((e.age+e.phaseSeed)%3.1)<.58?1.78:1;
-      e.bank+=(strafe-e.bank)*Math.min(1,dt*7);
+      bankTarget=strafe;
     }else if(e.type==='microfighter'){
-      strafe=Math.sin(e.age*9.4+e.phaseSeed)*.38;speedMul=1.15;e.bank=strafe;
+      strafe=Math.sin(e.age*9.4+e.phaseSeed)*.38;speedMul=1.15;bankTarget=strafe;
     }else if(e.type==='bulwark'){
       if(e.shield<e.maxShield&&e.flash<=0)e.shield=Math.min(e.maxShield,e.shield+dt*3.2);
       if(dist<230)forward=.55;
-      e.bank*=Math.max(0,1-dt*4);
+      bankTarget=strafe;
     }else if(e.type==='gunship'){
-      forward=dist>300?1:dist<245?-.42:0;strafe=Math.sin(e.age*1.7+e.phaseSeed)*.72;e.bank=strafe;
+      forward=dist>300?1:dist<245?-.42:0;strafe=Math.sin(e.age*1.7+e.phaseSeed)*.72;bankTarget=strafe;
     }else if(e.type==='carrier'){
-      forward=dist>355?1:dist<310?-.28:0;strafe=Math.sin(e.age*.72+e.phaseSeed)*.28;e.bank=strafe;
+      forward=dist>355?1:dist<310?-.28:0;strafe=Math.sin(e.age*.72+e.phaseSeed)*.28;bankTarget=strafe;
     }else if(e.type==='wraith'){
       e.cloaked=Math.sin(e.age*1.65+e.phaseSeed)>.28;
-      strafe=Math.sin(e.age*3.2+e.phaseSeed)*.68;speedMul=e.cloaked?1.38:.82;e.bank=strafe;
+      strafe=Math.sin(e.age*3.2+e.phaseSeed)*.68;speedMul=e.cloaked?1.38:.82;bankTarget=strafe;
       forward=dist>240?1:dist<190?-.25:.22;
     }else if(e.type==='bomber'){
-      forward=dist>335?1:dist<285?-.22:0;strafe=Math.sin(e.age*1.05+e.phaseSeed)*.38;e.bank=strafe;
+      forward=dist>335?1:dist<285?-.22:0;strafe=Math.sin(e.age*1.05+e.phaseSeed)*.38;bankTarget=strafe;
     }else if(e.type==='boss'){
       if(e.shield<e.maxShield&&e.flash<=0)e.shield=Math.min(e.maxShield,e.shield+dt*5);
-      forward=dist>300?1:dist<235?-.36:0;strafe=.54;e.bank=Math.sin(e.age*.8)*.25;
+      forward=dist>300?1:dist<235?-.36:0;strafe=.54;bankTarget=Math.sin(e.age*.8)*.25;
     }
-    e.x+=(nx*forward+tx*strafe)*e.spd*speedMul*dt;
-    e.y+=(ny*forward+ty*strafe)*e.spd*speedMul*dt;
+    const desiredVx=(nx*forward+tx*strafe)*e.spd*speedMul;
+    const desiredVy=(ny*forward+ty*strafe)*e.spd*speedMul;
+    const accel=e.type==='microfighter'?8.5:e.type==='interceptor'?6.2:e.type==='wraith'?5:e.type==='boss'?1.8:e.type==='carrier'?2.2:3.2;
+    const velocityEase=expEase(accel,dt);
+    e.vx+=(desiredVx-e.vx)*velocityEase;
+    e.vy+=(desiredVy-e.vy)*velocityEase;
+    const speedNow=Math.hypot(e.vx,e.vy);
+    if(speedNow>.5){
+      const desiredHeading=Math.atan2(e.vy,e.vx);
+      const turnRate=e.type==='microfighter'?7:e.type==='interceptor'?5.6:e.type==='wraith'?4.4:e.type==='boss'?1.25:e.type==='carrier'?1.7:2.6;
+      const turn=Math.max(-turnRate*dt,Math.min(turnRate*dt,shortestAngle(e.heading,desiredHeading)));
+      e.heading+=turn;
+    }
+    e.bank+=(bankTarget-e.bank)*expEase(e.type==='microfighter'?9:e.type==='interceptor'?7:3.8,dt);
+    e.thrust+=(Math.min(1.85,speedNow/Math.max(1,e.spd))-e.thrust)*expEase(4.2,dt);
+    e.x+=e.vx*dt;
+    e.y+=e.vy*dt;
 
     e.trailTimer-=dt;
     if(e.trailTimer<=0&&e.x>-30&&e.x<W+30&&e.y>-30&&e.y<H+30){
@@ -697,18 +722,19 @@ function update(dt){
     if(e.type==='carrier'&&e.launches<e.maxLaunches&&e.abilityTimer>0&&e.abilityTimer<.72)e.chargeLevel=Math.max(e.chargeLevel,1-e.abilityTimer/.72);
     if(e.type==='boss')e.enraged=e.hp/e.maxHp<.34;
 
-    const aim=e.heading;
-    if(e.type==='bulwark'&&e.shootTimer<=0&&dist<360){
+    const aim=e.aimHeading;
+    const weaponsReady=e.age>1.35;
+    if(e.type==='bulwark'&&weaponsReady&&e.shootTimer<=0&&dist<360){
       fireEnemyWeapon(e,aim,145,e.dmg*.72,'lance');e.shootTimer=3.15;
-    }else if(e.type==='gunship'&&e.shootTimer<=0&&dist<440){
+    }else if(e.type==='gunship'&&weaponsReady&&e.shootTimer<=0&&dist<440){
       fireEnemyWeapon(e,aim,220,e.dmg,'bolt',-.2);fireEnemyWeapon(e,aim,245,e.dmg*1.18,'lance');fireEnemyWeapon(e,aim,220,e.dmg,'bolt',.2);
       e.shootTimer=def.eventType==='signal'?1.08:1.7;
     }else if(e.type==='carrier'&&e.abilityTimer<=0&&e.launches<e.maxLaunches){
       spawnEnemy('microfighter',def.hpMul*.72,def.spdMul*1.08,false,e);spawnEnemy('microfighter',def.hpMul*.72,def.spdMul*1.08,false,e);
       e.launches++;e.abilityTimer=3.6;spawnParticles(e.x,e.y,e.accent,12,100,{glow:9,maxR:3});
-    }else if(e.type==='wraith'&&!e.cloaked&&e.shootTimer<=0&&dist<390){
+    }else if(e.type==='wraith'&&weaponsReady&&!e.cloaked&&e.shootTimer<=0&&dist<390){
       fireEnemyWeapon(e,aim,175,e.dmg,'seeker');e.shootTimer=2.55;
-    }else if(e.type==='bomber'&&e.shootTimer<=0&&dist<455){
+    }else if(e.type==='bomber'&&weaponsReady&&e.shootTimer<=0&&dist<455){
       fireEnemyWeapon(e,aim,112,e.dmg,'mine');e.shootTimer=2.85;
     }else if(e.type==='boss'){
       if(e.shootTimer<=0&&dist<520){
@@ -728,6 +754,7 @@ function update(dt){
         let dmg=e.dmg;
         if(shield>0){const absorbed=Math.min(shield,dmg*.6);shield-=absorbed;dmg-=absorbed;playSound('shield')}
         bastionHp-=dmg;
+        invuln=Math.max(invuln,.18);
         shakeTimer=.2;shakeIntensity=8;
       }
       spawnParticles(e.x,e.y,e.color,8,100,{life:1.1,maxR:4,glow:10});
@@ -748,6 +775,7 @@ function update(dt){
         let dmg=b.dmg;
         if(shield>0){const absorbed=Math.min(shield,dmg*.6);shield-=absorbed;dmg-=absorbed;playSound('shield')}
         bastionHp-=dmg;
+        invuln=Math.max(invuln,.16);
       }
       bullets.splice(i,1);
       if(b.kind==='mine')shockwaves.push({x:cx,y:cy,r:8,maxR:72,life:.55,maxLife:.55,color:b.color||'#ff477e',width:4,segments:12});
@@ -1151,9 +1179,15 @@ function drawAbilityTelegraph(e,over=false){
 function drawEnemyShip(e){
   const spec=ENEMY_ARCHETYPES[e.type]||ENEMY_ARCHETYPES.interceptor;
   const visualScale=spec.scale||1,displayR=e.r*visualScale;
-  ctx.save();ctx.translate(e.x+6,e.y+8);ctx.rotate(e.heading+Math.PI/2);ctx.scale(visualScale,visualScale);
+  const motionRatio=Math.min(1.8,Math.hypot(e.vx||0,e.vy||0)/Math.max(1,e.spd));
+  const lift=Math.sin(e.age*(e.type==='microfighter'?9:e.type==='interceptor'?6.5:3.4)+e.phaseSeed)*Math.min(2.8,e.r*.11)*(.4+motionRatio*.28);
+  const drawX=e.x-Math.sin(e.heading)*lift,drawY=e.y+Math.cos(e.heading)*lift;
+  const bankCompress=1-Math.min(.15,Math.abs(e.bank||0)*.12);
+  const thrustStretch=1+Math.min(.065,(e.thrust||0)*.03);
+  const shear=Math.max(-.085,Math.min(.085,(e.bank||0)*.075));
+  ctx.save();ctx.translate(drawX+6+(e.bank||0)*3,drawY+8);ctx.rotate(e.heading+Math.PI/2);ctx.scale(visualScale*bankCompress,visualScale*thrustStretch);ctx.transform(1,0,shear,1,0,0);
   ctx.fillStyle='rgba(0,0,0,.34)';ctx.shadowColor='rgba(0,0,0,.75)';ctx.shadowBlur=12;ctx.beginPath();ctx.ellipse(0,e.r*.12,e.r*.82,e.r*1.16,0,0,Math.PI*2);ctx.fill();ctx.restore();
-  ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.heading+Math.PI/2);ctx.scale(visualScale,visualScale);
+  ctx.save();ctx.translate(drawX,drawY);ctx.rotate(e.heading+Math.PI/2);ctx.scale(visualScale*bankCompress,visualScale*thrustStretch);ctx.transform(1,0,shear,1,0,0);
   if(e.cloaked)ctx.globalAlpha=.3+.13*Math.sin(ambientPulse*8+e.phaseSeed);
   ctx.shadowColor=e.color;ctx.shadowBlur=e.type==='boss'?30:14;
   drawAbilityTelegraph(e,false);

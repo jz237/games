@@ -30,6 +30,10 @@ checks.push({ name: 'fleet-has-ability-logic', pass: /e\.cloaked/.test(index) &&
 checks.push({ name: 'fleet-has-surface-microdetail', pass: /function drawFleetSurfaceDetail/.test(index) && /detailSeed/.test(index) && /SIEGE CORE CRITICAL/.test(index) });
 checks.push({ name: 'fleet-has-animated-telegraphs', pass: /function drawAbilityTelegraph/.test(index) && /chargeLevel/.test(index) && /sourceType/.test(index) });
 checks.push({ name: 'fleet-has-damage-effects', pass: /shockwaves/.test(index) && /SHIELD BREAK/.test(index) && /damageTimer/.test(index) });
+checks.push({ name: 'fleet-has-inertial-steering', pass: /desiredVx/.test(index) && /velocityEase=expEase/.test(index) && /shortestAngle/.test(index) && /turnRate/.test(index) });
+checks.push({ name: 'fleet-has-motion-aware-rendering', pass: /bankCompress/.test(index) && /thrustStretch/.test(index) && /const lift=Math\.sin/.test(index) });
+checks.push({ name: 'opening-waves-are-forgiving', pass: /count=w===1\?4:w===2\?6/.test(index) && /maxConcurrent=w===1\?2:w===2\?3/.test(index) && /damageMul=w===1\?\.45:w===2\?\.55/.test(index) });
+checks.push({ name: 'starter-loadout-is-stronger', pass: /bastionHp=120/.test(index) && /fireRate=6\.25/.test(index) && /shieldRegen=\.9/.test(index) });
 
 const pass = checks.every(c => c.pass);
 console.log('Glassrail Bastion Smoke Test');
