@@ -34,6 +34,12 @@ A stylized top-down **train-heist defense roguelite** where the player guards a 
 
 Every class uses its own silhouette, hull construction, engines, cockpit/core treatment, weapon mounts, animated ability effects, color language, movement profile, durability, damage, and score value.
 
+## Flight & Opening Balance
+- Enemy ships use acceleration, velocity damping, rate-limited turning, eased banking, thrust stretch, and subtle lift instead of direct position and rotation snaps.
+- Waves 1 and 2 are onboarding sectors: 4 then 6 contacts, strict 2/3-ship concurrency caps, no random double-spawns, lower hull/shield/speed multipliers, and reduced contact/weapon damage.
+- The starter bastion has 120 hull, 70 shield, stronger regeneration, and a faster 12-damage cannon so a new player can learn aiming and rail switching before the fleet escalates.
+- Short post-hit protection prevents several overlapping contacts or projectiles from deleting the bastion in one frame.
+
 ## Milestones
 1. ✅ Create concept + scope doc
 2. Build playable loop (movement, shooting, enemy AI, pickups)
