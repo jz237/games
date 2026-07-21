@@ -29,15 +29,13 @@ backdrop + 'HD vNNN' badge, ?classic=1 escape hatch.
 1. ~~Trackside trees~~ **DONE it.1** (treeSys: 283 billboards, oak+pine sheet unit 5,
    engine-identical transform, GEQUAL bug fixed → LEQUAL, cells 16000/EXCL 18000,
    heights 3200-5400).
-2. **Kerb treatment on road edges** — the engine's red edge lines are flat polys;
-   give the isRed-and-narrow (near-track, low-height) fragments a kerb-stone texture
-   (new fal texture: angled red/white kerb top-down) instead of wall blocks.
-3. **Photo mountain backdrop** — mountains/lake are the engine's 2D screen-space
-   pipeline (shader 2/3, NO world coords — cannot world-texture). Experiment: render
-   a fal mountain-panorama strip into MY sky quad's lower band, and mute the 2D
-   mountains by rewriting shader 3 to discard/fade its distinctive mountain colors
-   (RISK: same 2D pipeline draws HUD lines — gate by color families only, test
-   heavily; abort if HUD damaged and record why).
+2. ~~Kerb treatment~~ **DONE it.2** (procedural: isRed && Nn.y>0.6 → alternating
+   red/white 900-unit stones over the concrete texture; no new texture unit needed).
+3. ~~Photo mountain backdrop~~ **DONE it.3** (2D fragment rewrite discards the 5
+   sampled backdrop colors — greens/teal/lake exact, snow gated above mid-screen —
+   and sky.jpg carries a photo range amplified to the bottom 22%; SKY QUAD FIX:
+   fullscreen-triangle UVs span the VIEWPORT, so the shader now remaps v to the
+   actual sky band read from SCISSOR_BOX — image bottom rides the horizon).
 4. **Contact shadows** — fake AO: darken ground/asphalt fragments within ~40 units of
    walls (needs wall proximity — approximate via screen-space: NOT feasible per-fragment
    without data; try instead a soft dark band at the BASE of wall faces via vWorld.y
@@ -104,6 +102,17 @@ backdrop + 'HD vNNN' badge, ?classic=1 escape hatch.
   #mm-btn-twoplayer hidden; do NOT touch stuntcarracer.fly.dev/CSP.
 
 ## ITERATION LOG
+- it.3 (2026-07-21): PHOTO MOUNTAINS SHIPPED — 2D backdrop discard + horizon-anchored
+  sky mapping. LESSONS: (a) the sky quad's vUv covers the whole VIEWPORT (scissor just
+  clips it) — anything positional in the sky image needs the SCISSOR_BOX remap;
+  (b) 2D-pipeline rewrite is SAFE scoped to exact palette colors (HUD yellow/black
+  untouched); other TRACKS may use different backdrop palettes — check each track's
+  chooser later and extend the discard list if flat mountains reappear. v144 DEPLOYED.
+- it.2 (2026-07-21): KERBS SHIPPED — horizontal red edge strips (Nn.y>0.6) become
+  alternating red/white stones via `fract((x+z)/1800)` over the block texture;
+  vertical red walls untouched. LESSON: prefer PROCEDURAL patterns keyed on the
+  existing classification + normals before spending a texture unit. v143 DEPLOYED
+  (trees) to CF+GitHub mid-loop at user request; jez237.com still stuck v139.
 - it.1 (2026-07-21): TREES SHIPPED — 283 oak/pine billboards on the grass, correct
   depth vs walls/terrain, none on track. THREE HARD LESSONS: (a) NEVER combine the
   engine's matrices in JS for FORWARD projection — my row-vector mat4Mul product sent

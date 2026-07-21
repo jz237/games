@@ -79,6 +79,29 @@
     '}',
   ].join('\n');
 
+  // 2D backdrop pipeline: discard the flat mountain/lake fills so the photo
+  // mountains baked into sky.jpg show instead. Palette sampled from the engine's
+  // Little Ramp backdrop; HUD lines (yellow/black) are untouched, whites only
+  // above mid-screen. Other tracks may need palette additions — see ledger.
+  function rewriteFragment2D(src) {
+    return [
+      'precision mediump float;',
+      'uniform float windowHeight;',
+      'varying lowp vec4 outputColor;',
+      'bool near3(vec3 c, vec3 t){ return all(lessThan(abs(c - t), vec3(0.03))); }',
+      'void main() {',
+      '  vec3 c = outputColor.rgb;',
+      '  bool mtn = near3(c, vec3(0.3333, 0.4667, 0.4667))',   // 85,119,119 teal
+      '        || near3(c, vec3(0.2588, 0.3529, 0.0863))',      // 66,90,22 dark green
+      '        || near3(c, vec3(0.6, 0.7333, 0.2))',            // 153,187,51 lime
+      '        || near3(c, vec3(0.3333, 0.7333, 1.0));',        // 85,187,255 lake
+      '  bool snow = near3(c, vec3(1.0)) && gl_FragCoord.y > windowHeight * 0.5;',
+      '  if (mtn || snow) discard;',
+      '  gl_FragColor = outputColor;',
+      '}',
+    ].join('\n');
+  }
+
   // ── engine shader rewrites ──
   function rewriteVertex3D(src) {
     if (src.indexOf('projectionMatrix') < 0) return src;
@@ -155,6 +178,10 @@
       '      c = mix(atex, gtex, lowland) * macro;',
       '    } else if (isEarth) {',
       '      c = tri(uHdTexR, vWorld, Nn, 1.0 / 1100.0) * (0.72 + 0.5 * lum3(c)) * macro;', // sandy run-off
+      '    } else if (isRed && Nn.y > 0.6) {',
+      '      float seg = step(0.5, fract((vWorld.x + vWorld.z) / 1800.0));',            // ~900-unit kerb stones
+      '      vec3 stone = tri(uHdTexM, vWorld, Nn, 1.0 / 520.0);',
+      '      c = mix(vec3(0.78, 0.11, 0.09), vec3(0.93, 0.91, 0.87), seg) * (stone * 1.25);',
       '    } else if (isRed || (isWhite && fdist < 28000.0)) {',
       '      vec3 tex = tri(uHdTexM, vWorld, Nn, 1.0 / 520.0);',
       '      c = c * (tex * 1.3);',                                                     // concrete blocks, keeps red/white
@@ -188,7 +215,11 @@
     'precision mediump float;',
     'varying vec2 vUv;',
     'uniform sampler2D uSky;',
-    'void main(){ gl_FragColor = vec4(texture2D(uSky, vec2(vUv.x, 1.0 - vUv.y)).rgb, 1.0); }',
+    'uniform vec2 uSkyBand;',   // horizon Y, top Y in window px — maps image bottom onto the horizon
+    'void main(){',
+    '  float t = clamp((gl_FragCoord.y - uSkyBand.x) / max(1.0, uSkyBand.y - uSkyBand.x), 0.0, 1.0);',
+    '  gl_FragColor = vec4(texture2D(uSky, vec2(vUv.x, 1.0 - t)).rgb, 1.0);',
+    '}',
   ].join('\n');
   var GROUND_FS = [
     '#ifdef GL_FRAGMENT_PRECISION_HIGH',
@@ -360,6 +391,7 @@
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     st.skyU = gl.getUniformLocation(st.skyProg, 'uSky');
+    st.skyBand = gl.getUniformLocation(st.skyProg, 'uSkyBand');
     st.gInvVP = gl.getUniformLocation(st.groundProg, 'uInvVP');
     st.gY = gl.getUniformLocation(st.groundProg, 'uGroundY');
     st.gCam = gl.getUniformLocation(st.groundProg, 'uCamPos');
@@ -442,7 +474,7 @@
     upload(makeProceduralSky());
     var img = new Image();
     img.onload = function () { upload(img); };
-    img.src = 'images/sky.jpg?v=hd1';
+    img.src = 'images/sky.jpg?v=hd4';
   }
 
   function drawQuad(gl, prog, bindUniforms) {
@@ -491,10 +523,15 @@
 
   function drawSky(gl) {
     var st = gl.__hd;
+    var sb = gl.isEnabled(gl.SCISSOR_TEST) ? gl.getParameter(gl.SCISSOR_BOX) : null;
+    var vp = gl.getParameter(gl.VIEWPORT);
+    var horizonY = sb ? sb[1] : 0;
+    var topY = sb ? sb[1] + sb[3] : vp[3];
     drawQuad(gl, st.skyProg, function () {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, st.skyTex);
       gl.uniform1i(st.skyU, 0);
+      if (st.skyBand) gl.uniform2f(st.skyBand, horizonY, topY);
     });
   }
   function drawGround(gl) {
@@ -591,6 +628,7 @@
       try {
         if (src.indexOf('projectionMatrix') >= 0) src = rewriteVertex3D(src);
         else if (src.indexOf('textureWeight') >= 0) src = rewriteFragment3D(src);
+        else if (src.indexOf('gl_FragColor = outputColor') >= 0) src = rewriteFragment2D(src);
       } catch (e) { console.error('[hd-graphics] rewrite failed', e); }
       return origShaderSource(sh, src);
     };
