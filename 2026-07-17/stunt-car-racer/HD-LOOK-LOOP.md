@@ -48,10 +48,17 @@ backdrop + 'HD vNNN' badge, ?classic=1 escape hatch.
    right, green hills + trees, snow mountains — reference mood).
 8. ~~Damage holes + icons~~ **DONE it.5** (PIL-drawn checkered flag, stopwatch dial,
    torn-gap hole, cracked smash — same files/ids/positions).
-9. **Sun/bloom pass** — subtle warm tint + vignette via a final fullscreen quad after
-   the frame? (needs end-of-frame hook — investigate requestAnimationFrame wrap; may
-   conflict with engine loop — timebox).
-10. **Closing survey** — fresh-eyes shots of every screen vs reference; seed next round.
+9. ~~Sun/bloom~~ **DONE it.6** (CSS grade on #canvas: saturate 1.07 / contrast 1.03 /
+   brightness 1.01 — zero GL risk).
+10. ~~Closing survey~~ **DONE it.6** — found + FIXED the Big Ramp pale-world bug.
+
+## ROUND TWO BACKLOG
+1. Sweep tracks 5-8 chooser + race views (same survey script pattern).
+2. Sliver-tree edge case (rare edge-on billboard, e.g. t4 far right) — investigate facing math.
+3. Mobile portrait pass on 2-3 tracks.
+4. Race a full season race to see end screens (racewin/racelost/wrecked jpgs) in situ.
+5. Consider streaming-fill anchor: ground texture is camera-space-anchored (engine keeps
+   the world camera-relative!) — check whether the fill visibly fails to stream at speed.
 
 ## PROCESS (every iteration)
 - Home: worktree `/home/jez237/.openclaw/workspace/worktrees/scr-hd` (branch scr-hd);
@@ -101,6 +108,16 @@ backdrop + 'HD vNNN' badge, ?classic=1 escape hatch.
   #mm-btn-twoplayer hidden; do NOT touch stuntcarracer.fly.dev/CSP.
 
 ## ITERATION LOG
+- it.6 (2026-07-21): grade shipped; SURVEY caught Big Ramp pale-world. FIVE-HYPOTHESIS
+  debugging chain ended in a REVELATION: the engine keeps the WORLD CAMERA-RELATIVE —
+  viewMatrix has ZERO translation (cam pos [0,0,0] is CORRECT); worldMatrix carries it.
+  Implications now recorded: my "vWorld" is camera-relative; fog distances were always
+  right; the ground-fill plane at y=0 is EYE LEVEL so downward rays always miss → the
+  fill's below-horizon output was ALWAYS the miss-color: recolored it hazy-green
+  (0.58,0.68,0.60) — fixed t4 AND improved every horizon. Also: draw-time texture
+  binds (engine stomps units mid-frame on textured tracks), tree billboards face
+  per-tree camera, 2D-discard palette unchanged. TOOLS: pixel-ownership tracer
+  (scr-own.mjs) + frame tracer (scr-dbg-frame.mjs) + readPixels probe — THE debug kit.
 - it.5 (2026-07-21): fence CLOSED-TIMEBOX (blind vertex-buffer reverse-engineering);
   title reroll adopted (ramp-right composition); indicator sprites redrawn in PIL
   (no API needed for ≤64px art). v145 DEPLOYED (grass + title + sprites batch).

@@ -159,6 +159,7 @@
       '  bool isRed    = r > 0.45 && g < 0.36 && b < 0.34 && (r - g) > 0.18;',          // red wall panels
       '  bool isWhite  = r > 0.82 && g > 0.8 && b > 0.78;',                             // white panels / snow
       '  bool isEdge   = isRed || isWhite;',
+      '  bool isPale   = mono < 0.12 && b > r + 0.02 && lum3(c) > 0.55 && Nn.y > 0.5;',   // per-track pale terrain (Big Ramp)
       '  if (uHdDebug > 0.5) {',
       '    vec3 dc = vec3(1.0, 0.0, 0.0);',                    // red = unclassified
       '    if (isGround) dc = vec3(0.0, 1.0, 0.0);',           // green
@@ -171,7 +172,7 @@
       '  }',
       '  if (uHdTexOn > 0.5) {',
       '    float macro = 0.88 + 0.24 * fbm(vWorld.xz * 0.0012);',                       // breaks tiling at range
-    '    if (isGround) {',
+    '    if (isGround || isPale) {',
       '      float lowland = 1.0 - smoothstep(60.0, 170.0, vWorld.y);',                 // elevated olive = deck surface
       '      vec3 gtex = tri(uHdTexG, vWorld, Nn, 1.0 / 1500.0) * vec3(1.08, 1.02, 0.88) * (1.12 + 0.4 * (g - 0.3));',
       '      vec3 atex = tri(uHdTexA, vWorld, Nn, 1.0 / 680.0) * (0.9 + 1.1 * lum3(c));',
@@ -246,7 +247,7 @@
     '  vec3 pFar  = unproject(vec3(ndc, 0.8));',
     '  vec3 dir = pFar - pNear;',
     '  float t = (uGroundY - pNear.y) / (abs(dir.y) < 1e-5 ? 1e-5 : dir.y);',
-    '  vec3 fogC = vec3(0.72, 0.78, 0.88);',
+    '  vec3 fogC = vec3(0.58, 0.68, 0.60);',
     '  if (t < 0.0) { gl_FragColor = vec4(fogC, 1.0); return; }',
     '  vec3 hit = pNear + dir * t;',
     '  vec3 c;',
@@ -260,7 +261,7 @@
     '  } else {',
     '    c = scrubColor(hit.xz);',
     '  }',
-    '  c = mix(c, fogC, smoothstep(45000.0, 110000.0, d) * 0.6);',
+    '  c = mix(c, fogC, smoothstep(14000.0, 48000.0, d) * 0.85);',
     '  gl_FragColor = vec4(c, 1.0);',
     '}',
   ].join('\n');
@@ -272,12 +273,15 @@
     'attribute vec2 aCorner;',  // x -1..1, y 0..1
     'uniform mat4 uV;',
     'uniform mat4 uP;',
-    'uniform vec3 uRight;',
+    'uniform vec3 uCamT;',
     'varying vec2 vUv;',
     'void main(){',
     '  float species = floor(aTree.w / 100000.0);',
     '  float h = aTree.w - species * 100000.0;',
-    '  vec3 pos = aTree.xyz + uRight * (aCorner.x * h * 0.44) + vec3(0.0, aCorner.y * h, 0.0);',
+    '  vec3 toCam = vec3(uCamT.x - aTree.x, 0.0, uCamT.z - aTree.z);',
+    '  float tl = length(toCam);',
+    '  vec3 right = tl > 60.0 ? vec3(-toCam.z / tl, 0.0, toCam.x / tl) : vec3(0.0, 0.0, 1.0);',   // face camera; overhead = any facing
+    '  vec3 pos = aTree.xyz + right * (aCorner.x * h * 0.44) + vec3(0.0, aCorner.y * h, 0.0);',
     '  vec4 t = vec4(pos, 1.0) * uV * uP;',    // identical math to the engine vertex shader
     '  gl_Position = vec4(-t.x, t.y, -(2.0 * t.w - t.z), -t.w);',
     '  vUv = vec2((species + (aCorner.x * 0.5 + 0.5)) * 0.5, 1.0 - aCorner.y * 0.97);',
@@ -406,7 +410,7 @@
       gl.linkProgram(st.treeProg);
       st.tV = gl.getUniformLocation(st.treeProg, 'uV');
       st.tP = gl.getUniformLocation(st.treeProg, 'uP');
-      st.tRight = gl.getUniformLocation(st.treeProg, 'uRight');
+      st.tCam = gl.getUniformLocation(st.treeProg, 'uCamT');
       st.tTex = gl.getUniformLocation(st.treeProg, 'uTex');
       st.trees = buildTreeBuffer(gl);
       st.treeTex = gl.createTexture();
@@ -543,6 +547,7 @@
     var invView = mat4Inv(st.view);
     var cam = invView ? [invView[12], invView[13], invView[14]] : [0, 0, 0];
     st._vp = vp;
+    st._camPos = cam;
     if (invView) {
       var rx = invView[0], rz = invView[2];
       var rl = Math.sqrt(rx * rx + rz * rz) || 1;
@@ -552,6 +557,10 @@
       gl.uniformMatrix4fv(st.gInvVP, false, inv);
       gl.uniform1f(st.gY, st.groundY);
       gl.uniform3f(st.gCam, cam[0], cam[1], cam[2]);
+      // bind grass HERE: some tracks (Big Ramp) bind engine textures mid-frame,
+      // stomping the frame-start unit-1 binding — never trust it at draw time
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, st.worldTex.g);
       if (st.gTexG) gl.uniform1i(st.gTexG, 1);
       if (st.gTexOn) gl.uniform1f(st.gTexOn, st.texReady >= 4 ? 1 : 0);
     });
@@ -560,7 +569,7 @@
 
   function drawTrees(gl) {
     var st = gl.__hd;
-    if (!st.treeProg || !st.treeReady || !st._vp || !st._camRight) return;
+    if (!st.treeProg || !st.treeReady || !st.view || !st._camPos) return;
     var prevProg = gl.getParameter(gl.CURRENT_PROGRAM);
     var prevBuf = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
     var prevDepthTest = gl.isEnabled(gl.DEPTH_TEST);
@@ -596,7 +605,7 @@
     gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 24, 16);
     gl.uniformMatrix4fv(st.tV, false, st.view);
     gl.uniformMatrix4fv(st.tP, false, st.proj);
-    gl.uniform3f(st.tRight, st._camRight[0], st._camRight[1], st._camRight[2]);
+    gl.uniform3f(st.tCam, st._camPos[0], st._camPos[1], st._camPos[2]);
     gl.activeTexture(gl.TEXTURE5);
     gl.bindTexture(gl.TEXTURE_2D, st.treeTex);
     gl.uniform1i(st.tTex, 5);
@@ -699,16 +708,28 @@
 
     var pendingFill = null; // 'sky' | 'ground' | null
     var origClearColor = gl.clearColor.bind(gl);
+    var lastClearLum = 0;
     gl.clearColor = function (r, g, b, a) {
       var key = Math.round(r * 255) + ',' + Math.round(g * 255) + ',' + Math.round(b * 255);
       pendingFill = (key === SKY_KEY) ? 'sky' : (key === GROUND_KEY) ? 'ground' : null;
+      lastClearLum = 0.299 * r + 0.587 * g + 0.114 * b;
       return origClearColor(r, g, b, a);
     };
     var origClear = gl.clear.bind(gl);
     gl.clear = function (mask) {
       var st = gl.__hd;
-      if (!st || !st.enabled || !pendingFill || !(mask & gl.COLOR_BUFFER_BIT)) return origClear(mask);
+      if (!st || !st.enabled || !(mask & gl.COLOR_BUFFER_BIT)) return origClear(mask);
       var fill = pendingFill;
+      // tracks use per-track fill palettes — classify scissored clears by REGION,
+      // not color: bottom band = ground fill, upper band = sky fill
+      if (gl.isEnabled(gl.SCISSOR_TEST)) {
+        var sb = gl.getParameter(gl.SCISSOR_BOX);
+        var vpv = gl.getParameter(gl.VIEWPORT);
+        if (sb[3] < vpv[3]) fill = (sb[1] <= 0) ? 'ground' : 'sky';
+      } else if (!fill && st.view && st.proj && lastClearLum > 0.15) {
+        fill = 'ground';   // per-track fullscreen base fill (e.g. Big Ramp pale) -> grass plain
+      }
+      if (!fill) return origClear(mask);
       var rest = mask & ~gl.COLOR_BUFFER_BIT;
       if (fill === 'sky') {
         if (rest) origClear(rest);

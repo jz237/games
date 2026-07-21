@@ -95,7 +95,7 @@
 }
 
 .main-menu-card::after {
-  content: 'HD v145 \00b7 21 Jul 2026';
+  content: 'HD v146 \00b7 21 Jul 2026';
   position: absolute;
   right: 1.6%;
   bottom: 2%;
@@ -826,6 +826,9 @@
 .hud-box-mobile .hud-row {
   font-size: 12px;
 }
+
+/* Subtle warm cinematic grade over the 3D view (HD-LOOK it.6) */
+#canvas { filter: saturate(1.07) contrast(1.03) brightness(1.01); }
 
 /* ── Race-mode canvas: 8∶5 aspect ratio ─────────────────── */
 
