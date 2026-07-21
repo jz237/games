@@ -191,8 +191,8 @@
       '      vec3 tex = tri(uHdTexA, vWorld, Nn, 1.0 / 680.0);',
       '      c = tex * (0.9 + 1.1 * lum3(c)) * macro;',                                 // dark rich asphalt
       '    } else if (!isEdge && mono > 0.1 && g > r && g > 0.25) {',
-      '      vec3 tex = tri(uHdTexG, vWorld, Nn, 1.0 / 6000.0);',                       // green 3D geometry -> grassy
-      '      c = tex * (0.55 + 0.9 * lum3(c));',
+      '      vec3 tex = tri(uHdTexG, vWorld, Nn, 1.0 / 1500.0) * vec3(1.08, 1.02, 0.88);',  // green geometry = grass (mountains are 2D)
+      '      c = tex * (0.62 + 0.75 * lum3(c)) * macro;',
       '    }',
       '  }',
       '  float sun = clamp(dot(Nn, normalize(vec3(0.35, 0.8, 0.45))), 0.0, 1.0);',
@@ -247,7 +247,7 @@
     '  vec3 pFar  = unproject(vec3(ndc, 0.8));',
     '  vec3 dir = pFar - pNear;',
     '  float t = (uGroundY - pNear.y) / (abs(dir.y) < 1e-5 ? 1e-5 : dir.y);',
-    '  vec3 fogC = vec3(0.58, 0.68, 0.60);',
+    '  vec3 fogC = vec3(0.44, 0.57, 0.40);',
     '  if (t < 0.0) { gl_FragColor = vec4(fogC, 1.0); return; }',
     '  vec3 hit = pNear + dir * t;',
     '  vec3 c;',
@@ -261,7 +261,7 @@
     '  } else {',
     '    c = scrubColor(hit.xz);',
     '  }',
-    '  c = mix(c, fogC, smoothstep(14000.0, 48000.0, d) * 0.85);',
+    '  c = mix(c, fogC, smoothstep(26000.0, 95000.0, d) * 0.8);',
     '  gl_FragColor = vec4(c, 1.0);',
     '}',
   ].join('\n');
@@ -555,7 +555,10 @@
     }
     drawQuad(gl, st.groundProg, function () {
       gl.uniformMatrix4fv(st.gInvVP, false, inv);
-      gl.uniform1f(st.gY, st.groundY);
+      // camera-relative world: eye sits at y=0, so a plane AT 0 degenerates.
+      // 800 below eye ~= road-level ground seen from the cockpit; gives every
+      // track textured perspective ground where geometry is absent.
+      gl.uniform1f(st.gY, st.groundY - 800.0);
       gl.uniform3f(st.gCam, cam[0], cam[1], cam[2]);
       // bind grass HERE: some tracks (Big Ramp) bind engine textures mid-frame,
       // stomping the frame-start unit-1 binding — never trust it at draw time

@@ -53,12 +53,15 @@ backdrop + 'HD vNNN' badge, ?classic=1 escape hatch.
 10. ~~Closing survey~~ **DONE it.6** — found + FIXED the Big Ramp pale-world bug.
 
 ## ROUND TWO BACKLOG
-1. Sweep tracks 5-8 chooser + race views (same survey script pattern).
+1. ~~Track sweep 1-8~~ **DONE it.7** — all 8 choosers + t1/t8 races verified green/textured.
 2. Sliver-tree edge case (rare edge-on billboard, e.g. t4 far right) — investigate facing math.
 3. Mobile portrait pass on 2-3 tracks.
 4. Race a full season race to see end screens (racewin/racelost/wrecked jpgs) in situ.
-5. Consider streaming-fill anchor: ground texture is camera-space-anchored (engine keeps
-   the world camera-relative!) — check whether the fill visibly fails to stream at speed.
+5. ~~Streaming-fill anchor~~ **SETTLED it.7**: fill plane now 800 below eye (the y=0
+   plane degenerates — it IS eye level in camera-relative space); near band textured,
+   distance = field-green (0.44,0.57,0.40); green 3D geometry unified to grass scale.
+   The engine's clip mapping compresses the texture band toward the screen bottom —
+   accepted (matches the reference's smooth fields).
 
 ## PROCESS (every iteration)
 - Home: worktree `/home/jez237/.openclaw/workspace/worktrees/scr-hd` (branch scr-hd);
@@ -108,6 +111,10 @@ backdrop + 'HD vNNN' badge, ?classic=1 escape hatch.
   #mm-btn-twoplayer hidden; do NOT touch stuntcarracer.fly.dev/CSP.
 
 ## ITERATION LOG
+- it.7 (2026-07-21): 8-track sweep green; fill architecture settled (below-eye plane,
+  field-green distance, unified green-geometry grass). LESSON: in this engine EVERY
+  mysterious flat region so far has been MY OWN fill's fog color — check
+  scr-own2.mjs pixel-ownership FIRST, hypothesize second. v147 DEPLOYED.
 - it.6 (2026-07-21): grade shipped; SURVEY caught Big Ramp pale-world. FIVE-HYPOTHESIS
   debugging chain ended in a REVELATION: the engine keeps the WORLD CAMERA-RELATIVE —
   viewMatrix has ZERO translation (cam pos [0,0,0] is CORRECT); worldMatrix carries it.
