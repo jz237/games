@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#000000">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Stunt Car Racer">
+  <title>Stunt Car Racer</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="game.css?v=141">
+  <style>
+    html, body {
+      margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000;
+      user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+      touch-action: none; overscroll-behavior: none; -webkit-tap-highlight-color: transparent;
+    }
+    #canvas { display: block; width: 100vw; height: 100vh; padding: 0; touch-action: none; }
+    @supports (height: 100dvh) { #canvas { width: 100dvw; height: 100dvh; } }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" class="emscripten" tabindex="0" aria-label="Stunt Car Racer game"
+    oncontextmenu="event.preventDefault()"></canvas>
+  <script>
+    window.production = true;
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js?v=141').then(function (registration) {
+      registration.update().catch(function () {});
+    }).catch(function () {});
+    var Module = {
+      preRun: [],
+      postRun: [],
+      onRuntimeInitialized: function () {
+        window.__scrRuntimeReady = true;
+      },
+      locateFile: function (path) {
+        return path === 'source.wasm' ? 'source.wasm?v=141' : path;
+      },
+      print: function (text) {
+        if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+        console.log(text);
+      },
+      printErr: function (text) {
+        if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+        console.error(text);
+      },
+      canvas: (function () {
+        var canvas = document.getElementById('canvas');
+        canvas.addEventListener('webglcontextlost', function (event) {
+          alert('WebGL context lost. Please reload the game.');
+          event.preventDefault();
+        }, false);
+        return canvas;
+      }())
+    };
+  </script>
+  <script src="hd-graphics.js?v=141"></script>
+  <script src="hd-audio.js?v=141"></script>
+  <script src="source.js?v=141" async></script>
+  <script src="controls.js?v=141"></script>
+  <script src="driver-controls.js?v=141"></script>
+  <script src="profile.js?v=141"></script>
+  <script src="track-access.js?v=141"></script>
+  <script src="hotseat.js?v=141"></script>
+  <script src="link-championship.js?v=141"></script>
+  <script src="backup.js?v=141"></script>
+  <script src="multiplayer.js?v=141"></script>
+  <script src="game.js?v=141"></script>
+</body>
+</html>
