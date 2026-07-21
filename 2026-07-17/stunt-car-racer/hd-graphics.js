@@ -234,6 +234,67 @@
     '}',
   ].join('\n');
 
+  // billboard trees on the grass plain (drawn with the engine's clip convention
+  // so they depth-compose with real geometry)
+  var TREE_VS = [
+    'attribute vec4 aTree;',    // xyz world base, w = species*100000 + height
+    'attribute vec2 aCorner;',  // x -1..1, y 0..1
+    'uniform mat4 uV;',
+    'uniform mat4 uP;',
+    'uniform vec3 uRight;',
+    'varying vec2 vUv;',
+    'void main(){',
+    '  float species = floor(aTree.w / 100000.0);',
+    '  float h = aTree.w - species * 100000.0;',
+    '  vec3 pos = aTree.xyz + uRight * (aCorner.x * h * 0.44) + vec3(0.0, aCorner.y * h, 0.0);',
+    '  vec4 t = vec4(pos, 1.0) * uV * uP;',    // identical math to the engine vertex shader
+    '  gl_Position = vec4(-t.x, t.y, -(2.0 * t.w - t.z), -t.w);',
+    '  vUv = vec2((species + (aCorner.x * 0.5 + 0.5)) * 0.5, 1.0 - aCorner.y * 0.97);',
+    '}',
+  ].join('\n');
+  var TREE_FS = [
+    'precision mediump float;',
+    'uniform sampler2D uTex;',
+    'varying vec2 vUv;',
+    'void main(){',
+    '  vec4 c = texture2D(uTex, vUv);',
+    '  if (c.a < 0.5) discard;',
+    '  gl_FragColor = vec4(c.rgb * 0.96, 1.0);',
+    '}',
+  ].join('\n');
+
+  function hash2i(x, z) {
+    var n = x * 374761393 + z * 668265263;
+    n = (n ^ (n >> 13)) * 1274126177;
+    return ((n ^ (n >> 16)) >>> 0) / 4294967295;
+  }
+
+  function buildTreeBuffer(gl) {
+    var verts = [];
+    var CELL = 16000, RANGE = 128000, EXCL = 18000;
+    for (var cx = -RANGE; cx <= RANGE; cx += CELL) {
+      for (var cz = -RANGE; cz <= RANGE; cz += CELL) {
+        var h1 = hash2i(cx | 0, cz | 0);
+        if (h1 > 0.55) continue;                                  // sparse
+        var jx = (hash2i(cx + 1, cz) - 0.5) * CELL * 0.8;
+        var jz = (hash2i(cx, cz + 1) - 0.5) * CELL * 0.8;
+        var x = cx + jx, z = cz + jz;
+        if (Math.abs(x) < EXCL && Math.abs(z) < EXCL) continue;   // clear of the start area
+        var species = h1 < 0.28 ? 0 : 1;
+        var height = 3200 + hash2i(cx + 2, cz + 3) * 2200;   // road is ~3k units wide; trees ~1-1.7 road-widths
+        var w = species * 100000 + height;
+        // two triangles, corners (-1,0)(1,0)(1,1) / (-1,0)(1,1)(-1,1)
+        var quad = [[-1, 0], [1, 0], [1, 1], [-1, 0], [1, 1], [-1, 1]];
+        for (var q = 0; q < 6; q++) verts.push(x, 0, z, w, quad[q][0], quad[q][1]);
+      }
+    }
+    var buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    return { buf: buf, count: verts.length / 6 };
+  }
+
   function compile(gl, vsSrc, fsSrc) {
     function sh(type, src) {
       var s = gl.__origCreateShader.call(gl, type);
@@ -304,6 +365,38 @@
     st.gCam = gl.getUniformLocation(st.groundProg, 'uCamPos');
     st.gTexG = gl.getUniformLocation(st.groundProg, 'uHdTexG');
     st.gTexOn = gl.getUniformLocation(st.groundProg, 'uHdTexOn');
+
+    // trees: program + static buffer + sprite sheet on unit 5
+    st.treeProg = compile(gl, TREE_VS, TREE_FS);
+    if (st.treeProg) {
+      gl.bindAttribLocation(st.treeProg, 0, 'aTree');
+      gl.bindAttribLocation(st.treeProg, 1, 'aCorner');
+      gl.linkProgram(st.treeProg);
+      st.tV = gl.getUniformLocation(st.treeProg, 'uV');
+      st.tP = gl.getUniformLocation(st.treeProg, 'uP');
+      st.tRight = gl.getUniformLocation(st.treeProg, 'uRight');
+      st.tTex = gl.getUniformLocation(st.treeProg, 'uTex');
+      st.trees = buildTreeBuffer(gl);
+      st.treeTex = gl.createTexture();
+      st.treeReady = false;
+      var timg = new Image();
+      timg.onload = function () {
+        var prevA = gl.getParameter(gl.ACTIVE_TEXTURE);
+        gl.activeTexture(gl.TEXTURE5);
+        gl.bindTexture(gl.TEXTURE_2D, st.treeTex);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, timg);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.activeTexture(prevA);
+        st.treeReady = true;
+      };
+      timg.onerror = function () { console.error('[hd-graphics] tree sheet failed'); };
+      timg.src = 'images/tex-trees.png?v=hd3';
+    }
 
     // world photo textures on units 1-4 (POT, mipmapped, mirrored repeat)
     st.worldTex = {};
@@ -412,6 +505,12 @@
     if (!inv) return false;
     var invView = mat4Inv(st.view);
     var cam = invView ? [invView[12], invView[13], invView[14]] : [0, 0, 0];
+    st._vp = vp;
+    if (invView) {
+      var rx = invView[0], rz = invView[2];
+      var rl = Math.sqrt(rx * rx + rz * rz) || 1;
+      st._camRight = [rx / rl, 0, rz / rl];   // xz-flattened so billboards stay upright
+    }
     drawQuad(gl, st.groundProg, function () {
       gl.uniformMatrix4fv(st.gInvVP, false, inv);
       gl.uniform1f(st.gY, st.groundY);
@@ -420,6 +519,67 @@
       if (st.gTexOn) gl.uniform1f(st.gTexOn, st.texReady >= 4 ? 1 : 0);
     });
     return true;
+  }
+
+  function drawTrees(gl) {
+    var st = gl.__hd;
+    if (!st.treeProg || !st.treeReady || !st._vp || !st._camRight) return;
+    var prevProg = gl.getParameter(gl.CURRENT_PROGRAM);
+    var prevBuf = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
+    var prevDepthTest = gl.isEnabled(gl.DEPTH_TEST);
+    var prevDepthMask = gl.getParameter(gl.DEPTH_WRITEMASK);
+    var prevDepthFunc = gl.getParameter(gl.DEPTH_FUNC);
+    var prevBlend = gl.isEnabled(gl.BLEND);
+    var prevCull = gl.isEnabled(gl.CULL_FACE);
+    var prevScissor = gl.isEnabled(gl.SCISSOR_TEST);
+    var prevActive = gl.getParameter(gl.ACTIVE_TEXTURE);
+    var attrs = [0, 1].map(function (i) {
+      return {
+        en: gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_ENABLED),
+        buf: gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_BUFFER_BINDING),
+        size: gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_SIZE),
+        type: gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_TYPE),
+        norm: gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_NORMALIZED),
+        stride: gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_STRIDE),
+        off: gl.getVertexAttribOffset(i, gl.VERTEX_ATTRIB_ARRAY_POINTER),
+      };
+    });
+
+    gl.useProgram(st.treeProg);
+    gl.disable(gl.BLEND);
+    gl.disable(gl.CULL_FACE);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);   // probe: engine clears depth to 1, tests LESS
+    gl.depthMask(true);
+    if (prevScissor) gl.disable(gl.SCISSOR_TEST);   // crowns rise above the horizon split
+    gl.bindBuffer(gl.ARRAY_BUFFER, st.trees.buf);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 24, 16);
+    gl.uniformMatrix4fv(st.tV, false, st.view);
+    gl.uniformMatrix4fv(st.tP, false, st.proj);
+    gl.uniform3f(st.tRight, st._camRight[0], st._camRight[1], st._camRight[2]);
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_2D, st.treeTex);
+    gl.uniform1i(st.tTex, 5);
+    gl.drawArrays(gl.TRIANGLES, 0, st.trees.count);
+
+    for (var i = 0; i < 2; i++) {
+      var s = attrs[i];
+      gl.bindBuffer(gl.ARRAY_BUFFER, s.buf);
+      if (s.buf) gl.vertexAttribPointer(i, s.size, s.type, s.norm, s.stride, s.off);
+      if (!s.en) gl.disableVertexAttribArray(i);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, prevBuf);
+    gl.useProgram(prevProg);
+    if (!prevDepthTest) gl.disable(gl.DEPTH_TEST);
+    gl.depthMask(prevDepthMask);
+    gl.depthFunc(prevDepthFunc);
+    if (prevBlend) gl.enable(gl.BLEND);
+    if (prevCull) gl.enable(gl.CULL_FACE);
+    if (prevScissor) gl.enable(gl.SCISSOR_TEST);
+    gl.activeTexture(prevActive);
   }
 
   // ── context wrapping ──
@@ -522,6 +682,7 @@
       var drew = false;
       try { drew = drawGround(gl); } catch (e) { drew = false; }
       if (!drew) return origClear(gl.COLOR_BUFFER_BIT); // fall back to the engine fill
+      try { drawTrees(gl); } catch (e) { console.error('[hd-graphics] trees', e); }
     };
 
     setupOverlays(gl);
