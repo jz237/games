@@ -10,7 +10,7 @@
   <title>Stunt Car Racer</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="game.css?v=144">
+  <link rel="stylesheet" href="game.css?v=145">
   <style>
     html, body {
       margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000;
@@ -26,7 +26,7 @@
     oncontextmenu="event.preventDefault()"></canvas>
   <script>
     window.production = true;
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js?v=144').then(function (registration) {
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js?v=145').then(function (registration) {
       registration.update().catch(function () {});
     }).catch(function () {});
     var Module = {
@@ -36,7 +36,7 @@
         window.__scrRuntimeReady = true;
       },
       locateFile: function (path) {
-        return path === 'source.wasm' ? 'source.wasm?v=144' : path;
+        return path === 'source.wasm' ? 'source.wasm?v=145' : path;
       },
       print: function (text) {
         if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
@@ -56,17 +56,17 @@
       }())
     };
   </script>
-  <script src="hd-graphics.js?v=144"></script>
-  <script src="hd-audio.js?v=144"></script>
-  <script src="source.js?v=144" async></script>
-  <script src="controls.js?v=144"></script>
-  <script src="driver-controls.js?v=144"></script>
-  <script src="profile.js?v=144"></script>
-  <script src="track-access.js?v=144"></script>
-  <script src="hotseat.js?v=144"></script>
-  <script src="link-championship.js?v=144"></script>
-  <script src="backup.js?v=144"></script>
-  <script src="multiplayer.js?v=144"></script>
-  <script src="game.js?v=144"></script>
+  <script src="hd-graphics.js?v=145"></script>
+  <script src="hd-audio.js?v=145"></script>
+  <script src="source.js?v=145" async></script>
+  <script src="controls.js?v=145"></script>
+  <script src="driver-controls.js?v=145"></script>
+  <script src="profile.js?v=145"></script>
+  <script src="track-access.js?v=145"></script>
+  <script src="hotseat.js?v=145"></script>
+  <script src="link-championship.js?v=145"></script>
+  <script src="backup.js?v=145"></script>
+  <script src="multiplayer.js?v=145"></script>
+  <script src="game.js?v=145"></script>
 </body>
 </html>

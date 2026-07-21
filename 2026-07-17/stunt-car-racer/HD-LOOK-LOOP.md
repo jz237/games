@@ -36,19 +36,18 @@ backdrop + 'HD vNNN' badge, ?classic=1 escape hatch.
    and sky.jpg carries a photo range amplified to the bottom 22%; SKY QUAD FIX:
    fullscreen-triangle UVs span the VIEWPORT, so the shader now remaps v to the
    actual sky band read from SCISSOR_BOX — image bottom rides the horizon).
-4. **Contact shadows** — fake AO: darken ground/asphalt fragments within ~40 units of
-   walls (needs wall proximity — approximate via screen-space: NOT feasible per-fragment
-   without data; try instead a soft dark band at the BASE of wall faces via vWorld.y
-   proximity to local ground height captured…  investigate first, may be CLOSED-HARD).
-5. **Chain-link fence** — billboard strips along wall TOPS need per-wall positions
-   (no track data exported). Investigate reading vertex buffers in the bufferData
-   hook to harvest wall-top spans once per track load. Stretch goal; timebox it.
-6. **Grass calibration vs reference** — brightness/saturation A/B against REFERENCE.jpg
-   (current grass slightly deep; reference is sunnier). Tune modulation + macro floors.
-7. **Title screen art iteration** — regenerate menu.jpg with fal until composition ≈
-   reference (ramp right, valley center, mountains behind); keep UI clear-zone center.
-8. **Damage holes + flag/stopwatch icons** — replace remaining pixel art (cracked-glass
-   strip + tiny photoreal icons; keep positions/ids).
+4. ~~Contact shadows~~ **CLOSED-HARD it.4**: fragments have no neighbor-geometry or
+   adjacency data; SSAO impossible (WebGL1 default framebuffer depth is unreadable);
+   wall-base distance underivable from vWorld alone. Would need engine geometry.
+5. ~~Chain-link fence~~ **CLOSED-TIMEBOX it.5**: harvesting wall-top spans means
+   blind reverse-engineering of interleaved vertex buffers (layout unknown, per-track)
+   with real regression risk for a thin distant visual — beyond any sane timebox.
+6. ~~Grass calibration~~ **DONE it.4** (warm tint vec3(1.08,1.02,0.88) + brightness
+   lift on both the geometry grass branch and the ground quad — sunny reference green).
+7. ~~Title screen art~~ **DONE it.5** (reroll adopted: towering red/white-edged ramp
+   right, green hills + trees, snow mountains — reference mood).
+8. ~~Damage holes + icons~~ **DONE it.5** (PIL-drawn checkered flag, stopwatch dial,
+   torn-gap hole, cracked smash — same files/ids/positions).
 9. **Sun/bloom pass** — subtle warm tint + vignette via a final fullscreen quad after
    the frame? (needs end-of-frame hook — investigate requestAnimationFrame wrap; may
    conflict with engine loop — timebox).
@@ -102,6 +101,13 @@ backdrop + 'HD vNNN' badge, ?classic=1 escape hatch.
   #mm-btn-twoplayer hidden; do NOT touch stuntcarracer.fly.dev/CSP.
 
 ## ITERATION LOG
+- it.5 (2026-07-21): fence CLOSED-TIMEBOX (blind vertex-buffer reverse-engineering);
+  title reroll adopted (ramp-right composition); indicator sprites redrawn in PIL
+  (no API needed for ≤64px art). v145 DEPLOYED (grass + title + sprites batch).
+- it.4 (2026-07-21): shadows CLOSED-HARD (no adjacency/depth access at this layer);
+  grass calibrated warm+bright on both paths. LESSON: when an investigation item
+  dead-ends quickly, close it with reasons and pull the next quick win into the
+  same iteration — thin iterations waste loop cadence.
 - it.3 (2026-07-21): PHOTO MOUNTAINS SHIPPED — 2D backdrop discard + horizon-anchored
   sky mapping. LESSONS: (a) the sky quad's vUv covers the whole VIEWPORT (scissor just
   clips it) — anything positional in the sky image needs the SCISSOR_BOX remap;

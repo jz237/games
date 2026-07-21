@@ -173,7 +173,7 @@
       '    float macro = 0.88 + 0.24 * fbm(vWorld.xz * 0.0012);',                       // breaks tiling at range
     '    if (isGround) {',
       '      float lowland = 1.0 - smoothstep(60.0, 170.0, vWorld.y);',                 // elevated olive = deck surface
-      '      vec3 gtex = tri(uHdTexG, vWorld, Nn, 1.0 / 1500.0) * (1.05 + 0.4 * (g - 0.3));',
+      '      vec3 gtex = tri(uHdTexG, vWorld, Nn, 1.0 / 1500.0) * vec3(1.08, 1.02, 0.88) * (1.12 + 0.4 * (g - 0.3));',
       '      vec3 atex = tri(uHdTexA, vWorld, Nn, 1.0 / 680.0) * (0.9 + 1.1 * lum3(c));',
       '      c = mix(atex, gtex, lowland) * macro;',
       '    } else if (isEarth) {',
@@ -256,7 +256,7 @@
     '    float bias = -clamp(d / 9000.0, 0.0, 1.75);',                                  // fight mip flattening at range
     '    vec3 tNear = texture2D(uHdTexG, hit.xz / 1500.0, bias).rgb;',
     '    vec3 tFar  = texture2D(uHdTexG, hit.xz / 5000.0, bias * 0.5).rgb;',
-    '    c = mix(tNear, tFar, smoothstep(8000.0, 30000.0, d)) * macro * 1.1;',
+    '    c = mix(tNear, tFar, smoothstep(8000.0, 30000.0, d)) * vec3(1.08, 1.02, 0.88) * macro * 1.14;',
     '  } else {',
     '    c = scrubColor(hit.xz);',
     '  }',
