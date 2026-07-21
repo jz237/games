@@ -94,6 +94,22 @@
   container-type: size;
 }
 
+.main-menu-card::after {
+  content: 'HD v142 \00b7 21 Jul 2026';
+  position: absolute;
+  right: 1.6%;
+  bottom: 2%;
+  padding: 0.5vh 1.2vw;
+  background: rgba(8, 12, 22, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  color: #dfe8f5;
+  font: 600 clamp(9px, 1.9vh, 13px) system-ui, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0.05em;
+  z-index: 3;
+  pointer-events: none;
+}
+
 .main-menu-card .overlay-title-large {
   display: block;
   position: absolute;
