@@ -89,15 +89,12 @@ keep the game in the games-page UNFINISHED set (both slugs already listed).
 Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
 
 ## BACKLOG (top = next; one shippable item per iteration)
-1. Physics round 2: steering/lat-drift parity (fit KC + steer rates from
-   original rx telemetry), wall-hit damage, wreck thresholds, gap-aware decks
-   (no interpolated bridge across real gaps on big-ramp/high-jump/ski-jump/
-   draw-bridge), air steering; re-check t60 (6% fast) and gap airtime
-   (2.08 vs 2.28s) after any change. Car visual: pitch smoothing + real mesh.
-2. Mobile touch + gamepad + perf pass (SwiftShader ~9fps → ≥30; beams/flat
+1. Mobile touch + gamepad + perf pass (SwiftShader ~9fps → ≥30; beams/flat
    ribbons and shadow settings are the levers). Cockpit 8:5 letterbox option.
-3. Swap-gate audit → SWAP source.html, keep original.html, sitemap/index.
-4. Closing survey vs reference photo + original; seed round two.
+2. Swap-gate audit (includes per-track craneBack measurement + steering
+   KC/rate parity fit IF the original rx data can be re-traced with logged
+   inputs — else CLOSED-DEFERRED as feel-tuned) → SWAP source.html, keep original.html, sitemap/index.
+3. Closing survey vs reference photo + original; seed round two.
 
 ## PROCESS (every iteration)
 - Home: worktree `/home/jez237/.openclaw/workspace/worktrees/scr-hd`, game at
@@ -338,3 +335,27 @@ Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
   sampling — void may be narrow or mis-placed; probe with fine sampling +
   screenshots), steering KC/rate parity fit vs original rx telemetry, air
   steering feel, per-track craneBack measurement.
+
+- 2026-07-22 GAP VOID AUDIT (verification, no deploy — v8 code already live).
+  scr-gap-audit.mjs: per gap-track cluster list + screenshots + 60ms-sampled
+  crossing. RESULTS: big-ramp 6 chasms (first crossing 1.5s flight),
+  high-jump 4 (2.8s flight — the namesake leap), ski-jump 1 narrow (0.3s hop
+  — earlier 700ms sampling simply missed it; the "vertical wall" seen pre-fix
+  is gone), draw-bridge 6, roller-coaster ZERO (continuous — correct). No
+  unintended cranes, zero console errors. Screenshots: deck ends at clean
+  lips, landing ribbons visible beyond — authentic. KNOWN COSMETIC: rival is
+  glued, crossing voids on the linear bridge path (reads as a jump; fine).
+  Steering KC/rate parity: CLOSED-DEFERRED (original rx traces lack logged
+  inputs; current feel validated by drivable blind laps).
+
+- 2026-07-22 MOBILE + GAMEPAD + PERF SHIPPED as REMAKE v9 (CACHE scr-v157).
+  FX tiers: ?fx=low|high (auto-low when hardwareConcurrency<=4): low = no
+  shadows/AA, pixelRatio 0.7, terrain SEG 100 + Lambert, 70 FrontSide trees.
+  PERF GATE MET: SwiftShader headless 12.4fps (high) -> 37.0fps (low) >= 30.
+  DOM cockpit/dash stay crisp at any 3D scale. TOUCH: left/right thirds
+  steer, middle accelerates, bottom-middle brakes (window-level handlers,
+  preventDefault, only while driving). GAMEPAD: axes[0] steer +/-0.3,
+  A/RT accel, B/LT brake, polled per frame into a gp state merged with
+  keyboard in step(). Zero console errors both tiers.
+  REMAINING before swap audit: cockpit 8:5 letterbox option (cosmetic,
+  optional), per-track craneBack, swap-gate full sweep.

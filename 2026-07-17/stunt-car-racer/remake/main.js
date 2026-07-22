@@ -41,6 +41,8 @@ const TRACKS = {
 };
 const trackId = TRACKS[qs.get('track')] ? qs.get('track') : 'little-ramp';
 const CRANE_BACK = TRACKS[trackId].craneBack;
+// fx=low: no shadows/AA, 1x pixels, lighter world — mobile + headless proxy
+const FX = qs.get('fx') || (navigator.hardwareConcurrency <= 4 ? 'low' : 'high');
 
 // ---------- deterministic noise ----------
 function hash2(ix, iz) {
@@ -59,9 +61,9 @@ function clamp01(t) { return t < 0 ? 0 : t > 1 ? 1 : t; }
 function sstep(e0, e1, t) { return smooth(clamp01((t - e0) / (e1 - e0))); }
 
 // ---------- renderer / scene ----------
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-renderer.shadowMap.enabled = true;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: FX !== 'low' });
+renderer.setPixelRatio(FX === 'low' ? 0.7 : Math.min(window.devicePixelRatio || 1, 2));
+renderer.shadowMap.enabled = FX !== 'low';
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -327,13 +329,13 @@ async function buildWorld() {
 
   // --- terrain (after grid exists) ---
   {
-    const SIZE = 6400, SEG = 160;
+    const SIZE = 6400, SEG = FX === 'low' ? 100 : 160;
     const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) pos.setY(i, terrainH(pos.getX(i), pos.getZ(i)));
     geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1.0 }));
+    const mesh = new THREE.Mesh(geo, FX === 'low' ? new THREE.MeshLambertMaterial({ map: grassTex }) : new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1.0 }));
     mesh.receiveShadow = true;
     scene.add(mesh);
   }
@@ -349,9 +351,9 @@ async function buildWorld() {
       return g;
     }
     const geos = [speciesGeo(0, 0.5), speciesGeo(0.5, 1)];
-    const mat = new THREE.MeshStandardMaterial({ map: sheet, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0 });
+    const mat = new THREE.MeshStandardMaterial({ map: sheet, alphaTest: 0.5, side: FX === 'low' ? THREE.FrontSide : THREE.DoubleSide, roughness: 1.0 });
     let placed = 0, tries = 0;
-    while (placed < 160 && tries < 900) {
+    while (placed < (FX === 'low' ? 70 : 160) && tries < 900) {
       const i = tries++;
       const x = (hash2(i, 17) - 0.5) * 3000;
       const z = (hash2(i, 53) - 0.5) * 3000;
@@ -633,6 +635,37 @@ function syncWorldPose() {
 
 // ---------- input ----------
 const keys = {};
+const gp = { w: false, a: false, s: false, d: false };
+// touch: left/right thirds steer, middle accelerates, bottom-middle brakes
+function applyTouches(list) {
+  gp.tw = gp.ta = gp.ts = gp.td = false;
+  for (const t of list) {
+    const fx2 = t.clientX / window.innerWidth, fy = t.clientY / window.innerHeight;
+    if (fx2 < 0.33) gp.ta = true;
+    else if (fx2 > 0.67) gp.td = true;
+    else if (fy > 0.72) gp.ts = true;
+    else gp.tw = true;
+  }
+}
+for (const ev of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
+  window.addEventListener(ev, (e) => {
+    if (!state.driving) return;
+    applyTouches(e.touches);
+    e.preventDefault();
+  }, { passive: false });
+}
+function pollGamepad() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  gp.w = gp.a = gp.s = gp.d = false;
+  for (const p of pads) {
+    if (!p) continue;
+    const ax = p.axes[0] || 0;
+    if (ax < -0.3) gp.a = true;
+    if (ax > 0.3) gp.d = true;
+    if ((p.buttons[7] && p.buttons[7].pressed) || (p.buttons[0] && p.buttons[0].pressed)) gp.w = true;
+    if ((p.buttons[6] && p.buttons[6].pressed) || (p.buttons[1] && p.buttons[1].pressed)) gp.s = true;
+  }
+}
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'KeyC' && state.driving) state.chase = !state.chase;
@@ -653,10 +686,10 @@ const BRAKE = 300;
 const KC = 0.004;      // centrifugal outward drift factor (A/B-tunable)
 const STEER_BASE = 3, STEER_V = 0.045; // lateral m/s per unit speed
 function step(dt) {
-  const fwd = keys['KeyW'] || keys['ArrowUp'];
-  const brk = keys['KeyS'] || keys['ArrowDown'];
-  const left = keys['KeyA'] || keys['ArrowLeft'];
-  const right = keys['KeyD'] || keys['ArrowRight'];
+  const fwd = keys['KeyW'] || keys['ArrowUp'] || gp.w || gp.tw;
+  const brk = keys['KeyS'] || keys['ArrowDown'] || gp.s || gp.ts;
+  const left = keys['KeyA'] || keys['ArrowLeft'] || gp.a || gp.ta;
+  const right = keys['KeyD'] || keys['ArrowRight'] || gp.d || gp.td;
   state.grind = false;
   if (!state.airborne) {
     const vd = state.speed / DISP2MS; // display units for the fitted model
@@ -870,6 +903,7 @@ function drawDash(cnv) {
 let last = performance.now(), acc = 0, frames = 0, fpsT = 0, fps = 0;
 function frame(now) {
   requestAnimationFrame(frame);
+  pollGamepad();
   let dt = (now - last) / 1000;
   last = now;
   if (dt > 0.1) dt = 0.1;
@@ -916,7 +950,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 8,
+    version: 9,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });
