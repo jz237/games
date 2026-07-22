@@ -546,3 +546,36 @@ CLOSED-HARD with rationale. Feel roadmap if a future round reopens: tune
 skip frequency (suspension rates), landing bounce restitution vs original
 video captures, air-tumble rates, opponent physics (Opponent Behaviour.cpp
 unread).
+
+## WORLD-SPACE PHYSICS REWRITE — REMAKE v16 (CACHE scr-v165)
+USER: "physics not correct, missing something." THE MISSING THING: the car
+lived in ROAD coordinates — s advanced ALONG THE TRACK'S CURVE even in
+mid-air (jumps followed corners!), and velocity could never leave the road
+frame. THE ORIGINAL IS WORLD-SPACE: player x/y/z + world velocity vector;
+the track is just collision geometry under the wheels.
+REWRITE: state = world (x,y,z,vx,vy,vz,heading); the trike wheels sample
+deckAt(wheel world pos) (deckAt upgraded: skips gap segs, returns bank +
+segment frame); thrust along the CAR's heading; drags on the velocity
+VECTOR; surface-normal push (slopes decelerate climbs, BANKING pushes you
+around corners) from wheel forces; LATERAL GRIP per CalculateXAcceleration:
+sideways velocity killed fully per original step CAPPED at 2x contact force
+— sliding EMERGES when fast/light; walls kill outward velocity with a
+slight rebound + side-wheel damage; airborne = pure ballistic STRAIGHT
+LINE (flying off a bending track lands you off-line — the terror is back).
+STEERING (the second discovery): the original's cornering is mostly
+Track[piece].steeringAmount + AlignCarWithRoad — THE ROAD TURNS THE CAR
+(feed-forward k*v into heading + 5/s error spring, grounded only); the
+stick adjusts on top (authority ∝ speed); my first translation had ~13x
+too little authority — corner test at 80 m/s ploughed 60m wide.
+OFF-TRACK: original's OFF_TRACK_LIMIT ported — grounded off-deck 3.5s ->
+crane re-drop at the LAST ON-TRACK s (skipping back out of gap segments).
+CRANE RECOVERY BUG: the earlier world-space patch to craneRecover silently
+NO-OPED (unasserted str.replace) — it repositioned s but not x/z, dropping
+cars at their crash sites. LESSON: assert every patch anchor.
+s/lat are now DERIVED from deckAt for laps/HUD/camera/rival. Autopilot for
+audits = aim-ahead steering + self-calibrated turn sign + rival's
+sqrt(1400/kmax) anticipatory braking (window.__autopilot = {}).
+VERIFIED: brake 158->22 in 3s; unsteered car flies off corner 1 tangentially
+(lat -45, authentic); blind-W lap with 2 crane recoveries; autopilot laps:
+little-ramp 69s pt, hump-back 60s, ski-jump 134s (incl. crane starts);
+zero console errors throughout. Full 8-track re-audit queued next session.

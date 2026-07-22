@@ -208,6 +208,7 @@ function deckAt(x, z) {
   let best = null, bestD = Infinity;
   for (const i of nearPoints(x, z)) {
     for (const j of [i, (i - 1 + path.length) % path.length]) {
+      if (gapSeg.has(j)) continue; // chasms have no deck to land on
       const a = path[j], b = path[(j + 1) % path.length];
       const abx = b.x - a.x, abz = b.z - a.z;
       const L2 = abx * abx + abz * abz;
@@ -224,7 +225,7 @@ function deckAt(x, z) {
         const il = 1 / Math.sqrt(L2);
         const cross = (abx * il) * (z - pz) - (abz * il) * (x - px);
         bestD = d;
-        best = { seg: j, t, lat: cross > 0 ? d : -d, halfW: w / 2, y: cy + (bank / w) * (cross > 0 ? d : -d), cy, slope: (b.y - a.y) * il };
+        best = { seg: j, t, lat: cross > 0 ? d : -d, halfW: w / 2, y: cy + (bank / w) * (cross > 0 ? d : -d), cy, slope: (b.y - a.y) * il, bank, w, fx: abx * il, fz: abz * il, angle: Math.atan2(abx * il, abz * il) };
       }
     }
   }
@@ -253,7 +254,7 @@ let startIdx = 0;
 // road coordinates — the road carries you around corners (blind-W drives a
 // lap, exactly as the original's telemetry shows); steering moves `lat`.
 const state = {
-  s: 0, lat: 0, y: 0,
+  s: 0, lat: 0, y: 0, vx: 0, vz: 0,
   x: 0, z: 0, heading: 0,       // derived world pose (render + rigs)
   speed: 0, vy: 0, airborne: false, driving: false, chase: false,
   pt: 0,                         // physics time — headless wall-clock lies
@@ -642,22 +643,19 @@ function respawn() {
   const i0 = (startIdx - CRANE_BACK + N2) % N2;
   state.s = cum[i0]; state.lat = 0;
   const r = roadAt(state.s);
-  state.y = r.y;
-  state.speed = 0; state.vy = 0; state.airborne = false;
-  state.yawOff = 0; state.yawV = 0; state.accLatch = false;
-  state.craneT = 0; state.y = roadAt(state.s).y + CRANE_DROP_H;
+  state.x = r.x; state.z = r.z; state.heading = r.angle;
+  state.vx = 0; state.vz = 0; state.vy = 0;
+  state.speed = 0; state.airborne = false;
+  state.yawV = 0; state.accLatch = false;
+  state.pitch = 0; state.roll = 0; state.pitchV = 0; state.rollV = 0;
+  state.craneT = 0; state.y = r.y + CRANE_DROP_H;
   state.lap = 0; state.lapT0 = state.pt; state.lastLap = null; state.boost = 34;
+  state.damage = 0; state.wDmg = [0, 0, 0];
   state.relPrev = ((state.s - cum[startIdx]) % total + total) % total;
   state.lastMoveT = state.pt;
   rival.s = state.s + 32; rival.speed = 0;
-  syncWorldPose();
 }
-function syncWorldPose() {
-  const r = roadAt(state.s);
-  state.x = r.x + (-r.fz) * state.lat;
-  state.z = r.z + r.fx * state.lat;
-  state.heading = r.angle + (state.yawOff || 0);
-}
+function syncWorldPose() { /* world pose IS the state now */ }
 
 // ---------- input ----------
 const keys = {};
@@ -713,93 +711,88 @@ const BRAKE = 300;
 const KC = 0.004;      // centrifugal outward drift factor (A/B-tunable)
 const STEER_BASE = 3, STEER_V = 0.045; // lateral m/s per unit speed
 function step(dt) {
-  // crane phase: the car hangs on chains, lowering to the release height,
-  // then drops STATIONARY onto its suspension
+  // ---- crane: lowered on chains above the drop point, released stationary ----
   if (state.craneT >= 0) {
     state.craneT += dt;
-    const r0c = roadAt(state.s);
-    const targetY = r0c.y + Math.max(CRANE_REL, CRANE_DROP_H - CRANE_RATE * state.craneT);
-    state.y = targetY;
-    state.speed = 0; state.vy = 0;
+    const d0 = deckAt(state.x, state.z);
+    const baseY = d0 ? d0.y : terrainH(state.x, state.z);
+    state.y = baseY + Math.max(CRANE_REL, CRANE_DROP_H - CRANE_RATE * state.craneT);
+    state.vx = 0; state.vz = 0; state.vy = 0; state.speed = 0;
     const craneEl2 = document.getElementById('crane');
     if (craneEl2) craneEl2.style.display = 'block';
     if (CRANE_DROP_H - CRANE_RATE * state.craneT <= CRANE_REL) {
-      state.craneT = -1;               // release: free fall onto the deck
-      state.airborne = true;
+      state.craneT = -1;
       if (craneEl2) craneEl2.style.display = 'none';
       state.lastMoveT = state.pt;
     }
     state.pt += dt;
-    syncWorldPose();
     return;
+  }
+  // ---- autopilot (headless audits): aim at the centreline ahead, brake for turns ----
+  if (window.__autopilot && state.driving) {
+    const A = window.__autopilot;
+    gp.ta = gp.td = gp.ts = false;
+    if (A.dSign === undefined) { // calibrate: which way does "right" turn heading?
+      if (A.calT === undefined) { A.calT = 0; A.h0 = state.heading; }
+      A.calT += dt;
+      gp.td = true;
+      if (A.calT > 0.35) {
+        let dh = state.heading - A.h0;
+        while (dh > Math.PI) dh -= 2 * Math.PI;
+        while (dh < -Math.PI) dh += 2 * Math.PI;
+        A.dSign = dh >= 0 ? 1 : -1;
+        gp.td = false;
+      }
+    } else {
+      const spdA = Math.hypot(state.vx, state.vz);
+      const onDeck = !!deckAt(state.x, state.z);
+      const ahead = onDeck ? Math.max(45, spdA * 0.9) : 0; // off-road: return to the road
+      const rA = roadAt(state.s + ahead);
+      if (!onDeck && spdA > 60) gp.ts = true;
+      let want = Math.atan2(rA.x - state.x, rA.z - state.z) - state.heading;
+      while (want > Math.PI) want -= 2 * Math.PI;
+      while (want < -Math.PI) want += 2 * Math.PI;
+      if (Math.abs(want) > 2.6) { gp.td = true; gp.ta = false; } // target behind: commit to one side
+      else if (want * A.dSign > 0.05) gp.td = true;
+      else if (want * A.dSign < -0.05) gp.ta = true;
+      // anticipatory braking: corner-speed rule shared with the rival AI
+      let kmax = 1e-4;
+      const ri2 = roadAt(state.s).i;
+      for (let j = 0; j < 14; j++) kmax = Math.max(kmax, Math.abs(seg[(ri2 + j) % path.length].k));
+      const vT = Math.sqrt(1400 / kmax);
+      if (spdA > vT || (Math.abs(want) > 1 && spdA > 40)) gp.ts = true;
+    }
   }
   const fwd = keys['KeyW'] || keys['ArrowUp'] || gp.w || gp.tw;
   const brk = keys['KeyS'] || keys['ArrowDown'] || gp.s || gp.ts;
   const left = keys['KeyA'] || keys['ArrowLeft'] || gp.a || gp.ta;
   const right = keys['KeyD'] || keys['ArrowRight'] || gp.d || gp.td;
   state.grind = false;
-  // ---- longitudinal model from the original (CarControl/BoostPower/
-  // CalculateTotalAcceleration/ReduceWorldAcceleration) ----
-  // throttle LATCHES: once accelerating, keeps accelerating until BRAKE
   if (fwd) state.accLatch = true;
   if (brk) state.accLatch = false;
-  const vd = state.speed / DISP2MS;
-  let engine = 0;
-  if ((fwd || state.accLatch) && vd < 171.6) engine = T_MS;       // thrust cut at 120*256
-  else if (brk) engine = -T_MS;
-  // boost DOUBLES engine accel while reserve lasts (also with brake held)
-  const boostKey = keys['ShiftLeft'] || keys['ShiftRight'] || gp.b;
-  state.boosting = !!(boostKey && (state.accLatch || fwd || brk) && state.boost > 0);
-  if (state.boosting) { engine *= 2; state.boost = Math.max(0, state.boost - 0.52 * dt); }
-  // grip rule: |engine| capped at 2x wheel contact force — no thrust in the air
-  const gripCap = 2 * (state.contactF || 0);
-  if (Math.abs(engine) > gripCap) engine = Math.sign(engine) * gripCap;
-  state.engAcc = engine;
-  // drags: linear wind + quadratic (ReduceWorldAcceleration) + slope gravity
-  const sl = Math.max(-0.3, Math.min(0.3, roadAt(state.s).slope));
-  state.speed += (engine - WIND_S * state.speed - QDRAG_MS * state.speed * state.speed - GRAV * sl) * dt;
-  if (state.speed < 0) state.speed = 0;
-  const r0 = roadAt(state.s);
-  // ---- free-yaw steering + road alignment (CalculateSteering/AlignCarWithRoad) ----
-  const steer = (right ? 1 : 0) - (left ? 1 : 0);
-  const grounded2 = (state.contactF || 0) > 0;
-  state.yawV += steer * (grounded2 ? 3.2 : 0.9) * dt;
-  if (grounded2) state.yawV += (-state.yawOff) * 8 * dt;   // road pulls the car straight
-  state.yawV *= Math.max(0, 1 - (grounded2 ? 5 : 0.5) * dt);
-  state.yawOff = Math.max(-0.6, Math.min(0.6, state.yawOff + state.yawV * dt));
-  state.s += state.speed * Math.cos(state.yawOff) * dt;
-  state.lat += state.speed * Math.sin(state.yawOff) * dt;
-  state.lat -= r0.k * state.speed * state.speed * KC * dt;  // centrifugal
-  const r = roadAt(state.s);
-  // 2.7m walls are impassable at deck height: clamp + grind
-  const lim = r.w / 2 - 2.1;
-  if (!state.airborne || state.y < r.y + 3) {
-    if (state.lat > lim) { state.lat = lim; state.grind = true; }
-    if (state.lat < -lim) { state.lat = -lim; state.grind = true; }
-    if (state.grind && !state.airborne) {
-      state.yawOff *= Math.max(0, 1 - 4 * dt);
-      state.yawV *= Math.max(0, 1 - 4 * dt);
-      state.speed *= (1 - 0.55 * dt);
-      if (state.speed > 100) {
-        const side = state.lat > 0 ? 0 : 1; // FL grinds left wall, FR right
-        state.wDmg[side] = Math.min(40, state.wDmg[side] + 3.5 * dt);
-        state.damage = (state.wDmg[0] + state.wDmg[1] + state.wDmg[2]) / 3;
-      }
-    }
-  }
-  // ---- three-wheel contact physics (from the original's trike model) ----
-  // wheel world road heights at each contact point
+
+  const Fx = Math.sin(state.heading), Fz = Math.cos(state.heading); // forward
+  const Lx = Math.cos(state.heading), Lz = -Math.sin(state.heading); // left
+
+  // ---- three-wheel WORLD contacts (the original's trike, in world space) ----
   let totalF = 0, pitchT = 0, rollT = 0, contacts = 0, maxComp = 0;
-  const wheelBelow = [];
+  let pushX = 0, pushZ = 0, grass = false;
+  const wheelBelow = [0, 0, 0];
+  let refDeck = null;
   for (let w = 0; w < 3; w++) {
     const ww = WHEELS[w];
-    const rw = roadAt(state.s - ww.dz);            // forward = -dz
-    const latW = state.lat + ww.dx;
-    let roadY = -1e9;
-    if (!rw.gap && Math.abs(latW) <= rw.w / 2 + 0.4) {
-      roadY = rw.y + (rw.bank / rw.w) * latW;
+    const wx = state.x + Fx * -ww.dz + Lx * ww.dx;
+    const wz = state.z + Fz * -ww.dz + Lz * ww.dx;
+    const d = deckAt(wx, wz);
+    let roadY, slope = 0, sfx = 0, sfz = 0, bankLat = 0, latDirX = 0, latDirZ = 0;
+    if (d && Math.abs(d.lat) <= d.halfW + 0.4) {
+      roadY = d.y; slope = d.slope; sfx = d.fx; sfz = d.fz;
+      bankLat = d.bank / d.w; latDirX = -d.fz; latDirZ = d.fx;
+      if (!refDeck || w === 2) refDeck = d;
+    } else {
+      roadY = terrainH(wx, wz); // grass is drivable, punishingly
+      grass = true;
     }
-    // wheel actual height from CG + attitude (small-angle)
     const hW = state.y + ww.dz * state.pitch + ww.dx * state.roll;
     let diff = roadY - hW;
     if (diff > W_CLAMP_UP) diff = W_CLAMP_UP;
@@ -808,27 +801,28 @@ function step(dt) {
     if (amt < 0) amt = 0;
     state.wOld[w] = diff;
     state.wAmt[w] = amt;
-    wheelBelow.push(amt);
+    wheelBelow[w] = amt;
     if (amt > 0) {
       contacts++;
       const F = Math.min(amt, W_AMT_CAP) * W_K;
       totalF += F;
-      // restoring: force under a wheel rotates the body to RAISE that wheel
       pitchT += F * ww.dz;
       rollT += F * ww.dx;
+      // surface-normal tilt: climbing decelerates, banking pushes sideways
+      pushX += F * (-slope * sfx - bankLat * latDirX) * 0.9;
+      pushZ += F * (-slope * sfz - bankLat * latDirZ) * 0.9;
       if (amt > maxComp) maxComp = amt;
     }
   }
   const wasAirborne = state.airborne;
   state.airborne = contacts === 0;
-  // low-pass the contact force for the grip rule: the original's ~8Hz step
-  // never registers sub-0.12s hops, so brief skips must not cut thrust
+  // low-pass for the grip rule (the original's ~8Hz step ignores brief hops)
   state.contactF = (state.contactF || 0) + (totalF - (state.contactF || 0)) * Math.min(1, 6 * dt);
-  // vertical: gravity + wheel forces
+
+  // ---- vertical + attitude ----
   state.vy += (-GRAV + totalF) * dt;
-  if (contacts > 0) state.vy *= Math.max(0, 1 - 6 * dt); // tyre/suspension damping
+  if (contacts > 0) state.vy *= Math.max(0, 1 - 6 * dt);
   state.y += state.vy * dt;
-  // hard-landing damage from compression spike
   if (wasAirborne && contacts > 0) {
     state.lastImpact = Math.max(state.lastImpact, Math.abs(state.vy) + maxComp * 8);
     for (let w = 0; w < 3; w++) {
@@ -836,14 +830,12 @@ function step(dt) {
     }
     state.damage = (state.wDmg[0] + state.wDmg[1] + state.wDmg[2]) / 3;
   }
-  // attitude: torques from wheel forces; free tumble in the air
   state.pitchV += (pitchT / I_PITCH) * dt;
   state.rollV += (rollT / I_ROLL) * dt;
-  // align toward road grade while grounded (tyres resist twist)
-  if (contacts > 0) {
-    state.pitchV -= (state.engAcc || 0) * 0.004; // acceleration wheelie (nose up)
-    const targetPitch = -Math.atan(Math.max(-0.35, Math.min(0.35, r.slope)));
-    const targetRoll = -Math.atan2(r.bank, r.w);
+  if (contacts > 0 && refDeck) {
+    state.pitchV -= (state.engAcc || 0) * 0.004; // acceleration wheelie
+    const targetPitch = -Math.atan(Math.max(-0.35, Math.min(0.35, refDeck.slope)));
+    const targetRoll = -Math.atan2(refDeck.bank, refDeck.w);
     state.pitchV += (targetPitch - state.pitch) * 85 * dt;
     state.rollV += (targetRoll - state.roll) * 95 * dt;
     state.pitchV *= Math.max(0, 1 - 11 * dt);
@@ -854,16 +846,102 @@ function step(dt) {
   }
   state.pitch = Math.max(-0.55, Math.min(0.55, state.pitch + state.pitchV * dt));
   state.roll = Math.max(-0.55, Math.min(0.55, state.roll + state.rollV * dt));
-  // floor: never sink through the deck
-  const deckY = r.gap ? -1e9 : r.y + (r.bank / r.w) * state.lat;
-  if (deckY > -1e8 && state.y < deckY - 0.6) { state.y = deckY - 0.6; if (state.vy < 0) state.vy = 0; }
-  // fell into a chasm to the valley floor
-  if (state.y < 2) {
-    state.damage = Math.min(40, (state.damage || 0) + 10);
-    if (!state.wrecking) craneRecover();
+  // never sink through a deck under the car
+  const dUnder = deckAt(state.x, state.z);
+  if (dUnder && Math.abs(dUnder.lat) <= dUnder.halfW && state.y < dUnder.y - 0.6) {
+    state.y = dUnder.y - 0.6;
+    if (state.vy < 0) state.vy = 0;
   }
+
+  // ---- longitudinal: thrust along the CAR's heading; drags on the velocity ----
+  const spd = Math.hypot(state.vx, state.vz);
+  const vFwd = state.vx * Fx + state.vz * Fz;
+  const vd = vFwd / DISP2MS;
+  let engine = 0;
+  if (brk) engine = -T_MS;               // brake overrides throttle
+  else if ((fwd || state.accLatch) && vd < 171.6) engine = T_MS;
+  const boostKey = keys['ShiftLeft'] || keys['ShiftRight'] || gp.b;
+  state.boosting = !!(boostKey && (state.accLatch || fwd || brk) && state.boost > 0);
+  if (state.boosting) { engine *= 2; state.boost = Math.max(0, state.boost - 0.52 * dt); }
+  const gripCap = 2 * (state.contactF || 0);
+  if (Math.abs(engine) > gripCap) engine = Math.sign(engine) * gripCap;
+  state.engAcc = engine;
+  state.vx += Fx * engine * dt;
+  state.vz += Fz * engine * dt;
+  // drags (wind + quadratic + grass) act against the velocity vector
+  const dragA = WIND_S * spd + QDRAG_MS * spd * spd + (grass && contacts > 0 ? 28 : 0);
+  if (spd > 0.05) {
+    const k = Math.min(1, dragA * dt / spd);
+    state.vx -= state.vx * k;
+    state.vz -= state.vz * k;
+  }
+  // surface-normal push (slopes and banking)
+  state.vx += pushX * dt;
+  state.vz += pushZ * dt;
+  // lateral tyre grip (CalculateXAcceleration): kill sideways velocity fully
+  // per original step, CAPPED at 2x contact force — sliding emerges beyond it
+  const vLat = state.vx * Lx + state.vz * Lz;
+  if (contacts > 0) {
+    const want = Math.abs(vLat) * Math.min(1, 8.3 * dt);
+    const cap = gripCap * dt;
+    const kill = Math.sign(vLat) * Math.min(want, cap);
+    state.vx -= Lx * kill;
+    state.vz -= Lz * kill;
+  }
+
+  // ---- steering (CalculateSteering + AlignCarWithRoad + per-piece
+  // steeringAmount): grounded, THE ROAD TURNS THE CAR — feed-forward its
+  // curvature rate plus an error spring; the player's stick adjusts on top.
+  // Airborne: nothing steers you. Sliding happens via the grip cap.
+  const steer = (right ? 1 : 0) - (left ? 1 : 0);
+  const grounded2 = contacts > 0;
+  state.yawV += steer * (0.9 * Math.max(0.25, Math.abs(vd) / 92)) * dt;
+  if (grounded2 && refDeck) {
+    const sg2 = seg[refDeck.seg];
+    state.heading += sg2.k * vFwd * dt;           // the road's own turn rate
+    let da = refDeck.angle - state.heading;
+    while (da > Math.PI) da -= 2 * Math.PI;
+    while (da < -Math.PI) da += 2 * Math.PI;
+    if (Math.abs(da) < Math.PI / 2) state.heading += da * Math.min(1, 5 * dt);
+  }
+  state.yawV *= Math.max(0, 1 - (grounded2 ? 3 : 0.4) * dt);
+  state.heading += state.yawV * dt;
+
+  // ---- integrate world position ----
+  state.x += state.vx * dt;
+  state.z += state.vz * dt;
+
+  // ---- walls: impassable at deck height ----
+  const dNow = deckAt(state.x, state.z);
+  if (dNow && state.y > dNow.cy - 2.5 && state.y < dNow.cy + 4.5) {
+    const lim = dNow.halfW - 1.6;
+    if (Math.abs(dNow.lat) > lim && Math.abs(dNow.lat) < dNow.halfW + 1.5) {
+      const sgn = dNow.lat > 0 ? 1 : -1;
+      const latDirX = -dNow.fz * sgn, latDirZ = dNow.fx * sgn; // outward
+      const overshoot = Math.abs(dNow.lat) - lim;
+      state.x -= latDirX * overshoot;
+      state.z -= latDirZ * overshoot;
+      const vOut = state.vx * latDirX + state.vz * latDirZ;
+      if (vOut > 0) {
+        state.vx -= latDirX * vOut * 1.25; // slight rebound off the blocks
+        state.vz -= latDirZ * vOut * 1.25;
+        if (vOut > 12) {
+          const side = sgn > 0 ? 0 : 1;
+          state.wDmg[side] = Math.min(40, state.wDmg[side] + vOut * 0.12);
+          state.damage = (state.wDmg[0] + state.wDmg[1] + state.wDmg[2]) / 3;
+        }
+      }
+      state.grind = true;
+    }
+  }
+
+  // ---- derived road coordinate (laps, HUD, camera, rival) ----
+  if (dNow) {
+    state.s = cum[dNow.seg] + dNow.t * (cum[dNow.seg + 1] - cum[dNow.seg]);
+    state.lat = dNow.lat;
+  }
+  state.speed = spd;
   state.pt += dt;
-  syncWorldPose();
   // lap line crossing (start line at cum[startIdx])
   const lineS = cum[startIdx];
   const rel = ((state.s - lineS) % total + total) % total;
@@ -880,13 +958,18 @@ function step(dt) {
     state.lapT0 = state.pt;
   }
   state.relPrev = rel;
-  // wreck watch: stuck (gap trap / head-on grind) or damage limit -> crane
-  if (state.speed > 5 * DISP2MS || !fwd) state.lastMoveT = state.pt; // idle isn't stuck
+  // off-track: grounded with no deck under the car (the original re-drops
+  // after OFF_TRACK_LIMIT steps off the road)
+  if (!dNow && contacts > 0) state.offT = (state.offT || 0) + dt;
+  else state.offT = 0;
+  if (state.offT > 3.5 && !state.wrecking && state.driving) craneRecover();
+  // wreck watch: stuck under throttle or damage limit -> crane
+  if (state.speed > 5 * DISP2MS || !fwd) state.lastMoveT = state.pt;
   if (!state.wrecking && state.driving &&
       ((state.pt - state.lastMoveT > 3 && state.pt > 4) || (state.damage || 0) >= 32)) {
     craneRecover();
   }
-  // rival AI: same thrust model at 93%, corner-aware target speed, glued
+  // rival AI: road-relative follower (unchanged)
   if (rival.on) {
     const rv = rival.speed / DISP2MS;
     let kmax = 1e-4;
@@ -905,12 +988,22 @@ function craneRecover() {
   const craneEl = document.getElementById('crane');
   if (craneEl) craneEl.style.display = 'block';
   setTimeout(() => {
-    const N2 = path.length;
-    const back = ((startIdx - 24 + N2) % N2);
-    state.s = cum[back]; state.lat = 0;
-    state.y = roadAt(state.s).y;
-    state.speed = 0; state.vy = 0; state.airborne = false;
-    state.craneT = 0; state.y = roadAt(state.s).y + CRANE_DROP_H;
+    // re-drop at the last on-track position (the original re-drops at the
+    // current piece), never inside a chasm
+    let sBack = state.s - 30;
+    for (let tries = 0; tries < 12; tries++) {
+      const probe = roadAt(sBack);
+      if (!gapSeg.has(probe.i)) break;
+      sBack -= 15;
+    }
+    state.s = ((sBack % total) + total) % total;
+    const rr2 = roadAt(state.s);
+    state.x = rr2.x; state.z = rr2.z; state.heading = rr2.angle;
+    state.lat = 0; state.offT = 0;
+    state.vx = 0; state.vz = 0; state.vy = 0; state.speed = 0;
+    state.airborne = false; state.yawV = 0; state.accLatch = false;
+    state.pitch = 0; state.roll = 0; state.pitchV = 0; state.rollV = 0;
+    state.craneT = 0; state.y = rr2.y + CRANE_DROP_H;
     state.lastMoveT = state.pt;
     state.damage = 0; state.wDmg = [0, 0, 0];
     state.wrecking = false;
@@ -1057,14 +1150,15 @@ buildWorld().then(() => {
     deckAt, terrainH, respawn, roadAt,
     teleport: (idx, chase) => {
       state.s = cum[((idx % path.length) + path.length) % path.length];
-      state.lat = 0; state.speed = 0; state.vy = 0; state.airborne = false;
-      state.y = roadAt(state.s).y;
+      const rt = roadAt(state.s);
+      state.x = rt.x; state.z = rt.z; state.heading = rt.angle;
+      state.lat = 0; state.speed = 0; state.vx = 0; state.vz = 0; state.vy = 0;
+      state.airborne = false; state.y = rt.y;
       if (chase != null) state.chase = chase;
-      syncWorldPose();
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 15,
+    version: 16,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });
