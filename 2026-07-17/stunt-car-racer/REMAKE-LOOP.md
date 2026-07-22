@@ -89,11 +89,21 @@ keep the game in the games-page UNFINISHED set (both slugs already listed).
 Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
 
 ## BACKLOG (top = next; one shippable item per iteration)
-1. Physics tuning round 1 vs parity targets: A/B harness scripts the SAME
-   inputs in remake + original, overlays speed curves; fit ACCEL/DRAG to the
-   traced accel curve, verify jump airtime on the ramp (tune GRAV), add the
-   crane-launch (exit at display 28), fix spawn direction to match original
-   race direction (car must reach ramp section ~40% in, as telemetry did).
+1. Trace remaining 7 tracks (batch scr-trace.mjs per track; process with the
+   PLAIN nearest-XZ chain — it was correct; single-level loops assumed, check
+   each with the slat-structure dot plot first); build all in the remake
+   (track picker menu); sweep screenshots.
+2. Cockpit/HUD integration (reuse stack) + audio integration (reuse mixer).
+3. Rival AI + race flow (crane start, laps, win/lose, damage/wreck/records).
+4. Physics round 2: steering/lat-drift parity (fit KC + steer rates from
+   original rx telemetry), wall-hit damage, wreck thresholds, fall-into-gap
+   crane recovery, air steering; re-check t60 (currently 6% fast) and gap
+   airtime (2.08 vs 2.28) after any change. Car visual: pitch smoothing +
+   proper mesh (box intersects deck on sharp slope changes in chase view).
+5. Mobile touch + gamepad + perf pass (SwiftShader ~9fps → ≥30; beams/flat
+   ribbons and shadow settings are the levers).
+6. Swap-gate audit → SWAP source.html, keep original.html, sitemap/index.
+7. Closing survey vs reference photo + original; seed round two.
 3. PYLONS + contact shadows (the anchoring payoff) + underside framing.
 4. Physics tuning round 1 vs parity targets (accel/top/jump arc on Little Ramp).
 5. Trace remaining 7 tracks (batch the harness); build all; sweep screenshots.
@@ -144,6 +154,63 @@ Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
 
 ## ITERATION LOG
 - (newest first: item, result, lesson)
+- 2026-07-22 PHYSICS PARITY LANDED — REMAKE v4 DEPLOYED (CACHE scr-v152).
+  FINAL MODEL (all A/B-verified vs original telemetry): road-relative (s,lat,
+  y); thrust 11.07−0.000978v² display; NO slope decel (original ignores
+  grade — the 'climb grind' was off-road wall push, evidence void); car GLUED
+  to road over crests (original never lifts on the hill at 85+) — airborne
+  ONLY when road falls >2.2m/tick (gap lip/cliff), takeoff vy = approach
+  slope (±0.3 clamp) × speed; GRAV=55 (A/B-fit); CRANE_BACK=283 (crane drops
+  most of a lap before the line; the LINE sits just past the gap jump).
+  PARITY: top 92 exact; t90 9.98 vs 10.02 (0.4%); t60 3.67 vs 3.92 (6%);
+  gap-jump flight 2.08 vs 2.28s (8.8% — inside ±10% gate); t30 offset is
+  crane-timing semantics (mine instant, original ramps in ~0.3s).
+  TRACK TRUTH (dot-plot scr-trace/slat-structure.png was decisive): SINGLE-
+  LEVEL rounded-triangle loop, NO stacked decks — the v2 nearest-XZ chain
+  was RIGHT all along; the 'impossible cliffs' are REAL: ramp-up to a lip at
+  1560u (32.5m!) → chasm (dip floor 320) → landing → the LINE. Plus the big
+  hill (climb 0.125, plateau 3744, descent 0.25) mid-lap. Direction: +index,
+  spawn at (startIdx−283)%N. GRAV=50 lands short (dip-trap), 55 clears —
+  arc is sensitive; keep 55.
+  AUTOPILOT (for future track traces): rx-centering P-controller works on
+  flats; steering DURING the jump approach breaks the flight; chooser
+  flyover has NO per-slat LOD (batched) — dead end for ordering; the LOD
+  slat capture (secs 15-27 backbone) + dot plot is the working recipe.
+  Cockpit cam no longer renders own car (crest clip-through; dash overlay
+  is the real cockpit, item 2). Zero console errors.
+- 2026-07-22 PHYSICS PARITY ROUND 1 (committed, not deployed — v4 next).
+  THE BIG ONE: the original's car physics are ROAD-RELATIVE — (section,
+  distIntoSection, roadX); the road carries the car around corners (blind-W
+  drives whole laps in the original!). Remake refactored to (s, lat, y) road
+  coordinates: roadAt(s) binary-search sampler + per-seg frames (fx,fz,angle,
+  slope,k curvature); steering moves lat; centrifugal drift = k·v²·KC
+  (KC=0.004 первый guess); walls = lat clamp + grind (speed ×(1-0.55dt));
+  crest-launch takeoff = ballistic condition (vy=slope×speed the moment the
+  deck falls away from the arc — NOT a cliff threshold). Fitted accel model
+  dv/dt = 11.07 − 0.000978·v² (display units, from the traced curve) + crane
+  launch at 28 + spawn CRANE_BACK=40 slats before the line (section math:
+  crane drops ~2 sections early; forward/increasing-index = race direction).
+  A/B HARNESS scratchpad/scr-ab.mjs (GRAV env → ?grav=): logs PHYSICS time
+  (state.pt — wall-clock lies at headless fps), overlay plot vs original
+  telemetry. RESULT: t60 3.82 vs 3.92 (2.6%), t90 9.52 vs 10.02 (5%), top 92
+  exact — accel-curve parity gate substantially met.
+  TRACK TRUTH REVISED (ground-truth tracing): engine LOD draws ~23 slats
+  around the car individually → capture them per-frame with (sec,dist) =
+  the RACED PATH ORDER from the engine itself (scr-trace.mjs slatMode +
+  rx-centering autopilot with steer-sign calibration). Findings: raced line
+  is FLAT y=640 through secs 15-27; sec 26 holds the REAL JUMP (lip → dip
+  floor 320 → steep kicker); then the big climb (0.125 × 44 slats) to the
+  3744 plateau and a −0.25 descent. The old '2.28s ramp jump' = clearing
+  that gap at ~92 and landing ON the climb (below ~60 you drop into the dip
+  = crane-trap); after landing the original GRINDS UP the climb at 8-10
+  display (slope decel ≈ full thrust — fit slope gravity from this!).
+  AUTOPILOT LESSON: steering assist during the jump approach breaks the
+  jump (road bends → rx grows → controller steers mid-approach → lands off);
+  run-1's hands-off W cleared it — next iteration: no-steer window secs
+  25-27. Track JSON kept at the v2 chain (has mis-ordered hill features but
+  drives); the slope-limited/backbone re-chains were WORSE (fragmented) —
+  full-lap ground truth replaces chaining entirely next iteration.
+  Zero console errors throughout.
 - 2026-07-22 A-FRAME PYLONS SHIPPED as REMAKE v3 (CF+GitHub, CACHE scr-v151).
   Instanced beam system (~2000 unit-box instances, one draw call): per slat a
   cross rib + edge rails under the deck; every 2 slats an A-frame pylon (2
