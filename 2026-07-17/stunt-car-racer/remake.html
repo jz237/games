@@ -67,11 +67,20 @@
 <div id="menu">
   <h1>Stunt Car Racer</h1>
   <p class="sub">From-scratch remake &mdash; engine preview</p>
-  <button id="btn-drive" class="glass-btn">Drive Little Ramp</button>
-  <p class="note">The real Little Ramp circuit, traced point-for-point from the 1989 engine, now elevated
+  <div id="track-grid" style="display:grid;grid-template-columns:repeat(2,minmax(150px,220px));gap:1.2vh 1.2vw;justify-content:center;">
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=little-ramp&drive=1">Little Ramp</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=hump-back&drive=1">Hump Back</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=stepping-stones&drive=1">Stepping Stones</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=big-ramp&drive=1">Big Ramp</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=roller-coaster&drive=1">Roller Coaster</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=high-jump&drive=1">High Jump</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=ski-jump&drive=1">Ski Jump</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=draw-bridge&drive=1">Draw Bridge</a>
+  </div>
+  <p class="note">All 8 circuits traced point-for-point from the 1989 engine, elevated
     over the valley. Pylons, physics parity, cockpit and audio arrive in later iterations. <a class="plain" href="source.html">Play the current HD build</a>.</p>
 </div>
-<div id="badge">REMAKE v4 &middot; 22 Jul 2026</div>
-<script type="module" src="remake/main.js?v=4"></script>
+<div id="badge">REMAKE v5 &middot; 22 Jul 2026</div>
+<script type="module" src="remake/main.js?v=5"></script>
 </body>
 </html>

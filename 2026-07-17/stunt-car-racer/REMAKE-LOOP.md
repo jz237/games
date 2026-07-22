@@ -89,11 +89,7 @@ keep the game in the games-page UNFINISHED set (both slugs already listed).
 Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
 
 ## BACKLOG (top = next; one shippable item per iteration)
-1. Trace remaining 7 tracks (batch scr-trace.mjs per track; process with the
-   PLAIN nearest-XZ chain — it was correct; single-level loops assumed, check
-   each with the slat-structure dot plot first); build all in the remake
-   (track picker menu); sweep screenshots.
-2. Cockpit/HUD integration (reuse stack) + audio integration (reuse mixer).
+1. Cockpit/HUD integration (reuse stack) + audio integration (reuse mixer).
 3. Rival AI + race flow (crane start, laps, win/lose, damage/wreck/records).
 4. Physics round 2: steering/lat-drift parity (fit KC + steer rates from
    original rx telemetry), wall-hit damage, wreck thresholds, fall-into-gap
@@ -154,6 +150,19 @@ Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
 
 ## ITERATION LOG
 - (newest first: item, result, lesson)
+- 2026-07-22 ALL 8 TRACKS SHIPPED as REMAKE v5 (CACHE scr-v153). Batch-traced
+  the other 7 with scr-trace.mjs (FLY_MS=1000 DRIVE_MS=15000 SLOW=-1) +
+  plain nearest-XZ chain processor: hump-back 441 pts, stepping-stones 455,
+  big-ramp 397, roller-coaster 639, high-jump 437, ski-jump 378, draw-bridge
+  639 — ALL loops close within ~1 slat. Chain 'big gaps' (1.8-4k units) on
+  big-ramp/high-jump/ski-jump/draw-bridge = likely REAL deck gaps (jump
+  features) — currently interpolated across (drivable bridge); GAP-AWARE
+  rendering/physics (no deck + mandatory jump + fall-in) is queued in
+  physics round 2. remake.html menu = 8-track glass grid (links with
+  ?track=ID&drive=1 — page reload per track keeps state clean); TRACKS map
+  in main.js holds per-track craneBack (283 measured for little-ramp, 24
+  nominal elsewhere until race-flow measurement). Sweep: all 8 load, build,
+  render, teleport + screenshot OK, ZERO console errors.
 - 2026-07-22 PHYSICS PARITY LANDED — REMAKE v4 DEPLOYED (CACHE scr-v152).
   FINAL MODEL (all A/B-verified vs original telemetry): road-relative (s,lat,
   y); thrust 11.07−0.000978v² display; NO slope decel (original ignores

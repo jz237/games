@@ -26,9 +26,21 @@ const SLOPE_G = 0;
 // accel model fitted to the traced curve: dv/dt = THRUST − CDRAG·v² (display units)
 const THRUST_D = 11.07, CDRAG_D = 0.000978;
 const CRANE_LAUNCH = 28 * DISP2MS;   // the crane drop exits at display 28
-// the crane drops you most of a lap before the line: telemetry shows 275
-// slats from launch to the gap jump, and the line sits just past the gap
-const CRANE_BACK = 283;
+// all 8 traced tracks, division order; craneBack = slats before the start
+// line where the crane drops you (measured 283 on Little Ramp; others get a
+// nominal offset until their race-flow measurement)
+const TRACKS = {
+  'little-ramp':     { name: 'Little Ramp',     craneBack: 283 },
+  'hump-back':       { name: 'Hump Back',       craneBack: 24 },
+  'stepping-stones': { name: 'Stepping Stones', craneBack: 24 },
+  'big-ramp':        { name: 'Big Ramp',        craneBack: 24 },
+  'roller-coaster':  { name: 'Roller Coaster',  craneBack: 24 },
+  'high-jump':       { name: 'High Jump',       craneBack: 24 },
+  'ski-jump':        { name: 'Ski Jump',        craneBack: 24 },
+  'draw-bridge':     { name: 'Draw Bridge',     craneBack: 24 },
+};
+const trackId = TRACKS[qs.get('track')] ? qs.get('track') : 'little-ramp';
+const CRANE_BACK = TRACKS[trackId].craneBack;
 
 // ---------- deterministic noise ----------
 function hash2(ix, iz) {
@@ -275,7 +287,7 @@ function roadAt(s) {
 }
 
 async function buildWorld() {
-  const raw = await (await fetch('tracks/little-ramp.json')).json();
+  const raw = await (await fetch('tracks/' + trackId + '.json')).json();
   const pts = raw.points;
   let cx = 0, cz = 0;
   for (const p of pts) { cx += p.x; cz += p.z; }
@@ -727,7 +739,7 @@ function showMenu() {
   state.driving = false;
   state.speed = 0;
 }
-document.getElementById('btn-drive').addEventListener('click', startDrive);
+{ const b = document.getElementById('btn-drive'); if (b) b.addEventListener('click', startDrive); }
 
 buildWorld().then(() => {
   requestAnimationFrame(frame);
