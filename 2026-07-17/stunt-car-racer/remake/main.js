@@ -275,6 +275,19 @@ function buildSegFrames() {
   }
   total = cum[path.length];
 }
+// segments longer than ~30m are REAL deck gaps (chasms you must jump);
+// one-slat chain hiccups (~21m) stay bridged
+const gapSeg = new Set();
+function markGaps() {
+  gapSeg.clear();
+  for (let i = 0; i < path.length; i++) {
+    const a = path[i], b = path[(i + 1) % path.length];
+    const dxz = Math.hypot(b.x - a.x, b.z - a.z);
+    const dy = Math.abs(b.y - a.y);
+    // long jumps OR near-vertical chain sew-ups across a chasm = void
+    if (Math.hypot(dxz, dy) > 30 || dy / Math.max(dxz, 0.1) > 0.8) gapSeg.add(i);
+  }
+}
 // road sample at arc-length s: world pos of centerline, frame, width, bank
 function roadAt(s) {
   const N2 = path.length;
@@ -288,6 +301,7 @@ function roadAt(s) {
     x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t,
     w: a.w + (b.w - a.w) * t, bank: a.bank + (b.bank - a.bank) * t,
     fx: seg[i].fx, fz: seg[i].fz, angle: seg[i].angle, slope: seg[i].slope, k: seg[i].k,
+    gap: gapSeg.has(i),
   };
 }
 
@@ -309,6 +323,7 @@ async function buildWorld() {
   }
   startIdx = Math.max(0, path.findIndex(p => p.shade === 'start'));
   buildSegFrames();
+  markGaps();
 
   // --- terrain (after grid exists) ---
   {
@@ -373,6 +388,7 @@ async function buildWorld() {
   function ribbonFlat(A, B, mat, vScale, segColFn) {
     const pos = [], uv = [], col = [], idx = [];
     for (let i = 0; i < N; i++) {
+      if (gapSeg.has(i)) continue; // no deck across chasms
       const k = i, k2 = (i + 1) % N;
       const c = segColFn(i);
       const v0 = cum[i] * vScale, v1 = cum[i + 1] * vScale;
@@ -404,6 +420,7 @@ async function buildWorld() {
       if (colFn) { const c = colFn(k); col.push(...c, ...c); }
     }
     for (let i = 0; i < N; i++) {
+      if (gapSeg.has(i)) continue; // no deck across chasms
       const a = i * 2, b = i * 2 + 1, c = i * 2 + 2, d = i * 2 + 3;
       idx.push(a, b, c, b, d, c);
     }
@@ -489,6 +506,7 @@ async function buildWorld() {
       const lx = -fz, lz = fx;
       const topY = p.y - depth + 0.25;
       const edge = (s2) => [p.x + lx * (p.w / 2 - 0.8) * s2, topY, p.z + lz * (p.w / 2 - 0.8) * s2];
+      if (gapSeg.has(i)) continue; // no structure across chasms
       // underside: cross rib every slat + edge rails to the next slat
       beam(edge(-1), edge(1), 0.35);
       const pn = path[(i + 1) % N];
@@ -668,13 +686,30 @@ function step(dt) {
   if (!state.airborne || state.y < r.y + 3) {
     if (state.lat > lim) { state.lat = lim; state.grind = true; }
     if (state.lat < -lim) { state.lat = -lim; state.grind = true; }
-    if (state.grind && !state.airborne) state.speed *= (1 - 0.55 * dt);
+    if (state.grind && !state.airborne) {
+      state.speed *= (1 - 0.55 * dt);
+      if (state.speed > 100) state.damage = Math.min(40, (state.damage || 0) + 2.5 * dt);
+    }
   }
   const deckY = r.y + (r.bank / r.w) * state.lat;
   if (state.airborne) {
     state.vy -= GRAV * dt;
+    const fallVy = state.vy;
     state.y += state.vy * dt;
-    if (state.y <= deckY) { state.y = deckY; state.vy = 0; state.airborne = false; }
+    if (!r.gap && state.y <= deckY) {
+      state.y = deckY; state.vy = 0; state.airborne = false;
+      if (fallVy < -35) { // hard landing damages the chassis
+        state.damage = Math.min(40, (state.damage || 0) + (-fallVy - 35) * 0.15);
+      }
+    } else if (state.y < 2) {
+      // fell into a chasm to the valley floor
+      state.damage = Math.min(40, (state.damage || 0) + 10);
+      if (!state.wrecking) craneRecover();
+    }
+  } else if (r.gap) {
+    // deck vanishes under the car: over the void
+    state.airborne = true;
+    state.vy = Math.max(-0.3, Math.min(0.3, r0.slope)) * state.speed;
   } else {
     // 1989-style: the car is GLUED to the road over ordinary crests (the
     // original's telemetry never lifts on the hill at 85+). Airborne only
@@ -706,9 +741,10 @@ function step(dt) {
     state.lapT0 = state.pt;
   }
   state.relPrev = rel;
-  // wreck watch: stuck (gap trap / head-on grind) -> crane recovery
+  // wreck watch: stuck (gap trap / head-on grind) or damage limit -> crane
   if (state.speed > 5 * DISP2MS) state.lastMoveT = state.pt;
-  if (!state.wrecking && state.driving && state.pt - state.lastMoveT > 3 && state.pt > 4) {
+  if (!state.wrecking && state.driving &&
+      ((state.pt - state.lastMoveT > 3 && state.pt > 4) || (state.damage || 0) >= 32)) {
     craneRecover();
   }
   // rival AI: same thrust model at 93%, corner-aware target speed, glued
@@ -736,6 +772,7 @@ function craneRecover() {
     state.y = roadAt(state.s).y;
     state.speed = CRANE_LAUNCH; state.vy = 0; state.airborne = false;
     state.lastMoveT = state.pt;
+    state.damage = 0;
     state.wrecking = false;
     if (craneEl) craneEl.style.display = 'none';
   }, 2200);
@@ -755,8 +792,9 @@ function updateVisuals() {
   hudEl.style.display = state.driving && state.chase ? 'block' : 'none';
   if (cockpitOn) drawDash(dashEl);
   const r = roadAt(state.s);
-  const pitch = !state.airborne ? Math.atan(r.slope) : clamp01(-state.vy / 60) * 0.3;
-  car.rotation.set(-pitch, state.heading + Math.PI, -Math.atan2(r.bank, r.w));
+  const pitchT = !state.airborne ? Math.atan(r.slope) : clamp01(-state.vy / 60) * 0.3;
+  updateVisuals.p = (updateVisuals.p || 0) * 0.85 + pitchT * 0.15; // smooth crests
+  car.rotation.set(-updateVisuals.p, state.heading + Math.PI, -Math.atan2(r.bank, r.w));
   const steerRoll = ((keys['KeyA'] || keys['ArrowLeft']) ? 1 : 0) - ((keys['KeyD'] || keys['ArrowRight']) ? 1 : 0);
   car.rotation.z += steerRoll * 0.05 * Math.min(1, state.speed / 60);
 
@@ -808,6 +846,16 @@ function drawDash(cnv) {
   g.fillStyle = '#8fe6a0';
   g.fillText('L' + Math.max(0, state.lap), 10, 179);
   g.fillText('B34', 10, 189);
+  // damage squiggle: red jagged line grows with damage
+  const dmg = state.damage || 0;
+  if (dmg > 0.5) {
+    g.strokeStyle = '#e84a3a';
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(52, 180);
+    for (let i = 0; i < Math.min(40, dmg); i++) g.lineTo(54 + i, 180 + ((i % 2) ? 3 : -3));
+    g.stroke();
+  }
   const fmt = (t) => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0') + '.' + Math.floor((t % 1) * 10);
   // right LCD: current lap time + best
   g.fillStyle = '#e8d089';
@@ -868,7 +916,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 7,
+    version: 8,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });

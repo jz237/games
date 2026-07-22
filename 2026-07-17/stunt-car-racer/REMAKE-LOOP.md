@@ -89,19 +89,15 @@ keep the game in the games-page UNFINISHED set (both slugs already listed).
 Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
 
 ## BACKLOG (top = next; one shippable item per iteration)
-1. Rival AI + race flow: lap counting at the startIdx line, lap/best times on
-   the dash LCDs (replace 'L-'), localStorage records per track, wreck/crane
-   recovery (fall off deck -> chains.png crane moment -> respawn), rival car
-   following the centerline with a division speed profile.
-2. Physics round 2: steering/lat-drift parity (fit KC + steer rates from
+1. Physics round 2: steering/lat-drift parity (fit KC + steer rates from
    original rx telemetry), wall-hit damage, wreck thresholds, gap-aware decks
    (no interpolated bridge across real gaps on big-ramp/high-jump/ski-jump/
    draw-bridge), air steering; re-check t60 (6% fast) and gap airtime
    (2.08 vs 2.28s) after any change. Car visual: pitch smoothing + real mesh.
-3. Mobile touch + gamepad + perf pass (SwiftShader ~9fps → ≥30; beams/flat
+2. Mobile touch + gamepad + perf pass (SwiftShader ~9fps → ≥30; beams/flat
    ribbons and shadow settings are the levers). Cockpit 8:5 letterbox option.
-4. Swap-gate audit → SWAP source.html, keep original.html, sitemap/index.
-5. Closing survey vs reference photo + original; seed round two.
+3. Swap-gate audit → SWAP source.html, keep original.html, sitemap/index.
+4. Closing survey vs reference photo + original; seed round two.
 
 ## PROCESS (every iteration)
 - Home: worktree `/home/jez237/.openclaw/workspace/worktrees/scr-hd`, game at
@@ -325,3 +321,20 @@ Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
   round-2 polish). REGRESSION LESSON: a step() refactor DROPPED the
   syncWorldPose() call — world pose froze while s advanced; probe caught
   identical x/z across samples. Zero console errors.
+
+- 2026-07-22 PHYSICS ROUND 2 (partial) SHIPPED as REMAKE v8 (CACHE scr-v156).
+  GAP-AWARE DECKS: markGaps() = segment 3D length >30m OR |dy/dxz|>0.8 (chain
+  sew-ups across chasms come as SHORT NEAR-VERTICAL segments, not one long
+  hop — length test alone missed them; 0.8 keeps little-ramp's real ±0.62 pit
+  walls). Gap segs: no deck/kerb/wall/rail/rib/pylon rendering + physics
+  treats them as VOID (airborne over them, land only on real deck; fall to
+  y<2 = valley floor -> +10 damage + crane). DAMAGE MODEL: hard landings
+  (vy<-35: +0.15/unit over), wall grind at speed (+2.5/s over 100 m/s), red
+  dash squiggle at x52-94 y180, wreck at 32 -> crane (damage resets).
+  Pitch smoothing (0.85/0.15 lerp — crest snap gone). Little Ramp A/B
+  regression: unchanged (t60/t90/top identical to v7 rig numbers).
+  STILL OPEN in this item (continue next iteration): verify each gap track's
+  void placement visually (ski-jump idx ~334 region crossed glued at 700ms
+  sampling — void may be narrow or mis-placed; probe with fine sampling +
+  screenshots), steering KC/rate parity fit vs original rx telemetry, air
+  steering feel, per-track craneBack measurement.
