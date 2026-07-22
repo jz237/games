@@ -736,7 +736,7 @@ function step(dt) {
   const r0 = roadAt(state.s);
   // advance along the road; lateral: steering + centrifugal push in corners
   state.s += state.speed * dt;
-  const steer = (left ? 1 : 0) - (right ? 1 : 0);
+  const steer = (right ? 1 : 0) - (left ? 1 : 0); // user-reported: previous sign was reversed
   if (!state.airborne) {
     state.lat += steer * (STEER_BASE + STEER_V * state.speed) * dt;
     state.lat -= r0.k * state.speed * state.speed * KC * dt;
@@ -998,7 +998,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 11,
+    version: 12,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });

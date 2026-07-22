@@ -428,3 +428,6 @@ damage, boost faithful in behavior.
   zero errors); gap-jump/top-speed parity unchanged (takeoff at the flat
   lip identical); accel curve now starts from 0 (crane), matching the
   original's ritual rather than its W-held trace artifact.
+
+- 2026-07-22 v12 (CACHE scr-v161): steering sign REVERSED per user report
+  (A/D — and with them touch thirds + gamepad axis — were mirrored).
