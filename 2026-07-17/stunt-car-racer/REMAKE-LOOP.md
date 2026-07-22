@@ -622,3 +622,29 @@ visual gap:
   hump-back 79s, draw-bridge 46s, zero errors). Hint text updated in
   remake.html + source.html. GOTCHA: sed replacement '&' = whole match —
   mangled the hint line; rewrote via python re.sub.
+
+## v19 (CACHE scr-v168): HANDLING FIX — CAR NO LONGER TIPS OVER
+User "fix it" (physics/handling). MEASURED the problem instead of guessing:
+- Original engine (original.html telemetry): full lock at ~55 crosses the
+  whole track and off the far side in ~1.7s, barely scrubs speed, and
+  steering CAN take you off-line. Remake matched this laterally (reaches its
+  wall in ~1.5s) — so steering authority was NOT the issue (the "understeer"
+  plateau at 0.8·halfW was just the wall clamp). Left steering constants as
+  v18 (exposed ?sa=/?ak= for future tuning; defaults unchanged).
+- REAL BUG (found by logging attitude on a flat straight + chase filmstrip):
+  on flat ground at 60mph the car ROLLED to 30°+ and PITCHED wildly — it
+  tipped onto its side. Cause: attitude integrated raw per-wheel torques
+  (pitchT/rollT via I_PITCH/I_ROLL) + a stiff 85/95-per-sec align spring —
+  an underdamped feedback loop that a tiny perturbation blew up.
+  FIX: replaced the torque integration + spring with a STABLE critically-
+  damped exponential lean toward a target attitude = road grade + small
+  accel-squat (pitch) + road bank (×0.7, trace is noisy) + gentle lateral-g
+  lean (roll), approach rate 9/s, pitchV/rollV zeroed while grounded. Vertical
+  bounce still comes from the wheel forces (unchanged). Clamps pitch ±0.45,
+  roll ±0.26 (~15° — real banking, never keels onto a wall).
+- VERIFIED: flat straight roll 0.0° (was 0→31°), corner/wall roll caps 15°,
+  8-track autopilot laps clean (little-ramp 71s, hump-back 79s, draw-bridge
+  47s, ski-jump 92s), zero console errors. Car now sits level and drives
+  like a car. LESSON: never integrate raw contact torques into a visible
+  attitude DOF — target-based critical damping is stable; feedback springs
+  at 60Hz with big gains blow up.

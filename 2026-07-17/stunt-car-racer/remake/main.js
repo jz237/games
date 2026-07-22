@@ -33,6 +33,11 @@ const THRUST_D = 10.4, CDRAG_D = 0.000663; // rival AI uses display-unit form
 // the crane LOWERS the car and drops it STATIONARY (the ritual that opens
 // every SCR race); the old rolling-start misread a W-held trace
 const CRANE_DROP_H = 13, CRANE_RATE = 6.0, CRANE_REL = 2.4; // m, m/s, release height
+// steering feel: player authority + how hard the road re-aligns the car.
+// The original lets full lock steer right off the track; a too-strong align
+// spring makes the remake understeer/on-rails. ?sa= / ?ak= override for tuning.
+const STEER_AUTH = parseFloat(qs.get('sa')) || 0.9;
+const ALIGN_K = parseFloat(qs.get('ak')) || 5.0;
 // all 8 traced tracks, division order; craneBack = slats before the start
 // line where the crane drops you (measured 283 on Little Ramp; others get a
 // nominal offset until their race-flow measurement)
@@ -831,22 +836,28 @@ function step(dt) {
     }
     state.damage = (state.wDmg[0] + state.wDmg[1] + state.wDmg[2]) / 3;
   }
-  state.pitchV += (pitchT / I_PITCH) * dt;
-  state.rollV += (rollT / I_ROLL) * dt;
+  // Attitude: a STABLE critically-damped lean toward the road grade, NOT raw
+  // wheel-torque integration — that feedback loop was underdamped and tipped
+  // the car onto its side (~30 deg roll) on flat straights. Vertical bounce
+  // still comes from the wheel forces above; this only orients the body.
   if (contacts > 0 && refDeck) {
-    state.pitchV -= (state.engAcc || 0) * 0.004; // acceleration wheelie
-    const targetPitch = -Math.atan(Math.max(-0.35, Math.min(0.35, refDeck.slope)));
-    const targetRoll = -Math.atan2(refDeck.bank, refDeck.w);
-    state.pitchV += (targetPitch - state.pitch) * 85 * dt;
-    state.rollV += (targetRoll - state.roll) * 95 * dt;
-    state.pitchV *= Math.max(0, 1 - 11 * dt);
-    state.rollV *= Math.max(0, 1 - 12 * dt);
+    const vLatNow = state.vx * Lx + state.vz * Lz;      // sideways speed (car frame)
+    const tPitch = -Math.atan(Math.max(-0.35, Math.min(0.35, refDeck.slope)))
+                   - Math.max(-0.10, Math.min(0.10, (state.engAcc || 0) * 0.0016)); // squat/wheelie
+    const tRoll = -0.7 * Math.atan2(refDeck.bank, refDeck.w)            // road bank (damped; trace can be noisy)
+                  - Math.max(-0.13, Math.min(0.13, vLatNow * 0.009));   // gentle cornering lean
+    const kA = Math.min(1, 9 * dt);
+    state.pitch += (tPitch - state.pitch) * kA;
+    state.roll += (tRoll - state.roll) * kA;
+    state.pitchV = 0; state.rollV = 0;
   } else {
-    state.pitchV *= Math.max(0, 1 - 0.4 * dt);
-    state.rollV *= Math.max(0, 1 - 0.4 * dt);
+    // airborne: hold, drift slowly toward level
+    const kL = Math.min(1, 0.8 * dt);
+    state.pitch += (0 - state.pitch) * kL;
+    state.roll += (0 - state.roll) * kL;
   }
-  state.pitch = Math.max(-0.55, Math.min(0.55, state.pitch + state.pitchV * dt));
-  state.roll = Math.max(-0.55, Math.min(0.55, state.roll + state.rollV * dt));
+  state.pitch = Math.max(-0.45, Math.min(0.45, state.pitch));
+  state.roll = Math.max(-0.26, Math.min(0.26, state.roll)); // ~15deg: real banking, never keels onto a wall
   // never sink through a deck under the car
   const dUnder = deckAt(state.x, state.z);
   if (dUnder && Math.abs(dUnder.lat) <= dUnder.halfW && state.y < dUnder.y - 0.6) {
@@ -902,14 +913,14 @@ function step(dt) {
   else rightInput = mouse.active ? mouse.steer : 0;
   const steer = -Math.max(-1, Math.min(1, rightInput));
   const grounded2 = contacts > 0;
-  state.yawV += steer * (0.9 * Math.max(0.25, Math.abs(vd) / 92)) * dt;
+  state.yawV += steer * (STEER_AUTH * Math.max(0.25, Math.abs(vd) / 92)) * dt;
   if (grounded2 && refDeck) {
     const sg2 = seg[refDeck.seg];
     state.heading += sg2.k * vFwd * dt;           // the road's own turn rate
     let da = refDeck.angle - state.heading;
     while (da > Math.PI) da -= 2 * Math.PI;
     while (da < -Math.PI) da += 2 * Math.PI;
-    if (Math.abs(da) < Math.PI / 2) state.heading += da * Math.min(1, 5 * dt);
+    if (Math.abs(da) < Math.PI / 2) state.heading += da * Math.min(1, ALIGN_K * dt);
   }
   state.yawV *= Math.max(0, 1 - (grounded2 ? 3 : 0.4) * dt);
   state.heading += state.yawV * dt;
@@ -1165,7 +1176,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 18,
+    version: 19,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });
