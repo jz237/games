@@ -25,7 +25,9 @@ const GRAV = parseFloat(qs.get('grav')) || 55;
 const SLOPE_G = 0;
 // accel model fitted to the traced curve: dv/dt = THRUST − CDRAG·v² (display units)
 const THRUST_D = 11.07, CDRAG_D = 0.000978;
-const CRANE_LAUNCH = 28 * DISP2MS;   // the crane drop exits at display 28
+// the crane LOWERS the car and drops it STATIONARY (the ritual that opens
+// every SCR race); the old rolling-start misread a W-held trace
+const CRANE_DROP_H = 13, CRANE_RATE = 6.0, CRANE_REL = 2.4; // m, m/s, release height
 // all 8 traced tracks, division order; craneBack = slats before the start
 // line where the crane drops you (measured 283 on Little Ramp; others get a
 // nominal offset until their race-flow measurement)
@@ -254,6 +256,7 @@ const state = {
   lap: 0, lapT0: 0, lastLap: null, best: null,
   relPrev: 0, lastMoveT: 0, wrecking: false,
   boost: 34, boosting: false,
+  craneT: -1, lastImpact: 0,
 };
 const rival = { s: 0, speed: 0, on: true };
 // per-index road frame, filled after the track loads
@@ -620,11 +623,12 @@ function respawn() {
   state.s = cum[i0]; state.lat = 0;
   const r = roadAt(state.s);
   state.y = r.y;
-  state.speed = CRANE_LAUNCH; state.vy = 0; state.airborne = false;
+  state.speed = 0; state.vy = 0; state.airborne = false;
+  state.craneT = 0; state.y = roadAt(state.s).y + CRANE_DROP_H;
   state.lap = 0; state.lapT0 = state.pt; state.lastLap = null; state.boost = 34;
   state.relPrev = ((state.s - cum[startIdx]) % total + total) % total;
   state.lastMoveT = state.pt;
-  rival.s = state.s + 32; rival.speed = CRANE_LAUNCH;
+  rival.s = state.s + 32; rival.speed = 0;
   syncWorldPose();
 }
 function syncWorldPose() {
@@ -688,6 +692,26 @@ const BRAKE = 300;
 const KC = 0.004;      // centrifugal outward drift factor (A/B-tunable)
 const STEER_BASE = 3, STEER_V = 0.045; // lateral m/s per unit speed
 function step(dt) {
+  // crane phase: the car hangs on chains, lowering to the release height,
+  // then drops STATIONARY onto its suspension
+  if (state.craneT >= 0) {
+    state.craneT += dt;
+    const r0c = roadAt(state.s);
+    const targetY = r0c.y + Math.max(CRANE_REL, CRANE_DROP_H - CRANE_RATE * state.craneT);
+    state.y = targetY;
+    state.speed = 0; state.vy = 0;
+    const craneEl2 = document.getElementById('crane');
+    if (craneEl2) craneEl2.style.display = 'block';
+    if (CRANE_DROP_H - CRANE_RATE * state.craneT <= CRANE_REL) {
+      state.craneT = -1;               // release: free fall onto the deck
+      state.airborne = true;
+      if (craneEl2) craneEl2.style.display = 'none';
+      state.lastMoveT = state.pt;
+    }
+    state.pt += dt;
+    syncWorldPose();
+    return;
+  }
   const fwd = keys['KeyW'] || keys['ArrowUp'] || gp.w || gp.tw;
   const wantBoost = (keys['ShiftLeft'] || keys['ShiftRight'] || gp.b) && fwd && state.boost > 0 && !state.airborne;
   state.boosting = !!wantBoost;
@@ -736,9 +760,16 @@ function step(dt) {
     const fallVy = state.vy;
     state.y += state.vy * dt;
     if (!r.gap && state.y <= deckY) {
-      state.y = deckY; state.vy = 0; state.airborne = false;
+      state.lastImpact = Math.max(state.lastImpact, -fallVy);
       if (fallVy < -35) { // hard landing damages the chassis
         state.damage = Math.min(40, (state.damage || 0) + (-fallVy - 35) * 0.15);
+      }
+      if (fallVy < -9) {
+        // suspension bounce: the SCR skip
+        state.y = deckY + 0.02;
+        state.vy = -fallVy * 0.34;
+      } else {
+        state.y = deckY; state.vy = 0; state.airborne = false;
       }
     } else if (state.y < 2) {
       // fell into a chasm to the valley floor
@@ -750,14 +781,16 @@ function step(dt) {
     state.airborne = true;
     state.vy = Math.max(-0.3, Math.min(0.3, r0.slope)) * state.speed;
   } else {
-    // 1989-style: the car is GLUED to the road over ordinary crests (the
-    // original's telemetry never lifts on the hill at 85+). Airborne only
-    // when the road truly falls away (gap lip / cliff): drop > 2.2m in a
-    // tick. Takeoff vy inherits the approach slope (the ramp-up before the
-    // chasm is what kicks you across), clamped ±0.3.
-    if (state.y - deckY > 2.2) {
+    // BALLISTIC crest launch — the earlier glued-to-road model was wrong
+    // (its telemetry evidence only covered flat sections; the user is right
+    // that jumping IS the game). Airborne the moment the deck falls away
+    // from the arc: crests, humps, lips, cliffs all launch naturally.
+    const vyG = Math.max(-0.3, Math.min(0.3, r0.slope)) * state.speed;
+    const ballY = state.y + vyG * dt - 0.5 * GRAV * dt * dt;
+    if (ballY > deckY + 0.02) {
       state.airborne = true;
-      state.vy = Math.max(-0.3, Math.min(0.3, r0.slope)) * state.speed;
+      state.vy = vyG - GRAV * dt;
+      state.y = ballY;
     } else {
       state.y = deckY;
     }
@@ -781,7 +814,7 @@ function step(dt) {
   }
   state.relPrev = rel;
   // wreck watch: stuck (gap trap / head-on grind) or damage limit -> crane
-  if (state.speed > 5 * DISP2MS) state.lastMoveT = state.pt;
+  if (state.speed > 5 * DISP2MS || !fwd) state.lastMoveT = state.pt; // idle isn't stuck
   if (!state.wrecking && state.driving &&
       ((state.pt - state.lastMoveT > 3 && state.pt > 4) || (state.damage || 0) >= 32)) {
     craneRecover();
@@ -809,18 +842,27 @@ function craneRecover() {
     const back = ((startIdx - 24 + N2) % N2);
     state.s = cum[back]; state.lat = 0;
     state.y = roadAt(state.s).y;
-    state.speed = CRANE_LAUNCH; state.vy = 0; state.airborne = false;
+    state.speed = 0; state.vy = 0; state.airborne = false;
+    state.craneT = 0; state.y = roadAt(state.s).y + CRANE_DROP_H;
     state.lastMoveT = state.pt;
     state.damage = 0;
     state.wrecking = false;
     if (craneEl) craneEl.style.display = 'none';
-  }, 2200);
+  }, 1400);
 }
 
 // ---------- camera + visuals ----------
 const camTarget = new THREE.Vector3();
 function updateVisuals() {
-  car.position.set(state.x, state.y, state.z);
+  // visual suspension: spring-damper offset kicked by landings
+  const V = updateVisuals;
+  if (V.air === undefined) { V.air = false; V.sy = 0; V.syV = 0; }
+  if (V.air && !state.airborne) { V.syV -= Math.min(40, state.lastImpact) * 0.035; state.lastImpact = 0; }
+  V.air = state.airborne;
+  V.syV += (-V.sy * 110 - V.syV * 9) * (1 / 40);
+  V.sy = Math.max(-0.9, Math.min(0.9, V.sy + V.syV * (1 / 40)));
+  car.position.set(state.x, state.y + V.sy, state.z);
+  camera.userData.sy = V.sy; // cockpit cam inherits the bounce below
   // cockpit view never renders your own car (the dash overlay is the cockpit)
   car.visible = state.chase || !state.driving;
   const cockpitOn = state.driving && !state.chase;
@@ -847,7 +889,7 @@ function updateVisuals() {
       camera.position.set(state.x - sin * 22, state.y + 8.5, state.z - cos * 22);
       camTarget.set(ax, aheadY + 2, az);
     } else {
-      camera.position.set(state.x - sin * 1.2, state.y + 2.7, state.z - cos * 1.2);
+      camera.position.set(state.x - sin * 1.2, state.y + 2.7 + (camera.userData.sy || 0) * 0.8, state.z - cos * 1.2);
       camTarget.set(ax, aheadY + 1.6, az);
     }
     camera.lookAt(camTarget);
@@ -956,7 +998,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 10,
+    version: 11,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });
