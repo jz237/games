@@ -89,28 +89,19 @@ keep the game in the games-page UNFINISHED set (both slugs already listed).
 Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
 
 ## BACKLOG (top = next; one shippable item per iteration)
-1. Cockpit/HUD integration (reuse stack) + audio integration (reuse mixer).
-3. Rival AI + race flow (crane start, laps, win/lose, damage/wreck/records).
-4. Physics round 2: steering/lat-drift parity (fit KC + steer rates from
-   original rx telemetry), wall-hit damage, wreck thresholds, fall-into-gap
-   crane recovery, air steering; re-check t60 (currently 6% fast) and gap
-   airtime (2.08 vs 2.28) after any change. Car visual: pitch smoothing +
-   proper mesh (box intersects deck on sharp slope changes in chase view).
-5. Mobile touch + gamepad + perf pass (SwiftShader ~9fps → ≥30; beams/flat
-   ribbons and shadow settings are the levers).
-6. Swap-gate audit → SWAP source.html, keep original.html, sitemap/index.
-7. Closing survey vs reference photo + original; seed round two.
-3. PYLONS + contact shadows (the anchoring payoff) + underside framing.
-4. Physics tuning round 1 vs parity targets (accel/top/jump arc on Little Ramp).
-5. Trace remaining 7 tracks (batch the harness); build all; sweep screenshots.
-6. Cockpit/HUD integration (reuse stack) + audio integration (reuse mixer).
-7. Rival AI + race flow (crane start, laps, win/lose, damage/wreck/records).
-8. Physics tuning round 2 (Big Ramp jumps, Ski Jump, wreck thresholds).
-9. Mobile touch + gamepad + perf pass (LODs, shadow cascade budget; SwiftShader
-   headless baseline is ~11fps at 1600x900 — needs to reach >=30 for the gate).
-10. Swap-gate audit → SWAP source.html, keep original.html, sitemap/index
-    descriptions updated ('remake' wording, still Unfinished).
-11. Closing survey vs reference photo + original; seed round two.
+1. Rival AI + race flow: lap counting at the startIdx line, lap/best times on
+   the dash LCDs (replace 'L-'), localStorage records per track, wreck/crane
+   recovery (fall off deck -> chains.png crane moment -> respawn), rival car
+   following the centerline with a division speed profile.
+2. Physics round 2: steering/lat-drift parity (fit KC + steer rates from
+   original rx telemetry), wall-hit damage, wreck thresholds, gap-aware decks
+   (no interpolated bridge across real gaps on big-ramp/high-jump/ski-jump/
+   draw-bridge), air steering; re-check t60 (6% fast) and gap airtime
+   (2.08 vs 2.28s) after any change. Car visual: pitch smoothing + real mesh.
+3. Mobile touch + gamepad + perf pass (SwiftShader ~9fps → ≥30; beams/flat
+   ribbons and shadow settings are the levers). Cockpit 8:5 letterbox option.
+4. Swap-gate audit → SWAP source.html, keep original.html, sitemap/index.
+5. Closing survey vs reference photo + original; seed round two.
 
 ## PROCESS (every iteration)
 - Home: worktree `/home/jez237/.openclaw/workspace/worktrees/scr-hd`, game at
@@ -322,3 +313,15 @@ Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
   pointerdown/keydown; QA __remakeAudio.levels() (verified idle .13/high .30
   rate 1.35 at speed, ctx running). Zero console errors. Backlog next: rival
   AI + race flow (lap counting at startIdx line, records, wreck/crane).
+
+- 2026-07-22 RACE FLOW + RIVAL SHIPPED as REMAKE v7 (CACHE scr-v155). Lap
+  counting at cum[startIdx] via wrapped-progress edge (relPrev>0.9T ->
+  rel<0.1T); lap/current/best on dash LCDs; best persisted per track
+  (localStorage scr-remake-best-<trackId>); verified blind lap 16.1s counted.
+  Crane recovery: stuck >3s (speed<~19m/s) -> chains.png drop overlay 2.2s ->
+  respawn 24 slats before the line at crane launch speed. Rival car (red
+  livery clone, lat +2.8) follows centerline: same thrust model x0.93 with
+  corner-aware target sqrt(1400/kmax over next 8 segs), glued (cheats jumps —
+  round-2 polish). REGRESSION LESSON: a step() refactor DROPPED the
+  syncWorldPose() call — world pose froze while s advanced; probe caught
+  identical x/z across samples. Zero console errors.

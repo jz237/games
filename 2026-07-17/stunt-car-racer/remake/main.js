@@ -237,6 +237,8 @@ function terrainH(x, z) {
 const treeBillboards = [];
 const car = new THREE.Group();
 car.rotation.order = 'YXZ'; // yaw, then pitch/roll in car-local axes
+const rivalCar = new THREE.Group();
+rivalCar.rotation.order = 'YXZ';
 let startIdx = 0;
 // ROAD-RELATIVE physics like the 1989 engine: the car lives in (s, lat, y)
 // road coordinates — the road carries you around corners (blind-W drives a
@@ -247,7 +249,10 @@ const state = {
   speed: 0, vy: 0, airborne: false, driving: false, chase: false,
   pt: 0,                         // physics time — headless wall-clock lies
   grind: false,
+  lap: 0, lapT0: 0, lastLap: null, best: null,
+  relPrev: 0, lastMoveT: 0, wrecking: false,
 };
+const rival = { s: 0, speed: 0, on: true };
 // per-index road frame, filled after the track loads
 let seg = null; // {fx,fz,angle,slope,k,len}[]
 let total = 0;
@@ -572,7 +577,19 @@ async function buildWorld() {
       w.position.set(wx, 1.0, wz); w.castShadow = true; car.add(w);
     }
     scene.add(car);
+    // rival: same silhouette, red livery
+    const rBody = new THREE.MeshStandardMaterial({ color: 0xb03030, roughness: 0.45, metalness: 0.35 });
+    const rb = new THREE.Mesh(new THREE.BoxGeometry(4.0, 1.15, 6.6), rBody);
+    rb.position.y = 1.05; rb.castShadow = true; rivalCar.add(rb);
+    const rn = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.7, 2.2), rBody);
+    rn.position.set(0, 0.85, -4.2); rn.castShadow = true; rivalCar.add(rn);
+    for (const [wx, wz] of [[-2.2, -2.3], [2.2, -2.3], [-2.2, 2.4], [2.2, 2.4]]) {
+      const w = new THREE.Mesh(wheelGeo, darkMat);
+      w.position.set(wx, 1.0, wz); w.castShadow = true; rivalCar.add(w);
+    }
+    scene.add(rivalCar);
   }
+  try { state.best = parseFloat(localStorage.getItem('scr-remake-best-' + trackId)) || null; } catch (e) {}
   respawn();
 }
 
@@ -583,6 +600,10 @@ function respawn() {
   const r = roadAt(state.s);
   state.y = r.y;
   state.speed = CRANE_LAUNCH; state.vy = 0; state.airborne = false;
+  state.lap = 0; state.lapT0 = state.pt; state.lastLap = null;
+  state.relPrev = ((state.s - cum[startIdx]) % total + total) % total;
+  state.lastMoveT = state.pt;
+  rival.s = state.s + 32; rival.speed = CRANE_LAUNCH;
   syncWorldPose();
 }
 function syncWorldPose() {
@@ -669,6 +690,55 @@ function step(dt) {
   }
   state.pt += dt;
   syncWorldPose();
+  // lap line crossing (start line at cum[startIdx])
+  const lineS = cum[startIdx];
+  const rel = ((state.s - lineS) % total + total) % total;
+  if (state.relPrev > total * 0.9 && rel < total * 0.1) {
+    if (state.lap > 0) {
+      const lapTime = state.pt - state.lapT0;
+      state.lastLap = lapTime;
+      if (!state.best || lapTime < state.best) {
+        state.best = lapTime;
+        try { localStorage.setItem('scr-remake-best-' + trackId, String(lapTime)); } catch (e) {}
+      }
+    }
+    state.lap++;
+    state.lapT0 = state.pt;
+  }
+  state.relPrev = rel;
+  // wreck watch: stuck (gap trap / head-on grind) -> crane recovery
+  if (state.speed > 5 * DISP2MS) state.lastMoveT = state.pt;
+  if (!state.wrecking && state.driving && state.pt - state.lastMoveT > 3 && state.pt > 4) {
+    craneRecover();
+  }
+  // rival AI: same thrust model at 93%, corner-aware target speed, glued
+  if (rival.on) {
+    const rv = rival.speed / DISP2MS;
+    let kmax = 1e-4;
+    const ri = roadAt(rival.s).i;
+    for (let j = 0; j < 8; j++) kmax = Math.max(kmax, Math.abs(seg[(ri + j) % path.length].k));
+    const vT = Math.min(VMAX * 0.93, Math.sqrt(1400 / kmax));
+    if (rival.speed < vT) rival.speed += (THRUST_D * 0.93 - CDRAG_D * rv * rv) * DISP2MS * dt;
+    else rival.speed -= 200 * dt;
+    if (rival.speed < 0) rival.speed = 0;
+    rival.s += rival.speed * dt;
+  }
+}
+
+function craneRecover() {
+  state.wrecking = true;
+  const craneEl = document.getElementById('crane');
+  if (craneEl) craneEl.style.display = 'block';
+  setTimeout(() => {
+    const N2 = path.length;
+    const back = ((startIdx - 24 + N2) % N2);
+    state.s = cum[back]; state.lat = 0;
+    state.y = roadAt(state.s).y;
+    state.speed = CRANE_LAUNCH; state.vy = 0; state.airborne = false;
+    state.lastMoveT = state.pt;
+    state.wrecking = false;
+    if (craneEl) craneEl.style.display = 'none';
+  }, 2200);
 }
 
 // ---------- camera + visuals ----------
@@ -709,6 +779,13 @@ function updateVisuals() {
   sun.position.set(state.x + 1250, 820, state.z - 700);
   sun.target.position.set(state.x, 0, state.z);
 
+  if (rival.on && path.length) {
+    const rr = roadAt(rival.s);
+    const lx = -rr.fz, lz = rr.fx;
+    rivalCar.position.set(rr.x + lx * 2.8, rr.y + (rr.bank / rr.w) * 2.8, rr.z + lz * 2.8);
+    rivalCar.rotation.set(-Math.atan(rr.slope), rr.angle + Math.PI, 0);
+  }
+
   for (const t of treeBillboards) {
     t.rotation.y = Math.atan2(camera.position.x - t.position.x, camera.position.z - t.position.z);
   }
@@ -729,13 +806,13 @@ function drawDash(cnv) {
   // left LCD: lap / boost placeholder
   g.font = 'bold 8px monospace';
   g.fillStyle = '#8fe6a0';
-  g.fillText('L-', 10, 179);
+  g.fillText('L' + Math.max(0, state.lap), 10, 179);
   g.fillText('B34', 10, 189);
-  // right LCD: run time
-  const t = state.pt;
-  const mm = Math.floor(t / 60), ss = Math.floor(t % 60), d1 = Math.floor((t % 1) * 10);
+  const fmt = (t) => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0') + '.' + Math.floor((t % 1) * 10);
+  // right LCD: current lap time + best
   g.fillStyle = '#e8d089';
-  g.fillText(mm + ':' + String(ss).padStart(2, '0') + '.' + d1, 262, 184);
+  g.fillText(fmt(state.lap > 0 ? state.pt - state.lapT0 : 0), 262, 179);
+  if (state.best) { g.fillStyle = '#9fd3e8'; g.fillText(fmt(state.best), 262, 189); }
   // speed digits above the bar
   g.fillStyle = '#dfe8f5';
   g.fillText(String(Math.round(vd)).padStart(2, ' '), 230, 161);
@@ -791,7 +868,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 6,
+    version: 7,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });
