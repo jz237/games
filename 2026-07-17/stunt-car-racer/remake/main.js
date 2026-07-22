@@ -677,6 +677,13 @@ function updateVisuals() {
   car.position.set(state.x, state.y, state.z);
   // cockpit view never renders your own car (the dash overlay is the cockpit)
   car.visible = state.chase || !state.driving;
+  const cockpitOn = state.driving && !state.chase;
+  const cockpitEl = document.getElementById('cockpit');
+  const dashEl = document.getElementById('dash');
+  cockpitEl.style.display = cockpitOn ? 'block' : 'none';
+  dashEl.style.display = cockpitOn ? 'block' : 'none';
+  hudEl.style.display = state.driving && state.chase ? 'block' : 'none';
+  if (cockpitOn) drawDash(dashEl);
   const r = roadAt(state.s);
   const pitch = !state.airborne ? Math.atan(r.slope) : clamp01(-state.vy / 60) * 0.3;
   car.rotation.set(-pitch, state.heading + Math.PI, -Math.atan2(r.bank, r.w));
@@ -706,6 +713,32 @@ function updateVisuals() {
     t.rotation.y = Math.atan2(camera.position.x - t.position.x, camera.position.z - t.position.z);
   }
   hudEl.textContent = Math.round(state.speed / DISP2MS) + ' mph';
+}
+
+// ---------- dash (320x200 space, HD-dash coordinates) ----------
+function drawDash(cnv) {
+  const g = cnv.getContext('2d');
+  g.clearRect(0, 0, 320, 200);
+  const vd = Math.min(92, state.speed / DISP2MS);
+  // speedo bar: x101-245 y164 (green -> amber -> red)
+  const w = Math.round(vd * 144 / 92);
+  const grad = g.createLinearGradient(101, 0, 245, 0);
+  grad.addColorStop(0, '#37d658'); grad.addColorStop(0.65, '#e8c33a'); grad.addColorStop(1, '#e84a3a');
+  g.fillStyle = grad;
+  g.fillRect(101, 164, w, 3);
+  // left LCD: lap / boost placeholder
+  g.font = 'bold 8px monospace';
+  g.fillStyle = '#8fe6a0';
+  g.fillText('L-', 10, 179);
+  g.fillText('B34', 10, 189);
+  // right LCD: run time
+  const t = state.pt;
+  const mm = Math.floor(t / 60), ss = Math.floor(t % 60), d1 = Math.floor((t % 1) * 10);
+  g.fillStyle = '#e8d089';
+  g.fillText(mm + ':' + String(ss).padStart(2, '0') + '.' + d1, 262, 184);
+  // speed digits above the bar
+  g.fillStyle = '#dfe8f5';
+  g.fillText(String(Math.round(vd)).padStart(2, ' '), 230, 161);
 }
 
 // ---------- loop ----------
@@ -758,7 +791,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 5,
+    version: 6,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });

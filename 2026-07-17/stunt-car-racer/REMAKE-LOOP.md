@@ -308,3 +308,17 @@ Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
   SwiftShader headless: ~11fps at 1600x900 (perf gate work in item 9).
   Deployed alongside as REMAKE v1; main game untouched gameplay-wise (v149
   token/cache bump only, badge 'HD v149 · 22 Jul 2026').
+
+- 2026-07-22 COCKPIT + AUDIO SHIPPED as REMAKE v6 (CACHE scr-v154). Cockpit =
+  images/cockpit.png overlay (fixed inset 0, stretch-fill; 8:5 letterbox
+  polish later) + dash <canvas> 320x200 pixelated: speed bar x101-245 y164
+  (green->amber gradient, w=vd*144/92) lines up with the photo speedo scale,
+  left LCD 'L-/B34' rows 179/189, right time x262 y184 amber. Cockpit/dash
+  visible only driving+cockpit-view (chase keeps HUD pill; own car hidden in
+  cockpit). remake/audio.js = compact Web Audio mixer from the ElevenLabs
+  pack driven by __remake.state: menu music, idle/high crossfade by v/VMAX +
+  playbackRate 0.7+0.85v, air loop while airborne, land one-shot after
+  >0.4s flights, crash one-shot on grind (1.2s cooldown); unlock on first
+  pointerdown/keydown; QA __remakeAudio.levels() (verified idle .13/high .30
+  rate 1.35 at speed, ctx running). Zero console errors. Backlog next: rival
+  AI + race flow (lap counting at startIdx line, records, wreck/crane).
