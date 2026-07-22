@@ -257,7 +257,20 @@ const state = {
   relPrev: 0, lastMoveT: 0, wrecking: false,
   boost: 34, boosting: false,
   craneT: -1, lastImpact: 0,
+  pitch: 0, roll: 0, pitchV: 0, rollV: 0,
+  wOld: [0, 0, 0], wAmt: [0, 0, 0],   // per-wheel contact memory FL, FR, R
 };
+// three-wheel contact geometry (car frame: x lateral, z forward-negative)
+const WHEELS = [
+  { dx: -1.9, dz: -2.3 },  // front left
+  { dx: 1.9, dz: -2.3 },   // front right
+  { dx: 0.0, dz: 2.4 },    // rear axle
+];
+// contact model ported from the original's CalculateWheelCollision:
+// clamped height difference + INCREASE-extrapolated amount-below-road
+const W_INCREASE = 276 / 256, W_CLAMP_UP = 2.0, W_CLAMP_DOWN = -0.3;
+const W_K = 90, W_AMT_CAP = 1.3; // spring rate + per-wheel force cap (m, m/s²·m)
+const I_PITCH = 11, I_ROLL = 4;
 const rival = { s: 0, speed: 0, on: true };
 // per-index road frame, filled after the track loads
 let seg = null; // {fx,fz,angle,slope,k,len}[]
@@ -754,46 +767,74 @@ function step(dt) {
       if (state.speed > 100) state.damage = Math.min(40, (state.damage || 0) + 2.5 * dt);
     }
   }
-  const deckY = r.y + (r.bank / r.w) * state.lat;
-  if (state.airborne) {
-    state.vy -= GRAV * dt;
-    const fallVy = state.vy;
-    state.y += state.vy * dt;
-    if (!r.gap && state.y <= deckY) {
-      state.lastImpact = Math.max(state.lastImpact, -fallVy);
-      if (fallVy < -35) { // hard landing damages the chassis
-        state.damage = Math.min(40, (state.damage || 0) + (-fallVy - 35) * 0.15);
-      }
-      if (fallVy < -9) {
-        // suspension bounce: the SCR skip
-        state.y = deckY + 0.02;
-        state.vy = -fallVy * 0.34;
-      } else {
-        state.y = deckY; state.vy = 0; state.airborne = false;
-      }
-    } else if (state.y < 2) {
-      // fell into a chasm to the valley floor
-      state.damage = Math.min(40, (state.damage || 0) + 10);
-      if (!state.wrecking) craneRecover();
+  // ---- three-wheel contact physics (from the original's trike model) ----
+  // wheel world road heights at each contact point
+  let totalF = 0, pitchT = 0, rollT = 0, contacts = 0, maxComp = 0;
+  const wheelBelow = [];
+  for (let w = 0; w < 3; w++) {
+    const ww = WHEELS[w];
+    const rw = roadAt(state.s - ww.dz);            // forward = -dz
+    const latW = state.lat + ww.dx;
+    let roadY = -1e9;
+    if (!rw.gap && Math.abs(latW) <= rw.w / 2 + 0.4) {
+      roadY = rw.y + (rw.bank / rw.w) * latW;
     }
-  } else if (r.gap) {
-    // deck vanishes under the car: over the void
-    state.airborne = true;
-    state.vy = Math.max(-0.3, Math.min(0.3, r0.slope)) * state.speed;
+    // wheel actual height from CG + attitude (small-angle)
+    const hW = state.y + ww.dz * state.pitch + ww.dx * state.roll;
+    let diff = roadY - hW;
+    if (diff > W_CLAMP_UP) diff = W_CLAMP_UP;
+    if (diff < W_CLAMP_DOWN) diff = W_CLAMP_DOWN;
+    let amt = (diff - state.wOld[w]) * W_INCREASE + diff;
+    if (amt < 0) amt = 0;
+    state.wOld[w] = diff;
+    state.wAmt[w] = amt;
+    wheelBelow.push(amt);
+    if (amt > 0) {
+      contacts++;
+      const F = Math.min(amt, W_AMT_CAP) * W_K;
+      totalF += F;
+      // restoring: force under a wheel rotates the body to RAISE that wheel
+      pitchT += F * ww.dz;
+      rollT += F * ww.dx;
+      if (amt > maxComp) maxComp = amt;
+    }
+  }
+  const wasAirborne = state.airborne;
+  state.airborne = contacts === 0;
+  // vertical: gravity + wheel forces
+  state.vy += (-GRAV + totalF) * dt;
+  if (contacts > 0) state.vy *= Math.max(0, 1 - 6 * dt); // tyre/suspension damping
+  state.y += state.vy * dt;
+  // hard-landing damage from compression spike
+  if (wasAirborne && contacts > 0) {
+    const impact = -Math.min(0, state.vy - totalF * dt);
+    state.lastImpact = Math.max(state.lastImpact, Math.abs(state.vy) + maxComp * 8);
+    if (maxComp > 1.2) state.damage = Math.min(40, (state.damage || 0) + (maxComp - 1.2) * 9);
+  }
+  // attitude: torques from wheel forces; free tumble in the air
+  state.pitchV += (pitchT / I_PITCH) * dt;
+  state.rollV += (rollT / I_ROLL) * dt;
+  // align toward road grade while grounded (tyres resist twist)
+  if (contacts > 0) {
+    const targetPitch = -Math.atan(Math.max(-0.35, Math.min(0.35, r.slope)));
+    const targetRoll = -Math.atan2(r.bank, r.w);
+    state.pitchV += (targetPitch - state.pitch) * 85 * dt;
+    state.rollV += (targetRoll - state.roll) * 95 * dt;
+    state.pitchV *= Math.max(0, 1 - 11 * dt);
+    state.rollV *= Math.max(0, 1 - 12 * dt);
   } else {
-    // BALLISTIC crest launch — the earlier glued-to-road model was wrong
-    // (its telemetry evidence only covered flat sections; the user is right
-    // that jumping IS the game). Airborne the moment the deck falls away
-    // from the arc: crests, humps, lips, cliffs all launch naturally.
-    const vyG = Math.max(-0.3, Math.min(0.3, r0.slope)) * state.speed;
-    const ballY = state.y + vyG * dt - 0.5 * GRAV * dt * dt;
-    if (ballY > deckY + 0.02) {
-      state.airborne = true;
-      state.vy = vyG - GRAV * dt;
-      state.y = ballY;
-    } else {
-      state.y = deckY;
-    }
+    state.pitchV *= Math.max(0, 1 - 0.4 * dt);
+    state.rollV *= Math.max(0, 1 - 0.4 * dt);
+  }
+  state.pitch = Math.max(-0.55, Math.min(0.55, state.pitch + state.pitchV * dt));
+  state.roll = Math.max(-0.55, Math.min(0.55, state.roll + state.rollV * dt));
+  // floor: never sink through the deck
+  const deckY = r.gap ? -1e9 : r.y + (r.bank / r.w) * state.lat;
+  if (deckY > -1e8 && state.y < deckY - 0.6) { state.y = deckY - 0.6; if (state.vy < 0) state.vy = 0; }
+  // fell into a chasm to the valley floor
+  if (state.y < 2) {
+    state.damage = Math.min(40, (state.damage || 0) + 10);
+    if (!state.wrecking) craneRecover();
   }
   state.pt += dt;
   syncWorldPose();
@@ -873,9 +914,8 @@ function updateVisuals() {
   hudEl.style.display = state.driving && state.chase ? 'block' : 'none';
   if (cockpitOn) drawDash(dashEl);
   const r = roadAt(state.s);
-  const pitchT = !state.airborne ? Math.atan(r.slope) : clamp01(-state.vy / 60) * 0.3;
-  updateVisuals.p = (updateVisuals.p || 0) * 0.85 + pitchT * 0.15; // smooth crests
-  car.rotation.set(-updateVisuals.p, state.heading + Math.PI, -Math.atan2(r.bank, r.w));
+  // attitude now comes straight from the wheel-contact physics
+  car.rotation.set(state.pitch, state.heading + Math.PI, state.roll);
   const steerRoll = ((keys['KeyA'] || keys['ArrowLeft']) ? 1 : 0) - ((keys['KeyD'] || keys['ArrowRight']) ? 1 : 0);
   car.rotation.z += steerRoll * 0.05 * Math.min(1, state.speed / 60);
 
@@ -998,7 +1038,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 12,
+    version: 13,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });
