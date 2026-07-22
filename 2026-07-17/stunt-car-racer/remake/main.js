@@ -640,6 +640,9 @@ function syncWorldPose() { /* world pose IS the state now */ }
 // ---------- input ----------
 const keys = {};
 const gp = { w: false, a: false, s: false, d: false };
+// mouse driving: cursor X across the window = steering, left-click = accelerate,
+// right-click = brake. Only while driving (menu clicks stay normal).
+const mouse = { steer: 0, accel: false, brake: false, active: false };
 // touch: left/right thirds steer, middle accelerates, bottom-middle brakes
 function applyTouches(list) {
   gp.tw = gp.ta = gp.ts = gp.td = false;
@@ -678,6 +681,24 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Escape' && state.driving) showMenu();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ---------- mouse driving ----------
+window.addEventListener('mousemove', (e) => {
+  if (!state.driving) return;
+  mouse.active = true;
+  const nx = (e.clientX / window.innerWidth - 0.5) * 2;   // -1 (left) .. +1 (right)
+  mouse.steer = Math.max(-1, Math.min(1, nx * 1.8));      // ~55% travel = full lock
+});
+window.addEventListener('mousedown', (e) => {
+  if (!state.driving) return;
+  if (e.button === 0) mouse.accel = true;
+  else if (e.button === 2) mouse.brake = true;
+});
+window.addEventListener('mouseup', (e) => {
+  if (e.button === 0) mouse.accel = false;
+  else if (e.button === 2) mouse.brake = false;
+});
+window.addEventListener('contextmenu', (e) => { if (state.driving) e.preventDefault(); });
 
 // ---------- physics (fixed-step 60 Hz, original-ratio constants) ----------
 function groundInfo(x, z, y) {
@@ -743,8 +764,8 @@ function step(dt) {
       if (spdA > vT || (Math.abs(want) > 1 && spdA > 40)) gp.ts = true;
     }
   }
-  const fwd = keys['KeyW'] || keys['ArrowUp'] || gp.w || gp.tw;
-  const brk = keys['KeyS'] || keys['ArrowDown'] || gp.s || gp.ts;
+  const fwd = keys['KeyW'] || keys['ArrowUp'] || gp.w || gp.tw || mouse.accel;
+  const brk = keys['KeyS'] || keys['ArrowDown'] || gp.s || gp.ts || mouse.brake;
   const left = keys['KeyA'] || keys['ArrowLeft'] || gp.a || gp.ta;
   const right = keys['KeyD'] || keys['ArrowRight'] || gp.d || gp.td;
   state.grind = false;
@@ -873,7 +894,13 @@ function step(dt) {
   // steeringAmount): grounded, THE ROAD TURNS THE CAR — feed-forward its
   // curvature rate plus an error spring; the player's stick adjusts on top.
   // Airborne: nothing steers you. Sliding happens via the grip cap.
-  const steer = (right ? 1 : 0) - (left ? 1 : 0);
+  // steer input, then REVERSED per user request. A held steer key/touch/pad
+  // takes priority; otherwise the mouse cursor position steers (analog). Same
+  // sign for both so keyboard and mouse always agree.
+  let rightInput;
+  if (left || right) rightInput = (right ? 1 : 0) - (left ? 1 : 0);
+  else rightInput = mouse.active ? mouse.steer : 0;
+  const steer = -Math.max(-1, Math.min(1, rightInput));
   const grounded2 = contacts > 0;
   state.yawV += steer * (0.9 * Math.max(0.25, Math.abs(vd) / 92)) * dt;
   if (grounded2 && refDeck) {
@@ -1138,7 +1165,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 17,
+    version: 18,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });

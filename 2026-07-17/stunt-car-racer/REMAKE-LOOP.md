@@ -607,3 +607,18 @@ visual gap:
 - Verified fx=high hero/cockpit/chase (title-render match) + fx=low boot +
   autopilot laps little-ramp 69s / ski-jump 137s, zero console errors.
   Physics untouched.
+
+## v18 (CACHE scr-v167): STEERING REVERSED + MOUSE CONTROLS
+- Steering direction reversed again per user (flip sign of the steer input).
+- MOUSE DRIVING: cursor X across the window = analog steering, left-click =
+  accelerate, right-click = brake (contextmenu prevented while driving).
+  Only active while state.driving so menu clicks stay normal.
+- KEYBOARD PRIORITY: a held A/D/touch/pad steer key overrides the mouse;
+  otherwise the cursor position steers. Avoids a parked off-centre cursor
+  silently fighting the keys (absolute mouse-steer = cursor is the wheel).
+- Keyboard + mouse share ONE sign so they always agree (verified: mouse-right
+  and D both give lat +1.2). Autopilot self-calibrates dSign empirically so
+  the reversal doesn't break it — 8-track audit unaffected (little-ramp 71s,
+  hump-back 79s, draw-bridge 46s, zero errors). Hint text updated in
+  remake.html + source.html. GOTCHA: sed replacement '&' = whole match —
+  mangled the hint line; rewrote via python re.sub.
