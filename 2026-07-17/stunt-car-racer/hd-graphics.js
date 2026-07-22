@@ -556,9 +556,10 @@
     drawQuad(gl, st.groundProg, function () {
       gl.uniformMatrix4fv(st.gInvVP, false, inv);
       // camera-relative world: eye sits at y=0, so a plane AT 0 degenerates.
-      // 800 below eye ~= road-level ground seen from the cockpit; gives every
-      // track textured perspective ground where geometry is absent.
-      gl.uniform1f(st.gY, st.groundY - 800.0);
+      // The offset below eye tunes where the background ground sits: smaller =
+      // ground rises toward the track (elevated sections read anchored, not floating).
+      var drop = st.groundDrop != null ? st.groundDrop : 250.0;
+      gl.uniform1f(st.gY, st.groundY - drop);
       gl.uniform3f(st.gCam, cam[0], cam[1], cam[2]);
       // bind grass HERE: some tracks (Big Ramp) bind engine textures mid-frame,
       // stomping the frame-start unit-1 binding — never trust it at draw time

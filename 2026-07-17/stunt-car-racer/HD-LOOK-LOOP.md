@@ -54,9 +54,10 @@ backdrop + 'HD vNNN' badge, ?classic=1 escape hatch.
 
 ## ROUND TWO BACKLOG
 1. ~~Track sweep 1-8~~ **DONE it.7** — all 8 choosers + t1/t8 races verified green/textured.
-2. Sliver-tree edge case (rare edge-on billboard, e.g. t4 far right) — investigate facing math.
-3. Mobile portrait pass on 2-3 tracks.
-4. Race a full season race to see end screens (racewin/racelost/wrecked jpgs) in situ.
+2. Sliver-tree: NOT reproduced after the facing fix (it.7-8 runs) — WATCH-ONLY.
+3. ~~Mobile pass~~ **DONE it.8** (title/badge/buttons fit portrait; race letterboxed as designed).
+4. ~~End screens~~ **DONE it.8** (all three cards render: photoreal scenes + readable text;
+   verified via class-injection — deterministic, same visual path as the real trigger).
 5. ~~Streaming-fill anchor~~ **SETTLED it.7**: fill plane now 800 below eye (the y=0
    plane degenerates — it IS eye level in camera-relative space); near band textured,
    distance = field-green (0.44,0.57,0.40); green 3D geometry unified to grass scale.
@@ -110,7 +111,29 @@ backdrop + 'HD vNNN' badge, ?classic=1 escape hatch.
 - heads.png (driver portraits) stays ORIGINAL (user-loved). No multiplayer — keep
   #mm-btn-twoplayer hidden; do NOT touch stuntcarracer.fly.dev/CSP.
 
+## LOOP COMPLETE 2026-07-21 (v147 live CF + GitHub)
+Two rounds, 8 iterations, v143→v147 deployed. The reference look is achieved:
+green tree-dotted hills, dark aggregate asphalt with red/white kerbs, weathered
+red/white block walls, photo snow-mountain horizon, photoreal low cockpit, HD
+audio, cinematic end cards — all 8 tracks, desktop + mobile, zero console errors.
+Resume anytime with the /loop prompt; candidate future items: per-track palette
+variety (e.g. restore Big Ramp's icy mood as a grass variant), damage-glass art,
+season-dusk aesthetic exploration (accidental beauty — engine dims for season
+screens and the layers compose into twilight).
+
+## POST-LOOP MAINTENANCE
+- v148 (2026-07-21, user): ANCHORING — background ground-fill plane raised from
+  800→250 below eye (st.groundDrop override hook added) so elevated track sections
+  hug the ground instead of floating; safe because the fill draws behind ALL track
+  geometry (depth 0.9999, no depth write) so it can never occlude the road. Verified
+  chooser+race, near field unaffected. GAMES PAGE: game moved back to UNFINISHED
+  section — the section is keyed on slugTitle in the UNFINISHED set (NOT the tag);
+  renaming to "Stunt Car Racer HD" broke the match, so added 'stunt car racer hd'
+  to the set; reverted card tag featured→experimental and removed the front-page promo.
+
 ## ITERATION LOG
+- it.8 (2026-07-21): mobile + end-cards verified; sliver-tree not reproduced;
+  round two CLOSED — loop complete.
 - it.7 (2026-07-21): 8-track sweep green; fill architecture settled (below-eye plane,
   field-green distance, unified green-geometry grass). LESSON: in this engine EVERY
   mysterious flat region so far has been MY OWN fill's fog color — check
