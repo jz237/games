@@ -113,6 +113,12 @@ const wallTex = loadTex('images/tex-wall.jpg', 1, 1);
     mc.width = 1024; mc.height = 256;
     const m = mc.getContext('2d');
     m.drawImage(img, 0, img.height * 0.74, img.width, img.height * 0.26, 0, 0, 1024, 256);
+    // blend a horizontally-flipped copy: symmetric strip -> seamless mirrored wrap
+    m.save();
+    m.globalAlpha = 0.5;
+    m.scale(-1, 1);
+    m.drawImage(img, 0, img.height * 0.74, img.width, img.height * 0.26, -1024, 0, 1024, 256);
+    m.restore();
     m.globalCompositeOperation = 'destination-out';
     const fade = m.createLinearGradient(0, 0, 0, 120);
     fade.addColorStop(0, 'rgba(0,0,0,1)');
@@ -206,6 +212,7 @@ function terrainH(x, z) {
 // ---------- build world from track JSON ----------
 const treeBillboards = [];
 const car = new THREE.Group();
+car.rotation.order = 'YXZ'; // yaw, then pitch/roll in car-local axes
 let startIdx = 0;
 const state = {
   x: 0, y: 0, z: 0, heading: 0,
@@ -289,6 +296,31 @@ async function buildWorld() {
     LK.push([p.x + lx * kw, p.y + bankY * (kw / hw), p.z + lz * kw]);
     RK.push([p.x - lx * kw, p.y - bankY * (kw / hw), p.z - lz * kw]);
   }
+  // flat-shaded ribbon: per-segment duplicated verts -> hard color block edges
+  function ribbonFlat(A, B, mat, vScale, segColFn) {
+    const pos = [], uv = [], col = [], idx = [];
+    for (let i = 0; i < N; i++) {
+      const k = i, k2 = (i + 1) % N;
+      const c = segColFn(i);
+      const v0 = cum[i] * vScale, v1 = cum[i + 1] * vScale;
+      pos.push(...A[k], ...B[k], ...A[k2], ...B[k2]);
+      uv.push(0, v0, 1, v0, 0, v1, 1, v1);
+      col.push(...c, ...c, ...c, ...c);
+      const b4 = i * 4;
+      idx.push(b4, b4 + 1, b4 + 2, b4 + 1, b4 + 3, b4 + 2);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.receiveShadow = true;
+    mesh.castShadow = true;
+    scene.add(mesh);
+    return mesh;
+  }
   function ribbon(A, B, mat, vScale, colFn) {
     const pos = [], uv = [], col = [], idx = [];
     for (let i = 0; i <= N; i++) {
@@ -319,8 +351,8 @@ async function buildWorld() {
   ribbon(LK, RK, asMat, 1 / 14, (k) => path[k].shade === 'start' ? [0.22, 0.22, 0.24] : [1, 1, 1]);
   const kerbMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
   const kerbCol = (k) => (Math.floor(k / 2) % 2) ? [0.78, 0.12, 0.10] : [0.92, 0.90, 0.86];
-  ribbon(L, LK, kerbMat, 1 / 14, kerbCol);
-  ribbon(RK, R, kerbMat, 1 / 14, kerbCol);
+  ribbonFlat(L, LK, kerbMat, 1 / 14, kerbCol);
+  ribbonFlat(RK, R, kerbMat, 1 / 14, kerbCol);
   // deck sides + underside
   const depth = 1.1;
   const Ld = L.map(p => [p[0], p[1] - depth, p[2]]);
@@ -345,43 +377,95 @@ async function buildWorld() {
     const outerTop = outer.map(p => [p[0], p[1] + wallH, p[2]]);
     const wMat = new THREE.MeshStandardMaterial({ map: wallTex, vertexColors: true, roughness: 0.9 });
     const blockCol = (k) => (Math.floor(k / 3) % 2) ? [0.80, 0.16, 0.13] : [1, 1, 1];
-    ribbon(inner, innerTop, wMat, 1 / 6, blockCol);
-    ribbon(outerTop, outer, wMat, 1 / 6, blockCol);
-    ribbon(innerTop, outerTop, wMat, 1 / 6, blockCol);
+    ribbonFlat(inner, innerTop, wMat, 1 / 6, blockCol);
+    ribbonFlat(outerTop, outer, wMat, 1 / 6, blockCol);
+    ribbonFlat(innerTop, outerTop, wMat, 1 / 6, blockCol);
   }
   wallStrip(L, 1);
   wallStrip(R, -1);
 
-  // --- pier previews (proper A-frames next iteration) ---
+  // --- A-frame steel pylons + underside framing (instanced beams) ---
   {
-    const legGeo = new THREE.BoxGeometry(1, 1, 1);
-    const legMat = new THREE.MeshStandardMaterial({ color: 0x7d848d, roughness: 0.55, metalness: 0.5 });
-    const inst = new THREE.InstancedMesh(legGeo, legMat, Math.ceil(N / 4) * 2 + 8);
-    const M = new THREE.Matrix4();
+    const beamGeo = new THREE.BoxGeometry(1, 1, 1);
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0x7d848d, roughness: 0.5, metalness: 0.55 });
+    const MAXB = N * 3 + Math.ceil(N / 2) * 5 + 16;
+    const inst = new THREE.InstancedMesh(beamGeo, steelMat, MAXB);
+    const helper = new THREE.Object3D();
+    const UP = new THREE.Vector3(0, 1, 0);
+    const dir = new THREE.Vector3();
     let n = 0;
-    for (let i = 0; i < N; i += 4) {
+    function beam(p1, p2, w) {
+      if (n >= MAXB) return;
+      dir.set(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]);
+      const len = dir.length();
+      if (len < 0.05) return;
+      dir.normalize();
+      helper.position.set((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2, (p1[2] + p2[2]) / 2);
+      helper.quaternion.setFromUnitVectors(UP, dir);
+      helper.scale.set(w, len, w);
+      helper.updateMatrix();
+      inst.setMatrixAt(n++, helper.matrix);
+    }
+    const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    const patches = [];
+    for (let i = 0; i < N; i++) {
       const p = path[i];
       const a = path[(i - 1 + N) % N], b = path[(i + 1) % N];
       let fx = b.x - a.x, fz = b.z - a.z;
       const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
       const lx = -fz, lz = fx;
-      for (const s2 of [-1, 1]) {
-        const off = (p.w / 2 - 1.4) * s2;
-        const px = p.x + lx * off, pz = p.z + lz * off;
-        const gy = terrainH(px, pz);
-        const top = p.y - depth + 0.1;
-        const h = top - gy;
-        if (h < 0.5) continue;
-        const wleg = 2.0 + h * 0.05; // taller piers read thicker
-        M.makeScale(wleg, h, wleg);
-        M.setPosition(px, gy + h / 2, pz);
-        inst.setMatrixAt(n++, M);
+      const topY = p.y - depth + 0.25;
+      const edge = (s2) => [p.x + lx * (p.w / 2 - 0.8) * s2, topY, p.z + lz * (p.w / 2 - 0.8) * s2];
+      // underside: cross rib every slat + edge rails to the next slat
+      beam(edge(-1), edge(1), 0.35);
+      const pn = path[(i + 1) % N];
+      const topYn = pn.y - depth + 0.25;
+      let fxn = path[(i + 2) % N].x - p.x, fzn = path[(i + 2) % N].z - p.z;
+      const fln = Math.hypot(fxn, fzn) || 1; fxn /= fln; fzn /= fln;
+      const edgeN = (s2) => [pn.x + (-fzn) * (pn.w / 2 - 0.8) * s2, topYn, pn.z + fxn * (pn.w / 2 - 0.8) * s2];
+      beam(edge(-1), edgeN(-1), 0.4);
+      beam(edge(1), edgeN(1), 0.4);
+      // A-frame pylon every 2 slats (~2 track-widths)
+      if (i % 2 === 0) {
+        const legs = [];
+        for (const s2 of [-1, 1]) {
+          const bx = p.x + lx * (p.w / 2 + 2.6) * s2, bz = p.z + lz * (p.w / 2 + 2.6) * s2;
+          const gy = terrainH(bx, bz);
+          const base = [bx, gy - 0.4, bz];
+          const top = edge(s2);
+          if (top[1] - gy < 1.2) { legs.push(null); continue; }
+          const h = top[1] - gy;
+          beam(base, top, 0.8 + h * 0.012);
+          legs.push([base, top]);
+          patches.push([bx, gy, bz, 1.6 + h * 0.02]);
+        }
+        if (legs[0] && legs[1]) {
+          beam(lerp3(...legs[0], 0.42), lerp3(...legs[1], 0.42), 0.5);
+          beam(lerp3(...legs[0], 0.78), lerp3(...legs[1], 0.78), 0.45);
+          // diagonal brace for truss look
+          beam(lerp3(...legs[0], 0.42), lerp3(...legs[1], 0.78), 0.3);
+        }
       }
     }
     inst.count = n;
     inst.castShadow = true;
     inst.receiveShadow = true;
     scene.add(inst);
+    // dark contact patches where legs meet the grass
+    if (patches.length) {
+      const cGeo = new THREE.CircleGeometry(1, 20);
+      cGeo.rotateX(-Math.PI / 2);
+      const cMat = new THREE.MeshBasicMaterial({ color: 0x25301e, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+      const ci = new THREE.InstancedMesh(cGeo, cMat, patches.length);
+      const M2 = new THREE.Matrix4();
+      patches.forEach((pt, i2) => {
+        M2.makeScale(pt[3], 1, pt[3]);
+        M2.setPosition(pt[0], pt[1] + 0.12, pt[2]);
+        ci.setMatrixAt(i2, M2);
+      });
+      ci.renderOrder = 1;
+      scene.add(ci);
+    }
   }
 
   // --- start gantry ---
@@ -576,7 +660,7 @@ buildWorld().then(() => {
     deckAt, terrainH, respawn,
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 2,
+    version: 3,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });

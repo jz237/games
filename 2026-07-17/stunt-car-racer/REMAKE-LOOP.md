@@ -89,10 +89,11 @@ keep the game in the games-page UNFINISHED set (both slugs already listed).
 Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
 
 ## BACKLOG (top = next; one shippable item per iteration)
-1. PYLONS as real A-frame trusses (replace v2 box piers) + contact-shadow
-   decals + underside steel framing. Also: hard-edged wall block colors
-   (vertex-color rings currently smear red→white across one segment) and the
-   mountain-ring seam brightness step.
+1. Physics tuning round 1 vs parity targets: A/B harness scripts the SAME
+   inputs in remake + original, overlays speed curves; fit ACCEL/DRAG to the
+   traced accel curve, verify jump airtime on the ramp (tune GRAV), add the
+   crane-launch (exit at display 28), fix spawn direction to match original
+   race direction (car must reach ramp section ~40% in, as telemetry did).
 3. PYLONS + contact shadows (the anchoring payoff) + underside framing.
 4. Physics tuning round 1 vs parity targets (accel/top/jump arc on Little Ramp).
 5. Trace remaining 7 tracks (batch the harness); build all; sweep screenshots.
@@ -143,6 +144,21 @@ Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
 
 ## ITERATION LOG
 - (newest first: item, result, lesson)
+- 2026-07-22 A-FRAME PYLONS SHIPPED as REMAKE v3 (CF+GitHub, CACHE scr-v151).
+  Instanced beam system (~2000 unit-box instances, one draw call): per slat a
+  cross rib + edge rails under the deck; every 2 slats an A-frame pylon (2
+  leaning legs base +2.6m outside deck edge, width 0.8+h*0.012, cross-braces
+  at 42%/78% + a diagonal), dark contact-patch circles at leg bases
+  (CircleGeometry, polygonOffset, renderOrder 1). ribbonFlat() (per-segment
+  duplicated verts) gives HARD block edges on walls/kerbs — shared-ring
+  vertex colors smear; flat variants cost 2x verts, fine. Mountain-ring seam
+  fixed by blending a flipped copy at 50% (symmetric strip + mirrored wrap =
+  seamless; slight haze, reads atmospheric). car.rotation.order='YXZ'.
+  NOTE: the ramp descent deck renders near-black — that is the ramp's OWN
+  cast shadow (correct, dramatic); asphalt v-tiling seams visible every 14m
+  (tex-asphalt2 not perfectly seamless) — queue macro-variation polish.
+  SwiftShader dropped ~12->8fps with beams+flat ribbons (perf item budget).
+  Zero console errors.
 - 2026-07-22 TRACK BUILDER V1 SHIPPED as REMAKE v2 (deploy: CF+GitHub,
   CACHE scr-v150). remake/main.js v2 loads tracks/little-ramp.json and builds:
   deck ribbons (center asphalt + red/white kerb strips + sides/underside,
