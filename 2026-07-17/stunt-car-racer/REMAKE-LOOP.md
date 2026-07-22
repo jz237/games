@@ -89,10 +89,10 @@ keep the game in the games-page UNFINISHED set (both slugs already listed).
 Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
 
 ## BACKLOG (top = next; one shippable item per iteration)
-1. Original-tracer: Playwright harness logging telemetry+camera per frame on
-   Little Ramp; fit centerline; `tracks/little-ramp.json`; overlay plot vs
-   chooser flyover screenshot.
-2. Track builder v1: deck+walls+kerbs from JSON; drive it.
+1. PYLONS as real A-frame trusses (replace v2 box piers) + contact-shadow
+   decals + underside steel framing. Also: hard-edged wall block colors
+   (vertex-color rings currently smear red→white across one segment) and the
+   mountain-ring seam brightness step.
 3. PYLONS + contact shadows (the anchoring payoff) + underside framing.
 4. Physics tuning round 1 vs parity targets (accel/top/jump arc on Little Ramp).
 5. Trace remaining 7 tracks (batch the harness); build all; sweep screenshots.
@@ -143,6 +143,51 @@ Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
 
 ## ITERATION LOG
 - (newest first: item, result, lesson)
+- 2026-07-22 TRACK BUILDER V1 SHIPPED as REMAKE v2 (deploy: CF+GitHub,
+  CACHE scr-v150). remake/main.js v2 loads tracks/little-ramp.json and builds:
+  deck ribbons (center asphalt + red/white kerb strips + sides/underside,
+  DoubleSide on sides or the underside renders black), alternating red/white
+  block WALLS (vertexColors × wallTex; blocks every 3 slats), box-pier
+  previews (InstancedMesh, width 2+h*0.05 — thin sticks look absurd under a
+  13m+ deck), start gantry, terrain dished/flattened near the path
+  (spatial-hash grid over path points, CELL 40m — powers pathDist/deckAt).
+  SCALE LOCKED: S=1/48 (deck 600u→12.5m); physics in ORIGINAL RATIOS:
+  VMAX = 92×181×S ≈ 347 m/s, GRAV ≈ 104 m/s² (original gravity×S — REAL 9.8
+  would break jump airtimes; the SCR feel REQUIRES its own gravity ratio).
+  HUD displays original units (m/s ÷ 3.77). deckAt() = precise segment query
+  (lateral offset, banked surface y, slope); groundInfo picks deck vs terrain
+  (deck only when car y > deck-3 — falling off the edge drops you to grass).
+  Drive verified: 0→159 m/s, wall keep-in works blind, R respawns at start.
+  Viaduct-from-below shot = the anchoring payoff, already structural.
+  Zero console errors. SwiftShader ~12fps.
+  KNOWN ROUGH EDGES (queued): box piers (→A-frames), wall color smear at
+  block boundaries, mountain-ring seam step, car spawn direction vs original
+  race direction unverified (A/B item resolves).
+- 2026-07-22 ORIGINAL-TRACER SHIPPED (no deploy — next release bundles it).
+  `tracks/little-ramp.json` (397 ordered centerline points: x,y,z,width,bank,
+  shade; loop closes within 1 slat, zero gaps) + `parity/targets.json` +
+  `parity/little-ramp-telemetry-raw.json`. Overlay plot = rounded-triangle
+  circuit, ramp on one straight (red-elevation band) — consistent with chooser
+  flyover. Rig: scratchpad/scr-trace.mjs (TRACK/OUT envs) + scr-trace-process.mjs.
+  HOW THE GEOMETRY CAPTURE WORKS (the big shortcut — reuse for the other 7):
+  run ?classic=1; addInitScript wraps getContext BEFORE everything; the engine
+  streams geometry via ONE big allocation + per-frame bufferSubData, so keep a
+  CPU MIRROR of every buffer (bufferData sets size/content, bufferSubData
+  patches it) and, during a ~150ms trace window, snapshot each drawArrays
+  range (mode TRIANGLES, stride 36 = pos3f@0 + color4f@12 + uv2f@28) at draw
+  time. VBO coords are ABSOLUTE WORLD (worldMatrix = identity for the 3D
+  pass). Frame = 27 draws: 2 wall batches (white 1,1,1 + dark red .47,.2,.2),
+  1 far-deck batch, ~23 near slat quads (6 verts each), 1 mid batch. Deck
+  colors olive .6,.6,.47 / cream .73,.73,.6 / black start line. Every 6 verts
+  = one slat QUAD; dedupe by centroid, nearest-neighbour walk = ordered loop.
+  KEY NUMBERS: slat length 512u; deck width ~600u; deck BASELINE y=640 above
+  terrain (the original is aerial EVERYWHERE — pylons will drop 640u≈5m);
+  ramp apex/wall top 3744u; world spans ~1.6k..64k.
+  PHYSICS TARGETS (Little Ramp): top speed 92 display; zSpeed = 181 × display
+  speed (world units/s); accel curve sampled every 0.5s in targets.json;
+  t30 0.62s (crane launch exits at ~28!), t60 3.92s, t90 10.02s; ramp jump
+  section 26, airborne 2.28s; boost reserve starts 34. Telemetry rig pattern:
+  requestAnimationFrame loop reading Module._jsGet* (works headless).
 - 2026-07-22 REMAKE v1 — BOOTSTRAP SHIPPED. remake.html + remake/main.js +
   vendored three r171 (three.module.min.js imports ./three.core.min.js — BOTH
   files required). Valley terrain (deterministic value-noise heightfield,

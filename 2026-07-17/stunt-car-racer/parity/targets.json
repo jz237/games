@@ -1,0 +1,51 @@
+{
+  "source": "traced from original WASM engine 2026-07-22, Little Ramp practice, ?classic=1",
+  "display_speed_to_world_units_per_sec": 181,
+  "littleRamp": {
+    "topSpeed": 92,
+    "accelCurve_halfSecond": [
+      28,
+      33,
+      38,
+      43,
+      48,
+      52,
+      56,
+      60,
+      64,
+      67,
+      70,
+      73,
+      76,
+      78,
+      80,
+      83,
+      85,
+      86,
+      88,
+      89,
+      90,
+      92
+    ],
+    "timeTo": {
+      "s30": 0.62,
+      "s60": 3.92,
+      "s90": 10.02
+    },
+    "craneLaunchSpeed": 28,
+    "jump": {
+      "section": 26,
+      "airborneSeconds": 2.28
+    },
+    "boostInitial": 34,
+    "slatLengthUnits": 512,
+    "deckBaselineY": 640,
+    "wallTopY": 3744,
+    "slats": 397
+  },
+  "tolerances": {
+    "speed": 0.05,
+    "jumpApex": 0.1,
+    "lapTime": 0.1
+  }
+}
