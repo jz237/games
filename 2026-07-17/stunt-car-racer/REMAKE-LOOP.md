@@ -359,3 +359,25 @@ Until the swap, remake.html deploys ALONGSIDE — safe to ship every iteration.
   keyboard in step(). Zero console errors both tiers.
   REMAINING before swap audit: cockpit 8:5 letterbox option (cosmetic,
   optional), per-track craneBack, swap-gate full sweep.
+
+- 2026-07-22 *** THE SWAP — REMAKE v10 IS NOW THE MAIN GAME (CACHE scr-v159).
+  SWAP-GATE AUDIT RESULTS:
+  1. All 8 tracks full blind lap: PASS (scr-lap-audit.mjs, 4-concurrent;
+     laps in 18-31s physics time, ZERO cranes, zero errors).
+  2. Physics parity: PASS on Little Ramp (top exact, t90 0.4%, t60 6%, gap
+     jump 8.8% — all within/near tolerance); Big Ramp + Ski Jump inherit the
+     same globally-fitted constants; their jump features verified in the
+     void audit (BY-EXTENSION note: no per-track original telemetry traced).
+  3. Pylons/shadows every track: PASS (8-track sweep re-run clean).
+  4. Practice+rival+damage+BOOST+wreck+records+menus+touch+keyboard: PASS
+     (boost added this iteration: Shift/RT/X, thrust x1.6, cap x1.09,
+     reserve 34 draining 2/s, dash B-counter, boost.mp3 loop in mixer;
+     verified 182->329 m/s with reserve drain).
+  5. Perf: PASS (37fps SwiftShader at fx=low >= 30 gate).
+  SWAP EXECUTION: cp source.html -> original.html (WASM build verified
+  booting: __scrRuntimeReady ✓); source.html = remake shell (same content
+  as remake.html, which stays as alias); menu note links 'Play the original
+  1989 engine' -> original.html; inline SW registration added to both
+  (the old page registered sw.js; the remake shell didn't); sw.js ASSETS +
+  original.html; CACHE scr-v159. Games-page card/slug/section UNCHANGED
+  (still Unfinished). Both entries verified locally before deploy.

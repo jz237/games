@@ -1,7 +1,7 @@
 // Remake audio: reuses the ElevenLabs pack via a compact Web Audio mixer
 // driven by window.__remake.state. QA: window.__remakeAudio.levels()
 const FILES = {
-  idle: 'audio/engine-idle.mp3', high: 'audio/engine-high.mp3',
+  idle: 'audio/engine-idle.mp3', high: 'audio/engine-high.mp3', boost: 'audio/boost.mp3',
   air: 'audio/air.mp3', land: 'audio/land.mp3', crash: 'audio/crash.mp3',
   music: 'audio/music.mp3',
 };
@@ -17,7 +17,7 @@ async function boot() {
     const r = await fetch(url);
     bufs[k] = await ctx.decodeAudioData(await r.arrayBuffer());
   }));
-  for (const k of ['idle', 'high', 'air', 'music']) {
+  for (const k of ['idle', 'high', 'air', 'music', 'boost']) {
     const g = ctx.createGain();
     g.gain.value = 0;
     g.connect(ctx.destination);
@@ -49,6 +49,7 @@ function tick() {
   srcs.idle.playbackRate.value = rate;
   srcs.high.playbackRate.value = rate;
   gains.air.gain.value = driving && st.airborne ? 0.6 : 0;
+  gains.boost.gain.value = driving && st.boosting ? 0.65 : 0;
   const now = performance.now() / 1000;
   if (st.airborne && !wasAir) airSince = now;
   if (!st.airborne && wasAir && now - airSince > 0.4 && driving) shot('land', 0.7);

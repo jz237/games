@@ -253,6 +253,7 @@ const state = {
   grind: false,
   lap: 0, lapT0: 0, lastLap: null, best: null,
   relPrev: 0, lastMoveT: 0, wrecking: false,
+  boost: 34, boosting: false,
 };
 const rival = { s: 0, speed: 0, on: true };
 // per-index road frame, filled after the track loads
@@ -620,7 +621,7 @@ function respawn() {
   const r = roadAt(state.s);
   state.y = r.y;
   state.speed = CRANE_LAUNCH; state.vy = 0; state.airborne = false;
-  state.lap = 0; state.lapT0 = state.pt; state.lastLap = null;
+  state.lap = 0; state.lapT0 = state.pt; state.lastLap = null; state.boost = 34;
   state.relPrev = ((state.s - cum[startIdx]) % total + total) % total;
   state.lastMoveT = state.pt;
   rival.s = state.s + 32; rival.speed = CRANE_LAUNCH;
@@ -656,7 +657,7 @@ for (const ev of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
 }
 function pollGamepad() {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-  gp.w = gp.a = gp.s = gp.d = false;
+  gp.w = gp.a = gp.s = gp.d = gp.b = false;
   for (const p of pads) {
     if (!p) continue;
     const ax = p.axes[0] || 0;
@@ -664,6 +665,7 @@ function pollGamepad() {
     if (ax > 0.3) gp.d = true;
     if ((p.buttons[7] && p.buttons[7].pressed) || (p.buttons[0] && p.buttons[0].pressed)) gp.w = true;
     if ((p.buttons[6] && p.buttons[6].pressed) || (p.buttons[1] && p.buttons[1].pressed)) gp.s = true;
+    if ((p.buttons[5] && p.buttons[5].pressed) || (p.buttons[2] && p.buttons[2].pressed)) gp.b = true;
   }
 }
 window.addEventListener('keydown', e => {
@@ -687,20 +689,24 @@ const KC = 0.004;      // centrifugal outward drift factor (A/B-tunable)
 const STEER_BASE = 3, STEER_V = 0.045; // lateral m/s per unit speed
 function step(dt) {
   const fwd = keys['KeyW'] || keys['ArrowUp'] || gp.w || gp.tw;
+  const wantBoost = (keys['ShiftLeft'] || keys['ShiftRight'] || gp.b) && fwd && state.boost > 0 && !state.airborne;
+  state.boosting = !!wantBoost;
+  if (wantBoost) state.boost = Math.max(0, state.boost - 2 * dt);
   const brk = keys['KeyS'] || keys['ArrowDown'] || gp.s || gp.ts;
   const left = keys['KeyA'] || keys['ArrowLeft'] || gp.a || gp.ta;
   const right = keys['KeyD'] || keys['ArrowRight'] || gp.d || gp.td;
   state.grind = false;
   if (!state.airborne) {
     const vd = state.speed / DISP2MS; // display units for the fitted model
-    if (fwd) state.speed += (THRUST_D - CDRAG_D * vd * vd) * DISP2MS * dt;
+    if (fwd) state.speed += ((state.boosting ? THRUST_D * 1.6 : THRUST_D) - CDRAG_D * vd * vd) * DISP2MS * dt;
     else state.speed -= (CDRAG_D * vd * vd + 0.5) * DISP2MS * dt;
     // uphill slows, downhill feeds — clamped: steeper than ±0.3 is a jump
     // feature you fly over, not a drivable grade
     const sl = Math.max(-0.3, Math.min(0.3, roadAt(state.s).slope));
     state.speed -= SLOPE_G * sl * dt;
     if (brk) state.speed -= BRAKE * dt;
-    if (state.speed > VMAX) state.speed = VMAX;
+    const cap = state.boosting ? VMAX * 1.09 : VMAX;
+    if (state.speed > cap) state.speed = cap;
     if (state.speed < 0) state.speed = 0;
   }
   const r0 = roadAt(state.s);
@@ -878,7 +884,7 @@ function drawDash(cnv) {
   g.font = 'bold 8px monospace';
   g.fillStyle = '#8fe6a0';
   g.fillText('L' + Math.max(0, state.lap), 10, 179);
-  g.fillText('B34', 10, 189);
+  g.fillText('B' + Math.round(state.boost), 10, 189);
   // damage squiggle: red jagged line grows with damage
   const dmg = state.damage || 0;
   if (dmg > 0.5) {
@@ -950,7 +956,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 9,
+    version: 10,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });
