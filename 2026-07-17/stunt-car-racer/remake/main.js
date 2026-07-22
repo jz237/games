@@ -264,6 +264,7 @@ const state = {
   craneT: -1, lastImpact: 0,
   pitch: 0, roll: 0, pitchV: 0, rollV: 0,
   yawOff: 0, yawV: 0, accLatch: false, contactF: 0, engAcc: 0,
+  wDmg: [0, 0, 0],   // per-wheel damage FL, FR, R (original tracks each)
   wOld: [0, 0, 0], wAmt: [0, 0, 0],   // per-wheel contact memory FL, FR, R
 };
 // three-wheel contact geometry (car frame: x lateral, z forward-negative)
@@ -779,7 +780,11 @@ function step(dt) {
       state.yawOff *= Math.max(0, 1 - 4 * dt);
       state.yawV *= Math.max(0, 1 - 4 * dt);
       state.speed *= (1 - 0.55 * dt);
-      if (state.speed > 100) state.damage = Math.min(40, (state.damage || 0) + 2.5 * dt);
+      if (state.speed > 100) {
+        const side = state.lat > 0 ? 0 : 1; // FL grinds left wall, FR right
+        state.wDmg[side] = Math.min(40, state.wDmg[side] + 3.5 * dt);
+        state.damage = (state.wDmg[0] + state.wDmg[1] + state.wDmg[2]) / 3;
+      }
     }
   }
   // ---- three-wheel contact physics (from the original's trike model) ----
@@ -825,9 +830,11 @@ function step(dt) {
   state.y += state.vy * dt;
   // hard-landing damage from compression spike
   if (wasAirborne && contacts > 0) {
-    const impact = -Math.min(0, state.vy - totalF * dt);
     state.lastImpact = Math.max(state.lastImpact, Math.abs(state.vy) + maxComp * 8);
-    if (maxComp > 1.2) state.damage = Math.min(40, (state.damage || 0) + (maxComp - 1.2) * 9);
+    for (let w = 0; w < 3; w++) {
+      if (wheelBelow[w] > 1.2) state.wDmg[w] = Math.min(40, state.wDmg[w] + (wheelBelow[w] - 1.2) * 9);
+    }
+    state.damage = (state.wDmg[0] + state.wDmg[1] + state.wDmg[2]) / 3;
   }
   // attitude: torques from wheel forces; free tumble in the air
   state.pitchV += (pitchT / I_PITCH) * dt;
@@ -905,7 +912,7 @@ function craneRecover() {
     state.speed = 0; state.vy = 0; state.airborne = false;
     state.craneT = 0; state.y = roadAt(state.s).y + CRANE_DROP_H;
     state.lastMoveT = state.pt;
-    state.damage = 0;
+    state.damage = 0; state.wDmg = [0, 0, 0];
     state.wrecking = false;
     if (craneEl) craneEl.style.display = 'none';
   }, 1400);
@@ -1057,7 +1064,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 14,
+    version: 15,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });

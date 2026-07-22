@@ -528,3 +528,21 @@ match — the fitted model approximated exactly these mechanics).
   Regression 8/8 tracks lap, zero errors. REMAINING: (d) per-wheel damage
   refinement, (e) on_chains crane control freeze (partially done), (f)
   full-feel survey.
+
+## PHYSICS LOOP CLOSED (2026-07-22) — REMAKE v15 (CACHE scr-v164)
+Subsystem (d): PER-WHEEL DAMAGE — wDmg[FL,FR,R] from per-wheel landing
+compression spikes (>1.2m, x9) + grind damages the wall-side front wheel
+(3.5/s over 100 m/s); dash damage = mean; crane clears. CLOSED-HARD: the
+port NEVER sets wreck_wheel_height_reduction (wreck-from-damage stubbed in
+the source!) — remake keeps crane recovery at damage 32 as the gameplay
+stand-in. (e) on_chains: crane freeze implemented (control locked during
+descent). FULL-FEEL SURVEY (fx=high, blind laps): hump-back lap w/ 38
+flight samples, ski-jump 55, draw-bridge 105 (SCR porpoise-skip at speed —
+characterful), landing damage 13-27 accumulating, zero errors everywhere.
+Steering feel verified: steer pulse builds yawOff 0.146 rad + lateral
+drift, release → road alignment re-centres in <1s (fishtail exists).
+ALL SUBSYSTEMS from PHYSICS-NOTES now implemented from source or
+CLOSED-HARD with rationale. Feel roadmap if a future round reopens: tune
+skip frequency (suspension rates), landing bounce restitution vs original
+video captures, air-tumble rates, opponent physics (Opponent Behaviour.cpp
+unread).
