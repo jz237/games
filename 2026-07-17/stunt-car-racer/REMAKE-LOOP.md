@@ -579,3 +579,31 @@ VERIFIED: brake 158->22 in 3s; unsteered car flies off corner 1 tangentially
 (lat -45, authentic); blind-W lap with 2 crane recoveries; autopilot laps:
 little-ramp 69s pt, hump-back 60s, ski-jump 134s (incl. crane starts);
 zero console errors throughout. Full 8-track re-audit queued next session.
+
+## PHOTOREAL LOOK PASS — REMAKE v17 (CACHE scr-v166)
+USER (Opus session): "make the game play and look like it does on the title
+screen" + shared the menu.jpg ramp render. Closed the gameplay↔title-render
+visual gap:
+- NEW ASSETS (nano-banana-pro / fal): images/env-alpine.jpg (2048x1024
+  equirectangular alpine panorama — snow peaks, cumulus, meadow),
+  tex-grass2.jpg (lush wildflower meadow, 1024 POT), tex-asphalt3.jpg
+  (weathered charcoal tarmac, 1024 POT).
+- SKY: replaced the gradient dome + thin mountain-band cylinder with the
+  equirect panorama as scene.background AND scene.environment (PMREM IBL) —
+  photoreal 360 backdrop + image-based lighting on car/pylons. A gradient
+  canvas background shows for the first frame so it's never black.
+- SEAM HEAL (KEY GOTCHA): nano-banana panoramas are NOT horizontally
+  seamless → a hard diagonal seam appears near the zenith where the wrap
+  meets. Fix: PIL strip-composite — blend the left M=320 cols with the
+  mirror of the right cols (mask 128→255) and mirror that onto the right, so
+  col0==col(W-1). Full-BLEED 2:1 resize (slight vertical stretch), NOT
+  top/bottom pad (padding makes a solid zenith cap whose boundary is itself
+  a visible seam). Both learned the hard way.
+- LIGHTING: sun warmer 0xfff0d4 @2.5; hemi 0.85→0.35 (env supplies sky
+  ambient — avoid double-count wash); exposure 1.06→1.0; fog 0xa4b8c4
+  1600–4600 (aerial haze blends the terrain edge into the mountain bases).
+- TERRAIN: tex-grass2, hills 55→70, rim wall 160→gentle 90 at 2500–3200 so
+  the meadow lifts to meet the mountains instead of walling them off.
+- Verified fx=high hero/cockpit/chase (title-render match) + fx=low boot +
+  autopilot laps little-ramp 69s / ski-jump 137s, zero console errors.
+  Physics untouched.

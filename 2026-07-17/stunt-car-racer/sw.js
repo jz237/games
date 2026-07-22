@@ -1,12 +1,12 @@
 // Service worker for Stunt Car Racer PWA
 // Caches game files for offline play and home-screen launch
 
-var CACHE_NAME = 'scr-v165';
+var CACHE_NAME = 'scr-v166';
 var ASSETS = [
   'source.html',
   'original.html',
   'remake.html',
-  'remake/main.js?v=16',
+  'remake/main.js?v=17',
   'remake/audio.js?v=2',
   'tracks/little-ramp.json',
   'tracks/hump-back.json',
@@ -43,8 +43,11 @@ var ASSETS = [
   'audio/lost.mp3?v=149',
   'audio/music.mp3?v=149',
   'images/sky.jpg',
+  'images/env-alpine.jpg',
   'images/tex-grass.jpg',
+  'images/tex-grass2.jpg',
   'images/tex-asphalt2.jpg',
+  'images/tex-asphalt3.jpg',
   'images/tex-wall.jpg',
   'images/tex-sand.jpg',
   'manifest.json',

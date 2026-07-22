@@ -74,11 +74,11 @@ renderer.shadowMap.enabled = FX !== 'low';
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.06;
+renderer.toneMappingExposure = 1.0;
 
 const scene = new THREE.Scene();
-const FOG_COLOR = 0xcfe0ef;
-scene.fog = new THREE.Fog(FOG_COLOR, 900, 5200);
+const FOG_COLOR = 0xa4b8c4; // aerial-perspective haze; blends terrain edge into the mountains
+scene.fog = new THREE.Fog(FOG_COLOR, 1600, 4600);
 const camera = new THREE.PerspectiveCamera(68, 1, 0.3, 9000);
 
 function resize() {
@@ -91,7 +91,7 @@ window.addEventListener('resize', resize);
 resize();
 
 // ---------- lights ----------
-const sun = new THREE.DirectionalLight(0xfff3e0, 2.6);
+const sun = new THREE.DirectionalLight(0xfff0d4, 2.5);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.near = 800;
@@ -104,7 +104,7 @@ sun.shadow.normalBias = 0.5;    // low-body contact shadows (see ledger)
 sun.shadow.camera.updateProjectionMatrix();
 scene.add(sun);
 scene.add(sun.target);
-const hemi = new THREE.HemisphereLight(0xbdd7f2, 0x4a5d38, 0.85);
+const hemi = new THREE.HemisphereLight(0xbdd7f2, 0x4a5d38, 0.35); // env IBL provides most sky ambient
 scene.add(hemi);
 
 // ---------- textures ----------
@@ -117,59 +117,38 @@ function loadTex(url, repX, repY) {
   t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   return t;
 }
-const grassTex = loadTex('images/tex-grass.jpg', 300, 300);
-const asphaltTex = loadTex('images/tex-asphalt2.jpg', 1, 1);
+const grassTex = loadTex('images/tex-grass2.jpg', 260, 260);
+const asphaltTex = loadTex('images/tex-asphalt3.jpg', 1, 1);
 const wallTex = loadTex('images/tex-wall.jpg', 1, 1);
 
 // ---------- sky dome + mountain ring ----------
+// Photoreal 360 alpine environment: the equirectangular panorama becomes both
+// the world backdrop AND image-based lighting, the way the title render looks.
+// A tinted gradient dome shows immediately so the first frame is never black.
 (function buildSky() {
   const cnv = document.createElement('canvas');
   cnv.width = 4; cnv.height = 256;
   const g = cnv.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0.0, '#2f6fd0');
-  grad.addColorStop(0.45, '#5b93de');
-  grad.addColorStop(0.8, '#a9c8ea');
-  grad.addColorStop(1.0, '#dbe7f2');
+  grad.addColorStop(0.0, '#2f6fd0'); grad.addColorStop(0.5, '#6fa0dc');
+  grad.addColorStop(0.82, '#bcd2e6'); grad.addColorStop(1.0, '#8fa39a');
   g.fillStyle = grad; g.fillRect(0, 0, 4, 256);
-  const t = new THREE.CanvasTexture(cnv);
-  t.colorSpace = THREE.SRGBColorSpace;
-  const dome = new THREE.Mesh(
-    new THREE.SphereGeometry(7200, 32, 18),
-    new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide, fog: false, depthWrite: false })
-  );
-  dome.renderOrder = -3;
-  scene.add(dome);
-  const img = new Image();
-  img.onload = () => {
-    const mc = document.createElement('canvas');
-    mc.width = 1024; mc.height = 256;
-    const m = mc.getContext('2d');
-    m.drawImage(img, 0, img.height * 0.74, img.width, img.height * 0.26, 0, 0, 1024, 256);
-    // blend a horizontally-flipped copy: symmetric strip -> seamless mirrored wrap
-    m.save();
-    m.globalAlpha = 0.5;
-    m.scale(-1, 1);
-    m.drawImage(img, 0, img.height * 0.74, img.width, img.height * 0.26, -1024, 0, 1024, 256);
-    m.restore();
-    m.globalCompositeOperation = 'destination-out';
-    const fade = m.createLinearGradient(0, 0, 0, 120);
-    fade.addColorStop(0, 'rgba(0,0,0,1)');
-    fade.addColorStop(1, 'rgba(0,0,0,0)');
-    m.fillStyle = fade; m.fillRect(0, 0, 1024, 120);
-    const mt = new THREE.CanvasTexture(mc);
-    mt.colorSpace = THREE.SRGBColorSpace;
-    mt.wrapS = THREE.MirroredRepeatWrapping;
-    mt.repeat.set(3, 1);
-    const ring = new THREE.Mesh(
-      new THREE.CylinderGeometry(6300, 6300, 2400, 72, 1, true),
-      new THREE.MeshBasicMaterial({ map: mt, side: THREE.BackSide, transparent: true, fog: false, depthWrite: false })
-    );
-    ring.position.y = 850;
-    ring.renderOrder = -2;
-    scene.add(ring);
-  };
-  img.src = 'images/sky.jpg';
+  const domeTex = new THREE.CanvasTexture(cnv);
+  domeTex.colorSpace = THREE.SRGBColorSpace;
+  scene.background = domeTex;
+
+  texLoader.load('images/env-alpine.jpg', (tex) => {
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    scene.background = tex;
+    try {
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      pmrem.compileEquirectangularShader();
+      scene.environment = pmrem.fromEquirectangular(tex).texture;
+      pmrem.dispose();
+    } catch (e) { /* IBL optional — background still shows */ }
+  });
 })();
 
 // ---------- track data ----------
@@ -236,10 +215,11 @@ function deckAt(x, z) {
 function terrainH(x, z) {
   const n = vnoise(x / 340 + 7.3, z / 340 + 2.1) * 0.65
           + vnoise(x / 120 + 3.7, z / 120 + 9.4) * 0.35;
-  const hills = (n - 0.42) * 55;
+  const hills = (n - 0.42) * 70;
   const d = pathDist(x, z);
   const f = sstep(35, 190, d);
-  const rim = sstep(1800, 3000, Math.hypot(x, z)) * 160;
+  // gentle rise only at the very edge, lifting the meadow to meet the mountains
+  const rim = sstep(2500, 3200, Math.hypot(x, z)) * 90;
   return hills * f - 2 * (1 - f) + rim;
 }
 
@@ -1158,7 +1138,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 16,
+    version: 17,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });
