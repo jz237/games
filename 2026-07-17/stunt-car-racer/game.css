@@ -1,0 +1,1366 @@
+/*
+ * Game UI styles for Stunt Car Racer.
+ *
+ * All game overlay, button, HUD, and screen styles live here,
+ * keeping presentation out of game.js.
+ */
+
+:root {
+  --scr-sky: #5599ff;
+  --scr-ground: #777755;
+  --scr-road: #999977;
+  --scr-red: #995555;
+  --scr-red-dark: #550000;
+  --scr-cream: #ffffdd;
+  --scr-panel: #111322;
+}
+
+/* ── Fixed overlays ──────────────────────────────────────── */
+
+#fadeOverlay {
+  position: fixed;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 200;
+  transition: opacity 0.35s ease;
+}
+
+#gameUI {
+  position: fixed;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 100;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#season-overlay {
+  position: fixed;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  z-index: 150;
+  background: rgba(0, 0, 0, 0.88);
+}
+
+#season-card {
+  background: #11100d;
+  color: var(--scr-cream);
+  border: 3px solid var(--scr-red);
+  border-radius: 0;
+  padding: 3vh 4vw;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  font-family: "Lucida Console", Consolas, monospace;
+  text-align: center;
+  box-sizing: border-box;
+  min-width: min(80vw, 360px);
+  box-shadow: 0 0 0 2px var(--scr-cream), 7px 7px 0 rgba(0, 0, 0, 0.75);
+  scrollbar-color: var(--scr-red) rgba(0, 0, 0, 0.35);
+  scrollbar-width: thin;
+}
+
+#season-card::-webkit-scrollbar { width: 9px; }
+#season-card::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.35); }
+#season-card::-webkit-scrollbar-thumb { background: var(--scr-red); border: 2px solid #19192a; }
+
+/* Authentic 320x200 title surround from the original Windows remake assets. */
+#season-card.main-menu-card {
+  position: relative;
+  width: var(--game-viewport-width, min(100vw, calc(100vh * 8 / 5)));
+  height: var(--game-viewport-height, min(100vh, calc(100vw * 5 / 8)));
+  min-width: 0;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  color: #160b08;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background:
+    linear-gradient(180deg, rgba(6, 10, 18, 0.34), rgba(6, 10, 18, 0.06) 32%, rgba(6, 10, 18, 0.5) 82%),
+    #223 url("images/screens/menu.jpg") center / cover no-repeat;
+  image-rendering: auto;
+  box-shadow: 0 0 0 200vmax #04060b; /* blank out the canvas beyond the 8:5 card */
+  container-type: size;
+}
+
+.main-menu-card::after {
+  content: 'HD v149 \00b7 22 Jul 2026';
+  position: absolute;
+  right: 1.6%;
+  bottom: 2%;
+  padding: 0.5vh 1.2vw;
+  background: rgba(8, 12, 22, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  color: #dfe8f5;
+  font: 600 clamp(9px, 1.9vh, 13px) system-ui, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0.05em;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.main-menu-card .overlay-title-large {
+  display: block;
+  position: absolute;
+  left: 4%;
+  top: 6.5%;
+  width: 92%;
+  margin: 0;
+  text-align: center;
+  font: italic 900 clamp(22px, 15cqh, 68px) system-ui, "Segoe UI", Arial, sans-serif;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, #ffffff 8%, #eef3fa 30%, #9fb0c6 47%, #ffffff 53%, #d9e4f2 72%, #90a1ba 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 3px 0 #8c1a1a) drop-shadow(0 7px 14px rgba(0, 0, 0, 0.7));
+}
+
+.main-menu-card .overlay-subtitle {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 31.5%;
+  width: auto;
+  max-width: 88%;
+  margin: 0;
+  padding: 0.7vh 2.2vw;
+  box-sizing: border-box;
+  background: rgba(8, 12, 22, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #f2f6fc;
+  opacity: 1;
+  font: 600 clamp(9px, 2vh, 14px) system-ui, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0.06em;
+  line-height: 1.15;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  z-index: 2;
+}
+
+.main-menu-actions {
+  position: absolute;
+  left: 6%;
+  top: 39%;
+  width: 78%;
+  height: 55%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: clamp(3px, 0.8vh, 7px) clamp(4px, 0.8vw, 9px);
+}
+
+.main-menu-card .overlay-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  margin: 0;
+  padding: clamp(3px, 0.8vh, 8px) clamp(7px, 1.2vw, 14px);
+  overflow: hidden;
+  color: #f4f7fb;
+  background: linear-gradient(180deg, rgba(20, 26, 40, 0.72), rgba(8, 12, 22, 0.78));
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  font: 650 clamp(10px, 2.5vh, 17px) system-ui, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.main-menu-card .overlay-button:hover {
+  background: linear-gradient(180deg, rgba(46, 58, 84, 0.8), rgba(20, 28, 46, 0.85));
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+/* Online play is disabled on this deployment */
+#mm-btn-twoplayer { display: none !important; }
+
+.main-menu-card .main-menu-reset { grid-column: auto; }
+
+/* Five-key definition screen, matching the original game's configurable set. */
+#season-card.controls-card {
+  width: min(92vw, 600px);
+  padding: clamp(12px, 3vh, 28px) clamp(14px, 4vw, 36px);
+}
+
+.controls-description { max-width: 500px; margin-left: auto; margin-right: auto; }
+
+.pause-controls-owner { margin-top: clamp(4px, 1vh, 9px); }
+
+.pause-controls-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(4px, 0.8vh, 8px) clamp(5px, 1vw, 10px);
+  margin: clamp(5px, 1.2vh, 10px) auto clamp(8px, 1.6vh, 14px);
+  max-width: 560px;
+}
+
+.pause-control-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+  min-height: 28px;
+  padding: 3px 8px;
+  box-sizing: border-box;
+  color: var(--scr-cream);
+  background: rgba(153, 85, 85, 0.22);
+  border: 1px solid rgba(255, 255, 221, 0.28);
+  font-size: clamp(10px, 2.6vw, 14px);
+}
+
+.pause-control-chip span { opacity: 0.72; }
+.pause-control-chip b { color: #ffdd99; }
+
+.controls-grid {
+  display: grid;
+  gap: clamp(5px, 1vh, 10px);
+  margin: clamp(8px, 2vh, 16px) auto;
+}
+
+.controls-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 42%);
+  align-items: center;
+  gap: clamp(8px, 2vw, 18px);
+  min-height: 44px;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255, 255, 221, 0.16);
+}
+
+.controls-action {
+  text-align: left;
+  color: var(--scr-cream);
+  font-size: clamp(13px, 3.2vw, 18px);
+}
+
+.controls-key {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: clamp(7px, 1.3vh, 12px) 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(12px, 3vw, 17px);
+}
+
+.controls-key-capturing {
+  color: #11100d;
+  background: var(--scr-cream);
+  border-color: #ffdd44;
+  text-shadow: none;
+}
+
+.controls-status {
+  min-height: 2.6em;
+  margin: 1.5vh auto 0;
+  color: #ffdd99;
+  font-size: clamp(12px, 2.7vw, 15px);
+  line-height: 1.3;
+}
+
+.controls-status-error { color: #ff7777; }
+
+.controls-fallbacks {
+  max-width: 520px;
+  margin: 0.8vh auto 1.2vh;
+  color: rgba(255, 255, 221, 0.62);
+  font-size: clamp(10px, 2.4vw, 13px);
+  line-height: 1.35;
+}
+
+.controls-actions { text-align: center; }
+
+/* Portable save-disk replacement for desktop and mobile browsers. */
+.portable-backup-section {
+  width: min(100%, 650px);
+  margin: clamp(14px, 3vh, 24px) auto 0;
+  padding-top: clamp(10px, 2vh, 18px);
+  border-top: 2px solid rgba(255, 255, 221, 0.2);
+}
+
+.portable-backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.portable-file-input {
+  position: fixed;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+#season-card.portable-backup-card {
+  width: min(92vw, 560px);
+}
+
+.portable-backup-summary {
+  display: grid;
+  gap: 7px;
+  max-width: 480px;
+  margin: 2vh auto;
+  text-align: left;
+}
+
+.portable-backup-summary > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 10px;
+  padding: 7px 9px;
+  border-bottom: 1px solid rgba(255, 255, 221, 0.16);
+}
+
+.portable-backup-summary span { color: rgba(255, 255, 221, 0.58); }
+.portable-backup-summary b { overflow-wrap: anywhere; text-align: right; }
+
+/* Painted race-result screens, overlaid with a compact readable score strip. */
+#season-card.race-art-card {
+  position: relative;
+  width: var(--game-viewport-width, min(100vw, calc(100vh * 8 / 5)));
+  height: var(--game-viewport-height, min(100vh, calc(100vw * 5 / 8)));
+  min-width: 0;
+  max-width: none;
+  max-height: none;
+  padding: 0 6% 2.5%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background-color: #000;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  font-family: "Lucida Console", Consolas, monospace;
+  text-shadow: 1px 1px 0 #000, 0 0 4px #000;
+}
+
+#season-card.race-art-card::before {
+  content: "";
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: 1.5%;
+  height: 42%;
+  z-index: 0;
+  background: rgba(10, 8, 12, 0.84);
+  border: 2px solid rgba(255, 255, 221, 0.8);
+  box-shadow: inset 0 0 0 2px rgba(85, 0, 0, 0.8);
+}
+
+#season-card.race-art-card > * {
+  position: relative;
+  z-index: 1;
+  margin-top: 0.3vh;
+  margin-bottom: 0.3vh;
+}
+
+.race-art-card .overlay-subtitle,
+.race-art-card .overlay-title,
+.race-art-card .overlay-track,
+.race-art-card .overlay-result,
+.race-art-card .overlay-result-large,
+.race-art-card .overlay-winner,
+.race-art-card .overlay-fastest,
+.race-art-card .overlay-info,
+.race-art-card .overlay-detail {
+  font-size: clamp(9px, 2.25vh, 15px);
+  margin-top: 0.25vh;
+  margin-bottom: 0.25vh;
+}
+
+.race-art-card .overlay-button {
+  margin: 0.6vh 0 0;
+  padding: 0.7vh 3vw;
+  font-size: clamp(10px, 2.4vh, 16px);
+}
+
+#season-card.race-won-card { background-image: linear-gradient(180deg, rgba(6, 10, 18, 0.25), rgba(6, 10, 18, 0.55)), url("images/screens/racewin.jpg"); background-size: cover; background-position: center; image-rendering: auto; }
+#season-card.race-lost-card { background-image: linear-gradient(180deg, rgba(6, 10, 18, 0.25), rgba(6, 10, 18, 0.55)), url("images/screens/racelost.jpg"); background-size: cover; background-position: center; image-rendering: auto; }
+#season-card.race-wrecked-card { background-image: linear-gradient(180deg, rgba(6, 10, 18, 0.25), rgba(6, 10, 18, 0.55)), url("images/screens/wrecked.jpg"); background-size: cover; background-position: center; image-rendering: auto; }
+
+/* ── Base game button ────────────────────────────────────── */
+
+.game-button {
+  position: absolute;
+  display: none;
+  pointer-events: auto;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 12px;
+  font-family: Arial, sans-serif;
+  font-weight: bold;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  box-sizing: border-box;
+  text-align: center;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 90ms linear, border-color 90ms linear, transform 90ms linear;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.game-button:focus-visible {
+  outline: 3px solid var(--scr-cream);
+  outline-offset: 2px;
+}
+
+.game-button:hover {
+  background: rgba(153, 85, 85, 0.78);
+  border-color: rgba(255, 255, 221, 0.9);
+}
+
+.game-button:active { transform: translateY(1px); }
+
+/* ── Main menu buttons ───────────────────────────────────── */
+
+#mm-title {
+  left: 50%; top: 18%;
+  width: 70vw; height: auto;
+  max-width: 400px;
+  font-size: min(6vw, 32px);
+  pointer-events: none;
+  background: none; border: none;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.9);
+  transform: translateX(-50%);
+}
+
+#mm-practise {
+  left: 50%; top: 40%;
+  width: 50vw; height: 14vw;
+  max-width: 280px; max-height: 70px;
+  font-size: min(5vw, 26px);
+  transform: translateX(-50%);
+}
+
+#mm-season {
+  left: 50%; top: calc(40% + 16vw);
+  width: 50vw; height: 14vw;
+  max-width: 280px; max-height: 70px;
+  font-size: min(5vw, 26px);
+  transform: translateX(-50%);
+}
+
+/* ── Track menu (practise) ───────────────────────────────── */
+
+#tc-prev {
+  left: max(2vw, env(safe-area-inset-left));
+  bottom: max(6vh, env(safe-area-inset-bottom));
+  width: 14vw; height: 14vw;
+  max-width: 75px; max-height: 75px;
+  font-size: min(6vw, 32px);
+}
+
+#tc-next {
+  left: calc(max(2vw, env(safe-area-inset-left)) + min(16vw, 86px));
+  bottom: max(6vh, env(safe-area-inset-bottom));
+  width: 14vw; height: 14vw;
+  max-width: 75px; max-height: 75px;
+  font-size: min(6vw, 32px);
+}
+
+#tc-select {
+  right: max(2vw, env(safe-area-inset-right));
+  bottom: max(6vh, env(safe-area-inset-bottom));
+  width: 22vw; height: 14vw;
+  max-width: 130px; max-height: 75px;
+  font-size: min(3.5vw, 18px);
+}
+
+#tc-trackname {
+  left: 34vw; right: 26vw;
+  width: auto;
+  bottom: max(6vh, env(safe-area-inset-bottom)); height: 14vw;
+  max-height: 75px;
+  font-size: min(3.8vw, 20px);
+  pointer-events: none;
+  background: none; border: none;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+}
+
+#tc-backmain {
+  left: max(2vw, env(safe-area-inset-left));
+  top: max(2vh, env(safe-area-inset-top));
+  width: 18vw; height: 10vw;
+  max-width: 100px; max-height: 55px;
+  font-size: min(3.5vw, 18px);
+}
+
+/* ── Track preview (practise) ────────────────────────────── */
+
+#tc-back {
+  left: max(2vw, env(safe-area-inset-left));
+  bottom: max(6vh, env(safe-area-inset-bottom));
+  width: 22vw; height: 12vw;
+  max-width: 120px; max-height: 70px;
+  font-size: min(4.5vw, 22px);
+}
+
+#tc-view-prev, #tc-view-next {
+  bottom: max(6vh, env(safe-area-inset-bottom));
+  width: 15vw; height: 12vw;
+  max-width: 110px; max-height: 70px;
+  font-size: min(3.2vw, 17px);
+  transform: translateX(-50%);
+}
+
+#tc-view-prev { left: 36%; }
+#tc-view-next { left: 64%; }
+
+#tc-start {
+  right: max(2vw, env(safe-area-inset-right));
+  bottom: max(6vh, env(safe-area-inset-bottom));
+  width: 22vw; height: 12vw;
+  max-width: 120px; max-height: 70px;
+  font-size: min(4.5vw, 22px);
+}
+
+/* ── In-game driving controls (mobile) ───────────────────── */
+
+#tc-left {
+  left: max(2vw, env(safe-area-inset-left));
+  bottom: max(6vh, env(safe-area-inset-bottom));
+  width: 11vw; height: 11vw;
+  max-width: 65px; max-height: 65px;
+  font-size: min(5vw, 28px);
+}
+
+#tc-right {
+  left: calc(max(2vw, env(safe-area-inset-left)) + min(13vw, 74px));
+  bottom: max(6vh, env(safe-area-inset-bottom));
+  width: 11vw; height: 11vw;
+  max-width: 65px; max-height: 65px;
+  font-size: min(5vw, 28px);
+}
+
+#tc-accel, #tc-brake {
+  display: none;
+  flex-direction: row;
+  width: clamp(150px, 26vw, 210px);
+  height: clamp(58px, 11vw, 74px);
+  right: max(2vw, env(safe-area-inset-right));
+  background: rgba(18, 20, 36, 0.82);
+  border-color: rgba(255, 255, 255, 0.62);
+  border-radius: 10px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.55);
+}
+
+#tc-accel .split-left, #tc-accel .split-right,
+#tc-brake .split-left, #tc-brake .split-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  line-height: 1;
+}
+
+#tc-accel small, #tc-brake small {
+  font-size: clamp(9px, 1.45vw, 13px);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+#tc-accel b, #tc-brake b {
+  font-size: clamp(18px, 3.2vw, 27px);
+  line-height: 1;
+}
+
+#tc-accel .split-left, #tc-brake .split-left {
+  border-right: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+#tc-accel {
+  bottom: calc(max(4vh, env(safe-area-inset-bottom)) + clamp(58px, 11vw, 74px) + 2vh);
+  border-color: rgba(120, 255, 150, 0.82);
+}
+
+#tc-brake {
+  bottom: max(4vh, env(safe-area-inset-bottom));
+  border-color: rgba(255, 145, 120, 0.82);
+}
+
+#gameUI.desktop-input #tc-left,
+#gameUI.desktop-input #tc-right,
+#gameUI.desktop-input #tc-accel,
+#gameUI.desktop-input #tc-brake {
+  opacity: 0.22;
+}
+
+#gameUI.desktop-input #tc-left:hover,
+#gameUI.desktop-input #tc-right:hover,
+#gameUI.desktop-input #tc-accel:hover,
+#gameUI.desktop-input #tc-brake:hover,
+#gameUI.desktop-input #tc-left:active,
+#gameUI.desktop-input #tc-right:active,
+#gameUI.desktop-input #tc-accel:active,
+#gameUI.desktop-input #tc-brake:active {
+  opacity: 1;
+}
+
+/* ── In-game common ──────────────────────────────────────── */
+
+#tc-menu {
+  right: max(2vw, env(safe-area-inset-right));
+  top: max(2vh, env(safe-area-inset-top));
+  width: 10vw; height: 10vw;
+  max-width: 55px; max-height: 55px;
+  font-size: min(5vw, 28px);
+}
+
+/* Keep every driving control below the road view on short landscape phones.
+   The left/right safe-area insets also protect iPhones held with the notch on
+   either side. Portrait and desktop geometry remains unchanged. */
+@media (orientation: landscape) and (max-height: 500px) {
+  #tc-left,
+  #tc-right {
+    bottom: max(2vh, env(safe-area-inset-bottom));
+    width: clamp(48px, 14vh, 58px);
+    height: clamp(48px, 14vh, 58px);
+    font-size: clamp(20px, 7vh, 26px);
+  }
+
+  #tc-left {
+    left: max(2vw, env(safe-area-inset-left));
+  }
+
+  #tc-right {
+    left: calc(max(2vw, env(safe-area-inset-left)) + clamp(56px, 16vh, 70px));
+  }
+
+  #tc-accel,
+  #tc-brake {
+    bottom: max(2vh, env(safe-area-inset-bottom));
+    width: clamp(136px, 22vw, 158px);
+    height: clamp(48px, 15vh, 58px);
+  }
+
+  #tc-accel {
+    right: calc(max(2vw, env(safe-area-inset-right)) + clamp(136px, 22vw, 158px) + 1.5vw);
+  }
+
+  #tc-brake {
+    right: max(2vw, env(safe-area-inset-right));
+  }
+
+  #tc-accel small,
+  #tc-brake small {
+    font-size: clamp(8px, 2.7vh, 11px);
+  }
+
+  #tc-accel b,
+  #tc-brake b {
+    font-size: clamp(17px, 5vh, 23px);
+  }
+
+  #tc-menu {
+    width: clamp(44px, 13vh, 52px);
+    height: clamp(44px, 13vh, 52px);
+    font-size: clamp(21px, 7vh, 27px);
+  }
+}
+
+
+
+/* ── Game over / result ──────────────────────────────────── */
+
+#tc-gameover-label,
+#chain-boost-hint {
+  left: 50%; top: 40%;
+  width: 80vw; height: auto;
+  max-width: 500px;
+  font-size: min(7vw, 40px);
+  pointer-events: none;
+  background: none; border: none;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.9);
+  transform: translate(-50%, -50%);
+}
+
+#tc-gameover {
+  left: 50%; bottom: 6vh;
+  width: 18vw; height: 11vw;
+  max-width: 100px; max-height: 65px;
+  font-size: min(3.5vw, 18px);
+  transform: translateX(-50%);
+}
+
+/* ── HUD bars ────────────────────────────────────────────── */
+
+.hud-bar {
+  position: absolute;
+  display: none;
+  align-items: center;
+  pointer-events: none;
+  height: 2.5vh;
+  min-height: 14px;
+}
+
+.hud-icon {
+  font-size: min(6vh, 30px);
+  margin-right: 1vw;
+  line-height: 1;
+}
+
+.hud-track {
+  flex: 1;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.hud-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 4px;
+  transition: width 0.15s;
+}
+
+#tc-hud-damage {
+  left: 2vw; right: 14vw;
+  top: 2vh;
+  padding-left: 1vw;
+}
+
+#tc-hud-damage-fill { background: #ff3333; }
+
+/* ── HUD box (left side) ─────────────────────────────────── */
+
+#tc-hud-box {
+  position: absolute;
+  display: none;
+  left: 1.5vw;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  flex-direction: row;
+  align-items: stretch;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  padding: 0.6em 0.8em;
+  gap: 0.6em;
+}
+
+.hud-speed-track {
+  width: 6px;
+  min-width: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hud-speed-fill {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 0%;
+  border-radius: 3px;
+  background: linear-gradient(0deg, #44cc44, #cccc00, #ff4400);
+  transition: height 0.10s;
+}
+
+.hud-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.hud-row {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 22px;
+  color: #fff;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  line-height: 1.4;
+  min-height: 1.4em;
+}
+
+/* Compact HUD on mobile / touch devices */
+.hud-box-mobile {
+  padding: 0.4em 0.6em !important;
+  gap: 0.5em !important;
+}
+.hud-box-mobile .hud-speed-track {
+  width: 5px;
+  min-width: 5px;
+}
+.hud-box-mobile .hud-row {
+  font-size: 12px;
+}
+
+/* Subtle warm cinematic grade over the 3D view (HD-LOOK it.6) */
+#canvas { filter: saturate(1.07) contrast(1.03) brightness(1.01); }
+
+/* ── Race-mode canvas: 8∶5 aspect ratio ─────────────────── */
+
+#canvas.race-mode {
+  position: fixed !important;
+  width: var(--game-viewport-width, min(100vw, calc(100vh * 8 / 5))) !important;
+  height: var(--game-viewport-height, min(100vh, calc(100vw * 5 / 8))) !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+/* ── Chain overlay ─────────────────────────────────────────── */
+
+#chain-clip {
+  position: fixed;
+  left: 50%; top: 50%;
+  width: var(--game-viewport-width, min(100vw, calc(100vh * 8 / 5)));
+  height: var(--game-viewport-height, min(100vh, calc(100vw * 5 / 8)));
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 40;
+  display: none;
+}
+
+#chain-img {
+  position: absolute;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  image-rendering: auto;
+}
+
+/* ── Cockpit overlay ──────────────────────────────────────── */
+
+#cockpit-overlay {
+  position: fixed;
+  left: 50%; top: 50%;
+  width: var(--game-viewport-width, min(100vw, calc(100vh * 8 / 5)));
+  height: var(--game-viewport-height, min(100vh, calc(100vw * 5 / 8)));
+  transform: translate(-50%, -50%);
+  container-type: size;
+  pointer-events: none;
+  z-index: 50;
+  display: none;
+}
+
+#cockpit-img {
+  position: absolute;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  image-rendering: auto;
+  z-index: 1;
+}
+
+#cockpit-canvas {
+  position: absolute;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 2;
+  image-rendering: auto;
+}
+
+.cockpit-boost-img {
+  position: absolute;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  image-rendering: auto;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.cockpit-indicator {
+  position: absolute;
+  width: calc(16 / 320 * 100%);
+  height: calc(8 / 200 * 100%);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  pointer-events: none;
+  z-index: 2;
+}
+
+#cockpit-flag      { left: calc(96 / 320 * 100%);  top: calc(190 / 200 * 100%); }
+#cockpit-stopwatch { left: calc(208 / 320 * 100%); top: calc(190 / 200 * 100%); }
+
+.dust-cloud {
+  position: absolute;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  pointer-events: none;
+  z-index: -1;
+  display: none;
+}
+
+.spark-particle {
+  position: absolute;
+  width: calc(2 / 320 * 100%);
+  height: calc(2 / 200 * 100%);
+  pointer-events: none;
+  z-index: 0;
+  display: none;
+}
+
+.cockpit-damage-hole {
+  position: absolute;
+  top: calc(42 / 200 * 100%);
+  width: calc(32 / 320 * 100%);
+  height: calc(8 / 200 * 100%);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  pointer-events: none;
+  display: none;
+}
+
+#damage-holes-overlay {
+  position: fixed;
+  left: 50%; top: 50%;
+  width: var(--game-viewport-width, min(100vw, calc(100vh * 8 / 5)));
+  height: var(--game-viewport-height, min(100vh, calc(100vw * 5 / 8)));
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 101;
+  display: none;
+}
+
+.cockpit-wheel {
+  position: absolute;
+  image-rendering: auto;
+  pointer-events: none;
+  width: calc(44 / 320 * 100%);
+  height: calc(38 / 200 * 100%);
+  display: none;
+}
+
+/* cockpit.png is 320×200, so all offsets are fractions of those dimensions */
+.cockpit-text {
+  position: absolute;
+  display: none;
+  font-family: 'Courier New', Courier, monospace;
+  color: #d9ecff;
+  text-shadow: 0 0 6px rgba(110, 190, 255, 0.55);
+  font-size: 2.6cqh;
+  font-stretch: expanded;
+  line-height: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  width: calc(48 / 320 * 100%);
+  height: 2.6cqh;
+  pointer-events: none;
+  text-align: center;
+  z-index: 2;
+}
+
+#cockpit-lap-boost {
+  left: calc(39 / 320 * 100%);
+  top: calc(171 / 200 * 100%);
+}
+
+#cockpit-distance {
+  left: calc(39 / 320 * 100%);
+  top: calc(180 / 200 * 100%);
+}
+
+#cockpit-laptime {
+  left: calc(227 / 320 * 100%);
+  top: calc(171 / 200 * 100%);
+}
+
+#cockpit-bestlap {
+  left: calc(227 / 320 * 100%);
+  top: calc(180 / 200 * 100%);
+}
+
+/* ── Credits ── */
+
+.credits-btn {
+  position: absolute;
+  right: 3vw;
+  bottom: 2vh;
+  width: auto;
+  min-width: 0;
+  padding: 0.8vh 1.5vw;
+  font-size: min(4vw, 20px);
+  opacity: 0.6;
+}
+
+.credits-text {
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.credits-text h1 {
+  font-size: min(4vw, 20px);
+  margin: 2.5vh 0 0.5vh;
+  color: #ffcc00;
+}
+
+.credits-text h2 {
+  font-size: min(3vw, 16px);
+  margin: 1vh 0 0.3vh;
+  color: #ccc;
+  font-weight: normal;
+}
+
+.credits-text p {
+  font-size: min(3vw, 16px);
+  margin: 0.3vh 0;
+  color: #fff;
+}
+
+.credits-text a {
+  color: #66bbff;
+}
+
+.credits-aside {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* ── Overlay buttons (used in season and multiplayer screens) ── */
+
+.overlay-button {
+  display: inline-block;
+  margin: 1vh 0.8vw;
+  padding: 1.1vh 3vw;
+  background: linear-gradient(180deg, rgba(119, 85, 85, 0.92), rgba(61, 31, 36, 0.96));
+  color: #fff;
+  border: 2px solid rgba(255, 255, 221, 0.62);
+  border-radius: 0;
+  font-family: "Lucida Console", Consolas, monospace;
+  font-weight: bold;
+  font-size: min(4vw, 20px);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  box-sizing: border-box;
+  transition: filter 90ms linear, transform 90ms linear, border-color 90ms linear;
+}
+
+.overlay-button:hover,
+.overlay-button:focus-visible {
+  filter: brightness(1.22);
+  border-color: #ffffdd;
+  outline: none;
+}
+
+.overlay-button:active { transform: translateY(1px); }
+
+.overlay-button-secondary {
+  opacity: 0.5;
+  font-size: min(3vw, 14px);
+}
+
+/* ── Overlay text styles ─────────────────────────────────── */
+
+.overlay-title             { color: #ffdd99; font-size: min(5vw, 28px); margin-bottom: 2vh; text-transform: uppercase; text-shadow: 2px 2px 0 #550000; }
+.overlay-title-large       { color: #ffdd99; font-size: min(6vw, 32px); margin-bottom: 1vh; text-transform: uppercase; text-shadow: 2px 2px 0 #550000; }
+.overlay-subtitle          { font-size: min(3.5vw, 18px); opacity: 0.7; margin-bottom: 1vh; }
+.overlay-description       { font-size: min(3vw, 16px); opacity: 0.7; margin-bottom: 2vh; }
+.overlay-label             { font-size: min(2.5vw, 13px); opacity: 0.5; margin-bottom: 0.5vh; }
+.overlay-track             { font-size: min(5vw, 28px); margin: 2vh 0; }
+.overlay-matchup           { font-size: min(6vw, 32px); margin: 2vh 0; }
+.overlay-matchup-vs        { opacity: 0.5; font-size: min(4vw, 22px); }
+.overlay-winner            { font-size: min(4vw, 22px); margin: 1vh 0; }
+.overlay-fastest           { font-size: min(3.5vw, 18px); margin: 1vh 0; }
+.overlay-detail            { font-size: min(3vw, 16px); opacity: 0.6; margin: 1vh 0; }
+.overlay-info              { font-size: min(3.5vw, 18px); opacity: 0.7; margin: 1vh 0; }
+.overlay-result-large      { font-size: min(6vw, 32px); margin: 2vh 0; }
+.overlay-result            { font-size: min(5vw, 26px); margin: 2vh 0; }
+.overlay-result-small      { font-size: min(4vw, 20px); margin: 2vh 0; }
+
+/* ── Color helpers ───────────────────────────────────────── */
+
+.color-gold   { color: #ffd700; }
+.color-green  { color: #44ff44; }
+.color-red    { color: #ff4444; }
+.color-orange { color: #ff8844; }
+.color-yellow { color: #ffdd44; }
+
+/* ── Multiplayer inputs ──────────────────────────────────── */
+
+.multiplayer-code-display {
+  font-size: min(10vw, 60px);
+  letter-spacing: 0.3em;
+  margin: 2vh 0;
+}
+
+.multiplayer-code-input {
+  font-size: min(10vw, 60px);
+  text-align: center;
+  letter-spacing: 0.3em;
+  width: min(60vw, 300px);
+  padding: 1vh 2vw;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-family: monospace;
+  outline: none;
+}
+
+.multiplayer-signaling-input {
+  font-size: min(3vw, 15px);
+  text-align: center;
+  width: min(70vw, 340px);
+  padding: 0.8vh 1.5vw;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-family: monospace;
+  outline: none;
+  margin-bottom: 2vh;
+}
+
+.multiplayer-status {
+  font-size: min(3vw, 16px);
+  opacity: 0.7;
+  margin: 1vh 0;
+  min-height: 3vh;
+}
+
+/* ── Season overview ─────────────────────────────────────── */
+
+.season-grid {
+  display: flex;
+  gap: 1vw;
+  justify-content: center;
+  align-items: stretch;
+  margin: 1vh 0;
+}
+
+.season-card {
+  flex: 1;
+  background: #1a1713;
+  border: 2px solid #776060;
+  border-radius: 0;
+  padding: 1.5vh 1vw;
+  display: flex;
+  flex-direction: column;
+}
+
+.season-card-active {
+  background: #2b211b;
+  border-color: #ffdd99;
+}
+
+.season-label {
+  font-size: min(3.5vw, 17px);
+  font-weight: bold;
+  margin-bottom: 1vh;
+}
+
+.season-player {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: clamp(3px, 0.45vw, 6px);
+  font-size: min(2.5vw, 13px);
+  padding: 0.25vh 0;
+  opacity: 0.8;
+}
+
+.season-player-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.driver-portrait {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 50px;
+  height: 24px;
+  border: 1px solid #ffffdd;
+  background-image: url("images/screens/heads.png");
+  background-repeat: no-repeat;
+  background-size: 320px 200px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.driver-portrait-0  { background-position: -15px -12px; }
+.driver-portrait-1  { background-position: -15px -62px; }
+.driver-portrait-2  { background-position: -15px -112px; }
+.driver-portrait-3  { background-position: -95px -12px; }
+.driver-portrait-4  { background-position: -95px -62px; }
+.driver-portrait-5  { background-position: -95px -112px; }
+.driver-portrait-6  { background-position: -175px -12px; }
+.driver-portrait-7  { background-position: -175px -62px; }
+.driver-portrait-8  { background-position: -175px -112px; }
+.driver-portrait-9  { background-position: -255px -12px; }
+.driver-portrait-10 { background-position: -255px -62px; }
+.driver-portrait-11 { background-position: -255px -112px; }
+
+.season-player-human {
+  color: #ffdd44;
+  font-weight: bold;
+  opacity: 1;
+}
+
+.season-spacer { flex: 1; }
+
+.season-tracks {
+  margin-top: 1.5vh;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  padding-top: 1vh;
+}
+
+.season-track-name {
+  font-size: min(2.5vw, 13px);
+  opacity: 0.6;
+  padding: 0.2vh 0;
+}
+
+/* ── Standings table ─────────────────────────────────────── */
+
+.standings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: min(3.5vw, 18px);
+  margin: 1vh 0;
+}
+
+.standings-table td {
+  padding: 0.5vh 1vw;
+  border-bottom: 1px solid rgba(153, 85, 85, 0.35);
+}
+
+.standings-header {
+  color: #ffdd99;
+  opacity: 0.9;
+  text-transform: uppercase;
+}
+
+.standings-portrait {
+  width: 48px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.standings-center {
+  text-align: center;
+}
+
+.standings-bold {
+  font-weight: bold;
+}
+
+.hotseat-rules,
+.hotseat-standings-key {
+  max-width: 620px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.4;
+}
+
+.hotseat-bonus-card {
+  max-width: 620px;
+  margin: 1.5vh auto;
+  padding: 1.2vh 2vw;
+  border: 1px solid rgba(255, 221, 153, 0.55);
+  background: rgba(20, 8, 4, 0.78);
+}
+
+.hotseat-bonus-card .overlay-subtitle {
+  color: #ffdd99;
+  opacity: 1;
+  text-transform: uppercase;
+}
+
+@media (max-width: 560px) {
+  .standings-table {
+    font-size: clamp(11px, 3.4vw, 16px);
+  }
+
+  .standings-table td {
+    padding-left: 0.6vw;
+    padding-right: 0.6vw;
+  }
+
+  .hotseat-rules,
+  .hotseat-standings-key,
+  .hotseat-bonus-card .overlay-detail {
+    font-size: clamp(11px, 3.1vw, 14px);
+  }
+}
+
+@media (max-height: 600px) {
+  #season-card:not(.main-menu-card):not(.race-art-card) {
+    max-height: 94vh;
+    padding: clamp(8px, 2vh, 14px) clamp(16px, 3vw, 28px);
+  }
+
+  .overlay-title,
+  .overlay-title-large { margin-bottom: 1vh; }
+
+  .overlay-track,
+  .overlay-matchup,
+  .overlay-result,
+  .overlay-result-large,
+  .overlay-result-small { margin-top: 1vh; margin-bottom: 1vh; }
+
+  .season-card { padding-top: 0.8vh; padding-bottom: 0.8vh; }
+}
+
+@media (max-width: 700px) {
+  .main-menu-actions {
+    left: 5.5%;
+    width: 79%;
+    column-gap: 3px;
+  }
+
+  .main-menu-card .overlay-button {
+    padding-left: 4px;
+    padding-right: 4px;
+    font-size: clamp(9px, 2.45vh, 14px);
+  }
+
+  .controls-row {
+    grid-template-columns: minmax(0, 1fr) minmax(112px, 44%);
+    gap: 6px;
+  }
+
+  .portable-backup-actions .overlay-button {
+    flex: 1 1 135px;
+    margin-left: 0;
+    margin-right: 0;
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "source": "traced from original WASM engine 2026-07-22, Little Ramp practice, ?classic=1",
+  "display_speed_to_world_units_per_sec": 181,
+  "littleRamp": {
+    "topSpeed": 92,
+    "accelCurve_halfSecond": [
+      28,
+      33,
+      38,
+      43,
+      48,
+      52,
+      56,
+      60,
+      64,
+      67,
+      70,
+      73,
+      76,
+      78,
+      80,
+      83,
+      85,
+      86,
+      88,
+      89,
+      90,
+      92
+    ],
+    "timeTo": {
+      "s30": 0.62,
+      "s60": 3.92,
+      "s90": 10.02
+    },
+    "craneLaunchSpeed": 28,
+    "jump": {
+      "section": 26,
+      "airborneSeconds": 2.28,
+      "note": "REINTERPRETED 2026-07-22: sec 26 is the REAL gap-jump feature (lip -> dip floor y=320 -> steep kicker -> big climb to 3744 plateau -> descent). 2.28s = clearing the gap at ~92 and landing ON the climb. Below ~60 the car falls into the dip (crane-trap). Post-landing the original grinds UP the 0.125-slope climb at ~8-10 display: slope decel ~= full thrust there."
+    },
+    "boostInitial": 34,
+    "slatLengthUnits": 512,
+    "deckBaselineY": 640,
+    "wallTopY": 3744,
+    "slats": 397,
+    "hillProfile": {
+      "climbSlope": 0.125,
+      "climbSlats": 44,
+      "plateauY": 3744,
+      "descentSlope": -0.25,
+      "dipFloorY": 320
+    }
+  },
+  "tolerances": {
+    "speed": 0.05,
+    "jumpApex": 0.1,
+    "lapTime": 0.1
+  }
+}

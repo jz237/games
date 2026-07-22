@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stunt Car Racer — Remake (preview)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #04060b; overflow: hidden; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #menu {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2.2vh;
+    background:
+      linear-gradient(180deg, rgba(6,10,18,0.40), rgba(6,10,18,0.10) 32%, rgba(6,10,18,0.55) 82%),
+      #223 url("images/screens/menu.jpg") center / cover no-repeat;
+    color: #f2f6ff; text-align: center;
+    font-family: system-ui, "Segoe UI", Arial, sans-serif;
+  }
+  #menu h1 {
+    margin: 0; font-size: clamp(28px, 6.5vh, 64px); letter-spacing: 0.06em;
+    text-transform: uppercase; text-shadow: 0 3px 18px rgba(0,0,0,0.75);
+  }
+  #menu .sub {
+    margin: 0; font-size: clamp(13px, 2.4vh, 20px); opacity: 0.92;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.7);
+  }
+  .glass-btn {
+    appearance: none; cursor: pointer; color: #f4f8ff;
+    font: 600 clamp(15px, 2.6vh, 22px)/1 system-ui, "Segoe UI", Arial, sans-serif;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 1.6vh 4.2vw; border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(14, 22, 38, 0.44);
+    -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.45);
+    transition: background 0.15s, transform 0.15s;
+  }
+  .glass-btn:hover { background: rgba(30, 48, 80, 0.6); transform: translateY(-1px); }
+  #menu .note { font-size: clamp(11px, 1.8vh, 14px); opacity: 0.72; max-width: 62ch; padding: 0 4vw; }
+  #menu a.plain { color: #bcd2f2; }
+  #badge {
+    position: fixed; right: 1.6%; bottom: 2%; z-index: 6; pointer-events: none;
+    padding: 0.5vh 1.2vw; background: rgba(8,12,22,0.6);
+    border: 1px solid rgba(255,255,255,0.25); border-radius: 999px; color: #dfe8f5;
+    font: 600 clamp(9px, 1.9vh, 13px) system-ui, "Segoe UI", Arial, sans-serif;
+    letter-spacing: 0.05em;
+  }
+  #hud {
+    position: fixed; left: 1.4%; top: 2%; z-index: 5; display: none; pointer-events: none;
+    padding: 0.7vh 1.4vw; background: rgba(8,12,22,0.55);
+    border: 1px solid rgba(255,255,255,0.22); border-radius: 12px; color: #eaf2ff;
+    font: 600 clamp(12px, 2.2vh, 17px) system-ui, "Segoe UI", Arial, sans-serif;
+    letter-spacing: 0.04em;
+  }
+  #hint {
+    position: fixed; left: 50%; bottom: 3%; transform: translateX(-50%); z-index: 5;
+    display: none; pointer-events: none; padding: 0.6vh 1.6vw;
+    background: rgba(8,12,22,0.5); border-radius: 999px; color: #cdd9ec;
+    font: 500 clamp(10px, 1.8vh, 13px) system-ui, "Segoe UI", Arial, sans-serif;
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<img id="cockpit" src="images/cockpit.png" alt="" style="position:fixed;inset:0;width:100%;height:100%;display:none;pointer-events:none;z-index:4;">
+<canvas id="dash" width="320" height="200" style="position:fixed;inset:0;width:100%;height:100%;display:none;pointer-events:none;z-index:5;image-rendering:pixelated;"></canvas>
+<div id="hud">0 mph</div>
+<div id="hint">W / left-click accelerate · move mouse or A/D to steer · right-click / S brake · Shift boost · C camera · R respawn · Esc menu</div>
+<div id="menu">
+  <h1>Stunt Car Racer</h1>
+  <p class="sub">From-scratch remake &mdash; engine preview</p>
+  <div id="track-grid" style="display:grid;grid-template-columns:repeat(2,minmax(150px,220px));gap:1.2vh 1.2vw;justify-content:center;">
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=little-ramp&drive=1">Little Ramp</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=hump-back&drive=1">Hump Back</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=stepping-stones&drive=1">Stepping Stones</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=big-ramp&drive=1">Big Ramp</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=roller-coaster&drive=1">Roller Coaster</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=high-jump&drive=1">High Jump</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=ski-jump&drive=1">Ski Jump</a>
+    <a class="glass-btn" style="text-decoration:none;" href="remake.html?track=draw-bridge&drive=1">Draw Bridge</a>
+  </div>
+  <p class="note">All 8 circuits traced point-for-point from the 1989 engine, elevated
+    over the valley. Pylons, physics parity, cockpit and audio arrive in later iterations. <a class="plain" href="original.html">Play the original 1989 engine</a>.</p>
+</div>
+<img id="crane" src="images/chains.png" alt="" style="position:fixed;left:50%;top:-4%;transform:translateX(-50%);height:60%;display:none;pointer-events:none;z-index:6;">
+<div id="badge">REMAKE v18 &middot; 22 Jul 2026</div>
+<script type="module" src="remake/main.js?v=18"></script>
+<script type="module" src="remake/audio.js?v=2"></script>
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
+</body>
+</html>

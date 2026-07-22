@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Hard Hat Mac icon">
+  <rect width="512" height="512" fill="#11182a"/>
+  <path fill="#ffc116" d="M92 254c2-87 72-158 160-158s158 71 160 158h30v58H70v-58h22Z"/>
+  <path fill="#ff8c1a" d="M225 92h62v170h-62zM106 214h300v48H106z" opacity=".92"/>
+  <path fill="#202a45" d="M142 337h228v86H142z"/>
+  <path fill="#9aa9c8" d="M142 337h228v14H142zm18 30 48 38-16 18-50-40zm192 0-48 38 16 18 50-40z"/>
+  <circle cx="256" cy="380" r="16" fill="#ffc116"/>
+</svg>
