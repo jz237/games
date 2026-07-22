@@ -499,3 +499,32 @@ match — the fitted model approximated exactly these mechanics).
   NEXT SUBSYSTEMS: (b) free-yaw steering+alignment, (c) throttle latch +
   grip rule + linear wind + REDUCTION damping, (d) boost/damage per source,
   (e) crane on_chains behavior, (f) full A/B re-verify.
+
+- 2026-07-22 PHYSICS SUBSYSTEMS (b)+(c) — REMAKE v14 (CACHE scr-v163).
+  LONGITUDINAL now the original's: THROTTLE LATCH (accelerating persists
+  until brake — CarControl); thrust cut at display 171.6 (120*256) NOT 92 —
+  92 was just the drag equilibrium region (VMAX cap removed); linear wind
+  −0.0303·v + QUADRATIC drag −0.000663·v_d² (ReduceWorldAcceleration:
+  reduction = speed*maxspeed>>16>>5 — my old fitted v² was approximating
+  exactly this) + slope gravity −GRAV·sin(slope) (gravity rotated into car
+  z — the source HAS slope decel after all, small); brake = −thrust (weak,
+  authentic); BOOST ×2 engine (BoostPower: engine_z_acceleration *= 2),
+  reserve drains 0.52/s (boostUnit 16 per unit at ~8Hz — old 2/s was 4x
+  fast), works with brake held too; GRIP RULE |engine| ≤ 2×contactF with
+  the contact force LOW-PASSED 6/s (the original's ~8Hz step never sees
+  sub-0.12s hops — unsmoothed, micro-hops starved thrust: top 77→87).
+  T_MS 11.0 display/s (10.4 from raw 240 + conversion slop nudge).
+  FREE-YAW STEERING: state.yawOff/yawV — steer accelerates yaw (3.2/s²
+  grounded, 0.9 air), road alignment spring 8/s² grounded (AlignCarWith
+  Road), damping 5/0.5; motion decomposes v·cos/sin(yawOff) into s/lat —
+  DRIFT AND FISHTAIL now exist; grind straightens yaw along the wall.
+  Acceleration WHEELIE: pitchV −= engAcc×0.004 (CalculateXZRotation
+  Acceleration lifts the nose under power). A/B (rebased to the v=28
+  crossing — crane starts stationary): t60 4.0 vs 3.92 (2%), gap flight
+  2.02s, top 87.5-and-climbing in-window (equilibrium ~101 analytic; t90
+  in-window unreachable on blind laps — flights cut thrust; CLOSED-note).
+  Original top-speed experiment timed out on WASM boot (machine loaded) —
+  equilibrium settled analytically from source constants instead.
+  Regression 8/8 tracks lap, zero errors. REMAINING: (d) per-wheel damage
+  refinement, (e) on_chains crane control freeze (partially done), (f)
+  full-feel survey.

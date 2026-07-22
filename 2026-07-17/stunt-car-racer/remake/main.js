@@ -23,8 +23,13 @@ const GRAV = parseFloat(qs.get('grav')) || 55;
 // ramp structure) — the 1989 engine ignores grade for speed. Kept at 0 until
 // a clean uphill measurement says otherwise.
 const SLOPE_G = 0;
-// accel model fitted to the traced curve: dv/dt = THRUST − CDRAG·v² (display units)
-const THRUST_D = 11.07, CDRAG_D = 0.000978;
+// original longitudinal constants converted to m/s at 60Hz:
+// thrust 240 raw ≈ 10.4 display/s; wind −v/256 ≈ −0.0303/s; quadratic drag
+// (ReduceWorldAcceleration >>16 >>5) ≈ −0.000663·v_disp²/s; boost = ×2.
+const T_MS = 11.0 * (181 / 48);
+const WIND_S = 0.0303;
+const QDRAG_MS = 0.000663 / (181 / 48);
+const THRUST_D = 10.4, CDRAG_D = 0.000663; // rival AI uses display-unit form
 // the crane LOWERS the car and drops it STATIONARY (the ritual that opens
 // every SCR race); the old rolling-start misread a W-held trace
 const CRANE_DROP_H = 13, CRANE_RATE = 6.0, CRANE_REL = 2.4; // m, m/s, release height
@@ -258,6 +263,7 @@ const state = {
   boost: 34, boosting: false,
   craneT: -1, lastImpact: 0,
   pitch: 0, roll: 0, pitchV: 0, rollV: 0,
+  yawOff: 0, yawV: 0, accLatch: false, contactF: 0, engAcc: 0,
   wOld: [0, 0, 0], wAmt: [0, 0, 0],   // per-wheel contact memory FL, FR, R
 };
 // three-wheel contact geometry (car frame: x lateral, z forward-negative)
@@ -637,6 +643,7 @@ function respawn() {
   const r = roadAt(state.s);
   state.y = r.y;
   state.speed = 0; state.vy = 0; state.airborne = false;
+  state.yawOff = 0; state.yawV = 0; state.accLatch = false;
   state.craneT = 0; state.y = roadAt(state.s).y + CRANE_DROP_H;
   state.lap = 0; state.lapT0 = state.pt; state.lastLap = null; state.boost = 34;
   state.relPrev = ((state.s - cum[startIdx]) % total + total) % total;
@@ -648,7 +655,7 @@ function syncWorldPose() {
   const r = roadAt(state.s);
   state.x = r.x + (-r.fz) * state.lat;
   state.z = r.z + r.fx * state.lat;
-  state.heading = r.angle;
+  state.heading = r.angle + (state.yawOff || 0);
 }
 
 // ---------- input ----------
@@ -726,36 +733,42 @@ function step(dt) {
     return;
   }
   const fwd = keys['KeyW'] || keys['ArrowUp'] || gp.w || gp.tw;
-  const wantBoost = (keys['ShiftLeft'] || keys['ShiftRight'] || gp.b) && fwd && state.boost > 0 && !state.airborne;
-  state.boosting = !!wantBoost;
-  if (wantBoost) state.boost = Math.max(0, state.boost - 2 * dt);
   const brk = keys['KeyS'] || keys['ArrowDown'] || gp.s || gp.ts;
   const left = keys['KeyA'] || keys['ArrowLeft'] || gp.a || gp.ta;
   const right = keys['KeyD'] || keys['ArrowRight'] || gp.d || gp.td;
   state.grind = false;
-  if (!state.airborne) {
-    const vd = state.speed / DISP2MS; // display units for the fitted model
-    if (fwd) state.speed += ((state.boosting ? THRUST_D * 1.6 : THRUST_D) - CDRAG_D * vd * vd) * DISP2MS * dt;
-    else state.speed -= (CDRAG_D * vd * vd + 0.5) * DISP2MS * dt;
-    // uphill slows, downhill feeds — clamped: steeper than ±0.3 is a jump
-    // feature you fly over, not a drivable grade
-    const sl = Math.max(-0.3, Math.min(0.3, roadAt(state.s).slope));
-    state.speed -= SLOPE_G * sl * dt;
-    if (brk) state.speed -= BRAKE * dt;
-    const cap = state.boosting ? VMAX * 1.09 : VMAX;
-    if (state.speed > cap) state.speed = cap;
-    if (state.speed < 0) state.speed = 0;
-  }
+  // ---- longitudinal model from the original (CarControl/BoostPower/
+  // CalculateTotalAcceleration/ReduceWorldAcceleration) ----
+  // throttle LATCHES: once accelerating, keeps accelerating until BRAKE
+  if (fwd) state.accLatch = true;
+  if (brk) state.accLatch = false;
+  const vd = state.speed / DISP2MS;
+  let engine = 0;
+  if ((fwd || state.accLatch) && vd < 171.6) engine = T_MS;       // thrust cut at 120*256
+  else if (brk) engine = -T_MS;
+  // boost DOUBLES engine accel while reserve lasts (also with brake held)
+  const boostKey = keys['ShiftLeft'] || keys['ShiftRight'] || gp.b;
+  state.boosting = !!(boostKey && (state.accLatch || fwd || brk) && state.boost > 0);
+  if (state.boosting) { engine *= 2; state.boost = Math.max(0, state.boost - 0.52 * dt); }
+  // grip rule: |engine| capped at 2x wheel contact force — no thrust in the air
+  const gripCap = 2 * (state.contactF || 0);
+  if (Math.abs(engine) > gripCap) engine = Math.sign(engine) * gripCap;
+  state.engAcc = engine;
+  // drags: linear wind + quadratic (ReduceWorldAcceleration) + slope gravity
+  const sl = Math.max(-0.3, Math.min(0.3, roadAt(state.s).slope));
+  state.speed += (engine - WIND_S * state.speed - QDRAG_MS * state.speed * state.speed - GRAV * sl) * dt;
+  if (state.speed < 0) state.speed = 0;
   const r0 = roadAt(state.s);
-  // advance along the road; lateral: steering + centrifugal push in corners
-  state.s += state.speed * dt;
-  const steer = (right ? 1 : 0) - (left ? 1 : 0); // user-reported: previous sign was reversed
-  if (!state.airborne) {
-    state.lat += steer * (STEER_BASE + STEER_V * state.speed) * dt;
-    state.lat -= r0.k * state.speed * state.speed * KC * dt;
-  } else {
-    state.lat += steer * (STEER_BASE * 0.4) * dt; // minimal air control
-  }
+  // ---- free-yaw steering + road alignment (CalculateSteering/AlignCarWithRoad) ----
+  const steer = (right ? 1 : 0) - (left ? 1 : 0);
+  const grounded2 = (state.contactF || 0) > 0;
+  state.yawV += steer * (grounded2 ? 3.2 : 0.9) * dt;
+  if (grounded2) state.yawV += (-state.yawOff) * 8 * dt;   // road pulls the car straight
+  state.yawV *= Math.max(0, 1 - (grounded2 ? 5 : 0.5) * dt);
+  state.yawOff = Math.max(-0.6, Math.min(0.6, state.yawOff + state.yawV * dt));
+  state.s += state.speed * Math.cos(state.yawOff) * dt;
+  state.lat += state.speed * Math.sin(state.yawOff) * dt;
+  state.lat -= r0.k * state.speed * state.speed * KC * dt;  // centrifugal
   const r = roadAt(state.s);
   // 2.7m walls are impassable at deck height: clamp + grind
   const lim = r.w / 2 - 2.1;
@@ -763,6 +776,8 @@ function step(dt) {
     if (state.lat > lim) { state.lat = lim; state.grind = true; }
     if (state.lat < -lim) { state.lat = -lim; state.grind = true; }
     if (state.grind && !state.airborne) {
+      state.yawOff *= Math.max(0, 1 - 4 * dt);
+      state.yawV *= Math.max(0, 1 - 4 * dt);
       state.speed *= (1 - 0.55 * dt);
       if (state.speed > 100) state.damage = Math.min(40, (state.damage || 0) + 2.5 * dt);
     }
@@ -801,6 +816,9 @@ function step(dt) {
   }
   const wasAirborne = state.airborne;
   state.airborne = contacts === 0;
+  // low-pass the contact force for the grip rule: the original's ~8Hz step
+  // never registers sub-0.12s hops, so brief skips must not cut thrust
+  state.contactF = (state.contactF || 0) + (totalF - (state.contactF || 0)) * Math.min(1, 6 * dt);
   // vertical: gravity + wheel forces
   state.vy += (-GRAV + totalF) * dt;
   if (contacts > 0) state.vy *= Math.max(0, 1 - 6 * dt); // tyre/suspension damping
@@ -816,6 +834,7 @@ function step(dt) {
   state.rollV += (rollT / I_ROLL) * dt;
   // align toward road grade while grounded (tyres resist twist)
   if (contacts > 0) {
+    state.pitchV -= (state.engAcc || 0) * 0.004; // acceleration wheelie (nose up)
     const targetPitch = -Math.atan(Math.max(-0.35, Math.min(0.35, r.slope)));
     const targetRoll = -Math.atan2(r.bank, r.w);
     state.pitchV += (targetPitch - state.pitch) * 85 * dt;
@@ -1038,7 +1057,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 13,
+    version: 14,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });
