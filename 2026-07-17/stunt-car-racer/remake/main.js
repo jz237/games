@@ -457,7 +457,7 @@ async function buildWorld() {
   const asMat = new THREE.MeshStandardMaterial({ map: asphaltTex, roughness: 0.95 });
   asMat.map = asphaltTex;
   ribbon(LK, RK, asMat, 1 / 14, (k) => path[k].shade === 'start' ? [0.22, 0.22, 0.24] : [1, 1, 1]);
-  const kerbMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
+  const kerbMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide });
   const kerbCol = (k) => (Math.floor(k / 2) % 2) ? [0.78, 0.12, 0.10] : [0.92, 0.90, 0.86];
   ribbonFlat(L, LK, kerbMat, 1 / 14, kerbCol);
   ribbonFlat(RK, R, kerbMat, 1 / 14, kerbCol);
@@ -693,11 +693,20 @@ function pollGamepad() {
 }
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
+  if (e.repeat) return; // ignore OS auto-repeat for edge actions (camera/respawn strobed)
   if (e.code === 'KeyC' && state.driving) state.chase = !state.chase;
   if (e.code === 'KeyR' && state.driving) respawn();
   if (e.code === 'Escape' && state.driving) showMenu();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
+// focus loss (alt-tab, switching apps) must not leave a key or button stuck on
+function clearAllInput() {
+  for (const k in keys) keys[k] = false;
+  mouse.accel = mouse.brake = false; mouse.active = false;
+  gp.w = gp.a = gp.s = gp.d = gp.b = false;
+}
+window.addEventListener('blur', clearAllInput);
+document.addEventListener('visibilitychange', () => { if (document.hidden) clearAllInput(); });
 
 // ---------- mouse driving ----------
 window.addEventListener('mousemove', (e) => {
@@ -722,9 +731,12 @@ window.addEventListener('contextmenu', (e) => { if (state.driving) e.preventDefa
 // own extent (over ~ 0). Past a chasm lip the nearest deck is behind you and
 // holds nothing up.
 function onDeck(d, tol) { return !!d && d.over <= 0.01 && Math.abs(d.lat) <= d.halfW + tol; }
-function groundInfo(x, z, y) {
+function groundInfo(x, z, y, ignoreOverhead) {
   const d = deckAt(x, z);
-  if (onDeck(d, 0.2) && y > d.y - 3.0) {
+  // ignoreOverhead: the camera looks 40-60m AHEAD but passes the car's CURRENT
+  // y, so a rising ramp (deck > y+3) would be rejected and the target would dive
+  // to the terrain far below. For the camera we want the road ahead regardless.
+  if (onDeck(d, 0.2) && (ignoreOverhead || y > d.y - 3.0)) {
     return { y: d.y, deck: d };
   }
   return { y: terrainH(x, z), deck: null };
@@ -806,9 +818,12 @@ function step(dt) {
     const d = deckAt(wx, wz);
     let roadY, slope = 0, sfx = 0, sfz = 0, bankLat = 0, latDirX = 0, latDirZ = 0;
     let wGrass = false;
-    // height gate: a deck far ABOVE the car is an overpass, not the road
-    // under this wheel (same rule as groundInfo)
-    if (onDeck(d, 0.4) && state.y > d.y - 3.0) {
+    const hW = state.y + ww.dz * state.pitch + ww.dx * state.roll; // height of THIS wheel
+    // height gate: a deck far above THE WHEEL is an overpass, not its road.
+    // Gate on hW (not the body centre) so the gate tests the same height the
+    // contact below uses; diff is clamped at W_CLAMP_UP=2.0, so a real contact
+    // is never >2m under its road and can't be wrongly rejected here.
+    if (onDeck(d, 0.4) && hW > d.y - 3.0) {
       roadY = d.y; slope = d.slope; sfx = d.fx; sfz = d.fz;
       bankLat = d.bank / d.w; latDirX = -d.fz; latDirZ = d.fx;
       if (!refDeck || w === 2) refDeck = d;
@@ -816,7 +831,6 @@ function step(dt) {
       roadY = terrainH(wx, wz); // grass is drivable, punishingly
       wGrass = true;
     }
-    const hW = state.y + ww.dz * state.pitch + ww.dx * state.roll;
     let diff = roadY - hW;
     if (diff > W_CLAMP_UP) diff = W_CLAMP_UP;
     if (diff < W_CLAMP_DOWN) diff = W_CLAMP_DOWN;
@@ -903,10 +917,12 @@ function step(dt) {
   state.engAcc = engine;
   state.vx += Fx * engine * dt;
   state.vz += Fz * engine * dt;
-  // drags (wind + quadratic + grass) act against the velocity vector
-  const dragA = WIND_S * spd + QDRAG_MS * spd * spd + (grass && contacts > 0 ? 28 : 0);
-  if (spd > 0.05) {
-    const k = Math.min(1, dragA * dt / spd);
+  // drags (wind + quadratic + grass) act against the velocity vector, measured
+  // on the POST-thrust speed so the ratio can't cancel part of this tick's thrust
+  const spd2 = Math.hypot(state.vx, state.vz);
+  const dragA = WIND_S * spd2 + QDRAG_MS * spd2 * spd2 + (grass && contacts > 0 ? 28 : 0);
+  if (spd2 > 0.05) {
+    const k = Math.min(1, dragA * dt / spd2);
     state.vx -= state.vx * k;
     state.vz -= state.vz * k;
   }
@@ -1114,7 +1130,7 @@ function updateVisuals() {
   if (!window.__freezeCam) {
     const aheadDist = state.chase ? 40 : 60;
     const ax = state.x + sin * aheadDist, az = state.z + cos * aheadDist;
-    const ag = groundInfo(ax, az, state.y);
+    const ag = groundInfo(ax, az, state.y, true); // camera: follow the road ahead even as it climbs
     const aheadY = Math.abs(ag.y - state.y) < 25 ? ag.y : state.y;
     if (state.chase) {
       camera.position.set(state.x - sin * 22, state.y + 8.5, state.z - cos * 22);
@@ -1131,9 +1147,14 @@ function updateVisuals() {
 
   if (rival.on && path.length) {
     const rr = roadAt(rival.s);
-    const lx = -rr.fz, lz = rr.fx;
-    rivalCar.position.set(rr.x + lx * 2.8, rr.y + (rr.bank / rr.w) * 2.8, rr.z + lz * 2.8);
-    rivalCar.rotation.set(Math.atan(rr.slope), rr.angle + Math.PI, 0); // climbing (+slope) pitches the nose UP
+    // over a chasm the sew-up segment is a near-vertical wall; every other road
+    // consumer skips gaps, so hold the rival's last on-deck pose rather than
+    // planting it in the void pitched up to 78 degrees
+    if (!rr.gap) {
+      const lx = -rr.fz, lz = rr.fx;
+      rivalCar.position.set(rr.x + lx * 2.8, rr.y + (rr.bank / rr.w) * 2.8, rr.z + lz * 2.8);
+      rivalCar.rotation.set(Math.atan(rr.slope), rr.angle + Math.PI, 0); // climbing (+slope) pitches the nose UP
+    }
   }
 
   for (const t of treeBillboards) {
@@ -1146,7 +1167,8 @@ function updateVisuals() {
 function drawDash(cnv) {
   const g = cnv.getContext('2d');
   g.clearRect(0, 0, 320, 200);
-  const vd = Math.min(92, state.speed / DISP2MS);
+  const vdRaw = state.speed / DISP2MS;
+  const vd = Math.min(92, vdRaw); // bar is a fixed 144px 0-92 scale; digits use vdRaw
   // speedo bar: x101-245 y164 (green -> amber -> red)
   const w = Math.round(vd * 144 / 92);
   const grad = g.createLinearGradient(101, 0, 245, 0);
@@ -1175,7 +1197,7 @@ function drawDash(cnv) {
   if (state.best) { g.fillStyle = '#9fd3e8'; g.fillText(fmt(state.best), 262, 189); }
   // speed digits above the bar
   g.fillStyle = '#dfe8f5';
-  g.fillText(String(Math.round(vd)).padStart(2, ' '), 230, 161);
+  g.fillText(String(Math.round(vdRaw)).padStart(2, ' '), 230, 161);
 }
 
 // ---------- loop ----------
@@ -1207,6 +1229,10 @@ function showMenu() {
   menuEl.style.display = 'flex';
   hudEl.style.display = 'none';
   hintEl.style.display = 'none';
+  const craneEl3 = document.getElementById('crane');
+  if (craneEl3) craneEl3.style.display = 'none';
+  if (craneTimer) { clearTimeout(craneTimer); craneTimer = null; }
+  state.wrecking = false;
   state.driving = false;
   state.speed = 0;
 }
@@ -1231,13 +1257,14 @@ buildWorld().then(() => {
       state.contactF = 0; state.lastImpact = 0; state.offT = 0;
       state.relPrev = ((state.s - cum[startIdx]) % total + total) % total;
       state.lapT0 = NaN; // a teleported "lap" must never enter the records
+      state.craneT = -1; // not mid-hoist
       if (craneTimer) { clearTimeout(craneTimer); craneTimer = null; }
       state.wrecking = false;
       if (chase != null) state.chase = chase;
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 22,
+    version: 23,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });

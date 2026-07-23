@@ -649,6 +649,83 @@ User "fix it" (physics/handling). MEASURED the problem instead of guessing:
   attitude DOF — target-based critical damping is stable; feedback springs
   at 60Hz with big gains blow up.
 
+## v23 — 23 Jul 2026 — round-2 audit triage: verified fixes only
+
+The round-2 workflow (wf_a230666a-c67, 88 agents, 25 unique candidates, 17
+"confirmed" by 3-refuter panels) was itself audited: I re-verified every
+surviving finding against the REAL shipped engine before touching it, and TWO
+of the highest-rated "confirmed" ones did NOT hold up — a reminder that
+adversarial verification that RE-IMPLEMENTS the system can confirm its own
+artifact.
+
+FALSE POSITIVES (confirmed by the panel, refuted by in-engine measurement):
+- **C1 "wheel height gate tests the car centre" (rated 3/3, high, with a full
+  Playwright A/B showing contacts 3.00->0.83).** The verifying agent used a
+  standalone transplant of step() with a modified grid build. Running the ACTUAL
+  engine with the real `contacts` counter exposed at physics rate: v22 (state.y
+  gate) and a hW-gate build are IDENTICAL on roller-coaster's 0.5 climb
+  (meanContacts 1.4, totalF ~152 both). The wheels that drop on that climb drop
+  because the car outruns its climb rate, not because the gate rejects them — if
+  the gate were the constraint the hW build (easier for front wheels) would show
+  MORE contacts, and it doesn't. Shipped the hW gate anyway as a one-line
+  correctness cleanup (the gate should test the wheel it guards; provably safe,
+  hW already computed one line down) — but it is NOT the behaviour fix the panel
+  claimed.
+- **C9 "road surface back-face culled, normals n.y=-0.84" (rated 3/3).** Direct
+  scene measurement: the asphalt mesh (10201 verts) has meanNy = +0.993, upFrac
+  1.00 — the ROAD IS FINE. Only the KERB ribbons are inverted (n.y -0.94).
+  Shipped kerbMat -> DoubleSide (minor cosmetic), not the claimed road fix.
+
+VERIFIED-REAL AND FIXED:
+- **C10 camera dives at ramps.** `groundInfo(ax,az,state.y)` sampled 40-60m
+  ahead with the CAR'S current y; a deck rising >3 m ahead failed the overhead
+  gate and the target fell to distant terrain. Added `ignoreOverhead` param;
+  camera passes true. Scenario confirmed present (16 on-deck-above-terrain
+  frames approaching big-ramp); screenshot A/B clean.
+- **C15 keys/buttons latch on focus loss.** No blur/visibilitychange handler
+  existed — alt-tab with a steer key down left the car turning. Added
+  clearAllInput() on blur + visibilitychange. Verified: heading drift after
+  blur-with-KeyD-held = 0.
+- **C14 KeyC/KeyR fired on OS key auto-repeat** (camera strobe, respawn
+  re-fire). Added `if (e.repeat) return`.
+- **C16 cockpit speed digits saturated at 92** while the chase HUD showed true
+  speed. Digits now use the unclamped value; only the fixed 144px bar keeps the
+  0-92 clamp.
+- **C6 grass/quadratic drag used the PRE-thrust speed** (sampled before the
+  thrust impulse) in a ratio applied to the POST-thrust velocity, so it deleted
+  part of the tick's thrust. Now measured on the post-thrust speed.
+- **C8 leaving to the menu mid-crane-recovery stranded the chains overlay**
+  on screen (showMenu never hid #crane or cancelled the timer). Fixed.
+- **C7 teleport() left state.craneT** (QA hook completeness); now -1.
+- **C17 rival rendered planted in chasms** pitched up to 78 deg on sew-up
+  segments (roadAt raw, unlike every other gap-aware consumer). Holds its last
+  on-deck pose over a gap now.
+
+HELD — flagged to the user, deliberately NOT changed (feel / balance, and the
+controls the user approved at v18):
+- C13 yaw rate accumulated while steering (~0.3 rad/s) damps at only 0.4/s in
+  the air, so taking off mid-turn rotates the car ~19 deg over a 1.5 s flight.
+  Real modelling inconsistency (should carry actual angular velocity, not the
+  steering accumulator) but a HANDLING change.
+- C11 rival's corner-brake rule sqrt(1400/kmax) never binds (max track
+  curvature 0.009 < the 0.0134 threshold) — the rival ignores corners. Race
+  BALANCE, not correctness.
+- C2 autopilot dSign calibration measures road-alignment more than stick —
+  TEST tooling only (window.__autopilot), and it works empirically (7/8 laps).
+- C5 free-lap guard's 35 m window vs a theoretical 210 m crane walk-back —
+  requires 12 consecutive gap segments (essentially impossible); the realistic
+  30 m walk is covered, and v22's re-run of the gap probe already stops the
+  chasm re-drop (C3).
+
+Regression: 8-track autopilot 7/8 pass 2 laps zero errors; lap times within
+noise of v22 (little-ramp 16.6, hump-back 23.6, stepping-stones 39.4, big-ramp
+60, high-jump 30, draw-bridge 29.8). roller-coaster unchanged (pre-existing).
+
+**Lesson**: a "CONFIRMED 3/3 with a full A/B" is only as good as the code the
+verifier ran. When an agent re-implements the engine to test it, its A/B can be
+an artifact of the re-implementation. Expose the real quantity from the real
+engine and measure THAT.
+
 ## v22 — 23 Jul 2026 — round-2 audit: chasms made real, rendered roll un-mirrored
 
 Second adversarial audit (13 lenses: 6 re-checking each v21 fix for correctness
