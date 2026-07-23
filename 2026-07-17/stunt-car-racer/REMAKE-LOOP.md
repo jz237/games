@@ -648,3 +648,32 @@ User "fix it" (physics/handling). MEASURED the problem instead of guessing:
   like a car. LESSON: never integrate raw contact torques into a visible
   attitude DOF — target-based critical damping is stable; feedback springs
   at 60Hz with big gains blow up.
+
+## v20 (CACHE scr-v169): ATTITUDE RE-SIMULATED — physics, not animation
+User "no!" after v19 — read as rejecting v19's COSMETIC attitude (a smooth
+lean animation replaced the simulated body). v19's diagnosis (tip-over) was
+right; its remedy deleted physics. v20 = the original's OWN rotation law
+(CalculateXZRotationAcceleration): a spring-damper driven by per-wheel
+DISPLACEMENT differences with linear velocity damping — physical AND stable:
+- Drive = sum(clampedDiff_w x dz_w / dx_w) — DISPLACEMENTS, not forces: the
+  v13 instability was force-based torque built on the INCREASE extrapolation
+  (a per-tick derivative amplifier at 60Hz), NOT simulation per se.
+- Gains from stability analysis: pitch spring 2.2 (x sum dz^2 16.3 -> wn~6
+  rad/s), roll 5.0 (x sum dx^2 7.2), damping 6.6 (zeta~0.55). Discrete-safe
+  at 60Hz (wn*dt=0.1).
+- WHEELIE: engAcc x 0.05 into pitch accel — settles ~6 deg nose-up under
+  power (0.104 caused a runaway WHEELSTAND: once the nose lifts past front
+  contact, a >=0-clamped drive loses restoring force and rides the clamp at
+  -26 deg). Fix pair: gain halved AND cd floor -0.35 (gravity's righting
+  torque on an unloaded wheel — the model has no gravity-torque term).
+- Airborne: free rotation, light 0.5/s damping (v19's drift-to-level fake
+  removed); landings kick the nose via the same displacement drive; car
+  pitches to match steep kicker faces (verified -20 deg on the sec-26
+  kicker = slope-parallel, NOT divergence).
+- VERIFIED: launch wheelie -5.8 settle -5.4 deg; flat cruise pitch steady,
+  roll 0; laps little-ramp 70s / hump-back 66s / ski-jump 143s with
+  maxPitch 26 (steep features) maxRoll 17, zero errors; chase shot level+
+  planted. LESSON: displacement-coupled springs are stable where force-
+  coupled ones (via extrapolation) blow up; and >=0 contact clamps create
+  one-sided springs that RUN AWAY past the contact-loss angle — always give
+  the restoring path a floor.

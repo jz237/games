@@ -812,8 +812,14 @@ function step(dt) {
       contacts++;
       const F = Math.min(amt, W_AMT_CAP) * W_K;
       totalF += F;
-      pitchT += F * ww.dz;
-      rollT += F * ww.dx;
+      // attitude drive from contact DISPLACEMENT (raises the loaded wheel);
+      // using diff not the extrapolated amt — amt's per-tick delta term is a
+      // derivative amplifier at 60Hz and destabilised the old torque loop
+      // slightly-negative floor = gravity's righting torque on an unloaded
+      // wheel (prevents wheelstand runaway once the nose lifts)
+      const cd = Math.min(Math.max(diff, -0.35), 1.3);
+      pitchT += cd * ww.dz;
+      rollT += cd * ww.dx;
       // surface-normal tilt: climbing decelerates, banking pushes sideways
       pushX += F * (-slope * sfx - bankLat * latDirX) * 0.9;
       pushZ += F * (-slope * sfz - bankLat * latDirZ) * 0.9;
@@ -836,28 +842,24 @@ function step(dt) {
     }
     state.damage = (state.wDmg[0] + state.wDmg[1] + state.wDmg[2]) / 3;
   }
-  // Attitude: a STABLE critically-damped lean toward the road grade, NOT raw
-  // wheel-torque integration — that feedback loop was underdamped and tipped
-  // the car onto its side (~30 deg roll) on flat straights. Vertical bounce
-  // still comes from the wheel forces above; this only orients the body.
-  if (contacts > 0 && refDeck) {
-    const vLatNow = state.vx * Lx + state.vz * Lz;      // sideways speed (car frame)
-    const tPitch = -Math.atan(Math.max(-0.35, Math.min(0.35, refDeck.slope)))
-                   - Math.max(-0.10, Math.min(0.10, (state.engAcc || 0) * 0.0016)); // squat/wheelie
-    const tRoll = -0.7 * Math.atan2(refDeck.bank, refDeck.w)            // road bank (damped; trace can be noisy)
-                  - Math.max(-0.13, Math.min(0.13, vLatNow * 0.009));   // gentle cornering lean
-    const kA = Math.min(1, 9 * dt);
-    state.pitch += (tPitch - state.pitch) * kA;
-    state.roll += (tRoll - state.roll) * kA;
-    state.pitchV = 0; state.rollV = 0;
+  // Attitude: SIMULATED, not animated — the original's own rotation law
+  // (CalculateXZRotationAcceleration): accel = below-road displacement
+  // difference MINUS rotation_speed damping. A plain spring-damper on wheel
+  // DISPLACEMENTS: physical (landings kick the nose, kerbs roll you, throttle
+  // wheelies) and stable by construction (wn~6rad/s, zeta~0.55; the old
+  // tip-over came from force-based torque + per-tick extrapolation, not from
+  // simulating per se).
+  if (contacts > 0) {
+    // pitchT/rollT hold sum(cd*dz)/sum(cd*dx); dz^2 sums: pitch 16.3, roll 7.2
+    state.pitchV += (2.2 * pitchT - 6.6 * state.pitchV - (state.engAcc || 0) * 0.05) * dt;
+    state.rollV += (5.0 * rollT - 6.6 * state.rollV) * dt;
   } else {
-    // airborne: hold, drift slowly toward level
-    const kL = Math.min(1, 0.8 * dt);
-    state.pitch += (0 - state.pitch) * kL;
-    state.roll += (0 - state.roll) * kL;
+    // airborne: free rotation, lightly damped — tumble is real
+    state.pitchV *= Math.max(0, 1 - 0.5 * dt);
+    state.rollV *= Math.max(0, 1 - 0.5 * dt);
   }
-  state.pitch = Math.max(-0.45, Math.min(0.45, state.pitch));
-  state.roll = Math.max(-0.26, Math.min(0.26, state.roll)); // ~15deg: real banking, never keels onto a wall
+  state.pitch = Math.max(-0.45, Math.min(0.45, state.pitch + state.pitchV * dt));
+  state.roll = Math.max(-0.30, Math.min(0.30, state.roll + state.rollV * dt));
   // never sink through a deck under the car
   const dUnder = deckAt(state.x, state.z);
   if (dUnder && Math.abs(dUnder.lat) <= dUnder.halfW && state.y < dUnder.y - 0.6) {
@@ -1176,7 +1178,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 19,
+    version: 20,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });
