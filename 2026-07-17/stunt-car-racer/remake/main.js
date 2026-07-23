@@ -18,10 +18,10 @@ const DISP2MS = 181 * S;             // display-speed unit -> m/s
 const VMAX = 92 * DISP2MS;           // ≈ 347 m/s (engine hard cap)
 // gravity: A/B-tuned against the original's 2.28s gap-jump flight; ?grav= overrides
 const GRAV = parseFloat(qs.get('grav')) || 55;
-// slope decel: the original's traced speed curve shows NO uphill slowdown on
-// the hill climb (the earlier "climb grind" was the car off-road against the
-// ramp structure) — the 1989 engine ignores grade for speed. Kept at 0 until
-// a clean uphill measurement says otherwise.
+// SLOPE_G stays 0: grade resistance already arises physically from the
+// wheel-contact normal push (the -slope*sfx/sfz terms in the wheel loop),
+// which the A/B speed traces validated. A separate kinematic slope decel
+// here would double-count it.
 const SLOPE_G = 0;
 // original longitudinal constants converted to m/s at 60Hz:
 // thrust 240 raw ≈ 10.4 display/s; wind −v/256 ≈ −0.0303/s; quadratic drag
@@ -638,6 +638,12 @@ function respawn() {
   state.damage = 0; state.wDmg = [0, 0, 0];
   state.relPrev = ((state.s - cum[startIdx]) % total + total) % total;
   state.lastMoveT = state.pt;
+  state.wOld = [0, 0, 0]; state.wAmt = [0, 0, 0];
+  state.contactF = 0; state.lastImpact = 0; state.offT = 0;
+  if (craneTimer) { clearTimeout(craneTimer); craneTimer = null; }
+  state.wrecking = false;
+  const craneEl2 = document.getElementById('crane');
+  if (craneEl2) craneEl2.style.display = 'none';
   rival.s = state.s + 32; rival.speed = 0;
 }
 function syncWorldPose() { /* world pose IS the state now */ }
@@ -713,9 +719,7 @@ function groundInfo(x, z, y) {
   }
   return { y: terrainH(x, z), deck: null };
 }
-const BRAKE = 300;
-const KC = 0.004;      // centrifugal outward drift factor (A/B-tunable)
-const STEER_BASE = 3, STEER_V = 0.045; // lateral m/s per unit speed
+let craneTimer = null; // pending crane re-drop (wall-clock); cancelled on respawn
 function step(dt) {
   // ---- crane: lowered on chains above the drop point, released stationary ----
   if (state.craneT >= 0) {
@@ -791,13 +795,16 @@ function step(dt) {
     const wz = state.z + Fz * -ww.dz + Lz * ww.dx;
     const d = deckAt(wx, wz);
     let roadY, slope = 0, sfx = 0, sfz = 0, bankLat = 0, latDirX = 0, latDirZ = 0;
-    if (d && Math.abs(d.lat) <= d.halfW + 0.4) {
+    let wGrass = false;
+    // height gate: a deck far ABOVE the car is an overpass, not the road
+    // under this wheel (same rule as groundInfo)
+    if (d && Math.abs(d.lat) <= d.halfW + 0.4 && state.y > d.y - 3.0) {
       roadY = d.y; slope = d.slope; sfx = d.fx; sfz = d.fz;
       bankLat = d.bank / d.w; latDirX = -d.fz; latDirZ = d.fx;
       if (!refDeck || w === 2) refDeck = d;
     } else {
       roadY = terrainH(wx, wz); // grass is drivable, punishingly
-      grass = true;
+      wGrass = true;
     }
     const hW = state.y + ww.dz * state.pitch + ww.dx * state.roll;
     let diff = roadY - hW;
@@ -808,18 +815,20 @@ function step(dt) {
     state.wOld[w] = diff;
     state.wAmt[w] = amt;
     wheelBelow[w] = amt;
+    // attitude drive from contact DISPLACEMENT (raises the loaded wheel);
+    // using diff not the extrapolated amt — amt's per-tick delta term is a
+    // derivative amplifier at 60Hz and destabilised the old torque loop.
+    // Accumulated for EVERY wheel (not only loaded ones) so the slightly-
+    // negative floor really acts as gravity's righting torque on an
+    // unloaded wheel — inside the amt>0 gate it was dead code.
+    const cd = Math.min(Math.max(diff, -0.35), 1.3);
+    pitchT += cd * ww.dz;
+    rollT += cd * ww.dx;
     if (amt > 0) {
       contacts++;
       const F = Math.min(amt, W_AMT_CAP) * W_K;
       totalF += F;
-      // attitude drive from contact DISPLACEMENT (raises the loaded wheel);
-      // using diff not the extrapolated amt — amt's per-tick delta term is a
-      // derivative amplifier at 60Hz and destabilised the old torque loop
-      // slightly-negative floor = gravity's righting torque on an unloaded
-      // wheel (prevents wheelstand runaway once the nose lifts)
-      const cd = Math.min(Math.max(diff, -0.35), 1.3);
-      pitchT += cd * ww.dz;
-      rollT += cd * ww.dx;
+      if (wGrass) grass = true; // grass drag only from wheels that TOUCH it
       // surface-normal tilt: climbing decelerates, banking pushes sideways
       pushX += F * (-slope * sfx - bankLat * latDirX) * 0.9;
       pushZ += F * (-slope * sfz - bankLat * latDirZ) * 0.9;
@@ -862,7 +871,8 @@ function step(dt) {
   state.roll = Math.max(-0.30, Math.min(0.30, state.roll + state.rollV * dt));
   // never sink through a deck under the car
   const dUnder = deckAt(state.x, state.z);
-  if (dUnder && Math.abs(dUnder.lat) <= dUnder.halfW && state.y < dUnder.y - 0.6) {
+  if (dUnder && Math.abs(dUnder.lat) <= dUnder.halfW &&
+      state.y < dUnder.y - 0.6 && state.y > dUnder.y - 3.5) { // anti-tunnel only — never a teleport from far below
     state.y = dUnder.y - 0.6;
     if (state.vy < 0) state.vy = 0;
   }
@@ -915,7 +925,9 @@ function step(dt) {
   else rightInput = mouse.active ? mouse.steer : 0;
   const steer = -Math.max(-1, Math.min(1, rightInput));
   const grounded2 = contacts > 0;
-  state.yawV += steer * (STEER_AUTH * Math.max(0.25, Math.abs(vd) / 92)) * dt;
+  // stick steers only with wheels on the road (original: left_right_value
+  // is zeroed unless touching_road) — airborne, nothing steers you
+  if (grounded2) state.yawV += steer * (STEER_AUTH * Math.max(0.25, Math.abs(vd) / 92)) * dt;
   if (grounded2 && refDeck) {
     const sg2 = seg[refDeck.seg];
     state.heading += sg2.k * vFwd * dt;           // the road's own turn rate
@@ -933,7 +945,7 @@ function step(dt) {
 
   // ---- walls: impassable at deck height ----
   const dNow = deckAt(state.x, state.z);
-  if (dNow && state.y > dNow.cy - 2.5 && state.y < dNow.cy + 4.5) {
+  if (dNow && state.y > dNow.y - 2.5 && state.y < dNow.y + 4.5) {
     const lim = dNow.halfW - 1.6;
     if (Math.abs(dNow.lat) > lim && Math.abs(dNow.lat) < dNow.halfW + 1.5) {
       const sgn = dNow.lat > 0 ? 1 : -1;
@@ -965,26 +977,32 @@ function step(dt) {
   // lap line crossing (start line at cum[startIdx])
   const lineS = cum[startIdx];
   const rel = ((state.s - lineS) % total + total) % total;
-  if (state.relPrev > total * 0.9 && rel < total * 0.1) {
-    if (state.lap > 0) {
+  if (state.relPrev > total * 0.9 && rel < total * 0.1) {          // forward crossing
+    if (state.lap > 0 && isFinite(state.lapT0)) {
       const lapTime = state.pt - state.lapT0;
-      state.lastLap = lapTime;
-      if (!state.best || lapTime < state.best) {
-        state.best = lapTime;
-        try { localStorage.setItem('scr-remake-best-' + trackId, String(lapTime)); } catch (e) {}
+      if (lapTime > 8) { // reversing tricks / crane re-drops can't fake a lap
+        state.lastLap = lapTime;
+        if (!state.best || lapTime < state.best) {
+          state.best = lapTime;
+          try { localStorage.setItem('scr-remake-best-' + trackId, String(lapTime)); } catch (e) {}
+        }
       }
     }
     state.lap++;
     state.lapT0 = state.pt;
+  } else if (state.relPrev < total * 0.1 && rel > total * 0.9) {   // backward crossing
+    state.lap = Math.max(0, state.lap - 1);
+    state.lapT0 = NaN; // next forward crossing restarts timing, records nothing
   }
   state.relPrev = rel;
-  // off-track: grounded with no deck under the car (the original re-drops
-  // after OFF_TRACK_LIMIT steps off the road)
-  if (!dNow && contacts > 0) state.offT = (state.offT || 0) + dt;
+  // off-track: grounded but not ON the road — deckAt returns the nearest
+  // segment regardless of lateral distance or height, so bound both
+  const offRoad = !dNow || Math.abs(dNow.lat) > dNow.halfW + 1.5 || state.y < dNow.y - 4;
+  if (offRoad && contacts > 0) state.offT = (state.offT || 0) + dt;
   else state.offT = 0;
   if (state.offT > 3.5 && !state.wrecking && state.driving) craneRecover();
   // wreck watch: stuck under throttle or damage limit -> crane
-  if (state.speed > 5 * DISP2MS || !fwd) state.lastMoveT = state.pt;
+  if (state.speed > 5 * DISP2MS || (!fwd && !state.accLatch) || state.airborne) state.lastMoveT = state.pt;
   if (!state.wrecking && state.driving &&
       ((state.pt - state.lastMoveT > 3 && state.pt > 4) || (state.damage || 0) >= 32)) {
     craneRecover();
@@ -1007,7 +1025,9 @@ function craneRecover() {
   state.wrecking = true;
   const craneEl = document.getElementById('crane');
   if (craneEl) craneEl.style.display = 'block';
-  setTimeout(() => {
+  if (craneTimer) clearTimeout(craneTimer);
+  craneTimer = setTimeout(() => {
+    craneTimer = null;
     // re-drop at the last on-track position (the original re-drops at the
     // current piece), never inside a chasm
     let sBack = state.s - 30;
@@ -1016,7 +1036,14 @@ function craneRecover() {
       if (!gapSeg.has(probe.i)) break;
       sBack -= 15;
     }
-    state.s = ((sBack % total) + total) % total;
+    sBack = ((sBack % total) + total) % total;
+    // never re-drop BEHIND the start line when the wreck was just past it —
+    // that would hand the driver a free lap on the way back over
+    const lineS = cum[startIdx];
+    const relBack = ((sBack - lineS) % total + total) % total;
+    const relWreck = ((state.s - lineS) % total + total) % total;
+    if (relWreck < 35 && relBack > total * 0.5) sBack = ((lineS + 1) % total + total) % total;
+    state.s = sBack;
     const rr2 = roadAt(state.s);
     state.x = rr2.x; state.z = rr2.z; state.heading = rr2.angle;
     state.lat = 0; state.offT = 0;
@@ -1026,6 +1053,9 @@ function craneRecover() {
     state.craneT = 0; state.y = rr2.y + CRANE_DROP_H;
     state.lastMoveT = state.pt;
     state.damage = 0; state.wDmg = [0, 0, 0];
+    state.wOld = [0, 0, 0]; state.wAmt = [0, 0, 0];
+    state.contactF = 0; state.lastImpact = 0;
+    state.relPrev = ((state.s - lineS) % total + total) % total;
     state.wrecking = false;
     if (craneEl) craneEl.style.display = 'none';
   }, 1400);
@@ -1039,8 +1069,11 @@ function updateVisuals() {
   if (V.air === undefined) { V.air = false; V.sy = 0; V.syV = 0; }
   if (V.air && !state.airborne) { V.syV -= Math.min(40, state.lastImpact) * 0.035; state.lastImpact = 0; }
   V.air = state.airborne;
-  V.syV += (-V.sy * 110 - V.syV * 9) * (1 / 40);
-  V.sy = Math.max(-0.9, Math.min(0.9, V.sy + V.syV * (1 / 40)));
+  const nowMs = performance.now();
+  const vdt = Math.min(0.05, (nowMs - (V.t || nowMs)) / 1000);
+  V.t = nowMs;
+  V.syV += (-V.sy * 110 - V.syV * 9) * vdt;
+  V.sy = Math.max(-0.9, Math.min(0.9, V.sy + V.syV * vdt));
   car.position.set(state.x, state.y + V.sy, state.z);
   camera.userData.sy = V.sy; // cockpit cam inherits the bounce below
   // cockpit view never renders your own car (the dash overlay is the cockpit)
@@ -1054,7 +1087,7 @@ function updateVisuals() {
   if (cockpitOn) drawDash(dashEl);
   const r = roadAt(state.s);
   // attitude now comes straight from the wheel-contact physics
-  car.rotation.set(state.pitch, state.heading + Math.PI, state.roll);
+  car.rotation.set(-state.pitch, state.heading + Math.PI, state.roll); // physics pitch+ = nose down; rotation.x+ = nose up
   const steerRoll = ((keys['KeyA'] || keys['ArrowLeft']) ? 1 : 0) - ((keys['KeyD'] || keys['ArrowRight']) ? 1 : 0);
   car.rotation.z += steerRoll * 0.05 * Math.min(1, state.speed / 60);
 
@@ -1081,7 +1114,7 @@ function updateVisuals() {
     const rr = roadAt(rival.s);
     const lx = -rr.fz, lz = rr.fx;
     rivalCar.position.set(rr.x + lx * 2.8, rr.y + (rr.bank / rr.w) * 2.8, rr.z + lz * 2.8);
-    rivalCar.rotation.set(-Math.atan(rr.slope), rr.angle + Math.PI, 0);
+    rivalCar.rotation.set(Math.atan(rr.slope), rr.angle + Math.PI, 0); // climbing (+slope) pitches the nose UP
   }
 
   for (const t of treeBillboards) {
@@ -1174,11 +1207,18 @@ buildWorld().then(() => {
       state.x = rt.x; state.z = rt.z; state.heading = rt.angle;
       state.lat = 0; state.speed = 0; state.vx = 0; state.vz = 0; state.vy = 0;
       state.airborne = false; state.y = rt.y;
+      state.yawV = 0; state.pitch = 0; state.roll = 0; state.pitchV = 0; state.rollV = 0;
+      state.wOld = [0, 0, 0]; state.wAmt = [0, 0, 0];
+      state.contactF = 0; state.lastImpact = 0; state.offT = 0;
+      state.relPrev = ((state.s - cum[startIdx]) % total + total) % total;
+      state.lapT0 = NaN; // a teleported "lap" must never enter the records
+      if (craneTimer) { clearTimeout(craneTimer); craneTimer = null; }
+      state.wrecking = false;
       if (chase != null) state.chase = chase;
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 20,
+    version: 21,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });

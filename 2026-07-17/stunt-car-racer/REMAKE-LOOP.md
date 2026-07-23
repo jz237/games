@@ -649,6 +649,65 @@ User "fix it" (physics/handling). MEASURED the problem instead of guessing:
   attitude DOF — target-based critical damping is stable; feedback springs
   at 60Hz with big gains blow up.
 
+## v21 — 22 Jul 2026 — physics logic audit: 31 confirmed findings fixed
+
+Adversarial multi-agent audit (4 finder lenses -> dedup -> per-finding verify,
+36 agents) confirmed 31 logic errors, consolidated to 12 root causes. All fixed:
+
+- **A. deckAt is 2D-only** (3 sites): wheel contact now height-gated
+  (`state.y > d.y - 3.0`, same rule as groundInfo) so an overhead span can't
+  suck the car up off the grass; never-sink clamp bounded to 3.5m depth (was a
+  20m teleport-up); off-track detection now `!dNow || |lat| > halfW+1.5 ||
+  y < dNow.y - 4` (was dead near track because deckAt always returns nearest seg).
+- **B. Air steering removed**: stick yaw gated on grounded2 (original zeroes
+  left_right_value unless touching_road). Probe: 0.52s full stick in flight =
+  0.004 rad heading change (was ~0.3+).
+- **C. Lap logic**: backward crossing decrements lap (lapT0=NaN, records
+  nothing); laps < 8s never enter lastLap/best/localStorage; craneRecover
+  can't re-drop behind the line after a just-past-line wreck; relPrev
+  recomputed after crane re-drop and teleport.
+- **D. RENDER PITCH SIGN was inverted**: physics pitch+ = nose down but
+  rotation.x+ = nose up for our nose-at--z car — wheelies rendered as nose
+  dips since v13. Now `car.rotation.set(-state.pitch, ...)`; rival slope
+  pitch flipped to `+Math.atan(rr.slope)`. Verified with pinned-pitch A/B
+  screenshots (nose-up rears toward chase cam, nose-down dives away).
+- **E. Phantom grass drag**: grass flag was set for any wheel laterally
+  outside the deck even with zero terrain contact (28 m/s2 drag while
+  crossing deck edges). Now per-wheel, only when that wheel's amt > 0.
+  Lap times dropped ~2x across the board (little-ramp full lap ~18.5s pt).
+- **F. Righting-floor dead code**: cd (clamped displacement) accumulated only
+  inside `if (amt > 0)` — an unloaded wheel has amt = 0, so the -0.35 floor
+  never applied. Moved outside the gate; wheelie settles instead of riding
+  the clamp.
+- **G. Stuck-watch**: honors accLatch (`!fwd && !accLatch`) and refreshes
+  while airborne so long flights can't trip it.
+- **H. Crane/reset hygiene**: craneRecover timer stored + cancelled on
+  respawn (no ghost re-drop teleport after manual R); respawn/craneRecover/
+  teleport all reset wOld/wAmt/contactF/lastImpact/offT; teleport also zeroes
+  attitude + yawV, recomputes relPrev, sets lapT0 = NaN.
+- **I. Visual suspension** integrates real frame dt (perf.now clamped 50ms),
+  not hard-coded 1/40.
+- **J. SLOPE_G comment** rewritten: grade resistance comes physically from
+  the wheel-normal push terms; SLOPE_G=0 avoids double-count (code kept).
+- **K.** Dead constants BRAKE/KC/STEER_BASE/STEER_V deleted.
+- **L. Wall band** gates on banked surface height dNow.y (was centerline cy).
+
+Refuted (left alone): wall damage side attribution (audit lens confirmed
+current sgn mapping correct).
+
+Verification: 4/4 targeted probes green (crane+wheelie settle, air-steer
+gate, backward lap crossing, overhead-deck rejection incl. offT accrual);
+pinned-pitch screenshot pair confirms D; A/B same-script vs v20 baseline
+t60 6.5 vs 6.8, top 73 vs 66 (no regression, slightly better); 8-track
+autopilot audit 7/8 pass 2 laps zero errors — roller-coaster times out on
+v20 too (pre-existing blind-autopilot limitation, crane rescues work,
+zero errors; still test debt).
+
+**Lesson**: render-boundary sign conventions deserve a dedicated probe the
+day they're written — physics pitch+ = nose down had rendered inverted for
+8 versions because every eyeball test was of *magnitude* (does it move),
+not *direction*. Pin the state, screenshot both signs, compare.
+
 ## v20 (CACHE scr-v169): ATTITUDE RE-SIMULATED — physics, not animation
 User "no!" after v19 — read as rejecting v19's COSMETIC attitude (a smooth
 lean animation replaced the simulated body). v19's diagnosis (tip-over) was
