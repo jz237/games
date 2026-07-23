@@ -649,6 +649,83 @@ User "fix it" (physics/handling). MEASURED the problem instead of guessing:
   attitude DOF — target-based critical damping is stable; feedback springs
   at 60Hz with big gains blow up.
 
+## v22 — 23 Jul 2026 — round-2 audit: chasms made real, rendered roll un-mirrored
+
+Second adversarial audit (13 lenses: 6 re-checking each v21 fix for correctness
+AND for regressions it introduced, 7 fresh — energy, integration/dt, state
+machine, sign conventions, input pipeline, track geometry, rival/derived
+outputs). Every fix below was independently re-verified by hand before shipping.
+
+- **THE BIG ONE — `deckAt` fabricated 8 m of solid deck into every chasm.**
+  `t` was clamped to [0,1] and then `lat` was set to the distance to that
+  CLAMPED point, folding along-track overshoot into the lateral offset. Past a
+  chasm lip (gap segments are skipped, so the nearest deck is the one behind
+  you) that distance is almost entirely along-track, so any query within halfW
+  = **8 m** of the lip reported `|lat| <= halfW` and got full support at deck
+  height. MEASURED: 8.0 m of phantom deck at every gap on every track. On
+  stepping-stones the gaps are 10.7 m — only ~2.7 m was real void, so the
+  track's entire premise was ~75% filled in.
+  FIX: `lat` is now the signed PERPENDICULAR offset from the segment's infinite
+  line, plus a new `over` = along-track distance beyond the segment's extent.
+  New `onDeck(d, tol)` helper requires `over <= 0.01`; wired into wheel contact,
+  groundInfo, the never-sink clamp, the wall band (finding: walls also hung in
+  mid-air over chasms) and off-track detection.
+  Validated in isolation against real track data BEFORE touching the engine:
+  on-deck support identical (147/147, 126/126, 131/131) and `maxLatDelta =
+  0.0000` — the new lat is numerically identical wherever the query is within a
+  segment — while phantom reach goes 8 m -> 0 m. Confirmed again in-engine.
+- **Rendered roll was the mirror of simulated roll.** v21 flipped pitch but not
+  roll. `WHEELS[0]` is commented `front left` with `dx: -1.9`, but the wheel is
+  placed at `pos + Left*dx` with `Left = (cos h, -sin h)` — a NEGATIVE dx sits
+  1.9 m to the RIGHT. So `roll+` lowers the RIGHT side, while `rotation.z+`
+  lifts local +x (right) — opposite. Four independent lenses flagged it; a
+  pinned-roll screenshot pair settled it (v21 leaned left, physics said right).
+  Now `car.rotation.set(-state.pitch, heading + PI, -state.roll)`.
+  NOTE: the `front left`/`front right` comments on WHEELS are misleading — dx is
+  an offset along the LEFT vector, so dx<0 is the right-hand side.
+- **v21 regression: the start-line clamp discarded the chasm probe.** Fix C's
+  anti-free-lap clamp overwrote `sBack` AFTER the gap-avoidance walk had
+  validated it, so a wreck just past the line could re-drop the car into a
+  chasm — permanent wreck loop. The clamp now re-runs the walk.
+- **v21 regression: `lapT0 = NaN` printed "NaN:NaN.NaN" on the dash.** The
+  backward-crossing branch and teleport set lapT0 = NaN, but the cockpit timer
+  guarded on the lap counter, not the timer. Reachable in normal play: finish 2
+  laps, reverse over the line. Now guarded with isFinite.
+- **Landing impulses were consumed at RENDER rate.** `state.lastImpact` is a
+  running max written by physics but cleared only inside updateVisuals' airborne
+  edge check. Physics substeps (`while (acc >= 1/60) step(1/60)`) mean a hop
+  that starts and ends between two renders is invisible: its impact is never
+  consumed or cleared, then detonates on a later gentle landing. Now latched as
+  `state.landed` in step() and drained by the renderer. (Structural — a 45 s
+  probe at 29 fps did NOT reproduce it, so: latent, not observed.)
+
+VERIFICATION: 8-track autopilot 7/8 pass 2 laps, zero console errors
+(roller-coaster fails identically on v20/v21/v22 — see below). Lap times
+unchanged where gaps are small (little-ramp 16.5 vs 16.7, hump-back 23.6 vs
+23.9) and longer where they are not (big-ramp 43.9 -> 53.5, ski-jump 57.4,
+stepping-stones 39.3) — exactly what real chasms should cost a blind autopilot.
+A/B through one identical harness: v20 top 66.1 / t60 6.77, v21 83.7 / 6.45,
+v22 83.1 / 6.52 (original 92 / 3.92) — v22 parity-neutral on little-ramp, and
+the big top-speed gain belongs to **v21's** grass-drag fix, not to v22.
+
+ROLLER-COASTER IS NOT AN ENGINE BUG. Investigated to ground: the track has a
+sustained 0.500 grade (26.6 deg) from s~555-683. The contact model is LINEARISED
+(`hW = y + dz*pitch`), so seating on a grade needs `|pitch| >= slope` = 0.5,
+above the +-0.45 clamp — the body cannot lie flat, the front wheels dig in,
+contactF inflates to ~90 vs ~49 static, and the slope push (~40.5 m/s^2) nearly
+cancels thrust (41.5). All measured. BUT a clamp sweep REFUTED the fix: entering
+the climb with realistic momentum (60 display) the car covers 2021 m at min 45.7
+speed with zero wrecks, and pc=0.45 vs 0.85 are indistinguishable. It only fails
+from a standstill on that grade, which is correct physics and matches the
+original's own "grinds up the climb at 8-10 display" note. The blind autopilot
+simply arrives too slow. Test-rig debt, not engine debt — no change shipped.
+
+**Lesson**: a hand-derivation is not a verification. I talked myself out of the
+roll inversion by trusting a `// front left` comment instead of computing the
+wheel's actual position from `Left*dx`; four independent agents and one pinned
+screenshot were right and I was wrong. Where a sign or a geometric convention is
+concerned, pin the state and LOOK.
+
 ## v21 — 22 Jul 2026 — physics logic audit: 31 confirmed findings fixed
 
 Adversarial multi-agent audit (4 finder lenses -> dedup -> per-finding verify,

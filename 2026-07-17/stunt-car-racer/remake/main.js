@@ -197,19 +197,25 @@ function deckAt(x, z) {
       const abx = b.x - a.x, abz = b.z - a.z;
       const L2 = abx * abx + abz * abz;
       if (L2 < 1e-6) continue;
-      let t = ((x - a.x) * abx + (z - a.z) * abz) / L2;
-      t = clamp01(t);
+      const tRaw = ((x - a.x) * abx + (z - a.z) * abz) / L2;
+      const t = clamp01(tRaw);
       const px = a.x + abx * t, pz = a.z + abz * t;
       const d = Math.hypot(x - px, z - pz);
       if (d < bestD) {
         const cy = a.y + (b.y - a.y) * t;
         const w = a.w + (b.w - a.w) * t;
         const bank = a.bank + (b.bank - a.bank) * t;
-        // lateral sign via cross(fwd, rel)
         const il = 1 / Math.sqrt(L2);
-        const cross = (abx * il) * (z - pz) - (abz * il) * (x - px);
+        // TRUE lateral offset: signed perpendicular distance from the segment's
+        // infinite line. Using the distance to the CLAMPED point folded the
+        // along-track overshoot into `lat`, so a query up to halfW (8 m!) past a
+        // chasm lip reported |lat| <= halfW and got solid deck out over the void.
+        // Identical to the old value wherever the query lies within the segment.
+        const lat = (abx * il) * (z - a.z) - (abz * il) * (x - a.x);
+        // how far BEYOND this segment's own extent the query sits (0 while on it)
+        const over = (tRaw < 0 ? -tRaw : tRaw > 1 ? tRaw - 1 : 0) / il;
         bestD = d;
-        best = { seg: j, t, lat: cross > 0 ? d : -d, halfW: w / 2, y: cy + (bank / w) * (cross > 0 ? d : -d), cy, slope: (b.y - a.y) * il, bank, w, fx: abx * il, fz: abz * il, angle: Math.atan2(abx * il, abz * il) };
+        best = { seg: j, t, lat, over, halfW: w / 2, y: cy + (bank / w) * lat, cy, slope: (b.y - a.y) * il, bank, w, fx: abx * il, fz: abz * il, angle: Math.atan2(abx * il, abz * il) };
       }
     }
   }
@@ -639,7 +645,7 @@ function respawn() {
   state.relPrev = ((state.s - cum[startIdx]) % total + total) % total;
   state.lastMoveT = state.pt;
   state.wOld = [0, 0, 0]; state.wAmt = [0, 0, 0];
-  state.contactF = 0; state.lastImpact = 0; state.offT = 0;
+  state.contactF = 0; state.lastImpact = 0; state.landed = false; state.offT = 0;
   if (craneTimer) { clearTimeout(craneTimer); craneTimer = null; }
   state.wrecking = false;
   const craneEl2 = document.getElementById('crane');
@@ -712,9 +718,13 @@ window.addEventListener('mouseup', (e) => {
 window.addEventListener('contextmenu', (e) => { if (state.driving) e.preventDefault(); });
 
 // ---------- physics (fixed-step 60 Hz, original-ratio constants) ----------
+// A deck query only counts as SUPPORT when the point lies within the segment's
+// own extent (over ~ 0). Past a chasm lip the nearest deck is behind you and
+// holds nothing up.
+function onDeck(d, tol) { return !!d && d.over <= 0.01 && Math.abs(d.lat) <= d.halfW + tol; }
 function groundInfo(x, z, y) {
   const d = deckAt(x, z);
-  if (d && Math.abs(d.lat) <= d.halfW + 0.2 && y > d.y - 3.0) {
+  if (onDeck(d, 0.2) && y > d.y - 3.0) {
     return { y: d.y, deck: d };
   }
   return { y: terrainH(x, z), deck: null };
@@ -755,10 +765,10 @@ function step(dt) {
       }
     } else {
       const spdA = Math.hypot(state.vx, state.vz);
-      const onDeck = !!deckAt(state.x, state.z);
-      const ahead = onDeck ? Math.max(45, spdA * 0.9) : 0; // off-road: return to the road
+      const nearDeck = !!deckAt(state.x, state.z); // renamed: onDeck() is now a module-level helper
+      const ahead = nearDeck ? Math.max(45, spdA * 0.9) : 0; // off-road: return to the road
       const rA = roadAt(state.s + ahead);
-      if (!onDeck && spdA > 60) gp.ts = true;
+      if (!nearDeck && spdA > 60) gp.ts = true;
       let want = Math.atan2(rA.x - state.x, rA.z - state.z) - state.heading;
       while (want > Math.PI) want -= 2 * Math.PI;
       while (want < -Math.PI) want += 2 * Math.PI;
@@ -798,7 +808,7 @@ function step(dt) {
     let wGrass = false;
     // height gate: a deck far ABOVE the car is an overpass, not the road
     // under this wheel (same rule as groundInfo)
-    if (d && Math.abs(d.lat) <= d.halfW + 0.4 && state.y > d.y - 3.0) {
+    if (onDeck(d, 0.4) && state.y > d.y - 3.0) {
       roadY = d.y; slope = d.slope; sfx = d.fx; sfz = d.fz;
       bankLat = d.bank / d.w; latDirX = -d.fz; latDirZ = d.fx;
       if (!refDeck || w === 2) refDeck = d;
@@ -846,6 +856,7 @@ function step(dt) {
   state.y += state.vy * dt;
   if (wasAirborne && contacts > 0) {
     state.lastImpact = Math.max(state.lastImpact, Math.abs(state.vy) + maxComp * 8);
+    state.landed = true; // latched here so a hop between two renders is never missed
     for (let w = 0; w < 3; w++) {
       if (wheelBelow[w] > 1.2) state.wDmg[w] = Math.min(40, state.wDmg[w] + (wheelBelow[w] - 1.2) * 9);
     }
@@ -871,7 +882,7 @@ function step(dt) {
   state.roll = Math.max(-0.30, Math.min(0.30, state.roll + state.rollV * dt));
   // never sink through a deck under the car
   const dUnder = deckAt(state.x, state.z);
-  if (dUnder && Math.abs(dUnder.lat) <= dUnder.halfW &&
+  if (onDeck(dUnder, 0) &&
       state.y < dUnder.y - 0.6 && state.y > dUnder.y - 3.5) { // anti-tunnel only — never a teleport from far below
     state.y = dUnder.y - 0.6;
     if (state.vy < 0) state.vy = 0;
@@ -945,7 +956,7 @@ function step(dt) {
 
   // ---- walls: impassable at deck height ----
   const dNow = deckAt(state.x, state.z);
-  if (dNow && state.y > dNow.y - 2.5 && state.y < dNow.y + 4.5) {
+  if (dNow && dNow.over <= 0.01 && state.y > dNow.y - 2.5 && state.y < dNow.y + 4.5) {
     const lim = dNow.halfW - 1.6;
     if (Math.abs(dNow.lat) > lim && Math.abs(dNow.lat) < dNow.halfW + 1.5) {
       const sgn = dNow.lat > 0 ? 1 : -1;
@@ -997,7 +1008,7 @@ function step(dt) {
   state.relPrev = rel;
   // off-track: grounded but not ON the road — deckAt returns the nearest
   // segment regardless of lateral distance or height, so bound both
-  const offRoad = !dNow || Math.abs(dNow.lat) > dNow.halfW + 1.5 || state.y < dNow.y - 4;
+  const offRoad = !dNow || dNow.over > 0.01 || Math.abs(dNow.lat) > dNow.halfW + 1.5 || state.y < dNow.y - 4;
   if (offRoad && contacts > 0) state.offT = (state.offT || 0) + dt;
   else state.offT = 0;
   if (state.offT > 3.5 && !state.wrecking && state.driving) craneRecover();
@@ -1042,7 +1053,15 @@ function craneRecover() {
     const lineS = cum[startIdx];
     const relBack = ((sBack - lineS) % total + total) % total;
     const relWreck = ((state.s - lineS) % total + total) % total;
-    if (relWreck < 35 && relBack > total * 0.5) sBack = ((lineS + 1) % total + total) % total;
+    if (relWreck < 35 && relBack > total * 0.5) {
+      sBack = ((lineS + 1) % total + total) % total;
+      // re-run the chasm walk: the clamp above discarded the probe's result
+      for (let tries = 0; tries < 12; tries++) {
+        const probe = roadAt(sBack);
+        if (!gapSeg.has(probe.i)) break;
+        sBack = ((sBack + 15) % total + total) % total;
+      }
+    }
     state.s = sBack;
     const rr2 = roadAt(state.s);
     state.x = rr2.x; state.z = rr2.z; state.heading = rr2.angle;
@@ -1067,7 +1086,7 @@ function updateVisuals() {
   // visual suspension: spring-damper offset kicked by landings
   const V = updateVisuals;
   if (V.air === undefined) { V.air = false; V.sy = 0; V.syV = 0; }
-  if (V.air && !state.airborne) { V.syV -= Math.min(40, state.lastImpact) * 0.035; state.lastImpact = 0; }
+  if (state.landed) { V.syV -= Math.min(40, state.lastImpact) * 0.035; state.lastImpact = 0; state.landed = false; }
   V.air = state.airborne;
   const nowMs = performance.now();
   const vdt = Math.min(0.05, (nowMs - (V.t || nowMs)) / 1000);
@@ -1087,7 +1106,7 @@ function updateVisuals() {
   if (cockpitOn) drawDash(dashEl);
   const r = roadAt(state.s);
   // attitude now comes straight from the wheel-contact physics
-  car.rotation.set(-state.pitch, state.heading + Math.PI, state.roll); // physics pitch+ = nose down; rotation.x+ = nose up
+  car.rotation.set(-state.pitch, state.heading + Math.PI, -state.roll); // physics pitch+ = nose down, roll+ = RIGHT side down (dx<0 sits right of centre); rotation.x+/z+ are the opposite
   const steerRoll = ((keys['KeyA'] || keys['ArrowLeft']) ? 1 : 0) - ((keys['KeyD'] || keys['ArrowRight']) ? 1 : 0);
   car.rotation.z += steerRoll * 0.05 * Math.min(1, state.speed / 60);
 
@@ -1152,7 +1171,7 @@ function drawDash(cnv) {
   const fmt = (t) => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0') + '.' + Math.floor((t % 1) * 10);
   // right LCD: current lap time + best
   g.fillStyle = '#e8d089';
-  g.fillText(fmt(state.lap > 0 ? state.pt - state.lapT0 : 0), 262, 179);
+  g.fillText(fmt(state.lap > 0 && isFinite(state.lapT0) ? state.pt - state.lapT0 : 0), 262, 179);
   if (state.best) { g.fillStyle = '#9fd3e8'; g.fillText(fmt(state.best), 262, 189); }
   // speed digits above the bar
   g.fillStyle = '#dfe8f5';
@@ -1218,7 +1237,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 21,
+    version: 22,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });
