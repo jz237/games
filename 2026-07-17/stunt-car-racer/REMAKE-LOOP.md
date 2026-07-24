@@ -649,6 +649,52 @@ User "fix it" (physics/handling). MEASURED the problem instead of guessing:
   attitude DOF — target-based critical damping is stable; feedback springs
   at 60Hz with big gains blow up.
 
+## v24 — 23 Jul 2026 — the original's "rubber band" lateral tether
+
+User described the 1989 game's feel exactly: "held by a rubber band to an
+invisible centre guardrail above the track... the rubber band allowed some
+playability but you had to be careful it didn't break and send you off the
+track and crash." Traced this to the disassembled original (Car Behaviour.cpp,
+CalculateXAcceleration) and found the v16 world-space rewrite had SOFTENED it
+away.
+
+THE ORIGINAL'S LATERAL GRIP: every tick it drives the car's sideways (car-frame)
+velocity toward zero and integrates that at REDUCTION = 238/256 ~ 0.93 — a STIFF
+tether that cancels ~93% of any sideways drift per tick, holding the car to a
+track-parallel path. But the correction is hard-capped at 2x the downforce
+(GetTwiceCollisionYAcceleration). When lateral load exceeds that — a corner
+taken too fast, or light wheels on a crest/bank where downforce drops — the grip
+SATURATES, the band "breaks", and the car slides (off the track if you pushed
+too hard). Stiff hold + breakable cap = the exact feel the user remembers.
+
+THE REMAKE HAD: `want = |vLat| * min(1, 8.3*dt)` = only ~14% of sideways
+velocity removed per tick — ~6x too soft. The 2x-downforce cap existed but
+because `want` was always tiny it never bound, so the grip was simultaneously
+too mushy to feel like a tether and too slack to ever "break". The comment even
+claimed "kill sideways velocity fully per original step" — it didn't.
+
+FIX: `want = |vLat| * min(1, GRIP_STIFF*dt)`, GRIP_STIFF = 56/s (~0.93 per 60Hz
+tick, matching REDUCTION), keeping the 2x-contactF cap. Tunable via ?gs=.
+Added state.gripBroke telemetry (is the band saturated this tick?).
+
+MEASURED (soft v23 -> stiff v24, identical harness):
+- Line-holding drift while lapping: mean lateral drift 0.18 -> 0.02 m on
+  hump-back, 0.17 -> 0.01 on big-ramp; max 3.4 -> 0.9 — ~9x tighter tether.
+- Reckless corner (85 display, no brake, no steer) on hump-back: grip
+  saturates (gripBroke) 0% -> 30% of ticks — the band is now visibly straining
+  at its limit through a hard corner, and still just holds the line (6.6 < 8 m
+  half-width). The old soft grip never engaged the cap.
+- Drivability unchanged: 8-track autopilot 7/8 pass 2 laps, zero errors, times
+  within noise (little-ramp 16.8, hump-back 24.8, stepping-stones 39.1,
+  big-ramp 44.9, high-jump 30.1, ski-jump 51.3, draw-bridge 29.3;
+  roller-coaster fails as on every prior version).
+
+Faithful to the original's model (velocity + heading tether, no explicit
+centreline position-pull — the "centre" feel is emergent from stiff lateral
+grip + AlignCarWithRoad heading spring, both present). Offered to the user:
+tune GRIP_STIFF if they want it looser/tighter, and a tyre-screech audio cue on
+gripBroke to make the "about to break" moment audible.
+
 ## v23 — 23 Jul 2026 — round-2 audit triage: verified fixes only
 
 The round-2 workflow (wf_a230666a-c67, 88 agents, 25 unique candidates, 17

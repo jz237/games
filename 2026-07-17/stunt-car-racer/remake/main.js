@@ -38,6 +38,11 @@ const CRANE_DROP_H = 13, CRANE_RATE = 6.0, CRANE_REL = 2.4; // m, m/s, release h
 // spring makes the remake understeer/on-rails. ?sa= / ?ak= override for tuning.
 const STEER_AUTH = parseFloat(qs.get('sa')) || 0.9;
 const ALIGN_K = parseFloat(qs.get('ak')) || 5.0;
+// lateral tyre grip stiffness — the original's "rubber band to the track".
+// The 1989 engine cancels ~93% of the car's sideways velocity EVERY tick
+// (REDUCTION 238/256), a stiff tether, but hard-capped at 2x the downforce so
+// it SNAPS into a slide when overloaded. 56/s ~= 0.93 per 60Hz tick.
+const GRIP_STIFF = parseFloat(qs.get('gs')) || 56;
 // all 8 traced tracks, division order; craneBack = slats before the start
 // line where the crane drops you (measured 283 on Little Ramp; others get a
 // nominal offset until their race-flow measurement)
@@ -929,15 +934,23 @@ function step(dt) {
   // surface-normal push (slopes and banking)
   state.vx += pushX * dt;
   state.vz += pushZ * dt;
-  // lateral tyre grip (CalculateXAcceleration): kill sideways velocity fully
-  // per original step, CAPPED at 2x contact force — sliding emerges beyond it
+  // lateral tyre grip (original CalculateXAcceleration): a STIFF rubber band —
+  // cancel ~93% of the car's sideways velocity per tick so the car is held to a
+  // track-parallel path — but only up to 2x the downforce (gripCap). When the
+  // lateral load exceeds that (hard corner, or light wheels on a crest/bank) the
+  // grip saturates, the band "breaks", and the car slides — off the track if you
+  // pushed too hard. contactF (downforce) drops on jumps/crests, so the tether
+  // naturally lets go exactly where the original's did.
   const vLat = state.vx * Lx + state.vz * Lz;
   if (contacts > 0) {
-    const want = Math.abs(vLat) * Math.min(1, 8.3 * dt);
-    const cap = gripCap * dt;
+    const want = Math.abs(vLat) * Math.min(1, GRIP_STIFF * dt); // stiff hold
+    const cap = gripCap * dt;                                   // 2x downforce = break point
     const kill = Math.sign(vLat) * Math.min(want, cap);
     state.vx -= Lx * kill;
     state.vz -= Lz * kill;
+    state.gripBroke = want > cap + 1e-6; // telemetry: is the band saturated this tick?
+  } else {
+    state.gripBroke = false;
   }
 
   // ---- steering (CalculateSteering + AlignCarWithRoad + per-piece
@@ -1264,7 +1277,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 23,
+    version: 24,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });
