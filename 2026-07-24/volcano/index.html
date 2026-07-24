@@ -168,6 +168,9 @@ var P = {
   grain:       0.55,
   zoom:        1.00,
   lava:        1.00,
+  spill:       1.00,
+  trails:      1.00,
+  bolts:       1.00,
   shake:       1.00,
   paused:      false,
   debug:       0
@@ -380,8 +383,8 @@ S.pUpdate = ['#version 300 es','precision highp float; precision highp sampler2D
 ' vec4 a=texture(uA,vUv); vec4 b=texture(uB,vUv);',
 ' vec2 pos=a.xy, vel=a.zw;',
 ' float life=b.x, seed=b.y, type=b.z, size=b.w;',
-' if(seed<=0.0){ seed=0.001+h2(vUv*vec2(311.7,127.1)); float tr=h1(seed*91.7+3.3); type = tr<0.035 ? 1.0 : (tr<0.50 ? 0.0 : 2.0); life=-h1(seed*57.3)*9.0; }',
-' life -= uDt*(type<0.5?1.45:(type<1.5?0.55:0.62));',
+' if(seed<=0.0){ seed=0.001+h2(vUv*vec2(311.7,127.1)); float tr=h1(seed*91.7+3.3); type = tr<0.018 ? 1.0 : (tr<0.50 ? 0.0 : 2.0); life=-h1(seed*57.3)*9.0; }',
+' life -= uDt*(type<0.5?1.45:(type<1.5?0.80:0.62));',
 ' if(life<=0.0){',
 '  float r=h1(seed+uTime*0.37), r2=h1(seed*3.1+uTime*0.71), r3=h1(seed*7.7+uTime*1.13);',
 '  if(uEmit<0.02 || r>uRate){ life=-0.05; oA=vec4(pos,0.0,0.0); oB=vec4(life,seed,type,size); return; }',
@@ -389,7 +392,7 @@ S.pUpdate = ['#version 300 es','precision highp float; precision highp sampler2D
 '  float spd=(0.55+r3*1.5)*uIntensity;',
 '  pos=vec2(uVentX+(r-0.5)*0.045, uVentY+r2*0.02);',
 '  if(type<0.5){        vel=vec2(sin(ang*0.45)*spd*0.30, cos(ang*0.45)*spd*1.30); size=0.6+r3*0.9; }',   // ember
-'  else if(type<1.5){   vel=vec2(sin(ang*1.7)*spd*0.55, cos(ang*0.7)*spd*0.72); size=1.5+r3*2.0; }', // bomb
+'  else if(type<1.5){   vel=vec2(sin(ang*1.7)*spd*0.20, cos(ang*0.7)*spd*0.62); size=1.5+r3*2.0; }', // bomb
 '  else {               vel=vec2(sin(ang)*spd*0.7, cos(ang)*spd*0.9); size=2.4+r3*4.5; }',      // ash
 '  life=1.0;',
 ' } else {',
@@ -437,6 +440,31 @@ var P_FS_ADD = ['#version 300 es','precision highp float;',
 ' float amp = (vType<0.5? 0.60 : 1.30);',
 ' fc=vec4(col*g*flick*amp*vLife, g*vLife); }'].join('\n');
 
+var TRAIL_VS = ['#version 300 es','precision highp float;',
+'uniform sampler2D uA,uB; uniform vec2 uDim; uniform float uAspect,uLen;',
+'out float vT; out float vLife; out float vSeed;',
+'void main(){',
+' int id=gl_VertexID; int seg=id/2; int end=id-seg*2;',
+' int gx=seg%int(uDim.x); int gy=seg/int(uDim.x);',
+' vec2 uv=(vec2(float(gx),float(gy))+0.5)/uDim;',
+' vec4 a=texture(uA,uv); vec4 b=texture(uB,uv);',
+' vLife=b.x; vSeed=b.y; vT=float(end);',
+' if(b.x<=0.0 || abs(b.z-1.0)>0.5){ gl_Position=vec4(2.0,2.0,2.0,1.0); return; }',
+' vec2 pos = a.xy - (end==1 ? a.zw*uLen : vec2(0.0));',
+' gl_Position=vec4((pos/vec2(uAspect,1.0))*2.0-1.0,0.0,1.0); }'].join('\n');
+var TRAIL_FS = ['#version 300 es','precision highp float;',
+'in float vT; in float vLife; in float vSeed;','out vec4 fc;',
+'void main(){',
+' float f=1.0-vT;',
+' vec3 hot=vec3(1.0,0.62,0.20), cool=vec3(0.75,0.13,0.02);',
+' vec3 col=mix(cool,hot,f*f);',
+' fc=vec4(col*f*0.55*vLife, f*0.55*vLife); }'].join('\n');
+
+var BOLT_VS = ['#version 300 es','precision highp float;','in vec2 aPos;',
+'void main(){ gl_Position=vec4(aPos,0.0,1.0); }'].join('\n');
+var BOLT_FS = ['#version 300 es','precision highp float;','out vec4 fc;','uniform float uA;',
+'void main(){ fc=vec4(vec3(1.0,0.94,0.86)*uA, uA); }'].join('\n');
+
 var P_FS_ASH = ['#version 300 es','precision highp float;',
 'in float vLife; in float vSeed; in float vType; in float vDens;','out vec4 fc;',
 'uniform sampler2D uAsh;',
@@ -458,7 +486,8 @@ S.plate = FH+[
 /* lit volumetric smoke: march toward the key light for self-shadowing */
 S.smoke = FH+[
 'uniform sampler2D uDye; uniform vec2 uVT; uniform int uChan;',
-'uniform float uDens,uEmis,uLightK,uAspect; uniform vec3 uColA,uColB,uEmisCol; uniform vec2 uLight;',
+'uniform float uDens,uEmis,uLightK,uAspect,uUnder; uniform vec3 uColA,uColB,uEmisCol;',
+'uniform vec2 uLight,uVent;',
 'void main(){',
 ' vec3 dye=texture(uDye,vUv).xyz;',
 ' float d = (uChan==0? dye.x : dye.z);',
@@ -470,12 +499,16 @@ S.smoke = FH+[
 ' float dens=d*uDens;',
 ' float a=1.0-exp(-dens*1.55);',
 ' vec3 col=mix(uColA,uColB,lit);',
-' col += uEmisCol*clamp(dye.y*uEmis,0.0,3.0);',        // vent glow through the base
+' col += uEmisCol*clamp(dye.y*uEmis,0.0,3.0);',
+' // the vent throws light up into the underside of the column',
+' float dv=distance(vUv*vec2(uAspect,1.0),uVent);',
+' col += uEmisCol*uUnder*exp(-dv*4.5);',        // vent glow through the base
 ' fc=vec4(col*a,a); }'].join('\n');
 
 /* crater + fissure emissive, masked by the cone silhouette */
 S.lava = FH+[
-'uniform sampler2D uLava,uObs; uniform float uTime,uGlow,uAspect,uFlow; uniform vec2 uVent;',
+'uniform sampler2D uLava,uObs,uCone; uniform float uTime,uGlow,uAspect,uFlow,uSpill;',
+'uniform vec2 uVent; uniform vec4 uXf;',
 'float h(vec2 p){ vec3 q=fract(vec3(p.xyx)*vec3(443.897,441.423,437.195));',
 ' q+=dot(q,q.yzx+19.19); return fract((q.x+q.y)*q.z); }',
 'float vn(vec2 p){ vec2 i=floor(p),f=fract(p); vec2 u=f*f*(3.0-2.0*f);',
@@ -504,7 +537,16 @@ S.lava = FH+[
 ' if(t<0.45)      col=mix(vec3(0.30,0.020,0.004),vec3(0.95,0.20,0.02),t/0.45);',
 ' else if(t<0.80) col=mix(vec3(0.95,0.20,0.02),vec3(1.0,0.62,0.10),(t-0.45)/0.35);',
 ' else            col=mix(vec3(1.0,0.62,0.10),vec3(1.0,0.93,0.70),(t-0.80)/0.20);',
-' fc=vec4(col*m*uGlow, clamp(m*uGlow,0.0,1.0)); }'].join('\n');
+' // warm light spilling onto the rock: modulated by the plate\'s own luminance so it',
+' // lands on lit facets instead of sitting on top as a flat wash',
+' vec2 cuv=(vUv-uXf.zw)/uXf.xy;',
+' float lum=0.0;',
+' if(cuv.x>=0.0&&cuv.x<=1.0&&cuv.y>=0.0&&cuv.y<=1.0){',
+'   vec3 ct=texture(uCone,vec2(cuv.x,1.0-cuv.y)).rgb;',
+'   lum=dot(ct,vec3(0.299,0.587,0.114)); }',
+' float spill=exp(-dist*dist/0.030)*uSpill*lum*(0.55+0.45*step(-0.002,-d.y));',
+' vec3 spillCol=vec3(1.0,0.42,0.12)*spill;',
+' fc=vec4(col*m*uGlow + spillCol, clamp(m*uGlow+spill,0.0,1.0)); }'].join('\n');
 
 /* ---- post ---- */
 S.bright = FH+['uniform sampler2D uTex; uniform float uThresh;',
@@ -573,7 +615,8 @@ function prog(vs,fs){
   o.tex=function(n,t){ var u=o._t++; gl.activeTexture(gl.TEXTURE0+u); gl.bindTexture(gl.TEXTURE_2D,t); gl.uniform1i(o.l(n),u); return o; };
   return o;
 }
-var PR={}, quadVAO, emptyVAO;
+var PR={}, quadVAO, emptyVAO, boltVAO, boltBuf;
+var boltPts=new Float32Array(2*160), boltN=0, boltLife=0;
 
 function fbo(w,h,internal,filter,nAttach){
   var texs=[],fb=gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER,fb);
@@ -630,12 +673,20 @@ function initGL(){
   quadVAO=gl.createVertexArray(); gl.bindVertexArray(quadVAO);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
   emptyVAO=gl.createVertexArray();
+  boltBuf=gl.createBuffer();
+  boltVAO=gl.createVertexArray(); gl.bindVertexArray(boltVAO);
+  gl.bindBuffer(gl.ARRAY_BUFFER,boltBuf);
+  gl.bufferData(gl.ARRAY_BUFFER,boltPts.byteLength,gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+  gl.bindVertexArray(quadVAO);
 
   try{
     for(var k in S) PR[k]=prog(VS,S[k]);
     PR.pUpdate = prog(VS,S.pUpdate);
     PR.pAdd    = prog(P_VS,P_FS_ADD);
     PR.pAsh    = prog(P_VS,P_FS_ASH);
+    PR.trail   = prog(TRAIL_VS,TRAIL_FS);
+    PR.bolt    = prog(BOLT_VS,BOLT_FS);
   }catch(e){ console.error('[volcano] shader:',e.message); return 'shader compile failed'; }
 
   for(var n in IMG) if(IMG[n]) TEX[n]=makeTex(IMG[n], n==='lava'?gl.REPEAT:gl.CLAMP_TO_EDGE);
@@ -884,12 +935,41 @@ function advanceStage(dt){
   if(state.stage==='tremor') state.shake=Math.max(state.shake, 0.10*(state.stageT/3.2));
   state.shake*=Math.pow(0.12,dt);
   state.flash*=Math.pow(0.02,dt);
+  boltLife*=Math.pow(0.0005,dt);
   /* ash-column lightning */
   if((state.stage==='column'||state.stage==='sustain') && Math.random()<dt*0.55){
     state.flash=Math.max(state.flash,0.10+Math.random()*0.16);
+    if(P.bolts>0.01) spawnBolt();
     play('thunder',0.35+Math.random()*0.3, 0.85+Math.random()*0.4);
   }
 }
+function spawnBolt(){
+  var v=ventWorld();
+  /* strike inside the upper column, where the ash is densest */
+  var pts=[[v[0]+(Math.random()-0.5)*0.22, v[1]+0.30+Math.random()*0.34]];
+  pts.push([pts[0][0]+(Math.random()-0.5)*0.30, pts[0][1]-(0.14+Math.random()*0.26)]);
+  for(var it=0; it<4; it++){
+    var out=[pts[0]];
+    for(var i=0;i<pts.length-1;i++){
+      var a=pts[i], b=pts[i+1];
+      var dx=b[0]-a[0], dy=b[1]-a[1], L=Math.hypot(dx,dy)||1e-5;
+      var off=(Math.random()-0.5)*L*0.55;
+      out.push([(a[0]+b[0])*0.5 - dy/L*off, (a[1]+b[1])*0.5 + dx/L*off]);
+      out.push(b);
+    }
+    pts=out;
+    if(pts.length>78) break;
+  }
+  boltN=Math.min(pts.length,160);
+  for(var k=0;k<boltN;k++){
+    boltPts[k*2]   = (pts[k][0]/state.aspect)*2-1;
+    boltPts[k*2+1] = pts[k][1]*2-1;
+  }
+  boltLife=1.0;
+  gl.bindBuffer(gl.ARRAY_BUFFER,boltBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER,0,boltPts.subarray(0,boltN*2));
+}
+
 function onStageEnter(name){
   if(name==='blast'){
     state.flash=0.85; state.shake=0.55;
@@ -916,11 +996,12 @@ function drawPlate(tex,xf,tint,isJpg){
   blit(FB.scene);
 }
 function drawSmoke(chan){
+  var vw=ventWorld();
   var p=PR.smoke.use();
   p.f('uMaxVel',1).v2('uTexel',FB.dye.tx,FB.dye.ty).v2('uVT',FB.dye.tx,FB.dye.ty)
    .i('uChan',chan).f('uDens',chan===0?1.35:1.6).f('uEmis',chan===0?0.16:0.05)
    .f('uLightK',0.42).f('uAspect',state.aspect)
-   .v2('uLight',-0.86,-0.22)
+   .v2('uLight',-0.86,-0.22).v2('uVent',vw[0],vw[1]).f('uUnder',P.spill*0.85)
    .v3('uColA',0.055,0.050,0.056).v3('uColB',0.82,0.76,0.72)
    .v3('uEmisCol',0.95,0.36,0.10)
    .tex('uDye',FB.dye.read.tex);
@@ -969,7 +1050,8 @@ function render(){
   var v=ventWorld();
   p.f('uMaxVel',1).v2('uTexel',FB.obs.tx,FB.obs.ty).f('uTime',state.t)
    .f('uGlow',0.60*clamp(P.intensity,0,2)).f('uAspect',state.aspect).v2('uVent',v[0],v[1]).f('uFlow',P.lava)
-   .tex('uLava',TEX.lava).tex('uObs',FB.obs.tex);
+   .f('uSpill',P.spill).v4('uXf',XF.cone[0],XF.cone[1],XF.cone[2],XF.cone[3])
+   .tex('uLava',TEX.lava).tex('uObs',FB.obs.tex).tex('uCone',TEX.cone);
   blit(FB.scene);
 
   gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
@@ -978,7 +1060,28 @@ function render(){
   if(P.ashfall>0.01) drawParticles('ash');
   gl.blendFunc(gl.ONE,gl.ONE);
   if(P.embers>0.01) drawParticles('ember');
-  if(P.bombs>0.01)  drawParticles('bomb');
+  if(P.bombs>0.01){
+    var tp=PR.trail.use();
+    gl.uniform2f(tp.l('uDim'),PART_DIM,PART_DIM);
+    gl.uniform1f(tp.l('uAspect'),state.aspect);
+    gl.uniform1f(tp.l('uLen'),0.040*P.trails);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,FB.part.read.texs[0]); gl.uniform1i(tp.l('uA'),0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,FB.part.read.texs[1]); gl.uniform1i(tp.l('uB'),1);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,FB.scene.fb); gl.viewport(0,0,FB.scene.w,FB.scene.h);
+    gl.bindVertexArray(emptyVAO);
+    gl.drawArrays(gl.LINES,0,PART_DIM*PART_DIM*2);
+    gl.bindVertexArray(quadVAO);
+    drawParticles('bomb');
+  }
+
+  if(boltLife>0.02 && boltN>1 && P.bolts>0.01){
+    var bp=PR.bolt.use();
+    gl.uniform1f(bp.l('uA'), boltLife*1.5*P.bolts);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,FB.scene.fb); gl.viewport(0,0,FB.scene.w,FB.scene.h);
+    gl.bindVertexArray(boltVAO);
+    gl.drawArrays(gl.LINE_STRIP,0,boltN);
+    gl.bindVertexArray(quadVAO);
+  }
 
   gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
   drawPlate(TEX.fgrocks,XF.rocks,  [0.10,0.10,0.13,1], false);
@@ -1047,6 +1150,9 @@ var SPEC=[
   ['bombs','Lava bombs',0,2,0.01,2],
   ['ashfall','Ash fall',0,2,0.01,2],
   ['lava','Lava flows',0,2.5,0.01,2],
+  ['spill','Vent light spill',0,2.5,0.01,2],
+  ['trails','Bomb trails',0,3,0.01,2],
+  ['bolts','Column lightning',0,2,0.01,2],
   ['exposure','Exposure',0.2,3,0.01,2],
   ['bloom','Bloom',0,2.5,0.01,2],
   ['haze','Heat haze',0,3,0.01,2],
@@ -1225,7 +1331,7 @@ Promise.all([loadImages(), loadAudio()]).then(function(){
                                 stage:state.stage,started:state.started,
                                 assets:Object.keys(TEX).length}; },
       set:function(k,v){ P[k]=v; if(k==='zoom') layout(); },
-      erupt:erupt, restart:restartSequence,
+      erupt:erupt, restart:restartSequence, bolt:spawnBolt,
       setStage:function(n){ for(var i=0;i<STAGES.length;i++) if(STAGES[i].name===n){ stageIdx=i; state.stage=n; state.stageT=0; onStageEnter(n); return true; } return false; },
       step:function(n){ for(var i=0;i<(n||1);i++){ state.t+=0.016; advanceStage(0.016); step(0.016); } },
       vent:ventWorld
