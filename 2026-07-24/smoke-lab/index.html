@@ -1,0 +1,2196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Smoke Lab — Eulerian Fluid Playground (unfinished demo)</title>
+<style>
+  :root{
+    --bg:#07080b; --panel:rgba(14,16,21,.88); --line:#232838;
+    --line2:#2f3547; --txt:#dfe4ee; --dim:#8b93a7; --accent:#4db2ff; --accent2:#ff8a3d;
+    --warn:#ff5f56; --ok:#5ddc8b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);
+    font:13px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-tap-highlight-color:transparent}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  #ui{pointer-events:none}
+
+  /* ---------- HUD ---------- */
+  #hud{position:fixed;left:10px;top:10px;z-index:6;pointer-events:none;
+    font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--dim);
+    background:rgba(8,10,14,.55);border:1px solid var(--line);border-radius:8px;padding:7px 10px;
+    backdrop-filter:blur(6px);min-width:172px}
+  #hud b{color:var(--txt);font-weight:600}
+  #hud .row{display:flex;justify-content:space-between;gap:14px}
+  #hud .bad{color:var(--warn)}
+  #hud .tag{display:inline-block;margin-top:4px;padding:1px 6px;border-radius:4px;
+    background:#182031;color:var(--accent);font-size:10px;letter-spacing:.04em}
+  #hud .tag.cpu{background:#2a1d13;color:var(--accent2)}
+  .wip{display:inline-block;padding:1px 6px;border-radius:4px;background:#3a2a12;color:#ffc078;
+    font:9.5px/1.5 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.06em;
+    border:1px solid #5c431d;white-space:nowrap}
+
+  /* ---------- panel ---------- */
+  #panel{position:fixed;right:0;top:0;height:100%;width:326px;z-index:8;
+    background:var(--panel);backdrop-filter:blur(14px);border-left:1px solid var(--line);
+    overflow-y:auto;overscroll-behavior:contain;transition:transform .22s ease;
+    scrollbar-width:thin;scrollbar-color:#39405a transparent}
+  #panel::-webkit-scrollbar{width:9px}
+  #panel::-webkit-scrollbar-thumb{background:#333a51;border-radius:9px;border:3px solid transparent;background-clip:content-box}
+  body.hideui #panel{transform:translateX(100%)}
+  body.hideui #hud,body.hideui #ptoggle{opacity:0;pointer-events:none}
+  #phead{position:sticky;top:0;z-index:2;background:linear-gradient(180deg,#12141b,#12141bee);
+    border-bottom:1px solid var(--line);padding:11px 13px 9px;display:flex;align-items:center;gap:9px}
+  #phead h1{margin:0;font-size:13px;letter-spacing:.02em;font-weight:650;flex:1}
+  #phead h1 span{color:var(--dim);font-weight:400;font-size:11px}
+  #ptoggle{position:fixed;right:336px;top:12px;z-index:9;width:30px;height:30px;border-radius:8px;
+    border:1px solid var(--line);background:rgba(14,16,21,.85);color:var(--txt);cursor:pointer;
+    font-size:14px;line-height:1;transition:right .22s ease,opacity .2s}
+  body.hideui #ptoggle,body.collapsed #ptoggle{right:12px}
+  body.collapsed #panel{transform:translateX(100%)}
+
+  .grp{border-bottom:1px solid var(--line)}
+  .grp>summary{list-style:none;cursor:pointer;padding:9px 13px;display:flex;align-items:center;gap:8px;
+    font-weight:600;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#aab2c6;
+    user-select:none;background:#0f1117}
+  .grp>summary::-webkit-details-marker{display:none}
+  .grp>summary:hover{color:var(--txt)}
+  .grp>summary .arw{font-size:9px;color:var(--dim);transition:transform .15s;width:9px}
+  .grp[open]>summary .arw{transform:rotate(90deg)}
+  .grp>summary .sp{flex:1}
+  .grp .body{padding:6px 13px 12px}
+
+  .ctl{margin:7px 0}
+  .ctl .lab{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:3px}
+  .ctl .lab span:first-child{color:#b9c0d0;font-size:11.5px}
+  .ctl .val{font:11px/1 ui-monospace,Menlo,Consolas,monospace;color:var(--accent);
+    background:#141926;border:1px solid #212942;border-radius:4px;padding:2.5px 5px;min-width:52px;text-align:right}
+  .ctl.off{opacity:.35;pointer-events:none}
+  input[type=range]{width:100%;height:16px;-webkit-appearance:none;appearance:none;background:transparent;margin:0;cursor:ew-resize}
+  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:3px;background:#262d40}
+  input[type=range]::-moz-range-track{height:3px;border-radius:3px;background:#262d40}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;
+    background:var(--accent);margin-top:-5px;border:2px solid #0b0d12;box-shadow:0 0 6px rgba(77,178,255,.45)}
+  input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid #0b0d12}
+  select,input[type=text]{width:100%;background:#141926;color:var(--txt);border:1px solid #212942;
+    border-radius:5px;padding:5px 6px;font:12px/1.2 inherit;outline:none}
+  select:focus{border-color:var(--accent)}
+  input[type=color]{width:100%;height:24px;padding:0;border:1px solid #212942;border-radius:5px;background:#141926;cursor:pointer}
+  .btn{background:#1a2030;border:1px solid #2a3247;color:var(--txt);border-radius:6px;padding:5px 8px;
+    font:11.5px/1.2 inherit;cursor:pointer;transition:.12s}
+  .btn:hover{background:#222a3d;border-color:#3d475f}
+  .btn:active{transform:translateY(1px)}
+  .btn.on{background:#173049;border-color:#2f6da3;color:#bfe2ff}
+  .btn.wide{width:100%}
+  .btn.mini{padding:3px 6px;font-size:10.5px}
+  .btn.danger:hover{border-color:#7a3030;color:#ffb3ae}
+  .row{display:flex;gap:5px;flex-wrap:wrap;margin:7px 0}
+  .row>*{flex:1}
+  .seg{display:flex;gap:0;border:1px solid #2a3247;border-radius:6px;overflow:hidden}
+  .seg button{flex:1;background:#141926;border:0;border-right:1px solid #2a3247;color:var(--dim);
+    padding:5px 2px;font:11px/1.2 inherit;cursor:pointer}
+  .seg button:last-child{border-right:0}
+  .seg button.on{background:#173049;color:#bfe2ff}
+  .hint{color:#6d768c;font-size:10.5px;margin:6px 0 0;line-height:1.5}
+  .reset{color:var(--dim);font-size:10px;border:0;background:transparent;cursor:pointer;padding:2px 4px}
+  .reset:hover{color:var(--accent)}
+
+  /* wind dial */
+  #dial{width:62px;height:62px;border-radius:50%;border:1px solid #2a3247;background:
+    radial-gradient(circle at 50% 50%,#161b27,#10131c);position:relative;cursor:grab;flex:0 0 auto}
+  #dial:active{cursor:grabbing}
+  #dial i{position:absolute;left:50%;top:50%;width:2px;height:26px;background:var(--accent2);
+    transform-origin:50% 100%;border-radius:2px;margin-left:-1px;margin-top:-26px}
+  #dial b{position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px;border-radius:50%;background:#4a5470}
+  .dialrow{display:flex;gap:10px;align-items:center}
+  .dialrow .dcol{flex:1;min-width:0}
+
+  #toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,14px);z-index:20;
+    background:#182031;border:1px solid #2c3852;color:#cfe6ff;padding:8px 14px;border-radius:8px;
+    font-size:12px;opacity:0;pointer-events:none;transition:.2s}
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+
+  #help{position:fixed;left:10px;bottom:10px;z-index:6;color:#5f6880;
+    font:10.5px/1.6 ui-monospace,Menlo,Consolas,monospace;pointer-events:none}
+  #help b{color:#8b93a7;font-weight:600}
+  body.hideui #help{opacity:0}
+
+  @media (max-width:760px){
+    #panel{width:min(92vw,326px)}
+    #ptoggle{right:12px}
+    body.collapsed #panel{transform:translateX(100%)}
+    #help{display:none}
+  }
+</style>
+</head>
+<body class="collapsed">
+<canvas id="gl"></canvas>
+<canvas id="ui"></canvas>
+
+<div id="hud">
+  <div class="row"><span>fps</span><b id="h_fps">–</b></div>
+  <div class="row"><span>frame</span><b id="h_ms">–</b></div>
+  <div class="row"><span>grid</span><b id="h_grid">–</b></div>
+  <div class="row"><span>iters</span><b id="h_it">–</b></div>
+  <div class="row"><span>∑|div|</span><b id="h_div">–</b></div>
+  <div><span class="tag" id="h_mode">…</span> <span class="tag bad" id="h_nan" style="display:none">NaN CLAMPED</span></div>
+</div>
+
+<button id="ptoggle" title="Toggle panel (H)">☰</button>
+
+<aside id="panel">
+  <div id="phead">
+    <h1>Smoke Lab <span id="h_sub">webgl2</span></h1>
+    <span class="wip" title="Work in progress — parameters and presets are still being tuned">UNFINISHED</span>
+    <button class="btn mini" id="btnPaused" title="Space">❚❚</button>
+    <button class="btn mini" id="btnStep" title="Period">▶|</button>
+  </div>
+  <div id="groups"></div>
+</aside>
+
+<div id="toast"></div>
+<div id="help">
+  <span class="wip">UNFINISHED DEMO</span> — physics sandbox, still being tuned<br>
+  <b>drag</b> obstacle · <b>drag</b> canvas = push fluid · <b>right-drag</b> = add smoke<br>
+  <b>wheel</b> rotate · <b>shift+wheel</b> scale · <b>space</b> pause · <b>.</b> step · <b>R</b> reset · <b>D</b> debug · <b>H</b> hide UI
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ==========================================================================
+   Smoke Lab — a real Eulerian (Stable Fluids) smoke solver you can poke at.
+   Pipeline per step:  advect → forces (buoyancy/gravity/wind/turbulence)
+                       → vorticity confinement → emit → project → render
+   GPU path: WebGL2, half-float ping-pong FBOs.
+   CPU path: small Float32 grid, same math, 2D-canvas render.
+   ========================================================================== */
+
+var QS        = new URLSearchParams(location.search);
+var QA        = QS.has('qa');
+var FORCE_CPU = QS.get('cpu') === '1';
+
+var TAU = Math.PI * 2;
+var clamp = function(v,a,b){ return v<a?a:(v>b?b:v); };
+var lerp  = function(a,b,t){ return a+(b-a)*t; };
+
+/* --------------------------------------------------------------------------
+   1. PARAMETERS — every control is declared once here and the whole panel,
+   the defaults, the reset buttons and the save/load format come from it.
+   -------------------------------------------------------------------------- */
+
+var RES_CHOICES = [96,128,160,192,224,256,320,384,448,512];
+var COLORMAPS   = ['Grayscale','Fire','Cool','Temperature'];
+var DEBUG_VIEWS = ['None (smoke)','Velocity','Pressure','Divergence','Vorticity','Obstacle mask'];
+
+var GROUPS = [
+{ id:'sim', title:'Simulation', open:true, items:[
+  {k:'simRes',    t:'choice', label:'Grid resolution', vals:RES_CHOICES, def:256,
+                  fmt:function(v){ var g=gridFor(v,state.aspect); return g[0]+'×'+g[1]; }, reinit:true},
+  {k:'dyeScale',  t:'choice', label:'Smoke detail',    vals:[1,1.5,2,3], def:2,
+                  fmt:function(v){ return v+'×'; }, reinit:true},
+  {k:'dt',        t:'range',  label:'Timestep',        min:0.002, max:0.040, step:0.001, def:0.016, dp:3, unit:'s'},
+  {k:'iterations',t:'range',  label:'Solver iterations',min:4,    max:80,    step:1,     def:30,    dp:0},
+  {k:'simSpeed',  t:'range',  label:'Sim speed',       min:0.05,  max:3,     step:0.05,  def:1,     dp:2, unit:'×'},
+  {k:'substeps',  t:'range',  label:'Substeps / frame',min:1,     max:3,     step:1,     def:1,     dp:0}
+]},
+{ id:'fluid', title:'Fluid', open:true, items:[
+  {k:'viscosity', t:'range',  label:'Viscosity',            min:0, max:1.5, step:0.005, def:0,    dp:3},
+  {k:'densDiss',  t:'range',  label:'Density dissipation',  min:0, max:3,   step:0.01,  def:0.28, dp:2, unit:'/s'},
+  {k:'velDiss',   t:'range',  label:'Velocity dissipation', min:0, max:3,   step:0.01,  def:0.22, dp:2, unit:'/s'},
+  {k:'vorticity', t:'range',  label:'Vorticity confinement',min:0, max:40,  step:0.5,   def:11,   dp:1},
+  {k:'pressRetain',t:'range', label:'Pressure retention',   min:0, max:0.98,step:0.02,  def:0.82, dp:2},
+  {k:'omega',     t:'range',  label:'Relaxation ω',         min:0.5,max:1.5,step:0.01,  def:1.00, dp:2}
+]},
+{ id:'forces', title:'Forces', open:true, items:[
+  {k:'buoyancy',  t:'range', label:'Buoyancy',        min:0,  max:8,  step:0.02, def:1.35, dp:2},
+  {k:'ambient',   t:'range', label:'Ambient temp',    min:-1, max:1,  step:0.01, def:0,    dp:2},
+  {k:'tempDiss',  t:'range', label:'Temp dissipation',min:0,  max:4,  step:0.01, def:0.85, dp:2, unit:'/s'},
+  {k:'gravity',   t:'range', label:'Gravity (weight)',min:0,  max:4,  step:0.01, def:0.14, dp:2},
+  {t:'dial'},
+  {k:'windX',     t:'range', label:'Wind X',          min:-6, max:6,  step:0.02, def:0,    dp:2},
+  {k:'windY',     t:'range', label:'Wind Y',          min:-6, max:6,  step:0.02, def:0,    dp:2},
+  {k:'turbAmp',   t:'range', label:'Turbulence',      min:0,  max:8,  step:0.02, def:0.35, dp:2},
+  {k:'turbScale', t:'range', label:'Turbulence scale',min:0.5,max:20, step:0.1,  def:5.0,  dp:1},
+  {k:'turbSpeed', t:'range', label:'Turbulence drift',min:0,  max:3,  step:0.01, def:0.35, dp:2}
+]},
+{ id:'emit', title:'Emitters', open:true, items:[
+  {t:'emitterbar'},
+  {k:'radius', src:'em', t:'range', label:'Radius',      min:0.005,max:0.30, step:0.002,def:0.035,dp:3},
+  {k:'rate',   src:'em', t:'range', label:'Density rate',min:0,    max:12,   step:0.05, def:2.4,  dp:2},
+  {k:'temp',   src:'em', t:'range', label:'Temperature', min:-2,   max:6,    step:0.02, def:1.30, dp:2},
+  {k:'vel',    src:'em', t:'range', label:'Injection speed',min:0, max:4,    step:0.01, def:0.55, dp:2},
+  {k:'angle',  src:'em', t:'range', label:'Direction',   min:-180, max:180,  step:1,    def:0,    dp:0, unit:'°'},
+  {k:'spread', src:'em', t:'range', label:'Spread',      min:0,    max:180,  step:1,    def:22,   dp:0, unit:'°'},
+  {t:'emitmode'},
+  {k:'pulseRate',src:'em',t:'range',label:'Pulse rate',  min:0.1,  max:12,   step:0.1,  def:2.0,  dp:1, unit:'Hz'}
+]},
+{ id:'obs', title:'Obstacles', open:true, items:[
+  {t:'obsbar'},
+  {k:'freeSlip',  t:'seg',   label:'Boundary', opts:['No-slip','Free-slip'], def:0},
+  {k:'coupling',  t:'range', label:'Drag coupling',      min:0, max:3, step:0.02, def:1.0, dp:2},
+  {k:'restitution',t:'range',label:'Injected vel. scale',min:0, max:2, step:0.02, def:1.0, dp:2},
+  {k:'osx', src:'ob', t:'range', label:'Size X',   min:0.02,max:0.5, step:0.002,def:0.09,dp:3},
+  {k:'osy', src:'ob', t:'range', label:'Size Y',   min:0.02,max:0.5, step:0.002,def:0.09,dp:3},
+  {k:'rotd',src:'ob', t:'range', label:'Rotation', min:-180,max:180, step:1,    def:0,   dp:0, unit:'°'}
+]},
+{ id:'render', title:'Render', open:true, items:[
+  {k:'colormap', t:'choice', label:'Colormap', vals:[0,1,2,3], def:0, fmt:function(v){ return COLORMAPS[v]; }},
+  {k:'exposure', t:'range',  label:'Exposure', min:0.05,max:4, step:0.01, def:0.85, dp:2},
+  {k:'contrast', t:'range',  label:'Contrast', min:0.3, max:3, step:0.01, def:1.10, dp:2},
+  {k:'tint',     t:'color',  label:'Smoke tint',  def:'#e8eefc'},
+  {k:'bg',       t:'color',  label:'Background',  def:'#080a10'},
+  {k:'debug',    t:'choice', label:'Debug view', vals:[0,1,2,3,4,5], def:0, fmt:function(v){ return DEBUG_VIEWS[v]; }},
+  {k:'arrows',   t:'seg',    label:'Velocity arrows', opts:['Off','On'], def:0},
+  {k:'arrowScale',t:'range', label:'Arrow length', min:0.5,max:30, step:0.5, def:3, dp:1, unit:'×'},
+  {k:'arrowDens',t:'range',  label:'Arrow density',min:8, max:64, step:1,    def:28,  dp:0}
+]},
+{ id:'io', title:'Presets & I/O', open:false, items:[
+  {t:'presets'},
+  {t:'io'}
+]}
+];
+
+/* flatten to a lookup of "P-scoped" params (src undefined) */
+var DEFAULTS = {};
+var ITEMS = {};
+GROUPS.forEach(function(g){ g.items.forEach(function(it){
+  if(!it.k) return; ITEMS[it.k] = it; it.group = g.id;
+  if(!it.src) DEFAULTS[it.k] = it.def;
+}); });
+
+var EM_DEFAULTS = {radius:0.035,rate:2.4,temp:1.30,vel:0.55,angle:0,spread:22,pulse:0,pulseRate:2.0};
+
+var P = Object.assign({}, DEFAULTS);
+
+/* --------------------------------------------------------------------------
+   2. PRESETS
+   -------------------------------------------------------------------------- */
+var PRESETS = {
+  'Campfire': {
+    p:{buoyancy:2.1,tempDiss:1.35,densDiss:0.55,velDiss:0.30,vorticity:16,gravity:0.08,
+       turbAmp:0.9,turbScale:7,turbSpeed:0.6,colormap:1,exposure:0.85,contrast:1.25,
+       windX:0,windY:0,tint:'#ffd9a8',bg:'#0a0705'},
+    em:[{x:0.5,y:0.06,radius:0.05,rate:2.2,temp:2.4,vel:0.30,angle:0,spread:38,pulse:0}]
+  },
+  'Chimney Plume': {
+    p:{buoyancy:1.05,tempDiss:0.55,densDiss:0.16,velDiss:0.16,vorticity:9,gravity:0.10,
+       turbAmp:0.45,turbScale:4,turbSpeed:0.3,colormap:0,exposure:0.5,contrast:1.05,
+       windX:0.55,windY:0,tint:'#dfe6f5',bg:'#0b0e15'},
+    em:[{x:0.34,y:0.05,radius:0.030,rate:1.9,temp:1.2,vel:0.62,angle:0,spread:14,pulse:0}]
+  },
+  'Wind Tunnel': {
+    p:{buoyancy:0.15,tempDiss:1.2,densDiss:0.22,velDiss:0.05,vorticity:14,gravity:0.02,
+       windX:2.6,windY:0,turbAmp:0.15,turbScale:9,turbSpeed:0.2,iterations:60,
+       colormap:2,exposure:0.60,contrast:1.20,tint:'#cfe8ff',bg:'#070a12'},
+    em:[{x:0.03,y:0.5,radius:0.13,rate:1.6,temp:0.2,vel:1.6,angle:90,spread:0,pulse:0}]
+  },
+  'Jet': {
+    p:{buoyancy:0.5,tempDiss:1.0,densDiss:0.30,velDiss:0.10,vorticity:26,gravity:0.05,
+       turbAmp:1.2,turbScale:11,turbSpeed:0.9,iterations:40,
+       colormap:1,exposure:0.75,contrast:1.35,tint:'#ffd0a0',bg:'#08060a'},
+    em:[{x:0.10,y:0.28,radius:0.030,rate:3.0,temp:1.0,vel:2.6,angle:80,spread:6,pulse:0}]
+  },
+  'Slow Ink': {
+    p:{buoyancy:0.25,tempDiss:0.25,densDiss:0.02,velDiss:0.65,vorticity:4,gravity:0.55,
+       viscosity:0.22,turbAmp:0.05,turbScale:3,iterations:44,
+       colormap:2,exposure:1.15,contrast:0.9,tint:'#9fd2ff',bg:'#0e1118',simSpeed:0.55},
+    em:[{x:0.5,y:0.93,radius:0.045,rate:2.0,temp:-0.4,vel:0.28,angle:180,spread:20,pulse:0}]
+  },
+  'Explosion': {
+    p:{buoyancy:3.2,tempDiss:1.9,densDiss:0.75,velDiss:0.45,vorticity:30,gravity:0.20,
+       turbAmp:2.4,turbScale:8,turbSpeed:1.4,iterations:36,
+       colormap:1,exposure:1.0,contrast:1.5,tint:'#ffbf80',bg:'#07050a'},
+    em:[{x:0.5,y:0.22,radius:0.085,rate:9.0,temp:5.0,vel:1.4,angle:0,spread:180,pulse:1,pulseRate:0.6}]
+  }
+};
+
+/* --------------------------------------------------------------------------
+   3. SCENE STATE
+   -------------------------------------------------------------------------- */
+var glCanvas = document.getElementById('gl');
+var uiCanvas = document.getElementById('ui');
+var uictx    = uiCanvas.getContext('2d');
+
+var MAX_OBS = 8, MAX_EM = 4;
+
+var state = {
+  aspect: 16/9, W:0, H:0, dpr:1,
+  simW:0, simH:0, dyeW:0, dyeH:0,
+  paused:false, stepOnce:false, time:0, frames:0,
+  fps:0, ms:0, residual:0, nan:false, nanSticky:0,
+  gpu:true
+};
+
+var obstacles = [];
+var emitters  = [];
+var selObs = -1, hovObs = -1, selEm = 0, hovEm = -1;
+
+function newObstacle(type, x, y){
+  return {type:type, x:x, y:y, sx:0.09, sy:type===1?0.09:0.07, rot:0,
+          vx:0, vy:0, px:x, py:y};
+}
+function newEmitter(x,y){
+  var e = Object.assign({}, EM_DEFAULTS); e.x=x; e.y=y; e.on=true; return e;
+}
+
+function defaultScene(){
+  emitters = [ newEmitter(state.aspect*0.5, 0.05) ];
+  obstacles = [];
+  /* keep both inside the domain in portrait as well as landscape */
+  var o = newObstacle(1, state.aspect*0.5, 0.46); o.sx=o.sy=0.085; obstacles.push(o);
+  var w = newObstacle(2, state.aspect*0.68, 0.70); w.sx=0.12; w.sy=0.075; w.rot=-0.35; obstacles.push(w);
+  selObs = -1; selEm = 0;
+}
+
+/* world space: x in [0, aspect], y in [0,1], y up (matches uv) */
+function screenToWorld(cx, cy){
+  var r = glCanvas.getBoundingClientRect();
+  return { x:(cx - r.left)/r.width * state.aspect, y:1 - (cy - r.top)/r.height };
+}
+
+/* --- signed-distance functions, mirrored exactly in the shaders --- */
+function sdBox(px,py,bx,by){
+  var dx=Math.abs(px)-bx, dy=Math.abs(py)-by;
+  return Math.hypot(Math.max(dx,0),Math.max(dy,0)) + Math.min(Math.max(dx,dy),0);
+}
+function sdTri(px,py, ax,ay, bx,by, cx,cy){
+  var e0x=bx-ax,e0y=by-ay, e1x=cx-bx,e1y=cy-by, e2x=ax-cx,e2y=ay-cy;
+  var v0x=px-ax,v0y=py-ay, v1x=px-bx,v1y=py-by, v2x=px-cx,v2y=py-cy;
+  function pq(vx,vy,ex,ey){ var t=clamp((vx*ex+vy*ey)/(ex*ex+ey*ey),0,1); return [vx-ex*t, vy-ey*t]; }
+  var q0=pq(v0x,v0y,e0x,e0y), q1=pq(v1x,v1y,e1x,e1y), q2=pq(v2x,v2y,e2x,e2y);
+  var s = Math.sign(e0x*e2y - e0y*e2x);
+  var d0=[q0[0]*q0[0]+q0[1]*q0[1], s*(v0x*e0y-v0y*e0x)];
+  var d1=[q1[0]*q1[0]+q1[1]*q1[1], s*(v1x*e1y-v1y*e1x)];
+  var d2=[q2[0]*q2[0]+q2[1]*q2[1], s*(v2x*e2y-v2y*e2x)];
+  var d=[Math.min(d0[0],d1[0],d2[0]), Math.min(d0[1],d1[1],d2[1])];
+  return -Math.sqrt(d[0])*Math.sign(d[1]);
+}
+function sdObstacle(o, wx, wy){
+  var c=Math.cos(-o.rot), s=Math.sin(-o.rot);
+  var dx=wx-o.x, dy=wy-o.y;
+  var qx=c*dx - s*dy, qy=s*dx + c*dy;
+  if(o.type===0) return sdBox(qx,qy,o.sx,o.sy);
+  if(o.type===1){ var m=Math.min(o.sx,o.sy); return (Math.hypot(qx/o.sx, qy/o.sy)-1)*m; }
+  var r = 0.22*Math.min(o.sx,o.sy);
+  return sdTri(qx,qy, -0.85*o.sx, 0.34*o.sy, -0.85*o.sx, -0.16*o.sy, o.sx, 0) - r;
+}
+function pickObstacle(wx,wy,slack){
+  var best=-1, bd=1e9;
+  for(var i=obstacles.length-1;i>=0;i--){
+    var d=sdObstacle(obstacles[i],wx,wy);
+    if(d < (slack||0.012) && d < bd){ bd=d; best=i; }
+  }
+  return best;
+}
+function pickEmitter(wx,wy){
+  for(var i=emitters.length-1;i>=0;i--){
+    var e=emitters[i];
+    if(Math.hypot(wx-e.x, wy-e.y) < Math.max(0.035, e.radius*0.9)) return i;
+  }
+  return -1;
+}
+
+/* --------------------------------------------------------------------------
+   4. GPU BACKEND (WebGL2)
+   -------------------------------------------------------------------------- */
+var gl=null, ext={}, GLOK=false;
+
+var VERT = [
+'#version 300 es',
+'precision highp float;',
+'in vec2 aPos;',
+'out vec2 vUv; out vec2 vL; out vec2 vR; out vec2 vB; out vec2 vT;',
+'uniform vec2 uTexel;',
+'void main(){',
+'  vUv = aPos*0.5+0.5;',
+'  vL = vUv - vec2(uTexel.x,0.0); vR = vUv + vec2(uTexel.x,0.0);',
+'  vB = vUv - vec2(0.0,uTexel.y); vT = vUv + vec2(0.0,uTexel.y);',
+'  gl_Position = vec4(aPos,0.0,1.0);',
+'}'].join('\n');
+
+var FHEAD = [
+'#version 300 es',
+'precision highp float; precision highp int; precision highp sampler2D;',
+'in vec2 vUv; in vec2 vL; in vec2 vR; in vec2 vB; in vec2 vT;',
+'out vec4 fc;',
+'uniform float uMaxVel;',
+'vec2 san(vec2 v){ return (any(isnan(v))||any(isinf(v))) ? vec2(0.0) : clamp(v,-uMaxVel,uMaxVel); }',
+'float san1(float v){ return (isnan(v)||isinf(v)) ? 0.0 : v; }',
+''].join('\n');
+
+/* obstacle SDF block shared by the raster and display passes */
+var SDF_BLOCK = [
+'uniform int   uObsCount;',
+'uniform vec4  uObsA[8];',  // xy = centre (world), z = rot, w = type
+'uniform vec4  uObsB[8];',  // xy = half-size (world), zw = velocity (world/s)
+'uniform float uAspect;',
+'float sdBox(vec2 p, vec2 b){ vec2 d=abs(p)-b; return length(max(d,vec2(0.0)))+min(max(d.x,d.y),0.0); }',
+'float sdTri(vec2 p, vec2 p0, vec2 p1, vec2 p2){',
+'  vec2 e0=p1-p0,e1=p2-p1,e2=p0-p2;',
+'  vec2 v0=p-p0,v1=p-p1,v2=p-p2;',
+'  vec2 q0=v0-e0*clamp(dot(v0,e0)/dot(e0,e0),0.0,1.0);',
+'  vec2 q1=v1-e1*clamp(dot(v1,e1)/dot(e1,e1),0.0,1.0);',
+'  vec2 q2=v2-e2*clamp(dot(v2,e2)/dot(e2,e2),0.0,1.0);',
+'  float s=sign(e0.x*e2.y-e0.y*e2.x);',
+'  vec2 d=min(min(vec2(dot(q0,q0),s*(v0.x*e0.y-v0.y*e0.x)),',
+'                 vec2(dot(q1,q1),s*(v1.x*e1.y-v1.y*e1.x))),',
+'                 vec2(dot(q2,q2),s*(v2.x*e2.y-v2.y*e2.x)));',
+'  return -sqrt(d.x)*sign(d.y);',
+'}',
+'float sdOne(int i, vec2 P){',
+'  float c=cos(-uObsA[i].z), s=sin(-uObsA[i].z);',
+'  vec2 d=P-uObsA[i].xy;',
+'  vec2 q=vec2(c*d.x - s*d.y, s*d.x + c*d.y);',
+'  vec2 sz=uObsB[i].xy;',
+'  int t=int(uObsA[i].w);',
+'  if(t==0) return sdBox(q,sz);',
+'  if(t==1) return (length(q/sz)-1.0)*min(sz.x,sz.y);',
+'  float r=0.22*min(sz.x,sz.y);',
+'  return sdTri(q, vec2(-0.85*sz.x,0.34*sz.y), vec2(-0.85*sz.x,-0.16*sz.y), vec2(sz.x,0.0)) - r;',
+'}',
+''].join('\n');
+
+var SHADERS = {};
+
+SHADERS.copy = FHEAD + [
+'uniform sampler2D uTex;',
+'void main(){ fc = texture(uTex, vUv); }'].join('\n');
+
+SHADERS.clear = FHEAD + [
+'uniform sampler2D uTex; uniform float uValue;',
+'void main(){ fc = texture(uTex, vUv) * uValue; }'].join('\n');
+
+/* --- obstacle rasteriser: r = solid, gb = obstacle velocity, a = sdf --- */
+SHADERS.obstacle = FHEAD + SDF_BLOCK + [
+'void main(){',
+'  vec2 P = vUv * vec2(uAspect,1.0);',
+'  float best = 1e9; vec2 bvel = vec2(0.0);',
+'  for(int i=0;i<8;i++){',
+'    if(i>=uObsCount) break;',
+'    float d = sdOne(i,P);',
+'    if(d < best){ best = d; bvel = uObsB[i].zw; }',
+'  }',
+'  fc = vec4(best < 0.0 ? 1.0 : 0.0, bvel, clamp(best,-1.0,1.0));',
+'}'].join('\n');
+
+/* --- semi-Lagrangian advection (velocity) --- */
+SHADERS.advectVel = FHEAD + [
+'uniform sampler2D uVelocity, uObstacle;',
+'uniform vec2 uVelTexel; uniform float uDt, uDiss;',
+'void main(){',
+'  vec4 o = texture(uObstacle, vUv);',
+'  if(o.x > 0.5){ fc = vec4(o.yz,0.0,1.0); return; }',        // solid cells carry the obstacle's own velocity
+'  vec2 v = texture(uVelocity, vUv).xy;',
+'  vec2 coord = vUv - uDt * v * uVelTexel;',                  // trace back along the field
+'  vec2 r = texture(uVelocity, coord).xy;',
+'  r /= (1.0 + uDt * uDiss);',
+'  fc = vec4(san(r), 0.0, 1.0);',
+'}'].join('\n');
+
+/* --- semi-Lagrangian advection (density + temperature packed in RG) --- */
+SHADERS.advectDye = FHEAD + [
+'uniform sampler2D uVelocity, uSource, uObstacle;',
+'uniform vec2 uVelTexel; uniform float uDt, uDensDiss, uTempDiss, uAmbient;',
+'void main(){',
+'  if(texture(uObstacle, vUv).x > 0.5){ fc = vec4(0.0, uAmbient, 0.0, 1.0); return; }',
+'  vec2 v = texture(uVelocity, vUv).xy;',
+'  vec2 coord = vUv - uDt * v * uVelTexel;',
+'  vec2 s = texture(uSource, coord).xy;',
+'  float d = s.x / (1.0 + uDt*uDensDiss);',
+'  float t = uAmbient + (s.y - uAmbient) / (1.0 + uDt*uTempDiss);',   // hot smoke cools toward ambient
+'  fc = vec4(clamp(san1(d),0.0,8.0), clamp(san1(t),-6.0,10.0), 0.0, 1.0);',
+'}'].join('\n');
+
+/* --- curl (z-vorticity) --- */
+SHADERS.curl = FHEAD + [
+'uniform sampler2D uVelocity;',
+'void main(){',
+'  float l = texture(uVelocity,vL).y, r = texture(uVelocity,vR).y;',
+'  float b = texture(uVelocity,vB).x, t = texture(uVelocity,vT).x;',
+'  fc = vec4(0.5*((r-l)-(t-b)), 0.0,0.0,1.0);',              // dv/dx - du/dy
+'}'].join('\n');
+
+/* --- external forces: vorticity confinement + buoyancy + gravity + wind + curl-noise --- */
+SHADERS.forces = FHEAD + [
+'uniform sampler2D uVelocity, uCurl, uDye, uObstacle;',
+'uniform float uDt,uVort,uBuoy,uGrav,uAmbient,uTime,uTurbAmp,uTurbScale,uAspect;',
+'uniform vec2 uWind;',
+'float hash(vec2 p){ p=fract(p*vec2(127.1,311.7)); p+=dot(p,p+34.23); return fract(p.x*p.y*43758.5453); }',
+'float vnoise(vec2 p){',
+'  vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);',
+'  return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y);',
+'}',
+'float psi(vec2 p){ return vnoise(p)*0.62 + vnoise(p*2.03+11.3)*0.28 + vnoise(p*4.11+31.7)*0.10; }',
+'void main(){',
+'  vec4 o = texture(uObstacle, vUv);',
+'  if(o.x > 0.5){ fc = vec4(o.yz,0.0,1.0); return; }',
+'  vec2 v = texture(uVelocity, vUv).xy;',
+'  // -- vorticity confinement: push energy back into the curl that advection smears out',
+'  if(uVort > 0.0){',
+'    float cl=abs(texture(uCurl,vL).x), cr=abs(texture(uCurl,vR).x);',
+'    float cb=abs(texture(uCurl,vB).x), ct=abs(texture(uCurl,vT).x);',
+'    float c = texture(uCurl,vUv).x;',
+'    vec2 g = 0.5*vec2(cr-cl, ct-cb);',
+'    g /= (length(g) + 1e-5);',
+'    v += uDt * uVort * c * vec2(g.y, -g.x);',
+'  }',
+'  // -- buoyancy from temperature, weight from density',
+'  vec2 dye = texture(uDye, vUv).xy;',
+'  v.y += uDt * (uBuoy*(dye.y - uAmbient) - uGrav*dye.x);',
+'  // -- ambient wind',
+'  v += uDt * uWind;',
+'  // -- curl-noise turbulence (divergence free, so the projection does not just erase it)',
+'  if(uTurbAmp > 0.0){',
+'    vec2 p = vUv*vec2(uAspect,1.0)*uTurbScale + vec2(0.0, uTime);',
+'    float e = 0.035;',
+'    float n1=psi(p+vec2(0.0,e)), n2=psi(p-vec2(0.0,e));',
+'    float n3=psi(p+vec2(e,0.0)), n4=psi(p-vec2(e,0.0));',
+'    v += uDt * uTurbAmp * vec2(n1-n2, -(n3-n4)) / (2.0*e);',
+'  }',
+'  fc = vec4(san(v), 0.0, 1.0);',
+'}'].join('\n');
+
+/* --- gaussian splats (emitters + pointer) --- */
+SHADERS.splat = FHEAD + [
+'uniform sampler2D uSource;',
+'uniform int uCount; uniform vec3 uSp[8]; uniform vec4 uSv[8];',
+'uniform float uAspect; uniform vec2 uLo, uHi;',
+'void main(){',
+'  vec4 base = texture(uSource, vUv);',
+'  vec2 Pw = vUv*vec2(uAspect,1.0);',
+'  vec4 add = vec4(0.0);',
+'  for(int i=0;i<8;i++){',
+'    if(i>=uCount) break;',
+'    vec2 d = Pw - uSp[i].xy;',
+'    float r = max(uSp[i].z, 1e-4);',
+'    add += uSv[i] * exp(-dot(d,d)/(r*r));',
+'  }',
+'  vec4 res = base + add;',
+'  fc = vec4(clamp(res.x,uLo.x,uHi.x), clamp(res.y,uLo.y,uHi.y), res.zw);',
+'}'].join('\n');
+
+/* --- obstacle boundary condition: no-slip or free-slip --- */
+SHADERS.boundary = FHEAD + [
+'uniform sampler2D uVelocity, uObstacle;',
+'uniform int uFreeSlip; uniform float uCoupling;',
+'void main(){',
+'  vec4 o = texture(uObstacle, vUv);',
+'  vec2 v = texture(uVelocity, vUv).xy;',
+'  if(o.x > 0.5){',
+'    vec2 ov = o.yz * uCoupling;',
+'    if(uFreeSlip == 1){',
+'      vec2 n = vec2(texture(uObstacle,vR).w - texture(uObstacle,vL).w,',
+'                    texture(uObstacle,vT).w - texture(uObstacle,vB).w);',
+'      float L = length(n);',
+'      if(L > 1e-6){ n /= L; vec2 rel = v - ov; rel -= n*dot(n,rel); v = ov + rel; }',
+'      else v = ov;',
+'    } else { v = ov; }',
+'  }',
+'  fc = vec4(san(v),0.0,1.0);',
+'}'].join('\n');
+
+/* --- viscous diffusion (Jacobi) --- */
+SHADERS.viscosity = FHEAD + [
+'uniform sampler2D uVelocity, uSource, uObstacle;',
+'uniform float uAlpha;',
+'void main(){',
+'  vec4 o = texture(uObstacle, vUv);',
+'  if(o.x > 0.5){ fc = vec4(o.yz,0.0,1.0); return; }',
+'  vec2 c = texture(uVelocity,vUv).xy;',
+'  vec2 l = texture(uVelocity,vL).xy, r = texture(uVelocity,vR).xy;',
+'  vec2 b = texture(uVelocity,vB).xy, t = texture(uVelocity,vT).xy;',
+'  vec2 src = texture(uSource,vUv).xy;',
+'  fc = vec4(san((src + uAlpha*(l+r+b+t)) / (1.0 + 4.0*uAlpha)), 0.0, 1.0);',
+'}'].join('\n');
+
+/* --- divergence (obstacle aware).
+   The stored velocity is read as a MAC/staggered field: u lives on the cell's LEFT face,
+   v on its BOTTOM face. Forward differences here + backward differences in the gradient
+   pass compose into exactly the compact 5-point Laplacian the Jacobi solver inverts, so
+   the projection actually converges instead of plateauing on a checkerboard null space. --- */
+SHADERS.divergence = FHEAD + [
+'uniform sampler2D uVelocity, uObstacle;',
+'void main(){',
+'  if(texture(uObstacle,vUv).x > 0.5){ fc = vec4(0.0); return; }',
+'  float uc = texture(uVelocity,vUv).x, ur = texture(uVelocity,vR).x;',
+'  float vc = texture(uVelocity,vUv).y, vt = texture(uVelocity,vT).y;',
+'  vec4 ol=texture(uObstacle,vL), orr=texture(uObstacle,vR);',
+'  vec4 ob=texture(uObstacle,vB), ot=texture(uObstacle,vT);',
+'  if(ol.x>0.5)  uc = ol.y;',      // a face shared with a solid moves at the obstacle's velocity
+'  if(orr.x>0.5) ur = orr.y;',
+'  if(ob.x>0.5)  vc = ob.z;',
+'  if(ot.x>0.5)  vt = ot.z;',
+'  fc = vec4(san1((ur-uc)+(vt-vc)), 0.0,0.0,1.0);',
+'}'].join('\n');
+
+/* --- pressure Jacobi with Neumann BC at solids --- */
+SHADERS.pressure = FHEAD + [
+'uniform sampler2D uPressure, uDivergence, uObstacle;',
+'uniform float uOmega;',
+'void main(){',
+'  float c = texture(uPressure,vUv).x;',
+'  if(texture(uObstacle,vUv).x > 0.5){ fc = vec4(c,0.0,0.0,1.0); return; }',
+'  float l = texture(uObstacle,vL).x>0.5 ? c : texture(uPressure,vL).x;',
+'  float r = texture(uObstacle,vR).x>0.5 ? c : texture(uPressure,vR).x;',
+'  float b = texture(uObstacle,vB).x>0.5 ? c : texture(uPressure,vB).x;',
+'  float t = texture(uObstacle,vT).x>0.5 ? c : texture(uPressure,vT).x;',
+'  float d = texture(uDivergence,vUv).x;',
+'  float p = (l+r+b+t-d)*0.25;',
+'  p = mix(c,p,uOmega);',
+'  fc = vec4(clamp(san1(p),-2000.0,2000.0),0.0,0.0,1.0);',
+'}'].join('\n');
+
+/* --- subtract pressure gradient => divergence-free velocity --- */
+SHADERS.gradient = FHEAD + [
+'uniform sampler2D uPressure, uVelocity, uObstacle;',
+'void main(){',
+'  vec4 o = texture(uObstacle,vUv);',
+'  float c = texture(uPressure,vUv).x;',
+'  if(o.x > 0.5){ fc = vec4(o.yz,0.0,1.0); return; }',
+'  float l = texture(uObstacle,vL).x>0.5 ? c : texture(uPressure,vL).x;',
+'  float b = texture(uObstacle,vB).x>0.5 ? c : texture(uPressure,vB).x;',
+'  vec2 v = texture(uVelocity,vUv).xy - vec2(c-l, c-b);',   // backward diff, matches divergence
+'  fc = vec4(san(v),0.0,1.0);',
+'}'].join('\n');
+
+/* --- residual + NaN probe, packed into RGBA8 so readPixels is always legal --- */
+SHADERS.probe = FHEAD + [
+'uniform sampler2D uDivergence, uVelocity;',
+'void main(){',
+'  float sum=0.0, mx=0.0, bad=0.0;',
+'  for(int y=0;y<16;y++){',
+'    for(int x=0;x<16;x++){',
+'      vec2 uv=(vec2(float(x),float(y))+0.5)/16.0;',
+'      float d = texture(uDivergence,uv).x;',
+'      vec2 v = texture(uVelocity,uv).xy;',
+'      if(isnan(d)||isinf(d)||any(isnan(v))||any(isinf(v))||abs(d)>1.0e6) bad = 1.0;',
+'      else { sum += abs(d); mx = max(mx,abs(d)); }',
+'    }',
+'  }',
+'  // log encoding: one 16-bit slot has to cover a converged 1e-3 and a blown-up 1e6',
+'  float m = clamp(log2(1.0 + sum/256.0)/20.0, 0.0, 1.0);',
+'  float hi = floor(m*255.0);',
+'  fc = vec4(hi/255.0, m*255.0-hi, clamp(mx/256.0,0.0,1.0), bad);',
+'}'].join('\n');
+
+/* --- display: smoke + debug fields --- */
+SHADERS.display = FHEAD + [
+'uniform sampler2D uDye,uVelocity,uPressure,uDivergence,uCurl,uObstacle;',
+'uniform int uMode, uColormap;',
+'uniform float uExposure,uContrast;',
+'uniform vec3 uTint,uBg;',
+'vec3 cmFire(float t){',
+'  t=clamp(t,0.0,1.0);',
+'  vec3 a=vec3(0.06,0.02,0.03), b=vec3(0.75,0.13,0.02), c=vec3(1.0,0.62,0.11), d=vec3(1.0,0.98,0.86);',
+'  if(t<0.34) return mix(a,b,t/0.34);',
+'  if(t<0.72) return mix(b,c,(t-0.34)/0.38);',
+'  return mix(c,d,(t-0.72)/0.28);',
+'}',
+'vec3 cmCool(float t){',
+'  t=clamp(t,0.0,1.0);',
+'  vec3 a=vec3(0.03,0.05,0.12), b=vec3(0.10,0.36,0.72), c=vec3(0.35,0.79,0.92), d=vec3(0.92,0.99,1.0);',
+'  if(t<0.36) return mix(a,b,t/0.36);',
+'  if(t<0.74) return mix(b,c,(t-0.36)/0.38);',
+'  return mix(c,d,(t-0.74)/0.26);',
+'}',
+'vec3 cmTemp(float t){',
+'  t=clamp(t*0.5+0.5,0.0,1.0);',
+'  vec3 cold=vec3(0.16,0.42,0.95), mid=vec3(0.92,0.93,0.96), hot=vec3(0.98,0.36,0.10);',
+'  return t<0.5 ? mix(cold,mid,t/0.5) : mix(mid,hot,(t-0.5)/0.5);',
+'}',
+'vec3 diverging(float x){',
+'  float t=clamp(x*0.5+0.5,0.0,1.0);',
+'  vec3 neg=vec3(0.13,0.40,0.95), zero=vec3(0.05,0.06,0.09), pos=vec3(0.98,0.42,0.13);',
+'  return t<0.5 ? mix(neg,zero,t/0.5) : mix(zero,pos,(t-0.5)/0.5);',
+'}',
+'void main(){',
+'  if(uMode==0){',
+'    vec2 dye = texture(uDye,vUv).xy;',
+'    float dens = max(dye.x,0.0)*uExposure;',
+'    float shaped = pow(dens, uContrast);',
+'    float a = 1.0 - exp(-shaped*1.7);',
+'    float heat = clamp(dye.y*0.55, 0.0, 1.0);',
+'    vec3 col;',
+'    if(uColormap==0) col = vec3(1.0);',
+'    else if(uColormap==1) col = cmFire(clamp(heat*0.85 + shaped*0.30, 0.0, 1.0));',
+'    else if(uColormap==2) col = cmCool(clamp(shaped*0.55 + heat*0.45, 0.0, 1.0));',
+'    else col = cmTemp(dye.y*0.6);',
+'    col *= uTint;',
+'    fc = vec4(mix(uBg, col, clamp(a,0.0,1.0)), 1.0);',
+'  } else if(uMode==1){',
+'    vec2 v = texture(uVelocity,vUv).xy*0.006;',
+'    float m = length(v);',
+'    fc = vec4(vec3(0.5+v.x, 0.5+v.y, 0.55) * (0.35+min(m*2.0,1.0)), 1.0);',
+'  } else if(uMode==2){',
+'    fc = vec4(diverging(texture(uPressure,vUv).x*0.06), 1.0);',
+'  } else if(uMode==3){',
+'    fc = vec4(diverging(texture(uDivergence,vUv).x*0.5), 1.0);',
+'  } else if(uMode==4){',
+'    fc = vec4(diverging(texture(uCurl,vUv).x*0.03), 1.0);',
+'  } else {',
+'    vec4 o = texture(uObstacle,vUv);',
+'    vec3 c = mix(vec3(0.04,0.05,0.07), vec3(0.85,0.90,1.0), o.x);',
+'    c += diverging(o.w*6.0)*0.35;',
+'    c += vec3(abs(o.y),abs(o.z),0.0)*0.004;',
+'    fc = vec4(c,1.0);',
+'  }',
+'}'].join('\n');
+
+/* --- obstacle bodies + hover/selection outlines, drawn over the smoke --- */
+SHADERS.obsDraw = FHEAD + SDF_BLOCK + [
+'uniform int uHover, uSel;',
+'uniform float uPxW;',
+'float sdAll(vec2 Pw){',
+'  float d=1e9;',
+'  for(int i=0;i<8;i++){ if(i>=uObsCount) break; d = min(d, sdOne(i,Pw)); }',
+'  return d;',
+'}',
+'void main(){',
+'  vec2 Pw = vUv*vec2(uAspect,1.0);',
+'  float dAll=1e9, dHov=1e9, dSel=1e9;',
+'  for(int i=0;i<8;i++){',
+'    if(i>=uObsCount) break;',
+'    float d = sdOne(i,Pw);',
+'    dAll = min(dAll,d);',
+'    if(i==uHover) dHov = d;',
+'    if(i==uSel)   dSel = d;',
+'  }',
+'  float aa = max(uPxW*1.1, 0.0007);',
+'  float cov = smoothstep(aa,-aa,dAll);',
+'  // world-space gradient: stable everywhere, unlike dFdx/dFdy across 2x2 quads',
+'  float e = uPxW*2.0;',
+'  vec2 n = vec2(sdAll(Pw+vec2(e,0.0)) - sdAll(Pw-vec2(e,0.0)),',
+'                sdAll(Pw+vec2(0.0,e)) - sdAll(Pw-vec2(0.0,e)));',
+'  float nl = length(n); n = nl>1e-9 ? n/nl : vec2(0.0,1.0);',
+'  float lit = clamp(dot(n, normalize(vec2(-0.45,0.89))),0.0,1.0);',
+'  float depth = clamp(-dAll*7.0,0.0,1.0);',
+'  vec3 body = mix(vec3(0.30,0.33,0.40), vec3(0.11,0.12,0.16), depth);',
+'  body += lit*0.30*(1.0-depth*0.7);',
+'  vec4 outc = vec4(body, cov*0.97);',
+'  float w = max(uPxW*1.6, 0.0016);',
+'  float ringS = (1.0-smoothstep(w, w+aa, abs(dSel)));',
+'  float ringH = (1.0-smoothstep(w*0.8, w*0.8+aa, abs(dHov)));',
+'  vec3 selCol = vec3(0.30,0.70,1.0), hovCol = vec3(0.62,0.72,0.85);',
+'  outc.rgb = mix(outc.rgb, hovCol, ringH*0.75);',
+'  outc.a   = max(outc.a, ringH*0.55);',
+'  outc.rgb = mix(outc.rgb, selCol, ringS);',
+'  outc.a   = max(outc.a, ringS*0.95);',
+'  fc = outc;',
+'}'].join('\n');
+
+var ARROW_VS = [
+'#version 300 es',
+'precision highp float;',
+'uniform sampler2D uVelocity;',
+'uniform vec2 uGrid, uVelTexel; uniform float uScale;',
+'out float vT;',
+'void main(){',
+'  int id = gl_VertexID; int seg = id/2; int end = id - seg*2;',
+'  int gx = seg % int(uGrid.x); int gy = seg / int(uGrid.x);',
+'  vec2 uv = (vec2(float(gx),float(gy))+0.5)/uGrid;',
+'  vec2 v = texture(uVelocity, uv).xy;',
+'  // arrow length = how far a particle drifts in one 16 ms frame, times the user scale',
+'  vec2 pos = uv + (end==1 ? v*uVelTexel*uScale*0.016 : vec2(0.0));',
+'  vT = float(end);',
+'  gl_Position = vec4(pos*2.0-1.0, 0.0, 1.0);',
+'}'].join('\n');
+var ARROW_FS = [
+'#version 300 es','precision highp float;','in float vT;','out vec4 fc;',
+'void main(){ fc = vec4(mix(vec3(0.45,0.95,0.70), vec3(0.15,0.35,0.30), vT), mix(0.85,0.10,vT)); }'].join('\n');
+
+/* ---- tiny GL plumbing ---- */
+function compile(type, src){
+  var s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+    throw new Error(gl.getShaderInfoLog(s) + '\n' + src.split('\n').map(function(l,i){ return (i+1)+': '+l; }).slice(0,200).join('\n'));
+  return s;
+}
+function makeProg(vsSrc, fsSrc){
+  var p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vsSrc));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fsSrc));
+  gl.bindAttribLocation(p, 0, 'aPos');
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  var o = { h:p, _u:{} };
+  o.loc = function(n){ if(!(n in o._u)) o._u[n] = gl.getUniformLocation(p,n); return o._u[n]; };
+  o.use = function(){ gl.useProgram(p); o._unit = 0; return o; };
+  o.f  = function(n,v){ gl.uniform1f(o.loc(n),v); return o; };
+  o.i  = function(n,v){ gl.uniform1i(o.loc(n),v); return o; };
+  o.v2 = function(n,x,y){ gl.uniform2f(o.loc(n),x,y); return o; };
+  o.v3 = function(n,x,y,z){ gl.uniform3f(o.loc(n),x,y,z); return o; };
+  o.fv3= function(n,a){ gl.uniform3fv(o.loc(n),a); return o; };
+  o.fv4= function(n,a){ gl.uniform4fv(o.loc(n),a); return o; };
+  o.tex= function(n,t){ var u=o._unit++; gl.activeTexture(gl.TEXTURE0+u); gl.bindTexture(gl.TEXTURE_2D,t); gl.uniform1i(o.loc(n),u); return o; };
+  return o;
+}
+var PROG = {}, quadVAO=null, arrowVAO=null;
+
+function makeFBO(w,h,internal,format,type,filter){
+  var tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, internal, w, h);
+  var fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  var ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+  gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex:tex, fbo:fbo, w:w, h:h, tx:1/w, ty:1/h, ok:ok,
+           destroy:function(){ gl.deleteTexture(tex); gl.deleteFramebuffer(fbo); } };
+}
+function makeDouble(w,h,internal,format,type,filter){
+  var a = makeFBO(w,h,internal,format,type,filter);
+  var b = makeFBO(w,h,internal,format,type,filter);
+  return { w:w,h:h,tx:a.tx,ty:a.ty, read:a, write:b, ok:a.ok&&b.ok,
+           swap:function(){ var t=this.read; this.read=this.write; this.write=t; },
+           destroy:function(){ a.destroy(); b.destroy(); } };
+}
+function blit(target){
+  if(target){ gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo); gl.viewport(0,0,target.w,target.h); }
+  else { gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0,0,glCanvas.width, glCanvas.height); }
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+}
+
+var FB = {};   // all sim targets live here so a resize can nuke them cleanly
+function destroyTargets(){
+  ['velocity','dye','pressure'].forEach(function(k){ if(FB[k]) FB[k].destroy(); });
+  ['divergence','residual','curl','obstacle','probe'].forEach(function(k){ if(FB[k]) FB[k].destroy(); });
+  FB = {};
+}
+function allocTargets(){
+  destroyTargets();
+  var sw=state.simW, sh=state.simH, dw=state.dyeW, dh=state.dyeH;
+  var HF = gl.HALF_FLOAT;
+  FB.velocity   = makeDouble(sw,sh, gl.RG16F, gl.RG,  HF, gl.LINEAR);
+  FB.dye        = makeDouble(dw,dh, gl.RG16F, gl.RG,  HF, gl.LINEAR);
+  FB.pressure   = makeDouble(sw,sh, gl.R16F,  gl.RED, HF, gl.NEAREST);
+  FB.divergence = makeFBO(sw,sh, gl.R16F,  gl.RED, HF, gl.NEAREST);
+  FB.residual   = makeFBO(sw,sh, gl.R16F,  gl.RED, HF, gl.NEAREST);
+  FB.curl       = makeFBO(sw,sh, gl.R16F,  gl.RED, HF, gl.NEAREST);
+  FB.obstacle   = makeFBO(sw,sh, gl.RGBA16F, gl.RGBA, HF, gl.LINEAR);
+  FB.probe      = makeFBO(1,1, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
+  return FB.velocity.ok && FB.dye.ok && FB.pressure.ok && FB.divergence.ok && FB.obstacle.ok;
+}
+
+function initGL(){
+  gl = glCanvas.getContext('webgl2', {alpha:false, antialias:false, depth:false, stencil:false,
+                                      preserveDrawingBuffer:false, powerPreference:'high-performance'});
+  if(!gl) return false;
+  ext.cbf  = gl.getExtension('EXT_color_buffer_float');
+  ext.cbhf = gl.getExtension('EXT_color_buffer_half_float');
+  if(!ext.cbf && !ext.cbhf) return false;
+
+  var buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  quadVAO = gl.createVertexArray();
+  gl.bindVertexArray(quadVAO);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+  arrowVAO = gl.createVertexArray();
+
+  try {
+    for(var k in SHADERS) PROG[k] = makeProg(VERT, SHADERS[k]);
+    PROG.arrows = makeProg(ARROW_VS, ARROW_FS);
+  } catch(e){ console.error('[smoke-lab] shader:', e.message); return false; }
+
+  gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+  gl.bindVertexArray(quadVAO);
+  return true;
+}
+
+/* ---- uniform staging buffers ---- */
+var obsA = new Float32Array(MAX_OBS*4), obsB = new Float32Array(MAX_OBS*4);
+var spP  = new Float32Array(8*3),       spV  = new Float32Array(8*4);
+
+function packObstacles(){
+  var n = Math.min(obstacles.length, MAX_OBS), U = state.simH;
+  for(var i=0;i<n;i++){
+    var o = obstacles[i];
+    obsA[i*4]=o.x; obsA[i*4+1]=o.y; obsA[i*4+2]=o.rot; obsA[i*4+3]=o.type;
+    obsB[i*4]=Math.max(o.sx,0.004); obsB[i*4+1]=Math.max(o.sy,0.004);
+    obsB[i*4+2]=o.vx*U*P.restitution; obsB[i*4+3]=o.vy*U*P.restitution;
+  }
+  return n;
+}
+function setObsUniforms(p, n){
+  p.i('uObsCount', n).f('uAspect', state.aspect);
+  gl.uniform4fv(p.loc('uObsA'), obsA);
+  gl.uniform4fv(p.loc('uObsB'), obsB);
+}
+
+/* ---- one simulation step on the GPU ---- */
+var pendingSplats = [];   // {x,y,r, dyeD,dyeT, vx,vy} in world units
+
+function gpuStep(dt){
+  var U = state.simH;                       // texels per world unit (square cells)
+  var MAXV = 9.0 * U;
+  var vel = FB.velocity, dye = FB.dye, pres = FB.pressure;
+
+  gl.bindVertexArray(quadVAO);
+  gl.disable(gl.BLEND);
+
+  /* --- 0. rasterise obstacles into the solid mask (r=solid, gb=obstacle velocity, a=sdf) --- */
+  var nObs = packObstacles();
+  var p = PROG.obstacle.use();
+  p.f('uMaxVel',MAXV).v2('uTexel', FB.obstacle.tx, FB.obstacle.ty);
+  setObsUniforms(p, nObs);
+  blit(FB.obstacle);
+
+  /* --- 1. ADVECT velocity, then smoke+temperature --- */
+  p = PROG.advectVel.use();
+  p.f('uMaxVel',MAXV).v2('uTexel', vel.tx, vel.ty).v2('uVelTexel', vel.tx, vel.ty)
+   .f('uDt',dt).f('uDiss',P.velDiss).tex('uVelocity', vel.read.tex).tex('uObstacle', FB.obstacle.tex);
+  blit(vel.write); vel.swap();
+
+  p = PROG.advectDye.use();
+  p.f('uMaxVel',MAXV).v2('uTexel', dye.tx, dye.ty).v2('uVelTexel', vel.tx, vel.ty)
+   .f('uDt',dt).f('uDensDiss',P.densDiss).f('uTempDiss',P.tempDiss).f('uAmbient',P.ambient)
+   .tex('uVelocity', vel.read.tex).tex('uSource', dye.read.tex).tex('uObstacle', FB.obstacle.tex);
+  blit(dye.write); dye.swap();
+
+  /* --- 2. curl, then all external FORCES incl. vorticity confinement --- */
+  p = PROG.curl.use();
+  p.f('uMaxVel',MAXV).v2('uTexel', vel.tx, vel.ty).tex('uVelocity', vel.read.tex);
+  blit(FB.curl);
+
+  p = PROG.forces.use();
+  p.f('uMaxVel',MAXV).v2('uTexel', vel.tx, vel.ty).f('uDt',dt)
+   .f('uVort', P.vorticity*0.01*U).f('uBuoy', P.buoyancy*U).f('uGrav', P.gravity*U)
+   .f('uAmbient', P.ambient).f('uTime', state.time*P.turbSpeed)
+   .f('uTurbAmp', P.turbAmp*U).f('uTurbScale', P.turbScale).f('uAspect', state.aspect)
+   .v2('uWind', P.windX*U, P.windY*U)
+   .tex('uVelocity', vel.read.tex).tex('uCurl', FB.curl.tex)
+   .tex('uDye', dye.read.tex).tex('uObstacle', FB.obstacle.tex);
+  blit(vel.write); vel.swap();
+
+  /* --- 3. EMIT: gather emitter + pointer splats, one pass for velocity, one for dye --- */
+  var splats = [];
+  for(var i=0;i<emitters.length;i++){
+    var e = emitters[i];
+    if(!e.on) continue;
+    var duty = 1;
+    if(e.pulse){ var ph = (state.time*e.pulseRate) % 1; duty = ph < 0.30 ? 1 : 0; }
+    if(duty === 0) continue;
+    var jitter = (Math.random()-0.5) * e.spread*Math.PI/180;
+    var a = e.angle*Math.PI/180 + jitter;
+    splats.push({ x:e.x, y:e.y, r:e.radius,
+                  d:e.rate*dt, t:e.temp*dt*1.6,
+                  vx:Math.sin(a)*e.vel*U*dt*8, vy:Math.cos(a)*e.vel*U*dt*8 });
+  }
+  for(i=0;i<pendingSplats.length;i++) splats.push(pendingSplats[i]);
+  pendingSplats.length = 0;
+
+  if(splats.length){
+    var n = Math.min(splats.length, 8);
+    for(i=0;i<n;i++){ spP[i*3]=splats[i].x; spP[i*3+1]=splats[i].y; spP[i*3+2]=splats[i].r;
+                      spV[i*4]=splats[i].vx; spV[i*4+1]=splats[i].vy; spV[i*4+2]=0; spV[i*4+3]=0; }
+    p = PROG.splat.use();
+    p.f('uMaxVel',MAXV).v2('uTexel', vel.tx, vel.ty).i('uCount',n).f('uAspect',state.aspect)
+     .v2('uLo',-MAXV,-MAXV).v2('uHi',MAXV,MAXV).tex('uSource', vel.read.tex);
+    gl.uniform3fv(p.loc('uSp'), spP); gl.uniform4fv(p.loc('uSv'), spV);
+    blit(vel.write); vel.swap();
+
+    for(i=0;i<n;i++){ spV[i*4]=splats[i].d; spV[i*4+1]=splats[i].t; spV[i*4+2]=0; spV[i*4+3]=0; }
+    p = PROG.splat.use();
+    p.f('uMaxVel',MAXV).v2('uTexel', dye.tx, dye.ty).i('uCount',n).f('uAspect',state.aspect)
+     .v2('uLo',0,-6).v2('uHi',8,10).tex('uSource', dye.read.tex);
+    gl.uniform3fv(p.loc('uSp'), spP); gl.uniform4fv(p.loc('uSv'), spV);
+    blit(dye.write); dye.swap();
+  }
+
+  /* --- 4. viscous diffusion (only when it would do something) --- */
+  if(P.viscosity > 0.0005){
+    var alpha = P.viscosity * dt * U * 0.25;
+    var src = vel.read.tex;
+    for(i=0;i<8;i++){
+      p = PROG.viscosity.use();
+      p.f('uMaxVel',MAXV).v2('uTexel', vel.tx, vel.ty).f('uAlpha',alpha)
+       .tex('uVelocity', vel.read.tex).tex('uSource', src).tex('uObstacle', FB.obstacle.tex);
+      blit(vel.write); vel.swap();
+    }
+  }
+
+  /* --- 5. obstacle boundary condition before the projection --- */
+  applyBoundary(MAXV);
+
+  /* --- 6. PROJECT: divergence -> Jacobi pressure -> subtract gradient --- */
+  p = PROG.divergence.use();
+  p.f('uMaxVel',MAXV).v2('uTexel', vel.tx, vel.ty)
+   .tex('uVelocity', vel.read.tex).tex('uObstacle', FB.obstacle.tex);
+  blit(FB.divergence);
+
+  p = PROG.clear.use();
+  p.f('uMaxVel',MAXV).v2('uTexel', pres.tx, pres.ty).f('uValue', P.pressRetain).tex('uTex', pres.read.tex);
+  blit(pres.write); pres.swap();
+
+  var iters = Math.round(P.iterations);
+  for(i=0;i<iters;i++){
+    p = PROG.pressure.use();
+    p.f('uMaxVel',MAXV).v2('uTexel', pres.tx, pres.ty).f('uOmega', P.omega)
+     .tex('uPressure', pres.read.tex).tex('uDivergence', FB.divergence.tex).tex('uObstacle', FB.obstacle.tex);
+    blit(pres.write); pres.swap();
+  }
+
+  p = PROG.gradient.use();
+  p.f('uMaxVel',MAXV).v2('uTexel', vel.tx, vel.ty)
+   .tex('uPressure', pres.read.tex).tex('uVelocity', vel.read.tex).tex('uObstacle', FB.obstacle.tex);
+  blit(vel.write); vel.swap();
+
+  applyBoundary(MAXV);
+
+  /* --- 7. residual / NaN probe (cheap, every few frames) --- */
+  if(state.frames % 8 === 0) probe(MAXV);
+}
+
+function applyBoundary(MAXV){
+  var vel = FB.velocity;
+  var p = PROG.boundary.use();
+  p.f('uMaxVel',MAXV).v2('uTexel', vel.tx, vel.ty)
+   .i('uFreeSlip', P.freeSlip ? 1 : 0).f('uCoupling', P.coupling)
+   .tex('uVelocity', vel.read.tex).tex('uObstacle', FB.obstacle.tex);
+  blit(vel.write); vel.swap();
+}
+
+var probeBuf = new Uint8Array(4);
+function probe(MAXV){
+  /* recompute divergence on the *projected* velocity: that is the real residual,
+     not the divergence we fed into the solver */
+  var vel = FB.velocity;
+  var p = PROG.divergence.use();
+  p.f('uMaxVel',MAXV).v2('uTexel', vel.tx, vel.ty)
+   .tex('uVelocity', vel.read.tex).tex('uObstacle', FB.obstacle.tex);
+  blit(FB.residual);
+
+  p = PROG.probe.use();
+  p.f('uMaxVel',MAXV).v2('uTexel', FB.residual.tx, FB.residual.ty)
+   .tex('uDivergence', FB.residual.tex).tex('uVelocity', FB.velocity.read.tex);
+  blit(FB.probe);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, FB.probe.fbo);
+  gl.readPixels(0,0,1,1, gl.RGBA, gl.UNSIGNED_BYTE, probeBuf);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  state.residual = Math.pow(2, (probeBuf[0] + probeBuf[1]/255) / 255 * 20) - 1;
+  var bad = probeBuf[3] > 127;
+  if(bad){ state.nan = true; state.nanSticky = 180; resetFields(); }
+}
+
+function gpuRender(){
+  gl.bindVertexArray(quadVAO);
+  gl.disable(gl.BLEND);
+  var tint = hexToRgb(P.tint), bg = hexToRgb(P.bg);
+  var p = PROG.display.use();
+  p.f('uMaxVel',1).v2('uTexel', FB.dye.tx, FB.dye.ty)
+   .i('uMode', P.debug|0).i('uColormap', P.colormap|0)
+   .f('uExposure', P.exposure).f('uContrast', P.contrast)
+   .v3('uTint', tint[0],tint[1],tint[2]).v3('uBg', bg[0],bg[1],bg[2])
+   .tex('uDye', FB.dye.read.tex).tex('uVelocity', FB.velocity.read.tex)
+   .tex('uPressure', FB.pressure.read.tex).tex('uDivergence', FB.divergence.tex)
+   .tex('uCurl', FB.curl.tex).tex('uObstacle', FB.obstacle.tex);
+  blit(null);
+
+  if(P.debug !== 5 && obstacles.length){
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    var n = packObstacles();
+    p = PROG.obsDraw.use();
+    p.f('uMaxVel',1).v2('uTexel', 1/glCanvas.width, 1/glCanvas.height)
+     .i('uHover', hovObs).i('uSel', selObs).f('uPxW', 1/glCanvas.height);
+    setObsUniforms(p, n);
+    blit(null);
+    gl.disable(gl.BLEND);
+  }
+
+  if(P.arrows){
+    var cols = Math.round(P.arrowDens), rows = Math.max(4, Math.round(cols/state.aspect));
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindVertexArray(arrowVAO);
+    p = PROG.arrows.use();
+    p.v2('uGrid', cols, rows).v2('uVelTexel', FB.velocity.tx, FB.velocity.ty)
+     .f('uScale', P.arrowScale).tex('uVelocity', FB.velocity.read.tex);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0,0,glCanvas.width, glCanvas.height);
+    gl.drawArrays(gl.LINES, 0, cols*rows*2);
+    gl.bindVertexArray(quadVAO);
+    gl.disable(gl.BLEND);
+  }
+}
+
+function resetFields(){
+  if(state.gpu && FB.velocity){
+    var targets = [FB.velocity.read, FB.velocity.write, FB.dye.read, FB.dye.write,
+                   FB.pressure.read, FB.pressure.write, FB.divergence, FB.curl];
+    for(var i=0;i<targets.length;i++){
+      gl.bindFramebuffer(gl.FRAMEBUFFER, targets[i].fbo);
+      gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  } else if(CPU.ready){ CPU.reset(); }
+  state.residual = 0;
+}
+
+/* --------------------------------------------------------------------------
+   5. CPU BACKEND — same solver, small grid, 2D canvas output.
+   Used when float render targets are unavailable (or ?cpu=1).
+   -------------------------------------------------------------------------- */
+var CPU = {
+  ready:false, w:0, h:0,
+  init:function(w,h){
+    this.w=w; this.h=h;
+    var n=(w+2)*(h+2);
+    this.u=new Float32Array(n); this.v=new Float32Array(n);
+    this.u0=new Float32Array(n); this.v0=new Float32Array(n);
+    this.d=new Float32Array(n); this.t=new Float32Array(n);
+    this.d0=new Float32Array(n); this.t0=new Float32Array(n);
+    this.p=new Float32Array(n); this.div=new Float32Array(n); this.curl=new Float32Array(n);
+    this.solid=new Uint8Array(n); this.svx=new Float32Array(n); this.svy=new Float32Array(n);
+    this.img=null; this.ready=true;
+    this.off = document.createElement('canvas'); this.off.width=w; this.off.height=h;
+    this.offctx = this.off.getContext('2d');
+    this.img = this.offctx.createImageData(w,h);
+  },
+  reset:function(){
+    this.u.fill(0); this.v.fill(0); this.d.fill(0); this.t.fill(0); this.p.fill(0);
+  },
+  IX:function(i,j){ return i + (this.w+2)*j; },
+  raster:function(){
+    var w=this.w,h=this.h,U=h;
+    this.solid.fill(0);
+    for(var j=0;j<=h+1;j++) for(var i=0;i<=w+1;i++){
+      var id=i+(w+2)*j;
+      var wx=(i-0.5)/w*state.aspect, wy=(j-0.5)/h;
+      var best=1e9,bi=-1;
+      for(var k=0;k<obstacles.length;k++){
+        var dd=sdObstacle(obstacles[k],wx,wy);
+        if(dd<best){ best=dd; bi=k; }
+      }
+      if(best<0){ this.solid[id]=1;
+        this.svx[id]=obstacles[bi].vx*U*P.restitution*P.coupling;
+        this.svy[id]=obstacles[bi].vy*U*P.restitution*P.coupling; }
+      else { this.svx[id]=0; this.svy[id]=0; }
+    }
+  },
+  sample:function(f,x,y){
+    var w=this.w,h=this.h;
+    x=clamp(x,0.5,w+0.5); y=clamp(y,0.5,h+0.5);
+    var i0=Math.floor(x), j0=Math.floor(y), i1=i0+1, j1=j0+1;
+    var s1=x-i0, s0=1-s1, t1=y-j0, t0=1-t1;
+    var W=w+2;
+    return s0*(t0*f[i0+W*j0]+t1*f[i0+W*j1]) + s1*(t0*f[i1+W*j0]+t1*f[i1+W*j1]);
+  },
+  step:function(dt){
+    var w=this.w,h=this.h,W=w+2,U=h,i,j,id;
+    var MAXV=9*U;
+    this.raster();
+    var u=this.u,v=this.v,u0=this.u0,v0=this.v0,d=this.d,t=this.t,d0=this.d0,t0=this.t0;
+    var solid=this.solid,svx=this.svx,svy=this.svy;
+
+    /* 1. advect */
+    u0.set(u); v0.set(v); d0.set(d); t0.set(t);
+    for(j=1;j<=h;j++) for(i=1;i<=w;i++){
+      id=i+W*j;
+      if(solid[id]){ u[id]=svx[id]; v[id]=svy[id]; d[id]=0; t[id]=P.ambient; continue; }
+      var x=i-dt*u0[id], y=j-dt*v0[id];
+      u[id]=clamp(this.sample(u0,x,y)/(1+dt*P.velDiss),-MAXV,MAXV);
+      v[id]=clamp(this.sample(v0,x,y)/(1+dt*P.velDiss),-MAXV,MAXV);
+      d[id]=clamp(this.sample(d0,x,y)/(1+dt*P.densDiss),0,8);
+      t[id]=clamp(P.ambient+(this.sample(t0,x,y)-P.ambient)/(1+dt*P.tempDiss),-6,10);
+    }
+
+    /* 2. curl + forces */
+    for(j=1;j<=h;j++) for(i=1;i<=w;i++){
+      id=i+W*j;
+      this.curl[id]=0.5*((v[id+1]-v[id-1])-(u[id+W]-u[id-W]));
+    }
+    var vort=P.vorticity*0.01*U, buoy=P.buoyancy*U, grav=P.gravity*U;
+    var wx=P.windX*U, wy=P.windY*U;
+    for(j=1;j<=h;j++) for(i=1;i<=w;i++){
+      id=i+W*j;
+      if(solid[id]) continue;
+      if(vort>0 && i>1 && i<w && j>1 && j<h){
+        var gx=0.5*(Math.abs(this.curl[id+1])-Math.abs(this.curl[id-1]));
+        var gy=0.5*(Math.abs(this.curl[id+W])-Math.abs(this.curl[id-W]));
+        var L=Math.hypot(gx,gy)+1e-5; gx/=L; gy/=L;
+        u[id]+=dt*vort*this.curl[id]*gy;
+        v[id]-=dt*vort*this.curl[id]*gx;
+      }
+      v[id]+=dt*(buoy*(t[id]-P.ambient)-grav*d[id]);
+      u[id]+=dt*wx; v[id]+=dt*wy;
+      u[id]=clamp(u[id],-MAXV,MAXV); v[id]=clamp(v[id],-MAXV,MAXV);
+    }
+
+    /* 3. emit */
+    var splats=[];
+    for(i=0;i<emitters.length;i++){
+      var e=emitters[i]; if(!e.on) continue;
+      if(e.pulse){ var ph=(state.time*e.pulseRate)%1; if(ph>=0.30) continue; }
+      var ang=e.angle*Math.PI/180+(Math.random()-0.5)*e.spread*Math.PI/180;
+      splats.push({x:e.x,y:e.y,r:e.radius,d:e.rate*dt,t:e.temp*dt*1.6,
+                   vx:Math.sin(ang)*e.vel*U*dt*8, vy:Math.cos(ang)*e.vel*U*dt*8});
+    }
+    for(i=0;i<pendingSplats.length;i++) splats.push(pendingSplats[i]);
+    pendingSplats.length=0;
+    for(var s=0;s<splats.length;s++){
+      var sp=splats[s];
+      var cx=sp.x/state.aspect*w+0.5, cy=sp.y*h+0.5, rr=sp.r*h;
+      var i0=Math.max(1,Math.floor(cx-rr*2.5)), i1=Math.min(w,Math.ceil(cx+rr*2.5));
+      var j0=Math.max(1,Math.floor(cy-rr*2.5)), j1=Math.min(h,Math.ceil(cy+rr*2.5));
+      for(j=j0;j<=j1;j++) for(i=i0;i<=i1;i++){
+        id=i+W*j;
+        var g=Math.exp(-(((i-cx)*(i-cx)+(j-cy)*(j-cy))/(rr*rr)));
+        d[id]=clamp(d[id]+(sp.d||0)*g,0,8);
+        t[id]=clamp(t[id]+(sp.t||0)*g,-6,10);
+        u[id]=clamp(u[id]+(sp.vx||0)*g,-MAXV,MAXV);
+        v[id]=clamp(v[id]+(sp.vy||0)*g,-MAXV,MAXV);
+      }
+    }
+
+    /* 4. boundary + 5. project */
+    this.bound();
+    var p=this.p, div=this.div;
+    for(j=1;j<=h;j++) for(i=1;i<=w;i++){
+      id=i+W*j;
+      if(solid[id]){ div[id]=0; continue; }
+      /* forward differences on the MAC reading of the field — see the GPU divergence shader */
+      var uc=solid[id-1]?svx[id-1]:u[id], ur=solid[id+1]?svx[id+1]:u[id+1];
+      var vc=solid[id-W]?svy[id-W]:v[id], vt=solid[id+W]?svy[id+W]:v[id+W];
+      div[id]=(ur-uc)+(vt-vc);
+      p[id]*=P.pressRetain;
+    }
+    var iters=Math.round(P.iterations);
+    for(var k=0;k<iters;k++){
+      for(j=1;j<=h;j++) for(i=1;i<=w;i++){
+        id=i+W*j;
+        if(solid[id]) continue;
+        var c=p[id];
+        var pl=solid[id-1]?c:p[id-1], pr=solid[id+1]?c:p[id+1];
+        var pb=solid[id-W]?c:p[id-W], pt=solid[id+W]?c:p[id+W];
+        p[id]=c+(( (pl+pr+pb+pt-div[id])*0.25 )-c)*P.omega;
+      }
+    }
+    var res=0,cnt=0;
+    for(j=1;j<=h;j++) for(i=1;i<=w;i++){
+      id=i+W*j;
+      if(solid[id]) continue;
+      var c2=p[id];
+      var Pl=solid[id-1]?c2:p[id-1];
+      var Pb=solid[id-W]?c2:p[id-W];
+      u[id]=clamp(u[id]-(c2-Pl),-MAXV,MAXV);   // backward diff, matches divergence
+      v[id]=clamp(v[id]-(c2-Pb),-MAXV,MAXV);
+      if(!isFinite(u[id])||!isFinite(v[id])){ u[id]=0; v[id]=0; state.nan=true; state.nanSticky=180; }
+      res+=Math.abs(div[id]); cnt++;
+    }
+    state.residual = cnt? res/cnt : 0;
+    this.bound();
+    /* open domain edges */
+    for(j=0;j<=h+1;j++){ u[W*j]=u[1+W*j]; u[w+1+W*j]=u[w+W*j]; v[W*j]=v[1+W*j]; v[w+1+W*j]=v[w+W*j]; }
+    for(i=0;i<=w+1;i++){ u[i]=u[i+W]; u[i+W*(h+1)]=u[i+W*h]; v[i]=v[i+W]; v[i+W*(h+1)]=v[i+W*h]; }
+  },
+  bound:function(){
+    var w=this.w,h=this.h,W=w+2,u=this.u,v=this.v,solid=this.solid;
+    for(var j=1;j<=h;j++) for(var i=1;i<=w;i++){
+      var id=i+W*j;
+      if(!solid[id]) continue;
+      var ovx=this.svx[id], ovy=this.svy[id];
+      if(P.freeSlip){
+        var nx=(solid[id+1]?0:1)-(solid[id-1]?0:1);
+        var ny=(solid[id+W]?0:1)-(solid[id-W]?0:1);
+        var L=Math.hypot(nx,ny);
+        if(L>1e-6){ nx/=L; ny/=L;
+          var rx=u[id]-ovx, ry=v[id]-ovy, dn=nx*rx+ny*ry;
+          u[id]=ovx+rx-nx*dn; v[id]=ovy+ry-ny*dn;
+        } else { u[id]=ovx; v[id]=ovy; }
+      } else { u[id]=ovx; v[id]=ovy; }
+    }
+  },
+  render:function(ctx){
+    var w=this.w,h=this.h,W=w+2,img=this.img,data=img.data;
+    var tint=hexToRgb(P.tint), bg=hexToRgb(P.bg);
+    var mode=P.debug|0, cm=P.colormap|0;
+    for(var j=0;j<h;j++) for(var i=0;i<w;i++){
+      var id=(i+1)+W*(h-j);   // flip: canvas y is down
+      var o=(j*w+i)*4, R,G,B;
+      if(mode===0){
+        var dens=Math.max(this.d[id],0)*P.exposure;
+        var shaped=Math.pow(dens,P.contrast);
+        var a=1-Math.exp(-shaped*1.7);
+        var heat=clamp(this.t[id]*0.55,0,1);
+        var col;
+        if(cm===0) col=[1,1,1];
+        else if(cm===1) col=cmapFire(clamp(heat*0.85+shaped*0.30,0,1));
+        else if(cm===2) col=cmapCool(clamp(shaped*0.55+heat*0.45,0,1));
+        else col=cmapTemp(this.t[id]*0.6);
+        R=lerp(bg[0],col[0]*tint[0],a); G=lerp(bg[1],col[1]*tint[1],a); B=lerp(bg[2],col[2]*tint[2],a);
+      } else if(mode===1){
+        var vx=this.u[id]*0.006, vy=this.v[id]*0.006, m=Math.min(Math.hypot(vx,vy)*2,1);
+        R=(0.5+vx)*(0.35+m); G=(0.5+vy)*(0.35+m); B=0.55*(0.35+m);
+      } else if(mode===2){ var c=div3(this.p[id]*0.06); R=c[0];G=c[1];B=c[2]; }
+      else if(mode===3){ var c2=div3(this.div[id]*0.5); R=c2[0];G=c2[1];B=c2[2]; }
+      else if(mode===4){ var c3=div3(this.curl[id]*0.03); R=c3[0];G=c3[1];B=c3[2]; }
+      else { var s=this.solid[id]?1:0; R=lerp(0.04,0.85,s); G=lerp(0.05,0.90,s); B=lerp(0.07,1.0,s); }
+      data[o]=clamp(R,0,1)*255; data[o+1]=clamp(G,0,1)*255; data[o+2]=clamp(B,0,1)*255; data[o+3]=255;
+    }
+    this.offctx.putImageData(img,0,0);
+    ctx.imageSmoothingEnabled=true;
+    ctx.drawImage(this.off,0,0,ctx.canvas.width,ctx.canvas.height);
+  }
+};
+
+function div3(x){
+  var t=clamp(x*0.5+0.5,0,1);
+  var neg=[0.13,0.40,0.95], zero=[0.05,0.06,0.09], pos=[0.98,0.42,0.13];
+  if(t<0.5) return [lerp(neg[0],zero[0],t/0.5),lerp(neg[1],zero[1],t/0.5),lerp(neg[2],zero[2],t/0.5)];
+  return [lerp(zero[0],pos[0],(t-0.5)/0.5),lerp(zero[1],pos[1],(t-0.5)/0.5),lerp(zero[2],pos[2],(t-0.5)/0.5)];
+}
+function ramp(t,stops){
+  t=clamp(t,0,1);
+  for(var i=0;i<stops.length-1;i++){
+    var a=stops[i], b=stops[i+1];
+    if(t<=b[0]||i===stops.length-2){
+      var f=(t-a[0])/Math.max(b[0]-a[0],1e-6); f=clamp(f,0,1);
+      return [lerp(a[1],b[1],f),lerp(a[2],b[2],f),lerp(a[3],b[3],f)];
+    }
+  }
+  return [1,1,1];
+}
+function cmapFire(t){ return ramp(t,[[0,0.06,0.02,0.03],[0.34,0.75,0.13,0.02],[0.72,1,0.62,0.11],[1,1,0.98,0.86]]); }
+function cmapCool(t){ return ramp(t,[[0,0.03,0.05,0.12],[0.36,0.10,0.36,0.72],[0.74,0.35,0.79,0.92],[1,0.92,0.99,1]]); }
+function cmapTemp(t){ return ramp(t*0.5+0.5,[[0,0.16,0.42,0.95],[0.5,0.92,0.93,0.96],[1,0.98,0.36,0.10]]); }
+
+function hexToRgb(h){
+  h = (h||'#ffffff').replace('#','');
+  if(h.length===3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+  var n = parseInt(h,16);
+  return [((n>>16)&255)/255, ((n>>8)&255)/255, (n&255)/255];
+}
+
+/* --------------------------------------------------------------------------
+   6. SIZING
+   -------------------------------------------------------------------------- */
+function gridFor(res, aspect){
+  return aspect >= 1 ? [Math.round(res), Math.max(8, Math.round(res/aspect))]
+                     : [Math.max(8, Math.round(res*aspect)), Math.round(res)];
+}
+
+function pickAutoRes(){
+  /* only phones/small tablets get the downgrade — a short desktop window is still a desktop */
+  var small = window.innerWidth < 700 || (window.innerWidth * window.innerHeight) < 300000;
+  if(small && P.simRes > 192){ P.simRes = 160; P.dyeScale = Math.min(P.dyeScale, 1.5); return true; }
+  return false;
+}
+
+function resize(){
+  var dpr = Math.min(window.devicePixelRatio||1, 2);
+  var w = Math.max(320, window.innerWidth), h = Math.max(240, window.innerHeight);
+  state.W=w; state.H=h; state.dpr=dpr; state.aspect = w/h;
+  glCanvas.width  = Math.round(w*dpr); glCanvas.height = Math.round(h*dpr);
+  uiCanvas.width  = Math.round(w*dpr); uiCanvas.height = Math.round(h*dpr);
+  uictx.setTransform(dpr,0,0,dpr,0,0);
+
+  /* the setting is the resolution along the LONG edge, so a portrait phone does not
+     silently get 5x the cells of a landscape desktop. Cells stay square either way. */
+  var dims = gridFor(P.simRes, state.aspect);
+  state.simW = dims[0]; state.simH = dims[1];
+  state.dyeW = Math.round(state.simW*P.dyeScale);
+  state.dyeH = Math.round(state.simH*P.dyeScale);
+
+  if(state.gpu){
+    if(!allocTargets()){ fallbackToCPU('float render targets unavailable'); }
+  }
+  if(!state.gpu){
+    var cg = gridFor(Math.min(200, Math.round(P.simRes*0.6)), state.aspect);
+    CPU.init(cg[0], cg[1]);
+  }
+  refreshHUD();
+}
+
+function fallbackToCPU(why){
+  state.gpu = false;
+  document.getElementById('h_sub').textContent = 'cpu fallback';
+  var tag = document.getElementById('h_mode');
+  tag.textContent = 'CPU SOLVER'; tag.className = 'tag cpu';
+  toast('GPU float targets unavailable — running the small CPU grid ('+why+')', 4200);
+  glCanvas.style.display='none';
+  uiCanvas.style.background='transparent';
+  cpu2d = uiCanvas.getContext('2d');
+}
+var cpu2d = null;
+
+/* --------------------------------------------------------------------------
+   7. UI PANEL — built from the spec
+   -------------------------------------------------------------------------- */
+var groupsEl = document.getElementById('groups');
+var controlRefs = [];
+
+function targetOf(item){
+  if(item.src === 'em') return emitters[selEm] || null;
+  if(item.src === 'ob') return obstacles[selObs] || null;
+  return P;
+}
+function getVal(item){
+  var t = targetOf(item); if(!t) return item.def;
+  if(item.src === 'ob'){
+    if(item.k==='osx') return t.sx;
+    if(item.k==='osy') return t.sy;
+    if(item.k==='rotd') return t.rot*180/Math.PI;
+  }
+  var v = t[item.k];
+  return v === undefined ? item.def : v;
+}
+function setVal(item, v){
+  var t = targetOf(item); if(!t) return;
+  if(item.src === 'ob'){
+    if(item.k==='osx'){ t.sx=v; if(t.type===1) t.sy=v; }
+    else if(item.k==='osy'){ t.sy=v; if(t.type===1) t.sx=v; }
+    else if(item.k==='rotd'){ t.rot=v*Math.PI/180; }
+  } else {
+    t[item.k] = v;
+  }
+  if(item.reinit) scheduleResize();
+  saveSoon();
+}
+
+function fmtVal(item, v){
+  if(item.fmt) return item.fmt(v);
+  var s = (item.dp!==undefined) ? Number(v).toFixed(item.dp) : String(v);
+  return s + (item.unit||'');
+}
+
+function buildPanel(){
+  groupsEl.innerHTML = '';
+  GROUPS.forEach(function(g){
+    var det = document.createElement('details');
+    det.className = 'grp'; det.open = g.open !== false;
+    var sum = document.createElement('summary');
+    sum.innerHTML = '<span class="arw">▶</span><span>'+g.title+'</span><span class="sp"></span>';
+    var rb = document.createElement('button');
+    rb.className='reset'; rb.textContent='reset';
+    rb.onclick = function(ev){ ev.preventDefault(); ev.stopPropagation(); resetGroup(g); };
+    sum.appendChild(rb);
+    det.appendChild(sum);
+    var body = document.createElement('div'); body.className='body';
+    g.items.forEach(function(it){ body.appendChild(buildControl(it)); });
+    det.appendChild(body);
+    groupsEl.appendChild(det);
+  });
+  syncControls();
+}
+
+function buildControl(item){
+  var wrap = document.createElement('div');
+  if(item.t === 'range'){
+    wrap.className='ctl';
+    wrap.innerHTML = '<div class="lab"><span></span><span class="val"></span></div>';
+    wrap.querySelector('.lab span').textContent = item.label;
+    var inp = document.createElement('input');
+    inp.type='range'; inp.min=item.min; inp.max=item.max; inp.step=item.step;
+    wrap.appendChild(inp);
+    var out = wrap.querySelector('.val');
+    inp.addEventListener('input', function(){
+      var v = parseFloat(inp.value);
+      setVal(item, v); out.textContent = fmtVal(item, v);
+      if(item.k==='windX'||item.k==='windY') drawDial();
+    });
+    controlRefs.push({item:item, el:wrap, sync:function(){
+      var t = targetOf(item);
+      wrap.classList.toggle('off', !t);
+      var v = getVal(item);
+      inp.value = v; out.textContent = fmtVal(item, v);
+    }});
+  }
+  else if(item.t === 'choice'){
+    wrap.className='ctl';
+    wrap.innerHTML = '<div class="lab"><span></span><span class="val"></span></div>';
+    wrap.querySelector('.lab span').textContent = item.label;
+    var sel = document.createElement('select');
+    item.vals.forEach(function(v){
+      var o=document.createElement('option'); o.value=v; o.textContent=item.fmt?item.fmt(v):v; sel.appendChild(o);
+    });
+    wrap.appendChild(sel);
+    var out2 = wrap.querySelector('.val'); out2.style.display='none';
+    sel.addEventListener('change', function(){ setVal(item, parseFloat(sel.value)); syncControls(); });
+    controlRefs.push({item:item, el:wrap, sync:function(){
+      var v = getVal(item);
+      sel.value = v;
+      for(var i=0;i<sel.options.length;i++) sel.options[i].textContent = item.fmt?item.fmt(parseFloat(sel.options[i].value)):sel.options[i].value;
+    }});
+  }
+  else if(item.t === 'seg'){
+    wrap.className='ctl';
+    wrap.innerHTML = '<div class="lab"><span>'+item.label+'</span></div>';
+    var seg = document.createElement('div'); seg.className='seg';
+    item.opts.forEach(function(o,i){
+      var b=document.createElement('button'); b.textContent=o;
+      b.onclick=function(){ setVal(item,i); syncControls(); };
+      seg.appendChild(b);
+    });
+    wrap.appendChild(seg);
+    controlRefs.push({item:item, el:wrap, sync:function(){
+      var v = getVal(item)|0;
+      for(var i=0;i<seg.children.length;i++) seg.children[i].classList.toggle('on', i===v);
+    }});
+  }
+  else if(item.t === 'color'){
+    wrap.className='ctl';
+    wrap.innerHTML = '<div class="lab"><span>'+item.label+'</span></div>';
+    var c = document.createElement('input'); c.type='color';
+    c.addEventListener('input', function(){ setVal(item, c.value); });
+    wrap.appendChild(c);
+    controlRefs.push({item:item, el:wrap, sync:function(){ c.value = getVal(item); }});
+  }
+  else if(item.t === 'dial'){
+    wrap.className='ctl dialrow';
+    var dial = document.createElement('div'); dial.id='dial';
+    dial.innerHTML = '<i></i><b></b>';
+    var col = document.createElement('div'); col.className='dcol';
+    col.innerHTML = '<div class="lab"><span>Wind direction</span><span class="val" id="dialval">–</span></div>'+
+                    '<div class="hint">Drag the dial to aim; distance from centre sets strength.</div>';
+    wrap.appendChild(dial); wrap.appendChild(col);
+    var dragging=false;
+    function fromEvent(ev){
+      var r = dial.getBoundingClientRect();
+      var dx = ev.clientX - (r.left+r.width/2), dy = -(ev.clientY - (r.top+r.height/2));
+      var mag = clamp(Math.hypot(dx,dy)/(r.width/2)*3.0, 0, 6);
+      var ang = Math.atan2(dy,dx);
+      P.windX = Math.cos(ang)*mag; P.windY = Math.sin(ang)*mag;
+      syncControls(); saveSoon();
+    }
+    dial.addEventListener('pointerdown', function(ev){ dragging=true; dial.setPointerCapture(ev.pointerId); fromEvent(ev); });
+    dial.addEventListener('pointermove', function(ev){ if(dragging) fromEvent(ev); });
+    dial.addEventListener('pointerup',   function(){ dragging=false; });
+    controlRefs.push({item:{k:'__dial'}, el:wrap, sync:drawDial});
+  }
+  else if(item.t === 'emitterbar'){
+    wrap.className='ctl';
+    var row = document.createElement('div'); row.className='row';
+    wrap.appendChild(row);
+    var row2 = document.createElement('div'); row2.className='row';
+    var addB = document.createElement('button'); addB.className='btn'; addB.textContent='+ emitter';
+    addB.onclick = function(){
+      if(emitters.length>=MAX_EM){ toast('4 emitters max'); return; }
+      emitters.push(newEmitter(state.aspect*(0.25+Math.random()*0.5), 0.12));
+      selEm = emitters.length-1; syncControls(); saveSoon();
+    };
+    var delB = document.createElement('button'); delB.className='btn danger'; delB.textContent='remove';
+    delB.onclick = function(){
+      if(emitters.length<=1){ toast('keep at least one emitter'); return; }
+      emitters.splice(selEm,1); selEm = Math.max(0,selEm-1); syncControls(); saveSoon();
+    };
+    var onB = document.createElement('button'); onB.className='btn'; onB.textContent='on/off';
+    onB.onclick = function(){ var e=emitters[selEm]; if(e){ e.on=!e.on; syncControls(); saveSoon(); } };
+    row2.appendChild(addB); row2.appendChild(delB); row2.appendChild(onB);
+    wrap.appendChild(row2);
+    controlRefs.push({item:{k:'__embar'}, el:wrap, sync:function(){
+      row.innerHTML='';
+      emitters.forEach(function(e,i){
+        var b=document.createElement('button');
+        b.className='btn mini'+(i===selEm?' on':'');
+        b.textContent = 'E'+(i+1)+(e.on?'':' ×');
+        b.onclick=function(){ selEm=i; syncControls(); };
+        row.appendChild(b);
+      });
+    }});
+  }
+  else if(item.t === 'emitmode'){
+    wrap.className='ctl';
+    wrap.innerHTML = '<div class="lab"><span>Mode</span></div>';
+    var seg2 = document.createElement('div'); seg2.className='seg';
+    ['Continuous','Pulse'].forEach(function(o,i){
+      var b=document.createElement('button'); b.textContent=o;
+      b.onclick=function(){ var e=emitters[selEm]; if(e){ e.pulse=i; syncControls(); saveSoon(); } };
+      seg2.appendChild(b);
+    });
+    wrap.appendChild(seg2);
+    controlRefs.push({item:{k:'__emmode'}, el:wrap, sync:function(){
+      var e=emitters[selEm];
+      wrap.classList.toggle('off', !e);
+      for(var i=0;i<2;i++) seg2.children[i].classList.toggle('on', e && (e.pulse|0)===i);
+    }});
+  }
+  else if(item.t === 'obsbar'){
+    wrap.className='ctl';
+    var r1 = document.createElement('div'); r1.className='row';
+    [['+ box',0],['+ circle',1],['+ airfoil',2]].forEach(function(pair){
+      var b=document.createElement('button'); b.className='btn'; b.textContent=pair[0];
+      b.onclick=function(){
+        if(obstacles.length>=MAX_OBS){ toast(MAX_OBS+' obstacles max'); return; }
+        var o=newObstacle(pair[1], state.aspect*(0.3+Math.random()*0.4), 0.35+Math.random()*0.35);
+        if(pair[1]===1) o.sx=o.sy=0.08;
+        if(pair[1]===2){ o.sx=0.12; o.sy=0.075; }
+        obstacles.push(o); selObs=obstacles.length-1; syncControls(); saveSoon();
+      };
+      r1.appendChild(b);
+    });
+    var r2 = document.createElement('div'); r2.className='row';
+    var dupB=document.createElement('button'); dupB.className='btn'; dupB.textContent='duplicate';
+    dupB.onclick=function(){
+      var o=obstacles[selObs]; if(!o) return toast('select an obstacle first');
+      if(obstacles.length>=MAX_OBS) return toast(MAX_OBS+' obstacles max');
+      var c=Object.assign({},o); c.x+=0.06; c.y+=0.06; c.vx=c.vy=0; c.px=c.x; c.py=c.y;
+      obstacles.push(c); selObs=obstacles.length-1; syncControls(); saveSoon();
+    };
+    var delB2=document.createElement('button'); delB2.className='btn danger'; delB2.textContent='delete';
+    delB2.onclick=function(){
+      if(selObs<0) return toast('select an obstacle first');
+      obstacles.splice(selObs,1); selObs=-1; syncControls(); saveSoon();
+    };
+    var clrB=document.createElement('button'); clrB.className='btn danger'; clrB.textContent='clear all';
+    clrB.onclick=function(){ obstacles=[]; selObs=-1; syncControls(); saveSoon(); };
+    r2.appendChild(dupB); r2.appendChild(delB2); r2.appendChild(clrB);
+    var lst = document.createElement('div'); lst.className='row';
+    wrap.appendChild(r1); wrap.appendChild(r2); wrap.appendChild(lst);
+    var hint=document.createElement('p'); hint.className='hint';
+    hint.textContent='Drag on the canvas to move. Wheel rotates, shift+wheel scales.';
+    wrap.appendChild(hint);
+    controlRefs.push({item:{k:'__obsbar'}, el:wrap, sync:function(){
+      lst.innerHTML='';
+      obstacles.forEach(function(o,i){
+        var b=document.createElement('button');
+        b.className='btn mini'+(i===selObs?' on':'');
+        b.textContent = ['box','circle','wing'][o.type]+' '+(i+1);
+        b.onclick=function(){ selObs=i; syncControls(); };
+        lst.appendChild(b);
+      });
+      if(!obstacles.length){ var s=document.createElement('span'); s.className='hint'; s.textContent='none'; lst.appendChild(s); }
+    }});
+  }
+  else if(item.t === 'presets'){
+    wrap.className='ctl';
+    wrap.innerHTML = '<div class="lab"><span>Preset</span></div>';
+    var sel3 = document.createElement('select');
+    var o0=document.createElement('option'); o0.value=''; o0.textContent='— choose —'; sel3.appendChild(o0);
+    Object.keys(PRESETS).forEach(function(name){
+      var o=document.createElement('option'); o.value=name; o.textContent=name; sel3.appendChild(o);
+    });
+    sel3.addEventListener('change', function(){ if(sel3.value){ applyPreset(sel3.value); } });
+    wrap.appendChild(sel3);
+    controlRefs.push({item:{k:'__preset'}, el:wrap, sync:function(){}});
+  }
+  else if(item.t === 'io'){
+    wrap.className='ctl';
+    var r=document.createElement('div'); r.className='row';
+    var b1=document.createElement('button'); b1.className='btn'; b1.textContent='copy JSON';
+    b1.onclick=function(){
+      var s = JSON.stringify(serialize(), null, 2);
+      if(navigator.clipboard && navigator.clipboard.writeText)
+        navigator.clipboard.writeText(s).then(function(){ toast('settings copied'); },function(){ prompt('Copy:', s); });
+      else prompt('Copy:', s);
+    };
+    var b2=document.createElement('button'); b2.className='btn'; b2.textContent='link';
+    b2.onclick=function(){
+      location.hash = encodeURIComponent(JSON.stringify(serialize()));
+      toast('URL updated — copy the address bar');
+    };
+    var b3=document.createElement('button'); b3.className='btn'; b3.textContent='paste';
+    b3.onclick=function(){
+      var s=prompt('Paste a settings JSON blob:'); if(!s) return;
+      try{ deserialize(JSON.parse(s)); scheduleResize(); syncControls(); toast('settings loaded'); }
+      catch(e){ toast('could not parse that'); }
+    };
+    r.appendChild(b1); r.appendChild(b2); r.appendChild(b3);
+    var r2b=document.createElement('div'); r2b.className='row';
+    var b4=document.createElement('button'); b4.className='btn wide danger'; b4.textContent='RESET ALL';
+    b4.onclick=function(){
+      P = Object.assign({}, DEFAULTS);
+      defaultScene();
+      try{ localStorage.removeItem('smokelab.v1'); }catch(e){}
+      location.hash='';
+      scheduleResize(); resetFields(); syncControls(); toast('everything reset');
+    };
+    r2b.appendChild(b4);
+    wrap.appendChild(r); wrap.appendChild(r2b);
+    var h=document.createElement('p'); h.className='hint';
+    h.textContent='Settings auto-save to this browser. "link" writes them into the URL so you can share a scene.';
+    wrap.appendChild(h);
+    controlRefs.push({item:{k:'__io'}, el:wrap, sync:function(){}});
+  }
+  return wrap;
+}
+
+function drawDial(){
+  var d = document.getElementById('dial'); if(!d) return;
+  var mag = Math.hypot(P.windX, P.windY);
+  var ang = Math.atan2(P.windY, P.windX);
+  var i = d.querySelector('i');
+  i.style.transform = 'rotate(' + (90 - ang*180/Math.PI) + 'deg)';
+  i.style.height = (6 + clamp(mag/6,0,1)*22) + 'px';
+  i.style.marginTop = '-' + (6 + clamp(mag/6,0,1)*22) + 'px';
+  i.style.opacity = mag < 0.01 ? 0.25 : 1;
+  var out = document.getElementById('dialval');
+  if(out) out.textContent = mag.toFixed(2) + ' @ ' + Math.round(((ang*180/Math.PI)+360)%360) + '°';
+}
+
+function syncControls(){ controlRefs.forEach(function(c){ try{ c.sync(); }catch(e){} }); }
+
+function resetGroup(g){
+  g.items.forEach(function(it){
+    if(!it.k) return;
+    if(it.src === 'em'){ var e=emitters[selEm]; if(e) e[it.k]=EM_DEFAULTS[it.k]; }
+    else if(it.src === 'ob'){ var o=obstacles[selObs]; if(o){ if(it.k==='osx')o.sx=0.09; if(it.k==='osy')o.sy=0.09; if(it.k==='rotd')o.rot=0; } }
+    else P[it.k] = it.def;
+  });
+  scheduleResize(); syncControls(); saveSoon();
+  toast(g.title + ' reset');
+}
+
+function applyPreset(name){
+  var pr = PRESETS[name]; if(!pr) return;
+  P = Object.assign({}, DEFAULTS, pr.p||{});
+  emitters = (pr.em||[]).map(function(e){
+    var n = newEmitter(e.x*state.aspect, e.y);
+    Object.keys(e).forEach(function(k){ if(k!=='x'&&k!=='y') n[k]=e[k]; });
+    return n;
+  });
+  if(!emitters.length) emitters=[newEmitter(state.aspect*0.5,0.05)];
+  selEm = 0;
+  if(name === 'Wind Tunnel'){
+    obstacles = [];
+    var a = newObstacle(1, state.aspect*0.42, 0.5); a.sx=a.sy=0.075; obstacles.push(a);
+    var b = newObstacle(2, state.aspect*0.72, 0.5); b.sx=0.13; b.sy=0.08; b.rot=-0.22; obstacles.push(b);
+  } else if(name === 'Slow Ink'){
+    obstacles = [];
+    var c = newObstacle(0, state.aspect*0.5, 0.45); c.sx=0.16; c.sy=0.02; c.rot=0.35; obstacles.push(c);
+  } else if(!obstacles.length){
+    defaultScene();
+  }
+  selObs = -1;
+  scheduleResize(); resetFields(); syncControls(); saveSoon();
+  toast(name);
+}
+
+/* --------------------------------------------------------------------------
+   8. SAVE / LOAD
+   -------------------------------------------------------------------------- */
+function serialize(){
+  return {
+    v:1, p:P,
+    ob: obstacles.map(function(o){ return {t:o.type,x:+o.x.toFixed(4),y:+o.y.toFixed(4),
+                                           sx:+o.sx.toFixed(4),sy:+o.sy.toFixed(4),r:+o.rot.toFixed(4)}; }),
+    em: emitters.map(function(e){ return {x:+e.x.toFixed(4),y:+e.y.toFixed(4),radius:e.radius,rate:e.rate,
+                                          temp:e.temp,vel:e.vel,angle:e.angle,spread:e.spread,
+                                          pulse:e.pulse,pulseRate:e.pulseRate,on:e.on}; })
+  };
+}
+function deserialize(o){
+  if(!o) return false;
+  if(o.p) P = Object.assign({}, DEFAULTS, o.p);
+  if(o.ob && o.ob.length){
+    obstacles = o.ob.map(function(s){
+      var n = newObstacle(s.t, s.x, s.y); n.sx=s.sx; n.sy=s.sy; n.rot=s.r; n.px=s.x; n.py=s.y; return n;
+    });
+  }
+  if(o.em && o.em.length){
+    emitters = o.em.map(function(s){
+      var n = newEmitter(s.x, s.y);
+      Object.keys(s).forEach(function(k){ n[k]=s[k]; });
+      if(n.on===undefined) n.on=true;
+      return n;
+    });
+  }
+  selEm = 0; selObs = -1;
+  return true;
+}
+var saveTimer=0;
+function saveSoon(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(function(){
+    try{ localStorage.setItem('smokelab.v1', JSON.stringify(serialize())); }catch(e){}
+  }, 400);
+}
+function loadSaved(){
+  if(location.hash.length > 3){
+    try{ if(deserialize(JSON.parse(decodeURIComponent(location.hash.slice(1))))) return true; }catch(e){}
+  }
+  try{
+    var s = localStorage.getItem('smokelab.v1');
+    if(s) return deserialize(JSON.parse(s));
+  }catch(e){}
+  return false;
+}
+
+/* --------------------------------------------------------------------------
+   9. INPUT
+   -------------------------------------------------------------------------- */
+var drag = null;   // {mode:'obs'|'em'|'fluid'|'smoke', idx, ox, oy, lastX, lastY}
+
+function onDown(ev){
+  if(ev.target !== glCanvas && ev.target !== uiCanvas) return;
+  ev.preventDefault();
+  uiCanvas.setPointerCapture && uiCanvas.setPointerCapture(ev.pointerId);
+  var w = screenToWorld(ev.clientX, ev.clientY);
+  var right = ev.button === 2 || ev.ctrlKey;
+
+  var ei = pickEmitter(w.x, w.y);
+  var oi = pickObstacle(w.x, w.y, 0.010);
+  if(!right && ei >= 0){
+    selEm = ei; drag = {mode:'em', idx:ei, ox:emitters[ei].x-w.x, oy:emitters[ei].y-w.y};
+    syncControls(); return;
+  }
+  if(!right && oi >= 0){
+    selObs = oi;
+    var o = obstacles[oi];
+    drag = {mode:'obs', idx:oi, ox:o.x-w.x, oy:o.y-w.y};
+    syncControls(); return;
+  }
+  drag = {mode: right ? 'smoke' : 'fluid', lastX:w.x, lastY:w.y};
+  if(!right && oi < 0 && ei < 0){ selObs = -1; syncControls(); }
+}
+
+function onMove(ev){
+  var w = screenToWorld(ev.clientX, ev.clientY);
+  hovObs = pickObstacle(w.x, w.y, 0.008);
+  hovEm  = pickEmitter(w.x, w.y);
+  if(!drag){
+    glCanvas.style.cursor = (hovObs>=0||hovEm>=0) ? 'grab' : 'crosshair';
+    return;
+  }
+  glCanvas.style.cursor = 'grabbing';
+  if(drag.mode === 'obs'){
+    var o = obstacles[drag.idx]; if(!o) return;
+    o.x = clamp(w.x + drag.ox, -0.5, state.aspect+0.5);
+    o.y = clamp(w.y + drag.oy, -0.5, 1.5);
+  } else if(drag.mode === 'em'){
+    var e = emitters[drag.idx]; if(!e) return;
+    e.x = clamp(w.x + drag.ox, 0, state.aspect);
+    e.y = clamp(w.y + drag.oy, 0, 1);
+    saveSoon();
+  } else {
+    var dx = w.x - drag.lastX, dy = w.y - drag.lastY;
+    var U = state.gpu ? state.simH : CPU.h;
+    if(drag.mode === 'fluid'){
+      pendingSplats.push({x:w.x, y:w.y, r:0.045, d:0, t:0, vx:dx*U*6, vy:dy*U*6});
+    } else {
+      pendingSplats.push({x:w.x, y:w.y, r:0.05, d:0.30, t:0.16, vx:dx*U*2, vy:dy*U*2});
+    }
+    drag.lastX = w.x; drag.lastY = w.y;
+  }
+}
+function onUp(){
+  if(drag && drag.mode==='obs') saveSoon();
+  drag = null;
+  glCanvas.style.cursor = 'crosshair';
+}
+function onWheel(ev){
+  var w = screenToWorld(ev.clientX, ev.clientY);
+  var idx = (drag && drag.mode==='obs') ? drag.idx : (hovObs >= 0 ? hovObs : selObs);
+  var o = obstacles[idx]; if(!o) return;
+  ev.preventDefault();
+  var d = Math.sign(ev.deltaY);
+  if(ev.shiftKey){
+    var f = d > 0 ? 0.94 : 1.064;
+    o.sx = clamp(o.sx*f, 0.012, 0.6);
+    o.sy = clamp(o.sy*f, 0.012, 0.6);
+  } else {
+    o.rot -= d * 0.09;
+  }
+  selObs = idx;
+  syncControls(); saveSoon();
+}
+
+uiCanvas.style.pointerEvents = 'auto';
+uiCanvas.addEventListener('pointerdown', onDown);
+window.addEventListener('pointermove', onMove);
+window.addEventListener('pointerup', onUp);
+window.addEventListener('pointercancel', onUp);
+uiCanvas.addEventListener('wheel', onWheel, {passive:false});
+uiCanvas.addEventListener('contextmenu', function(ev){ ev.preventDefault(); });
+
+window.addEventListener('keydown', function(ev){
+  if(ev.target.tagName === 'INPUT' || ev.target.tagName === 'SELECT') return;
+  var k = ev.key;
+  if(k === ' '){ ev.preventDefault(); togglePause(); }
+  else if(k === '.'){ state.stepOnce = true; state.paused = true; syncPauseBtn(); }
+  else if(k === 'r' || k === 'R'){ resetFields(); toast('fields cleared'); }
+  else if(k === 'h' || k === 'H'){ document.body.classList.toggle('hideui'); }
+  else if(k === 'd' || k === 'D'){ P.debug = (P.debug+1) % DEBUG_VIEWS.length; syncControls(); toast(DEBUG_VIEWS[P.debug]); }
+  else if(k === 'Delete' || k === 'Backspace'){
+    if(selObs >= 0){ obstacles.splice(selObs,1); selObs=-1; syncControls(); saveSoon(); }
+  }
+});
+
+function togglePause(){ state.paused = !state.paused; syncPauseBtn(); }
+function syncPauseBtn(){
+  var b = document.getElementById('btnPaused');
+  b.textContent = state.paused ? '▶' : '❚❚';
+  b.classList.toggle('on', state.paused);
+}
+document.getElementById('btnPaused').onclick = togglePause;
+document.getElementById('btnStep').onclick = function(){ state.stepOnce = true; state.paused = true; syncPauseBtn(); };
+document.getElementById('ptoggle').onclick = function(){ document.body.classList.toggle('collapsed'); };
+
+/* --------------------------------------------------------------------------
+   10. OVERLAY GIZMOS (emitter handles) — drawn on the 2D canvas above the sim
+   -------------------------------------------------------------------------- */
+function drawOverlay(){
+  var ctx = uictx, W = state.W, H = state.H;
+  if(!state.gpu){ /* CPU path paints the field first, then gizmos on top */ }
+  else ctx.clearRect(0,0,W,H);
+
+  for(var i=0;i<emitters.length;i++){
+    var e = emitters[i];
+    var x = e.x/state.aspect*W, y = (1-e.y)*H;
+    var r = Math.max(7, e.radius*H);
+    var sel = (i===selEm), hov = (i===hovEm);
+    ctx.save();
+    ctx.globalAlpha = e.on ? 1 : 0.4;
+    ctx.strokeStyle = sel ? 'rgba(255,150,70,0.95)' : 'rgba(210,220,240,0.45)';
+    ctx.lineWidth = sel ? 1.6 : 1.1;
+    ctx.setLineDash(e.on ? [] : [3,3]);
+    ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(x,y,3.2,0,TAU);
+    ctx.fillStyle = sel ? 'rgba(255,150,70,0.95)' : 'rgba(210,220,240,0.6)';
+    ctx.fill();
+    if(e.vel > 0.001){
+      var a = e.angle*Math.PI/180;
+      var dx = Math.sin(a), dy = -Math.cos(a);
+      var L = r + 10 + Math.min(e.vel*16, 34);
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+dx*L, y+dy*L); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x+dx*L, y+dy*L);
+      ctx.lineTo(x+dx*(L-7)-dy*4, y+dy*(L-7)+dx*4);
+      ctx.lineTo(x+dx*(L-7)+dy*4, y+dy*(L-7)-dx*4);
+      ctx.closePath(); ctx.fill();
+      if(e.spread > 1){
+        ctx.globalAlpha *= 0.30;
+        var s = e.spread*Math.PI/180/2;
+        ctx.beginPath(); ctx.moveTo(x,y);
+        ctx.arc(x, y, L*0.8, Math.atan2(dy,dx)-s, Math.atan2(dy,dx)+s);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = e.on ? 0.85 : 0.4;
+    ctx.fillStyle = sel ? '#ffb070' : '#c9d2e4';
+    ctx.font = '10px ui-monospace,Menlo,monospace';
+    ctx.fillText('E'+(i+1), x + r + 4, y - r - 2);
+    ctx.restore();
+  }
+
+  if(hovEm >= 0 || hovObs >= 0){
+    ctx.save();
+    ctx.fillStyle = 'rgba(190,205,230,0.55)';
+    ctx.font = '11px ui-sans-serif,system-ui';
+    ctx.restore();
+  }
+}
+
+/* CPU path draws obstacle bodies itself (no GL pass available) */
+function drawCPUObstacles(ctx){
+  for(var i=0;i<obstacles.length;i++){
+    var o = obstacles[i];
+    ctx.save();
+    ctx.translate(o.x/state.aspect*state.W, (1-o.y)*state.H);
+    ctx.rotate(-o.rot);
+    var sx = o.sx/state.aspect*state.W, sy = o.sy*state.H;
+    ctx.beginPath();
+    if(o.type===0) ctx.rect(-sx,-sy,sx*2,sy*2);
+    else if(o.type===1){ ctx.ellipse(0,0,sx,sy,0,0,TAU); }
+    else {
+      ctx.moveTo(-0.85*sx, -0.34*sy); ctx.lineTo(-0.85*sx, 0.16*sy); ctx.lineTo(sx, 0);
+      ctx.closePath();
+    }
+    var g = ctx.createLinearGradient(0,-sy,0,sy);
+    g.addColorStop(0,'#3d4351'); g.addColorStop(1,'#171a21');
+    ctx.fillStyle = g; ctx.fill();
+    if(i===selObs || i===hovObs){
+      ctx.strokeStyle = i===selObs ? 'rgba(77,178,255,0.95)' : 'rgba(160,180,210,0.6)';
+      ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+function drawCPUArrows(ctx){
+  if(!P.arrows) return;
+  var cols = Math.round(P.arrowDens), rows = Math.max(4, Math.round(cols/state.aspect));
+  ctx.save(); ctx.strokeStyle='rgba(115,242,179,0.55)'; ctx.lineWidth=1;
+  ctx.beginPath();
+  for(var j=0;j<rows;j++) for(var i=0;i<cols;i++){
+    var fx = (i+0.5)/cols, fy = (j+0.5)/rows;
+    var ci = Math.round(fx*CPU.w)+1, cj = Math.round(fy*CPU.h)+1;
+    var id = ci + (CPU.w+2)*cj;
+    var x = fx*state.W, y = (1-fy)*state.H;
+    var vx = CPU.u[id]/CPU.w*state.W*P.arrowScale*0.016;
+    var vy = -CPU.v[id]/CPU.h*state.H*P.arrowScale*0.016;
+    ctx.moveTo(x,y); ctx.lineTo(x+vx, y+vy);
+  }
+  ctx.stroke(); ctx.restore();
+}
+
+/* --------------------------------------------------------------------------
+   11. HUD + toast
+   -------------------------------------------------------------------------- */
+var hudEls = {};
+['fps','ms','grid','it','div','mode','nan','sub'].forEach(function(k){ hudEls[k]=document.getElementById('h_'+k); });
+function refreshHUD(){
+  hudEls.grid.textContent = state.gpu ? (state.simW+'×'+state.simH+' / '+state.dyeW+'×'+state.dyeH)
+                                      : (CPU.w+'×'+CPU.h);
+}
+var toastTimer=0;
+function toast(msg, ms){
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.remove('on'); }, ms||1700);
+}
+
+/* --------------------------------------------------------------------------
+   12. MAIN LOOP
+   -------------------------------------------------------------------------- */
+var resizeTimer = 0, needResize = false;
+function scheduleResize(){ needResize = true; }
+window.addEventListener('resize', function(){
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(function(){ needResize = true; }, 120);
+});
+
+var lastT = 0, fpsAcc = 0, fpsN = 0, msAcc = 0;
+
+function frame(now){
+  requestAnimationFrame(frame);
+  var rt = now*0.001;
+  var wall = lastT ? Math.min(rt - lastT, 0.1) : 0.016;
+  lastT = rt;
+  var t0 = performance.now();
+
+  if(needResize){ needResize = false; resize(); syncControls(); }
+
+  /* update obstacle drag velocity (smoothed so one fast frame does not spike the fluid) */
+  var invdt = wall > 1e-4 ? 1/wall : 60;
+  for(var i=0;i<obstacles.length;i++){
+    var o = obstacles[i];
+    var vx = (o.x - o.px)*invdt, vy = (o.y - o.py)*invdt;
+    o.vx = lerp(o.vx, vx, 0.35);
+    o.vy = lerp(o.vy, vy, 0.35);
+    if(Math.abs(o.vx) < 1e-4) o.vx = 0;
+    if(Math.abs(o.vy) < 1e-4) o.vy = 0;
+    o.px = o.x; o.py = o.y;
+  }
+
+  var run = !state.paused || state.stepOnce;
+  if(run){
+    var sub = Math.max(1, Math.round(P.substeps));
+    var dt = clamp(P.dt * P.simSpeed / sub, 0.0005, 0.05);
+    for(var s=0;s<sub;s++){
+      state.time += dt;
+      if(state.gpu) gpuStep(dt); else CPU.step(dt);
+    }
+    state.stepOnce = false;
+    if(state.paused) syncPauseBtn();
+  }
+
+  if(state.gpu){
+    gpuRender();
+    drawOverlay();
+  } else {
+    var ctx = cpu2d || uictx;
+    CPU.render(ctx);
+    drawCPUArrows(ctx);
+    drawCPUObstacles(ctx);
+    drawOverlay();
+  }
+
+  state.frames++;
+  msAcc += performance.now() - t0;
+  fpsAcc += wall; fpsN++;
+  if(fpsAcc > 0.4){
+    state.fps = fpsN/fpsAcc; state.ms = msAcc/fpsN;
+    hudEls.fps.textContent = state.fps.toFixed(0);
+    hudEls.ms.textContent  = state.ms.toFixed(1)+' ms';
+    hudEls.it.textContent  = Math.round(P.iterations);
+    hudEls.div.textContent = state.residual.toExponential(1);
+    fpsAcc=0; fpsN=0; msAcc=0;
+  }
+  if(state.nanSticky > 0){
+    state.nanSticky--;
+    hudEls.nan.style.display = 'inline-block';
+  } else if(state.nan){
+    state.nan = false; hudEls.nan.style.display = 'none';
+  }
+}
+
+/* --------------------------------------------------------------------------
+   13. BOOT
+   -------------------------------------------------------------------------- */
+function boot(){
+  state.aspect = Math.max(0.4, window.innerWidth / Math.max(1,window.innerHeight));
+
+  var ok = false;
+  if(!FORCE_CPU){
+    try { ok = initGL(); } catch(e){ console.error('[smoke-lab]', e); ok = false; }
+  }
+  state.gpu = ok;
+
+  var loaded = loadSaved();
+  if(!loaded){ defaultScene(); }
+  if(!emitters.length) defaultScene();
+  pickAutoRes();
+
+  if(!ok) fallbackToCPU(FORCE_CPU ? 'forced by ?cpu=1' : 'no WebGL2 float targets');
+  else {
+    var tag = document.getElementById('h_mode');
+    tag.textContent = 'WEBGL2 · RG16F'; tag.className = 'tag';
+  }
+
+  buildPanel();
+  resize();
+  syncControls();
+  syncPauseBtn();
+  drawDial();
+
+  if(window.innerWidth > 1100) document.body.classList.remove('collapsed');
+
+  requestAnimationFrame(frame);
+
+  if(QA){
+    window.__smokeQA = {
+      state: state, params: P, obstacles: obstacles, emitters: emitters,
+      mode: function(){ return state.gpu ? 'gpu' : 'cpu'; },
+      set: function(k,v){ P[k]=v; syncControls(); },
+      preset: applyPreset,
+      addObstacle: function(t,x,y){ var o=newObstacle(t,x,y); obstacles.push(o); return obstacles.length-1; },
+      dragObstacle: function(i,x,y){ var o=obstacles[i]; if(o){ o.x=x; o.y=y; } },
+      step: function(n){ for(var i=0;i<(n||1);i++){ state.time+=P.dt; if(state.gpu) gpuStep(P.dt); else CPU.step(P.dt); } },
+      stats: function(){ return {fps:state.fps, ms:state.ms, residual:state.residual, nan:state.nanSticky>0,
+                                 grid: state.gpu ? [state.simW,state.simH] : [CPU.w,CPU.h],
+                                 dye:  state.gpu ? [state.dyeW,state.dyeH] : [CPU.w,CPU.h],
+                                 obstacles:obstacles.length, emitters:emitters.length, gpu:state.gpu}; },
+      /* mean smoke density read straight off the GPU, for headless checks */
+      sampleDensity: function(){
+        if(!state.gpu) { var s=0,n=0; for(var i=0;i<CPU.d.length;i++){ s+=CPU.d[i]; n++; } return s/n; }
+        var w=8,h=8;
+        var tmp = makeFBO(w,h, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
+        var p = PROG.display.use();
+        p.f('uMaxVel',1).v2('uTexel', FB.dye.tx, FB.dye.ty).i('uMode',0).i('uColormap',0)
+         .f('uExposure',P.exposure).f('uContrast',P.contrast)
+         .v3('uTint',1,1,1).v3('uBg',0,0,0)
+         .tex('uDye',FB.dye.read.tex).tex('uVelocity',FB.velocity.read.tex)
+         .tex('uPressure',FB.pressure.read.tex).tex('uDivergence',FB.divergence.tex)
+         .tex('uCurl',FB.curl.tex).tex('uObstacle',FB.obstacle.tex);
+        blit(tmp);
+        var buf = new Uint8Array(w*h*4);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, tmp.fbo);
+        gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,buf);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        tmp.destroy();
+        var sum=0; for(var k=0;k<w*h;k++) sum += buf[k*4];
+        return sum/(w*h)/255;
+      }
+    };
+  }
+}
+
+boot();
+})();
+</script>
+</body>
+</html>
