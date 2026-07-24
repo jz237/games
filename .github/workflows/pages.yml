@@ -1,0 +1,47 @@
+name: Deploy to GitHub Pages
+
+# Replaces the old "legacy" Pages build, which stopped serving on 2026-07-24
+# (builds reported success, but every edge returned "Site not found").
+# This publishes the repo tree as-is — no Jekyll processing.
+
+on:
+  push:
+    branches: [main]
+    # the leaderboard bot pushes to scores/ and nothing on the site reads those
+    # files (games call game-scores.jez237.workers.dev), so skip a full redeploy
+    paths-ignore:
+      - 'scores/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# let a running deploy finish rather than cancelling it half-published
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # whole repo; the action already excludes .git and .github
+          path: .
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
