@@ -175,6 +175,7 @@ var P = {
   dust:        1.00,
   fglight:     1.00,
   haze2:       0.85,
+  fallout:     0.85,
   spill:       1.00,
   trails:      1.00,
   bolts:       1.00,
@@ -348,6 +349,28 @@ S.obstacle = FH+[
 'void main(){ vec2 uv=(vUv-uXf.zw)/uXf.xy;',
 ' float a = (uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) ? 0.0 : texture(uCone,vec2(uv.x,1.0-uv.y)).a;',
 ' fc=vec4(a>0.55?1.0:0.0,0.0,0.0,a); }'].join('\n');
+
+S.fallout = FH+[
+'uniform sampler2D uDye; uniform float uTime,uAmt,uAspect,uWind;',
+'float hf(vec2 p){ vec3 q=fract(vec3(p.xyx)*vec3(443.897,441.423,437.195));',
+' q+=dot(q,q.yzx+19.19); return fract((q.x+q.y)*q.z); }',
+'float vf(vec2 p){ vec2 i=floor(p),f=fract(p); vec2 u=f*f*(3.0-2.0*f);',
+' return mix(mix(hf(i),hf(i+vec2(1,0)),u.x),mix(hf(i+vec2(0,1)),hf(i+vec2(1,1)),u.x),u.y); }',
+'float ff(vec2 p){ return vf(p)*0.6+vf(p*2.3+5.1)*0.4; }',
+'void main(){',
+' // look UP the column: ash falls from whatever cloud is overhead, drifting with wind',
+' float above=0.0;',
+' for(int i=1;i<=8;i++){',
+'   vec2 sp=vUv+vec2(uWind*float(i)*0.006, float(i)*0.052);',
+'   above += texture(uDye, clamp(sp,0.0,1.0)).x;',
+' }',
+' above/=8.0;',
+' if(above<0.015){ fc=vec4(0.0); return; }',
+' // stretched vertically so it reads as falling curtains rather than noise',
+' float st=ff(vec2(vUv.x*uAspect*46.0 + uTime*0.35, vUv.y*5.0 - mod(uTime,240.0)*1.25));',
+' float veil=smoothstep(0.02,0.26,above)*smoothstep(0.36,0.78,st)*uAmt;',
+' veil*=smoothstep(0.0,0.22,vUv.y);',
+' fc=vec4(vec3(0.44,0.425,0.415)*veil, veil); }'].join('\n');
 
 S.scale = FH+['uniform sampler2D uTex; uniform float uValue;',
 'void main(){ fc = texture(uTex,vUv)*uValue; }'].join('\n');
@@ -1187,6 +1210,15 @@ function render(){
     gl.bindVertexArray(quadVAO);
   }
 
+  if(P.fallout>0.01){
+    gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+    var fp=PR.fallout.use();
+    fp.f('uMaxVel',1).v2('uTexel',FB.dye.tx,FB.dye.ty).f('uTime',state.t)
+      .f('uAmt',P.fallout).f('uAspect',state.aspect).f('uWind',P.windX)
+      .tex('uDye',FB.dye.read.tex);
+    blit(FB.scene);
+  }
+
   gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
   var fgLit = P.fglight*(0.16 + 0.42*clamp(P.intensity,0,2)*emission().rate + 1.5*state.flash);
   drawPlate(TEX.fgrocks,XF.rocks,  [0.13,0.125,0.15,1], false, 0, fgLit);
@@ -1262,6 +1294,7 @@ var SPEC=[
   ['dust','Ash accumulation',0,2,0.01,2],
   ['fglight','Foreground light',0,3,0.01,2],
   ['haze2','Distance haze',0,1.5,0.01,2],
+  ['fallout','Ash fallout',0,2.5,0.01,2],
   ['spill','Vent light spill',0,2.5,0.01,2],
   ['trails','Bomb trails',0,3,0.01,2],
   ['bolts','Column lightning',0,2,0.01,2],
