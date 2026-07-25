@@ -481,10 +481,24 @@ var BOLT_FS = ['#version 300 es','precision highp float;','out vec4 fc;','unifor
 var P_FS_ASH = ['#version 300 es','precision highp float;',
 'in float vLife; in float vSeed; in float vType; in float vDens;','out vec4 fc;',
 'uniform sampler2D uAsh;',
-'void main(){ vec4 t=texture(uAsh,gl_PointCoord);',
-' float a=t.a*clamp(vLife*1.5,0.0,1.0)*0.17*smoothstep(0.08,0.60,vDens);',
+'float ha(float n){ return fract(sin(n*91.7)*43758.5453); }',
+'void main(){',
+' // rotate the sprite per particle so one puff does not tile visibly',
+' float rot=ha(vSeed*3.7)*6.2831;',
+' float cs=cos(rot), sn=sin(rot);',
+' vec2 pc=gl_PointCoord-0.5;',
+' pc=vec2(cs*pc.x-sn*pc.y, sn*pc.x+cs*pc.y)+0.5;',
+' if(pc.x<0.0||pc.x>1.0||pc.y<0.0||pc.y>1.0) discard;',
+' vec4 t=texture(uAsh,pc);',
+' float a=t.a*clamp(vLife*1.5,0.0,1.0)*0.15*smoothstep(0.08,0.60,vDens);',
+' // BiRefNet returns a near-binary matte, which leaves a hard cutout edge on an',
+' // inherently soft subject -- window the alpha radially so every puff fades out',
+' float rad=length(gl_PointCoord-0.5)*2.0;',
+' a*=smoothstep(1.02,0.30,rad);',
 ' if(a<0.004) discard;',
-' vec3 col=t.rgb*vec3(0.62,0.60,0.60);',
+' // take ONLY alpha from the plate: it was matted off white, so its edge texels',
+' // carry white RGB and premultiplying them rings every puff with a bright halo',
+' vec3 col=vec3(0.56,0.545,0.535)*(0.72+0.55*ha(vSeed*11.3));',
 ' fc=vec4(col*a,a); }'].join('\n');
 
 /* ---- scene draws ---- */
@@ -508,6 +522,7 @@ S.smoke = FH+[
 ' float shadow=0.0; vec2 st=uLight*uVT*2.6;',
 ' for(int i=1;i<=6;i++){ vec2 s=vUv+st*float(i);',
 '   vec3 q=texture(uDye,clamp(s,0.0,1.0)).xyz; shadow += (uChan==0? q.x : q.z); }',
+' shadow /= 6.0;',
 ' float lit=exp(-shadow*uLightK);',
 ' float dens=d*uDens;',
 ' float a=1.0-exp(-dens*1.55);',
@@ -1035,9 +1050,9 @@ function drawSmoke(chan){
   var p=PR.smoke.use();
   p.f('uMaxVel',1).v2('uTexel',FB.dye.tx,FB.dye.ty).v2('uVT',FB.dye.tx,FB.dye.ty)
    .i('uChan',chan).f('uDens',chan===0?1.35:1.6).f('uEmis',chan===0?0.16:0.05)
-   .f('uLightK',0.42).f('uAspect',state.aspect)
+   .f('uLightK',0.62).f('uAspect',state.aspect)
    .v2('uLight',-0.86,-0.22).v2('uVent',vw[0],vw[1]).f('uUnder',P.spill*0.85)
-   .v3('uColA',0.055,0.050,0.056).v3('uColB',0.82,0.76,0.72)
+   .v3('uColA',0.135,0.128,0.132).v3('uColB',0.80,0.745,0.705)
    .v3('uEmisCol',0.95,0.36,0.10)
    .tex('uDye',FB.dye.read.tex);
   blit(FB.scene);
