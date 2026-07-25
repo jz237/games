@@ -168,6 +168,8 @@ var P = {
   grain:       0.55,
   zoom:        1.00,
   lava:        1.00,
+  ceiling:     0.62,
+  spread:      0.62,
   dust:        1.00,
   spill:       1.00,
   trails:      1.00,
@@ -298,7 +300,8 @@ S.curl = FH+['uniform sampler2D uVel;',
 
 S.forces = FH+[
 'uniform sampler2D uVel,uCurl,uDye,uObs;',
-'uniform float uDt,uVort,uBuoy,uTurb,uTurbS,uTime,uAspect,uSurgeG; uniform vec2 uWind;',
+'uniform float uDt,uVort,uBuoy,uTurb,uTurbS,uTime,uAspect,uSurgeG,uCeil,uSpread,uVentX;',
+'uniform vec2 uWind;',
 'float hash(vec2 p){ p=fract(p*vec2(127.1,311.7)); p+=dot(p,p+34.23); return fract(p.x*p.y*43758.5453); }',
 'float vn(vec2 p){ vec2 i=floor(p),f=fract(p); vec2 u=f*f*(3.0-2.0*f);',
 ' return mix(mix(hash(i),hash(i+vec2(1,0)),u.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x),u.y); }',
@@ -315,6 +318,14 @@ S.forces = FH+[
 ' v.y += uDt*(uBuoy*dye.y);',                       // hot ash rises
 ' v.y -= uDt*uSurgeG*dye.z;',                        // dense surge sinks and hugs terrain
 ' v += uDt*uWind;',
+' // a real Plinian column reaches neutral buoyancy and spreads into an umbrella:',
+' // damp the rise above the ceiling and push outward from the axis',
+' float sp=smoothstep(uCeil,uCeil+0.20,vUv.y);',
+' if(sp>0.0){',
+'   v.y -= uDt*sp*uSpread*0.55;',
+'   float side=vUv.x*uAspect-uVentX;',
+'   v.x += uDt*sp*uSpread*1.25*sign(side)*clamp(abs(side)*7.0,0.22,1.0);',
+' }',
 ' if(uTurb>0.0){ vec2 p=vUv*vec2(uAspect,1.0)*uTurbS+vec2(0.0,uTime*0.25); float e=0.03;',
 '  v += uDt*uTurb*vec2(psi(p+vec2(0.0,e))-psi(p-vec2(0.0,e)),-(psi(p+vec2(e,0.0))-psi(p-vec2(e,0.0))))/(2.0*e); }',
 ' fc=vec4(san(v),0.0,1.0); }'].join('\n');
@@ -796,6 +807,7 @@ function step(dt){
   p.f('uMaxVel',MAXV).v2('uTexel',vel.tx,vel.ty).f('uDt',dt)
    .f('uVort',P.vorticity*0.01*U).f('uBuoy',P.buoyancy*U).f('uSurgeG',0.55*U)
    .f('uTurb',P.turbulence*U).f('uTurbS',5.5).f('uTime',state.t).f('uAspect',state.aspect)
+   .f('uCeil',P.ceiling).f('uSpread',P.spread*U).f('uVentX',ventWorld()[0])
    .v2('uWind',P.windX*U,0)
    .tex('uVel',vel.read.tex).tex('uCurl',FB.curl.tex).tex('uDye',dye.read.tex).tex('uObs',FB.obs.tex);
   blit(vel.write); vel.swap();
@@ -966,10 +978,27 @@ function spawnBolt(){
     pts=out;
     if(pts.length>78) break;
   }
-  boltN=Math.min(pts.length,160);
-  for(var k=0;k<boltN;k++){
-    boltPts[k*2]   = (pts[k][0]/state.aspect)*2-1;
-    boltPts[k*2+1] = pts[k][1]*2-1;
+  /* main channel as segment pairs, then fork a few branches off it */
+  var segs=[];
+  for(var k=0;k<pts.length-1;k++) segs.push([pts[k],pts[k+1]]);
+  var nb=1+((Math.random()*3)|0);
+  for(var b=0;b<nb;b++){
+    var at=1+((Math.random()*(pts.length-2))|0);
+    var dir=[(Math.random()-0.5)*0.9, -(0.25+Math.random()*0.5)];
+    var cur=pts[at], steps=2+((Math.random()*3)|0);
+    for(var t=0;t<steps;t++){
+      var nx=[cur[0]+dir[0]*0.05+(Math.random()-0.5)*0.035,
+              cur[1]+dir[1]*0.05+(Math.random()-0.5)*0.030];
+      segs.push([cur,nx]); cur=nx;
+    }
+  }
+  boltN=Math.min(segs.length*2,160);
+  for(var q=0;q<(boltN>>1);q++){
+    var a0=segs[q][0], a1=segs[q][1];
+    boltPts[q*4]   = (a0[0]/state.aspect)*2-1;
+    boltPts[q*4+1] = a0[1]*2-1;
+    boltPts[q*4+2] = (a1[0]/state.aspect)*2-1;
+    boltPts[q*4+3] = a1[1]*2-1;
   }
   boltLife=1.0;
   gl.bindBuffer(gl.ARRAY_BUFFER,boltBuf);
@@ -1087,7 +1116,7 @@ function render(){
     gl.uniform1f(bp.l('uA'), boltLife*1.5*P.bolts);
     gl.bindFramebuffer(gl.FRAMEBUFFER,FB.scene.fb); gl.viewport(0,0,FB.scene.w,FB.scene.h);
     gl.bindVertexArray(boltVAO);
-    gl.drawArrays(gl.LINE_STRIP,0,boltN);
+    gl.drawArrays(gl.LINES,0,boltN);
     gl.bindVertexArray(quadVAO);
   }
 
@@ -1158,6 +1187,8 @@ var SPEC=[
   ['bombs','Lava bombs',0,2,0.01,2],
   ['ashfall','Ash fall',0,2,0.01,2],
   ['lava','Lava flows',0,2.5,0.01,2],
+  ['ceiling','Anvil height',0.3,1.0,0.01,2],
+  ['spread','Anvil spread',0,1.5,0.01,2],
   ['dust','Ash accumulation',0,2,0.01,2],
   ['spill','Vent light spill',0,2.5,0.01,2],
   ['trails','Bomb trails',0,3,0.01,2],
