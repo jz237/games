@@ -172,6 +172,7 @@ var P = {
   ceiling:     0.62,
   spread:      0.62,
   dust:        1.00,
+  fglight:     1.00,
   spill:       1.00,
   trails:      1.00,
   bolts:       1.00,
@@ -507,7 +508,8 @@ var P_FS_ASH = ['#version 300 es','precision highp float;',
 
 /* ---- scene draws ---- */
 S.plate = FH+[
-'uniform sampler2D uTex; uniform vec4 uXf; uniform vec4 uTintA; uniform float uIsJpg,uAsh;',
+'uniform sampler2D uTex; uniform vec4 uXf; uniform vec4 uTintA; uniform float uIsJpg,uAsh,uLit;',
+'uniform vec3 uLitCol;',
 'void main(){ vec2 uv=(vUv-uXf.zw)/uXf.xy;',
 ' if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0){ fc=vec4(0.0); return; }',
 ' vec4 t=texture(uTex,vec2(uv.x,1.0-uv.y));',
@@ -519,6 +521,12 @@ S.plate = FH+[
 '   float cover=uAsh*smoothstep(0.20,0.62,lum);',
 '   vec3 ash=vec3(0.400,0.378,0.352)*(0.55+0.70*lum);',
 '   rgb=mix(rgb, ash, clamp(cover,0.0,0.88));',
+' }',
+' if(uLit>0.0){',
+'   // the eruption throws light onto the foreground: brighter facets face it, so',
+'   // key off the plate\'s own luminance instead of washing the silhouette flat',
+'   float l2=dot(rgb,vec3(0.299,0.587,0.114));',
+'   rgb += uLitCol*uLit*(0.18+2.6*l2*l2);',
 ' }',
 ' fc=vec4(rgb*t.a*uTintA.rgb*uTintA.a, t.a*uTintA.a); }'].join('\n');
 
@@ -1061,12 +1069,12 @@ function erupt(){
 /* =====================================================================
    6. RENDER
    ===================================================================== */
-function drawPlate(tex,xf,tint,isJpg,ash){
+function drawPlate(tex,xf,tint,isJpg,ash,lit){
   var p=PR.plate.use();
   p.f('uMaxVel',1).v2('uTexel',1/canvas.width,1/canvas.height)
    .v4('uXf',xf[0],xf[1],xf[2],xf[3])
    .v4('uTintA',tint[0],tint[1],tint[2],tint[3]).f('uIsJpg',isJpg?1:0)
-   .f('uAsh',ash||0).tex('uTex',tex);
+   .f('uAsh',ash||0).f('uLit',lit||0).v3('uLitCol',1.0,0.44,0.16).tex('uTex',tex);
   blit(FB.scene);
 }
 function drawSmoke(chan){
@@ -1159,7 +1167,8 @@ function render(){
   }
 
   gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
-  drawPlate(TEX.fgrocks,XF.rocks,  [0.10,0.10,0.13,1], false);
+  var fgLit = P.fglight*(0.16 + 0.42*clamp(P.intensity,0,2)*emission().rate + 1.5*state.flash);
+  drawPlate(TEX.fgrocks,XF.rocks,  [0.13,0.125,0.15,1], false, 0, fgLit);
   gl.disable(gl.BLEND);
 
   /* bloom */
@@ -1229,6 +1238,7 @@ var SPEC=[
   ['ceiling','Anvil height',0.3,1.0,0.01,2],
   ['spread','Anvil spread',0,1.5,0.01,2],
   ['dust','Ash accumulation',0,2,0.01,2],
+  ['fglight','Foreground light',0,3,0.01,2],
   ['spill','Vent light spill',0,2.5,0.01,2],
   ['trails','Bomb trails',0,3,0.01,2],
   ['bolts','Column lightning',0,2,0.01,2],
