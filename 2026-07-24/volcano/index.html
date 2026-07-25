@@ -1130,7 +1130,7 @@ function drawSmoke(chan){
    .i('uChan',chan).f('uDens',chan===0?1.35:1.6).f('uEmis',chan===0?0.085:0.03)
    .f('uLightK',0.30).f('uAspect',state.aspect)
    .v2('uLight',-0.86,-0.22).v2('uVent',vw[0],vw[1]).f('uUnder',P.spill*0.48)
-   .v3('uColA',0.345,0.330,0.335).v3('uColB',0.78,0.730,0.700)
+   .v3('uColA',0.300,0.315,0.375).v3('uColB',0.90,0.755,0.615)
    .v3('uEmisCol',0.95,0.36,0.10)
    .tex('uDye',FB.dye.read.tex);
   blit(FB.scene);
