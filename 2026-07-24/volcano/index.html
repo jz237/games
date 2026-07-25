@@ -150,12 +150,13 @@ var gl=null;
 /* ---------------- tunables ---------------- */
 var P = {
   intensity:   1.00,   // master eruption strength
-  buoyancy:    2.35,
-  vorticity:   18,
-  turbulence:  0.30,
+  buoyancy:    1.05,
+  vorticity:   21,
+  turbulence:  0.42,
+  turbScale:   6.5,
   windX:       0.02,
-  tempDiss:    0.26,
-  densDiss:    0.16,
+  tempDiss:    0.17,
+  densDiss:    0.075,
   velDiss:     0.16,
   iterations:  40,
   dyeScale:    2.0,
@@ -298,6 +299,9 @@ S.advectDye = FH+[
 ' float d=s.x/(1.0+uDt*uDens);',
 ' float t=s.y/(1.0+uDt*uTemp);',
 ' float g=s.z/(1.0+uDt*uSurge);',
+' float edge=min(min(vUv.x,1.0-vUv.x),min(vUv.y,1.0-vUv.y));',
+' float loss=(1.0-smoothstep(0.0,0.055,edge))*uDt*2.5;',
+' d*=(1.0-loss); g*=(1.0-loss);',
 ' fc=vec4(clamp(san1(d),0.0,11.0),clamp(san1(t),0.0,12.0),clamp(san1(g),0.0,11.0),1.0); }'].join('\n');
 
 S.curl = FH+['uniform sampler2D uVel;',
@@ -900,7 +904,7 @@ function step(dt){
   p=PR.forces.use();
   p.f('uMaxVel',MAXV).v2('uTexel',vel.tx,vel.ty).f('uDt',dt)
    .f('uVort',P.vorticity*0.01*U).f('uBuoy',P.buoyancy*U).f('uSurgeG',0.55*U)
-   .f('uTurb',P.turbulence*U).f('uTurbS',5.5).f('uTime',state.t).f('uAspect',state.aspect)
+   .f('uTurb',P.turbulence*U).f('uTurbS',P.turbScale).f('uTime',state.t).f('uAspect',state.aspect)
    .f('uCeil',P.ceiling).f('uSpread',P.spread*U).f('uVentX',ventWorld()[0])
    .v2('uWind',P.windX*U,0)
    .tex('uVel',vel.read.tex).tex('uCurl',FB.curl.tex).tex('uDye',dye.read.tex).tex('uObs',FB.obs.tex);
@@ -911,9 +915,9 @@ function step(dt){
   var em=emission();
   if(em.rate>0.001){
     var jit=(Math.random()-0.5)*0.5;
-    sp.push({x:v[0]+jit*0.025, y:v[1]+0.034, r:0.055+0.038*em.rate,
-             d:em.rate*dt*0.85, t:em.rate*dt*0.62, g:0,
-             vx:jit*em.rate*U*dt*6, vy:em.rate*U*dt*15});
+    sp.push({x:v[0]+jit*0.030, y:v[1]+0.040, r:0.150+0.055*em.rate,
+             d:em.rate*dt*0.95, t:em.rate*dt*0.55, g:0,
+             vx:jit*em.rate*U*dt*1.6, vy:em.rate*U*dt*3.4});
   }
   if(em.surge>0.001){
     for(var s=-1;s<=1;s+=2){
@@ -1291,6 +1295,7 @@ var SPEC=[
   ['buoyancy','Buoyancy',0,5,0.01,2],
   ['vorticity','Vorticity',0,40,0.5,1],
   ['turbulence','Turbulence',0,2,0.01,2],
+  ['turbScale','Eddy scale',1,12,0.1,1],
   ['windX','Wind',-0.8,0.8,0.005,3],
   ['tempDiss','Cooling rate',0,2,0.01,2],
   ['densDiss','Ash dissipation',0,1.5,0.01,2],
