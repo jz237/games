@@ -171,6 +171,7 @@ var P = {
   lava:        1.00,
   ceiling:     0.62,
   spread:      0.62,
+  steam:       0.30,
   dust:        1.00,
   fglight:     1.00,
   spill:       1.00,
@@ -555,7 +556,7 @@ S.smoke = FH+[
 
 /* crater + fissure emissive, masked by the cone silhouette */
 S.lava = FH+[
-'uniform sampler2D uLava,uObs,uCone; uniform float uTime,uGlow,uAspect,uFlow,uSpill;',
+'uniform sampler2D uLava,uObs,uCone; uniform float uTime,uGlow,uAspect,uFlow,uSpill,uSteam;',
 'uniform vec2 uVent; uniform vec4 uXf;',
 'float h(vec2 p){ vec3 q=fract(vec3(p.xyx)*vec3(443.897,441.423,437.195));',
 ' q+=dot(q,q.yzx+19.19); return fract((q.x+q.y)*q.z); }',
@@ -590,6 +591,12 @@ S.lava = FH+[
 ' vec3 lt=texture(uLava, W*4.2+vec2(0.0,-uTime*0.05)).rgb;',
 ' float crust=smoothstep(0.16,0.72,lt.r-lt.b*0.55);',
 ' flows*=mix(0.55,1.15,crust);',
+' // steam boiling off the flows: sample the channel slightly downslope so the',
+' // wisps sit just above the lava, then break them up with upward-scrolling noise',
+' float nB=fbm(vec2(ang*7.5, (dist+0.030)*2.3 - mod(uTime,240.0)*0.30));',
+' float chanB=smoothstep(0.50,0.74,nB)*below*exp(-dist*3.0);',
+' float wisp=fbm(vec2(W.x*9.0, W.y*6.5 - mod(uTime,240.0)*0.85));',
+' float steam=chanB*smoothstep(0.60,0.84,wisp)*uSteam*mix(0.20,1.0,gully);',
 ' float m=clamp(lake*1.05 + flows*2.15*uFlow, 0.0, 3.0);',
 ' // incandescent ramp: deep red at the cooling tips, white-hot only in the vent',
 ' float t=clamp(m*0.75,0.0,1.0);',
@@ -601,7 +608,9 @@ S.lava = FH+[
 ' // lands on lit facets instead of sitting on top as a flat wash',
 ' float spill=exp(-dist*dist/0.030)*uSpill*lum*(0.55+0.45*step(-0.002,-d.y));',
 ' vec3 spillCol=vec3(1.0,0.42,0.12)*spill;',
-' fc=vec4(col*m*uGlow + spillCol, clamp(m*uGlow+spill,0.0,1.0)); }'].join('\n');
+' // steam is lit from beneath by the lava, so it reads warm near the flow',
+' vec3 steamCol=mix(vec3(0.62,0.60,0.60),vec3(1.0,0.66,0.34),clamp(m*0.9,0.0,1.0))*steam;',
+' fc=vec4(col*m*uGlow + spillCol + steamCol, clamp(m*uGlow+spill+steam*0.8,0.0,1.0)); }'].join('\n');
 
 /* ---- post ---- */
 S.bright = FH+['uniform sampler2D uTex; uniform float uThresh;',
@@ -1133,7 +1142,7 @@ function render(){
   var v=ventWorld();
   p.f('uMaxVel',1).v2('uTexel',FB.obs.tx,FB.obs.ty).f('uTime',state.t)
    .f('uGlow',0.60*clamp(P.intensity,0,2)).f('uAspect',state.aspect).v2('uVent',v[0],v[1]).f('uFlow',P.lava)
-   .f('uSpill',P.spill).v4('uXf',XF.cone[0],XF.cone[1],XF.cone[2],XF.cone[3])
+   .f('uSpill',P.spill).f('uSteam',P.steam).v4('uXf',XF.cone[0],XF.cone[1],XF.cone[2],XF.cone[3])
    .tex('uLava',TEX.lava).tex('uObs',FB.obs.tex).tex('uCone',TEX.cone);
   blit(FB.scene);
 
@@ -1237,6 +1246,7 @@ var SPEC=[
   ['pressRetain','Pressure retention',0,0.98,0.01,2],
   ['ceiling','Anvil height',0.3,1.0,0.01,2],
   ['spread','Anvil spread',0,1.5,0.01,2],
+  ['steam','Steam off flows',0,3,0.01,2],
   ['dust','Ash accumulation',0,2,0.01,2],
   ['fglight','Foreground light',0,3,0.01,2],
   ['spill','Vent light spill',0,2.5,0.01,2],
