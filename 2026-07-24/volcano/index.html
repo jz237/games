@@ -157,7 +157,8 @@ var P = {
   tempDiss:    0.26,
   densDiss:    0.16,
   velDiss:     0.16,
-  iterations:  26,
+  iterations:  40,
+  pressRetain: 0.80,
   embers:      1.00,
   bombs:       1.00,
   ashfall:     1.00,
@@ -292,7 +293,7 @@ S.advectDye = FH+[
 ' float d=s.x/(1.0+uDt*uDens);',
 ' float t=s.y/(1.0+uDt*uTemp);',
 ' float g=s.z/(1.0+uDt*uSurge);',
-' fc=vec4(clamp(san1(d),0.0,6.0),clamp(san1(t),0.0,8.0),clamp(san1(g),0.0,6.0),1.0); }'].join('\n');
+' fc=vec4(clamp(san1(d),0.0,11.0),clamp(san1(t),0.0,12.0),clamp(san1(g),0.0,11.0),1.0); }'].join('\n');
 
 S.curl = FH+['uniform sampler2D uVel;',
 'void main(){ float l=texture(uVel,vL).y,r=texture(uVel,vR).y,b=texture(uVel,vB).x,t=texture(uVel,vT).x;',
@@ -344,6 +345,9 @@ S.obstacle = FH+[
 'void main(){ vec2 uv=(vUv-uXf.zw)/uXf.xy;',
 ' float a = (uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) ? 0.0 : texture(uCone,vec2(uv.x,1.0-uv.y)).a;',
 ' fc=vec4(a>0.55?1.0:0.0,0.0,0.0,a); }'].join('\n');
+
+S.scale = FH+['uniform sampler2D uTex; uniform float uValue;',
+'void main(){ fc = texture(uTex,vUv)*uValue; }'].join('\n');
 
 S.boundary = FH+['uniform sampler2D uVel,uObs;',
 'void main(){ vec4 o=texture(uObs,vUv); vec2 v=texture(uVel,vUv).xy;',
@@ -519,10 +523,10 @@ S.smoke = FH+[
 ' vec3 dye=texture(uDye,vUv).xyz;',
 ' float d = (uChan==0? dye.x : dye.z);',
 ' if(d<0.002){ fc=vec4(0.0); return; }',
-' float shadow=0.0; vec2 st=uLight*uVT*2.6;',
-' for(int i=1;i<=6;i++){ vec2 s=vUv+st*float(i);',
+' float shadow=0.0; vec2 st=uLight*uVT*9.5;',
+' for(int i=1;i<=8;i++){ vec2 s=vUv+st*float(i);',
 '   vec3 q=texture(uDye,clamp(s,0.0,1.0)).xyz; shadow += (uChan==0? q.x : q.z); }',
-' shadow /= 6.0;',
+' shadow /= 8.0;',
 ' float lit=exp(-shadow*uLightK);',
 ' float dens=d*uDens;',
 ' float a=1.0-exp(-dens*1.55);',
@@ -558,7 +562,7 @@ S.lava = FH+[
 ' vec3 lt=texture(uLava, W*4.2+vec2(0.0,-uTime*0.05)).rgb;',
 ' float crust=smoothstep(0.16,0.72,lt.r-lt.b*0.55);',
 ' flows*=mix(0.55,1.15,crust);',
-' float m=clamp(lake*1.60 + flows*1.75*uFlow, 0.0, 3.0);',
+' float m=clamp(lake*1.05 + flows*1.75*uFlow, 0.0, 3.0);',
 ' // incandescent ramp: deep red at the cooling tips, white-hot only in the vent',
 ' float t=clamp(m*0.75,0.0,1.0);',
 ' vec3 col;',
@@ -833,13 +837,13 @@ function step(dt){
   if(em.rate>0.001){
     var jit=(Math.random()-0.5)*0.5;
     sp.push({x:v[0]+jit*0.025, y:v[1]+0.034, r:0.055+0.038*em.rate,
-             d:em.rate*dt*3.4, t:em.rate*dt*4.4, g:0,
+             d:em.rate*dt*0.85, t:em.rate*dt*0.62, g:0,
              vx:jit*em.rate*U*dt*6, vy:em.rate*U*dt*15});
   }
   if(em.surge>0.001){
     for(var s=-1;s<=1;s+=2){
       sp.push({x:v[0]+s*(0.05+0.05*Math.random()), y:v[1]-0.045, r:0.045,
-               d:0, t:em.surge*dt*0.8, g:em.surge*dt*5.5,
+               d:0, t:em.surge*dt*0.12, g:em.surge*dt*0.85,
                vx:s*em.surge*U*dt*14, vy:-em.surge*U*dt*4});
     }
   }
@@ -859,7 +863,7 @@ function step(dt){
     for(i=0;i<n;i++){ splV[i*4]=sp[i].d; splV[i*4+1]=sp[i].t; splV[i*4+2]=sp[i].g; splV[i*4+3]=0; }
     p=PR.splat.use();
     p.f('uMaxVel',MAXV).v2('uTexel',dye.tx,dye.ty).i('uN',n).f('uAspect',state.aspect)
-     .v4('uLo',0,0,0,0).v4('uHi',6,8,6,1).tex('uSrc',dye.read.tex);
+     .v4('uLo',0,0,0,0).v4('uHi',11,12,11,1).tex('uSrc',dye.read.tex);
     gl.uniform3fv(p.l('uP'),splP); gl.uniform4fv(p.l('uV'),splV);
     blit(dye.write); dye.swap();
   }
@@ -872,6 +876,10 @@ function step(dt){
   p=PR.divergence.use(); p.f('uMaxVel',MAXV).v2('uTexel',vel.tx,vel.ty)
    .tex('uVel',vel.read.tex).tex('uObs',FB.obs.tex);
   blit(FB.div);
+
+  p=PR.scale.use();
+  p.f('uMaxVel',MAXV).v2('uTexel',pres.tx,pres.ty).f('uValue',P.pressRetain).tex('uTex',pres.read.tex);
+  blit(pres.write); pres.swap();
 
   var iters=Math.round(P.iterations);
   for(i=0;i<iters;i++){
@@ -1049,10 +1057,10 @@ function drawSmoke(chan){
   var vw=ventWorld();
   var p=PR.smoke.use();
   p.f('uMaxVel',1).v2('uTexel',FB.dye.tx,FB.dye.ty).v2('uVT',FB.dye.tx,FB.dye.ty)
-   .i('uChan',chan).f('uDens',chan===0?1.35:1.6).f('uEmis',chan===0?0.16:0.05)
-   .f('uLightK',0.62).f('uAspect',state.aspect)
-   .v2('uLight',-0.86,-0.22).v2('uVent',vw[0],vw[1]).f('uUnder',P.spill*0.85)
-   .v3('uColA',0.135,0.128,0.132).v3('uColB',0.80,0.745,0.705)
+   .i('uChan',chan).f('uDens',chan===0?1.35:1.6).f('uEmis',chan===0?0.085:0.03)
+   .f('uLightK',0.30).f('uAspect',state.aspect)
+   .v2('uLight',-0.86,-0.22).v2('uVent',vw[0],vw[1]).f('uUnder',P.spill*0.48)
+   .v3('uColA',0.345,0.330,0.335).v3('uColB',0.78,0.730,0.700)
    .v3('uEmisCol',0.95,0.36,0.10)
    .tex('uDye',FB.dye.read.tex);
   blit(FB.scene);
@@ -1202,6 +1210,7 @@ var SPEC=[
   ['bombs','Lava bombs',0,2,0.01,2],
   ['ashfall','Ash fall',0,2,0.01,2],
   ['lava','Lava flows',0,2.5,0.01,2],
+  ['pressRetain','Pressure retention',0,0.98,0.01,2],
   ['ceiling','Anvil height',0.3,1.0,0.01,2],
   ['spread','Anvil spread',0,1.5,0.01,2],
   ['dust','Ash accumulation',0,2,0.01,2],
