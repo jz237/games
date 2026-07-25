@@ -168,6 +168,7 @@ var P = {
   grain:       0.55,
   zoom:        1.00,
   lava:        1.00,
+  dust:        1.00,
   spill:       1.00,
   trails:      1.00,
   bolts:       1.00,
@@ -181,6 +182,7 @@ var DEFAULTS = Object.assign({}, P);
 var VENT_U = 0.533, VENT_V = 0.111;
 var SUMMIT_Y = 0.50;          // where the crater sits in the frame; the rest is sky for the column
 
+var ashLoad = 0;
 var state = {
   W:0,H:0,dpr:1,aspect:16/9, simW:0,simH:0,
   t:0, stage:'calm', stageT:0, fps:0, ms:0, residual:0, nan:false, nanTick:0,
@@ -906,6 +908,7 @@ var STAGES=[
 ];
 var stageIdx=0;
 function restartSequence(){
+  ashLoad=0;
   stageIdx=0; state.stage='calm'; state.stageT=0; state.shake=0; state.flash=0;
   clearFields();
 }
@@ -935,6 +938,9 @@ function advanceStage(dt){
   if(state.stage==='tremor') state.shake=Math.max(state.shake, 0.10*(state.stageT/3.2));
   state.shake*=Math.pow(0.12,dt);
   state.flash*=Math.pow(0.02,dt);
+  /* ash settles on the mountain while it erupts, and slowly weathers off */
+  var em0=emission();
+  ashLoad = clamp(ashLoad + dt*(em0.rate*0.085) - dt*0.012, 0, 1);
   boltLife*=Math.pow(0.0005,dt);
   /* ash-column lightning */
   if((state.stage==='column'||state.stage==='sustain') && Math.random()<dt*0.55){
@@ -1042,7 +1048,9 @@ function render(){
 
   drawSmoke(0);                                       // ash column, behind the cone
 
-  drawPlate(TEX.cone,   XF.cone,   [0.95,0.88,0.84,1], false);
+  var al=ashLoad*P.dust;
+  drawPlate(TEX.cone,   XF.cone,
+    [lerp(0.95,0.62,al), lerp(0.88,0.60,al), lerp(0.84,0.60,al), 1], false);
 
   /* crater + fissure glow, additive */
   gl.blendFunc(gl.ONE,gl.ONE);
@@ -1150,6 +1158,7 @@ var SPEC=[
   ['bombs','Lava bombs',0,2,0.01,2],
   ['ashfall','Ash fall',0,2,0.01,2],
   ['lava','Lava flows',0,2.5,0.01,2],
+  ['dust','Ash accumulation',0,2,0.01,2],
   ['spill','Vent light spill',0,2.5,0.01,2],
   ['trails','Bomb trails',0,3,0.01,2],
   ['bolts','Column lightning',0,2,0.01,2],
@@ -1334,7 +1343,7 @@ Promise.all([loadImages(), loadAudio()]).then(function(){
       erupt:erupt, restart:restartSequence, bolt:spawnBolt,
       setStage:function(n){ for(var i=0;i<STAGES.length;i++) if(STAGES[i].name===n){ stageIdx=i; state.stage=n; state.stageT=0; onStageEnter(n); return true; } return false; },
       step:function(n){ for(var i=0;i<(n||1);i++){ state.t+=0.016; advanceStage(0.016); step(0.016); } },
-      vent:ventWorld
+      vent:ventWorld, ash:function(){ return ashLoad; }
     };
   }
 });
