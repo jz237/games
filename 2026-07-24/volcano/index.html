@@ -174,6 +174,7 @@ var P = {
   steam:       0.30,
   dust:        1.00,
   fglight:     1.00,
+  haze2:       0.85,
   spill:       1.00,
   trails:      1.00,
   bolts:       1.00,
@@ -509,7 +510,8 @@ var P_FS_ASH = ['#version 300 es','precision highp float;',
 
 /* ---- scene draws ---- */
 S.plate = FH+[
-'uniform sampler2D uTex; uniform vec4 uXf; uniform vec4 uTintA; uniform float uIsJpg,uAsh,uLit;',
+'uniform sampler2D uTex; uniform vec4 uXf; uniform vec4 uTintA; uniform float uIsJpg,uAsh,uLit,uHaze;',
+'uniform vec3 uHazeCol;',
 'uniform vec3 uLitCol;',
 'void main(){ vec2 uv=(vUv-uXf.zw)/uXf.xy;',
 ' if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0){ fc=vec4(0.0); return; }',
@@ -522,6 +524,15 @@ S.plate = FH+[
 '   float cover=uAsh*smoothstep(0.20,0.62,lum);',
 '   vec3 ash=vec3(0.400,0.378,0.352)*(0.55+0.70*lum);',
 '   rgb=mix(rgb, ash, clamp(cover,0.0,0.88));',
+' }',
+' if(uHaze>0.0){',
+'   // aerial perspective: more air sits between the camera and the BASE of a distant',
+'   // ridge than its crest, so haze must be a vertical gradient, not a flat tint',
+'   float hz=uHaze*(1.0-smoothstep(0.09,0.42,vUv.y));',
+'   float lum3=dot(rgb,vec3(0.299,0.587,0.114));',
+'   rgb=mix(rgb,uHazeCol,clamp(hz,0.0,0.88));',
+'   // crests catch the last of the sunset',
+'   rgb+=vec3(1.0,0.60,0.34)*0.30*uHaze*smoothstep(0.30,0.75,lum3);',
 ' }',
 ' if(uLit>0.0){',
 '   // the eruption throws light onto the foreground: brighter facets face it, so',
@@ -1078,12 +1089,13 @@ function erupt(){
 /* =====================================================================
    6. RENDER
    ===================================================================== */
-function drawPlate(tex,xf,tint,isJpg,ash,lit){
+function drawPlate(tex,xf,tint,isJpg,ash,lit,haze){
   var p=PR.plate.use();
   p.f('uMaxVel',1).v2('uTexel',1/canvas.width,1/canvas.height)
    .v4('uXf',xf[0],xf[1],xf[2],xf[3])
    .v4('uTintA',tint[0],tint[1],tint[2],tint[3]).f('uIsJpg',isJpg?1:0)
-   .f('uAsh',ash||0).f('uLit',lit||0).v3('uLitCol',1.0,0.44,0.16).tex('uTex',tex);
+   .f('uAsh',ash||0).f('uLit',lit||0).v3('uLitCol',1.0,0.44,0.16)
+   .f('uHaze',haze||0).v3('uHazeCol',0.52,0.47,0.47).tex('uTex',tex);
   blit(FB.scene);
 }
 function drawSmoke(chan){
@@ -1129,7 +1141,7 @@ function render(){
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);      // premultiplied-alpha over
 
   drawPlate(TEX.sky,    XF.sky,    [1,1,1,1], true);
-  drawPlate(TEX.ridges, XF.ridges, [0.30,0.36,0.50,1], false);
+  drawPlate(TEX.ridges, XF.ridges, [0.42,0.46,0.58,1], false, 0, 0, P.haze2);
 
   drawSmoke(0);                                       // ash column, behind the cone
 
@@ -1249,6 +1261,7 @@ var SPEC=[
   ['steam','Steam off flows',0,3,0.01,2],
   ['dust','Ash accumulation',0,2,0.01,2],
   ['fglight','Foreground light',0,3,0.01,2],
+  ['haze2','Distance haze',0,1.5,0.01,2],
   ['spill','Vent light spill',0,2.5,0.01,2],
   ['trails','Bomb trails',0,3,0.01,2],
   ['bolts','Column lightning',0,2,0.01,2],
