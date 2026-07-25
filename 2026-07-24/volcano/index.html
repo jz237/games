@@ -165,7 +165,7 @@ var P = {
   bombs:       1.00,
   ashfall:     1.00,
   exposure:    0.95,
-  bloom:       0.62,
+  bloom:       0.42,
   haze:        1.00,
   grade:       1.00,
   grain:       0.55,
@@ -177,7 +177,7 @@ var P = {
   dust:        1.00,
   fglight:     1.00,
   haze2:       0.85,
-  fallout:     0.85,
+  fallout:     0.22,
   spill:       1.00,
   trails:      1.00,
   bolts:       1.00,
@@ -372,8 +372,8 @@ S.fallout = FH+[
 ' above/=8.0;',
 ' if(above<0.015){ fc=vec4(0.0); return; }',
 ' // stretched vertically so it reads as falling curtains rather than noise',
-' float st=ff(vec2(vUv.x*uAspect*46.0 + uTime*0.35, vUv.y*5.0 - mod(uTime,240.0)*1.25));',
-' float veil=smoothstep(0.02,0.26,above)*smoothstep(0.36,0.78,st)*uAmt;',
+' float st=ff(vec2(vUv.x*uAspect*11.0 + uTime*0.22, vUv.y*1.9 - mod(uTime,240.0)*0.45));',
+' float veil=smoothstep(0.10,0.70,above)*smoothstep(0.58,0.92,st)*uAmt;',
 ' veil*=smoothstep(0.0,0.22,vUv.y);',
 ' fc=vec4(vec3(0.44,0.425,0.415)*veil, veil); }'].join('\n');
 
@@ -431,15 +431,15 @@ S.pUpdate = ['#version 300 es','precision highp float; precision highp sampler2D
 ' vec4 a=texture(uA,vUv); vec4 b=texture(uB,vUv);',
 ' vec2 pos=a.xy, vel=a.zw;',
 ' float life=b.x, seed=b.y, type=b.z, size=b.w;',
-' if(seed<=0.0){ seed=0.001+h2(vUv*vec2(311.7,127.1)); float tr=h1(seed*91.7+3.3); type = tr<0.018 ? 1.0 : (tr<0.50 ? 0.0 : 2.0); life=-h1(seed*57.3)*9.0; }',
-' life -= uDt*(type<0.5?1.45:(type<1.5?0.80:0.62));',
+' if(seed<=0.0){ seed=0.001+h2(vUv*vec2(311.7,127.1)); float tr=h1(seed*91.7+3.3); type = tr<0.012 ? 1.0 : (tr<0.17 ? 0.0 : 2.0); life=-h1(seed*57.3)*9.0; }',
+' life -= uDt*(type<0.5?2.4:(type<1.5?0.80:0.62));',
 ' if(life<=0.0){',
 '  float r=h1(seed+uTime*0.37), r2=h1(seed*3.1+uTime*0.71), r3=h1(seed*7.7+uTime*1.13);',
 '  if(uEmit<0.02 || r>uRate){ life=-0.05; oA=vec4(pos,0.0,0.0); oB=vec4(life,seed,type,size); return; }',
 '  float ang=(r2-0.5)*2.2;',
 '  float spd=(0.55+r3*1.5)*uIntensity;',
 '  pos=vec2(uVentX+(r-0.5)*0.045, uVentY+r2*0.02);',
-'  if(type<0.5){        vel=vec2(sin(ang*0.45)*spd*0.30, cos(ang*0.45)*spd*1.30); size=0.6+r3*0.9; }',   // ember
+'  if(type<0.5){        vel=vec2(sin(ang*0.30)*spd*0.16, cos(ang*0.30)*spd*0.90); size=0.5+r3*0.7; }',   // ember
 '  else if(type<1.5){   vel=vec2(sin(ang*1.7)*spd*0.20, cos(ang*0.7)*spd*0.62); size=1.5+r3*2.0; }', // bomb
 '  else {               vel=vec2(sin(ang)*spd*0.7, cos(ang)*spd*0.9); size=2.4+r3*4.5; }',      // ash
 '  life=1.0;',
@@ -485,7 +485,7 @@ var P_FS_ADD = ['#version 300 es','precision highp float;',
 ' if(heat<0.34)      col=mix(c0,c1,heat/0.34);',
 ' else if(heat<0.72) col=mix(c1,c2,(heat-0.34)/0.38);',
 ' else               col=mix(c2,c3,(heat-0.72)/0.28);',
-' float amp = (vType<0.5? 0.60 : 1.30);',
+' float amp = (vType<0.5? 0.36 : 1.05);',
 ' fc=vec4(col*g*flick*amp*vLife, g*vLife); }'].join('\n');
 
 var TRAIL_VS = ['#version 300 es','precision highp float;',
@@ -643,7 +643,7 @@ S.lava = FH+[
 ' float chanB=smoothstep(0.52,0.82,nB)*chan*exp(-dist*3.4);',
 ' float wisp=fbm(vec2(W.x*9.0, W.y*6.5 - mod(uTime,240.0)*0.85));',
 ' float steam=chanB*smoothstep(0.60,0.84,wisp)*uSteam*mix(0.20,1.0,gully);',
-' float m=clamp(lake*1.05 + flows*2.6, 0.0, 3.0);',
+' float m=clamp(lake*0.70 + flows*2.6, 0.0, 3.0);',
 ' // incandescent ramp: deep red at the cooling tips, white-hot only in the vent',
 ' float t=clamp(m*0.75,0.0,1.0);',
 ' vec3 col;',
@@ -915,8 +915,9 @@ function step(dt){
   var em=emission();
   if(em.rate>0.001){
     var jit=(Math.random()-0.5)*0.5;
-    sp.push({x:v[0]+jit*0.030, y:v[1]+0.040, r:0.150+0.055*em.rate,
-             d:em.rate*dt*0.95, t:em.rate*dt*0.55, g:0,
+    var rad = 0.105+0.045*em.rate;
+    sp.push({x:v[0]+jit*0.030, y:v[1]+rad*0.95, r:rad,
+             d:em.rate*dt*1.85, t:em.rate*dt*1.15, g:0,
              vx:jit*em.rate*U*dt*1.6, vy:em.rate*U*dt*3.4});
   }
   if(em.surge>0.001){
@@ -1033,8 +1034,8 @@ function emission(){
   if(s==='blast')   return {rate:1.55*k, surge:1.25*k};
   if(s==='column')  return {rate:(1.15-0.30*(state.stageT/14))*k, surge:0.42*k*Math.max(0,1-state.stageT/7)};
   /* sustained: slow surges */
-  var pulse=0.72+0.34*Math.sin(state.t*0.42)+0.16*Math.sin(state.t*1.13);
-  return {rate:0.82*k*pulse, surge:0.16*k*Math.max(0,Math.sin(state.t*0.23))};
+  var pulse=0.90+0.13*Math.sin(state.t*0.42)+0.07*Math.sin(state.t*1.13);
+  return {rate:1.05*k*pulse, surge:0.16*k*Math.max(0,Math.sin(state.t*0.23))};
 }
 function advanceStage(dt){
   state.stageT+=dt;
@@ -1138,10 +1139,10 @@ function drawSmoke(chan){
   var vw=ventWorld();
   var p=PR.smoke.use();
   p.f('uMaxVel',1).v2('uTexel',FB.dye.tx,FB.dye.ty).v2('uVT',FB.dye.tx,FB.dye.ty)
-   .i('uChan',chan).f('uDens',chan===0?1.35:1.6).f('uEmis',chan===0?0.085:0.03)
+   .i('uChan',chan).f('uDens',chan===0?4.2:3.0).f('uEmis',chan===0?0.040:0.015)
    .f('uLightK',0.30).f('uAspect',state.aspect)
-   .v2('uLight',-0.86,-0.22).v2('uVent',vw[0],vw[1]).f('uUnder',P.spill*0.48)
-   .v3('uColA',0.300,0.315,0.375).v3('uColB',0.90,0.755,0.615)
+   .v2('uLight',-0.86,-0.22).v2('uVent',vw[0],vw[1]).f('uUnder',P.spill*0.22)
+   .v3('uColA',0.185,0.190,0.215).v3('uColB',0.68,0.590,0.500)
    .v3('uEmisCol',0.95,0.36,0.10)
    .tex('uDye',FB.dye.read.tex);
   blit(FB.scene);
