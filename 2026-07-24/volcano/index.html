@@ -158,6 +158,7 @@ var P = {
   densDiss:    0.16,
   velDiss:     0.16,
   iterations:  40,
+  dyeScale:    2.0,
   pressRetain: 0.80,
   embers:      1.00,
   bombs:       1.00,
@@ -291,7 +292,7 @@ S.advectVel = FH+[
 /* dye: R = ash column density, G = temperature, B = flank surge density */
 S.advectDye = FH+[
 'uniform sampler2D uVel,uSrc,uObs; uniform vec2 uVT; uniform float uDt,uDens,uTemp,uSurge;',
-'void main(){ if(texture(uObs,vUv).x>0.5){ fc=vec4(0.0); return; }',
+'void main(){ if(texture(uObs,vUv).x>0.92){ fc=vec4(0.0); return; }',
 ' vec2 v=texture(uVel,vUv).xy;',
 ' vec3 s=texture(uSrc,vUv-uDt*v*uVT).xyz;',
 ' float d=s.x/(1.0+uDt*uDens);',
@@ -797,8 +798,9 @@ function alloc(){
   ['div','curl','obs','probe','scene','bright','b1','b2'].forEach(function(k){ if(FB[k]) FB[k].destroy(); });
   FB={};
   var sw=state.simW, sh2=state.simH, HF=gl.HALF_FLOAT;
+  var dw=state.dyeW, dh=state.dyeH;
   FB.vel   = dbl(sw,sh2,gl.RG16F,gl.LINEAR);
-  FB.dye   = dbl(sw,sh2,gl.RGBA16F,gl.LINEAR);
+  FB.dye   = dbl(dw,dh,gl.RGBA16F,gl.LINEAR);
   FB.pres  = dbl(sw,sh2,gl.R16F,gl.NEAREST);
   FB.div   = fbo(sw,sh2,gl.R16F,gl.NEAREST);
   FB.curl  = fbo(sw,sh2,gl.R16F,gl.NEAREST);
@@ -1266,9 +1268,12 @@ function resize(){
   state.simW = base;
   state.simH = Math.max(8,Math.round(base/state.aspect));
   if(state.aspect<1){ state.simH=base; state.simW=Math.max(8,Math.round(base*state.aspect)); }
+  var ds = small ? 1.5 : P.dyeScale;
+  state.dyeW = Math.max(8,Math.round(state.simW*ds));
+  state.dyeH = Math.max(8,Math.round(state.simH*ds));
   if(!alloc()) console.warn('[volcano] some targets incomplete');
   layout();
-  document.getElementById('h_grid').textContent = state.simW+'×'+state.simH;
+  document.getElementById('h_grid').textContent = state.simW+'×'+state.simH+' / '+state.dyeW+'×'+state.dyeH;
 }
 
 /* =====================================================================
@@ -1472,7 +1477,7 @@ Promise.all([loadImages(), loadAudio()]).then(function(){
       state:state, params:P,
       begin:begin,
       stats:function(){ return {fps:state.fps,ms:state.ms,residual:state.residual,nan:state.nanTick>0,
-                                sim:[state.simW,state.simH],particles:PART_DIM*PART_DIM,
+                                sim:[state.simW,state.simH],dye:[state.dyeW,state.dyeH],particles:PART_DIM*PART_DIM,
                                 stage:state.stage,started:state.started,
                                 assets:Object.keys(TEX).length}; },
       set:function(k,v){ P[k]=v; if(k==='zoom') layout(); },
