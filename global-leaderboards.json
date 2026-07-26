@@ -1,5 +1,24 @@
 [
   {
+    "slug": "chrome-riot",
+    "name": "Chrome Riot",
+    "playUrl": "https://jez237.com/games/2026-07-22/chrome-riot/",
+    "boards": [
+      {
+        "slug": "chrome-riot-arcade",
+        "name": "Arcade",
+        "url": "https://game-scores.jez237.workers.dev/scores/chrome-riot",
+        "scoreLabel": "W"
+      },
+      {
+        "slug": "chrome-riot-overdrive",
+        "name": "Overdrive",
+        "url": "https://game-scores.jez237.workers.dev/scores/chrome-riot-overdrive-v1",
+        "scoreLabel": "W"
+      }
+    ]
+  },
+  {
     "slug": "steel-duel",
     "name": "Steel Duel",
     "url": "https://game-scores.jez237.workers.dev/scores/steel-duel",
