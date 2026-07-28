@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.65.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.66.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,23 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.66.0 (2026-07-28) — AMIGA 4-BIT COLOUR: every drawn colour quantised to a multiple of 17.**
+  Comparing floor histograms exposed something bigger than the floor. The reference's flat floor
+  is dominated by FOUR hard values (187 21%, 153 16%, 102 12%, 221 9%); ours spread across a
+  continuum with no value above 8%. Checking the top colours across two lossless frames:
+  **`#999999` 13.3%, `#bbbbbb` 12.4%, `#666666` 7.7%, `#dddddd` 5.9%** — 39% of all pixels in
+  four greys, and the **median channel error against the nearest multiple of 17 over the top 40
+  colours is 1** (capture scaling noise). The Amiga is 4 bits per channel; every colour it can
+  draw is a multiple of 17.
+  Our BASE palette was already right — the shading was the problem: multiplying a correct colour
+  by a continuous factor lands between palette entries, so hard steps became smooth gradients.
+  - New `q17()` / `rgb17()`, applied in `shadeHex`, `topColor`, `wallColor` and both tinted-floor
+    paths. Result: our floor histogram now peaks at 187 (25%), 221 (24%), 102 (10%), 119 (8%) —
+    the same palette values, 67% of pixels in the top four against 35% before.
+  - **The three-tone floor was a non-finding.** v0.65.0 noted 221/187/153 and wondered about a
+    third checker tone. Sampling diamond centres along flat rows shows the tones are REGIONAL,
+    not a 3-phase pattern: a 2-tone checker modulated by brightness, which is what we already
+    do. No change needed — and the histogram, not the tone list, was the real signal.
 - **v0.65.0 (2026-07-28) — CAST SHADOWS, a feature noted in iteration 21 and never built.**
   Mapping mean floor brightness in 60x50 blocks across a lossless capture shows blocks
   averaging **~51 grey right beside raised structures against ~155 for open floor** — the
