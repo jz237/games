@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.82.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.83.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,19 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.83.0 (2026-07-28) — realistic pass 13: acting on the sibling-branch lesson.**
+  v0.82.0's defect existed because a rendering rule was fixed in one branch and not its twin.
+  So this pass audited every remaining draw path for the same shape of problem:
+  - **The GOAL squares were missing two shading terms** every other floor cell gets
+    (`ambientOcc` and `grain`), so the goal sat at a subtly different brightness from the ground
+    around it. They now take the identical full term through `litRGB`.
+  - **`wallColor()` was dead** once tinted walls moved to `litWall` — removed. A stale path that
+    still *looks* live is precisely what let the v0.62.0 fix miss its sibling for ten versions.
+  - **`topColor()` was computed then unconditionally discarded** whenever `PAL.checker` is set,
+    which is every palette we ship. Now only computed on the path that uses it.
+  - Nothing here changes what the player sees much; it removes three ways for the next
+    rendering change to be applied inconsistently.
+  - All six races render clean.
 - **v0.82.0 (2026-07-28) — realistic pass 12: whole-frame review; tinted walls fixed.**
   Reviewing races that had not been looked at since the lighting work turned up a real defect
   in **Aerial**: its tinted walls were still on the old `N=3` sub-stripe path. After the GS=3
