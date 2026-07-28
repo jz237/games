@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.50.0';
+const VERSION = '0.51.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -1500,6 +1500,74 @@ function optionsClick(){
   for(const r of OPT_ROWS){ const d=Math.abs(menuMY-r.y); if(d<bd){ bd=d; best=r; } }
   if(best&&bd<22){ best.cycle(); Snd.count&&Snd.count(); }
 }
+/* Menu letterforms measured from the original's options screen (36 glyphs).
+   Proportional: each entry carries its own width. Anything missing falls back
+   to the previous Courier rendering. */
+const MENU_FONT={
+  '!':['.##.','####','####','.##.','.##.','.##.','....','.##.','....','....'],
+  '\'':['.##','.##','##.','#..','...','...','...','...','...','...'],
+  '.':['..','..','..','..','..','..','##','##','..','..'],
+  ':':['..','##','##','..','..','..','##','##','..','..'],
+  'B':['########.','..##...##','..##...##','..##...##','..######.','..##...##','..##...##','.###...##','.#######.','.........'],
+  'D':['#######..','#######..','.##...##.','.##....##','.##....##','.##....##','.##...###','.###..##.','#######..','.........'],
+  'G':['..#####.','###...##','##......','##...###','##...###','##....##','###...##','..######','........','........'],
+  'I':['#######','.######','...##..','...##..','...##..','...##..','...##..','..###..','#######','.......'],
+  'J':['....####','.....###','......##','......##','......##','##....##','##....##','##....##','.######.','........'],
+  'L':['#####....','.##......','.##......','.##......','.##......','.##.....#','.##....##','.###...##','#########','.........'],
+  'M':['#.......#','##.....##','##....###','###..####','#########','##.##..##','##.....##','##.....##','##.....##','.........'],
+  'O':['..####...','.##..###.','##....###','##....###','##....###','##....###','.##..###.','..####...','.........','.........'],
+  'P':['########.','.##....##','.##....##','.#######.','.######..','.##......','.##......','#####....','.........','.........'],
+  'R':['########..','.###...##.','.###...##.','.#######..','.#######..','.###..##..','.###...##.','####....##','..........','..........'],
+  'S':['.#####.','######.','##...##','###....','..###..','....###','....###','##...##','.#####.','.......'],
+  'a':['.........','.........','.######..','......##.','.....###.','..######.','##....##.','.#####.##','.........','.........'],
+  'c':['.......','.......','.......','.######','##...##','##.....','##.....','##...##','.######','.......'],
+  'd':['.....###.','......##.','..###.##.','.##..###.','###...##.','###...##.','.##...##.','..####.##','.........','.........'],
+  'e':['.......','.......','.#####.','##...##','##...##','#######','##.....','.#####.','.......','.......'],
+  'f':['..####.','.##..##','###..##','###....','####...','###....','###....','###....','####...','.......'],
+  'g':['.........','.........','..####..#','..####.##','###...##.','###...##.','..#####..','......##.','......##.','.........'],
+  'h':['###......','.##......','.##..###.','.###.###.','.####..##','.##....##','.##....##','###....##','###....##','.........'],
+  'i':['.##.','.##.','....','###.','.##.','.##.','.##.','.##.','####','....'],
+  'k':['###......','###......','.##......','.##....##','.##...##.','.######..','.######..','.##...##.','###....##','.........'],
+  'l':['###..','.##..','.##..','.##..','.##..','.##..','.###.','#####','.....','.....'],
+  'm':['.........','.........','.#....##.','###...##.','####.####','###.##.##','###....##','###....##','.#.....##','.........'],
+  'n':['.......','.......','.......','######.','##...##','##...##','##...##','##...##','##...##','.......'],
+  'o':['........','........','.#####..','##...###','##...###','##...###','##...##.','.#####..','........','........'],
+  'p':['.........','.........','.........','.##.####.','..##...##','..##...##','..##...##','..######.','..##.....','#####....'],
+  'r':['.........','.........','####.###.','..###..##','..###..##','..##....#','..##.....','#####....','.........','.........'],
+  's':['........','........','........','.######.','##......','.#####..','.....###','.....##.','######..','........'],
+  't':['..##...','.###...','######.','.###...','.###...','.###...','.###..#','..####.','.......','.......'],
+  'u':['.........','.........','.........','##...###.','##...###.','##...###.','##...###.','##...###.','.####.###','.........'],
+  'v':['.........','.........','.........','###....##','###....##','..##..##.','..##..##.','...####..','....##...','.........'],
+  'w':['.........','.........','###....##','###.##.##','###.##.##','###.##.##','.###..##.','.###..##.','.........','.........'],
+  'y':['.........','.........','###....##','###....##','.##....##','..##..##.','...####..','...###...','.####....','.........'],
+};
+function menuText(g,str,x,y,scale,col,align){
+  // Draw with the measured letterforms. A few glyphs (N, b, F, K) never appear on
+  // the reference screen, so those characters fall back individually rather than
+  // dropping the whole line back to Courier.
+  const FB=Math.round(scale*7.5);          // fallback size that matches the pixel font
+  let wdt=0;
+  for(const ch of str){ if(ch===' '){ wdt+=4*scale; continue; }
+    const gl=MENU_FONT[ch]; wdt+=(gl?gl[0].length+1:6)*scale; }
+  let px=align==='center'?x-wdt/2:(align==='right'?x-wdt:x);
+  g.fillStyle=col;
+  for(const ch of str){
+    if(ch===' '){ px+=4*scale; continue; }
+    const gl=MENU_FONT[ch];
+    if(!gl){                                  // unknown glyph: draw it the old way
+      g.font=`900 ${FB}px "Courier New",monospace`; g.textAlign='left'; g.textBaseline='top';
+      g.fillText(ch,px,y); px+=6*scale; continue; }
+    for(let r=0;r<gl.length;r++){ const row=gl[r];
+      let c=0;
+      while(c<row.length){
+        if(row[c]==='#'){ let e=c; while(e<row.length&&row[e]==='#') e++;
+          g.fillRect(px+c*scale, y+r*scale, (e-c)*scale, scale); c=e; }
+        else c++;
+      } }
+    px+=(gl[0].length+1)*scale;
+  }
+  return true;
+}
 function spaced(g,str,x,y,size,col,align){   // the original letter-spaces its text
   g.font=`900 ${size}px "Courier New",monospace`; g.textBaseline='middle';
   const gap=size*0.78, w=str.length*gap;
@@ -1523,16 +1591,19 @@ function renderOptions(g,dt){
     px+=gap;
   }
   const RED='#882222';
-  spaced(g,'Press Left Mouse Button',320,66,15,RED,'center');
-  spaced(g,'near Item to change the',320,84,15,RED,'center');
-  spaced(g,"Item's value.",320,102,15,RED,'center');
-  spaced(g,'Select  GO!  when finished.',320,122,15,RED,'center');
+  // measured letterforms where available, Courier as the fallback
+  const MT=(str,x,y,align)=>menuText(g,str,x,y-8,2,RED,align)
+        || spaced(g,str,x,y,15,RED,align);
+  MT('Press Left Mouse Button',320,66,'center');
+  MT('near Item to change the',320,84,'center');
+  MT("Item's value.",320,102,'center');
+  MT('Select  GO!  when finished.',320,122,'center');
   for(const r of OPT_ROWS){
-    spaced(g,r.label,36,r.y,15,RED,'left');
+    MT(r.label,36,r.y,'left');
     // numeric values sit further right than the word values, as on the Amiga
-    spaced(g,r.get(),r.get().length<=2?505:395,r.y,15,RED,'left');
+    MT(r.get(),r.get().length<=2?505:395,r.y,'left');
   }
-  spaced(g,'GO!',320,GO_Y,17,RED,'center');
+  MT('GO!',320,GO_Y,'center');
   // yellow marble cursor
   const mg=g.createRadialGradient(menuMX-4,menuMY-5,1,menuMX,menuMY,13);
   mg.addColorStop(0,'#ffff88'); mg.addColorStop(0.45,'#cccc00'); mg.addColorStop(1,'#666600');

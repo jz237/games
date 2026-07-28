@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.50.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.51.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -608,6 +608,21 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   marble detect + input at ~10 Hz). Until then only the first two screens of a course are
   reachable, and both are already captured in `ref-shots/`.
   Game-side work has a much better return per iteration — prefer it unless that unlock is built.
+- **v0.51.0 (2026-07-28) — the options screen now uses the ORIGINAL'S LETTERFORMS.**
+  Extracted **36 glyphs** from `captures/m2-06.png` by walking each menu row against its known
+  text and assigning column-groups to characters (the instruction block's four lines all matched
+  exactly: 20/19/12/22 glyphs). Saved as `menu_font.json` / `menu_font.js`; embedded in the game as
+  `MENU_FONT` (~4 KB) with `menuText()`. Proportional — each glyph carries its own width.
+  - `N`, `b`, `F`, `K` never appear on that screen, so unknown characters fall back to Courier
+    **per character**; at this size the weights match and the line still reads as one font.
+  - Extraction gotcha: a row whose value sits far right (e.g. `Number of Players:  1`) yields one
+    extra column-group, and some glyphs split into two runs — check `len(groups)==len(text)` before
+    trusting an assignment.
+  - Verification gotcha: **at low zoom this font is easily mistaken for Courier.** I twice judged
+    the render "still Courier" from a full screenshot; a 4x crop shows the blocky pixel
+    construction plainly. Crop before concluding.
+- Viewport sweep (320x480 up to 2560x1080, six shapes): no overflow, canvas never collapses,
+  8:5 aspect held in every case, no exceptions.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
