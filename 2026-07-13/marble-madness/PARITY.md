@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.48.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.49.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -546,6 +546,22 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     game-time is needed, enforce monotonic countdown across a sequence rather than trusting a
     single frame. The earlier "24 game-seconds in a 6 s hold" reading is therefore UNRELIABLE — do
     not conclude anything about the original's clock rate from it.
+- **v0.49.0 (2026-07-28) — FIRST CAPTURE OF THE PRACTICE COURSE BEYOND ITS OPENING.**
+  Using the new recipe (boot → GO! → repeated `hold Down 2.0` + `shot`) a run yields **3-4 distinct
+  screens** before the marble dies; archived in `ref-shots/map-01,03,04.png`.
+  What screen 2 (`map-04`) shows, and how our build compares:
+  - the centre twin-peak structure with its stepped platforms, now mid-screen — **matches** our
+    opening island;
+  - a wide plain below it with **white-tipped pyramids at the bottom-left and bottom-right** —
+    **matches** our `pyramid(5,21)` / `pyramid(17,21)`;
+  - side walls that are YELLOW-striped on the left and RED-striped on the right (we use one ramp
+    for both — a known, unfixed difference);
+  - **painted arrows FLANKING the centre structure and angled OUTWARD** (down-left / down-right) to
+    steer you around it. Ours pointed straight down-course → fixed: `floorArrow()` takes a `turn`
+    angle and a pair now sits at (6.5,13) −0.62 rad and (16.5,13) +0.62 rad.
+  **Encouraging for the biggest caveat in this project**: the NES-map-derived layout for this
+  section is broadly RIGHT — the structure and the flanking pyramids are where the original has
+  them. Mapping runs are cheap now; each yields a few screens, so several runs per course.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and

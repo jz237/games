@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.48.0';
+const VERSION = '0.49.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -167,7 +167,9 @@ function buildPractice(){ newGrid(24,88);
     // red tube arch gates flanking the course, as on the original
     for(const [av,au] of [[5.5,8],[17.5,8],[5.5,33],[17.5,33],[5.5,66],[15.5,66]]) archGate(g,ox,oy,av,au);
     // painted arrows on the floor pointing down-course
-    for(const [av,au] of [[11.5,12],[11.5,26],[6.5,38],[16.5,38],[11.5,58],[8,70]]) floorArrow(g,ox,oy,av,au);
+    for(const [av,au,tn] of [[11.5,26],[6.5,38],[16.5,38],[11.5,58],[8,70]]) floorArrow(g,ox,oy,av,au,tn);
+    // pair flanking the centre island, angled outward as on the original
+    floorArrow(g,ox,oy,6.5,13,-0.62); floorArrow(g,ox,oy,16.5,13,0.62);
     for(const [cv,cu] of [[10.5,53.5],[10.5,55.5],[10.5,59],[10.5,61]]){
       const h=groundH(cv,cu); if(isNaN(h)) continue;
       const px=projX(cv,cu)+ox, py=projY(cv,cu,h+0.05)+oy;
@@ -1268,11 +1270,12 @@ function archGate(g,ox,oy,v,u,span,hgt){
   g.beginPath(); g.moveTo(ltx-2,lty); g.quadraticCurveTo(cx,cy-2,rtx-2,rty); g.stroke();
   g.lineCap='butt'; g.lineJoin='miter';
 }
-function floorArrow(g,ox,oy,v,u){
+function floorArrow(g,ox,oy,v,u,turn){
   const h=groundH(v,u); if(isNaN(h)) return;
   const px=projX(v,u)+ox, py=projY(v,u,h+0.04)+oy;
   g.save(); g.setTransform(AXx,AXy,AUx,AUy,px,py);
-  g.fillStyle=PAL.arrow||'#a72222';
+  if(turn) g.rotate(turn);          // the original angles the pair beside the centre
+  g.fillStyle=PAL.arrow||'#a72222';   // structure outward, steering you around it
   for(const off of [0,1.5]){          // twin chevrons pointing along +u, as painted on the original
     g.beginPath();
     g.moveTo(-1.7+off,-1.5); g.lineTo(-0.5+off,-1.5); g.lineTo(1.5+off,0);
