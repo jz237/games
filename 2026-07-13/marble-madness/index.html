@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.69.0';
+const VERSION = '0.71.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -504,7 +504,13 @@ const RACES=[
    (capture scaling noise). Our shading multiplied the same base palette into a continuum,
    which is why our floor histogram spreads where the original's has four hard peaks.
    Everything drawn on the course goes through this so the steps stay hard. */
-const q17 = v => Math.max(0, Math.min(255, Math.round(v/17)*17));
+/* REALISTIC MODE (2026-07-28, user direction): the Amiga's 4-bit palette is what made
+   everything read as hard flat bands. Quantisation is off so shading can be continuous;
+   the measured palette values stay as the BASE colours, they are just no longer snapped
+   after shading. Set QUANTISE back to true to get the period-accurate look back. */
+const QUANTISE = false;
+const q17 = v => { const c=Math.max(0,Math.min(255,v));
+  return QUANTISE ? Math.round(c/17)*17 : Math.round(c); };
 function rgb17(r,g,b){ return `rgb(${q17(r)},${q17(g)},${q17(b)})`; }
 function hex2rgb(h){ return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]; }
 function shadeHex(h,k){ const [r,g,b]=hex2rgb(h); return rgb17(r*k,g*k,b*k); }
@@ -573,23 +579,44 @@ let off,offX,offY,offW,offH;
    (the "hard #333 shadows" noted back in iteration 21, never implemented until now).
    Light comes from up-screen, so step back along -v/-u and darken this cell if anything
    up there is tall enough to block it. Runs in prerender only, once per race load. */
-const SH_LEN = 6, SH_TAN = 0.55, SH_DARK = 0.55;
+/* Soft shadows. The binary version gave a hard #333 edge, which was right for the Amiga
+   but reads as a cut-out now: occlusion is accumulated along the ray and weighted by
+   distance, so the shadow has a penumbra and fades with the blocker's remoteness. */
+const SH_LEN = 7, SH_TAN = 0.55, SH_DARK = 0.46;
 function castShadow(v,u,c){
   const h=(c.h00+c.h10+c.h01+c.h11)/4;
   const steps=Math.round(SH_LEN*GS);
-  for(let k=1;k<=steps;k++){
+  let occ=0, wsum=0;
+  const k0=Math.round(1.2*GS);
+  for(let k=k0;k<=steps;k++){
     const row=cells[u-k]; if(!row) break;
-    const q=row[v-k]; if(!q) continue;
-    if(Math.max(q.h00,q.h10,q.h01,q.h11) > h + (k/GS)*SH_TAN) return SH_DARK;
+    const q=row[v-k];
+    const w=1-(k-k0)/steps;                      // nearer blockers matter more
+    wsum+=w; if(!q) continue;
+    const over=Math.max(q.h00,q.h10,q.h01,q.h11) - (h + (k/GS)*SH_TAN);
+    if(over>0) occ += w*Math.min(1, over*1.8);   // partial for grazing blockers
   }
-  return 1;
+  return 1 - (1-SH_DARK)*Math.min(1, occ/(wsum*0.55));
 }
-function hardShade(c){
-  const sv=(c.h10+c.h11-c.h00-c.h01)/2;      // slope along +v
-  if(sv>=0) return 1+0.10*Math.tanh(sv*0.8);
-  const steep=Math.max(0,-sv-0.45);          // knee: gentle down-slopes stay unshaded,
-  return 1-0.80*Math.tanh(steep*1.1);        // so ramps and the plain do not band
+/* Lambert + ambient + a soft specular sheen, from the cell's actual surface normal.
+   Replaces the hand-tuned "hard shade" knee, which existed to mimic the original's
+   flat-banded cliff faces. Slopes are in height-units per cell, so they are divided by
+   the cell size to get a true gradient before the normal is built. */
+const LIGHT = (() => { const v=[-0.55,-0.42,0.72], L=Math.hypot(...v);
+  return [v[0]/L, v[1]/L, v[2]/L]; })();
+function surfaceShade(c){
+  const sv=(c.h10+c.h11-c.h00-c.h01)/2*GS;   // d(height)/d(v) in world units
+  const su=(c.h01+c.h11-c.h00-c.h10)/2*GS;   // d(height)/d(u)
+  const n=1/Math.sqrt(sv*sv+su*su+1);
+  const nx=-sv*n, ny=-su*n, nz=n;            // outward normal
+  const diff=Math.max(0, nx*LIGHT[0]+ny*LIGHT[1]+nz*LIGHT[2]);
+  // half-vector specular against a viewer looking straight down the projection
+  const hx=LIGHT[0], hy=LIGHT[1], hz=LIGHT[2]+1, hl=Math.hypot(hx,hy,hz);
+  const spec=Math.pow(Math.max(0,(nx*hx+ny*hy+nz*hz)/hl), 22)*0.30;
+  const FLAT=0.30+0.74*LIGHT[2];             // what level ground scores
+  return (0.30 + 0.74*diff + spec)/FLAT;   // low ambient => deep shadow sides
 }
+function hardShade(c){ return surfaceShade(c); }
 function drawCellC(g,v,u,ox,oy,c){
   const x00=pX(v,u)+ox,   y00=pY(v,u,c.h00)+oy;
   const x10=pX(v+1,u)+ox, y10=pY(v+1,u,c.h10)+oy;
@@ -1416,23 +1443,41 @@ function floorArrow(g,ox,oy,v,u,turn,len){
 function drawMarbleG(g,m){
   const p=marbleScreen(m); const r=m.r*AXx;   // scale with the projection, not a constant
   const h=groundH(m.v,m.u);
-  if(!isNaN(h)){ const sy=projY(m.v,m.u,h)+offY-camY; const k=Math.max(0.35,1-(m.z-h)*0.12);
-    g.fillStyle='rgba(34,34,34,.72)'; g.beginPath();   // hard-edged, like the original
-    g.ellipse(projX(m.v,m.u)+offX-camX+2,sy-1,r*0.92*k,r*0.42*k,0,0,Math.PI*2); g.fill(); }
-  // the Amiga sprite is flat-shaded: a solid disc, a hard dark crescent on the
-  // shaded side, and a small light patch — not a glossy gradient sphere
-  const C=(m.kind==='steelie')?['#8899aa','#334455','#ccccdd']
-        :(m.pIdx===1?['#3355cc','#112266','#99aaff']:['#cc0000','#660000','#ee0000']);
-  g.fillStyle=C[0]; g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.fill();
+  // Soft contact shadow: blurs and spreads as the marble leaves the ground, which is the
+  // main cue that it is airborne. The old one was a hard flat ellipse.
+  if(!isNaN(h)){ const sy=projY(m.v,m.u,h)+offY-camY;
+    const air=Math.max(0,m.z-h), k=Math.max(0.30,1-air*0.10);
+    g.save(); g.globalAlpha=Math.max(0.12,0.55-air*0.05);
+    g.filter=`blur(${(1.6+air*1.1).toFixed(1)}px)`;
+    g.fillStyle='#0b0b10'; g.beginPath();
+    g.ellipse(projX(m.v,m.u)+offX-camX+2,sy-1,r*0.95*k,r*0.44*k,0,0,Math.PI*2); g.fill();
+    g.restore(); }
+  /* A lit sphere: body gradient from a terminator on the shaded side, a broad soft
+     specular, a tight hot highlight and a rim light picked up from the floor. */
+  const C=(m.kind==='steelie')?['#8899aa','#222a38','#e8ecff']
+        :(m.pIdx===1?['#3355cc','#0a1030','#bcccff']:['#cc0000','#2a0000','#ff9977']);
+  const lx=p.x-r*0.42, ly=p.y-r*0.46;
+  const body=g.createRadialGradient(lx,ly,r*0.06,p.x+r*0.16,p.y+r*0.20,r*1.28);
+  body.addColorStop(0,shadeHex(C[0],1.55)); body.addColorStop(0.42,C[0]);
+  body.addColorStop(0.82,shadeHex(C[0],0.52)); body.addColorStop(1,C[1]);
+  g.fillStyle=body; g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.fill();
   g.save(); g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.clip();
-  g.fillStyle=C[1]; g.beginPath();
-  g.arc(p.x+r*0.30,p.y+r*0.34,r*0.95,0,Math.PI*2); g.fill();   // shaded crescent
-  g.restore();
   drawSpinPattern(g,m,p.x,p.y,r);
-  g.fillStyle=C[2]; g.beginPath();
-  g.ellipse(p.x-r*0.44,p.y-r*0.46,r*0.20,r*0.15,-0.6,0,Math.PI*2); g.fill();
-  g.strokeStyle='rgba(17,17,17,.45)'; g.lineWidth=1;
-  g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.stroke();
+  // re-apply the light over the pattern so the markings are shaded with the ball
+  const relit=g.createRadialGradient(lx,ly,r*0.05,p.x+r*0.18,p.y+r*0.22,r*1.25);
+  relit.addColorStop(0,'rgba(255,255,255,.34)'); relit.addColorStop(0.45,'rgba(255,255,255,0)');
+  relit.addColorStop(0.80,'rgba(0,0,0,.30)'); relit.addColorStop(1,'rgba(0,0,0,.62)');
+  g.fillStyle=relit; g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.fill();
+  // rim light along the lower-right edge, as if bounced off the floor
+  const rim=g.createRadialGradient(p.x+r*0.34,p.y+r*0.40,r*0.55,p.x+r*0.30,p.y+r*0.36,r*1.05);
+  rim.addColorStop(0,'rgba(255,255,255,0)'); rim.addColorStop(0.86,'rgba(255,255,255,0)');
+  rim.addColorStop(1,'rgba(255,255,255,.30)');
+  g.fillStyle=rim; g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.fill();
+  g.restore();
+  const hot=g.createRadialGradient(lx,ly,0,lx,ly,r*0.30);
+  hot.addColorStop(0,'rgba(255,255,255,.92)'); hot.addColorStop(0.55,'rgba(255,255,255,.22)');
+  hot.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=hot; g.beginPath(); g.arc(lx,ly,r*0.30,0,Math.PI*2); g.fill();
 }
 /* The Amiga marble carries chunky surface patches that visibly turn as it rolls
    (measured off the original sprite: red ball, olive-yellow blocks). Patches live
@@ -1916,12 +1961,12 @@ function render(dt){
     text(g,'type letters · ENTER to confirm',320,292,13,'#99aacc'); }
   if(state==='timeup'){ stateT+=dt;
     /* Measured off a real GAME OVER (rec/t2-full01.png): panel x358-907 y586-828 in
-       #989898, lines at y694 and y762 in a dull yellow #c1c114, text centred on x~287
+       #999999, lines at y694 and y762 in yellow #cccc00, text centred on x~287
        not on the screen. The panel sits LOW and slightly LEFT of centre, and carries
        only these two lines — the score stays where the original leaves it, in the HUD. */
     g.fillStyle='#999999'; g.fillRect(123,264,317,124);
-    menuText(g,'OUT OF TIME',287,319,2,'#bbbb11','center');
-    menuText(g,'GAME OVER',289,354,2,'#bbbb11','center');
+    menuText(g,'OUT OF TIME',287,319,2,'#cccc00','center');
+    menuText(g,'GAME OVER',289,354,2,'#cccc00','center');
     // 2P is our own addition, so it gets the spare room inside the panel
     if(numPlayers===2) text(g,'P1  '+player.score+'   ·   P2  '+player2.score,281,378,12,'#882222');
     text(g,'click / space to retry',540,392,11,'#99aaee'); }

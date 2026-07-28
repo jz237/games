@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.69.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.71.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,31 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **⚠ DIRECTION CHANGE (user, 2026-07-28): make the game look GRAPHICALLY MORE REALISTIC.**
+  This reverses the thrust of v0.61-v0.69, which pushed the renderer toward the Amiga's flat
+  16-colour look on purpose. The measured geometry, layouts, palettes, fonts and timings all
+  STAY — they are the ground truth for what the course is. What changes is how it is drawn.
+  `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
+  period-accurate flat look at any time.
+- **v0.71.0 (2026-07-28) — realistic lighting pass 1: surface lighting, soft shadows, lit marble.**
+  - **`surfaceShade()`** replaces the hand-tuned `hardShade` knee with Lambert + ambient + a
+    narrow specular, computed from the cell's real surface normal (slopes converted to world
+    units via `*GS` before building the normal). **Normalised so LEVEL ground scores exactly
+    1.0** — without that every surface is multiplied down and the whole course goes muddy, which
+    is what the first attempt looked like. Ambient 0.30 against 0.74 diffuse gives deep shaded
+    faces while flat floor keeps its palette brightness.
+  - **Soft shadows**: occlusion is accumulated along the ray and distance-weighted instead of
+    returning a binary flag, so shadows have a penumbra and fade with the blocker's remoteness.
+    **The ray starts at 1.2 world units out, not immediately** — a steep face rises faster than
+    the light ray, so from k=1 every cone shadowed ITSELF and the spires came out uniformly dark.
+  - **The marble is a lit sphere**: body gradient with a terminator, a broad soft specular, a
+    tight hot highlight, a floor-bounce rim light, and the spin pattern re-lit underneath so the
+    markings shade with the ball. Its contact shadow now blurs and spreads with altitude, which
+    is the main read on whether it is airborne.
+  - **THE SCRATCHPAD WAS WIPED AGAIN** (second time). Rebuilt from the recipe in this file:
+    server on 8379, `google-chrome --headless=new --remote-debugging-port=9379`, plus a shared
+    `cdp.mjs` helper and `shot.mjs`/`smoke.mjs`. Note `pgrep` reported Chrome alive when the
+    debug port was dead — check the port with curl, not the process list. Six races render clean.
 - **v0.69.0 (2026-07-28) — HUD digits are `#ff0000`; options title rebuilt; glyph `b` measured.**
   - **THE HUD DIGITS ARE PURE `#ff0000`, not `#882222`.** A lossless grab of the bar is 85%
     `#888888` with `#ff0000` digits and **no dark red anywhere in it**. Iteration 21 recorded
