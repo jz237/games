@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.36.0';
+const VERSION = '0.37.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -1727,7 +1727,8 @@ if(QA){
     lift(dz){ player.z+=dz; player.grounded=false; player.vz=0; player.dropIn=false; },
     hold(dir,on){ keys[dir]=!!on; },
     setTime(t){ for(const pl of players) pl.timeLeft=t; },
-    get hazards(){ return hazards.map(h=>({t:h.type,v:+(h.v??h.cv??0).toFixed(1),u:+(h.u??h.cu??0).toFixed(1)})); },
+    get hazards(){ return hazards.map(h=>({t:h.type,v:+(h.v??h.cv??0).toFixed(1),u:+(h.u??h.cu??0).toFixed(1),
+      val:h.val,taken:h.taken})); },
     get hidden(){ return player.hidden; },
     step(ms){ autoStep=false; const n=Math.round(ms/1000/STEP); for(let i=0;i<n;i++) physics(STEP); render(STEP*n); },
     auto(on){ autoStep=on; last=performance.now(); acc=0; },

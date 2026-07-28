@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.36.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.37.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -354,6 +354,19 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   Rule of thumb going forward: aim for a competent run to use **~1/3 of the clock**. Difficulty 7
   still scales everything ×0.75. Silly at 15% is very generous but generous is the safe error —
   the original playtest complaint was that the clock felt too fast.
+- **v0.37.0 (2026-07-27) — scoring & hazard audit: NO DEFECTS.** Every documented rule checked
+  against the running game (`score.mjs`, `goalbonus.mjs`, `pads.mjs`, `steelie.mjs`):
+  - movement **10 pts/s** while speed >1.2 (a first reading of "20 per 10 s" was the marble
+    stalled against the centre island, not a bug — always log speed alongside score);
+  - **goal bonus ~100 per remaining second** (4099 awarded for 42.0 s left) and the drain also
+    rolls the clock into the next race — **carryover confirmed** (next race began at 99.5 = base
+    60 + ~39.5 carried);
+  - **practice bonus pads award 3000/4000/5000/6000**, pickup radius 0.95 cells vs a drawn pad of
+    0.81, so the grace favours the player; pads sit 3 cells apart at u76.3;
+  - **Steelie** activates at its `triggerU`, spawns at its configured cell and chases (ultimate:
+    u35→u56 in 5 s); it can also fall off the course itself.
+  **GOTCHA: `__qa.hazards` reports the type as `t`, not `type`** — filtering on `type` silently
+  returns [] and looks like the hazards are missing. The getter now also reports `val`/`taken`.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
