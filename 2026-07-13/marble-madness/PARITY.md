@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.30.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.31.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -276,6 +276,21 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   trustworthy — by ~2 s the marble reaches a wall or the plain's edge and bounces (the third
   sample reversed direction), and driving +v for 3 s in our own `feel.mjs` runs off the 24-cell
   course, so the empirical "top speed after 3 s" reads low (7.8) versus the analytic 9.18.
+- **v0.31.0 (2026-07-27) — momentum beats control.** Third feel measurement: from rest, 1 s
+  forward then 1 s of FULL REVERSE. The original **still travels +2.1 cells forward** during that
+  reverse second — it cannot be turned around in a second. Ours turned and ran backwards. Fix is
+  less control authority at the same top speed: `ACC 9.2→4.6` with `FRICT 3.13→1.55`
+  (terminal = ACC/(FRICT*0.32) ≈ 9.3 unchanged), `MOUSE_GAIN→0.034`. Ours now carries ~+0.4 cells
+  into the reverse second before turning.
+  - **Test-site trap**: the first two attempts measured a WALL BOUNCE, not physics — the marble
+    hit the raised platform at v4-7/u6-8 and rebounded (velocity flipped +3.57 → -1.54). Use the
+    clear lane at **v=8, u=4..10** (between the left platform and the centre island, past the
+    sawtooth carve). `trace.mjs` prints velocity every 0.25 s and makes bounces obvious.
+  - **The naive bot is retired.** `bot.mjs` (pure proportional, gain 0.6/clamp 0.75) cannot drive
+    the heavier marble — it failed the Silly race with 5-7 deaths at every ACC below 9. That was a
+    HARNESS limit, not an impassable course: `bot2.mjs` (PD with 0.35 s lookahead, lateral-velocity
+    damping, and easing off down-course when far off line — what a human does) clears every race at
+    ACC 4.6: practice 0 deaths, beginner 1, silly 1, all with 24-41 s to spare. **Use bot2.mjs.**
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
