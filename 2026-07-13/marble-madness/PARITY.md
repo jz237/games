@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.56.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.57.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,10 +646,40 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.57.0 (2026-07-28) — the floor lattice MEASURED numerically; v0.56.0's target was 16% wide.**
+  Two independent methods now agree on the original's floor diamond, replacing every hand count:
+  - **2-D autocorrelation of the seam mask** over a clean floor patch returns lattice offsets
+    `(30,-15)` and `(31,+15)`. Those are the HALF-diagonal translations doubled — the true
+    fundamental translation `(15,7.5)` has a non-integer dy, so the strongest integer peak sits at
+    twice it. Diamond = **30 px wide x 15 px tall** in the 1110 px screen.
+  - **A rendered mask overlay** (`captures/mask.png`, red = matched pixels) confirms the mask
+    traces the seam lattice itself and not the dark tiles, and counting it gives ~10 diamonds per
+    300 source px = 30 px. Same answer, different method.
+  So the original's diamond is **2.70% x 1.35% of screen width, symmetric 2:1**. v0.56.0 aimed at
+  3.15% from a hand count of "~35 px" and landed at 3.13% — **16% too wide**. Ours is currently
+  3.13% x 2.50%, so it is somewhat too wide and badly too TALL (1.25:1 against the original's 2:1).
+  - **The width cannot be fixed on its own.** Narrowing the basis to hit 2.70% while leaving the
+    vertical alone would take the tile to 17.3 x 16 — very nearly square, which reads WORSE than
+    today's 1.25:1. Width and aspect have to move together.
+  - **And the aspect cannot be fixed without re-authoring the courses.** A symmetric diamond
+    requires mirror-symmetric axes (`AX=(a,b)`, `AU=(-a,b)`), which forces +u to point down-LEFT
+    at 26.6 degrees. Our courses are long strips along +u, so they would run off the side of the
+    screen instead of descending. In the original, down-course is plainly straight down the
+    screen, which under symmetric axes is the grid DIAGONAL — i.e. its courses are authored on
+    the diagonal and ours are not. Rotating at build time does not dodge this: the checker and
+    the heightfield have to share a lattice or cliffs stop landing on tile edges, so the
+    heightfield would have to be resampled, which is re-authoring by another name.
+  **Conclusion: basis scale + axes + course authoring are ONE job, not three.** Do not touch the
+  basis piecemeal. The correct end state is `AX=(13.0,6.49)`, `AU=(-13.0,6.49)` with the marble's
+  `r` raised to keep it at the measured 5.0% of screen width, and all six courses laid out along
+  the grid diagonal.
+  - Shipped this iteration: **polka-dot density restored.** `dots` hashed per CELL, so v0.56.0's
+    finer grid made them GS*GS = 9x denser on the Silly surfaces. Now one dot per WORLD unit,
+    drawn on that unit's anchor cell. Bots, playthrough and trap sweep all still clean.
 - **v0.56.0 (2026-07-28) — THE GRID IS NOW AS FINE AS THE ORIGINAL'S, with zero gameplay change.**
   The heightfield is 3x denser (`GS=3`) and the checker diamond is drawn per 2-cell TILE
-  (`TSZ=GS/1.5`), which lands it at 2/3 of a world unit = 20 px = **3.13% of screen width**
-  against the measured 3.15%. Verified by cropping the same 18%-of-screen-width band from ours
+  (`TSZ=GS/1.5`), which lands it at 2/3 of a world unit = 20 px = 3.13% of screen width.
+  **The 3.15% target was itself wrong — see v0.57.0; the measured figure is 2.70%.** Verified by cropping the same 18%-of-screen-width band from ours
   and from the reference at matching magnification and counting: ~6 tiles vs ~5.75.
   - **The whole change is confined to the cell grid.** World units are untouched, so physics,
     the marble, hazards, course coordinates, the QA hooks and every bot waypoint keep working
