@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.29.0';
+const VERSION = '0.30.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -799,10 +799,10 @@ function commitEntry(){ if(!entryPlayer) return;
 let shards=[], floaters=[], paused=false, lastTickSec=99;
 let camX=0,camY=0,camInit=false;
 /* Marble feel measured against the original running under FS-UAE (see PARITY.md):
-   its marble covers ~3.2 cells in the first second of full input from rest and
-   sheds speed noticeably when you let go. Ours used to cover 7.2 and coast almost
-   forever, which made every course a blur and the clocks meaningless. */
-const GRAV=22, ACC=11, FRICT=3.6, MAXSP=6.2, MOUSE_GAIN=0.020, STEP=1/120;
+   its marble covers ~3.2 cells in the first second of full input from rest but
+   reaches ~9 cells/s once rolling — slow off the line, fast when it gets going.
+   Ours used to cover 7.2 in that first second and coast almost forever. */
+const GRAV=22, ACC=9.2, FRICT=3.13, MAXSP=9.6, MOUSE_GAIN=0.020, STEP=1/120;
 /* Amiga-exclusive "turbocharge": hold fire / left mouse button while steering
    for a burst of extra speed (documented in the official manual). */
 const TURBO_ACC=1.55, TURBO_SP=1.32;
