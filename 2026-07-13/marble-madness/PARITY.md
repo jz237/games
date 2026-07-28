@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.61.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.62.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,27 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.62.0 (2026-07-28) — cliff stripes rebuilt from measurement; two wrong assumptions.**
+  Reading colour RUNS along scanlines across the reference's walls (rather than histogramming
+  the whole frame) shows what the stripes actually are:
+  - bottom-left wall: `YELx18 greyx6 YELx21 greyx6 YELx22 ...`
+  - bottom-right wall: `redx21 darkx6 redx22 darkx8 redx22 ...`
+  - structure risers: `ORGx22 ... YELx22 ... redx18 ... ORGx2 YELx21`
+  **So a wall face is ONE colour, not a cycle through the ramp** — long single-hue runs, with
+  the hue set by position across the course (yellow left, orange middle, dark red right).
+  v0.50.0's `stripeShift` rotated a 4-colour cycle, which still produced a 4-colour wall.
+  **And the stripe period is ~26 px against a 30 px floor diamond — one stripe per diamond.**
+  We drew `nStripes:8` per CELL, which after the GS=3 grid change worked out at about **1.3 px
+  per stripe**: not stripes at all, just noise. Now one fill per cell face.
+  - Measured hues replace the guessed ramp: **dark red `#872021`, orange `#cb6500`, yellow
+    `#cacb00`**. The old `#aa2222` medium red is dropped — `#a82121` does appear in the frames
+    but at 0.5% of saturated pixels, which is rail shading, not a stripe colour.
+  - **Method note: histograms answered the wrong question.** Counting colours over two whole
+    frames gave proportions (dark red 32%, yellow 17%, orange 6%) that suggested a weighted
+    ramp. The run-length scan showed the truth — the proportions come from how much WALL of
+    each colour is on screen, not from any per-wall sequence. Read runs, not histograms, when
+    the question is "what is the pattern".
+  - Verified: six races, bots to every goal with 0 deaths, playthrough to the ending, traps clean.
 - **v0.61.0 (2026-07-28) — steep faces now shade HARD, as the original's do.**
   `captures/struct-ref.png` (the centre structure at 2x) shows the cone flanks going
   near-black on the shaded side while the lit side keeps the floor checker. Ours were flat

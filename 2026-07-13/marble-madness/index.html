@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.61.0';
+const VERSION = '0.62.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -463,7 +463,7 @@ function buildUltimate(){ newGrid(26,72);
 /* ---------- palettes ----------
    PAL_AMIGA is measured from the original Amiga disk running under FS-UAE
    (practice race); see PARITY.md "MEASURED FROM THE REAL AMIGA GAME". */
-const PAL_AMIGA={ stripes:['#882222','#aa2222','#cc6600','#cccc00'], nStripes:8,
+const PAL_AMIGA={ stripes:['#872021','#cb6500','#cacb00'], nStripes:1,
   floorHi:'#dddddd', floorLo:'#cccccc', floorAlt:'#bbbbbb', line:'rgba(102,102,102,.55)',
   checker:true, rail:'#dd3333', arrow:'#a72222', stripeShift:true };
 /* Sampled from the genuine Amiga screenshots on the box back: the other races
@@ -514,17 +514,21 @@ function stripeWall(g,c,p1x,p1y,p2x,p2y,b1y,b2y,base,vpos){
   // vertical stripes across a wall quad (top edge p1->p2, bottoms b1y/b2y)
   let cols,N;
   if(isGreyCell(c)){
-    // the original paints cliff faces as fine vertical bands of a fixed ramp;
-    // the two wall orientations differ only in overall brightness
-    // The original shades this ramp across the course: walls on the left read
-    // yellow-first, those on the right red-first. Rotate the order by position.
+    /* MEASURED off two full reference frames. Two things we had wrong:
+       - a wall face is ONE colour, not a cycle through the ramp. Reading a scanline
+         across the reference's walls gives `YELx20 greyx6 YELx20 ...` on the course's
+         left and `redx20 darkx6 redx20 ...` on its right — long single-hue runs.
+       - the stripe period is ~26 px against a 30 px floor diamond, i.e. ONE STRIPE PER
+         DIAMOND. We drew `nStripes:8` per cell, which after the GS=3 grid change came out
+         at roughly 1.3 px per stripe — visually just noise.
+       So: pick one hue from the ramp by position across the course (yellow on the left
+       through orange to dark red on the right) and fill the whole cell face with it. */
     const k=base<0.4?0.82:1;
-    const st=PAL.stripes.slice();
-    if(PAL.stripeShift&&vpos!==undefined){
-      const rot=Math.max(0,Math.min(st.length-1,Math.round((vpos/CV)*(st.length-1))));
-      for(let i=0;i<rot;i++) st.unshift(st.pop());
-    }
-    cols=st.map(h=>shadeHex(h,k)); N=PAL.nStripes;
+    const st=PAL.stripes;
+    let idx=st.length-1;
+    if(PAL.stripeShift&&vpos!==undefined)
+      idx=Math.max(0,Math.min(st.length-1,Math.round((1-vpos/CV)*(st.length-1))));
+    cols=[shadeHex(st[idx],k)]; N=1;
   } else { cols=[wallColor(c,base),wallColor(c,base*0.55)]; N=3; }
   for(let i=0;i<N;i++){
     const t0=i/N, t1=(i+1)/N;
