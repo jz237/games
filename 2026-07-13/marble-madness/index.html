@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.63.0';
+const VERSION = '0.64.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -1598,6 +1598,12 @@ function optionsClick(){
    Proportional: each entry carries its own width. Anything missing falls back
    to the previous Courier rendering. */
 const MENU_FONT={
+  /* U and V measured 2026-07-28 from a LOSSLESS grab of the real GAME OVER panel
+     (captures/gameover-lossless.png) — 'OUT OF TIME' and 'GAME OVER' are the only
+     captured text carrying either letter. Validated by re-extracting the letters we
+     already had from the same panel: 86% pixel agreement with the stored glyphs. */
+  'U':['###...##','###..###','###..###','###..###','###..###','###..###','###..###','.#######'],
+  'V':['###...###','###...###','###...###','.###.###.','.#######.','..#####..','..#####..','...###...'],
   '!':['.##.','####','####','.##.','.##.','.##.','....','.##.'],
   '\'':['.##','.##','##.','#..','...','...','...','...'],
   '.':['..','..','..','..','..','..','##','##'],

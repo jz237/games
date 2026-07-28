@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.63.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.64.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,29 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.64.0 (2026-07-28) — two more measured glyphs (U, V); the font's Courier fallback shrinks.**
+  `MENU_FONT` was missing **K Q U V W X Y Z** — none appear on any captured screen, so they fell
+  back to Courier per character. But **"OUT OF TIME" carries a U and "GAME OVER" a V**, so the
+  GAME OVER panel yields two of the eight.
+  - **It had to be a LOSSLESS grab.** Extracting from the h264 recording gave visibly fatter
+    strokes — re-extracting letters we already had and diffing against the stored ones is the
+    check that caught it. New `tools/grab_gameover.py` boots, starts a race, touches nothing and
+    screen-grabs the panel; `tools/extract_glyphs.py` walks a row of known text and refuses to
+    emit anything if the glyph count does not match the string.
+  - **Two capture traps, both hit:**
+    1. A "lots of yellow pixels" detector for the panel fired on a MID-RACE frame — the course's
+       own striped walls are yellow. The panel is better found as a wide uniform grey run.
+    2. A full-frame scan per poll was slower than the panel is on screen, so the first fixed
+       detector walked straight past it. Probe a handful of pixels at the panel's measured
+       location and poll tight instead.
+  - Sampling: point-sampling cell centres landed on the edges of the display-scaled Amiga pixels
+    and thickened strokes; a 3x3 majority vote per cell is stable. Validation: **86% pixel
+    agreement** with the stored glyphs across every letter present in both.
+  - The false-start capture is itself the **best lossless reference of the practice opening so
+    far** (`captures/gameover-lossless.png` run, saved as the race view): flanking arch gates with
+    striped wedges, the centre ziggurat, handrails, the scalloped far edge against black, and a
+    pale ramp upper-centre-right that we do not have yet.
+  - Still missing: **K Q W X Y Z** — no captured screen contains them.
 - **v0.63.0 (2026-07-28) — stripe hue is set by wall ORIENTATION, correcting v0.62.0.**
   `captures/struct-full.png` (the whole centre structure at 2x) settles it: the structure shows
   BOTH hues on adjacent risers, which position-based colouring cannot produce. Faces pointing
