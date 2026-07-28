@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.76.0';
+const VERSION = '0.77.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -621,20 +621,34 @@ function castShadow(v,u,c){
    Replaces the hand-tuned "hard shade" knee, which existed to mimic the original's
    flat-banded cliff faces. Slopes are in height-units per cell, so they are divided by
    the cell size to get a true gradient before the normal is built. */
-const LIGHT = (() => { const v=[-0.55,-0.42,0.72], L=Math.hypot(...v);
-  return [v[0]/L, v[1]/L, v[2]/L]; })();
-function surfaceShade(c){
+const norm3 = v => { const L=Math.hypot(...v); return [v[0]/L,v[1]/L,v[2]/L]; };
+const LIGHT = norm3([-0.55,-0.42,0.72]);          // key, over the viewer's left shoulder
+const FILL  = norm3([ 0.48, 0.55,0.62]);          // sky bounce from the opposite side
+const KEY_COL=[1.00,0.98,0.94], FILL_COL=[0.72,0.81,1.00];
+const AMB=0.16, KEYAMT=0.74, FILLAMT=0.34;
+function shadeTerms(c){
   const sv=(c.h10+c.h11-c.h00-c.h01)/2*GS;   // d(height)/d(v) in world units
   const su=(c.h01+c.h11-c.h00-c.h10)/2*GS;   // d(height)/d(u)
   const n=1/Math.sqrt(sv*sv+su*su+1);
   const nx=-sv*n, ny=-su*n, nz=n;            // outward normal
-  const diff=Math.max(0, nx*LIGHT[0]+ny*LIGHT[1]+nz*LIGHT[2]);
-  // half-vector specular against a viewer looking straight down the projection
+  const key=Math.max(0, nx*LIGHT[0]+ny*LIGHT[1]+nz*LIGHT[2]);
+  const fil=Math.max(0, nx*FILL[0] +ny*FILL[1] +nz*FILL[2]);
+  // half-vector specular against a viewer looking straight down the projection.
+  // Stone floor is matte, so this is a broad low sheen, not a glint.
   const hx=LIGHT[0], hy=LIGHT[1], hz=LIGHT[2]+1, hl=Math.hypot(hx,hy,hz);
-  const spec=Math.pow(Math.max(0,(nx*hx+ny*hy+nz*hz)/hl), 22)*0.30;
-  const FLAT=0.30+0.74*LIGHT[2];             // what level ground scores
-  return (0.30 + 0.74*diff + spec)/FLAT;   // low ambient => deep shadow sides
+  const spec=Math.pow(Math.max(0,(nx*hx+ny*hy+nz*hz)/hl), 12)*0.13;
+  return {key:AMB+KEYAMT*key+spec, fil:FILLAMT*fil};
 }
+const FLATT = (()=>{ const t=shadeTerms({h00:0,h10:0,h01:0,h11:0});
+  return t.key+t.fil; })();                  // what level ground scores, for normalising
+function litRGB(hex,mul,c){
+  const [r,g,b]=hex2rgb(hex), t=shadeTerms(c);
+  const k=t.key*mul/FLATT, f=t.fil*mul/FLATT;
+  return rgb17(r*(k*KEY_COL[0]+f*FILL_COL[0]),
+               g*(k*KEY_COL[1]+f*FILL_COL[1]),
+               b*(k*KEY_COL[2]+f*FILL_COL[2]));
+}
+function surfaceShade(c){ const t=shadeTerms(c); return (t.key+t.fil)/FLATT; }
 function hardShade(c){ return surfaceShade(c); }
 /* Ambient occlusion. Floor right up against a wall sees less of the sky, so it darkens —
    the cue that sells "these two surfaces actually meet" rather than one being painted on
@@ -712,7 +726,7 @@ function drawCellC(g,v,u,ox,oy,c){
               *hardShade(c)*castShadow(v,u,c)*ambientOcc(v,u,c)*grain(v,u);
       const alt=((Math.floor(v/TSZ)+Math.floor(u/TSZ))%2)===1;
       if(!c.tint){
-        topc=shadeHex(alt?PAL.floorAlt:PAL.floorHi,kk);
+        topc=litRGB(alt?PAL.floorAlt:PAL.floorHi, kk/Math.max(1e-6,surfaceShade(c)), c);
       } else {
         // tinted floors get the same diamond checker in their own hue
         const [r0,g0,b0]=hex2rgb(c.tint), k2=kk*(alt?0.88:1.06);

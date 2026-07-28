@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.76.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.77.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,20 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.77.0 (2026-07-28) — realistic pass 7: TWO LIGHTS (warm key + cool sky fill).**
+  One key light plus flat ambient makes every shadow side the same grey, which is the giveaway
+  that it is a multiplier rather than light. Real scenes get a large cool bounce off the sky, so
+  shadow sides shift BLUE instead of merely darkening — the strongest cue left after six passes.
+  - `shadeTerms()` returns key and fill diffuse separately; `litRGB()` combines them with a
+    faintly warm key (`1.00,0.98,0.94`) and a cool fill (`0.72,0.81,1.00`). Normalised against a
+    flat normal so level lit ground still scores exactly 1.0 — the same normalisation v0.71.0
+    proved is essential; without it everything is multiplied down and goes muddy.
+  - **Material**: the stone floor's specular is now broad and weak (exponent 12, strength 0.13)
+    rather than the tight glint that suited the marble. Matte stone should not glint.
+  - **Tuned by measurement, not eye**: the first fill weights gave the flat floor `b-r = +13` —
+    visibly blue for grey stone. A horizontal surface SHOULD read slightly cool (it sees the most
+    sky), so the fix was warming the fill to land at `+8`, not removing the tint.
+  - All six races render clean.
 - **v0.76.0 (2026-07-28) — realistic pass 6: critters lit, HUD bar given depth.**
   Audited every hazard sprite for flat fills before touching any of them — hammers, pistons,
   vacuums and acid already carried gradients; only **`drawCritter` did not**, and two solid
