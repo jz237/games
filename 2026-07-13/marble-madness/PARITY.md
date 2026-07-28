@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.68.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.69.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,21 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.69.0 (2026-07-28) — HUD digits are `#ff0000`; options title rebuilt; glyph `b` measured.**
+  - **THE HUD DIGITS ARE PURE `#ff0000`, not `#882222`.** A lossless grab of the bar is 85%
+    `#888888` with `#ff0000` digits and **no dark red anywhere in it**. Iteration 21 recorded
+    `#882222` from a scaled capture that had dimmed the red, and every version since has drawn
+    the score and clock too dark. `HUDLOW` (our low-time cue, not the original's) moves to
+    `#ffff00` — a legal colour that cannot be confused with the white count-up.
+  - **Options title measured**: spans x268-1094 of the screen area at rows 72-97 — **476 canvas
+    px wide centred on 309.6, letters 13.3 px tall, in a bar only 17 px deep**. Ours was 289 px
+    of 24 px Courier in a 30 px bar. The wide look is **letter-spacing, not a wide font**, so the
+    advance is a fixed 28 px and the glyphs come from `MENU_FONT` like everything else.
+  - **Glyph `b` measured** from that same title bar — "Marble" is the only captured text with a
+    lowercase b. Segmentation matched exactly (15 groups for 15 glyphs). `MENU_FONT` is now 46
+    glyphs; still missing **K Q W X Y Z**.
+  - The rest of the options screen already matched: `#999999` field, `#888888` bar, `#882222`
+    body text, in the same proportions as the reference.
 - **v0.68.0 (2026-07-28) — every colour literal on the Amiga grid; marble colours measured.**
   - **86 of 112 distinct hex constants were off-grid.** `q17` only quantises the floor and wall
     paths; the marble, hazards, HUD, menus and decor are drawn from literals and never went

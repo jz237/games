@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.68.0';
+const VERSION = '0.69.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -1628,6 +1628,10 @@ function optionsClick(){
    Proportional: each entry carries its own width. Anything missing falls back
    to the previous Courier rendering. */
 const MENU_FONT={
+  /* 'b' measured 2026-07-28 from the OPTIONS TITLE BAR of ref-shots/amiga-options-menu.png
+     — 'Marble' is the only captured text containing one. Segmentation matched exactly
+     (15 groups for 15 glyphs), which is the check that validates the row walk. */
+  'b':['####......','.###......','.###.####.','.####..###','.####..###','.###...###','.###...###','...######.'],
   /* U and V measured 2026-07-28 from a LOSSLESS grab of the real GAME OVER panel
      (captures/gameover-lossless.png) — 'OUT OF TIME' and 'GAME OVER' are the only
      captured text carrying either letter. Validated by re-extracting the letters we
@@ -1734,15 +1738,14 @@ function spaced(g,str,x,y,size,col,align){   // the original letter-spaces its t
 function renderOptions(g,dt){
   stateT+=dt;
   g.fillStyle='#999999'; g.fillRect(0,0,640,400);
-  g.fillStyle='#888888'; g.fillRect(0,0,640,30);
+  g.fillStyle='#888888'; g.fillRect(0,0,640,17);
   // title letters alternate red/blue and cycle, as on the Amiga
   const title='Marble  Madness!!';
-  const gap=17; let px=320-(title.length*gap)/2;
-  g.font='900 24px "Courier New",monospace'; g.textAlign='left'; g.textBaseline='middle';
+  const gap=28; let px=310-(16*gap)/2;
   const phase=Math.floor(stateT*3);
   for(let i=0;i<title.length;i++){
     const ch=title[i];
-    if(ch!==' '){ g.fillStyle=((i+phase)%2)?'#2222cc':'#cc2222'; g.fillText(ch,px,15); }
+    if(ch!==' ') menuText(g,ch,px,2,2,((i+phase)%2)?'#2222cc':'#cc2222','left');
     px+=gap;
   }
   const RED='#882222';
@@ -1826,7 +1829,7 @@ function render(dt){
   floaters=floaters.filter(f=>f.t<1.1);
   // HUD — the Amiga original: a grey bar across the top, score left, time centre,
   // both in chunky red digits (measured from the real game, see PARITY.md)
-  const HUDBG='#888888', HUDFG='#882222', HUDLOW='#dd2222';
+  const HUDBG='#888888', HUDFG='#ff0000', HUDLOW='#ffff00';
   g.fillStyle=HUDBG; g.fillRect(0,0,640,20);   // the original's bar is ~4% of screen height
   // The original FILLS THE CLOCK IN at the start of a race rather than showing the
   // allowance outright: white digits stepping up by 5 every 0.2 s, a short hold, then
