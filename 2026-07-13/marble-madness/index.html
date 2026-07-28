@@ -34,7 +34,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.25.0';
+const VERSION = '0.26.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -1617,13 +1617,28 @@ function renderTitle(g){
   demoT+=1/60;
   g.fillStyle='#04050c'; g.fillRect(0,0,640,400);
   g.globalAlpha=0.16; if(off) g.drawImage(off,offW/2-380,60,760,475,0,0,640,400); g.globalAlpha=1;
-  const grad=g.createLinearGradient(0,86,0,190);
-  grad.addColorStop(0,'#ffe08a'); grad.addColorStop(0.45,'#ff9a3d'); grad.addColorStop(1,'#e0333d');
-  g.font='900 64px "Arial Black",Arial,sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.lineJoin='round';
-  g.strokeStyle='#1a0508'; g.lineWidth=10; g.strokeText('MARBLE',320,120); g.strokeText('MADNESS',320,186);
-  g.fillStyle=grad; g.fillText('MARBLE',320,120); g.fillText('MADNESS',320,186);
+  // the original's title: BLUE "MARBLE" flanked by chevron arcs over an
+  // orange/yellow "MADNESS" with a red shadow
+  g.font='900 58px "Arial Black",Arial,sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.lineJoin='round';
+  const mw=g.measureText('MARBLE').width;
+  g.lineWidth=7; g.lineCap='round';
+  for(let i=0;i<4;i++){                      // chevron arcs either side
+    const off=mw/2+14+i*17, a=0.30+i*0.14;
+    g.strokeStyle=`rgba(70,110,220,${1-i*0.2})`;
+    g.beginPath(); g.arc(320-off,118,26+i*3,-a-0.7,a+0.7); g.stroke();
+    g.beginPath(); g.arc(320+off,118,26+i*3,Math.PI-a-0.7,Math.PI+a+0.7); g.stroke();
+  }
+  g.lineCap='butt';
+  const gb=g.createLinearGradient(0,92,0,146);
+  gb.addColorStop(0,'#bcd8ff'); gb.addColorStop(0.5,'#4f8ae8'); gb.addColorStop(1,'#1f3fa8');
+  g.strokeStyle='#0a1030'; g.lineWidth=9; g.strokeText('MARBLE',320,118);
+  g.fillStyle=gb; g.fillText('MARBLE',320,118);
+  const go=g.createLinearGradient(0,158,0,214);
+  go.addColorStop(0,'#ffe27a'); go.addColorStop(0.5,'#ff9a2e'); go.addColorStop(1,'#d4241c');
+  g.strokeStyle='#3a0808'; g.lineWidth=9; g.strokeText('MADNESS',320,186);
+  g.fillStyle=go; g.fillText('MADNESS',320,186);
   text(g,'A M I G A   T R I B U T E',320,232,13,'#9fb0e8');
-  text(g,'PRACTICE BUILD v'+VERSION+' — ALL SIX RACES · beat the Ultimate to finish',320,258,12,'#66708f');
+  text(g,'clean-room recreation · v'+VERSION+' · all six races',320,258,12,'#66708f');
   if(Math.floor(demoT*1.6)%2===0) text(g,'SPACE / CLICK — 1 PLAYER      press 2 — 2 PLAYERS',320,288,16,'#ffd23a');
   text(g,'HIGH SCORES',320,316,12,'#9fb0e8');
   for(let i=0;i<5;i++){ const h=hiscores[i];

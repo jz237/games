@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.25.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.26.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -221,6 +221,12 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   the two overlapped illegibly. The grey panel now covers the whole block and the final score is
   drawn in the measured Amiga digit font. LESSON: the smoke and bot suites only cover the `race`
   state; sweep the other screens too.
+- **v0.26.0 (2026-07-27)**: title screen restyled to the original's treatment — **"MARBLE" in
+  blue** (`#bcd8ff→#4f8ae8→#1f3fa8`) with the chevron arcs either side, **"MADNESS" orange over
+  red** (`#ffe27a→#ff9a2e→#d4241c`); both had been the same orange. Dropped the stale "PRACTICE
+  BUILD" label. Hi-score flow verified end-to-end with a qualifying score (`hiscore.mjs`):
+  timeup → `beginEntry()` → `initials` → `enterInitials()` → title, table updated, no errors —
+  the earlier sweep's "state=title" was correct behaviour for a zero score, not a bug.
   **GOTCHA: the `PAL_*` consts must stay ABOVE `const RACES`** — RACES references `pal:PAL_AMIGA`,
   so if they sit below it the whole script dies on a temporal-dead-zone ReferenceError before
   `window.__qa` is ever defined (symptom: VERSION readable but `__qa` undefined).
