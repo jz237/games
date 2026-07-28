@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.40.0';
+const VERSION = '0.43.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -1107,6 +1107,9 @@ function updateHazards(dt){
 }
 function collideMarbles(a,b){
   if(!a.alive||!b.alive||!a.active||!b.active) return;
+  // a marble materialising from a catch-up warp must not knock the leader off:
+  // it used to land directly on them and shove them into the void, repeatedly
+  if(a.dropIn||b.dropIn) return;
   if(Math.abs(a.z-b.z)>1.6) return;
   const dv=b.v-a.v, du=b.u-a.u, d=Math.hypot(dv,du), rr=a.r+b.r-0.15;
   if(d<=0.0001||d>=rr) return;
@@ -1184,7 +1187,11 @@ function physics(dt){
     const dy=Math.abs((player.v*AXy+player.u*AUy)-(player2.v*AXy+player2.u*AUy));
     if(dy>560){ catchupCD=3;
       const lead=player.u>player2.u?player:player2, trail=lead===player?player2:player;
-      trail.v=lead.lastSafe.v; trail.u=lead.lastSafe.u;
+      // offset to whichever side has ground, so the two do not overlap on arrival
+      let tv=lead.lastSafe.v, off=0;
+      for(const cand of [1.8,-1.8,2.6,-2.6,0]){
+        if(!isNaN(groundH(lead.lastSafe.v+cand,lead.lastSafe.u))){ off=cand; break; } }
+      trail.v=tv+off; trail.u=lead.lastSafe.u;
       const hh=groundH(trail.v,trail.u); trail.z=(isNaN(hh)?4:hh)+2.2;
       trail.vv=0; trail.vu=0; trail.vz=0; trail.grounded=false; trail.dropIn=true;
       trail.timeLeft=Math.max(1,trail.timeLeft-1); } }
@@ -1201,6 +1208,10 @@ function physics(dt){
         for(const [dv,du] of [[0.9,0],[-0.9,0],[0,0.9],[0,-0.9]]){
           const hh=groundH(pl.v+dv,pl.u+du);
           if(isNaN(hh)||Math.abs(hh-(isNaN(h2)?0:h2))>0.8){ ok=false; break; } }
+        // and never checkpoint on the lip of a drop: respawning there just feeds the
+        // player straight back off the same edge, burning the whole clock in a loop
+        if(ok) for(const ahead of [1.6,3.0]){
+          if(isNaN(groundH(pl.v,pl.u+ahead))){ ok=false; break; } }
         if(ok) pl.lastSafe={v:pl.v,u:pl.u}; } }
     const c=cellAt(pl.v,pl.u);
     if(c&&c.type===GOAL&&pl.grounded&&!pl.finished){

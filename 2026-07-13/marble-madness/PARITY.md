@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.40.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.43.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -407,6 +407,22 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   bonus pads by `h.taken`, movement by `moveAcc`, the goal drain by `pl.finished` + a bounded
   `take`. Sound is self-limiting too: pressing into a wall for 3 s produced ONE `clack` (the
   -0.38 bounce plus the heavy marble's slow re-acceleration keeps it under the threshold).
+- **v0.43.0 (2026-07-28) — DEATH-LOOP TRAP FIXED SYSTEMICALLY (found via a 2P playthrough).**
+  A 2P run had P1 die 14 times around beginner u31-35 and lose the whole clock, while solo the
+  same driver finished. **It was not a 2P bug**: 2P offsets P1's start by 1.2 cells (v12.5→v11.3),
+  and reproducing that start SOLO failed identically. The real defect: beginner's ledge drops from
+  v3-21 to **v14-21 in one row at u32**; a marble on the left fell, respawned at a `lastSafe`
+  recorded on the lip, and fell again — forever.
+  - **Tapering the geometry made it WORSE** (each taper step is another edge to fall off; the
+    playthrough then failed at race 1). Reverted.
+  - **The fix is in the checkpoint rule**: `lastSafe` now also requires ground at `u+1.6` and
+    `u+3.0`, so a checkpoint is never set on the lip of a drop. Trap case: 14 deaths + timeout →
+    **goal, 4 deaths**. Full playthrough still completes all six races to the ending.
+  - Also hardened the 2P catch-up warp (unrelated to this symptom but wrong anyway): it now lands
+    the trailing player 1.8 cells to the side of the leader's checkpoint rather than on top of
+    them, and `collideMarbles` ignores a marble that is still `dropIn`.
+  **LESSON: when a bug appears only in one mode, reproduce the mode's side-effects in the simple
+  mode before believing it.**
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
