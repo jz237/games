@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.71.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.72.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,20 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.72.0 (2026-07-28) — realistic pass 2: wall gradients, ambient occlusion, surface grain.**
+  - **Cliff faces are no longer flat fills.** A flat wall reads as a printed sticker; a real
+    face catches less light toward its base (the sky is occluded down there) and picks up a
+    little bounce right at the floor line. Each face now gets a vertical ramp — full hue at the
+    lip, 55% at the base, lifting to 70% on the very bottom edge. `cssRGB()` parses back the
+    colour strings our own helpers emit so the ramp can be built from whatever hue the stripe
+    rule picked, without threading rgb triples through every call site.
+  - **Ambient occlusion** (`ambientOcc`): floor pressed against a wall darkens, which is the cue
+    that sells "these two surfaces meet" instead of one being painted on the other. Strength
+    scales with the neighbour's rise and saturates, so a 1-unit lip smudges gently while a cliff
+    base goes properly dark. Diagonals count 0.6.
+  - **Per-cell grain**: +/-2.5% keyed off the cell index. Invisible as noise, but it stops the
+    large plains reading as paint. Deterministic, so it does not shimmer as the camera moves.
+  - All six races render clean.
 - **v0.71.0 (2026-07-28) — realistic lighting pass 1: surface lighting, soft shadows, lit marble.**
   - **`surfaceShade()`** replaces the hand-tuned `hardShade` knee with Lambert + ambient + a
     narrow specular, computed from the cell's real surface normal (slopes converted to world

@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.71.0';
+const VERSION = '0.72.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -558,15 +558,34 @@ function stripeWall(g,c,p1x,p1y,p2x,p2y,b1y,b2y,base,vpos){
     let hue = facesLeft ? (((vpos|0)%4===3) ? accent : hi) : st[0];
     cols=[shadeHex(hue,k)]; N=1;
   } else { cols=[wallColor(c,base),wallColor(c,base*0.55)]; N=3; }
+  const topY=(p1y+p2y)/2, botY=(b1y+b2y)/2;
   for(let i=0;i<N;i++){
     const t0=i/N, t1=(i+1)/N;
-    g.fillStyle=cols[i%cols.length]; g.beginPath();
+    const base=cols[i%cols.length];
+    let paint=base;
+    if(botY>topY+1){
+      const gd=g.createLinearGradient(0,topY,0,botY);
+      const [br,bg,bb]=cssRGB(base);
+      gd.addColorStop(0,   rgb17(br*1.06,bg*1.06,bb*1.06));
+      gd.addColorStop(0.55,rgb17(br*0.78,bg*0.78,bb*0.78));
+      gd.addColorStop(0.93,rgb17(br*0.55,bg*0.55,bb*0.55));
+      gd.addColorStop(1,   rgb17(br*0.70,bg*0.70,bb*0.70));   // bounce off the floor
+      paint=gd;
+    }
+    g.fillStyle=paint; g.beginPath();
     g.moveTo(p1x+(p2x-p1x)*t0, p1y+(p2y-p1y)*t0);
     g.lineTo(p1x+(p2x-p1x)*t1, p1y+(p2y-p1y)*t1);
     g.lineTo(p1x+(p2x-p1x)*t1, b1y+(b2y-b1y)*t1);
     g.lineTo(p1x+(p2x-p1x)*t0, b1y+(b2y-b1y)*t0);
     g.closePath(); g.fill();
   }
+}
+/* parse back the colour strings our own helpers emit, so the wall ramp can be built from
+   whatever hue the stripe rule picked without threading rgb triples through every call */
+function cssRGB(c){
+  if(c[0]==='#') return hex2rgb(c);
+  const m=c.match(/rgba?\((\d+),(\d+),(\d+)/);
+  return m?[+m[1],+m[2],+m[3]]:[128,128,128];
 }
 let off,offX,offY,offW,offH;
 /* The original shades STEEP faces hard: the cone flanks on the practice course's centre
@@ -617,6 +636,29 @@ function surfaceShade(c){
   return (0.30 + 0.74*diff + spec)/FLAT;   // low ambient => deep shadow sides
 }
 function hardShade(c){ return surfaceShade(c); }
+/* Ambient occlusion. Floor right up against a wall sees less of the sky, so it darkens —
+   the cue that sells "these two surfaces actually meet" rather than one being painted on
+   top of the other. Strength scales with how much taller the neighbour is, and saturates,
+   so a 1-unit lip smudges gently while a cliff base goes properly dark. */
+/* A hair of per-cell grain. Perfectly uniform fills are the giveaway that a surface is
+   flat colour rather than material; +/-2.5% keyed off the cell index is invisible as
+   noise but stops the large plains reading as paint. Deterministic, so it does not
+   shimmer as the camera moves. */
+function grain(v,u){
+  const n=Math.sin(v*12.9898+u*78.233)*43758.5453;
+  return 1 + ((n-Math.floor(n))-0.5)*0.05;
+}
+function ambientOcc(v,u,c){
+  const h=(c.h00+c.h10+c.h01+c.h11)/4;
+  let occ=0;
+  for(const [dv,du] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]){
+    const row=cells[u+du]; if(!row) continue;
+    const q=row[v+dv]; if(!q) continue;
+    const rise=Math.max(q.h00,q.h10,q.h01,q.h11)-h;
+    if(rise>0.05) occ += Math.min(1, rise*0.85)*((dv&&du)?0.6:1);
+  }
+  return 1 - 0.30*Math.min(1, occ/3.4);
+}
 function drawCellC(g,v,u,ox,oy,c){
   const x00=pX(v,u)+ox,   y00=pY(v,u,c.h00)+oy;
   const x10=pX(v+1,u)+ox, y10=pY(v+1,u,c.h10)+oy;
@@ -666,7 +708,7 @@ function drawCellC(g,v,u,ox,oy,c){
       const s2=(c.h01+c.h11-c.h00-c.h10)/2;
       const kk=(1+Math.max(-1.2,Math.min(0,s2))*-0.13+Math.min(1.2,Math.max(0,s2))*-0.08)
               *Math.max(0.72,Math.min(1.10,0.70+((c.h00+c.h10+c.h01+c.h11)/4)*0.026))
-              *hardShade(c)*castShadow(v,u,c);
+              *hardShade(c)*castShadow(v,u,c)*ambientOcc(v,u,c)*grain(v,u);
       const alt=((Math.floor(v/TSZ)+Math.floor(u/TSZ))%2)===1;
       if(!c.tint){
         topc=shadeHex(alt?PAL.floorAlt:PAL.floorHi,kk);
