@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.20.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.21.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -184,6 +184,12 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   find ground, otherwise `groundH` returns NaN at the course edge and the arch silently vanishes)
   and the **painted twin-chevron floor arrows** (`floorArrow()`, drawn through the axonometric
   setTransform so they lie flat on the surface).
+- **v0.21.0 (2026-07-27)**: practice OPENING rebuilt from the real Amiga screen — the invented
+  wave field is gone, replaced by a broad FLAT checkerboard plain with a three-peak **sawtooth far
+  edge** (`carve` per column), a stepped **centre island with twin white-tipped peaks**
+  (`pyramid(...,{tint:'#e2e2e2'})`), and a raised platform under each arch gate. Platforms are
+  left UNTINTED on purpose so they pick up the palette's red/orange/yellow striped cliff faces.
+  The bot line had to be re-routed around the island (see waypoints).
   **GOTCHA: the `PAL_*` consts must stay ABOVE `const RACES`** — RACES references `pal:PAL_AMIGA`,
   so if they sit below it the whole script dies on a temporal-dead-zone ReferenceError before
   `window.__qa` is ever defined (symptom: VERSION readable but `__qa` undefined).
@@ -222,6 +228,11 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     terrain edits, atGate index near list end at low u. Byte-identical across an edit ⇒ edit not
     in page OR bot never reaches the cells — verify which before touching geometry.
 - Waypoints (current, verified v0.17.0):
+  - Practice `[maxU,tV]` (**re-routed v0.21.0** for the new centre island — pass it on the RIGHT;
+    the left route loses too much time and dies in the slalom):
+    [7,12],[12,16.5],[18,15],[24,11.5],[30,10.7],[43,11.5],[50,15.5],[52.5,15.5],[55,9],[57.5,5.5],
+    [61,15.5],[66,15],[72,10],[88,7.5] → goal, 0 deaths, ~11 s, score 5110.
+    (superseded v0.18.0 note follows)
   - Practice `[maxU,tV]` (**corrected v0.18.0** — the practice course is a SLALOM: 1-unit steps
     at u=51, u=57 and u=63 are passable only on alternating sides, so the line must zig
     right→left→right; the old list drove into the u=51 wall and fell off the west edge):
@@ -284,10 +295,14 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
 3. **Measure the remaining clocks on the rig**: the pre-race banner states the allowance in plain
    text — set each difficulty on the menu, click GO!, screenshot the banner. Do the same for
    races 2–6 (needs driving the marble to each goal, or accepting practice-only data).
-4. **Capture the real course geometry** (keyboard joystick works; `mm_ctl.py hold Down 2`):
-   drive down each course taking shots, then correct my layouts — my practice course is visibly
-   wavier than the original's, whose opening is a broad flat checker plain with a central
-   twin-peaked structure. (Arch gates and floor arrows: DONE in v0.20.0.)
+4. **Course geometry — partially done.** The practice OPENING is rebuilt from the real screen
+   (v0.21.0). The rest of each course is still my own layout from the NES maps.
+   **Driving the original is harder than expected**: the camera does NOT scroll until the marble
+   makes real down-course progress, and holding a single direction just drifts it around the
+   opening screen (all four directions tried; the red arches/walls defeat a naive red-blob marble
+   detector, and frame-differencing is polluted whenever the camera does move). To map more
+   course, work out the true joystick→course-axis mapping first (the view is rotated 45°, so
+   down-course is probably a DIAGONAL, e.g. Down+Right held together).
 5. Capture races 2–6 palettes (each race has its own scheme) and repaint as in v0.18.0.
 2. **Amiga-exclusive features from manual**: options menu (players/input/Red-Blue/difficulty
    0–7/GO!), turbocharge button (fire/LMB speed burst). Difficulty should scale clocks toward

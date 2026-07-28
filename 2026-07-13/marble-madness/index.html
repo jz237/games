@@ -34,7 +34,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.20.0';
+const VERSION = '0.21.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -111,7 +111,20 @@ function groundH(v,u){ const c=cellAt(v,u); if(!c) return NaN;
 /* ---------- races ---------- */
 function buildPractice(){ newGrid(24,88);
   const RED={tint:'#b34852'}, DARK={tint:'#79809f'}, GRID={tex:'grid'};
-  waves(3,0,20,13,12,12,0.55,7,9,GRID);
+  /* Opening plain rebuilt from the real Amiga screen (iteration 25): a broad
+     FLAT checkerboard plain with a sawtooth far edge, twin white-tipped peaks
+     on a stepped centre island, and a raised diamond platform either side. */
+  slab(3,0,20,13,12,GRID);
+  for(let v=3;v<=20;v++){                       // three-peak sawtooth far edge
+    const t=((v-3)%6)/6, cut=Math.round(4.5*Math.abs(t-0.5)*2);
+    if(cut>0) carve(v,0,v,cut-1);
+  }
+  slab(4,6,7,8,12.9,GRID);                      // left diamond platform (under the arch)
+  slab(16,6,19,8,12.9,GRID);                    // right diamond platform
+  slab(9,8,14,11,12.7,GRID);                    // centre island base
+  slab(10,9,13,10,13.4,GRID);                   // its stepped tier
+  pyramid(10,9,13.4,17.6,{tint:'#e2e2e2'});     // twin white-tipped peaks
+  pyramid(12,9,13.4,17.6,{tint:'#e2e2e2'});
   rampU(3,14,20,19,12,10,GRID);
   slab(3,20,20,27,10);
   pyramid(5,21,10,12.2); pyramid(17,21,10,12.2);
