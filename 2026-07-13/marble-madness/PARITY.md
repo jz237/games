@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.23.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.24.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -73,8 +73,12 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     finished." then `Number of Players:  1`, `Difficulty:  0`, `Red Player:  Rear Port`,
     `Input Device:  Joy Stick`, and `GO!` near the bottom centre.
   - Text is letter-spaced (roughly one blank between glyphs) in a chunky 8x8-ish font.
-- **In-race HUD**: a grey `#888888` bar across the very top; **score at left, time at centre**,
-  both in RED `#882222` chunky digits (time shown as 2 digits, e.g. `39`, `00`).
+- **In-race HUD**: a grey `#888888` bar across the very top (~4% of screen height); **score at
+  ~22% across, time centred**, both in RED `#882222` chunky digits (time is 2 digits, e.g. `39`).
+  **The digit font is measured**: all ten glyphs are 8x8, sampled at Amiga pixel scale
+  (`x=144+ax*(1100/320)`, `y=68+ay*(784/256)`) from HUD numbers across several captures —
+  the shapes are in `HUD_FONT` in index.html. Distinctive: heavy 2–3 px strokes, a slashed-looking
+  `0`, and a rounded `.######.` bottom row on most glyphs.
 - **Practice race palette — MY BUILD IS WRONG (was pastel blue/grey)**. Reality:
   - Floor = grey diamond checkerboard: `#bbbbbb` (14.9%), `#999999` (12.2%), `#dddddd` (8.0%),
     with `#666666` (10%) grid/shadow lines. NO blue anywhere in this race.
@@ -208,6 +212,10 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   perpendicular to travel, hiding any with `z<=0.06` and foreshortening the rest by `sqrt(z)`.
   The marble is now flat-shaded with a hard crescent and blocky patches to match the real sprite,
   and the drop shadow is hard-edged. Steelie and P2 get their own patch colours.
+- **v0.24.0 (2026-07-27)**: the HUD now uses the ORIGINAL'S NUMBER FONT — all ten digits measured
+  glyph-by-glyph off the real screen and drawn as run-length filled rects (`HUD_FONT` + `hudNum()`,
+  scale 2 on the 640x400 canvas = the original's proportions). Bar height 26→20 px and the score
+  moved to 22% across to match the Amiga layout; the pre-race banner's number uses it too.
   **GOTCHA: the `PAL_*` consts must stay ABOVE `const RACES`** — RACES references `pal:PAL_AMIGA`,
   so if they sit below it the whole script dies on a temporal-dead-zone ReferenceError before
   `window.__qa` is ever defined (symptom: VERSION readable but `__qa` undefined).

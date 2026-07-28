@@ -34,7 +34,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.23.0';
+const VERSION = '0.24.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -1380,6 +1380,37 @@ function text(g,s,x,y,size,color,align,font){
   g.font=`900 ${size}px ${font||'"Courier New",monospace'}`; g.textAlign=align||'center'; g.textBaseline='middle';
   g.fillStyle='rgba(0,0,0,.75)'; g.fillText(s,x+2,y+2); g.fillStyle=color; g.fillText(s,x,y);
 }
+/* The Amiga HUD number font, measured glyph-by-glyph off the real screen
+   (8x8 cells, sampled at Amiga pixel scale from the reference captures). */
+const HUD_FONT={
+ '0':['.#######','###...##','###..###','########','####..##','####..##','.#######','..#####.'],
+ '1':['.####...','.####...','..###...','..###...','..###...','..###...','#######.','#######.'],
+ '2':['########','##...###','.....###','...####.','.##.....','###...##','########','########'],
+ '3':['########','###...##','......##','..#####.','......##','##....##','########','.######.'],
+ '4':['...#####','..###.##','.###..##','###...##','########','########','....####','...#####'],
+ '5':['########','###.....','#######.','......##','......##','##....##','########','.######.'],
+ '6':['.######.','.###....','###.....','#######.','###...##','###...##','########','.######.'],
+ '7':['########','###...##','......##','.....##.','....##..','...###..','..###...','..###...'],
+ '8':['########','###...##','###..###','########','####..##','###...##','########','.######.'],
+ '9':['########','###...##','###...##','.#######','......##','.....###','.######.','.#####..'],
+};
+function hudNum(g,str,x,y,scale,color,align){
+  const cw=(8+1)*scale, w=String(str).length*cw;
+  let px=align==='right'?x-w:(align==='center'?x-w/2:x);
+  g.fillStyle=color;
+  for(const ch of String(str)){
+    const gl=HUD_FONT[ch];
+    if(gl){ for(let r=0;r<8;r++){ const row=gl[r];
+      let c=0;
+      while(c<8){                       // run-length the row so we fill fewer rects
+        if(row[c]==='#'){ let e=c; while(e<8&&row[e]==='#') e++;
+          g.fillRect(px+c*scale, y+r*scale, (e-c)*scale, scale); c=e; }
+        else c++;
+      } } }
+    px+=cw;
+  }
+  return w;
+}
 function textFlat(g,s,x,y,size,color,align){   // HUD digits: flat, no drop shadow
   g.font=`900 ${size}px "Courier New",monospace`; g.textAlign=align||'center'; g.textBaseline='middle';
   g.fillStyle=color; g.fillText(s,x,y);
@@ -1504,26 +1535,27 @@ function render(dt){
   // HUD — the Amiga original: a grey bar across the top, score left, time centre,
   // both in chunky red digits (measured from the real game, see PARITY.md)
   const HUDBG='#888888', HUDFG='#882222', HUDLOW='#dd2222';
-  g.fillStyle=HUDBG; g.fillRect(0,0,640,26);
+  g.fillStyle=HUDBG; g.fillRect(0,0,640,20);   // the original's bar is ~4% of screen height
   if(numPlayers===1){
-    textFlat(g,String(player.score),22,15,20,HUDFG,'left');
-    textFlat(g,String(Math.ceil(player.timeLeft)).padStart(2,'0'),320,15,20,
+    hudNum(g,player.score,143,2,2,HUDFG,'left');    // score sits ~22% across, as on the Amiga
+    hudNum(g,String(Math.ceil(player.timeLeft)).padStart(2,'0'),320,2,2,
          player.timeLeft<=6?HUDLOW:HUDFG,'center');
   } else {
-    textFlat(g,String(player.score),22,15,18,HUDFG,'left');
-    textFlat(g,player.out?'--':String(Math.ceil(player.timeLeft)).padStart(2,'0'),250,15,18,
+    hudNum(g,player.score,40,2,2,HUDFG,'left');
+    hudNum(g,player.out?'00':String(Math.ceil(player.timeLeft)).padStart(2,'0'),250,2,2,
          player.out?'#555555':(player.timeLeft<=6?HUDLOW:HUDFG),'center');
-    textFlat(g,player2.out?'--':String(Math.ceil(player2.timeLeft)).padStart(2,'0'),390,15,18,
+    hudNum(g,player2.out?'00':String(Math.ceil(player2.timeLeft)).padStart(2,'0'),390,2,2,
          player2.out?'#555555':(player2.timeLeft<=6?HUDLOW:HUDFG),'center');
-    textFlat(g,String(player2.score),618,15,18,'#223388','right');
-    if(player.finished) text(g,'FIN',250,42,12,'#ffd23a','center');
-    if(player2.finished) text(g,'FIN',390,42,12,'#ffd23a','center');
+    hudNum(g,player2.score,600,2,2,'#223388','right');
+    if(player.finished) text(g,'FIN',250,34,12,'#ffd23a','center');
+    if(player2.finished) text(g,'FIN',390,34,12,'#ffd23a','center');
   }
   if(state==='ready'){ stateT+=dt;
     // the original announces each race on a grey panel in dark red
     g.fillStyle='#999999'; g.fillRect(60,146,520,74);
     spaced(g,'TIME TO FINISH',320,170,18,'#882222','center');
-    spaced(g,RACES[raceIdx].name.replace(' RACE','')+' RACE:   '+raceTime(raceIdx),320,198,18,'#882222','center');
+    const bl=spaced(g,RACES[raceIdx].name.replace(' RACE','')+' RACE:',292,198,18,'#882222','center');
+    hudNum(g,raceTime(raceIdx),292+bl/2+16,190,2,'#882222','left');
     if(stateT>1.5){ state='race'; stateT=0; Snd.ready(2); } }
   if(state==='race'&&deathMsgT>0){ text(g,deathMsg,320,168,22,'#ff97a5'); }
   if(state==='race'&&numPlayers===2){
