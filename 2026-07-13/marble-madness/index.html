@@ -35,9 +35,24 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.55.0';
+const VERSION = '0.56.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
+/* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
+   was 4.69% — its courses are the same physical size but made of ~1.5x MORE, SMALLER
+   cells. GS is that factor.
+   The whole change is confined to the CELL GRID: the array is GS times denser and each
+   cell draws at 1/GS the screen size. WORLD UNITS DO NOT CHANGE — physics, the marble,
+   hazards, course coordinates, the QA hooks and the bot waypoints all keep working in
+   the original units, and the projection basis is untouched. The world->cell conversion
+   happens in exactly two places: the height lookup and the cell renderer.
+   gi/ge map an inclusive world range [v0,v1] to cell indices [round(v0*GS),
+   round((v1+1)*GS)-1], so ADJACENT ranges tile with no gaps and no overlap — that is
+   what lets per-cell authoring loops (the sawtooth carve in buildPractice) survive. */
+const GS = 3;                                 // cells per authored world unit
+const TSZ = Math.max(1, Math.round(GS/1.5));  // cells per drawn checker diamond
+const gi = x => Math.round(x*GS);            // inclusive range START -> cell index
+const ge = x => Math.round((x+1)*GS)-1;      // inclusive range END   -> cell index
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
 /* Marble size: the ONLY comparable metric is what fraction of the SCREEN it covers.
    Measured on the original: 55 px of its 1100 px screen = 5.0%.
@@ -54,6 +69,9 @@ const BASIS_STD={axx:20,axy:10,aux:-10,auy:14}, BASIS_FLIP={axx:20,axy:10,aux:10
 function setBasis(b){ AXx=b.axx; AXy=b.axy; AUx=b.aux; AUy=b.auy;
   DET=AXx*AUy-AUx*AXy; FLIP=AUy<0; }
 function projX(v,u){ return v*AXx + u*AUx; }
+/* renderer helpers: the cell grid is GS times denser than world units */
+function pX(v,u){ return (v/GS)*AXx + (u/GS)*AUx; }
+function pY(v,u,z){ return (v/GS)*AXy + (u/GS)*AUy - z*AZ; }
 function projY(v,u,z){ return v*AXy + u*AUy - z*AZ; }
 function screenToGrid(sx,sy){ return { dv:(AUy*sx - AUx*sy)/DET, du:(-AXy*sx + AXx*sy)/DET }; }
 
@@ -61,35 +79,45 @@ function screenToGrid(sx,sy){ return { dv:(AUy*sx - AUx*sy)/DET, du:(-AXy*sx + A
 const NORMAL=0, GOAL=1;
 const ABYSS=-2.5;
 let CV=0, CU=0, cells=null, dynBand=null, decorFn=null, simT=0;
-function newGrid(cv,cu){ CV=cv; CU=cu; dynBand=null; decorFn=null; hazards=[];
+function newGrid(cv,cu){ CV=Math.round(cv*GS); CU=Math.round(cu*GS); dynBand=null; decorFn=null; hazards=[];
   cells=new Array(CU); for(let u=0;u<CU;u++) cells[u]=new Array(CV).fill(null); }
 function put(v,u,h00,h10,h01,h11,o){ cells[u][v]={h00,h10,h01,h11,type:(o&&o.type)||NORMAL,tint:(o&&o.tint)||null,tex:(o&&o.tex)||null,dots:!!(o&&o.dots)}; }
-function carve(v0,u0,v1,u1){ for(let u=u0;u<=u1;u++)for(let v=v0;v<=v1;v++) cells[u][v]=null; }
-function slab(v0,u0,v1,u1,h,o){ for(let u=u0;u<=u1;u++)for(let v=v0;v<=v1;v++) put(v,u,h,h,h,h,o); }
-function rampU(v0,u0,v1,u1,hTop,hBot,o){ const n=(u1+1-u0);
-  for(let u=u0;u<=u1;u++){ const a=hTop+(hBot-hTop)*(u-u0)/n, b=hTop+(hBot-hTop)*(u+1-u0)/n;
-    for(let v=v0;v<=v1;v++) put(v,u,a,a,b,b,o); } }
-function rampV(v0,u0,v1,u1,hL,hR,o){ const n=(v1+1-v0);
-  for(let v=v0;v<=v1;v++){ const a=hL+(hR-hL)*(v-v0)/n, b=hL+(hR-hL)*(v+1-v0)/n;
-    for(let u=u0;u<=u1;u++) put(v,u,a,b,a,b,o); } }
+function carve(v0,u0,v1,u1){ for(let u=gi(u0);u<=ge(u1);u++)for(let v=gi(v0);v<=ge(v1);v++)
+  if(cells[u]) cells[u][v]=null; }
+function slab(v0,u0,v1,u1,h,o){ for(let u=gi(u0);u<=ge(u1);u++)for(let v=gi(v0);v<=ge(v1);v++) put(v,u,h,h,h,h,o); }
+function rampU(v0,u0,v1,u1,hTop,hBot,o){ const U0=gi(u0),U1=ge(u1),n=(U1+1-U0);
+  for(let u=U0;u<=U1;u++){ const a=hTop+(hBot-hTop)*(u-U0)/n, b=hTop+(hBot-hTop)*(u+1-U0)/n;
+    for(let v=gi(v0);v<=ge(v1);v++) put(v,u,a,a,b,b,o); } }
+function rampV(v0,u0,v1,u1,hL,hR,o){ const V0=gi(v0),V1=ge(v1),n=(V1+1-V0);
+  for(let v=V0;v<=V1;v++){ const a=hL+(hR-hL)*(v-V0)/n, b=hL+(hR-hL)*(v+1-V0)/n;
+    for(let u=gi(u0);u<=ge(u1);u++) put(v,u,a,b,a,b,o); } }
 function waves(v0,u0,v1,u1,hTop,hBot,amp,perV,perU,o){
-  const f=(v,u)=>{ const t=(u-u0)/(u1+1-u0);
-    const eased=Math.min(1,Math.min(u-u0,(u1+1)-u)/2.2);
-    return hTop+(hBot-hTop)*t + amp*Math.max(0,eased)*Math.sin(v*Math.PI*2/perV)*Math.sin(u*Math.PI*2/perU); };
-  for(let u=u0;u<=u1;u++)for(let v=v0;v<=v1;v++) put(v,u,f(v,u),f(v+1,u),f(v,u+1),f(v+1,u+1),o);
+  const V0=gi(v0),V1=ge(v1),U0=gi(u0),U1=ge(u1), PV=perV*GS, PU=perU*GS;
+  const f=(v,u)=>{ const t=(u-U0)/(U1+1-U0);
+    const eased=Math.min(1,Math.min(u-U0,(U1+1)-u)/(2.2*GS));
+    return hTop+(hBot-hTop)*t + amp*Math.max(0,eased)*Math.sin(v*Math.PI*2/PV)*Math.sin(u*Math.PI*2/PU); };
+  for(let u=U0;u<=U1;u++)for(let v=V0;v<=V1;v++) put(v,u,f(v,u),f(v+1,u),f(v,u+1),f(v+1,u+1),o);
 }
+/* the old footprint was a fixed 2x2 CELLS; in world terms that is a 2x2 patch, which at
+   GS covers more cells — so it is rebuilt as a cone over the scaled block, keeping the
+   peak the same physical size instead of shrinking as the grid gets finer */
 function pyramid(v,u,base,peak,o){ const oo=o||{};
-  put(v,u,  base,base,base,peak,oo); put(v+1,u,  base,base,peak,base,oo);
-  put(v,u+1,base,peak,base,base,oo); put(v+1,u+1,peak,base,base,base,oo); }
+  const V0=gi(v),V1=ge(v+1),U0=gi(u),U1=ge(u+1);
+  const cx=(V0+V1+1)/2, cy=(U0+U1+1)/2, rx=(V1+1-V0)/2, ry=(U1+1-U0)/2;
+  const f=(vv,uu)=>{ const d=Math.max(Math.abs(vv-cx)/rx,Math.abs(uu-cy)/ry);
+    return base+(peak-base)*Math.max(0,1-d); };
+  for(let uu=U0;uu<=U1;uu++)for(let vv=V0;vv<=V1;vv++)
+    put(vv,uu,f(vv,uu),f(vv+1,uu),f(vv,uu+1),f(vv+1,uu+1),oo); }
 /* animated band: cells must ALSO be authored (static shape ~ t=0) for prerender bounds */
 function dynWaves(v0,u0,v1,u1,hTop,hBot,amp,perV,perU,speed,o){
-  dynBand={v0,u0,v1,u1,hTop,hBot,amp,perV,perU,speed,tint:(o&&o.tint)||null,tex:(o&&o.tex)||null};
+  dynBand={v0:gi(v0),u0:gi(u0),v1:ge(v1),u1:ge(u1),hTop,hBot,amp,perV:perV*GS,perU:perU*GS,
+    speed,tint:(o&&o.tint)||null,tex:(o&&o.tex)||null};
   waves(v0,u0,v1,u1,hTop,hBot,amp,perV,perU,o);
 }
 function dynH(v,u,t){ const b=dynBand;
   const tt=(u-b.u0)/(b.u1+1-b.u0);
-  const easeU=Math.min(1,Math.min(u-b.u0,(b.u1+1)-u)/2.2);
-  const easeV=Math.min(1,Math.min(v-b.v0,(b.v1+1)-v)/1.2);
+  const easeU=Math.min(1,Math.min(u-b.u0,(b.u1+1)-u)/(2.2*GS));
+  const easeV=Math.min(1,Math.min(v-b.v0,(b.v1+1)-v)/(1.2*GS));
   const eased=Math.max(0,Math.min(easeU,easeV));
   return b.hTop+(b.hBot-b.hTop)*tt + b.amp*eased*Math.sin(v*Math.PI*2/b.perV + t*b.speed*0.7)*Math.sin(u*Math.PI*2/b.perU + t*b.speed);
 }
@@ -102,7 +130,11 @@ function hillsAt(v,u){ let dh=0;
     const dv=v-h.cv, du=u-h.cu, q=(dv*dv+du*du)/(2*h.sig*h.sig);
     if(q<9) dh+=h.amp*Math.exp(-q); }
   return dh; }
-function groundH(v,u){ const c=cellAt(v,u); if(!c) return NaN;
+/* v,u come in as WORLD coordinates; the cell grid is GS times denser, so this is where
+   the conversion lives. hillsAt still takes world coordinates (its hazards are authored
+   in them), so it is passed the unconverted pair. */
+function groundH(wv,wu){ const v=wv*GS, u=wu*GS;
+  const c=cellAt(v,u); if(!c) return NaN;
   let base;
   if(inDyn(v,u)){
     const iv=Math.floor(v), iu=Math.floor(u), fv=v-iv, fu=u-iu;
@@ -113,7 +145,7 @@ function groundH(v,u){ const c=cellAt(v,u); if(!c) return NaN;
     const fv=v-Math.floor(v), fu=u-Math.floor(u);
     base=(c.h00*(1-fv)+c.h10*fv)*(1-fu) + (c.h01*(1-fv)+c.h11*fv)*fu;
   }
-  return base+hillsAt(v,u); }
+  return base+hillsAt(wv,wu); }
 
 /* ---------- races ---------- */
 function buildPractice(){ newGrid(24,88);
@@ -503,35 +535,35 @@ function stripeWall(g,c,p1x,p1y,p2x,p2y,b1y,b2y,base,vpos){
 }
 let off,offX,offY,offW,offH;
 function drawCellC(g,v,u,ox,oy,c){
-  const x00=projX(v,u)+ox,   y00=projY(v,u,c.h00)+oy;
-  const x10=projX(v+1,u)+ox, y10=projY(v+1,u,c.h10)+oy;
-  const x01=projX(v,u+1)+ox, y01=projY(v,u+1,c.h01)+oy;
-  const x11=projX(v+1,u+1)+ox,y11=projY(v+1,u+1,c.h11)+oy;
+  const x00=pX(v,u)+ox,   y00=pY(v,u,c.h00)+oy;
+  const x10=pX(v+1,u)+ox, y10=pY(v+1,u,c.h10)+oy;
+  const x01=pX(v,u+1)+ox, y01=pY(v,u+1,c.h01)+oy;
+  const x11=pX(v+1,u+1)+ox,y11=pY(v+1,u+1,c.h11)+oy;
   if(!FLIP){
     const S=(u+1<CU)?cells[u+1][v]:null;
     const sA=S?S.h00:ABYSS, sB=S?S.h10:ABYSS;
     if(c.h01>sA+0.01||c.h11>sB+0.01){
-      const b1=projY(v,u+1,Math.min(sA,c.h01))+oy, b2=projY(v+1,u+1,Math.min(sB,c.h11))+oy;
+      const b1=pY(v,u+1,Math.min(sA,c.h01))+oy, b2=pY(v+1,u+1,Math.min(sB,c.h11))+oy;
       stripeWall(g,c,x01,y01,x11,y11,b1,b2,0.34,v);
       dots(g,c,x01,y01,x11,b1,v,u); }
   } else {
     const S=(u-1>=0)?cells[u-1][v]:null;
     const sA=S?S.h01:ABYSS, sB=S?S.h11:ABYSS;
     if(c.h00>sA+0.01||c.h10>sB+0.01){
-      const b1=projY(v,u,Math.min(sA,c.h00))+oy, b2=projY(v+1,u,Math.min(sB,c.h10))+oy;
+      const b1=pY(v,u,Math.min(sA,c.h00))+oy, b2=pY(v+1,u,Math.min(sB,c.h10))+oy;
       stripeWall(g,c,x00,y00,x10,y10,b1,b2,0.34,v);
       dots(g,c,x00,y00,x10,b1,v,u); }
   }
   const E=(v+1<CV)?cells[u][v+1]:null;
   const eA=E?E.h00:ABYSS, eB=E?E.h01:ABYSS;
   if(c.h10>eA+0.01||c.h11>eB+0.01){
-    const b1=projY(v+1,u,Math.min(eA,c.h10))+oy, b2=projY(v+1,u+1,Math.min(eB,c.h11))+oy;
+    const b1=pY(v+1,u,Math.min(eA,c.h10))+oy, b2=pY(v+1,u+1,Math.min(eB,c.h11))+oy;
     stripeWall(g,c,x10,y10,x11,y11,b1,b2,0.58,v); }
   if(c.type===GOAL){
     for(let i=0;i<3;i++)for(let j=0;j<3;j++){ const v0=v+i/3,v1=v+(i+1)/3,u0=u+j/3,u1=u+(j+1)/3;
       g.fillStyle=((i+j)%2)?'#e8ecf8':'#12141f'; g.beginPath();
-      g.moveTo(projX(v0,u0)+ox,projY(v0,u0,c.h00)+oy); g.lineTo(projX(v1,u0)+ox,projY(v1,u0,c.h00)+oy);
-      g.lineTo(projX(v1,u1)+ox,projY(v1,u1,c.h00)+oy); g.lineTo(projX(v0,u1)+ox,projY(v0,u1,c.h00)+oy);
+      g.moveTo(pX(v0,u0)+ox,pY(v0,u0,c.h00)+oy); g.lineTo(pX(v1,u0)+ox,pY(v1,u0,c.h00)+oy);
+      g.lineTo(pX(v1,u1)+ox,pY(v1,u1,c.h00)+oy); g.lineTo(pX(v0,u1)+ox,pY(v0,u1,c.h00)+oy);
       g.closePath(); g.fill(); }
   } else if(c.tex==='check'){
     const [r,gg,b]=baseRGB(c);
@@ -539,21 +571,19 @@ function drawCellC(g,v,u,ox,oy,c){
     const k=1 + Math.max(-1.2,Math.min(0,s))*-0.13 + Math.min(1.2,Math.max(0,s))*-0.08;
     const c1=`rgb(${Math.round(r*k)},${Math.round(gg*k)},${Math.round(b*k)})`;
     const c2=`rgb(${Math.round(r*k*0.74)},${Math.round(gg*k*0.72)},${Math.round(b*k*0.7)})`;
-    const hAt=(fv,fu)=>(c.h00*(1-fv)+c.h10*fv)*(1-fu)+(c.h01*(1-fv)+c.h11*fv)*fu;
-    const par=(Math.floor(v)+Math.floor(u))%2;
-    for(let i=0;i<2;i++)for(let j=0;j<2;j++){
-      g.fillStyle=(((i+j)%2)===par)?c1:c2; g.beginPath();
-      const pts=[[i/2,j/2],[(i+1)/2,j/2],[(i+1)/2,(j+1)/2],[i/2,(j+1)/2]];
-      pts.forEach(([fv,fu],n)=>{ const px=projX(v+fv,u+fu)+ox, py=projY(v+fv,u+fu,hAt(fv,fu))+oy;
-        if(n===0) g.moveTo(px,py); else g.lineTo(px,py); });
-      g.closePath(); g.fill(); }
+    // this used to subdivide the cell 2x2 for a finer texture; with the denser grid the
+    // cell IS finer, so it now uses the same measured diamond as every other floor
+    const par=(Math.floor(v/TSZ)+Math.floor(u/TSZ))%2;
+    g.fillStyle=par?c2:c1; g.beginPath();
+    g.moveTo(x00,y00); g.lineTo(x10,y10); g.lineTo(x11,y11); g.lineTo(x01,y01);
+    g.closePath(); g.fill();
   } else {
     let topc=topColor(c);
     if(PAL.checker){
       const s2=(c.h01+c.h11-c.h00-c.h10)/2;
       const kk=(1+Math.max(-1.2,Math.min(0,s2))*-0.13+Math.min(1.2,Math.max(0,s2))*-0.08)
               *Math.max(0.72,Math.min(1.10,0.70+((c.h00+c.h10+c.h01+c.h11)/4)*0.026));
-      const alt=((Math.floor(v)+Math.floor(u))%2)===1;
+      const alt=((Math.floor(v/TSZ)+Math.floor(u/TSZ))%2)===1;
       if(!c.tint){
         topc=shadeHex(alt?PAL.floorAlt:PAL.floorHi,kk);
       } else {
@@ -570,9 +600,12 @@ function drawCellC(g,v,u,ox,oy,c){
         g.fillStyle=cols[hsh%3]; g.beginPath();
         g.arc((x00+x11)/2+((hsh%7)-3),(y00+y11)/2+((hsh%5)-2),2.6+(hsh%2),0,Math.PI*2); g.fill(); } }
     if(c.tex==='grid'&&PAL.checker){
-      // one diamond per cell, alternating, with a darker seam — as the original
+      // the darker seam marks DIAMOND boundaries, not every cell — so only the two
+      // edges of this cell that lie on a tile boundary get stroked
       g.strokeStyle=PAL.line; g.lineWidth=1; g.beginPath();
-      g.moveTo(x00,y00); g.lineTo(x10,y10); g.lineTo(x11,y11); g.lineTo(x01,y01); g.closePath(); g.stroke();
+      if(v%TSZ===0){ g.moveTo(x00,y00); g.lineTo(x01,y01); }
+      if(u%TSZ===0){ g.moveTo(x00,y00); g.lineTo(x10,y10); }
+      g.stroke();
     } else if(c.tex==='grid'){ g.strokeStyle=c.tint?'rgba(30,50,54,.45)':PAL.line; g.lineWidth=1; g.beginPath();
       g.moveTo(x00,y00); g.lineTo(x10,y10); g.lineTo(x11,y11); g.lineTo(x01,y01); g.closePath();
       const mv0x=(x00+x10)/2,mv0y=(y00+y10)/2,mv1x=(x01+x11)/2,mv1y=(y01+y11)/2;
@@ -614,7 +647,7 @@ function prerender(){
   let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
   for(let u=0;u<CU;u++)for(let v=0;v<CV;v++){ const c=cells[u][v]; if(!c) continue;
     for(const [vv,uu,h] of [[v,u,c.h00],[v+1,u,c.h10],[v,u+1,c.h01],[v+1,u+1,c.h11]]){
-      const px=projX(vv,uu), py=projY(vv,uu,h+1), pb=projY(vv,uu,ABYSS);
+      const px=pX(vv,uu), py=pY(vv,uu,h+1), pb=pY(vv,uu,ABYSS);
       if(px<mnx)mnx=px; if(px>mxx)mxx=px; if(py<mny)mny=py; if(pb>mxy)mxy=pb; } }
   const pad=26; offX=pad-mnx; offY=pad-mny; offW=Math.ceil(mxx-mnx)+pad*2; offH=Math.ceil(mxy-mny)+pad*2;
   off=document.createElement('canvas'); off.width=offW; off.height=offH;
@@ -1126,7 +1159,7 @@ function updateHazards(dt){
         }
       } else { for(const pl of players) if(pl.alive&&!pl.hidden&&pl.z<12.6&&
           pl.v>=h.rect.v0&&pl.v<=h.rect.v1&&pl.u>=h.rect.u0&&pl.u<=h.rect.u1&&
-          !cellAt(pl.v,pl.u)){
+          !cellAt(pl.v*GS,pl.u*GS)){
           h.busyT=0.8; h.captive=pl; pl.hidden=true; pl.vv=0; pl.vu=0; Snd.fall(); break; } }
     }
   }
@@ -1228,8 +1261,8 @@ function physics(dt){
       if(pl.moveAcc>=1){ pl.moveAcc-=1; pl.score+=10; } }
     pl.safeT+=dt;
     const h2=groundH(pl.v,pl.u);
-    if(pl.safeT>0.4&&pl.grounded&&Math.hypot(pl.vv,pl.vu)<7&&!inDyn(pl.v,pl.u)){ pl.safeT=0;
-      const c=cellAt(pl.v,pl.u);
+    if(pl.safeT>0.4&&pl.grounded&&Math.hypot(pl.vv,pl.vu)<7&&!inDyn(pl.v*GS,pl.u*GS)){ pl.safeT=0;
+      const c=cellAt(pl.v*GS,pl.u*GS);
       if(c&&c.type===NORMAL){ let ok=true;
         for(const [dv,du] of [[0.9,0],[-0.9,0],[0,0.9],[0,-0.9]]){
           const hh=groundH(pl.v+dv,pl.u+du);
@@ -1239,7 +1272,7 @@ function physics(dt){
         if(ok) for(const ahead of [1.6,3.0]){
           if(isNaN(groundH(pl.v,pl.u+ahead))){ ok=false; break; } }
         if(ok) pl.lastSafe={v:pl.v,u:pl.u}; } }
-    const c=cellAt(pl.v,pl.u);
+    const c=cellAt(pl.v*GS,pl.u*GS);
     if(c&&c.type===GOAL&&pl.grounded&&!pl.finished){
       pl.finished=true; finishOrder.push(pl.pIdx);
       pl.carry=Math.max(0,pl.timeLeft)+(finishOrder.length===1&&numPlayers===2?5:0);
@@ -1348,10 +1381,11 @@ function drawSpinPattern(g,m,cx,cy,r){
   g.globalAlpha=1; g.restore();
 }
 function redrawFront(g,m){
-  const mu=Math.floor(m.u), px=projX(m.v,m.u)+offX;
-  const u0=Math.max(0,FLIP?mu-4:mu+1), u1=Math.min(CU-1,FLIP?mu-1:mu+4);
+  const mu=Math.floor(m.u*GS), px=projX(m.v,m.u)+offX;
+  const W=4*GS;   // 4 WORLD units ahead, expressed in cells
+  const u0=Math.max(0,FLIP?mu-W:mu+1), u1=Math.min(CU-1,FLIP?mu-1:mu+W);
   for(let u=u0;u<=u1;u++)for(let v=0;v<CV;v++){ const c=cells[u]&&cells[u][v]; if(!c) continue;
-    const cx=projX(v+0.5,u)+offX; if(Math.abs(cx-px)>90) continue;
+    const cx=pX(v+0.5,u)+offX; if(Math.abs(cx-px)>90) continue;
     const ch=Math.max(c.h00,c.h10,c.h01,c.h11); if(ch<=m.z+0.2) continue;
     g.save(); g.translate(-camX,-camY);
     if(inDyn(v,u)){ const dc=dynCellAt(v,u); if(dc) drawCellC(g,v,u,offX,offY,dc); }
@@ -1359,8 +1393,9 @@ function redrawFront(g,m){
     g.restore(); }
 }
 function hillCellC(v,u){ const c=cells[u][v]; if(!c) return null;
-  return {h00:c.h00+hillsAt(v,u),h10:c.h10+hillsAt(v+1,u),h01:c.h01+hillsAt(v,u+1),
-          h11:c.h11+hillsAt(v+1,u+1),type:c.type,tint:c.tint,tex:c.tex}; }
+  return {h00:c.h00+hillsAt(v/GS,u/GS),h10:c.h10+hillsAt((v+1)/GS,u/GS),
+          h01:c.h01+hillsAt(v/GS,(u+1)/GS),h11:c.h11+hillsAt((v+1)/GS,(u+1)/GS),
+          type:c.type,tint:c.tint,tex:c.tex}; }
 function drawAcid(g,h){
   const gh=groundH(h.v,h.u); if(isNaN(gh)) return;
   const px=projX(h.v,h.u)+offX-camX, py=projY(h.v,h.u,gh+0.02)+offY-camY;

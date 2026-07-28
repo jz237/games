@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.55.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.56.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,45 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.56.0 (2026-07-28) — THE GRID IS NOW AS FINE AS THE ORIGINAL'S, with zero gameplay change.**
+  The heightfield is 3x denser (`GS=3`) and the checker diamond is drawn per 2-cell TILE
+  (`TSZ=GS/1.5`), which lands it at 2/3 of a world unit = 20 px = **3.13% of screen width**
+  against the measured 3.15%. Verified by cropping the same 18%-of-screen-width band from ours
+  and from the reference at matching magnification and counting: ~6 tiles vs ~5.75.
+  - **The whole change is confined to the cell grid.** World units are untouched, so physics,
+    the marble, hazards, course coordinates, the QA hooks and every bot waypoint keep working
+    exactly as before. The world->cell conversion lives in precisely two places: `groundH()` and
+    the renderer (`pX`/`pY`). Builder ops map world ranges to cell indices via `gi`/`ge`.
+  - **WHY GS MUST BE AN INTEGER — the failed first attempt.** The obvious reading of "1.5x finer"
+    is `GS=1.5`, scaling the world itself. That was built and it broke two of six races. Two
+    separate reasons, both worth remembering:
+    1. **Scaling the world leaks everywhere.** Bot waypoints, QA warps and every authored
+       coordinate are in world units; multiplying the world by 1.5 invalidates all of them. The
+       grid density is a RENDERING property and must not escape the renderer.
+    2. **1.5 cannot preserve course edges.** `round(v*1.5)/1.5` returns v only for even v, so
+       every feature edge at an odd coordinate shifts by up to 1/3 of a unit. A terrain diff
+       against the previous build showed 16-37 solid/void flips per race and height differences
+       up to 4.48. With `GS=3` the same diff shows **0 solid/void mismatches** in all six races
+       and a worst height difference of 0.70 (from the pyramid rewrite alone).
+    Tile size and terrain resolution are INDEPENDENT — that is what makes an integer GS work:
+    take the exact-mapping density you need, then draw the diamond at whatever multiple of it
+    matches the measurement.
+  - `pyramid()` was a fixed 2x2-cell footprint; it is now a cone over the scaled block so the
+    peak keeps its physical size instead of shrinking as the grid gets finer.
+  - The occlusion window in `redrawFront` was expressed in CELLS (`mu+4`); at GS=3 that reached
+    only 1.33 world units instead of 4, so it is now `4*GS`.
+  - `tex:'check'` floors subdivided each cell 2x2 for a finer texture; with the denser grid that
+    became 6 tiles per world unit, so they now use the same measured diamond as every other floor.
+  - **Performance is unaffected** despite 9x the cells: all six races still sit at a 16.6-16.7 ms
+    median. The per-cell cost is in `prerender`, which is once per race load; the per-frame cost
+    is the prerendered blit.
+  - Verified: bots reach every goal with 0 deaths, full six-race playthrough reaches the ending,
+    trap sweep clean on all six, fuzz clean, states clean.
+- **STILL OPEN on the grid: the AXES.** The original is a symmetric 2:1 isometric (both floor
+  axes +/-17.5, +8.65) so its diamonds are 35 x 17.3; ours is `AX=(20,10)`, `AU=(-10,14)`, which
+  renders tiles closer to squares than diamonds. The SIZE now matches; the SHAPE does not. That
+  is a basis change affecting camera lookahead, wall faces, occlusion order and `BASIS_FLIP`,
+  and it should be its own iteration.
 - **v0.55.0 (2026-07-28) — the floor grid MEASURED properly, and a canvas-height bug from v0.54.0.**
   - **THE CANVAS IS 640x400, NOT 640x480.** Every y in v0.54.0's banner geometry was converted
     against 480, so the whole panel sat ~20% too low. Fixed: panel `(33,139,577,68)`, line tops
