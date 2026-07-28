@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.27.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.28.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -240,6 +240,18 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   is GENEROUS rather than tight — which is the right side to err on given the original playtest
   complaint ("clock counts down super fast"), and difficulty 7 (×0.75) exists for the tight version.
   No change made; revisit only if a human playtest says the pacing feels slack.
+- **v0.28.0 (2026-07-27)**: housekeeping the reviews turned up. The page header badge and the
+  games-index entry both still said **"PRACTICE BUILD" / "Unfinished ... palette measured from
+  arcade reference shots"** — stale since the emulator work; both now describe what ships (measured
+  from the real disk, options screen, difficulty, turbocharge, and an honest note that course
+  layouts past each opening still come from arcade maps). Mobile check at 390x844 (`mobile.mjs`):
+  no horizontal overflow, touch enabled, no errors — but the canvas hugged the top of a portrait
+  screen with a large void below, so the stage is now vertically centred (`#stagewrap`).
+- **Reference review (iteration 32)**: `box-main` is a genuine Amiga shot of a blue race — it
+  confirms light-blue/white checker floors, BLUE striped cliffs, dark-navy pyramids with white
+  tips, and the **Marble Munchers as rounded green blobs** (mine already match). One of the four
+  box shots is an orange/tan course, which supports keeping the Intermediate race's tan scheme
+  rather than forcing every race blue.
   **GOTCHA: the `PAL_*` consts must stay ABOVE `const RACES`** — RACES references `pal:PAL_AMIGA`,
   so if they sit below it the whole script dies on a temporal-dead-zone ReferenceError before
   `window.__qa` is ever defined (symptom: VERSION readable but `__qa` undefined).

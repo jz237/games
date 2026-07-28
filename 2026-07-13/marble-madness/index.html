@@ -10,6 +10,7 @@
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;min-height:100%;background:#04050c;color:#dfe4f8;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
 body{display:flex;flex-direction:column;align-items:center;min-height:100vh;min-height:100dvh}
+#stagewrap{flex:1;display:flex;align-items:center;justify-content:center;width:100%}
 .bar{width:100%;max-width:1040px;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;font-size:13px;color:#8d97b8}
 .bar b{color:#e8ddff;letter-spacing:.12em;font-weight:800}
 .bar .tag{font-size:10px;letter-spacing:.16em;border:1px solid rgba(232,168,80,.5);color:#f0b060;border-radius:99px;padding:2px 8px;margin-left:8px;vertical-align:2px}
@@ -24,17 +25,17 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 </head>
 <body>
 <div class="bar">
-  <div><b>MARBLE MADNESS</b><span class="tag">PRACTICE BUILD</span></div>
+  <div><b>MARBLE MADNESS</b><span class="tag">AMIGA TRIBUTE</span></div>
   <div><a href="../../">&larr; jez237 games</a></div>
 </div>
-<div id="stage"><canvas id="game" width="640" height="400"></canvas></div>
+<div id="stagewrap"><div id="stage"><canvas id="game" width="640" height="400"></canvas></div></div>
 <div class="hint"><span>Arrows/WASD</span> roll &middot; <span>click</span> for mouse-trackball (Esc releases) &middot; <span>drag</span> on touch &middot; gamepad left stick &middot; <span>P</span> pause &middot; <span>M</span> mute (music + sfx)</div>
 <script>
 "use strict";
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.27.0';
+const VERSION = '0.28.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
