@@ -34,7 +34,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.21.0';
+const VERSION = '0.22.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -415,9 +415,12 @@ function buildUltimate(){ newGrid(26,72);
 const PAL_AMIGA={ stripes:['#882222','#aa2222','#cc6600','#cccc00'], nStripes:8,
   floorHi:'#dddddd', floorLo:'#cccccc', floorAlt:'#bbbbbb', line:'rgba(102,102,102,.55)',
   checker:true, rail:'#dd3333', arrow:'#a72222' };
-const PAL_BLUE={ stripes:['#2e56c8','#16295e'], nStripes:3,
-  floorHi:'#d6dce6', floorLo:'#c6ccd8', floorAlt:'#aeb6c6', line:'rgba(64,74,96,.55)',
-  checker:false, rail:'#dd3333', arrow:'#a72222' };
+/* Sampled from the genuine Amiga screenshots on the box back: the other races
+   use the same diamond checkerboard in near-white / light blue, with dark
+   blue-purple striped cliff faces. */
+const PAL_BLUE={ stripes:['#3c5aa8','#22356e','#4a3078','#8fa4dc'], nStripes:8,
+  floorHi:'#e8f0f8', floorLo:'#d4e2f2', floorAlt:'#c0d8ec', line:'rgba(72,60,104,.45)',
+  checker:true, rail:'#dd3333', arrow:'#4a3078' };
 let PAL=PAL_BLUE;
 
 const RACES=[

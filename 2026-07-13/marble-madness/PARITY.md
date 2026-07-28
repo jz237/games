@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.21.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.22.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -190,6 +190,11 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   (`pyramid(...,{tint:'#e2e2e2'})`), and a raised platform under each arch gate. Platforms are
   left UNTINTED on purpose so they pick up the palette's red/orange/yellow striped cliff faces.
   The bot line had to be re-routed around the island (see waypoints).
+- **v0.22.0 (2026-07-27)**: the other five races now use the authentic diamond checkerboard too.
+  Sampled from the box-back Amiga screenshots (quantised histogram over the non-dark pixels):
+  floors are near-white `#e8f0f8` / light blue `#c0d8ec`; cliff faces are a dark blue-purple
+  striped ramp `#3c5aa8 / #22356e / #4a3078 / #8fa4dc`. `PAL_BLUE.checker` is now `true`, so every
+  race has the checker floor rather than the old flat grid.
   **GOTCHA: the `PAL_*` consts must stay ABOVE `const RACES`** — RACES references `pal:PAL_AMIGA`,
   so if they sit below it the whole script dies on a temporal-dead-zone ReferenceError before
   `window.__qa` is ever defined (symptom: VERSION readable but `__qa` undefined).
@@ -295,7 +300,18 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
 3. **Measure the remaining clocks on the rig**: the pre-race banner states the allowance in plain
    text — set each difficulty on the menu, click GO!, screenshot the banner. Do the same for
    races 2–6 (needs driving the marble to each goal, or accepting practice-only data).
-4. **Course geometry — partially done.** The practice OPENING is rebuilt from the real screen
+4. **DEAD END (2 iterations spent, 26 & 25): driving the original's courses.** The keyboard
+   joystick moves the marble (score rises) but no single direction or diagonal makes real
+   down-course progress — the marble just drifts around the opening screen and eventually leaves
+   it, and **the camera never scrolls**, so the opening is a fixed-camera screen and everything
+   past it stays unseen. Switching Input Device to Mouse in the options menu did not take either
+   (the click cycles nothing visible / starts a race). Marble-tracking by red-blob or
+   frame-differencing is defeated by the red arches, striped walls and camera behaviour.
+   **Do not re-attempt without a new idea** — e.g. work out the real joystick↔course-axis mapping
+   from the manual/observation of a human play video, or accept the NES-map layouts.
+   The BOX BACK SCAN is the productive alternative: it carries four genuine Amiga screenshots of
+   other courses (`captures/box-main|topright|bottom|left.png`, cropped from `Box_back.jpg`).
+5. **Course geometry — partially done.** The practice OPENING is rebuilt from the real screen
    (v0.21.0). The rest of each course is still my own layout from the NES maps.
    **Driving the original is harder than expected**: the camera does NOT scroll until the marble
    makes real down-course progress, and holding a single direction just drifts it around the
