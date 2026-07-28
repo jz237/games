@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.32.0';
+const VERSION = '0.33.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -373,12 +373,12 @@ function buildUltimate(){ newGrid(26,72);
   rampU(8,6,14,7,26,24,GRID);
   // floating islands over the starfield
   slab(8,8,15,10,24,GRID);
-  slab(10,11,13,11,24,GRID);
-  slab(4,12,11,15,23,GRID);
+  slab(8,11,13,11,24,GRID);            // neck widened: overlaps both islands
+  slab(4,12,13,15,23,GRID);
   hazards.push({type:'muncher',v:16.5,u:18.5,homeV:16.5,homeU:18.5,phase:0,state:'idle',hopT:0,tv:16.5,tu:18.5});
-  slab(9,16,14,16,23,GRID);
-  slab(13,17,20,20,22,GRID);
-  slab(14,21,17,21,22,GRID);
+  slab(9,16,16,16,23,GRID);            // neck reaches the next island
+  slab(11,17,20,20,22,GRID);
+  slab(12,21,17,21,22,GRID);
   slab(8,22,17,25,21,GRID);
   // red checker terraces
   rampU(5,26,20,28,21,19,RCHK);
@@ -430,9 +430,11 @@ const RACES=[
     steelie:{ v:18, u:68, triggerU:62 } },
   { name:'INTERMEDIATE RACE', time:45, start:[6.5,1], build:buildIntermediate,
     steelie:{ v:12, u:56, triggerU:48 } },
-  { name:'AERIAL RACE', time:45, start:[6.5,1], build:buildAerial, steelie:null },
+  // start on the centre-line the course funnels to (v11-15 by u11), not its edge
+  { name:'AERIAL RACE', time:45, start:[13,1], build:buildAerial, steelie:null },
   { name:'SILLY RACE', time:30, start:[12.5,1], build:buildSilly, steelie:null, basis:BASIS_FLIP },
-  { name:'ULTIMATE RACE', time:40, start:[14,1], build:buildUltimate,
+  // likewise: the corridor from u6 is v8-14, so v14 was exactly its right edge
+  { name:'ULTIMATE RACE', time:40, start:[11.5,1], build:buildUltimate,
     steelie:{ v:12, u:35, triggerU:29 }, stars:true },
 ];
 

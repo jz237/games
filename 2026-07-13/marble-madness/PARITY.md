@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.32.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.33.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -307,6 +307,20 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     **Still unproven: that Aerial/Ultimate are completable at all under the new physics.** To prove
     it, port the gate lists to a driver with velocity targets, or extend `botT.mjs` to plan across
     gaps (it currently cannot handle the practice slalom either, stalling at u≈50).
+- **v0.33.0 (2026-07-27) — two courses started you off their own racing line.** `terrain.mjs`
+  (new) dumps ground heights as a grid via `__qa.ground`, which made the problem obvious:
+  - **Aerial** started at v6.5 while the course funnels v6-19 → v9-16 → **v11-15** by u11, so the
+    start was ~5 cells left of where the path goes. Now starts at v13.
+  - **Ultimate** started at v14 — the EXACT right edge of the v8-14 corridor from u6. Now v11.5.
+  - **Ultimate's islands** are a zigzag whose consecutive platforms overlapped by only 2 cells
+    (u11 v10-13 → u12 v4-11; u16 v9-14 → u17 v13-20). Necks widened to ~4-cell overlaps
+    (`slab(8,11,13,11)`, `slab(4,12,13,15)`, `slab(9,16,16,16)`, `slab(11,17,20,20)`,
+    `slab(12,21,17,21)`). Driver progress on Ultimate went u5.8 → 9.2 (start) → 16.4 (necks).
+  These were survivable with the old twitchy marble and punishing with the faithful heavy one —
+  the physics work exposed them rather than caused them.
+  **STILL UNPROVEN: Aerial and Ultimate completed end-to-end.** Best so far: aerial u31/76,
+  ultimate u16/72. `botC.mjs` (corridor driver: widest safe band ahead + throttle easing) was
+  WORSE than `botT.mjs` on most races — don't assume more sophistication helps.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
