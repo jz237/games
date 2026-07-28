@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.49.0';
+const VERSION = '0.50.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -430,7 +430,7 @@ function buildUltimate(){ newGrid(26,72);
    (practice race); see PARITY.md "MEASURED FROM THE REAL AMIGA GAME". */
 const PAL_AMIGA={ stripes:['#882222','#aa2222','#cc6600','#cccc00'], nStripes:8,
   floorHi:'#dddddd', floorLo:'#cccccc', floorAlt:'#bbbbbb', line:'rgba(102,102,102,.55)',
-  checker:true, rail:'#dd3333', arrow:'#a72222' };
+  checker:true, rail:'#dd3333', arrow:'#a72222', stripeShift:true };
 /* Sampled from the genuine Amiga screenshots on the box back: the other races
    use the same diamond checkerboard in near-white / light blue, with dark
    blue-purple striped cliff faces. */
@@ -475,14 +475,21 @@ function wallColor(c,f){
   if(isGreyCell(c)){ const st=PAL.stripes; return shadeHex(st[f<0.4?0:st.length-1],1); }
   const [r,g,b]=hex2rgb(c.tint);
   return `rgb(${Math.round(r*f)},${Math.round(g*f)},${Math.round(b*f)})`; }
-function stripeWall(g,c,p1x,p1y,p2x,p2y,b1y,b2y,base){
+function stripeWall(g,c,p1x,p1y,p2x,p2y,b1y,b2y,base,vpos){
   // vertical stripes across a wall quad (top edge p1->p2, bottoms b1y/b2y)
   let cols,N;
   if(isGreyCell(c)){
     // the original paints cliff faces as fine vertical bands of a fixed ramp;
     // the two wall orientations differ only in overall brightness
+    // The original shades this ramp across the course: walls on the left read
+    // yellow-first, those on the right red-first. Rotate the order by position.
     const k=base<0.4?0.82:1;
-    cols=PAL.stripes.map(h=>shadeHex(h,k)); N=PAL.nStripes;
+    const st=PAL.stripes.slice();
+    if(PAL.stripeShift&&vpos!==undefined){
+      const rot=Math.max(0,Math.min(st.length-1,Math.round((vpos/CV)*(st.length-1))));
+      for(let i=0;i<rot;i++) st.unshift(st.pop());
+    }
+    cols=st.map(h=>shadeHex(h,k)); N=PAL.nStripes;
   } else { cols=[wallColor(c,base),wallColor(c,base*0.55)]; N=3; }
   for(let i=0;i<N;i++){
     const t0=i/N, t1=(i+1)/N;
@@ -505,21 +512,21 @@ function drawCellC(g,v,u,ox,oy,c){
     const sA=S?S.h00:ABYSS, sB=S?S.h10:ABYSS;
     if(c.h01>sA+0.01||c.h11>sB+0.01){
       const b1=projY(v,u+1,Math.min(sA,c.h01))+oy, b2=projY(v+1,u+1,Math.min(sB,c.h11))+oy;
-      stripeWall(g,c,x01,y01,x11,y11,b1,b2,0.34);
+      stripeWall(g,c,x01,y01,x11,y11,b1,b2,0.34,v);
       dots(g,c,x01,y01,x11,b1,v,u); }
   } else {
     const S=(u-1>=0)?cells[u-1][v]:null;
     const sA=S?S.h01:ABYSS, sB=S?S.h11:ABYSS;
     if(c.h00>sA+0.01||c.h10>sB+0.01){
       const b1=projY(v,u,Math.min(sA,c.h00))+oy, b2=projY(v+1,u,Math.min(sB,c.h10))+oy;
-      stripeWall(g,c,x00,y00,x10,y10,b1,b2,0.34);
+      stripeWall(g,c,x00,y00,x10,y10,b1,b2,0.34,v);
       dots(g,c,x00,y00,x10,b1,v,u); }
   }
   const E=(v+1<CV)?cells[u][v+1]:null;
   const eA=E?E.h00:ABYSS, eB=E?E.h01:ABYSS;
   if(c.h10>eA+0.01||c.h11>eB+0.01){
     const b1=projY(v+1,u,Math.min(eA,c.h10))+oy, b2=projY(v+1,u+1,Math.min(eB,c.h11))+oy;
-    stripeWall(g,c,x10,y10,x11,y11,b1,b2,0.58); }
+    stripeWall(g,c,x10,y10,x11,y11,b1,b2,0.58,v); }
   if(c.type===GOAL){
     for(let i=0;i<3;i++)for(let j=0;j<3;j++){ const v0=v+i/3,v1=v+(i+1)/3,u0=u+j/3,u1=u+(j+1)/3;
       g.fillStyle=((i+j)%2)?'#e8ecf8':'#12141f'; g.beginPath();
