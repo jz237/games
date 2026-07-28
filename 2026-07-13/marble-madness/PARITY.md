@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.31.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.32.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -291,6 +291,22 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     HARNESS limit, not an impassable course: `bot2.mjs` (PD with 0.35 s lookahead, lateral-velocity
     damping, and easing off down-course when far off line — what a human does) clears every race at
     ACC 4.6: practice 0 deaths, beginner 1, silly 1, all with 24-41 s to spare. **Use bot2.mjs.**
+- **v0.32.0 (2026-07-27) — did the heavier marble break the courses? No.** New QA hook
+  `__qa.ground(v,u)` (returns groundH or null) lets a driver follow the course with no hand-tuned
+  waypoints; `botT.mjs` scores lateral options 1.5/3/4.5 rows ahead for solid, climbable ground.
+  Findings at ACC 4.6:
+  - **Idle test** (`idle.mjs`, 5 s of no input): practice/beginner/intermediate/ultimate starts are
+    stable; aerial rolls forward down its slope (fine); **Silly rolls off its start deck and dies**
+    — friction is lower now, so standing still on that deck is fatal. Authentic-ish, but noted.
+  - **Intermediate reaches the GOAL** with the terrain follower (3 deaths) — the earlier failure was
+    my invented waypoint list, not the course.
+  - **Aerial and Ultimate fail with every simple driver — but they fail WORSE at the OLD physics.**
+    Control run at ACC 9.2: aerial u=11, ultimate u=18.3; at ACC 4.6: aerial u=28.3, ultimate 12.7.
+    So the new marble did NOT break them; the ledger's gate lists were tuned for the retired
+    `__steerG` PD gate-seek (with velocity targets), not for a plain proportional gate follower.
+    **Still unproven: that Aerial/Ultimate are completable at all under the new physics.** To prove
+    it, port the gate lists to a driver with velocity targets, or extend `botT.mjs` to plan across
+    gaps (it currently cannot handle the practice slalom either, stalling at u≈50).
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and

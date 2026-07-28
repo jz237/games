@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.31.0';
+const VERSION = '0.32.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -1725,6 +1725,7 @@ if(QA){
     menuAt(x,y){ menuMX=x; menuMY=y; },
     menuClick(){ optionsClick(); },
     setDifficulty(d){ OPT.difficulty=d%8; },
+    ground(v,u){ const h=groundH(v,u); return isNaN(h)?null:+h.toFixed(3); },
     turbo(on){ turbo=!!on; }
   };
 }
