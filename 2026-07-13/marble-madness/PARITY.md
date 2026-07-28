@@ -578,6 +578,22 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     state check reports WORKBENCH.
   Lesson worth keeping: **a uniform ~70% frame-change every frame is a flashing/cycling screen, not
   motion.** Real scrolling gives irregular changes (32%, 36%, 42%, 0%...).
+- **2026-07-28 iteration 56 — mapping rig hardened; capture is no longer the bottleneck, CONTROL is.**
+  - **`tools/map_run.py`** — one command drives a whole mapping run with every stage guarded by
+    `screen_state`. It resumes from ANY starting state (Workbench / title / menu / mid-race), and
+    it **detects the GO! click failing** (it silently fails often — roughly one attempt in two) and
+    retries up to 3 times. Optional lead-in inputs: `python3 map_run.py <prefix> Right,Right`.
+  - **`tools/record_run.sh`** — records the Xvfb display with ffmpeg (10 fps, x264). Screenshots
+    cost ~1.5 s each, which is far too slow to see a marble that crosses the screen in a second;
+    video gives every frame. A 30 s recording of a fresh race yielded 6 frames of genuine
+    scrolling transition where screenshot bursts had given 2. **Wait for ffmpeg to finish before
+    extracting** — my first extraction ran against a half-written file and found nothing.
+  - **The real blocker is now steering, not capture.** Driving straight Down from the practice
+    start shatters the marble on the centre structure EVERY time; the course's own painted arrows
+    say the route goes around it. Open-loop bursts cannot steer that. Closed-loop control from the
+    marble detector is not viable either — a screenshot round-trip is ~1.5 s and the marble moves
+    most of a screen in that time. A future attempt needs to drive from the VIDEO stream (decode
+    frames live) or accept that only the first two screens are reachable this way.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
