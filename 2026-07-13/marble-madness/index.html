@@ -35,16 +35,20 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.45.0';
+const VERSION = '0.46.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
-let AXx = 14, AXy = 7;        // +v (across): 2:1 like the arcade (measured from reference)
-let AUx = -7, AUy = 10;       // +u (down course): steep down-left
-const AZ  = 16;               // pixels per height unit
+/* Measured from a 3x zoom of the original's floor: one checker diamond is ~35 px
+   of its 1100 px-wide screen (3.2%) and the marble ~52 px (4.7%), i.e. the marble
+   is 1.5 cells across. (The 61 px autocorrelation period is a light-dark PAIR, not
+   one cell — reading it as one cell makes the marble half the size it should be.) */
+let AXx = 20, AXy = 10;       // +v (across): 2:1, a cell ≈ 3.1% of a 640px canvas
+let AUx = -10, AUy = 14;      // +u (down course): steep down-left
+const AZ  = 23;               // pixels per height unit
 let DET = AXx*AUy - AUx*AXy;
 let FLIP = false;             // true when +u renders up-screen (Silly race)
-const BASIS_STD={axx:14,axy:7,aux:-7,auy:10}, BASIS_FLIP={axx:14,axy:7,aux:7,auy:-10};
+const BASIS_STD={axx:20,axy:10,aux:-10,auy:14}, BASIS_FLIP={axx:20,axy:10,aux:10,auy:-14};
 function setBasis(b){ AXx=b.axx; AXy=b.axy; AUx=b.aux; AUy=b.auy;
   DET=AXx*AUy-AUx*AXy; FLIP=AUy<0; }
 function projX(v,u){ return v*AXx + u*AUx; }
@@ -774,7 +778,7 @@ const Music=(()=>{
 })();
 /* ---------- marbles ---------- */
 function makeMarble(kind){ return { kind, v:0,u:0,z:0,vv:0,vu:0,vz:0,grounded:true,alive:true,hidden:false,active:kind==='player',
-  r:1.05, mass:kind==='steelie'?2.3:1, dropIn:false, deathKind:'', deathT:0, aiRespawnT:0,
+  r:0.75, mass:kind==='steelie'?2.3:1, dropIn:false, deathKind:'', deathT:0, aiRespawnT:0,
   pIdx:0, timeLeft:0, score:0, maxU:0, lastSafe:{v:0,u:0}, safeT:0, finished:false, out:false, carry:0, moveAcc:0 }; }
 const player=makeMarble('player');
 const player2=makeMarble('player'); player2.pIdx=1; player2.active=false;
@@ -1276,7 +1280,7 @@ function floorArrow(g,ox,oy,v,u){
   g.setTransform(1,0,0,1,0,0); g.restore();
 }
 function drawMarbleG(g,m){
-  const p=marbleScreen(m); const r=m.r*14;
+  const p=marbleScreen(m); const r=m.r*AXx;   // scale with the projection, not a constant
   const h=groundH(m.v,m.u);
   if(!isNaN(h)){ const sy=projY(m.v,m.u,h)+offY-camY; const k=Math.max(0.35,1-(m.z-h)*0.12);
     g.fillStyle='rgba(40,40,40,.72)'; g.beginPath();   // hard-edged, like the original

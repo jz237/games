@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.45.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.46.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -443,6 +443,23 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     catch-up spiral; a hidden tab freezes rather than draining the clock.
   - Added `visibilitychange` → `paused=true` during a race, so tab-switching behaviour is the same
     in every browser rather than depending on how aggressively rAF is throttled.
+- **v0.46.0 (2026-07-28) — MARBLE-TO-COURSE SCALE corrected (biggest visual gap left).**
+  Side-by-side with the original: its course FILLS the screen, ours sat back with dead space.
+  The marble is ~the same % of screen width in both, so the difference is the GRID:
+  - **Measure by zooming, not autocorrelation.** A 3x crop of the original's floor shows one
+    checker diamond ≈ **35 px of its 1100 px screen (3.2%)** and the marble ≈ **52 px (4.7%)** —
+    so the marble is **1.5 cells across**. The 61 px autocorrelation period everyone reaches for
+    first is a light-dark PAIR (two cells); reading it as one cell says 0.9 cells and makes the
+    marble half size. I briefly shipped that error inside this iteration before re-measuring.
+  - Ours was **2.1 cells** across with the camera pulled back 2.5x to compensate. Now:
+    basis `14,7,-7,10 → 20,10,-10,14`, `AZ 16→23`, marble `r 1.05→0.75`. Marble = 4.7% of a 640px
+    canvas and a cell = 3.1% — both match the original.
+  - This is why course "necks" kept needing widening: the marble was ~40% too fat for its grid.
+  - Verified after: all six render; practice/beginner/silly reach goal with **0 deaths**;
+    intermediate and aerial reach goal with the terrain follower; **ultimate needs a moderated
+    throttle (0.55)** — flat-out down its terraces shatters the marble on the accumulated drop,
+    which is the documented "big drops smash the marble" rule doing its job. Trap sweep clean.
+  - `drawMarbleG` now sizes the marble from `AXx` rather than a hardcoded 14.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
