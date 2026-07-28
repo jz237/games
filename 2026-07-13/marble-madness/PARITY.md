@@ -562,6 +562,22 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   **Encouraging for the biggest caveat in this project**: the NES-map-derived layout for this
   section is broadly RIGHT — the structure and the flanking pyramids are where the original has
   them. Mapping runs are cheap now; each yields a few screens, so several runs per course.
+- **2026-07-28 iteration 55 — mapping run FAILED; the rig needs a real state check.**
+  Two attempts to capture more of the practice course produced nothing usable:
+  - Run 1: the **GO! click silently did not register**, so the game sat on the options menu for the
+    whole run. Every frame differed by ~70% — that is just the menu title's letters COLOUR-CYCLING,
+    which is easy to mistake for the course scrolling.
+  - Run 2: I added a "did the race start?" check, it passed, and the run still produced nothing —
+    because **the game had quit back to the Amiga Workbench** and my check only asked "is this the
+    grey menu?", so a blue Workbench screen counted as RACE.
+  - New `tools/screen_state.py` classifies **WORKBENCH | MENU | RACE | TITLE | BLACK** from colour
+    fractions (blue-dominant → Workbench; >55% dark + some red → title; >50% mid-grey → menu).
+    Validated on captures of each. **Use it before and during every mapping run**; a run that
+    silently drives a dead session wastes ~8 minutes.
+  - Unexplained: what made the game exit to Workbench mid-session. Watch for it; re-boot when the
+    state check reports WORKBENCH.
+  Lesson worth keeping: **a uniform ~70% frame-change every frame is a flashing/cycling screen, not
+  motion.** Real scrolling gives irregular changes (32%, 36%, 42%, 0%...).
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
