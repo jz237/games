@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.37.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.38.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -367,6 +367,20 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     u35→u56 in 5 s); it can also fall off the course itself.
   **GOTCHA: `__qa.hazards` reports the type as `t`, not `type`** — filtering on `type` silently
   returns [] and looks like the hazards are missing. The getter now also reports `val`/`taken`.
+- **v0.38.0 (2026-07-27) — FULL HAZARD AUDIT: every mechanic verified, no defects.**
+  `hazards.mjs` stands the marble on each hazard in each race for 3.5 s and records the outcome:
+  muncher → `eaten`; acid → `dissolved`; hammer → `smashed`; piston → shoves (~9 cells, no death);
+  moving hill → carries the marble (20-35 cells); critter → **+500**; drop tube (beginner) →
+  transports v5,u50 → u61.5; catapult (beginner) → launches u67 → u88.
+  **The vacuum's nozzle deliberately hangs over the void** beside the u25-28 ramp (v15.8, zone
+  v9-15.5): parked at v12 with NO input the marble is dragged to v18.9 and falls — working as
+  designed, so "NO GROUND under hazard" for it is expected, not a bug.
+  Combined with v0.37 this means **every hazard, the Steelie, the bonus pads and the whole scoring
+  economy are verified working**.
+  QA `hazards` getter now reports rect-based hazards (tube, catapult) by their rect centre plus a
+  `rect:true` flag — they previously read `0,0` and looked misplaced.
+  Harness note: `__qa.lastDeath` is NOT cleared between probes, so a hazard that does not kill
+  still shows the previous kill's `kind`; compare the deaths COUNT, not the kind.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
