@@ -34,7 +34,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.22.0';
+const VERSION = '0.23.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -933,6 +933,16 @@ function marblePhysics(m,dt,accV,accU){
       if(sp>lim){ m.vv*=lim/sp; m.vu*=lim/sp; }
     }
   } else { m.vz-=GRAV*dt; }
+  // rolling-without-slipping spin, used to turn the surface pattern
+  {
+    const sp=Math.hypot(m.vv,m.vu);
+    if(sp>0.02){
+      const dx=(m.vv*AXx+m.vu*AUx), dy=(m.vv*AXy+m.vu*AUy);
+      const dl=Math.hypot(dx,dy)||1;
+      m.spinX=dx/dl; m.spinY=dy/dl;
+    }
+    m.spin=(m.spin||0)+sp*dt/Math.max(0.2,m.r)*0.55;
+  }
   // axis-separated wall checks
   let nv=m.v+m.vv*dt, nu=m.u+m.vu*dt;
   const h0=groundH(m.v,m.u);
@@ -1220,18 +1230,50 @@ function drawMarbleG(g,m){
   const p=marbleScreen(m); const r=m.r*14;
   const h=groundH(m.v,m.u);
   if(!isNaN(h)){ const sy=projY(m.v,m.u,h)+offY-camY; const k=Math.max(0.35,1-(m.z-h)*0.12);
-    g.fillStyle='rgba(6,8,18,.38)'; g.beginPath();
-    g.ellipse(projX(m.v,m.u)+offX-camX,sy-2,r*0.95*k,r*0.4*k,0,0,Math.PI*2); g.fill(); }
-  const grad=g.createRadialGradient(p.x-r*0.38,p.y-r*0.45,r*0.12,p.x,p.y,r*1.05);
-  if(m.kind==='steelie'){ grad.addColorStop(0,'#cfd3e2'); grad.addColorStop(0.25,'#6a7086');
-    grad.addColorStop(0.6,'#2b2f40'); grad.addColorStop(1,'#0b0d16'); }
-  else if(m.pIdx===1){ grad.addColorStop(0,'#e8ecff'); grad.addColorStop(0.28,'#a8b6f5');
-    grad.addColorStop(0.62,'#3a56cc'); grad.addColorStop(1,'#16255e'); }
-  else { grad.addColorStop(0,'#ffdcd2'); grad.addColorStop(0.28,'#ee8a5a');
-    grad.addColorStop(0.62,'#cc3322'); grad.addColorStop(1,'#621212'); }
-  g.fillStyle=grad; g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.fill();
-  g.strokeStyle='rgba(12,16,40,.55)'; g.lineWidth=1; g.stroke();
-  g.fillStyle='rgba(255,255,255,.9)'; g.beginPath(); g.arc(p.x-r*0.42,p.y-r*0.48,r*0.16,0,Math.PI*2); g.fill();
+    g.fillStyle='rgba(40,40,40,.72)'; g.beginPath();   // hard-edged, like the original
+    g.ellipse(projX(m.v,m.u)+offX-camX+2,sy-1,r*0.92*k,r*0.42*k,0,0,Math.PI*2); g.fill(); }
+  // the Amiga sprite is flat-shaded: a solid disc, a hard dark crescent on the
+  // shaded side, and a small light patch — not a glossy gradient sphere
+  const C=(m.kind==='steelie')?['#8f96ad','#3a4058','#c9cee0']
+        :(m.pIdx===1?['#3a56cc','#16255e','#93a8ff']:['#cc2222','#8b1a1a','#ee6644']);
+  g.fillStyle=C[0]; g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.fill();
+  g.save(); g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.clip();
+  g.fillStyle=C[1]; g.beginPath();
+  g.arc(p.x+r*0.30,p.y+r*0.34,r*0.95,0,Math.PI*2); g.fill();   // shaded crescent
+  g.restore();
+  drawSpinPattern(g,m,p.x,p.y,r);
+  g.fillStyle=C[2]; g.beginPath();
+  g.ellipse(p.x-r*0.44,p.y-r*0.46,r*0.20,r*0.15,-0.6,0,Math.PI*2); g.fill();
+  g.strokeStyle='rgba(20,10,10,.45)'; g.lineWidth=1;
+  g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.stroke();
+}
+/* The Amiga marble carries chunky surface patches that visibly turn as it rolls
+   (measured off the original sprite: red ball, olive-yellow blocks). Patches live
+   on a unit sphere and are rotated about the axis perpendicular to travel. */
+const SPIN_PATCHES=[[0,0,1],[0.72,0.16,0.68],[-0.62,0.38,0.68],[0.1,-0.8,0.59],[-0.15,0.86,0.49],[0.86,-0.42,0.29]];
+function drawSpinPattern(g,m,cx,cy,r){
+  const col=(m.kind==='steelie')?'#8f96ad':(m.pIdx===1?'#93a8ff':'#cccc00');
+  const a=m.spin||0, tx=(m.spinX===undefined?1:m.spinX), ty=(m.spinY===undefined?0:m.spinY);
+  const ax=-ty, ay=tx, az=0;                    // roll axis: perpendicular to travel
+  const ca=Math.cos(a), sa=Math.sin(a);
+  g.save();
+  g.beginPath(); g.arc(cx,cy,r*0.97,0,Math.PI*2); g.clip();
+  for(const [px0,py0,pz0] of SPIN_PATCHES){
+    // Rodrigues rotation of the patch centre about (ax,ay,az)
+    const dot=ax*px0+ay*py0+az*pz0;
+    const rx=px0*ca+(ay*pz0-az*py0)*sa+ax*dot*(1-ca);
+    const ry=py0*ca+(az*px0-ax*pz0)*sa+ay*dot*(1-ca);
+    const rz=pz0*ca+(ax*py0-ay*px0)*sa+az*dot*(1-ca);
+    if(rz<=0.06) continue;                       // on the far side
+    const sx=cx+rx*r, sy=cy+ry*r, sz=Math.sqrt(Math.max(0.06,rz));
+    g.fillStyle=col; g.globalAlpha=Math.min(1,0.35+rz);
+    // blocky patches, as on the original sprite
+    const pw=r*0.34*sz, ph=r*0.40*sz, ang=Math.atan2(ry,rx);
+    g.translate(sx,sy); g.rotate(ang*0.35);
+    g.fillRect(-pw/2,-ph/2,pw,ph);
+    g.rotate(-ang*0.35); g.translate(-sx,-sy);
+  }
+  g.globalAlpha=1; g.restore();
 }
 function redrawFront(g,m){
   const mu=Math.floor(m.u), px=projX(m.v,m.u)+offX;

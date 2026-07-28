@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.22.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.23.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -89,6 +89,13 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     red/orange/yellow ramp).
 - **Game over**: grey `#999999` panel centred low with YELLOW `#cccc00` text
   `OUT OF TIME` / `GAME OVER`.
+- **The marble sprite** (zoomed from the real capture, `captures/marble-zoom.png`): a FLAT-shaded
+  bright red disc (no gloss), a hard dark-red `#8b1a1a` crescent on the lower-right, and chunky
+  olive-yellow `#cccc00` BLOCKS on the surface that visibly rotate as it rolls. Its drop shadow is
+  hard-edged dark grey, offset down-right — not a soft blur.
+- Box-back screenshots histogrammed: `box-main` and `box-left` are dominated by light blue
+  `#a8c0d8`/`#c0d8f0` + white with dark navy-purple `#303060`/`#484878` walls (confirms PAL_BLUE);
+  `box-bottom` adds a brown-orange `#783018` accent.
 - **Pre-race banner (iteration 23)**: on starting a race the original shows a grey panel in dark
   red reading `TIME TO FINISH` / `<RACE NAME> RACE:   <seconds>`.
 - **MEASURED CLOCK (corrected, iteration 24): at Difficulty 0 the practice race starts at 60 s.**
@@ -195,6 +202,12 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   floors are near-white `#e8f0f8` / light blue `#c0d8ec`; cliff faces are a dark blue-purple
   striped ramp `#3c5aa8 / #22356e / #4a3078 / #8fa4dc`. `PAL_BLUE.checker` is now `true`, so every
   race has the checker floor rather than the old flat grid.
+- **v0.23.0 (2026-07-27)**: the marble now ROLLS. Physics accumulates `m.spin` (rolling without
+  slipping: `spin += speed*dt/r*0.55`) plus the screen-space travel direction `m.spinX/spinY`;
+  `drawSpinPattern()` places patches on a unit sphere and rotates them (Rodrigues) about the axis
+  perpendicular to travel, hiding any with `z<=0.06` and foreshortening the rest by `sqrt(z)`.
+  The marble is now flat-shaded with a hard crescent and blocky patches to match the real sprite,
+  and the drop shadow is hard-edged. Steelie and P2 get their own patch colours.
   **GOTCHA: the `PAL_*` consts must stay ABOVE `const RACES`** — RACES references `pal:PAL_AMIGA`,
   so if they sit below it the whole script dies on a temporal-dead-zone ReferenceError before
   `window.__qa` is ever defined (symptom: VERSION readable but `__qa` undefined).
