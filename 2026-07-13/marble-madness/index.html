@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.80.0';
+const VERSION = '0.81.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -1544,6 +1544,19 @@ function drawMarbleG(g,m){
     g.fillStyle='#0b0b10'; g.beginPath();
     g.ellipse(projX(m.v,m.u)+offX-camX+2,sy-1,r*0.95*k,r*0.44*k,0,0,Math.PI*2); g.fill();
     g.restore(); }
+  /* Motion blur. A real camera smears a fast-moving ball along its path; without it a
+     quick marble reads as a sprite teleporting between frames. Two ghosts trailing the
+     travel direction, scaled by speed, cost almost nothing and do most of the work. */
+  { const sp=Math.hypot(m.vv,m.vu);
+    if(sp>3.2&&m.alive){
+      const dx=(m.vv*AXx+m.vu*AUx), dy=(m.vv*AXy+m.vu*AUy);
+      const dl=Math.hypot(dx,dy)||1, amt=Math.min(1,(sp-3.2)/7);
+      for(let i=1;i<=2;i++){
+        const back=(i*0.42*amt)*r*1.5;
+        g.save(); g.globalAlpha=0.20*amt/i;
+        g.fillStyle=(m.kind==='steelie')?'#8899aa':(m.pIdx===1?'#3355cc':'#cc0000');
+        g.beginPath(); g.arc(p.x-dx/dl*back, p.y-dy/dl*back, r*(1-i*0.06),0,Math.PI*2);
+        g.fill(); g.restore(); } } }
   /* A lit sphere: body gradient from a terminator on the shaded side, a broad soft
      specular, a tight hot highlight and a rim light picked up from the floor. */
   const C=(m.kind==='steelie')?['#8899aa','#222a38','#e8ecff']
@@ -1561,9 +1574,11 @@ function drawMarbleG(g,m){
   relit.addColorStop(0.80,'rgba(0,0,0,.30)'); relit.addColorStop(1,'rgba(0,0,0,.62)');
   g.fillStyle=relit; g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.fill();
   // rim light along the lower-right edge, as if bounced off the floor
+  const [br,bg2,bb]=hex2rgb(PAL.floorHi||'#dddddd');
   const rim=g.createRadialGradient(p.x+r*0.34,p.y+r*0.40,r*0.55,p.x+r*0.30,p.y+r*0.36,r*1.05);
-  rim.addColorStop(0,'rgba(255,255,255,0)'); rim.addColorStop(0.86,'rgba(255,255,255,0)');
-  rim.addColorStop(1,'rgba(255,255,255,.30)');
+  rim.addColorStop(0,`rgba(${br},${bg2},${bb},0)`);
+  rim.addColorStop(0.86,`rgba(${br},${bg2},${bb},0)`);
+  rim.addColorStop(1,`rgba(${br},${bg2},${bb},.34)`);
   g.fillStyle=rim; g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.fill();
   g.restore();
   const hot=g.createRadialGradient(lx,ly,0,lx,ly,r*0.30);

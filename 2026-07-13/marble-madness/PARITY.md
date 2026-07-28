@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.80.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.81.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,17 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.81.0 (2026-07-28) — realistic pass 11: motion blur and a floor-coloured bounce.**
+  - **Motion blur.** A real camera smears a fast ball along its path; without it a quick marble
+    reads as a sprite teleporting between frames. Two ghosts trail the travel direction, scaled
+    by speed above a 3.2 threshold so a slow roll is untouched.
+  - **The bounce light now carries the FLOOR's colour** rather than white. A white rim is the
+    generic "shiny thing" cue; light bouncing off the course carries the course's colour, which
+    is what actually places the ball on *this* ground. It reads from `PAL.floorHi`, so the blue
+    races tint it themselves.
+  - **Deliberately NOT added: squash on impact.** It is a strong cartoon cue but wrong here — a
+    stone or glass marble does not visibly deform, so it would work against the direction.
+  - All six races render clean.
 - **v0.80.0 (2026-07-28) — realistic pass 10: contact dust (rolling trail + landing puffs).**
   Nine passes made the scene look lit; this one couples the marble to it. A ball that rolls and
   lands with no consequence in the world reads as a sprite sliding over a backdrop no matter how
