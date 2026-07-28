@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.19.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.20.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -91,10 +91,12 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   `OUT OF TIME` / `GAME OVER`.
 - **Pre-race banner (iteration 23)**: on starting a race the original shows a grey panel in dark
   red reading `TIME TO FINISH` / `<RACE NAME> RACE:   <seconds>`.
-- **MEASURED CLOCK: at Difficulty 0 the practice race allows 45 s**, not the 60 s I had assumed
-  (banner text, unambiguous). The Amiga's difficulty 0 is therefore NOT the arcade "normal" DIP.
-  Still to measure: the same banner at difficulties 1–7 and for races 2–6 (cheap now — set
-  difficulty on the menu, click GO!, screenshot the banner).
+- **MEASURED CLOCK (corrected, iteration 24): at Difficulty 0 the practice race starts at 60 s.**
+  Direct observation on a fresh race — marble at the start gate, score `0`, clock `58` two seconds
+  in. So d0 DOES match the arcade allowance. The `45` I read from the pre-race banner in iteration
+  23 was NOT difficulty 0 (the difficulty had been cycled in an earlier session and the banner
+  number is the only thing I read); treat banner numbers as suspect unless the menu difficulty is
+  verified in the SAME boot. Still to measure: d1–d7 and races 2–6.
 - The options-menu title letters **colour-cycle** (captured once as pink/blue `#ffaaaa/#aaaaff`,
   once as pure red/blue `#cc2222/#2222cc`).
 - Keyboard→joystick works in the rig (`joystick_port_1 = keyboard` in mm.fs-uae): arrow keys drive
@@ -175,6 +177,13 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   `TIME TO FINISH / <RACE> RACE:  <n>` wording on a grey panel.
   New QA hooks: `options`, `openOptions()`, `menuAt(x,y)`, `menuClick()`, `setDifficulty(d)`,
   `turbo(on)`.
+- **v0.20.0 (2026-07-27)**: practice clock corrected to 60 s at d0 (difficulty curve now
+  `1 − 0.0357·d`, so d7 ≈ 0.75× → 45 s, matching the other banner reading). Added the original's
+  **red tube arch gates** (`archGate()` — built in WORLD space from projX/projY so it foreshortens
+  correctly; screen-space drawing looked like a croquet hoop. It shrinks its span until both feet
+  find ground, otherwise `groundH` returns NaN at the course edge and the arch silently vanishes)
+  and the **painted twin-chevron floor arrows** (`floorArrow()`, drawn through the axonometric
+  setTransform so they lie flat on the surface).
   **GOTCHA: the `PAL_*` consts must stay ABOVE `const RACES`** — RACES references `pal:PAL_AMIGA`,
   so if they sit below it the whole script dies on a temporal-dead-zone ReferenceError before
   `window.__qa` is ever defined (symptom: VERSION readable but `__qa` undefined).
@@ -275,9 +284,10 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
 3. **Measure the remaining clocks on the rig**: the pre-race banner states the allowance in plain
    text — set each difficulty on the menu, click GO!, screenshot the banner. Do the same for
    races 2–6 (needs driving the marble to each goal, or accepting practice-only data).
-4. **Capture the real course geometry** (keyboard joystick now works): drive down each course
-   taking shots, then correct my layouts — the practice course is visibly wavier in my build than
-   the original's, and the red arch gates and painted floor arrows are not modelled at all.
+4. **Capture the real course geometry** (keyboard joystick works; `mm_ctl.py hold Down 2`):
+   drive down each course taking shots, then correct my layouts — my practice course is visibly
+   wavier than the original's, whose opening is a broad flat checker plain with a central
+   twin-peaked structure. (Arch gates and floor arrows: DONE in v0.20.0.)
 5. Capture races 2–6 palettes (each race has its own scheme) and repaint as in v0.18.0.
 2. **Amiga-exclusive features from manual**: options menu (players/input/Red-Blue/difficulty
    0–7/GO!), turbocharge button (fire/LMB speed burst). Difficulty should scale clocks toward

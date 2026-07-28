@@ -34,7 +34,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.19.0';
+const VERSION = '0.20.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -144,12 +144,10 @@ function buildPractice(){ newGrid(24,88);
       const x=projX(v,8)+ox, y=projY(v,8,isNaN(h)?12:h+0.03)+oy;
       if(i===0) g.moveTo(x,y); else g.lineTo(x,y); }
     g.stroke(); g.setLineDash([]);
-    for(const av of [3.6,20.2]){
-      const h=groundH(av,8); if(isNaN(h)) continue;
-      const bx=projX(av,8)+ox, by=projY(av,8,h)+oy;
-      g.strokeStyle='#c23a44'; g.lineWidth=4;
-      g.beginPath(); g.moveTo(bx-9,by); g.lineTo(bx-9,by-30);
-      g.arc(bx,by-30,9,Math.PI,0); g.lineTo(bx+9,by); g.stroke(); }
+    // red tube arch gates flanking the course, as on the original
+    for(const [av,au] of [[5.5,8],[17.5,8],[5.5,33],[17.5,33],[5.5,66],[15.5,66]]) archGate(g,ox,oy,av,au);
+    // painted arrows on the floor pointing down-course
+    for(const [av,au] of [[11.5,12],[11.5,26],[6.5,38],[16.5,38],[11.5,58],[8,70]]) floorArrow(g,ox,oy,av,au);
     for(const [cv,cu] of [[10.5,53.5],[10.5,55.5],[10.5,59],[10.5,61]]){
       const h=groundH(cv,cu); if(isNaN(h)) continue;
       const px=projX(cv,cu)+ox, py=projY(cv,cu,h+0.05)+oy;
@@ -410,7 +408,7 @@ const PAL_BLUE={ stripes:['#2e56c8','#16295e'], nStripes:3,
 let PAL=PAL_BLUE;
 
 const RACES=[
-  { name:'PRACTICE RACE', time:45, start:[11.5,4], build:buildPractice, steelie:null, pal:PAL_AMIGA },
+  { name:'PRACTICE RACE', time:60, start:[11.5,4], build:buildPractice, steelie:null, pal:PAL_AMIGA },
   { name:'BEGINNER RACE', time:60, start:[12.5,3], build:buildBeginner,
     steelie:{ v:18, u:68, triggerU:62 } },
   { name:'INTERMEDIATE RACE', time:45, start:[6.5,1], build:buildIntermediate,
@@ -755,10 +753,11 @@ let state='title', stateT=0, raceIdx=0, deaths=0, raceT=0;
 /* Amiga options screen (see PARITY.md): players, difficulty 0-7, port, device */
 const OPT={ players:1, difficulty:0, port:'Rear  Port', device:'Joy Stick' };
 let menuMX=320, menuMY=300;   // marble cursor position on the options screen
-/* Difficulty scales the per-race allowance. d0 practice = 45 s is measured from
-   the real Amiga; higher levels tighten toward the arcade DIP values. */
+/* Difficulty scales the per-race allowance. MEASURED on the real Amiga: the
+   practice race starts at 60 s on difficulty 0 (score 0 / clock 58 two seconds
+   in), so d0 matches the arcade allowance and higher levels tighten from there. */
 function raceTime(i){ const base=RACES[i].time;
-  return Math.max(12, Math.round(base*(1-0.043*OPT.difficulty))); }
+  return Math.max(12, Math.round(base*(1-0.0357*OPT.difficulty))); }
 let hiscores; try{ hiscores=JSON.parse(localStorage.getItem('mm-hiscores-v1')||'null'); }catch(e){ hiscores=null; }
 if(!Array.isArray(hiscores)||hiscores.length<5)
   hiscores=[{n:'MMM',s:15000},{n:'ATA',s:12000},{n:'RII',s:9000},{n:'EAE',s:6000},{n:'JEZ',s:3000}];
@@ -1165,6 +1164,41 @@ function updateCam(){
   const tx=Math.max(0,Math.min(offW-640,px-320)), ty=Math.max(0,Math.min(offH-400,py-(FLIP?230:170)));
   if(!camInit){ camX=tx; camY=ty; camInit=true; }
   camX+=(tx-camX)*0.14; camY+=(ty-camY)*0.14;
+}
+/* Decor measured off the original: bright red tube arches with a lighter
+   highlight along the top, and dark red chevrons painted on the floor. */
+function archGate(g,ox,oy,v,u,span,hgt){
+  // built in world space so it foreshortens with the projection, like the original's
+  let SP=span||2.2; const HT=hgt||3.4;
+  let hL=groundH(v-SP,u), hR=groundH(v+SP,u);
+  while((isNaN(hL)||isNaN(hR))&&SP>0.6){   // shrink until both feet are on the course
+    SP-=0.3; hL=groundH(v-SP,u); hR=groundH(v+SP,u); }
+  if(isNaN(hL)||isNaN(hR)) return;
+  const P=(vv,zz)=>[projX(vv,u)+ox, projY(vv,u,zz)+oy];
+  const [lx,ly]=P(v-SP,hL), [ltx,lty]=P(v-SP,hL+HT);
+  const [rx,ry]=P(v+SP,hR), [rtx,rty]=P(v+SP,hR+HT);
+  const [cx,cy]=P(v,(hL+hR)/2+HT+0.55);
+  const path=()=>{ g.beginPath(); g.moveTo(lx,ly); g.lineTo(ltx,lty);
+    g.quadraticCurveTo(cx,cy,rtx,rty); g.lineTo(rx,ry); };
+  g.lineCap='round'; g.lineJoin='round';
+  g.strokeStyle='#7d1a1d'; g.lineWidth=9; path(); g.stroke();
+  g.strokeStyle=PAL.rail||'#dd3333'; g.lineWidth=6; path(); g.stroke();
+  g.strokeStyle='rgba(255,180,170,.8)'; g.lineWidth=1.8;
+  g.beginPath(); g.moveTo(ltx-2,lty); g.quadraticCurveTo(cx,cy-2,rtx-2,rty); g.stroke();
+  g.lineCap='butt'; g.lineJoin='miter';
+}
+function floorArrow(g,ox,oy,v,u){
+  const h=groundH(v,u); if(isNaN(h)) return;
+  const px=projX(v,u)+ox, py=projY(v,u,h+0.04)+oy;
+  g.save(); g.setTransform(AXx,AXy,AUx,AUy,px,py);
+  g.fillStyle=PAL.arrow||'#a72222';
+  for(const off of [0,1.5]){          // twin chevrons pointing along +u, as painted on the original
+    g.beginPath();
+    g.moveTo(-1.7+off,-1.5); g.lineTo(-0.5+off,-1.5); g.lineTo(1.5+off,0);
+    g.lineTo(-0.5+off,1.5); g.lineTo(-1.7+off,1.5); g.lineTo(0.3+off,0);
+    g.closePath(); g.fill();
+  }
+  g.setTransform(1,0,0,1,0,0); g.restore();
 }
 function drawMarbleG(g,m){
   const p=marbleScreen(m); const r=m.r*14;
