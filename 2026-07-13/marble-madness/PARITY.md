@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.64.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.65.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,23 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.65.0 (2026-07-28) — CAST SHADOWS, a feature noted in iteration 21 and never built.**
+  Mapping mean floor brightness in 60x50 blocks across a lossless capture shows blocks
+  averaging **~51 grey right beside raised structures against ~155 for open floor** — the
+  "hard #333 shadows" in the original palette notes are real cast shadows on the floor, and we
+  drew none at all (only the marble's own ellipse).
+  - `castShadow(v,u,c)` steps back along -v/-u and darkens the cell if anything up-light is
+    tall enough to block it (`SH_LEN` 6 world units, `SH_TAN` 0.55, factor 0.55). It runs
+    inside `prerender`, so it costs nothing per frame: all six races still sit at a 16.7 ms
+    median with the same p95.
+  - **A non-finding worth recording so it is not chased again**: what looked like a pale ramp
+    upper-centre-right in the downscaled view is **plain floor**. Scanning for near-white pixels
+    across the whole upper half returned nothing above 228 grey. Features spotted in a
+    downscaled screenshot must be re-checked at magnification before being built.
+  - The floor checker reads as **three tones plus a seam** — 221 / 187 / 153 with 102 seams —
+    not two. Ours alternates two; worth revisiting.
+  - The flanking "arch gates" are confirmed to be **railings that follow the platform corner**
+    (a bend with a post at the low end), consistent with v0.60.0.
 - **v0.64.0 (2026-07-28) — two more measured glyphs (U, V); the font's Courier fallback shrinks.**
   `MENU_FONT` was missing **K Q U V W X Y Z** — none appear on any captured screen, so they fell
   back to Courier per character. But **"OUT OF TIME" carries a U and "GAME OVER" a V**, so the

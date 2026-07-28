@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.64.0';
+const VERSION = '0.65.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -554,6 +554,22 @@ let off,offX,offY,offW,offH;
    (see captures/struct-ref.png). Our slope shading was +/-10-15%, far too gentle for that.
    tanh saturates, so gentle floor slopes are left essentially untouched and only genuinely
    steep faces darken; darkening is much stronger than brightening, as in the reference. */
+/* The original casts HARD shadows from raised terrain onto the floor: measured on a
+   lossless grab, shadowed floor blocks average ~51 grey against ~155 for lit floor
+   (the "hard #333 shadows" noted back in iteration 21, never implemented until now).
+   Light comes from up-screen, so step back along -v/-u and darken this cell if anything
+   up there is tall enough to block it. Runs in prerender only, once per race load. */
+const SH_LEN = 6, SH_TAN = 0.55, SH_DARK = 0.55;
+function castShadow(v,u,c){
+  const h=(c.h00+c.h10+c.h01+c.h11)/4;
+  const steps=Math.round(SH_LEN*GS);
+  for(let k=1;k<=steps;k++){
+    const row=cells[u-k]; if(!row) break;
+    const q=row[v-k]; if(!q) continue;
+    if(Math.max(q.h00,q.h10,q.h01,q.h11) > h + (k/GS)*SH_TAN) return SH_DARK;
+  }
+  return 1;
+}
 function hardShade(c){
   const sv=(c.h10+c.h11-c.h00-c.h01)/2;      // slope along +v
   if(sv>=0) return 1+0.10*Math.tanh(sv*0.8);
@@ -609,7 +625,7 @@ function drawCellC(g,v,u,ox,oy,c){
       const s2=(c.h01+c.h11-c.h00-c.h10)/2;
       const kk=(1+Math.max(-1.2,Math.min(0,s2))*-0.13+Math.min(1.2,Math.max(0,s2))*-0.08)
               *Math.max(0.72,Math.min(1.10,0.70+((c.h00+c.h10+c.h01+c.h11)/4)*0.026))
-              *hardShade(c);
+              *hardShade(c)*castShadow(v,u,c);
       const alt=((Math.floor(v/TSZ)+Math.floor(u/TSZ))%2)===1;
       if(!c.tint){
         topc=shadeHex(alt?PAL.floorAlt:PAL.floorHi,kk);
