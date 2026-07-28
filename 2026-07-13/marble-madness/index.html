@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.59.0';
+const VERSION = '0.60.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -203,6 +203,8 @@ function buildPractice(){ newGrid(24,88);
     // pair flanking the centre island — they CONVERGE, steering you back to the middle
     // once you are past it (measured; v0.49.0 had these angled outward)
     floorArrow(g,ox,oy,6.5,13,0.62); floorArrow(g,ox,oy,16.5,13,-0.62);
+    // handrails along the centre structure's two side edges, post at the near end
+    railing(g,ox,oy,8.8,11.8,8.8,7.9); railing(g,ox,oy,14.2,11.8,14.2,7.9);
     for(const [cv,cu] of [[10.5,53.5],[10.5,55.5],[10.5,59],[10.5,61]]){
       const h=groundH(cv,cu); if(isNaN(h)) continue;
       const px=projX(cv,cu)+ox, py=projY(cv,cu,h+0.05)+oy;
@@ -1325,6 +1327,25 @@ function archGate(g,ox,oy,v,u,span,hgt){
    along a grid axis, and the pair beside the centre structure CONVERGES (left one points
    down-right, right one points down-left), funnelling you back to the middle once past
    it. v0.49.0 had them angled the other way, outward. `len` is the shaft length in cells. */
+/* A straight red tube handrail with a short post at its low end. Measured off
+   rec/r1-last.png: the centre structure's raised platform carries one along each side,
+   running parallel to the edge. Distinct from archGate — no span and no arch; earlier
+   builds used arches here, which is why section 2 read wrong beside the structure. */
+function railing(g,ox,oy,v0,u0,v1,u1,hgt){
+  const h0=groundH(v0,u0), h1=groundH(v1,u1);
+  if(isNaN(h0)||isNaN(h1)) return;
+  const HT=hgt||1.5;
+  const P=(vv,uu,zz)=>[projX(vv,uu)+ox, projY(vv,uu,zz)+oy];
+  const [ax,ay]=P(v0,u0,h0+HT), [bx,by]=P(v1,u1,h1+HT), [px,py]=P(v0,u0,h0);
+  g.lineCap='round'; g.lineJoin='round';
+  g.strokeStyle='#7d1a1d'; g.lineWidth=8;
+  g.beginPath(); g.moveTo(px,py); g.lineTo(ax,ay); g.lineTo(bx,by); g.stroke();
+  g.strokeStyle=PAL.rail||'#dd3333'; g.lineWidth=5;
+  g.beginPath(); g.moveTo(px,py); g.lineTo(ax,ay); g.lineTo(bx,by); g.stroke();
+  g.strokeStyle='rgba(255,180,170,.8)'; g.lineWidth=1.8;
+  g.beginPath(); g.moveTo(ax-2,ay-1); g.lineTo(bx-2,by-1); g.stroke();
+  g.lineCap='butt'; g.lineJoin='miter';
+}
 function floorArrow(g,ox,oy,v,u,turn,len){
   const h=groundH(v,u); if(isNaN(h)) return;
   const px=projX(v,u)+ox, py=projY(v,u,h+0.04)+oy;

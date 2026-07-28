@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.59.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.60.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,26 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.60.0 (2026-07-28) — handrails beside the centre structure; a harness trap that nearly
+  caused a wrong "fix".**
+  - **HARNESS TRAP — our screenshots have a TRANSPARENT background.** Comparing our section 2
+    against the reference, everything outside the course was WHITE in ours and BLACK in the
+    original, which reads as an obvious palette bug. It is not: `render()` starts with
+    `clearRect`, so the canvas is transparent there and the near-black CSS background
+    (`#04050c` on the canvas element) shows through in a browser. `toDataURL('image/png')`
+    keeps the transparency and the image viewer paints it white. **Never judge background or
+    void colour from a canvas screenshot** — check the CSS, or composite before comparing.
+  - **The elements flanking the centre structure are HANDRAILS, not arch gates.** Magnified,
+    they are a straight shaded red tube running parallel to the platform edge with a short
+    vertical post at its low end — no span, no arch. New `railing(g,ox,oy,v0,u0,v1,u1,hgt)`
+    draws that (same tube shading as `archGate`: dark outline, red body, pale highlight), and
+    the practice course now carries one along each side of the centre structure. Arch gates
+    still exist elsewhere on the course; the two are different pieces of furniture.
+  - Still UNIDENTIFIED: a small red object at the bottom centre of `rec/r1-last.png`, cut off by
+    the frame edge. Three stacked red blocks. Do not guess at it — it needs a capture where the
+    camera has scrolled far enough to show it whole.
+  - Verified: six races render, bots reach every goal with 0 deaths, playthrough reaches the
+    ending, trap sweep clean.
 - **v0.59.0 (2026-07-28) — floor arrows corrected from the best capture yet of section 2.**
   Scored drive routes (score = 10 pts per unit of forward progress, so it ranks routes):
   | route | score |
