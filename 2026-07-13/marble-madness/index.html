@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.74.0';
+const VERSION = '0.75.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -686,7 +686,8 @@ function drawCellC(g,v,u,ox,oy,c){
     stripeWall(g,c,x10,y10,x11,y11,b1,b2,0.58,v); }
   if(c.type===GOAL){
     for(let i=0;i<3;i++)for(let j=0;j<3;j++){ const v0=v+i/3,v1=v+(i+1)/3,u0=u+j/3,u1=u+(j+1)/3;
-      g.fillStyle=((i+j)%2)?'#eeeeff':'#111122'; g.beginPath();
+            const gk=hardShade(c)*castShadow(v,u,c);
+      g.fillStyle=((i+j)%2)?rgb17(238*gk,238*gk,255*gk):rgb17(28*gk,30*gk,42*gk); g.beginPath();
       g.moveTo(pX(v0,u0)+ox,pY(v0,u0,c.h00)+oy); g.lineTo(pX(v1,u0)+ox,pY(v1,u0,c.h00)+oy);
       g.lineTo(pX(v1,u1)+ox,pY(v1,u1,c.h00)+oy); g.lineTo(pX(v0,u1)+ox,pY(v0,u1,c.h00)+oy);
       g.closePath(); g.fill(); }
@@ -763,9 +764,14 @@ function edgeContours(g,v,u,ox,oy,c,x00,y00,x10,y10,x01,y01,x11,y11){
   for(const [nc,a,b,ca,cb,ax,ay,bx,by] of N){
     if(lower(nc,a,b,ca,cb)){
       const big=(!nc)||(nc[a]<c[ca]-1.4)||(nc[b]<c[cb]-1.4);
-      g.lineWidth=big?2.2:1.5;
-      g.strokeStyle=c.tint?'rgba(17,17,17,.62)':'rgba(17,17,51,.7)';
-      g.beginPath(); g.moveTo(ax,ay); g.lineTo(bx,by); g.stroke(); } }
+      g.save();
+      g.lineWidth=big?1.8:1.2;                      // shaded underside, offset below
+      g.strokeStyle=c.tint?'rgba(17,17,17,.34)':'rgba(17,17,51,.38)';
+      g.beginPath(); g.moveTo(ax,ay+1.1); g.lineTo(bx,by+1.1); g.stroke();
+      g.lineWidth=big?1.1:0.8;                      // lit lip catching the light
+      g.strokeStyle='rgba(255,255,255,.42)';
+      g.beginPath(); g.moveTo(ax,ay-0.3); g.lineTo(bx,by-0.3); g.stroke();
+      g.restore(); } }
 }
 function drawCell(g,v,u,ox,oy){ const c=cells[u][v]; if(!c) return; drawCellC(g,v,u,ox,oy,c); }
 function dynCellAt(v,u){ const c=cells[u][v]; if(!c) return null;

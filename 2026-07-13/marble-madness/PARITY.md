@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.74.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.75.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,17 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.75.0 (2026-07-28) — realistic pass 5: edges relit, goal squares shaded.**
+  - **The dark drop-off outlines were a CEL-SHADING cue** — a heavy ink stroke centred on every
+    edge, which is exactly the wrong signal now. A real lip does the opposite: its top catches
+    the light and goes BRIGHT, and only the shaded underside of the drop darkens. Each edge is
+    now a thin bright lip with a soft dark line offset just below it, instead of one black
+    stroke straddling the boundary. This is the single change that most stops the course
+    reading as cartoon linework.
+  - **Goal squares** were pure light-on-near-black, which floats out of the scene at constant
+    brightness. They now take the same `hardShade * castShadow` term as the surrounding floor,
+    so the goal sits in the same light as everything around it.
+  - All six races render clean.
 - **v0.74.0 (2026-07-28) — realistic pass 4: the floor arrows read as PAINT, not decals.**
   A flat opaque fill is what makes a floor marking look like a vector sticker laid on top of
   the scene. Real paint sits IN the surface, so the arrows now:
