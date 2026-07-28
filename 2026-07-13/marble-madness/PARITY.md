@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.24.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.25.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -216,6 +216,11 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   glyph-by-glyph off the real screen and drawn as run-length filled rects (`HUD_FONT` + `hudNum()`,
   scale 2 on the 640x400 canvas = the original's proportions). Bar height 26→20 px and the score
   moved to 22% across to match the Amiga layout; the pre-race banner's number uses it too.
+- **v0.25.0 (2026-07-27)**: **regression fix found by the new state sweep** — since v0.19.0 the
+  game-over screen drew `GAME OVER` directly on top of the `FINAL SCORE` line (both at y=206), so
+  the two overlapped illegibly. The grey panel now covers the whole block and the final score is
+  drawn in the measured Amiga digit font. LESSON: the smoke and bot suites only cover the `race`
+  state; sweep the other screens too.
   **GOTCHA: the `PAL_*` consts must stay ABOVE `const RACES`** — RACES references `pal:PAL_AMIGA`,
   so if they sit below it the whole script dies on a temporal-dead-zone ReferenceError before
   `window.__qa` is ever defined (symptom: VERSION readable but `__qa` undefined).
@@ -270,6 +275,10 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   - Ultimate `[v,u]`: [11.5,5.5],[11.5,8],[11.5,11],[9.5,13],[11,15.8],[15.5,18],[15.5,21],[12,23.5],[12,27],[12,30.5],[12,36],[9.5,38],[9.5,41.5],[12.5,44.5],[13,47],[11.2,49],[12.8,51],[12.5,53],[12.5,60],[12.5,63],[12.5,68]
 - Gates green at v0.17.0: practice+beginner goal (≤4 deaths), silly goal (≤4), aerial goal (≤2),
   ultimate goal, intermediate goal.
+- **`states.mjs` (scratchpad) walks EVERY UI state** — title, options, options+2P, 2P race, timeup,
+  hi-score entry, initials, ending — capturing each and reporting exceptions. Run it after any
+  change to rendering or the state machine: the smoke/bot suites only ever exercise `race`, and
+  that blind spot let a text overlap ship in v0.19–v0.24 (see below).
 
 ## Deploy protocol
 1. Edit working copy → sync to BOTH `games-source/.../index.html` and

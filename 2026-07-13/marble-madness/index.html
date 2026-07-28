@@ -34,7 +34,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.24.0';
+const VERSION = '0.25.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -1601,11 +1601,16 @@ function render(dt){
       text(g,ch,286+i*34,246,30,i===entryName.length?'#ffd23a':'#eef2ff'); }
     text(g,'type letters · ENTER to confirm',320,292,13,'#9aa6cc'); }
   if(state==='timeup'){ stateT+=dt;
-    g.fillStyle='#999999'; g.fillRect(150,132,340,96);
-    text(g,'OUT OF TIME',320,172,26,'#cccc00');
-    text(g,'GAME OVER',320,206,26,'#cccc00');
-    text(g,numPlayers===2?('P1  '+player.score+'   ·   P2  '+player2.score):('FINAL SCORE  '+player.score),320,206,18,'#eef2ff');
-    text(g,'click / space to retry',320,244,14,'#9fb0e8'); }
+    g.fillStyle='#999999'; g.fillRect(150,132,340,152);
+    text(g,'OUT OF TIME',320,168,26,'#cccc00');
+    text(g,'GAME OVER',320,202,26,'#cccc00');
+    if(numPlayers===2){
+      text(g,'P1  '+player.score+'   ·   P2  '+player2.score,320,248,16,'#882222');
+    } else {
+      text(g,'FINAL SCORE',320,240,14,'#882222');
+      hudNum(g,player.score,320,254,2,'#882222','center');
+    }
+    text(g,'click / space to retry',320,300,14,'#9fb0e8'); }
 }
 let demoT=0;
 function renderTitle(g){
