@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.79.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.80.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,19 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.80.0 (2026-07-28) — realistic pass 10: contact dust (rolling trail + landing puffs).**
+  Nine passes made the scene look lit; this one couples the marble to it. A ball that rolls and
+  lands with no consequence in the world reads as a sprite sliding over a backdrop no matter how
+  well the backdrop is shaded — kicked-up dust is what ties the two together.
+  - Rolling emits at a rate set by speed and trails behind the direction of travel; landings
+    puff once, in proportion to impact.
+  - **Spawned from `render`, never from `physics`.** The step runs at 120 Hz, so spawning there
+    would emit hundreds of particles per landing and make the effect frame-rate dependent. The
+    landing branch only sets `m.puff`; render consumes and clears it.
+  - Drawn BEFORE the entities so a trail sits under the ball rather than over it, and cleared on
+    race load so it cannot survive a restart.
+  - Alpha is deliberately low (0.34) — dust that reads clearly is dust that reads as smoke.
+  - All six races render clean.
 - **v0.79.0 (2026-07-28) — realistic pass 9: every surface now shares ONE light model.**
   The tinted floors (which includes the practice course's cones) and the `tex:'check'` surfaces
   were the last two paths still multiplying a base colour by a plain scalar. Both now go

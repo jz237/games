@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.79.0';
+const VERSION = '0.80.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -1026,7 +1026,7 @@ function nextEntry(){ entryPlayer=entryQueue.shift()||null; entryName='';
 function commitEntry(){ if(!entryPlayer) return;
   hiscores.push({n:(entryName||'???').padEnd(3,'?').slice(0,3),s:entryPlayer.score});
   hiscores.sort((a,b)=>b.s-a.s); hiscores=hiscores.slice(0,5); saveScores(); Snd.count(); nextEntry(); }
-let shards=[], floaters=[], paused=false, lastTickSec=99;
+let shards=[], floaters=[], dust=[], paused=false, lastTickSec=99;
 let camX=0,camY=0,camInit=false;
 /* Marble feel measured against the original running under FS-UAE (see PARITY.md):
    ~2.4 cells in the first second from rest, ~9 cells/s once rolling, and a full
@@ -1134,7 +1134,7 @@ function loadRace(i){ raceIdx=i; const R=RACES[i];
     pl.timeLeft=raceTime(i)+Math.min(CARRY_CAP,pl.carry); });
   catchupCD=0;
   steelie.active=false; steelie.alive=false;
-  finishOrder=[]; shards=[]; camInit=false; lastTickSec=99; deathMsgT=0; raceT=0;
+  finishOrder=[]; shards=[]; dust=[]; camInit=false; lastTickSec=99; deathMsgT=0; raceT=0;
   state='ready'; stateT=0; paused=false; qaInp=null; qaInp2=null;
   Snd.ready(0); Snd.ready(1); }
 function startGame(n){ numPlayers=n||1;
@@ -1221,7 +1221,7 @@ function marblePhysics(m,dt,accV,accU){
       const impact=-m.vz;
       if(impact>14&&!m.dropIn){ m.z=h2; die(m,'shatter'); return; }
       m.z=h2; m.grounded=true; m.dropIn=false;
-      if(impact>3.5){ m.vz=impact*0.18; m.grounded=false; m.z+=0.001; if(m.kind==='player')Snd.clack(impact*0.7); }
+      if(impact>3.5){ m.vz=impact*0.18; m.grounded=false; m.z+=0.001; m.puff=impact; if(m.kind==='player')Snd.clack(impact*0.7); }
       else m.vz=0;
     }
     if(m.z<ABYSS-3.5){ die(m,'fall'); }
@@ -1953,6 +1953,25 @@ function render(dt){
     hz.addColorStop(1,'rgba(206,216,232,0)');
     g.save(); g.globalCompositeOperation='source-atop';
     g.fillStyle=hz; g.fillRect(0,0,640,400); g.restore(); }
+  /* Contact dust. A marble that rolls and lands with no consequence in the world reads as
+     a sprite sliding over a backdrop; kicked-up dust is what couples it to the surface.
+     Rolling emits at a rate set by speed, landings puff once in proportion to impact.
+     Spawned from RENDER, never from physics — the 120 Hz step would flood it. */
+  for(const m of marbles){
+    if(!m.active||!m.alive||m.hidden) continue;
+    const p=marbleScreen(m), sp=Math.hypot(m.vv,m.vu), rr=m.r*AXx;
+    if(m.puff){ const n=Math.min(9,2+Math.round(m.puff*0.5));
+      for(let i=0;i<n;i++) dust.push({x:p.x+(Math.random()*2-1)*6,y:p.y+rr*0.55,
+        vx:(Math.random()*2-1)*54,vy:-Math.random()*26-4,r:1.6+Math.random()*2.6,t:0,l:0.6});
+      m.puff=0; }
+    if(m.grounded&&sp>2.4&&Math.random()<Math.min(0.85,(sp/9)*0.7)){
+      dust.push({x:p.x-m.vv*1.1,y:p.y+rr*0.6,vx:-m.vv*3-(Math.random()*2-1)*10,
+        vy:-Math.random()*14-2,r:1.1+Math.random()*1.7,t:0,l:0.45}); }
+  }
+  for(const d of dust){ d.t+=dt; d.x+=d.vx*dt; d.y+=d.vy*dt; d.vy+=54*dt; d.vx*=0.94;
+    g.globalAlpha=Math.max(0,1-d.t/d.l)*0.34; g.fillStyle='#d8d4cc';
+    g.beginPath(); g.arc(d.x,d.y,d.r*(1+d.t*1.6),0,Math.PI*2); g.fill(); g.globalAlpha=1; }
+  dust=dust.filter(d=>d.t<d.l);
   // marbles + munchers back-to-front
   const ents=[];
   // the original holds the marbles off screen until the clock has finished filling in
