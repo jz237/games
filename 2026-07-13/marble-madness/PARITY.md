@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.60.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.61.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,18 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.61.0 (2026-07-28) — steep faces now shade HARD, as the original's do.**
+  `captures/struct-ref.png` (the centre structure at 2x) shows the cone flanks going
+  near-black on the shaded side while the lit side keeps the floor checker. Ours were flat
+  white spikes: the slope shading was +/-10-15%, nowhere near enough for a face that steep.
+  - New `hardShade(c)` multiplies the cell's brightness by a term driven by the +v slope.
+    **The knee is the important part**: `steep = max(0, -sv - 0.45)` means gentle down-slopes
+    are left completely alone, so the wide plain and the ramps do not band — only genuinely
+    steep faces darken. Darkening is much stronger than brightening (0.80 vs 0.10), matching
+    the reference, where the lit side is barely brighter than flat floor but the shaded side
+    is dramatically darker.
+  - Still lighter than the original's near-black; the character is right and the floor is
+    untouched, which was the constraint. Worth another pass once a cleaner cone capture exists.
 - **v0.60.0 (2026-07-28) — handrails beside the centre structure; a harness trap that nearly
   caused a wrong "fix".**
   - **HARNESS TRAP — our screenshots have a TRANSPARENT background.** Comparing our section 2
@@ -929,6 +941,11 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   that blind spot let a text overlap ship in v0.19–v0.24 (see below).
 
 ## Deploy protocol
+> **⚠ CLOUDFLARE DOES NOT DEPLOY ON PUSH.** Step 2's deploy script is not optional. Iterations
+> 58-60 skipped it; 0.58 and 0.59 went live anyway because another process happened to deploy
+> them, so the omission was invisible until 0.60 sat at the old version for half an hour with
+> the commit correctly on `origin/main`. **A green push and a live site are different facts —
+> verify the live version every iteration.**
 1. Edit working copy → sync to BOTH `games-source/.../index.html` and
    `jez237-website/games/.../index.html`.
 2. Site: in the workspace repo commit OWN PATHS ONLY (OpenClaw pushes concurrently — never

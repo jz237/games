@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.60.0';
+const VERSION = '0.61.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -537,6 +537,17 @@ function stripeWall(g,c,p1x,p1y,p2x,p2y,b1y,b2y,base,vpos){
   }
 }
 let off,offX,offY,offW,offH;
+/* The original shades STEEP faces hard: the cone flanks on the practice course's centre
+   structure go near-black on the shaded side while the lit side keeps the floor checker
+   (see captures/struct-ref.png). Our slope shading was +/-10-15%, far too gentle for that.
+   tanh saturates, so gentle floor slopes are left essentially untouched and only genuinely
+   steep faces darken; darkening is much stronger than brightening, as in the reference. */
+function hardShade(c){
+  const sv=(c.h10+c.h11-c.h00-c.h01)/2;      // slope along +v
+  if(sv>=0) return 1+0.10*Math.tanh(sv*0.8);
+  const steep=Math.max(0,-sv-0.45);          // knee: gentle down-slopes stay unshaded,
+  return 1-0.80*Math.tanh(steep*1.1);        // so ramps and the plain do not band
+}
 function drawCellC(g,v,u,ox,oy,c){
   const x00=pX(v,u)+ox,   y00=pY(v,u,c.h00)+oy;
   const x10=pX(v+1,u)+ox, y10=pY(v+1,u,c.h10)+oy;
@@ -585,7 +596,8 @@ function drawCellC(g,v,u,ox,oy,c){
     if(PAL.checker){
       const s2=(c.h01+c.h11-c.h00-c.h10)/2;
       const kk=(1+Math.max(-1.2,Math.min(0,s2))*-0.13+Math.min(1.2,Math.max(0,s2))*-0.08)
-              *Math.max(0.72,Math.min(1.10,0.70+((c.h00+c.h10+c.h01+c.h11)/4)*0.026));
+              *Math.max(0.72,Math.min(1.10,0.70+((c.h00+c.h10+c.h01+c.h11)/4)*0.026))
+              *hardShade(c);
       const alt=((Math.floor(v/TSZ)+Math.floor(u/TSZ))%2)===1;
       if(!c.tint){
         topc=shadeHex(alt?PAL.floorAlt:PAL.floorHi,kk);
