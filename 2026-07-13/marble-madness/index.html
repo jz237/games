@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.38.0';
+const VERSION = '0.39.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -823,6 +823,7 @@ let turbo=false, turbo2=false;
 /* ---------- input ---------- */
 const keys={};
 let inpV=0,inpU=0, inp2V=0,inp2U=0, qaInp=null, qaInp2=null, mouseDV=0,mouseDU=0;
+let catchupCD=0;
 addEventListener('keydown',e=>{ if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
   if(state==='initials'){
     if(/^[a-zA-Z0-9]$/.test(e.key)&&entryName.length<3){ entryName+=e.key.toUpperCase(); Snd.tick(); }
@@ -904,6 +905,7 @@ function loadRace(i){ raceIdx=i; const R=RACES[i];
     pl.vv=0; pl.vu=0; pl.vz=0; pl.grounded=true; pl.alive=true; pl.dropIn=false; pl.hidden=false;
     pl.lastSafe={v:pl.v,u:pl.u}; pl.maxU=0; pl.finished=false;
     pl.timeLeft=raceTime(i)+pl.carry; });
+  catchupCD=0;
   steelie.active=false; steelie.alive=false;
   finishOrder=[]; shards=[]; camInit=false; lastTickSec=99; deathMsgT=0; raceT=0;
   state='ready'; stateT=0; paused=false; qaInp=null; qaInp2=null;
@@ -1170,10 +1172,14 @@ function physics(dt){
   }
   if(numPlayers===2&&player.alive&&player2.alive&&!player.hidden&&!player2.hidden) collideMarbles(player,player2);
   for(const pl of players) if(pl.alive&&!pl.hidden&&steelie.active&&steelie.alive) collideMarbles(pl,steelie);
-  // catch-up rule: trailing live player warped to leader's checkpoint
-  if(numPlayers===2&&!player.out&&!player2.out&&!player.finished&&!player2.finished&&player.alive&&player2.alive){
+  // catch-up rule: trailing live player warped to leader's checkpoint.
+  // It costs the trailing player a second, so it MUST have a cooldown — without one
+  // it re-fired every physics step and drained a full minute in about seven seconds.
+  if(catchupCD>0) catchupCD-=dt;
+  if(numPlayers===2&&catchupCD<=0&&!player.out&&!player2.out&&!player.finished&&!player2.finished&&player.alive&&player2.alive){
     const dy=Math.abs((player.v*AXy+player.u*AUy)-(player2.v*AXy+player2.u*AUy));
-    if(dy>560){ const lead=player.u>player2.u?player:player2, trail=lead===player?player2:player;
+    if(dy>560){ catchupCD=3;
+      const lead=player.u>player2.u?player:player2, trail=lead===player?player2:player;
       trail.v=lead.lastSafe.v; trail.u=lead.lastSafe.u;
       const hh=groundH(trail.v,trail.u); trail.z=(isNaN(hh)?4:hh)+2.2;
       trail.vv=0; trail.vu=0; trail.vz=0; trail.grounded=false; trail.dropIn=true;

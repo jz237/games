@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.38.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.39.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -381,6 +381,17 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   `rect:true` flag — they previously read `0,0` and looked misplaced.
   Harness note: `__qa.lastDeath` is NOT cleared between probes, so a hazard that does not kill
   still shows the previous kill's `kind`; compare the deaths COUNT, not the kind.
+- **v0.39.0 (2026-07-28) — REAL 2-PLAYER BUG: the catch-up rule drained the trailing clock.**
+  The rule warps a trailing player to the leader's checkpoint and charges them 1 s — but it ran
+  **every physics step with no cooldown**. If the pair stayed >560 px apart (e.g. the leader's
+  `lastSafe` is itself far behind, or the leader keeps pulling away) it re-fired at 120 Hz and
+  **drained a full 60 s clock in about 7 s**. Added `catchupCD` (3 s, reset in `loadRace`).
+  Verified: P1 warped 56 rows ahead now costs P2 exactly 1 s, once, then the clock ticks normally.
+  Rest of the 2P audit is clean: separate clocks tick 1:1 for both players, winner finishes with
+  `finishOrder=[0]` and collects the bonus (P1 +7170 incl. +1000), timeout eliminates a player
+  (`out:true`).
+  **How it was found**: an audit probe warped P1 near the goal and P2's clock hit 0 in 7 s — the
+  probe looked broken, but the anomaly was real. Worth remembering when a test result looks absurd.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
