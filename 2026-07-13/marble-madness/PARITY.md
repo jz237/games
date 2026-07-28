@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.33.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.34.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -321,6 +321,20 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   **STILL UNPROVEN: Aerial and Ultimate completed end-to-end.** Best so far: aerial u31/76,
   ultimate u16/72. `botC.mjs` (corridor driver: widest safe band ahead + throttle easing) was
   WORSE than `botT.mjs` on most races — don't assume more sophistication helps.
+- **v0.34.0 (2026-07-27) — death-logging finds four more Aerial defects.** `deaths.mjs` drives a
+  race and prints `__qa.lastDeath` each time it dies; the clusters point straight at the geometry:
+  - row 20: `rampU(5,18,10,20)` was narrower than the `slab(5,15,15,17)` platform feeding it, so
+    anyone on the right half ran out of ground → ramp widened to v13 (and the u21 slab with it).
+  - row 40: the twin ramps (v5-10 / v14-19) missed the v6-11 channel above them by a cell →
+    left ramp extended to v11.
+  - row 58: the **catapult only captured v11-14 of a v9-16 platform**, so an off-centre marble
+    rolled straight past it into the 5-row void it exists to launch you over → rect widened to
+    v9-16, u52-55.
+  - row 68: the twin chutes (v5-9 / v16-20) were fed by a v10-15 platform — 2-cell overlap →
+    added chute mouths `slab(6,63,9,63)` and `slab(16,63,19,63)`.
+  Aerial driver progress: **u31 → u68 of 76**. Ultimate unchanged at u16/72.
+  **Repeated IDENTICAL death coordinates are deterministic replay, not a respawn-loop bug** — the
+  driver fails the same way each run; don't go hunting in `respawnPlayer`.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
