@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.58.0';
+const VERSION = '0.59.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -200,8 +200,9 @@ function buildPractice(){ newGrid(24,88);
     for(const [av,au] of [[5.5,8],[17.5,8],[5.5,33],[17.5,33],[5.5,66],[15.5,66]]) archGate(g,ox,oy,av,au);
     // painted arrows on the floor pointing down-course
     for(const [av,au,tn] of [[11.5,26],[6.5,38],[16.5,38],[11.5,58],[8,70]]) floorArrow(g,ox,oy,av,au,tn);
-    // pair flanking the centre island, angled outward as on the original
-    floorArrow(g,ox,oy,6.5,13,-0.62); floorArrow(g,ox,oy,16.5,13,0.62);
+    // pair flanking the centre island — they CONVERGE, steering you back to the middle
+    // once you are past it (measured; v0.49.0 had these angled outward)
+    floorArrow(g,ox,oy,6.5,13,0.62); floorArrow(g,ox,oy,16.5,13,-0.62);
     for(const [cv,cu] of [[10.5,53.5],[10.5,55.5],[10.5,59],[10.5,61]]){
       const h=groundH(cv,cu); if(isNaN(h)) continue;
       const px=projX(cv,cu)+ox, py=projY(cv,cu,h+0.05)+oy;
@@ -1319,18 +1320,22 @@ function archGate(g,ox,oy,v,u,span,hgt){
   g.beginPath(); g.moveTo(ltx-2,lty); g.quadraticCurveTo(cx,cy-2,rtx-2,rty); g.stroke();
   g.lineCap='butt'; g.lineJoin='miter';
 }
-function floorArrow(g,ox,oy,v,u,turn){
+/* Measured off rec/r1-last.png, the clearest capture of practice section 2: the painted
+   arrows are a SINGLE LONG arrow with one head — not the twin chevrons we drew — laid
+   along a grid axis, and the pair beside the centre structure CONVERGES (left one points
+   down-right, right one points down-left), funnelling you back to the middle once past
+   it. v0.49.0 had them angled the other way, outward. `len` is the shaft length in cells. */
+function floorArrow(g,ox,oy,v,u,turn,len){
   const h=groundH(v,u); if(isNaN(h)) return;
   const px=projX(v,u)+ox, py=projY(v,u,h+0.04)+oy;
+  const L=len||6.2, W=0.42, HW=1.05, HL=1.6;   // shaft length/half-width, head half-width/length
   g.save(); g.setTransform(AXx,AXy,AUx,AUy,px,py);
-  if(turn) g.rotate(turn);          // the original angles the pair beside the centre
-  g.fillStyle=PAL.arrow||'#a72222';   // structure outward, steering you around it
-  for(const off of [0,1.5]){          // twin chevrons pointing along +u, as painted on the original
-    g.beginPath();
-    g.moveTo(-1.7+off,-1.5); g.lineTo(-0.5+off,-1.5); g.lineTo(1.5+off,0);
-    g.lineTo(-0.5+off,1.5); g.lineTo(-1.7+off,1.5); g.lineTo(0.3+off,0);
-    g.closePath(); g.fill();
-  }
+  if(turn) g.rotate(turn);
+  g.fillStyle=PAL.arrow||'#a72222';
+  g.beginPath();
+  g.moveTo(-L/2,-W); g.lineTo(L/2-HL,-W); g.lineTo(L/2-HL,-HW); g.lineTo(L/2,0);
+  g.lineTo(L/2-HL,HW); g.lineTo(L/2-HL,W); g.lineTo(-L/2,W);
+  g.closePath(); g.fill();
   g.setTransform(1,0,0,1,0,0); g.restore();
 }
 function drawMarbleG(g,m){

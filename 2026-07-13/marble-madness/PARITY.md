@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.58.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.59.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,32 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.59.0 (2026-07-28) — floor arrows corrected from the best capture yet of section 2.**
+  Scored drive routes (score = 10 pts per unit of forward progress, so it ranks routes):
+  | route | score |
+  |---|---|
+  | `Down` throughout | 220 |
+  | `Down` 2s, `Down+Right` 2s, then `Down` | **250** |
+  | `Down+Right` throughout | 120 |
+  **A hypothesis worth recording as WRONG**: the isometric finding suggested the joystick is
+  rotated 45 degrees to the screen, so down-course should be `Down+Right` held together. It is
+  not — that route scores barely half of plain `Down`. `Down` is the down-course direction; a
+  brief `Right` correction early helps, sustained `Right` hurts.
+  Also: **route A ended with 32 s STILL ON THE CLOCK** — it ran out of SCRIPT, not time. Scripts
+  must cover ~55 s of holds, not ~27 s. Extending it did not beat 250 though; the marble dies at
+  the centre structure either way, so ~250 is the open-loop ceiling.
+  - **`rec/r1-last.png` is now the best reference for practice section 2** (score 250, clock 32,
+    marble alive): the twin-peak centre structure with its red arch and striped stepped tiers,
+    flanking arch rails, the descending channel with a YELLOW-striped wall left and RED right,
+    both white-tipped pyramids, and a small red post at the bottom centre (unidentified).
+  - **The painted arrows were wrong in two ways**, both fixed:
+    1. **Shape** — they are a SINGLE LONG arrow with one head laid along a grid axis, not the
+       twin chevrons we drew. Length ~21.6% of screen width (~6.2 cells), so `floorArrow` takes
+       a `len` and defaults to that instead of 4.2.
+    2. **Direction** — the pair beside the centre structure **CONVERGES** (left points down-right,
+       right points down-left), funnelling you back to the middle once past the structure.
+       v0.49.0 read them as angled OUTWARD and implemented the opposite sign.
+  - Verified: bots reach every goal with 0 deaths, playthrough reaches the ending, traps clean.
 - **v0.58.0 (2026-07-28) — GAME OVER panel measured from a real one; driving the original revisited.**
   - **Driving is not a dead end, but straight down is.** With the pointer fix from iteration 61 a
     race now starts reliably, so scripted drives are cheap. The HUD SCORE is the fitness function
