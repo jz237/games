@@ -13,7 +13,7 @@ body{display:flex;flex-direction:column;align-items:center;min-height:100vh;min-
 #stagewrap{flex:1;display:flex;align-items:center;justify-content:center;width:100%}
 .bar{width:100%;max-width:1040px;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;font-size:13px;color:#8d97b8}
 .bar b{color:#e8ddff;letter-spacing:.12em;font-weight:800}
-.bar .tag{font-size:10px;letter-spacing:.16em;border:1px solid rgba(232,168,80,.5);color:#f0b060;border-radius:99px;padding:2px 8px;margin-left:8px;vertical-align:2px}
+.bar .tag{font-size:10px;letter-spacing:.16em;border:1px solid rgba(238,170,85,.5);color:#f0b060;border-radius:99px;padding:2px 8px;margin-left:8px;vertical-align:2px}
 .bar a{color:#7fa8ff;text-decoration:none}
 .bar a:hover{text-decoration:underline}
 #stage{position:relative;width:min(100vw,1040px,calc((100dvh - 92px)*1.6));aspect-ratio:8/5}
@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.67.0';
+const VERSION = '0.68.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -149,7 +149,7 @@ function groundH(wv,wu){ const v=wv*GS, u=wu*GS;
 
 /* ---------- races ---------- */
 function buildPractice(){ newGrid(24,88);
-  const RED={tint:'#b34852'}, DARK={tint:'#79809f'}, GRID={tex:'grid'};
+  const RED={tint:'#bb4455'}, DARK={tint:'#778899'}, GRID={tex:'grid'};
   /* Opening plain rebuilt from the real Amiga screen (iteration 25): a broad
      FLAT checkerboard plain with a sawtooth far edge, twin white-tipped peaks
      on a stepped centre island, and a raised diamond platform either side. */
@@ -163,8 +163,8 @@ function buildPractice(){ newGrid(24,88);
   slab(9,8,14,11,12.7,GRID);                    // centre island base
   slab(10,8,13,11,13.05,GRID);                  // middle step — the original is a ziggurat
   slab(10,9,13,10,13.4,GRID);                   // its stepped tier
-  pyramid(10,9,13.4,17.6,{tint:'#e2e2e2'});     // twin white-tipped peaks
-  pyramid(12,9,13.4,17.6,{tint:'#e2e2e2'});
+  pyramid(10,9,13.4,17.6,{tint:'#dddddd'});     // twin white-tipped peaks
+  pyramid(12,9,13.4,17.6,{tint:'#dddddd'});
   rampU(3,14,20,19,12,10,GRID);
   slab(3,20,20,27,10);
   pyramid(5,21,10,12.2); pyramid(17,21,10,12.2);
@@ -192,7 +192,7 @@ function buildPractice(){ newGrid(24,88);
     hazards.push({type:'bonus',v:bv,u:76.3,val,taken:false});
   slab(14,73,14,83,2.5); slab(1,73,1,83,2.5); slab(2,83,13,83,2.5);
   decorFn=(g,ox,oy)=>{
-    g.strokeStyle='rgba(240,244,255,.85)'; g.lineWidth=2.5; g.setLineDash([8,6]); g.beginPath();
+    g.strokeStyle='rgba(238,238,255,.85)'; g.lineWidth=2.5; g.setLineDash([8,6]); g.beginPath();
     for(let i=0;i<=30;i++){ const v=3.4+(20.4-3.4)*i/30; const h=groundH(v,8);
       const x=projX(v,8)+ox, y=projY(v,8,isNaN(h)?12:h+0.03)+oy;
       if(i===0) g.moveTo(x,y); else g.lineTo(x,y); }
@@ -218,7 +218,7 @@ function buildPractice(){ newGrid(24,88);
   };
 }
 function buildBeginner(){ newGrid(26,110);
-  const GRID={tex:'grid'}, PINK={tint:'#c95f9d'}, TEAL={tex:'grid',tint:'#79b6b9'};
+  const GRID={tex:'grid'}, PINK={tint:'#cc6699'}, TEAL={tex:'grid',tint:'#77bbbb'};
   // start plateau with box obstacles
   slab(3,0,22,8,14,GRID);
   slab(5,2,7,3,15.2,GRID); slab(16,4,18,5,15.2,GRID); slab(10,6,11,7,15.2,GRID);
@@ -247,7 +247,7 @@ function buildBeginner(){ newGrid(26,110);
   // lower deck, twin narrow bridges over the big void
   slab(3,47,22,56,4,GRID);
   // pink tunnel-house: drop in, come out past the bridges (the map's doorway shortcut)
-  slab(3,48,6,51,6.4,{tint:'#c95f9d'});
+  slab(3,48,6,51,6.4,{tint:'#cc6699'});
   slab(4,48,5,48,4,GRID);
   carve(4,49,5,50);
   hazards.push({type:'tube',rect:{v0:4,v1:6,u0:49,u1:51},exit:{v:12.5,u:62},busyT:0});
@@ -256,7 +256,7 @@ function buildBeginner(){ newGrid(26,110);
   // steelie zone with a catapult flinger (map shows pink catapults here)
   slab(3,65,22,74,3,GRID);
   slab(8,68,9,69,4.2,GRID); slab(15,71,16,72,4.2,GRID);
-  slab(11,66,13,67,3.02,{tex:'grid',tint:'#d8b04a'});
+  slab(11,66,13,67,3.02,{tex:'grid',tint:'#ddaa44'});
   hazards.push({type:'catapult',rect:{v0:11,v1:14,u0:66,u1:68},launch:{vv:0,vu:8.5,vz:5.5},snap:{v:12.5,u:67},busyT:0});
   // descent to the waves
   rampU(3,75,22,80,3,1.2,GRID);
@@ -273,7 +273,7 @@ function buildBeginner(){ newGrid(26,110);
   decorFn=(g,ox,oy)=>{ goalText(g,12.5,101.2,0.45,ox,oy); };
 }
 function buildIntermediate(){ newGrid(26,100);
-  const CHK={tex:'check',tint:'#c98a52'}, CHKD={tex:'check',tint:'#a06a3c'}, PINK={tint:'#c95f9d'}, GRN={tint:'#5fae62'};
+  const CHK={tex:'check',tint:'#cc8855'}, CHKD={tex:'check',tint:'#996644'}, PINK={tint:'#cc6699'}, GRN={tint:'#66aa66'};
   // twin start spurs (1P uses left) merging onto a deck
   slab(4,0,8,4,14,CHK); slab(17,0,21,4,14,CHK);
   rampU(4,5,8,8,14,12,CHK); rampU(17,5,21,8,14,12,CHK);
@@ -317,19 +317,19 @@ function buildIntermediate(){ newGrid(26,100);
 function goalText(g,v,u,z,ox,oy){
   const t=document.createElement('canvas'); t.width=240; t.height=56; const tg=t.getContext('2d');
   tg.font='900 44px "Arial Black",Arial,sans-serif'; tg.textAlign='center'; tg.textBaseline='middle';
-  tg.lineJoin='round'; tg.strokeStyle='#3a0d12'; tg.lineWidth=9; tg.strokeText('GOAL',120,30);
-  tg.fillStyle='#e33049'; tg.fillText('GOAL',120,30);
+  tg.lineJoin='round'; tg.strokeStyle='#331111'; tg.lineWidth=9; tg.strokeText('GOAL',120,30);
+  tg.fillStyle='#dd3344'; tg.fillText('GOAL',120,30);
   const cx=projX(v,u)+ox, cy=projY(v,u,z)+oy, sc=1/22, fu=FLIP?-1:1;
   g.setTransform(AXx*sc,AXy*sc,AUx*sc*fu,AUy*sc*fu,cx,cy); g.drawImage(t,-120,-28); g.setTransform(1,0,0,1,0,0);
   for(const dv of [-5.6,5.6]){
     const fx=projX(v+dv,u)+ox, fy=projY(v+dv,u,z)+oy, top=fy-34;
-    g.strokeStyle='#dfe4f2'; g.lineWidth=2;
+    g.strokeStyle='#ddddee'; g.lineWidth=2;
     g.beginPath(); g.moveTo(fx,fy); g.lineTo(fx,top); g.stroke();
-    g.fillStyle='#3d7ce0'; g.beginPath();
+    g.fillStyle='#4477dd'; g.beginPath();
     g.moveTo(fx,top); g.lineTo(fx+13,top+5); g.lineTo(fx,top+10); g.closePath(); g.fill(); }
 }
 function buildAerial(){ newGrid(26,76);
-  const REDC={tex:'check',tint:'#a83a30'}, CAT={tex:'grid',tint:'#9aa0b4'}, REDW={tint:'#8f2f28'};
+  const REDC={tex:'check',tint:'#aa3333'}, CAT={tex:'grid',tint:'#9999bb'}, REDW={tint:'#883322'};
   waves(4,0,9,4,15,14.4,0.5,5,7,REDC); waves(16,0,21,4,15,14.4,0.5,5,7,REDC);
   rampV(10,0,12,4,14.4,13,REDC); rampV(13,0,15,4,13,14.4,REDC);
   slab(4,5,21,6,13,REDC);
@@ -356,7 +356,7 @@ function buildAerial(){ newGrid(26,76);
   slab(7,43,16,44,6.6,CAT);
   slab(3,49,18,50,5,CAT);
   slab(9,51,16,54,5,REDC);
-  slab(11,53,13,54,5.02,{tex:'grid',tint:'#d8b04a'});
+  slab(11,53,13,54,5.02,{tex:'grid',tint:'#ddaa44'});
   // capture the full platform width: rolling off the end into the void was unavoidable
   // launch slightly left so you land ON the left chute's line: landing dead centre
   // left barely four rows to reach a chute, which the heavy marble cannot do
@@ -367,7 +367,7 @@ function buildAerial(){ newGrid(26,76);
     const hT=4+(su-64)*(1-4)/6, hB=4+(su-63)*(1-4)/6;
     const cL=7-bow, cR=18+bow;
     const l0=Math.round(cL-2), l1=Math.round(cL+2), r0=Math.round(cR-2), r1=Math.round(cR+2);
-    rampU(l0,su,l1,su,hT,hB,{tint:'#b03a30'}); rampU(r0,su,r1,su,hT,hB,{tint:'#b03a30'});
+    rampU(l0,su,l1,su,hT,hB,{tint:'#aa3333'}); rampU(r0,su,r1,su,hT,hB,{tint:'#aa3333'});
     slab(l0-1,su,l0-1,su,hT+2,REDW); slab(l1+1,su,l1+1,su,hT+2,REDW);
     slab(r0-1,su,r0-1,su,hT+2,REDW); slab(r1+1,su,r1+1,su,hT+2,REDW);
   }
@@ -383,7 +383,7 @@ function buildAerial(){ newGrid(26,76);
   decorFn=(g,ox,oy)=>{ goalText(g,12.5,72.4,0.6,ox,oy); };
 }
 function buildSilly(){ newGrid(26,58);
-  const GOLD={tex:'grid',tint:'#c9a23c'}, GOLDW={tint:'#c9a23c',dots:true}, GREY={tex:'grid',tint:'#9aa0b4'};
+  const GOLD={tex:'grid',tint:'#ccaa44'}, GOLDW={tint:'#ccaa44',dots:true}, GREY={tex:'grid',tint:'#9999bb'};
   rampU(9,0,16,5,22,21,GOLD);                                   // start deck (bottom of screen)
   rampU(6,2,19,5,21.667,21,GOLD);                               // flare into both X-walk mouths
   for(let su=6;su<=13;su++){ // X-crossing walkways (reference map)
@@ -395,17 +395,17 @@ function buildSilly(){ newGrid(26,58);
       rampU(v0,su,v1,su,hT,hB,GOLD);
     }
   }
-  slab(3,9,4,10,19.9,GOLD); pyramid(3,9,19.9,21.7,{tint:'#22242e'});
-  slab(21,9,22,10,19.9,GOLD); pyramid(21,9,19.9,21.7,{tint:'#22242e'});
+  slab(3,9,4,10,19.9,GOLD); pyramid(3,9,19.9,21.7,{tint:'#222233'});
+  slab(21,9,22,10,19.9,GOLD); pyramid(21,9,19.9,21.7,{tint:'#222233'});
   slab(5,14,20,23,17.5,GREY);                                   // critter room floor
   slab(4,14,4,23,20.5,GOLDW); slab(21,14,21,23,20.5,GOLDW);     // dotted room walls
-  pyramid(7,16,17.5,19.3,{tint:'#22242e'}); pyramid(17,20,17.5,19.3,{tint:'#22242e'});
+  pyramid(7,16,17.5,19.3,{tint:'#222233'}); pyramid(17,20,17.5,19.3,{tint:'#222233'});
   for(let i=0;i<12;i++){
     const cv=6.5+(i*137%13), cu=15+(i*89%8);
     hazards.push({type:'critter',v:cv,u:cu,zone:{v0:6,v1:19.5,u0:14.5,u1:22.5},
       dv:0,du:0,phase:i*0.7,alive:true,splatT:0,pink:i%3===2});
   }
-  rampU(5,24,18,33,17.5,13,{tex:'grid',tint:'#b0894a'});        // polka cliff ledges
+  rampU(5,24,18,33,17.5,13,{tex:'grid',tint:'#aa8844'});        // polka cliff ledges
   carve(9,26,14,31);                                            // central void: pick a ledge
   rampU(4,34,21,43,13,9,GOLD);                                  // castle plateau
   for(let u=34;u<=43;u+=2){ const h=13-(u-34+0.5)*0.4;
@@ -417,8 +417,8 @@ function buildSilly(){ newGrid(26,58);
   decorFn=(g,ox,oy)=>{ goalText(g,12.5,52.6,5.5,ox,oy); };
 }
 function buildUltimate(){ newGrid(26,72);
-  const DOTF={tint:'#cf8a3a',dots:true}, GRID={tex:'grid',tint:'#9aa0b4'};
-  const RCHK={tex:'check',tint:'#b8452f'}, BLUE={tint:'#3d7ce0'};
+  const DOTF={tint:'#cc8833',dots:true}, GRID={tex:'grid',tint:'#9999bb'};
+  const RCHK={tex:'check',tint:'#bb4433'}, BLUE={tint:'#4477dd'};
   // polka-dot start plateau
   slab(6,0,19,5,26,DOTF); carve(6,0,8,1);
   rampU(8,6,14,7,26,24,GRID);
@@ -453,7 +453,7 @@ function buildUltimate(){ newGrid(26,72);
   hazards.push({type:'piston',v:9,u:52,phase:1.4});
   // wave finale
   rampU(5,53,20,54,12.5,11,RCHK);
-  dynWaves(5,55,20,61,11,9.5,0.5,6,7,2.2,{tex:'grid',tint:'#79b6b9'});
+  dynWaves(5,55,20,61,11,9.5,0.5,6,7,2.2,{tex:'grid',tint:'#77bbbb'});
   // final checker descent + goal
   rampU(5,62,20,64,9.5,8,RCHK);
   slab(5,65,20,66,8,RCHK);
@@ -617,7 +617,7 @@ function drawCellC(g,v,u,ox,oy,c){
     stripeWall(g,c,x10,y10,x11,y11,b1,b2,0.58,v); }
   if(c.type===GOAL){
     for(let i=0;i<3;i++)for(let j=0;j<3;j++){ const v0=v+i/3,v1=v+(i+1)/3,u0=u+j/3,u1=u+(j+1)/3;
-      g.fillStyle=((i+j)%2)?'#e8ecf8':'#12141f'; g.beginPath();
+      g.fillStyle=((i+j)%2)?'#eeeeff':'#111122'; g.beginPath();
       g.moveTo(pX(v0,u0)+ox,pY(v0,u0,c.h00)+oy); g.lineTo(pX(v1,u0)+ox,pY(v1,u0,c.h00)+oy);
       g.lineTo(pX(v1,u1)+ox,pY(v1,u1,c.h00)+oy); g.lineTo(pX(v0,u1)+ox,pY(v0,u1,c.h00)+oy);
       g.closePath(); g.fill(); }
@@ -655,7 +655,7 @@ function drawCellC(g,v,u,ox,oy,c){
     // one dot per WORLD unit, drawn on that unit's anchor cell — hashing per cell made
     // them GS*GS times denser once the grid got finer
     if(c.dots&&v%GS===0&&u%GS===0){ const hsh=((v/GS)*31+(u/GS)*17)%97;
-      if(hsh%3!==2){ const cols=['#d94b30','#a8382a','#b8386e'];
+      if(hsh%3!==2){ const cols=['#dd4433','#aa3322','#bb3366'];
         g.fillStyle=cols[hsh%3]; g.beginPath();
         g.arc((x00+x11)/2+((hsh%7)-3),(y00+y11)/2+((hsh%5)-2),2.6+(hsh%2),0,Math.PI*2); g.fill(); } }
     if(c.tex==='grid'&&PAL.checker){
@@ -665,7 +665,7 @@ function drawCellC(g,v,u,ox,oy,c){
       if(v%TSZ===0){ g.moveTo(x00,y00); g.lineTo(x01,y01); }
       if(u%TSZ===0){ g.moveTo(x00,y00); g.lineTo(x10,y10); }
       g.stroke();
-    } else if(c.tex==='grid'){ g.strokeStyle=c.tint?'rgba(30,50,54,.45)':PAL.line; g.lineWidth=1; g.beginPath();
+    } else if(c.tex==='grid'){ g.strokeStyle=c.tint?'rgba(34,51,51,.45)':PAL.line; g.lineWidth=1; g.beginPath();
       g.moveTo(x00,y00); g.lineTo(x10,y10); g.lineTo(x11,y11); g.lineTo(x01,y01); g.closePath();
       const mv0x=(x00+x10)/2,mv0y=(y00+y10)/2,mv1x=(x01+x11)/2,mv1y=(y01+y11)/2;
       const mu0x=(x00+x01)/2,mu0y=(y00+y01)/2,mu1x=(x10+x11)/2,mu1y=(y10+y11)/2;
@@ -675,7 +675,7 @@ function drawCellC(g,v,u,ox,oy,c){
   if(c.type!==GOAL) edgeContours(g,v,u,ox,oy,c,x00,y00,x10,y10,x01,y01,x11,y11);
 }
 function dots(g,c,x0,y0,x1,yBot,v,u){ if(!c.dots) return;
-  const cols=['#d94b30','#e08a2c','#b8386e'];
+  const cols=['#dd4433','#dd8833','#bb3366'];
   const H=Math.abs(yBot-y0); if(H<10) return;
   const n=1+((v*7+u*13)%2);
   for(let i=0;i<n;i++){ const hsh=(v*31+u*17+i*53)%97;
@@ -695,7 +695,7 @@ function edgeContours(g,v,u,ox,oy,c,x00,y00,x10,y10,x01,y01,x11,y11){
     if(lower(nc,a,b,ca,cb)){
       const big=(!nc)||(nc[a]<c[ca]-1.4)||(nc[b]<c[cb]-1.4);
       g.lineWidth=big?2.2:1.5;
-      g.strokeStyle=c.tint?'rgba(20,16,20,.62)':'rgba(16,22,44,.7)';
+      g.strokeStyle=c.tint?'rgba(17,17,17,.62)':'rgba(17,17,51,.7)';
       g.beginPath(); g.moveTo(ax,ay); g.lineTo(bx,by); g.stroke(); } }
 }
 function drawCell(g,v,u,ox,oy){ const c=cells[u][v]; if(!c) return; drawCellC(g,v,u,ox,oy,c); }
@@ -1046,7 +1046,7 @@ function die(m,kind){ if(!m.alive) return; m.alive=false; m.deathKind=kind; m.de
     if(kind==='shatter'){ Snd.shatter(); const p=marbleScreen(m);
       for(let i=0;i<12;i++) shards.push({x:p.x,y:p.y,vx:(Math.random()*2-1)*140,vy:-Math.random()*160-30,r:2+Math.random()*3.5,t:0}); }
     else if(kind==='dissolved'){ Snd.sizzle(); const p=marbleScreen(m);
-      for(let i=0;i<10;i++) shards.push({x:p.x,y:p.y+4,vx:(Math.random()*2-1)*60,vy:-Math.random()*90-20,r:1.5+Math.random()*2.5,t:0,col:'#7fd28a'}); }
+      for(let i=0;i<10;i++) shards.push({x:p.x,y:p.y+4,vx:(Math.random()*2-1)*60,vy:-Math.random()*90-20,r:1.5+Math.random()*2.5,t:0,col:'#77cc88'}); }
     else if(kind==='eaten'){ Snd.gulp(); }
     else if(kind==='smashed'){ Snd.shatter(); const p=marbleScreen(m);
       for(let i=0;i<12;i++) shards.push({x:p.x,y:p.y,vx:(Math.random()*2-1)*150,vy:-Math.random()*120-20,r:2+Math.random()*3.5,t:0}); }
@@ -1056,7 +1056,7 @@ function die(m,kind){ if(!m.alive) return; m.alive=false; m.deathKind=kind; m.de
     if(kind==='fall'){ let best=null,bd=6;
       for(const pl of players){ if(!pl.alive) continue;
         const d=Math.hypot(pl.v-m.v,pl.u-m.u); if(d<bd){ bd=d; best=pl; } }
-      if(best){ best.score+=1000; addFloater(m.v,m.u,Math.max(0,m.z),'+1000','#7fd4ff'); Snd.count(); } } }
+      if(best){ best.score+=1000; addFloater(m.v,m.u,Math.max(0,m.z),'+1000','#77ccff'); Snd.count(); } } }
 }
 function respawnPlayer(pl){ pl.v=pl.lastSafe.v; pl.u=pl.lastSafe.u; const h=groundH(pl.v,pl.u);
   pl.z=(isNaN(h)?4:h)+2.2; pl.vv=0; pl.vu=0; pl.vz=0;
@@ -1207,7 +1207,7 @@ function updateHazards(dt){
       if(!h.taken) for(const pl of players)
         if(pl.alive&&!pl.hidden&&pl.grounded&&Math.hypot(pl.v-h.v,pl.u-h.u)<0.95){
           h.taken=true; pl.score+=h.val*1000;
-          addFloater(h.v,h.u,0.3,'+'+(h.val*1000),'#ffd23a');
+          addFloater(h.v,h.u,0.3,'+'+(h.val*1000),'#ffcc33');
           Snd.goal(); break; }
     } else if(h.type==='tube'){
       if(h.busyT>0){ h.busyT-=dt;
@@ -1342,7 +1342,7 @@ function physics(dt){
 
 /* ---------- render ---------- */
 function marbleScreen(m){ return { x:projX(m.v,m.u)+offX-camX, y:projY(m.v,m.u,m.z)+offY-camY-m.r*AZ*0.55 }; }
-function addFloater(v,u,z,txt,col){ floaters.push({v,u,z,txt,col:col||'#ffd23a',t:0}); }
+function addFloater(v,u,z,txt,col){ floaters.push({v,u,z,txt,col:col||'#ffcc33',t:0}); }
 function updateCam(){
   const foc=players.filter(pl=>!pl.out&&!pl.finished&&pl.alive);
   const list=foc.length?foc:players.filter(pl=>!pl.out);
@@ -1370,9 +1370,9 @@ function archGate(g,ox,oy,v,u,span,hgt){
   const path=()=>{ g.beginPath(); g.moveTo(lx,ly); g.lineTo(ltx,lty);
     g.quadraticCurveTo(cx,cy,rtx,rty); g.lineTo(rx,ry); };
   g.lineCap='round'; g.lineJoin='round';
-  g.strokeStyle='#7d1a1d'; g.lineWidth=9; path(); g.stroke();
+  g.strokeStyle='#772222'; g.lineWidth=9; path(); g.stroke();
   g.strokeStyle=PAL.rail||'#dd3333'; g.lineWidth=6; path(); g.stroke();
-  g.strokeStyle='rgba(255,180,170,.8)'; g.lineWidth=1.8;
+  g.strokeStyle='rgba(255,187,170,.8)'; g.lineWidth=1.8;
   g.beginPath(); g.moveTo(ltx-2,lty); g.quadraticCurveTo(cx,cy-2,rtx-2,rty); g.stroke();
   g.lineCap='butt'; g.lineJoin='miter';
 }
@@ -1392,11 +1392,11 @@ function railing(g,ox,oy,v0,u0,v1,u1,hgt){
   const P=(vv,uu,zz)=>[projX(vv,uu)+ox, projY(vv,uu,zz)+oy];
   const [ax,ay]=P(v0,u0,h0+HT), [bx,by]=P(v1,u1,h1+HT), [px,py]=P(v0,u0,h0);
   g.lineCap='round'; g.lineJoin='round';
-  g.strokeStyle='#7d1a1d'; g.lineWidth=8;
+  g.strokeStyle='#772222'; g.lineWidth=8;
   g.beginPath(); g.moveTo(px,py); g.lineTo(ax,ay); g.lineTo(bx,by); g.stroke();
   g.strokeStyle=PAL.rail||'#dd3333'; g.lineWidth=5;
   g.beginPath(); g.moveTo(px,py); g.lineTo(ax,ay); g.lineTo(bx,by); g.stroke();
-  g.strokeStyle='rgba(255,180,170,.8)'; g.lineWidth=1.8;
+  g.strokeStyle='rgba(255,187,170,.8)'; g.lineWidth=1.8;
   g.beginPath(); g.moveTo(ax-2,ay-1); g.lineTo(bx-2,by-1); g.stroke();
   g.lineCap='butt'; g.lineJoin='miter';
 }
@@ -1406,7 +1406,7 @@ function floorArrow(g,ox,oy,v,u,turn,len){
   const L=len||6.2, W=0.42, HW=1.05, HL=1.6;   // shaft length/half-width, head half-width/length
   g.save(); g.setTransform(AXx,AXy,AUx,AUy,px,py);
   if(turn) g.rotate(turn);
-  g.fillStyle=PAL.arrow||'#a72222';
+  g.fillStyle=PAL.arrow||'#aa2222';
   g.beginPath();
   g.moveTo(-L/2,-W); g.lineTo(L/2-HL,-W); g.lineTo(L/2-HL,-HW); g.lineTo(L/2,0);
   g.lineTo(L/2-HL,HW); g.lineTo(L/2-HL,W); g.lineTo(-L/2,W);
@@ -1417,12 +1417,12 @@ function drawMarbleG(g,m){
   const p=marbleScreen(m); const r=m.r*AXx;   // scale with the projection, not a constant
   const h=groundH(m.v,m.u);
   if(!isNaN(h)){ const sy=projY(m.v,m.u,h)+offY-camY; const k=Math.max(0.35,1-(m.z-h)*0.12);
-    g.fillStyle='rgba(40,40,40,.72)'; g.beginPath();   // hard-edged, like the original
+    g.fillStyle='rgba(34,34,34,.72)'; g.beginPath();   // hard-edged, like the original
     g.ellipse(projX(m.v,m.u)+offX-camX+2,sy-1,r*0.92*k,r*0.42*k,0,0,Math.PI*2); g.fill(); }
   // the Amiga sprite is flat-shaded: a solid disc, a hard dark crescent on the
   // shaded side, and a small light patch — not a glossy gradient sphere
-  const C=(m.kind==='steelie')?['#8f96ad','#3a4058','#c9cee0']
-        :(m.pIdx===1?['#3a56cc','#16255e','#93a8ff']:['#cc2222','#8b1a1a','#ee6644']);
+  const C=(m.kind==='steelie')?['#8899aa','#334455','#ccccdd']
+        :(m.pIdx===1?['#3355cc','#112266','#99aaff']:['#cc0000','#660000','#ee0000']);
   g.fillStyle=C[0]; g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.fill();
   g.save(); g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.clip();
   g.fillStyle=C[1]; g.beginPath();
@@ -1431,7 +1431,7 @@ function drawMarbleG(g,m){
   drawSpinPattern(g,m,p.x,p.y,r);
   g.fillStyle=C[2]; g.beginPath();
   g.ellipse(p.x-r*0.44,p.y-r*0.46,r*0.20,r*0.15,-0.6,0,Math.PI*2); g.fill();
-  g.strokeStyle='rgba(20,10,10,.45)'; g.lineWidth=1;
+  g.strokeStyle='rgba(17,17,17,.45)'; g.lineWidth=1;
   g.beginPath(); g.arc(p.x,p.y,r,0,Math.PI*2); g.stroke();
 }
 /* The Amiga marble carries chunky surface patches that visibly turn as it rolls
@@ -1439,7 +1439,7 @@ function drawMarbleG(g,m){
    on a unit sphere and are rotated about the axis perpendicular to travel. */
 const SPIN_PATCHES=[[0,0,1],[0.72,0.16,0.68],[-0.62,0.38,0.68],[0.1,-0.8,0.59],[-0.15,0.86,0.49],[0.86,-0.42,0.29]];
 function drawSpinPattern(g,m,cx,cy,r){
-  const col=(m.kind==='steelie')?'#8f96ad':(m.pIdx===1?'#93a8ff':'#cccc00');
+  const col=(m.kind==='steelie')?'#8899aa':(m.pIdx===1?'#99aaff':'#aaaa00');
   const a=m.spin||0, tx=(m.spinX===undefined?1:m.spinX), ty=(m.spinY===undefined?0:m.spinY);
   const ax=-ty, ay=tx, az=0;                    // roll axis: perpendicular to travel
   const ca=Math.cos(a), sa=Math.sin(a);
@@ -1484,10 +1484,10 @@ function drawAcid(g,h){
   const r=h.r*(1+Math.sin(h.wob*3)*0.07);
   g.save(); g.setTransform(AXx,AXy,AUx,AUy,px,py);
   const rg=g.createRadialGradient(0,0,r*0.15,0,0,r);
-  rg.addColorStop(0,'#b8f08c'); rg.addColorStop(0.5,'#59a844'); rg.addColorStop(1,'#2c6d2a');
+  rg.addColorStop(0,'#bbee88'); rg.addColorStop(0.5,'#55aa44'); rg.addColorStop(1,'#336622');
   g.fillStyle=rg; g.beginPath(); g.arc(0,0,r,0,Math.PI*2); g.fill();
   g.setTransform(1,0,0,1,0,0);
-  g.fillStyle='rgba(220,255,190,.55)';
+  g.fillStyle='rgba(221,255,187,.55)';
   const bx=px+Math.sin(h.wob*5)*4, by=py-2;
   g.beginPath(); g.arc(bx,by,1.6,0,Math.PI*2); g.fill();
   g.restore();
@@ -1498,17 +1498,17 @@ function drawMuncher(g,h){
   const px=projX(h.v,h.u)+offX-camX;
   const sy=projY(h.v,h.u,gh)+offY-camY;
   const py=projY(h.v,h.u,gh+k*0.85)+offY-camY;
-  g.fillStyle='rgba(6,10,8,.35)'; g.beginPath();
+  g.fillStyle='rgba(0,17,0,.35)'; g.beginPath();
   g.ellipse(px,sy-1,12*(1-k*0.3),5*(1-k*0.3),0,0,Math.PI*2); g.fill();
   const sq=1+Math.sin(h.phase*4)*0.07+(h.state==='hop'?0.2:0);
   for(let i=0;i<3;i++){
     const rr=11-i*2.6, yy=py-7-i*7.5*sq;
     const grd=g.createRadialGradient(px-3,yy-3,1,px,yy,rr+2);
-    grd.addColorStop(0,'#c9f3a0'); grd.addColorStop(0.5,'#6fc258'); grd.addColorStop(1,'#2f7a34');
+    grd.addColorStop(0,'#ccee99'); grd.addColorStop(0.5,'#77bb55'); grd.addColorStop(1,'#337733');
     g.fillStyle=grd; g.beginPath(); g.ellipse(px,yy,rr,rr*0.8,0,0,Math.PI*2); g.fill();
   }
   const ey=py-7-2*7.5*sq;
-  g.fillStyle='#12240f'; g.beginPath();
+  g.fillStyle='#112211'; g.beginPath();
   g.arc(px-3,ey-2,1.6,0,Math.PI*2); g.arc(px+3,ey-2,1.6,0,Math.PI*2); g.fill();
 }
 function drawHammer(g,h){
@@ -1517,25 +1517,25 @@ function drawHammer(g,h){
   const hz=base+0.25+lift*2.1;
   const px=projX(h.v,h.u)+offX-camX;
   const gy=projY(h.v,h.u,base)+offY-camY, py=projY(h.v,h.u,hz)+offY-camY;
-  g.fillStyle='rgba(10,6,4,.4)'; g.beginPath();
+  g.fillStyle='rgba(17,0,0,.4)'; g.beginPath();
   g.ellipse(px,gy-1,10*(1-lift*0.35),4.5*(1-lift*0.35),0,0,Math.PI*2); g.fill();
-  g.strokeStyle='#5c5648'; g.lineWidth=3; g.beginPath(); g.moveTo(px,gy-46); g.lineTo(px,py-8); g.stroke();
+  g.strokeStyle='#555544'; g.lineWidth=3; g.beginPath(); g.moveTo(px,gy-46); g.lineTo(px,py-8); g.stroke();
   const grd=g.createLinearGradient(px-13,py-16,px+13,py);
-  grd.addColorStop(0,'#f2d878'); grd.addColorStop(0.5,'#cfa53a'); grd.addColorStop(1,'#8f6d1c');
+  grd.addColorStop(0,'#eedd77'); grd.addColorStop(0.5,'#ccaa33'); grd.addColorStop(1,'#886622');
   g.fillStyle=grd; g.beginPath();
   if(g.roundRect) g.roundRect(px-13,py-17,26,15,4); else g.rect(px-13,py-17,26,15);
-  g.fill(); g.strokeStyle='#4d3c10'; g.lineWidth=1; g.stroke();
+  g.fill(); g.strokeStyle='#554411'; g.lineWidth=1; g.stroke();
 }
 function drawPiston(g,h){
   const gh=groundH(h.v,h.u); if(isNaN(gh)) return;
   const ph=h.phase, ext=ph<0.1?1:(ph<0.5?1-(ph-0.1)/0.4:(ph>1.9?(ph-1.9)/0.3*0.25:0));
   const px=projX(h.v,h.u)+offX-camX, gy=projY(h.v,h.u,gh)+offY-camY;
-  g.fillStyle='rgba(10,6,4,.35)'; g.beginPath(); g.ellipse(px,gy-1,11,4.5,0,0,Math.PI*2); g.fill();
+  g.fillStyle='rgba(17,0,0,.35)'; g.beginPath(); g.ellipse(px,gy-1,11,4.5,0,0,Math.PI*2); g.fill();
   const n=4;
   for(let i=0;i<n;i++){
     const yy=gy-4-i*(4+ext*7);
     const grd=g.createLinearGradient(px-11,yy-4,px+11,yy+2);
-    grd.addColorStop(0,'#f2d878'); grd.addColorStop(0.6,'#cfa53a'); grd.addColorStop(1,'#8f6d1c');
+    grd.addColorStop(0,'#eedd77'); grd.addColorStop(0.6,'#ccaa33'); grd.addColorStop(1,'#886622');
     g.fillStyle=grd; g.beginPath(); g.ellipse(px,yy,11-i*1.1,4.2,0,0,Math.PI*2); g.fill(); }
 }
 function drawVacuum(g,h){
@@ -1543,10 +1543,10 @@ function drawVacuum(g,h){
   const px=projX(h.v,h.u)+offX-camX, py=projY(h.v,h.u,base)+offY-camY;
   for(let i=0;i<3;i++){
     const grd=g.createLinearGradient(px-14,py-10-i*8,px+14,py-2-i*8);
-    grd.addColorStop(0,'#f2d878'); grd.addColorStop(0.6,'#cfa53a'); grd.addColorStop(1,'#8f6d1c');
+    grd.addColorStop(0,'#eedd77'); grd.addColorStop(0.6,'#ccaa33'); grd.addColorStop(1,'#886622');
     g.fillStyle=grd; g.beginPath(); g.ellipse(px,py-6-i*8,14-i*2,5.5,0,0,Math.PI*2); g.fill(); }
   const t=simT*3%1;
-  g.fillStyle='rgba(230,230,255,.5)';
+  g.fillStyle='rgba(238,238,255,.5)';
   for(let i=0;i<3;i++){ const k=(t+i/3)%1;
     const sx=px-38*(1-k)*Math.sign(1), sy=py-8;
     g.beginPath(); g.arc(px-38+38*k,sy,1.8,0,Math.PI*2); g.fill(); }
@@ -1555,11 +1555,11 @@ function drawCritter(g,h){
   const gh=groundH(h.v,h.u); if(isNaN(gh)) return;
   const px=projX(h.v,h.u)+offX-camX, py=projY(h.v,h.u,gh)+offY-camY;
   if(!h.alive){ if(h.splatT<1.2){ g.globalAlpha=Math.max(0,1-h.splatT/1.2);
-      g.fillStyle=h.pink?'#d968b0':'#6fc258'; g.beginPath(); g.ellipse(px,py-2,8,3.5,0,0,Math.PI*2); g.fill();
+      g.fillStyle=h.pink?'#dd66aa':'#77bb55'; g.beginPath(); g.ellipse(px,py-2,8,3.5,0,0,Math.PI*2); g.fill();
       g.globalAlpha=1; } return; }
   const wob=Math.sin(h.phase*14)*1.2;
-  g.fillStyle='rgba(8,10,8,.3)'; g.beginPath(); g.ellipse(px,py-1,5,2.2,0,0,Math.PI*2); g.fill();
-  const c1=h.pink?'#e88ac4':'#8fd07a', c2=h.pink?'#a03d78':'#3f7a34';
+  g.fillStyle='rgba(0,17,0,.3)'; g.beginPath(); g.ellipse(px,py-1,5,2.2,0,0,Math.PI*2); g.fill();
+  const c1=h.pink?'#ee88cc':'#88cc77', c2=h.pink?'#994477':'#447733';
   g.fillStyle=c2; g.beginPath(); g.ellipse(px+wob*0.4,py-4,4.5,3.4,0,0,Math.PI*2); g.fill();
   g.fillStyle=c1; g.beginPath(); g.ellipse(px+wob*0.6,py-7,3.2,2.6,0,0,Math.PI*2); g.fill();
   g.strokeStyle=c2; g.lineWidth=1;
@@ -1773,7 +1773,7 @@ function render(dt){
   if(RACES[raceIdx].stars){
     for(let i=0;i<90;i++){ const hx=(i*127)%offW, hy=(i*211)%offH;
       const sx=hx-camX, sy=hy-camY; if(sx<0||sx>640||sy<0||sy>400) continue;
-      g.fillStyle=i%4?'rgba(200,210,255,.5)':'rgba(255,240,200,.7)';
+      g.fillStyle=i%4?'rgba(204,204,255,.5)':'rgba(255,238,204,.7)';
       g.fillRect(sx,sy,i%3?1:2,i%3?1:2); } }
   g.drawImage(off,camX,camY,640,400,0,0,640,400);
   // animated wave band redraw (only cells near viewport)
@@ -1798,10 +1798,10 @@ function render(dt){
     const gh=groundH(h.v,h.u); if(isNaN(gh)) continue;
     const px=projX(h.v,h.u)+offX-camX, py=projY(h.v,h.u,gh+0.03)+offY-camY;
     g.save(); g.setTransform(AXx/16,AXy/16,AUx/16,AUy/16,px,py);
-    g.fillStyle='rgba(255,210,58,.2)'; g.beginPath(); g.arc(0,0,13,0,Math.PI*2); g.fill();
-    g.strokeStyle='rgba(255,210,58,.8)'; g.lineWidth=2; g.stroke();
+    g.fillStyle='rgba(255,204,51,.2)'; g.beginPath(); g.arc(0,0,13,0,Math.PI*2); g.fill();
+    g.strokeStyle='rgba(255,204,51,.8)'; g.lineWidth=2; g.stroke();
     g.setTransform(1,0,0,1,0,0);
-    text(g,String(h.val),px,py-7,15,'#ffd23a'); g.restore(); }
+    text(g,String(h.val),px,py-7,15,'#ffcc33'); g.restore(); }
   // marbles + munchers back-to-front
   const ents=[];
   // the original holds the marbles off screen until the clock has finished filling in
@@ -1816,7 +1816,7 @@ function render(dt){
     else if(e.h.type==='vacuum') drawVacuum(g,e.h);
     else if(e.h.type==='critter') drawCritter(g,e.h); }
   for(const s of shards){ s.t+=dt; s.x+=s.vx*dt; s.y+=s.vy*dt; s.vy+=460*dt;
-    g.globalAlpha=Math.max(0,1-s.t/1.1); g.fillStyle=s.col||'#c9d6ff';
+    g.globalAlpha=Math.max(0,1-s.t/1.1); g.fillStyle=s.col||'#ccddff';
     g.beginPath(); g.arc(s.x,s.y,s.r,0,Math.PI*2); g.fill(); g.globalAlpha=1; }
   shards=shards.filter(s=>s.t<1.1);
   for(const f of floaters){ f.t+=dt;
@@ -1845,8 +1845,8 @@ function render(dt){
     hudNum(g,player2.out?'00':clk(player2),390,2,2,
          player2.out?'#555555':clkCol(player2),'center');
     hudNum(g,player2.score,600,2,2,'#223388','right');
-    if(player.finished) text(g,'FIN',250,34,12,'#ffd23a','center');
-    if(player2.finished) text(g,'FIN',390,34,12,'#ffd23a','center');
+    if(player.finished) text(g,'FIN',250,34,12,'#ffcc33','center');
+    if(player2.finished) text(g,'FIN',390,34,12,'#ffcc33','center');
   }
   if(state==='ready'){ stateT+=dt;
     // The original announces each race on a grey panel in dark red, drawn over the
@@ -1856,7 +1856,7 @@ function render(dt){
     // Note neither line is centred on the panel — line 2 sits ~19px right of line 1.
     // THE CANVAS IS 640x400, NOT 640x480 — v0.54.0 converted every y against 480 and
     // sat the whole panel ~20% too low. Fractions: x/1110*640, y/784*400.
-    g.fillStyle='#989898'; g.fillRect(33,139,577,68);
+    g.fillStyle='#999999'; g.fillRect(33,139,577,68);
     menuText(g,'TIME TO FINISH',277,158,2,'#882222','center');
     const bstr=RACES[raceIdx].name.replace(' RACE','')+' RACE:';
     // the original's line pitch is 1.15x its glyph height; ours are 16px at scale 2
@@ -1865,68 +1865,68 @@ function render(dt){
     // hold the ready state until the clock has actually finished filling in
     const fill=Math.max(...players.filter(pl=>!pl.out).map(pl=>countUpTime(Math.ceil(pl.timeLeft))),1.5);
     if(stateT>fill){ state='race'; stateT=0; Snd.ready(2); } }
-  if(state==='race'&&deathMsgT>0){ menuFit(g,deathMsg,320,160,3,'#ff97a5','center',560); }
+  if(state==='race'&&deathMsgT>0){ menuFit(g,deathMsg,320,160,3,'#ff99aa','center',560); }
   if(state==='race'&&numPlayers===2){
     for(const pl of players) if(pl.finished){
-      text(g,(pl.pIdx===0?'P1':'P2')+' FINISHED!',320,140,16,'#ffd23a'); break; } }
-  if(state==='race'&&paused){ menuText(g,'PAUSED',320,168,4,'#eef2ff','center');
-    menuFit(g,'press P or click',320,214,2,'#9fb0e8','center',560); }
+      text(g,(pl.pIdx===0?'P1':'P2')+' FINISHED!',320,140,16,'#ffcc33'); break; } }
+  if(state==='race'&&paused){ menuText(g,'PAUSED',320,168,4,'#eeeeff','center');
+    menuFit(g,'press P or click',320,214,2,'#99aaee','center',560); }
   if(state==='goal'){ stateT+=dt;
-    menuFit(g,'RACE COMPLETE!',320,138,4,'#ffd23a','center',600);
+    menuFit(g,'RACE COMPLETE!',320,138,4,'#ffcc33','center',600);
     if(numPlayers===2&&finishOrder.length){
-      text(g,'PLAYER '+(finishOrder[0]+1)+' WINS THE RACE  (+1000, +5s)',320,178,15,finishOrder[0]===0?'#8fa8f0':'#f0a0aa'); }
+      text(g,'PLAYER '+(finishOrder[0]+1)+' WINS THE RACE  (+1000, +5s)',320,178,15,finishOrder[0]===0?'#88aaee':'#ee99aa'); }
     let draining=false;
     for(const pl of players){ if(!pl.finished) continue;
       if(pl.timeLeft>0&&stateT>0.8){ const take=Math.min(pl.timeLeft,dt*16);
         pl.timeLeft-=take; pl.score+=Math.round(take*100); draining=true;
         if(Math.random()<dt*22) Snd.count(); } }
     const drainLeft=players.filter(pl=>pl.finished).reduce((a,pl)=>a+pl.timeLeft,0);
-    text(g,'TIME BONUS  '+String(Math.ceil(drainLeft)).padStart(2,'0')+'  ×100',320,206,16,'#c8d2f8');
+    text(g,'TIME BONUS  '+String(Math.ceil(drainLeft)).padStart(2,'0')+'  ×100',320,206,16,'#ccccff');
     if(drainLeft<=0.01&&stateT>2.4){
       if(raceIdx+1<RACES.length){ loadRace(raceIdx+1); }
       else { state='ending'; stateT=0; shards=[]; Snd.goal(); } } }
   if(state==='ending'){ stateT+=dt;
     if(Math.random()<dt*6){ const fx=80+Math.random()*480, fy=60+Math.random()*200;
-      const hue=['#ffd23a','#7fd4ff','#ff7a8a','#8fd07a'][Math.floor(Math.random()*4)];
+      const hue=['#ffcc33','#77ccff','#ff7788','#88cc77'][Math.floor(Math.random()*4)];
       for(let i=0;i<14;i++){ const a=i/14*Math.PI*2;
         shards.push({x:fx,y:fy,vx:Math.cos(a)*(60+Math.random()*60),vy:Math.sin(a)*(60+Math.random()*60)-30,r:2,t:0,col:hue}); }
       if(Math.random()<0.5) Snd.count(); }
     // a backing panel, like the game-over screen: the ending sits over live course
-    g.fillStyle='rgba(10,12,26,.78)'; g.fillRect(70,104,500,120);
-    menuFit(g,'CONGRATULATIONS!',320,118,4,'#ffd23a','center',470);
-    menuFit(g,'YOU BEAT ALL SIX RACES',320,162,3,'#eef2ff','center',450);
+    g.fillStyle='rgba(17,17,34,.78)'; g.fillRect(70,104,500,120);
+    menuFit(g,'CONGRATULATIONS!',320,118,4,'#ffcc33','center',470);
+    menuFit(g,'YOU BEAT ALL SIX RACES',320,162,3,'#eeeeff','center',450);
     if(numPlayers===2){
       const w=player.score>=player2.score?'PLAYER 1':'PLAYER 2';
-      text(g,'P1  '+player.score+'    P2  '+player2.score,320,212,20,'#7fd4ff');
-      text(g,player.score===player2.score?'DEAD HEAT!':(w+' TAKES THE CROWN'),320,238,14,'#ffd23a');
-    } else text(g,'FINAL SCORE  '+player.score,320,212,22,'#7fd4ff');
-    text(g,'a clean-room tribute to the 1986 Amiga original',320,262,13,'#9aa6cc');
-    if(stateT>2){ text(g,'CLICK OR PRESS SPACE',320,300,16,'#ffd23a'); }
+      text(g,'P1  '+player.score+'    P2  '+player2.score,320,212,20,'#77ccff');
+      text(g,player.score===player2.score?'DEAD HEAT!':(w+' TAKES THE CROWN'),320,238,14,'#ffcc33');
+    } else text(g,'FINAL SCORE  '+player.score,320,212,22,'#77ccff');
+    text(g,'a clean-room tribute to the 1986 Amiga original',320,262,13,'#99aacc');
+    if(stateT>2){ text(g,'CLICK OR PRESS SPACE',320,300,16,'#ffcc33'); }
     if(stateT>2&&(keys[' ']||false)){ keys[' ']=false; queueScoreEntry(); } }
   if(state==='initials'){ stateT+=dt;
-    menuFit(g,'GREAT SCORE!',320,110,4,'#ffd23a','center',600);
+    menuFit(g,'GREAT SCORE!',320,110,4,'#ffcc33','center',600);
     text(g,(entryPlayer&&entryPlayer.pIdx===1?'PLAYER 2':'PLAYER 1')+'   '+(entryPlayer?entryPlayer.score:0),320,164,18,
-      entryPlayer&&entryPlayer.pIdx===1?'#f0a0aa':'#8fa8f0');
-    text(g,'ENTER YOUR INITIALS',320,204,15,'#c8d2f8');
+      entryPlayer&&entryPlayer.pIdx===1?'#ee99aa':'#88aaee');
+    text(g,'ENTER YOUR INITIALS',320,204,15,'#ccccff');
     for(let i=0;i<3;i++){ const ch=entryName[i]||'_';
-      text(g,ch,286+i*34,246,30,i===entryName.length?'#ffd23a':'#eef2ff'); }
-    text(g,'type letters · ENTER to confirm',320,292,13,'#9aa6cc'); }
+      text(g,ch,286+i*34,246,30,i===entryName.length?'#ffcc33':'#eeeeff'); }
+    text(g,'type letters · ENTER to confirm',320,292,13,'#99aacc'); }
   if(state==='timeup'){ stateT+=dt;
     /* Measured off a real GAME OVER (rec/t2-full01.png): panel x358-907 y586-828 in
        #989898, lines at y694 and y762 in a dull yellow #c1c114, text centred on x~287
        not on the screen. The panel sits LOW and slightly LEFT of centre, and carries
        only these two lines — the score stays where the original leaves it, in the HUD. */
-    g.fillStyle='#989898'; g.fillRect(123,264,317,124);
-    menuText(g,'OUT OF TIME',287,319,2,'#c1c114','center');
-    menuText(g,'GAME OVER',289,354,2,'#c1c114','center');
+    g.fillStyle='#999999'; g.fillRect(123,264,317,124);
+    menuText(g,'OUT OF TIME',287,319,2,'#bbbb11','center');
+    menuText(g,'GAME OVER',289,354,2,'#bbbb11','center');
     // 2P is our own addition, so it gets the spare room inside the panel
     if(numPlayers===2) text(g,'P1  '+player.score+'   ·   P2  '+player2.score,281,378,12,'#882222');
-    text(g,'click / space to retry',540,392,11,'#9fb0e8'); }
+    text(g,'click / space to retry',540,392,11,'#99aaee'); }
 }
 let demoT=0;
 function renderTitle(g){
   demoT+=1/60;
-  g.fillStyle='#04050c'; g.fillRect(0,0,640,400);
+  g.fillStyle='#000011'; g.fillRect(0,0,640,400);
   g.globalAlpha=0.16; if(off) g.drawImage(off,offW/2-380,60,760,475,0,0,640,400); g.globalAlpha=1;
   // the original's title: BLUE "MARBLE" flanked by chevron arcs over an
   // orange/yellow "MADNESS" with a red shadow
@@ -1935,26 +1935,26 @@ function renderTitle(g){
   g.lineWidth=7; g.lineCap='round';
   for(let i=0;i<4;i++){                      // chevron arcs either side
     const off=mw/2+14+i*17, a=0.30+i*0.14;
-    g.strokeStyle=`rgba(70,110,220,${1-i*0.2})`;
+    g.strokeStyle=`rgba(68,102,221,${1-i*0.2})`;
     g.beginPath(); g.arc(320-off,118,26+i*3,-a-0.7,a+0.7); g.stroke();
     g.beginPath(); g.arc(320+off,118,26+i*3,Math.PI-a-0.7,Math.PI+a+0.7); g.stroke();
   }
   g.lineCap='butt';
   const gb=g.createLinearGradient(0,92,0,146);
-  gb.addColorStop(0,'#bcd8ff'); gb.addColorStop(0.5,'#4f8ae8'); gb.addColorStop(1,'#1f3fa8');
-  g.strokeStyle='#0a1030'; g.lineWidth=9; g.strokeText('MARBLE',320,118);
+  gb.addColorStop(0,'#bbddff'); gb.addColorStop(0.5,'#5588ee'); gb.addColorStop(1,'#2244aa');
+  g.strokeStyle='#111133'; g.lineWidth=9; g.strokeText('MARBLE',320,118);
   g.fillStyle=gb; g.fillText('MARBLE',320,118);
   const go=g.createLinearGradient(0,158,0,214);
-  go.addColorStop(0,'#ffe27a'); go.addColorStop(0.5,'#ff9a2e'); go.addColorStop(1,'#d4241c');
-  g.strokeStyle='#3a0808'; g.lineWidth=9; g.strokeText('MADNESS',320,186);
+  go.addColorStop(0,'#ffdd77'); go.addColorStop(0.5,'#ff9933'); go.addColorStop(1,'#cc2222');
+  g.strokeStyle='#330000'; g.lineWidth=9; g.strokeText('MADNESS',320,186);
   g.fillStyle=go; g.fillText('MADNESS',320,186);
-  text(g,'A M I G A   T R I B U T E',320,232,13,'#9fb0e8');
-  text(g,'clean-room recreation · v'+VERSION+' · all six races',320,258,12,'#66708f');
-  if(Math.floor(demoT*1.6)%2===0) text(g,'SPACE / CLICK — 1 PLAYER      press 2 — 2 PLAYERS',320,288,16,'#ffd23a');
-  text(g,'HIGH SCORES',320,316,12,'#9fb0e8');
+  text(g,'A M I G A   T R I B U T E',320,232,13,'#99aaee');
+  text(g,'clean-room recreation · v'+VERSION+' · all six races',320,258,12,'#667788');
+  if(Math.floor(demoT*1.6)%2===0) text(g,'SPACE / CLICK — 1 PLAYER      press 2 — 2 PLAYERS',320,288,16,'#ffcc33');
+  text(g,'HIGH SCORES',320,316,12,'#99aaee');
   for(let i=0;i<5;i++){ const h=hiscores[i];
-    text(g,(i+1)+'.  '+h.n+'  '+String(h.s).padStart(6,' '),320,332+i*13,12,i===0?'#ffd23a':'#c8d2f8'); }
-  text(g,'P1: arrows + mouse · P2: WASD · GOAL before the clock dies — big drops smash the marble',320,394,10.5,'#8d97b8');
+    text(g,(i+1)+'.  '+h.n+'  '+String(h.s).padStart(6,' '),320,332+i*13,12,i===0?'#ffcc33':'#ccccff'); }
+  text(g,'P1: arrows + mouse · P2: WASD · GOAL before the clock dies — big drops smash the marble',320,394,10.5,'#8899bb');
 }
 
 /* ---------- main loop ---------- */

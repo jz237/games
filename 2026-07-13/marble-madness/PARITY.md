@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.67.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.68.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,23 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.68.0 (2026-07-28) — every colour literal on the Amiga grid; marble colours measured.**
+  - **86 of 112 distinct hex constants were off-grid.** `q17` only quantises the floor and wall
+    paths; the marble, hazards, HUD, menus and decor are drawn from literals and never went
+    through it. All 173 quoted hex literals and 25 `rgb()`/`rgba()` literals are now snapped
+    at source, so what ships is exactly what the hardware could draw. Prose in comments keeps
+    the raw measured values on purpose.
+  - **THE MARBLE: `#cc0000` body, `#aaaa00` markings, `#660000` shading** — pure reds with no
+    green or blue, all exact Amiga colours. Ours was `#cc2222` / `#882222` / `#ee6644` with
+    `#cccc00` dots.
+  - **How that nearly went wrong, and the tool that saved it.** A quick "red plus yellow blob"
+    detector put the marble at (350,340) and sampling there gave a body of `#aa2222`. That
+    location is the **wall/rail junction** — red tube against yellow stripes — which is the
+    exact false positive `tools/find_marble.py` was built to reject three discriminators deep
+    (isolation > 0.45, 30-80 px square red extent, four-way red enclosure of the yellow). I had
+    already edited the body colour to the rail's `#aa2222` before checking the crop.
+    **Run `find_marble.py`; do not re-roll the detector.** Cropping the candidate and LOOKING
+    at it is what caught it — a colour sample from an unverified window is worthless.
 - **v0.67.0 (2026-07-28) — both palettes snapped onto the Amiga grid; a v0.62.0 reading undone.**
   With the 4-bit finding in hand, every palette constant was checked against it.
   - **PAL_AMIGA's greys and rail were already exact** (`#dddddd` `#cccccc` `#bbbbbb` `#dd3333`) —
