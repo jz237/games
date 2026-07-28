@@ -511,6 +511,23 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   turns up.
   Verified at r=0.80: bots reach every goal with **0 deaths**, full six-race playthrough reaches
   the ending, trap sweep clean.
+- **2026-07-28 iteration 52 — reference-measurement tooling hardened; physics measurements
+  RE-EXAMINED and found sound.**
+  - **`read_clock.py`** (new): OCRs the HUD clock from a reference capture by matching the measured
+    `HUD_FONT` glyphs. Validated on three captures. **This gives a GAME-time base**, so speed can be
+    measured in px per game-second with no dependence on the emulator's ~0.76x wall-clock rate.
+  - **`find_marble.py` had a false positive that took three discriminators to kill.** The corner
+    where a red arch gate meets a striped wall is red + yellow + marble-sized + circular + ringed by
+    grey floor — it passes every obvious test. What separates them: **on the marble the yellow
+    patches are ENCLOSED by red in all four directions; on the arch corner the yellow lies beside
+    the tube.** The detector now requires isolation > 0.45, a 30-80 px roughly-square red extent,
+    AND four-way red enclosure.
+  - **Did that false positive corrupt the v0.29-v0.31 physics constants? No.** Those measurements
+    used frame-DIFFERENCING against a parked reference frame, not this detector — and on the fixed
+    opening screen the ONLY thing that moves is the marble, so the changed-pixel cluster is the
+    marble by construction. The acceleration / top-speed / reversal numbers stand.
+  - Driving the original remains impossible: the marble was undetectable in 6 of 8 frames because
+    it wedges against the course edge off-view, while the clock ticked normally (57→48).
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
