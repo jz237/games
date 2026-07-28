@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.43.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.44.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -423,6 +423,15 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     them, and `collideMarbles` ignores a marble that is still `dropIn`.
   **LESSON: when a bug appears only in one mode, reproduce the mode's side-effects in the simple
   mode before believing it.**
+- **v0.44.0 (2026-07-28) — trap sweep across every course: CLEAN.** `traps.mjs` drops the marble
+  on a grid of positions in each race (549 spots total), leaves it 8 s with NO input, and flags
+  anywhere it dies 3+ times. After the v0.43 checkpoint fix: **no death loops in any race**.
+  **Filter carefully**: the first pass flagged 39 spots, all false — a marble parked beside acid or
+  a muncher dies repeatedly because the hazard is working. Count only repeated `fall`/`shatter`.
+  Also verified the ENDING: `forceEnd()` → `ending` persists until input (it does not auto-advance),
+  shows CONGRATULATIONS / YOU BEAT ALL SIX RACES / FINAL SCORE, and `beginEntry()` leads to
+  `initials` when the score qualifies. Removed a stale line from it ("music and the final
+  look-and-feel polish are still on the way") written before either existed.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and

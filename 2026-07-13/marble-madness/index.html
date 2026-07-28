@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.43.0';
+const VERSION = '0.44.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -1634,7 +1634,7 @@ function render(dt){
       text(g,'P1  '+player.score+'    P2  '+player2.score,320,212,20,'#7fd4ff');
       text(g,player.score===player2.score?'DEAD HEAT!':(w+' TAKES THE CROWN'),320,238,14,'#ffd23a');
     } else text(g,'FINAL SCORE  '+player.score,320,212,22,'#7fd4ff');
-    text(g,'music and the final look-and-feel polish are still on the way',320,262,13,'#9aa6cc');
+    text(g,'a clean-room tribute to the 1986 Amiga original',320,262,13,'#9aa6cc');
     if(stateT>2){ text(g,'CLICK OR PRESS SPACE',320,300,16,'#ffd23a'); }
     if(stateT>2&&(keys[' ']||false)){ keys[' ']=false; queueScoreEntry(); } }
   if(state==='initials'){ stateT+=dt;
