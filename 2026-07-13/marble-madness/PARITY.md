@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.18.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.19.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -89,9 +89,17 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     red/orange/yellow ramp).
 - **Game over**: grey `#999999` panel centred low with YELLOW `#cccc00` text
   `OUT OF TIME` / `GAME OVER`.
-- Timing observed: practice clock counts DOWN in whole seconds and the run ended at `00` with the
-  marble parked (no input) — a static marble scores nothing after the initial movement points
-  (score froze at 130).
+- **Pre-race banner (iteration 23)**: on starting a race the original shows a grey panel in dark
+  red reading `TIME TO FINISH` / `<RACE NAME> RACE:   <seconds>`.
+- **MEASURED CLOCK: at Difficulty 0 the practice race allows 45 s**, not the 60 s I had assumed
+  (banner text, unambiguous). The Amiga's difficulty 0 is therefore NOT the arcade "normal" DIP.
+  Still to measure: the same banner at difficulties 1–7 and for races 2–6 (cheap now — set
+  difficulty on the menu, click GO!, screenshot the banner).
+- The options-menu title letters **colour-cycle** (captured once as pink/blue `#ffaaaa/#aaaaff`,
+  once as pure red/blue `#cc2222/#2222cc`).
+- Keyboard→joystick works in the rig (`joystick_port_1 = keyboard` in mm.fs-uae): arrow keys drive
+  the marble (verified: score rose, marble moved). `mm_ctl.py hold <Key> <secs>` / `probe`.
+  NOTE: FS-UAE under Xvfb runs BELOW realtime, so wall-clock seconds != game seconds.
 
 ## Reference facts
 - Six races: **Practice, Beginner, Intermediate, Aerial, Silly, Ultimate**. Arcade time limits
@@ -156,6 +164,17 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   digits, score left / time centre (`textFlat()` helper, no drop shadow). OUT OF TIME / GAME OVER
   grey panel with yellow text. Verified: all 6 races render clean; practice/beginner/silly bots
   all reach the goal with 0 deaths.
+- **v0.19.0 (2026-07-27)**: the Amiga **options screen** (state `options` between title and play):
+  grey screen, colour-cycling red/blue letter-spaced title, dark-red letter-spaced body text
+  (`spaced()` helper), yellow marble cursor following the mouse, rows Number of Players /
+  Difficulty 0–7 / Red Player port / Input Device, and GO!. Clicking near a row cycles it.
+  **Difficulty 0–7 now scales every clock** (`raceTime(i)` = base × (1 − 0.043·d)); the practice
+  base is the measured 45 s, so d0 = 45/60/45/45/30/40 and d7 = 31/42/31/31/21/28.
+  **Turbocharge** (manual feature): hold fire / left mouse / Space — `TURBO_ACC 1.55`,
+  `TURBO_SP 1.32`, measured +37% distance over 3 s. Pre-race banner now uses the original's
+  `TIME TO FINISH / <RACE> RACE:  <n>` wording on a grey panel.
+  New QA hooks: `options`, `openOptions()`, `menuAt(x,y)`, `menuClick()`, `setDifficulty(d)`,
+  `turbo(on)`.
   **GOTCHA: the `PAL_*` consts must stay ABOVE `const RACES`** — RACES references `pal:PAL_AMIGA`,
   so if they sit below it the whole script dies on a temporal-dead-zone ReferenceError before
   `window.__qa` is ever defined (symptom: VERSION readable but `__qa` undefined).
@@ -252,12 +271,14 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
    grey HUD bar with red digits at top (score left / time centre), grey+yellow OUT OF
    TIME/GAME OVER panel. Capture the other five races from the rig for their own palettes before
    repainting them (each race has its own colour scheme).
-2. **Options menu + difficulty + turbo** (all now confirmed on the real thing): recreate the menu
-   screen 1:1 (grey, pink/blue title, dark-red text, yellow-marble cursor), wire Difficulty 0–7
-   to clock budgets, add the turbocharge button.
-3. **Measure per-difficulty clocks on the rig**: start a race at difficulty 0 and at 7, read the
-   time digits at t=0 — that settles the 60/60/45/45/30/40 vs arcade-DIP question with real data.
-4. Capture races 2–6 for layout/hazard/palette truth (muncher placement audit, Silly launcher).
+2. ~~Options menu + difficulty + turbo~~ **DONE in v0.19.0.**
+3. **Measure the remaining clocks on the rig**: the pre-race banner states the allowance in plain
+   text — set each difficulty on the menu, click GO!, screenshot the banner. Do the same for
+   races 2–6 (needs driving the marble to each goal, or accepting practice-only data).
+4. **Capture the real course geometry** (keyboard joystick now works): drive down each course
+   taking shots, then correct my layouts — the practice course is visibly wavier in my build than
+   the original's, and the red arch gates and painted floor arrows are not modelled at all.
+5. Capture races 2–6 palettes (each race has its own scheme) and repaint as in v0.18.0.
 2. **Amiga-exclusive features from manual**: options menu (players/input/Red-Blue/difficulty
    0–7/GO!), turbocharge button (fire/LMB speed burst). Difficulty should scale clocks toward
    arcade DIP at higher levels.

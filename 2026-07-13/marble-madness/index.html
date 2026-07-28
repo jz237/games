@@ -34,7 +34,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.18.0';
+const VERSION = '0.19.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -410,7 +410,7 @@ const PAL_BLUE={ stripes:['#2e56c8','#16295e'], nStripes:3,
 let PAL=PAL_BLUE;
 
 const RACES=[
-  { name:'PRACTICE RACE', time:60, start:[11.5,4], build:buildPractice, steelie:null, pal:PAL_AMIGA },
+  { name:'PRACTICE RACE', time:45, start:[11.5,4], build:buildPractice, steelie:null, pal:PAL_AMIGA },
   { name:'BEGINNER RACE', time:60, start:[12.5,3], build:buildBeginner,
     steelie:{ v:18, u:68, triggerU:62 } },
   { name:'INTERMEDIATE RACE', time:45, start:[6.5,1], build:buildIntermediate,
@@ -752,6 +752,13 @@ let players=[player], numPlayers=1, finishOrder=[], deathMsg='', deathMsgT=0;
 /* ---------- game state ---------- */
 const cv=document.getElementById('game'), ctx2=cv.getContext('2d');
 let state='title', stateT=0, raceIdx=0, deaths=0, raceT=0;
+/* Amiga options screen (see PARITY.md): players, difficulty 0-7, port, device */
+const OPT={ players:1, difficulty:0, port:'Rear  Port', device:'Joy Stick' };
+let menuMX=320, menuMY=300;   // marble cursor position on the options screen
+/* Difficulty scales the per-race allowance. d0 practice = 45 s is measured from
+   the real Amiga; higher levels tighten toward the arcade DIP values. */
+function raceTime(i){ const base=RACES[i].time;
+  return Math.max(12, Math.round(base*(1-0.043*OPT.difficulty))); }
 let hiscores; try{ hiscores=JSON.parse(localStorage.getItem('mm-hiscores-v1')||'null'); }catch(e){ hiscores=null; }
 if(!Array.isArray(hiscores)||hiscores.length<5)
   hiscores=[{n:'MMM',s:15000},{n:'ATA',s:12000},{n:'RII',s:9000},{n:'EAE',s:6000},{n:'JEZ',s:3000}];
@@ -769,6 +776,10 @@ function commitEntry(){ if(!entryPlayer) return;
 let shards=[], floaters=[], paused=false, lastTickSec=99;
 let camX=0,camY=0,camInit=false;
 const GRAV=22, ACC=20, FRICT=3.2, MAXSP=11, MOUSE_GAIN=0.012, STEP=1/120;
+/* Amiga-exclusive "turbocharge": hold fire / left mouse button while steering
+   for a burst of extra speed (documented in the official manual). */
+const TURBO_ACC=1.55, TURBO_SP=1.32;
+let turbo=false, turbo2=false;
 
 /* ---------- input ---------- */
 const keys={};
@@ -781,25 +792,37 @@ addEventListener('keydown',e=>{ if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRigh
     Snd.unlock(); return; }
   keys[e.key.toLowerCase()]=true;
   if(e.key===' '&&state==='timeup'&&stateT>0.8){ if(players.some(pl=>scoreQualifies(pl.score))){ queueScoreEntry(); } else startGame(1); }
-  else if(e.key===' '&&state==='title') startGame(1);
+  else if(e.key===' '&&state==='title'){ state='options'; stateT=0; }
+  else if(e.key===' '&&state==='options'){ startGame(OPT.players); }
   if(e.key==='2'&&(state==='title'||state==='timeup')) startGame(2);
   if(e.key===' '&&state==='ending'&&stateT>1.2){ queueScoreEntry(); }
+  if(e.key===' '&&state==='race') turbo=true;
+  if(e.key==='Shift'&&state==='race') turbo2=true;
   if(e.key.toLowerCase()==='p'&&state==='race'){ paused=!paused; }
   if(e.key.toLowerCase()==='m'){ Snd.setMuted(!Snd.muted); }
   Snd.unlock(); });
-addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false; });
+addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false;
+  if(e.key===' ') turbo=false; if(e.key==='Shift') turbo2=false; });
+addEventListener('mousedown',e=>{ if(state==='race'&&e.button===0) turbo=true; });
+addEventListener('mouseup',e=>{ if(e.button===0) turbo=false; });
 cv.addEventListener('click',()=>{ Snd.unlock();
   if(state==='timeup'&&stateT>0.8){ if(players.some(pl=>scoreQualifies(pl.score))){ queueScoreEntry(); } else startGame(1); return; }
-  if(state==='title'){ startGame(1); return; }
+  if(state==='title'){ state='options'; stateT=0; return; }
+  if(state==='options'){ optionsClick(); return; }
   if(state==='ending'&&stateT>1.2){ queueScoreEntry(); return; }
   if(state==='race'&&!('ontouchstart' in window)){ cv.requestPointerLock&&cv.requestPointerLock(); }
   if(paused) paused=false; });
-addEventListener('mousemove',e=>{ if(document.pointerLockElement!==cv||state!=='race') return;
+addEventListener('mousemove',e=>{
+  if(state==='options'){ const r=cv.getBoundingClientRect();
+    menuMX=(e.clientX-r.left)*640/r.width; menuMY=(e.clientY-r.top)*400/r.height; return; }
+  if(document.pointerLockElement!==cv||state!=='race') return;
   const g=screenToGrid(e.movementX,e.movementY);
   mouseDV+=g.dv*MOUSE_GAIN*DET/14; mouseDU+=g.du*MOUSE_GAIN*DET/14; });
 let touchId=null,touchLX=0,touchLY=0;
 cv.addEventListener('touchstart',e=>{ e.preventDefault(); Snd.unlock();
-  if(state==='title'||state==='timeup'){ startGame(1); return; }
+  if(state==='title'){ state='options'; stateT=0; return; }
+  if(state==='options'){ optionsClick(); return; }
+  if(state==='timeup'){ startGame(OPT.players); return; }
   const t=e.changedTouches[0]; touchId=t.identifier; touchLX=t.clientX; touchLY=t.clientY; },{passive:false});
 cv.addEventListener('touchmove',e=>{ e.preventDefault();
   for(const t of e.changedTouches){ if(t.identifier!==touchId) continue;
@@ -818,7 +841,9 @@ function pollInput(){
     if(keys['arrowright']||(numPlayers===1&&keys['d'])) sx+=1;
     if(gps[0]){ if(Math.abs(gps[0].axes[0])>0.18) sx+=gps[0].axes[0];
       if(Math.abs(gps[0].axes[1])>0.18) sy+=gps[0].axes[1];
-      if(gps[0].buttons[0]&&gps[0].buttons[0].pressed&&(state==='title'||state==='timeup')) startGame(1); }
+      if(gps[0].buttons[0]&&gps[0].buttons[0].pressed&&(state==='title'||state==='timeup')) startGame(1);
+      if(state==='race'&&gps[0].buttons[0]&&gps[0].buttons[0].pressed) turbo=true;
+      else if(state==='race'&&gps[0].buttons[0]&&!gps[0].buttons[0].pressed) turbo=false; }
     [inpV,inpU]=intentFrom(sx,sy); }
   if(qaInp2){ inp2V=qaInp2.v; inp2U=qaInp2.u; }
   else if(numPlayers===2){ let sx=0,sy=0;
@@ -839,7 +864,7 @@ function loadRace(i){ raceIdx=i; const R=RACES[i];
     if(isNaN(pl.z)){ pl.v=R.start[0]; pl.z=groundH(pl.v,pl.u); }
     pl.vv=0; pl.vu=0; pl.vz=0; pl.grounded=true; pl.alive=true; pl.dropIn=false; pl.hidden=false;
     pl.lastSafe={v:pl.v,u:pl.u}; pl.maxU=0; pl.finished=false;
-    pl.timeLeft=R.time+pl.carry; });
+    pl.timeLeft=raceTime(i)+pl.carry; });
   steelie.active=false; steelie.alive=false;
   finishOrder=[]; shards=[]; camInit=false; lastTickSec=99; deathMsgT=0; raceT=0;
   state='ready'; stateT=0; paused=false; qaInp=null; qaInp2=null;
@@ -883,9 +908,12 @@ function marblePhysics(m,dt,accV,accU){
       const e=0.28;
       const gv=(groundH(m.v+e,m.u)-groundH(m.v-e,m.u))/(2*e);
       const gu=(groundH(m.v,m.u+e)-groundH(m.v,m.u-e))/(2*e);
-      m.vv+=(accV-(isNaN(gv)?0:gv)*GRAV*0.55)*dt;
-      m.vu+=(accU-(isNaN(gu)?0:gu)*GRAV*0.55)*dt;
-      const sp=Math.hypot(m.vv,m.vu), lim=MAXSP+Math.max(0,-(isNaN(gu)?0:gu))*4;
+      const tb=(m.kind==='player')&&(m.pIdx===1?turbo2:turbo);
+      const ta=tb?TURBO_ACC:1;
+      m.vv+=(accV*ta-(isNaN(gv)?0:gv)*GRAV*0.55)*dt;
+      m.vu+=(accU*ta-(isNaN(gu)?0:gu)*GRAV*0.55)*dt;
+      const sp=Math.hypot(m.vv,m.vu);
+      const lim=MAXSP*(tb?TURBO_SP:1)+Math.max(0,-(isNaN(gu)?0:gu))*4;
       const f=1/(1+FRICT*dt*0.32); m.vv*=f; m.vu*=f;
       if(sp>lim){ m.vv*=lim/sp; m.vu*=lim/sp; }
     }
@@ -1264,10 +1292,69 @@ function textFlat(g,s,x,y,size,color,align){   // HUD digits: flat, no drop shad
   g.font=`900 ${size}px "Courier New",monospace`; g.textAlign=align||'center'; g.textBaseline='middle';
   g.fillStyle=color; g.fillText(s,x,y);
 }
+/* ---- Amiga options screen ----------------------------------------------
+   Recreated from the original (grey screen, colour-cycling title, dark red
+   letter-spaced text, yellow marble cursor). Clicking near a row cycles it. */
+const OPT_ROWS=[
+  { y:150, label:'Number of Players:', get:()=>String(OPT.players),
+    cycle:()=>{ OPT.players=OPT.players===1?2:1; } },
+  { y:180, label:'Difficulty:', get:()=>String(OPT.difficulty),
+    cycle:()=>{ OPT.difficulty=(OPT.difficulty+1)%8; } },
+  { y:228, label:'Red Player:', get:()=>OPT.port,
+    cycle:()=>{ OPT.port=OPT.port==='Rear  Port'?'Front Port':'Rear  Port'; } },
+  { y:258, label:'Input Device:', get:()=>OPT.device,
+    cycle:()=>{ OPT.device=OPT.device==='Joy Stick'?'Mouse':(OPT.device==='Mouse'?'Keyboard':'Joy Stick'); } },
+];
+const GO_Y=340;
+function optionsClick(){
+  if(menuMY>GO_Y-26){ Snd.ready(0); startGame(OPT.players); return; }
+  let best=null,bd=1e9;
+  for(const r of OPT_ROWS){ const d=Math.abs(menuMY-r.y); if(d<bd){ bd=d; best=r; } }
+  if(best&&bd<22){ best.cycle(); Snd.count&&Snd.count(); }
+}
+function spaced(g,str,x,y,size,col,align){   // the original letter-spaces its text
+  g.font=`900 ${size}px "Courier New",monospace`; g.textBaseline='middle';
+  const gap=size*0.78, w=str.length*gap;
+  let px=align==='center'?x-w/2:(align==='right'?x-w:x);
+  g.textAlign='left';
+  for(const ch of str){ if(ch!==' '){ g.fillStyle=col; g.fillText(ch,px,y); } px+=gap; }
+  return w;
+}
+function renderOptions(g,dt){
+  stateT+=dt;
+  g.fillStyle='#999999'; g.fillRect(0,0,640,400);
+  g.fillStyle='#888888'; g.fillRect(0,0,640,30);
+  // title letters alternate red/blue and cycle, as on the Amiga
+  const title='Marble  Madness!!';
+  const gap=17; let px=320-(title.length*gap)/2;
+  g.font='900 24px "Courier New",monospace'; g.textAlign='left'; g.textBaseline='middle';
+  const phase=Math.floor(stateT*3);
+  for(let i=0;i<title.length;i++){
+    const ch=title[i];
+    if(ch!==' '){ g.fillStyle=((i+phase)%2)?'#2222cc':'#cc2222'; g.fillText(ch,px,15); }
+    px+=gap;
+  }
+  const RED='#882222';
+  spaced(g,'Press Left Mouse Button',320,66,15,RED,'center');
+  spaced(g,'near Item to change the',320,84,15,RED,'center');
+  spaced(g,"Item's value.",320,102,15,RED,'center');
+  spaced(g,'Select  GO!  when finished.',320,122,15,RED,'center');
+  for(const r of OPT_ROWS){
+    spaced(g,r.label,36,r.y,15,RED,'left');
+    // numeric values sit further right than the word values, as on the Amiga
+    spaced(g,r.get(),r.get().length<=2?505:395,r.y,15,RED,'left');
+  }
+  spaced(g,'GO!',320,GO_Y,17,RED,'center');
+  // yellow marble cursor
+  const mg=g.createRadialGradient(menuMX-4,menuMY-5,1,menuMX,menuMY,13);
+  mg.addColorStop(0,'#ffff88'); mg.addColorStop(0.45,'#cccc00'); mg.addColorStop(1,'#666600');
+  g.fillStyle=mg; g.beginPath(); g.arc(menuMX,menuMY,13,0,Math.PI*2); g.fill();
+}
 function render(dt){
   updateMusic();
   const g=ctx2; g.clearRect(0,0,640,400);
   if(state==='title'){ renderTitle(g); return; }
+  if(state==='options'){ renderOptions(g,dt); return; }
   updateCam();
   if(RACES[raceIdx].stars){
     for(let i=0;i<90;i++){ const hx=(i*127)%offW, hy=(i*211)%offH;
@@ -1341,8 +1428,10 @@ function render(dt){
     if(player2.finished) text(g,'FIN',390,42,12,'#ffd23a','center');
   }
   if(state==='ready'){ stateT+=dt;
-    text(g,RACES[raceIdx].name,320,150,30,'#ffd23a');
-    text(g,'GET READY!',320,196,20,'#eef2ff');
+    // the original announces each race on a grey panel in dark red
+    g.fillStyle='#999999'; g.fillRect(60,146,520,74);
+    spaced(g,'TIME TO FINISH',320,170,18,'#882222','center');
+    spaced(g,RACES[raceIdx].name.replace(' RACE','')+' RACE:   '+raceTime(raceIdx),320,198,18,'#882222','center');
     if(stateT>1.5){ state='race'; stateT=0; Snd.ready(2); } }
   if(state==='race'&&deathMsgT>0){ text(g,deathMsg,320,168,22,'#ff97a5'); }
   if(state==='race'&&numPlayers===2){
@@ -1473,7 +1562,13 @@ if(QA){
     get hazards(){ return hazards.map(h=>({t:h.type,v:+(h.v??h.cv??0).toFixed(1),u:+(h.u??h.cu??0).toFixed(1)})); },
     get hidden(){ return player.hidden; },
     step(ms){ autoStep=false; const n=Math.round(ms/1000/STEP); for(let i=0;i<n;i++) physics(STEP); render(STEP*n); },
-    auto(on){ autoStep=on; last=performance.now(); acc=0; }
+    auto(on){ autoStep=on; last=performance.now(); acc=0; },
+    get options(){ return {...OPT, raceTime:RACES.map((r,i)=>raceTime(i))}; },
+    openOptions(){ state='options'; stateT=0; },
+    menuAt(x,y){ menuMX=x; menuMY=y; },
+    menuClick(){ optionsClick(); },
+    setDifficulty(d){ OPT.difficulty=d%8; },
+    turbo(on){ turbo=!!on; }
   };
 }
 </script>
