@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.72.0';
+const VERSION = '0.73.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -1425,6 +1425,20 @@ function updateCam(){
 }
 /* Decor measured off the original: bright red tube arches with a lighter
    highlight along the top, and dark red chevrons painted on the floor. */
+/* Round tube shading. Canvas cannot put a gradient ACROSS a stroke's width, so the
+   cylinder is built from concentric passes: a dark rim, the body, then narrower and
+   brighter strokes nudged toward the light. Two flat layers plus a hairline highlight
+   read as a flat ribbon; this reads as round. */
+function tube(g,path,hue){
+  const [r0,g0,b0]=hex2rgb(hue);
+  const layers=[[9.5,0.30,0,0],[8.2,0.58,0,0],[6.6,0.95,-0.3,-0.3],
+                [2.6,1.06,-0.9,-0.9],[1.0,1.45,-1.5,-1.5]];
+  for(const [w,k,dx,dy] of layers){
+    g.save(); g.translate(dx,dy);
+    g.strokeStyle=rgb17(r0*k,g0*k,b0*k); g.lineWidth=w; path(); g.stroke();
+    g.restore();
+  }
+}
 function archGate(g,ox,oy,v,u,span,hgt){
   // built in world space so it foreshortens with the projection, like the original's
   let SP=span||2.2; const HT=hgt||3.4;
@@ -1439,10 +1453,7 @@ function archGate(g,ox,oy,v,u,span,hgt){
   const path=()=>{ g.beginPath(); g.moveTo(lx,ly); g.lineTo(ltx,lty);
     g.quadraticCurveTo(cx,cy,rtx,rty); g.lineTo(rx,ry); };
   g.lineCap='round'; g.lineJoin='round';
-  g.strokeStyle='#772222'; g.lineWidth=9; path(); g.stroke();
-  g.strokeStyle=PAL.rail||'#dd3333'; g.lineWidth=6; path(); g.stroke();
-  g.strokeStyle='rgba(255,187,170,.8)'; g.lineWidth=1.8;
-  g.beginPath(); g.moveTo(ltx-2,lty); g.quadraticCurveTo(cx,cy-2,rtx-2,rty); g.stroke();
+  tube(g,path,PAL.rail||'#dd3333');
   g.lineCap='butt'; g.lineJoin='miter';
 }
 /* Measured off rec/r1-last.png, the clearest capture of practice section 2: the painted
@@ -1461,12 +1472,8 @@ function railing(g,ox,oy,v0,u0,v1,u1,hgt){
   const P=(vv,uu,zz)=>[projX(vv,uu)+ox, projY(vv,uu,zz)+oy];
   const [ax,ay]=P(v0,u0,h0+HT), [bx,by]=P(v1,u1,h1+HT), [px,py]=P(v0,u0,h0);
   g.lineCap='round'; g.lineJoin='round';
-  g.strokeStyle='#772222'; g.lineWidth=8;
-  g.beginPath(); g.moveTo(px,py); g.lineTo(ax,ay); g.lineTo(bx,by); g.stroke();
-  g.strokeStyle=PAL.rail||'#dd3333'; g.lineWidth=5;
-  g.beginPath(); g.moveTo(px,py); g.lineTo(ax,ay); g.lineTo(bx,by); g.stroke();
-  g.strokeStyle='rgba(255,187,170,.8)'; g.lineWidth=1.8;
-  g.beginPath(); g.moveTo(ax-2,ay-1); g.lineTo(bx-2,by-1); g.stroke();
+  tube(g,()=>{ g.beginPath(); g.moveTo(px,py); g.lineTo(ax,ay); g.lineTo(bx,by); },
+       PAL.rail||'#dd3333');
   g.lineCap='butt'; g.lineJoin='miter';
 }
 function floorArrow(g,ox,oy,v,u,turn,len){
@@ -1892,6 +1899,12 @@ function render(dt){
     g.strokeStyle='rgba(255,204,51,.8)'; g.lineWidth=2; g.stroke();
     g.setTransform(1,0,0,1,0,0);
     text(g,String(h.val),px,py-7,15,'#ffcc33'); g.restore(); }
+  { const hz=g.createLinearGradient(0,10,0,300);
+    hz.addColorStop(0,'rgba(206,216,232,.20)');
+    hz.addColorStop(0.55,'rgba(206,216,232,.07)');
+    hz.addColorStop(1,'rgba(206,216,232,0)');
+    g.save(); g.globalCompositeOperation='source-atop';
+    g.fillStyle=hz; g.fillRect(0,0,640,400); g.restore(); }
   // marbles + munchers back-to-front
   const ents=[];
   // the original holds the marbles off screen until the clock has finished filling in

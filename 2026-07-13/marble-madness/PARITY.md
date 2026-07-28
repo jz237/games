@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.72.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.73.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,20 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.73.0 (2026-07-28) — realistic pass 3: round tubes, atmospheric depth.**
+  - **`tube()` — cylindrical shading for the rails and arches.** Canvas cannot put a gradient
+    ACROSS a stroke's width, so the cylinder is built from concentric passes: dark rim, body,
+    then narrower and brighter strokes nudged toward the light. Two flat layers plus a hairline
+    (what we had) read as a flat ribbon.
+    **Tuned by measuring, twice.** The first weights bleached the tube pink — sampling gave a
+    body of `#ea4e50` against a `#dd3333` base, because the passes brighter than 1.0 covered a
+    third of the visible width. Body now sits at 0.95 across most of the tube with only a
+    hairline above it; measured back at `#d14b4d`, which is the base plus expected AA.
+  - **Atmospheric depth**: a faint haze fading in toward the top of the frame. In an axonometric
+    view "further away" is up-screen, so this lifts and desaturates distant course the way real
+    distance does. Drawn with **`globalCompositeOperation='source-atop'`** so it lands only on
+    pixels the terrain already painted — otherwise it tints the empty void under the course.
+  - All six races render clean.
 - **v0.72.0 (2026-07-28) — realistic pass 2: wall gradients, ambient occlusion, surface grain.**
   - **Cliff faces are no longer flat fills.** A flat wall reads as a printed sticker; a real
     face catches less light toward its base (the sky is occluded down there) and picks up a
