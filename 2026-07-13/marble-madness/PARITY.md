@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.66.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.67.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,24 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.67.0 (2026-07-28) — both palettes snapped onto the Amiga grid; a v0.62.0 reading undone.**
+  With the 4-bit finding in hand, every palette constant was checked against it.
+  - **PAL_AMIGA's greys and rail were already exact** (`#dddddd` `#cccccc` `#bbbbbb` `#dd3333`) —
+    they came from careful measurement. **The three stripe hues were not.** v0.62.0 recorded
+    them off a capture as `#872021` / `#cb6500` / `#cacb00`; those snap to `#882222` / `#cc6600`
+    / `#cccc00`, which is exactly what the palette held BEFORE that "correction". The emulator's
+    scaling had shifted each channel by 1-2 and I wrote the noise down as the value.
+    **Snap a sampled colour to the hardware's grid before believing its last digit.**
+    (`arrow` likewise `#a72222` -> `#aa2222`.)
+  - **PAL_BLUE was entirely off-grid** — no surprise, it came from photos of a printed box back.
+    Rather than snap values that had already drifted, it is rebuilt from the box-back samples
+    this ledger records — floors `#a8c0d8` / `#c0d8f0`, walls `#303060` / `#484878` — each taken
+    to the nearest legal colour: floors `#ccddee` / `#bbccdd` / `#aabbdd`, walls `#333366` /
+    `#444477`. Note the blue races' two wall hues are **both dark**: low contrast, unlike
+    practice's yellow-against-dark-red. Different race, different scheme.
+  - `stripeWall`'s orientation rule is now length-agnostic (`st[len-1]` for the lit orientation,
+    `st[len-2]` as accent), so a palette can carry two hues or three.
+  - Verified: six races, bots to every goal with 0 deaths, playthrough to the ending, traps clean.
 - **v0.66.0 (2026-07-28) — AMIGA 4-BIT COLOUR: every drawn colour quantised to a multiple of 17.**
   Comparing floor histograms exposed something bigger than the floor. The reference's flat floor
   is dominated by FOUR hard values (187 21%, 153 16%, 102 12%, 221 9%); ours spread across a
