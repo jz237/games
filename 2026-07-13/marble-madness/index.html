@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.62.0';
+const VERSION = '0.63.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -161,6 +161,7 @@ function buildPractice(){ newGrid(24,88);
   slab(4,6,7,8,12.9,GRID);                      // left diamond platform (under the arch)
   slab(16,6,19,8,12.9,GRID);                    // right diamond platform
   slab(9,8,14,11,12.7,GRID);                    // centre island base
+  slab(10,8,13,11,13.05,GRID);                  // middle step — the original is a ziggurat
   slab(10,9,13,10,13.4,GRID);                   // its stepped tier
   pyramid(10,9,13.4,17.6,{tint:'#e2e2e2'});     // twin white-tipped peaks
   pyramid(12,9,13.4,17.6,{tint:'#e2e2e2'});
@@ -523,12 +524,19 @@ function stripeWall(g,c,p1x,p1y,p2x,p2y,b1y,b2y,base,vpos){
          at roughly 1.3 px per stripe — visually just noise.
        So: pick one hue from the ramp by position across the course (yellow on the left
        through orange to dark red on the right) and fill the whole cell face with it. */
-    const k=base<0.4?0.82:1;
-    const st=PAL.stripes;
-    let idx=st.length-1;
-    if(PAL.stripeShift&&vpos!==undefined)
-      idx=Math.max(0,Math.min(st.length-1,Math.round((1-vpos/CV)*(st.length-1))));
-    cols=[shadeHex(st[idx],k)]; N=1;
+    /* CORRECTION to v0.62.0, from captures/struct-full.png (the whole centre structure at
+       2x): the hue is set by the wall's ORIENTATION, not by position across the course.
+       Faces pointing down-LEFT (the +u edge, parallel to +v) are yellow; faces pointing
+       down-RIGHT (the +v edge) are dark red. That explains the structure's mixed risers —
+       both orientations are visible on it — AND the two big course-edge walls being
+       uniformly yellow on the left and red on the right, which position also happened to
+       explain. Orange appears among the yellow at roughly 1 in 4 (measured 17% yellow to
+       6% orange), so it is used as an accent on that orientation. */
+    const k=1;                                  // hue already encodes the orientation
+    const st=PAL.stripes;                       // [dark red, orange, yellow]
+    const facesLeft = base<0.4;                 // the +u edge face
+    let hue = facesLeft ? (((vpos|0)%4===3) ? st[1] : st[2]) : st[0];
+    cols=[shadeHex(hue,k)]; N=1;
   } else { cols=[wallColor(c,base),wallColor(c,base*0.55)]; N=3; }
   for(let i=0;i<N;i++){
     const t0=i/N, t1=(i+1)/N;

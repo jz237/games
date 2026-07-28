@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.62.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.63.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,24 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.63.0 (2026-07-28) — stripe hue is set by wall ORIENTATION, correcting v0.62.0.**
+  `captures/struct-full.png` (the whole centre structure at 2x) settles it: the structure shows
+  BOTH hues on adjacent risers, which position-based colouring cannot produce. Faces pointing
+  down-LEFT (the +u edge, parallel to +v) are **yellow**; faces pointing down-RIGHT (the +v
+  edge) are **dark red**. Orange is an accent among the yellow at roughly 1 in 4, matching the
+  measured 17% yellow to 6% orange.
+  - **Why v0.62.0's position rule looked right**: the two big course-edge walls have opposite
+    orientations AND sit at opposite sides of the course, so position and orientation predict
+    the same colours there. Only a surface showing both orientations at once — the centre
+    structure — distinguishes them. **A rule that fits the easy case is not confirmed by it.**
+  - Also removed a brightness factor that was double-counting: `k=base<0.4?0.82:1` darkened the
+    down-left faces, which turned the measured `#cacb00` yellow olive now that the hue itself
+    encodes the orientation.
+  - **Centre structure is a ziggurat**: added the missing middle step (`slab(10,8,13,11,13.05)`)
+    between the base at 12.7 and the tier at 13.4, inside the existing footprint so the route is
+    unchanged. The reference shows several descending steps where we had one.
+  - Verified after the geometry change: six races, bots to every goal with 0 deaths, playthrough
+    to the ending, traps clean on all six.
 - **v0.62.0 (2026-07-28) — cliff stripes rebuilt from measurement; two wrong assumptions.**
   Reading colour RUNS along scanlines across the reference's walls (rather than histogramming
   the whole frame) shows what the stripes actually are:
