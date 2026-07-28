@@ -91,6 +91,8 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
   walkways + flared start deck, full-length split-level bridge (u18–24).
 - 2026-07-27: data-loss recovery; game+ledger committed to jz237/games mirror (user request
   "push to github"); Amiga disks secured; manual mined (difficulty/turbo/options-menu findings).
+- 2026-07-27 iter 20: built local headless Amiga rig (vAmigaWeb + IPF→ADF via capsimg); real
+  game boots — Workbench → icons → title verified; captures in game-refs/.../captures/.
 
 ## Playtest findings (STANDING)
 - **2026-07-14 user retraction**: "clock counts down super fast and cant even see the ledges" —
@@ -138,12 +140,36 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
    "e") — jez237.github.io does not exist and 404s everything.
 4. Update games-index desc (jez237-website/games/index.html ~line 1301) when features land.
 
+## Amiga emulator rig (LIVE since 2026-07-27, iteration 20)
+- **vAmigaWeb (WASM A500) in headless Chrome — WORKING; real game boots to title.**
+  Server: `python3 server.py` in scratchpad `mm-emu/` (port 8380, COOP/COEP headers, serves
+  `/home/jez237/game-refs/tools/site/` = clone of vAmigaWeb.github.io; game files in `site/mm/`).
+  Chrome: port 9381, SwiftShader flags, profile `mm-emu/chromeprofile`. Drivers in scratchpad
+  `mm-emu/`: `boot.mjs` (navigate, inject kick13-256.rom + mm.adf via `wasm_loadfile`, run,
+  timed shots), `mouse.mjs` (action list: `M,dx,dy,n` stepped moves / `d` dblclick / `W,0|1`
+  warp / `w,ms` / `s,name` shot → `game-refs/marble-madness/captures/`).
+- IPF→ADF: disk-utilities built with `caps=y` + FrodeSolheim capsimg (glue header
+  `tools/capsinc/caps/capsimage.h`; `lib/libcapsimage.so.5` symlink; run disk-analyse from its
+  own dir with `LD_LIBRARY_PATH=../libdisk:../../lib`). Result: T0.0–79.1 all AmigaDOS; only
+  T0.1 is a longtrack (110496 bits) — **plain mm.adf boots and passed protection so far**
+  (title reached; watch for late checks at race start). mm.eadf (extended) also made.
+- KICK13.ROM/kickstart12.rom on disk are DOUBLED 256KB images — use first half
+  (`site/mm/kick13-256.rom`, verified "Kickstart 1.3 Rev 34.005").
+- Mouse calibration: `wasm_mouse(port,dx,dy)` steps of ~10; **1.6 counts ≈ 1 page px** (uniform
+  x/y at window-size 1100x800). `wasm_mouse_button(port,1,down)`. **Warp OFF before clicking**
+  (warp breaks double-click timing). vAmigaWeb ROM dialog blocks emu until a rom is loaded —
+  loadfile then close modals. Boot path: WB blue screen → dblclick disk icon (~page 527,470) →
+  window opens → dblclick marble program icon → game loads (df0 badge shows track#).
+- Facts so far: title = blue arc "MARBLE" + orange gradient "MADNESS" on black; "Amiga Version
+  by: Larry Reed"; (c) 1984, 1986 Atari Games Corp. & Electronic Arts. Title persists ≥30 s —
+  options menu likely needs a mouse click (manual: menu follows title).
+
 ## Queue (parity checklist)
-1. **Amiga reference capture** (unblocked by disks): install fs-uae + capsimg (or drive
-   vengeance's emulator remotely); boot MarbleMadness.ipf; capture title/options/all-6-races;
-   measure real Amiga palette, HUD font/layout, race clocks per difficulty, hazard placements,
-   Silly launcher look, music tempo. Then: palette micro-diffs, HUD chunky-digit font, muncher
-   placement audit (was footage-blocked — now solved by emulator).
+1. **Amiga reference capture (rig is LIVE, game at title screen)**: click through to options
+   menu; capture menu; cycle Difficulty 0–7 and note clock values per difficulty; click GO!;
+   capture all six races (palette, HUD font/layout, hazard placements, Silly launcher, music
+   tempo via audio if feasible). Then: palette micro-diffs, HUD chunky-digit font, muncher
+   placement audit.
 2. **Amiga-exclusive features from manual**: options menu (players/input/Red-Blue/difficulty
    0–7/GO!), turbocharge button (fire/LMB speed burst). Difficulty should scale clocks toward
    arcade DIP at higher levels.
