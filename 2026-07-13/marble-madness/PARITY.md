@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.81.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.82.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,20 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.82.0 (2026-07-28) — realistic pass 12: whole-frame review; tinted walls fixed.**
+  Reviewing races that had not been looked at since the lighting work turned up a real defect
+  in **Aerial**: its tinted walls were still on the old `N=3` sub-stripe path. After the GS=3
+  grid change a cell is only ~10 px wide, so three stripes per cell rendered as **~3 px
+  hairlines**. This is the exact defect fixed for GREY walls back in v0.62.0 — missed here
+  because `stripeWall` branches on `isGreyCell` and the two halves were changed independently.
+  **When a rendering rule is fixed in one branch, check the sibling branch the same day.**
+  - Tinted walls now take one lit fill per cell face like every other wall.
+  - **Not fixed, and understood**: fine banding remains on diagonal walls. That is the cell-step
+    sawtooth — a diagonal wall alternates between +u and +v faces cell by cell, and those two
+    orientations are legitimately different brightnesses. At the original's coarser grid it read
+    as chunky steps; at GS=3 it reads as stripes. It is geometry, not shading, so it belongs to
+    the axes/grid work, not here.
+  - All six races render clean.
 - **v0.81.0 (2026-07-28) — realistic pass 11: motion blur and a floor-coloured bounce.**
   - **Motion blur.** A real camera smears a fast ball along its path; without it a quick marble
     reads as a sprite teleporting between frames. Two ghosts trail the travel direction, scaled
