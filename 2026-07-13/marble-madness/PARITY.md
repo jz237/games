@@ -528,6 +528,24 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     marble by construction. The acceleration / top-speed / reversal numbers stand.
   - Driving the original remains impossible: the marble was undetectable in 6 of 8 frames because
     it wedges against the course edge off-view, while the clock ticked normally (57→48).
+- **2026-07-28 iteration 53 — BREAKTHROUGH: the original CAN be driven. `Down` is down-course.**
+  Every earlier attempt (iterations 25, 26, 49) concluded "the camera never scrolls" and wrote the
+  course-mapping off as a dead end. **That conclusion was wrong.** Those runs used `Up`, `Left`,
+  `Right` and diagonals; they also trusted a marble detector that was locking onto an arch-gate
+  corner, so a stationary false positive made it look like nothing moved.
+  With `hold Down` in 2.5 s bursts from the practice start: the marble travels from (672,288) to
+  (168,576) and onward, and **the frame changes 32%, 36%, 42% between bursts — the view scrolls.**
+  A longer 6 s hold moved it 606 px and revealed terrain not visible at the start (new yellow
+  striped walls along the bottom, the centre structure risen up the screen).
+  **This reopens course mapping** — the biggest remaining parity gap. Recipe: boot, GO!, then
+  repeated `mm_ctl.py hold Down 2.5` + `shot`, and stitch the captures.
+  - `find_marble.py` now needs all three discriminators (isolation, marble-sized roughly-square red
+    extent, four-way red enclosure of the yellow) or the arch corner wins.
+  - **`read_clock.py` is NOT trustworthy yet**: this font's `0` and `8` differ by one or two pixels
+    at the glyph edges, and it reads `06` as `86`, `60` as `68`. Sub-sampling did not fix it. If
+    game-time is needed, enforce monotonic countdown across a sequence rather than trusting a
+    single frame. The earlier "24 game-seconds in a 6 s hold" reading is therefore UNRELIABLE — do
+    not conclude anything about the original's clock rate from it.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
