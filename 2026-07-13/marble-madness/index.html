@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.77.0';
+const VERSION = '0.78.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -556,7 +556,7 @@ function stripeWall(g,c,p1x,p1y,p2x,p2y,b1y,b2y,base,vpos){
     const facesLeft = base<0.4;                 // the +u edge face
     const hi=st[st.length-1], accent=st[Math.max(0,st.length-2)];
     let hue = facesLeft ? (((vpos|0)%4===3) ? accent : hi) : st[0];
-    cols=[shadeHex(hue,k)]; N=1;
+    cols=[litWall(hue, facesLeft)]; N=1;
   } else { cols=[wallColor(c,base),wallColor(c,base*0.55)]; N=3; }
   const topY=(p1y+p2y)/2, botY=(b1y+b2y)/2;
   for(let i=0;i<N;i++){
@@ -566,10 +566,10 @@ function stripeWall(g,c,p1x,p1y,p2x,p2y,b1y,b2y,base,vpos){
     if(botY>topY+1){
       const gd=g.createLinearGradient(0,topY,0,botY);
       const [br,bg,bb]=cssRGB(base);
-      gd.addColorStop(0,   rgb17(br*1.06,bg*1.06,bb*1.06));
-      gd.addColorStop(0.55,rgb17(br*0.78,bg*0.78,bb*0.78));
-      gd.addColorStop(0.93,rgb17(br*0.55,bg*0.55,bb*0.55));
-      gd.addColorStop(1,   rgb17(br*0.70,bg*0.70,bb*0.70));   // bounce off the floor
+      gd.addColorStop(0,   rgb17(br*1.03,bg*1.03,bb*1.03));
+      gd.addColorStop(0.55,rgb17(br*0.92,bg*0.92,bb*0.92));
+      gd.addColorStop(0.93,rgb17(br*0.79,bg*0.79,bb*0.79));
+      gd.addColorStop(1,   rgb17(br*0.88,bg*0.88,bb*0.88));   // bounce off the floor
       paint=gd;
     }
     g.fillStyle=paint; g.beginPath();
@@ -622,9 +622,8 @@ function castShadow(v,u,c){
    flat-banded cliff faces. Slopes are in height-units per cell, so they are divided by
    the cell size to get a true gradient before the normal is built. */
 const norm3 = v => { const L=Math.hypot(...v); return [v[0]/L,v[1]/L,v[2]/L]; };
-const LIGHT = norm3([-0.55,-0.42,0.72]);          // key, over the viewer's left shoulder
-const FILL  = norm3([ 0.48, 0.55,0.62]);          // sky bounce from the opposite side
-const KEY_COL=[1.00,0.98,0.94], FILL_COL=[0.72,0.81,1.00];
+const LIGHT = norm3([ 0.45, 0.34,0.82]);          // key, over the viewer's shoulder
+const KEY_COL=[1.00,0.98,0.94], FILL_COL=[0.84,0.90,1.00];
 const AMB=0.16, KEYAMT=0.74, FILLAMT=0.34;
 function shadeTerms(c){
   const sv=(c.h10+c.h11-c.h00-c.h01)/2*GS;   // d(height)/d(v) in world units
@@ -632,7 +631,7 @@ function shadeTerms(c){
   const n=1/Math.sqrt(sv*sv+su*su+1);
   const nx=-sv*n, ny=-su*n, nz=n;            // outward normal
   const key=Math.max(0, nx*LIGHT[0]+ny*LIGHT[1]+nz*LIGHT[2]);
-  const fil=Math.max(0, nx*FILL[0] +ny*FILL[1] +nz*FILL[2]);
+  const fil=0.5+0.5*nz;                      // hemispheric sky: full overhead, half on a wall
   // half-vector specular against a viewer looking straight down the projection.
   // Stone floor is matte, so this is a broad low sheen, not a glint.
   const hx=LIGHT[0], hy=LIGHT[1], hz=LIGHT[2]+1, hl=Math.hypot(hx,hy,hz);
@@ -641,6 +640,21 @@ function shadeTerms(c){
 }
 const FLATT = (()=>{ const t=shadeTerms({h00:0,h10:0,h01:0,h11:0});
   return t.key+t.fil; })();                  // what level ground scores, for normalising
+/* Walls are vertical, so their normal is horizontal: the +u face looks along +u, the +v
+   face along +v. Feeding those through the same two lights is what makes a cliff sit in
+   the same light as the floor it rises from, rather than being a flat swatch pasted on. */
+function wallTerms(facesU){
+  const nx=facesU?0:1, ny=facesU?1:0;
+  const key=Math.max(0, nx*LIGHT[0]+ny*LIGHT[1]);
+  return {key:AMB+KEYAMT*key, fil:FILLAMT*0.5};   // a wall sees half the sky
+}
+function litWall(hex,facesU){
+  const [r,g,b]=hex2rgb(hex), t=wallTerms(facesU);
+  const k=t.key/FLATT, f=t.fil/FLATT;
+  return rgb17(r*(k*KEY_COL[0]+f*FILL_COL[0]),
+               g*(k*KEY_COL[1]+f*FILL_COL[1]),
+               b*(k*KEY_COL[2]+f*FILL_COL[2]));
+}
 function litRGB(hex,mul,c){
   const [r,g,b]=hex2rgb(hex), t=shadeTerms(c);
   const k=t.key*mul/FLATT, f=t.fil*mul/FLATT;

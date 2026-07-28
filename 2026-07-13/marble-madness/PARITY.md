@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.77.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.78.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,26 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.78.0 (2026-07-28) — realistic pass 8: walls join the light model; three tuning traps.**
+  - **The key light was pointing where no visible surface could see it.** It came from
+    UP-SCREEN, but in this projection the only wall faces ever drawn are the +u and +v ones,
+    and both point away from up-screen. Under a physical model every visible wall is therefore
+    unlit — which is exactly *why* walls had been bypassing the lighting and using their raw
+    hue since the start. Moving the key over the viewer's shoulder (mostly overhead, tilted
+    into the screen) lets it reach the surfaces we can actually see, so walls now shade with
+    their true horizontal normals through the same two lights as the floor.
+  - **Directional fill leaves verticals unlit.** With a directional fill the walls landed at
+    ~35% of floor brightness. Real sky light is a **hemisphere**: a horizontal surface sees all
+    of it, a vertical face still sees half. Modelling it as `0.5+0.5*nz` lifts walls without
+    faking anything.
+  - **Two systems were darkening the same thing.** v0.72.0's wall ramp existed to fake a face
+    being darker than the floor; once orientation lighting does that properly, the ramp must
+    only carry what it really represents (less sky toward the base). Left as it was the two
+    compounded to ~27%. Softened, walls measure **62% of floor** — believable and readable.
+  - **Fill saturation pulled back**: a strongly blue fill pushes yellow toward olive. Physically
+    right, but the stripe hues carry course information, so the cool shadow shift stays while
+    the saturation drain does not.
+  - All six races render clean.
 - **v0.77.0 (2026-07-28) — realistic pass 7: TWO LIGHTS (warm key + cool sky fill).**
   One key light plus flat ambient makes every shadow side the same grey, which is the giveaway
   that it is a multiplier rather than light. Real scenes get a large cool bounce off the sky, so
