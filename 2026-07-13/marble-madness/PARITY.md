@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.51.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.52.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -623,6 +623,17 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     construction plainly. Crop before concluding.
 - Viewport sweep (320x480 up to 2560x1080, six shapes): no overflow, canvas never collapses,
   8:5 aspect held in every case, no exceptions.
+- **v0.52.0 (2026-07-28) — the measured letterforms now cover the IN-GAME text too.**
+  Nine more glyphs (`T E F N H A C 4 5`) extracted from the pre-race banner capture
+  (`captures/d0-start3.png`, banner rows at Amiga y101-109 and y111-119 — both matched their
+  character counts exactly). Font is now **45 glyphs**; `TIME TO FINISH / <RACE> RACE: <n>` and the
+  `OUT OF TIME / GAME OVER` panel render with it.
+  - Still missing `U V Y K Q W X Z` (they never appear on a captured screen). Those fall back per
+    character — but the fallback is now **sized by CAP HEIGHT** (`fontsize = 8*scale/0.63`,
+    baseline at `y+8*scale`) instead of an eyeballed factor, so the substituted letters no longer
+    stand out as smaller. Before the fix the `U` in "OUT" and `V` in "OVER" were visibly undersized.
+  - Row-detection gotcha: scanning a capture for "text rows" also finds the HUD, which shifts the
+    pairing of rows to expected strings. Target the known y-ranges instead of zipping blindly.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
