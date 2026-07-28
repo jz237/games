@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.39.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.40.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -392,6 +392,21 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   (`out:true`).
   **How it was found**: an audit probe warped P1 near the goal and P2's clock hit 0 in 7 s — the
   probe looked broken, but the anomaly was real. Worth remembering when a test result looks absurd.
+- **v0.40.0 (2026-07-28) — first END-TO-END PLAYTHROUGH, and it found a balance flaw.**
+  `playthrough.mjs` plays all six races in ONE game (no `loadRace` between them), so progression,
+  carry-over and the ending are exercised together for the first time. It completes:
+  `state=ending`, 6/6 races, 10 deaths. But the clock compounded —
+  race1 60 s → race2 102 → race3 116 → race4 133 → race5 151 → **race6 195 s for a 50 s course**.
+  Uncapped carry-over plus our deliberately roomy budgets removes the clock as a threat after
+  race 2. Added `CARRY_CAP=20`: now 60/80/76/65/50/70, still completing, final score 28.6k
+  (was 63k — most of that was time bonus on hoarded seconds).
+  NOTE this is a deliberate deviation: the arcade does not cap carry-over, but its budgets are
+  much tighter (60/60/35/30/20/20) so the surplus never compounds like this.
+- **Per-frame audit (v0.40.0)**: checked every score/time mutation for the catch-up class of bug.
+  Steelie +1000 fires inside `die()` (once), the 2P winner bonus is guarded by `!pl.finished`,
+  bonus pads by `h.taken`, movement by `moveAcc`, the goal drain by `pl.finished` + a bounded
+  `take`. Sound is self-limiting too: pressing into a wall for 3 s produced ONE `clack` (the
+  -0.38 bounce plus the heavy marble's slow re-acceleration keeps it under the threshold).
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and

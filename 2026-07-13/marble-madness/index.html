@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.39.0';
+const VERSION = '0.40.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -818,6 +818,7 @@ const GRAV=22, ACC=4.6, FRICT=1.55, MAXSP=9.6, MOUSE_GAIN=0.034, STEP=1/120;
 /* Amiga-exclusive "turbocharge": hold fire / left mouse button while steering
    for a burst of extra speed (documented in the official manual). */
 const TURBO_ACC=1.55, TURBO_SP=1.32;
+const CARRY_CAP=20;   // seconds of banked time that may roll into the next race
 let turbo=false, turbo2=false;
 
 /* ---------- input ---------- */
@@ -904,7 +905,10 @@ function loadRace(i){ raceIdx=i; const R=RACES[i];
     if(isNaN(pl.z)){ pl.v=R.start[0]; pl.z=groundH(pl.v,pl.u); }
     pl.vv=0; pl.vu=0; pl.vz=0; pl.grounded=true; pl.alive=true; pl.dropIn=false; pl.hidden=false;
     pl.lastSafe={v:pl.v,u:pl.u}; pl.maxU=0; pl.finished=false;
-    pl.timeLeft=raceTime(i)+pl.carry; });
+    // Banking time is the reward for a fast race, but uncapped carry-over plus our
+    // deliberately roomy budgets compounded to ~195 s by the last race, which removes
+    // the clock as a threat entirely. Cap what rolls forward.
+    pl.timeLeft=raceTime(i)+Math.min(CARRY_CAP,pl.carry); });
   catchupCD=0;
   steelie.active=false; steelie.alive=false;
   finishOrder=[]; shards=[]; camInit=false; lastTickSec=99; deathMsgT=0; raceT=0;
