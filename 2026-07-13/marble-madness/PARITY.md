@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.54.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.55.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,36 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.55.0 (2026-07-28) — the floor grid MEASURED properly, and a canvas-height bug from v0.54.0.**
+  - **THE CANVAS IS 640x400, NOT 640x480.** Every y in v0.54.0's banner geometry was converted
+    against 480, so the whole panel sat ~20% too low. Fixed: panel `(33,139,577,68)`, line tops
+    158/176, number left edge 515. Correct fractions are **x/1110*640 and y/784*400**. The only
+    other `480` in the file is an unrelated random range — nothing else was affected.
+  - **The original's floor diamond is 35 x 17.3 px in its 1110x784 screen** (3.15% x 2.2% of the
+    screen) — measured by cropping exactly 200 source px of clean floor at 4x and counting, which
+    matches the figure derived independently back in v0.48. Ours is 30 px wide on a 640 canvas
+    (4.69%). **The original's grid is ~1.5x finer than ours** — not the 2.3x claimed last
+    iteration, which was an eyeball error (see the retraction above).
+  - **It is also a different SHAPE.** 35 x 17.3 with symmetric diagonals means the original is a
+    standard 2:1 isometric grid: both floor axes are (+/-17.5, +8.65), so down-course is the
+    on-screen DIAGONAL. Ours is `AX=(20,10)`, `AU=(-10,14)` — a much steeper, narrower
+    down-course axis. v0.48 flagged this as "a deliberate deviation unless a better measurement
+    turns up"; this is that measurement.
+  - **Measurement method that finally worked, after autocorrelation, edge-spacing and peak-finding
+    all gave contradictory answers (2.7%-5.5% on the same image):** crop a known number of source
+    pixels of clean floor at 4x and count tiles by eye. Statistical estimators are defeated here
+    because the tiles carry internal dither, the lattice has half-pitch minima where diagonal
+    neighbours touch, and sloped surfaces foreshorten the pitch. **Do not trust a pitch number
+    that was not read off a magnified crop with a known ruler in it.**
+  - Also re-confirmed **the marble is correct**: ours draws at `r*AXx` = 0.80*20 = 16 px radius,
+    32 px across a 640 canvas = 5.0%; the reference's is 54 px of 1110 = 4.9%. An earlier reading
+    of "ours is 52 px / 8.1%" was a red-pixel scan catching the striped wall behind the marble.
+- **NEXT BIG ITEM — rebase the projection on the measured isometric grid.** Two coupled changes:
+  shrink the cell so it lands at ~3.15% of screen width, and move to the symmetric 2:1 axes. Both
+  require multiplying every course builder's cell coordinates to preserve the physical layout, and
+  the basis shape change also affects camera lookahead, wall faces, occlusion order and `BASIS_FLIP`
+  for Silly. Real regression risk across all six courses — give it its own iteration, and do the
+  SCALE first (cheap to verify: one number, courses scale uniformly) before the AXES.
 - **v0.54.0 (2026-07-28) — THE DIFFICULTY CURVE AND THE RACE-START PRESENTATION, BOTH MEASURED.**
   Four races run on the real Amiga with the menu digit verified in the same boot, each recorded at
   10 fps across the GO! press so the clock could be read from the first frame of the race.
@@ -692,14 +722,10 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     the fastest way to read a sequence of digits in a single look).
   - `ffmpeg` is at `/usr/bin/ffmpeg`, NOT in `tools/opt/usr/bin` (that holds only fs-uae, xdotool,
     Xvfb). `record_run.sh` gets away with it via PATH; a hardcoded `{BIN}/ffmpeg` does not.
-- **BIGGEST REMAINING LOOK GAP: OUR GRID IS ~2.3x TOO COARSE.** Comparing our practice opening with
-  the real one at the same framing, the original's diamond checker tiles are roughly 2.7% of screen
-  width; ours are ~6.25%. This is the same finding that made the marble size so hard to pin down in
-  v0.46-0.48 ("the original's grid is finer than mine") and it is why our courses read as chunky
-  next to the reference even with the palette, stripes, arches and arrows all correct. Fixing it
-  means shrinking the projection basis AND multiplying every course builder's cell coordinates to
-  keep the physical layout — a systemic change across all six courses with real regression risk.
-  It is the highest-value remaining item and should get a whole iteration (or several) to itself.
+- **~~BIGGEST REMAINING LOOK GAP: OUR GRID IS ~2.3x TOO COARSE.~~ RETRACTED — the factor is ~1.5x,
+  see the v0.55.0 entry.** The 2.3x came from eyeballing screen-width percentages off two images
+  displayed at different scales, which is exactly what this ledger tells you not to do. Kept here
+  because it was stated to the user.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and

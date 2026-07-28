@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.54.0';
+const VERSION = '0.55.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -1731,11 +1731,14 @@ function render(dt){
     // of the real race start (screen area x144-1254 / y68-852 of a 1440x1080 grab):
     // panel x201-1202 y340-474; line tops y378 and y408; the number left edge x1038.
     // Note neither line is centred on the panel — line 2 sits ~19px right of line 1.
-    g.fillStyle='#989898'; g.fillRect(33,166,577,83);
-    menuText(g,'TIME TO FINISH',277,190,2,'#882222','center');
+    // THE CANVAS IS 640x400, NOT 640x480 — v0.54.0 converted every y against 480 and
+    // sat the whole panel ~20% too low. Fractions: x/1110*640, y/784*400.
+    g.fillStyle='#989898'; g.fillRect(33,139,577,68);
+    menuText(g,'TIME TO FINISH',277,158,2,'#882222','center');
     const bstr=RACES[raceIdx].name.replace(' RACE','')+' RACE:';
-    menuText(g,bstr,296,208,2,'#882222','center');
-    hudNum(g,raceTime(raceIdx),515,208,2,'#882222','left');
+    // the original's line pitch is 1.15x its glyph height; ours are 16px at scale 2
+    menuText(g,bstr,296,176,2,'#882222','center');
+    hudNum(g,raceTime(raceIdx),515,176,2,'#882222','left');
     // hold the ready state until the clock has actually finished filling in
     const fill=Math.max(...players.filter(pl=>!pl.out).map(pl=>countUpTime(Math.ceil(pl.timeLeft))),1.5);
     if(stateT>fill){ state='race'; stateT=0; Snd.ready(2); } }
