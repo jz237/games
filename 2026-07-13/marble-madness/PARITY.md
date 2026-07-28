@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.17.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.18.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -149,6 +149,16 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   v0.15–0.16: hazard/geometry polish, Beginner tunnel+catapult, Ultimate island bridges
   4-wide+flush. v0.17.0: curved Beginner slide + Aerial chutes, round wave pit, Silly X-crossing
   walkways + flared start deck, full-length split-level bridge (u18–24).
+- **v0.18.0 (2026-07-27)**: per-race palette table (`PAL_AMIGA` / `PAL_BLUE`; active `PAL` chosen
+  in `loadRace`). Practice race repainted to the measured Amiga colours — per-cell grey diamond
+  checker floor, 8-band red/orange/yellow striped cliff faces. RED player marble (P2 now blue,
+  matching the Amiga's Red/Blue Player). HUD rebuilt as the original's grey top bar with flat red
+  digits, score left / time centre (`textFlat()` helper, no drop shadow). OUT OF TIME / GAME OVER
+  grey panel with yellow text. Verified: all 6 races render clean; practice/beginner/silly bots
+  all reach the goal with 0 deaths.
+  **GOTCHA: the `PAL_*` consts must stay ABOVE `const RACES`** — RACES references `pal:PAL_AMIGA`,
+  so if they sit below it the whole script dies on a temporal-dead-zone ReferenceError before
+  `window.__qa` is ever defined (symptom: VERSION readable but `__qa` undefined).
 - 2026-07-27: data-loss recovery; game+ledger committed to jz237/games mirror (user request
   "push to github"); Amiga disks secured; manual mined (difficulty/turbo/options-menu findings).
 - 2026-07-27 iter 20: built local headless Amiga rig (vAmigaWeb + IPF→ADF via capsimg); real
@@ -166,6 +176,13 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   code change. Serve: `python3 -m http.server 8379` in a scratchpad dir containing
   `marble-madness/`. Chrome: `--headless=new --remote-debugging-port=9379
   --user-data-dir=$PWD/chromeprofile3`; drive via Node CDP.
+- **`__qa.step(ms)` TAKES MILLISECONDS** (`n=Math.round(ms/1000/STEP)`): pass `1000/120` for one
+  physics step. Passing `1/120` rounds to ZERO steps — the run looks alive but nothing moves.
+- **`__qa.start()` enters `race` directly; `__qa.loadRace(i)` enters `ready`** (needs ~1.5 s of
+  stepping). Do `start()` + `loadRace()` + drive inside ONE `Runtime.evaluate`: between separate
+  calls the rAF render loop advances a finished race past `timeup`, the drive loop then never
+  runs, and the QA getters return the PREVIOUS race's values — identical results across races is
+  THIS bug, not a terrain problem.
 - **Always `Page.navigate` to `?qa=1&cb=Date.now()` AND assert a fresh-build marker** (a constant
   from the newest edit) — Chrome has served stale HTML across `Page.reload({ignoreCache:true})`.
   Never `--virtual-time-budget`. pkill chrome with a bracket pattern from a separate call.
@@ -177,7 +194,11 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     terrain edits, atGate index near list end at low u. Byte-identical across an edit ⇒ edit not
     in page OR bot never reaches the cells — verify which before touching geometry.
 - Waypoints (current, verified v0.17.0):
-  - Practice `[maxU,tV]`: [20,11.5],[27,10.7],[43,11.5],[50,15.5],[56.6,5.5],[57.8,5.5],[63.4,15.5],[72,10],[88,7.5]
+  - Practice `[maxU,tV]` (**corrected v0.18.0** — the practice course is a SLALOM: 1-unit steps
+    at u=51, u=57 and u=63 are passable only on alternating sides, so the line must zig
+    right→left→right; the old list drove into the u=51 wall and fell off the west edge):
+    [20,11.5],[27,10.7],[43,11.5],[50,15.5],[52.5,15.5],[55,9],[57.5,5.5],[61,15.5],[66,15],
+    [72,10],[88,7.5] → goal, 0 deaths, ~10 s, score 5100 with the bonus pads
   - Beginner: [9,12.5],[12,7.5],[15,17.5],[31,16.5],[56,17.5],[61,17.5],[65,10],[75,12],[83,12],[99,6],[110,12.5]
   - Silly: [6,11],[8,9.5],[10,11.5],[12,14],[14,16.5],[18,12.5],[33,6.5],[43,12],[51,12],[58,12.5]
   - Aerial `[v,u]`: [11.5,5],[12.5,8.5],[12.5,10],[12.5,14],[10.5,16.2],[7.5,17.3],[7,20],[7,22.5],[9,23.5],[10.2,27],[11,32],[9.5,37.5],[6.5,47.5],[9,49.5],[12.4,53.5],[12.5,62],[7.5,64.5],[7,69],[12.5,76]
