@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.34.0';
+const VERSION = '0.35.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -314,7 +314,9 @@ function buildAerial(){ newGrid(26,76);
   slab(9,51,16,54,5,REDC);
   slab(11,53,13,54,5.02,{tex:'grid',tint:'#d8b04a'});
   // capture the full platform width: rolling off the end into the void was unavoidable
-  hazards.push({type:'catapult',rect:{v0:9,v1:16,u0:52,u1:55},launch:{vv:0,vu:8.2,vz:8},snap:{v:12.5,u:54},busyT:0});
+  // launch slightly left so you land ON the left chute's line: landing dead centre
+  // left barely four rows to reach a chute, which the heavy marble cannot do
+  hazards.push({type:'catapult',rect:{v0:9,v1:16,u0:52,u1:55},launch:{vv:-4.5,vu:8.2,vz:8},snap:{v:12.5,u:54},busyT:0});
   slab(8,60,17,63,4,REDC);
   for(let su=64;su<=69;su++){ // curved twin chutes bow outward then back
     const t=(su-64)/5, bow=1.4*Math.sin(t*Math.PI);
@@ -326,7 +328,9 @@ function buildAerial(){ newGrid(26,76);
     slab(r0-1,su,r0-1,su,hT+2,REDW); slab(r1+1,su,r1+1,su,hT+2,REDW);
   }
   slab(10,62,15,63,4,REDC);
-  slab(6,63,9,63,4,REDC); slab(16,63,19,63,4,REDC);   // mouths of the twin chutes
+  // the catapult lands you centrally, so flare the chute mouths across three rows
+  // rather than one — otherwise the middle simply drops away under you
+  slab(5,62,10,64,4,REDC); slab(15,62,20,64,4,REDC);
   slab(4,70,21,71,1,REDC);
   rampU(4,72,21,72,1,0.2,REDC);
   slab(4,73,21,75,0.2,REDC);

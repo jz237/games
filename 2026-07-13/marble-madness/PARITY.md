@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.34.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.35.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -335,6 +335,16 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   Aerial driver progress: **u31 → u68 of 76**. Ultimate unchanged at u16/72.
   **Repeated IDENTICAL death coordinates are deterministic replay, not a respawn-loop bug** — the
   driver fails the same way each run; don't go hunting in `respawnPlayer`.
+- **v0.35.0 (2026-07-27) — ALL SIX RACES VERIFIED COMPLETABLE at the measured physics.**
+  `deaths.mjs` (terrain follower, no stuck-detection) reaches the goal on beginner, intermediate,
+  **aerial**, silly and ultimate; practice is completed by `bot2.mjs` (the follower cannot handle
+  its slalom). This closes the question left open in v0.32-v0.34.
+  - **Aerial's last blocker was the catapult's aim.** It launched straight (`vv:0`), landing you
+    dead centre on the u60-63 platform — but the course splits into twin chutes at u64 with the
+    middle void, leaving ~4 rows (<0.5 s) to move sideways, which the heavy marble cannot do.
+    Now launches `vv:-4.5` so you land on the LEFT chute's line: aerial finishes with 0 deaths.
+  - **Ultimate and Intermediate were already fine** — the earlier "failures" were `botT.mjs`
+    aborting on its `stuck>2400` counter, not the courses. When in doubt, re-run without it.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
