@@ -25,13 +25,73 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
   `C:\Users\jrb04\OneDrive\Desktop\Amiga\Marble Madness\` (sftp paths need leading `/C:/`).
   **Clean-room rule: run/measure/observe only — palette, HUD, timings, layouts, feel. Never ship
   or commit EA data/assets; recreate everything original.**
-- Emulation: `fs-uae` is in apt (3.1.66, not yet installed); IPF needs the capsimg plugin
-  (may need separate fetch; CDN-blocked sources are common — Wikimedia-style API endpoints work).
-  Fallback: vengeance has an emulator setup (`OneDrive\Desktop\Emulated\Pinball Dreams.lnk`);
-  proven remote workflow: schtasks /IT to launch interactively + screenshot capture (see
-  unity-destruction-game-windows memory for the pattern).
+- **THE REFERENCE RIG (WORKING, 2026-07-27 iter 21): FS-UAE + real IPF, headless, scriptable.**
+  Everything under `/home/jez237/game-refs/` (outside all repos):
+  - `tools/opt/` = fs-uae 3.1.66 + Xvfb + xdotool + libxdo3, installed WITHOUT root via
+    `apt-get download` + `dpkg-deb -x` (all deps already satisfied on this box).
+  - `fsuae/` = FS-UAE base dir: `Kickstarts/kick13.rom` (first 256 KB of the doubled KICK13.ROM),
+    `Plugins/CAPSImg/` (FrodeSolheim capsimg release — gives FS-UAE **native IPF support, so the
+    longtrack copy protection passes**), `Floppies/MarbleMadness.ipf`, `Configurations/mm.fs-uae`
+    (A500, 1440x1080 window, `automatic_input_grab = 1`).
+  - Display: `Xvfb :77 -screen 0 1440x1080x24`; capture with `ffmpeg -f x11grab`.
+  - Control: `tools/mm_ctl.py` — `grab | goto X Y | click [n] | shot NAME | key K | pin`.
+    Closed-loop pointer targeting: pin to origin, dead-reckon (scale 0.577 px/x, 0.947 px/y),
+    then correct bydifference-detecting the red pointer against a parked reference frame.
+  - Launch: `DISPLAY=:77 SDL_AUDIODRIVER=dummy fs-uae --base-dir=/home/jez237/game-refs/fsuae
+    /home/jez237/game-refs/fsuae/Configurations/mm.fs-uae`.
+  - Boot path: `grab` → `goto 723 700` + `click 2` (disk icon) → `goto 706 330` + `click 2`
+    (program icon) → ~25 s → title → ~20 s → options menu → click GO! → race.
+  - **Gotchas**: F12 opens the FS-UAE menu and RELEASES the mouse grab (re-grab by clicking in the
+    window). `pkill -f "fs-uae --base-dir"` matches this shell's own command line and kills the
+    session — use a bracket pattern. Amiga screen area within the 1440x1080 capture =
+    x 144–1244, y 68–852.
+- **vAmigaWeb (WASM) rig also built but IS A DEAD END for this title**: it boots the game from a
+  converted ADF/eADF but always hangs right after the title (head parked at track 46) — the
+  longtrack protection fails. Both plain ADF and `-f "Marble Madness!"` eADF (which DOES preserve
+  `T0.1: AmigaDOS Long Track (111000 Bits)`), and both KS 1.2 and 1.3, hang identically. Keep the
+  IPF+FS-UAE path. (vAmigaWeb clone + drivers still in scratchpad `mm-emu/` if ever needed.)
+- IPF→ADF conversion (for reference only): disk-utilities built `caps=y` with capsimg; glue header
+  at `tools/capsinc/caps/capsimage.h`, `tools/lib/libcapsimage.so.5` symlink; run from the
+  disk-analyse dir with `LD_LIBRARY_PATH=../libdisk:../../lib`. Use `-f "Marble Madness!"`
+  (the formats file knows this title: `amigados_unknown_length`).
 - VGMaps NES maps (Rick N. Bruns) = arcade-derived STRUCTURE reference, not palette.
   Hall of Light / Lemon Amiga are anti-bot-blocked from this box; Wikimedia API works.
+
+## MEASURED FROM THE REAL AMIGA GAME (2026-07-27, iteration 21)
+Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
+`amiga-title.png`, `amiga-options-menu.png`, `amiga-practice-race.png`, `amiga-game-over.png`.
+
+- **Title**: black bg; "MARBLE" in blue chevron-arc lettering, "MADNESS" in orange/yellow gradient
+  with a red drop shadow; "Amiga Version by:" (red) / "Larry Reed" (orange); blue EA striped logo;
+  "Copyright(c) 1984, 1986 / Atari Games Corp. & Electronic Arts" in blue. Title holds until the
+  game finishes loading, then the options menu appears on its own (~20 s).
+- **Options menu** (exactly as the manual describes, mouse-only, marble = cursor):
+  - Grey screen `#999999`; title bar `#888888` reading `Marble Madness!!` with letters alternating
+    pink `#ffaaaa` / blue `#aaaaff`; all body text dark red `#882222`; the CURSOR IS A YELLOW
+    MARBLE `#cccc00` with `#666600` shading.
+  - Lines: "Press Left Mouse Button / near Item to change the / Item's value. / Select GO! when
+    finished." then `Number of Players:  1`, `Difficulty:  0`, `Red Player:  Rear Port`,
+    `Input Device:  Joy Stick`, and `GO!` near the bottom centre.
+  - Text is letter-spaced (roughly one blank between glyphs) in a chunky 8x8-ish font.
+- **In-race HUD**: a grey `#888888` bar across the very top; **score at left, time at centre**,
+  both in RED `#882222` chunky digits (time shown as 2 digits, e.g. `39`, `00`).
+- **Practice race palette — MY BUILD IS WRONG (was pastel blue/grey)**. Reality:
+  - Floor = grey diamond checkerboard: `#bbbbbb` (14.9%), `#999999` (12.2%), `#dddddd` (8.0%),
+    with `#666666` (10%) grid/shadow lines. NO blue anywhere in this race.
+  - Vertical striped cliff faces = dark red `#882222` / red `#aa2222` / orange `#cc6600` /
+    yellow `#cccc00` stripes (the blue striped walls I built came from a DIFFERENT race's arcade
+    shot — blue is not the practice palette).
+  - Rails/arch gates = bright red `#dd3333` tube geometry arching over the course edges.
+  - Ground arrows painted on the floor in `#a72222`, pointing down-course.
+  - Drop shadows are hard-edged `#333333`/`#444444`, offset down-right.
+  - The player marble is RED (`Red Player`), not silver.
+  - Only ~10 distinct colours dominate the frame (OCS 32-colour palette, mostly greys + the
+    red/orange/yellow ramp).
+- **Game over**: grey `#999999` panel centred low with YELLOW `#cccc00` text
+  `OUT OF TIME` / `GAME OVER`.
+- Timing observed: practice clock counts DOWN in whole seconds and the run ended at `00` with the
+  marble parked (no input) — a static marble scores nothing after the initial movement points
+  (score froze at 130).
 
 ## Reference facts
 - Six races: **Practice, Beginner, Intermediate, Aerial, Silly, Ultimate**. Arcade time limits
@@ -165,11 +225,18 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
   options menu likely needs a mouse click (manual: menu follows title).
 
 ## Queue (parity checklist)
-1. **Amiga reference capture (rig is LIVE, game at title screen)**: click through to options
-   menu; capture menu; cycle Difficulty 0–7 and note clock values per difficulty; click GO!;
-   capture all six races (palette, HUD font/layout, hazard placements, Silly launcher, music
-   tempo via audio if feasible). Then: palette micro-diffs, HUD chunky-digit font, muncher
-   placement audit.
+1. **PALETTE/LOOK OVERHAUL — biggest open parity gap.** Repaint the practice (and then every)
+   race to the measured Amiga palette above: grey diamond checkerboard floors, red/orange/yellow
+   striped cliff faces, red arch rails, red floor arrows, hard `#333` shadows, RED player marble,
+   grey HUD bar with red digits at top (score left / time centre), grey+yellow OUT OF
+   TIME/GAME OVER panel. Capture the other five races from the rig for their own palettes before
+   repainting them (each race has its own colour scheme).
+2. **Options menu + difficulty + turbo** (all now confirmed on the real thing): recreate the menu
+   screen 1:1 (grey, pink/blue title, dark-red text, yellow-marble cursor), wire Difficulty 0–7
+   to clock budgets, add the turbocharge button.
+3. **Measure per-difficulty clocks on the rig**: start a race at difficulty 0 and at 7, read the
+   time digits at t=0 — that settles the 60/60/45/45/30/40 vs arcade-DIP question with real data.
+4. Capture races 2–6 for layout/hazard/palette truth (muncher placement audit, Silly launcher).
 2. **Amiga-exclusive features from manual**: options menu (players/input/Red-Blue/difficulty
    0–7/GO!), turbocharge button (fire/LMB speed burst). Difficulty should scale clocks toward
    arcade DIP at higher levels.
