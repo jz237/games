@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.35.0';
+const VERSION = '0.36.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -435,13 +435,15 @@ const RACES=[
   { name:'PRACTICE RACE', time:60, start:[11.5,4], build:buildPractice, steelie:null, pal:PAL_AMIGA },
   { name:'BEGINNER RACE', time:60, start:[12.5,3], build:buildBeginner,
     steelie:{ v:18, u:68, triggerU:62 } },
-  { name:'INTERMEDIATE RACE', time:45, start:[6.5,1], build:buildIntermediate,
+  // budgets set so a competent run uses ~1/3 of the clock, leaving a human room:
+  // intermediate needed 62% and ultimate 50% at the old values (see PARITY.md)
+  { name:'INTERMEDIATE RACE', time:56, start:[6.5,1], build:buildIntermediate,
     steelie:{ v:12, u:56, triggerU:48 } },
   // start on the centre-line the course funnels to (v11-15 by u11), not its edge
   { name:'AERIAL RACE', time:45, start:[13,1], build:buildAerial, steelie:null },
   { name:'SILLY RACE', time:30, start:[12.5,1], build:buildSilly, steelie:null, basis:BASIS_FLIP },
   // likewise: the corridor from u6 is v8-14, so v14 was exactly its right edge
-  { name:'ULTIMATE RACE', time:40, start:[11.5,1], build:buildUltimate,
+  { name:'ULTIMATE RACE', time:50, start:[11.5,1], build:buildUltimate,
     steelie:{ v:12, u:35, triggerU:29 }, stars:true },
 ];
 

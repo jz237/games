@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.35.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.36.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -345,6 +345,15 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     Now launches `vv:-4.5` so you land on the LEFT chute's line: aerial finishes with 0 deaths.
   - **Ultimate and Intermediate were already fine** — the earlier "failures" were `botT.mjs`
     aborting on its `stuck>2400` counter, not the courses. When in doubt, re-run without it.
+- **v0.36.0 (2026-07-27) — clock balance audit.** `balance.mjs` runs each race to the goal and
+  reports how much of the clock a competent driver needs. At v0.35 budgets:
+  practice 18 s/60 (30%), beginner 19.5 s/60 (33% with `bot2`; 42 s if the driver dies 5x),
+  **intermediate 27.8 s/45 (62%)**, aerial 11.8 s/45 (26%), silly 4.5 s/30 (15%),
+  **ultimate 19.8 s/40 (50%)**. A human is far slower than a bot that never hesitates, so the two
+  outliers left almost no room: **intermediate 45→56 s, ultimate 40→50 s** (now 50% and 40%).
+  Rule of thumb going forward: aim for a competent run to use **~1/3 of the clock**. Difficulty 7
+  still scales everything ×0.75. Silly at 15% is very generous but generous is the safe error —
+  the original playtest complaint was that the clock felt too fast.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
