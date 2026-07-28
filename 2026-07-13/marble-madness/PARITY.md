@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.53.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.54.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,60 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.54.0 (2026-07-28) — THE DIFFICULTY CURVE AND THE RACE-START PRESENTATION, BOTH MEASURED.**
+  Four races run on the real Amiga with the menu digit verified in the same boot, each recorded at
+  10 fps across the GO! press so the clock could be read from the first frame of the race.
+  - **Difficulty -> practice-race clock: d0 60, d4 60, d5 60, d6 50, d7 45.** The option does
+    NOTHING to the clock until the top two levels, where it bites hard. Our invented smooth ramp
+    (`base*(1-0.0357*d)`) is replaced by `DIFF_SCALE=[1,1,1,1,1,1,50/60,45/60]` applied to every
+    race's base time. d1-d3 are unmeasured but bracketed by measured 60s on both sides.
+    Applying the practice RATIO to the other five races is an assumption, not a measurement.
+  - **The clock FILLS IN at the start of a race** — it does not simply appear. White digits step
+    up by **+5 every 0.2 s** from 00 to the allowance, hold ~0.35 s, then turn red and start
+    draining. Implemented as `countUp()`/`countUpTime()`; the `ready` state now lasts exactly as
+    long as the fill instead of a flat 1.5 s.
+  - **The marble is NOT drawn during the fill.** Held off until the clock goes live.
+  - **Banner geometry measured** off the same capture (screen area x144-1254 / y68-852 of a
+    1440x1080 grab): panel x201-1202 y340-474 in `#989898`; `TIME TO FINISH` top y378 centred
+    x360-887; `<RACE> RACE:` top y408 spanning x399-914; the number's left edge x1038 in the HUD
+    digit font (its `0` carries the same notch as the HUD's). Neither line is centred on the
+    panel — line 2 sits ~19 px right of line 1. Ours was too high, too narrow and centred.
+  - New QA hook **`__qa.ready(i)`** — `start()`/`loadRace()` force `state='race'` so bots don't
+    burn steps on the presentation, which also made it untestable. `ready(i)` keeps it.
+  - `menu.mjs`'s turbo check reported **+0% for years** because it measured DISTANCE from the
+    practice start, where the centre structure blocks the marble either way. Rewritten to measure
+    PEAK SPEED on open ground: 6.99 -> 9.10, +30%, matching `TURBO_SP=1.32`. Turbo was never broken.
+- **2026-07-28 iteration 61 — THE RIG'S POINTER WAS AIMING AT THE WRONG THING (root cause of the
+  flaky GO! click).** `mm_ctl.find_ptr()` looks for RED pixels that differ from a reference frame.
+  That is right on the Workbench (red arrow pointer) and wrong on the game's own screens:
+  - the options-menu cursor is a **YELLOW marble** `#cccc00`, which `find_ptr` can never see;
+  - the menu title's letters **colour-cycle**, and on their red phase `find_ptr` locked onto the
+    TITLE BAR instead, so every "aim" computed a wild correction and drove the cursor into a
+    screen corner — from which a click often landed on GO!. That is the "GO! silently fails about
+    half the time" behaviour logged since iteration 55, and it also silently ignored every attempt
+    to change a menu setting.
+  - **`find_marble_cursor()`** finds the yellow marble ABSOLUTELY (nothing else on that screen is
+    yellow; skip rows above y=112 for the cycling title bar) — no reference frame, no dead
+    reckoning. New **`mm_ctl.py gotoy X Y`** uses it.
+  - **The game's screen scales mouse motion ~6x more than the Workbench does**: 3.71 px/unit
+    across and 3.59 down vs the Workbench's 0.577/0.947. `gotoy` starts from those and
+    **recalibrates from its own observed move each iteration**, ignoring an axis that clamped at a
+    screen edge, so a wrong constant costs one iteration rather than the whole run.
+  - New tools in `game-refs/tools/`: `diff_probe.py` (boot -> set difficulty -> GO! -> capture),
+    `clock_probe.py` (record across GO!, extract HUD strips — screenshots at ~1.5 s each are far
+    too slow to catch a 2 s count-up), `set_diff.sh` (cycle the row N times and crop the digit),
+    `countup_test.py`, and `crop.py` (crop the same rect from many captures into one stacked PNG —
+    the fastest way to read a sequence of digits in a single look).
+  - `ffmpeg` is at `/usr/bin/ffmpeg`, NOT in `tools/opt/usr/bin` (that holds only fs-uae, xdotool,
+    Xvfb). `record_run.sh` gets away with it via PATH; a hardcoded `{BIN}/ffmpeg` does not.
+- **BIGGEST REMAINING LOOK GAP: OUR GRID IS ~2.3x TOO COARSE.** Comparing our practice opening with
+  the real one at the same framing, the original's diamond checker tiles are roughly 2.7% of screen
+  width; ours are ~6.25%. This is the same finding that made the marble size so hard to pin down in
+  v0.46-0.48 ("the original's grid is finer than mine") and it is why our courses read as chunky
+  next to the reference even with the palette, stripes, arches and arrows all correct. Fixing it
+  means shrinking the projection basis AND multiplying every course builder's cell coordinates to
+  keep the physical layout — a systemic change across all six courses with real regression risk.
+  It is the highest-value remaining item and should get a whole iteration (or several) to itself.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and

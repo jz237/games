@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.53.0';
+const VERSION = '0.54.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -803,11 +803,18 @@ let state='title', stateT=0, raceIdx=0, deaths=0, raceT=0;
 /* Amiga options screen (see PARITY.md): players, difficulty 0-7, port, device */
 const OPT={ players:1, difficulty:0, port:'Rear  Port', device:'Joy Stick' };
 let menuMX=320, menuMY=300;   // marble cursor position on the options screen
-/* Difficulty scales the per-race allowance. MEASURED on the real Amiga: the
-   practice race starts at 60 s on difficulty 0 (score 0 / clock 58 two seconds
-   in), so d0 matches the arcade allowance and higher levels tighten from there. */
+/* Difficulty scales the per-race allowance. MEASURED on the real Amiga by setting the
+   menu digit and reading the practice clock off a 10 fps recording of the race start:
+   d0 60, d4 60, d5 60, d6 50, d7 45. So the option does nothing to the clock until the
+   top two levels, where it bites hard — not the smooth ramp we had guessed. d1-d3 are
+   unmeasured but bracketed by measured 60s on both sides. */
+const DIFF_SCALE=[1,1,1,1,1,1,50/60,45/60];
 function raceTime(i){ const base=RACES[i].time;
-  return Math.max(12, Math.round(base*(1-0.0357*OPT.difficulty))); }
+  return Math.max(12, Math.round(base*DIFF_SCALE[OPT.difficulty|0])); }
+/* Start-of-race clock fill: +5 every 0.2 s, then a beat before it goes live. */
+const CU_STEP=5, CU_DT=0.2, CU_HOLD=0.35;
+function countUp(target,t){ return Math.min(target, Math.floor(t/CU_DT)*CU_STEP); }
+function countUpTime(target){ return Math.ceil(target/CU_STEP)*CU_DT+CU_HOLD; }
 let hiscores; try{ hiscores=JSON.parse(localStorage.getItem('mm-hiscores-v1')||'null'); }catch(e){ hiscores=null; }
 if(!Array.isArray(hiscores)||hiscores.length<5)
   hiscores=[{n:'MMM',s:15000},{n:'ATA',s:12000},{n:'RII',s:9000},{n:'EAE',s:6000},{n:'JEZ',s:3000}];
@@ -1674,7 +1681,8 @@ function render(dt){
     text(g,String(h.val),px,py-7,15,'#ffd23a'); g.restore(); }
   // marbles + munchers back-to-front
   const ents=[];
-  for(const m of marbles) if(m.active&&!m.hidden&&(m.alive||(m.kind==='player'&&!m.out&&m.deathKind==='fall'&&m.deathT<0.9)))
+  // the original holds the marbles off screen until the clock has finished filling in
+  for(const m of marbles) if(state!=='ready'&&m.active&&!m.hidden&&(m.alive||(m.kind==='player'&&!m.out&&m.deathKind==='fall'&&m.deathT<0.9)))
     ents.push({k:m.v*AXy+m.u*AUy,m});
   for(const h of hazards) if(['muncher','hammer','piston','vacuum','critter'].includes(h.type)) ents.push({k:h.v*AXy+h.u*AUy,h});
   ents.sort((a,b)=>a.k-b.k);
@@ -1697,28 +1705,40 @@ function render(dt){
   // both in chunky red digits (measured from the real game, see PARITY.md)
   const HUDBG='#888888', HUDFG='#882222', HUDLOW='#dd2222';
   g.fillStyle=HUDBG; g.fillRect(0,0,640,20);   // the original's bar is ~4% of screen height
+  // The original FILLS THE CLOCK IN at the start of a race rather than showing the
+  // allowance outright: white digits stepping up by 5 every 0.2 s, a short hold, then
+  // they turn red and start draining. Measured off a 10 fps capture of the real game.
+  const rdy=state==='ready';
+  const clk=pl=>rdy?String(countUp(Math.ceil(pl.timeLeft),stateT)).padStart(2,'0')
+                   :String(Math.ceil(pl.timeLeft)).padStart(2,'0');
+  const clkCol=pl=>rdy?'#ffffff':(pl.timeLeft<=6?HUDLOW:HUDFG);
   if(numPlayers===1){
     hudNum(g,player.score,143,2,2,HUDFG,'left');    // score sits ~22% across, as on the Amiga
-    hudNum(g,String(Math.ceil(player.timeLeft)).padStart(2,'0'),320,2,2,
-         player.timeLeft<=6?HUDLOW:HUDFG,'center');
+    hudNum(g,clk(player),320,2,2,clkCol(player),'center');
   } else {
     hudNum(g,player.score,40,2,2,HUDFG,'left');
-    hudNum(g,player.out?'00':String(Math.ceil(player.timeLeft)).padStart(2,'0'),250,2,2,
-         player.out?'#555555':(player.timeLeft<=6?HUDLOW:HUDFG),'center');
-    hudNum(g,player2.out?'00':String(Math.ceil(player2.timeLeft)).padStart(2,'0'),390,2,2,
-         player2.out?'#555555':(player2.timeLeft<=6?HUDLOW:HUDFG),'center');
+    hudNum(g,player.out?'00':clk(player),250,2,2,
+         player.out?'#555555':clkCol(player),'center');
+    hudNum(g,player2.out?'00':clk(player2),390,2,2,
+         player2.out?'#555555':clkCol(player2),'center');
     hudNum(g,player2.score,600,2,2,'#223388','right');
     if(player.finished) text(g,'FIN',250,34,12,'#ffd23a','center');
     if(player2.finished) text(g,'FIN',390,34,12,'#ffd23a','center');
   }
   if(state==='ready'){ stateT+=dt;
-    // the original announces each race on a grey panel in dark red
-    g.fillStyle='#999999'; g.fillRect(60,146,520,74);
-    menuText(g,'TIME TO FINISH',320,160,2,'#882222','center');
+    // The original announces each race on a grey panel in dark red, drawn over the
+    // course while the clock fills in. Panel and both text lines measured off a capture
+    // of the real race start (screen area x144-1254 / y68-852 of a 1440x1080 grab):
+    // panel x201-1202 y340-474; line tops y378 and y408; the number left edge x1038.
+    // Note neither line is centred on the panel — line 2 sits ~19px right of line 1.
+    g.fillStyle='#989898'; g.fillRect(33,166,577,83);
+    menuText(g,'TIME TO FINISH',277,190,2,'#882222','center');
     const bstr=RACES[raceIdx].name.replace(' RACE','')+' RACE:';
-    menuText(g,bstr,300,188,2,'#882222','center');
-    hudNum(g,raceTime(raceIdx),300+bstr.length*11+4,188,2,'#882222','left');
-    if(stateT>1.5){ state='race'; stateT=0; Snd.ready(2); } }
+    menuText(g,bstr,296,208,2,'#882222','center');
+    hudNum(g,raceTime(raceIdx),515,208,2,'#882222','left');
+    // hold the ready state until the clock has actually finished filling in
+    const fill=Math.max(...players.filter(pl=>!pl.out).map(pl=>countUpTime(Math.ceil(pl.timeLeft))),1.5);
+    if(stateT>fill){ state='race'; stateT=0; Snd.ready(2); } }
   if(state==='race'&&deathMsgT>0){ menuFit(g,deathMsg,320,160,3,'#ff97a5','center',560); }
   if(state==='race'&&numPlayers===2){
     for(const pl of players) if(pl.finished){
@@ -1862,6 +1882,9 @@ if(QA){
       steelie.vz=0; steelie.grounded=!isNaN(h); steelie.dropIn=false; },
     start(){ startGame(1); state='race'; },
     loadRace(i){ for(const pl of players) pl.carry=0; loadRace(i); state='race'; },
+    // the hooks above skip the pre-race presentation so bots don't burn steps on it;
+    // this one keeps it, for checking the banner and the clock filling in
+    ready(i){ for(const pl of players) pl.carry=0; loadRace(i|0); return state; },
     warp(v,u){ player.v=v; player.u=u; const h=groundH(v,u); player.z=isNaN(h)?6:h;
       player.vv=0;player.vu=0;player.vz=0;player.grounded=!isNaN(h); },
     input(gv,gu){ qaInp=(gv===null)?null:{v:gv,u:gu}; },
