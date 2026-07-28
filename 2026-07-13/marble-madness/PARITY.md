@@ -460,6 +460,22 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     throttle (0.55)** — flat-out down its terraces shatters the marble on the accumulated drop,
     which is the documented "big drops smash the marble" rule doing its job. Trap sweep clean.
   - `drawMarbleG` now sizes the marble from `AXx` rather than a hardcoded 14.
+- **2026-07-28 iteration 49 — scale correction INDEPENDENTLY VALIDATED; drive attempt blocked again.**
+  - **Validation**: with both games now at the same cell size, feature geometry is directly
+    comparable. The span from the leftmost to the rightmost bright-red arch structure on the
+    practice opening measures **21.4 cells in the original vs 21.0 in ours** — so v0.46.0's basis
+    (20 px/cell) and marble radius (0.75) are right, confirmed against the original's own layout
+    rather than against my earlier ambiguous autocorrelation.
+  - **A WORKING MARBLE DETECTOR for reference captures** — `game-refs/tools/find_marble.py`.
+    Earlier attempts failed because the arch gates and striped walls are also red+yellow. The
+    discriminator that works: a compact red blob **carrying olive-yellow patches AND ringed by
+    open grey floor** (sample a circle at radius 42 px; require >50% plain grey). Validated on
+    four captures; returns the marble's screen position and an isolation fraction.
+  - **Driving the original is still blocked.** With the detector working, a clean 4-direction map
+    was attempted: the first hold moved the marble a long way down-left, then it wedged and stopped
+    responding. A sustained Up+Right drive produced **0% frame change over 9 s — the emulator had
+    frozen** (HUD still drawn, clock not ticking). Restart the rig with `tools/start-rig.sh` and
+    re-boot before any further attempt. The dead-end verdict stands.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
