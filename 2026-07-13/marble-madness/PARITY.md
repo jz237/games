@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.78.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.79.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,18 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.79.0 (2026-07-28) — realistic pass 9: every surface now shares ONE light model.**
+  The tinted floors (which includes the practice course's cones) and the `tex:'check'` surfaces
+  were the last two paths still multiplying a base colour by a plain scalar. Both now go
+  through `litRGB`, so warm key, cool hemispheric fill, cast shadow, ambient occlusion and
+  grain apply uniformly across the whole course.
+  - **The gotcha both paths share**: `kk` already carries `surfaceShade`, and `litRGB` re-derives
+    the orientation terms from the cell, so the scalar has to be divided back out first or the
+    surface term is applied twice. Same correction as the untinted floor path in v0.77.0.
+  - That closes the sweep started in v0.71.0: terrain, walls, edges, tinted surfaces, cones,
+    floor markings, goal squares, the marble, tube rails, all five hazard types and the HUD are
+    now lit rather than tinted-by-multiplier.
+  - All six races render clean.
 - **v0.78.0 (2026-07-28) — realistic pass 8: walls join the light model; three tuning traps.**
   - **The key light was pointing where no visible surface could see it.** It came from
     UP-SCREEN, but in this projection the only wall faces ever drawn are the +u and +v ones,
