@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.44.0';
+const VERSION = '0.45.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -842,6 +842,10 @@ addEventListener('keydown',e=>{ if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRigh
   if(e.key.toLowerCase()==='p'&&state==='race'){ paused=!paused; }
   if(e.key.toLowerCase()==='m'){ Snd.setMuted(!Snd.muted); }
   Snd.unlock(); });
+// Hiding the tab stops rAF in most browsers, so the race freezes anyway — but
+// pause explicitly so behaviour is the same everywhere and nobody comes back to
+// a marble that has been rolling (or a clock that has been running) without them.
+addEventListener('visibilitychange',()=>{ if(document.hidden&&state==='race') paused=true; });
 addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false;
   if(e.key===' ') turbo=false; if(e.key==='Shift') turbo2=false; });
 addEventListener('mousedown',e=>{ if(state==='race'&&e.button===0) turbo=true; });

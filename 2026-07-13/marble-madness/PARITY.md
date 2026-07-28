@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.44.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.45.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -432,6 +432,17 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   shows CONGRATULATIONS / YOU BEAT ALL SIX RACES / FINAL SCORE, and `beginEntry()` leads to
   `initials` when the score qualifies. Removed a stale line from it ("music and the final
   look-and-feel polish are still on the way") written before either existed.
+- **v0.45.0 (2026-07-28) — robustness audit: clean, plus a tab-visibility pause.**
+  - `fuzz.mjs`: random steering/turbo every few frames for 60 s in EACH race, then 60 rapid
+    start/start2/loadRace/forceEnd/openOptions cycles. No NaN positions or velocities, no runaway
+    coordinates, no negative scores, no odd states, no exceptions.
+  - `storage.mjs`: six malformed `mm-hiscores-v1` payloads (garbage text, wrong shape, array of
+    junk, nulls, a 5 KB string, empty) — the game boots every time and falls back to the default
+    table. Corrupt saves cannot brick it.
+  - The main loop already clamps `dt` to 0.25 s, so a stall or GC pause cannot trigger a
+    catch-up spiral; a hidden tab freezes rather than draining the clock.
+  - Added `visibilitychange` → `paused=true` during a race, so tab-switching behaviour is the same
+    in every browser rather than depending on how aggressively rAF is throttled.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
