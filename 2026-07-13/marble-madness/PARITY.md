@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.28.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.29.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -252,6 +252,24 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   tips, and the **Marble Munchers as rounded green blobs** (mine already match). One of the four
   box shots is an orange/tan course, which supports keeping the Intermediate race's tan scheme
   rather than forcing every race blue.
+- **v0.29.0 (2026-07-27) — FIRST MEASURED *FEEL* CORRECTION.** Timed the real Amiga marble:
+  from rest on the opening plain, one second of full input moved it ~145 screen px in x; the
+  checker cell period there is ~61 screen px (autocorrelation on a flat scanline), so **~2.4
+  cells/s**, and correcting for the emulator running ~0.76x realtime gives **~3.2 cells in a true
+  second**. It also clearly sheds speed when input stops (~2.6 cells over the next 2.2 s).
+  OURS covered **7.24 cells** in that first second, hit MAXSP within it, and coasted 13.2 cells
+  while barely slowing — i.e. roughly 2-3x too fast and far too slippery, which is also why the
+  courses felt short against their clocks. Retuned `ACC 20→11, MAXSP 11→6.2, FRICT 3.2→3.6`
+  (`MOUSE_GAIN 0.012→0.020` to keep the trackball feel). Now ~3.95 cells/s with a decaying coast.
+  Bots still reach every goal with margin: practice 17.5 s of 60 (was 11 s), beginner 16.6 s,
+  silly 8 s. **Method (repeatable):** `feel.mjs` for ours; for the original, capture at rest, hold
+  a direction 1.0 s, capture, coast 2.2 s, capture, then locate the marble by differencing the
+  red-ish pixels against the rest frame (camera is static on the opening screen) and scale by the
+  checker period.
+- **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
+  all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
+  rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
+  the numbers go to nonsense.
   **GOTCHA: the `PAL_*` consts must stay ABOVE `const RACES`** — RACES references `pal:PAL_AMIGA`,
   so if they sit below it the whole script dies on a temporal-dead-zone ReferenceError before
   `window.__qa` is ever defined (symptom: VERSION readable but `__qa` undefined).
