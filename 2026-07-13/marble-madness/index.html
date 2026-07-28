@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.57.0';
+const VERSION = '0.58.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -1826,16 +1826,16 @@ function render(dt){
       text(g,ch,286+i*34,246,30,i===entryName.length?'#ffd23a':'#eef2ff'); }
     text(g,'type letters · ENTER to confirm',320,292,13,'#9aa6cc'); }
   if(state==='timeup'){ stateT+=dt;
-    g.fillStyle='#999999'; g.fillRect(150,132,340,152);
-    menuText(g,'OUT OF TIME',320,156,3,'#cccc00','center');
-    menuText(g,'GAME OVER',320,192,3,'#cccc00','center');
-    if(numPlayers===2){
-      text(g,'P1  '+player.score+'   ·   P2  '+player2.score,320,248,16,'#882222');
-    } else {
-      text(g,'FINAL SCORE',320,240,14,'#882222');
-      hudNum(g,player.score,320,254,2,'#882222','center');
-    }
-    text(g,'click / space to retry',320,300,14,'#9fb0e8'); }
+    /* Measured off a real GAME OVER (rec/t2-full01.png): panel x358-907 y586-828 in
+       #989898, lines at y694 and y762 in a dull yellow #c1c114, text centred on x~287
+       not on the screen. The panel sits LOW and slightly LEFT of centre, and carries
+       only these two lines — the score stays where the original leaves it, in the HUD. */
+    g.fillStyle='#989898'; g.fillRect(123,264,317,124);
+    menuText(g,'OUT OF TIME',287,319,2,'#c1c114','center');
+    menuText(g,'GAME OVER',289,354,2,'#c1c114','center');
+    // 2P is our own addition, so it gets the spare room inside the panel
+    if(numPlayers===2) text(g,'P1  '+player.score+'   ·   P2  '+player2.score,281,378,12,'#882222');
+    text(g,'click / space to retry',540,392,11,'#9fb0e8'); }
 }
 let demoT=0;
 function renderTitle(g){

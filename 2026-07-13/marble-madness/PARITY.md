@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.57.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.58.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -646,6 +646,30 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     subtitle was unreadable against the checkerboard.
   - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
     font is illegible.
+- **v0.58.0 (2026-07-28) — GAME OVER panel measured from a real one; driving the original revisited.**
+  - **Driving is not a dead end, but straight down is.** With the pointer fix from iteration 61 a
+    race now starts reliably, so scripted drives are cheap. The HUD SCORE is the fitness function
+    — the original pays 10 points per unit of forward progress, so a higher final score means the
+    marble got further, and it is readable straight off the recorded HUD strip.
+    - 12 s of `Down` -> **100 points**; 30 s of `Down` -> **220 points**, then the score plateaus
+      and the clock runs out. A full frame at the plateau shows the marble SHATTERED just left of
+      the twin-peak centre structure, with the debris still on screen.
+    - So the ~220 ceiling is the centre structure, exactly as the course's own outward-pointing
+      arrows warn. `drive_try.py <tag> "Down:3,Down+Left:2,..."` runs any sequence and leaves HUD
+      strips at intervals, so a route can be scored and compared. Next step is a route that
+      goes AROUND the structure rather than into it.
+    - Worth knowing: 220 points scrolled the camera about half a screen past the start, so even a
+      failed run maps new ground. Mapping does not need a completed race, just a better route.
+  - **The GAME OVER panel, measured off `rec/t2-full01.png`** (a real out-of-time): panel
+    x358-907, y586-828 in `#989898` — the same grey as the pre-race banner; two lines of dull
+    yellow `#c1c114` with tops at y694 and y762, centred on x~287, i.e. **noticeably LEFT of the
+    screen centre and low down**. Ours was a centred box in the upper-middle at `#999999` with
+    `#cccc00` text at scale 3. Now `fillRect(123,264,317,124)` with both lines at scale 2.
+    The original's panel carries ONLY those two lines — no score — because the score stays in the
+    HUD, which is still drawn. Our `FINAL SCORE` line is gone for that reason; the 2P score line
+    (our own addition) moved inside the panel.
+  - Line pitch here is 34.7 canvas px against a 14.3 px glyph — a wide gap, unlike the pre-race
+    banner's tight 18/16. The two panels do not share a layout; measure each one.
 - **v0.57.0 (2026-07-28) — the floor lattice MEASURED numerically; v0.56.0's target was 16% wide.**
   Two independent methods now agree on the original's floor diamond, replacing every hand count:
   - **2-D autocorrelation of the seam mask** over a clean floor patch returns lattice offsets
