@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.26.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.27.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -227,6 +227,19 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   BUILD" label. Hi-score flow verified end-to-end with a qualifying score (`hiscore.mjs`):
   timeup → `beginEntry()` → `initials` → `enterInitials()` → title, table updated, no errors —
   the earlier sweep's "state=title" was correct behaviour for a zero score, not a bug.
+- **v0.27.0 (2026-07-27)**: the diamond checker now covers TINTED floors as well (in their own
+  hue, ±% brightness by parity) — previously only untinted cells got it, so the Silly race's gold
+  decks were flat while everything else was checkered. Every surface in the original is checkered.
+- **Audio: no capture, none needed for now.** Tried SDL's disk driver
+  (`SDL_AUDIODRIVER=disk SDL_DISKAUDIOFILE=...`) to record the real game — no file appeared, and in
+  any case the emulator was sitting at the Workbench with nothing playing. Not worth another
+  attempt: the melodies can't be copied anyway (clean-room), and our own `Snd` layer already has a
+  speed-linked filtered-noise ROLL, impact clacks, goal/ready/count cues and the FM music bus.
+- **Course-vs-clock calibration (reasoned, 2026-07-27)**: the bot finishes the practice race in
+  ~11 s of its 60 s budget on a perfect line; a human will take perhaps twice that. So difficulty 0
+  is GENEROUS rather than tight — which is the right side to err on given the original playtest
+  complaint ("clock counts down super fast"), and difficulty 7 (×0.75) exists for the tight version.
+  No change made; revisit only if a human playtest says the pacing feels slack.
   **GOTCHA: the `PAL_*` consts must stay ABOVE `const RACES`** — RACES references `pal:PAL_AMIGA`,
   so if they sit below it the whole script dies on a temporal-dead-zone ReferenceError before
   `window.__qa` is ever defined (symptom: VERSION readable but `__qa` undefined).
