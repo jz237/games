@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.52.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.53.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -634,6 +634,18 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     stand out as smaller. Before the fix the `U` in "OUT" and `V` in "OVER" were visibly undersized.
   - Row-detection gotcha: scanning a capture for "text rows" also finds the HUD, which shifts the
     pairing of rows to expected strings. Target the known y-ranges instead of zipping blindly.
+- **v0.53.0 (2026-07-28) — ONE FONT THROUGHOUT.** The prominent in-play messages (death notices,
+  `RACE COMPLETE!`, `PAUSED`, `GREAT SCORE!`, the ending) now use the measured letterforms as well,
+  so the game no longer mixes two typefaces. The original uses one face for everything; mixing was
+  itself a fidelity gap even for strings the original never shows.
+  - **`menuFit()`**: the measured font is PROPORTIONAL and much wider than Courier at the same
+    nominal size, so fixed scales overflowed the 640px canvas ("CONGRATULATIONS!" at scale 4 needs
+    ~640 px). `menuFit` steps the scale down until the string fits a given width. Use it for
+    anything longer than a few characters.
+  - The ending screen also gains a backing panel — it draws over live course terrain and the white
+    subtitle was unreadable against the checkerboard.
+  - Small text (hi-score table, control hints) deliberately stays in Courier: at scale 1 the pixel
+    font is illegible.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and

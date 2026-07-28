@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.52.0';
+const VERSION = '0.53.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -1550,6 +1550,20 @@ const MENU_FONT={
   'w':['.........','.........','###....##','###.##.##','###.##.##','###.##.##','.###..##.','.###..##.'],
   'y':['.........','.........','###....##','###....##','.##....##','..##..##.','...####..','...###...','.####....'],
 };
+function menuFit(g,str,x,y,scale,col,align,maxW){
+  // the measured font is proportional and wider than Courier at the same nominal
+  // size, so long strings overflow: step the scale down until it fits
+  const W=maxW||600;
+  let sc=scale;
+  while(sc>1){
+    let wdt=0;
+    for(const ch of str){ if(ch===' '){ wdt+=4*sc; continue; }
+      const gl=MENU_FONT[ch]; wdt+=(gl?gl[0].length+1:7)*sc; }
+    if(wdt<=W) break;
+    sc--;
+  }
+  return menuText(g,str,x,y,sc,col,align);
+}
 function menuText(g,str,x,y,scale,col,align){
   // Draw with the measured letterforms. A few glyphs (N, b, F, K) never appear on
   // the reference screen, so those characters fall back individually rather than
@@ -1705,13 +1719,14 @@ function render(dt){
     menuText(g,bstr,300,188,2,'#882222','center');
     hudNum(g,raceTime(raceIdx),300+bstr.length*11+4,188,2,'#882222','left');
     if(stateT>1.5){ state='race'; stateT=0; Snd.ready(2); } }
-  if(state==='race'&&deathMsgT>0){ text(g,deathMsg,320,168,22,'#ff97a5'); }
+  if(state==='race'&&deathMsgT>0){ menuFit(g,deathMsg,320,160,3,'#ff97a5','center',560); }
   if(state==='race'&&numPlayers===2){
     for(const pl of players) if(pl.finished){
       text(g,(pl.pIdx===0?'P1':'P2')+' FINISHED!',320,140,16,'#ffd23a'); break; } }
-  if(state==='race'&&paused){ text(g,'PAUSED',320,180,30,'#eef2ff'); text(g,'press P or click',320,214,14,'#9fb0e8'); }
+  if(state==='race'&&paused){ menuText(g,'PAUSED',320,168,4,'#eef2ff','center');
+    menuFit(g,'press P or click',320,214,2,'#9fb0e8','center',560); }
   if(state==='goal'){ stateT+=dt;
-    text(g,'RACE COMPLETE!',320,150,32,'#ffd23a');
+    menuFit(g,'RACE COMPLETE!',320,138,4,'#ffd23a','center',600);
     if(numPlayers===2&&finishOrder.length){
       text(g,'PLAYER '+(finishOrder[0]+1)+' WINS THE RACE  (+1000, +5s)',320,178,15,finishOrder[0]===0?'#8fa8f0':'#f0a0aa'); }
     let draining=false;
@@ -1730,8 +1745,10 @@ function render(dt){
       for(let i=0;i<14;i++){ const a=i/14*Math.PI*2;
         shards.push({x:fx,y:fy,vx:Math.cos(a)*(60+Math.random()*60),vy:Math.sin(a)*(60+Math.random()*60)-30,r:2,t:0,col:hue}); }
       if(Math.random()<0.5) Snd.count(); }
-    text(g,'CONGRATULATIONS!',320,130,34,'#ffd23a');
-    text(g,'YOU BEAT ALL SIX RACES',320,172,20,'#eef2ff');
+    // a backing panel, like the game-over screen: the ending sits over live course
+    g.fillStyle='rgba(10,12,26,.78)'; g.fillRect(70,104,500,120);
+    menuFit(g,'CONGRATULATIONS!',320,118,4,'#ffd23a','center',470);
+    menuFit(g,'YOU BEAT ALL SIX RACES',320,162,3,'#eef2ff','center',450);
     if(numPlayers===2){
       const w=player.score>=player2.score?'PLAYER 1':'PLAYER 2';
       text(g,'P1  '+player.score+'    P2  '+player2.score,320,212,20,'#7fd4ff');
@@ -1741,7 +1758,7 @@ function render(dt){
     if(stateT>2){ text(g,'CLICK OR PRESS SPACE',320,300,16,'#ffd23a'); }
     if(stateT>2&&(keys[' ']||false)){ keys[' ']=false; queueScoreEntry(); } }
   if(state==='initials'){ stateT+=dt;
-    text(g,'GREAT SCORE!',320,120,30,'#ffd23a');
+    menuFit(g,'GREAT SCORE!',320,110,4,'#ffd23a','center',600);
     text(g,(entryPlayer&&entryPlayer.pIdx===1?'PLAYER 2':'PLAYER 1')+'   '+(entryPlayer?entryPlayer.score:0),320,164,18,
       entryPlayer&&entryPlayer.pIdx===1?'#f0a0aa':'#8fa8f0');
     text(g,'ENTER YOUR INITIALS',320,204,15,'#c8d2f8');
