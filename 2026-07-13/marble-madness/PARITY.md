@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.46.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.47.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -476,6 +476,22 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
     responding. A sustained Up+Right drive produced **0% frame change over 9 s — the emulator had
     frozen** (HUD still drawn, clock not ticking). Restart the rig with `tools/start-rig.sh` and
     re-boot before any further attempt. The dead-end verdict stands.
+- **v0.47.0 (2026-07-28) — marble size corrected AGAIN; use a BASIS-FREE ratio.**
+  v0.46 sized the marble from "cells across", which silently depends on the original's projection
+  basis. **I cannot measure that basis reliably** — decomposing screen offsets of the three arch
+  structures into (dv,du) gave nonsense (left arch dv=-3.6, right dv=+9.4, i.e. wildly asymmetric
+  about a marble that sits between them), because it assumes proportions I do not know.
+  **The measure that needs no basis: marble diameter ÷ checker-diamond WIDTH, both in pixels.**
+  - original: 52 px marble / 35 px diamond = **1.49**
+  - ours at v0.46 (r=0.75): 30/30 = 1.00 → too small; at v0.45 (r=1.05, old zoom): 29.4/21 = 1.40
+  - now r=**1.12**: 44.8/30 = 1.49 ✓
+  So the pre-v0.46 marble was nearly right all along and v0.46 shrank it by a third. The ZOOM part
+  of v0.46 (basis 14→20 px) stands — the side-by-side clearly showed the original's course filling
+  the frame while ours sat back.
+  **Evidence it is now right: the full six-race playthrough completes again (7 deaths, best yet);
+  with r=0.75 it failed at the final race.**
+  **RULE: when comparing against the original, prefer ratios between two things visible in the
+  SAME screenshot. Anything requiring the original's projection basis is guesswork.**
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
