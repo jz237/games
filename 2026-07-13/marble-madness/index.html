@@ -35,17 +35,16 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.47.0';
+const VERSION = '0.48.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
-/* Scale measured from a 3x zoom of the original's floor. Use the RATIO of marble
-   diameter to checker-diamond WIDTH — it needs no assumption about the original's
-   projection basis, which I cannot measure reliably:
-     original: 52 px marble / 35 px diamond = 1.49
-   Diamond width here is AXx+|AUx| = 30 px, so the marble diameter should be ~45 px,
-   i.e. r = 45/(2*AXx) = 1.12 cells. ("Cells across" is basis-dependent and led me
-   to two wrong values before this.) */
+/* Marble size: the ONLY comparable metric is what fraction of the SCREEN it covers.
+   Measured on the original: 55 px of its 1100 px screen = 5.0%.
+   Cell-relative measures ("cells across", "marble ÷ diamond width") are not
+   comparable — the original's grid is finer than ours, so the same marble spans a
+   different number of cells. Both of those led me to wrong values.
+   Here: 2*r*AXx / 640 = 5.0%  ->  r = 0.80 with AXx = 20. */
 let AXx = 20, AXy = 10;       // +v (across): 2:1, a cell ≈ 3.1% of a 640px canvas
 let AUx = -10, AUy = 14;      // +u (down course): steep down-left
 const AZ  = 23;               // pixels per height unit
@@ -781,7 +780,7 @@ const Music=(()=>{
 })();
 /* ---------- marbles ---------- */
 function makeMarble(kind){ return { kind, v:0,u:0,z:0,vv:0,vu:0,vz:0,grounded:true,alive:true,hidden:false,active:kind==='player',
-  r:1.12, mass:kind==='steelie'?2.3:1, dropIn:false, deathKind:'', deathT:0, aiRespawnT:0,
+  r:0.80, mass:kind==='steelie'?2.3:1, dropIn:false, deathKind:'', deathT:0, aiRespawnT:0,
   pIdx:0, timeLeft:0, score:0, maxU:0, lastSafe:{v:0,u:0}, safeT:0, finished:false, out:false, carry:0, moveAcc:0 }; }
 const player=makeMarble('player');
 const player2=makeMarble('player'); player2.pIdx=1; player2.active=false;

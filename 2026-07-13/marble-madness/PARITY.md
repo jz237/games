@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.47.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.48.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -492,6 +492,25 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   with r=0.75 it failed at the final race.**
   **RULE: when comparing against the original, prefer ratios between two things visible in the
   SAME screenshot. Anything requiring the original's projection basis is guesswork.**
+- **v0.48.0 (2026-07-28) — marble size SETTLED: use SCREEN FRACTION. Three wrong answers first.**
+  Measured on the original: the marble is **55 px of its 1100 px screen = 5.0% of screen width**.
+  | version | metric used | r | % of screen | verdict |
+  |---|---|---|---|---|
+  | v0.45 | (inherited) | 1.05 @AXx14 | 4.59% | ~right by luck |
+  | v0.46 | "cells across" (1.5) | 0.75 @AXx20 | 4.69% | ~right, wrong reasoning |
+  | v0.47 | marble ÷ diamond width (1.49) | 1.12 @AXx20 | **7.00%** | WRONG |
+  | v0.48 | **screen fraction (5.0%)** | **0.80** @AXx20 | 5.00% | ✓ |
+  **Why the cell-relative metrics fail: the original's grid is FINER than ours** (its course is
+  more, smaller cells), so the same marble legitimately spans a different number of cells/diamonds.
+  Only a fraction of the screen — what the player actually sees — is comparable between two games
+  with different grid resolutions.
+  Also derived (for reference, do NOT build on it): if the original's floor diamond really is one
+  cell with axis-aligned diagonals 35 x 17.3 px, its basis would be AXx=17.5, AXy=8.65,
+  AUx=-17.5, AUy=8.65 — a symmetric 2:1 isometric grid, i.e. a SHALLOWER down-course axis than our
+  (-10,14). Unverified; our steeper axis is a deliberate deviation unless a better measurement
+  turns up.
+  Verified at r=0.80: bots reach every goal with **0 deaths**, full six-race playthrough reaches
+  the ending, trap sweep clean.
 - **Performance is not a feel problem**: `perf.mjs` measures real rAF frame times per race —
   all six sit at a median 16.6-16.7 ms (60 fps), p95 ~17 ms, worst 19.6 ms, even in software
   rendering. NOTE the probe must carry a generation guard or each race adds another rAF loop and
