@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.73.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.74.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,17 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.74.0 (2026-07-28) — realistic pass 4: the floor arrows read as PAINT, not decals.**
+  A flat opaque fill is what makes a floor marking look like a vector sticker laid on top of
+  the scene. Real paint sits IN the surface, so the arrows now:
+  - let the floor's checker and shading show through (the fill is a translucent ramp, not a
+    solid) — which also means they pick up the cast shadows and ambient occlusion underneath
+    for free, instead of floating above them at constant brightness;
+  - **wear thinner at the tail** (60% alpha) than at the head (82-88%), where a marking would
+    see the most traffic;
+  - meet the floor along a **soft dark seam** rather than a razor edge.
+  - The munchers already used radial gradients and needed no work — checked before changing.
+  - All six races render clean.
 - **v0.73.0 (2026-07-28) — realistic pass 3: round tubes, atmospheric depth.**
   - **`tube()` — cylindrical shading for the rails and arches.** Canvas cannot put a gradient
     ACROSS a stroke's width, so the cylinder is built from concentric passes: dark rim, body,

@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.73.0';
+const VERSION = '0.74.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -1482,11 +1482,18 @@ function floorArrow(g,ox,oy,v,u,turn,len){
   const L=len||6.2, W=0.42, HW=1.05, HL=1.6;   // shaft length/half-width, head half-width/length
   g.save(); g.setTransform(AXx,AXy,AUx,AUy,px,py);
   if(turn) g.rotate(turn);
-  g.fillStyle=PAL.arrow||'#aa2222';
-  g.beginPath();
-  g.moveTo(-L/2,-W); g.lineTo(L/2-HL,-W); g.lineTo(L/2-HL,-HW); g.lineTo(L/2,0);
-  g.lineTo(L/2-HL,HW); g.lineTo(L/2-HL,W); g.lineTo(-L/2,W);
-  g.closePath(); g.fill();
+  const shape=()=>{ g.beginPath();
+    g.moveTo(-L/2,-W); g.lineTo(L/2-HL,-W); g.lineTo(L/2-HL,-HW); g.lineTo(L/2,0);
+    g.lineTo(L/2-HL,HW); g.lineTo(L/2-HL,W); g.lineTo(-L/2,W);
+    g.closePath(); };
+  const [ar,ag,ab]=hex2rgb(PAL.arrow||'#aa2222');
+  const wear=g.createLinearGradient(-L/2,0,L/2,0);
+  wear.addColorStop(0,   `rgba(${ar},${ag},${ab},.60)`);   // worn thin at the tail
+  wear.addColorStop(0.38,`rgba(${ar},${ag},${ab},.88)`);
+  wear.addColorStop(1,   `rgba(${ar},${ag},${ab},.82)`);
+  g.strokeStyle='rgba(0,0,0,.20)'; g.lineWidth=0.16; g.lineJoin='round';
+  shape(); g.stroke();                                     // soft seam into the floor
+  g.fillStyle=wear; shape(); g.fill();
   g.setTransform(1,0,0,1,0,0); g.restore();
 }
 function drawMarbleG(g,m){
