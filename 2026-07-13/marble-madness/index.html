@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.93.0';
+const VERSION = '0.94.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -64,13 +64,25 @@ const rndReset = () => { _seed = 0x2545f491; };
 const GS = 3;                                 // cells per authored world unit
 /* Cells per drawn checker diamond. MEASURED, not chosen: the give-away that our board did
    not read as Marble Madness was the marble-to-tile ratio. Autocorrelating a row of floor
-   gives a checker period of 61 px on the reference's 1110 px screen against a 55 px marble
-   - the marble is 0.90 of a period, i.e. under two diamonds wide. Ours was 2.62 periods,
-   so the floor was a fine mesh the marble dwarfed. TSZ 2 -> 6 scales the diamond 3x and
-   lands the ratio at 0.87. Purely cosmetic: TSZ only feeds checker parity and grid lines
-   (see drawCellC), never the heightfield or physics, and at GS=3 it makes one diamond
-   exactly two authored world units so it still aligns with course features. */
-const TSZ = 6;
+   compares the marble against the diamond WIDTH.
+
+   The geometry that makes the reference measurable: moving (+1v, -1u) shifts one diamond
+   width right at CONSTANT screen y (dx = 2*AXx, dy = 0) and leaves checker parity unchanged,
+   because parity is (floor(v/TSZ)+floor(u/TSZ))%2 and the two terms move opposite ways. So
+   the horizontal colour period IS one diamond width - not two, as v0.93.0 assumed. Ours is
+   exact from the constants: diamond = 2*AXx*TSZ/GS, marble = 2*r*AXx.
+
+       original   diamond 61 px / 1110 px screen,  marble 55 px  ->  0.90
+       TSZ=2      diamond 26.7 px / 640 px screen, marble 32 px  ->  1.20   (33% out)
+       TSZ=3      diamond 40 px / 640 px screen,   marble 32 px  ->  0.80   (11% out) <- best
+       TSZ=6      diamond 80 px                                  ->  0.40   (v0.93.0, wrong)
+
+   Screen-relative this also lands: diamond 6.25% of width against the reference's 5.50%,
+   marble 5.00% against 4.95%. An earlier "our view is 1.7x too zoomed" reading came from a
+   marble bounding box that had swallowed the adjacent red rails - the zoom was always fine.
+   At GS=3, TSZ=3 makes one diamond exactly one authored world unit. Purely cosmetic: TSZ
+   feeds only checker parity and grid lines (drawCellC), never heightfield or physics. */
+const TSZ = 3;
 const gi = x => Math.round(x*GS);            // inclusive range START -> cell index
 const ge = x => Math.round((x+1)*GS)-1;      // inclusive range END   -> cell index
 /* ---------- projection basis (trimetric-ish; tune vs reference later) ---------- */
@@ -816,7 +828,13 @@ function drawCellC(g,v,u,ox,oy,c){
     if(c.tex==='grid'&&PAL.checker){
       // the darker seam marks DIAMOND boundaries, not every cell — so only the two
       // edges of this cell that lie on a tile boundary get stroked
-      g.strokeStyle=PAL.line; g.lineWidth=1; g.beginPath();
+      /* Seam width is MEASURED, not chosen. Of the #666666 pixels on the reference's floor,
+         91% lie within 3 px of a lighter pixel — they are mortar, not shading — and their
+         most common horizontal run is 2 px. This corrects v0.93.0's reading, which blamed
+         the missing #666666 (20% of the reference floor against our 3%) on terrain
+         undulation we had not built. The floor is flat; we were simply drawing the mortar
+         as a hairline. */
+      g.strokeStyle=PAL.line; g.lineWidth=2; g.beginPath();
       if(v%TSZ===0){ g.moveTo(x00,y00); g.lineTo(x01,y01); }
       if(u%TSZ===0){ g.moveTo(x00,y00); g.lineTo(x10,y10); }
       g.stroke();

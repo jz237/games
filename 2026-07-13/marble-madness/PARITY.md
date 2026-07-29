@@ -1556,7 +1556,48 @@ symlink to the source of record. Verify that the thing you measured is the thing
 4. **Mountain** — original has white peaks with striped red/orange/yellow flanks; ours is grey rock.
 5. **Arrows** — original `#882222` with a lighter core; ours pale pink.
 
-## v0.93.0 — THE SCALE THAT MADE THE BOARD WRONG (2026-07-29)
+## v0.94.0 — SEAM MORTAR, AND A CORRECTION TO v0.93.0 (2026-07-29)
+
+**Two v0.93.0 conclusions were wrong. Both were wrong the same way: comparing a number taken
+from the reference against a number taken differently from our render.**
+
+**1. The missing #666666 is MORTAR, not terrain.** v0.93.0 blamed the gap (reference floor 20%
+#666666, ours 3%) on undulating terrain we had not built. Test: of the reference's #666666
+floor pixels, **91% lie within 3 px of a lighter pixel** and their most common horizontal run
+is 2 px. They are seam mortar. The practice floor is FLAT - the scalloped far edge is the
+plateau's sawtooth outline in plan, confirmed by magnifying the silhouette, where the boundary
+is a clean staircase along uniform diamond edges. Our seam was `lineWidth=1`; it is now 2.
+
+**2. TSZ=6 was a 2x overshoot.** The "marble / checker period" ratio behind it compared the
+reference's colour-alternation period against our seam lattice - different features. The
+geometry that makes this measurable: moving **(+1v, -1u) shifts one diamond width right at
+constant screen y and leaves checker parity unchanged**, so the horizontal colour period IS one
+diamond width, not two. With ours exact from the constants (diamond = 2*AXx*TSZ/GS,
+marble = 2*r*AXx):
+
+| | diamond | marble | marble/diamond |
+|---|---|---|---|
+| original | 61 px / 1110 screen | 55 px | **0.90** |
+| TSZ=2 | 26.7 px / 640 | 32 px | 1.20 (33% out) |
+| **TSZ=3** | **40 px / 640** | **32 px** | **0.80 (11% out)** |
+| TSZ=6 (v0.93.0) | 80 px | 32 px | 0.40 |
+
+Screen-relative it lands too: diamond 6.25% of width vs 5.50%, marble 5.00% vs 4.95%. The
+v0.93.0 claim that "our view is 1.7x too zoomed" is also **withdrawn** - it came from a marble
+bounding box that had swallowed the adjacent red rails. The zoom was always fine.
+
+*Lesson, the same one twice: a ratio is only meaningful if BOTH terms were measured the same
+way. Prefer exact values from the constants for our side, and derive the reference side from
+geometry you can state, not from whatever a detector happened to lock onto.*
+
+Palette now tracks the reference closely - **16 colours cover 90%** of our frame (real hardware
+is ~16), top entries #bbbbbb 16% / #882222 12% / #dddddd 9% / #999999 7% / #888888 4% against
+the reference's #bbbbbb 15% / #999999 11% / #666666 9% / #dddddd 7% / #888888 4%.
+
+Control: all three bot races reproduce EXACTLY twice over (v0.93.0's seeded RNG), race 0
+unchanged at goal / 0 deaths / 5190.
+
+## v0.93.0 — SCALE AND SEEDED RNG (2026-07-29)
 
 The user's complaint was "the board looks nothing like the original". Measured against the
 footage, the dominant cause is a single ratio.
