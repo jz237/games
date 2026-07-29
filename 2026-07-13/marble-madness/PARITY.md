@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.84.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.85.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,28 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.85.0 (2026-07-28) — AUDIO RIG BUILT; practice music retuned from measurement.**
+  Sound was the last untouched area. The same method as the visuals now applies to it.
+  - **CAPTURING THE ORIGINAL'S AUDIO.** FS-UAE does not use SDL for sound, so `SDL_AUDIODRIVER=disk`
+    does nothing (tried first, silently produced no file). It links **OpenAL**, and OpenAL Soft
+    has a wave-writer backend. Recipe:
+    ```
+    ALSOFT_CONF=<conf with [general] drivers=wave / [wave] file=...>  ALSOFT_DRIVERS=wave  fs-uae ...
+    ```
+    It writes float WAV, which python's `wave` module rejects (`unknown extended format`) —
+    convert with `ffmpeg -acodec pcm_s16le` first.
+  - **`tools/notes.py`** — Goertzel note-scan over C2..C7. Goertzel rather than an FFT because
+    there is no numpy on this box and only ~60 known frequencies matter.
+  - **MEASURED, practice race**: **F#4 = 369 Hz is present in EVERY analysis window**, with
+    harmonics at F#5/F#6 and a recurring C# (the fifth). So the race sits in **F# over a
+    sustained F# pedal**. Autocorrelating the RMS envelope gives a **1.94 s bar => ~124 BPM**.
+    Ours was in **C at 112 BPM with no drone at all**. Now transposed +6, retimed, and given a
+    held F#4 pedal channel.
+  - The title screen is nearly silent (rms ~169 against ~1500 in race) — **the Amiga title
+    probably has no music**. Do not add any until that is confirmed either way.
+  - Clean-room unchanged: the capture is a measuring instrument. Nothing from it is shipped or
+    committed; the music is re-synthesised to match measured pitch and tempo.
+  - All six tracks load, music engine clean, six races render clean.
 - **v0.84.0 (2026-07-28) — THE MARBLE WAS SUNK INTO THE FLOOR (user-reported).**
   `marbleScreen()` lifted the ball off its contact point by `r*AZ*0.55`. But the ball is DRAWN
   with screen radius `r*AXx`, and for a sphere to REST on a surface the lift must equal that
