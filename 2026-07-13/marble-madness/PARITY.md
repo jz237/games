@@ -1556,6 +1556,50 @@ symlink to the source of record. Verify that the thing you measured is the thing
 4. **Mountain** — original has white peaks with striped red/orange/yellow flanks; ours is grey rock.
 5. **Arrows** — original `#882222` with a lighter core; ours pale pink.
 
+## v0.93.0 — THE SCALE THAT MADE THE BOARD WRONG (2026-07-29)
+
+The user's complaint was "the board looks nothing like the original". Measured against the
+footage, the dominant cause is a single ratio.
+
+**Marble-to-tile scale.** Autocorrelating a row of floor gives the checker period; comparing it
+to the marble's measured width is resolution-independent:
+
+| | original | ours (v0.92.0) | ours (v0.93.0) |
+|---|---|---|---|
+| checker period | 61 px / 1110 wide | 21 px / 640 wide | 63 px / 640 wide |
+| marble width | 55 px | 55 px | 65 px |
+| **marble / period** | **0.90** | **2.62** | **1.03** |
+
+Our floor was a fine mesh the marble dwarfed; the original's marble is under two diamonds wide,
+which is what gives the board its chunky, readable look. Fixed by `TSZ` 2 -> 6 (cells per drawn
+checker diamond). TSZ feeds only checker parity and grid lines, never the heightfield, and at
+GS=3 one diamond is exactly two authored world units so it still aligns with course features.
+
+**Floor palette.** The original's floor is FOUR greys, not a ramp: #bbbbbb 31%, #999999 23%,
+#666666 20%, #dddddd 15%, while the steps between them (#cccccc 0.12%, #aaaaaa 0.35%) are
+scaler noise it never uses. Ours ran #dddddd/#cccccc/#bbbbbb — three adjacent steps, hence the
+washed-out pale board. Now: checker pair dd/bb, seam a solid #666666, slope shading tripled
+(it was +/-10-15%, far too gentle for a floor that should span dd to 66), and `floorSnap()`
+locks the floor to its own four entries. Floor greys went bb:27/aa:20/dd:18/cc:15 to
+**bb:45 / dd:25 / 99:15** with aa+88 down to 7% combined.
+
+The residual gap — ours 99:15%/66:3% against the reference's 23%/20% — is *terrain*, not
+palette: the original's practice floor visibly undulates and ours is nearly flat. Shading
+cannot darken a slope that is not there. That is the course-geometry item below.
+
+**Seeded gameplay RNG.** Race 4 returned u=23.3 then u=31.4 on IDENTICAL code — hazard motion
+called `Math.random()` inside the physics step, so no regression check on that race meant
+anything and the race was unrepeatable for a player too (the original's hazards run fixed
+patterns). `rnd()` is a mulberry32 reset by `loadRace`; cosmetic randomness (dust, shards,
+confetti, audio noise) deliberately still uses `Math.random()` so it cannot consume from the
+seeded stream. All three bot races now reproduce exactly, twice over.
+
+*Lesson: when a control run moves, re-run the UNCHANGED code before blaming the change. Two
+identical runs would have saved the investigation; one run cannot tell a regression from a
+coin flip.*
+
+Control after all of the above: race 0 goal / 0 deaths / 5190 — unchanged.
+
 ## Lessons (STANDING)
 - Commit source+ledger every iteration (two total-loss events: pre-v0.2, 2026-07-27).
 - Python edit scripts: `assert old in s` for EVERY replacement (silent no-ops bit twice).
