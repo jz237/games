@@ -1578,6 +1578,33 @@ New reusable tools (in `game-refs/tools/`, outside all repos):
 `adfls.py` (walk/extract an AmigaDOS OFS volume), `hunks.py` (list an Amiga executable's hunks
 with per-hunk entropy), `palettes.py` (print all six colour tables), `stitch_course.py`.
 
+## v0.99.0 — THE OPENING FLANKS ARE RAMPS, NOT ARCHES (2026-07-29)
+
+First structural change authored FROM the course map rather than from a guess.
+
+Magnifying the left flanking structure on `COURSE-MAP-practice.png` shows it is a **triangular
+wedge**, tall at the outboard end and tapering to a point inboard, with a red tube rail along its
+sloping top edge and a post at the tall end. The giveaway is the striped side face: its bands get
+shorter across the structure (dark red, dark red, orange, yellow, yellow) and finish at a POINT.
+That is a wedge descending - not the flat platform under an arch, which is what we had since
+iteration 25. The right one mirrors it, so both taper inward toward the course centre.
+
+    slab(4,6,7,8,12.9)  ->  rampV(4,6,8,8,14.2,12)     left, tall outboard
+    slab(16,6,19,8,12.9) -> rampV(16,6,20,8,12,14.2)   right, mirrored
+    archGate at [5.5,8] and [17.5,8]  ->  railing along each ramp's sloping top edge
+
+Control: race 0 still reaches goal with 0 deaths (5180 / 41.4 s against 5190 / 40.1 s - the
+terrain genuinely changed here, so a small delta is correct, not a regression). Races 1 and 4
+unchanged.
+
+**Still wrong, visible in the shipped render:** only the LEFT ramp is in frame at the start and
+the opening is not symmetric, where the reference has both gates well inside the frame at equal
+depth. So the opening's placement in v is off, not just the structures' shape. The map has the
+positions - measure the two gates' pixel centres and invert the projection (ground features, so
+dz=0: `dv-du = dx/30.5`, `dv+du = dy/18.3`) rather than adjusting by eye.
+
+Arches at u=33 and u=66 are left alone - those sections are not mapped yet.
+
 ## FIRST REAL COURSE MAP (2026-07-29)
 
 **`captures/ref-practice/COURSE-MAP-practice.png` is a clean stitched map of the real practice
