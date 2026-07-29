@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.86.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.87.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,24 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.87.0 (2026-07-28) — kick density measured; the bass line is NOT measurable from this capture.**
+  - **Kick**: low-frequency transients in the real race audio land at 16ths 18/19, 36/37 and 52.
+    A kick lasts ~100 ms against a 121 ms sixteenth, so each PAIR is **one hit spanning two
+    analysis windows** — roughly **one kick per bar**, 16-18 sixteenths apart. Ours fired every
+    8 sixteenths, twice per bar: double the original. Now `k:[0,16,32,48]`.
+  - **THE BASS LINE CANNOT BE READ FROM THIS CAPTURE, and a threshold nearly faked it.** Scanning
+    F#2..B3 with a "louder than the median" test returned mostly silence with a few B3/B2/F#2 —
+    which reads as a sparse bass and would have justified gutting our continuous bass channel.
+    That conclusion is an artifact: **a bass playing CONSTANTLY sets the median itself, so
+    nothing can exceed 1.25x it and everything reads as silent.** The test can only ever find
+    notes that stand out from their own average. Combined with the v0.86.0 finding that this
+    register is dominated by kick-drum energy anyway, there is no reliable bass measurement here
+    — so the bass channel is left alone rather than "corrected" toward a detector artifact.
+    **A detector that reports silence for a constant signal is measuring contrast, not content.**
+  - To measure the bass properly a future capture needs the music isolated — ideally a longer
+    stationary recording, and cross-checking any candidate line against a second boot.
+  - Snare and hi-hat remain unmeasured and unchanged; they are ours, not the original's.
+  - All six tracks load, music engine clean, six races render clean.
 - **v0.86.0 (2026-07-28) — the practice melody TRANSCRIBED from the original, note by note.**
   `tools/transcribe.py` walks the captured race audio one 16th note at a time (Goertzel on a
   4x-downsampled signal, bass and lead registers scanned separately so the pedal cannot win
