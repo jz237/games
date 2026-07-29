@@ -1579,8 +1579,15 @@ New reusable tools (in `game-refs/tools/`, outside all repos):
 with per-hunk entropy), `palettes.py` (print all six colour tables), `stitch_course.py`.
 
 **Single remaining blocker for 1:1 geometry: identify the packer on `c/MarbleMadness!.dat`.**
-Next step is to check the loader `/MarbleMadness!` (5864 bytes) - it is small, should be a plain
-hunk exe, and its code will name or reveal the decompressor it calls.
+
+Checked the loader `/MarbleMadness!` and it is the good kind of find: a **plain, unpacked 23-hunk
+executable with its SYMBOL table intact** (`_LoadSeg`, `_AllocMem`, `_CreatePort`, `.L10`..), so
+it can be read directly. The filenames it holds are `c/bootscr`, `c/splash`, `c/xxx`, `c/zzz`,
+`lo-res/paintcan` - it does **not** name `c/MarbleMadness!.dat`, and it imports `_LoadSeg`.
+
+So the load chain runs through **`c/xxx` (6116 B) and `c/zzz` (4948 B)**, which are next. One of
+them is the stage that opens the .dat, and whatever unpacks it is in there - both are small
+enough to read as 68k.
 
 ## v0.98.0 — THE DISK IS READABLE. ALL SIX PALETTES ARE NOW EXACT (2026-07-29)
 
