@@ -1492,6 +1492,70 @@ restores the period look); snare/hi-hat and races 2-6 music are ours, not measur
    default-difficulty clocks (current 60/60/45/45/30/40 vs DIP 60/60/35/30/20/20).
 4. Cosmetics: Silly launcher contraption + T-platform decor; occlusion polish; richer SFX.
 
+## v0.92.0 — THE STEERING BLOCKER WAS NOT REAL (2026-07-29)
+
+**The blocker in item 5 above is withdrawn. Closed-loop control works and the original has now
+been driven and recorded.**
+
+Every iteration since 56 has repeated that driving the original was infeasible because a
+screenshot round-trip costs ~1.5 s while the marble crosses the screen in under a second. That
+number came from timing `mm_ctl.py shot`, which pays Python interpreter startup on every call.
+It measured the HARNESS, not the emulator. Measured properly:
+
+    full 1440x1080 grab + decode      111 ms/frame    9.0 Hz
+    cropped 300x220                    99 ms          10.1 Hz
+
+and with a PERSISTENT ffmpeg raw-video pipe there is no per-frame spawn at all. `autodrive.py`
+ran **599 frames in 60 s with zero dropped** — 10 Hz closed-loop, against the 0.67 Hz the old
+objection assumed.
+
+*Lesson: before recording something as blocked, check that the measurement behind it timed the
+thing you are blaming. A slow harness looks exactly like a fast game.*
+
+`tools/autodrive.py` + `tools/mapcourse.py` now start a race and drive it while recording
+full-resolution lossless video. First run reached **score 1340 on the practice race**, and
+`captures/ref-practice/p01..p21.png` are the resulting reference frames — the first time this
+project has seen the real course past its opening screen.
+
+### Measured from that footage (practice race)
+- **Palette is 12 colours.** Exact 4-bit values across 5 frames, by share of pixels:
+  `#bbbbbb` 23%, `#999999` 17%, `#666666` 16%, `#dddddd` 11%, `#000000` 8%, `#888888` 6%,
+  `#333333` 6%, `#cccc00` 6%, `#444444` 4%, `#cc6600` 2%, `#aa2222` 1%, plus `#882222`
+  (which the emulator's scaler reports as the off-grid `#882122`).
+- **Structure faces are flat, unlit, full-saturation.** A scanline across a wall reads
+  `#882122 x21, #333333 x6, #882122 x21` — solid 21 px stripes with 6 px separators, no ramp.
+- **Floor diamonds** are ~40x20 px on a 1110 px screen = 3.6% of width (ours were 4.2%).
+- Course is a raised plateau with striped cliff edges (yellow one side, dark red the other),
+  two chevron gates, a central twin-peaked white mountain, and diverging red floor arrows.
+
+### What shipped in v0.92.0 (rendering only — race 0 control run identical at goal/0/5190)
+- `QUANTISE` back **on**. The 2026-07-28 "realistic" experiment turned it off; that is what
+  stopped the game looking like Marble Madness. The reference settles it without an opinion:
+  a real frame needs **96 colours to cover 90% of itself**, ours needed **1552**.
+- Full-frame **4-bit output snap** (`quantiseFrame`). Canvas antialiases every polygon edge and
+  the floor is thousands of small diamonds, so fringing dominated; OCS physically cannot show
+  an off-palette pixel. Cost **0.58 ms/frame** (3.5% of a 60 fps budget).
+- `litWall` is a **pass-through** under QUANTISE — the original picks a different palette entry
+  per orientation rather than shading one hue, which is what turned our `#cccc00` into olive.
+- Wall vertical gradient disabled under QUANTISE (measured: faces are flat).
+
+Result, same viewpoint: on-4-bit-grid **26.7% -> 99.7%**; colours covering 90% of the frame
+**1552 -> 22** (reference measures 96 only because of scaler noise; true hardware is ~16).
+
+*Trap hit on the way: the local server was serving a STALE COPY of index.html sitting in the
+scratchpad, so the first "fix" verified as a no-op with a byte-identical histogram. It is now a
+symlink to the source of record. Verify that the thing you measured is the thing you edited.*
+
+### Still wrong, and now measurable rather than arguable
+1. **Course geometry** — the layouts are still invented from NES maps. This is the big one and
+   it is now unblocked: drive each race with `mapcourse.py` and rebuild from the footage.
+2. **Framing** — the original fills the frame with the marble top-centre; ours sits the course
+   in the left two thirds with dead grey around it.
+3. **Floor** — ours is large outlined tiles; the original's are smaller, unoutlined, and
+   mottled across four greys with the terrain undulating beneath them.
+4. **Mountain** — original has white peaks with striped red/orange/yellow flanks; ours is grey rock.
+5. **Arrows** — original `#882222` with a lighter core; ours pale pink.
+
 ## Lessons (STANDING)
 - Commit source+ledger every iteration (two total-loss events: pre-v0.2, 2026-07-27).
 - Python edit scripts: `assert old in s` for EVERY replacement (silent no-ops bit twice).

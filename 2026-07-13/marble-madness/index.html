@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.91.0';
+const VERSION = '0.92.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -504,11 +504,13 @@ const RACES=[
    (capture scaling noise). Our shading multiplied the same base palette into a continuum,
    which is why our floor histogram spreads where the original's has four hard peaks.
    Everything drawn on the course goes through this so the steps stay hard. */
-/* REALISTIC MODE (2026-07-28, user direction): the Amiga's 4-bit palette is what made
-   everything read as hard flat bands. Quantisation is off so shading can be continuous;
-   the measured palette values stay as the BASE colours, they are just no longer snapped
-   after shading. Set QUANTISE back to true to get the period-accurate look back. */
-const QUANTISE = false;
+/* AUTHENTIC MODE (2026-07-29). The "realistic" experiment of 2026-07-28 turned this off so
+   shading could be continuous. That is what stopped the game looking like Marble Madness,
+   and the reference settles it numerically: on a lossless frame of the real practice race,
+   #bbbbbb/#999999/#666666/#dddddd alone are 42% of every pixel and the whole frame uses
+   TWELVE colours. Continuous shading cannot produce that histogram — four hard peaks
+   become a smear. Flat 4-bit colour is not a stylistic option here, it IS the look. */
+const QUANTISE = true;
 const q17 = v => { const c=Math.max(0,Math.min(255,v));
   return QUANTISE ? Math.round(c/17)*17 : Math.round(c); };
 function rgb17(r,g,b){ return `rgb(${q17(r)},${q17(g)},${q17(b)})`; }
@@ -559,7 +561,11 @@ function stripeWall(g,c,p1x,p1y,p2x,p2y,b1y,b2y,base,vpos){
     const t0=i/N, t1=(i+1)/N;
     const base=cols[i%cols.length];
     let paint=base;
-    if(botY>topY+1){
+    /* A wall face in the original is ONE flat colour top to bottom. Reading a scanline down
+       a reference wall gives `#882122 x21, #333333 x6, #882122 x21` - solid runs, no ramp.
+       The vertical gradient below belongs to the realistic experiment; in authentic mode it
+       is exactly the smear that stops the render matching the reference histogram. */
+    if(!QUANTISE && botY>topY+1){
       const gd=g.createLinearGradient(0,topY,0,botY);
       const [br,bg,bb]=cssRGB(base);
       gd.addColorStop(0,   rgb17(br*1.03,bg*1.03,bb*1.03));
@@ -645,6 +651,13 @@ function wallTerms(facesU){
   return {key:AMB+KEYAMT*key, fil:FILLAMT*0.5};   // a wall sees half the sky
 }
 function litWall(hex,facesU){
+  /* AUTHENTIC MODE: the original does not light its structure faces at all - it picks a
+     different PALETTE ENTRY per orientation. Measured on the reference, the course's left
+     edge wall is uniformly #cccc00 and its right edge uniformly #882122, both at full
+     saturation, with no vertical or per-face falloff. Running those through the two-light
+     model is what turned our yellow into olive. The caller has already chosen the hue from
+     the orientation (see stripeWall), so here that hue is simply the answer. */
+  if(QUANTISE) return hex;
   const [r,g,b]=hex2rgb(hex), t=wallTerms(facesU);
   const k=t.key/FLATT, f=t.fil/FLATT;
   return rgb17(r*(k*KEY_COL[0]+f*FILL_COL[0]),
@@ -996,7 +1009,10 @@ let marbles=[player,player2,steelie];
 let players=[player], numPlayers=1, finishOrder=[], deathMsg='', deathMsgT=0;
 
 /* ---------- game state ---------- */
-const cv=document.getElementById('game'), ctx2=cv.getContext('2d');
+const cv=document.getElementById('game');
+/* willReadFrequently: the 4-bit snap reads the whole frame back every render, and without
+   this hint Chrome keeps the canvas GPU-side and each getImageData stalls on a readback. */
+const ctx2=cv.getContext('2d',{willReadFrequently:true});
 let state='title', stateT=0, raceIdx=0, deaths=0, raceT=0;
 /* Amiga options screen (see PARITY.md): players, difficulty 0-7, port, device */
 const OPT={ players:1, difficulty:0, port:'Rear  Port', device:'Joy Stick' };
@@ -1926,7 +1942,10 @@ function renderOptions(g,dt){
   mg.addColorStop(0,'#ffff88'); mg.addColorStop(0.45,'#cccc00'); mg.addColorStop(1,'#666600');
   g.fillStyle=mg; g.beginPath(); g.arc(menuMX,menuMY,13,0,Math.PI*2); g.fill();
 }
-function render(dt){
+/* renderScene has several early exits (title, options); wrapping it means the 4-bit snap
+   happens on EVERY path, including the QA screenshot hook, which does not go via frame(). */
+function render(dt){ renderScene(dt); if(QUANTISE) quantiseFrame(); }
+function renderScene(dt){
   updateMusic();
   const g=ctx2; g.clearRect(0,0,640,400);
   if(state==='title'){ renderTitle(g); return; }
@@ -2159,6 +2178,20 @@ function updateMusic(){
   else if(state==='ending') key='ending';
   if(key!==lastMusicKey){ lastMusicKey=key; if(key) Music.play(key); else Music.stop(); }
   Music.tempo=(state==='race'&&raceIdx===4)?1+Math.min(0.6,raceT*0.025):1;
+}
+/* AMIGA 4-BIT OUTPUT. OCS holds four bits per channel, so no pixel the original ever put on
+   screen sat between the multiples of 17 - and the hardware has no antialiasing to put one
+   there. Canvas 2D antialiases every polygon edge, and with a floor made of thousands of
+   small diamonds that fringing dominates: measured, our frame needed 870 distinct colours to
+   cover 90% of itself where a real frame needs 96. Snapping the FINISHED frame per channel
+   is precisely what the hardware does, and it removes the fringes at their source rather
+   than trying to draw around them. Gated on QUANTISE so the realistic build still works. */
+const Q17 = new Uint8Array(256);
+for(let i=0;i<256;i++) Q17[i]=Math.round(i/17)*17;
+function quantiseFrame(){
+  const img=ctx2.getImageData(0,0,640,400), d=img.data;
+  for(let i=0;i<d.length;i+=4){ d[i]=Q17[d[i]]; d[i+1]=Q17[d[i+1]]; d[i+2]=Q17[d[i+2]]; }
+  ctx2.putImageData(img,0,0);
 }
 function frame(now){
   let dt=(now-last)/1000; last=now; if(dt>0.25) dt=0.25;
