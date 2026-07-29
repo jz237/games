@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.94.0';
+const VERSION = '0.95.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -92,12 +92,21 @@ const ge = x => Math.round((x+1)*GS)-1;      // inclusive range END   -> cell in
    comparable — the original's grid is finer than ours, so the same marble spans a
    different number of cells. Both of those led me to wrong values.
    Here: 2*r*AXx / 640 = 5.0%  ->  r = 0.80 with AXx = 20. */
-let AXx = 20, AXy = 10;       // +v (across): 2:1 down-right
-let AUx = -20, AUy = 10;      // +u (down course): 2:1 down-left, the MIRROR of +v
+/* AXy/AXx is MEASURED at ~0.60, not the 0.50 we assumed. A far-edge segment that runs pure
+   +v projects at exactly this slope, and the reference's plateau silhouette gives:
+       endpoint slope of one clean segment   0.607
+       least squares over that segment       0.634
+       floor tile pitch ratio 22.2 / 37.9    0.586
+   centring on 0.60, against our exact 0.50. Equivalently the original's floor diamond is
+   1.67:1 (its measured pitch is 37.9 x 22.2), where ours was 2:1. v0.91.0 set these axes
+   symmetric off a "measured slope +0.502" - that figure was our own render, not the
+   reference. Symmetry between +v and +u is kept; only the vertical scale changes. */
+let AXx = 20, AXy = 12;       // +v (across): down-right at the measured 0.60
+let AUx = -20, AUy = 12;      // +u (down course): down-left, the MIRROR of +v
 const AZ  = 23;               // pixels per height unit
 let DET = AXx*AUy - AUx*AXy;
 let FLIP = false;             // true when +u renders up-screen (Silly race)
-const BASIS_STD={axx:20,axy:10,aux:-20,auy:10}, BASIS_FLIP={axx:20,axy:10,aux:20,auy:-10};
+const BASIS_STD={axx:20,axy:12,aux:-20,auy:12}, BASIS_FLIP={axx:20,axy:12,aux:20,auy:-12};
 function setBasis(b){ AXx=b.axx; AXy=b.axy; AUx=b.aux; AUy=b.auy;
   DET=AXx*AUy-AUx*AXy; FLIP=AUy<0; }
 function projX(v,u){ return v*AXx + u*AUx; }
@@ -560,7 +569,12 @@ function shadeHex(h,k){ const [r,g,b]=hex2rgb(h); return rgb17(r*k,g*k,b*k); }
    are scaler noise, not colours the game owns. Our shading produced a continuum that the
    4-bit snap then spread over every step, giving washed-out half-tones the reference never
    shows. Snapping the floor to its own four entries is what makes the checker read hard. */
-const FLOOR_RAMP=[0x66,0x99,0xbb,0xdd];
+/* Six entries, not four: the reference also spends #333333 on 6% of the frame and #444444 on
+   4%, and that is where they go - the shaded flank of the twin cones on the centre structure
+   is near-black against a #dddddd lit face, a HARD split with nothing in between. Snapping
+   grey-tinted cells through the same ramp is what turns our cones from grey gradient rock
+   into the original's white spikes. */
+const FLOOR_RAMP=[0x33,0x44,0x66,0x99,0xbb,0xdd];
 function floorSnap(css){
   const [r,g,b]=cssRGB(css); const l=(r*0.299+g*0.587+b*0.114);
   let best=FLOOR_RAMP[0];
@@ -812,8 +826,10 @@ function drawCellC(g,v,u,ox,oy,c){
       if(!c.tint){
         topc=floorSnap(litRGB(alt?PAL.floorAlt:PAL.floorHi, kk/Math.max(1e-6,surfaceShade(c)), c));
       } else {
-        // tinted floors get the same diamond checker in their own hue
-        topc=litRGB(c.tint, kk/Math.max(1e-6,surfaceShade(c))*(alt?0.88:1.06), c);
+        // tinted floors get the same diamond checker in their own hue; GREY tints (the white
+        // cones) go through the floor ramp so they band hard instead of smoothing to rock
+        const tc=litRGB(c.tint, kk/Math.max(1e-6,surfaceShade(c))*(alt?0.88:1.06), c);
+        topc=isGreyCell(c)?floorSnap(tc):tc;
       }
     }
     g.fillStyle=topc; g.strokeStyle=g.fillStyle; g.lineWidth=1; g.beginPath();

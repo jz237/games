@@ -1556,6 +1556,36 @@ symlink to the source of record. Verify that the thing you measured is the thing
 4. **Mountain** — original has white peaks with striped red/orange/yellow flanks; ours is grey rock.
 5. **Arrows** — original `#882222` with a lighter core; ours pale pink.
 
+## v0.95.0 — THE PROJECTION WAS NEVER 2:1 (2026-07-29)
+
+**The original's axonometric is ~5:3, not 2:1.** A far-edge segment that runs pure +v projects
+at exactly AXy/AXx, so the plateau silhouette measures it directly:
+
+    endpoint slope of one clean segment    0.607
+    least squares over that segment        0.634
+    floor tile pitch ratio 22.2 / 37.9     0.586
+    -> ~0.60, against our exact 0.50
+
+Equivalently the reference's floor diamond is 1.71:1 (measured pitch 37.9 x 22.2) where ours
+was 2:1. AXy 10 -> 12 makes ours exactly 40 x 24 = **1.67:1**. Every shape on the board -
+diamonds, cliff faces, cone flanks, the sawtooth edge - was proportioned wrong until now.
+
+**v0.91.0's "floor axes now symmetric 2:1, measured slope +0.502" is withdrawn.** That 0.502
+was measured off OUR OWN RENDER, not the reference. The symmetry between +v and +u it
+established is kept and is correct; only the vertical scale was wrong.
+
+Also this iteration: `FLOOR_RAMP` extended to six entries (#333333 and #444444 are 6% and 4%
+of the reference frame - they are the near-black shaded flank of the centre structure's twin
+cones against a #dddddd lit face, a hard split with nothing between), and grey-tinted cells
+now snap through it so the cones band hard instead of smoothing into grey rock.
+
+*Tooling note: the seam-crossing lattice detector is UNRELIABLE and should not be used again.
+It reports 32 x 8 px for a render whose exact constants give 40 x 24. It also disagreed with
+the reference's own pitch scan. Where our side is concerned, read the constants; the exact
+diamond is 2*AXx x 2*AXy and the exact marble is 2*r*AXx.*
+
+Control: races 0/1/4 identical to v0.94.0 - projection is rendering plus input mapping only.
+
 ## v0.94.0 — SEAM MORTAR, AND A CORRECTION TO v0.93.0 (2026-07-29)
 
 **Two v0.93.0 conclusions were wrong. Both were wrong the same way: comparing a number taken
