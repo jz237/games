@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.95.0';
+const VERSION = '0.96.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -195,8 +195,23 @@ function buildPractice(){ newGrid(24,88);
      FLAT checkerboard plain with a sawtooth far edge, twin white-tipped peaks
      on a stepped centre island, and a raised diamond platform either side. */
   slab(3,0,20,13,12,GRID);
-  for(let v=3;v<=20;v++){                       // three-peak sawtooth far edge
-    const t=((v-3)%6)/6, cut=Math.round(4.5*Math.abs(t-0.5)*2);
+  /* Far edge, MEASURED off the reference silhouette rather than styled. Two facts fix it:
+       - its crests all sit at the SAME screen height (y=61 at x=150, 516 and 888), so the
+         boundary runs along constant v+u, the direction that is horizontal on screen;
+       - one period spans 33.0% of the screen width against our 9.4%, and its amplitude is
+         11.9% against our 28.9%.
+     A boundary along constant v+u that advances +6v then -6u produces exactly that: on
+     screen it goes down-right, up-right, down-right, tracing a level zigzag. So the void
+     above the plain is a DESCENDING STAIRCASE in u, not a sawtooth carved into constant u -
+     which is what we had, and why ours came out three times too fine and twice too deep.
+     Depth is capped at 5 because our opening is COMPRESSED relative to the original's: the
+     side platforms sit at u=6-8, so an uncapped 9-deep staircase carves the ground out from
+     under the left arch and leaves it floating. The reference has clear plain between its far
+     edge and its gates; matching that needs the whole opening re-spaced in u, which is a
+     bigger job than the edge itself. Capped, the staircase is 9.4% of screen width deep
+     against the reference's 11.9%. */
+  for(let v=3;v<=20;v++){
+    const cut=Math.max(0, Math.min(5, 9 - 6*Math.floor((v-3)/6)));
     if(cut>0) carve(v,0,v,cut-1);
   }
   slab(4,6,7,8,12.9,GRID);                      // left diamond platform (under the arch)

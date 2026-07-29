@@ -1556,6 +1556,40 @@ symlink to the source of record. Verify that the thing you measured is the thing
 4. **Mountain** — original has white peaks with striped red/orange/yellow flanks; ours is grey rock.
 5. **Arrows** — original `#882222` with a lighter core; ours pale pink.
 
+## v0.96.0 — THE FAR EDGE RUNS ALONG CONSTANT v+u (2026-07-29)
+
+The plateau's far edge was the wrong SHAPE, not just the wrong size. The reference's crests all
+sit at the same screen height (y=61 at x=150, 516 and 888), which means the boundary runs along
+**constant v+u** - the direction that is horizontal on screen. A boundary that advances +6v then
+-6u traces exactly that: down-right, up-right, down-right, a level zigzag. So the void above the
+plain is a DESCENDING STAIRCASE in u, not a sawtooth carved into constant u.
+
+Silhouettes, traced with identical code on both images:
+
+| | amplitude | crest spacing | crests |
+|---|---|---|---|
+| original | 11.9% of width | 33.0%, 33.5% | 3 |
+| v0.94.0 | 26.1% | 9.4% (x5) | 8 |
+| **v0.96.0** | 28.4% | **31.1%, 25.3%** | **3** |
+
+Crest count and spacing now match. **Amplitude does not, and the number is not clean**: the
+tracer takes the topmost non-black pixel per column, so it measures our whole plateau outline
+including the cliff on the right that the reference does not show at this point in the course.
+Do not chase that 28.4% without first isolating the far edge from the rest of the silhouette.
+
+**Our opening is COMPRESSED in u relative to the original's.** The staircase depth had to be
+capped at 5 because the side platforms sit at u=6-8; an uncapped 9-deep staircase carves the
+ground out from under the left arch and leaves it floating (tried, reverted). The reference has
+clear plain between its far edge and its gates. Matching it needs the whole opening re-spaced
+in u - the gates and centre island pushed further down-course - which is the next real job.
+
+*Trap: the "Depth is capped" paragraph was first pasted AFTER the comment's closing `*/`,
+leaving prose as bare code. The page threw on load and the harness failed at `await open()`
+with no hint that the cause was a syntax error. When the CDP harness dies at open(), suspect
+the build before the harness - Chrome and the server were both fine.*
+
+Control: races 0/1/4 identical - the carve is above the start and does not touch traversal.
+
 ## v0.95.0 — THE PROJECTION WAS NEVER 2:1 (2026-07-29)
 
 **The original's axonometric is ~5:3, not 2:1.** A far-edge segment that runs pure +v projects
