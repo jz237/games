@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.89.0';
+const VERSION = '0.91.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -60,12 +60,12 @@ const ge = x => Math.round((x+1)*GS)-1;      // inclusive range END   -> cell in
    comparable — the original's grid is finer than ours, so the same marble spans a
    different number of cells. Both of those led me to wrong values.
    Here: 2*r*AXx / 640 = 5.0%  ->  r = 0.80 with AXx = 20. */
-let AXx = 20, AXy = 10;       // +v (across): 2:1, a cell ≈ 3.1% of a 640px canvas
-let AUx = -10, AUy = 14;      // +u (down course): steep down-left
+let AXx = 20, AXy = 10;       // +v (across): 2:1 down-right
+let AUx = -20, AUy = 10;      // +u (down course): 2:1 down-left, the MIRROR of +v
 const AZ  = 23;               // pixels per height unit
 let DET = AXx*AUy - AUx*AXy;
 let FLIP = false;             // true when +u renders up-screen (Silly race)
-const BASIS_STD={axx:20,axy:10,aux:-10,auy:14}, BASIS_FLIP={axx:20,axy:10,aux:10,auy:-14};
+const BASIS_STD={axx:20,axy:10,aux:-20,auy:10}, BASIS_FLIP={axx:20,axy:10,aux:20,auy:-10};
 function setBasis(b){ AXx=b.axx; AXy=b.axy; AUx=b.aux; AUy=b.auy;
   DET=AXx*AUy-AUx*AXy; FLIP=AUy<0; }
 function projX(v,u){ return v*AXx + u*AUx; }

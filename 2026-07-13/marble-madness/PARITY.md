@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.89.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.91.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,26 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.91.0 (2026-07-29) — THE BOARD SHAPE FIXED: floor axes are now symmetric 2:1.**
+  User: "the board don't look like the original board." Correct, and the cause was known and
+  deferred since v0.57.0 — I kept fixing surface properties measurable from one screenshot and
+  left the structural one alone.
+  - **MEASURED**: a least-squares fit along a long straight course edge in a lossless capture
+    gives slope **+0.502 — exactly 1:2** — and a slope histogram over the whole frame is
+    **symmetric**, equal peaks either side of zero. Both of the original's floor axes are 2:1
+    mirrors. Ours had `+v=(20,10)` (correct) but `+u=(-10,14)`: steeper, and not a mirror. That
+    is why every platform, wall and tile was the wrong SHAPE. Now `+u=(-20,10)`.
+  - **Rendering-only, proven by a control run.** The same waypoint bot was run against the new
+    and old bases: race 0 goal/0 deaths/5190 and race 1 goal/4 deaths/1270 are **identical** in
+    both. Silly fails in both — that is a property of the rebuilt bot, not of the change.
+  - **THE SCALE IS STILL WRONG AND CANNOT BE FIXED ALONE.** Our tile is ~4.2% of screen width
+    against the measured 2.70%. Scaling the axes to 13/6.5 puts the tile exactly right, but the
+    marble must then grow from r=0.80 to r=1.21 to hold its measured 4.9% — and at that size it
+    **no longer fits the courses**: practice stalls at u=7.3 with 12 of 15 sample windows stuck.
+    Tried, measured, reverted. The scale needs the six courses widened first.
+  - **Remaining board gap, from the side-by-side**: the original's opening is an open plain
+    filling the frame; ours is roughly **half as wide** and reads as an island. That is course
+    CONTENT, not projection — the practice course needs widening (and the bot waypoints with it).
 - **v0.89.0 (2026-07-29) — the ROLLING sound measured; UI-state suite rebuilt.**
   - **The roll is a BRIGHT HISS, not a rumble.** Differencing a rolling capture against a
     stationary one (which is music only) isolates what the marble adds: **2000 Hz at 8.6x and
