@@ -233,6 +233,14 @@ function buildPractice(){ newGrid(24,88);
      i.e. the pair sits at (6.7, 17.5) and (17.5, 6.7). */
   rampV(5,16,9,19,14.2,12,GRID);                // left ramp: tall outboard, tapers inboard
   rampV(15,5,19,8,12,14.2,GRID);                // right ramp, the (v,u)-swapped mirror
+  /* CENTRE ZIGGURAT: measured, and the move REVERTED - see PARITY.md. The measurement stands
+     (centred on the axis at v-u = 0.38, and at v+u >= 36.5 against the gates' 24.2, so 12+ units
+     further down-course where ours sat 3 units ABOVE them). But u 14..20 is already occupied by
+     `rampU(3,14,20,19,12,10)`, the next course section, which overwrites anything put there.
+     Our practice course packs its sections into u so tightly that the opening cannot hold its
+     true extent. Placing this correctly requires re-spacing every down-course section in u,
+     which also invalidates the bot waypoints. Left at the old position deliberately rather than
+     shipping a placement the renderer silently discards. */
   slab(9,8,14,11,12.7,GRID);                    // centre island base
   slab(10,8,13,11,13.05,GRID);                  // middle step — the original is a ziggurat
   slab(10,9,13,10,13.4,GRID);                   // its stepped tier

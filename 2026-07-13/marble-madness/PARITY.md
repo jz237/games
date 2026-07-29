@@ -1578,6 +1578,41 @@ New reusable tools (in `game-refs/tools/`, outside all repos):
 `adfls.py` (walk/extract an AmigaDOS OFS volume), `hunks.py` (list an Amiga executable's hunks
 with per-hunk entropy), `palettes.py` (print all six colour tables), `stitch_course.py`.
 
+## ZIGGURAT MEASURED; THE COURSE IS TOO TIGHTLY PACKED IN u TO PLACE IT (2026-07-29)
+
+Segmented the cliff out (bound the search to y < 785, above where the cliff's stripes begin) and
+confirmed the cones by eye at 2x first. **The earlier x=794 "apex" was indeed a false positive** -
+the real cones sit at map x ~405 and ~605, 200 px apart, midpoint 505 against the gate axis at
+518. Essentially on the axis, as they must be.
+
+Clean measurement of the ziggurat, via `mapworld.py`:
+
+| | value | check |
+|---|---|---|
+| footprint centre | **v-u = 0.38** | on the axis, to measurement error - the test a symmetric structure must pass |
+| depth | **v+u >= 36.5** | against the gate pair's 24.2, so **12+ units further down-course** |
+| half-extent | 4.75 units | |
+| cone separation | 200 px = 3.28 units of v-u | so +/-1.64 either side of the axis |
+
+**Ours sits at v+u = 21 - three units ABOVE the gates. The order of the first two landmarks is
+inverted.** That is a real, measured defect.
+
+**But it cannot be fixed in isolation, and the attempt was reverted.** Moving the ziggurat to
+u 14..20 puts it inside `rampU(3,14,20,19,12,10)` - the next course section - which overwrites
+it. A camera warp to (12,12) showed empty plain where the structure should have been: the
+renderer had silently discarded it. Shipping that would have meant shipping a comment claiming
+something the code did not do.
+
+**The underlying problem, stated plainly: our practice course packs its sections into u far more
+tightly than the original does.** The opening alone needs u out to ~24 (gates at u=17.5, ziggurat
+centred near u=18) where ours hands the whole range past u=13 to the next section. Every
+structural correction from here collides with this. **The next real job is to re-space
+buildPractice in u** - push every down-course section out to make room for the opening at its
+measured extent - which also means re-deriving the race-0 bot waypoints, since those are
+expressed in u.
+
+Control after revert: race 0 goal / 0 deaths / 5150 at 44.6 s, identical to the v1.0.0 baseline.
+
 ## MEASUREMENT TOOL, AND A CHANGE DELIBERATELY NOT SHIPPED (2026-07-29)
 
 `game-refs/tools/mapworld.py` converts a pixel on the stitched course map to world (v,u), with
