@@ -1578,7 +1578,40 @@ New reusable tools (in `game-refs/tools/`, outside all repos):
 `adfls.py` (walk/extract an AmigaDOS OFS volume), `hunks.py` (list an Amiga executable's hunks
 with per-hunk entropy), `palettes.py` (print all six colour tables), `stitch_course.py`.
 
-**Single remaining blocker for 1:1 geometry: identify the packer on `c/MarbleMadness!.dat`.**
+## GEOMETRY: THE FILE ROUTE IS CLOSED. GET IT FROM RAM INSTEAD (2026-07-29)
+
+**Every plainly-named data file on the disk has now been identified, and none holds the course
+geometry.** Recording this so no future iteration re-opens them:
+
+| file | what it actually is |
+|---|---|
+| `*.ilb` | **IFF ILBM pictures.** `c/bootscr` is an ILBM loader - `_GetPicture`, `_GetCMAP`, `_GetBODY`, `_UnPackRow`, and the `FORM`/`BMHD`/`CMAP`/`BODY` tags. The extension is ILBM truncated. ByteRun1 RLE. |
+| `*obsc.vlb` | **precomputed blitter/copper lists.** 38% `0xff00` + 41% `0x00ff` is byte-alternating `ff 00` read at two alignments, and the recurring constants `0x0040 0x0080 0x0100` are blitter register offsets. NO 2D stride at any width, so not a height field - tested. |
+| `*.mlb` | compressed graphics; header offsets are unpack DESTINATIONS past the file end. Only the palette at 0x17 is plaintext (which is what v0.98.0 used). Unpacks to 4 planes x 6512 B = 352x148 at 16 colours - a TILE SHEET, not a whole course. |
+| `marbdat` | sprite/animation table + a score table |
+| `c/xxx` (6116 B) | **packed** - same signature as the .dat: HUNK_HEADER then noise |
+| `c/zzz` (4948 B) | plain; a thin `_Open`/`_Read`/`_AllocMem` file loader |
+| `/MarbleMadness!` | plain, 23 hunks, symbols intact; loads bootscr/splash/xxx/zzz |
+
+So the course data exists **only in unpacked form at runtime**, and there is no 68k disassembler
+on this box (no capstone, no m68k objdump, no vda68k) to find the depacker in `xxx`.
+
+**Therefore: dump it out of the emulator's RAM.** The game unpacks itself; a memory image of a
+loaded course contains the geometry with no depacker required. Two routes, both verified
+available:
+1. **`console_debugger`** - this fs-uae build has it (`strings` shows `console_debugger`,
+   `hot key: enter debugger`, `Activated debugger`). The UAE debugger's `S <file> <addr> <len>`
+   saves a memory range straight to disk. Run fs-uae with stdin on a pipe, drive into a race
+   with the existing rig, then dump chip RAM.
+2. **ptrace a CHILD.** `/proc/sys/kernel/yama/ptrace_scope` is 1, so attaching to the
+   already-running fs-uae is denied - but a parent may read its own child's `/proc/<pid>/mem`.
+   Launch fs-uae from the dumper process.
+
+**Search key for locating the data in a dump: the practice palette**, whose exact 16 OCS words
+are already known from v0.98.0 (`0000 0333 0444 0666 0999 0bbb 0ddd 0822 0c60 0cc0 0622 0a22
+0d33 0f88`). Find those and the course structures are adjacent.
+
+*Old note superseded:* identify the packer on `c/MarbleMadness!.dat`.
 
 Checked the loader `/MarbleMadness!` and it is the good kind of find: a **plain, unpacked 23-hunk
 executable with its SYMBOL table intact** (`_LoadSeg`, `_AllocMem`, `_CreatePort`, `.L10`..), so
