@@ -1578,6 +1578,51 @@ New reusable tools (in `game-refs/tools/`, outside all repos):
 `adfls.py` (walk/extract an AmigaDOS OFS volume), `hunks.py` (list an Amiga executable's hunks
 with per-hunk entropy), `palettes.py` (print all six colour tables), `stitch_course.py`.
 
+## v1.1.0 — PRACTICE COURSE RE-AUTHORED IN THE COURSE'S OWN FRAME (2026-07-29)
+
+**The diagonal rewrite is done.** The practice course is now authored in `(l, d)` - lateral and
+down-course - from `COURSE-MAP-practice.png`, and for the first time its composition matches the
+original's.
+
+New primitives (additive; nothing else touched):
+
+    DOFF = 12,  v = d + l + DOFF,  u = d - l + DOFF
+    dcells / dsurf / dslab / dcarve / dramp / drampL / dcone
+
+`dsurf` evaluates height at each cell's **four corners**, not once per cell. The first version set
+all four to one value, which makes every cell a flat plateau, so slopes rendered as a staircase of
+disconnected fragments. rampU/rampV already did this for the u-frame.
+
+### Verification, all four objective
+
+| check | before | after |
+|---|---|---|
+| horizontal drift over the mapped span | **660 px** | **0 px** |
+| flanking pair at equal screen depth | no (v+u 13 vs 25) | **yes, both 24.2** |
+| left route to goal | n/a | **goal, 0 deaths, d=68.7, t=46.6** |
+| right route to goal | n/a | **goal, 0 deaths, d=68.6, t=46.6** |
+
+The 0-px drift is the whole point: `AXx + AUx = 0` by construction, so a course authored along d
+*cannot* drift sideways. And the two side routes agreeing to 0.1 in d and exactly in time is the
+symmetry the original has and ours never did.
+
+**Centre route is blocked at d=13.3 - and that is CORRECT.** The ziggurat is an obstacle you go
+around, which is exactly what the reference's diverging floor arrows instruct.
+
+Races 1 and 4 unchanged (goal/1270, timeup/2740). Their higher death counts in `bot2.mjs` are the
+shared counter carrying over from race 0, whose old u-based waypoints now fail by design - **use
+`scratchpad/mm/dbot.mjs` for race 0**, which takes `[[maxD, targetLateral], ...]` waypoints.
+
+### Still wrong, honestly
+1. the far-edge sawtooth is ragged - `dcarve` steps 0.5 in lateral, which does not align to cells;
+2. the wedges' striped faces only show at the outboard end; the reference's cover the whole face;
+3. the cones are grey, not the reference's white with a hard near-black split;
+4. the ziggurat's terraces do not read as stepped tiers with striped risers;
+5. beyond the far edge ours continues instead of going black - the carve is not removing enough;
+6. our floor carries speckle/mottle the reference does not;
+7. the reference's gates are `|>` chevrons whose rail traces the whole outline; ours is a straight rail.
+8. past d=42 the run-out is OURS, not measured - the map ends where the drive stopped.
+
 ## ROOT CAUSE: THE ORIGINAL'S COURSES RUN ALONG THE v+u DIAGONAL (2026-07-29)
 
 **This is why every placement attempt this session has failed, and it is one fact.**
