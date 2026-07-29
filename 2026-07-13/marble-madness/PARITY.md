@@ -1556,6 +1556,40 @@ symlink to the source of record. Verify that the thing you measured is the thing
 4. **Mountain** — original has white peaks with striped red/orange/yellow flanks; ours is grey rock.
 5. **Arrows** — original `#882222` with a lighter core; ours pale pink.
 
+## v0.97.0 — THE DRIVER FINISHED A RACE; BEGINNER PALETTE MEASURED (2026-07-29)
+
+**The driver now completes courses.** Its marble detector was matching on COLOUR, and the
+striped walls are the same red as the marble and carry yellow too - so it locked onto a wall
+and steering was blind. Stitching the first run's footage exposed the cost plainly: the same
+two chevron gates repeated four times down the map because the view never scrolled. The
+marble had wiggled near the start for a whole minute.
+
+Fix: **find the marble by MOTION.** The walls are painted on the course and the course is
+stationary whenever the camera is, so the only reddish thing that CHANGES between frames is
+the marble. A frame full of changes means the camera scrolled, so that case falls back to
+colour and self-corrects on the next stationary frame. Result: 899 frames, 884 marble hits,
+15 lost - and the run **finished the practice race and entered the BEGINNER RACE** (score
+3840). First time this project has seen course 2.
+
+*Lesson: the stitch was worth building even though its output was useless. A map that shows
+the same landmark four times is unambiguous proof the run never moved - far more useful than
+the driver's own "seen 749, lost 0", which was a detector confidently reporting a wall.*
+
+### BEGINNER RACE palette, measured (captures/ref-beginner/, c2f4.png)
+Both halves of our guessed PAL_BLUE were wrong:
+- walls are **bright cyan #00aaee** (3.1% of frame) with **#0066aa** on the shaded
+  orientation - not the dull navy #333366/#444477 taken off the box-back scans;
+- the floor is the **SAME GREY as the practice course** (#999999 23.6%, #666666 12.1%,
+  #bbbbbb 10.7%) - not the blue-tinted #ccddee/#bbccdd/#aabbdd we had. Only the WALLS carry
+  a race's colour. The floor does sit darker than practice's, hence floorHi bb not dd.
+
+After the fix, ours against the reference: #000000 29.6/31.7, #999999 18.8/23.6,
+#bbbbbb 11.2/10.7, #666666 6.9/12.1, #444444 4.5/8.9. Our blues total 15.2% against 3.5% -
+that is a LAYOUT difference (our beginner course has far more wall area than the original's,
+whose blue structures are sparse open-topped pens on a wide plain), not a palette one.
+
+Control: races 0/1/4 identical.
+
 ## v0.96.0 — THE FAR EDGE RUNS ALONG CONSTANT v+u (2026-07-29)
 
 The plateau's far edge was the wrong SHAPE, not just the wrong size. The reference's crests all

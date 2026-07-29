@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.96.0';
+const VERSION = '0.97.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -535,12 +535,19 @@ function buildUltimate(){ newGrid(26,72);
 const PAL_AMIGA={ stripes:['#882222','#cc6600','#cccc00'], nStripes:1,
   floorHi:'#dddddd', floorLo:'#bbbbbb', floorAlt:'#bbbbbb', line:'#666666',
   checker:true, rail:'#dd3333', arrow:'#aa2222', stripeShift:true };
-/* Sampled from the genuine Amiga screenshots on the box back: the other races
-   use the same diamond checkerboard in near-white / light blue, with dark
-   blue-purple striped cliff faces. */
-const PAL_BLUE={ stripes:['#333366','#444477'], nStripes:1,
-  floorHi:'#ccddee', floorLo:'#bbccdd', floorAlt:'#aabbdd', line:'rgba(68,68,102,.45)',
-  checker:true, rail:'#dd3333', arrow:'#443377' };
+/* MEASURED from the real BEGINNER RACE, reached for the first time on 2026-07-29 by driving
+   the original (captures/ref-beginner/). This replaces values guessed off the box-back scans,
+   and the guesses were wrong in both directions:
+     - walls are BRIGHT CYAN #00aaee (3.1% of the frame) with #0066aa (0.45%) on the shaded
+       orientation, not the dull navy #333366/#444477 we had;
+     - the floor is the SAME GREY as the practice course - #999999 23.6%, #666666 12.1%,
+       #bbbbbb 10.7% - not the blue-tinted #ccddee/#bbccdd/#aabbdd we had. Only the walls
+       carry the colour, exactly as the practice course only carries it on its walls.
+   The floor also sits DARKER than practice's (which is bb 31 / 99 23 / dd 15), hence
+   floorHi bb rather than dd. Seam is the same solid #666666. */
+const PAL_BLUE={ stripes:['#0066aa','#00aaee'], nStripes:1,
+  floorHi:'#bbbbbb', floorLo:'#999999', floorAlt:'#999999', line:'#666666',
+  checker:true, rail:'#dd3333', arrow:'#0066aa' };
 let PAL=PAL_BLUE;
 
 const RACES=[
