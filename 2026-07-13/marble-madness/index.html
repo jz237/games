@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.99.0';
+const VERSION = '1.0.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -194,7 +194,11 @@ function buildPractice(){ newGrid(24,88);
   /* Opening plain rebuilt from the real Amiga screen (iteration 25): a broad
      FLAT checkerboard plain with a sawtooth far edge, twin white-tipped peaks
      on a stepped centre island, and a raised diamond platform either side. */
-  slab(3,0,20,13,12,GRID);
+  /* The opening plain runs to u=20, not u=13. It has to: the flanking gate pair sits at
+     v+u = 24.2 (measured), and a mirror-symmetric on-screen pair has SWAPPED v,u - see the
+     rampV calls below - so one of them stands at u=17.5. The old u=13 plain simply could not
+     host it, which is why only the left ramp was ever in frame. */
+  slab(3,0,20,20,12,GRID);
   /* Far edge, MEASURED off the reference silhouette rather than styled. Two facts fix it:
        - its crests all sit at the SAME screen height (y=61 at x=150, 516 and 888), so the
          boundary runs along constant v+u, the direction that is horizontal on screen;
@@ -220,8 +224,15 @@ function buildPractice(){ newGrid(24,88);
      edge and a post at the tall end. The striped side face is the giveaway - its bands get
      shorter left to right (dark red, dark red, orange, yellow, yellow) and finish at a point,
      which is a wedge descending, not the flat platform under an arch that we had. */
-  rampV(4,6,8,8,14.2,12,GRID);                  // left ramp: tall outboard, tapers inboard
-  rampV(16,6,20,8,12,14.2,GRID);                // right ramp, mirrored
+  /* MEASURED off COURSE-MAP-practice.png. The two gates share a y range (204..400), so they
+     are at equal SCREEN DEPTH, and their centres are 664 px apart. Mirroring about the screen
+     vertical maps (v,u) -> (u,v), because projX = AXx(v-u) negates while projY = AXy(v+u) does
+     not. So an on-screen symmetric pair has equal v+u with v and u SWAPPED - not equal u,
+     which is what every previous build assumed. Solving 664 px = AXx*2*(b-a) and
+     159 px = AXy*((a+b) - 15.5) against the marble start gives b-a = 10.9 and a+b = 24.2,
+     i.e. the pair sits at (6.7, 17.5) and (17.5, 6.7). */
+  rampV(5,16,9,19,14.2,12,GRID);                // left ramp: tall outboard, tapers inboard
+  rampV(15,5,19,8,12,14.2,GRID);                // right ramp, the (v,u)-swapped mirror
   slab(9,8,14,11,12.7,GRID);                    // centre island base
   slab(10,8,13,11,13.05,GRID);                  // middle step — the original is a ziggurat
   slab(10,9,13,10,13.4,GRID);                   // its stepped tier
@@ -263,7 +274,7 @@ function buildPractice(){ newGrid(24,88);
        first point, so start each at the ramp's TALL end, as the reference does. The arch gates
        that used to stand here were wrong - see the rampV pair in buildPractice. Sections 33
        and 66 keep arches for now; they are not mapped yet. */
-    railing(g,ox,oy,4.2,7,7.8,7,1.4); railing(g,ox,oy,19.8,7,16.2,7,1.4);
+    railing(g,ox,oy,5.2,17.5,8.8,17.5,1.4); railing(g,ox,oy,18.8,6.5,15.2,6.5,1.4);
     for(const [av,au] of [[5.5,33],[17.5,33],[5.5,66],[15.5,66]]) archGate(g,ox,oy,av,au);
     // painted arrows on the floor pointing down-course
     for(const [av,au,tn] of [[11.5,26],[6.5,38],[16.5,38],[11.5,58],[8,70]]) floorArrow(g,ox,oy,av,au,tn);
@@ -596,7 +607,12 @@ const PAL_ULT={ stripes:['#660000','#990000','#cc0000'], nStripes:1,
 let PAL=PAL_BLUE;
 
 const RACES=[
-  { name:'PRACTICE RACE', time:60, start:[11.5,4], build:buildPractice, steelie:null, pal:PAL_AMIGA },
+  /* Start ON the symmetry axis. The screen's vertical centre line is v=u, because projX is
+     AXx(v-u) and vanishes there. The old [11.5,4] start had v != u, so the marble began well
+     off-axis (x = +150 px) while the gate pair straddles x = 0 at +/-250 - which is why the
+     opening never looked centred no matter what was done to the structures. Same depth
+     (v+u = 15.5), just moved onto the axis. */
+  { name:'PRACTICE RACE', time:60, start:[7.75,7.75], build:buildPractice, steelie:null, pal:PAL_AMIGA },
   { name:'BEGINNER RACE', time:60, start:[12.5,3], build:buildBeginner, pal:PAL_BLUE,
     steelie:{ v:18, u:68, triggerU:62 } },
   // budgets set so a competent run uses ~1/3 of the clock, leaving a human room:

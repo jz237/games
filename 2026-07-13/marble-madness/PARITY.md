@@ -1578,6 +1578,43 @@ New reusable tools (in `game-refs/tools/`, outside all repos):
 `adfls.py` (walk/extract an AmigaDOS OFS volume), `hunks.py` (list an Amiga executable's hunks
 with per-hunk entropy), `palettes.py` (print all six colour tables), `stitch_course.py`.
 
+## v1.0.0 — ON-SCREEN SYMMETRY MEANS SWAPPED (v,u) (2026-07-29)
+
+**The reason the opening never looked centred, found at last, and it is a projection fact rather
+than a layout mistake.**
+
+Mirroring about the screen's vertical centre negates x and leaves y alone. Since
+`projX = AXx(v-u)` and `projY = AXy(v+u)`, negating x swaps v and u while the depth is
+unchanged. So:
+
+* **an on-screen symmetric PAIR has equal v+u with v and u SWAPPED** - not equal u, which is
+  what every build since iteration 25 assumed;
+* **the screen's centre line is v=u**, because projX vanishes there.
+
+Both had been wrong for the whole project.
+
+Measured from `COURSE-MAP-practice.png`: the two gates share a y range (204..400), so equal
+screen depth, and their centres are 664 px apart. Solving `664 = AXx*2*(b-a)` and
+`159 = AXy*((a+b) - 15.5)` gives `b-a = 10.9`, `a+b = 24.2` - the pair stands at **(6.7, 17.5)
+and (17.5, 6.7)**. Ours were at (6,7) and (18,7), whose v+u are 13 and 25: two completely
+different depths, which is why only one was ever in frame.
+
+Three changes follow:
+
+1. opening plain widened from u=13 to **u=20** - it has to reach u=17.5 to host one of the pair;
+2. the ramps moved to the measured mirror positions, with their rails;
+3. **the start moved onto the axis: [11.5,4] -> [7.75,7.75]**, same depth (v+u = 15.5). The old
+   start had v != u, putting the marble at x = +150 px while the gates straddle x = 0 at +/-250.
+   No amount of adjusting the structures could have centred that.
+
+Control: race 0 goal / 0 deaths (5150 at 44.6 s). Race 1 goal / 4 deaths. Race 4 unchanged.
+
+*Lesson: when a layout keeps looking off-centre no matter how the pieces move, check what
+symmetry MEANS in the projection before moving anything again.*
+
+**Next, and now mechanical:** the ziggurat still sits too close to the start - the reference has
+it below the gates. Same method: measure its footprint centre on the map, invert with dz=0.
+
 ## v0.99.0 — THE OPENING FLANKS ARE RAMPS, NOT ARCHES (2026-07-29)
 
 First structural change authored FROM the course map rather than from a guess.
