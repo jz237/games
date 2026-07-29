@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.87.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.88.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,25 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.88.0 (2026-07-29) — THE PRACTICE TRACK IS NOW THE ORIGINAL'S, FULL LOOP.**
+  A 75 s untouched race was captured (marble stationary, so almost no SFX) and the whole loop
+  transcribed rather than an 8 s fragment.
+  - **THE TEMPO WAS WRONG: 113.4 BPM, not 124.** Fingerprinting each 16th (pitch magnitudes +
+    kick band) and autocorrelating the sequence put the loop at **16.93 s**. At the assumed
+    124 BPM that is 8.75 bars — not a length any loop is written in. If it is really **8 bars**,
+    the tempo must be 113.4. Re-running the same detection at 113.4 puts the top candidate at
+    **exactly 128 sixteenths = 8.00 bars**, with the 1-bar structure also appearing.
+    **A loop length that is not a round number of bars means the TEMPO is wrong, not the loop.**
+    v0.85.0's 124 BPM came from an RMS-envelope autocorrelation that had locked onto something
+    other than the bar.
+  - **Full 8-bar transcription**: 128 sixteenths of lead (77 note runs) and bass (59 runs).
+    Lead pitch set C#4/F#4/G#4/C#5/D5/F#5/C#6; the bass settles onto a sustained F#3 in the
+    second half. `59`/B3 in the bass output is the known artifact bin (v0.86.0 proved B3 is
+    magnitude ~1.0 there), so it is treated as "hold the last real note", not as a note.
+  - **Invented channels removed.** The pulse-arp and the F#4 drone I inferred in v0.85.0 were
+    guesses; the measured lead already carries the sustained F# energy. The track is now lead +
+    bass + drums, all measured, with drums at one kick per bar across 8 bars.
+  - All six tracks load, music engine clean, six races render clean.
 - **v0.87.0 (2026-07-28) — kick density measured; the bass line is NOT measurable from this capture.**
   - **Kick**: low-frequency transients in the real race audio land at 16ths 18/19, 36/37 and 52.
     A kick lasts ~100 ms against a 121 ms sixteenth, so each PAIR is **one hit spanning two
