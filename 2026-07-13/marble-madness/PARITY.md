@@ -1578,6 +1578,44 @@ New reusable tools (in `game-refs/tools/`, outside all repos):
 `adfls.py` (walk/extract an AmigaDOS OFS volume), `hunks.py` (list an Amiga executable's hunks
 with per-hunk entropy), `palettes.py` (print all six colour tables), `stitch_course.py`.
 
+## FIRST REAL COURSE MAP (2026-07-29)
+
+**`captures/ref-practice/COURSE-MAP-practice.png` is a clean stitched map of the real practice
+course** - the artifact eight iterations of screenshot work failed to produce. No repeated
+landmarks, coherent from the start down past the first drop. Readable structure, top to bottom:
+
+1. open plain, sawtooth far edge, two chevron (`|>`) gates at equal depth left and right;
+2. the twin-peaked stepped ziggurat - white cones, red rails along its ridges, striped
+   dark-red/orange/yellow risers - with two floor arrows DIVERGING around it;
+3. the plateau **ends**: a wide drop, striped cliff faces, YELLOW on the left and DARK RED on
+   the right (which independently confirms the v0.63.0 orientation-based stripe rule);
+4. a lower level - two white cone markers on raised blocks, a red conical POST centre, a
+   rail-bounded flat area, and a dark chute descending mid-bottom.
+
+Two things had to be fixed to get it.
+
+**Driver: eight-way wedge sweep.** The old controller alternated Left/Right when stuck, which
+cannot get round the course's diagonal walls - it thrashed for 73% of a run (948 wiggles in
+1299 frames). Sweeping all eight headings drops that to **53% (398 in 749)** and the run ended
+in a course transition.
+
+**Stitcher: reject low-confidence shifts.** The first stitch showed the same chevron gate four
+times because the matcher accepted any best score. Now a shift is only taken if its error is
+well under the error at shift 0 AND beats every rival by a margin - necessary because a
+periodic diamond checker scores nearly as well one whole tile out. Match errors on the good run
+are 1.4-6.1 with consistent 46-50 px shifts.
+
+**Tried and rejected: MOUSE steering.** The manual lists an input device and the arcade used a
+trackball, so analog mouse control looked like the fix for the thrashing. It was worse - 722
+wiggles in 749 frames and the marble **never moved at all** (the motion detector fell back to
+colour and locked onto static walls, which only happens when nothing is moving). The game
+ignores the mouse until its input device is changed in the OPTIONS MENU. Do that first if
+retrying. Also checked and closed: **there is no attract/demo mode** - the game sits on the
+menu indefinitely (recorded 190 s of idle to be sure).
+
+**Next: author the practice course from this map**, then repeat the recipe for the other five.
+The RAM route below is no longer the critical path but stays documented.
+
 ## RAM ACCESS WORKS (2026-07-29) — geometry still not located
 
 `tools/ramdump.py` is built and **verified**: it spawns fs-uae as a CHILD (necessary -
