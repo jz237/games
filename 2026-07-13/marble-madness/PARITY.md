@@ -1578,6 +1578,38 @@ New reusable tools (in `game-refs/tools/`, outside all repos):
 `adfls.py` (walk/extract an AmigaDOS OFS volume), `hunks.py` (list an Amiga executable's hunks
 with per-hunk entropy), `palettes.py` (print all six colour tables), `stitch_course.py`.
 
+## MEASUREMENT TOOL, AND A CHANGE DELIBERATELY NOT SHIPPED (2026-07-29)
+
+`game-refs/tools/mapworld.py` converts a pixel on the stitched course map to world (v,u), with
+the constants and the anchor written down in one place instead of being redone by hand each time:
+
+    dv - du = dx / AXx        AXx = 30.5      (reference px per world unit)
+    dv + du = dy / AXy        AXy = 18.3      (AXy/AXx = 0.60, measured)
+    anchor: map (518, 241) = world (7.75, 7.75)
+
+The anchor is the marble's GROUND point - the bbox BOTTOM, not its centre, because the sprite is
+drawn lifted by its own radius. `mapworld.py find <map>` locates striped structures by their
+stripe colours (the floor never uses them) and reports each one's base in world coordinates.
+
+**Validated**: it independently reproduces v1.0.0's gate pair at (6.4, 17.8) and (17.8, 6.4),
+both v+u = 24.2, from pixels alone.
+
+**Ground features only.** An elevated feature's dy also carries `-AZ*dz`, and AZ for the
+reference is not independently measured, so converting an elevated point silently folds height
+into depth. Measure a structure's ground CONTACT edge.
+
+**The ziggurat placement was measured and NOT shipped.** Two contaminations, both visible in the
+numbers rather than guessed at:
+- the striped band runs unbroken from the ziggurat through the cliff face below it, so its
+  reported base (y=818, v+u=47.0) and widest row (670 px) both include cliff, not structure;
+- of the two "white cone apexes" found at x=426 and x=794, the second is almost certainly a
+  false positive - a rail highlight or shadow edge - because the pair's midpoint would then sit
+  92 px (3.0 units of v-u) OFF the symmetry axis that the gates establish at x=518.
+
+Shipping a placement on those numbers would have repeated this session's recurring failure -
+acting on an under-verified measurement and retracting it. The ziggurat needs the cliff
+segmented out of the striped mass and its cones confirmed by eye at magnification first.
+
 ## v1.0.0 — ON-SCREEN SYMMETRY MEANS SWAPPED (v,u) (2026-07-29)
 
 **The reason the opening never looked centred, found at last, and it is a projection fact rather
