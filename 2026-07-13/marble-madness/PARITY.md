@@ -1578,7 +1578,42 @@ New reusable tools (in `game-refs/tools/`, outside all repos):
 `adfls.py` (walk/extract an AmigaDOS OFS volume), `hunks.py` (list an Amiga executable's hunks
 with per-hunk entropy), `palettes.py` (print all six colour tables), `stitch_course.py`.
 
-## ZIGGURAT MEASURED; THE COURSE IS TOO TIGHTLY PACKED IN u TO PLACE IT (2026-07-29)
+## RE-SPACING ATTEMPTED AND REVERTED — IT IS A RE-AUTHORING JOB, NOT A SHIFT (2026-07-29)
+
+Tried the re-spacing the previous entry called for. **It broke race 0 and was reverted.** What it
+established is worth more than the attempt:
+
+1. **The mechanical shift works.** A scripted transform that adds +12 to every `u >= 14` argument
+   across `slab/carve/rampU/rampV/waves/pyramid` cleanly moved 27 lines. Two traps in it, both
+   caught by printing the diff before writing: it also shifted the opening plain's OWN extent
+   (u1 20 -> 32) and the LEFT GATE RAMP (`rampV(5,16,9,19)` -> `(5,28,9,31)`), which belong to
+   the opening and must not move. *Always diff a blanket numeric transform before trusting it.*
+2. **Placing the ziggurat at its measured position then forces the plain wider in v as well.**
+   Centred on the axis at v=u=18 with the measured half-extent, it spans v 13..23, while the
+   plain reached only v=20 - so there was no gap on its high-v side and every route was forced
+   left. The reference's arrows DIVERGE, so both sides must be passable.
+3. **Widening the plain to v 2..26 (grid 28) made race 0 unplayable** - every steering probe
+   (hold v = 8, 10, 12, 24, 25) ended with 14+ deaths and the marble at v ~1.4-2.3, falling off
+   the plain's left edge.
+4. **One result is genuinely reassuring**: a straight-down run now stops at u=15.5, blocked by the
+   ziggurat. That is CORRECT - the original's centre structure is an obstacle you route around,
+   which is exactly what its diverging floor arrows tell the player.
+
+**Conclusion: buildPractice's geometry is a tightly coupled system** - section u-ranges, the
+plain's v-extent, the sawtooth carve and the bot waypoints all interlock, and moving one moves
+the failure somewhere else. Getting the practice course to the map means **re-authoring it as a
+whole against COURSE-MAP-practice.png**, with the race-0 waypoints re-derived from scratch
+afterwards, not shifting the existing calls. That is one coherent piece of work and should be
+started fresh rather than continued in increments.
+
+The measurements it needs are all recorded and validated: gates at (6.4,17.8)/(17.8,6.4) with
+v+u = 24.2; ziggurat centred on the axis at v+u >= 36.5, half-extent 4.75, cones +/-1.64 off
+axis; far edge a descending staircase along constant v+u with 33% crest spacing; and
+`tools/mapworld.py` to convert any further map pixel.
+
+Control after revert: race 0 goal / 0 deaths / 5150 at 44.6 s - identical to v1.0.0.
+
+## ZIGGURAT MEASURED; THE COURSE IS TOO TIGHTLY PACKED IN u (2026-07-29)
 
 Segmented the cliff out (bound the search to y < 785, above where the cliff's stripes begin) and
 confirmed the cones by eye at 2x first. **The earlier x=794 "apex" was indeed a false positive** -
