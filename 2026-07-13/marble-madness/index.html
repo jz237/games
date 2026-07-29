@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.83.0';
+const VERSION = '0.84.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -1444,7 +1444,8 @@ function physics(dt){
 }
 
 /* ---------- render ---------- */
-function marbleScreen(m){ return { x:projX(m.v,m.u)+offX-camX, y:projY(m.v,m.u,m.z)+offY-camY-m.r*AZ*0.55 }; }
+function marbleScreen(m){ return { x:projX(m.v,m.u)+offX-camX,
+  y:projY(m.v,m.u,m.z)+offY-camY-m.r*AXx }; }
 function addFloater(v,u,z,txt,col){ floaters.push({v,u,z,txt,col:col||'#ffcc33',t:0}); }
 function updateCam(){
   const foc=players.filter(pl=>!pl.out&&!pl.finished&&pl.alive);

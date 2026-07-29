@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.83.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.84.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,20 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.84.0 (2026-07-28) — THE MARBLE WAS SUNK INTO THE FLOOR (user-reported).**
+  `marbleScreen()` lifted the ball off its contact point by `r*AZ*0.55`. But the ball is DRAWN
+  with screen radius `r*AXx`, and for a sphere to REST on a surface the lift must equal that
+  drawn radius — then the bottom of the circle touches the ground point exactly. The old
+  expression mixed the height axis (`AZ`) with a 0.55 fudge and came out **~37% of a radius
+  short**, so the marble sat embedded in the tiles rather than on them.
+  - **The bug hid because both halves were plausible in isolation.** `AZ` is the right axis for
+    converting a height to screen pixels, and 0.55 looks like a deliberate artistic offset. Only
+    relating the lift to the DRAWN radius exposes it. Rule: when something must visually touch a
+    surface, derive the offset from the quantity actually drawn, not from a related constant.
+  - Verified the ball also tracks uneven ground smoothly: rolling across the wave band, the
+    largest per-step height jump is **0.0049 world units**, far below the ~0.05 that would read
+    as a pop. So there was never a stepping problem — only the sinking.
+  - All six races render clean.
 - **v0.83.0 (2026-07-28) — realistic pass 13: acting on the sibling-branch lesson.**
   v0.82.0's defect existed because a rendering rule was fixed in one branch and not its twin.
   So this pass audited every remaining draw path for the same shape of problem:
