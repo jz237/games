@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.85.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.86.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,24 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.86.0 (2026-07-28) — the practice melody TRANSCRIBED from the original, note by note.**
+  `tools/transcribe.py` walks the captured race audio one 16th note at a time (Goertzel on a
+  4x-downsampled signal, bass and lead registers scanned separately so the pedal cannot win
+  every window) and prints a MIDI sequence. 8 s of real race audio = 66 sixteenths, collapsed
+  to **46 note runs**, now the practice lead.
+  - **The pitch set is F#, G#, C#, D** — F#4/G#4/C#5/D5/F#5/C#6 — all within F# minor.
+  - **A wrong reading, caught and corrected.** The bass register reported a constant `B3`, which
+    looked like a B pedal and would have put the whole track in the wrong key. A high-resolution
+    scan of specific frequencies shows **B3 is essentially absent (magnitude 1.0)** while
+    **F#5 = 740 Hz dominates at 53.5** and **B1 = 62 Hz sits at 27** with no harmonic series
+    above it — i.e. the low energy is a KICK DRUM, and the "B3" was the bass scan returning the
+    least-bad bin from a range containing only percussion. **When a detector must return
+    something, check the magnitude before believing the label.**
+  - **Do not smooth measured data before checking what it removes.** A first pass filtered
+    single-16th notes as detector flicker; that deleted **F#5, the loudest tone in the entire
+    spectrum**, and chained neighbours into false half-bar holds. The shipped sequence is raw
+    run-length encoding of the measurement.
+  - All six tracks load, music engine clean, six races render clean.
 - **v0.85.0 (2026-07-28) — AUDIO RIG BUILT; practice music retuned from measurement.**
   Sound was the last untouched area. The same method as the visuals now applies to it.
   - **CAPTURING THE ORIGINAL'S AUDIO.** FS-UAE does not use SDL for sound, so `SDL_AUDIODRIVER=disk`
