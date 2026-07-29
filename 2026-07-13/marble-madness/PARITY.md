@@ -1556,6 +1556,32 @@ symlink to the source of record. Verify that the thing you measured is the thing
 4. **Mountain** — original has white peaks with striped red/orange/yellow flanks; ours is grey rock.
 5. **Arrows** — original `#882222` with a lighter core; ours pale pink.
 
+## DISK SURVEY — WHERE THE GEOMETRY IS NOT (2026-07-29, no version change)
+
+Followed up v0.98.0 by decoding the remaining data files. **No game change shipped this pass**;
+the value is in eliminating leads so no future iteration re-treads them.
+
+| file | verdict |
+|---|---|
+| `*obsc.vlb` | **NOT vectors.** The clean 15-byte records hold only for the first ~90; the rest is `00 ff 00 ff` repeating - single-bitplane MASK data. "obsc" = the mask that clips the marble behind scenery. |
+| `*.ilb` | bitplane data too (entropy 6.23, dominated by ff/fe/fc/c0/3f) |
+| `*.mlb` | **compressed** graphics. Its four header offsets (6566/13078/19590/26102, spacing 6512) end at 32614 - PAST the 27361-byte file - so they are unpack DESTINATIONS, not in-file pointers. The palette at 0x17 is plaintext, which is why v0.98.0 worked. |
+| `marbdat` | a hunk exe with one 1920-byte low-entropy (3.16) table: 9 offsets, then a score table (250 500 750 1000 1500..6000), then a long run of 16-byte records whose byte[11] simply INCREMENTS (0x4d..0x5d+) - a sprite/animation table. |
+| `c/MarbleMadness!.dat` | starts `00 00 03 f3` (HUNK_HEADER) but the next long is noise where a normal exe has 0. **Hunk magic then a packed/encrypted payload.** This is where the geometry is. |
+
+*Correction to my own reading during this pass: I briefly took six consecutive 16-byte records in
+`marbdat` at 1632-1712 as six per-course parameter blocks. They are not - the identical run
+continues to 1904 with the ID byte incrementing straight through. Six consecutive records of a
+long uniform list is not a six-element table; check where the run ENDS before naming it.*
+
+New reusable tools (in `game-refs/tools/`, outside all repos):
+`adfls.py` (walk/extract an AmigaDOS OFS volume), `hunks.py` (list an Amiga executable's hunks
+with per-hunk entropy), `palettes.py` (print all six colour tables), `stitch_course.py`.
+
+**Single remaining blocker for 1:1 geometry: identify the packer on `c/MarbleMadness!.dat`.**
+Next step is to check the loader `/MarbleMadness!` (5864 bytes) - it is small, should be a plain
+hunk exe, and its code will name or reveal the decompressor it calls.
+
 ## v0.98.0 — THE DISK IS READABLE. ALL SIX PALETTES ARE NOW EXACT (2026-07-29)
 
 **The user asked what was blocking a 1:1 level match. The answer was that I had been inferring
