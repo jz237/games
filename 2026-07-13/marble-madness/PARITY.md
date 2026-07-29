@@ -1578,7 +1578,58 @@ New reusable tools (in `game-refs/tools/`, outside all repos):
 `adfls.py` (walk/extract an AmigaDOS OFS volume), `hunks.py` (list an Amiga executable's hunks
 with per-hunk entropy), `palettes.py` (print all six colour tables), `stitch_course.py`.
 
-## RE-SPACING ATTEMPTED AND REVERTED — IT IS A RE-AUTHORING JOB, NOT A SHIFT (2026-07-29)
+## ROOT CAUSE: THE ORIGINAL'S COURSES RUN ALONG THE v+u DIAGONAL (2026-07-29)
+
+**This is why every placement attempt this session has failed, and it is one fact.**
+
+Anchor-free observation: on the course map the two flanking gates occupy the **same screen-y
+band** - left y 204..397, right y 204..400. Since `projY = AXy*(v+u)`, equal screen y means
+**equal v+u**. Two structures at equal *u* with differing *v* would have different v+u and so
+appear at different depths. No anchor, no world conversion, no assumption enters this.
+
+Therefore:
+
+* the original's **lateral** axis is **v-u** (the gates straddle the course along it);
+* the original's **down-course** axis is **v+u** - which is also straight DOWN-SCREEN, consistent
+  with the stitcher measuring pure vertical scroll of 46-50 px per frame and no horizontal
+  component;
+* and this is forced, not stylistic: a diamond floor requires both axes to sit at +/-angle from
+  vertical, so down-screen is necessarily the diagonal. If either axis pointed straight down the
+  floor tiles would be squares.
+
+**Our authoring model uses u as down-course and v as lateral.** It cannot express the above. That
+single mismatch produced every symptom chased this session: the gate pair at different depths, the
+ziggurat above instead of below the gates, the opening that would not centre, and the re-spacing
+that broke race 0 by forcing routes off the plain's edge.
+
+### What fixing it takes
+Not an engine change - the engine is agnostic. A new PRIMITIVE that fills a rectangle in the
+ROTATED frame, since `slab` fills an axis-aligned rectangle in (v,u) which is a diamond in the
+course's own frame:
+
+    function dslab(l0,d0,l1,d1,h,o){          // l = lateral = (v-u)/2, d = downcourse = (v+u)/2
+      for(let u=0;u<CU;u++) for(let v=0;v<CV;v++){
+        const l=(v-u)/2/GS, d=(v+u)/2/GS;
+        if(l>=l0&&l<=l1&&d>=d0&&d<=d1) put(v,u,h,h,h,h,o);
+      }
+    }
+
+Additive and low-risk - it does not touch the engine or the other five courses. buildPractice is
+then re-authored in (lateral, downcourse) against COURSE-MAP-practice.png, and the race-0 bot
+waypoints re-derived afterwards, since those are expressed in u.
+
+**All the measurements this needs are recorded and validated**: gates at v+u = 24.2 with lateral
+separation 10.9 units; ziggurat on the axis at v+u >= 36.5, half-extent 4.75, cones +/-1.64 off
+axis; far edge a descending staircase along constant v+u with 33%-of-width crest spacing; the
+projection at AXy/AXx = 0.60; all six palettes exact from the disk; and `tools/mapworld.py` to
+convert any further map pixel.
+
+**Loop stopped here deliberately.** Incremental fixes cannot resolve an authoring-model mismatch -
+the last four attempts each moved the failure rather than removing it. Re-authoring the course in
+the rotated frame is a single coherent job that should be started fresh, and it is the user's call
+whether to spend on it. v1.0.0 remains live and correct on both hosts.
+
+## RE-SPACING ATTEMPTED AND REVERTED (2026-07-29)
 
 Tried the re-spacing the previous entry called for. **It broke race 0 and was reverted.** What it
 established is worth more than the attempt:
