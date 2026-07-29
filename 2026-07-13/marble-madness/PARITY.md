@@ -1578,7 +1578,38 @@ New reusable tools (in `game-refs/tools/`, outside all repos):
 `adfls.py` (walk/extract an AmigaDOS OFS volume), `hunks.py` (list an Amiga executable's hunks
 with per-hunk entropy), `palettes.py` (print all six colour tables), `stitch_course.py`.
 
-## GEOMETRY: THE FILE ROUTE IS CLOSED. GET IT FROM RAM INSTEAD (2026-07-29)
+## RAM ACCESS WORKS (2026-07-29) — geometry still not located
+
+`tools/ramdump.py` is built and **verified**: it spawns fs-uae as a CHILD (necessary -
+`ptrace_scope` is 1, so attaching to a running emulator is denied but a parent may read its own
+child's `/proc/<pid>/mem`), drives into a race with the existing rig, then scans every rw region
+>= 512 KB for the practice palette's exact OCS words and saves the region containing them.
+
+Result: palette found in exactly two host regions (a 97 MB one at `0xff6000+0x25b2d62` and a
+10 MB one at `0x758b58000000+0xdbbca`), and the 97 MB region dumped to
+`captures/prc.bin` (101 MB).
+
+**What the palette actually locates: the COPPER LIST, not the course.** Immediately before it is
+a table of eight descending 32-bit Amiga pointers spaced 0x808 apart (bitplane pointers,
+0x3a838..0x3b670) and immediately after it are more OCS colour words - the signature of a display
+list. Useful anyway: copper lists live in chip RAM, so this bounds where the Amiga's RAM sits
+inside the host dump.
+
+Scanned the +/-2 MB window around it in 4 KB blocks for a height field (entropy < 4.5 and >55% of
+bytes < 32): **one hit, and it is almost all zeros.** So the geometry is not a small-integer byte
+table there. It may be 16-bit, may be elsewhere, or may not look like a dense array at all -
+guessing its shape is the wrong approach.
+
+**Next step, and it removes the guessing entirely: DIFFERENTIAL DUMPING.** Take one dump with
+PRACTICE loaded and one with BEGINNER loaded, then diff them. The engine code and the copper list
+stay put; the per-course data does not. Whatever differs wholesale IS the course data, whatever
+its format, and no assumption about its shape is needed. `ramdump.py` already does everything
+except take the second dump and diff.
+
+*Note for that work: dump the 10 MB region too, not just the 97 MB one. Two regions hold the
+palette and the smaller one is the likelier candidate for the Amiga's own address space.*
+
+## GEOMETRY: THE FILE ROUTE IS CLOSED (2026-07-29)
 
 **Every plainly-named data file on the disk has now been identified, and none holds the course
 geometry.** Recording this so no future iteration re-opens them:
