@@ -1556,6 +1556,59 @@ symlink to the source of record. Verify that the thing you measured is the thing
 4. **Mountain** — original has white peaks with striped red/orange/yellow flanks; ours is grey rock.
 5. **Arrows** — original `#882222` with a lighter core; ours pale pink.
 
+## v0.98.0 — THE DISK IS READABLE. ALL SIX PALETTES ARE NOW EXACT (2026-07-29)
+
+**The user asked what was blocking a 1:1 level match. The answer was that I had been inferring
+level geometry from screenshots, which is under-determined - a screen pixel is f(v,u,z), two
+equations and three unknowns - when the data is sitting on the disk we already have.**
+
+Every layout figure derived from screenshots has needed retracting: the tile scale twice, the
+"1.7x zoom", the 2:1 projection, the far-edge amplitude. That is the method failing, not bad
+luck.
+
+`mm.adf` is a **plain AmigaDOS OFS volume** named `MarbleMadness!`. `tools/adfls.py` walks it
+and extracts files. 53 entries, and the course data is named plainly:
+
+    practy/beginr/interm/aerial/silly/ultima  .mlb   course graphics + palette (27-36 KB)
+    prc/beg/int/aer/sil/ult + "obsc"          .vlb   per-course vector data, entropy 1.94
+    marbdat.vlb, ooze.vlb, slink.vlb, birdink.vlb    marble and hazard models
+    Prc/Beg/Int/Sil/Ult + "Track"                    per-race music
+    c/MarbleMadness!.dat                             175 KB, entropy 7.97 - PACKED
+
+### What shipped: six exact palettes
+Each `.mlb` opens with four evenly spaced bitplane offsets then **16 words of Amiga OCS 0RGB**.
+`tools/palettes.py` prints all six. The practice table came out IDENTICAL to the one measured
+painstakingly from lossless captures, and the beginner cyans matched the v0.97.0 measurement -
+which is what makes the other four trustworthy without capturing each race.
+
+**The structure is the same in all six: entries 0-6 are the FLOOR RAMP, 7+ are the race's own
+colours.** That is the general form of the v0.97.0 guess. Two races bend it - intermediate tints
+its entire grey ramp OLIVE (#333311 .. #dddd99) and aerial uses #888888/#aaaaaa where the others
+use #999999/#bbbbbb - so `floorSnap` now snaps to the ACTIVE palette's own ramp instead of one
+hard-coded grey list, which is what preserves that distinction.
+
+    PRACTICE      greys        #882222 #cc6600 #cccc00 #662222 #aa2222 #dd3333 #ff8888
+    BEGINNER      greys        #004488 #0066aa #00aaee #333366 #555588 #8888bb #ccccff
+    INTERMEDIATE  OLIVE ramp   #553300 #774411 #995522 #bb6633 + dark greys
+    AERIAL        888/aaa ramp #660000 #992200 #cc4400 #885533..#eebb77
+    SILLY         greys        #886600 #bb9900 #ffff00 #cc6600 #550033 #772222
+    ULTIMATE      greys        #660000 #990000 #cc0000 #663300..#dd9900 #eecccc #eebb33
+
+Races 3-6 had all been falling back to a single guessed PAL_BLUE taken off the box-back scans.
+
+### Still blocking a 1:1 LEVEL match
+1. **Geometry format not yet decoded.** `.mlb` is graphics (4 bitplanes, entropy 6.45, no row
+   stride). The strong lead is `*obsc.vlb`: **entropy 1.94** with clean repeating 14-byte
+   records carrying an incrementing index, and the `.vlb` extension is shared with the marble
+   and hazard MODELS - so `.vlb` is vector/3D data. Decode that and the courses fall out.
+2. **`c/MarbleMadness!.dat` is packed** (entropy 7.97). If the geometry lives there instead, a
+   depacker has to be identified first.
+3. **The driver plays badly** - 948 wiggles in 1299 frames. It reaches the beginner race but
+   thrashes, so footage coverage is poor and races 3-6 need runs actually FINISHED on the clock.
+   Less critical now: the disk is a better source than any recording.
+
+Control: races 0/1/4 identical.
+
 ## v0.97.0 — THE DRIVER FINISHED A RACE; BEGINNER PALETTE MEASURED (2026-07-29)
 
 **The driver now completes courses.** Its marble detector was matching on COLOUR, and the

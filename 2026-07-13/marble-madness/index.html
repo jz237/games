@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.97.0';
+const VERSION = '0.98.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -532,7 +532,12 @@ function buildUltimate(){ newGrid(26,72);
    is why the board read as washed-out pale grey against the reference's chunky checker.
    The seam is solid #666666: at 16% of the floor it is a real palette entry, not a 55%
    alpha tint of one. */
+/* CONFIRMED against the disk 2026-07-29: practy.mlb's colour table is exactly
+   #000000 #333333 #444444 #666666 #999999 #bbbbbb #dddddd #882222 #cc6600 #cccc00
+   #662222 #aa2222 #dd3333 #ff8888 - every value here, plus #662222 and #ff8888 which the
+   screenshot work never isolated. The measurements were right. */
 const PAL_AMIGA={ stripes:['#882222','#cc6600','#cccc00'], nStripes:1,
+  ramp:['#000000','#333333','#444444','#666666','#999999','#bbbbbb','#dddddd'],
   floorHi:'#dddddd', floorLo:'#bbbbbb', floorAlt:'#bbbbbb', line:'#666666',
   checker:true, rail:'#dd3333', arrow:'#aa2222', stripeShift:true };
 /* MEASURED from the real BEGINNER RACE, reached for the first time on 2026-07-29 by driving
@@ -545,24 +550,54 @@ const PAL_AMIGA={ stripes:['#882222','#cc6600','#cccc00'], nStripes:1,
        carry the colour, exactly as the practice course only carries it on its walls.
    The floor also sits DARKER than practice's (which is bb 31 / 99 23 / dd 15), hence
    floorHi bb rather than dd. Seam is the same solid #666666. */
-const PAL_BLUE={ stripes:['#0066aa','#00aaee'], nStripes:1,
+const PAL_BLUE={ stripes:['#004488','#0066aa','#00aaee'], nStripes:1,
+  ramp:['#000000','#333333','#444444','#666666','#999999','#bbbbbb','#dddddd'],
   floorHi:'#bbbbbb', floorLo:'#999999', floorAlt:'#999999', line:'#666666',
-  checker:true, rail:'#dd3333', arrow:'#0066aa' };
+  checker:true, rail:'#8888bb', arrow:'#0066aa' };
+/* ---------- palettes read STRAIGHT OFF THE DISK (2026-07-29) ----------
+   Every value below is the game's own colour table, not a measurement of a screenshot of it.
+   Each course's `<name>.mlb` opens with a small header of four evenly spaced bitplane offsets
+   followed by 16 words of Amiga OCS 0RGB; `tools/adfls.py` reads the AmigaDOS volume and
+   `tools/palettes.py` prints the tables. The practice entries came out identical to the ones
+   painstakingly measured from lossless captures, and the beginner cyans matched too, which is
+   what makes the other four trustworthy without a capture of each.
+
+   The structure is the same in all six: **entries 0-6 are the FLOOR RAMP and 7+ are the
+   race's own colours.** That is the general form of the rule guessed in v0.97.0 ("only the
+   walls carry a race's colour"). Two races bend it - intermediate tints its whole grey ramp
+   olive, and aerial uses #888888/#aaaaaa where the others use #999999/#bbbbbb - so the ramp
+   travels WITH the palette rather than being global. */
+const PAL_INTER={ stripes:['#553300','#774411','#995522'], nStripes:1,
+  ramp:['#000000','#333311','#555533','#777755','#999977','#bbbb99','#dddd99'],
+  floorHi:'#dddd99', floorLo:'#bbbb99', floorAlt:'#bbbb99', line:'#777755',
+  checker:true, rail:'#bb6633', arrow:'#553300' };
+const PAL_AERIAL={ stripes:['#660000','#992200','#cc4400'], nStripes:1,
+  ramp:['#000000','#333333','#444444','#666666','#888888','#aaaaaa','#dddddd'],
+  floorHi:'#dddddd', floorLo:'#aaaaaa', floorAlt:'#aaaaaa', line:'#666666',
+  checker:true, rail:'#ddaa66', arrow:'#992200' };
+const PAL_SILLY={ stripes:['#886600','#bb9900','#ffff00'], nStripes:1,
+  ramp:['#000000','#333333','#444444','#666666','#999999','#bbbbbb','#dddddd'],
+  floorHi:'#dddddd', floorLo:'#bbbbbb', floorAlt:'#bbbbbb', line:'#666666',
+  checker:true, rail:'#cc6600', arrow:'#772222' };
+const PAL_ULT={ stripes:['#660000','#990000','#cc0000'], nStripes:1,
+  ramp:['#000000','#333333','#444444','#666666','#999999','#bbbbbb','#dddddd'],
+  floorHi:'#dddddd', floorLo:'#bbbbbb', floorAlt:'#bbbbbb', line:'#666666',
+  checker:true, rail:'#dd9900', arrow:'#885500' };
 let PAL=PAL_BLUE;
 
 const RACES=[
   { name:'PRACTICE RACE', time:60, start:[11.5,4], build:buildPractice, steelie:null, pal:PAL_AMIGA },
-  { name:'BEGINNER RACE', time:60, start:[12.5,3], build:buildBeginner,
+  { name:'BEGINNER RACE', time:60, start:[12.5,3], build:buildBeginner, pal:PAL_BLUE,
     steelie:{ v:18, u:68, triggerU:62 } },
   // budgets set so a competent run uses ~1/3 of the clock, leaving a human room:
   // intermediate needed 62% and ultimate 50% at the old values (see PARITY.md)
-  { name:'INTERMEDIATE RACE', time:56, start:[6.5,1], build:buildIntermediate,
+  { name:'INTERMEDIATE RACE', time:56, start:[6.5,1], build:buildIntermediate, pal:PAL_INTER,
     steelie:{ v:12, u:56, triggerU:48 } },
   // start on the centre-line the course funnels to (v11-15 by u11), not its edge
-  { name:'AERIAL RACE', time:45, start:[13,1], build:buildAerial, steelie:null },
-  { name:'SILLY RACE', time:30, start:[12.5,1], build:buildSilly, steelie:null, basis:BASIS_FLIP },
+  { name:'AERIAL RACE', time:45, start:[13,1], build:buildAerial, steelie:null, pal:PAL_AERIAL },
+  { name:'SILLY RACE', time:30, start:[12.5,1], build:buildSilly, steelie:null, basis:BASIS_FLIP, pal:PAL_SILLY },
   // likewise: the corridor from u6 is v8-14, so v14 was exactly its right edge
-  { name:'ULTIMATE RACE', time:50, start:[11.5,1], build:buildUltimate,
+  { name:'ULTIMATE RACE', time:50, start:[11.5,1], build:buildUltimate, pal:PAL_ULT,
     steelie:{ v:12, u:35, triggerU:29 }, stars:true },
 ];
 
@@ -596,9 +631,23 @@ function shadeHex(h,k){ const [r,g,b]=hex2rgb(h); return rgb17(r*k,g*k,b*k); }
    is near-black against a #dddddd lit face, a HARD split with nothing in between. Snapping
    grey-tinted cells through the same ramp is what turns our cones from grey gradient rock
    into the original's white spikes. */
+/* The ramp travels with the palette: the disk shows intermediate tinting its whole grey ramp
+   olive (#333311 .. #dddd99) and aerial using #888888/#aaaaaa where the rest use
+   #999999/#bbbbbb. Snapping every race to one hard-coded grey list would flatten exactly the
+   distinction the original draws, so match on LUMA and return the ramp's own entry. */
 const FLOOR_RAMP=[0x33,0x44,0x66,0x99,0xbb,0xdd];
 function floorSnap(css){
   const [r,g,b]=cssRGB(css); const l=(r*0.299+g*0.587+b*0.114);
+  const ramp=PAL.ramp;
+  if(ramp){
+    let best=ramp[1], bd=1e9;
+    for(let i=1;i<ramp.length;i++){
+      const [rr,gg,bb]=hex2rgb(ramp[i]);
+      const d=Math.abs((rr*0.299+gg*0.587+bb*0.114)-l);
+      if(d<bd){ bd=d; best=ramp[i]; }
+    }
+    return best;
+  }
   let best=FLOOR_RAMP[0];
   for(const v of FLOOR_RAMP) if(Math.abs(v-l)<Math.abs(best-l)) best=v;
   return `rgb(${best},${best},${best})`;
