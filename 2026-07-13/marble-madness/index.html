@@ -35,7 +35,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background
 /* MARBLE MADNESS — practice build. Clean-room recreation: all code + art original.
    Engine: axonometric per-cell heightfield, painter-order prerender, fixed-step physics,
    dynamic (animated) wave bands, multi-race chain with time carryover, Steelie rival AI. */
-const VERSION = '0.88.0';
+const VERSION = '0.89.0';
 const QA = new URLSearchParams(location.search).has('qa');
 
 /* GRID DENSITY. Measured: the original's floor diamond is 3.15% of screen width, ours
@@ -828,7 +828,7 @@ const Snd=(()=>{ let ac=null,master=null,rollGain=null,rollFilt=null,muted=QA,mu
       const len=ac.sampleRate*1.2, buf=ac.createBuffer(1,len,ac.sampleRate), d=buf.getChannelData(0);
       for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
       const src=ac.createBufferSource(); src.buffer=buf; src.loop=true;
-      rollFilt=ac.createBiquadFilter(); rollFilt.type='bandpass'; rollFilt.Q.value=1.1; rollFilt.frequency.value=300;
+      rollFilt=ac.createBiquadFilter(); rollFilt.type='bandpass'; rollFilt.Q.value=0.9; rollFilt.frequency.value=2000;
       rollGain=ac.createGain(); rollGain.gain.value=0;
       src.connect(rollFilt).connect(rollGain).connect(master); src.start();
     }catch(e){ ac=null; } } return ac; }
@@ -849,7 +849,7 @@ const Snd=(()=>{ let ac=null,master=null,rollGain=null,rollFilt=null,muted=QA,mu
     roll(speed,grounded){ if(!ac||muted||!rollGain) return;
       const target=grounded?Math.min(1,speed/9)*0.32:0;
       rollGain.gain.setTargetAtTime(target,ac.currentTime,0.06);
-      rollFilt.frequency.setTargetAtTime(240+speed*55,ac.currentTime,0.08); },
+      rollFilt.frequency.setTargetAtTime(1950+speed*95,ac.currentTime,0.08); },
     clack(sp){ env('square',150+sp*8,90,0.07,0.25); noise(0.05,900,0.18); },
     thud(){ env('sine',120,60,0.16,0.3); noise(0.08,300,0.2); },
     shatter(){ noise(0.45,1300,0.5); env('sine',1400,320,0.5,0.22); env('sine',990,240,0.62,0.16,0.05); },

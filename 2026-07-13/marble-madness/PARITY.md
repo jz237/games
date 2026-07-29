@@ -6,7 +6,7 @@ Marble Madness as an all-original clean-room browser build (no ripped code/art/s
 
 - **Live**: https://jez237.com/games/2026-07-13/marble-madness/ · GitHub mirror: https://jz237.github.io/games/2026-07-13/marble-madness/
 - **Source of record**: `games-source/2026-07-13/marble-madness/` (= checkout of the public `jz237/games` repo — COMMIT after every iteration, see Deploy). Deploy copy: `jez237-website/games/2026-07-13/marble-madness/index.html`.
-- **Current version: v0.88.0** (single self-contained index.html, `const VERSION` near top).
+- **Current version: v0.89.0** (single self-contained index.html, `const VERSION` near top).
 
 > **⚠ 2026-07-27 DATA LOSS + RECOVERY.** `games-source/2026-07-13/` (source copy, this ledger,
 > reference images) was deleted from disk — it had never been committed anywhere (games-source is
@@ -652,6 +652,38 @@ Screenshots archived at `/home/jez237/game-refs/marble-madness/ref-shots/`:
   STAY — they are the ground truth for what the course is. What changes is how it is drawn.
   `QUANTISE` is now a constant at the top of the file: set it back to `true` to restore the
   period-accurate flat look at any time.
+- **v0.89.0 (2026-07-29) — the ROLLING sound measured; UI-state suite rebuilt.**
+  - **The roll is a BRIGHT HISS, not a rumble.** Differencing a rolling capture against a
+    stationary one (which is music only) isolates what the marble adds: **2000 Hz at 8.6x and
+    2800 Hz at 12.5x**, plus some 5600 Hz, and essentially nothing below 1.4 kHz. Ours ran a
+    bandpass at `240+speed*55` — about 735 Hz flat out, **three to four times too low**. Now
+    `1950+speed*95` with a wider Q, landing inside the measured band.
+    The stationary-vs-rolling difference is the right instrument here: it cancels the music,
+    which otherwise dominates every band.
+  - **`states.mjs` was lost in the scratchpad wipe and had not been rebuilt** — the one suite
+    that covers anything other than `race`, after ~18 versions of rendering changes. Recreated
+    and run: all eight UI states (title, options, options+2P, 2P race, timeup, hi-score,
+    initials, ending) clean. **A missing test is invisible; re-check the harness inventory after
+    any wipe, not just the scripts you happen to need that day.**
+
+## STATE OF THE CLONE (2026-07-29)
+**Measured and matched**: palette (Amiga 4-bit), HUD layout and digit font, options screen and
+its letterforms, pre-race banner, GAME OVER panel, difficulty->clock table, race-start count-up,
+floor-diamond size, cliff-stripe colour rule, floor arrows, handrails, cast shadows, marble
+colours and size, practice music (full 8-bar loop, tempo, melody, bass, kick), rolling SFX.
+
+**BLOCKED — all on the same root cause: nobody can drive the original past its opening.**
+Open-loop input tops out around 250 points; the marble dies at the practice centre structure.
+Everything downstream is gated on it: races 2-6 clocks, races 2-6 music, course geometry beyond
+each opening, muncher/hazard placement. Unlock = closed-loop steering from a decoded video
+stream (see the v0.56 note).
+
+**KNOWN DEVIATIONS, deliberate**: the projection axes are not the original's symmetric 2:1
+isometric (fixing it means re-authoring all six courses — see v0.57.0); graphics are rendered
+realistically rather than flat 16-colour, per the 2026-07-28 direction change (`QUANTISE`
+restores the period look); snare/hi-hat and races 2-6 music are ours, not measured.
+
+**GATE**: a human playtest still gates any parity claim.
 - **v0.88.0 (2026-07-29) — THE PRACTICE TRACK IS NOW THE ORIGINAL'S, FULL LOOP.**
   A 75 s untouched race was captured (marble stationary, so almost no SFX) and the whole loop
   transcribed rather than an 8 s fragment.
