@@ -37,8 +37,8 @@
         A personal tribute build. Original game © 1992 Digital Illusions /
         21st Century Entertainment.
       </p>
-      <p class="shell__build" title="Build 20260731T193916Z">
-        v1.18.0 · build 20260731T193916Z
+      <p class="shell__build" title="Build 20260731T195015Z">
+        v1.19.0 · build 20260731T195015Z
       </p>
     </footer>
   </div>
