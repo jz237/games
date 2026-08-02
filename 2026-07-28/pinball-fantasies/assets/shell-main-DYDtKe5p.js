@@ -38,8 +38,8 @@ import{c as r}from"./global-leaderboard-5kBy31NQ.js";const i=""+new URL("party-l
         A personal tribute build. Original game © 1992 Digital Illusions /
         21st Century Entertainment.
       </p>
-      <p class="shell__build" title="Build 20260802T191302Z">
-        v1.27.0 · build 20260802T191302Z
+      <p class="shell__build" title="Build 20260802T223448Z">
+        v1.28.0 · build 20260802T223448Z
       </p>
     </footer>
   </div>
