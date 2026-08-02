@@ -1,4 +1,4 @@
-import{c as r}from"./global-leaderboard-DQ1KeubK.js";const i=""+new URL("party-land-thumb-Bkk2hIVw.webp",import.meta.url).href,o=""+new URL("speed-devils-thumb-CRL8Ut-m.webp",import.meta.url).href,d=""+new URL("gameshow-thumb-BDvt3cIa.webp",import.meta.url).href,p=""+new URL("stones-thumb-DEbrTsLH.webp",import.meta.url).href,n=[{id:"party-land",name:"Party Land",line:"Ducks, Cyclone, Puke & the Mad elephant",art:i,playable:!0},{id:"speed-devils",name:"Speed Devils",line:"Gears, overtakes, pit stops & turbo",art:o,playable:!0},{id:"billion-dollar-gameshow",name:"Billion Dollar Gameshow",line:"Six prizes, the wheel & the billion loop",art:d,playable:!0},{id:"stones-n-bones",name:"Stones 'n' Bones",line:"Ghosts, the Tower, the Well & the Vault",art:p,playable:!0}],l=document.querySelector("#app");if(l===null)throw new Error("Application root #app was not found.");document.title="Pinball Fantasies HD";document.body.classList.add("shell-mode");function c(a){const e=a.art===null?'<span class="table-card__art table-card__art--pending" aria-hidden="true">🦴</span>':`<img class="table-card__art" src="${a.art}" alt="" decoding="async" />`,t=a.playable?'<span class="table-card__status">Play</span>':'<span class="table-card__status table-card__status--soon">Coming soon</span>',s=`
+import{c as r}from"./global-leaderboard-5kBy31NQ.js";const i=""+new URL("party-land-thumb-Bkk2hIVw.webp",import.meta.url).href,o=""+new URL("speed-devils-thumb-CRL8Ut-m.webp",import.meta.url).href,d=""+new URL("gameshow-thumb-BDvt3cIa.webp",import.meta.url).href,p=""+new URL("stones-thumb-DEbrTsLH.webp",import.meta.url).href,n=[{id:"party-land",name:"Party Land",line:"Ducks, Cyclone, Puke & the Mad elephant",art:i,playable:!0},{id:"speed-devils",name:"Speed Devils",line:"Gears, overtakes, pit stops & turbo",art:o,playable:!0},{id:"billion-dollar-gameshow",name:"Billion Dollar Gameshow",line:"Six prizes, the wheel & the billion loop",art:d,playable:!0},{id:"stones-n-bones",name:"Stones 'n' Bones",line:"Ghosts, the Tower, the Well & the Vault",art:p,playable:!0}],l=document.querySelector("#app");if(l===null)throw new Error("Application root #app was not found.");document.title="Pinball Fantasies HD";document.body.classList.add("shell-mode");function c(a){const e=a.art===null?'<span class="table-card__art table-card__art--pending" aria-hidden="true">🦴</span>':`<img class="table-card__art" src="${a.art}" alt="" decoding="async" />`,t=a.playable?'<span class="table-card__status">Play</span>':'<span class="table-card__status table-card__status--soon">Coming soon</span>',s=`
     ${e}
     <span class="table-card__veil" aria-hidden="true"></span>
     <span class="table-card__label">
@@ -38,8 +38,8 @@ import{c as r}from"./global-leaderboard-DQ1KeubK.js";const i=""+new URL("party-l
         A personal tribute build. Original game © 1992 Digital Illusions /
         21st Century Entertainment.
       </p>
-      <p class="shell__build" title="Build 20260802T002616Z">
-        v1.26.0 · build 20260802T002616Z
+      <p class="shell__build" title="Build 20260802T191302Z">
+        v1.27.0 · build 20260802T191302Z
       </p>
     </footer>
   </div>
