@@ -127,7 +127,8 @@ const IMGS = {};
 let groundSlices = null; // [{y0}, canvas] pair-list: full-res bake, sliced to stay under mobile canvas limits
 const BAKE_S = S;        // bake at output resolution — 1:1 blit, zero scaling smudge
 const SLICES = 2;
-const SPRITE_SETS = ['hero-n', 'hero-s', 'hero-e', 'hero-act', 'hero-die', 'rif-s', 'rif-n', 'rif-e', 'rif-act', 'rif-die', 'rif-die2', 'moto'];
+const SPRITE_SETS = ['hero-n', 'hero-s', 'hero-e', 'hero-act', 'hero-die', 'rif-s', 'rif-n', 'rif-e', 'rif-act', 'rif-die', 'rif-die2', 'moto',
+  'off-s', 'off-e', 'off-n', 'off-act', 'lob-s', 'lob-act', 'mortar'];
 const SPRITE_NAMES = ['sprites/hero', 'sprites/rifleman', 'sprites/officer', 'sprites/lobber',
   'ui/portrait', 'ui/rifle', 'ui/keyart.webp', 'tiles/sand', 'tiles/grass',
   'props/palm', 'props/boulder', 'props/pond', 'props/trench', 'props/gate', 'props/wreck',
@@ -620,7 +621,8 @@ function rectsAt(x, y, w, h) {
 
 function newEnemy(x, y, type, dir, mode) {
   return { x, y, type, hp: 1, t: 0, dir, mode: mode || (type === 'rifleman' || type === 'officer' ? 'traverse' : 'hold'),
-    walk: 0, walkDist: 0, walkFrame: 0, fireT: 0, duckT: 0, coverCd: 0,
+    walk: 0, walkDist: 0, walkFrame: 0, fireT: 0, duckT: 0, coverCd: 0, barkT: 0,
+    lean: 0, face: dir < 0 ? -1 : 1, stepped: 0,
     shotCd: 40 + ((x * 7 + y * 13) % 60), dodgeT: 0, dodgeCd: 0, dodgeX: 0, dodgeY: 0 };
 }
 
@@ -673,7 +675,8 @@ function addScorch(x, y, r) {
 // and sometimes drops the supplies he was carrying
 function dropCorpse(e) {
   const set = (((e.x * 31 + e.y * 17) | 0) & 1) ? 'rif-die2' : 'rif-die';
-  G.corpses.push({ x: e.x, y: e.y, type: e.type, dieT: 0, set });
+  // bodies keep the facing they died with instead of mirroring as Joe walks by
+  G.corpses.push({ x: e.x, y: e.y, type: e.type, dieT: 0, set, face: e.face || 1 });
   if (G.corpses.length > 8) G.corpses.shift();
   const roll = ((e.x * 7 + e.y * 13 + G.frame) | 0) % 100;
   if (roll < PICKUP_DROP_CHANCE) {
@@ -1114,12 +1117,22 @@ function tick() {
         const ny3 = e.y + Math.sign(dy) * 0.5;
         if (!rectsAt(e.x - 5, ny3 - 6, 10, 10)) e.y = ny3;
       }
+      // lean into the drift (smoothed so the bike banks rather than snaps),
+      // and kick up a dust plume off the rear wheel while moving
+      e.lean += ((e.y - oy) * e.dir * 0.10 - e.lean) * 0.18;
+      if (Math.abs(e.x - ox) > 0.5 && e.t % 2 === 0)
+        spawnPart({ kind: 'dust', x: e.x - e.dir * 7, y: e.y + 3, vx: -e.dir * 0.15 + (vrng() - 0.5) * 0.1,
+          vy: -0.08 - vrng() * 0.06, t: 0, ttl: 20 + vrng() * 10, size: 1.0 + vrng() * 0.7 });
       if (live && d < 9) killJoe();
     } else if (e.type === 'mortar') {
-      // dug-in crew: ranged shells that land on where the player IS
-      if (live && e.t % MORTAR_INTERVAL === 60 && d < 200) {
-        e.fireT = 22;
+      // dug-in crew with a readable load ritual: lift the shell, drop it in,
+      // THEN the tube fires — the round leaves when the animation says it does
+      if (live && e.t % MORTAR_INTERVAL === 60 && d < 200) e.fireT = 22;
+      if (e.fireT === 8 && live) {
         G.shells.push({ x: e.x, y: e.y, tx: J.x, ty: J.y, t: 0, ttl: MORTAR_FLIGHT });
+        for (let k = 0; k < 3; k++)
+          spawnPart({ kind: 'smoke', x: e.x - 4, y: e.y - 12, vx: (vrng() - 0.5) * 0.2,
+            vy: -0.5 - vrng() * 0.3, t: 0, ttl: 36 + vrng() * 18, size: 1.5 + vrng() });
         if (window.Sfx) Sfx.play('shot', { gain: 0.4, rate: 0.6 });
       }
     } else if (e.type === 'lobber' || e.type === 'trencher') {
@@ -1171,6 +1184,11 @@ function tick() {
           }
         }
         if (e.dodgeT <= 0) {
+          // officers periodically stop, plant their feet and bellow an order —
+          // a character beat that breaks up the mob's motion
+          if (e.type === 'officer' && e.barkT <= 0 && e.fireT <= 0 && d < 180 && (e.t + 97) % 300 === 0) e.barkT = 26;
+          if (e.barkT > 0) { e.barkT--; }
+          else {
           if (e.mode === 'traverse') {
             // cross the screen on the entry line until the player is in reach
             if (d < ENGAGE_RANGE) e.mode = 'engage';
@@ -1209,11 +1227,13 @@ function tick() {
               if (window.Sfx) Sfx.play('shot', { gain: 0.34, rate: 0.85 });
             }
           }
+          }
         }
       }
     }
 
     const stepped = Math.hypot(e.x - ox, e.y - oy);
+    e.stepped = stepped;
     e.vx0 = ox; e.vy0 = oy; e.vdx = e.x - ox;
     e.walk = (e.walk || 0) + stepped;
     e.walkDist = (e.walkDist || 0) + stepped;
@@ -1459,51 +1479,93 @@ function render(alpha) {
   }
   ctx.restore();
 
-  // enemies: riflemen/trenchers get the painted 4-frame advance plus fire,
-  // duck and pop-up poses; officers and grenadiers keep their single portraits
-  const ENEMY_STATIC = { officer: 'sprites/officer', lobber: 'sprites/lobber' };
+  // enemies: every unit type now runs a full painted pose machine — walk views
+  // picked from its own per-tick velocity, action sequences (fire, throw,
+  // load-and-fire, bark), and continuous secondary motion (stride lean, recoil
+  // kick, bank-into-the-drift) — so nobody on the field slides around frozen
+  const ENEMY_FALLBACK = { officer: 'sprites/officer', lobber: 'sprites/lobber', mortar: 'props/obj-2' };
+  const walkKey = (pfx, e) => {
+    // face the way they are actually moving: side view when crossing, back
+    // view when heading away, front view when closing on the player
+    const vx = e.x - (e.vx0 !== undefined ? e.vx0 : e.x);
+    const vy = e.y - (e.vy0 !== undefined ? e.vy0 : e.y);
+    let view = 's';
+    if (Math.abs(vx) > Math.abs(vy) * 1.2 && Math.abs(vx) > 0.05) view = 'e';
+    else if (vy < -0.05) view = 'n';
+    e.view = view;
+    return `sprites/${pfx}-${view}-${(e.walkFrame || 0) & 3}`;
+  };
   const drawEnemy = (e, ex, ey, corpse) => {
-    let img = null;
+    let key, stride = false, kick = 0, preRot = 0;
     if (corpse || e.dieT !== undefined) {
       const t = e.dieT || 0;
       const fi = t < 8 ? 0 : t < 18 ? 1 : t < 30 ? 2 : 3;
-      img = IMGS[`sprites/${e.set || 'rif-die'}-${fi}`];
+      key = `sprites/${e.set || 'rif-die'}-${fi}`;
     } else if (e.type === 'moto') {
-      img = IMGS[`sprites/moto-${(e.walkFrame || 0) & 3}`];
+      key = `sprites/moto-${(e.walkFrame || 0) & 3}`;
+      preRot = e.lean || 0; // banked into the drift, smoothed in the update
     } else if (e.type === 'mortar') {
-      img = IMGS['props/obj-2'];
-    } else if (ENEMY_STATIC[e.type]) {
-      img = IMGS[ENEMY_STATIC[e.type]];
+      // load ritual: lift the shell (1), drop it in (2), the tube fires (3);
+      // at rest the loader occasionally leans in to fuss with the elevation
+      const fi = e.fireT > 15 ? 1 : e.fireT > 8 ? 2 : e.fireT > 0 ? 3 : ((e.t % 190) < 16 ? 2 : 0);
+      key = `sprites/mortar-${fi}`;
+    } else if (e.type === 'officer') {
+      if (e.fireT > 0) { key = `sprites/off-act-${e.fireT > 9 ? 1 : 0}`; kick = Math.max(0, e.fireT - 12) * 0.35; }
+      else if (e.barkT > 0) key = 'sprites/off-act-2'; // arm up, bellowing
+      else { key = walkKey('off', e); stride = true; }
+    } else if (e.type === 'lobber' || (e.type === 'trencher' && e.fireT > 0)) {
+      // grenadiers: crouched walk plus a windup -> release -> recover throw;
+      // a popped-up trencher borrows the throw so his grenade visibly leaves
+      // a raised arm instead of materialising out of the trench
+      if (e.fireT > 0) key = `sprites/lob-act-${e.fireT > 12 ? 1 : e.fireT > 5 ? 2 : 3}`;
+      else if ((e.stepped || 0) > 0.04) { key = `sprites/lob-s-${(e.walkFrame || 0) & 3}`; stride = true; }
+      else key = 'sprites/lob-act-0'; // crouched idle, grenade at the chest
     } else if (e.duckT > 0) {
-      img = IMGS[`sprites/rif-act-${e.duckT > 16 ? RIF_DUCK : RIF_POP}`];
+      key = `sprites/rif-act-${e.duckT > 16 ? RIF_DUCK : RIF_POP}`;
     } else if (e.fireT > 0) {
-      img = IMGS[`sprites/rif-act-${RIF_FIRE}`];
+      key = `sprites/rif-act-${RIF_FIRE}`;
+      kick = Math.max(0, e.fireT - 12) * 0.35;
     } else {
-      // face the way they are actually moving: side view when crossing, back
-      // view when heading away, front view when closing on the player
-      const vx = e.x - (e.vx0 !== undefined ? e.vx0 : e.x);
-      const vy = e.y - (e.vy0 !== undefined ? e.vy0 : e.y);
-      let view = 's';
-      if (Math.abs(vx) > Math.abs(vy) * 1.2 && Math.abs(vx) > 0.05) view = 'e';
-      else if (vy < -0.05) view = 'n';
-      img = IMGS[`sprites/rif-${view}-${(e.walkFrame || 0) & 3}`] || IMGS[`sprites/rif-s-${(e.walkFrame || 0) & 3}`];
-      e.view = view;
+      key = walkKey('rif', e);
+      stride = true;
     }
-    if (!img) img = IMGS['sprites/rifleman'];
+    e._sprite = key;
+    let img = IMGS[key];
+    if (!img && /-[en]-/.test(key)) img = IMGS[key.replace(/-[en]-/, '-s-')];
+    if (!img) img = IMGS[ENEMY_FALLBACK[e.type]] || IMGS['sprites/rifleman'];
     if (!img) {
       ctx.fillStyle = e.type === 'officer' ? '#4a7d3a' : '#8f8f9d';
       ctx.fillRect((ex - 4) * S, (ey - 8) * S, 8 * S, 12 * S);
       return;
     }
-    drawShadow(ex, ey, corpse ? 6 : 4);
+    // facing with hysteresis: engaged shooters face Joe (6px deadzone), side-on
+    // walkers face their travel — nobody mirror-pops as Joe crosses their column
+    let face = e.face || 1;
+    if (!corpse && e.dieT === undefined) {
+      if (e.type === 'moto') face = e.dir < 0 ? -1 : 1;
+      else if (e.type === 'mortar') face = 1; // an emplacement does not swivel
+      else if (e.fireT > 0 || e.barkT > 0 || e.mode === 'engage' || e.type === 'lobber' || e.type === 'trencher') {
+        const ddx = G.joe.x - ex;
+        if (Math.abs(ddx) > 6) face = ddx < 0 ? -1 : 1;
+      } else if (e.view === 'e' && Math.abs(e.vdx || 0) > 0.03) {
+        face = (e.vdx || 0) < 0 ? -1 : 1;
+      }
+      e.face = face;
+    }
+    let leanA = 0;
+    if (stride && (e.stepped || 0) > 0.04)
+      leanA = Math.sin(((e.walkFrame || 0) + (e.walkDist || 0) / WALK_STRIDE) * 1.57) * 0.03;
+    drawShadow(ex, ey, corpse ? 6 : e.type === 'mortar' ? 7 : 4);
     const h = corpse ? ENEMY_H * 0.82 : e.type === 'moto' ? ENEMY_H * 1.25
-      : e.type === 'mortar' ? ENEMY_H * 1.15 : e.type === 'officer' ? ENEMY_H + 1 : ENEMY_H;
+      : e.type === 'mortar' ? ENEMY_H * 1.3 : e.type === 'officer' ? ENEMY_H + 1 : ENEMY_H;
     const w = h * (img.width / img.height);
     ctx.save();
-    const flip = e.type === 'moto' ? (e.dir < 0 ? -1 : 1)
-      : (e.view === 'e' && e.vdx !== undefined) ? (e.vdx < 0 ? -1 : 1)
-      : (G.joe.x < ex) ? -1 : 1;
-    ctx.translate(ex * S, (ey + 4) * S); ctx.scale(flip, 1);
+    ctx.translate(ex * S, (ey + 4) * S);
+    if (preRot) ctx.rotate(preRot); // screen-space bank, before the mirror
+    ctx.scale(face, 1);
+    if (leanA) ctx.rotate(leanA);
+    if (kick) ctx.translate(0, kick * S);
+    if (e.type === 'moto') ctx.translate(0, Math.sin((e.walk || 0) * 1.7) * 0.35 * S); // terrain judder
     ctx.drawImage(img, -w / 2 * S, -h * S, w * S, h * S);
     ctx.restore();
   };
@@ -1967,7 +2029,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.21.0-fx2', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.22.0-anim', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
@@ -2075,7 +2137,7 @@ if (qa) {
     uncalm: () => { G.calm = false; G.spawned.clear(); return true; },
     invuln: (n) => { G.joe.invuln = n | 0; return G.joe.invuln; },
     give: (kind) => { G.pickups.push({ x: G.joe.x, y: G.joe.y, kind, t: 0 }); return true; },
-    spawnType: (type) => { G.enemies.push(newEnemy(G.joe.x + 60, G.joe.y - 40, type, -1, 'traverse')); return type; },
+    spawnType: (type, x, y) => { G.enemies.push(newEnemy(x !== undefined ? x : G.joe.x + 60, y !== undefined ? y : G.joe.y - 40, type, -1, 'traverse')); return type; },
     // what each character is actually rendering this frame — lets QA assert the
     // animation advances rather than just trusting that sprites exist
     anim: () => ({
@@ -2093,6 +2155,8 @@ if (qa) {
       ammo: G.ammo, pickups: G.pickups.length, shells: G.shells.length,
       rescued: G.rescued, powsFree: G.pows.filter(w => w.freed).length, powsDead: G.pows.filter(w => w.dead).length,
       enemyTypes: G.enemies.map(e => e.type),
+      enemySprites: G.enemies.map(e => e._sprite || ''),
+      barks: G.enemies.filter(e => e.barkT > 0).length,
       corpseSets: G.corpses.map(c => c.set),
       propsAlive: G.props.filter(p => !p.dead).length,
       propsDead: G.props.filter(p => p.dead).length,
