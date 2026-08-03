@@ -21,7 +21,7 @@ const Sfx = {
     this.ready = true;
   },
 
-  play(name, { rate = 1, gain = 1, variance = 0.06 } = {}) {
+  play(name, { rate = 1, gain = 1, variance = 0.06, pan = 0 } = {}) {
     const buf = this.buffers[name];
     if (!buf || !this.ctx) return;
     if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -30,7 +30,13 @@ const Sfx = {
     src.playbackRate.value = rate * (1 + (Math.random() * 2 - 1) * variance);
     const g = this.ctx.createGain();
     g.gain.value = this.volume * gain;
-    src.connect(g); g.connect(this.ctx.destination);
+    src.connect(g);
+    // positional stereo: callers pass the sound's screen position as pan [-1,1]
+    if (pan && this.ctx.createStereoPanner) {
+      const p = this.ctx.createStereoPanner();
+      p.pan.value = Math.max(-1, Math.min(1, pan));
+      g.connect(p); p.connect(this.ctx.destination);
+    } else g.connect(this.ctx.destination);
     src.start();
   },
 

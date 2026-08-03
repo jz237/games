@@ -589,6 +589,11 @@ function continueGame() {
 }
 // difficulty ramp on area loop — placeholder until areas 2+ are measured
 function diffMul() { return Math.min(1.9, 1 + (G.area - 1) * 0.1); }
+// arcade-loop depth: 0 on the first circuit of the areas, +1 per full lap —
+// deepens pressure beyond diffMul's speed/wave scaling (cap, cadence, nerve)
+function loopN() { return ((Math.max(1, G.area) - 1) / AREAS.length) | 0; }
+// positional stereo pan from a world/screen x
+function panAt(x) { return Math.max(-1, Math.min(1, (x / VIEW_W - 0.5) * 1.3)); }
 
 function finishEntry() {
   const name = (G.entry && G.entry.name.trim()) || 'JOE';
@@ -643,7 +648,7 @@ function spawnEnemies() {
 // and right margins on a fixed line and cross the screen.
 function spawnEdgeWave() {
   if (G.calm || G.state !== 'play') return;
-  if (G.enemies.length >= 7) return;
+  if (G.enemies.length >= Math.min(9, 7 + loopN())) return;
   if (G.frame - (G.lastWave || 0) < WAVE_INTERVAL / diffMul()) return;
   G.lastWave = G.frame;
   // occasionally the wave is a motorcycle instead of infantry
@@ -693,7 +698,7 @@ function destroyEnemy(e) {
     G.flashT = Math.max(G.flashT, 3);
     for (let i = 0; i < 8; i++) spawnPart({ kind: 'spark', x: e.x, y: e.y, vx: (vrng() - 0.5) * 2.6, vy: -1.5 * vrng(), t: 0, ttl: 18 + vrng() * 14, size: 0.9 });
     for (let i = 0; i < 5; i++) spawnPart({ kind: 'chunk', x: e.x, y: e.y, vx: (vrng() - 0.5) * 2.2, vy: -1.2 - vrng() * 1.2, t: 0, ttl: 42 + vrng() * 20, size: 1 + vrng() * 0.8, ground: e.y + 2 + vrng() * 6 });
-    if (window.Sfx) Sfx.play('explosion', { gain: 0.85, rate: 1.05 });
+    if (window.Sfx) Sfx.play('explosion', { gain: 0.85, rate: 1.05, pan: panAt(e.x) });
   } else dropCorpse(e);
 }
 
@@ -710,7 +715,7 @@ function blowProp(p, depth) {
     spawnPart({ kind: 'spark', x: p.x, y: p.y, vx: (vrng() - 0.5) * 3, vy: -2 * vrng(), t: 0, ttl: 20 + vrng() * 18, size: 1 });
   for (let i = 0; i < 7; i++)
     spawnPart({ kind: 'smoke', x: p.x + (vrng() - 0.5) * 10, y: p.y - 2, vx: (vrng() - 0.5) * 0.25, vy: -0.32 - vrng() * 0.2, t: 0, ttl: 90 + vrng() * 40, size: 3.5 + vrng() * 2.5 });
-  if (window.Sfx) Sfx.play('explosion', { gain: 1.0, rate: 0.78 });
+  if (window.Sfx) Sfx.play('explosion', { gain: 1.0, rate: 0.78, pan: panAt(p.x) });
   // everything caught in the blast
   for (let j = G.enemies.length - 1; j >= 0; j--) {
     const e = G.enemies[j];
@@ -749,7 +754,7 @@ function detonate(x, y) {
   for (let i = 0; i < 6; i++) spawnPart({ kind: 'chunk', x, y, vx: (vrng() - 0.5) * 2.2, vy: -1.2 - vrng() * 1.4, t: 0, ttl: 40 + vrng() * 22, size: 1 + vrng() * 0.8, ground: y + 2 + vrng() * 6 });
   for (let i = 0; i < 10; i++) spawnPart({ kind: 'spark', x, y, vx: (vrng() - 0.5) * 2.4, vy: -1.6 * vrng(), t: 0, ttl: 18 + vrng() * 14, size: 0.9 });
   for (let i = 0; i < 4; i++) spawnPart({ kind: 'smoke', x: x + (vrng() - 0.5) * 8, y: y - 2, vx: (vrng() - 0.5) * 0.2, vy: -0.3 - vrng() * 0.2, t: 0, ttl: 70 + vrng() * 30, size: 3 + vrng() * 2 });
-  if (window.Sfx) Sfx.play('explosion', { gain: 1.0, rate: 0.9 });
+  if (window.Sfx) Sfx.play('explosion', { gain: 1.0, rate: 0.9, pan: panAt(x) });
   for (let j = G.enemies.length - 1; j >= 0; j--) {
     const e = G.enemies[j];
     if (Math.hypot(e.x - x, e.y - y) < 26) {
@@ -968,7 +973,7 @@ function tick() {
       // muzzle flash + ejected casing (visual only)
       G.fx.push({ kind: 'muzzle', x: J.x + f.x / len * 7, y: J.y - 6 + f.y / len * 7, dx: f.x / len, dy: f.y / len, t: 0 });
       spawnPart({ kind: 'casing', x: J.x + 3, y: J.y - 5, vx: 0.35 + vrng() * 0.3, vy: -0.5 - vrng() * 0.3, t: 0, ttl: 55, size: 1, ground: J.y + 2 + vrng() * 3 });
-      if (window.Sfx) Sfx.play('shot', { gain: 0.7 });
+      if (window.Sfx) Sfx.play('shot', { gain: 0.7, pan: panAt(J.x) });
     }
     J.firePrev = fire;
 
@@ -997,7 +1002,7 @@ function tick() {
       if (Math.abs(b.x - w.x) < 6 && Math.abs(b.y - w.y) < 9) {
         w.dead = true; w.t = 0; hitPow = true;
         G.fx.push({ kind: 'boom', x: w.x, y: w.y, t: 0 });
-        if (window.Sfx) Sfx.play('player-death', { gain: 0.5 });
+        if (window.Sfx) Sfx.play('player-death', { gain: 0.5, pan: panAt(w.x) });
         break;
       }
     }
@@ -1019,7 +1024,7 @@ function tick() {
         G.score += KILL_POINTS; if (G.score > G.top) G.top = G.score;
         G.fx.push({ kind: 'boom', x: e.x, y: e.y, t: 0 });
         for (let k = 0; k < 5; k++) spawnPart({ kind: 'dust', x: e.x, y: e.y, vx: (vrng() - 0.5) * 0.8, vy: -0.2 - vrng() * 0.3, t: 0, ttl: 20 + vrng() * 12, size: 1.2 + vrng() });
-        if (window.Sfx) Sfx.play('enemy-down', { gain: 0.8 });
+        if (window.Sfx) Sfx.play('enemy-down', { gain: 0.8, pan: panAt(e.x) });
         break;
       }
     }
@@ -1057,7 +1062,7 @@ function tick() {
       for (let k = 0; k < 3; k++) spawnPart({ kind: 'smoke', x: sh.tx + (vrng() - 0.5) * 8, y: sh.ty, vx: 0, vy: -0.28, t: 0, ttl: 70, size: 3 });
       for (const q of G.props) if (!q.dead && !q.fuse && Math.hypot(q.x - sh.tx, q.y - sh.ty) < q.r + 12) q.fuse = 4;
       if (G.joe.alive && G.state === 'play' && Math.hypot(G.joe.x - sh.tx, G.joe.y - sh.ty) < 15) killJoe();
-      if (window.Sfx) Sfx.play('explosion', { gain: 0.9 });
+      if (window.Sfx) Sfx.play('explosion', { gain: 0.9, pan: panAt(sh.tx) });
       G.shells.splice(i, 1);
     }
   }
@@ -1070,7 +1075,7 @@ function tick() {
       G.rescued++;
       G.score += POW_POINTS; if (G.score > G.top) G.top = G.score;
       G.fx.push({ kind: 'rescue', x: w.x, y: w.y, t: 0 });
-      if (window.Sfx) Sfx.play('ready', { gain: 0.7 });
+      if (window.Sfx) Sfx.play('ready', { gain: 0.7, pan: panAt(w.x) });
     }
   }
   // a freed prisoner sprints south off the map
@@ -1089,7 +1094,7 @@ function tick() {
       else G.grenades = Math.min(9, G.grenades + 2);
       G.score += 50; if (G.score > G.top) G.top = G.score;
       G.pickups.splice(i, 1);
-      if (window.Sfx) Sfx.play('ready', { gain: 0.5, rate: 1.5 });
+      if (window.Sfx) Sfx.play('ready', { gain: 0.5, rate: 1.5, pan: panAt(pu.x) });
     }
   }
 
@@ -1133,7 +1138,7 @@ function tick() {
         for (let k = 0; k < 3; k++)
           spawnPart({ kind: 'smoke', x: e.x - 4, y: e.y - 12, vx: (vrng() - 0.5) * 0.2,
             vy: -0.5 - vrng() * 0.3, t: 0, ttl: 36 + vrng() * 18, size: 1.5 + vrng() });
-        if (window.Sfx) Sfx.play('shot', { gain: 0.4, rate: 0.6 });
+        if (window.Sfx) Sfx.play('shot', { gain: 0.4, rate: 0.6, pan: panAt(e.x) });
       }
     } else if (e.type === 'lobber' || e.type === 'trencher') {
       // dug-in throwers: hold position, arc a grenade at Joe, drop back down
@@ -1176,7 +1181,7 @@ function tick() {
             if (along < DODGE_MIN_LEAD || along > DODGE_MAX_LEAD) continue;
             const miss = Math.abs(bx * uy - by * ux);    // closest approach
             if (miss > DODGE_HIT_WIDTH) continue;        // it was going to miss anyway
-            if (((e.t * 2654435761) >>> 11) % 100 >= DODGE_CHANCE) { e.dodgeCd = 12; break; } // nerve failed
+            if (((e.t * 2654435761) >>> 11) % 100 >= Math.min(75, DODGE_CHANCE + loopN() * 8)) { e.dodgeCd = 12; break; } // nerve failed
             const side = (bx * -uy + by * ux) > 0 ? -1 : 1;
             e.dodgeX = side * -uy; e.dodgeY = side * ux;
             e.dodgeT = 11; e.dodgeCd = DODGE_COOLDOWN + ((e.t * 31) % 90);
@@ -1217,14 +1222,14 @@ function tick() {
             if (e.shotCd > 0) e.shotCd--;
             else if (d < ENGAGE_RANGE && e.fireT <= 0) {
               e.fireT = 16;
-              e.shotCd = ENEMY_SHOT_CD + ((e.t * 37) % 40);
+              e.shotCd = Math.max(46, ENEMY_SHOT_CD - loopN() * 10) + ((e.t * 37) % 40);
               const spread = ((((e.t * 2654435761) >>> 20) % 100) / 100 - 0.5) * 0.22;
               const ca = Math.cos(spread), sa = Math.sin(spread);
               const ax = dx / d, ay = dy / d;
               G.ebullets.push({ x: e.x, y: e.y + 2, vx: (ax * ca - ay * sa) * ENEMY_BULLET_SPEED,
                 vy: (ax * sa + ay * ca) * ENEMY_BULLET_SPEED, life: 150 });
               G.fx.push({ kind: 'muzzle', x: e.x + ax * 6, y: e.y + ay * 6, dx: ax, dy: ay, t: 0 });
-              if (window.Sfx) Sfx.play('shot', { gain: 0.34, rate: 0.85 });
+              if (window.Sfx) Sfx.play('shot', { gain: 0.34, rate: 0.85, pan: panAt(e.x) });
             }
           }
           }
@@ -1252,7 +1257,7 @@ function tick() {
     l.x += l.vx; l.y += l.vy; l.t++;
     if (l.t >= l.ttl) {
       G.fx.push({ kind: 'boom', x: l.x, y: l.y, t: 0 });
-      if (window.Sfx) Sfx.play('explosion', { gain: 0.9 });
+      if (window.Sfx) Sfx.play('explosion', { gain: 0.9, pan: panAt(l.x) });
       if (J.alive && Math.abs(l.x - J.x) < 12 && Math.abs(l.y - J.y) < 12) killJoe();
       G.lobs.splice(i, 1);
     }
@@ -2029,7 +2034,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.22.0-anim', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.23.0-feel', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
@@ -2118,7 +2123,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },
@@ -2138,6 +2143,7 @@ if (qa) {
     invuln: (n) => { G.joe.invuln = n | 0; return G.joe.invuln; },
     give: (kind) => { G.pickups.push({ x: G.joe.x, y: G.joe.y, kind, t: 0 }); return true; },
     spawnType: (type, x, y) => { G.enemies.push(newEnemy(x !== undefined ? x : G.joe.x + 60, y !== undefined ? y : G.joe.y - 40, type, -1, 'traverse')); return type; },
+    setArea: (n) => { G.area = Math.max(1, n | 0); return { area: G.area, diff: diffMul(), loop: loopN() }; },
     // what each character is actually rendering this frame — lets QA assert the
     // animation advances rather than just trusting that sprites exist
     anim: () => ({
