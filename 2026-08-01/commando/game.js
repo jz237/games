@@ -1422,6 +1422,7 @@ function tick() {
 
 // ---------- render ----------
 let LERP = 1;                              // 0..1 fraction between logic ticks
+let lightC = null;                         // offscreen darkness layer (dusk/night areas)
 const IX = (o) => (o.px === undefined ? o.x : o.px + (o.x - o.px) * LERP);
 const IY = (o) => (o.py === undefined ? o.y : o.py + (o.y - o.py) * LERP);
 const IT = (o) => (o.pt === undefined ? o.t : o.pt + (o.t - o.pt) * LERP);
@@ -1948,6 +1949,45 @@ function render(alpha) {
 
   ctx.restore(); // end screen-shake transform (HUD and overlays never shake)
 
+  // per-area time of day: dusk grade on Area 2, true darkness on Area 3.
+  // Darkness is an offscreen layer with radial holes punched out by every
+  // light source — muzzle flashes, explosions, burning wrecks, tracers, and
+  // a courtesy halo around Joe — so night firefights strobe the ground.
+  const amb = A.ambience;
+  if (amb && G.state !== 'title' && G.state !== 'map') {
+    if (!lightC) lightC = document.createElement('canvas');
+    if (lightC.width !== canvas.width || lightC.height !== canvas.height) {
+      lightC.width = canvas.width; lightC.height = canvas.height;
+    }
+    const lc = lightC.getContext('2d');
+    lc.globalCompositeOperation = 'source-over';
+    lc.clearRect(0, 0, lightC.width, lightC.height);
+    lc.fillStyle = amb.mode === 'night' ? 'rgba(6,9,26,0.52)' : 'rgba(30,16,42,0.20)';
+    lc.fillRect(0, 0, lightC.width, lightC.height);
+    lc.globalCompositeOperation = 'destination-out';
+    const punch = (wx, wy, r, a) => {
+      const x = wx * S, y = (wy - cy) * S, rs = r * S;
+      if (y < -rs || y > VIEW_H * S + rs || x < -rs || x > VIEW_W * S + rs) return;
+      const g2 = lc.createRadialGradient(x, y, 0, x, y, rs);
+      g2.addColorStop(0, `rgba(0,0,0,${a})`);
+      g2.addColorStop(1, 'rgba(0,0,0,0)');
+      lc.fillStyle = g2;
+      lc.beginPath(); lc.arc(x, y, rs, 0, 7); lc.fill();
+    };
+    if (amb.mode === 'night' && G.joe.alive) punch(IX(G.joe), IY(G.joe) - 5, 34, 0.78);
+    for (const f of G.fx) {
+      if (f.kind === 'muzzle') punch(f.x, f.y, 22, 0.9);
+      else if (f.kind === 'bigboom') punch(f.x, f.y, 48 * Math.min(1, f.t / 6 + 0.4), 0.95);
+      else if (f.kind === 'boom') punch(f.x, f.y, 28, 0.9);
+    }
+    for (const p of G.props) if (p.burn > 0 && !amb.noFire) punch(p.x, p.y - 2, 26, 0.85);
+    for (const b of G.bullets) punch(IX(b), IY(b), 6, 0.5);
+    for (const b of G.ebullets) punch(b.x, b.y, 6, 0.5);
+    ctx.drawImage(lightC, 0, 0);
+    if (amb.mode === 'dusk') { ctx.fillStyle = 'rgba(255,118,30,0.10)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+    else if (amb.mode === 'night') { ctx.fillStyle = 'rgba(22,32,88,0.10)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+  }
+
   // brief warm frame-flash on big detonations (capped by the flash setting,
   // photosensitivity-safe: default 0.6 -> peak alpha ~0.08 for 5 frames)
   if (G.flashT > 0) {
@@ -2227,7 +2267,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.26.0-trucks', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.27.0-night', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
@@ -2316,7 +2356,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },

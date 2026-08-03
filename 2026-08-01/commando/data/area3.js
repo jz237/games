@@ -39,3 +39,6 @@ window.AREA3 = {
     { x: 143, y: 220 },
   ],
 };
+
+// it59: night assault — the river camp is stormed in darkness
+window.AREA3.ambience = { mode: "night" };
