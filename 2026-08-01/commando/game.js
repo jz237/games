@@ -130,7 +130,7 @@ const SLICES = 2;
 const SPRITE_SETS = ['hero-n', 'hero-s', 'hero-e', 'hero-act', 'hero-die', 'rif-s', 'rif-n', 'rif-e', 'rif-act', 'rif-die', 'rif-die2', 'moto',
   'off-s', 'off-e', 'off-n', 'off-act', 'lob-s', 'lob-act', 'mortar'];
 const SPRITE_NAMES = ['sprites/hero', 'sprites/rifleman', 'sprites/officer', 'sprites/lobber',
-  'ui/portrait', 'ui/rifle', 'ui/keyart.webp', 'tiles/sand', 'tiles/grass',
+  'ui/portrait', 'ui/rifle', 'ui/keyart.webp', 'ui/map.webp', 'tiles/sand', 'tiles/grass',
   'props/palm', 'props/boulder', 'props/pond', 'props/trench', 'props/gate', 'props/wreck',
   'props/obj-0', 'props/obj-1', 'props/obj-2', 'props/obj-3'];
 for (const set of SPRITE_SETS) for (let i = 0; i < 4; i++) SPRITE_NAMES.push(`sprites/${set}-${i}`);
@@ -539,7 +539,7 @@ function uiEdges() {
 }
 
 function cueFor(s) {
-  if (s === 'clear') return 'clear';
+  if (s === 'clear' || s === 'map') return 'clear'; // victory tune carries over the map
   if (s === 'gameover') return 'gameover';
   if (s === 'entry') return 'hiscore';
   if (s === 'ranking') return G.postGame ? 'hiscore' : 'main';
@@ -567,7 +567,7 @@ function startGame() {
 function nextArea() {
   G.area++; G.rescued = 0; G.ammo = Math.max(G.ammo, START_AMMO);
   applyArea(G.area);
-  resetWorld(); setState('intro', 130);
+  resetWorld(); setState('map', 230); // campaign-map interlude, then the intro card
 }
 // point the engine at an area's data and art
 function applyArea(n) {
@@ -854,6 +854,10 @@ function tick() {
         else setState('credits', 250);
       } else setState('title', 300);
     }
+    endTick(); return;
+  }
+  if (G.state === 'map') {
+    if (--G.stateTimer <= 0 || ed.e.fire) setState('intro', 130);
     endTick(); return;
   }
   if (G.state === 'intro') {
@@ -2038,6 +2042,57 @@ function render(alpha) {
     textC('AREA ' + G.area, 102, 20, '#e8d8b0', true);
     if (G.area > AREAS.length) textC('LOOP ' + (Math.floor((G.area - 1) / AREAS.length) + 1), 88, 6, '#c8a24a');
     textC(A.title || 'LANDING ZONE — FORTRESS GATE', 124, 7, '#b8b09a');
+  } else if (G.state === 'map') {
+    // painted campaign map: the grease-pencil route crawls to the next objective
+    const m = IMGS['ui/map.webp'];
+    ctx.fillStyle = '#141109'; ctx.fillRect(0, 0, VIEW_W * S, VIEW_H * S);
+    let mx = 0, my = 0, mw = VIEW_W * S, mh = VIEW_H * S;
+    if (m) {
+      const sc = Math.max(VIEW_W * S / m.width, VIEW_H * S / m.height);
+      mw = m.width * sc; mh = m.height * sc;
+      mx = (VIEW_W * S - mw) / 2; my = (VIEW_H * S - mh) / 2;
+      ctx.drawImage(m, mx, my, mw, mh);
+    }
+    ctx.fillStyle = 'rgba(8,10,5,0.22)'; ctx.fillRect(0, 0, VIEW_W * S, VIEW_H * S);
+    // waypoints on the painted map: beach landing, mid fortress, river bridge,
+    // final stronghold — normalized to the drawn (cover-fit) rect
+    const PTS = [[0.44, 0.90], [0.47, 0.55], [0.475, 0.262], [0.47, 0.10]];
+    const P = (i) => [mx + PTS[i][0] * mw, my + PTS[i][1] * mh];
+    const L = (G.area - 1) % AREAS.length; // layout index of the NEW area
+    const ink = (a) => `rgba(152,40,26,${a})`;
+    ctx.lineCap = 'round';
+    ctx.setLineDash([3 * S, 3 * S]);
+    for (let i = 0; i < L; i++) { // legs already fought, dim
+      const [x0, y0] = P(i), [x1, y1] = P(i + 1);
+      ctx.strokeStyle = ink(0.35); ctx.lineWidth = 1.4 * S;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    }
+    // the active leg crawls in with an eased head along a bent path
+    const pRaw = Math.min(1, (1 - G.stateTimer / 230) * 1.45);
+    const p = pRaw * pRaw * (3 - 2 * pRaw);
+    const [ax2, ay2] = P(L), [bx2, by2] = P(L + 1);
+    const bend = [18, -22, 14][L] * S;
+    const qx = (ax2 + bx2) / 2 + bend, qy = (ay2 + by2) / 2;
+    ctx.strokeStyle = ink(0.85); ctx.lineWidth = 1.8 * S;
+    ctx.beginPath(); ctx.moveTo(ax2, ay2);
+    for (let i = 1; i <= 26 * p; i++) {
+      const t2 = i / 26, u = 1 - t2;
+      ctx.lineTo(u * u * ax2 + 2 * u * t2 * qx + t2 * t2 * bx2, u * u * ay2 + 2 * u * t2 * qy + t2 * t2 * by2);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for (let i = 0; i <= AREAS.length; i++) { // markers
+      const [x2, y2] = P(i);
+      ctx.fillStyle = i <= L ? ink(0.9) : 'rgba(60,50,30,0.55)';
+      ctx.beginPath(); ctx.arc(x2, y2, 1.6 * S, 0, 7); ctx.fill();
+    }
+    const pulse = 1 + 0.25 * Math.sin(G.frame * 0.18); // objective ring
+    ctx.strokeStyle = ink(0.9); ctx.lineWidth = 1 * S;
+    ctx.beginPath(); ctx.arc(bx2, by2, 4 * pulse * S, 0, 7); ctx.stroke();
+    textC('CAMPAIGN MAP', 22, 8, '#e8d8b0', true);
+    textC('ADVANCING — AREA ' + G.area, 38, 6, '#c8a24a');
+    textC(A.title || '', VIEW_H - 16, 6, '#b8b09a');
+    if (blink) textC('FIRE TO CONTINUE', VIEW_H - 6, 5, '#9a9280');
   } else if (G.state === 'ready') {
     textC('PLAYER 1 READY', 110, 8, '#fff', true);
   } else if (G.state === 'clear') {
@@ -2108,7 +2163,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.24.0-finale', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.25.0-map', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
