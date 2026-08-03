@@ -455,7 +455,26 @@ const FIRES = [
 let vseed = 0x9E3779B9;
 function vrng() { vseed |= 0; vseed = vseed + 0x6D2B79F5 | 0; let t = Math.imul(vseed ^ vseed >>> 15, 1 | vseed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
 function spawnPart(p) { if (G.parts.length > 130) G.parts.shift(); G.parts.push(p); }
+// gunfire after a quiet spell flushes birds out of the nearest treeline
+function flushBirds(x, y) {
+  const side = x < VIEW_W / 2 ? 1 : -1; // fly away over the far margin
+  const n = 2 + ((x | 0) % 3);
+  for (let i = 0; i < n; i++)
+    spawnPart({ kind: 'bird', x: (side > 0 ? 18 : VIEW_W - 18) + (vrng() - 0.5) * 14, y: y - 20 - vrng() * 30,
+      vx: side * (0.9 + vrng() * 0.5), vy: -0.5 - vrng() * 0.4, t: 0, ttl: 160 + vrng() * 40, size: 1 });
+}
 function updateParticles() {
+  // ambient flocks cross high over the field every so often
+  if (G.state === 'play' && !G.calm) {
+    G.flockT = (G.flockT || 0) + 1;
+    if (G.flockT > 1700 + (G.wt % 700)) {
+      G.flockT = 0;
+      const dir = (G.wt & 1) ? 1 : -1;
+      for (let i = 0; i < 4 + (G.wt % 3); i++)
+        spawnPart({ kind: 'bird', x: dir > 0 ? -8 - i * 9 : A.width + 8 + i * 9, y: G.camY + 30 + vrng() * 70 + i * 4,
+          vx: dir * (1.1 + vrng() * 0.4), vy: -0.03, t: 0, ttl: 320, size: 1 });
+    }
+  }
   // painted fires breathe: smoke puffs + embers while on screen
   for (const f of FIRES) {
     if (f.y < G.camY - 40 || f.y > G.camY + VIEW_H + 40) continue;
@@ -468,6 +487,7 @@ function updateParticles() {
     if (p.kind === 'smoke') { p.size += 0.06; p.vx += 0.004; }
     else if (p.kind === 'casing' || p.kind === 'chunk') { p.vy += 0.09; if (p.vy > 0 && p.y >= p.ground) { p.vy = 0; p.vx *= 0.6; } }
     else if (p.kind === 'spark') { p.vy += 0.03; }
+    else if (p.kind === 'bird') { p.vy -= 0.006; p.vx *= 1.004; } // climbs away, gathers pace
     if (p.t >= p.ttl) G.parts.splice(i, 1);
   }
 }
@@ -1007,6 +1027,9 @@ function tick() {
       G.fx.push({ kind: 'muzzle', x: J.x + f.x / len * 7, y: J.y - 6 + f.y / len * 7, dx: f.x / len, dy: f.y / len, t: 0 });
       spawnPart({ kind: 'casing', x: J.x + 3, y: J.y - 5, vx: 0.35 + vrng() * 0.3, vy: -0.5 - vrng() * 0.3, t: 0, ttl: 55, size: 1, ground: J.y + 2 + vrng() * 3 });
       if (window.Sfx) Sfx.play('shot', { gain: 0.7, pan: panAt(J.x) });
+      // the first shot after a long quiet flushes birds from the treeline
+      if ((G.quietT || 0) > 350 && (!A.ambience || A.ambience.mode !== 'night')) flushBirds(J.x, J.y);
+      G.quietT = 0;
     }
     J.firePrev = fire;
 
@@ -1358,6 +1381,7 @@ function tick() {
   }
   if (G.shake > 0) G.shake--;
   if (G.flashT > 0) G.flashT--;
+  G.quietT = (G.quietT || 0) + 1;
   for (let i = G.scorch.length - 1; i >= 0; i--) if (++G.scorch[i].t > G.scorch[i].ttl) G.scorch.splice(i, 1);
 
   // --- destructible props: fuses, chain reactions, burn-down ---
@@ -1944,10 +1968,61 @@ function render(alpha) {
       const a = (1 - p.t / p.ttl) * 0.42;
       ctx.fillStyle = `rgba(196,170,124,${a})`;
       ctx.beginPath(); ctx.arc(p.x * S, (p.y - cy) * S, (p.size + p.t * 0.06) * S, 0, 7); ctx.fill();
+    } else if (p.kind === 'bird') {
+      // a dark flapping V, wingbeat from its own clock
+      const px2 = IX(p) * S, py2 = (IY(p) - cy) * S;
+      const flap = Math.sin(p.t * 0.55) * 1.6;
+      ctx.strokeStyle = 'rgba(24,22,18,0.85)';
+      ctx.lineWidth = 0.7 * S; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(px2 - 2.2 * S, py2 - flap * S);
+      ctx.lineTo(px2, py2);
+      ctx.lineTo(px2 + 2.2 * S, py2 - flap * S);
+      ctx.stroke();
     }
   }
 
   ctx.restore(); // end screen-shake transform (HUD and overlays never shake)
+
+  // ambient life: slow cloud shadows drift over the field by day and dusk —
+  // two huge soft blobs anchored in WORLD space so they pass over the terrain
+  // as you advance (invisible at night; the darkness owns that mood)
+  if ((!A.ambience || A.ambience.mode !== 'night') && G.state !== 'title' && G.state !== 'map') {
+    ctx.save();
+    for (let k = 0; k < 2; k++) {
+      const drift = (G.wt * (0.055 + k * 0.03) + k * 700);
+      const wx = ((drift * 0.6 + k * 137) % (VIEW_W + 260)) - 130;
+      const wy = A.height - ((drift + k * 900) % (A.height + 300)) - 150 - cy;
+      if (wy < -160 || wy > VIEW_H + 160) continue;
+      const r = (95 + k * 45) * S;
+      const g2 = ctx.createRadialGradient(wx * S, wy * S, 0, wx * S, wy * S, r);
+      g2.addColorStop(0, 'rgba(10,14,8,0.075)');
+      g2.addColorStop(0.7, 'rgba(10,14,8,0.045)');
+      g2.addColorStop(1, 'rgba(10,14,8,0)');
+      ctx.fillStyle = g2;
+      ctx.beginPath(); ctx.arc(wx * S, wy * S, r, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // fireflies wander the jungle margins at night, pulsing softly
+  let fireflies = null;
+  if (A.ambience && A.ambience.mode === 'night' && G.state !== 'title' && G.state !== 'map') {
+    fireflies = [];
+    for (let i = 0; i < 9; i++) {
+      const ax = i & 1 ? 26 + (i * 17) % 26 : VIEW_W - 26 - (i * 13) % 26;
+      const ay = cy + 20 + ((i * 47) % (VIEW_H - 40));
+      const t2 = G.wt * 0.02 + i * 2.4;
+      fireflies.push([ax + Math.sin(t2) * 9 + Math.sin(t2 * 2.3) * 3,
+        ay + Math.cos(t2 * 0.8) * 7, 0.35 + 0.3 * Math.sin(G.wt * 0.07 + i * 1.7)]);
+    }
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (const [fx2, fy2, a] of fireflies) {
+      ctx.fillStyle = `rgba(190,230,110,${Math.max(0, a)})`;
+      ctx.beginPath(); ctx.arc(fx2 * S, (fy2 - cy) * S, 0.8 * S, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+  }
 
   // per-area time of day: dusk grade on Area 2, true darkness on Area 3.
   // Darkness is an offscreen layer with radial holes punched out by every
@@ -1983,6 +2058,7 @@ function render(alpha) {
     for (const p of G.props) if (p.burn > 0 && !amb.noFire) punch(p.x, p.y - 2, 26, 0.85);
     for (const b of G.bullets) punch(IX(b), IY(b), 6, 0.5);
     for (const b of G.ebullets) punch(b.x, b.y, 6, 0.5);
+    if (fireflies) for (const [fx2, fy2, a] of fireflies) punch(fx2, fy2, 5, Math.max(0, a) * 0.9);
     ctx.drawImage(lightC, 0, 0);
     if (amb.mode === 'dusk') { ctx.fillStyle = 'rgba(255,118,30,0.10)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
     else if (amb.mode === 'night') { ctx.fillStyle = 'rgba(22,32,88,0.10)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
@@ -2267,7 +2343,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.27.0-night', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.28.0-alive', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
@@ -2377,6 +2453,7 @@ if (qa) {
     give: (kind) => { G.pickups.push({ x: G.joe.x, y: G.joe.y, kind, t: 0 }); return true; },
     spawnType: (type, x, y) => { G.enemies.push(newEnemy(x !== undefined ? x : G.joe.x + 60, y !== undefined ? y : G.joe.y - 40, type, -1, 'traverse')); return type; },
     setArea: (n) => { G.area = Math.max(1, n | 0); return { area: G.area, diff: diffMul(), loop: loopN() }; },
+    quiet: (n) => { G.quietT = n | 0; return G.quietT; },
     // massacre everything except fleeing officers through the normal destroy
     // path — scenario cleanup that still exercises corpses/vehicle explosions
     wipe: () => { for (const e of G.enemies) if (e.mode !== 'flee') destroyEnemy(e); G.enemies = G.enemies.filter(e => e.mode === 'flee'); return G.enemies.length; },
@@ -2404,6 +2481,7 @@ if (qa) {
       propsDead: G.props.filter(p => p.dead).length,
       corpses: G.corpses.length,
       scorch: G.scorch.length, flash: G.flashT,
+      birds: G.parts.filter(p => p.kind === 'bird').length,
     }),
     blocked: (x, y) => maskBlocked(x, y),
     plateNames: () => PLATES.map(p => p.name + (p.mask ? '+mask' : '-NOMASK')),
