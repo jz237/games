@@ -469,6 +469,7 @@ function updateParticles() {
   }
 }
 const CLEAR_BONUS = 500; // tally value — original ceremony still uncaptured; approximation
+const OFFICER_BONUS = 1000; // bounty for dropping the fleeing garrison commander
 const POW_CLEAR_BONUS = 300; // per prisoner brought out alive
 const ENTRY_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789. ';
 // continue checkpoints (camY values): area start, mid-jungle, trench/bridge
@@ -552,7 +553,7 @@ function setState(s, t) {
 }
 function resetWorld() {
   Object.assign(G, { camY: A.height - VIEW_H, bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
-    pows: (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 })), spawned: new Set(), shake: 0, tally: 0, cp: CHECKPOINTS[0], lastWave: 0, scorch: [], flashT: 0,
+    pows: (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 })), spawned: new Set(), shake: 0, tally: 0, cp: CHECKPOINTS[0], lastWave: 0, scorch: [], flashT: 0, finale: null,
     props: DESTRUCTIBLE_DEFS.map(d => ({ ...d, dead: false, fuse: 0, burn: 0 })) });
   G.pows = (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 }));
   Object.assign(G.joe, { x: A.spawn.x, y: A.spawn.y, alive: true, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, grenCd: 0, invuln: 0, walk: 0, walkDist: 0 });
@@ -691,6 +692,12 @@ function dropCorpse(e) {
 
 // a destroyed vehicle explodes instead of leaving an infantry corpse
 function destroyEnemy(e) {
+  if (e.mode === 'flee') {
+    // the fleeing garrison commander carries a bounty
+    G.score += OFFICER_BONUS; if (G.score > G.top) G.top = G.score;
+    G.fx.push({ kind: 'bonus', x: e.x, y: e.y - 8, t: 0 });
+    if (G.finale) G.finale.officer = 'down';
+  }
   if (e.type === 'moto') {
     G.fx.push({ kind: 'bigboom', x: e.x, y: e.y, t: 0 });
     addScorch(e.x, e.y, 11);
@@ -771,6 +778,8 @@ function detonate(x, y) {
 // that killed you is still standing on the respawn spot and re-kills instantly
 function respawnJoe() {
   G.enemies = []; G.lobs = []; G.nades = []; G.corpses = []; G.ebullets = []; G.shells = []; G.pickups = [];
+  // an unfinished gate assault re-arms — the garrison reforms while Joe is down
+  if (G.finale && G.finale.phase !== 'done') G.finale = null;
   const y = Math.min(A.height - 20, G.camY + VIEW_H - 26);
   let x = A.spawn.x;
   for (const dx of [0, 10, -10, 20, -20, 32, -32, 46, -46, 62, -62, 80, -80]) {
@@ -1155,6 +1164,13 @@ function tick() {
         const sxDelta = (e.t % 100 < 50 ? 1 : -1) * e.dir * 0.4;
         if (!rectsAt(e.x + sxDelta - 4, e.y - 6, 8, 10)) e.x += sxDelta;
       }
+    } else if (e.mode === 'flee') {
+      // the garrison commander bolts for the treeline — no fight left in him,
+      // no dodging either; he can be shot in the back for the bounty
+      const nx2 = e.x + (e.fleeDir || 1) * 1.8;
+      if (!rectsAt(nx2 - 4, e.y - 6, 8, 10)) e.x = nx2;
+      else { const ny2 = e.y + 1.2; if (!rectsAt(e.x - 4, ny2 - 6, 8, 10)) e.y = ny2; }
+      if (e.x < 10 || e.x > A.width - 10) e.gone = true;
     } else if (live) {
       const move = (vx, vy) => {
         const nx2 = e.x + vx;
@@ -1246,9 +1262,16 @@ function tick() {
     if (e.coverCd > 0) e.coverCd--;
     e.x = Math.max(6, Math.min(A.width - 6, e.x));
   }
-  // cull: off the sides for traversers, far from the camera for everyone
-  G.enemies = G.enemies.filter(e => e.y < G.camY + VIEW_H + 60 && e.y > G.camY - 80
-    && !(e.mode === 'traverse' && (e.x <= 7 || e.x >= A.width - 7) && e.t > 30));
+  // cull: off the sides for traversers, far from the camera for everyone;
+  // a fleeing officer who makes the edge got away — the bounty is forfeit
+  G.enemies = G.enemies.filter(e => {
+    if (e.gone) {
+      if (e.mode === 'flee' && G.finale && G.finale.officer === 'up') G.finale.officer = 'fled';
+      return false;
+    }
+    return e.y < G.camY + VIEW_H + 60 && e.y > G.camY - 80
+      && !(e.mode === 'traverse' && (e.x <= 7 || e.x >= A.width - 7) && e.t > 30);
+  });
   G.corpses = G.corpses.filter(c => c.y < G.camY + VIEW_H + 80 && c.y > G.camY - 100);
 
   // --- lobs (grenade arcs) ---
@@ -1286,10 +1309,50 @@ function tick() {
   for (let i = G.fx.length - 1; i >= 0; i--) if (++G.fx[i].t > (G.fx[i].kind === 'bigboom' ? 30 : G.fx[i].kind === 'muzzle' ? 4 : G.fx[i].kind === 'impact' ? 5 : 24)) G.fx.splice(i, 1);
   updateParticles();
 
-  // area clear (enter the painted gateway passage) -> tally ceremony
+  // --- fortress finale: the garrison sallies out before the area can clear —
+  // the arcade's signature end-of-area beat: the gate bursts, a last wave
+  // pours out, and the commander makes a run for it (bounty if you drop him)
   const ex = A.exit || { y: 58, x0: 116, x1: 160 };
+  const gateX = (ex.x0 + ex.x1) / 2;
+  if (G.state === 'play' && J.alive && !G.calm && !G.finale && J.y > ex.y && J.y < ex.y + 64) {
+    G.finale = { phase: 'burst', t: 0, toSpawn: Math.min(10, 7 + loopN() * 2), spawned: 0, officer: null };
+    G.shake = Math.max(G.shake, 12); G.flashT = Math.max(G.flashT, 3);
+    for (let k = 0; k < 14; k++)
+      spawnPart({ kind: 'dust', x: gateX + (vrng() - 0.5) * 34, y: ex.y + vrng() * 8, vx: (vrng() - 0.5) * 0.9,
+        vy: -0.25 - vrng() * 0.35, t: 0, ttl: 40 + vrng() * 24, size: 2 + vrng() * 2 });
+    if (window.Sfx) Sfx.play('explosion', { gain: 0.9, rate: 0.7, pan: panAt(gateX) });
+  }
+  if (G.finale && G.state === 'play') {
+    const F = G.finale; F.t++;
+    if (F.phase === 'burst') {
+      if (F.t % 5 === 0)
+        spawnPart({ kind: 'dust', x: gateX + (vrng() - 0.5) * 30, y: ex.y + 4, vx: (vrng() - 0.5) * 0.5, vy: -0.3, t: 0, ttl: 30, size: 2.2 });
+      if (F.t >= 26) { F.phase = 'wave'; F.t = 0; }
+    } else if (F.phase === 'wave') {
+      if (F.spawned < F.toSpawn && F.t % 13 === 1) {
+        const e2 = newEnemy(gateX + ((F.spawned * 37) % 21) - 10, ex.y + 3, 'rifleman', (F.spawned & 1) ? 1 : -1, 'engage');
+        e2.finale = true; e2.shotCd = 34 + ((F.spawned * 29) % 30);
+        G.enemies.push(e2); F.spawned++;
+        for (let k = 0; k < 3; k++)
+          spawnPart({ kind: 'dust', x: e2.x, y: e2.y, vx: (vrng() - 0.5) * 0.5, vy: -0.2, t: 0, ttl: 18, size: 1.2 });
+        if (F.spawned === ((F.toSpawn / 2) | 0) && !F.officer) {
+          const o = newEnemy(gateX, ex.y + 6, 'officer', 1, 'flee');
+          o.finale = true; o.fleeDir = J.x > gateX ? -1 : 1; // away from Joe's side
+          G.enemies.push(o); F.officer = 'up';
+        }
+      }
+      if (F.spawned >= F.toSpawn) F.phase = 'hold';
+    } else if (F.phase === 'hold') {
+      if (!G.enemies.some(e2 => e2.finale)) {
+        F.phase = 'done';
+        if (window.Sfx) Sfx.play('ready', { gain: 0.6, rate: 1.25 });
+      }
+    }
+  }
+  // area clear (enter the painted gateway passage) -> tally ceremony —
+  // LOCKED while the garrison is still in the fight
   if (G.state === 'play' && J.alive && J.y < ex.y && J.x > ex.x0 && J.x < ex.x1) {
-    setState('clear', 160);
+    if (!G.finale || G.finale.phase === 'done') setState('clear', 160);
   }
 }
 
@@ -1723,6 +1786,15 @@ function render(alpha) {
       ctx.restore();
       continue;
     }
+    if (f.kind === 'bonus') {
+      // bounty floater: "+1000" drifting up off the officer's body
+      const a = 1 - f.t / 24;
+      ctx.fillStyle = `rgba(255,210,87,${a})`;
+      ctx.font = `bold ${7 * S}px monospace`; ctx.textAlign = 'center';
+      ctx.fillText('+' + OFFICER_BONUS, f.x * S, (f.y - cy - f.t * 0.55) * S);
+      ctx.textAlign = 'start';
+      continue;
+    }
     if (f.kind === 'rescue') {
       const a = 1 - f.t / 24;
       ctx.strokeStyle = `rgba(180,255,150,${a})`; ctx.lineWidth = 1.2 * S;
@@ -1973,6 +2045,8 @@ function render(alpha) {
     textC('AREA ' + G.area + ' SECURED', 92, 14, '#e8d8b0', true);
     textC('BONUS ' + G.tally, 118, 10, '#ffd257', true);
     if (G.pows.length) textC(`PRISONERS RESCUED ${G.rescued}/${G.pows.length}`, 134, 6, '#b8e0a0');
+    if (G.finale) textC(G.finale.officer === 'down' ? `ENEMY OFFICER ELIMINATED  +${OFFICER_BONUS}` : 'THE OFFICER GOT AWAY…', 148, 6,
+      G.finale.officer === 'down' ? '#ffd257' : '#9a9280');
   } else if (G.state === 'gameover') {
     scrim(0.55);
     textC('GAME OVER', 108, 16, '#e33', true);
@@ -2034,7 +2108,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.23.0-feel', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.24.0-finale', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
@@ -2123,7 +2197,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },
@@ -2144,6 +2218,9 @@ if (qa) {
     give: (kind) => { G.pickups.push({ x: G.joe.x, y: G.joe.y, kind, t: 0 }); return true; },
     spawnType: (type, x, y) => { G.enemies.push(newEnemy(x !== undefined ? x : G.joe.x + 60, y !== undefined ? y : G.joe.y - 40, type, -1, 'traverse')); return type; },
     setArea: (n) => { G.area = Math.max(1, n | 0); return { area: G.area, diff: diffMul(), loop: loopN() }; },
+    // massacre everything except fleeing officers through the normal destroy
+    // path — scenario cleanup that still exercises corpses/vehicle explosions
+    wipe: () => { for (const e of G.enemies) if (e.mode !== 'flee') destroyEnemy(e); G.enemies = G.enemies.filter(e => e.mode === 'flee'); return G.enemies.length; },
     // what each character is actually rendering this frame — lets QA assert the
     // animation advances rather than just trusting that sprites exist
     anim: () => ({
