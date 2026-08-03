@@ -59,6 +59,16 @@ const DEATH_FRAMES = 96;               // full collapse, then the body lingers
 const LIVES_START = 4;                 // HUD observation
 const START_AMMO = 120;                // rifle rounds; pickups top this up
 const KILL_POINTS = 100;
+const CHAIN_WINDOW = 110; // ticks a kill chain stays alive (~2.2s)
+function chainMult() { return 1 + Math.min(4, ((G.chain || 0) / 3) | 0); }
+// every enemy kill routes through here: extends the chain, pays multiplied
+// points, and celebrates each multiplier step with a floater
+function chainKill() {
+  G.chain = (G.chain || 0) + 1; G.chainT = CHAIN_WINDOW;
+  const m = chainMult();
+  if (m > 1 && G.chain % 3 === 0) G.fx.push({ kind: 'bonus', x: G.joe.x, y: G.joe.y - 14, t: 0, txt: '×' + m });
+  G.score += KILL_POINTS * m; if (G.score > G.top) G.top = G.score;
+}
 const POW_POINTS = 500;                // rescuing a prisoner
 
 // ---------- setup ----------
@@ -134,7 +144,7 @@ const SPRITE_SETS = ['hero-n', 'hero-s', 'hero-e', 'hero-act', 'hero-die', 'rif-
   'off-s', 'off-e', 'off-n', 'off-act', 'lob-s', 'lob-act', 'mortar', 'truck'];
 const SPRITE_NAMES = ['sprites/hero', 'sprites/rifleman', 'sprites/officer', 'sprites/lobber',
   'ui/portrait', 'ui/rifle', 'ui/keyart.webp', 'ui/map.webp', 'tiles/sand', 'tiles/grass',
-  'props/palm', 'props/boulder', 'props/pond', 'props/trench', 'props/gate', 'props/wreck',
+  'props/palm', 'props/boulder', 'props/pond', 'props/trench', 'props/gate', 'props/wreck', 'sprites/truck-wreck',
   'props/obj-0', 'props/obj-1', 'props/obj-2', 'props/obj-3'];
 for (const set of SPRITE_SETS) for (let i = 0; i < 4; i++) SPRITE_NAMES.push(`sprites/${set}-${i}`);
 for (const name of SPRITE_NAMES) {
@@ -438,7 +448,7 @@ const G = {
   score: 0, top: loadScores()[0][1], lives: LIVES_START, grenades: 3, ammo: START_AMMO,
   area: 1, tally: 0, entry: null, lastEntry: null, paused: false, postGame: false,
   settingsSel: 0, settingsFrom: 'title', remap: null, cp: 1616, continues: 0,
-  frame: 0, wt: 0,
+  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [],
   camY: A.height - VIEW_H,  // camera top in world coords
   joe: { x: A.spawn.x, y: A.spawn.y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, firePrev: false, grenCd: 0, grenPrev: false, invuln: 0, alive: true, walk: 0, walkDist: 0, moving: false, fireT: 0, throwT: 0, recoil: 0, duck: false, deathT: 0 },
   bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
@@ -577,6 +587,7 @@ function setState(s, t) {
 function resetWorld() {
   Object.assign(G, { camY: A.height - VIEW_H, bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
     pows: (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 })), spawned: new Set(), shake: 0, tally: 0, cp: CHECKPOINTS[0], lastWave: 0, scorch: [], flashT: 0, finale: null,
+    hitStop: 0, chain: 0, chainT: 0, wrecks: [],
     props: DESTRUCTIBLE_DEFS.map(d => ({ ...d, dead: false, fuse: 0, burn: 0 })) });
   G.pows = (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 }));
   Object.assign(G.joe, { x: A.spawn.x, y: A.spawn.y, alive: true, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, grenCd: 0, invuln: 0, walk: 0, walkDist: 0 });
@@ -734,6 +745,7 @@ function destroyEnemy(e) {
     for (let i = 0; i < (big ? 12 : 8); i++) spawnPart({ kind: 'spark', x: e.x, y: e.y, vx: (vrng() - 0.5) * 2.6, vy: -1.5 * vrng(), t: 0, ttl: 18 + vrng() * 14, size: 0.9 });
     for (let i = 0; i < (big ? 8 : 5); i++) spawnPart({ kind: 'chunk', x: e.x, y: e.y, vx: (vrng() - 0.5) * 2.2, vy: -1.2 - vrng() * 1.2, t: 0, ttl: 42 + vrng() * 20, size: 1 + vrng() * 0.8, ground: e.y + 2 + vrng() * 6 });
     if (window.Sfx) Sfx.play('explosion', { gain: big ? 1.0 : 0.85, rate: big ? 0.85 : 1.05, pan: panAt(e.x) });
+    G.hitStop = Math.max(G.hitStop || 0, 4);
     if (big) {
       // whoever was still aboard (or standing at the tailgate) goes with it —
       // marked gone rather than spliced so the caller's index stays valid
@@ -742,9 +754,12 @@ function destroyEnemy(e) {
         if (e2 === e || e2.gone || e2.type === 'truck') continue;
         if (Math.hypot(e2.x - e.x, e2.y - e.y) < 22) {
           dropCorpse(e2); e2.gone = true;
-          G.score += KILL_POINTS; if (G.score > G.top) G.top = G.score;
+          chainKill();
         }
       }
+      // the burnt hulk stays on the battlefield
+      if (G.wrecks.length > 3) G.wrecks.shift();
+      G.wrecks.push({ x: e.x, y: e.y, face: e.face || 1 });
     }
   } else dropCorpse(e);
 }
@@ -763,13 +778,14 @@ function blowProp(p, depth) {
   for (let i = 0; i < 7; i++)
     spawnPart({ kind: 'smoke', x: p.x + (vrng() - 0.5) * 10, y: p.y - 2, vx: (vrng() - 0.5) * 0.25, vy: -0.32 - vrng() * 0.2, t: 0, ttl: 90 + vrng() * 40, size: 3.5 + vrng() * 2.5 });
   if (window.Sfx) Sfx.play('explosion', { gain: 1.0, rate: 0.78, pan: panAt(p.x) });
+  G.hitStop = Math.max(G.hitStop || 0, 4);
   // everything caught in the blast
   for (let j = G.enemies.length - 1; j >= 0; j--) {
     const e = G.enemies[j];
     if (Math.hypot(e.x - p.x, e.y - p.y) < BLAST_R) {
       destroyEnemy(e);
       G.enemies.splice(j, 1);
-      G.score += KILL_POINTS; if (G.score > G.top) G.top = G.score;
+      chainKill();
     }
   }
   for (const w of G.pows) if (!w.freed && !w.dead && Math.hypot(w.x - p.x, w.y - p.y) < BLAST_R) { w.dead = true; w.t = 0; }
@@ -806,7 +822,7 @@ function detonate(x, y) {
     const e = G.enemies[j];
     if (Math.hypot(e.x - x, e.y - y) < 26) {
       G.enemies.splice(j, 1);
-      G.score += KILL_POINTS;
+      chainKill();
       G.fx.push({ kind: 'boom', x: e.x, y: e.y, t: 0 });
     }
   }
@@ -831,6 +847,7 @@ function respawnJoe() {
 
 function killJoe() {
   if (!G.joe.alive || G.joe.invuln > 0) return;
+  G.chain = 0; G.chainT = 0; // getting hit breaks the kill chain
   G.joe.alive = false;
   G.joe.deathT = 0; G.joe.fireT = 0; G.joe.throwT = 0; G.joe.duck = false;
   G.fx.push({ kind: 'death', x: G.joe.x, y: G.joe.y, t: 0 });
@@ -857,6 +874,9 @@ function snapshotPrev() {
 // ---------- logic tick (50Hz) ----------
 function tick() {
   snapshotPrev();
+  // hit-stop: a couple of frozen frames on a kill sell the impact (prev ==
+  // cur after the snapshot, so interpolation holds perfectly still)
+  if (G.hitStop > 0 && G.state === 'play') { G.hitStop--; return; }
   G.frame++;
   const J = G.joe;
   const ed = uiEdges();
@@ -1086,7 +1106,8 @@ function tick() {
         G.fx.push({ kind: 'impact', x: b.x, y: b.y, dx: b.vx, dy: b.vy, t: 0 });
         destroyEnemy(e);
         G.enemies.splice(j, 1); G.bullets.splice(i, 1);
-        G.score += KILL_POINTS; if (G.score > G.top) G.top = G.score;
+        chainKill();
+        G.hitStop = Math.max(G.hitStop || 0, 2);
         G.fx.push({ kind: 'boom', x: e.x, y: e.y, t: 0 });
         for (let k = 0; k < 5; k++) spawnPart({ kind: 'dust', x: e.x, y: e.y, vx: (vrng() - 0.5) * 0.8, vy: -0.2 - vrng() * 0.3, t: 0, ttl: 20 + vrng() * 12, size: 1.2 + vrng() });
         if (window.Sfx) Sfx.play('enemy-down', { gain: 0.8, pan: panAt(e.x) });
@@ -1382,6 +1403,7 @@ function tick() {
   if (G.shake > 0) G.shake--;
   if (G.flashT > 0) G.flashT--;
   G.quietT = (G.quietT || 0) + 1;
+  if (G.chainT > 0 && --G.chainT === 0) G.chain = 0; // the window lapses
   for (let i = G.scorch.length - 1; i >= 0; i--) if (++G.scorch[i].t > G.scorch[i].ttl) G.scorch.splice(i, 1);
 
   // --- destructible props: fuses, chain reactions, burn-down ---
@@ -1504,6 +1526,18 @@ function render(alpha) {
     g3.addColorStop(1, 'rgba(22,18,12,0)');
     ctx.fillStyle = g3;
     ctx.beginPath(); ctx.arc(sc.x * S, sy * S, sc.r * S, 0, 7); ctx.fill();
+  }
+
+  // burnt-out truck hulks stay where they died for the rest of the area
+  const husk = IMGS['sprites/truck-wreck'];
+  if (husk) for (const wk of G.wrecks) {
+    const wy = wk.y - cy;
+    if (wy < -40 || wy > VIEW_H + 40) continue;
+    const hh2 = ENEMY_H * 1.45, ww2 = hh2 * (husk.width / husk.height);
+    ctx.save();
+    ctx.translate(wk.x * S, (wy + 4) * S); ctx.scale(wk.face, 1);
+    ctx.drawImage(husk, -ww2 / 2 * S, -hh2 * S, ww2 * S, hh2 * S);
+    ctx.restore();
   }
 
   // wreck decals over destroyed props (drawn before set dressing/sprites)
@@ -1880,11 +1914,11 @@ function render(alpha) {
       continue;
     }
     if (f.kind === 'bonus') {
-      // bounty floater: "+1000" drifting up off the officer's body
+      // rising gold floater: officer bounty or a chain-multiplier milestone
       const a = 1 - f.t / 24;
       ctx.fillStyle = `rgba(255,210,87,${a})`;
       ctx.font = `bold ${7 * S}px monospace`; ctx.textAlign = 'center';
-      ctx.fillText('+' + OFFICER_BONUS, f.x * S, (f.y - cy - f.t * 0.55) * S);
+      ctx.fillText(f.txt || ('+' + OFFICER_BONUS), f.x * S, (f.y - cy - f.t * 0.55) * S);
       ctx.textAlign = 'start';
       continue;
     }
@@ -2101,6 +2135,15 @@ function render(alpha) {
     ctx.fillStyle = '#fff'; ctx.font = `bold ${8 * S}px monospace`;
     ctx.fillText(String(G.score).padStart(7, '0'), 31 * S, 18 * S);
     for (let i = 0; i < Math.min(6, Math.max(0, G.lives)); i++) { ctx.fillStyle = '#7da05a'; ctx.fillRect((32 + i * 7) * S, 21 * S, 5 * S, 5 * S); }
+    // kill-chain chip: multiplier + a draining window bar (only while chaining)
+    if (chainMult() > 1 && G.state === 'play') {
+      ctx.fillStyle = '#ffd257'; ctx.font = `bold ${6 * S}px monospace`;
+      ctx.fillText('×' + chainMult(), 95 * S, 18 * S);
+      ctx.fillStyle = 'rgba(255,210,87,0.35)';
+      ctx.fillRect(95 * S, 20 * S, 14 * S, 1.6 * S);
+      ctx.fillStyle = '#ffd257';
+      ctx.fillRect(95 * S, 20 * S, 14 * (G.chainT / CHAIN_WINDOW) * S, 1.6 * S);
+    }
     ctx.fillStyle = '#9a916f'; ctx.font = `${4.5 * S}px monospace`; ctx.fillText('×' + Math.max(0, G.lives), 78 * S, 26 * S);
     // top-right: objective banner + status line
     const obj = G.camY > 1265 ? 'REACH THE BRIDGE' : G.camY > 900 ? 'CROSS THE BRIDGE' : G.camY > 300 ? 'BREAK THE TRENCH LINE' : 'BREACH THE GATE';
@@ -2343,7 +2386,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.28.0-alive', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.29.0-chain', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
@@ -2432,7 +2475,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },
@@ -2482,6 +2525,7 @@ if (qa) {
       corpses: G.corpses.length,
       scorch: G.scorch.length, flash: G.flashT,
       birds: G.parts.filter(p => p.kind === 'bird').length,
+      wrecks: G.wrecks.length,
     }),
     blocked: (x, y) => maskBlocked(x, y),
     plateNames: () => PLATES.map(p => p.name + (p.mask ? '+mask' : '-NOMASK')),
