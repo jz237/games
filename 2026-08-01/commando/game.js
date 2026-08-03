@@ -439,7 +439,7 @@ const G = {
   joe: { x: A.spawn.x, y: A.spawn.y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, firePrev: false, grenCd: 0, grenPrev: false, invuln: 0, alive: true, walk: 0, walkDist: 0, moving: false, fireT: 0, throwT: 0, recoil: 0, duck: false, deathT: 0 },
   bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
   pows: (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 })), rescued: 0,
-  spawned: new Set(), shake: 0,
+  spawned: new Set(), shake: 0, scorch: [], flashT: 0,
   props: DESTRUCTIBLE_DEFS.map(d => ({ ...d, dead: false, fuse: 0, burn: 0 })),
 };
 // painted fire locations (world coords, from the plates) that get live glow + smoke
@@ -462,7 +462,7 @@ function updateParticles() {
     const p = G.parts[i];
     p.x += p.vx; p.y += p.vy; p.t++;
     if (p.kind === 'smoke') { p.size += 0.06; p.vx += 0.004; }
-    else if (p.kind === 'casing') { p.vy += 0.09; if (p.vy > 0 && p.y >= p.ground) { p.vy = 0; p.vx *= 0.6; } }
+    else if (p.kind === 'casing' || p.kind === 'chunk') { p.vy += 0.09; if (p.vy > 0 && p.y >= p.ground) { p.vy = 0; p.vx *= 0.6; } }
     else if (p.kind === 'spark') { p.vy += 0.03; }
     if (p.t >= p.ttl) G.parts.splice(i, 1);
   }
@@ -551,7 +551,7 @@ function setState(s, t) {
 }
 function resetWorld() {
   Object.assign(G, { camY: A.height - VIEW_H, bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
-    pows: (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 })), spawned: new Set(), shake: 0, tally: 0, cp: CHECKPOINTS[0], lastWave: 0,
+    pows: (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 })), spawned: new Set(), shake: 0, tally: 0, cp: CHECKPOINTS[0], lastWave: 0, scorch: [], flashT: 0,
     props: DESTRUCTIBLE_DEFS.map(d => ({ ...d, dead: false, fuse: 0, burn: 0 })) });
   G.pows = (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 }));
   Object.assign(G.joe, { x: A.spawn.x, y: A.spawn.y, alive: true, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, grenCd: 0, invuln: 0, walk: 0, walkDist: 0 });
@@ -577,6 +577,7 @@ function applyArea(n) {
 // continue (normal mode): resume from the last checkpoint reached, score kept
 function continueGame() {
   G.lives = LIVES_START; G.grenades = 3; G.ammo = START_AMMO; G.continues++;
+  G.rescued = 0; // the world (and its prisoners) reset with the continue
   const cp = G.cp;
   resetWorld();
   G.camY = cp; G.cp = cp;
@@ -662,6 +663,12 @@ function spawnEdgeWave() {
   }
 }
 
+// permanent-ish blast mark on the ground, fading out over ~28s
+function addScorch(x, y, r) {
+  if (G.scorch.length > 11) G.scorch.shift();
+  G.scorch.push({ x, y, r, t: 0, ttl: 1400 });
+}
+
 // a killed soldier leaves a body playing one of several collapse sequences,
 // and sometimes drops the supplies he was carrying
 function dropCorpse(e) {
@@ -674,11 +681,27 @@ function dropCorpse(e) {
   }
 }
 
+// a destroyed vehicle explodes instead of leaving an infantry corpse
+function destroyEnemy(e) {
+  if (e.type === 'moto') {
+    G.fx.push({ kind: 'bigboom', x: e.x, y: e.y, t: 0 });
+    addScorch(e.x, e.y, 11);
+    G.shake = Math.max(G.shake, 8);
+    G.flashT = Math.max(G.flashT, 3);
+    for (let i = 0; i < 8; i++) spawnPart({ kind: 'spark', x: e.x, y: e.y, vx: (vrng() - 0.5) * 2.6, vy: -1.5 * vrng(), t: 0, ttl: 18 + vrng() * 14, size: 0.9 });
+    for (let i = 0; i < 5; i++) spawnPart({ kind: 'chunk', x: e.x, y: e.y, vx: (vrng() - 0.5) * 2.2, vy: -1.2 - vrng() * 1.2, t: 0, ttl: 42 + vrng() * 20, size: 1 + vrng() * 0.8, ground: e.y + 2 + vrng() * 6 });
+    if (window.Sfx) Sfx.play('explosion', { gain: 0.85, rate: 1.05 });
+  } else dropCorpse(e);
+}
+
 // blow a destructible prop: wreck decal, fireball, casualties, chain reaction
 function blowProp(p, depth) {
   if (p.dead) return;
   p.dead = true; p.burn = 150;
   G.fx.push({ kind: 'bigboom', x: p.x, y: p.y, t: 0 });
+  addScorch(p.x, p.y, p.r * 1.5);
+  G.flashT = Math.max(G.flashT, p.kind === 'fuel' ? 5 : 4);
+  for (let i = 0; i < 7; i++) spawnPart({ kind: 'chunk', x: p.x, y: p.y, vx: (vrng() - 0.5) * 2.6, vy: -1.4 - vrng() * 1.4, t: 0, ttl: 44 + vrng() * 22, size: 1 + vrng(), ground: p.y + 2 + vrng() * 7 });
   G.shake = Math.max(G.shake, p.kind === 'fuel' ? 16 : 10);
   for (let i = 0; i < (p.kind === 'fuel' ? 16 : 10); i++)
     spawnPart({ kind: 'spark', x: p.x, y: p.y, vx: (vrng() - 0.5) * 3, vy: -2 * vrng(), t: 0, ttl: 20 + vrng() * 18, size: 1 });
@@ -689,7 +712,7 @@ function blowProp(p, depth) {
   for (let j = G.enemies.length - 1; j >= 0; j--) {
     const e = G.enemies[j];
     if (Math.hypot(e.x - p.x, e.y - p.y) < BLAST_R) {
-      dropCorpse(e);
+      destroyEnemy(e);
       G.enemies.splice(j, 1);
       G.score += KILL_POINTS; if (G.score > G.top) G.top = G.score;
     }
@@ -717,7 +740,10 @@ function hitProp(x, y, slack) {
 function detonate(x, y) {
   for (const p of G.props) if (!p.dead && !p.fuse && Math.hypot(p.x - x, p.y - y) < p.r + 14) p.fuse = 4;
   G.fx.push({ kind: 'bigboom', x, y, t: 0 });
+  addScorch(x, y, 13);
   G.shake = 10;
+  G.flashT = Math.max(G.flashT, 4);
+  for (let i = 0; i < 6; i++) spawnPart({ kind: 'chunk', x, y, vx: (vrng() - 0.5) * 2.2, vy: -1.2 - vrng() * 1.4, t: 0, ttl: 40 + vrng() * 22, size: 1 + vrng() * 0.8, ground: y + 2 + vrng() * 6 });
   for (let i = 0; i < 10; i++) spawnPart({ kind: 'spark', x, y, vx: (vrng() - 0.5) * 2.4, vy: -1.6 * vrng(), t: 0, ttl: 18 + vrng() * 14, size: 0.9 });
   for (let i = 0; i < 4; i++) spawnPart({ kind: 'smoke', x: x + (vrng() - 0.5) * 8, y: y - 2, vx: (vrng() - 0.5) * 0.2, vy: -0.3 - vrng() * 0.2, t: 0, ttl: 70 + vrng() * 30, size: 3 + vrng() * 2 });
   if (window.Sfx) Sfx.play('explosion', { gain: 1.0, rate: 0.9 });
@@ -767,6 +793,7 @@ function snapshotPrev() {
   for (const b of G.ebullets) { b.px = b.x; b.py = b.y; }
   for (const l of G.lobs) { l.px = l.x; l.py = l.y; l.pt = l.t; }
   for (const n of G.nades) { n.px = n.x; n.py = n.y; n.pt = n.t; }
+  for (const sh of G.shells) { sh.pt = sh.t; }
   for (const p of G.parts) { p.px = p.x; p.py = p.y; }
 }
 
@@ -936,7 +963,7 @@ function tick() {
       J.fireCd = FIRE_MIN_INTERVAL;
       J.fireT = FIRE_POSE_FRAMES; J.recoil = 3;
       // muzzle flash + ejected casing (visual only)
-      G.fx.push({ kind: 'muzzle', x: J.x + f.x / len * 7, y: J.y - 6 + f.y / len * 7, t: 0 });
+      G.fx.push({ kind: 'muzzle', x: J.x + f.x / len * 7, y: J.y - 6 + f.y / len * 7, dx: f.x / len, dy: f.y / len, t: 0 });
       spawnPart({ kind: 'casing', x: J.x + 3, y: J.y - 5, vx: 0.35 + vrng() * 0.3, vy: -0.5 - vrng() * 0.3, t: 0, ttl: 55, size: 1, ground: J.y + 2 + vrng() * 3 });
       if (window.Sfx) Sfx.play('shot', { gain: 0.7 });
     }
@@ -983,7 +1010,8 @@ function tick() {
       const e = G.enemies[j];
       if (Math.abs(b.x - e.x) < 7 && Math.abs(b.y - e.y) < 9) {
         // leave a body that plays out the collapse, then lingers
-        dropCorpse(e);
+        G.fx.push({ kind: 'impact', x: b.x, y: b.y, dx: b.vx, dy: b.vy, t: 0 });
+        destroyEnemy(e);
         G.enemies.splice(j, 1); G.bullets.splice(i, 1);
         G.score += KILL_POINTS; if (G.score > G.top) G.top = G.score;
         G.fx.push({ kind: 'boom', x: e.x, y: e.y, t: 0 });
@@ -998,8 +1026,11 @@ function tick() {
   for (let i = G.ebullets.length - 1; i >= 0; i--) {
     const b = G.ebullets[i];
     b.x += b.vx; b.y += b.vy;
+    // enemy fire cooks off fuel drums too — their own barrage is a hazard
+    if (hitProp(b.x, b.y)) { G.ebullets.splice(i, 1); continue; }
     if (maskBlocked(b.x, b.y)) {
-      for (let k = 0; k < 2; k++) spawnPart({ kind: 'dust', x: b.x, y: b.y, vx: (vrng() - 0.5) * 0.4, vy: -0.12, t: 0, ttl: 14, size: 0.9 });
+      if (!hitProp(b.x, b.y, 10))
+        for (let k = 0; k < 2; k++) spawnPart({ kind: 'dust', x: b.x, y: b.y, vx: (vrng() - 0.5) * 0.4, vy: -0.12, t: 0, ttl: 14, size: 0.9 });
       G.ebullets.splice(i, 1); continue;
     }
     if (--b.life <= 0 || b.y < G.camY - 20 || b.y > G.camY + VIEW_H + 20 || b.x < 0 || b.x > A.width) { G.ebullets.splice(i, 1); continue; }
@@ -1015,7 +1046,10 @@ function tick() {
     sh.t++;
     if (sh.t >= sh.ttl) {
       G.fx.push({ kind: 'bigboom', x: sh.tx, y: sh.ty, t: 0 });
+      addScorch(sh.tx, sh.ty, 11);
       G.shake = Math.max(G.shake, 12);
+      G.flashT = Math.max(G.flashT, 4);
+      for (let i = 0; i < 4; i++) spawnPart({ kind: 'chunk', x: sh.tx, y: sh.ty, vx: (vrng() - 0.5) * 2, vy: -1.1 - vrng(), t: 0, ttl: 38 + vrng() * 18, size: 1 + vrng() * 0.7, ground: sh.ty + 2 + vrng() * 6 });
       for (let k = 0; k < 9; k++) spawnPart({ kind: 'spark', x: sh.tx, y: sh.ty, vx: (vrng() - 0.5) * 2.4, vy: -1.4 * vrng(), t: 0, ttl: 18 + vrng() * 12, size: 0.9 });
       for (let k = 0; k < 3; k++) spawnPart({ kind: 'smoke', x: sh.tx + (vrng() - 0.5) * 8, y: sh.ty, vx: 0, vy: -0.28, t: 0, ttl: 70, size: 3 });
       for (const q of G.props) if (!q.dead && !q.fuse && Math.hypot(q.x - sh.tx, q.y - sh.ty) < q.r + 12) q.fuse = 4;
@@ -1098,7 +1132,7 @@ function tick() {
       }
       if (e.type === 'trencher') {
         // idle cycle in cover so they read as manning the trench
-        if (e.duckT <= 0 && e.t % 120 < 60) e.duckT = 1;
+        if (e.duckT <= 0 && e.fireT <= 0 && e.t % 120 === 0) e.duckT = 44;
       } else {
         const sxDelta = (e.t % 100 < 50 ? 1 : -1) * e.dir * 0.4;
         if (!rectsAt(e.x + sxDelta - 4, e.y - 6, 8, 10)) e.x += sxDelta;
@@ -1171,7 +1205,7 @@ function tick() {
               const ax = dx / d, ay = dy / d;
               G.ebullets.push({ x: e.x, y: e.y + 2, vx: (ax * ca - ay * sa) * ENEMY_BULLET_SPEED,
                 vy: (ax * sa + ay * ca) * ENEMY_BULLET_SPEED, life: 150 });
-              G.fx.push({ kind: 'muzzle', x: e.x + ax * 6, y: e.y + ay * 6, t: 0 });
+              G.fx.push({ kind: 'muzzle', x: e.x + ax * 6, y: e.y + ay * 6, dx: ax, dy: ay, t: 0 });
               if (window.Sfx) Sfx.play('shot', { gain: 0.34, rate: 0.85 });
             }
           }
@@ -1211,6 +1245,8 @@ function tick() {
     if (n.t >= n.ttl) { detonate(n.x, n.y); G.nades.splice(i, 1); }
   }
   if (G.shake > 0) G.shake--;
+  if (G.flashT > 0) G.flashT--;
+  for (let i = G.scorch.length - 1; i >= 0; i--) if (++G.scorch[i].t > G.scorch[i].ttl) G.scorch.splice(i, 1);
 
   // --- destructible props: fuses, chain reactions, burn-down ---
   for (const p of G.props) {
@@ -1222,7 +1258,7 @@ function tick() {
   }
 
   // --- fx + visual particles ---
-  for (let i = G.fx.length - 1; i >= 0; i--) if (++G.fx[i].t > (G.fx[i].kind === 'bigboom' ? 30 : G.fx[i].kind === 'muzzle' ? 4 : 24)) G.fx.splice(i, 1);
+  for (let i = G.fx.length - 1; i >= 0; i--) if (++G.fx[i].t > (G.fx[i].kind === 'bigboom' ? 30 : G.fx[i].kind === 'muzzle' ? 4 : G.fx[i].kind === 'impact' ? 5 : 24)) G.fx.splice(i, 1);
   updateParticles();
 
   // area clear (enter the painted gateway passage) -> tally ceremony
@@ -1236,6 +1272,7 @@ function tick() {
 let LERP = 1;                              // 0..1 fraction between logic ticks
 const IX = (o) => (o.px === undefined ? o.x : o.px + (o.x - o.px) * LERP);
 const IY = (o) => (o.py === undefined ? o.y : o.py + (o.y - o.py) * LERP);
+const IT = (o) => (o.pt === undefined ? o.t : o.pt + (o.t - o.pt) * LERP);
 function render(alpha) {
   LERP = alpha === undefined ? 1 : alpha;
   const cy = G.pcamY === undefined ? G.camY : G.pcamY + (G.camY - G.pcamY) * LERP;
@@ -1277,6 +1314,19 @@ function render(alpha) {
         ctx.fillRect(mx * mk.cell * S, (mk.y0 + my * mk.cell - cy) * S, mk.cell * S, mk.cell * S);
       }
     }
+  }
+
+  // blast scorch marks, fading out slowly
+  for (const sc of G.scorch) {
+    const sy = sc.y - cy;
+    if (sy < -40 || sy > VIEW_H + 40) continue;
+    const a = Math.min(1, sc.t / 5) * Math.min(1, (sc.ttl - sc.t) / 300) * 0.5;
+    const g3 = ctx.createRadialGradient(sc.x * S, sy * S, 0, sc.x * S, sy * S, sc.r * S);
+    g3.addColorStop(0, `rgba(14,11,8,${a})`);
+    g3.addColorStop(0.65, `rgba(22,18,12,${a * 0.55})`);
+    g3.addColorStop(1, 'rgba(22,18,12,0)');
+    ctx.fillStyle = g3;
+    ctx.beginPath(); ctx.arc(sc.x * S, sy * S, sc.r * S, 0, 7); ctx.fill();
   }
 
   // wreck decals over destroyed props (drawn before set dressing/sprites)
@@ -1341,12 +1391,12 @@ function render(alpha) {
   // enemy thrown grenades: tumbling olive stick-grenade with a ground shadow
   for (const l of G.lobs) {
     const lx = IX(l), ly = IY(l);
-    const z = Math.sin(Math.PI * (l.t / l.ttl)) * 7;
+    const z = Math.sin(Math.PI * (IT(l) / l.ttl)) * 7;
     ctx.fillStyle = 'rgba(30,25,10,0.30)';
     ctx.beginPath(); ctx.ellipse(lx * S, (ly - cy + 1) * S, 2.2 * S, 1.1 * S, 0, 0, 7); ctx.fill();
     ctx.save();
     ctx.translate(lx * S, (ly - cy - z) * S);
-    ctx.rotate(l.t * 0.34);
+    ctx.rotate(IT(l) * 0.34);
     ctx.fillStyle = '#4b5a2e';
     ctx.fillRect(-0.7 * S, -2.6 * S, 1.4 * S, 4 * S);   // handle
     ctx.fillStyle = '#6a7a44';
@@ -1355,16 +1405,22 @@ function render(alpha) {
   }
   // shell casings on the ground (under the sprites)
   for (const p of G.parts) {
-    if (p.kind !== 'casing') continue;
+    if (p.kind !== 'casing' && p.kind !== 'chunk') continue;
     const a = 1 - p.t / p.ttl;
-    ctx.fillStyle = `rgba(212,170,80,${0.9 * a})`;
-    ctx.fillRect((IX(p) - 0.6) * S, (IY(p) - cy - 0.6) * S, 1.2 * S, 1.2 * S);
+    if (p.kind === 'chunk') {
+      ctx.fillStyle = `rgba(52,42,30,${0.95 * a})`;
+      const sz = p.size;
+      ctx.fillRect((IX(p) - sz / 2) * S, (IY(p) - cy - sz / 2) * S, sz * S, sz * S);
+    } else {
+      ctx.fillStyle = `rgba(212,170,80,${0.9 * a})`;
+      ctx.fillRect((IX(p) - 0.6) * S, (IY(p) - cy - 0.6) * S, 1.2 * S, 1.2 * S);
+    }
   }
 
   // player grenades (olive, arcing)
   for (const n of G.nades) {
     const nx = IX(n), ny = IY(n);
-    const z = Math.sin(Math.PI * (n.t / n.ttl)) * 8;
+    const z = Math.sin(Math.PI * (IT(n) / n.ttl)) * 8;
     drawShadow(nx, ny - cy, 2);
     ctx.fillStyle = '#4d6030';
     ctx.beginPath(); ctx.arc(nx * S, (ny - cy - z) * S, 2.4 * S, 0, 7); ctx.fill();
@@ -1491,7 +1547,7 @@ function render(alpha) {
 
   // incoming mortar rounds: a growing target ring warns where it will land
   for (const sh of G.shells) {
-    const k = sh.t / sh.ttl;
+    const k = IT(sh) / sh.ttl;
     const sy = sh.ty - cy;
     if (sy < -20 || sy > VIEW_H + 20) continue;
     ctx.strokeStyle = `rgba(255,90,50,${0.25 + 0.5 * k})`;
@@ -1560,14 +1616,43 @@ function render(alpha) {
   // fx
   for (const f of G.fx) {
     if (f.kind === 'muzzle') {
+      // directional star flash: bright teardrop along the shot with cross spikes
       const a = (1 - f.t / 4) * (0.5 + 0.5 * Settings.flash);
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      let mg = ctx.createRadialGradient(f.x * S, (f.y - cy) * S, 0, f.x * S, (f.y - cy) * S, 6 * S);
-      mg.addColorStop(0, `rgba(255,230,150,${a})`);
-      mg.addColorStop(0.4, `rgba(255,160,60,${a * 0.55})`);
+      ctx.translate(f.x * S, (f.y - cy) * S);
+      ctx.rotate(Math.atan2(f.dy === undefined ? -1 : f.dy, f.dx || 0));
+      let mg = ctx.createRadialGradient(2 * S, 0, 0, 2 * S, 0, 7 * S);
+      mg.addColorStop(0, `rgba(255,246,205,${a})`);
+      mg.addColorStop(0.35, `rgba(255,180,70,${a * 0.7})`);
       mg.addColorStop(1, 'rgba(255,120,30,0)');
       ctx.fillStyle = mg;
-      ctx.beginPath(); ctx.arc(f.x * S, (f.y - cy) * S, 6 * S, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(2.6 * S, 0, 5.6 * S, 2.3 * S, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = `rgba(255,235,170,${a * 0.9})`;
+      ctx.lineWidth = 0.8 * S; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, 0); ctx.lineTo(8.5 * S, 0);
+      ctx.moveTo(1.6 * S, -2.6 * S); ctx.lineTo(1.6 * S, 2.6 * S);
+      ctx.stroke();
+      ctx.restore();
+      continue;
+    }
+    if (f.kind === 'impact') {
+      // hit confirm: three short sparks fanning on from the bullet vector
+      const a = (1 - f.t / 5);
+      const sp = Math.hypot(f.dx || 0, f.dy || -1) || 1;
+      const ux = (f.dx || 0) / sp, uy = (f.dy === undefined ? -1 : f.dy) / sp;
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = `rgba(255,225,150,${a})`;
+      ctx.lineWidth = 0.9 * S; ctx.lineCap = 'round';
+      for (const ang of [-0.5, 0, 0.5]) {
+        const ca = Math.cos(ang), sa = Math.sin(ang);
+        const rx = ux * ca - uy * sa, ry = ux * sa + uy * ca;
+        const l0 = (1 + f.t * 0.8), l1 = l0 + 3.2;
+        ctx.beginPath();
+        ctx.moveTo((f.x + rx * l0) * S, (f.y - cy + ry * l0) * S);
+        ctx.lineTo((f.x + rx * l1) * S, (f.y - cy + ry * l1) * S);
+        ctx.stroke();
+      }
       ctx.restore();
       continue;
     }
@@ -1578,12 +1663,38 @@ function render(alpha) {
       continue;
     }
     if (f.kind === 'bigboom') {
-      const a = 1 - f.t / 30;
-      const fl = 0.5 + 0.5 * Settings.flash; // flash-intensity setting scales the hot core
-      ctx.fillStyle = `rgba(90,70,45,${a * 0.55})`; // smoke ring
-      ctx.beginPath(); ctx.arc(f.x * S, (f.y - cy) * S, (5 + f.t * 1.5) * S, 0, 7); ctx.fill();
-      ctx.fillStyle = `rgba(255,${190 - f.t * 5},50,${a * fl})`;
-      ctx.beginPath(); ctx.arc(f.x * S, (f.y - cy) * S, (3 + f.t * 1.0) * S, 0, 7); ctx.fill();
+      // staged: white-hot core -> shockwave ring -> rolling multi-blob fireball
+      // -> smoke. Blob jitter is seeded from position + coarse time, so replays
+      // and QA screenshots stay deterministic while the fire still roils.
+      const T2 = f.t, a = 1 - T2 / 30;
+      const fl = 0.5 + 0.5 * Settings.flash;
+      const ex2 = f.x * S, ey2 = (f.y - cy) * S;
+      ctx.fillStyle = `rgba(70,58,44,${a * 0.5})`;
+      ctx.beginPath(); ctx.arc(ex2, ey2, (5 + T2 * 1.6) * S, 0, 7); ctx.fill();
+      if (T2 < 14) {
+        ctx.strokeStyle = `rgba(255,225,175,${(1 - T2 / 14) * 0.5 * fl})`;
+        ctx.lineWidth = Math.max(1, 2.6 - T2 * 0.16) * S;
+        ctx.beginPath(); ctx.arc(ex2, ey2, (3 + T2 * 2.5) * S, 0, 7); ctx.stroke();
+      }
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      if (T2 < 4) {
+        ctx.fillStyle = `rgba(255,252,235,${(1 - T2 / 4) * fl})`;
+        ctx.beginPath(); ctx.arc(ex2, ey2, (5 + T2 * 3) * S, 0, 7); ctx.fill();
+      }
+      let hh = ((f.x * 73856093) ^ (f.y * 19349663) ^ ((T2 >> 1) * 83492791)) >>> 0;
+      const jr = () => { hh = (hh * 1103515245 + 12345) >>> 0; return ((hh >>> 9) / 8388608) - 1; };
+      for (let bi = 0; bi < 4; bi++) {
+        const ox2 = jr() * (2 + T2 * 0.28) * S;
+        const oy2 = jr() * (2 + T2 * 0.22) * S - T2 * 0.22 * S; // fire climbs
+        const r = (2.2 + T2 * 0.55) * (0.72 + 0.28 * (((bi * 37 + T2) % 5) / 4)) * S;
+        const g2 = ctx.createRadialGradient(ex2 + ox2, ey2 + oy2, 0, ex2 + ox2, ey2 + oy2, r);
+        g2.addColorStop(0, `rgba(255,${215 - T2 * 5},95,${a * fl * 0.85})`);
+        g2.addColorStop(0.6, `rgba(235,${115 - T2 * 2},45,${a * 0.5})`);
+        g2.addColorStop(1, 'rgba(120,40,20,0)');
+        ctx.fillStyle = g2;
+        ctx.beginPath(); ctx.arc(ex2 + ox2, ey2 + oy2, r, 0, 7); ctx.fill();
+      }
+      ctx.restore();
     } else {
       ctx.fillStyle = f.kind === 'boom' ? `rgba(255,${180 - f.t * 6},60,${1 - f.t / 24})` : `rgba(255,255,255,${1 - f.t / 24})`;
       ctx.beginPath(); ctx.arc(f.x * S, (f.y - cy) * S, (2 + f.t * 0.6) * S, 0, 7); ctx.fill();
@@ -1629,6 +1740,13 @@ function render(alpha) {
   }
 
   ctx.restore(); // end screen-shake transform (HUD and overlays never shake)
+
+  // brief warm frame-flash on big detonations (capped by the flash setting,
+  // photosensitivity-safe: default 0.6 -> peak alpha ~0.08 for 5 frames)
+  if (G.flashT > 0) {
+    ctx.fillStyle = `rgba(255,220,170,${(G.flashT / 5) * 0.13 * Settings.flash})`;
+    ctx.fillRect(0, 0, VIEW_W * S, VIEW_H * S);
+  }
 
   // ---------- HUD + screen cards ----------
   const scrim = (a) => { ctx.fillStyle = `rgba(5,8,4,${a})`; ctx.fillRect(0, 0, VIEW_W * S, VIEW_H * S); };
@@ -1849,7 +1967,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.20.0-title', (VIEW_W - 60) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.21.0-fx2', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
@@ -1979,6 +2097,7 @@ if (qa) {
       propsAlive: G.props.filter(p => !p.dead).length,
       propsDead: G.props.filter(p => p.dead).length,
       corpses: G.corpses.length,
+      scorch: G.scorch.length, flash: G.flashT,
     }),
     blocked: (x, y) => maskBlocked(x, y),
     plateNames: () => PLATES.map(p => p.name + (p.mask ? '+mask' : '-NOMASK')),
