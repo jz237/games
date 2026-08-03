@@ -36,6 +36,9 @@ const DODGE_COOLDOWN = 210;
 // New unit types (it44). Motorcycles race across on a line and are lethal on
 // contact; mortar crews are dug in and drop shells on the player's position.
 const MOTO_SPEED = 2.6;
+const TRUCK_SPEED = 1.5;   // troop truck: drives in, stops, unloads a squad
+const TRUCK_HP = 5;        // takes a burst, not a single round
+const TRUCK_SQUAD = 4;     // riflemen aboard
 const MORTAR_INTERVAL = 210;
 const MORTAR_FLIGHT = 78;
 const PICKUP_DROP_CHANCE = 22;        // percent of infantry that drop supplies
@@ -128,7 +131,7 @@ let groundSlices = null; // [{y0}, canvas] pair-list: full-res bake, sliced to s
 const BAKE_S = S;        // bake at output resolution — 1:1 blit, zero scaling smudge
 const SLICES = 2;
 const SPRITE_SETS = ['hero-n', 'hero-s', 'hero-e', 'hero-act', 'hero-die', 'rif-s', 'rif-n', 'rif-e', 'rif-act', 'rif-die', 'rif-die2', 'moto',
-  'off-s', 'off-e', 'off-n', 'off-act', 'lob-s', 'lob-act', 'mortar'];
+  'off-s', 'off-e', 'off-n', 'off-act', 'lob-s', 'lob-act', 'mortar', 'truck'];
 const SPRITE_NAMES = ['sprites/hero', 'sprites/rifleman', 'sprites/officer', 'sprites/lobber',
   'ui/portrait', 'ui/rifle', 'ui/keyart.webp', 'ui/map.webp', 'tiles/sand', 'tiles/grass',
   'props/palm', 'props/boulder', 'props/pond', 'props/trench', 'props/gate', 'props/wreck',
@@ -652,9 +655,13 @@ function spawnEdgeWave() {
   if (G.enemies.length >= Math.min(9, 7 + loopN())) return;
   if (G.frame - (G.lastWave || 0) < WAVE_INTERVAL / diffMul()) return;
   G.lastWave = G.frame;
-  // occasionally the wave is a motorcycle instead of infantry
-  const moto = rng() < 0.18 && G.area >= 1;
-  const count = moto ? 1 : 1 + (rng() < 0.45 ? 1 : 0);
+  // occasionally the wave is a vehicle instead of infantry: a motorcycle, or
+  // (rarer) a troop truck that drives in and unloads a squad — the it44 disk
+  // study saw trucks in the original's later stretches
+  const roll = rng();
+  const truck = roll < 0.09;
+  const moto = !truck && roll < 0.26 && G.area >= 1;
+  const count = (moto || truck) ? 1 : 1 + (rng() < 0.45 ? 1 : 0);
   for (let i = 0; i < count; i++) {
     const fromLeft = rng() < 0.5;
     // enter on a line in the upper half of the view, ahead of the player
@@ -667,7 +674,7 @@ function spawnEdgeWave() {
       if (!maskBlocked(cand, y) && !rectsAt(cand - 4, y - 6, 8, 10)) { x = cand; break; }
     }
     if (x < 0) continue;
-    G.enemies.push(newEnemy(x, y, moto ? 'moto' : 'rifleman', fromLeft ? 1 : -1, 'traverse'));
+    G.enemies.push(newEnemy(x, y, truck ? 'truck' : moto ? 'moto' : 'rifleman', fromLeft ? 1 : -1, 'traverse'));
   }
 }
 
@@ -698,14 +705,27 @@ function destroyEnemy(e) {
     G.fx.push({ kind: 'bonus', x: e.x, y: e.y - 8, t: 0 });
     if (G.finale) G.finale.officer = 'down';
   }
-  if (e.type === 'moto') {
+  if (e.type === 'moto' || e.type === 'truck') {
+    const big = e.type === 'truck';
     G.fx.push({ kind: 'bigboom', x: e.x, y: e.y, t: 0 });
-    addScorch(e.x, e.y, 11);
-    G.shake = Math.max(G.shake, 8);
-    G.flashT = Math.max(G.flashT, 3);
-    for (let i = 0; i < 8; i++) spawnPart({ kind: 'spark', x: e.x, y: e.y, vx: (vrng() - 0.5) * 2.6, vy: -1.5 * vrng(), t: 0, ttl: 18 + vrng() * 14, size: 0.9 });
-    for (let i = 0; i < 5; i++) spawnPart({ kind: 'chunk', x: e.x, y: e.y, vx: (vrng() - 0.5) * 2.2, vy: -1.2 - vrng() * 1.2, t: 0, ttl: 42 + vrng() * 20, size: 1 + vrng() * 0.8, ground: e.y + 2 + vrng() * 6 });
-    if (window.Sfx) Sfx.play('explosion', { gain: 0.85, rate: 1.05, pan: panAt(e.x) });
+    addScorch(e.x, e.y, big ? 16 : 11);
+    G.shake = Math.max(G.shake, big ? 12 : 8);
+    G.flashT = Math.max(G.flashT, big ? 4 : 3);
+    for (let i = 0; i < (big ? 12 : 8); i++) spawnPart({ kind: 'spark', x: e.x, y: e.y, vx: (vrng() - 0.5) * 2.6, vy: -1.5 * vrng(), t: 0, ttl: 18 + vrng() * 14, size: 0.9 });
+    for (let i = 0; i < (big ? 8 : 5); i++) spawnPart({ kind: 'chunk', x: e.x, y: e.y, vx: (vrng() - 0.5) * 2.2, vy: -1.2 - vrng() * 1.2, t: 0, ttl: 42 + vrng() * 20, size: 1 + vrng() * 0.8, ground: e.y + 2 + vrng() * 6 });
+    if (window.Sfx) Sfx.play('explosion', { gain: big ? 1.0 : 0.85, rate: big ? 0.85 : 1.05, pan: panAt(e.x) });
+    if (big) {
+      // whoever was still aboard (or standing at the tailgate) goes with it —
+      // marked gone rather than spliced so the caller's index stays valid
+      G.score += 400; if (G.score > G.top) G.top = G.score; // caller pays +100 -> 500 total
+      for (const e2 of G.enemies) {
+        if (e2 === e || e2.gone || e2.type === 'truck') continue;
+        if (Math.hypot(e2.x - e.x, e2.y - e.y) < 22) {
+          dropCorpse(e2); e2.gone = true;
+          G.score += KILL_POINTS; if (G.score > G.top) G.top = G.score;
+        }
+      }
+    }
   } else dropCorpse(e);
 }
 
@@ -1029,7 +1049,16 @@ function tick() {
     if (--b.life <= 0 || b.y < G.camY - 8 || b.x < 0 || b.x > A.width) { G.bullets.splice(i, 1); continue; }
     for (let j = G.enemies.length - 1; j >= 0; j--) {
       const e = G.enemies[j];
-      if (Math.abs(b.x - e.x) < 7 && Math.abs(b.y - e.y) < 9) {
+      const hw = e.type === 'truck' ? 15 : 7, hh = e.type === 'truck' ? 10 : 9;
+      if (Math.abs(b.x - e.x) < hw && Math.abs(b.y - e.y) < hh) {
+        // a truck soaks a burst before it goes up
+        if (e.type === 'truck' && e.hp > 1) {
+          e.hp--;
+          G.fx.push({ kind: 'impact', x: b.x, y: b.y, dx: b.vx, dy: b.vy, t: 0 });
+          for (let k = 0; k < 2; k++) spawnPart({ kind: 'spark', x: b.x, y: b.y, vx: (vrng() - 0.5) * 1.4, vy: -0.8 * vrng(), t: 0, ttl: 12, size: 0.8 });
+          G.bullets.splice(i, 1);
+          break;
+        }
         // leave a body that plays out the collapse, then lingers
         G.fx.push({ kind: 'impact', x: b.x, y: b.y, dx: b.vx, dy: b.vy, t: 0 });
         destroyEnemy(e);
@@ -1123,7 +1152,38 @@ function tick() {
     const ox = e.x, oy = e.y;
     const dx = J.x - e.x, dy = J.y - e.y, d = Math.hypot(dx, dy) || 1;
 
-    if (e.type === 'moto') {
+    if (e.type === 'truck') {
+      // troop truck: drives in on its line, pulls up near the player's column,
+      // unloads a squad off the tailgate, then drives off. Killing it early
+      // (it takes a burst) kills whoever is still aboard.
+      if (e.phase === undefined) {
+        e.phase = 'drive'; e.hp = TRUCK_HP; e.unloaded = 0; e.holdT = 0;
+        const want = Math.max(60, Math.min(A.width - 60, J.x + (e.dir > 0 ? -34 : 34)));
+        e.stopX = e.dir > 0 ? Math.max(e.x + 40, want) : Math.min(e.x - 40, want);
+      }
+      if (e.phase === 'drive' || e.phase === 'leave') {
+        const nx2 = e.x + e.dir * TRUCK_SPEED;
+        if (rectsAt(nx2 - 10, e.y - 6, 20, 10)) {
+          const ny2 = e.y + (dy > 0 ? 1.0 : -1.0);
+          if (!rectsAt(e.x - 10, ny2 - 6, 20, 10)) e.y = ny2; else e.dir = -e.dir;
+        } else e.x = nx2;
+        if (e.t % 3 === 0)
+          spawnPart({ kind: 'dust', x: e.x - e.dir * 16, y: e.y + 4, vx: -e.dir * 0.2 + (vrng() - 0.5) * 0.1,
+            vy: -0.1 - vrng() * 0.06, t: 0, ttl: 24 + vrng() * 10, size: 1.4 + vrng() * 0.8 });
+        if (live && d < 14) killJoe(); // getting run over by a truck is fatal
+        if (e.phase === 'drive' && ((e.dir > 0 && e.x >= e.stopX) || (e.dir < 0 && e.x <= e.stopX))) e.phase = 'unload';
+        if (e.phase === 'leave' && (e.x < 14 || e.x > A.width - 14)) e.gone = true;
+      } else if (e.phase === 'unload') {
+        if (e.unloaded < TRUCK_SQUAD && e.t % 20 === 0) {
+          const s2 = newEnemy(e.x - e.dir * 16, e.y + 4, 'rifleman', -e.dir, 'engage');
+          s2.shotCd = 50 + ((e.unloaded * 31) % 40);
+          G.enemies.push(s2); e.unloaded++;
+          for (let k = 0; k < 3; k++)
+            spawnPart({ kind: 'dust', x: s2.x, y: s2.y, vx: (vrng() - 0.5) * 0.4, vy: -0.15, t: 0, ttl: 16, size: 1.1 });
+        }
+        if (e.unloaded >= TRUCK_SQUAD && ++e.holdT > 90) e.phase = 'leave';
+      }
+    } else if (e.type === 'moto') {
       // races along its line; lethal to touch, and it ignores small cover
       const nx2 = e.x + e.dir * MOTO_SPEED * diffMul();
       if (rectsAt(nx2 - 5, e.y - 6, 10, 10)) {
@@ -1576,6 +1636,8 @@ function render(alpha) {
     } else if (e.type === 'moto') {
       key = `sprites/moto-${(e.walkFrame || 0) & 3}`;
       preRot = e.lean || 0; // banked into the drift, smoothed in the update
+    } else if (e.type === 'truck') {
+      key = `sprites/truck-${(e.walkFrame || 0) & 3}`;
     } else if (e.type === 'mortar') {
       // load ritual: lift the shell (1), drop it in (2), the tube fires (3);
       // at rest the loader occasionally leans in to fuss with the elevation
@@ -1614,7 +1676,7 @@ function render(alpha) {
     // walkers face their travel — nobody mirror-pops as Joe crosses their column
     let face = e.face || 1;
     if (!corpse && e.dieT === undefined) {
-      if (e.type === 'moto') face = e.dir < 0 ? -1 : 1;
+      if (e.type === 'moto' || e.type === 'truck') face = e.dir < 0 ? -1 : 1;
       else if (e.type === 'mortar') face = 1; // an emplacement does not swivel
       else if (e.fireT > 0 || e.barkT > 0 || e.mode === 'engage' || e.type === 'lobber' || e.type === 'trencher') {
         const ddx = G.joe.x - ex;
@@ -1627,8 +1689,9 @@ function render(alpha) {
     let leanA = 0;
     if (stride && (e.stepped || 0) > 0.04)
       leanA = Math.sin(((e.walkFrame || 0) + (e.walkDist || 0) / WALK_STRIDE) * 1.57) * 0.03;
-    drawShadow(ex, ey, corpse ? 6 : e.type === 'mortar' ? 7 : 4);
+    drawShadow(ex, ey, corpse ? 6 : e.type === 'truck' ? 10 : e.type === 'mortar' ? 7 : 4);
     const h = corpse ? ENEMY_H * 0.82 : e.type === 'moto' ? ENEMY_H * 1.25
+      : e.type === 'truck' ? ENEMY_H * 1.5
       : e.type === 'mortar' ? ENEMY_H * 1.3 : e.type === 'officer' ? ENEMY_H + 1 : ENEMY_H;
     const w = h * (img.width / img.height);
     ctx.save();
@@ -1638,6 +1701,7 @@ function render(alpha) {
     if (leanA) ctx.rotate(leanA);
     if (kick) ctx.translate(0, kick * S);
     if (e.type === 'moto') ctx.translate(0, Math.sin((e.walk || 0) * 1.7) * 0.35 * S); // terrain judder
+    if (e.type === 'truck') ctx.translate(0, Math.sin((e.walk || 0) * 0.9) * 0.3 * S); // heavier, slower sway
     ctx.drawImage(img, -w / 2 * S, -h * S, w * S, h * S);
     ctx.restore();
   };
@@ -2163,7 +2227,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.25.0-map', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.26.0-trucks', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
