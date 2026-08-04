@@ -88,15 +88,41 @@ const qa = new URLSearchParams(location.search).has('qa');
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const S = 4; // render scale: logic in lores units, painterly art drawn at 4x
+// Band layout: on a tall touch screen the canvas fills the WHOLE viewport —
+// the measured playfield strip sits high, a slim status band above it and a
+// CONTROL DECK below (thumbs come off the action). The logical playfield
+// never changes size; bands are pure presentation.
+let BAND_TOP = 0, BAND_BOT = 0; // logical px above/below the playfield
+let touchSeenFlag = false;      // set on the first touch (touchUI is declared later — TDZ)
 function fit() {
   const cssScale = Math.min(innerWidth / VIEW_W, innerHeight / VIEW_H);
-  canvas.width = VIEW_W * S; canvas.height = VIEW_H * S;
+  const spareCss = innerHeight - VIEW_H * cssScale;
+  const coarse = (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) || touchSeenFlag;
+  if (coarse && innerHeight > innerWidth && spareCss > 100) {
+    const spareL = spareCss / cssScale;
+    BAND_TOP = Math.min(26, Math.round(spareL * 0.16));
+    BAND_BOT = Math.round(spareL - BAND_TOP);
+  } else { BAND_TOP = 0; BAND_BOT = 0; }
+  canvas.width = VIEW_W * S; canvas.height = (VIEW_H + BAND_TOP + BAND_BOT) * S;
   canvas.style.width = Math.floor(VIEW_W * cssScale) + 'px';
-  canvas.style.height = Math.floor(VIEW_H * cssScale) + 'px';
+  canvas.style.height = Math.floor((VIEW_H + BAND_TOP + BAND_BOT) * cssScale) + 'px';
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 }
 addEventListener('resize', fit); fit();
+// where the deck controls live (shared by hit-tests and the overlay render)
+function ctrlPos() {
+  if (!BAND_BOT) {
+    return { fx: Settings.leftHand ? VIEW_W - FIRE_BTN.x : FIRE_BTN.x, fy: FIRE_BTN.y, fr: FIRE_BTN.r,
+             gx: Settings.leftHand ? VIEW_W - GREN_BTN.x : GREN_BTN.x, gy: GREN_BTN.y, gr: GREN_BTN.r,
+             sx: Settings.leftHand ? VIEW_W - 60 : 60, sy: VIEW_H - 56 };
+  }
+  const cy2 = VIEW_H + Math.max(40, Math.min(190, BAND_BOT * 0.45)); // natural thumb height
+  const right = !Settings.leftHand;
+  return { fx: right ? VIEW_W - 44 : 44, fy: cy2 + 12, fr: 26,
+           gx: right ? VIEW_W - 24 : 24, gy: cy2 - 26, gr: 15,
+           sx: right ? 56 : VIEW_W - 56, sy: cy2 };
+}
 
 // painted terrain plates: full-scene art-directed sections layered over the
 // baked ground (dense set dressing painted in; engine draws only moving things
@@ -370,11 +396,14 @@ document.addEventListener('visibilitychange', () => {
 const GREN_BTN = { x: VIEW_W - 24, y: VIEW_H - 78, r: 13 };
 const FIRE_BTN = { x: VIEW_W - 38, y: VIEW_H - 34, r: 22 }; // visual hint; whole right half fires
 const touchUI = { stick: null, fireIds: new Set(), grenIds: new Set(), seen: false, dir: { x: 0, y: 0 }, fire: false, gren: false };
-function touchLogical(t, r) { return { x: (t.clientX - r.left) / r.width * VIEW_W, y: (t.clientY - r.top) / r.height * VIEW_H }; }
+function touchLogical(t, r) {
+  const totalH = VIEW_H + BAND_TOP + BAND_BOT;
+  return { x: (t.clientX - r.left) / r.width * VIEW_W, y: (t.clientY - r.top) / r.height * totalH - BAND_TOP };
+}
 function onTouch(e) {
   e.preventDefault();
   const r = canvas.getBoundingClientRect();
-  touchUI.seen = true;
+  if (!touchUI.seen) { touchUI.seen = true; touchSeenFlag = true; fit(); }
   const live = new Set();
   for (const t of e.touches) live.add(t.identifier);
   if (touchUI.stick && !live.has(touchUI.stick.id)) touchUI.stick = null;
@@ -385,8 +414,8 @@ function onTouch(e) {
       const p = touchLogical(t, r);
       if (p.x > VIEW_W - 60 && p.y < 16) { if (window.Music) Music.toggle(); continue; }
       if (p.x < 60 && p.y < 16 && (G.state === 'title' || (G.state === 'play' && G.paused))) { openSettings(); continue; }
-      const gx = Settings.leftHand ? VIEW_W - GREN_BTN.x : GREN_BTN.x;
-      if (Math.hypot(p.x - gx, p.y - GREN_BTN.y) < GREN_BTN.r * Settings.touchSize + 5) { touchUI.grenIds.add(t.identifier); continue; }
+      const cp = ctrlPos();
+      if (Math.hypot(p.x - cp.gx, p.y - cp.gy) < cp.gr * Settings.touchSize + 5) { touchUI.grenIds.add(t.identifier); continue; }
       // landscape pillars: the fire-side pillar's upper band is the grenade
       const offRight = Settings.leftHand ? p.x < -2 : p.x > VIEW_W + 2;
       if (offRight && p.y < VIEW_H * 0.45) { touchUI.grenIds.add(t.identifier); continue; }
@@ -395,8 +424,9 @@ function onTouch(e) {
         if (!touchUI.stick) {
           // floating: base lands under the thumb; fixed: base is anchored and
           // the first touch already reads as an offset from it
-          const bx = Settings.stickFixed ? (Settings.leftHand ? VIEW_W - 60 : 60) : p.x;
-          const by = Settings.stickFixed ? VIEW_H - 56 : p.y;
+          const cp2 = ctrlPos();
+          const bx = Settings.stickFixed ? cp2.sx : p.x;
+          const by = Settings.stickFixed ? cp2.sy : p.y;
           touchUI.stick = { id: t.identifier, ox: bx, oy: by, cx: p.x, cy: p.y };
         }
       }
@@ -1809,6 +1839,14 @@ const IT = (o) => (o.pt === undefined ? o.t : o.pt + (o.t - o.pt) * LERP);
 function render(alpha) {
   if (Settings.perf === 'low') perfLow = true;
   else if (Settings.perf === 'high') perfLow = false;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (BAND_TOP || BAND_BOT) {
+    ctx.fillStyle = '#0a0c08';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  ctx.save();
+  ctx.translate(0, BAND_TOP * S);
+  ctx.beginPath(); ctx.rect(0, 0, VIEW_W * S, VIEW_H * S); ctx.clip();
   LERP = alpha === undefined ? 1 : alpha;
   const cy = G.pcamY === undefined ? G.camY : G.pcamY + (G.camY - G.pcamY) * LERP;
 
@@ -2503,14 +2541,14 @@ function render(alpha) {
   if (amb && G.state !== 'title' && G.state !== 'map') {
     if (!lightC) lightC = document.createElement('canvas');
     const LS = perfLow ? 0.5 : 1; // low tier: half-res darkness, stretched back
-    const lw = Math.ceil(canvas.width * LS), lh = Math.ceil(canvas.height * LS);
+    const lw = Math.ceil(VIEW_W * S * LS), lh = Math.ceil(VIEW_H * S * LS);
     if (lightC.width !== lw || lightC.height !== lh) { lightC.width = lw; lightC.height = lh; }
     const lc = lightC.getContext('2d');
     lc.setTransform(LS, 0, 0, LS, 0, 0);
     lc.globalCompositeOperation = 'source-over';
-    lc.clearRect(0, 0, canvas.width, canvas.height);
+    lc.clearRect(0, 0, VIEW_W * S, VIEW_H * S);
     lc.fillStyle = amb.mode === 'night' ? 'rgba(6,9,26,0.52)' : 'rgba(30,16,42,0.20)';
-    lc.fillRect(0, 0, canvas.width, canvas.height);
+    lc.fillRect(0, 0, VIEW_W * S, VIEW_H * S);
     lc.globalCompositeOperation = 'destination-out';
     const punch = (wx, wy, r, a) => {
       const x = wx * S, y = (wy - cy) * S, rs = r * S;
@@ -2546,9 +2584,9 @@ function render(alpha) {
       lc.lineTo((bm.ox + Math.cos(bm.a + h2) * L) * S, (oy2 + Math.sin(bm.a + h2) * L) * S);
       lc.closePath(); lc.fill();
     }
-    ctx.drawImage(lightC, 0, 0, canvas.width, canvas.height);
-    if (amb.mode === 'dusk') { ctx.fillStyle = 'rgba(255,118,30,0.10)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
-    else if (amb.mode === 'night') { ctx.fillStyle = 'rgba(22,32,88,0.10)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+    ctx.drawImage(lightC, 0, 0, VIEW_W * S, VIEW_H * S);
+    if (amb.mode === 'dusk') { ctx.fillStyle = 'rgba(255,118,30,0.10)'; ctx.fillRect(0, 0, VIEW_W * S, VIEW_H * S); }
+    else if (amb.mode === 'night') { ctx.fillStyle = 'rgba(22,32,88,0.10)'; ctx.fillRect(0, 0, VIEW_W * S, VIEW_H * S); }
   }
 
   // dusk downpour: wind-slanted streaks, ground splash ticks, a cooler cast,
@@ -2911,11 +2949,43 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.40.0-wide', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.41.0-fullscreen', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
+  ctx.restore(); // end playfield clip
+  if (BAND_TOP || BAND_BOT) {
+    // slim status band above; textured control deck below
+    if (BAND_TOP > 6) {
+      const g7 = ctx.createLinearGradient(0, 0, 0, BAND_TOP * S);
+      g7.addColorStop(0, '#131509'); g7.addColorStop(1, '#0a0c08');
+      ctx.fillStyle = g7; ctx.fillRect(0, 0, VIEW_W * S, BAND_TOP * S);
+      ctx.fillStyle = '#8a8266'; ctx.font = `bold ${Math.min(7, BAND_TOP * 0.42) * S}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText('COMMANDO HD', VIEW_W / 2 * S, (BAND_TOP * 0.62) * S);
+      ctx.textAlign = 'start';
+      ctx.fillStyle = 'rgba(212,178,90,0.35)';
+      ctx.fillRect(0, BAND_TOP * S - 2, VIEW_W * S, 2);
+    }
+    if (BAND_BOT > 6) {
+      const dy0 = (BAND_TOP + VIEW_H) * S;
+      const g8 = ctx.createLinearGradient(0, dy0, 0, dy0 + BAND_BOT * S);
+      g8.addColorStop(0, '#10120b'); g8.addColorStop(0.25, '#0c0e08'); g8.addColorStop(1, '#070806');
+      ctx.fillStyle = g8; ctx.fillRect(0, dy0, VIEW_W * S, BAND_BOT * S);
+      ctx.fillStyle = 'rgba(212,178,90,0.35)';
+      ctx.fillRect(0, dy0, VIEW_W * S, 2);
+      if (BAND_BOT > 90) { // tribute footer fills the deck floor
+        ctx.fillStyle = 'rgba(122,114,90,0.4)'; ctx.font = `${4.5 * S}px monospace`; ctx.textAlign = 'center';
+        ctx.fillText('A TRIBUTE TO THE CLASSIC', VIEW_W / 2 * S, dy0 + (BAND_BOT - 14) * S);
+        ctx.fillText('© CAPCOM 1985 · AMIGA ELITE 1989 · ALL-NEW ART & SOUND', VIEW_W / 2 * S, dy0 + (BAND_BOT - 7) * S);
+        ctx.textAlign = 'start';
+      }
+    }
+  }
+  ctx.save();
+  ctx.translate(0, BAND_TOP * S);
   if (touchUI.seen) {
     const TA = Settings.touchOpacity, TS = Settings.touchSize;
+    const cp = ctrlPos();
     ctx.globalAlpha = TA;
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3 * S;
     if (touchUI.stick) {
@@ -2924,36 +2994,38 @@ function render(alpha) {
       const ndx = st.cx - st.ox, ndy = st.cy - st.oy, nd = Math.hypot(ndx, ndy) || 1, cl = Math.min(nd, 14 * TS);
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.arc((st.ox + ndx / nd * cl) * S, (st.oy + ndy / nd * cl) * S, 7 * TS * S, 0, 7); ctx.fill();
-    } else if (Settings.stickFixed && G.state === 'play') {
-      // idle ghost so the anchored base is findable before you touch it
+    } else if ((Settings.stickFixed || BAND_BOT > 6) && G.state === 'play') {
+      // idle ghost so the stick zone is findable before you touch it
       ctx.globalAlpha = TA * 0.5;
-      const bx2 = Settings.leftHand ? VIEW_W - 60 : 60;
-      ctx.beginPath(); ctx.arc(bx2 * S, (VIEW_H - 56) * S, 16 * TS * S, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cp.sx * S, cp.sy * S, 16 * TS * S, 0, 7); ctx.stroke();
+      if (BAND_BOT > 6) {
+        ctx.fillStyle = '#9a916f'; ctx.font = `${4.5 * S}px monospace`; ctx.textAlign = 'center';
+        ctx.fillText('MOVE', cp.sx * S, (cp.sy + 26) * S); ctx.textAlign = 'start';
+      }
       ctx.globalAlpha = TA;
     }
-    const fbx = Settings.leftHand ? VIEW_W - FIRE_BTN.x : FIRE_BTN.x;
-    const gbx = Settings.leftHand ? VIEW_W - GREN_BTN.x : GREN_BTN.x;
-    ctx.beginPath(); ctx.arc(fbx * S, FIRE_BTN.y * S, FIRE_BTN.r * TS * S, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cp.fx * S, cp.fy * S, cp.fr * TS * S, 0, 7); ctx.stroke();
     if (touchUI.fire) { // live-fire pulse on the hint ring
       ctx.globalAlpha = TA * (0.6 + 0.4 * Math.sin(G.frame * 0.5));
-      ctx.beginPath(); ctx.arc(fbx * S, FIRE_BTN.y * S, (FIRE_BTN.r * TS + 3 + Math.sin(G.frame * 0.5) * 1.5) * S, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cp.fx * S, cp.fy * S, (cp.fr * TS + 3 + Math.sin(G.frame * 0.5) * 1.5) * S, 0, 7); ctx.stroke();
       ctx.globalAlpha = TA;
     }
     // grenade button: count, low-stock tint, cooldown sweep
     ctx.strokeStyle = G.grenades === 0 ? 'rgba(220,90,70,1)' : '#fff';
-    ctx.beginPath(); ctx.arc(gbx * S, GREN_BTN.y * S, GREN_BTN.r * TS * S, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cp.gx * S, cp.gy * S, cp.gr * TS * S, 0, 7); ctx.stroke();
     if (G.joe.grenCd > 0 && G.state === 'play') {
       ctx.strokeStyle = '#ffd257'; ctx.lineWidth = 1.8 * S;
       ctx.beginPath();
-      ctx.arc(gbx * S, GREN_BTN.y * S, GREN_BTN.r * TS * S, -Math.PI / 2, -Math.PI / 2 + (1 - G.joe.grenCd / 25) * Math.PI * 2);
+      ctx.arc(cp.gx * S, cp.gy * S, cp.gr * TS * S, -Math.PI / 2, -Math.PI / 2 + (1 - G.joe.grenCd / 25) * Math.PI * 2);
       ctx.stroke();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3 * S;
     }
     ctx.fillStyle = '#fff'; ctx.font = `${5 * S}px monospace`;
-    ctx.fillText('FIRE', (fbx - 9) * S, (FIRE_BTN.y + 2) * S);
-    ctx.fillText('G×' + G.grenades, (gbx - 8) * S, (GREN_BTN.y + 2) * S);
+    ctx.fillText('FIRE', (cp.fx - 9) * S, (cp.fy + 2) * S);
+    ctx.fillText('G×' + G.grenades, (cp.gx - 8) * S, (cp.gy + 2) * S);
     ctx.globalAlpha = 1;
   }
+  ctx.restore();
 }
 
 // ---------- retro filter: true-lores downsample + 8-step palette + scanlines ----------
@@ -2966,7 +3038,7 @@ function applyRetro() {
     retroCtx = retroCanvas.getContext('2d', { willReadFrequently: true });
   }
   retroCtx.imageSmoothingEnabled = true;
-  retroCtx.drawImage(canvas, 0, 0, VIEW_W, VIEW_H);
+  retroCtx.drawImage(canvas, 0, BAND_TOP * S, VIEW_W * S, VIEW_H * S, 0, 0, VIEW_W, VIEW_H);
   const img = retroCtx.getImageData(0, 0, VIEW_W, VIEW_H);
   const d = img.data;
   for (let i = 0; i < d.length; i += 4) {
@@ -2976,6 +3048,7 @@ function applyRetro() {
   }
   retroCtx.putImageData(img, 0, 0);
   ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, BAND_TOP * S);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(retroCanvas, 0, 0, VIEW_W * S, VIEW_H * S);
   if (Settings.scanlines) {
@@ -3025,7 +3098,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, perfLow, battery: !!Settings.battery, demo: !!G.demo, ambush: G.ambush ? G.ambush.phase : null, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, perfLow, battery: !!Settings.battery, bands: { top: BAND_TOP, bot: BAND_BOT }, ctrls: ctrlPos(), demo: !!G.demo, ambush: G.ambush ? G.ambush.phase : null, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },
