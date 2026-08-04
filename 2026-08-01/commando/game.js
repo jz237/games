@@ -290,6 +290,7 @@ const SETTINGS_DEFAULTS = {
   touchSize: 1.0,              // touch button scale (0.7-1.6)
   touchOpacity: 0.35,          // touch overlay alpha (0.2-0.8)
   stickFixed: false,           // anchored stick base instead of floating
+  aimAssist: true,             // touch-only shot magnetism toward the nearest target
   retro: false, scanlines: true,
   mode: 'normal',              // normal (checkpoints+continues) | arcade (original rules)
   keys: { fire: 'KeyZ', grenade: 'KeyX', pause: 'Space' },
@@ -566,6 +567,7 @@ const SETTINGS_ITEMS = [
   { k: 'touchSize', label: 'TOUCH SIZE', type: 'range', min: 0.7, max: 1.6, step: 0.1 },
   { k: 'touchOpacity', label: 'TOUCH OPACITY', type: 'range', min: 0.2, max: 0.8, step: 0.1 },
   { k: 'stickFixed', label: 'FIXED STICK', type: 'bool' },
+  { k: 'aimAssist', label: 'AIM ASSIST (TOUCH)', type: 'bool' },
   { k: 'retro', label: 'RETRO FILTER', type: 'bool' },
   { k: 'scanlines', label: 'SCANLINES', type: 'bool' },
   { k: 'mode', label: 'GAME MODE', type: 'mode' },
@@ -635,7 +637,7 @@ function cueFor(s) {
   if (s === 'gameover') return 'gameover';
   if (s === 'entry') return 'hiscore';
   if (s === 'ranking') return G.postGame ? 'hiscore' : 'main';
-  if (s === 'title' || s === 'credits' || s === 'intro') return 'main';
+  if (s === 'title' || s === 'credits' || s === 'intro' || s === 'tutorial') return 'main';
   return null;
 }
 function setState(s, t) {
@@ -668,6 +670,9 @@ const DEMO_SCRIPT = (() => {
   key(1420, 'up', 0);
   return ev.sort((a, b) => a[0] - b[0]);
 })();
+// first-run touch tutorial: a one-time control diagram before the first game
+function tutorialSeen() { try { return localStorage.getItem('commandoHD.tutorial') === '1'; } catch (e) { return true; } }
+function markTutorialSeen() { try { localStorage.setItem('commandoHD.tutorial', '1'); } catch (e) {} }
 function startDemo() {
   seed = 0xC0FFEE; vseed = 0x9E3779B9; // deterministic ghost
   G.score = 0; G.lives = LIVES_START; G.grenades = 3; G.ammo = START_AMMO; G.area = 1;
@@ -687,7 +692,8 @@ function startGame() {
   G.score = 0; G.lives = LIVES_START; G.grenades = 3; G.ammo = START_AMMO; G.area = 1; G.postGame = false; G.paused = false; G.continues = 0; G.rescued = 0;
   applyArea(1);
   resetWorld();
-  setState('intro', 130);
+  if (touchUI.seen && !tutorialSeen()) { markTutorialSeen(); setState('tutorial', 420); }
+  else setState('intro', 130);
 }
 function nextArea() {
   G.area++; G.rescued = 0; G.ammo = Math.max(G.ammo, START_AMMO);
@@ -1073,6 +1079,10 @@ function tick() {
     if (--G.stateTimer <= 0 || ed.e.fire) setState('intro', 130);
     endTick(); return;
   }
+  if (G.state === 'tutorial') {
+    if (--G.stateTimer <= 0 || ed.e.fire || touchUI.fire || touchUI.gren || touchUI.dir.x || touchUI.dir.y) setState('intro', 130);
+    endTick(); return;
+  }
   if (G.state === 'intro') {
     if (--G.stateTimer <= 0 || ed.e.fire) setState('ready', 70);
     endTick(); return;
@@ -1195,11 +1205,25 @@ function tick() {
       G.ammo--;
       const f = (J.face.x || J.face.y) ? J.face : { x: 0, y: -1 };
       const len = Math.hypot(f.x, f.y) || 1;
-      G.bullets.push({ x: J.x, y: J.y - 6, vx: f.x / len * BULLET_SPEED, vy: f.y / len * BULLET_SPEED, life: 90 });
+      let ax2 = f.x / len, ay2 = f.y / len;
+      // aim assist (touch sessions only): snap the SHOT — never the sprite —
+      // to the nearest live target within ~20° and 130px. Thumbs get 8 ways;
+      // the assist bridges the angles between them. Desktop feel untouched.
+      if (Settings.aimAssist && touchUI.seen) {
+        let best = null, bestD = 130;
+        for (const e2 of G.enemies) {
+          if (e2.deadTank || e2.gone) continue;
+          const ddx = e2.x - J.x, ddy = (e2.y - 4) - (J.y - 6), dd = Math.hypot(ddx, ddy);
+          if (dd < 10 || dd > 130) continue;
+          if ((ddx * ax2 + ddy * ay2) / dd > 0.94 && dd < bestD) { bestD = dd; best = { x: ddx / dd, y: ddy / dd }; }
+        }
+        if (best) { ax2 = best.x; ay2 = best.y; }
+      }
+      G.bullets.push({ x: J.x, y: J.y - 6, vx: ax2 * BULLET_SPEED, vy: ay2 * BULLET_SPEED, life: 90 });
       J.fireCd = mg ? 5 : FIRE_MIN_INTERVAL; // the MG crate doubles the cadence
       J.fireT = FIRE_POSE_FRAMES; J.recoil = 3;
       // muzzle flash + ejected casing (visual only)
-      G.fx.push({ kind: 'muzzle', x: J.x + f.x / len * 7, y: J.y - 6 + f.y / len * 7, dx: f.x / len, dy: f.y / len, t: 0 });
+      G.fx.push({ kind: 'muzzle', x: J.x + ax2 * 7, y: J.y - 6 + ay2 * 7, dx: ax2, dy: ay2, t: 0 });
       spawnPart({ kind: 'casing', x: J.x + 3, y: J.y - 5, vx: 0.35 + vrng() * 0.3, vy: -0.5 - vrng() * 0.3, t: 0, ttl: 55, size: 1, ground: J.y + 2 + vrng() * 3 });
       if (window.Sfx) Sfx.play('shot', { gain: 0.7, pan: panAt(J.x) });
       // the first shot after a long quiet flushes birds from the treeline
@@ -2565,6 +2589,10 @@ function render(alpha) {
     ctx.fillStyle = color; ctx.font = `${bold ? 'bold ' : ''}${size * S}px monospace`;
     ctx.textAlign = 'center'; ctx.fillText(str, VIEW_W / 2 * S, y * S); ctx.textAlign = 'start';
   };
+  const textC2 = (x, str, y, size, color, bold) => {
+    ctx.fillStyle = color; ctx.font = `${bold ? 'bold ' : ''}${size * S}px monospace`;
+    ctx.textAlign = 'center'; ctx.fillText(str, x * S, y * S); ctx.textAlign = 'start';
+  };
   const blink = G.frame % 50 < 30;
   if (G.demo && G.state === 'play') {
     // attract-demo banner over the ghost run
@@ -2781,6 +2809,29 @@ function render(alpha) {
     textC('ADVANCING — AREA ' + G.area, 38, 6, '#c8a24a');
     textC(A.title || '', VIEW_H - 16, 6, '#b8b09a');
     if (blink) textC('FIRE TO CONTINUE', VIEW_H - 6, 5, '#9a9280');
+  } else if (G.state === 'tutorial') {
+    // one-time touch controls diagram over the dimmed field
+    scrim(0.72);
+    textC('TOUCH CONTROLS', 34, 11, '#e8d8b0', true);
+    const lx2 = Settings.leftHand ? VIEW_W - 68 : 68, rx2 = Settings.leftHand ? 68 : VIEW_W - 68;
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 1.4 * S;
+    ctx.beginPath(); ctx.arc(lx2 * S, 120 * S, 22 * S, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(lx2 * S, 120 * S, 9 * S, 0, 7); ctx.stroke();
+    for (let a3 = 0; a3 < 4; a3++) { // 8-way arrows
+      const an = a3 * Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo((lx2 + Math.cos(an) * 26) * S, (120 + Math.sin(an) * 26) * S);
+      ctx.lineTo((lx2 + Math.cos(an) * 32) * S, (120 + Math.sin(an) * 32) * S);
+      ctx.stroke();
+    }
+    textC2(lx2, 'THIS SIDE', 158, 6, '#ffd257');
+    textC2(lx2, 'SLIDE TO MOVE', 166, 5, '#cfc8b0');
+    ctx.beginPath(); ctx.arc(rx2 * S, 120 * S, 18 * S, 0, 7); ctx.stroke();
+    textC2(rx2, 'THIS SIDE', 158, 6, '#ffd257');
+    textC2(rx2, 'HOLD TO FIRE', 166, 5, '#cfc8b0');
+    textC2(rx2, 'SMALL BUTTON', 96, 5, '#cfc8b0');
+    textC2(rx2, '= GRENADE', 103, 5, '#cfc8b0');
+    if (blink) textC('TAP ANYWHERE TO BEGIN', 196, 6, '#fff', true);
   } else if (G.state === 'ready') {
     textC('PLAYER 1 READY', 110, 8, '#fff', true);
   } else if (G.state === 'clear') {
@@ -2853,7 +2904,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.38.0-grip', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.39.0-helping', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
