@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0a0c08">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Commando HD">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>Commando HD — a tribute to the classic</title>
 <style>
   html, body { margin: 0; padding: 0; background: #0a0c08; height: 100%; overflow: hidden;
@@ -24,6 +31,13 @@
 <script>window.AREAS = [window.AREA1, window.AREA2, window.AREA3];</script>
 <script src="data/plate-masks.js"></script>
 <script src="game.js"></script>
+<script>
+// PWA offline cache — https only, so the LAN dev server (http) and the
+// headless QA rig (http://127.0.0.1) can never be served stale assets.
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+</script>
 <div id="sitelinks">
   <a href="/games/">&larr; All games</a>
   <a href="/experiments/sid-player/">C64 SID player &mdash; Rob Hubbard's Commando</a>

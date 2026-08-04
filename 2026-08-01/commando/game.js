@@ -2808,7 +2808,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.35.0-pocket', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.36.0-pwa', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
