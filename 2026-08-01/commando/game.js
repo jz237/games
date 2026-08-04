@@ -75,6 +75,7 @@ function chainMult() { return 1 + Math.min(4, ((G.chain || 0) / 3) | 0); }
 // every enemy kill routes through here: extends the chain, pays multiplied
 // points, and celebrates each multiplier step with a floater
 function chainKill() {
+  buzz(12);
   G.chain = (G.chain || 0) + 1; G.chainT = CHAIN_WINDOW;
   const m = chainMult();
   if (m > 1 && G.chain % 3 === 0) G.fx.push({ kind: 'bonus', x: G.joe.x, y: G.joe.y - 14, t: 0, txt: '×' + m });
@@ -283,6 +284,7 @@ const SETTINGS_DEFAULTS = {
   shake: 1.0, flash: 0.6,      // photosensitivity-safe flash default
   autoFire: false,             // keyboard hold-to-fire (touch always auto-fires at the cap)
   leftHand: false,
+  haptics: true,               // vibration on touch devices (where supported)
   retro: false, scanlines: true,
   mode: 'normal',              // normal (checkpoints+continues) | arcade (original rules)
   keys: { fire: 'KeyZ', grenade: 'KeyX', pause: 'Space' },
@@ -340,6 +342,22 @@ addEventListener('keydown', e => {
   }
 });
 addEventListener('keyup', e => { const k = actionFor(e.code); if (k) { keys[k] = false; e.preventDefault(); } });
+// lifecycle: backgrounding auto-pauses a live game (a call or app switch must
+// not kill Joe unattended) and parks the audio; returning revives the audio
+// contexts — iOS suspends them aggressively — but stays PAUSED until the
+// player says so.
+document.addEventListener('visibilitychange', () => {
+  if (!G) return;
+  if (document.visibilityState === 'hidden') {
+    if (G.state === 'play' && !G.paused && !G.demo) G.paused = true;
+    for (const k in keys) keys[k] = false;
+    try { if (window.Music && Music.suspend) Music.suspend(); } catch (e) {}
+    try { if (window.Sfx && Sfx.ctx) Sfx.ctx.suspend(); } catch (e) {}
+  } else {
+    try { if (window.Music && Music.resume) Music.resume(); } catch (e) {}
+    try { if (window.Sfx && Sfx.ctx) Sfx.ctx.resume(); } catch (e) {}
+  }
+});
 // twin-zone touch UI: left half = floating 8-way stick, right half = fire zone
 // (hold to auto-fire at the measured min interval — same cadence cap as the
 // original), discrete grenade button, music toggle on the HUD ♪ corner.
@@ -529,6 +547,7 @@ const SETTINGS_ITEMS = [
   { k: 'flash', label: 'FLASH FX', type: 'pct' },
   { k: 'autoFire', label: 'AUTO-FIRE (KEYS)', type: 'bool' },
   { k: 'leftHand', label: 'LEFT-HANDED TOUCH', type: 'bool' },
+  { k: 'haptics', label: 'VIBRATION (TOUCH)', type: 'bool' },
   { k: 'retro', label: 'RETRO FILTER', type: 'bool' },
   { k: 'scanlines', label: 'SCANLINES', type: 'bool' },
   { k: 'mode', label: 'GAME MODE', type: 'mode' },
@@ -674,6 +693,11 @@ function diffMul() { return Math.min(1.9, 1 + (G.area - 1) * 0.1); }
 function loopN() { return ((Math.max(1, G.area) - 1) / AREAS.length) | 0; }
 // positional stereo pan from a world/screen x
 function panAt(x) { return Math.max(-1, Math.min(1, (x / VIEW_W - 0.5) * 1.3)); }
+// haptic pulse: touch players only, gated by the setting and device support
+function buzz(pattern) {
+  if (!Settings.haptics || !touchUI.seen) return;
+  try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
+}
 
 function finishEntry() {
   const name = (G.entry && G.entry.name.trim()) || 'JOE';
@@ -863,6 +887,7 @@ function blowProp(p, depth) {
   for (let i = 0; i < 7; i++)
     spawnPart({ kind: 'smoke', x: p.x + (vrng() - 0.5) * 10, y: p.y - 2, vx: (vrng() - 0.5) * 0.25, vy: -0.32 - vrng() * 0.2, t: 0, ttl: 90 + vrng() * 40, size: 3.5 + vrng() * 2.5 });
   if (window.Sfx) Sfx.play('explosion', { gain: 1.0, rate: 0.78, pan: panAt(p.x) });
+  buzz(35);
   G.hitStop = Math.max(G.hitStop || 0, 4);
   // everything caught in the blast
   for (let j = G.enemies.length - 1; j >= 0; j--) {
@@ -937,6 +962,7 @@ function killJoe() {
   if (!G.joe.alive || G.joe.invuln > 0) return;
   G.chain = 0; G.chainT = 0; // getting hit breaks the kill chain
   G.mgT = 0; // and costs you the MG
+  buzz([60, 40, 90]);
   G.joe.alive = false;
   G.joe.deathT = 0; G.joe.fireT = 0; G.joe.throwT = 0; G.joe.duck = false;
   G.fx.push({ kind: 'death', x: G.joe.x, y: G.joe.y, t: 0 });
@@ -1164,6 +1190,7 @@ function tick() {
       G.grenades--;
       G.nades.push({ x: J.x, y: J.y - 4, vx: f.x / len * 1.75, vy: f.y / len * 1.75, t: 0, ttl: 40 });
       J.grenCd = 25; J.throwT = THROW_POSE_FRAMES;
+      buzz(8);
     }
     J.grenPrev = gren;
   }
@@ -1294,7 +1321,7 @@ function tick() {
     if (pu.t > 900 || pu.y > G.camY + VIEW_H + 60 || pu.y < G.camY - 60) { G.pickups.splice(i, 1); continue; }
     if (J.alive && G.state === 'play' && Math.abs(pu.x - J.x) < 9 && Math.abs(pu.y - J.y) < 10) {
       if (pu.kind === 'ammo') G.ammo = Math.min(START_AMMO * 2, G.ammo + 45);
-      else if (pu.kind === 'mg') G.mgT = MG_TIME;
+      else if (pu.kind === 'mg') { G.mgT = MG_TIME; buzz(20); }
       else G.grenades = Math.min(9, G.grenades + 2);
       G.score += 50; if (G.score > G.top) G.top = G.score;
       G.pickups.splice(i, 1);
@@ -1633,9 +1660,12 @@ function tick() {
     }
     const wasSpot = G.spotT;
     G.spotT = inBeam ? Math.min(60, G.spotT + 1) : Math.max(0, G.spotT - 1);
-    if (wasSpot < 20 && G.spotT >= 20 && window.Sfx) {
-      Sfx.play('ready', { gain: 0.5, rate: 0.55 }); // the alarm goes up
-      Sfx.play('ready', { gain: 0.4, rate: 0.75 });
+    if (wasSpot < 20 && G.spotT >= 20) {
+      if (window.Sfx) {
+        Sfx.play('ready', { gain: 0.5, rate: 0.55 }); // the alarm goes up
+        Sfx.play('ready', { gain: 0.4, rate: 0.75 });
+      }
+      buzz(30);
     }
     if (G.spotT > 20) {
       // caught in the light: waves come faster and everyone shoots sooner
@@ -1663,6 +1693,7 @@ function tick() {
       spawnPart({ kind: 'dust', x: gateX + (vrng() - 0.5) * 34, y: ex.y + vrng() * 8, vx: (vrng() - 0.5) * 0.9,
         vy: -0.25 - vrng() * 0.35, t: 0, ttl: 40 + vrng() * 24, size: 2 + vrng() * 2 });
     if (window.Sfx) Sfx.play('explosion', { gain: 0.9, rate: 0.7, pan: panAt(gateX) });
+    buzz(45);
   }
   if (G.finale && G.state === 'play') {
     const F = G.finale; F.t++;
@@ -2777,7 +2808,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.34.0-ambush', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.35.0-pocket', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
@@ -2889,6 +2920,7 @@ if (qa) {
     setArea: (n) => { G.area = Math.max(1, n | 0); return { area: G.area, diff: diffMul(), loop: loopN() }; },
     quiet: (n) => { G.quietT = n | 0; return G.quietT; },
     realInput: () => { G.realInput = true; return true; },
+    settingsIndex: (k) => SETTINGS_ITEMS.findIndex(it => it.k === k),
     // massacre everything except fleeing officers through the normal destroy
     // path — scenario cleanup that still exercises corpses/vehicle explosions
     wipe: () => { for (const e of G.enemies) if (e.mode !== 'flee') destroyEnemy(e); G.enemies = G.enemies.filter(e => e.mode === 'flee'); return G.enemies.length; },
