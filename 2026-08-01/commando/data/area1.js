@@ -76,3 +76,6 @@ window.AREA1 = {
     { x: 100, y: 380 },
   ],
 };
+
+// it65: the LZ pond shimmers
+window.AREA1.water = [{ x0: 4, y0: 1724, x1: 56, y1: 1796 }];

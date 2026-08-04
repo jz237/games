@@ -43,4 +43,4 @@ window.AREA2 = {
 };
 
 // it59: dusk assault — the palisade falls at last light
-window.AREA2.ambience = { mode: "dusk" };
+window.AREA2.ambience = { mode: "dusk", rain: true }; // it65: dusk downpour

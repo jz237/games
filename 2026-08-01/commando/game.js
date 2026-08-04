@@ -459,7 +459,7 @@ const G = {
   score: 0, top: loadScores()[0][1], lives: LIVES_START, grenades: 3, ammo: START_AMMO,
   area: 1, tally: 0, entry: null, lastEntry: null, paused: false, postGame: false,
   settingsSel: 0, settingsFrom: 'title', remap: null, cp: 1616, continues: 0,
-  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0,
+  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0,
   camY: A.height - VIEW_H,  // camera top in world coords
   joe: { x: A.spawn.x, y: A.spawn.y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, firePrev: false, grenCd: 0, grenPrev: false, invuln: 0, alive: true, walk: 0, walkDist: 0, moving: false, fireT: 0, throwT: 0, recoil: 0, duck: false, deathT: 0 },
   bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
@@ -598,7 +598,7 @@ function setState(s, t) {
 function resetWorld() {
   Object.assign(G, { camY: A.height - VIEW_H, bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
     pows: (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 })), spawned: new Set(), shake: 0, tally: 0, cp: CHECKPOINTS[0], lastWave: 0, scorch: [], flashT: 0, finale: null,
-    hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, spotT: 0,
+    hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, spotT: 0, thunderT: 0,
     beams: (A.searchlights || []).map((sl, i) => ({ ox: sl.x, oy: sl.y, a: Math.PI / 2, phase: i * 2.3 })),
     props: DESTRUCTIBLE_DEFS.map(d => ({ ...d, dead: false, fuse: 0, burn: 0 })) });
   G.pows = (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 }));
@@ -1519,6 +1519,12 @@ function tick() {
   if (G.flashT > 0) G.flashT--;
   G.quietT = (G.quietT || 0) + 1;
   if (G.mgT > 0) G.mgT--;
+  if (G.thunderT > 0) G.thunderT--;
+  // distant thunder rolls through the Area 2 downpour
+  if (A.ambience && A.ambience.rain && G.state === 'play' && G.wt % 1100 === 640) {
+    G.thunderT = 3;
+    if (window.Sfx) Sfx.play('explosion', { gain: 0.22, rate: 0.32, variance: 0.15, pan: ((G.wt / 1100) & 1) ? 0.6 : -0.6 });
+  }
   if (G.chainT > 0 && --G.chainT === 0) G.chain = 0; // the window lapses
   for (let i = G.scorch.length - 1; i >= 0; i--) if (++G.scorch[i].t > G.scorch[i].ttl) G.scorch.splice(i, 1);
 
@@ -2247,6 +2253,30 @@ function render(alpha) {
     ctx.restore();
   }
 
+  // water shimmer: sparse specular glints breathing over the known water
+  // rects (pond, swamp) — hash-scattered, pulsing on offset clocks
+  if (A.water && G.state !== 'title' && G.state !== 'map') {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let r = 0; r < A.water.length; r++) {
+      const wr = A.water[r];
+      if (wr.y1 < cy - 10 || wr.y0 > cy + VIEW_H + 10) continue;
+      for (let i = 0; i < 26; i++) {
+        const gx2 = wr.x0 + ((i * 73.7 + r * 31.1) % (wr.x1 - wr.x0));
+        const gy2 = wr.y0 + ((i * 41.3 + r * 17.7) % (wr.y1 - wr.y0));
+        const sy2 = gy2 - cy;
+        if (sy2 < -4 || sy2 > VIEW_H + 4) continue;
+        const ph = Math.sin(G.wt * 0.045 + i * 1.71 + r * 2.3);
+        if (ph <= 0.35) continue;
+        const a2 = (ph - 0.35) * (ph - 0.35) * 0.5;
+        ctx.fillStyle = `rgba(210,235,255,${a2})`;
+        ctx.beginPath();
+        ctx.ellipse((gx2 + ph * 1.2) * S, sy2 * S, 1.5 * S, 0.5 * S, 0, 0, 7);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
   // searchlight cones: additive light in-world (the darkness pass below also
   // punches the same triangles out, so the beam genuinely lights the ground)
   if (G.beams.length && G.state !== 'title' && G.state !== 'map') {
@@ -2343,6 +2373,38 @@ function render(alpha) {
     ctx.drawImage(lightC, 0, 0);
     if (amb.mode === 'dusk') { ctx.fillStyle = 'rgba(255,118,30,0.10)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
     else if (amb.mode === 'night') { ctx.fillStyle = 'rgba(22,32,88,0.10)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+  }
+
+  // dusk downpour: wind-slanted streaks, ground splash ticks, a cooler cast,
+  // and the dim pulse of far-off lightning under the thunder
+  if (A.ambience && A.ambience.rain && G.state !== 'title' && G.state !== 'map') {
+    ctx.fillStyle = 'rgba(90,110,150,0.05)';
+    ctx.fillRect(0, 0, VIEW_W * S, VIEW_H * S);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(205,225,248,0.21)';
+    ctx.lineWidth = 0.5 * S; ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < 84; i++) {
+      const rx = ((i * 97.3 + G.wt * 2.7 + (i * i) * 0.71) % (VIEW_W + 30)) - 15;
+      const ry = ((i * 53.7 + G.wt * (5.4 + (i % 5) * 0.35)) % (VIEW_H + 24)) - 12;
+      ctx.moveTo(rx * S, ry * S);
+      ctx.lineTo((rx - 1.4) * S, (ry + 6.4) * S);
+    }
+    ctx.stroke();
+    // splash ticks where drops land
+    ctx.fillStyle = 'rgba(210,230,250,0.20)';
+    for (let i = 0; i < 12; i++) {
+      const ph = (G.wt + i * 31) % 22;
+      if (ph > 3) continue;
+      const sx2 = (i * 71.9 + Math.floor(G.wt / 22) * 137.3) % VIEW_W;
+      const sy3 = (i * 127.7 + Math.floor(G.wt / 22) * 61.1) % VIEW_H;
+      ctx.beginPath(); ctx.ellipse(sx2 * S, sy3 * S, (1 + ph) * S * 0.7, (0.4 + ph * 0.2) * S, 0, 0, 7); ctx.stroke();
+    }
+    ctx.restore();
+    if (G.thunderT > 0) {
+      ctx.fillStyle = `rgba(220,230,255,${0.05 * Settings.flash})`;
+      ctx.fillRect(0, 0, VIEW_W * S, VIEW_H * S);
+    }
   }
 
   // brief warm frame-flash on big detonations (capped by the flash setting,
@@ -2637,7 +2699,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.32.0-spotlight', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.33.0-weather', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
@@ -2726,7 +2788,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },

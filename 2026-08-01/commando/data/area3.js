@@ -45,3 +45,6 @@ window.AREA3.ambience = { mode: "night" };
 
 // it64: gate-tower searchlights sweep the killing ground at night
 window.AREA3.searchlights = [{ x: 100, y: 54 }, { x: 174, y: 54 }];
+
+// it65: swamp water flanking the causeway
+window.AREA3.water = [{ x0: 14, y0: 300, x1: 112, y1: 500 }, { x0: 168, y0: 258, x1: 258, y1: 500 }];
