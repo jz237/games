@@ -5,7 +5,10 @@
 
 // ---------- measured constants (parity ledger) ----------
 const LOGIC_HZ = 50;
-const VIEW_W = 274, VIEW_H = 224;      // logical playfield (lores px)
+const VIEW_W = 274;                    // logical playfield width — NEVER widened
+let VIEW_H = 224;                      // logical view height; grows on tall touch
+const VIEW_H_BASE = 224;               // the measured desktop/Amiga window
+const VIEW_H_MAX = 620;                // sanity cap for extreme aspect ratios
 const SPEED_H = 2.0, SPEED_V = 1.0;    // px/frame — LOCKED it14
 const TURN_DELAY = 10;                 // frames when reversing facing — it14
 const START_LATENCY = 2;               // frames from standstill — it14
@@ -54,7 +57,9 @@ const MORTAR_INTERVAL = 210;
 const MORTAR_FLIGHT = 78;
 const PICKUP_DROP_CHANCE = 22;        // percent of infantry that drop supplies
 const LOB_SPEED = 2.0;                 // px/frame horizontal drift — it12
-const SCROLL_LINE = 100;               // Joe screen-y that pushes the camera north
+// Joe screen-y that pushes the camera north — proportional so the measured
+// 100/224 feel holds when the mobile view grows taller
+function scrollLine() { return Math.round(VIEW_H * (100 / 224)); }
 // sprite render heights: 274 logical px = 26 m (plate scale), so a 1.8 m
 // soldier is ~19 logical px tall — matched to the painted set dressing
 const HERO_H = 19, ENEMY_H = 18;
@@ -92,22 +97,38 @@ const S = 4; // render scale: logic in lores units, painterly art drawn at 4x
 // the measured playfield strip sits high, a slim status band above it and a
 // CONTROL DECK below (thumbs come off the action). The logical playfield
 // never changes size; bands are pure presentation.
-let BAND_TOP = 0, BAND_BOT = 0; // logical px above/below the playfield
+let BAND_TOP = 0, BAND_BOT = 0; // logical px above/below the playfield (cap overflow only)
 let touchSeenFlag = false;      // set on the first touch (touchUI is declared later — TDZ)
+let worldReady = false;         // G/A exist (fit() runs before they are declared — TDZ)
 function fit() {
-  const cssScale = Math.min(innerWidth / VIEW_W, innerHeight / VIEW_H);
-  const spareCss = innerHeight - VIEW_H * cssScale;
+  const cssScale = innerWidth / VIEW_W; // width-fit; the height adapts
   const coarse = (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) || touchSeenFlag;
-  if (coarse && innerHeight > innerWidth && spareCss > 100) {
-    const spareL = spareCss / cssScale;
-    BAND_TOP = Math.min(26, Math.round(spareL * 0.16));
-    BAND_BOT = Math.round(spareL - BAND_TOP);
-  } else { BAND_TOP = 0; BAND_BOT = 0; }
-  canvas.width = VIEW_W * S; canvas.height = (VIEW_H + BAND_TOP + BAND_BOT) * S;
+  const wantL = Math.floor(innerHeight / cssScale);
+  if (coarse && innerHeight > innerWidth && wantL > VIEW_H_BASE + 20) {
+    // TALL VIEW: the playfield window itself fills the screen — you simply
+    // see more of the battlefield (the arcade original ran a portrait
+    // monitor; the 224-line window was the Amiga's). World/speeds untouched.
+    VIEW_H = Math.min(VIEW_H_MAX, wantL);
+    BAND_TOP = 0;
+    BAND_BOT = Math.max(0, wantL - VIEW_H); // only for absurdly tall screens
+  } else {
+    VIEW_H = VIEW_H_BASE;
+    BAND_TOP = 0; BAND_BOT = 0;
+    // desktop/landscape: classic aspect-fit letterbox, centered by the stage
+    const fitScale = Math.min(innerWidth / VIEW_W, innerHeight / VIEW_H);
+    canvas.width = VIEW_W * S; canvas.height = VIEW_H * S;
+    canvas.style.width = Math.floor(VIEW_W * fitScale) + 'px';
+    canvas.style.height = Math.floor(VIEW_H * fitScale) + 'px';
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    if (worldReady) G.camY = Math.max(0, Math.min(A.height - VIEW_H, G.camY));
+    return;
+  }
+  canvas.width = VIEW_W * S; canvas.height = (VIEW_H + BAND_BOT) * S;
   canvas.style.width = Math.floor(VIEW_W * cssScale) + 'px';
-  canvas.style.height = Math.floor((VIEW_H + BAND_TOP + BAND_BOT) * cssScale) + 'px';
+  canvas.style.height = Math.floor((VIEW_H + BAND_BOT) * cssScale) + 'px';
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
+  if (worldReady) G.camY = Math.max(0, Math.min(A.height - VIEW_H, G.camY));
 }
 addEventListener('resize', fit); fit();
 // where the deck controls live (shared by hit-tests and the overlay render)
@@ -531,13 +552,15 @@ const G = {
   area: 1, tally: 0, entry: null, lastEntry: null, paused: false, postGame: false,
   settingsSel: 0, settingsFrom: 'title', remap: null, cp: 1616, continues: 0,
   frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0, demo: false, ambush: null,
-  camY: A.height - VIEW_H,  // camera top in world coords
+  camY: A.height - VIEW_H,  // camera top in world coords (worldReady arms below)
   joe: { x: A.spawn.x, y: A.spawn.y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, firePrev: false, grenCd: 0, grenPrev: false, invuln: 0, alive: true, walk: 0, walkDist: 0, moving: false, fireT: 0, throwT: 0, recoil: 0, duck: false, deathT: 0 },
   bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
   pows: (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 })), rescued: 0,
   spawned: new Set(), shake: 0, scorch: [], flashT: 0,
   props: DESTRUCTIBLE_DEFS.map(d => ({ ...d, dead: false, fuse: 0, burn: 0 })),
 };
+worldReady = true;
+fit(); // re-fit now that the world exists (camY clamp active)
 // painted fire locations (world coords, from the plates) that get live glow + smoke
 const FIRES = [
   { x: 85, y: 1661, r: 22 },  // LZ burning drum
@@ -1227,7 +1250,7 @@ function tick() {
 
     // camera: scrolls north at SPEED_V when Joe crosses the scroll line
     const joeScreenY = J.y - G.camY;
-    if (joeScreenY < SCROLL_LINE && G.camY > 0) {
+    if (joeScreenY < scrollLine() && G.camY > 0) {
       G.camY = Math.max(0, G.camY - SPEED_V);
     }
 
@@ -2629,7 +2652,8 @@ function render(alpha) {
   }
 
   // ---------- HUD + screen cards ----------
-  const scrim = (a) => { ctx.fillStyle = `rgba(5,8,4,${a})`; ctx.fillRect(0, 0, VIEW_W * S, VIEW_H * S); };
+  const cardOff = Math.max(0, (VIEW_H - VIEW_H_BASE) / 2); // centre 224-designed cards in a tall view
+  const scrim = (a) => { ctx.fillStyle = `rgba(5,8,4,${a})`; ctx.fillRect(0, -cardOff * S, VIEW_W * S, VIEW_H * S); };
   const textC = (str, y, size, color, bold) => {
     ctx.fillStyle = color; ctx.font = `${bold ? 'bold ' : ''}${size * S}px monospace`;
     ctx.textAlign = 'center'; ctx.fillText(str, VIEW_W / 2 * S, y * S); ctx.textAlign = 'start';
@@ -2744,13 +2768,15 @@ function render(alpha) {
     ctx.fillText('N', mmx * S, (mmy - mr + 5.5) * S); ctx.textAlign = 'start';
   }
 
+  ctx.save();
+  ctx.translate(0, cardOff * S);
   if (G.state === 'title') {
     const ka = IMGS['ui/keyart.webp'];
     if (ka) {
-      // cover-fit the painted key art, then darken so the lettering reads
+      // cover-fit the painted key art (full-bleed: compensate the card offset)
       const sc = Math.max(VIEW_W / ka.width, VIEW_H / ka.height);
       const kw = ka.width * sc, kh = ka.height * sc;
-      ctx.drawImage(ka, (VIEW_W - kw) / 2 * S, (VIEW_H - kh) / 2 * S, kw * S, kh * S);
+      ctx.drawImage(ka, (VIEW_W - kw) / 2 * S, ((VIEW_H - kh) / 2 - cardOff) * S, kw * S, kh * S);
       scrim(0.34);
       const grd = ctx.createLinearGradient(0, 0, 0, VIEW_H * 0.55 * S);
       grd.addColorStop(0, 'rgba(5,8,4,0.62)'); grd.addColorStop(1, 'rgba(5,8,4,0)');
@@ -2804,7 +2830,8 @@ function render(alpha) {
     if (G.area > AREAS.length) textC('LOOP ' + (Math.floor((G.area - 1) / AREAS.length) + 1), 88, 6, '#c8a24a');
     textC(A.title || 'LANDING ZONE — FORTRESS GATE', 124, 7, '#b8b09a');
   } else if (G.state === 'map') {
-    // painted campaign map: the grease-pencil route crawls to the next objective
+    // painted campaign map: full-bleed in the TALL view (neutralise cardOff)
+    ctx.translate(0, -cardOff * S);
     const m = IMGS['ui/map.webp'];
     ctx.fillStyle = '#141109'; ctx.fillRect(0, 0, VIEW_W * S, VIEW_H * S);
     let mx = 0, my = 0, mw = VIEW_W * S, mh = VIEW_H * S;
@@ -2947,9 +2974,10 @@ function render(alpha) {
     textC('PAUSED', 104, 14, '#fff', true);
     textC('SPACE RESUME · ESC SETTINGS', 122, 6, '#b8b09a');
   }
+  ctx.restore(); // end card centring
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.41.0-fullscreen', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.42.0-tallview', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -3037,6 +3065,7 @@ function applyRetro() {
     retroCanvas.width = VIEW_W; retroCanvas.height = VIEW_H;
     retroCtx = retroCanvas.getContext('2d', { willReadFrequently: true });
   }
+  if (retroCanvas.height !== VIEW_H) retroCanvas.height = VIEW_H; // ctx survives a resize
   retroCtx.imageSmoothingEnabled = true;
   retroCtx.drawImage(canvas, 0, BAND_TOP * S, VIEW_W * S, VIEW_H * S, 0, 0, VIEW_W, VIEW_H);
   const img = retroCtx.getImageData(0, 0, VIEW_W, VIEW_H);
@@ -3098,7 +3127,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, perfLow, battery: !!Settings.battery, bands: { top: BAND_TOP, bot: BAND_BOT }, ctrls: ctrlPos(), demo: !!G.demo, ambush: G.ambush ? G.ambush.phase : null, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, perfLow, battery: !!Settings.battery, bands: { top: BAND_TOP, bot: BAND_BOT }, viewH: VIEW_H, ctrls: ctrlPos(), demo: !!G.demo, ambush: G.ambush ? G.ambush.phase : null, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },
