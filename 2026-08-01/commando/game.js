@@ -287,6 +287,9 @@ const SETTINGS_DEFAULTS = {
   haptics: true,               // vibration on touch devices (where supported)
   perf: 'auto',                // auto | high | low — effect shedding tier
   battery: false,              // render at 30fps (logic stays 50Hz)
+  touchSize: 1.0,              // touch button scale (0.7-1.6)
+  touchOpacity: 0.35,          // touch overlay alpha (0.2-0.8)
+  stickFixed: false,           // anchored stick base instead of floating
   retro: false, scanlines: true,
   mode: 'normal',              // normal (checkpoints+continues) | arcade (original rules)
   keys: { fire: 'KeyZ', grenade: 'KeyX', pause: 'Space' },
@@ -382,9 +385,17 @@ function onTouch(e) {
       if (p.x > VIEW_W - 60 && p.y < 16) { if (window.Music) Music.toggle(); continue; }
       if (p.x < 60 && p.y < 16 && (G.state === 'title' || (G.state === 'play' && G.paused))) { openSettings(); continue; }
       const gx = Settings.leftHand ? VIEW_W - GREN_BTN.x : GREN_BTN.x;
-      if (Math.hypot(p.x - gx, p.y - GREN_BTN.y) < GREN_BTN.r + 5) { touchUI.grenIds.add(t.identifier); continue; }
+      if (Math.hypot(p.x - gx, p.y - GREN_BTN.y) < GREN_BTN.r * Settings.touchSize + 5) { touchUI.grenIds.add(t.identifier); continue; }
       const inStickHalf = Settings.leftHand ? p.x >= VIEW_W * 0.5 : p.x < VIEW_W * 0.5;
-      if (inStickHalf) { if (!touchUI.stick) touchUI.stick = { id: t.identifier, ox: p.x, oy: p.y, cx: p.x, cy: p.y }; }
+      if (inStickHalf) {
+        if (!touchUI.stick) {
+          // floating: base lands under the thumb; fixed: base is anchored and
+          // the first touch already reads as an offset from it
+          const bx = Settings.stickFixed ? (Settings.leftHand ? VIEW_W - 60 : 60) : p.x;
+          const by = Settings.stickFixed ? VIEW_H - 56 : p.y;
+          touchUI.stick = { id: t.identifier, ox: bx, oy: by, cx: p.x, cy: p.y };
+        }
+      }
       else touchUI.fireIds.add(t.identifier);
     }
   }
@@ -552,6 +563,9 @@ const SETTINGS_ITEMS = [
   { k: 'haptics', label: 'VIBRATION (TOUCH)', type: 'bool' },
   { k: 'perf', label: 'PERFORMANCE', type: 'perf' },
   { k: 'battery', label: 'BATTERY SAVER 30FPS', type: 'bool' },
+  { k: 'touchSize', label: 'TOUCH SIZE', type: 'range', min: 0.7, max: 1.6, step: 0.1 },
+  { k: 'touchOpacity', label: 'TOUCH OPACITY', type: 'range', min: 0.2, max: 0.8, step: 0.1 },
+  { k: 'stickFixed', label: 'FIXED STICK', type: 'bool' },
   { k: 'retro', label: 'RETRO FILTER', type: 'bool' },
   { k: 'scanlines', label: 'SCANLINES', type: 'bool' },
   { k: 'mode', label: 'GAME MODE', type: 'mode' },
@@ -584,6 +598,9 @@ function adjustSetting(item, dir, activate) {
       scoreMode = Settings.mode; G.top = loadScores()[0][1];
       applySettings();
     }
+  } else if (item.type === 'range') {
+    Settings[item.k] = Math.max(item.min, Math.min(item.max, Math.round((Settings[item.k] + dir * item.step) * 100) / 100));
+    applySettings();
   } else if (item.type === 'perf') {
     if (dir || activate) {
       const order = ['auto', 'high', 'low'];
@@ -2819,6 +2836,7 @@ function render(alpha) {
       if (it.type === 'pct') val = Math.round(Settings[it.k] * 100) + '%';
       else if (it.type === 'bool') val = Settings[it.k] ? 'ON' : 'OFF';
       else if (it.type === 'mode') val = Settings.mode.toUpperCase();
+      else if (it.type === 'range') val = Math.round(Settings[it.k] * 100) + '%';
       else if (it.type === 'perf') val = Settings.perf.toUpperCase() + (Settings.perf === 'auto' ? (perfLow ? ' →LOW' : ' →HIGH') : '');
       else if (it.type === 'track') val = ((window.Music && Music.mode) || 'original').toUpperCase();
       else if (it.type === 'key') val = (G.remap === it.k) ? 'PRESS KEY…' : Settings.keys[it.k];
@@ -2835,23 +2853,44 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.37.0-tune', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.38.0-grip', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
-    ctx.globalAlpha = 0.35;
+    const TA = Settings.touchOpacity, TS = Settings.touchSize;
+    ctx.globalAlpha = TA;
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3 * S;
     if (touchUI.stick) {
       const st = touchUI.stick;
-      ctx.beginPath(); ctx.arc(st.ox * S, st.oy * S, 16 * S, 0, 7); ctx.stroke();
-      const ndx = st.cx - st.ox, ndy = st.cy - st.oy, nd = Math.hypot(ndx, ndy) || 1, cl = Math.min(nd, 14);
+      ctx.beginPath(); ctx.arc(st.ox * S, st.oy * S, 16 * TS * S, 0, 7); ctx.stroke();
+      const ndx = st.cx - st.ox, ndy = st.cy - st.oy, nd = Math.hypot(ndx, ndy) || 1, cl = Math.min(nd, 14 * TS);
       ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc((st.ox + ndx / nd * cl) * S, (st.oy + ndy / nd * cl) * S, 7 * S, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc((st.ox + ndx / nd * cl) * S, (st.oy + ndy / nd * cl) * S, 7 * TS * S, 0, 7); ctx.fill();
+    } else if (Settings.stickFixed && G.state === 'play') {
+      // idle ghost so the anchored base is findable before you touch it
+      ctx.globalAlpha = TA * 0.5;
+      const bx2 = Settings.leftHand ? VIEW_W - 60 : 60;
+      ctx.beginPath(); ctx.arc(bx2 * S, (VIEW_H - 56) * S, 16 * TS * S, 0, 7); ctx.stroke();
+      ctx.globalAlpha = TA;
     }
     const fbx = Settings.leftHand ? VIEW_W - FIRE_BTN.x : FIRE_BTN.x;
     const gbx = Settings.leftHand ? VIEW_W - GREN_BTN.x : GREN_BTN.x;
-    ctx.beginPath(); ctx.arc(fbx * S, FIRE_BTN.y * S, FIRE_BTN.r * S, 0, 7); ctx.stroke();
-    ctx.beginPath(); ctx.arc(gbx * S, GREN_BTN.y * S, GREN_BTN.r * S, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(fbx * S, FIRE_BTN.y * S, FIRE_BTN.r * TS * S, 0, 7); ctx.stroke();
+    if (touchUI.fire) { // live-fire pulse on the hint ring
+      ctx.globalAlpha = TA * (0.6 + 0.4 * Math.sin(G.frame * 0.5));
+      ctx.beginPath(); ctx.arc(fbx * S, FIRE_BTN.y * S, (FIRE_BTN.r * TS + 3 + Math.sin(G.frame * 0.5) * 1.5) * S, 0, 7); ctx.stroke();
+      ctx.globalAlpha = TA;
+    }
+    // grenade button: count, low-stock tint, cooldown sweep
+    ctx.strokeStyle = G.grenades === 0 ? 'rgba(220,90,70,1)' : '#fff';
+    ctx.beginPath(); ctx.arc(gbx * S, GREN_BTN.y * S, GREN_BTN.r * TS * S, 0, 7); ctx.stroke();
+    if (G.joe.grenCd > 0 && G.state === 'play') {
+      ctx.strokeStyle = '#ffd257'; ctx.lineWidth = 1.8 * S;
+      ctx.beginPath();
+      ctx.arc(gbx * S, GREN_BTN.y * S, GREN_BTN.r * TS * S, -Math.PI / 2, -Math.PI / 2 + (1 - G.joe.grenCd / 25) * Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3 * S;
+    }
     ctx.fillStyle = '#fff'; ctx.font = `${5 * S}px monospace`;
     ctx.fillText('FIRE', (fbx - 9) * S, (FIRE_BTN.y + 2) * S);
     ctx.fillText('G×' + G.grenades, (gbx - 8) * S, (GREN_BTN.y + 2) * S);
