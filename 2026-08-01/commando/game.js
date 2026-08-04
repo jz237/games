@@ -39,6 +39,11 @@ const MOTO_SPEED = 2.6;
 const TRUCK_SPEED = 1.5;   // troop truck: drives in, stops, unloads a squad
 const TRUCK_HP = 5;        // takes a burst, not a single round
 const TRUCK_SQUAD = 4;     // riflemen aboard
+const TANK_HP = 3;         // grenades/blasts to kill — rifle rounds ping off
+const TANK_CD = 150;       // cannon cadence between telegraphed shots
+const TANK_RANGE = 190;
+const TANK_SHELL_SPEED = 2.4;
+const TANK_POINTS = 2000;  // flat bounty on top of the chain kill
 const MORTAR_INTERVAL = 210;
 const MORTAR_FLIGHT = 78;
 const PICKUP_DROP_CHANCE = 22;        // percent of infantry that drop supplies
@@ -141,7 +146,7 @@ let groundSlices = null; // [{y0}, canvas] pair-list: full-res bake, sliced to s
 const BAKE_S = S;        // bake at output resolution — 1:1 blit, zero scaling smudge
 const SLICES = 2;
 const SPRITE_SETS = ['hero-n', 'hero-s', 'hero-e', 'hero-act', 'hero-die', 'rif-s', 'rif-n', 'rif-e', 'rif-act', 'rif-die', 'rif-die2', 'moto',
-  'off-s', 'off-e', 'off-n', 'off-act', 'lob-s', 'lob-act', 'mortar', 'truck'];
+  'off-s', 'off-e', 'off-n', 'off-act', 'lob-s', 'lob-act', 'mortar', 'truck', 'tank'];
 const SPRITE_NAMES = ['sprites/hero', 'sprites/rifleman', 'sprites/officer', 'sprites/lobber',
   'ui/portrait', 'ui/rifle', 'ui/keyart.webp', 'ui/map.webp', 'tiles/sand', 'tiles/grass',
   'props/palm', 'props/boulder', 'props/pond', 'props/trench', 'props/gate', 'props/wreck', 'sprites/truck-wreck',
@@ -728,8 +733,46 @@ function dropCorpse(e) {
   }
 }
 
+// grenade/blast damage against dug-in armor; returns true if it died just now.
+// A killed tank is NOT removed — the burnt hulk stays parked at the gate.
+function tankHit(e) {
+  e.hp = (e.hp || TANK_HP) - 1;
+  e.hitT = 12;
+  for (let k = 0; k < 6; k++)
+    spawnPart({ kind: 'spark', x: e.x + (vrng() - 0.5) * 12, y: e.y - 10 * vrng(), vx: (vrng() - 0.5) * 2, vy: -vrng(), t: 0, ttl: 14, size: 0.8 });
+  if (e.hp > 0) {
+    if (window.Sfx) Sfx.play('enemy-down', { gain: 0.5, rate: 0.7, pan: panAt(e.x) });
+    return false;
+  }
+  e.deadTank = true; e.aimT = 0; e.fireT = 0;
+  G.fx.push({ kind: 'bigboom', x: e.x, y: e.y - 4, t: 0 });
+  G.fx.push({ kind: 'bigboom', x: e.x + 6, y: e.y - 13, t: 0 });
+  addScorch(e.x, e.y, 20);
+  G.shake = Math.max(G.shake, 14); G.flashT = Math.max(G.flashT, 5);
+  G.hitStop = Math.max(G.hitStop || 0, 5);
+  for (let i = 0; i < 10; i++)
+    spawnPart({ kind: 'chunk', x: e.x, y: e.y - 6, vx: (vrng() - 0.5) * 2.8, vy: -1.5 - vrng() * 1.5, t: 0, ttl: 46 + vrng() * 22, size: 1 + vrng(), ground: e.y + 2 + vrng() * 8 });
+  G.score += TANK_POINTS; if (G.score > G.top) G.top = G.score;
+  G.fx.push({ kind: 'bonus', x: e.x, y: e.y - 18, t: 0, txt: '+' + TANK_POINTS });
+  chainKill();
+  if (window.Sfx) Sfx.play('explosion', { gain: 1.0, rate: 0.7, pan: panAt(e.x) });
+  return true;
+}
+
+// a heavy tank shell detonates where it lands instead of just vanishing
+function heavyBoom(b) {
+  G.fx.push({ kind: 'boom', x: b.x, y: b.y, t: 0 });
+  addScorch(b.x, b.y, 8);
+  for (let k = 0; k < 5; k++)
+    spawnPart({ kind: 'spark', x: b.x, y: b.y, vx: (vrng() - 0.5) * 2.2, vy: -1.2 * vrng(), t: 0, ttl: 16, size: 0.9 });
+  if (G.joe.alive && G.state === 'play' && Math.hypot(b.x - G.joe.x, b.y - G.joe.y) < 13) killJoe();
+  hitProp(b.x, b.y, 8);
+  if (window.Sfx) Sfx.play('explosion', { gain: 0.6, rate: 1.15, pan: panAt(b.x) });
+}
+
 // a destroyed vehicle explodes instead of leaving an infantry corpse
 function destroyEnemy(e) {
+  if (e.type === 'tank') { if (!e.deadTank) tankHit(e); return; }
   if (e.mode === 'flee') {
     // the fleeing garrison commander carries a bounty
     G.score += OFFICER_BONUS; if (G.score > G.top) G.top = G.score;
@@ -751,7 +794,7 @@ function destroyEnemy(e) {
       // marked gone rather than spliced so the caller's index stays valid
       G.score += 400; if (G.score > G.top) G.top = G.score; // caller pays +100 -> 500 total
       for (const e2 of G.enemies) {
-        if (e2 === e || e2.gone || e2.type === 'truck') continue;
+        if (e2 === e || e2.gone || e2.type === 'truck' || e2.type === 'tank') continue;
         if (Math.hypot(e2.x - e.x, e2.y - e.y) < 22) {
           dropCorpse(e2); e2.gone = true;
           chainKill();
@@ -783,6 +826,7 @@ function blowProp(p, depth) {
   for (let j = G.enemies.length - 1; j >= 0; j--) {
     const e = G.enemies[j];
     if (Math.hypot(e.x - p.x, e.y - p.y) < BLAST_R) {
+      if (e.type === 'tank') { if (!e.deadTank) tankHit(e); continue; }
       destroyEnemy(e);
       G.enemies.splice(j, 1);
       chainKill();
@@ -821,6 +865,7 @@ function detonate(x, y) {
   for (let j = G.enemies.length - 1; j >= 0; j--) {
     const e = G.enemies[j];
     if (Math.hypot(e.x - x, e.y - y) < 26) {
+      if (e.type === 'tank') { if (!e.deadTank) tankHit(e); continue; }
       G.enemies.splice(j, 1);
       chainKill();
       G.fx.push({ kind: 'boom', x: e.x, y: e.y, t: 0 });
@@ -1092,8 +1137,18 @@ function tick() {
     if (--b.life <= 0 || b.y < G.camY - 8 || b.x < 0 || b.x > A.width) { G.bullets.splice(i, 1); continue; }
     for (let j = G.enemies.length - 1; j >= 0; j--) {
       const e = G.enemies[j];
-      const hw = e.type === 'truck' ? 15 : 7, hh = e.type === 'truck' ? 10 : 9;
+      const hw = e.type === 'truck' ? 15 : e.type === 'tank' ? 14 : 7, hh = e.type === 'truck' ? 10 : e.type === 'tank' ? 13 : 9;
       if (Math.abs(b.x - e.x) < hw && Math.abs(b.y - e.y) < hh) {
+        // rifle rounds PING off tank armor — grenades are the answer
+        if (e.type === 'tank') {
+          if (!e.deadTank) {
+            G.fx.push({ kind: 'impact', x: b.x, y: b.y, dx: b.vx, dy: b.vy, t: 0 });
+            for (let k = 0; k < 2; k++) spawnPart({ kind: 'spark', x: b.x, y: b.y, vx: (vrng() - 0.5) * 1.8, vy: -0.9 * vrng(), t: 0, ttl: 10, size: 0.7 });
+            G.bullets.splice(i, 1);
+            break;
+          }
+          continue; // dead hulk: rounds pass over it
+        }
         // a truck soaks a burst before it goes up
         if (e.type === 'truck' && e.hp > 1) {
           e.hp--;
@@ -1123,13 +1178,18 @@ function tick() {
     // enemy fire cooks off fuel drums too — their own barrage is a hazard
     if (hitProp(b.x, b.y)) { G.ebullets.splice(i, 1); continue; }
     if (maskBlocked(b.x, b.y)) {
-      if (!hitProp(b.x, b.y, 10))
+      if (b.heavy) heavyBoom(b);
+      else if (!hitProp(b.x, b.y, 10))
         for (let k = 0; k < 2; k++) spawnPart({ kind: 'dust', x: b.x, y: b.y, vx: (vrng() - 0.5) * 0.4, vy: -0.12, t: 0, ttl: 14, size: 0.9 });
       G.ebullets.splice(i, 1); continue;
     }
-    if (--b.life <= 0 || b.y < G.camY - 20 || b.y > G.camY + VIEW_H + 20 || b.x < 0 || b.x > A.width) { G.ebullets.splice(i, 1); continue; }
-    if (J.alive && G.state === 'play' && Math.abs(b.x - J.x) < 5 && Math.abs(b.y - J.y) < 7) {
+    if (--b.life <= 0 || b.y < G.camY - 20 || b.y > G.camY + VIEW_H + 20 || b.x < 0 || b.x > A.width) {
+      if (b.heavy && b.life <= 0) heavyBoom(b); // the round comes down somewhere
+      G.ebullets.splice(i, 1); continue;
+    }
+    if (J.alive && G.state === 'play' && Math.abs(b.x - J.x) < (b.heavy ? 7 : 5) && Math.abs(b.y - J.y) < (b.heavy ? 9 : 7)) {
       G.ebullets.splice(i, 1);
+      if (b.heavy) heavyBoom(b);
       killJoe();
     }
   }
@@ -1196,7 +1256,26 @@ function tick() {
     const ox = e.x, oy = e.y;
     const dx = J.x - e.x, dy = J.y - e.y, d = Math.hypot(dx, dy) || 1;
 
-    if (e.type === 'truck') {
+    if (e.type === 'tank') {
+      // dug-in armor: static, bullet-proof, killed by grenades/blasts. The
+      // cannon telegraphs with a building muzzle glow, then a heavy shell.
+      if (e.deadTank) {
+        if (e.t % 9 === 0) spawnPart({ kind: 'smoke', x: e.x + (vrng() - 0.5) * 8, y: e.y - 10, vx: 0.03, vy: -0.2, t: 0, ttl: 60, size: 2 + vrng() });
+      } else if (e.aimT > 0) {
+        e.aimT--;
+        if (e.aimT === 0 && live) {
+          const aim = Math.atan2(J.y - (e.y - 6), J.x - e.x);
+          G.ebullets.push({ x: e.x, y: e.y - 4, vx: Math.cos(aim) * TANK_SHELL_SPEED, vy: Math.sin(aim) * TANK_SHELL_SPEED, life: 160, heavy: true });
+          e.fireT = 14;
+          G.shake = Math.max(G.shake, 6);
+          G.fx.push({ kind: 'muzzle', x: e.x + Math.cos(aim) * 11, y: e.y - 4 + Math.sin(aim) * 11, dx: Math.cos(aim), dy: Math.sin(aim), t: 0 });
+          if (window.Sfx) Sfx.play('explosion', { gain: 0.7, rate: 1.35, pan: panAt(e.x) });
+        }
+      } else {
+        if (e.shotCd > 0) e.shotCd--;
+        else if (live && d < TANK_RANGE) { e.aimT = 26; e.shotCd = TANK_CD + ((e.t * 13) % 40); }
+      }
+    } else if (e.type === 'truck') {
       // troop truck: drives in on its line, pulls up near the player's column,
       // unloads a squad off the tailgate, then drives off. Killing it early
       // (it takes a burst) kills whoever is still aboard.
@@ -1278,7 +1357,10 @@ function tick() {
       const nx2 = e.x + (e.fleeDir || 1) * 1.8;
       if (!rectsAt(nx2 - 4, e.y - 6, 8, 10)) e.x = nx2;
       else { const ny2 = e.y + 1.2; if (!rectsAt(e.x - 4, ny2 - 6, 8, 10)) e.y = ny2; }
-      if (e.x < 10 || e.x > A.width - 10) e.gone = true;
+      // narrow gates can box him in — after long enough he slips into the
+      // treeline anyway, or the finale would deadlock waiting on him
+      e.fleeT = (e.fleeT || 0) + 1;
+      if (e.x < 10 || e.x > A.width - 10 || e.fleeT > 260) e.gone = true;
     } else if (live) {
       const move = (vx, vy) => {
         const nx2 = e.x + vx;
@@ -1426,6 +1508,13 @@ function tick() {
   const gateX = (ex.x0 + ex.x1) / 2;
   if (G.state === 'play' && J.alive && !G.calm && !G.finale && J.y > ex.y && J.y < ex.y + 64) {
     G.finale = { phase: 'burst', t: 0, toSpawn: Math.min(10, 7 + loopN() * 2), spawned: 0, officer: null };
+    // from Area 2 on (and on every deep-loop gate) the garrison has ARMOR:
+    // a dug-in tank that rifle fire cannot touch — work grenades onto it
+    if (G.area >= 2 || loopN() >= 1) {
+      const tk = newEnemy(gateX, ex.y + 12, 'tank', 1, 'hold');
+      tk.finale = true; tk.hp = TANK_HP; tk.shotCd = 90;
+      G.enemies.push(tk);
+    }
     G.shake = Math.max(G.shake, 12); G.flashT = Math.max(G.flashT, 3);
     for (let k = 0; k < 14; k++)
       spawnPart({ kind: 'dust', x: gateX + (vrng() - 0.5) * 34, y: ex.y + vrng() * 8, vx: (vrng() - 0.5) * 0.9,
@@ -1453,7 +1542,7 @@ function tick() {
       }
       if (F.spawned >= F.toSpawn) F.phase = 'hold';
     } else if (F.phase === 'hold') {
-      if (!G.enemies.some(e2 => e2.finale)) {
+      if (!G.enemies.some(e2 => e2.finale && !e2.deadTank)) {
         F.phase = 'done';
         if (window.Sfx) Sfx.play('ready', { gain: 0.6, rate: 1.25 });
       }
@@ -1642,12 +1731,16 @@ function render(alpha) {
   ctx.lineCap = 'round';
   for (const b of G.ebullets) {
     const sp = Math.hypot(b.vx, b.vy) || 1;
-    const ux = b.vx / sp, uy = b.vy / sp, len = 4.5;
+    const ux = b.vx / sp, uy = b.vy / sp, len = b.heavy ? 8 : 4.5;
     const bx = IX(b), by = IY(b);
-    ctx.strokeStyle = 'rgba(255,70,30,0.42)'; ctx.lineWidth = 2.4 * S;
+    ctx.strokeStyle = 'rgba(255,70,30,0.42)'; ctx.lineWidth = (b.heavy ? 4.2 : 2.4) * S;
     ctx.beginPath(); ctx.moveTo((bx - ux * len) * S, (by - cy - uy * len) * S); ctx.lineTo(bx * S, (by - cy) * S); ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,190,120,0.95)'; ctx.lineWidth = 1 * S;
+    ctx.strokeStyle = 'rgba(255,190,120,0.95)'; ctx.lineWidth = (b.heavy ? 1.8 : 1) * S;
     ctx.beginPath(); ctx.moveTo((bx - ux * len) * S, (by - cy - uy * len) * S); ctx.lineTo(bx * S, (by - cy) * S); ctx.stroke();
+    if (b.heavy) { // a shell you can see coming
+      ctx.fillStyle = 'rgba(255,235,200,0.9)';
+      ctx.beginPath(); ctx.arc(bx * S, (by - cy) * S, 1.8 * S, 0, 7); ctx.fill();
+    }
   }
   ctx.restore();
 
@@ -1697,6 +1790,11 @@ function render(alpha) {
       preRot = e.lean || 0; // banked into the drift, smoothed in the update
     } else if (e.type === 'truck') {
       key = `sprites/truck-${(e.walkFrame || 0) & 3}`;
+    } else if (e.type === 'tank') {
+      // frames: idle / idle+exhaust / FIRING / burnt hulk — the sheet shares a
+      // baseline that includes the downward muzzle blast, so tanks anchor by a
+      // foot fraction (sandbag line at 80/112) instead of the canvas bottom
+      key = `sprites/tank-${e.deadTank ? 3 : e.fireT > 0 ? 2 : ((e.t >> 5) & 1) ? 1 : 0}`;
     } else if (e.type === 'mortar') {
       // load ritual: lift the shell (1), drop it in (2), the tube fires (3);
       // at rest the loader occasionally leans in to fuss with the elevation
@@ -1736,7 +1834,7 @@ function render(alpha) {
     let face = e.face || 1;
     if (!corpse && e.dieT === undefined) {
       if (e.type === 'moto' || e.type === 'truck') face = e.dir < 0 ? -1 : 1;
-      else if (e.type === 'mortar') face = 1; // an emplacement does not swivel
+      else if (e.type === 'mortar' || e.type === 'tank') face = 1; // emplacements do not swivel
       else if (e.fireT > 0 || e.barkT > 0 || e.mode === 'engage' || e.type === 'lobber' || e.type === 'trencher') {
         const ddx = G.joe.x - ex;
         if (Math.abs(ddx) > 6) face = ddx < 0 ? -1 : 1;
@@ -1748,10 +1846,12 @@ function render(alpha) {
     let leanA = 0;
     if (stride && (e.stepped || 0) > 0.04)
       leanA = Math.sin(((e.walkFrame || 0) + (e.walkDist || 0) / WALK_STRIDE) * 1.57) * 0.03;
-    drawShadow(ex, ey, corpse ? 6 : e.type === 'truck' ? 10 : e.type === 'mortar' ? 7 : 4);
+    drawShadow(ex, ey, corpse ? 6 : e.type === 'tank' ? 12 : e.type === 'truck' ? 10 : e.type === 'mortar' ? 7 : 4);
     const h = corpse ? ENEMY_H * 0.82 : e.type === 'moto' ? ENEMY_H * 1.25
       : e.type === 'truck' ? ENEMY_H * 1.5
+      : e.type === 'tank' ? ENEMY_H * 2.2 * (112 / 78)
       : e.type === 'mortar' ? ENEMY_H * 1.3 : e.type === 'officer' ? ENEMY_H + 1 : ENEMY_H;
+    const foot = e.type === 'tank' ? 80 / 112 : 1;
     const w = h * (img.width / img.height);
     ctx.save();
     ctx.translate(ex * S, (ey + 4) * S);
@@ -1761,8 +1861,22 @@ function render(alpha) {
     if (kick) ctx.translate(0, kick * S);
     if (e.type === 'moto') ctx.translate(0, Math.sin((e.walk || 0) * 1.7) * 0.35 * S); // terrain judder
     if (e.type === 'truck') ctx.translate(0, Math.sin((e.walk || 0) * 0.9) * 0.3 * S); // heavier, slower sway
-    ctx.drawImage(img, -w / 2 * S, -h * S, w * S, h * S);
+    ctx.drawImage(img, -w / 2 * S, -h * foot * S, w * S, h * S);
     ctx.restore();
+    if (e.type === 'tank' && !corpse && !e.deadTank) {
+      // armor pips + the building muzzle glow that telegraphs the cannon
+      for (let i = 0; i < TANK_HP; i++) {
+        ctx.fillStyle = i < (e.hp || TANK_HP) ? '#ffd257' : 'rgba(60,50,30,0.6)';
+        ctx.fillRect((ex - 5.5 + i * 4) * S, (ey - h * foot - 3) * S, 2.6 * S, 1.6 * S);
+      }
+      if (e.aimT > 0) {
+        const g4 = 1 - e.aimT / 26;
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = `rgba(255,150,60,${0.2 + g4 * 0.55})`;
+        ctx.beginPath(); ctx.arc(ex * S, (ey + 5) * S, (1 + g4 * 3.6) * S, 0, 7); ctx.fill();
+        ctx.restore();
+      }
+    }
   };
   // prisoners: staked and waiting, then sprinting for the treeline once cut free
   for (const w of G.pows) {
@@ -2386,7 +2500,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.29.0-chain', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.30.0-armor', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
@@ -2517,6 +2631,8 @@ if (qa) {
       ammo: G.ammo, pickups: G.pickups.length, shells: G.shells.length,
       rescued: G.rescued, powsFree: G.pows.filter(w => w.freed).length, powsDead: G.pows.filter(w => w.dead).length,
       enemyTypes: G.enemies.map(e => e.type),
+      enemyHp: G.enemies.map(e => e.hp || 1),
+      tankDead: G.enemies.some(e => e.type === 'tank' && e.deadTank),
       enemySprites: G.enemies.map(e => e._sprite || ''),
       barks: G.enemies.filter(e => e.barkT > 0).length,
       corpseSets: G.corpses.map(c => c.set),
