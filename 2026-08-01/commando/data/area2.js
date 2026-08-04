@@ -44,3 +44,6 @@ window.AREA2 = {
 
 // it59: dusk assault — the palisade falls at last light
 window.AREA2.ambience = { mode: "dusk", rain: true }; // it65: dusk downpour
+
+// it66: the rope bridge is a killing zone — the trap springs mid-crossing
+window.AREA2.ambushZone = { x0: 112, x1: 162, y0: 330, y1: 420, farY: 288, nearY: 452 };

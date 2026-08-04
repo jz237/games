@@ -325,6 +325,7 @@ function ensureMusic() {
   }
 }
 addEventListener('keydown', e => {
+  if (G && G.demo) G.realInput = true; // any real key ends the ghost run
   // key-remap capture (settings panel)
   if (G && G.remap) {
     if (e.code !== 'Escape') { Settings.keys[G.remap] = e.code; applySettings(); }
@@ -451,6 +452,7 @@ let A = AREAS[0];
 function areaData(n) { return AREAS[((Math.max(1, n) - 1) % AREAS.length + AREAS.length) % AREAS.length]; }
 loadPlates(A);   // bind area 1's plates and masks at boot
 const urlTitle = new URLSearchParams(location.search).has('title');
+const urlAttract = new URLSearchParams(location.search).has('attract');
 const urlMaskDebug = new URLSearchParams(location.search).has('mask');
 const G = {
   // title | ranking | credits | intro | ready | play | dead | clear | gameover | entry | continue | settings
@@ -459,7 +461,7 @@ const G = {
   score: 0, top: loadScores()[0][1], lives: LIVES_START, grenades: 3, ammo: START_AMMO,
   area: 1, tally: 0, entry: null, lastEntry: null, paused: false, postGame: false,
   settingsSel: 0, settingsFrom: 'title', remap: null, cp: 1616, continues: 0,
-  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0,
+  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0, demo: false, ambush: null,
   camY: A.height - VIEW_H,  // camera top in world coords
   joe: { x: A.spawn.x, y: A.spawn.y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, firePrev: false, grenCd: 0, grenPrev: false, invuln: 0, alive: true, walk: 0, walkDist: 0, moving: false, fireT: 0, throwT: 0, recoil: 0, duck: false, deathT: 0 },
   bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
@@ -598,13 +600,44 @@ function setState(s, t) {
 function resetWorld() {
   Object.assign(G, { camY: A.height - VIEW_H, bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
     pows: (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 })), spawned: new Set(), shake: 0, tally: 0, cp: CHECKPOINTS[0], lastWave: 0, scorch: [], flashT: 0, finale: null,
-    hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, spotT: 0, thunderT: 0,
+    hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, spotT: 0, thunderT: 0, ambush: null,
     beams: (A.searchlights || []).map((sl, i) => ({ ox: sl.x, oy: sl.y, a: Math.PI / 2, phase: i * 2.3 })),
     props: DESTRUCTIBLE_DEFS.map(d => ({ ...d, dead: false, fuse: 0, burn: 0 })) });
   G.pows = (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 }));
   Object.assign(G.joe, { x: A.spawn.x, y: A.spawn.y, alive: true, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, grenCd: 0, invuln: 0, walk: 0, walkDist: 0 });
 }
+// ---------- attract demo: a scripted ghost run on a fixed seed ----------
+// Hand-authored input program: push north in bursts, jink, lob two grenades.
+const DEMO_SCRIPT = (() => {
+  const ev = [];
+  const key = (tt, k, d) => ev.push([tt, k, d]);
+  key(10, 'up', 1);
+  for (let i = 0; i < 26; i++) {
+    const base = 30 + i * 52;
+    key(base, 'fire', 1); key(base + 4, 'fire', 0);
+    key(base + 18, 'fire', 1); key(base + 22, 'fire', 0);
+    if (i % 4 === 2) { const side = ((i >> 2) & 1) ? 'left' : 'right'; key(base + 30, side, 1); key(base + 44, side, 0); }
+    if (i === 7 || i === 17) { key(base + 26, 'grenade', 1); key(base + 29, 'grenade', 0); }
+  }
+  key(1420, 'up', 0);
+  return ev.sort((a, b) => a[0] - b[0]);
+})();
+function startDemo() {
+  seed = 0xC0FFEE; vseed = 0x9E3779B9; // deterministic ghost
+  G.score = 0; G.lives = LIVES_START; G.grenades = 3; G.ammo = START_AMMO; G.area = 1;
+  G.postGame = false; G.paused = false; G.continues = 0; G.rescued = 0;
+  applyArea(1); resetWorld();
+  G.demo = true; G.demoT = 0; G.demoI = 0; G.realInput = false;
+  for (const k in keys) keys[k] = false;
+  G.state = 'play'; G.stateTimer = 0;
+}
+function endDemo() {
+  G.demo = false;
+  for (const k in keys) keys[k] = false;
+  setState('ranking', 300);
+}
 function startGame() {
+  G.demo = false;
   G.score = 0; G.lives = LIVES_START; G.grenades = 3; G.ammo = START_AMMO; G.area = 1; G.postGame = false; G.paused = false; G.continues = 0; G.rescued = 0;
   applyArea(1);
   resetWorld();
@@ -890,6 +923,7 @@ function respawnJoe() {
   G.enemies = []; G.lobs = []; G.nades = []; G.corpses = []; G.ebullets = []; G.shells = []; G.pickups = [];
   // an unfinished gate assault re-arms — the garrison reforms while Joe is down
   if (G.finale && G.finale.phase !== 'done') G.finale = null;
+  if (G.ambush && G.ambush.phase === 'fight') G.ambush = null; // trap resets too
   const y = Math.min(A.height - 20, G.camY + VIEW_H - 26);
   let x = A.spawn.x;
   for (const dx of [0, 10, -10, 20, -20, 32, -32, 46, -46, 62, -62, 80, -80]) {
@@ -934,6 +968,17 @@ function tick() {
   if (G.hitStop > 0 && G.state === 'play') { G.hitStop--; return; }
   G.frame++;
   const J = G.joe;
+  // attract demo: scripted inputs drive a ghost game; any REAL input starts
+  // a live one, and the ghost's death (or the clock) returns to the attract
+  if (G.demo) {
+    if (G.realInput || touchUI.fire || gp.fire || gp.pause) { startGame(); return; }
+    G.demoT++;
+    while (G.demoI < DEMO_SCRIPT.length && DEMO_SCRIPT[G.demoI][0] <= G.demoT) {
+      const dv = DEMO_SCRIPT[G.demoI++];
+      keys[dv[1]] = !!dv[2];
+    }
+    if (G.demoT > 1560) { endDemo(); return; }
+  }
   const ed = uiEdges();
   const endTick = () => { for (const k in uiPrev) uiPrev[k] = ed.now[k]; };
 
@@ -963,7 +1008,7 @@ function tick() {
     if (ed.e.menu && G.state === 'title') { openSettings(); endTick(); return; }
     if (ed.e.fire) { startGame(); endTick(); return; }
     if (--G.stateTimer <= 0) {
-      if (G.state === 'title') setState('ranking', 300);
+      if (G.state === 'title') { if (!qa || urlAttract) startDemo(); else setState('ranking', 300); }
       else if (G.state === 'ranking') {
         if (G.postGame) { G.postGame = false; setState('title', 300); }
         else setState('credits', 250);
@@ -1012,6 +1057,7 @@ function tick() {
     endTick(); return;
   }
   if (G.state === 'dead') {
+    if (G.demo) { if (--G.stateTimer <= 0) endDemo(); endTick(); return; }
     if (--G.stateTimer <= 0) {
       if (--G.lives < 0) {
         // normal mode: offer a continue from the last checkpoint; arcade: original rules
@@ -1540,6 +1586,31 @@ function tick() {
   // --- fx + visual particles ---
   for (let i = G.fx.length - 1; i >= 0; i--) if (++G.fx[i].t > (G.fx[i].kind === 'bigboom' ? 30 : G.fx[i].kind === 'muzzle' ? 4 : G.fx[i].kind === 'impact' ? 5 : 24)) G.fx.splice(i, 1);
   updateParticles();
+
+  // --- bridge ambush: the trap springs mid-crossing --------------------------
+  const AZ = A.ambushZone;
+  if (AZ && G.state === 'play' && !G.calm && !G.ambush && J.alive
+      && J.x > AZ.x0 && J.x < AZ.x1 && J.y > AZ.y0 && J.y < AZ.y1) {
+    G.ambush = { phase: 'fight', t: 0 };
+    G.shake = Math.max(G.shake, 10);
+    for (const amb of [[126, AZ.farY, 'rifleman'], [150, AZ.farY, 'rifleman'], [137, AZ.farY - 12, 'lobber'],
+                       [126, AZ.nearY, 'rifleman'], [152, AZ.nearY, 'rifleman']]) {
+      const e2 = newEnemy(amb[0], amb[1], amb[2], amb[0] < 137 ? 1 : -1, amb[2] === 'lobber' ? 'hold' : 'engage');
+      e2.ambush = true; e2.shotCd = 40 + ((amb[0] * 13) % 30);
+      G.enemies.push(e2);
+    }
+    for (let k = 0; k < 3; k++) G.fx.push({ kind: 'boom', x: 128 + k * 9, y: AZ.y1 + 8 + k * 4, t: 0 });
+    addScorch(137, AZ.y1 + 12, 9);
+    if (window.Sfx) { Sfx.play('explosion', { gain: 0.8, rate: 0.9 }); Sfx.play('ready', { gain: 0.4, rate: 0.5 }); }
+  }
+  if (G.ambush && G.ambush.phase === 'fight') {
+    G.ambush.t++;
+    if (G.ambush.t > 10 && J.alive && !G.enemies.some(e2 => e2.ambush)) {
+      G.ambush.phase = 'done';
+      G.score += 500; if (G.score > G.top) G.top = G.score;
+      G.fx.push({ kind: 'bonus', x: J.x, y: J.y - 14, t: 0, txt: 'AMBUSH REPELLED +500' });
+    }
+  }
 
   // --- searchlights (night gates): sweep, catch, track, draw the garrison ---
   if (G.beams.length && G.state === 'play') {
@@ -2421,6 +2492,13 @@ function render(alpha) {
     ctx.textAlign = 'center'; ctx.fillText(str, VIEW_W / 2 * S, y * S); ctx.textAlign = 'start';
   };
   const blink = G.frame % 50 < 30;
+  if (G.demo && G.state === 'play') {
+    // attract-demo banner over the ghost run
+    ctx.fillStyle = 'rgba(5,8,4,0.55)';
+    ctx.fillRect((VIEW_W / 2 - 52) * S, 150 * S, 104 * S, 16 * S);
+    textC('DEMO', 157, 7, '#ffd257', true);
+    if (blink) textC('PRESS FIRE TO PLAY', 163.5, 5, '#e8d8b0');
+  }
   const hudOn = G.state === 'intro' || G.state === 'ready' || G.state === 'play' || G.state === 'dead' || G.state === 'clear';
 
   if (hudOn) {
@@ -2699,7 +2777,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.33.0-weather', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.34.0-ambush', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
@@ -2788,7 +2866,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, demo: !!G.demo, ambush: G.ambush ? G.ambush.phase : null, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },
@@ -2810,6 +2888,7 @@ if (qa) {
     spawnType: (type, x, y) => { G.enemies.push(newEnemy(x !== undefined ? x : G.joe.x + 60, y !== undefined ? y : G.joe.y - 40, type, -1, 'traverse')); return type; },
     setArea: (n) => { G.area = Math.max(1, n | 0); return { area: G.area, diff: diffMul(), loop: loopN() }; },
     quiet: (n) => { G.quietT = n | 0; return G.quietT; },
+    realInput: () => { G.realInput = true; return true; },
     // massacre everything except fleeing officers through the normal destroy
     // path — scenario cleanup that still exercises corpses/vehicle explosions
     wipe: () => { for (const e of G.enemies) if (e.mode !== 'flee') destroyEnemy(e); G.enemies = G.enemies.filter(e => e.mode === 'flee'); return G.enemies.length; },
