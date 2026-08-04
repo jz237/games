@@ -459,7 +459,7 @@ const G = {
   score: 0, top: loadScores()[0][1], lives: LIVES_START, grenades: 3, ammo: START_AMMO,
   area: 1, tally: 0, entry: null, lastEntry: null, paused: false, postGame: false,
   settingsSel: 0, settingsFrom: 'title', remap: null, cp: 1616, continues: 0,
-  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0,
+  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0,
   camY: A.height - VIEW_H,  // camera top in world coords
   joe: { x: A.spawn.x, y: A.spawn.y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, firePrev: false, grenCd: 0, grenPrev: false, invuln: 0, alive: true, walk: 0, walkDist: 0, moving: false, fireT: 0, throwT: 0, recoil: 0, duck: false, deathT: 0 },
   bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
@@ -598,7 +598,8 @@ function setState(s, t) {
 function resetWorld() {
   Object.assign(G, { camY: A.height - VIEW_H, bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
     pows: (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 })), spawned: new Set(), shake: 0, tally: 0, cp: CHECKPOINTS[0], lastWave: 0, scorch: [], flashT: 0, finale: null,
-    hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0,
+    hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, spotT: 0,
+    beams: (A.searchlights || []).map((sl, i) => ({ ox: sl.x, oy: sl.y, a: Math.PI / 2, phase: i * 2.3 })),
     props: DESTRUCTIBLE_DEFS.map(d => ({ ...d, dead: false, fuse: 0, burn: 0 })) });
   G.pows = (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 }));
   Object.assign(G.joe, { x: A.spawn.x, y: A.spawn.y, alive: true, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, grenCd: 0, invuln: 0, walk: 0, walkDist: 0 });
@@ -1534,6 +1535,38 @@ function tick() {
   for (let i = G.fx.length - 1; i >= 0; i--) if (++G.fx[i].t > (G.fx[i].kind === 'bigboom' ? 30 : G.fx[i].kind === 'muzzle' ? 4 : G.fx[i].kind === 'impact' ? 5 : 24)) G.fx.splice(i, 1);
   updateParticles();
 
+  // --- searchlights (night gates): sweep, catch, track, draw the garrison ---
+  if (G.beams.length && G.state === 'play') {
+    let inBeam = false;
+    for (const bm of G.beams) {
+      const sweep = Math.PI / 2 + Math.sin(G.wt * 0.011 + bm.phase) * 0.55;
+      if (G.spotT > 10 && J.alive) {
+        const want = Math.atan2(J.y - bm.oy, J.x - bm.ox);
+        bm.a += (want - bm.a) * 0.08; // the beam hunts you
+      } else bm.a += (sweep - bm.a) * 0.1;
+      if (J.alive) {
+        const dx2 = J.x - bm.ox, dy2 = J.y - bm.oy, dd = Math.hypot(dx2, dy2);
+        if (dd < 140) {
+          let da = Math.atan2(dy2, dx2) - bm.a;
+          while (da > Math.PI) da -= 2 * Math.PI;
+          while (da < -Math.PI) da += 2 * Math.PI;
+          if (Math.abs(da) < 0.14) inBeam = true;
+        }
+      }
+    }
+    const wasSpot = G.spotT;
+    G.spotT = inBeam ? Math.min(60, G.spotT + 1) : Math.max(0, G.spotT - 1);
+    if (wasSpot < 20 && G.spotT >= 20 && window.Sfx) {
+      Sfx.play('ready', { gain: 0.5, rate: 0.55 }); // the alarm goes up
+      Sfx.play('ready', { gain: 0.4, rate: 0.75 });
+    }
+    if (G.spotT > 20) {
+      // caught in the light: waves come faster and everyone shoots sooner
+      G.lastWave -= 1.5;
+      for (const e2 of G.enemies) if (e2.mode === 'engage' && e2.shotCd > 1) e2.shotCd--;
+    }
+  }
+
   // --- fortress finale: the garrison sallies out before the area can clear —
   // the arcade's signature end-of-area beat: the gate bursts, a last wave
   // pours out, and the commander makes a run for it (bounty if you drop him)
@@ -2214,6 +2247,30 @@ function render(alpha) {
     ctx.restore();
   }
 
+  // searchlight cones: additive light in-world (the darkness pass below also
+  // punches the same triangles out, so the beam genuinely lights the ground)
+  if (G.beams.length && G.state !== 'title' && G.state !== 'map') {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (const bm of G.beams) {
+      const oy2 = bm.oy - cy;
+      if (oy2 < -160 || oy2 > VIEW_H + 40) continue;
+      const L = 135, h2 = 0.13;
+      const g5 = ctx.createRadialGradient(bm.ox * S, oy2 * S, 2 * S, bm.ox * S, oy2 * S, L * S);
+      g5.addColorStop(0, 'rgba(255,242,200,0.30)');
+      g5.addColorStop(0.5, 'rgba(255,235,180,0.13)');
+      g5.addColorStop(1, 'rgba(255,230,170,0)');
+      ctx.fillStyle = g5;
+      ctx.beginPath();
+      ctx.moveTo(bm.ox * S, oy2 * S);
+      ctx.lineTo((bm.ox + Math.cos(bm.a - h2) * L) * S, (oy2 + Math.sin(bm.a - h2) * L) * S);
+      ctx.lineTo((bm.ox + Math.cos(bm.a + h2) * L) * S, (oy2 + Math.sin(bm.a + h2) * L) * S);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(255,250,220,0.85)';
+      ctx.beginPath(); ctx.arc(bm.ox * S, oy2 * S, 1.6 * S, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+  }
+
   // fireflies wander the jungle margins at night, pulsing softly
   let fireflies = null;
   if (A.ambience && A.ambience.mode === 'night' && G.state !== 'title' && G.state !== 'map') {
@@ -2268,6 +2325,21 @@ function render(alpha) {
     for (const b of G.bullets) punch(IX(b), IY(b), 6, 0.5);
     for (const b of G.ebullets) punch(b.x, b.y, 6, 0.5);
     if (fireflies) for (const [fx2, fy2, a] of fireflies) punch(fx2, fy2, 5, Math.max(0, a) * 0.9);
+    for (const bm of G.beams) { // searchlight cones carve the darkness
+      const oy2 = bm.oy - cy;
+      if (oy2 < -160 || oy2 > VIEW_H + 40) continue;
+      const L = 135, h2 = 0.13;
+      const g6 = lc.createRadialGradient(bm.ox * S, oy2 * S, 2 * S, bm.ox * S, oy2 * S, L * S);
+      g6.addColorStop(0, 'rgba(0,0,0,0.92)');
+      g6.addColorStop(0.75, 'rgba(0,0,0,0.7)');
+      g6.addColorStop(1, 'rgba(0,0,0,0)');
+      lc.fillStyle = g6;
+      lc.beginPath();
+      lc.moveTo(bm.ox * S, oy2 * S);
+      lc.lineTo((bm.ox + Math.cos(bm.a - h2) * L) * S, (oy2 + Math.sin(bm.a - h2) * L) * S);
+      lc.lineTo((bm.ox + Math.cos(bm.a + h2) * L) * S, (oy2 + Math.sin(bm.a + h2) * L) * S);
+      lc.closePath(); lc.fill();
+    }
     ctx.drawImage(lightC, 0, 0);
     if (amb.mode === 'dusk') { ctx.fillStyle = 'rgba(255,118,30,0.10)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
     else if (amb.mode === 'night') { ctx.fillStyle = 'rgba(22,32,88,0.10)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
@@ -2565,7 +2637,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.31.0-marksman', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.32.0-spotlight', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
@@ -2654,7 +2726,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },

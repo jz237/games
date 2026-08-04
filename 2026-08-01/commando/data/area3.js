@@ -42,3 +42,6 @@ window.AREA3 = {
 
 // it59: night assault — the river camp is stormed in darkness
 window.AREA3.ambience = { mode: "night" };
+
+// it64: gate-tower searchlights sweep the killing ground at night
+window.AREA3.searchlights = [{ x: 100, y: 54 }, { x: 174, y: 54 }];
