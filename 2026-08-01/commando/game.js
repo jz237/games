@@ -285,6 +285,8 @@ const SETTINGS_DEFAULTS = {
   autoFire: false,             // keyboard hold-to-fire (touch always auto-fires at the cap)
   leftHand: false,
   haptics: true,               // vibration on touch devices (where supported)
+  perf: 'auto',                // auto | high | low — effect shedding tier
+  battery: false,              // render at 30fps (logic stays 50Hz)
   retro: false, scanlines: true,
   mode: 'normal',              // normal (checkpoints+continues) | arcade (original rules)
   keys: { fire: 'KeyZ', grenade: 'KeyX', pause: 'Space' },
@@ -495,7 +497,7 @@ const FIRES = [
 // visual-only RNG — separate stream so gameplay determinism is untouched
 let vseed = 0x9E3779B9;
 function vrng() { vseed |= 0; vseed = vseed + 0x6D2B79F5 | 0; let t = Math.imul(vseed ^ vseed >>> 15, 1 | vseed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
-function spawnPart(p) { if (G.parts.length > 130) G.parts.shift(); G.parts.push(p); }
+function spawnPart(p) { if (G.parts.length > (perfLow ? 80 : 130)) G.parts.shift(); G.parts.push(p); }
 // gunfire after a quiet spell flushes birds out of the nearest treeline
 function flushBirds(x, y) {
   const side = x < VIEW_W / 2 ? 1 : -1; // fly away over the far margin
@@ -548,6 +550,8 @@ const SETTINGS_ITEMS = [
   { k: 'autoFire', label: 'AUTO-FIRE (KEYS)', type: 'bool' },
   { k: 'leftHand', label: 'LEFT-HANDED TOUCH', type: 'bool' },
   { k: 'haptics', label: 'VIBRATION (TOUCH)', type: 'bool' },
+  { k: 'perf', label: 'PERFORMANCE', type: 'perf' },
+  { k: 'battery', label: 'BATTERY SAVER 30FPS', type: 'bool' },
   { k: 'retro', label: 'RETRO FILTER', type: 'bool' },
   { k: 'scanlines', label: 'SCANLINES', type: 'bool' },
   { k: 'mode', label: 'GAME MODE', type: 'mode' },
@@ -578,6 +582,12 @@ function adjustSetting(item, dir, activate) {
     if (dir || activate) {
       Settings.mode = Settings.mode === 'normal' ? 'arcade' : 'normal';
       scoreMode = Settings.mode; G.top = loadScores()[0][1];
+      applySettings();
+    }
+  } else if (item.type === 'perf') {
+    if (dir || activate) {
+      const order = ['auto', 'high', 'low'];
+      Settings.perf = order[(order.indexOf(Settings.perf) + (dir < 0 ? order.length - 1 : 1)) % order.length];
       applySettings();
     }
   } else if (item.type === 'track') {
@@ -1732,10 +1742,25 @@ function tick() {
 // ---------- render ----------
 let LERP = 1;                              // 0..1 fraction between logic ticks
 let lightC = null;                         // offscreen darkness layer (dusk/night areas)
+// effect-shedding tier: 'auto' watches real frame times with hysteresis and
+// drops to low when the device can't hold rate (darkness at half res, fewer
+// rain streaks/glints/fireflies/particles, no cloud shadows)
+let perfLow = false, perfScore = 0, lastFrameT = 0;
+function notePerfFrame(now) {
+  const d = now - lastFrameT; lastFrameT = now;
+  if (Settings.perf !== 'auto') return;
+  if (G.state !== 'play' || d <= 0 || d > 250) return; // ignore pauses/tab spikes
+  if (d > 24) perfScore = Math.min(600, perfScore + 3);
+  else if (d < 18) perfScore = Math.max(0, perfScore - 1);
+  if (!perfLow && perfScore > 300) perfLow = true;
+  else if (perfLow && perfScore < 60) perfLow = false;
+}
 const IX = (o) => (o.px === undefined ? o.x : o.px + (o.x - o.px) * LERP);
 const IY = (o) => (o.py === undefined ? o.y : o.py + (o.y - o.py) * LERP);
 const IT = (o) => (o.pt === undefined ? o.t : o.pt + (o.t - o.pt) * LERP);
 function render(alpha) {
+  if (Settings.perf === 'low') perfLow = true;
+  else if (Settings.perf === 'high') perfLow = false;
   LERP = alpha === undefined ? 1 : alpha;
   const cy = G.pcamY === undefined ? G.camY : G.pcamY + (G.camY - G.pcamY) * LERP;
 
@@ -2337,7 +2362,7 @@ function render(alpha) {
   // ambient life: slow cloud shadows drift over the field by day and dusk —
   // two huge soft blobs anchored in WORLD space so they pass over the terrain
   // as you advance (invisible at night; the darkness owns that mood)
-  if ((!A.ambience || A.ambience.mode !== 'night') && G.state !== 'title' && G.state !== 'map') {
+  if (!perfLow && (!A.ambience || A.ambience.mode !== 'night') && G.state !== 'title' && G.state !== 'map') {
     ctx.save();
     for (let k = 0; k < 2; k++) {
       const drift = (G.wt * (0.055 + k * 0.03) + k * 700);
@@ -2362,7 +2387,7 @@ function render(alpha) {
     for (let r = 0; r < A.water.length; r++) {
       const wr = A.water[r];
       if (wr.y1 < cy - 10 || wr.y0 > cy + VIEW_H + 10) continue;
-      for (let i = 0; i < 26; i++) {
+      for (let i = 0; i < (perfLow ? 12 : 26); i++) {
         const gx2 = wr.x0 + ((i * 73.7 + r * 31.1) % (wr.x1 - wr.x0));
         const gy2 = wr.y0 + ((i * 41.3 + r * 17.7) % (wr.y1 - wr.y0));
         const sy2 = gy2 - cy;
@@ -2407,7 +2432,7 @@ function render(alpha) {
   let fireflies = null;
   if (A.ambience && A.ambience.mode === 'night' && G.state !== 'title' && G.state !== 'map') {
     fireflies = [];
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < (perfLow ? 5 : 9); i++) {
       const ax = i & 1 ? 26 + (i * 17) % 26 : VIEW_W - 26 - (i * 13) % 26;
       const ay = cy + 20 + ((i * 47) % (VIEW_H - 40));
       const t2 = G.wt * 0.02 + i * 2.4;
@@ -2429,14 +2454,15 @@ function render(alpha) {
   const amb = A.ambience;
   if (amb && G.state !== 'title' && G.state !== 'map') {
     if (!lightC) lightC = document.createElement('canvas');
-    if (lightC.width !== canvas.width || lightC.height !== canvas.height) {
-      lightC.width = canvas.width; lightC.height = canvas.height;
-    }
+    const LS = perfLow ? 0.5 : 1; // low tier: half-res darkness, stretched back
+    const lw = Math.ceil(canvas.width * LS), lh = Math.ceil(canvas.height * LS);
+    if (lightC.width !== lw || lightC.height !== lh) { lightC.width = lw; lightC.height = lh; }
     const lc = lightC.getContext('2d');
+    lc.setTransform(LS, 0, 0, LS, 0, 0);
     lc.globalCompositeOperation = 'source-over';
-    lc.clearRect(0, 0, lightC.width, lightC.height);
+    lc.clearRect(0, 0, canvas.width, canvas.height);
     lc.fillStyle = amb.mode === 'night' ? 'rgba(6,9,26,0.52)' : 'rgba(30,16,42,0.20)';
-    lc.fillRect(0, 0, lightC.width, lightC.height);
+    lc.fillRect(0, 0, canvas.width, canvas.height);
     lc.globalCompositeOperation = 'destination-out';
     const punch = (wx, wy, r, a) => {
       const x = wx * S, y = (wy - cy) * S, rs = r * S;
@@ -2472,7 +2498,7 @@ function render(alpha) {
       lc.lineTo((bm.ox + Math.cos(bm.a + h2) * L) * S, (oy2 + Math.sin(bm.a + h2) * L) * S);
       lc.closePath(); lc.fill();
     }
-    ctx.drawImage(lightC, 0, 0);
+    ctx.drawImage(lightC, 0, 0, canvas.width, canvas.height);
     if (amb.mode === 'dusk') { ctx.fillStyle = 'rgba(255,118,30,0.10)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
     else if (amb.mode === 'night') { ctx.fillStyle = 'rgba(22,32,88,0.10)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
   }
@@ -2486,7 +2512,7 @@ function render(alpha) {
     ctx.strokeStyle = 'rgba(205,225,248,0.21)';
     ctx.lineWidth = 0.5 * S; ctx.lineCap = 'round';
     ctx.beginPath();
-    for (let i = 0; i < 84; i++) {
+    for (let i = 0; i < (perfLow ? 44 : 84); i++) {
       const rx = ((i * 97.3 + G.wt * 2.7 + (i * i) * 0.71) % (VIEW_W + 30)) - 15;
       const ry = ((i * 53.7 + G.wt * (5.4 + (i % 5) * 0.35)) % (VIEW_H + 24)) - 12;
       ctx.moveTo(rx * S, ry * S);
@@ -2495,7 +2521,7 @@ function render(alpha) {
     ctx.stroke();
     // splash ticks where drops land
     ctx.fillStyle = 'rgba(210,230,250,0.20)';
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < (perfLow ? 6 : 12); i++) {
       const ph = (G.wt + i * 31) % 22;
       if (ph > 3) continue;
       const sx2 = (i * 71.9 + Math.floor(G.wt / 22) * 137.3) % VIEW_W;
@@ -2793,6 +2819,7 @@ function render(alpha) {
       if (it.type === 'pct') val = Math.round(Settings[it.k] * 100) + '%';
       else if (it.type === 'bool') val = Settings[it.k] ? 'ON' : 'OFF';
       else if (it.type === 'mode') val = Settings.mode.toUpperCase();
+      else if (it.type === 'perf') val = Settings.perf.toUpperCase() + (Settings.perf === 'auto' ? (perfLow ? ' →LOW' : ' →HIGH') : '');
       else if (it.type === 'track') val = ((window.Music && Music.mode) || 'original').toUpperCase();
       else if (it.type === 'key') val = (G.remap === it.k) ? 'PRESS KEY…' : Settings.keys[it.k];
       if (val) { ctx.textAlign = 'right'; ctx.fillText(val, 234 * S, y * S); }
@@ -2808,7 +2835,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.36.0-pwa', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.37.0-tune', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
@@ -2864,14 +2891,18 @@ function applyRetro() {
 }
 
 // ---------- main loop: fixed 50Hz logic, rAF render ----------
-let acc = 0, last = performance.now(), frozen = false;
+let acc = 0, last = performance.now(), frozen = false, rSkip = false;
 function loop(now) {
   requestAnimationFrame(loop);
   if (frozen) { render(); if (Settings.retro) applyRetro(); return; }
+  notePerfFrame(now);
   pollGamepad();
   acc += Math.min(100, now - last); last = now;
   const stepMs = 1000 / LOGIC_HZ;
   while (acc >= stepMs) { tick(); acc -= stepMs; }
+  // battery saver: logic every frame, paint every other (30fps on 60Hz panels)
+  rSkip = !rSkip;
+  if (Settings.battery && rSkip) return;
   render(acc / stepMs);
   if (Settings.retro) applyRetro();
 }
@@ -2897,7 +2928,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, demo: !!G.demo, ambush: G.ambush ? G.ambush.phase : null, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, perfLow, battery: !!Settings.battery, demo: !!G.demo, ambush: G.ambush ? G.ambush.phase : null, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },
