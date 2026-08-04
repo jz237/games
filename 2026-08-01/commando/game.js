@@ -387,6 +387,9 @@ function onTouch(e) {
       if (p.x < 60 && p.y < 16 && (G.state === 'title' || (G.state === 'play' && G.paused))) { openSettings(); continue; }
       const gx = Settings.leftHand ? VIEW_W - GREN_BTN.x : GREN_BTN.x;
       if (Math.hypot(p.x - gx, p.y - GREN_BTN.y) < GREN_BTN.r * Settings.touchSize + 5) { touchUI.grenIds.add(t.identifier); continue; }
+      // landscape pillars: the fire-side pillar's upper band is the grenade
+      const offRight = Settings.leftHand ? p.x < -2 : p.x > VIEW_W + 2;
+      if (offRight && p.y < VIEW_H * 0.45) { touchUI.grenIds.add(t.identifier); continue; }
       const inStickHalf = Settings.leftHand ? p.x >= VIEW_W * 0.5 : p.x < VIEW_W * 0.5;
       if (inStickHalf) {
         if (!touchUI.stick) {
@@ -416,10 +419,14 @@ function onTouch(e) {
   touchUI.fire = touchUI.fireIds.size > 0;
   touchUI.gren = touchUI.grenIds.size > 0;
 }
-canvas.addEventListener('touchstart', e => { ensureMusic(); onTouch(e); }, { passive: false });
-canvas.addEventListener('touchmove', onTouch, { passive: false });
-canvas.addEventListener('touchend', onTouch, { passive: false });
-canvas.addEventListener('touchcancel', onTouch, { passive: false });
+// listeners live on the full-screen stage, not the canvas: in landscape the
+// letterbox pillars become live control zones (left = stick, right = fire,
+// right-upper band = grenade) — thumbs naturally rest there
+const stageEl = document.getElementById('stage') || canvas;
+stageEl.addEventListener('touchstart', e => { ensureMusic(); onTouch(e); }, { passive: false });
+stageEl.addEventListener('touchmove', onTouch, { passive: false });
+stageEl.addEventListener('touchend', onTouch, { passive: false });
+stageEl.addEventListener('touchcancel', onTouch, { passive: false });
 // gamepad (standard mapping: stick/dpad move, A/R2 fire, B/R1 grenade, Start pause)
 const gp = { dx: 0, dy: 0, fire: false, gren: false, pause: false };
 function pollGamepad() {
@@ -2904,7 +2911,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.39.0-helping', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.40.0-wide', (VIEW_W - 54) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   if (touchUI.seen) {
