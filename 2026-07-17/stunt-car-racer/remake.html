@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Stunt Car Racer — Remake (preview)</title>
 <style>
   html, body { margin: 0; height: 100%; background: #04060b; overflow: hidden; }
@@ -58,6 +58,63 @@
     background: rgba(8,12,22,0.5); border-radius: 999px; color: #cdd9ec;
     font: 500 clamp(10px, 1.8vh, 13px) system-ui, "Segoe UI", Arial, sans-serif;
   }
+
+  /* ---------- mobile ---------- */
+  #scene { touch-action: none; }
+  html, body { overscroll-behavior: none; -webkit-user-select: none; user-select: none;
+               -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  #menu { touch-action: pan-y; }
+  /* on-screen driving controls (shown only on touch devices, while driving) */
+  #touch-ui { position: fixed; inset: 0; z-index: 7; display: none; pointer-events: none; }
+  #touch-ui .mbtn {
+    position: fixed; pointer-events: auto; touch-action: none; appearance: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #eaf2ff; background: rgba(10,16,28,0.42);
+    border: 1px solid rgba(255,255,255,0.30); border-radius: 16px;
+    font: 700 clamp(11px, 2.1vh, 15px)/1 system-ui, "Segoe UI", Arial, sans-serif;
+    letter-spacing: 0.09em; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    transition: background 0.08s, transform 0.08s;
+  }
+  #touch-ui .mbtn.on { background: rgba(72,124,206,0.66); transform: scale(0.96); }
+  #b-brake { right: calc(2.2vw + env(safe-area-inset-right)); bottom: calc(2.5vh + env(safe-area-inset-bottom));
+             width: clamp(96px, 17vw, 150px); height: clamp(56px, 14vh, 84px); }
+  #b-boost { right: calc(2.2vw + env(safe-area-inset-right));
+             bottom: calc(2.5vh + env(safe-area-inset-bottom) + clamp(62px, 15.5vh, 92px));
+             width: clamp(80px, 13vw, 120px); height: clamp(46px, 11vh, 66px);
+             border-color: rgba(255,196,120,0.55); color: #ffdcae; }
+  #b-cam, #b-resp, #b-menu { top: calc(1.8vh + env(safe-area-inset-top));
+             height: clamp(34px, 7vh, 46px); padding: 0 clamp(10px, 1.6vw, 18px); }
+  #b-cam  { right: calc(2.2vw + env(safe-area-inset-right) + clamp(150px, 22vw, 230px)); }
+  #b-resp { right: calc(2.2vw + env(safe-area-inset-right) + clamp(74px, 11vw, 116px)); }
+  #b-menu { right: calc(2.2vw + env(safe-area-inset-right)); }
+  #t-steer { position: fixed; left: calc(3vw + env(safe-area-inset-left));
+             bottom: calc(3vh + env(safe-area-inset-bottom) + 24px); pointer-events: none;
+             padding: 0.7vh 1.6vh; border-radius: 999px; color: #cfe0f5;
+             background: rgba(10,16,28,0.34); border: 1px solid rgba(255,255,255,0.18);
+             font: 600 clamp(10px, 1.9vh, 13px) system-ui, "Segoe UI", Arial, sans-serif; }
+  /* portrait nag */
+  #rotate { position: fixed; inset: 0; z-index: 9; display: none;
+            align-items: center; justify-content: center; text-align: center;
+            background: rgba(4,6,11,0.93); color: #eaf2ff;
+            font: 600 clamp(16px, 4.6vw, 26px)/1.5 system-ui, "Segoe UI", Arial, sans-serif; }
+  #hint { transition: opacity 0.6s; }
+  @media (pointer: coarse) {
+    /* badge would sit under the BRAKE button */
+    #badge { right: auto; left: calc(1.6% + env(safe-area-inset-left));
+             bottom: calc(1.6% + env(safe-area-inset-bottom)); opacity: 0.45;
+             font-size: 9px; padding: 3px 8px; }
+    #hud { left: calc(1.4% + env(safe-area-inset-left)); top: calc(1.6% + env(safe-area-inset-top)); }
+    #hint { bottom: calc(2.5vh + env(safe-area-inset-bottom) + clamp(60px, 15vh, 90px)); }
+  }
+  /* phone landscape is short — the menu must fit and scroll */
+  @media (max-height: 460px) {
+    #menu { justify-content: flex-start; gap: 1.1vh;
+            padding: calc(2vh + env(safe-area-inset-top)) 0 calc(2vh + env(safe-area-inset-bottom));
+            overflow-y: auto; }
+    #menu h1 { font-size: clamp(19px, 7vh, 32px); }
+    #menu .sub, #menu .note { display: none; }
+    .glass-btn { padding: 1.2vh 2.4vw; font-size: clamp(12px, 3.4vh, 16px); }
+  }
 </style>
 </head>
 <body>
@@ -83,8 +140,17 @@
     over the valley. Pylons, physics parity, cockpit and audio arrive in later iterations. <a class="plain" href="original.html">Play the original 1989 engine</a>.</p>
 </div>
 <img id="crane" src="images/chains.png" alt="" style="position:fixed;left:50%;top:-4%;transform:translateX(-50%);height:60%;display:none;pointer-events:none;z-index:6;">
-<div id="badge">REMAKE v24 &middot; 23 Jul 2026</div>
-<script type="module" src="remake/main.js?v=24"></script>
+<div id="touch-ui" aria-hidden="true">
+  <div id="t-steer">&#9664; slide to steer &#9654;</div>
+  <button class="mbtn" id="b-brake" type="button">BRAKE</button>
+  <button class="mbtn" id="b-boost" type="button">BOOST</button>
+  <button class="mbtn" id="b-cam" type="button">CAM</button>
+  <button class="mbtn" id="b-resp" type="button">RESET</button>
+  <button class="mbtn" id="b-menu" type="button">MENU</button>
+</div>
+<div id="rotate"><div>Rotate your device &#8635;<br><small style="opacity:.72;font-weight:400">landscape plays best</small></div></div>
+<div id="badge">REMAKE v25 &middot; 23 Jul 2026</div>
+<script type="module" src="remake/main.js?v=25"></script>
 <script type="module" src="remake/audio.js?v=2"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
 </body>

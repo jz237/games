@@ -649,6 +649,65 @@ User "fix it" (physics/handling). MEASURED the problem instead of guessing:
   attitude DOF — target-based critical damping is stable; feedback springs
   at 60Hz with big gains blow up.
 
+## v25 — 23 Jul 2026 — mobile pass: the game was barely playable on a phone
+
+Audited the game at real phone viewports (Playwright device profiles + in-page
+touch synthesis) rather than guessing. Seven concrete defects, all fixed.
+
+- **Phones were being handed the FULL DESKTOP RENDER TIER.** `FX` was chosen by
+  `navigator.hardwareConcurrency <= 4 ? 'low' : 'high'` — but modern phones
+  report 6-8 cores, so every phone got shadows + MSAA + pixelRatio 2 + 160
+  trees + DoubleSide foliage. MEASURED on iPhone 14 landscape: shadows on,
+  pixelRatio 2, 1500x680 backing store. Now `IS_TOUCH` (pointer:coarse or
+  maxTouchPoints) forces the light tier: shadows off, pixelRatio 0.7,
+  525x237 — **~5.5x fewer pixels** plus no shadow pass and no MSAA.
+- **BOOST WAS UNREACHABLE ON TOUCH.** `boostKey` read keyboard + gamepad only;
+  the touch handler never set it. A core mechanic (2x engine, the risk/reward
+  of the boost reserve) was simply missing on phones. Same for camera toggle,
+  respawn and menu — all keyboard-only. Now real on-screen buttons.
+- **STEERING WAS BINARY.** Touch set `gp.ta`/`gp.td` booleans = full lock or
+  nothing, while mouse got a continuous value. With v24's stiff rubber-band
+  tether that made the band impossible to feather — you could only slam the
+  wheel. Now a **relative analog steering pad**: press anywhere in the left
+  45%, slide left/right; offset from the initial touch = analog steer
+  (full lock at 16% of screen width), self-centring on release. The thumb
+  never has to find an exact spot.
+- **Right side = accelerate** (big forgiving target, excludes buttons), with
+  BRAKE and BOOST as dedicated thumb buttons bottom-right, CAM/RESET/MENU
+  top-right. All >= 44x34 CSS px, inside the viewport, safe-area inset aware.
+- **The on-screen hint was desktop text** ("W / left-click accelerate · move
+  mouse or A/D to steer · Shift boost · C camera · R respawn · Esc menu") —
+  wrapped over 4 lines on a phone, covering the speedo and the badge.
+  Now touch-specific wording that fades out after 7s.
+- **Cockpit view by default ate the screen.** On a 750x340 landscape phone the
+  dash art took ~35% of the display. Touch now defaults to the chase camera
+  (CAM button switches back).
+- **Portrait was a squashed mess** — cockpit art stretched, road a letterbox
+  slit. Now a "Rotate your device" overlay while driving in portrait, plus a
+  best-effort fullscreen + `screen.orientation.lock('landscape')` claimed on
+  the first touch of the race (a gesture is required, and the menu links
+  navigate straight into ?drive=1 so load-time is too early).
+- Also: `user-scalable=no` + `touch-action:none` (no double-tap zoom / pull-to-
+  refresh mid-corner), `overscroll-behavior:none`, tap-highlight and long-press
+  callout suppressed, safe-area insets on every HUD element, the version badge
+  moved off the BRAKE button on coarse pointers, the menu made to fit and
+  scroll on short landscape screens (sub/note hidden under 460px height), and
+  **haptics**: 20ms on a heavy landing, 35ms on a wall scrape, a 60/40/140
+  pattern on a wreck.
+
+VERIFIED (iPhone 14 + Pixel 7 landscape profiles, real handlers driven by
+synthesised TouchEvents): light tier confirmed, touch UI shown, analog steer
+changes heading, right-side accel works, BOOST/BRAKE/CAM all work, buttons big
+enough + in view + no badge overlap, zero console errors. Portrait nag and
+short-landscape menu confirmed by screenshot. DESKTOP UNCHANGED: shadows on,
+touch UI hidden, cockpit still the default view, original hint text.
+Physics untouched — 8-track autopilot 7/8 pass with lap times identical to v24
+(16.8 / 24.8 / 39.1 / 44.9 / 29.8 / 51.3 / 29.4); roller-coaster unchanged.
+
+**Lesson**: `hardwareConcurrency` is a terrible mobile proxy — it was silently
+giving phones the heaviest tier for the entire life of the remake. Detect the
+input modality (`pointer: coarse`), not the core count.
+
 ## v24 — 23 Jul 2026 — the original's "rubber band" lateral tether
 
 User described the 1989 game's feel exactly: "held by a rubber band to an

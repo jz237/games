@@ -58,8 +58,13 @@ const TRACKS = {
 };
 const trackId = TRACKS[qs.get('track')] ? qs.get('track') : 'little-ramp';
 const CRANE_BACK = TRACKS[trackId].craneBack;
+// Touch device? Phones/tablets get the light tier regardless of core count —
+// modern phones report 6-8 cores and were being handed the full desktop tier
+// (shadows + MSAA + 2x pixel ratio + 160 trees), which is far too heavy.
+const IS_TOUCH = (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches)
+  || (navigator.maxTouchPoints || 0) > 0;
 // fx=low: no shadows/AA, 1x pixels, lighter world — mobile + headless proxy
-const FX = qs.get('fx') || (navigator.hardwareConcurrency <= 4 ? 'low' : 'high');
+const FX = qs.get('fx') || ((IS_TOUCH || navigator.hardwareConcurrency <= 4) ? 'low' : 'high');
 
 // ---------- deterministic noise ----------
 function hash2(ix, iz) {
@@ -665,20 +670,55 @@ const gp = { w: false, a: false, s: false, d: false };
 // mouse driving: cursor X across the window = steering, left-click = accelerate,
 // right-click = brake. Only while driving (menu clicks stay normal).
 const mouse = { steer: 0, accel: false, brake: false, active: false };
-// touch: left/right thirds steer, middle accelerates, bottom-middle brakes
+// TOUCH DRIVING. The old scheme was left/right thirds = full-lock steering,
+// i.e. binary: you could only slam the wheel to a stop. With the v24 rubber-band
+// tether that made the band impossible to feather. Now:
+//   left ~45% of the screen  = relative steering pad. Press anywhere, slide
+//     left/right; offset from where you first touched = ANALOG steer, so the
+//     thumb never has to find an exact spot and it self-centres on release.
+//   right side (not on a button) = accelerate — a big forgiving target.
+//   BRAKE / BOOST / CAM / RESET / MENU = real on-screen buttons (.mbtn).
+const touch = { steerId: null, x0: 0, steer: 0, accel: false };
+const btn = { brake: false, boost: false };
+const STEER_TRAVEL = 0.16;   // fraction of screen width for full lock
+const STEER_SIDE = 0.45;     // left fraction of the screen that steers
+function onBtn(t) { return !!(t.target && t.target.closest && t.target.closest('.mbtn')); }
 function applyTouches(list) {
-  gp.tw = gp.ta = gp.ts = gp.td = false;
+  let accel = false;
   for (const t of list) {
-    const fx2 = t.clientX / window.innerWidth, fy = t.clientY / window.innerHeight;
-    if (fx2 < 0.33) gp.ta = true;
-    else if (fx2 > 0.67) gp.td = true;
-    else if (fy > 0.72) gp.ts = true;
-    else gp.tw = true;
+    if (onBtn(t)) continue;
+    if (touch.steerId !== null && t.identifier === touch.steerId) continue;
+    if (t.clientX / window.innerWidth >= STEER_SIDE) accel = true;
   }
+  touch.accel = accel;
 }
-for (const ev of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
+window.addEventListener('touchstart', (e) => {
+  if (!state.driving) return;
+  for (const t of e.changedTouches) {
+    if (onBtn(t)) continue;
+    if (touch.steerId === null && t.clientX / window.innerWidth < STEER_SIDE) {
+      touch.steerId = t.identifier; touch.x0 = t.clientX; touch.steer = 0;
+    }
+  }
+  applyTouches(e.touches);
+  e.preventDefault();
+}, { passive: false });
+window.addEventListener('touchmove', (e) => {
+  if (!state.driving) return;
+  for (const t of e.changedTouches) {
+    if (t.identifier !== touch.steerId) continue;
+    const d = (t.clientX - touch.x0) / (window.innerWidth * STEER_TRAVEL);
+    touch.steer = Math.max(-1, Math.min(1, d));
+  }
+  applyTouches(e.touches);
+  e.preventDefault();
+}, { passive: false });
+for (const ev of ['touchend', 'touchcancel']) {
   window.addEventListener(ev, (e) => {
     if (!state.driving) return;
+    for (const t of e.changedTouches) {
+      if (t.identifier === touch.steerId) { touch.steerId = null; touch.steer = 0; }
+    }
     applyTouches(e.touches);
     e.preventDefault();
   }, { passive: false });
@@ -707,6 +747,8 @@ window.addEventListener('keyup', e => { keys[e.code] = false; });
 // focus loss (alt-tab, switching apps) must not leave a key or button stuck on
 function clearAllInput() {
   for (const k in keys) keys[k] = false;
+  touch.steerId = null; touch.steer = 0; touch.accel = false;
+  btn.brake = btn.boost = false;
   mouse.accel = mouse.brake = false; mouse.active = false;
   gp.w = gp.a = gp.s = gp.d = gp.b = false;
 }
@@ -730,6 +772,53 @@ window.addEventListener('mouseup', (e) => {
   else if (e.button === 2) mouse.brake = false;
 });
 window.addEventListener('contextmenu', (e) => { if (state.driving) e.preventDefault(); });
+
+// ---------- mobile: on-screen controls, fullscreen, orientation, haptics ----------
+const touchUI = document.getElementById('touch-ui');
+const rotateEl = document.getElementById('rotate');
+function bindHold(id, set) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const on = (e) => { e.preventDefault(); e.stopPropagation(); set(true); el.classList.add('on'); };
+  const off = (e) => { if (e) { e.preventDefault(); e.stopPropagation(); } set(false); el.classList.remove('on'); };
+  el.addEventListener('pointerdown', on);
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, off);
+}
+function bindTap(id, fn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
+}
+bindHold('b-brake', (v) => { btn.brake = v; });
+bindHold('b-boost', (v) => { btn.boost = v; });
+bindTap('b-cam', () => { if (state.driving) state.chase = !state.chase; });
+bindTap('b-resp', () => { if (state.driving) respawn(); });
+bindTap('b-menu', () => { if (state.driving) showMenu(); });
+function buzz(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+
+// Fullscreen + landscape lock need a user gesture, and the menu links navigate
+// straight into ?drive=1 (no gesture on load) — so claim it on the first touch
+// of the race itself. Both are best-effort: iOS Safari has no element
+// fullscreen on iPhone and no orientation lock outside an installed PWA.
+let wentFull = false;
+window.addEventListener('pointerdown', () => {
+  if (wentFull || !IS_TOUCH || !state.driving) return;
+  wentFull = true;
+  const el = document.documentElement;
+  const rq = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (rq) { try { const p = rq.call(el); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+  try {
+    const o = screen.orientation;
+    if (o && o.lock) { const p = o.lock('landscape'); if (p && p.catch) p.catch(() => {}); }
+  } catch (e) {}
+});
+function updateOrientationUI() {
+  if (!rotateEl) return;
+  const portrait = window.innerHeight > window.innerWidth;
+  rotateEl.style.display = (IS_TOUCH && portrait && state.driving) ? 'flex' : 'none';
+}
+window.addEventListener('resize', updateOrientationUI);
+window.addEventListener('orientationchange', updateOrientationUI);
 
 // ---------- physics (fixed-step 60 Hz, original-ratio constants) ----------
 // A deck query only counts as SUPPORT when the point lies within the segment's
@@ -800,8 +889,8 @@ function step(dt) {
       if (spdA > vT || (Math.abs(want) > 1 && spdA > 40)) gp.ts = true;
     }
   }
-  const fwd = keys['KeyW'] || keys['ArrowUp'] || gp.w || gp.tw || mouse.accel;
-  const brk = keys['KeyS'] || keys['ArrowDown'] || gp.s || gp.ts || mouse.brake;
+  const fwd = keys['KeyW'] || keys['ArrowUp'] || gp.w || gp.tw || mouse.accel || touch.accel;
+  const brk = keys['KeyS'] || keys['ArrowDown'] || gp.s || gp.ts || mouse.brake || btn.brake;
   const left = keys['KeyA'] || keys['ArrowLeft'] || gp.a || gp.ta;
   const right = keys['KeyD'] || keys['ArrowRight'] || gp.d || gp.td;
   state.grind = false;
@@ -876,6 +965,7 @@ function step(dt) {
   if (wasAirborne && contacts > 0) {
     state.lastImpact = Math.max(state.lastImpact, Math.abs(state.vy) + maxComp * 8);
     state.landed = true; // latched here so a hop between two renders is never missed
+    if (state.lastImpact > 18) buzz(20); // thump on a heavy landing
     for (let w = 0; w < 3; w++) {
       if (wheelBelow[w] > 1.2) state.wDmg[w] = Math.min(40, state.wDmg[w] + (wheelBelow[w] - 1.2) * 9);
     }
@@ -914,7 +1004,7 @@ function step(dt) {
   let engine = 0;
   if (brk) engine = -T_MS;               // brake overrides throttle
   else if ((fwd || state.accLatch) && vd < 171.6) engine = T_MS;
-  const boostKey = keys['ShiftLeft'] || keys['ShiftRight'] || gp.b;
+  const boostKey = keys['ShiftLeft'] || keys['ShiftRight'] || gp.b || btn.boost; // boost was keyboard/pad only — unreachable on a phone
   state.boosting = !!(boostKey && (state.accLatch || fwd || brk) && state.boost > 0);
   if (state.boosting) { engine *= 2; state.boost = Math.max(0, state.boost - 0.52 * dt); }
   const gripCap = 2 * (state.contactF || 0);
@@ -962,6 +1052,7 @@ function step(dt) {
   // sign for both so keyboard and mouse always agree.
   let rightInput;
   if (left || right) rightInput = (right ? 1 : 0) - (left ? 1 : 0);
+  else if (touch.steerId !== null) rightInput = touch.steer;   // analog thumb
   else rightInput = mouse.active ? mouse.steer : 0;
   const steer = -Math.max(-1, Math.min(1, rightInput));
   const grounded2 = contacts > 0;
@@ -998,6 +1089,7 @@ function step(dt) {
         state.vx -= latDirX * vOut * 1.25; // slight rebound off the blocks
         state.vz -= latDirZ * vOut * 1.25;
         if (vOut > 12) {
+          buzz(35); // wall scrape
           const side = sgn > 0 ? 0 : 1;
           state.wDmg[side] = Math.min(40, state.wDmg[side] + vOut * 0.12);
           state.damage = (state.wDmg[0] + state.wDmg[1] + state.wDmg[2]) / 3;
@@ -1063,6 +1155,7 @@ function step(dt) {
 
 function craneRecover() {
   state.wrecking = true;
+  buzz([60, 40, 140]); // wrecked
   const craneEl = document.getElementById('crane');
   if (craneEl) craneEl.style.display = 'block';
   if (craneTimer) clearTimeout(craneTimer);
@@ -1236,12 +1329,25 @@ function startDrive() {
   menuEl.style.display = 'none';
   hudEl.style.display = 'block';
   hintEl.style.display = 'block';
+  hintEl.style.opacity = '1';
   state.driving = true;
+  if (IS_TOUCH) {
+    if (touchUI) touchUI.style.display = 'block';
+    state.chase = true; // the cockpit art eats a phone screen; chase reads better
+    hintEl.textContent = 'Slide left thumb to steer · hold right side to accelerate';
+    clearTimeout(startDrive.hintT);
+    startDrive.hintT = setTimeout(() => { hintEl.style.opacity = '0'; }, 7000);
+    updateOrientationUI();
+  }
 }
 function showMenu() {
   menuEl.style.display = 'flex';
   hudEl.style.display = 'none';
   hintEl.style.display = 'none';
+  if (touchUI) touchUI.style.display = 'none';
+  if (rotateEl) rotateEl.style.display = 'none';
+  touch.steerId = null; touch.steer = 0; touch.accel = false;
+  btn.brake = btn.boost = false;
   const craneEl3 = document.getElementById('crane');
   if (craneEl3) craneEl3.style.display = 'none';
   if (craneTimer) { clearTimeout(craneTimer); craneTimer = null; }
@@ -1277,7 +1383,7 @@ buildWorld().then(() => {
     },
     startIdx: () => startIdx,
     fps: () => fps,
-    version: 24,
+    version: 25,
     __t: { renderer, scene, sun, hemi, camera, THREE },
   };
 });
