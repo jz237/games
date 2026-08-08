@@ -513,6 +513,8 @@ let scoreMode = Settings.mode; // separate BEST SEVEN per mode
 // enemies charge to contact, grenade arcs are the only ranged threat, and
 // every modern system (chains, hit-stop, assist, new unit types) stands down
 function classicMode() { return Settings.mode === 'classic'; }
+const CLASSIC_CHARGE_RANGE = 55;  // it76 filmstrip: passes at >=65 lores never turned
+const CLASSIC_WAVE_PERIOD = 235;  // it76: idle bursts every ~470f; halved for advance pressure
 function loadScores() {
   try {
     const s = JSON.parse(localStorage.getItem('commandoHD.scores.' + scoreMode));
@@ -854,7 +856,7 @@ function spawnEnemies() {
 function spawnEdgeWave() {
   if (G.calm || G.state !== 'play') return;
   if (G.enemies.length >= Math.min(9, 7 + loopN())) return;
-  if (G.frame - (G.lastWave || 0) < (classicMode() ? WAVE_INTERVAL * 0.63 : WAVE_INTERVAL) / diffMul()) return;
+  if (G.frame - (G.lastWave || 0) < (classicMode() ? CLASSIC_WAVE_PERIOD : WAVE_INTERVAL) / diffMul()) return;
   G.lastWave = G.frame;
   // occasionally the wave is a vehicle instead of infantry: a motorcycle, or
   // (rarer) a troop truck that drives in and unloads a squad — the it44 disk
@@ -864,16 +866,15 @@ function spawnEdgeWave() {
   const truck = roll < 0.09;
   const moto = !truck && roll < 0.26 && G.area >= 1;
   const sniper = !truck && !moto && roll < 0.32 && (G.area >= 2 || loopN() >= 1);
-  const count = (moto || truck || sniper) ? 1 : 1 + (rng() < (classicMode() ? 0.6 : 0.45) ? 1 : 0);
+  // CLASSIC (it76 filmstrip): the disk sends SQUAD BURSTS — 2-4 riflemen from
+  // ONE edge on their own lines, with real lulls between bursts
+  const count = classicMode() ? 2 + (rng() < 0.5 ? 1 : 0) + (rng() < 0.25 ? 1 : 0)
+    : (moto || truck || sniper) ? 1 : 1 + (rng() < 0.45 ? 1 : 0);
+  const burstLeft = rng() < 0.5; // classic: the whole squad shares a side
   for (let i = 0; i < count; i++) {
-    const fromLeft = rng() < 0.5;
-    // enter on a line in the upper half of the view, ahead of the player —
-    // CLASSIC spawns hug the player's row instead (the C64's cramped window
-    // put every entry a heartbeat away; the tall mobile view must not dilute
-    // that pressure)
-    const y = classicMode()
-      ? Math.max(G.camY + 12, G.joe.y - 60 - rng() * 100)
-      : G.camY + 26 + rng() * (VIEW_H * 0.55);
+    const fromLeft = classicMode() ? burstLeft : rng() < 0.5;
+    // enter on a line in the upper half of the view, ahead of the player
+    const y = G.camY + 26 + rng() * (VIEW_H * 0.55);
     // the map edges are usually jungle wall — walk inward to the first open
     // column so a wave is never silently swallowed by painted cover
     let x = -1;
@@ -1607,7 +1608,7 @@ function tick() {
         // then turn and CHARGE; the bayonet does the killing. No shooting,
         // no dodging, no holding range.
         if (e.mode === 'traverse') {
-          if (d < ENGAGE_RANGE * 0.8) e.mode = 'engage';
+          if (d < CLASSIC_CHARGE_RANGE) e.mode = 'engage'; // measured: they pass at 65+, lunge only near
           else {
             const nx2 = e.x + e.dir * TRAVERSE_SPEED * diffMul();
             if (rectsAt(nx2 - 4, e.y - 6, 8, 10)) {
@@ -3015,7 +3016,7 @@ function render(alpha) {
   ctx.restore(); // end card centring
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.43.0-classic', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.44.0-measured', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
