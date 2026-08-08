@@ -2152,11 +2152,17 @@ function render(alpha) {
     return `sprites/${pfx}-${view}-${(e.walkFrame || 0) & 3}`;
   };
   const drawEnemy = (e, ex, ey, corpse) => {
-    let key, stride = false, kick = 0, preRot = 0;
+    let key, stride = false, kick = 0, preRot = 0, seqKey = null, seqA = 0;
     if (corpse || e.dieT !== undefined) {
       const t = e.dieT || 0;
+      const DB = [0, 8, 18, 30];
       const fi = t < 8 ? 0 : t < 18 ? 1 : t < 30 ? 2 : 3;
       key = `sprites/${e.set || 'rif-die'}-${fi}`;
+      if (fi < 3) { // it79: the collapse melts stage into stage
+        const span = (DB[fi + 1] || 42) - DB[fi];
+        seqKey = `sprites/${e.set || 'rif-die'}-${fi + 1}`;
+        seqA = Math.max(0, Math.min(1, (t - DB[fi]) / span)) * 0.6;
+      }
     } else if (e.type === 'moto') {
       key = `sprites/moto-${(e.walkFrame || 0) & 3}`;
       preRot = e.lean || 0; // banked into the drift, smoothed in the update
@@ -2175,6 +2181,11 @@ function render(alpha) {
       // at rest the loader occasionally leans in to fuss with the elevation
       const fi = e.fireT > 15 ? 1 : e.fireT > 8 ? 2 : e.fireT > 0 ? 3 : ((e.t % 190) < 16 ? 2 : 0);
       key = `sprites/mortar-${fi}`;
+      if (e.fireT > 8) { // the load ritual flows lift->drop->fire
+        const hi = fi === 1 ? 22 : 15, lo = fi === 1 ? 15 : 8;
+        seqKey = `sprites/mortar-${fi + 1}`;
+        seqA = Math.max(0, Math.min(1, (hi - e.fireT) / (hi - lo))) * 0.5;
+      }
     } else if (e.type === 'officer') {
       if (e.fireT > 0) { key = `sprites/off-act-${e.fireT > 9 ? 1 : 0}`; kick = Math.max(0, e.fireT - 12) * 0.35; }
       else if (e.barkT > 0) key = 'sprites/off-act-2'; // arm up, bellowing
@@ -2183,11 +2194,23 @@ function render(alpha) {
       // grenadiers: crouched walk plus a windup -> release -> recover throw;
       // a popped-up trencher borrows the throw so his grenade visibly leaves
       // a raised arm instead of materialising out of the trench
-      if (e.fireT > 0) key = `sprites/lob-act-${e.fireT > 12 ? 1 : e.fireT > 5 ? 2 : 3}`;
+      if (e.fireT > 0) {
+        const fi2 = e.fireT > 12 ? 1 : e.fireT > 5 ? 2 : 3;
+        key = `sprites/lob-act-${fi2}`;
+        if (fi2 < 3) { // wind-up melts into release, release into recover
+          const hi = fi2 === 1 ? 18 : 12, lo = fi2 === 1 ? 12 : 5;
+          seqKey = `sprites/lob-act-${fi2 + 1}`;
+          seqA = Math.max(0, Math.min(1, (hi - e.fireT) / (hi - lo))) * 0.55;
+        }
+      }
       else if ((e.stepped || 0) > 0.04) { key = `sprites/lob-s-${(e.walkFrame || 0) & 3}`; stride = true; }
       else key = 'sprites/lob-act-0'; // crouched idle, grenade at the chest
     } else if (e.duckT > 0) {
       key = `sprites/rif-act-${e.duckT > 16 ? RIF_DUCK : RIF_POP}`;
+      if (e.duckT > 13 && e.duckT < 20) { // duck melts into the pop-up
+        seqKey = `sprites/rif-act-${RIF_POP}`;
+        seqA = Math.max(0, Math.min(1, (19 - e.duckT) / 6)) * 0.55;
+      }
     } else if (e.fireT > 0) {
       key = `sprites/rif-act-${RIF_FIRE}`;
       kick = Math.max(0, e.fireT - 12) * 0.35;
@@ -2216,9 +2239,11 @@ function render(alpha) {
       } else if (e.view === 'e' && Math.abs(e.vdx || 0) > 0.03) {
         face = (e.vdx || 0) < 0 ? -1 : 1;
       }
+      if ((e.face || 1) !== face) e.turnT = 4; // it79: a beat of squash sells the turn
       e.face = face;
     }
-    let leanA = 0, blendImg = null, blendA = 0;
+    if (e.turnT > 0) e.turnT--;
+    let leanA = 0, blendImg = seqKey ? (IMGS[seqKey] || null) : null, blendA = seqA;
     if (stride && (e.stepped || 0) > 0.04) {
       leanA = Math.sin(((e.walkFrame || 0) + (e.walkDist || 0) / WALK_STRIDE) * 1.57) * 0.03;
       if (!perfLow) {
@@ -2228,7 +2253,7 @@ function render(alpha) {
         blendA = Math.max(0, Math.min(1, (e.walkDist || 0) / WALK_STRIDE));
       }
     }
-    drawShadow(ex, ey, corpse ? 6 : e.type === 'tank' ? 12 : e.type === 'truck' ? 10 : e.type === 'mortar' ? 7 : 4);
+    drawShadow(ex, ey, corpse ? 7 : e.type === 'tank' ? 13 : e.type === 'truck' ? 11 : e.type === 'mortar' ? 8 : 5);
     const h = corpse ? ENEMY_H * 0.82 : e.type === 'moto' ? ENEMY_H * 1.25
       : e.type === 'truck' ? ENEMY_H * 1.5
       : e.type === 'tank' ? ENEMY_H * 2.2 * (112 / 78)
@@ -2238,7 +2263,8 @@ function render(alpha) {
     ctx.save();
     ctx.translate(ex * S, (ey + 4) * S);
     if (preRot) ctx.rotate(preRot); // screen-space bank, before the mirror
-    ctx.scale(face, 1);
+    const squash = e.turnT > 0 ? 0.5 + 0.5 * (1 - e.turnT / 4) : 1;
+    ctx.scale(face * squash, 1);
     if (leanA) ctx.rotate(leanA);
     if (kick) ctx.translate(0, kick * S);
     if (e.type === 'moto') ctx.translate(0, Math.sin((e.walk || 0) * 1.7) * 0.35 * S); // terrain judder
@@ -2359,10 +2385,15 @@ function render(alpha) {
     const fx = J.face.x, fy = J.face.y;
     let img = null, lean = 0, heroBlend = null, heroBlendA = 0;
     if (!J.alive) {
-      // death collapse: frames 0-2 play out, frame 3 is the body on the ground
+      // death collapse: stages melt into each other (it79)
       const t = J.deathT || 0;
+      const DB = [0, 8, 18, 30];
       const fi = t < 8 ? 0 : t < 18 ? 1 : t < 30 ? 2 : 3;
       img = IMGS[`sprites/hero-die-${fi}`];
+      if (fi < 3) {
+        heroBlend = IMGS[`sprites/hero-die-${fi + 1}`] || null;
+        heroBlendA = Math.max(0, Math.min(1, (t - DB[fi]) / ((DB[fi + 1] || 42) - DB[fi])));
+      }
     } else if (J.throwT > 0) {
       img = IMGS[`sprites/hero-act-${ACT_THROW}`];
     } else if (J.duck) {
@@ -2386,12 +2417,17 @@ function render(alpha) {
     if (!img) img = IMGS['sprites/hero'];
     if (img) {
       const jx = IX(J), jy = IY(J);
-      drawShadow(jx, jy - cy, J.alive ? 4 : 6);
+      drawShadow(jx, jy - cy, J.alive ? 5 : 7);
+      if (J.lastFx === undefined) J.lastFx = fx >= 0 ? 1 : -1;
+      const nowFx = fx < 0 ? -1 : fx > 0 ? 1 : J.lastFx;
+      if (nowFx !== J.lastFx) { J.turnAnim = 4; J.lastFx = nowFx; }
+      if (J.turnAnim > 0) J.turnAnim--;
       const dead = !J.alive;
       const h = dead ? HERO_H * 0.82 : HERO_H, w = h * (img.width / img.height);
       ctx.save();
       const flip = fx < 0 ? -1 : 1;
-      ctx.translate(jx * S, (jy - cy + 4) * S); ctx.scale(flip, 1);
+      const jsquash = J.turnAnim > 0 ? 0.5 + 0.5 * (1 - J.turnAnim / 4) : 1;
+      ctx.translate(jx * S, (jy - cy + 4) * S); ctx.scale(flip * jsquash, 1);
       if (lean) ctx.rotate(lean);
       if (J.recoil > 0) ctx.translate(0, J.recoil * 0.5 * S); // kick back from the shot
       ctx.drawImage(img, -w / 2 * S, -h * S, w * S, h * S);
@@ -3066,7 +3102,7 @@ function render(alpha) {
   ctx.restore(); // end card centring
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.46.0-bigger', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.47.0-fluid', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
