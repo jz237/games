@@ -81,6 +81,7 @@ function chainMult() { return 1 + Math.min(4, ((G.chain || 0) / 3) | 0); }
 // points, and celebrates each multiplier step with a floater
 function chainKill() {
   buzz(12);
+  if (classicMode()) { G.score += KILL_POINTS; if (G.score > G.top) G.top = G.score; return; }
   G.chain = (G.chain || 0) + 1; G.chainT = CHAIN_WINDOW;
   const m = chainMult();
   if (m > 1 && G.chain % 3 === 0) G.fx.push({ kind: 'bonus', x: G.joe.x, y: G.joe.y - 14, t: 0, txt: '×' + m });
@@ -508,6 +509,10 @@ function inputDir() {
 const DEFAULT_SCORES = [['NEIL', 100000], ['LIZZIE', 80000], ['STEVE', 50000],
   ['IAN', 40000], ['PAUL', 30000], ['WINCO', 20000], ['COMMANDO', 10000]];
 let scoreMode = Settings.mode; // separate BEST SEVEN per mode
+// CLASSIC: the measured 1989 threat model under the HD presentation —
+// enemies charge to contact, grenade arcs are the only ranged threat, and
+// every modern system (chains, hit-stop, assist, new unit types) stands down
+function classicMode() { return Settings.mode === 'classic'; }
 function loadScores() {
   try {
     const s = JSON.parse(localStorage.getItem('commandoHD.scores.' + scoreMode));
@@ -656,7 +661,8 @@ function adjustSetting(item, dir, activate) {
     if (dir || activate) { Settings[item.k] = !Settings[item.k]; applySettings(); }
   } else if (item.type === 'mode') {
     if (dir || activate) {
-      Settings.mode = Settings.mode === 'normal' ? 'arcade' : 'normal';
+      const order = ['normal', 'arcade', 'classic'];
+      Settings.mode = order[(order.indexOf(Settings.mode) + (dir < 0 ? order.length - 1 : 1)) % order.length];
       scoreMode = Settings.mode; G.top = loadScores()[0][1];
       applySettings();
     }
@@ -835,8 +841,10 @@ function spawnEnemies() {
     if (G.spawned.has(i)) continue;
     if (s.y > G.camY - 40 && s.y < G.camY + VIEW_H + 40) {
       G.spawned.add(i);
-      // placed soldiers start traversing from wherever they are
-      G.enemies.push(newEnemy(s.x, s.y, s.type, s.x < VIEW_W / 2 ? 1 : -1));
+      // placed soldiers start traversing from wherever they are; CLASSIC maps
+      // the modern emplacements back to their 1989 counterparts
+      const t2 = classicMode() ? ({ mortar: 'trencher', sniper: 'rifleman', tank: 'rifleman' }[s.type] || s.type) : s.type;
+      G.enemies.push(newEnemy(s.x, s.y, t2, s.x < VIEW_W / 2 ? 1 : -1));
     }
   }
 }
@@ -846,20 +854,26 @@ function spawnEnemies() {
 function spawnEdgeWave() {
   if (G.calm || G.state !== 'play') return;
   if (G.enemies.length >= Math.min(9, 7 + loopN())) return;
-  if (G.frame - (G.lastWave || 0) < WAVE_INTERVAL / diffMul()) return;
+  if (G.frame - (G.lastWave || 0) < (classicMode() ? WAVE_INTERVAL * 0.63 : WAVE_INTERVAL) / diffMul()) return;
   G.lastWave = G.frame;
   // occasionally the wave is a vehicle instead of infantry: a motorcycle, or
   // (rarer) a troop truck that drives in and unloads a squad — the it44 disk
-  // study saw trucks in the original's later stretches
-  const roll = rng();
+  // study saw trucks in the original's later stretches. CLASSIC waves are
+  // riflemen only (the disk showed nothing else crossing the field).
+  const roll = classicMode() ? 1 : rng();
   const truck = roll < 0.09;
   const moto = !truck && roll < 0.26 && G.area >= 1;
   const sniper = !truck && !moto && roll < 0.32 && (G.area >= 2 || loopN() >= 1);
-  const count = (moto || truck || sniper) ? 1 : 1 + (rng() < 0.45 ? 1 : 0);
+  const count = (moto || truck || sniper) ? 1 : 1 + (rng() < (classicMode() ? 0.6 : 0.45) ? 1 : 0);
   for (let i = 0; i < count; i++) {
     const fromLeft = rng() < 0.5;
-    // enter on a line in the upper half of the view, ahead of the player
-    const y = G.camY + 26 + rng() * (VIEW_H * 0.55);
+    // enter on a line in the upper half of the view, ahead of the player —
+    // CLASSIC spawns hug the player's row instead (the C64's cramped window
+    // put every entry a heartbeat away; the tall mobile view must not dilute
+    // that pressure)
+    const y = classicMode()
+      ? Math.max(G.camY + 12, G.joe.y - 60 - rng() * 100)
+      : G.camY + 26 + rng() * (VIEW_H * 0.55);
     // the map edges are usually jungle wall — walk inward to the first open
     // column so a wave is never silently swallowed by painted cover
     let x = -1;
@@ -888,7 +902,7 @@ function dropCorpse(e) {
   const roll = ((e.x * 7 + e.y * 13 + G.frame) | 0) % 100;
   if (roll < PICKUP_DROP_CHANCE) {
     // rare prize: an MG crate — a burst of full-auto
-    G.pickups.push({ x: e.x, y: e.y, kind: roll < 3 ? 'mg' : roll < PICKUP_DROP_CHANCE / 2 ? 'ammo' : 'grenade', t: 0 });
+    G.pickups.push({ x: e.x, y: e.y, kind: (roll < 3 && !classicMode()) ? 'mg' : roll < PICKUP_DROP_CHANCE / 2 ? 'ammo' : 'grenade', t: 0 });
   }
 }
 
@@ -1084,7 +1098,10 @@ function tick() {
   snapshotPrev();
   // hit-stop: a couple of frozen frames on a kill sell the impact (prev ==
   // cur after the snapshot, so interpolation holds perfectly still)
-  if (G.hitStop > 0 && G.state === 'play') { G.hitStop--; return; }
+  if (G.hitStop > 0 && G.state === 'play') {
+    if (classicMode()) G.hitStop = 0; // no modern juice in classic
+    else { G.hitStop--; return; }
+  }
   G.frame++;
   const J = G.joe;
   // attract demo: scripted inputs drive a ghost game; any REAL input starts
@@ -1269,7 +1286,7 @@ function tick() {
       // aim assist (touch sessions only): snap the SHOT — never the sprite —
       // to the nearest live target within ~20° and 130px. Thumbs get 8 ways;
       // the assist bridges the angles between them. Desktop feel untouched.
-      if (Settings.aimAssist && touchUI.seen) {
+      if (Settings.aimAssist && touchUI.seen && !classicMode()) {
         let best = null, bestD = 130;
         for (const e2 of G.enemies) {
           if (e2.deadTank || e2.gone) continue;
@@ -1585,6 +1602,26 @@ function tick() {
         const ny2 = e.y + vy;
         if (!rectsAt(e.x - 4, ny2 - 6, 8, 10)) e.y = ny2;
       };
+      if (classicMode()) {
+        // CLASSIC: the it42-measured disk behaviour — traverse the entry line,
+        // then turn and CHARGE; the bayonet does the killing. No shooting,
+        // no dodging, no holding range.
+        if (e.mode === 'traverse') {
+          if (d < ENGAGE_RANGE * 0.8) e.mode = 'engage';
+          else {
+            const nx2 = e.x + e.dir * TRAVERSE_SPEED * diffMul();
+            if (rectsAt(nx2 - 4, e.y - 6, 8, 10)) {
+              const ny2 = e.y + (dy > 0 ? 1 : -1) * TRAVERSE_SPEED;
+              if (!rectsAt(e.x - 4, ny2 - 6, 8, 10)) e.y = ny2; else e.dir = -e.dir;
+            } else e.x = nx2;
+          }
+        }
+        if (e.mode === 'engage') {
+          const sp = ENEMY_WALK * diffMul(); // the measured 1.3px/f charge
+          move(dx / d * sp, dy / d * sp);
+          if (live && d < 8) killJoe();
+        }
+      } else {
       // DODGE overrides everything: sidestep out of the line of an incoming round
       if (e.dodgeT > 0) {
         e.dodgeT--;
@@ -1658,6 +1695,7 @@ function tick() {
           }
         }
       }
+      } // end modern combat model (classic charges instead)
     }
 
     const stepped = Math.hypot(e.x - ox, e.y - oy);
@@ -1794,7 +1832,7 @@ function tick() {
     G.finale = { phase: 'burst', t: 0, toSpawn: Math.min(10, 7 + loopN() * 2), spawned: 0, officer: null };
     // from Area 2 on (and on every deep-loop gate) the garrison has ARMOR:
     // a dug-in tank that rifle fire cannot touch — work grenades onto it
-    if (G.area >= 2 || loopN() >= 1) {
+    if (!classicMode() && (G.area >= 2 || loopN() >= 1)) {
       const tk = newEnemy(gateX, ex.y + 12, 'tank', 1, 'hold');
       tk.finale = true; tk.hp = TANK_HP; tk.shotCd = 90;
       G.enemies.push(tk);
@@ -2977,7 +3015,7 @@ function render(alpha) {
   ctx.restore(); // end card centring
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.42.0-tallview', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.43.0-classic', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
