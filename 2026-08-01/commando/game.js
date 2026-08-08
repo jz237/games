@@ -558,7 +558,7 @@ const G = {
   score: 0, top: loadScores()[0][1], lives: LIVES_START, grenades: 3, ammo: START_AMMO,
   area: 1, tally: 0, entry: null, lastEntry: null, paused: false, postGame: false,
   settingsSel: 0, settingsFrom: 'title', remap: null, cp: 1616, continues: 0,
-  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0, demo: false, ambush: null,
+  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0, demo: false, ambush: null, burst: null,
   camY: A.height - VIEW_H,  // camera top in world coords (worldReady arms below)
   joe: { x: A.spawn.x, y: A.spawn.y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, firePrev: false, grenCd: 0, grenPrev: false, invuln: 0, alive: true, walk: 0, walkDist: 0, moving: false, fireT: 0, throwT: 0, recoil: 0, duck: false, deathT: 0 },
   bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
@@ -716,7 +716,7 @@ function setState(s, t) {
 function resetWorld() {
   Object.assign(G, { camY: A.height - VIEW_H, bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
     pows: (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 })), spawned: new Set(), shake: 0, tally: 0, cp: CHECKPOINTS[0], lastWave: 0, scorch: [], flashT: 0, finale: null,
-    hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, spotT: 0, thunderT: 0, ambush: null,
+    hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, spotT: 0, thunderT: 0, ambush: null, burst: null,
     beams: (A.searchlights || []).map((sl, i) => ({ ox: sl.x, oy: sl.y, a: Math.PI / 2, phase: i * 2.3 })),
     props: DESTRUCTIBLE_DEFS.map(d => ({ ...d, dead: false, fuse: 0, burn: 0 })) });
   G.pows = (A.pows || []).map(p => ({ ...p, freed: false, dead: false, t: 0 }));
@@ -871,8 +871,15 @@ function spawnEdgeWave() {
   const count = classicMode() ? 2 + (rng() < 0.5 ? 1 : 0) + (rng() < 0.25 ? 1 : 0)
     : (moto || truck || sniper) ? 1 : 1 + (rng() < 0.45 ? 1 : 0);
   const burstLeft = rng() < 0.5; // classic: the whole squad shares a side
+  if (classicMode()) {
+    // it76-measured squad shape: the first man enters now, the rest of the
+    // squad follows the same edge 30-60 frames apart
+    spawnWalker(burstLeft);
+    if (count > 1) G.burst = { side: burstLeft, remaining: count - 1, nextAt: G.frame + 30 + ((G.frame * 13) % 31) };
+    return;
+  }
   for (let i = 0; i < count; i++) {
-    const fromLeft = classicMode() ? burstLeft : rng() < 0.5;
+    const fromLeft = rng() < 0.5;
     // enter on a line in the upper half of the view, ahead of the player
     const y = G.camY + 26 + rng() * (VIEW_H * 0.55);
     // the map edges are usually jungle wall — walk inward to the first open
@@ -885,6 +892,17 @@ function spawnEdgeWave() {
     if (x < 0) continue;
     G.enemies.push(newEnemy(x, y, truck ? 'truck' : moto ? 'moto' : sniper ? 'sniper' : 'rifleman', fromLeft ? 1 : -1, 'traverse'));
   }
+}
+// one walker entering from an edge on its own line (the burst queue's unit)
+function spawnWalker(fromLeft) {
+  const y = G.camY + 26 + rng() * (VIEW_H * 0.55);
+  let x = -1;
+  for (let d2 = 0; d2 < 64; d2 += 3) {
+    const cand = fromLeft ? 10 + d2 : A.width - 10 - d2;
+    if (!maskBlocked(cand, y) && !rectsAt(cand - 4, y - 6, 8, 10)) { x = cand; break; }
+  }
+  if (x < 0) return;
+  G.enemies.push(newEnemy(x, y, 'rifleman', fromLeft ? 1 : -1, 'traverse'));
 }
 
 // permanent-ish blast mark on the ground, fading out over ~28s
@@ -1464,6 +1482,13 @@ function tick() {
   // held position, and TRENCH defenders pop up from cover.
   spawnEnemies();
   spawnEdgeWave();
+  // classic squad stagger: the rest of the burst follows its point man
+  if (G.burst && G.burst.remaining > 0 && !G.calm && G.frame >= G.burst.nextAt) {
+    spawnWalker(G.burst.side);
+    G.burst.remaining--;
+    G.burst.nextAt = G.frame + 30 + ((G.frame * 17) % 31);
+    if (G.burst.remaining <= 0) G.burst = null;
+  }
   const live = J.alive && G.state === 'play';
   for (const e of G.enemies) {
     e.t++;
@@ -1552,7 +1577,7 @@ function tick() {
       }
     } else if (e.type === 'lobber' || e.type === 'trencher') {
       // dug-in throwers: hold position, arc a grenade at Joe, drop back down
-      if (live && e.t % 150 === 24 && d < 150) {
+      if (live && e.t % (classicMode() ? CLASSIC_WAVE_PERIOD : 150) === 24 && d < 150) {
         const spd = LOB_SPEED;
         G.lobs.push({ x: e.x, y: e.y, vx: dx / d * spd, vy: dy / d * spd, t: 0, ttl: Math.min(90, d / spd) });
         e.fireT = 18;
@@ -1560,7 +1585,7 @@ function tick() {
       }
       if (e.type === 'trencher') {
         // idle cycle in cover so they read as manning the trench
-        if (e.duckT <= 0 && e.fireT <= 0 && e.t % 120 === 0) e.duckT = 44;
+        if (e.duckT <= 0 && e.fireT <= 0 && e.t % (classicMode() ? CLASSIC_WAVE_PERIOD : 120) === 0) e.duckT = 44;
       } else {
         const sxDelta = (e.t % 100 < 50 ? 1 : -1) * e.dir * 0.4;
         if (!rectsAt(e.x + sxDelta - 4, e.y - 6, 8, 10)) e.x += sxDelta;
@@ -2837,7 +2862,7 @@ function render(alpha) {
     scrim(0.8);
     textC('RANKING', 44, 14, '#e33', true);
     textC('BEST SEVEN', 60, 8, '#e8d8b0');
-    textC(scoreMode.toUpperCase() + ' MODE', 70, 5, '#8a836e');
+    textC(scoreMode.toUpperCase() + ' MODE — CHANGE IN SETTINGS', 70, 5, scoreMode === 'classic' ? '#c8a24a' : '#8a836e');
     const t = loadScores();
     ctx.font = `${7 * S}px monospace`;
     for (let i = 0; i < 7; i++) {
@@ -3016,7 +3041,7 @@ function render(alpha) {
   ctx.restore(); // end card centring
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.44.0-measured', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.45.0-squads', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -3166,7 +3191,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, perfLow, battery: !!Settings.battery, bands: { top: BAND_TOP, bot: BAND_BOT }, viewH: VIEW_H, ctrls: ctrlPos(), demo: !!G.demo, ambush: G.ambush ? G.ambush.phase : null, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, perfLow, battery: !!Settings.battery, bands: { top: BAND_TOP, bot: BAND_BOT }, viewH: VIEW_H, ctrls: ctrlPos(), demo: !!G.demo, ambush: G.ambush ? G.ambush.phase : null, burstLeft: G.burst ? G.burst.remaining : 0, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },
