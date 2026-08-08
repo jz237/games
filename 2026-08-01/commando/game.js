@@ -62,8 +62,8 @@ const LOB_SPEED = 2.0;                 // px/frame horizontal drift — it12
 function scrollLine() { return Math.round(VIEW_H * (100 / 224)); }
 // sprite render heights: 274 logical px = 26 m (plate scale), so a 1.8 m
 // soldier is ~19 logical px tall — matched to the painted set dressing
-const HERO_H = 19, ENEMY_H = 18;
-const WALK_STRIDE = 4.5;               // logical px travelled per run frame
+const HERO_H = 23, ENEMY_H = 22;       // it78: +21% presentation scale (user: "larger")
+const WALK_STRIDE = 5.2;               // logical px per run frame — scaled with the legs
 // hero-act sheet: 0 fire standing, 1 fire crouched, 2 duck, 3 grenade throw
 // hero-die / rif-die sheets: 0 hit, 1 buckling, 2 falling, 3 dead
 const ACT_FIRE = 0, ACT_CROUCH_FIRE = 1, ACT_DUCK = 2, ACT_THROW = 3;
@@ -1368,7 +1368,7 @@ function tick() {
     if (--b.life <= 0 || b.y < G.camY - 8 || b.x < 0 || b.x > A.width) { G.bullets.splice(i, 1); continue; }
     for (let j = G.enemies.length - 1; j >= 0; j--) {
       const e = G.enemies[j];
-      const hw = e.type === 'truck' ? 15 : e.type === 'tank' ? 14 : 7, hh = e.type === 'truck' ? 10 : e.type === 'tank' ? 13 : 9;
+      const hw = e.type === 'truck' ? 16 : e.type === 'tank' ? 15 : 8, hh = e.type === 'truck' ? 11 : e.type === 'tank' ? 14 : 10;
       if (Math.abs(b.x - e.x) < hw && Math.abs(b.y - e.y) < hh) {
         // rifle rounds PING off tank armor — grenades are the answer
         if (e.type === 'tank') {
@@ -2218,9 +2218,16 @@ function render(alpha) {
       }
       e.face = face;
     }
-    let leanA = 0;
-    if (stride && (e.stepped || 0) > 0.04)
+    let leanA = 0, blendImg = null, blendA = 0;
+    if (stride && (e.stepped || 0) > 0.04) {
       leanA = Math.sin(((e.walkFrame || 0) + (e.walkDist || 0) / WALK_STRIDE) * 1.57) * 0.03;
+      if (!perfLow) {
+        // it78 crossfade: melt this stride frame into the next one
+        const nk = key.replace(/-(\d)$/, (m, fr) => '-' + (((+fr) + 1) & 3));
+        blendImg = IMGS[nk] || null;
+        blendA = Math.max(0, Math.min(1, (e.walkDist || 0) / WALK_STRIDE));
+      }
+    }
     drawShadow(ex, ey, corpse ? 6 : e.type === 'tank' ? 12 : e.type === 'truck' ? 10 : e.type === 'mortar' ? 7 : 4);
     const h = corpse ? ENEMY_H * 0.82 : e.type === 'moto' ? ENEMY_H * 1.25
       : e.type === 'truck' ? ENEMY_H * 1.5
@@ -2237,6 +2244,12 @@ function render(alpha) {
     if (e.type === 'moto') ctx.translate(0, Math.sin((e.walk || 0) * 1.7) * 0.35 * S); // terrain judder
     if (e.type === 'truck') ctx.translate(0, Math.sin((e.walk || 0) * 0.9) * 0.3 * S); // heavier, slower sway
     ctx.drawImage(img, -w / 2 * S, -h * foot * S, w * S, h * S);
+    if (blendImg) {
+      const w3 = h * (blendImg.width / blendImg.height);
+      ctx.globalAlpha = blendA * 0.55;
+      ctx.drawImage(blendImg, -w3 / 2 * S, -h * foot * S, w3 * S, h * S);
+      ctx.globalAlpha = 1;
+    }
     ctx.restore();
     if (e.type === 'sniper' && !corpse && e.aimT > 0 && e.tx !== undefined) {
       // the telegraph: a thin tracking laser that hardens when it LOCKS
@@ -2344,7 +2357,7 @@ function render(alpha) {
   const joeVisible = J.alive ? (J.invuln > 0 ? G.frame % 6 < 4 : true) : true;
   if (joeVisible) {
     const fx = J.face.x, fy = J.face.y;
-    let img = null, lean = 0;
+    let img = null, lean = 0, heroBlend = null, heroBlendA = 0;
     if (!J.alive) {
       // death collapse: frames 0-2 play out, frame 3 is the body on the ground
       const t = J.deathT || 0;
@@ -2361,6 +2374,12 @@ function render(alpha) {
       const moving = J.moving;
       const frame = moving ? (J.walk & 3) : 0;
       img = IMGS[`sprites/hero-${view}-${frame}`];
+      // it78: crossfade into the NEXT stride frame by distance fraction so the
+      // painted 4-frame cycle reads as continuous motion
+      if (moving && !perfLow) {
+        heroBlend = IMGS[`sprites/hero-${view}-${(frame + 1) & 3}`] || null;
+        heroBlendA = Math.max(0, Math.min(1, J.walkDist / WALK_STRIDE));
+      }
       // continuous phase from distance covered — a frame-index sine snapped
       if (moving) lean = Math.sin((J.walk + J.walkDist / WALK_STRIDE) * 1.57) * 0.035;
     }
@@ -2376,6 +2395,12 @@ function render(alpha) {
       if (lean) ctx.rotate(lean);
       if (J.recoil > 0) ctx.translate(0, J.recoil * 0.5 * S); // kick back from the shot
       ctx.drawImage(img, -w / 2 * S, -h * S, w * S, h * S);
+      if (heroBlend) {
+        const w2 = h * (heroBlend.width / heroBlend.height);
+        ctx.globalAlpha = heroBlendA * 0.55;
+        ctx.drawImage(heroBlend, -w2 / 2 * S, -h * S, w2 * S, h * S);
+        ctx.globalAlpha = 1;
+      }
       ctx.restore();
     } else {
       drawShadow(IX(J), IY(J) - cy, 4);
@@ -3041,7 +3066,7 @@ function render(alpha) {
   ctx.restore(); // end card centring
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.45.0-squads', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.46.0-bigger', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
