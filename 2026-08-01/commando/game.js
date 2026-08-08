@@ -9,6 +9,12 @@ const VIEW_W = 274;                    // logical playfield width — NEVER wide
 let VIEW_H = 224;                      // logical view height; grows on tall touch
 const VIEW_H_BASE = 224;               // the measured desktop/Amiga window
 const VIEW_H_MAX = 620;                // sanity cap for extreme aspect ratios
+// it81: a tall portrait view shows ~2.6x more world, which shrinks everyone on
+// screen. Scale the CAST (draw size AND the character-sized hit radii, so the
+// relationship between what you see and what connects never changes) back up.
+function charScale() {
+  return VIEW_H > VIEW_H_BASE ? Math.min(1.7, 1 + (VIEW_H - VIEW_H_BASE) / VIEW_H_BASE * 0.45) : 1;
+}
 const SPEED_H = 2.0, SPEED_V = 1.0;    // px/frame — LOCKED it14
 const TURN_DELAY = 10;                 // frames when reversing facing — it14
 const START_LATENCY = 2;               // frames from standstill — it14
@@ -63,7 +69,9 @@ function scrollLine() { return Math.round(VIEW_H * (100 / 224)); }
 // sprite render heights: 274 logical px = 26 m (plate scale), so a 1.8 m
 // soldier is ~19 logical px tall — matched to the painted set dressing
 const HERO_H = 23, ENEMY_H = 22;       // it78: +21% presentation scale (user: "larger")
-const WALK_STRIDE = 5.2;               // logical px per run frame — scaled with the legs
+const WALK_STRIDE = 10;                // logical px per run frame. it81: was 5.2,
+// which cycled the 4-frame walk ~5x/second — too fast to read, which is what
+// "choppy" actually was. 10 gives ~2.4 cycles/s at run speed (arcade cadence).
 // hero-act sheet: 0 fire standing, 1 fire crouched, 2 duck, 3 grenade throw
 // hero-die / rif-die sheets: 0 hit, 1 buckling, 2 falling, 3 dead
 const ACT_FIRE = 0, ACT_CROUCH_FIRE = 1, ACT_DUCK = 2, ACT_THROW = 3;
@@ -1368,7 +1376,8 @@ function tick() {
     if (--b.life <= 0 || b.y < G.camY - 8 || b.x < 0 || b.x > A.width) { G.bullets.splice(i, 1); continue; }
     for (let j = G.enemies.length - 1; j >= 0; j--) {
       const e = G.enemies[j];
-      const hw = e.type === 'truck' ? 16 : e.type === 'tank' ? 15 : 8, hh = e.type === 'truck' ? 11 : e.type === 'tank' ? 14 : 10;
+      const CS = charScale();
+      const hw = (e.type === 'truck' ? 16 : e.type === 'tank' ? 15 : 8) * CS, hh = (e.type === 'truck' ? 11 : e.type === 'tank' ? 14 : 10) * CS;
       if (Math.abs(b.x - e.x) < hw && Math.abs(b.y - e.y) < hh) {
         // rifle rounds PING off tank armor — grenades are the answer
         if (e.type === 'tank') {
@@ -1418,7 +1427,7 @@ function tick() {
       if (b.heavy && b.life <= 0) heavyBoom(b); // the round comes down somewhere
       G.ebullets.splice(i, 1); continue;
     }
-    if (J.alive && G.state === 'play' && Math.abs(b.x - J.x) < (b.heavy ? 7 : 5) && Math.abs(b.y - J.y) < (b.heavy ? 9 : 7)) {
+    if (J.alive && G.state === 'play' && Math.abs(b.x - J.x) < (b.heavy ? 7 : 5) * charScale() && Math.abs(b.y - J.y) < (b.heavy ? 9 : 7) * charScale()) {
       G.ebullets.splice(i, 1);
       if (b.heavy) heavyBoom(b);
       killJoe();
@@ -1447,7 +1456,7 @@ function tick() {
   // --- prisoners of war ---
   for (const w of G.pows) {
     if (w.freed || w.dead) { w.t++; continue; }
-    if (J.alive && G.state === 'play' && Math.abs(w.x - J.x) < 10 && Math.abs(w.y - J.y) < 11) {
+    if (J.alive && G.state === 'play' && Math.abs(w.x - J.x) < 10 * charScale() && Math.abs(w.y - J.y) < 11 * charScale()) {
       w.freed = true; w.t = 0;
       G.rescued++;
       G.score += POW_POINTS; if (G.score > G.top) G.top = G.score;
@@ -1466,7 +1475,7 @@ function tick() {
     const pu = G.pickups[i];
     pu.t++;
     if (pu.t > 900 || pu.y > G.camY + VIEW_H + 60 || pu.y < G.camY - 60) { G.pickups.splice(i, 1); continue; }
-    if (J.alive && G.state === 'play' && Math.abs(pu.x - J.x) < 9 && Math.abs(pu.y - J.y) < 10) {
+    if (J.alive && G.state === 'play' && Math.abs(pu.x - J.x) < 9 * charScale() && Math.abs(pu.y - J.y) < 10 * charScale()) {
       if (pu.kind === 'ammo') G.ammo = Math.min(START_AMMO * 2, G.ammo + 45);
       else if (pu.kind === 'mg') { G.mgT = MG_TIME; buzz(20); }
       else G.grenades = Math.min(9, G.grenades + 2);
@@ -1532,7 +1541,7 @@ function tick() {
         if (e.t % 3 === 0)
           spawnPart({ kind: 'dust', x: e.x - e.dir * 16, y: e.y + 4, vx: -e.dir * 0.2 + (vrng() - 0.5) * 0.1,
             vy: -0.1 - vrng() * 0.06, t: 0, ttl: 24 + vrng() * 10, size: 1.4 + vrng() * 0.8 });
-        if (live && d < 14) killJoe(); // getting run over by a truck is fatal
+        if (live && d < 14 * charScale()) killJoe(); // getting run over by a truck is fatal
         if (e.phase === 'drive' && ((e.dir > 0 && e.x >= e.stopX) || (e.dir < 0 && e.x <= e.stopX))) e.phase = 'unload';
         if (e.phase === 'leave' && (e.x < 14 || e.x > A.width - 14)) e.gone = true;
       } else if (e.phase === 'unload') {
@@ -1563,7 +1572,7 @@ function tick() {
       if (Math.abs(e.x - ox) > 0.5 && e.t % 2 === 0)
         spawnPart({ kind: 'dust', x: e.x - e.dir * 7, y: e.y + 3, vx: -e.dir * 0.15 + (vrng() - 0.5) * 0.1,
           vy: -0.08 - vrng() * 0.06, t: 0, ttl: 20 + vrng() * 10, size: 1.0 + vrng() * 0.7 });
-      if (live && d < 9) killJoe();
+      if (live && d < 9 * charScale()) killJoe();
     } else if (e.type === 'mortar') {
       // dug-in crew with a readable load ritual: lift the shell, drop it in,
       // THEN the tube fires — the round leaves when the animation says it does
@@ -1645,7 +1654,7 @@ function tick() {
         if (e.mode === 'engage') {
           const sp = ENEMY_WALK * diffMul(); // the measured 1.3px/f charge
           move(dx / d * sp, dy / d * sp);
-          if (live && d < 8) killJoe();
+          if (live && d < 8 * charScale()) killJoe();
         }
       } else {
       // DODGE overrides everything: sidestep out of the line of an incoming round
@@ -2161,7 +2170,7 @@ function render(alpha) {
       if (fi < 3) { // it79: the collapse melts stage into stage
         const span = (DB[fi + 1] || 42) - DB[fi];
         seqKey = `sprites/${e.set || 'rif-die'}-${fi + 1}`;
-        seqA = Math.max(0, Math.min(1, (t - DB[fi]) / span)) * 0.6;
+        seqA = Math.max(0, Math.min(1, (t - DB[fi]) / span));
       }
     } else if (e.type === 'moto') {
       key = `sprites/moto-${(e.walkFrame || 0) & 3}`;
@@ -2184,7 +2193,7 @@ function render(alpha) {
       if (e.fireT > 8) { // the load ritual flows lift->drop->fire
         const hi = fi === 1 ? 22 : 15, lo = fi === 1 ? 15 : 8;
         seqKey = `sprites/mortar-${fi + 1}`;
-        seqA = Math.max(0, Math.min(1, (hi - e.fireT) / (hi - lo))) * 0.5;
+        seqA = Math.max(0, Math.min(1, (hi - e.fireT) / (hi - lo)));
       }
     } else if (e.type === 'officer') {
       if (e.fireT > 0) { key = `sprites/off-act-${e.fireT > 9 ? 1 : 0}`; kick = Math.max(0, e.fireT - 12) * 0.35; }
@@ -2200,7 +2209,7 @@ function render(alpha) {
         if (fi2 < 3) { // wind-up melts into release, release into recover
           const hi = fi2 === 1 ? 18 : 12, lo = fi2 === 1 ? 12 : 5;
           seqKey = `sprites/lob-act-${fi2 + 1}`;
-          seqA = Math.max(0, Math.min(1, (hi - e.fireT) / (hi - lo))) * 0.55;
+          seqA = Math.max(0, Math.min(1, (hi - e.fireT) / (hi - lo)));
         }
       }
       else if ((e.stepped || 0) > 0.04) { key = `sprites/lob-s-${(e.walkFrame || 0) & 3}`; stride = true; }
@@ -2209,7 +2218,7 @@ function render(alpha) {
       key = `sprites/rif-act-${e.duckT > 16 ? RIF_DUCK : RIF_POP}`;
       if (e.duckT > 13 && e.duckT < 20) { // duck melts into the pop-up
         seqKey = `sprites/rif-act-${RIF_POP}`;
-        seqA = Math.max(0, Math.min(1, (19 - e.duckT) / 6)) * 0.55;
+        seqA = Math.max(0, Math.min(1, (19 - e.duckT) / 6));
       }
     } else if (e.fireT > 0) {
       key = `sprites/rif-act-${RIF_FIRE}`;
@@ -2253,11 +2262,11 @@ function render(alpha) {
         blendA = Math.max(0, Math.min(1, (e.walkDist || 0) / WALK_STRIDE));
       }
     }
-    drawShadow(ex, ey, corpse ? 7 : e.type === 'tank' ? 13 : e.type === 'truck' ? 11 : e.type === 'mortar' ? 8 : 5);
-    const h = corpse ? ENEMY_H * 0.82 : e.type === 'moto' ? ENEMY_H * 1.25
+    drawShadow(ex, ey, (corpse ? 7 : e.type === 'tank' ? 13 : e.type === 'truck' ? 11 : e.type === 'mortar' ? 8 : 5) * charScale());
+    const h = (corpse ? ENEMY_H * 0.82 : e.type === 'moto' ? ENEMY_H * 1.25
       : e.type === 'truck' ? ENEMY_H * 1.5
       : e.type === 'tank' ? ENEMY_H * 2.2 * (112 / 78)
-      : e.type === 'mortar' ? ENEMY_H * 1.3 : e.type === 'officer' ? ENEMY_H + 1 : ENEMY_H;
+      : e.type === 'mortar' ? ENEMY_H * 1.3 : e.type === 'officer' ? ENEMY_H + 1 : ENEMY_H) * charScale();
     const foot = e.type === 'tank' ? 80 / 112 : 1;
     const w = h * (img.width / img.height);
     ctx.save();
@@ -2269,13 +2278,14 @@ function render(alpha) {
     if (kick) ctx.translate(0, kick * S);
     if (e.type === 'moto') ctx.translate(0, Math.sin((e.walk || 0) * 1.7) * 0.35 * S); // terrain judder
     if (e.type === 'truck') ctx.translate(0, Math.sin((e.walk || 0) * 0.9) * 0.3 * S); // heavier, slower sway
+    if (blendImg && blendA > 0.02) ctx.globalAlpha = 1 - blendA;
     ctx.drawImage(img, -w / 2 * S, -h * foot * S, w * S, h * S);
-    if (blendImg) {
+    if (blendImg && blendA > 0.02) {
       const w3 = h * (blendImg.width / blendImg.height);
-      ctx.globalAlpha = blendA * 0.55;
+      ctx.globalAlpha = blendA;
       ctx.drawImage(blendImg, -w3 / 2 * S, -h * foot * S, w3 * S, h * S);
-      ctx.globalAlpha = 1;
     }
+    ctx.globalAlpha = 1;
     ctx.restore();
     if (e.type === 'sniper' && !corpse && e.aimT > 0 && e.tx !== undefined) {
       // the telegraph: a thin tracking laser that hardens when it LOCKS
@@ -2318,7 +2328,7 @@ function render(alpha) {
     ctx.save();
     if (w.dead) ctx.globalAlpha = Math.max(0, 1 - w.t / 120);
     if (img) {
-      const h = w.freed ? HERO_H * 0.95 : HERO_H * 1.02, iw2 = h * (img.width / img.height);
+      const h = (w.freed ? HERO_H * 0.95 : HERO_H * 1.02) * charScale(), iw2 = h * (img.width / img.height);
       if (w.freed) ctx.translate(0, Math.sin(w.t * 0.4) * 0.6 * S); // running bob
       if (w.dead) { ctx.translate(w.x * S, (sy + 3) * S); ctx.rotate(1.4); ctx.translate(-w.x * S, -(sy + 3) * S); }
       ctx.drawImage(img, (w.x - iw2 / 2) * S, (sy - h + 4) * S, iw2 * S, h * S);
@@ -2345,7 +2355,7 @@ function render(alpha) {
     const py2 = pu.y - cy + Math.sin(pu.t * 0.12) * 0.8;
     drawShadow(pu.x, pu.y - cy, 3);
     if (img) {
-      const h = 11, w = h * (img.width / img.height);
+      const h = 11 * charScale(), w = h * (img.width / img.height);
       ctx.drawImage(img, (pu.x - w / 2) * S, (py2 - h) * S, w * S, h * S);
     } else { ctx.fillStyle = '#c8a24a'; ctx.fillRect((pu.x - 4) * S, (py2 - 6) * S, 8 * S, 6 * S); }
     if (pu.t % 60 < 30) { // glint
@@ -2409,6 +2419,8 @@ function render(alpha) {
       // painted 4-frame cycle reads as continuous motion
       if (moving && !perfLow) {
         heroBlend = IMGS[`sprites/hero-${view}-${(frame + 1) & 3}`] || null;
+        // ramp the FULL 0->1 so the next pose has completely taken over by the
+        // stride boundary — the old 0.55 cap left a visible snap every step
         heroBlendA = Math.max(0, Math.min(1, J.walkDist / WALK_STRIDE));
       }
       // continuous phase from distance covered — a frame-index sine snapped
@@ -2417,26 +2429,27 @@ function render(alpha) {
     if (!img) img = IMGS['sprites/hero'];
     if (img) {
       const jx = IX(J), jy = IY(J);
-      drawShadow(jx, jy - cy, J.alive ? 5 : 7);
+      drawShadow(jx, jy - cy, (J.alive ? 5 : 7) * charScale());
       if (J.lastFx === undefined) J.lastFx = fx >= 0 ? 1 : -1;
       const nowFx = fx < 0 ? -1 : fx > 0 ? 1 : J.lastFx;
       if (nowFx !== J.lastFx) { J.turnAnim = 4; J.lastFx = nowFx; }
       if (J.turnAnim > 0) J.turnAnim--;
       const dead = !J.alive;
-      const h = dead ? HERO_H * 0.82 : HERO_H, w = h * (img.width / img.height);
+      const h = (dead ? HERO_H * 0.82 : HERO_H) * charScale(), w = h * (img.width / img.height);
       ctx.save();
       const flip = fx < 0 ? -1 : 1;
       const jsquash = J.turnAnim > 0 ? 0.5 + 0.5 * (1 - J.turnAnim / 4) : 1;
       ctx.translate(jx * S, (jy - cy + 4) * S); ctx.scale(flip * jsquash, 1);
       if (lean) ctx.rotate(lean);
       if (J.recoil > 0) ctx.translate(0, J.recoil * 0.5 * S); // kick back from the shot
+      if (heroBlend && heroBlendA > 0.02) ctx.globalAlpha = 1 - heroBlendA;
       ctx.drawImage(img, -w / 2 * S, -h * S, w * S, h * S);
-      if (heroBlend) {
+      if (heroBlend && heroBlendA > 0.02) {
         const w2 = h * (heroBlend.width / heroBlend.height);
-        ctx.globalAlpha = heroBlendA * 0.55;
+        ctx.globalAlpha = heroBlendA;
         ctx.drawImage(heroBlend, -w2 / 2 * S, -h * S, w2 * S, h * S);
-        ctx.globalAlpha = 1;
       }
+      ctx.globalAlpha = 1;
       ctx.restore();
     } else {
       drawShadow(IX(J), IY(J) - cy, 4);
@@ -3102,7 +3115,7 @@ function render(alpha) {
   ctx.restore(); // end card centring
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.47.0-fluid', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.48.0-scale', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -3252,7 +3265,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, perfLow, battery: !!Settings.battery, bands: { top: BAND_TOP, bot: BAND_BOT }, viewH: VIEW_H, ctrls: ctrlPos(), demo: !!G.demo, ambush: G.ambush ? G.ambush.phase : null, burstLeft: G.burst ? G.burst.remaining : 0, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, perfLow, battery: !!Settings.battery, bands: { top: BAND_TOP, bot: BAND_BOT }, viewH: VIEW_H, charScale: charScale(), ctrls: ctrlPos(), demo: !!G.demo, ambush: G.ambush ? G.ambush.phase : null, burstLeft: G.burst ? G.burst.remaining : 0, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },
