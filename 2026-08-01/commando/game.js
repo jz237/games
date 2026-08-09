@@ -389,11 +389,14 @@ function ensureMusic() {
   }
 }
 addEventListener('keydown', e => {
-  if (G && G.demo) G.realInput = true; // any real key ends the ghost run
+  if (G && (G.demo || G.autoplay)) G.realInput = true; // any real key ends a demo
   // key-remap capture (settings panel)
   if (G && G.remap) {
     if (e.code !== 'Escape') { Settings.keys[G.remap] = e.code; applySettings(); }
     G.remap = null; e.preventDefault(); return;
+  }
+  if (e.code === 'KeyD' && G && (G.state === 'title' || G.state === 'ranking' || G.state === 'credits') && !G.autoplay) {
+    startAutoplay(); e.preventDefault(); return;
   }
   const k = actionFor(e.code);
   if (k) {
@@ -434,6 +437,7 @@ function onTouch(e) {
   e.preventDefault();
   const r = canvas.getBoundingClientRect();
   if (!touchUI.seen) { touchUI.seen = true; touchSeenFlag = true; fit(); }
+  if (G && G.autoplay && e.type === 'touchstart') G.realInput = true;
   const live = new Set();
   for (const t of e.touches) live.add(t.identifier);
   if (touchUI.stick && !live.has(touchUI.stick.id)) touchUI.stick = null;
@@ -566,7 +570,7 @@ const G = {
   score: 0, top: loadScores()[0][1], lives: LIVES_START, grenades: 3, ammo: START_AMMO,
   area: 1, tally: 0, entry: null, lastEntry: null, paused: false, postGame: false,
   settingsSel: 0, settingsFrom: 'title', remap: null, cp: 1616, continues: 0,
-  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0, demo: false, ambush: null, burst: null,
+  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0, demo: false, autoplay: false, botT: 0, botStuck: 0, ambush: null, burst: null,
   camY: A.height - VIEW_H,  // camera top in world coords (worldReady arms below)
   joe: { x: A.spawn.x, y: A.spawn.y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, firePrev: false, grenCd: 0, grenPrev: false, invuln: 0, alive: true, walk: 0, walkDist: 0, moving: false, fireT: 0, throwT: 0, recoil: 0, duck: false, deathT: 0 },
   bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
@@ -643,6 +647,7 @@ const SETTINGS_ITEMS = [
   { k: 'touchOpacity', label: 'TOUCH OPACITY', type: 'range', min: 0.2, max: 0.8, step: 0.1 },
   { k: 'stickFixed', label: 'FIXED STICK', type: 'bool' },
   { k: 'aimAssist', label: 'AIM ASSIST (TOUCH)', type: 'bool' },
+  { label: 'WATCH DEMO (AUTO-PLAY)', type: 'demo' },
   { k: 'retro', label: 'RETRO FILTER', type: 'bool' },
   { k: 'scanlines', label: 'SCANLINES', type: 'bool' },
   { k: 'mode', label: 'GAME MODE', type: 'mode' },
@@ -676,6 +681,8 @@ function adjustSetting(item, dir, activate) {
       scoreMode = Settings.mode; G.top = loadScores()[0][1];
       applySettings();
     }
+  } else if (item.type === 'demo') {
+    if (dir || activate) { closeSettings(); startAutoplay(); }
   } else if (item.type === 'range') {
     Settings[item.k] = Math.max(item.min, Math.min(item.max, Math.round((Settings[item.k] + dir * item.step) * 100) / 100));
     applySettings();
@@ -749,6 +756,131 @@ const DEMO_SCRIPT = (() => {
 // first-run touch tutorial: a one-time control diagram before the first game
 function tutorialSeen() { try { return localStorage.getItem('commandoHD.tutorial') === '1'; } catch (e) { return true; } }
 function markTutorialSeen() { try { localStorage.setItem('commandoHD.tutorial', '1'); } catch (e) {} }
+// ---------- DEMO MODE: a real autopilot, not a recording ----------
+// The it66 attract ghost replays 1560 ticks of canned input and stops. This
+// plays the GAME: it reads the field every tick, fights, collects, rescues,
+// clears gates and rolls into the next area — indefinitely, until you touch a
+// control. Deliberately imperfect (it dies sometimes) so it looks like play.
+const BOT_KEYS = ['up', 'down', 'left', 'right', 'fire', 'grenade'];
+function faceKeys(dx, dy) { // 8-way quantize toward a target
+  const out = {};
+  if (Math.abs(dx) > Math.abs(dy) * 0.4142) out[dx < 0 ? 'left' : 'right'] = true;
+  if (Math.abs(dy) > Math.abs(dx) * 0.4142) out[dy < 0 ? 'up' : 'down'] = true;
+  return out;
+}
+function autopilotTick() {
+  const J = G.joe;
+  for (const k of BOT_KEYS) keys[k] = false;
+  G.botT++;
+  if (G.state !== 'play' || !J.alive || G.paused) {
+    // drive the game's own ceremony screens so the demo never parks: the
+    // continue prompt needs a real edge, so pulse rather than hold
+    if (G.state === 'continue') keys.fire = (G.botT % 24) < 4;
+    return;
+  }
+
+  let foe = null, foeD = 1e9, cluster = 0, armour = null;
+  for (const e of G.enemies) {
+    if (e.gone) continue;
+    const d = Math.hypot(e.x - J.x, e.y - J.y);
+    if (e.type === 'tank') { if (!e.deadTank && d < 110) armour = e; continue; }
+    if (e.deadTank) continue;
+    if (d < 46) cluster++;
+    if (d < foeD) { foeD = d; foe = e; }
+  }
+  let loot = null, lootD = 1e9;
+  for (const pu of G.pickups) {
+    const d = Math.hypot(pu.x - J.x, pu.y - J.y);
+    if (d < 70 && d < lootD) { lootD = d; loot = pu; }
+  }
+  let pow = null, powD = 1e9;
+  for (const w of G.pows) {
+    if (w.freed || w.dead) continue;
+    const d = Math.hypot(w.x - J.x, w.y - J.y);
+    if (d < 90 && d < powD) { powD = d; pow = w; }
+  }
+
+  // --- stay alive first: sidestep aimed rounds and anything about to run us
+  // over (a demo that dies every few seconds sells nothing) ---
+  for (const b of G.ebullets) {
+    const bx = b.x - J.x, by = b.y - J.y;
+    const bs = Math.hypot(b.vx, b.vy) || 1;
+    const ux = b.vx / bs, uy = b.vy / bs;
+    const along = -(bx * ux + by * uy);
+    if (along < 3 || along > 46) continue;          // not incoming / too far off
+    if (Math.abs(bx * uy - by * ux) > 8) continue;  // going to miss anyway
+    const side = (bx * -uy + by * ux) > 0 ? -1 : 1;
+    Object.assign(keys, faceKeys(side * -uy * 10, side * ux * 10));
+    return;
+  }
+  for (const e of G.enemies) {
+    if (e.type !== 'moto' && e.type !== 'truck') continue;
+    const d = Math.hypot(e.x - J.x, e.y - J.y);
+    if (d > 40) continue;
+    // step off its lane, not away from it (it is faster than we are)
+    Object.assign(keys, faceKeys(0, e.y < J.y ? 12 : -12));
+    keys[(e.dir > 0) ? 'left' : 'right'] = true;
+    return;
+  }
+
+  const gTarget = armour || (cluster >= 2 && foeD > 26 && foeD < 96 ? foe : null);
+  if (gTarget && G.grenades > 0 && J.grenCd === 0 && G.botT % 7 === 0) {
+    Object.assign(keys, faceKeys(gTarget.x - J.x, gTarget.y - J.y));
+    keys.grenade = true;
+    return;
+  }
+
+  // ADVANCE IS THE DEFAULT. Only stop for something that is actually in the
+  // way or on top of us — otherwise a wave game pins the bot in place forever
+  // (it scored but crawled 136px in 5,500 ticks before this rule).
+  const ahead = foe && foe.y < J.y + 18;
+  const threat = foe && (foeD < 30 || (ahead && foeD < 74));
+  // if the push north has stalled, ignore everything and drive
+  const camMoved = G.camY !== (G.botCam === undefined ? -1 : G.botCam);
+  if (G.botT % 20 === 0) { if (camMoved) G.botPush = 0; else G.botPush = (G.botPush || 0) + 1; G.botCam = G.camY; }
+  const desperate = (G.botPush || 0) > 9;
+
+  if (threat && !desperate) {
+    Object.assign(keys, faceKeys(foe.x - J.x, foe.y - J.y));
+    keys.fire = true;
+    // never reverse into the map we already cleared — sidestep instead
+    if (foeD < 15) { keys.up = false; keys.down = false; keys[(G.botT >> 4) & 1 ? 'left' : 'right'] = true; }
+    return;
+  }
+
+  let want;
+  if (loot && lootD < 44 && !threat) want = faceKeys(loot.x - J.x, loot.y - J.y);
+  else if (pow && powD < 70 && !threat) want = faceKeys(pow.x - J.x, pow.y - J.y);
+  else {
+    const ex = A.exit || { x0: 116, x1: 160 };
+    const lane = (ex.x0 + ex.x1) / 2;
+    want = { up: true };
+    if (Math.abs(J.x - lane) > 26) want[J.x < lane ? 'right' : 'left'] = true;
+  }
+  const moved = Math.hypot(J.x - (G.botLastX || 0), J.y - (G.botLastY || 0));
+  if (G.botT % 10 === 0) {
+    G.botStuck = moved < 1.5 ? G.botStuck + 1 : 0;
+    G.botLastX = J.x; G.botLastY = J.y;
+  }
+  if (G.botStuck > 1) {
+    want = { [((G.botT >> 5) & 1) ? 'left' : 'right']: true };
+    if ((G.botT >> 6) & 1) want.up = true;
+    if (G.botStuck > 8) G.botStuck = 0;
+  }
+  Object.assign(keys, want);
+  if (G.botT % 11 < 3) keys.fire = true;
+}
+function startAutoplay() {
+  startGame();
+  G.autoplay = true; G.realInput = false;
+  G.botT = 0; G.botStuck = 0; G.botLastX = G.joe.x; G.botLastY = G.joe.y;
+  try { if (window.Music) { ensureMusic(); if (Music.mode !== 'original') Music.toggle(); } } catch (e) {}
+}
+function endAutoplay() {
+  G.autoplay = false;
+  for (const k of BOT_KEYS) keys[k] = false;
+  setState('title', 300);
+}
 function startDemo() {
   seed = 0xC0FFEE; vseed = 0x9E3779B9; // deterministic ghost
   G.score = 0; G.lives = LIVES_START; G.grenades = 3; G.ammo = START_AMMO; G.area = 1;
@@ -764,7 +896,7 @@ function endDemo() {
   setState('ranking', 300);
 }
 function startGame() {
-  G.demo = false;
+  G.demo = false; G.autoplay = false;
   G.score = 0; G.lives = LIVES_START; G.grenades = 3; G.ammo = START_AMMO; G.area = 1; G.postGame = false; G.paused = false; G.continues = 0; G.rescued = 0;
   applyArea(1);
   resetWorld();
@@ -1133,6 +1265,15 @@ function tick() {
   const J = G.joe;
   // attract demo: scripted inputs drive a ghost game; any REAL input starts
   // a live one, and the ghost's death (or the clock) returns to the attract
+  if (G.autoplay) {
+    if (G.realInput || touchUI.fire || touchUI.gren || touchUI.dir.x || touchUI.dir.y || gp.fire || gp.pause || gp.dx || gp.dy) { endAutoplay(); return; }
+    // a run that truly ended (or wandered back to the attract) starts another
+    // campaign, so "watch the demo" means watch until YOU stop it
+    if (G.state === 'gameover' || G.state === 'entry' || G.state === 'ranking' || G.state === 'credits' || G.state === 'title') {
+      startAutoplay(); return;
+    }
+    autopilotTick();
+  }
   if (G.demo) {
     if (G.realInput || touchUI.fire || gp.fire || gp.pause) { startGame(); return; }
     G.demoT++;
@@ -2801,6 +2942,12 @@ function render(alpha) {
     ctx.textAlign = 'center'; ctx.fillText(str, x * S, y * S); ctx.textAlign = 'start';
   };
   const blink = G.frame % 50 < 30;
+  if (G.autoplay && G.state === 'play') {
+    ctx.fillStyle = 'rgba(5,8,4,0.5)';
+    ctx.fillRect((VIEW_W / 2 - 58) * S, 3 * S, 116 * S, 13 * S);
+    textC('DEMO — AUTO-PLAY', 9, 6, '#ffd257', true);
+    if (blink) textC(touchUI.seen ? 'TAP TO TAKE OVER' : 'PRESS ANY KEY TO EXIT', 14.5, 4.5, '#e8d8b0');
+  }
   if (G.demo && G.state === 'play') {
     // attract-demo banner over the ghost run
     ctx.fillStyle = 'rgba(5,8,4,0.55)';
@@ -3115,7 +3262,7 @@ function render(alpha) {
   ctx.restore(); // end card centring
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.49.1-fresh', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.51.0-maps', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -3265,7 +3412,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, perfLow, battery: !!Settings.battery, bands: { top: BAND_TOP, bot: BAND_BOT }, viewH: VIEW_H, charScale: charScale(), ctrls: ctrlPos(), demo: !!G.demo, ambush: G.ambush ? G.ambush.phase : null, burstLeft: G.burst ? G.burst.remaining : 0, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, perfLow, battery: !!Settings.battery, bands: { top: BAND_TOP, bot: BAND_BOT }, viewH: VIEW_H, charScale: charScale(), ctrls: ctrlPos(), demo: !!G.demo, autoplay: !!G.autoplay, ambush: G.ambush ? G.ambush.phase : null, burstLeft: G.burst ? G.burst.remaining : 0, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },
@@ -3288,6 +3435,7 @@ if (qa) {
     setArea: (n) => { G.area = Math.max(1, n | 0); return { area: G.area, diff: diffMul(), loop: loopN() }; },
     quiet: (n) => { G.quietT = n | 0; return G.quietT; },
     realInput: () => { G.realInput = true; return true; },
+    autoplay: () => { startAutoplay(); return !!G.autoplay; },
     settingsIndex: (k) => SETTINGS_ITEMS.findIndex(it => it.k === k),
     // massacre everything except fleeing officers through the normal destroy
     // path — scenario cleanup that still exercises corpses/vehicle explosions

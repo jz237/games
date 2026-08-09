@@ -1,7 +1,7 @@
 // area3.js — Area 3. LAYOUT IS NOT MEASURED (see area2.js): built in the same
 // idiom and to the same 26 m metric as areas 1-2.
 window.AREA3 = {
-  title: 'RIVER CAMP — STOCKADE GATE',
+  title: 'PRISON CAMP — FORTRESS RAMPART',
   width: 274,
   height: 868,
   spawn: { x: 137, y: 840 },

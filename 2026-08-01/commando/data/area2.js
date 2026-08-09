@@ -1,9 +1,11 @@
-// area2.js — Area 2. LAYOUT IS NOT MEASURED: automation could not clear Area 1
-// on the disk (the fortress gate defeats the scripted navigator), so this area
-// is designed in the same idiom and to the same 26m metric as Area 1, using the
-// log-wall trench lines actually observed north of the bridge (it46 capture).
+// area2.js — Area 2. LAYOUT IS STILL NOT MEASURED (automation cannot clear
+// Area 1's gate on the disk), but as of it84 the ART is rebuilt in the
+// ORIGINAL'S OWN VOCABULARY, read off the stitched disk map of Area 1:
+// hard dirt ground, SCATTERED short log-and-sandbag barricade segments at
+// staggered offsets (not one tidy band), a water crossing on a narrow bridge,
+// and a full-width stone wall with a central arch as the gate.
 window.AREA2 = {
-  title: 'DESERT OUTPOST — BUNKER GATE',
+  title: 'RIVER CROSSING — FORTRESS GATE',
   width: 274,
   height: 868,
   spawn: { x: 137, y: 840 },
