@@ -3115,7 +3115,7 @@ function render(alpha) {
   ctx.restore(); // end card centring
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.48.0-scale', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.49.1-fresh', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip

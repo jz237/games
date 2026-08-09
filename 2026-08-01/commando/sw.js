@@ -2,10 +2,18 @@
 // page registers this worker on https origins alone, so the LAN dev server and
 // the headless QA rig never see stale cached assets).
 //
-// Strategy: precache the boot core on install; everything else same-scope is
-// cached on first fetch (cache-first). The game loads every sprite, plate and
-// mask at boot, so one online session leaves the whole game playable offline.
-const CACHE = 'commando-hd-v1';
+// it82 REWRITE. The first version was cache-first over EVERYTHING with a fixed
+// cache name and ignoreSearch — which meant a browser that loaded the game once
+// replayed that build forever: updates were invisible, and even a ?cachebust
+// query matched the stale entry. Now:
+//   * CODE (documents, .js, .webmanifest) is NETWORK-FIRST — you always get the
+//     build that is actually deployed when you are online, and the cache is
+//     refreshed behind you; offline falls back to the last good copy.
+//   * MEDIA (art, audio, wasm) stays CACHE-FIRST — it is the bulk of the ~8MB
+//     payload, it rarely changes, and it is what makes offline play possible.
+//   * The cache name carries a version; activate() purges every other cache, so
+//     a deploy self-heals instead of needing the user to clear anything.
+const CACHE = 'commando-hd-v2';
 const CORE = [
   './index.html',
   './game.js',
@@ -21,7 +29,12 @@ const CORE = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' }))))
+      .catch(() => {})
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -32,12 +45,38 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+const isCode = (req, url) =>
+  req.mode === 'navigate' ||
+  /\.(?:html|js|webmanifest|json)$/i.test(url.pathname);
+
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return; // never touch cross-origin
+
+  if (isCode(e.request, url)) {
+    // network-first with FORCED REVALIDATION. The site is served by a Worker
+    // that stamps its own 4h Cache-Control (so the project's _headers rules do
+    // not reach these files); cache:'no-cache' makes the browser check the
+    // etag every time, so a fresh deploy is never masked by the HTTP cache.
+    // Cheap: unchanged files answer 304.
+    e.respondWith(
+      fetch(new Request(e.request, { cache: 'no-cache' }))
+        .then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(e.request, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(e.request).then((hit) => hit || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // media: cache-first, filled on first sight
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then((hit) => {
+    caches.match(e.request).then((hit) => {
       if (hit) return hit;
       return fetch(e.request).then((res) => {
         if (res && res.ok) {
