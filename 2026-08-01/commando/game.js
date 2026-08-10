@@ -428,7 +428,42 @@ document.addEventListener('visibilitychange', () => {
 // (hold to auto-fire at the measured min interval — same cadence cap as the
 // original), discrete grenade button, music toggle on the HUD ♪ corner.
 const GREN_BTN = { x: VIEW_W - 24, y: VIEW_H - 78, r: 13 };
-const DEMO_BTN = { x: VIEW_W / 2, y: 180, w: 84, h: 18 }; // title-screen demo button
+const DEMO_BTN = { x: VIEW_W / 2, y: 180, w: 84, h: 18 }; // desktop title hint box
+// it92: on touch the whole UI is BUTTONS, laid out against the live view height
+// (the panel used to be arrow-key-only and the title's only tap target was an
+// invisible 60x16 corner). Everything below is in VIEW space, so it follows the
+// tall mobile viewport instead of the 224-row desktop card.
+function settingsLayout() {
+  const ROW = touchUI.seen ? Math.min(20, Math.max(13, VIEW_H / 26)) : 11.5;
+  const TOP = touchUI.seen ? 56 : 46;
+  const shown = Math.max(4, Math.floor((VIEW_H - TOP - (touchUI.seen ? 34 : 26)) / ROW));
+  const maxScroll = Math.max(0, SETTINGS_ITEMS.length - shown);
+  const scroll = Math.max(0, Math.min(maxScroll, G.settingsSel - ((shown / 2) | 0)));
+  return { ROW, TOP, shown, scroll, maxScroll };
+}
+function uiButtons() {
+  if (!touchUI.seen) return [];
+  const H = VIEW_H, cw = 116, ch = Math.min(26, Math.max(18, H / 22));
+  if (G.state === 'title' || G.state === 'ranking' || G.state === 'credits') {
+    const y0 = H * 0.54;
+    return [
+      { id: 'start', x: VIEW_W / 2, y: y0, w: cw, h: ch, label: '▶  START', hue: '#fff' },
+      { id: 'demo', x: VIEW_W / 2, y: y0 + ch + 8, w: cw, h: ch, label: '▶  WATCH DEMO', hue: '#ffd257' },
+      { id: 'settings', x: VIEW_W / 2, y: y0 + (ch + 8) * 2, w: cw, h: ch, label: '⚙  SETTINGS', hue: '#c9c0a6' },
+    ];
+  }
+  if (G.state === 'settings') {
+    const L = settingsLayout();
+    return [{ id: 'close', x: VIEW_W / 2, y: L.TOP + L.shown * L.ROW + 6, w: 96, h: Math.min(22, ch), label: 'CLOSE', hue: '#e8d8b0' }];
+  }
+  return [];
+}
+function hitButton(p) {
+  for (const b of uiButtons()) {
+    if (Math.abs(p.x - b.x) <= b.w / 2 + 3 && p.y >= b.y - 3 && p.y <= b.y + b.h + 3) return b;
+  }
+  return null;
+}
 const FIRE_BTN = { x: VIEW_W - 38, y: VIEW_H - 34, r: 22 }; // visual hint; whole right half fires
 const touchUI = { stick: null, fireIds: new Set(), grenIds: new Set(), seen: false, dir: { x: 0, y: 0 }, fire: false, gren: false };
 function touchLogical(t, r) {
@@ -450,8 +485,29 @@ function onTouch(e) {
       const p = touchLogical(t, r);
       if (p.x > VIEW_W - 60 && p.y < 16) { if (window.Music) Music.toggle(); continue; }
       if (p.x < 60 && p.y < 16 && (G.state === 'title' || (G.state === 'play' && G.paused))) { openSettings(); continue; }
-      if (G.state === 'title' && Math.abs(p.x - DEMO_BTN.x) < DEMO_BTN.w / 2 + 4
-          && p.y > DEMO_BTN.y - 4 && p.y < DEMO_BTN.y + DEMO_BTN.h + 4) { startAutoplay(); continue; }
+      const btn = hitButton(p);
+      if (btn) {
+        if (btn.id === 'start') startGame();
+        else if (btn.id === 'demo') startAutoplay();
+        else if (btn.id === 'settings') openSettings();
+        else if (btn.id === 'close') closeSettings();
+        continue;
+      }
+      if (G.state === 'settings') {
+        // tap a row to select it; tap its right/left third to adjust, centre to
+        // activate — no arrow keys involved
+        const L = settingsLayout();
+        const idx = L.scroll + Math.floor((p.y - L.TOP + L.ROW * 0.25) / L.ROW);
+        if (idx >= 0 && idx < SETTINGS_ITEMS.length && p.y >= L.TOP - L.ROW * 0.4) {
+          const item = SETTINGS_ITEMS[idx];
+          if (G.settingsSel !== idx) G.settingsSel = idx;
+          else if (item.type === 'back') closeSettings();
+          else if (p.x > VIEW_W * 0.66) adjustSetting(item, 1, false);
+          else if (p.x < VIEW_W * 0.34) adjustSetting(item, -1, false);
+          else adjustSetting(item, 0, true);
+          continue;
+        }
+      }
       const cp = ctrlPos();
       if (Math.hypot(p.x - cp.gx, p.y - cp.gy) < cp.gr * Settings.touchSize + 5) { touchUI.grenIds.add(t.identifier); continue; }
       // landscape pillars: the fire-side pillar's upper band is the grenade
@@ -3080,9 +3136,12 @@ function render(alpha) {
     const ka = IMGS['ui/keyart.webp'];
     if (ka) {
       // cover-fit the painted key art (full-bleed: compensate the card offset)
-      const sc = Math.max(VIEW_W / ka.width, VIEW_H / ka.height);
+      // cover the FULL view (card space is the 224-row desktop layout, so on a
+      // tall phone the art was letterboxed with dead space above it)
+      const fullH = VIEW_H + cardOff * 2;
+      const sc = Math.max(VIEW_W / ka.width, fullH / ka.height);
       const kw = ka.width * sc, kh = ka.height * sc;
-      ctx.drawImage(ka, (VIEW_W - kw) / 2 * S, ((VIEW_H - kh) / 2 - cardOff) * S, kw * S, kh * S);
+      ctx.drawImage(ka, (VIEW_W - kw) / 2 * S, ((fullH - kh) / 2 - cardOff) * S, kw * S, kh * S);
       scrim(0.34);
       const grd = ctx.createLinearGradient(0, 0, 0, VIEW_H * 0.55 * S);
       grd.addColorStop(0, 'rgba(5,8,4,0.62)'); grd.addColorStop(1, 'rgba(5,8,4,0)');
@@ -3092,12 +3151,15 @@ function render(alpha) {
     textC('HD', 95, 16, '#e8b34a', true);
     textC('A TRIBUTE TO THE CLASSIC', 110, 7, '#c9c0a6');
     // banner behind the call to action and credits so they read over the art
-    ctx.fillStyle = 'rgba(5,8,4,0.55)';
-    ctx.fillRect(0, 168 * S, VIEW_W * S, 14 * S);
-    ctx.fillRect(0, 192 * S, VIEW_W * S, 22 * S);
-    if (blink) textC('PRESS FIRE TO START', 172, 9, '#fff', true);
-    // WATCH DEMO: an actual button, tappable on touch, D on a keyboard
+    if (!touchUI.seen) {
+      ctx.fillStyle = 'rgba(5,8,4,0.55)';
+      ctx.fillRect(0, 168 * S, VIEW_W * S, 14 * S);
+      ctx.fillRect(0, 192 * S, VIEW_W * S, 22 * S);
+    }
+    if (!touchUI.seen && blink) textC('PRESS FIRE TO START', 172, 9, '#fff', true);
+    // WATCH DEMO hint box (desktop; touch players get the button stack below)
     const db = DEMO_BTN;
+    if (!touchUI.seen) {
     ctx.strokeStyle = 'rgba(255,210,87,0.85)'; ctx.lineWidth = 0.9 * S;
     ctx.strokeRect((db.x - db.w / 2) * S, db.y * S, db.w * S, db.h * S);
     ctx.fillStyle = 'rgba(255,210,87,0.10)';
@@ -3106,10 +3168,13 @@ function render(alpha) {
     ctx.textAlign = 'center';
     ctx.fillText('▶ WATCH DEMO', db.x * S, (db.y + 8) * S);
     ctx.font = `${4.5 * S}px monospace`; ctx.fillStyle = '#c9c0a6';
-    ctx.fillText(touchUI.seen ? 'TAP HERE' : 'PRESS  D', db.x * S, (db.y + 14.5) * S);
+    ctx.fillText('PRESS  D', db.x * S, (db.y + 14.5) * S);
     ctx.textAlign = 'start';
-    textC('ORIGINAL © CAPCOM 1985 · AMIGA VERSION ELITE 1989', 201, 5, '#9a9280');
-    textC('NON-COMMERCIAL FAN REMAKE — ALL-NEW ART & SOUND', 210, 5, '#9a9280');
+    }
+    if (!touchUI.seen) {
+      textC('ORIGINAL © CAPCOM 1985 · AMIGA VERSION ELITE 1989', 201, 5, '#9a9280');
+      textC('NON-COMMERCIAL FAN REMAKE — ALL-NEW ART & SOUND', 210, 5, '#9a9280');
+    }
     ctx.fillStyle = '#9ac'; ctx.font = `${5 * S}px monospace`;
     ctx.fillText('⚙ SETTINGS [ESC]', 6 * S, 10 * S);
   } else if (G.state === 'ranking') {
@@ -3266,16 +3331,17 @@ function render(alpha) {
     scrim(0.88);
     textC('SETTINGS', 28, 12, '#e8d8b0', true);
     ctx.font = `${6 * S}px monospace`;
-    const ROW = 11.5, TOP = 46;
-    const shown = Math.max(4, Math.floor((VIEW_H - TOP - 26) / ROW));
-    const maxScroll = Math.max(0, SETTINGS_ITEMS.length - shown);
-    const scroll = Math.max(0, Math.min(maxScroll, G.settingsSel - ((shown / 2) | 0)));
+    const { ROW, TOP, shown, scroll, maxScroll } = settingsLayout();
     if (scroll > 0) textC('▲', TOP - 8, 6, '#8a836e');
     if (scroll < maxScroll) textC('▼', TOP + shown * ROW - 2, 6, '#8a836e');
     for (let i = scroll; i < Math.min(SETTINGS_ITEMS.length, scroll + shown); i++) {
       const it = SETTINGS_ITEMS[i];
       const y = TOP + (i - scroll) * ROW;
       const sel = i === G.settingsSel;
+      if (sel && touchUI.seen) { // a fat highlight bar reads at arm's length
+        ctx.fillStyle = 'rgba(255,210,87,0.16)';
+        ctx.fillRect(30 * S, (y - ROW * 0.72) * S, (VIEW_W - 60) * S, ROW * 0.95 * S);
+      }
       ctx.fillStyle = sel ? '#ffd257' : '#cfc8b0';
       ctx.textAlign = 'left';
       ctx.fillText((sel ? '> ' : '  ') + it.label, 40 * S, y * S);
@@ -3291,8 +3357,11 @@ function render(alpha) {
       if (val) { ctx.textAlign = 'right'; ctx.fillText(val, 234 * S, y * S); }
       ctx.textAlign = 'start';
     }
-    textC('ARROWS NAVIGATE/ADJUST · FIRE SELECT · ESC BACK', 212, 4.5, '#8a836e');
-    textC('MODE CHANGE APPLIES TO YOUR NEXT GAME', 220, 4.5, '#8a836e');
+    const foot = settingsLayout();
+    const fy = foot.TOP + foot.shown * foot.ROW + (touchUI.seen ? 34 : 12);
+    textC(touchUI.seen ? 'TAP A ROW · TAP LEFT/RIGHT TO ADJUST' : 'ARROWS NAVIGATE/ADJUST · FIRE SELECT · ESC BACK',
+      Math.min(VIEW_H - 12, fy), 4.5, '#8a836e');
+    textC('MODE CHANGE APPLIES TO YOUR NEXT GAME', Math.min(VIEW_H - 5, fy + 8), 4.5, '#8a836e');
   }
   if (G.paused && G.state === 'play') {
     scrim(0.3);
@@ -3300,9 +3369,28 @@ function render(alpha) {
     textC('SPACE RESUME · ESC SETTINGS', 122, 6, '#b8b09a');
   }
   ctx.restore(); // end card centring
+  // ---- touch UI: real buttons, drawn in view space ----
+  if (touchUI.seen && (G.state === 'title' || G.state === 'ranking' || G.state === 'credits')) {
+    ctx.fillStyle = '#9a9280'; ctx.font = `${4.6 * S}px monospace`; ctx.textAlign = 'center';
+    ctx.fillText('ORIGINAL © CAPCOM 1985 · AMIGA VERSION ELITE 1989', VIEW_W / 2 * S, (VIEW_H - 16) * S);
+    ctx.fillText('NON-COMMERCIAL FAN REMAKE — ALL-NEW ART & SOUND', VIEW_W / 2 * S, (VIEW_H - 9) * S);
+    ctx.textAlign = 'start';
+  }
+  for (const b of uiButtons()) {
+    const x0 = (b.x - b.w / 2) * S, y0 = b.y * S, w0 = b.w * S, h0 = b.h * S;
+    ctx.fillStyle = 'rgba(6,9,5,0.78)';
+    ctx.fillRect(x0, y0, w0, h0);
+    ctx.strokeStyle = b.hue; ctx.lineWidth = 1.1 * S;
+    ctx.strokeRect(x0, y0, w0, h0);
+    ctx.fillStyle = b.hue;
+    ctx.font = `bold ${Math.min(8, b.h * 0.42) * S}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(b.label, b.x * S, (b.y + b.h * 0.66) * S);
+    ctx.textAlign = 'start';
+  }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.53.0-recruit', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.54.0-touchui', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -3336,7 +3424,7 @@ function render(alpha) {
   }
   ctx.save();
   ctx.translate(0, BAND_TOP * S);
-  if (touchUI.seen) {
+  if (touchUI.seen && (G.state === 'play' || G.state === 'dead' || G.state === 'ready')) {
     const TA = Settings.touchOpacity, TS = Settings.touchSize;
     const cp = ctrlPos();
     ctx.globalAlpha = TA;
@@ -3477,6 +3565,8 @@ if (qa) {
     realInput: () => { G.realInput = true; return true; },
     autoplay: () => { startAutoplay(); return !!G.autoplay; },
     settingsIndex: (k) => SETTINGS_ITEMS.findIndex(it => it.k === k),
+    ui: () => uiButtons(),
+    uiLayout: () => settingsLayout(),
     // massacre everything except fleeing officers through the normal destroy
     // path — scenario cleanup that still exercises corpses/vehicle explosions
     wipe: () => { for (const e of G.enemies) if (e.mode !== 'flee') destroyEnemy(e); G.enemies = G.enemies.filter(e => e.mode === 'flee'); return G.enemies.length; },
