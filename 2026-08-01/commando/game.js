@@ -341,6 +341,7 @@ const SETTINGS_DEFAULTS = {
   autoFire: false,             // keyboard hold-to-fire (touch always auto-fires at the cap)
   leftHand: false,
   haptics: true,               // vibration on touch devices (where supported)
+  difficulty: 'recruit',       // recruit | soldier | veteran — see DIFFS
   perf: 'auto',                // auto | high | low — effect shedding tier
   battery: false,              // render at 30fps (logic stays 50Hz)
   touchSize: 1.0,              // touch button scale (0.7-1.6)
@@ -427,6 +428,7 @@ document.addEventListener('visibilitychange', () => {
 // (hold to auto-fire at the measured min interval — same cadence cap as the
 // original), discrete grenade button, music toggle on the HUD ♪ corner.
 const GREN_BTN = { x: VIEW_W - 24, y: VIEW_H - 78, r: 13 };
+const DEMO_BTN = { x: VIEW_W / 2, y: 180, w: 84, h: 18 }; // title-screen demo button
 const FIRE_BTN = { x: VIEW_W - 38, y: VIEW_H - 34, r: 22 }; // visual hint; whole right half fires
 const touchUI = { stick: null, fireIds: new Set(), grenIds: new Set(), seen: false, dir: { x: 0, y: 0 }, fire: false, gren: false };
 function touchLogical(t, r) {
@@ -448,6 +450,8 @@ function onTouch(e) {
       const p = touchLogical(t, r);
       if (p.x > VIEW_W - 60 && p.y < 16) { if (window.Music) Music.toggle(); continue; }
       if (p.x < 60 && p.y < 16 && (G.state === 'title' || (G.state === 'play' && G.paused))) { openSettings(); continue; }
+      if (G.state === 'title' && Math.abs(p.x - DEMO_BTN.x) < DEMO_BTN.w / 2 + 4
+          && p.y > DEMO_BTN.y - 4 && p.y < DEMO_BTN.y + DEMO_BTN.h + 4) { startAutoplay(); continue; }
       const cp = ctrlPos();
       if (Math.hypot(p.x - cp.gx, p.y - cp.gy) < cp.gr * Settings.touchSize + 5) { touchUI.grenIds.add(t.identifier); continue; }
       // landscape pillars: the fire-side pillar's upper band is the grenade
@@ -634,6 +638,9 @@ const CHECKPOINTS = [1616, 1050, 500]; // Area 1; areas may override via data
 
 // settings panel model
 const SETTINGS_ITEMS = [
+  { k: 'difficulty', label: 'DIFFICULTY', type: 'diff' },
+  { k: 'mode', label: 'GAME MODE', type: 'mode' },
+  { label: 'WATCH DEMO (AUTO-PLAY)', type: 'demo' },
   { k: 'musicVol', label: 'MUSIC VOLUME', type: 'pct' },
   { k: 'sfxVol', label: 'SFX VOLUME', type: 'pct' },
   { k: 'shake', label: 'SCREEN SHAKE', type: 'pct' },
@@ -647,10 +654,8 @@ const SETTINGS_ITEMS = [
   { k: 'touchOpacity', label: 'TOUCH OPACITY', type: 'range', min: 0.2, max: 0.8, step: 0.1 },
   { k: 'stickFixed', label: 'FIXED STICK', type: 'bool' },
   { k: 'aimAssist', label: 'AIM ASSIST (TOUCH)', type: 'bool' },
-  { label: 'WATCH DEMO (AUTO-PLAY)', type: 'demo' },
   { k: 'retro', label: 'RETRO FILTER', type: 'bool' },
   { k: 'scanlines', label: 'SCANLINES', type: 'bool' },
-  { k: 'mode', label: 'GAME MODE', type: 'mode' },
   { k: 'track', label: 'MUSIC TRACK', type: 'track' },
   { k: 'fire', label: 'FIRE KEY', type: 'key' },
   { k: 'grenade', label: 'GRENADE KEY', type: 'key' },
@@ -686,6 +691,12 @@ function adjustSetting(item, dir, activate) {
   } else if (item.type === 'range') {
     Settings[item.k] = Math.max(item.min, Math.min(item.max, Math.round((Settings[item.k] + dir * item.step) * 100) / 100));
     applySettings();
+  } else if (item.type === 'diff') {
+    if (dir || activate) {
+      const order = ['recruit', 'soldier', 'veteran'];
+      Settings.difficulty = order[(order.indexOf(Settings.difficulty) + (dir < 0 ? order.length - 1 : 1)) % order.length];
+      applySettings();
+    }
   } else if (item.type === 'perf') {
     if (dir || activate) {
       const order = ['auto', 'high', 'low'];
@@ -807,8 +818,8 @@ function autopilotTick() {
     const bs = Math.hypot(b.vx, b.vy) || 1;
     const ux = b.vx / bs, uy = b.vy / bs;
     const along = -(bx * ux + by * uy);
-    if (along < 3 || along > 46) continue;          // not incoming / too far off
-    if (Math.abs(bx * uy - by * ux) > 8) continue;  // going to miss anyway
+    if (along < 3 || along > 70) continue;          // not incoming / too far off
+    if (Math.abs(bx * uy - by * ux) > 12) continue; // going to miss anyway
     const side = (bx * -uy + by * ux) > 0 ? -1 : 1;
     Object.assign(keys, faceKeys(side * -uy * 10, side * ux * 10));
     return;
@@ -816,7 +827,7 @@ function autopilotTick() {
   for (const e of G.enemies) {
     if (e.type !== 'moto' && e.type !== 'truck') continue;
     const d = Math.hypot(e.x - J.x, e.y - J.y);
-    if (d > 40) continue;
+    if (d > 55) continue;
     // step off its lane, not away from it (it is faster than we are)
     Object.assign(keys, faceKeys(0, e.y < J.y ? 12 : -12));
     keys[(e.dir > 0) ? 'left' : 'right'] = true;
@@ -834,7 +845,7 @@ function autopilotTick() {
   // way or on top of us — otherwise a wave game pins the bot in place forever
   // (it scored but crawled 136px in 5,500 ticks before this rule).
   const ahead = foe && foe.y < J.y + 18;
-  const threat = foe && (foeD < 30 || (ahead && foeD < 74));
+  const threat = foe && (foeD < 34 || (ahead && foeD < 78));
   // if the push north has stalled, ignore everything and drive
   const camMoved = G.camY !== (G.botCam === undefined ? -1 : G.botCam);
   if (G.botT % 20 === 0) { if (camMoved) G.botPush = 0; else G.botPush = (G.botPush || 0) + 1; G.botCam = G.camY; }
@@ -897,7 +908,7 @@ function endDemo() {
 }
 function startGame() {
   G.demo = false; G.autoplay = false;
-  G.score = 0; G.lives = LIVES_START; G.grenades = 3; G.ammo = START_AMMO; G.area = 1; G.postGame = false; G.paused = false; G.continues = 0; G.rescued = 0;
+  G.score = 0; G.lives = LIVES_START + DF().lives; G.grenades = 3 + (DF().lives > 0 ? 2 : 0); G.ammo = START_AMMO; G.area = 1; G.postGame = false; G.paused = false; G.continues = 0; G.rescued = 0;
   applyArea(1);
   resetWorld();
   if (touchUI.seen && !tutorialSeen()) { markTutorialSeen(); setState('tutorial', 420); }
@@ -928,6 +939,15 @@ function continueGame() {
   if (window.Music && Music.currentCue !== 'main') Music.play('main');
 }
 // difficulty ramp on area loop — placeholder until areas 2+ are measured
+// One dial for "how hard is this to survive". RECRUIT is the default because
+// Joe dies in a single hit — the 1985 rule — and modern mode stacks snipers,
+// mortars and vehicles on top of that.
+const DIFFS = {
+  recruit: { fire: 1.9, bullet: 0.74, wave: 1.6, cap: -3, lives: 3, invuln: 190, drop: 1.6 },
+  soldier: { fire: 1.0, bullet: 1.00, wave: 1.0, cap: 0, lives: 0, invuln: 110, drop: 1.0 },
+  veteran: { fire: 0.8, bullet: 1.12, wave: 0.8, cap: 1, lives: -1, invuln: 90, drop: 0.8 },
+};
+function DF() { return DIFFS[G && G.autoplay ? 'recruit' : Settings.difficulty] || DIFFS.soldier; }
 function diffMul() { return Math.min(1.9, 1 + (G.area - 1) * 0.1); }
 // arcade-loop depth: 0 on the first circuit of the areas, +1 per full lap —
 // deepens pressure beyond diffMul's speed/wave scaling (cap, cadence, nerve)
@@ -995,8 +1015,8 @@ function spawnEnemies() {
 // and right margins on a fixed line and cross the screen.
 function spawnEdgeWave() {
   if (G.calm || G.state !== 'play') return;
-  if (G.enemies.length >= Math.min(9, 7 + loopN())) return;
-  if (G.frame - (G.lastWave || 0) < (classicMode() ? CLASSIC_WAVE_PERIOD : WAVE_INTERVAL) / diffMul()) return;
+  if (G.enemies.length >= Math.max(3, Math.min(9, 7 + loopN()) + DF().cap)) return;
+  if (G.frame - (G.lastWave || 0) < (classicMode() ? CLASSIC_WAVE_PERIOD : WAVE_INTERVAL) * DF().wave / diffMul()) return;
   G.lastWave = G.frame;
   // occasionally the wave is a vehicle instead of infantry: a motorcycle, or
   // (rarer) a troop truck that drives in and unloads a squad — the it44 disk
@@ -1059,7 +1079,7 @@ function dropCorpse(e) {
   G.corpses.push({ x: e.x, y: e.y, type: e.type, dieT: 0, set, face: e.face || 1 });
   if (G.corpses.length > 8) G.corpses.shift();
   const roll = ((e.x * 7 + e.y * 13 + G.frame) | 0) % 100;
-  if (roll < PICKUP_DROP_CHANCE) {
+  if (roll < PICKUP_DROP_CHANCE * DF().drop) {
     // rare prize: an MG crate — a burst of full-auto
     G.pickups.push({ x: e.x, y: e.y, kind: (roll < 3 && !classicMode()) ? 'mg' : roll < PICKUP_DROP_CHANCE / 2 ? 'ammo' : 'grenade', t: 0 });
   }
@@ -1221,7 +1241,7 @@ function respawnJoe() {
     const cand = Math.max(10, Math.min(A.width - 10, A.spawn.x + dx));
     if (!rectsAt(cand - 5, y - 8, 10, 12)) { x = cand; break; }
   }
-  Object.assign(G.joe, { x, y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, grenCd: 0, invuln: 110, alive: true, deathT: 0, fireT: 0, throwT: 0, recoil: 0, duck: false, moving: false, walk: 0, walkDist: 0 });
+  Object.assign(G.joe, { x, y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, grenCd: 0, invuln: DF().invuln, alive: true, deathT: 0, fireT: 0, throwT: 0, recoil: 0, duck: false, moving: false, walk: 0, walkDist: 0 });
 }
 
 function killJoe() {
@@ -1662,7 +1682,7 @@ function tick() {
         }
       } else {
         if (e.shotCd > 0) e.shotCd--;
-        else if (live && d < TANK_RANGE) { e.aimT = 26; e.shotCd = TANK_CD + ((e.t * 13) % 40); }
+        else if (live && d < TANK_RANGE) { e.aimT = 26; e.shotCd = (TANK_CD + ((e.t * 13) % 40)) * DF().fire; }
       }
     } else if (e.type === 'truck') {
       // troop truck: drives in on its line, pulls up near the player's column,
@@ -1717,7 +1737,7 @@ function tick() {
     } else if (e.type === 'mortar') {
       // dug-in crew with a readable load ritual: lift the shell, drop it in,
       // THEN the tube fires — the round leaves when the animation says it does
-      if (live && e.t % MORTAR_INTERVAL === 60 && d < 200) e.fireT = 22;
+      if (live && e.t % Math.round(MORTAR_INTERVAL * DF().fire) === 60 && d < 200) e.fireT = 22;
       if (e.fireT === 8 && live) {
         G.shells.push({ x: e.x, y: e.y, tx: J.x, ty: J.y, t: 0, ttl: MORTAR_FLIGHT });
         for (let k = 0; k < 3; k++)
@@ -1727,7 +1747,7 @@ function tick() {
       }
     } else if (e.type === 'lobber' || e.type === 'trencher') {
       // dug-in throwers: hold position, arc a grenade at Joe, drop back down
-      if (live && e.t % (classicMode() ? CLASSIC_WAVE_PERIOD : 150) === 24 && d < 150) {
+      if (live && e.t % Math.round((classicMode() ? CLASSIC_WAVE_PERIOD : 150) * DF().fire) === 24 && d < 150) {
         const spd = LOB_SPEED;
         G.lobs.push({ x: e.x, y: e.y, vx: dx / d * spd, vy: dy / d * spd, t: 0, ttl: Math.min(90, d / spd) });
         e.fireT = 18;
@@ -1751,7 +1771,7 @@ function tick() {
             const dx2 = e.tx - e.x, dy2 = e.ty - (e.y - 5), dd = Math.hypot(dx2, dy2) || 1;
             G.ebullets.push({ x: e.x, y: e.y - 5, vx: dx2 / dd * SNIPER_SHOT_SPEED, vy: dy2 / dd * SNIPER_SHOT_SPEED, life: 150 });
             e.fireT = 12; e.boltT = 34;
-            e.shotCd = SNIPER_CD + ((e.t * 17) % 50);
+            e.shotCd = (SNIPER_CD + ((e.t * 17) % 50)) * DF().fire;
             G.fx.push({ kind: 'muzzle', x: e.x + dx2 / dd * 7, y: e.y - 5 + dy2 / dd * 7, dx: dx2 / dd, dy: dy2 / dd, t: 0 });
             if (window.Sfx) Sfx.play('shot', { gain: 0.55, rate: 1.4, pan: panAt(e.x) });
           }
@@ -1858,12 +1878,13 @@ function tick() {
             if (e.shotCd > 0) e.shotCd--;
             else if (d < ENGAGE_RANGE && e.fireT <= 0) {
               e.fireT = 16;
-              e.shotCd = Math.max(46, ENEMY_SHOT_CD - loopN() * 10) + ((e.t * 37) % 40);
+              e.shotCd = (Math.max(46, ENEMY_SHOT_CD - loopN() * 10) + ((e.t * 37) % 40)) * DF().fire;
               const spread = ((((e.t * 2654435761) >>> 20) % 100) / 100 - 0.5) * 0.22;
               const ca = Math.cos(spread), sa = Math.sin(spread);
               const ax = dx / d, ay = dy / d;
-              G.ebullets.push({ x: e.x, y: e.y + 2, vx: (ax * ca - ay * sa) * ENEMY_BULLET_SPEED,
-                vy: (ax * sa + ay * ca) * ENEMY_BULLET_SPEED, life: 150 });
+              const ebs = ENEMY_BULLET_SPEED * DF().bullet;
+              G.ebullets.push({ x: e.x, y: e.y + 2, vx: (ax * ca - ay * sa) * ebs,
+                vy: (ax * sa + ay * ca) * ebs, life: 150 });
               G.fx.push({ kind: 'muzzle', x: e.x + ax * 6, y: e.y + ay * 6, dx: ax, dy: ay, t: 0 });
               if (window.Sfx) Sfx.play('shot', { gain: 0.34, rate: 0.85, pan: panAt(e.x) });
             }
@@ -3074,7 +3095,19 @@ function render(alpha) {
     ctx.fillStyle = 'rgba(5,8,4,0.55)';
     ctx.fillRect(0, 168 * S, VIEW_W * S, 14 * S);
     ctx.fillRect(0, 192 * S, VIEW_W * S, 22 * S);
-    if (blink) textC('PRESS FIRE TO START', 178, 9, '#fff', true);
+    if (blink) textC('PRESS FIRE TO START', 172, 9, '#fff', true);
+    // WATCH DEMO: an actual button, tappable on touch, D on a keyboard
+    const db = DEMO_BTN;
+    ctx.strokeStyle = 'rgba(255,210,87,0.85)'; ctx.lineWidth = 0.9 * S;
+    ctx.strokeRect((db.x - db.w / 2) * S, db.y * S, db.w * S, db.h * S);
+    ctx.fillStyle = 'rgba(255,210,87,0.10)';
+    ctx.fillRect((db.x - db.w / 2) * S, db.y * S, db.w * S, db.h * S);
+    ctx.fillStyle = '#ffd257'; ctx.font = `bold ${6 * S}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('▶ WATCH DEMO', db.x * S, (db.y + 8) * S);
+    ctx.font = `${4.5 * S}px monospace`; ctx.fillStyle = '#c9c0a6';
+    ctx.fillText(touchUI.seen ? 'TAP HERE' : 'PRESS  D', db.x * S, (db.y + 14.5) * S);
+    ctx.textAlign = 'start';
     textC('ORIGINAL © CAPCOM 1985 · AMIGA VERSION ELITE 1989', 201, 5, '#9a9280');
     textC('NON-COMMERCIAL FAN REMAKE — ALL-NEW ART & SOUND', 210, 5, '#9a9280');
     ctx.fillStyle = '#9ac'; ctx.font = `${5 * S}px monospace`;
@@ -3233,9 +3266,15 @@ function render(alpha) {
     scrim(0.88);
     textC('SETTINGS', 28, 12, '#e8d8b0', true);
     ctx.font = `${6 * S}px monospace`;
-    for (let i = 0; i < SETTINGS_ITEMS.length; i++) {
+    const ROW = 11.5, TOP = 46;
+    const shown = Math.max(4, Math.floor((VIEW_H - TOP - 26) / ROW));
+    const maxScroll = Math.max(0, SETTINGS_ITEMS.length - shown);
+    const scroll = Math.max(0, Math.min(maxScroll, G.settingsSel - ((shown / 2) | 0)));
+    if (scroll > 0) textC('▲', TOP - 8, 6, '#8a836e');
+    if (scroll < maxScroll) textC('▼', TOP + shown * ROW - 2, 6, '#8a836e');
+    for (let i = scroll; i < Math.min(SETTINGS_ITEMS.length, scroll + shown); i++) {
       const it = SETTINGS_ITEMS[i];
-      const y = 46 + i * 11.5;
+      const y = TOP + (i - scroll) * ROW;
       const sel = i === G.settingsSel;
       ctx.fillStyle = sel ? '#ffd257' : '#cfc8b0';
       ctx.textAlign = 'left';
@@ -3245,6 +3284,7 @@ function render(alpha) {
       else if (it.type === 'bool') val = Settings[it.k] ? 'ON' : 'OFF';
       else if (it.type === 'mode') val = Settings.mode.toUpperCase();
       else if (it.type === 'range') val = Math.round(Settings[it.k] * 100) + '%';
+      else if (it.type === 'diff') val = Settings.difficulty.toUpperCase();
       else if (it.type === 'perf') val = Settings.perf.toUpperCase() + (Settings.perf === 'auto' ? (perfLow ? ' →LOW' : ' →HIGH') : '');
       else if (it.type === 'track') val = ((window.Music && Music.mode) || 'original').toUpperCase();
       else if (it.type === 'key') val = (G.remap === it.k) ? 'PRESS KEY…' : Settings.keys[it.k];
@@ -3262,7 +3302,7 @@ function render(alpha) {
   ctx.restore(); // end card centring
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.51.0-maps', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.53.0-recruit', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -3412,7 +3452,7 @@ let qaFrozen = false;
 // ---------- QA hooks (?qa=1) ----------
 if (qa) {
   window.__qa = {
-    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, perfLow, battery: !!Settings.battery, bands: { top: BAND_TOP, bot: BAND_BOT }, viewH: VIEW_H, charScale: charScale(), ctrls: ctrlPos(), demo: !!G.demo, autoplay: !!G.autoplay, ambush: G.ambush ? G.ambush.phase : null, burstLeft: G.burst ? G.burst.remaining : 0, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
+    state: () => ({ state: G.state, frame: G.frame, wt: G.wt, score: G.score, lives: G.lives, grenades: G.grenades, area: G.area, diff: diffMul(), loop: loopN(), ambience: (A.ambience && A.ambience.mode) || 'day', chain: G.chain, mult: chainMult(), mg: G.mgT, spot: G.spotT, rain: !!(A.ambience && A.ambience.rain), waterRects: (A.water || []).length, perfLow, battery: !!Settings.battery, bands: { top: BAND_TOP, bot: BAND_BOT }, viewH: VIEW_H, charScale: charScale(), ctrls: ctrlPos(), demo: !!G.demo, autoplay: !!G.autoplay, difficulty: Settings.difficulty, ambush: G.ambush ? G.ambush.phase : null, burstLeft: G.burst ? G.burst.remaining : 0, snipersAiming: G.enemies.filter(e => e.type === 'sniper' && e.aimT > 0).length, finale: G.finale ? { phase: G.finale.phase, spawned: G.finale.spawned, officer: G.finale.officer } : null, paused: G.paused, mode: Settings.mode, cp: G.cp, continues: G.continues, sel: G.settingsSel, joe: { x: G.joe.x, y: G.joe.y, alive: G.joe.alive, invuln: G.joe.invuln }, camY: G.camY, enemies: G.enemies.length, esig: G.enemies.map(e => (e.x | 0) + ':' + (e.y | 0)).join(','), bullets: G.bullets.length, nades: G.nades.length, shake: G.shake, touch: { dir: touchUI.dir, fire: touchUI.fire, gren: touchUI.gren, stick: !!touchUI.stick } }),
     freeze: (on) => { qaFrozen = frozen = !!on; },
     step: (n = 1) => { for (let i = 0; i < n; i++) tick(); render(); return window.__qa.state(); },
     input: (k, on) => { keys[k] = !!on; },
