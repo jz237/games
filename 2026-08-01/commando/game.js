@@ -344,10 +344,11 @@ const SETTINGS_DEFAULTS = {
   difficulty: 'recruit',       // recruit | soldier | veteran — see DIFFS
   perf: 'auto',                // auto | high | low — effect shedding tier
   battery: false,              // render at 30fps (logic stays 50Hz)
-  touchSize: 1.0,              // touch button scale (0.7-1.6)
+  touchSize: 1.15,             // touch button scale (0.7-1.6) — larger default reads better on phones
   touchOpacity: 0.35,          // touch overlay alpha (0.2-0.8)
   stickFixed: false,           // anchored stick base instead of floating
   aimAssist: true,             // touch-only shot magnetism toward the nearest target
+  touchAutoFire: true,         // touch fires by itself when an enemy is near — one thumb plays
   retro: false, scanlines: true,
   mode: 'normal',              // normal (checkpoints+continues) | arcade (original rules)
   keys: { fire: 'KeyZ', grenade: 'KeyX', pause: 'Space' },
@@ -427,7 +428,7 @@ document.addEventListener('visibilitychange', () => {
 // twin-zone touch UI: left half = floating 8-way stick, right half = fire zone
 // (hold to auto-fire at the measured min interval — same cadence cap as the
 // original), discrete grenade button, music toggle on the HUD ♪ corner.
-const GREN_BTN = { x: VIEW_W - 24, y: VIEW_H - 78, r: 13 };
+const GREN_BTN = { x: VIEW_W - 26, y: VIEW_H - 84, r: 16 };
 const DEMO_BTN = { x: VIEW_W / 2, y: 180, w: 84, h: 18 }; // desktop title hint box
 // it92: on touch the whole UI is BUTTONS, laid out against the live view height
 // (the panel used to be arrow-key-only and the title's only tap target was an
@@ -710,6 +711,7 @@ const SETTINGS_ITEMS = [
   { k: 'touchOpacity', label: 'TOUCH OPACITY', type: 'range', min: 0.2, max: 0.8, step: 0.1 },
   { k: 'stickFixed', label: 'FIXED STICK', type: 'bool' },
   { k: 'aimAssist', label: 'AIM ASSIST (TOUCH)', type: 'bool' },
+  { k: 'touchAutoFire', label: 'AUTO-FIRE (TOUCH)', type: 'bool' },
   { k: 'retro', label: 'RETRO FILTER', type: 'bool' },
   { k: 'scanlines', label: 'SCANLINES', type: 'bool' },
   { k: 'track', label: 'MUSIC TRACK', type: 'track' },
@@ -1520,7 +1522,16 @@ function tick() {
     const fire = keys.fire || touchUI.fire || gp.fire;
     if (J.fireCd > 0) J.fireCd--;
     const mg = G.mgT > 0;
-    const autoHold = touchUI.fire || ((Settings.autoFire || mg) && (keys.fire || gp.fire));
+    // touch auto-fire: the gun runs itself when something is in range, so one
+    // thumb can play — the fire side stays available for aiming bursts
+    let touchAuto = false;
+    if (touchUI.seen && Settings.touchAutoFire && !G.autoplay && !G.demo) {
+      for (const e of G.enemies) {
+        if (e.gone || e.deadTank) continue;
+        if (Math.abs(e.x - J.x) < 132 && Math.abs(e.y - J.y) < 132) { touchAuto = true; break; }
+      }
+    }
+    const autoHold = touchUI.fire || touchAuto || ((Settings.autoFire || mg) && (keys.fire || gp.fire));
     const fireWants = (fire && !J.firePrev) || autoHold;
     if (fireWants && J.fireCd === 0 && G.bullets.length < (mg ? 6 : MAX_BULLETS) && G.ammo > 0) {
       G.ammo--;
@@ -3147,9 +3158,11 @@ function render(alpha) {
       grd.addColorStop(0, 'rgba(5,8,4,0.62)'); grd.addColorStop(1, 'rgba(5,8,4,0)');
       ctx.fillStyle = grd; ctx.fillRect(0, 0, VIEW_W * S, VIEW_H * 0.55 * S);
     } else scrim(0.62);
-    textC('COMMANDO', 72, 30, '#e8d8b0', true);
-    textC('HD', 95, 16, '#e8b34a', true);
-    textC('A TRIBUTE TO THE CLASSIC', 110, 7, '#c9c0a6');
+    if (!touchUI.seen) {
+      textC('COMMANDO', 72, 30, '#e8d8b0', true);
+      textC('HD', 95, 16, '#e8b34a', true);
+      textC('A TRIBUTE TO THE CLASSIC', 110, 7, '#c9c0a6');
+    }
     // banner behind the call to action and credits so they read over the art
     if (!touchUI.seen) {
       ctx.fillStyle = 'rgba(5,8,4,0.55)';
@@ -3175,8 +3188,10 @@ function render(alpha) {
       textC('ORIGINAL © CAPCOM 1985 · AMIGA VERSION ELITE 1989', 201, 5, '#9a9280');
       textC('NON-COMMERCIAL FAN REMAKE — ALL-NEW ART & SOUND', 210, 5, '#9a9280');
     }
-    ctx.fillStyle = '#9ac'; ctx.font = `${5 * S}px monospace`;
-    ctx.fillText('⚙ SETTINGS [ESC]', 6 * S, 10 * S);
+    if (!touchUI.seen) { // touch players have a SETTINGS button in the stack
+      ctx.fillStyle = '#9ac'; ctx.font = `${5 * S}px monospace`;
+      ctx.fillText('⚙ SETTINGS [ESC]', 6 * S, 10 * S);
+    }
   } else if (G.state === 'ranking') {
     scrim(0.8);
     textC('RANKING', 44, 14, '#e33', true);
@@ -3370,6 +3385,20 @@ function render(alpha) {
   }
   ctx.restore(); // end card centring
   // ---- touch UI: real buttons, drawn in view space ----
+  if (touchUI.seen && G.state === 'title') {
+    // the logo lives in VIEW space on touch: upper third, clear of the buttons
+    const ly = VIEW_H * 0.15;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(5,8,4,0.45)';
+    ctx.fillRect(0, (ly - 16) * S, VIEW_W * S, 62 * S);
+    ctx.fillStyle = '#e8d8b0'; ctx.font = `bold ${30 * S}px monospace`;
+    ctx.fillText('COMMANDO', VIEW_W / 2 * S, (ly + 8) * S);
+    ctx.fillStyle = '#e8b34a'; ctx.font = `bold ${15 * S}px monospace`;
+    ctx.fillText('HD', VIEW_W / 2 * S, (ly + 24) * S);
+    ctx.fillStyle = '#c9c0a6'; ctx.font = `${6.5 * S}px monospace`;
+    ctx.fillText('A TRIBUTE TO THE CLASSIC', VIEW_W / 2 * S, (ly + 36) * S);
+    ctx.textAlign = 'start';
+  }
   if (touchUI.seen && (G.state === 'title' || G.state === 'ranking' || G.state === 'credits')) {
     ctx.fillStyle = '#9a9280'; ctx.font = `${4.6 * S}px monospace`; ctx.textAlign = 'center';
     ctx.fillText('ORIGINAL © CAPCOM 1985 · AMIGA VERSION ELITE 1989', VIEW_W / 2 * S, (VIEW_H - 16) * S);
@@ -3390,7 +3419,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.54.0-touchui', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.55.0-touchplay', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
