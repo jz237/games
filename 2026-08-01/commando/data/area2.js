@@ -2,7 +2,7 @@
 // Area 1's gate on the disk), but as of it84 the ART is rebuilt in the
 // ORIGINAL'S OWN VOCABULARY, read off the stitched disk map of Area 1:
 // hard dirt ground, SCATTERED short log-and-sandbag barricade segments at
-// staggered offsets (not one tidy band), a water crossing on a narrow bridge,
+// staggered offsets (not one tidy band), a water crossing on a wide causeway,
 // and a full-width stone wall with a central arch as the gate.
 window.AREA2 = {
   title: 'RIVER CROSSING — FORTRESS GATE',
@@ -48,4 +48,5 @@ window.AREA2 = {
 window.AREA2.ambience = { mode: "dusk", rain: true }; // it65: dusk downpour
 
 // it66: the rope bridge is a killing zone — the trap springs mid-crossing
-window.AREA2.ambushZone = { x0: 112, x1: 162, y0: 330, y1: 420, farY: 288, nearY: 452 };
+window.AREA2.water = [{ x0: 0, y0: 205, x1: 120, y1: 289 }, { x0: 174, y0: 205, x1: 274, y1: 289 }]; // it113: measured river band, causeway 120-174 dry
+window.AREA2.ambushZone = { x0: 120, x1: 174, y0: 220, y1: 280, farY: 200, nearY: 300 }; // it113: moved to the measured causeway

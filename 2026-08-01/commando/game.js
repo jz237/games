@@ -3419,7 +3419,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.55.0-touchplay', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.56.0-parity', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -3589,12 +3589,13 @@ if (qa) {
     invuln: (n) => { G.joe.invuln = n | 0; return G.joe.invuln; },
     give: (kind) => { G.pickups.push({ x: G.joe.x, y: G.joe.y, kind, t: 0 }); return true; },
     spawnType: (type, x, y) => { G.enemies.push(newEnemy(x !== undefined ? x : G.joe.x + 60, y !== undefined ? y : G.joe.y - 40, type, -1, 'traverse')); return type; },
-    setArea: (n) => { G.area = Math.max(1, n | 0); return { area: G.area, diff: diffMul(), loop: loopN() }; },
+    setArea: (n) => { G.area = Math.max(1, n | 0); applyArea(G.area); return { area: G.area, diff: diffMul(), loop: loopN() }; }, // it113: also REBIND A — G.area alone left masks/zones on the old area
     quiet: (n) => { G.quietT = n | 0; return G.quietT; },
     realInput: () => { G.realInput = true; return true; },
     autoplay: () => { startAutoplay(); return !!G.autoplay; },
     settingsIndex: (k) => SETTINGS_ITEMS.findIndex(it => it.k === k),
     ui: () => uiButtons(),
+    azdebug: () => JSON.stringify({ az: A.ambushZone, calm: G.calm, ambush: G.ambush, state: G.state, jx: G.joe.x, jy: G.joe.y, area: G.area }),
     uiLayout: () => settingsLayout(),
     // massacre everything except fleeing officers through the normal destroy
     // path — scenario cleanup that still exercises corpses/vehicle explosions
