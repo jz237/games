@@ -3077,7 +3077,7 @@ function render(alpha) {
     }
     ctx.fillStyle = '#9a916f'; ctx.font = `${4.5 * S}px monospace`; ctx.fillText('×' + Math.max(0, G.lives), 78 * S, 26 * S);
     // top-right: objective banner + status line
-    const obj = G.camY > 1265 ? 'REACH THE BRIDGE' : G.camY > 900 ? 'CROSS THE BRIDGE' : G.camY > 300 ? 'BREAK THE TRENCH LINE' : 'BREACH THE GATE';
+    const obj = G.camY > 1265 ? 'REACH THE OLD WALL' : G.camY > 900 ? 'PASS THE OLD WALL' : G.camY > 300 ? 'BREAK THE TRENCH LINE' : 'BREACH THE GATE';
     panel(VIEW_W - 112, 2, 110, 27);
     ctx.textAlign = 'right';
     ctx.fillStyle = '#d4b25a'; ctx.font = `bold ${4.5 * S}px monospace`;
@@ -3419,7 +3419,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.56.0-parity', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.57.0-a1wall', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
