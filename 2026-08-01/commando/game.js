@@ -892,10 +892,53 @@ function autopilotTick() {
     return;
   }
 
-  const gTarget = armour || (cluster >= 2 && foeD > 26 && foeD < 96 ? foe : null);
-  if (gTarget && G.grenades > 0 && J.grenCd === 0 && G.botT % 7 === 0) {
-    Object.assign(keys, faceKeys(gTarget.x - J.x, gTarget.y - J.y));
+  // grenades land exactly GREN_RANGE away (1.75px/f x 40f) in the facing
+  // direction — a throw only counts when the target sits ON the arc; tanks
+  // need 3 hits, so 3 grenades stay reserved for them
+  const GREN_RANGE = 70, GREN_SLOP = 18;
+  const onArc = (t) => Math.abs(Math.hypot(t.x - J.x, t.y - J.y) - GREN_RANGE) <= GREN_SLOP;
+  if (armour) {
+    const d = Math.hypot(armour.x - J.x, armour.y - J.y);
+    if (onArc(armour) && G.grenades > 0 && J.grenCd === 0 && G.botT % 7 === 0) {
+      Object.assign(keys, faceKeys(armour.x - J.x, armour.y - J.y));
+      keys.grenade = true;
+      return;
+    }
+    Object.assign(keys, faceKeys(armour.x - J.x, armour.y - J.y));
+    if (d < GREN_RANGE - GREN_SLOP) {
+      for (const k of BOT_KEYS) keys[k] = false;
+      Object.assign(keys, faceKeys(J.x - armour.x, J.y - armour.y));
+    }
+    keys.fire = true;
+    return;
+  }
+  if (cluster >= 2 && foe && onArc(foe) && G.grenades > 3 && J.grenCd === 0 && G.botT % 7 === 0) {
+    Object.assign(keys, faceKeys(foe.x - J.x, foe.y - J.y));
     keys.grenade = true;
+    return;
+  }
+
+  // FINALE: hold a firing line south of the gate while the garrison pours,
+  // then surge through the open exit — wandering mid-finale loses the war
+  if (G.finale && G.state === 'play') {
+    const ex2 = A.exit || { y: 58, x0: 112, x1: 162 };
+    const lane2 = (ex2.x0 + ex2.x1) / 2;
+    if (G.finale.phase === 'done') {
+      const want2 = { up: true };
+      if (Math.abs(J.x - lane2) > 6) want2[J.x < lane2 ? 'right' : 'left'] = true;
+      Object.assign(keys, want2);
+      keys.fire = G.botT % 5 < 3;
+      return;
+    }
+    const holdY = ex2.y + 52;
+    const want2 = {};
+    if (J.y < holdY - 6) want2.down = true;
+    else if (J.y > holdY + 10) want2.up = true;
+    if (Math.abs(J.x - lane2) > 8) want2[J.x < lane2 ? 'right' : 'left'] = true;
+    else if ((G.botT >> 4) & 1) want2[(G.botT >> 5) & 1 ? 'left' : 'right'] = true;
+    Object.assign(keys, want2);
+    if (foe) Object.assign(keys, faceKeys(foe.x - J.x, foe.y - J.y));
+    keys.fire = true;
     return;
   }
 
@@ -921,10 +964,16 @@ function autopilotTick() {
   if (loot && lootD < 44 && !threat) want = faceKeys(loot.x - J.x, loot.y - J.y);
   else if (pow && powD < 70 && !threat) want = faceKeys(pow.x - J.x, pow.y - J.y);
   else {
+    // advance on the exit lane — when off it, ALTERNATE pure-lateral ticks so
+    // alignment beats wall-slide (a diagonal push wedged the bot into the
+    // causeway's west bank for 70k ticks)
     const ex = A.exit || { x0: 116, x1: 160 };
     const lane = (ex.x0 + ex.x1) / 2;
-    want = { up: true };
-    if (Math.abs(J.x - lane) > 26) want[J.x < lane ? 'right' : 'left'] = true;
+    const off = J.x - lane;
+    if (Math.abs(off) > 8) {
+      want = { [off > 0 ? 'left' : 'right']: true };
+      if ((G.botT & 3) < 2) want.up = true;
+    } else want = { up: true };
   }
   const moved = Math.hypot(J.x - (G.botLastX || 0), J.y - (G.botLastY || 0));
   if (G.botT % 10 === 0) {
@@ -936,8 +985,13 @@ function autopilotTick() {
     if ((G.botT >> 6) & 1) want.up = true;
     if (G.botStuck > 8) G.botStuck = 0;
   }
+  if (desperate) {
+    // the scroll has been dead a long time: sweep the full width for the gap
+    const sweepX = ((G.botT >> 7) & 1) ? 40 : VIEW_W - 40;
+    want = { up: true, [J.x < sweepX ? 'right' : 'left']: true };
+  }
   Object.assign(keys, want);
-  if (G.botT % 11 < 3) keys.fire = true;
+  if (G.botT % 11 < 3 && G.ammo > 25) keys.fire = true; // suppress only with ammo to spare
 }
 function startAutoplay() {
   startGame();
@@ -972,10 +1026,20 @@ function startGame() {
   if (touchUI.seen && !tutorialSeen()) { markTutorialSeen(); setState('tutorial', 420); }
   else setState('intro', 130);
 }
+const MISSION_BONUS = 5000;
 function nextArea() {
+  const finishedLoop = G.area % AREAS.length === 0;   // the last area just fell
   G.area++; G.rescued = 0; G.ammo = Math.max(G.ammo, START_AMMO);
+  G.grenades = Math.max(G.grenades, 3);   // arcade convention: restock on advance
   applyArea(G.area);
-  resetWorld(); setState('map', 230); // campaign-map interlude, then the intro card
+  resetWorld();
+  if (finishedLoop) {
+    // it116: the campaign used to roll silently into the next loop — clearing
+    // all three areas now earns a real MISSION ACCOMPLISHED ceremony
+    G.score += MISSION_BONUS;
+    if (G.score > G.top) G.top = G.score;
+    setState('victory', 460);
+  } else setState('map', 230);
 }
 // point the engine at an area's data and art
 function applyArea(n) {
@@ -1300,6 +1364,7 @@ function respawnJoe() {
     if (!rectsAt(cand - 5, y - 8, 10, 12)) { x = cand; break; }
   }
   Object.assign(G.joe, { x, y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, grenCd: 0, invuln: DF().invuln, alive: true, deathT: 0, fireT: 0, throwT: 0, recoil: 0, duck: false, moving: false, walk: 0, walkDist: 0 });
+  G.ammo = Math.max(G.ammo, START_AMMO);   // it116: a fresh life means a fresh rifle — ammo-starvation spirals parked the demo at the causeway
 }
 
 function killJoe() {
@@ -1396,6 +1461,10 @@ function tick() {
         else setState('credits', 250);
       } else setState('title', 300);
     }
+    endTick(); return;
+  }
+  if (G.state === 'victory') {
+    if (--G.stateTimer <= 0) setState('map', 230);   // celebrate, then loop on, harder
     endTick(); return;
   }
   if (G.state === 'map') {
@@ -3227,6 +3296,14 @@ function render(alpha) {
     textC('AREA ' + G.area, 102, 20, '#e8d8b0', true);
     if (G.area > AREAS.length) textC('LOOP ' + (Math.floor((G.area - 1) / AREAS.length) + 1), 88, 6, '#c8a24a');
     textC(A.title || 'LANDING ZONE — FORTRESS GATE', 124, 7, '#b8b09a');
+  } else if (G.state === 'victory') {
+    scrim(0.82);
+    textC('MISSION ACCOMPLISHED', 74, 15, '#ffd257', true);
+    textC('ALL AREAS LIBERATED', 96, 8, '#e8d8b0');
+    textC('BONUS  ' + MISSION_BONUS, 116, 9, '#fff', true);
+    textC('POWS RESCUED ' + G.rescued + ' · CONTINUES ' + G.continues, 132, 6, '#c9c0a6');
+    textC('THE CAMPAIGN CONTINUES — THE ENEMY REGROUPS', 152, 6, '#9a9280');
+    if (blink) textC('LOOP ' + (loopN() + 1), 172, 8, '#e8b34a', true);
   } else if (G.state === 'map') {
     // painted campaign map: full-bleed in the TALL view (neutralise cardOff)
     ctx.translate(0, -cardOff * S);
@@ -3419,7 +3496,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.57.0-a1wall', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.58.0-victory', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
