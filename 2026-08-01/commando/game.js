@@ -631,7 +631,7 @@ const G = {
   score: 0, top: loadScores()[0][1], lives: LIVES_START, grenades: 3, ammo: START_AMMO,
   area: 1, tally: 0, entry: null, lastEntry: null, paused: false, postGame: false,
   settingsSel: 0, settingsFrom: 'title', remap: null, cp: 1616, continues: 0,
-  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0, demo: false, autoplay: false, botT: 0, botStuck: 0, ambush: null, burst: null,
+  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0, demo: false, autoplay: false, botT: 0, botStuck: 0, botLaneX: 0, botLaneUntil: 0, botLaneStuck: 0, botEscape: 0, botNoTrail: 0, botEscSide: 1, botWp: null, botPlanAt: 0, botAvoid: [], botEngT: 0, botEngScore: -1, botDisengage: 0, botArbAt: 0, botArbX: 0, botArbY: 0, botArbScore: -1, botBreak: 0, botNullN: 0, botRetreatUntil: 0, ambush: null, burst: null,
   camY: A.height - VIEW_H,  // camera top in world coords (worldReady arms below)
   joe: { x: A.spawn.x, y: A.spawn.y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, firePrev: false, grenCd: 0, grenPrev: false, invuln: 0, alive: true, walk: 0, walkDist: 0, moving: false, fireT: 0, throwT: 0, recoil: 0, duck: false, deathT: 0 },
   bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
@@ -831,6 +831,92 @@ function markTutorialSeen() { try { localStorage.setItem('commandoHD.tutorial', 
 // clears gates and rolls into the next area — indefinitely, until you touch a
 // control. Deliberately imperfect (it dies sometimes) so it looks like play.
 const BOT_KEYS = ['up', 'down', 'left', 'right', 'fire', 'grenade'];
+// it117: the bot plans on the WALKABILITY MASK instead of wall-sliding blind —
+// "it can't get by trees" was true because it never looked at the ground truth
+function botWalkable(x, y) { return x > 6 && x < A.width - 6 && !rectsAt(x - 4, y - 8, 8, 10); }
+function botLaneOpen(x, y) { return botWalkable(x, y) && botWalkable(x, y - 12) && botWalkable(x, y - 24); }
+function botLaneFor(y) {
+  if (A.route) for (const r of A.route) if (y >= r.y0 && y < r.y1) return r.lane;
+  const ex = A.exit || { x0: 116, x1: 160 };
+  return (ex.x0 + ex.x1) / 2;
+}
+// it117 FINAL FORM: a real breadth-first pathfinder on the walkability grid.
+// Plans a windowed path toward the route lane every ~25 ticks and follows the
+// first waypoint — replacing the lane-hunt/escape hacks that could fight each
+// other into corners.
+// BFS cells use a SLIMMER probe than Joe's engine box: the 10px-tall probe
+// read the ~10px river-bank strip as water-blocked and starved the planner of
+// the eastward path to the causeway; the engine's own axis-slide handles the
+// tight fit when the waypoint threads it
+function botCellOpen(x, y) { return x > 6 && x < A.width - 6 && !rectsAt(x - 3, y - 4, 6, 6); }
+function botCellPoint(x, y) { return x > 6 && x < A.width - 6 && !rectsAt(x - 1, y - 1, 2, 2); }
+function botPlanStep(loose) {
+  const probe = loose ? botCellPoint : botCellOpen;
+  const J = G.joe;
+  const ST = 4, AHEAD = 150, BACK = 56;
+  // FULL-WIDTH window: a lateral clip once hid the only opening through the
+  // dragon-teeth field and pinned the bot in the west margin (67x52 cells is
+  // still a trivial grid)
+  const x0 = 8, x1 = A.width - 8;
+  let yT = Math.max(8, J.y - AHEAD), yB = Math.min(A.height - 8, J.y + BACK);
+  // area handoffs can leave a stale J.y outside the new area for a tick —
+  // an inverted window meant a negative typed-array length and a crash
+  if (yB <= yT) { yT = Math.max(8, Math.min(yT, A.height - 40)); yB = yT + 32; }
+  const W2 = ((x1 - x0) / ST | 0) + 1, H2 = ((yB - yT) / ST | 0) + 1;
+  const open = new Uint8Array(W2 * H2);
+  const avoid = (G.botAvoid || []).filter(a => a.until > G.botT);
+  G.botAvoid = avoid;
+  for (let gy = 0; gy < H2; gy++) for (let gx = 0; gx < W2; gx++) {
+    const wx = x0 + gx * ST, wy = yT + gy * ST;
+    let ok = probe(wx, wy);
+    if (ok) for (const a of avoid) { if (Math.abs(wx - a.x) < 9 && Math.abs(wy - a.y) < 9) { ok = false; break; } }
+    open[gy * W2 + gx] = ok ? 1 : 0;
+  }
+  let sx = Math.round((J.x - x0) / ST), sy = Math.round((J.y - yT) / ST);
+  sx = Math.max(0, Math.min(W2 - 1, sx)); sy = Math.max(0, Math.min(H2 - 1, sy));
+  const si = sy * W2 + sx;
+  if (!open[si]) { // standing in a blocked cell: free the start
+    open[si] = 1;
+  }
+  const prev = new Int32Array(W2 * H2).fill(-1);
+  const q = new Int32Array(W2 * H2);
+  let qh = 0, qt = 0;
+  q[qt++] = si; prev[si] = si;
+  const lane = botLaneFor(Math.max(8, J.y - 120));
+  let best = si, bestSc = 1e9;
+  while (qh < qt) {
+    const cur = q[qh++];
+    const gx = cur % W2, gy = (cur / W2) | 0;
+    const sc = (yT + gy * ST) * 3 + Math.abs((x0 + gx * ST) - lane);
+    if (sc < bestSc) { bestSc = sc; best = cur; }
+    if (gx + 1 < W2 && open[cur + 1] && prev[cur + 1] < 0) { prev[cur + 1] = cur; q[qt++] = cur + 1; }
+    if (gx > 0 && open[cur - 1] && prev[cur - 1] < 0) { prev[cur - 1] = cur; q[qt++] = cur - 1; }
+    if (gy > 0 && open[cur - W2] && prev[cur - W2] < 0) { prev[cur - W2] = cur; q[qt++] = cur - W2; }
+    if (gy + 1 < H2 && open[cur + W2] && prev[cur + W2] < 0) { prev[cur + W2] = cur; q[qt++] = cur + W2; }
+  }
+  if (best === si) return loose ? null : botPlanStep(true); // strict boxed: retry at point resolution
+  let cur = best, first = best;
+  while (prev[cur] !== si && prev[cur] !== cur) { cur = prev[cur]; first = cur; }
+  if (prev[cur] === si) first = cur;
+  // hand back a waypoint a few cells along the path, not the adjacent cell —
+  // adjacent cells produce dithering at grid resolution
+  let wp = best, back = 0;
+  for (let c = best; c !== si && prev[c] !== c; c = prev[c]) back++;
+  let hops = Math.max(0, back - 4);
+  wp = best;
+  for (let i = 0; i < hops && prev[wp] !== si && prev[wp] !== wp; i++) wp = prev[wp];
+  return { x: x0 + (wp % W2) * ST, y: yT + ((wp / W2) | 0) * ST };
+}
+function botFindLane(fromX, y, preferX) {
+  const toward = preferX >= fromX ? 1 : -1;
+  for (let d = 6; d <= 200; d += 6) {
+    for (const sgn of [toward, -toward]) {
+      const cx = fromX + sgn * d;
+      if (botLaneOpen(cx, y)) return cx;
+    }
+  }
+  return -1;
+}
 function faceKeys(dx, dy) { // 8-way quantize toward a target
   const out = {};
   if (Math.abs(dx) > Math.abs(dy) * 0.4142) out[dx < 0 ? 'left' : 'right'] = true;
@@ -847,6 +933,17 @@ function autopilotTick() {
     if (G.state === 'continue') keys.fire = (G.botT % 24) < 4;
     return;
   }
+
+  // PROGRESS ARBITER — the reflexes below (evade, engage, grenade-shaping,
+  // the finale line) can each preempt movement forever under enough pressure;
+  // if a 400-tick window produces no score and <30px of displacement, force a
+  // BREAKTHROUGH: pathfinder-only movement with suppressive fire
+  if (G.botT - G.botArbAt >= 400) {
+    const disp = Math.hypot(J.x - G.botArbX, J.y - G.botArbY);
+    if (G.score === G.botArbScore && disp < 30) G.botBreak = G.botT + 250;
+    G.botArbAt = G.botT; G.botArbX = J.x; G.botArbY = J.y; G.botArbScore = G.score;
+  }
+  const breakthrough = G.botT <= G.botBreak;
 
   let foe = null, foeD = 1e9, cluster = 0, armour = null;
   for (const e of G.enemies) {
@@ -871,7 +968,7 @@ function autopilotTick() {
 
   // --- stay alive first: sidestep aimed rounds and anything about to run us
   // over (a demo that dies every few seconds sells nothing) ---
-  for (const b of G.ebullets) {
+  if (!breakthrough) for (const b of G.ebullets) {
     const bx = b.x - J.x, by = b.y - J.y;
     const bs = Math.hypot(b.vx, b.vy) || 1;
     const ux = b.vx / bs, uy = b.vy / bs;
@@ -882,7 +979,7 @@ function autopilotTick() {
     Object.assign(keys, faceKeys(side * -uy * 10, side * ux * 10));
     return;
   }
-  for (const e of G.enemies) {
+  if (!breakthrough) for (const e of G.enemies) {
     if (e.type !== 'moto' && e.type !== 'truck') continue;
     const d = Math.hypot(e.x - J.x, e.y - J.y);
     if (d > 55) continue;
@@ -897,7 +994,7 @@ function autopilotTick() {
   // need 3 hits, so 3 grenades stay reserved for them
   const GREN_RANGE = 70, GREN_SLOP = 18;
   const onArc = (t) => Math.abs(Math.hypot(t.x - J.x, t.y - J.y) - GREN_RANGE) <= GREN_SLOP;
-  if (armour) {
+  if (armour && !breakthrough) {
     const d = Math.hypot(armour.x - J.x, armour.y - J.y);
     if (onArc(armour) && G.grenades > 0 && J.grenCd === 0 && G.botT % 7 === 0) {
       Object.assign(keys, faceKeys(armour.x - J.x, armour.y - J.y));
@@ -920,7 +1017,7 @@ function autopilotTick() {
 
   // FINALE: hold a firing line south of the gate while the garrison pours,
   // then surge through the open exit — wandering mid-finale loses the war
-  if (G.finale && G.state === 'play') {
+  if (G.finale && G.state === 'play' && !breakthrough) {
     const ex2 = A.exit || { y: 58, x0: 112, x1: 162 };
     const lane2 = (ex2.x0 + ex2.x1) / 2;
     if (G.finale.phase === 'done') {
@@ -952,28 +1049,62 @@ function autopilotTick() {
   if (G.botT % 20 === 0) { if (camMoved) G.botPush = 0; else G.botPush = (G.botPush || 0) + 1; G.botCam = G.camY; }
   const desperate = (G.botPush || 0) > 9;
 
-  if (threat && !desperate) {
-    Object.assign(keys, faceKeys(foe.x - J.x, foe.y - J.y));
-    keys.fire = true;
-    // never reverse into the map we already cleared — sidestep instead
-    if (foeD < 15) { keys.up = false; keys.down = false; keys[(G.botT >> 4) & 1 ? 'left' : 'right'] = true; }
-    return;
+  if (threat && !desperate && !breakthrough && G.botT > G.botDisengage) {
+    // ENGAGE NO-PROGRESS GUARD: a foe camped behind cover can hold the bot
+    // here forever, firing into a rock — if 250 ticks of engagement produce
+    // no score, hand control back to the pathfinder (fire stays hot)
+    if (G.botEngScore !== G.score) { G.botEngScore = G.score; G.botEngT = G.botT; }
+    if (G.botT - G.botEngT > 250) { G.botDisengage = G.botT + 180; G.botEngT = G.botT; }
+    else {
+      Object.assign(keys, faceKeys(foe.x - J.x, foe.y - J.y));
+      keys.fire = true;
+      // never reverse into the map we already cleared — sidestep instead
+      if (foeD < 15) { keys.up = false; keys.down = false; keys[(G.botT >> 4) & 1 ? 'left' : 'right'] = true; }
+      return;
+    }
   }
 
+  // a chase is only worth it if the first strides toward it are open ground —
+  // trinket-baiting into palm pockets is how the bot got wrapped in trees
+  const chaseable = (t) => {
+    const dx2 = Math.sign(t.x - J.x) * 10, dy2 = Math.sign(t.y - J.y) * 10;
+    return botWalkable(J.x + dx2, J.y + dy2) && botWalkable((J.x + t.x) / 2, (J.y + t.y) / 2);
+  };
   let want;
-  if (loot && lootD < 44 && !threat) want = faceKeys(loot.x - J.x, loot.y - J.y);
-  else if (pow && powD < 70 && !threat) want = faceKeys(pow.x - J.x, pow.y - J.y);
+  if (loot && lootD < 44 && !threat && chaseable(loot)) want = faceKeys(loot.x - J.x, loot.y - J.y);
+  else if (pow && powD < 70 && !threat && chaseable(pow)) want = faceKeys(pow.x - J.x, pow.y - J.y);
   else {
-    // advance on the exit lane — when off it, ALTERNATE pure-lateral ticks so
-    // alignment beats wall-slide (a diagonal push wedged the bot into the
-    // causeway's west bank for 70k ticks)
-    const ex = A.exit || { x0: 116, x1: 160 };
-    const lane = (ex.x0 + ex.x1) / 2;
-    const off = J.x - lane;
-    if (Math.abs(off) > 8) {
-      want = { [off > 0 ? 'left' : 'right']: true };
-      if ((G.botT & 3) < 2) want.up = true;
-    } else want = { up: true };
+    // PATHFINDER ADVANCE: replan a BFS path on the walkability grid every 25
+    // ticks (or when the waypoint is reached) and walk the waypoint
+    const wpStale = !G.botWp || G.botT - G.botPlanAt > 25
+      || (Math.abs(J.x - G.botWp.x) < 5 && Math.abs(J.y - G.botWp.y) < 5);
+    if (wpStale) {
+      G.botWp = botPlanStep();
+      G.botPlanAt = G.botT;
+    }
+    if (G.botWp) {
+      // micro-stuck: if following makes no movement for 30 ticks, force replan
+      const mv = Math.abs(J.x - (G.botFx || J.x)) + Math.abs(J.y - (G.botFy || J.y));
+      G.botFollowStuck = mv < 0.7 ? (G.botFollowStuck || 0) + 1 : 0;
+      G.botFx = J.x; G.botFy = J.y;
+      if (G.botFollowStuck > 30) {
+        // a waypoint the engine cannot actually reach: remember it and route
+        // around next plan (the slim BFS probe threads gaps Joe cannot fit)
+        G.botFollowStuck = 0;
+        if (G.botWp) { G.botAvoid.push({ x: G.botWp.x, y: G.botWp.y, until: G.botT + 1500 }); if (G.botAvoid.length > 12) G.botAvoid.shift(); }
+        G.botWp = null; want = { down: true };
+      }
+      else want = faceKeys(G.botWp.x - J.x, G.botWp.y - J.y);
+    } else {
+      // boxed in (BFS found nothing): brief retreat-and-swing, then replan —
+      // and if planning fails REPEATEDLY here, escalate to a long southward
+      // reset that walks clean out of the pocket's geometry before retrying
+      G.botNullN++;
+      if (G.botNullN > 8) { G.botRetreatUntil = G.botT + 120; G.botNullN = 0; }
+      want = { down: true, [((G.botT >> 5) & 1) ? 'left' : 'right']: true };
+    }
+    if (G.botT <= G.botRetreatUntil) want = { down: true };
+    if (G.botWp) G.botNullN = 0;
   }
   const moved = Math.hypot(J.x - (G.botLastX || 0), J.y - (G.botLastY || 0));
   if (G.botT % 10 === 0) {
@@ -996,7 +1127,7 @@ function autopilotTick() {
 function startAutoplay() {
   startGame();
   G.autoplay = true; G.realInput = false;
-  G.botT = 0; G.botStuck = 0; G.botLastX = G.joe.x; G.botLastY = G.joe.y;
+  G.botT = 0; G.botStuck = 0; G.botLaneX = 0; G.botLaneUntil = 0; G.botLaneStuck = 0; G.botEscape = 0; G.botNoTrail = 0; G.botEscSide = 1; G.botWp = null; G.botPlanAt = 0; G.botAvoid = []; G.botEngT = 0; G.botEngScore = -1; G.botDisengage = 0; G.botArbAt = 0; G.botArbX = 0; G.botArbY = 0; G.botArbScore = -1; G.botBreak = 0; G.botNullN = 0; G.botRetreatUntil = 0; G.botLastX = G.joe.x; G.botLastY = G.joe.y;
   try { if (window.Music) { ensureMusic(); if (Music.mode !== 'original') Music.toggle(); } } catch (e) {}
 }
 function endAutoplay() {
@@ -1354,8 +1485,11 @@ function detonate(x, y) {
 // that killed you is still standing on the respawn spot and re-kills instantly
 function respawnJoe() {
   G.enemies = []; G.lobs = []; G.nades = []; G.corpses = []; G.ebullets = []; G.shells = []; G.pickups = [];
-  // an unfinished gate assault re-arms — the garrison reforms while Joe is down
-  if (G.finale && G.finale.phase !== 'done') G.finale = null;
+  // it117: an unfinished gate assault PERSISTS across deaths — the arcade
+  // original resumes the assault after a life, it does not reform the whole
+  // garrison (the old full reset made the finale a war of attrition that a
+  // respawning player, or the demo on the tall mobile view, could never win)
+  if (G.finale && G.finale.phase !== 'done') G.finale.t = 0;
   if (G.ambush && G.ambush.phase === 'fight') G.ambush = null; // trap resets too
   const y = Math.min(A.height - 20, G.camY + VIEW_H - 26);
   let x = A.spawn.x;
@@ -3496,7 +3630,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.58.0-victory', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.59.0-pathfind', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -3672,6 +3806,7 @@ if (qa) {
     autoplay: () => { startAutoplay(); return !!G.autoplay; },
     settingsIndex: (k) => SETTINGS_ITEMS.findIndex(it => it.k === k),
     ui: () => uiButtons(),
+    botdebug: () => JSON.stringify({ wp: G.botWp, brk: G.botBreak, t: G.botT, avoid: (G.botAvoid || []).length, dis: G.botDisengage }),
     azdebug: () => JSON.stringify({ az: A.ambushZone, calm: G.calm, ambush: G.ambush, state: G.state, jx: G.joe.x, jy: G.joe.y, area: G.area }),
     uiLayout: () => settingsLayout(),
     // massacre everything except fleeing officers through the normal destroy

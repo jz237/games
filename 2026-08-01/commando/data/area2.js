@@ -48,5 +48,8 @@ window.AREA2 = {
 window.AREA2.ambience = { mode: "dusk", rain: true }; // it65: dusk downpour
 
 // it66: the rope bridge is a killing zone — the trap springs mid-crossing
+// it117: the demo's route knowledge — the parity trail runs EAST through the
+// trench belt, then centres for the breach/causeway/gate (read off the masks)
+window.AREA2.route = [{ y0: 500, y1: 9999, lane: 182 }, { y0: 0, y1: 500, lane: 142 }];
 window.AREA2.water = [{ x0: 0, y0: 205, x1: 120, y1: 289 }, { x0: 174, y0: 205, x1: 274, y1: 289 }]; // it113: measured river band, causeway 120-174 dry
 window.AREA2.ambushZone = { x0: 120, x1: 174, y0: 220, y1: 280, farY: 200, nearY: 300 }; // it113: moved to the measured causeway
