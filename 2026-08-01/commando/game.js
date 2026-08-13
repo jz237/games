@@ -12,6 +12,9 @@ const VIEW_H_MAX = 620;                // sanity cap for extreme aspect ratios
 // it81: a tall portrait view shows ~2.6x more world, which shrinks everyone on
 // screen. Scale the CAST (draw size AND the character-sized hit radii, so the
 // relationship between what you see and what connects never changes) back up.
+// it118: smoothstep for pose crossfades — linear blends spend too long in the
+// ambiguous double-exposure middle; easing holds each pose then melts quickly
+function poseEase(a) { return a * a * (3 - 2 * a); }
 function charScale() {
   return VIEW_H > VIEW_H_BASE ? Math.min(1.7, 1 + (VIEW_H - VIEW_H_BASE) / VIEW_H_BASE * 0.45) : 1;
 }
@@ -2691,7 +2694,7 @@ function render(alpha) {
         // it78 crossfade: melt this stride frame into the next one
         const nk = key.replace(/-(\d)$/, (m, fr) => '-' + (((+fr) + 1) & 3));
         blendImg = IMGS[nk] || null;
-        blendA = Math.max(0, Math.min(1, (e.walkDist || 0) / WALK_STRIDE));
+        blendA = poseEase(Math.max(0, Math.min(1, (e.walkDist || 0) / WALK_STRIDE)));
       }
     }
     drawShadow(ex, ey, (corpse ? 7 : e.type === 'tank' ? 13 : e.type === 'truck' ? 11 : e.type === 'mortar' ? 8 : 5) * charScale());
@@ -2702,7 +2705,11 @@ function render(alpha) {
     const foot = e.type === 'tank' ? 80 / 112 : 1;
     const w = h * (img.width / img.height);
     ctx.save();
-    ctx.translate(ex * S, (ey + 4) * S);
+    // stride-synced bob for walkers (vehicles keep their judder/sway lines);
+    // anchors snap to device pixels — fractional coords shimmer at 1.7x scale
+    const isWalker = !corpse && e.type !== 'moto' && e.type !== 'truck' && e.type !== 'tank';
+    const ebob = (isWalker && stride && !perfLow) ? -Math.abs(Math.sin(((e.walkFrame || 0) + (e.walkDist || 0) / WALK_STRIDE) * Math.PI * 0.5)) * 0.8 * charScale() : 0;
+    ctx.translate(Math.round(ex * S), Math.round((ey + 4 + ebob) * S));
     if (preRot) ctx.rotate(preRot); // screen-space bank, before the mirror
     const squash = e.turnT > 0 ? 0.5 + 0.5 * (1 - e.turnT / 4) : 1;
     ctx.scale(face * squash, 1);
@@ -2847,13 +2854,20 @@ function render(alpha) {
       const moving = J.moving;
       const frame = moving ? (J.walk & 3) : 0;
       img = IMGS[`sprites/hero-${view}-${frame}`];
+      // facing swaps (n/s/e) melt across 5 ticks instead of hard-cutting
+      if (J.viewPrev === undefined) { J.viewPrev = view; J.viewBlendT = 0; }
+      if (view !== J.viewPrev) {
+        if (!J.viewBlendT) { J.viewFrom = J.viewPrev; J.viewBlendT = 5; }
+        J.viewPrev = view;
+      }
+      if (J.viewBlendT > 0) J.viewBlendT--;
       // it78: crossfade into the NEXT stride frame by distance fraction so the
       // painted 4-frame cycle reads as continuous motion
       if (moving && !perfLow) {
         heroBlend = IMGS[`sprites/hero-${view}-${(frame + 1) & 3}`] || null;
         // ramp the FULL 0->1 so the next pose has completely taken over by the
         // stride boundary — the old 0.55 cap left a visible snap every step
-        heroBlendA = Math.max(0, Math.min(1, J.walkDist / WALK_STRIDE));
+        heroBlendA = poseEase(Math.max(0, Math.min(1, J.walkDist / WALK_STRIDE)));
       }
       // continuous phase from distance covered — a frame-index sine snapped
       if (moving) lean = Math.sin((J.walk + J.walkDist / WALK_STRIDE) * 1.57) * 0.035;
@@ -2871,15 +2885,31 @@ function render(alpha) {
       ctx.save();
       const flip = fx < 0 ? -1 : 1;
       const jsquash = J.turnAnim > 0 ? 0.5 + 0.5 * (1 - J.turnAnim / 4) : 1;
-      ctx.translate(jx * S, (jy - cy + 4) * S); ctx.scale(flip * jsquash, 1);
+      // stride-synced bob: two footfalls per painted cycle, interpolated so it
+      // stays 60fps-smooth; the shadow breathes inversely at ground contact
+      const ph = J.walk + J.walkDist / WALK_STRIDE;
+      const bob = (J.alive && G.state === 'play' && J.moving && !perfLow) ? -Math.abs(Math.sin(ph * Math.PI * 0.5)) * 0.9 * charScale() : 0;
+      const breathe = (!J.moving && J.alive && !perfLow) ? 1 + Math.sin(G.wt * 0.045) * 0.008 : 1;
+      // pixel-snapped anchor: fractional device coords shimmer at 1.7x scale
+      ctx.translate(Math.round(jx * S), Math.round((jy - cy + 4 + bob) * S));
+      ctx.scale(flip * jsquash, breathe);
       if (lean) ctx.rotate(lean);
       if (J.recoil > 0) ctx.translate(0, J.recoil * 0.5 * S); // kick back from the shot
-      if (heroBlend && heroBlendA > 0.02) ctx.globalAlpha = 1 - heroBlendA;
+      const vb = J.viewBlendT > 0 && !perfLow ? J.viewBlendT / 5 : 0;
+      const hf2 = (J.alive && J.moving) ? (J.walk & 3) : 0;
+      const fromImg = vb > 0 ? IMGS[`sprites/hero-${J.viewFrom}-${hf2}`] : null;
+      if (heroBlend && heroBlendA > 0.02) ctx.globalAlpha = (1 - heroBlendA) * (1 - vb);
+      else if (vb > 0) ctx.globalAlpha = 1 - vb;
       ctx.drawImage(img, -w / 2 * S, -h * S, w * S, h * S);
       if (heroBlend && heroBlendA > 0.02) {
         const w2 = h * (heroBlend.width / heroBlend.height);
-        ctx.globalAlpha = heroBlendA;
+        ctx.globalAlpha = heroBlendA * (1 - vb);
         ctx.drawImage(heroBlend, -w2 / 2 * S, -h * S, w2 * S, h * S);
+      }
+      if (fromImg && vb > 0) {
+        const w3 = h * (fromImg.width / fromImg.height);
+        ctx.globalAlpha = vb;
+        ctx.drawImage(fromImg, -w3 / 2 * S, -h * S, w3 * S, h * S);
       }
       ctx.globalAlpha = 1;
       ctx.restore();
@@ -3630,7 +3660,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.59.0-pathfind', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.60.0-fluid', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
