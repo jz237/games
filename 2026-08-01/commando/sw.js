@@ -49,6 +49,11 @@ const isCode = (req, url) =>
   req.mode === 'navigate' ||
   /\.(?:html|js|webmanifest|json)$/i.test(url.pathname);
 
+// it125: the page's update toast asks the waiting worker to take over now
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);

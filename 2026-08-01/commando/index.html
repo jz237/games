@@ -35,7 +35,30 @@
 // PWA offline cache — https only, so the LAN dev server (http) and the
 // headless QA rig (http://127.0.0.1) can never be served stale assets.
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      // it125 UPDATE TOAST — a new build used to land silently and only appear
+      // after the player happened to close the app twice. Now the waiting
+      // worker announces itself and one tap takes it.
+      const offer = (worker) => {
+        if (!worker || !navigator.serviceWorker.controller) return;
+        const bar = document.createElement('div');
+        bar.textContent = 'NEW VERSION READY — TAP TO RELOAD';
+        bar.setAttribute('role', 'status');
+        bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:22px;z-index:9999;'
+          + 'background:#1b1d14;color:#ffd257;border:1px solid #ffd257;border-radius:4px;'
+          + 'padding:10px 16px;font:12px/1.4 ui-monospace,Menlo,monospace;letter-spacing:.06em;'
+          + 'cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.55)';
+        bar.onclick = () => { worker.postMessage({ type: 'SKIP_WAITING' }); location.reload(); };
+        document.body.appendChild(bar);
+      };
+      if (reg.waiting) offer(reg.waiting);
+      reg.addEventListener('updatefound', () => {
+        const w = reg.installing;
+        if (w) w.addEventListener('statechange', () => { if (w.state === 'installed') offer(w); });
+      });
+    }).catch(() => {});
+  });
 }
 </script>
 <div id="sitelinks">

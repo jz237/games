@@ -15,6 +15,23 @@ const VIEW_H_MAX = 620;                // sanity cap for extreme aspect ratios
 // it118: smoothstep for pose crossfades — linear blends spend too long in the
 // ambiguous double-exposure middle; easing holds each pose then melts quickly
 function poseEase(a) { return a * a * (3 - 2 * a); }
+// how many frames a sprite set actually shipped with (4 or 8), cached
+const FRAME_N = {};
+function frameCount(set) {
+  let n = FRAME_N[set];
+  if (n === undefined) {
+    n = 0;
+    while (IMGS[`sprites/${set}-${n}`] && n < 8) n++;
+    // NEVER cache a count of 0/1: the first call can land before the sprite
+    // loader finishes, and a frozen count of 1 stalls the whole stride clock
+    if (n >= 2) FRAME_N[set] = n; else n = 4;
+  }
+  return n;
+}
+// a walk cycle covers the same GROUND DISTANCE whatever its frame count, so an
+// 8-frame set reads twice as finely without running twice as fast
+const CYCLE_DIST = 40;
+function strideFor(set) { return CYCLE_DIST / frameCount(set); }
 function charScale() {
   return VIEW_H > VIEW_H_BASE ? Math.min(1.7, 1 + (VIEW_H - VIEW_H_BASE) / VIEW_H_BASE * 0.45) : 1;
 }
@@ -72,6 +89,7 @@ function scrollLine() { return Math.round(VIEW_H * (100 / 224)); }
 // sprite render heights: 274 logical px = 26 m (plate scale), so a 1.8 m
 // soldier is ~19 logical px tall — matched to the painted set dressing
 const HERO_H = 23, ENEMY_H = 22;       // it78: +21% presentation scale (user: "larger")
+const SHAKE_MAX = 16;          // the largest shake any event requests
 const WALK_STRIDE = 10;                // logical px per run frame. it81: was 5.2,
 // which cycled the 4-frame walk ~5x/second — too fast to read, which is what
 // "choppy" actually was. 10 gives ~2.4 cycles/s at run speed (arcade cadence).
@@ -217,7 +235,10 @@ const SPRITE_NAMES = ['sprites/hero', 'sprites/rifleman', 'sprites/officer', 'sp
   'ui/portrait', 'ui/rifle', 'ui/keyart.webp', 'ui/map.webp', 'tiles/sand', 'tiles/grass',
   'props/palm', 'props/boulder', 'props/pond', 'props/trench', 'props/gate', 'props/wreck', 'sprites/truck-wreck',
   'props/obj-0', 'props/obj-1', 'props/obj-2', 'props/obj-3'];
-for (const set of SPRITE_SETS) for (let i = 0; i < 4; i++) SPRITE_NAMES.push(`sprites/${set}-${i}`);
+// it120: sets may carry 4 OR 8 frames — 8-frame cycles are what separate a
+// readable run from the 1985-budget 4-frame flip. Missing indices just never
+// resolve, so a set can be upgraded one direction at a time.
+for (const set of SPRITE_SETS) for (let i = 0; i < 8; i++) SPRITE_NAMES.push(`sprites/${set}-${i}`);
 for (const name of SPRITE_NAMES) {
   const img = new Image();
   // names may carry an explicit extension (WebP for the big key art)
@@ -344,6 +365,7 @@ const SETTINGS_DEFAULTS = {
   autoFire: false,             // keyboard hold-to-fire (touch always auto-fires at the cap)
   leftHand: false,
   haptics: true,               // vibration on touch devices (where supported)
+  reduceMotion: false,         // accessibility: no shake, no flash, no bob
   difficulty: 'recruit',       // recruit | soldier | veteran — see DIFFS
   perf: 'auto',                // auto | high | low — effect shedding tier
   battery: false,              // render at 30fps (logic stays 50Hz)
@@ -537,10 +559,31 @@ function onTouch(e) {
   let dx = 0, dy = 0;
   const st = touchUI.stick;
   if (st) {
-    const ox = st.cx - st.ox, oy = st.cy - st.oy;
-    if (Math.hypot(ox, oy) > 6) { // deadzone, then 8-way quantize (45° sectors)
-      if (Math.abs(ox) > Math.abs(oy) * 0.4142) dx = Math.sign(ox);
-      if (Math.abs(oy) > Math.abs(ox) * 0.4142) dy = Math.sign(oy);
+    let ox = st.cx - st.ox, oy = st.cy - st.oy;
+    const mag = Math.hypot(ox, oy);
+    // it124 THUMB-FOLLOW: past a travel limit the origin is dragged along, so
+    // a long slide keeps the stick under the thumb instead of stranding it
+    const REACH = 22 * Settings.touchSize;
+    if (mag > REACH) {
+      const k = (mag - REACH) / mag;
+      st.ox += ox * k; st.oy += oy * k;
+      ox = st.cx - st.ox; oy = st.cy - st.oy;
+    }
+    // deadzone scales with the player's chosen control size
+    const DEAD = 5 * Settings.touchSize;
+    if (Math.hypot(ox, oy) > DEAD) {
+      // SECTOR HYSTERESIS: a thumb resting near a 45-degree boundary used to
+      // chatter between two directions every frame. Holding the current sector
+      // needs less angle than entering a new one.
+      const prev = touchUI.dir || { x: 0, y: 0 };
+      const held = (sx, sy) => prev.x === sx && prev.y === sy;
+      const wide = 0.4142, narrow = 0.3249;   // 45 deg to enter, ~36 deg to hold
+      const rx = Math.abs(ox), ry = Math.abs(oy);
+      const kx = held(Math.sign(ox), prev.y) ? narrow : wide;
+      const ky = held(prev.x, Math.sign(oy)) ? narrow : wide;
+      if (rx > ry * kx) dx = Math.sign(ox);
+      if (ry > rx * ky) dy = Math.sign(oy);
+      if (!dx && !dy) { dx = prev.x; dy = prev.y; }   // never drop to neutral mid-slide
     }
   }
   touchUI.dir = { x: dx, y: dy };
@@ -699,6 +742,7 @@ const CHECKPOINTS = [1616, 1050, 500]; // Area 1; areas may override via data
 // settings panel model
 const SETTINGS_ITEMS = [
   { k: 'difficulty', label: 'DIFFICULTY', type: 'diff' },
+  { k: 'reduceMotion', label: 'REDUCED MOTION', type: 'bool' },
   { k: 'mode', label: 'GAME MODE', type: 'mode' },
   { label: 'WATCH DEMO (AUTO-PLAY)', type: 'demo' },
   { k: 'musicVol', label: 'MUSIC VOLUME', type: 'pct' },
@@ -1691,8 +1735,11 @@ function tick() {
     J.duck = !moving && (keys.fire || touchUI.fire || gp.fire) && J.fireT > 0;
     if (moving) {
       // turn-reversal delay (measured): reversing horizontal facing costs TURN_DELAY frames
+      // it123: the turn penalty is 1989 CLASSIC behaviour ONLY. In modern
+      // modes a 10-frame freeze on every direction reversal is what made the
+      // game feel unresponsive on both keyboard and touch.
       const reversing = dx && J.face.x && Math.sign(dx) !== Math.sign(J.face.x);
-      if (reversing && J.turn <= 0) J.turn = TURN_DELAY;
+      if (reversing && J.turn <= 0 && classicMode()) J.turn = TURN_DELAY;
       if (J.turn > 0) { J.turn--; }
       else {
         if (J.latency > 0) J.latency--;
@@ -1706,8 +1753,10 @@ function tick() {
           // animates while Joe is pressed against terrain
           const moved = Math.hypot(J.x - px0, J.y - py0);
           J.walkDist += moved;
-          while (J.walkDist >= WALK_STRIDE) {
-            J.walkDist -= WALK_STRIDE;
+          const hv = (J.face.x !== 0) ? 'e' : (J.face.y > 0 ? 's' : 'n');
+          const hStride = strideFor(`hero-${hv}`);
+          while (J.walkDist >= hStride) {
+            J.walkDist -= hStride;
             J.walk++;
             spawnPart({ kind: 'dust', x: J.x + (vrng() - 0.5) * 3, y: J.y + 2, vx: (vrng() - 0.5) * 0.15, vy: -0.06, t: 0, ttl: 14 + vrng() * 8, size: 0.9 });
           }
@@ -1715,7 +1764,7 @@ function tick() {
       }
       if (dx || dy) J.face = { x: dx, y: dy || (dx ? 0 : -1) };
       if (!J.face.x && !J.face.y) J.face = { x: 0, y: -1 };
-    } else { J.latency = START_LATENCY; J.turn = 0; J.moving = false; }
+    } else { J.latency = classicMode() ? START_LATENCY : 0; J.turn = 0; J.moving = false; }
 
     // camera: scrolls north at SPEED_V when Joe crosses the scroll line
     const joeScreenY = J.y - G.camY;
@@ -1762,6 +1811,16 @@ function tick() {
       J.fireT = FIRE_POSE_FRAMES; J.recoil = 3;
       // muzzle flash + ejected casing (visual only)
       G.fx.push({ kind: 'muzzle', x: J.x + ax2 * 7, y: J.y - 6 + ay2 * 7, dx: ax2, dy: ay2, t: 0 });
+      // it122: eject a brass casing sideways from the breech — spins away,
+      // bounces once, then rests; the detail that says "this is a rifle"
+      if (!perfLow && !Settings.reduceMotion) {
+        spawnPart({ kind: 'casing', x: J.x + ay2 * 3, y: J.y - 5,
+          vx: ay2 * (0.5 + vrng() * 0.35) + (vrng() - 0.5) * 0.15,
+          vy: -ax2 * 0.28 - 0.25 - vrng() * 0.2,
+          t: 0, ttl: 42 + vrng() * 14, size: 0.9, spin: (vrng() - 0.5) * 0.9,
+          ground: J.y + 1 + vrng() * 4 });   // without a ground the casing never settles
+        if (window.Sfx && (G.frame & 1) === 0) Sfx.play('shot', { gain: 0.1, rate: 2.9, variance: 0.2, pan: panAt(J.x) });
+      }
       spawnPart({ kind: 'casing', x: J.x + 3, y: J.y - 5, vx: 0.35 + vrng() * 0.3, vy: -0.5 - vrng() * 0.3, t: 0, ttl: 55, size: 1, ground: J.y + 2 + vrng() * 3 });
       if (window.Sfx) Sfx.play('shot', { gain: 0.7, pan: panAt(J.x) });
       // the first shot after a long quiet flushes birds from the treeline
@@ -1825,13 +1884,20 @@ function tick() {
         }
         // a truck soaks a burst before it goes up
         if (e.type === 'truck' && e.hp > 1) {
-          e.hp--;
+          e.hp--; e.hitFlash = 4;
           G.fx.push({ kind: 'impact', x: b.x, y: b.y, dx: b.vx, dy: b.vy, t: 0 });
           for (let k = 0; k < 2; k++) spawnPart({ kind: 'spark', x: b.x, y: b.y, vx: (vrng() - 0.5) * 1.4, vy: -0.8 * vrng(), t: 0, ttl: 12, size: 0.8 });
           G.bullets.splice(i, 1);
           break;
         }
         // leave a body that plays out the collapse, then lingers
+        // it125: hit feedback — the corpse carries a brief white flash and a
+        // knockback nudge along the round's line, so the hit has weight
+        e.hitFlash = 5;
+        {
+          const sp2 = Math.hypot(b.vx, b.vy) || 1;
+          e.x += (b.vx / sp2) * 1.6; e.y += (b.vy / sp2) * 1.1;
+        }
         G.fx.push({ kind: 'impact', x: b.x, y: b.y, dx: b.vx, dy: b.vy, t: 0 });
         destroyEnemy(e);
         G.enemies.splice(j, 1); G.bullets.splice(i, 1);
@@ -2155,6 +2221,7 @@ function tick() {
               const spread = ((((e.t * 2654435761) >>> 20) % 100) / 100 - 0.5) * 0.22;
               const ca = Math.cos(spread), sa = Math.sin(spread);
               const ax = dx / d, ay = dy / d;
+              if (window.Sfx) Sfx.play('shot', { gain: 0.42, rate: 0.68, variance: 0.09, pan: panAt(e.x) });
               const ebs = ENEMY_BULLET_SPEED * DF().bullet;
               G.ebullets.push({ x: e.x, y: e.y + 2, vx: (ax * ca - ay * sa) * ebs,
                 vy: (ax * sa + ay * ca) * ebs, life: 150 });
@@ -2207,6 +2274,8 @@ function tick() {
     n.x += n.vx; n.y += n.vy; n.t++;
     if (n.t >= n.ttl) { detonate(n.x, n.y); G.nades.splice(i, 1); }
   }
+  for (const e of G.enemies) if (e.hitFlash > 0) e.hitFlash--;
+  for (const c of G.corpses) if (c.hitFlash > 0) c.hitFlash--;
   if (G.shake > 0) G.shake--;
   if (G.flashT > 0) G.flashT--;
   G.quietT = (G.quietT || 0) + 1;
@@ -2381,11 +2450,21 @@ function render(alpha) {
   LERP = alpha === undefined ? 1 : alpha;
   const cy = G.pcamY === undefined ? G.camY : G.pcamY + (G.camY - G.pcamY) * LERP;
 
-  // screen shake (frame-derived jitter so QA screenshots stay deterministic)
+  // SCREEN SHAKE — it119 rebuilt. The old version advanced its phase by
+  // G.frame * 2.7 / 3.1 radians: ~155 and ~178 degrees PER LOGIC TICK, so the
+  // screen slammed to opposite sides on alternating frames — a strobe, not a
+  // shake — at FRACTIONAL pixel offsets that resampled every textured pixel in
+  // the scene. Measured: 28,244 frame-oscillation events in 80 combat frames
+  // versus 763 with shake+flash off. Now: a much lower frequency advanced by
+  // INTERPOLATED time (smooth across the 60fps renders between 50Hz ticks),
+  // amplitude eased out, and the offset SNAPPED TO WHOLE DEVICE PIXELS so the
+  // scene displaces instead of resampling.
   ctx.save();
-  if (G.shake > 0 && Settings.shake > 0) {
-    const amp = G.shake * Settings.shake;
-    ctx.translate(Math.sin(G.frame * 2.7) * amp * 0.35 * S, Math.cos(G.frame * 3.1) * amp * 0.28 * S);
+  if (G.shake > 0 && Settings.shake > 0 && !Settings.reduceMotion) {
+    const ease = G.shake / SHAKE_MAX;                 // smooth decay, not linear steps
+    const amp = SHAKE_MAX * Settings.shake * ease * ease;
+    const ph = (G.frame + LERP) * 0.62;               // ~5Hz at 50Hz logic: a shake you can see
+    ctx.translate(Math.round(Math.sin(ph) * amp * 0.42 * S), Math.round(Math.cos(ph * 0.79) * amp * 0.3 * S));
   }
 
   // --- ground: pre-baked full-res slices, 1:1 blit (no scaling smudge) ---
@@ -2545,17 +2624,24 @@ function render(alpha) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   ctx.lineCap = 'round';
+  ctx.lineCap = 'round';
   for (const b of G.ebullets) {
     const sp = Math.hypot(b.vx, b.vy) || 1;
-    const ux = b.vx / sp, uy = b.vy / sp, len = b.heavy ? 8 : 4.5;
+    const ux = b.vx / sp, uy = b.vy / sp;
+    const len = b.heavy ? 11 : Math.min(7, 2 + sp * 1.1);
     const bx = IX(b), by = IY(b);
-    ctx.strokeStyle = 'rgba(255,70,30,0.42)'; ctx.lineWidth = (b.heavy ? 4.2 : 2.4) * S;
-    ctx.beginPath(); ctx.moveTo((bx - ux * len) * S, (by - cy - uy * len) * S); ctx.lineTo(bx * S, (by - cy) * S); ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,190,120,0.95)'; ctx.lineWidth = (b.heavy ? 1.8 : 1) * S;
-    ctx.beginPath(); ctx.moveTo((bx - ux * len) * S, (by - cy - uy * len) * S); ctx.lineTo(bx * S, (by - cy) * S); ctx.stroke();
+    const hx = bx * S, hy = (by - cy) * S;
+    const tx = (bx - ux * len) * S, ty = (by - cy - uy * len) * S;
+    // COLD palette: enemy fire must be readable as theirs at a glance
+    const g = ctx.createLinearGradient(tx, ty, hx, hy);
+    g.addColorStop(0, 'rgba(120,255,180,0)');
+    g.addColorStop(0.55, 'rgba(150,255,200,0.45)');
+    g.addColorStop(1, 'rgba(225,255,240,0.95)');
+    ctx.strokeStyle = g; ctx.lineWidth = (b.heavy ? 2.6 : 1.4) * S;
+    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
     if (b.heavy) { // a shell you can see coming
       ctx.fillStyle = 'rgba(255,235,200,0.9)';
-      ctx.beginPath(); ctx.arc(bx * S, (by - cy) * S, 1.8 * S, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(hx, hy, 1.8 * S, 0, 7); ctx.fill();
     }
   }
   ctx.restore();
@@ -2564,19 +2650,30 @@ function render(alpha) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   ctx.lineCap = 'round';
+  // it122 TRACERS — the old bullet was a FIXED-LENGTH SOLID STROKE at uniform
+  // alpha, which is the visual definition of a laser beam. A real tracer is a
+  // hot head with a tail that FADES OUT behind it, and its length follows its
+  // speed. Player rounds are warm white-yellow; enemy rounds are cold and
+  // green-white, so you can read whose fire is whose at a glance.
+  ctx.save();
+  ctx.lineCap = 'round';
   for (const b of G.bullets) {
     const sp = Math.hypot(b.vx, b.vy) || 1;
-    const ux = b.vx / sp, uy = b.vy / sp, len = 5.5;
+    const ux = b.vx / sp, uy = b.vy / sp;
+    const len = Math.min(9, 2.5 + sp * 1.15);        // faster round, longer streak
     const bx = IX(b), by = IY(b);
     const hx = bx * S, hy = (by - cy) * S;
     const tx = (bx - ux * len) * S, ty = (by - cy - uy * len) * S;
-    ctx.strokeStyle = 'rgba(255,150,50,0.40)'; ctx.lineWidth = 2.6 * S;
+    const g = ctx.createLinearGradient(tx, ty, hx, hy);
+    g.addColorStop(0, 'rgba(255,140,40,0)');          // tail dissolves into air
+    g.addColorStop(0.55, 'rgba(255,190,90,0.5)');
+    g.addColorStop(1, 'rgba(255,240,200,0.95)');      // hot head
+    ctx.strokeStyle = g; ctx.lineWidth = 1.5 * S;
     ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,225,150,0.95)'; ctx.lineWidth = 1.1 * S;
-    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,245,215,1)';
-    ctx.beginPath(); ctx.arc(hx, hy, 1.1 * S, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,250,230,1)';
+    ctx.beginPath(); ctx.arc(hx, hy, 0.9 * S, 0, 7); ctx.fill();
   }
+  ctx.restore();
   ctx.restore();
 
   // enemies: every unit type now runs a full painted pose machine — walk views
@@ -2708,7 +2805,7 @@ function render(alpha) {
     // stride-synced bob for walkers (vehicles keep their judder/sway lines);
     // anchors snap to device pixels — fractional coords shimmer at 1.7x scale
     const isWalker = !corpse && e.type !== 'moto' && e.type !== 'truck' && e.type !== 'tank';
-    const ebob = (isWalker && stride && !perfLow) ? -Math.abs(Math.sin(((e.walkFrame || 0) + (e.walkDist || 0) / WALK_STRIDE) * Math.PI * 0.5)) * 0.8 * charScale() : 0;
+    const ebob = (isWalker && stride && !perfLow && !Settings.reduceMotion) ? -Math.abs(Math.sin(((e.walkFrame || 0) + (e.walkDist || 0) / WALK_STRIDE) * Math.PI * 0.5)) * 0.8 * charScale() : 0;
     ctx.translate(Math.round(ex * S), Math.round((ey + 4 + ebob) * S));
     if (preRot) ctx.rotate(preRot); // screen-space bank, before the mirror
     const squash = e.turnT > 0 ? 0.5 + 0.5 * (1 - e.turnT / 4) : 1;
@@ -2723,6 +2820,13 @@ function render(alpha) {
       const w3 = h * (blendImg.width / blendImg.height);
       ctx.globalAlpha = blendA;
       ctx.drawImage(blendImg, -w3 / 2 * S, -h * foot * S, w3 * S, h * S);
+    }
+    // hit flash: re-stamp the same sprite as a white silhouette on top
+    if (e.hitFlash > 0 && !Settings.reduceMotion) {
+      ctx.globalAlpha = Math.min(0.85, e.hitFlash / 5);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.drawImage(img, -w / 2 * S, -h * foot * S, w * S, h * S);
+      ctx.globalCompositeOperation = 'source-over';
     }
     ctx.globalAlpha = 1;
     ctx.restore();
@@ -2852,7 +2956,8 @@ function render(alpha) {
     } else {
       const view = fx !== 0 ? 'e' : (fy > 0 ? 's' : 'n');
       const moving = J.moving;
-      const frame = moving ? (J.walk & 3) : 0;
+      const fcH = frameCount(`hero-${view}`);
+      const frame = moving ? (J.walk % fcH) : 0;
       img = IMGS[`sprites/hero-${view}-${frame}`];
       // facing swaps (n/s/e) melt across 5 ticks instead of hard-cutting
       if (J.viewPrev === undefined) { J.viewPrev = view; J.viewBlendT = 0; }
@@ -2864,13 +2969,13 @@ function render(alpha) {
       // it78: crossfade into the NEXT stride frame by distance fraction so the
       // painted 4-frame cycle reads as continuous motion
       if (moving && !perfLow) {
-        heroBlend = IMGS[`sprites/hero-${view}-${(frame + 1) & 3}`] || null;
+        heroBlend = IMGS[`sprites/hero-${view}-${(frame + 1) % fcH}`] || null;
         // ramp the FULL 0->1 so the next pose has completely taken over by the
         // stride boundary — the old 0.55 cap left a visible snap every step
-        heroBlendA = poseEase(Math.max(0, Math.min(1, J.walkDist / WALK_STRIDE)));
+        heroBlendA = poseEase(Math.max(0, Math.min(1, J.walkDist / strideFor(`hero-${view}`))));
       }
       // continuous phase from distance covered — a frame-index sine snapped
-      if (moving) lean = Math.sin((J.walk + J.walkDist / WALK_STRIDE) * 1.57) * 0.035;
+      if (moving) lean = Math.sin((J.walk + J.walkDist / strideFor(`hero-${view}`)) * (6.283 / fcH)) * 0.035;
     }
     if (!img) img = IMGS['sprites/hero'];
     if (img) {
@@ -2887,8 +2992,10 @@ function render(alpha) {
       const jsquash = J.turnAnim > 0 ? 0.5 + 0.5 * (1 - J.turnAnim / 4) : 1;
       // stride-synced bob: two footfalls per painted cycle, interpolated so it
       // stays 60fps-smooth; the shadow breathes inversely at ground contact
-      const ph = J.walk + J.walkDist / WALK_STRIDE;
-      const bob = (J.alive && G.state === 'play' && J.moving && !perfLow) ? -Math.abs(Math.sin(ph * Math.PI * 0.5)) * 0.9 * charScale() : 0;
+      const bset = `hero-${(J.face.x !== 0) ? 'e' : (J.face.y > 0 ? 's' : 'n')}`;
+      const bfc = frameCount(bset);
+      const ph = (J.walk + J.walkDist / strideFor(bset)) * (4 / bfc);   // two footfalls per cycle at any frame count
+      const bob = (J.alive && G.state === 'play' && J.moving && !perfLow && !Settings.reduceMotion) ? -Math.abs(Math.sin(ph * Math.PI * 0.5)) * 0.9 * charScale() : 0;
       const breathe = (!J.moving && J.alive && !perfLow) ? 1 + Math.sin(G.wt * 0.045) * 0.008 : 1;
       // pixel-snapped anchor: fractional device coords shimmer at 1.7x scale
       ctx.translate(Math.round(jx * S), Math.round((jy - cy + 4 + bob) * S));
@@ -2896,7 +3003,7 @@ function render(alpha) {
       if (lean) ctx.rotate(lean);
       if (J.recoil > 0) ctx.translate(0, J.recoil * 0.5 * S); // kick back from the shot
       const vb = J.viewBlendT > 0 && !perfLow ? J.viewBlendT / 5 : 0;
-      const hf2 = (J.alive && J.moving) ? (J.walk & 3) : 0;
+      const hf2 = (J.alive && J.moving) ? (J.walk % frameCount(`hero-${J.viewFrom}`)) : 0;
       const fromImg = vb > 0 ? IMGS[`sprites/hero-${J.viewFrom}-${hf2}`] : null;
       if (heroBlend && heroBlendA > 0.02) ctx.globalAlpha = (1 - heroBlendA) * (1 - vb);
       else if (vb > 0) ctx.globalAlpha = 1 - vb;
@@ -2924,7 +3031,7 @@ function render(alpha) {
   for (const f of G.fx) {
     if (f.kind === 'muzzle') {
       // directional star flash: bright teardrop along the shot with cross spikes
-      const a = (1 - f.t / 4) * (0.5 + 0.5 * Settings.flash);
+      const a = (1 - f.t / 4) * (0.5 + 0.5 * Settings.flash) * (Settings.reduceMotion ? 0.35 : 1);
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
       ctx.translate(f.x * S, (f.y - cy) * S);
       ctx.rotate(Math.atan2(f.dy === undefined ? -1 : f.dy, f.dx || 0));
@@ -3022,7 +3129,8 @@ function render(alpha) {
   for (const f of GLOWS) {
     const fy = f.y - cy;
     if (fy < -50 || fy > VIEW_H + 50) continue;
-    const flick = 0.55 + 0.2 * Math.sin(G.frame * 0.31) + 0.15 * Math.sin(G.frame * 0.73 + 1.7);
+    const ft = G.frame + LERP;   // interpolated: stepping per logic tick reads as a stutter
+    const flick = 0.55 + 0.2 * Math.sin(ft * 0.31) + 0.15 * Math.sin(ft * 0.73 + 1.7);
     const a = flick * (0.35 + 0.45 * Settings.flash);
     const gl2 = ctx.createRadialGradient(f.x * S, fy * S, 0, f.x * S, fy * S, f.r * S);
     gl2.addColorStop(0, `rgba(255,170,60,${a * 0.5})`);
@@ -3660,7 +3768,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.60.0-fluid', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.61.0-polish', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -3781,11 +3889,14 @@ function loop(now) {
   pollGamepad();
   acc += Math.min(100, now - last); last = now;
   const stepMs = 1000 / LOGIC_HZ;
-  while (acc >= stepMs) { tick(); acc -= stepMs; }
+  let nTicks = 0;
+  while (acc >= stepMs) { tick(); acc -= stepMs; nTicks++; }
   // battery saver: logic every frame, paint every other (30fps on 60Hz panels)
   rSkip = !rSkip;
-  if (Settings.battery && rSkip) return;
-  render(acc / stepMs);
+  if (Settings.battery && rSkip) { window.__lastDrawn = 0; window.__lastTicks = nTicks; return; }
+  const alpha = acc / stepMs;
+  window.__lastDrawn = 1; window.__lastAlpha = alpha; window.__lastTicks = nTicks;
+  render(alpha);
   if (Settings.retro) applyRetro();
 }
 requestAnimationFrame(loop);
@@ -3836,6 +3947,7 @@ if (qa) {
     autoplay: () => { startAutoplay(); return !!G.autoplay; },
     settingsIndex: (k) => SETTINGS_ITEMS.findIndex(it => it.k === k),
     ui: () => uiButtons(),
+    frames: (set) => frameCount(set),
     botdebug: () => JSON.stringify({ wp: G.botWp, brk: G.botBreak, t: G.botT, avoid: (G.botAvoid || []).length, dis: G.botDisengage }),
     azdebug: () => JSON.stringify({ az: A.ambushZone, calm: G.calm, ambush: G.ambush, state: G.state, jx: G.joe.x, jy: G.joe.y, area: G.area }),
     uiLayout: () => settingsLayout(),
@@ -3845,7 +3957,7 @@ if (qa) {
     // what each character is actually rendering this frame — lets QA assert the
     // animation advances rather than just trusting that sprites exist
     anim: () => ({
-      joeFrame: G.joe.moving ? (G.joe.walk & 3) : 0,
+      joeFrame: G.joe.moving ? (G.joe.walk % frameCount(`hero-${(G.joe.face.x !== 0) ? 'e' : (G.joe.face.y > 0 ? 's' : 'n')}`)) : 0,
       joePose: !G.joe.alive ? 'dead' : G.joe.throwT > 0 ? 'throw'
         : G.joe.duck ? (G.joe.fireT > 0 ? 'crouchfire' : 'duck')
         : G.joe.fireT > 0 ? 'fire' : (G.joe.moving ? 'run' : 'idle'),
@@ -3872,6 +3984,7 @@ if (qa) {
       wrecks: G.wrecks.length,
     }),
     blocked: (x, y) => maskBlocked(x, y),
+    solid: (x, y) => !!rectsAt(x - 5, y - 8, 10, 12),   // FULL collision: obstacle rects AND mask
     plateNames: () => PLATES.map(p => p.name + (p.mask ? '+mask' : '-NOMASK')),
     settings: (patch) => {
       if (patch && typeof patch === 'object') {

@@ -21,9 +21,16 @@ const Sfx = {
     this.ready = true;
   },
 
-  play(name, { rate = 1, gain = 1, variance = 0.06, pan = 0 } = {}) {
+  // it126 DUCKING: an explosion is the loudest thing on the field, so the
+  // small sounds under it (shots, casings, footfalls) briefly step aside
+  // instead of turning the mix to mush.
+  duckUntil: 0,
+  play(name, { rate = 1, gain = 1, variance = 0.06, pan = 0, duckable = true } = {}) {
     const buf = this.buffers[name];
     if (!buf || !this.ctx) return;
+    const now = (this.ctx.currentTime || 0);
+    if (name === 'explosion') this.duckUntil = now + 0.42;
+    else if (duckable && now < this.duckUntil) gain *= 0.45;
     if (this.ctx.state === 'suspended') this.ctx.resume();
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
