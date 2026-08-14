@@ -59,9 +59,12 @@ const ENEMY_SHOT_CD = 78;
 // always land), and only flinch about half the time.
 const DODGE_MIN_LEAD = 16;             // closer than this and he cannot react
 const DODGE_MAX_LEAD = 46;
-const DODGE_HIT_WIDTH = 8;             // only dodge rounds that would connect
-const DODGE_CHANCE = 55;               // percent
-const DODGE_COOLDOWN = 210;
+const DODGE_HIT_WIDTH = 5;             // it127: was 8 — only a round genuinely on target
+const DODGE_CHANCE = 20;               // percent — it127: was 55, which meant a
+                                       // soldier slipped better than half the
+                                       // rounds aimed at him and firefights
+                                       // turned into whack-a-mole
+const DODGE_COOLDOWN = 340;            // it127: was 210 — one flinch, then commit
 // New unit types (it44). Motorcycles race across on a line and are lethal on
 // contact; mortar crews are dug in and drop shells on the player's position.
 const MOTO_SPEED = 2.6;
@@ -677,7 +680,7 @@ const G = {
   score: 0, top: loadScores()[0][1], lives: LIVES_START, grenades: 3, ammo: START_AMMO,
   area: 1, tally: 0, entry: null, lastEntry: null, paused: false, postGame: false,
   settingsSel: 0, settingsFrom: 'title', remap: null, cp: 1616, continues: 0,
-  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0, demo: false, autoplay: false, botT: 0, botStuck: 0, botLaneX: 0, botLaneUntil: 0, botLaneStuck: 0, botEscape: 0, botNoTrail: 0, botEscSide: 1, botWp: null, botPlanAt: 0, botAvoid: [], botEngT: 0, botEngScore: -1, botDisengage: 0, botArbAt: 0, botArbX: 0, botArbY: 0, botArbScore: -1, botBreak: 0, botNullN: 0, botRetreatUntil: 0, ambush: null, burst: null,
+  frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0, demo: false, autoplay: false, botT: 0, botStuck: 0, botLaneX: 0, botLaneUntil: 0, botLaneStuck: 0, botEscape: 0, botNoTrail: 0, botEscSide: 1, botWp: null, botPlanAt: 0, botAvoid: [], botPanicUntil: 0, botFrozeAt: 0, botFrozeX: 0, botFrozeY: 0, botFrozeScore: -1, botEngT: 0, botEngScore: -1, botDisengage: 0, botArbAt: 0, botArbX: 0, botArbY: 0, botArbScore: -1, botBreak: 0, botNullN: 0, botRetreatUntil: 0, ambush: null, burst: null,
   camY: A.height - VIEW_H,  // camera top in world coords (worldReady arms below)
   joe: { x: A.spawn.x, y: A.spawn.y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, firePrev: false, grenCd: 0, grenPrev: false, invuln: 0, alive: true, walk: 0, walkDist: 0, moving: false, fireT: 0, throwT: 0, recoil: 0, duck: false, deathT: 0 },
   bullets: [], ebullets: [], lobs: [], nades: [], shells: [], pickups: [], enemies: [], corpses: [], fx: [], parts: [],
@@ -981,6 +984,39 @@ function autopilotTick() {
     return;
   }
 
+  {
+    const stillHere = Math.abs(J.x - G.botFrozeX) < 3 && Math.abs(J.y - G.botFrozeY) < 3;
+    if (!stillHere || G.score !== G.botFrozeScore) {
+      G.botFrozeAt = G.botT; G.botFrozeX = J.x; G.botFrozeY = J.y; G.botFrozeScore = G.score;
+    } else if (G.botT - G.botFrozeAt > 600 && G.botT > G.botPanicUntil) {
+      G.botPanicUntil = G.botT + 150;
+      G.botFrozeAt = G.botT;
+      G.botPanicDir = ((G.botPanicDir || 0) + 1) % 4;
+    }
+  }
+  if (G.botT <= G.botPanicUntil) {
+    const d4 = [{ down: true }, { right: true }, { up: true }, { left: true }][G.botPanicDir || 0];
+    Object.assign(keys, d4);
+    keys.fire = (G.botT % 6) < 3;
+    return;
+  }
+
+  // TRAPPED INSIDE TERRAIN — this must be checked BEFORE any combat reflex.
+  // Wrecks and husks become solid where Joe is already standing, so he can end
+  // up inside geometry with no walkable neighbour; every reflex below returns
+  // early, so the bot sat there for 10,000 ticks with four enemies on screen.
+  // Getting back onto open ground outranks everything.
+  if (!botCellOpen(J.x, J.y)) {
+    let best = null;
+    for (let r = 8; r <= 120 && !best; r += 8) {
+      for (let a = 0; a < 16; a++) {
+        const px2 = J.x + Math.cos(a * 0.3927) * r, py2 = J.y + Math.sin(a * 0.3927) * r;
+        if (botCellOpen(px2, py2) && botCellOpen((J.x + px2) / 2, (J.y + py2) / 2)) { best = { x: px2, y: py2 }; break; }
+      }
+    }
+    if (best) { Object.assign(keys, faceKeys(best.x - J.x, best.y - J.y)); keys.fire = true; return; }
+  }
+
   // PROGRESS ARBITER — the reflexes below (evade, engage, grenade-shaping,
   // the finale line) can each preempt movement forever under enough pressure;
   // if a 400-tick window produces no score and <30px of displacement, force a
@@ -1096,6 +1132,24 @@ function autopilotTick() {
   if (G.botT % 20 === 0) { if (camMoved) G.botPush = 0; else G.botPush = (G.botPush || 0) + 1; G.botCam = G.camY; }
   const desperate = (G.botPush || 0) > 9;
 
+  // marksmanship helpers: where will the target BE when the round arrives, and
+  // is that point actually on one of the eight rays we can shoot along?
+  const leadOf = (t) => {
+    const tvx = t.x - (t.px === undefined ? t.x : t.px);
+    const tvy = t.y - (t.py === undefined ? t.y : t.py);
+    const d0 = Math.hypot(t.x - J.x, t.y - J.y);
+    const flight = d0 / Math.max(0.6, BULLET_SPEED);       // ticks until arrival
+    return { x: t.x + tvx * flight, y: t.y + tvy * flight };
+  };
+  const onRay = (px2, py2) => {
+    const ax = px2 - J.x, ay = py2 - J.y;
+    const m = Math.hypot(ax, ay) || 1;
+    // nearest of the eight unit rays, then how far off that ray we are
+    const q = Math.round(Math.atan2(ay, ax) / (Math.PI / 4)) * (Math.PI / 4);
+    const off = Math.abs(ax / m * Math.sin(q) - ay / m * Math.cos(q)) * m;
+    return off < 7;                                        // within half a body
+  };
+
   if (threat && !desperate && !breakthrough && G.botT > G.botDisengage) {
     // ENGAGE NO-PROGRESS GUARD: a foe camped behind cover can hold the bot
     // here forever, firing into a rock — if 250 ticks of engagement produce
@@ -1103,8 +1157,11 @@ function autopilotTick() {
     if (G.botEngScore !== G.score) { G.botEngScore = G.score; G.botEngT = G.botT; }
     if (G.botT - G.botEngT > 250) { G.botDisengage = G.botT + 180; G.botEngT = G.botT; }
     else {
-      Object.assign(keys, faceKeys(foe.x - J.x, foe.y - J.y));
-      keys.fire = true;
+      const lead = leadOf(foe);
+      Object.assign(keys, faceKeys(lead.x - J.x, lead.y - J.y));
+      // hold fire until the lead point is genuinely on a ray — spraying at
+      // 22 degrees off target is what made the bot look like a poor shot
+      keys.fire = onRay(lead.x, lead.y) || foeD < 26;
       // never reverse into the map we already cleared — sidestep instead
       if (foeD < 15) { keys.up = false; keys.down = false; keys[(G.botT >> 4) & 1 ? 'left' : 'right'] = true; }
       return;
@@ -1174,7 +1231,7 @@ function autopilotTick() {
 function startAutoplay() {
   startGame();
   G.autoplay = true; G.realInput = false;
-  G.botT = 0; G.botStuck = 0; G.botLaneX = 0; G.botLaneUntil = 0; G.botLaneStuck = 0; G.botEscape = 0; G.botNoTrail = 0; G.botEscSide = 1; G.botWp = null; G.botPlanAt = 0; G.botAvoid = []; G.botEngT = 0; G.botEngScore = -1; G.botDisengage = 0; G.botArbAt = 0; G.botArbX = 0; G.botArbY = 0; G.botArbScore = -1; G.botBreak = 0; G.botNullN = 0; G.botRetreatUntil = 0; G.botLastX = G.joe.x; G.botLastY = G.joe.y;
+  G.botT = 0; G.botStuck = 0; G.botLaneX = 0; G.botLaneUntil = 0; G.botLaneStuck = 0; G.botEscape = 0; G.botNoTrail = 0; G.botEscSide = 1; G.botWp = null; G.botPlanAt = 0; G.botAvoid = []; G.botPanicUntil = 0; G.botFrozeAt = 0; G.botFrozeX = 0; G.botFrozeY = 0; G.botFrozeScore = -1; G.botEngT = 0; G.botEngScore = -1; G.botDisengage = 0; G.botArbAt = 0; G.botArbX = 0; G.botArbY = 0; G.botArbScore = -1; G.botBreak = 0; G.botNullN = 0; G.botRetreatUntil = 0; G.botLastX = G.joe.x; G.botLastY = G.joe.y;
   try { if (window.Music) { ensureMusic(); if (Music.mode !== 'original') Music.toggle(); } } catch (e) {}
 }
 function endAutoplay() {
@@ -1538,11 +1595,27 @@ function respawnJoe() {
   // respawning player, or the demo on the tall mobile view, could never win)
   if (G.finale && G.finale.phase !== 'done') G.finale.t = 0;
   if (G.ambush && G.ambush.phase === 'fight') G.ambush = null; // trap resets too
-  const y = Math.min(A.height - 20, G.camY + VIEW_H - 26);
+  let y = Math.min(A.height - 20, G.camY + VIEW_H - 26);   // it127: mutable — the search may move it
   let x = A.spawn.x;
-  for (const dx of [0, 10, -10, 20, -20, 32, -32, 46, -46, 62, -62, 80, -80]) {
-    const cand = Math.max(10, Math.min(A.width - 10, A.spawn.x + dx));
-    if (!rectsAt(cand - 5, y - 8, 10, 12)) { x = cand; break; }
+  let placed = false;
+  for (const dy of [0, -10, -22, -36, 10, 22]) {
+    const yy = Math.max(G.camY + 10, Math.min(A.height - 10, y + dy));
+    for (const dx of [0, 10, -10, 20, -20, 32, -32, 46, -46, 62, -62, 80, -80]) {
+      const cand = Math.max(10, Math.min(A.width - 10, A.spawn.x + dx));
+      if (!rectsAt(cand - 5, yy - 8, 10, 12)) { x = cand; y = yy; placed = true; break; }
+    }
+    if (placed) break;
+  }
+  if (!placed) {
+    // last resort: sweep for ANY legal cell. Leaving Joe inside terrain traps
+    // him permanently — no direction is walkable — which is exactly how the
+    // demo froze in area 3, and would strand a human player identically.
+    outer:
+    for (let yy = y; yy > G.camY + 10; yy -= 8) {
+      for (let xx = 12; xx < A.width - 12; xx += 6) {
+        if (!rectsAt(xx - 5, yy - 8, 10, 12)) { x = xx; y = yy; placed = true; break outer; }
+      }
+    }
   }
   Object.assign(G.joe, { x, y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, grenCd: 0, invuln: DF().invuln, alive: true, deathT: 0, fireT: 0, throwT: 0, recoil: 0, duck: false, moving: false, walk: 0, walkDist: 0 });
   G.ammo = Math.max(G.ammo, START_AMMO);   // it116: a fresh life means a fresh rifle — ammo-starvation spirals parked the demo at the causeway
@@ -2176,7 +2249,7 @@ function tick() {
             if (along < DODGE_MIN_LEAD || along > DODGE_MAX_LEAD) continue;
             const miss = Math.abs(bx * uy - by * ux);    // closest approach
             if (miss > DODGE_HIT_WIDTH) continue;        // it was going to miss anyway
-            if (((e.t * 2654435761) >>> 11) % 100 >= Math.min(75, DODGE_CHANCE + loopN() * 8)) { e.dodgeCd = 12; break; } // nerve failed
+            if (((e.t * 2654435761) >>> 11) % 100 >= Math.min(40, DODGE_CHANCE + loopN() * 5)) { e.dodgeCd = 12; break; } // nerve failed (it127: escalation capped 75 -> 40)
             const side = (bx * -uy + by * ux) > 0 ? -1 : 1;
             e.dodgeX = side * -uy; e.dodgeY = side * ux;
             e.dodgeT = 11; e.dodgeCd = DODGE_COOLDOWN + ((e.t * 31) % 90);
@@ -2428,8 +2501,13 @@ function notePerfFrame(now) {
   const d = now - lastFrameT; lastFrameT = now;
   if (Settings.perf !== 'auto') return;
   if (G.state !== 'play' || d <= 0 || d > 250) return; // ignore pauses/tab spikes
-  if (d > 24) perfScore = Math.min(600, perfScore + 3);
-  else if (d < 18) perfScore = Math.max(0, perfScore - 1);
+  // it127: the trigger was 24ms — i.e. the safeguard only woke below ~41fps,
+  // so the entire 41-50fps band (exactly where a mid-range phone lands) got no
+  // help and kept drawing every effect. Measured 45.8fps median at 2x CPU
+  // throttle with perfLow never engaging. 19ms (~53fps) engages it in the band
+  // it exists to protect.
+  if (d > 19) perfScore = Math.min(600, perfScore + 3);
+  else if (d < 16.5) perfScore = Math.max(0, perfScore - 1);
   if (!perfLow && perfScore > 300) perfLow = true;
   else if (perfLow && perfScore < 60) perfLow = false;
 }
@@ -2814,13 +2892,10 @@ function render(alpha) {
     if (kick) ctx.translate(0, kick * S);
     if (e.type === 'moto') ctx.translate(0, Math.sin((e.walk || 0) * 1.7) * 0.35 * S); // terrain judder
     if (e.type === 'truck') ctx.translate(0, Math.sin((e.walk || 0) * 0.9) * 0.3 * S); // heavier, slower sway
-    if (blendImg && blendA > 0.02) ctx.globalAlpha = 1 - blendA;
+    // it127: ONE sprite at FULL alpha — cross-dissolving two poses only reaches
+    // full opacity where both cover a pixel, so mid-stride the body read as
+    // half transparent. Same fix as the hero.
     ctx.drawImage(img, -w / 2 * S, -h * foot * S, w * S, h * S);
-    if (blendImg && blendA > 0.02) {
-      const w3 = h * (blendImg.width / blendImg.height);
-      ctx.globalAlpha = blendA;
-      ctx.drawImage(blendImg, -w3 / 2 * S, -h * foot * S, w3 * S, h * S);
-    }
     // hit flash: re-stamp the same sprite as a white silhouette on top
     if (e.hitFlash > 0 && !Settings.reduceMotion) {
       ctx.globalAlpha = Math.min(0.85, e.hitFlash / 5);
@@ -3002,23 +3077,8 @@ function render(alpha) {
       ctx.scale(flip * jsquash, breathe);
       if (lean) ctx.rotate(lean);
       if (J.recoil > 0) ctx.translate(0, J.recoil * 0.5 * S); // kick back from the shot
-      const vb = J.viewBlendT > 0 && !perfLow ? J.viewBlendT / 5 : 0;
-      const hf2 = (J.alive && J.moving) ? (J.walk % frameCount(`hero-${J.viewFrom}`)) : 0;
-      const fromImg = vb > 0 ? IMGS[`sprites/hero-${J.viewFrom}-${hf2}`] : null;
-      if (heroBlend && heroBlendA > 0.02) ctx.globalAlpha = (1 - heroBlendA) * (1 - vb);
-      else if (vb > 0) ctx.globalAlpha = 1 - vb;
+      // it127: ONE sprite, FULL alpha. No cross-dissolve — see the note above.
       ctx.drawImage(img, -w / 2 * S, -h * S, w * S, h * S);
-      if (heroBlend && heroBlendA > 0.02) {
-        const w2 = h * (heroBlend.width / heroBlend.height);
-        ctx.globalAlpha = heroBlendA * (1 - vb);
-        ctx.drawImage(heroBlend, -w2 / 2 * S, -h * S, w2 * S, h * S);
-      }
-      if (fromImg && vb > 0) {
-        const w3 = h * (fromImg.width / fromImg.height);
-        ctx.globalAlpha = vb;
-        ctx.drawImage(fromImg, -w3 / 2 * S, -h * S, w3 * S, h * S);
-      }
-      ctx.globalAlpha = 1;
       ctx.restore();
     } else {
       drawShadow(IX(J), IY(J) - cy, 4);
@@ -3768,7 +3828,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.61.0-polish', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.62.0-solid', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
