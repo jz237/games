@@ -368,6 +368,7 @@ const SETTINGS_DEFAULTS = {
   autoFire: false,             // keyboard hold-to-fire (touch always auto-fires at the cap)
   leftHand: false,
   haptics: true,               // vibration on touch devices (where supported)
+  players: 1,                  // 1 or 2 — alternating play, as the original
   reduceMotion: false,         // accessibility: no shake, no flash, no bob
   difficulty: 'recruit',       // recruit | soldier | veteran — see DIFFS
   perf: 'auto',                // auto | high | low — effect shedding tier
@@ -679,6 +680,7 @@ const G = {
   stateTimer: (qa && !urlTitle) ? 40 : 300,
   score: 0, top: loadScores()[0][1], lives: LIVES_START, grenades: 3, ammo: START_AMMO,
   area: 1, tally: 0, entry: null, lastEntry: null, paused: false, postGame: false,
+  player: 1, slots: [], handoff: 0,   // it128: 2-player alternating
   settingsSel: 0, settingsFrom: 'title', remap: null, cp: 1616, continues: 0,
   frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0, demo: false, autoplay: false, botT: 0, botStuck: 0, botLaneX: 0, botLaneUntil: 0, botLaneStuck: 0, botEscape: 0, botNoTrail: 0, botEscSide: 1, botWp: null, botPlanAt: 0, botAvoid: [], botPanicUntil: 0, botFrozeAt: 0, botFrozeX: 0, botFrozeY: 0, botFrozeScore: -1, botEngT: 0, botEngScore: -1, botDisengage: 0, botArbAt: 0, botArbX: 0, botArbY: 0, botArbScore: -1, botBreak: 0, botNullN: 0, botRetreatUntil: 0, ambush: null, burst: null,
   camY: A.height - VIEW_H,  // camera top in world coords (worldReady arms below)
@@ -744,6 +746,7 @@ const CHECKPOINTS = [1616, 1050, 500]; // Area 1; areas may override via data
 
 // settings panel model
 const SETTINGS_ITEMS = [
+  { k: 'players', label: 'PLAYERS', type: 'players' },
   { k: 'difficulty', label: 'DIFFICULTY', type: 'diff' },
   { k: 'reduceMotion', label: 'REDUCED MOTION', type: 'bool' },
   { k: 'mode', label: 'GAME MODE', type: 'mode' },
@@ -799,6 +802,8 @@ function adjustSetting(item, dir, activate) {
   } else if (item.type === 'range') {
     Settings[item.k] = Math.max(item.min, Math.min(item.max, Math.round((Settings[item.k] + dir * item.step) * 100) / 100));
     applySettings();
+  } else if (item.type === 'players') {
+    if (dir || activate) { Settings.players = Settings.players === 1 ? 2 : 1; applySettings(); }
   } else if (item.type === 'diff') {
     if (dir || activate) {
       const order = ['recruit', 'soldier', 'veteran'];
@@ -1253,9 +1258,39 @@ function endDemo() {
   for (const k in keys) keys[k] = false;
   setState('ranking', 300);
 }
+// it128: each player carries their own run — score, lives, area, checkpoint and
+// supplies — so an alternating game is genuinely two separate campaigns sharing
+// one machine, exactly as the cabinet did.
+function blankSlot() {
+  return { score: 0, lives: LIVES_START + DF().lives, area: 1, cp: 1616, grenades: 3 + (DF().lives > 0 ? 2 : 0),
+           ammo: START_AMMO, rescued: 0, continues: 0, out: false, started: false };
+}
+function saveSlot() {
+  const sl = G.slots[G.player - 1];
+  if (!sl) return;
+  sl.score = G.score; sl.lives = G.lives; sl.area = G.area; sl.cp = G.cp;
+  sl.grenades = G.grenades; sl.ammo = G.ammo; sl.rescued = G.rescued; sl.continues = G.continues;
+}
+function loadSlot(n) {
+  const sl = G.slots[n - 1];
+  G.player = n;
+  G.score = sl.score; G.lives = sl.lives; G.area = sl.area; G.cp = sl.cp;
+  G.grenades = sl.grenades; G.ammo = sl.ammo; G.rescued = sl.rescued; G.continues = sl.continues;
+  sl.started = true;
+  applyArea(G.area);
+}
+// hand over to the other player if they are still in the game
+function otherLive() {
+  if (Settings.players !== 2) return 0;
+  const other = G.player === 1 ? 2 : 1;
+  return G.slots[other - 1].out ? 0 : other;
+}
 function startGame() {
   G.demo = false; G.autoplay = false;
+  G.slots = [blankSlot(), blankSlot()];
+  G.player = 1;
   G.score = 0; G.lives = LIVES_START + DF().lives; G.grenades = 3 + (DF().lives > 0 ? 2 : 0); G.ammo = START_AMMO; G.area = 1; G.postGame = false; G.paused = false; G.continues = 0; G.rescued = 0;
+  G.slots[0].started = true;
   applyArea(1);
   resetWorld();
   if (touchUI.seen && !tutorialSeen()) { markTutorialSeen(); setState('tutorial', 420); }
@@ -1717,6 +1752,10 @@ function tick() {
     }
     endTick(); return;
   }
+  if (G.state === 'handoff') {
+    if (--G.stateTimer <= 0) setState('intro', 130);
+    endTick(); return;
+  }
   if (G.state === 'victory') {
     if (--G.stateTimer <= 0) setState('map', 230);   // celebrate, then loop on, harder
     endTick(); return;
@@ -1769,9 +1808,21 @@ function tick() {
     if (G.demo) { if (--G.stateTimer <= 0) endDemo(); endTick(); return; }
     if (--G.stateTimer <= 0) {
       if (--G.lives < 0) {
+        // it128: in a 2-player game the machine passes to the other player
+        // before any continue/game-over is offered — their run is untouched
+        const nxt = otherLive();
+        if (nxt) {
+          G.lives = -1; saveSlot();
+          G.slots[G.player - 1].out = (Settings.mode !== 'normal');
+          loadSlot(nxt);
+          resetWorld();
+          G.handoff = 150;
+          setState('handoff', 150);
+          endTick(); return;
+        }
         // normal mode: offer a continue from the last checkpoint; arcade: original rules
         if (Settings.mode === 'normal') setState('continue', 500);
-        else setState('gameover', 200);
+        else { G.slots[G.player - 1].out = true; setState('gameover', 200); }
       } else { J.alive = true; respawnJoe(); setState('ready', 70); }
       endTick(); return;
     }
@@ -3463,7 +3514,13 @@ function render(alpha) {
       ctx.strokeRect(4 * S, 4 * S, 23 * S, 23 * S);
     }
     ctx.fillStyle = '#d4b25a'; ctx.font = `bold ${5 * S}px monospace`;
-    ctx.fillText('1P', 31 * S, 9 * S);
+    ctx.fillText(G.player + 'P', 31 * S, 9 * S);
+    if (Settings.players === 2 && G.slots.length === 2) {
+      const o = G.slots[(G.player === 1 ? 2 : 1) - 1];
+      ctx.fillStyle = o.out ? '#6b6455' : '#9a9280';
+      ctx.font = `${5 * S}px monospace`;
+      ctx.fillText((G.player === 1 ? '2P' : '1P') + ' ' + String(o.score).padStart(7, '0') + (o.out ? ' OUT' : ''), 31 * S, 16 * S);
+    }
     ctx.fillStyle = '#fff'; ctx.font = `bold ${8 * S}px monospace`;
     ctx.fillText(String(G.score).padStart(7, '0'), 31 * S, 18 * S);
     for (let i = 0; i < Math.min(6, Math.max(0, G.lives)); i++) { ctx.fillStyle = '#7da05a'; ctx.fillRect((32 + i * 7) * S, 21 * S, 5 * S, 5 * S); }
@@ -3628,6 +3685,12 @@ function render(alpha) {
     textC('AREA ' + G.area, 102, 20, '#e8d8b0', true);
     if (G.area > AREAS.length) textC('LOOP ' + (Math.floor((G.area - 1) / AREAS.length) + 1), 88, 6, '#c8a24a');
     textC(A.title || 'LANDING ZONE — FORTRESS GATE', 124, 7, '#b8b09a');
+  } else if (G.state === 'handoff') {
+    scrim(0.82);
+    textC('PLAYER ' + G.player, 82, 18, '#ffd257', true);
+    textC('READY', 108, 12, '#e8d8b0', true);
+    textC('AREA ' + G.area + ' · ' + G.lives + ' LIVES · SCORE ' + G.score, 132, 6, '#c9c0a6');
+    if (blink) textC('TAKE OVER', 156, 7, '#fff', true);
   } else if (G.state === 'victory') {
     scrim(0.82);
     textC('MISSION ACCOMPLISHED', 74, 15, '#ffd257', true);
@@ -3774,6 +3837,7 @@ function render(alpha) {
       else if (it.type === 'bool') val = Settings[it.k] ? 'ON' : 'OFF';
       else if (it.type === 'mode') val = Settings.mode.toUpperCase();
       else if (it.type === 'range') val = Math.round(Settings[it.k] * 100) + '%';
+      else if (it.type === 'players') val = Settings.players === 2 ? '2 PLAYERS (ALTERNATING)' : '1 PLAYER';
       else if (it.type === 'diff') val = Settings.difficulty.toUpperCase();
       else if (it.type === 'perf') val = Settings.perf.toUpperCase() + (Settings.perf === 'auto' ? (perfLow ? ' →LOW' : ' →HIGH') : '');
       else if (it.type === 'track') val = ((window.Music && Music.mode) || 'original').toUpperCase();
@@ -3828,7 +3892,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.62.0-solid', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.63.0-twoup', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -4008,6 +4072,8 @@ if (qa) {
     settingsIndex: (k) => SETTINGS_ITEMS.findIndex(it => it.k === k),
     ui: () => uiButtons(),
     frames: (set) => frameCount(set),
+    twop: () => JSON.stringify({ player: G.player, slots: G.slots, players: Settings.players }),
+    startGame: () => { startGame(); return true; },
     botdebug: () => JSON.stringify({ wp: G.botWp, brk: G.botBreak, t: G.botT, avoid: (G.botAvoid || []).length, dis: G.botDisengage }),
     azdebug: () => JSON.stringify({ az: A.ambushZone, calm: G.calm, ambush: G.ambush, state: G.state, jx: G.joe.x, jy: G.joe.y, area: G.area }),
     uiLayout: () => settingsLayout(),
