@@ -32,6 +32,22 @@ function frameCount(set) {
 // 8-frame set reads twice as finely without running twice as fast
 const CYCLE_DIST = 40;
 function strideFor(set) { return CYCLE_DIST / frameCount(set); }
+// which painted sprite family an enemy type walks on — everything not listed
+// borrows the rifleman's, which is also the on-screen fallback
+function enemyPfx(t) { return t === 'officer' ? 'off' : t === 'lobber' ? 'lob' : 'rif'; }
+// Position within the CURRENT walk cycle, 0..1 — the phase secondary motion
+// hangs off. Expressed as a fraction of the whole cycle rather than of a fixed
+// 4-frame period, so lean and footfall-bob stay at two footfalls per cycle
+// whether the set has 4 frames or 8. (At 4 frames this is algebraically the
+// old expression, so nothing already on screen changes.)
+function cyclePhase(e) {
+  // reuse the count the walk-key lookup already resolved this frame: rebuilding
+  // "off-e" and re-resolving its length three times per enemy per frame is pure
+  // overhead in the hottest loop in the renderer
+  const fc = e._fc || frameCount(`${enemyPfx(e.type)}-${e.view || 's'}`);
+  const frac = (e.walkDist || 0) / (e._stride || WALK_STRIDE);
+  return (((e.walkFrame || 0) % fc) + frac) / fc;
+}
 function charScale() {
   return VIEW_H > VIEW_H_BASE ? Math.min(1.7, 1 + (VIEW_H - VIEW_H_BASE) / VIEW_H_BASE * 0.45) : 1;
 }
@@ -233,7 +249,7 @@ let groundSlices = null; // [{y0}, canvas] pair-list: full-res bake, sliced to s
 const BAKE_S = S;        // bake at output resolution — 1:1 blit, zero scaling smudge
 const SLICES = 2;
 const SPRITE_SETS = ['hero-n', 'hero-s', 'hero-e', 'hero-act', 'hero-die', 'rif-s', 'rif-n', 'rif-e', 'rif-act', 'rif-die', 'rif-die2', 'moto',
-  'off-s', 'off-e', 'off-n', 'off-act', 'lob-s', 'lob-act', 'mortar', 'truck', 'tank', 'snp'];
+  'off-s', 'off-e', 'off-n', 'off-act', 'lob-s', 'lob-n', 'lob-e', 'lob-act', 'mortar', 'truck', 'tank', 'snp'];
 const SPRITE_NAMES = ['sprites/hero', 'sprites/rifleman', 'sprites/officer', 'sprites/lobber',
   'ui/portrait', 'ui/rifle', 'ui/keyart.webp', 'ui/map.webp', 'tiles/sand', 'tiles/grass',
   'props/palm', 'props/boulder', 'props/pond', 'props/trench', 'props/gate', 'props/wreck', 'sprites/truck-wreck',
@@ -458,7 +474,7 @@ document.addEventListener('visibilitychange', () => {
 // (hold to auto-fire at the measured min interval — same cadence cap as the
 // original), discrete grenade button, music toggle on the HUD ♪ corner.
 const GREN_BTN = { x: VIEW_W - 26, y: VIEW_H - 84, r: 16 };
-const DEMO_BTN = { x: VIEW_W / 2, y: 180, w: 84, h: 18 }; // desktop title hint box
+// (the desktop DEMO hint box is gone — WATCH DEMO is a row in the title menu)
 // it92: on touch the whole UI is BUTTONS, laid out against the live view height
 // (the panel used to be arrow-key-only and the title's only tap target was an
 // invisible 60x16 corner). Everything below is in VIEW space, so it follows the
@@ -471,7 +487,70 @@ function settingsLayout() {
   const scroll = Math.max(0, Math.min(maxScroll, G.settingsSel - ((shown / 2) | 0)));
   return { ROW, TOP, shown, scroll, maxScroll };
 }
+// it130: ONE title menu, driven by every input device.
+// Before this the title screen was two unrelated screens wearing the same name:
+// desktop got static text hints ("PRESS FIRE", "PRESS D"), touch got a separate
+// three-button stack, and the two drifted apart every time either was touched —
+// which is why the mobile title kept coming back wrong. Same rows, same order,
+// same actions now; only the metrics differ, because a thumb needs a bigger
+// target than a mouse.
+function titleMenu() {
+  const cyc = (k, order) => (d) => {
+    const i = order.indexOf(Settings[k]);
+    Settings[k] = order[(i + (d < 0 ? order.length - 1 : 1)) % order.length];
+    if (k === 'mode') { scoreMode = Settings.mode; G.top = loadScores()[0][1]; }
+    applySettings();
+  };
+  return [
+    { id: 'start', label: 'START GAME', hue: '#fff', act: () => startGame() },
+    { id: 'players', label: 'PLAYERS', hue: '#c9c0a6',
+      val: () => (Settings.players === 2 ? '2 PLAYER' : '1 PLAYER'),
+      cyc: () => { Settings.players = Settings.players === 1 ? 2 : 1; applySettings(); } },
+    { id: 'diff', label: 'DIFFICULTY', hue: '#c9c0a6',
+      val: () => Settings.difficulty.toUpperCase(), cyc: cyc('difficulty', ['recruit', 'soldier', 'veteran']) },
+    { id: 'mode', label: 'MODE', hue: '#c9c0a6',
+      val: () => Settings.mode.toUpperCase(), cyc: cyc('mode', ['normal', 'arcade', 'classic']) },
+    { id: 'demo', label: 'WATCH DEMO', hue: '#ffd257', act: () => startAutoplay() },
+    { id: 'scores', label: 'HIGH SCORES', hue: '#c9c0a6', act: () => setState('ranking', 600) },
+    { id: 'settings', label: 'SETTINGS', hue: '#c9c0a6', act: () => openSettings() },
+    { id: 'credits', label: 'CREDITS', hue: '#9a9280', act: () => setState('credits', 600) },
+  ];
+}
+// Rows are sized from the view, not from a fixed desktop layout: the tall
+// portrait viewport gets thumb-sized rows, the 224-row desktop card gets tight
+// ones, and both stay clear of the copyright lines at the bottom.
+function titleLayout() {
+  const n = titleMenu().length;
+  const touch = touchUI.seen;
+  // The title is painted inside the card transform: the 224-row card is centred
+  // in a tall view, so card-space y runs from -off at the top of the glass to
+  // VIEW_H-off at the bottom. Laying the menu out against VIEW_H directly (as
+  // if the card filled the screen) pushed it a whole cardOff down the phone and
+  // ran the last six rows off the bottom edge.
+  const off = Math.max(0, (VIEW_H - VIEW_H_BASE) / 2);
+  const visTop = -off, visBot = VIEW_H - off;
+  const rowH = touch ? Math.min(26, Math.max(16, VIEW_H / 24)) : 13;
+  const gap = touch ? 3 : 1.6;
+  const w = touch ? Math.min(196, VIEW_W - 20) : 152;
+  const total = n * (rowH + gap) - gap;
+  const keepOut = 26;                       // the credit lines live down there
+  const top = Math.max(visTop + VIEW_H * 0.30, visBot - keepOut - total);
+  return { n, rowH, gap, w, top, total, off, visTop, visBot };
+}
+function titleRows() {
+  const L = titleLayout();
+  // y is CARD space (what the painter uses); hitY is VIEW space (what a finger
+  // reports). They differ by the card offset on a tall screen, and mixing them
+  // up puts every tap target a couple of hundred pixels away from its row.
+  return titleMenu().map((m, i) => {
+    const y = L.top + i * (L.rowH + L.gap);
+    return { ...m, custom: true, x: VIEW_W / 2, y, hitY: y + L.off, w: L.w, h: L.rowH, idx: i };
+  });
+}
 function uiButtons() {
+  // the title menu is hit-tested for taps but drawn by its own painter, so it
+  // is marked custom and skipped by the generic button loop
+  if (G && G.state === 'title') return titleRows();
   if (!touchUI.seen) return [];
   const H = VIEW_H, cw = 116, ch = Math.min(26, Math.max(18, H / 22));
   if (G.state === 'title' || G.state === 'ranking' || G.state === 'credits') {
@@ -490,7 +569,8 @@ function uiButtons() {
 }
 function hitButton(p) {
   for (const b of uiButtons()) {
-    if (Math.abs(p.x - b.x) <= b.w / 2 + 3 && p.y >= b.y - 3 && p.y <= b.y + b.h + 3) return b;
+    const by = b.hitY !== undefined ? b.hitY : b.y;
+    if (Math.abs(p.x - b.x) <= b.w / 2 + 3 && p.y >= by - 3 && p.y <= by + b.h + 3) return b;
   }
   return null;
 }
@@ -517,6 +597,17 @@ function onTouch(e) {
       if (p.x < 60 && p.y < 16 && (G.state === 'title' || (G.state === 'play' && G.paused))) { openSettings(); continue; }
       const btn = hitButton(p);
       if (btn) {
+        if (G.state === 'title') {
+          // one tap on a title row does what fire does to it: value rows cycle,
+          // action rows fire. Selection follows the finger so the highlight
+          // never disagrees with what the next key press would hit.
+          G.titleSel = btn.idx;
+          const row = titleMenu()[btn.idx];
+          // same rule as the key path: re-arm the attract countdown only if we
+          // are staying on the title
+          if (row) { if (row.cyc) { row.cyc(p.x < VIEW_W * 0.34 ? -1 : 1); G.stateTimer = 600; } else row.act(); }
+          continue;
+        }
         if (btn.id === 'start') startGame();
         else if (btn.id === 'demo') startAutoplay();
         else if (btn.id === 'settings') openSettings();
@@ -601,6 +692,19 @@ const stageEl = document.getElementById('stage') || canvas;
 stageEl.addEventListener('touchstart', e => { ensureMusic(); onTouch(e); }, { passive: false });
 stageEl.addEventListener('touchmove', onTouch, { passive: false });
 stageEl.addEventListener('touchend', onTouch, { passive: false });
+// it130: the title menu is clickable with a mouse too. There was no mouse
+// handler at all before, so on desktop the only way into anything was a
+// keyboard shortcut you had to already know about.
+stageEl.addEventListener('mousedown', (e) => {
+  ensureMusic();
+  if (!G || G.state !== 'title') return;
+  const p = touchLogical(e, canvas.getBoundingClientRect());
+  const btn = hitButton(p);
+  if (!btn) return;
+  G.titleSel = btn.idx;
+  const row = titleMenu()[btn.idx];
+  if (row) { if (row.cyc) { row.cyc(p.x < VIEW_W * 0.34 ? -1 : 1); G.stateTimer = 600; } else row.act(); }
+});
 stageEl.addEventListener('touchcancel', onTouch, { passive: false });
 // gamepad (standard mapping: stick/dpad move, A/R2 fire, B/R1 grenade, Start pause)
 const gp = { dx: 0, dy: 0, fire: false, gren: false, pause: false };
@@ -681,7 +785,7 @@ const G = {
   score: 0, top: loadScores()[0][1], lives: LIVES_START, grenades: 3, ammo: START_AMMO,
   area: 1, tally: 0, entry: null, lastEntry: null, paused: false, postGame: false,
   player: 1, slots: [], handoff: 0,   // it128: 2-player alternating
-  settingsSel: 0, settingsFrom: 'title', remap: null, cp: 1616, continues: 0,
+  settingsSel: 0, settingsFrom: 'title', titleSel: 0, remap: null, cp: 1616, continues: 0,
   frame: 0, wt: 0, hitStop: 0, chain: 0, chainT: 0, wrecks: [], mgT: 0, beams: [], spotT: 0, thunderT: 0, demo: false, autoplay: false, botT: 0, botStuck: 0, botLaneX: 0, botLaneUntil: 0, botLaneStuck: 0, botEscape: 0, botNoTrail: 0, botEscSide: 1, botWp: null, botPlanAt: 0, botAvoid: [], botPanicUntil: 0, botFrozeAt: 0, botFrozeX: 0, botFrozeY: 0, botFrozeScore: -1, botEngT: 0, botEngScore: -1, botDisengage: 0, botArbAt: 0, botArbX: 0, botArbY: 0, botArbScore: -1, botBreak: 0, botNullN: 0, botRetreatUntil: 0, ambush: null, burst: null,
   camY: A.height - VIEW_H,  // camera top in world coords (worldReady arms below)
   joe: { x: A.spawn.x, y: A.spawn.y, face: { x: 0, y: -1 }, turn: 0, latency: 0, fireCd: 0, firePrev: false, grenCd: 0, grenPrev: false, invuln: 0, alive: true, walk: 0, walkDist: 0, moving: false, fireT: 0, throwT: 0, recoil: 0, duck: false, deathT: 0 },
@@ -731,7 +835,18 @@ function updateParticles() {
     const p = G.parts[i];
     p.x += p.vx; p.y += p.vy; p.t++;
     if (p.kind === 'smoke') { p.size += 0.06; p.vx += 0.004; }
-    else if (p.kind === 'casing' || p.kind === 'chunk') { p.vy += 0.09; if (p.vy > 0 && p.y >= p.ground) { p.vy = 0; p.vx *= 0.6; } }
+    else if (p.kind === 'casing' || p.kind === 'chunk') {
+      p.vy += 0.09;
+      if (p.vy > 0 && p.y >= p.ground) {
+        // it130: brass hits dirt — tink once, on the landing frame only, and
+        // only for casings (a flying chunk of truck is not a shell casing)
+        if (p.kind === 'casing' && !p.landed && window.Sfx) {
+          Sfx.tink({ gain: 0.85, pan: Math.max(-1, Math.min(1, (p.x - VIEW_W / 2) / (VIEW_W / 2))) });
+        }
+        p.landed = 1;
+        p.vy = 0; p.vx *= 0.6;
+      }
+    }
     else if (p.kind === 'spark') { p.vy += 0.03; }
     else if (p.kind === 'bird') { p.vy -= 0.006; p.vx *= 1.004; } // climbs away, gathers pace
     if (p.t >= p.ttl) G.parts.splice(i, 1);
@@ -999,6 +1114,21 @@ function autopilotTick() {
       G.botPanicDir = ((G.botPanicDir || 0) + 1) % 4;
     }
   }
+
+  // it130 STALLED-ADVANCE GUARD. The freeze detector above only fires when the
+  // bot is motionless AND its score is static — but a bot busily winning an
+  // unwinnable-position firefight looks alive by both measures. On the tall
+  // phone view the camera culls far fewer enemies, so the engage reflex always
+  // has a target and the run burned 10k ticks pinned east of the Area 1 wall,
+  // never crossing the arch. (Deterministic, and it predates this iteration:
+  // the same tick and the same coordinates reproduce on the it128 build.)
+  // Northward progress is the only thing the demo owes, so measure THAT.
+  if (G.botBestY === undefined || J.y < G.botBestY - 2) { G.botBestY = J.y; G.botBestAt = G.botT; }
+  else if (G.botT - (G.botBestAt || 0) > 900 && G.botT > G.botPanicUntil) {
+    G.botPanicUntil = G.botT + 240;      // long enough to walk a wall face
+    G.botBestAt = G.botT;
+    G.botPanicDir = ((G.botPanicDir || 0) + 1) % 4;
+  }
   if (G.botT <= G.botPanicUntil) {
     const d4 = [{ down: true }, { right: true }, { up: true }, { left: true }][G.botPanicDir || 0];
     Object.assign(keys, d4);
@@ -1236,7 +1366,7 @@ function autopilotTick() {
 function startAutoplay() {
   startGame();
   G.autoplay = true; G.realInput = false;
-  G.botT = 0; G.botStuck = 0; G.botLaneX = 0; G.botLaneUntil = 0; G.botLaneStuck = 0; G.botEscape = 0; G.botNoTrail = 0; G.botEscSide = 1; G.botWp = null; G.botPlanAt = 0; G.botAvoid = []; G.botPanicUntil = 0; G.botFrozeAt = 0; G.botFrozeX = 0; G.botFrozeY = 0; G.botFrozeScore = -1; G.botEngT = 0; G.botEngScore = -1; G.botDisengage = 0; G.botArbAt = 0; G.botArbX = 0; G.botArbY = 0; G.botArbScore = -1; G.botBreak = 0; G.botNullN = 0; G.botRetreatUntil = 0; G.botLastX = G.joe.x; G.botLastY = G.joe.y;
+  G.botT = 0; G.botStuck = 0; G.botLaneX = 0; G.botLaneUntil = 0; G.botLaneStuck = 0; G.botEscape = 0; G.botNoTrail = 0; G.botEscSide = 1; G.botWp = null; G.botPlanAt = 0; G.botAvoid = []; G.botPanicUntil = 0; G.botFrozeAt = 0; G.botFrozeX = 0; G.botFrozeY = 0; G.botFrozeScore = -1; G.botEngT = 0; G.botEngScore = -1; G.botDisengage = 0; G.botArbAt = 0; G.botArbX = 0; G.botArbY = 0; G.botArbScore = -1; G.botBreak = 0; G.botNullN = 0; G.botRetreatUntil = 0; G.botLastX = G.joe.x; G.botLastY = G.joe.y; G.botBestY = undefined; G.botBestAt = 0;
   try { if (window.Music) { ensureMusic(); if (Music.mode !== 'original') Music.toggle(); } } catch (e) {}
 }
 function endAutoplay() {
@@ -1742,6 +1872,30 @@ function tick() {
   // attract cycle (disk truth: title ↔ ranking ↔ credits, no gameplay demo)
   if (G.state === 'title' || G.state === 'ranking' || G.state === 'credits') {
     if (ed.e.menu && G.state === 'title') { openSettings(); endTick(); return; }
+    if (G.state === 'title') {
+      // menu navigation: up/down moves, left/right cycles a value row, fire
+      // takes the row. Any of it also cancels the attract countdown, so the
+      // title cannot walk off to the demo while someone is reading the options.
+      const rows = titleMenu();
+      const n = rows.length;
+      if (ed.e.up) { G.titleSel = (G.titleSel + n - 1) % n; G.stateTimer = 600; }
+      if (ed.e.down) { G.titleSel = (G.titleSel + 1) % n; G.stateTimer = 600; }
+      const row = rows[G.titleSel] || rows[0];
+      if (row.cyc && (ed.e.left || ed.e.right)) { row.cyc(ed.e.left ? -1 : 1); G.stateTimer = 600; }
+      // A stray tap on the artwork must NOT start the game now that there is a
+      // menu to aim at — touch activates rows through hitButton and nothing
+      // else. Keyboard and gamepad fire still take the selected row.
+      if (ed.e.fire && !touchUI.fire) {
+        // Only re-arm the attract countdown when we STAY on the title. An action
+        // row has already set the state it is going to (and its timer with it) —
+        // stamping 600 over that left the intro card sitting there for twelve
+        // seconds instead of two.
+        if (row.cyc) { row.cyc(1); G.stateTimer = 600; } else row.act();
+        endTick(); return;
+      }
+      if (--G.stateTimer <= 0) { if (!qa || urlAttract) startDemo(); else setState('ranking', 300); }
+      endTick(); return;
+    }
     if (ed.e.fire) { startGame(); endTick(); return; }
     if (--G.stateTimer <= 0) {
       if (G.state === 'title') { if (!qa || urlAttract) startDemo(); else setState('ranking', 300); }
@@ -1883,6 +2037,9 @@ function tick() {
             J.walkDist -= hStride;
             J.walk++;
             spawnPart({ kind: 'dust', x: J.x + (vrng() - 0.5) * 3, y: J.y + 2, vx: (vrng() - 0.5) * 0.15, vy: -0.06, t: 0, ttl: 14 + vrng() * 8, size: 0.9 });
+            // it130: a footfall on every OTHER pose. A walk cycle plants two
+            // feet, so stepping on all eight would sell a sprint, not a stride.
+            if (window.Sfx && !(J.walk & 1)) Sfx.step({ gain: 0.9 });
           }
         }
       }
@@ -2364,7 +2521,12 @@ function tick() {
     e.vx0 = ox; e.vy0 = oy; e.vdx = e.x - ox;
     e.walk = (e.walk || 0) + stepped;
     e.walkDist = (e.walkDist || 0) + stepped;
-    while (e.walkDist >= WALK_STRIDE) { e.walkDist -= WALK_STRIDE; e.walkFrame = (e.walkFrame || 0) + 1; }
+    // it130: a cycle covers CONSTANT GROUND DISTANCE whatever its frame count,
+    // so an 8-frame walker reads twice as finely at the SAME footfall cadence
+    // instead of scurrying twice as fast. (strideFor a 4-frame set is exactly
+    // WALK_STRIDE, so every existing walker is bit-identical.)
+    e._stride = strideFor(`${enemyPfx(e.type)}-${e.view || 's'}`);
+    while (e.walkDist >= e._stride) { e.walkDist -= e._stride; e.walkFrame = (e.walkFrame || 0) + 1; }
     if (e.coverCd > 0) e.coverCd--;
     e.x = Math.max(6, Math.min(A.width - 6, e.x));
   }
@@ -2819,7 +2981,14 @@ function render(alpha) {
     if (Math.abs(vx) > Math.abs(vy) * 1.2 && Math.abs(vx) > 0.05) view = 'e';
     else if (vy < -0.05) view = 'n';
     e.view = view;
-    return `sprites/${pfx}-${view}-${(e.walkFrame || 0) & 3}`;
+    // it130: & 3 here was a hard 4-frame ceiling on EVERY enemy. The rifleman's
+    // 8-frame cycles shipped in it120 and were never once visible in game —
+    // frames 4-7 could not be addressed. Ask the set how long it actually is,
+    // exactly as the hero path does.
+    const set = `${pfx}-${view}`;
+    const fc = frameCount(set);
+    e._fc = fc;                                  // secondary motion reuses this
+    return `sprites/${set}-${(e.walkFrame || 0) % fc}`;
   };
   const drawEnemy = (e, ex, ey, corpse) => {
     let key, stride = false, kick = 0, preRot = 0, seqKey = null, seqA = 0;
@@ -2873,7 +3042,9 @@ function render(alpha) {
           seqA = Math.max(0, Math.min(1, (hi - e.fireT) / (hi - lo)));
         }
       }
-      else if ((e.stepped || 0) > 0.04) { key = `sprites/lob-s-${(e.walkFrame || 0) & 3}`; stride = true; }
+      // it130: was pinned to lob-s at 4 frames, so a grenadier crossing the
+      // screen or heading away still faced the camera. He has n/e cycles now.
+      else if ((e.stepped || 0) > 0.04) { key = walkKey('lob', e); stride = true; }
       else key = 'sprites/lob-act-0'; // crouched idle, grenade at the chest
     } else if (e.duckT > 0) {
       key = `sprites/rif-act-${e.duckT > 16 ? RIF_DUCK : RIF_POP}`;
@@ -2913,16 +3084,14 @@ function render(alpha) {
       e.face = face;
     }
     if (e.turnT > 0) e.turnT--;
-    let leanA = 0, blendImg = seqKey ? (IMGS[seqKey] || null) : null, blendA = seqA;
-    if (stride && (e.stepped || 0) > 0.04) {
-      leanA = Math.sin(((e.walkFrame || 0) + (e.walkDist || 0) / WALK_STRIDE) * 1.57) * 0.03;
-      if (!perfLow) {
-        // it78 crossfade: melt this stride frame into the next one
-        const nk = key.replace(/-(\d)$/, (m, fr) => '-' + (((+fr) + 1) & 3));
-        blendImg = IMGS[nk] || null;
-        blendA = poseEase(Math.max(0, Math.min(1, (e.walkDist || 0) / WALK_STRIDE)));
-      }
-    }
+    // it130: the it78 crossfade lookup used to live here. it127 removed the
+    // actual dissolve draw (complementary alpha is what made Joe see-through),
+    // but left this computing a blend image and alpha that nothing reads —
+    // a regex, an image lookup and an ease per enemy per frame, for nothing.
+    // Its frame arithmetic was also masked to 4, so it would have mis-picked
+    // the next frame for every 8-frame cycle had it still been drawing.
+    let leanA = 0;
+    if (stride && (e.stepped || 0) > 0.04) leanA = Math.sin(cyclePhase(e) * 6.2832) * 0.03;
     drawShadow(ex, ey, (corpse ? 7 : e.type === 'tank' ? 13 : e.type === 'truck' ? 11 : e.type === 'mortar' ? 8 : 5) * charScale());
     const h = (corpse ? ENEMY_H * 0.82 : e.type === 'moto' ? ENEMY_H * 1.25
       : e.type === 'truck' ? ENEMY_H * 1.5
@@ -2934,7 +3103,7 @@ function render(alpha) {
     // stride-synced bob for walkers (vehicles keep their judder/sway lines);
     // anchors snap to device pixels — fractional coords shimmer at 1.7x scale
     const isWalker = !corpse && e.type !== 'moto' && e.type !== 'truck' && e.type !== 'tank';
-    const ebob = (isWalker && stride && !perfLow && !Settings.reduceMotion) ? -Math.abs(Math.sin(((e.walkFrame || 0) + (e.walkDist || 0) / WALK_STRIDE) * Math.PI * 0.5)) * 0.8 * charScale() : 0;
+    const ebob = (isWalker && stride && !perfLow && !Settings.reduceMotion) ? -Math.abs(Math.sin(cyclePhase(e) * 6.2832)) * 0.8 * charScale() : 0;
     ctx.translate(Math.round(ex * S), Math.round((ey + 4 + ebob) * S));
     if (preRot) ctx.rotate(preRot); // screen-space bank, before the mirror
     const squash = e.turnT > 0 ? 0.5 + 0.5 * (1 - e.turnT / 4) : 1;
@@ -3612,44 +3781,77 @@ function render(alpha) {
       const kw = ka.width * sc, kh = ka.height * sc;
       ctx.drawImage(ka, (VIEW_W - kw) / 2 * S, ((fullH - kh) / 2 - cardOff) * S, kw * S, kh * S);
       scrim(0.34);
-      const grd = ctx.createLinearGradient(0, 0, 0, VIEW_H * 0.55 * S);
+      // start the top shade at the TOP OF THE GLASS, not the top of the card:
+      // on a tall phone the card begins a third of the way down, so anchoring
+      // here left the upper third unshaded with a hard seam where it began
+      const gTop = Math.max(0, (VIEW_H - VIEW_H_BASE) / 2) * -1;
+      const gH = (VIEW_H) * 0.55;
+      const grd = ctx.createLinearGradient(0, gTop * S, 0, (gTop + gH) * S);
       grd.addColorStop(0, 'rgba(5,8,4,0.62)'); grd.addColorStop(1, 'rgba(5,8,4,0)');
-      ctx.fillStyle = grd; ctx.fillRect(0, 0, VIEW_W * S, VIEW_H * 0.55 * S);
+      ctx.fillStyle = grd; ctx.fillRect(0, gTop * S, VIEW_W * S, gH * S);
     } else scrim(0.62);
-    if (!touchUI.seen) {
-      textC('COMMANDO', 72, 30, '#e8d8b0', true);
-      textC('HD', 95, 16, '#e8b34a', true);
-      textC('A TRIBUTE TO THE CLASSIC', 110, 7, '#c9c0a6');
-    }
-    // banner behind the call to action and credits so they read over the art
-    if (!touchUI.seen) {
-      ctx.fillStyle = 'rgba(5,8,4,0.55)';
-      ctx.fillRect(0, 168 * S, VIEW_W * S, 14 * S);
-      ctx.fillRect(0, 192 * S, VIEW_W * S, 22 * S);
-    }
-    if (!touchUI.seen && blink) textC('PRESS FIRE TO START', 172, 9, '#fff', true);
-    // WATCH DEMO hint box (desktop; touch players get the button stack below)
-    const db = DEMO_BTN;
-    if (!touchUI.seen) {
-    ctx.strokeStyle = 'rgba(255,210,87,0.85)'; ctx.lineWidth = 0.9 * S;
-    ctx.strokeRect((db.x - db.w / 2) * S, db.y * S, db.w * S, db.h * S);
-    ctx.fillStyle = 'rgba(255,210,87,0.10)';
-    ctx.fillRect((db.x - db.w / 2) * S, db.y * S, db.w * S, db.h * S);
-    ctx.fillStyle = '#ffd257'; ctx.font = `bold ${6 * S}px monospace`;
+    // --- logo: same wordmark both ways, sized off the view -------------------
+    const L = titleLayout();
+    const big = touchUI.seen;
+    const logoY = Math.max(L.visTop + 26, L.top - (big ? 62 : 58));
+    const lg = big ? 30 : 30, sm = big ? 15 : 16;
+    // soft backdrop, not a hard band: a flat rect cut two visible seams across
+    // the artwork above and below the wordmark
+    const lgd = ctx.createLinearGradient(0, (logoY - 26) * S, 0, (logoY + 34) * S);
+    lgd.addColorStop(0, 'rgba(5,8,4,0)');
+    lgd.addColorStop(0.28, 'rgba(5,8,4,0.55)');
+    lgd.addColorStop(0.75, 'rgba(5,8,4,0.5)');
+    lgd.addColorStop(1, 'rgba(5,8,4,0)');
+    ctx.fillStyle = lgd;
+    ctx.fillRect(0, (logoY - 26) * S, VIEW_W * S, 60 * S);
     ctx.textAlign = 'center';
-    ctx.fillText('▶ WATCH DEMO', db.x * S, (db.y + 8) * S);
-    ctx.font = `${4.5 * S}px monospace`; ctx.fillStyle = '#c9c0a6';
-    ctx.fillText('PRESS  D', db.x * S, (db.y + 14.5) * S);
+    ctx.fillStyle = '#e8d8b0'; ctx.font = `bold ${lg * S}px monospace`;
+    ctx.fillText('COMMANDO', VIEW_W / 2 * S, logoY * S);
+    ctx.fillStyle = '#e8b34a'; ctx.font = `bold ${sm * S}px monospace`;
+    ctx.fillText('HD', VIEW_W / 2 * S, (logoY + 16) * S);
+    ctx.fillStyle = '#c9c0a6'; ctx.font = `${6.5 * S}px monospace`;
+    ctx.fillText('A TRIBUTE TO THE CLASSIC', VIEW_W / 2 * S, (logoY + 28) * S);
     ctx.textAlign = 'start';
+
+    // --- the menu ------------------------------------------------------------
+    const rows = titleRows();
+    for (const r of rows) {
+      const on = r.idx === G.titleSel;
+      const x0 = (r.x - r.w / 2) * S, y0 = r.y * S, w0 = r.w * S, h0 = r.h * S;
+      ctx.fillStyle = on ? 'rgba(24,32,14,0.92)' : 'rgba(6,9,5,0.72)';
+      ctx.fillRect(x0, y0, w0, h0);
+      ctx.strokeStyle = on ? '#ffd257' : 'rgba(150,142,116,0.5)';
+      ctx.lineWidth = (on ? 1.4 : 0.8) * S;
+      ctx.strokeRect(x0, y0, w0, h0);
+      const fs = Math.min(8.5, r.h * 0.44);
+      const ty = (r.y + r.h * 0.66) * S;
+      ctx.font = `bold ${fs * S}px monospace`;
+      ctx.fillStyle = on ? '#fff' : r.hue;
+      const val = r.val ? r.val() : null;
+      if (val) {
+        // label left, value right — and arrows on the selected row to advertise
+        // that left/right (or a tap on either side) changes it
+        ctx.textAlign = 'left';
+        ctx.fillText(r.label, (r.x - r.w / 2 + 8) * S, ty);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = on ? '#ffd257' : '#e8d8b0';
+        ctx.fillText(on ? `‹ ${val} ›` : val, (r.x + r.w / 2 - 8) * S, ty);
+      } else {
+        ctx.textAlign = 'center';
+        ctx.fillText(on ? `▸ ${r.label} ◂` : r.label, r.x * S, ty);
+      }
+      ctx.textAlign = 'start';
     }
-    if (!touchUI.seen) {
-      textC('ORIGINAL © CAPCOM 1985 · AMIGA VERSION ELITE 1989', 201, 5, '#9a9280');
-      textC('NON-COMMERCIAL FAN REMAKE — ALL-NEW ART & SOUND', 210, 5, '#9a9280');
+    // a quiet hint of how to drive it, and the legal lines
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#9a9280'; ctx.font = `${4.8 * S}px monospace`;
+    if (blink) {
+      ctx.fillText(touchUI.seen ? 'TAP A ROW' : 'ARROWS TO CHOOSE  ·  FIRE / ENTER TO SELECT',
+        VIEW_W / 2 * S, (L.top - 6) * S);
     }
-    if (!touchUI.seen) { // touch players have a SETTINGS button in the stack
-      ctx.fillStyle = '#9ac'; ctx.font = `${5 * S}px monospace`;
-      ctx.fillText('⚙ SETTINGS [ESC]', 6 * S, 10 * S);
-    }
+    ctx.fillText('ORIGINAL © CAPCOM 1985 · AMIGA VERSION ELITE 1989', VIEW_W / 2 * S, (L.visBot - 15) * S);
+    ctx.fillText('NON-COMMERCIAL FAN REMAKE — ALL-NEW ART & SOUND', VIEW_W / 2 * S, (L.visBot - 8) * S);
+    ctx.textAlign = 'start';
   } else if (G.state === 'ranking') {
     scrim(0.8);
     textC('RANKING', 44, 14, '#e33', true);
@@ -3858,27 +4060,16 @@ function render(alpha) {
   }
   ctx.restore(); // end card centring
   // ---- touch UI: real buttons, drawn in view space ----
-  if (touchUI.seen && G.state === 'title') {
-    // the logo lives in VIEW space on touch: upper third, clear of the buttons
-    const ly = VIEW_H * 0.15;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(5,8,4,0.45)';
-    ctx.fillRect(0, (ly - 16) * S, VIEW_W * S, 62 * S);
-    ctx.fillStyle = '#e8d8b0'; ctx.font = `bold ${30 * S}px monospace`;
-    ctx.fillText('COMMANDO', VIEW_W / 2 * S, (ly + 8) * S);
-    ctx.fillStyle = '#e8b34a'; ctx.font = `bold ${15 * S}px monospace`;
-    ctx.fillText('HD', VIEW_W / 2 * S, (ly + 24) * S);
-    ctx.fillStyle = '#c9c0a6'; ctx.font = `${6.5 * S}px monospace`;
-    ctx.fillText('A TRIBUTE TO THE CLASSIC', VIEW_W / 2 * S, (ly + 36) * S);
-    ctx.textAlign = 'start';
-  }
-  if (touchUI.seen && (G.state === 'title' || G.state === 'ranking' || G.state === 'credits')) {
+  // it130: the touch-only logo and credit block that used to sit here are gone —
+  // the title screen above now paints one layout for both input styles.
+  if (touchUI.seen && (G.state === 'ranking' || G.state === 'credits')) {
     ctx.fillStyle = '#9a9280'; ctx.font = `${4.6 * S}px monospace`; ctx.textAlign = 'center';
     ctx.fillText('ORIGINAL © CAPCOM 1985 · AMIGA VERSION ELITE 1989', VIEW_W / 2 * S, (VIEW_H - 16) * S);
     ctx.fillText('NON-COMMERCIAL FAN REMAKE — ALL-NEW ART & SOUND', VIEW_W / 2 * S, (VIEW_H - 9) * S);
     ctx.textAlign = 'start';
   }
   for (const b of uiButtons()) {
+    if (b.custom) continue;   // title rows paint themselves, with selection state
     const x0 = (b.x - b.w / 2) * S, y0 = b.y * S, w0 = b.w * S, h0 = b.h * S;
     ctx.fillStyle = 'rgba(6,9,5,0.78)';
     ctx.fillRect(x0, y0, w0, h0);
@@ -3892,7 +4083,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.63.0-twoup', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.64.0-menu', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -4077,6 +4268,14 @@ if (qa) {
     botdebug: () => JSON.stringify({ wp: G.botWp, brk: G.botBreak, t: G.botT, avoid: (G.botAvoid || []).length, dis: G.botDisengage }),
     azdebug: () => JSON.stringify({ az: A.ambushZone, calm: G.calm, ambush: G.ambush, state: G.state, jx: G.joe.x, jy: G.joe.y, area: G.area }),
     uiLayout: () => settingsLayout(),
+    // title menu geometry + the view metrics it derives from, so a test can
+    // assert every row is actually on screen instead of eyeballing a shot
+    titleUI: () => ({
+      viewH: VIEW_H, bandTop: BAND_TOP, bandBot: BAND_BOT, touch: touchUI.seen,
+      sel: G.titleSel, rows: titleRows().map(r => ({ id: r.id, y: r.y, hitY: r.hitY, h: r.h })),
+      ...titleLayout(),
+    }),
+    titlePick: (i) => { G.titleSel = i; },
     // massacre everything except fleeing officers through the normal destroy
     // path — scenario cleanup that still exercises corpses/vehicle explosions
     wipe: () => { for (const e of G.enemies) if (e.mode !== 'flee') destroyEnemy(e); G.enemies = G.enemies.filter(e => e.mode === 'flee'); return G.enemies.length; },
@@ -4088,7 +4287,10 @@ if (qa) {
         : G.joe.duck ? (G.joe.fireT > 0 ? 'crouchfire' : 'duck')
         : G.joe.fireT > 0 ? 'fire' : (G.joe.moving ? 'run' : 'idle'),
       joeDeathFrame: G.joe.alive ? -1 : (G.joe.deathT < 8 ? 0 : G.joe.deathT < 18 ? 1 : G.joe.deathT < 30 ? 2 : 3),
-      enemyFrames: G.enemies.map(e => (e.walkFrame || 0) & 3),
+      // report the REAL index: masking here to & 3 is precisely what let a
+      // 4-frame ceiling hide behind a green test suite once already
+      enemyFrames: G.enemies.map(e => (e.walkFrame || 0) % frameCount(`${enemyPfx(e.type)}-${e.view || 's'}`)),
+      enemySets: G.enemies.map(e => `${enemyPfx(e.type)}-${e.view || 's'}:${frameCount(`${enemyPfx(e.type)}-${e.view || 's'}`)}`),
       enemyPoses: G.enemies.map(e => e.duckT > 16 ? 'duck' : e.duckT > 0 ? 'pop' : e.fireT > 0 ? 'fire' : 'walk'),
       enemyModes: G.enemies.map(e => e.dodgeT > 0 ? 'dodge' : e.mode),
       ebullets: G.ebullets.length,
