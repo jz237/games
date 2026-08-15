@@ -84,6 +84,7 @@ body {
   display: block;
   width: 100%;
   height: 100%;
+  object-fit: contain;
   cursor: crosshair;
   touch-action: none;
 }
@@ -311,6 +312,32 @@ body {
   .settings-grid { gap: 11px 14px; margin-top: 15px; }
   .settings-heading > span { font-size: 10px; }
   .settings-note { margin-top: 13px; }
+}
+
+/* Portrait phones: the shell fills the whole screen and the stage takes every
+   pixel between the status bar and the controls — the game adopts a matching
+   portrait logical canvas so there is no letterboxing. Placed after the generic
+   phone block so these rules win the cascade. */
+@media (max-width: 700px) and (orientation: portrait) {
+  body { padding: 0; place-items: stretch; }
+  #game-shell {
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    padding:
+      max(2px, env(safe-area-inset-top, 0px))
+      max(2px, env(safe-area-inset-right, 0px))
+      max(2px, env(safe-area-inset-bottom, 0px))
+      max(2px, env(safe-area-inset-left, 0px));
+  }
+  #stage-wrap {
+    aspect-ratio: auto;
+    min-height: 0;
+    height: 100%;
+    border-left-width: 1px;
+    border-right-width: 1px;
+  }
 }
 
 @media (max-width: 520px) {

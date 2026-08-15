@@ -35,13 +35,15 @@
   const scanlinesInput = document.querySelector("#scanlines-enabled");
   const shakeInput = document.querySelector("#shake-enabled");
 
-  const W = canvas.width;
-  const H = canvas.height;
-  const VERSION = "v4.0.0";
+  // Logical playfield size — landscape 960×720 on desktop, portrait matched to
+  // the device aspect on phones so the game fills the whole screen.
+  let W = canvas.width;
+  let H = canvas.height;
+  const VERSION = "v4.1.0";
   const PLAY_LEFT = 34;
-  const PLAY_RIGHT = W - 34;
+  let PLAY_RIGHT = W - 34;
   const PLAY_TOP = 48;
-  const PADDLE_Y = H - 48;
+  let PADDLE_Y = H - 48;
   const STATES = Object.freeze({
     TITLE: "title",
     STORY: "story",
@@ -264,13 +266,16 @@
     laserCooldown: 0
   };
 
-  const stars = Array.from({ length: 110 }, (_, i) => ({
-    x: pseudo(i * 3.17) * W,
-    y: pseudo(i * 8.91 + 2) * H,
-    r: .4 + pseudo(i * 2.33 + 9) * 1.4,
-    a: .18 + pseudo(i * 1.71 + 1) * .55,
-    s: 3 + pseudo(i * 5.19) * 13
-  }));
+  function makeStars() {
+    return Array.from({ length: 110 }, (_, i) => ({
+      x: pseudo(i * 3.17) * W,
+      y: pseudo(i * 8.91 + 2) * H,
+      r: .4 + pseudo(i * 2.33 + 9) * 1.4,
+      a: .18 + pseudo(i * 1.71 + 1) * .55,
+      s: 3 + pseudo(i * 5.19) * 13
+    }));
+  }
+  let stars = makeStars();
 
   function pseudo(seed) {
     const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
@@ -322,6 +327,40 @@
     renderScale = nextScale;
     canvas.width = Math.round(W * renderScale);
     canvas.height = Math.round(H * renderScale);
+  }
+
+  let pendingLayout = false;
+
+  function desiredLogicalSize() {
+    const boxW = stageWrap.clientWidth || W;
+    const boxH = stageWrap.clientHeight || H;
+    if (boxH > boxW * 1.05) {
+      // Portrait phone: match the stage box aspect so the field fills it exactly.
+      return { w: 720, h: Math.round(Math.max(900, Math.min(1400, 720 * boxH / boxW))) };
+    }
+    return { w: 960, h: 720 };
+  }
+
+  function layoutSafeNow() {
+    return state === STATES.TITLE || state === STATES.STORY ||
+      state === STATES.GAME_OVER || state === STATES.CONTINUE || state === STATES.ENDING;
+  }
+
+  function applyLogicalSize(force = false) {
+    const next = desiredLogicalSize();
+    if (next.w === W && next.h === H) { pendingLayout = false; return; }
+    if (!force && !layoutSafeNow()) { pendingLayout = true; return; }
+    W = next.w;
+    H = next.h;
+    PLAY_RIGHT = W - 34;
+    PADDLE_Y = H - 48;
+    paddle.y = PADDLE_Y;
+    paddle.x = Math.max(PLAY_LEFT + 7, Math.min(PLAY_RIGHT - paddle.w - 7, paddle.x));
+    paddle.targetX = paddle.x + paddle.w / 2;
+    stars = makeStars();
+    renderScale = 0; // force the backing store to adopt the new logical size
+    applyRenderResolution();
+    pendingLayout = false;
   }
 
   function saveHighScore() {
@@ -608,6 +647,7 @@
   function startRound() {
     state = STATES.PLAYING;
     stateTimer = 0;
+    if (pendingLayout) applyLogicalSize(true);
     bricks = makeLevel(round);
     capsules = [];
     lasers = [];
@@ -718,6 +758,7 @@
     state = STATES.TITLE;
     stopMusic();
     titleMenu.hidden = false;
+    applyLogicalSize();
     updateHud();
   }
 
@@ -2192,6 +2233,7 @@
   [masterInput, musicVolumeInput, sfxVolumeInput].forEach(input => input.addEventListener("input", updateVolumeLabels));
   document.addEventListener("fullscreenchange", () => requestAnimationFrame(fitFullscreenStage));
   window.addEventListener("resize", () => {
+    applyLogicalSize();
     if (settings.resolution === "auto") applyRenderResolution();
     requestAnimationFrame(fitFullscreenStage);
   });
@@ -2205,6 +2247,7 @@
   }
 
   syncSettingsForm();
+  applyLogicalSize();
   applyRenderResolution();
   crt.classList.toggle("crt-off", !settings.scanlines);
   muteButton.textContent = muted ? "SOUND OFF" : "SOUND ON";
@@ -2232,6 +2275,8 @@
         startMusic();
       },
       // Arkanoid heritage hooks
+      W: () => W,
+      H: () => H,
       campaign: () => campaign,
       round: () => round,
       stages: ARKANOID_STAGES,
