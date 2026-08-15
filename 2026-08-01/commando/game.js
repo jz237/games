@@ -1018,7 +1018,15 @@ function botLaneFor(y) {
 // read the ~10px river-bank strip as water-blocked and starved the planner of
 // the eastward path to the causeway; the engine's own axis-slide handles the
 // tight fit when the waypoint threads it
-function botCellOpen(x, y) { return x > 6 && x < A.width - 6 && !rectsAt(x - 3, y - 4, 6, 6); }
+// it131: THE PLANNER MUST PROBE THE BODY IT IS STEERING.
+// This asked whether a 6x6 box fits while Joe actually collides as 10x12
+// (see the movement test: rectsAt(x-5, y-8, 10, 12)). So the BFS happily
+// routed him through gaps he cannot enter: he walks up, stops dead against
+// geometry, the waypoint is blacklisted for failing, the blacklist closes the
+// cells around him, BFS then returns no path at all, and the panic walk slides
+// him side to side forever. Measured: y pinned at exactly 1063 for 7,000+ ticks
+// while x oscillated 75<->103 either side of a gap at x~107.
+function botCellOpen(x, y) { return x > 6 && x < A.width - 6 && !rectsAt(x - 5, y - 8, 10, 12); }
 function botCellPoint(x, y) { return x > 6 && x < A.width - 6 && !rectsAt(x - 1, y - 1, 2, 2); }
 function botPlanStep(loose) {
   const probe = loose ? botCellPoint : botCellOpen;
@@ -2336,16 +2344,43 @@ function tick() {
         if (e.unloaded >= TRUCK_SQUAD && ++e.holdT > 90) e.phase = 'leave';
       }
     } else if (e.type === 'moto') {
-      // races along its line; lethal to touch, and it ignores small cover
-      const nx2 = e.x + e.dir * MOTO_SPEED * diffMul();
-      if (rectsAt(nx2 - 5, e.y - 6, 10, 10)) {
-        const ny2 = e.y + (dy > 0 ? 1.4 : -1.4);
-        if (!rectsAt(e.x - 5, ny2 - 6, 10, 10)) e.y = ny2; else e.dir = -e.dir;
-      } else e.x = nx2;
-      // drift toward the player's line so it actually threatens
-      if (Math.abs(dy) > 3 && e.t % 3 === 0) {
-        const ny3 = e.y + Math.sign(dy) * 0.5;
-        if (!rectsAt(e.x - 5, ny3 - 6, 10, 10)) e.y = ny3;
+      // it131: A DESPATCH RIDER, NOT A PINBALL.
+      // This used to reverse direction the instant its nose touched anything
+      // (`e.dir = -e.dir`), so a bike that met a rock or a hut spent the rest of
+      // its life bouncing between the same two obstacles — the "gets stuck"
+      // report. A rider goes AROUND: steer along the blocking edge, and only
+      // ever commit to a real turn if there is genuinely no way past.
+      const spd = MOTO_SPEED * diffMul();
+      const nx2 = e.x + e.dir * spd;
+      const clear = (xx, yy) => !rectsAt(xx - 5, yy - 6, 10, 10);
+      if (clear(nx2, e.y)) {
+        e.x = nx2;
+        e.motoStuck = 0;
+      } else {
+        // blocked ahead: look for a lane to either side, preferring the one
+        // that also carries it toward Joe, and swing wide enough to clear
+        let steered = false;
+        const first = dy >= 0 ? 1 : -1;
+        for (const sgn of [first, -first]) {
+          for (const amt of [1.6, 2.6, 3.6]) {
+            const ny2 = e.y + sgn * amt;
+            if (clear(e.x, ny2) && clear(nx2, ny2)) { e.y = ny2; e.x += e.dir * spd * 0.55; steered = true; break; }
+          }
+          if (steered) break;
+        }
+        if (!steered) {
+          // truly walled in — squeeze along the face, and if even that fails for
+          // a good while, turn round ONCE rather than every single tick
+          const ny2 = e.y + (dy > 0 ? 1.2 : -1.2);
+          if (clear(e.x, ny2)) e.y = ny2;
+          else if ((e.motoStuck = (e.motoStuck || 0) + 1) > 40) { e.dir = -e.dir; e.motoStuck = 0; }
+        }
+      }
+      // hunt the player's line so it actually threatens, but ease onto it —
+      // a bike does not sidestep
+      if (Math.abs(dy) > 3 && e.t % 2 === 0) {
+        const ny3 = e.y + Math.sign(dy) * 0.55;
+        if (clear(e.x, ny3)) e.y = ny3;
       }
       // lean into the drift (smoothed so the bike banks rather than snaps),
       // and kick up a dust plume off the rear wheel while moving
@@ -4083,7 +4118,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.64.0-menu', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.65.0-rider', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
