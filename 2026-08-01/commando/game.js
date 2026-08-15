@@ -34,7 +34,7 @@ const CYCLE_DIST = 40;
 function strideFor(set) { return CYCLE_DIST / frameCount(set); }
 // which painted sprite family an enemy type walks on — everything not listed
 // borrows the rifleman's, which is also the on-screen fallback
-function enemyPfx(t) { return t === 'officer' ? 'off' : t === 'lobber' ? 'lob' : 'rif'; }
+function enemyPfx(t) { return t === 'officer' ? 'off' : t === 'lobber' ? 'lob' : t === 'moto' ? 'moto' : 'rif'; }
 // Position within the CURRENT walk cycle, 0..1 — the phase secondary motion
 // hangs off. Expressed as a fraction of the whole cycle rather than of a fixed
 // 4-frame period, so lean and footfall-bob stay at two footfalls per cycle
@@ -249,7 +249,8 @@ let groundSlices = null; // [{y0}, canvas] pair-list: full-res bake, sliced to s
 const BAKE_S = S;        // bake at output resolution — 1:1 blit, zero scaling smudge
 const SLICES = 2;
 const SPRITE_SETS = ['hero-n', 'hero-s', 'hero-e', 'hero-act', 'hero-die', 'rif-s', 'rif-n', 'rif-e', 'rif-act', 'rif-die', 'rif-die2', 'moto',
-  'off-s', 'off-e', 'off-n', 'off-act', 'lob-s', 'lob-n', 'lob-e', 'lob-act', 'mortar', 'truck', 'tank', 'snp'];
+  'off-s', 'off-e', 'off-n', 'off-act', 'lob-s', 'lob-n', 'lob-e', 'lob-act', 'mortar', 'truck', 'tank', 'snp',
+  'moto-s', 'moto-n', 'moto-e'];
 const SPRITE_NAMES = ['sprites/hero', 'sprites/rifleman', 'sprites/officer', 'sprites/lobber',
   'ui/portrait', 'ui/rifle', 'ui/keyart.webp', 'ui/map.webp', 'tiles/sand', 'tiles/grass',
   'props/palm', 'props/boulder', 'props/pond', 'props/trench', 'props/gate', 'props/wreck', 'sprites/truck-wreck',
@@ -2350,38 +2351,84 @@ function tick() {
       // its life bouncing between the same two obstacles — the "gets stuck"
       // report. A rider goes AROUND: steer along the blocking edge, and only
       // ever commit to a real turn if there is genuinely no way past.
+      // it132: A RIDER WITH A HEADING, NOT A SLIDING BILLBOARD.
+      // The bike used to advance along X only (`e.x += e.dir * spd`) and merely
+      // nudge Y to creep onto Joe's row, so whatever it was doing it was always
+      // moving sideways — and being locked to a side-on sprite it could not have
+      // looked like anything else. Now it carries a real heading, steers that
+      // heading toward what it wants at a bike's turn rate, and drives along it.
       const spd = MOTO_SPEED * diffMul();
-      const nx2 = e.x + e.dir * spd;
       const clear = (xx, yy) => !rectsAt(xx - 5, yy - 6, 10, 10);
-      if (clear(nx2, e.y)) {
-        e.x = nx2;
-        e.motoStuck = 0;
-      } else {
-        // blocked ahead: look for a lane to either side, preferring the one
-        // that also carries it toward Joe, and swing wide enough to clear
-        let steered = false;
-        const first = dy >= 0 ? 1 : -1;
-        for (const sgn of [first, -first]) {
-          for (const amt of [1.6, 2.6, 3.6]) {
-            const ny2 = e.y + sgn * amt;
-            if (clear(e.x, ny2) && clear(nx2, ny2)) { e.y = ny2; e.x += e.dir * spd * 0.55; steered = true; break; }
+      if (e.head === undefined) { e.head = e.dir < 0 ? Math.PI : 0; e.motoPhase = 'charge'; e.motoT = 0; }
+      e.motoT = (e.motoT || 0) + 1;
+
+      // Sweep in, then peel off and come round again. A bike that simply homed
+      // would either catch Joe or sit on him; passes are what make it read as a
+      // despatch rider harrying the position.
+      if (e.motoPhase === 'charge' && (d < 24 || e.motoT > 400)) {
+        e.motoPhase = 'break'; e.motoT = 0; e.breakSide = (dx >= 0 ? 1 : -1);
+      } else if (e.motoPhase === 'break' && e.motoT > 110) {
+        e.motoPhase = 'charge'; e.motoT = 0;
+      }
+      const tx = e.motoPhase === 'charge' ? J.x : e.x + e.breakSide * 70;
+      const ty = e.motoPhase === 'charge' ? J.y : e.y - 60;
+
+      // steer toward the target, turn-rate limited — a bike leans into a curve
+      let want = Math.atan2(ty - e.y, tx - e.x);
+      let turn = want - e.head;
+      while (turn > Math.PI) turn -= Math.PI * 2;
+      while (turn < -Math.PI) turn += Math.PI * 2;
+      const TURN_RATE = 0.05;
+      e.head += Math.max(-TURN_RATE, Math.min(TURN_RATE, turn));
+
+      // TRAPPED INSIDE GEOMETRY comes first, exactly as it does for the demo
+      // bot. If the rider is standing in a solid rect — dropped there by a
+      // spawn, or swallowed by a wreck that appeared around him — then EVERY
+      // candidate heading is blocked too, so the fan below can never find a way
+      // out and the bike sits there for the rest of the level. Measured: a
+      // rider spawned into cover moved 0px in 300 ticks. Get out first, ride
+      // second.
+      if (!clear(e.x, e.y)) {
+        let esc = null;
+        for (let r = 4; r <= 48 && esc === null; r += 4) {
+          for (let a = 0; a < 12; a++) {
+            const ang = a * (Math.PI / 6);
+            if (clear(e.x + Math.cos(ang) * r, e.y + Math.sin(ang) * r)) { esc = ang; break; }
           }
-          if (steered) break;
         }
-        if (!steered) {
-          // truly walled in — squeeze along the face, and if even that fails for
-          // a good while, turn round ONCE rather than every single tick
-          const ny2 = e.y + (dy > 0 ? 1.2 : -1.2);
-          if (clear(e.x, ny2)) e.y = ny2;
-          else if ((e.motoStuck = (e.motoStuck || 0) + 1) > 40) { e.dir = -e.dir; e.motoStuck = 0; }
+        if (esc !== null) {
+          e.head = esc;
+          e.x += Math.cos(esc) * spd;
+          e.y += Math.sin(esc) * spd;
+        }
+        e.escaping = 1;
+      } else e.escaping = 0;
+
+      // Obstacle avoidance by FANNING THE HEADING rather than reversing: try
+      // straight on, then progressively wider swerves either side. Reversing on
+      // contact is what made it rattle between the same two rocks forever.
+      let rode = e.escaping === 1;
+      for (const off of e.escaping ? [] : [0, 0.3, -0.3, 0.7, -0.7, 1.15, -1.15, 1.8, -1.8, 2.6, -2.6]) {
+        const h = e.head + off;
+        const nx2 = e.x + Math.cos(h) * spd, ny2 = e.y + Math.sin(h) * spd;
+        if (clear(nx2, ny2)) {
+          e.x = nx2; e.y = ny2;
+          if (off) e.head += off * 0.45;      // commit part way so it keeps clearing
+          rode = true; break;
         }
       }
-      // hunt the player's line so it actually threatens, but ease onto it —
-      // a bike does not sidestep
-      if (Math.abs(dy) > 3 && e.t % 2 === 0) {
-        const ny3 = e.y + Math.sign(dy) * 0.55;
-        if (clear(e.x, ny3)) e.y = ny3;
-      }
+      if (!rode) {
+        // boxed in on every heading: back out and swing right round
+        e.head += 0.6;
+        if ((e.motoStuck = (e.motoStuck || 0) + 1) > 30) {
+          const back = e.head + Math.PI;
+          const bx = e.x + Math.cos(back) * spd, by = e.y + Math.sin(back) * spd;
+          if (clear(bx, by)) { e.x = bx; e.y = by; }
+          e.motoStuck = 0;
+        }
+      } else e.motoStuck = 0;
+      e.x = Math.max(8, Math.min(A.width - 8, e.x));
+      e.dir = Math.cos(e.head) < 0 ? -1 : 1;
       // lean into the drift (smoothed so the bike banks rather than snaps),
       // and kick up a dust plume off the rear wheel while moving
       e.lean += ((e.y - oy) * e.dir * 0.10 - e.lean) * 0.18;
@@ -3038,7 +3085,21 @@ function render(alpha) {
         seqA = Math.max(0, Math.min(1, (t - DB[fi]) / span));
       }
     } else if (e.type === 'moto') {
-      key = `sprites/moto-${(e.walkFrame || 0) & 3}`;
+      // it132: the bike now has n/s/e sets painted from the game's OWN 70-degree
+      // camera. The old single set was a ground-level side elevation — the only
+      // thing in the game drawn from eye level, which is why it read as a
+      // sticker laid on the field rather than a machine standing on it. Pick the
+      // set from where the rider is actually heading, exactly like a walker.
+      const mvx = e.x - (e.vx0 !== undefined ? e.vx0 : e.x);
+      const mvy = e.y - (e.vy0 !== undefined ? e.vy0 : e.y);
+      let mview = e.view || 's';
+      if (Math.abs(mvx) > Math.abs(mvy) * 1.2 && Math.abs(mvx) > 0.06) mview = 'e';
+      else if (mvy < -0.06) mview = 'n';
+      else if (mvy > 0.06) mview = 's';
+      e.view = mview;
+      const mfc = frameCount(`moto-${mview}`);
+      e._fc = mfc;
+      key = `sprites/moto-${mview}-${(e.walkFrame || 0) % mfc}`;
       preRot = e.lean || 0; // banked into the drift, smoothed in the update
     } else if (e.type === 'truck') {
       key = `sprites/truck-${(e.walkFrame || 0) & 3}`;
@@ -3107,7 +3168,12 @@ function render(alpha) {
     // walkers face their travel — nobody mirror-pops as Joe crosses their column
     let face = e.face || 1;
     if (!corpse && e.dieT === undefined) {
-      if (e.type === 'moto' || e.type === 'truck') face = e.dir < 0 ? -1 : 1;
+      // it132: only the side-on bike set may mirror. The n/s sets are painted
+      // head-on and tail-on, so flipping them just swapped which hand held the
+      // throttle for no gain — and made the rider twitch every time his heading
+      // wandered across the column Joe was standing in.
+      if (e.type === 'moto') face = (e.view === 'e') ? (e.dir < 0 ? -1 : 1) : 1;
+      else if (e.type === 'truck') face = e.dir < 0 ? -1 : 1;
       else if (e.type === 'mortar' || e.type === 'tank') face = 1; // emplacements do not swivel
       else if (e.fireT > 0 || e.barkT > 0 || e.mode === 'engage' || e.type === 'lobber' || e.type === 'trencher' || e.type === 'sniper') {
         const ddx = G.joe.x - ex;
@@ -4118,7 +4184,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.65.0-rider', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.66.0-despatch', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
