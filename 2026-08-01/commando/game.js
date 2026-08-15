@@ -3364,12 +3364,10 @@ function render(alpha) {
       if (J.viewBlendT > 0) J.viewBlendT--;
       // it78: crossfade into the NEXT stride frame by distance fraction so the
       // painted 4-frame cycle reads as continuous motion
-      if (moving && !perfLow) {
-        heroBlend = IMGS[`sprites/hero-${view}-${(frame + 1) % fcH}`] || null;
-        // ramp the FULL 0->1 so the next pose has completely taken over by the
-        // stride boundary — the old 0.55 cap left a visible snap every step
-        heroBlendA = poseEase(Math.max(0, Math.min(1, J.walkDist / strideFor(`hero-${view}`))));
-      }
+      // it132: the it78 hero crossfade lookup lived here. it127 removed the
+      // dissolve DRAW (complementary alpha is what made Joe look see-through)
+      // but left this computing a blend frame and alpha that nothing reads —
+      // the same dead pair found on the enemy path in it130.
       // continuous phase from distance covered — a frame-index sine snapped
       if (moving) lean = Math.sin((J.walk + J.walkDist / strideFor(`hero-${view}`)) * (6.283 / fcH)) * 0.035;
     }
@@ -4184,7 +4182,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.66.0-despatch', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.67.0-onejoe', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
