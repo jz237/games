@@ -23,5 +23,5 @@
     { "file": "xenon-2-megablast-v304.mp3", "seconds": 150, "title": "Xenon 2 - Megablast (In-Game)", "source": "experiments/amiga-mod-player/audio/Xenon_2/02_in_game_bgm.mp3" },
     { "file": "jim-power-title-v304.mp3", "seconds": 150, "title": "Jim Power - Title Theme", "source": "experiments/amiga-mod-player/audio/Jim_Power/01_title.mp3" }
   ],
-  "warning": "Do NOT source replacements from experiments/amiga-mod-player/audio/{Project-X,Apidya,Turrican_II} - those render folders are malformed (wind-like sweeps/noise)."
+  "warning": "Do NOT source replacements from the malformed Project-X/Apidya/Turrican_II render folders (wind-like sweeps/noise). They were quarantined 2026-07-10 to experiments/amiga-mod-player/audio-quarantine/ - see the README there. Never pick audio from that quarantine folder."
 }

@@ -1,0 +1,585 @@
+{
+"1": {
+"lead": 4,
+"rows": [
+"SSSSSSSSSSSSS",
+"RRRRRRRRRRRRR",
+"YYYYYYYYYYYYY",
+"BBBBBBBBBBBBB",
+"PPPPPPPPPPPPP",
+"NNNNNNNNNNNNN"
+]
+},
+"2": {
+"lead": 2,
+"rows": [
+"W............",
+"WO...........",
+"WOC..........",
+"WOCN.........",
+"WOCNR........",
+"WOCNRB.......",
+"WOCNRBP......",
+"WOCNRBPY.....",
+"WOCNRBPYW....",
+"WOCNRBPYWO...",
+"WOCNRBPYWOC..",
+"WOCNRBPYWOCN.",
+"SSSSSSSSSSSSR"
+]
+},
+"3": {
+"lead": 3,
+"rows": [
+"NNNNNNNNNNNNN",
+".............",
+"WWWGGGGGGGGGG",
+".............",
+"RRRRRRRRRRRRR",
+".............",
+"GGGGGGGGGGWWW",
+".............",
+"PPPPPPPPPPPPP",
+".............",
+"BBBGGGGGGGGGG",
+".............",
+"CCCCCCCCCCCCC",
+".............",
+"GGGGGGGGGGCCC"
+]
+},
+"4": {
+"lead": 4,
+"rows": [
+".OCNSB.YWOCN.",
+".CNSBP.WOCNS.",
+".NSBPY.OCNSB.",
+".SBPYW.CNSBP.",
+".BPYWO.NSBPY.",
+".PYWOC.SBPYW.",
+".YWOCN.BPYWO.",
+".WOCNS.PYWOC.",
+".OCNSB.YWOCN.",
+".CNSBP.WOCNS.",
+".NSBPY.OCNSB.",
+".SBPYW.CNSBP.",
+".BPYWO.NSBPY.",
+".PYWOC.SBPYW."
+]
+},
+"5": {
+"lead": 2,
+"rows": [
+"...Y.....Y...",
+"...Y.....Y...",
+"....Y...Y....",
+"....Y...Y....",
+"...SSSSSSS...",
+"...SSSSSSS...",
+"..SSRSSSRSS..",
+"..SSRSSSRSS..",
+".SSSSSSSSSSS.",
+".SSSSSSSSSSS.",
+".SSSSSSSSSSS.",
+".S.SSSSSSS.S.",
+".S.S.....S.S.",
+".S.S.....S.S.",
+"....SS.SS....",
+"....SS.SS...."
+]
+},
+"6": {
+"lead": 4,
+"rows": [
+"B.R.N.C.N.R.B",
+"B.R.N.C.N.R.B",
+"B.R.N.C.N.R.B",
+"B.R.N.C.N.R.B",
+"B.R.N.C.N.R.B",
+"B.GOGOGOGOG.B",
+"B.R.N.C.N.R.B",
+"B.R.N.C.N.R.B",
+"B.R.N.C.N.R.B",
+"B.R.N.C.N.R.B",
+"O.O.G.O.G.O.O",
+"B.R.N.C.N.R.B"
+]
+},
+"7": {
+"lead": 3,
+"rows": [
+".B.B.B.B.B.B.",
+".....YYP.....",
+"....YYPPB....",
+"...YYPPBBR...",
+".B.YPPBBRR.B.",
+"..YPPBBRRNN..",
+"..PPBBRRNNC..",
+"..PBBRRNNCC..",
+".BBBRRNNCCO..",
+"..BRRNNCCOO..",
+"..RRNNCCOOW..",
+"...NNCCOOW...",
+".B.NCCOOWW...",
+"....COOWW....",
+".....OWW.....",
+".............",
+".B.B.....B.B."
+]
+},
+"8": {
+"lead": 4,
+"rows": [
+"...G.G.G.G...",
+".G.........G.",
+".GG.G...G.GG.",
+"......W......",
+".G...GOG...G.",
+"...G..C..G...",
+"......N......",
+"...G..R..G...",
+".G...GBG...G.",
+"......P......",
+".GG.G...G.GG.",
+".G.........G.",
+"...G.G.G.G..."
+]
+},
+"9": {
+"lead": 2,
+"rows": [
+".GBG.....G.G.",
+".GNG.....GNG.",
+".GCG.....GCG.",
+".GGG.....GGG.",
+".............",
+"....PWWWY....",
+"....POOOY....",
+"....PCCCY....",
+"....PNNNY....",
+"....PRRRY....",
+"....PBBBY...."
+]
+},
+"10": {
+"lead": 0,
+"rows": [
+".G...........",
+".............",
+".G...........",
+".G...........",
+".G...........",
+".G.....B.....",
+".G....BCB....",
+".G...BCWCB...",
+".G..BCWCWCB..",
+".G.BCWCSCWCB.",
+".G..BCWCWCB..",
+".G...BCWCB...",
+".G....BCB....",
+".G.....B.....",
+".G...........",
+".G...........",
+".G...........",
+".GGGGGGGGGGGG"
+]
+},
+"11": {
+"lead": 3,
+"rows": [
+".B.B.B.B.B.B.",
+".SSSSSSSSSSS.",
+".S.........S.",
+".S.SSSSSSS.S.",
+".S.S.....S.S.",
+".S.S.SSS.S.S.",
+".S.S.S.S.S.S.",
+".S.S.SSS.S.S.",
+".S.S.....S.S.",
+".S.SSSSSSS.S.",
+".S.........S.",
+".SSSSSSSSSSS.",
+".............",
+".............",
+".............",
+".............",
+".B.B.B.B.B.B."
+]
+},
+"12": {
+"lead": 4,
+"rows": [
+"GGGGGGGGGGGGG",
+"....G.....GP.",
+".GW.G.....G..",
+".G..G..G..G..",
+".G..GN.G..G..",
+".G..G..G..G..",
+".G.OG..G.BG..",
+".G..G..G..G..",
+".G..G..G..G..",
+".G..G.RG..G..",
+".G..G..G..G..",
+".GC....G.....",
+".G.....G....Y",
+".GGGGGGGGGGGG"
+]
+},
+"13": {
+"lead": 4,
+"rows": [
+".YYY.WWW.YYY.",
+".PPP.OOO.PPP.",
+".BBB.CCC.BBB.",
+".RRR.NNN.RRR.",
+".NNN.RRR.NNN.",
+".CCC.BBB.CCC.",
+".OOO.PPP.OOO.",
+".WWW.YYY.WWW."
+]
+},
+"14": {
+"lead": 4,
+"rows": [
+"BBBBBBBBBBBBB",
+"G...........G",
+"BBBBBBBBBBBBB",
+".............",
+"OSSSSSSSSSSSO",
+"G...........G",
+"WWWWWWWWWWWWW",
+".............",
+"CSSSSSSSSSSSC",
+"G...........G",
+"RRRRRRRRRRRRR",
+".............",
+"RRRRRRRRRRRRR",
+"G...........G"
+]
+},
+"15": {
+"lead": 3,
+"rows": [
+".B.B.B.B.B.B.",
+".............",
+".............",
+"CWGCCCCCCCGWC",
+"CWYGCCCCCGNWC",
+"CWYYGCCCGNNWC",
+"CWYYYGWGNNNWC",
+"CWYYYYWNNNNWC",
+"CWYYYYWNNNNWC",
+"CWYYYYWNNNNWC",
+"CSYYYYWNNNNSC",
+"CCSYYYWNNNSCC",
+"CCCSYYWNNSCCC",
+"CCCCSYWNSCCCC",
+"CCCCCSWSCCCCC"
+]
+},
+"16": {
+"lead": 4,
+"rows": [
+"......G......",
+"....WW.WW....",
+"..WW..G..WW..",
+"WW..OO.OO..WW",
+"..OO..G..OO..",
+"OO..YY.YY..OO",
+"..YY..G..YY..",
+"YY..NN.NN..YY",
+"..NN..G..NN..",
+"NN..RR.RR..NN",
+"..RR..G..RR..",
+"RR..BB.BB..RR",
+"..BB.....BB..",
+"BB.........BB"
+]
+},
+"17": {
+"lead": 4,
+"rows": [
+"......S......",
+"...BBBSNNN...",
+"..BBBWWWNNN..",
+"..BBWWWWWNN..",
+".BBBWWWWWNNN.",
+".BBBWWWWWNNN.",
+".BBBWWWWWNNN.",
+".S..S.S.S..S.",
+"......S......",
+"......S......",
+"......S......",
+"....G.G......",
+"....GGG......",
+".....G......."
+]
+},
+"18": {
+"lead": 4,
+"rows": [
+"O.GYYYYYYYG.O",
+"O.GGYYYYYGG.O",
+"O.G.GYYYG.G.O",
+"O.G.PGYGC.G.O",
+"O.G.P.S.C.G.O",
+"O.G.P.N.C.G.O",
+"O.G.P.N.C.G.O",
+"O.G.P.N.C.G.O",
+"O.G.P.N.C.G.O",
+"OGGGP.N.CGGGO"
+]
+},
+"19": {
+"lead": 3,
+"rows": [
+".B.B.B.B.B.B.",
+"..GGGGGGGGG..",
+"..NRBPGPBRN..",
+"..NRBPGPBRN..",
+"..NRBPGPBRN..",
+"..NRBPYPBRN..",
+"..NRBPGPBRN..",
+"..NRBPGPBRN..",
+"..NRBPGPBRN..",
+"..GGGGGGGGG..",
+".............",
+".............",
+".B.B.B.B.B.B.",
+".............",
+".............",
+".............",
+".B.B.B.B.B.B."
+]
+},
+"20": {
+"lead": 4,
+"rows": [
+"GWGOGCGNGRGBG",
+"GPGSGSGSGSGYG",
+".............",
+"GPG.G.G.G.G.G",
+"G.GPG.G.G.G.G",
+"G.G.GPG.G.G.G",
+"G.G.G.GPG.G.G",
+"G.G.G.G.GPG.G",
+"...........P.",
+"..G.G.G.GPG..",
+"..G.G.GPG.G..",
+"..G.GPG.G.G..",
+"...PG.G.G....",
+".P....G......"
+]
+},
+"21": {
+"lead": 4,
+"rows": [
+".GOOOOOOOOOG.",
+".G.........G.",
+".G.GGGGGGG.G.",
+".G.G.....G.G.",
+".G.G.....G.G.",
+".G.G.RRR.G.G.",
+".G.G.NNN.G.G.",
+".G.G.BBB.G.G.",
+".G.G.WWW.G.G.",
+".G.G.....G.G.",
+".G.GCCCCCG.G.",
+".G.........G.",
+".G.........G.",
+".GGGGGGGGGGG."
+]
+},
+"22": {
+"lead": 4,
+"rows": [
+"YYYYYYYYYYYYY",
+"YYYYYYYYYYYYY",
+".............",
+"RRG.GRRRG.GRR",
+"RRG.GRRRG.GRR",
+"RRG.GRRRG.GRR",
+"RRG.GRRRG.GRR",
+".............",
+"WWWWWWWWWWWWW",
+"WWWWWWWWWWWWW"
+]
+},
+"23": {
+"lead": 3,
+"rows": [
+".B.B.B.B.B.B.",
+"CCCCCCCCCCCCC",
+".............",
+"..SSS.SSS.SSS",
+"..SNS.SNS.SNS",
+"..SSS.SSS.SSS",
+".............",
+".SSS.SSS.SSS.",
+".SRS.SRS.SRS.",
+".SSS.SSS.SSS.",
+".............",
+"SSS.SSS.SSS..",
+"SBS.SBS.SBS..",
+"SSS.SSS.SSS..",
+".............",
+".............",
+".B.B.B.B.B.B."
+]
+},
+"24": {
+"lead": 7,
+"rows": [
+".....WWW.....",
+".....WWW.....",
+".....WWW.....",
+"....WWWWW....",
+"....WBWBW....",
+"...WBBWBBW...",
+"...BBBBBBB...",
+"..BBBBBBBBB..",
+"..BBBBBBBBB..",
+".BBBBBBBBBBB.",
+"BBBBBBBBBBBBB"
+]
+},
+"25": {
+"lead": 4,
+"rows": [
+"RRRRRRRRRRRRR",
+"NNNNNNNNNNNNN",
+"BBBBBBBBBBBBB",
+"GGGGGSSSGGGGG",
+"GRRRG...GBBBG",
+"GRRRG...GBBBG",
+"G...........G",
+"G...........G",
+"G...GNNNG...G",
+"G...GNNNG...G",
+"GSSSGGGGGSSSG"
+]
+},
+"26": {
+"lead": 4,
+"rows": [
+"..GSSSG......",
+".G.....G.....",
+"G..CCC..G....",
+"G.NNNNN.G....",
+"G.BBBBB.G....",
+"G..PPP..G....",
+".G.....G.....",
+"..GGGGG......"
+]
+},
+"27": {
+"lead": 3,
+"rows": [
+".B.B.B.B.B.B.",
+".............",
+".............",
+".............",
+".B.B.B.B.B.B.",
+".............",
+".............",
+".............",
+"SSSSSSSSSSSSS",
+"YYYYYYYYYYYYY",
+"SSSSSSSSSSSSS",
+".............",
+"SSSSSSSSSSSSS",
+"RRRRRRRRRRRRR",
+"SSSSSSSSSSSSS"
+]
+},
+"28": {
+"lead": 3,
+"rows": [
+"BBBBBBBBBBBBB",
+"BGGGGPGPGGGGB",
+"BG.........GB",
+"BGP.......PGB",
+"BGPP.....PPGB",
+"BGPPP...PPPGB",
+".BGPPP.PPPGB.",
+"..BGPPPPPGB..",
+"...BGPPPGB...",
+"....BGPGB....",
+".....BPB.....",
+"......B......"
+]
+},
+"29": {
+"lead": 4,
+"rows": [
+"YYYYYG.GYYYYY",
+"PPPPPG.GPPPPP",
+"GGWGGG.GGGWGG",
+"BBBBBG.GBBBBB",
+"RRRRRG.GRRRRR",
+"NNNNNG.GNNNNN",
+"SSWSSG.GSSWSS",
+"CCCCCG.GCCCCC",
+"OOOOOG.GOOOOO",
+"WWWWWG.GWWWWW"
+]
+},
+"30": {
+"lead": 4,
+"rows": [
+"YP...........",
+"YPBR.........",
+"YPBRNC.......",
+"YPBRNCOW.....",
+"YPBRNCOWYP...",
+"SPBRNCOWYPBR.",
+".GSRNCOWYPBRN",
+"...GSCOWYPBRN",
+".....GSWYPBRN",
+".......GSPBRN",
+".........GSRN",
+"...........GS"
+]
+},
+"31": {
+"lead": 3,
+"rows": [
+".B.B.B.B.B.B.",
+"N.R.B.P.Y.W.O",
+"S.S.S.S.S.S.S",
+".B.R.N.C.O.W.",
+".S.S.S.S.S.S.",
+"C.N.R.B.P.Y.W",
+"S.S.S.S.S.S.S",
+".P.B.R.N.C.O.",
+".S.S.S.S.S.S.",
+"O.C.N.R.B.P.Y",
+"S.S.S.S.S.S.S",
+".Y.P.B.R.N.C.",
+".S.S.S.S.S.S.",
+"W.O.C.N.R.B.P",
+"S.S.S.S.S.S.S"
+]
+},
+"32": {
+"lead": 4,
+"rows": [
+"..G.G.G.G.G..",
+"..G.G.G.G.G..",
+"..G.G.G.GNN..",
+"..G.G.G.G.G..",
+"..G.G.GRRRR..",
+"..G.G.G.G.G..",
+"..G.GBBBBBB..",
+"..G.G.G.G.G..",
+"..GPPPPPPPP..",
+"..G.G.G.G.G..",
+"..YYYYYYYYY..",
+"..SSSSSSSSS.."
+]
+},
+"33": {
+"lead": 0,
+"rows": []
+}
+}

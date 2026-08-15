@@ -1,7 +1,18 @@
-# Shatter Storm: Amiga Edition v3.0.4
+# Shatter Storm: Amiga Edition v4.0.0
 
 A standalone enhanced brick breaker derived from the clean-room browser remake
 inspired by Jez's supplied 1987 Amiga disk.
+
+v4.0.0 adds the full Arkanoid (Taito, 1986) heritage: the ARKANOID 33 campaign
+plays all 33 arcade screen layouts (parsed and verified stage-by-stage against
+original arcade captures), the complete 7-capsule set (Laser, Enlarge, Catch,
+Slow, Disruption, Break, Extra Vaus) with authentic replace/drop rules, the four
+enemies (Konerd, Pyradok, Tri-Sphere, Opopo) emerging from animated top-wall
+hatches, authentic scoring (colour values 50-120, silver = 50 x stage, +1 hit
+every 8 stages), 1UPs at 20,000/60,000/every 60,000, the Break escape gate
+(+10,000), a continue countdown that resets the score like the arcade, the
+story intro and ending, and the 16-hit DOH boss on round 33. The original ten
+handcrafted rounds remain as the STORM SET campaign.
 
 ## Play
 
