@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#050817">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="description" content="Play Shatter Storm: Amiga Edition v4.1.0 — all 33 arcade Arkanoid screen layouts, 7 capsules, 4 enemies, the Break gate and the DOH boss, with real Amiga music and genuine Paula sound effects.">
+  <meta name="description" content="Play Shatter Storm: Amiga Edition v4.2.0 — all 33 arcade Arkanoid screen layouts, 7 capsules, 4 enemies, the Break gate and the DOH boss, with an original ElevenLabs score, a classic Amiga music option and genuine Paula sound effects.">
   <link rel="canonical" href="https://jez237.com/games/2026-03-11/shatter-storm/amiga/">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Shatter Storm: Amiga Edition">
-  <meta property="og:description" content="The 33 arcade screens of Arkanoid faithfully rebuilt — Laser, Catch, Break and Disruption capsules, Konerd to Opopo enemies, DOH on round 33 — plus real Amiga music.">
+  <meta property="og:description" content="The 33 arcade screens of Arkanoid faithfully rebuilt — Laser, Catch, Break and Disruption capsules, Konerd to Opopo enemies, DOH on round 33 — plus an original score and classic Amiga music.">
   <meta property="og:url" content="https://jez237.com/games/2026-03-11/shatter-storm/amiga/">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <title>Shatter Storm: Amiga Edition</title>
@@ -51,7 +51,7 @@
     <section id="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
       <form id="settings-form" class="settings-card">
         <div class="settings-heading">
-          <p>SHATTER STORM · AMIGA EDITION v4.1.0</p>
+          <p>SHATTER STORM · AMIGA EDITION v4.2.0</p>
           <h1 id="settings-title">GAME SETTINGS</h1>
           <span>Configure the cabinet, then launch.</span>
         </div>
@@ -76,6 +76,14 @@
             </select>
           </label>
 
+          <label class="setting setting-wide" for="music-style">
+            <span>MUSIC STYLE</span>
+            <select id="music-style" name="musicStyle">
+              <option value="original" selected>Original score — composed for this game</option>
+              <option value="amiga">Classic Amiga mix — Pinball Dreams · Lotus 2 · Xenon 2 · Jim Power</option>
+            </select>
+          </label>
+
           <label class="setting" for="master-volume">
             <span>MASTER VOLUME <output id="master-value" for="master-volume">85%</output></span>
             <input id="master-volume" name="masterVolume" type="range" min="0" max="100" value="85">
@@ -92,14 +100,14 @@
           </label>
 
           <div class="setting toggles" aria-label="Display and audio options">
-            <label><input id="music-enabled" type="checkbox" checked> AMIGA MUSIC</label>
+            <label><input id="music-enabled" type="checkbox" checked> MUSIC</label>
             <label><input id="sfx-enabled" type="checkbox" checked> GAME SFX</label>
             <label><input id="scanlines-enabled" type="checkbox" checked> CRT SCANLINES</label>
             <label><input id="shake-enabled" type="checkbox" checked> SCREEN SHAKE</label>
           </div>
         </div>
 
-        <p class="settings-note">AMIGA MIX: Pinball Dreams · Lotus Turbo Challenge 2 · Xenon 2 · Jim Power. Four eye-verified music tracks play in sequence; effects are genuine Amiga Paula captures.</p>
+        <p class="settings-note">ORIGINAL SCORE: six ElevenLabs pieces composed for this game — one per campaign act, a DOH theme and the ending. AMIGA MIX: Pinball Dreams · Lotus 2 · Xenon 2 · Jim Power. Effects are genuine Amiga Paula captures.</p>
         <div class="settings-actions">
           <button id="settings-cancel" type="button">CANCEL</button>
           <button id="settings-start" type="submit">SAVE SETTINGS</button>
@@ -107,6 +115,6 @@
       </form>
     </section>
   </main>
-  <script src="game.js?v=410"></script>
+  <script src="game.js?v=420"></script>
 </body>
 </html>

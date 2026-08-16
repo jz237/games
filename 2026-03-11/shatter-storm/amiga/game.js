@@ -27,6 +27,7 @@
   const settingsStart = document.querySelector("#settings-start");
   const difficultyInput = document.querySelector("#difficulty");
   const resolutionInput = document.querySelector("#resolution");
+  const musicStyleInput = document.querySelector("#music-style");
   const masterInput = document.querySelector("#master-volume");
   const musicVolumeInput = document.querySelector("#music-volume");
   const sfxVolumeInput = document.querySelector("#sfx-volume");
@@ -39,7 +40,7 @@
   // the device aspect on phones so the game fills the whole screen.
   let W = canvas.width;
   let H = canvas.height;
-  const VERSION = "v4.1.0";
+  const VERSION = "v4.2.0";
   const PLAY_LEFT = 34;
   let PLAY_RIGHT = W - 34;
   const PLAY_TOP = 48;
@@ -185,6 +186,16 @@
     { src: "audio/xenon-2-megablast-v304.mp3", title: "Xenon 2 · Megablast", gain: 1 },
     { src: "audio/jim-power-title-v304.mp3", title: "Jim Power · Title Theme", gain: 1 }
   ]);
+  // Original score composed for this game with ElevenLabs Music — one act per
+  // quarter of the campaign, a DOH theme, and the ending. Tracks loop in place.
+  const ORIGINAL_TRACKS = Object.freeze([
+    { src: "audio/level-act1-v420.mp3", title: "First Wall · Original Score", gain: 1 },
+    { src: "audio/level-act2-v420.mp3", title: "Silver Circuit · Original Score", gain: 1.15 },
+    { src: "audio/level-act3-v420.mp3", title: "Warped Space · Original Score", gain: 1.08 },
+    { src: "audio/level-act4-v420.mp3", title: "Final Ascent · Original Score", gain: 1.02 },
+    { src: "audio/doh-fortress-v420.mp3", title: "Fortress DOH · Original Score", gain: 1.03 }
+  ]);
+  const ENDING_TRACK = Object.freeze({ src: "audio/ending-voyage-v420.mp3", title: "Voyage of Arkanoid · Original Score", gain: 1.06 });
   const sampleBank = new Map();
   const sampleCursor = new Map();
   const sampleLastPlayed = new Map();
@@ -194,9 +205,10 @@
     expert: { lives: 3, paddleWidth: 102, paddleSpeed: 700, ballSpeed: 1.14, enemyDelay: .78, enemySpeed: 1.18 }
   });
   const defaultSettings = Object.freeze({
-    version: 3,
+    version: 4,
     difficulty: "classic",
     resolution: "auto",
+    musicStyle: "original",
     masterVolume: .85,
     musicVolume: .95,
     sfxVolume: .82,
@@ -301,6 +313,7 @@
       }
       if (!difficultyProfiles[merged.difficulty]) merged.difficulty = "classic";
       if (!["auto", "720", "1080", "1440"].includes(merged.resolution)) merged.resolution = "auto";
+      if (!["original", "amiga"].includes(merged.musicStyle)) merged.musicStyle = "original";
       ["masterVolume", "musicVolume", "sfxVolume"].forEach(key => {
         merged[key] = Math.max(0, Math.min(1, Number(merged[key])));
       });
@@ -462,22 +475,39 @@
     return true;
   }
 
-  function musicVolumeFor(trackInfo = MUSIC_PLAYLIST[musicTrackIndex]) {
+  // Which original-score track fits right now: acts by campaign quarter,
+  // the DOH theme on round 33, the ending piece over the epilogue.
+  function originalTrackFor() {
+    if (state === STATES.ENDING) return ENDING_TRACK;
+    if (isDohRound()) return ORIGINAL_TRACKS[4];
+    const act = campaign === "arkanoid"
+      ? Math.min(3, Math.floor(round / 8))
+      : Math.floor(round / 3) % 4;
+    return ORIGINAL_TRACKS[act];
+  }
+
+  function currentTrackInfo() {
+    return settings.musicStyle === "amiga" ? MUSIC_PLAYLIST[musicTrackIndex] : originalTrackFor();
+  }
+
+  function musicVolumeFor(trackInfo = currentTrackInfo()) {
     return Math.max(0, Math.min(1,
       settings.masterVolume * settings.musicVolume * (trackInfo?.gain || 1)
     ));
   }
 
   function ensureMusicTrack() {
-    const trackInfo = MUSIC_PLAYLIST[musicTrackIndex];
+    const trackInfo = currentTrackInfo();
     if (!musicTrack) {
       musicTrack = new Audio();
       musicTrack.preload = "auto";
       musicTrack.addEventListener("ended", () => {
+        if (settings.musicStyle !== "amiga") return; // original tracks loop in place
         musicTrackIndex = (musicTrackIndex + 1) % MUSIC_PLAYLIST.length;
         startMusic();
       });
     }
+    musicTrack.loop = settings.musicStyle !== "amiga";
     if (musicTrack.dataset.src !== trackInfo.src) {
       musicTrack.dataset.src = trackInfo.src;
       musicTrack.src = trackInfo.src;
@@ -1004,6 +1034,7 @@
     enemies = [];
     dohShots = [];
     saveHighScore();
+    startMusic(); // swaps to the ending piece under the original score
     window.setTimeout(() => chord([523, 659, 784, 1047], .09, .3), 400);
   }
 
@@ -1940,7 +1971,7 @@
       logo("SHATTER", "STORM · AMIGA EDITION");
       centered("THE 33 ARCADE SCREENS OF ARKANOID · FAITHFULLY REBUILT", 374, 17, "#7bb5d9");
       centered("7 CAPSULES · 4 ENEMIES · BREAK GATES · DOH AWAITS ON ROUND 33", 410, 15, "#ff8db0");
-      centered(VERSION + " · REAL AMIGA MUSIC · GENUINE PAULA SFX", 442, 13, "#6589a5");
+      centered(VERSION + " · ORIGINAL SCORE + AMIGA MIX · GENUINE PAULA SFX", 442, 13, "#6589a5");
       centered("SELECT A CAMPAIGN OR PRESS SPACE FOR ARKANOID 33", 490, 20, "#e9fbff", true);
       centered("Konerd · Pyradok · Tri-Sphere · Opopo emerge from the top hatches.", 548, 15, "#83a2bb");
       centered("Catch capsules: Laser, Enlarge, Catch, Slow, Disruption, Break, Extra Vaus.", 574, 15, "#83a2bb");
@@ -2137,6 +2168,7 @@
   function syncSettingsForm() {
     difficultyInput.value = settings.difficulty;
     resolutionInput.value = settings.resolution;
+    musicStyleInput.value = settings.musicStyle;
     masterInput.value = Math.round(settings.masterVolume * 100);
     musicVolumeInput.value = Math.round(settings.musicVolume * 100);
     sfxVolumeInput.value = Math.round(settings.sfxVolume * 100);
@@ -2152,6 +2184,7 @@
       version: defaultSettings.version,
       difficulty: difficultyInput.value,
       resolution: resolutionInput.value,
+      musicStyle: musicStyleInput.value,
       masterVolume: Number(masterInput.value) / 100,
       musicVolume: Number(musicVolumeInput.value) / 100,
       sfxVolume: Number(sfxVolumeInput.value) / 100,
@@ -2277,6 +2310,11 @@
       // Arkanoid heritage hooks
       W: () => W,
       H: () => H,
+      ORIGINAL_TRACKS,
+      ENDING_TRACK,
+      musicStyle: () => settings.musicStyle,
+      setMusicStyle: style => { settings.musicStyle = style; startMusic(); },
+      currentTrackInfo,
       campaign: () => campaign,
       round: () => round,
       stages: ARKANOID_STAGES,

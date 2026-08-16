@@ -1,4 +1,4 @@
-# Shatter Storm: Amiga Edition v4.0.0
+# Shatter Storm: Amiga Edition v4.2.0
 
 A standalone enhanced brick breaker derived from the clean-room browser remake
 inspired by Jez's supplied 1987 Amiga disk.
@@ -13,6 +13,12 @@ every 8 stages), 1UPs at 20,000/60,000/every 60,000, the Break escape gate
 (+10,000), a continue countdown that resets the score like the arcade, the
 story intro and ending, and the 16-hit DOH boss on round 33. The original ten
 handcrafted rounds remain as the STORM SET campaign.
+
+v4.2.0 adds an original soundtrack composed for this game with ElevenLabs
+Music: four level themes (one per campaign act), a DOH boss theme and an
+ending piece, all in the Amiga ProTracker chiptune idiom and loudness-matched.
+The classic Amiga mix (Pinball Dreams, Lotus 2, Xenon 2, Jim Power) remains
+available via Settings -> Music Style.
 
 ## Play
 
