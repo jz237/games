@@ -1134,9 +1134,29 @@ function autopilotTick() {
   // Northward progress is the only thing the demo owes, so measure THAT.
   if (G.botBestY === undefined || J.y < G.botBestY - 2) { G.botBestY = J.y; G.botBestAt = G.botT; }
   else if (G.botT - (G.botBestAt || 0) > 900 && G.botT > G.botPanicUntil) {
-    G.botPanicUntil = G.botT + 240;      // long enough to walk a wall face
+    // it135: STALL ESCALATION. Two distinct stall species reach here, and each
+    // needs a different medicine:
+    //  * a COMBAT HOLD — enemies keep arriving, kills keep landing, so every
+    //    score-based liveness check stays green while y never improves. The
+    //    Area 2 river run farmed 20,000 points at (101,289) without crossing:
+    //    engage kept winning duels and the arbiter (which also trusts score)
+    //    never declared breakthrough. Medicine: BREAKTHROUGH — every combat
+    //    reflex stands down and the pathfinder marches north unopposed.
+    //  * a GEOMETRY TRAP — wedged against terrain the planner cannot see a way
+    //    out of. Medicine: the blind panic walk.
+    // Strikes alternate between them so whichever species this stall is, its
+    // medicine arrives by the second strike. The waypoint blacklist is flushed
+    // either way — after 900 stalled ticks its guesses were worse than none.
+    G.botAvoid = [];
+    G.botWp = null;
     G.botBestAt = G.botT;
-    G.botPanicDir = ((G.botPanicDir || 0) + 1) % 4;
+    G.botStallN = (G.botStallN || 0) + 1;
+    if (G.botStallN & 1) {
+      G.botBreak = G.botT + 350;         // breakthrough: pathfinder-led march
+    } else {
+      G.botPanicUntil = G.botT + 240;    // blind walk for the geometry traps
+      G.botPanicDir = ((G.botPanicDir || 0) + 1) % 4;
+    }
   }
   if (G.botT <= G.botPanicUntil) {
     const d4 = [{ down: true }, { right: true }, { up: true }, { left: true }][G.botPanicDir || 0];
@@ -1242,6 +1262,42 @@ function autopilotTick() {
     return;
   }
 
+  // it135 TRENCH-BUSTER. Area 2's mid-map wall has ONE gap, and a dug-in
+  // defender kneels in it. Rifle fire cannot decide that duel (he ducks the
+  // exchange), so the mobile demo farmed 42,000 points of spawns south of the
+  // wall across 95k ticks, dying at the choke over and over, and the finale
+  // that ends the area never armed. The 1989 answer is the grenade's arc over
+  // the cover — so when the advance has stalled and a dug-in blocker stands
+  // north of us, walk onto the throwing arc and lob one. Fires only on real
+  // stall (no new best-northing for 300+ ticks), keeps the tank reserve.
+  {
+    const stalled = G.botT - (G.botBestAt || 0) > 300;
+    let digIn = null, digD = 1e9;
+    if (stalled && G.grenades > 1) {
+      for (const e2 of G.enemies) {
+        if (e2.type !== 'trencher' && !(e2.type === 'rifleman' && e2.mode === 'hold')) continue;
+        if (e2.y > J.y - 6) continue;                 // only blockers to the NORTH
+        const d2 = Math.hypot(e2.x - J.x, e2.y - J.y);
+        if (d2 < digD && d2 < 150) { digD = d2; digIn = e2; }
+      }
+    }
+    if (digIn && J.grenCd === 0) {
+      if (onArc(digIn)) {
+        if (G.botT % 7 === 0) {
+          Object.assign(keys, faceKeys(digIn.x - J.x, digIn.y - J.y));
+          keys.grenade = true;
+          return;
+        }
+      } else {
+        // manage the range onto the arc: too close backs off, too far closes in
+        const toward = digD > GREN_RANGE;
+        Object.assign(keys, faceKeys((digIn.x - J.x) * (toward ? 1 : -1), (digIn.y - J.y) * (toward ? 1 : -1)));
+        keys.fire = true;   // keep pressure while walking the range
+        return;
+      }
+    }
+  }
+
   // FINALE: hold a firing line south of the gate while the garrison pours,
   // then surge through the open exit — wandering mid-finale loses the war
   if (G.finale && G.state === 'play' && !breakthrough) {
@@ -1294,7 +1350,12 @@ function autopilotTick() {
     return off < 7;                                        // within half a body
   };
 
-  if (threat && !desperate && !breakthrough && G.botT > G.botDisengage) {
+  // it135: an EMPTY RIFLE cannot engage. The reflex used to hold its ground
+  // and "fire" with zero rounds — the failing river run showed RIFLE 000 while
+  // the bot stood in the open trading nothing with the garrison. With a dry
+  // magazine, navigation and grenades are the only options that do anything.
+  const canShoot = G.ammo > 0;
+  if (threat && canShoot && !desperate && !breakthrough && G.botT > G.botDisengage) {
     // ENGAGE NO-PROGRESS GUARD: a foe camped behind cover can hold the bot
     // here forever, firing into a rock — if 250 ticks of engagement produce
     // no score, hand control back to the pathfinder (fire stays hot)
@@ -1375,7 +1436,7 @@ function autopilotTick() {
 function startAutoplay() {
   startGame();
   G.autoplay = true; G.realInput = false;
-  G.botT = 0; G.botStuck = 0; G.botLaneX = 0; G.botLaneUntil = 0; G.botLaneStuck = 0; G.botEscape = 0; G.botNoTrail = 0; G.botEscSide = 1; G.botWp = null; G.botPlanAt = 0; G.botAvoid = []; G.botPanicUntil = 0; G.botFrozeAt = 0; G.botFrozeX = 0; G.botFrozeY = 0; G.botFrozeScore = -1; G.botEngT = 0; G.botEngScore = -1; G.botDisengage = 0; G.botArbAt = 0; G.botArbX = 0; G.botArbY = 0; G.botArbScore = -1; G.botBreak = 0; G.botNullN = 0; G.botRetreatUntil = 0; G.botLastX = G.joe.x; G.botLastY = G.joe.y; G.botBestY = undefined; G.botBestAt = 0;
+  G.botT = 0; G.botStuck = 0; G.botLaneX = 0; G.botLaneUntil = 0; G.botLaneStuck = 0; G.botEscape = 0; G.botNoTrail = 0; G.botEscSide = 1; G.botWp = null; G.botPlanAt = 0; G.botAvoid = []; G.botPanicUntil = 0; G.botFrozeAt = 0; G.botFrozeX = 0; G.botFrozeY = 0; G.botFrozeScore = -1; G.botEngT = 0; G.botEngScore = -1; G.botDisengage = 0; G.botArbAt = 0; G.botArbX = 0; G.botArbY = 0; G.botArbScore = -1; G.botBreak = 0; G.botNullN = 0; G.botRetreatUntil = 0; G.botStallN = 0; G.botLastX = G.joe.x; G.botLastY = G.joe.y; G.botBestY = undefined; G.botBestAt = 0;
   try { if (window.Music) { ensureMusic(); if (Music.mode !== 'original') Music.toggle(); } } catch (e) {}
 }
 function endAutoplay() {
@@ -3989,36 +4050,83 @@ function render(alpha) {
     ctx.fillText('ORIGINAL © CAPCOM 1985 · AMIGA VERSION ELITE 1989', VIEW_W / 2 * S, (L.visBot - 15) * S);
     ctx.fillText('NON-COMMERCIAL FAN REMAKE — ALL-NEW ART & SOUND', VIEW_W / 2 * S, (L.visBot - 8) * S);
     ctx.textAlign = 'start';
-  } else if (G.state === 'ranking') {
-    scrim(0.8);
-    textC('RANKING', 44, 14, '#e33', true);
-    textC('BEST SEVEN', 60, 8, '#e8d8b0');
-    textC(scoreMode.toUpperCase() + ' MODE — CHANGE IN SETTINGS', 70, 5, scoreMode === 'classic' ? '#c8a24a' : '#8a836e');
-    const t = loadScores();
-    ctx.font = `${7 * S}px monospace`;
-    for (let i = 0; i < 7; i++) {
-      const [nm, sc] = t[i];
-      const hot = G.lastEntry && nm === G.lastEntry && sc === G.score;
-      ctx.fillStyle = hot ? '#ffd257' : '#cfc8b0';
-      ctx.textAlign = 'left'; ctx.fillText(`${i + 1}  ${nm}`, 62 * S, (84 + i * 15) * S);
-      ctx.textAlign = 'right'; ctx.fillText(String(sc).padStart(6, ' '), 214 * S, (84 + i * 15) * S);
+  } else if (G.state === 'ranking' || G.state === 'credits') {
+    // it135: RANKING and CREDITS restyled into the it130 title family — same
+    // header treatment (cream over a soft gradient band, gold accent), same
+    // panel language as the menu rows. They had kept the pre-menu flat look,
+    // and the seam showed every time the attract rotated through them.
+    scrim(G.state === 'ranking' ? 0.66 : 0.72);
+    const off2 = Math.max(0, (VIEW_H - VIEW_H_BASE) / 2);
+    // on touch the attract keeps its START/DEMO/SETTINGS stack lower down, so
+    // the panel rides higher there and leaves the stack its room
+    const topBase = touchUI.seen ? -off2 + 34 : 30;
+    const head = (big, small) => {
+      const hg = ctx.createLinearGradient(0, (topBase - 8) * S, 0, (topBase + 34) * S);
+      hg.addColorStop(0, 'rgba(5,8,4,0)'); hg.addColorStop(0.35, 'rgba(5,8,4,0.55)'); hg.addColorStop(1, 'rgba(5,8,4,0)');
+      ctx.fillStyle = hg; ctx.fillRect(0, (topBase - 8) * S, VIEW_W * S, 42 * S);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e8d8b0'; ctx.font = `bold ${15 * S}px monospace`;
+      ctx.fillText(big, VIEW_W / 2 * S, (topBase + 12) * S);
+      ctx.fillStyle = '#c9c0a6'; ctx.font = `${5.5 * S}px monospace`;
+      ctx.fillText(small, VIEW_W / 2 * S, (topBase + 22) * S);
+      ctx.textAlign = 'start';
+    };
+    const panel = (py, ph) => {
+      const px = (VIEW_W - 176) / 2;
+      ctx.fillStyle = 'rgba(6,9,5,0.72)';
+      ctx.fillRect(px * S, py * S, 176 * S, ph * S);
+      ctx.strokeStyle = 'rgba(150,142,116,0.5)'; ctx.lineWidth = 0.8 * S;
+      ctx.strokeRect(px * S, py * S, 176 * S, ph * S);
+      return px;
+    };
+    if (G.state === 'ranking') {
+      head('BEST SEVEN', scoreMode.toUpperCase() + ' MODE — CHANGE IN SETTINGS');
+      const t = loadScores();
+      const py = topBase + 32, rowH = 14.5;
+      const px = panel(py, 7 * rowH + 10);
+      ctx.font = `${7 * S}px monospace`;
+      for (let i = 0; i < 7; i++) {
+        const [nm, sc] = t[i];
+        const hot = G.lastEntry && nm === G.lastEntry && sc === G.score;
+        const ry = py + 6 + i * rowH;
+        if (hot) {
+          ctx.fillStyle = 'rgba(24,32,14,0.92)';
+          ctx.fillRect((px + 3) * S, ry * S, 170 * S, (rowH - 1.5) * S);
+          ctx.strokeStyle = '#ffd257'; ctx.lineWidth = 0.9 * S;
+          ctx.strokeRect((px + 3) * S, ry * S, 170 * S, (rowH - 1.5) * S);
+        }
+        ctx.fillStyle = hot ? '#ffd257' : '#cfc8b0';
+        ctx.textAlign = 'left'; ctx.fillText(`${i + 1}  ${nm}`, (px + 10) * S, (ry + 10) * S);
+        ctx.textAlign = 'right'; ctx.fillText(String(sc).padStart(6, ' '), (px + 166) * S, (ry + 10) * S);
+        ctx.textAlign = 'start';
+      }
+      if (!G.postGame && blink && !touchUI.seen) textC('PRESS FIRE TO START', py + 7 * rowH + 20, 7, '#fff');
+    } else {
+      head('COMMANDO HD', 'A TRIBUTE TO THE CLASSIC');
+      const lines = [
+        ['ORIGINAL GAME', '© CAPCOM 1985'],
+        ['AMIGA VERSION', 'ELITE SYSTEMS 1989'],
+        ['C64 MUSIC', 'ROB HUBBARD'],
+        ['HIGH-SCORE THEME', 'MARTIN GALWAY'],
+        ['SOUNDTRACK & SFX', 'ELEVENLABS'],
+        ['PAINTERLY ART', 'ALL-NEW'],
+      ];
+      const py = topBase + 32, rowH = 13.5;
+      const px = panel(py, lines.length * rowH + 20);
+      ctx.font = `${5.8 * S}px monospace`;
+      for (let i = 0; i < lines.length; i++) {
+        const ry = py + 6 + i * rowH;
+        ctx.fillStyle = '#9a9280'; ctx.textAlign = 'left';
+        ctx.fillText(lines[i][0], (px + 10) * S, (ry + 9) * S);
+        ctx.fillStyle = '#e8d8b0'; ctx.textAlign = 'right';
+        ctx.fillText(lines[i][1], (px + 166) * S, (ry + 9) * S);
+        ctx.textAlign = 'start';
+      }
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#8a836e'; ctx.font = `${5 * S}px monospace`;
+      ctx.fillText('A NON-COMMERCIAL FAN REMAKE', VIEW_W / 2 * S, (py + lines.length * rowH + 13) * S);
       ctx.textAlign = 'start';
     }
-    if (!G.postGame && blink) textC('PRESS FIRE TO START', 208, 7, '#fff');
-  } else if (G.state === 'credits') {
-    scrim(0.85);
-    textC('COMMANDO HD', 48, 14, '#e8d8b0', true);
-    textC('A TRIBUTE TO THE CLASSIC', 63, 7, '#b8b09a');
-    const lines = [
-      'ORIGINAL GAME © CAPCOM 1985 (ARCADE)',
-      'AMIGA VERSION — ELITE SYSTEMS 1989',
-      'C64 MUSIC — ROB HUBBARD',
-      'HIGH-SCORE THEME — MARTIN GALWAY',
-      'MODERN SOUNDTRACK & SFX — ELEVENLABS',
-      'ALL-NEW PAINTERLY ART',
-    ];
-    for (let i = 0; i < lines.length; i++) textC(lines[i], 96 + i * 14, 6, '#cfc8b0');
-    textC('A NON-COMMERCIAL FAN REMAKE', 96 + lines.length * 14 + 6, 5.5, '#8a836e');
   } else if (G.state === 'intro') {
     scrim(0.55);
     textC('AREA ' + G.area, 102, 20, '#e8d8b0', true);
@@ -4220,7 +4328,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.68.0-quartermaster', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.69.0-crossing', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -4402,7 +4510,18 @@ if (qa) {
     frames: (set) => frameCount(set),
     twop: () => JSON.stringify({ player: G.player, slots: G.slots, players: Settings.players }),
     startGame: () => { startGame(); return true; },
-    botdebug: () => JSON.stringify({ wp: G.botWp, brk: G.botBreak, t: G.botT, avoid: (G.botAvoid || []).length, dis: G.botDisengage }),
+    botdebug: () => JSON.stringify({ wp: G.botWp, brk: G.botBreak, t: G.botT, avoid: (G.botAvoid || []).length,
+      avoidAt: (G.botAvoid || []).map(a => `${a.x | 0},${a.y | 0}`), dis: G.botDisengage,
+      bestY: G.botBestY, stalledFor: G.botT - (G.botBestAt || 0) }),
+    corridor: (x0, x1, y0, y1) => { // botCellOpen sampled over a rect, for stall forensics
+      const out = [];
+      for (let y = y0; y <= y1; y += 4) {
+        let line = '';
+        for (let x = x0; x <= x1; x += 4) line += botCellOpen(x, y) ? '.' : '#';
+        out.push(y + ' ' + line);
+      }
+      return out.join('\n');
+    },
     azdebug: () => JSON.stringify({ az: A.ambushZone, calm: G.calm, ambush: G.ambush, state: G.state, jx: G.joe.x, jy: G.joe.y, area: G.area }),
     uiLayout: () => settingsLayout(),
     // title menu geometry + the view metrics it derives from, so a test can
