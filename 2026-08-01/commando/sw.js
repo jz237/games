@@ -13,7 +13,9 @@
 //     payload, it rarely changes, and it is what makes offline play possible.
 //   * The cache name carries a version; activate() purges every other cache, so
 //     a deploy self-heals instead of needing the user to clear anything.
-const CACHE = 'commando-hd-v2';
+// it134: v3 — one-time purge so every installed client drops the pre-it133
+// sprite cache (the "three different Joes" art lived on in v2 forever).
+const CACHE = 'commando-hd-v3';
 const CORE = [
   './index.html',
   './game.js',
@@ -79,17 +81,23 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // media: cache-first, filled on first sight
+  // it134: media is STALE-WHILE-REVALIDATE, not cache-first. Cache-first with
+  // unchanging filenames meant repainted art NEVER reached an installed client:
+  // the it133 hero fix shipped, game.js said v0.67, and phones kept drawing the
+  // old three-different-Joes sprites out of the v2 cache indefinitely. Now the
+  // cached copy answers instantly (offline play intact) while a background
+  // fetch refreshes the entry — new art appears one load later, no cache-name
+  // bump required.
   e.respondWith(
     caches.match(e.request).then((hit) => {
-      if (hit) return hit;
-      return fetch(e.request).then((res) => {
+      const refresh = fetch(e.request).then((res) => {
         if (res && res.ok) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(e.request, copy));
         }
         return res;
-      });
+      }).catch(() => hit);   // offline: the cached copy is the answer
+      return hit || refresh;
     })
   );
 });

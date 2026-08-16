@@ -248,7 +248,7 @@ const IMGS = {};
 let groundSlices = null; // [{y0}, canvas] pair-list: full-res bake, sliced to stay under mobile canvas limits
 const BAKE_S = S;        // bake at output resolution — 1:1 blit, zero scaling smudge
 const SLICES = 2;
-const SPRITE_SETS = ['hero-n', 'hero-s', 'hero-e', 'hero-act', 'hero-die', 'rif-s', 'rif-n', 'rif-e', 'rif-act', 'rif-die', 'rif-die2', 'moto',
+const SPRITE_SETS = ['hero-n', 'hero-s', 'hero-e', 'hero-act', 'hero-die', 'rif-s', 'rif-n', 'rif-e', 'rif-act', 'rif-die', 'rif-die2',
   'off-s', 'off-e', 'off-n', 'off-act', 'lob-s', 'lob-n', 'lob-e', 'lob-act', 'mortar', 'truck', 'tank', 'snp',
   'moto-s', 'moto-n', 'moto-e'];
 const SPRITE_NAMES = ['sprites/hero', 'sprites/rifleman', 'sprites/officer', 'sprites/lobber',
@@ -2307,7 +2307,7 @@ function tick() {
           e.fireT = 14;
           G.shake = Math.max(G.shake, 6);
           G.fx.push({ kind: 'muzzle', x: e.x + Math.cos(aim) * 11, y: e.y - 4 + Math.sin(aim) * 11, dx: Math.cos(aim), dy: Math.sin(aim), t: 0 });
-          if (window.Sfx) Sfx.play('explosion', { gain: 0.7, rate: 1.35, pan: panAt(e.x) });
+          if (window.Sfx) Sfx.boom({ pan: panAt(e.x) }); // it134: a real cannon, not a sped-up explosion
         }
       } else {
         if (e.shotCd > 0) e.shotCd--;
@@ -2445,7 +2445,7 @@ function tick() {
         for (let k = 0; k < 3; k++)
           spawnPart({ kind: 'smoke', x: e.x - 4, y: e.y - 12, vx: (vrng() - 0.5) * 0.2,
             vy: -0.5 - vrng() * 0.3, t: 0, ttl: 36 + vrng() * 18, size: 1.5 + vrng() });
-        if (window.Sfx) Sfx.play('shot', { gain: 0.4, rate: 0.6, pan: panAt(e.x) });
+        if (window.Sfx) Sfx.thunk({ pan: panAt(e.x) }); // it134: a tube cough, not a pitched-down rifle
       }
     } else if (e.type === 'lobber' || e.type === 'trencher') {
       // dug-in throwers: hold position, arc a grenade at Joe, drop back down
@@ -2623,6 +2623,32 @@ function tick() {
       && !(e.mode === 'traverse' && (e.x <= 7 || e.x >= A.width - 7) && e.t > 30);
   });
   G.corpses = G.corpses.filter(c => c.y < G.camY + VIEW_H + 80 && c.y > G.camY - 100);
+
+  // it134: describe what should be AUDIBLE this tick — engine loops for the
+  // nearest live vehicle of each kind, and the area's ambient bed. Sfx.mix owns
+  // node lifecycles and a watchdog silences everything if these calls stop
+  // (pause, menus), so this is the only wiring the game needs.
+  if (window.Sfx && Sfx.mix) {
+    const eng = {};
+    for (const kind of ['moto', 'truck', 'tank']) {
+      let best = null, bestD = 1e9;
+      for (const e2 of G.enemies) {
+        if (e2.type !== kind || e2.deadTank || e2.gone) continue;
+        const dd = Math.abs(e2.y - J.y) + Math.abs(e2.x - J.x) * 0.6;
+        if (dd < bestD) { bestD = dd; best = e2; }
+      }
+      if (best && bestD < 340) {
+        eng[kind] = {
+          gain: Math.max(0.15, 1 - bestD / 340),
+          pan: panAt(best.x),
+          rate: kind === 'moto' ? 0.8 + Math.min(1.2, (best.stepped || 0) * 0.5) : undefined,
+        };
+      } else eng[kind] = null;
+    }
+    const mode = (A.ambience && A.ambience.rain) ? 'rain'
+      : (A.ambience && A.ambience.mode === 'night') ? 'night' : 'day';
+    Sfx.mix({ engines: eng, ambient: mode });
+  }
 
   // --- lobs (grenade arcs) ---
   for (let i = G.lobs.length - 1; i >= 0; i--) {
@@ -3329,8 +3355,16 @@ function render(alpha) {
   // for the west half) plus fire / crouch-fire / duck / throw poses and a
   // four-frame death collapse
   const J = G.joe;
-  const joeVisible = J.alive ? (J.invuln > 0 ? G.frame % 6 < 4 : true) : true;
-  if (joeVisible) {
+  // it134: spawn protection is an ALPHA SHIMMER, never a disappearance. The old
+  // gate hid Joe outright 2 of every 6 ticks — an ~8Hz strobe that ran for the
+  // whole invulnerability window after every respawn and read as a rendering
+  // bug, not as protection (user: "your guy flickers on and off super fast").
+  // A slow pulse between 45% and 80% stays readable, still says "untouchable",
+  // and under Reduced Motion it is simply a steady 60%.
+  const invulnAlpha = (J.alive && J.invuln > 0)
+    ? (Settings.reduceMotion ? 0.6 : 0.62 + 0.18 * Math.sin((G.frame + LERP) * 0.18))
+    : 1;
+  {
     const fx = J.face.x, fy = J.face.y;
     let img = null, lean = 0, heroBlend = null, heroBlendA = 0;
     if (!J.alive) {
@@ -3397,6 +3431,10 @@ function render(alpha) {
       if (lean) ctx.rotate(lean);
       if (J.recoil > 0) ctx.translate(0, J.recoil * 0.5 * S); // kick back from the shot
       // it127: ONE sprite, FULL alpha. No cross-dissolve — see the note above.
+      // (it134: the one sanctioned exception is the invulnerability shimmer —
+      // a single uniform alpha on a single sprite can't produce the see-through
+      // double-exposure the dissolve did.)
+      if (invulnAlpha < 1) ctx.globalAlpha = invulnAlpha;
       ctx.drawImage(img, -w / 2 * S, -h * S, w * S, h * S);
       ctx.restore();
     } else {
@@ -4182,7 +4220,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.67.0-onejoe', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.68.0-quartermaster', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
