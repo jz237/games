@@ -401,6 +401,7 @@ const SETTINGS_DEFAULTS = {
   touchOpacity: 0.35,          // touch overlay alpha (0.2-0.8)
   stickFixed: false,           // anchored stick base instead of floating
   aimAssist: true,             // touch-only shot magnetism toward the nearest target
+  ambientAudio: false,         // it137: engine loops + jungle bed OFF by default — user: "stop audio"
   touchAutoFire: true,         // touch fires by itself when an enemy is near — one thumb plays
   retro: false, scanlines: true,
   mode: 'normal',              // normal (checkpoints+continues) | arcade (original rules)
@@ -925,6 +926,7 @@ const SETTINGS_ITEMS = [
   { k: 'touchOpacity', label: 'TOUCH OPACITY', type: 'range', min: 0.2, max: 0.8, step: 0.1 },
   { k: 'stickFixed', label: 'FIXED STICK', type: 'bool' },
   { k: 'aimAssist', label: 'AIM ASSIST (TOUCH)', type: 'bool' },
+  { k: 'ambientAudio', label: 'ENGINES & AMBIENCE', type: 'bool' },
   { k: 'touchAutoFire', label: 'AUTO-FIRE (TOUCH)', type: 'bool' },
   { k: 'retro', label: 'RETRO FILTER', type: 'bool' },
   { k: 'scanlines', label: 'SCANLINES', type: 'bool' },
@@ -2775,6 +2777,15 @@ function tick() {
   // node lifecycles and a watchdog silences everything if these calls stop
   // (pause, menus), so this is the only wiring the game needs.
   if (window.Sfx && Sfx.mix) {
+    // it137: the continuous voices are OPT-IN. The synthesized drones shipped
+    // in it134 and the next message from the field was "stop audio" — a
+    // 4.3kHz insect band and a 30Hz saw are exactly the sounds that grate on
+    // small speakers. One-shot effects (shots, steps, thunk, boom) stay; the
+    // mixer is told silence explicitly so voices ramp out instead of waiting
+    // for the watchdog.
+    if (!Settings.ambientAudio) {
+      Sfx.mix({ engines: { moto: null, truck: null, tank: null }, ambient: null });
+    } else {
     const eng = {};
     for (const kind of ['moto', 'truck', 'tank']) {
       let best = null, bestD = 1e9;
@@ -2794,6 +2805,7 @@ function tick() {
     const mode = (A.ambience && A.ambience.rain) ? 'rain'
       : (A.ambience && A.ambience.mode === 'night') ? 'night' : 'day';
     Sfx.mix({ engines: eng, ambient: mode });
+    }
   }
 
   // --- lobs (grenade arcs) ---
@@ -4427,7 +4439,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.70.0-honestwater', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.70.1-quiet', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -4632,6 +4644,7 @@ if (qa) {
       ...titleLayout(),
     }),
     titlePick: (i) => { G.titleSel = i; },
+    setSetting: (k, v) => { Settings[k] = v; applySettings(); return Settings[k]; },
     // jump straight to the high-score entry ceremony with a qualifying score
     qaEntry: (score) => { G.score = score | 0; G.entry = { name: '', ci: 0 }; setState('entry', 1500); return G.state; },
     entryState: () => JSON.stringify({ state: G.state, name: G.entry ? G.entry.name : null,
