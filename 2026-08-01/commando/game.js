@@ -227,6 +227,13 @@ function plateAt(y) { for (const p of PLATES) if (y >= p.y0 && y < p.y1 && p.img
 function maskRange(y) { for (const p of PLATES) if (p.mask && y >= p.mask.y0 && y < p.mask.y1) return p.mask; return null; }
 // plate ranges overlap at seams — a point is blocked if ANY covering plate says so
 function maskBlocked(px, py) {
+  // it136: carve rects force MEASURED-OPEN ground through mask misreads — the
+  // Area 2 causeway is dry at x 120-174 by the it113 disk measurement, but the
+  // mask derivation read the bridge's own railings/shadow as a solid strip
+  // through its centre (x~164-172), pinching the only crossing.
+  if (A.carve) for (const c of A.carve) {
+    if (px >= c.x0 && px < c.x1 && py >= c.y0 && py < c.y1) return false;
+  }
   // a destroyed prop clears the painted obstruction it stood on
   if (G.props) for (const p of G.props) {
     if (p.dead && Math.hypot(px - p.x, py - p.y) < p.r) return false;
@@ -596,6 +603,7 @@ function onTouch(e) {
       const p = touchLogical(t, r);
       if (p.x > VIEW_W - 60 && p.y < 16) { if (window.Music) Music.toggle(); continue; }
       if (p.x < 60 && p.y < 16 && (G.state === 'title' || (G.state === 'play' && G.paused))) { openSettings(); continue; }
+      if (entryTap(p)) continue;    // it136: high-score tap keyboard
       const btn = hitButton(p);
       if (btn) {
         if (G.state === 'title') {
@@ -698,8 +706,10 @@ stageEl.addEventListener('touchend', onTouch, { passive: false });
 // keyboard shortcut you had to already know about.
 stageEl.addEventListener('mousedown', (e) => {
   ensureMusic();
-  if (!G || G.state !== 'title') return;
+  if (!G) return;
   const p = touchLogical(e, canvas.getBoundingClientRect());
+  if (G.state === 'entry') { entryTap(p); return; }
+  if (G.state !== 'title') return;
   const btn = hitButton(p);
   if (!btn) return;
   G.titleSel = btn.idx;
@@ -857,6 +867,41 @@ const CLEAR_BONUS = 500; // tally value — original ceremony still uncaptured; 
 const OFFICER_BONUS = 1000; // bounty for dropping the fleeing garrison commander
 const POW_CLEAR_BONUS = 300; // per prisoner brought out alive
 const ENTRY_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789. ';
+// it136: the high-score entry gets a TAP KEYBOARD. A phone player could
+// technically drive the letter wheel with the stick, but nothing on screen
+// said so, and a name that takes forty precise stick-flicks after a good run
+// is where a phone player just walks away. One geometry function feeds both
+// the painter and the hit-test — the title menu taught what happens when
+// layout and hit-testing are computed in two places.
+function entryPad() {
+  const rows = ['ABCDEFGH', 'IJKLMNOP', 'QRSTUVWX', 'YZ012345', '6789. ←■'];
+  const off = Math.max(0, (VIEW_H - VIEW_H_BASE) / 2);
+  const cw = 26, ch = touchUI.seen ? 20 : 16, gap = 2;
+  const top = 126;
+  const cells = [];
+  rows.forEach((r, ri) => {
+    const x0 = (VIEW_W - (r.length * (cw + gap) - gap)) / 2;
+    for (let ci = 0; ci < r.length; ci++) {
+      cells.push({ ch: r[ci], x: x0 + ci * (cw + gap), y: top + ri * (ch + gap), w: cw, h: ch,
+        hitY: top + ri * (ch + gap) + off });
+    }
+  });
+  return cells;
+}
+function entryTap(p) {
+  if (!G || G.state !== 'entry' || !G.entry) return false;
+  for (const c of entryPad()) {
+    if (p.x >= c.x - 1 && p.x <= c.x + c.w + 1 && p.y >= c.hitY - 1 && p.y <= c.hitY + c.h + 1) {
+      const E = G.entry;
+      if (c.ch === '■') finishEntry();
+      else if (c.ch === '←') { E.name = E.name.slice(0, -1); }
+      else { E.name += c.ch; E.ci = ENTRY_CHARS.indexOf(c.ch); if (E.name.length >= 8) finishEntry(); }
+      G.stateTimer = 1500;   // a tap is activity — reset the 30s walk-away timeout
+      return true;
+    }
+  }
+  return false;
+}
 // continue checkpoints (camY values): area start, mid-jungle, trench/bridge
 const CHECKPOINTS = [1616, 1050, 500]; // Area 1; areas may override via data
 
@@ -1074,6 +1119,17 @@ function botPlanStep(loose) {
     if (gy + 1 < H2 && open[cur + W2] && prev[cur + W2] < 0) { prev[cur + W2] = cur; q[qt++] = cur + W2; }
   }
   if (best === si) return loose ? null : botPlanStep(true); // strict boxed: retry at point resolution
+  // it136: a LOCAL best is as bad as no path. Joe stood in a pocket whose few
+  // BFS-phase exit cells were covered by exactly two blacklist discs; the
+  // reachable set collapsed to the pocket, best became a cell BEHIND him
+  // (wp=(36,503) from (47,497)), and because that is not null, the loose
+  // retry never fired. If the best reachable cell gains no meaningful ground
+  // and a blacklist exists, the blacklist has cornered the planner: shed it
+  // and plan once more with clean eyes.
+  if (!loose && (G.botAvoid || []).length && (yT + (((best / W2) | 0)) * ST) > J.y - 8) {
+    G.botAvoid = [];
+    return botPlanStep(false);
+  }
   let cur = best, first = best;
   while (prev[cur] !== si && prev[cur] !== cur) { cur = prev[cur]; first = cur; }
   if (prev[cur] === si) first = cur;
@@ -1132,6 +1188,14 @@ function autopilotTick() {
   // never crossing the arch. (Deterministic, and it predates this iteration:
   // the same tick and the same coordinates reproduce on the it128 build.)
   // Northward progress is the only thing the demo owes, so measure THAT.
+  // it136: a big SOUTHWARD jump in y is a NEW ATTEMPT (area change hands Joe a
+  // fresh map at y~1900; a respawn snaps him back to the checkpoint). Without
+  // this, bestY carried area 1's exit (y=8) into area 2 forever, "no new best
+  // northing" was true for the entire rest of the game, and the stall guard
+  // fired every 900 ticks as a way of life — permanent breakthrough/panic
+  // cycling instead of an occasional rescue. Measured: bestY=8 while Joe
+  // fought at y=497 in area 2.
+  if (G.botBestY !== undefined && J.y > G.botBestY + 180) { G.botBestY = J.y; G.botBestAt = G.botT; }
   if (G.botBestY === undefined || J.y < G.botBestY - 2) { G.botBestY = J.y; G.botBestAt = G.botT; }
   else if (G.botT - (G.botBestAt || 0) > 900 && G.botT > G.botPanicUntil) {
     // it135: STALL ESCALATION. Two distinct stall species reach here, and each
@@ -1159,6 +1223,7 @@ function autopilotTick() {
     }
   }
   if (G.botT <= G.botPanicUntil) {
+    G.botBranch = 'panic';
     const d4 = [{ down: true }, { right: true }, { up: true }, { left: true }][G.botPanicDir || 0];
     Object.assign(keys, d4);
     keys.fire = (G.botT % 6) < 3;
@@ -1282,6 +1347,7 @@ function autopilotTick() {
       }
     }
     if (digIn && J.grenCd === 0) {
+      G.botBranch = 'trench-buster';
       if (onArc(digIn)) {
         if (G.botT % 7 === 0) {
           Object.assign(keys, faceKeys(digIn.x - J.x, digIn.y - J.y));
@@ -1362,6 +1428,7 @@ function autopilotTick() {
     if (G.botEngScore !== G.score) { G.botEngScore = G.score; G.botEngT = G.botT; }
     if (G.botT - G.botEngT > 250) { G.botDisengage = G.botT + 180; G.botEngT = G.botT; }
     else {
+      G.botBranch = 'engage';
       const lead = leadOf(foe);
       Object.assign(keys, faceKeys(lead.x - J.x, lead.y - J.y));
       // hold fire until the lead point is genuinely on a ray — spraying at
@@ -1420,15 +1487,26 @@ function autopilotTick() {
     G.botStuck = moved < 1.5 ? G.botStuck + 1 : 0;
     G.botLastX = J.x; G.botLastY = J.y;
   }
+  // it136: THE BLIND OVERRIDES MUST FEEL WALLS. Both of these stomp the
+  // pathfinder's keys with dead reckoning, and both were one-way traps inside
+  // Area 2's blind wall alcove (a doorway whose north half is solid):
+  //   - the stuck-shimmy banged both walls of the 12px niche, moved <1.5px,
+  //     and therefore SUSTAINED ITSELF forever;
+  //   - desperate pressed up + swept toward x=40 — Joe parked at (41,497),
+  //     pinned against the alcove ceiling at exactly the sweep target, and
+  //     desperate never presses down so it could never back out.
+  // Rule: an override that would push into a wall it can feel goes SOUTH
+  // first — out of the pocket — and resumes its sweep from open ground.
+  const wallNorth = !botCellOpen(J.x, J.y - 7);
   if (G.botStuck > 1) {
     want = { [((G.botT >> 5) & 1) ? 'left' : 'right']: true };
-    if ((G.botT >> 6) & 1) want.up = true;
+    if ((G.botT >> 6) & 1) { if (wallNorth) want.down = true; else want.up = true; }
     if (G.botStuck > 8) G.botStuck = 0;
   }
   if (desperate) {
     // the scroll has been dead a long time: sweep the full width for the gap
     const sweepX = ((G.botT >> 7) & 1) ? 40 : VIEW_W - 40;
-    want = { up: true, [J.x < sweepX ? 'right' : 'left']: true };
+    want = { [wallNorth ? 'down' : 'up']: true, [J.x < sweepX ? 'right' : 'left']: true };
   }
   Object.assign(keys, want);
   if (G.botT % 11 < 3 && G.ammo > 25) keys.fire = true; // suppress only with ammo to spare
@@ -1564,6 +1642,13 @@ function finishEntry() {
 }
 
 function rectsAt(x, y, w, h) {
+  // it136: WATER IS ALWAYS SOLID, straight from the measured data — the plate
+  // mask is derived from painted pixels and had a hole east of the Area 2
+  // bridge (x~176-208) that let anyone stroll on the river. The A.water rects
+  // are the it113 measurement; they outrank whatever the paint reads as.
+  if (A.water) for (const wr of A.water) {
+    if (x < wr.x1 && x + w > wr.x0 && y < wr.y1 && y + h > wr.y0) return wr;
+  }
   for (const o of A.obstacles) {
     if (maskRange(o.y + o.h / 2)) continue; // plate regions collide via their mask
     if (x < o.x + o.w && x + w > o.x && y < o.y + o.h && y + h > o.y) return o;
@@ -4253,8 +4338,22 @@ function render(alpha) {
       ctx.fillStyle = i === E.name.length ? '#ffd257' : '#6a6350';
       ctx.fillRect((x0 + i * 16 + 1) * S, 116 * S, 14 * S, 1.2 * S);
     }
-    textC('UP/DOWN LETTER · FIRE LOCK · LEFT ERASE', 156, 6, '#8a836e');
-    textC('FIRE ON ■ = DONE', 168, 6, '#8a836e');
+    // it136: tap keyboard — painted from the same geometry the hit-test uses
+    ctx.font = `bold ${8 * S}px monospace`;
+    for (const c of entryPad()) {
+      ctx.fillStyle = 'rgba(6,9,5,0.72)';
+      ctx.fillRect(c.x * S, c.y * S, c.w * S, c.h * S);
+      ctx.strokeStyle = c.ch === '■' ? '#ffd257' : 'rgba(150,142,116,0.5)';
+      ctx.lineWidth = 0.8 * S;
+      ctx.strokeRect(c.x * S, c.y * S, c.w * S, c.h * S);
+      ctx.fillStyle = c.ch === '■' ? '#ffd257' : c.ch === '←' ? '#c9a06a' : '#e8d8b0';
+      ctx.textAlign = 'center';
+      ctx.fillText(c.ch === ' ' ? '␣' : c.ch, (c.x + c.w / 2) * S, (c.y + c.h * 0.68) * S);
+      ctx.textAlign = 'start';
+    }
+    const padBottom = entryPad().reduce((m, c) => Math.max(m, c.y + c.h), 0);
+    textC(touchUI.seen ? 'TAP LETTERS · ■ = DONE' : 'TAP OR TYPE · UP/DOWN LETTER · FIRE LOCK · ■ = DONE',
+      padBottom + 10, 6, '#8a836e');
   } else if (G.state === 'continue') {
     scrim(0.6);
     textC('CONTINUE?', 80, 16, '#ffd257', true);
@@ -4328,7 +4427,7 @@ function render(alpha) {
   }
 
   ctx.fillStyle = '#888'; ctx.font = `${4 * S}px monospace`;
-  ctx.fillText('v0.69.0-crossing', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
+  ctx.fillText('v0.70.0-honestwater', (VIEW_W - 64) * S, (VIEW_H - 3) * S);
 
   // touch overlays (only once touch is in use)
   ctx.restore(); // end playfield clip
@@ -4510,7 +4609,8 @@ if (qa) {
     frames: (set) => frameCount(set),
     twop: () => JSON.stringify({ player: G.player, slots: G.slots, players: Settings.players }),
     startGame: () => { startGame(); return true; },
-    botdebug: () => JSON.stringify({ wp: G.botWp, brk: G.botBreak, t: G.botT, avoid: (G.botAvoid || []).length,
+    botdebug: () => JSON.stringify({ branch: G.botBranch || '-', keys: Object.keys(keys).filter(k => keys[k]).join('+'),
+      wp: G.botWp, brk: G.botBreak, t: G.botT, avoid: (G.botAvoid || []).length,
       avoidAt: (G.botAvoid || []).map(a => `${a.x | 0},${a.y | 0}`), dis: G.botDisengage,
       bestY: G.botBestY, stalledFor: G.botT - (G.botBestAt || 0) }),
     corridor: (x0, x1, y0, y1) => { // botCellOpen sampled over a rect, for stall forensics
@@ -4532,6 +4632,10 @@ if (qa) {
       ...titleLayout(),
     }),
     titlePick: (i) => { G.titleSel = i; },
+    // jump straight to the high-score entry ceremony with a qualifying score
+    qaEntry: (score) => { G.score = score | 0; G.entry = { name: '', ci: 0 }; setState('entry', 1500); return G.state; },
+    entryState: () => JSON.stringify({ state: G.state, name: G.entry ? G.entry.name : null,
+      pad: entryPad().map(c => ({ ch: c.ch, x: c.x + c.w / 2, hitY: c.hitY + c.h / 2 })) }),
     // massacre everything except fleeing officers through the normal destroy
     // path — scenario cleanup that still exercises corpses/vehicle explosions
     wipe: () => { for (const e of G.enemies) if (e.mode !== 'flee') destroyEnemy(e); G.enemies = G.enemies.filter(e => e.mode === 'flee'); return G.enemies.length; },
