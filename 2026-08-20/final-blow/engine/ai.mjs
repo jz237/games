@@ -157,7 +157,7 @@ export function decideAiIntent(brain, {
   roll = 0.5,
 } = {}) {
   const settings = AI_DIFFICULTIES[brain.difficulty];
-  const fighterId = self.id || self.def?.id;
+  const fighterId = self.kitId || self.def?.kitId || self.id || self.def?.id;
   const kit = getFighterKit(fighterId);
   const distance = Math.abs(observation.x - self.x);
   const combo = comboFollowup({ ...self, aiBrain: brain }, settings, roll);

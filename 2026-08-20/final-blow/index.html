@@ -19,7 +19,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">FAIR FIGHT AI <b>0.9A</b></div>
+      <div class="build-tag">ARCADE ASCENT <b>0.9B</b></div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
     </header>
@@ -82,6 +82,7 @@
           <p>WHERE WILL IT END?</p>
           <h2 id="stageTitle">SELECT STAGE</h2>
         </header>
+        <div id="arcadeRoutePreview" class="arcade-route-preview" aria-label="Arcade ladder" hidden></div>
         <div id="stageGrid" class="stage-grid">
           <button class="stage-card menu-focus selected" data-stage="kensington">
             <span class="stage-preview kensington-preview"></span>
@@ -101,10 +102,39 @@
         </div>
       </section>
 
+      <section id="ladderScreen" class="screen ladder-screen" aria-labelledby="arcadeLadderTitle">
+        <div class="ladder-boss" aria-hidden="true">
+          <img src="assets/fighters/commissioner.webp" alt="" draggable="false">
+          <span>THE COMMISSIONER</span>
+        </div>
+        <div class="ladder-copy">
+          <p class="eyebrow" id="arcadeLadderCounter">BOUT 2 / 8</p>
+          <h2 id="arcadeLadderTitle">THE STREET OPENS</h2>
+          <p id="arcadeLadderMessage">One name crossed out. Seven remain.</p>
+          <div id="arcadeLadderNodes" class="arcade-ladder-nodes" aria-label="Arcade route"></div>
+          <button id="arcadeContinueButton" class="arcade-button primary menu-focus">NEXT FIGHT →</button>
+        </div>
+      </section>
+
+      <section id="endingScreen" class="screen ending-screen" aria-labelledby="endingTitle">
+        <div id="endingArt" class="ending-art" aria-hidden="true"></div>
+        <div class="ending-copy">
+          <p class="eyebrow">ARCADE CLEARED · PHILLY AFTER DARK</p>
+          <h2 id="endingTitle">THE GROUND REMEMBERS</h2>
+          <blockquote id="endingQuote">THE LAST BELL RANG UNDER HIS FEET.</blockquote>
+          <p id="endingStory"></p>
+          <div class="ending-stamp"><span>THE COMMISSIONER</span><b>DEFEATED</b></div>
+          <div class="menu-stack horizontal">
+            <button id="endingReplayButton" class="arcade-button primary menu-focus">NEW ARCADE RUN</button>
+            <button class="arcade-button ghost" data-back="title">TITLE</button>
+          </div>
+        </div>
+      </section>
+
       <section id="resultScreen" class="screen result-screen" aria-labelledby="resultTitle">
         <div id="victoryPose" class="victory-pose" aria-hidden="true"></div>
         <div class="result-copy">
-          <p class="eyebrow">MATCH COMPLETE</p>
+          <p class="eyebrow" id="resultEyebrow">MATCH COMPLETE</p>
           <h2 id="resultTitle">DEATHBLOW WINS</h2>
           <div id="resultFinisher">FAULTLINE EXECUTION</div>
           <blockquote id="resultQuote">THE STREET MOVED FIRST.</blockquote>

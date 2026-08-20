@@ -51,6 +51,14 @@ import {
   resetAiBrain,
   stepAiBrain,
 } from "./engine/ai.mjs";
+import {
+  ARCADE_BOSS_ID,
+  arcadeRunSnapshot,
+  createArcadeRun,
+  currentArcadeMatch,
+  getArcadeEnding,
+  recordArcadeResult,
+} from "./engine/arcade.mjs";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -163,6 +171,23 @@ const roster = [
     finishers: ["MIC DROP", "WEST STAINES MASSIVE"],
   },
 ];
+
+const arcadeBoss = Object.freeze({
+  id: ARCADE_BOSS_ID,
+  kitId: "deathblow",
+  name: "THE COMMISSIONER",
+  title: "KEEPER OF THE BLACK BOOK",
+  mark: "TC",
+  color: "#661421",
+  accent: "#d6b56b",
+  weapon: "steel cane",
+  special: "FINAL AUTHORITY",
+  vfx: "authority",
+  boss: true,
+  finishers: ["CLOSED SESSION", "FINAL AUTHORITY"],
+  victoryQuote: "THE BOOK CLOSES WHEN I SAY IT CLOSES.",
+  finisherScriptId: "deathblow",
+});
 
 // Each Final Blow is staged as a short, character-specific arcade cinematic.
 // Coordinates are local to the victim: negative X begins behind the attacker,
@@ -393,14 +418,16 @@ for (const [id, stage] of Object.entries(stages)) {
 const fighterImages = {};
 const fighterAtlases = {};
 const fighterMoveAtlases = {};
-for (const fighter of roster) {
+for (const fighter of [...roster, arcadeBoss]) {
   const image = new Image();
   image.src = `assets/fighters/${fighter.id}.webp`;
   fighterImages[fighter.id] = image;
   const atlas = new Image();
   atlas.src = `assets/atlases/${fighter.id}.webp`;
   fighterAtlases[fighter.id] = atlas;
-  if (getFighterKit(fighter.id)) {
+  if (fighter.boss) {
+    fighterMoveAtlases[fighter.id] = atlas;
+  } else if (getFighterKit(fighter.id)) {
     const moveAtlas = new Image();
     moveAtlas.src = `assets/moves/${fighter.id}-specials.webp`;
     fighterMoveAtlases[fighter.id] = moveAtlas;
@@ -470,7 +497,7 @@ const keyMaps = [
 ];
 
 const simulationClock = new FixedStepClock();
-const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.9a-fair-ai");
+const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.9b-arcade-ascent");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
 const state = {
@@ -516,6 +543,7 @@ const state = {
   musicVolume: clamp(Number(localStorage.getItem("final-blow-music-volume") ?? "1"), 0, 1),
   sfxVolume: clamp(Number(localStorage.getItem("final-blow-sfx-volume") ?? "1"), 0, 1),
   aiDifficulty: normalizeAiDifficulty(localStorage.getItem("final-blow-ai-difficulty") || DEFAULT_AI_DIFFICULTY),
+  arcadeRun: null,
 };
 
 function random() {
@@ -530,17 +558,27 @@ function seedMatch(round = state.round) {
     state.picks[0],
     state.picks[1],
     state.stage,
+    state.arcadeRun?.current || 0,
+    currentArcadeMatch(state.arcadeRun)?.opponentId || "versus",
   );
   state.rng.setState(state.matchSeed);
 }
 
-function makeFighter(index, side) {
-  const def = roster[index];
-  const kit = getFighterKit(def.id);
+function makeFighter(index, side, overrideDef = null) {
+  const def = overrideDef || roster[index];
+  const kitId = def.kitId || def.id;
+  const kit = getFighterKit(kitId);
+  const movement = getFighterMovement(kitId, MOVEMENT_RULES);
   return {
     def,
+    kitId,
     kit,
-    movement: getFighterMovement(def.id, MOVEMENT_RULES),
+    movement: def.boss ? {
+      ...movement,
+      walkForward: movement.walkForward * 1.04,
+      walkBack: movement.walkBack * 1.04,
+      dashSpeed: movement.dashSpeed * 1.03,
+    } : movement,
     side,
     x: side === 0 ? 355 : 925,
     y: FLOOR,
@@ -643,6 +681,57 @@ function renderMoveList(fighterId = "deathblow") {
     .join("");
 }
 
+function arcadeOpponentDef(match = currentArcadeMatch(state.arcadeRun)) {
+  if (!match) return null;
+  return match.opponentId === ARCADE_BOSS_ID
+    ? arcadeBoss
+    : roster.find(({ id }) => id === match.opponentId) || null;
+}
+
+function renderArcadeRoute() {
+  const run = state.arcadeRun;
+  const containers = [$("#arcadeRoutePreview"), $("#arcadeLadderNodes")].filter(Boolean);
+  for (const container of containers) {
+    container.hidden = state.mode !== "arcade" || !run;
+    if (!run) {
+      container.innerHTML = "";
+      continue;
+    }
+    container.innerHTML = run.matches.map((match, index) => {
+      const def = arcadeOpponentDef(match);
+      const stateClass = index < run.current ? "cleared" : index === run.current ? "current" : "locked";
+      return `<div class="ladder-node ${stateClass} ${match.kind}" title="${match.label} · ${def.name}">
+        <span>${index < run.current ? "✓" : index + 1}</span>
+        <img src="assets/fighters/${def.id}.webp" alt="" draggable="false">
+        <b>${match.kind === "boss" ? "BOSS" : match.kind === "rival" ? "RIVAL" : def.name}</b>
+      </div>`;
+    }).join("");
+  }
+  if ($("#arcadeLadderCounter")) {
+    $("#arcadeLadderCounter").textContent = run.completed
+      ? `${run.wins} / ${run.matches.length} CLEARED`
+      : `BOUT ${run.current + 1} / ${run.matches.length}`;
+  }
+}
+
+function prepareArcadeOpponent(usePlannedStage = false) {
+  const match = currentArcadeMatch(state.arcadeRun);
+  const def = arcadeOpponentDef(match);
+  if (!match || !def) return null;
+  const opponentIndex = roster.findIndex(({ id }) => id === match.opponentId);
+  state.picks[1] = opponentIndex >= 0 ? opponentIndex : 0;
+  if (usePlannedStage) state.stage = match.stage;
+  renderArcadeRoute();
+  updateStageUI();
+  return def;
+}
+
+function makeMatchFighters() {
+  const match = state.mode === "arcade" ? currentArcadeMatch(state.arcadeRun) : null;
+  const bossOverride = match?.opponentId === ARCADE_BOSS_ID ? arcadeBoss : null;
+  return [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1, bossOverride)];
+}
+
 function showScreen(name) {
   state.screen = name;
   $$(".screen").forEach((screen) => screen.classList.toggle("active", screen.id === `${name}Screen`));
@@ -659,6 +748,7 @@ function startSelect(mode) {
   enterImmersiveMode();
   unlockAudio();
   state.mode = mode;
+  state.arcadeRun = null;
   state.picks = [0, mode === "arcade" ? 4 : 1];
   state.locks = [false, mode === "arcade"];
   state.selectingPlayer = 0;
@@ -672,9 +762,12 @@ function chooseFighter(index) {
   if (state.mode === "arcade") {
     state.picks[0] = index;
     state.locks = [true, true];
-    let opponent = Math.floor(random() * roster.length);
-    if (opponent === index) opponent = (opponent + 1) % roster.length;
-    state.picks[1] = opponent;
+    state.arcadeRun = createArcadeRun(
+      roster[index].id,
+      roster.map(({ id }) => id),
+      state.rng.nextUint32(),
+    );
+    prepareArcadeOpponent(false);
   } else if (!state.locks[0]) {
     state.picks[0] = index;
     state.locks[0] = true;
@@ -703,6 +796,7 @@ function updateRosterUI() {
 function showStageSelect() {
   if (!(state.locks[0] && state.locks[1])) return;
   showScreen("stage");
+  renderArcadeRoute();
   updateStageUI();
 }
 
@@ -729,7 +823,7 @@ function startMatch(resetSet = true) {
   state.matchSerial += 1;
   state.qaManualMode = false;
   seedMatch(state.round);
-  state.fighters = [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1)];
+  state.fighters = makeMatchFighters();
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
@@ -750,7 +844,11 @@ function startMatch(resetSet = true) {
   commandHistory[1].length = 0;
   updateHud();
   showScreen("fight");
-  announce(`ROUND ${state.round}`, stages[state.stage].name, 1.2);
+  const arcadeMatch = state.mode === "arcade" ? currentArcadeMatch(state.arcadeRun) : null;
+  const introLabel = arcadeMatch?.kind === "boss" ? "FINAL BOUT · THE COMMISSIONER"
+    : arcadeMatch?.kind === "rival" ? `RIVAL BOUT · ${state.fighters[1].def.name}`
+      : stages[state.stage].name;
+  announce(`ROUND ${state.round}`, introLabel, 1.2);
   setTimeout(() => {
     if (state.screen === "fight" && state.phase === "intro") announce("FIGHT!", "NO MERCY ON THESE STREETS", 0.8);
   }, 1150);
@@ -763,7 +861,7 @@ function resetRound() {
   state.round += 1;
   state.qaManualMode = false;
   seedMatch(state.round);
-  state.fighters = [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1)];
+  state.fighters = makeMatchFighters();
   state.fighters.forEach((fighter, side) => { fighter.meter = carriedGrit[side] || 0; });
   state.particles.length = 0;
   state.effects.length = 0;
@@ -808,7 +906,8 @@ function finishRound(winner, type = -1) {
     const duration = performFinisher(winner, type);
     state.phaseTime = duration;
     duckMusic(0.1, duration * 1000);
-    announce("FINAL BLOW", `${winDef.finishers[type]} · ${finisherScripts[winDef.id].combo}`, 2.45);
+    const scriptId = winDef.finisherScriptId || winDef.id;
+    announce("FINAL BLOW", `${winDef.finishers[type]} · ${finisherScripts[scriptId].combo}`, 2.45);
   } else {
     state.phaseTime = 2.4;
     duckMusic(0.28, 1700);
@@ -821,7 +920,7 @@ function finishRound(winner, type = -1) {
 function performFinisher(winner, type) {
   const attacker = state.fighters[winner];
   const victim = state.fighters[1 - winner];
-  const script = finisherScripts[attacker.def.id];
+  const script = finisherScripts[attacker.def.finisherScriptId || attacker.def.id];
   const direction = attacker.x <= victim.x ? 1 : -1;
   const anchor = clamp(victim.x, 390, W - 390);
   attacker.attacking = null;
@@ -962,16 +1061,76 @@ function showResult(winner) {
   state.finisher = null;
   state.cinematicZoom = 1;
   const def = state.fighters[winner].def;
-  const kit = getFighterKit(def.id);
+  const kit = getFighterKit(def.kitId || def.id);
+  const arcadeDefeat = state.mode === "arcade" && winner === 1 && state.arcadeRun;
+  $("#resultEyebrow").textContent = arcadeDefeat ? "ARCADE RUN INTERRUPTED" : "MATCH COMPLETE";
   $("#resultTitle").textContent = `${def.name} WINS`;
-  $("#resultFinisher").textContent = state.finisherType >= 0 ? def.finishers[state.finisherType] : "KNOCKOUT";
+  $("#resultFinisher").textContent = arcadeDefeat
+    ? `${currentArcadeMatch(state.arcadeRun)?.label || "BOUT"} · CONTINUE?`
+    : state.finisherType >= 0 ? def.finishers[state.finisherType] : "KNOCKOUT";
   const victoryPose = $("#victoryPose");
-  victoryPose.classList.toggle("portrait-art", !kit);
-  victoryPose.style.backgroundImage = kit
+  victoryPose.classList.toggle("portrait-art", !kit || def.boss);
+  victoryPose.style.backgroundImage = kit && !def.boss
     ? `url("assets/moves/${def.id}-specials.webp")`
     : `url("assets/fighters/${def.id}.webp")`;
-  $("#resultQuote").textContent = kit?.victory.quote || "PHILLY REMEMBERS THE WINNER.";
+  $("#resultQuote").textContent = def.victoryQuote || kit?.victory.quote || "PHILLY REMEMBERS THE WINNER.";
+  $("#rematchButton").textContent = arcadeDefeat ? "CONTINUE" : "REMATCH";
+  $("#reselectButton").textContent = arcadeDefeat ? "ABANDON RUN" : "SELECT FIGHTERS";
   showScreen("result");
+}
+
+function showArcadeLadder(clearedMatch) {
+  const run = state.arcadeRun;
+  const next = currentArcadeMatch(run);
+  const nextDef = arcadeOpponentDef(next);
+  const clearedDef = arcadeOpponentDef(clearedMatch);
+  renderArcadeRoute();
+  $("#arcadeLadderTitle").textContent = next?.kind === "boss" ? "FINAL AUTHORITY"
+    : next?.kind === "rival" ? "SETTLE THE RIVALRY"
+      : "THE STREET OPENS";
+  $("#arcadeLadderMessage").textContent = next?.kind === "boss"
+    ? "THE BLACK BOOK OPENS. THE COMMISSIONER IS WAITING AT THE VET."
+    : `${clearedDef?.name || "ONE FIGHTER"} CROSSED OUT · ${nextDef?.name || "THE NEXT CHALLENGER"} STEPS FORWARD.`;
+  $("#arcadeContinueButton").textContent = next?.kind === "boss" ? "ENTER FINAL BOUT →"
+    : next?.kind === "rival" ? "FACE YOUR RIVAL →"
+      : "NEXT FIGHT →";
+  showScreen("ladder");
+}
+
+function showArcadeEnding() {
+  const run = state.arcadeRun;
+  const ending = getArcadeEnding(run?.playerId);
+  const def = roster.find(({ id }) => id === run?.playerId);
+  if (!ending || !def) {
+    showScreen("title");
+    return;
+  }
+  const screen = $("#endingScreen");
+  screen.style.setProperty("--ending-color", ending.color);
+  $("#endingTitle").textContent = ending.title;
+  $("#endingQuote").textContent = ending.quote;
+  $("#endingStory").textContent = ending.story;
+  $("#endingArt").style.backgroundImage = `url("assets/moves/${def.id}-specials.webp")`;
+  renderArcadeRoute();
+  showScreen("ending");
+}
+
+function resolveMatchResult(winner) {
+  if (state.mode !== "arcade" || !state.arcadeRun) {
+    showResult(winner);
+    return;
+  }
+  const outcome = recordArcadeResult(state.arcadeRun, winner === 0);
+  if (winner !== 0) {
+    showResult(winner);
+    return;
+  }
+  if (outcome.completed) {
+    showArcadeEnding();
+    return;
+  }
+  prepareArcadeOpponent(true);
+  showArcadeLadder(outcome.match);
 }
 
 function updateHud() {
@@ -1151,9 +1310,9 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     crouching: fighter.crouch || Boolean(input.down),
     forwardHeld: direction.forwardHeld,
   };
-  const kitMove = createFighterMove(fighter.def.id, action, moveContext);
+  const kitMove = createFighterMove(fighter.kitId, action, moveContext);
   const gritCost = kitMove
-    ? fighterActionCost(fighter.def.id, action, moveContext)
+    ? fighterActionCost(fighter.kitId, action, moveContext)
     : gritCostForAction(action);
   if (fighter.meter < gritCost) return false;
   const validLink = !cancelledFrom
@@ -1164,6 +1323,11 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   fighter.attacking = kitMove || (advancedActions.has(action)
     ? createAdvancedMove(action)
     : createCombatMove(action, moveContext));
+  if (fighter.def.boss) {
+    fighter.attacking.damage = Number((fighter.attacking.damage * 1.08).toFixed(4));
+    fighter.attacking.chipDamage = Number(((fighter.attacking.chipDamage || 0) * 1.08).toFixed(4));
+    if (fighter.attacking.advanceSpeed) fighter.attacking.advanceSpeed *= 1.04;
+  }
   fighter.attackSerial += 1;
   fighter.attacking.attackSerial = fighter.attackSerial;
   const activeFlow = fighter.def.id === "ali"
@@ -1284,7 +1448,7 @@ function prepareFighterInput(fighter, input) {
   recordInput(fighter.side, normalized, fighter);
   if (state.phase === "fight") {
     const command = recognizeFighterCommand(
-      fighter.def.id,
+      fighter.kitId,
       commandHistory[fighter.side],
       state.simulationTick,
     ) || recognizeCombatCommand(commandHistory[fighter.side], state.simulationTick);
@@ -1430,8 +1594,8 @@ function tryAttackCancel(fighter, input) {
   if (current.rhythmCancel && fighter.rhythmStacks < (current.rhythmCancelStacks || 2)) return false;
   if (!action || !canCancelAttack(current, actionGroup, fighter.attackFrame, fighter.attackConnected)) return false;
   const moveContext = { airborne: !fighter.grounded, crouching: fighter.crouch, ...directionContext(fighter, input) };
-  const gritCost = createFighterMove(fighter.def.id, action, moveContext)
-    ? fighterActionCost(fighter.def.id, action, moveContext)
+  const gritCost = createFighterMove(fighter.kitId, action, moveContext)
+    ? fighterActionCost(fighter.kitId, action, moveContext)
     : gritCostForAction(action);
   if (fighter.meter < gritCost) return false;
   fighter.inputBuffer.consume(action, state.simulationTick);
@@ -2227,7 +2391,7 @@ function simulateGameTick(dt) {
     finishRound(state.finishWinner, -1);
   } else if (state.phase === "roundover" && state.phaseTime <= 0) {
     const winner = state.rounds[0] > state.rounds[1] ? 0 : 1;
-    if (state.rounds[winner] >= 2) showResult(winner);
+    if (state.rounds[winner] >= 2) resolveMatchResult(winner);
     else resetRound();
   }
 
@@ -2445,6 +2609,18 @@ function drawAttackVfx(fighter, time, activePower) {
       ctx.globalAlpha = activePower * (1 - i * 0.17);
       ctx.beginPath(); ctx.arc(42, -125, 35 + i * 31, -0.9, 0.9); ctx.stroke();
     }
+  } else if (fighter.def.vfx === "authority") {
+    ctx.strokeStyle = fighter.def.accent;
+    ctx.lineWidth = strong ? 9 : 5;
+    ctx.beginPath();
+    ctx.moveTo(18, -172);
+    ctx.lineTo(reach + 28, -84);
+    ctx.stroke();
+    ctx.fillStyle = "#f7e4ae";
+    for (let seal = 0; seal < 3; seal += 1) {
+      ctx.globalAlpha = activePower * (0.85 - seal * 0.18);
+      ctx.strokeRect(62 + seal * 36, -158 + seal * 18, 26, 26);
+    }
   }
   ctx.restore();
 }
@@ -2593,9 +2769,9 @@ function drawFighter(fighter, time) {
     ? fighterMoveAtlases[fighter.def.id] || fighterAtlases[fighter.def.id]
     : fighterAtlases[fighter.def.id];
   const frame = pose.frame;
-  const sizeAdjust = { deathblow: 1.08, jez: 1, alan: 1.08, post: 1.05, benny: 1.01, donald: 1.01, cyraxx: 1.02, ali: 1 }[fighter.def.id] || 1;
+  const sizeAdjust = { deathblow: 1.08, jez: 1, alan: 1.08, post: 1.05, benny: 1.01, donald: 1.01, cyraxx: 1.02, ali: 1, commissioner: 1.02 }[fighter.def.id] || 1;
   const moveSheetAdjust = pose.bank === "specials"
-    ? ({ deathblow: 1.14, jez: 1.03, alan: 1.06, post: 1.02, benny: 1.02, donald: 1.04, cyraxx: 1.05, ali: 1.04 }[fighter.def.id] || 1)
+    ? ({ deathblow: 1.14, jez: 1.03, alan: 1.06, post: 1.02, benny: 1.02, donald: 1.04, cyraxx: 1.05, ali: 1.04, commissioner: 1.02 }[fighter.def.id] || 1)
     : 1;
   const renderSize = 330 * sizeAdjust * moveSheetAdjust;
   const attackKind = attack?.kind;
@@ -3388,6 +3564,8 @@ function menuPadLoop() {
       if (state.locks[0] && state.locks[1]) showStageSelect();
       else chooseFighter(state.picks[state.selectingPlayer]);
     } else if (state.screen === "stage") startMatch(true);
+    else if (state.screen === "ladder") startMatch(true);
+    else if (state.screen === "ending") startSelect("arcade");
     else if (state.screen === "result") startMatch(true);
   }
   menuPadWasPressed = confirm;
@@ -3440,6 +3618,8 @@ document.addEventListener("visibilitychange", syncMusic);
 $("#fighterContinue").addEventListener("click", showStageSelect);
 $$(".stage-card").forEach((card) => card.addEventListener("click", () => chooseStage(card.dataset.stage)));
 $("#fightButton").addEventListener("click", () => startMatch(true));
+$("#arcadeContinueButton").addEventListener("click", () => startMatch(true));
+$("#endingReplayButton").addEventListener("click", () => startSelect("arcade"));
 $("#rematchButton").addEventListener("click", () => startMatch(true));
 $("#reselectButton").addEventListener("click", () => startSelect(state.mode));
 $$("[data-back]").forEach((button) => button.addEventListener("click", () => back(button.dataset.back)));
@@ -3473,7 +3653,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "0.9a-fair-ai",
+  version: "0.9b-arcade-ascent",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -3486,6 +3666,7 @@ window.__finalBlowEngine = {
       screen: state.screen,
       mode: state.mode,
       aiDifficulty: state.aiDifficulty,
+      arcade: arcadeRunSnapshot(state.arcadeRun),
       seed: state.matchSeed,
       rng: state.rng.getState(),
       commands: commandHistory.map((history) => history.map((entry) => ({ ...entry }))),
@@ -3514,6 +3695,8 @@ window.__finalBlowEngine = {
       })),
       fighters: state.fighters.map((fighter) => ({
         id: fighter.def.id,
+        kitId: fighter.kitId,
+        boss: Boolean(fighter.def.boss),
         side: fighter.side,
         state: fighter.combatState,
         stateFrame: fighter.stateFrame,
@@ -3574,6 +3757,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       const secondIndex = roster.findIndex((fighter) => fighter.id === secondId);
       if (firstIndex < 0 || secondIndex < 0) throw new Error(`Unknown matchup: ${firstId} vs ${secondId}`);
       state.mode = "versus";
+      state.arcadeRun = null;
       state.qaManualMode = true;
       state.picks = [firstIndex, secondIndex];
       state.rounds = [0, 0];
@@ -3613,6 +3797,46 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       window.__finalBlowQa.fight(firstId, secondId);
       setAiDifficulty(difficulty);
       state.mode = "arcade";
+      return window.__finalBlowEngine.snapshot();
+    },
+    arcade(playerId = "deathblow", difficulty = DEFAULT_AI_DIFFICULTY, seed = 237) {
+      const playerIndex = roster.findIndex(({ id }) => id === playerId);
+      if (playerIndex < 0) throw new Error(`Unknown arcade fighter: ${playerId}`);
+      state.mode = "arcade";
+      state.qaManualMode = true;
+      state.picks = [playerIndex, 0];
+      state.locks = [true, true];
+      state.arcadeRun = createArcadeRun(playerId, roster.map(({ id }) => id), seed);
+      setAiDifficulty(difficulty);
+      prepareArcadeOpponent(false);
+      state.rounds = [0, 0];
+      state.round = 1;
+      state.fighters = makeMatchFighters();
+      state.phase = "fight";
+      state.phaseTime = 0;
+      state.finishWinner = -1;
+      state.finisher = null;
+      state.traps.length = 0;
+      state.projectiles.length = 0;
+      showScreen("fight");
+      updateHud();
+      updateFacings();
+      return window.__finalBlowEngine.snapshot();
+    },
+    arcadeResult(playerWon = true) {
+      if (!state.arcadeRun) throw new Error("Start a QA arcade run first");
+      const outcome = recordArcadeResult(state.arcadeRun, Boolean(playerWon));
+      if (!playerWon) {
+        showResult(1);
+      } else if (outcome.completed) {
+        showArcadeEnding();
+      } else {
+        prepareArcadeOpponent(true);
+        state.rounds = [0, 0];
+        state.round = 1;
+        state.fighters = makeMatchFighters();
+        showArcadeLadder(outcome.match);
+      }
       return window.__finalBlowEngine.snapshot();
     },
     input(side, input = {}, frames = 1) {
@@ -3663,6 +3887,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       const index = roster.findIndex((fighter) => fighter.id === id);
       if (index < 0) throw new Error(`Unknown fighter: ${id}`);
       state.mode = "versus";
+      state.arcadeRun = null;
       state.qaManualMode = true;
       state.picks = [index, index === 1 ? 0 : 1];
       state.rounds = [0, 0];
@@ -3691,6 +3916,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       const index = roster.findIndex((fighter) => fighter.id === id);
       if (index < 0) throw new Error(`Unknown fighter: ${id}`);
       state.mode = "versus";
+      state.arcadeRun = null;
       state.qaManualMode = true;
       state.picks = [index, index === 1 ? 0 : 1];
       state.fighters = [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1)];

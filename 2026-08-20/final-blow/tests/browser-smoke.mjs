@@ -234,14 +234,14 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /0\.9A/);
+  assert.match(title.build, /0\.9B/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
   assert.equal(title.moveListRows, 9);
   assert.deepEqual(title.aiDifficulties, ['rookie', 'street', 'pro', 'final']);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '0.9a-fair-ai');
+  assert.equal(title.engineVersion, '0.9b-arcade-ascent');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -307,6 +307,89 @@ try {
   assert.equal(finalAi.fighters[1].ai.reactionFrames, 6);
   assert.ok(finalAi.fighters[1].ai.decisions > rookieAi.snapshot.fighters[1].ai.decisions / 2);
   assert.ok(finalAi.fighters[1].ai.lastObservedFrame <= finalAi.tick - 6);
+
+  const arcadeAssets = await evaluate(client, `(async () => {
+    const paths = ['assets/fighters/commissioner.webp', 'assets/atlases/commissioner.webp'];
+    return Promise.all(paths.map((src) => new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve([image.naturalWidth, image.naturalHeight]);
+      image.onerror = () => resolve([0, 0]);
+      image.src = src;
+    })));
+  })()`);
+  assert.deepEqual(arcadeAssets, [[800, 800], [1280, 1280]]);
+
+  const arcadeOpening = await evaluate(client, `window.__finalBlowQa.arcade('deathblow', 'pro', 237)`);
+  assert.equal(arcadeOpening.arcade.matches.length, 8);
+  assert.equal(arcadeOpening.arcade.matches.at(-1).opponentId, 'commissioner');
+  assert.equal(arcadeOpening.arcade.matches.at(-2).opponentId, 'alan');
+  assert.equal(arcadeOpening.arcade.current, 0);
+  assert.equal(arcadeOpening.fighters[1].boss, false);
+  const arcadeLoss = await evaluate(client, `(() => {
+    const snapshot = window.__finalBlowQa.arcadeResult(false);
+    return {
+      snapshot,
+      eyebrow: document.querySelector('#resultEyebrow').textContent,
+      continueLabel: document.querySelector('#rematchButton').textContent,
+    };
+  })()`);
+  assert.equal(arcadeLoss.snapshot.arcade.current, 0, 'a continue must retry the current bout');
+  assert.equal(arcadeLoss.snapshot.arcade.losses, 1);
+  assert.equal(arcadeLoss.snapshot.screen, 'result');
+  assert.match(arcadeLoss.eyebrow, /ARCADE RUN/);
+  assert.equal(arcadeLoss.continueLabel, 'CONTINUE');
+
+  const bossReady = await evaluate(client, `(() => {
+    window.__finalBlowQa.arcade('deathblow', 'final', 237);
+    for (let bout = 0; bout < 7; bout += 1) window.__finalBlowQa.arcadeResult(true);
+    return {
+      snapshot: window.__finalBlowEngine.snapshot(),
+      nodes: document.querySelectorAll('#arcadeLadderNodes .ladder-node').length,
+      cleared: document.querySelectorAll('#arcadeLadderNodes .ladder-node.cleared').length,
+      currentBoss: document.querySelectorAll('#arcadeLadderNodes .ladder-node.current.boss').length,
+      title: document.querySelector('#arcadeLadderTitle').textContent,
+      button: document.querySelector('#arcadeContinueButton').textContent,
+    };
+  })()`);
+  assert.equal(bossReady.snapshot.arcade.current, 7);
+  assert.equal(bossReady.snapshot.arcade.currentMatch.opponentId, 'commissioner');
+  assert.equal(bossReady.snapshot.fighters[1].id, 'commissioner');
+  assert.equal(bossReady.snapshot.fighters[1].kitId, 'deathblow');
+  assert.equal(bossReady.snapshot.fighters[1].boss, true);
+  assert.equal(bossReady.snapshot.screen, 'ladder');
+  assert.equal(bossReady.nodes, 8);
+  assert.equal(bossReady.cleared, 7);
+  assert.equal(bossReady.currentBoss, 1);
+  assert.match(bossReady.title, /FINAL AUTHORITY/);
+  assert.match(bossReady.button, /FINAL BOUT/);
+
+  const bossFight = await evaluate(client, `(() => {
+    document.querySelector('#arcadeContinueButton').click();
+    window.__finalBlowQa.step(3.2);
+    return window.__finalBlowEngine.snapshot();
+  })()`);
+  assert.equal(bossFight.screen, 'fight');
+  assert.equal(bossFight.fighters[1].id, 'commissioner');
+  assert.equal(bossFight.fighters[1].boss, true);
+  assert.ok(bossFight.fighters[1].ai.decisions > 0);
+
+  const arcadeEnding = await evaluate(client, `(() => {
+    const snapshot = window.__finalBlowQa.arcadeResult(true);
+    return {
+      snapshot,
+      title: document.querySelector('#endingTitle').textContent,
+      quote: document.querySelector('#endingQuote').textContent,
+      story: document.querySelector('#endingStory').textContent,
+      art: document.querySelector('#endingArt').style.backgroundImage,
+    };
+  })()`);
+  assert.equal(arcadeEnding.snapshot.arcade.completed, true);
+  assert.equal(arcadeEnding.snapshot.arcade.wins, 8);
+  assert.equal(arcadeEnding.snapshot.screen, 'ending');
+  assert.equal(arcadeEnding.title, 'THE GROUND REMEMBERS');
+  assert.ok(arcadeEnding.quote.length > 20);
+  assert.ok(arcadeEnding.story.length > 80);
+  assert.match(arcadeEnding.art, /deathblow-specials/);
 
   const kitMoves = await evaluate(client, `(() => {
     const specs = [
@@ -1230,6 +1313,47 @@ try {
   assert.match(mobileVictory.background, /deathblow-specials\.webp/);
   assert.ok(mobileVictory.screen.width >= 840 && mobileVictory.screen.height >= 385);
   assert.ok(mobileVictory.pose.width > 250 && mobileVictory.pose.height > 250);
+
+  const mobileLadder = await evaluate(client, `(() => {
+    window.__finalBlowQa.arcade('ali', 'street', 88);
+    for (let bout = 0; bout < 7; bout += 1) window.__finalBlowQa.arcadeResult(true);
+    const screen = document.querySelector('#ladderScreen').getBoundingClientRect();
+    const route = document.querySelector('#arcadeLadderNodes').getBoundingClientRect();
+    const button = document.querySelector('#arcadeContinueButton').getBoundingClientRect();
+    return {
+      active: document.querySelector('#ladderScreen').classList.contains('active'),
+      nodes: document.querySelectorAll('#arcadeLadderNodes .ladder-node').length,
+      screen: { left: screen.left, top: screen.top, right: screen.right, bottom: screen.bottom },
+      route: { left: route.left, right: route.right, bottom: route.bottom },
+      button: { left: button.left, right: button.right, bottom: button.bottom },
+      overflow: document.documentElement.scrollWidth > innerWidth,
+    };
+  })()`);
+  assert.equal(mobileLadder.active, true);
+  assert.equal(mobileLadder.nodes, 8);
+  assert.equal(mobileLadder.overflow, false);
+  assert.ok(mobileLadder.route.left >= 0 && mobileLadder.route.right <= 844);
+  assert.ok(mobileLadder.button.left >= 0 && mobileLadder.button.right <= 844 && mobileLadder.button.bottom <= 390);
+
+  const mobileEnding = await evaluate(client, `(() => {
+    window.__finalBlowQa.arcadeResult(true);
+    const screen = document.querySelector('#endingScreen').getBoundingClientRect();
+    const copy = document.querySelector('.ending-copy').getBoundingClientRect();
+    const menu = document.querySelector('#endingReplayButton').getBoundingClientRect();
+    return {
+      active: document.querySelector('#endingScreen').classList.contains('active'),
+      title: document.querySelector('#endingTitle').textContent,
+      screen: { width: screen.width, height: screen.height },
+      copy: { left: copy.left, right: copy.right, top: copy.top, bottom: copy.bottom },
+      menu: { left: menu.left, right: menu.right, bottom: menu.bottom },
+      overflow: document.documentElement.scrollWidth > innerWidth,
+    };
+  })()`);
+  assert.equal(mobileEnding.active, true);
+  assert.equal(mobileEnding.title, 'WEST STAINES MASSIVE');
+  assert.equal(mobileEnding.overflow, false);
+  assert.ok(mobileEnding.copy.left >= 0 && mobileEnding.copy.right <= 844);
+  assert.ok(mobileEnding.menu.left >= 0 && mobileEnding.menu.right <= 844 && mobileEnding.menu.bottom <= 390);
 
   await client.send("Emulation.setDeviceMetricsOverride", {
     width: 390,
