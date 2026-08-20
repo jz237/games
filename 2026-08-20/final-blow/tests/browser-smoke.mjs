@@ -229,19 +229,25 @@ try {
     moveListRows: document.querySelectorAll('.move-list-row').length,
     aiDifficulties: [...document.querySelectorAll('#aiDifficultySelect option')].map((option) => option.value),
     aiDifficulty: document.querySelector('#aiDifficultySelect')?.value,
+    visualQualities: [...document.querySelectorAll('#visualQualitySelect option')].map((option) => option.value),
+    pauseButtons: document.querySelectorAll('#pausePanel button').length,
+    soundCaptions: document.querySelector('#soundCaptionsToggle')?.checked,
     engineVersion: window.__finalBlowEngine?.version,
     engine: window.__finalBlowEngine?.snapshot(),
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.0A/);
+  assert.match(title.build, /1\.0B/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
   assert.equal(title.moveListRows, 9);
   assert.deepEqual(title.aiDifficulties, ['rookie', 'street', 'pro', 'final']);
+  assert.deepEqual(title.visualQualities, ['auto', 'high', 'balanced', 'battery']);
+  assert.equal(title.pauseButtons, 4);
+  assert.equal(title.soundCaptions, true);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.0a-training-lab');
+  assert.equal(title.engineVersion, '1.0b-offline-edition');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -1260,6 +1266,55 @@ try {
   })()`);
   assert.equal(padRemap.light, 2);
 
+  const polishUi = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.input(0, { heavy: true });
+    window.__finalBlowQa.step(0.08);
+    const beforePause = window.__finalBlowEngine.snapshot();
+    window.__finalBlowQa.pause(true);
+    window.__finalBlowQa.step(0.8);
+    const duringPause = window.__finalBlowEngine.snapshot();
+    const pausePanel = document.querySelector('#pausePanel');
+    const pauseVisible = !pausePanel.hidden;
+    const performanceLabel = document.querySelector('#pausePerformance').textContent;
+    window.__finalBlowQa.pause(false);
+    window.__finalBlowQa.step(0.08);
+    const resumed = window.__finalBlowEngine.snapshot();
+    const battery = window.__finalBlowQa.quality('battery');
+    window.__finalBlowQa.fighter(0, { health: 37 });
+    window.__finalBlowQa.pause(true);
+    document.querySelector('#restartButton').click();
+    const restarted = window.__finalBlowEngine.snapshot();
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.input(0, { light: true });
+    window.__finalBlowQa.step(0.04);
+    return {
+      beforeFrame: beforePause.fighters[0].attackFrame,
+      pausedFrame: duringPause.fighters[0].attackFrame,
+      resumedFrame: resumed.fighters[0].attackFrame,
+      pauseVisible,
+      performanceLabel,
+      battery,
+      restartedHealth: restarted.fighters[0].health,
+      restartedPaused: restarted.paused,
+      caption: document.querySelector('#soundCaption').textContent,
+      captionVisible: !document.querySelector('#soundCaption').hidden,
+      balance: restarted.balance,
+    };
+  })()`);
+  assert.equal(polishUi.pausedFrame, polishUi.beforeFrame, 'pause must freeze combat state');
+  assert.ok(polishUi.resumedFrame > polishUi.pausedFrame, 'resume must continue combat state');
+  assert.equal(polishUi.pauseVisible, true);
+  assert.match(polishUi.performanceLabel, /PROFILE/);
+  assert.equal(polishUi.battery.id, 'battery');
+  assert.equal(polishUi.battery.trailScale, 0);
+  assert.equal(polishUi.restartedHealth, 100);
+  assert.equal(polishUi.restartedPaused, false);
+  assert.match(polishUi.caption, /LIGHT SWING/);
+  assert.equal(polishUi.captionVisible, true);
+  assert.equal(polishUi.balance.fighters.length, 8);
+  assert.deepEqual(polishUi.balance.violations, []);
+
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
   await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
   await evaluate(client, `window.__finalBlowQa.step(0.12)`);
@@ -1319,6 +1374,57 @@ try {
     await writeFile(process.env.FINAL_BLOW_VICTORY_SCREENSHOT, Buffer.from(capture.data, "base64"));
   }
 
+  const offlineCache = await evaluate(client, `(async () => {
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) {
+      await Promise.race([
+        new Promise((resolve) => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true })),
+        new Promise((resolve) => setTimeout(resolve, 2500)),
+      ]);
+    }
+    const names = await caches.keys();
+    const name = names.find((item) => item.startsWith('final-blow-offline-'));
+    const cache = name ? await caches.open(name) : null;
+    const requests = cache ? await cache.keys() : [];
+    return {
+      controlled: Boolean(navigator.serviceWorker.controller),
+      name,
+      entries: requests.length,
+      hasGame: Boolean(cache && await cache.match('./game.js')),
+      hasMusic: Boolean(cache && await cache.match('./assets/audio/subway-after-midnight.mp3')),
+      ready: window.__finalBlowEngine.snapshot().offlineReady,
+    };
+  })()`);
+  assert.equal(offlineCache.controlled, true);
+  assert.match(offlineCache.name, /final-blow-offline-1\.0b/);
+  assert.ok(offlineCache.entries >= 55);
+  assert.equal(offlineCache.hasGame, true);
+  assert.equal(offlineCache.hasMusic, true);
+  assert.equal(offlineCache.ready, true);
+
+  await client.send('Network.emulateNetworkConditions', {
+    offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
+    connectionType: 'none',
+  });
+  const offlineLoaded = client.once('Page.loadEventFired');
+  await client.send('Page.reload', { ignoreCache: false });
+  await offlineLoaded;
+  await delay(500);
+  const offlineBoot = await evaluate(client, `(() => ({
+    title: document.title,
+    build: document.querySelector('.build-tag').textContent,
+    version: window.__finalBlowEngine?.version,
+    badge: document.querySelector('#offlineBadge').textContent,
+  }))()`);
+  assert.match(offlineBoot.title, /Final Blow/);
+  assert.match(offlineBoot.build, /1\.0B/);
+  assert.equal(offlineBoot.version, '1.0b-offline-edition');
+  assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
+  await client.send('Network.emulateNetworkConditions', {
+    offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
+    connectionType: 'wifi',
+  });
+
   await client.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
   await client.send("Emulation.setDeviceMetricsOverride", {
     width: 844,
@@ -1346,6 +1452,34 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
+
+  const mobilePolish = await evaluate(client, `(() => {
+    const snapshot = window.__finalBlowQa.training('deathblow', 'jez', 'guard');
+    const training = document.querySelector('#trainingPanel').getBoundingClientRect();
+    const pauseButton = document.querySelector('#touchPauseButton');
+    const pauseBounds = pauseButton.getBoundingClientRect();
+    pauseButton.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+    const paused = window.__finalBlowEngine.snapshot();
+    const pausePanel = document.querySelector('#pausePanel').getBoundingClientRect();
+    window.__finalBlowQa.pause(false);
+    return {
+      timer: document.querySelector('#timer').textContent,
+      profile: snapshot.performance.id,
+      training: { left: training.left, top: training.top, right: training.right, bottom: training.bottom },
+      pauseButton: { display: getComputedStyle(pauseButton).display, left: pauseBounds.left, right: pauseBounds.right, bottom: pauseBounds.bottom },
+      paused: paused.paused,
+      pausePanel: { left: pausePanel.left, top: pausePanel.top, right: pausePanel.right, bottom: pausePanel.bottom },
+      overflow: document.documentElement.scrollWidth > innerWidth,
+    };
+  })()`);
+  assert.equal(mobilePolish.timer, '∞');
+  assert.equal(mobilePolish.profile, 'battery');
+  assert.equal(mobilePolish.pauseButton.display, 'block');
+  assert.equal(mobilePolish.paused, true);
+  assert.equal(mobilePolish.overflow, false);
+  assert.ok(mobilePolish.training.left >= 0 && mobilePolish.training.right <= 844 && mobilePolish.training.bottom <= 390);
+  assert.ok(mobilePolish.pauseButton.left >= 0 && mobilePolish.pauseButton.right <= 844 && mobilePolish.pauseButton.bottom <= 390);
+  assert.ok(mobilePolish.pausePanel.left >= 0 && mobilePolish.pausePanel.right <= 844 && mobilePolish.pausePanel.bottom <= 390);
 
   await evaluate(client, `(() => {
     document.querySelector('[data-mode="arcade"]').click();

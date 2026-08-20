@@ -6,6 +6,10 @@
   "scope": "./",
   "display": "fullscreen",
   "orientation": "landscape",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
   "background_color": "#030407",
   "theme_color": "#080b13"
 }

@@ -19,7 +19,8 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">TRAINING LAB <b>1.0A</b></div>
+      <div class="build-tag">OFFLINE EDITION <b>1.0B</b></div>
+      <div id="offlineBadge" class="offline-badge" aria-live="polite">CACHE CHECK</div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
     </header>
@@ -65,6 +66,20 @@
       <div id="announcer" class="announcer hidden" aria-live="assertive">
         <strong></strong><span></span>
       </div>
+      <div id="soundCaption" class="sound-caption" aria-live="polite" hidden></div>
+
+      <section id="pausePanel" class="pause-panel" aria-labelledby="pauseTitle" hidden>
+        <p class="eyebrow">THE STREET WAITS</p>
+        <h2 id="pauseTitle">PAUSED</h2>
+        <div id="pausePerformance" class="pause-performance">AUTO VISUALS</div>
+        <div class="menu-stack">
+          <button id="resumeButton" class="arcade-button primary menu-focus" type="button">RESUME</button>
+          <button id="restartButton" class="arcade-button" type="button">RESTART ROUND</button>
+          <button id="pauseOptionsButton" class="arcade-button" type="button">CONTROLS &amp; OPTIONS</button>
+          <button id="pauseSelectButton" class="arcade-button ghost" type="button">SELECT FIGHTERS</button>
+        </div>
+        <p>ESC / P / START TO RESUME</p>
+      </section>
 
       <section id="titleScreen" class="screen title-screen active" aria-labelledby="gameTitle">
         <div class="title-glow"></div>
@@ -181,6 +196,7 @@
           <button data-touch="jump" aria-label="Jump">▲</button>
         </div>
       </div>
+      <button id="touchPauseButton" class="touch-pause" type="button" aria-label="Pause game">Ⅱ</button>
     </section>
 
     <footer class="footer-strip">
@@ -229,6 +245,7 @@
           <label><input id="soundToggle" type="checkbox" checked><span>ELEVENLABS SFX</span></label>
           <label><input id="reducedMotionToggle" type="checkbox"><span>REDUCED MOTION</span></label>
           <label><input id="highContrastToggle" type="checkbox"><span>HIGH CONTRAST HUD</span></label>
+          <label><input id="soundCaptionsToggle" type="checkbox" checked><span>VISUAL SOUND CUES</span></label>
           <div class="volume-control">
             <label for="musicVolume"><span>MUSIC VOLUME</span><output id="musicVolumeValue">100%</output></label>
             <input id="musicVolume" type="range" min="0" max="100" step="1" value="100">
@@ -273,6 +290,12 @@
               <option value="1">FULL</option><option value="0.5">LOW</option><option value="0">OFF</option>
             </select>
           </label>
+          <label class="option-picker"><span>VISUAL QUALITY</span>
+            <select id="visualQualitySelect" aria-label="Visual quality">
+              <option value="auto">AUTO · DEVICE AWARE</option><option value="high">HIGH</option>
+              <option value="balanced">BALANCED</option><option value="battery">BATTERY SAVER</option>
+            </select>
+          </label>
           <label class="option-picker"><span>TOUCH LAYOUT</span>
             <select id="touchHandednessSelect" aria-label="Touch control layout">
               <option value="standard">STANDARD</option><option value="left">LEFT-HANDED</option>
@@ -287,6 +310,7 @@
             <input id="touchOpacity" type="range" min="40" max="100" step="2" value="82">
           </div>
           <label><input id="touchHapticsToggle" type="checkbox" checked><span>TOUCH HAPTICS</span></label>
+          <button id="installButton" class="install-button" type="button" hidden>INSTALL OFFLINE GAME</button>
         </section>
         <section class="remap-panel">
           <header><h3>COMPLETE INPUT REMAP</h3><button id="resetBindingsButton" type="button">RESTORE DEFAULTS</button></header>
