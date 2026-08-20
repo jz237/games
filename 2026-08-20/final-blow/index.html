@@ -19,7 +19,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">FIGHTING SYSTEM UPGRADE <b>0.6B</b></div>
+      <div class="build-tag">GRIT &amp; COMBO SYSTEM <b>0.7A</b></div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
     </header>
@@ -31,15 +31,17 @@
         <div class="fighter-hud p1-hud">
           <div class="hud-name"><span class="side-tag">P1</span><b id="p1Name">DEATHBLOW</b><span id="p1Rounds" class="round-pips"></span></div>
           <div class="health-shell"><i id="p1Health"></i><em id="p1Damage"></em></div>
-          <div class="meter-shell"><i id="p1Meter"></i></div>
+          <div class="grit-row"><span>GRIT</span><div class="meter-shell"><i id="p1Meter"></i></div><b id="p1Grit">0</b></div>
         </div>
         <div class="timer-wrap"><span id="roundLabel">ROUND 1</span><b id="timer">99</b></div>
         <div class="fighter-hud p2-hud">
           <div class="hud-name"><span id="p2Rounds" class="round-pips"></span><b id="p2Name">JEZ</b><span class="side-tag">P2</span></div>
           <div class="health-shell"><i id="p2Health"></i><em id="p2Damage"></em></div>
-          <div class="meter-shell"><i id="p2Meter"></i></div>
+          <div class="grit-row"><b id="p2Grit">0</b><div class="meter-shell"><i id="p2Meter"></i></div><span>GRIT</span></div>
         </div>
       </div>
+      <div id="p1Combo" class="combo-readout p1-combo" aria-live="polite"><b>0</b><span>HIT COMBO</span><em>0 DAMAGE</em></div>
+      <div id="p2Combo" class="combo-readout p2-combo" aria-live="polite"><b>0</b><span>HIT COMBO</span><em>0 DAMAGE</em></div>
 
       <div id="announcer" class="announcer hidden" aria-live="assertive">
         <strong></strong><span></span>
@@ -128,7 +130,7 @@
 
     <footer class="footer-strip">
       <span id="stageTicker">KENSINGTON &amp; ALLEGHENY // PHILADELPHIA</span>
-      <span>FRAME HITBOXES · DASHES · THROWS · REVERSALS · 4 SOUNDTRACKS</span>
+      <span>CHAINS · CANCELS · JUGGLES · GRIT SUPERS · FINAL BLOWS</span>
     </footer>
   </main>
 
@@ -144,6 +146,8 @@
           <p><kbd>A</kbd><kbd>D</kbd> MOVE/GUARD · <kbd>W</kbd> JUMP · <kbd>S</kbd> CROUCH/LOW GUARD</p>
           <p><kbd>J</kbd> LIGHT · <kbd>K</kbd> HEAVY · <kbd>L</kbd> SPECIAL</p>
           <p>DOUBLE-TAP DASH · LIGHT + HEAVY THROW · <kbd>I</kbd> GUARD</p>
+          <p>HEAVY + SPECIAL ENHANCED · FULL GRIT + <kbd>U</kbd> SUPER</p>
+          <p>COMMANDS: ↓ → SPECIAL · → ↓ → HEAVY · ← → HEAVY</p>
           <p>FINAL BLOWS: ↓ → HEAVY · ← ↓ → SPECIAL · <kbd>U</kbd> CHARACTER COMBO</p>
         </section>
         <section>
@@ -151,13 +155,16 @@
           <p><kbd>←</kbd><kbd>→</kbd> MOVE/GUARD · <kbd>↑</kbd> JUMP · <kbd>↓</kbd> CROUCH/LOW GUARD</p>
           <p><kbd>1</kbd> LIGHT · <kbd>2</kbd> HEAVY · <kbd>3</kbd> SPECIAL</p>
           <p>DOUBLE-TAP DASH · LIGHT + HEAVY THROW · <kbd>5</kbd> GUARD</p>
+          <p>HEAVY + SPECIAL ENHANCED · FULL GRIT + <kbd>0</kbd> SUPER</p>
+          <p>COMMANDS: ↓ → SPECIAL · → ↓ → HEAVY · ← → HEAVY</p>
           <p>FINAL BLOWS: ↓ → HEAVY · ← ↓ → SPECIAL · <kbd>0</kbd> CHARACTER COMBO</p>
         </section>
         <section>
           <h3>XINPUT / GAMEPAD</h3>
           <p>STICK / D-PAD MOVE · <span class="xbox-a">A</span> JUMP</p>
           <p><span class="xbox-x">X</span> LIGHT · <span class="xbox-y">Y</span> HEAVY · LB SPECIAL</p>
-          <p><span class="xbox-b">B</span> GUARD · X + Y THROW · LT + RT CHARACTER COMBO</p>
+          <p><span class="xbox-b">B</span> GUARD · X + Y THROW · Y + LB ENHANCED</p>
+          <p>FULL GRIT + LT + RT SUPER · POST-KO CHARACTER FINAL BLOW</p>
         </section>
         <section class="options-panel">
           <h3>OPTIONS</h3>
@@ -184,7 +191,7 @@
           </label>
         </section>
       </div>
-      <p class="dialog-note">Hold away to guard high; down guards low. Forward + Heavy is an overhead. Press F3 for live hitboxes, hurtboxes, pushboxes and frame state.</p>
+      <p class="dialog-note">Hit-confirm normals into chains or specials. Enhanced moves cost 25 Grit; during blockstun, Enhanced or Forward + Special triggers a 30-Grit guard reversal. Supers cost 100. Post-KO FB still performs each fighter's unique Final Blow.</p>
       <button class="arcade-button primary dialog-done" value="close">DONE</button>
     </form>
   </dialog>

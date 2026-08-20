@@ -22,6 +22,15 @@ import {
   isCounterHit,
   resolvePushboxPositions,
 } from "./engine/defense.mjs";
+import {
+  COMBO_RULES,
+  GRIT_RULES,
+  ComboTracker,
+  canCancelAttack,
+  createAdvancedMove,
+  gritCostForAction,
+  recognizeCombatCommand,
+} from "./engine/combos.mjs";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -427,6 +436,7 @@ const pressed = new Set();
 const touch = new Set();
 const previousPads = new Map();
 const commandHistory = [[], []];
+const qaInputOverrides = [null, null];
 
 const keyMaps = [
   { left: "KeyA", right: "KeyD", jump: "KeyW", down: "KeyS", guard: "KeyI", light: "KeyJ", heavy: "KeyK", special: "KeyL", final: "KeyU" },
@@ -434,7 +444,7 @@ const keyMaps = [
 ];
 
 const simulationClock = new FixedStepClock();
-const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.6-defense");
+const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.7-combos");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
 const state = {
@@ -470,6 +480,7 @@ const state = {
   lastImpactSide: -1,
   rng: new DeterministicRng(initialSeed),
   debug: debugRequested,
+  qaManualMode: false,
   audio: null,
   audioUnlocked: false,
   musicDuck: 1,
@@ -517,6 +528,15 @@ function makeFighter(index, side) {
     attackTime: 0,
     attackFrame: 0,
     attackHit: false,
+    attackHits: 0,
+    lastAttackHitFrame: -Infinity,
+    attackConnected: "",
+    cancelledFrom: "",
+    linkedFrom: "",
+    linkWindow: null,
+    confirmWindowFrames: 0,
+    juggleCount: 0,
+    combo: new ComboTracker(),
     stun: 0,
     hitstunFrames: 0,
     blockstunFrames: 0,
@@ -579,6 +599,7 @@ function showScreen(name) {
   const playing = name === "fight";
   $("#hud").classList.toggle("hidden", !playing);
   $("#hud").setAttribute("aria-hidden", String(!playing));
+  if (!playing) $$(".combo-readout").forEach((readout) => readout.classList.remove("active"));
   $("#touchControls").classList.toggle("playing", playing);
   if (!playing) $("#announcer").classList.add("hidden");
   syncMusic();
@@ -656,6 +677,7 @@ function startMatch(resetSet = true) {
     state.round = 1;
   }
   state.matchSerial += 1;
+  state.qaManualMode = false;
   seedMatch(state.round);
   state.fighters = [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1)];
   state.particles.length = 0;
@@ -670,7 +692,7 @@ function startMatch(resetSet = true) {
   state.finisherType = 0;
   state.finisher = null;
   state.cinematicZoom = 1;
-  $(".touch-final").classList.remove("ready");
+  $(".touch-final").classList.remove("ready", "super-ready");
   $("#touchControls").classList.remove("cinematic");
   commandHistory[0].length = 0;
   commandHistory[1].length = 0;
@@ -685,9 +707,12 @@ function startMatch(resetSet = true) {
 
 function resetRound() {
   resetMusicDuck();
+  const carriedGrit = state.fighters.map((fighter) => fighter.meter);
   state.round += 1;
+  state.qaManualMode = false;
   seedMatch(state.round);
   state.fighters = [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1)];
+  state.fighters.forEach((fighter, side) => { fighter.meter = carriedGrit[side] || 0; });
   state.particles.length = 0;
   state.effects.length = 0;
   state.timer = 99;
@@ -699,7 +724,7 @@ function resetRound() {
   state.finishWinner = -1;
   state.finisher = null;
   state.cinematicZoom = 1;
-  $(".touch-final").classList.remove("ready");
+  $(".touch-final").classList.remove("ready", "super-ready");
   $("#touchControls").classList.remove("cinematic");
   commandHistory[0].length = 0;
   commandHistory[1].length = 0;
@@ -899,10 +924,17 @@ function updateHud() {
     healthBar.classList.toggle("danger", health <= 0.25);
     $(`#${prefix}Damage`).style.transform = `scaleX(${health})`;
     $(`#${prefix}Meter`).style.transform = `scaleX(${clamp(fighter.meter, 0, 100) / 100})`;
+    $(`#${prefix}Grit`).textContent = String(Math.floor(fighter.meter));
+    $(`#${prefix}Meter`).closest(".grit-row").classList.toggle("full", fighter.meter >= GRIT_RULES.superCost);
     $(`#${prefix}Rounds`).innerHTML = [0, 1].map((round) => `<i class="${state.rounds[side] > round ? "won" : ""}"></i>`).join("");
   });
   $("#timer").textContent = String(Math.ceil(state.timer)).padStart(2, "0");
   $("#roundLabel").textContent = `ROUND ${state.round}`;
+  const finalButton = $(".touch-final");
+  const superReady = state.phase === "fight" && state.fighters[0]?.meter >= GRIT_RULES.superCost;
+  finalButton.classList.toggle("super-ready", superReady);
+  if (state.phase === "finish" && state.finishWinner === 0) finalButton.textContent = "FB";
+  else finalButton.textContent = superReady ? "SUPER" : "GRIT";
 }
 
 function getPad(index) {
@@ -941,14 +973,17 @@ function readInput(side) {
   const jump = edge("jump") || padEdge(0) || Boolean(pad && (axisY < -0.65 || buttonValue(pad, 12)) && !previous[20]);
   let light = edge("light") || padEdge(2);
   let heavy = edge("heavy") || padEdge(3);
-  const special = edge("special") || padEdge(4) || padEdge(5);
+  let special = edge("special") || padEdge(4) || padEdge(5);
   const lightHeld = held("light") || buttonValue(pad, 2);
   const heavyHeld = held("heavy") || buttonValue(pad, 3);
+  const specialHeld = held("special") || buttonValue(pad, 4) || buttonValue(pad, 5);
   const throwInput = (light && heavyHeld) || (heavy && lightHeld);
-  if (throwInput) {
+  const enhanced = !throwInput && ((special && heavyHeld) || (heavy && specialHeld));
+  if (throwInput || enhanced) {
     light = false;
     heavy = false;
   }
+  if (enhanced) special = false;
   const triggers = buttonValue(pad, 6) && buttonValue(pad, 7);
   const previousTriggers = Boolean(previous[6] && previous[7]);
   const final = edge("final") || (triggers && !previousTriggers);
@@ -957,13 +992,13 @@ function readInput(side) {
     next[20] = axisY < -0.65 || buttonValue(pad, 12);
     previousPads.set(pad.index, next);
   }
-  return { left, right, down, guard, jump, light, heavy, special, throw: throwInput, final };
+  return { left, right, down, guard, jump, light, heavy, special, enhanced, throw: throwInput, final };
 }
 
 function aiInput(fighter, opponent, dt) {
   fighter.aiClock -= dt;
   const distance = opponent.x - fighter.x;
-  const input = { left: false, right: false, down: false, guard: false, jump: false, light: false, heavy: false, special: false, throw: false, final: false };
+  const input = { left: false, right: false, down: false, guard: false, jump: false, light: false, heavy: false, special: false, enhanced: false, throw: false, super: false, final: false };
   if (state.phase === "finish" && state.finishWinner === 1) {
     input.final = fighter.aiClock <= 0;
     if (input.final) fighter.aiClock = 2;
@@ -996,6 +1031,15 @@ function aiInput(fighter, opponent, dt) {
   return input;
 }
 
+function readQaInput(side) {
+  const override = qaInputOverrides[side];
+  if (!override || override.frames <= 0) return null;
+  override.frames -= 1;
+  const input = { ...override.input };
+  if (override.frames <= 0) qaInputOverrides[side] = null;
+  return input;
+}
+
 function rememberCommand(side, token) {
   const history = commandHistory[side];
   const frame = state.simulationTick;
@@ -1025,8 +1069,8 @@ function recordInput(side, input, fighter) {
 function tryFinish(side, input) {
   if (state.phase !== "finish" || state.finishWinner !== side) return false;
   let type = -1;
-  if (commandMatches(side, ["back", "down", "forward", "special"])) type = 1;
-  else if (commandMatches(side, ["down", "forward", "heavy"])) type = 0;
+  if (input.special && commandMatches(side, ["back", "down", "forward", "special"])) type = 1;
+  else if (input.heavy && commandMatches(side, ["down", "forward", "heavy"])) type = 0;
   else if (input.final) type = commandHistory[side].some((item) => item.token === "special") ? 1 : 0;
   if (type >= 0) {
     finishRound(side, type);
@@ -1044,33 +1088,78 @@ function directionContext(fighter, input) {
   };
 }
 
-function beginAttack(fighter, kind, input = {}, { reversal = false } = {}) {
-  if (fighter.attacking || fighter.stun > 0 || fighter.down || fighter.wakeupFrames > 0) return false;
-  if (kind === "throw" && !fighter.grounded) return false;
+const advancedActions = new Set(["commandSpecial", "launcher", "driveHeavy", "enhanced", "guardReversal", "super"]);
+
+function beginAttack(fighter, action, input = {}, { reversal = false, force = false, cancelledFrom = "" } = {}) {
+  if (!force && (fighter.attacking || fighter.stun > 0 || fighter.down || fighter.wakeupFrames > 0)) return false;
+  if (action === "throw" && !fighter.grounded) return false;
+  if (advancedActions.has(action) && !fighter.grounded) return false;
+  const gritCost = gritCostForAction(action);
+  if (fighter.meter < gritCost) return false;
   const direction = directionContext(fighter, input);
-  fighter.attacking = createCombatMove(kind, {
-    airborne: !fighter.grounded,
-    crouching: fighter.crouch || Boolean(input.down),
-    forwardHeld: direction.forwardHeld,
-  });
+  const validLink = !cancelledFrom
+    && fighter.linkWindow?.connected === "hit"
+    && fighter.linkWindow.expiresFrame >= state.simulationTick
+    && ["light", "heavy"].includes(action);
+  const linkedFrom = validLink ? fighter.linkWindow.profileId : "";
+  fighter.attacking = advancedActions.has(action)
+    ? createAdvancedMove(action)
+    : createCombatMove(action, {
+      airborne: !fighter.grounded,
+      crouching: fighter.crouch || Boolean(input.down),
+      forwardHeld: direction.forwardHeld,
+    });
+  fighter.meter = clamp(fighter.meter - gritCost, 0, GRIT_RULES.maximum);
   fighter.attackTime = 0;
   fighter.attackFrame = 0;
   fighter.attackHit = false;
+  fighter.attackHits = 0;
+  fighter.lastAttackHitFrame = -Infinity;
+  fighter.attackConnected = "";
+  fighter.cancelledFrom = cancelledFrom;
+  fighter.linkedFrom = linkedFrom;
+  fighter.linkWindow = null;
   fighter.block = false;
   fighter.guarding = false;
+  fighter.blockstunFrames = force ? 0 : fighter.blockstunFrames;
+  fighter.hitstunFrames = force ? 0 : fighter.hitstunFrames;
+  fighter.stun = force ? 0 : fighter.stun;
   fighter.dashFrames = 0;
   fighter.queuedDashDirection = 0;
   fighter.lastHitResult = reversal ? "reversal" : "";
-  if (reversal) {
-    fighter.invulnerableFrames = Math.max(fighter.invulnerableFrames, DEFENSE_RULES.reversalWindowFrames);
-    spawnCombatText(fighter.x, fighter.y - fighter.height - 25, "REVERSAL", fighter.def.accent);
+  if (reversal || fighter.attacking.reversalInvulnerableFrames) {
+    fighter.invulnerableFrames = Math.max(
+      fighter.invulnerableFrames,
+      fighter.attacking.reversalInvulnerableFrames || DEFENSE_RULES.reversalWindowFrames,
+    );
+    const label = action === "guardReversal" ? "GRIT REVERSAL" : "REVERSAL";
+    fighter.lastHitResult = action === "guardReversal" ? "guard-reversal" : "reversal";
+    spawnCombatText(fighter.x, fighter.y - fighter.height - 25, label, fighter.def.accent);
   }
-  if (kind === "special") fighter.specialGlow = 0.7;
-  sound(kind === "throw" ? "heavy" : kind);
+  if (fighter.attacking.kind === "special") fighter.specialGlow = fighter.attacking.superMove ? 1.25 : 0.7;
+  if (fighter.attacking.superMove) {
+    if ($("#flashToggle").checked) state.flash = Math.max(state.flash, 0.22);
+    state.hitstop = Math.max(state.hitstop, 0.09);
+    spawnCombatText(fighter.x, fighter.y - fighter.height - 35, "FULL GRIT SUPER", fighter.def.accent);
+  }
+  if (linkedFrom) spawnCombatText(fighter.x, fighter.y - fighter.height - 20, "LINK", fighter.def.accent);
+  updateHud();
+  sound(fighter.attacking.superMove ? "final" : action === "throw" ? "heavy" : fighter.attacking.kind);
   return true;
 }
 
-const bufferedActions = ["jump", "throw", "light", "heavy", "special"];
+const bufferedActions = [
+  "jump",
+  "throw",
+  "super",
+  "enhanced",
+  "launcher",
+  "driveHeavy",
+  "commandSpecial",
+  "light",
+  "heavy",
+  "special",
+];
 
 function bufferActionInputs(fighter, input) {
   for (const action of bufferedActions) {
@@ -1101,11 +1190,21 @@ function prepareFighterInput(fighter, input) {
     light: Boolean(input.light),
     heavy: Boolean(input.heavy),
     special: Boolean(input.special),
+    enhanced: Boolean(input.enhanced),
     throw: Boolean(input.throw),
+    super: Boolean(input.super || (input.final && state.phase === "fight")),
     final: Boolean(input.final),
   };
   recordInput(fighter.side, normalized, fighter);
   if (state.phase === "fight") {
+    const command = recognizeCombatCommand(commandHistory[fighter.side], state.simulationTick);
+    if (command && ((command.action === "commandSpecial" && normalized.special)
+      || (["launcher", "driveHeavy"].includes(command.action) && normalized.heavy))) {
+      normalized[command.action] = true;
+      if (command.action === "commandSpecial") normalized.special = false;
+      else normalized.heavy = false;
+      commandHistory[fighter.side].splice(0, command.endIndex + 1);
+    }
     bufferActionInputs(fighter, normalized);
     trackDirectionalPresses(fighter, normalized);
     if (normalized.throw) fighter.lastThrowInputFrame = state.simulationTick;
@@ -1135,6 +1234,7 @@ function advanceFighterTimers(fighter) {
   fighter.dashCooldownFrames = Math.max(0, fighter.dashCooldownFrames - 1);
   fighter.reversalWindowFrames = Math.max(0, fighter.reversalWindowFrames - 1);
   fighter.throwTechFlashFrames = Math.max(0, fighter.throwTechFlashFrames - 1);
+  fighter.confirmWindowFrames = Math.max(0, fighter.confirmWindowFrames - 1);
   fighter.landingRecoveryFrames = Math.max(0, fighter.landingRecoveryFrames - 1);
 
   if (fighter.down && fighter.grounded) {
@@ -1148,6 +1248,7 @@ function advanceFighterTimers(fighter) {
     fighter.wakeupFrames -= 1;
     if (fighter.wakeupFrames === 0) {
       fighter.justWoke = true;
+      fighter.juggleCount = 0;
       fighter.reversalWindowFrames = DEFENSE_RULES.reversalWindowFrames;
       fighter.invulnerableFrames = DEFENSE_RULES.reversalWindowFrames;
     }
@@ -1192,6 +1293,84 @@ function applyFighterPhysics(fighter, dt) {
   fighter.x = clamp(fighter.x, MOVEMENT_RULES.stageMinX, MOVEMENT_RULES.stageMaxX);
 }
 
+const attackActionPriority = [
+  "super",
+  "enhanced",
+  "launcher",
+  "driveHeavy",
+  "commandSpecial",
+  "throw",
+  "special",
+  "heavy",
+  "light",
+];
+
+function bufferedAction(fighter, actions = attackActionPriority) {
+  return actions.find((action) => fighter.inputBuffer.has(action, state.simulationTick)) || null;
+}
+
+function tryGuardReversal(fighter, input) {
+  if (!fighter.grounded || fighter.blockstunFrames <= 0 || fighter.meter < GRIT_RULES.guardReversalCost) return false;
+  const direction = directionContext(fighter, input);
+  const enhanced = fighter.inputBuffer.has("enhanced", state.simulationTick);
+  const directionalSpecial = direction.forwardHeld
+    && (fighter.inputBuffer.has("special", state.simulationTick)
+      || fighter.inputBuffer.has("commandSpecial", state.simulationTick));
+  if (!enhanced && !directionalSpecial) return false;
+  if (enhanced) fighter.inputBuffer.consume("enhanced", state.simulationTick);
+  else fighter.inputBuffer.consume(["commandSpecial", "special"], state.simulationTick);
+  return beginAttack(fighter, "guardReversal", input, { force: true, reversal: true });
+}
+
+function tryAttackCancel(fighter, input) {
+  const current = fighter.attacking;
+  if (!current || !fighter.attackConnected) return false;
+  const action = bufferedAction(fighter, attackActionPriority.filter((candidate) => candidate !== "throw"));
+  if (!action || !canCancelAttack(current, action, fighter.attackFrame, fighter.attackConnected)) return false;
+  if (fighter.meter < gritCostForAction(action)) return false;
+  fighter.inputBuffer.consume(action, state.simulationTick);
+  const previousMove = current.profileId;
+  fighter.attacking = null;
+  const started = beginAttack(fighter, action, input, { cancelledFrom: previousMove });
+  if (!started) {
+    fighter.attacking = current;
+    return false;
+  }
+  fighter.confirmWindowFrames = 12;
+  const chain = ["light", "heavy", "launcher", "driveHeavy"].includes(action);
+  spawnCombatText(
+    fighter.x + fighter.facing * 35,
+    fighter.y - fighter.height - 22,
+    chain ? "CHAIN" : "HIT CONFIRM",
+    fighter.def.accent,
+  );
+  return true;
+}
+
+function tryStartupChordOverride(fighter, input) {
+  const current = fighter.attacking;
+  if (!current || fighter.attackConnected) return false;
+  let action = null;
+  if (fighter.attackFrame <= 6
+    && ["heavy", "special"].includes(current.kind)
+    && fighter.inputBuffer.has("enhanced", state.simulationTick)
+    && fighter.meter >= GRIT_RULES.enhancedSpecialCost) action = "enhanced";
+  else if (fighter.attackFrame <= 3
+    && ["light", "heavy"].includes(current.kind)
+    && fighter.inputBuffer.has("throw", state.simulationTick)) action = "throw";
+  if (!action) return false;
+  fighter.inputBuffer.consume(action, state.simulationTick);
+  const previousMove = current.profileId;
+  fighter.attacking = null;
+  const started = beginAttack(fighter, action, input, { cancelledFrom: previousMove });
+  if (!started) {
+    fighter.attacking = current;
+    return false;
+  }
+  spawnCombatText(fighter.x, fighter.y - fighter.height - 18, action === "enhanced" ? "ENHANCED" : "THROW", fighter.def.accent);
+  return true;
+}
+
 function updateFighter(fighter, opponent, input, dt) {
   fighter.animTime += dt;
   advanceFighterTimers(fighter);
@@ -1202,7 +1381,9 @@ function updateFighter(fighter, opponent, input, dt) {
   if (tryFinish(fighter.side, input)) return;
   if (state.phase !== "fight") return;
 
-  if (fighter.blockstunFrames > 0) {
+  if (fighter.blockstunFrames > 0 && tryGuardReversal(fighter, input)) {
+    // The reversal replaces blockstun and continues into normal attack processing.
+  } else if (fighter.blockstunFrames > 0) {
     fighter.block = true;
     fighter.guarding = true;
     fighter.crouch = fighter.guardHeight === "low";
@@ -1226,8 +1407,16 @@ function updateFighter(fighter, opponent, input, dt) {
       if (fighter.justWoke && fighter.inputBuffer.has("special", state.simulationTick)) {
         fighter.inputBuffer.consume("special", state.simulationTick);
         beginAttack(fighter, "special", input, { reversal: true });
-      } else if (fighter.queuedDashDirection && fighter.dashCooldownFrames === 0 && !fighter.crouch) {
-        startDash(fighter, fighter.queuedDashDirection);
+      } else {
+        const commandAction = bufferedAction(fighter, ["super", "enhanced", "launcher", "driveHeavy", "commandSpecial"]);
+        if (commandAction) {
+          fighter.inputBuffer.consume(commandAction, state.simulationTick);
+          beginAttack(fighter, commandAction, input, {
+            reversal: fighter.reversalWindowFrames > 0 && commandAction === "commandSpecial",
+          });
+        } else if (fighter.queuedDashDirection && fighter.dashCooldownFrames === 0 && !fighter.crouch) {
+          startDash(fighter, fighter.queuedDashDirection);
+        }
       }
 
       if (fighter.dashFrames <= 0 && !fighter.attacking) {
@@ -1250,7 +1439,7 @@ function updateFighter(fighter, opponent, input, dt) {
           if (Math.abs(fighter.vx) > 20) fighter.walkTime += dt;
         }
 
-        const bufferedAttack = fighter.inputBuffer.consume(["throw", "special", "heavy", "light"], state.simulationTick);
+        const bufferedAttack = fighter.inputBuffer.consume(attackActionPriority, state.simulationTick);
         if (bufferedAttack) beginAttack(fighter, bufferedAttack.action, input, {
           reversal: fighter.reversalWindowFrames > 0 && bufferedAttack.action === "special",
         });
@@ -1272,10 +1461,17 @@ function updateFighter(fighter, opponent, input, dt) {
   if (fighter.attacking) {
     fighter.attackFrame += 1;
     fighter.attackTime = fighter.attackFrame * SIMULATION_STEP_SECONDS;
-    fighter.vx *= fighter.grounded ? 0.82 : 0.985;
     const attack = fighter.attacking;
+    if (attack.advanceSpeed && fighter.attackFrame < attack.activeEndFrame) fighter.vx = fighter.facing * attack.advanceSpeed;
+    else fighter.vx *= fighter.grounded ? 0.82 : 0.985;
     fighter.crouch = attack.profileId.startsWith("crouch-");
-    if (fighter.attackFrame >= attack.totalFrames) {
+    const cancelled = tryStartupChordOverride(fighter, input) || tryAttackCancel(fighter, input);
+    if (!cancelled && fighter.attackFrame >= attack.totalFrames) {
+      fighter.linkWindow = fighter.attackConnected ? {
+        profileId: attack.profileId,
+        connected: fighter.attackConnected,
+        expiresFrame: state.simulationTick + DEFAULT_INPUT_BUFFER_FRAMES,
+      } : null;
       fighter.attacking = null;
       fighter.attackTime = 0;
       fighter.attackFrame = 0;
@@ -1321,14 +1517,25 @@ function hit(attacker, victim, attack, collision) {
   }
 
   attacker.attackHit = true;
+  attacker.attackHits += 1;
+  attacker.lastAttackHitFrame = attacker.attackFrame;
   const blocked = canGuardAttack({
     level: attack.level,
     guardHeight: victim.guardHeight,
     guarding: victim.guarding,
     grounded: victim.grounded,
   });
+  attacker.attackConnected = blocked ? "block" : "hit";
+  attacker.confirmWindowFrames = 12;
   const counter = !blocked && attack.level !== ATTACK_LEVELS.THROW && isCounterHit(victim);
-  const baseDamage = attack.damage * (counter ? DEFENSE_RULES.counterDamageMultiplier : 1);
+  const wasJuggle = !victim.grounded || victim.pendingKnockdown;
+  let comboResult = { hitNumber: 1, damageScale: 1 };
+  if (!blocked && attack.level !== ATTACK_LEVELS.THROW) {
+    comboResult = attacker.combo.registerHit(state.simulationTick, victim.juggleCount);
+  } else if (!blocked) attacker.combo.reset();
+  const baseDamage = attack.damage
+    * (counter ? DEFENSE_RULES.counterDamageMultiplier : 1)
+    * comboResult.damageScale;
   const damage = blocked ? attack.chipDamage : baseDamage;
   victim.health = blocked
     ? Math.max(1, victim.health - damage)
@@ -1340,25 +1547,39 @@ function hit(attacker, victim, attack, collision) {
   victim.guardHeight = victim.crouch ? "low" : victim.guardHeight;
   victim.lastHitResult = blocked ? `blocked-${attack.level}` : counter ? "counter" : attack.level;
   if (!blocked) {
+    attacker.combo.addDamage(damage);
+    if (wasJuggle) victim.juggleCount += 1;
     victim.attacking = null;
     victim.attackTime = 0;
     victim.attackFrame = 0;
     victim.attackHit = false;
     victim.dashFrames = 0;
     victim.queuedDashDirection = 0;
-    if (attack.knockdown || attack.level === ATTACK_LEVELS.THROW) {
+    const finalAttackHit = attacker.attackHits >= (attack.maxHits || 1);
+    const shouldKnockDown = (attack.knockdown && (!attack.knockdownOnFinal || finalAttackHit))
+      || attack.level === ATTACK_LEVELS.THROW;
+    if (shouldKnockDown) {
       victim.pendingKnockdown = true;
       victim.grounded = false;
-      victim.vy = attack.level === ATTACK_LEVELS.THROW ? -315 : -220 - attack.damage * 3;
+      victim.vy = attack.level === ATTACK_LEVELS.THROW ? -315
+        : attack.launchVelocityY || -220 - attack.damage * 3;
+    } else if (attack.juggleLift) {
+      victim.pendingKnockdown = true;
+      victim.grounded = false;
+      victim.vy = attack.juggleLift;
     }
   }
   victim.hitFlash = 0.12;
-  attacker.meter = clamp(attacker.meter + attack.meter, 0, 100);
-  victim.meter = clamp(victim.meter + attack.meter * 0.45, 0, 100);
+  attacker.meter = clamp(attacker.meter + attack.meter * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
+  victim.meter = clamp(victim.meter + attack.meter * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
   state.shake = Math.max(state.shake, attack.kind === "special" || attack.kind === "throw" ? 0.34 : 0.13);
   state.hitstop = Math.max(state.hitstop, blocked ? 0.035 : attack.kind === "special" || attack.kind === "throw" ? 0.105 : attack.kind === "heavy" ? 0.075 : 0.045);
   const impact = collision?.point || { x: victim.x - attacker.facing * 22, y: victim.y - 105 };
   spawnHit(impact.x, impact.y, attacker.def, attack.kind, blocked);
+  if (attack.superMove) {
+    state.effects.push({ kind: "super", x: impact.x, y: impact.y, life: 0.55, max: 0.55, color: attacker.def.accent });
+    if ($("#flashToggle").checked) state.flash = Math.max(state.flash, attacker.attackHits >= attack.maxHits ? 0.22 : 0.08);
+  }
   if (counter) spawnCombatText(impact.x, impact.y - 74, "COUNTER", attacker.def.accent);
   else if (!blocked && attack.level === ATTACK_LEVELS.OVERHEAD) spawnCombatText(impact.x, impact.y - 70, "OVERHEAD", attacker.def.accent);
   else if (!blocked && attack.level === ATTACK_LEVELS.LOW) spawnCombatText(impact.x, impact.y - 64, "LOW", attacker.def.accent);
@@ -1386,17 +1607,22 @@ function checkKnockout() {
     victim.stun = 99;
     victim.hitstunFrames = 5940;
     attacker.attacking = null;
-    attacker.meter = 100;
     duckMusic(0.34, 1900);
     announce("FINISH THEM", "PRESS FB  /  ↓ → HEAVY  /  ← ↓ → SPECIAL", 2.2);
     $(".touch-final").classList.add("ready");
+    updateHud();
     sound("finish");
 }
 
 function resolveCombatInteractions() {
   const contacts = state.fighters.map((attacker, side) => {
-    if (!attacker.attacking || attacker.attackHit) return null;
+    if (!attacker.attacking) return null;
+    const maximumHits = attacker.attacking.maxHits || 1;
+    if (attacker.attackHits >= maximumHits) return null;
+    if (attacker.attackHits > 0
+      && attacker.attackFrame - attacker.lastAttackHitFrame < (attacker.attacking.rehitFrames || Infinity)) return null;
     const victim = state.fighters[1 - side];
+    if ((!victim.grounded || victim.pendingKnockdown) && victim.juggleCount >= COMBO_RULES.juggleLimit) return null;
     const collision = findBoxCollision(attacker, victim);
     return collision ? { attacker, victim, attack: attacker.attacking, collision } : null;
   }).filter(Boolean);
@@ -1405,6 +1631,21 @@ function resolveCombatInteractions() {
     hit(contact.attacker, contact.victim, contact.attack, contact.collision);
   }
   checkKnockout();
+}
+
+function updateComboState() {
+  for (const attacker of state.fighters) {
+    const defender = state.fighters[1 - attacker.side];
+    const defenderInCombo = Boolean(defender
+      && (defender.hitstunFrames > 0 || defender.pendingKnockdown || !defender.grounded));
+    attacker.combo.tick(state.simulationTick, defenderInCombo);
+    const readout = $(`#p${attacker.side + 1}Combo`);
+    if (!readout) continue;
+    const combo = attacker.combo.snapshot(state.simulationTick);
+    readout.classList.toggle("active", combo.visible);
+    readout.querySelector("b").textContent = String(combo.hits);
+    readout.querySelector("em").textContent = `${Math.round(combo.damage)} DAMAGE`;
+  }
 }
 
 function spawnHit(x, y, def, attackKind, blocked) {
@@ -1479,8 +1720,9 @@ function simulateGameTick(dt) {
   state.flash = Math.max(0, state.flash - dt);
 
   updateFacings();
-  let input0 = readInput(0);
-  let input1 = state.mode === "arcade" ? aiInput(state.fighters[1], state.fighters[0], dt) : readInput(1);
+  let input0 = readQaInput(0) || readInput(0);
+  let input1 = readQaInput(1)
+    || (state.mode === "arcade" ? aiInput(state.fighters[1], state.fighters[0], dt) : readInput(1));
   if (state.phase === "intro") {
     input0 = {};
     input1 = {};
@@ -1498,6 +1740,7 @@ function simulateGameTick(dt) {
     separateFighters();
     updateFacings();
   }
+  updateComboState();
   syncFighterStateMachines();
 
   if (state.phase === "fight") {
@@ -2140,8 +2383,10 @@ function drawDebugOverlay() {
     ...state.fighters.map((fighter) => {
       const move = fighter.attacking?.profileId || "—";
       const guard = fighter.guarding ? fighter.guardHeight.toUpperCase() : "—";
-      return `P${fighter.side + 1} ${fighter.combatState.toUpperCase()} F${fighter.stateFrame} · ${move} · GUARD ${guard} · HS ${fighter.hitstunFrames}/BS ${fighter.blockstunFrames}/KD ${fighter.knockdownFrames} · BUF ${fighter.inputBuffer.snapshot().map((entry) => entry.action).join("/") || "—"}`;
+      const combo = fighter.combo.snapshot(state.simulationTick);
+      return `P${fighter.side + 1} ${fighter.combatState.toUpperCase()} F${fighter.stateFrame} · ${move} · GRIT ${Math.floor(fighter.meter)} · COMBO ${combo.hits}/${combo.damage.toFixed(1)} · JUG ${state.fighters[1 - fighter.side]?.juggleCount || 0} · GUARD ${guard} · HS ${fighter.hitstunFrames}/BS ${fighter.blockstunFrames}/KD ${fighter.knockdownFrames} · BUF ${fighter.inputBuffer.snapshot().map((entry) => entry.action).join("/") || "—"}`;
     }),
+    ...commandHistory.map((history, side) => `P${side + 1} INPUT ${history.slice(-8).map((entry) => entry.token).join(" › ") || "—"}`),
   ];
   const panelWidth = 980;
   const panelHeight = 18 + lines.length * 19;
@@ -2194,7 +2439,14 @@ function runSimulationStep(dt, tick) {
 function loop(now) {
   const elapsed = Math.max(0, (now - state.lastRenderTime) / 1000 || 0);
   state.lastRenderTime = now;
-  const frame = simulationClock.advance(elapsed, runSimulationStep);
+  const frame = state.qaManualMode
+    ? {
+      steps: 0,
+      tick: simulationClock.tick,
+      alpha: state.simulationAlpha,
+      droppedSeconds: simulationClock.droppedSeconds,
+    }
+    : simulationClock.advance(elapsed, runSimulationStep);
   state.simulationTick = frame.tick;
   state.simulationAlpha = frame.alpha;
   state.simulationSteps = frame.steps;
@@ -2513,7 +2765,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "0.6-defense",
+  version: "0.7-combos",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -2526,6 +2778,7 @@ window.__finalBlowEngine = {
       screen: state.screen,
       seed: state.matchSeed,
       rng: state.rng.getState(),
+      commands: commandHistory.map((history) => history.map((entry) => ({ ...entry }))),
       fighters: state.fighters.map((fighter) => ({
         id: fighter.def.id,
         side: fighter.side,
@@ -2541,6 +2794,10 @@ window.__finalBlowEngine = {
         move: fighter.attacking?.profileId || null,
         attackLevel: fighter.attacking?.level || null,
         attackFrame: fighter.attackFrame,
+        attackHits: fighter.attackHits,
+        attackConnected: fighter.attackConnected,
+        cancelledFrom: fighter.cancelledFrom,
+        linkedFrom: fighter.linkedFrom,
         facing: fighter.facing,
         grounded: fighter.grounded,
         crouching: fighter.crouch,
@@ -2554,8 +2811,10 @@ window.__finalBlowEngine = {
         wakeupFrames: fighter.wakeupFrames,
         invulnerableFrames: fighter.invulnerableFrames,
         pendingKnockdown: fighter.pendingKnockdown,
+        juggleCount: fighter.juggleCount,
         down: fighter.down,
         lastHitResult: fighter.lastHitResult,
+        combo: fighter.combo.snapshot(state.simulationTick),
         hurtboxes: getHurtboxes(fighter),
         hitboxes: getActiveHitboxes(fighter),
         inputBuffer: fighter.inputBuffer.snapshot(),
@@ -2571,6 +2830,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       const secondIndex = roster.findIndex((fighter) => fighter.id === secondId);
       if (firstIndex < 0 || secondIndex < 0) throw new Error(`Unknown matchup: ${firstId} vs ${secondId}`);
       state.mode = "versus";
+      state.qaManualMode = true;
       state.picks = [firstIndex, secondIndex];
       state.rounds = [0, 0];
       state.round = 1;
@@ -2587,11 +2847,39 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.finisher = null;
       state.hitstop = 0;
       state.lastImpactSide = -1;
+      qaInputOverrides[0] = null;
+      qaInputOverrides[1] = null;
       commandHistory[0].length = 0;
       commandHistory[1].length = 0;
       showScreen("fight");
       updateHud();
       updateFacings();
+      return window.__finalBlowEngine.snapshot();
+    },
+    input(side, input = {}, frames = 1) {
+      if (side !== 0 && side !== 1) throw new Error(`Unknown fighter side: ${side}`);
+      qaInputOverrides[side] = { input: { ...input }, frames: Math.max(1, Math.floor(frames)) };
+      return true;
+    },
+    fighter(side, values = {}) {
+      const fighter = state.fighters[side];
+      if (!fighter) throw new Error(`Unknown fighter side: ${side}`);
+      const allowed = new Set([
+        "health",
+        "meter",
+        "hitstunFrames",
+        "blockstunFrames",
+        "knockdownFrames",
+        "wakeupFrames",
+        "invulnerableFrames",
+        "juggleCount",
+      ]);
+      for (const [key, value] of Object.entries(values)) {
+        if (!allowed.has(key) || !Number.isFinite(value)) continue;
+        fighter[key] = key === "health" || key === "meter" ? clamp(value, 0, 100) : Math.max(0, Math.floor(value));
+      }
+      fighter.stun = Math.max(fighter.hitstunFrames, fighter.blockstunFrames) / SIMULATION_HZ;
+      updateHud();
       return window.__finalBlowEngine.snapshot();
     },
     positions(firstX = 500, secondX = 610) {
@@ -2612,6 +2900,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       const index = roster.findIndex((fighter) => fighter.id === id);
       if (index < 0) throw new Error(`Unknown fighter: ${id}`);
       state.mode = "versus";
+      state.qaManualMode = true;
       state.picks = [index, index === 1 ? 0 : 1];
       state.rounds = [0, 0];
       state.round = 1;

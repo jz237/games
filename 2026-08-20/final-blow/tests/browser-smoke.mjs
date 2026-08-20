@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, normalize } from "node:path";
@@ -224,12 +224,16 @@ try {
     title: document.title,
     build: document.querySelector('.build-tag')?.textContent.trim(),
     rosterCards: document.querySelectorAll('.fighter-card').length,
+    gritLabels: document.querySelectorAll('.grit-row').length,
+    comboReadouts: document.querySelectorAll('.combo-readout').length,
     engine: window.__finalBlowEngine?.snapshot(),
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /0\.6B/);
+  assert.match(title.build, /0\.7A/);
   assert.equal(title.rosterCards, 8);
+  assert.equal(title.gritLabels, 2);
+  assert.equal(title.comboReadouts, 2);
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -372,13 +376,11 @@ try {
   assert.equal(lowVsHigh.fighters[1].lastHitResult, "low", "standing guard must lose to lows");
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 600)`);
-  await dispatchKey(client, "keyDown", "Numpad2", "2", 98);
+  await evaluate(client, `window.__finalBlowQa.input(1, { heavy: true })`);
   await evaluate(client, `window.__finalBlowQa.step(0.0334)`);
-  await dispatchKey(client, "keyUp", "Numpad2", "2", 98);
-  await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
-  await evaluate(client, `window.__finalBlowQa.step(0.18)`);
+  await evaluate(client, `window.__finalBlowQa.input(0, { light: true })`);
+  await evaluate(client, `window.__finalBlowQa.step(0.25)`);
   const counterHit = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
-  await dispatchKey(client, "keyUp", "KeyJ", "j", 74);
   assert.equal(counterHit.fighters[1].lastHitResult, "counter");
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 585)`);
@@ -392,16 +394,9 @@ try {
   assert.ok(throwHit.fighters[1].pendingKnockdown || throwHit.fighters[1].down);
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 585)`);
-  await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
-  await dispatchKey(client, "keyDown", "KeyK", "k", 75);
-  await dispatchKey(client, "keyDown", "Numpad1", "1", 97);
-  await dispatchKey(client, "keyDown", "Numpad2", "2", 98);
+  await evaluate(client, `window.__finalBlowQa.input(0, { throw: true }); window.__finalBlowQa.input(1, { throw: true })`);
   await evaluate(client, `window.__finalBlowQa.step(0.14)`);
   const throwTech = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
-  await dispatchKey(client, "keyUp", "KeyJ", "j", 74);
-  await dispatchKey(client, "keyUp", "KeyK", "k", 75);
-  await dispatchKey(client, "keyUp", "Numpad1", "1", 97);
-  await dispatchKey(client, "keyUp", "Numpad2", "2", 98);
   assert.equal(throwTech.fighters[0].lastHitResult, "throw-tech");
   assert.equal(throwTech.fighters[1].lastHitResult, "throw-tech");
 
@@ -427,6 +422,113 @@ try {
   await dispatchKey(client, "keyUp", "Numpad3", "3", 99);
   assert.equal(reversal.fighters[1].move, "ground-special");
   assert.equal(reversal.fighters[1].lastHitResult, "reversal");
+
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
+  await dispatchKey(client, "keyDown", "KeyS", "s", 83);
+  await evaluate(client, `window.__finalBlowQa.step(0.0334)`);
+  await dispatchKey(client, "keyUp", "KeyS", "s", 83);
+  await evaluate(client, `window.__finalBlowQa.step(0.0167)`);
+  await dispatchKey(client, "keyDown", "KeyD", "d", 68);
+  await dispatchKey(client, "keyDown", "KeyL", "l", 76);
+  await evaluate(client, `window.__finalBlowQa.step(0.05)`);
+  const commandSpecial = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await dispatchKey(client, "keyUp", "KeyL", "l", 76);
+  await dispatchKey(client, "keyUp", "KeyD", "d", 68);
+  assert.equal(commandSpecial.fighters[0].move, "command-special");
+
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
+  await dispatchKey(client, "keyDown", "KeyD", "d", 68);
+  await evaluate(client, `window.__finalBlowQa.step(0.0334)`);
+  await dispatchKey(client, "keyUp", "KeyD", "d", 68);
+  await dispatchKey(client, "keyDown", "KeyS", "s", 83);
+  await evaluate(client, `window.__finalBlowQa.step(0.0334)`);
+  await dispatchKey(client, "keyUp", "KeyS", "s", 83);
+  await dispatchKey(client, "keyDown", "KeyD", "d", 68);
+  await dispatchKey(client, "keyDown", "KeyK", "k", 75);
+  await evaluate(client, `window.__finalBlowQa.step(0.05)`);
+  const launcher = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await dispatchKey(client, "keyUp", "KeyK", "k", 75);
+  await dispatchKey(client, "keyUp", "KeyD", "d", 68);
+  assert.equal(launcher.fighters[0].move, "rising-launcher");
+
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.fighter(0, { meter: 50 })`);
+  await dispatchKey(client, "keyDown", "KeyK", "k", 75);
+  await evaluate(client, `window.__finalBlowQa.step(0.0334)`);
+  await dispatchKey(client, "keyDown", "KeyL", "l", 76);
+  await evaluate(client, `window.__finalBlowQa.step(0.05)`);
+  const enhanced = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await dispatchKey(client, "keyUp", "KeyK", "k", 75);
+  await dispatchKey(client, "keyUp", "KeyL", "l", 76);
+  assert.equal(enhanced.fighters[0].move, "enhanced-special");
+  assert.equal(enhanced.fighters[0].meter, 25);
+
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.fighter(0, { meter: 50, blockstunFrames: 20 })`);
+  await dispatchKey(client, "keyDown", "KeyK", "k", 75);
+  await dispatchKey(client, "keyDown", "KeyL", "l", 76);
+  await evaluate(client, `window.__finalBlowQa.step(0.05)`);
+  const guardReversal = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await dispatchKey(client, "keyUp", "KeyK", "k", 75);
+  await dispatchKey(client, "keyUp", "KeyL", "l", 76);
+  assert.equal(guardReversal.fighters[0].move, "guard-reversal");
+  assert.equal(guardReversal.fighters[0].meter, 20);
+  assert.equal(guardReversal.fighters[0].lastHitResult, "guard-reversal");
+
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 600)`);
+  await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
+  await evaluate(client, `window.__finalBlowQa.step(0.12)`);
+  await dispatchKey(client, "keyUp", "KeyJ", "j", 74);
+  await dispatchKey(client, "keyDown", "KeyK", "k", 75);
+  await evaluate(client, `window.__finalBlowQa.step(0.2)`);
+  const chained = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await dispatchKey(client, "keyUp", "KeyK", "k", 75);
+  assert.equal(chained.fighters[0].move, "stand-heavy");
+  assert.equal(chained.fighters[0].cancelledFrom, "stand-light");
+  await evaluate(client, `window.__finalBlowQa.step(0.3)`);
+  const twoHitCombo = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(twoHitCombo.fighters[0].combo.hits, 2);
+  assert.ok(twoHitCombo.fighters[0].combo.damage < 18, "second hit should be damage-scaled");
+  assert.equal(await evaluate(client, `document.querySelector('#p1Combo').classList.contains('active')`), true);
+  if (process.env.FINAL_BLOW_SCREENSHOT) {
+    await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
+    await delay(80);
+    const capture = await client.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+    await writeFile(process.env.FINAL_BLOW_SCREENSHOT, Buffer.from(capture.data, "base64"));
+    await evaluate(client, `window.__finalBlowEngine.toggleDebug(true)`);
+  }
+
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 600)`);
+  await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
+  await evaluate(client, `window.__finalBlowQa.step(0.12)`);
+  await dispatchKey(client, "keyUp", "KeyJ", "j", 74);
+  await dispatchKey(client, "keyDown", "KeyL", "l", 76);
+  await evaluate(client, `window.__finalBlowQa.step(0.2)`);
+  const hitConfirm = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await dispatchKey(client, "keyUp", "KeyL", "l", 76);
+  assert.equal(hitConfirm.fighters[0].move, "ground-special");
+  assert.equal(hitConfirm.fighters[0].cancelledFrom, "stand-light");
+
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 600)`);
+  await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
+  await evaluate(client, `window.__finalBlowQa.step(0.1)`);
+  await dispatchKey(client, "keyUp", "KeyJ", "j", 74);
+  await evaluate(client, `window.__finalBlowQa.step(0.2834)`);
+  await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
+  await evaluate(client, `window.__finalBlowQa.step(0.18)`);
+  const linked = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await dispatchKey(client, "keyUp", "KeyJ", "j", 74);
+  assert.equal(linked.fighters[0].linkedFrom, "stand-light");
+  assert.equal(linked.fighters[0].combo.hits, 2);
+
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 600); window.__finalBlowQa.fighter(0, { meter: 100 })`);
+  assert.equal(await evaluate(client, `document.querySelector('.touch-final').classList.contains('super-ready')`), true);
+  await dispatchKey(client, "keyDown", "KeyU", "u", 85);
+  await evaluate(client, `window.__finalBlowQa.step(1.25)`);
+  const gritSuper = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await dispatchKey(client, "keyUp", "KeyU", "u", 85);
+  assert.equal(gritSuper.fighters[0].meter, 0);
+  assert.equal(gritSuper.fighters[0].combo.hits, 4);
+  assert.ok(gritSuper.fighters[0].combo.damage > 20 && gritSuper.fighters[0].combo.damage < 32);
+  assert.ok(gritSuper.fighters[1].juggleCount >= 2, "the super should exercise juggle scaling");
 
   await evaluate(client, `(() => {
     document.querySelector('[data-mode="arcade"]').click();
@@ -480,10 +582,24 @@ try {
   })()`);
   assert.equal(gamepadGuard.fighters[0].guarding, true);
   assert.equal(gamepadGuard.fighters[0].guardHeight, "high");
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.fighter(0, { meter: 50 }); (() => {
+    window.__qaPad.buttons[3] = { pressed: true, value: 1 };
+    window.__qaPad.buttons[4] = { pressed: true, value: 1 };
+    return true;
+  })()`);
+  await evaluate(client, `window.__finalBlowQa.step(0.05)`);
+  const gamepadEnhanced = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await evaluate(client, `(() => {
+    window.__qaPad.buttons[3] = { pressed: false, value: 0 };
+    window.__qaPad.buttons[4] = { pressed: false, value: 0 };
+    return true;
+  })()`);
+  assert.equal(gamepadEnhanced.fighters[0].move, "enhanced-special");
+  assert.equal(gamepadEnhanced.fighters[0].meter, 25);
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
   await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
-  await delay(120);
+  await evaluate(client, `window.__finalBlowQa.step(0.12)`);
   const attack = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await dispatchKey(client, "keyUp", "KeyJ", "j", 74);
   assert.equal(attack.fighters[0].attack, "light");
@@ -566,6 +682,34 @@ try {
   })()`);
   assert.equal(touchGuard.fighters[0].guarding, true);
   assert.equal(touchGuard.fighters[0].guardHeight, "low");
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.fighter(0, { meter: 50 }); (() => {
+    for (const action of ['heavy', 'special']) {
+      document.querySelector('[data-touch="' + action + '"]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+    }
+    return true;
+  })()`);
+  await evaluate(client, `window.__finalBlowQa.step(0.05)`);
+  const touchEnhanced = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await evaluate(client, `(() => {
+    for (const action of ['heavy', 'special']) {
+      document.querySelector('[data-touch="' + action + '"]').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' }));
+    }
+    return true;
+  })()`);
+  assert.equal(touchEnhanced.fighters[0].move, "enhanced-special");
+  assert.equal(touchEnhanced.fighters[0].meter, 25);
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.fighter(0, { meter: 100 }); (() => {
+    document.querySelector('[data-touch="final"]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+    return true;
+  })()`);
+  await evaluate(client, `window.__finalBlowQa.step(0.1)`);
+  const touchSuper = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await evaluate(client, `(() => {
+    document.querySelector('[data-touch="final"]').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' }));
+    return true;
+  })()`);
+  assert.equal(touchSuper.fighters[0].move, "grit-super");
+  assert.equal(touchSuper.fighters[0].meter, 0);
 
   await client.send("Emulation.setDeviceMetricsOverride", {
     width: 390,
@@ -591,6 +735,7 @@ try {
       keyboardAttackFrame: attack.fighters[0].attackFrame,
       gamepadAttackFrame: gamepadAttack.fighters[0].attackFrame,
       gamepadGuard: gamepadGuard.fighters[0].guardHeight,
+      gamepadEnhanced: gamepadEnhanced.fighters[0].move,
       movement: {
         walked: Math.round(walking.fighters[0].x - movementStart.fighters[0].x),
         dashFrames: dash.fighters[0].dashFrames,
@@ -609,9 +754,28 @@ try {
         throwTech: throwTech.fighters[0].lastHitResult,
         reversal: reversal.fighters[1].lastHitResult,
       },
+      combos: {
+        commandSpecial: commandSpecial.fighters[0].move,
+        launcher: launcher.fighters[0].move,
+        enhancedCost: 50 - enhanced.fighters[0].meter,
+        guardReversalCost: 50 - guardReversal.fighters[0].meter,
+        chain: chained.fighters[0].cancelledFrom,
+        hitConfirm: hitConfirm.fighters[0].move,
+        link: linked.fighters[0].linkedFrom,
+        hits: twoHitCombo.fighters[0].combo.hits,
+        scaledDamage: twoHitCombo.fighters[0].combo.damage,
+        superHits: gritSuper.fighters[0].combo.hits,
+        superDamage: gritSuper.fighters[0].combo.damage,
+      },
     },
     finisher: { elapsed: finisher.elapsed, impacts: finisher.impacts },
-    mobile: { ...landscape, touchAttackFrame: touchAttack.fighters[0].attackFrame, touchGuard: touchGuard.fighters[0].guardHeight },
+    mobile: {
+      ...landscape,
+      touchAttackFrame: touchAttack.fighters[0].attackFrame,
+      touchGuard: touchGuard.fighters[0].guardHeight,
+      touchEnhanced: touchEnhanced.fighters[0].move,
+      touchSuper: touchSuper.fighters[0].move,
+    },
     portrait,
   }, null, 2));
 } finally {

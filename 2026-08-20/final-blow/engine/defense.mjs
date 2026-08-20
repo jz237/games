@@ -44,7 +44,7 @@ const moveProfiles = {
     id: "stand-light",
     baseKind: "light",
     level: ATTACK_LEVELS.MID,
-    hitstunFrames: 14,
+    hitstunFrames: 22,
     blockstunFrames: 9,
     chipDamage: 0,
     hitboxes: [
@@ -61,7 +61,7 @@ const moveProfiles = {
     recoveryFrames: 9,
     range: 112,
     damage: 5,
-    hitstunFrames: 13,
+    hitstunFrames: 20,
     blockstunFrames: 9,
     chipDamage: 0,
     hitboxes: [
