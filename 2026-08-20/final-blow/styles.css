@@ -1022,8 +1022,10 @@ kbd,
   margin: 3px 0;
   cursor: pointer;
 }
-.options-panel .music-picker { align-items: flex-start; flex-direction: column; margin-top: 13px; }
-.music-picker select {
+.options-panel .music-picker,
+.options-panel .option-picker { align-items: flex-start; flex-direction: column; margin-top: 13px; }
+.music-picker select,
+.option-picker select {
   width: 100%;
   padding: 8px 9px;
   border: 1px solid #4d5c6a;

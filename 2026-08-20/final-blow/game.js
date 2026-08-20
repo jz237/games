@@ -42,8 +42,15 @@ import {
   getFighterMovement,
   listFighterMoves,
   recognizeFighterCommand,
-  selectKitAiIntent,
 } from "./engine/fighter-kits.mjs";
+import {
+  DEFAULT_AI_DIFFICULTY,
+  aiBrainSnapshot,
+  createAiBrain,
+  normalizeAiDifficulty,
+  resetAiBrain,
+  stepAiBrain,
+} from "./engine/ai.mjs";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -463,7 +470,7 @@ const keyMaps = [
 ];
 
 const simulationClock = new FixedStepClock();
-const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.8d-feedback-flow");
+const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.9a-fair-ai");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
 const state = {
@@ -508,6 +515,7 @@ const state = {
   musicChoice: localStorage.getItem("final-blow-music-choice") || "auto",
   musicVolume: clamp(Number(localStorage.getItem("final-blow-music-volume") ?? "1"), 0, 1),
   sfxVolume: clamp(Number(localStorage.getItem("final-blow-sfx-volume") ?? "1"), 0, 1),
+  aiDifficulty: normalizeAiDifficulty(localStorage.getItem("final-blow-ai-difficulty") || DEFAULT_AI_DIFFICULTY),
 };
 
 function random() {
@@ -598,6 +606,7 @@ function makeFighter(index, side) {
     cinematicScale: 1,
     down: false,
     aiClock: 0,
+    aiBrain: createAiBrain(state.aiDifficulty),
     combatState: FIGHTER_STATES.IDLE,
     previousCombatState: FIGHTER_STATES.IDLE,
     stateFrame: 0,
@@ -1049,71 +1058,18 @@ function readInput(side) {
 
 function aiInput(fighter, opponent, dt) {
   fighter.aiClock -= dt;
-  const distance = opponent.x - fighter.x;
   const input = { left: false, right: false, down: false, guard: false, jump: false, light: false, heavy: false, special: false, enhanced: false, throw: false, super: false, final: false };
   if (state.phase === "finish" && state.finishWinner === 1) {
     input.final = fighter.aiClock <= 0;
     if (input.final) fighter.aiClock = 2;
     return input;
   }
-  if (fighter.aiClock <= 0) {
-    fighter.aiClock = 0.14 + random() * 0.32;
-    const abs = Math.abs(distance);
-    if (fighter.kit) {
-      const roll = random();
-      const intent = selectKitAiIntent(fighter.def.id, {
-        distance: abs,
-        opponentAirborne: !opponent.grounded,
-        opponentAttacking: Boolean(opponent.attacking),
-        meter: fighter.meter,
-        roll,
-      });
-      if (opponent.attacking && abs < 158 && intent?.response !== "counter" && roll < 0.64) {
-        input.guard = true;
-        input.down = opponent.attacking.level === ATTACK_LEVELS.LOW;
-        return input;
-      }
-      if (intent?.movement === "advance") {
-        input.right = distance > 0;
-        input.left = distance < 0;
-      } else if (intent?.movement === "retreat") {
-        input.right = distance < 0;
-        input.left = distance > 0;
-      }
-      let action = intent?.action;
-      if (action && fighter.meter >= GRIT_RULES.enhancedSpecialCost && roll > 0.82) {
-        action = {
-          special: "enhanced",
-          commandSpecial: "enhancedCommandSpecial",
-          backSpecial: "enhancedBackSpecial",
-          launcher: "enhancedLauncher",
-        }[action] || action;
-      }
-      if (action) input[action] = true;
-      return input;
-    }
-    if (opponent.attacking && abs < 145 && random() < 0.62) input.down = true;
-    else if (abs > 250) {
-      input.right = distance > 0;
-      input.left = distance < 0;
-      if (random() < 0.22) input.special = true;
-    } else if (abs > 115) {
-      input.right = distance > 0;
-      input.left = distance < 0;
-      if (random() < 0.2) input.jump = true;
-      if (random() < 0.32) input.special = true;
-    } else {
-      const roll = random();
-      if (roll < 0.11 && abs < 82) input.throw = true;
-      else if (roll < 0.44) input.light = true;
-      else if (roll < 0.78) input.heavy = true;
-      else input.down = true;
-    }
-  } else if (Math.abs(distance) > 170) {
-    input.right = distance > 0;
-    input.left = distance < 0;
-  }
-  return input;
+  return stepAiBrain(fighter.aiBrain, {
+    frame: state.simulationTick,
+    self: fighter,
+    opponent,
+    roll: random(),
+  });
 }
 
 function readQaInput(side) {
@@ -3220,6 +3176,15 @@ function updateVolumeUi() {
   if ($("#sfxVolumeValue")) $("#sfxVolumeValue").textContent = `${Math.round(state.sfxVolume * 100)}%`;
 }
 
+function setAiDifficulty(difficulty) {
+  state.aiDifficulty = normalizeAiDifficulty(difficulty);
+  localStorage.setItem("final-blow-ai-difficulty", state.aiDifficulty);
+  const select = $("#aiDifficultySelect");
+  if (select) select.value = state.aiDifficulty;
+  for (const fighter of state.fighters) resetAiBrain(fighter.aiBrain, state.aiDifficulty);
+  return state.aiDifficulty;
+}
+
 function setTrack(index, restart = true) {
   const next = (index + musicTracks.length) % musicTracks.length;
   const changed = next !== currentTrackIndex;
@@ -3448,6 +3413,10 @@ $("#sfxVolume").addEventListener("input", (event) => {
   localStorage.setItem("final-blow-sfx-volume", String(state.sfxVolume));
   updateVolumeUi();
 });
+$("#aiDifficultySelect").addEventListener("change", (event) => {
+  setAiDifficulty(event.target.value);
+  sound("select");
+});
 $("#musicSelect").addEventListener("change", (event) => {
   unlockAudio();
   chooseMusic(event.target.value);
@@ -3504,7 +3473,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "0.8d-feedback-flow",
+  version: "0.9a-fair-ai",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -3515,6 +3484,8 @@ window.__finalBlowEngine = {
       tick: state.simulationTick,
       phase: state.phase,
       screen: state.screen,
+      mode: state.mode,
+      aiDifficulty: state.aiDifficulty,
       seed: state.matchSeed,
       rng: state.rng.getState(),
       commands: commandHistory.map((history) => history.map((entry) => ({ ...entry }))),
@@ -3590,6 +3561,7 @@ window.__finalBlowEngine = {
         hurtboxes: getHurtboxes(fighter),
         hitboxes: getActiveHitboxes(fighter),
         inputBuffer: fighter.inputBuffer.snapshot(),
+        ai: aiBrainSnapshot(fighter.aiBrain),
       })),
     };
   },
@@ -3628,6 +3600,19 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       showScreen("fight");
       updateHud();
       updateFacings();
+      return window.__finalBlowEngine.snapshot();
+    },
+    difficulty(difficulty = DEFAULT_AI_DIFFICULTY) {
+      return setAiDifficulty(difficulty);
+    },
+    aiMode(enabled = true) {
+      state.mode = enabled ? "arcade" : "versus";
+      return state.mode;
+    },
+    aiFight(firstId = "deathblow", secondId = "jez", difficulty = DEFAULT_AI_DIFFICULTY) {
+      window.__finalBlowQa.fight(firstId, secondId);
+      setAiDifficulty(difficulty);
+      state.mode = "arcade";
       return window.__finalBlowEngine.snapshot();
     },
     input(side, input = {}, frames = 1) {
@@ -3743,6 +3728,7 @@ setupRoster();
 renderMoveList();
 updateMusicUi();
 updateVolumeUi();
+setAiDifficulty(state.aiDifficulty);
 syncOrientationGate();
 showScreen("title");
 updateStageUI();

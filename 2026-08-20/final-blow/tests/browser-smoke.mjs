@@ -227,15 +227,21 @@ try {
     gritLabels: document.querySelectorAll('.grit-row').length,
     comboReadouts: document.querySelectorAll('.combo-readout').length,
     moveListRows: document.querySelectorAll('.move-list-row').length,
+    aiDifficulties: [...document.querySelectorAll('#aiDifficultySelect option')].map((option) => option.value),
+    aiDifficulty: document.querySelector('#aiDifficultySelect')?.value,
+    engineVersion: window.__finalBlowEngine?.version,
     engine: window.__finalBlowEngine?.snapshot(),
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /0\.8D/);
+  assert.match(title.build, /0\.9A/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
   assert.equal(title.moveListRows, 9);
+  assert.deepEqual(title.aiDifficulties, ['rookie', 'street', 'pro', 'final']);
+  assert.equal(title.aiDifficulty, 'street');
+  assert.equal(title.engineVersion, '0.9a-fair-ai');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -272,6 +278,35 @@ try {
   assert.equal(kitUi.rows.length, 9);
   assert.ok(kitUi.rows.includes('Vinyl Step'));
   assert.match(kitUi.identity, /FOOTSIES/);
+
+  const rookieAi = await evaluate(client, `(() => {
+    window.__finalBlowQa.aiFight('deathblow', 'post', 'rookie');
+    window.__finalBlowQa.positions(500, 760);
+    window.__finalBlowQa.step(1.2);
+    return {
+      snapshot: window.__finalBlowEngine.snapshot(),
+      stored: localStorage.getItem('final-blow-ai-difficulty'),
+      selected: document.querySelector('#aiDifficultySelect').value,
+    };
+  })()`);
+  assert.equal(rookieAi.snapshot.mode, 'arcade');
+  assert.equal(rookieAi.snapshot.aiDifficulty, 'rookie');
+  assert.equal(rookieAi.snapshot.fighters[1].ai.difficulty, 'rookie');
+  assert.equal(rookieAi.snapshot.fighters[1].ai.reactionFrames, 20);
+  assert.ok(rookieAi.snapshot.fighters[1].ai.decisions > 0);
+  assert.ok(rookieAi.snapshot.fighters[1].ai.lastObservedFrame <= rookieAi.snapshot.tick - 20);
+  assert.equal(rookieAi.stored, 'rookie');
+  assert.equal(rookieAi.selected, 'rookie');
+
+  const finalAi = await evaluate(client, `(() => {
+    window.__finalBlowQa.aiFight('jez', 'cyraxx', 'final');
+    window.__finalBlowQa.positions(460, 680);
+    window.__finalBlowQa.step(0.8);
+    return window.__finalBlowEngine.snapshot();
+  })()`);
+  assert.equal(finalAi.fighters[1].ai.reactionFrames, 6);
+  assert.ok(finalAi.fighters[1].ai.decisions > rookieAi.snapshot.fighters[1].ai.decisions / 2);
+  assert.ok(finalAi.fighters[1].ai.lastObservedFrame <= finalAi.tick - 6);
 
   const kitMoves = await evaluate(client, `(() => {
     const specs = [
