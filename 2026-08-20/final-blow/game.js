@@ -129,6 +129,49 @@ for (const fighter of roster) {
   fighterImages[fighter.id] = image;
 }
 
+// Original soundtrack and combat cues generated with the ElevenLabs API.
+const audioAssets = {
+  select: "assets/audio/ui-select.mp3",
+  jump: "assets/audio/jump.mp3",
+  light: "assets/audio/light-swing.mp3",
+  heavy: "assets/audio/heavy-swing.mp3",
+  special: "assets/audio/special-swing.mp3",
+  hit: "assets/audio/body-hit.mp3",
+  block: "assets/audio/block.mp3",
+  finish: "assets/audio/finish-ready.mp3",
+  final: "assets/audio/final-blow.mp3",
+  ko: "assets/audio/knockout.mp3",
+};
+
+const sfxVolumes = {
+  select: 0.5,
+  jump: 0.42,
+  light: 0.5,
+  heavy: 0.58,
+  special: 0.65,
+  hit: 0.72,
+  block: 0.62,
+  finish: 0.78,
+  final: 0.92,
+  ko: 0.8,
+};
+
+const sfxPools = Object.fromEntries(Object.entries(audioAssets).map(([kind, src]) => [
+  kind,
+  Array.from({ length: kind === "hit" ? 5 : 3 }, () => {
+    const sample = new Audio(src);
+    sample.preload = "auto";
+    return sample;
+  }),
+]));
+const sfxCursors = Object.fromEntries(Object.keys(audioAssets).map((kind) => [kind, 0]));
+
+const fightMusic = new Audio("assets/audio/philly-after-dark.mp3");
+fightMusic.preload = "auto";
+fightMusic.loop = true;
+fightMusic.volume = 0.24;
+let musicDuckTimer = 0;
+
 const keys = new Set();
 const pressed = new Set();
 const touch = new Set();
@@ -162,6 +205,8 @@ const state = {
   flash: 0,
   lastTime: performance.now(),
   audio: null,
+  audioUnlocked: false,
+  musicDuck: 1,
 };
 
 function makeFighter(index, side) {
@@ -219,6 +264,7 @@ function showScreen(name) {
   $("#hud").setAttribute("aria-hidden", String(!playing));
   $("#touchControls").classList.toggle("playing", playing);
   if (!playing) $("#announcer").classList.add("hidden");
+  syncMusic();
 }
 
 function startSelect(mode) {
@@ -285,6 +331,7 @@ function updateStageUI() {
 
 function startMatch(resetSet = true) {
   unlockAudio();
+  resetMusicDuck();
   if (resetSet) {
     state.rounds = [0, 0];
     state.round = 1;
@@ -310,6 +357,7 @@ function startMatch(resetSet = true) {
 }
 
 function resetRound() {
+  resetMusicDuck();
   state.round += 1;
   state.fighters = [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1)];
   state.particles.length = 0;
@@ -345,9 +393,11 @@ function finishRound(winner, type = -1) {
   state.finisherType = type;
   const winDef = state.fighters[winner].def;
   if (type >= 0) {
+    duckMusic(0.12, 2900);
     announce("FINAL BLOW", winDef.finishers[type], 2.35);
     performFinisher(winner, type);
   } else {
+    duckMusic(0.28, 1700);
     announce(`${winDef.name} WINS`, "KNOCKOUT", 1.65);
     sound("ko");
   }
@@ -607,6 +657,7 @@ function hit(attacker, victim, attack) {
     victim.stun = 99;
     attacker.attacking = null;
     attacker.meter = 100;
+    duckMusic(0.34, 1900);
     announce("FINISH THEM", "↓ → HEAVY  /  ← ↓ → SPECIAL", 2.2);
     sound("finish");
   }
@@ -1033,15 +1084,79 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
+function musicBaseVolume() {
+  return {
+    title: 0.23,
+    select: 0.27,
+    stage: 0.28,
+    fight: 0.34,
+    result: 0.25,
+  }[state.screen] || 0.25;
+}
+
+function syncMusic() {
+  if (!state.audioUnlocked) return;
+  const enabled = Boolean($("#musicToggle")?.checked);
+  fightMusic.volume = clamp(musicBaseVolume() * state.musicDuck, 0, 1);
+  if (!enabled || document.hidden) {
+    fightMusic.pause();
+    return;
+  }
+  if (fightMusic.paused) fightMusic.play().catch(() => {});
+}
+
+function resetMusicDuck() {
+  window.clearTimeout(musicDuckTimer);
+  state.musicDuck = 1;
+  syncMusic();
+}
+
+function duckMusic(amount, duration) {
+  window.clearTimeout(musicDuckTimer);
+  state.musicDuck = amount;
+  syncMusic();
+  musicDuckTimer = window.setTimeout(() => {
+    state.musicDuck = 1;
+    syncMusic();
+  }, duration);
+}
+
+function stopSfx() {
+  Object.values(sfxPools).flat().forEach((sample) => {
+    sample.pause();
+    sample.currentTime = 0;
+  });
+}
+
 function unlockAudio() {
-  if (!$("#soundToggle").checked) return;
-  if (!state.audio) state.audio = new (window.AudioContext || window.webkitAudioContext)();
-  if (state.audio.state === "suspended") state.audio.resume();
+  state.audioUnlocked = true;
+  if ($("#soundToggle").checked) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass && !state.audio) state.audio = new AudioContextClass();
+    if (state.audio?.state === "suspended") state.audio.resume();
+  }
+  syncMusic();
 }
 
 function sound(kind) {
   if (!$("#soundToggle").checked) return;
   unlockAudio();
+  const pool = sfxPools[kind];
+  if (!pool?.length) {
+    proceduralSound(kind);
+    return;
+  }
+  const cursor = sfxCursors[kind] % pool.length;
+  sfxCursors[kind] = cursor + 1;
+  const sample = pool[cursor];
+  sample.pause();
+  sample.currentTime = 0;
+  sample.volume = sfxVolumes[kind] ?? 0.62;
+  const playback = sample.play();
+  if (playback?.catch) playback.catch(() => proceduralSound(kind));
+}
+
+function proceduralSound(kind) {
   if (!state.audio) return;
   const now = state.audio.currentTime;
   const oscillator = state.audio.createOscillator();
@@ -1130,6 +1245,15 @@ function menuPadLoop() {
 
 $$('[data-mode]').forEach((button) => button.addEventListener("click", () => startSelect(button.dataset.mode)));
 $("#controlsButton").addEventListener("click", () => { unlockAudio(); $("#controlsDialog").showModal(); });
+$("#musicToggle").addEventListener("change", () => {
+  unlockAudio();
+  syncMusic();
+});
+$("#soundToggle").addEventListener("change", () => {
+  if ($("#soundToggle").checked) unlockAudio();
+  else stopSfx();
+});
+document.addEventListener("visibilitychange", syncMusic);
 $("#fighterContinue").addEventListener("click", showStageSelect);
 $$(".stage-card").forEach((card) => card.addEventListener("click", () => chooseStage(card.dataset.stage)));
 $("#fightButton").addEventListener("click", () => startMatch(true));
