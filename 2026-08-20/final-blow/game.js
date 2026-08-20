@@ -6,10 +6,22 @@ import {
   FrameInputBuffer,
   SIMULATION_HZ,
   SIMULATION_STEP_SECONDS,
-  createAttackInstance,
   hashSeed,
   transitionFighterState,
 } from "./engine/foundation.mjs";
+import {
+  ATTACK_LEVELS,
+  DEFENSE_RULES,
+  DirectionTapTracker,
+  MOVEMENT_RULES,
+  canGuardAttack,
+  createCombatMove,
+  findBoxCollision,
+  getActiveHitboxes,
+  getHurtboxes,
+  isCounterHit,
+  resolvePushboxPositions,
+} from "./engine/defense.mjs";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -417,12 +429,12 @@ const previousPads = new Map();
 const commandHistory = [[], []];
 
 const keyMaps = [
-  { left: "KeyA", right: "KeyD", jump: "KeyW", block: "KeyS", light: "KeyJ", heavy: "KeyK", special: "KeyL", final: "KeyU" },
-  { left: "ArrowLeft", right: "ArrowRight", jump: "ArrowUp", block: "ArrowDown", light: "Numpad1", heavy: "Numpad2", special: "Numpad3", final: "Numpad0" },
+  { left: "KeyA", right: "KeyD", jump: "KeyW", down: "KeyS", guard: "KeyI", light: "KeyJ", heavy: "KeyK", special: "KeyL", final: "KeyU" },
+  { left: "ArrowLeft", right: "ArrowRight", jump: "ArrowUp", down: "ArrowDown", guard: "Numpad5", light: "Numpad1", heavy: "Numpad2", special: "Numpad3", final: "Numpad0" },
 ];
 
 const simulationClock = new FixedStepClock();
-const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.6-foundation");
+const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.6-defense");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
 const state = {
@@ -455,6 +467,7 @@ const state = {
   simulationDroppedSeconds: 0,
   matchSerial: 0,
   matchSeed: initialSeed,
+  lastImpactSide: -1,
   rng: new DeterministicRng(initialSeed),
   debug: debugRequested,
   audio: null,
@@ -498,11 +511,32 @@ function makeFighter(index, side) {
     grounded: true,
     crouch: false,
     block: false,
+    guarding: false,
+    guardHeight: "high",
     attacking: null,
     attackTime: 0,
     attackFrame: 0,
     attackHit: false,
     stun: 0,
+    hitstunFrames: 0,
+    blockstunFrames: 0,
+    knockdownFrames: 0,
+    wakeupFrames: 0,
+    invulnerableFrames: 0,
+    reversalWindowFrames: 0,
+    throwInvulnerableFrames: 0,
+    pendingKnockdown: false,
+    landingRecoveryFrames: 0,
+    dashFrames: 0,
+    dashCooldownFrames: 0,
+    dashDirection: 0,
+    queuedDashDirection: 0,
+    directionTapTracker: new DirectionTapTracker(),
+    previousDirectionalInput: { left: false, right: false },
+    justWoke: false,
+    throwTechFlashFrames: 0,
+    lastThrowInputFrame: -Infinity,
+    lastHitResult: "",
     hitFlash: 0,
     specialGlow: 0,
     animTime: random() * 2,
@@ -631,6 +665,7 @@ function startMatch(resetSet = true) {
   state.phase = "intro";
   state.phaseTime = 2.25;
   state.hitstop = 0;
+  state.lastImpactSide = -1;
   state.finishWinner = -1;
   state.finisherType = 0;
   state.finisher = null;
@@ -660,6 +695,7 @@ function resetRound() {
   state.phase = "intro";
   state.phaseTime = 2.1;
   state.hitstop = 0;
+  state.lastImpactSide = -1;
   state.finishWinner = -1;
   state.finisher = null;
   state.cinematicZoom = 1;
@@ -900,11 +936,19 @@ function readInput(side) {
   const padEdge = (index) => Boolean(pad && buttonValue(pad, index) && !previous[index]);
   const left = held("left") || axisX < -0.42 || buttonValue(pad, 14);
   const right = held("right") || axisX > 0.42 || buttonValue(pad, 15);
-  const down = held("block") || axisY > 0.52 || buttonValue(pad, 13);
+  const down = held("down") || axisY > 0.52 || buttonValue(pad, 13);
+  const guard = held("guard") || buttonValue(pad, 1);
   const jump = edge("jump") || padEdge(0) || Boolean(pad && (axisY < -0.65 || buttonValue(pad, 12)) && !previous[20]);
-  const light = edge("light") || padEdge(2);
-  const heavy = edge("heavy") || padEdge(3);
+  let light = edge("light") || padEdge(2);
+  let heavy = edge("heavy") || padEdge(3);
   const special = edge("special") || padEdge(4) || padEdge(5);
+  const lightHeld = held("light") || buttonValue(pad, 2);
+  const heavyHeld = held("heavy") || buttonValue(pad, 3);
+  const throwInput = (light && heavyHeld) || (heavy && lightHeld);
+  if (throwInput) {
+    light = false;
+    heavy = false;
+  }
   const triggers = buttonValue(pad, 6) && buttonValue(pad, 7);
   const previousTriggers = Boolean(previous[6] && previous[7]);
   const final = edge("final") || (triggers && !previousTriggers);
@@ -913,13 +957,13 @@ function readInput(side) {
     next[20] = axisY < -0.65 || buttonValue(pad, 12);
     previousPads.set(pad.index, next);
   }
-  return { left, right, down, jump, light, heavy, special, final };
+  return { left, right, down, guard, jump, light, heavy, special, throw: throwInput, final };
 }
 
 function aiInput(fighter, opponent, dt) {
   fighter.aiClock -= dt;
   const distance = opponent.x - fighter.x;
-  const input = { left: false, right: false, down: false, jump: false, light: false, heavy: false, special: false, final: false };
+  const input = { left: false, right: false, down: false, guard: false, jump: false, light: false, heavy: false, special: false, throw: false, final: false };
   if (state.phase === "finish" && state.finishWinner === 1) {
     input.final = fighter.aiClock <= 0;
     if (input.final) fighter.aiClock = 2;
@@ -940,7 +984,8 @@ function aiInput(fighter, opponent, dt) {
       if (random() < 0.32) input.special = true;
     } else {
       const roll = random();
-      if (roll < 0.44) input.light = true;
+      if (roll < 0.11 && abs < 82) input.throw = true;
+      else if (roll < 0.44) input.light = true;
       else if (roll < 0.78) input.heavy = true;
       else input.down = true;
     }
@@ -990,17 +1035,42 @@ function tryFinish(side, input) {
   return false;
 }
 
-function beginAttack(fighter, kind) {
-  if (fighter.attacking || fighter.stun > 0 || fighter.down) return;
-  fighter.attacking = createAttackInstance(kind);
+function directionContext(fighter, input) {
+  const absolute = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  return {
+    absolute,
+    forwardHeld: absolute === fighter.facing,
+    backHeld: absolute === -fighter.facing,
+  };
+}
+
+function beginAttack(fighter, kind, input = {}, { reversal = false } = {}) {
+  if (fighter.attacking || fighter.stun > 0 || fighter.down || fighter.wakeupFrames > 0) return false;
+  if (kind === "throw" && !fighter.grounded) return false;
+  const direction = directionContext(fighter, input);
+  fighter.attacking = createCombatMove(kind, {
+    airborne: !fighter.grounded,
+    crouching: fighter.crouch || Boolean(input.down),
+    forwardHeld: direction.forwardHeld,
+  });
   fighter.attackTime = 0;
   fighter.attackFrame = 0;
   fighter.attackHit = false;
+  fighter.block = false;
+  fighter.guarding = false;
+  fighter.dashFrames = 0;
+  fighter.queuedDashDirection = 0;
+  fighter.lastHitResult = reversal ? "reversal" : "";
+  if (reversal) {
+    fighter.invulnerableFrames = Math.max(fighter.invulnerableFrames, DEFENSE_RULES.reversalWindowFrames);
+    spawnCombatText(fighter.x, fighter.y - fighter.height - 25, "REVERSAL", fighter.def.accent);
+  }
   if (kind === "special") fighter.specialGlow = 0.7;
-  sound(kind);
+  sound(kind === "throw" ? "heavy" : kind);
+  return true;
 }
 
-const bufferedActions = ["jump", "light", "heavy", "special"];
+const bufferedActions = ["jump", "throw", "light", "heavy", "special"];
 
 function bufferActionInputs(fighter, input) {
   for (const action of bufferedActions) {
@@ -1009,48 +1079,202 @@ function bufferActionInputs(fighter, input) {
   fighter.inputBuffer.prune(state.simulationTick);
 }
 
+function trackDirectionalPresses(fighter, input) {
+  const previous = fighter.previousDirectionalInput;
+  for (const direction of ["left", "right"]) {
+    if (input[direction] && !previous[direction]
+      && fighter.directionTapTracker.press(direction, state.simulationTick)) {
+      fighter.queuedDashDirection = direction === "right" ? 1 : -1;
+    }
+  }
+  previous.left = Boolean(input.left);
+  previous.right = Boolean(input.right);
+}
+
+function prepareFighterInput(fighter, input) {
+  const normalized = {
+    left: Boolean(input.left),
+    right: Boolean(input.right),
+    down: Boolean(input.down),
+    guard: Boolean(input.guard),
+    jump: Boolean(input.jump),
+    light: Boolean(input.light),
+    heavy: Boolean(input.heavy),
+    special: Boolean(input.special),
+    throw: Boolean(input.throw),
+    final: Boolean(input.final),
+  };
+  recordInput(fighter.side, normalized, fighter);
+  if (state.phase === "fight") {
+    bufferActionInputs(fighter, normalized);
+    trackDirectionalPresses(fighter, normalized);
+    if (normalized.throw) fighter.lastThrowInputFrame = state.simulationTick;
+  }
+  return normalized;
+}
+
+function enterKnockdown(fighter) {
+  fighter.pendingKnockdown = false;
+  fighter.down = true;
+  fighter.knockdownFrames = DEFENSE_RULES.knockdownFrames;
+  fighter.wakeupFrames = 0;
+  fighter.hitstunFrames = 0;
+  fighter.blockstunFrames = 0;
+  fighter.vx *= 0.28;
+  fighter.vy = 0;
+  fighter.attacking = null;
+  fighter.inputBuffer.clear();
+}
+
+function advanceFighterTimers(fighter) {
+  fighter.justWoke = false;
+  fighter.hitFlash = Math.max(0, fighter.hitFlash - SIMULATION_STEP_SECONDS);
+  fighter.specialGlow = Math.max(0, fighter.specialGlow - SIMULATION_STEP_SECONDS);
+  fighter.invulnerableFrames = Math.max(0, fighter.invulnerableFrames - 1);
+  fighter.throwInvulnerableFrames = Math.max(0, fighter.throwInvulnerableFrames - 1);
+  fighter.dashCooldownFrames = Math.max(0, fighter.dashCooldownFrames - 1);
+  fighter.reversalWindowFrames = Math.max(0, fighter.reversalWindowFrames - 1);
+  fighter.throwTechFlashFrames = Math.max(0, fighter.throwTechFlashFrames - 1);
+  fighter.landingRecoveryFrames = Math.max(0, fighter.landingRecoveryFrames - 1);
+
+  if (fighter.down && fighter.grounded) {
+    fighter.knockdownFrames = Math.max(0, fighter.knockdownFrames - 1);
+    if (fighter.knockdownFrames === 0) {
+      fighter.down = false;
+      fighter.wakeupFrames = DEFENSE_RULES.wakeupFrames;
+      fighter.throwInvulnerableFrames = DEFENSE_RULES.throwInvulnerableFrames;
+    }
+  } else if (fighter.wakeupFrames > 0) {
+    fighter.wakeupFrames -= 1;
+    if (fighter.wakeupFrames === 0) {
+      fighter.justWoke = true;
+      fighter.reversalWindowFrames = DEFENSE_RULES.reversalWindowFrames;
+      fighter.invulnerableFrames = DEFENSE_RULES.reversalWindowFrames;
+    }
+  } else {
+    fighter.hitstunFrames = Math.max(0, fighter.hitstunFrames - 1);
+    fighter.blockstunFrames = Math.max(0, fighter.blockstunFrames - 1);
+  }
+  fighter.stun = Math.max(fighter.hitstunFrames, fighter.blockstunFrames) / SIMULATION_HZ;
+}
+
+function startDash(fighter, direction) {
+  const forward = direction === fighter.facing;
+  fighter.dashDirection = direction;
+  fighter.dashFrames = forward ? MOVEMENT_RULES.forwardDashFrames : MOVEMENT_RULES.backDashFrames;
+  fighter.dashCooldownFrames = fighter.dashFrames + MOVEMENT_RULES.dashCooldownFrames;
+  fighter.queuedDashDirection = 0;
+  fighter.block = false;
+  fighter.guarding = false;
+  fighter.crouch = false;
+  if (!forward) fighter.invulnerableFrames = Math.max(fighter.invulnerableFrames, MOVEMENT_RULES.backDashInvulnerableFrames);
+}
+
+function applyFighterPhysics(fighter, dt) {
+  fighter.vy += GRAVITY * dt;
+  fighter.x += fighter.vx * dt;
+  fighter.y += fighter.vy * dt;
+  if (fighter.y >= FLOOR) {
+    const landed = !fighter.grounded;
+    fighter.y = FLOOR;
+    fighter.vy = 0;
+    fighter.grounded = true;
+    if (fighter.pendingKnockdown) enterKnockdown(fighter);
+    else if (landed && fighter.attacking?.profileId.startsWith("air-")) {
+      fighter.attacking = null;
+      fighter.attackTime = 0;
+      fighter.attackFrame = 0;
+      fighter.landingRecoveryFrames = 5;
+    }
+  } else {
+    fighter.grounded = false;
+  }
+  fighter.x = clamp(fighter.x, MOVEMENT_RULES.stageMinX, MOVEMENT_RULES.stageMaxX);
+}
+
 function updateFighter(fighter, opponent, input, dt) {
   fighter.animTime += dt;
-  fighter.stun = Math.max(0, fighter.stun - dt);
-  fighter.hitFlash = Math.max(0, fighter.hitFlash - dt);
-  fighter.specialGlow = Math.max(0, fighter.specialGlow - dt);
-  fighter.facing = opponent.x >= fighter.x ? 1 : -1;
+  advanceFighterTimers(fighter);
   fighter.block = false;
+  fighter.guarding = false;
   fighter.crouch = false;
 
-  recordInput(fighter.side, input, fighter);
   if (tryFinish(fighter.side, input)) return;
   if (state.phase !== "fight") return;
-  bufferActionInputs(fighter, input);
 
-  if (fighter.stun <= 0 && !fighter.attacking) {
-    const move = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-    fighter.block = input.down && fighter.grounded;
-    fighter.crouch = fighter.block;
-    fighter.vx = fighter.block ? 0 : move * 285;
-    if (Math.abs(fighter.vx) > 20 && fighter.grounded) fighter.walkTime += dt;
-    if (fighter.grounded && !fighter.block && fighter.inputBuffer.has("jump", state.simulationTick)) {
-      fighter.inputBuffer.consume("jump", state.simulationTick);
-      fighter.vy = -730;
-      fighter.grounded = false;
-      sound("jump");
-    }
-    const bufferedAttack = fighter.inputBuffer.consume(["special", "heavy", "light"], state.simulationTick);
-    if (bufferedAttack) beginAttack(fighter, bufferedAttack.action);
-  } else if (fighter.stun > 0) {
+  if (fighter.blockstunFrames > 0) {
+    fighter.block = true;
+    fighter.guarding = true;
+    fighter.crouch = fighter.guardHeight === "low";
+    fighter.vx *= 0.84;
+  } else if (fighter.hitstunFrames > 0 || fighter.pendingKnockdown) {
     fighter.vx *= 0.9;
+  } else if (fighter.down || fighter.wakeupFrames > 0 || fighter.landingRecoveryFrames > 0 || fighter.throwTechFlashFrames > 0) {
+    fighter.vx *= 0.72;
+  } else if (!fighter.attacking) {
+    const direction = directionContext(fighter, input);
+    if (!fighter.grounded) {
+      fighter.queuedDashDirection = 0;
+      const bufferedAirAttack = fighter.inputBuffer.consume(["special", "heavy", "light"], state.simulationTick);
+      if (bufferedAirAttack) beginAttack(fighter, bufferedAirAttack.action, input);
+    } else {
+      fighter.crouch = input.down;
+      fighter.guardHeight = fighter.crouch ? "low" : "high";
+      fighter.guarding = input.guard || direction.backHeld || input.down;
+      fighter.block = fighter.guarding;
+
+      if (fighter.justWoke && fighter.inputBuffer.has("special", state.simulationTick)) {
+        fighter.inputBuffer.consume("special", state.simulationTick);
+        beginAttack(fighter, "special", input, { reversal: true });
+      } else if (fighter.queuedDashDirection && fighter.dashCooldownFrames === 0 && !fighter.crouch) {
+        startDash(fighter, fighter.queuedDashDirection);
+      }
+
+      if (fighter.dashFrames <= 0 && !fighter.attacking) {
+        if (fighter.inputBuffer.has("jump", state.simulationTick)) {
+          fighter.inputBuffer.consume("jump", state.simulationTick);
+          fighter.vy = MOVEMENT_RULES.jumpVelocityY;
+          fighter.vx = direction.forwardHeld ? fighter.facing * MOVEMENT_RULES.forwardJumpVelocityX
+            : direction.backHeld ? -fighter.facing * MOVEMENT_RULES.backJumpVelocityX
+              : MOVEMENT_RULES.neutralJumpVelocityX;
+          fighter.grounded = false;
+          fighter.block = false;
+          fighter.guarding = false;
+          sound("jump");
+        } else {
+          if (fighter.crouch) fighter.vx = 0;
+          else if (direction.absolute) {
+            const speed = direction.forwardHeld ? MOVEMENT_RULES.forwardWalkSpeed : MOVEMENT_RULES.backWalkSpeed;
+            fighter.vx = direction.absolute * speed;
+          } else fighter.vx = 0;
+          if (Math.abs(fighter.vx) > 20) fighter.walkTime += dt;
+        }
+
+        const bufferedAttack = fighter.inputBuffer.consume(["throw", "special", "heavy", "light"], state.simulationTick);
+        if (bufferedAttack) beginAttack(fighter, bufferedAttack.action, input, {
+          reversal: fighter.reversalWindowFrames > 0 && bufferedAttack.action === "special",
+        });
+      }
+    }
+  }
+
+  if (fighter.dashFrames > 0 && !fighter.attacking) {
+    const forward = fighter.dashDirection === fighter.facing;
+    fighter.vx = fighter.dashDirection * (forward ? MOVEMENT_RULES.forwardDashSpeed : MOVEMENT_RULES.backDashSpeed);
+    fighter.dashFrames -= 1;
+    fighter.block = false;
+    fighter.guarding = false;
+    if (!forward && fighter.dashFrames >= MOVEMENT_RULES.backDashFrames - MOVEMENT_RULES.backDashInvulnerableFrames) {
+      fighter.invulnerableFrames = Math.max(fighter.invulnerableFrames, 1);
+    }
   }
 
   if (fighter.attacking) {
     fighter.attackFrame += 1;
     fighter.attackTime = fighter.attackFrame * SIMULATION_STEP_SECONDS;
-    fighter.vx *= 0.82;
+    fighter.vx *= fighter.grounded ? 0.82 : 0.985;
     const attack = fighter.attacking;
-    if (!fighter.attackHit && fighter.attackFrame >= attack.activeStartFrame && fighter.attackFrame < attack.activeEndFrame) {
-      const vertical = Math.abs((fighter.y - fighter.height * 0.5) - (opponent.y - opponent.height * 0.5));
-      const forwardDistance = (opponent.x - fighter.x) * fighter.facing;
-      if (forwardDistance > 8 && forwardDistance < attack.range && vertical < 125) hit(fighter, opponent, attack);
-    }
+    fighter.crouch = attack.profileId.startsWith("crouch-");
     if (fighter.attackFrame >= attack.totalFrames) {
       fighter.attacking = null;
       fighter.attackTime = 0;
@@ -1058,47 +1282,129 @@ function updateFighter(fighter, opponent, input, dt) {
     }
   }
 
-  fighter.vy += GRAVITY * dt;
-  fighter.x += fighter.vx * dt;
-  fighter.y += fighter.vy * dt;
-  if (fighter.y >= FLOOR) {
-    fighter.y = FLOOR;
-    fighter.vy = 0;
-    fighter.grounded = true;
-  }
-  fighter.x = clamp(fighter.x, 85, W - 85);
+  applyFighterPhysics(fighter, dt);
 }
 
-function hit(attacker, victim, attack) {
+function spawnCombatText(x, y, label, color = "#fff") {
+  state.effects.push({ kind: "combatText", label, x, y, life: 0.72, max: 0.72, color });
+}
+
+function techThrow(attacker, victim) {
   attacker.attackHit = true;
-  const blocked = victim.block && victim.facing === -attacker.facing;
-  const damage = blocked ? Math.max(1, attack.damage * 0.22) : attack.damage;
-  victim.health = clamp(victim.health - damage, 0, 100);
-  victim.stun = blocked ? 0.09 : 0.18 + attack.damage * 0.009;
-  victim.vx = attacker.facing * attack.push * (blocked ? 0.32 : 1);
-  if (!blocked && attack.kind !== "light") victim.vy = -55 - attack.damage * 5;
+  attacker.attacking = null;
+  victim.attacking = null;
+  attacker.inputBuffer.consume("throw", state.simulationTick);
+  victim.inputBuffer.consume("throw", state.simulationTick);
+  attacker.vx = -attacker.facing * 260;
+  victim.vx = attacker.facing * 260;
+  attacker.throwInvulnerableFrames = DEFENSE_RULES.throwInvulnerableFrames;
+  victim.throwInvulnerableFrames = DEFENSE_RULES.throwInvulnerableFrames;
+  attacker.throwTechFlashFrames = 18;
+  victim.throwTechFlashFrames = 18;
+  attacker.lastHitResult = "throw-tech";
+  victim.lastHitResult = "throw-tech";
+  state.hitstop = Math.max(state.hitstop, 0.075);
+  state.shake = Math.max(state.shake, 0.11);
+  spawnCombatText((attacker.x + victim.x) * 0.5, Math.min(attacker.y, victim.y) - 205, "THROW TECH", "#68f5ff");
+  sound("block");
+}
+
+function hit(attacker, victim, attack, collision) {
+  if (attack.level === ATTACK_LEVELS.THROW) {
+    if (!victim.grounded || victim.throwInvulnerableFrames > 0 || victim.down || victim.wakeupFrames > 0) return;
+    const recentThrowInput = state.simulationTick - victim.lastThrowInputFrame <= DEFENSE_RULES.throwTechWindowFrames;
+    if (recentThrowInput
+      || victim.attacking?.level === ATTACK_LEVELS.THROW) {
+      techThrow(attacker, victim);
+      return;
+    }
+  }
+
+  attacker.attackHit = true;
+  const blocked = canGuardAttack({
+    level: attack.level,
+    guardHeight: victim.guardHeight,
+    guarding: victim.guarding,
+    grounded: victim.grounded,
+  });
+  const counter = !blocked && attack.level !== ATTACK_LEVELS.THROW && isCounterHit(victim);
+  const baseDamage = attack.damage * (counter ? DEFENSE_RULES.counterDamageMultiplier : 1);
+  const damage = blocked ? attack.chipDamage : baseDamage;
+  victim.health = blocked
+    ? Math.max(1, victim.health - damage)
+    : clamp(victim.health - damage, 0, 100);
+  victim.blockstunFrames = blocked ? attack.blockstunFrames : 0;
+  victim.hitstunFrames = blocked ? 0 : attack.hitstunFrames + (counter ? DEFENSE_RULES.counterHitstunBonusFrames : 0);
+  victim.stun = Math.max(victim.hitstunFrames, victim.blockstunFrames) / SIMULATION_HZ;
+  victim.vx = attacker.facing * attack.push * (blocked ? 0.28 : 1);
+  victim.guardHeight = victim.crouch ? "low" : victim.guardHeight;
+  victim.lastHitResult = blocked ? `blocked-${attack.level}` : counter ? "counter" : attack.level;
+  if (!blocked) {
+    victim.attacking = null;
+    victim.attackTime = 0;
+    victim.attackFrame = 0;
+    victim.attackHit = false;
+    victim.dashFrames = 0;
+    victim.queuedDashDirection = 0;
+    if (attack.knockdown || attack.level === ATTACK_LEVELS.THROW) {
+      victim.pendingKnockdown = true;
+      victim.grounded = false;
+      victim.vy = attack.level === ATTACK_LEVELS.THROW ? -315 : -220 - attack.damage * 3;
+    }
+  }
   victim.hitFlash = 0.12;
   attacker.meter = clamp(attacker.meter + attack.meter, 0, 100);
   victim.meter = clamp(victim.meter + attack.meter * 0.45, 0, 100);
-  state.shake = Math.max(state.shake, attack.kind === "special" ? 0.34 : 0.13);
-  state.hitstop = Math.max(state.hitstop, blocked ? 0.035 : attack.kind === "special" ? 0.105 : attack.kind === "heavy" ? 0.075 : 0.045);
-  spawnHit(victim.x - attacker.facing * 22, victim.y - 105, attacker.def, attack.kind, blocked);
+  state.shake = Math.max(state.shake, attack.kind === "special" || attack.kind === "throw" ? 0.34 : 0.13);
+  state.hitstop = Math.max(state.hitstop, blocked ? 0.035 : attack.kind === "special" || attack.kind === "throw" ? 0.105 : attack.kind === "heavy" ? 0.075 : 0.045);
+  const impact = collision?.point || { x: victim.x - attacker.facing * 22, y: victim.y - 105 };
+  spawnHit(impact.x, impact.y, attacker.def, attack.kind, blocked);
+  if (counter) spawnCombatText(impact.x, impact.y - 74, "COUNTER", attacker.def.accent);
+  else if (!blocked && attack.level === ATTACK_LEVELS.OVERHEAD) spawnCombatText(impact.x, impact.y - 70, "OVERHEAD", attacker.def.accent);
+  else if (!blocked && attack.level === ATTACK_LEVELS.LOW) spawnCombatText(impact.x, impact.y - 64, "LOW", attacker.def.accent);
+  else if (!blocked && attack.level === ATTACK_LEVELS.THROW) spawnCombatText(impact.x, impact.y - 72, "THROW", attacker.def.accent);
   sound(blocked ? "block" : "hit");
   updateHud();
+  state.lastImpactSide = attacker.side;
+}
 
-  if (victim.health <= 0 && state.phase === "fight") {
+function checkKnockout() {
+  if (state.phase !== "fight" || !state.fighters.some((fighter) => fighter.health <= 0)) return;
+  const [first, second] = state.fighters;
+  const winner = first.health <= 0 && second.health <= 0
+    ? state.lastImpactSide ?? 0
+    : first.health <= 0 ? 1 : 0;
+  const attacker = state.fighters[winner];
+  const victim = state.fighters[1 - winner];
     state.phase = "finish";
     state.phaseTime = 6;
-    state.finishWinner = attacker.side;
+    state.finishWinner = winner;
     victim.down = false;
+    victim.pendingKnockdown = false;
+    victim.knockdownFrames = 0;
+    victim.wakeupFrames = 0;
     victim.stun = 99;
+    victim.hitstunFrames = 5940;
     attacker.attacking = null;
     attacker.meter = 100;
     duckMusic(0.34, 1900);
     announce("FINISH THEM", "PRESS FB  /  ↓ → HEAVY  /  ← ↓ → SPECIAL", 2.2);
     $(".touch-final").classList.add("ready");
     sound("finish");
+}
+
+function resolveCombatInteractions() {
+  const contacts = state.fighters.map((attacker, side) => {
+    if (!attacker.attacking || attacker.attackHit) return null;
+    const victim = state.fighters[1 - side];
+    const collision = findBoxCollision(attacker, victim);
+    return collision ? { attacker, victim, attack: attacker.attacking, collision } : null;
+  }).filter(Boolean);
+  for (const contact of contacts) {
+    if (contact.attack.level === ATTACK_LEVELS.THROW && contact.attacker.attacking !== contact.attack) continue;
+    hit(contact.attacker, contact.victim, contact.attack, contact.collision);
   }
+  checkKnockout();
 }
 
 function spawnHit(x, y, def, attackKind, blocked) {
@@ -1114,20 +1420,41 @@ function spawnHit(x, y, def, attackKind, blocked) {
 function separateFighters() {
   const [a, b] = state.fighters;
   if (!a || !b) return;
-  const overlap = 86 - Math.abs(a.x - b.x);
-  if (overlap > 0) {
-    const direction = a.x < b.x ? -1 : 1;
-    a.x += direction * overlap * 0.5;
-    b.x -= direction * overlap * 0.5;
-  }
+  if ((!a.grounded && a.y < FLOOR - 34) || (!b.grounded && b.y < FLOOR - 34)) return;
+  const positions = resolvePushboxPositions(
+    {
+      x: a.x,
+      side: a.side,
+      halfWidth: a.crouch ? MOVEMENT_RULES.crouchingPushboxHalfWidth : MOVEMENT_RULES.standingPushboxHalfWidth,
+    },
+    {
+      x: b.x,
+      side: b.side,
+      halfWidth: b.crouch ? MOVEMENT_RULES.crouchingPushboxHalfWidth : MOVEMENT_RULES.standingPushboxHalfWidth,
+    },
+  );
+  a.x = positions.aX;
+  b.x = positions.bX;
+}
+
+function updateFacings() {
+  const [a, b] = state.fighters;
+  if (!a || !b || state.finisher) return;
+  if (!a.attacking || !a.grounded) a.facing = b.x >= a.x ? 1 : -1;
+  if (!b.attacking || !b.grounded) b.facing = a.x >= b.x ? 1 : -1;
 }
 
 function resolveFighterState(fighter) {
   if (state.finisher) return FIGHTER_STATES.FINISHER;
-  if (fighter.down) return FIGHTER_STATES.DOWN;
-  if (fighter.stun > 0) return FIGHTER_STATES.HITSTUN;
+  if (fighter.down || fighter.knockdownFrames > 0) return FIGHTER_STATES.KNOCKDOWN;
+  if (fighter.wakeupFrames > 0) return FIGHTER_STATES.WAKEUP;
+  if (fighter.throwTechFlashFrames > 0) return FIGHTER_STATES.THROW_TECH;
+  if (fighter.blockstunFrames > 0) return FIGHTER_STATES.BLOCKSTUN;
+  if (fighter.hitstunFrames > 0 || fighter.pendingKnockdown) return FIGHTER_STATES.HITSTUN;
+  if (fighter.attacking?.level === ATTACK_LEVELS.THROW) return FIGHTER_STATES.THROW;
   if (fighter.attacking) return FIGHTER_STATES.ATTACK;
   if (!fighter.grounded) return FIGHTER_STATES.JUMP;
+  if (fighter.dashFrames > 0) return FIGHTER_STATES.DASH;
   if (fighter.block) return FIGHTER_STATES.BLOCK;
   if (fighter.crouch) return FIGHTER_STATES.CROUCH;
   if (Math.abs(fighter.vx) > 20) return FIGHTER_STATES.WALK;
@@ -1151,6 +1478,7 @@ function simulateGameTick(dt) {
   state.shake = Math.max(0, state.shake - dt * 2.8);
   state.flash = Math.max(0, state.flash - dt);
 
+  updateFacings();
   let input0 = readInput(0);
   let input1 = state.mode === "arcade" ? aiInput(state.fighters[1], state.fighters[0], dt) : readInput(1);
   if (state.phase === "intro") {
@@ -1159,10 +1487,17 @@ function simulateGameTick(dt) {
     if (state.phaseTime <= 0) state.phase = "fight";
   }
 
+  input0 = prepareFighterInput(state.fighters[0], input0);
+  input1 = prepareFighterInput(state.fighters[1], input1);
+
   updateFighter(state.fighters[0], state.fighters[1], input0, dt);
   updateFighter(state.fighters[1], state.fighters[0], input1, dt);
   if (state.finisher) updateFinisher(dt);
-  else separateFighters();
+  else {
+    resolveCombatInteractions();
+    separateFighters();
+    updateFacings();
+  }
   syncFighterStateMachines();
 
   if (state.phase === "fight") {
@@ -1301,8 +1636,10 @@ function drawVetAtmosphere(time) {
 
 function fighterAnimationFrame(fighter) {
   if (fighter.cinematicFrame !== null) return fighter.cinematicFrame;
-  if (fighter.down || fighter.hitFlash > 0 || fighter.stun > 0.36) return 15;
-  if (fighter.block || fighter.crouch) return 12;
+  if (fighter.down || fighter.knockdownFrames > 0 || fighter.hitFlash > 0 || fighter.hitstunFrames > 21) return 15;
+  if (fighter.wakeupFrames > 0) return fighter.wakeupFrames > 9 ? 15 : 12;
+  if (fighter.throwTechFlashFrames > 0) return 12;
+  if (fighter.block || fighter.blockstunFrames > 0 || fighter.crouch) return 12;
   if (fighter.attacking) {
     const attack = fighter.attacking;
     const startup = attack.active[0];
@@ -1317,6 +1654,7 @@ function fighterAnimationFrame(fighter) {
     return frames[3];
   }
   if (!fighter.grounded) return fighter.vy < 0 ? 13 : 15;
+  if (fighter.dashFrames > 0) return 5 + Math.floor(fighter.walkTime * 18) % 3;
   if (Math.abs(fighter.vx) > 22) return 4 + Math.floor(fighter.walkTime * 10) % 4;
   return Math.floor(fighter.animTime * 5) % 4;
 }
@@ -1679,7 +2017,18 @@ function drawParticles() {
     ctx.strokeStyle = effect.color;
     ctx.shadowBlur = 25;
     ctx.shadowColor = effect.color;
-    if (effect.kind === "finisherImpact") {
+    if (effect.kind === "combatText") {
+      ctx.globalAlpha = Math.min(1, alpha * 1.7);
+      ctx.translate(0, -(1 - alpha) * 42);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "900 24px Arial Narrow, Arial, sans-serif";
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = "rgba(0,0,0,.88)";
+      ctx.strokeText(effect.label, 0, 0);
+      ctx.fillStyle = effect.color;
+      ctx.fillText(effect.label, 0, 0);
+    } else if (effect.kind === "finisherImpact") {
       drawFinisherImpact(effect, alpha);
     } else if (effect.kind === "slash") {
       ctx.lineWidth = 18 * alpha;
@@ -1774,29 +2123,27 @@ function drawDebugOverlay() {
   ctx.textBaseline = "top";
 
   for (const fighter of state.fighters) {
-    ctx.strokeStyle = fighter.side === 0 ? "#35e7ff" : "#ff4dc4";
-    ctx.strokeRect(
-      fighter.x - fighter.width * 0.5,
-      fighter.y - fighter.height,
-      fighter.width,
-      fighter.height,
-    );
-    if (fighter.attacking
-      && fighter.attackFrame >= fighter.attacking.activeStartFrame
-      && fighter.attackFrame < fighter.attacking.activeEndFrame) {
-      ctx.strokeStyle = "#ffef5a";
-      const attackX = fighter.facing > 0 ? fighter.x + 8 : fighter.x - fighter.attacking.range;
-      ctx.strokeRect(attackX, fighter.y - 190, fighter.attacking.range - 8, 150);
-    }
+    const hurtColor = fighter.side === 0 ? "#35e7ff" : "#ff4dc4";
+    ctx.strokeStyle = hurtColor;
+    for (const box of getHurtboxes(fighter)) ctx.strokeRect(box.x, box.y, box.width, box.height);
+    ctx.strokeStyle = "rgba(110,255,125,.88)";
+    const pushHalf = fighter.crouch ? MOVEMENT_RULES.crouchingPushboxHalfWidth : MOVEMENT_RULES.standingPushboxHalfWidth;
+    ctx.strokeRect(fighter.x - pushHalf, fighter.y - 112, pushHalf * 2, 112);
+    ctx.strokeStyle = "#ffef5a";
+    for (const box of getActiveHitboxes(fighter)) ctx.strokeRect(box.x, box.y, box.width, box.height);
   }
 
   const lines = [
     `SIM ${SIMULATION_HZ}HZ · TICK ${state.simulationTick} · STEPS ${state.simulationSteps}`,
     `ALPHA ${state.simulationAlpha.toFixed(3)} · DROPPED ${state.simulationDroppedSeconds.toFixed(3)}s`,
     `PHASE ${state.phase} · RNG ${state.rng.getState().toString(16).padStart(8, "0")}`,
-    ...state.fighters.map((fighter) => `P${fighter.side + 1} ${fighter.combatState.toUpperCase()} F${fighter.stateFrame} · BUF ${fighter.inputBuffer.snapshot().map((entry) => entry.action).join("/") || "—"}`),
+    ...state.fighters.map((fighter) => {
+      const move = fighter.attacking?.profileId || "—";
+      const guard = fighter.guarding ? fighter.guardHeight.toUpperCase() : "—";
+      return `P${fighter.side + 1} ${fighter.combatState.toUpperCase()} F${fighter.stateFrame} · ${move} · GUARD ${guard} · HS ${fighter.hitstunFrames}/BS ${fighter.blockstunFrames}/KD ${fighter.knockdownFrames} · BUF ${fighter.inputBuffer.snapshot().map((entry) => entry.action).join("/") || "—"}`;
+    }),
   ];
-  const panelWidth = 560;
+  const panelWidth = 980;
   const panelHeight = 18 + lines.length * 19;
   ctx.fillStyle = "rgba(0,0,0,.82)";
   ctx.fillRect(14, 64, panelWidth, panelHeight);
@@ -2166,7 +2513,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "0.6-foundation",
+  version: "0.6-defense",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -2186,10 +2533,31 @@ window.__finalBlowEngine = {
         stateFrame: fighter.stateFrame,
         x: fighter.x,
         y: fighter.y,
+        vx: fighter.vx,
+        vy: fighter.vy,
         health: fighter.health,
         meter: fighter.meter,
         attack: fighter.attacking?.kind || null,
+        move: fighter.attacking?.profileId || null,
+        attackLevel: fighter.attacking?.level || null,
         attackFrame: fighter.attackFrame,
+        facing: fighter.facing,
+        grounded: fighter.grounded,
+        crouching: fighter.crouch,
+        guarding: fighter.guarding,
+        guardHeight: fighter.guardHeight,
+        dashFrames: fighter.dashFrames,
+        dashDirection: fighter.dashDirection,
+        hitstunFrames: fighter.hitstunFrames,
+        blockstunFrames: fighter.blockstunFrames,
+        knockdownFrames: fighter.knockdownFrames,
+        wakeupFrames: fighter.wakeupFrames,
+        invulnerableFrames: fighter.invulnerableFrames,
+        pendingKnockdown: fighter.pendingKnockdown,
+        down: fighter.down,
+        lastHitResult: fighter.lastHitResult,
+        hurtboxes: getHurtboxes(fighter),
+        hitboxes: getActiveHitboxes(fighter),
         inputBuffer: fighter.inputBuffer.snapshot(),
       })),
     };
@@ -2198,6 +2566,48 @@ window.__finalBlowEngine = {
 
 if (["127.0.0.1", "localhost"].includes(location.hostname)) {
   window.__finalBlowQa = {
+    fight(firstId = "deathblow", secondId = "jez") {
+      const firstIndex = roster.findIndex((fighter) => fighter.id === firstId);
+      const secondIndex = roster.findIndex((fighter) => fighter.id === secondId);
+      if (firstIndex < 0 || secondIndex < 0) throw new Error(`Unknown matchup: ${firstId} vs ${secondId}`);
+      state.mode = "versus";
+      state.picks = [firstIndex, secondIndex];
+      state.rounds = [0, 0];
+      state.round = 1;
+      state.matchSerial += 1;
+      seedMatch(state.round);
+      state.fighters = [makeFighter(firstIndex, 0), makeFighter(secondIndex, 1)];
+      state.particles.length = 0;
+      state.effects.length = 0;
+      state.timer = 99;
+      state.timerCarry = 0;
+      state.phase = "fight";
+      state.phaseTime = 0;
+      state.finishWinner = -1;
+      state.finisher = null;
+      state.hitstop = 0;
+      state.lastImpactSide = -1;
+      commandHistory[0].length = 0;
+      commandHistory[1].length = 0;
+      showScreen("fight");
+      updateHud();
+      updateFacings();
+      return window.__finalBlowEngine.snapshot();
+    },
+    positions(firstX = 500, secondX = 610) {
+      if (state.fighters.length !== 2) throw new Error("Start a QA fight first");
+      state.fighters[0].x = clamp(firstX, MOVEMENT_RULES.stageMinX, MOVEMENT_RULES.stageMaxX);
+      state.fighters[1].x = clamp(secondX, MOVEMENT_RULES.stageMinX, MOVEMENT_RULES.stageMaxX);
+      state.fighters.forEach((fighter) => {
+        fighter.y = FLOOR;
+        fighter.vx = 0;
+        fighter.vy = 0;
+        fighter.grounded = true;
+      });
+      separateFighters();
+      updateFacings();
+      return window.__finalBlowEngine.snapshot();
+    },
     ready(id, type = 0) {
       const index = roster.findIndex((fighter) => fighter.id === id);
       if (index < 0) throw new Error(`Unknown fighter: ${id}`);

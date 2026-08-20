@@ -19,7 +19,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">DETERMINISTIC COMBAT CORE <b>0.6A</b></div>
+      <div class="build-tag">FIGHTING SYSTEM UPGRADE <b>0.6B</b></div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
     </header>
@@ -128,7 +128,7 @@
 
     <footer class="footer-strip">
       <span id="stageTicker">KENSINGTON &amp; ALLEGHENY // PHILADELPHIA</span>
-      <span>FIXED 60HZ COMBAT · 4 ELEVENLABS SOUNDTRACKS · GAMEPAD API</span>
+      <span>FRAME HITBOXES · DASHES · THROWS · REVERSALS · 4 SOUNDTRACKS</span>
     </footer>
   </main>
 
@@ -141,21 +141,23 @@
       <div class="controls-grid">
         <section>
           <h3>PLAYER 1 · KEYBOARD</h3>
-          <p><kbd>A</kbd><kbd>D</kbd> MOVE · <kbd>W</kbd> JUMP · <kbd>S</kbd> BLOCK</p>
+          <p><kbd>A</kbd><kbd>D</kbd> MOVE/GUARD · <kbd>W</kbd> JUMP · <kbd>S</kbd> CROUCH/LOW GUARD</p>
           <p><kbd>J</kbd> LIGHT · <kbd>K</kbd> HEAVY · <kbd>L</kbd> SPECIAL</p>
+          <p>DOUBLE-TAP DASH · LIGHT + HEAVY THROW · <kbd>I</kbd> GUARD</p>
           <p>FINAL BLOWS: ↓ → HEAVY · ← ↓ → SPECIAL · <kbd>U</kbd> CHARACTER COMBO</p>
         </section>
         <section>
           <h3>PLAYER 2 · KEYBOARD</h3>
-          <p><kbd>←</kbd><kbd>→</kbd> MOVE · <kbd>↑</kbd> JUMP · <kbd>↓</kbd> BLOCK</p>
+          <p><kbd>←</kbd><kbd>→</kbd> MOVE/GUARD · <kbd>↑</kbd> JUMP · <kbd>↓</kbd> CROUCH/LOW GUARD</p>
           <p><kbd>1</kbd> LIGHT · <kbd>2</kbd> HEAVY · <kbd>3</kbd> SPECIAL</p>
+          <p>DOUBLE-TAP DASH · LIGHT + HEAVY THROW · <kbd>5</kbd> GUARD</p>
           <p>FINAL BLOWS: ↓ → HEAVY · ← ↓ → SPECIAL · <kbd>0</kbd> CHARACTER COMBO</p>
         </section>
         <section>
           <h3>XINPUT / GAMEPAD</h3>
           <p>STICK / D-PAD MOVE · <span class="xbox-a">A</span> JUMP</p>
           <p><span class="xbox-x">X</span> LIGHT · <span class="xbox-y">Y</span> HEAVY · LB SPECIAL</p>
-          <p><span class="xbox-b">B</span> BLOCK · LT + RT CHARACTER COMBO</p>
+          <p><span class="xbox-b">B</span> GUARD · X + Y THROW · LT + RT CHARACTER COMBO</p>
         </section>
         <section class="options-panel">
           <h3>OPTIONS</h3>
@@ -182,7 +184,7 @@
           </label>
         </section>
       </div>
-      <p class="dialog-note">Xbox/XInput-style controllers use the browser Gamepad API. Connect before or during play. Press F3 for the combat debug overlay.</p>
+      <p class="dialog-note">Hold away to guard high; down guards low. Forward + Heavy is an overhead. Press F3 for live hitboxes, hurtboxes, pushboxes and frame state.</p>
       <button class="arcade-button primary dialog-done" value="close">DONE</button>
     </form>
   </dialog>

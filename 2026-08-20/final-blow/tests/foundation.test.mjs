@@ -56,13 +56,16 @@ function testRng() {
 }
 
 function testMoveGrammar() {
-  assert.deepEqual(Object.keys(BASE_MOVES), ["light", "heavy", "special"]);
+  assert.deepEqual(Object.keys(BASE_MOVES), ["light", "heavy", "special", "throw"]);
   const heavy = createAttackInstance("heavy");
   assert.equal(heavy.totalFrames, 34);
   assert.equal(heavy.activeStartFrame, 12);
   assert.equal(heavy.activeEndFrame, 20);
   assert.ok(heavy.duration > 0.56 && heavy.duration < 0.57);
   assert.throws(() => createAttackInstance("missing"), /Unknown move kind/);
+  const grapple = createAttackInstance("throw");
+  assert.equal(grapple.totalFrames, 29);
+  assert.equal(grapple.activeStartFrame, 5);
 }
 
 function testStateMachine() {
@@ -76,6 +79,12 @@ function testStateMachine() {
   assert.equal(transitionFighterState(fighter, FIGHTER_STATES.ATTACK, 6), false);
   assert.equal(fighter.combatState, FIGHTER_STATES.DOWN);
   assert.equal(transitionFighterState(fighter, FIGHTER_STATES.ATTACK, 6, { force: true }), true);
+  assert.equal(transitionFighterState(fighter, FIGHTER_STATES.THROW_TECH, 7), true);
+  assert.equal(transitionFighterState(fighter, FIGHTER_STATES.IDLE, 8), true);
+  assert.equal(transitionFighterState(fighter, FIGHTER_STATES.DASH, 9), true);
+  assert.equal(transitionFighterState(fighter, FIGHTER_STATES.HITSTUN, 10), true);
+  assert.equal(transitionFighterState(fighter, FIGHTER_STATES.KNOCKDOWN, 11), true);
+  assert.equal(transitionFighterState(fighter, FIGHTER_STATES.WAKEUP, 12), true);
 }
 
 testFixedClock();
