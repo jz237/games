@@ -78,6 +78,25 @@ button { color: inherit; }
 .mini-brand strong { color: var(--red); font-size: 16px; }
 .build-tag b { color: var(--amber); }
 
+.track-button {
+  max-width: 34%;
+  overflow: hidden;
+  padding: 4px 10px;
+  border: 1px solid #3f5365;
+  background: rgba(5, 10, 16, .72);
+  color: #a8eefa;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.track-button:hover,
+.track-button:focus-visible { border-color: var(--cyan); color: white; outline: 0; }
+
 .pad-status {
   display: flex;
   gap: 7px;
@@ -137,6 +156,7 @@ canvas {
   display: block;
   width: 100%;
   height: 100%;
+  object-fit: cover;
   image-rendering: auto;
   outline: none;
 }
@@ -912,6 +932,17 @@ kbd,
 }
 
 .options-panel input { accent-color: var(--red); }
+.options-panel .music-picker { align-items: flex-start; flex-direction: column; margin-top: 13px; }
+.music-picker select {
+  width: 100%;
+  padding: 8px 9px;
+  border: 1px solid #4d5c6a;
+  background: #080d14;
+  color: #e8eef2;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .04em;
+}
 .dialog-note { color: #8f9aa4; font: 11px/1.5 system-ui, sans-serif; }
 .dialog-done { display: block; width: min(280px, 100%); margin: 18px auto 0; }
 
@@ -949,6 +980,92 @@ kbd,
 .touch-action button.active { transform: rotate(8deg) scale(.92); }
 .touch-action .touch-final { border-color: var(--amber); color: var(--amber); }
 
+.rotate-gate {
+  position: fixed;
+  z-index: 9999;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  background:
+    radial-gradient(circle at 50% 42%, rgba(239,44,40,.25), transparent 35%),
+    repeating-linear-gradient(135deg, rgba(255,255,255,.025) 0 2px, transparent 2px 8px),
+    #030507;
+  text-align: center;
+}
+
+.orientation-blocked .rotate-gate { display: flex; }
+.rotate-gate p { margin: 0; color: var(--amber); font-size: 10px; font-weight: 950; letter-spacing: .3em; }
+.rotate-gate h2 {
+  margin: 2px 0 0;
+  color: white;
+  font-family: Impact, "Arial Black", sans-serif;
+  font-size: clamp(31px, 9vw, 58px);
+  font-style: italic;
+  line-height: .95;
+  letter-spacing: .03em;
+  text-shadow: 4px 5px 0 #7d0c12;
+}
+.rotate-gate > span { color: #aab4bd; font: 12px/1.4 system-ui, sans-serif; }
+.rotate-gate .arcade-button { width: min(320px, 86%); margin-top: 9px; }
+
+.phone-turn { position: relative; width: 104px; height: 82px; margin-bottom: 5px; }
+.phone-turn i {
+  position: absolute;
+  top: 12px;
+  left: 25px;
+  width: 48px;
+  height: 76px;
+  border: 4px solid white;
+  border-radius: 9px;
+  box-shadow: 0 0 22px rgba(78,221,245,.45);
+  animation: phone-turn 1.7s ease-in-out infinite;
+}
+.phone-turn i::after { position: absolute; bottom: 4px; left: 17px; width: 7px; height: 7px; border: 2px solid white; border-radius: 50%; content: ""; }
+.phone-turn b { position: absolute; right: -4px; bottom: 0; color: var(--cyan); font-size: 42px; text-shadow: 0 0 14px var(--cyan); }
+@keyframes phone-turn { 0%, 18% { transform: rotate(0); } 65%, 100% { transform: rotate(90deg); } }
+
+body.mobile-landscape,
+body:has(#app:fullscreen) {
+  display: block;
+  width: 100dvw;
+  height: 100dvh;
+  min-height: 100dvh;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.mobile-landscape #app,
+#app:fullscreen {
+  width: 100dvw;
+  max-width: none;
+  height: 100dvh;
+  filter: none;
+}
+
+.mobile-landscape .topbar,
+.mobile-landscape .footer-strip,
+#app:fullscreen .topbar,
+#app:fullscreen .footer-strip { display: none; }
+
+.mobile-landscape .game-frame,
+#app:fullscreen .game-frame {
+  width: 100dvw;
+  height: 100dvh;
+  border: 0;
+  aspect-ratio: auto;
+}
+
+.mobile-landscape .touch-controls {
+  right: max(2%, env(safe-area-inset-right));
+  bottom: max(2%, env(safe-area-inset-bottom));
+  left: max(2%, env(safe-area-inset-left));
+}
+
 @media (pointer: coarse), (max-width: 760px) {
   body { padding: 0; align-items: start; }
   #app { width: 100%; }
@@ -956,6 +1073,7 @@ kbd,
   .game-frame { border-right: 0; border-left: 0; }
   .touch-controls.playing { display: flex; }
   .build-tag { display: none; }
+  .track-button { max-width: 48%; }
   .screen { padding: 15px; }
   .title-lockup h1 { font-size: clamp(52px, 14vw, 92px); }
   .title-lockup h2 { letter-spacing: .18em; }

@@ -1,0 +1,11 @@
+{
+  "name": "Final Blow: Philly After Dark",
+  "short_name": "Final Blow",
+  "description": "A Philadelphia after-dark arcade weapon fighter.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#030407",
+  "theme_color": "#080b13"
+}

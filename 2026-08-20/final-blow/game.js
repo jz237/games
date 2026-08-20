@@ -21,51 +21,56 @@ const roster = [
     accent: "#ffb21f",
     weapon: "gauntlets",
     special: "FAULTLINE PUNCH",
+    vfx: "seismic",
     finishers: ["FAULTLINE EXECUTION", "AFTERSHOCK BURIAL"],
   },
   {
     id: "jez",
     name: "JEZ",
-    title: "NEON SIGNSMITH",
+    title: "BLUE-GI SIGNSMITH",
     mark: "JZ",
     color: "#14cbe8",
     accent: "#ff43c5",
     weapon: "signblade",
-    special: "VINYL SNARE",
+    special: "NEON PALM",
+    vfx: "neon",
     finishers: ["NEON GUILLOTINE", "VINYL WRAP"],
   },
   {
     id: "alan",
-    name: "ALAN SMITHEE",
-    title: "UNCREDITED WILDCARD",
-    mark: "AS",
+    name: "ALLAN",
+    title: "SOUTH PHILLY HEAVYWEIGHT",
+    mark: "AL",
     color: "#d8d8d8",
     accent: "#e52d2d",
-    weapon: "reelchain",
-    special: "JUMP CUT",
-    finishers: ["THE FINAL CUT", "UNCREDITED"],
+    weapon: "gauntlets",
+    special: "SOUTH STREET SLAM",
+    vfx: "steel",
+    finishers: ["THE HEAVY HAND", "SOUTH STREET SHUTDOWN"],
   },
   {
     id: "post",
     name: "POST",
-    title: "DEAD-LETTER ENFORCER",
+    title: "SPRAY-CAN BRAWLER",
     mark: "P",
     color: "#e59b25",
     accent: "#fff1b0",
-    weapon: "posthammer",
-    special: "EXPRESS DELIVERY",
-    finishers: ["DEAD LETTER", "RETURN TO SENDER"],
+    weapon: "spraycan",
+    special: "PAINT THE TOWN",
+    vfx: "paint",
+    finishers: ["FULL COVERAGE", "WET PAINT"],
   },
   {
     id: "benny",
-    name: "BENNY FRANKLIN",
-    title: "STORM INVENTOR",
-    mark: "BF",
+    name: "BENNY",
+    title: "STREET TECHNICIAN",
+    mark: "BN",
     color: "#416fe8",
     accent: "#f7e53e",
-    weapon: "caneblade",
-    special: "KITE & KEY",
-    finishers: ["LIGHTNING ROD", "THUNDER SIGNATURE"],
+    weapon: "shockgloves",
+    special: "BENNY BLITZ",
+    vfx: "voltage",
+    finishers: ["CIRCUIT BREAKER", "BENNY'S LAST CALL"],
   },
   {
     id: "donald",
@@ -76,6 +81,7 @@ const roster = [
     accent: "#f1bd26",
     weapon: "golfclub",
     special: "GOLDEN SHOCKWAVE",
+    vfx: "gilded",
     finishers: ["GOLDEN SEND-OFF", "YOU'RE FIRED!"],
   },
   {
@@ -87,6 +93,7 @@ const roster = [
     accent: "#ad5aff",
     weapon: "micstaff",
     special: "BUFFERING",
+    vfx: "feedback",
     finishers: ["FEEDBACK BLACKOUT", "INTERNET MELTDOWN"],
   },
   {
@@ -98,6 +105,7 @@ const roster = [
     accent: "#ff48aa",
     weapon: "micchucks",
     special: "BASS DROP",
+    vfx: "bass",
     finishers: ["MIC DROP", "WEST STAINES MASSIVE"],
   },
 ];
@@ -123,10 +131,14 @@ for (const [id, stage] of Object.entries(stages)) {
 }
 
 const fighterImages = {};
+const fighterAtlases = {};
 for (const fighter of roster) {
   const image = new Image();
   image.src = `assets/fighters/${fighter.id}.webp`;
   fighterImages[fighter.id] = image;
+  const atlas = new Image();
+  atlas.src = `assets/atlases/${fighter.id}.webp`;
+  fighterAtlases[fighter.id] = atlas;
 }
 
 // Original soundtrack and combat cues generated with the ElevenLabs API.
@@ -166,9 +178,16 @@ const sfxPools = Object.fromEntries(Object.entries(audioAssets).map(([kind, src]
 ]));
 const sfxCursors = Object.fromEntries(Object.keys(audioAssets).map((kind) => [kind, 0]));
 
-const fightMusic = new Audio("assets/audio/philly-after-dark.mp3");
+const musicTracks = [
+  { title: "PHILLY AFTER DARK", src: "assets/audio/philly-after-dark.mp3" },
+  { title: "VET PARKING LOT", src: "assets/audio/vet-parking-lot.mp3" },
+  { title: "NEON SIGN WAR", src: "assets/audio/neon-sign-war.mp3" },
+  { title: "SUBWAY AFTER MIDNIGHT", src: "assets/audio/subway-after-midnight.mp3" },
+];
+let currentTrackIndex = 0;
+const fightMusic = new Audio(musicTracks[currentTrackIndex].src);
 fightMusic.preload = "auto";
-fightMusic.loop = true;
+fightMusic.loop = false;
 fightMusic.volume = 0.24;
 let musicDuckTimer = 0;
 
@@ -203,10 +222,12 @@ const state = {
   finisherType: 0,
   shake: 0,
   flash: 0,
+  hitstop: 0,
   lastTime: performance.now(),
   audio: null,
   audioUnlocked: false,
   musicDuck: 1,
+  musicChoice: localStorage.getItem("final-blow-music-choice") || "auto",
 };
 
 function makeFighter(index, side) {
@@ -232,6 +253,8 @@ function makeFighter(index, side) {
     stun: 0,
     hitFlash: 0,
     specialGlow: 0,
+    animTime: Math.random() * 2,
+    walkTime: Math.random(),
     down: false,
     aiClock: 0,
   };
@@ -268,6 +291,7 @@ function showScreen(name) {
 }
 
 function startSelect(mode) {
+  enterImmersiveMode();
   unlockAudio();
   state.mode = mode;
   state.picks = [0, mode === "arcade" ? 4 : 1];
@@ -331,6 +355,7 @@ function updateStageUI() {
 
 function startMatch(resetSet = true) {
   unlockAudio();
+  if (state.musicChoice === "auto") advanceTrack();
   resetMusicDuck();
   if (resetSet) {
     state.rounds = [0, 0];
@@ -343,6 +368,7 @@ function startMatch(resetSet = true) {
   state.timerCarry = 0;
   state.phase = "intro";
   state.phaseTime = 2.25;
+  state.hitstop = 0;
   state.finishWinner = -1;
   state.finisherType = 0;
   commandHistory[0].length = 0;
@@ -366,6 +392,7 @@ function resetRound() {
   state.timerCarry = 0;
   state.phase = "intro";
   state.phaseTime = 2.1;
+  state.hitstop = 0;
   state.finishWinner = -1;
   commandHistory[0].length = 0;
   commandHistory[1].length = 0;
@@ -567,9 +594,9 @@ function tryFinish(side, input) {
 function beginAttack(fighter, kind) {
   if (fighter.attacking || fighter.stun > 0 || fighter.down) return;
   const attackData = {
-    light: { duration: 0.28, active: [0.08, 0.18], range: 92, damage: 6, push: 150, meter: 10 },
-    heavy: { duration: 0.48, active: [0.16, 0.31], range: 124, damage: 12, push: 260, meter: 16 },
-    special: { duration: 0.7, active: [0.24, 0.49], range: 174, damage: 17, push: 360, meter: 22 },
+    light: { duration: 0.34, active: [0.1, 0.19], range: 98, damage: 6, push: 150, meter: 10 },
+    heavy: { duration: 0.56, active: [0.2, 0.33], range: 132, damage: 12, push: 260, meter: 16 },
+    special: { duration: 0.78, active: [0.27, 0.49], range: 184, damage: 17, push: 360, meter: 22 },
   }[kind];
   fighter.attacking = { kind, ...attackData };
   fighter.attackTime = 0;
@@ -579,6 +606,7 @@ function beginAttack(fighter, kind) {
 }
 
 function updateFighter(fighter, opponent, input, dt) {
+  fighter.animTime += dt;
   fighter.stun = Math.max(0, fighter.stun - dt);
   fighter.hitFlash = Math.max(0, fighter.hitFlash - dt);
   fighter.specialGlow = Math.max(0, fighter.specialGlow - dt);
@@ -595,6 +623,7 @@ function updateFighter(fighter, opponent, input, dt) {
     fighter.block = input.down && fighter.grounded;
     fighter.crouch = fighter.block;
     fighter.vx = fighter.block ? 0 : move * 285;
+    if (Math.abs(fighter.vx) > 20 && fighter.grounded) fighter.walkTime += dt;
     if (input.jump && fighter.grounded && !fighter.block) {
       fighter.vy = -730;
       fighter.grounded = false;
@@ -645,7 +674,8 @@ function hit(attacker, victim, attack) {
   attacker.meter = clamp(attacker.meter + attack.meter, 0, 100);
   victim.meter = clamp(victim.meter + attack.meter * 0.45, 0, 100);
   state.shake = Math.max(state.shake, attack.kind === "special" ? 0.34 : 0.13);
-  spawnHit(victim.x - attacker.facing * 22, victim.y - 105, attacker.def.accent, attack.kind === "special" ? 24 : 13);
+  state.hitstop = Math.max(state.hitstop, blocked ? 0.035 : attack.kind === "special" ? 0.105 : attack.kind === "heavy" ? 0.075 : 0.045);
+  spawnHit(victim.x - attacker.facing * 22, victim.y - 105, attacker.def, attack.kind, blocked);
   sound(blocked ? "block" : "hit");
   updateHud();
 
@@ -663,13 +693,14 @@ function hit(attacker, victim, attack) {
   }
 }
 
-function spawnHit(x, y, color, count) {
+function spawnHit(x, y, def, attackKind, blocked) {
+  const count = blocked ? 9 : attackKind === "special" ? 28 : attackKind === "heavy" ? 18 : 12;
   for (let i = 0; i < count; i += 1) {
     const angle = Math.random() * Math.PI * 2;
     const speed = 90 + Math.random() * 310;
-    state.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 0.18 + Math.random() * 0.34, max: 0.55, size: 2 + Math.random() * 6, color });
+    state.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 0.18 + Math.random() * 0.34, max: 0.55, size: 2 + Math.random() * 6, color: Math.random() > 0.34 ? def.accent : def.color });
   }
-  state.effects.push({ kind: "hit", x, y, life: 0.22, color });
+  state.effects.push({ kind: blocked ? "guard" : "hit", style: def.vfx, attackKind, x, y, life: attackKind === "special" ? 0.42 : 0.28, max: attackKind === "special" ? 0.42 : 0.28, color: def.accent });
 }
 
 function separateFighters() {
@@ -685,6 +716,11 @@ function separateFighters() {
 
 function updateGame(dt) {
   if (state.screen !== "fight" || !state.fighters.length) return;
+  if (document.body.classList.contains("orientation-blocked")) return;
+  if (state.hitstop > 0) {
+    state.hitstop = Math.max(0, state.hitstop - dt);
+    return;
+  }
   state.phaseTime = Math.max(0, state.phaseTime - dt);
   state.shake = Math.max(0, state.shake - dt * 2.8);
   state.flash = Math.max(0, state.flash - dt);
@@ -835,35 +871,128 @@ function drawVetAtmosphere(time) {
   }
 }
 
+function fighterAnimationFrame(fighter) {
+  if (fighter.down || fighter.hitFlash > 0 || fighter.stun > 0.36) return 15;
+  if (fighter.block || fighter.crouch) return 12;
+  if (fighter.attacking) {
+    const attack = fighter.attacking;
+    const startup = attack.active[0];
+    const activeEnd = attack.active[1];
+    const time = fighter.attackTime;
+    const frames = attack.kind === "light" ? [8, 9, 10, 11]
+      : attack.kind === "heavy" ? [8, 13, 13, 11]
+        : [8, 13, 14, 11];
+    if (time < startup * 0.48) return frames[0];
+    if (time < startup) return frames[1];
+    if (time <= activeEnd) return frames[2];
+    return frames[3];
+  }
+  if (!fighter.grounded) return fighter.vy < 0 ? 13 : 15;
+  if (Math.abs(fighter.vx) > 22) return 4 + Math.floor(fighter.walkTime * 10) % 4;
+  return Math.floor(fighter.animTime * 5) % 4;
+}
+
+function drawAtlasFrame(atlas, frame, size) {
+  const cell = 320;
+  ctx.drawImage(atlas, (frame % 4) * cell, Math.floor(frame / 4) * cell, cell, cell, -size * 0.5, -size, size, size);
+}
+
+function drawAttackVfx(fighter, time, activePower) {
+  const attack = fighter.attacking;
+  if (!attack || activePower <= 0) return;
+  const strong = attack.kind === "special";
+  const reach = attack.kind === "special" ? 178 : attack.kind === "heavy" ? 125 : 90;
+  const pulse = 0.82 + Math.sin(time * 0.022) * 0.18;
+  ctx.save();
+  ctx.globalAlpha = clamp(activePower * (strong ? 1 : 0.72), 0, 1);
+  ctx.globalCompositeOperation = "screen";
+  ctx.strokeStyle = fighter.def.accent;
+  ctx.fillStyle = fighter.def.accent;
+  ctx.shadowColor = fighter.def.accent;
+  ctx.shadowBlur = strong ? 26 : 13;
+  ctx.lineCap = "round";
+
+  if (fighter.def.vfx === "seismic") {
+    ctx.lineWidth = strong ? 9 : 5;
+    for (let i = 0; i < 5; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(12 + i * 19, -4);
+      ctx.lineTo(33 + i * 18, -18 - (i % 2) * 16);
+      ctx.lineTo(49 + i * 20, -3);
+      ctx.stroke();
+    }
+    ctx.beginPath(); ctx.ellipse(76, -5, reach * 0.7 * pulse, 24 * pulse, 0, 0, Math.PI * 2); ctx.stroke();
+  } else if (fighter.def.vfx === "paint") {
+    for (let i = 0; i < (strong ? 11 : 6); i += 1) {
+      const x = 44 + i * 13;
+      const y = -126 + Math.sin(i * 2.1 + time * 0.018) * (22 + i * 2);
+      ctx.globalAlpha = activePower * (0.45 + (i % 3) * 0.2);
+      ctx.beginPath(); ctx.arc(x, y, 3 + (i % 4) * 2.1, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (fighter.def.vfx === "voltage") {
+    ctx.lineWidth = strong ? 8 : 4;
+    for (let row = -1; row <= 1; row += 1) {
+      ctx.beginPath(); ctx.moveTo(24, -130 + row * 22);
+      for (let i = 1; i <= 6; i += 1) ctx.lineTo(24 + i * reach / 6, -130 + row * 22 + (i % 2 ? -12 : 12));
+      ctx.stroke();
+    }
+  } else if (fighter.def.vfx === "neon") {
+    ctx.lineWidth = strong ? 12 : 6;
+    ctx.beginPath(); ctx.arc(28, -128, reach * 0.78, -1.12, 1.1); ctx.stroke();
+    ctx.strokeStyle = fighter.def.color;
+    ctx.lineWidth *= 0.38;
+    ctx.beginPath(); ctx.arc(34, -128, reach * 0.66, -1.05, 1.03); ctx.stroke();
+  } else if (fighter.def.vfx === "steel") {
+    ctx.lineWidth = strong ? 8 : 4;
+    ctx.beginPath(); ctx.arc(reach * 0.72, -118, 34 * pulse, 0, Math.PI * 2); ctx.stroke();
+    for (let i = -2; i <= 2; i += 1) {
+      ctx.beginPath(); ctx.moveTo(38, -118 + i * 17); ctx.lineTo(reach + 24, -118 + i * 8); ctx.stroke();
+    }
+  } else if (fighter.def.vfx === "gilded") {
+    ctx.lineWidth = strong ? 16 : 8;
+    ctx.beginPath(); ctx.arc(20, -130, reach * 0.86, -1.15, 1.15); ctx.stroke();
+  } else if (fighter.def.vfx === "feedback") {
+    ctx.lineWidth = strong ? 8 : 4;
+    for (let i = 0; i < 4; i += 1) {
+      ctx.globalAlpha = activePower * (1 - i * 0.18);
+      ctx.beginPath(); ctx.ellipse(48 + i * 35, -128, 17 + i * 9, 49 + i * 8, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+  } else if (fighter.def.vfx === "bass") {
+    ctx.lineWidth = strong ? 10 : 5;
+    for (let i = 0; i < 4; i += 1) {
+      ctx.globalAlpha = activePower * (1 - i * 0.17);
+      ctx.beginPath(); ctx.arc(42, -125, 35 + i * 31, -0.9, 0.9); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 function drawFighter(fighter, time) {
   const jump = FLOOR - fighter.y;
-  const attackProgress = fighter.attacking ? fighter.attackTime / fighter.attacking.duration : 0;
-  const attackSwing = fighter.attacking ? Math.sin(clamp(attackProgress, 0, 1) * Math.PI) : 0;
-  const bob = fighter.grounded && !fighter.stun ? Math.sin(time * 0.007 + fighter.side * 2) * 3 : 0;
-  const sprite = fighterImages[fighter.def.id];
-  const sizeAdjust = {
-    deathblow: 1.07,
-    jez: .98,
-    alan: 1.02,
-    post: 1.06,
-    benny: 1.01,
-    donald: 1,
-    cyraxx: 1.01,
-    ali: .98,
-  }[fighter.def.id] || 1;
-  const renderHeight = 308 * sizeAdjust;
-  const renderWidth = sprite?.naturalHeight ? renderHeight * sprite.naturalWidth / sprite.naturalHeight : 190;
-  const attackKind = fighter.attacking?.kind;
-  const lunge = attackSwing * (attackKind === "special" ? 55 : attackKind === "heavy" ? 38 : 24);
-  const crouchScale = fighter.crouch ? .84 : 1;
-  const crouchDrop = fighter.crouch ? 25 : 0;
+  const attack = fighter.attacking;
+  const attackProgress = attack ? clamp(fighter.attackTime / attack.duration, 0, 1) : 0;
+  const attackSwing = attack ? Math.sin(attackProgress * Math.PI) : 0;
+  const startupPower = attack && fighter.attackTime < attack.active[0]
+    ? Math.sin((fighter.attackTime / attack.active[0]) * Math.PI) : 0;
+  const activePower = attack && fighter.attackTime >= attack.active[0] && fighter.attackTime <= attack.active[1]
+    ? 1 : attack ? Math.max(0, attackSwing * 0.42) : 0;
+  const moving = Math.abs(fighter.vx) > 22 && fighter.grounded && !attack;
+  const bob = fighter.grounded && !fighter.stun && !fighter.block
+    ? Math.sin((moving ? fighter.walkTime * 20 : fighter.animTime * 10) + fighter.side * 2) * (moving ? 1.8 : 2.7) : 0;
+  const atlas = fighterAtlases[fighter.def.id];
+  const frame = fighterAnimationFrame(fighter);
+  const sizeAdjust = { deathblow: 1.08, jez: 1, alan: 1.08, post: 1.05, benny: 1.01, donald: 1.01, cyraxx: 1.02, ali: 1 }[fighter.def.id] || 1;
+  const renderSize = 330 * sizeAdjust;
+  const attackKind = attack?.kind;
+  const lunge = attackSwing * (attackKind === "special" ? 68 : attackKind === "heavy" ? 46 : 29);
+  const crouchScale = fighter.crouch ? 0.88 : 1;
+  const crouchDrop = fighter.crouch ? 21 : 0;
 
   ctx.save();
   ctx.translate(fighter.x, fighter.y + bob);
-
-  ctx.fillStyle = "rgba(0,0,0,.56)";
+  ctx.fillStyle = "rgba(0,0,0,.58)";
   ctx.beginPath();
-  ctx.ellipse(0, jump + 5, renderWidth * .32, 16, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, jump + 5, renderSize * 0.24, 15, 0, 0, Math.PI * 2);
   ctx.fill();
 
   if (fighter.down) {
@@ -872,54 +1001,56 @@ function drawFighter(fighter, time) {
   }
 
   ctx.scale(fighter.facing, 1);
-  ctx.translate(lunge, crouchDrop - attackSwing * (attackKind === "special" ? 12 : 4));
-  ctx.rotate(-attackSwing * (attackKind === "heavy" ? .075 : .035));
-  ctx.scale(1 + attackSwing * .035, crouchScale);
+  ctx.translate(lunge - startupPower * 8, crouchDrop - attackSwing * (attackKind === "special" ? 13 : 5));
+  ctx.rotate(-attackSwing * (attackKind === "heavy" ? 0.07 : 0.025));
+  ctx.scale(1 + activePower * 0.045 - startupPower * 0.025, crouchScale + startupPower * 0.035 - activePower * 0.025);
 
   if (fighter.specialGlow > 0) {
-    const glow = ctx.createRadialGradient(0, -125, 18, 0, -125, 165);
+    const glow = ctx.createRadialGradient(0, -135, 16, 0, -135, 178);
     glow.addColorStop(0, `${fighter.def.accent}88`);
     glow.addColorStop(1, `${fighter.def.accent}00`);
     ctx.fillStyle = glow;
-    ctx.fillRect(-190, -315, 380, 335);
-    ctx.strokeStyle = `${fighter.def.accent}99`;
-    ctx.lineWidth = 3;
-    for (let i = 0; i < 3; i += 1) {
-      const radius = 55 + i * 28 + Math.sin(time * .012 + i) * 7;
-      ctx.beginPath();
-      ctx.arc(0, -128, radius, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+    ctx.fillRect(-205, -335, 410, 350);
   }
 
-  if (sprite?.complete && sprite.naturalWidth) {
+  drawAttackVfx(fighter, time, activePower);
+
+  if (atlas?.complete && atlas.naturalWidth) {
+    const trails = attack ? (attackKind === "special" ? 3 : activePower > 0.8 ? 2 : 0) : 0;
+    for (let index = trails; index >= 1; index -= 1) {
+      ctx.save();
+      ctx.translate(-index * (13 + activePower * 8), index * 1.5);
+      ctx.globalAlpha = 0.08 + (trails - index) * 0.045;
+      ctx.globalCompositeOperation = "screen";
+      ctx.filter = "saturate(1.65) brightness(1.35)";
+      ctx.shadowColor = fighter.def.accent;
+      ctx.shadowBlur = 22;
+      drawAtlasFrame(atlas, frame, renderSize);
+      ctx.restore();
+    }
+
     ctx.save();
-    ctx.shadowColor = fighter.specialGlow > 0 ? fighter.def.accent : "rgba(0,0,0,.88)";
-    ctx.shadowBlur = fighter.specialGlow > 0 ? 24 : 9;
+    ctx.shadowColor = fighter.specialGlow > 0 ? fighter.def.accent : "rgba(0,0,0,.9)";
+    ctx.shadowBlur = fighter.specialGlow > 0 ? 25 : 9;
     ctx.shadowOffsetY = 6;
-    if (fighter.hitFlash > 0) ctx.filter = "brightness(2.4) saturate(.25)";
-    else if (fighter.block) ctx.filter = "brightness(.82) saturate(.8)";
-    ctx.drawImage(sprite, -renderWidth * .5, -renderHeight, renderWidth, renderHeight);
+    if (fighter.hitFlash > 0) ctx.filter = "brightness(2.5) saturate(.28)";
+    else if (fighter.block) ctx.filter = "brightness(.82) saturate(.78)";
+    drawAtlasFrame(atlas, frame, renderSize);
     ctx.restore();
   } else {
     ctx.fillStyle = fighter.def.color;
     ctx.fillRect(-48, -205, 96, 205);
-    ctx.fillStyle = fighter.def.accent;
-    ctx.beginPath();
-    ctx.arc(0, -220, 28, 0, Math.PI * 2);
-    ctx.fill();
   }
 
   if (fighter.block) {
-    ctx.strokeStyle = `${fighter.def.accent}cc`;
+    ctx.strokeStyle = `${fighter.def.accent}dd`;
     ctx.shadowColor = fighter.def.accent;
-    ctx.shadowBlur = 16;
+    ctx.shadowBlur = 17;
     ctx.lineWidth = 8;
     ctx.beginPath();
-    ctx.arc(32, -135, 83, -1.18, 1.18);
+    ctx.arc(35, -139, 85, -1.18, 1.18);
     ctx.stroke();
   }
-
   ctx.restore();
 
   if (fighter.stun > 0.4 && !fighter.down) {
@@ -1032,7 +1163,7 @@ function drawParticles() {
   }
   ctx.globalAlpha = 1;
   for (const effect of state.effects) {
-    const alpha = clamp(effect.life / 0.9, 0, 1);
+    const alpha = clamp(effect.life / (effect.max || 0.9), 0, 1);
     ctx.save();
     ctx.translate(effect.x, effect.y);
     ctx.globalAlpha = alpha;
@@ -1045,6 +1176,39 @@ function drawParticles() {
       ctx.moveTo(-170, 110);
       ctx.lineTo(160, -150);
       ctx.stroke();
+    } else if (effect.kind === "guard") {
+      const radius = (1 - alpha) * 64 + 42;
+      ctx.lineWidth = 9 * alpha;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, -1.45, 1.45);
+      ctx.stroke();
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius + 15, -1.18, 1.18);
+      ctx.stroke();
+    } else if (effect.kind === "hit") {
+      const radius = (1 - alpha) * (effect.attackKind === "special" ? 120 : 68) + 18;
+      ctx.lineWidth = (effect.attackKind === "special" ? 12 : 7) * alpha;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      const rays = effect.attackKind === "special" ? 12 : 8;
+      for (let i = 0; i < rays; i += 1) {
+        const angle = i * Math.PI * 2 / rays + (effect.style === "feedback" ? 0.18 : 0);
+        const start = radius * 0.45;
+        const end = radius * (effect.style === "seismic" && i % 2 ? 1.8 : 1.3);
+        ctx.lineWidth = i % 2 ? 3 : 6;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * start, Math.sin(angle) * start);
+        ctx.lineTo(Math.cos(angle) * end, Math.sin(angle) * end);
+        ctx.stroke();
+      }
+      if (["bass", "feedback", "voltage"].includes(effect.style)) {
+        ctx.globalAlpha *= 0.65;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, radius * 1.45, radius * 0.55, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     } else {
       const radius = (1 - alpha) * 165 + 25;
       ctx.lineWidth = 11 * alpha;
@@ -1094,9 +1258,46 @@ function musicBaseVolume() {
   }[state.screen] || 0.25;
 }
 
+function updateMusicUi() {
+  const select = $("#musicSelect");
+  if (select) select.value = state.musicChoice;
+  const button = $("#trackButton");
+  if (button) button.textContent = `♫ ${state.musicChoice === "auto" ? "AUTO · " : ""}${musicTracks[currentTrackIndex].title}`;
+}
+
+function setTrack(index, restart = true) {
+  const next = (index + musicTracks.length) % musicTracks.length;
+  const changed = next !== currentTrackIndex;
+  currentTrackIndex = next;
+  if (changed) {
+    fightMusic.pause();
+    fightMusic.src = musicTracks[currentTrackIndex].src;
+    fightMusic.load();
+  } else if (restart) {
+    fightMusic.currentTime = 0;
+  }
+  updateMusicUi();
+  syncMusic();
+}
+
+function advanceTrack() {
+  setTrack(currentTrackIndex + 1, true);
+}
+
+function chooseMusic(choice) {
+  state.musicChoice = choice;
+  localStorage.setItem("final-blow-music-choice", choice);
+  if (choice !== "auto") setTrack(Number(choice), true);
+  else {
+    updateMusicUi();
+    syncMusic();
+  }
+}
+
 function syncMusic() {
   if (!state.audioUnlocked) return;
   const enabled = Boolean($("#musicToggle")?.checked);
+  fightMusic.loop = state.musicChoice !== "auto";
   fightMusic.volume = clamp(musicBaseVolume() * state.musicDuck, 0, 1);
   if (!enabled || document.hidden) {
     fightMusic.pause();
@@ -1188,6 +1389,32 @@ function back(target) {
   else if (target === "select") showScreen("select");
 }
 
+function isPhoneViewport() {
+  return navigator.maxTouchPoints > 0
+    && window.matchMedia("(pointer: coarse)").matches
+    && Math.min(window.innerWidth, window.innerHeight) <= 680;
+}
+
+function syncOrientationGate() {
+  const phone = isPhoneViewport();
+  const portrait = window.innerHeight > window.innerWidth;
+  document.body.classList.toggle("orientation-blocked", phone && portrait);
+  document.body.classList.toggle("mobile-landscape", phone && !portrait);
+}
+
+function lockLandscape() {
+  if (!screen.orientation?.lock) return;
+  screen.orientation.lock("landscape").catch(() => {});
+}
+
+function enterImmersiveMode() {
+  if (!isPhoneViewport()) return;
+  const app = $("#app");
+  const request = app.requestFullscreen?.({ navigationUI: "hide" }) || app.webkitRequestFullscreen?.();
+  if (request?.then) request.then(lockLandscape).catch(() => {});
+  else lockLandscape();
+}
+
 function titleKeyboard(event) {
   if (state.screen === "title" && (event.code === "Enter" || event.code === "Space")) startSelect("arcade");
   if (event.code === "Escape") {
@@ -1249,6 +1476,21 @@ $("#musicToggle").addEventListener("change", () => {
   unlockAudio();
   syncMusic();
 });
+$("#musicSelect").addEventListener("change", (event) => {
+  unlockAudio();
+  chooseMusic(event.target.value);
+});
+$("#trackButton").addEventListener("click", () => {
+  unlockAudio();
+  advanceTrack();
+});
+fightMusic.addEventListener("ended", () => {
+  if (state.musicChoice === "auto") advanceTrack();
+  else {
+    fightMusic.currentTime = 0;
+    syncMusic();
+  }
+});
 $("#soundToggle").addEventListener("change", () => {
   if ($("#soundToggle").checked) unlockAudio();
   else stopSfx();
@@ -1261,6 +1503,13 @@ $("#rematchButton").addEventListener("click", () => startMatch(true));
 $("#reselectButton").addEventListener("click", () => startSelect(state.mode));
 $$("[data-back]").forEach((button) => button.addEventListener("click", () => back(button.dataset.back)));
 $("#homeLink").addEventListener("click", (event) => { event.preventDefault(); showScreen("title"); });
+$("#fullscreenButton").addEventListener("click", () => {
+  unlockAudio();
+  enterImmersiveMode();
+});
+window.addEventListener("resize", syncOrientationGate);
+window.addEventListener("orientationchange", syncOrientationGate);
+document.addEventListener("fullscreenchange", syncOrientationGate);
 
 $$("[data-touch]").forEach((button) => {
   const action = button.dataset.touch;
@@ -1283,6 +1532,8 @@ $$("[data-touch]").forEach((button) => {
 });
 
 setupRoster();
+updateMusicUi();
+syncOrientationGate();
 showScreen("title");
 updateStageUI();
 requestAnimationFrame(loop);
