@@ -110,6 +110,212 @@ const roster = [
   },
 ];
 
+// Each Final Blow is staged as a short, character-specific arcade cinematic.
+// Coordinates are local to the victim: negative X begins behind the attacker,
+// Y is height above the floor, and frame numbers address the 4x4 atlas grammar.
+const finisherScripts = {
+  deathblow: {
+    combo: "FAULTLINE FIVE",
+    duration: 5.35,
+    keys: [
+      { t: 0, ax: -300, ay: 0, af: 0, vx: 0, vy: 0, vf: 15, zoom: 1.02 },
+      { t: .42, ax: -205, ay: 0, af: 6, vx: 0, vy: 0, vf: 15, zoom: 1.06 },
+      { t: .68, ax: -58, ay: 0, af: 10, vx: 10, vy: 0, vf: 15, zoom: 1.12 },
+      { t: 1.12, ax: -42, ay: 0, af: 13, vx: 28, vy: 38, vf: 15, vr: -.08, zoom: 1.15 },
+      { t: 1.48, ax: -10, ay: 0, af: 14, vx: 58, vy: 176, vf: 15, vr: -.28, zoom: 1.22 },
+      { t: 1.9, ax: -98, ay: 88, af: 13, vx: 62, vy: 225, vf: 15, vr: -.42, zoom: 1.18 },
+      { t: 2.5, ax: -8, ay: 24, af: 14, vx: 30, vy: 0, vf: 15, vr: .62, zoom: 1.28 },
+      { t: 3.3, ax: -130, ay: 0, af: 12, vx: 30, vy: 0, vf: 15, vr: .62, zoom: 1.12 },
+      { t: 4.02, ax: -12, ay: 0, af: 14, vx: 48, vy: 0, vf: 15, vr: 1.18, zoom: 1.34 },
+      { t: 5.35, ax: -118, ay: 0, af: 0, vx: 72, vy: 0, vf: 15, vr: 1.35, zoom: 1.08 },
+    ],
+    impacts: [
+      { t: .68, label: "RAM", sound: "heavy", power: .55 },
+      { t: 1.12, label: "RISING IRON", sound: "hit", power: .7 },
+      { t: 1.48, label: "SKYBREAKER", sound: "special", power: .9 },
+      { t: 2.5, label: "GROUND SLAM", sound: "heavy", power: 1.05 },
+      { t: 4.02, label: "FAULTLINE", sound: "final", power: 1.45, final: true },
+    ],
+  },
+  jez: {
+    combo: "NEON SEVEN-PALM",
+    duration: 5.25,
+    keys: [
+      { t: 0, ax: -305, ay: 0, af: 0, vx: 0, vy: 0, vf: 15, zoom: 1.02 },
+      { t: .38, ax: -150, ay: 0, af: 7, vx: 0, vy: 0, vf: 15, zoom: 1.07 },
+      { t: .58, ax: -42, ay: 0, af: 9, vx: 4, vy: 0, vf: 15, zoom: 1.12 },
+      { t: .86, ax: 48, ay: 0, af: 10, vx: -4, vy: 8, vf: 15, vr: .05, zoom: 1.15 },
+      { t: 1.13, ax: -50, ay: 0, af: 9, vx: 6, vy: 16, vf: 15, vr: -.08, zoom: 1.17 },
+      { t: 1.42, ax: 42, ay: 0, af: 10, vx: -8, vy: 28, vf: 15, vr: .12, zoom: 1.2 },
+      { t: 1.82, ax: -58, ay: 0, af: 13, vx: 22, vy: 115, vf: 15, vr: -.2, zoom: 1.2 },
+      { t: 2.25, ax: -5, ay: 155, af: 14, vx: 28, vy: 188, vf: 15, vr: -.5, zoom: 1.23 },
+      { t: 2.8, ax: 65, ay: 50, af: 13, vx: 18, vy: 60, vf: 15, vr: .72, zoom: 1.17 },
+      { t: 3.4, ax: -125, ay: 0, af: 12, vx: 18, vy: 0, vf: 15, vr: .72, zoom: 1.12 },
+      { t: 4.0, ax: -16, ay: 0, af: 14, vx: 42, vy: 0, vf: 15, vr: 1.18, zoom: 1.33 },
+      { t: 5.25, ax: -142, ay: 0, af: 0, vx: 64, vy: 0, vf: 15, vr: 1.35, zoom: 1.08 },
+    ],
+    impacts: [
+      { t: .58, label: "PALM ONE", sound: "light", power: .38 },
+      { t: .86, label: "PHASE STEP", sound: "hit", power: .48 },
+      { t: 1.13, label: "NEON THREE", sound: "light", power: .5 },
+      { t: 1.42, label: "SIGN FLASH", sound: "hit", power: .62 },
+      { t: 1.82, label: "LIFT", sound: "heavy", power: .8 },
+      { t: 2.25, label: "SKY PALM", sound: "special", power: .92 },
+      { t: 4.0, label: "NEON GUILLOTINE", sound: "final", power: 1.42, final: true },
+    ],
+  },
+  alan: {
+    combo: "SOUTH STREET SIX",
+    duration: 5.3,
+    keys: [
+      { t: 0, ax: -285, ay: 0, af: 0, vx: 0, vy: 0, vf: 15, zoom: 1.02 },
+      { t: .42, ax: -112, ay: 0, af: 6, vx: 0, vy: 0, vf: 15, zoom: 1.08 },
+      { t: .66, ax: -42, ay: 0, af: 9, vx: 8, vy: 0, vf: 15, zoom: 1.13 },
+      { t: .96, ax: -48, ay: 0, af: 10, vx: 16, vy: 4, vf: 15, vr: -.05, zoom: 1.14 },
+      { t: 1.28, ax: -32, ay: 0, af: 13, vx: 35, vy: 60, vf: 15, vr: -.14, zoom: 1.18 },
+      { t: 1.68, ax: -20, ay: 0, af: 14, vx: 58, vy: 188, vf: 15, vr: -.46, zoom: 1.24 },
+      { t: 2.18, ax: -72, ay: 145, af: 13, vx: 55, vy: 220, vf: 15, vr: -.55, zoom: 1.2 },
+      { t: 2.72, ax: 4, ay: 25, af: 14, vx: 24, vy: 0, vf: 15, vr: .78, zoom: 1.3 },
+      { t: 3.42, ax: -112, ay: 0, af: 8, vx: 24, vy: 0, vf: 15, vr: .78, zoom: 1.12 },
+      { t: 4.05, ax: -8, ay: 0, af: 13, vx: 52, vy: 0, vf: 15, vr: 1.22, zoom: 1.35 },
+      { t: 5.3, ax: -130, ay: 0, af: 0, vx: 70, vy: 0, vf: 15, vr: 1.38, zoom: 1.08 },
+    ],
+    impacts: [
+      { t: .66, label: "LEFT HOOK", sound: "light", power: .42 },
+      { t: .96, label: "RIGHT CROSS", sound: "hit", power: .55 },
+      { t: 1.28, label: "BODY BREAK", sound: "heavy", power: .72 },
+      { t: 1.68, label: "UPPERCUT", sound: "special", power: .95 },
+      { t: 2.72, label: "PILEDRIVER", sound: "heavy", power: 1.08 },
+      { t: 4.05, label: "HEAVY HAND", sound: "final", power: 1.46, final: true },
+    ],
+  },
+  post: {
+    combo: "FULL COVERAGE",
+    duration: 5.25,
+    keys: [
+      { t: 0, ax: -315, ay: 0, af: 0, vx: 0, vy: 0, vf: 15, zoom: 1.02 },
+      { t: .5, ax: -205, ay: 0, af: 8, vx: 0, vy: 0, vf: 15, zoom: 1.06 },
+      { t: .82, ax: -155, ay: 0, af: 10, vx: 8, vy: 6, vf: 15, zoom: 1.12 },
+      { t: 1.18, ax: -55, ay: 0, af: 9, vx: 18, vy: 12, vf: 15, vr: -.08, zoom: 1.15 },
+      { t: 1.58, ax: 48, ay: 0, af: 10, vx: -8, vy: 32, vf: 15, vr: .14, zoom: 1.18 },
+      { t: 1.96, ax: -35, ay: 0, af: 13, vx: 30, vy: 125, vf: 15, vr: -.28, zoom: 1.2 },
+      { t: 2.42, ax: -12, ay: 128, af: 14, vx: 38, vy: 185, vf: 15, vr: -.5, zoom: 1.22 },
+      { t: 2.92, ax: -85, ay: 0, af: 12, vx: 24, vy: 0, vf: 15, vr: .72, zoom: 1.14 },
+      { t: 3.48, ax: -155, ay: 0, af: 13, vx: 24, vy: 0, vf: 15, vr: .72, zoom: 1.12 },
+      { t: 4.0, ax: -28, ay: 0, af: 14, vx: 45, vy: 0, vf: 15, vr: 1.18, zoom: 1.34 },
+      { t: 5.25, ax: -155, ay: 0, af: 0, vx: 72, vy: 0, vf: 15, vr: 1.36, zoom: 1.08 },
+    ],
+    impacts: [
+      { t: .5, label: "PRIMER", sound: "special", power: .45 },
+      { t: .82, label: "SPRAY BURST", sound: "hit", power: .55 },
+      { t: 1.18, label: "ROLLER ONE", sound: "light", power: .55 },
+      { t: 1.58, label: "ROLLER TWO", sound: "heavy", power: .7 },
+      { t: 1.96, label: "PAINT LIFT", sound: "special", power: .88 },
+      { t: 4.0, label: "FULL COVERAGE", sound: "final", power: 1.45, final: true },
+    ],
+  },
+  benny: {
+    combo: "CIRCUIT BREAKER",
+    duration: 5.25,
+    keys: [
+      { t: 0, ax: -300, ay: 0, af: 0, vx: 0, vy: 0, vf: 15, zoom: 1.02 },
+      { t: .4, ax: -145, ay: 0, af: 7, vx: 0, vy: 0, vf: 15, zoom: 1.07 },
+      { t: .62, ax: -44, ay: 0, af: 9, vx: 6, vy: 0, vf: 15, zoom: 1.12 },
+      { t: .88, ax: 42, ay: 0, af: 10, vx: -4, vy: 10, vf: 15, vr: .05, zoom: 1.15 },
+      { t: 1.14, ax: -46, ay: 0, af: 9, vx: 8, vy: 22, vf: 15, vr: -.09, zoom: 1.17 },
+      { t: 1.45, ax: -28, ay: 0, af: 13, vx: 32, vy: 92, vf: 15, vr: -.2, zoom: 1.2 },
+      { t: 1.88, ax: -8, ay: 100, af: 14, vx: 50, vy: 195, vf: 15, vr: -.48, zoom: 1.24 },
+      { t: 2.4, ax: 55, ay: 65, af: 13, vx: 32, vy: 90, vf: 15, vr: .58, zoom: 1.2 },
+      { t: 3.08, ax: -145, ay: 0, af: 12, vx: 24, vy: 0, vf: 15, vr: .72, zoom: 1.12 },
+      { t: 3.96, ax: -22, ay: 0, af: 14, vx: 48, vy: 0, vf: 15, vr: 1.18, zoom: 1.34 },
+      { t: 5.25, ax: -145, ay: 0, af: 0, vx: 72, vy: 0, vf: 15, vr: 1.36, zoom: 1.08 },
+    ],
+    impacts: [
+      { t: .62, label: "HOT WIRE", sound: "light", power: .4 },
+      { t: .88, label: "CROSS CURRENT", sound: "hit", power: .52 },
+      { t: 1.14, label: "THREE-PHASE", sound: "light", power: .58 },
+      { t: 1.45, label: "VOLTAGE LIFT", sound: "heavy", power: .82 },
+      { t: 1.88, label: "ARC FLASH", sound: "special", power: 1 },
+      { t: 3.96, label: "CIRCUIT BREAKER", sound: "final", power: 1.46, final: true },
+    ],
+  },
+  donald: {
+    combo: "GOLDEN BACK NINE",
+    duration: 5.35,
+    keys: [
+      { t: 0, ax: -320, ay: 0, af: 0, vx: 0, vy: 0, vf: 15, zoom: 1.02 },
+      { t: .48, ax: -185, ay: 0, af: 6, vx: 0, vy: 0, vf: 15, zoom: 1.07 },
+      { t: .76, ax: -72, ay: 0, af: 9, vx: 10, vy: 0, vf: 15, zoom: 1.12 },
+      { t: 1.08, ax: -58, ay: 0, af: 10, vx: 20, vy: 22, vf: 15, vr: -.08, zoom: 1.15 },
+      { t: 1.48, ax: -115, ay: 0, af: 13, vx: 20, vy: 22, vf: 15, vr: -.08, zoom: 1.12 },
+      { t: 1.86, ax: -28, ay: 0, af: 14, vx: 58, vy: 178, vf: 15, vr: -.45, zoom: 1.25 },
+      { t: 2.32, ax: -80, ay: 112, af: 13, vx: 68, vy: 220, vf: 15, vr: -.58, zoom: 1.2 },
+      { t: 2.78, ax: 18, ay: 52, af: 14, vx: 32, vy: 0, vf: 15, vr: .72, zoom: 1.3 },
+      { t: 3.38, ax: -180, ay: 0, af: 13, vx: 32, vy: 0, vf: 15, vr: .72, zoom: 1.12 },
+      { t: 4.08, ax: -30, ay: 0, af: 14, vx: 65, vy: 0, vf: 15, vr: 1.2, zoom: 1.36 },
+      { t: 5.35, ax: -180, ay: 0, af: 0, vx: 90, vy: 0, vf: 15, vr: 1.38, zoom: 1.08 },
+    ],
+    impacts: [
+      { t: .76, label: "TEE SHOT", sound: "light", power: .42 },
+      { t: 1.08, label: "CHIP SHOT", sound: "hit", power: .58 },
+      { t: 1.86, label: "GOLDEN DRIVE", sound: "special", power: 1 },
+      { t: 2.78, label: "CLUBHOUSE DROP", sound: "heavy", power: 1.08 },
+      { t: 4.08, label: "YOU'RE FIRED", sound: "final", power: 1.5, final: true },
+    ],
+  },
+  cyraxx: {
+    combo: "FEEDBACK MELTDOWN",
+    duration: 5.3,
+    keys: [
+      { t: 0, ax: -320, ay: 0, af: 0, vx: 0, vy: 0, vf: 15, zoom: 1.02 },
+      { t: .46, ax: -195, ay: 0, af: 7, vx: 0, vy: 0, vf: 15, zoom: 1.06 },
+      { t: .72, ax: -90, ay: 0, af: 9, vx: 8, vy: 8, vf: 15, zoom: 1.12 },
+      { t: 1.02, ax: 45, ay: 0, af: 10, vx: -6, vy: 18, vf: 15, vr: .08, zoom: 1.15 },
+      { t: 1.34, ax: -48, ay: 0, af: 13, vx: 22, vy: 80, vf: 15, vr: -.18, zoom: 1.2 },
+      { t: 1.75, ax: -15, ay: 95, af: 14, vx: 50, vy: 185, vf: 15, vr: -.45, zoom: 1.24 },
+      { t: 2.2, ax: 70, ay: 80, af: 13, vx: 36, vy: 108, vf: 15, vr: .58, zoom: 1.2 },
+      { t: 2.72, ax: -90, ay: 0, af: 12, vx: 26, vy: 0, vf: 15, vr: .7, zoom: 1.14 },
+      { t: 3.3, ax: -165, ay: 0, af: 13, vx: 26, vy: 0, vf: 15, vr: .7, zoom: 1.12 },
+      { t: 4.0, ax: -25, ay: 0, af: 14, vx: 54, vy: 0, vf: 15, vr: 1.2, zoom: 1.35 },
+      { t: 5.3, ax: -165, ay: 0, af: 0, vx: 78, vy: 0, vf: 15, vr: 1.38, zoom: 1.08 },
+    ],
+    impacts: [
+      { t: .72, label: "MIC CHECK", sound: "light", power: .4 },
+      { t: 1.02, label: "STAFF SWEEP", sound: "hit", power: .56 },
+      { t: 1.34, label: "GAIN SPIKE", sound: "heavy", power: .78 },
+      { t: 1.75, label: "SONIC LIFT", sound: "special", power: 1 },
+      { t: 2.2, label: "BUFFER DROP", sound: "heavy", power: 1.05 },
+      { t: 4.0, label: "FEEDBACK BLACKOUT", sound: "final", power: 1.48, final: true },
+    ],
+  },
+  ali: {
+    combo: "WEST STAINES MASSIVE",
+    duration: 5.3,
+    keys: [
+      { t: 0, ax: -310, ay: 0, af: 0, vx: 0, vy: 0, vf: 15, zoom: 1.02 },
+      { t: .42, ax: -175, ay: 0, af: 6, vx: 0, vy: 0, vf: 15, zoom: 1.07 },
+      { t: .66, ax: -62, ay: 0, af: 9, vx: 8, vy: 5, vf: 15, zoom: 1.12 },
+      { t: .94, ax: 45, ay: 0, af: 10, vx: -5, vy: 14, vf: 15, vr: .06, zoom: 1.15 },
+      { t: 1.22, ax: -46, ay: 0, af: 9, vx: 12, vy: 30, vf: 15, vr: -.1, zoom: 1.17 },
+      { t: 1.55, ax: -32, ay: 0, af: 13, vx: 34, vy: 105, vf: 15, vr: -.24, zoom: 1.2 },
+      { t: 1.95, ax: -8, ay: 125, af: 14, vx: 54, vy: 195, vf: 15, vr: -.5, zoom: 1.25 },
+      { t: 2.42, ax: 62, ay: 75, af: 13, vx: 34, vy: 92, vf: 15, vr: .58, zoom: 1.2 },
+      { t: 3.05, ax: -150, ay: 0, af: 12, vx: 24, vy: 0, vf: 15, vr: .72, zoom: 1.12 },
+      { t: 3.98, ax: -20, ay: 0, af: 14, vx: 52, vy: 0, vf: 15, vr: 1.2, zoom: 1.35 },
+      { t: 5.3, ax: -150, ay: 0, af: 0, vx: 78, vy: 0, vf: 15, vr: 1.38, zoom: 1.08 },
+    ],
+    impacts: [
+      { t: .66, label: "MIC ONE", sound: "light", power: .4 },
+      { t: .94, label: "MIC TWO", sound: "hit", power: .52 },
+      { t: 1.22, label: "BOOYAKASHA", sound: "light", power: .58 },
+      { t: 1.55, label: "BASS LIFT", sound: "heavy", power: .82 },
+      { t: 1.95, label: "MASSIVE AIR", sound: "special", power: 1 },
+      { t: 2.42, label: "MIC DROP", sound: "heavy", power: 1.08 },
+      { t: 3.98, label: "WEST STAINES MASSIVE", sound: "final", power: 1.5, final: true },
+    ],
+  },
+};
+
 const stages = {
   kensington: {
     name: "KENSINGTON & ALLEGHENY",
@@ -220,6 +426,8 @@ const state = {
   phaseTime: 0,
   finishWinner: -1,
   finisherType: 0,
+  finisher: null,
+  cinematicZoom: 1,
   shake: 0,
   flash: 0,
   hitstop: 0,
@@ -228,6 +436,8 @@ const state = {
   audioUnlocked: false,
   musicDuck: 1,
   musicChoice: localStorage.getItem("final-blow-music-choice") || "auto",
+  musicVolume: clamp(Number(localStorage.getItem("final-blow-music-volume") ?? "1"), 0, 1),
+  sfxVolume: clamp(Number(localStorage.getItem("final-blow-sfx-volume") ?? "1"), 0, 1),
 };
 
 function makeFighter(index, side) {
@@ -255,6 +465,9 @@ function makeFighter(index, side) {
     specialGlow: 0,
     animTime: Math.random() * 2,
     walkTime: Math.random(),
+    cinematicFrame: null,
+    cinematicRotation: 0,
+    cinematicScale: 1,
     down: false,
     aiClock: 0,
   };
@@ -371,6 +584,10 @@ function startMatch(resetSet = true) {
   state.hitstop = 0;
   state.finishWinner = -1;
   state.finisherType = 0;
+  state.finisher = null;
+  state.cinematicZoom = 1;
+  $(".touch-final").classList.remove("ready");
+  $("#touchControls").classList.remove("cinematic");
   commandHistory[0].length = 0;
   commandHistory[1].length = 0;
   updateHud();
@@ -394,6 +611,10 @@ function resetRound() {
   state.phaseTime = 2.1;
   state.hitstop = 0;
   state.finishWinner = -1;
+  state.finisher = null;
+  state.cinematicZoom = 1;
+  $(".touch-final").classList.remove("ready");
+  $("#touchControls").classList.remove("cinematic");
   commandHistory[0].length = 0;
   commandHistory[1].length = 0;
   updateHud();
@@ -415,15 +636,16 @@ function announce(main, sub = "", duration = 1) {
 function finishRound(winner, type = -1) {
   if (state.phase === "roundover" || state.phase === "result") return;
   state.phase = "roundover";
-  state.phaseTime = type >= 0 ? 3.4 : 2.4;
   state.rounds[winner] += 1;
   state.finisherType = type;
   const winDef = state.fighters[winner].def;
   if (type >= 0) {
-    duckMusic(0.12, 2900);
-    announce("FINAL BLOW", winDef.finishers[type], 2.35);
-    performFinisher(winner, type);
+    const duration = performFinisher(winner, type);
+    state.phaseTime = duration;
+    duckMusic(0.1, duration * 1000);
+    announce("FINAL BLOW", `${winDef.finishers[type]} · ${finisherScripts[winDef.id].combo}`, 2.45);
   } else {
+    state.phaseTime = 2.4;
     duckMusic(0.28, 1700);
     announce(`${winDef.name} WINS`, "KNOCKOUT", 1.65);
     sound("ko");
@@ -434,31 +656,146 @@ function finishRound(winner, type = -1) {
 function performFinisher(winner, type) {
   const attacker = state.fighters[winner];
   const victim = state.fighters[1 - winner];
-  attacker.specialGlow = 2.4;
-  victim.down = true;
-  state.shake = 1.2;
-  state.flash = $("#flashToggle").checked ? 0.32 : 0;
-  const particleCount = $("#goreToggle").checked ? 78 : 44;
-  for (let i = 0; i < particleCount; i += 1) {
+  const script = finisherScripts[attacker.def.id];
+  const direction = attacker.x <= victim.x ? 1 : -1;
+  const anchor = clamp(victim.x, 390, W - 390);
+  attacker.attacking = null;
+  attacker.vx = 0;
+  attacker.vy = 0;
+  attacker.down = false;
+  victim.vx = 0;
+  victim.vy = 0;
+  victim.down = false;
+  state.finisher = {
+    winner,
+    type,
+    script,
+    direction,
+    anchor,
+    elapsed: 0,
+    impactIndex: 0,
+    beatLabel: script.combo,
+    beatLife: .8,
+  };
+  state.cinematicZoom = 1.02;
+  state.shake = .16;
+  $(".touch-final").classList.remove("ready");
+  $("#touchControls").classList.add("cinematic");
+  sound("special");
+  return script.duration + .55;
+}
+
+function sampleFinisher(keys, elapsed) {
+  let from = keys[0];
+  let to = keys.at(-1);
+  for (let index = 0; index < keys.length - 1; index += 1) {
+    if (elapsed >= keys[index].t && elapsed <= keys[index + 1].t) {
+      from = keys[index];
+      to = keys[index + 1];
+      break;
+    }
+  }
+  const span = Math.max(.001, to.t - from.t);
+  const linear = clamp((elapsed - from.t) / span, 0, 1);
+  const eased = linear * linear * (3 - 2 * linear);
+  const mix = (field, fallback = 0) => lerp(from[field] ?? fallback, to[field] ?? from[field] ?? fallback, eased);
+  return {
+    ax: mix("ax"), ay: mix("ay"), vx: mix("vx"), vy: mix("vy"),
+    ar: mix("ar"), vr: mix("vr"), zoom: mix("zoom", 1.08),
+    af: linear < .5 ? from.af : to.af,
+    vf: linear < .5 ? from.vf : to.vf,
+  };
+}
+
+function triggerFinisherImpact(finisher, impact) {
+  const attacker = state.fighters[finisher.winner];
+  const victim = state.fighters[1 - finisher.winner];
+  const finalImpact = Boolean(impact.final);
+  const pointX = victim.x - finisher.direction * 12;
+  const pointY = victim.y - (finalImpact ? 108 : 125);
+  const gore = $("#goreToggle").checked;
+  const count = Math.round((finalImpact ? 52 : 12) * impact.power * (gore ? 1.35 : 1));
+
+  victim.hitFlash = finalImpact ? .22 : .11;
+  attacker.specialGlow = finalImpact ? 1.1 : .45;
+  state.hitstop = Math.max(state.hitstop, finalImpact ? .16 : .045 + impact.power * .028);
+  state.shake = Math.max(state.shake, finalImpact ? 1.1 : .16 + impact.power * .22);
+  if (finalImpact && $("#flashToggle").checked) state.flash = .34;
+  finisher.beatLabel = impact.label;
+  finisher.beatLife = finalImpact ? 1.05 : .48;
+
+  for (let index = 0; index < count; index += 1) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = 130 + Math.random() * 620;
+    const speed = 100 + Math.random() * (finalImpact ? 670 : 330) * impact.power;
+    const splatter = finalImpact && gore && Math.random() > .34;
     state.particles.push({
-      x: victim.x,
-      y: victim.y - 105,
+      x: pointX,
+      y: pointY,
       vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed - 130,
-      life: 0.55 + Math.random() * 1.15,
-      max: 1.7,
-      size: 2 + Math.random() * 8,
-      color: $("#goreToggle").checked ? (Math.random() > 0.22 ? "#d90b19" : attacker.def.accent) : attacker.def.accent,
+      vy: Math.sin(angle) * speed - (finalImpact ? 150 : 35),
+      life: (finalImpact ? .65 : .22) + Math.random() * (finalImpact ? 1.15 : .42),
+      max: finalImpact ? 1.8 : .64,
+      size: 2 + Math.random() * (finalImpact ? 8 : 5),
+      color: splatter ? "#d90b19" : Math.random() > .38 ? attacker.def.accent : attacker.def.color,
     });
   }
-  state.effects.push({ kind: type === 0 ? "slash" : "burst", x: victim.x, y: victim.y - 105, life: 0.9, color: attacker.def.accent });
-  sound("final");
+
+  state.effects.push({
+    kind: "finisherImpact",
+    style: attacker.def.vfx,
+    variant: finisher.type,
+    final: finalImpact,
+    power: impact.power,
+    direction: finisher.direction,
+    x: pointX,
+    y: pointY,
+    life: finalImpact ? 1.2 : .55,
+    max: finalImpact ? 1.2 : .55,
+    color: attacker.def.accent,
+    secondary: attacker.def.color,
+  });
+  sound(impact.sound);
+}
+
+function updateFinisher(dt) {
+  const finisher = state.finisher;
+  if (!finisher) return;
+  const attacker = state.fighters[finisher.winner];
+  const victim = state.fighters[1 - finisher.winner];
+  finisher.elapsed = Math.min(finisher.script.duration, finisher.elapsed + dt);
+  finisher.beatLife = Math.max(0, finisher.beatLife - dt);
+  const pose = sampleFinisher(finisher.script.keys, finisher.elapsed);
+
+  attacker.x = finisher.anchor + finisher.direction * pose.ax;
+  attacker.y = FLOOR - pose.ay;
+  victim.x = finisher.anchor + finisher.direction * pose.vx;
+  victim.y = FLOOR - pose.vy;
+  attacker.facing = victim.x >= attacker.x ? 1 : -1;
+  victim.facing = -attacker.facing;
+  attacker.grounded = pose.ay < 2;
+  victim.grounded = pose.vy < 2;
+  attacker.cinematicFrame = pose.af;
+  victim.cinematicFrame = pose.vf;
+  attacker.cinematicRotation = pose.ar * finisher.direction;
+  victim.cinematicRotation = pose.vr * finisher.direction;
+  attacker.specialGlow = Math.max(attacker.specialGlow, .28 + Math.sin(finisher.elapsed * 9) * .08);
+  attacker.block = false;
+  victim.block = false;
+  attacker.crouch = false;
+  victim.crouch = false;
+  state.cinematicZoom = pose.zoom;
+
+  while (finisher.impactIndex < finisher.script.impacts.length
+    && finisher.script.impacts[finisher.impactIndex].t <= finisher.elapsed) {
+    triggerFinisherImpact(finisher, finisher.script.impacts[finisher.impactIndex]);
+    finisher.impactIndex += 1;
+  }
 }
 
 function showResult(winner) {
   state.phase = "result";
+  state.finisher = null;
+  state.cinematicZoom = 1;
   const def = state.fighters[winner].def;
   $("#resultTitle").textContent = `${def.name} WINS`;
   $("#resultFinisher").textContent = state.finisherType >= 0 ? def.finishers[state.finisherType] : "KNOCKOUT";
@@ -688,7 +1025,8 @@ function hit(attacker, victim, attack) {
     attacker.attacking = null;
     attacker.meter = 100;
     duckMusic(0.34, 1900);
-    announce("FINISH THEM", "↓ → HEAVY  /  ← ↓ → SPECIAL", 2.2);
+    announce("FINISH THEM", "PRESS FB  /  ↓ → HEAVY  /  ← ↓ → SPECIAL", 2.2);
+    $(".touch-final").classList.add("ready");
     sound("finish");
   }
 }
@@ -735,7 +1073,8 @@ function updateGame(dt) {
 
   updateFighter(state.fighters[0], state.fighters[1], input0, dt);
   updateFighter(state.fighters[1], state.fighters[0], input1, dt);
-  separateFighters();
+  if (state.finisher) updateFinisher(dt);
+  else separateFighters();
 
   if (state.phase === "fight") {
     state.timerCarry += dt;
@@ -872,6 +1211,7 @@ function drawVetAtmosphere(time) {
 }
 
 function fighterAnimationFrame(fighter) {
+  if (fighter.cinematicFrame !== null) return fighter.cinematicFrame;
   if (fighter.down || fighter.hitFlash > 0 || fighter.stun > 0.36) return 15;
   if (fighter.block || fighter.crouch) return 12;
   if (fighter.attacking) {
@@ -977,7 +1317,7 @@ function drawFighter(fighter, time) {
   const activePower = attack && fighter.attackTime >= attack.active[0] && fighter.attackTime <= attack.active[1]
     ? 1 : attack ? Math.max(0, attackSwing * 0.42) : 0;
   const moving = Math.abs(fighter.vx) > 22 && fighter.grounded && !attack;
-  const bob = fighter.grounded && !fighter.stun && !fighter.block
+  const bob = fighter.cinematicFrame === null && fighter.grounded && !fighter.stun && !fighter.block
     ? Math.sin((moving ? fighter.walkTime * 20 : fighter.animTime * 10) + fighter.side * 2) * (moving ? 1.8 : 2.7) : 0;
   const atlas = fighterAtlases[fighter.def.id];
   const frame = fighterAnimationFrame(fighter);
@@ -994,6 +1334,9 @@ function drawFighter(fighter, time) {
   ctx.beginPath();
   ctx.ellipse(0, jump + 5, renderSize * 0.24, 15, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  if (fighter.cinematicRotation) ctx.rotate(fighter.cinematicRotation);
+  if (fighter.cinematicScale !== 1) ctx.scale(fighter.cinematicScale, fighter.cinematicScale);
 
   if (fighter.down) {
     ctx.rotate(-fighter.facing * 1.35);
@@ -1153,6 +1496,83 @@ function drawWeapon(fighter, handX, handY, swing) {
   ctx.restore();
 }
 
+function drawFinisherImpact(effect, alpha) {
+  const spread = (effect.final ? 155 : 72) * effect.power;
+  const growth = 1 - alpha;
+  ctx.globalCompositeOperation = "screen";
+  ctx.lineCap = "round";
+  ctx.fillStyle = effect.color;
+  ctx.strokeStyle = effect.color;
+
+  if (effect.style === "seismic") {
+    ctx.lineWidth = effect.final ? 11 : 6;
+    ctx.beginPath(); ctx.ellipse(0, 94, spread * (.35 + growth), 18 + growth * 38, 0, 0, Math.PI * 2); ctx.stroke();
+    for (let i = -4; i <= 4; i += 1) {
+      ctx.beginPath(); ctx.moveTo(i * 12, 45); ctx.lineTo(i * 24, 85); ctx.lineTo(i * 43, 112 + (i % 2) * 12); ctx.stroke();
+    }
+  } else if (effect.style === "neon") {
+    ctx.lineWidth = effect.final ? 10 : 5;
+    ctx.rotate((effect.variant ? -1 : 1) * growth * .7);
+    for (let i = 0; i < 3; i += 1) {
+      const radius = spread * (.28 + i * .22 + growth * .28);
+      ctx.beginPath(); ctx.arc(0, 0, radius, i * .7, i * .7 + Math.PI * 1.35); ctx.stroke();
+    }
+    ctx.strokeStyle = effect.secondary;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i += 1) {
+      const angle = i * Math.PI / 4;
+      const radius = i % 2 ? spread * .32 : spread * .6;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      if (!i) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath(); ctx.stroke();
+  } else if (effect.style === "steel") {
+    ctx.lineWidth = effect.final ? 12 : 6;
+    ctx.beginPath(); ctx.arc(0, 0, spread * (.3 + growth * .55), 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 12; i += 1) {
+      const angle = i * Math.PI / 6;
+      ctx.beginPath(); ctx.moveTo(Math.cos(angle) * 18, Math.sin(angle) * 18); ctx.lineTo(Math.cos(angle) * spread, Math.sin(angle) * spread); ctx.stroke();
+    }
+  } else if (effect.style === "paint") {
+    for (let i = 0; i < (effect.final ? 26 : 12); i += 1) {
+      const angle = i * 2.399 + effect.variant;
+      const radius = spread * (.15 + ((i * 37) % 100) / 120) * (0.45 + growth);
+      ctx.globalAlpha = alpha * (.48 + (i % 3) * .2);
+      ctx.fillStyle = i % 3 ? effect.color : effect.secondary;
+      ctx.beginPath(); ctx.arc(Math.cos(angle) * radius, Math.sin(angle) * radius, 4 + (i % 5) * 3, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (effect.style === "voltage") {
+    ctx.lineWidth = effect.final ? 9 : 5;
+    for (let branch = 0; branch < (effect.final ? 9 : 5); branch += 1) {
+      const angle = branch * Math.PI * 2 / (effect.final ? 9 : 5);
+      ctx.save(); ctx.rotate(angle); ctx.beginPath(); ctx.moveTo(0, 0);
+      for (let step = 1; step <= 6; step += 1) ctx.lineTo(step * spread / 6, (step % 2 ? -1 : 1) * (8 + branch % 3 * 4));
+      ctx.stroke(); ctx.restore();
+    }
+  } else if (effect.style === "gilded") {
+    ctx.lineWidth = effect.final ? 18 : 9;
+    for (let i = 0; i < 3; i += 1) {
+      ctx.globalAlpha = alpha * (1 - i * .2);
+      ctx.beginPath(); ctx.arc(-spread * .2, 0, spread * (.45 + i * .18 + growth * .2), -1.15, 1.15); ctx.stroke();
+    }
+  } else if (effect.style === "feedback") {
+    ctx.lineWidth = effect.final ? 10 : 5;
+    for (let i = 0; i < 5; i += 1) {
+      ctx.globalAlpha = alpha * (1 - i * .13);
+      const radius = spread * (.22 + i * .18 + growth * .22);
+      ctx.beginPath(); ctx.ellipse(0, 0, radius, radius * (.55 + i * .06), i % 2 ? .2 : -.2, 0, Math.PI * 2); ctx.stroke();
+    }
+  } else if (effect.style === "bass") {
+    ctx.lineWidth = effect.final ? 12 : 6;
+    ctx.beginPath(); ctx.arc(0, 0, 20 + growth * 28, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < 5; i += 1) {
+      ctx.globalAlpha = alpha * (1 - i * .14);
+      ctx.beginPath(); ctx.arc(0, 0, spread * (.25 + i * .19 + growth * .16), -1.1, 1.1); ctx.stroke();
+    }
+  }
+}
+
 function drawParticles() {
   for (const particle of state.particles) {
     ctx.globalAlpha = clamp(particle.life / particle.max, 0, 1);
@@ -1170,7 +1590,9 @@ function drawParticles() {
     ctx.strokeStyle = effect.color;
     ctx.shadowBlur = 25;
     ctx.shadowColor = effect.color;
-    if (effect.kind === "slash") {
+    if (effect.kind === "finisherImpact") {
+      drawFinisherImpact(effect, alpha);
+    } else if (effect.kind === "slash") {
       ctx.lineWidth = 18 * alpha;
       ctx.beginPath();
       ctx.moveTo(-170, 110);
@@ -1220,11 +1642,51 @@ function drawParticles() {
   }
 }
 
+function drawFinisherOverlay() {
+  const finisher = state.finisher;
+  if (!finisher) return;
+  const attacker = state.fighters[finisher.winner];
+  const progress = finisher.elapsed / finisher.script.duration;
+  const barHeight = 24 + Math.sin(clamp(progress * 2, 0, 1) * Math.PI * .5) * 17;
+  const tint = ctx.createRadialGradient(W * .5, H * .48, 90, W * .5, H * .48, W * .72);
+  tint.addColorStop(0, `${attacker.def.accent}16`);
+  tint.addColorStop(1, "rgba(0,0,0,.22)");
+  ctx.fillStyle = tint;
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "rgba(0,0,0,.9)";
+  ctx.fillRect(0, 0, W, barHeight);
+  ctx.fillRect(0, H - barHeight, W, barHeight);
+  ctx.fillStyle = attacker.def.accent;
+  ctx.fillRect(0, barHeight - 3, W, 3);
+  ctx.fillRect(0, H - barHeight, W, 3);
+
+  if (finisher.beatLife > 0) {
+    const alpha = clamp(finisher.beatLife * 2.2, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = "center";
+    ctx.font = "900 17px Arial Narrow, Arial";
+    ctx.fillStyle = "white";
+    ctx.shadowColor = "black";
+    ctx.shadowBlur = 8;
+    ctx.fillText(finisher.beatLabel, W * .5, H - barHeight - 16);
+    ctx.font = "900 11px Arial";
+    ctx.fillStyle = attacker.def.accent;
+    ctx.fillText(`${finisher.impactIndex} HIT FINAL COMBINATION`, W * .5, H - barHeight + 19);
+    ctx.restore();
+  }
+}
+
 function draw(time) {
   ctx.save();
   const shakeX = state.shake > 0 ? (Math.random() - 0.5) * state.shake * 18 : 0;
   const shakeY = state.shake > 0 ? (Math.random() - 0.5) * state.shake * 12 : 0;
   ctx.translate(shakeX, shakeY);
+  if (state.finisher) {
+    ctx.translate(W * .5, H * .53);
+    ctx.scale(state.cinematicZoom, state.cinematicZoom);
+    ctx.translate(-W * .5, -H * .53);
+  }
   drawStage(time);
   if (state.screen === "fight") {
     const ordered = [...state.fighters].sort((a, b) => a.y - b.y);
@@ -1232,6 +1694,7 @@ function draw(time) {
     drawParticles();
   }
   ctx.restore();
+  drawFinisherOverlay();
   if (state.flash > 0) {
     ctx.fillStyle = `rgba(255,245,220,${clamp(state.flash * 3, 0, 0.9)})`;
     ctx.fillRect(0, 0, W, H);
@@ -1263,6 +1726,15 @@ function updateMusicUi() {
   if (select) select.value = state.musicChoice;
   const button = $("#trackButton");
   if (button) button.textContent = `♫ ${state.musicChoice === "auto" ? "AUTO · " : ""}${musicTracks[currentTrackIndex].title}`;
+}
+
+function updateVolumeUi() {
+  const musicSlider = $("#musicVolume");
+  const sfxSlider = $("#sfxVolume");
+  if (musicSlider) musicSlider.value = String(Math.round(state.musicVolume * 100));
+  if (sfxSlider) sfxSlider.value = String(Math.round(state.sfxVolume * 100));
+  if ($("#musicVolumeValue")) $("#musicVolumeValue").textContent = `${Math.round(state.musicVolume * 100)}%`;
+  if ($("#sfxVolumeValue")) $("#sfxVolumeValue").textContent = `${Math.round(state.sfxVolume * 100)}%`;
 }
 
 function setTrack(index, restart = true) {
@@ -1298,7 +1770,7 @@ function syncMusic() {
   if (!state.audioUnlocked) return;
   const enabled = Boolean($("#musicToggle")?.checked);
   fightMusic.loop = state.musicChoice !== "auto";
-  fightMusic.volume = clamp(musicBaseVolume() * state.musicDuck, 0, 1);
+  fightMusic.volume = clamp(musicBaseVolume() * state.musicDuck * state.musicVolume, 0, 1);
   if (!enabled || document.hidden) {
     fightMusic.pause();
     return;
@@ -1352,7 +1824,7 @@ function sound(kind) {
   const sample = pool[cursor];
   sample.pause();
   sample.currentTime = 0;
-  sample.volume = sfxVolumes[kind] ?? 0.62;
+  sample.volume = (sfxVolumes[kind] ?? 0.62) * state.sfxVolume;
   const playback = sample.play();
   if (playback?.catch) playback.catch(() => proceduralSound(kind));
 }
@@ -1377,7 +1849,7 @@ function proceduralSound(kind) {
   oscillator.type = settings[3];
   oscillator.frequency.setValueAtTime(settings[0], now);
   oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, settings[1]), now + settings[2]);
-  gain.gain.setValueAtTime(settings[4], now);
+  gain.gain.setValueAtTime(Math.max(0.0001, settings[4] * state.sfxVolume), now);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + settings[2]);
   oscillator.connect(gain).connect(state.audio.destination);
   oscillator.start(now);
@@ -1476,6 +1948,18 @@ $("#musicToggle").addEventListener("change", () => {
   unlockAudio();
   syncMusic();
 });
+$("#musicVolume").addEventListener("input", (event) => {
+  state.musicVolume = Number(event.target.value) / 100;
+  localStorage.setItem("final-blow-music-volume", String(state.musicVolume));
+  updateVolumeUi();
+  unlockAudio();
+  syncMusic();
+});
+$("#sfxVolume").addEventListener("input", (event) => {
+  state.sfxVolume = Number(event.target.value) / 100;
+  localStorage.setItem("final-blow-sfx-volume", String(state.sfxVolume));
+  updateVolumeUi();
+});
 $("#musicSelect").addEventListener("change", (event) => {
   unlockAudio();
   chooseMusic(event.target.value);
@@ -1531,8 +2015,52 @@ $$("[data-touch]").forEach((button) => {
   button.addEventListener("pointerleave", end);
 });
 
+if (["127.0.0.1", "localhost"].includes(location.hostname)) {
+  window.__finalBlowQa = {
+    ready(id, type = 0) {
+      const index = roster.findIndex((fighter) => fighter.id === id);
+      if (index < 0) throw new Error(`Unknown fighter: ${id}`);
+      state.mode = "versus";
+      state.picks = [index, index === 1 ? 0 : 1];
+      state.rounds = [0, 0];
+      state.fighters = [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1)];
+      state.fighters[1].health = 0;
+      state.particles.length = 0;
+      state.effects.length = 0;
+      state.phase = "finish";
+      state.phaseTime = 6;
+      state.finishWinner = 0;
+      state.finisherType = type;
+      state.finisher = null;
+      state.hitstop = 0;
+      state.cinematicZoom = 1;
+      $("#touchControls").classList.remove("cinematic");
+      showScreen("fight");
+      updateHud();
+      $(".touch-final").classList.add("ready");
+    },
+    status() {
+      return {
+        phase: state.phase,
+        fighter: state.fighters[0]?.def.id,
+        elapsed: state.finisher?.elapsed || 0,
+        impacts: state.finisher?.impactIndex || 0,
+        beat: state.finisher?.beatLabel || "",
+        attackerFrame: state.fighters[0]?.cinematicFrame,
+        victimFrame: state.fighters[1]?.cinematicFrame,
+      };
+    },
+    step(seconds) {
+      const frames = Math.ceil(seconds * 120);
+      for (let frame = 0; frame < frames; frame += 1) updateGame(1 / 120);
+      return this.status();
+    },
+  };
+}
+
 setupRoster();
 updateMusicUi();
+updateVolumeUi();
 syncOrientationGate();
 showScreen("title");
 updateStageUI();

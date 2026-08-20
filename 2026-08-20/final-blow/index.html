@@ -19,7 +19,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">MOTION SYSTEM BUILD <b>0.4</b></div>
+      <div class="build-tag">CINEMATIC FINISHER BUILD <b>0.5</b></div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
     </header>
@@ -143,19 +143,19 @@
           <h3>PLAYER 1 · KEYBOARD</h3>
           <p><kbd>A</kbd><kbd>D</kbd> MOVE · <kbd>W</kbd> JUMP · <kbd>S</kbd> BLOCK</p>
           <p><kbd>J</kbd> LIGHT · <kbd>K</kbd> HEAVY · <kbd>L</kbd> SPECIAL</p>
-          <p>FINAL BLOWS: ↓ → HEAVY · ← ↓ → SPECIAL · <kbd>U</kbd> QUICK FINAL</p>
+          <p>FINAL BLOWS: ↓ → HEAVY · ← ↓ → SPECIAL · <kbd>U</kbd> CHARACTER COMBO</p>
         </section>
         <section>
           <h3>PLAYER 2 · KEYBOARD</h3>
           <p><kbd>←</kbd><kbd>→</kbd> MOVE · <kbd>↑</kbd> JUMP · <kbd>↓</kbd> BLOCK</p>
           <p><kbd>1</kbd> LIGHT · <kbd>2</kbd> HEAVY · <kbd>3</kbd> SPECIAL</p>
-          <p>FINAL BLOWS: ↓ → HEAVY · ← ↓ → SPECIAL · <kbd>0</kbd> QUICK FINAL</p>
+          <p>FINAL BLOWS: ↓ → HEAVY · ← ↓ → SPECIAL · <kbd>0</kbd> CHARACTER COMBO</p>
         </section>
         <section>
           <h3>XINPUT / GAMEPAD</h3>
           <p>STICK / D-PAD MOVE · <span class="xbox-a">A</span> JUMP</p>
           <p><span class="xbox-x">X</span> LIGHT · <span class="xbox-y">Y</span> HEAVY · LB SPECIAL</p>
-          <p><span class="xbox-b">B</span> BLOCK · LT + RT QUICK FINAL</p>
+          <p><span class="xbox-b">B</span> BLOCK · LT + RT CHARACTER COMBO</p>
         </section>
         <section class="options-panel">
           <h3>OPTIONS</h3>
@@ -163,6 +163,14 @@
           <label><input id="flashToggle" type="checkbox" checked><span>SCREEN FLASH</span></label>
           <label><input id="musicToggle" type="checkbox" checked><span>ELEVENLABS MUSIC</span></label>
           <label><input id="soundToggle" type="checkbox" checked><span>ELEVENLABS SFX</span></label>
+          <div class="volume-control">
+            <label for="musicVolume"><span>MUSIC VOLUME</span><output id="musicVolumeValue">100%</output></label>
+            <input id="musicVolume" type="range" min="0" max="100" step="1" value="100">
+          </div>
+          <div class="volume-control">
+            <label for="sfxVolume"><span>SFX VOLUME</span><output id="sfxVolumeValue">100%</output></label>
+            <input id="sfxVolume" type="range" min="0" max="100" step="1" value="100">
+          </div>
           <label class="music-picker"><span>SOUNDTRACK</span>
             <select id="musicSelect" aria-label="Soundtrack selection">
               <option value="auto">AUTO ROTATE · ALL 4</option>

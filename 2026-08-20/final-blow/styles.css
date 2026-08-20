@@ -932,6 +932,24 @@ kbd,
 }
 
 .options-panel input { accent-color: var(--red); }
+.volume-control {
+  margin: 12px 0;
+  padding: 9px 10px;
+  border: 1px solid #344451;
+  background: rgba(3, 7, 12, .58);
+}
+.volume-control label {
+  justify-content: space-between;
+  margin: 0 0 7px;
+  color: #d6dde2;
+}
+.volume-control output { color: var(--cyan); font-variant-numeric: tabular-nums; }
+.volume-control input[type="range"] {
+  width: 100%;
+  height: 5px;
+  margin: 3px 0;
+  cursor: pointer;
+}
 .options-panel .music-picker { align-items: flex-start; flex-direction: column; margin-top: 13px; }
 .music-picker select {
   width: 100%;
@@ -956,7 +974,11 @@ kbd,
   align-items: flex-end;
   justify-content: space-between;
   pointer-events: none;
+  transition: opacity .22s ease, transform .22s ease;
 }
+
+.touch-controls.cinematic { opacity: 0; pointer-events: none; transform: translateY(18px); }
+.touch-controls.cinematic button { pointer-events: none; }
 
 .touch-controls button {
   display: grid;
@@ -979,6 +1001,14 @@ kbd,
 .touch-action button { transform: rotate(8deg); }
 .touch-action button.active { transform: rotate(8deg) scale(.92); }
 .touch-action .touch-final { border-color: var(--amber); color: var(--amber); }
+.touch-action .touch-final.ready {
+  border-width: 4px;
+  background: radial-gradient(circle, rgba(239,44,40,.9), rgba(90,4,9,.82));
+  color: white;
+  box-shadow: 0 0 0 5px rgba(255,177,27,.2), 0 0 34px var(--amber), inset 0 0 18px rgba(255,255,255,.32);
+  animation: final-ready .46s ease-in-out infinite alternate;
+}
+@keyframes final-ready { to { transform: rotate(8deg) scale(1.13); filter: brightness(1.35); } }
 
 .rotate-gate {
   position: fixed;
