@@ -284,6 +284,251 @@ const jezMoves = {
   }),
 };
 
+const alanMoves = {
+  standLight: move("alan-union-jab", "light", {
+    cancelProfileId: "stand-light", level: ATTACK_LEVELS.MID,
+    startupFrames: 6, activeFrames: 5, recoveryFrames: 9, range: 105, damage: 8, push: 172, meter: 11,
+    hitstunFrames: 22, blockstunFrames: 10, chipDamage: 0,
+    hitboxes: [box(22, -171, 91, 66, 0, 4)],
+  }),
+  forwardLight: move("alan-shoulder-check", "light", {
+    cancelProfileId: "stand-light", level: ATTACK_LEVELS.MID,
+    startupFrames: 8, activeFrames: 5, recoveryFrames: 11, range: 134, damage: 10, push: 218, meter: 12,
+    hitstunFrames: 23, blockstunFrames: 11, chipDamage: 0, advanceSpeed: 168,
+    hitboxes: [box(20, -181, 119, 105, 0, 4)],
+  }),
+  crouchLight: move("alan-pipefitters-tap", "light", {
+    cancelProfileId: "crouch-light", level: ATTACK_LEVELS.LOW,
+    startupFrames: 7, activeFrames: 5, recoveryFrames: 11, range: 115, damage: 7, push: 153, meter: 10,
+    hitstunFrames: 21, blockstunFrames: 10, chipDamage: 0,
+    hitboxes: [box(24, -74, 100, 45, 0, 4)],
+  }),
+  standHeavy: move("alan-heavy-hand", "heavy", {
+    cancelProfileId: "stand-heavy", level: ATTACK_LEVELS.MID,
+    startupFrames: 14, activeFrames: 7, recoveryFrames: 17, range: 154, damage: 17, push: 325, meter: 18,
+    hitstunFrames: 25, blockstunFrames: 15, chipDamage: 0, armorFrames: 4,
+    hitboxes: [box(31, -191, 119, 101, 0, 2), box(48, -181, 140, 96, 3, 6)],
+  }),
+  crouchHeavy: move("alan-loading-dock-sweep", "heavy", {
+    cancelProfileId: "crouch-heavy", level: ATTACK_LEVELS.LOW,
+    startupFrames: 15, activeFrames: 7, recoveryFrames: 22, range: 174, damage: 15, push: 290, meter: 17,
+    hitstunFrames: 24, blockstunFrames: 15, chipDamage: 0, knockdown: true,
+    hitboxes: [box(29, -67, 121, 43, 0, 2), box(51, -60, 145, 39, 3, 6)],
+  }),
+  overhead: move("alan-foreman-hammer", "heavy", {
+    cancelProfileId: "overhead", level: ATTACK_LEVELS.OVERHEAD,
+    startupFrames: 21, activeFrames: 7, recoveryFrames: 20, range: 157, damage: 19, push: 335, meter: 20,
+    hitstunFrames: 26, blockstunFrames: 17, chipDamage: 0, knockdown: true,
+    hitboxes: [box(20, -231, 111, 112, 0, 2), box(42, -211, 135, 142, 3, 6)],
+  }),
+  driveHeavy: move("alan-broad-street-boot", "heavy", {
+    cancelProfileId: "drive-heavy", level: ATTACK_LEVELS.MID,
+    startupFrames: 16, activeFrames: 9, recoveryFrames: 19, range: 194, damage: 18, push: 370, meter: 20,
+    hitstunFrames: 26, blockstunFrames: 17, chipDamage: 0, advanceSpeed: 238,
+    command: "← → + HEAVY", hitboxes: [box(30, -188, 154, 124, 0, 4), box(50, -176, 178, 116, 5, 8)],
+  }),
+  throw: move("alan-dockyard-clinch", "throw", {
+    cancelProfileId: "throw", level: ATTACK_LEVELS.THROW,
+    startupFrames: 5, activeFrames: 3, recoveryFrames: 25, range: 86, damage: 18, push: 225, meter: 16,
+    hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, knockdown: true, animation: anim(1),
+    hitboxes: [box(18, -183, 82, 154, 0, 2)],
+  }),
+  special: move("alan-heavy-hand-special", "special", {
+    cancelProfileId: "ground-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 12, activeFrames: 10, recoveryFrames: 18, range: 177, damage: 18, push: 345, meter: 23,
+    hitstunFrames: 27, blockstunFrames: 18, chipDamage: 3, armorFrames: 8,
+    moveName: "HEAVY HAND", command: "SPECIAL", animation: anim(0),
+    hitboxes: [box(29, -198, 151, 144, 0, 4), box(48, -184, 174, 132, 5, 9)],
+  }),
+  commandSpecial: move("alan-south-street-slam", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 15, activeFrames: 12, recoveryFrames: 19, range: 218, damage: 22, push: 405, meter: 26,
+    hitstunFrames: 30, blockstunFrames: 20, chipDamage: 4, knockdown: true, armorFrames: 10, advanceSpeed: 295,
+    moveName: "SOUTH STREET SLAM", command: "↓ → + SPECIAL", animation: anim(0),
+    hitboxes: [box(27, -207, 175, 158, 0, 5), box(51, -191, 202, 145, 6, 11)],
+  }),
+  backSpecial: move("alan-southpaw-counter", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 3, activeFrames: 14, recoveryFrames: 18, range: 0, damage: 0, push: 0, meter: 0,
+    hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0,
+    counterWindowFrom: 3, counterWindowTo: 16, counterDamage: 23, counterHitstunFrames: 34,
+    counterPush: 430, counterLaunchVelocityY: -330,
+    moveName: "SOUTHPAW COUNTER", command: "↓ ← + SPECIAL · counters strikes", animation: anim(1), hitboxes: [],
+  }),
+  launcher: move("alan-broad-street-uppercut", "heavy", {
+    cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
+    startupFrames: 10, activeFrames: 9, recoveryFrames: 25, range: 139, damage: 14, push: 82, meter: 18,
+    hitstunFrames: 28, blockstunFrames: 16, chipDamage: 0, knockdown: true, launchVelocityY: -590,
+    juggleStarter: true, reversalInvulnerableFrames: 7,
+    moveName: "BROAD STREET UPPERCUT", command: "→ ↓ → + HEAVY", animation: anim(2),
+    hitboxes: [box(18, -225, 111, 180, 0, 3), box(33, -270, 129, 225, 4, 8)],
+  }),
+  enhanced: move("alan-ex-heavy-hand", "special", {
+    cancelProfileId: "ground-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 8, activeFrames: 17, recoveryFrames: 15, range: 201, damage: 11, push: 112, meter: 10,
+    hitstunFrames: 26, blockstunFrames: 20, chipDamage: 3, maxHits: 2, rehitFrames: 8,
+    gritCost: GRIT_RULES.enhancedSpecialCost, armorFrames: 13,
+    moveName: "HEAVY HAND EX", command: "HEAVY + SPECIAL", animation: anim(0),
+    hitboxes: [box(27, -204, 175, 152, 0, 7), box(50, -189, 199, 140, 8, 16)],
+  }),
+  enhancedCommandSpecial: move("alan-ex-south-street-slam", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 10, activeFrames: 20, recoveryFrames: 16, range: 246, damage: 13, push: 132, meter: 11,
+    hitstunFrames: 28, blockstunFrames: 22, chipDamage: 4, knockdown: true, knockdownOnFinal: true,
+    maxHits: 2, rehitFrames: 9, gritCost: GRIT_RULES.enhancedSpecialCost, armorFrames: 16, advanceSpeed: 345,
+    moveName: "SOUTH STREET SLAM EX", command: "↓ → + HEAVY + SPECIAL", animation: anim(0),
+    hitboxes: [box(27, -211, 192, 164, 0, 9), box(53, -195, 220, 151, 10, 19)],
+  }),
+  enhancedBackSpecial: move("alan-ex-southpaw-counter", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 1, activeFrames: 20, recoveryFrames: 14, range: 0, damage: 0, push: 0, meter: 0,
+    hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, gritCost: GRIT_RULES.enhancedSpecialCost,
+    counterWindowFrom: 1, counterWindowTo: 20, counterDamage: 30, counterHitstunFrames: 39,
+    counterPush: 485, counterLaunchVelocityY: -385, counterSuper: true,
+    moveName: "SOUTHPAW COUNTER EX", command: "↓ ← + HEAVY + SPECIAL · counters all strikes", animation: anim(1), hitboxes: [],
+  }),
+  enhancedLauncher: move("alan-ex-broad-street-uppercut", "special", {
+    cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
+    startupFrames: 7, activeFrames: 14, recoveryFrames: 21, range: 160, damage: 9, push: 74, meter: 9,
+    hitstunFrames: 28, blockstunFrames: 18, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
+    launchVelocityY: -635, juggleStarter: true, maxHits: 2, rehitFrames: 7,
+    gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 12,
+    moveName: "BROAD STREET UPPERCUT EX", command: "→ ↓ → + HEAVY + SPECIAL", animation: anim(2),
+    hitboxes: [box(16, -229, 124, 187, 0, 6), box(35, -281, 145, 238, 7, 13)],
+  }),
+  super: move("alan-south-street-six", "special", {
+    cancelProfileId: "grit-super", level: ATTACK_LEVELS.MID,
+    startupFrames: 8, activeFrames: 42, recoveryFrames: 27, range: 248, damage: 7, push: 58, meter: 0,
+    hitstunFrames: 29, blockstunFrames: 23, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
+    juggleLift: -215, maxHits: 6, rehitFrames: 7, gritCost: GRIT_RULES.superCost, juggleLimit: 7,
+    superMove: true, armorFrames: 11,
+    moveName: "SOUTH STREET SIX", command: "FULL GRIT + FB", animation: anim(3),
+    hitboxes: [box(21, -218, 183, 177, 0, 10), box(45, -207, 218, 166, 11, 21), box(24, -237, 234, 198, 22, 31), box(49, -218, 253, 181, 32, 41)],
+  }),
+};
+
+const postMoves = {
+  standLight: move("post-can-tap", "light", {
+    cancelProfileId: "stand-light", level: ATTACK_LEVELS.MID,
+    startupFrames: 5, activeFrames: 5, recoveryFrames: 8, range: 112, damage: 6, push: 142, meter: 10,
+    hitstunFrames: 21, blockstunFrames: 9, chipDamage: 0,
+    hitboxes: [box(25, -172, 98, 65, 0, 4)],
+  }),
+  forwardLight: move("post-taggers-poke", "light", {
+    cancelProfileId: "stand-light", level: ATTACK_LEVELS.MID,
+    startupFrames: 7, activeFrames: 6, recoveryFrames: 10, range: 151, damage: 8, push: 172, meter: 11,
+    hitstunFrames: 22, blockstunFrames: 10, chipDamage: 0, advanceSpeed: 115,
+    hitboxes: [box(29, -178, 135, 74, 0, 5)],
+  }),
+  crouchLight: move("post-low-tag", "light", {
+    cancelProfileId: "crouch-light", level: ATTACK_LEVELS.LOW,
+    startupFrames: 5, activeFrames: 5, recoveryFrames: 9, range: 124, damage: 6, push: 135, meter: 10,
+    hitstunFrames: 21, blockstunFrames: 9, chipDamage: 0,
+    hitboxes: [box(25, -72, 108, 43, 0, 4)],
+  }),
+  standHeavy: move("post-roller-swing", "heavy", {
+    cancelProfileId: "stand-heavy", level: ATTACK_LEVELS.MID,
+    startupFrames: 11, activeFrames: 8, recoveryFrames: 14, range: 166, damage: 12, push: 255, meter: 16,
+    hitstunFrames: 23, blockstunFrames: 13, chipDamage: 0,
+    hitboxes: [box(33, -190, 129, 98, 0, 3), box(52, -178, 150, 94, 4, 7)],
+  }),
+  crouchHeavy: move("post-puddle-sweep", "heavy", {
+    cancelProfileId: "crouch-heavy", level: ATTACK_LEVELS.LOW,
+    startupFrames: 11, activeFrames: 7, recoveryFrames: 18, range: 184, damage: 11, push: 238, meter: 16,
+    hitstunFrames: 22, blockstunFrames: 14, chipDamage: 0, knockdown: true,
+    hitboxes: [box(32, -65, 132, 42, 0, 2), box(53, -58, 153, 37, 3, 6)],
+  }),
+  overhead: move("post-drip-drop", "heavy", {
+    cancelProfileId: "overhead", level: ATTACK_LEVELS.OVERHEAD,
+    startupFrames: 17, activeFrames: 7, recoveryFrames: 17, range: 173, damage: 14, push: 270, meter: 18,
+    hitstunFrames: 24, blockstunFrames: 14, chipDamage: 0,
+    hitboxes: [box(27, -225, 122, 111, 0, 2), box(48, -207, 146, 136, 3, 6)],
+  }),
+  driveHeavy: move("post-wall-run", "heavy", {
+    cancelProfileId: "drive-heavy", level: ATTACK_LEVELS.MID,
+    startupFrames: 13, activeFrames: 9, recoveryFrames: 15, range: 211, damage: 14, push: 292, meter: 18,
+    hitstunFrames: 24, blockstunFrames: 15, chipDamage: 0, advanceSpeed: 315,
+    command: "← → + HEAVY", hitboxes: [box(35, -191, 169, 121, 0, 4), box(58, -178, 192, 113, 5, 8)],
+  }),
+  throw: move("post-fresh-coat-toss", "throw", {
+    cancelProfileId: "throw", level: ATTACK_LEVELS.THROW,
+    startupFrames: 4, activeFrames: 3, recoveryFrames: 21, range: 79, damage: 14, push: 205, meter: 14,
+    hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, knockdown: true, animation: anim(1),
+    hitboxes: [box(21, -178, 72, 148, 0, 2)],
+  }),
+  special: move("post-rattlecan-burst", "special", {
+    cancelProfileId: "ground-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 9, activeFrames: 13, recoveryFrames: 14, range: 231, damage: 14, push: 238, meter: 21,
+    hitstunFrames: 24, blockstunFrames: 17, chipDamage: 3,
+    moveName: "RATTLECAN BURST", command: "SPECIAL", animation: anim(0),
+    hitboxes: [box(37, -191, 184, 129, 0, 6), box(55, -181, 218, 120, 7, 12)],
+  }),
+  commandSpecial: move("post-paint-the-town", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 13, activeFrames: 15, recoveryFrames: 18, range: 333, damage: 17, push: 322, meter: 24,
+    hitstunFrames: 26, blockstunFrames: 19, chipDamage: 4,
+    moveName: "PAINT THE TOWN", command: "↓ → + SPECIAL", animation: anim(0),
+    hitboxes: [box(44, -200, 248, 142, 0, 7), box(67, -190, 309, 130, 8, 14)],
+  }),
+  backSpecial: move("post-wet-paint", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.LOW,
+    startupFrames: 5, activeFrames: 7, recoveryFrames: 18, range: 0, damage: 0, push: 0, meter: 0,
+    hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0,
+    trap: { deployFrame: 8, offsets: [112], armFrames: 15, lifetimeFrames: 360, radius: 66, damage: 10, chipDamage: 2, hitstunFrames: 25, blockstunFrames: 16, push: 255, knockdown: true, color: "#ff3bbf" },
+    moveName: "WET PAINT", command: "↓ ← + SPECIAL · persistent low trap", animation: anim(1), hitboxes: [],
+  }),
+  launcher: move("post-tag-updraft", "heavy", {
+    cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
+    startupFrames: 8, activeFrames: 9, recoveryFrames: 21, range: 151, damage: 10, push: 68, meter: 17,
+    hitstunFrames: 26, blockstunFrames: 15, chipDamage: 0, knockdown: true, launchVelocityY: -565,
+    juggleStarter: true, reversalInvulnerableFrames: 6,
+    moveName: "TAG UPDRAFT", command: "→ ↓ → + HEAVY", animation: anim(2),
+    hitboxes: [box(20, -222, 118, 177, 0, 3), box(38, -263, 137, 218, 4, 8)],
+  }),
+  enhanced: move("post-ex-rattlecan-burst", "special", {
+    cancelProfileId: "ground-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 6, activeFrames: 20, recoveryFrames: 12, range: 264, damage: 8, push: 80, meter: 8,
+    hitstunFrames: 24, blockstunFrames: 19, chipDamage: 3, maxHits: 2, rehitFrames: 8,
+    gritCost: GRIT_RULES.enhancedSpecialCost,
+    moveName: "RATTLECAN BURST EX", command: "HEAVY + SPECIAL", animation: anim(0),
+    hitboxes: [box(33, -198, 210, 137, 0, 9), box(58, -185, 251, 128, 10, 19)],
+  }),
+  enhancedCommandSpecial: move("post-ex-paint-the-town", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 9, activeFrames: 23, recoveryFrames: 14, range: 374, damage: 9, push: 94, meter: 9,
+    hitstunFrames: 26, blockstunFrames: 21, chipDamage: 4, knockdown: true, knockdownOnFinal: true,
+    maxHits: 2, rehitFrames: 10, gritCost: GRIT_RULES.enhancedSpecialCost,
+    moveName: "PAINT THE TOWN EX", command: "↓ → + HEAVY + SPECIAL", animation: anim(0),
+    hitboxes: [box(38, -205, 281, 149, 0, 10), box(68, -191, 347, 137, 11, 22)],
+  }),
+  enhancedBackSpecial: move("post-ex-wet-paint", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.LOW,
+    startupFrames: 3, activeFrames: 9, recoveryFrames: 15, range: 0, damage: 0, push: 0, meter: 0,
+    hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, gritCost: GRIT_RULES.enhancedSpecialCost,
+    reversalInvulnerableFrames: 5,
+    trap: { deployFrame: 6, offsets: [88, 205], armFrames: 9, lifetimeFrames: 480, radius: 78, damage: 12, chipDamage: 3, hitstunFrames: 28, blockstunFrames: 19, push: 285, knockdown: true, color: "#ff3bbf" },
+    moveName: "WET PAINT EX", command: "↓ ← + HEAVY + SPECIAL · two traps", animation: anim(1), hitboxes: [],
+  }),
+  enhancedLauncher: move("post-ex-tag-updraft", "special", {
+    cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
+    startupFrames: 5, activeFrames: 15, recoveryFrames: 18, range: 174, damage: 7, push: 61, meter: 8,
+    hitstunFrames: 27, blockstunFrames: 17, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
+    launchVelocityY: -605, juggleStarter: true, maxHits: 2, rehitFrames: 7,
+    gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 11,
+    moveName: "TAG UPDRAFT EX", command: "→ ↓ → + HEAVY + SPECIAL", animation: anim(2),
+    hitboxes: [box(17, -226, 130, 185, 0, 6), box(38, -276, 151, 234, 7, 14)],
+  }),
+  super: move("post-full-coverage", "special", {
+    cancelProfileId: "grit-super", level: ATTACK_LEVELS.MID,
+    startupFrames: 7, activeFrames: 45, recoveryFrames: 22, range: 365, damage: 6, push: 47, meter: 0,
+    hitstunFrames: 26, blockstunFrames: 21, chipDamage: 1.5, knockdown: true, knockdownOnFinal: true,
+    juggleLift: -188, maxHits: 7, rehitFrames: 6, gritCost: GRIT_RULES.superCost, juggleLimit: 8,
+    superMove: true, reversalInvulnerableFrames: 8,
+    moveName: "FULL COVERAGE", command: "FULL GRIT + FB", animation: anim(3),
+    hitboxes: [box(27, -211, 215, 168, 0, 10), box(49, -204, 268, 160, 11, 21), box(32, -230, 322, 190, 22, 33), box(58, -215, 361, 176, 34, 44)],
+  }),
+};
+
 const fighterKits = {
   deathblow: {
     id: "deathblow",
@@ -336,6 +581,58 @@ const fighterKits = {
       ["Seven-Palm Neon Guillotine", "FULL GRIT + FB"],
     ],
     moves: { ...shared, ...jezMoves },
+  },
+  alan: {
+    id: "alan",
+    archetype: "HEAVYWEIGHT COUNTER-PUNCHER",
+    summary: "A planted powerhouse with armored hands and the roster's only true strike counter. Slow to turn; brutal when he reads you.",
+    movement: {
+      forwardWalkSpeed: 228, backWalkSpeed: 172, jumpVelocityY: -684,
+      forwardJumpVelocityX: 268, backJumpVelocityX: 224, neutralJumpVelocityX: 0,
+      forwardDashSpeed: 488, forwardDashFrames: 14, backDashSpeed: 412, backDashFrames: 17,
+      backDashInvulnerableFrames: 5, dashCooldownFrames: 12,
+      standingPushboxHalfWidth: 46, crouchingPushboxHalfWidth: 42,
+    },
+    ai: { preferredRange: 96, retreatRange: 58, approachRange: 188, antiAirAction: "launcher", pokeAction: "special", closeAction: "heavy", rangedAction: "commandSpecial", counterAction: "backSpecial", counterRange: 172, counterChance: 0.76 },
+    victory: { bank: "specials", frame: 15, quote: "SIX SHOTS. ONE ANSWER." },
+    moveList: [
+      ["Union Jab / Shoulder Check", "LIGHT / → + LIGHT"],
+      ["Foreman Hammer", "→ + HEAVY · overhead"],
+      ["Heavy Hand", "SPECIAL · armored"],
+      ["South Street Slam", "↓ → + SPECIAL"],
+      ["Southpaw Counter", "↓ ← + SPECIAL · counters strikes"],
+      ["Broad Street Uppercut", "→ ↓ → + HEAVY · anti-air"],
+      ["Enhanced specials", "Repeat motion + HEAVY + SPECIAL · 25 Grit"],
+      ["Dockyard Clinch", "LIGHT + HEAVY"],
+      ["South Street Six", "FULL GRIT + FB"],
+    ],
+    moves: { ...shared, ...alanMoves },
+  },
+  post: {
+    id: "post",
+    archetype: "GRAFFITI ZONER / TRAPPER",
+    summary: "Controls long lanes with spray, retreats behind persistent Wet Paint traps, then launches anyone who chases carelessly.",
+    movement: {
+      forwardWalkSpeed: 302, backWalkSpeed: 294, jumpVelocityY: -765,
+      forwardJumpVelocityX: 322, backJumpVelocityX: 338, neutralJumpVelocityX: 0,
+      forwardDashSpeed: 595, forwardDashFrames: 10, backDashSpeed: 625, backDashFrames: 10,
+      backDashInvulnerableFrames: 8, dashCooldownFrames: 8,
+      standingPushboxHalfWidth: 37, crouchingPushboxHalfWidth: 34,
+    },
+    ai: { preferredRange: 238, retreatRange: 126, approachRange: 348, antiAirAction: "launcher", pokeAction: "special", closeAction: "launcher", rangedAction: "backSpecial", retreatWhenClose: true },
+    victory: { bank: "specials", frame: 15, quote: "THE WHOLE CITY IS MY WALL." },
+    moveList: [
+      ["Can Tap / Tagger's Poke", "LIGHT / → + LIGHT"],
+      ["Drip Drop", "→ + HEAVY · overhead"],
+      ["Rattlecan Burst", "SPECIAL"],
+      ["Paint the Town", "↓ → + SPECIAL · long range"],
+      ["Wet Paint", "↓ ← + SPECIAL · persistent low trap"],
+      ["Tag Updraft", "→ ↓ → + HEAVY · anti-air"],
+      ["Enhanced specials", "Repeat motion + HEAVY + SPECIAL · 25 Grit"],
+      ["Fresh Coat Toss", "LIGHT + HEAVY"],
+      ["Full Coverage", "FULL GRIT + FB"],
+    ],
+    moves: { ...shared, ...postMoves },
   },
 };
 
@@ -434,22 +731,29 @@ export function attackAnimationPose(attack, attackFrame) {
 export function selectKitAiIntent(fighterId, {
   distance = Infinity,
   opponentAirborne = false,
+  opponentAttacking = false,
   meter = 0,
   roll = 0.5,
 } = {}) {
   const ai = getFighterKit(fighterId)?.ai;
   if (!ai) return null;
+  if (opponentAttacking
+    && ai.counterAction
+    && distance < (ai.counterRange || 160)
+    && roll < (ai.counterChance || 0.7)) {
+    return { movement: "hold", action: ai.counterAction, response: "counter" };
+  }
   if (opponentAirborne && distance < 180) return { movement: "hold", action: ai.antiAirAction };
   if (meter >= GRIT_RULES.superCost && roll < 0.22 && distance < 245) return { movement: "hold", action: "super" };
   if (distance < ai.retreatRange) {
     const action = roll < 0.42 ? ai.closeAction : roll < 0.72 ? "light" : "throw";
-    return { movement: fighterId === "jez" ? "retreat" : "hold", action };
+    return { movement: ai.retreatWhenClose || fighterId === "jez" ? "retreat" : "hold", action };
   }
   if (distance > ai.approachRange) {
     return { movement: "advance", action: roll < 0.34 ? ai.rangedAction : null };
   }
   if (distance > ai.preferredRange + 28) return { movement: "advance", action: roll < 0.48 ? ai.pokeAction : null };
-  if (distance < ai.preferredRange - 24) return { movement: fighterId === "jez" ? "retreat" : "hold", action: roll < 0.52 ? ai.closeAction : "heavy" };
+  if (distance < ai.preferredRange - 24) return { movement: ai.retreatWhenClose || fighterId === "jez" ? "retreat" : "hold", action: roll < 0.52 ? ai.closeAction : "heavy" };
   return { movement: "hold", action: roll < 0.36 ? ai.pokeAction : roll < 0.62 ? "light" : roll < 0.8 ? "heavy" : null };
 }
 

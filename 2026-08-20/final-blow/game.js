@@ -462,7 +462,7 @@ const keyMaps = [
 ];
 
 const simulationClock = new FixedStepClock();
-const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.8-duelist-kits");
+const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.8b-counter-traps");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
 const state = {
@@ -475,6 +475,7 @@ const state = {
   fighters: [],
   particles: [],
   effects: [],
+  traps: [],
   rounds: [0, 0],
   round: 1,
   timer: 99,
@@ -553,6 +554,8 @@ function makeFighter(index, side) {
     lastAttackHitFrame: -Infinity,
     attackConnected: "",
     armorHits: 0,
+    counterTriggered: false,
+    trapDeployed: false,
     cancelledFrom: "",
     linkedFrom: "",
     linkWindow: null,
@@ -713,6 +716,7 @@ function startMatch(resetSet = true) {
   state.fighters = [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1)];
   state.particles.length = 0;
   state.effects.length = 0;
+  state.traps.length = 0;
   state.timer = 99;
   state.timerCarry = 0;
   state.phase = "intro";
@@ -746,6 +750,7 @@ function resetRound() {
   state.fighters.forEach((fighter, side) => { fighter.meter = carriedGrit[side] || 0; });
   state.particles.length = 0;
   state.effects.length = 0;
+  state.traps.length = 0;
   state.timer = 99;
   state.timerCarry = 0;
   state.phase = "intro";
@@ -1046,18 +1051,19 @@ function aiInput(fighter, opponent, dt) {
     fighter.aiClock = 0.14 + random() * 0.32;
     const abs = Math.abs(distance);
     if (fighter.kit) {
-      if (opponent.attacking && abs < 158 && random() < 0.64) {
-        input.guard = true;
-        input.down = opponent.attacking.level === ATTACK_LEVELS.LOW;
-        return input;
-      }
       const roll = random();
       const intent = selectKitAiIntent(fighter.def.id, {
         distance: abs,
         opponentAirborne: !opponent.grounded,
+        opponentAttacking: Boolean(opponent.attacking),
         meter: fighter.meter,
         roll,
       });
+      if (opponent.attacking && abs < 158 && intent?.response !== "counter" && roll < 0.64) {
+        input.guard = true;
+        input.down = opponent.attacking.level === ATTACK_LEVELS.LOW;
+        return input;
+      }
       if (intent?.movement === "advance") {
         input.right = distance > 0;
         input.left = distance < 0;
@@ -1203,6 +1209,8 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   fighter.attackConnected = "";
   fighter.cancelledFrom = cancelledFrom;
   fighter.linkedFrom = linkedFrom;
+  fighter.counterTriggered = false;
+  fighter.trapDeployed = false;
   fighter.linkWindow = null;
   fighter.block = false;
   fighter.guarding = false;
@@ -1217,6 +1225,8 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
       fighter.invulnerableFrames,
       fighter.attacking.reversalInvulnerableFrames || DEFENSE_RULES.reversalWindowFrames,
     );
+  }
+  if (reversal) {
     const label = action === "guardReversal" ? "GRIT REVERSAL" : "REVERSAL";
     fighter.lastHitResult = action === "guardReversal" ? "guard-reversal" : "reversal";
     spawnCombatText(fighter.x, fighter.y - fighter.height - 25, label, fighter.def.accent);
@@ -1587,6 +1597,7 @@ function updateFighter(fighter, opponent, input, dt) {
     fighter.attackFrame += 1;
     fighter.attackTime = fighter.attackFrame * SIMULATION_STEP_SECONDS;
     const attack = fighter.attacking;
+    maybeDeployTrap(fighter, attack);
     if (attack.advanceSpeed && fighter.attackFrame < attack.activeEndFrame) fighter.vx = fighter.facing * attack.advanceSpeed;
     else fighter.vx *= fighter.grounded ? 0.82 : 0.985;
     fighter.crouch = attack.profileId.startsWith("crouch-");
@@ -1604,6 +1615,109 @@ function updateFighter(fighter, opponent, input, dt) {
   }
 
   applyFighterPhysics(fighter, dt);
+}
+
+function maybeDeployTrap(fighter, attack) {
+  const profile = attack?.trap;
+  if (!profile || fighter.trapDeployed || fighter.attackFrame < profile.deployFrame) return;
+  fighter.trapDeployed = true;
+  const color = profile.color || "#ff3fbf";
+  const offsets = profile.offsets || [110];
+  const newTraps = offsets.map((offset, index) => ({
+    id: `${fighter.side}-${state.simulationTick}-${index}`,
+    ownerSide: fighter.side,
+    x: clamp(fighter.x + fighter.facing * offset, MOVEMENT_RULES.stageMinX + 12, MOVEMENT_RULES.stageMaxX - 12),
+    y: FLOOR,
+    radius: profile.radius,
+    damage: profile.damage,
+    chipDamage: profile.chipDamage,
+    hitstunFrames: profile.hitstunFrames,
+    blockstunFrames: profile.blockstunFrames,
+    push: profile.push,
+    knockdown: profile.knockdown,
+    armFrames: profile.armFrames,
+    lifeFrames: profile.lifetimeFrames,
+    maxLifeFrames: profile.lifetimeFrames,
+    enhanced: offsets.length > 1,
+    color,
+  }));
+  const ownerTraps = state.traps.filter((trap) => trap.ownerSide === fighter.side);
+  const removeCount = Math.max(0, ownerTraps.length + newTraps.length - 3);
+  if (removeCount) {
+    const retired = new Set(ownerTraps.slice(0, removeCount).map((trap) => trap.id));
+    state.traps = state.traps.filter((trap) => !retired.has(trap.id));
+  }
+  state.traps.push(...newTraps);
+  for (const trap of newTraps) {
+    state.effects.push({ kind: "paintDeploy", x: trap.x, y: trap.y - 8, life: 0.48, max: 0.48, color });
+  }
+  spawnCombatText(fighter.x + fighter.facing * 82, fighter.y - fighter.height - 16, newTraps.length > 1 ? "DOUBLE TRAP" : "TRAP SET", color);
+  sound("special");
+}
+
+function triggerPaintTrap(trap, victim) {
+  const owner = state.fighters[trap.ownerSide];
+  if (!owner) return;
+  const blocked = canGuardAttack({
+    level: ATTACK_LEVELS.LOW,
+    guardHeight: victim.guardHeight,
+    guarding: victim.guarding,
+    grounded: victim.grounded,
+  });
+  let damage = trap.chipDamage;
+  if (!blocked) {
+    const comboResult = owner.combo.registerHit(state.simulationTick, victim.juggleCount);
+    damage = trap.damage * comboResult.damageScale;
+    owner.combo.addDamage(damage);
+  }
+  victim.health = blocked
+    ? Math.max(1, victim.health - damage)
+    : clamp(victim.health - damage, 0, 100);
+  victim.blockstunFrames = blocked ? trap.blockstunFrames : 0;
+  victim.hitstunFrames = blocked ? 0 : trap.hitstunFrames;
+  victim.stun = Math.max(victim.hitstunFrames, victim.blockstunFrames) / SIMULATION_HZ;
+  victim.vx = owner.facing * trap.push * (blocked ? 0.26 : 1);
+  victim.lastHitResult = blocked ? "blocked-low-trap" : "paint-trap";
+  victim.hitFlash = 0.13;
+  if (!blocked) {
+    victim.attacking = null;
+    victim.attackTime = 0;
+    victim.attackFrame = 0;
+    victim.attackHit = false;
+    victim.dashFrames = 0;
+    victim.queuedDashDirection = 0;
+    if (trap.knockdown) {
+      victim.pendingKnockdown = true;
+      victim.grounded = false;
+      victim.vy = -245;
+    }
+  }
+  owner.meter = clamp(owner.meter + 13 * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
+  victim.meter = clamp(victim.meter + 13 * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
+  owner.attackConnected = blocked ? "block" : "hit";
+  state.effects.push({ kind: "paintTrapBurst", x: trap.x, y: trap.y - 24, life: 0.62, max: 0.62, color: trap.color });
+  spawnHit(trap.x, trap.y - 63, { ...owner.def, accent: trap.color }, "special", blocked);
+  spawnCombatText(trap.x, trap.y - 112, blocked ? "WET BLOCK" : "WET PAINT!", trap.color);
+  state.shake = Math.max(state.shake, blocked ? 0.12 : 0.28);
+  state.hitstop = Math.max(state.hitstop, blocked ? 0.035 : 0.09);
+  state.lastImpactSide = owner.side;
+  sound(blocked ? "block" : "hit");
+  updateHud();
+}
+
+function updatePaintTraps() {
+  if (!state.traps.length) return;
+  for (const trap of state.traps) {
+    trap.lifeFrames -= 1;
+    trap.armFrames = Math.max(0, trap.armFrames - 1);
+    if (trap.lifeFrames <= 0 || trap.armFrames > 0) continue;
+    const victim = state.fighters[1 - trap.ownerSide];
+    if (!victim || !victim.grounded || victim.down || victim.wakeupFrames > 0 || victim.invulnerableFrames > 0) continue;
+    if (Math.abs(victim.x - trap.x) > trap.radius) continue;
+    trap.triggered = true;
+    triggerPaintTrap(trap, victim);
+  }
+  state.traps = state.traps.filter((trap) => trap.lifeFrames > 0 && !trap.triggered);
 }
 
 function spawnCombatText(x, y, label, color = "#fff") {
@@ -1630,7 +1744,63 @@ function techThrow(attacker, victim) {
   sound("block");
 }
 
+function triggerSouthpawCounter(counterFighter, incomingFighter, incomingAttack, collision) {
+  const stance = counterFighter.attacking;
+  if (!stance
+    || counterFighter.counterTriggered
+    || !Number.isFinite(stance.counterWindowFrom)
+    || counterFighter.attackFrame < stance.counterWindowFrom
+    || counterFighter.attackFrame > stance.counterWindowTo
+    || incomingAttack.level === ATTACK_LEVELS.THROW
+    || (incomingAttack.superMove && !stance.counterSuper)) return false;
+
+  counterFighter.counterTriggered = true;
+  counterFighter.attackHit = true;
+  counterFighter.attackHits = 1;
+  counterFighter.attackConnected = "hit";
+  counterFighter.lastHitResult = "counter-punch";
+  counterFighter.attackFrame = Math.max(counterFighter.attackFrame, stance.activeStartFrame);
+  counterFighter.attackTime = counterFighter.attackFrame * SIMULATION_STEP_SECONDS;
+  const comboResult = counterFighter.combo.registerHit(state.simulationTick, incomingFighter.juggleCount);
+  const damage = stance.counterDamage * comboResult.damageScale;
+  counterFighter.combo.addDamage(damage);
+  incomingFighter.health = clamp(incomingFighter.health - damage, 0, 100);
+  incomingFighter.attacking = null;
+  incomingFighter.attackTime = 0;
+  incomingFighter.attackFrame = 0;
+  incomingFighter.attackHit = false;
+  incomingFighter.attackConnected = "";
+  incomingFighter.hitstunFrames = stance.counterHitstunFrames;
+  incomingFighter.blockstunFrames = 0;
+  incomingFighter.stun = stance.counterHitstunFrames / SIMULATION_HZ;
+  incomingFighter.vx = counterFighter.facing * stance.counterPush;
+  incomingFighter.pendingKnockdown = true;
+  incomingFighter.grounded = false;
+  incomingFighter.vy = stance.counterLaunchVelocityY;
+  incomingFighter.lastHitResult = "southpaw-countered";
+  incomingFighter.hitFlash = 0.17;
+  incomingFighter.dashFrames = 0;
+  incomingFighter.queuedDashDirection = 0;
+  counterFighter.meter = clamp(counterFighter.meter + 24, 0, GRIT_RULES.maximum);
+  incomingFighter.meter = clamp(incomingFighter.meter + 12, 0, GRIT_RULES.maximum);
+  const impact = collision?.point || {
+    x: incomingFighter.x - counterFighter.facing * 28,
+    y: incomingFighter.y - 132,
+  };
+  spawnHit(impact.x, impact.y, counterFighter.def, "special", false);
+  state.effects.push({ kind: "counterPunch", x: impact.x, y: impact.y, life: 0.62, max: 0.62, color: counterFighter.def.accent });
+  spawnCombatText(impact.x, impact.y - 128, "COUNTER-PUNCH!", counterFighter.def.accent);
+  state.hitstop = Math.max(state.hitstop, 0.16);
+  state.shake = Math.max(state.shake, 0.42);
+  state.lastImpactSide = counterFighter.side;
+  if ($("#flashToggle").checked) state.flash = Math.max(state.flash, 0.11);
+  sound("heavy");
+  updateHud();
+  return true;
+}
+
 function hit(attacker, victim, attack, collision) {
+  if (triggerSouthpawCounter(victim, attacker, attack, collision)) return;
   if (attack.level === ATTACK_LEVELS.THROW) {
     if (!victim.grounded || victim.throwInvulnerableFrames > 0 || victim.down || victim.wakeupFrames > 0) return;
     const recentThrowInput = state.simulationTick - victim.lastThrowInputFrame <= DEFENSE_RULES.throwTechWindowFrames;
@@ -1872,6 +2042,7 @@ function simulateGameTick(dt) {
   updateFighter(state.fighters[1], state.fighters[0], input1, dt);
   if (state.finisher) updateFinisher(dt);
   else {
+    updatePaintTraps();
     resolveCombatInteractions();
     separateFighters();
     updateFacings();
@@ -2116,6 +2287,50 @@ function drawAttackVfx(fighter, time, activePower) {
   ctx.restore();
 }
 
+function drawPaintTraps(time) {
+  for (const trap of state.traps) {
+    const armed = trap.armFrames <= 0;
+    const life = clamp(trap.lifeFrames / trap.maxLifeFrames, 0, 1);
+    const pulse = 1 + Math.sin(time * 0.009 + trap.x * 0.02) * 0.08;
+    ctx.save();
+    ctx.translate(trap.x, trap.y);
+    ctx.globalAlpha = Math.min(1, life * 1.8) * (armed ? 0.9 : 0.58);
+    ctx.fillStyle = trap.color;
+    ctx.shadowColor = trap.color;
+    ctx.shadowBlur = armed ? 21 : 9;
+    ctx.beginPath();
+    ctx.ellipse(0, 1, trap.radius * 0.86 * pulse, 14 * pulse, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha *= 0.55;
+    ctx.fillStyle = "#fff2c6";
+    for (let spot = 0; spot < 6; spot += 1) {
+      const angle = spot * 2.4;
+      ctx.beginPath();
+      ctx.ellipse(Math.cos(angle) * trap.radius * 0.52, -3 + Math.sin(angle) * 7, 6 + spot % 3 * 2, 3, angle, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = Math.min(1, life * 1.8);
+    ctx.fillStyle = "#d9d9d9";
+    ctx.fillRect(-7, -23, 14, 25);
+    ctx.fillStyle = trap.color;
+    ctx.fillRect(-7, -18, 14, 10);
+    ctx.strokeStyle = armed ? "#fff" : trap.color;
+    ctx.lineWidth = armed ? 3 : 2;
+    ctx.globalAlpha *= armed ? 0.75 : 0.35;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, trap.radius * pulse, 20 * pulse, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    if (state.debug) {
+      ctx.globalAlpha = 0.82;
+      ctx.strokeStyle = "#ffef5a";
+      ctx.setLineDash([7, 5]);
+      ctx.strokeRect(-trap.radius, -80, trap.radius * 2, 84);
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+  }
+}
+
 function drawFighter(fighter, time) {
   const jump = FLOOR - fighter.y;
   const attack = fighter.attacking;
@@ -2135,7 +2350,7 @@ function drawFighter(fighter, time) {
   const frame = pose.frame;
   const sizeAdjust = { deathblow: 1.08, jez: 1, alan: 1.08, post: 1.05, benny: 1.01, donald: 1.01, cyraxx: 1.02, ali: 1 }[fighter.def.id] || 1;
   const moveSheetAdjust = pose.bank === "specials"
-    ? ({ deathblow: 1.14, jez: 1.03 }[fighter.def.id] || 1)
+    ? ({ deathblow: 1.14, jez: 1.03, alan: 1.06, post: 1.02 }[fighter.def.id] || 1)
     : 1;
   const renderSize = 330 * sizeAdjust * moveSheetAdjust;
   const attackKind = attack?.kind;
@@ -2418,6 +2633,34 @@ function drawParticles() {
       ctx.fillText(effect.label, 0, 0);
     } else if (effect.kind === "finisherImpact") {
       drawFinisherImpact(effect, alpha);
+    } else if (effect.kind === "paintDeploy" || effect.kind === "paintTrapBurst") {
+      const burst = effect.kind === "paintTrapBurst";
+      const radius = (1 - alpha) * (burst ? 138 : 72) + 12;
+      ctx.globalCompositeOperation = "screen";
+      for (let drop = 0; drop < (burst ? 18 : 9); drop += 1) {
+        const angle = drop * 2.399 + (burst ? 0.35 : 0);
+        const reach = radius * (0.35 + (drop % 5) * 0.13);
+        ctx.globalAlpha = alpha * (0.5 + (drop % 3) * 0.18);
+        ctx.fillStyle = effect.color;
+        ctx.beginPath();
+        ctx.arc(Math.cos(angle) * reach, Math.sin(angle) * reach * 0.45, 4 + (drop % 4) * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (effect.kind === "counterPunch") {
+      const radius = (1 - alpha) * 126 + 24;
+      ctx.globalCompositeOperation = "screen";
+      ctx.lineWidth = 12 * alpha;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, -1.25, 1.25);
+      ctx.stroke();
+      for (let ray = 0; ray < 10; ray += 1) {
+        const angle = ray * Math.PI * 2 / 10;
+        ctx.lineWidth = ray % 2 ? 4 : 8;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * 20, Math.sin(angle) * 20);
+        ctx.lineTo(Math.cos(angle) * radius * 1.35, Math.sin(angle) * radius * 1.35);
+        ctx.stroke();
+      }
     } else if (effect.kind === "slash") {
       ctx.lineWidth = 18 * alpha;
       ctx.beginPath();
@@ -2560,6 +2803,7 @@ function draw(time) {
   }
   drawStage(time);
   if (state.screen === "fight") {
+    drawPaintTraps(time);
     const ordered = [...state.fighters].sort((a, b) => a.y - b.y);
     ordered.forEach((fighter) => drawFighter(fighter, time));
     drawParticles();
@@ -2913,7 +3157,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "0.8-duelist-kits",
+  version: "0.8b-counter-traps",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -2927,6 +3171,15 @@ window.__finalBlowEngine = {
       seed: state.matchSeed,
       rng: state.rng.getState(),
       commands: commandHistory.map((history) => history.map((entry) => ({ ...entry }))),
+      traps: state.traps.map((trap) => ({
+        id: trap.id,
+        ownerSide: trap.ownerSide,
+        x: trap.x,
+        radius: trap.radius,
+        armFrames: trap.armFrames,
+        lifeFrames: trap.lifeFrames,
+        enhanced: trap.enhanced,
+      })),
       fighters: state.fighters.map((fighter) => ({
         id: fighter.def.id,
         side: fighter.side,
@@ -2949,6 +3202,8 @@ window.__finalBlowEngine = {
         attackFrame: fighter.attackFrame,
         attackHits: fighter.attackHits,
         attackConnected: fighter.attackConnected,
+        counterTriggered: fighter.counterTriggered,
+        trapDeployed: fighter.trapDeployed,
         cancelledFrom: fighter.cancelledFrom,
         linkedFrom: fighter.linkedFrom,
         facing: fighter.facing,
@@ -2992,6 +3247,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.fighters = [makeFighter(firstIndex, 0), makeFighter(secondIndex, 1)];
       state.particles.length = 0;
       state.effects.length = 0;
+      state.traps.length = 0;
       state.timer = 99;
       state.timerCarry = 0;
       state.phase = "fight";
@@ -3063,6 +3319,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.fighters[1].health = 0;
       state.particles.length = 0;
       state.effects.length = 0;
+      state.traps.length = 0;
       state.phase = "finish";
       state.phaseTime = 6;
       state.finishWinner = 0;

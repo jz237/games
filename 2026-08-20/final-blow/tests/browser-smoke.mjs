@@ -231,7 +231,7 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /0\.8A/);
+  assert.match(title.build, /0\.8B/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -240,7 +240,12 @@ try {
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
   const kitUi = await evaluate(client, `(async () => {
-    const paths = ['assets/moves/deathblow-specials.webp', 'assets/moves/jez-specials.webp'];
+    const paths = [
+      'assets/moves/deathblow-specials.webp',
+      'assets/moves/jez-specials.webp',
+      'assets/moves/alan-specials.webp',
+      'assets/moves/post-specials.webp',
+    ];
     const loaded = await Promise.all(paths.map((src) => new Promise((resolve) => {
       const image = new Image();
       image.onload = () => resolve({ src, width: image.naturalWidth, height: image.naturalHeight });
@@ -256,7 +261,9 @@ try {
       identity: document.querySelector('#moveListIdentity').textContent,
     };
   })()`);
-  assert.deepEqual(kitUi.loaded.map(({ width, height }) => [width, height]), [[1280, 1280], [1280, 1280]]);
+  assert.deepEqual(kitUi.loaded.map(({ width, height }) => [width, height]), [
+    [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280],
+  ]);
   assert.equal(kitUi.rows.length, 9);
   assert.ok(kitUi.rows.includes('Vinyl Step'));
   assert.match(kitUi.identity, /FOOTSIES/);
@@ -283,9 +290,29 @@ try {
       ['jez', 'enhancedLauncher', 'jez-ex-signpost-rising', 50],
       ['jez', 'throw', 'jez-signpost-trip', 0],
       ['jez', 'super', 'jez-seven-palm-neon-guillotine', 100],
+      ['alan', 'special', 'alan-heavy-hand-special', 0],
+      ['alan', 'commandSpecial', 'alan-south-street-slam', 0],
+      ['alan', 'backSpecial', 'alan-southpaw-counter', 0],
+      ['alan', 'launcher', 'alan-broad-street-uppercut', 0],
+      ['alan', 'enhanced', 'alan-ex-heavy-hand', 50],
+      ['alan', 'enhancedCommandSpecial', 'alan-ex-south-street-slam', 50],
+      ['alan', 'enhancedBackSpecial', 'alan-ex-southpaw-counter', 50],
+      ['alan', 'enhancedLauncher', 'alan-ex-broad-street-uppercut', 50],
+      ['alan', 'throw', 'alan-dockyard-clinch', 0],
+      ['alan', 'super', 'alan-south-street-six', 100],
+      ['post', 'special', 'post-rattlecan-burst', 0],
+      ['post', 'commandSpecial', 'post-paint-the-town', 0],
+      ['post', 'backSpecial', 'post-wet-paint', 0],
+      ['post', 'launcher', 'post-tag-updraft', 0],
+      ['post', 'enhanced', 'post-ex-rattlecan-burst', 50],
+      ['post', 'enhancedCommandSpecial', 'post-ex-paint-the-town', 50],
+      ['post', 'enhancedBackSpecial', 'post-ex-wet-paint', 50],
+      ['post', 'enhancedLauncher', 'post-ex-tag-updraft', 50],
+      ['post', 'throw', 'post-fresh-coat-toss', 0],
+      ['post', 'super', 'post-full-coverage', 100],
     ];
     return specs.map(([id, action, expected, meter]) => {
-      window.__finalBlowQa.fight(id, id === 'jez' ? 'deathblow' : 'jez');
+      window.__finalBlowQa.fight(id, id === 'deathblow' ? 'jez' : 'deathblow');
       if (meter) window.__finalBlowQa.fighter(0, { meter });
       window.__finalBlowQa.input(0, { [action]: true });
       window.__finalBlowQa.step(0.034);
@@ -297,6 +324,54 @@ try {
   assert.ok(kitMoves.every(({ bank }) => bank === 'specials'));
   assert.ok(kitMoves.filter(({ action }) => action.startsWith('enhanced')).every(({ meter }) => meter === 25));
   assert.ok(kitMoves.filter(({ action }) => action === 'super').every(({ meter }) => meter === 0));
+
+  const allanMoveList = await evaluate(client, `(() => {
+    const select = document.querySelector('#moveListSelect');
+    select.value = 'alan';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return {
+      identity: document.querySelector('#moveListIdentity').textContent,
+      moves: [...document.querySelectorAll('.move-list-row b')].map((node) => node.textContent),
+    };
+  })()`);
+  assert.match(allanMoveList.identity, /COUNTER-PUNCHER/);
+  assert.ok(allanMoveList.moves.includes('Southpaw Counter'));
+
+  await evaluate(client, `window.__finalBlowQa.fight('jez', 'alan'); window.__finalBlowQa.positions(500, 610); window.__finalBlowQa.input(1, { backSpecial: true }); window.__finalBlowQa.step(0.05)`);
+  await evaluate(client, `window.__finalBlowQa.input(0, { heavy: true }); window.__finalBlowQa.step(0.24)`);
+  const southpawCounter = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(southpawCounter.fighters[1].counterTriggered, true, 'Allan stance should fire on an incoming strike');
+  assert.equal(southpawCounter.fighters[1].health, 100, 'counter should negate the incoming strike');
+  assert.ok(southpawCounter.fighters[0].health <= 77, 'counter should deliver its own heavy damage');
+  assert.equal(southpawCounter.fighters[0].lastHitResult, 'southpaw-countered');
+  if (process.env.FINAL_BLOW_COUNTER_SCREENSHOT) {
+    await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
+    await delay(80);
+    const capture = await client.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+    await writeFile(process.env.FINAL_BLOW_COUNTER_SCREENSHOT, Buffer.from(capture.data, "base64"));
+  }
+
+  await evaluate(client, `window.__finalBlowQa.fight('post', 'alan'); window.__finalBlowQa.positions(500, 850); window.__finalBlowQa.input(0, { backSpecial: true }); window.__finalBlowQa.step(0.18)`);
+  const armedPaint = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(armedPaint.traps.length, 1, 'Wet Paint should deploy one persistent trap');
+  assert.equal(armedPaint.traps[0].ownerSide, 0);
+  assert.ok(armedPaint.traps[0].lifeFrames > 300, 'trap should persist after Post recovers');
+  await evaluate(client, `window.__finalBlowQa.step(0.28); window.__finalBlowQa.positions(500, 612); window.__finalBlowQa.step(0.05)`);
+  const sprungPaint = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(sprungPaint.traps.length, 0, 'trap should be consumed when the opponent enters it');
+  assert.ok(sprungPaint.fighters[1].health < 100);
+  assert.equal(sprungPaint.fighters[1].lastHitResult, 'paint-trap');
+
+  await evaluate(client, `window.__finalBlowQa.fight('post', 'alan'); window.__finalBlowQa.positions(350, 920); window.__finalBlowQa.fighter(0, { meter: 50 }); window.__finalBlowQa.input(0, { enhancedBackSpecial: true }); window.__finalBlowQa.step(0.14)`);
+  const doublePaint = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(doublePaint.traps.length, 2, 'Wet Paint EX should deploy a two-trap lane');
+  assert.ok(doublePaint.traps.every((trap) => trap.enhanced));
+  if (process.env.FINAL_BLOW_FIGHT_SCREENSHOT) {
+    await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
+    await delay(80);
+    const capture = await client.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+    await writeFile(process.env.FINAL_BLOW_FIGHT_SCREENSHOT, Buffer.from(capture.data, "base64"));
+  }
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
   const movementStart = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
@@ -665,6 +740,16 @@ try {
   assert.equal(jezSuper.fighters[0].combo.hits, 7);
   assert.ok(jezSuper.fighters[0].combo.damage > 20 && jezSuper.fighters[0].combo.damage < 30);
 
+  await evaluate(client, `window.__finalBlowQa.fight('alan', 'post'); window.__finalBlowQa.positions(500, 600); window.__finalBlowQa.fighter(0, { meter: 100 }); window.__finalBlowQa.input(0, { super: true }); window.__finalBlowQa.step(2.4)`);
+  const allanSuper = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(allanSuper.fighters[0].combo.hits, 6);
+  assert.ok(allanSuper.fighters[0].combo.damage > 27 && allanSuper.fighters[0].combo.damage < 33);
+
+  await evaluate(client, `window.__finalBlowQa.fight('post', 'alan'); window.__finalBlowQa.positions(500, 600); window.__finalBlowQa.fighter(0, { meter: 100 }); window.__finalBlowQa.input(0, { super: true }); window.__finalBlowQa.step(2.4)`);
+  const postSuper = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(postSuper.fighters[0].combo.hits, 7);
+  assert.ok(postSuper.fighters[0].combo.damage > 24 && postSuper.fighters[0].combo.damage < 31);
+
   await evaluate(client, `(() => {
     document.querySelector('[data-mode="arcade"]').click();
     document.querySelectorAll('.fighter-card')[0].click();
@@ -761,6 +846,14 @@ try {
   assert.equal(jezVictory.title, "JEZ WINS");
   assert.equal(jezVictory.quote, "READ THE SIGN.");
   assert.match(jezVictory.background, /jez-specials\.webp/);
+  const allanVictory = await evaluate(client, `window.__finalBlowQa.result('alan')`);
+  assert.equal(allanVictory.title, "ALLAN WINS");
+  assert.equal(allanVictory.quote, "SIX SHOTS. ONE ANSWER.");
+  assert.match(allanVictory.background, /alan-specials\.webp/);
+  const postVictory = await evaluate(client, `window.__finalBlowQa.result('post')`);
+  assert.equal(postVictory.title, "POST WINS");
+  assert.equal(postVictory.quote, "THE WHOLE CITY IS MY WALL.");
+  assert.match(postVictory.background, /post-specials\.webp/);
   if (process.env.FINAL_BLOW_VICTORY_SCREENSHOT) {
     await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
     await delay(80);
