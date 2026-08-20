@@ -31,6 +31,18 @@ import {
   gritCostForAction,
   recognizeCombatCommand,
 } from "./engine/combos.mjs";
+import {
+  KIT_ACTIONS,
+  attackAnimationPose,
+  createFighterMove,
+  fighterActionCost,
+  fighterActionGroup,
+  getFighterKit,
+  getFighterMovement,
+  listFighterMoves,
+  recognizeFighterCommand,
+  selectKitAiIntent,
+} from "./engine/fighter-kits.mjs";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -372,6 +384,7 @@ for (const [id, stage] of Object.entries(stages)) {
 
 const fighterImages = {};
 const fighterAtlases = {};
+const fighterMoveAtlases = {};
 for (const fighter of roster) {
   const image = new Image();
   image.src = `assets/fighters/${fighter.id}.webp`;
@@ -379,6 +392,11 @@ for (const fighter of roster) {
   const atlas = new Image();
   atlas.src = `assets/atlases/${fighter.id}.webp`;
   fighterAtlases[fighter.id] = atlas;
+  if (getFighterKit(fighter.id)) {
+    const moveAtlas = new Image();
+    moveAtlas.src = `assets/moves/${fighter.id}-specials.webp`;
+    fighterMoveAtlases[fighter.id] = moveAtlas;
+  }
 }
 
 // Original soundtrack and combat cues generated with the ElevenLabs API.
@@ -444,7 +462,7 @@ const keyMaps = [
 ];
 
 const simulationClock = new FixedStepClock();
-const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.7-combos");
+const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.8-duelist-kits");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
 const state = {
@@ -507,8 +525,11 @@ function seedMatch(round = state.round) {
 
 function makeFighter(index, side) {
   const def = roster[index];
+  const kit = getFighterKit(def.id);
   return {
     def,
+    kit,
+    movement: getFighterMovement(def.id, MOVEMENT_RULES),
     side,
     x: side === 0 ? 355 : 925,
     y: FLOOR,
@@ -531,6 +552,7 @@ function makeFighter(index, side) {
     attackHits: 0,
     lastAttackHitFrame: -Infinity,
     attackConnected: "",
+    armorHits: 0,
     cancelledFrom: "",
     linkedFrom: "",
     linkWindow: null,
@@ -591,6 +613,15 @@ function setupRoster() {
     grid.append(card);
   });
   updateRosterUI();
+}
+
+function renderMoveList(fighterId = "deathblow") {
+  const kit = getFighterKit(fighterId);
+  if (!kit) return;
+  $("#moveListIdentity").innerHTML = `<strong>${kit.archetype}</strong> · ${kit.summary}`;
+  $("#moveListRows").innerHTML = listFighterMoves(fighterId)
+    .map(({ name, command }) => `<div class="move-list-row"><b>${name}</b><span>${command}</span></div>`)
+    .join("");
 }
 
 function showScreen(name) {
@@ -908,8 +939,15 @@ function showResult(winner) {
   state.finisher = null;
   state.cinematicZoom = 1;
   const def = state.fighters[winner].def;
+  const kit = getFighterKit(def.id);
   $("#resultTitle").textContent = `${def.name} WINS`;
   $("#resultFinisher").textContent = state.finisherType >= 0 ? def.finishers[state.finisherType] : "KNOCKOUT";
+  const victoryPose = $("#victoryPose");
+  victoryPose.classList.toggle("portrait-art", !kit);
+  victoryPose.style.backgroundImage = kit
+    ? `url("assets/moves/${def.id}-specials.webp")`
+    : `url("assets/fighters/${def.id}.webp")`;
+  $("#resultQuote").textContent = kit?.victory.quote || "PHILLY REMEMBERS THE WINNER.";
   showScreen("result");
 }
 
@@ -1007,6 +1045,38 @@ function aiInput(fighter, opponent, dt) {
   if (fighter.aiClock <= 0) {
     fighter.aiClock = 0.14 + random() * 0.32;
     const abs = Math.abs(distance);
+    if (fighter.kit) {
+      if (opponent.attacking && abs < 158 && random() < 0.64) {
+        input.guard = true;
+        input.down = opponent.attacking.level === ATTACK_LEVELS.LOW;
+        return input;
+      }
+      const roll = random();
+      const intent = selectKitAiIntent(fighter.def.id, {
+        distance: abs,
+        opponentAirborne: !opponent.grounded,
+        meter: fighter.meter,
+        roll,
+      });
+      if (intent?.movement === "advance") {
+        input.right = distance > 0;
+        input.left = distance < 0;
+      } else if (intent?.movement === "retreat") {
+        input.right = distance < 0;
+        input.left = distance > 0;
+      }
+      let action = intent?.action;
+      if (action && fighter.meter >= GRIT_RULES.enhancedSpecialCost && roll > 0.82) {
+        action = {
+          special: "enhanced",
+          commandSpecial: "enhancedCommandSpecial",
+          backSpecial: "enhancedBackSpecial",
+          launcher: "enhancedLauncher",
+        }[action] || action;
+      }
+      if (action) input[action] = true;
+      return input;
+    }
     if (opponent.attacking && abs < 145 && random() < 0.62) input.down = true;
     else if (abs > 250) {
       input.right = distance > 0;
@@ -1064,6 +1134,7 @@ function recordInput(side, input, fighter) {
   if (input.right) rememberCommand(side, fighter.facing === 1 ? "forward" : "back");
   if (input.heavy) rememberCommand(side, "heavy");
   if (input.special) rememberCommand(side, "special");
+  if (input.enhanced) rememberCommand(side, "enhanced");
 }
 
 function tryFinish(side, input) {
@@ -1088,32 +1159,46 @@ function directionContext(fighter, input) {
   };
 }
 
-const advancedActions = new Set(["commandSpecial", "launcher", "driveHeavy", "enhanced", "guardReversal", "super"]);
+const advancedActions = new Set([
+  "commandSpecial",
+  "launcher",
+  "driveHeavy",
+  "enhanced",
+  "guardReversal",
+  "super",
+  ...KIT_ACTIONS,
+]);
 
 function beginAttack(fighter, action, input = {}, { reversal = false, force = false, cancelledFrom = "" } = {}) {
   if (!force && (fighter.attacking || fighter.stun > 0 || fighter.down || fighter.wakeupFrames > 0)) return false;
-  if (action === "throw" && !fighter.grounded) return false;
+  const actionGroup = fighterActionGroup(action);
+  if (actionGroup === "throw" && !fighter.grounded) return false;
   if (advancedActions.has(action) && !fighter.grounded) return false;
-  const gritCost = gritCostForAction(action);
-  if (fighter.meter < gritCost) return false;
   const direction = directionContext(fighter, input);
+  const moveContext = {
+    airborne: !fighter.grounded,
+    crouching: fighter.crouch || Boolean(input.down),
+    forwardHeld: direction.forwardHeld,
+  };
+  const kitMove = createFighterMove(fighter.def.id, action, moveContext);
+  const gritCost = kitMove
+    ? fighterActionCost(fighter.def.id, action, moveContext)
+    : gritCostForAction(action);
+  if (fighter.meter < gritCost) return false;
   const validLink = !cancelledFrom
     && fighter.linkWindow?.connected === "hit"
     && fighter.linkWindow.expiresFrame >= state.simulationTick
-    && ["light", "heavy"].includes(action);
+    && ["light", "heavy"].includes(actionGroup);
   const linkedFrom = validLink ? fighter.linkWindow.profileId : "";
-  fighter.attacking = advancedActions.has(action)
+  fighter.attacking = kitMove || (advancedActions.has(action)
     ? createAdvancedMove(action)
-    : createCombatMove(action, {
-      airborne: !fighter.grounded,
-      crouching: fighter.crouch || Boolean(input.down),
-      forwardHeld: direction.forwardHeld,
-    });
+    : createCombatMove(action, moveContext));
   fighter.meter = clamp(fighter.meter - gritCost, 0, GRIT_RULES.maximum);
   fighter.attackTime = 0;
   fighter.attackFrame = 0;
   fighter.attackHit = false;
   fighter.attackHits = 0;
+  fighter.armorHits = 0;
   fighter.lastAttackHitFrame = -Infinity;
   fighter.attackConnected = "";
   fighter.cancelledFrom = cancelledFrom;
@@ -1143,8 +1228,16 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     spawnCombatText(fighter.x, fighter.y - fighter.height - 35, "FULL GRIT SUPER", fighter.def.accent);
   }
   if (linkedFrom) spawnCombatText(fighter.x, fighter.y - fighter.height - 20, "LINK", fighter.def.accent);
+  if (fighter.attacking.moveName) {
+    spawnCombatText(
+      fighter.x + fighter.facing * 28,
+      fighter.y - fighter.height - 42,
+      fighter.attacking.moveName,
+      fighter.def.accent,
+    );
+  }
   updateHud();
-  sound(fighter.attacking.superMove ? "final" : action === "throw" ? "heavy" : fighter.attacking.kind);
+  sound(fighter.attacking.superMove ? "final" : actionGroup === "throw" ? "heavy" : fighter.attacking.kind);
   return true;
 }
 
@@ -1159,6 +1252,7 @@ const bufferedActions = [
   "light",
   "heavy",
   "special",
+  ...KIT_ACTIONS,
 ];
 
 function bufferActionInputs(fighter, input) {
@@ -1195,14 +1289,19 @@ function prepareFighterInput(fighter, input) {
     super: Boolean(input.super || (input.final && state.phase === "fight")),
     final: Boolean(input.final),
   };
+  for (const action of advancedActions) normalized[action] = Boolean(normalized[action] || input[action]);
   recordInput(fighter.side, normalized, fighter);
   if (state.phase === "fight") {
-    const command = recognizeCombatCommand(commandHistory[fighter.side], state.simulationTick);
-    if (command && ((command.action === "commandSpecial" && normalized.special)
-      || (["launcher", "driveHeavy"].includes(command.action) && normalized.heavy))) {
+    const command = recognizeFighterCommand(
+      fighter.def.id,
+      commandHistory[fighter.side],
+      state.simulationTick,
+    ) || recognizeCombatCommand(commandHistory[fighter.side], state.simulationTick);
+    const terminal = command?.terminal
+      || (command?.action === "commandSpecial" ? "special" : "heavy");
+    if (command && normalized[terminal]) {
       normalized[command.action] = true;
-      if (command.action === "commandSpecial") normalized.special = false;
-      else normalized.heavy = false;
+      normalized[terminal] = false;
       commandHistory[fighter.side].splice(0, command.endIndex + 1);
     }
     bufferActionInputs(fighter, normalized);
@@ -1262,13 +1361,13 @@ function advanceFighterTimers(fighter) {
 function startDash(fighter, direction) {
   const forward = direction === fighter.facing;
   fighter.dashDirection = direction;
-  fighter.dashFrames = forward ? MOVEMENT_RULES.forwardDashFrames : MOVEMENT_RULES.backDashFrames;
-  fighter.dashCooldownFrames = fighter.dashFrames + MOVEMENT_RULES.dashCooldownFrames;
+  fighter.dashFrames = forward ? fighter.movement.forwardDashFrames : fighter.movement.backDashFrames;
+  fighter.dashCooldownFrames = fighter.dashFrames + fighter.movement.dashCooldownFrames;
   fighter.queuedDashDirection = 0;
   fighter.block = false;
   fighter.guarding = false;
   fighter.crouch = false;
-  if (!forward) fighter.invulnerableFrames = Math.max(fighter.invulnerableFrames, MOVEMENT_RULES.backDashInvulnerableFrames);
+  if (!forward) fighter.invulnerableFrames = Math.max(fighter.invulnerableFrames, fighter.movement.backDashInvulnerableFrames);
 }
 
 function applyFighterPhysics(fighter, dt) {
@@ -1295,8 +1394,12 @@ function applyFighterPhysics(fighter, dt) {
 
 const attackActionPriority = [
   "super",
+  "enhancedLauncher",
+  "enhancedBackSpecial",
+  "enhancedCommandSpecial",
   "enhanced",
   "launcher",
+  "backSpecial",
   "driveHeavy",
   "commandSpecial",
   "throw",
@@ -1326,8 +1429,13 @@ function tryAttackCancel(fighter, input) {
   const current = fighter.attacking;
   if (!current || !fighter.attackConnected) return false;
   const action = bufferedAction(fighter, attackActionPriority.filter((candidate) => candidate !== "throw"));
-  if (!action || !canCancelAttack(current, action, fighter.attackFrame, fighter.attackConnected)) return false;
-  if (fighter.meter < gritCostForAction(action)) return false;
+  const actionGroup = fighterActionGroup(action);
+  if (!action || !canCancelAttack(current, actionGroup, fighter.attackFrame, fighter.attackConnected)) return false;
+  const moveContext = { airborne: !fighter.grounded, crouching: fighter.crouch, ...directionContext(fighter, input) };
+  const gritCost = createFighterMove(fighter.def.id, action, moveContext)
+    ? fighterActionCost(fighter.def.id, action, moveContext)
+    : gritCostForAction(action);
+  if (fighter.meter < gritCost) return false;
   fighter.inputBuffer.consume(action, state.simulationTick);
   const previousMove = current.profileId;
   fighter.attacking = null;
@@ -1337,7 +1445,7 @@ function tryAttackCancel(fighter, input) {
     return false;
   }
   fighter.confirmWindowFrames = 12;
-  const chain = ["light", "heavy", "launcher", "driveHeavy"].includes(action);
+  const chain = ["light", "heavy", "launcher", "driveHeavy"].includes(actionGroup);
   spawnCombatText(
     fighter.x + fighter.facing * 35,
     fighter.y - fighter.height - 22,
@@ -1351,10 +1459,16 @@ function tryStartupChordOverride(fighter, input) {
   const current = fighter.attacking;
   if (!current || fighter.attackConnected) return false;
   let action = null;
+  const bufferedEnhanced = bufferedAction(fighter, [
+    "enhancedLauncher",
+    "enhancedBackSpecial",
+    "enhancedCommandSpecial",
+    "enhanced",
+  ]);
   if (fighter.attackFrame <= 6
     && ["heavy", "special"].includes(current.kind)
-    && fighter.inputBuffer.has("enhanced", state.simulationTick)
-    && fighter.meter >= GRIT_RULES.enhancedSpecialCost) action = "enhanced";
+    && bufferedEnhanced
+    && fighter.meter >= GRIT_RULES.enhancedSpecialCost) action = bufferedEnhanced;
   else if (fighter.attackFrame <= 3
     && ["light", "heavy"].includes(current.kind)
     && fighter.inputBuffer.has("throw", state.simulationTick)) action = "throw";
@@ -1367,7 +1481,7 @@ function tryStartupChordOverride(fighter, input) {
     fighter.attacking = current;
     return false;
   }
-  spawnCombatText(fighter.x, fighter.y - fighter.height - 18, action === "enhanced" ? "ENHANCED" : "THROW", fighter.def.accent);
+  spawnCombatText(fighter.x, fighter.y - fighter.height - 18, fighterActionGroup(action) === "enhanced" ? "ENHANCED" : "THROW", fighter.def.accent);
   return true;
 }
 
@@ -1408,11 +1522,22 @@ function updateFighter(fighter, opponent, input, dt) {
         fighter.inputBuffer.consume("special", state.simulationTick);
         beginAttack(fighter, "special", input, { reversal: true });
       } else {
-        const commandAction = bufferedAction(fighter, ["super", "enhanced", "launcher", "driveHeavy", "commandSpecial"]);
+        const commandAction = bufferedAction(fighter, [
+          "super",
+          "enhancedLauncher",
+          "enhancedBackSpecial",
+          "enhancedCommandSpecial",
+          "enhanced",
+          "launcher",
+          "backSpecial",
+          "driveHeavy",
+          "commandSpecial",
+        ]);
         if (commandAction) {
           fighter.inputBuffer.consume(commandAction, state.simulationTick);
           beginAttack(fighter, commandAction, input, {
-            reversal: fighter.reversalWindowFrames > 0 && commandAction === "commandSpecial",
+            reversal: fighter.reversalWindowFrames > 0
+              && ["commandSpecial", "backSpecial", "launcher", "enhancedLauncher"].includes(commandAction),
           });
         } else if (fighter.queuedDashDirection && fighter.dashCooldownFrames === 0 && !fighter.crouch) {
           startDash(fighter, fighter.queuedDashDirection);
@@ -1422,10 +1547,10 @@ function updateFighter(fighter, opponent, input, dt) {
       if (fighter.dashFrames <= 0 && !fighter.attacking) {
         if (fighter.inputBuffer.has("jump", state.simulationTick)) {
           fighter.inputBuffer.consume("jump", state.simulationTick);
-          fighter.vy = MOVEMENT_RULES.jumpVelocityY;
-          fighter.vx = direction.forwardHeld ? fighter.facing * MOVEMENT_RULES.forwardJumpVelocityX
-            : direction.backHeld ? -fighter.facing * MOVEMENT_RULES.backJumpVelocityX
-              : MOVEMENT_RULES.neutralJumpVelocityX;
+          fighter.vy = fighter.movement.jumpVelocityY;
+          fighter.vx = direction.forwardHeld ? fighter.facing * fighter.movement.forwardJumpVelocityX
+            : direction.backHeld ? -fighter.facing * fighter.movement.backJumpVelocityX
+              : fighter.movement.neutralJumpVelocityX;
           fighter.grounded = false;
           fighter.block = false;
           fighter.guarding = false;
@@ -1433,7 +1558,7 @@ function updateFighter(fighter, opponent, input, dt) {
         } else {
           if (fighter.crouch) fighter.vx = 0;
           else if (direction.absolute) {
-            const speed = direction.forwardHeld ? MOVEMENT_RULES.forwardWalkSpeed : MOVEMENT_RULES.backWalkSpeed;
+            const speed = direction.forwardHeld ? fighter.movement.forwardWalkSpeed : fighter.movement.backWalkSpeed;
             fighter.vx = direction.absolute * speed;
           } else fighter.vx = 0;
           if (Math.abs(fighter.vx) > 20) fighter.walkTime += dt;
@@ -1449,11 +1574,11 @@ function updateFighter(fighter, opponent, input, dt) {
 
   if (fighter.dashFrames > 0 && !fighter.attacking) {
     const forward = fighter.dashDirection === fighter.facing;
-    fighter.vx = fighter.dashDirection * (forward ? MOVEMENT_RULES.forwardDashSpeed : MOVEMENT_RULES.backDashSpeed);
+    fighter.vx = fighter.dashDirection * (forward ? fighter.movement.forwardDashSpeed : fighter.movement.backDashSpeed);
     fighter.dashFrames -= 1;
     fighter.block = false;
     fighter.guarding = false;
-    if (!forward && fighter.dashFrames >= MOVEMENT_RULES.backDashFrames - MOVEMENT_RULES.backDashInvulnerableFrames) {
+    if (!forward && fighter.dashFrames >= fighter.movement.backDashFrames - fighter.movement.backDashInvulnerableFrames) {
       fighter.invulnerableFrames = Math.max(fighter.invulnerableFrames, 1);
     }
   }
@@ -1525,9 +1650,14 @@ function hit(attacker, victim, attack, collision) {
     guarding: victim.guarding,
     grounded: victim.grounded,
   });
+  const armored = !blocked
+    && attack.level !== ATTACK_LEVELS.THROW
+    && victim.attacking?.armorFrames > 0
+    && victim.attackFrame <= victim.attacking.armorFrames
+    && victim.armorHits < 1;
   attacker.attackConnected = blocked ? "block" : "hit";
   attacker.confirmWindowFrames = 12;
-  const counter = !blocked && attack.level !== ATTACK_LEVELS.THROW && isCounterHit(victim);
+  const counter = !blocked && !armored && attack.level !== ATTACK_LEVELS.THROW && isCounterHit(victim);
   const wasJuggle = !victim.grounded || victim.pendingKnockdown;
   let comboResult = { hitNumber: 1, damageScale: 1 };
   if (!blocked && attack.level !== ATTACK_LEVELS.THROW) {
@@ -1535,18 +1665,19 @@ function hit(attacker, victim, attack, collision) {
   } else if (!blocked) attacker.combo.reset();
   const baseDamage = attack.damage
     * (counter ? DEFENSE_RULES.counterDamageMultiplier : 1)
-    * comboResult.damageScale;
+    * comboResult.damageScale
+    * (armored ? 0.65 : 1);
   const damage = blocked ? attack.chipDamage : baseDamage;
   victim.health = blocked
     ? Math.max(1, victim.health - damage)
     : clamp(victim.health - damage, 0, 100);
   victim.blockstunFrames = blocked ? attack.blockstunFrames : 0;
-  victim.hitstunFrames = blocked ? 0 : attack.hitstunFrames + (counter ? DEFENSE_RULES.counterHitstunBonusFrames : 0);
+  victim.hitstunFrames = blocked || armored ? 0 : attack.hitstunFrames + (counter ? DEFENSE_RULES.counterHitstunBonusFrames : 0);
   victim.stun = Math.max(victim.hitstunFrames, victim.blockstunFrames) / SIMULATION_HZ;
-  victim.vx = attacker.facing * attack.push * (blocked ? 0.28 : 1);
+  victim.vx = attacker.facing * attack.push * (blocked ? 0.28 : armored ? 0.12 : 1);
   victim.guardHeight = victim.crouch ? "low" : victim.guardHeight;
-  victim.lastHitResult = blocked ? `blocked-${attack.level}` : counter ? "counter" : attack.level;
-  if (!blocked) {
+  victim.lastHitResult = blocked ? `blocked-${attack.level}` : armored ? "armor" : counter ? "counter" : attack.level;
+  if (!blocked && !armored) {
     attacker.combo.addDamage(damage);
     if (wasJuggle) victim.juggleCount += 1;
     victim.attacking = null;
@@ -1568,6 +1699,9 @@ function hit(attacker, victim, attack, collision) {
       victim.grounded = false;
       victim.vy = attack.juggleLift;
     }
+  } else if (armored) {
+    victim.armorHits += 1;
+    spawnCombatText(victim.x, victim.y - victim.height - 18, "SEISMIC ARMOR", victim.def.accent);
   }
   victim.hitFlash = 0.12;
   attacker.meter = clamp(attacker.meter + attack.meter * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
@@ -1622,7 +1756,8 @@ function resolveCombatInteractions() {
     if (attacker.attackHits > 0
       && attacker.attackFrame - attacker.lastAttackHitFrame < (attacker.attacking.rehitFrames || Infinity)) return null;
     const victim = state.fighters[1 - side];
-    if ((!victim.grounded || victim.pendingKnockdown) && victim.juggleCount >= COMBO_RULES.juggleLimit) return null;
+    const juggleLimit = attacker.attacking.juggleLimit || COMBO_RULES.juggleLimit;
+    if ((!victim.grounded || victim.pendingKnockdown) && victim.juggleCount >= juggleLimit) return null;
     const collision = findBoxCollision(attacker, victim);
     return collision ? { attacker, victim, attack: attacker.attacking, collision } : null;
   }).filter(Boolean);
@@ -1661,17 +1796,18 @@ function spawnHit(x, y, def, attackKind, blocked) {
 function separateFighters() {
   const [a, b] = state.fighters;
   if (!a || !b) return;
+  if (a.attacking?.ignorePushbox || b.attacking?.ignorePushbox) return;
   if ((!a.grounded && a.y < FLOOR - 34) || (!b.grounded && b.y < FLOOR - 34)) return;
   const positions = resolvePushboxPositions(
     {
       x: a.x,
       side: a.side,
-      halfWidth: a.crouch ? MOVEMENT_RULES.crouchingPushboxHalfWidth : MOVEMENT_RULES.standingPushboxHalfWidth,
+      halfWidth: a.crouch ? a.movement.crouchingPushboxHalfWidth : a.movement.standingPushboxHalfWidth,
     },
     {
       x: b.x,
       side: b.side,
-      halfWidth: b.crouch ? MOVEMENT_RULES.crouchingPushboxHalfWidth : MOVEMENT_RULES.standingPushboxHalfWidth,
+      halfWidth: b.crouch ? b.movement.crouchingPushboxHalfWidth : b.movement.standingPushboxHalfWidth,
     },
   );
   a.x = positions.aX;
@@ -1877,29 +2013,32 @@ function drawVetAtmosphere(time) {
   }
 }
 
-function fighterAnimationFrame(fighter) {
-  if (fighter.cinematicFrame !== null) return fighter.cinematicFrame;
-  if (fighter.down || fighter.knockdownFrames > 0 || fighter.hitFlash > 0 || fighter.hitstunFrames > 21) return 15;
-  if (fighter.wakeupFrames > 0) return fighter.wakeupFrames > 9 ? 15 : 12;
-  if (fighter.throwTechFlashFrames > 0) return 12;
-  if (fighter.block || fighter.blockstunFrames > 0 || fighter.crouch) return 12;
+function fighterAnimationPose(fighter) {
+  const base = (frame) => ({ bank: "base", frame });
+  if (fighter.cinematicFrame !== null) return base(fighter.cinematicFrame);
+  if (fighter.down || fighter.knockdownFrames > 0 || fighter.hitFlash > 0 || fighter.hitstunFrames > 21) return base(15);
+  if (fighter.wakeupFrames > 0) return base(fighter.wakeupFrames > 9 ? 15 : 12);
+  if (fighter.throwTechFlashFrames > 0) return base(12);
+  if (fighter.block || fighter.blockstunFrames > 0 || fighter.crouch) return base(12);
   if (fighter.attacking) {
     const attack = fighter.attacking;
+    const kitPose = attackAnimationPose(attack, fighter.attackFrame);
+    if (kitPose) return kitPose;
     const startup = attack.active[0];
     const activeEnd = attack.active[1];
     const time = fighter.attackTime;
     const frames = attack.kind === "light" ? [8, 9, 10, 11]
       : attack.kind === "heavy" ? [8, 13, 13, 11]
         : [8, 13, 14, 11];
-    if (time < startup * 0.48) return frames[0];
-    if (time < startup) return frames[1];
-    if (time <= activeEnd) return frames[2];
-    return frames[3];
+    if (time < startup * 0.48) return base(frames[0]);
+    if (time < startup) return base(frames[1]);
+    if (time <= activeEnd) return base(frames[2]);
+    return base(frames[3]);
   }
-  if (!fighter.grounded) return fighter.vy < 0 ? 13 : 15;
-  if (fighter.dashFrames > 0) return 5 + Math.floor(fighter.walkTime * 18) % 3;
-  if (Math.abs(fighter.vx) > 22) return 4 + Math.floor(fighter.walkTime * 10) % 4;
-  return Math.floor(fighter.animTime * 5) % 4;
+  if (!fighter.grounded) return base(fighter.vy < 0 ? 13 : 15);
+  if (fighter.dashFrames > 0) return base(5 + Math.floor(fighter.walkTime * 18) % 3);
+  if (Math.abs(fighter.vx) > 22) return base(4 + Math.floor(fighter.walkTime * 10) % 4);
+  return base(Math.floor(fighter.animTime * 5) % 4);
 }
 
 function drawAtlasFrame(atlas, frame, size) {
@@ -1989,10 +2128,16 @@ function drawFighter(fighter, time) {
   const moving = Math.abs(fighter.vx) > 22 && fighter.grounded && !attack;
   const bob = fighter.cinematicFrame === null && fighter.grounded && !fighter.stun && !fighter.block
     ? Math.sin((moving ? fighter.walkTime * 20 : fighter.animTime * 10) + fighter.side * 2) * (moving ? 1.8 : 2.7) : 0;
-  const atlas = fighterAtlases[fighter.def.id];
-  const frame = fighterAnimationFrame(fighter);
+  const pose = fighterAnimationPose(fighter);
+  const atlas = pose.bank === "specials"
+    ? fighterMoveAtlases[fighter.def.id] || fighterAtlases[fighter.def.id]
+    : fighterAtlases[fighter.def.id];
+  const frame = pose.frame;
   const sizeAdjust = { deathblow: 1.08, jez: 1, alan: 1.08, post: 1.05, benny: 1.01, donald: 1.01, cyraxx: 1.02, ali: 1 }[fighter.def.id] || 1;
-  const renderSize = 330 * sizeAdjust;
+  const moveSheetAdjust = pose.bank === "specials"
+    ? ({ deathblow: 1.14, jez: 1.03 }[fighter.def.id] || 1)
+    : 1;
+  const renderSize = 330 * sizeAdjust * moveSheetAdjust;
   const attackKind = attack?.kind;
   const lunge = attackSwing * (attackKind === "special" ? 68 : attackKind === "heavy" ? 46 : 29);
   const crouchScale = fighter.crouch ? 0.88 : 1;
@@ -2370,7 +2515,9 @@ function drawDebugOverlay() {
     ctx.strokeStyle = hurtColor;
     for (const box of getHurtboxes(fighter)) ctx.strokeRect(box.x, box.y, box.width, box.height);
     ctx.strokeStyle = "rgba(110,255,125,.88)";
-    const pushHalf = fighter.crouch ? MOVEMENT_RULES.crouchingPushboxHalfWidth : MOVEMENT_RULES.standingPushboxHalfWidth;
+    const pushHalf = fighter.crouch
+      ? fighter.movement.crouchingPushboxHalfWidth
+      : fighter.movement.standingPushboxHalfWidth;
     ctx.strokeRect(fighter.x - pushHalf, fighter.y - 112, pushHalf * 2, 112);
     ctx.strokeStyle = "#ffef5a";
     for (const box of getActiveHitboxes(fighter)) ctx.strokeRect(box.x, box.y, box.width, box.height);
@@ -2693,6 +2840,7 @@ function menuPadLoop() {
 
 $$('[data-mode]').forEach((button) => button.addEventListener("click", () => startSelect(button.dataset.mode)));
 $("#controlsButton").addEventListener("click", () => { unlockAudio(); $("#controlsDialog").showModal(); });
+$("#moveListSelect").addEventListener("change", (event) => renderMoveList(event.target.value));
 $("#musicToggle").addEventListener("change", () => {
   unlockAudio();
   syncMusic();
@@ -2765,7 +2913,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "0.7-combos",
+  version: "0.8-duelist-kits",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -2792,6 +2940,11 @@ window.__finalBlowEngine = {
         meter: fighter.meter,
         attack: fighter.attacking?.kind || null,
         move: fighter.attacking?.profileId || null,
+        moveName: fighter.attacking?.moveName || null,
+        kitAction: fighter.attacking?.kitAction || null,
+        animationBank: fighter.attacking?.animation?.bank || "base",
+        archetype: fighter.kit?.archetype || null,
+        movement: { ...fighter.movement },
         attackLevel: fighter.attacking?.level || null,
         attackFrame: fighter.attackFrame,
         attackHits: fighter.attackHits,
@@ -2922,6 +3075,21 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       updateHud();
       $(".touch-final").classList.add("ready");
     },
+    result(id = "deathblow") {
+      const index = roster.findIndex((fighter) => fighter.id === id);
+      if (index < 0) throw new Error(`Unknown fighter: ${id}`);
+      state.mode = "versus";
+      state.qaManualMode = true;
+      state.picks = [index, index === 1 ? 0 : 1];
+      state.fighters = [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1)];
+      state.finisherType = -1;
+      showResult(0);
+      return {
+        title: $("#resultTitle").textContent,
+        quote: $("#resultQuote").textContent,
+        background: $("#victoryPose").style.backgroundImage,
+      };
+    },
     status() {
       return {
         phase: state.phase,
@@ -2945,6 +3113,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
 }
 
 setupRoster();
+renderMoveList();
 updateMusicUi();
 updateVolumeUi();
 syncOrientationGate();

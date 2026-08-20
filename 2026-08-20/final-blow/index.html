@@ -19,7 +19,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">GRIT &amp; COMBO SYSTEM <b>0.7A</b></div>
+      <div class="build-tag">DUELIST KITS <b>0.8A</b></div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
     </header>
@@ -102,13 +102,17 @@
       </section>
 
       <section id="resultScreen" class="screen result-screen" aria-labelledby="resultTitle">
-        <p class="eyebrow">MATCH COMPLETE</p>
-        <h2 id="resultTitle">DEATHBLOW WINS</h2>
-        <div id="resultFinisher">FAULTLINE EXECUTION</div>
-        <div class="menu-stack horizontal">
-          <button id="rematchButton" class="arcade-button primary menu-focus">REMATCH</button>
-          <button id="reselectButton" class="arcade-button">SELECT FIGHTERS</button>
-          <button class="arcade-button ghost" data-back="title">TITLE</button>
+        <div id="victoryPose" class="victory-pose" aria-hidden="true"></div>
+        <div class="result-copy">
+          <p class="eyebrow">MATCH COMPLETE</p>
+          <h2 id="resultTitle">DEATHBLOW WINS</h2>
+          <div id="resultFinisher">FAULTLINE EXECUTION</div>
+          <blockquote id="resultQuote">THE STREET MOVED FIRST.</blockquote>
+          <div class="menu-stack horizontal">
+            <button id="rematchButton" class="arcade-button primary menu-focus">REMATCH</button>
+            <button id="reselectButton" class="arcade-button">SELECT FIGHTERS</button>
+            <button class="arcade-button ghost" data-back="title">TITLE</button>
+          </div>
         </div>
       </section>
 
@@ -147,7 +151,7 @@
           <p><kbd>J</kbd> LIGHT · <kbd>K</kbd> HEAVY · <kbd>L</kbd> SPECIAL</p>
           <p>DOUBLE-TAP DASH · LIGHT + HEAVY THROW · <kbd>I</kbd> GUARD</p>
           <p>HEAVY + SPECIAL ENHANCED · FULL GRIT + <kbd>U</kbd> SUPER</p>
-          <p>COMMANDS: ↓ → SPECIAL · → ↓ → HEAVY · ← → HEAVY</p>
+          <p>COMMANDS: ↓ → SPECIAL · ↓ ← SPECIAL · → ↓ → HEAVY · ← → HEAVY</p>
           <p>FINAL BLOWS: ↓ → HEAVY · ← ↓ → SPECIAL · <kbd>U</kbd> CHARACTER COMBO</p>
         </section>
         <section>
@@ -156,7 +160,7 @@
           <p><kbd>1</kbd> LIGHT · <kbd>2</kbd> HEAVY · <kbd>3</kbd> SPECIAL</p>
           <p>DOUBLE-TAP DASH · LIGHT + HEAVY THROW · <kbd>5</kbd> GUARD</p>
           <p>HEAVY + SPECIAL ENHANCED · FULL GRIT + <kbd>0</kbd> SUPER</p>
-          <p>COMMANDS: ↓ → SPECIAL · → ↓ → HEAVY · ← → HEAVY</p>
+          <p>COMMANDS: ↓ → SPECIAL · ↓ ← SPECIAL · → ↓ → HEAVY · ← → HEAVY</p>
           <p>FINAL BLOWS: ↓ → HEAVY · ← ↓ → SPECIAL · <kbd>0</kbd> CHARACTER COMBO</p>
         </section>
         <section>
@@ -189,6 +193,17 @@
               <option value="3">SUBWAY AFTER MIDNIGHT</option>
             </select>
           </label>
+        </section>
+        <section class="move-list-panel">
+          <header>
+            <div><h3>FEATURED FIGHTER MOVE LIST</h3><p>Unique frame data, specials and enhanced routes.</p></div>
+            <select id="moveListSelect" aria-label="Choose fighter move list">
+              <option value="deathblow">DEATHBLOW</option>
+              <option value="jez">JEZ</option>
+            </select>
+          </header>
+          <div id="moveListIdentity" class="move-list-identity"></div>
+          <div id="moveListRows" class="move-list-rows"></div>
         </section>
       </div>
       <p class="dialog-note">Hit-confirm normals into chains or specials. Enhanced moves cost 25 Grit; during blockstun, Enhanced or Forward + Special triggers a 30-Grit guard reversal. Supers cost 100. Post-KO FB still performs each fighter's unique Final Blow.</p>

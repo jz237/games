@@ -226,16 +226,77 @@ try {
     rosterCards: document.querySelectorAll('.fighter-card').length,
     gritLabels: document.querySelectorAll('.grit-row').length,
     comboReadouts: document.querySelectorAll('.combo-readout').length,
+    moveListRows: document.querySelectorAll('.move-list-row').length,
     engine: window.__finalBlowEngine?.snapshot(),
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /0\.7A/);
+  assert.match(title.build, /0\.8A/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
+  assert.equal(title.moveListRows, 9);
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
+
+  const kitUi = await evaluate(client, `(async () => {
+    const paths = ['assets/moves/deathblow-specials.webp', 'assets/moves/jez-specials.webp'];
+    const loaded = await Promise.all(paths.map((src) => new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve({ src, width: image.naturalWidth, height: image.naturalHeight });
+      image.onerror = () => resolve({ src, width: 0, height: 0 });
+      image.src = src;
+    })));
+    const select = document.querySelector('#moveListSelect');
+    select.value = 'jez';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return {
+      loaded,
+      rows: [...document.querySelectorAll('.move-list-row b')].map((node) => node.textContent),
+      identity: document.querySelector('#moveListIdentity').textContent,
+    };
+  })()`);
+  assert.deepEqual(kitUi.loaded.map(({ width, height }) => [width, height]), [[1280, 1280], [1280, 1280]]);
+  assert.equal(kitUi.rows.length, 9);
+  assert.ok(kitUi.rows.includes('Vinyl Step'));
+  assert.match(kitUi.identity, /FOOTSIES/);
+
+  const kitMoves = await evaluate(client, `(() => {
+    const specs = [
+      ['deathblow', 'special', 'deathblow-tremor-tap', 0],
+      ['deathblow', 'commandSpecial', 'deathblow-faultline-fist', 0],
+      ['deathblow', 'backSpecial', 'deathblow-aftershock-grab', 0],
+      ['deathblow', 'launcher', 'deathblow-quarry-breaker', 0],
+      ['deathblow', 'enhanced', 'deathblow-ex-tremor-tap', 50],
+      ['deathblow', 'enhancedCommandSpecial', 'deathblow-ex-faultline-fist', 50],
+      ['deathblow', 'enhancedBackSpecial', 'deathblow-ex-aftershock-grab', 50],
+      ['deathblow', 'enhancedLauncher', 'deathblow-ex-quarry-breaker', 50],
+      ['deathblow', 'throw', 'deathblow-concrete-pour', 0],
+      ['deathblow', 'super', 'deathblow-epicenter-execution', 100],
+      ['jez', 'special', 'jez-neon-edge', 0],
+      ['jez', 'commandSpecial', 'jez-signline-lance', 0],
+      ['jez', 'backSpecial', 'jez-vinyl-step', 0],
+      ['jez', 'launcher', 'jez-signpost-rising', 0],
+      ['jez', 'enhanced', 'jez-ex-neon-edge', 50],
+      ['jez', 'enhancedCommandSpecial', 'jez-ex-signline-lance', 50],
+      ['jez', 'enhancedBackSpecial', 'jez-ex-vinyl-step', 50],
+      ['jez', 'enhancedLauncher', 'jez-ex-signpost-rising', 50],
+      ['jez', 'throw', 'jez-signpost-trip', 0],
+      ['jez', 'super', 'jez-seven-palm-neon-guillotine', 100],
+    ];
+    return specs.map(([id, action, expected, meter]) => {
+      window.__finalBlowQa.fight(id, id === 'jez' ? 'deathblow' : 'jez');
+      if (meter) window.__finalBlowQa.fighter(0, { meter });
+      window.__finalBlowQa.input(0, { [action]: true });
+      window.__finalBlowQa.step(0.034);
+      const fighter = window.__finalBlowEngine.snapshot().fighters[0];
+      return { id, action, expected, actual: fighter.move, bank: fighter.animationBank, meter: fighter.meter };
+    });
+  })()`);
+  assert.deepEqual(kitMoves.map(({ actual }) => actual), kitMoves.map(({ expected }) => expected));
+  assert.ok(kitMoves.every(({ bank }) => bank === 'specials'));
+  assert.ok(kitMoves.filter(({ action }) => action.startsWith('enhanced')).every(({ meter }) => meter === 25));
+  assert.ok(kitMoves.filter(({ action }) => action === 'super').every(({ meter }) => meter === 0));
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
   const movementStart = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
@@ -267,7 +328,7 @@ try {
   const forwardJump = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await dispatchKey(client, "keyUp", "KeyW", "w", 87);
   await dispatchKey(client, "keyUp", "KeyD", "d", 68);
-  assert.ok(forwardJump.fighters[0].vx > 300, "forward jump should have its own fast arc");
+  assert.ok(forwardJump.fighters[0].vx > 270, "DeathBlow should use his own forward jump arc");
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
   await dispatchKey(client, "keyDown", "KeyA", "a", 65);
@@ -276,7 +337,7 @@ try {
   const backJump = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await dispatchKey(client, "keyUp", "KeyW", "w", 87);
   await dispatchKey(client, "keyUp", "KeyA", "a", 65);
-  assert.ok(backJump.fighters[0].vx < -260, "back jump should have its own retreating arc");
+  assert.ok(backJump.fighters[0].vx < -230, "DeathBlow should use his own retreating jump arc");
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 650)`);
   await dispatchKey(client, "keyDown", "KeyD", "d", 68);
@@ -318,8 +379,17 @@ try {
   const overhead = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await dispatchKey(client, "keyUp", "KeyK", "k", 75);
   await dispatchKey(client, "keyUp", "KeyD", "d", 68);
-  assert.equal(overhead.fighters[0].move, "overhead");
+  assert.equal(overhead.fighters[0].move, "deathblow-demolition-drop");
   assert.equal(overhead.fighters[0].attackLevel, "overhead");
+
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
+  await dispatchKey(client, "keyDown", "KeyD", "d", 68);
+  await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
+  await evaluate(client, `window.__finalBlowQa.step(0.08)`);
+  const forwardLight = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await dispatchKey(client, "keyUp", "KeyJ", "j", 74);
+  await dispatchKey(client, "keyUp", "KeyD", "d", 68);
+  assert.equal(forwardLight.fighters[0].move, "deathblow-body-check");
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
   await dispatchKey(client, "keyDown", "KeyS", "s", 83);
@@ -328,7 +398,7 @@ try {
   const crouchLight = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await dispatchKey(client, "keyUp", "KeyJ", "j", 74);
   await dispatchKey(client, "keyUp", "KeyS", "s", 83);
-  assert.equal(crouchLight.fighters[0].move, "crouch-light");
+  assert.equal(crouchLight.fighters[0].move, "deathblow-quarry-tap");
   assert.equal(crouchLight.fighters[0].attackLevel, "low");
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
@@ -342,7 +412,7 @@ try {
   assert.equal(airHeavy.fighters[0].move, "air-heavy");
   assert.equal(airHeavy.fighters[0].attackLevel, "air");
 
-  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 600)`);
+  await evaluate(client, `window.__finalBlowQa.fight('jez', 'deathblow'); window.__finalBlowQa.positions(500, 600)`);
   await dispatchKey(client, "keyDown", "Numpad5", "5", 101);
   await evaluate(client, `window.__finalBlowQa.step(0.05)`);
   await dispatchKey(client, "keyDown", "KeyL", "l", 76);
@@ -375,7 +445,7 @@ try {
   await dispatchKey(client, "keyUp", "Numpad5", "5", 101);
   assert.equal(lowVsHigh.fighters[1].lastHitResult, "low", "standing guard must lose to lows");
 
-  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 600)`);
+  await evaluate(client, `window.__finalBlowQa.fight('jez', 'deathblow'); window.__finalBlowQa.positions(500, 600)`);
   await evaluate(client, `window.__finalBlowQa.input(1, { heavy: true })`);
   await evaluate(client, `window.__finalBlowQa.step(0.0334)`);
   await evaluate(client, `window.__finalBlowQa.input(0, { light: true })`);
@@ -420,7 +490,7 @@ try {
   await evaluate(client, `window.__finalBlowQa.step(0.08)`);
   const reversal = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await dispatchKey(client, "keyUp", "Numpad3", "3", 99);
-  assert.equal(reversal.fighters[1].move, "ground-special");
+  assert.equal(reversal.fighters[1].move, "jez-neon-edge");
   assert.equal(reversal.fighters[1].lastHitResult, "reversal");
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
@@ -434,7 +504,35 @@ try {
   const commandSpecial = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await dispatchKey(client, "keyUp", "KeyL", "l", 76);
   await dispatchKey(client, "keyUp", "KeyD", "d", 68);
-  assert.equal(commandSpecial.fighters[0].move, "command-special");
+  assert.equal(commandSpecial.fighters[0].move, "deathblow-faultline-fist");
+
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 585)`);
+  await dispatchKey(client, "keyDown", "KeyS", "s", 83);
+  await evaluate(client, `window.__finalBlowQa.step(0.0334)`);
+  await dispatchKey(client, "keyUp", "KeyS", "s", 83);
+  await dispatchKey(client, "keyDown", "KeyA", "a", 65);
+  await dispatchKey(client, "keyDown", "KeyL", "l", 76);
+  await evaluate(client, `window.__finalBlowQa.step(0.08)`);
+  const aftershockGrab = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await dispatchKey(client, "keyUp", "KeyL", "l", 76);
+  await dispatchKey(client, "keyUp", "KeyA", "a", 65);
+  assert.equal(aftershockGrab.fighters[0].move, "deathblow-aftershock-grab");
+  assert.equal(aftershockGrab.fighters[0].moveName, "AFTERSHOCK GRAB");
+  assert.equal(aftershockGrab.fighters[0].attackLevel, "throw");
+  assert.equal(aftershockGrab.fighters[0].animationBank, "specials");
+  if (process.env.FINAL_BLOW_DEATHBLOW_SCREENSHOT) {
+    await evaluate(client, `window.__finalBlowQa.positions(370, 920); window.__finalBlowQa.step(0.05); window.__finalBlowEngine.toggleDebug(false)`);
+    await delay(80);
+    const capture = await client.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+    await writeFile(process.env.FINAL_BLOW_DEATHBLOW_SCREENSHOT, Buffer.from(capture.data, "base64"));
+    await evaluate(client, `window.__finalBlowEngine.toggleDebug(true)`);
+  }
+
+  await evaluate(client, `window.__finalBlowQa.fight('jez', 'deathblow'); window.__finalBlowQa.positions(500, 600); window.__finalBlowQa.input(1, { special: true })`);
+  await evaluate(client, `window.__finalBlowQa.step(0.034); window.__finalBlowQa.input(0, { light: true }); window.__finalBlowQa.step(0.16)`);
+  const seismicArmor = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(seismicArmor.fighters[1].lastHitResult, "armor");
+  assert.equal(seismicArmor.fighters[1].move, "deathblow-tremor-tap");
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
   await dispatchKey(client, "keyDown", "KeyD", "d", 68);
@@ -449,7 +547,7 @@ try {
   const launcher = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await dispatchKey(client, "keyUp", "KeyK", "k", 75);
   await dispatchKey(client, "keyUp", "KeyD", "d", 68);
-  assert.equal(launcher.fighters[0].move, "rising-launcher");
+  assert.equal(launcher.fighters[0].move, "deathblow-quarry-breaker");
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.fighter(0, { meter: 50 })`);
   await dispatchKey(client, "keyDown", "KeyK", "k", 75);
@@ -459,8 +557,39 @@ try {
   const enhanced = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await dispatchKey(client, "keyUp", "KeyK", "k", 75);
   await dispatchKey(client, "keyUp", "KeyL", "l", 76);
-  assert.equal(enhanced.fighters[0].move, "enhanced-special");
+  assert.equal(enhanced.fighters[0].move, "deathblow-ex-tremor-tap");
   assert.equal(enhanced.fighters[0].meter, 25);
+
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.fighter(0, { meter: 50 })`);
+  await dispatchKey(client, "keyDown", "KeyS", "s", 83);
+  await evaluate(client, `window.__finalBlowQa.step(0.0334)`);
+  await dispatchKey(client, "keyUp", "KeyS", "s", 83);
+  await dispatchKey(client, "keyDown", "KeyD", "d", 68);
+  await dispatchKey(client, "keyDown", "KeyK", "k", 75);
+  await dispatchKey(client, "keyDown", "KeyL", "l", 76);
+  await evaluate(client, `window.__finalBlowQa.step(0.05)`);
+  const enhancedFaultline = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await dispatchKey(client, "keyUp", "KeyL", "l", 76);
+  await dispatchKey(client, "keyUp", "KeyK", "k", 75);
+  await dispatchKey(client, "keyUp", "KeyD", "d", 68);
+  assert.equal(enhancedFaultline.fighters[0].move, "deathblow-ex-faultline-fist");
+  assert.equal(enhancedFaultline.fighters[0].meter, 25);
+
+  await evaluate(client, `window.__finalBlowQa.fight('jez', 'deathblow'); window.__finalBlowQa.positions(500, 670); window.__finalBlowQa.input(0, { backSpecial: true })`);
+  await evaluate(client, `window.__finalBlowQa.step(0.12)`);
+  const vinylStep = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(vinylStep.fighters[0].move, "jez-vinyl-step");
+  assert.equal(vinylStep.fighters[0].moveName, "VINYL STEP");
+  assert.equal(vinylStep.fighters[0].animationBank, "specials");
+  assert.ok(vinylStep.fighters[0].movement.forwardWalkSpeed > aftershockGrab.fighters[0].movement.forwardWalkSpeed);
+  if (process.env.FINAL_BLOW_KIT_SCREENSHOT) {
+    await evaluate(client, `window.__finalBlowQa.positions(370, 920)`);
+    await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
+    await delay(80);
+    const capture = await client.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+    await writeFile(process.env.FINAL_BLOW_KIT_SCREENSHOT, Buffer.from(capture.data, "base64"));
+    await evaluate(client, `window.__finalBlowEngine.toggleDebug(true)`);
+  }
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.fighter(0, { meter: 50, blockstunFrames: 20 })`);
   await dispatchKey(client, "keyDown", "KeyK", "k", 75);
@@ -481,12 +610,12 @@ try {
   await evaluate(client, `window.__finalBlowQa.step(0.2)`);
   const chained = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await dispatchKey(client, "keyUp", "KeyK", "k", 75);
-  assert.equal(chained.fighters[0].move, "stand-heavy");
-  assert.equal(chained.fighters[0].cancelledFrom, "stand-light");
+  assert.equal(chained.fighters[0].move, "deathblow-wrecking-hook");
+  assert.equal(chained.fighters[0].cancelledFrom, "deathblow-hammer-jab");
   await evaluate(client, `window.__finalBlowQa.step(0.3)`);
   const twoHitCombo = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   assert.equal(twoHitCombo.fighters[0].combo.hits, 2);
-  assert.ok(twoHitCombo.fighters[0].combo.damage < 18, "second hit should be damage-scaled");
+  assert.ok(twoHitCombo.fighters[0].combo.damage < 22, "second hit should be damage-scaled below raw kit damage");
   assert.equal(await evaluate(client, `document.querySelector('#p1Combo').classList.contains('active')`), true);
   if (process.env.FINAL_BLOW_SCREENSHOT) {
     await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
@@ -504,8 +633,8 @@ try {
   await evaluate(client, `window.__finalBlowQa.step(0.2)`);
   const hitConfirm = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await dispatchKey(client, "keyUp", "KeyL", "l", 76);
-  assert.equal(hitConfirm.fighters[0].move, "ground-special");
-  assert.equal(hitConfirm.fighters[0].cancelledFrom, "stand-light");
+  assert.equal(hitConfirm.fighters[0].move, "deathblow-tremor-tap");
+  assert.equal(hitConfirm.fighters[0].cancelledFrom, "deathblow-hammer-jab");
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 600)`);
   await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
@@ -516,7 +645,7 @@ try {
   await evaluate(client, `window.__finalBlowQa.step(0.18)`);
   const linked = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await dispatchKey(client, "keyUp", "KeyJ", "j", 74);
-  assert.equal(linked.fighters[0].linkedFrom, "stand-light");
+  assert.equal(linked.fighters[0].linkedFrom, "deathblow-hammer-jab");
   assert.equal(linked.fighters[0].combo.hits, 2);
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 600); window.__finalBlowQa.fighter(0, { meter: 100 })`);
@@ -527,8 +656,14 @@ try {
   await dispatchKey(client, "keyUp", "KeyU", "u", 85);
   assert.equal(gritSuper.fighters[0].meter, 0);
   assert.equal(gritSuper.fighters[0].combo.hits, 4);
-  assert.ok(gritSuper.fighters[0].combo.damage > 20 && gritSuper.fighters[0].combo.damage < 32);
+  assert.ok(gritSuper.fighters[0].combo.damage > 28 && gritSuper.fighters[0].combo.damage < 36);
   assert.ok(gritSuper.fighters[1].juggleCount >= 2, "the super should exercise juggle scaling");
+
+  await evaluate(client, `window.__finalBlowQa.fight('jez', 'deathblow'); window.__finalBlowQa.positions(500, 600); window.__finalBlowQa.fighter(0, { meter: 100 }); window.__finalBlowQa.input(0, { super: true }); window.__finalBlowQa.step(2.4)`);
+  const jezSuper = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(jezSuper.fighters[0].move, null);
+  assert.equal(jezSuper.fighters[0].combo.hits, 7);
+  assert.ok(jezSuper.fighters[0].combo.damage > 20 && jezSuper.fighters[0].combo.damage < 30);
 
   await evaluate(client, `(() => {
     document.querySelector('[data-mode="arcade"]').click();
@@ -544,6 +679,7 @@ try {
   assert.equal(started.screen, "fight");
   assert.equal(started.phase, "fight");
   assert.equal(started.fighters.length, 2);
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
 
   await evaluate(client, `(() => {
     window.__qaPad = {
@@ -561,7 +697,7 @@ try {
     window.__qaPad.buttons[2] = { pressed: true, value: 1 };
     return true;
   })()`);
-  await delay(120);
+  await evaluate(client, `window.__finalBlowQa.step(0.08)`);
   const gamepadAttack = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await evaluate(client, `(() => {
     window.__qaPad.buttons[2] = { pressed: false, value: 0 };
@@ -594,7 +730,7 @@ try {
     window.__qaPad.buttons[4] = { pressed: false, value: 0 };
     return true;
   })()`);
-  assert.equal(gamepadEnhanced.fighters[0].move, "enhanced-special");
+  assert.equal(gamepadEnhanced.fighters[0].move, "deathblow-ex-tremor-tap");
   assert.equal(gamepadEnhanced.fighters[0].meter, 25);
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
@@ -616,6 +752,21 @@ try {
   assert.ok(finisher.elapsed > 1);
   assert.ok(finisher.impacts >= 2);
   assert.equal(finisher.simulationHz, 60);
+
+  const deathblowVictory = await evaluate(client, `window.__finalBlowQa.result('deathblow')`);
+  assert.equal(deathblowVictory.title, "DEATHBLOW WINS");
+  assert.equal(deathblowVictory.quote, "THE STREET MOVED FIRST.");
+  assert.match(deathblowVictory.background, /deathblow-specials\.webp/);
+  const jezVictory = await evaluate(client, `window.__finalBlowQa.result('jez')`);
+  assert.equal(jezVictory.title, "JEZ WINS");
+  assert.equal(jezVictory.quote, "READ THE SIGN.");
+  assert.match(jezVictory.background, /jez-specials\.webp/);
+  if (process.env.FINAL_BLOW_VICTORY_SCREENSHOT) {
+    await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
+    await delay(80);
+    const capture = await client.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+    await writeFile(process.env.FINAL_BLOW_VICTORY_SCREENSHOT, Buffer.from(capture.data, "base64"));
+  }
 
   await client.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
   await client.send("Emulation.setDeviceMetricsOverride", {
@@ -696,7 +847,7 @@ try {
     }
     return true;
   })()`);
-  assert.equal(touchEnhanced.fighters[0].move, "enhanced-special");
+  assert.equal(touchEnhanced.fighters[0].move, "deathblow-ex-tremor-tap");
   assert.equal(touchEnhanced.fighters[0].meter, 25);
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.fighter(0, { meter: 100 }); (() => {
     document.querySelector('[data-touch="final"]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
@@ -708,8 +859,24 @@ try {
     document.querySelector('[data-touch="final"]').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' }));
     return true;
   })()`);
-  assert.equal(touchSuper.fighters[0].move, "grit-super");
+  assert.equal(touchSuper.fighters[0].move, "deathblow-epicenter-execution");
   assert.equal(touchSuper.fighters[0].meter, 0);
+
+  const mobileVictory = await evaluate(client, `(() => {
+    window.__finalBlowQa.result('deathblow');
+    const screen = document.querySelector('#resultScreen').getBoundingClientRect();
+    const pose = document.querySelector('#victoryPose').getBoundingClientRect();
+    return {
+      active: document.querySelector('#resultScreen').classList.contains('active'),
+      background: document.querySelector('#victoryPose').style.backgroundImage,
+      screen: { width: screen.width, height: screen.height },
+      pose: { width: pose.width, height: pose.height },
+    };
+  })()`);
+  assert.equal(mobileVictory.active, true);
+  assert.match(mobileVictory.background, /deathblow-specials\.webp/);
+  assert.ok(mobileVictory.screen.width >= 840 && mobileVictory.screen.height >= 385);
+  assert.ok(mobileVictory.pose.width > 250 && mobileVictory.pose.height > 250);
 
   await client.send("Emulation.setDeviceMetricsOverride", {
     width: 390,
