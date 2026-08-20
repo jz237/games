@@ -438,6 +438,31 @@ kbd,
 .fighter-card.p2-pick { outline: 4px solid var(--red); }
 .fighter-card.p1-pick.p2-pick { box-shadow: 0 0 0 4px var(--red), 0 0 30px var(--cyan); }
 
+.fighter-portrait {
+  position: absolute;
+  z-index: 1;
+  bottom: 18%;
+  left: 50%;
+  width: auto;
+  max-width: 116%;
+  height: 88%;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 12px 10px rgba(0,0,0,.86)) brightness(1.18) saturate(1.08) contrast(1.08);
+  pointer-events: none;
+  transform: translateX(-50%) scale(1.03);
+  transform-origin: 50% 82%;
+  transition: transform .15s ease, filter .15s ease;
+  user-select: none;
+}
+
+.fighter-card:hover .fighter-portrait,
+.fighter-card:focus-visible .fighter-portrait,
+.fighter-card.focused .fighter-portrait {
+  filter: drop-shadow(0 12px 15px rgba(0,0,0,.92)) drop-shadow(0 0 10px var(--fighter)) brightness(1.27) saturate(1.18) contrast(1.1);
+  transform: translateX(-50%) scale(1.1);
+}
+
 .fighter-art {
   position: absolute;
   inset: 5% 8% 24%;

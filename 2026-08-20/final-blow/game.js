@@ -122,6 +122,13 @@ for (const [id, stage] of Object.entries(stages)) {
   stageImages[id] = image;
 }
 
+const fighterImages = {};
+for (const fighter of roster) {
+  const image = new Image();
+  image.src = `assets/fighters/${fighter.id}.webp`;
+  fighterImages[fighter.id] = image;
+}
+
 const keys = new Set();
 const pressed = new Set();
 const touch = new Set();
@@ -196,9 +203,7 @@ function setupRoster() {
     card.style.setProperty("--fighter", fighter.color);
     card.innerHTML = `
       <span class="pick-badge p1">P1</span><span class="pick-badge p2">P2</span>
-      <span class="fighter-art" aria-hidden="true">
-        <i class="head"></i><i class="body"></i><i class="arm"></i><i class="weapon"></i>
-      </span>
+      <img class="fighter-portrait" src="assets/fighters/${fighter.id}.webp" alt="" aria-hidden="true" draggable="false">
       <span class="fighter-info"><strong>${fighter.name}</strong><small>${fighter.title}</small></span>`;
     card.addEventListener("click", () => chooseFighter(index));
     grid.append(card);
@@ -780,81 +785,87 @@ function drawVetAtmosphere(time) {
 }
 
 function drawFighter(fighter, time) {
-  const crouch = fighter.crouch ? 34 : 0;
   const jump = FLOOR - fighter.y;
   const attackProgress = fighter.attacking ? fighter.attackTime / fighter.attacking.duration : 0;
   const attackSwing = fighter.attacking ? Math.sin(clamp(attackProgress, 0, 1) * Math.PI) : 0;
   const bob = fighter.grounded && !fighter.stun ? Math.sin(time * 0.007 + fighter.side * 2) * 3 : 0;
+  const sprite = fighterImages[fighter.def.id];
+  const sizeAdjust = {
+    deathblow: 1.07,
+    jez: .98,
+    alan: 1.02,
+    post: 1.06,
+    benny: 1.01,
+    donald: 1,
+    cyraxx: 1.01,
+    ali: .98,
+  }[fighter.def.id] || 1;
+  const renderHeight = 308 * sizeAdjust;
+  const renderWidth = sprite?.naturalHeight ? renderHeight * sprite.naturalWidth / sprite.naturalHeight : 190;
+  const attackKind = fighter.attacking?.kind;
+  const lunge = attackSwing * (attackKind === "special" ? 55 : attackKind === "heavy" ? 38 : 24);
+  const crouchScale = fighter.crouch ? .84 : 1;
+  const crouchDrop = fighter.crouch ? 25 : 0;
 
   ctx.save();
   ctx.translate(fighter.x, fighter.y + bob);
-  ctx.scale(fighter.facing, 1);
-  if (fighter.hitFlash > 0) ctx.globalCompositeOperation = "screen";
 
-  ctx.save();
-  ctx.scale(fighter.facing, 1);
   ctx.fillStyle = "rgba(0,0,0,.56)";
   ctx.beginPath();
-  ctx.ellipse(0, jump + 4, 68, 15, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, jump + 5, renderWidth * .32, 16, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.restore();
 
   if (fighter.down) {
     ctx.rotate(-fighter.facing * 1.35);
-    ctx.translate(-42, 18);
+    ctx.translate(-fighter.facing * 45, 17);
   }
+
+  ctx.scale(fighter.facing, 1);
+  ctx.translate(lunge, crouchDrop - attackSwing * (attackKind === "special" ? 12 : 4));
+  ctx.rotate(-attackSwing * (attackKind === "heavy" ? .075 : .035));
+  ctx.scale(1 + attackSwing * .035, crouchScale);
 
   if (fighter.specialGlow > 0) {
-    const glow = ctx.createRadialGradient(0, -100, 18, 0, -100, 135);
-    glow.addColorStop(0, `${fighter.def.accent}99`);
+    const glow = ctx.createRadialGradient(0, -125, 18, 0, -125, 165);
+    glow.addColorStop(0, `${fighter.def.accent}88`);
     glow.addColorStop(1, `${fighter.def.accent}00`);
     ctx.fillStyle = glow;
-    ctx.fillRect(-150, -250, 300, 270);
+    ctx.fillRect(-190, -315, 380, 335);
+    ctx.strokeStyle = `${fighter.def.accent}99`;
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i += 1) {
+      const radius = 55 + i * 28 + Math.sin(time * .012 + i) * 7;
+      ctx.beginPath();
+      ctx.arc(0, -128, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
 
-  const legSpread = fighter.attacking?.kind === "heavy" ? 18 : 0;
-  drawLimb(-22 - legSpread, -70 + crouch, -32, -2, 28, "#171c25", fighter.def.color);
-  drawLimb(22 + legSpread, -70 + crouch, 34, -2, 28, "#111720", fighter.def.color);
-
-  ctx.fillStyle = fighter.def.color;
-  ctx.strokeStyle = "rgba(255,255,255,.42)";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(-48, -166 + crouch);
-  ctx.lineTo(38, -172 + crouch);
-  ctx.lineTo(53, -78 + crouch);
-  ctx.lineTo(-43, -72 + crouch);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = "rgba(0,0,0,.24)";
-  ctx.fillRect(-38, -105 + crouch, 84, 13);
-
-  const skin = fighter.def.id === "donald" ? "#e4a978" : fighter.def.id === "ali" ? "#b88154" : "#bb8265";
-  ctx.fillStyle = skin;
-  ctx.beginPath();
-  ctx.ellipse(-1, -195 + crouch, 31, 35, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = fighter.def.id === "donald" ? "#e4c15e" : fighter.def.id === "benny" ? "#dad7cc" : "#191b20";
-  ctx.beginPath();
-  ctx.arc(-3, -211 + crouch, 29, Math.PI, Math.PI * 2);
-  ctx.lineTo(26, -205 + crouch);
-  ctx.lineTo(-31, -205 + crouch);
-  ctx.fill();
-  ctx.fillStyle = "#0b0c0f";
-  ctx.fillRect(10, -197 + crouch, 5, 3);
-
-  const frontHandX = 52 + attackSwing * (fighter.attacking?.kind === "special" ? 112 : 72);
-  const frontHandY = -130 + crouch - attackSwing * 24;
-  drawLimb(30, -148 + crouch, frontHandX, frontHandY, 20, skin, fighter.def.color);
-  drawLimb(-32, -145 + crouch, -58, -105 + crouch, 19, skin, fighter.def.color);
-  drawWeapon(fighter, frontHandX, frontHandY, attackSwing);
+  if (sprite?.complete && sprite.naturalWidth) {
+    ctx.save();
+    ctx.shadowColor = fighter.specialGlow > 0 ? fighter.def.accent : "rgba(0,0,0,.88)";
+    ctx.shadowBlur = fighter.specialGlow > 0 ? 24 : 9;
+    ctx.shadowOffsetY = 6;
+    if (fighter.hitFlash > 0) ctx.filter = "brightness(2.4) saturate(.25)";
+    else if (fighter.block) ctx.filter = "brightness(.82) saturate(.8)";
+    ctx.drawImage(sprite, -renderWidth * .5, -renderHeight, renderWidth, renderHeight);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = fighter.def.color;
+    ctx.fillRect(-48, -205, 96, 205);
+    ctx.fillStyle = fighter.def.accent;
+    ctx.beginPath();
+    ctx.arc(0, -220, 28, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   if (fighter.block) {
     ctx.strokeStyle = `${fighter.def.accent}cc`;
-    ctx.lineWidth = 7;
+    ctx.shadowColor = fighter.def.accent;
+    ctx.shadowBlur = 16;
+    ctx.lineWidth = 8;
     ctx.beginPath();
-    ctx.arc(20, -128 + crouch, 70, -1.15, 1.15);
+    ctx.arc(32, -135, 83, -1.18, 1.18);
     ctx.stroke();
   }
 
