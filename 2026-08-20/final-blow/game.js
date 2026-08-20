@@ -463,7 +463,7 @@ const keyMaps = [
 ];
 
 const simulationClock = new FixedStepClock();
-const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.8c-rush-keepaway");
+const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.8d-feedback-flow");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
 const state = {
@@ -553,12 +553,16 @@ function makeFighter(index, side) {
     attackFrame: 0,
     attackHit: false,
     attackHits: 0,
+    attackSerial: 0,
     lastAttackHitFrame: -Infinity,
     attackConnected: "",
     armorHits: 0,
     counterTriggered: false,
     trapDeployed: false,
     projectileSpawnFrames: new Set(),
+    rhythmStacks: 0,
+    rhythmExpiresFrame: 0,
+    rhythmLastAttackSerial: -1,
     cancelledFrom: "",
     linkedFrom: "",
     linkWindow: null,
@@ -1204,6 +1208,18 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   fighter.attacking = kitMove || (advancedActions.has(action)
     ? createAdvancedMove(action)
     : createCombatMove(action, moveContext));
+  fighter.attackSerial += 1;
+  fighter.attacking.attackSerial = fighter.attackSerial;
+  const activeFlow = fighter.def.id === "ali"
+    && fighter.rhythmStacks > 0
+    && state.simulationTick <= fighter.rhythmExpiresFrame;
+  if (activeFlow) {
+    const flow = fighter.rhythmStacks;
+    fighter.attacking.rhythmBoost = flow;
+    fighter.attacking.damage = Number((fighter.attacking.damage * (1 + flow * 0.035)).toFixed(4));
+    if (fighter.attacking.advanceSpeed) fighter.attacking.advanceSpeed *= 1 + flow * 0.055;
+    fighter.attacking.hitstunFrames += flow;
+  }
   fighter.meter = clamp(fighter.meter - gritCost, 0, GRIT_RULES.maximum);
   fighter.attackTime = 0;
   fighter.attackFrame = 0;
@@ -1244,7 +1260,10 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     spawnCombatText(fighter.x, fighter.y - fighter.height - 35, "FULL GRIT SUPER", fighter.def.accent);
   }
   if (linkedFrom) spawnCombatText(fighter.x, fighter.y - fighter.height - 20, "LINK", fighter.def.accent);
-  if (fighter.attacking.moveName) {
+  const suppressFlowMoveLabel = fighter.def.id === "ali"
+    && cancelledFrom
+    && fighter.rhythmStacks >= 2;
+  if (fighter.attacking.moveName && !suppressFlowMoveLabel) {
     spawnCombatText(
       fighter.x + fighter.facing * 28,
       fighter.y - fighter.height - 42,
@@ -1351,6 +1370,12 @@ function advanceFighterTimers(fighter) {
   fighter.throwTechFlashFrames = Math.max(0, fighter.throwTechFlashFrames - 1);
   fighter.confirmWindowFrames = Math.max(0, fighter.confirmWindowFrames - 1);
   fighter.landingRecoveryFrames = Math.max(0, fighter.landingRecoveryFrames - 1);
+  if (fighter.rhythmStacks > 0 && state.simulationTick > fighter.rhythmExpiresFrame) {
+    fighter.rhythmStacks = 0;
+    fighter.rhythmExpiresFrame = 0;
+    fighter.rhythmLastAttackSerial = -1;
+    if (fighter.def.id === "ali") spawnCombatText(fighter.x, fighter.y - fighter.height - 20, "FLOW LOST", fighter.def.accent);
+  }
 
   if (fighter.down && fighter.grounded) {
     fighter.knockdownFrames = Math.max(0, fighter.knockdownFrames - 1);
@@ -1446,6 +1471,7 @@ function tryAttackCancel(fighter, input) {
   if (!current || !fighter.attackConnected) return false;
   const action = bufferedAction(fighter, attackActionPriority.filter((candidate) => candidate !== "throw"));
   const actionGroup = fighterActionGroup(action);
+  if (current.rhythmCancel && fighter.rhythmStacks < (current.rhythmCancelStacks || 2)) return false;
   if (!action || !canCancelAttack(current, actionGroup, fighter.attackFrame, fighter.attackConnected)) return false;
   const moveContext = { airborne: !fighter.grounded, crouching: fighter.crouch, ...directionContext(fighter, input) };
   const gritCost = createFighterMove(fighter.def.id, action, moveContext)
@@ -1456,6 +1482,8 @@ function tryAttackCancel(fighter, input) {
   const previousMove = current.profileId;
   const voltageCancel = Boolean(current.rushCancel
     && ["special", "commandSpecial", "enhanced"].includes(actionGroup));
+  const flowCancel = Boolean(current.rhythmCancel
+    && fighter.rhythmStacks >= (current.rhythmCancelStacks || 2));
   fighter.attacking = null;
   const started = beginAttack(fighter, action, input, { cancelledFrom: previousMove });
   if (!started) {
@@ -1467,7 +1495,7 @@ function tryAttackCancel(fighter, input) {
   spawnCombatText(
     fighter.x + fighter.facing * 35,
     fighter.y - fighter.height - 22,
-    voltageCancel ? "VOLTAGE CANCEL" : chain ? "CHAIN" : "HIT CONFIRM",
+    voltageCancel ? "VOLTAGE CANCEL" : flowCancel ? "FLOW CANCEL" : chain ? "CHAIN" : "HIT CONFIRM",
     fighter.def.accent,
   );
   return true;
@@ -1512,6 +1540,7 @@ function updateFighter(fighter, opponent, input, dt) {
 
   if (tryFinish(fighter.side, input)) return;
   if (state.phase !== "fight") return;
+  const flowSpeed = fighter.def.id === "ali" ? 1 + fighter.rhythmStacks * 0.045 : 1;
 
   if (fighter.blockstunFrames > 0 && tryGuardReversal(fighter, input)) {
     // The reversal replaces blockstun and continues into normal attack processing.
@@ -1577,7 +1606,7 @@ function updateFighter(fighter, opponent, input, dt) {
           if (fighter.crouch) fighter.vx = 0;
           else if (direction.absolute) {
             const speed = direction.forwardHeld ? fighter.movement.forwardWalkSpeed : fighter.movement.backWalkSpeed;
-            fighter.vx = direction.absolute * speed;
+            fighter.vx = direction.absolute * speed * flowSpeed;
           } else fighter.vx = 0;
           if (Math.abs(fighter.vx) > 20) fighter.walkTime += dt;
         }
@@ -1592,7 +1621,7 @@ function updateFighter(fighter, opponent, input, dt) {
 
   if (fighter.dashFrames > 0 && !fighter.attacking) {
     const forward = fighter.dashDirection === fighter.facing;
-    fighter.vx = fighter.dashDirection * (forward ? fighter.movement.forwardDashSpeed : fighter.movement.backDashSpeed);
+    fighter.vx = fighter.dashDirection * (forward ? fighter.movement.forwardDashSpeed : fighter.movement.backDashSpeed) * flowSpeed;
     fighter.dashFrames -= 1;
     fighter.block = false;
     fighter.guarding = false;
@@ -1739,12 +1768,15 @@ function maybeSpawnProjectile(fighter, attack) {
     if (fighter.attackFrame < spawnFrame || fighter.projectileSpawnFrames.has(spawnFrame)) continue;
     fighter.projectileSpawnFrames.add(spawnFrame);
     const yOffset = profile.yOffsets?.[index] ?? profile.yOffsets?.[0] ?? -110;
+    const xOffset = profile.xOffsets?.[index] ?? profile.xOffsets?.[0] ?? 78;
+    const armFrames = profile.armFramesByIndex?.[index] ?? profile.armFrames ?? 0;
     const projectile = {
       id: `${fighter.side}-${state.simulationTick}-${index}`,
       ownerSide: fighter.side,
-      x: fighter.x + fighter.facing * 78,
+      x: fighter.x + fighter.facing * xOffset,
       y: FLOOR + yOffset,
       vx: fighter.facing * profile.speed,
+      direction: fighter.facing,
       width: profile.width,
       height: profile.height,
       damage: profile.damage,
@@ -1756,17 +1788,20 @@ function maybeSpawnProjectile(fighter, attack) {
       knockdown: Boolean(profile.knockdown),
       lifeFrames: profile.lifeFrames,
       maxLifeFrames: profile.lifeFrames,
+      armFrames,
+      maxArmFrames: armFrames,
       color: profile.color || fighter.def.accent,
+      style: profile.style || "orb",
       sequenceIndex: index,
       enhanced: spawnFrames.length > 1,
     };
     const owned = state.projectiles.filter((item) => item.ownerSide === fighter.side);
-    if (owned.length >= 5) {
+    if (owned.length >= (profile.maxOwned || 5)) {
       const oldest = owned[0];
       state.projectiles = state.projectiles.filter((item) => item.id !== oldest.id);
     }
     state.projectiles.push(projectile);
-    state.effects.push({ kind: "projectileLaunch", x: projectile.x, y: projectile.y, life: 0.35, max: 0.35, color: projectile.color });
+    state.effects.push({ kind: projectile.style === "feedback" ? "feedbackTelegraph" : "projectileLaunch", x: projectile.x, y: projectile.y, life: 0.35, max: 0.35, color: projectile.color });
     sound("special");
   }
 }
@@ -1796,8 +1831,10 @@ function triggerProjectile(projectile, victim) {
   victim.blockstunFrames = blocked ? projectile.blockstunFrames : 0;
   victim.hitstunFrames = blocked || armored ? 0 : projectile.hitstunFrames + (counter ? DEFENSE_RULES.counterHitstunBonusFrames : 0);
   victim.stun = Math.max(victim.hitstunFrames, victim.blockstunFrames) / SIMULATION_HZ;
-  victim.vx = Math.sign(projectile.vx) * projectile.push * (blocked ? 0.27 : armored ? 0.12 : 1);
-  victim.lastHitResult = blocked ? `blocked-${projectile.level}-projectile` : armored ? "armor" : counter ? "counter-projectile" : `${projectile.level}-projectile`;
+  const hitDirection = Math.sign(projectile.vx) || projectile.direction || owner.facing;
+  victim.vx = hitDirection * projectile.push * (blocked ? 0.27 : armored ? 0.12 : 1);
+  const resultKind = projectile.style === "feedback" ? "feedback-echo" : "projectile";
+  victim.lastHitResult = blocked ? `blocked-${projectile.level}-${resultKind}` : armored ? "armor" : counter ? `counter-${resultKind}` : projectile.style === "feedback" ? "feedback-echo" : `${projectile.level}-projectile`;
   victim.hitFlash = 0.13;
   if (!blocked && !armored) {
     owner.combo.addDamage(damage);
@@ -1820,9 +1857,10 @@ function triggerProjectile(projectile, victim) {
   owner.confirmWindowFrames = 12;
   owner.meter = clamp(owner.meter + 15 * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
   victim.meter = clamp(victim.meter + 15 * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
-  state.effects.push({ kind: "projectileBurst", x: projectile.x, y: projectile.y, life: 0.5, max: 0.5, color: projectile.color });
+  state.effects.push({ kind: projectile.style === "feedback" ? "feedbackBurst" : "projectileBurst", x: projectile.x, y: projectile.y, life: 0.5, max: 0.5, color: projectile.color });
   spawnHit(projectile.x, projectile.y, { ...owner.def, accent: projectile.color }, "special", blocked);
-  if (counter) spawnCombatText(projectile.x, projectile.y - 72, "COUNTER", projectile.color);
+  if (projectile.style === "feedback") spawnCombatText(projectile.x, projectile.y - 86, blocked ? "ECHO BLOCK" : "FEEDBACK ECHO!", projectile.color);
+  else if (counter) spawnCombatText(projectile.x, projectile.y - 72, "COUNTER", projectile.color);
   else if (!blocked && projectile.level === ATTACK_LEVELS.LOW) spawnCombatText(projectile.x, projectile.y - 61, "LOW SHOT", projectile.color);
   state.shake = Math.max(state.shake, blocked ? 0.1 : 0.25);
   state.hitstop = Math.max(state.hitstop, blocked ? 0.035 : 0.085);
@@ -1835,10 +1873,12 @@ function triggerProjectile(projectile, victim) {
 function updateProjectiles(dt) {
   for (const projectile of state.projectiles) {
     projectile.lifeFrames -= 1;
+    projectile.armFrames = Math.max(0, (projectile.armFrames || 0) - 1);
     projectile.x += projectile.vx * dt;
     if (projectile.lifeFrames <= 0
       || projectile.x < MOVEMENT_RULES.stageMinX - 160
       || projectile.x > MOVEMENT_RULES.stageMaxX + 160) continue;
+    if (projectile.armFrames > 0) continue;
     const victim = state.fighters[1 - projectile.ownerSide];
     if (!victim || victim.down || victim.wakeupFrames > 0) continue;
     const projectileBox = {
@@ -1935,6 +1975,34 @@ function triggerSouthpawCounter(counterFighter, incomingFighter, incomingAttack,
   return true;
 }
 
+function registerAliFlow(attacker, attack) {
+  if (attacker.def.id !== "ali"
+    || attack.level === ATTACK_LEVELS.THROW
+    || attacker.rhythmLastAttackSerial === attack.attackSerial) return;
+  const continuing = attacker.rhythmStacks > 0 && state.simulationTick <= attacker.rhythmExpiresFrame;
+  attacker.rhythmStacks = continuing ? Math.min(3, attacker.rhythmStacks + 1) : 1;
+  attacker.rhythmExpiresFrame = state.simulationTick + 96;
+  attacker.rhythmLastAttackSerial = attack.attackSerial;
+  attacker.specialGlow = Math.max(attacker.specialGlow, 0.35 + attacker.rhythmStacks * 0.12);
+  const massive = attacker.rhythmStacks === 3;
+  spawnCombatText(
+    attacker.x,
+    attacker.y - attacker.height - 88,
+    massive ? "MASSIVE FLOW!" : `FLOW ${attacker.rhythmStacks}/3`,
+    massive ? "#ff4fb9" : attacker.def.accent,
+  );
+  state.effects.push({
+    kind: "flowPulse",
+    x: attacker.x,
+    y: attacker.y - 112,
+    life: massive ? 0.7 : 0.42,
+    max: massive ? 0.7 : 0.42,
+    color: massive ? "#ff4fb9" : attacker.def.accent,
+    stacks: attacker.rhythmStacks,
+  });
+  if (massive && $("#flashToggle").checked) state.flash = Math.max(state.flash, 0.06);
+}
+
 function hit(attacker, victim, attack, collision) {
   if (triggerSouthpawCounter(victim, attacker, attack, collision)) return;
   if (attack.level === ATTACK_LEVELS.THROW) {
@@ -1985,6 +2053,7 @@ function hit(attacker, victim, attack, collision) {
   victim.lastHitResult = blocked ? `blocked-${attack.level}` : armored ? "armor" : counter ? "counter" : attack.level;
   if (!blocked && !armored) {
     attacker.combo.addDamage(damage);
+    registerAliFlow(attacker, attack);
     if (wasJuggle) victim.juggleCount += 1;
     victim.attacking = null;
     victim.attackTime = 0;
@@ -2470,12 +2539,49 @@ function drawPaintTraps(time) {
 
 function drawProjectiles(time) {
   for (const projectile of state.projectiles) {
-    const direction = Math.sign(projectile.vx) || 1;
+    const direction = Math.sign(projectile.vx) || projectile.direction || 1;
     const life = clamp(projectile.lifeFrames / projectile.maxLifeFrames, 0, 1);
     const pulse = 1 + Math.sin(time * 0.018 + projectile.x * 0.03) * 0.11;
     ctx.save();
     ctx.translate(projectile.x, projectile.y);
     ctx.scale(direction, 1);
+    if (projectile.style === "feedback") {
+      const armed = projectile.armFrames <= 0;
+      const charge = projectile.maxArmFrames
+        ? 1 - clamp(projectile.armFrames / projectile.maxArmFrames, 0, 1)
+        : 1;
+      ctx.globalCompositeOperation = "screen";
+      ctx.globalAlpha = Math.min(0.95, life * 1.6) * (0.38 + charge * 0.62);
+      ctx.shadowColor = projectile.color;
+      ctx.shadowBlur = armed ? 30 : 17;
+      ctx.strokeStyle = projectile.color;
+      ctx.lineWidth = armed ? 6 : 3;
+      if (!armed) ctx.setLineDash([9, 7]);
+      for (let ring = 0; ring < 3; ring += 1) {
+        const phase = (time * 0.004 + ring * 0.29) % 1;
+        const radiusX = projectile.width * (0.2 + phase * 0.34) * pulse;
+        const radiusY = projectile.height * (0.23 + phase * 0.28) * pulse;
+        ctx.globalAlpha *= 0.82;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, radiusX, radiusY, Math.sin(time * 0.002 + ring) * 0.13, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.globalAlpha = armed ? 0.9 : 0.48;
+      ctx.fillStyle = armed ? "#efffe8" : projectile.color;
+      for (let slice = -2; slice <= 2; slice += 1) {
+        const jitter = Math.sin(time * 0.03 + slice * 2.1) * 9;
+        ctx.fillRect(-projectile.width * 0.38 + jitter, slice * projectile.height * 0.16 - 3, projectile.width * (0.7 - Math.abs(slice) * 0.08), armed ? 5 : 3);
+      }
+      if (state.debug) {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 0.85;
+        ctx.strokeStyle = "#ffef5a";
+        ctx.strokeRect(-projectile.width * 0.5, -projectile.height * 0.5, projectile.width, projectile.height);
+      }
+      ctx.restore();
+      continue;
+    }
     ctx.globalCompositeOperation = "screen";
     ctx.globalAlpha = Math.min(1, life * 2);
     const trail = ctx.createLinearGradient(-105, 0, 20, 0);
@@ -2533,7 +2639,7 @@ function drawFighter(fighter, time) {
   const frame = pose.frame;
   const sizeAdjust = { deathblow: 1.08, jez: 1, alan: 1.08, post: 1.05, benny: 1.01, donald: 1.01, cyraxx: 1.02, ali: 1 }[fighter.def.id] || 1;
   const moveSheetAdjust = pose.bank === "specials"
-    ? ({ deathblow: 1.14, jez: 1.03, alan: 1.06, post: 1.02, benny: 1.02, donald: 1.04 }[fighter.def.id] || 1)
+    ? ({ deathblow: 1.14, jez: 1.03, alan: 1.06, post: 1.02, benny: 1.02, donald: 1.04, cyraxx: 1.05, ali: 1.04 }[fighter.def.id] || 1)
     : 1;
   const renderSize = 330 * sizeAdjust * moveSheetAdjust;
   const attackKind = attack?.kind;
@@ -2547,6 +2653,23 @@ function drawFighter(fighter, time) {
   ctx.beginPath();
   ctx.ellipse(0, jump + 5, renderSize * 0.24, 15, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  if (fighter.def.id === "ali" && fighter.rhythmStacks > 0) {
+    ctx.save();
+    ctx.translate(0, -112);
+    ctx.globalCompositeOperation = "screen";
+    ctx.strokeStyle = fighter.rhythmStacks === 3 ? "#ff4fb9" : fighter.def.accent;
+    ctx.shadowColor = fighter.def.accent;
+    ctx.shadowBlur = 17 + fighter.rhythmStacks * 4;
+    for (let ring = 0; ring < fighter.rhythmStacks; ring += 1) {
+      ctx.globalAlpha = 0.24 + ring * 0.07;
+      ctx.lineWidth = 3 + ring;
+      ctx.beginPath();
+      ctx.arc(0, 0, 72 + ring * 22 + Math.sin(time * 0.01 + ring) * 6, -1.12, 1.12);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   if (fighter.cinematicRotation) ctx.rotate(fighter.cinematicRotation);
   if (fighter.cinematicScale !== 1) ctx.scale(fighter.cinematicScale, fighter.cinematicScale);
@@ -2844,6 +2967,29 @@ function drawParticles() {
         ctx.lineTo(Math.cos(angle) * radius * 1.35, Math.sin(angle) * radius * 1.35);
         ctx.stroke();
       }
+    } else if (effect.kind === "flowPulse") {
+      const radius = 35 + (1 - alpha) * (80 + effect.stacks * 18);
+      ctx.globalCompositeOperation = "screen";
+      ctx.strokeStyle = effect.color;
+      for (let ring = 0; ring < effect.stacks + 1; ring += 1) {
+        ctx.globalAlpha = alpha * (1 - ring * 0.15);
+        ctx.lineWidth = 7 - ring;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius + ring * 18, -1.1, 1.1);
+        ctx.stroke();
+      }
+    } else if (effect.kind === "feedbackTelegraph" || effect.kind === "feedbackBurst") {
+      const burst = effect.kind === "feedbackBurst";
+      const radius = (1 - alpha) * (burst ? 146 : 76) + 18;
+      ctx.globalCompositeOperation = "screen";
+      ctx.strokeStyle = effect.color;
+      for (let ring = 0; ring < (burst ? 5 : 3); ring += 1) {
+        ctx.globalAlpha = alpha * (1 - ring * 0.13);
+        ctx.lineWidth = burst ? 8 - ring : 4;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, radius * (0.42 + ring * 0.18), radius * (0.28 + ring * 0.11), ring % 2 ? 0.18 : -0.18, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     } else if (effect.kind === "projectileLaunch" || effect.kind === "projectileBurst") {
       const burst = effect.kind === "projectileBurst";
       const radius = (1 - alpha) * (burst ? 112 : 62) + 12;
@@ -2974,7 +3120,7 @@ function drawDebugOverlay() {
       const move = fighter.attacking?.profileId || "—";
       const guard = fighter.guarding ? fighter.guardHeight.toUpperCase() : "—";
       const combo = fighter.combo.snapshot(state.simulationTick);
-      return `P${fighter.side + 1} ${fighter.combatState.toUpperCase()} F${fighter.stateFrame} · ${move} · GRIT ${Math.floor(fighter.meter)} · COMBO ${combo.hits}/${combo.damage.toFixed(1)} · JUG ${state.fighters[1 - fighter.side]?.juggleCount || 0} · GUARD ${guard} · HS ${fighter.hitstunFrames}/BS ${fighter.blockstunFrames}/KD ${fighter.knockdownFrames} · BUF ${fighter.inputBuffer.snapshot().map((entry) => entry.action).join("/") || "—"}`;
+      return `P${fighter.side + 1} ${fighter.combatState.toUpperCase()} F${fighter.stateFrame} · ${move} · GRIT ${Math.floor(fighter.meter)} · FLOW ${fighter.rhythmStacks || 0} · COMBO ${combo.hits}/${combo.damage.toFixed(1)} · JUG ${state.fighters[1 - fighter.side]?.juggleCount || 0} · GUARD ${guard} · HS ${fighter.hitstunFrames}/BS ${fighter.blockstunFrames}/KD ${fighter.knockdownFrames} · BUF ${fighter.inputBuffer.snapshot().map((entry) => entry.action).join("/") || "—"}`;
     }),
     ...commandHistory.map((history, side) => `P${side + 1} INPUT ${history.slice(-8).map((entry) => entry.token).join(" › ") || "—"}`),
   ];
@@ -3358,7 +3504,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "0.8c-rush-keepaway",
+  version: "0.8d-feedback-flow",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -3391,6 +3537,8 @@ window.__finalBlowEngine = {
         height: projectile.height,
         level: projectile.level,
         lifeFrames: projectile.lifeFrames,
+        armFrames: projectile.armFrames,
+        style: projectile.style,
         enhanced: projectile.enhanced,
       })),
       fighters: state.fighters.map((fighter) => ({
@@ -3415,6 +3563,9 @@ window.__finalBlowEngine = {
         attackFrame: fighter.attackFrame,
         attackHits: fighter.attackHits,
         attackConnected: fighter.attackConnected,
+        rhythmStacks: fighter.rhythmStacks,
+        rhythmExpiresFrame: fighter.rhythmExpiresFrame,
+        rhythmBoost: fighter.attacking?.rhythmBoost || 0,
         counterTriggered: fighter.counterTriggered,
         trapDeployed: fighter.trapDeployed,
         cancelledFrom: fighter.cancelledFrom,
@@ -3496,10 +3647,14 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         "wakeupFrames",
         "invulnerableFrames",
         "juggleCount",
+        "rhythmStacks",
+        "rhythmExpiresFrame",
       ]);
       for (const [key, value] of Object.entries(values)) {
         if (!allowed.has(key) || !Number.isFinite(value)) continue;
-        fighter[key] = key === "health" || key === "meter" ? clamp(value, 0, 100) : Math.max(0, Math.floor(value));
+        fighter[key] = key === "health" || key === "meter" ? clamp(value, 0, 100)
+          : key === "rhythmStacks" ? clamp(Math.floor(value), 0, 3)
+            : Math.max(0, Math.floor(value));
       }
       fighter.stun = Math.max(fighter.hitstunFrames, fighter.blockstunFrames) / SIMULATION_HZ;
       updateHud();

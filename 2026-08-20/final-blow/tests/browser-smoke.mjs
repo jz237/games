@@ -231,7 +231,7 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /0\.8C/);
+  assert.match(title.build, /0\.8D/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -247,6 +247,8 @@ try {
       'assets/moves/post-specials.webp',
       'assets/moves/benny-specials.webp',
       'assets/moves/donald-specials.webp',
+      'assets/moves/cyraxx-specials.webp',
+      'assets/moves/ali-specials.webp',
     ];
     const loaded = await Promise.all(paths.map((src) => new Promise((resolve) => {
       const image = new Image();
@@ -264,7 +266,8 @@ try {
     };
   })()`);
   assert.deepEqual(kitUi.loaded.map(({ width, height }) => [width, height]), [
-    [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280],
+    [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280],
+    [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280],
   ]);
   assert.equal(kitUi.rows.length, 9);
   assert.ok(kitUi.rows.includes('Vinyl Step'));
@@ -332,6 +335,26 @@ try {
       ['donald', 'enhancedLauncher', 'donald-ex-eagle-uppercut', 50],
       ['donald', 'throw', 'donald-clubhouse-ejection', 0],
       ['donald', 'super', 'donald-golden-back-nine', 100],
+      ['cyraxx', 'special', 'cyraxx-mic-check', 0],
+      ['cyraxx', 'commandSpecial', 'cyraxx-feedback-loop', 0],
+      ['cyraxx', 'backSpecial', 'cyraxx-buffer-skip', 0],
+      ['cyraxx', 'launcher', 'cyraxx-gain-spike', 0],
+      ['cyraxx', 'enhanced', 'cyraxx-ex-mic-check', 50],
+      ['cyraxx', 'enhancedCommandSpecial', 'cyraxx-ex-feedback-loop', 50],
+      ['cyraxx', 'enhancedBackSpecial', 'cyraxx-ex-buffer-skip', 50],
+      ['cyraxx', 'enhancedLauncher', 'cyraxx-ex-gain-spike', 50],
+      ['cyraxx', 'throw', 'cyraxx-mute-button', 0],
+      ['cyraxx', 'super', 'cyraxx-feedback-meltdown', 100],
+      ['ali', 'special', 'ali-booyakasha-beat', 0],
+      ['ali', 'commandSpecial', 'ali-massive-step', 0],
+      ['ali', 'backSpecial', 'ali-beat-skip', 0],
+      ['ali', 'launcher', 'ali-bassline-riser', 0],
+      ['ali', 'enhanced', 'ali-ex-booyakasha-beat', 50],
+      ['ali', 'enhancedCommandSpecial', 'ali-ex-massive-step', 50],
+      ['ali', 'enhancedBackSpecial', 'ali-ex-beat-skip', 50],
+      ['ali', 'enhancedLauncher', 'ali-ex-bassline-riser', 50],
+      ['ali', 'throw', 'ali-respect-toss', 0],
+      ['ali', 'super', 'ali-west-staines-massive-super', 100],
     ];
     return specs.map(([id, action, expected, meter]) => {
       window.__finalBlowQa.fight(id, id === 'deathblow' ? 'jez' : 'deathblow');
@@ -461,6 +484,83 @@ try {
   const executiveRetreat = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   assert.ok(executiveRetreat.fighters[0].x < 530, 'Executive Retreat should create real backward space');
   assert.equal(executiveRetreat.projectiles.length, 1, 'Executive Retreat should leave a low chip shot behind');
+
+  const finalKitLists = await evaluate(client, `(() => {
+    const select = document.querySelector('#moveListSelect');
+    const read = (id) => {
+      select.value = id;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return {
+        identity: document.querySelector('#moveListIdentity').textContent,
+        moves: [...document.querySelectorAll('.move-list-row b')].map((node) => node.textContent),
+      };
+    };
+    return { cyraxx: read('cyraxx'), ali: read('ali') };
+  })()`);
+  assert.match(finalKitLists.cyraxx.identity, /FEEDBACK TRICKSTER/);
+  assert.ok(finalKitLists.cyraxx.moves.includes('Feedback Loop'));
+  assert.match(finalKitLists.ali.identity, /RHYTHM \/ MOMENTUM/);
+  assert.ok(finalKitLists.ali.moves.includes('Massive Step'));
+
+  await evaluate(client, `window.__finalBlowQa.fight('cyraxx', 'ali'); window.__finalBlowQa.positions(350, 920); window.__finalBlowQa.input(0, { commandSpecial: true }); window.__finalBlowQa.step(0.2)`);
+  const feedbackTelegraph = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(feedbackTelegraph.projectiles.length, 1, 'Feedback Loop should plant a delayed echo');
+  assert.equal(feedbackTelegraph.projectiles[0].style, 'feedback');
+  assert.ok(feedbackTelegraph.projectiles[0].armFrames > 0, 'the echo must visibly telegraph before becoming active');
+  assert.equal(Math.round(feedbackTelegraph.projectiles[0].x), 542);
+  if (process.env.FINAL_BLOW_FEEDBACK_SCREENSHOT) {
+    await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
+    await delay(80);
+    const capture = await client.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+    await writeFile(process.env.FINAL_BLOW_FEEDBACK_SCREENSHOT, Buffer.from(capture.data, "base64"));
+  }
+  await evaluate(client, `window.__finalBlowQa.positions(350, 542); window.__finalBlowQa.step(0.52)`);
+  const feedbackHit = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(feedbackHit.projectiles.length, 0, 'armed feedback should be consumed on contact');
+  assert.equal(feedbackHit.fighters[1].lastHitResult, 'feedback-echo');
+  assert.ok(feedbackHit.fighters[1].health < 100);
+
+  await evaluate(client, `window.__finalBlowQa.fight('cyraxx', 'ali'); window.__finalBlowQa.positions(350, 920); window.__finalBlowQa.fighter(0, { meter: 50 }); window.__finalBlowQa.input(0, { enhancedCommandSpecial: true }); window.__finalBlowQa.step(0.27)`);
+  const doubleFeedback = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(doubleFeedback.projectiles.length, 2, 'Feedback Loop EX should stagger two echoes');
+  assert.ok(doubleFeedback.projectiles.every((projectile) => projectile.style === 'feedback' && projectile.enhanced));
+  assert.notEqual(doubleFeedback.projectiles[0].armFrames, doubleFeedback.projectiles[1].armFrames);
+
+  await evaluate(client, `window.__finalBlowQa.fight('cyraxx', 'ali'); window.__finalBlowQa.positions(500, 610); window.__finalBlowQa.input(0, { backSpecial: true }); window.__finalBlowQa.step(0.3)`);
+  const bufferSkip = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(bufferSkip.fighters[0].move, 'cyraxx-buffer-skip');
+  assert.ok(bufferSkip.fighters[0].x > bufferSkip.fighters[1].x, 'Buffer Skip should phase through the opponent');
+
+  await evaluate(client, `window.__finalBlowQa.fight('ali', 'cyraxx'); window.__finalBlowQa.positions(500, 600); window.__finalBlowQa.input(0, { light: true }); window.__finalBlowQa.step(0.16)`);
+  const flowOne = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(flowOne.fighters[0].rhythmStacks, 1, 'one distinct hit should establish Flow');
+  await evaluate(client, `window.__finalBlowQa.step(0.18); window.__finalBlowQa.positions(500, 600); window.__finalBlowQa.input(0, { heavy: true }); window.__finalBlowQa.step(0.3)`);
+  const flowTwo = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(flowTwo.fighters[0].rhythmStacks, 2, 'a second attack on beat should advance Flow');
+  await evaluate(client, `window.__finalBlowQa.step(0.28); window.__finalBlowQa.positions(500, 600); window.__finalBlowQa.input(0, { special: true }); window.__finalBlowQa.step(0.5)`);
+  const massiveFlow = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(massiveFlow.fighters[0].rhythmStacks, 3, 'three distinct attacks should reach Massive Flow');
+  if (process.env.FINAL_BLOW_FLOW_SCREENSHOT) {
+    await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
+    await delay(80);
+    const capture = await client.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+    await writeFile(process.env.FINAL_BLOW_FLOW_SCREENSHOT, Buffer.from(capture.data, "base64"));
+    await evaluate(client, `window.__finalBlowEngine.toggleDebug(true)`);
+  }
+  await evaluate(client, `window.__finalBlowQa.input(0, { commandSpecial: true }); window.__finalBlowQa.step(0.084)`);
+  const flowCancel = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(flowCancel.fighters[0].move, 'ali-massive-step');
+  assert.equal(flowCancel.fighters[0].cancelledFrom, 'ali-booyakasha-beat');
+  assert.equal(flowCancel.fighters[0].rhythmBoost, 3);
+  await evaluate(client, `window.__finalBlowQa.step(2.2)`);
+  const expiredFlow = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(expiredFlow.fighters[0].rhythmStacks, 0, 'Flow should expire when Ali falls off beat');
+
+  await evaluate(client, `window.__finalBlowQa.fight('ali', 'cyraxx'); (() => { const tick = window.__finalBlowEngine.snapshot().tick; return window.__finalBlowQa.fighter(0, { rhythmStacks: 3, rhythmExpiresFrame: tick + 96 }); })()`);
+  const flowWalkStart = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await evaluate(client, `window.__finalBlowQa.input(0, { right: true }, 12); window.__finalBlowQa.step(0.15)`);
+  const flowWalk = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.ok(flowWalk.fighters[0].x - flowWalkStart.fighters[0].x > 55, 'Massive Flow should provide a real movement-speed bonus');
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
   const movementStart = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
@@ -849,6 +949,16 @@ try {
   assert.equal(donaldSuper.fighters[0].combo.hits, 9);
   assert.ok(donaldSuper.fighters[0].combo.damage > 20 && donaldSuper.fighters[0].combo.damage < 25);
 
+  await evaluate(client, `window.__finalBlowQa.fight('cyraxx', 'ali'); window.__finalBlowQa.positions(500, 600); window.__finalBlowQa.fighter(0, { meter: 100 }); window.__finalBlowQa.input(0, { super: true }); window.__finalBlowQa.step(2.4)`);
+  const cyraxxSuper = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(cyraxxSuper.fighters[0].combo.hits, 7);
+  assert.ok(cyraxxSuper.fighters[0].combo.damage > 18 && cyraxxSuper.fighters[0].combo.damage < 28);
+
+  await evaluate(client, `window.__finalBlowQa.fight('ali', 'cyraxx'); window.__finalBlowQa.positions(500, 600); window.__finalBlowQa.fighter(0, { meter: 100 }); window.__finalBlowQa.input(0, { super: true }); window.__finalBlowQa.step(2.4)`);
+  const aliSuper = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(aliSuper.fighters[0].combo.hits, 8);
+  assert.ok(aliSuper.fighters[0].combo.damage > 18 && aliSuper.fighters[0].combo.damage < 28);
+
   await evaluate(client, `(() => {
     document.querySelector('[data-mode="arcade"]').click();
     document.querySelectorAll('.fighter-card')[0].click();
@@ -961,6 +1071,14 @@ try {
   assert.equal(donaldVictory.title, "DONALD TRUMP WINS");
   assert.equal(donaldVictory.quote, "NINE HOLES. NO MERCY.");
   assert.match(donaldVictory.background, /donald-specials\.webp/);
+  const cyraxxVictory = await evaluate(client, `window.__finalBlowQa.result('cyraxx')`);
+  assert.equal(cyraxxVictory.title, "CYRAXX WINS");
+  assert.equal(cyraxxVictory.quote, "THE ECHO GETS THE LAST WORD.");
+  assert.match(cyraxxVictory.background, /cyraxx-specials\.webp/);
+  const aliVictory = await evaluate(client, `window.__finalBlowQa.result('ali')`);
+  assert.equal(aliVictory.title, "ALI G WINS");
+  assert.equal(aliVictory.quote, "KEEP IT MASSIVE.");
+  assert.match(aliVictory.background, /ali-specials\.webp/);
   if (process.env.FINAL_BLOW_VICTORY_SCREENSHOT) {
     await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
     await delay(80);
