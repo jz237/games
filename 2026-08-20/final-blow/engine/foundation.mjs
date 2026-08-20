@@ -1,0 +1,293 @@
+export const SIMULATION_HZ = 60;
+export const SIMULATION_STEP_SECONDS = 1 / SIMULATION_HZ;
+export const DEFAULT_INPUT_BUFFER_FRAMES = 6;
+
+export const FIGHTER_STATES = Object.freeze({
+  IDLE: "idle",
+  WALK: "walk",
+  CROUCH: "crouch",
+  JUMP: "jump",
+  ATTACK: "attack",
+  BLOCK: "block",
+  HITSTUN: "hitstun",
+  FINISHER: "finisher",
+  DOWN: "down",
+});
+
+const ALL_ACTIVE_STATES = [
+  FIGHTER_STATES.IDLE,
+  FIGHTER_STATES.WALK,
+  FIGHTER_STATES.CROUCH,
+  FIGHTER_STATES.JUMP,
+  FIGHTER_STATES.ATTACK,
+  FIGHTER_STATES.BLOCK,
+  FIGHTER_STATES.HITSTUN,
+  FIGHTER_STATES.FINISHER,
+  FIGHTER_STATES.DOWN,
+];
+
+export const FIGHTER_STATE_TRANSITIONS = Object.freeze({
+  [FIGHTER_STATES.IDLE]: new Set(ALL_ACTIVE_STATES),
+  [FIGHTER_STATES.WALK]: new Set(ALL_ACTIVE_STATES),
+  [FIGHTER_STATES.CROUCH]: new Set(ALL_ACTIVE_STATES),
+  [FIGHTER_STATES.JUMP]: new Set([
+    FIGHTER_STATES.JUMP,
+    FIGHTER_STATES.IDLE,
+    FIGHTER_STATES.ATTACK,
+    FIGHTER_STATES.HITSTUN,
+    FIGHTER_STATES.FINISHER,
+    FIGHTER_STATES.DOWN,
+  ]),
+  [FIGHTER_STATES.ATTACK]: new Set([
+    FIGHTER_STATES.ATTACK,
+    FIGHTER_STATES.IDLE,
+    FIGHTER_STATES.WALK,
+    FIGHTER_STATES.JUMP,
+    FIGHTER_STATES.HITSTUN,
+    FIGHTER_STATES.FINISHER,
+    FIGHTER_STATES.DOWN,
+  ]),
+  [FIGHTER_STATES.BLOCK]: new Set([
+    FIGHTER_STATES.BLOCK,
+    FIGHTER_STATES.IDLE,
+    FIGHTER_STATES.CROUCH,
+    FIGHTER_STATES.HITSTUN,
+    FIGHTER_STATES.FINISHER,
+    FIGHTER_STATES.DOWN,
+  ]),
+  [FIGHTER_STATES.HITSTUN]: new Set([
+    FIGHTER_STATES.HITSTUN,
+    FIGHTER_STATES.IDLE,
+    FIGHTER_STATES.JUMP,
+    FIGHTER_STATES.FINISHER,
+    FIGHTER_STATES.DOWN,
+  ]),
+  [FIGHTER_STATES.FINISHER]: new Set([
+    FIGHTER_STATES.FINISHER,
+    FIGHTER_STATES.IDLE,
+    FIGHTER_STATES.DOWN,
+  ]),
+  [FIGHTER_STATES.DOWN]: new Set([
+    FIGHTER_STATES.DOWN,
+    FIGHTER_STATES.IDLE,
+    FIGHTER_STATES.FINISHER,
+  ]),
+});
+
+export const BASE_MOVES = deepFreeze({
+  light: {
+    startupFrames: 6,
+    activeFrames: 6,
+    recoveryFrames: 9,
+    range: 98,
+    damage: 6,
+    push: 150,
+    meter: 10,
+  },
+  heavy: {
+    startupFrames: 12,
+    activeFrames: 8,
+    recoveryFrames: 14,
+    range: 132,
+    damage: 12,
+    push: 260,
+    meter: 16,
+  },
+  special: {
+    startupFrames: 16,
+    activeFrames: 14,
+    recoveryFrames: 17,
+    range: 184,
+    damage: 17,
+    push: 360,
+    meter: 22,
+  },
+});
+
+function deepFreeze(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  Object.values(value).forEach(deepFreeze);
+  return value;
+}
+
+export function createAttackInstance(kind, overrides = {}) {
+  const source = BASE_MOVES[kind];
+  if (!source) throw new Error(`Unknown move kind: ${kind}`);
+  const move = { ...source, ...overrides };
+  const totalFrames = move.startupFrames + move.activeFrames + move.recoveryFrames;
+  return {
+    kind,
+    ...move,
+    totalFrames,
+    activeStartFrame: move.startupFrames,
+    activeEndFrame: move.startupFrames + move.activeFrames,
+    duration: totalFrames * SIMULATION_STEP_SECONDS,
+    active: [
+      move.startupFrames * SIMULATION_STEP_SECONDS,
+      (move.startupFrames + move.activeFrames) * SIMULATION_STEP_SECONDS,
+    ],
+  };
+}
+
+export class FixedStepClock {
+  constructor({
+    hz = SIMULATION_HZ,
+    maxFrameSeconds = 0.25,
+    maxCatchUpSteps = 8,
+  } = {}) {
+    this.hz = hz;
+    this.stepSeconds = 1 / hz;
+    this.maxFrameSeconds = maxFrameSeconds;
+    this.maxCatchUpSteps = maxCatchUpSteps;
+    this.accumulator = 0;
+    this.tick = 0;
+    this.droppedSeconds = 0;
+  }
+
+  advance(frameSeconds, step) {
+    const raw = Number.isFinite(frameSeconds) ? Math.max(0, frameSeconds) : 0;
+    const accepted = Math.min(raw, this.maxFrameSeconds);
+    this.droppedSeconds += raw - accepted;
+    this.accumulator += accepted;
+    let steps = 0;
+
+    while (this.accumulator + 1e-10 >= this.stepSeconds && steps < this.maxCatchUpSteps) {
+      this.accumulator -= this.stepSeconds;
+      if (this.accumulator < 0 && this.accumulator > -1e-9) this.accumulator = 0;
+      this.tick += 1;
+      step(this.stepSeconds, this.tick);
+      steps += 1;
+    }
+
+    if (this.accumulator + 1e-10 >= this.stepSeconds) {
+      const wholeSteps = Math.floor((this.accumulator + 1e-10) / this.stepSeconds);
+      const discarded = wholeSteps * this.stepSeconds;
+      this.accumulator -= discarded;
+      this.droppedSeconds += discarded;
+    }
+
+    return {
+      steps,
+      tick: this.tick,
+      alpha: Math.min(1, this.accumulator / this.stepSeconds),
+      droppedSeconds: this.droppedSeconds,
+    };
+  }
+
+  stepOnce(step) {
+    this.tick += 1;
+    step(this.stepSeconds, this.tick);
+    return this.tick;
+  }
+
+  reset() {
+    this.accumulator = 0;
+    this.tick = 0;
+    this.droppedSeconds = 0;
+  }
+}
+
+export class FrameInputBuffer {
+  constructor(windowFrames = DEFAULT_INPUT_BUFFER_FRAMES) {
+    this.windowFrames = windowFrames;
+    this.entries = [];
+  }
+
+  push(action, frame, payload = null) {
+    this.entries = this.entries.filter((entry) => entry.action !== action);
+    this.entries.push({ action, frame, payload });
+  }
+
+  prune(frame) {
+    this.entries = this.entries.filter((entry) => frame >= entry.frame && frame - entry.frame <= this.windowFrames);
+  }
+
+  consume(actions, frame) {
+    this.prune(frame);
+    const order = Array.isArray(actions) ? actions : [actions];
+    for (const action of order) {
+      let selected = -1;
+      for (let index = this.entries.length - 1; index >= 0; index -= 1) {
+        if (this.entries[index].action === action) {
+          selected = index;
+          break;
+        }
+      }
+      if (selected >= 0) return this.entries.splice(selected, 1)[0];
+    }
+    return null;
+  }
+
+  has(action, frame) {
+    this.prune(frame);
+    return this.entries.some((entry) => entry.action === action);
+  }
+
+  clear() {
+    this.entries.length = 0;
+  }
+
+  snapshot() {
+    return this.entries.map((entry) => ({ ...entry }));
+  }
+
+  restore(entries = []) {
+    this.entries = entries.map((entry) => ({ ...entry }));
+  }
+}
+
+export class DeterministicRng {
+  constructor(seed = 0x5f3759df) {
+    this.setState(seed);
+  }
+
+  setState(seed) {
+    const normalized = Number(seed) >>> 0;
+    this.state = normalized || 0x6d2b79f5;
+  }
+
+  getState() {
+    return this.state >>> 0;
+  }
+
+  nextUint32() {
+    let value = this.state >>> 0;
+    value ^= value << 13;
+    value ^= value >>> 17;
+    value ^= value << 5;
+    this.state = value >>> 0;
+    return this.state;
+  }
+
+  nextFloat() {
+    return this.nextUint32() / 0x100000000;
+  }
+}
+
+export function hashSeed(...parts) {
+  let hash = 0x811c9dc5;
+  for (const part of parts) {
+    const text = String(part);
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193);
+    }
+  }
+  return hash >>> 0 || 1;
+}
+
+export function transitionFighterState(fighter, nextState, tick, { force = false } = {}) {
+  if (!Object.values(FIGHTER_STATES).includes(nextState)) throw new Error(`Unknown fighter state: ${nextState}`);
+  const current = fighter.combatState || FIGHTER_STATES.IDLE;
+  if (current === nextState) {
+    fighter.stateFrame = (fighter.stateFrame || 0) + 1;
+    return false;
+  }
+  if (!force && !FIGHTER_STATE_TRANSITIONS[current]?.has(nextState)) return false;
+  fighter.previousCombatState = current;
+  fighter.combatState = nextState;
+  fighter.stateFrame = 0;
+  fighter.stateEnteredTick = tick;
+  return true;
+}

@@ -1,3 +1,16 @@
+import {
+  DEFAULT_INPUT_BUFFER_FRAMES,
+  DeterministicRng,
+  FIGHTER_STATES,
+  FixedStepClock,
+  FrameInputBuffer,
+  SIMULATION_HZ,
+  SIMULATION_STEP_SECONDS,
+  createAttackInstance,
+  hashSeed,
+  transitionFighterState,
+} from "./engine/foundation.mjs";
+
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
 
@@ -408,6 +421,10 @@ const keyMaps = [
   { left: "ArrowLeft", right: "ArrowRight", jump: "ArrowUp", block: "ArrowDown", light: "Numpad1", heavy: "Numpad2", special: "Numpad3", final: "Numpad0" },
 ];
 
+const simulationClock = new FixedStepClock();
+const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.6-foundation");
+const debugRequested = new URLSearchParams(location.search).has("debug");
+
 const state = {
   screen: "title",
   mode: "arcade",
@@ -431,7 +448,15 @@ const state = {
   shake: 0,
   flash: 0,
   hitstop: 0,
-  lastTime: performance.now(),
+  lastRenderTime: performance.now(),
+  simulationTick: 0,
+  simulationAlpha: 0,
+  simulationSteps: 0,
+  simulationDroppedSeconds: 0,
+  matchSerial: 0,
+  matchSeed: initialSeed,
+  rng: new DeterministicRng(initialSeed),
+  debug: debugRequested,
   audio: null,
   audioUnlocked: false,
   musicDuck: 1,
@@ -439,6 +464,22 @@ const state = {
   musicVolume: clamp(Number(localStorage.getItem("final-blow-music-volume") ?? "1"), 0, 1),
   sfxVolume: clamp(Number(localStorage.getItem("final-blow-sfx-volume") ?? "1"), 0, 1),
 };
+
+function random() {
+  return state.rng.nextFloat();
+}
+
+function seedMatch(round = state.round) {
+  state.matchSeed = hashSeed(
+    initialSeed,
+    state.matchSerial,
+    round,
+    state.picks[0],
+    state.picks[1],
+    state.stage,
+  );
+  state.rng.setState(state.matchSeed);
+}
 
 function makeFighter(index, side) {
   const def = roster[index];
@@ -459,17 +500,23 @@ function makeFighter(index, side) {
     block: false,
     attacking: null,
     attackTime: 0,
+    attackFrame: 0,
     attackHit: false,
     stun: 0,
     hitFlash: 0,
     specialGlow: 0,
-    animTime: Math.random() * 2,
-    walkTime: Math.random(),
+    animTime: random() * 2,
+    walkTime: random(),
     cinematicFrame: null,
     cinematicRotation: 0,
     cinematicScale: 1,
     down: false,
     aiClock: 0,
+    combatState: FIGHTER_STATES.IDLE,
+    previousCombatState: FIGHTER_STATES.IDLE,
+    stateFrame: 0,
+    stateEnteredTick: state.simulationTick,
+    inputBuffer: new FrameInputBuffer(DEFAULT_INPUT_BUFFER_FRAMES),
   };
 }
 
@@ -520,7 +567,7 @@ function chooseFighter(index) {
   if (state.mode === "arcade") {
     state.picks[0] = index;
     state.locks = [true, true];
-    let opponent = Math.floor(Math.random() * roster.length);
+    let opponent = Math.floor(random() * roster.length);
     if (opponent === index) opponent = (opponent + 1) % roster.length;
     state.picks[1] = opponent;
   } else if (!state.locks[0]) {
@@ -574,6 +621,8 @@ function startMatch(resetSet = true) {
     state.rounds = [0, 0];
     state.round = 1;
   }
+  state.matchSerial += 1;
+  seedMatch(state.round);
   state.fighters = [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1)];
   state.particles.length = 0;
   state.effects.length = 0;
@@ -602,6 +651,7 @@ function startMatch(resetSet = true) {
 function resetRound() {
   resetMusicDuck();
   state.round += 1;
+  seedMatch(state.round);
   state.fighters = [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1)];
   state.particles.length = 0;
   state.effects.length = 0;
@@ -725,18 +775,18 @@ function triggerFinisherImpact(finisher, impact) {
   finisher.beatLife = finalImpact ? 1.05 : .48;
 
   for (let index = 0; index < count; index += 1) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 100 + Math.random() * (finalImpact ? 670 : 330) * impact.power;
-    const splatter = finalImpact && gore && Math.random() > .34;
+    const angle = random() * Math.PI * 2;
+    const speed = 100 + random() * (finalImpact ? 670 : 330) * impact.power;
+    const splatter = finalImpact && gore && random() > .34;
     state.particles.push({
       x: pointX,
       y: pointY,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed - (finalImpact ? 150 : 35),
-      life: (finalImpact ? .65 : .22) + Math.random() * (finalImpact ? 1.15 : .42),
+      life: (finalImpact ? .65 : .22) + random() * (finalImpact ? 1.15 : .42),
       max: finalImpact ? 1.8 : .64,
-      size: 2 + Math.random() * (finalImpact ? 8 : 5),
-      color: splatter ? "#d90b19" : Math.random() > .38 ? attacker.def.accent : attacker.def.color,
+      size: 2 + random() * (finalImpact ? 8 : 5),
+      color: splatter ? "#d90b19" : random() > .38 ? attacker.def.accent : attacker.def.color,
     });
   }
 
@@ -834,7 +884,19 @@ function readInput(side) {
   const axisX = pad ? pad.axes[0] || 0 : 0;
   const axisY = pad ? pad.axes[1] || 0 : 0;
   const held = (action) => keys.has(map[action]) || (side === 0 && touch.has(action));
-  const edge = (action) => pressed.has(map[action]) || (side === 0 && touch.has(`${action}:pressed`));
+  const edge = (action) => {
+    let active = false;
+    if (pressed.has(map[action])) {
+      active = true;
+      pressed.delete(map[action]);
+    }
+    const touchToken = `${action}:pressed`;
+    if (side === 0 && touch.has(touchToken)) {
+      active = true;
+      touch.delete(touchToken);
+    }
+    return active;
+  };
   const padEdge = (index) => Boolean(pad && buttonValue(pad, index) && !previous[index]);
   const left = held("left") || axisX < -0.42 || buttonValue(pad, 14);
   const right = held("right") || axisX > 0.42 || buttonValue(pad, 15);
@@ -845,7 +907,7 @@ function readInput(side) {
   const special = edge("special") || padEdge(4) || padEdge(5);
   const triggers = buttonValue(pad, 6) && buttonValue(pad, 7);
   const previousTriggers = Boolean(previous[6] && previous[7]);
-  const final = edge("final") || (triggers && !previousTriggers) || (side === 0 && touch.has("final:pressed"));
+  const final = edge("final") || (triggers && !previousTriggers);
   if (pad) {
     const next = pad.buttons.map((button) => button.pressed || button.value > 0.55);
     next[20] = axisY < -0.65 || buttonValue(pad, 12);
@@ -864,20 +926,20 @@ function aiInput(fighter, opponent, dt) {
     return input;
   }
   if (fighter.aiClock <= 0) {
-    fighter.aiClock = 0.14 + Math.random() * 0.32;
+    fighter.aiClock = 0.14 + random() * 0.32;
     const abs = Math.abs(distance);
-    if (opponent.attacking && abs < 145 && Math.random() < 0.62) input.down = true;
+    if (opponent.attacking && abs < 145 && random() < 0.62) input.down = true;
     else if (abs > 250) {
       input.right = distance > 0;
       input.left = distance < 0;
-      if (Math.random() < 0.22) input.special = true;
+      if (random() < 0.22) input.special = true;
     } else if (abs > 115) {
       input.right = distance > 0;
       input.left = distance < 0;
-      if (Math.random() < 0.2) input.jump = true;
-      if (Math.random() < 0.32) input.special = true;
+      if (random() < 0.2) input.jump = true;
+      if (random() < 0.32) input.special = true;
     } else {
-      const roll = Math.random();
+      const roll = random();
       if (roll < 0.44) input.light = true;
       else if (roll < 0.78) input.heavy = true;
       else input.down = true;
@@ -891,9 +953,9 @@ function aiInput(fighter, opponent, dt) {
 
 function rememberCommand(side, token) {
   const history = commandHistory[side];
-  const now = performance.now();
-  if (!history.length || history.at(-1).token !== token || now - history.at(-1).time > 150) history.push({ token, time: now });
-  while (history.length > 9 || (history[0] && now - history[0].time > 1800)) history.shift();
+  const frame = state.simulationTick;
+  if (!history.length || history.at(-1).token !== token || frame - history.at(-1).frame > 9) history.push({ token, frame });
+  while (history.length > 9 || (history[0] && frame - history[0].frame > 108)) history.shift();
 }
 
 function commandMatches(side, sequence) {
@@ -930,16 +992,21 @@ function tryFinish(side, input) {
 
 function beginAttack(fighter, kind) {
   if (fighter.attacking || fighter.stun > 0 || fighter.down) return;
-  const attackData = {
-    light: { duration: 0.34, active: [0.1, 0.19], range: 98, damage: 6, push: 150, meter: 10 },
-    heavy: { duration: 0.56, active: [0.2, 0.33], range: 132, damage: 12, push: 260, meter: 16 },
-    special: { duration: 0.78, active: [0.27, 0.49], range: 184, damage: 17, push: 360, meter: 22 },
-  }[kind];
-  fighter.attacking = { kind, ...attackData };
+  fighter.attacking = createAttackInstance(kind);
   fighter.attackTime = 0;
+  fighter.attackFrame = 0;
   fighter.attackHit = false;
   if (kind === "special") fighter.specialGlow = 0.7;
   sound(kind);
+}
+
+const bufferedActions = ["jump", "light", "heavy", "special"];
+
+function bufferActionInputs(fighter, input) {
+  for (const action of bufferedActions) {
+    if (input[action]) fighter.inputBuffer.push(action, state.simulationTick);
+  }
+  fighter.inputBuffer.prune(state.simulationTick);
 }
 
 function updateFighter(fighter, opponent, input, dt) {
@@ -954,6 +1021,7 @@ function updateFighter(fighter, opponent, input, dt) {
   recordInput(fighter.side, input, fighter);
   if (tryFinish(fighter.side, input)) return;
   if (state.phase !== "fight") return;
+  bufferActionInputs(fighter, input);
 
   if (fighter.stun <= 0 && !fighter.attacking) {
     const move = (input.right ? 1 : 0) - (input.left ? 1 : 0);
@@ -961,30 +1029,32 @@ function updateFighter(fighter, opponent, input, dt) {
     fighter.crouch = fighter.block;
     fighter.vx = fighter.block ? 0 : move * 285;
     if (Math.abs(fighter.vx) > 20 && fighter.grounded) fighter.walkTime += dt;
-    if (input.jump && fighter.grounded && !fighter.block) {
+    if (fighter.grounded && !fighter.block && fighter.inputBuffer.has("jump", state.simulationTick)) {
+      fighter.inputBuffer.consume("jump", state.simulationTick);
       fighter.vy = -730;
       fighter.grounded = false;
       sound("jump");
     }
-    if (input.light) beginAttack(fighter, "light");
-    else if (input.heavy) beginAttack(fighter, "heavy");
-    else if (input.special) beginAttack(fighter, "special");
+    const bufferedAttack = fighter.inputBuffer.consume(["special", "heavy", "light"], state.simulationTick);
+    if (bufferedAttack) beginAttack(fighter, bufferedAttack.action);
   } else if (fighter.stun > 0) {
     fighter.vx *= 0.9;
   }
 
   if (fighter.attacking) {
-    fighter.attackTime += dt;
+    fighter.attackFrame += 1;
+    fighter.attackTime = fighter.attackFrame * SIMULATION_STEP_SECONDS;
     fighter.vx *= 0.82;
     const attack = fighter.attacking;
-    if (!fighter.attackHit && fighter.attackTime >= attack.active[0] && fighter.attackTime <= attack.active[1]) {
+    if (!fighter.attackHit && fighter.attackFrame >= attack.activeStartFrame && fighter.attackFrame < attack.activeEndFrame) {
       const vertical = Math.abs((fighter.y - fighter.height * 0.5) - (opponent.y - opponent.height * 0.5));
       const forwardDistance = (opponent.x - fighter.x) * fighter.facing;
       if (forwardDistance > 8 && forwardDistance < attack.range && vertical < 125) hit(fighter, opponent, attack);
     }
-    if (fighter.attackTime >= attack.duration) {
+    if (fighter.attackFrame >= attack.totalFrames) {
       fighter.attacking = null;
       fighter.attackTime = 0;
+      fighter.attackFrame = 0;
     }
   }
 
@@ -1034,9 +1104,9 @@ function hit(attacker, victim, attack) {
 function spawnHit(x, y, def, attackKind, blocked) {
   const count = blocked ? 9 : attackKind === "special" ? 28 : attackKind === "heavy" ? 18 : 12;
   for (let i = 0; i < count; i += 1) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 90 + Math.random() * 310;
-    state.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 0.18 + Math.random() * 0.34, max: 0.55, size: 2 + Math.random() * 6, color: Math.random() > 0.34 ? def.accent : def.color });
+    const angle = random() * Math.PI * 2;
+    const speed = 90 + random() * 310;
+    state.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 0.18 + random() * 0.34, max: 0.55, size: 2 + random() * 6, color: random() > 0.34 ? def.accent : def.color });
   }
   state.effects.push({ kind: blocked ? "guard" : "hit", style: def.vfx, attackKind, x, y, life: attackKind === "special" ? 0.42 : 0.28, max: attackKind === "special" ? 0.42 : 0.28, color: def.accent });
 }
@@ -1052,7 +1122,25 @@ function separateFighters() {
   }
 }
 
-function updateGame(dt) {
+function resolveFighterState(fighter) {
+  if (state.finisher) return FIGHTER_STATES.FINISHER;
+  if (fighter.down) return FIGHTER_STATES.DOWN;
+  if (fighter.stun > 0) return FIGHTER_STATES.HITSTUN;
+  if (fighter.attacking) return FIGHTER_STATES.ATTACK;
+  if (!fighter.grounded) return FIGHTER_STATES.JUMP;
+  if (fighter.block) return FIGHTER_STATES.BLOCK;
+  if (fighter.crouch) return FIGHTER_STATES.CROUCH;
+  if (Math.abs(fighter.vx) > 20) return FIGHTER_STATES.WALK;
+  return FIGHTER_STATES.IDLE;
+}
+
+function syncFighterStateMachines() {
+  for (const fighter of state.fighters) {
+    transitionFighterState(fighter, resolveFighterState(fighter), state.simulationTick);
+  }
+}
+
+function simulateGameTick(dt) {
   if (state.screen !== "fight" || !state.fighters.length) return;
   if (document.body.classList.contains("orientation-blocked")) return;
   if (state.hitstop > 0) {
@@ -1075,6 +1163,7 @@ function updateGame(dt) {
   updateFighter(state.fighters[1], state.fighters[0], input1, dt);
   if (state.finisher) updateFinisher(dt);
   else separateFighters();
+  syncFighterStateMachines();
 
   if (state.phase === "fight") {
     state.timerCarry += dt;
@@ -1677,6 +1766,49 @@ function drawFinisherOverlay() {
   }
 }
 
+function drawDebugOverlay() {
+  if (!state.debug) return;
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.font = "700 14px ui-monospace, SFMono-Regular, Menlo, monospace";
+  ctx.textBaseline = "top";
+
+  for (const fighter of state.fighters) {
+    ctx.strokeStyle = fighter.side === 0 ? "#35e7ff" : "#ff4dc4";
+    ctx.strokeRect(
+      fighter.x - fighter.width * 0.5,
+      fighter.y - fighter.height,
+      fighter.width,
+      fighter.height,
+    );
+    if (fighter.attacking
+      && fighter.attackFrame >= fighter.attacking.activeStartFrame
+      && fighter.attackFrame < fighter.attacking.activeEndFrame) {
+      ctx.strokeStyle = "#ffef5a";
+      const attackX = fighter.facing > 0 ? fighter.x + 8 : fighter.x - fighter.attacking.range;
+      ctx.strokeRect(attackX, fighter.y - 190, fighter.attacking.range - 8, 150);
+    }
+  }
+
+  const lines = [
+    `SIM ${SIMULATION_HZ}HZ · TICK ${state.simulationTick} · STEPS ${state.simulationSteps}`,
+    `ALPHA ${state.simulationAlpha.toFixed(3)} · DROPPED ${state.simulationDroppedSeconds.toFixed(3)}s`,
+    `PHASE ${state.phase} · RNG ${state.rng.getState().toString(16).padStart(8, "0")}`,
+    ...state.fighters.map((fighter) => `P${fighter.side + 1} ${fighter.combatState.toUpperCase()} F${fighter.stateFrame} · BUF ${fighter.inputBuffer.snapshot().map((entry) => entry.action).join("/") || "—"}`),
+  ];
+  const panelWidth = 560;
+  const panelHeight = 18 + lines.length * 19;
+  ctx.fillStyle = "rgba(0,0,0,.82)";
+  ctx.fillRect(14, 64, panelWidth, panelHeight);
+  ctx.strokeStyle = "rgba(70,235,255,.75)";
+  ctx.strokeRect(14, 64, panelWidth, panelHeight);
+  lines.forEach((line, index) => {
+    ctx.fillStyle = index === 0 ? "#5cf3ff" : "#f4f7ff";
+    ctx.fillText(line, 25, 74 + index * 19);
+  });
+  ctx.restore();
+}
+
 function draw(time) {
   ctx.save();
   const shakeX = state.shake > 0 ? (Math.random() - 0.5) * state.shake * 18 : 0;
@@ -1699,15 +1831,29 @@ function draw(time) {
     ctx.fillStyle = `rgba(255,245,220,${clamp(state.flash * 3, 0, 0.9)})`;
     ctx.fillRect(0, 0, W, H);
   }
+  drawDebugOverlay();
+}
+
+function clearLatchedInputEdges() {
+  pressed.clear();
+  for (const token of [...touch]) if (token.endsWith(":pressed")) touch.delete(token);
+}
+
+function runSimulationStep(dt, tick) {
+  state.simulationTick = tick;
+  simulateGameTick(dt);
 }
 
 function loop(now) {
-  const dt = Math.min(0.033, (now - state.lastTime) / 1000 || 0);
-  state.lastTime = now;
-  updateGame(dt);
+  const elapsed = Math.max(0, (now - state.lastRenderTime) / 1000 || 0);
+  state.lastRenderTime = now;
+  const frame = simulationClock.advance(elapsed, runSimulationStep);
+  state.simulationTick = frame.tick;
+  state.simulationAlpha = frame.alpha;
+  state.simulationSteps = frame.steps;
+  state.simulationDroppedSeconds = frame.droppedSeconds;
+  if (frame.steps > 0) clearLatchedInputEdges();
   draw(now);
-  pressed.clear();
-  for (const token of [...touch]) if (token.endsWith(":pressed")) touch.delete(token);
   requestAnimationFrame(loop);
 }
 
@@ -1907,6 +2053,10 @@ function titleKeyboard(event) {
 
 window.addEventListener("keydown", (event) => {
   if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space"].includes(event.code)) event.preventDefault();
+  if (event.code === "F3") {
+    event.preventDefault();
+    state.debug = !state.debug;
+  }
   if (!keys.has(event.code)) pressed.add(event.code);
   keys.add(event.code);
   titleKeyboard(event);
@@ -2015,6 +2165,37 @@ $$("[data-touch]").forEach((button) => {
   button.addEventListener("pointerleave", end);
 });
 
+window.__finalBlowEngine = {
+  version: "0.6-foundation",
+  simulationHz: SIMULATION_HZ,
+  toggleDebug(enabled = !state.debug) {
+    state.debug = Boolean(enabled);
+    return state.debug;
+  },
+  snapshot() {
+    return {
+      tick: state.simulationTick,
+      phase: state.phase,
+      screen: state.screen,
+      seed: state.matchSeed,
+      rng: state.rng.getState(),
+      fighters: state.fighters.map((fighter) => ({
+        id: fighter.def.id,
+        side: fighter.side,
+        state: fighter.combatState,
+        stateFrame: fighter.stateFrame,
+        x: fighter.x,
+        y: fighter.y,
+        health: fighter.health,
+        meter: fighter.meter,
+        attack: fighter.attacking?.kind || null,
+        attackFrame: fighter.attackFrame,
+        inputBuffer: fighter.inputBuffer.snapshot(),
+      })),
+    };
+  },
+};
+
 if (["127.0.0.1", "localhost"].includes(location.hostname)) {
   window.__finalBlowQa = {
     ready(id, type = 0) {
@@ -2023,6 +2204,9 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.mode = "versus";
       state.picks = [index, index === 1 ? 0 : 1];
       state.rounds = [0, 0];
+      state.round = 1;
+      state.matchSerial += 1;
+      seedMatch(state.round);
       state.fighters = [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1)];
       state.fighters[1].health = 0;
       state.particles.length = 0;
@@ -2048,11 +2232,14 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         beat: state.finisher?.beatLabel || "",
         attackerFrame: state.fighters[0]?.cinematicFrame,
         victimFrame: state.fighters[1]?.cinematicFrame,
+        simulationTick: state.simulationTick,
+        simulationHz: SIMULATION_HZ,
       };
     },
     step(seconds) {
-      const frames = Math.ceil(seconds * 120);
-      for (let frame = 0; frame < frames; frame += 1) updateGame(1 / 120);
+      const frames = Math.ceil(seconds * SIMULATION_HZ);
+      for (let frame = 0; frame < frames; frame += 1) simulationClock.stepOnce(runSimulationStep);
+      state.simulationTick = simulationClock.tick;
       return this.status();
     },
   };
