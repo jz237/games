@@ -101,6 +101,10 @@ function testCancelRoutes() {
   assert.equal(canCancelAttack(light, "super", light.activeEndFrame, "hit"), true);
   const special = createCombatMove("special");
   assert.equal(canCancelAttack(special, "heavy", special.activeEndFrame, "hit"), false);
+  const rushSpecial = { ...special, cancelRoutes: ["special", "commandSpecial", "enhanced", "super"] };
+  assert.equal(canCancelAttack(rushSpecial, "commandSpecial", rushSpecial.activeEndFrame, "hit"), true);
+  assert.equal(canCancelAttack(rushSpecial, "commandSpecial", rushSpecial.activeEndFrame, "block"), true);
+  assert.equal(canCancelAttack(rushSpecial, "heavy", rushSpecial.activeEndFrame, "hit"), false);
 }
 
 testGritMoves();

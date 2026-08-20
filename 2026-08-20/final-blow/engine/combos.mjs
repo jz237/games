@@ -318,7 +318,8 @@ export const CANCEL_ROUTES = deepFreeze(cancelRoutes);
 
 export function canCancelAttack(attack, nextAction, attackFrame, connected = "") {
   const routeId = attack?.cancelProfileId || attack?.profileId;
-  if (!attack || !connected || !CANCEL_ROUTES[routeId]?.includes(nextAction)) return false;
+  const allowedRoutes = attack?.cancelRoutes || CANCEL_ROUTES[routeId];
+  if (!attack || !connected || !allowedRoutes?.includes(nextAction)) return false;
   const chainAction = ["light", "heavy", "launcher", "driveHeavy"].includes(nextAction);
   const earliest = chainAction ? attack.activeStartFrame : Math.max(attack.activeStartFrame, attack.activeEndFrame - 2);
   const latest = attack.activeEndFrame + (attack.kind === "light" ? 7 : 5);

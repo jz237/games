@@ -14,6 +14,7 @@ import {
   DEFENSE_RULES,
   DirectionTapTracker,
   MOVEMENT_RULES,
+  boxesOverlap,
   canGuardAttack,
   createCombatMove,
   findBoxCollision,
@@ -462,7 +463,7 @@ const keyMaps = [
 ];
 
 const simulationClock = new FixedStepClock();
-const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.8b-counter-traps");
+const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.8c-rush-keepaway");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
 const state = {
@@ -476,6 +477,7 @@ const state = {
   particles: [],
   effects: [],
   traps: [],
+  projectiles: [],
   rounds: [0, 0],
   round: 1,
   timer: 99,
@@ -556,6 +558,7 @@ function makeFighter(index, side) {
     armorHits: 0,
     counterTriggered: false,
     trapDeployed: false,
+    projectileSpawnFrames: new Set(),
     cancelledFrom: "",
     linkedFrom: "",
     linkWindow: null,
@@ -717,6 +720,7 @@ function startMatch(resetSet = true) {
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
+  state.projectiles.length = 0;
   state.timer = 99;
   state.timerCarry = 0;
   state.phase = "intro";
@@ -751,6 +755,7 @@ function resetRound() {
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
+  state.projectiles.length = 0;
   state.timer = 99;
   state.timerCarry = 0;
   state.phase = "intro";
@@ -1211,6 +1216,7 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   fighter.linkedFrom = linkedFrom;
   fighter.counterTriggered = false;
   fighter.trapDeployed = false;
+  fighter.projectileSpawnFrames.clear();
   fighter.linkWindow = null;
   fighter.block = false;
   fighter.guarding = false;
@@ -1448,6 +1454,8 @@ function tryAttackCancel(fighter, input) {
   if (fighter.meter < gritCost) return false;
   fighter.inputBuffer.consume(action, state.simulationTick);
   const previousMove = current.profileId;
+  const voltageCancel = Boolean(current.rushCancel
+    && ["special", "commandSpecial", "enhanced"].includes(actionGroup));
   fighter.attacking = null;
   const started = beginAttack(fighter, action, input, { cancelledFrom: previousMove });
   if (!started) {
@@ -1459,7 +1467,7 @@ function tryAttackCancel(fighter, input) {
   spawnCombatText(
     fighter.x + fighter.facing * 35,
     fighter.y - fighter.height - 22,
-    chain ? "CHAIN" : "HIT CONFIRM",
+    voltageCancel ? "VOLTAGE CANCEL" : chain ? "CHAIN" : "HIT CONFIRM",
     fighter.def.accent,
   );
   return true;
@@ -1598,7 +1606,9 @@ function updateFighter(fighter, opponent, input, dt) {
     fighter.attackTime = fighter.attackFrame * SIMULATION_STEP_SECONDS;
     const attack = fighter.attacking;
     maybeDeployTrap(fighter, attack);
-    if (attack.advanceSpeed && fighter.attackFrame < attack.activeEndFrame) fighter.vx = fighter.facing * attack.advanceSpeed;
+    maybeSpawnProjectile(fighter, attack);
+    if (attack.retreatSpeed && fighter.attackFrame < attack.activeEndFrame) fighter.vx = -fighter.facing * attack.retreatSpeed;
+    else if (attack.advanceSpeed && fighter.attackFrame < attack.activeEndFrame) fighter.vx = fighter.facing * attack.advanceSpeed;
     else fighter.vx *= fighter.grounded ? 0.82 : 0.985;
     fighter.crouch = attack.profileId.startsWith("crouch-");
     const cancelled = tryStartupChordOverride(fighter, input) || tryAttackCancel(fighter, input);
@@ -1718,6 +1728,132 @@ function updatePaintTraps() {
     triggerPaintTrap(trap, victim);
   }
   state.traps = state.traps.filter((trap) => trap.lifeFrames > 0 && !trap.triggered);
+}
+
+function maybeSpawnProjectile(fighter, attack) {
+  const profile = attack?.projectile;
+  if (!profile) return;
+  const spawnFrames = profile.spawnFrames || [attack.activeStartFrame];
+  for (let index = 0; index < spawnFrames.length; index += 1) {
+    const spawnFrame = spawnFrames[index];
+    if (fighter.attackFrame < spawnFrame || fighter.projectileSpawnFrames.has(spawnFrame)) continue;
+    fighter.projectileSpawnFrames.add(spawnFrame);
+    const yOffset = profile.yOffsets?.[index] ?? profile.yOffsets?.[0] ?? -110;
+    const projectile = {
+      id: `${fighter.side}-${state.simulationTick}-${index}`,
+      ownerSide: fighter.side,
+      x: fighter.x + fighter.facing * 78,
+      y: FLOOR + yOffset,
+      vx: fighter.facing * profile.speed,
+      width: profile.width,
+      height: profile.height,
+      damage: profile.damage,
+      chipDamage: profile.chipDamage,
+      hitstunFrames: profile.hitstunFrames,
+      blockstunFrames: profile.blockstunFrames,
+      push: profile.push,
+      level: profile.level,
+      knockdown: Boolean(profile.knockdown),
+      lifeFrames: profile.lifeFrames,
+      maxLifeFrames: profile.lifeFrames,
+      color: profile.color || fighter.def.accent,
+      sequenceIndex: index,
+      enhanced: spawnFrames.length > 1,
+    };
+    const owned = state.projectiles.filter((item) => item.ownerSide === fighter.side);
+    if (owned.length >= 5) {
+      const oldest = owned[0];
+      state.projectiles = state.projectiles.filter((item) => item.id !== oldest.id);
+    }
+    state.projectiles.push(projectile);
+    state.effects.push({ kind: "projectileLaunch", x: projectile.x, y: projectile.y, life: 0.35, max: 0.35, color: projectile.color });
+    sound("special");
+  }
+}
+
+function triggerProjectile(projectile, victim) {
+  const owner = state.fighters[projectile.ownerSide];
+  if (!owner) return;
+  const blocked = canGuardAttack({
+    level: projectile.level,
+    guardHeight: victim.guardHeight,
+    guarding: victim.guarding,
+    grounded: victim.grounded,
+  });
+  const armored = !blocked
+    && victim.attacking?.armorFrames > 0
+    && victim.attackFrame <= victim.attacking.armorFrames
+    && victim.armorHits < 1;
+  const counter = !blocked && !armored && isCounterHit(victim);
+  let comboResult = { damageScale: 1 };
+  if (!blocked) comboResult = owner.combo.registerHit(state.simulationTick, victim.juggleCount);
+  const baseDamage = projectile.damage
+    * (counter ? DEFENSE_RULES.counterDamageMultiplier : 1)
+    * comboResult.damageScale
+    * (armored ? 0.65 : 1);
+  const damage = blocked ? projectile.chipDamage : baseDamage;
+  victim.health = blocked ? Math.max(1, victim.health - damage) : clamp(victim.health - damage, 0, 100);
+  victim.blockstunFrames = blocked ? projectile.blockstunFrames : 0;
+  victim.hitstunFrames = blocked || armored ? 0 : projectile.hitstunFrames + (counter ? DEFENSE_RULES.counterHitstunBonusFrames : 0);
+  victim.stun = Math.max(victim.hitstunFrames, victim.blockstunFrames) / SIMULATION_HZ;
+  victim.vx = Math.sign(projectile.vx) * projectile.push * (blocked ? 0.27 : armored ? 0.12 : 1);
+  victim.lastHitResult = blocked ? `blocked-${projectile.level}-projectile` : armored ? "armor" : counter ? "counter-projectile" : `${projectile.level}-projectile`;
+  victim.hitFlash = 0.13;
+  if (!blocked && !armored) {
+    owner.combo.addDamage(damage);
+    victim.attacking = null;
+    victim.attackTime = 0;
+    victim.attackFrame = 0;
+    victim.attackHit = false;
+    victim.dashFrames = 0;
+    victim.queuedDashDirection = 0;
+    if (projectile.knockdown) {
+      victim.pendingKnockdown = true;
+      victim.grounded = false;
+      victim.vy = -245;
+    }
+  } else if (armored) {
+    victim.armorHits += 1;
+    spawnCombatText(victim.x, victim.y - victim.height - 18, "SEISMIC ARMOR", victim.def.accent);
+  }
+  owner.attackConnected = blocked ? "block" : "hit";
+  owner.confirmWindowFrames = 12;
+  owner.meter = clamp(owner.meter + 15 * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
+  victim.meter = clamp(victim.meter + 15 * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
+  state.effects.push({ kind: "projectileBurst", x: projectile.x, y: projectile.y, life: 0.5, max: 0.5, color: projectile.color });
+  spawnHit(projectile.x, projectile.y, { ...owner.def, accent: projectile.color }, "special", blocked);
+  if (counter) spawnCombatText(projectile.x, projectile.y - 72, "COUNTER", projectile.color);
+  else if (!blocked && projectile.level === ATTACK_LEVELS.LOW) spawnCombatText(projectile.x, projectile.y - 61, "LOW SHOT", projectile.color);
+  state.shake = Math.max(state.shake, blocked ? 0.1 : 0.25);
+  state.hitstop = Math.max(state.hitstop, blocked ? 0.035 : 0.085);
+  state.lastImpactSide = owner.side;
+  projectile.hit = true;
+  sound(blocked ? "block" : "hit");
+  updateHud();
+}
+
+function updateProjectiles(dt) {
+  for (const projectile of state.projectiles) {
+    projectile.lifeFrames -= 1;
+    projectile.x += projectile.vx * dt;
+    if (projectile.lifeFrames <= 0
+      || projectile.x < MOVEMENT_RULES.stageMinX - 160
+      || projectile.x > MOVEMENT_RULES.stageMaxX + 160) continue;
+    const victim = state.fighters[1 - projectile.ownerSide];
+    if (!victim || victim.down || victim.wakeupFrames > 0) continue;
+    const projectileBox = {
+      x: projectile.x - projectile.width * 0.5,
+      y: projectile.y - projectile.height * 0.5,
+      width: projectile.width,
+      height: projectile.height,
+    };
+    if (!getHurtboxes(victim).some((hurtbox) => boxesOverlap(projectileBox, hurtbox))) continue;
+    triggerProjectile(projectile, victim);
+  }
+  state.projectiles = state.projectiles.filter((projectile) => !projectile.hit
+    && projectile.lifeFrames > 0
+    && projectile.x >= MOVEMENT_RULES.stageMinX - 160
+    && projectile.x <= MOVEMENT_RULES.stageMaxX + 160);
 }
 
 function spawnCombatText(x, y, label, color = "#fff") {
@@ -2042,6 +2178,7 @@ function simulateGameTick(dt) {
   updateFighter(state.fighters[1], state.fighters[0], input1, dt);
   if (state.finisher) updateFinisher(dt);
   else {
+    updateProjectiles(dt);
     updatePaintTraps();
     resolveCombatInteractions();
     separateFighters();
@@ -2331,6 +2468,52 @@ function drawPaintTraps(time) {
   }
 }
 
+function drawProjectiles(time) {
+  for (const projectile of state.projectiles) {
+    const direction = Math.sign(projectile.vx) || 1;
+    const life = clamp(projectile.lifeFrames / projectile.maxLifeFrames, 0, 1);
+    const pulse = 1 + Math.sin(time * 0.018 + projectile.x * 0.03) * 0.11;
+    ctx.save();
+    ctx.translate(projectile.x, projectile.y);
+    ctx.scale(direction, 1);
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = Math.min(1, life * 2);
+    const trail = ctx.createLinearGradient(-105, 0, 20, 0);
+    trail.addColorStop(0, `${projectile.color}00`);
+    trail.addColorStop(0.55, `${projectile.color}78`);
+    trail.addColorStop(1, projectile.color);
+    ctx.fillStyle = trail;
+    ctx.beginPath();
+    ctx.moveTo(-112, 0);
+    ctx.quadraticCurveTo(-32, -projectile.height * 0.5, 15, 0);
+    ctx.quadraticCurveTo(-32, projectile.height * 0.5, -112, 0);
+    ctx.fill();
+    ctx.shadowColor = projectile.color;
+    ctx.shadowBlur = 24;
+    ctx.fillStyle = "#fff5b8";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, projectile.width * 0.34 * pulse, projectile.height * 0.4 * pulse, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = projectile.color;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(0, 0, projectile.height * 0.48 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,.82)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(-4, -4, projectile.height * 0.18, -2.7, -0.3);
+    ctx.stroke();
+    if (state.debug) {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = "#ffef5a";
+      ctx.strokeRect(-projectile.width * 0.5, -projectile.height * 0.5, projectile.width, projectile.height);
+    }
+    ctx.restore();
+  }
+}
+
 function drawFighter(fighter, time) {
   const jump = FLOOR - fighter.y;
   const attack = fighter.attacking;
@@ -2350,7 +2533,7 @@ function drawFighter(fighter, time) {
   const frame = pose.frame;
   const sizeAdjust = { deathblow: 1.08, jez: 1, alan: 1.08, post: 1.05, benny: 1.01, donald: 1.01, cyraxx: 1.02, ali: 1 }[fighter.def.id] || 1;
   const moveSheetAdjust = pose.bank === "specials"
-    ? ({ deathblow: 1.14, jez: 1.03, alan: 1.06, post: 1.02 }[fighter.def.id] || 1)
+    ? ({ deathblow: 1.14, jez: 1.03, alan: 1.06, post: 1.02, benny: 1.02, donald: 1.04 }[fighter.def.id] || 1)
     : 1;
   const renderSize = 330 * sizeAdjust * moveSheetAdjust;
   const attackKind = attack?.kind;
@@ -2661,6 +2844,23 @@ function drawParticles() {
         ctx.lineTo(Math.cos(angle) * radius * 1.35, Math.sin(angle) * radius * 1.35);
         ctx.stroke();
       }
+    } else if (effect.kind === "projectileLaunch" || effect.kind === "projectileBurst") {
+      const burst = effect.kind === "projectileBurst";
+      const radius = (1 - alpha) * (burst ? 112 : 62) + 12;
+      ctx.globalCompositeOperation = "screen";
+      ctx.fillStyle = effect.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 0.34, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = effect.color;
+      for (let ray = 0; ray < (burst ? 12 : 7); ray += 1) {
+        const angle = ray * Math.PI * 2 / (burst ? 12 : 7);
+        ctx.lineWidth = 3 + ray % 3 * 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * radius * 0.25, Math.sin(angle) * radius * 0.25);
+        ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+        ctx.stroke();
+      }
     } else if (effect.kind === "slash") {
       ctx.lineWidth = 18 * alpha;
       ctx.beginPath();
@@ -2804,6 +3004,7 @@ function draw(time) {
   drawStage(time);
   if (state.screen === "fight") {
     drawPaintTraps(time);
+    drawProjectiles(time);
     const ordered = [...state.fighters].sort((a, b) => a.y - b.y);
     ordered.forEach((fighter) => drawFighter(fighter, time));
     drawParticles();
@@ -3157,7 +3358,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "0.8b-counter-traps",
+  version: "0.8c-rush-keepaway",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -3179,6 +3380,18 @@ window.__finalBlowEngine = {
         armFrames: trap.armFrames,
         lifeFrames: trap.lifeFrames,
         enhanced: trap.enhanced,
+      })),
+      projectiles: state.projectiles.map((projectile) => ({
+        id: projectile.id,
+        ownerSide: projectile.ownerSide,
+        x: projectile.x,
+        y: projectile.y,
+        vx: projectile.vx,
+        width: projectile.width,
+        height: projectile.height,
+        level: projectile.level,
+        lifeFrames: projectile.lifeFrames,
+        enhanced: projectile.enhanced,
       })),
       fighters: state.fighters.map((fighter) => ({
         id: fighter.def.id,
@@ -3248,6 +3461,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.particles.length = 0;
       state.effects.length = 0;
       state.traps.length = 0;
+      state.projectiles.length = 0;
       state.timer = 99;
       state.timerCarry = 0;
       state.phase = "fight";
@@ -3320,6 +3534,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.particles.length = 0;
       state.effects.length = 0;
       state.traps.length = 0;
+      state.projectiles.length = 0;
       state.phase = "finish";
       state.phaseTime = 6;
       state.finishWinner = 0;

@@ -231,7 +231,7 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /0\.8B/);
+  assert.match(title.build, /0\.8C/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -245,6 +245,8 @@ try {
       'assets/moves/jez-specials.webp',
       'assets/moves/alan-specials.webp',
       'assets/moves/post-specials.webp',
+      'assets/moves/benny-specials.webp',
+      'assets/moves/donald-specials.webp',
     ];
     const loaded = await Promise.all(paths.map((src) => new Promise((resolve) => {
       const image = new Image();
@@ -262,7 +264,7 @@ try {
     };
   })()`);
   assert.deepEqual(kitUi.loaded.map(({ width, height }) => [width, height]), [
-    [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280],
+    [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280],
   ]);
   assert.equal(kitUi.rows.length, 9);
   assert.ok(kitUi.rows.includes('Vinyl Step'));
@@ -310,6 +312,26 @@ try {
       ['post', 'enhancedLauncher', 'post-ex-tag-updraft', 50],
       ['post', 'throw', 'post-fresh-coat-toss', 0],
       ['post', 'super', 'post-full-coverage', 100],
+      ['benny', 'special', 'benny-static-snap', 0],
+      ['benny', 'commandSpecial', 'benny-blitz', 0],
+      ['benny', 'backSpecial', 'benny-live-wire', 0],
+      ['benny', 'launcher', 'benny-circuit-riser', 0],
+      ['benny', 'enhanced', 'benny-ex-static-snap', 50],
+      ['benny', 'enhancedCommandSpecial', 'benny-ex-blitz', 50],
+      ['benny', 'enhancedBackSpecial', 'benny-ex-live-wire', 50],
+      ['benny', 'enhancedLauncher', 'benny-ex-circuit-riser', 50],
+      ['benny', 'throw', 'benny-ground-fault', 0],
+      ['benny', 'super', 'benny-circuit-breaker-super', 100],
+      ['donald', 'special', 'donald-clubhouse-check', 0],
+      ['donald', 'commandSpecial', 'donald-golden-shockwave', 0],
+      ['donald', 'backSpecial', 'donald-executive-retreat', 0],
+      ['donald', 'launcher', 'donald-eagle-uppercut', 0],
+      ['donald', 'enhanced', 'donald-ex-clubhouse-check', 50],
+      ['donald', 'enhancedCommandSpecial', 'donald-ex-golden-shockwave', 50],
+      ['donald', 'enhancedBackSpecial', 'donald-ex-executive-retreat', 50],
+      ['donald', 'enhancedLauncher', 'donald-ex-eagle-uppercut', 50],
+      ['donald', 'throw', 'donald-clubhouse-ejection', 0],
+      ['donald', 'super', 'donald-golden-back-nine', 100],
     ];
     return specs.map(([id, action, expected, meter]) => {
       window.__finalBlowQa.fight(id, id === 'deathblow' ? 'jez' : 'deathblow');
@@ -372,6 +394,73 @@ try {
     const capture = await client.send("Page.captureScreenshot", { format: "png", fromSurface: true });
     await writeFile(process.env.FINAL_BLOW_FIGHT_SCREENSHOT, Buffer.from(capture.data, "base64"));
   }
+
+  const rushKeepAwayLists = await evaluate(client, `(() => {
+    const select = document.querySelector('#moveListSelect');
+    const read = (id) => {
+      select.value = id;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return {
+        identity: document.querySelector('#moveListIdentity').textContent,
+        moves: [...document.querySelectorAll('.move-list-row b')].map((node) => node.textContent),
+      };
+    };
+    return { benny: read('benny'), donald: read('donald') };
+  })()`);
+  assert.match(rushKeepAwayLists.benny.identity, /RUSHDOWN/);
+  assert.ok(rushKeepAwayLists.benny.moves.includes('Benny Blitz'));
+  assert.match(rushKeepAwayLists.donald.identity, /KEEP-AWAY/);
+  assert.ok(rushKeepAwayLists.donald.moves.includes('Golden Shockwave'));
+
+  await evaluate(client, `window.__finalBlowQa.fight('benny', 'donald'); window.__finalBlowQa.positions(500, 610); window.__finalBlowQa.input(0, { special: true }); window.__finalBlowQa.step(0.52)`);
+  await evaluate(client, `window.__finalBlowQa.input(0, { commandSpecial: true }); window.__finalBlowQa.step(0.05)`);
+  const voltageCancel = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(voltageCancel.fighters[0].move, 'benny-blitz');
+  assert.equal(voltageCancel.fighters[0].cancelledFrom, 'benny-static-snap');
+  assert.ok(voltageCancel.fighters[0].combo.hits >= 2, 'Benny should retain the rush combo through his voltage cancel');
+
+  await evaluate(client, `window.__finalBlowQa.fight('benny', 'donald'); window.__finalBlowQa.positions(500, 610); window.__finalBlowQa.input(0, { backSpecial: true }); window.__finalBlowQa.step(0.3)`);
+  const liveWire = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(liveWire.fighters[0].move, 'benny-live-wire');
+  assert.ok(liveWire.fighters[0].x > liveWire.fighters[1].x, 'Live Wire should phase through the opponent');
+  if (process.env.FINAL_BLOW_RUSH_SCREENSHOT) {
+    await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
+    await delay(80);
+    const capture = await client.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+    await writeFile(process.env.FINAL_BLOW_RUSH_SCREENSHOT, Buffer.from(capture.data, "base64"));
+  }
+
+  await evaluate(client, `window.__finalBlowQa.fight('donald', 'benny'); window.__finalBlowQa.positions(350, 920); window.__finalBlowQa.input(0, { commandSpecial: true }); window.__finalBlowQa.step(0.25)`);
+  const goldenFlight = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(goldenFlight.projectiles.length, 1, 'Golden Shockwave should create a persistent projectile');
+  assert.ok(goldenFlight.projectiles[0].x > 430, 'projectile should travel independently after launch');
+  await evaluate(client, `window.__finalBlowQa.positions(350, ${Math.round(goldenFlight.projectiles[0].x + 24)}); window.__finalBlowQa.step(0.06)`);
+  const goldenHit = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(goldenHit.projectiles.length, 0, 'projectile should be consumed on hit');
+  assert.ok(goldenHit.fighters[1].health < 100);
+  assert.match(goldenHit.fighters[1].lastHitResult, /projectile/);
+
+  await evaluate(client, `window.__finalBlowQa.fight('donald', 'benny'); window.__finalBlowQa.positions(350, 650); window.__finalBlowQa.input(1, { guard: true }, 70); window.__finalBlowQa.input(0, { commandSpecial: true }); window.__finalBlowQa.step(0.75)`);
+  const blockedGolfBall = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(blockedGolfBall.fighters[1].health, 97, 'Golden Shockwave should deal three chip damage');
+  assert.equal(blockedGolfBall.fighters[1].lastHitResult, 'blocked-mid-projectile');
+
+  await evaluate(client, `window.__finalBlowQa.fight('donald', 'benny'); window.__finalBlowQa.positions(350, 920); window.__finalBlowQa.fighter(0, { meter: 50 }); window.__finalBlowQa.input(0, { enhancedCommandSpecial: true }); window.__finalBlowQa.step(0.3)`);
+  const doubleShockwave = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(doubleShockwave.projectiles.length, 2, 'Golden Shockwave EX should launch two balls at different heights');
+  assert.ok(doubleShockwave.projectiles.every((projectile) => projectile.enhanced));
+  assert.notEqual(doubleShockwave.projectiles[0].y, doubleShockwave.projectiles[1].y);
+  if (process.env.FINAL_BLOW_PROJECTILE_SCREENSHOT) {
+    await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
+    await delay(80);
+    const capture = await client.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+    await writeFile(process.env.FINAL_BLOW_PROJECTILE_SCREENSHOT, Buffer.from(capture.data, "base64"));
+  }
+
+  await evaluate(client, `window.__finalBlowQa.fight('donald', 'benny'); window.__finalBlowQa.positions(600, 820); window.__finalBlowQa.input(0, { backSpecial: true }); window.__finalBlowQa.step(0.2)`);
+  const executiveRetreat = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.ok(executiveRetreat.fighters[0].x < 530, 'Executive Retreat should create real backward space');
+  assert.equal(executiveRetreat.projectiles.length, 1, 'Executive Retreat should leave a low chip shot behind');
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
   const movementStart = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
@@ -750,6 +839,16 @@ try {
   assert.equal(postSuper.fighters[0].combo.hits, 7);
   assert.ok(postSuper.fighters[0].combo.damage > 24 && postSuper.fighters[0].combo.damage < 31);
 
+  await evaluate(client, `window.__finalBlowQa.fight('benny', 'donald'); window.__finalBlowQa.positions(500, 600); window.__finalBlowQa.fighter(0, { meter: 100 }); window.__finalBlowQa.input(0, { super: true }); window.__finalBlowQa.step(2.4)`);
+  const bennySuper = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(bennySuper.fighters[0].combo.hits, 8);
+  assert.ok(bennySuper.fighters[0].combo.damage > 21 && bennySuper.fighters[0].combo.damage < 26);
+
+  await evaluate(client, `window.__finalBlowQa.fight('donald', 'benny'); window.__finalBlowQa.positions(500, 600); window.__finalBlowQa.fighter(0, { meter: 100 }); window.__finalBlowQa.input(0, { super: true }); window.__finalBlowQa.step(2.5)`);
+  const donaldSuper = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(donaldSuper.fighters[0].combo.hits, 9);
+  assert.ok(donaldSuper.fighters[0].combo.damage > 20 && donaldSuper.fighters[0].combo.damage < 25);
+
   await evaluate(client, `(() => {
     document.querySelector('[data-mode="arcade"]').click();
     document.querySelectorAll('.fighter-card')[0].click();
@@ -854,6 +953,14 @@ try {
   assert.equal(postVictory.title, "POST WINS");
   assert.equal(postVictory.quote, "THE WHOLE CITY IS MY WALL.");
   assert.match(postVictory.background, /post-specials\.webp/);
+  const bennyVictory = await evaluate(client, `window.__finalBlowQa.result('benny')`);
+  assert.equal(bennyVictory.title, "BENNY WINS");
+  assert.equal(bennyVictory.quote, "CURRENT STAYS WITH ME.");
+  assert.match(bennyVictory.background, /benny-specials\.webp/);
+  const donaldVictory = await evaluate(client, `window.__finalBlowQa.result('donald')`);
+  assert.equal(donaldVictory.title, "DONALD TRUMP WINS");
+  assert.equal(donaldVictory.quote, "NINE HOLES. NO MERCY.");
+  assert.match(donaldVictory.background, /donald-specials\.webp/);
   if (process.env.FINAL_BLOW_VICTORY_SCREENSHOT) {
     await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
     await delay(80);

@@ -20,7 +20,7 @@ function history(tokens) {
 }
 
 function testCompleteKits() {
-  assert.deepEqual(Object.keys(FIGHTER_KITS), ["deathblow", "jez", "alan", "post"]);
+  assert.deepEqual(Object.keys(FIGHTER_KITS), ["deathblow", "jez", "alan", "post", "benny", "donald"]);
   for (const id of Object.keys(FIGHTER_KITS)) {
     const kit = FIGHTER_KITS[id];
     assert.ok(kit.archetype.length > 8);
@@ -46,6 +46,8 @@ function testDistinctArchetypesAndFrameData() {
   const jez = FIGHTER_KITS.jez;
   const alan = FIGHTER_KITS.alan;
   const post = FIGHTER_KITS.post;
+  const benny = FIGHTER_KITS.benny;
+  const donald = FIGHTER_KITS.donald;
   assert.ok(deathblow.movement.forwardWalkSpeed < MOVEMENT_RULES.forwardWalkSpeed);
   assert.ok(jez.movement.forwardWalkSpeed > MOVEMENT_RULES.forwardWalkSpeed);
   assert.ok(deathblow.movement.standingPushboxHalfWidth > jez.movement.standingPushboxHalfWidth);
@@ -65,6 +67,14 @@ function testDistinctArchetypesAndFrameData() {
   assert.equal(post.moves.super.maxHits, 7);
   assert.ok(post.movement.backDashSpeed > post.movement.forwardDashSpeed);
   assert.ok(alan.movement.standingPushboxHalfWidth > post.movement.standingPushboxHalfWidth);
+  assert.equal(benny.moves.commandSpecial.maxHits, 3);
+  assert.equal(benny.moves.commandSpecial.rushCancel, true);
+  assert.ok(benny.movement.forwardDashSpeed > jez.movement.forwardDashSpeed);
+  assert.deepEqual(donald.moves.commandSpecial.projectile.spawnFrames, [12]);
+  assert.deepEqual(donald.moves.enhancedCommandSpecial.projectile.spawnFrames, [9, 15]);
+  assert.equal(donald.moves.backSpecial.retreatSpeed, 470);
+  assert.equal(donald.moves.super.maxHits, 9);
+  assert.ok(donald.movement.backWalkSpeed > donald.movement.forwardWalkSpeed);
   assert.notEqual(deathblow.moves.commandSpecial.id, jez.moves.commandSpecial.id);
   assert.equal(selectKitMoveKey("light", { forwardHeld: true }), "forwardLight");
   assert.equal(selectKitMoveKey("heavy", { forwardHeld: true }), "overhead");
@@ -99,6 +109,15 @@ function testMoveInstancesAndArt() {
   assert.equal(wetPaint.moveName, "WET PAINT EX");
   assert.deepEqual(wetPaint.trap.offsets, [88, 205]);
   assert.equal(wetPaint.gritCost, 25);
+
+  const blitz = createFighterMove("benny", "commandSpecial");
+  assert.equal(blitz.moveName, "BENNY BLITZ");
+  assert.equal(blitz.maxHits, 3);
+  assert.ok(blitz.cancelRoutes.includes("commandSpecial"));
+  const shockwave = createFighterMove("donald", "enhancedCommandSpecial");
+  assert.equal(shockwave.moveName, "GOLDEN SHOCKWAVE EX");
+  assert.equal(shockwave.hitboxes.length, 0);
+  assert.equal(shockwave.projectile.yOffsets.length, 2);
 }
 
 function testCommandsAndAi() {
@@ -107,6 +126,8 @@ function testCommandsAndAi() {
   assert.equal(recognizeFighterCommand("jez", history(["forward", "down", "forward", "enhanced"]), 13)?.action, "enhancedLauncher");
   assert.equal(recognizeFighterCommand("post", history(["down", "back", "special"]), 9)?.action, "backSpecial");
   assert.equal(recognizeFighterCommand("alan", history(["down", "back", "enhanced"]), 9)?.action, "enhancedBackSpecial");
+  assert.equal(recognizeFighterCommand("benny", history(["down", "forward", "special"]), 9)?.action, "commandSpecial");
+  assert.equal(recognizeFighterCommand("donald", history(["down", "back", "special"]), 9)?.action, "backSpecial");
 
   assert.equal(selectKitAiIntent("deathblow", { distance: 40, roll: 0.1 }).action, "backSpecial");
   assert.equal(selectKitAiIntent("jez", { distance: 220, roll: 0.2 }).action, "special");
@@ -116,6 +137,9 @@ function testCommandsAndAi() {
   assert.deepEqual(allanCounter, { movement: "hold", action: "backSpecial", response: "counter" });
   assert.equal(selectKitAiIntent("post", { distance: 80, roll: 0.2 }).movement, "retreat");
   assert.equal(selectKitAiIntent("post", { distance: 420, roll: 0.2 }).action, "backSpecial");
+  assert.equal(selectKitAiIntent("benny", { distance: 140, roll: 0.2 }).movement, "advance");
+  assert.equal(selectKitAiIntent("donald", { distance: 80, roll: 0.2 }).movement, "retreat");
+  assert.equal(selectKitAiIntent("donald", { distance: 440, roll: 0.2 }).action, "commandSpecial");
 }
 
 testCompleteKits();
@@ -123,4 +147,4 @@ testDistinctArchetypesAndFrameData();
 testMoveInstancesAndArt();
 testCommandsAndAi();
 
-console.log("Final Blow DeathBlow/Jez/Allan/Post fighter-kit tests passed");
+console.log("Final Blow six-fighter kit tests passed");
