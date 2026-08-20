@@ -19,7 +19,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">ARCADE ASCENT <b>0.9B</b></div>
+      <div class="build-tag">TRAINING LAB <b>1.0A</b></div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
     </header>
@@ -43,6 +43,25 @@
       <div id="p1Combo" class="combo-readout p1-combo" aria-live="polite"><b>0</b><span>HIT COMBO</span><em>0 DAMAGE</em></div>
       <div id="p2Combo" class="combo-readout p2-combo" aria-live="polite"><b>0</b><span>HIT COMBO</span><em>0 DAMAGE</em></div>
 
+      <aside id="trainingPanel" class="training-panel" aria-label="Training controls" hidden>
+        <div class="training-stats">
+          <span><small>DAMAGE</small><b id="trainingDamage">0</b></span>
+          <span><small>COMBO</small><b id="trainingCombo">0</b></span>
+          <span><small>FRAME DATA</small><b id="trainingFrames">—</b></span>
+          <span><small>ADVANTAGE</small><b id="trainingAdvantage">—</b></span>
+        </div>
+        <div class="training-tools">
+          <label>DUMMY <select id="trainingDummySelect">
+            <option value="stand">STAND</option><option value="guard">AUTO GUARD</option>
+            <option value="crouch">CROUCH</option><option value="jump">JUMP</option><option value="cpu">CPU</option>
+          </select></label>
+          <label><input id="trainingRecoverToggle" type="checkbox" checked> AUTO LIFE</label>
+          <label><input id="trainingGritToggle" type="checkbox" checked> INFINITE GRIT</label>
+          <button id="trainingResetButton" type="button">RESET POSITION</button>
+        </div>
+        <div id="trainingInputs" class="training-inputs">INPUT: —</div>
+      </aside>
+
       <div id="announcer" class="announcer hidden" aria-live="assertive">
         <strong></strong><span></span>
       </div>
@@ -58,6 +77,7 @@
         <div class="menu-stack">
           <button class="arcade-button primary menu-focus" data-mode="arcade">1 PLAYER · ARCADE</button>
           <button class="arcade-button" data-mode="versus">2 PLAYER · LOCAL VERSUS</button>
+          <button class="arcade-button" data-mode="training">TRAINING LAB</button>
           <button class="arcade-button ghost" id="controlsButton">CONTROLS & OPTIONS</button>
         </div>
         <div class="start-hint">PRESS <kbd>ENTER</kbd> OR <span class="xbox-a">A</span> TO START</div>
@@ -157,6 +177,7 @@
           <button data-touch="special" aria-label="Special attack">S</button>
           <button data-touch="heavy" aria-label="Heavy attack">H</button>
           <button data-touch="light" aria-label="Light attack">L</button>
+          <button data-touch="guard" aria-label="Guard">G</button>
           <button data-touch="jump" aria-label="Jump">▲</button>
         </div>
       </div>
@@ -206,6 +227,8 @@
           <label><input id="flashToggle" type="checkbox" checked><span>SCREEN FLASH</span></label>
           <label><input id="musicToggle" type="checkbox" checked><span>ELEVENLABS MUSIC</span></label>
           <label><input id="soundToggle" type="checkbox" checked><span>ELEVENLABS SFX</span></label>
+          <label><input id="reducedMotionToggle" type="checkbox"><span>REDUCED MOTION</span></label>
+          <label><input id="highContrastToggle" type="checkbox"><span>HIGH CONTRAST HUD</span></label>
           <div class="volume-control">
             <label for="musicVolume"><span>MUSIC VOLUME</span><output id="musicVolumeValue">100%</output></label>
             <input id="musicVolume" type="range" min="0" max="100" step="1" value="100">
@@ -231,6 +254,45 @@
               <option value="final">FINAL · RELENTLESS</option>
             </select>
           </label>
+          <label class="option-picker"><span>CONTROL STYLE</span>
+            <select id="controlStyleSelect" aria-label="Control style">
+              <option value="classic">CLASSIC · MOTION COMMANDS</option>
+              <option value="modern">MODERN · DIRECTION + BUTTON</option>
+            </select>
+          </label>
+          <label class="option-picker"><span>COLOR ASSIST</span>
+            <select id="colorAssistSelect" aria-label="Color assistance palette">
+              <option value="standard">STANDARD</option>
+              <option value="deuteranopia">DEUTERANOPIA</option>
+              <option value="protanopia">PROTANOPIA</option>
+              <option value="tritanopia">TRITANOPIA</option>
+            </select>
+          </label>
+          <label class="option-picker"><span>SCREEN SHAKE</span>
+            <select id="shakeSelect" aria-label="Screen shake intensity">
+              <option value="1">FULL</option><option value="0.5">LOW</option><option value="0">OFF</option>
+            </select>
+          </label>
+          <label class="option-picker"><span>TOUCH LAYOUT</span>
+            <select id="touchHandednessSelect" aria-label="Touch control layout">
+              <option value="standard">STANDARD</option><option value="left">LEFT-HANDED</option>
+            </select>
+          </label>
+          <div class="volume-control">
+            <label for="touchScale"><span>TOUCH SIZE</span><output id="touchScaleValue">100%</output></label>
+            <input id="touchScale" type="range" min="80" max="130" step="5" value="100">
+          </div>
+          <div class="volume-control">
+            <label for="touchOpacity"><span>TOUCH OPACITY</span><output id="touchOpacityValue">82%</output></label>
+            <input id="touchOpacity" type="range" min="40" max="100" step="2" value="82">
+          </div>
+          <label><input id="touchHapticsToggle" type="checkbox" checked><span>TOUCH HAPTICS</span></label>
+        </section>
+        <section class="remap-panel">
+          <header><h3>COMPLETE INPUT REMAP</h3><button id="resetBindingsButton" type="button">RESTORE DEFAULTS</button></header>
+          <p>Choose any keyboard action, then press a key. Duplicate assignments swap automatically.</p>
+          <div class="remap-columns"><div><h4>PLAYER 1 KEYBOARD</h4><div id="p1KeyBindings" class="binding-grid"></div></div><div><h4>PLAYER 2 KEYBOARD</h4><div id="p2KeyBindings" class="binding-grid"></div></div></div>
+          <h4>XINPUT / GAMEPAD</h4><div id="padBindings" class="pad-binding-grid"></div>
         </section>
         <section class="move-list-panel">
           <header>

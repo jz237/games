@@ -59,6 +59,25 @@ import {
   getArcadeEnding,
   recordArcadeResult,
 } from "./engine/arcade.mjs";
+import {
+  DEFAULT_KEY_MAPS,
+  DEFAULT_PAD_MAP,
+  PAD_BUTTON_LABELS,
+  REMAPPABLE_ACTIONS,
+  applyControlStyle,
+  formatKeyCode,
+  normalizeControlStyle,
+  normalizeKeyMaps,
+  normalizePadMap,
+  remapKeyBinding,
+  remapPadBinding,
+} from "./engine/controls.mjs";
+import {
+  TRAINING_DUMMY_MODES,
+  createTrainingState,
+  trainingDummyInput,
+  trainingSnapshot,
+} from "./engine/training.mjs";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -72,6 +91,14 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lerp = (a, b, t) => a + (b - a) * t;
+
+function storedJson(key, fallback = null) {
+  try {
+    return JSON.parse(localStorage.getItem(key)) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 const roster = [
   {
@@ -491,13 +518,12 @@ const previousPads = new Map();
 const commandHistory = [[], []];
 const qaInputOverrides = [null, null];
 
-const keyMaps = [
-  { left: "KeyA", right: "KeyD", jump: "KeyW", down: "KeyS", guard: "KeyI", light: "KeyJ", heavy: "KeyK", special: "KeyL", final: "KeyU" },
-  { left: "ArrowLeft", right: "ArrowRight", jump: "ArrowUp", down: "ArrowDown", guard: "Numpad5", light: "Numpad1", heavy: "Numpad2", special: "Numpad3", final: "Numpad0" },
-];
+let keyMaps = normalizeKeyMaps(storedJson("final-blow-keymaps", DEFAULT_KEY_MAPS));
+let padMap = normalizePadMap(storedJson("final-blow-pad-map", DEFAULT_PAD_MAP));
+let pendingKeyBinding = null;
 
 const simulationClock = new FixedStepClock();
-const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "0.9b-arcade-ascent");
+const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "1.0a-training-lab");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
 const state = {
@@ -544,6 +570,20 @@ const state = {
   sfxVolume: clamp(Number(localStorage.getItem("final-blow-sfx-volume") ?? "1"), 0, 1),
   aiDifficulty: normalizeAiDifficulty(localStorage.getItem("final-blow-ai-difficulty") || DEFAULT_AI_DIFFICULTY),
   arcadeRun: null,
+  controlStyle: normalizeControlStyle(localStorage.getItem("final-blow-control-style") || "classic"),
+  accessibility: {
+    reducedMotion: localStorage.getItem("final-blow-reduced-motion") === "1",
+    highContrast: localStorage.getItem("final-blow-high-contrast") === "1",
+    colorAssist: localStorage.getItem("final-blow-color-assist") || "standard",
+    shakeScale: clamp(Number(localStorage.getItem("final-blow-shake-scale") ?? "1"), 0, 1),
+  },
+  touchSettings: {
+    handedness: localStorage.getItem("final-blow-touch-handedness") || "standard",
+    scale: clamp(Number(localStorage.getItem("final-blow-touch-scale") ?? "1"), 0.8, 1.3),
+    opacity: clamp(Number(localStorage.getItem("final-blow-touch-opacity") ?? "0.82"), 0.4, 1),
+    haptics: localStorage.getItem("final-blow-touch-haptics") !== "0",
+  },
+  training: createTrainingState(),
 };
 
 function random() {
@@ -601,6 +641,7 @@ function makeFighter(index, side, overrideDef = null) {
     attackHits: 0,
     attackSerial: 0,
     lastAttackHitFrame: -Infinity,
+    lastDamageFrame: -Infinity,
     attackConnected: "",
     armorHits: 0,
     counterTriggered: false,
@@ -707,7 +748,7 @@ function renderArcadeRoute() {
       </div>`;
     }).join("");
   }
-  if ($("#arcadeLadderCounter")) {
+  if ($("#arcadeLadderCounter") && run) {
     $("#arcadeLadderCounter").textContent = run.completed
       ? `${run.wins} / ${run.matches.length} CLEARED`
       : `BOUT ${run.current + 1} / ${run.matches.length}`;
@@ -739,6 +780,9 @@ function showScreen(name) {
   $("#hud").classList.toggle("hidden", !playing);
   $("#hud").setAttribute("aria-hidden", String(!playing));
   if (!playing) $$(".combo-readout").forEach((readout) => readout.classList.remove("active"));
+  const trainingVisible = playing && state.mode === "training";
+  $("#trainingPanel").hidden = !trainingVisible;
+  $("#gameFrame").classList.toggle("training-active", trainingVisible);
   $("#touchControls").classList.toggle("playing", playing);
   if (!playing) $("#announcer").classList.add("hidden");
   syncMusic();
@@ -747,12 +791,14 @@ function showScreen(name) {
 function startSelect(mode) {
   enterImmersiveMode();
   unlockAudio();
-  state.mode = mode;
+  state.mode = ["arcade", "versus", "training"].includes(mode) ? mode : "arcade";
   state.arcadeRun = null;
-  state.picks = [0, mode === "arcade" ? 4 : 1];
-  state.locks = [false, mode === "arcade"];
+  state.picks = [0, state.mode === "arcade" ? 4 : 1];
+  state.locks = [false, state.mode === "arcade"];
   state.selectingPlayer = 0;
-  $("#selectPrompt").textContent = "PLAYER 1 — CHOOSE";
+  $("#selectPrompt").textContent = state.mode === "training"
+    ? "CHOOSE YOUR TRAINING FIGHTER"
+    : "PLAYER 1 — CHOOSE";
   showScreen("select");
   updateRosterUI();
 }
@@ -772,7 +818,9 @@ function chooseFighter(index) {
     state.picks[0] = index;
     state.locks[0] = true;
     state.selectingPlayer = 1;
-    $("#selectPrompt").textContent = "PLAYER 2 — CHOOSE";
+    $("#selectPrompt").textContent = state.mode === "training"
+      ? "TRAINING DUMMY — CHOOSE"
+      : "PLAYER 2 — CHOOSE";
   } else {
     state.picks[1] = index;
     state.locks[1] = true;
@@ -795,6 +843,7 @@ function updateRosterUI() {
 
 function showStageSelect() {
   if (!(state.locks[0] && state.locks[1])) return;
+  $("#fightButton").textContent = state.mode === "training" ? "ENTER LAB →" : "FIGHT →";
   showScreen("stage");
   renderArcadeRoute();
   updateStageUI();
@@ -824,6 +873,15 @@ function startMatch(resetSet = true) {
   state.qaManualMode = false;
   seedMatch(state.round);
   state.fighters = makeMatchFighters();
+  if (state.mode === "training") {
+    state.training = createTrainingState({
+      ...state.training,
+      resets: 0,
+      lastDamage: 0,
+      lastResult: "READY",
+    });
+    if (state.training.infiniteGrit) state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
+  }
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
@@ -844,6 +902,7 @@ function startMatch(resetSet = true) {
   commandHistory[1].length = 0;
   updateHud();
   showScreen("fight");
+  updateTrainingUi();
   const arcadeMatch = state.mode === "arcade" ? currentArcadeMatch(state.arcadeRun) : null;
   const introLabel = arcadeMatch?.kind === "boss" ? "FINAL BOUT · THE COMMISSIONER"
     : arcadeMatch?.kind === "rival" ? `RIVAL BOUT · ${state.fighters[1].def.name}`
@@ -1148,13 +1207,79 @@ function updateHud() {
     $(`#${prefix}Meter`).closest(".grit-row").classList.toggle("full", fighter.meter >= GRIT_RULES.superCost);
     $(`#${prefix}Rounds`).innerHTML = [0, 1].map((round) => `<i class="${state.rounds[side] > round ? "won" : ""}"></i>`).join("");
   });
-  $("#timer").textContent = String(Math.ceil(state.timer)).padStart(2, "0");
-  $("#roundLabel").textContent = `ROUND ${state.round}`;
+  $("#timer").textContent = state.mode === "training" ? "∞" : String(Math.ceil(state.timer)).padStart(2, "0");
+  $("#roundLabel").textContent = state.mode === "training" ? "TRAINING" : `ROUND ${state.round}`;
   const finalButton = $(".touch-final");
   const superReady = state.phase === "fight" && state.fighters[0]?.meter >= GRIT_RULES.superCost;
   finalButton.classList.toggle("super-ready", superReady);
   if (state.phase === "finish" && state.finishWinner === 0) finalButton.textContent = "FB";
   else finalButton.textContent = superReady ? "SUPER" : "GRIT";
+}
+
+function resetTrainingPosition(countReset = true) {
+  if (state.mode !== "training") return;
+  state.fighters = makeMatchFighters();
+  state.particles.length = 0;
+  state.effects.length = 0;
+  state.traps.length = 0;
+  state.projectiles.length = 0;
+  state.hitstop = 0;
+  state.phase = "fight";
+  state.phaseTime = 0;
+  if (state.training.infiniteGrit) state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
+  if (countReset) state.training.resets += 1;
+  state.training.lastDamage = 0;
+  updateHud();
+  updateTrainingUi();
+}
+
+function updateTrainingUi(input = {}) {
+  if (state.mode !== "training" || !state.fighters.length) return;
+  const [player] = state.fighters;
+  const combo = player.combo.snapshot(state.simulationTick);
+  if (combo.damage > 0) state.training.lastDamage = combo.damage;
+  const labels = [
+    ["left", "←"], ["right", "→"], ["down", "↓"], ["jump", "↑"], ["guard", "GUARD"],
+    ["light", "L"], ["heavy", "H"], ["special", "S"], ["enhanced", "EX"], ["throw", "THROW"], ["super", "SUPER"],
+  ].filter(([action]) => input[action]).map(([, label]) => label);
+  const inputLabel = labels.join("+");
+  if (inputLabel && (inputLabel !== state.training.lastInputLabel
+    || state.simulationTick - state.training.lastInputFrame > 6)) {
+    state.training.inputHistory.push(inputLabel);
+    state.training.inputHistory = state.training.inputHistory.slice(-8);
+    state.training.lastInputLabel = inputLabel;
+    state.training.lastInputFrame = state.simulationTick;
+  } else if (!inputLabel) {
+    state.training.lastInputLabel = "";
+  }
+  const snapshot = trainingSnapshot(state.training);
+  const move = snapshot.lastMove;
+  $("#trainingDamage").textContent = Number(snapshot.lastDamage).toFixed(1).replace(/\.0$/, "");
+  $("#trainingCombo").textContent = `${combo.hits} HIT`;
+  $("#trainingFrames").textContent = move
+    ? `${move.name} · S${move.startup} A${move.active} R${move.recovery}`
+    : "—";
+  $("#trainingAdvantage").textContent = snapshot.lastAdvantage === null
+    ? move ? `${move.onHit >= 0 ? "+" : ""}${move.onHit} HIT · ${move.onBlock >= 0 ? "+" : ""}${move.onBlock} BLOCK` : "—"
+    : `${snapshot.lastAdvantage >= 0 ? "+" : ""}${snapshot.lastAdvantage} ACTUAL`;
+  $("#trainingInputs").textContent = `INPUT: ${snapshot.inputHistory.join(" › ") || "—"}  //  DUMMY: ${snapshot.dummyMode.toUpperCase()}  //  RESETS: ${snapshot.resets}`;
+  $("#trainingDummySelect").value = snapshot.dummyMode;
+  $("#trainingRecoverToggle").checked = snapshot.autoRecover;
+  $("#trainingGritToggle").checked = snapshot.infiniteGrit;
+}
+
+function syncNewOptionsUi() {
+  $("#controlStyleSelect").value = state.controlStyle;
+  $("#reducedMotionToggle").checked = state.accessibility.reducedMotion;
+  $("#highContrastToggle").checked = state.accessibility.highContrast;
+  $("#colorAssistSelect").value = state.accessibility.colorAssist;
+  $("#shakeSelect").value = String(state.accessibility.shakeScale);
+  $("#touchHandednessSelect").value = state.touchSettings.handedness;
+  $("#touchScale").value = String(Math.round(state.touchSettings.scale * 100));
+  $("#touchOpacity").value = String(Math.round(state.touchSettings.opacity * 100));
+  $("#touchScaleValue").textContent = `${Math.round(state.touchSettings.scale * 100)}%`;
+  $("#touchOpacityValue").textContent = `${Math.round(state.touchSettings.opacity * 100)}%`;
+  $("#touchHapticsToggle").checked = state.touchSettings.haptics;
 }
 
 function getPad(index) {
@@ -1186,17 +1311,21 @@ function readInput(side) {
     return active;
   };
   const padEdge = (index) => Boolean(pad && buttonValue(pad, index) && !previous[index]);
+  const mappedButton = (action) => buttonValue(pad, padMap[action])
+    || (action === "special" && padMap.special === DEFAULT_PAD_MAP.special && buttonValue(pad, 5));
+  const mappedEdge = (action) => padEdge(padMap[action])
+    || (action === "special" && padMap.special === DEFAULT_PAD_MAP.special && padEdge(5));
   const left = held("left") || axisX < -0.42 || buttonValue(pad, 14);
   const right = held("right") || axisX > 0.42 || buttonValue(pad, 15);
   const down = held("down") || axisY > 0.52 || buttonValue(pad, 13);
-  const guard = held("guard") || buttonValue(pad, 1);
-  const jump = edge("jump") || padEdge(0) || Boolean(pad && (axisY < -0.65 || buttonValue(pad, 12)) && !previous[20]);
-  let light = edge("light") || padEdge(2);
-  let heavy = edge("heavy") || padEdge(3);
-  let special = edge("special") || padEdge(4) || padEdge(5);
-  const lightHeld = held("light") || buttonValue(pad, 2);
-  const heavyHeld = held("heavy") || buttonValue(pad, 3);
-  const specialHeld = held("special") || buttonValue(pad, 4) || buttonValue(pad, 5);
+  const guard = held("guard") || mappedButton("guard");
+  const jump = edge("jump") || mappedEdge("jump") || Boolean(pad && (axisY < -0.65 || buttonValue(pad, 12)) && !previous[20]);
+  let light = edge("light") || mappedEdge("light");
+  let heavy = edge("heavy") || mappedEdge("heavy");
+  let special = edge("special") || mappedEdge("special");
+  const lightHeld = held("light") || mappedButton("light");
+  const heavyHeld = held("heavy") || mappedButton("heavy");
+  const specialHeld = held("special") || mappedButton("special");
   const throwInput = (light && heavyHeld) || (heavy && lightHeld);
   const enhanced = !throwInput && ((special && heavyHeld) || (heavy && specialHeld));
   if (throwInput || enhanced) {
@@ -1206,7 +1335,8 @@ function readInput(side) {
   if (enhanced) special = false;
   const triggers = buttonValue(pad, 6) && buttonValue(pad, 7);
   const previousTriggers = Boolean(previous[6] && previous[7]);
-  const final = edge("final") || (triggers && !previousTriggers);
+  const defaultFinalEdge = mappedEdge("final") && (padMap.final !== DEFAULT_PAD_MAP.final || buttonValue(pad, 6));
+  const final = edge("final") || defaultFinalEdge || (triggers && !previousTriggers);
   if (pad) {
     const next = pad.buttons.map((button) => button.pressed || button.value > 0.55);
     next[20] = axisY < -0.65 || buttonValue(pad, 12);
@@ -1340,6 +1470,25 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     if (fighter.attacking.advanceSpeed) fighter.attacking.advanceSpeed *= 1 + flow * 0.055;
     fighter.attacking.hitstunFrames += flow;
   }
+  if (state.mode === "training" && fighter.side === 0) {
+    const move = fighter.attacking;
+    const startup = Number.isFinite(move.startupFrames) ? move.startupFrames : move.activeStartFrame;
+    const active = Number.isFinite(move.activeFrames)
+      ? move.activeFrames
+      : Math.max(1, move.activeEndFrame - move.activeStartFrame + 1);
+    const recovery = Number.isFinite(move.recoveryFrames)
+      ? move.recoveryFrames
+      : Math.max(0, move.durationFrames - move.activeEndFrame);
+    state.training.lastMove = {
+      name: move.moveName || move.profileId || move.kind,
+      startup,
+      active,
+      recovery,
+      onHit: (move.hitstunFrames || 0) - recovery,
+      onBlock: (move.blockstunFrames || 0) - recovery,
+    };
+    state.training.lastAdvantage = null;
+  }
   fighter.meter = clamp(fighter.meter - gritCost, 0, GRIT_RULES.maximum);
   fighter.attackTime = 0;
   fighter.attackFrame = 0;
@@ -1445,6 +1594,7 @@ function prepareFighterInput(fighter, input) {
     final: Boolean(input.final),
   };
   for (const action of advancedActions) normalized[action] = Boolean(normalized[action] || input[action]);
+  Object.assign(normalized, applyControlStyle(normalized, state.controlStyle, fighter.facing));
   recordInput(fighter.side, normalized, fighter);
   if (state.phase === "fight") {
     const command = recognizeFighterCommand(
@@ -1832,6 +1982,7 @@ function triggerPaintTrap(trap, victim) {
   victim.health = blocked
     ? Math.max(1, victim.health - damage)
     : clamp(victim.health - damage, 0, 100);
+  victim.lastDamageFrame = state.simulationTick;
   victim.blockstunFrames = blocked ? trap.blockstunFrames : 0;
   victim.hitstunFrames = blocked ? 0 : trap.hitstunFrames;
   victim.stun = Math.max(victim.hitstunFrames, victim.blockstunFrames) / SIMULATION_HZ;
@@ -1948,6 +2099,7 @@ function triggerProjectile(projectile, victim) {
     * (armored ? 0.65 : 1);
   const damage = blocked ? projectile.chipDamage : baseDamage;
   victim.health = blocked ? Math.max(1, victim.health - damage) : clamp(victim.health - damage, 0, 100);
+  victim.lastDamageFrame = state.simulationTick;
   victim.blockstunFrames = blocked ? projectile.blockstunFrames : 0;
   victim.hitstunFrames = blocked || armored ? 0 : projectile.hitstunFrames + (counter ? DEFENSE_RULES.counterHitstunBonusFrames : 0);
   victim.stun = Math.max(victim.hitstunFrames, victim.blockstunFrames) / SIMULATION_HZ;
@@ -2061,6 +2213,7 @@ function triggerSouthpawCounter(counterFighter, incomingFighter, incomingAttack,
   const damage = stance.counterDamage * comboResult.damageScale;
   counterFighter.combo.addDamage(damage);
   incomingFighter.health = clamp(incomingFighter.health - damage, 0, 100);
+  incomingFighter.lastDamageFrame = state.simulationTick;
   incomingFighter.attacking = null;
   incomingFighter.attackTime = 0;
   incomingFighter.attackFrame = 0;
@@ -2165,9 +2318,15 @@ function hit(attacker, victim, attack, collision) {
   victim.health = blocked
     ? Math.max(1, victim.health - damage)
     : clamp(victim.health - damage, 0, 100);
+  victim.lastDamageFrame = state.simulationTick;
   victim.blockstunFrames = blocked ? attack.blockstunFrames : 0;
   victim.hitstunFrames = blocked || armored ? 0 : attack.hitstunFrames + (counter ? DEFENSE_RULES.counterHitstunBonusFrames : 0);
   victim.stun = Math.max(victim.hitstunFrames, victim.blockstunFrames) / SIMULATION_HZ;
+  if (state.mode === "training" && attacker.side === 0) {
+    const remainingRecovery = Math.max(0, (attack.durationFrames || 0) - attacker.attackFrame);
+    state.training.lastAdvantage = (victim.blockstunFrames || victim.hitstunFrames) - remainingRecovery;
+    state.training.lastResult = blocked ? "BLOCK" : armored ? "ARMOR" : "HIT";
+  }
   victim.vx = attacker.facing * attack.push * (blocked ? 0.28 : armored ? 0.12 : 1);
   victim.guardHeight = victim.crouch ? "low" : victim.guardHeight;
   victim.lastHitResult = blocked ? `blocked-${attack.level}` : armored ? "armor" : counter ? "counter" : attack.level;
@@ -2220,6 +2379,22 @@ function hit(attacker, victim, attack, collision) {
 
 function checkKnockout() {
   if (state.phase !== "fight" || !state.fighters.some((fighter) => fighter.health <= 0)) return;
+  if (state.mode === "training") {
+    const winner = state.fighters[0].health <= 0 ? 1 : 0;
+    if (state.training.autoRecover) {
+      state.training.lastResult = `${state.fighters[winner].def.name.toUpperCase()} RESET`;
+      resetTrainingPosition(true);
+    } else {
+      state.fighters.forEach((fighter) => {
+        fighter.health = Math.max(1, fighter.health);
+        fighter.pendingKnockdown = false;
+      });
+      state.training.lastResult = "KO HELD · RESET WHEN READY";
+      updateHud();
+      updateTrainingUi();
+    }
+    return;
+  }
   const [first, second] = state.fighters;
   const winner = first.health <= 0 && second.health <= 0
     ? state.lastImpactSide ?? 0
@@ -2352,8 +2527,15 @@ function simulateGameTick(dt) {
 
   updateFacings();
   let input0 = readQaInput(0) || readInput(0);
+  const trainingDummy = state.mode === "training"
+    ? trainingDummyInput(state.training, state.simulationTick, {
+      attackLevel: state.fighters[0]?.attacking?.level,
+    })
+    : null;
   let input1 = readQaInput(1)
-    || (state.mode === "arcade" ? aiInput(state.fighters[1], state.fighters[0], dt) : readInput(1));
+    || (state.mode === "arcade" || (state.mode === "training" && trainingDummy === null)
+      ? aiInput(state.fighters[1], state.fighters[0], dt)
+      : trainingDummy || readInput(1));
   if (state.phase === "intro") {
     input0 = {};
     input1 = {};
@@ -2376,7 +2558,29 @@ function simulateGameTick(dt) {
   updateComboState();
   syncFighterStateMachines();
 
-  if (state.phase === "fight") {
+  if (state.mode === "training") {
+    let trainingHudDirty = false;
+    if (state.training.infiniteGrit) {
+      state.fighters.forEach((fighter) => {
+        if (fighter.meter < GRIT_RULES.maximum) trainingHudDirty = true;
+        fighter.meter = GRIT_RULES.maximum;
+      });
+    }
+    if (state.training.autoRecover && state.phase === "fight") {
+      state.fighters.forEach((fighter) => {
+        const ready = state.simulationTick - fighter.lastDamageFrame >= 90
+          && fighter.hitstunFrames === 0
+          && fighter.blockstunFrames === 0
+          && !fighter.pendingKnockdown;
+        if (!ready || fighter.health >= 100) return;
+        fighter.health = Math.min(100, fighter.health + 0.45);
+        trainingHudDirty = true;
+      });
+    }
+    if (trainingHudDirty) updateHud();
+  }
+
+  if (state.phase === "fight" && state.mode !== "training") {
     state.timerCarry += dt;
     if (state.timerCarry >= 1) {
       state.timer = Math.max(0, state.timer - Math.floor(state.timerCarry));
@@ -2405,6 +2609,7 @@ function simulateGameTick(dt) {
   state.particles = state.particles.filter((particle) => particle.life > 0);
   for (const effect of state.effects) effect.life -= dt;
   state.effects = state.effects.filter((effect) => effect.life > 0);
+  updateTrainingUi(input0);
 }
 
 function drawCover(image, offsetX = 0) {
@@ -2827,7 +3032,9 @@ function drawFighter(fighter, time) {
   drawAttackVfx(fighter, time, activePower);
 
   if (atlas?.complete && atlas.naturalWidth) {
-    const trails = attack ? (attackKind === "special" ? 3 : activePower > 0.8 ? 2 : 0) : 0;
+    const trails = state.accessibility.reducedMotion
+      ? 0
+      : attack ? (attackKind === "special" ? 3 : activePower > 0.8 ? 2 : 0) : 0;
     for (let index = trails; index >= 1; index -= 1) {
       ctx.save();
       ctx.translate(-index * (13 + activePower * 8), index * 1.5);
@@ -3271,8 +3478,9 @@ function drawDebugOverlay() {
 
 function draw(time) {
   ctx.save();
-  const shakeX = state.shake > 0 ? (Math.random() - 0.5) * state.shake * 18 : 0;
-  const shakeY = state.shake > 0 ? (Math.random() - 0.5) * state.shake * 12 : 0;
+  const shakeScale = state.accessibility.reducedMotion ? 0 : state.accessibility.shakeScale;
+  const shakeX = state.shake > 0 ? (Math.random() - 0.5) * state.shake * 18 * shakeScale : 0;
+  const shakeY = state.shake > 0 ? (Math.random() - 0.5) * state.shake * 12 * shakeScale : 0;
   ctx.translate(shakeX, shakeY);
   if (state.finisher) {
     ctx.translate(W * .5, H * .53);
@@ -3350,6 +3558,57 @@ function updateVolumeUi() {
   if (sfxSlider) sfxSlider.value = String(Math.round(state.sfxVolume * 100));
   if ($("#musicVolumeValue")) $("#musicVolumeValue").textContent = `${Math.round(state.musicVolume * 100)}%`;
   if ($("#sfxVolumeValue")) $("#sfxVolumeValue").textContent = `${Math.round(state.sfxVolume * 100)}%`;
+}
+
+function applyAccessibilitySettings() {
+  document.body.classList.toggle("reduced-motion", state.accessibility.reducedMotion);
+  document.body.classList.toggle("high-contrast", state.accessibility.highContrast);
+  document.body.dataset.colorAssist = ["standard", "deuteranopia", "protanopia", "tritanopia"].includes(state.accessibility.colorAssist)
+    ? state.accessibility.colorAssist : "standard";
+  $("#reducedMotionToggle").checked = state.accessibility.reducedMotion;
+  $("#highContrastToggle").checked = state.accessibility.highContrast;
+  $("#colorAssistSelect").value = document.body.dataset.colorAssist;
+  $("#shakeSelect").value = String(state.accessibility.shakeScale);
+}
+
+function applyTouchSettings() {
+  state.touchSettings.handedness = state.touchSettings.handedness === "left" ? "left" : "standard";
+  document.body.classList.toggle("touch-left", state.touchSettings.handedness === "left");
+  document.documentElement.style.setProperty("--touch-button-size", `${Math.round(56 * state.touchSettings.scale)}px`);
+  document.documentElement.style.setProperty("--touch-opacity", String(state.touchSettings.opacity));
+  $("#touchHandednessSelect").value = state.touchSettings.handedness;
+  $("#touchScale").value = String(Math.round(state.touchSettings.scale * 100));
+  $("#touchOpacity").value = String(Math.round(state.touchSettings.opacity * 100));
+  $("#touchScaleValue").textContent = `${Math.round(state.touchSettings.scale * 100)}%`;
+  $("#touchOpacityValue").textContent = `${Math.round(state.touchSettings.opacity * 100)}%`;
+  $("#touchHapticsToggle").checked = state.touchSettings.haptics;
+}
+
+function saveBindings() {
+  localStorage.setItem("final-blow-keymaps", JSON.stringify(keyMaps));
+  localStorage.setItem("final-blow-pad-map", JSON.stringify(padMap));
+}
+
+function renderBindings() {
+  const labels = {
+    left: "LEFT", right: "RIGHT", jump: "JUMP", down: "CROUCH", guard: "GUARD",
+    light: "LIGHT", heavy: "HEAVY", special: "SPECIAL", final: "SUPER / FB",
+  };
+  for (const player of [0, 1]) {
+    const container = $(`#p${player + 1}KeyBindings`);
+    container.innerHTML = REMAPPABLE_ACTIONS.map((action) => `<button type="button" class="binding-button${pendingKeyBinding?.player === player && pendingKeyBinding.action === action ? " listening" : ""}" data-bind-player="${player}" data-bind-action="${action}"><span>${labels[action]}</span><b>${pendingKeyBinding?.player === player && pendingKeyBinding.action === action ? "PRESS KEY" : formatKeyCode(keyMaps[player][action])}</b></button>`).join("");
+  }
+  const padActions = ["jump", "guard", "light", "heavy", "special", "final"];
+  $("#padBindings").innerHTML = padActions.map((action) => `<label>${labels[action]}<select data-pad-action="${action}">${PAD_BUTTON_LABELS.map((label, button) => `<option value="${button}"${padMap[action] === button ? " selected" : ""}>${label}</option>`).join("")}</select></label>`).join("");
+  $$('[data-bind-player]').forEach((button) => button.addEventListener("click", () => {
+    pendingKeyBinding = { player: Number(button.dataset.bindPlayer), action: button.dataset.bindAction };
+    renderBindings();
+  }));
+  $$('[data-pad-action]').forEach((select) => select.addEventListener("change", () => {
+    padMap = remapPadBinding(padMap, select.dataset.padAction, Number(select.value));
+    saveBindings();
+    renderBindings();
+  }));
 }
 
 function setAiDifficulty(difficulty) {
@@ -3530,6 +3789,18 @@ function titleKeyboard(event) {
 }
 
 window.addEventListener("keydown", (event) => {
+  if (pendingKeyBinding) {
+    event.preventDefault();
+    if (event.code === "Escape") {
+      pendingKeyBinding = null;
+    } else {
+      keyMaps = remapKeyBinding(keyMaps, pendingKeyBinding.player, pendingKeyBinding.action, event.code);
+      saveBindings();
+      pendingKeyBinding = null;
+    }
+    renderBindings();
+    return;
+  }
   if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space"].includes(event.code)) event.preventDefault();
   if (event.code === "F3") {
     event.preventDefault();
@@ -3595,6 +3866,75 @@ $("#aiDifficultySelect").addEventListener("change", (event) => {
   setAiDifficulty(event.target.value);
   sound("select");
 });
+$("#controlStyleSelect").addEventListener("change", (event) => {
+  state.controlStyle = normalizeControlStyle(event.target.value);
+  localStorage.setItem("final-blow-control-style", state.controlStyle);
+  syncNewOptionsUi();
+});
+$("#reducedMotionToggle").addEventListener("change", (event) => {
+  state.accessibility.reducedMotion = event.target.checked;
+  localStorage.setItem("final-blow-reduced-motion", event.target.checked ? "1" : "0");
+  applyAccessibilitySettings();
+});
+$("#highContrastToggle").addEventListener("change", (event) => {
+  state.accessibility.highContrast = event.target.checked;
+  localStorage.setItem("final-blow-high-contrast", event.target.checked ? "1" : "0");
+  applyAccessibilitySettings();
+});
+$("#colorAssistSelect").addEventListener("change", (event) => {
+  state.accessibility.colorAssist = event.target.value;
+  localStorage.setItem("final-blow-color-assist", state.accessibility.colorAssist);
+  applyAccessibilitySettings();
+});
+$("#shakeSelect").addEventListener("change", (event) => {
+  state.accessibility.shakeScale = clamp(Number(event.target.value), 0, 1);
+  localStorage.setItem("final-blow-shake-scale", String(state.accessibility.shakeScale));
+});
+$("#touchHandednessSelect").addEventListener("change", (event) => {
+  state.touchSettings.handedness = event.target.value === "left" ? "left" : "standard";
+  localStorage.setItem("final-blow-touch-handedness", state.touchSettings.handedness);
+  applyTouchSettings();
+});
+$("#touchScale").addEventListener("input", (event) => {
+  state.touchSettings.scale = clamp(Number(event.target.value) / 100, 0.8, 1.3);
+  localStorage.setItem("final-blow-touch-scale", String(state.touchSettings.scale));
+  syncNewOptionsUi();
+  applyTouchSettings();
+});
+$("#touchOpacity").addEventListener("input", (event) => {
+  state.touchSettings.opacity = clamp(Number(event.target.value) / 100, 0.4, 1);
+  localStorage.setItem("final-blow-touch-opacity", String(state.touchSettings.opacity));
+  syncNewOptionsUi();
+  applyTouchSettings();
+});
+$("#touchHapticsToggle").addEventListener("change", (event) => {
+  state.touchSettings.haptics = event.target.checked;
+  localStorage.setItem("final-blow-touch-haptics", event.target.checked ? "1" : "0");
+});
+$("#resetBindingsButton").addEventListener("click", () => {
+  keyMaps = normalizeKeyMaps(DEFAULT_KEY_MAPS);
+  padMap = normalizePadMap(DEFAULT_PAD_MAP);
+  localStorage.setItem("final-blow-keymaps", JSON.stringify(keyMaps));
+  localStorage.setItem("final-blow-pad-map", JSON.stringify(padMap));
+  pendingKeyBinding = null;
+  renderBindings();
+});
+$("#trainingDummySelect").addEventListener("change", (event) => {
+  if (!TRAINING_DUMMY_MODES.includes(event.target.value)) return;
+  state.training.dummyMode = event.target.value;
+  updateTrainingUi();
+});
+$("#trainingRecoverToggle").addEventListener("change", (event) => {
+  state.training.autoRecover = event.target.checked;
+  updateTrainingUi();
+});
+$("#trainingGritToggle").addEventListener("change", (event) => {
+  state.training.infiniteGrit = event.target.checked;
+  if (event.target.checked) state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
+  updateHud();
+  updateTrainingUi();
+});
+$("#trainingResetButton").addEventListener("click", () => resetTrainingPosition(true));
 $("#musicSelect").addEventListener("change", (event) => {
   unlockAudio();
   chooseMusic(event.target.value);
@@ -3639,6 +3979,7 @@ $$("[data-touch]").forEach((button) => {
     touch.add(action);
     touch.add(`${action}:pressed`);
     button.classList.add("active");
+    if (state.touchSettings.haptics && event.isTrusted) navigator.vibrate?.(12);
     unlockAudio();
   };
   const end = (event) => {
@@ -3653,7 +3994,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "0.9b-arcade-ascent",
+  version: "1.0a-training-lab",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -3952,6 +4293,10 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
 
 setupRoster();
 renderMoveList();
+renderBindings();
+applyAccessibilitySettings();
+applyTouchSettings();
+syncNewOptionsUi();
 updateMusicUi();
 updateVolumeUi();
 setAiDifficulty(state.aiDifficulty);

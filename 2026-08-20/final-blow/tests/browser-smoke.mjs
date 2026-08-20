@@ -234,14 +234,14 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /0\.9B/);
+  assert.match(title.build, /1\.0A/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
   assert.equal(title.moveListRows, 9);
   assert.deepEqual(title.aiDifficulties, ['rookie', 'street', 'pro', 'final']);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '0.9b-arcade-ascent');
+  assert.equal(title.engineVersion, '1.0a-training-lab');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -1144,6 +1144,121 @@ try {
   })()`);
   assert.equal(gamepadEnhanced.fighters[0].move, "deathblow-ex-tremor-tap");
   assert.equal(gamepadEnhanced.fighters[0].meter, 25);
+
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); (() => {
+    window.__qaPad.buttons[5] = { pressed: true, value: 1 };
+    return true;
+  })()`);
+  await evaluate(client, `window.__finalBlowQa.step(0.08)`);
+  const gamepadRbSpecial = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await evaluate(client, `(() => { window.__qaPad.buttons[5] = { pressed: false, value: 0 }; return true; })()`);
+  assert.equal(gamepadRbSpecial.fighters[0].move, "deathblow-tremor-tap");
+
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.fighter(0, { meter: 100 }); (() => {
+    window.__qaPad.buttons[6] = { pressed: true, value: 1 };
+    window.__qaPad.buttons[7] = { pressed: true, value: 1 };
+    return true;
+  })()`);
+  await evaluate(client, `window.__finalBlowQa.step(0.08)`);
+  const gamepadTriggerSuper = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  await evaluate(client, `(() => {
+    window.__qaPad.buttons[6] = { pressed: false, value: 0 };
+    window.__qaPad.buttons[7] = { pressed: false, value: 0 };
+    return true;
+  })()`);
+  assert.equal(gamepadTriggerSuper.fighters[0].move, "deathblow-epicenter-execution");
+  assert.equal(gamepadTriggerSuper.fighters[0].meter, 0);
+
+  const trainingUi = await evaluate(client, `(() => {
+    document.querySelector('[data-mode="training"]').click();
+    document.querySelectorAll('.fighter-card')[0].click();
+    document.querySelectorAll('.fighter-card')[1].click();
+    document.querySelector('#fighterContinue').click();
+    document.querySelector('#fightButton').click();
+    window.__finalBlowQa.step(2.5);
+    const dummy = document.querySelector('#trainingDummySelect');
+    dummy.value = 'guard';
+    dummy.dispatchEvent(new Event('change', { bubbles: true }));
+    window.__finalBlowQa.input(0, { light: true });
+    window.__finalBlowQa.step(0.14);
+    window.__finalBlowQa.input(0, {});
+    const activeSnapshot = window.__finalBlowEngine.snapshot();
+    const activeFrames = document.querySelector('#trainingFrames').textContent;
+    const activeInputs = document.querySelector('#trainingInputs').textContent;
+    const grit = document.querySelector('#trainingGritToggle');
+    grit.checked = false;
+    grit.dispatchEvent(new Event('change', { bubbles: true }));
+    document.querySelector('#trainingResetButton').click();
+    const snapshot = window.__finalBlowEngine.snapshot();
+    return {
+      screen: snapshot.screen,
+      phase: snapshot.phase,
+      panelVisible: !document.querySelector('#trainingPanel').hidden,
+      dummy: dummy.value,
+      dummyGuard: activeSnapshot.fighters[1].guarding,
+      frames: activeFrames,
+      inputs: activeInputs,
+      resetHealth: snapshot.fighters.map((fighter) => fighter.health),
+      resetGrit: snapshot.fighters.map((fighter) => fighter.meter),
+    };
+  })()`);
+  assert.equal(trainingUi.screen, 'fight');
+  assert.equal(trainingUi.phase, 'fight');
+  assert.equal(trainingUi.panelVisible, true);
+  assert.equal(trainingUi.dummy, 'guard');
+  assert.equal(trainingUi.dummyGuard, true);
+  assert.match(trainingUi.frames, /S\d+ A\d+ R\d+/);
+  assert.match(trainingUi.inputs, /DUMMY: GUARD/);
+  assert.deepEqual(trainingUi.resetHealth, [100, 100]);
+  assert.deepEqual(trainingUi.resetGrit, [0, 0]);
+
+  const controlsUi = await evaluate(client, `(() => {
+    const controlStyle = document.querySelector('#controlStyleSelect');
+    controlStyle.value = 'modern';
+    controlStyle.dispatchEvent(new Event('change', { bubbles: true }));
+    const reduced = document.querySelector('#reducedMotionToggle');
+    reduced.checked = true;
+    reduced.dispatchEvent(new Event('change', { bubbles: true }));
+    const color = document.querySelector('#colorAssistSelect');
+    color.value = 'tritanopia';
+    color.dispatchEvent(new Event('change', { bubbles: true }));
+    const handedness = document.querySelector('#touchHandednessSelect');
+    handedness.value = 'left';
+    handedness.dispatchEvent(new Event('change', { bubbles: true }));
+    const opacity = document.querySelector('#touchOpacity');
+    opacity.value = '60';
+    opacity.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector('#p1KeyBindings [data-bind-action="light"]').click();
+    return {
+      style: localStorage.getItem('final-blow-control-style'),
+      reduced: document.body.classList.contains('reduced-motion'),
+      color: document.body.dataset.colorAssist,
+      left: document.body.classList.contains('touch-left'),
+      opacity: document.documentElement.style.getPropertyValue('--touch-opacity'),
+      listening: document.querySelector('#p1KeyBindings [data-bind-action="light"]').textContent,
+    };
+  })()`);
+  assert.equal(controlsUi.style, 'modern');
+  assert.equal(controlsUi.reduced, true);
+  assert.equal(controlsUi.color, 'tritanopia');
+  assert.equal(controlsUi.left, true);
+  assert.equal(controlsUi.opacity, '0.6');
+  assert.match(controlsUi.listening, /PRESS KEY/);
+  await dispatchKey(client, 'keyDown', 'KeyQ', 'q', 81);
+  const remapped = await evaluate(client, `(() => ({
+    keyMap: JSON.parse(localStorage.getItem('final-blow-keymaps'))[0].light,
+    label: document.querySelector('#p1KeyBindings [data-bind-action="light"]').textContent,
+  }))()`);
+  assert.equal(remapped.keyMap, 'KeyQ');
+  assert.match(remapped.label, /Q$/);
+  const padRemap = await evaluate(client, `(() => {
+    const select = document.querySelector('[data-pad-action="light"]');
+    select.value = '3';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    document.querySelector('#resetBindingsButton').click();
+    return JSON.parse(localStorage.getItem('final-blow-pad-map'));
+  })()`);
+  assert.equal(padRemap.light, 2);
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
   await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
