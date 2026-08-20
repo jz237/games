@@ -1,4 +1,4 @@
-const CACHE_NAME = "final-blow-offline-1.0b";
+const CACHE_NAME = "final-blow-offline-1.0c";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -15,6 +15,8 @@ const PRECACHE = [
   "./engine/controls.mjs",
   "./engine/training.mjs",
   "./engine/polish.mjs",
+  "./engine/rooms.mjs",
+  "./engine/webrtc.mjs",
   "./assets/kensington-allegheny.webp",
   "./assets/veterans-stadium.webp",
   "./assets/fighters/deathblow.webp",

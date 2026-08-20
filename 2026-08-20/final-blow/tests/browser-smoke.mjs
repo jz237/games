@@ -232,12 +232,14 @@ try {
     visualQualities: [...document.querySelectorAll('#visualQualitySelect option')].map((option) => option.value),
     pauseButtons: document.querySelectorAll('#pausePanel button').length,
     soundCaptions: document.querySelector('#soundCaptionsToggle')?.checked,
+    onlineButton: document.querySelector('#onlineButton')?.textContent.trim(),
+    onlineSecurityBadges: document.querySelectorAll('.online-security span').length,
     engineVersion: window.__finalBlowEngine?.version,
     engine: window.__finalBlowEngine?.snapshot(),
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.0B/);
+  assert.match(title.build, /1\.0C/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -246,8 +248,10 @@ try {
   assert.deepEqual(title.visualQualities, ['auto', 'high', 'balanced', 'battery']);
   assert.equal(title.pauseButtons, 4);
   assert.equal(title.soundCaptions, true);
+  assert.match(title.onlineButton, /PRIVATE ROOM/);
+  assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.0b-offline-edition');
+  assert.equal(title.engineVersion, '1.0c-private-rooms');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -1396,8 +1400,8 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.0b/);
-  assert.ok(offlineCache.entries >= 55);
+  assert.match(offlineCache.name, /final-blow-offline-1\.0c/);
+  assert.ok(offlineCache.entries >= 57);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasMusic, true);
   assert.equal(offlineCache.ready, true);
@@ -1417,8 +1421,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.0B/);
-  assert.equal(offlineBoot.version, '1.0b-offline-edition');
+  assert.match(offlineBoot.build, /1\.0C/);
+  assert.equal(offlineBoot.version, '1.0c-private-rooms');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,

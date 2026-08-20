@@ -84,6 +84,15 @@ import {
   resolvePerformanceProfile,
   trimVisualBudget,
 } from "./engine/polish.mjs";
+import {
+  buildInviteUrl,
+  connectPrivateRoom,
+  createPrivateRoom,
+  parseInvite,
+  roomFingerprint,
+  scrubInviteFromAddress,
+} from "./engine/rooms.mjs";
+import { FinalBlowPeer } from "./engine/webrtc.mjs";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -558,7 +567,7 @@ let padMap = normalizePadMap(storedJson("final-blow-pad-map", DEFAULT_PAD_MAP));
 let pendingKeyBinding = null;
 
 const simulationClock = new FixedStepClock();
-const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "1.0b-offline-edition");
+const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "1.0c-private-rooms");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
 const state = {
@@ -626,6 +635,251 @@ const state = {
   training: createTrainingState(),
 };
 state.performance = resolvePerformanceProfile(state.visualQuality, performanceEnvironment(state.accessibility.reducedMotion));
+
+let pendingOnlineInvite = parseInvite(location.hash);
+const onlineSession = {
+  generation: 0,
+  role: null,
+  roomId: "",
+  expiresAt: 0,
+  inviteUrl: "",
+  signaling: null,
+  peer: null,
+  stopUiSignal: null,
+  peers: new Set(),
+  latency: null,
+  status: "idle",
+  expiryTimer: 0,
+};
+
+function onlineSnapshot() {
+  return {
+    role: onlineSession.role,
+    roomId: onlineSession.roomId,
+    fingerprint: onlineSession.roomId ? roomFingerprint(onlineSession.roomId) : "",
+    expiresAt: onlineSession.expiresAt,
+    peers: [...onlineSession.peers],
+    latency: onlineSession.latency,
+    status: onlineSession.status,
+    signalingState: onlineSession.signaling?.socket?.readyState ?? -1,
+    peer: onlineSession.peer?.snapshot() ?? null,
+  };
+}
+
+function setOnlineStatus(kind, detail) {
+  const titles = {
+    idle: "ROOM SYSTEM READY",
+    signaling: "SIGNALING LOCKED",
+    waiting: "PRIVATE ROOM OPEN",
+    connecting: "NEGOTIATING P2P",
+    connected: "DIRECT LINK READY",
+    error: "LINK ERROR",
+    closed: "ROOM CLOSED",
+  };
+  onlineSession.status = kind;
+  const panel = $("#onlineStatus");
+  panel.className = `online-status ${kind}`;
+  $("#onlineStatusTitle").textContent = titles[kind] || "PRIVATE ROOM";
+  $("#onlineStatusDetail").textContent = detail || "Create a room or open a private invite.";
+}
+
+function setOnlineError(message = "") {
+  const node = $("#onlineError");
+  node.textContent = message;
+  node.hidden = !message;
+}
+
+function updateOnlineSeats() {
+  const hostPresent = onlineSession.role === "host" || onlineSession.peers.has("host");
+  const guestPresent = onlineSession.role === "guest" || onlineSession.peers.has("guest");
+  for (const [role, present] of [["host", hostPresent], ["guest", guestPresent]]) {
+    const node = $(`#online${role[0].toUpperCase()}${role.slice(1)}Seat`);
+    node.classList.toggle("occupied", present);
+    node.querySelector("em").textContent = present ? (onlineSession.role === role ? "YOU" : "CONNECTED") : "WAITING";
+  }
+}
+
+function tickOnlineExpiry() {
+  if (!onlineSession.expiresAt) return;
+  const remaining = Math.max(0, onlineSession.expiresAt - Date.now());
+  const minutes = Math.floor(remaining / 60_000);
+  const seconds = Math.floor((remaining % 60_000) / 1000);
+  $("#onlineExpiry").textContent = `EXPIRES IN ${minutes}:${String(seconds).padStart(2, "0")}`;
+  if (remaining === 0) {
+    disconnectOnline(false);
+    setOnlineStatus("closed", "This private room expired. Create a new room to continue.");
+  }
+}
+
+function resetOnlineUi() {
+  $("#onlineActions").hidden = false;
+  $("#onlineRoomDetails").hidden = true;
+  $("#onlineCreateButton").disabled = false;
+  $("#onlineJoinButton").disabled = false;
+  $("#onlineInviteLink").value = "";
+  $("#onlineInviteInput").value = "";
+  $("#onlineCopyButton").hidden = false;
+  $("#onlineLatency").textContent = "NEGOTIATING";
+  setOnlineError();
+  updateOnlineSeats();
+}
+
+function disconnectOnline(resetStatus = true) {
+  onlineSession.generation += 1;
+  if (onlineSession.expiryTimer) clearInterval(onlineSession.expiryTimer);
+  onlineSession.expiryTimer = 0;
+  onlineSession.stopUiSignal?.();
+  onlineSession.stopUiSignal = null;
+  onlineSession.peer?.close();
+  onlineSession.signaling?.close();
+  onlineSession.peer = null;
+  onlineSession.signaling = null;
+  onlineSession.role = null;
+  onlineSession.roomId = "";
+  onlineSession.expiresAt = 0;
+  onlineSession.inviteUrl = "";
+  onlineSession.peers.clear();
+  onlineSession.latency = null;
+  resetOnlineUi();
+  if (resetStatus) setOnlineStatus("idle", "Create a room or open a private invite.");
+}
+
+function renderOnlineRoom() {
+  $("#onlineActions").hidden = true;
+  $("#onlineRoomDetails").hidden = false;
+  $("#onlineFingerprint").textContent = roomFingerprint(onlineSession.roomId);
+  $("#onlineInviteLink").value = onlineSession.role === "host" ? onlineSession.inviteUrl : "PRIVATE INVITE AUTHENTICATED";
+  $("#onlineCopyButton").hidden = onlineSession.role !== "host";
+  updateOnlineSeats();
+  tickOnlineExpiry();
+}
+
+function receiveOnlineSignal(message) {
+  if (message.type === "welcome") {
+    onlineSession.expiresAt = Number(message.expiresAt) || onlineSession.expiresAt;
+    onlineSession.peers = new Set((message.peers || []).filter((role) => role === "host" || role === "guest"));
+    updateOnlineSeats();
+    tickOnlineExpiry();
+  } else if (message.type === "peer" && ["host", "guest"].includes(message.role)) {
+    if (message.state === "joined") onlineSession.peers.add(message.role);
+    else onlineSession.peers.delete(message.role);
+    updateOnlineSeats();
+  }
+}
+
+async function beginOnlineConnection({ roomId, role, token, guestToken = "", expiresAt = 0 }) {
+  disconnectOnline(false);
+  const generation = onlineSession.generation;
+  onlineSession.role = role;
+  onlineSession.roomId = roomId;
+  onlineSession.expiresAt = expiresAt;
+  onlineSession.inviteUrl = role === "host" ? buildInviteUrl({ roomId, guestToken }) : "";
+  onlineSession.peers.add(role);
+  renderOnlineRoom();
+  setOnlineError();
+  setOnlineStatus("signaling", "Authenticating the private room seat…");
+  try {
+    const signaling = await connectPrivateRoom({ roomId, role, token });
+    if (generation !== onlineSession.generation) {
+      signaling.close();
+      return;
+    }
+    onlineSession.signaling = signaling;
+    onlineSession.peer = new FinalBlowPeer({
+      role,
+      signaling,
+      onStatus(kind, detail) {
+        if (generation !== onlineSession.generation) return;
+        setOnlineStatus(kind, detail);
+        if (kind === "connected") {
+          onlineSession.peers.add(role === "host" ? "guest" : "host");
+          updateOnlineSeats();
+        }
+      },
+      onLatency(milliseconds) {
+        if (generation !== onlineSession.generation) return;
+        onlineSession.latency = milliseconds;
+        $("#onlineLatency").textContent = `${milliseconds} MS · ENCRYPTED`;
+      },
+    });
+    onlineSession.stopUiSignal = signaling.onMessage(receiveOnlineSignal);
+    signaling.onClose(({ code, reason }) => {
+      if (generation !== onlineSession.generation) return;
+      setOnlineStatus("closed", code === 4001 ? "Private room expired." : reason || "Private room connection closed.");
+    });
+    onlineSession.expiryTimer = setInterval(tickOnlineExpiry, 1000);
+  } catch (error) {
+    if (generation !== onlineSession.generation) return;
+    onlineSession.peer?.close();
+    onlineSession.signaling?.close();
+    onlineSession.peer = null;
+    onlineSession.signaling = null;
+    const message = error instanceof Error ? error.message : "Could not open private room.";
+    setOnlineError(message);
+    setOnlineStatus("error", message);
+    $("#onlineActions").hidden = false;
+    $("#onlineRoomDetails").hidden = true;
+  }
+}
+
+function openOnlineLobby() {
+  enterImmersiveMode();
+  unlockAudio();
+  showScreen("online");
+  if (pendingOnlineInvite) {
+    $("#onlineInviteInput").value = location.href;
+    setOnlineStatus("waiting", "Private invite detected. Press Join Private Room.");
+  }
+}
+
+async function createOnlineRoom() {
+  setOnlineError();
+  $("#onlineCreateButton").disabled = true;
+  setOnlineStatus("connecting", "Creating an expiring two-seat room…");
+  try {
+    const room = await createPrivateRoom();
+    await beginOnlineConnection({
+      roomId: room.roomId,
+      role: "host",
+      token: room.hostToken,
+      guestToken: room.guestToken,
+      expiresAt: room.expiresAt,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not create private room.";
+    setOnlineError(message);
+    setOnlineStatus("error", message);
+    $("#onlineCreateButton").disabled = false;
+  }
+}
+
+async function joinOnlineRoom() {
+  setOnlineError();
+  const credentials = parseInvite($("#onlineInviteInput").value) || parseInvite(location.hash);
+  if (!credentials) {
+    setOnlineError("Paste the complete private invite link. A room fingerprint alone cannot unlock a seat.");
+    setOnlineStatus("error", "Private invite missing its secure key.");
+    return;
+  }
+  $("#onlineJoinButton").disabled = true;
+  pendingOnlineInvite = null;
+  scrubInviteFromAddress();
+  await beginOnlineConnection(credentials);
+}
+
+async function copyOnlineInvite() {
+  if (!onlineSession.inviteUrl) return;
+  try {
+    await navigator.clipboard.writeText(onlineSession.inviteUrl);
+  } catch {
+    const field = $("#onlineInviteLink");
+    field.select();
+    document.execCommand("copy");
+  }
+  const button = $("#onlineCopyButton");
+  button.textContent = "COPIED";
+  setTimeout(() => { button.textContent = "COPY"; }, 1200);
+}
 
 function random() {
   return state.rng.nextFloat();
@@ -815,6 +1069,7 @@ function makeMatchFighters() {
 }
 
 function showScreen(name) {
+  if (state.screen === "online" && name !== "online") disconnectOnline(true);
   state.screen = name;
   $$(".screen").forEach((screen) => screen.classList.toggle("active", screen.id === `${name}Screen`));
   const playing = name === "fight";
@@ -3990,6 +4245,14 @@ function menuPadLoop() {
 }
 
 $$('[data-mode]').forEach((button) => button.addEventListener("click", () => startSelect(button.dataset.mode)));
+$("#onlineButton").addEventListener("click", openOnlineLobby);
+$("#onlineCreateButton").addEventListener("click", createOnlineRoom);
+$("#onlineJoinButton").addEventListener("click", joinOnlineRoom);
+$("#onlineInviteInput").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") joinOnlineRoom();
+});
+$("#onlineCopyButton").addEventListener("click", copyOnlineInvite);
+$("#onlineDisconnectButton").addEventListener("click", () => disconnectOnline(true));
 $("#controlsButton").addEventListener("click", () => { unlockAudio(); $("#controlsDialog").showModal(); });
 $("#moveListSelect").addEventListener("change", (event) => renderMoveList(event.target.value));
 $("#musicToggle").addEventListener("change", () => {
@@ -4171,7 +4434,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.0b-offline-edition",
+  version: "1.0c-private-rooms",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -4193,6 +4456,7 @@ window.__finalBlowEngine = {
       accessibility: { ...state.accessibility },
       touchSettings: { ...state.touchSettings },
       training: trainingSnapshot(state.training),
+      online: onlineSnapshot(),
       balance: balanceAudit,
       arcade: arcadeRunSnapshot(state.arcadeRun),
       seed: state.matchSeed,
@@ -4514,7 +4778,11 @@ setAiDifficulty(state.aiDifficulty);
 syncOrientationGate();
 updateOfflineBadge();
 registerOfflineGame();
-showScreen("title");
+if (pendingOnlineInvite) {
+  $("#onlineInviteInput").value = location.href;
+  showScreen("online");
+  setOnlineStatus("waiting", "Private invite detected. Press Join Private Room.");
+} else showScreen("title");
 updateStageUI();
 requestAnimationFrame(loop);
 requestAnimationFrame(menuPadLoop);

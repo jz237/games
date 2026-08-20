@@ -19,7 +19,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">OFFLINE EDITION <b>1.0B</b></div>
+      <div class="build-tag">PRIVATE ROOMS <b>1.0C</b></div>
       <div id="offlineBadge" class="offline-badge" aria-live="polite">CACHE CHECK</div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
@@ -92,10 +92,48 @@
         <div class="menu-stack">
           <button class="arcade-button primary menu-focus" data-mode="arcade">1 PLAYER · ARCADE</button>
           <button class="arcade-button" data-mode="versus">2 PLAYER · LOCAL VERSUS</button>
+          <button class="arcade-button online-button" id="onlineButton">ONLINE · PRIVATE ROOM</button>
           <button class="arcade-button" data-mode="training">TRAINING LAB</button>
           <button class="arcade-button ghost" id="controlsButton">CONTROLS & OPTIONS</button>
         </div>
         <div class="start-hint">PRESS <kbd>ENTER</kbd> OR <span class="xbox-a">A</span> TO START</div>
+      </section>
+
+      <section id="onlineScreen" class="screen online-screen" aria-labelledby="onlineTitle">
+        <div class="online-copy">
+          <p class="eyebrow">HEAD-TO-HEAD · INVITE ONLY</p>
+          <h2 id="onlineTitle">PRIVATE<br><strong>ROOMS</strong></h2>
+          <p>Create a sealed two-player room, share one private invite, then connect directly over encrypted WebRTC.</p>
+          <div class="online-security" aria-label="Private room security">
+            <span>🔒 TOKEN AUTH</span><span>◉ P2P ENCRYPTED</span><span>⌛ 15 MINUTES</span><span>2 SEATS ONLY</span>
+          </div>
+          <p class="online-checkpoint-note">CONNECTION LOBBY IS LIVE · ROLLBACK FIGHTS ARRIVE IN CHECKPOINT 14</p>
+        </div>
+        <div class="online-terminal">
+          <div id="onlineStatus" class="online-status idle" aria-live="polite">
+            <i></i><div><strong id="onlineStatusTitle">ROOM SYSTEM READY</strong><span id="onlineStatusDetail">Create a room or open a private invite.</span></div>
+          </div>
+          <div id="onlineActions" class="online-actions">
+            <button id="onlineCreateButton" class="arcade-button primary" type="button">CREATE PRIVATE ROOM</button>
+            <div class="online-divider"><span>OR JOIN AN INVITE</span></div>
+            <label for="onlineInviteInput">PASTE PRIVATE INVITE LINK</label>
+            <input id="onlineInviteInput" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://…/#online=join…">
+            <button id="onlineJoinButton" class="arcade-button" type="button">JOIN PRIVATE ROOM</button>
+          </div>
+          <div id="onlineRoomDetails" class="online-room-details" hidden>
+            <div class="online-room-head"><span>ROOM FINGERPRINT</span><b id="onlineFingerprint">—</b><small id="onlineExpiry">EXPIRES IN 15:00</small></div>
+            <label for="onlineInviteLink">PRIVATE GUEST INVITE</label>
+            <div class="online-copy-row"><input id="onlineInviteLink" type="text" readonly><button id="onlineCopyButton" type="button">COPY</button></div>
+            <div class="online-seats">
+              <span id="onlineHostSeat"><i></i><b>HOST</b><em>WAITING</em></span>
+              <span id="onlineGuestSeat"><i></i><b>GUEST</b><em>WAITING</em></span>
+            </div>
+            <div class="online-link-readout"><span>DIRECT LINK</span><b id="onlineLatency">NEGOTIATING</b></div>
+            <button id="onlineDisconnectButton" class="arcade-button ghost compact" type="button">CLOSE ROOM</button>
+          </div>
+          <p id="onlineError" class="online-error" role="alert" hidden></p>
+          <button class="text-button online-back" data-back="title">← BACK TO TITLE</button>
+        </div>
       </section>
 
       <section id="selectScreen" class="screen select-screen" aria-labelledby="selectTitle">

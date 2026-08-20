@@ -347,6 +347,121 @@ canvas {
 .arcade-button.ghost { background: rgba(7,11,17,.7); color: #aab4bd; }
 .arcade-button.compact { min-height: 34px; padding: 8px 17px; font-size: 11px; }
 .arcade-button:disabled { cursor: not-allowed; filter: grayscale(1); opacity: .4; transform: none; }
+.online-button { border-color: #2d8595; background: linear-gradient(180deg, #154d5b, #071d27); color: #b8f6ff; }
+
+.online-screen {
+  align-items: stretch;
+  gap: clamp(22px, 4vw, 70px);
+  background:
+    linear-gradient(90deg, rgba(3,6,10,.96), rgba(3,8,13,.76) 51%, rgba(2,5,9,.94)),
+    radial-gradient(circle at 20% 32%, rgba(78,221,245,.16), transparent 31%),
+    url("assets/veterans-stadium.webp") center / cover;
+}
+
+.online-screen::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background: repeating-linear-gradient(110deg, transparent 0 38px, rgba(78,221,245,.028) 39px 40px);
+}
+
+.online-copy,
+.online-terminal { position: relative; z-index: 2; }
+
+.online-copy {
+  display: flex;
+  flex: 1 1 48%;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.online-copy h2 {
+  margin: 0;
+  color: #f3efe2;
+  font-family: Impact, Haettenschweiler, "Arial Black", sans-serif;
+  font-size: clamp(68px, 8.7vw, 132px);
+  font-style: italic;
+  line-height: .74;
+  letter-spacing: -.02em;
+  text-shadow: 5px 6px 0 #102b35, 0 0 28px rgba(78,221,245,.24);
+}
+
+.online-copy h2 strong { color: var(--cyan); -webkit-text-stroke: 1px #14687a; }
+.online-copy > p:not(.eyebrow):not(.online-checkpoint-note) { max-width: 610px; margin: 24px 0 16px; color: #aabac4; font-size: clamp(11px, 1.05vw, 16px); line-height: 1.55; }
+.online-checkpoint-note { max-width: 560px; margin: 15px 0 0; color: var(--amber); font-size: clamp(8px, .76vw, 11px); font-weight: 900; letter-spacing: .11em; line-height: 1.5; }
+
+.online-security { display: flex; flex-wrap: wrap; gap: 6px; }
+.online-security span { padding: 6px 8px; border: 1px solid #315662; background: rgba(4,15,20,.82); color: #a6e7ef; font-size: clamp(7px, .68vw, 10px); font-weight: 900; letter-spacing: .08em; }
+
+.online-terminal {
+  display: flex;
+  flex: 0 1 510px;
+  align-self: center;
+  flex-direction: column;
+  max-height: 100%;
+  padding: clamp(15px, 2vw, 28px);
+  border: 1px solid #385563;
+  background: linear-gradient(160deg, rgba(12,24,32,.97), rgba(4,8,13,.98));
+  box-shadow: 12px 16px 0 rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+.online-status { display: flex; gap: 12px; align-items: center; min-height: 58px; padding: 11px 13px; border-left: 3px solid #73818b; background: #071019; }
+.online-status > i { flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%; background: #77858d; box-shadow: 0 0 0 transparent; }
+.online-status div { min-width: 0; }
+.online-status strong,
+.online-status span { display: block; }
+.online-status strong { color: white; font-size: 12px; letter-spacing: .1em; }
+.online-status span { margin-top: 4px; overflow: hidden; color: #84939c; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.online-status.connecting,
+.online-status.signaling,
+.online-status.waiting { border-color: var(--amber); }
+.online-status.connecting > i,
+.online-status.signaling > i,
+.online-status.waiting > i { background: var(--amber); box-shadow: 0 0 12px rgba(255,177,27,.66); animation: online-pulse 1s ease-in-out infinite alternate; }
+.online-status.connected { border-color: var(--green); }
+.online-status.connected > i { background: var(--green); box-shadow: 0 0 15px rgba(140,244,75,.72); }
+.online-status.error,
+.online-status.closed { border-color: var(--red); }
+.online-status.error > i,
+.online-status.closed > i { background: var(--red); }
+
+@keyframes online-pulse { to { transform: scale(1.35); opacity: .68; } }
+
+.online-actions { display: grid; gap: 8px; margin-top: 14px; }
+.online-actions label,
+.online-room-details > label { color: #81929d; font-size: 8px; font-weight: 900; letter-spacing: .12em; }
+.online-actions input,
+.online-copy-row input { width: 100%; min-width: 0; height: 36px; padding: 8px 10px; border: 1px solid #385260; background: #03090e; color: #c9f5fa; font-family: ui-monospace, monospace; font-size: 10px; outline: 0; }
+.online-actions input:focus,
+.online-copy-row input:focus { border-color: var(--cyan); box-shadow: 0 0 12px rgba(78,221,245,.2); }
+.online-divider { position: relative; margin: 3px 0; text-align: center; }
+.online-divider::before { position: absolute; top: 50%; right: 0; left: 0; height: 1px; background: #263945; content: ""; }
+.online-divider span { position: relative; padding: 0 9px; background: #08111a; color: #667883; font-size: 7px; font-weight: 900; letter-spacing: .14em; }
+
+.online-room-details { display: grid; gap: 9px; margin-top: 13px; }
+.online-room-details[hidden] { display: none !important; }
+.online-room-head { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; padding: 8px 10px; border: 1px solid #31515d; background: rgba(6,15,21,.88); }
+.online-room-head span { color: #718590; font-size: 7px; font-weight: 900; letter-spacing: .12em; }
+.online-room-head b { grid-column: 1 / -1; overflow: hidden; color: var(--cyan); font-family: ui-monospace, monospace; font-size: clamp(10px, 1vw, 14px); letter-spacing: .1em; text-overflow: ellipsis; white-space: nowrap; }
+.online-room-head small { position: absolute; right: clamp(26px, 3vw, 42px); color: var(--amber); font-size: 7px; font-weight: 900; }
+.online-copy-row { display: grid; grid-template-columns: 1fr auto; }
+.online-copy-row button { min-width: 64px; border: 1px solid #397384; background: #103844; color: white; cursor: pointer; font-size: 8px; font-weight: 900; }
+
+.online-seats { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.online-seats > span { display: grid; grid-template-columns: auto 1fr; gap: 2px 7px; align-items: center; padding: 7px 9px; border: 1px solid #33454f; background: #071018; }
+.online-seats i { grid-row: 1 / 3; width: 8px; height: 8px; border-radius: 50%; background: #596872; }
+.online-seats b { color: #dce7ea; font-size: 9px; }
+.online-seats em { color: #6f8089; font-size: 7px; font-style: normal; }
+.online-seats .occupied { border-color: #4d7657; }
+.online-seats .occupied i { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.online-seats .occupied em { color: #a1d995; }
+.online-link-readout { display: flex; align-items: center; justify-content: space-between; padding: 7px 9px; background: #060d13; color: #687b86; font-size: 8px; font-weight: 900; }
+.online-link-readout b { color: var(--cyan); }
+.online-error { margin: 9px 0 0; padding: 7px 9px; border-left: 3px solid var(--red); background: rgba(95,9,13,.34); color: #ffb5b1; font-size: 9px; line-height: 1.4; }
+.online-back { align-self: flex-start; margin-top: 11px; }
 
 .start-hint {
   margin-top: 12px;
@@ -1588,6 +1703,34 @@ body:has(#app:fullscreen) {
   .title-lockup h2 { letter-spacing: .18em; }
   .hook { display: none; }
   .menu-stack { width: min(430px, 86%); margin-top: 17px; }
+  .title-screen .menu-stack { gap: 3px; margin-top: 8px; }
+  .title-screen .arcade-button { min-height: 29px; padding: 5px 12px; }
+  .title-screen .start-hint { margin-top: 4px; }
+  .online-screen { gap: 12px; padding: 10px; }
+  .online-copy { flex-basis: 43%; }
+  .online-copy h2 { font-size: clamp(48px, 8vw, 67px); }
+  .online-copy > p:not(.eyebrow):not(.online-checkpoint-note) { margin: 12px 0 8px; font-size: 9px; line-height: 1.35; }
+  .online-security { gap: 3px; }
+  .online-security span { padding: 3px 5px; font-size: 6px; }
+  .online-checkpoint-note { margin-top: 7px; font-size: 6px; }
+  .online-terminal { flex-basis: 55%; padding: 8px; box-shadow: 6px 7px 0 rgba(0,0,0,.32); }
+  .online-status { gap: 7px; min-height: 42px; padding: 6px 8px; }
+  .online-status strong { font-size: 9px; }
+  .online-status span { margin-top: 2px; font-size: 7px; }
+  .online-actions { gap: 4px; margin-top: 7px; }
+  .online-actions .arcade-button { min-height: 28px; padding: 5px 9px; font-size: 8px; }
+  .online-actions input,
+  .online-copy-row input { height: 28px; padding: 4px 6px; font-size: 7px; }
+  .online-divider { margin: 0; }
+  .online-room-details { gap: 4px; margin-top: 6px; }
+  .online-room-head { padding: 5px 7px; }
+  .online-room-head small { right: 18px; }
+  .online-copy-row button { min-width: 48px; }
+  .online-seats { gap: 4px; }
+  .online-seats > span { padding: 4px 6px; }
+  .online-link-readout { padding: 4px 6px; }
+  .online-room-details .arcade-button { min-height: 25px; padding: 4px 8px; font-size: 7px; }
+  .online-back { margin-top: 5px; font-size: 7px; }
   .roster-grid { gap: 5px; margin: 9px 0; }
   .fighter-info { padding: 5px 6px; }
   .fighter-info small { display: none; }

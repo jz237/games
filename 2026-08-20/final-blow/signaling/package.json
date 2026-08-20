@@ -1,0 +1,22 @@
+{
+  "name": "final-blow-signaling",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "deploy:dry": "wrangler deploy --dry-run",
+    "test": "vitest run",
+    "test:live": "node test/live-smoke.mjs",
+    "types": "wrangler types worker-configuration.d.ts --include-runtime false"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.0.0",
+    "@cloudflare/workers-types": "5.20260820.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11",
+    "wrangler": "4.125.0",
+    "ws": "8.21.3"
+  }
+}
