@@ -36,6 +36,13 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
+      # Games that live in this repo but are published somewhere else. Their
+      # source and history stay here; they are just dropped from the artifact so
+      # jz237.github.io/games/ does not serve a second copy.
+      #   final-blow -> jez237.com and jz237.github.io/jez237-site
+      - name: Drop games published elsewhere
+        run: rm -rf 2026-08-20/final-blow
+
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
         with:
