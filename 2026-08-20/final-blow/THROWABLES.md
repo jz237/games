@@ -63,3 +63,44 @@ disc, the vinyl record arcs highest, the golf ball and wires bounce, the wires a
 bed bugs leave hazards, and the loogies stay short. It also verifies Jez's tether
 reels in on a clean hit but not on block, and that DeathBlow gets exactly two pizzas
 before the supply runs dry.
+
+---
+
+# Stage weapons
+
+Separate system, separate command, separate look. Exactly one themed pickup type
+per stage, one physical weapon on the playfield at a time, once per round.
+
+| Stage | Weapon | Behaviour |
+| --- | --- | --- |
+| Kensington & Allegheny | Discarded needle | Quick pickup, very fast straight dart, tiny hitbox, low damage and brief hitstun, bright glint for readability, one use, no status effect |
+| The Vet Parking Lot | Beer bottle | Quick one-handed pickup, fast short-to-medium arc, moderate damage and a stagger, glass shatter with shards that vanish immediately |
+| Wildwood Boardwalk | Dead pigeon | Floppy tumbling arc, broad soft hitbox, feather burst, removed cleanly on landing |
+| Chinese Buffet | Serving tongs | Medium-speed end-over-end throw, narrow hitbox, sharp metallic clang |
+| Cruise-Ship Pool Deck | Souvenir cup | Backlog left this TBD. A giant frozen-drink cup is the most on-theme object on a budget pool deck: slow, wobbly, big soft hitbox, slushy burst that briefly slows |
+
+## Rules
+
+- **Arrival** is seeded from the match seed, stage and round, so the same fight
+  always drops the weapon at the same moment and the same floor slot on every
+  peer and every replay. It lands somewhere between 16 and 62 seconds into the
+  round — never off the opening bell — at one of five fair positions spanning the
+  walkable stage, including dead centre.
+- **It never arrives at an unfair moment.** `canWeaponArrive` blocks the drop
+  during intros, hitstop, supers, any knockdown, the finishing prompt, fatalities,
+  Final Blows and while paused. A blocked arrival waits rather than being lost.
+- **It telegraphs** for 48 frames with a falling object, a pulsing landing ring, a
+  drop line, a name tag and its own audio cue and caption, so both fighters can
+  see it coming and contest it.
+- **Pickup is down + HP** while standing over it. Outside pickup range that press
+  is the ordinary crouching HP, so nothing is taken away from the normal game.
+- **While carrying, the weapon replaces HP entirely.** A heavy press throws it or
+  is swallowed — it never leaks out as a normal. Carrying slows the walk to 72%
+  and stops you jumping, and getting hit makes you drop it.
+- **Throwing** is HP: forward is the committed attacking throw, neutral or away is
+  a safer short toss with much less recovery. One use — the weapon is gone once it
+  lands, and does not respawn inside the round.
+- **STAGE WEAPONS: ON/OFF** is a persistent option, default ON. Training has a
+  SPAWN STAGE WEAPON button for practice. A Passive CPU never collects or uses one.
+- The whole lifecycle — plan, arrival, ownership, carry timer, flight, collision
+  and removal — lives in rollback snapshots, so online play and replays stay exact.

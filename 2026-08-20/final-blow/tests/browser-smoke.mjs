@@ -306,7 +306,7 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.1F/);
+  assert.match(title.build, /1\.1G/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -324,7 +324,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.1f-throwables-edition');
+  assert.equal(title.engineVersion, '1.1g-stage-weapons-edition');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -1149,6 +1149,111 @@ try {
   })()`);
   assert.equal(ammo.left, 0, "the supply must run out");
   assert.equal(ammo.thrown, 2, "DeathBlow gets exactly two pizzas per round");
+
+  // Stage weapons: one themed pickup per stage, arriving at a seeded time and a
+  // fair floor slot, contested with down + HP, thrown with HP, single use.
+  const weaponPlans = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.stage('kensington');
+    const plan = (stage, round) => window.__finalBlowQa.stageWeaponPlan(stage, round);
+    const first = plan('kensington', 1);
+    return {
+      repeat: JSON.stringify(plan('kensington', 1)) === JSON.stringify(first),
+      perRound: JSON.stringify(plan('kensington', 2)) !== JSON.stringify(first),
+      stages: ['kensington', 'vet', 'wildwood', 'buffet', 'cruise'].map((stage) => plan(stage, 1)),
+      first,
+    };
+  })()`);
+  assert.equal(weaponPlans.repeat, true, "the same seed and round must always plan the same arrival");
+  assert.equal(weaponPlans.perRound, true, "each round gets its own arrival");
+  const weaponIds = weaponPlans.stages.map((plan) => plan.weaponId);
+  assert.deepEqual(weaponIds, ["needle", "bottle", "pigeon", "tongs", "souvenir-cup"]);
+  assert.equal(new Set(weaponIds).size, 5, "every stage has its own weapon type");
+  for (const plan of weaponPlans.stages) {
+    assert.ok(plan.spawnFrame > 60 * 10, "a weapon must not arrive off the opening bell");
+    assert.ok(plan.spawnFrame < 99 * 60, "a weapon must arrive inside the round");
+    assert.ok(plan.x > 200 && plan.x < 1100, "spawn slots must be reachable floor positions");
+  }
+
+  const weaponFlow = await evaluate(client, `(() => {
+    const out = {};
+    window.__finalBlowQa.stageWeapons(true);
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.forceStageWeapon(600);
+    window.__finalBlowQa.positions(600, 1050);
+    out.onFloor = window.__finalBlowEngine.snapshot().stageWeapon;
+    window.__finalBlowQa.input(0, { down: true, heavy: true }, 4);
+    window.__finalBlowQa.step(12 / 60);
+    const held = window.__finalBlowEngine.snapshot();
+    out.held = { phase: held.stageWeapon.phase, holder: held.stageWeapon.holder, carried: held.fighters[0].carriedWeapon, move: held.fighters[0].move };
+    const startX = held.fighters[0].x;
+    window.__finalBlowQa.input(0, { jump: true, right: true }, 24);
+    window.__finalBlowQa.step(0.4);
+    const carrying = window.__finalBlowEngine.snapshot();
+    out.carrying = { grounded: carrying.fighters[0].grounded, walked: Math.round(carrying.fighters[0].x - startX) };
+    window.__finalBlowQa.input(0, { right: true, heavy: true }, 6);
+    window.__finalBlowQa.step(0.35);
+    const thrown = window.__finalBlowEngine.snapshot();
+    out.thrown = { phase: thrown.stageWeapon.phase, carried: thrown.fighters[0].carriedWeapon, move: thrown.fighters[0].move };
+    window.__finalBlowQa.step(1.6);
+    const landed = window.__finalBlowEngine.snapshot();
+    out.landed = { health: landed.fighters[1].health, result: landed.fighters[1].lastHitResult, weapons: landed.projectiles.length };
+    // Single use: the weapon does not come back this round.
+    window.__finalBlowQa.step(3);
+    out.afterwards = window.__finalBlowEngine.snapshot().stageWeapon.phase;
+    return out;
+  })()`);
+  assert.equal(weaponFlow.onFloor.phase, "ground");
+  assert.equal(weaponFlow.held.phase, "held");
+  assert.equal(weaponFlow.held.carried, "needle");
+  assert.equal(weaponFlow.held.move, null, "the pickup press must not leak out as a normal");
+  assert.equal(weaponFlow.carrying.grounded, true, "carrying a weapon must stop you jumping");
+  assert.ok(weaponFlow.carrying.walked > 40 && weaponFlow.carrying.walked < 120, "carrying slows the walk without freezing it");
+  assert.equal(weaponFlow.thrown.phase, "thrown");
+  assert.equal(weaponFlow.thrown.carried, null);
+  assert.match(weaponFlow.thrown.move, /stage-weapon-needle/);
+  assert.ok(weaponFlow.landed.health < 100, "a thrown stage weapon must hurt");
+  assert.equal(weaponFlow.landed.weapons, 0, "the weapon is single use and removed after it lands");
+  assert.notEqual(weaponFlow.afterwards, "ground", "the weapon must not respawn inside the round");
+
+  // Out of pickup range, down + HP is still just a crouching heavy.
+  const farPickup = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.forceStageWeapon(1100);
+    window.__finalBlowQa.positions(300, 950);
+    window.__finalBlowQa.input(0, { down: true, heavy: true }, 3);
+    window.__finalBlowQa.step(0.12);
+    const snapshot = window.__finalBlowEngine.snapshot();
+    return { move: snapshot.fighters[0].move, carried: snapshot.fighters[0].carriedWeapon, phase: snapshot.stageWeapon.phase };
+  })()`);
+  assert.equal(farPickup.carried, null, "you cannot pick up a weapon you are not standing near");
+  assert.equal(farPickup.phase, "ground");
+  assert.match(farPickup.move, /foundation-sweep/, "out of range, down + HP stays the crouching heavy");
+
+  // Passive CPU never collects a weapon, and the option can turn them off.
+  const weaponRules = await evaluate(client, `(() => {
+    window.__finalBlowQa.difficulty('passive');
+    window.__finalBlowQa.aiFight('deathblow', 'jez', 'passive');
+    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.forceStageWeapon(900);
+    window.__finalBlowQa.positions(880, 920);
+    for (let frame = 0; frame < 240; frame += 1) window.__finalBlowQa.step(1 / 60);
+    const passive = window.__finalBlowEngine.snapshot();
+    window.__finalBlowQa.difficulty('street');
+    const off = window.__finalBlowQa.stageWeapons(false);
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    const disabled = window.__finalBlowEngine.snapshot().stageWeapon;
+    const stored = localStorage.getItem('final-blow-stage-weapons');
+    window.__finalBlowQa.stageWeapons(true);
+    return { passiveCarried: passive.fighters[1].carriedWeapon, off, disabled, stored, toggle: document.querySelector('#stageWeaponToggle') !== null };
+  })()`);
+  assert.equal(weaponRules.passiveCarried, null, "a Passive CPU must never collect a stage weapon");
+  assert.equal(weaponRules.off, false);
+  assert.equal(weaponRules.disabled, null, "turning stage weapons off removes them");
+  assert.equal(weaponRules.stored, "0", "the STAGE WEAPONS setting persists");
+  assert.equal(weaponRules.toggle, true, "there is a STAGE WEAPONS option");
 
   const desktopFraming = await evaluate(client, FIGHTER_FRAMING_PROBE);
   assertFighterFraming(desktopFraming, "desktop");
@@ -2027,7 +2132,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.1f/);
+  assert.match(offlineCache.name, /final-blow-offline-1\.1g/);
   assert.ok(offlineCache.entries >= 156);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasRollback, true);
@@ -2054,8 +2159,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.1F/);
-  assert.equal(offlineBoot.version, '1.1f-throwables-edition');
+  assert.match(offlineBoot.build, /1\.1G/);
+  assert.equal(offlineBoot.version, '1.1g-stage-weapons-edition');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,

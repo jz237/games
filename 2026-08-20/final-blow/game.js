@@ -129,6 +129,14 @@ import {
   graphicFatalitySnapshot,
 } from "./engine/fatalities.mjs";
 import {
+  STAGE_WEAPONS,
+  canPickUpWeapon,
+  canWeaponArrive,
+  getStageWeapon,
+  planStageWeapon,
+  weaponSnapshot,
+} from "./engine/stage-weapons.mjs";
+import {
   FIGHTER_THROWABLES,
   THROWABLE_COMMAND,
   createThrowObjectMove,
@@ -600,6 +608,7 @@ const fallbackSoundKinds = Object.freeze({
   "hit-heavy": "hit",
   super: "final",
   fatal: "final",
+  "stage-weapon": "select",
 });
 
 const musicTracks = [
@@ -631,6 +640,7 @@ const soundCaptionLabels = Object.freeze({
   super: "FULL GRIT SUPER",
   fatal: "GRAPHIC FATALITY",
   finish: "FINAL BLOW READY",
+  "stage-weapon": "STAGE WEAPON DROPS",
   final: "FINAL BLOW",
   ko: "KNOCKOUT",
   pause: "GAME PAUSED",
@@ -709,6 +719,8 @@ const state = {
   soundCaptions: localStorage.getItem("final-blow-sound-captions") !== "0",
   attractEnabled: localStorage.getItem("final-blow-attract-mode") !== "0",
   graphicFatalities: localStorage.getItem("final-blow-graphic-fatalities") !== "0",
+  stageWeaponsEnabled: localStorage.getItem("final-blow-stage-weapons") !== "0",
+  stageWeapon: null,
   offlineReady: false,
   accessibility: {
     reducedMotion: localStorage.getItem("final-blow-reduced-motion") === "1",
@@ -1766,6 +1778,8 @@ function makeFighter(index, side, overrideDef = null) {
     // Personal throwable ammunition, refreshed at the start of every round.
     throwableUses: throwableUses(kitId),
     throwableSpawned: false,
+    carriedWeapon: null,
+    carryFrames: 0,
     slowFrames: 0,
     // Dizzy meter and its deterministic decay / recovery / immunity clocks.
     stunMeter: 0,
@@ -1872,6 +1886,7 @@ function saveRollbackState() {
     particles: cloneRollbackValue(state.particles),
     effects: cloneRollbackValue(state.effects),
     commands: commandHistory.map((history) => cloneRollbackValue(history)),
+    stageWeapon: cloneRollbackValue(state.stageWeapon),
   };
 }
 
@@ -1909,6 +1924,7 @@ function restoreRollbackState(snapshot) {
   state.effects = cloneRollbackValue(snapshot.effects || []);
   commandHistory[0] = cloneRollbackValue(snapshot.commands?.[0] || []);
   commandHistory[1] = cloneRollbackValue(snapshot.commands?.[1] || []);
+  state.stageWeapon = cloneRollbackValue(snapshot.stageWeapon ?? null);
   state.finisher = snapshot.finisher ? {
     ...cloneRollbackValue(snapshot.finisher),
     script: finisherScripts[snapshot.finisher.scriptId],
@@ -2163,6 +2179,7 @@ function startMatch(resetSet = true) {
   state.qaManualMode = false;
   seedMatch(state.round);
   state.fighters = makeMatchFighters();
+  resetStageWeapon();
   warmFighterAudio();
   if (state.mode === "training") {
     state.training = createTrainingState({
@@ -2236,6 +2253,7 @@ function startOnlineMatch(config) {
   state.simulationTick = 0;
   seedOnlineRound(1);
   state.fighters = makeMatchFighters();
+  resetStageWeapon();
   warmFighterAudio();
   state.particles.length = 0;
   state.effects.length = 0;
@@ -2284,6 +2302,7 @@ function resetRound() {
   state.fighters = makeMatchFighters();
   warmFighterAudio();
   state.fighters.forEach((fighter, side) => { fighter.meter = carriedGrit[side] || 0; });
+  resetStageWeapon();
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
@@ -2321,6 +2340,8 @@ function announce(main, sub = "", duration = 1) {
 function finishRound(winner, type = -1) {
   if (state.phase === "roundover" || state.phase === "result") return;
   for (const fighter of state.fighters) clearGrabState(fighter);
+  for (const fighter of state.fighters) { fighter.carriedWeapon = null; fighter.carryFrames = 0; }
+  if (state.stageWeapon) state.stageWeapon.phase = "gone";
   state.phase = "roundover";
   state.rounds[winner] += 1;
   state.finisherType = type;
@@ -2721,6 +2742,7 @@ function updateTrainingUi(input = {}) {
 
 function syncNewOptionsUi() {
   $("#goreToggle").checked = state.graphicFatalities;
+  $("#stageWeaponToggle").checked = state.stageWeaponsEnabled;
   $("#controlStyleSelect").value = state.controlStyle;
   $("#reducedMotionToggle").checked = state.accessibility.reducedMotion;
   $("#highContrastToggle").checked = state.accessibility.highContrast;
@@ -3551,7 +3573,17 @@ function updateFighter(fighter, opponent, input, dt) {
       }
 
       if (fighter.dashFrames <= 0 && !fighter.attacking) {
-        if (fighter.inputBuffer.has("jump", state.simulationTick)) {
+        // Carrying a stage weapon is too heavy to jump with, but it must not
+        // freeze the fighter in place either: the walk still runs below.
+        const carryProfile = fighter.carriedWeapon ? stageWeaponProfile() : null;
+        const jumpBuffered = fighter.inputBuffer.has("jump", state.simulationTick);
+        if (carryProfile?.carryBlocksJump && jumpBuffered) {
+          fighter.inputBuffer.consume("jump", state.simulationTick);
+          if (fighter.carryFrames % 30 === 0) {
+            spawnCombatText(fighter.x, fighter.y - fighter.height - 18, "TOO HEAVY", "#8a93a5");
+          }
+        }
+        if (!carryProfile?.carryBlocksJump && fighter.inputBuffer.has("jump", state.simulationTick)) {
           fighter.inputBuffer.consume("jump", state.simulationTick);
           fighter.vy = fighter.movement.jumpVelocityY;
           fighter.vx = direction.forwardHeld ? fighter.facing * fighter.movement.forwardJumpVelocityX
@@ -3566,11 +3598,24 @@ function updateFighter(fighter, opponent, input, dt) {
           else if (direction.absolute) {
             const speed = direction.forwardHeld ? fighter.movement.forwardWalkSpeed : fighter.movement.backWalkSpeed;
             const snare = fighter.slowFrames > 0 ? 0.55 : 1;
-            fighter.vx = direction.absolute * speed * flowSpeed * snare;
+            const carry = fighter.carriedWeapon ? (stageWeaponProfile()?.carryWalkScale ?? 1) : 1;
+            fighter.vx = direction.absolute * speed * flowSpeed * snare * carry;
           } else fighter.vx = 0;
           if (Math.abs(fighter.vx) > 20) fighter.walkTime += dt;
         }
 
+        // Down + HP over a grounded weapon picks it up; outside pickup range the
+        // same press stays an ordinary crouching HP. While carrying, the weapon
+        // *replaces* HP entirely, so a heavy press either throws it or is
+        // swallowed rather than leaking out as a normal.
+        if (fighter.carriedWeapon) {
+          const threw = tryThrowStageWeapon(fighter, input);
+          fighter.inputBuffer.consume("heavy", state.simulationTick);
+          if (threw) return;
+        } else if (tryPickUpStageWeapon(fighter, input)) {
+          fighter.inputBuffer.consume("heavy", state.simulationTick);
+          return;
+        }
         const bufferedAttack = fighter.inputBuffer.consume(attackActionPriority, state.simulationTick);
         if (bufferedAttack) beginAttack(fighter, bufferedAttack.action, input, {
           reversal: fighter.reversalWindowFrames > 0 && bufferedAttack.action === "special",
@@ -4079,6 +4124,220 @@ function beginGrabHold(attacker, victim, attack) {
   sound("throw", attacker);
 }
 
+// ---------------------------------------------------------------------------
+// Stage weapons
+// ---------------------------------------------------------------------------
+
+function resetStageWeapon() {
+  for (const fighter of state.fighters) {
+    fighter.carriedWeapon = null;
+    fighter.carryFrames = 0;
+  }
+  if (!state.stageWeaponsEnabled) {
+    state.stageWeapon = null;
+    return;
+  }
+  const plan = planStageWeapon(state.stage, {
+    matchSeed: state.matchSeed,
+    round: state.round,
+    minX: MOVEMENT_RULES.stageMinX,
+    maxX: MOVEMENT_RULES.stageMaxX,
+  });
+  state.stageWeapon = plan
+    ? { ...plan, phase: "pending", y: FLOOR, holder: -1, frames: 0, roundStartTick: state.simulationTick }
+    : null;
+}
+
+function stageWeaponProfile() {
+  return state.stageWeapon ? getStageWeapon(state.stageWeapon.stageId) : null;
+}
+
+function announceWeaponArrival(profile) {
+  spawnCombatText(state.stageWeapon.x, FLOOR - 210, profile.cue, "#ffd54a");
+  state.effects.push({
+    kind: "guard",
+    style: profile.style,
+    attackKind: "stage-weapon",
+    x: state.stageWeapon.x,
+    y: FLOOR - 40,
+    life: 0.5,
+    max: 0.5,
+    color: "#ffd54a",
+  });
+  if (!rollbackResimulating) sound("stage-weapon");
+}
+
+function updateStageWeapon() {
+  const weapon = state.stageWeapon;
+  if (!weapon) return;
+  const profile = stageWeaponProfile();
+  if (!profile) return;
+  weapon.frames += 1;
+  if (weapon.phase === "pending") {
+    // spawnFrame counts from the start of the round, not from match boot.
+    if (state.simulationTick - weapon.roundStartTick < weapon.spawnFrame) return;
+    if (!canWeaponArrive({
+      phase: state.phase,
+      hitstop: state.hitstop,
+      finisherActive: Boolean(state.finisher),
+      superActive: state.fighters.some((fighter) => fighter.attacking?.superMove),
+      anyKnockdown: state.fighters.some((fighter) => fighter.down || fighter.knockdownFrames > 0 || fighter.pendingKnockdown),
+      paused: state.paused,
+    })) return;
+    weapon.phase = "telegraph";
+    weapon.frames = 0;
+    announceWeaponArrival(profile);
+    return;
+  }
+  if (weapon.phase === "telegraph") {
+    if (weapon.frames >= profile.telegraphFrames) {
+      weapon.phase = "ground";
+      weapon.frames = 0;
+    }
+    return;
+  }
+  if (weapon.phase === "ground") {
+    if (weapon.frames >= profile.groundFrames) {
+      weapon.phase = "gone";
+      spawnCombatText(weapon.x, FLOOR - 120, "GONE", "#8a93a5");
+    }
+    return;
+  }
+  if (weapon.phase === "held") {
+    const holder = state.fighters[weapon.holder];
+    if (holder) holder.carryFrames = Math.min(holder.carryFrames, profile.carryFrames);
+    if (!holder || holder.carriedWeapon !== weapon.weaponId) {
+      dropStageWeapon(holder, true);
+      return;
+    }
+    weapon.x = holder.x;
+    holder.carryFrames += 1;
+    // A dropped weapon after too long stops it being a permanent upgrade.
+    if (holder.carryFrames >= profile.carryFrames) dropStageWeapon(holder, true);
+  }
+}
+
+function tryPickUpStageWeapon(fighter, input) {
+  const weapon = state.stageWeapon;
+  if (!weapon || weapon.phase !== "ground") return false;
+  if (fighter.carriedWeapon) return false;
+  if (isPassiveDifficulty(fighter.aiBrain?.difficulty)) return false;
+  if (!input.down || !input.heavy) return false;
+  const profile = stageWeaponProfile();
+  if (!canPickUpWeapon(fighter, weapon, { range: profile.pickupRange, scale: FIGHTER_SCALE })) return false;
+  weapon.phase = "held";
+  weapon.holder = fighter.side;
+  weapon.frames = 0;
+  fighter.carriedWeapon = weapon.weaponId;
+  fighter.carryFrames = 0;
+  fighter.inputBuffer.consume("heavy", state.simulationTick);
+  spawnCombatText(fighter.x, fighter.y - fighter.height - 40, profile.name, fighter.def.accent);
+  if (!rollbackResimulating) objectSound(profile.style);
+  updateHud();
+  return true;
+}
+
+function dropStageWeapon(fighter, expire = false) {
+  const weapon = state.stageWeapon;
+  if (!weapon) return;
+  if (fighter) {
+    fighter.carriedWeapon = null;
+    fighter.carryFrames = 0;
+  }
+  weapon.phase = expire ? "gone" : "ground";
+  weapon.holder = -1;
+  weapon.frames = 0;
+  updateHud();
+}
+
+// The held weapon replaces HP until it leaves the fighter's hands.
+function tryThrowStageWeapon(fighter, input) {
+  const weapon = state.stageWeapon;
+  if (!weapon || weapon.phase !== "held" || weapon.holder !== fighter.side) return false;
+  if (!fighter.carriedWeapon || fighter.attacking) return false;
+  if (!input.heavy && !input.throwWeapon) return false;
+  const profile = stageWeaponProfile();
+  // The press that picks the weapon up must not also throw it: the fighter is
+  // still bringing it up to throwing height.
+  if (fighter.carryFrames < profile.pickupFrames) return false;
+  const direction = directionContext(fighter, input);
+  // Forward is the committed attacking throw; neutral or away is a safer toss.
+  const committed = direction.forwardHeld;
+  const scale = FIGHTER_SCALE;
+  fighter.carriedWeapon = null;
+  fighter.carryFrames = 0;
+  weapon.phase = "thrown";
+  weapon.holder = -1;
+  fighter.attacking = createAttackInstance("special", {
+    id: `stage-weapon-${profile.id}`,
+    profileId: `stage-weapon-${profile.id}`,
+    cancelProfileId: "stage-weapon",
+    kind: "special",
+    level: profile.level,
+    moveName: profile.name,
+    startupFrames: committed ? profile.throwStartupFrames : Math.max(6, profile.throwStartupFrames - 4),
+    activeFrames: profile.throwActiveFrames,
+    recoveryFrames: committed ? profile.throwRecoveryFrames : profile.dropRecoveryFrames,
+    range: 0,
+    damage: 0,
+    chipDamage: 0,
+    push: 0,
+    meter: 6,
+    hitstunFrames: 0,
+    blockstunFrames: 0,
+    hitboxes: [],
+  });
+  fighter.attackFrame = 0;
+  fighter.attackTime = 0;
+  fighter.attackHit = false;
+  fighter.attackHits = 0;
+  fighter.inputBuffer.consume("heavy", state.simulationTick);
+  state.projectiles.push({
+    id: `weapon-${state.simulationTick}`,
+    ownerSide: fighter.side,
+    throwable: profile.id,
+    stageWeapon: true,
+    x: fighter.x + fighter.facing * 66 * scale,
+    y: FLOOR - 130 * scale,
+    vx: fighter.facing * (committed ? profile.speed : profile.dropSpeed) * scale,
+    vy: (committed ? profile.launchY : profile.dropLaunchY) * scale,
+    gravity: profile.gravity * scale,
+    direction: fighter.facing,
+    width: profile.width * scale,
+    height: profile.height * scale,
+    hazardWidth: 0,
+    damage: committed ? profile.damage : profile.damage * 0.6,
+    chipDamage: profile.chipDamage,
+    hitstunFrames: profile.hitstunFrames,
+    blockstunFrames: profile.blockstunFrames,
+    push: Math.round(profile.push * scale),
+    level: profile.level,
+    knockdown: Boolean(profile.knockdown),
+    lifeFrames: profile.lifeFrames,
+    maxLifeFrames: profile.lifeFrames,
+    armFrames: 0,
+    maxArmFrames: 0,
+    bouncesLeft: profile.bounces,
+    bounceDamping: 0.4,
+    hazardFrames: 0,
+    hazard: false,
+    spin: profile.spin,
+    spinAngle: 0,
+    wobble: 0,
+    tether: null,
+    slowFrames: profile.slowFrames || 0,
+    staggerFrames: profile.staggerFrames || 0,
+    color: "#ffd54a",
+    style: profile.style,
+    sequenceIndex: 0,
+    enhanced: false,
+  });
+  if (!rollbackResimulating) objectSound(profile.style);
+  spawnCombatText(fighter.x, fighter.y - fighter.height - 46, committed ? profile.name : "TOSS", fighter.def.accent);
+  updateHud();
+  return true;
+}
+
 function updateGrabHolds() {
   for (const attacker of state.fighters) {
     const grab = attacker.grabbing;
@@ -4356,7 +4615,10 @@ function hit(attacker, victim, attack, collision) {
     spawnCombatText(victim.x, victim.y - victim.height - 18, "SEISMIC ARMOR", victim.def.accent);
   }
   victim.hitFlash = 0.12;
-  if (!blocked && !armored) addStun(victim, attacker, attack, { counter, blocked });
+  if (!blocked && !armored) {
+    addStun(victim, attacker, attack, { counter, blocked });
+    if (victim.carriedWeapon) dropStageWeapon(victim, false);
+  }
   attacker.meter = clamp(attacker.meter + attack.meter * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
   victim.meter = clamp(victim.meter + attack.meter * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
   state.shake = Math.max(state.shake, attack.kind === "special" || attack.kind === "throw" ? 0.34 : 0.13);
@@ -4551,6 +4813,7 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
   updateFighter(state.fighters[0], state.fighters[1], input0, dt);
   updateFighter(state.fighters[1], state.fighters[0], input1, dt);
   updateGrabHolds();
+  updateStageWeapon();
   if (state.finisher) updateFinisher(dt);
   else {
     updateProjectiles(dt);
@@ -5331,6 +5594,100 @@ function drawThrowable(projectile, time, life) {
       ctx.fill();
       break;
     }
+    case "needle": {
+      ctx.rotate(Math.atan2(projectile.vy, Math.abs(projectile.vx) || 1));
+      ctx.fillStyle = "#cfd6e2";
+      ctx.fillRect(-w * 0.5, -h * 0.35, w * 0.7, h * 0.7);
+      ctx.fillStyle = "#e9edf5";
+      ctx.beginPath();
+      ctx.moveTo(w * 0.2, -h * 0.2);
+      ctx.lineTo(w * 0.5, 0);
+      ctx.lineTo(w * 0.2, h * 0.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#ff6b5a";
+      ctx.fillRect(-w * 0.5, -h * 0.5, w * 0.16, h);
+      break;
+    }
+    case "bottle": {
+      ctx.rotate(angle);
+      ctx.fillStyle = "rgba(96,148,72,.92)";
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.32, h * 0.5);
+      ctx.lineTo(w * 0.32, h * 0.5);
+      ctx.lineTo(w * 0.32, -h * 0.05);
+      ctx.lineTo(w * 0.14, -h * 0.3);
+      ctx.lineTo(w * 0.14, -h * 0.5);
+      ctx.lineTo(-w * 0.14, -h * 0.5);
+      ctx.lineTo(-w * 0.14, -h * 0.3);
+      ctx.lineTo(-w * 0.32, -h * 0.05);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(240,248,220,.55)";
+      ctx.fillRect(-w * 0.2, -h * 0.02, w * 0.1, h * 0.42);
+      ctx.fillStyle = "#d8b24a";
+      ctx.fillRect(-w * 0.3, h * 0.06, w * 0.6, h * 0.2);
+      break;
+    }
+    case "pigeon": {
+      ctx.rotate(angle * 0.6);
+      ctx.fillStyle = "#6f7684";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, w * 0.42, h * 0.32, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#8c93a3";
+      ctx.beginPath();
+      ctx.ellipse(-w * 0.28, -h * 0.1, w * 0.16, h * 0.2, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#585f6c";
+      ctx.beginPath();
+      ctx.ellipse(w * 0.3, -h * 0.16, w * 0.14, h * 0.16, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#ff9a4a";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.1, h * 0.28);
+      ctx.lineTo(-w * 0.24, h * 0.5);
+      ctx.stroke();
+      break;
+    }
+    case "tongs": {
+      ctx.rotate(angle);
+      ctx.strokeStyle = "#d5dce8";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.5, -h * 0.4);
+      ctx.lineTo(w * 0.5, 0);
+      ctx.moveTo(-w * 0.5, h * 0.4);
+      ctx.lineTo(w * 0.5, 0);
+      ctx.stroke();
+      ctx.strokeStyle = "#9fb0c6";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(-w * 0.5, 0, h * 0.4, -1.4, 1.4);
+      ctx.stroke();
+      break;
+    }
+    case "cup": {
+      ctx.rotate(angle * 0.5);
+      ctx.fillStyle = "#ff5aa8";
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.34, -h * 0.5);
+      ctx.lineTo(w * 0.34, -h * 0.5);
+      ctx.lineTo(w * 0.22, h * 0.5);
+      ctx.lineTo(-w * 0.22, h * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.55)";
+      ctx.fillRect(-w * 0.3, -h * 0.44, w * 0.6, h * 0.12);
+      ctx.strokeStyle = "#7fe9ff";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.1, -h * 0.5);
+      ctx.lineTo(w * 0.34, -h * 0.9);
+      ctx.stroke();
+      break;
+    }
     default: {
       ctx.fillStyle = projectile.color;
       ctx.beginPath();
@@ -5339,6 +5696,78 @@ function drawThrowable(projectile, time, life) {
     }
   }
   ctx.globalAlpha = 1;
+}
+
+// The grounded weapon and its arrival telegraph. Both fighters can see exactly
+// where and when it lands, so the pickup is always contestable.
+function drawStageWeapon(time) {
+  const weapon = state.stageWeapon;
+  if (!weapon || !["telegraph", "ground"].includes(weapon.phase)) return;
+  const profile = stageWeaponProfile();
+  if (!profile) return;
+  const telegraphing = weapon.phase === "telegraph";
+  const progress = telegraphing ? clamp(weapon.frames / Math.max(1, profile.telegraphFrames), 0, 1) : 1;
+  const remaining = telegraphing ? 1 : 1 - clamp(weapon.frames / Math.max(1, profile.groundFrames), 0, 1);
+  ctx.save();
+  ctx.translate(weapon.x, FLOOR);
+
+  // Landing marker.
+  ctx.globalAlpha = telegraphing ? 0.35 + 0.4 * Math.abs(Math.sin(time * 0.012)) : 0.28 + remaining * 0.3;
+  ctx.strokeStyle = "#ffd54a";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.ellipse(0, 4, 46 * FIGHTER_SCALE * (telegraphing ? 0.6 + progress * 0.6 : 1), 13, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  if (telegraphing) {
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(0, -190);
+    ctx.lineTo(0, -20);
+    ctx.setLineDash([8, 9]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  ctx.globalAlpha = telegraphing ? progress : 1;
+  const drop = telegraphing ? -150 * (1 - progress) : Math.sin(time * 0.006) * 2;
+  ctx.translate(0, -profile.height * 0.5 * FIGHTER_SCALE + drop);
+  drawThrowable({
+    style: profile.style,
+    width: profile.width * FIGHTER_SCALE,
+    height: profile.height * FIGHTER_SCALE,
+    spinAngle: telegraphing ? time * 0.01 : 0,
+    vx: 1,
+    vy: 0,
+    color: "#ffd54a",
+    ownerSide: -1,
+    hazard: false,
+  }, time, 1);
+
+  if (profile.glint) {
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(time * 0.02));
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    for (const angle of [0, Math.PI / 2]) {
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(angle) * -22, Math.sin(angle) * -22);
+      ctx.lineTo(Math.cos(angle) * 22, Math.sin(angle) * 22);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  // Name tag so the object is identifiable without knowing the stage.
+  ctx.save();
+  ctx.globalAlpha = telegraphing ? progress : 0.55 + remaining * 0.45;
+  ctx.font = "900 15px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#ffd54a";
+  ctx.strokeStyle = "rgba(0,0,0,.75)";
+  ctx.lineWidth = 4;
+  ctx.strokeText(profile.name, weapon.x, FLOOR - profile.height * FIGHTER_SCALE - 26);
+  ctx.fillText(profile.name, weapon.x, FLOOR - profile.height * FIGHTER_SCALE - 26);
+  ctx.restore();
 }
 
 function drawProjectiles(time) {
@@ -5524,6 +5953,25 @@ function drawFighter(fighter, time) {
   }
 
   drawAttackVfx(fighter, time, activePower);
+  if (fighter.carriedWeapon) {
+    const carried = stageWeaponProfile();
+    if (carried) {
+      ctx.save();
+      ctx.translate(52 * FIGHTER_SCALE, -150 * FIGHTER_SCALE);
+      drawThrowable({
+        style: carried.style,
+        width: carried.width * FIGHTER_SCALE,
+        height: carried.height * FIGHTER_SCALE,
+        spinAngle: 0.4,
+        vx: 1,
+        vy: 0,
+        color: "#ffd54a",
+        ownerSide: -1,
+        hazard: false,
+      }, time, 1);
+      ctx.restore();
+    }
+  }
 
   if (atlas?.complete && atlas.naturalWidth) {
     const baseTrails = state.accessibility.reducedMotion
@@ -6097,6 +6545,7 @@ function draw(time) {
   drawStage(time);
   if (state.screen === "fight") {
     drawPaintTraps(time);
+    drawStageWeapon(time);
     drawProjectiles(time);
     const ordered = [...state.fighters].sort((a, b) => a.y - b.y);
     ordered.forEach((fighter) => drawFighter(fighter, time));
@@ -6280,6 +6729,21 @@ function syncDifficultyUi() {
   if (!bar) return;
   bar.hidden = !(state.screen === "select" && facesCpuOpponent());
   renderDifficultyOptions();
+}
+
+function setStageWeapons(enabled) {
+  state.stageWeaponsEnabled = Boolean(enabled);
+  localStorage.setItem("final-blow-stage-weapons", state.stageWeaponsEnabled ? "1" : "0");
+  const toggle = $("#stageWeaponToggle");
+  if (toggle) toggle.checked = state.stageWeaponsEnabled;
+  if (!state.stageWeaponsEnabled) {
+    state.stageWeapon = null;
+    state.fighters.forEach((fighter) => { fighter.carriedWeapon = null; fighter.carryFrames = 0; });
+  } else if (!state.stageWeapon && state.fighters.length) {
+    resetStageWeapon();
+  }
+  updateHud();
+  return state.stageWeaponsEnabled;
 }
 
 function setAiDifficulty(difficulty) {
@@ -6783,6 +7247,7 @@ $("#sfxVolume").addEventListener("input", (event) => {
   localStorage.setItem("final-blow-sfx-volume", String(state.sfxVolume));
   updateVolumeUi();
 });
+$("#stageWeaponToggle").addEventListener("change", (event) => setStageWeapons(event.target.checked));
 $("#aiDifficultySelect").addEventListener("change", (event) => {
   setAiDifficulty(event.target.value);
   sound("select");
@@ -6879,6 +7344,17 @@ $("#trainingGritToggle").addEventListener("change", (event) => {
   updateTrainingUi();
 });
 $("#trainingResetButton").addEventListener("click", () => resetTrainingPosition(true));
+// Training can force this round's weapon onto the floor for practice.
+$("#trainingWeaponButton").addEventListener("click", () => {
+  if (!state.stageWeaponsEnabled) setStageWeapons(true);
+  if (!state.stageWeapon) resetStageWeapon();
+  if (!state.stageWeapon) return;
+  state.stageWeapon.phase = "ground";
+  state.stageWeapon.frames = 0;
+  state.stageWeapon.holder = -1;
+  state.fighters.forEach((fighter) => { fighter.carriedWeapon = null; fighter.carryFrames = 0; });
+  updateHud();
+});
 $("#musicSelect").addEventListener("change", (event) => {
   unlockAudio();
   chooseMusic(event.target.value);
@@ -6972,7 +7448,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.1f-throwables-edition",
+  version: "1.1g-stage-weapons-edition",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -7019,6 +7495,8 @@ window.__finalBlowEngine = {
         lifeFrames: trap.lifeFrames,
         enhanced: trap.enhanced,
       })),
+      stageWeapon: weaponSnapshot(state.stageWeapon),
+      stageWeaponsEnabled: state.stageWeaponsEnabled,
       projectiles: state.projectiles.map((projectile) => ({
         id: projectile.id,
         ownerSide: projectile.ownerSide,
@@ -7085,6 +7563,8 @@ window.__finalBlowEngine = {
         down: fighter.down,
         lastHitResult: fighter.lastHitResult,
         throwableUses: fighter.throwableUses,
+        carriedWeapon: fighter.carriedWeapon,
+        carryFrames: fighter.carryFrames,
         slowFrames: fighter.slowFrames,
         stunMeter: fighter.stunMeter,
         dizzyFrames: fighter.dizzyFrames,
@@ -7119,6 +7599,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.matchSerial += 1;
       seedMatch(state.round);
       state.fighters = [makeFighter(firstIndex, 0), makeFighter(secondIndex, 1)];
+      resetStageWeapon();
       state.particles.length = 0;
       state.effects.length = 0;
       state.traps.length = 0;
@@ -7155,6 +7636,37 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.training.dummyMode = dummyMode;
       updateTrainingUi();
       return trainingSnapshot(state.training);
+    },
+    stage(stageId = "kensington") {
+      if (!stages[stageId]) throw new Error(`Unknown stage: ${stageId}`);
+      state.stage = stageId;
+      updateStageUI();
+      resetStageWeapon();
+      return state.stage;
+    },
+    stageWeapons(enabled = true) {
+      setStageWeapons(Boolean(enabled));
+      return state.stageWeaponsEnabled;
+    },
+    forceStageWeapon(x = null) {
+      if (!state.stageWeapon) resetStageWeapon();
+      if (!state.stageWeapon) return null;
+      state.stageWeapon.phase = "ground";
+      state.stageWeapon.frames = 0;
+      state.stageWeapon.holder = -1;
+      state.stageWeapon.roundStartTick = state.simulationTick;
+      if (Number.isFinite(x)) state.stageWeapon.x = clamp(x, MOVEMENT_RULES.stageMinX, MOVEMENT_RULES.stageMaxX);
+      state.fighters.forEach((fighter) => { fighter.carriedWeapon = null; fighter.carryFrames = 0; });
+      updateHud();
+      return weaponSnapshot(state.stageWeapon);
+    },
+    stageWeaponPlan(stageId = state.stage, round = state.round) {
+      return planStageWeapon(stageId, {
+        matchSeed: state.matchSeed,
+        round,
+        minX: MOVEMENT_RULES.stageMinX,
+        maxX: MOVEMENT_RULES.stageMaxX,
+      });
     },
     fighterScale() {
       return FIGHTER_SCALE;
