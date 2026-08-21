@@ -233,13 +233,15 @@ try {
     pauseButtons: document.querySelectorAll('#pausePanel button').length,
     soundCaptions: document.querySelector('#soundCaptionsToggle')?.checked,
     onlineButton: document.querySelector('#onlineButton')?.textContent.trim(),
+    demoButton: document.querySelector('#demoButton')?.textContent.trim(),
+    attractEnabled: document.querySelector('#attractModeToggle')?.checked,
     onlineSecurityBadges: document.querySelectorAll('.online-security span').length,
     engineVersion: window.__finalBlowEngine?.version,
     engine: window.__finalBlowEngine?.snapshot(),
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.0D/);
+  assert.match(title.build, /1\.0E/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -249,11 +251,29 @@ try {
   assert.equal(title.pauseButtons, 4);
   assert.equal(title.soundCaptions, true);
   assert.match(title.onlineButton, /PRIVATE ROOM/);
+  assert.match(title.demoButton, /WATCH DEMO/);
+  assert.equal(title.attractEnabled, true);
+  assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.0d-rollback-online');
+  assert.equal(title.engineVersion, '1.0e-demo-edition');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
+
+  const attractOption = await evaluate(client, `(() => {
+    const toggle = document.querySelector('#attractModeToggle');
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+    const disabled = window.__finalBlowEngine.snapshot();
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+    return { disabled, enabled: window.__finalBlowEngine.snapshot(), stored: localStorage.getItem('final-blow-attract-mode') };
+  })()`);
+  assert.equal(attractOption.disabled.attractEnabled, false);
+  assert.equal(attractOption.disabled.demo.idleScheduled, false);
+  assert.equal(attractOption.enabled.attractEnabled, true);
+  assert.equal(attractOption.enabled.demo.idleScheduled, true);
+  assert.equal(attractOption.stored, '1');
 
   const kitUi = await evaluate(client, `(async () => {
     const paths = [
@@ -1378,6 +1398,60 @@ try {
     await writeFile(process.env.FINAL_BLOW_VICTORY_SCREENSHOT, Buffer.from(capture.data, "base64"));
   }
 
+  const demoOpening = await evaluate(client, `window.__finalBlowQa.demo(237)`);
+  assert.equal(demoOpening.mode, 'demo');
+  assert.equal(demoOpening.screen, 'fight');
+  assert.equal(demoOpening.demo.active, true);
+  assert.equal(demoOpening.demo.difficulty, 'pro');
+  assert.notEqual(demoOpening.fighters[0].id, demoOpening.fighters[1].id);
+  assert.equal(demoOpening.fighters[0].ai.difficulty, 'pro');
+  assert.equal(demoOpening.fighters[1].ai.difficulty, 'pro');
+  const demoThinking = await evaluate(client, `window.__finalBlowQa.step(4.5); window.__finalBlowEngine.snapshot()`);
+  assert.ok(demoThinking.fighters[0].ai.decisions > 0, 'CPU 1 should make delayed visual decisions');
+  assert.ok(demoThinking.fighters[1].ai.decisions > 0, 'CPU 2 should make delayed visual decisions');
+  assert.equal(demoThinking.demo.superShown, true, 'every exhibition should deliberately showcase a super');
+  assert.equal(await evaluate(client, `document.querySelector('#demoHud').hidden`), false);
+
+  const demoFinishReady = await evaluate(client, `window.__finalBlowQa.demoKnockout(0)`);
+  assert.equal(demoFinishReady.phase, 'finish');
+  assert.equal(demoFinishReady.fighters[1].health, 0);
+  const demoFinalBlow = await evaluate(client, `window.__finalBlowQa.step(0.05); ({ snapshot: window.__finalBlowEngine.snapshot(), status: window.__finalBlowQa.status() })`);
+  assert.equal(demoFinalBlow.snapshot.phase, 'roundover');
+  assert.ok(demoFinalBlow.status.elapsed > 0, 'the winning CPU should trigger its character Final Blow');
+
+  const demoResult = await evaluate(client, `window.__finalBlowQa.demoResult(0)`);
+  assert.equal(demoResult.screen, 'result');
+  assert.equal(demoResult.demo.resultScheduled, true);
+  assert.equal(await evaluate(client, `document.querySelector('#demoResultStatus').hidden`), false);
+  await delay(5_150);
+  const automaticDemoCycle = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(automaticDemoCycle.screen, 'fight');
+  assert.equal(automaticDemoCycle.demo.cycle.cycle, 2);
+  assert.equal(automaticDemoCycle.demo.matches, 2);
+  assert.equal(automaticDemoCycle.demo.resultScheduled, false);
+  await evaluate(client, `window.__finalBlowQa.demo(333)`);
+  const demoMarathon = await evaluate(client, `window.__finalBlowQa.demoCycles(64)`);
+  assert.equal(demoMarathon.cycles.length, 64);
+  assert.equal(demoMarathon.demo.matches, 64);
+  assert.equal(new Set(demoMarathon.cycles.slice(0, 28).map(({ picks }) => [...picks].sort().join('::'))).size, 28);
+  assert.ok(demoMarathon.cycles.every(({ picks }) => picks[0] !== picks[1]));
+  assert.deepEqual(demoMarathon.resources, {
+    fighters: 2,
+    particles: 0,
+    effects: 0,
+    traps: 0,
+    projectiles: 0,
+    resultTimers: 0,
+    introTimers: 1,
+  });
+  await dispatchKey(client, "keyDown", "KeyQ", "q", 81);
+  await dispatchKey(client, "keyUp", "KeyQ", "q", 81);
+  const demoExit = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(demoExit.screen, 'title');
+  assert.equal(demoExit.mode, 'arcade');
+  assert.equal(demoExit.demo.active, false);
+  assert.equal(await evaluate(client, `document.body.classList.contains('demo-active')`), false);
+
   const offlineCache = await evaluate(client, `(async () => {
     await navigator.serviceWorker.ready;
     if (!navigator.serviceWorker.controller) {
@@ -1396,15 +1470,17 @@ try {
       entries: requests.length,
       hasGame: Boolean(cache && await cache.match('./game.js')),
       hasRollback: Boolean(cache && await cache.match('./engine/rollback.mjs')),
+      hasDemo: Boolean(cache && await cache.match('./engine/demo.mjs')),
       hasMusic: Boolean(cache && await cache.match('./assets/audio/subway-after-midnight.mp3')),
       ready: window.__finalBlowEngine.snapshot().offlineReady,
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.0d/);
-  assert.ok(offlineCache.entries >= 57);
+  assert.match(offlineCache.name, /final-blow-offline-1\.0e/);
+  assert.ok(offlineCache.entries >= 58);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasRollback, true);
+  assert.equal(offlineCache.hasDemo, true);
   assert.equal(offlineCache.hasMusic, true);
   assert.equal(offlineCache.ready, true);
 
@@ -1423,8 +1499,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.0D/);
-  assert.equal(offlineBoot.version, '1.0d-rollback-online');
+  assert.match(offlineBoot.build, /1\.0E/);
+  assert.equal(offlineBoot.version, '1.0e-demo-edition');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -1458,6 +1534,40 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
+
+  const mobileDemo = await evaluate(client, `(() => {
+    const snapshot = window.__finalBlowQa.demo(845);
+    const hud = document.querySelector('#demoHud').getBoundingClientRect();
+    const touch = document.querySelector('#touchControls');
+    const pause = document.querySelector('#touchPauseButton');
+    const result = {
+      snapshot,
+      hud: { left: hud.left, top: hud.top, right: hud.right, bottom: hud.bottom },
+      touchDisplay: getComputedStyle(touch).display,
+      pauseDisplay: getComputedStyle(pause).display,
+      overflow: document.documentElement.scrollWidth > innerWidth,
+    };
+    document.querySelector('#game').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+    result.exit = window.__finalBlowEngine.snapshot();
+    const demoButton = document.querySelector('#demoButton').getBoundingClientRect();
+    const controlsButton = document.querySelector('#controlsButton').getBoundingClientRect();
+    result.titleButtons = {
+      demo: { left: demoButton.left, right: demoButton.right, bottom: demoButton.bottom },
+      controls: { left: controlsButton.left, right: controlsButton.right, bottom: controlsButton.bottom },
+    };
+    return result;
+  })()`);
+  assert.equal(mobileDemo.snapshot.demo.active, true);
+  assert.equal(mobileDemo.snapshot.mode, 'demo');
+  assert.notEqual(mobileDemo.snapshot.fighters[0].id, mobileDemo.snapshot.fighters[1].id);
+  assert.equal(mobileDemo.touchDisplay, 'none');
+  assert.equal(mobileDemo.pauseDisplay, 'none');
+  assert.equal(mobileDemo.overflow, false);
+  assert.equal(mobileDemo.exit.screen, 'title');
+  assert.equal(mobileDemo.exit.demo.active, false);
+  assert.ok(mobileDemo.titleButtons.demo.left >= 0 && mobileDemo.titleButtons.demo.right <= 844 && mobileDemo.titleButtons.demo.bottom <= 390);
+  assert.ok(mobileDemo.titleButtons.controls.left >= 0 && mobileDemo.titleButtons.controls.right <= 844 && mobileDemo.titleButtons.controls.bottom <= 390);
+  assert.ok(mobileDemo.hud.left >= 0 && mobileDemo.hud.right <= 844 && mobileDemo.hud.bottom <= 390);
 
   const mobilePolish = await evaluate(client, `(() => {
     const snapshot = window.__finalBlowQa.training('deathblow', 'jez', 'guard');
@@ -1509,7 +1619,7 @@ try {
   })()`);
   assert.equal(touchAttack.fighters[0].attack, "light");
   assert.equal(touchAttack.fighters[0].state, "attack");
-  await evaluate(client, `window.__finalBlowQa.step(0.5)`);
+  await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
   await evaluate(client, `(() => {
     const button = document.querySelector('[data-touch="down"]');
     button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
@@ -1668,6 +1778,13 @@ try {
       },
     },
     finisher: { elapsed: finisher.elapsed, impacts: finisher.impacts },
+    demo: {
+      firstMatchup: demoOpening.demo.cycle.picks,
+      cycles: demoMarathon.cycles.length,
+      bothBrainsActive: [demoThinking.fighters[0].ai.decisions, demoThinking.fighters[1].ai.decisions],
+      finalBlowElapsed: demoFinalBlow.status.elapsed,
+      mobileHud: mobileDemo.hud,
+    },
     mobile: {
       ...landscape,
       touchAttackFrame: touchAttack.fighters[0].attackFrame,

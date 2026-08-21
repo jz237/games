@@ -104,6 +104,12 @@ import {
   recommendedInputDelay,
   serializeRollbackState,
 } from "./engine/rollback.mjs";
+import {
+  DEMO_AI_DIFFICULTY,
+  DEMO_IDLE_DELAY_MS,
+  DEMO_RESULT_HOLD_MS,
+  createDemoDirector,
+} from "./engine/demo.mjs";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -578,7 +584,7 @@ let padMap = normalizePadMap(storedJson("final-blow-pad-map", DEFAULT_PAD_MAP));
 let pendingKeyBinding = null;
 
 const simulationClock = new FixedStepClock();
-const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "1.0d-rollback-online");
+const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "1.0e-demo-edition");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
 const state = {
@@ -631,6 +637,7 @@ const state = {
   visualQuality: normalizeVisualQuality(localStorage.getItem("final-blow-visual-quality") || "auto"),
   performance: null,
   soundCaptions: localStorage.getItem("final-blow-sound-captions") !== "0",
+  attractEnabled: localStorage.getItem("final-blow-attract-mode") !== "0",
   offlineReady: false,
   accessibility: {
     reducedMotion: localStorage.getItem("final-blow-reduced-motion") === "1",
@@ -691,6 +698,20 @@ const onlineSession = {
   lastPersistedFrame: -1,
 };
 
+const demoSession = {
+  active: false,
+  attract: false,
+  qa: false,
+  director: null,
+  cycle: null,
+  matches: 0,
+  superSide: 0,
+  superShown: false,
+  resultTimer: 0,
+  idleTimer: 0,
+};
+let fightAnnouncementTimer = 0;
+
 function onlineSnapshot() {
   const rollback = onlineSession.rollback?.metrics() || null;
   const confirmedChecksumFrame = rollback
@@ -718,6 +739,156 @@ function onlineSnapshot() {
     confirmedChecksum: confirmedChecksumFrame > 0 ? onlineSession.rollback.checksumAt(confirmedChecksumFrame) : null,
     lastChecksumSentFrame: onlineSession.lastChecksumSentFrame,
   };
+}
+
+function demoSnapshot() {
+  return {
+    active: demoSession.active,
+    attract: demoSession.attract,
+    qa: demoSession.qa,
+    cycle: demoSession.cycle ? { ...demoSession.cycle, picks: [...demoSession.cycle.picks] } : null,
+    matches: demoSession.matches,
+    superSide: demoSession.superSide,
+    superShown: demoSession.superShown,
+    difficulty: DEMO_AI_DIFFICULTY,
+    resultScheduled: Boolean(demoSession.resultTimer),
+    idleScheduled: Boolean(demoSession.idleTimer),
+    director: demoSession.director?.snapshot() || null,
+  };
+}
+
+function cancelFightAnnouncement() {
+  window.clearTimeout(fightAnnouncementTimer);
+  fightAnnouncementTimer = 0;
+}
+
+function scheduleFightAnnouncement(callback, delay) {
+  cancelFightAnnouncement();
+  fightAnnouncementTimer = window.setTimeout(() => {
+    fightAnnouncementTimer = 0;
+    callback();
+  }, delay);
+}
+
+function clearDemoResultTimer() {
+  window.clearTimeout(demoSession.resultTimer);
+  demoSession.resultTimer = 0;
+}
+
+function clearIdleDemoTimer() {
+  window.clearTimeout(demoSession.idleTimer);
+  demoSession.idleTimer = 0;
+}
+
+function updateDemoUi() {
+  const activeFight = demoSession.active && state.mode === "demo" && state.screen === "fight";
+  const panel = $("#demoHud");
+  panel.hidden = !activeFight;
+  if (!demoSession.cycle) return;
+  const [firstId, secondId] = demoSession.cycle.picks;
+  const first = roster.find(({ id }) => id === firstId);
+  const second = roster.find(({ id }) => id === secondId);
+  $("#demoHudMatchup").textContent = `${first?.name || firstId} VS ${second?.name || secondId}`;
+  $("#demoHudCycle").textContent = `CYCLE ${demoSession.cycle.cycle} · ${stages[demoSession.cycle.stage].name}`;
+}
+
+function endDemoSession() {
+  clearDemoResultTimer();
+  cancelFightAnnouncement();
+  demoSession.active = false;
+  demoSession.attract = false;
+  demoSession.qa = false;
+  demoSession.director = null;
+  demoSession.cycle = null;
+  demoSession.matches = 0;
+  demoSession.superSide = 0;
+  demoSession.superShown = false;
+  document.body.classList.remove("demo-active");
+  $("#demoHud").hidden = true;
+  $("#demoResultStatus").hidden = true;
+  if (state.mode === "demo") state.mode = "arcade";
+  if (state.musicChoice !== "auto") setTrack(Number(state.musicChoice), false);
+}
+
+function exitDemo() {
+  if (!demoSession.active) return false;
+  endDemoSession();
+  showScreen("title");
+  return true;
+}
+
+function startNextDemoMatch() {
+  if (!demoSession.active || !demoSession.director) return false;
+  clearDemoResultTimer();
+  cancelFightAnnouncement();
+  const cycle = demoSession.director.next();
+  const picks = cycle.picks.map((id) => roster.findIndex((fighter) => fighter.id === id));
+  if (picks.some((index) => index < 0) || picks[0] === picks[1]) throw new Error("Demo director produced an invalid matchup.");
+  demoSession.cycle = cycle;
+  demoSession.matches += 1;
+  demoSession.superSide = (cycle.cycle - 1) % 2;
+  demoSession.superShown = false;
+  state.mode = "demo";
+  state.arcadeRun = null;
+  state.picks = picks;
+  state.locks = [true, true];
+  state.stage = cycle.stage;
+  $("#demoResultStatus").hidden = true;
+  startMatch(true);
+  state.fighters[demoSession.superSide].meter = GRIT_RULES.maximum;
+  updateHud();
+  state.qaManualMode = demoSession.qa;
+  setTrack(cycle.track, true);
+  updateDemoUi();
+  announce(`WATCH DEMO · CYCLE ${cycle.cycle}`, `${state.fighters[0].def.name} VS ${state.fighters[1].def.name}`, 1.2);
+  return true;
+}
+
+function startDemo({ attract = false, qa = false, seed = null } = {}) {
+  if (onlineSession.role) disconnectOnline(true);
+  if (demoSession.active) endDemoSession();
+  clearIdleDemoTimer();
+  if (!attract && !qa) {
+    enterImmersiveMode();
+    unlockAudio();
+  }
+  demoSession.active = true;
+  demoSession.attract = Boolean(attract);
+  demoSession.qa = Boolean(qa);
+  demoSession.director = createDemoDirector({
+    fighterIds: roster.map(({ id }) => id),
+    stageIds: Object.keys(stages),
+    trackCount: musicTracks.length,
+    seed: seed ?? hashSeed(Date.now(), performance.now(), state.rng.nextUint32()),
+  });
+  document.body.classList.add("demo-active");
+  startNextDemoMatch();
+  return demoSnapshot();
+}
+
+function scheduleNextDemoMatch() {
+  if (!demoSession.active) return;
+  clearDemoResultTimer();
+  $("#demoResultStatus").hidden = false;
+  demoSession.resultTimer = window.setTimeout(() => {
+    demoSession.resultTimer = 0;
+    startNextDemoMatch();
+  }, DEMO_RESULT_HOLD_MS);
+}
+
+function scheduleIdleDemo() {
+  clearIdleDemoTimer();
+  if (!state.attractEnabled || demoSession.active || state.screen !== "title" || document.hidden) return;
+  demoSession.idleTimer = window.setTimeout(() => {
+    demoSession.idleTimer = 0;
+    if (state.attractEnabled && state.screen === "title" && !document.hidden && !$("#controlsDialog").open) startDemo({ attract: true });
+  }, DEMO_IDLE_DELAY_MS);
+}
+
+function noteUserActivity() {
+  if (demoSession.active) return exitDemo();
+  if (state.screen === "title") scheduleIdleDemo();
+  return false;
 }
 
 function setOnlineStatus(kind, detail) {
@@ -1532,7 +1703,7 @@ function makeFighter(index, side, overrideDef = null) {
     cinematicScale: 1,
     down: false,
     aiClock: 0,
-    aiBrain: createAiBrain(state.aiDifficulty),
+    aiBrain: createAiBrain(state.mode === "demo" ? DEMO_AI_DIFFICULTY : state.aiDifficulty),
     combatState: FIGHTER_STATES.IDLE,
     previousCombatState: FIGHTER_STATES.IDLE,
     stateFrame: 0,
@@ -1791,6 +1962,7 @@ function makeMatchFighters() {
 }
 
 function showScreen(name) {
+  if (demoSession.active && !["fight", "result"].includes(name)) endDemoSession();
   const keepsOnlineLink = state.mode === "online" && ["online", "fight", "result"].includes(name);
   if (onlineSession.role && !keepsOnlineLink) disconnectOnline(true);
   state.screen = name;
@@ -1806,12 +1978,16 @@ function showScreen(name) {
   const trainingVisible = playing && state.mode === "training";
   $("#trainingPanel").hidden = !trainingVisible;
   $("#gameFrame").classList.toggle("training-active", trainingVisible);
-  $("#touchControls").classList.toggle("playing", playing);
-  $("#touchPauseButton").classList.toggle("playing", playing);
+  const playerControlled = playing && state.mode !== "demo";
+  $("#touchControls").classList.toggle("playing", playerControlled);
+  $("#touchPauseButton").classList.toggle("playing", playerControlled);
   $("#touchPauseButton").hidden = playing && state.mode === "online";
   if (!playing) $("#announcer").classList.add("hidden");
   updateOnlineHud();
+  updateDemoUi();
   syncMusic();
+  if (name === "title") scheduleIdleDemo();
+  else clearIdleDemoTimer();
 }
 
 function startSelect(mode) {
@@ -1888,8 +2064,9 @@ function updateStageUI() {
 }
 
 function startMatch(resetSet = true) {
-  unlockAudio();
-  if (state.musicChoice === "auto") advanceTrack();
+  cancelFightAnnouncement();
+  if (!(state.mode === "demo" && demoSession.attract)) unlockAudio();
+  if (state.musicChoice === "auto" && state.mode !== "demo") advanceTrack();
   resetMusicDuck();
   if (resetSet) {
     state.rounds = [0, 0];
@@ -1934,7 +2111,7 @@ function startMatch(resetSet = true) {
     : arcadeMatch?.kind === "rival" ? `RIVAL BOUT · ${state.fighters[1].def.name}`
       : stages[state.stage].name;
   announce(`ROUND ${state.round}`, introLabel, 1.2);
-  setTimeout(() => {
+  scheduleFightAnnouncement(() => {
     if (state.screen === "fight" && state.phase === "intro") announce("FIGHT!", "NO MERCY ON THESE STREETS", 0.8);
   }, 1150);
   canvas.focus();
@@ -1942,6 +2119,7 @@ function startMatch(resetSet = true) {
 
 function startOnlineMatch(config) {
   if (!validOnlineMatchConfig(config)) return false;
+  cancelFightAnnouncement();
   unlockAudio();
   if (state.musicChoice === "auto") advanceTrack();
   resetMusicDuck();
@@ -1998,7 +2176,7 @@ function startOnlineMatch(config) {
   showScreen("fight");
   updateOnlineHud();
   announce("ONLINE ROUND 1", `${roster[state.picks[0]].name} VS ${roster[state.picks[1]].name} · ${config.inputDelay}F DELAY`, 1.35);
-  setTimeout(() => {
+  scheduleFightAnnouncement(() => {
     if (state.mode === "online" && state.screen === "fight" && state.phase === "intro") announce("FIGHT!", "ROLLBACK SYNC LOCKED", 0.8);
   }, 1150);
   persistOnlineResume(true);
@@ -2007,6 +2185,7 @@ function startOnlineMatch(config) {
 }
 
 function resetRound() {
+  cancelFightAnnouncement();
   resetMusicDuck();
   const carriedGrit = state.fighters.map((fighter) => fighter.meter);
   state.round += 1;
@@ -2034,7 +2213,7 @@ function resetRound() {
   commandHistory[1].length = 0;
   updateHud();
   announce(`ROUND ${state.round}`, "SETTLE IT", 1.15);
-  setTimeout(() => {
+  scheduleFightAnnouncement(() => {
     if (state.screen === "fight" && state.phase === "intro") announce("FIGHT!", "", 0.75);
   }, 1050);
 }
@@ -2218,7 +2397,8 @@ function showResult(winner) {
   const def = state.fighters[winner].def;
   const kit = getFighterKit(def.kitId || def.id);
   const arcadeDefeat = state.mode === "arcade" && winner === 1 && state.arcadeRun;
-  $("#resultEyebrow").textContent = arcadeDefeat ? "ARCADE RUN INTERRUPTED" : "MATCH COMPLETE";
+  $("#resultEyebrow").textContent = state.mode === "demo" ? `WATCH DEMO · CYCLE ${demoSession.cycle?.cycle || 1}`
+    : arcadeDefeat ? "ARCADE RUN INTERRUPTED" : "MATCH COMPLETE";
   $("#resultTitle").textContent = `${def.name} WINS`;
   $("#resultFinisher").textContent = arcadeDefeat
     ? `${currentArcadeMatch(state.arcadeRun)?.label || "BOUT"} · CONTINUE?`
@@ -2232,6 +2412,8 @@ function showResult(winner) {
   $("#rematchButton").textContent = arcadeDefeat ? "CONTINUE" : "REMATCH";
   $("#reselectButton").textContent = arcadeDefeat ? "ABANDON RUN" : state.mode === "online" ? "LEAVE ROOM" : "SELECT FIGHTERS";
   showScreen("result");
+  if (state.mode === "demo") scheduleNextDemoMatch();
+  else $("#demoResultStatus").hidden = true;
   if (state.mode === "online") {
     onlineSession.rematchVotes.clear();
     updateOnlineRematchUi();
@@ -2296,6 +2478,9 @@ function resolveMatchResult(winner) {
 function updateHud() {
   if (rollbackResimulating) return;
   if (!state.fighters.length) return;
+  const sideTags = $$(".side-tag");
+  if (sideTags[0]) sideTags[0].textContent = state.mode === "demo" ? "CPU 1" : "P1";
+  if (sideTags[1]) sideTags[1].textContent = state.mode === "demo" ? "CPU 2" : "P2";
   state.fighters.forEach((fighter, side) => {
     const prefix = side === 0 ? "p1" : "p2";
     $(`#${prefix}Name`).textContent = fighter.def.name;
@@ -2310,7 +2495,8 @@ function updateHud() {
     $(`#${prefix}Rounds`).innerHTML = [0, 1].map((round) => `<i class="${state.rounds[side] > round ? "won" : ""}"></i>`).join("");
   });
   $("#timer").textContent = state.mode === "training" ? "∞" : String(Math.ceil(state.timer)).padStart(2, "0");
-  $("#roundLabel").textContent = state.mode === "training" ? "TRAINING" : `ROUND ${state.round}`;
+  $("#roundLabel").textContent = state.mode === "training" ? "TRAINING"
+    : state.mode === "demo" ? `DEMO · ROUND ${state.round}` : `ROUND ${state.round}`;
   const finalButton = $(".touch-final");
   const superReady = state.phase === "fight" && state.fighters[0]?.meter >= GRIT_RULES.superCost;
   finalButton.classList.toggle("super-ready", superReady);
@@ -2385,6 +2571,7 @@ function syncNewOptionsUi() {
   $("#touchHapticsToggle").checked = state.touchSettings.haptics;
   $("#soundCaptionsToggle").checked = state.soundCaptions;
   $("#visualQualitySelect").value = state.visualQuality;
+  $("#attractModeToggle").checked = state.attractEnabled;
 }
 
 function getPad(index) {
@@ -2453,9 +2640,24 @@ function readInput(side) {
 function aiInput(fighter, opponent, dt) {
   fighter.aiClock -= dt;
   const input = { left: false, right: false, down: false, guard: false, jump: false, light: false, heavy: false, special: false, enhanced: false, throw: false, super: false, final: false };
-  if (state.phase === "finish" && state.finishWinner === 1) {
+  const cpuFinisher = state.mode === "demo" || fighter.side === 1;
+  if (state.phase === "finish" && state.finishWinner === fighter.side && cpuFinisher) {
     input.final = fighter.aiClock <= 0;
     if (input.final) fighter.aiClock = 2;
+    return input;
+  }
+  if (state.mode === "demo" && state.phase === "fight" && !demoSession.superShown) {
+    const distance = Math.abs(opponent.x - fighter.x);
+    const towardRight = opponent.x > fighter.x;
+    if (distance > 245) {
+      input.right = towardRight;
+      input.left = !towardRight;
+    } else if (fighter.side === demoSession.superSide) {
+      input.super = true;
+      demoSession.superShown = true;
+    } else {
+      input.guard = true;
+    }
     return input;
   }
   return stepAiBrain(fighter.aiBrain, {
@@ -3717,14 +3919,15 @@ function simulateOfflineGameTick(dt) {
     state.hitstop = Math.max(0, state.hitstop - dt);
     return;
   }
-  let input0 = readQaInput(0) || readInput(0);
+  let input0 = readQaInput(0)
+    || (state.mode === "demo" ? aiInput(state.fighters[0], state.fighters[1], dt) : readInput(0));
   const trainingDummy = state.mode === "training"
     ? trainingDummyInput(state.training, state.simulationTick, {
       attackLevel: state.fighters[0]?.attacking?.level,
     })
     : null;
   let input1 = readQaInput(1)
-    || (state.mode === "arcade" || (state.mode === "training" && trainingDummy === null)
+    || (state.mode === "arcade" || state.mode === "demo" || (state.mode === "training" && trainingDummy === null)
       ? aiInput(state.fighters[1], state.fighters[0], dt)
       : trainingDummy || readInput(1));
   simulatePreparedGameTick(dt, input0, input1);
@@ -4877,6 +5080,7 @@ function sound(kind) {
   if (rollbackResimulating) return;
   showSoundCaption(kind);
   if (!$("#soundToggle").checked) return;
+  if (demoSession.attract && !state.audioUnlocked) return;
   unlockAudio();
   const pool = sfxPools[kind];
   if (!pool?.length) {
@@ -5004,7 +5208,7 @@ window.addEventListener("offline", updateOfflineBadge);
 
 function setPaused(paused) {
   if (state.screen !== "fight") return false;
-  if (state.mode === "online") {
+  if (state.mode === "online" || state.mode === "demo") {
     state.paused = false;
     $("#pausePanel").hidden = true;
     return false;
@@ -5053,6 +5257,11 @@ function titleKeyboard(event) {
 }
 
 window.addEventListener("keydown", (event) => {
+  if (demoSession.active) {
+    event.preventDefault();
+    noteUserActivity();
+    return;
+  }
   if (pendingKeyBinding) {
     event.preventDefault();
     if (event.code === "Escape") {
@@ -5076,6 +5285,7 @@ window.addEventListener("keydown", (event) => {
 });
 window.addEventListener("keyup", (event) => keys.delete(event.code));
 window.addEventListener("blur", () => { keys.clear(); pressed.clear(); });
+document.addEventListener("pointerdown", () => noteUserActivity(), true);
 
 window.addEventListener("gamepadconnected", (event) => {
   $("#padStatus").classList.add("connected");
@@ -5091,8 +5301,19 @@ window.addEventListener("gamepaddisconnected", () => {
 
 let menuPadWasPressed = false;
 let menuPadPauseWasPressed = false;
+let menuPadAnyWasPressed = false;
 function menuPadLoop() {
   const pad = getPad(0);
+  const anyInput = Boolean(pad && (pad.buttons.some((button) => button.pressed || button.value > 0.55)
+    || pad.axes.some((axis) => Math.abs(axis) > 0.55)));
+  if (demoSession.active && anyInput && !menuPadAnyWasPressed) {
+    menuPadAnyWasPressed = true;
+    exitDemo();
+    requestAnimationFrame(menuPadLoop);
+    return;
+  }
+  if (!demoSession.active && anyInput && !menuPadAnyWasPressed) noteUserActivity();
+  menuPadAnyWasPressed = anyInput;
   const pause = buttonValue(pad, 9);
   if (state.screen === "fight" && pause && !menuPadPauseWasPressed) setPaused(!state.paused);
   menuPadPauseWasPressed = pause;
@@ -5116,6 +5337,7 @@ function menuPadLoop() {
 
 $$('[data-mode]').forEach((button) => button.addEventListener("click", () => startSelect(button.dataset.mode)));
 $("#onlineButton").addEventListener("click", openOnlineLobby);
+$("#demoButton").addEventListener("click", () => startDemo());
 $("#onlineCreateButton").addEventListener("click", createOnlineRoom);
 $("#onlineJoinButton").addEventListener("click", joinOnlineRoom);
 $("#onlineInviteInput").addEventListener("keydown", (event) => {
@@ -5210,6 +5432,13 @@ $("#soundCaptionsToggle").addEventListener("change", (event) => {
   localStorage.setItem("final-blow-sound-captions", event.target.checked ? "1" : "0");
   if (!state.soundCaptions) $("#soundCaption").hidden = true;
 });
+$("#attractModeToggle").addEventListener("change", (event) => {
+  state.attractEnabled = event.target.checked;
+  localStorage.setItem("final-blow-attract-mode", state.attractEnabled ? "1" : "0");
+  if (state.attractEnabled) scheduleIdleDemo();
+  else clearIdleDemoTimer();
+});
+$("#controlsDialog").addEventListener("close", scheduleIdleDemo);
 $("#touchHandednessSelect").addEventListener("change", (event) => {
   state.touchSettings.handedness = event.target.value === "left" ? "left" : "standard";
   localStorage.setItem("final-blow-touch-handedness", state.touchSettings.handedness);
@@ -5277,6 +5506,8 @@ $("#soundToggle").addEventListener("change", () => {
 document.addEventListener("visibilitychange", () => {
   if (state.mode === "online" && state.screen === "fight") setOnlineLocalSuspended(document.hidden || document.body.classList.contains("orientation-blocked"));
   else if (document.hidden && state.screen === "fight" && !state.paused) setPaused(true);
+  if (document.hidden) clearIdleDemoTimer();
+  else if (state.screen === "title") scheduleIdleDemo();
   syncMusic();
 });
 $("#fighterContinue").addEventListener("click", showStageSelect);
@@ -5339,7 +5570,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.0d-rollback-online",
+  version: "1.0e-demo-edition",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -5357,11 +5588,13 @@ window.__finalBlowEngine = {
       visualQuality: state.visualQuality,
       performance: { ...state.performance },
       soundCaptions: state.soundCaptions,
+      attractEnabled: state.attractEnabled,
       offlineReady: state.offlineReady,
       accessibility: { ...state.accessibility },
       touchSettings: { ...state.touchSettings },
       training: trainingSnapshot(state.training),
       online: onlineSnapshot(),
+      demo: demoSnapshot(),
       balance: balanceAudit,
       arcade: arcadeRunSnapshot(state.arcadeRun),
       seed: state.matchSeed,
@@ -5537,6 +5770,52 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       setAiDifficulty(difficulty);
       state.mode = "arcade";
       return window.__finalBlowEngine.snapshot();
+    },
+    demo(seed = 237) {
+      startDemo({ qa: true, seed });
+      return window.__finalBlowEngine.snapshot();
+    },
+    demoKnockout(winner = 0) {
+      if (!demoSession.active || state.mode !== "demo" || state.screen !== "fight") throw new Error("Start a QA demo first");
+      const side = winner === 1 ? 1 : 0;
+      state.fighters[1 - side].health = 0;
+      state.lastImpactSide = side;
+      state.hitstop = 0;
+      checkKnockout();
+      return window.__finalBlowEngine.snapshot();
+    },
+    demoResult(winner = 0) {
+      if (!demoSession.active || state.mode !== "demo") throw new Error("Start a QA demo first");
+      const side = winner === 1 ? 1 : 0;
+      state.rounds[side] = 2;
+      state.finisherType = 0;
+      showResult(side);
+      return window.__finalBlowEngine.snapshot();
+    },
+    demoCycles(count = 1) {
+      if (!demoSession.active || state.mode !== "demo") throw new Error("Start a QA demo first");
+      const total = Math.max(1, Math.min(500, Math.floor(count)));
+      const cycles = [{ ...demoSession.cycle, picks: [...demoSession.cycle.picks] }];
+      while (cycles.length < total) {
+        startNextDemoMatch();
+        cycles.push({ ...demoSession.cycle, picks: [...demoSession.cycle.picks] });
+      }
+      return {
+        cycles,
+        demo: demoSnapshot(),
+        resources: {
+          fighters: state.fighters.length,
+          particles: state.particles.length,
+          effects: state.effects.length,
+          traps: state.traps.length,
+          projectiles: state.projectiles.length,
+          resultTimers: demoSession.resultTimer ? 1 : 0,
+          introTimers: fightAnnouncementTimer ? 1 : 0,
+        },
+      };
+    },
+    exitDemo() {
+      return exitDemo();
     },
     arcade(playerId = "deathblow", difficulty = DEFAULT_AI_DIFFICULTY, seed = 237) {
       const playerIndex = roster.findIndex(({ id }) => id === playerId);

@@ -19,7 +19,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">ROLLBACK ONLINE <b>1.0D</b></div>
+      <div class="build-tag">DEMO EDITION <b>1.0E</b></div>
       <div id="offlineBadge" class="offline-badge" aria-live="polite">CACHE CHECK</div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
@@ -43,6 +43,9 @@
       </div>
       <div id="onlineHud" class="online-hud" aria-live="polite" hidden>
         <b id="onlineHudState">ROLLBACK SYNC</b><span id="onlineHudPing">— MS</span><span id="onlineHudDelay">2F DELAY</span><span id="onlineHudRollbacks">0 RB</span>
+      </div>
+      <div id="demoHud" class="demo-hud" aria-live="polite" hidden>
+        <b>WATCH DEMO</b><span id="demoHudMatchup">DEATHBLOW VS JEZ</span><em id="demoHudCycle">CYCLE 1</em><small>PRESS ANY BUTTON TO PLAY</small>
       </div>
       <div id="onlineInterruption" class="online-interruption" aria-live="assertive" hidden>
         <strong id="onlineInterruptionTitle">RECONNECTING</strong><span id="onlineInterruptionDetail">Holding the match while the encrypted link returns…</span>
@@ -100,6 +103,7 @@
           <button class="arcade-button" data-mode="versus">2 PLAYER · LOCAL VERSUS</button>
           <button class="arcade-button online-button" id="onlineButton">ONLINE · PRIVATE ROOM</button>
           <button class="arcade-button" data-mode="training">TRAINING LAB</button>
+          <button class="arcade-button demo-button" id="demoButton">WATCH DEMO · CPU VS CPU</button>
           <button class="arcade-button ghost" id="controlsButton">CONTROLS & OPTIONS</button>
         </div>
         <div class="start-hint">PRESS <kbd>ENTER</kbd> OR <span class="xbox-a">A</span> TO START</div>
@@ -238,6 +242,7 @@
           <div id="resultFinisher">FAULTLINE EXECUTION</div>
           <blockquote id="resultQuote">THE STREET MOVED FIRST.</blockquote>
           <p id="onlineRematchStatus" class="online-rematch-status" hidden>REMATCH VOTES · 0 / 2</p>
+          <p id="demoResultStatus" class="demo-result-status" hidden>NEXT RANDOM FIGHT IN 5 SECONDS · PRESS ANY BUTTON TO PLAY</p>
           <div class="menu-stack horizontal">
             <button id="rematchButton" class="arcade-button primary menu-focus">REMATCH</button>
             <button id="reselectButton" class="arcade-button">SELECT FIGHTERS</button>
@@ -311,6 +316,7 @@
           <label><input id="reducedMotionToggle" type="checkbox"><span>REDUCED MOTION</span></label>
           <label><input id="highContrastToggle" type="checkbox"><span>HIGH CONTRAST HUD</span></label>
           <label><input id="soundCaptionsToggle" type="checkbox" checked><span>VISUAL SOUND CUES</span></label>
+          <label><input id="attractModeToggle" type="checkbox" checked><span>IDLE WATCH DEMO · 45 SECONDS</span></label>
           <div class="volume-control">
             <label for="musicVolume"><span>MUSIC VOLUME</span><output id="musicVolumeValue">100%</output></label>
             <input id="musicVolume" type="range" min="0" max="100" step="1" value="100">

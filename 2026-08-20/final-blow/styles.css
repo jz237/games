@@ -348,6 +348,7 @@ canvas {
 .arcade-button.compact { min-height: 34px; padding: 8px 17px; font-size: 11px; }
 .arcade-button:disabled { cursor: not-allowed; filter: grayscale(1); opacity: .4; transform: none; }
 .online-button { border-color: #2d8595; background: linear-gradient(180deg, #154d5b, #071d27); color: #b8f6ff; }
+.demo-button { border-color: #a86c19; background: linear-gradient(180deg, #624014, #201105); color: #ffe4a3; }
 
 .online-screen {
   align-items: stretch;
@@ -886,6 +887,31 @@ kbd,
 .online-hud.error { border-color: var(--red); }
 .online-hud.error b { color: var(--red); }
 
+.demo-hud {
+  position: absolute;
+  z-index: 9;
+  top: 13.2%;
+  left: 50%;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 9px;
+  border: 1px solid rgba(255,177,27,.68);
+  background: rgba(12,7,2,.86);
+  color: #cad2d7;
+  font-size: clamp(6px, .58vw, 9px);
+  font-weight: 900;
+  letter-spacing: .07em;
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.demo-hud[hidden] { display: none !important; }
+.demo-hud b { color: var(--amber); }
+.demo-hud em { color: var(--cyan); font-style: normal; }
+.demo-hud small { color: #fff; font-size: inherit; animation: demo-prompt .7s ease-in-out infinite alternate; }
+@keyframes demo-prompt { to { opacity: .5; } }
+
 .online-interruption {
   position: absolute;
   z-index: 18;
@@ -901,6 +927,11 @@ kbd,
 .online-interruption span { color: #d2e3e8; font-size: clamp(8px, .85vw, 13px); font-weight: 900; letter-spacing: .08em; }
 .online-rematch-status { margin: 4px 0; color: var(--cyan); font-size: 9px; font-weight: 900; letter-spacing: .12em; }
 .online-rematch-status[hidden] { display: none !important; }
+.demo-result-status { margin: 5px 0 13px; color: var(--amber); font-size: clamp(8px, .8vw, 12px); font-weight: 900; letter-spacing: .12em; }
+.demo-result-status[hidden] { display: none !important; }
+body.demo-active #resultScreen .menu-stack { display: none; }
+body.demo-active .touch-controls,
+body.demo-active .touch-pause { display: none !important; }
 
 .hud-name {
   display: flex;
@@ -1793,6 +1824,8 @@ body:has(#app:fullscreen) {
   .online-match-setup > p { font-size: 5px; }
   .online-room-details .arcade-button { min-height: 25px; padding: 4px 8px; font-size: 7px; }
   .online-back { margin-top: 5px; font-size: 7px; }
+  .demo-hud { top: 16%; gap: 5px; padding: 3px 6px; font-size: 6px; }
+  .demo-hud small { display: none; }
   .roster-grid { gap: 5px; margin: 9px 0; }
   .fighter-info { padding: 5px 6px; }
   .fighter-info small { display: none; }
