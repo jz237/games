@@ -1804,6 +1804,29 @@ body:has(#app:fullscreen) {
   left: max(2%, env(safe-area-inset-left));
 }
 
+/* A short landscape frame gives the HUD a taller share of the canvas, which
+   squeezes the playable fight area. Tighten it so the enlarged fighters keep the
+   same 68-74% framing on a phone as they do on a desktop. */
+.mobile-landscape .hud,
+#app:fullscreen .hud {
+  top: 1.4%;
+  gap: 9px;
+}
+.mobile-landscape .fighter-hud,
+#app:fullscreen .fighter-hud { gap: 2px; }
+.mobile-landscape .hud-name,
+#app:fullscreen .hud-name { font-size: 9px; line-height: 1.1; }
+.mobile-landscape .health-shell,
+#app:fullscreen .health-shell { height: 12px; }
+.mobile-landscape .grit-row,
+#app:fullscreen .grit-row { font-size: 8px; line-height: 1; }
+.mobile-landscape .meter-shell,
+#app:fullscreen .meter-shell { height: 6px; }
+.mobile-landscape .timer-wrap b,
+#app:fullscreen .timer-wrap b { font-size: 26px; line-height: 1; }
+.mobile-landscape .round-pips i,
+#app:fullscreen .round-pips i { width: 6px; height: 6px; }
+
 @media (pointer: coarse), (max-width: 760px) {
   body { padding: 0; align-items: start; }
   #app { width: 100%; }

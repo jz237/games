@@ -13,6 +13,7 @@ import {
   ATTACK_LEVELS,
   DEFENSE_RULES,
   DirectionTapTracker,
+  FIGHTER_SCALE,
   MOVEMENT_RULES,
   STUN_RULES,
   stunGainForAttack,
@@ -139,9 +140,9 @@ const ctx = canvas.getContext("2d");
 const W = canvas.width;
 const H = canvas.height;
 const FLOOR = 600;
-// Faster fall to match the quicker walks: jump height is unchanged so anti-airs
-// still line up, but the whole arc resolves in about 45 frames instead of 48.
-const GRAVITY = 2180;
+// Faster fall to match the quicker walks, then scaled with the fighters so the
+// jump arc keeps the same shape and hang time relative to body size.
+const GRAVITY = Math.round(2180 * FIGHTER_SCALE);
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -1703,8 +1704,8 @@ function makeFighter(index, side, overrideDef = null) {
     y: FLOOR,
     vx: 0,
     vy: 0,
-    width: 92,
-    height: 196,
+    width: Math.round(92 * FIGHTER_SCALE),
+    height: Math.round(196 * FIGHTER_SCALE),
     facing: side === 0 ? 1 : -1,
     health: 100,
     meter: 0,
@@ -3054,7 +3055,7 @@ function trackDirectionalPresses(fighter, input) {
   previous.right = Boolean(input.right);
 }
 
-const PROXIMITY_GRAB_RANGE = 104;
+const PROXIMITY_GRAB_RANGE = Math.round(104 * FIGHTER_SCALE);
 
 function inProximityGrabRange(fighter, opponent) {
   return Boolean(opponent)
@@ -3699,12 +3700,12 @@ function maybeSpawnProjectile(fighter, attack) {
     const projectile = {
       id: `${fighter.side}-${state.simulationTick}-${index}`,
       ownerSide: fighter.side,
-      x: fighter.x + fighter.facing * xOffset,
-      y: FLOOR + yOffset,
-      vx: fighter.facing * profile.speed,
+      x: fighter.x + fighter.facing * xOffset * FIGHTER_SCALE,
+      y: FLOOR + yOffset * FIGHTER_SCALE,
+      vx: fighter.facing * profile.speed * FIGHTER_SCALE,
       direction: fighter.facing,
-      width: profile.width,
-      height: profile.height,
+      width: profile.width * FIGHTER_SCALE,
+      height: profile.height * FIGHTER_SCALE,
       damage: profile.damage,
       chipDamage: profile.chipDamage,
       hitstunFrames: profile.hitstunFrames,
@@ -5043,6 +5044,19 @@ function drawProjectiles(time) {
   }
 }
 
+// 330 was 62.4% of the playable fight area; FIGHTER_SCALE lifts the roster into
+// the 68-74% MK/SF2 band, and the per-fighter adjust keeps body types distinct
+// without letting anyone leave that band.
+const FIGHTER_RENDER_BASE = 330;
+const FIGHTER_SIZE_ADJUST = Object.freeze({
+  deathblow: 1.068, jez: 0.995, alan: 1.062, post: 1.04,
+  benny: 1, donald: 1.02, cyraxx: 1.02, ali: 0.99, commissioner: 1.03,
+});
+
+function fighterRenderSize(fighterId) {
+  return FIGHTER_RENDER_BASE * FIGHTER_SCALE * (FIGHTER_SIZE_ADJUST[fighterId] || 1);
+}
+
 function drawFighter(fighter, time) {
   const jump = FLOOR - fighter.y;
   const attack = fighter.attacking;
@@ -5061,11 +5075,11 @@ function drawFighter(fighter, time) {
     : fighterAtlases[fighter.def.id];
   const frame = pose.frame;
   const graphicFatality = activeGraphicFatality(fighter);
-  const sizeAdjust = { deathblow: 1.08, jez: 1, alan: 1.08, post: 1.05, benny: 1.01, donald: 1.01, cyraxx: 1.02, ali: 1, commissioner: 1.02 }[fighter.def.id] || 1;
+  const sizeAdjust = FIGHTER_SIZE_ADJUST[fighter.def.id] || 1;
   const moveSheetAdjust = pose.bank === "specials"
     ? ({ deathblow: 1.14, jez: 1.03, alan: 1.06, post: 1.02, benny: 1.02, donald: 1.04, cyraxx: 1.05, ali: 1.04, commissioner: 1.02 }[fighter.def.id] || 1)
     : 1;
-  const renderSize = 330 * sizeAdjust * moveSheetAdjust;
+  const renderSize = fighterRenderSize(fighter.def.id) * moveSheetAdjust;
   const attackKind = attack?.kind;
   const lunge = attackSwing * (attackKind === "special" ? 68 : attackKind === "heavy" ? 46 : 29);
   const crouchScale = fighter.crouch ? 0.88 : 1;
@@ -6502,7 +6516,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.1d-passive-cpu-edition",
+  version: "1.1e-big-fighter-edition",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -6679,6 +6693,13 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.training.dummyMode = dummyMode;
       updateTrainingUi();
       return trainingSnapshot(state.training);
+    },
+    fighterScale() {
+      return FIGHTER_SCALE;
+    },
+    fighterRenderSizes() {
+      // Mirrors the sizing drawFighter uses, so tests can assert on-screen framing.
+      return Object.fromEntries(roster.map(({ id }) => [id, fighterRenderSize(id)]));
     },
     difficulty(difficulty = DEFAULT_AI_DIFFICULTY) {
       return setAiDifficulty(difficulty);

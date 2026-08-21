@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  AUTHORED_MOVEMENT_BASELINE,
   FIGHTER_KITS,
   KIT_ACTIONS,
   attackAnimationPose,
@@ -50,9 +51,27 @@ function testDistinctArchetypesAndFrameData() {
   const donald = FIGHTER_KITS.donald;
   const cyraxx = FIGHTER_KITS.cyraxx;
   const ali = FIGHTER_KITS.ali;
-  assert.ok(deathblow.movement.forwardWalkSpeed < MOVEMENT_RULES.forwardWalkSpeed);
-  assert.ok(jez.movement.forwardWalkSpeed > MOVEMENT_RULES.forwardWalkSpeed);
-  assert.ok(deathblow.movement.standingPushboxHalfWidth > jez.movement.standingPushboxHalfWidth);
+  // Movement is authored as ratios of the shared rules, so assert the resolved
+  // values the game actually uses rather than the raw literals.
+  const movementFor = (id) => getFighterMovement(id, MOVEMENT_RULES);
+  const deathblowMovement = movementFor("deathblow");
+  const jezMovement = movementFor("jez");
+  assert.ok(deathblowMovement.forwardWalkSpeed < MOVEMENT_RULES.forwardWalkSpeed);
+  assert.ok(jezMovement.forwardWalkSpeed > MOVEMENT_RULES.forwardWalkSpeed);
+  assert.ok(deathblowMovement.standingPushboxHalfWidth > jezMovement.standingPushboxHalfWidth);
+  // Shared tempo and fighter scale must reach every fighter, not just the ones
+  // without overrides.
+  for (const id of ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali"]) {
+    const movement = movementFor(id);
+    assert.ok(
+      movement.forwardWalkSpeed > AUTHORED_MOVEMENT_BASELINE.forwardWalkSpeed,
+      `${id} must inherit the faster arcade walk`,
+    );
+    assert.ok(
+      Math.abs(movement.jumpVelocityY) > Math.abs(AUTHORED_MOVEMENT_BASELINE.jumpVelocityY),
+      `${id} must inherit the scaled jump`,
+    );
+  }
   assert.ok(deathblow.moves.standHeavy.startupFrames > jez.moves.standHeavy.startupFrames);
   assert.ok(deathblow.moves.standHeavy.damage > jez.moves.standHeavy.damage);
   assert.equal(deathblow.moves.backSpecial.level, "throw");
@@ -91,7 +110,12 @@ function testDistinctArchetypesAndFrameData() {
   assert.notEqual(deathblow.moves.commandSpecial.id, jez.moves.commandSpecial.id);
   assert.equal(selectKitMoveKey("light", { forwardHeld: true }), "forwardLight");
   assert.equal(selectKitMoveKey("heavy", { forwardHeld: true }), "overhead");
-  assert.equal(getFighterMovement("jez", MOVEMENT_RULES).forwardDashSpeed, 670);
+  // Jez keeps his authored dash ratio against the shared rules.
+  assert.equal(
+    getFighterMovement("jez", MOVEMENT_RULES).forwardDashSpeed,
+    Math.round((670 / AUTHORED_MOVEMENT_BASELINE.forwardDashSpeed) * MOVEMENT_RULES.forwardDashSpeed),
+  );
+  assert.ok(getFighterMovement("jez", MOVEMENT_RULES).forwardDashSpeed > 670, "the scaled world dashes further");
 }
 
 function testMoveInstancesAndArt() {

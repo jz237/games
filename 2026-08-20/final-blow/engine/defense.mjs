@@ -8,27 +8,46 @@ export const ATTACK_LEVELS = Object.freeze({
   THROW: "throw",
 });
 
+/**
+ * MK/SF2 framing. Every spatial quantity that belongs to a fighter — body size,
+ * hitboxes, hurtboxes, pushboxes, move reach, walk and jump speeds, launch
+ * velocities and gravity — is multiplied by this one factor, while the stage
+ * bounds stay put. The fighters therefore grow to roughly 71% of the playable
+ * fight-area height and the arena reads as narrower in body-widths, exactly like
+ * a classic 2D fighter, without changing a single spacing relationship between
+ * reach, walk speed and body size.
+ *
+ * Measured: the 320px atlas cell is 95.6% character, the playable area between
+ * the HUD (canvas y 79) and the floor (y 600) is 521px, and the pre-scale average
+ * standing fighter was 62.4% of it. 1.14 lands the roster at 68.1%-74.0%.
+ */
+export const FIGHTER_SCALE = 1.14;
+
+const spatial = (value) => Math.round(value * FIGHTER_SCALE);
+
 // Arcade tempo. Walks and jumps are quicker than 1.0 so neutral has real
 // momentum, but jump height is unchanged so anti-airs still line up, and dashes
 // cost more to repeat so they support footsies instead of replacing them.
 export const MOVEMENT_RULES = Object.freeze({
+  // Stage bounds are deliberately NOT scaled: that is what makes the arena read
+  // as narrower relative to the larger fighters.
   stageMinX: 76,
   stageMaxX: 1204,
-  forwardWalkSpeed: 336,
-  backWalkSpeed: 262,
+  forwardWalkSpeed: spatial(336),
+  backWalkSpeed: spatial(262),
   neutralJumpVelocityX: 0,
-  forwardJumpVelocityX: 352,
-  backJumpVelocityX: 300,
-  jumpVelocityY: -815,
-  forwardDashSpeed: 620,
+  forwardJumpVelocityX: spatial(352),
+  backJumpVelocityX: spatial(300),
+  jumpVelocityY: -spatial(815),
+  forwardDashSpeed: spatial(620),
   forwardDashFrames: 10,
-  backDashSpeed: 540,
+  backDashSpeed: spatial(540),
   backDashFrames: 13,
   backDashInvulnerableFrames: 4,
   dashTapWindowFrames: 12,
   dashCooldownFrames: 14,
-  standingPushboxHalfWidth: 39,
-  crouchingPushboxHalfWidth: 35,
+  standingPushboxHalfWidth: spatial(39),
+  crouchingPushboxHalfWidth: spatial(35),
 });
 
 export const DEFENSE_RULES = Object.freeze({
@@ -381,11 +400,13 @@ export class DirectionTapTracker {
   }
 }
 
+// Boxes are authored in unscaled body-local units, so scaling here keeps every
+// hitbox, hurtbox and attack box aligned with the enlarged art automatically.
 export function localBoxToWorld(fighter, box) {
-  const x = fighter.facing >= 0
-    ? fighter.x + box.x
-    : fighter.x - box.x - box.width;
-  return { x, y: fighter.y + box.y, width: box.width, height: box.height };
+  const width = box.width * FIGHTER_SCALE;
+  const offsetX = box.x * FIGHTER_SCALE;
+  const x = fighter.facing >= 0 ? fighter.x + offsetX : fighter.x - offsetX - width;
+  return { x, y: fighter.y + box.y * FIGHTER_SCALE, width, height: box.height * FIGHTER_SCALE };
 }
 
 export function boxesOverlap(a, b) {

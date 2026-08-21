@@ -108,3 +108,34 @@ damage, still reacts to hits, and can still be grabbed and thrown.
 The browser suite runs a Passive CPU for 1,920 frames across six distances and
 asserts zero attacks, zero guards, zero jumps, zero grabs, zero Grit spent, zero
 movement, and that the only state it ever occupies is `idle`.
+
+## MK/SF2 fighter scale
+
+`FIGHTER_SCALE = 1.14` in `engine/defense.mjs` is the single factor applied to every
+spatial quantity that belongs to a fighter: body size, hitboxes, hurtboxes,
+pushboxes, move reach and push, advance/retreat speeds, launch and juggle
+velocities, walk and jump speeds, gravity, grab range, projectile origins, speeds
+and sizes, and the drawn sprite. **Stage bounds are deliberately not scaled** — that
+is what makes the arena read as narrower in body-widths, exactly like a classic 2D
+fighter, while every spacing relationship between reach, walk speed and body size is
+preserved untouched.
+
+Measured against the live build: the 320px atlas cell is 95.6% character, the
+playable fight area between the HUD and the floor line is 521 canvas px, and the
+pre-scale roster averaged 62.4% of it. After scaling the roster sits at
+**68.4% – 74.0%**, with per-character adjust values (0.99 for Ali G up to 1.068 for
+DeathBlow) keeping body types visibly distinct inside that band.
+
+The landscape HUD was made more compact so a 844×390 phone gets the same playable
+area fraction as a desktop; framing now drifts by at most 0.2 percentage points
+between the two.
+
+### A latent bug this exposed
+
+All eight fighters override every field of `MOVEMENT_RULES`, and those overrides
+were absolute literals authored against the original 1.0 baseline. That meant the
+arcade tempo change in 1.1C never reached a single fighter. `getFighterMovement` now
+interprets kit movement as **ratios** of `AUTHORED_MOVEMENT_BASELINE`, so a fighter
+authored at 246 against a 292 baseline stays at 84% of whatever the shared walk
+currently is. Personality is preserved and every future tempo or scale change
+propagates correctly. The kit test asserts this for all eight fighters.

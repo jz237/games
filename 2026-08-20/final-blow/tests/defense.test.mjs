@@ -3,6 +3,7 @@ import {
   ATTACK_LEVELS,
   COMBAT_MOVE_PROFILES,
   DirectionTapTracker,
+  FIGHTER_SCALE,
   boxesOverlap,
   canGuardAttack,
   createCombatMove,
@@ -130,8 +131,17 @@ function testBoxesAndCollision() {
   defender.invulnerableFrames = 1;
   assert.equal(findBoxCollision(attacker, defender), null);
 
+  // Boxes are authored unscaled and scaled into the world with the fighters.
   const mirrored = localBoxToWorld({ x: 500, y: 600, facing: -1 }, { x: 20, y: -100, width: 50, height: 40 });
-  assert.deepEqual(mirrored, { x: 430, y: 500, width: 50, height: 40 });
+  assert.deepEqual(mirrored, {
+    x: 500 - 20 * FIGHTER_SCALE - 50 * FIGHTER_SCALE,
+    y: 600 - 100 * FIGHTER_SCALE,
+    width: 50 * FIGHTER_SCALE,
+    height: 40 * FIGHTER_SCALE,
+  });
+  const facingRight = localBoxToWorld({ x: 500, y: 600, facing: 1 }, { x: 20, y: -100, width: 50, height: 40 });
+  assert.equal(facingRight.x, 500 + 20 * FIGHTER_SCALE);
+  assert.ok(FIGHTER_SCALE > 1.1 && FIGHTER_SCALE < 1.2, "fighter scale should stay in the MK/SF2 framing band");
   assert.equal(boxesOverlap({ x: 0, y: 0, width: 10, height: 10 }, { x: 9, y: 9, width: 4, height: 4 }), true);
   assert.equal(boxesOverlap({ x: 0, y: 0, width: 10, height: 10 }, { x: 10, y: 0, width: 4, height: 4 }), false);
 }

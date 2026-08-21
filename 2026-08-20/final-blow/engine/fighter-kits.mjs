@@ -1323,8 +1323,41 @@ export function fighterActionCost(fighterId, action, context = {}) {
   return getKitMoveProfile(fighterId, action, context)?.gritCost || 0;
 }
 
+/**
+ * The per-fighter movement blocks below were authored against the original 1.0
+ * shared rules. Treating those literals as absolute meant every later change to
+ * the shared tempo — and now the fighter scale — silently failed to reach any
+ * fighter, because all eight override every field.
+ *
+ * They are therefore interpreted as *ratios* of this baseline. A fighter that was
+ * authored at 246 against a 292 baseline stays at 84% of whatever the shared
+ * forward walk currently is, so personality is preserved while arcade tempo and
+ * fighter scale both propagate correctly.
+ */
+export const AUTHORED_MOVEMENT_BASELINE = Object.freeze({
+  forwardWalkSpeed: 292,
+  backWalkSpeed: 224,
+  jumpVelocityY: -748,
+  forwardJumpVelocityX: 326,
+  backJumpVelocityX: 278,
+  forwardDashSpeed: 580,
+  backDashSpeed: 505,
+  standingPushboxHalfWidth: 39,
+  crouchingPushboxHalfWidth: 35,
+});
+
 export function getFighterMovement(fighterId, fallback) {
-  return { ...fallback, ...(getFighterKit(fighterId)?.movement || {}) };
+  const authored = getFighterKit(fighterId)?.movement;
+  if (!authored) return { ...fallback };
+  const movement = { ...fallback };
+  for (const [field, value] of Object.entries(authored)) {
+    const baseline = AUTHORED_MOVEMENT_BASELINE[field];
+    const shared = fallback?.[field];
+    movement[field] = Number.isFinite(baseline) && Number.isFinite(shared) && baseline !== 0
+      ? Math.round((value / baseline) * shared)
+      : value;
+  }
+  return movement;
 }
 
 // Four-button motion vocabulary. Punch terminals (LP/HP) drive the signature

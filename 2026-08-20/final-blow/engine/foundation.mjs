@@ -246,6 +246,10 @@ export const BASE_MOVES = deepFreeze({
  * Training frame data reads the resolved instance, so what a player sees on
  * screen is always the tuned number.
  */
+// Kept in sync with FIGHTER_SCALE in defense.mjs. It lives here as a literal
+// because foundation.mjs is the base module and must not import from defense.
+export const MOVE_SPATIAL_SCALE = 1.14;
+
 export const ARCADE_TUNING = deepFreeze({
   damage: { light: 1.15, heavy: 1.22, special: 1.14, throw: 1.16 },
   recovery: { light: 1.08, heavy: 1.28, special: 1.32, throw: 1.24 },
@@ -282,6 +286,10 @@ export function createAttackInstance(kind, overrides = {}) {
   }
   for (const field of ["launchVelocityY", "juggleLift"]) {
     if (Number.isFinite(move[field])) move[field] = Math.round(move[field] * ARCADE_TUNING.launchVelocity);
+  }
+  // Reach and impulse scale with the fighter so spacing relationships survive.
+  for (const field of ["range", "push", "advanceSpeed", "retreatSpeed", "launchVelocityY", "juggleLift"]) {
+    if (Number.isFinite(move[field])) move[field] = Math.round(move[field] * MOVE_SPATIAL_SCALE);
   }
   const totalFrames = move.startupFrames + move.activeFrames + move.recoveryFrames;
   return {
