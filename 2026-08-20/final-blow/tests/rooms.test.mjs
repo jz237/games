@@ -9,12 +9,19 @@ import {
   createPrivateRoom,
   parseInvite,
   roomFingerprint,
+  runtimeSignalingApiUrl,
   scrubInviteFromAddress,
 } from "../engine/rooms.mjs";
 
 const roomId = "A".repeat(22);
 const hostToken = "H".repeat(43);
 const guestToken = "G".repeat(43);
+
+test("local QA may opt into a loopback signaling worker but public pages cannot override production", () => {
+  assert.equal(runtimeSignalingApiUrl({ hostname: "127.0.0.1", search: "?signaling=http%3A%2F%2F127.0.0.1%3A8787" }), "http://127.0.0.1:8787");
+  assert.match(runtimeSignalingApiUrl({ hostname: "jz237.github.io", search: "?signaling=http%3A%2F%2F127.0.0.1%3A8787" }), /workers\.dev/u);
+  assert.match(runtimeSignalingApiUrl({ hostname: "localhost", search: "?signaling=https%3A%2F%2Fevil.example" }), /workers\.dev/u);
+});
 
 test("private invites keep credentials in the URL fragment", () => {
   const invite = buildInviteUrl(

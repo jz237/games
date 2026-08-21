@@ -4,6 +4,19 @@ export const SIGNALING_AUTH_PREFIX = "fb-auth.";
 export const ROOM_ID_PATTERN = /^[A-Za-z0-9_-]{22}$/u;
 export const ROOM_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/u;
 
+export function runtimeSignalingApiUrl(locationLike = globalThis.location) {
+  if (!locationLike || !["127.0.0.1", "localhost"].includes(locationLike.hostname)) return SIGNALING_API_URL;
+  try {
+    const candidate = new URLSearchParams(locationLike.search).get("signaling");
+    if (!candidate) return SIGNALING_API_URL;
+    const url = new URL(candidate);
+    if (url.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(url.hostname)) return SIGNALING_API_URL;
+    return url.origin;
+  } catch {
+    return SIGNALING_API_URL;
+  }
+}
+
 function assertCredentials(credentials) {
   if (!credentials || !ROOM_ID_PATTERN.test(credentials.roomId) || !ROOM_TOKEN_PATTERN.test(credentials.token)) {
     throw new Error("That private-room invite is incomplete or invalid.");
@@ -44,7 +57,7 @@ export function scrubInviteFromAddress(locationLike = globalThis.location, histo
   return true;
 }
 
-export async function createPrivateRoom({ apiUrl = SIGNALING_API_URL, fetchImpl = globalThis.fetch } = {}) {
+export async function createPrivateRoom({ apiUrl = runtimeSignalingApiUrl(), fetchImpl = globalThis.fetch } = {}) {
   if (typeof fetchImpl !== "function") throw new Error("Private rooms require a network connection.");
   const response = await fetchImpl(`${apiUrl.replace(/\/$/u, "")}/v1/rooms`, {
     method: "POST",
@@ -78,7 +91,7 @@ export async function createPrivateRoom({ apiUrl = SIGNALING_API_URL, fetchImpl 
 }
 
 export class RoomSignalingClient {
-  constructor({ roomId, role, token, apiUrl = SIGNALING_API_URL, WebSocketImpl = globalThis.WebSocket }) {
+  constructor({ roomId, role, token, apiUrl = runtimeSignalingApiUrl(), WebSocketImpl = globalThis.WebSocket }) {
     assertCredentials({ roomId, token });
     if (!['host', 'guest'].includes(role)) throw new Error("Invalid private-room seat.");
     if (typeof WebSocketImpl !== "function") throw new Error("This browser does not support private rooms.");

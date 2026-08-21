@@ -239,7 +239,7 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.0C/);
+  assert.match(title.build, /1\.0D/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -251,7 +251,7 @@ try {
   assert.match(title.onlineButton, /PRIVATE ROOM/);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.0c-private-rooms');
+  assert.equal(title.engineVersion, '1.0d-rollback-online');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -1395,14 +1395,16 @@ try {
       name,
       entries: requests.length,
       hasGame: Boolean(cache && await cache.match('./game.js')),
+      hasRollback: Boolean(cache && await cache.match('./engine/rollback.mjs')),
       hasMusic: Boolean(cache && await cache.match('./assets/audio/subway-after-midnight.mp3')),
       ready: window.__finalBlowEngine.snapshot().offlineReady,
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.0c/);
+  assert.match(offlineCache.name, /final-blow-offline-1\.0d/);
   assert.ok(offlineCache.entries >= 57);
   assert.equal(offlineCache.hasGame, true);
+  assert.equal(offlineCache.hasRollback, true);
   assert.equal(offlineCache.hasMusic, true);
   assert.equal(offlineCache.ready, true);
 
@@ -1421,8 +1423,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.0C/);
-  assert.equal(offlineBoot.version, '1.0c-private-rooms');
+  assert.match(offlineBoot.build, /1\.0D/);
+  assert.equal(offlineBoot.version, '1.0d-rollback-online');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,

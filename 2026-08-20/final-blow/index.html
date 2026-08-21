@@ -19,7 +19,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">PRIVATE ROOMS <b>1.0C</b></div>
+      <div class="build-tag">ROLLBACK ONLINE <b>1.0D</b></div>
       <div id="offlineBadge" class="offline-badge" aria-live="polite">CACHE CHECK</div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
@@ -40,6 +40,12 @@
           <div class="health-shell"><i id="p2Health"></i><em id="p2Damage"></em></div>
           <div class="grit-row"><b id="p2Grit">0</b><div class="meter-shell"><i id="p2Meter"></i></div><span>GRIT</span></div>
         </div>
+      </div>
+      <div id="onlineHud" class="online-hud" aria-live="polite" hidden>
+        <b id="onlineHudState">ROLLBACK SYNC</b><span id="onlineHudPing">— MS</span><span id="onlineHudDelay">2F DELAY</span><span id="onlineHudRollbacks">0 RB</span>
+      </div>
+      <div id="onlineInterruption" class="online-interruption" aria-live="assertive" hidden>
+        <strong id="onlineInterruptionTitle">RECONNECTING</strong><span id="onlineInterruptionDetail">Holding the match while the encrypted link returns…</span>
       </div>
       <div id="p1Combo" class="combo-readout p1-combo" aria-live="polite"><b>0</b><span>HIT COMBO</span><em>0 DAMAGE</em></div>
       <div id="p2Combo" class="combo-readout p2-combo" aria-live="polite"><b>0</b><span>HIT COMBO</span><em>0 DAMAGE</em></div>
@@ -107,7 +113,7 @@
           <div class="online-security" aria-label="Private room security">
             <span>🔒 TOKEN AUTH</span><span>◉ P2P ENCRYPTED</span><span>⌛ 15 MINUTES</span><span>2 SEATS ONLY</span>
           </div>
-          <p class="online-checkpoint-note">CONNECTION LOBBY IS LIVE · ROLLBACK FIGHTS ARRIVE IN CHECKPOINT 14</p>
+          <p class="online-checkpoint-note">LIVE ROLLBACK · INPUT PREDICTION · DESYNC GUARD · RECONNECT &amp; REMATCH</p>
         </div>
         <div class="online-terminal">
           <div id="onlineStatus" class="online-status idle" aria-live="polite">
@@ -129,6 +135,26 @@
               <span id="onlineGuestSeat"><i></i><b>GUEST</b><em>WAITING</em></span>
             </div>
             <div class="online-link-readout"><span>DIRECT LINK</span><b id="onlineLatency">NEGOTIATING</b></div>
+            <div id="onlineMatchSetup" class="online-match-setup" hidden>
+              <div class="online-match-grid">
+                <label>YOUR FIGHTER<select id="onlineFighterSelect" aria-label="Your online fighter">
+                  <option value="deathblow">DEATHBLOW</option><option value="jez">JEZ</option>
+                  <option value="alan">ALLAN</option><option value="post">POST</option>
+                  <option value="benny">BENNY</option><option value="donald">DONALD TRUMP</option>
+                  <option value="cyraxx">CYRAXX</option><option value="ali">ALI G</option>
+                </select></label>
+                <div class="online-opponent"><span>OPPONENT</span><b id="onlineOpponentFighter">CHOOSING…</b></div>
+                <label>STAGE<select id="onlineStageSelect" aria-label="Online stage">
+                  <option value="kensington">KENSINGTON &amp; ALLEGHENY</option><option value="vet">THE VET PARKING LOT</option>
+                </select></label>
+                <label>INPUT DELAY<select id="onlineDelaySelect" aria-label="Online input delay">
+                  <option value="auto">AUTO · PING TUNED</option><option value="0">0 FRAMES</option><option value="1">1 FRAME</option>
+                  <option value="2">2 FRAMES</option><option value="3">3 FRAMES</option><option value="4">4 FRAMES</option>
+                </select></label>
+              </div>
+              <button id="onlineReadyButton" class="arcade-button primary" type="button">READY FOR ROLLBACK</button>
+              <p id="onlineMatchStatus">LINK BOTH SEATS TO ARM THE MATCH</p>
+            </div>
             <button id="onlineDisconnectButton" class="arcade-button ghost compact" type="button">CLOSE ROOM</button>
           </div>
           <p id="onlineError" class="online-error" role="alert" hidden></p>
@@ -211,6 +237,7 @@
           <h2 id="resultTitle">DEATHBLOW WINS</h2>
           <div id="resultFinisher">FAULTLINE EXECUTION</div>
           <blockquote id="resultQuote">THE STREET MOVED FIRST.</blockquote>
+          <p id="onlineRematchStatus" class="online-rematch-status" hidden>REMATCH VOTES · 0 / 2</p>
           <div class="menu-stack horizontal">
             <button id="rematchButton" class="arcade-button primary menu-focus">REMATCH</button>
             <button id="reselectButton" class="arcade-button">SELECT FIGHTERS</button>

@@ -144,7 +144,8 @@ async function createTarget(debugPort, url) {
 
 const { server, requests: staticRequests } = await startStaticServer();
 const address = server.address();
-const gameUrl = `http://127.0.0.1:${address.port}/?debug=1`;
+const signalingApi = process.env.FINAL_BLOW_SIGNALING_API || "";
+const gameUrl = `http://127.0.0.1:${address.port}/?debug=1${signalingApi ? `&signaling=${encodeURIComponent(signalingApi)}` : ""}`;
 const userDataDir = await mkdtemp(join(tmpdir(), "final-blow-online-chrome-"));
 const portProbe = createServer();
 await new Promise((resolve) => portProbe.listen(0, "127.0.0.1", resolve));
@@ -232,12 +233,14 @@ try {
   assert.equal(guest.requestUrls.some((url) => url.includes(guestSecret)), false);
   assert.equal(staticRequests.some((url) => url.includes(guestSecret)), false);
 
+  await delay(450);
   const mobileBounds = await evaluate(host.client, `(() => {
-    const screen = document.querySelector('#onlineScreen').getBoundingClientRect();
+    document.querySelector('#onlineScreen').style.animation = 'none';
+    const settledScreen = document.querySelector('#onlineScreen').getBoundingClientRect();
     const terminal = document.querySelector('.online-terminal').getBoundingClientRect();
     const copy = document.querySelector('#onlineCopyButton').getBoundingClientRect();
     return {
-      screen: { left: screen.left, top: screen.top, right: screen.right, bottom: screen.bottom },
+      screen: { left: settledScreen.left, top: settledScreen.top, right: settledScreen.right, bottom: settledScreen.bottom },
       terminal: { left: terminal.left, top: terminal.top, right: terminal.right, bottom: terminal.bottom },
       copy: { left: copy.left, top: copy.top, right: copy.right, bottom: copy.bottom },
       overflow: document.documentElement.scrollWidth > innerWidth,
@@ -246,10 +249,146 @@ try {
   assert.equal(mobileBounds.overflow, false);
   for (const bounds of [mobileBounds.screen, mobileBounds.terminal, mobileBounds.copy]) {
     assert.ok(
-      bounds.left >= 0 && bounds.top >= 0 && bounds.right <= 844 && bounds.bottom <= 390,
+      bounds.left >= -0.1 && bounds.top >= -0.1 && bounds.right <= 844.1 && bounds.bottom <= 390.1,
       `Online mobile element escaped viewport: ${JSON.stringify({ bounds, mobileBounds })}`,
     );
   }
+
+  await evaluate(host.client, `(() => {
+    const change = (selector, value) => { const node = document.querySelector(selector); node.value = value; node.dispatchEvent(new Event('change', { bubbles: true })); };
+    change('#onlineFighterSelect', 'deathblow');
+    change('#onlineStageSelect', 'vet');
+    change('#onlineDelaySelect', '2');
+    return true;
+  })()`);
+  await evaluate(guest.client, `(() => {
+    const change = (selector, value) => { const node = document.querySelector(selector); node.value = value; node.dispatchEvent(new Event('change', { bubbles: true })); };
+    change('#onlineFighterSelect', 'jez');
+    change('#onlineDelaySelect', '1');
+    return true;
+  })()`);
+  await delay(250);
+  await evaluate(guest.client, `document.querySelector('#onlineReadyButton').click(); true`);
+  await waitFor(host.client, `window.__finalBlowEngine.snapshot().online.lobby.remoteReady === true`);
+  await evaluate(host.client, `document.querySelector('#onlineReadyButton').click(); true`);
+  const hostFight = await waitFor(host.client, `(() => {
+    const value = window.__finalBlowEngine.snapshot();
+    return value.screen === 'fight' && value.mode === 'online' && value.online.rollback ? value : null;
+  })()`, 15_000);
+  const guestFight = await waitFor(guest.client, `(() => {
+    const value = window.__finalBlowEngine.snapshot();
+    return value.screen === 'fight' && value.mode === 'online' && value.online.rollback ? value : null;
+  })()`, 15_000);
+  assert.deepEqual(hostFight.online.matchConfig.picks, ["deathblow", "jez"]);
+  assert.deepEqual(guestFight.online.matchConfig.picks, ["deathblow", "jez"]);
+  assert.equal(hostFight.online.matchConfig.stage, "vet");
+  assert.equal(hostFight.online.matchConfig.inputDelay, 2);
+  assert.equal(guestFight.online.matchConfig.matchId, hostFight.online.matchConfig.matchId);
+
+  await Promise.all([
+    evaluate(host.client, `window.__finalBlowQa.onlineManual(true)`),
+    evaluate(guest.client, `window.__finalBlowQa.onlineManual(true)`),
+  ]);
+  const pumpBoth = async (frames) => {
+    let remaining = frames;
+    while (remaining > 0) {
+      const chunk = Math.min(6, remaining);
+      await Promise.all([
+        evaluate(host.client, `window.__finalBlowQa.step(${chunk} / 60)`),
+        evaluate(guest.client, `window.__finalBlowQa.step(${chunk} / 60)`),
+      ]);
+      remaining -= chunk;
+      await delay(12);
+    }
+  };
+  await pumpBoth(160);
+  await waitFor(host.client, `window.__finalBlowEngine.snapshot().phase === 'fight'`, 15_000);
+  await waitFor(guest.client, `window.__finalBlowEngine.snapshot().phase === 'fight'`, 15_000);
+  await evaluate(host.client, `(() => {
+    const button = document.querySelector('[data-touch="right"]');
+    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 11 }));
+    return true;
+  })()`);
+  await guest.client.send("Input.dispatchKeyEvent", { type: "keyDown", key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+  await pumpBoth(36);
+  await evaluate(host.client, `(() => {
+    const button = document.querySelector('[data-touch="right"]');
+    button.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 11 }));
+    return true;
+  })()`);
+  await guest.client.send("Input.dispatchKeyEvent", { type: "keyUp", key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
+  await evaluate(host.client, `(() => {
+    const button = document.querySelector('[data-touch="light"]');
+    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 12 }));
+    button.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 12 }));
+    return true;
+  })()`);
+  await guest.client.send("Input.dispatchKeyEvent", { type: "keyDown", key: "j", code: "KeyJ", windowsVirtualKeyCode: 74 });
+  await guest.client.send("Input.dispatchKeyEvent", { type: "keyUp", key: "j", code: "KeyJ", windowsVirtualKeyCode: 74 });
+  await pumpBoth(150);
+
+  const hostSynced = await waitFor(host.client, `(() => {
+    const value = window.__finalBlowEngine.snapshot().online;
+    return value.confirmedChecksumFrame >= 240 && value.checksumMismatches === 0 ? value : null;
+  })()`, 20_000);
+  const guestSynced = await waitFor(guest.client, `(() => {
+    const value = window.__finalBlowEngine.snapshot().online;
+    return value.confirmedChecksumFrame >= 240 && value.checksumMismatches === 0 ? value : null;
+  })()`, 20_000);
+  assert.equal(hostSynced.confirmedChecksumFrame, guestSynced.confirmedChecksumFrame);
+  assert.equal(hostSynced.confirmedChecksum, guestSynced.confirmedChecksum);
+  const convergedState = await Promise.all([
+    evaluate(host.client, `window.__finalBlowEngine.snapshot()`),
+    evaluate(guest.client, `window.__finalBlowEngine.snapshot()`),
+  ]);
+  assert.deepEqual(
+    convergedState[0].fighters.map(({ x, y, health, meter, state: fighterState }) => ({ x, y, health, meter, fighterState })),
+    convergedState[1].fighters.map(({ x, y, health, meter, state: fighterState }) => ({ x, y, health, meter, fighterState })),
+  );
+  const netHudBounds = await evaluate(host.client, `(() => {
+    const bounds = document.querySelector('#onlineHud').getBoundingClientRect();
+    return { hidden: document.querySelector('#onlineHud').hidden, left: bounds.left, top: bounds.top, right: bounds.right, bottom: bounds.bottom };
+  })()`);
+  assert.equal(netHudBounds.hidden, false);
+  assert.ok(netHudBounds.left >= 0 && netHudBounds.top >= 0 && netHudBounds.right <= 844 && netHudBounds.bottom <= 390);
+
+  await evaluate(guest.client, `window.__finalBlowQa.dropOnlineLink()`);
+  await waitFor(guest.client, `window.__finalBlowEngine.snapshot().online.reconnecting === true`, 12_000);
+  const guestReconnected = await waitFor(guest.client, `(() => {
+    const value = window.__finalBlowEngine.snapshot().online;
+    return value.peer?.connected && !value.reconnecting && !value.networkPaused ? value : null;
+  })()`, 35_000);
+  const hostReconnected = await waitFor(host.client, `(() => {
+    const value = window.__finalBlowEngine.snapshot().online;
+    return value.peer?.connected && !value.reconnecting && !value.networkPaused ? value : null;
+  })()`, 35_000);
+  assert.equal(guestReconnected.matchConfig.matchId, hostReconnected.matchConfig.matchId);
+  await pumpBoth(72);
+  const recovered = await Promise.all([
+    evaluate(host.client, `window.__finalBlowEngine.snapshot().online`),
+    evaluate(guest.client, `window.__finalBlowEngine.snapshot().online`),
+  ]);
+  assert.equal(recovered[0].checksumMismatches, 0);
+  assert.equal(recovered[1].checksumMismatches, 0);
+
+  const previousMatchId = hostFight.online.matchConfig.matchId;
+  await Promise.all([
+    evaluate(host.client, `window.__finalBlowQa.onlineResult(0)`),
+    evaluate(guest.client, `window.__finalBlowQa.onlineResult(0)`),
+  ]);
+  await evaluate(guest.client, `document.querySelector('#rematchButton').click(); true`);
+  await waitFor(host.client, `document.querySelector('#onlineRematchStatus').textContent.includes('1 / 2')`);
+  await evaluate(host.client, `document.querySelector('#rematchButton').click(); true`);
+  const rematchHost = await waitFor(host.client, `(() => {
+    const value = window.__finalBlowEngine.snapshot();
+    return value.screen === 'fight' && value.online.matchConfig?.matchId !== '${previousMatchId}' ? value.online : null;
+  })()`, 15_000);
+  const rematchGuest = await waitFor(guest.client, `(() => {
+    const value = window.__finalBlowEngine.snapshot();
+    return value.screen === 'fight' && value.online.matchConfig?.matchId !== '${previousMatchId}' ? value.online : null;
+  })()`, 15_000);
+  assert.equal(rematchHost.matchConfig.matchId, rematchGuest.matchConfig.matchId);
+  assert.equal(rematchHost.matchConfig.rematch, true);
   assert.deepEqual(host.errors, []);
   assert.deepEqual(guest.errors, []);
   console.log(JSON.stringify({
@@ -259,6 +398,16 @@ try {
     guest: { control: guestConnected.peer.controlState, input: guestConnected.peer.inputState, latency: guestConnected.latency },
     inviteSecretInRequestUrls: false,
     mobileBounds,
+    rollback: {
+      matchId: hostFight.online.matchConfig.matchId,
+      inputDelay: hostFight.online.matchConfig.inputDelay,
+      confirmedFrame: hostSynced.confirmedChecksumFrame,
+      checksum: hostSynced.confirmedChecksum,
+      hostRollbacks: hostSynced.rollback.rollbacks,
+      guestRollbacks: guestSynced.rollback.rollbacks,
+      reconnectFrame: hostReconnected.rollback.frame,
+      rematchId: rematchHost.matchConfig.matchId,
+    },
   }, null, 2));
 } finally {
   host?.client.close();

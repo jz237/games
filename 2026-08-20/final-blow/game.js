@@ -93,6 +93,17 @@ import {
   scrubInviteFromAddress,
 } from "./engine/rooms.mjs";
 import { FinalBlowPeer } from "./engine/webrtc.mjs";
+import {
+  RollbackSession,
+  bitsToInput,
+  checksumState,
+  inputToBits,
+  matchTagFromId,
+  normalizeInputDelay,
+  parseRollbackState,
+  recommendedInputDelay,
+  serializeRollbackState,
+} from "./engine/rollback.mjs";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -567,7 +578,7 @@ let padMap = normalizePadMap(storedJson("final-blow-pad-map", DEFAULT_PAD_MAP));
 let pendingKeyBinding = null;
 
 const simulationClock = new FixedStepClock();
-const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "1.0c-private-rooms");
+const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "1.0d-rollback-online");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
 const state = {
@@ -604,6 +615,7 @@ const state = {
   matchSeed: initialSeed,
   lastImpactSide: -1,
   rng: new DeterministicRng(initialSeed),
+  visualRng: new DeterministicRng(hashSeed(initialSeed, "visual")),
   debug: debugRequested,
   qaManualMode: false,
   audio: null,
@@ -650,9 +662,40 @@ const onlineSession = {
   latency: null,
   status: "idle",
   expiryTimer: 0,
+  credentials: null,
+  reconnectTimer: 0,
+  reconnectAttempts: 0,
+  reconnecting: false,
+  peerGeneration: 0,
+  lobby: {
+    localFighter: "deathblow",
+    remoteFighter: "jez",
+    stage: "kensington",
+    delayChoice: "auto",
+    localReady: false,
+    remoteReady: false,
+    remoteControlStyle: "classic",
+    remoteDelayChoice: "auto",
+  },
+  matchConfig: null,
+  rollback: null,
+  matchActive: false,
+  networkPaused: false,
+  localSuspended: false,
+  remoteSuspended: false,
+  awaitingResume: false,
+  rematchVotes: new Set(),
+  remoteChecksums: new Map(),
+  checksumMismatches: 0,
+  lastChecksumSentFrame: -1,
+  lastPersistedFrame: -1,
 };
 
 function onlineSnapshot() {
+  const rollback = onlineSession.rollback?.metrics() || null;
+  const confirmedChecksumFrame = rollback
+    ? Math.floor(Math.min(rollback.frame, rollback.confirmedRemoteFrame + 1, rollback.acknowledgedLocalFrame + 1) / 60) * 60
+    : 0;
   return {
     role: onlineSession.role,
     roomId: onlineSession.roomId,
@@ -663,6 +706,17 @@ function onlineSnapshot() {
     status: onlineSession.status,
     signalingState: onlineSession.signaling?.socket?.readyState ?? -1,
     peer: onlineSession.peer?.snapshot() ?? null,
+    lobby: { ...onlineSession.lobby },
+    matchConfig: onlineSession.matchConfig ? { ...onlineSession.matchConfig } : null,
+    matchActive: onlineSession.matchActive,
+    networkPaused: onlineSession.networkPaused,
+    reconnecting: onlineSession.reconnecting,
+    rollback,
+    checksumMismatches: onlineSession.checksumMismatches,
+    localChecksum: rollback ? onlineSession.rollback.checksumAt(rollback.frame) : null,
+    confirmedChecksumFrame,
+    confirmedChecksum: confirmedChecksumFrame > 0 ? onlineSession.rollback.checksumAt(confirmedChecksumFrame) : null,
+    lastChecksumSentFrame: onlineSession.lastChecksumSentFrame,
   };
 }
 
@@ -699,6 +753,116 @@ function updateOnlineSeats() {
   }
 }
 
+const ONLINE_RESUME_KEY = "final-blow-online-resume-v1";
+const onlineFighterIds = new Set(roster.map(({ id }) => id));
+
+function onlineLocalSide() {
+  return onlineSession.role === "guest" ? 1 : 0;
+}
+
+function onlineRemoteRole() {
+  return onlineSession.role === "host" ? "guest" : "host";
+}
+
+function safeSessionWrite(value) {
+  try {
+    if (value === null) sessionStorage.removeItem(ONLINE_RESUME_KEY);
+    else sessionStorage.setItem(ONLINE_RESUME_KEY, JSON.stringify(value));
+  } catch {
+    // Private browsing can deny session storage; the in-memory room remains usable.
+  }
+}
+
+function persistOnlineResume(includeState = false) {
+  if (!onlineSession.credentials || !onlineSession.roomId) return;
+  const resume = {
+    credentials: onlineSession.credentials,
+    inviteUrl: onlineSession.inviteUrl,
+    lobby: onlineSession.lobby,
+    matchConfig: onlineSession.matchConfig,
+    matchActive: onlineSession.matchActive,
+    screen: state.screen,
+    savedAt: Date.now(),
+  };
+  if (includeState && onlineSession.rollback && state.screen === "fight") {
+    const sync = onlineSession.rollback.exportSync();
+    resume.rollback = { frame: sync.frame, state: serializeRollbackState(sync.state) };
+  }
+  safeSessionWrite(resume);
+}
+
+function readOnlineResume() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(ONLINE_RESUME_KEY));
+    if (!value?.credentials?.roomId || !value.credentials.token) return null;
+    if (Number(value.credentials.expiresAt) <= Date.now()) return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function setOnlineInterruption(visible, title = "RECONNECTING", detail = "Holding the match while the encrypted link returns…") {
+  const panel = $("#onlineInterruption");
+  panel.hidden = !visible;
+  $("#onlineInterruptionTitle").textContent = title;
+  $("#onlineInterruptionDetail").textContent = detail;
+}
+
+function updateOnlineHud(kind = "sync") {
+  const panel = $("#onlineHud");
+  const metrics = onlineSession.rollback?.metrics();
+  panel.hidden = !(state.mode === "online" && ["fight", "result"].includes(state.screen));
+  panel.classList.toggle("warning", kind === "warning" || onlineSession.networkPaused);
+  panel.classList.toggle("error", kind === "error");
+  $("#onlineHudState").textContent = onlineSession.networkPaused ? "LINK HOLD"
+    : kind === "error" ? "DESYNC"
+      : kind === "warning" ? "PREDICTING" : "ROLLBACK SYNC";
+  $("#onlineHudPing").textContent = onlineSession.latency === null ? "— MS" : `${onlineSession.latency} MS`;
+  $("#onlineHudDelay").textContent = `${metrics?.inputDelay ?? onlineSession.matchConfig?.inputDelay ?? 0}F DELAY`;
+  $("#onlineHudRollbacks").textContent = `${metrics?.rollbacks || 0} RB`;
+}
+
+function updateOnlineMatchSetup() {
+  const connected = Boolean(onlineSession.peer?.connected);
+  const setup = $("#onlineMatchSetup");
+  setup.hidden = !connected || onlineSession.matchActive;
+  if (!connected) return;
+  const lobby = onlineSession.lobby;
+  $("#onlineFighterSelect").value = lobby.localFighter;
+  $("#onlineOpponentFighter").textContent = onlineFighterIds.has(lobby.remoteFighter)
+    ? roster.find(({ id }) => id === lobby.remoteFighter).name
+    : "CHOOSING…";
+  $("#onlineStageSelect").value = lobby.stage;
+  $("#onlineStageSelect").disabled = onlineSession.role !== "host";
+  $("#onlineDelaySelect").value = lobby.delayChoice;
+  const readyButton = $("#onlineReadyButton");
+  readyButton.disabled = !connected;
+  readyButton.textContent = lobby.localReady ? "READY LOCKED · CANCEL" : "READY FOR ROLLBACK";
+  setup.classList.toggle("ready", lobby.localReady && lobby.remoteReady);
+  $("#onlineMatchStatus").textContent = lobby.localReady && lobby.remoteReady
+    ? onlineSession.role === "host" ? "BOTH READY · LAUNCHING MATCH" : "BOTH READY · HOST IS LAUNCHING"
+    : lobby.localReady ? "YOU ARE READY · WAITING FOR OPPONENT"
+      : lobby.remoteReady ? "OPPONENT READY · LOCK YOUR FIGHTER" : "CHOOSE, TUNE DELAY, THEN READY UP";
+}
+
+function sendOnlineControl(message) {
+  return onlineSession.peer?.sendControl({ protocol: "final-blow-1.0d", ...message }) || false;
+}
+
+function sendOnlineLobbyState() {
+  if (!onlineSession.peer?.connected) return false;
+  const lobby = onlineSession.lobby;
+  return sendOnlineControl({
+    type: "lobby-state",
+    fighter: lobby.localFighter,
+    stage: lobby.stage,
+    delayChoice: lobby.delayChoice,
+    controlStyle: state.controlStyle,
+    ready: lobby.localReady,
+  });
+}
+
 function tickOnlineExpiry() {
   if (!onlineSession.expiresAt) return;
   const remaining = Math.max(0, onlineSession.expiresAt - Date.now());
@@ -706,6 +870,10 @@ function tickOnlineExpiry() {
   const seconds = Math.floor((remaining % 60_000) / 1000);
   $("#onlineExpiry").textContent = `EXPIRES IN ${minutes}:${String(seconds).padStart(2, "0")}`;
   if (remaining === 0) {
+    if (onlineSession.peer?.connected) {
+      $("#onlineExpiry").textContent = "SIGNALING EXPIRED · P2P ACTIVE";
+      return;
+    }
     disconnectOnline(false);
     setOnlineStatus("closed", "This private room expired. Create a new room to continue.");
   }
@@ -720,14 +888,21 @@ function resetOnlineUi() {
   $("#onlineInviteInput").value = "";
   $("#onlineCopyButton").hidden = false;
   $("#onlineLatency").textContent = "NEGOTIATING";
+  $("#onlineMatchSetup").hidden = true;
+  $("#onlineRematchStatus").hidden = true;
+  $("#onlineHud").hidden = true;
+  setOnlineInterruption(false);
   setOnlineError();
   updateOnlineSeats();
 }
 
-function disconnectOnline(resetStatus = true) {
+function disconnectOnline(resetStatus = true, { clearStored = true } = {}) {
   onlineSession.generation += 1;
+  onlineSession.peerGeneration += 1;
   if (onlineSession.expiryTimer) clearInterval(onlineSession.expiryTimer);
+  if (onlineSession.reconnectTimer) clearTimeout(onlineSession.reconnectTimer);
   onlineSession.expiryTimer = 0;
+  onlineSession.reconnectTimer = 0;
   onlineSession.stopUiSignal?.();
   onlineSession.stopUiSignal = null;
   onlineSession.peer?.close();
@@ -740,6 +915,24 @@ function disconnectOnline(resetStatus = true) {
   onlineSession.inviteUrl = "";
   onlineSession.peers.clear();
   onlineSession.latency = null;
+  onlineSession.credentials = null;
+  onlineSession.reconnectAttempts = 0;
+  onlineSession.reconnecting = false;
+  onlineSession.rollback = null;
+  onlineSession.matchConfig = null;
+  onlineSession.matchActive = false;
+  onlineSession.networkPaused = false;
+  onlineSession.localSuspended = false;
+  onlineSession.remoteSuspended = false;
+  onlineSession.awaitingResume = false;
+  onlineSession.rematchVotes.clear();
+  onlineSession.remoteChecksums.clear();
+  onlineSession.checksumMismatches = 0;
+  onlineSession.lastChecksumSentFrame = -1;
+  onlineSession.lastPersistedFrame = -1;
+  onlineSession.lobby.localReady = false;
+  onlineSession.lobby.remoteReady = false;
+  if (clearStored) safeSessionWrite(null);
   resetOnlineUi();
   if (resetStatus) setOnlineStatus("idle", "Create a room or open a private invite.");
 }
@@ -751,15 +944,18 @@ function renderOnlineRoom() {
   $("#onlineInviteLink").value = onlineSession.role === "host" ? onlineSession.inviteUrl : "PRIVATE INVITE AUTHENTICATED";
   $("#onlineCopyButton").hidden = onlineSession.role !== "host";
   updateOnlineSeats();
+  updateOnlineMatchSetup();
   tickOnlineExpiry();
 }
 
 function receiveOnlineSignal(message) {
   if (message.type === "welcome") {
     onlineSession.expiresAt = Number(message.expiresAt) || onlineSession.expiresAt;
+    if (onlineSession.credentials) onlineSession.credentials.expiresAt = onlineSession.expiresAt;
     onlineSession.peers = new Set((message.peers || []).filter((role) => role === "host" || role === "guest"));
     updateOnlineSeats();
     tickOnlineExpiry();
+    persistOnlineResume(false);
   } else if (message.type === "peer" && ["host", "guest"].includes(message.role)) {
     if (message.state === "joined") onlineSession.peers.add(message.role);
     else onlineSession.peers.delete(message.role);
@@ -767,49 +963,131 @@ function receiveOnlineSignal(message) {
   }
 }
 
-async function beginOnlineConnection({ roomId, role, token, guestToken = "", expiresAt = 0 }) {
-  disconnectOnline(false);
+function scheduleOnlineReconnect(detail = "Encrypted peer link interrupted.") {
+  if (onlineSession.reconnecting || !onlineSession.credentials || Date.now() >= onlineSession.expiresAt) return;
+  onlineSession.reconnecting = true;
+  onlineSession.networkPaused = onlineSession.matchActive;
+  onlineSession.reconnectAttempts += 1;
+  setOnlineInterruption(onlineSession.matchActive, "RECONNECTING", `${detail} · ATTEMPT ${onlineSession.reconnectAttempts} / 5`);
+  updateOnlineHud("warning");
+  setOnlineStatus("connecting", `Reconnecting encrypted seat · attempt ${onlineSession.reconnectAttempts} / 5…`);
+  if (onlineSession.reconnectAttempts > 5) {
+    setOnlineInterruption(true, "LINK LOST", "The room could not reconnect. Return to the title and create a new invite.");
+    setOnlineStatus("error", "Reconnect window exhausted.");
+    return;
+  }
+  onlineSession.peerGeneration += 1;
+  onlineSession.stopUiSignal?.();
+  onlineSession.stopUiSignal = null;
+  onlineSession.peer?.close();
+  onlineSession.signaling?.close();
+  onlineSession.peer = null;
+  onlineSession.signaling = null;
+  onlineSession.reconnectTimer = setTimeout(async () => {
+    onlineSession.reconnectTimer = 0;
+    try {
+      await connectOnlineTransport();
+    } catch (error) {
+      onlineSession.reconnecting = false;
+      scheduleOnlineReconnect(error instanceof Error ? error.message : "Reconnect failed.");
+    }
+  }, 450 + onlineSession.reconnectAttempts * 350);
+}
+
+function beginOnlineResumeHandshake() {
+  if (!onlineSession.matchActive || !onlineSession.rollback) return;
+  onlineSession.networkPaused = true;
+  onlineSession.awaitingResume = true;
+  setOnlineInterruption(true, "RESYNCHRONIZING", "Verifying the deterministic match state…");
+  const metrics = onlineSession.rollback.metrics();
+  sendOnlineControl({
+    type: "resume-hello",
+    matchId: onlineSession.matchConfig?.matchId,
+    frame: metrics.frame,
+    checksum: onlineSession.rollback.checksumAt(metrics.frame),
+  });
+  updateOnlineHud("warning");
+}
+
+async function connectOnlineTransport() {
+  const credentials = onlineSession.credentials;
+  if (!credentials) throw new Error("Private room credentials are unavailable.");
   const generation = onlineSession.generation;
+  const peerGeneration = ++onlineSession.peerGeneration;
+  const signaling = await connectPrivateRoom(credentials);
+  if (generation !== onlineSession.generation || peerGeneration !== onlineSession.peerGeneration) {
+    signaling.close();
+    return;
+  }
+  onlineSession.signaling = signaling;
+  onlineSession.peer = new FinalBlowPeer({
+    role: onlineSession.role,
+    signaling,
+    onStatus(kind, detail) {
+      if (generation !== onlineSession.generation || peerGeneration !== onlineSession.peerGeneration) return;
+      if (kind === "connected") {
+        onlineSession.reconnectAttempts = 0;
+        onlineSession.reconnecting = false;
+        onlineSession.peers.add(onlineRemoteRole());
+        setOnlineStatus("connected", onlineSession.matchActive ? "Direct link restored. Verifying rollback state…" : detail);
+        updateOnlineSeats();
+        updateOnlineMatchSetup();
+        if (onlineSession.matchActive) beginOnlineResumeHandshake();
+        else sendOnlineLobbyState();
+        persistOnlineResume(false);
+        return;
+      }
+      if (["error", "closed"].includes(kind) || (kind === "waiting" && onlineSession.matchActive)) {
+        scheduleOnlineReconnect(detail);
+        return;
+      }
+      setOnlineStatus(kind, detail);
+    },
+    onLatency(milliseconds) {
+      if (generation !== onlineSession.generation || peerGeneration !== onlineSession.peerGeneration) return;
+      onlineSession.latency = milliseconds;
+      $("#onlineLatency").textContent = `${milliseconds} MS · ENCRYPTED`;
+      updateOnlineHud();
+    },
+    onControl(message) {
+      if (generation !== onlineSession.generation || peerGeneration !== onlineSession.peerGeneration) return;
+      receiveOnlineControl(message);
+    },
+    onInput(packet) {
+      if (generation !== onlineSession.generation || peerGeneration !== onlineSession.peerGeneration) return;
+      receiveOnlineInput(packet);
+    },
+  });
+  onlineSession.stopUiSignal = signaling.onMessage(receiveOnlineSignal);
+  signaling.onClose(({ code, reason }) => {
+    if (generation !== onlineSession.generation || peerGeneration !== onlineSession.peerGeneration) return;
+    if (onlineSession.peer?.connected) return;
+    if (code === 4001) setOnlineStatus("closed", "Private signaling room expired.");
+    else scheduleOnlineReconnect(reason || "Private room signaling closed.");
+  });
+}
+
+async function beginOnlineConnection({ roomId, role, token, guestToken = "", expiresAt = 0 }) {
+  disconnectOnline(false, { clearStored: false });
+  state.mode = "online";
   onlineSession.role = role;
   onlineSession.roomId = roomId;
-  onlineSession.expiresAt = expiresAt;
+  onlineSession.expiresAt = Number(expiresAt) || Date.now() + 15 * 60_000;
   onlineSession.inviteUrl = role === "host" ? buildInviteUrl({ roomId, guestToken }) : "";
+  onlineSession.credentials = { roomId, role, token, guestToken, expiresAt: onlineSession.expiresAt };
+  onlineSession.lobby.localFighter = role === "host" ? "deathblow" : "jez";
+  onlineSession.lobby.remoteFighter = role === "host" ? "jez" : "deathblow";
+  onlineSession.lobby.localReady = false;
+  onlineSession.lobby.remoteReady = false;
   onlineSession.peers.add(role);
   renderOnlineRoom();
   setOnlineError();
   setOnlineStatus("signaling", "Authenticating the private room seat…");
+  persistOnlineResume(false);
   try {
-    const signaling = await connectPrivateRoom({ roomId, role, token });
-    if (generation !== onlineSession.generation) {
-      signaling.close();
-      return;
-    }
-    onlineSession.signaling = signaling;
-    onlineSession.peer = new FinalBlowPeer({
-      role,
-      signaling,
-      onStatus(kind, detail) {
-        if (generation !== onlineSession.generation) return;
-        setOnlineStatus(kind, detail);
-        if (kind === "connected") {
-          onlineSession.peers.add(role === "host" ? "guest" : "host");
-          updateOnlineSeats();
-        }
-      },
-      onLatency(milliseconds) {
-        if (generation !== onlineSession.generation) return;
-        onlineSession.latency = milliseconds;
-        $("#onlineLatency").textContent = `${milliseconds} MS · ENCRYPTED`;
-      },
-    });
-    onlineSession.stopUiSignal = signaling.onMessage(receiveOnlineSignal);
-    signaling.onClose(({ code, reason }) => {
-      if (generation !== onlineSession.generation) return;
-      setOnlineStatus("closed", code === 4001 ? "Private room expired." : reason || "Private room connection closed.");
-    });
+    await connectOnlineTransport();
     onlineSession.expiryTimer = setInterval(tickOnlineExpiry, 1000);
   } catch (error) {
-    if (generation !== onlineSession.generation) return;
     onlineSession.peer?.close();
     onlineSession.signaling?.close();
     onlineSession.peer = null;
@@ -817,14 +1095,58 @@ async function beginOnlineConnection({ roomId, role, token, guestToken = "", exp
     const message = error instanceof Error ? error.message : "Could not open private room.";
     setOnlineError(message);
     setOnlineStatus("error", message);
-    $("#onlineActions").hidden = false;
-    $("#onlineRoomDetails").hidden = true;
+    if (!onlineSession.reconnecting) scheduleOnlineReconnect(message);
+  }
+}
+
+async function resumeStoredOnlineConnection(resume) {
+  const credentials = resume?.credentials;
+  if (!credentials || !["host", "guest"].includes(credentials.role)) return false;
+  disconnectOnline(false, { clearStored: false });
+  state.mode = "online";
+  onlineSession.role = credentials.role;
+  onlineSession.roomId = credentials.roomId;
+  onlineSession.expiresAt = Number(credentials.expiresAt) || 0;
+  onlineSession.credentials = cloneRollbackValue(credentials);
+  onlineSession.inviteUrl = credentials.role === "host" ? String(resume.inviteUrl || "") : "";
+  Object.assign(onlineSession.lobby, resume.lobby || {});
+  onlineSession.peers.add(credentials.role);
+  if (resume.matchActive && validOnlineMatchConfig(resume.matchConfig)) {
+    startOnlineMatch(resume.matchConfig);
+    if (resume.rollback?.state && Number.isInteger(resume.rollback.frame)) {
+      onlineSession.rollback.importSync({
+        frame: resume.rollback.frame,
+        state: parseRollbackState(resume.rollback.state),
+      });
+      syncRollbackPresentation();
+    }
+    if (resume.screen === "result") {
+      const winner = state.rounds[0] > state.rounds[1] ? 0 : 1;
+      showResult(winner);
+    }
+    onlineSession.networkPaused = true;
+    onlineSession.reconnecting = true;
+    setOnlineInterruption(true, "RESTORING MATCH", "Reopening the private seat and requesting verified host state…");
+  } else {
+    showScreen("online");
+    renderOnlineRoom();
+  }
+  setOnlineStatus("connecting", "Restoring the private room seat…");
+  try {
+    await connectOnlineTransport();
+    onlineSession.expiryTimer = setInterval(tickOnlineExpiry, 1000);
+    return true;
+  } catch (error) {
+    onlineSession.reconnecting = false;
+    scheduleOnlineReconnect(error instanceof Error ? error.message : "Stored room reconnect failed.");
+    return false;
   }
 }
 
 function openOnlineLobby() {
   enterImmersiveMode();
   unlockAudio();
+  state.mode = "online";
   showScreen("online");
   if (pendingOnlineInvite) {
     $("#onlineInviteInput").value = location.href;
@@ -881,8 +1203,231 @@ async function copyOnlineInvite() {
   setTimeout(() => { button.textContent = "COPY"; }, 1200);
 }
 
+function delayChoiceFrames(choice) {
+  return choice === "auto"
+    ? recommendedInputDelay(onlineSession.latency || 70)
+    : normalizeInputDelay(choice);
+}
+
+function makeOnlineMatchConfig({ rematch = false } = {}) {
+  if (onlineSession.role !== "host") return null;
+  const lobby = onlineSession.lobby;
+  const seedBytes = new Uint32Array(1);
+  crypto.getRandomValues(seedBytes);
+  return {
+    version: 1,
+    matchId: crypto.randomUUID(),
+    seed: seedBytes[0] || 237,
+    picks: [lobby.localFighter, lobby.remoteFighter],
+    stage: stages[lobby.stage] ? lobby.stage : "kensington",
+    inputDelay: Math.max(delayChoiceFrames(lobby.delayChoice), delayChoiceFrames(lobby.remoteDelayChoice)),
+    controlStyles: [state.controlStyle, lobby.remoteControlStyle],
+    rematch: Boolean(rematch),
+  };
+}
+
+function validOnlineMatchConfig(config) {
+  return Boolean(
+    config
+    && config.version === 1
+    && typeof config.matchId === "string"
+    && config.matchId.length >= 12
+    && Number.isInteger(config.seed)
+    && config.picks?.length === 2
+    && config.picks.every((id) => onlineFighterIds.has(id))
+    && stages[config.stage]
+    && Number.isInteger(config.inputDelay)
+    && config.inputDelay >= 0
+    && config.inputDelay <= 4
+    && config.controlStyles?.length === 2,
+  );
+}
+
+function maybeLaunchOnlineMatch() {
+  if (onlineSession.role !== "host" || onlineSession.matchActive) return;
+  if (!onlineSession.lobby.localReady || !onlineSession.lobby.remoteReady) return;
+  const config = makeOnlineMatchConfig();
+  if (!config) return;
+  sendOnlineControl({ type: "match-start", config });
+  startOnlineMatch(config);
+}
+
+function toggleOnlineReady() {
+  if (!onlineSession.peer?.connected || onlineSession.matchActive) return;
+  onlineSession.lobby.localReady = !onlineSession.lobby.localReady;
+  sendOnlineLobbyState();
+  updateOnlineMatchSetup();
+  persistOnlineResume(false);
+  maybeLaunchOnlineMatch();
+}
+
+function updateOnlineRematchUi() {
+  const node = $("#onlineRematchStatus");
+  const visible = state.mode === "online" && state.screen === "result";
+  node.hidden = !visible;
+  if (!visible) return;
+  node.textContent = `REMATCH VOTES · ${onlineSession.rematchVotes.size} / 2`;
+  $("#rematchButton").textContent = onlineSession.rematchVotes.has(onlineSession.role)
+    ? "REMATCH REQUESTED" : onlineSession.rematchVotes.has(onlineRemoteRole()) ? "ACCEPT REMATCH" : "REQUEST REMATCH";
+}
+
+function maybeLaunchOnlineRematch() {
+  if (onlineSession.role !== "host" || onlineSession.rematchVotes.size < 2) return;
+  const config = makeOnlineMatchConfig({ rematch: true });
+  if (!config) return;
+  sendOnlineControl({ type: "match-start", config });
+  startOnlineMatch(config);
+}
+
+function requestOnlineRematch() {
+  if (state.mode !== "online" || state.screen !== "result" || !onlineSession.peer?.connected) return;
+  onlineSession.rematchVotes.add(onlineSession.role);
+  sendOnlineControl({ type: "rematch-vote", matchId: onlineSession.matchConfig?.matchId });
+  updateOnlineRematchUi();
+  maybeLaunchOnlineRematch();
+}
+
+function compareOnlineChecksum(frame, remoteChecksum) {
+  const rollback = onlineSession.rollback;
+  if (!rollback || typeof remoteChecksum !== "string") return;
+  const localChecksum = rollback.checksumAt(frame);
+  if (!localChecksum) {
+    onlineSession.remoteChecksums.set(frame, remoteChecksum);
+    return;
+  }
+  onlineSession.remoteChecksums.delete(frame);
+  if (localChecksum === remoteChecksum) {
+    onlineSession.checksumMismatches = 0;
+    updateOnlineHud();
+    return;
+  }
+  onlineSession.checksumMismatches += 1;
+  updateOnlineHud("error");
+  sendOnlineControl({ type: "desync-warning", matchId: onlineSession.matchConfig?.matchId, frame });
+  if (onlineSession.role === "host" && onlineSession.checksumMismatches >= 2) sendAuthoritativeOnlineState("desync");
+}
+
+function checkPendingOnlineChecksums() {
+  for (const [frame, checksum] of onlineSession.remoteChecksums) compareOnlineChecksum(frame, checksum);
+}
+
+function sendAuthoritativeOnlineState(reason = "reconnect") {
+  if (onlineSession.role !== "host" || !onlineSession.rollback || !onlineSession.peer?.connected) return false;
+  onlineSession.networkPaused = true;
+  onlineSession.awaitingResume = true;
+  setOnlineInterruption(true, reason === "desync" ? "SYNC REPAIR" : "RESYNCHRONIZING", "Transferring the host's verified deterministic state…");
+  const sync = onlineSession.rollback.exportSync();
+  const sent = sendOnlineControl({
+    type: "state-sync",
+    reason,
+    matchId: onlineSession.matchConfig?.matchId,
+    frame: sync.frame,
+    state: serializeRollbackState(sync.state),
+  });
+  updateOnlineHud("warning");
+  return sent;
+}
+
+function completeOnlineResume() {
+  onlineSession.awaitingResume = false;
+  onlineSession.reconnecting = false;
+  onlineSession.localSuspended = !state.qaManualMode
+    && (document.hidden || document.body.classList.contains("orientation-blocked"));
+  onlineSession.networkPaused = onlineSession.localSuspended || onlineSession.remoteSuspended;
+  onlineSession.checksumMismatches = 0;
+  onlineSession.remoteChecksums.clear();
+  refreshOnlinePauseOverlay();
+  persistOnlineResume(true);
+}
+
+function refreshOnlinePauseOverlay() {
+  if (!onlineSession.matchActive) return;
+  const suspended = onlineSession.localSuspended || onlineSession.remoteSuspended;
+  onlineSession.networkPaused = onlineSession.reconnecting || onlineSession.awaitingResume || suspended;
+  if (suspended) setOnlineInterruption(true, "MATCH HOLD", onlineSession.localSuspended
+    ? "Return to landscape play to resume both fighters."
+    : "The other fighter is restoring the arena view…");
+  else if (!onlineSession.networkPaused) setOnlineInterruption(false);
+  updateOnlineHud(onlineSession.networkPaused ? "warning" : "sync");
+}
+
+function setOnlineLocalSuspended(suspended) {
+  if (!onlineSession.matchActive || onlineSession.localSuspended === Boolean(suspended)) return;
+  onlineSession.localSuspended = Boolean(suspended);
+  sendOnlineControl({ type: "peer-suspend", matchId: onlineSession.matchConfig?.matchId, suspended: onlineSession.localSuspended });
+  refreshOnlinePauseOverlay();
+}
+
+function receiveOnlineControl(message) {
+  if (!message || typeof message !== "object") return;
+  if (message.type === "lobby-state" && !onlineSession.matchActive) {
+    if (onlineFighterIds.has(message.fighter)) onlineSession.lobby.remoteFighter = message.fighter;
+    if (onlineSession.role === "guest" && stages[message.stage]) onlineSession.lobby.stage = message.stage;
+    onlineSession.lobby.remoteDelayChoice = ["auto", "0", "1", "2", "3", "4"].includes(String(message.delayChoice))
+      ? String(message.delayChoice) : "auto";
+    onlineSession.lobby.remoteControlStyle = normalizeControlStyle(message.controlStyle);
+    onlineSession.lobby.remoteReady = Boolean(message.ready);
+    updateOnlineMatchSetup();
+    maybeLaunchOnlineMatch();
+    return;
+  }
+  if (message.type === "match-start" && onlineSession.role === "guest" && validOnlineMatchConfig(message.config)) {
+    startOnlineMatch(message.config);
+    return;
+  }
+  if (!onlineSession.matchConfig || message.matchId !== onlineSession.matchConfig.matchId) return;
+  if (message.type === "checksum" && Number.isInteger(message.frame)) {
+    compareOnlineChecksum(message.frame, message.checksum);
+  } else if (message.type === "desync-warning" && onlineSession.role === "host") {
+    onlineSession.checksumMismatches += 1;
+    if (onlineSession.checksumMismatches >= 2) sendAuthoritativeOnlineState("desync");
+  } else if (message.type === "resume-hello") {
+    if (onlineSession.role === "host") sendAuthoritativeOnlineState("reconnect");
+    else beginOnlineResumeHandshake();
+  } else if (message.type === "state-sync" && onlineSession.role === "guest"
+    && Number.isInteger(message.frame) && typeof message.state === "string") {
+    try {
+      onlineSession.networkPaused = true;
+      onlineSession.rollback.importSync({ frame: message.frame, state: parseRollbackState(message.state) });
+      syncRollbackPresentation();
+      sendOnlineControl({ type: "state-sync-ack", matchId: message.matchId, frame: message.frame });
+    } catch {
+      scheduleOnlineReconnect("Authoritative state transfer failed.");
+    }
+  } else if (message.type === "state-sync-ack" && onlineSession.role === "host") {
+    sendOnlineControl({ type: "state-sync-go", matchId: message.matchId, frame: onlineSession.rollback?.frame || 0 });
+    completeOnlineResume();
+  } else if (message.type === "state-sync-go" && onlineSession.role === "guest") {
+    completeOnlineResume();
+  } else if (message.type === "rematch-vote" && state.screen === "result") {
+    onlineSession.rematchVotes.add(onlineRemoteRole());
+    updateOnlineRematchUi();
+    maybeLaunchOnlineRematch();
+  } else if (message.type === "peer-suspend") {
+    onlineSession.remoteSuspended = Boolean(message.suspended);
+    refreshOnlinePauseOverlay();
+  }
+}
+
+function receiveOnlineInput(packet) {
+  if (!onlineSession.matchActive || !onlineSession.rollback) return;
+  try {
+    const result = onlineSession.rollback.receivePacket(packet);
+    if (!result.accepted) return;
+    checkPendingOnlineChecksums();
+    updateOnlineHud(result.rolledBack ? "warning" : "sync");
+  } catch {
+    onlineSession.checksumMismatches += 1;
+    updateOnlineHud("error");
+  }
+}
+
 function random() {
   return state.rng.nextFloat();
+}
+
+function visualRandom() {
+  return state.visualRng.nextFloat();
 }
 
 function seedMatch(round = state.round) {
@@ -897,6 +1442,13 @@ function seedMatch(round = state.round) {
     currentArcadeMatch(state.arcadeRun)?.opponentId || "versus",
   );
   state.rng.setState(state.matchSeed);
+  state.visualRng.setState(hashSeed(state.matchSeed, "visual"));
+}
+
+function seedOnlineRound(round = state.round) {
+  state.matchSeed = hashSeed("FINAL-BLOW-ONLINE", onlineSession.matchConfig?.seed || 237, round);
+  state.rng.setState(state.matchSeed);
+  state.visualRng.setState(hashSeed(state.matchSeed, "visual"));
 }
 
 function makeFighter(index, side, overrideDef = null) {
@@ -973,8 +1525,8 @@ function makeFighter(index, side, overrideDef = null) {
     lastHitResult: "",
     hitFlash: 0,
     specialGlow: 0,
-    animTime: random() * 2,
-    walkTime: random(),
+    animTime: visualRandom() * 2,
+    walkTime: visualRandom(),
     cinematicFrame: null,
     cinematicRotation: 0,
     cinematicScale: 1,
@@ -987,6 +1539,176 @@ function makeFighter(index, side, overrideDef = null) {
     stateEnteredTick: state.simulationTick,
     inputBuffer: new FrameInputBuffer(DEFAULT_INPUT_BUFFER_FRAMES),
   };
+}
+
+let rollbackResimulating = false;
+const rollbackFighterReferences = new Set(["def", "kit", "movement", "combo", "directionTapTracker", "inputBuffer", "projectileSpawnFrames"]);
+const rollbackPresentationFighterFields = new Set([
+  "animTime", "walkTime", "hitFlash", "specialGlow", "cinematicFrame", "cinematicRotation", "cinematicScale", "lastHitResult",
+]);
+
+function cloneRollbackValue(value) {
+  return structuredClone(value);
+}
+
+function saveRollbackFighter(fighter) {
+  const values = {};
+  for (const [key, value] of Object.entries(fighter)) {
+    if (!rollbackFighterReferences.has(key)) values[key] = cloneRollbackValue(value);
+  }
+  return {
+    id: fighter.def.id,
+    values,
+    combo: {
+      hits: fighter.combo.hits,
+      totalDamage: fighter.combo.totalDamage,
+      active: fighter.combo.active,
+      startedFrame: fighter.combo.startedFrame,
+      lastHitFrame: fighter.combo.lastHitFrame,
+      displayUntilFrame: fighter.combo.displayUntilFrame,
+      peakHits: fighter.combo.peakHits,
+    },
+    directionTaps: fighter.directionTapTracker.snapshot(),
+    inputBuffer: fighter.inputBuffer.snapshot(),
+    projectileSpawnFrames: [...fighter.projectileSpawnFrames],
+  };
+}
+
+function restoreRollbackFighter(fighter, snapshot) {
+  Object.assign(fighter, cloneRollbackValue(snapshot.values));
+  Object.assign(fighter.combo, snapshot.combo);
+  fighter.directionTapTracker.restore(snapshot.directionTaps);
+  fighter.inputBuffer.restore(snapshot.inputBuffer);
+  fighter.projectileSpawnFrames = new Set(snapshot.projectileSpawnFrames || []);
+}
+
+function saveRollbackState() {
+  const finisher = state.finisher ? (() => {
+    const { script: _script, ...values } = state.finisher;
+    return { ...cloneRollbackValue(values), scriptId: state.fighters[state.finisher.winner]?.def.finisherScriptId || state.fighters[state.finisher.winner]?.def.id };
+  })() : null;
+  return {
+    version: 1,
+    simulationTick: state.simulationTick,
+    picks: [...state.picks],
+    stage: state.stage,
+    rounds: [...state.rounds],
+    round: state.round,
+    timer: state.timer,
+    timerCarry: state.timerCarry,
+    phase: state.phase,
+    phaseTime: state.phaseTime,
+    finishWinner: state.finishWinner,
+    finisherType: state.finisherType,
+    finisher,
+    cinematicZoom: state.cinematicZoom,
+    shake: state.shake,
+    flash: state.flash,
+    hitstop: state.hitstop,
+    matchSeed: state.matchSeed,
+    lastImpactSide: state.lastImpactSide,
+    rng: state.rng.getState(),
+    visualRng: state.visualRng.getState(),
+    fighters: state.fighters.map(saveRollbackFighter),
+    traps: cloneRollbackValue(state.traps),
+    projectiles: cloneRollbackValue(state.projectiles),
+    particles: cloneRollbackValue(state.particles),
+    effects: cloneRollbackValue(state.effects),
+    commands: commandHistory.map((history) => cloneRollbackValue(history)),
+  };
+}
+
+function restoreRollbackState(snapshot) {
+  if (!snapshot || snapshot.version !== 1 || snapshot.fighters?.length !== 2) throw new Error("Unsupported Final Blow rollback state.");
+  state.simulationTick = snapshot.simulationTick;
+  state.picks = [...snapshot.picks];
+  state.stage = snapshot.stage;
+  state.rounds = [...snapshot.rounds];
+  state.round = snapshot.round;
+  state.timer = snapshot.timer;
+  state.timerCarry = snapshot.timerCarry;
+  state.phase = snapshot.phase;
+  state.phaseTime = snapshot.phaseTime;
+  state.finishWinner = snapshot.finishWinner;
+  state.finisherType = snapshot.finisherType;
+  state.cinematicZoom = snapshot.cinematicZoom;
+  state.shake = snapshot.shake;
+  state.flash = snapshot.flash;
+  state.hitstop = snapshot.hitstop;
+  state.matchSeed = snapshot.matchSeed;
+  state.lastImpactSide = snapshot.lastImpactSide;
+  state.rng.setState(snapshot.rng);
+  state.visualRng.setState(snapshot.visualRng);
+  for (let side = 0; side < 2; side += 1) {
+    if (state.fighters[side]?.def.id !== snapshot.fighters[side].id) {
+      const index = roster.findIndex(({ id }) => id === snapshot.fighters[side].id);
+      state.fighters[side] = makeFighter(index, side);
+    }
+    restoreRollbackFighter(state.fighters[side], snapshot.fighters[side]);
+  }
+  state.traps = cloneRollbackValue(snapshot.traps || []);
+  state.projectiles = cloneRollbackValue(snapshot.projectiles || []);
+  state.particles = cloneRollbackValue(snapshot.particles || []);
+  state.effects = cloneRollbackValue(snapshot.effects || []);
+  commandHistory[0] = cloneRollbackValue(snapshot.commands?.[0] || []);
+  commandHistory[1] = cloneRollbackValue(snapshot.commands?.[1] || []);
+  state.finisher = snapshot.finisher ? {
+    ...cloneRollbackValue(snapshot.finisher),
+    script: finisherScripts[snapshot.finisher.scriptId],
+  } : null;
+  if (state.finisher) delete state.finisher.scriptId;
+}
+
+function combatRollbackState() {
+  const snapshot = saveRollbackState();
+  delete snapshot.visualRng;
+  delete snapshot.particles;
+  delete snapshot.effects;
+  delete snapshot.shake;
+  delete snapshot.flash;
+  delete snapshot.cinematicZoom;
+  for (const fighter of snapshot.fighters) {
+    for (const field of rollbackPresentationFighterFields) delete fighter.values[field];
+  }
+  return snapshot;
+}
+
+function syncRollbackPresentation() {
+  updateHud();
+  updateComboState();
+  updateOnlineHud();
+  $("#touchControls").classList.toggle("cinematic", Boolean(state.finisher));
+  $(".touch-final").classList.toggle("ready", state.phase === "finish" && state.finishWinner === onlineLocalSide());
+}
+
+function createOnlineRollback(config, initialFrame = 0) {
+  return new RollbackSession({
+    localSide: onlineLocalSide(),
+    matchTag: matchTagFromId(config.matchId),
+    inputDelay: config.inputDelay,
+    initialFrame,
+    saveState: saveRollbackState,
+    loadState: restoreRollbackState,
+    checksum: () => checksumState(combatRollbackState()),
+    step(inputs, frame, { resimulating }) {
+      const previous = rollbackResimulating;
+      rollbackResimulating = resimulating;
+      try {
+        state.simulationTick = frame + 1;
+        simulatePreparedGameTick(SIMULATION_STEP_SECONDS, bitsToInput(inputs[0]), bitsToInput(inputs[1]));
+      } finally {
+        rollbackResimulating = previous;
+      }
+    },
+    onRollback() {
+      syncRollbackPresentation();
+    },
+    onWindowExceeded() {
+      updateOnlineHud("error");
+      if (onlineSession.role === "host") sendAuthoritativeOnlineState("rollback-window");
+      else sendOnlineControl({ type: "desync-warning", matchId: config.matchId, frame: onlineSession.rollback?.frame || 0 });
+    },
+  });
 }
 
 function setupRoster() {
@@ -1069,7 +1791,8 @@ function makeMatchFighters() {
 }
 
 function showScreen(name) {
-  if (state.screen === "online" && name !== "online") disconnectOnline(true);
+  const keepsOnlineLink = state.mode === "online" && ["online", "fight", "result"].includes(name);
+  if (onlineSession.role && !keepsOnlineLink) disconnectOnline(true);
   state.screen = name;
   $$(".screen").forEach((screen) => screen.classList.toggle("active", screen.id === `${name}Screen`));
   const playing = name === "fight";
@@ -1085,7 +1808,9 @@ function showScreen(name) {
   $("#gameFrame").classList.toggle("training-active", trainingVisible);
   $("#touchControls").classList.toggle("playing", playing);
   $("#touchPauseButton").classList.toggle("playing", playing);
+  $("#touchPauseButton").hidden = playing && state.mode === "online";
   if (!playing) $("#announcer").classList.add("hidden");
+  updateOnlineHud();
   syncMusic();
 }
 
@@ -1215,12 +1940,79 @@ function startMatch(resetSet = true) {
   canvas.focus();
 }
 
+function startOnlineMatch(config) {
+  if (!validOnlineMatchConfig(config)) return false;
+  unlockAudio();
+  if (state.musicChoice === "auto") advanceTrack();
+  resetMusicDuck();
+  state.mode = "online";
+  state.arcadeRun = null;
+  state.qaManualMode = false;
+  state.paused = false;
+  onlineSession.matchConfig = cloneRollbackValue(config);
+  onlineSession.matchActive = true;
+  onlineSession.networkPaused = false;
+  onlineSession.localSuspended = false;
+  onlineSession.remoteSuspended = false;
+  onlineSession.awaitingResume = false;
+  onlineSession.rematchVotes.clear();
+  onlineSession.remoteChecksums.clear();
+  onlineSession.checksumMismatches = 0;
+  onlineSession.lastChecksumSentFrame = -1;
+  onlineSession.lastPersistedFrame = -1;
+  onlineSession.lobby.localReady = false;
+  onlineSession.lobby.remoteReady = false;
+  state.picks = config.picks.map((id) => roster.findIndex((fighter) => fighter.id === id));
+  state.stage = config.stage;
+  state.rounds = [0, 0];
+  state.round = 1;
+  state.matchSerial += 1;
+  state.simulationTick = 0;
+  seedOnlineRound(1);
+  state.fighters = makeMatchFighters();
+  state.particles.length = 0;
+  state.effects.length = 0;
+  state.traps.length = 0;
+  state.projectiles.length = 0;
+  state.timer = 99;
+  state.timerCarry = 0;
+  state.phase = "intro";
+  state.phaseTime = 2.25;
+  state.hitstop = 0;
+  state.lastImpactSide = -1;
+  state.finishWinner = -1;
+  state.finisherType = 0;
+  state.finisher = null;
+  state.cinematicZoom = 1;
+  state.shake = 0;
+  state.flash = 0;
+  commandHistory[0].length = 0;
+  commandHistory[1].length = 0;
+  onlineSession.rollback = createOnlineRollback(config, 0);
+  $("#onlineMatchSetup").hidden = true;
+  $("#onlineRematchStatus").hidden = true;
+  $("#touchControls").classList.remove("cinematic");
+  $(".touch-final").classList.remove("ready", "super-ready");
+  updateStageUI();
+  updateHud();
+  showScreen("fight");
+  updateOnlineHud();
+  announce("ONLINE ROUND 1", `${roster[state.picks[0]].name} VS ${roster[state.picks[1]].name} · ${config.inputDelay}F DELAY`, 1.35);
+  setTimeout(() => {
+    if (state.mode === "online" && state.screen === "fight" && state.phase === "intro") announce("FIGHT!", "ROLLBACK SYNC LOCKED", 0.8);
+  }, 1150);
+  persistOnlineResume(true);
+  canvas.focus();
+  return true;
+}
+
 function resetRound() {
   resetMusicDuck();
   const carriedGrit = state.fighters.map((fighter) => fighter.meter);
   state.round += 1;
   state.qaManualMode = false;
-  seedMatch(state.round);
+  if (state.mode === "online") seedOnlineRound(state.round);
+  else seedMatch(state.round);
   state.fighters = makeMatchFighters();
   state.fighters.forEach((fighter, side) => { fighter.meter = carriedGrit[side] || 0; });
   state.particles.length = 0;
@@ -1248,6 +2040,7 @@ function resetRound() {
 }
 
 function announce(main, sub = "", duration = 1) {
+  if (rollbackResimulating) return;
   const box = $("#announcer");
   box.querySelector("strong").textContent = main;
   box.querySelector("span").textContent = sub;
@@ -1303,8 +2096,10 @@ function performFinisher(winner, type) {
   };
   state.cinematicZoom = 1.02;
   state.shake = .16;
-  $(".touch-final").classList.remove("ready");
-  $("#touchControls").classList.add("cinematic");
+  if (!rollbackResimulating) {
+    $(".touch-final").classList.remove("ready");
+    $("#touchControls").classList.add("cinematic");
+  }
   sound("special");
   return script.duration + .55;
 }
@@ -1349,18 +2144,18 @@ function triggerFinisherImpact(finisher, impact) {
   finisher.beatLife = finalImpact ? 1.05 : .48;
 
   for (let index = 0; index < count; index += 1) {
-    const angle = random() * Math.PI * 2;
-    const speed = 100 + random() * (finalImpact ? 670 : 330) * impact.power;
-    const splatter = finalImpact && gore && random() > .34;
+    const angle = visualRandom() * Math.PI * 2;
+    const speed = 100 + visualRandom() * (finalImpact ? 670 : 330) * impact.power;
+    const splatter = finalImpact && gore && visualRandom() > .34;
     state.particles.push({
       x: pointX,
       y: pointY,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed - (finalImpact ? 150 : 35),
-      life: (finalImpact ? .65 : .22) + random() * (finalImpact ? 1.15 : .42),
+      life: (finalImpact ? .65 : .22) + visualRandom() * (finalImpact ? 1.15 : .42),
       max: finalImpact ? 1.8 : .64,
-      size: 2 + random() * (finalImpact ? 8 : 5),
-      color: splatter ? "#d90b19" : random() > .38 ? attacker.def.accent : attacker.def.color,
+      size: 2 + visualRandom() * (finalImpact ? 8 : 5),
+      color: splatter ? "#d90b19" : visualRandom() > .38 ? attacker.def.accent : attacker.def.color,
     });
   }
 
@@ -1435,8 +2230,13 @@ function showResult(winner) {
     : `url("assets/fighters/${def.id}.webp")`;
   $("#resultQuote").textContent = def.victoryQuote || kit?.victory.quote || "PHILLY REMEMBERS THE WINNER.";
   $("#rematchButton").textContent = arcadeDefeat ? "CONTINUE" : "REMATCH";
-  $("#reselectButton").textContent = arcadeDefeat ? "ABANDON RUN" : "SELECT FIGHTERS";
+  $("#reselectButton").textContent = arcadeDefeat ? "ABANDON RUN" : state.mode === "online" ? "LEAVE ROOM" : "SELECT FIGHTERS";
   showScreen("result");
+  if (state.mode === "online") {
+    onlineSession.rematchVotes.clear();
+    updateOnlineRematchUi();
+    persistOnlineResume(true);
+  }
 }
 
 function showArcadeLadder(clearedMatch) {
@@ -1494,6 +2294,7 @@ function resolveMatchResult(winner) {
 }
 
 function updateHud() {
+  if (rollbackResimulating) return;
   if (!state.fighters.length) return;
   state.fighters.forEach((fighter, side) => {
     const prefix = side === 0 ? "p1" : "p2";
@@ -1535,6 +2336,7 @@ function resetTrainingPosition(countReset = true) {
 }
 
 function updateTrainingUi(input = {}) {
+  if (rollbackResimulating) return;
   if (state.mode !== "training" || !state.fighters.length) return;
   const [player] = state.fighters;
   const combo = player.combo.snapshot(state.simulationTick);
@@ -1897,7 +2699,10 @@ function prepareFighterInput(fighter, input) {
     final: Boolean(input.final),
   };
   for (const action of advancedActions) normalized[action] = Boolean(normalized[action] || input[action]);
-  Object.assign(normalized, applyControlStyle(normalized, state.controlStyle, fighter.facing));
+  const controlStyle = state.mode === "online"
+    ? normalizeControlStyle(onlineSession.matchConfig?.controlStyles?.[fighter.side])
+    : state.controlStyle;
+  Object.assign(normalized, applyControlStyle(normalized, controlStyle, fighter.facing));
   recordInput(fighter.side, normalized, fighter);
   if (state.phase === "fight") {
     const command = recognizeFighterCommand(
@@ -2716,7 +3521,7 @@ function checkKnockout() {
     attacker.attacking = null;
     duckMusic(0.34, 1900);
     announce("FINISH THEM", "PRESS FB  /  ↓ → HEAVY  /  ← ↓ → SPECIAL", 2.2);
-    $(".touch-final").classList.add("ready");
+    if (!rollbackResimulating) $(".touch-final").classList.add("ready");
     updateHud();
     sound("finish");
 }
@@ -2747,6 +3552,7 @@ function updateComboState() {
     const defenderInCombo = Boolean(defender
       && (defender.hitstunFrames > 0 || defender.pendingKnockdown || !defender.grounded));
     attacker.combo.tick(state.simulationTick, defenderInCombo);
+    if (rollbackResimulating) continue;
     const readout = $(`#p${attacker.side + 1}Combo`);
     if (!readout) continue;
     const combo = attacker.combo.snapshot(state.simulationTick);
@@ -2760,9 +3566,9 @@ function spawnHit(x, y, def, attackKind, blocked) {
   const baseCount = blocked ? 9 : attackKind === "special" ? 28 : attackKind === "heavy" ? 18 : 12;
   const count = Math.max(3, Math.round(baseCount * state.performance.particleScale));
   for (let i = 0; i < count; i += 1) {
-    const angle = random() * Math.PI * 2;
-    const speed = 90 + random() * 310;
-    state.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 0.18 + random() * 0.34, max: 0.55, size: 2 + random() * 6, color: random() > 0.34 ? def.accent : def.color });
+    const angle = visualRandom() * Math.PI * 2;
+    const speed = 90 + visualRandom() * 310;
+    state.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 0.18 + visualRandom() * 0.34, max: 0.55, size: 2 + visualRandom() * 6, color: visualRandom() > 0.34 ? def.accent : def.color });
   }
   state.effects.push({ kind: blocked ? "guard" : "hit", style: def.vfx, attackKind, x, y, life: attackKind === "special" ? 0.42 : 0.28, max: attackKind === "special" ? 0.42 : 0.28, color: def.accent });
 }
@@ -2818,10 +3624,7 @@ function syncFighterStateMachines() {
   }
 }
 
-function simulateGameTick(dt) {
-  if (state.screen !== "fight" || !state.fighters.length) return;
-  if (document.body.classList.contains("orientation-blocked")) return;
-  if (state.paused) return;
+function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
   if (state.hitstop > 0) {
     state.hitstop = Math.max(0, state.hitstop - dt);
     return;
@@ -2831,16 +3634,6 @@ function simulateGameTick(dt) {
   state.flash = Math.max(0, state.flash - dt);
 
   updateFacings();
-  let input0 = readQaInput(0) || readInput(0);
-  const trainingDummy = state.mode === "training"
-    ? trainingDummyInput(state.training, state.simulationTick, {
-      attackLevel: state.fighters[0]?.attacking?.level,
-    })
-    : null;
-  let input1 = readQaInput(1)
-    || (state.mode === "arcade" || (state.mode === "training" && trainingDummy === null)
-      ? aiInput(state.fighters[1], state.fighters[0], dt)
-      : trainingDummy || readInput(1));
   if (state.phase === "intro") {
     input0 = {};
     input1 = {};
@@ -2917,6 +3710,66 @@ function simulateGameTick(dt) {
   state.particles = trimVisualBudget(state.particles, state.performance.particleBudget);
   state.effects = trimVisualBudget(state.effects, state.performance.effectBudget);
   updateTrainingUi(input0);
+}
+
+function simulateOfflineGameTick(dt) {
+  if (state.hitstop > 0) {
+    state.hitstop = Math.max(0, state.hitstop - dt);
+    return;
+  }
+  let input0 = readQaInput(0) || readInput(0);
+  const trainingDummy = state.mode === "training"
+    ? trainingDummyInput(state.training, state.simulationTick, {
+      attackLevel: state.fighters[0]?.attacking?.level,
+    })
+    : null;
+  let input1 = readQaInput(1)
+    || (state.mode === "arcade" || (state.mode === "training" && trainingDummy === null)
+      ? aiInput(state.fighters[1], state.fighters[0], dt)
+      : trainingDummy || readInput(1));
+  simulatePreparedGameTick(dt, input0, input1);
+}
+
+function maybeSendOnlineChecksum() {
+  const rollback = onlineSession.rollback;
+  if (!rollback || !onlineSession.peer?.connected) return;
+  const metrics = rollback.metrics();
+  const confirmed = Math.min(metrics.frame, metrics.confirmedRemoteFrame + 1, metrics.acknowledgedLocalFrame + 1);
+  const checkpoint = Math.floor(confirmed / 60) * 60;
+  if (checkpoint <= 0 || checkpoint <= onlineSession.lastChecksumSentFrame) return;
+  const checksum = rollback.checksumAt(checkpoint);
+  if (!checksum) return;
+  onlineSession.lastChecksumSentFrame = checkpoint;
+  sendOnlineControl({ type: "checksum", matchId: onlineSession.matchConfig?.matchId, frame: checkpoint, checksum });
+}
+
+function simulateOnlineGameTick() {
+  const rollback = onlineSession.rollback;
+  if (!rollback || onlineSession.networkPaused) return;
+  const localInput = readQaInput(0) || readInput(0);
+  const result = rollback.advance(inputToBits(localInput));
+  if (onlineSession.peer?.connected) onlineSession.peer.sendInput(rollback.inputPacket());
+  if (!result.advanced) {
+    updateOnlineHud("warning");
+    return;
+  }
+  state.simulationTick = rollback.frame;
+  maybeSendOnlineChecksum();
+  checkPendingOnlineChecksums();
+  const metrics = rollback.metrics();
+  if (metrics.frame - onlineSession.lastPersistedFrame >= 60) {
+    onlineSession.lastPersistedFrame = metrics.frame;
+    persistOnlineResume(true);
+  }
+  updateOnlineHud(metrics.frame - metrics.lastRollbackFrame < 30 ? "warning" : "sync");
+}
+
+function simulateGameTick(dt) {
+  if (state.screen !== "fight" || !state.fighters.length) return;
+  if (document.body.classList.contains("orientation-blocked")) return;
+  if (state.paused) return;
+  if (state.mode === "online" && onlineSession.matchActive) simulateOnlineGameTick();
+  else simulateOfflineGameTick(dt);
 }
 
 function drawCover(image, offsetX = 0) {
@@ -3763,6 +4616,10 @@ function drawDebugOverlay() {
     `SIM ${SIMULATION_HZ}HZ · TICK ${state.simulationTick} · STEPS ${state.simulationSteps}`,
     `ALPHA ${state.simulationAlpha.toFixed(3)} · DROPPED ${state.simulationDroppedSeconds.toFixed(3)}s`,
     `PHASE ${state.phase} · RNG ${state.rng.getState().toString(16).padStart(8, "0")}`,
+    ...(onlineSession.rollback ? [(() => {
+      const net = onlineSession.rollback.metrics();
+      return `NET F${net.frame} · CONF ${net.confirmedRemoteFrame} · ${net.inputDelay}F DELAY · ${net.rollbacks} RB / ${net.resimulatedFrames} RESIM · MAX ${net.maximumRollback}F ${net.maximumResimulationMs.toFixed(3)}MS · DESYNC ${onlineSession.checksumMismatches}`;
+    })()] : []),
     ...state.fighters.map((fighter) => {
       const move = fighter.attacking?.profileId || "—";
       const guard = fighter.guarding ? fighter.guardHeight.toUpperCase() : "—";
@@ -3818,7 +4675,7 @@ function clearLatchedInputEdges() {
 }
 
 function runSimulationStep(dt, tick) {
-  state.simulationTick = tick;
+  if (!(state.mode === "online" && onlineSession.rollback)) state.simulationTick = tick;
   simulateGameTick(dt);
 }
 
@@ -3833,7 +4690,8 @@ function loop(now) {
       droppedSeconds: simulationClock.droppedSeconds,
     }
     : simulationClock.advance(elapsed, runSimulationStep);
-  state.simulationTick = frame.tick;
+  state.simulationTick = state.mode === "online" && onlineSession.rollback
+    ? onlineSession.rollback.frame : frame.tick;
   state.simulationAlpha = frame.alpha;
   state.simulationSteps = frame.steps;
   state.simulationDroppedSeconds = frame.droppedSeconds;
@@ -3988,6 +4846,7 @@ function resetMusicDuck() {
 }
 
 function duckMusic(amount, duration) {
+  if (rollbackResimulating) return;
   window.clearTimeout(musicDuckTimer);
   state.musicDuck = amount;
   syncMusic();
@@ -4015,6 +4874,7 @@ function unlockAudio() {
 }
 
 function sound(kind) {
+  if (rollbackResimulating) return;
   showSoundCaption(kind);
   if (!$("#soundToggle").checked) return;
   unlockAudio();
@@ -4085,8 +4945,10 @@ function isPhoneViewport() {
 function syncOrientationGate() {
   const phone = isPhoneViewport();
   const portrait = window.innerHeight > window.innerWidth;
-  document.body.classList.toggle("orientation-blocked", phone && portrait);
+  const blocked = phone && portrait;
+  document.body.classList.toggle("orientation-blocked", blocked);
   document.body.classList.toggle("mobile-landscape", phone && !portrait);
+  setOnlineLocalSuspended(blocked || document.hidden);
 }
 
 function lockLandscape() {
@@ -4142,6 +5004,11 @@ window.addEventListener("offline", updateOfflineBadge);
 
 function setPaused(paused) {
   if (state.screen !== "fight") return false;
+  if (state.mode === "online") {
+    state.paused = false;
+    $("#pausePanel").hidden = true;
+    return false;
+  }
   state.paused = Boolean(paused);
   $("#pausePanel").hidden = !state.paused;
   $("#touchControls").classList.toggle("paused", state.paused);
@@ -4238,7 +5105,10 @@ function menuPadLoop() {
     } else if (state.screen === "stage") startMatch(true);
     else if (state.screen === "ladder") startMatch(true);
     else if (state.screen === "ending") startSelect("arcade");
-    else if (state.screen === "result") startMatch(true);
+    else if (state.screen === "result") {
+      if (state.mode === "online") requestOnlineRematch();
+      else startMatch(true);
+    }
   }
   menuPadWasPressed = confirm;
   requestAnimationFrame(menuPadLoop);
@@ -4252,6 +5122,32 @@ $("#onlineInviteInput").addEventListener("keydown", (event) => {
   if (event.key === "Enter") joinOnlineRoom();
 });
 $("#onlineCopyButton").addEventListener("click", copyOnlineInvite);
+$("#onlineFighterSelect").addEventListener("change", (event) => {
+  if (!onlineFighterIds.has(event.target.value)) return;
+  onlineSession.lobby.localFighter = event.target.value;
+  onlineSession.lobby.localReady = false;
+  sendOnlineLobbyState();
+  updateOnlineMatchSetup();
+  persistOnlineResume(false);
+});
+$("#onlineStageSelect").addEventListener("change", (event) => {
+  if (onlineSession.role !== "host" || !stages[event.target.value]) return;
+  onlineSession.lobby.stage = event.target.value;
+  onlineSession.lobby.localReady = false;
+  sendOnlineLobbyState();
+  updateOnlineMatchSetup();
+  persistOnlineResume(false);
+});
+$("#onlineDelaySelect").addEventListener("change", (event) => {
+  const choice = String(event.target.value);
+  if (!["auto", "0", "1", "2", "3", "4"].includes(choice)) return;
+  onlineSession.lobby.delayChoice = choice;
+  onlineSession.lobby.localReady = false;
+  sendOnlineLobbyState();
+  updateOnlineMatchSetup();
+  persistOnlineResume(false);
+});
+$("#onlineReadyButton").addEventListener("click", toggleOnlineReady);
 $("#onlineDisconnectButton").addEventListener("click", () => disconnectOnline(true));
 $("#controlsButton").addEventListener("click", () => { unlockAudio(); $("#controlsDialog").showModal(); });
 $("#moveListSelect").addEventListener("change", (event) => renderMoveList(event.target.value));
@@ -4278,6 +5174,11 @@ $("#aiDifficultySelect").addEventListener("change", (event) => {
 $("#controlStyleSelect").addEventListener("change", (event) => {
   state.controlStyle = normalizeControlStyle(event.target.value);
   localStorage.setItem("final-blow-control-style", state.controlStyle);
+  if (state.mode === "online" && !onlineSession.matchActive) {
+    onlineSession.lobby.localReady = false;
+    sendOnlineLobbyState();
+    updateOnlineMatchSetup();
+  }
   syncNewOptionsUi();
 });
 $("#reducedMotionToggle").addEventListener("change", (event) => {
@@ -4374,7 +5275,8 @@ $("#soundToggle").addEventListener("change", () => {
   else stopSfx();
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && state.screen === "fight" && !state.paused) setPaused(true);
+  if (state.mode === "online" && state.screen === "fight") setOnlineLocalSuspended(document.hidden || document.body.classList.contains("orientation-blocked"));
+  else if (document.hidden && state.screen === "fight" && !state.paused) setPaused(true);
   syncMusic();
 });
 $("#fighterContinue").addEventListener("click", showStageSelect);
@@ -4382,7 +5284,10 @@ $$(".stage-card").forEach((card) => card.addEventListener("click", () => chooseS
 $("#fightButton").addEventListener("click", () => startMatch(true));
 $("#arcadeContinueButton").addEventListener("click", () => startMatch(true));
 $("#endingReplayButton").addEventListener("click", () => startSelect("arcade"));
-$("#rematchButton").addEventListener("click", () => startMatch(true));
+$("#rematchButton").addEventListener("click", () => {
+  if (state.mode === "online") requestOnlineRematch();
+  else startMatch(true);
+});
 $("#reselectButton").addEventListener("click", () => startSelect(state.mode));
 $("#resumeButton").addEventListener("click", () => setPaused(false));
 $("#restartButton").addEventListener("click", restartPausedRound);
@@ -4434,7 +5339,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.0c-private-rooms",
+  version: "1.0d-rollback-online",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -4609,6 +5514,24 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.mode = enabled ? "arcade" : "versus";
       return state.mode;
     },
+    onlineManual(enabled = true) {
+      if (state.mode !== "online" || !onlineSession.rollback) throw new Error("Start an online rollback match first");
+      state.qaManualMode = Boolean(enabled);
+      return state.qaManualMode;
+    },
+    dropOnlineLink() {
+      if (!onlineSession.peer) throw new Error("No online peer link is active");
+      onlineSession.peer.connection.close();
+      return true;
+    },
+    onlineResult(winner = 0) {
+      if (state.mode !== "online" || !onlineSession.rollback) throw new Error("Start an online rollback match first");
+      const side = winner === 1 ? 1 : 0;
+      state.rounds[side] = 2;
+      state.finisherType = -1;
+      showResult(side);
+      return window.__finalBlowEngine.snapshot();
+    },
     aiFight(firstId = "deathblow", secondId = "jez", difficulty = DEFAULT_AI_DIFFICULTY) {
       window.__finalBlowQa.fight(firstId, secondId);
       setAiDifficulty(difficulty);
@@ -4778,10 +5701,14 @@ setAiDifficulty(state.aiDifficulty);
 syncOrientationGate();
 updateOfflineBadge();
 registerOfflineGame();
+const storedOnlineResume = pendingOnlineInvite ? null : readOnlineResume();
 if (pendingOnlineInvite) {
+  state.mode = "online";
   $("#onlineInviteInput").value = location.href;
   showScreen("online");
   setOnlineStatus("waiting", "Private invite detected. Press Join Private Room.");
+} else if (storedOnlineResume) {
+  resumeStoredOnlineConnection(storedOnlineResume);
 } else showScreen("title");
 updateStageUI();
 requestAnimationFrame(loop);

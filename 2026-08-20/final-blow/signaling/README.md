@@ -15,7 +15,7 @@ Cloudflare Worker and Durable Object service for two-player invite-only WebRTC n
 - Durable Object WebSocket Hibernation keeps connections alive without holding an isolate awake.
 - Offer, answer, and ICE data are relayed but never written to durable storage.
 
-Actual match traffic is peer-to-peer. `final-blow-control` is reliable and ordered; `final-blow-input` is unordered with zero retransmissions for checkpoint 14 rollback input packets.
+Actual match traffic is peer-to-peer. `final-blow-control` is reliable and ordered; `final-blow-input` is unordered with zero retransmissions for production rollback input packets. Match inputs never traverse or persist in the Worker. See [`../ROLLBACK.md`](../ROLLBACK.md) for the game protocol, correction bounds, reconnect flow, and verification commands.
 
 ## Commands
 

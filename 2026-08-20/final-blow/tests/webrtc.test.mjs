@@ -58,11 +58,13 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 test("host creates reliable control and lossy unordered input channels", async () => {
   const signaling = new FakeSignaling();
   const statuses = [];
+  const inputs = [];
   const peer = new FinalBlowPeer({
     role: "host",
     signaling,
     RTCPeerConnectionImpl: FakePeerConnection,
     onStatus: (kind) => statuses.push(kind),
+    onInput: (packet) => inputs.push(packet),
   });
   assert.deepEqual(peer.controlChannel.options, { ordered: true });
   assert.deepEqual(peer.inputChannel.options, { ordered: false, maxRetransmits: 0 });
@@ -74,6 +76,10 @@ test("host creates reliable control and lossy unordered input channels", async (
   peer.inputChannel.open();
   assert.equal(peer.snapshot().connected, true);
   assert.ok(statuses.includes("connected"));
+  const packet = new Uint8Array([0xfb, 0x14, 1]).buffer;
+  peer.inputChannel.dispatchEvent(new MessageEvent("message", { data: packet }));
+  await settle();
+  assert.deepEqual([...new Uint8Array(inputs[0])], [0xfb, 0x14, 1]);
   peer.close();
 });
 

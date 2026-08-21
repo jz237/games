@@ -19,6 +19,7 @@ export class FinalBlowPeer {
     onStatus = () => {},
     onLatency = () => {},
     onControl = () => {},
+    onInput = () => {},
   }) {
     if (!['host', 'guest'].includes(role)) throw new Error("Invalid WebRTC role.");
     if (typeof RTCPeerConnectionImpl !== "function") throw new Error("This browser cannot create a WebRTC match link.");
@@ -27,6 +28,7 @@ export class FinalBlowPeer {
     this.onStatus = onStatus;
     this.onLatency = onLatency;
     this.onControl = onControl;
+    this.onInput = onInput;
     this.connection = new RTCPeerConnectionImpl({ iceServers: ICE_SERVERS });
     this.controlChannel = null;
     this.inputChannel = null;
@@ -42,7 +44,10 @@ export class FinalBlowPeer {
         this.onStatus("error", error instanceof Error ? error.message : "WebRTC signaling failed.");
       });
     });
-    this.stopCloseListener = signaling.onClose(() => this.onStatus("closed", "Secure room link closed."));
+    this.stopCloseListener = signaling.onClose(() => {
+      if (this.connected) this.onStatus("connected", "Direct P2P link active. Signaling has closed.");
+      else this.onStatus("closed", "Secure room link closed.");
+    });
     this.connection.addEventListener("icecandidate", (event) => {
       signaling.send({ type: "ice", candidate: candidatePayload(event.candidate) });
     });
@@ -117,6 +122,7 @@ export class FinalBlowPeer {
       channel.close();
       return;
     }
+    channel.binaryType = "arraybuffer";
     channel.addEventListener("open", () => this.#checkReady());
     channel.addEventListener("close", () => {
       this.connected = false;
@@ -124,13 +130,17 @@ export class FinalBlowPeer {
       this.onStatus("waiting", "Peer data channel closed.");
     });
     if (channel.label === "final-blow-control") channel.addEventListener("message", (event) => this.#handleControl(event.data));
+    else channel.addEventListener("message", async (event) => {
+      const payload = event.data instanceof Blob ? await event.data.arrayBuffer() : event.data;
+      this.onInput(payload);
+    });
   }
 
   #checkReady() {
     const ready = this.controlChannel?.readyState === "open" && this.inputChannel?.readyState === "open";
     if (!ready || this.connected) return;
     this.connected = true;
-    this.onStatus("connected", "Direct P2P link ready. Rollback combat unlocks at checkpoint 14.");
+    this.onStatus("connected", "Direct P2P link ready. Rollback combat is armed.");
     this.#startLatencyProbe();
   }
 
@@ -198,6 +208,8 @@ export class FinalBlowPeer {
       controlState: this.controlChannel?.readyState || "missing",
       inputState: this.inputChannel?.readyState || "missing",
       connected: this.connected,
+      controlBufferedAmount: this.controlChannel?.bufferedAmount || 0,
+      inputBufferedAmount: this.inputChannel?.bufferedAmount || 0,
     };
   }
 
