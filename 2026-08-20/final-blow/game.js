@@ -6767,7 +6767,10 @@ function drawFatalityPool(effect, alpha) {
 function drawDizzyStars(fighter, time) {
   if (!fighter || fighter.dizzyFrames <= 0) return;
   const centreX = fighter.x;
-  const centreY = fighter.y - fighter.height - 30;
+  // Anchor to the DRAWN sprite height, not the collision box, so the stars orbit
+  // above the head rather than across the chest.
+  const drawnHeight = fighterRenderSize(fighter.def.id) * 0.956;
+  const centreY = fighter.y - drawnHeight - 26;
   const remaining = fighter.dizzyFrames / Math.max(1, fighter.dizzyTotalFrames);
   const stars = 5;
   ctx.save();
