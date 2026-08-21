@@ -833,6 +833,8 @@ kbd,
 
 .kensington-preview { background-image: linear-gradient(180deg, transparent, rgba(0,0,0,.22)), url("assets/kensington-allegheny.webp"); }
 .vet-preview { background-image: linear-gradient(180deg, transparent, rgba(0,0,0,.22)), url("assets/veterans-stadium.webp"); }
+.wildwood-preview { background-image: linear-gradient(180deg, transparent, rgba(0,0,0,.22)), url("assets/wildwood-boardwalk.webp"); }
+.buffet-preview { background-image: linear-gradient(180deg, transparent, rgba(0,0,0,.22)), url("assets/chinese-buffet.webp"); }
 
 .stage-card strong {
   display: block;

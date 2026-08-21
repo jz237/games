@@ -129,6 +129,8 @@ import {
   graphicFatalitySnapshot,
 } from "./engine/fatalities.mjs";
 import {
+  BOARDWALK_POSTURES,
+  BUFFET_POSTURES,
   CROWD_LAYERS,
   POSTURES,
   TAILGATE_POSTURES,
@@ -531,6 +533,16 @@ const stages = {
     name: "THE VET PARKING LOT",
     ticker: "VETERANS STADIUM // SOUTH PHILADELPHIA // 1999",
     src: "assets/veterans-stadium.webp",
+  },
+  wildwood: {
+    name: "WILDWOOD BOARDWALK",
+    ticker: "WILDWOOD BOARDWALK // NEW JERSEY // AFTER DARK",
+    src: "assets/wildwood-boardwalk.webp",
+  },
+  buffet: {
+    name: "CHINESE BUFFET · CRAB LEGS",
+    ticker: "CRAB-LEG SECTION // ALL YOU CAN EAT // 11PM",
+    src: "assets/chinese-buffet.webp",
   },
 };
 
@@ -5002,7 +5014,8 @@ function drawStage(time) {
 }
 
 const POSTURE_BY_ID = Object.fromEntries(
-  [...POSTURES, ...TAILGATE_POSTURES].map((posture) => [posture.id, posture]),
+  [...POSTURES, ...TAILGATE_POSTURES, ...BOARDWALK_POSTURES, ...BUFFET_POSTURES]
+    .map((posture) => [posture.id, posture]),
 );
 
 function resetCrowd() {
@@ -5118,6 +5131,27 @@ function drawPedestrian(person, layer, x, gait, paused, reaction) {
       ctx.beginPath();
       ctx.moveTo(1, -34); ctx.lineTo(22, -28); ctx.lineTo(1, -20);
       ctx.closePath(); ctx.fill();
+    } else if (person.prop === "plate") {
+      ctx.fillStyle = "#eceff2";
+      ctx.beginPath();
+      ctx.ellipse(0, -3, 10, 3.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // A heap of crab legs piled well past the rim.
+      ctx.fillStyle = "#e2743a";
+      for (let leg = 0; leg < 4; leg += 1) {
+        ctx.save();
+        ctx.translate((leg - 1.5) * 4, -6);
+        ctx.rotate((leg - 1.5) * 0.4);
+        ctx.fillRect(-1.4, -8, 2.8, 9);
+        ctx.restore();
+      }
+    } else if (person.prop === "tongs") {
+      ctx.strokeStyle = "#d5dce8";
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(-2, 2); ctx.lineTo(12, -6);
+      ctx.moveTo(-2, 6); ctx.lineTo(12, -1);
+      ctx.stroke();
     } else if (person.prop === "sign") {
       ctx.fillStyle = "#e6e9ec";
       ctx.fillRect(-2, -34, 26, 18);
@@ -5332,6 +5366,72 @@ function drawTailgateProps(frame, centre) {
   ctx.globalAlpha = 1;
 }
 
+// Gulls, a moving ride car and neon haze over the boardwalk.
+function drawBoardwalkAtmosphere(frame, centre) {
+  ctx.save();
+  // Seagulls drifting over the ocean.
+  ctx.globalAlpha = 0.5;
+  ctx.strokeStyle = "#d8dee6";
+  ctx.lineWidth = 2;
+  for (let index = 0; index < 6; index += 1) {
+    const gullX = ((frame * (0.6 + index * 0.18) + index * 230) % (W + 160)) - 80
+      + (centre - W * 0.5) * -0.06;
+    const gullY = 150 + index * 17 + Math.sin(frame * 0.02 + index) * 9;
+    const flap = Math.sin(frame * 0.16 + index * 1.4) * 5;
+    ctx.beginPath();
+    ctx.moveTo(gullX - 8, gullY + flap);
+    ctx.quadraticCurveTo(gullX, gullY - 3, gullX + 8, gullY + flap);
+    ctx.stroke();
+  }
+  // A ride car climbing the coaster behind the sign.
+  const rideT = (frame % 420) / 420;
+  ctx.globalAlpha = 0.75;
+  ctx.fillStyle = "#ffd54a";
+  ctx.fillRect(200 + rideT * 260 + (centre - W * 0.5) * -0.08, 300 - Math.sin(rideT * Math.PI) * 58, 14, 8);
+  // Sea haze rolling along the railing line.
+  const haze = ctx.createLinearGradient(0, 400, 0, 520);
+  haze.addColorStop(0, "rgba(150,180,205,0)");
+  haze.addColorStop(0.5, `rgba(150,180,205,${0.06 + Math.sin(frame * 0.008) * 0.02})`);
+  haze.addColorStop(1, "rgba(150,180,205,0)");
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, 400, W, 120);
+  ctx.restore();
+}
+
+// Steam bursts, swaying pendant lights and rattling trays over the crab legs.
+function drawBuffetAtmosphere(frame, centre, reaction) {
+  ctx.save();
+  for (let index = 0; index < 7; index += 1) {
+    const x = 120 + index * 165 + (centre - W * 0.5) * -0.1;
+    if (x < -60 || x > W + 60) continue;
+    // Steam pulses on their own rhythm rather than all together.
+    const pulse = (frame * (0.012 + index * 0.002) + index * 1.7) % (Math.PI * 2);
+    const rise = (Math.sin(pulse) + 1) * 0.5;
+    const size = 16 + rise * 26;
+    const gradient = ctx.createRadialGradient(x, 430 - rise * 46, 2, x, 430 - rise * 46, size);
+    gradient.addColorStop(0, `rgba(240,244,248,${0.16 * (1 - rise * 0.55)})`);
+    gradient.addColorStop(1, "rgba(240,244,248,0)");
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(x, 430 - rise * 46, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Pendant lights swaying, harder right after a big hit.
+  const sway = (0.02 + reaction * 0.05) * Math.sin(frame * 0.03);
+  ctx.globalAlpha = 0.4;
+  ctx.strokeStyle = "#f2c98a";
+  ctx.lineWidth = 2;
+  for (let index = 0; index < 6; index += 1) {
+    const x = 150 + index * 200 + (centre - W * 0.5) * -0.1;
+    ctx.beginPath();
+    ctx.moveTo(x, 60);
+    ctx.lineTo(x + Math.sin(sway + index) * 12, 132);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawCrowd(time) {
   const crowd = state.crowd;
   if (!crowd) return;
@@ -5362,6 +5462,15 @@ function drawCrowd(time) {
       }
       ctx.globalAlpha = 1;
     }
+    return;
+  }
+
+  if (crowd.variant === "boardwalk") {
+    drawBoardwalkAtmosphere(frame, centre);
+    return;
+  }
+  if (crowd.variant === "buffet") {
+    drawBuffetAtmosphere(frame, centre, reaction);
     return;
   }
 
@@ -7801,7 +7910,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.1j-tailgate-edition",
+  version: "1.1k-four-stages-edition",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -8076,6 +8185,10 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       setAiDifficulty(difficulty);
       state.mode = "arcade";
       return window.__finalBlowEngine.snapshot();
+    },
+    demoStages() {
+      // The stage list the attract director shuffles through.
+      return Object.keys(stages);
     },
     demo(seed = 237) {
       startDemo({ qa: true, seed });

@@ -72,14 +72,56 @@ const FAN_ACCENTS = Object.freeze([
   "#f2f5f7", "#0f2f28", "#c7ced4", "#2d6b57", "#141719", "#9aa3ab",
 ]);
 
+/**
+ * Boardwalk strollers: an easy night-out crowd, plus cyclists and people leaning
+ * on the railing looking at the ocean.
+ */
+export const BOARDWALK_POSTURES = Object.freeze([
+  Object.freeze({ id: "stroll", weight: 26, lean: 0.06, headDrop: 0.02, stride: 0.7, armSwing: 0.42, bob: 0.7, prop: "" }),
+  Object.freeze({ id: "amble", weight: 18, lean: 0.10, headDrop: 0.04, stride: 0.5, armSwing: 0.3, bob: 0.5, prop: "" }),
+  Object.freeze({ id: "railing", weight: 14, lean: 0.44, headDrop: -0.12, stride: 0, armSwing: 0.04, bob: 0.1, prop: "" }),
+  Object.freeze({ id: "snack", weight: 14, lean: 0.06, headDrop: -0.16, stride: 0.3, armSwing: 0.14, bob: 0.3, prop: "cup" }),
+  Object.freeze({ id: "cyclist", weight: 10, lean: 0.5, headDrop: 0.1, stride: 1.3, armSwing: 0.06, bob: 0.2, prop: "" }),
+  Object.freeze({ id: "linger", weight: 10, lean: 0.14, headDrop: 0.08, stride: 0.06, armSwing: 0.08, bob: 0.2, prop: "" }),
+  Object.freeze({ id: "point", weight: 8, lean: -0.06, headDrop: -0.2, stride: 0.1, armSwing: 0.7, bob: 0.3, prop: "" }),
+]);
+
+/**
+ * Buffet patrons: loading plates, reaching with tongs, competing for crab legs
+ * and carrying overflowing dishes back to their tables.
+ */
+export const BUFFET_POSTURES = Object.freeze([
+  Object.freeze({ id: "load", weight: 24, lean: 0.34, headDrop: 0.24, stride: 0.06, armSwing: 0.5, bob: 0.2, prop: "plate" }),
+  Object.freeze({ id: "tongs", weight: 20, lean: 0.4, headDrop: 0.26, stride: 0, armSwing: 0.66, bob: 0.2, prop: "tongs" }),
+  Object.freeze({ id: "carry", weight: 18, lean: -0.04, headDrop: -0.06, stride: 0.5, armSwing: 0.1, bob: 0.4, prop: "plate" }),
+  Object.freeze({ id: "queue", weight: 14, lean: 0.12, headDrop: 0.08, stride: 0.1, armSwing: 0.1, bob: 0.2, prop: "plate" }),
+  Object.freeze({ id: "reach", weight: 12, lean: 0.46, headDrop: 0.18, stride: 0, armSwing: 0.8, bob: 0.2, prop: "tongs" }),
+  Object.freeze({ id: "spill", weight: 6, lean: 0.3, headDrop: 0.3, stride: 0.4, armSwing: 0.7, bob: 0.9, prop: "plate" }),
+  Object.freeze({ id: "linger", weight: 6, lean: 0.1, headDrop: 0.04, stride: 0.04, armSwing: 0.06, bob: 0.2, prop: "" }),
+]);
+
+// Easy night-out and restaurant palettes: warmer and lighter than the street.
+const BOARDWALK_COLOURS = Object.freeze([
+  "#6a5f77", "#4d6a7a", "#7a6455", "#5f7268", "#7d5f6a", "#556380",
+  "#8a7a63", "#4a5f6d", "#6f6a52", "#77606b", "#3f5866", "#6b7460",
+]);
+const BUFFET_COLOURS = Object.freeze([
+  "#7c6a5c", "#5f6b74", "#84756a", "#6b6f5e", "#75626b", "#5b6a6b",
+  "#8b7a6c", "#666f7c", "#7a6c5a", "#6e6472", "#556663", "#877066",
+]);
+
 export const CROWD_VARIANTS = Object.freeze({
   street: Object.freeze({ postures: POSTURES, coats: null, trousers: null, accents: null }),
   tailgate: Object.freeze({ postures: TAILGATE_POSTURES, coats: FAN_COLOURS, trousers: FAN_TROUSERS, accents: FAN_ACCENTS }),
+  boardwalk: Object.freeze({ postures: BOARDWALK_POSTURES, coats: BOARDWALK_COLOURS, trousers: null, accents: null }),
+  buffet: Object.freeze({ postures: BUFFET_POSTURES, coats: BUFFET_COLOURS, trousers: null, accents: null }),
 });
 
 export const STAGE_CROWD_VARIANT = Object.freeze({
   kensington: "street",
   vet: "tailgate",
+  wildwood: "boardwalk",
+  buffet: "buffet",
 });
 
 /**

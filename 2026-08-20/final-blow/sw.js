@@ -1,4 +1,4 @@
-const CACHE_NAME = "final-blow-offline-1.1j";
+const CACHE_NAME = "final-blow-offline-1.1k";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -23,6 +23,8 @@ const PRECACHE = [
   "./engine/fighter-audio.mjs",
   "./assets/kensington-allegheny.webp",
   "./assets/veterans-stadium.webp",
+  "./assets/wildwood-boardwalk.webp",
+  "./assets/chinese-buffet.webp",
   "./assets/fighters/deathblow.webp",
   "./assets/fighters/jez.webp",
   "./assets/fighters/alan.webp",

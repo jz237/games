@@ -306,7 +306,7 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.1J/);
+  assert.match(title.build, /1\.1K/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -324,7 +324,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.1j-tailgate-edition');
+  assert.equal(title.engineVersion, '1.1k-four-stages-edition');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -1388,6 +1388,48 @@ try {
     "the tailgate must rebuild deterministically",
   );
 
+  // Wildwood and the Chinese Buffet: selectable, identifiable from gameplay
+  // alone, correctly framed for the enlarged fighters, and wired into every mode.
+  const newStages = await evaluate(client, `(() => {
+    const cards = [...document.querySelectorAll('.stage-card')].map((card) => card.dataset.stage);
+    const out = { cards, stages: {} };
+    for (const stage of ['wildwood', 'buffet']) {
+      window.__finalBlowQa.fight('benny', 'ali');
+      window.__finalBlowQa.stage(stage);
+      window.__finalBlowQa.positions(300, 1000);
+      window.__finalBlowQa.step(2.5);
+      const snapshot = window.__finalBlowEngine.snapshot();
+      const weapon = window.__finalBlowQa.stageWeaponPlan(stage, 1);
+      out.stages[stage] = {
+        ticker: document.querySelector('#stageTicker').textContent,
+        crowd: snapshot.crowd,
+        weapon: weapon.weaponId,
+        floor: snapshot.fighters[0].y,
+        bounds: [snapshot.fighters[0].movement.stageMinX, snapshot.fighters[0].movement.stageMaxX],
+      };
+    }
+    // Every stage must be reachable by the Watch Demo shuffle bag.
+    out.demoStages = window.__finalBlowQa.demoStages();
+    return out;
+  })()`);
+  assert.deepEqual(newStages.cards, ["kensington", "vet", "wildwood", "buffet"], "both new stages are selectable");
+  assert.match(newStages.stages.wildwood.ticker, /WILDWOOD BOARDWALK/);
+  assert.match(newStages.stages.buffet.ticker, /CRAB-LEG SECTION/);
+  assert.equal(newStages.stages.wildwood.crowd.variant, "boardwalk");
+  assert.equal(newStages.stages.buffet.crowd.variant, "buffet");
+  assert.equal(newStages.stages.wildwood.weapon, "pigeon", "Wildwood carries the dead pigeon");
+  assert.equal(newStages.stages.buffet.weapon, "tongs", "the buffet carries the serving tongs");
+  for (const [id, stage] of Object.entries(newStages.stages)) {
+    assert.ok(stage.crowd.visible >= 20, `${id} must feel occupied, saw ${stage.crowd.visible}`);
+    assert.equal(stage.floor, 600, `${id} must share the same floor line`);
+    assert.deepEqual(stage.bounds, [76, 1204], `${id} must share the same stage bounds`);
+  }
+  assert.deepEqual(
+    [...newStages.demoStages].sort(),
+    ["buffet", "kensington", "vet", "wildwood"],
+    "Watch Demo must shuffle through every stage",
+  );
+
   // The crowd reacts to a super and then settles back to its routes.
   const crowdReaction = await evaluate(client, `(() => {
     window.__finalBlowQa.fight('deathblow', 'jez');
@@ -2280,7 +2322,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.1j/);
+  assert.match(offlineCache.name, /final-blow-offline-1\.1k/);
   assert.ok(offlineCache.entries >= 156);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasRollback, true);
@@ -2307,8 +2349,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.1J/);
-  assert.equal(offlineBoot.version, '1.1j-tailgate-edition');
+  assert.match(offlineBoot.build, /1\.1K/);
+  assert.equal(offlineBoot.version, '1.1k-four-stages-edition');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,

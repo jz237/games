@@ -3,7 +3,7 @@ import test from "node:test";
 import { createDemoDirector, demoMatchupKey } from "../engine/demo.mjs";
 
 const fighters = ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali"];
-const stages = ["kensington", "vet"];
+const stages = ["kensington", "vet", "wildwood", "buffet"];
 
 test("demo director is deterministic and exhausts every matchup before repeating", () => {
   const first = createDemoDirector({ fighterIds: fighters, stageIds: stages, trackCount: 4, seed: 237 });
@@ -53,4 +53,17 @@ test("demo director rejects unusable rosters, stages and soundtrack sets", () =>
   assert.throws(() => createDemoDirector({ fighterIds: ["solo"], stageIds: stages, trackCount: 4 }), /two different/);
   assert.throws(() => createDemoDirector({ fighterIds: fighters, stageIds: [], trackCount: 4 }), /one stage/);
   assert.throws(() => createDemoDirector({ fighterIds: fighters, stageIds: stages, trackCount: 0 }), /one soundtrack/);
+});
+
+test("the stage bag reaches all four stages before repeating any of them", () => {
+  const director = createDemoDirector({ fighterIds: fighters, stageIds: stages, trackCount: 4, seed: 8123 });
+  const seen = new Set();
+  let previous = null;
+  for (let cycle = 0; cycle < stages.length * 3; cycle += 1) {
+    const match = director.next();
+    seen.add(match.stage);
+    assert.notEqual(match.stage, previous, "the same stage must never run twice in a row");
+    previous = match.stage;
+  }
+  assert.deepEqual([...seen].sort(), [...stages].sort(), "every stage must appear in the rotation");
 });
