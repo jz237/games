@@ -7,21 +7,25 @@ export const AI_DIFFICULTIES = Object.freeze({
     id: "rookie", label: "ROOKIE", reactionFrames: 20, decisionFrames: 18,
     defenseChance: 0.46, antiAirChance: 0.38, comboChance: 0.22,
     throwChance: 0.09, meterChance: 0.24, wakeupReversalChance: 0.16, errorChance: 0.24,
+    throwTechChance: 0.12, grabPressureChance: 0.1,
   }),
   street: Object.freeze({
     id: "street", label: "STREET", reactionFrames: 14, decisionFrames: 13,
     defenseChance: 0.62, antiAirChance: 0.55, comboChance: 0.42,
     throwChance: 0.15, meterChance: 0.44, wakeupReversalChance: 0.31, errorChance: 0.14,
+    throwTechChance: 0.3, grabPressureChance: 0.2,
   }),
   pro: Object.freeze({
     id: "pro", label: "PRO", reactionFrames: 9, decisionFrames: 9,
     defenseChance: 0.76, antiAirChance: 0.72, comboChance: 0.65,
     throwChance: 0.22, meterChance: 0.68, wakeupReversalChance: 0.52, errorChance: 0.08,
+    throwTechChance: 0.56, grabPressureChance: 0.34,
   }),
   final: Object.freeze({
     id: "final", label: "FINAL", reactionFrames: 6, decisionFrames: 7,
     defenseChance: 0.87, antiAirChance: 0.84, comboChance: 0.8,
     throwChance: 0.29, meterChance: 0.84, wakeupReversalChance: 0.7, errorChance: 0.04,
+    throwTechChance: 0.78, grabPressureChance: 0.48,
   }),
 });
 
@@ -70,6 +74,7 @@ export function visibleOpponentObservation(opponent, frame) {
     attackStartupFrame: attack?.activeStartFrame ?? Infinity,
     attackActiveEndFrame: attack?.activeEndFrame ?? -Infinity,
     attackRange: attack?.range || 0,
+    grabbing: Boolean(opponent?.grabbing),
     health: opponent?.health ?? 100,
     meter: opponent?.meter ?? 0,
   });
@@ -122,6 +127,14 @@ function inputFromIntent(intent, self, observation, pulseAction = false) {
   input.down = Boolean(intent.down);
   input.jump = Boolean(intent.jump && pulseAction);
   if (pulseAction && intent.action) input[intent.action] = true;
+  if (intent.action === "throw") {
+    // Grabs are a direction plus LP/LK, so hold toward or away from the opponent
+    // exactly like a human would.
+    const towardRight = observation.x > self.x;
+    input.right = intent.throwBack ? !towardRight : towardRight;
+    input.left = intent.throwBack ? towardRight : !towardRight;
+    input.throwBack = Boolean(intent.throwBack);
+  }
   return input;
 }
 
@@ -169,6 +182,10 @@ export function decideAiIntent(brain, {
   if (observation.attacking && distance <= incomingRange) {
     const defend = mixRoll(roll, 5) < settings.defenseChance;
     if (observation.attackLevel === ATTACK_LEVELS.THROW && defend) {
+      // Teching means answering with a grab of your own inside the tech window.
+      if (mixRoll(roll, 17) < (settings.throwTechChance || 0)) {
+        return { movement: "hold", action: "throw", reason: "throw-tech" };
+      }
       return mixRoll(roll, 6) < 0.52
         ? { movement: "retreat", action: null, jump: true, reason: "throw-evade" }
         : { movement: "retreat", action: "backSpecial", reason: "throw-evade" };
@@ -197,8 +214,10 @@ export function decideAiIntent(brain, {
     return { movement: "hold", action: null, guard: true, down: mixRoll(roll, 9) < 0.36, reason: "wakeup-block" };
   }
 
-  if (distance < 80 && mixRoll(roll, 10) < settings.throwChance) {
-    return { movement: "hold", action: "throw", reason: "throw" };
+  if (distance < 96 && mixRoll(roll, 10) < settings.throwChance) {
+    // Corner-carry with a back throw sometimes, forward throw otherwise.
+    const back = mixRoll(roll, 18) < (settings.grabPressureChance || 0) * 0.5;
+    return { movement: "hold", action: "throw", throwBack: back, reason: back ? "back-throw" : "throw" };
   }
 
   let intent = selectKitAiIntent(fighterId, {

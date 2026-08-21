@@ -55,11 +55,24 @@ can also take over during the first six frames of a normal it accidentally start
 
 - **Throw:** stand touching a grounded opponent and press **toward + LP or LK** to
   throw forward, or **away + LP or LK** to throw backward and swap corners. Outside
-  grab range the same press is an ordinary normal — there is no grab-whiff animation.
+  the 104px grab range the same press is an ordinary normal — there is no grab-whiff
+  animation.
+- A grab needs a grounded, close, correctly facing opponent who is not in hitstun,
+  blockstun, knockdown, wake-up or throw invulnerability.
+- **The grab is visible.** A landed throw opens a clinch: the victim is locked to the
+  thrower's hands, lifted and rotated for that fighter's hold length, then released.
+  Damage, knockdown and Grit all land on release, not on contact. Every fighter has
+  its own hold length, lift height, hold offset, victim rotation, release arc and
+  screen shake (see `THROW_STYLES` in `game.js`), so DeathBlow's slam reads nothing
+  like Ali G's judo arc or Jez's low trip.
 - A completed special motion always beats the proximity grab, so close-range command
   specials stay reachable.
 - The existing throw-tech window is unchanged: pressing a grab of your own inside the
-  tech window breaks it.
+  tech window breaks it, pushes both fighters apart and grants both sides throw
+  invulnerability. A tech cancels any clinch that had already started.
+- The CPU grabs and techs on a per-difficulty profile (`throwTechChance` and
+  `grabPressureChance` in `engine/ai.mjs`), and holds a real direction when it does so
+  it goes through the same proximity rule a human uses.
 - **Final Blow:** once the finishing prompt appears, any single fresh press of LP, HP,
   LK or HK executes a finisher. LP or LK selects Finisher A, HP or HK selects
   Finisher B. The window only arms after every combat button has been released, so
@@ -102,6 +115,18 @@ choices:
    the bump only guards against a stale client silently desyncing.
 7. **The simplified ("modern") control style now uses the LP&LK chord** to reach the
    special without a motion, since there is no longer a dedicated special button.
+8. **Throws resolve on release, not on contact.** Opening a clinch first makes the
+   grab readable and gives the tech window somewhere to live, and it keeps the damage
+   event in one place. The clinch is 11–18 frames depending on the fighter, which is
+   long enough to read and short enough not to stall the round.
+9. **Grab presentation is a data table, not per-fighter animation work.** Hold
+   length, lift, offset, spin, release arc and shake are eight numbers per fighter in
+   `THROW_STYLES`. Full authored grab art can replace this later without touching the
+   simulation, and the table is trivially retunable.
+10. **The CPU techs by throwing back.** Rather than a special-cased escape, the AI
+    answers an incoming grab with its own grab inside the tech window — the same rule
+    a human uses — so tech rates follow naturally from each difficulty's reaction
+    profile.
 
 ## Verification
 

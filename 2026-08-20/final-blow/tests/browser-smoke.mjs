@@ -242,7 +242,7 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.0G/);
+  assert.match(title.build, /1\.1B/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -260,7 +260,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.1a-four-button-edition');
+  assert.equal(title.engineVersion, '1.1b-grapple-edition');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -953,6 +953,9 @@ try {
   await dispatchKey(client, "keyDown", "KeyD", "d", 68);
   await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
   await evaluate(client, `window.__finalBlowQa.step(0.16)`);
+  const throwClinch = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.ok(throwClinch.fighters[0].grabbing, "toward + LP grabs at point-blank range");
+  await evaluate(client, `window.__finalBlowQa.step(0.6)`);
   const throwHit = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await dispatchKey(client, "keyUp", "KeyJ", "j", 74);
   await dispatchKey(client, "keyUp", "KeyD", "d", 68);
@@ -965,6 +968,90 @@ try {
   const throwTech = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   assert.equal(throwTech.fighters[0].lastHitResult, "throw-tech");
   assert.equal(throwTech.fighters[1].lastHitResult, "throw-tech");
+  assert.equal(throwTech.fighters[0].grabbing, null, "a tech must leave no live clinch");
+  assert.equal(throwTech.fighters[1].grabbed, null);
+
+  // Every fighter has a visible grab: a clinch that holds the victim, then a
+  // release that knocks down. Forward and backward throws send opposite ways.
+  const grabRoster = ['deathblow', 'jez', 'alan', 'post', 'benny', 'donald', 'cyraxx', 'ali'];
+  for (const fighterId of grabRoster) {
+    const opponentId = fighterId === 'jez' ? 'deathblow' : 'jez';
+    const clinch = await evaluate(client, `(() => {
+      window.__finalBlowQa.fight('${fighterId}', '${opponentId}');
+      window.__finalBlowQa.positions(500, 560);
+      window.__finalBlowQa.input(0, { right: true, light: true });
+      let held = null;
+      let holdFrames = 0;
+      let lowestY = Infinity;
+      for (let frame = 0; frame < 40; frame += 1) {
+        window.__finalBlowQa.step(1 / 60);
+        const snapshot = window.__finalBlowEngine.snapshot();
+        if (!snapshot.fighters[0].grabbing) continue;
+        holdFrames += 1;
+        lowestY = Math.min(lowestY, snapshot.fighters[1].y);
+        if (!held) held = snapshot;
+      }
+      window.__finalBlowQa.input(0, {});
+      window.__finalBlowQa.step(0.7);
+      const released = window.__finalBlowEngine.snapshot();
+      return { held, released, holdFrames, lowestY };
+    })()`);
+    assert.ok(clinch.held?.fighters[0].grabbing, `${fighterId} must hold the opponent during the grab`);
+    assert.equal(clinch.held.fighters[1].grabbed?.attacker, 0, `${fighterId}'s victim must be held`);
+    assert.equal(clinch.held.fighters[1].state, "throw");
+    assert.ok(clinch.holdFrames >= 8, `${fighterId}'s clinch must be visible for several frames`);
+    assert.ok(clinch.lowestY < 598, `${fighterId} must lift the victim off the floor`);
+    assert.equal(clinch.released.fighters[0].grabbing, null);
+    assert.equal(clinch.released.fighters[1].lastHitResult, "throw", `${fighterId}'s throw must resolve as a throw`);
+    assert.ok(clinch.released.fighters[1].health < 100, `${fighterId}'s throw must deal damage on release`);
+    assert.ok(
+      clinch.released.fighters[1].x > clinch.released.fighters[0].x,
+      `${fighterId} must send a forward throw away from itself`,
+    );
+  }
+
+  // Back throw swaps sides so corners can be escaped.
+  const backThrow = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.positions(500, 560);
+    window.__finalBlowQa.input(0, { left: true, light: true, throwBack: true });
+    let held = null;
+    for (let frame = 0; frame < 40 && !held; frame += 1) {
+      window.__finalBlowQa.step(1 / 60);
+      if (window.__finalBlowEngine.snapshot().fighters[0].grabbing) held = window.__finalBlowEngine.snapshot();
+    }
+    window.__finalBlowQa.input(0, {});
+    window.__finalBlowQa.step(0.7);
+    return { held, released: window.__finalBlowEngine.snapshot() };
+  })()`);
+  assert.equal(backThrow.held.fighters[0].grabbing?.back, true);
+  assert.ok(
+    backThrow.released.fighters[1].x < backThrow.released.fighters[0].x,
+    "a back throw must send the victim behind the thrower",
+  );
+
+  // Outside grab range the same press is an ordinary normal, not a grab whiff.
+  const farLight = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.positions(400, 900);
+    window.__finalBlowQa.input(0, { right: true, light: true });
+    window.__finalBlowQa.step(0.05);
+    return window.__finalBlowEngine.snapshot();
+  })()`);
+  assert.equal(farLight.fighters[0].move, "deathblow-body-check", "out of range LP stays a normal");
+  assert.equal(farLight.fighters[0].grabbing, null);
+
+  // Grabs cannot start against a fighter already in hitstun or blockstun.
+  const grabDuringStun = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.positions(500, 560);
+    window.__finalBlowQa.fighter(1, { hitstunFrames: 20 });
+    window.__finalBlowQa.input(0, { right: true, light: true });
+    window.__finalBlowQa.step(0.08);
+    return window.__finalBlowEngine.snapshot();
+  })()`);
+  assert.equal(grabDuringStun.fighters[0].grabbing, null, "no grabs during hitstun");
+  assert.notEqual(grabDuringStun.fighters[0].attackLevel, "throw");
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 600)`);
   await dispatchKey(client, "keyDown", "KeyS", "s", 83);
@@ -1619,7 +1706,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.0g/);
+  assert.match(offlineCache.name, /final-blow-offline-1\.1b/);
   assert.ok(offlineCache.entries >= 156);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasRollback, true);
@@ -1646,8 +1733,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.0G/);
-  assert.equal(offlineBoot.version, '1.1a-four-button-edition');
+  assert.match(offlineBoot.build, /1\.1B/);
+  assert.equal(offlineBoot.version, '1.1b-grapple-edition');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,

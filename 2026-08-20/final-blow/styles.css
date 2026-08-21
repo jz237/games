@@ -1072,6 +1072,14 @@ body.demo-active .touch-pause { display: none !important; }
 .training-tools button { padding: 5px 7px; border: 1px solid #4d6574; background: #09121b; color: white; font-size: 8px; font-weight: 900; }
 .training-tools button { cursor: pointer; }
 .training-inputs { grid-column: 1 / -1; color: var(--amber); font-family: ui-monospace, monospace; }
+.training-grab-hint {
+  grid-column: 1 / -1;
+  color: rgba(216, 216, 210, .68);
+  font-family: ui-monospace, monospace;
+  font-size: .82em;
+  letter-spacing: .02em;
+}
+.training-grab-hint.ready { color: #7fe9ff; text-shadow: 0 0 10px rgba(41, 224, 255, .55); }
 .p1-combo { left: 4%; }
 .p2-combo { right: 4%; direction: rtl; transform: translateX(24px) scale(.84); text-align: right; }
 .p2-combo.active { transform: translateX(0) scale(1); }

@@ -1746,6 +1746,10 @@ function makeFighter(index, side, overrideDef = null) {
     previousDirectionalInput: { left: false, right: false },
     justWoke: false,
     throwTechFlashFrames: 0,
+    // Live grab sequence state. `grabbing` is set on the thrower and `grabbed` on
+    // the victim; both are plain data so rollback snapshots clone them directly.
+    grabbing: null,
+    grabbed: null,
     lastThrowInputFrame: -Infinity,
     lastHitResult: "",
     hitFlash: 0,
@@ -2287,6 +2291,7 @@ function announce(main, sub = "", duration = 1) {
 
 function finishRound(winner, type = -1) {
   if (state.phase === "roundover" || state.phase === "result") return;
+  for (const fighter of state.fighters) clearGrabState(fighter);
   state.phase = "roundover";
   state.rounds[winner] += 1;
   state.finisherType = type;
@@ -2638,11 +2643,20 @@ function updateTrainingUi(input = {}) {
   const [player] = state.fighters;
   const combo = player.combo.snapshot(state.simulationTick);
   if (combo.damage > 0) state.training.lastDamage = combo.damage;
+  const limbSuffix = input.limb === "kick" ? "K" : "P";
   const labels = [
-    ["left", "←"], ["right", "→"], ["down", "↓"], ["jump", "↑"], ["guard", "GUARD"],
-    ["light", "L"], ["heavy", "H"], ["special", "S"], ["enhanced", "EX"], ["throw", "THROW"], ["super", "SUPER"],
+    ["left", "←"], ["right", "→"], ["down", "↓"], ["jump", "↑"],
+    ["light", `L${limbSuffix}`], ["heavy", `H${limbSuffix}`], ["special", "SPECIAL"],
+    ["enhanced", "EX"], ["throw", input.throwBack ? "BACK THROW" : "THROW"], ["super", "SUPER"],
   ].filter(([action]) => input[action]).map(([, label]) => label);
   const inputLabel = labels.join("+");
+  // Training always shows the live grab rule so the SF2 proximity command is learnable.
+  const opponent = state.fighters[1];
+  const grabReady = inProximityGrabRange(player, opponent) && !player.attacking;
+  $("#trainingGrabHint").textContent = grabReady
+    ? "IN GRAB RANGE · TOWARD + LP/LK THROWS FORWARD · AWAY + LP/LK THROWS BACK"
+    : "GRAB: STEP IN CLOSE, THEN TOWARD OR AWAY + LP OR LK";
+  $("#trainingGrabHint").classList.toggle("ready", grabReady);
   if (inputLabel && (inputLabel !== state.training.lastInputLabel
     || state.simulationTick - state.training.lastInputFrame > 6)) {
     state.training.inputHistory.push(inputLabel);
@@ -3334,6 +3348,19 @@ function updateFighter(fighter, opponent, input, dt) {
 
   if (tryFinish(fighter.side, input)) return;
   if (state.phase !== "fight") return;
+  // A live grab owns both fighters until updateGrabHolds releases them.
+  if (fighter.grabbed) {
+    fighter.inputBuffer.clear();
+    return;
+  }
+  if (fighter.grabbing) {
+    fighter.vx = 0;
+    if (fighter.attacking) {
+      fighter.attackFrame = Math.min(fighter.attackFrame + 1, fighter.attacking.activeEndFrame);
+      fighter.attackTime = fighter.attackFrame * SIMULATION_STEP_SECONDS;
+    }
+    return;
+  }
   const flowSpeed = fighter.def.id === "ali" ? 1 + fighter.rhythmStacks * 0.045 : 1;
 
   if (fighter.blockstunFrames > 0 && tryGuardReversal(fighter, input)) {
@@ -3702,7 +3729,158 @@ function spawnCombatText(x, y, label, color = "#fff") {
   state.effects.push({ kind: "combatText", label, x, y, life: 0.72, max: 0.72, color });
 }
 
+/**
+ * Every fighter throws with its own hold, release and impact. The numbers are
+ * deliberately small and data-driven so the grab game can be retuned without
+ * touching the simulation. `hold` is the length of the visible clinch in frames,
+ * `lift` raises the victim during the hold, `launch` scales the release arc and
+ * `spin` rotates the held victim so grapplers read differently from strikers.
+ */
+const THROW_STYLES = Object.freeze({
+  deathblow: { hold: 17, lift: 78, offset: 62, spin: -0.5, launch: 1.22, drop: 1.35, shake: 0.42, label: "SLAM" },
+  jez: { hold: 12, lift: 22, offset: 54, spin: -1.15, launch: 0.94, drop: 1, shake: 0.26, label: "TRIP" },
+  alan: { hold: 18, lift: 66, offset: 58, spin: -0.72, launch: 1.16, drop: 1.2, shake: 0.38, label: "CLINCH" },
+  post: { hold: 14, lift: 48, offset: 66, spin: -0.4, launch: 1.08, drop: 1, shake: 0.28, label: "TOSS" },
+  benny: { hold: 11, lift: 30, offset: 52, spin: -0.85, launch: 1.02, drop: 1.05, shake: 0.24, label: "DROP" },
+  donald: { hold: 15, lift: 52, offset: 70, spin: -0.3, launch: 1.3, drop: 0.9, shake: 0.32, label: "HEAVE" },
+  cyraxx: { hold: 12, lift: 34, offset: 56, spin: -0.6, launch: 1, drop: 1, shake: 0.26, label: "SHOVE" },
+  ali: { hold: 13, lift: 70, offset: 50, spin: -1.35, launch: 1.12, drop: 1.1, shake: 0.3, label: "JUDO" },
+  commissioner: { hold: 16, lift: 60, offset: 64, spin: -0.65, launch: 1.24, drop: 1.25, shake: 0.4, label: "HOOK" },
+});
+
+const DEFAULT_THROW_STYLE = Object.freeze({
+  hold: 14, lift: 48, offset: 58, spin: -0.7, launch: 1.05, drop: 1.05, shake: 0.3, label: "THROW",
+});
+
+function throwStyle(fighter) {
+  return THROW_STYLES[fighter?.def?.id] || DEFAULT_THROW_STYLE;
+}
+
+function beginGrabHold(attacker, victim, attack) {
+  const style = throwStyle(attacker);
+  const back = Boolean(attack.backThrow);
+  attacker.grabbing = {
+    victim: victim.side,
+    frame: 0,
+    total: style.hold,
+    back,
+    damage: attack.damage,
+    push: attack.push,
+    meter: attack.meter,
+    profileId: attack.profileId,
+    moveName: attack.moveName || style.label,
+  };
+  victim.grabbed = { attacker: attacker.side, frame: 0, total: style.hold, back };
+  victim.attacking = null;
+  victim.attackFrame = 0;
+  victim.attackTime = 0;
+  victim.vx = 0;
+  victim.vy = 0;
+  victim.down = false;
+  victim.grounded = true;
+  victim.hitstunFrames = 0;
+  victim.blockstunFrames = 0;
+  victim.pendingKnockdown = false;
+  victim.inputBuffer.clear();
+  victim.combo.reset();
+  attacker.attackHit = true;
+  attacker.attackHits += 1;
+  attacker.attackConnected = "hit";
+  attacker.lastHitResult = "grab";
+  victim.lastHitResult = "grabbed";
+  state.hitstop = Math.max(state.hitstop, 0.06);
+  spawnCombatText(
+    (attacker.x + victim.x) * 0.5,
+    Math.min(attacker.y, victim.y) - 190,
+    attacker.grabbing.moveName,
+    attacker.def.accent,
+  );
+  sound("throw", attacker);
+}
+
+function updateGrabHolds() {
+  for (const attacker of state.fighters) {
+    const grab = attacker.grabbing;
+    if (!grab) continue;
+    const victim = state.fighters[grab.victim];
+    if (!victim || victim.grabbed?.attacker !== attacker.side) {
+      attacker.grabbing = null;
+      continue;
+    }
+    const style = throwStyle(attacker);
+    grab.frame += 1;
+    victim.grabbed.frame = grab.frame;
+    const progress = Math.min(1, grab.frame / Math.max(1, grab.total));
+    // The victim rides the thrower's hand through the clinch, then gets released.
+    const direction = grab.back ? -attacker.facing : attacker.facing;
+    victim.x = clamp(
+      attacker.x + attacker.facing * style.offset * (1 - progress * 0.35),
+      MOVEMENT_RULES.stageMinX,
+      MOVEMENT_RULES.stageMaxX,
+    );
+    victim.y = FLOOR - style.lift * Math.sin(progress * Math.PI);
+    victim.grounded = victim.y >= FLOOR - 0.5;
+    victim.vx = 0;
+    victim.vy = 0;
+    victim.facing = -attacker.facing;
+    victim.cinematicRotation = style.spin * Math.sin(progress * Math.PI) * attacker.facing;
+    attacker.vx = 0;
+    if (grab.frame >= grab.total) resolveGrabThrow(attacker, victim, grab, style, direction);
+  }
+}
+
+function resolveGrabThrow(attacker, victim, grab, style, direction) {
+  attacker.grabbing = null;
+  victim.grabbed = null;
+  victim.cinematicRotation = 0;
+  victim.health = clamp(victim.health - grab.damage, 0, 100);
+  victim.lastDamageFrame = state.simulationTick;
+  victim.lastHitResult = ATTACK_LEVELS.THROW;
+  victim.juggleCount = 0;
+  victim.pendingKnockdown = true;
+  victim.grounded = false;
+  victim.vx = direction * grab.push * style.launch;
+  victim.vy = -315 * style.drop;
+  victim.x = clamp(
+    attacker.x + direction * style.offset,
+    MOVEMENT_RULES.stageMinX,
+    MOVEMENT_RULES.stageMaxX,
+  );
+  victim.hitFlash = 0.16;
+  attacker.combo.reset();
+  attacker.meter = clamp(attacker.meter + grab.meter * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
+  victim.meter = clamp(victim.meter + grab.meter * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
+  state.shake = Math.max(state.shake, style.shake);
+  state.hitstop = Math.max(state.hitstop, 0.11);
+  state.lastImpactSide = attacker.side;
+  const impactX = victim.x;
+  const impactY = FLOOR - 60;
+  spawnHit(impactX, impactY, attacker.def, "throw", false);
+  spawnCombatText(impactX, impactY - 78, grab.back ? "BACK THROW" : "THROW", attacker.def.accent);
+  sound("hit-heavy", attacker);
+  if (state.mode === "training" && attacker.side === 0) {
+    state.training.lastResult = grab.back ? "BACK THROW" : "THROW";
+    state.training.lastDamage = grab.damage;
+  }
+  updateHud();
+}
+
+function clearGrabState(fighter) {
+  if (fighter.grabbing) {
+    const victim = state.fighters[fighter.grabbing.victim];
+    if (victim?.grabbed?.attacker === fighter.side) victim.grabbed = null;
+    fighter.grabbing = null;
+  }
+  if (fighter.grabbed) {
+    const attacker = state.fighters[fighter.grabbed.attacker];
+    if (attacker?.grabbing?.victim === fighter.side) attacker.grabbing = null;
+    fighter.grabbed = null;
+  }
+}
+
 function techThrow(attacker, victim) {
+  clearGrabState(attacker);
+  clearGrabState(victim);
   attacker.attackHit = true;
   attacker.attacking = null;
   victim.attacking = null;
@@ -3810,12 +3988,15 @@ function hit(attacker, victim, attack, collision) {
   if (triggerSouthpawCounter(victim, attacker, attack, collision)) return;
   if (attack.level === ATTACK_LEVELS.THROW) {
     if (!victim.grounded || victim.throwInvulnerableFrames > 0 || victim.down || victim.wakeupFrames > 0) return;
+    if (victim.grabbed || attacker.grabbing) return;
     const recentThrowInput = state.simulationTick - victim.lastThrowInputFrame <= DEFENSE_RULES.throwTechWindowFrames;
     if (recentThrowInput
       || victim.attacking?.level === ATTACK_LEVELS.THROW) {
       techThrow(attacker, victim);
       return;
     }
+    beginGrabHold(attacker, victim, attack);
+    return;
   }
 
   attacker.attackHit = true;
@@ -3937,21 +4118,22 @@ function checkKnockout() {
     : first.health <= 0 ? 1 : 0;
   const attacker = state.fighters[winner];
   const victim = state.fighters[1 - winner];
-    state.phase = "finish";
-    state.phaseTime = 6;
-    state.finishWinner = winner;
-    victim.down = false;
-    victim.pendingKnockdown = false;
-    victim.knockdownFrames = 0;
-    victim.wakeupFrames = 0;
-    victim.stun = 99;
-    victim.hitstunFrames = 5940;
-    attacker.attacking = null;
-    duckMusic(0.34, 1900);
-    announce("FINISH THEM", "PRESS FB  /  ↓ → HEAVY  /  ← ↓ → SPECIAL", 2.2);
-    if (!rollbackResimulating) setTouchPrompt("final");
-    updateHud();
-    sound("finish");
+  for (const fighter of state.fighters) clearGrabState(fighter);
+  state.phase = "finish";
+  state.phaseTime = 6;
+  state.finishWinner = winner;
+  victim.down = false;
+  victim.pendingKnockdown = false;
+  victim.knockdownFrames = 0;
+  victim.wakeupFrames = 0;
+  victim.stun = 99;
+  victim.hitstunFrames = 5940;
+  attacker.attacking = null;
+  duckMusic(0.34, 1900);
+  announce("FINISH THEM", "ANY BUTTON  ·  LP/LK = A  ·  HP/HK = B", 2.2);
+  if (!rollbackResimulating) setTouchPrompt("final");
+  updateHud();
+  sound("finish");
 }
 
 function resolveCombatInteractions() {
@@ -4004,6 +4186,7 @@ function spawnHit(x, y, def, attackKind, blocked) {
 function separateFighters() {
   const [a, b] = state.fighters;
   if (!a || !b) return;
+  if (a.grabbing || b.grabbing || a.grabbed || b.grabbed) return;
   if (a.attacking?.ignorePushbox || b.attacking?.ignorePushbox) return;
   if ((!a.grounded && a.y < FLOOR - 34) || (!b.grounded && b.y < FLOOR - 34)) return;
   const positions = resolvePushboxPositions(
@@ -4025,6 +4208,7 @@ function separateFighters() {
 function updateFacings() {
   const [a, b] = state.fighters;
   if (!a || !b || state.finisher) return;
+  if (a.grabbing || b.grabbing || a.grabbed || b.grabbed) return;
   if (!a.attacking || !a.grounded) a.facing = b.x >= a.x ? 1 : -1;
   if (!b.attacking || !b.grounded) b.facing = a.x >= b.x ? 1 : -1;
 }
@@ -4033,6 +4217,7 @@ function resolveFighterState(fighter) {
   if (state.finisher) return FIGHTER_STATES.FINISHER;
   if (fighter.down || fighter.knockdownFrames > 0) return FIGHTER_STATES.KNOCKDOWN;
   if (fighter.wakeupFrames > 0) return FIGHTER_STATES.WAKEUP;
+  if (fighter.grabbing || fighter.grabbed) return FIGHTER_STATES.THROW;
   if (fighter.throwTechFlashFrames > 0) return FIGHTER_STATES.THROW_TECH;
   if (fighter.blockstunFrames > 0) return FIGHTER_STATES.BLOCKSTUN;
   if (fighter.hitstunFrames > 0 || fighter.pendingKnockdown) return FIGHTER_STATES.HITSTUN;
@@ -4073,6 +4258,7 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
 
   updateFighter(state.fighters[0], state.fighters[1], input0, dt);
   updateFighter(state.fighters[1], state.fighters[0], input1, dt);
+  updateGrabHolds();
   if (state.finisher) updateFinisher(dt);
   else {
     updateProjectiles(dt);
@@ -4307,6 +4493,7 @@ function drawVetAtmosphere(time) {
 function fighterAnimationPose(fighter) {
   const base = (frame) => ({ bank: "base", frame });
   if (fighter.cinematicFrame !== null) return base(fighter.cinematicFrame);
+  if (fighter.grabbed) return base(15);
   if (fighter.down || fighter.knockdownFrames > 0 || fighter.hitFlash > 0 || fighter.hitstunFrames > 21) return base(15);
   if (fighter.wakeupFrames > 0) return base(fighter.wakeupFrames > 9 ? 15 : 12);
   if (fighter.throwTechFlashFrames > 0) return base(12);
@@ -6126,7 +6313,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.1a-four-button-edition",
+  version: "1.1b-grapple-edition",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -6234,6 +6421,10 @@ window.__finalBlowEngine = {
         juggleCount: fighter.juggleCount,
         down: fighter.down,
         lastHitResult: fighter.lastHitResult,
+        grabbing: fighter.grabbing ? { ...fighter.grabbing } : null,
+        grabbed: fighter.grabbed ? { ...fighter.grabbed } : null,
+        throwInvulnerableFrames: fighter.throwInvulnerableFrames,
+        throwTechFlashFrames: fighter.throwTechFlashFrames,
         combo: fighter.combo.snapshot(state.simulationTick),
         hurtboxes: getHurtboxes(fighter),
         hitboxes: getActiveHitboxes(fighter),
