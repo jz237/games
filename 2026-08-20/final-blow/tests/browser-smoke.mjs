@@ -306,7 +306,7 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.1H/);
+  assert.match(title.build, /1\.1I/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -324,7 +324,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.1h-cyraxx-rebuild-edition');
+  assert.equal(title.engineVersion, '1.1i-ka-crowd-edition');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -1317,6 +1317,56 @@ try {
   assert.deepEqual(cyraxxArt.specials.size, [1280, 1280]);
   assert.deepEqual(cyraxxArt.portrait.size, [588, 720]);
 
+  // K&A crowd: at least 25 pedestrians on screen at once, spread across depth
+  // layers, dominated by hunched and shuffling postures, deterministic, and
+  // never inside the fighters' floor plane or collision space.
+  const crowdProbe = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.stage('kensington');
+    const samples = [];
+    for (let step = 0; step < 12; step += 1) {
+      window.__finalBlowQa.step(1.5);
+      samples.push(window.__finalBlowEngine.snapshot().crowd);
+    }
+    const first = window.__finalBlowEngine.snapshot().crowd;
+    // Same seed and round must rebuild the identical crowd.
+    window.__finalBlowQa.stage('kensington');
+    const rebuilt = window.__finalBlowEngine.snapshot().crowd;
+    return { samples, first, rebuilt, reaction: window.__finalBlowEngine.snapshot().crowdReaction };
+  })()`);
+  const visibleCounts = crowdProbe.samples.map((sample) => sample.visible);
+  assert.ok(
+    Math.min(...visibleCounts) >= 25,
+    `at least 25 pedestrians must be visible at all times, saw a low of ${Math.min(...visibleCounts)}`,
+  );
+  assert.ok(crowdProbe.samples[0].total >= 25);
+  for (const sample of crowdProbe.samples) {
+    assert.ok(Object.keys(sample.layers).length >= 3, "the crowd must span several depth layers");
+    assert.ok(Object.keys(sample.postures).length >= 4, "postures must be varied, not cloned");
+    const hunched = ["hunch", "shuffle", "stoop", "linger"]
+      .reduce((total, id) => total + (sample.postures[id] || 0), 0);
+    assert.ok(
+      hunched / sample.visible > 0.55,
+      `hunched and shuffling postures must dominate, got ${Math.round(hunched / sample.visible * 100)}%`,
+    );
+  }
+  assert.deepEqual(crowdProbe.rebuilt.layers, crowdProbe.first.layers, "the crowd must rebuild deterministically");
+
+  // The crowd reacts to a super and then settles back to its routes.
+  const crowdReaction = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.positions(500, 600);
+    window.__finalBlowQa.fighter(0, { meter: 100 });
+    window.__finalBlowQa.input(0, { super: true });
+    window.__finalBlowQa.step(0.6);
+    const stirred = window.__finalBlowEngine.snapshot().crowdReaction;
+    window.__finalBlowQa.step(3);
+    return { stirred, settled: window.__finalBlowEngine.snapshot().crowdReaction };
+  })()`);
+  assert.ok(crowdReaction.stirred > 0.2, "a super must stir the crowd");
+  assert.equal(crowdReaction.settled, 0, "the crowd must return to its routes");
+
   const desktopFraming = await evaluate(client, FIGHTER_FRAMING_PROBE);
   assertFighterFraming(desktopFraming, "desktop");
 
@@ -2194,7 +2244,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.1h/);
+  assert.match(offlineCache.name, /final-blow-offline-1\.1i/);
   assert.ok(offlineCache.entries >= 156);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasRollback, true);
@@ -2221,8 +2271,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.1H/);
-  assert.equal(offlineBoot.version, '1.1h-cyraxx-rebuild-edition');
+  assert.match(offlineBoot.build, /1\.1I/);
+  assert.equal(offlineBoot.version, '1.1i-ka-crowd-edition');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2298,6 +2348,14 @@ try {
     assert.ok(box.left >= -1 && box.right <= touchLayout.viewport.width + 1, `${name} must stay inside the frame width`);
   }
   assert.ok(touchLayout.minButton >= 34, "attack buttons must stay comfortably tappable");
+
+  const mobileCrowd = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.step(2.5);
+    return window.__finalBlowEngine.snapshot().crowd;
+  })()`);
+  assert.ok(mobileCrowd.visible >= 25, `the crowd must stay dense on 844x390, saw ${mobileCrowd.visible}`);
 
   const mobileFraming = await evaluate(client, FIGHTER_FRAMING_PROBE);
   assertFighterFraming(mobileFraming, "844x390 landscape");
