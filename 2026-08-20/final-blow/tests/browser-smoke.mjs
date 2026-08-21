@@ -287,6 +287,18 @@ try {
   const title = await evaluate(client, `(() => ({
     title: document.title,
     build: document.querySelector('.build-tag')?.textContent.trim(),
+    version: (() => {
+      const badge = document.querySelector('#titleVersion');
+      const box = badge?.getBoundingClientRect();
+      return badge && box ? {
+        text: badge.textContent.trim(),
+        display: getComputedStyle(badge).display,
+        left: box.left,
+        top: box.top,
+        right: box.right,
+        bottom: box.bottom,
+      } : null;
+    })(),
     rosterCards: document.querySelectorAll('.fighter-card').length,
     gritLabels: document.querySelectorAll('.grit-row').length,
     comboReadouts: document.querySelectorAll('.combo-readout').length,
@@ -306,7 +318,11 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.2/);
+  assert.match(title.build, /1\.2B/);
+  assert.equal(title.version.text, 'VERSION 1.2B');
+  assert.notEqual(title.version.display, 'none');
+  assert.ok(title.version.left >= 0 && title.version.top >= 0);
+  assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -324,7 +340,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.2a-face-to-face');
+  assert.equal(title.engineVersion, '1.2b-title-version');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -2437,8 +2453,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.2/);
-  assert.equal(offlineBoot.version, '1.2a-face-to-face');
+  assert.match(offlineBoot.build, /1\.2B/);
+  assert.equal(offlineBoot.version, '1.2b-title-version');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2455,6 +2471,8 @@ try {
   await reload(client);
   const landscape = await evaluate(client, `(() => {
     const frame = document.querySelector('#gameFrame').getBoundingClientRect();
+    const version = document.querySelector('#titleVersion');
+    const versionBox = version.getBoundingClientRect();
     return {
       width: innerWidth,
       height: innerHeight,
@@ -2464,6 +2482,14 @@ try {
       orientationBlocked: document.body.classList.contains('orientation-blocked'),
       frameWidth: frame.width,
       frameHeight: frame.height,
+      version: {
+        text: version.textContent.trim(),
+        display: getComputedStyle(version).display,
+        left: versionBox.left,
+        top: versionBox.top,
+        right: versionBox.right,
+        bottom: versionBox.bottom,
+      },
     };
   })()`);
   assert.equal(landscape.width, 844);
@@ -2472,6 +2498,10 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
+  assert.equal(landscape.version.text, 'VERSION 1.2B');
+  assert.notEqual(landscape.version.display, 'none');
+  assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
+  assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);
 
   // The rebuilt four-button HUD has to fit the 844x390 landscape target with the
   // movement pad on the left and the LP/HP/LK/HK cluster on the right.
