@@ -1911,3 +1911,49 @@ body:has(#app:fullscreen) {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+.difficulty-bar {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 10px auto 0;
+  padding: 8px 14px;
+  max-width: min(760px, 94%);
+  border: 1px solid rgba(255, 177, 27, .34);
+  border-radius: 8px;
+  background: rgba(6, 11, 17, .5);
+}
+.difficulty-bar[hidden] { display: none !important; }
+.difficulty-title { color: var(--amber); font-weight: 950; letter-spacing: .12em; font-size: clamp(9px, 1.2vw, 12px); }
+.difficulty-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.difficulty-options button {
+  padding: 5px 12px;
+  border: 2px solid rgba(216, 216, 210, .34);
+  border-radius: 4px;
+  background: rgba(10, 16, 24, .7);
+  color: rgba(216, 216, 210, .82);
+  font-weight: 900;
+  letter-spacing: .08em;
+  font-size: clamp(9px, 1.2vw, 12px);
+  cursor: pointer;
+}
+.difficulty-options button:hover { border-color: rgba(255, 177, 27, .6); color: #fff; }
+.difficulty-options button[aria-checked="true"] {
+  border-color: var(--amber);
+  background: rgba(255, 177, 27, .18);
+  color: #fff;
+  box-shadow: 0 0 14px rgba(255, 177, 27, .35);
+}
+.difficulty-options button.passive[aria-checked="true"] {
+  border-color: #7fe9ff;
+  background: rgba(41, 224, 255, .16);
+  box-shadow: 0 0 14px rgba(41, 224, 255, .35);
+}
+.difficulty-hint {
+  grid-column: 2;
+  margin: 0;
+  color: rgba(216, 216, 210, .66);
+  font-size: clamp(9px, 1.15vw, 12px);
+  letter-spacing: .02em;
+}

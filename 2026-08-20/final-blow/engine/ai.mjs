@@ -3,6 +3,16 @@ import { GRIT_RULES } from "./combos.mjs";
 import { getFighterKit, selectKitAiIntent } from "./fighter-kits.mjs";
 
 export const AI_DIFFICULTIES = Object.freeze({
+  // Passive is an inert practice opponent. Every chance is zero and the brain
+  // short-circuits before it can produce an input at all, so it never advances,
+  // chases, attacks, throws, techs, jumps, blocks, reverses, spends meter or
+  // takes a Final Blow. It exists to be hit.
+  passive: Object.freeze({
+    id: "passive", label: "PASSIVE", reactionFrames: 24, decisionFrames: 24,
+    defenseChance: 0, antiAirChance: 0, comboChance: 0,
+    throwChance: 0, meterChance: 0, wakeupReversalChance: 0, errorChance: 0,
+    throwTechChance: 0, grabPressureChance: 0, inert: true,
+  }),
   rookie: Object.freeze({
     id: "rookie", label: "ROOKIE", reactionFrames: 20, decisionFrames: 18,
     defenseChance: 0.46, antiAirChance: 0.38, comboChance: 0.22,
@@ -30,6 +40,13 @@ export const AI_DIFFICULTIES = Object.freeze({
 });
 
 export const DEFAULT_AI_DIFFICULTY = "street";
+
+// Ordered easiest to hardest for the difficulty pickers.
+export const AI_DIFFICULTY_ORDER = Object.freeze(["passive", "rookie", "street", "pro", "final"]);
+
+export function isPassiveDifficulty(difficulty) {
+  return normalizeAiDifficulty(difficulty) === "passive";
+}
 
 export function normalizeAiDifficulty(id) {
   return AI_DIFFICULTIES[id] ? id : DEFAULT_AI_DIFFICULTY;
@@ -163,6 +180,8 @@ function comboFollowup(self, settings, roll) {
   return { action, comboKey };
 }
 
+export const PASSIVE_INTENT = Object.freeze({ movement: "hold", action: null, reason: "passive" });
+
 export function decideAiIntent(brain, {
   frame,
   self,
@@ -170,6 +189,7 @@ export function decideAiIntent(brain, {
   roll = 0.5,
 } = {}) {
   const settings = AI_DIFFICULTIES[brain.difficulty];
+  if (settings.inert) return { ...PASSIVE_INTENT };
   const fighterId = self.kitId || self.def?.kitId || self.id || self.def?.id;
   const kit = getFighterKit(fighterId);
   const distance = Math.abs(observation.x - self.x);
@@ -253,6 +273,12 @@ export function stepAiBrain(brain, {
   roll = 0.5,
 } = {}) {
   recordAiObservation(brain, frame, opponent);
+  // A passive brain never produces an input, whatever it can see.
+  if (AI_DIFFICULTIES[brain.difficulty].inert) {
+    brain.intent = { ...PASSIVE_INTENT };
+    brain.lastObservedFrame = frame;
+    return emptyInput();
+  }
   const observation = getReactionObservation(brain, frame);
   if (!observation) return emptyInput();
   brain.lastObservedFrame = observation.frame;

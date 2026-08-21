@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import {
   AI_DIFFICULTIES,
+  AI_DIFFICULTY_ORDER,
   aiBrainSnapshot,
   createAiBrain,
+  isPassiveDifficulty,
   decideAiIntent,
   getReactionObservation,
   recordAiObservation,
@@ -44,13 +46,51 @@ function findRoll(predicate) {
 }
 
 function testDifficultyFairness() {
-  assert.deepEqual(Object.keys(AI_DIFFICULTIES), ["rookie", "street", "pro", "final"]);
-  const levels = Object.values(AI_DIFFICULTIES);
-  assert.ok(levels.every(({ reactionFrames }) => reactionFrames >= 6), "every level must retain visible human reaction delay");
-  assert.ok(levels.every(({ errorChance }) => errorChance > 0), "even FINAL difficulty must make execution errors");
+  assert.deepEqual(Object.keys(AI_DIFFICULTIES), ["passive", "rookie", "street", "pro", "final"]);
+  assert.deepEqual([...AI_DIFFICULTY_ORDER], ["passive", "rookie", "street", "pro", "final"]);
+  const fighting = AI_DIFFICULTY_ORDER.filter((id) => id !== "passive").map((id) => AI_DIFFICULTIES[id]);
+  assert.ok(fighting.every(({ reactionFrames }) => reactionFrames >= 6), "every level must retain visible human reaction delay");
+  assert.ok(fighting.every(({ errorChance }) => errorChance > 0), "even FINAL difficulty must make execution errors");
   assert.ok(AI_DIFFICULTIES.rookie.reactionFrames > AI_DIFFICULTIES.street.reactionFrames);
   assert.ok(AI_DIFFICULTIES.street.reactionFrames > AI_DIFFICULTIES.pro.reactionFrames);
   assert.ok(AI_DIFFICULTIES.pro.reactionFrames > AI_DIFFICULTIES.final.reactionFrames);
+  // Grab pressure and tech skill rise with the ladder.
+  assert.ok(AI_DIFFICULTIES.final.throwTechChance > AI_DIFFICULTIES.rookie.throwTechChance);
+  assert.ok(AI_DIFFICULTIES.pro.grabPressureChance > AI_DIFFICULTIES.rookie.grabPressureChance);
+}
+
+function testPassiveIsInert() {
+  assert.equal(isPassiveDifficulty("passive"), true);
+  assert.equal(isPassiveDifficulty("rookie"), false);
+  const settings = AI_DIFFICULTIES.passive;
+  assert.equal(settings.inert, true);
+  for (const key of ["defenseChance", "antiAirChance", "comboChance", "throwChance",
+    "meterChance", "wakeupReversalChance", "errorChance", "throwTechChance", "grabPressureChance"]) {
+    assert.equal(settings[key], 0, `passive ${key} must be zero`);
+  }
+
+  // Whatever the passive brain is shown, and however the dice fall, it must
+  // never produce a single input: no advance, attack, guard, jump, throw,
+  // reversal, meter spend or Final Blow.
+  const brain = createAiBrain("passive");
+  const empty = {
+    left: false, right: false, down: false, guard: false, jump: false,
+    light: false, heavy: false, special: false, enhanced: false, throw: false,
+    super: false, final: false,
+  };
+  const distances = [10, 60, 140, 300, 620];
+  for (let frame = 0; frame < 600; frame += 1) {
+    const distance = distances[frame % distances.length];
+    const opponent = fighter("jez", {
+      x: 500 + distance,
+      attacking: frame % 3 === 0 ? attack() : null,
+      grounded: frame % 7 !== 0,
+    });
+    const self = fighter("deathblow", { x: 500, meter: 100, justWoke: frame % 11 === 0, wakeupFrames: frame % 11 === 0 ? 2 : 0 });
+    const input = stepAiBrain(brain, { frame, self, opponent, roll: (frame % 97) / 97 });
+    assert.deepEqual(input, empty, `passive produced an input on frame ${frame}`);
+  }
+  assert.equal(aiBrainSnapshot(brain).intent.reason, "passive");
 }
 
 function testDelayedVisibleObservations() {
@@ -123,6 +163,7 @@ function testArchetypesAndDeterminism() {
 }
 
 testDifficultyFairness();
+testPassiveIsInert();
 testDelayedVisibleObservations();
 testDefenseAntiAirWakeupAndCombos();
 testArchetypesAndDeterminism();

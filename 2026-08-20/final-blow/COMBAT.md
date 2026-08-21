@@ -89,3 +89,22 @@ punishable, light pokes must stay meaningfully faster than heavies, chip must be
 meaningful but never lethal, every super must out-damage a single heavy while leaving
 most of the bar, dizzy must trigger from repeated clean hits, must last long enough to
 punish, and must grant immunity on recovery.
+
+## CPU difficulty and Passive mode
+
+The ladder is now **PASSIVE · ROOKIE · STREET · PRO · FINAL**, shown as a visible
+picker on the fighter-select screen whenever a CPU is actually in the match (Arcade,
+and Training with a CPU dummy). It is hidden in local versus, stays in sync with the
+options screen, and the choice persists in `final-blow-ai-difficulty`.
+
+**Passive** is an inert practice opponent, guaranteed structurally rather than by
+tuning: its settings carry `inert: true`, and `stepAiBrain` short-circuits to an empty
+input before it can even read an observation. `aiInput` also returns early so a
+Passive CPU can never take a Final Blow or run the demo super opener. It therefore
+never advances, chases, attacks, throws, techs, jumps, anti-airs, blocks, dodges,
+retaliates, spends Grit, reverses on wake-up or finishes a round. It still takes
+damage, still reacts to hits, and can still be grabbed and thrown.
+
+The browser suite runs a Passive CPU for 1,920 frames across six distances and
+asserts zero attacks, zero guards, zero jumps, zero grabs, zero Grit spent, zero
+movement, and that the only state it ever occupies is `idle`.

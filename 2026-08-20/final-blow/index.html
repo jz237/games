@@ -19,7 +19,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">FOOTSIES EDITION <b>1.1C</b></div>
+      <div class="build-tag">PASSIVE CPU EDITION <b>1.1D</b></div>
       <div id="offlineBadge" class="offline-badge" aria-live="polite">CACHE CHECK</div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
@@ -174,6 +174,11 @@
           <div id="selectPrompt">PLAYER 1 — CHOOSE</div>
         </header>
         <div id="rosterGrid" class="roster-grid" role="listbox" aria-label="Fighter roster"></div>
+        <div id="difficultyBar" class="difficulty-bar" role="radiogroup" aria-label="CPU difficulty" hidden>
+          <span class="difficulty-title">CPU DIFFICULTY</span>
+          <div id="difficultyOptions" class="difficulty-options"></div>
+          <p id="difficultyHint" class="difficulty-hint"></p>
+        </div>
         <div class="selection-footer">
           <button class="text-button" data-back="title">← BACK</button>
           <div id="selectionReadout"><span>P1</span> DEATHBLOW <i>VS</i> <span>P2</span> JEZ</div>
@@ -344,6 +349,7 @@
           </label>
           <label class="option-picker"><span>CPU DIFFICULTY</span>
             <select id="aiDifficultySelect" aria-label="CPU difficulty">
+              <option value="passive">PASSIVE · INERT PRACTICE DUMMY</option>
               <option value="rookie">ROOKIE · PATIENT LEARNER</option>
               <option value="street">STREET · BALANCED</option>
               <option value="pro">PRO · SHARP</option>

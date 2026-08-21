@@ -252,12 +252,12 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.1C/);
+  assert.match(title.build, /1\.1D/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
   assert.equal(title.moveListRows, 9);
-  assert.deepEqual(title.aiDifficulties, ['rookie', 'street', 'pro', 'final']);
+  assert.deepEqual(title.aiDifficulties, ['passive', 'rookie', 'street', 'pro', 'final']);
   assert.deepEqual(title.visualQualities, ['auto', 'high', 'balanced', 'battery']);
   assert.equal(title.pauseButtons, 4);
   assert.equal(title.soundCaptions, true);
@@ -270,7 +270,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.1c-footsies-edition');
+  assert.equal(title.engineVersion, '1.1d-passive-cpu-edition');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -998,6 +998,103 @@ try {
   assert.equal(throwTech.fighters[1].lastHitResult, "throw-tech");
   assert.equal(throwTech.fighters[0].grabbing, null, "a tech must leave no live clinch");
   assert.equal(throwTech.fighters[1].grabbed, null);
+
+  // Passive CPU: the acceptance check is that a Passive opponent left running for
+  // multiple full rounds at several distances performs zero offensive OR
+  // defensive actions, while the human stays free to hit it.
+  const passiveRun = await evaluate(client, `(() => {
+    window.__finalBlowQa.difficulty('passive');
+    window.__finalBlowQa.aiFight('deathblow', 'jez', 'passive');
+    const distances = [40, 90, 180, 320, 520, 780];
+    const seen = new Set();
+    let moved = 0;
+    let attacked = 0;
+    let guarded = 0;
+    let jumped = 0;
+    let grabbed = 0;
+    let meterSpent = 0;
+    let frames = 0;
+    for (const distance of distances) {
+      window.__finalBlowQa.positions(400, 400 + distance);
+      window.__finalBlowQa.fighter(1, { meter: 100, health: 100 });
+      const startX = window.__finalBlowEngine.snapshot().fighters[1].x;
+      for (let frame = 0; frame < 320; frame += 1) {
+        window.__finalBlowQa.step(1 / 60);
+        frames += 1;
+        const cpu = window.__finalBlowEngine.snapshot().fighters[1];
+        seen.add(cpu.state);
+        if (cpu.move) attacked += 1;
+        if (cpu.guarding) guarded += 1;
+        if (!cpu.grounded) jumped += 1;
+        if (cpu.grabbing) grabbed += 1;
+        if (cpu.meter < 100) meterSpent += 1;
+        if (Math.abs(cpu.x - startX) > 2) moved += 1;
+      }
+    }
+    return { seen: [...seen], moved, attacked, guarded, jumped, grabbed, meterSpent, frames };
+  })()`);
+  assert.ok(passiveRun.frames >= 1900, "passive run must cover multiple full rounds of frames");
+  assert.equal(passiveRun.attacked, 0, "a Passive CPU must never attack");
+  assert.equal(passiveRun.guarded, 0, "a Passive CPU must never automatically block");
+  assert.equal(passiveRun.jumped, 0, "a Passive CPU must never jump");
+  assert.equal(passiveRun.grabbed, 0, "a Passive CPU must never grab");
+  assert.equal(passiveRun.meterSpent, 0, "a Passive CPU must never spend Grit");
+  assert.equal(passiveRun.moved, 0, "a Passive CPU must never advance or chase");
+  assert.deepEqual(passiveRun.seen, ["idle"], `a Passive CPU must stay idle, saw ${passiveRun.seen}`);
+
+  // The human is still free to hit it, and it still takes damage and reacts.
+  const passiveTarget = await evaluate(client, `(() => {
+    window.__finalBlowQa.aiFight('deathblow', 'jez', 'passive');
+    window.__finalBlowQa.positions(500, 600);
+    window.__finalBlowQa.input(0, { heavy: true });
+    window.__finalBlowQa.step(0.5);
+    const hit = window.__finalBlowEngine.snapshot();
+    // Fresh round: a grab needs an opponent who is not still in hitstun.
+    window.__finalBlowQa.aiFight('deathblow', 'jez', 'passive');
+    window.__finalBlowQa.positions(500, 560);
+    window.__finalBlowQa.input(0, { right: true, light: true });
+    window.__finalBlowQa.step(0.8);
+    return { hit, thrown: window.__finalBlowEngine.snapshot() };
+  })()`);
+  assert.ok(passiveTarget.hit.fighters[1].health < 100, "a Passive CPU must still take damage");
+  assert.equal(passiveTarget.hit.fighters[1].lastHitResult, "mid");
+  assert.equal(passiveTarget.thrown.fighters[1].lastHitResult, "throw", "a Passive CPU can still be thrown");
+
+  // Restore a fighting difficulty for the rest of the run.
+  await evaluate(client, `window.__finalBlowQa.difficulty('street')`);
+
+  // The difficulty picker is visible before an Arcade match and remembers itself.
+  const difficultyUi = await evaluate(client, `(() => {
+    document.querySelector('[data-mode="arcade"]').click();
+    const bar = document.querySelector('#difficultyBar');
+    const buttons = [...document.querySelectorAll('#difficultyOptions button')];
+    buttons.find((button) => button.dataset.difficulty === 'passive').click();
+    const afterClick = {
+      stored: localStorage.getItem('final-blow-ai-difficulty'),
+      checked: [...document.querySelectorAll('#difficultyOptions button')]
+        .filter((button) => button.getAttribute('aria-checked') === 'true')
+        .map((button) => button.dataset.difficulty),
+      hint: document.querySelector('#difficultyHint').textContent,
+      optionsSelect: document.querySelector('#aiDifficultySelect').value,
+    };
+    document.querySelector('[data-mode="versus"]').click();
+    const versusHidden = document.querySelector('#difficultyBar').hidden;
+    document.querySelector('[data-mode="arcade"]').click();
+    return {
+      visibleInArcade: !bar.hidden,
+      labels: buttons.map((button) => button.textContent),
+      afterClick,
+      versusHidden,
+    };
+  })()`);
+  assert.equal(difficultyUi.visibleInArcade, true, "difficulty must be visible before an Arcade match");
+  assert.deepEqual(difficultyUi.labels, ["PASSIVE", "ROOKIE", "STREET", "PRO", "FINAL"]);
+  assert.deepEqual(difficultyUi.afterClick.checked, ["passive"]);
+  assert.equal(difficultyUi.afterClick.stored, "passive", "the choice must persist between sessions");
+  assert.equal(difficultyUi.afterClick.optionsSelect, "passive", "the options screen must stay in sync");
+  assert.match(difficultyUi.afterClick.hint, /Never attacks/);
+  assert.equal(difficultyUi.versusHidden, true, "no CPU picker in local versus");
+  await evaluate(client, `window.__finalBlowQa.difficulty('street'); document.querySelector('#homeLink').click();`);
 
   // Dizzy: repeated clean hits stun, the meter bleeds off when they stop, the
   // dizzy is a real punish window, and recovery grants a long immunity so it can
@@ -1776,7 +1873,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.1c/);
+  assert.match(offlineCache.name, /final-blow-offline-1\.1d/);
   assert.ok(offlineCache.entries >= 156);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasRollback, true);
@@ -1803,8 +1900,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.1C/);
-  assert.equal(offlineBoot.version, '1.1c-footsies-edition');
+  assert.match(offlineBoot.build, /1\.1D/);
+  assert.equal(offlineBoot.version, '1.1d-passive-cpu-edition');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,

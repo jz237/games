@@ -46,9 +46,12 @@ import {
   recognizeFighterCommand,
 } from "./engine/fighter-kits.mjs";
 import {
+  AI_DIFFICULTIES,
+  AI_DIFFICULTY_ORDER,
   DEFAULT_AI_DIFFICULTY,
   aiBrainSnapshot,
   createAiBrain,
+  isPassiveDifficulty,
   normalizeAiDifficulty,
   resetAiBrain,
   stepAiBrain,
@@ -2071,6 +2074,7 @@ function startSelect(mode) {
     ? "CHOOSE YOUR TRAINING FIGHTER"
     : "PLAYER 1 — CHOOSE";
   showScreen("select");
+  syncDifficultyUi();
   updateRosterUI();
 }
 
@@ -2780,6 +2784,7 @@ function activeControlStyle(side) {
 function aiInput(fighter, opponent, dt) {
   fighter.aiClock -= dt;
   const input = { left: false, right: false, down: false, guard: false, jump: false, light: false, heavy: false, special: false, enhanced: false, throw: false, super: false, final: false };
+  if (isPassiveDifficulty(fighter.aiBrain?.difficulty)) return input;
   const cpuFinisher = state.mode === "demo" || fighter.side === 1;
   if (state.phase === "finish" && state.finishWinner === fighter.side && cpuFinisher) {
     input.final = fighter.aiClock <= 0;
@@ -5837,12 +5842,46 @@ function renderBindings() {
   }));
 }
 
+const DIFFICULTY_HINTS = Object.freeze({
+  passive: "Never attacks, blocks, techs or moves. A living practice dummy.",
+  rookie: "Slow to react and prone to mistakes. Room to learn a matchup.",
+  street: "Balanced reactions and pressure. The default fight.",
+  pro: "Fast reactions, real punishes and confident meter use.",
+  final: "Reads almost everything. Boss-level pressure.",
+});
+
+function renderDifficultyOptions() {
+  const container = $("#difficultyOptions");
+  if (!container) return;
+  container.innerHTML = AI_DIFFICULTY_ORDER.map((id) => {
+    const selected = state.aiDifficulty === id;
+    return `<button type="button" role="radio" class="${id}" data-difficulty="${id}" aria-checked="${selected}">${AI_DIFFICULTIES[id].label}</button>`;
+  }).join("");
+  $$("[data-difficulty]").forEach((button) => button.addEventListener("click", () => {
+    setAiDifficulty(button.dataset.difficulty);
+  }));
+  $("#difficultyHint").textContent = DIFFICULTY_HINTS[state.aiDifficulty] || "";
+}
+
+// The picker is only meaningful when a CPU is actually in the match.
+function facesCpuOpponent() {
+  return state.mode === "arcade" || (state.mode === "training" && state.training.dummyMode === "cpu");
+}
+
+function syncDifficultyUi() {
+  const bar = $("#difficultyBar");
+  if (!bar) return;
+  bar.hidden = !(state.screen === "select" && facesCpuOpponent());
+  renderDifficultyOptions();
+}
+
 function setAiDifficulty(difficulty) {
   state.aiDifficulty = normalizeAiDifficulty(difficulty);
   localStorage.setItem("final-blow-ai-difficulty", state.aiDifficulty);
   const select = $("#aiDifficultySelect");
   if (select) select.value = state.aiDifficulty;
   for (const fighter of state.fighters) resetAiBrain(fighter.aiBrain, state.aiDifficulty);
+  syncDifficultyUi();
   return state.aiDifficulty;
 }
 
@@ -6356,6 +6395,7 @@ $("#resetBindingsButton").addEventListener("click", () => {
 $("#trainingDummySelect").addEventListener("change", (event) => {
   if (!TRAINING_DUMMY_MODES.includes(event.target.value)) return;
   state.training.dummyMode = event.target.value;
+  syncDifficultyUi();
   updateTrainingUi();
 });
 $("#trainingRecoverToggle").addEventListener("change", (event) => {
@@ -6462,7 +6502,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.1c-footsies-edition",
+  version: "1.1d-passive-cpu-edition",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
