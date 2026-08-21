@@ -324,7 +324,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.2-janney-blood-edition');
+  assert.equal(title.engineVersion, '1.2a-face-to-face');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -920,6 +920,33 @@ try {
   await dispatchKey(client, "keyUp", "KeyD", "d", 68);
   assert.ok(crossover.fighters[0].x > crossover.fighters[1].x, "airborne fighters should be able to cross over");
   assert.equal(crossover.fighters[0].facing, -1, "facing should flip after a cross-up");
+
+  // Attacks commit their hitbox direction through startup/active frames, but
+  // recovery must immediately turn both sprites back toward one another. The
+  // previous full-move lock left cross-through fighters visibly facing away.
+  await evaluate(client, `
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.positions(500, 650);
+    window.__finalBlowQa.input(0, { heavy: true });
+    window.__finalBlowQa.step(1 / 60);
+    window.__finalBlowQa.positions(700, 500);
+  `);
+  const committedFacing = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.ok(committedFacing.fighters[0].attackFrame <= committedFacing.fighters[0].activeEndFrame);
+  assert.equal(committedFacing.fighters[0].facing, 1, "startup/active frames should preserve the committed attack direction");
+  const recoveryFacing = await evaluate(client, `(() => {
+    for (let frame = 0; frame < 90; frame += 1) {
+      window.__finalBlowQa.step(1 / 60);
+      const snapshot = window.__finalBlowEngine.snapshot();
+      const fighter = snapshot.fighters[0];
+      if (fighter.move && fighter.attackFrame > fighter.activeEndFrame) return snapshot;
+    }
+    return window.__finalBlowEngine.snapshot();
+  })()`);
+  assert.ok(recoveryFacing.fighters[0].move, "the facing probe must sample attack recovery");
+  assert.ok(recoveryFacing.fighters[0].attackFrame > recoveryFacing.fighters[0].activeEndFrame);
+  assert.equal(recoveryFacing.fighters[0].facing, -1, "recovery should turn fighter one toward the opponent");
+  assert.equal(recoveryFacing.fighters[1].facing, 1, "fighter two should face fighter one after the side swap");
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
   await dispatchKey(client, "keyDown", "KeyD", "d", 68);
@@ -2411,7 +2438,7 @@ try {
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
   assert.match(offlineBoot.build, /1\.2/);
-  assert.equal(offlineBoot.version, '1.2-janney-blood-edition');
+  assert.equal(offlineBoot.version, '1.2a-face-to-face');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,

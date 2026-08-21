@@ -4942,8 +4942,19 @@ function updateFacings() {
   const [a, b] = state.fighters;
   if (!a || !b || state.finisher) return;
   if (a.grabbing || b.grabbing || a.grabbed || b.grabbed) return;
-  if (!a.attacking || !a.grounded) a.facing = b.x >= a.x ? 1 : -1;
-  if (!b.attacking || !b.grounded) b.facing = a.x >= b.x ? 1 : -1;
+  // Preserve a move's committed direction through startup and active frames so
+  // cross-ups still punish whiffs instead of auto-correcting the hitbox. The
+  // instant recovery begins, turn the fighter back toward the opponent; keeping
+  // facing locked for the full recovery was what left fighters looking away.
+  const canTurn = (fighter) => !fighter.attacking
+    || fighter.attackFrame > fighter.attacking.activeEndFrame;
+  const toward = (fighter, opponent) => {
+    const delta = opponent.x - fighter.x;
+    if (Math.abs(delta) > 1e-6) return delta > 0 ? 1 : -1;
+    return fighter.side < opponent.side ? 1 : -1;
+  };
+  if (canTurn(a)) a.facing = toward(a, b);
+  if (canTurn(b)) b.facing = toward(b, a);
 }
 
 function resolveFighterState(fighter) {
@@ -8285,7 +8296,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.2-janney-blood-edition",
+  version: "1.2a-face-to-face",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -8387,6 +8398,8 @@ window.__finalBlowEngine = {
         movement: { ...fighter.movement },
         attackLevel: fighter.attacking?.level || null,
         attackFrame: fighter.attackFrame,
+        activeEndFrame: fighter.attacking?.activeEndFrame ?? null,
+        totalFrames: fighter.attacking?.totalFrames ?? null,
         attackHits: fighter.attackHits,
         attackConnected: fighter.attackConnected,
         rhythmStacks: fighter.rhythmStacks,
