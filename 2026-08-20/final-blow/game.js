@@ -110,6 +110,11 @@ import {
   DEMO_RESULT_HOLD_MS,
   createDemoDirector,
 } from "./engine/demo.mjs";
+import {
+  auditGraphicFatalities,
+  getGraphicFatality,
+  graphicFatalitySnapshot,
+} from "./engine/fatalities.mjs";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -244,6 +249,8 @@ const roster = [
 
 const balanceAudit = auditFighterBalance(roster.map(({ id }) => getFighterKit(id)));
 if (balanceAudit.violations.length) console.warn("Final Blow balance guardrail warning", balanceAudit.violations);
+const fatalityAudit = auditGraphicFatalities(roster.map(({ id }) => id));
+if (fatalityAudit.errors.length) console.warn("Final Blow graphic fatality warning", fatalityAudit.errors);
 
 const arcadeBoss = Object.freeze({
   id: ARCADE_BOSS_ID,
@@ -584,6 +591,8 @@ let padMap = normalizePadMap(storedJson("final-blow-pad-map", DEFAULT_PAD_MAP));
 let pendingKeyBinding = null;
 
 const simulationClock = new FixedStepClock();
+// Keep the gameplay seed stable across presentation-only releases so arcade routes,
+// AI openings, and rollback baselines do not change when visual content is added.
 const initialSeed = hashSeed("FINAL BLOW", "PHILLY AFTER DARK", "1.0e-demo-edition");
 const debugRequested = new URLSearchParams(location.search).has("debug");
 
@@ -638,6 +647,7 @@ const state = {
   performance: null,
   soundCaptions: localStorage.getItem("final-blow-sound-captions") !== "0",
   attractEnabled: localStorage.getItem("final-blow-attract-mode") !== "0",
+  graphicFatalities: localStorage.getItem("final-blow-graphic-fatalities") !== "0",
   offlineReady: false,
   accessibility: {
     reducedMotion: localStorage.getItem("final-blow-reduced-motion") === "1",
@@ -2252,7 +2262,10 @@ function finishRound(winner, type = -1) {
 function performFinisher(winner, type) {
   const attacker = state.fighters[winner];
   const victim = state.fighters[1 - winner];
-  const script = finisherScripts[attacker.def.finisherScriptId || attacker.def.id];
+  const scriptId = attacker.def.finisherScriptId || attacker.def.id;
+  const script = finisherScripts[scriptId];
+  const fatality = getGraphicFatality(scriptId, type);
+  const fatalityAt = script.impacts.find((impact) => impact.final)?.t ?? script.duration;
   const direction = attacker.x <= victim.x ? 1 : -1;
   const anchor = clamp(victim.x, 390, W - 390);
   attacker.attacking = null;
@@ -2272,6 +2285,9 @@ function performFinisher(winner, type) {
     impactIndex: 0,
     beatLabel: script.combo,
     beatLife: .8,
+    fatalityId: fatality.id,
+    fatalityAt,
+    fatalityTriggered: false,
   };
   state.cinematicZoom = 1.02;
   state.shake = .16;
@@ -2311,7 +2327,7 @@ function triggerFinisherImpact(finisher, impact) {
   const finalImpact = Boolean(impact.final);
   const pointX = victim.x - finisher.direction * 12;
   const pointY = victim.y - (finalImpact ? 108 : 125);
-  const gore = $("#goreToggle").checked;
+  const gore = state.graphicFatalities;
   const count = Math.round((finalImpact ? 52 : 12) * impact.power * (gore ? 1.35 : 1));
 
   victim.hitFlash = finalImpact ? .22 : .11;
@@ -2352,6 +2368,42 @@ function triggerFinisherImpact(finisher, impact) {
     color: attacker.def.accent,
     secondary: attacker.def.color,
   });
+  if (finalImpact && gore) {
+    const scriptId = attacker.def.finisherScriptId || attacker.def.id;
+    const fatality = getGraphicFatality(scriptId, finisher.type);
+    finisher.fatalityTriggered = true;
+    finisher.beatLabel = fatality.title;
+    finisher.beatLife = 1.45;
+    const decalLife = Math.max(1.4, finisher.script.duration - finisher.elapsed + .8);
+    state.effects.push({
+      kind: "fatalityPool",
+      profileId: fatality.id,
+      family: fatality.family,
+      x: victim.x,
+      y: FLOOR + 4,
+      life: decalLife,
+      max: decalLife,
+      color: fatality.palette[0],
+      secondary: fatality.palette[1],
+      direction: finisher.direction,
+      scale: fatality.blood,
+    });
+    const goreCount = Math.round(42 * fatality.blood * state.performance.particleScale);
+    for (let index = 0; index < goreCount; index += 1) {
+      const angle = -Math.PI * (.12 + visualRandom() * .76);
+      const speed = 180 + visualRandom() * 620 * fatality.separation;
+      state.particles.push({
+        x: pointX + (visualRandom() - .5) * 34,
+        y: pointY + (visualRandom() - .5) * 42,
+        vx: Math.cos(angle) * speed * (visualRandom() > .5 ? 1 : -1),
+        vy: Math.sin(angle) * speed,
+        life: .75 + visualRandom() * 1.4,
+        max: 2.15,
+        size: 3 + visualRandom() * 9,
+        color: visualRandom() > .28 ? fatality.palette[0] : fatality.palette[1],
+      });
+    }
+  }
   sound(impact.sound);
 }
 
@@ -2558,6 +2610,7 @@ function updateTrainingUi(input = {}) {
 }
 
 function syncNewOptionsUi() {
+  $("#goreToggle").checked = state.graphicFatalities;
   $("#controlStyleSelect").value = state.controlStyle;
   $("#reducedMotionToggle").checked = state.accessibility.reducedMotion;
   $("#highContrastToggle").checked = state.accessibility.highContrast;
@@ -4111,6 +4164,206 @@ function drawAtlasFrame(atlas, frame, size) {
   ctx.drawImage(atlas, (frame % 4) * cell, Math.floor(frame / 4) * cell, cell, cell, -size * 0.5, -size, size, size);
 }
 
+function activeGraphicFatality(fighter) {
+  const finisher = state.finisher;
+  if (!state.graphicFatalities || !finisher?.fatalityTriggered || fighter.side === finisher.winner) return null;
+  const attacker = state.fighters[finisher.winner];
+  const scriptId = attacker?.def.finisherScriptId || attacker?.def.id || "deathblow";
+  return graphicFatalitySnapshot(scriptId, finisher.type, finisher.elapsed, finisher.fatalityAt);
+}
+
+function drawFatalityAtlasBand(atlas, frame, size, top, bottom, transform = {}) {
+  const y = -size + top * size;
+  const height = Math.max(1, (bottom - top) * size);
+  ctx.save();
+  ctx.translate(transform.x || 0, transform.y || 0);
+  ctx.rotate(transform.rotation || 0);
+  ctx.scale(transform.scaleX || 1, transform.scaleY || 1);
+  ctx.globalAlpha *= transform.alpha ?? 1;
+  if (transform.filter) ctx.filter = transform.filter;
+  ctx.beginPath();
+  ctx.rect(-size * .52, y, size * 1.04, height);
+  ctx.clip();
+  drawAtlasFrame(atlas, frame, size);
+  ctx.restore();
+}
+
+function drawFatalityCut(size, yRatio, fatality, width = .32) {
+  const y = -size + yRatio * size;
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.strokeStyle = fatality.palette[0];
+  ctx.fillStyle = fatality.palette[1];
+  ctx.shadowColor = fatality.palette[0];
+  ctx.shadowBlur = 13;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(-size * width, y);
+  ctx.quadraticCurveTo(0, y + 9, size * width, y - 3);
+  ctx.stroke();
+  for (let drop = 0; drop < 7; drop += 1) {
+    const x = (drop - 3) * size * width / 4;
+    ctx.beginPath();
+    ctx.ellipse(x, y + 6 + (drop % 3) * 4, 3 + drop % 2 * 2, 7 + drop % 3 * 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawFatalitySkeleton(size, fatality, pulse) {
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha *= .44 + pulse * .38;
+  ctx.strokeStyle = "#fff9d8";
+  ctx.shadowColor = fatality.palette[0];
+  ctx.shadowBlur = 18;
+  ctx.lineWidth = 6;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(0, -size * .72, size * .07, 0, Math.PI * 2);
+  ctx.moveTo(0, -size * .64); ctx.lineTo(0, -size * .34);
+  ctx.moveTo(-size * .13, -size * .56); ctx.lineTo(size * .13, -size * .56);
+  ctx.moveTo(-size * .12, -size * .55); ctx.lineTo(-size * .2, -size * .34);
+  ctx.moveTo(size * .12, -size * .55); ctx.lineTo(size * .2, -size * .34);
+  ctx.moveTo(0, -size * .34); ctx.lineTo(-size * .13, -size * .08);
+  ctx.moveTo(0, -size * .34); ctx.lineTo(size * .13, -size * .08);
+  ctx.stroke();
+  for (let rib = 0; rib < 4; rib += 1) {
+    ctx.beginPath();
+    ctx.ellipse(0, -size * (.56 - rib * .055), size * (.1 - rib * .008), size * .033, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawGraphicFatalityVictim(atlas, frame, size, fatality, time) {
+  const reveal = fatality.reveal;
+  const settle = fatality.settle;
+  const force = fatality.separation;
+  const direction = state.finisher?.direction || 1;
+  const whole = (transform = {}) => drawFatalityAtlasBand(atlas, frame, size, 0, 1, transform);
+  const band = (top, bottom, x, y, rotation = 0, extra = {}) => drawFatalityAtlasBand(
+    atlas,
+    frame,
+    size,
+    top,
+    bottom,
+    { x: x * direction * force * settle, y: y * force * settle, rotation: rotation * direction * settle, ...extra },
+  );
+
+  ctx.save();
+  if (fatality.family === "rupture") {
+    band(0, .28, -74, -92, -.86);
+    band(.28, .52, 38, -42, .33);
+    band(.52, .73, -48, 12, -.25);
+    band(.73, 1, 64, 34, .5);
+    drawFatalityCut(size, .28, fatality);
+    drawFatalityCut(size, .52, fatality, .37);
+    drawFatalityCut(size, .73, fatality, .3);
+  } else if (fatality.family === "slice") {
+    const pieces = Math.max(3, Math.min(5, fatality.pieces));
+    for (let index = 0; index < pieces; index += 1) {
+      const top = index / pieces;
+      const bottom = (index + 1) / pieces;
+      const side = index % 2 ? 1 : -1;
+      band(top, bottom, side * (42 + index * 12), -20 - index * 7, fatality.angle + side * .08);
+      if (index < pieces - 1) drawFatalityCut(size, bottom, fatality, .36 - index * .025);
+    }
+  } else if (fatality.family === "crush") {
+    const compression = 1 - reveal * .68;
+    whole({
+      y: size * .28 * reveal,
+      scaleX: 1 + reveal * .34,
+      scaleY: compression,
+      filter: "contrast(1.28) saturate(.72) brightness(.72)",
+    });
+    if (reveal > .46) {
+      band(0, .34, -54, -28, -.32, { alpha: reveal * .9 });
+      band(.34, .68, 45, 10, .22, { alpha: reveal * .82 });
+      drawFatalityCut(size, .43, fatality, .4);
+    }
+  } else if (fatality.family === "dissolve") {
+    const strips = Math.max(6, Math.min(10, fatality.pieces));
+    for (let index = 0; index < strips; index += 1) {
+      const top = index / strips;
+      const bottom = (index + 1) / strips;
+      const wave = Math.sin(index * 2.4 + time * .018);
+      band(top, bottom, wave * (26 + index * 5), 18 + index * 5, wave * .06, {
+        alpha: 1 - reveal * (.25 + index / strips * .48),
+        filter: `saturate(${1 + reveal * 1.8}) contrast(${1 + reveal * .5})`,
+      });
+    }
+    ctx.globalAlpha *= .58 + reveal * .34;
+    ctx.fillStyle = fatality.palette[0];
+    for (let drop = 0; drop < 20; drop += 1) {
+      const angle = drop * 2.399;
+      const radius = (28 + (drop % 6) * 16) * reveal;
+      ctx.beginPath();
+      ctx.arc(Math.cos(angle) * radius, -size * .42 + Math.sin(angle) * radius + settle * 72, 5 + drop % 5 * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (fatality.family === "electrocute") {
+    const pulse = (Math.sin(time * .045) + 1) * .5;
+    if (settle < .62) {
+      whole({
+        x: (pulse - .5) * 18,
+        filter: pulse > .46 ? "brightness(2.2) contrast(1.7) grayscale(1)" : "brightness(.18) contrast(2)",
+      });
+      drawFatalitySkeleton(size, fatality, pulse);
+    } else {
+      band(0, .26, -52, -70, -.58, { filter: "brightness(.2) saturate(0)" });
+      band(.26, .55, 38, -22, .28, { filter: "brightness(.2) saturate(0)" });
+      band(.55, .77, -44, 18, -.2, { filter: "brightness(.2) saturate(0)" });
+      band(.77, 1, 50, 28, .42, { filter: "brightness(.2) saturate(0)" });
+      drawFatalityCut(size, .55, fatality, .33);
+    }
+  } else if (fatality.family === "launch") {
+    band(.25, 1, 0, 22, .18, { filter: "contrast(1.15) brightness(.72)" });
+    band(0, .25, 135, -205, -1.65, { scaleX: .96, scaleY: .96 });
+    drawFatalityCut(size, .25, fatality, .24);
+    if (fatality.pieces > 3) {
+      band(.36, .61, -48, -16, -.22, { alpha: reveal });
+      band(.61, .82, 55, 23, .31, { alpha: reveal });
+      drawFatalityCut(size, .61, fatality, .32);
+    }
+  } else if (fatality.family === "glitch") {
+    const strips = Math.max(7, Math.min(12, fatality.pieces));
+    for (let index = 0; index < strips; index += 1) {
+      const top = index / strips;
+      const bottom = (index + 1) / strips;
+      const glitch = ((index * 47) % 9 - 4) * 9 * reveal;
+      band(top, bottom, glitch, index % 3 === 0 ? -18 : 8, (index % 2 ? .04 : -.04) * reveal, {
+        alpha: 1 - reveal * (index % 3 === 0 ? .48 : .18),
+        filter: index % 2 ? "hue-rotate(75deg) contrast(1.45)" : "hue-rotate(-35deg) contrast(1.6)",
+      });
+    }
+    ctx.globalCompositeOperation = "screen";
+    ctx.fillStyle = fatality.palette[0];
+    for (let line = 0; line < 9; line += 1) {
+      ctx.globalAlpha = .25 + (line % 3) * .16;
+      ctx.fillRect(-size * .45 + ((line * 71) % 90), -size * (.9 - line * .09), size * (.25 + (line % 4) * .08), 3 + line % 3 * 3);
+    }
+  } else if (fatality.family === "implode") {
+    if (settle < .5) {
+      const compression = 1 - settle * 1.05;
+      whole({ scaleX: compression, scaleY: compression, y: -size * .34 * (1 - compression), filter: "contrast(1.5) brightness(.72)" });
+    } else {
+      const burst = (settle - .5) * 2;
+      const pieces = Math.max(5, Math.min(8, fatality.pieces));
+      for (let index = 0; index < pieces; index += 1) {
+        const top = index / pieces;
+        const bottom = (index + 1) / pieces;
+        const angle = index * Math.PI * 2 / pieces;
+        band(top, bottom, Math.cos(angle) * 86 * burst, Math.sin(angle) * 72 * burst - 26, (index - pieces / 2) * .16);
+      }
+      drawFatalityCut(size, .48, fatality, .42);
+    }
+  } else {
+    whole();
+  }
+  ctx.restore();
+}
+
 function drawAttackVfx(fighter, time, activePower) {
   const attack = fighter.attacking;
   if (!attack || activePower <= 0) return;
@@ -4337,6 +4590,7 @@ function drawFighter(fighter, time) {
     ? fighterMoveAtlases[fighter.def.id] || fighterAtlases[fighter.def.id]
     : fighterAtlases[fighter.def.id];
   const frame = pose.frame;
+  const graphicFatality = activeGraphicFatality(fighter);
   const sizeAdjust = { deathblow: 1.08, jez: 1, alan: 1.08, post: 1.05, benny: 1.01, donald: 1.01, cyraxx: 1.02, ali: 1, commissioner: 1.02 }[fighter.def.id] || 1;
   const moveSheetAdjust = pose.bank === "specials"
     ? ({ deathblow: 1.14, jez: 1.03, alan: 1.06, post: 1.02, benny: 1.02, donald: 1.04, cyraxx: 1.05, ali: 1.04, commissioner: 1.02 }[fighter.def.id] || 1)
@@ -4417,7 +4671,8 @@ function drawFighter(fighter, time) {
     ctx.shadowOffsetY = 6;
     if (fighter.hitFlash > 0) ctx.filter = "brightness(2.5) saturate(.28)";
     else if (fighter.block) ctx.filter = "brightness(.82) saturate(.78)";
-    drawAtlasFrame(atlas, frame, renderSize);
+    if (graphicFatality) drawGraphicFatalityVictim(atlas, frame, renderSize, graphicFatality, time);
+    else drawAtlasFrame(atlas, frame, renderSize);
     ctx.restore();
   } else {
     ctx.fillStyle = fighter.def.color;
@@ -4612,6 +4867,44 @@ function drawFinisherImpact(effect, alpha) {
   }
 }
 
+function drawFatalityPool(effect, alpha) {
+  const growth = 1 - alpha;
+  const scale = effect.scale || 1;
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.scale(effect.direction || 1, 1);
+  ctx.globalAlpha = Math.min(1, alpha * 1.8);
+  const pool = ctx.createRadialGradient(0, 0, 4, 0, 0, 116 * scale);
+  pool.addColorStop(0, effect.color);
+  pool.addColorStop(.54, effect.secondary);
+  pool.addColorStop(1, "rgba(40,0,8,0)");
+  ctx.fillStyle = pool;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, (42 + growth * 112) * scale, 8 + growth * 25, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = effect.color;
+  for (let drop = 0; drop < 13; drop += 1) {
+    const angle = drop * 2.399 + (effect.family === "glitch" ? .4 : 0);
+    const reach = (24 + growth * 118) * (.45 + (drop % 5) * .14) * scale;
+    ctx.globalAlpha = alpha * (.38 + drop % 3 * .18);
+    ctx.beginPath();
+    ctx.ellipse(Math.cos(angle) * reach, Math.sin(angle) * reach * .22, 4 + drop % 4 * 3, 2 + drop % 3 * 2, angle, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (["rupture", "launch", "crush"].includes(effect.family)) {
+    ctx.globalAlpha = alpha * .82;
+    ctx.fillStyle = "#e9d6b1";
+    ctx.strokeStyle = "#6d0c19";
+    ctx.lineWidth = 4;
+    ctx.rotate(-.18);
+    ctx.beginPath();
+    ctx.rect(-31, -13, 62, 14);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawParticles() {
   for (const particle of state.particles) {
     ctx.globalAlpha = clamp(particle.life / particle.max, 0, 1);
@@ -4642,6 +4935,8 @@ function drawParticles() {
       ctx.fillText(effect.label, 0, 0);
     } else if (effect.kind === "finisherImpact") {
       drawFinisherImpact(effect, alpha);
+    } else if (effect.kind === "fatalityPool") {
+      drawFatalityPool(effect, alpha);
     } else if (effect.kind === "paintDeploy" || effect.kind === "paintTrapBurst") {
       const burst = effect.kind === "paintTrapBurst";
       const radius = (1 - alpha) * (burst ? 138 : 72) + 12;
@@ -4791,6 +5086,30 @@ function drawFinisherOverlay() {
     ctx.font = "900 11px Arial";
     ctx.fillStyle = attacker.def.accent;
     ctx.fillText(`${finisher.impactIndex} HIT FINAL COMBINATION`, W * .5, H - barHeight + 19);
+    ctx.restore();
+  }
+
+  if (finisher.fatalityTriggered) {
+    const attackerId = attacker.def.finisherScriptId || attacker.def.id;
+    const fatality = graphicFatalitySnapshot(attackerId, finisher.type, finisher.elapsed, finisher.fatalityAt);
+    const reveal = fatality.reveal;
+    ctx.save();
+    ctx.globalAlpha = Math.sin(reveal * Math.PI * .5) * clamp(1.45 - fatality.aftermath * .14, .55, 1);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,.95)";
+    ctx.shadowBlur = 18;
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = "rgba(0,0,0,.92)";
+    ctx.fillStyle = fatality.palette[0];
+    ctx.font = "1000 52px Arial Narrow, Impact, sans-serif";
+    ctx.strokeText("GRAPHIC FATALITY", W * .5, H * .23);
+    ctx.fillText("GRAPHIC FATALITY", W * .5, H * .23);
+    ctx.font = "900 18px Arial Narrow, Arial, sans-serif";
+    ctx.lineWidth = 7;
+    ctx.fillStyle = "#fff0df";
+    ctx.strokeText(`${fatality.title} · ${fatality.caption}`, W * .5, H * .3);
+    ctx.fillText(`${fatality.title} · ${fatality.caption}`, W * .5, H * .3);
     ctx.restore();
   }
 }
@@ -5377,6 +5696,10 @@ $("#musicToggle").addEventListener("change", () => {
   unlockAudio();
   syncMusic();
 });
+$("#goreToggle").addEventListener("change", (event) => {
+  state.graphicFatalities = event.target.checked;
+  localStorage.setItem("final-blow-graphic-fatalities", state.graphicFatalities ? "1" : "0");
+});
 $("#musicVolume").addEventListener("input", (event) => {
   state.musicVolume = Number(event.target.value) / 100;
   localStorage.setItem("final-blow-music-volume", String(state.musicVolume));
@@ -5570,7 +5893,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.0e-demo-edition",
+  version: "1.0f-fatality-edition",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -5589,6 +5912,8 @@ window.__finalBlowEngine = {
       performance: { ...state.performance },
       soundCaptions: state.soundCaptions,
       attractEnabled: state.attractEnabled,
+      graphicFatalities: state.graphicFatalities,
+      fatalityAudit,
       offlineReady: state.offlineReady,
       accessibility: { ...state.accessibility },
       touchSettings: { ...state.touchSettings },
@@ -5930,6 +6255,14 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       updateHud();
       $(".touch-final").classList.add("ready");
     },
+    graphicFatality(id, type = 0, seconds = 4.7) {
+      this.ready(id, type);
+      state.graphicFatalities = true;
+      $("#goreToggle").checked = true;
+      finishRound(0, type);
+      this.step(seconds);
+      return this.status();
+    },
     result(id = "deathblow") {
       const index = roster.findIndex((fighter) => fighter.id === id);
       if (index < 0) throw new Error(`Unknown fighter: ${id}`);
@@ -5947,6 +6280,10 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       };
     },
     status() {
+      const scriptId = state.fighters[state.finisher?.winner ?? 0]?.def.finisherScriptId
+        || state.fighters[state.finisher?.winner ?? 0]?.def.id
+        || "deathblow";
+      const fatality = state.finisher ? getGraphicFatality(scriptId, state.finisher.type) : null;
       return {
         phase: state.phase,
         fighter: state.fighters[0]?.def.id,
@@ -5955,6 +6292,11 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         beat: state.finisher?.beatLabel || "",
         attackerFrame: state.fighters[0]?.cinematicFrame,
         victimFrame: state.fighters[1]?.cinematicFrame,
+        graphicFatalities: state.graphicFatalities,
+        fatalityId: state.finisher?.fatalityId || null,
+        fatalityFamily: fatality?.family || null,
+        fatalityTriggered: Boolean(state.finisher?.fatalityTriggered),
+        fatalityPools: state.effects.filter((effect) => effect.kind === "fatalityPool").length,
         simulationTick: state.simulationTick,
         simulationHz: SIMULATION_HZ,
       };

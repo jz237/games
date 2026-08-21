@@ -235,13 +235,14 @@ try {
     onlineButton: document.querySelector('#onlineButton')?.textContent.trim(),
     demoButton: document.querySelector('#demoButton')?.textContent.trim(),
     attractEnabled: document.querySelector('#attractModeToggle')?.checked,
+    graphicFatalities: document.querySelector('#goreToggle')?.checked,
     onlineSecurityBadges: document.querySelectorAll('.online-security span').length,
     engineVersion: window.__finalBlowEngine?.version,
     engine: window.__finalBlowEngine?.snapshot(),
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.0E/);
+  assert.match(title.build, /1\.0F/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -253,10 +254,12 @@ try {
   assert.match(title.onlineButton, /PRIVATE ROOM/);
   assert.match(title.demoButton, /WATCH DEMO/);
   assert.equal(title.attractEnabled, true);
+  assert.equal(title.graphicFatalities, true);
+  assert.deepEqual(title.engine.fatalityAudit, { fighters: 8, fatalities: 16, errors: [] });
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.0e-demo-edition');
+  assert.equal(title.engineVersion, '1.0f-fatality-edition');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -274,6 +277,23 @@ try {
   assert.equal(attractOption.enabled.attractEnabled, true);
   assert.equal(attractOption.enabled.demo.idleScheduled, true);
   assert.equal(attractOption.stored, '1');
+
+  const fatalityOption = await evaluate(client, `(() => {
+    const toggle = document.querySelector('#goreToggle');
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+    const disabled = window.__finalBlowEngine.snapshot().graphicFatalities;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+    return {
+      disabled,
+      enabled: window.__finalBlowEngine.snapshot().graphicFatalities,
+      stored: localStorage.getItem('final-blow-graphic-fatalities'),
+    };
+  })()`);
+  assert.equal(fatalityOption.disabled, false);
+  assert.equal(fatalityOption.enabled, true);
+  assert.equal(fatalityOption.stored, '1');
 
   const kitUi = await evaluate(client, `(async () => {
     const paths = [
@@ -1359,6 +1379,28 @@ try {
   assert.ok(finisher.impacts >= 2);
   assert.equal(finisher.simulationHz, 60);
 
+  const graphicFatalities = await evaluate(client, `(async () => {
+    const fighters = ['deathblow', 'jez', 'alan', 'post', 'benny', 'donald', 'cyraxx', 'ali'];
+    const results = [];
+    for (const fighter of fighters) {
+      for (const variant of [0, 1]) {
+        const status = window.__finalBlowQa.graphicFatality(fighter, variant, 4.7);
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        results.push(status);
+      }
+    }
+    return results;
+  })()`);
+  assert.equal(graphicFatalities.length, 16);
+  assert.equal(new Set(graphicFatalities.map((fatality) => fatality.fatalityId)).size, 16);
+  assert.deepEqual([...new Set(graphicFatalities.map((fatality) => fatality.fatalityFamily))].sort(),
+    ['crush', 'dissolve', 'electrocute', 'glitch', 'implode', 'launch', 'rupture', 'slice']);
+  for (const fatality of graphicFatalities) {
+    assert.equal(fatality.graphicFatalities, true);
+    assert.equal(fatality.fatalityTriggered, true);
+    assert.ok(fatality.fatalityPools >= 1);
+  }
+
   const deathblowVictory = await evaluate(client, `window.__finalBlowQa.result('deathblow')`);
   assert.equal(deathblowVictory.title, "DEATHBLOW WINS");
   assert.equal(deathblowVictory.quote, "THE STREET MOVED FIRST.");
@@ -1471,16 +1513,18 @@ try {
       hasGame: Boolean(cache && await cache.match('./game.js')),
       hasRollback: Boolean(cache && await cache.match('./engine/rollback.mjs')),
       hasDemo: Boolean(cache && await cache.match('./engine/demo.mjs')),
+      hasFatalities: Boolean(cache && await cache.match('./engine/fatalities.mjs')),
       hasMusic: Boolean(cache && await cache.match('./assets/audio/subway-after-midnight.mp3')),
       ready: window.__finalBlowEngine.snapshot().offlineReady,
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.0e/);
-  assert.ok(offlineCache.entries >= 58);
+  assert.match(offlineCache.name, /final-blow-offline-1\.0f/);
+  assert.ok(offlineCache.entries >= 59);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasRollback, true);
   assert.equal(offlineCache.hasDemo, true);
+  assert.equal(offlineCache.hasFatalities, true);
   assert.equal(offlineCache.hasMusic, true);
   assert.equal(offlineCache.ready, true);
 
@@ -1499,8 +1543,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.0E/);
-  assert.equal(offlineBoot.version, '1.0e-demo-edition');
+  assert.match(offlineBoot.build, /1\.0F/);
+  assert.equal(offlineBoot.version, '1.0f-fatality-edition');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
