@@ -1,4 +1,4 @@
-export const ROLLBACK_PROTOCOL_VERSION = 1;
+export const ROLLBACK_PROTOCOL_VERSION = 2;
 export const DEFAULT_ROLLBACK_WINDOW = 12;
 export const DEFAULT_REDUNDANCY_FRAMES = 8;
 export const DEFAULT_PREDICTION_LIMIT = 12;
@@ -16,6 +16,11 @@ export const NET_INPUT = Object.freeze({
   THROW: 1 << 9,
   SUPER: 1 << 10,
   FINAL: 1 << 11,
+  // Four-button limb selector: set means the light/heavy pulse came from LK/HK
+  // rather than LP/HP, which picks a different authored normal.
+  KICK: 1 << 12,
+  // Back-throw modifier: the grab was made with away held rather than toward.
+  THROW_BACK: 1 << 13,
 });
 
 const INPUT_FIELDS = Object.freeze([
@@ -34,7 +39,8 @@ const INPUT_FIELDS = Object.freeze([
 ]);
 
 export const HELD_INPUT_MASK = NET_INPUT.LEFT | NET_INPUT.RIGHT | NET_INPUT.DOWN | NET_INPUT.GUARD;
-export const PULSE_INPUT_MASK = INPUT_FIELDS.reduce((mask, [, bit]) => mask | bit, 0) & ~HELD_INPUT_MASK;
+export const PULSE_INPUT_MASK = (INPUT_FIELDS.reduce((mask, [, bit]) => mask | bit, 0)
+  | NET_INPUT.KICK | NET_INPUT.THROW_BACK) & ~HELD_INPUT_MASK;
 
 const PACKET_MAGIC = 0xfb14;
 const PACKET_HEADER_BYTES = 16;
@@ -63,12 +69,20 @@ export function recommendedInputDelay(roundTripMilliseconds = 0) {
 export function inputToBits(input = {}) {
   let bits = 0;
   for (const [field, bit] of INPUT_FIELDS) if (input[field]) bits |= bit;
+  if (input.limb === "kick") bits |= NET_INPUT.KICK;
+  if (input.throwBack) bits |= NET_INPUT.THROW_BACK;
   return bits & 0xffff;
 }
 
 export function bitsToInput(bits = 0) {
   const normalized = Number(bits) & 0xffff;
-  return Object.fromEntries(INPUT_FIELDS.map(([field, bit]) => [field, Boolean(normalized & bit)]));
+  const input = Object.fromEntries(INPUT_FIELDS.map(([field, bit]) => [field, Boolean(normalized & bit)]));
+  input.limb = normalized & NET_INPUT.KICK ? "kick" : "punch";
+  const normalPress = input.light || input.heavy;
+  input.punch = normalPress && input.limb === "punch";
+  input.kick = normalPress && input.limb === "kick";
+  input.throwBack = Boolean(normalized & NET_INPUT.THROW_BACK);
+  return input;
 }
 
 export function predictedInput(bits = 0) {

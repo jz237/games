@@ -1,5 +1,5 @@
 import { createAttackInstance } from "./foundation.mjs";
-import { ATTACK_LEVELS } from "./defense.mjs";
+import { ATTACK_LEVELS, KICK_VARIANTS, deriveKickProfile } from "./defense.mjs";
 import { GRIT_RULES, matchCommandSequence } from "./combos.mjs";
 
 export const KIT_ACTIONS = Object.freeze([
@@ -83,7 +83,7 @@ const deathblowMoves = {
     cancelProfileId: "drive-heavy", level: ATTACK_LEVELS.MID,
     startupFrames: 17, activeFrames: 9, recoveryFrames: 18, range: 186, damage: 17, push: 350, meter: 20,
     hitstunFrames: 25, blockstunFrames: 17, chipDamage: 0, advanceSpeed: 245,
-    command: "← → + HEAVY", hitboxes: [box(32, -190, 145, 129, 0, 4), box(51, -178, 166, 120, 5, 8)],
+    command: "← → + KICK", hitboxes: [box(32, -190, 145, 129, 0, 4), box(51, -178, 166, 120, 5, 8)],
   }),
   throw: move("deathblow-concrete-pour", "throw", {
     cancelProfileId: "throw", level: ATTACK_LEVELS.THROW,
@@ -102,21 +102,21 @@ const deathblowMoves = {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
     startupFrames: 15, activeFrames: 13, recoveryFrames: 17, range: 211, damage: 20, push: 385, meter: 25,
     hitstunFrames: 29, blockstunFrames: 19, chipDamage: 4, knockdown: true, armorFrames: 11, advanceSpeed: 280,
-    moveName: "FAULTLINE FIST", command: "↓ → + SPECIAL", animation: anim(0),
+    moveName: "FAULTLINE FIST", command: "↓ → + PUNCH", animation: anim(0),
     hitboxes: [box(31, -199, 168, 151, 0, 5), box(52, -184, 191, 141, 6, 12)],
   }),
   backSpecial: move("deathblow-aftershock-grab", "special", {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.THROW,
     startupFrames: 8, activeFrames: 4, recoveryFrames: 28, range: 91, damage: 20, push: 245, meter: 18,
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, knockdown: true,
-    moveName: "AFTERSHOCK GRAB", command: "↓ ← + SPECIAL", animation: anim(1),
+    moveName: "AFTERSHOCK GRAB", command: "↓ ← + PUNCH", animation: anim(1),
     hitboxes: [box(18, -181, 84, 151, 0, 3)],
   }),
   launcher: move("deathblow-quarry-breaker", "heavy", {
     cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
     startupFrames: 11, activeFrames: 8, recoveryFrames: 24, range: 132, damage: 12, push: 78, meter: 17,
     hitstunFrames: 27, blockstunFrames: 15, chipDamage: 0, knockdown: true, launchVelocityY: -560,
-    juggleStarter: true, moveName: "QUARRY BREAKER", command: "→ ↓ → + HEAVY", animation: anim(2),
+    juggleStarter: true, moveName: "QUARRY BREAKER", command: "→ ↓ → + PUNCH", animation: anim(2),
     hitboxes: [box(20, -216, 104, 169, 0, 3), box(34, -253, 118, 205, 4, 7)],
   }),
   enhanced: move("deathblow-ex-tremor-tap", "special", {
@@ -124,7 +124,7 @@ const deathblowMoves = {
     startupFrames: 10, activeFrames: 18, recoveryFrames: 15, range: 193, damage: 11, push: 105, meter: 9,
     hitstunFrames: 25, blockstunFrames: 20, chipDamage: 3, knockdown: true, knockdownOnFinal: true,
     maxHits: 2, rehitFrames: 8, gritCost: GRIT_RULES.enhancedSpecialCost, armorFrames: 13,
-    moveName: "TREMOR TAP EX", command: "HEAVY + SPECIAL", animation: anim(0),
+    moveName: "TREMOR TAP EX", command: "LP&HP", animation: anim(0),
     hitboxes: [box(28, -202, 169, 155, 0, 8), box(48, -188, 191, 145, 9, 17)],
   }),
   enhancedCommandSpecial: move("deathblow-ex-faultline-fist", "special", {
@@ -132,7 +132,7 @@ const deathblowMoves = {
     startupFrames: 11, activeFrames: 20, recoveryFrames: 15, range: 238, damage: 12, push: 124, meter: 10,
     hitstunFrames: 27, blockstunFrames: 21, chipDamage: 4, knockdown: true, knockdownOnFinal: true,
     maxHits: 2, rehitFrames: 9, gritCost: GRIT_RULES.enhancedSpecialCost, armorFrames: 15, advanceSpeed: 330,
-    moveName: "FAULTLINE FIST EX", command: "↓ → + HEAVY + SPECIAL", animation: anim(0),
+    moveName: "FAULTLINE FIST EX", command: "↓ → + LP&HP", animation: anim(0),
     hitboxes: [box(29, -205, 184, 158, 0, 9), box(54, -188, 210, 145, 10, 19)],
   }),
   enhancedBackSpecial: move("deathblow-ex-aftershock-grab", "special", {
@@ -140,7 +140,7 @@ const deathblowMoves = {
     startupFrames: 5, activeFrames: 6, recoveryFrames: 24, range: 113, damage: 25, push: 285, meter: 12,
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, knockdown: true,
     gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 5,
-    moveName: "AFTERSHOCK GRAB EX", command: "↓ ← + HEAVY + SPECIAL", animation: anim(1),
+    moveName: "AFTERSHOCK GRAB EX", command: "↓ ← + LP&HP", animation: anim(1),
     hitboxes: [box(15, -186, 108, 156, 0, 5)],
   }),
   enhancedLauncher: move("deathblow-ex-quarry-breaker", "special", {
@@ -149,7 +149,7 @@ const deathblowMoves = {
     hitstunFrames: 27, blockstunFrames: 17, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
     launchVelocityY: -610, juggleStarter: true, maxHits: 2, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 10,
-    moveName: "QUARRY BREAKER EX", command: "→ ↓ → + HEAVY + SPECIAL", animation: anim(2),
+    moveName: "QUARRY BREAKER EX", command: "→ ↓ → + LP&HP", animation: anim(2),
     hitboxes: [box(17, -221, 116, 178, 0, 5), box(33, -265, 135, 219, 6, 12)],
   }),
   super: move("deathblow-epicenter-execution", "special", {
@@ -157,7 +157,7 @@ const deathblowMoves = {
     startupFrames: 9, activeFrames: 36, recoveryFrames: 27, range: 251, damage: 10, push: 62, meter: 0,
     hitstunFrames: 29, blockstunFrames: 23, chipDamage: 3, knockdown: true, knockdownOnFinal: true,
     juggleLift: -230, maxHits: 4, rehitFrames: 8, gritCost: GRIT_RULES.superCost,
-    superMove: true, armorFrames: 9, moveName: "EPICENTER EXECUTION", command: "FULL GRIT + FB", animation: anim(3),
+    superMove: true, armorFrames: 9, moveName: "EPICENTER EXECUTION", command: "FULL GRIT + ↓ → ↓ → PUNCH", animation: anim(3),
     hitboxes: [box(20, -218, 181, 180, 0, 8), box(43, -205, 207, 166, 9, 17), box(21, -235, 222, 197, 18, 26), box(46, -214, 239, 179, 27, 35)],
   }),
 };
@@ -203,7 +203,7 @@ const jezMoves = {
     cancelProfileId: "drive-heavy", level: ATTACK_LEVELS.MID,
     startupFrames: 12, activeFrames: 8, recoveryFrames: 14, range: 205, damage: 13, push: 275, meter: 18,
     hitstunFrames: 23, blockstunFrames: 14, chipDamage: 0, advanceSpeed: 285,
-    command: "← → + HEAVY", hitboxes: [box(37, -186, 161, 112, 0, 3), box(57, -173, 184, 107, 4, 7)],
+    command: "← → + KICK", hitboxes: [box(37, -186, 161, 112, 0, 3), box(57, -173, 184, 107, 4, 7)],
   }),
   throw: move("jez-signpost-trip", "throw", {
     cancelProfileId: "throw", level: ATTACK_LEVELS.THROW,
@@ -222,14 +222,14 @@ const jezMoves = {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
     startupFrames: 12, activeFrames: 12, recoveryFrames: 16, range: 286, damage: 16, push: 315, meter: 24,
     hitstunFrames: 25, blockstunFrames: 18, chipDamage: 4, knockdown: true,
-    moveName: "SIGNLINE LANCE", command: "↓ → + SPECIAL", animation: anim(0),
+    moveName: "SIGNLINE LANCE", command: "↓ → + PUNCH", animation: anim(0),
     hitboxes: [box(41, -199, 224, 138, 0, 5), box(62, -188, 258, 128, 6, 11)],
   }),
   backSpecial: move("jez-vinyl-step", "special", {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
     startupFrames: 7, activeFrames: 12, recoveryFrames: 12, range: 185, damage: 12, push: 165, meter: 18,
     hitstunFrames: 23, blockstunFrames: 15, chipDamage: 2, advanceSpeed: 610, ignorePushbox: true,
-    moveName: "VINYL STEP", command: "↓ ← + SPECIAL", animation: anim(1),
+    moveName: "VINYL STEP", command: "↓ ← + PUNCH", animation: anim(1),
     hitboxes: [box(28, -184, 151, 128, 0, 5), box(52, -174, 184, 122, 6, 11)],
   }),
   launcher: move("jez-signpost-rising", "heavy", {
@@ -237,14 +237,14 @@ const jezMoves = {
     startupFrames: 7, activeFrames: 8, recoveryFrames: 19, range: 138, damage: 9, push: 70, meter: 16,
     hitstunFrames: 25, blockstunFrames: 13, chipDamage: 0, knockdown: true, launchVelocityY: -545,
     juggleStarter: true, reversalInvulnerableFrames: 6,
-    moveName: "SIGNPOST RISING", command: "→ ↓ → + HEAVY", animation: anim(2),
+    moveName: "SIGNPOST RISING", command: "→ ↓ → + PUNCH", animation: anim(2),
     hitboxes: [box(22, -218, 108, 170, 0, 3), box(38, -252, 125, 204, 4, 7)],
   }),
   enhanced: move("jez-ex-neon-edge", "special", {
     cancelProfileId: "ground-special", level: ATTACK_LEVELS.MID,
     startupFrames: 7, activeFrames: 17, recoveryFrames: 11, range: 244, damage: 8, push: 74, meter: 8,
     hitstunFrames: 23, blockstunFrames: 18, chipDamage: 3, maxHits: 2, rehitFrames: 7,
-    gritCost: GRIT_RULES.enhancedSpecialCost, moveName: "NEON EDGE EX", command: "HEAVY + SPECIAL", animation: anim(0),
+    gritCost: GRIT_RULES.enhancedSpecialCost, moveName: "NEON EDGE EX", command: "LP&HP", animation: anim(0),
     hitboxes: [box(31, -197, 202, 135, 0, 7), box(55, -182, 230, 127, 8, 16)],
   }),
   enhancedCommandSpecial: move("jez-ex-signline-lance", "special", {
@@ -252,7 +252,7 @@ const jezMoves = {
     startupFrames: 9, activeFrames: 19, recoveryFrames: 13, range: 318, damage: 9, push: 92, meter: 9,
     hitstunFrames: 25, blockstunFrames: 20, chipDamage: 4, knockdown: true, knockdownOnFinal: true,
     maxHits: 2, rehitFrames: 8, gritCost: GRIT_RULES.enhancedSpecialCost,
-    moveName: "SIGNLINE LANCE EX", command: "↓ → + HEAVY + SPECIAL", animation: anim(0),
+    moveName: "SIGNLINE LANCE EX", command: "↓ → + LP&HP", animation: anim(0),
     hitboxes: [box(36, -204, 249, 145, 0, 8), box(64, -190, 287, 135, 9, 18)],
   }),
   enhancedBackSpecial: move("jez-ex-vinyl-step", "special", {
@@ -260,7 +260,7 @@ const jezMoves = {
     startupFrames: 4, activeFrames: 16, recoveryFrames: 10, range: 212, damage: 8, push: 68, meter: 8,
     hitstunFrames: 23, blockstunFrames: 17, chipDamage: 3, maxHits: 2, rehitFrames: 7,
     advanceSpeed: 720, ignorePushbox: true, reversalInvulnerableFrames: 7,
-    gritCost: GRIT_RULES.enhancedSpecialCost, moveName: "VINYL STEP EX", command: "↓ ← + HEAVY + SPECIAL", animation: anim(1),
+    gritCost: GRIT_RULES.enhancedSpecialCost, moveName: "VINYL STEP EX", command: "↓ ← + LP&HP", animation: anim(1),
     hitboxes: [box(26, -192, 177, 137, 0, 7), box(54, -178, 214, 128, 8, 15)],
   }),
   enhancedLauncher: move("jez-ex-signpost-rising", "special", {
@@ -269,7 +269,7 @@ const jezMoves = {
     hitstunFrames: 26, blockstunFrames: 16, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
     launchVelocityY: -585, juggleStarter: true, maxHits: 2, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 12,
-    moveName: "SIGNPOST RISING EX", command: "→ ↓ → + HEAVY + SPECIAL", animation: anim(2),
+    moveName: "SIGNPOST RISING EX", command: "→ ↓ → + LP&HP", animation: anim(2),
     hitboxes: [box(18, -224, 121, 181, 0, 6), box(37, -268, 141, 223, 7, 13)],
   }),
   super: move("jez-seven-palm-neon-guillotine", "special", {
@@ -279,7 +279,7 @@ const jezMoves = {
     juggleLift: -195, maxHits: 7, rehitFrames: 6, gritCost: GRIT_RULES.superCost,
     juggleLimit: 8,
     superMove: true, reversalInvulnerableFrames: 8,
-    moveName: "SEVEN-PALM NEON GUILLOTINE", command: "FULL GRIT + FB", animation: anim(3),
+    moveName: "SEVEN-PALM NEON GUILLOTINE", command: "FULL GRIT + ↓ → ↓ → PUNCH", animation: anim(3),
     hitboxes: [box(25, -212, 192, 169, 0, 10), box(44, -202, 226, 159, 11, 21), box(29, -231, 244, 191, 22, 32), box(52, -213, 272, 177, 33, 42)],
   }),
 };
@@ -325,7 +325,7 @@ const alanMoves = {
     cancelProfileId: "drive-heavy", level: ATTACK_LEVELS.MID,
     startupFrames: 16, activeFrames: 9, recoveryFrames: 19, range: 194, damage: 18, push: 370, meter: 20,
     hitstunFrames: 26, blockstunFrames: 17, chipDamage: 0, advanceSpeed: 238,
-    command: "← → + HEAVY", hitboxes: [box(30, -188, 154, 124, 0, 4), box(50, -176, 178, 116, 5, 8)],
+    command: "← → + KICK", hitboxes: [box(30, -188, 154, 124, 0, 4), box(50, -176, 178, 116, 5, 8)],
   }),
   throw: move("alan-dockyard-clinch", "throw", {
     cancelProfileId: "throw", level: ATTACK_LEVELS.THROW,
@@ -344,7 +344,7 @@ const alanMoves = {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
     startupFrames: 15, activeFrames: 12, recoveryFrames: 19, range: 218, damage: 22, push: 405, meter: 26,
     hitstunFrames: 30, blockstunFrames: 20, chipDamage: 4, knockdown: true, armorFrames: 10, advanceSpeed: 295,
-    moveName: "SOUTH STREET SLAM", command: "↓ → + SPECIAL", animation: anim(0),
+    moveName: "SOUTH STREET SLAM", command: "↓ → + PUNCH", animation: anim(0),
     hitboxes: [box(27, -207, 175, 158, 0, 5), box(51, -191, 202, 145, 6, 11)],
   }),
   backSpecial: move("alan-southpaw-counter", "special", {
@@ -353,14 +353,14 @@ const alanMoves = {
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0,
     counterWindowFrom: 3, counterWindowTo: 16, counterDamage: 23, counterHitstunFrames: 34,
     counterPush: 430, counterLaunchVelocityY: -330,
-    moveName: "SOUTHPAW COUNTER", command: "↓ ← + SPECIAL · counters strikes", animation: anim(1), hitboxes: [],
+    moveName: "SOUTHPAW COUNTER", command: "↓ ← + PUNCH · counters strikes", animation: anim(1), hitboxes: [],
   }),
   launcher: move("alan-broad-street-uppercut", "heavy", {
     cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
     startupFrames: 10, activeFrames: 9, recoveryFrames: 25, range: 139, damage: 14, push: 82, meter: 18,
     hitstunFrames: 28, blockstunFrames: 16, chipDamage: 0, knockdown: true, launchVelocityY: -590,
     juggleStarter: true, reversalInvulnerableFrames: 7,
-    moveName: "BROAD STREET UPPERCUT", command: "→ ↓ → + HEAVY", animation: anim(2),
+    moveName: "BROAD STREET UPPERCUT", command: "→ ↓ → + PUNCH", animation: anim(2),
     hitboxes: [box(18, -225, 111, 180, 0, 3), box(33, -270, 129, 225, 4, 8)],
   }),
   enhanced: move("alan-ex-heavy-hand", "special", {
@@ -368,7 +368,7 @@ const alanMoves = {
     startupFrames: 8, activeFrames: 17, recoveryFrames: 15, range: 201, damage: 11, push: 112, meter: 10,
     hitstunFrames: 26, blockstunFrames: 20, chipDamage: 3, maxHits: 2, rehitFrames: 8,
     gritCost: GRIT_RULES.enhancedSpecialCost, armorFrames: 13,
-    moveName: "HEAVY HAND EX", command: "HEAVY + SPECIAL", animation: anim(0),
+    moveName: "HEAVY HAND EX", command: "LP&HP", animation: anim(0),
     hitboxes: [box(27, -204, 175, 152, 0, 7), box(50, -189, 199, 140, 8, 16)],
   }),
   enhancedCommandSpecial: move("alan-ex-south-street-slam", "special", {
@@ -376,7 +376,7 @@ const alanMoves = {
     startupFrames: 10, activeFrames: 20, recoveryFrames: 16, range: 246, damage: 13, push: 132, meter: 11,
     hitstunFrames: 28, blockstunFrames: 22, chipDamage: 4, knockdown: true, knockdownOnFinal: true,
     maxHits: 2, rehitFrames: 9, gritCost: GRIT_RULES.enhancedSpecialCost, armorFrames: 16, advanceSpeed: 345,
-    moveName: "SOUTH STREET SLAM EX", command: "↓ → + HEAVY + SPECIAL", animation: anim(0),
+    moveName: "SOUTH STREET SLAM EX", command: "↓ → + LP&HP", animation: anim(0),
     hitboxes: [box(27, -211, 192, 164, 0, 9), box(53, -195, 220, 151, 10, 19)],
   }),
   enhancedBackSpecial: move("alan-ex-southpaw-counter", "special", {
@@ -385,7 +385,7 @@ const alanMoves = {
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, gritCost: GRIT_RULES.enhancedSpecialCost,
     counterWindowFrom: 1, counterWindowTo: 20, counterDamage: 30, counterHitstunFrames: 39,
     counterPush: 485, counterLaunchVelocityY: -385, counterSuper: true,
-    moveName: "SOUTHPAW COUNTER EX", command: "↓ ← + HEAVY + SPECIAL · counters all strikes", animation: anim(1), hitboxes: [],
+    moveName: "SOUTHPAW COUNTER EX", command: "↓ ← + LP&HP · counters all strikes", animation: anim(1), hitboxes: [],
   }),
   enhancedLauncher: move("alan-ex-broad-street-uppercut", "special", {
     cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
@@ -393,7 +393,7 @@ const alanMoves = {
     hitstunFrames: 28, blockstunFrames: 18, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
     launchVelocityY: -635, juggleStarter: true, maxHits: 2, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 12,
-    moveName: "BROAD STREET UPPERCUT EX", command: "→ ↓ → + HEAVY + SPECIAL", animation: anim(2),
+    moveName: "BROAD STREET UPPERCUT EX", command: "→ ↓ → + LP&HP", animation: anim(2),
     hitboxes: [box(16, -229, 124, 187, 0, 6), box(35, -281, 145, 238, 7, 13)],
   }),
   super: move("alan-south-street-six", "special", {
@@ -402,7 +402,7 @@ const alanMoves = {
     hitstunFrames: 29, blockstunFrames: 23, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
     juggleLift: -215, maxHits: 6, rehitFrames: 7, gritCost: GRIT_RULES.superCost, juggleLimit: 7,
     superMove: true, armorFrames: 11,
-    moveName: "SOUTH STREET SIX", command: "FULL GRIT + FB", animation: anim(3),
+    moveName: "SOUTH STREET SIX", command: "FULL GRIT + ↓ → ↓ → PUNCH", animation: anim(3),
     hitboxes: [box(21, -218, 183, 177, 0, 10), box(45, -207, 218, 166, 11, 21), box(24, -237, 234, 198, 22, 31), box(49, -218, 253, 181, 32, 41)],
   }),
 };
@@ -448,7 +448,7 @@ const postMoves = {
     cancelProfileId: "drive-heavy", level: ATTACK_LEVELS.MID,
     startupFrames: 13, activeFrames: 9, recoveryFrames: 15, range: 211, damage: 14, push: 292, meter: 18,
     hitstunFrames: 24, blockstunFrames: 15, chipDamage: 0, advanceSpeed: 315,
-    command: "← → + HEAVY", hitboxes: [box(35, -191, 169, 121, 0, 4), box(58, -178, 192, 113, 5, 8)],
+    command: "← → + KICK", hitboxes: [box(35, -191, 169, 121, 0, 4), box(58, -178, 192, 113, 5, 8)],
   }),
   throw: move("post-fresh-coat-toss", "throw", {
     cancelProfileId: "throw", level: ATTACK_LEVELS.THROW,
@@ -467,7 +467,7 @@ const postMoves = {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
     startupFrames: 13, activeFrames: 15, recoveryFrames: 18, range: 333, damage: 17, push: 322, meter: 24,
     hitstunFrames: 26, blockstunFrames: 19, chipDamage: 4,
-    moveName: "PAINT THE TOWN", command: "↓ → + SPECIAL", animation: anim(0),
+    moveName: "PAINT THE TOWN", command: "↓ → + PUNCH", animation: anim(0),
     hitboxes: [box(44, -200, 248, 142, 0, 7), box(67, -190, 309, 130, 8, 14)],
   }),
   backSpecial: move("post-wet-paint", "special", {
@@ -475,14 +475,14 @@ const postMoves = {
     startupFrames: 5, activeFrames: 7, recoveryFrames: 18, range: 0, damage: 0, push: 0, meter: 0,
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0,
     trap: { deployFrame: 8, offsets: [112], armFrames: 15, lifetimeFrames: 360, radius: 66, damage: 10, chipDamage: 2, hitstunFrames: 25, blockstunFrames: 16, push: 255, knockdown: true, color: "#ff3bbf" },
-    moveName: "WET PAINT", command: "↓ ← + SPECIAL · persistent low trap", animation: anim(1), hitboxes: [],
+    moveName: "WET PAINT", command: "↓ ← + PUNCH · persistent low trap", animation: anim(1), hitboxes: [],
   }),
   launcher: move("post-tag-updraft", "heavy", {
     cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
     startupFrames: 8, activeFrames: 9, recoveryFrames: 21, range: 151, damage: 10, push: 68, meter: 17,
     hitstunFrames: 26, blockstunFrames: 15, chipDamage: 0, knockdown: true, launchVelocityY: -565,
     juggleStarter: true, reversalInvulnerableFrames: 6,
-    moveName: "TAG UPDRAFT", command: "→ ↓ → + HEAVY", animation: anim(2),
+    moveName: "TAG UPDRAFT", command: "→ ↓ → + PUNCH", animation: anim(2),
     hitboxes: [box(20, -222, 118, 177, 0, 3), box(38, -263, 137, 218, 4, 8)],
   }),
   enhanced: move("post-ex-rattlecan-burst", "special", {
@@ -490,7 +490,7 @@ const postMoves = {
     startupFrames: 6, activeFrames: 20, recoveryFrames: 12, range: 264, damage: 8, push: 80, meter: 8,
     hitstunFrames: 24, blockstunFrames: 19, chipDamage: 3, maxHits: 2, rehitFrames: 8,
     gritCost: GRIT_RULES.enhancedSpecialCost,
-    moveName: "RATTLECAN BURST EX", command: "HEAVY + SPECIAL", animation: anim(0),
+    moveName: "RATTLECAN BURST EX", command: "LP&HP", animation: anim(0),
     hitboxes: [box(33, -198, 210, 137, 0, 9), box(58, -185, 251, 128, 10, 19)],
   }),
   enhancedCommandSpecial: move("post-ex-paint-the-town", "special", {
@@ -498,7 +498,7 @@ const postMoves = {
     startupFrames: 9, activeFrames: 23, recoveryFrames: 14, range: 374, damage: 9, push: 94, meter: 9,
     hitstunFrames: 26, blockstunFrames: 21, chipDamage: 4, knockdown: true, knockdownOnFinal: true,
     maxHits: 2, rehitFrames: 10, gritCost: GRIT_RULES.enhancedSpecialCost,
-    moveName: "PAINT THE TOWN EX", command: "↓ → + HEAVY + SPECIAL", animation: anim(0),
+    moveName: "PAINT THE TOWN EX", command: "↓ → + LP&HP", animation: anim(0),
     hitboxes: [box(38, -205, 281, 149, 0, 10), box(68, -191, 347, 137, 11, 22)],
   }),
   enhancedBackSpecial: move("post-ex-wet-paint", "special", {
@@ -507,7 +507,7 @@ const postMoves = {
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, gritCost: GRIT_RULES.enhancedSpecialCost,
     reversalInvulnerableFrames: 5,
     trap: { deployFrame: 6, offsets: [88, 205], armFrames: 9, lifetimeFrames: 480, radius: 78, damage: 12, chipDamage: 3, hitstunFrames: 28, blockstunFrames: 19, push: 285, knockdown: true, color: "#ff3bbf" },
-    moveName: "WET PAINT EX", command: "↓ ← + HEAVY + SPECIAL · two traps", animation: anim(1), hitboxes: [],
+    moveName: "WET PAINT EX", command: "↓ ← + LP&HP · two traps", animation: anim(1), hitboxes: [],
   }),
   enhancedLauncher: move("post-ex-tag-updraft", "special", {
     cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
@@ -515,7 +515,7 @@ const postMoves = {
     hitstunFrames: 27, blockstunFrames: 17, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
     launchVelocityY: -605, juggleStarter: true, maxHits: 2, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 11,
-    moveName: "TAG UPDRAFT EX", command: "→ ↓ → + HEAVY + SPECIAL", animation: anim(2),
+    moveName: "TAG UPDRAFT EX", command: "→ ↓ → + LP&HP", animation: anim(2),
     hitboxes: [box(17, -226, 130, 185, 0, 6), box(38, -276, 151, 234, 7, 14)],
   }),
   super: move("post-full-coverage", "special", {
@@ -524,7 +524,7 @@ const postMoves = {
     hitstunFrames: 26, blockstunFrames: 21, chipDamage: 1.5, knockdown: true, knockdownOnFinal: true,
     juggleLift: -188, maxHits: 7, rehitFrames: 6, gritCost: GRIT_RULES.superCost, juggleLimit: 8,
     superMove: true, reversalInvulnerableFrames: 8,
-    moveName: "FULL COVERAGE", command: "FULL GRIT + FB", animation: anim(3),
+    moveName: "FULL COVERAGE", command: "FULL GRIT + ↓ → ↓ → PUNCH", animation: anim(3),
     hitboxes: [box(27, -211, 215, 168, 0, 10), box(49, -204, 268, 160, 11, 21), box(32, -230, 322, 190, 22, 33), box(58, -215, 361, 176, 34, 44)],
   }),
 };
@@ -572,7 +572,7 @@ const bennyMoves = {
     cancelProfileId: "drive-heavy", level: ATTACK_LEVELS.MID,
     startupFrames: 10, activeFrames: 8, recoveryFrames: 12, range: 191, damage: 12, push: 246, meter: 17,
     hitstunFrames: 23, blockstunFrames: 13, chipDamage: 0, advanceSpeed: 350,
-    command: "← → + HEAVY", hitboxes: [box(34, -187, 150, 111, 0, 3), box(53, -175, 172, 105, 4, 7)],
+    command: "← → + KICK", hitboxes: [box(34, -187, 150, 111, 0, 3), box(53, -175, 172, 105, 4, 7)],
   }),
   throw: move("benny-ground-fault", "throw", {
     cancelProfileId: "throw", level: ATTACK_LEVELS.THROW,
@@ -593,7 +593,7 @@ const bennyMoves = {
     startupFrames: 7, activeFrames: 22, recoveryFrames: 12, range: 229, damage: 6, push: 64, meter: 8,
     hitstunFrames: 23, blockstunFrames: 17, chipDamage: 2, maxHits: 3, rehitFrames: 7,
     advanceSpeed: 650, rushCancel: true, cancelRoutes: bennyCancelRoutes,
-    moveName: "BENNY BLITZ", command: "↓ → + SPECIAL", animation: anim(0),
+    moveName: "BENNY BLITZ", command: "↓ → + PUNCH", animation: anim(0),
     hitboxes: [box(24, -199, 174, 145, 0, 6), box(52, -186, 211, 135, 7, 14), box(65, -178, 224, 128, 15, 21)],
   }),
   backSpecial: move("benny-live-wire", "special", {
@@ -602,7 +602,7 @@ const bennyMoves = {
     hitstunFrames: 22, blockstunFrames: 15, chipDamage: 2, maxHits: 2, rehitFrames: 7,
     advanceSpeed: 790, ignorePushbox: true, reversalInvulnerableFrames: 5,
     rushCancel: true, cancelRoutes: bennyCancelRoutes,
-    moveName: "LIVE WIRE", command: "↓ ← + SPECIAL · cross-through", animation: anim(1),
+    moveName: "LIVE WIRE", command: "↓ ← + PUNCH · cross-through", animation: anim(1),
     hitboxes: [box(22, -190, 158, 133, 0, 7), box(51, -178, 192, 124, 8, 15)],
   }),
   launcher: move("benny-circuit-riser", "heavy", {
@@ -610,7 +610,7 @@ const bennyMoves = {
     startupFrames: 6, activeFrames: 9, recoveryFrames: 18, range: 137, damage: 9, push: 64, meter: 16,
     hitstunFrames: 25, blockstunFrames: 13, chipDamage: 0, knockdown: true, launchVelocityY: -555,
     juggleStarter: true, reversalInvulnerableFrames: 7,
-    moveName: "CIRCUIT RISER", command: "→ ↓ → + HEAVY", animation: anim(2),
+    moveName: "CIRCUIT RISER", command: "→ ↓ → + PUNCH", animation: anim(2),
     hitboxes: [box(19, -217, 107, 169, 0, 3), box(37, -254, 124, 207, 4, 8)],
   }),
   enhanced: move("benny-ex-static-snap", "special", {
@@ -618,7 +618,7 @@ const bennyMoves = {
     startupFrames: 4, activeFrames: 22, recoveryFrames: 8, range: 207, damage: 5.5, push: 52, meter: 6,
     hitstunFrames: 23, blockstunFrames: 18, chipDamage: 2, maxHits: 3, rehitFrames: 6,
     gritCost: GRIT_RULES.enhancedSpecialCost, rushCancel: true, cancelRoutes: bennyCancelRoutes,
-    moveName: "STATIC SNAP EX", command: "HEAVY + SPECIAL", animation: anim(0),
+    moveName: "STATIC SNAP EX", command: "LP&HP", animation: anim(0),
     hitboxes: [box(25, -199, 172, 142, 0, 10), box(51, -184, 201, 132, 11, 21)],
   }),
   enhancedCommandSpecial: move("benny-ex-blitz", "special", {
@@ -627,7 +627,7 @@ const bennyMoves = {
     hitstunFrames: 24, blockstunFrames: 19, chipDamage: 2, maxHits: 4, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, advanceSpeed: 735,
     rushCancel: true, cancelRoutes: bennyCancelRoutes,
-    moveName: "BENNY BLITZ EX", command: "↓ → + HEAVY + SPECIAL", animation: anim(0),
+    moveName: "BENNY BLITZ EX", command: "↓ → + LP&HP", animation: anim(0),
     hitboxes: [box(23, -204, 191, 150, 0, 8), box(53, -190, 229, 141, 9, 18), box(70, -181, 248, 132, 19, 28)],
   }),
   enhancedBackSpecial: move("benny-ex-live-wire", "special", {
@@ -636,7 +636,7 @@ const bennyMoves = {
     hitstunFrames: 23, blockstunFrames: 18, chipDamage: 2, maxHits: 3, rehitFrames: 6,
     gritCost: GRIT_RULES.enhancedSpecialCost, advanceSpeed: 885, ignorePushbox: true,
     reversalInvulnerableFrames: 8, rushCancel: true, cancelRoutes: bennyCancelRoutes,
-    moveName: "LIVE WIRE EX", command: "↓ ← + HEAVY + SPECIAL · cross-through", animation: anim(1),
+    moveName: "LIVE WIRE EX", command: "↓ ← + LP&HP · cross-through", animation: anim(1),
     hitboxes: [box(19, -198, 183, 143, 0, 10), box(54, -183, 221, 133, 11, 21)],
   }),
   enhancedLauncher: move("benny-ex-circuit-riser", "special", {
@@ -645,7 +645,7 @@ const bennyMoves = {
     hitstunFrames: 26, blockstunFrames: 16, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
     launchVelocityY: -595, juggleStarter: true, maxHits: 2, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 11,
-    moveName: "CIRCUIT RISER EX", command: "→ ↓ → + HEAVY + SPECIAL", animation: anim(2),
+    moveName: "CIRCUIT RISER EX", command: "→ ↓ → + LP&HP", animation: anim(2),
     hitboxes: [box(16, -222, 120, 179, 0, 6), box(37, -268, 141, 224, 7, 13)],
   }),
   super: move("benny-circuit-breaker-super", "special", {
@@ -654,7 +654,7 @@ const bennyMoves = {
     hitstunFrames: 25, blockstunFrames: 20, chipDamage: 1.25, knockdown: true, knockdownOnFinal: true,
     juggleLift: -180, maxHits: 8, rehitFrames: 6, gritCost: GRIT_RULES.superCost, juggleLimit: 9,
     superMove: true, reversalInvulnerableFrames: 9,
-    moveName: "CIRCUIT BREAKER", command: "FULL GRIT + FB", animation: anim(3),
+    moveName: "CIRCUIT BREAKER", command: "FULL GRIT + ↓ → ↓ → PUNCH", animation: anim(3),
     hitboxes: [box(23, -210, 196, 167, 0, 11), box(45, -201, 231, 157, 12, 23), box(29, -228, 252, 187, 24, 35), box(53, -211, 279, 172, 36, 47)],
   }),
 };
@@ -700,7 +700,7 @@ const donaldMoves = {
     cancelProfileId: "drive-heavy", level: ATTACK_LEVELS.MID,
     startupFrames: 16, activeFrames: 9, recoveryFrames: 18, range: 236, damage: 16, push: 345, meter: 19,
     hitstunFrames: 25, blockstunFrames: 16, chipDamage: 0, advanceSpeed: 225,
-    command: "← → + HEAVY", hitboxes: [box(37, -194, 181, 122, 0, 4), box(61, -180, 211, 114, 5, 8)],
+    command: "← → + KICK", hitboxes: [box(37, -194, 181, 122, 0, 4), box(61, -180, 211, 114, 5, 8)],
   }),
   throw: move("donald-clubhouse-ejection", "throw", {
     cancelProfileId: "throw", level: ATTACK_LEVELS.THROW,
@@ -720,21 +720,21 @@ const donaldMoves = {
     startupFrames: 11, activeFrames: 5, recoveryFrames: 22, range: 0, damage: 0, push: 0, meter: 0,
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0,
     projectile: { spawnFrames: [12], speed: 530, lifeFrames: 105, width: 58, height: 42, yOffsets: [-112], damage: 15, chipDamage: 3, hitstunFrames: 26, blockstunFrames: 18, push: 310, level: ATTACK_LEVELS.MID, color: "#ffd43b" },
-    moveName: "GOLDEN SHOCKWAVE", command: "↓ → + SPECIAL · projectile", animation: anim(0), hitboxes: [],
+    moveName: "GOLDEN SHOCKWAVE", command: "↓ → + PUNCH · projectile", animation: anim(0), hitboxes: [],
   }),
   backSpecial: move("donald-executive-retreat", "special", {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.LOW,
     startupFrames: 7, activeFrames: 7, recoveryFrames: 17, range: 0, damage: 0, push: 0, meter: 0,
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, retreatSpeed: 470, reversalInvulnerableFrames: 4,
     projectile: { spawnFrames: [12], speed: 430, lifeFrames: 112, width: 46, height: 32, yOffsets: [-48], damage: 11, chipDamage: 2, hitstunFrames: 23, blockstunFrames: 16, push: 245, level: ATTACK_LEVELS.LOW, color: "#ffbd28" },
-    moveName: "EXECUTIVE RETREAT", command: "↓ ← + SPECIAL · backstep low shot", animation: anim(1), hitboxes: [],
+    moveName: "EXECUTIVE RETREAT", command: "↓ ← + PUNCH · backstep low shot", animation: anim(1), hitboxes: [],
   }),
   launcher: move("donald-eagle-uppercut", "heavy", {
     cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
     startupFrames: 10, activeFrames: 9, recoveryFrames: 24, range: 171, damage: 12, push: 75, meter: 17,
     hitstunFrames: 27, blockstunFrames: 15, chipDamage: 0, knockdown: true, launchVelocityY: -575,
     juggleStarter: true, reversalInvulnerableFrames: 6,
-    moveName: "EAGLE UPPERCUT", command: "→ ↓ → + HEAVY", animation: anim(2),
+    moveName: "EAGLE UPPERCUT", command: "→ ↓ → + PUNCH", animation: anim(2),
     hitboxes: [box(23, -226, 127, 181, 0, 3), box(42, -269, 151, 224, 4, 8)],
   }),
   enhanced: move("donald-ex-clubhouse-check", "special", {
@@ -742,7 +742,7 @@ const donaldMoves = {
     startupFrames: 8, activeFrames: 19, recoveryFrames: 14, range: 281, damage: 10, push: 92, meter: 9,
     hitstunFrames: 26, blockstunFrames: 20, chipDamage: 3, maxHits: 2, rehitFrames: 9,
     gritCost: GRIT_RULES.enhancedSpecialCost,
-    moveName: "CLUBHOUSE CHECK EX", command: "HEAVY + SPECIAL", animation: anim(0),
+    moveName: "CLUBHOUSE CHECK EX", command: "LP&HP", animation: anim(0),
     hitboxes: [box(31, -210, 219, 153, 0, 8), box(64, -193, 257, 141, 9, 18)],
   }),
   enhancedCommandSpecial: move("donald-ex-golden-shockwave", "special", {
@@ -750,7 +750,7 @@ const donaldMoves = {
     startupFrames: 8, activeFrames: 10, recoveryFrames: 18, range: 0, damage: 0, push: 0, meter: 0,
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, gritCost: GRIT_RULES.enhancedSpecialCost,
     projectile: { spawnFrames: [9, 15], speed: 610, lifeFrames: 112, width: 62, height: 45, yOffsets: [-106, -151], damage: 10, chipDamage: 3, hitstunFrames: 25, blockstunFrames: 20, push: 105, level: ATTACK_LEVELS.MID, color: "#ffe45f" },
-    moveName: "GOLDEN SHOCKWAVE EX", command: "↓ → + HEAVY + SPECIAL · two projectiles", animation: anim(0), hitboxes: [],
+    moveName: "GOLDEN SHOCKWAVE EX", command: "↓ → + LP&HP · two projectiles", animation: anim(0), hitboxes: [],
   }),
   enhancedBackSpecial: move("donald-ex-executive-retreat", "special", {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.LOW,
@@ -758,7 +758,7 @@ const donaldMoves = {
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, gritCost: GRIT_RULES.enhancedSpecialCost,
     retreatSpeed: 590, reversalInvulnerableFrames: 8,
     projectile: { spawnFrames: [8, 13], speed: 490, lifeFrames: 120, width: 51, height: 36, yOffsets: [-47, -82], damage: 8, chipDamage: 2, hitstunFrames: 24, blockstunFrames: 18, push: 96, level: ATTACK_LEVELS.LOW, color: "#ffe45f" },
-    moveName: "EXECUTIVE RETREAT EX", command: "↓ ← + HEAVY + SPECIAL · two low shots", animation: anim(1), hitboxes: [],
+    moveName: "EXECUTIVE RETREAT EX", command: "↓ ← + LP&HP · two low shots", animation: anim(1), hitboxes: [],
   }),
   enhancedLauncher: move("donald-ex-eagle-uppercut", "special", {
     cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
@@ -766,7 +766,7 @@ const donaldMoves = {
     hitstunFrames: 27, blockstunFrames: 17, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
     launchVelocityY: -620, juggleStarter: true, maxHits: 2, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 11,
-    moveName: "EAGLE UPPERCUT EX", command: "→ ↓ → + HEAVY + SPECIAL", animation: anim(2),
+    moveName: "EAGLE UPPERCUT EX", command: "→ ↓ → + LP&HP", animation: anim(2),
     hitboxes: [box(19, -232, 141, 190, 0, 6), box(43, -282, 166, 239, 7, 13)],
   }),
   super: move("donald-golden-back-nine", "special", {
@@ -775,7 +775,7 @@ const donaldMoves = {
     hitstunFrames: 26, blockstunFrames: 21, chipDamage: 1, knockdown: true, knockdownOnFinal: true,
     juggleLift: -174, maxHits: 9, rehitFrames: 6, gritCost: GRIT_RULES.superCost, juggleLimit: 10,
     superMove: true, reversalInvulnerableFrames: 8,
-    moveName: "GOLDEN BACK NINE", command: "FULL GRIT + FB", animation: anim(3),
+    moveName: "GOLDEN BACK NINE", command: "FULL GRIT + ↓ → ↓ → PUNCH", animation: anim(3),
     hitboxes: [box(31, -218, 226, 177, 0, 12), box(57, -207, 278, 165, 13, 26), box(36, -235, 323, 194, 27, 40), box(64, -216, 354, 178, 41, 53)],
   }),
 };
@@ -821,7 +821,7 @@ const cyraxxMoves = {
     cancelProfileId: "drive-heavy", level: ATTACK_LEVELS.MID,
     startupFrames: 13, activeFrames: 9, recoveryFrames: 16, range: 224, damage: 15, push: 315, meter: 18,
     hitstunFrames: 25, blockstunFrames: 16, chipDamage: 0, advanceSpeed: 295,
-    command: "← → + HEAVY", hitboxes: [box(34, -202, 172, 132, 0, 4), box(58, -187, 202, 121, 5, 8)],
+    command: "← → + KICK", hitboxes: [box(34, -202, 172, 132, 0, 4), box(58, -187, 202, 121, 5, 8)],
   }),
   throw: move("cyraxx-mute-button", "throw", {
     cancelProfileId: "throw", level: ATTACK_LEVELS.THROW,
@@ -841,14 +841,14 @@ const cyraxxMoves = {
     startupFrames: 8, activeFrames: 5, recoveryFrames: 17, range: 0, damage: 0, push: 0, meter: 0,
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0,
     projectile: { spawnFrames: [9], speed: 0, lifeFrames: 88, armFrames: 22, xOffsets: [192], yOffsets: [-123], width: 124, height: 154, damage: 14, chipDamage: 2, hitstunFrames: 27, blockstunFrames: 18, push: 245, level: ATTACK_LEVELS.MID, color: "#b15cff", style: "feedback" },
-    moveName: "FEEDBACK LOOP", command: "↓ → + SPECIAL · delayed echo", animation: anim(0), hitboxes: [],
+    moveName: "FEEDBACK LOOP", command: "↓ → + PUNCH · delayed echo", animation: anim(0), hitboxes: [],
   }),
   backSpecial: move("cyraxx-buffer-skip", "special", {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
     startupFrames: 5, activeFrames: 18, recoveryFrames: 10, range: 201, damage: 7, push: 62, meter: 9,
     hitstunFrames: 23, blockstunFrames: 16, chipDamage: 2, maxHits: 2, rehitFrames: 8,
     advanceSpeed: 815, ignorePushbox: true, reversalInvulnerableFrames: 5,
-    moveName: "BUFFER SKIP", command: "↓ ← + SPECIAL · phase through", animation: anim(1),
+    moveName: "BUFFER SKIP", command: "↓ ← + PUNCH · phase through", animation: anim(1),
     hitboxes: [box(23, -197, 166, 143, 0, 8), box(48, -183, 194, 132, 9, 17)],
   }),
   launcher: move("cyraxx-gain-spike", "heavy", {
@@ -856,7 +856,7 @@ const cyraxxMoves = {
     startupFrames: 8, activeFrames: 10, recoveryFrames: 19, range: 159, damage: 10, push: 68, meter: 16,
     hitstunFrames: 26, blockstunFrames: 14, chipDamage: 0, knockdown: true, launchVelocityY: -585,
     juggleStarter: true, reversalInvulnerableFrames: 6,
-    moveName: "GAIN SPIKE", command: "→ ↓ → + HEAVY", animation: anim(2),
+    moveName: "GAIN SPIKE", command: "→ ↓ → + PUNCH", animation: anim(2),
     hitboxes: [box(21, -225, 119, 181, 0, 4), box(39, -273, 145, 229, 5, 9)],
   }),
   enhanced: move("cyraxx-ex-mic-check", "special", {
@@ -864,7 +864,7 @@ const cyraxxMoves = {
     startupFrames: 5, activeFrames: 24, recoveryFrames: 9, range: 239, damage: 6, push: 58, meter: 7,
     hitstunFrames: 24, blockstunFrames: 18, chipDamage: 2, maxHits: 3, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost,
-    moveName: "MIC CHECK EX", command: "HEAVY + SPECIAL", animation: anim(0),
+    moveName: "MIC CHECK EX", command: "LP&HP", animation: anim(0),
     hitboxes: [box(27, -213, 190, 158, 0, 11), box(54, -198, 228, 147, 12, 23)],
   }),
   enhancedCommandSpecial: move("cyraxx-ex-feedback-loop", "special", {
@@ -872,7 +872,7 @@ const cyraxxMoves = {
     startupFrames: 6, activeFrames: 12, recoveryFrames: 14, range: 0, damage: 0, push: 0, meter: 0,
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, gritCost: GRIT_RULES.enhancedSpecialCost,
     projectile: { spawnFrames: [7, 13], speed: 0, lifeFrames: 104, armFramesByIndex: [15, 31], xOffsets: [139, 284], yOffsets: [-102, -151], width: 128, height: 148, damage: 10, chipDamage: 2, hitstunFrames: 25, blockstunFrames: 19, push: 116, level: ATTACK_LEVELS.MID, color: "#d276ff", style: "feedback" },
-    moveName: "FEEDBACK LOOP EX", command: "↓ → + HEAVY + SPECIAL · two echoes", animation: anim(0), hitboxes: [],
+    moveName: "FEEDBACK LOOP EX", command: "↓ → + LP&HP · two echoes", animation: anim(0), hitboxes: [],
   }),
   enhancedBackSpecial: move("cyraxx-ex-buffer-skip", "special", {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
@@ -880,7 +880,7 @@ const cyraxxMoves = {
     hitstunFrames: 24, blockstunFrames: 18, chipDamage: 2, maxHits: 3, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, advanceSpeed: 930, ignorePushbox: true, reversalInvulnerableFrames: 9,
     projectile: { spawnFrames: [13], speed: 0, lifeFrames: 82, armFrames: 18, xOffsets: [-34], yOffsets: [-117], width: 108, height: 143, damage: 8, chipDamage: 2, hitstunFrames: 22, blockstunFrames: 17, push: 85, level: ATTACK_LEVELS.MID, color: "#8cff4d", style: "feedback" },
-    moveName: "BUFFER SKIP EX", command: "↓ ← + HEAVY + SPECIAL · phase + echo", animation: anim(1),
+    moveName: "BUFFER SKIP EX", command: "↓ ← + LP&HP · phase + echo", animation: anim(1),
     hitboxes: [box(19, -205, 181, 152, 0, 11), box(52, -187, 222, 139, 12, 24)],
   }),
   enhancedLauncher: move("cyraxx-ex-gain-spike", "special", {
@@ -889,7 +889,7 @@ const cyraxxMoves = {
     hitstunFrames: 27, blockstunFrames: 17, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
     launchVelocityY: -625, juggleStarter: true, maxHits: 2, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 10,
-    moveName: "GAIN SPIKE EX", command: "→ ↓ → + HEAVY + SPECIAL", animation: anim(2),
+    moveName: "GAIN SPIKE EX", command: "→ ↓ → + LP&HP", animation: anim(2),
     hitboxes: [box(18, -232, 134, 192, 0, 7), box(43, -288, 161, 247, 8, 14)],
   }),
   super: move("cyraxx-feedback-meltdown", "special", {
@@ -898,7 +898,7 @@ const cyraxxMoves = {
     hitstunFrames: 26, blockstunFrames: 20, chipDamage: 1.25, knockdown: true, knockdownOnFinal: true,
     juggleLift: -182, maxHits: 7, rehitFrames: 7, gritCost: GRIT_RULES.superCost, juggleLimit: 8,
     superMove: true, reversalInvulnerableFrames: 9,
-    moveName: "FEEDBACK MELTDOWN", command: "FULL GRIT + FB", animation: anim(3),
+    moveName: "FEEDBACK MELTDOWN", command: "FULL GRIT + ↓ → ↓ → PUNCH", animation: anim(3),
     hitboxes: [box(27, -221, 213, 182, 0, 11), box(54, -209, 261, 169, 12, 24), box(34, -241, 302, 201, 25, 36), box(59, -223, 334, 185, 37, 48)],
   }),
 };
@@ -946,7 +946,7 @@ const aliMoves = {
     cancelProfileId: "drive-heavy", level: ATTACK_LEVELS.MID,
     startupFrames: 10, activeFrames: 9, recoveryFrames: 13, range: 212, damage: 13, push: 276, meter: 17,
     hitstunFrames: 24, blockstunFrames: 14, chipDamage: 0, advanceSpeed: 355,
-    command: "← → + HEAVY", hitboxes: [box(32, -192, 162, 119, 0, 4), box(54, -179, 193, 112, 5, 8)],
+    command: "← → + KICK", hitboxes: [box(32, -192, 162, 119, 0, 4), box(54, -179, 193, 112, 5, 8)],
   }),
   throw: move("ali-respect-toss", "throw", {
     cancelProfileId: "throw", level: ATTACK_LEVELS.THROW,
@@ -967,7 +967,7 @@ const aliMoves = {
     startupFrames: 6, activeFrames: 22, recoveryFrames: 10, range: 224, damage: 6, push: 56, meter: 8,
     hitstunFrames: 23, blockstunFrames: 16, chipDamage: 2, maxHits: 3, rehitFrames: 7, advanceSpeed: 615,
     rhythmCancel: true, rhythmCancelStacks: 2, cancelRoutes: aliFlowRoutes,
-    moveName: "MASSIVE STEP", command: "↓ → + SPECIAL · three-beat rush", animation: anim(0),
+    moveName: "MASSIVE STEP", command: "↓ → + PUNCH · three-beat rush", animation: anim(0),
     hitboxes: [box(23, -199, 165, 145, 0, 6), box(50, -186, 198, 135, 7, 14), box(65, -178, 220, 128, 15, 21)],
   }),
   backSpecial: move("ali-beat-skip", "special", {
@@ -976,7 +976,7 @@ const aliMoves = {
     hitstunFrames: 22, blockstunFrames: 15, chipDamage: 2, maxHits: 2, rehitFrames: 8,
     advanceSpeed: 835, ignorePushbox: true, reversalInvulnerableFrames: 5,
     rhythmCancel: true, rhythmCancelStacks: 2, cancelRoutes: aliFlowRoutes,
-    moveName: "BEAT SKIP", command: "↓ ← + SPECIAL · cross-through", animation: anim(1),
+    moveName: "BEAT SKIP", command: "↓ ← + PUNCH · cross-through", animation: anim(1),
     hitboxes: [box(22, -193, 159, 137, 0, 7), box(49, -180, 190, 127, 8, 16)],
   }),
   launcher: move("ali-bassline-riser", "heavy", {
@@ -984,7 +984,7 @@ const aliMoves = {
     startupFrames: 7, activeFrames: 9, recoveryFrames: 17, range: 146, damage: 9, push: 61, meter: 15,
     hitstunFrames: 25, blockstunFrames: 13, chipDamage: 0, knockdown: true, launchVelocityY: -568,
     juggleStarter: true, reversalInvulnerableFrames: 7,
-    moveName: "BASSLINE RISER", command: "→ ↓ → + HEAVY", animation: anim(2),
+    moveName: "BASSLINE RISER", command: "→ ↓ → + PUNCH", animation: anim(2),
     hitboxes: [box(19, -220, 111, 175, 0, 3), box(37, -263, 133, 218, 4, 8)],
   }),
   enhanced: move("ali-ex-booyakasha-beat", "special", {
@@ -992,7 +992,7 @@ const aliMoves = {
     startupFrames: 4, activeFrames: 23, recoveryFrames: 7, range: 204, damage: 5.5, push: 48, meter: 7,
     hitstunFrames: 23, blockstunFrames: 18, chipDamage: 2, maxHits: 3, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, rhythmCancel: true, rhythmCancelStacks: 1, cancelRoutes: aliFlowRoutes,
-    moveName: "BOOYAKASHA BEAT EX", command: "HEAVY + SPECIAL", animation: anim(0),
+    moveName: "BOOYAKASHA BEAT EX", command: "LP&HP", animation: anim(0),
     hitboxes: [box(24, -202, 171, 146, 0, 10), box(50, -186, 199, 136, 11, 22)],
   }),
   enhancedCommandSpecial: move("ali-ex-massive-step", "special", {
@@ -1001,7 +1001,7 @@ const aliMoves = {
     hitstunFrames: 24, blockstunFrames: 19, chipDamage: 2, maxHits: 4, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, advanceSpeed: 735,
     rhythmCancel: true, rhythmCancelStacks: 1, cancelRoutes: aliFlowRoutes,
-    moveName: "MASSIVE STEP EX", command: "↓ → + HEAVY + SPECIAL · four-beat rush", animation: anim(0),
+    moveName: "MASSIVE STEP EX", command: "↓ → + LP&HP · four-beat rush", animation: anim(0),
     hitboxes: [box(21, -207, 183, 152, 0, 8), box(50, -192, 221, 143, 9, 18), box(68, -182, 247, 133, 19, 28)],
   }),
   enhancedBackSpecial: move("ali-ex-beat-skip", "special", {
@@ -1010,7 +1010,7 @@ const aliMoves = {
     hitstunFrames: 24, blockstunFrames: 18, chipDamage: 2, maxHits: 3, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, advanceSpeed: 950, ignorePushbox: true, reversalInvulnerableFrames: 9,
     rhythmCancel: true, rhythmCancelStacks: 1, cancelRoutes: aliFlowRoutes,
-    moveName: "BEAT SKIP EX", command: "↓ ← + HEAVY + SPECIAL · triple cross", animation: anim(1),
+    moveName: "BEAT SKIP EX", command: "↓ ← + LP&HP · triple cross", animation: anim(1),
     hitboxes: [box(18, -201, 178, 145, 0, 10), box(51, -185, 218, 134, 11, 22)],
   }),
   enhancedLauncher: move("ali-ex-bassline-riser", "special", {
@@ -1019,7 +1019,7 @@ const aliMoves = {
     hitstunFrames: 26, blockstunFrames: 16, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
     launchVelocityY: -610, juggleStarter: true, maxHits: 2, rehitFrames: 7,
     gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 11,
-    moveName: "BASSLINE RISER EX", command: "→ ↓ → + HEAVY + SPECIAL", animation: anim(2),
+    moveName: "BASSLINE RISER EX", command: "→ ↓ → + LP&HP", animation: anim(2),
     hitboxes: [box(17, -228, 126, 187, 0, 6), box(40, -278, 151, 236, 7, 13)],
   }),
   super: move("ali-west-staines-massive-super", "special", {
@@ -1028,7 +1028,7 @@ const aliMoves = {
     hitstunFrames: 25, blockstunFrames: 20, chipDamage: 1.25, knockdown: true, knockdownOnFinal: true,
     juggleLift: -178, maxHits: 8, rehitFrames: 6, gritCost: GRIT_RULES.superCost, juggleLimit: 9,
     superMove: true, reversalInvulnerableFrames: 10,
-    moveName: "WEST STAINES MASSIVE", command: "FULL GRIT + FB", animation: anim(3),
+    moveName: "WEST STAINES MASSIVE", command: "FULL GRIT + ↓ → ↓ → PUNCH", animation: anim(3),
     hitboxes: [box(24, -216, 199, 174, 0, 11), box(49, -205, 241, 162, 12, 23), box(31, -234, 278, 193, 24, 35), box(56, -216, 308, 177, 36, 47)],
   }),
 };
@@ -1048,15 +1048,15 @@ const fighterKits = {
     ai: { preferredRange: 82, retreatRange: 52, approachRange: 176, antiAirAction: "launcher", pokeAction: "driveHeavy", closeAction: "backSpecial", rangedAction: "commandSpecial" },
     victory: { bank: "specials", frame: 15, quote: "THE STREET MOVED FIRST." },
     moveList: [
-      ["Hammer Jab / Body Check", "LIGHT / → + LIGHT"],
-      ["Demolition Drop", "→ + HEAVY · overhead"],
-      ["Tremor Tap", "SPECIAL"],
-      ["Faultline Fist", "↓ → + SPECIAL"],
-      ["Aftershock Grab", "↓ ← + SPECIAL · unblockable"],
-      ["Quarry Breaker", "→ ↓ → + HEAVY · anti-air"],
-      ["Enhanced specials", "Repeat motion + HEAVY + SPECIAL · 25 Grit"],
-      ["Concrete Pour", "LIGHT + HEAVY"],
-      ["Epicenter Execution", "FULL GRIT + FB"],
+      ["Hammer Jab / Body Check", "LP / → + LP"],
+      ["Demolition Drop", "→ + HP · overhead"],
+      ["Tremor Tap", "↓ → + KICK"],
+      ["Faultline Fist", "↓ → + PUNCH"],
+      ["Aftershock Grab", "↓ ← + PUNCH · unblockable"],
+      ["Quarry Breaker", "→ ↓ → + PUNCH · anti-air"],
+      ["Enhanced specials", "Repeat motion + LP&HP · 25 Grit"],
+      ["Concrete Pour", "CLOSE + → or ← + LP/LK"],
+      ["Epicenter Execution", "FULL GRIT + ↓ → ↓ → PUNCH"],
     ],
     moves: { ...shared, ...deathblowMoves },
   },
@@ -1074,15 +1074,15 @@ const fighterKits = {
     ai: { preferredRange: 188, retreatRange: 96, approachRange: 286, antiAirAction: "launcher", pokeAction: "special", closeAction: "backSpecial", rangedAction: "commandSpecial" },
     victory: { bank: "specials", frame: 15, quote: "READ THE SIGN." },
     moveList: [
-      ["Neon Jab / Letter Opener", "LIGHT / → + LIGHT"],
-      ["Marquee Axe", "→ + HEAVY · overhead"],
-      ["Neon Edge", "SPECIAL"],
-      ["Signline Lance", "↓ → + SPECIAL"],
-      ["Vinyl Step", "↓ ← + SPECIAL · cross-through"],
-      ["Signpost Rising", "→ ↓ → + HEAVY · anti-air"],
-      ["Enhanced specials", "Repeat motion + HEAVY + SPECIAL · 25 Grit"],
-      ["Signpost Trip", "LIGHT + HEAVY"],
-      ["Seven-Palm Neon Guillotine", "FULL GRIT + FB"],
+      ["Neon Jab / Letter Opener", "LP / → + LP"],
+      ["Marquee Axe", "→ + HP · overhead"],
+      ["Neon Edge", "↓ → + KICK"],
+      ["Signline Lance", "↓ → + PUNCH"],
+      ["Vinyl Step", "↓ ← + PUNCH · cross-through"],
+      ["Signpost Rising", "→ ↓ → + PUNCH · anti-air"],
+      ["Enhanced specials", "Repeat motion + LP&HP · 25 Grit"],
+      ["Signpost Trip", "CLOSE + → or ← + LP/LK"],
+      ["Seven-Palm Neon Guillotine", "FULL GRIT + ↓ → ↓ → PUNCH"],
     ],
     moves: { ...shared, ...jezMoves },
   },
@@ -1100,15 +1100,15 @@ const fighterKits = {
     ai: { preferredRange: 96, retreatRange: 58, approachRange: 188, antiAirAction: "launcher", pokeAction: "special", closeAction: "heavy", rangedAction: "commandSpecial", counterAction: "backSpecial", counterRange: 172, counterChance: 0.76 },
     victory: { bank: "specials", frame: 15, quote: "SIX SHOTS. ONE ANSWER." },
     moveList: [
-      ["Union Jab / Shoulder Check", "LIGHT / → + LIGHT"],
-      ["Foreman Hammer", "→ + HEAVY · overhead"],
-      ["Heavy Hand", "SPECIAL · armored"],
-      ["South Street Slam", "↓ → + SPECIAL"],
-      ["Southpaw Counter", "↓ ← + SPECIAL · counters strikes"],
-      ["Broad Street Uppercut", "→ ↓ → + HEAVY · anti-air"],
-      ["Enhanced specials", "Repeat motion + HEAVY + SPECIAL · 25 Grit"],
-      ["Dockyard Clinch", "LIGHT + HEAVY"],
-      ["South Street Six", "FULL GRIT + FB"],
+      ["Union Jab / Shoulder Check", "LP / → + LP"],
+      ["Foreman Hammer", "→ + HP · overhead"],
+      ["Heavy Hand", "↓ → + KICK · armored"],
+      ["South Street Slam", "↓ → + PUNCH"],
+      ["Southpaw Counter", "↓ ← + PUNCH · counters strikes"],
+      ["Broad Street Uppercut", "→ ↓ → + PUNCH · anti-air"],
+      ["Enhanced specials", "Repeat motion + LP&HP · 25 Grit"],
+      ["Dockyard Clinch", "CLOSE + → or ← + LP/LK"],
+      ["South Street Six", "FULL GRIT + ↓ → ↓ → PUNCH"],
     ],
     moves: { ...shared, ...alanMoves },
   },
@@ -1126,15 +1126,15 @@ const fighterKits = {
     ai: { preferredRange: 238, retreatRange: 126, approachRange: 348, antiAirAction: "launcher", pokeAction: "special", closeAction: "launcher", rangedAction: "backSpecial", retreatWhenClose: true },
     victory: { bank: "specials", frame: 15, quote: "THE WHOLE CITY IS MY WALL." },
     moveList: [
-      ["Can Tap / Tagger's Poke", "LIGHT / → + LIGHT"],
-      ["Drip Drop", "→ + HEAVY · overhead"],
-      ["Rattlecan Burst", "SPECIAL"],
-      ["Paint the Town", "↓ → + SPECIAL · long range"],
-      ["Wet Paint", "↓ ← + SPECIAL · persistent low trap"],
-      ["Tag Updraft", "→ ↓ → + HEAVY · anti-air"],
-      ["Enhanced specials", "Repeat motion + HEAVY + SPECIAL · 25 Grit"],
-      ["Fresh Coat Toss", "LIGHT + HEAVY"],
-      ["Full Coverage", "FULL GRIT + FB"],
+      ["Can Tap / Tagger's Poke", "LP / → + LP"],
+      ["Drip Drop", "→ + HP · overhead"],
+      ["Rattlecan Burst", "↓ → + KICK"],
+      ["Paint the Town", "↓ → + PUNCH · long range"],
+      ["Wet Paint", "↓ ← + PUNCH · persistent low trap"],
+      ["Tag Updraft", "→ ↓ → + PUNCH · anti-air"],
+      ["Enhanced specials", "Repeat motion + LP&HP · 25 Grit"],
+      ["Fresh Coat Toss", "CLOSE + → or ← + LP/LK"],
+      ["Full Coverage", "FULL GRIT + ↓ → ↓ → PUNCH"],
     ],
     moves: { ...shared, ...postMoves },
   },
@@ -1152,15 +1152,15 @@ const fighterKits = {
     ai: { preferredRange: 92, retreatRange: 48, approachRange: 258, antiAirAction: "launcher", pokeAction: "commandSpecial", closeAction: "special", rangedAction: "backSpecial" },
     victory: { bank: "specials", frame: 15, quote: "CURRENT STAYS WITH ME." },
     moveList: [
-      ["Static Jab / Hot Lead", "LIGHT / → + LIGHT"],
-      ["Power Surge", "→ + HEAVY · overhead"],
-      ["Static Snap", "SPECIAL · voltage cancel"],
-      ["Benny Blitz", "↓ → + SPECIAL · three-hit rush"],
-      ["Live Wire", "↓ ← + SPECIAL · cross-through"],
-      ["Circuit Riser", "→ ↓ → + HEAVY · anti-air"],
-      ["Enhanced specials", "Repeat motion + HEAVY + SPECIAL · 25 Grit"],
-      ["Ground Fault", "LIGHT + HEAVY"],
-      ["Circuit Breaker", "FULL GRIT + FB"],
+      ["Static Jab / Hot Lead", "LP / → + LP"],
+      ["Power Surge", "→ + HP · overhead"],
+      ["Static Snap", "↓ → + KICK · voltage cancel"],
+      ["Benny Blitz", "↓ → + PUNCH · three-hit rush"],
+      ["Live Wire", "↓ ← + PUNCH · cross-through"],
+      ["Circuit Riser", "→ ↓ → + PUNCH · anti-air"],
+      ["Enhanced specials", "Repeat motion + LP&HP · 25 Grit"],
+      ["Ground Fault", "CLOSE + → or ← + LP/LK"],
+      ["Circuit Breaker", "FULL GRIT + ↓ → ↓ → PUNCH"],
     ],
     moves: { ...shared, ...bennyMoves },
   },
@@ -1178,15 +1178,15 @@ const fighterKits = {
     ai: { preferredRange: 276, retreatRange: 142, approachRange: 388, antiAirAction: "launcher", pokeAction: "commandSpecial", closeAction: "backSpecial", rangedAction: "commandSpecial", retreatWhenClose: true },
     victory: { bank: "specials", frame: 15, quote: "NINE HOLES. NO MERCY." },
     moveList: [
-      ["Caddy Tap / Long Iron", "LIGHT / → + LIGHT"],
-      ["Clubhouse Chop", "→ + HEAVY · overhead"],
-      ["Clubhouse Check", "SPECIAL"],
-      ["Golden Shockwave", "↓ → + SPECIAL · projectile"],
-      ["Executive Retreat", "↓ ← + SPECIAL · backstep low shot"],
-      ["Eagle Uppercut", "→ ↓ → + HEAVY · anti-air"],
-      ["Enhanced specials", "Repeat motion + HEAVY + SPECIAL · 25 Grit"],
-      ["Clubhouse Ejection", "LIGHT + HEAVY"],
-      ["Golden Back Nine", "FULL GRIT + FB"],
+      ["Caddy Tap / Long Iron", "LP / → + LP"],
+      ["Clubhouse Chop", "→ + HP · overhead"],
+      ["Clubhouse Check", "↓ → + KICK"],
+      ["Golden Shockwave", "↓ → + PUNCH · projectile"],
+      ["Executive Retreat", "↓ ← + PUNCH · backstep low shot"],
+      ["Eagle Uppercut", "→ ↓ → + PUNCH · anti-air"],
+      ["Enhanced specials", "Repeat motion + LP&HP · 25 Grit"],
+      ["Clubhouse Ejection", "CLOSE + → or ← + LP/LK"],
+      ["Golden Back Nine", "FULL GRIT + ↓ → ↓ → PUNCH"],
     ],
     moves: { ...shared, ...donaldMoves },
   },
@@ -1204,15 +1204,15 @@ const fighterKits = {
     ai: { preferredRange: 206, retreatRange: 104, approachRange: 326, antiAirAction: "launcher", pokeAction: "special", closeAction: "backSpecial", rangedAction: "commandSpecial", retreatWhenClose: true },
     victory: { bank: "specials", frame: 15, quote: "THE ECHO GETS THE LAST WORD." },
     moveList: [
-      ["Static Check / Cable Poke", "LIGHT / → + LIGHT"],
-      ["Dropped Signal", "→ + HEAVY · overhead"],
-      ["Mic Check", "SPECIAL · two-hit feedback"],
-      ["Feedback Loop", "↓ → + SPECIAL · delayed echo"],
-      ["Buffer Skip", "↓ ← + SPECIAL · phase through"],
-      ["Gain Spike", "→ ↓ → + HEAVY · anti-air"],
-      ["Enhanced specials", "Repeat motion + HEAVY + SPECIAL · 25 Grit"],
-      ["Mute Button", "LIGHT + HEAVY"],
-      ["Feedback Meltdown", "FULL GRIT + FB"],
+      ["Static Check / Cable Poke", "LP / → + LP"],
+      ["Dropped Signal", "→ + HP · overhead"],
+      ["Mic Check", "↓ → + KICK · two-hit feedback"],
+      ["Feedback Loop", "↓ → + PUNCH · delayed echo"],
+      ["Buffer Skip", "↓ ← + PUNCH · phase through"],
+      ["Gain Spike", "→ ↓ → + PUNCH · anti-air"],
+      ["Enhanced specials", "Repeat motion + LP&HP · 25 Grit"],
+      ["Mute Button", "CLOSE + → or ← + LP/LK"],
+      ["Feedback Meltdown", "FULL GRIT + ↓ → ↓ → PUNCH"],
     ],
     moves: { ...shared, ...cyraxxMoves },
   },
@@ -1230,15 +1230,15 @@ const fighterKits = {
     ai: { preferredRange: 112, retreatRange: 57, approachRange: 272, antiAirAction: "launcher", pokeAction: "commandSpecial", closeAction: "special", rangedAction: "backSpecial" },
     victory: { bank: "specials", frame: 15, quote: "KEEP IT MASSIVE." },
     moveList: [
-      ["Mic One / Mic Two", "LIGHT / → + LIGHT"],
-      ["Crown Drop", "→ + HEAVY · overhead"],
-      ["Booyakasha Beat", "SPECIAL · builds Flow"],
-      ["Massive Step", "↓ → + SPECIAL · three-beat rush"],
-      ["Beat Skip", "↓ ← + SPECIAL · cross-through"],
-      ["Bassline Riser", "→ ↓ → + HEAVY · anti-air"],
-      ["Enhanced specials", "Repeat motion + HEAVY + SPECIAL · 25 Grit"],
-      ["Respect Toss", "LIGHT + HEAVY"],
-      ["West Staines Massive", "FULL GRIT + FB"],
+      ["Mic One / Mic Two", "LP / → + LP"],
+      ["Crown Drop", "→ + HP · overhead"],
+      ["Booyakasha Beat", "↓ → + KICK · builds Flow"],
+      ["Massive Step", "↓ → + PUNCH · three-beat rush"],
+      ["Beat Skip", "↓ ← + PUNCH · cross-through"],
+      ["Bassline Riser", "→ ↓ → + PUNCH · anti-air"],
+      ["Enhanced specials", "Repeat motion + LP&HP · 25 Grit"],
+      ["Respect Toss", "CLOSE + → or ← + LP/LK"],
+      ["West Staines Massive", "FULL GRIT + ↓ → ↓ → PUNCH"],
     ],
     moves: { ...shared, ...aliMoves },
   },
@@ -1264,15 +1264,18 @@ export function fighterActionGroup(action) {
 }
 
 export function selectKitMoveKey(action, context = {}) {
+  const kick = context.limb === "kick";
   if (action === "light") {
-    if (context.airborne) return "airLight";
-    if (context.crouching) return "crouchLight";
+    if (context.airborne) return kick ? "airLightKick" : "airLight";
+    if (context.crouching) return kick ? "crouchLightKick" : "crouchLight";
+    if (kick) return "standLightKick";
     if (context.forwardHeld) return "forwardLight";
     return "standLight";
   }
   if (action === "heavy") {
-    if (context.airborne) return "airHeavy";
-    if (context.crouching) return "crouchHeavy";
+    if (context.airborne) return kick ? "airHeavyKick" : "airHeavy";
+    if (context.crouching) return kick ? "crouchHeavyKick" : "crouchHeavy";
+    if (kick) return "standHeavyKick";
     if (context.forwardHeld) return "overhead";
     return "standHeavy";
   }
@@ -1280,10 +1283,28 @@ export function selectKitMoveKey(action, context = {}) {
   return action;
 }
 
+// Per-fighter kick normals are derived once from that fighter's own punch
+// normals, so every character keeps a personal kick game without a second set of
+// hand-authored move data. The cache keeps the profiles referentially stable,
+// which matters for deterministic replay and rollback comparisons.
+const derivedKickCache = new Map();
+
+function kitKickProfile(fighterId, kit, key) {
+  const cacheKey = `${fighterId}:${key}`;
+  if (derivedKickCache.has(cacheKey)) return derivedKickCache.get(cacheKey);
+  const source = kit.moves[KICK_VARIANTS[key].source];
+  const derived = deepFreeze(deriveKickProfile(source, key));
+  derivedKickCache.set(cacheKey, derived);
+  return derived;
+}
+
 export function getKitMoveProfile(fighterId, action, context = {}) {
   const kit = getFighterKit(fighterId);
   if (!kit) return null;
-  return kit.moves[selectKitMoveKey(action, context)] || null;
+  const key = selectKitMoveKey(action, context);
+  if (kit.moves[key]) return kit.moves[key];
+  if (KICK_VARIANTS[key]) return kitKickProfile(fighterId, kit, key);
+  return null;
 }
 
 export function createFighterMove(fighterId, action, context = {}) {
@@ -1306,19 +1327,25 @@ export function getFighterMovement(fighterId, fallback) {
   return { ...fallback, ...(getFighterKit(fighterId)?.movement || {}) };
 }
 
+// Four-button motion vocabulary. Punch terminals (LP/HP) drive the signature
+// command specials and the super; kick terminals (LK/HK) drive the base special
+// and the running attack. No move needs a fifth button.
+export const FIGHTER_COMMANDS = Object.freeze([
+  { action: "super", sequence: ["down", "forward", "down", "forward", "punch"], terminal: "punch", display: "↓ → ↓ → + PUNCH", options: { maxWindowFrames: 48, maxGapFrames: 18 } },
+  { action: "enhancedLauncher", sequence: ["forward", "down", "forward", "enhanced"], terminal: "enhanced", display: "→ ↓ → + LP+HP" },
+  { action: "enhancedBackSpecial", sequence: ["down", "back", "enhanced"], terminal: "enhanced", display: "↓ ← + LP+HP" },
+  { action: "enhancedCommandSpecial", sequence: ["down", "forward", "enhanced"], terminal: "enhanced", display: "↓ → + LP+HP" },
+  { action: "launcher", sequence: ["forward", "down", "forward", "punch"], terminal: "punch", display: "→ ↓ → + PUNCH" },
+  { action: "driveHeavy", sequence: ["back", "forward", "kick"], terminal: "kick", display: "← → + KICK" },
+  { action: "backSpecial", sequence: ["down", "back", "punch"], terminal: "punch", display: "↓ ← + PUNCH" },
+  { action: "commandSpecial", sequence: ["down", "forward", "punch"], terminal: "punch", display: "↓ → + PUNCH" },
+  { action: "special", sequence: ["down", "forward", "kick"], terminal: "kick", display: "↓ → + KICK" },
+]);
+
 export function recognizeFighterCommand(fighterId, history, currentFrame) {
   if (!getFighterKit(fighterId)) return null;
-  const candidates = [
-    { action: "enhancedLauncher", sequence: ["forward", "down", "forward", "enhanced"], terminal: "enhanced" },
-    { action: "enhancedBackSpecial", sequence: ["down", "back", "enhanced"], terminal: "enhanced" },
-    { action: "enhancedCommandSpecial", sequence: ["down", "forward", "enhanced"], terminal: "enhanced" },
-    { action: "launcher", sequence: ["forward", "down", "forward", "heavy"], terminal: "heavy" },
-    { action: "driveHeavy", sequence: ["back", "forward", "heavy"], terminal: "heavy" },
-    { action: "backSpecial", sequence: ["down", "back", "special"], terminal: "special" },
-    { action: "commandSpecial", sequence: ["down", "forward", "special"], terminal: "special" },
-  ];
-  for (const candidate of candidates) {
-    const match = matchCommandSequence(history, candidate.sequence, currentFrame);
+  for (const candidate of FIGHTER_COMMANDS) {
+    const match = matchCommandSequence(history, candidate.sequence, currentFrame, candidate.options);
     if (match) return { ...candidate, ...match };
   }
   return null;

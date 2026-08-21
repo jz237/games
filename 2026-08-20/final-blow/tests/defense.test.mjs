@@ -23,7 +23,30 @@ function testMoveSelection() {
   assert.equal(selectMoveProfile("heavy", { airborne: true }).id, "air-heavy");
   assert.equal(selectMoveProfile("special", { airborne: true }).id, "air-special");
   assert.equal(selectMoveProfile("throw").level, ATTACK_LEVELS.THROW);
-  assert.equal(Object.keys(COMBAT_MOVE_PROFILES).length, 10);
+  assert.equal(Object.keys(COMBAT_MOVE_PROFILES).length, 16);
+
+  // Four-button layout: the kick buttons select their own derived normals.
+  assert.equal(selectMoveProfile("light", { limb: "kick" }).id, "stand-light-lk");
+  assert.equal(selectMoveProfile("heavy", { limb: "kick" }).id, "stand-heavy-hk");
+  assert.equal(selectMoveProfile("heavy", { limb: "kick", crouching: true }).id, "crouch-heavy-sweep");
+  assert.equal(selectMoveProfile("light", { limb: "kick", crouching: true }).id, "crouch-light-lk");
+  assert.equal(selectMoveProfile("heavy", { limb: "kick", airborne: true }).id, "air-heavy-hk");
+  assert.equal(selectMoveProfile("light", { limb: "kick", airborne: true }).id, "air-light-lk");
+  // Forward + HK stays a roundhouse rather than the punch overhead.
+  assert.equal(selectMoveProfile("heavy", { limb: "kick", forwardHeld: true }).id, "stand-heavy-hk");
+
+  // The generic profiles inherit unset fields from BASE_MOVES, so compare the
+  // resolved values a real attack instance would use.
+  const roundhouse = createCombatMove("heavy", { limb: "kick" });
+  const heavyPunch = createCombatMove("heavy");
+  assert.ok(roundhouse.range > heavyPunch.range, "kicks reach further than the matching punch");
+  assert.ok(roundhouse.startupFrames > heavyPunch.startupFrames, "kicks start slower");
+  assert.ok(roundhouse.recoveryFrames > heavyPunch.recoveryFrames, "kicks recover slower");
+  assert.ok(roundhouse.push > heavyPunch.push, "kicks push further");
+  const sweepProfile = selectMoveProfile("heavy", { limb: "kick", crouching: true });
+  assert.equal(sweepProfile.level, ATTACK_LEVELS.LOW);
+  assert.equal(sweepProfile.knockdown, true);
+  assert.equal(sweepProfile.moveName, "SWEEP");
 
   const sweep = createCombatMove("heavy", { crouching: true });
   assert.equal(sweep.profileId, "crouch-heavy");

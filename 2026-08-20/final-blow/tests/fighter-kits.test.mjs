@@ -142,14 +142,14 @@ function testMoveInstancesAndArt() {
 }
 
 function testCommandsAndAi() {
-  assert.equal(recognizeFighterCommand("deathblow", history(["down", "back", "special"]), 9)?.action, "backSpecial");
+  assert.equal(recognizeFighterCommand("deathblow", history(["down", "back", "punch"]), 9)?.action, "backSpecial");
   assert.equal(recognizeFighterCommand("jez", history(["down", "forward", "enhanced"]), 9)?.action, "enhancedCommandSpecial");
   assert.equal(recognizeFighterCommand("jez", history(["forward", "down", "forward", "enhanced"]), 13)?.action, "enhancedLauncher");
-  assert.equal(recognizeFighterCommand("post", history(["down", "back", "special"]), 9)?.action, "backSpecial");
+  assert.equal(recognizeFighterCommand("post", history(["down", "back", "punch"]), 9)?.action, "backSpecial");
   assert.equal(recognizeFighterCommand("alan", history(["down", "back", "enhanced"]), 9)?.action, "enhancedBackSpecial");
-  assert.equal(recognizeFighterCommand("benny", history(["down", "forward", "special"]), 9)?.action, "commandSpecial");
-  assert.equal(recognizeFighterCommand("donald", history(["down", "back", "special"]), 9)?.action, "backSpecial");
-  assert.equal(recognizeFighterCommand("cyraxx", history(["down", "forward", "special"]), 9)?.action, "commandSpecial");
+  assert.equal(recognizeFighterCommand("benny", history(["down", "forward", "punch"]), 9)?.action, "commandSpecial");
+  assert.equal(recognizeFighterCommand("donald", history(["down", "back", "punch"]), 9)?.action, "backSpecial");
+  assert.equal(recognizeFighterCommand("cyraxx", history(["down", "forward", "punch"]), 9)?.action, "commandSpecial");
   assert.equal(recognizeFighterCommand("ali", history(["down", "back", "enhanced"]), 9)?.action, "enhancedBackSpecial");
 
   assert.equal(selectKitAiIntent("deathblow", { distance: 40, roll: 0.1 }).action, "backSpecial");

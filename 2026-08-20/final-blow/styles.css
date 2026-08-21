@@ -1667,25 +1667,48 @@ body.demo-active .touch-pause { display: none !important; }
 
 .touch-controls button.active { background: rgba(239,44,40,.72); transform: scale(.92); }
 .touch-move { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-.touch-action { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; transform: rotate(-8deg); }
-.touch-action button { transform: rotate(8deg); }
+.touch-move .touch-center { display: block; pointer-events: none; }
+/* Four-button right-side cluster: punches on top, kicks below. */
+.touch-action { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; transform: rotate(-8deg); }
+.touch-action button { transform: rotate(8deg); font-size: clamp(11px, 2.1vw, 17px); letter-spacing: .02em; }
 .touch-action button.active { transform: rotate(8deg) scale(.92); }
-.touch-action .touch-final { border-color: var(--amber); color: var(--amber); font-size: clamp(8px, 1.6vw, 13px); letter-spacing: -.02em; }
-.touch-action .touch-final.ready {
-  border-width: 4px;
+.touch-action .touch-lp, .touch-action .touch-hp { border-color: rgba(255,177,27,.7); color: var(--amber); }
+.touch-action .touch-lk, .touch-action .touch-hk { border-color: rgba(41,224,255,.7); color: #7fe9ff; }
+.touch-action .touch-hp, .touch-action .touch-hk { border-width: 3px; }
+
+.touch-action.super-ready button {
+  box-shadow: 0 0 0 3px rgba(41,224,255,.16), 0 0 22px #39eaff, inset 0 0 14px rgba(255,255,255,.28);
+}
+.touch-action.ready button {
+  border-color: var(--amber);
   background: radial-gradient(circle, rgba(239,44,40,.9), rgba(90,4,9,.82));
   color: white;
   box-shadow: 0 0 0 5px rgba(255,177,27,.2), 0 0 34px var(--amber), inset 0 0 18px rgba(255,255,255,.32);
   animation: final-ready .46s ease-in-out infinite alternate;
 }
-.touch-action .touch-final.super-ready {
-  border-width: 4px;
-  background: radial-gradient(circle, rgba(24,214,232,.94), rgba(12,40,95,.88));
-  color: white;
-  box-shadow: 0 0 0 5px rgba(41,224,255,.18), 0 0 32px #39eaff, inset 0 0 18px rgba(255,255,255,.32);
-  animation: final-ready .4s ease-in-out infinite alternate;
+
+.touch-prompt {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  margin-bottom: 6px;
+  transform: translateX(-50%);
+  padding: 5px 13px;
+  border-radius: 999px;
+  border: 2px solid var(--amber);
+  background: rgba(6,11,17,.78);
+  color: var(--amber);
+  font-size: clamp(9px, 1.7vw, 13px);
+  font-weight: 950;
+  letter-spacing: .08em;
+  white-space: nowrap;
+  pointer-events: none;
 }
+.touch-prompt[hidden] { display: none !important; }
+.touch-prompt.ready { color: white; background: rgba(160,12,18,.86); animation: prompt-ready .46s ease-in-out infinite alternate; }
+.touch-prompt.super-ready { border-color: #39eaff; color: #9ff0ff; }
 @keyframes final-ready { to { transform: rotate(8deg) scale(1.13); filter: brightness(1.35); } }
+@keyframes prompt-ready { to { transform: translateX(-50%) scale(1.08); filter: brightness(1.4); } }
 
 .rotate-gate {
   position: fixed;

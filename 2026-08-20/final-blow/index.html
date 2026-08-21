@@ -19,7 +19,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">FIGHTER AUDIO EDITION <b>1.0G</b></div>
+      <div class="build-tag">FOUR-BUTTON EDITION <b>1.1A</b></div>
       <div id="offlineBadge" class="offline-badge" aria-live="polite">CACHE CHECK</div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
@@ -252,19 +252,24 @@
       </section>
 
       <div id="touchControls" class="touch-controls" aria-label="Touch controls">
-        <div class="touch-move">
-          <button data-touch="left" aria-label="Move left">◀</button>
-          <button data-touch="down" aria-label="Crouch or block">▼</button>
-          <button data-touch="right" aria-label="Move right">▶</button>
+        <div class="touch-move" role="group" aria-label="Movement pad">
+          <button data-touch="up left" aria-label="Jump back">◤</button>
+          <button data-touch="up" aria-label="Jump">▲</button>
+          <button data-touch="up right" aria-label="Jump forward">◥</button>
+          <button data-touch="left" aria-label="Walk left, or block when facing right">◀</button>
+          <span class="touch-center" aria-hidden="true"></span>
+          <button data-touch="right" aria-label="Walk right, or block when facing left">▶</button>
+          <button data-touch="down left" aria-label="Crouch block left">◣</button>
+          <button data-touch="down" aria-label="Crouch">▼</button>
+          <button data-touch="down right" aria-label="Crouch block right">◢</button>
         </div>
-        <div class="touch-action">
-          <button class="touch-final" data-touch="final" aria-label="Final Blow">FB</button>
-          <button data-touch="special" aria-label="Special attack">S</button>
-          <button data-touch="heavy" aria-label="Heavy attack">H</button>
-          <button data-touch="light" aria-label="Light attack">L</button>
-          <button data-touch="guard" aria-label="Guard">G</button>
-          <button data-touch="jump" aria-label="Jump">▲</button>
+        <div class="touch-action" role="group" aria-label="Attack buttons">
+          <button class="touch-lp" data-touch="lp" aria-label="Light punch">LP</button>
+          <button class="touch-hp" data-touch="hp" aria-label="Heavy punch">HP</button>
+          <button class="touch-lk" data-touch="lk" aria-label="Light kick">LK</button>
+          <button class="touch-hk" data-touch="hk" aria-label="Heavy kick">HK</button>
         </div>
+        <div id="touchPrompt" class="touch-prompt" aria-live="polite" hidden></div>
       </div>
       <button id="touchPauseButton" class="touch-pause" type="button" aria-label="Pause game">Ⅱ</button>
     </section>
@@ -284,28 +289,30 @@
       <div class="controls-grid">
         <section>
           <h3>PLAYER 1 · KEYBOARD</h3>
-          <p><kbd>A</kbd><kbd>D</kbd> MOVE/GUARD · <kbd>W</kbd> JUMP · <kbd>S</kbd> CROUCH/LOW GUARD</p>
-          <p><kbd>J</kbd> LIGHT · <kbd>K</kbd> HEAVY · <kbd>L</kbd> SPECIAL</p>
-          <p>DOUBLE-TAP DASH · LIGHT + HEAVY THROW · <kbd>I</kbd> GUARD</p>
-          <p>HEAVY + SPECIAL ENHANCED · FULL GRIT + <kbd>U</kbd> SUPER</p>
-          <p>COMMANDS: ↓ → SPECIAL · ↓ ← SPECIAL · → ↓ → HEAVY · ← → HEAVY</p>
-          <p>FINAL BLOWS: ↓ → HEAVY · ← ↓ → SPECIAL · <kbd>U</kbd> CHARACTER COMBO</p>
+          <p><kbd>A</kbd><kbd>D</kbd> WALK · HOLD AWAY TO BLOCK · <kbd>W</kbd> JUMP · <kbd>S</kbd> CROUCH</p>
+          <p>DOWN-AWAY CROUCH-BLOCKS LOWS · NO GUARD BUTTON</p>
+          <p><kbd>J</kbd> LP · <kbd>K</kbd> HP · <kbd>N</kbd> LK · <kbd>M</kbd> HK</p>
+          <p>SPECIALS: ↓ → + PUNCH · ↓ ← + PUNCH · ↓ → + KICK · → ↓ → + PUNCH · ← → + KICK</p>
+          <p>ENHANCED: MOTION + LP&amp;HP OR LK&amp;HK · SUPER: ↓ → ↓ → + PUNCH OR HP&amp;HK</p>
+          <p>THROW: CLOSE + TOWARD/AWAY + LP OR LK · DOUBLE-TAP DASH</p>
+          <p>FINAL BLOW: ANY ONE OF LP / HP / LK / HK · LP·LK = A · HP·HK = B</p>
         </section>
         <section>
           <h3>PLAYER 2 · KEYBOARD</h3>
-          <p><kbd>←</kbd><kbd>→</kbd> MOVE/GUARD · <kbd>↑</kbd> JUMP · <kbd>↓</kbd> CROUCH/LOW GUARD</p>
-          <p><kbd>1</kbd> LIGHT · <kbd>2</kbd> HEAVY · <kbd>3</kbd> SPECIAL</p>
-          <p>DOUBLE-TAP DASH · LIGHT + HEAVY THROW · <kbd>5</kbd> GUARD</p>
-          <p>HEAVY + SPECIAL ENHANCED · FULL GRIT + <kbd>0</kbd> SUPER</p>
-          <p>COMMANDS: ↓ → SPECIAL · ↓ ← SPECIAL · → ↓ → HEAVY · ← → HEAVY</p>
-          <p>FINAL BLOWS: ↓ → HEAVY · ← ↓ → SPECIAL · <kbd>0</kbd> CHARACTER COMBO</p>
+          <p><kbd>←</kbd><kbd>→</kbd> WALK · HOLD AWAY TO BLOCK · <kbd>↑</kbd> JUMP · <kbd>↓</kbd> CROUCH</p>
+          <p>DOWN-AWAY CROUCH-BLOCKS LOWS · NO GUARD BUTTON</p>
+          <p><kbd>NUM 1</kbd> LP · <kbd>NUM 2</kbd> HP · <kbd>NUM 4</kbd> LK · <kbd>NUM 5</kbd> HK</p>
+          <p>SPECIALS: ↓ → + PUNCH · ↓ ← + PUNCH · ↓ → + KICK · → ↓ → + PUNCH · ← → + KICK</p>
+          <p>ENHANCED: MOTION + LP&amp;HP OR LK&amp;HK · SUPER: ↓ → ↓ → + PUNCH OR HP&amp;HK</p>
+          <p>THROW: CLOSE + TOWARD/AWAY + LP OR LK · DOUBLE-TAP DASH</p>
+          <p>FINAL BLOW: ANY ONE OF LP / HP / LK / HK · LP·LK = A · HP·HK = B</p>
         </section>
         <section>
           <h3>XINPUT / GAMEPAD</h3>
-          <p>STICK / D-PAD MOVE · <span class="xbox-a">A</span> JUMP</p>
-          <p><span class="xbox-x">X</span> LIGHT · <span class="xbox-y">Y</span> HEAVY · LB SPECIAL</p>
-          <p><span class="xbox-b">B</span> GUARD · X + Y THROW · Y + LB ENHANCED</p>
-          <p>FULL GRIT + LT + RT SUPER · POST-KO CHARACTER FINAL BLOW</p>
+          <p>STICK / D-PAD IS THE WHOLE MOVEMENT CONTROL · UP JUMPS · AWAY BLOCKS</p>
+          <p><span class="xbox-x">X</span> LP · <span class="xbox-y">Y</span> HP · <span class="xbox-a">A</span> LK · <span class="xbox-b">B</span> HK</p>
+          <p id="padEquivalents">PLAYSTATION: □ LP · △ HP · ✕ LK · ○ HK — NINTENDO: Y LP · X HP · B LK · A HK</p>
+          <p>SAME MOTIONS, CHORDS AND SINGLE-BUTTON FINAL BLOW AS KEYBOARD</p>
         </section>
         <section class="options-panel">
           <h3>OPTIONS</h3>

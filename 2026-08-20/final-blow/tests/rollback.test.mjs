@@ -51,9 +51,19 @@ test("input bitfields preserve held and pulse controls without predicting repeat
     left: true, right: false, down: true, guard: true,
     jump: false, light: true, heavy: false, special: false,
     enhanced: false, throw: false, super: false, final: true,
+    limb: "punch", punch: true, kick: false, throwBack: false,
   });
   assert.equal(predictedInput(bits), bits & HELD_INPUT_MASK);
   assert.equal(bitsToInput(predictedInput(bits)).light, false);
+
+  // The four-button limb selector and the back-throw modifier survive the wire.
+  const kickBits = inputToBits({ heavy: true, limb: "kick" });
+  assert.equal(bitsToInput(kickBits).limb, "kick");
+  assert.equal(bitsToInput(kickBits).kick, true);
+  assert.equal(bitsToInput(kickBits).punch, false);
+  const backThrowBits = inputToBits({ throw: true, throwBack: true });
+  assert.equal(bitsToInput(backThrowBits).throwBack, true);
+  assert.equal(bitsToInput(inputToBits({ throw: true })).throwBack, false);
 });
 
 test("binary input packets include redundant frames, acknowledgement and match isolation", () => {

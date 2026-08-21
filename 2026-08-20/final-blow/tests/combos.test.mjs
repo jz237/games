@@ -68,27 +68,41 @@ function testCommands() {
     { token: "forward", frame: 2 },
     { token: "down", frame: 7 },
     { token: "forward", frame: 11 },
-    { token: "heavy", frame: 12 },
+    { token: "punch", frame: 12 },
   ];
   assert.equal(recognizeCombatCommand(launcherHistory, 12)?.action, "launcher");
   const driveHistory = [
     { token: "back", frame: 20 },
     { token: "forward", frame: 26 },
-    { token: "heavy", frame: 27 },
+    { token: "kick", frame: 27 },
   ];
   assert.equal(recognizeCombatCommand(driveHistory, 27)?.action, "driveHeavy");
   const specialHistory = [
     { token: "down", frame: 30 },
     { token: "forward", frame: 35 },
-    { token: "special", frame: 36 },
+    { token: "punch", frame: 36 },
   ];
   assert.equal(recognizeCombatCommand(specialHistory, 36)?.action, "commandSpecial");
-  assert.ok(matchCommandSequence(specialHistory, ["down", "forward", "special"], 36));
+  const kickSpecialHistory = [
+    { token: "down", frame: 40 },
+    { token: "forward", frame: 45 },
+    { token: "kick", frame: 46 },
+  ];
+  assert.equal(recognizeCombatCommand(kickSpecialHistory, 46)?.action, "special");
+  const superHistory = [
+    { token: "down", frame: 50 },
+    { token: "forward", frame: 54 },
+    { token: "down", frame: 58 },
+    { token: "forward", frame: 62 },
+    { token: "punch", frame: 63 },
+  ];
+  assert.equal(recognizeCombatCommand(superHistory, 63)?.action, "super", "double quarter-circle plus punch is the super");
+  assert.ok(matchCommandSequence(specialHistory, ["down", "forward", "punch"], 36));
   assert.equal(matchCommandSequence([
     { token: "down", frame: 1 },
     { token: "forward", frame: 30 },
-    { token: "special", frame: 31 },
-  ], ["down", "forward", "special"], 31), null, "slow inputs must not be accepted");
+    { token: "punch", frame: 31 },
+  ], ["down", "forward", "punch"], 31), null, "slow inputs must not be accepted");
 }
 
 function testCancelRoutes() {

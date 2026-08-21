@@ -37,7 +37,7 @@ const advancedProfiles = {
     blockstunFrames: 18,
     chipDamage: 3,
     knockdown: true,
-    command: "↓ → + SPECIAL",
+    command: "↓ → + PUNCH",
     hitboxes: [
       { from: 0, to: 5, box: { x: 31, y: -194, width: 154, height: 148 } },
       { from: 6, to: 13, box: { x: 48, y: -180, width: 174, height: 134 } },
@@ -61,7 +61,7 @@ const advancedProfiles = {
     knockdown: true,
     launchVelocityY: -535,
     juggleStarter: true,
-    command: "→ ↓ → + HEAVY",
+    command: "→ ↓ → + PUNCH",
     hitboxes: [
       { from: 0, to: 2, box: { x: 22, y: -210, width: 94, height: 160 } },
       { from: 3, to: 6, box: { x: 33, y: -244, width: 108, height: 194 } },
@@ -83,7 +83,7 @@ const advancedProfiles = {
     blockstunFrames: 16,
     chipDamage: 0,
     advanceSpeed: 235,
-    command: "← → + HEAVY",
+    command: "← → + KICK",
     hitboxes: [
       { from: 0, to: 3, box: { x: 34, y: -181, width: 132, height: 116 } },
       { from: 4, to: 7, box: { x: 52, y: -171, width: 151, height: 108 } },
@@ -292,12 +292,14 @@ export function matchCommandSequence(history, sequence, currentFrame, {
 
 export function recognizeCombatCommand(history, currentFrame) {
   const candidates = [
-    { action: "launcher", sequence: ["forward", "down", "forward", "heavy"] },
-    { action: "driveHeavy", sequence: ["back", "forward", "heavy"] },
-    { action: "commandSpecial", sequence: ["down", "forward", "special"] },
+    { action: "super", sequence: ["down", "forward", "down", "forward", "punch"], terminal: "punch", options: { maxWindowFrames: 48, maxGapFrames: 18 } },
+    { action: "launcher", sequence: ["forward", "down", "forward", "punch"], terminal: "punch" },
+    { action: "driveHeavy", sequence: ["back", "forward", "kick"], terminal: "kick" },
+    { action: "commandSpecial", sequence: ["down", "forward", "punch"], terminal: "punch" },
+    { action: "special", sequence: ["down", "forward", "kick"], terminal: "kick" },
   ];
   for (const candidate of candidates) {
-    const match = matchCommandSequence(history, candidate.sequence, currentFrame);
+    const match = matchCommandSequence(history, candidate.sequence, currentFrame, candidate.options);
     if (match) return { ...candidate, ...match };
   }
   return null;

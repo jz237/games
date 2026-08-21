@@ -1,4 +1,4 @@
-import { createAttackInstance } from "./foundation.mjs";
+import { BASE_MOVES, createAttackInstance } from "./foundation.mjs";
 
 export const ATTACK_LEVELS = Object.freeze({
   MID: "mid",
@@ -207,18 +207,112 @@ function deepFreeze(value) {
   return value;
 }
 
+/**
+ * Kick normals are derived from each fighter's authored punch normals so every
+ * character keeps a distinct kick game (range, timing and push all inherit the
+ * source move's personality) without hand-authoring a second set of 48 moves.
+ * The transforms follow SF2/MK3 proportions: kicks reach further and push harder
+ * than the matching punch, but start slower and recover slower.
+ */
+export const KICK_VARIANTS = deepFreeze({
+  standLightKick: {
+    source: "standLight", suffix: "lk", moveName: "LOW KICK", level: ATTACK_LEVELS.MID,
+    range: 1.2, damage: 1, push: 1.12, startup: 1, active: 0, recovery: 2,
+    hitstun: 0, blockstun: 1, boxY: 0.9, boxHeight: 1.06,
+  },
+  standHeavyKick: {
+    source: "standHeavy", suffix: "hk", moveName: "ROUNDHOUSE", level: ATTACK_LEVELS.MID,
+    range: 1.3, damage: 1.05, push: 1.38, startup: 3, active: 1, recovery: 5,
+    hitstun: 1, blockstun: 1, boxY: 0.88, boxHeight: 1.1,
+  },
+  crouchLightKick: {
+    source: "crouchLight", suffix: "lk", moveName: "SHORT KICK", level: ATTACK_LEVELS.LOW,
+    range: 1.15, damage: 0.95, push: 1.05, startup: 0, active: 0, recovery: 1,
+    hitstun: 0, blockstun: 0, boxY: 1, boxHeight: 1,
+  },
+  crouchHeavyKick: {
+    source: "crouchHeavy", suffix: "sweep", moveName: "SWEEP", level: ATTACK_LEVELS.LOW,
+    range: 1.24, damage: 1.02, push: 1.3, startup: 2, active: 0, recovery: 6,
+    hitstun: 0, blockstun: 1, boxY: 1.04, boxHeight: 0.94, knockdown: true,
+  },
+  airLightKick: {
+    source: "airLight", suffix: "lk", moveName: "JUMP KICK", level: ATTACK_LEVELS.AIR,
+    range: 1.14, damage: 1, push: 1.06, startup: 0, active: 0, recovery: 1,
+    hitstun: 0, blockstun: 0, boxY: 0.92, boxHeight: 1.04,
+  },
+  airHeavyKick: {
+    source: "airHeavy", suffix: "hk", moveName: "JUMP ROUNDHOUSE", level: ATTACK_LEVELS.AIR,
+    range: 1.22, damage: 1.03, push: 1.18, startup: 1, active: 0, recovery: 2,
+    hitstun: 0, blockstun: 1, boxY: 0.9, boxHeight: 1.08,
+  },
+});
+
+export const KICK_MOVE_KEYS = Object.freeze(Object.keys(KICK_VARIANTS));
+
+const droppedOnDerive = ["animation", "projectile", "trap", "superMove", "gritCost", "command", "maxHits", "rehitFrames"];
+
+function resolveField(source, base, field) {
+  return Number.isFinite(source?.[field]) ? source[field] : base[field];
+}
+
+export function deriveKickProfile(source, key) {
+  const variant = KICK_VARIANTS[key];
+  if (!source || !variant) return null;
+  const base = BASE_MOVES[source.baseKind] || BASE_MOVES.light;
+  const scaleRange = variant.range;
+  const derived = {
+    ...source,
+    id: `${source.id}-${variant.suffix}`,
+    cancelProfileId: source.cancelProfileId || source.id,
+    level: variant.level,
+    moveName: variant.moveName,
+    limb: "kick",
+    startupFrames: Math.max(3, Math.round(resolveField(source, base, "startupFrames") + variant.startup)),
+    activeFrames: Math.max(2, Math.round(resolveField(source, base, "activeFrames") + variant.active)),
+    recoveryFrames: Math.max(4, Math.round(resolveField(source, base, "recoveryFrames") + variant.recovery)),
+    range: Math.round(resolveField(source, base, "range") * scaleRange),
+    damage: Number((resolveField(source, base, "damage") * variant.damage).toFixed(2)),
+    push: Math.round(resolveField(source, base, "push") * variant.push),
+    meter: Math.round(resolveField(source, base, "meter") * 1.02),
+    hitstunFrames: Math.max(0, Math.round((source.hitstunFrames ?? 20) + variant.hitstun)),
+    blockstunFrames: Math.max(0, Math.round((source.blockstunFrames ?? 10) + variant.blockstun)),
+    hitboxes: (source.hitboxes || []).map((entry) => ({
+      from: entry.from,
+      to: entry.to,
+      box: {
+        x: Math.round(entry.box.x * scaleRange),
+        y: Math.round(entry.box.y * variant.boxY),
+        width: Math.round(entry.box.width * scaleRange),
+        height: Math.round(entry.box.height * variant.boxHeight),
+      },
+    })),
+  };
+  if (variant.knockdown) derived.knockdown = true;
+  for (const field of droppedOnDerive) delete derived[field];
+  return derived;
+}
+
+for (const key of KICK_MOVE_KEYS) {
+  const derived = deriveKickProfile(moveProfiles[KICK_VARIANTS[key].source], key);
+  if (derived) moveProfiles[key] = derived;
+}
+
 export const COMBAT_MOVE_PROFILES = deepFreeze(moveProfiles);
 
 export function selectMoveProfile(kind, context = {}) {
   if (kind === "throw") return COMBAT_MOVE_PROFILES.throw;
+  const kick = context.limb === "kick";
   if (context.airborne) {
-    return COMBAT_MOVE_PROFILES[kind === "special" ? "airSpecial" : kind === "heavy" ? "airHeavy" : "airLight"];
+    if (kind === "special") return COMBAT_MOVE_PROFILES.airSpecial;
+    if (kind === "heavy") return COMBAT_MOVE_PROFILES[kick ? "airHeavyKick" : "airHeavy"];
+    return COMBAT_MOVE_PROFILES[kick ? "airLightKick" : "airLight"];
   }
-  if (kind === "light" && context.crouching) return COMBAT_MOVE_PROFILES.crouchLight;
-  if (kind === "heavy" && context.crouching) return COMBAT_MOVE_PROFILES.crouchHeavy;
-  if (kind === "heavy" && context.forwardHeld) return COMBAT_MOVE_PROFILES.overhead;
+  if (kind === "light" && context.crouching) return COMBAT_MOVE_PROFILES[kick ? "crouchLightKick" : "crouchLight"];
+  if (kind === "heavy" && context.crouching) return COMBAT_MOVE_PROFILES[kick ? "crouchHeavyKick" : "crouchHeavy"];
+  if (kind === "heavy" && context.forwardHeld && !kick) return COMBAT_MOVE_PROFILES.overhead;
   if (kind === "special") return COMBAT_MOVE_PROFILES.special;
-  return COMBAT_MOVE_PROFILES[kind === "heavy" ? "standHeavy" : "standLight"];
+  if (kind === "heavy") return COMBAT_MOVE_PROFILES[kick ? "standHeavyKick" : "standHeavy"];
+  return COMBAT_MOVE_PROFILES[kick ? "standLightKick" : "standLight"];
 }
 
 export function createCombatMove(kind, context = {}) {

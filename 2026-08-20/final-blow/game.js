@@ -60,17 +60,23 @@ import {
   recordArcadeResult,
 } from "./engine/arcade.mjs";
 import {
+  ATTACK_BUTTONS,
+  BUTTON_LABELS,
+  BUTTON_NAMES,
   DEFAULT_KEY_MAPS,
   DEFAULT_PAD_MAP,
   PAD_BUTTON_LABELS,
   REMAPPABLE_ACTIONS,
   applyControlStyle,
+  detectPadLabelSet,
   formatKeyCode,
   normalizeControlStyle,
   normalizeKeyMaps,
   normalizePadMap,
+  padButtonLabel,
   remapKeyBinding,
   remapPadBinding,
+  resolveFourButtonInput,
 } from "./engine/controls.mjs";
 import {
   TRAINING_DUMMY_MODES,
@@ -652,6 +658,9 @@ const state = {
   finishWinner: -1,
   finisherType: 0,
   finisher: null,
+  // A finisher only fires on a button press that starts after the prompt appears,
+  // so the KO-causing attack or a held button can never trigger one.
+  finishArmed: [false, false],
   cinematicZoom: 1,
   shake: 0,
   flash: 0,
@@ -1894,7 +1903,7 @@ function syncRollbackPresentation() {
   updateComboState();
   updateOnlineHud();
   $("#touchControls").classList.toggle("cinematic", Boolean(state.finisher));
-  $(".touch-final").classList.toggle("ready", state.phase === "finish" && state.finishWinner === onlineLocalSide());
+  setTouchPrompt(state.phase === "finish" && state.finishWinner === onlineLocalSide() ? "final" : "");
 }
 
 function createOnlineRollback(config, initialFrame = 0) {
@@ -2145,7 +2154,7 @@ function startMatch(resetSet = true) {
   state.finisherType = 0;
   state.finisher = null;
   state.cinematicZoom = 1;
-  $(".touch-final").classList.remove("ready", "super-ready");
+  setTouchPrompt("");
   $("#touchControls").classList.remove("cinematic");
   commandHistory[0].length = 0;
   commandHistory[1].length = 0;
@@ -2217,7 +2226,7 @@ function startOnlineMatch(config) {
   $("#onlineMatchSetup").hidden = true;
   $("#onlineRematchStatus").hidden = true;
   $("#touchControls").classList.remove("cinematic");
-  $(".touch-final").classList.remove("ready", "super-ready");
+  setTouchPrompt("");
   updateStageUI();
   updateHud();
   showScreen("fight");
@@ -2255,7 +2264,7 @@ function resetRound() {
   state.finishWinner = -1;
   state.finisher = null;
   state.cinematicZoom = 1;
-  $(".touch-final").classList.remove("ready", "super-ready");
+  setTouchPrompt("");
   $("#touchControls").classList.remove("cinematic");
   commandHistory[0].length = 0;
   commandHistory[1].length = 0;
@@ -2330,7 +2339,7 @@ function performFinisher(winner, type) {
   state.cinematicZoom = 1.02;
   state.shake = .16;
   if (!rollbackResimulating) {
-    $(".touch-final").classList.remove("ready");
+    setTouchPrompt("");
     $("#touchControls").classList.add("cinematic");
   }
   sound("special", attacker);
@@ -2587,11 +2596,23 @@ function updateHud() {
   $("#timer").textContent = state.mode === "training" ? "∞" : String(Math.ceil(state.timer)).padStart(2, "0");
   $("#roundLabel").textContent = state.mode === "training" ? "TRAINING"
     : state.mode === "demo" ? `DEMO · ROUND ${state.round}` : `ROUND ${state.round}`;
-  const finalButton = $(".touch-final");
+  const finishing = state.phase === "finish" && state.finishWinner === 0;
   const superReady = state.phase === "fight" && state.fighters[0]?.meter >= GRIT_RULES.superCost;
-  finalButton.classList.toggle("super-ready", superReady);
-  if (state.phase === "finish" && state.finishWinner === 0) finalButton.textContent = "FB";
-  else finalButton.textContent = superReady ? "SUPER" : "GRIT";
+  setTouchPrompt(finishing ? "final" : superReady ? "super" : "");
+}
+
+function setTouchPrompt(kind = "") {
+  const prompt = $("#touchPrompt");
+  const actions = $(".touch-action");
+  const label = kind === "final" ? "FINISH HIM · ANY BUTTON"
+    : kind === "super" ? "SUPER READY · \u2193 \u2192 \u2193 \u2192 + PUNCH"
+      : "";
+  prompt.textContent = label;
+  prompt.hidden = !label;
+  prompt.classList.toggle("ready", kind === "final");
+  prompt.classList.toggle("super-ready", kind === "super");
+  actions.classList.toggle("ready", kind === "final");
+  actions.classList.toggle("super-ready", kind === "super");
 }
 
 function resetTrainingPosition(countReset = true) {
@@ -2694,38 +2715,41 @@ function readInput(side) {
     return active;
   };
   const padEdge = (index) => Boolean(pad && buttonValue(pad, index) && !previous[index]);
-  const mappedButton = (action) => buttonValue(pad, padMap[action])
-    || (action === "special" && padMap.special === DEFAULT_PAD_MAP.special && buttonValue(pad, 5));
-  const mappedEdge = (action) => padEdge(padMap[action])
-    || (action === "special" && padMap.special === DEFAULT_PAD_MAP.special && padEdge(5));
   const left = held("left") || axisX < -0.42 || buttonValue(pad, 14);
   const right = held("right") || axisX > 0.42 || buttonValue(pad, 15);
   const down = held("down") || axisY > 0.52 || buttonValue(pad, 13);
-  const guard = held("guard") || mappedButton("guard");
-  const jump = edge("jump") || mappedEdge("jump") || Boolean(pad && (axisY < -0.65 || buttonValue(pad, 12)) && !previous[20]);
-  let light = edge("light") || mappedEdge("light");
-  let heavy = edge("heavy") || mappedEdge("heavy");
-  let special = edge("special") || mappedEdge("special");
-  const lightHeld = held("light") || mappedButton("light");
-  const heavyHeld = held("heavy") || mappedButton("heavy");
-  const specialHeld = held("special") || mappedButton("special");
-  const throwInput = (light && heavyHeld) || (heavy && lightHeld);
-  const enhanced = !throwInput && ((special && heavyHeld) || (heavy && specialHeld));
-  if (throwInput || enhanced) {
-    light = false;
-    heavy = false;
+  const upHeld = held("up") || Boolean(pad && (axisY < -0.65 || buttonValue(pad, 12)));
+  const up = edge("up") || (upHeld && !previous[20]);
+
+  // The four combat buttons are the only attack inputs. Everything else is
+  // reached by the directional control, a motion, or a two-button chord.
+  const raw = { fourButton: true, left, right, down, up, jump: up };
+  for (const button of ATTACK_BUTTONS) {
+    raw[button] = edge(button) || padEdge(padMap[button]);
+    raw[`${button}Held`] = held(button) || Boolean(buttonValue(pad, padMap[button]));
   }
-  if (enhanced) special = false;
-  const triggers = buttonValue(pad, 6) && buttonValue(pad, 7);
-  const previousTriggers = Boolean(previous[6] && previous[7]);
-  const defaultFinalEdge = mappedEdge("final") && (padMap.final !== DEFAULT_PAD_MAP.final || buttonValue(pad, 6));
-  const final = edge("final") || defaultFinalEdge || (triggers && !previousTriggers);
+
+  // Arm the finishing window only once every combat button is released, so the
+  // KO-causing press or a held button can never roll straight into a finisher.
+  const attackHeld = ATTACK_BUTTONS.some((button) => raw[`${button}Held`]);
+  if (state.phase === "finish" && state.finishWinner === side) {
+    if (!attackHeld) state.finishArmed[side] = true;
+  } else {
+    state.finishArmed[side] = false;
+  }
+
   if (pad) {
     const next = pad.buttons.map((button) => button.pressed || button.value > 0.55);
     next[20] = axisY < -0.65 || buttonValue(pad, 12);
     previousPads.set(pad.index, next);
   }
-  return { left, right, down, guard, jump, light, heavy, special, enhanced, throw: throwInput, final };
+  return raw;
+}
+
+function activeControlStyle(side) {
+  return state.mode === "online"
+    ? normalizeControlStyle(onlineSession.matchConfig?.controlStyles?.[side])
+    : state.controlStyle;
 }
 
 function aiInput(fighter, opponent, dt) {
@@ -2786,26 +2810,40 @@ function commandMatches(side, sequence) {
   return true;
 }
 
+// Directions are recorded as discrete state changes rather than per-frame holds
+// so a steady down-forward hold cannot fake a repeated quarter-circle motion.
+const directionTokenState = ["", ""];
+
+function directionStateToken(input, fighter) {
+  const absolute = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  const horizontal = absolute === 0 ? "" : absolute === fighter.facing ? "forward" : "back";
+  if (input.down && horizontal) return `down-${horizontal}`;
+  if (input.down) return "down";
+  return horizontal;
+}
+
+function recordDirection(side, input, fighter) {
+  const token = directionStateToken(input, fighter);
+  if (token === directionTokenState[side]) return;
+  directionTokenState[side] = token;
+  if (!token) return;
+  for (const part of token.split("-")) rememberCommand(side, part);
+}
+
 function recordInput(side, input, fighter) {
-  if (input.down) rememberCommand(side, "down");
-  if (input.left) rememberCommand(side, fighter.facing === -1 ? "forward" : "back");
-  if (input.right) rememberCommand(side, fighter.facing === 1 ? "forward" : "back");
-  if (input.heavy) rememberCommand(side, "heavy");
-  if (input.special) rememberCommand(side, "special");
+  recordDirection(side, input, fighter);
+  if (input.punch) rememberCommand(side, "punch");
+  if (input.kick) rememberCommand(side, "kick");
   if (input.enhanced) rememberCommand(side, "enhanced");
 }
 
 function tryFinish(side, input) {
   if (state.phase !== "finish" || state.finishWinner !== side) return false;
-  let type = -1;
-  if (input.special && commandMatches(side, ["back", "down", "forward", "special"])) type = 1;
-  else if (input.heavy && commandMatches(side, ["down", "forward", "heavy"])) type = 0;
-  else if (input.final) type = commandHistory[side].some((item) => item.token === "special") ? 1 : 0;
-  if (type >= 0) {
-    finishRound(side, type);
-    return true;
-  }
-  return false;
+  if (!input.final) return false;
+  // Any one of LP / HP / LK / HK finishes: lights pick Finisher A, heavies pick B.
+  const type = state.graphicFatalities ? (input.finisherVariant === 1 ? 1 : 0) : 0;
+  finishRound(side, type);
+  return true;
 }
 
 function directionContext(fighter, input) {
@@ -2827,7 +2865,7 @@ const advancedActions = new Set([
   ...KIT_ACTIONS,
 ]);
 
-function beginAttack(fighter, action, input = {}, { reversal = false, force = false, cancelledFrom = "" } = {}) {
+function beginAttack(fighter, action, input = {}, { reversal = false, force = false, cancelledFrom = "", limb = "", backThrow = null } = {}) {
   if (!force && (fighter.attacking || fighter.stun > 0 || fighter.down || fighter.wakeupFrames > 0)) return false;
   const actionGroup = fighterActionGroup(action);
   if (actionGroup === "throw" && !fighter.grounded) return false;
@@ -2837,6 +2875,7 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     airborne: !fighter.grounded,
     crouching: fighter.crouch || Boolean(input.down),
     forwardHeld: direction.forwardHeld,
+    limb: limb || input.limb || "punch",
   };
   const kitMove = createFighterMove(fighter.kitId, action, moveContext);
   const gritCost = kitMove
@@ -2858,6 +2897,9 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   }
   fighter.attackSerial += 1;
   fighter.attacking.attackSerial = fighter.attackSerial;
+  if (actionGroup === "throw") {
+    fighter.attacking.backThrow = Boolean(backThrow ?? input.throwBack);
+  }
   const activeFlow = fighter.def.id === "ali"
     && fighter.rhythmStacks > 0
     && state.simulationTick <= fighter.rhythmExpiresFrame;
@@ -2958,8 +3000,14 @@ const bufferedActions = [
 ];
 
 function bufferActionInputs(fighter, input) {
+  const limbPayload = input.limb === "kick" ? { limb: "kick" } : null;
+  const throwPayload = input.throwBack ? { back: true } : null;
   for (const action of bufferedActions) {
-    if (input[action]) fighter.inputBuffer.push(action, state.simulationTick);
+    if (!input[action]) continue;
+    const payload = action === "light" || action === "heavy" ? limbPayload
+      : action === "throw" ? throwPayload
+        : null;
+    fighter.inputBuffer.push(action, state.simulationTick, payload);
   }
   fighter.inputBuffer.prune(state.simulationTick);
 }
@@ -2976,40 +3024,97 @@ function trackDirectionalPresses(fighter, input) {
   previous.right = Boolean(input.right);
 }
 
+const PROXIMITY_GRAB_RANGE = 104;
+
+function inProximityGrabRange(fighter, opponent) {
+  return Boolean(opponent)
+    && fighter.grounded
+    && opponent.grounded
+    && !opponent.down
+    && opponent.wakeupFrames <= 0
+    && opponent.hitstunFrames <= 0
+    && opponent.blockstunFrames <= 0
+    && opponent.throwInvulnerableFrames <= 0
+    && Math.abs(opponent.x - fighter.x) <= PROXIMITY_GRAB_RANGE;
+}
+
+/**
+ * SF2-style proximity throw: touching a valid opponent and pressing toward or
+ * away plus LP or LK grabs instead of throwing out the ordinary normal. Outside
+ * grab range the same press stays an ordinary normal, so there is no separate
+ * grab-whiff animation and no extra button.
+ */
+function applyProximityGrab(fighter, normalized) {
+  if (state.phase !== "fight") return;
+  if (!normalized.light || normalized.heavy || normalized.throw) return;
+  if (fighter.attacking || fighter.hitstunFrames > 0 || fighter.blockstunFrames > 0) return;
+  const direction = directionContext(fighter, normalized);
+  if (!direction.forwardHeld && !direction.backHeld) return;
+  if (!inProximityGrabRange(fighter, state.fighters[1 - fighter.side])) return;
+  normalized.throw = true;
+  normalized.throwBack = direction.backHeld;
+  normalized.light = false;
+  normalized.punch = false;
+  normalized.kick = false;
+}
+
 function prepareFighterInput(fighter, input) {
+  const side = fighter.side;
+  const finishing = state.phase === "finish" && state.finishWinner === side;
+  const source = input?.fourButton
+    ? resolveFourButtonInput(input, {
+      facing: fighter.facing,
+      style: activeControlStyle(side),
+      meter: fighter.meter,
+      finishing,
+      finishArmed: state.finishArmed[side],
+    })
+    : input;
+  const normalPress = Boolean(source.light || source.heavy);
+  const limb = source.limb === "kick" ? "kick" : "punch";
   const normalized = {
-    left: Boolean(input.left),
-    right: Boolean(input.right),
-    down: Boolean(input.down),
-    guard: Boolean(input.guard),
-    jump: Boolean(input.jump),
-    light: Boolean(input.light),
-    heavy: Boolean(input.heavy),
-    special: Boolean(input.special),
-    enhanced: Boolean(input.enhanced),
-    throw: Boolean(input.throw),
-    super: Boolean(input.super || (input.final && state.phase === "fight")),
-    final: Boolean(input.final),
+    left: Boolean(source.left),
+    right: Boolean(source.right),
+    down: Boolean(source.down),
+    guard: Boolean(source.guard),
+    jump: Boolean(source.jump),
+    light: Boolean(source.light),
+    heavy: Boolean(source.heavy),
+    special: Boolean(source.special),
+    enhanced: Boolean(source.enhanced),
+    throw: Boolean(source.throw),
+    throwBack: Boolean(source.throwBack),
+    super: Boolean(source.super || (source.final && state.phase === "fight")),
+    final: Boolean(source.final),
+    finisherVariant: Number.isInteger(source.finisherVariant) ? source.finisherVariant : 0,
+    limb,
+    punch: Boolean(source.punch ?? (normalPress && limb === "punch")),
+    kick: Boolean(source.kick ?? (normalPress && limb === "kick")),
   };
-  for (const action of advancedActions) normalized[action] = Boolean(normalized[action] || input[action]);
-  const controlStyle = state.mode === "online"
-    ? normalizeControlStyle(onlineSession.matchConfig?.controlStyles?.[fighter.side])
-    : state.controlStyle;
-  Object.assign(normalized, applyControlStyle(normalized, controlStyle, fighter.facing));
-  recordInput(fighter.side, normalized, fighter);
+  for (const action of advancedActions) normalized[action] = Boolean(normalized[action] || source[action]);
+  Object.assign(normalized, applyControlStyle(normalized, activeControlStyle(side), fighter.facing));
+  recordInput(side, normalized, fighter);
   if (state.phase === "fight") {
     const command = recognizeFighterCommand(
       fighter.kitId,
-      commandHistory[fighter.side],
+      commandHistory[side],
       state.simulationTick,
-    ) || recognizeCombatCommand(commandHistory[fighter.side], state.simulationTick);
+    ) || recognizeCombatCommand(commandHistory[side], state.simulationTick);
     const terminal = command?.terminal
       || (command?.action === "commandSpecial" ? "special" : "heavy");
-    if (command && normalized[terminal]) {
+    const affordable = command?.action !== "super" || fighter.meter >= GRIT_RULES.superCost;
+    if (command && affordable && normalized[terminal]) {
       normalized[command.action] = true;
-      normalized[terminal] = false;
-      commandHistory[fighter.side].splice(0, command.endIndex + 1);
+      normalized.punch = false;
+      normalized.kick = false;
+      normalized.light = false;
+      normalized.heavy = false;
+      normalized.enhanced = false;
+      commandHistory[side].splice(0, command.endIndex + 1);
     }
+    // A completed motion always beats the proximity grab shortcut, so close-range
+    // command specials stay reachable while touching an opponent.
+    applyProximityGrab(fighter, normalized);
     bufferActionInputs(fighter, normalized);
     trackDirectionalPresses(fighter, normalized);
     if (normalized.throw) fighter.lastThrowInputFrame = state.simulationTick;
@@ -3145,19 +3250,26 @@ function tryAttackCancel(fighter, input) {
   const actionGroup = fighterActionGroup(action);
   if (current.rhythmCancel && fighter.rhythmStacks < (current.rhythmCancelStacks || 2)) return false;
   if (!action || !canCancelAttack(current, actionGroup, fighter.attackFrame, fighter.attackConnected)) return false;
-  const moveContext = { airborne: !fighter.grounded, crouching: fighter.crouch, ...directionContext(fighter, input) };
+  const queuedLimb = fighter.inputBuffer.entries.find((entry) => entry.action === action)?.payload?.limb;
+  const moveContext = {
+    airborne: !fighter.grounded,
+    crouching: fighter.crouch,
+    limb: queuedLimb || input.limb || "punch",
+    ...directionContext(fighter, input),
+  };
   const gritCost = createFighterMove(fighter.kitId, action, moveContext)
     ? fighterActionCost(fighter.kitId, action, moveContext)
     : gritCostForAction(action);
   if (fighter.meter < gritCost) return false;
-  fighter.inputBuffer.consume(action, state.simulationTick);
+  const consumed = fighter.inputBuffer.consume(action, state.simulationTick);
+  const cancelLimb = consumed?.payload?.limb || queuedLimb || "";
   const previousMove = current.profileId;
   const voltageCancel = Boolean(current.rushCancel
     && ["special", "commandSpecial", "enhanced"].includes(actionGroup));
   const flowCancel = Boolean(current.rhythmCancel
     && fighter.rhythmStacks >= (current.rhythmCancelStacks || 2));
   fighter.attacking = null;
-  const started = beginAttack(fighter, action, input, { cancelledFrom: previousMove });
+  const started = beginAttack(fighter, action, input, { cancelledFrom: previousMove, limb: cancelLimb });
   if (!started) {
     fighter.attacking = current;
     return false;
@@ -3183,7 +3295,14 @@ function tryStartupChordOverride(fighter, input) {
     "enhancedCommandSpecial",
     "enhanced",
   ]);
+  // The super and enhanced chords are two buttons, so the first of the pair can
+  // land a frame early and start an ordinary normal. Let the chord take over
+  // during that normal's startup rather than eating the input.
   if (fighter.attackFrame <= 6
+    && ["heavy", "special"].includes(current.kind)
+    && fighter.inputBuffer.has("super", state.simulationTick)
+    && fighter.meter >= GRIT_RULES.superCost) action = "super";
+  else if (fighter.attackFrame <= 6
     && ["heavy", "special"].includes(current.kind)
     && bufferedEnhanced
     && fighter.meter >= GRIT_RULES.enhancedSpecialCost) action = bufferedEnhanced;
@@ -3191,10 +3310,13 @@ function tryStartupChordOverride(fighter, input) {
     && ["light", "heavy"].includes(current.kind)
     && fighter.inputBuffer.has("throw", state.simulationTick)) action = "throw";
   if (!action) return false;
-  fighter.inputBuffer.consume(action, state.simulationTick);
+  const consumedOverride = fighter.inputBuffer.consume(action, state.simulationTick);
   const previousMove = current.profileId;
   fighter.attacking = null;
-  const started = beginAttack(fighter, action, input, { cancelledFrom: previousMove });
+  const started = beginAttack(fighter, action, input, {
+    cancelledFrom: previousMove,
+    backThrow: action === "throw" ? Boolean(consumedOverride?.payload?.back) : null,
+  });
   if (!started) {
     fighter.attacking = current;
     return false;
@@ -3230,11 +3352,15 @@ function updateFighter(fighter, opponent, input, dt) {
     if (!fighter.grounded) {
       fighter.queuedDashDirection = 0;
       const bufferedAirAttack = fighter.inputBuffer.consume(["special", "heavy", "light"], state.simulationTick);
-      if (bufferedAirAttack) beginAttack(fighter, bufferedAirAttack.action, input);
+      if (bufferedAirAttack) {
+        beginAttack(fighter, bufferedAirAttack.action, input, { limb: bufferedAirAttack.payload?.limb });
+      }
     } else {
       fighter.crouch = input.down;
       fighter.guardHeight = fighter.crouch ? "low" : "high";
-      fighter.guarding = input.guard || direction.backHeld || input.down;
+      // SF2 directional guarding: hold away to block, down-away to crouch-block.
+      // Crouching alone never blocks and there is no dedicated guard button.
+      fighter.guarding = direction.backHeld || Boolean(input.guard);
       fighter.block = fighter.guarding;
 
       if (fighter.justWoke && fighter.inputBuffer.has("special", state.simulationTick)) {
@@ -3286,6 +3412,8 @@ function updateFighter(fighter, opponent, input, dt) {
         const bufferedAttack = fighter.inputBuffer.consume(attackActionPriority, state.simulationTick);
         if (bufferedAttack) beginAttack(fighter, bufferedAttack.action, input, {
           reversal: fighter.reversalWindowFrames > 0 && bufferedAttack.action === "special",
+          limb: bufferedAttack.payload?.limb,
+          backThrow: bufferedAttack.action === "throw" ? Boolean(bufferedAttack.payload?.back) : null,
         });
       }
     }
@@ -3729,7 +3857,10 @@ function hit(attacker, victim, attack, collision) {
     state.training.lastAdvantage = (victim.blockstunFrames || victim.hitstunFrames) - remainingRecovery;
     state.training.lastResult = blocked ? "BLOCK" : armored ? "ARMOR" : "HIT";
   }
-  victim.vx = attacker.facing * attack.push * (blocked ? 0.28 : armored ? 0.12 : 1);
+  // A back throw sends the victim behind the thrower, which is how corners get
+  // swapped in SF2. Everything else pushes along the attacker's facing.
+  const pushDirection = attack.backThrow ? -attacker.facing : attacker.facing;
+  victim.vx = pushDirection * attack.push * (blocked ? 0.28 : armored ? 0.12 : 1);
   victim.guardHeight = victim.crouch ? "low" : victim.guardHeight;
   victim.lastHitResult = blocked ? `blocked-${attack.level}` : armored ? "armor" : counter ? "counter" : attack.level;
   if (!blocked && !armored) {
@@ -3818,7 +3949,7 @@ function checkKnockout() {
     attacker.attacking = null;
     duckMusic(0.34, 1900);
     announce("FINISH THEM", "PRESS FB  /  ↓ → HEAVY  /  ← ↓ → SPECIAL", 2.2);
-    if (!rollbackResimulating) $(".touch-final").classList.add("ready");
+    if (!rollbackResimulating) setTouchPrompt("final");
     updateHud();
     sound("finish");
 }
@@ -5313,10 +5444,22 @@ function applyPerformanceSettings() {
   $("#pausePerformance").textContent = `${state.visualQuality.toUpperCase()} VISUALS · ${state.performance.id.toUpperCase()} PROFILE · ${state.performance.particleBudget} FX BUDGET`;
 }
 
+// The movement pad is three rows tall now, so on a short landscape phone the
+// button size has to come from the available height rather than a fixed 56px.
+const TOUCH_PAD_ROWS = 3;
+const TOUCH_PAD_GAP = 5;
+const TOUCH_PAD_HEIGHT_SHARE = 0.56;
+
+function touchButtonSize() {
+  const available = (window.innerHeight || 720) * TOUCH_PAD_HEIGHT_SHARE - TOUCH_PAD_GAP * (TOUCH_PAD_ROWS - 1);
+  const fits = available / TOUCH_PAD_ROWS;
+  return Math.round(clamp(Math.min(56, fits) * state.touchSettings.scale, 34, 72));
+}
+
 function applyTouchSettings() {
   state.touchSettings.handedness = state.touchSettings.handedness === "left" ? "left" : "standard";
   document.body.classList.toggle("touch-left", state.touchSettings.handedness === "left");
-  document.documentElement.style.setProperty("--touch-button-size", `${Math.round(56 * state.touchSettings.scale)}px`);
+  document.documentElement.style.setProperty("--touch-button-size", `${touchButtonSize()}px`);
   document.documentElement.style.setProperty("--touch-opacity", String(state.touchSettings.opacity));
   $("#touchHandednessSelect").value = state.touchSettings.handedness;
   $("#touchScale").value = String(Math.round(state.touchSettings.scale * 100));
@@ -5331,17 +5474,22 @@ function saveBindings() {
   localStorage.setItem("final-blow-pad-map", JSON.stringify(padMap));
 }
 
+function activePadLabelSet() {
+  const pad = getPad(0) || getPad(1);
+  return detectPadLabelSet(pad?.id || "");
+}
+
 function renderBindings() {
   const labels = {
-    left: "LEFT", right: "RIGHT", jump: "JUMP", down: "CROUCH", guard: "GUARD",
-    light: "LIGHT", heavy: "HEAVY", special: "SPECIAL", final: "SUPER / FB",
+    left: "LEFT", right: "RIGHT", up: "UP / JUMP", down: "DOWN / CROUCH",
+    lp: BUTTON_NAMES.lp, hp: BUTTON_NAMES.hp, lk: BUTTON_NAMES.lk, hk: BUTTON_NAMES.hk,
   };
   for (const player of [0, 1]) {
     const container = $(`#p${player + 1}KeyBindings`);
     container.innerHTML = REMAPPABLE_ACTIONS.map((action) => `<button type="button" class="binding-button${pendingKeyBinding?.player === player && pendingKeyBinding.action === action ? " listening" : ""}" data-bind-player="${player}" data-bind-action="${action}"><span>${labels[action]}</span><b>${pendingKeyBinding?.player === player && pendingKeyBinding.action === action ? "PRESS KEY" : formatKeyCode(keyMaps[player][action])}</b></button>`).join("");
   }
-  const padActions = ["jump", "guard", "light", "heavy", "special", "final"];
-  $("#padBindings").innerHTML = padActions.map((action) => `<label>${labels[action]}<select data-pad-action="${action}">${PAD_BUTTON_LABELS.map((label, button) => `<option value="${button}"${padMap[action] === button ? " selected" : ""}>${label}</option>`).join("")}</select></label>`).join("");
+  const labelSet = activePadLabelSet();
+  $("#padBindings").innerHTML = ATTACK_BUTTONS.map((action) => `<label>${BUTTON_LABELS[action]} · ${labels[action]}<select data-pad-action="${action}">${PAD_BUTTON_LABELS.map((_, button) => `<option value="${button}"${padMap[action] === button ? " selected" : ""}>${padButtonLabel(button, labelSet)}</option>`).join("")}</select></label>`).join("");
   $$('[data-bind-player]').forEach((button) => button.addEventListener("click", () => {
     pendingKeyBinding = { player: Number(button.dataset.bindPlayer), action: button.dataset.bindAction };
     renderBindings();
@@ -5944,24 +6092,31 @@ $("#fullscreenButton").addEventListener("click", () => {
 });
 window.addEventListener("resize", () => {
   syncOrientationGate();
+  document.documentElement.style.setProperty("--touch-button-size", `${touchButtonSize()}px`);
   if (state.visualQuality === "auto") applyPerformanceSettings();
 });
-window.addEventListener("orientationchange", syncOrientationGate);
+window.addEventListener("orientationchange", () => {
+  syncOrientationGate();
+  document.documentElement.style.setProperty("--touch-button-size", `${touchButtonSize()}px`);
+});
 document.addEventListener("fullscreenchange", syncOrientationGate);
 
 $$("[data-touch]").forEach((button) => {
-  const action = button.dataset.touch;
+  // A pad button may map to two tokens at once, e.g. the up-forward corner.
+  const tokens = button.dataset.touch.split(/\s+/).filter(Boolean);
   const start = (event) => {
     event.preventDefault();
-    touch.add(action);
-    touch.add(`${action}:pressed`);
+    for (const token of tokens) {
+      touch.add(token);
+      touch.add(`${token}:pressed`);
+    }
     button.classList.add("active");
     if (state.touchSettings.haptics && event.isTrusted) navigator.vibrate?.(12);
     unlockAudio();
   };
   const end = (event) => {
     event.preventDefault();
-    touch.delete(action);
+    for (const token of tokens) touch.delete(token);
     button.classList.remove("active");
   };
   button.addEventListener("pointerdown", start);
@@ -5971,7 +6126,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.0g-fighter-audio-edition",
+  version: "1.1a-four-button-edition",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -6343,7 +6498,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       $("#touchControls").classList.remove("cinematic");
       showScreen("fight");
       updateHud();
-      $(".touch-final").classList.add("ready");
+      setTouchPrompt("final");
     },
     graphicFatality(id, type = 0, seconds = 4.7) {
       this.ready(id, type);

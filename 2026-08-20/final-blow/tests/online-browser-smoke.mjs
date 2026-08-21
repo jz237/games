@@ -318,7 +318,7 @@ try {
   })()`);
   await guest.client.send("Input.dispatchKeyEvent", { type: "keyUp", key: "a", code: "KeyA", windowsVirtualKeyCode: 65 });
   await evaluate(host.client, `(() => {
-    const button = document.querySelector('[data-touch="light"]');
+    const button = document.querySelector('[data-touch="lp"]');
     button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 12 }));
     button.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 12 }));
     return true;
