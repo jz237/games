@@ -131,9 +131,11 @@ import {
 import {
   CROWD_LAYERS,
   POSTURES,
+  TAILGATE_POSTURES,
   createCrowd,
   crowdPosition,
   crowdSnapshot,
+  scufflePhase,
 } from "./engine/crowd.mjs";
 import {
   STAGE_WEAPONS,
@@ -4984,8 +4986,8 @@ function drawStage(time) {
   ctx.fillStyle = shade;
   ctx.fillRect(0, 0, W, H);
 
-  if (state.stage === "kensington") drawCrowd(time);
-  else drawVetAtmosphere(time);
+  drawCrowd(time);
+  if (state.stage === "vet") drawVetAtmosphere(time);
 
   ctx.fillStyle = "rgba(6,8,11,.26)";
   ctx.fillRect(0, FLOOR, W, H - FLOOR);
@@ -4999,7 +5001,9 @@ function drawStage(time) {
   }
 }
 
-const POSTURE_BY_ID = Object.fromEntries(POSTURES.map((posture) => [posture.id, posture]));
+const POSTURE_BY_ID = Object.fromEntries(
+  [...POSTURES, ...TAILGATE_POSTURES].map((posture) => [posture.id, posture]),
+);
 
 function resetCrowd() {
   state.crowd = createCrowd(state.stage, { seed: hashSeed(state.matchSeed, state.round) });
@@ -5090,6 +5094,48 @@ function drawPedestrian(person, layer, x, gait, paused, reaction) {
     ctx.fillRect(person.bagSide * 13 - 5, hipY + 2, 11, 15);
   }
 
+  // Tailgate props ride in the raised hand: cups, cans, flags and handmade signs.
+  if (person.prop && layer.detail !== "low") {
+    const handX = swing * 14 + shoulderHalf + 4;
+    const handY = hipY + 12;
+    ctx.save();
+    ctx.translate(handX, handY);
+    if (person.prop === "cup") {
+      ctx.fillStyle = "#d8dde2";
+      ctx.beginPath();
+      ctx.moveTo(-4, -9); ctx.lineTo(4, -9); ctx.lineTo(3, 2); ctx.lineTo(-3, 2);
+      ctx.closePath(); ctx.fill();
+    } else if (person.prop === "can") {
+      ctx.fillStyle = "#a6adb4";
+      ctx.fillRect(-3.5, -10, 7, 11);
+      ctx.fillStyle = person.accent;
+      ctx.fillRect(-3.5, -6, 7, 3);
+    } else if (person.prop === "flag") {
+      ctx.strokeStyle = "#8d949b";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, 4); ctx.lineTo(0, -34); ctx.stroke();
+      ctx.fillStyle = person.accent;
+      ctx.beginPath();
+      ctx.moveTo(1, -34); ctx.lineTo(22, -28); ctx.lineTo(1, -20);
+      ctx.closePath(); ctx.fill();
+    } else if (person.prop === "sign") {
+      ctx.fillStyle = "#e6e9ec";
+      ctx.fillRect(-2, -34, 26, 18);
+      ctx.strokeStyle = "#1c4f42";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-2, -34, 26, 18);
+      // Hand-scrawled marks, never real text or a logo.
+      ctx.beginPath();
+      ctx.moveTo(2, -28); ctx.lineTo(20, -28);
+      ctx.moveTo(2, -23); ctx.lineTo(14, -23);
+      ctx.stroke();
+      ctx.strokeStyle = "#8d949b";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(11, -16); ctx.lineTo(11, 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // Neck and head, dropped forward for the hunched postures.
   ctx.strokeStyle = "#7d6c5e";
   ctx.lineWidth = 5 * person.width;
@@ -5108,6 +5154,10 @@ function drawPedestrian(person, layer, x, gait, paused, reaction) {
   ctx.strokeStyle = "rgba(8,11,16,.5)";
   ctx.lineWidth = 1.8;
   ctx.stroke();
+  if (person.facePaint && layer.detail === "high") {
+    ctx.fillStyle = "#1c4f42";
+    ctx.fillRect(-8 * person.width, -3, 16 * person.width, 3.5);
+  }
   if (person.hasHood) {
     ctx.fillStyle = person.coat;
     ctx.beginPath();
@@ -5121,6 +5171,165 @@ function drawPedestrian(person, layer, x, gait, paused, reaction) {
   ctx.restore();
   ctx.restore();
   ctx.restore();
+}
+
+// One rowdy background scuffle. Readable and physical, never graphic: shoving,
+// shirt-grabbing, wild misses, wrestling, friends pulling people apart.
+function drawScuffle(group, frame, centre, reaction) {
+  const phase = scufflePhase(group, frame);
+  const beat = Math.sin(phase * Math.PI * 2);
+  const clash = Math.max(0, Math.sin(phase * Math.PI * 2 - 0.6));
+  const drawX = group.x + (centre - W * 0.5) * -0.2;
+  if (drawX < -110 || drawX > W + 110) return;
+
+  ctx.save();
+  ctx.translate(drawX, group.y);
+  ctx.scale(group.scale * group.flip, group.scale);
+  ctx.globalAlpha = 0.82;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  const brawler = (offsetX, lean, armReach, shirt, tilt = 0) => {
+    ctx.save();
+    ctx.translate(offsetX, 0);
+    ctx.rotate(tilt);
+    ctx.strokeStyle = "#232a30";
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.moveTo(-3, -46); ctx.lineTo(-9, 0);
+    ctx.moveTo(3, -46); ctx.lineTo(10, 0);
+    ctx.stroke();
+    ctx.save();
+    ctx.translate(0, -46);
+    ctx.rotate(lean);
+    ctx.translate(0, 46);
+    ctx.fillStyle = shirt;
+    ctx.beginPath();
+    ctx.moveTo(-11, -88); ctx.lineTo(11, -88); ctx.lineTo(8, -44); ctx.lineTo(-8, -44);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "rgba(8,11,16,.5)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.strokeStyle = shirt;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(9, -84); ctx.lineTo(armReach, -66);
+    ctx.moveTo(-9, -84); ctx.lineTo(-armReach * 0.4, -52);
+    ctx.stroke();
+    ctx.fillStyle = "#8d7a69";
+    ctx.beginPath();
+    ctx.ellipse(2, -100, 8, 9.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.restore();
+  };
+
+  const swing = group.reach * (0.4 + clash * 0.6) * (1 + reaction * 0.25);
+  switch (group.kind) {
+    case "argue":
+      brawler(-16, 0.2 + beat * 0.06, swing * 0.7, group.shirts[0]);
+      brawler(18, -0.2 - beat * 0.06, -swing * 0.7, group.shirts[1], 0.04);
+      break;
+    case "shove":
+      brawler(-18 - clash * 8, 0.26, swing, group.shirts[0]);
+      brawler(20 + clash * 12, -0.3, -swing * 0.4, group.shirts[1], -clash * 0.16);
+      break;
+    case "shirtgrab":
+      brawler(-13, 0.3, swing * 0.55, group.shirts[0]);
+      brawler(14, -0.32, -swing * 0.55, group.shirts[1], beat * 0.08);
+      break;
+    case "swing":
+      brawler(-20, 0.16 + clash * 0.2, swing * 1.3, group.shirts[0]);
+      brawler(24, -0.34, -swing * 0.3, group.shirts[1], -clash * 0.22);
+      break;
+    case "wrestle":
+      brawler(-10, 0.44, swing * 0.4, group.shirts[0], beat * 0.1);
+      brawler(11, -0.46, -swing * 0.4, group.shirts[1], -beat * 0.1);
+      break;
+    case "separate":
+      brawler(-26, 0.3, swing, group.shirts[0]);
+      brawler(26, -0.3, -swing, group.shirts[1]);
+      // The friend in the middle, arms out, holding them apart.
+      brawler(0, -0.05, swing * 0.9, group.shirts[2], 0);
+      break;
+    case "tableflip": {
+      brawler(-24, 0.34, swing, group.shirts[0]);
+      brawler(26, -0.24, -swing * 0.5, group.shirts[1], clash * 0.2);
+      const lift = clash * 26;
+      ctx.save();
+      ctx.translate(2, -22 - lift);
+      ctx.rotate(clash * 0.5);
+      ctx.fillStyle = "#6b7078";
+      ctx.fillRect(-30, -6, 60, 7);
+      ctx.strokeStyle = "#4e545b";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-22, 1); ctx.lineTo(-26, 20);
+      ctx.moveTo(22, 1); ctx.lineTo(26, 20);
+      ctx.stroke();
+      ctx.restore();
+      break;
+    }
+    default:
+      // celebrate
+      brawler(-22, -0.1, -swing * 1.2, group.shirts[0]);
+      brawler(0, -0.06, swing * 1.2, group.shirts[1]);
+      brawler(23, -0.12, -swing, group.shirts[2]);
+  }
+  // A puff of dust at the peak of the clash so the scuffle reads as a fight
+  // rather than two people standing close together.
+  if (clash > 0.72) {
+    ctx.globalAlpha = (clash - 0.72) * 2.2;
+    ctx.fillStyle = "rgba(214,206,190,.55)";
+    for (let index = 0; index < 4; index += 1) {
+      const puffX = (index - 1.5) * 13;
+      const puffY = -18 - Math.abs(Math.sin(phase * 9 + index)) * 12;
+      ctx.beginPath();
+      ctx.arc(puffX, puffY, 5 + index, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// Coolers, folding tables and grills the tailgate gathers around.
+function drawTailgateProps(frame, centre) {
+  const spots = [180, 470, 760, 1050];
+  for (let index = 0; index < spots.length; index += 1) {
+    const x = spots[index] + (centre - W * 0.5) * -0.14;
+    if (x < -80 || x > W + 80) continue;
+    const y = 498 + (index % 2) * 16;
+    ctx.save();
+    ctx.globalAlpha = 0.8;
+    ctx.translate(x, y);
+    if (index % 2 === 0) {
+      ctx.fillStyle = "#c3cad0";
+      ctx.fillRect(-22, -20, 44, 20);
+      ctx.fillStyle = "#1c4f42";
+      ctx.fillRect(-22, -24, 44, 5);
+    } else {
+      ctx.fillStyle = "#4a5057";
+      ctx.fillRect(-20, -26, 40, 6);
+      ctx.strokeStyle = "#3a4046";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-14, -20); ctx.lineTo(-17, 2);
+      ctx.moveTo(14, -20); ctx.lineTo(17, 2);
+      ctx.stroke();
+      // Grill smoke.
+      const smoke = 12 + Math.sin(frame * 0.03 + index) * 5;
+      const gradient = ctx.createRadialGradient(0, -40, 2, 0, -40, smoke * 2.4);
+      gradient.addColorStop(0, "rgba(214,222,228,.2)");
+      gradient.addColorStop(1, "rgba(214,222,228,0)");
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(0, -40, smoke * 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawCrowd(time) {
@@ -5139,7 +5348,24 @@ function drawCrowd(time) {
   }
   ctx.globalAlpha = 1;
 
-  // Street life behind the crowd: the El train and drifting litter.
+  for (const group of crowd.scuffles || []) drawScuffle(group, frame, centre, reaction);
+  if (crowd.variant === "tailgate") {
+    drawTailgateProps(frame, centre);
+    // Cups thrown into the air when the crowd is stirred hardest.
+    if (reaction > 0.5) {
+      ctx.globalAlpha = Math.min(0.7, (reaction - 0.5) * 1.6);
+      ctx.fillStyle = "#d8dde2";
+      for (let index = 0; index < 14; index += 1) {
+        const cupX = ((index * 97 + frame * 2.4) % (W + 60)) - 30;
+        const cupY = 470 - Math.abs(Math.sin(frame * 0.05 + index)) * 90;
+        ctx.fillRect(cupX, cupY, 6, 8);
+      }
+      ctx.globalAlpha = 1;
+    }
+    return;
+  }
+
+  // Street life behind the K&A crowd: the El train and drifting litter.
   const trainX = ((time * 0.08) % (W + 650)) - 500;
   ctx.fillStyle = "rgba(18,31,40,.7)";
   ctx.fillRect(trainX, 154, 430, 58);
@@ -7575,7 +7801,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.1i-ka-crowd-edition",
+  version: "1.1j-tailgate-edition",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);

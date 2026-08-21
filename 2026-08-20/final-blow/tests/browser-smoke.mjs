@@ -306,7 +306,7 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.1I/);
+  assert.match(title.build, /1\.1J/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -324,7 +324,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.1i-ka-crowd-edition');
+  assert.equal(title.engineVersion, '1.1j-tailgate-edition');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -1352,6 +1352,42 @@ try {
   }
   assert.deepEqual(crowdProbe.rebuilt.layers, crowdProbe.first.layers, "the crowd must rebuild deterministically");
 
+  // The Vet is a rowdy bird-football tailgate: a dense fan crowd with drinking
+  // postures and several simultaneous scuffles, all deterministic.
+  const tailgate = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'donald');
+    window.__finalBlowQa.stage('vet');
+    const samples = [];
+    for (let step = 0; step < 8; step += 1) {
+      window.__finalBlowQa.step(1.5);
+      samples.push(window.__finalBlowEngine.snapshot().crowd);
+    }
+    window.__finalBlowQa.stage('kensington');
+    const street = window.__finalBlowEngine.snapshot().crowd;
+    window.__finalBlowQa.stage('vet');
+    const rebuilt = window.__finalBlowEngine.snapshot().crowd;
+    return { samples, street, rebuilt };
+  })()`);
+  for (const sample of tailgate.samples) {
+    assert.equal(sample.variant, "tailgate");
+    assert.ok(sample.visible >= 25, `the tailgate must stay dense, saw ${sample.visible}`);
+    assert.ok(sample.scuffles >= 3, `several scuffles must be running, saw ${sample.scuffles}`);
+    assert.ok(sample.scuffleKinds.length >= 3, "scuffles must use different fight loops");
+    const drinking = ["drink", "chug", "toast", "pour", "stumble"]
+      .reduce((total, id) => total + (sample.postures[id] || 0), 0);
+    assert.ok(
+      drinking / sample.visible > 0.4,
+      `the lot must be dominated by drinking, got ${Math.round(drinking / sample.visible * 100)}%`,
+    );
+  }
+  assert.equal(tailgate.street.variant, "street", "K&A keeps its own street crowd");
+  assert.equal(tailgate.street.scuffles, 0, "the street crowd has no tailgate scuffles");
+  assert.deepEqual(
+    tailgate.rebuilt.scuffleKinds,
+    tailgate.samples[0].scuffleKinds,
+    "the tailgate must rebuild deterministically",
+  );
+
   // The crowd reacts to a super and then settles back to its routes.
   const crowdReaction = await evaluate(client, `(() => {
     window.__finalBlowQa.fight('deathblow', 'jez');
@@ -2244,7 +2280,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.1i/);
+  assert.match(offlineCache.name, /final-blow-offline-1\.1j/);
   assert.ok(offlineCache.entries >= 156);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasRollback, true);
@@ -2271,8 +2307,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.1I/);
-  assert.equal(offlineBoot.version, '1.1i-ka-crowd-edition');
+  assert.match(offlineBoot.build, /1\.1J/);
+  assert.equal(offlineBoot.version, '1.1j-tailgate-edition');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,

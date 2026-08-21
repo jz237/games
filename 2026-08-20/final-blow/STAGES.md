@@ -56,3 +56,47 @@ Figures are drawn with plain canvas primitives, culled the moment their
 parallaxed position leaves the frame, and drop bag and hat detail on the far
 layer. The browser suite asserts the crowd stays at 25 or more visible on the
 844x390 landscape target as well as on desktop.
+
+## The Vet Parking Lot
+
+The same crowd engine drives a completely different scene. `STAGE_CROWD_VARIANT`
+maps the Vet to the **tailgate** variant, which swaps the posture set, the palette
+and adds looping background fights.
+
+### The fans
+
+Eight tailgate postures replace the street set, weighted so **drinking, chugging,
+toasting, pouring and stumbling make up over 60%** of the lot: people raise cups,
+tip cans back, clink toasts, pour drinks, wave flags, hold up handmade signs and
+mill about. Props are drawn in the raised hand — plastic cups, cans, flags on
+poles and hand-scrawled signs whose marks are deliberately abstract scribbles.
+
+The palette is a wholly original fictional bird team: deep greens, whites,
+silvers and blacks, with a third of the crowd wearing face paint stripes. **There
+are no official Philadelphia Eagles, NFL or sponsor marks anywhere** — no real
+logos, no real wordmarks, no reproduced merchandise. The identity comes entirely
+from colour, face paint, flags and handmade signage.
+
+### The scuffles
+
+Five simultaneous fight loops run at any time, drawn from eight distinct kinds:
+arguing, shoving, shirt-grabbing, a wild swing, wrestling, a friend holding two
+people apart, a table bump and flip, and post-fight celebration. Each group has
+its own place, scale, mirror, loop period, playback speed and phase offset, so no
+two beat together and the lot never looks like one animation played in unison. A
+puff of dust at the peak of each clash makes them read as fights rather than
+people standing close. The violence stays rowdy and physical — shoving, grabbing
+and missing — with no graphic detail.
+
+### Props and reactions
+
+Coolers, folding tables and grills are placed along the lot, with the grills
+giving off drifting smoke. When the crowd is stirred hardest — a super, or the
+finishing prompt — cups are thrown into the air across the whole lot, then
+everything settles back to its routes.
+
+### Not in the way
+
+Every fan, scuffle and prop is drawn before the fighters, sits above the fight
+floor line, and has no simulation presence at all. Nothing can enter combat
+collision space or cover the fighters or HUD.
