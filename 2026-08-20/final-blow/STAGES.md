@@ -152,3 +152,47 @@ rather than an API key. Both stages currently draw from the existing four origin
 soundtracks through the normal rotation, and their ambience is rendered visually
 rather than as an audio bed. Rotating the ElevenLabs key would unblock a dedicated
 track and ambience mix for each.
+
+## Cruise-Ship Pool Deck
+
+The fight happens on the open deck directly in front of the ship's main pool:
+turquoise water, tiled edging, chrome handrails and ladders, rows of white
+loungers with folded towels, closed parasols, an open bar with stools and hanging
+glasses, a curved water slide, three tiers of balconies and railings, lifeboats, a
+funnel and the ocean horizon beyond.
+
+### The passengers
+
+This is the densest crowd in the game: **44 passengers, at least 39 visible at
+once**, across the far, mid and near layers.
+
+Nine poolside postures carry the comedic high-chaos budget-vacation energy through
+behaviour and styling rather than any branding: nursing an absurd souvenir cup with
+a straw, filming everything on a phone, queueing impatiently, staggering along
+overpacked, throwing a towel down to claim a lounger, dancing, stumbling, carrying
+an overloaded plate, and staff squeezing through the crowd. The palette is loud
+mismatched resort wear — clashing oranges, cyans, pinks, yellows, greens and
+purples. **No Spirit Airlines, Nissan, cruise-line, alcohol or other corporate
+marks appear anywhere.**
+
+### The incidents
+
+Six concurrent incident loops run at any time from six distinct kinds:
+cannonballs, splashing, arguing over a lounger, cutting the bar line, spilling a
+frozen drink and staff squeezing past. Each has its own place, scale, mirror, loop
+period, speed and phase offset, so nothing beats together.
+
+On top of that: splash plumes rising out of the pool on independent rhythms, a
+rider running the water slide, and heat shimmer over the hot deck that intensifies
+when the crowd is stirred.
+
+### Safety and framing
+
+The playable floor is clearly separated from the pool and every passenger. As on
+every other stage, the crowd is drawn before the fighters, has no simulation
+presence, and cannot enter combat collision space or cover the fighters or HUD.
+The stage shares the same floor line and bounds as the rest of the roster.
+
+Stage weapon: the **souvenir cup** — the backlog left this one TBD, and a giant
+frozen-drink cup is the most on-theme object on a budget pool deck: slow, wobbly,
+a big soft hitbox and a slushy burst that briefly slows whoever wears it.

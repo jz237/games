@@ -306,7 +306,7 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.1K/);
+  assert.match(title.build, /1\.1/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -324,7 +324,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.1k-four-stages-edition');
+  assert.equal(title.engineVersion, '1.1-philly-after-dark');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -1393,7 +1393,7 @@ try {
   const newStages = await evaluate(client, `(() => {
     const cards = [...document.querySelectorAll('.stage-card')].map((card) => card.dataset.stage);
     const out = { cards, stages: {} };
-    for (const stage of ['wildwood', 'buffet']) {
+    for (const stage of ['wildwood', 'buffet', 'cruise']) {
       window.__finalBlowQa.fight('benny', 'ali');
       window.__finalBlowQa.stage(stage);
       window.__finalBlowQa.positions(300, 1000);
@@ -1412,13 +1412,33 @@ try {
     out.demoStages = window.__finalBlowQa.demoStages();
     return out;
   })()`);
-  assert.deepEqual(newStages.cards, ["kensington", "vet", "wildwood", "buffet"], "both new stages are selectable");
+  assert.deepEqual(
+    newStages.cards,
+    ["kensington", "vet", "wildwood", "buffet", "cruise"],
+    "every stage is selectable",
+  );
   assert.match(newStages.stages.wildwood.ticker, /WILDWOOD BOARDWALK/);
   assert.match(newStages.stages.buffet.ticker, /CRAB-LEG SECTION/);
   assert.equal(newStages.stages.wildwood.crowd.variant, "boardwalk");
   assert.equal(newStages.stages.buffet.crowd.variant, "buffet");
   assert.equal(newStages.stages.wildwood.weapon, "pigeon", "Wildwood carries the dead pigeon");
   assert.equal(newStages.stages.buffet.weapon, "tongs", "the buffet carries the serving tongs");
+  assert.equal(newStages.stages.cruise.weapon, "souvenir-cup", "the pool deck carries the souvenir cup");
+  assert.match(newStages.stages.cruise.ticker, /MAIN POOL DECK/);
+  assert.equal(newStages.stages.cruise.crowd.variant, "poolside");
+  // The pool deck is the densest crowd in the game: 35+ passengers at once.
+  assert.ok(
+    newStages.stages.cruise.crowd.visible >= 35,
+    `the pool deck must hold 35+ passengers, saw ${newStages.stages.cruise.crowd.visible}`,
+  );
+  assert.ok(
+    newStages.stages.cruise.crowd.scuffles >= 5,
+    "the pool deck must run several concurrent incidents",
+  );
+  assert.ok(
+    newStages.stages.cruise.crowd.scuffleKinds.length >= 3,
+    "pool-deck incidents must use different loops",
+  );
   for (const [id, stage] of Object.entries(newStages.stages)) {
     assert.ok(stage.crowd.visible >= 20, `${id} must feel occupied, saw ${stage.crowd.visible}`);
     assert.equal(stage.floor, 600, `${id} must share the same floor line`);
@@ -1426,7 +1446,7 @@ try {
   }
   assert.deepEqual(
     [...newStages.demoStages].sort(),
-    ["buffet", "kensington", "vet", "wildwood"],
+    ["buffet", "cruise", "kensington", "vet", "wildwood"],
     "Watch Demo must shuffle through every stage",
   );
 
@@ -2322,7 +2342,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.1k/);
+  assert.match(offlineCache.name, /final-blow-offline-1\.1/);
   assert.ok(offlineCache.entries >= 156);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasRollback, true);
@@ -2349,8 +2369,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.1K/);
-  assert.equal(offlineBoot.version, '1.1k-four-stages-edition');
+  assert.match(offlineBoot.build, /1\.1/);
+  assert.equal(offlineBoot.version, '1.1-philly-after-dark');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2434,6 +2454,18 @@ try {
     return window.__finalBlowEngine.snapshot().crowd;
   })()`);
   assert.ok(mobileCrowd.visible >= 25, `the crowd must stay dense on 844x390, saw ${mobileCrowd.visible}`);
+
+  const mobilePoolDeck = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.stage('cruise');
+    window.__finalBlowQa.step(2.5);
+    return window.__finalBlowEngine.snapshot().crowd;
+  })()`);
+  assert.ok(
+    mobilePoolDeck.visible >= 35,
+    `the pool deck must hold 35+ passengers on 844x390, saw ${mobilePoolDeck.visible}`,
+  );
+  await evaluate(client, `window.__finalBlowQa.stage('kensington')`);
 
   const mobileFraming = await evaluate(client, FIGHTER_FRAMING_PROBE);
   assertFighterFraming(mobileFraming, "844x390 landscape");

@@ -131,6 +131,7 @@ import {
 import {
   BOARDWALK_POSTURES,
   BUFFET_POSTURES,
+  POOLSIDE_POSTURES,
   CROWD_LAYERS,
   POSTURES,
   TAILGATE_POSTURES,
@@ -543,6 +544,11 @@ const stages = {
     name: "CHINESE BUFFET · CRAB LEGS",
     ticker: "CRAB-LEG SECTION // ALL YOU CAN EAT // 11PM",
     src: "assets/chinese-buffet.webp",
+  },
+  cruise: {
+    name: "CRUISE-SHIP POOL DECK",
+    ticker: "MAIN POOL DECK // DECK 11 // SAILING SOMEWHERE",
+    src: "assets/cruise-pool-deck.webp",
   },
 };
 
@@ -5014,7 +5020,7 @@ function drawStage(time) {
 }
 
 const POSTURE_BY_ID = Object.fromEntries(
-  [...POSTURES, ...TAILGATE_POSTURES, ...BOARDWALK_POSTURES, ...BUFFET_POSTURES]
+  [...POSTURES, ...TAILGATE_POSTURES, ...BOARDWALK_POSTURES, ...BUFFET_POSTURES, ...POOLSIDE_POSTURES]
     .map((posture) => [posture.id, posture]),
 );
 
@@ -5145,6 +5151,29 @@ function drawPedestrian(person, layer, x, gait, paused, reaction) {
         ctx.fillRect(-1.4, -8, 2.8, 9);
         ctx.restore();
       }
+    } else if (person.prop === "bigcup") {
+      // An absurd souvenir cup, straw and all.
+      ctx.fillStyle = person.accent;
+      ctx.beginPath();
+      ctx.moveTo(-7, -20); ctx.lineTo(7, -20); ctx.lineTo(5, 3); ctx.lineTo(-5, 3);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#ff5aa8";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(3, -20); ctx.lineTo(9, -32); ctx.stroke();
+    } else if (person.prop === "phone") {
+      ctx.fillStyle = "#1c2026";
+      ctx.fillRect(-3, -20, 7, 12);
+      ctx.fillStyle = "#7fe9ff";
+      ctx.fillRect(-2, -19, 5, 10);
+    } else if (person.prop === "bag") {
+      ctx.fillStyle = person.accent;
+      ctx.fillRect(-8, -6, 18, 20);
+      ctx.strokeStyle = "#2b3138";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(1, -6, 7, Math.PI, 0); ctx.stroke();
+    } else if (person.prop === "towel") {
+      ctx.fillStyle = person.accent;
+      ctx.fillRect(-4, -14, 16, 22);
     } else if (person.prop === "tongs") {
       ctx.strokeStyle = "#d5dce8";
       ctx.lineWidth = 2.2;
@@ -5432,6 +5461,44 @@ function drawBuffetAtmosphere(frame, centre, reaction) {
   ctx.restore();
 }
 
+// Splashes in the pool, traffic on the slide and heat shimmer over the deck.
+function drawPoolDeckAtmosphere(frame, centre, reaction) {
+  ctx.save();
+  // Splash plumes where the pool sits behind the fight floor.
+  for (let index = 0; index < 5; index += 1) {
+    const cycle = (frame * (0.9 + index * 0.25) + index * 137) % 260;
+    if (cycle > 60) continue;
+    const life = cycle / 60;
+    const x = 220 + index * 210 + (centre - W * 0.5) * -0.12;
+    if (x < -60 || x > W + 60) continue;
+    ctx.globalAlpha = (1 - life) * 0.65;
+    ctx.fillStyle = "#dff4ff";
+    for (let drop = 0; drop < 7; drop += 1) {
+      const angle = (drop / 7) * Math.PI - Math.PI;
+      const spread = life * 46;
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(angle) * spread, 452 + Math.sin(angle) * spread * 0.5, 4 - life * 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  // A rider running the slide.
+  const slideT = (frame % 300) / 300;
+  ctx.globalAlpha = 0.8;
+  ctx.fillStyle = "#ffd24a";
+  ctx.beginPath();
+  ctx.arc(150 + slideT * 120 + (centre - W * 0.5) * -0.1, 300 + Math.sin(slideT * Math.PI) * 90, 7, 0, Math.PI * 2);
+  ctx.fill();
+  // Heat shimmer over the hot deck, stronger when the crowd is stirred.
+  const shimmer = ctx.createLinearGradient(0, 470, 0, 560);
+  shimmer.addColorStop(0, "rgba(255,244,214,0)");
+  shimmer.addColorStop(0.5, `rgba(255,244,214,${0.05 + reaction * 0.05 + Math.sin(frame * 0.02) * 0.015})`);
+  shimmer.addColorStop(1, "rgba(255,244,214,0)");
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = shimmer;
+  ctx.fillRect(0, 470, W, 90);
+  ctx.restore();
+}
+
 function drawCrowd(time) {
   const crowd = state.crowd;
   if (!crowd) return;
@@ -5471,6 +5538,10 @@ function drawCrowd(time) {
   }
   if (crowd.variant === "buffet") {
     drawBuffetAtmosphere(frame, centre, reaction);
+    return;
+  }
+  if (crowd.variant === "poolside") {
+    drawPoolDeckAtmosphere(frame, centre, reaction);
     return;
   }
 
@@ -7910,7 +7981,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.1k-four-stages-edition",
+  version: "1.1-philly-after-dark",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
