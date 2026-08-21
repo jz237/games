@@ -242,7 +242,7 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.0F/);
+  assert.match(title.build, /1\.0G/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -256,12 +256,57 @@ try {
   assert.equal(title.attractEnabled, true);
   assert.equal(title.graphicFatalities, true);
   assert.deepEqual(title.engine.fatalityAudit, { fighters: 8, fatalities: 16, errors: [] });
+  assert.deepEqual(title.engine.audio.audit, { fighters: 8, cuesPerFighter: 12, totalCues: 96, errors: [] });
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.0f-fatality-edition');
+  assert.equal(title.engineVersion, '1.0g-fighter-audio-edition');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
+
+  const fighterAudioRoutes = await evaluate(client, `(() => {
+    const fighterIds = ['deathblow', 'jez', 'alan', 'post', 'benny', 'donald', 'cyraxx', 'ali'];
+    const cues = ['jump', 'dash', 'light', 'heavy', 'special', 'throw', 'hit-light', 'hit-heavy', 'block', 'super', 'fatal', 'ko'];
+    const soundToggle = document.querySelector('#soundToggle');
+    const enabled = soundToggle.checked;
+    soundToggle.checked = false;
+    const routes = fighterIds.flatMap((fighterId) => cues.map((cue) => window.__finalBlowQa.soundCue(fighterId, cue)));
+    soundToggle.checked = enabled;
+    return routes;
+  })()`);
+  assert.equal(fighterAudioRoutes.length, 96);
+  assert.ok(fighterAudioRoutes.every(({ signature }) => signature));
+  assert.equal(new Set(fighterAudioRoutes.map(({ src }) => src)).size, 96);
+  assert.equal(fighterAudioRoutes[0].src, 'assets/audio/fighters/deathblow/jump.mp3');
+  assert.equal(fighterAudioRoutes.at(-1).src, 'assets/audio/fighters/ali/ko.mp3');
+
+  const contextualAudio = await evaluate(client, `(() => {
+    const soundToggle = document.querySelector('#soundToggle');
+    const enabled = soundToggle.checked;
+    soundToggle.checked = false;
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.positions(500, 585);
+    window.__finalBlowQa.input(0, { light: true });
+    window.__finalBlowQa.step(0.45);
+    const hit = window.__finalBlowEngine.snapshot().audio.lastEvent;
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.positions(500, 585);
+    window.__finalBlowQa.input(1, { guard: true }, 40);
+    window.__finalBlowQa.input(0, { light: true });
+    window.__finalBlowQa.step(0.45);
+    const block = window.__finalBlowEngine.snapshot().audio.lastEvent;
+    soundToggle.checked = enabled;
+    document.querySelector('#homeLink').click();
+    return { hit, block };
+  })()`);
+  assert.deepEqual(contextualAudio.hit, {
+    kind: 'hit-light', fighterId: 'deathblow', signature: true,
+    src: 'assets/audio/fighters/deathblow/hit-light.mp3',
+  });
+  assert.deepEqual(contextualAudio.block, {
+    kind: 'block', fighterId: 'jez', signature: true,
+    src: 'assets/audio/fighters/jez/block.mp3',
+  });
 
   const attractOption = await evaluate(client, `(() => {
     const toggle = document.querySelector('#attractModeToggle');
@@ -1354,7 +1399,7 @@ try {
   assert.equal(polishUi.battery.trailScale, 0);
   assert.equal(polishUi.restartedHealth, 100);
   assert.equal(polishUi.restartedPaused, false);
-  assert.match(polishUi.caption, /LIGHT SWING/);
+  assert.match(polishUi.caption, /DEATHBLOW · LIGHT ATTACK/);
   assert.equal(polishUi.captionVisible, true);
   assert.equal(polishUi.balance.fighters.length, 8);
   assert.deepEqual(polishUi.balance.violations, []);
@@ -1514,17 +1559,23 @@ try {
       hasRollback: Boolean(cache && await cache.match('./engine/rollback.mjs')),
       hasDemo: Boolean(cache && await cache.match('./engine/demo.mjs')),
       hasFatalities: Boolean(cache && await cache.match('./engine/fatalities.mjs')),
+      hasFighterAudioEngine: Boolean(cache && await cache.match('./engine/fighter-audio.mjs')),
+      hasDeathBlowFatal: Boolean(cache && await cache.match('./assets/audio/fighters/deathblow/fatal.mp3')),
+      hasAliSuper: Boolean(cache && await cache.match('./assets/audio/fighters/ali/super.mp3')),
       hasMusic: Boolean(cache && await cache.match('./assets/audio/subway-after-midnight.mp3')),
       ready: window.__finalBlowEngine.snapshot().offlineReady,
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.0f/);
-  assert.ok(offlineCache.entries >= 59);
+  assert.match(offlineCache.name, /final-blow-offline-1\.0g/);
+  assert.ok(offlineCache.entries >= 156);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasRollback, true);
   assert.equal(offlineCache.hasDemo, true);
   assert.equal(offlineCache.hasFatalities, true);
+  assert.equal(offlineCache.hasFighterAudioEngine, true);
+  assert.equal(offlineCache.hasDeathBlowFatal, true);
+  assert.equal(offlineCache.hasAliSuper, true);
   assert.equal(offlineCache.hasMusic, true);
   assert.equal(offlineCache.ready, true);
 
@@ -1543,8 +1594,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.0F/);
-  assert.equal(offlineBoot.version, '1.0f-fatality-edition');
+  assert.match(offlineBoot.build, /1\.0G/);
+  assert.equal(offlineBoot.version, '1.0g-fighter-audio-edition');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,

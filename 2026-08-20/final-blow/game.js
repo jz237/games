@@ -115,6 +115,12 @@ import {
   getGraphicFatality,
   graphicFatalitySnapshot,
 } from "./engine/fatalities.mjs";
+import {
+  FIGHTER_AUDIO_CUES,
+  FIGHTER_AUDIO_LABELS,
+  auditFighterAudio,
+  fighterAudioCue,
+} from "./engine/fighter-audio.mjs";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -531,25 +537,47 @@ const audioAssets = {
 const sfxVolumes = {
   select: 0.5,
   jump: 0.42,
+  dash: 0.46,
   light: 0.5,
   heavy: 0.58,
   special: 0.65,
+  throw: 0.68,
   hit: 0.72,
+  "hit-light": 0.66,
+  "hit-heavy": 0.76,
   block: 0.62,
+  super: 0.86,
+  fatal: 0.94,
   finish: 0.78,
   final: 0.92,
   ko: 0.8,
 };
 
-const sfxPools = Object.fromEntries(Object.entries(audioAssets).map(([kind, src]) => [
-  kind,
-  Array.from({ length: kind === "hit" ? 5 : 3 }, () => {
+function createSfxPool(kind, src) {
+  return Array.from({ length: kind.startsWith("hit-") || kind === "hit" ? 5 : 3 }, () => {
     const sample = new Audio(src);
     sample.preload = "auto";
     return sample;
-  }),
+  });
+}
+
+const sfxPools = Object.fromEntries(Object.entries(audioAssets).map(([kind, src]) => [
+  kind,
+  createSfxPool(kind, src),
 ]));
 const sfxCursors = Object.fromEntries(Object.keys(audioAssets).map((kind) => [kind, 0]));
+const fighterSfxPools = new Map();
+const fighterSfxCursors = new Map();
+const fighterAudioAudit = auditFighterAudio();
+
+const fallbackSoundKinds = Object.freeze({
+  dash: "jump",
+  throw: "heavy",
+  "hit-light": "hit",
+  "hit-heavy": "hit",
+  super: "final",
+  fatal: "final",
+});
 
 const musicTracks = [
   { title: "PHILLY AFTER DARK", src: "assets/audio/philly-after-dark.mp3" },
@@ -564,14 +592,21 @@ fightMusic.loop = false;
 fightMusic.volume = 0.24;
 let musicDuckTimer = 0;
 let soundCaptionTimer = 0;
+let lastSoundEvent = null;
 const soundCaptionLabels = Object.freeze({
   select: "MENU CLICK",
   jump: "JUMP",
+  dash: "DASH",
   light: "LIGHT SWING",
   heavy: "HEAVY SWING",
   special: "SPECIAL ATTACK",
+  throw: "THROW",
   hit: "BODY IMPACT",
+  "hit-light": "LIGHT IMPACT",
+  "hit-heavy": "HEAVY IMPACT",
   block: "GUARD IMPACT",
+  super: "FULL GRIT SUPER",
+  fatal: "GRAPHIC FATALITY",
   finish: "FINAL BLOW READY",
   final: "FINAL BLOW",
   ko: "KNOCKOUT",
@@ -2086,6 +2121,7 @@ function startMatch(resetSet = true) {
   state.qaManualMode = false;
   seedMatch(state.round);
   state.fighters = makeMatchFighters();
+  warmFighterAudio();
   if (state.mode === "training") {
     state.training = createTrainingState({
       ...state.training,
@@ -2158,6 +2194,7 @@ function startOnlineMatch(config) {
   state.simulationTick = 0;
   seedOnlineRound(1);
   state.fighters = makeMatchFighters();
+  warmFighterAudio();
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
@@ -2203,6 +2240,7 @@ function resetRound() {
   if (state.mode === "online") seedOnlineRound(state.round);
   else seedMatch(state.round);
   state.fighters = makeMatchFighters();
+  warmFighterAudio();
   state.fighters.forEach((fighter, side) => { fighter.meter = carriedGrit[side] || 0; });
   state.particles.length = 0;
   state.effects.length = 0;
@@ -2254,7 +2292,7 @@ function finishRound(winner, type = -1) {
     state.phaseTime = 2.4;
     duckMusic(0.28, 1700);
     announce(`${winDef.name} WINS`, "KNOCKOUT", 1.65);
-    sound("ko");
+    sound("ko", state.fighters[1 - winner]);
   }
   updateHud();
 }
@@ -2295,7 +2333,7 @@ function performFinisher(winner, type) {
     $(".touch-final").classList.remove("ready");
     $("#touchControls").classList.add("cinematic");
   }
-  sound("special");
+  sound("special", attacker);
   return script.duration + .55;
 }
 
@@ -2404,7 +2442,7 @@ function triggerFinisherImpact(finisher, impact) {
       });
     }
   }
-  sound(impact.sound);
+  sound(finalImpact ? "fatal" : impact.sound, attacker);
 }
 
 function updateFinisher(dt) {
@@ -2901,7 +2939,7 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     );
   }
   updateHud();
-  sound(fighter.attacking.superMove ? "final" : actionGroup === "throw" ? "heavy" : fighter.attacking.kind);
+  sound(fighter.attacking.superMove ? "super" : actionGroup === "throw" ? "throw" : fighter.attacking.kind, fighter);
   return true;
 }
 
@@ -3042,6 +3080,7 @@ function startDash(fighter, direction) {
   fighter.guarding = false;
   fighter.crouch = false;
   if (!forward) fighter.invulnerableFrames = Math.max(fighter.invulnerableFrames, fighter.movement.backDashInvulnerableFrames);
+  sound("dash", fighter);
 }
 
 function applyFighterPhysics(fighter, dt) {
@@ -3234,7 +3273,7 @@ function updateFighter(fighter, opponent, input, dt) {
           fighter.grounded = false;
           fighter.block = false;
           fighter.guarding = false;
-          sound("jump");
+          sound("jump", fighter);
         } else {
           if (fighter.crouch) fighter.vx = 0;
           else if (direction.absolute) {
@@ -3324,7 +3363,7 @@ function maybeDeployTrap(fighter, attack) {
     state.effects.push({ kind: "paintDeploy", x: trap.x, y: trap.y - 8, life: 0.48, max: 0.48, color });
   }
   spawnCombatText(fighter.x + fighter.facing * 82, fighter.y - fighter.height - 16, newTraps.length > 1 ? "DOUBLE TRAP" : "TRAP SET", color);
-  sound("special");
+  sound("special", fighter);
 }
 
 function triggerPaintTrap(trap, victim) {
@@ -3374,7 +3413,7 @@ function triggerPaintTrap(trap, victim) {
   state.shake = Math.max(state.shake, blocked ? 0.12 : 0.28);
   state.hitstop = Math.max(state.hitstop, blocked ? 0.035 : 0.09);
   state.lastImpactSide = owner.side;
-  sound(blocked ? "block" : "hit");
+  sound(blocked ? "block" : "hit-heavy", blocked ? victim : owner);
   updateHud();
 }
 
@@ -3436,7 +3475,7 @@ function maybeSpawnProjectile(fighter, attack) {
     }
     state.projectiles.push(projectile);
     state.effects.push({ kind: projectile.style === "feedback" ? "feedbackTelegraph" : "projectileLaunch", x: projectile.x, y: projectile.y, life: 0.35, max: 0.35, color: projectile.color });
-    sound("special");
+    sound("special", fighter);
   }
 }
 
@@ -3501,7 +3540,7 @@ function triggerProjectile(projectile, victim) {
   state.hitstop = Math.max(state.hitstop, blocked ? 0.035 : 0.085);
   state.lastImpactSide = owner.side;
   projectile.hit = true;
-  sound(blocked ? "block" : "hit");
+  sound(blocked ? "block" : "hit-heavy", blocked ? victim : owner);
   updateHud();
 }
 
@@ -3552,7 +3591,7 @@ function techThrow(attacker, victim) {
   state.hitstop = Math.max(state.hitstop, 0.075);
   state.shake = Math.max(state.shake, 0.11);
   spawnCombatText((attacker.x + victim.x) * 0.5, Math.min(attacker.y, victim.y) - 205, "THROW TECH", "#68f5ff");
-  sound("block");
+  sound("block", victim);
 }
 
 function triggerSouthpawCounter(counterFighter, incomingFighter, incomingAttack, collision) {
@@ -3606,7 +3645,7 @@ function triggerSouthpawCounter(counterFighter, incomingFighter, incomingAttack,
   state.shake = Math.max(state.shake, 0.42);
   state.lastImpactSide = counterFighter.side;
   if ($("#flashToggle").checked) state.flash = Math.max(state.flash, 0.11);
-  sound("heavy");
+  sound("hit-heavy", counterFighter);
   updateHud();
   return true;
 }
@@ -3735,7 +3774,10 @@ function hit(attacker, victim, attack, collision) {
   else if (!blocked && attack.level === ATTACK_LEVELS.OVERHEAD) spawnCombatText(impact.x, impact.y - 70, "OVERHEAD", attacker.def.accent);
   else if (!blocked && attack.level === ATTACK_LEVELS.LOW) spawnCombatText(impact.x, impact.y - 64, "LOW", attacker.def.accent);
   else if (!blocked && attack.level === ATTACK_LEVELS.THROW) spawnCombatText(impact.x, impact.y - 72, "THROW", attacker.def.accent);
-  sound(blocked ? "block" : "hit");
+  sound(
+    blocked ? "block" : attack.kind === "light" ? "hit-light" : "hit-heavy",
+    blocked ? victim : attacker,
+  );
   updateHud();
   state.lastImpactSide = attacker.side;
 }
@@ -5379,10 +5421,30 @@ function duckMusic(amount, duration) {
 }
 
 function stopSfx() {
-  Object.values(sfxPools).flat().forEach((sample) => {
+  [...Object.values(sfxPools).flat(), ...[...fighterSfxPools.values()].flat()].forEach((sample) => {
     sample.pause();
     sample.currentTime = 0;
   });
+}
+
+function fighterSoundId(fighter) {
+  if (typeof fighter === "string") return fighter;
+  return fighter?.def?.id || fighter?.id || null;
+}
+
+function fighterSoundPool(kind, fighter) {
+  const fighterId = fighterSoundId(fighter);
+  const src = fighterAudioCue(fighterId, kind);
+  if (!src) return null;
+  const key = `${fighterId}:${kind}`;
+  if (!fighterSfxPools.has(key)) fighterSfxPools.set(key, createSfxPool(kind, src));
+  return { key, pool: fighterSfxPools.get(key) };
+}
+
+function warmFighterAudio(fighters = state.fighters) {
+  for (const fighter of fighters) {
+    for (const cue of FIGHTER_AUDIO_CUES) fighterSoundPool(cue, fighter);
+  }
 }
 
 function unlockAudio() {
@@ -5395,34 +5457,50 @@ function unlockAudio() {
   syncMusic();
 }
 
-function sound(kind) {
+function sound(kind, fighter = null) {
   if (rollbackResimulating) return;
-  showSoundCaption(kind);
+  const fighterId = fighterSoundId(fighter);
+  const fallbackKind = fallbackSoundKinds[kind] || kind;
+  const signatureSrc = fighterAudioCue(fighterId, kind);
+  lastSoundEvent = Object.freeze({
+    kind,
+    fighterId,
+    signature: Boolean(signatureSrc),
+    src: signatureSrc || audioAssets[fallbackKind] || null,
+  });
+  showSoundCaption(kind, fighter);
   if (!$("#soundToggle").checked) return;
   if (demoSession.attract && !state.audioUnlocked) return;
   unlockAudio();
-  const pool = sfxPools[kind];
+  const signature = fighterSoundPool(kind, fighter);
+  const pool = signature?.pool || sfxPools[fallbackKind];
   if (!pool?.length) {
-    proceduralSound(kind);
+    proceduralSound(fallbackKind);
     return;
   }
-  const cursor = sfxCursors[kind] % pool.length;
-  sfxCursors[kind] = cursor + 1;
+  const cursorKey = signature?.key || fallbackKind;
+  const cursor = signature
+    ? (fighterSfxCursors.get(cursorKey) || 0) % pool.length
+    : (sfxCursors[cursorKey] || 0) % pool.length;
+  if (signature) fighterSfxCursors.set(cursorKey, cursor + 1);
+  else sfxCursors[cursorKey] = cursor + 1;
   const sample = pool[cursor];
   sample.pause();
   sample.currentTime = 0;
   sample.volume = (sfxVolumes[kind] ?? 0.62) * state.sfxVolume;
   const playback = sample.play();
-  if (playback?.catch) playback.catch(() => proceduralSound(kind));
+  if (playback?.catch) playback.catch(() => proceduralSound(fallbackKind));
 }
 
-function showSoundCaption(kind) {
+function showSoundCaption(kind, fighter = null) {
   if (!state.soundCaptions) return;
   const caption = $("#soundCaption");
-  const label = soundCaptionLabels[kind];
+  const fighterId = fighterSoundId(fighter);
+  const fighterName = fighter?.def?.name || roster.find(({ id }) => id === fighterId)?.name;
+  const label = FIGHTER_AUDIO_LABELS[kind] || soundCaptionLabels[kind];
   if (!caption || !label) return;
   window.clearTimeout(soundCaptionTimer);
-  caption.textContent = `◀ ${label} ▶`;
+  caption.textContent = `◀ ${fighterName ? `${fighterName} · ` : ""}${label} ▶`;
   caption.hidden = false;
   soundCaptionTimer = window.setTimeout(() => { caption.hidden = true; }, 720);
 }
@@ -5893,7 +5971,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.0f-fatality-edition",
+  version: "1.0g-fighter-audio-edition",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -5914,6 +5992,12 @@ window.__finalBlowEngine = {
       attractEnabled: state.attractEnabled,
       graphicFatalities: state.graphicFatalities,
       fatalityAudit,
+      fighterAudioAudit,
+      audio: {
+        audit: fighterAudioAudit,
+        lastEvent: lastSoundEvent ? { ...lastSoundEvent } : null,
+        loadedPalettes: new Set([...fighterSfxPools.keys()].map((key) => key.split(":")[0])).size,
+      },
       offlineReady: state.offlineReady,
       accessibility: { ...state.accessibility },
       touchSettings: { ...state.touchSettings },
@@ -6067,6 +6151,12 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.visualQuality = normalizeVisualQuality(quality);
       applyPerformanceSettings();
       return { ...state.performance };
+    },
+    soundCue(fighterId = "deathblow", cue = "special") {
+      const fighter = roster.find(({ id }) => id === fighterId);
+      if (!fighter || !FIGHTER_AUDIO_CUES.includes(cue)) throw new Error(`Unknown fighter audio cue: ${fighterId}/${cue}`);
+      sound(cue, fighter);
+      return { ...lastSoundEvent };
     },
     aiMode(enabled = true) {
       state.mode = enabled ? "arcade" : "versus";
