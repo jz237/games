@@ -306,7 +306,7 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.1G/);
+  assert.match(title.build, /1\.1H/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -324,7 +324,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.1g-stage-weapons-edition');
+  assert.equal(title.engineVersion, '1.1h-cyraxx-rebuild-edition');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -1255,6 +1255,68 @@ try {
   assert.equal(weaponRules.stored, "0", "the STAGE WEAPONS setting persists");
   assert.equal(weaponRules.toggle, true, "there is a STAGE WEAPONS option");
 
+  // Cyraxx's rebuilt art: every atlas cell must carry a sprite, the alpha must be
+  // clean, and the palette must read as a blue-shirted man rather than the old
+  // purple-and-green cyber-goth.
+  const cyraxxArt = await evaluate(client, `(async () => {
+    const load = (src) => new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = src;
+    });
+    const analyse = async (src, cells) => {
+      const image = await load(src);
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      const cell = image.width / cells;
+      const filled = [];
+      let magentaFringe = 0;
+      let bluePixels = 0;
+      let opaquePixels = 0;
+      for (let row = 0; row < cells; row += 1) {
+        for (let col = 0; col < cells; col += 1) {
+          const data = context.getImageData(col * cell, row * cell, cell, cell).data;
+          let solid = 0;
+          for (let index = 0; index < data.length; index += 4) {
+            const [r, g, b, a] = [data[index], data[index + 1], data[index + 2], data[index + 3]];
+            if (a < 140) continue;
+            solid += 1;
+            opaquePixels += 1;
+            if (Math.min(r, b) - g > 90) magentaFringe += 1;
+            if (b > r + 18 && b > 70 && b < 210 && g > r - 10) bluePixels += 1;
+          }
+          filled.push(solid);
+        }
+      }
+      return {
+        size: [image.width, image.height],
+        cells: filled.length,
+        emptyCells: filled.filter((count) => count < 400).length,
+        minFill: Math.min(...filled),
+        magentaFringeRatio: magentaFringe / Math.max(1, opaquePixels),
+        blueRatio: bluePixels / Math.max(1, opaquePixels),
+      };
+    };
+    return {
+      atlas: await analyse('assets/atlases/cyraxx.webp', 4),
+      specials: await analyse('assets/moves/cyraxx-specials.webp', 4),
+      portrait: await analyse('assets/fighters/cyraxx.webp', 1),
+    };
+  })()`);
+  for (const [name, art] of Object.entries(cyraxxArt)) {
+    assert.equal(art.emptyCells, 0, `${name}: every cell must contain a sprite`);
+    assert.ok(art.minFill > 2000, `${name}: cells must hold a full figure, smallest was ${art.minFill}`);
+    assert.ok(art.magentaFringeRatio < 0.005, `${name}: keyed magenta must not survive as a fringe`);
+    assert.ok(art.blueRatio > 0.04, `${name}: the blue T-shirt must be a visible part of the palette`);
+  }
+  assert.deepEqual(cyraxxArt.atlas.size, [1280, 1280]);
+  assert.deepEqual(cyraxxArt.specials.size, [1280, 1280]);
+  assert.deepEqual(cyraxxArt.portrait.size, [588, 720]);
+
   const desktopFraming = await evaluate(client, FIGHTER_FRAMING_PROBE);
   assertFighterFraming(desktopFraming, "desktop");
 
@@ -2132,7 +2194,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.1g/);
+  assert.match(offlineCache.name, /final-blow-offline-1\.1h/);
   assert.ok(offlineCache.entries >= 156);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasRollback, true);
@@ -2159,8 +2221,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.1G/);
-  assert.equal(offlineBoot.version, '1.1g-stage-weapons-edition');
+  assert.match(offlineBoot.build, /1\.1H/);
+  assert.equal(offlineBoot.version, '1.1h-cyraxx-rebuild-edition');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
