@@ -98,7 +98,8 @@ function testMoveInstancesAndArt() {
   const faultline = createFighterMove("deathblow", "commandSpecial");
   assert.equal(faultline.profileId, "deathblow-faultline-fist");
   assert.equal(faultline.moveName, "FAULTLINE FIST");
-  assert.equal(faultline.totalFrames, 45);
+  assert.equal(faultline.totalFrames, faultline.startupFrames + faultline.activeFrames + faultline.recoveryFrames);
+  assert.ok(faultline.recoveryFrames >= 20, "a whiffed command special is punishable");
   assert.deepEqual(attackAnimationPose(faultline, 0), { bank: "specials", frame: 0 });
   assert.deepEqual(attackAnimationPose(faultline, faultline.activeStartFrame), { bank: "specials", frame: 1 });
   assert.deepEqual(attackAnimationPose(faultline, faultline.activeEndFrame - 1), { bank: "specials", frame: 2 });

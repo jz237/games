@@ -24,20 +24,24 @@ function testGritMoves() {
   const enhanced = createAdvancedMove("enhanced");
   assert.equal(enhanced.profileId, "enhanced-special");
   assert.equal(enhanced.maxHits, 2);
-  assert.equal(enhanced.totalFrames, 44);
+  assert.equal(enhanced.totalFrames, enhanced.startupFrames + enhanced.activeFrames + enhanced.recoveryFrames);
+  assert.ok(enhanced.recoveryFrames > ADVANCED_MOVE_PROFILES.enhanced.recoveryFrames, "EX specials recover slower than authored");
   const superMove = createAdvancedMove("super");
   assert.equal(superMove.maxHits, 4);
   assert.equal(superMove.superMove, true);
-  assert.equal(superMove.totalFrames, 65);
+  assert.equal(superMove.totalFrames, superMove.startupFrames + superMove.activeFrames + superMove.recoveryFrames);
   assert.throws(() => createAdvancedMove("missing"), /Unknown advanced move/);
 }
 
 function testScalingAndTracking() {
   assert.equal(damageScaleForHit(1), 1);
-  assert.equal(damageScaleForHit(2), 0.9);
-  assert.equal(damageScaleForHit(4), 0.72);
+  assert.equal(damageScaleForHit(2), COMBO_RULES.hitScales[1]);
+  assert.equal(damageScaleForHit(4), COMBO_RULES.hitScales[3]);
   assert.ok(damageScaleForHit(20) >= COMBO_RULES.minimumScale);
   assert.ok(damageScaleForHit(3, 3) < damageScaleForHit(3, 0));
+  // Short combos: by the fourth hit the payoff has already fallen below half.
+  assert.ok(damageScaleForHit(4) < 0.5, "extended strings must not stay worth it");
+  assert.ok(damageScaleForHit(2) > 0.6, "a two-hit confirm is still worth having");
 
   const combo = new ComboTracker();
   const first = combo.registerHit(10);
@@ -46,7 +50,7 @@ function testScalingAndTracking() {
   combo.addDamage(9);
   assert.equal(first.hitNumber, 1);
   assert.equal(second.hitNumber, 2);
-  assert.equal(second.damageScale, 0.9);
+  assert.equal(second.damageScale, COMBO_RULES.hitScales[1]);
   assert.deepEqual(combo.snapshot(20), {
     hits: 2,
     damage: 19,

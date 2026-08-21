@@ -8,36 +8,70 @@ export const ATTACK_LEVELS = Object.freeze({
   THROW: "throw",
 });
 
+// Arcade tempo. Walks and jumps are quicker than 1.0 so neutral has real
+// momentum, but jump height is unchanged so anti-airs still line up, and dashes
+// cost more to repeat so they support footsies instead of replacing them.
 export const MOVEMENT_RULES = Object.freeze({
   stageMinX: 76,
   stageMaxX: 1204,
-  forwardWalkSpeed: 292,
-  backWalkSpeed: 224,
+  forwardWalkSpeed: 336,
+  backWalkSpeed: 262,
   neutralJumpVelocityX: 0,
-  forwardJumpVelocityX: 326,
-  backJumpVelocityX: 278,
-  jumpVelocityY: -748,
-  forwardDashSpeed: 580,
-  forwardDashFrames: 11,
-  backDashSpeed: 505,
-  backDashFrames: 14,
-  backDashInvulnerableFrames: 6,
+  forwardJumpVelocityX: 352,
+  backJumpVelocityX: 300,
+  jumpVelocityY: -815,
+  forwardDashSpeed: 620,
+  forwardDashFrames: 10,
+  backDashSpeed: 540,
+  backDashFrames: 13,
+  backDashInvulnerableFrames: 4,
   dashTapWindowFrames: 12,
-  dashCooldownFrames: 9,
+  dashCooldownFrames: 14,
   standingPushboxHalfWidth: 39,
   crouchingPushboxHalfWidth: 35,
 });
 
 export const DEFENSE_RULES = Object.freeze({
-  throwTechWindowFrames: 7,
-  throwInvulnerableFrames: 30,
-  knockdownFrames: 46,
-  wakeupFrames: 18,
-  wakeupInvulnerableFrames: 12,
-  reversalWindowFrames: 5,
-  counterDamageMultiplier: 1.2,
-  counterHitstunBonusFrames: 5,
+  throwTechWindowFrames: 6,
+  // Long post-throw protection is what stops throw loops without a defensive answer.
+  throwInvulnerableFrames: 40,
+  knockdownFrames: 48,
+  wakeupFrames: 16,
+  wakeupInvulnerableFrames: 10,
+  reversalWindowFrames: 4,
+  counterDamageMultiplier: 1.3,
+  counterHitstunBonusFrames: 7,
+  // Landing recovery makes a whiffed jump-in a real commitment.
+  landingRecoveryFrames: 7,
+  airAttackLandingRecoveryFrames: 11,
 });
+
+/**
+ * Dizzy. Repeated clean hits in a short window stun a fighter; the meter bleeds
+ * off once they stop getting hit, recovery is deterministic, and a long immunity
+ * afterwards means dizzy can never loop. Mashing shortens the dizzy but cannot
+ * remove it entirely, so the punish window is always real.
+ */
+export const STUN_RULES = Object.freeze({
+  threshold: 100,
+  decayGraceFrames: 48,
+  decayPerFrame: 0.62,
+  dizzyFrames: 128,
+  minimumDizzyFrames: 46,
+  mashRelief: 5,
+  immuneFrames: 320,
+  gain: Object.freeze({ light: 9, heavy: 17, special: 20, throw: 0 }),
+  counterBonus: 4,
+  levelBonus: Object.freeze({ overhead: 3, low: 2, air: 2 }),
+});
+
+export function stunGainForAttack(attack, { counter = false, blocked = false } = {}) {
+  if (!attack || blocked || attack.level === ATTACK_LEVELS.THROW) return 0;
+  const base = STUN_RULES.gain[attack.kind] ?? STUN_RULES.gain.light;
+  const levelBonus = STUN_RULES.levelBonus[attack.level] || 0;
+  const scale = attack.maxHits > 1 ? 1 / Math.min(4, attack.maxHits) : 1;
+  return Math.max(0, Number(((base + levelBonus + (counter ? STUN_RULES.counterBonus : 0)) * scale).toFixed(3)));
+}
 
 const moveProfiles = {
   standLight: {

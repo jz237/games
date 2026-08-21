@@ -52,7 +52,12 @@ function testMoveSelection() {
   assert.equal(sweep.profileId, "crouch-heavy");
   assert.equal(sweep.level, ATTACK_LEVELS.LOW);
   assert.equal(sweep.knockdown, true);
-  assert.equal(sweep.totalFrames, 36);
+  const sweepProfileFrames = COMBAT_MOVE_PROFILES.crouchHeavy;
+  assert.equal(
+    sweep.totalFrames,
+    sweepProfileFrames.startupFrames + sweepProfileFrames.activeFrames + sweep.recoveryFrames,
+  );
+  assert.ok(sweep.recoveryFrames > sweepProfileFrames.recoveryFrames, "a whiffed sweep is punishable");
 }
 
 function testGuardMatrix() {

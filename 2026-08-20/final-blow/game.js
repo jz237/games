@@ -14,6 +14,8 @@ import {
   DEFENSE_RULES,
   DirectionTapTracker,
   MOVEMENT_RULES,
+  STUN_RULES,
+  stunGainForAttack,
   boxesOverlap,
   canGuardAttack,
   createCombatMove,
@@ -134,7 +136,9 @@ const ctx = canvas.getContext("2d");
 const W = canvas.width;
 const H = canvas.height;
 const FLOOR = 600;
-const GRAVITY = 1850;
+// Faster fall to match the quicker walks: jump height is unchanged so anti-airs
+// still line up, but the whole arc resolves in about 45 frames instead of 48.
+const GRAVITY = 2180;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -1746,6 +1750,13 @@ function makeFighter(index, side, overrideDef = null) {
     previousDirectionalInput: { left: false, right: false },
     justWoke: false,
     throwTechFlashFrames: 0,
+    // Dizzy meter and its deterministic decay / recovery / immunity clocks.
+    stunMeter: 0,
+    stunDecayDelay: 0,
+    dizzyFrames: 0,
+    dizzyTotalFrames: 0,
+    stunImmuneFrames: 0,
+    dizzyMashCount: 0,
     // Live grab sequence state. `grabbing` is set on the thrower and `grabbed` on
     // the victim; both are plain data so rollback snapshots clone them directly.
     grabbing: null,
@@ -3136,6 +3147,69 @@ function prepareFighterInput(fighter, input) {
   return normalized;
 }
 
+function recoverFromDizzy(fighter) {
+  fighter.dizzyFrames = 0;
+  fighter.dizzyTotalFrames = 0;
+  fighter.dizzyMashCount = 0;
+  fighter.stunMeter = 0;
+  fighter.stunDecayDelay = 0;
+  // A long immunity after recovery is what makes dizzy loops impossible.
+  fighter.stunImmuneFrames = STUN_RULES.immuneFrames;
+  fighter.hitstunFrames = 0;
+  fighter.stun = 0;
+  fighter.invulnerableFrames = Math.max(fighter.invulnerableFrames, 6);
+  spawnCombatText(fighter.x, fighter.y - fighter.height - 40, "SHAKE IT OFF", fighter.def.accent);
+  sound("block", fighter);
+}
+
+function enterDizzy(fighter, attacker) {
+  fighter.dizzyFrames = STUN_RULES.dizzyFrames;
+  fighter.dizzyTotalFrames = STUN_RULES.dizzyFrames;
+  fighter.dizzyMashCount = 0;
+  fighter.stunMeter = 0;
+  fighter.stunDecayDelay = 0;
+  fighter.attacking = null;
+  fighter.attackFrame = 0;
+  fighter.attackTime = 0;
+  fighter.hitstunFrames = 0;
+  fighter.blockstunFrames = 0;
+  fighter.stun = 0;
+  fighter.block = false;
+  fighter.guarding = false;
+  fighter.dashFrames = 0;
+  fighter.queuedDashDirection = 0;
+  fighter.inputBuffer.clear();
+  fighter.lastHitResult = "dizzy";
+  state.hitstop = Math.max(state.hitstop, 0.16);
+  state.shake = Math.max(state.shake, 0.34);
+  if ($("#flashToggle").checked) state.flash = Math.max(state.flash, 0.2);
+  spawnCombatText(fighter.x, fighter.y - fighter.height - 52, "DIZZY", "#ffd54a");
+  duckMusic(0.55, 620);
+  sound("ko", fighter);
+}
+
+// Mashing buttons and directions shortens the dizzy but never removes the punish
+// window: the timer can never drop below STUN_RULES.minimumDizzyFrames elapsed.
+function relieveDizzy(fighter, input) {
+  const pressed = Boolean(input.light || input.heavy || input.special
+    || input.enhanced || input.super || input.jump || input.throw);
+  const directional = Boolean(input.left || input.right || input.down);
+  if (!pressed && !(directional && state.simulationTick % 4 === 0)) return;
+  fighter.dizzyMashCount += 1;
+  const elapsed = fighter.dizzyTotalFrames - fighter.dizzyFrames;
+  const floor = Math.max(0, STUN_RULES.minimumDizzyFrames - elapsed);
+  fighter.dizzyFrames = Math.max(floor, fighter.dizzyFrames - STUN_RULES.mashRelief);
+}
+
+function addStun(victim, attacker, attack, { counter = false, blocked = false } = {}) {
+  if (victim.stunImmuneFrames > 0 || victim.dizzyFrames > 0) return;
+  const gain = stunGainForAttack(attack, { counter, blocked });
+  if (gain <= 0) return;
+  victim.stunMeter = Number((victim.stunMeter + gain).toFixed(3));
+  victim.stunDecayDelay = STUN_RULES.decayGraceFrames;
+  if (victim.stunMeter >= STUN_RULES.threshold) enterDizzy(victim, attacker);
+}
+
 function enterKnockdown(fighter) {
   fighter.pendingKnockdown = false;
   fighter.down = true;
@@ -3160,6 +3234,15 @@ function advanceFighterTimers(fighter) {
   fighter.throwTechFlashFrames = Math.max(0, fighter.throwTechFlashFrames - 1);
   fighter.confirmWindowFrames = Math.max(0, fighter.confirmWindowFrames - 1);
   fighter.landingRecoveryFrames = Math.max(0, fighter.landingRecoveryFrames - 1);
+  fighter.stunImmuneFrames = Math.max(0, fighter.stunImmuneFrames - 1);
+  if (fighter.dizzyFrames > 0) {
+    fighter.dizzyFrames -= 1;
+    if (fighter.dizzyFrames === 0) recoverFromDizzy(fighter);
+  } else if (fighter.stunDecayDelay > 0) {
+    fighter.stunDecayDelay -= 1;
+  } else if (fighter.stunMeter > 0) {
+    fighter.stunMeter = Math.max(0, Number((fighter.stunMeter - STUN_RULES.decayPerFrame).toFixed(3)));
+  }
   if (fighter.rhythmStacks > 0 && state.simulationTick > fighter.rhythmExpiresFrame) {
     fighter.rhythmStacks = 0;
     fighter.rhythmExpiresFrame = 0;
@@ -3216,7 +3299,10 @@ function applyFighterPhysics(fighter, dt) {
       fighter.attacking = null;
       fighter.attackTime = 0;
       fighter.attackFrame = 0;
-      fighter.landingRecoveryFrames = 5;
+      fighter.landingRecoveryFrames = DEFENSE_RULES.airAttackLandingRecoveryFrames;
+    } else if (landed && !fighter.down) {
+      // Even an empty jump costs a few frames on the way down.
+      fighter.landingRecoveryFrames = Math.max(fighter.landingRecoveryFrames, DEFENSE_RULES.landingRecoveryFrames);
     }
   } else {
     fighter.grounded = false;
@@ -3359,6 +3445,13 @@ function updateFighter(fighter, opponent, input, dt) {
       fighter.attackFrame = Math.min(fighter.attackFrame + 1, fighter.attacking.activeEndFrame);
       fighter.attackTime = fighter.attackFrame * SIMULATION_STEP_SECONDS;
     }
+    return;
+  }
+  if (fighter.dizzyFrames > 0) {
+    relieveDizzy(fighter, input);
+    fighter.vx *= 0.82;
+    fighter.inputBuffer.clear();
+    applyFighterPhysics(fighter, dt);
     return;
   }
   const flowSpeed = fighter.def.id === "ali" ? 1 + fighter.rhythmStacks * 0.045 : 1;
@@ -3840,7 +3933,7 @@ function resolveGrabThrow(attacker, victim, grab, style, direction) {
   victim.pendingKnockdown = true;
   victim.grounded = false;
   victim.vx = direction * grab.push * style.launch;
-  victim.vy = -315 * style.drop;
+  victim.vy = -371 * style.drop;
   victim.x = clamp(
     attacker.x + direction * style.offset,
     MOVEMENT_RULES.stageMinX,
@@ -4020,6 +4113,9 @@ function hit(attacker, victim, attack, collision) {
   let comboResult = { hitNumber: 1, damageScale: 1 };
   if (!blocked && attack.level !== ATTACK_LEVELS.THROW) {
     comboResult = attacker.combo.registerHit(state.simulationTick, victim.juggleCount);
+    if ((attack.maxHits || 1) > 1 && attacker.attackHits > 1) {
+      comboResult.damageScale = Math.max(comboResult.damageScale, COMBO_RULES.multiHitFloor);
+    }
   } else if (!blocked) attacker.combo.reset();
   const baseDamage = attack.damage
     * (counter ? DEFENSE_RULES.counterDamageMultiplier : 1)
@@ -4060,8 +4156,8 @@ function hit(attacker, victim, attack, collision) {
     if (shouldKnockDown) {
       victim.pendingKnockdown = true;
       victim.grounded = false;
-      victim.vy = attack.level === ATTACK_LEVELS.THROW ? -315
-        : attack.launchVelocityY || -220 - attack.damage * 3;
+      victim.vy = attack.level === ATTACK_LEVELS.THROW ? -371
+        : attack.launchVelocityY || -259 - attack.damage * 3.5;
     } else if (attack.juggleLift) {
       victim.pendingKnockdown = true;
       victim.grounded = false;
@@ -4072,6 +4168,7 @@ function hit(attacker, victim, attack, collision) {
     spawnCombatText(victim.x, victim.y - victim.height - 18, "SEISMIC ARMOR", victim.def.accent);
   }
   victim.hitFlash = 0.12;
+  if (!blocked && !armored) addStun(victim, attacker, attack, { counter, blocked });
   attacker.meter = clamp(attacker.meter + attack.meter * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
   victim.meter = clamp(victim.meter + attack.meter * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
   state.shake = Math.max(state.shake, attack.kind === "special" || attack.kind === "throw" ? 0.34 : 0.13);
@@ -4144,8 +4241,14 @@ function resolveCombatInteractions() {
     if (attacker.attackHits > 0
       && attacker.attackFrame - attacker.lastAttackHitFrame < (attacker.attacking.rehitFrames || Infinity)) return null;
     const victim = state.fighters[1 - side];
+    // The juggle limit exists to stop separate attacks being strung together in
+    // the air. A single authored multi-hit move is already bounded by its own
+    // maxHits and rehitFrames, so its later hits are exempt.
+    const rehitOfSameMove = attacker.attackHits > 0;
     const juggleLimit = attacker.attacking.juggleLimit || COMBO_RULES.juggleLimit;
-    if ((!victim.grounded || victim.pendingKnockdown) && victim.juggleCount >= juggleLimit) return null;
+    if (!rehitOfSameMove
+      && (!victim.grounded || victim.pendingKnockdown)
+      && victim.juggleCount >= juggleLimit) return null;
     const collision = findBoxCollision(attacker, victim);
     return collision ? { attacker, victim, attack: attacker.attacking, collision } : null;
   }).filter(Boolean);
@@ -4217,6 +4320,7 @@ function resolveFighterState(fighter) {
   if (state.finisher) return FIGHTER_STATES.FINISHER;
   if (fighter.down || fighter.knockdownFrames > 0) return FIGHTER_STATES.KNOCKDOWN;
   if (fighter.wakeupFrames > 0) return FIGHTER_STATES.WAKEUP;
+  if (fighter.dizzyFrames > 0) return FIGHTER_STATES.HITSTUN;
   if (fighter.grabbing || fighter.grabbed) return FIGHTER_STATES.THROW;
   if (fighter.throwTechFlashFrames > 0) return FIGHTER_STATES.THROW_TECH;
   if (fighter.blockstunFrames > 0) return FIGHTER_STATES.BLOCKSTUN;
@@ -4494,6 +4598,7 @@ function fighterAnimationPose(fighter) {
   const base = (frame) => ({ bank: "base", frame });
   if (fighter.cinematicFrame !== null) return base(fighter.cinematicFrame);
   if (fighter.grabbed) return base(15);
+  if (fighter.dizzyFrames > 0) return base(12 + Math.floor(fighter.animTime * 6) % 2);
   if (fighter.down || fighter.knockdownFrames > 0 || fighter.hitFlash > 0 || fighter.hitstunFrames > 21) return base(15);
   if (fighter.wakeupFrames > 0) return base(fighter.wakeupFrames > 9 ? 15 : 12);
   if (fighter.throwTechFlashFrames > 0) return base(12);
@@ -5265,6 +5370,49 @@ function drawFatalityPool(effect, alpha) {
   ctx.restore();
 }
 
+// Unmistakable dizzy feedback: a ring of stars orbiting the head plus a label.
+function drawDizzyStars(fighter, time) {
+  if (!fighter || fighter.dizzyFrames <= 0) return;
+  const centreX = fighter.x;
+  const centreY = fighter.y - fighter.height - 30;
+  const remaining = fighter.dizzyFrames / Math.max(1, fighter.dizzyTotalFrames);
+  const stars = 5;
+  ctx.save();
+  ctx.globalAlpha = 0.55 + 0.45 * Math.abs(Math.sin(time * 6));
+  for (let index = 0; index < stars; index += 1) {
+    const angle = time * 4.4 + (index / stars) * Math.PI * 2;
+    const x = centreX + Math.cos(angle) * 52;
+    const y = centreY + Math.sin(angle) * 15;
+    const size = 7 + Math.sin(angle * 2) * 2.4;
+    ctx.fillStyle = index % 2 ? "#ffd54a" : "#fff2b8";
+    ctx.beginPath();
+    for (let point = 0; point < 10; point += 1) {
+      const radius = point % 2 ? size * 0.44 : size;
+      const pointAngle = (point / 10) * Math.PI * 2 - Math.PI / 2;
+      const px = x + Math.cos(pointAngle) * radius;
+      const py = y + Math.sin(pointAngle) * radius;
+      if (point === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.font = "900 20px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#ffd54a";
+  ctx.strokeStyle = "rgba(0,0,0,.72)";
+  ctx.lineWidth = 4;
+  ctx.strokeText("DIZZY", centreX, centreY - 30);
+  ctx.fillText("DIZZY", centreX, centreY - 30);
+  // A thin drain bar shows the dizzy running out, so the punish window is legible.
+  ctx.fillStyle = "rgba(0,0,0,.55)";
+  ctx.fillRect(centreX - 34, centreY - 22, 68, 5);
+  ctx.fillStyle = "#ffd54a";
+  ctx.fillRect(centreX - 34, centreY - 22, 68 * remaining, 5);
+  ctx.restore();
+}
+
 function drawParticles() {
   for (const particle of state.particles) {
     ctx.globalAlpha = clamp(particle.life / particle.max, 0, 1);
@@ -5540,6 +5688,7 @@ function draw(time) {
     drawProjectiles(time);
     const ordered = [...state.fighters].sort((a, b) => a.y - b.y);
     ordered.forEach((fighter) => drawFighter(fighter, time));
+    state.fighters.forEach((fighter) => drawDizzyStars(fighter, time));
     drawParticles();
   }
   ctx.restore();
@@ -6313,7 +6462,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.1b-grapple-edition",
+  version: "1.1c-footsies-edition",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -6421,6 +6570,10 @@ window.__finalBlowEngine = {
         juggleCount: fighter.juggleCount,
         down: fighter.down,
         lastHitResult: fighter.lastHitResult,
+        stunMeter: fighter.stunMeter,
+        dizzyFrames: fighter.dizzyFrames,
+        dizzy: fighter.dizzyFrames > 0,
+        stunImmuneFrames: fighter.stunImmuneFrames,
         grabbing: fighter.grabbing ? { ...fighter.grabbing } : null,
         grabbed: fighter.grabbed ? { ...fighter.grabbed } : null,
         throwInvulnerableFrames: fighter.throwInvulnerableFrames,

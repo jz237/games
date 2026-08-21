@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  ARCADE_TUNING,
   BASE_MOVES,
   DeterministicRng,
   FIGHTER_STATES,
@@ -58,14 +59,21 @@ function testRng() {
 function testMoveGrammar() {
   assert.deepEqual(Object.keys(BASE_MOVES), ["light", "heavy", "special", "throw"]);
   const heavy = createAttackInstance("heavy");
-  assert.equal(heavy.totalFrames, 34);
+  // Arcade tuning stretches recovery and damage; startup and active are authored.
+  assert.equal(heavy.recoveryFrames, Math.round(BASE_MOVES.heavy.recoveryFrames * ARCADE_TUNING.recovery.heavy));
+  assert.equal(heavy.totalFrames, BASE_MOVES.heavy.startupFrames + BASE_MOVES.heavy.activeFrames + heavy.recoveryFrames);
   assert.equal(heavy.activeStartFrame, 12);
   assert.equal(heavy.activeEndFrame, 20);
-  assert.ok(heavy.duration > 0.56 && heavy.duration < 0.57);
+  assert.ok(heavy.damage > BASE_MOVES.heavy.damage, "individual hits land harder than the authored base");
+  assert.ok(heavy.recoveryFrames > BASE_MOVES.heavy.recoveryFrames, "a whiffed heavy leaves a punish window");
+  assert.ok(heavy.duration > 0.6 && heavy.duration < 0.66);
   assert.throws(() => createAttackInstance("missing"), /Unknown move kind/);
   const grapple = createAttackInstance("throw");
-  assert.equal(grapple.totalFrames, 29);
+  assert.equal(grapple.recoveryFrames, Math.round(BASE_MOVES.throw.recoveryFrames * ARCADE_TUNING.recovery.throw));
+  assert.equal(grapple.totalFrames, BASE_MOVES.throw.startupFrames + BASE_MOVES.throw.activeFrames + grapple.recoveryFrames);
   assert.equal(grapple.activeStartFrame, 5);
+  const light = createAttackInstance("light");
+  assert.ok(light.recoveryFrames <= heavy.recoveryFrames - 6, "light pokes stay fast so neutral rewards spacing");
 }
 
 function testStateMachine() {

@@ -232,6 +232,37 @@ export const BASE_MOVES = deepFreeze({
   },
 });
 
+/**
+ * Arcade tuning applied to every move instance as it is built. This is the one
+ * choke point where all authored per-fighter frame data passes through, so the
+ * SF2 Hyper Fighting / MK3 proportions can be dialled in globally without
+ * rewriting eight hand-authored move sets:
+ *
+ *  - individual hits land harder than a modern combo-heavy fighter,
+ *  - a whiffed heavy, sweep, uppercut, throw or special leaves a real punish
+ *    window because recovery grows faster than damage does,
+ *  - light pokes stay fast so neutral still rewards spacing over mashing.
+ *
+ * Training frame data reads the resolved instance, so what a player sees on
+ * screen is always the tuned number.
+ */
+export const ARCADE_TUNING = deepFreeze({
+  damage: { light: 1.15, heavy: 1.22, special: 1.14, throw: 1.16 },
+  recovery: { light: 1.08, heavy: 1.28, special: 1.32, throw: 1.24 },
+  chipDamage: { light: 1, heavy: 1, special: 1.4, throw: 1 },
+  // Gravity rose with the faster arcade tempo, so authored launch and juggle
+  // velocities are scaled by the same ratio. Hang time — and therefore every
+  // authored multi-hit rhythm — is preserved exactly.
+  launchVelocity: 2180 / 1850,
+});
+
+function tuned(table, kind, value, { round = false, minimum = 0 } = {}) {
+  const scale = table[kind] ?? 1;
+  const scaled = value * scale;
+  const result = round ? Math.round(scaled) : Number(scaled.toFixed(3));
+  return Math.max(minimum, result);
+}
+
 function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
   Object.freeze(value);
@@ -243,6 +274,15 @@ export function createAttackInstance(kind, overrides = {}) {
   const source = BASE_MOVES[kind];
   if (!source) throw new Error(`Unknown move kind: ${kind}`);
   const move = { ...source, ...overrides };
+  const tuningKind = BASE_MOVES[move.baseKind] ? move.baseKind : kind;
+  move.damage = tuned(ARCADE_TUNING.damage, tuningKind, move.damage, { minimum: 1 });
+  move.recoveryFrames = tuned(ARCADE_TUNING.recovery, tuningKind, move.recoveryFrames, { round: true, minimum: 4 });
+  if (move.chipDamage) {
+    move.chipDamage = tuned(ARCADE_TUNING.chipDamage, tuningKind, move.chipDamage, { minimum: 0 });
+  }
+  for (const field of ["launchVelocityY", "juggleLift"]) {
+    if (Number.isFinite(move[field])) move[field] = Math.round(move[field] * ARCADE_TUNING.launchVelocity);
+  }
   const totalFrames = move.startupFrames + move.activeFrames + move.recoveryFrames;
   return {
     kind,

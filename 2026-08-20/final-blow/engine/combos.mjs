@@ -10,14 +10,21 @@ export const GRIT_RULES = Object.freeze({
   damageTakenGainMultiplier: 0.45,
 });
 
+// Short, high-impact combos. The scaling curve drops hard after the third hit so
+// a confirm is worth having but an extended string is not, and the juggle floor
+// is low enough that air chains cannot replace neutral.
 export const COMBO_RULES = Object.freeze({
-  resetGapFrames: 45,
+  resetGapFrames: 38,
   displayFrames: 72,
-  juggleLimit: 4,
-  hitScales: Object.freeze([1, 0.9, 0.8, 0.72, 0.64, 0.57, 0.5, 0.44, 0.4, 0.36]),
-  minimumScale: 0.35,
-  juggleScaleStep: 0.08,
-  minimumJuggleScale: 0.68,
+  juggleLimit: 2,
+  hitScales: Object.freeze([1, 0.74, 0.52, 0.38, 0.3, 0.25, 0.22, 0.2, 0.18, 0.16]),
+  minimumScale: 0.15,
+  juggleScaleStep: 0.2,
+  minimumJuggleScale: 0.4,
+  // A single authored multi-hit move (a super, an EX rekka) should not scale its
+  // own hits into nothing. Its length is already bounded by maxHits/rehitFrames,
+  // so its later hits get a floor that the general curve does not.
+  multiHitFloor: 0.52,
 });
 
 const advancedProfiles = {
@@ -305,9 +312,12 @@ export function recognizeCombatCommand(history, currentFrame) {
   return null;
 }
 
+// Deliberate, limited cancel routes: a light confirms into one heavy, a heavy
+// confirms into a special. There is no universal chain and no light-into-light
+// mash string, so pressure has to be earned with spacing rather than buttons.
 const cancelRoutes = {
-  "stand-light": ["light", "heavy", "launcher", "driveHeavy", "special", "commandSpecial", "enhanced", "super"],
-  "crouch-light": ["light", "heavy", "launcher", "special", "commandSpecial", "enhanced", "super"],
+  "stand-light": ["heavy", "special", "commandSpecial", "enhanced", "super"],
+  "crouch-light": ["heavy", "special", "commandSpecial", "enhanced", "super"],
   "stand-heavy": ["special", "commandSpecial", "enhanced", "super"],
   "crouch-heavy": ["special", "commandSpecial", "enhanced", "super"],
   overhead: ["special", "commandSpecial", "enhanced", "super"],
