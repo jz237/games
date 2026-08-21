@@ -1006,7 +1006,9 @@ body.demo-active .touch-pause { display: none !important; }
 
 .grit-row {
   display: grid;
-  grid-template-columns: auto minmax(70px, 72%) auto;
+  /* Five columns so the throwable readout shares the Grit row instead of adding
+     a second line, which would eat into the playable fight area. */
+  grid-template-columns: auto minmax(60px, 1fr) auto auto auto;
   align-items: center;
   gap: 6px;
   margin-top: 2px;
@@ -1018,6 +1020,7 @@ body.demo-active .touch-pause { display: none !important; }
 .grit-row .meter-shell { margin: 0; }
 .grit-row b { min-width: 22px; color: white; font-size: clamp(8px, .65vw, 11px); }
 .grit-row.full { color: #fff36a; filter: drop-shadow(0 0 7px #35ebff); }
+.p2-hud .grit-row { grid-template-columns: auto auto auto minmax(60px, 1fr) auto; }
 .grit-row.full .meter-shell { box-shadow: 0 0 10px #35ebff, inset 0 0 4px white; }
 .p2-hud .grit-row { text-align: right; }
 .p2-hud .meter-shell { margin-left: auto; }
@@ -1980,3 +1983,28 @@ body:has(#app:fullscreen) {
   font-size: clamp(9px, 1.15vw, 12px);
   letter-spacing: .02em;
 }
+
+/* The throwable readout rides inside the Grit row so the HUD stays the same
+   height and the enlarged fighters keep their framing. */
+.object-name {
+  color: rgba(216, 216, 210, .7);
+  font-size: clamp(6px, .82vw, 9px);
+  font-weight: 900;
+  letter-spacing: .08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 12ch;
+}
+.object-pips { display: flex; gap: 3px; flex: 0 0 auto; }
+.object-pips i {
+  width: 7px;
+  height: 7px;
+  border: 1px solid rgba(255, 177, 27, .7);
+  border-radius: 50%;
+}
+.object-pips i.left { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.mobile-landscape .object-name,
+#app:fullscreen .object-name { font-size: 6px; max-width: 9ch; }
+.mobile-landscape .object-pips i,
+#app:fullscreen .object-pips i { width: 5px; height: 5px; }

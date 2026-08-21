@@ -304,6 +304,7 @@ export function recognizeCombatCommand(history, currentFrame) {
     { action: "driveHeavy", sequence: ["back", "forward", "kick"], terminal: "kick" },
     { action: "commandSpecial", sequence: ["down", "forward", "punch"], terminal: "punch" },
     { action: "special", sequence: ["down", "forward", "kick"], terminal: "kick" },
+    { action: "throwObject", sequence: ["down", "back", "kick"], terminal: "kick" },
   ];
   for (const candidate of candidates) {
     const match = matchCommandSequence(history, candidate.sequence, currentFrame, candidate.options);

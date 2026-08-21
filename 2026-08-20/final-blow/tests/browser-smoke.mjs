@@ -306,11 +306,11 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.1E/);
+  assert.match(title.build, /1\.1F/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
-  assert.equal(title.moveListRows, 9);
+  assert.equal(title.moveListRows, 10);
   assert.deepEqual(title.aiDifficulties, ['passive', 'rookie', 'street', 'pro', 'final']);
   assert.deepEqual(title.visualQualities, ['auto', 'high', 'balanced', 'battery']);
   assert.equal(title.pauseButtons, 4);
@@ -324,7 +324,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.1e-big-fighter-edition');
+  assert.equal(title.engineVersion, '1.1f-throwables-edition');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -434,7 +434,7 @@ try {
     [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280],
     [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280],
   ]);
-  assert.equal(kitUi.rows.length, 9);
+  assert.equal(kitUi.rows.length, 10);
   assert.ok(kitUi.rows.includes('Vinyl Step'));
   assert.match(kitUi.identity, /FOOTSIES/);
 
@@ -1054,6 +1054,101 @@ try {
   assert.equal(throwTech.fighters[1].lastHitResult, "throw-tech");
   assert.equal(throwTech.fighters[0].grabbing, null, "a tech must leave no live clinch");
   assert.equal(throwTech.fighters[1].grabbed, null);
+
+  // Personal throwable objects: one recognisable object per fighter, thrown with
+  // the same command everywhere, each with genuinely different physics and a
+  // real recovery window, and none of them spammable.
+  const throwables = await evaluate(client, `(() => {
+    const ids = ['deathblow','jez','alan','post','benny','donald','cyraxx','ali'];
+    const out = {};
+    for (const id of ids) {
+      window.__finalBlowQa.fight(id, id === 'jez' ? 'deathblow' : 'jez');
+      window.__finalBlowQa.positions(300, 1050);
+      const startUses = window.__finalBlowEngine.snapshot().fighters[0].throwableUses;
+      window.__finalBlowQa.input(0, { throwObject: true });
+      let first = null;
+      const path = [];
+      let recoveryFrames = 0;
+      for (let frame = 0; frame < 150; frame += 1) {
+        window.__finalBlowQa.step(1 / 60);
+        const snapshot = window.__finalBlowEngine.snapshot();
+        if (snapshot.fighters[0].move) recoveryFrames += 1;
+        const object = snapshot.projectiles.find((projectile) => projectile.throwable);
+        if (!object) continue;
+        if (!first) first = { ...object };
+        path.push({ x: object.x, y: object.y, hazard: object.hazard, bounces: object.bouncesLeft });
+      }
+      const after = window.__finalBlowEngine.snapshot();
+      out[id] = {
+        spawned: Boolean(first),
+        style: first?.style || null,
+        width: Math.round(first?.width || 0),
+        height: Math.round(first?.height || 0),
+        travel: Math.round((path.at(-1)?.x ?? 0) - (path[0]?.x ?? 0)),
+        apex: Math.round(Math.min(...path.map((point) => point.y))),
+        rest: Math.round(Math.max(...path.map((point) => point.y))),
+        bounced: (first?.bouncesLeft ?? 0) > (path.at(-1)?.bounces ?? 0),
+        hazard: path.some((point) => point.hazard),
+        startUses,
+        usesAfter: after.fighters[0].throwableUses,
+        recoveryFrames,
+      };
+    }
+    return out;
+  })()`);
+  const objectStyles = new Set();
+  for (const [id, object] of Object.entries(throwables)) {
+    assert.ok(object.spawned, `${id} must be able to throw a personal object`);
+    assert.ok(object.style, `${id}'s object must have a style`);
+    objectStyles.add(object.style);
+    assert.equal(object.usesAfter, object.startUses - 1, `${id}'s object must cost a use`);
+    assert.ok(object.startUses >= 2 && object.startUses <= 4, `${id} must have a bounded per-round supply`);
+    assert.ok(object.recoveryFrames >= 24, `${id}'s throw must leave a real recovery window, got ${object.recoveryFrames}`);
+    assert.ok(object.travel > 120, `${id}'s object must actually travel, got ${object.travel}`);
+  }
+  assert.equal(objectStyles.size, 8, "every fighter must have a visually distinct object");
+
+  // Archetypes, not eight fireballs.
+  assert.ok(throwables.benny.travel > throwables.alan.travel * 1.6, "the X-Acto out-ranges the loogies by a wide margin");
+  assert.equal(throwables.benny.apex, throwables.benny.rest, "the X-Acto flies dead straight");
+  assert.ok(throwables.deathblow.width >= 90, "the pizza is a broad disc");
+  assert.ok(throwables.ali.apex < throwables.donald.apex, "the vinyl record is the steeper anti-air arc");
+  assert.ok(throwables.donald.bounced, "the golf ball skips off the floor");
+  assert.ok(throwables.post.bounced && throwables.post.hazard, "the wires bounce then uncoil into a hazard");
+  assert.ok(throwables.cyraxx.hazard, "the bed bugs linger as a floor hazard");
+  assert.ok(throwables.alan.travel < 340, "the loogies stay short-range close pressure");
+
+  // Jez's cable reels a clean hit in, and does not on block.
+  const tether = await evaluate(client, `(() => {
+    const run = (guard) => {
+      window.__finalBlowQa.fight('jez', 'deathblow');
+      window.__finalBlowQa.positions(240, 1000);
+      if (guard) window.__finalBlowQa.input(1, { guard: true }, 200);
+      window.__finalBlowQa.input(0, { throwObject: true });
+      for (let frame = 0; frame < 150; frame += 1) window.__finalBlowQa.step(1 / 60);
+      const snapshot = window.__finalBlowEngine.snapshot();
+      return { gap: Math.round(snapshot.fighters[1].x - snapshot.fighters[0].x), result: snapshot.fighters[1].lastHitResult };
+    };
+    return { clean: run(false), blocked: run(true) };
+  })()`);
+  assert.ok(tether.clean.gap < 320, `a clean mouse hit must reel the opponent in, gap was ${tether.clean.gap}`);
+  assert.ok(tether.blocked.gap > tether.clean.gap + 200, "a blocked mouse must not reel anyone in");
+
+  // The supply is finite: throwing until empty stops producing objects.
+  const ammo = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    let thrown = 0;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      window.__finalBlowQa.positions(300, 1050);
+      const before = window.__finalBlowEngine.snapshot().fighters[0].throwableUses;
+      window.__finalBlowQa.input(0, { throwObject: true });
+      for (let frame = 0; frame < 80; frame += 1) window.__finalBlowQa.step(1 / 60);
+      if (window.__finalBlowEngine.snapshot().fighters[0].throwableUses < before) thrown += 1;
+    }
+    return { thrown, left: window.__finalBlowEngine.snapshot().fighters[0].throwableUses };
+  })()`);
+  assert.equal(ammo.left, 0, "the supply must run out");
+  assert.equal(ammo.thrown, 2, "DeathBlow gets exactly two pizzas per round");
 
   const desktopFraming = await evaluate(client, FIGHTER_FRAMING_PROBE);
   assertFighterFraming(desktopFraming, "desktop");
@@ -1932,7 +2027,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.1e/);
+  assert.match(offlineCache.name, /final-blow-offline-1\.1f/);
   assert.ok(offlineCache.entries >= 156);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasRollback, true);
@@ -1959,8 +2054,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.1E/);
-  assert.equal(offlineBoot.version, '1.1e-big-fighter-edition');
+  assert.match(offlineBoot.build, /1\.1F/);
+  assert.equal(offlineBoot.version, '1.1f-throwables-edition');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,

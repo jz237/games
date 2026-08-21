@@ -6,6 +6,7 @@ import {
   FrameInputBuffer,
   SIMULATION_HZ,
   SIMULATION_STEP_SECONDS,
+  createAttackInstance,
   hashSeed,
   transitionFighterState,
 } from "./engine/foundation.mjs";
@@ -127,6 +128,14 @@ import {
   getGraphicFatality,
   graphicFatalitySnapshot,
 } from "./engine/fatalities.mjs";
+import {
+  FIGHTER_THROWABLES,
+  THROWABLE_COMMAND,
+  createThrowObjectMove,
+  getThrowable,
+  stepThrowable,
+  throwableUses,
+} from "./engine/throwables.mjs";
 import {
   FIGHTER_AUDIO_CUES,
   FIGHTER_AUDIO_LABELS,
@@ -1754,6 +1763,10 @@ function makeFighter(index, side, overrideDef = null) {
     previousDirectionalInput: { left: false, right: false },
     justWoke: false,
     throwTechFlashFrames: 0,
+    // Personal throwable ammunition, refreshed at the start of every round.
+    throwableUses: throwableUses(kitId),
+    throwableSpawned: false,
+    slowFrames: 0,
     // Dizzy meter and its deterministic decay / recovery / immunity clocks.
     stunMeter: 0,
     stunDecayDelay: 0,
@@ -2614,6 +2627,14 @@ function updateHud() {
     $(`#${prefix}Meter`).closest(".grit-row").classList.toggle("full", fighter.meter >= GRIT_RULES.superCost);
     $(`#${prefix}Rounds`).innerHTML = [0, 1].map((round) => `<i class="${state.rounds[side] > round ? "won" : ""}"></i>`).join("");
   });
+  state.fighters.forEach((fighter, side) => {
+    const prefix = `p${side + 1}`;
+    const profile = getThrowable(fighter.kitId);
+    $(`#${prefix}ObjectName`).textContent = profile ? profile.name : "—";
+    $(`#${prefix}Objects`).innerHTML = profile
+      ? Array.from({ length: profile.usesPerRound }, (_, index) => `<i class="${index < fighter.throwableUses ? "left" : ""}"></i>`).join("")
+      : "";
+  });
   $("#timer").textContent = state.mode === "training" ? "∞" : String(Math.ceil(state.timer)).padStart(2, "0");
   $("#roundLabel").textContent = state.mode === "training" ? "TRAINING"
     : state.mode === "demo" ? `DEMO · ROUND ${state.round}` : `ROUND ${state.round}`;
@@ -2887,6 +2908,7 @@ function directionContext(fighter, input) {
 }
 
 const advancedActions = new Set([
+  "throwObject",
   "commandSpecial",
   "launcher",
   "driveHeavy",
@@ -2908,8 +2930,13 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     forwardHeld: direction.forwardHeld,
     limb: limb || input.limb || "punch",
   };
-  const kitMove = createFighterMove(fighter.kitId, action, moveContext);
-  const gritCost = kitMove
+  if (action === "throwObject" && fighter.throwableUses <= 0) return false;
+  const throwObjectProfile = action === "throwObject" ? createThrowObjectMove(fighter.kitId) : null;
+  if (action === "throwObject" && !throwObjectProfile) return false;
+  const kitMove = throwObjectProfile
+    ? createAttackInstance(throwObjectProfile.baseKind, { ...throwObjectProfile, profileId: throwObjectProfile.id })
+    : createFighterMove(fighter.kitId, action, moveContext);
+  const gritCost = kitMove && !throwObjectProfile
     ? fighterActionCost(fighter.kitId, action, moveContext)
     : gritCostForAction(action);
   if (fighter.meter < gritCost) return false;
@@ -2928,6 +2955,11 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   }
   fighter.attackSerial += 1;
   fighter.attacking.attackSerial = fighter.attackSerial;
+  if (throwObjectProfile) {
+    fighter.throwableUses = Math.max(0, fighter.throwableUses - 1);
+    fighter.throwableSpawned = false;
+    updateHud();
+  }
   if (actionGroup === "throw") {
     fighter.attacking.backThrow = Boolean(backThrow ?? input.throwBack);
   }
@@ -3018,6 +3050,7 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
 
 const bufferedActions = [
   "jump",
+  "throwObject",
   "throw",
   "super",
   "enhanced",
@@ -3241,6 +3274,7 @@ function advanceFighterTimers(fighter) {
   fighter.confirmWindowFrames = Math.max(0, fighter.confirmWindowFrames - 1);
   fighter.landingRecoveryFrames = Math.max(0, fighter.landingRecoveryFrames - 1);
   fighter.stunImmuneFrames = Math.max(0, fighter.stunImmuneFrames - 1);
+  fighter.slowFrames = Math.max(0, (fighter.slowFrames || 0) - 1);
   if (fighter.dizzyFrames > 0) {
     fighter.dizzyFrames -= 1;
     if (fighter.dizzyFrames === 0) recoverFromDizzy(fighter);
@@ -3318,6 +3352,7 @@ function applyFighterPhysics(fighter, dt) {
 
 const attackActionPriority = [
   "super",
+  "throwObject",
   "enhancedLauncher",
   "enhancedBackSpecial",
   "enhancedCommandSpecial",
@@ -3530,7 +3565,8 @@ function updateFighter(fighter, opponent, input, dt) {
           if (fighter.crouch) fighter.vx = 0;
           else if (direction.absolute) {
             const speed = direction.forwardHeld ? fighter.movement.forwardWalkSpeed : fighter.movement.backWalkSpeed;
-            fighter.vx = direction.absolute * speed * flowSpeed;
+            const snare = fighter.slowFrames > 0 ? 0.55 : 1;
+            fighter.vx = direction.absolute * speed * flowSpeed * snare;
           } else fighter.vx = 0;
           if (Math.abs(fighter.vx) > 20) fighter.walkTime += dt;
         }
@@ -3561,6 +3597,7 @@ function updateFighter(fighter, opponent, input, dt) {
     fighter.attackTime = fighter.attackFrame * SIMULATION_STEP_SECONDS;
     const attack = fighter.attacking;
     maybeDeployTrap(fighter, attack);
+    maybeSpawnThrowable(fighter, attack);
     maybeSpawnProjectile(fighter, attack);
     if (attack.retreatSpeed && fighter.attackFrame < attack.activeEndFrame) fighter.vx = -fighter.facing * attack.retreatSpeed;
     else if (attack.advanceSpeed && fighter.attackFrame < attack.activeEndFrame) fighter.vx = fighter.facing * attack.advanceSpeed;
@@ -3686,6 +3723,57 @@ function updatePaintTraps() {
   state.traps = state.traps.filter((trap) => trap.lifeFrames > 0 && !trap.triggered);
 }
 
+function maybeSpawnThrowable(fighter, attack) {
+  if (!attack?.throwableId || fighter.throwableSpawned) return;
+  if (fighter.attackFrame < attack.activeStartFrame) return;
+  const profile = getThrowable(fighter.kitId);
+  if (!profile) return;
+  fighter.throwableSpawned = true;
+  const scale = FIGHTER_SCALE;
+  state.projectiles.push({
+    id: `${fighter.side}-obj-${state.simulationTick}`,
+    ownerSide: fighter.side,
+    throwable: profile.id,
+    x: fighter.x + fighter.facing * profile.spawnX * scale,
+    y: FLOOR + profile.spawnY * scale,
+    vx: fighter.facing * profile.speed * scale,
+    vy: profile.launchY * scale,
+    gravity: profile.gravity * scale,
+    direction: fighter.facing,
+    width: profile.width * scale,
+    height: profile.height * scale,
+    hazardWidth: profile.hazardWidth * scale,
+    damage: profile.damage,
+    chipDamage: profile.chipDamage,
+    hitstunFrames: profile.hitstunFrames,
+    blockstunFrames: profile.blockstunFrames,
+    push: Math.round(profile.push * scale),
+    level: profile.level,
+    knockdown: Boolean(profile.knockdown),
+    lifeFrames: profile.lifeFrames,
+    maxLifeFrames: profile.lifeFrames,
+    armFrames: 0,
+    maxArmFrames: 0,
+    bouncesLeft: profile.bounces,
+    bounceDamping: profile.bounceDamping,
+    hazardFrames: profile.hazardFrames,
+    hazard: false,
+    spin: profile.spin,
+    spinAngle: 0,
+    wobble: profile.wobble,
+    tether: profile.tether ? { ...profile.tether } : null,
+    slowFrames: profile.slowFrames,
+    staggerFrames: profile.staggerFrames,
+    color: fighter.def.accent,
+    style: profile.style,
+    sequenceIndex: 0,
+    enhanced: false,
+  });
+  sound("throw", fighter);
+  if (!rollbackResimulating) objectSound(profile.style);
+  spawnCombatText(fighter.x, fighter.y - fighter.height - 46, profile.name, fighter.def.accent);
+}
+
 function maybeSpawnProjectile(fighter, attack) {
   const profile = attack?.projectile;
   if (!profile) return;
@@ -3731,6 +3819,70 @@ function maybeSpawnProjectile(fighter, attack) {
     state.effects.push({ kind: projectile.style === "feedback" ? "feedbackTelegraph" : "projectileLaunch", x: projectile.x, y: projectile.y, life: 0.35, max: 0.35, color: projectile.color });
     sound("special", fighter);
   }
+}
+
+const THROWABLE_IMPACT_COLORS = Object.freeze({
+  pizza: ["#e8b23a", "#c4402a", "#f4e3b0"],
+  mouse: ["#cfd6e2", "#7fe9ff", "#8a93a5"],
+  loogie: ["#b9e37a", "#dff3b8", "#89b84f"],
+  wires: ["#4f5b70", "#ff3fbf", "#9aa6bb"],
+  xacto: ["#dfe6f0", "#ff5a4a", "#9fb0c6"],
+  golfball: ["#ffffff", "#e6ecf5", "#c8d3e2"],
+  bedbugs: ["#7a3a2c", "#c4552f", "#3d1f17"],
+  vinyl: ["#1b1b1f", "#d8d8d2", "#ff4fb9"],
+});
+
+// Each object breaks, splatters or settles in its own way.
+function spawnThrowableImpact(projectile, phase) {
+  if (!projectile.throwable) return;
+  const palette = THROWABLE_IMPACT_COLORS[projectile.style] || ["#d8d8d2"];
+  const settling = phase === "settle";
+  const count = Math.max(4, Math.round((settling ? 12 : 20) * state.performance.particleScale));
+  for (let index = 0; index < count; index += 1) {
+    const angle = settling ? -Math.PI * (0.15 + visualRandom() * 0.7) : visualRandom() * Math.PI * 2;
+    const speed = (settling ? 60 : 140) + visualRandom() * (settling ? 110 : 300);
+    state.particles.push({
+      x: projectile.x,
+      y: projectile.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 0.2 + visualRandom() * 0.36,
+      max: 0.56,
+      size: 2 + visualRandom() * (projectile.style === "pizza" ? 7 : 5),
+      color: palette[Math.floor(visualRandom() * palette.length)] || palette[0],
+    });
+  }
+  if (!rollbackResimulating) objectSound(projectile.style);
+  state.effects.push({
+    kind: settling ? "guard" : "hit",
+    style: projectile.style,
+    attackKind: "throw-object",
+    x: projectile.x,
+    y: projectile.y,
+    life: 0.3,
+    max: 0.3,
+    color: palette[0],
+  });
+}
+
+// Jez's mouse keeps its cable: a clean hit reels the victim in, a block just
+// retracts it harmlessly, and a whiff leaves him in his long recovery.
+function applyThrowableTether(projectile, victim, owner, blocked) {
+  const tether = projectile.tether;
+  if (!tether) return;
+  if (blocked) {
+    spawnCombatText(projectile.x, projectile.y - 40, "CABLE SLIPS", owner.def.accent);
+    return;
+  }
+  const holdDistance = tether.holdDistance * FIGHTER_SCALE;
+  const target = owner.x + owner.facing * holdDistance;
+  victim.x = clamp(target, MOVEMENT_RULES.stageMinX, MOVEMENT_RULES.stageMaxX);
+  victim.vx = 0;
+  victim.vy = 0;
+  victim.grounded = true;
+  victim.pendingKnockdown = false;
+  spawnCombatText((owner.x + victim.x) * 0.5, victim.y - victim.height - 30, "GET OVER HERE", owner.def.accent);
+  state.shake = Math.max(state.shake, 0.26);
 }
 
 function triggerProjectile(projectile, victim) {
@@ -3781,6 +3933,21 @@ function triggerProjectile(projectile, victim) {
     victim.armorHits += 1;
     spawnCombatText(victim.x, victim.y - victim.height - 18, "SEISMIC ARMOR", victim.def.accent);
   }
+  if (projectile.throwable) {
+    applyThrowableTether(projectile, victim, owner, blocked);
+    if (!blocked && !armored) {
+      if (projectile.staggerFrames) {
+        victim.hitstunFrames += projectile.staggerFrames;
+        victim.stun = Math.max(victim.stun, victim.hitstunFrames / SIMULATION_HZ);
+      }
+      if (projectile.slowFrames) {
+        victim.slowFrames = Math.max(victim.slowFrames || 0, projectile.slowFrames);
+        spawnCombatText(victim.x, victim.y - victim.height - 24, "SNARED", owner.def.accent);
+      }
+    }
+    spawnThrowableImpact(projectile, "hit");
+    if (projectile.hazard) projectile.lifeFrames = 0;
+  }
   owner.attackConnected = blocked ? "block" : "hit";
   owner.confirmWindowFrames = 12;
   owner.meter = clamp(owner.meter + 15 * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
@@ -3802,7 +3969,22 @@ function updateProjectiles(dt) {
   for (const projectile of state.projectiles) {
     projectile.lifeFrames -= 1;
     projectile.armFrames = Math.max(0, (projectile.armFrames || 0) - 1);
-    projectile.x += projectile.vx * dt;
+    if (projectile.throwable) {
+      const phase = stepThrowable(projectile, {
+        dt,
+        floorY: FLOOR,
+        minX: MOVEMENT_RULES.stageMinX - 140,
+        maxX: MOVEMENT_RULES.stageMaxX + 140,
+      });
+      if (phase === "bounce" && !rollbackResimulating) objectSound(projectile.style);
+      if (phase === "settle") spawnThrowableImpact(projectile, "settle");
+      if (phase === "expired") {
+        projectile.lifeFrames = 0;
+        spawnThrowableImpact(projectile, "expire");
+      }
+    } else {
+      projectile.x += projectile.vx * dt;
+    }
     if (projectile.lifeFrames <= 0
       || projectile.x < MOVEMENT_RULES.stageMinX - 160
       || projectile.x > MOVEMENT_RULES.stageMaxX + 160) continue;
@@ -4961,6 +5143,204 @@ function drawPaintTraps(time) {
   }
 }
 
+// Each personal object is drawn as a recognisable physical thing rather than a
+// recoloured orb, so its flight path and weight read at a glance.
+function drawThrowable(projectile, time, life) {
+  const w = projectile.width;
+  const h = projectile.height;
+  const angle = projectile.spinAngle || 0;
+  const wobble = projectile.wobble ? Math.sin(time * 0.02) * projectile.wobble * 0.01 : 0;
+  ctx.globalAlpha = Math.min(1, life * 2.2);
+  switch (projectile.style) {
+    case "pizza": {
+      ctx.rotate(angle + wobble);
+      ctx.fillStyle = "#e8b23a";
+      ctx.beginPath();
+      ctx.arc(0, 0, w * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#c9812a";
+      ctx.beginPath();
+      ctx.arc(0, 0, w * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#f2e2b4";
+      ctx.beginPath();
+      ctx.arc(0, 0, w * 0.36, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#c4402a";
+      for (let i = 0; i < 6; i += 1) {
+        const a = (i / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * w * 0.2, Math.sin(a) * w * 0.2, w * 0.06, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.strokeStyle = "rgba(120,70,20,.5)";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 8; i += 1) {
+        const a = (i / 8) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a) * w * 0.5, Math.sin(a) * w * 0.5);
+        ctx.stroke();
+      }
+      break;
+    }
+    case "mouse": {
+      // Cable trailing back toward the thrower.
+      const owner = state.fighters[projectile.ownerSide];
+      if (owner) {
+        const back = (owner.x - projectile.x) * (Math.sign(projectile.vx) || 1);
+        ctx.strokeStyle = "#8a93a5";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        for (let i = 1; i <= 8; i += 1) {
+          const t = i / 8;
+          ctx.lineTo(back * t, Math.sin(t * Math.PI * 2 + time * 0.02) * 9 * (1 - t));
+        }
+        ctx.stroke();
+      }
+      ctx.rotate(Math.sin(angle) * 0.2);
+      ctx.fillStyle = "#e3e8f0";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, w * 0.5, h * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#5b6474";
+      ctx.fillRect(-w * 0.06, -h * 0.5, w * 0.12, h * 0.42);
+      ctx.fillStyle = "#7fe9ff";
+      ctx.beginPath();
+      ctx.arc(w * 0.18, 0, h * 0.14, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "loogie": {
+      ctx.fillStyle = "#b9e37a";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, w * 0.5, h * 0.42, Math.atan2(projectile.vy, projectile.vx) * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(223,243,184,.75)";
+      ctx.beginPath();
+      ctx.ellipse(-w * 0.12, -h * 0.12, w * 0.18, h * 0.16, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(137,184,79,.7)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.5, h * 0.1);
+      ctx.quadraticCurveTo(-w * 0.9, 0, -w * 1.2, h * 0.2);
+      ctx.stroke();
+      break;
+    }
+    case "wires": {
+      const uncoiled = projectile.hazard;
+      ctx.strokeStyle = "#4f5b70";
+      ctx.lineWidth = 4;
+      const coils = uncoiled ? 5 : 7;
+      for (let i = 0; i < coils; i += 1) {
+        const spread = uncoiled ? w * 0.5 : w * 0.3;
+        ctx.strokeStyle = i % 2 ? "#4f5b70" : "#7b3fa0";
+        ctx.beginPath();
+        if (uncoiled) {
+          ctx.moveTo(-spread + (i / coils) * spread * 2, h * 0.2);
+          ctx.quadraticCurveTo(
+            -spread + ((i + 0.5) / coils) * spread * 2,
+            h * 0.2 - 16 - Math.sin(time * 0.01 + i) * 5,
+            -spread + ((i + 1) / coils) * spread * 2,
+            h * 0.2,
+          );
+        } else {
+          ctx.arc(0, 0, w * 0.2 + i * 3, angle + i, angle + i + 4.2);
+        }
+        ctx.stroke();
+      }
+      break;
+    }
+    case "xacto": {
+      ctx.rotate(Math.atan2(projectile.vy, Math.abs(projectile.vx)));
+      ctx.fillStyle = "#2b3038";
+      ctx.fillRect(-w * 0.5, -h * 0.5, w * 0.45, h);
+      ctx.fillStyle = "#dfe6f0";
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.05, -h * 0.5);
+      ctx.lineTo(w * 0.5, 0);
+      ctx.lineTo(-w * 0.05, h * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,.7)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.05, 0);
+      ctx.lineTo(w * 0.5, 0);
+      ctx.stroke();
+      break;
+    }
+    case "golfball": {
+      ctx.rotate(angle);
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(0, 0, w * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(150,165,185,.55)";
+      for (let i = 0; i < 7; i += 1) {
+        const a = (i / 7) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * w * 0.24, Math.sin(a) * w * 0.24, w * 0.06, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case "bedbugs": {
+      const swarm = projectile.hazard ? 9 : 6;
+      for (let i = 0; i < swarm; i += 1) {
+        const phase = time * 0.01 + i * 1.7;
+        const bx = Math.cos(phase) * w * (projectile.hazard ? 0.45 : 0.28);
+        const by = Math.sin(phase * 1.4) * h * 0.3;
+        ctx.fillStyle = i % 3 ? "#7a3a2c" : "#c4552f";
+        ctx.beginPath();
+        ctx.ellipse(bx, by, 6, 4.4, phase, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(40,20,14,.8)";
+        ctx.lineWidth = 1.2;
+        for (let leg = -1; leg <= 1; leg += 2) {
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(bx + leg * 6, by + Math.sin(phase * 3) * 4);
+          ctx.stroke();
+        }
+      }
+      break;
+    }
+    case "vinyl": {
+      ctx.rotate(angle);
+      ctx.fillStyle = "#16161a";
+      ctx.beginPath();
+      ctx.arc(0, 0, w * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(216,216,210,.28)";
+      ctx.lineWidth = 1.4;
+      for (let r = 3; r < 5; r += 1) {
+        ctx.beginPath();
+        ctx.arc(0, 0, w * 0.5 * (r / 6), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#ff4fb9";
+      ctx.beginPath();
+      ctx.arc(0, 0, w * 0.17, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#16161a";
+      ctx.beginPath();
+      ctx.arc(0, 0, w * 0.04, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    default: {
+      ctx.fillStyle = projectile.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, w * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
 function drawProjectiles(time) {
   for (const projectile of state.projectiles) {
     const direction = Math.sign(projectile.vx) || projectile.direction || 1;
@@ -4969,6 +5349,19 @@ function drawProjectiles(time) {
     ctx.save();
     ctx.translate(projectile.x, projectile.y);
     ctx.scale(direction, 1);
+    if (projectile.throwable) {
+      // Ground shadow so the arc and landing point read clearly.
+      ctx.save();
+      ctx.scale(direction, 1);
+      ctx.fillStyle = "rgba(0,0,0,.34)";
+      ctx.beginPath();
+      ctx.ellipse(0, FLOOR - projectile.y, projectile.width * 0.34, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      drawThrowable(projectile, time, life);
+      ctx.restore();
+      continue;
+    }
     if (projectile.style === "feedback") {
       const armed = projectile.armFrames <= 0;
       const charge = projectile.maxArmFrames
@@ -6042,6 +6435,69 @@ function showSoundCaption(kind, fighter = null) {
   soundCaptionTimer = window.setTimeout(() => { caption.hidden = true; }, 720);
 }
 
+/**
+ * Each personal object gets its own synthesized impact rather than a shared
+ * sample: a tone sweep for the body of the sound plus a shaped noise burst for
+ * its texture. Synthesis keeps the objects distinct without shipping eight more
+ * audio files, works offline, and costs nothing to add a ninth.
+ *
+ * [startHz, endHz, seconds, waveform, gain, noiseAmount, noiseSeconds, filterHz]
+ */
+const OBJECT_SOUNDS = Object.freeze({
+  pizza: [190, 62, 0.24, "sine", 0.085, 0.5, 0.2, 900],
+  mouse: [640, 210, 0.13, "square", 0.06, 0.22, 0.1, 3200],
+  loogie: [430, 120, 0.17, "sine", 0.07, 0.62, 0.16, 1500],
+  wires: [150, 58, 0.3, "sawtooth", 0.075, 0.4, 0.26, 700],
+  xacto: [1500, 640, 0.11, "triangle", 0.062, 0.3, 0.09, 6200],
+  golfball: [900, 380, 0.09, "sine", 0.055, 0.16, 0.06, 4200],
+  bedbugs: [260, 320, 0.34, "triangle", 0.05, 0.7, 0.32, 2400],
+  vinyl: [520, 90, 0.26, "sawtooth", 0.08, 0.34, 0.2, 1800],
+});
+
+function noiseBurst(now, amount, seconds, filterHz) {
+  if (!amount || !state.audio) return;
+  const frames = Math.max(1, Math.floor(state.audio.sampleRate * seconds));
+  const buffer = state.audio.createBuffer(1, frames, state.audio.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let index = 0; index < frames; index += 1) {
+    // Deterministic pseudo-noise: audio must never touch gameplay RNG.
+    const value = Math.sin(index * 12.9898) * 43758.5453;
+    data[index] = ((value - Math.floor(value)) * 2 - 1) * (1 - index / frames);
+  }
+  const source = state.audio.createBufferSource();
+  source.buffer = buffer;
+  const filter = state.audio.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(filterHz, now);
+  const gain = state.audio.createGain();
+  gain.gain.setValueAtTime(Math.max(0.0001, amount * 0.09 * state.sfxVolume), now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
+  source.connect(filter).connect(gain).connect(state.audio.destination);
+  source.start(now);
+  source.stop(now + seconds);
+}
+
+function objectSound(styleId) {
+  if (!$("#soundToggle").checked) return;
+  unlockAudio();
+  if (!state.audio) return;
+  const settings = OBJECT_SOUNDS[styleId];
+  if (!settings) return;
+  const now = state.audio.currentTime;
+  const [startHz, endHz, seconds, waveform, gainValue, noiseAmount, noiseSeconds, filterHz] = settings;
+  const oscillator = state.audio.createOscillator();
+  const gain = state.audio.createGain();
+  oscillator.type = waveform;
+  oscillator.frequency.setValueAtTime(startHz, now);
+  oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, endHz), now + seconds);
+  gain.gain.setValueAtTime(Math.max(0.0001, gainValue * state.sfxVolume), now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
+  oscillator.connect(gain).connect(state.audio.destination);
+  oscillator.start(now);
+  oscillator.stop(now + seconds);
+  noiseBurst(now, noiseAmount, noiseSeconds, filterHz);
+}
+
 function proceduralSound(kind) {
   if (!state.audio) return;
   const now = state.audio.currentTime;
@@ -6516,7 +6972,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.1e-big-fighter-edition",
+  version: "1.1f-throwables-edition",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -6576,6 +7032,10 @@ window.__finalBlowEngine = {
         armFrames: projectile.armFrames,
         style: projectile.style,
         enhanced: projectile.enhanced,
+        throwable: projectile.throwable || null,
+        hazard: Boolean(projectile.hazard),
+        bouncesLeft: projectile.bouncesLeft ?? 0,
+        vy: projectile.vy ?? 0,
       })),
       fighters: state.fighters.map((fighter) => ({
         id: fighter.def.id,
@@ -6624,6 +7084,8 @@ window.__finalBlowEngine = {
         juggleCount: fighter.juggleCount,
         down: fighter.down,
         lastHitResult: fighter.lastHitResult,
+        throwableUses: fighter.throwableUses,
+        slowFrames: fighter.slowFrames,
         stunMeter: fighter.stunMeter,
         dizzyFrames: fighter.dizzyFrames,
         dizzy: fighter.dizzyFrames > 0,

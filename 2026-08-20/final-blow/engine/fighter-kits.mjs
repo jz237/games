@@ -1,6 +1,7 @@
 import { createAttackInstance } from "./foundation.mjs";
 import { ATTACK_LEVELS, KICK_VARIANTS, deriveKickProfile } from "./defense.mjs";
 import { GRIT_RULES, matchCommandSequence } from "./combos.mjs";
+import { FIGHTER_THROWABLES, THROWABLE_COMMAND } from "./throwables.mjs";
 
 export const KIT_ACTIONS = Object.freeze([
   "backSpecial",
@@ -1373,6 +1374,8 @@ export const FIGHTER_COMMANDS = Object.freeze([
   { action: "backSpecial", sequence: ["down", "back", "punch"], terminal: "punch", display: "↓ ← + PUNCH" },
   { action: "commandSpecial", sequence: ["down", "forward", "punch"], terminal: "punch", display: "↓ → + PUNCH" },
   { action: "special", sequence: ["down", "forward", "kick"], terminal: "kick", display: "↓ → + KICK" },
+  // The last free quarter-circle throws the fighter's personal object.
+  { action: "throwObject", sequence: ["down", "back", "kick"], terminal: "kick", display: "↓ ← + KICK" },
 ]);
 
 export function recognizeFighterCommand(fighterId, history, currentFrame) {
@@ -1426,5 +1429,17 @@ export function selectKitAiIntent(fighterId, {
 }
 
 export function listFighterMoves(fighterId) {
-  return getFighterKit(fighterId)?.moveList.map(([name, command]) => ({ name, command })) || [];
+  const kit = getFighterKit(fighterId);
+  if (!kit) return [];
+  const moves = kit.moveList.map(([name, command]) => ({ name, command }));
+  // The personal throwable is data-driven, so it is listed from the throwable
+  // table rather than duplicated into every kit's move list.
+  const throwable = FIGHTER_THROWABLES[fighterId];
+  if (throwable) {
+    moves.splice(Math.max(0, moves.length - 1), 0, {
+      name: throwable.name,
+      command: `${THROWABLE_COMMAND.display} · ${throwable.usesPerRound} per round`,
+    });
+  }
+  return moves;
 }
