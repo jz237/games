@@ -3,7 +3,7 @@ import test from "node:test";
 import { createDemoDirector, demoMatchupKey } from "../engine/demo.mjs";
 
 const fighters = ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali"];
-const stages = ["kensington", "vet", "wildwood", "buffet", "cruise"];
+const stages = ["kensington", "vet", "wildwood", "buffet", "cruise", "janney"];
 
 test("demo director is deterministic and exhausts every matchup before repeating", () => {
   const first = createDemoDirector({ fighterIds: fighters, stageIds: stages, trackCount: 4, seed: 237 });
@@ -55,7 +55,7 @@ test("demo director rejects unusable rosters, stages and soundtrack sets", () =>
   assert.throws(() => createDemoDirector({ fighterIds: fighters, stageIds: stages, trackCount: 0 }), /one soundtrack/);
 });
 
-test("the stage bag reaches all four stages before repeating any of them", () => {
+test("the stage bag reaches every stage before repeating any of them", () => {
   const director = createDemoDirector({ fighterIds: fighters, stageIds: stages, trackCount: 4, seed: 8123 });
   const seen = new Set();
   let previous = null;

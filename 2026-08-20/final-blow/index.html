@@ -9,7 +9,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="description" content="Final Blow: Philly After Dark — a playable 1990s-inspired weapon fighter prototype.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23080b13'/%3E%3Cpath d='M14 10h39l-4 12H29l-2 8h18l-4 11H24l-5 15H5z' fill='%23ef2c28'/%3E%3C/svg%3E">
-  <title>Final Blow: Philly After Dark</title>
+  <title>Final Blow 1.2: Philly After Dark</title>
+  <meta name="application-version" content="1.2">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -19,7 +20,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">PHILLY AFTER DARK <b>1.1</b></div>
+      <div class="build-tag">PHILLY AFTER DARK <b>1.2</b></div>
       <div id="offlineBadge" class="offline-badge" aria-live="polite">CACHE CHECK</div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
@@ -152,6 +153,8 @@
                 <div class="online-opponent"><span>OPPONENT</span><b id="onlineOpponentFighter">CHOOSING…</b></div>
                 <label>STAGE<select id="onlineStageSelect" aria-label="Online stage">
                   <option value="kensington">KENSINGTON &amp; ALLEGHENY</option><option value="vet">THE VET PARKING LOT</option>
+                  <option value="wildwood">WILDWOOD BOARDWALK</option><option value="buffet">CHINESE BUFFET</option>
+                  <option value="cruise">CRUISE POOL DECK</option><option value="janney">JANNEY STREET VACANT LOT</option>
                 </select></label>
                 <label>INPUT DELAY<select id="onlineDelaySelect" aria-label="Online input delay">
                   <option value="auto">AUTO · PING TUNED</option><option value="0">0 FRAMES</option><option value="1">1 FRAME</option>
@@ -218,6 +221,11 @@
             <span class="stage-preview cruise-preview"></span>
             <strong>CRUISE POOL DECK</strong>
             <small>DECK 11 · SAILING SOMEWHERE</small>
+          </button>
+          <button class="stage-card" data-stage="janney">
+            <span class="stage-preview janney-preview"></span>
+            <strong>JANNEY STREET VACANT LOT</strong>
+            <small>PHILADELPHIA · EARLY DUSK</small>
           </button>
         </div>
         <div class="selection-footer">

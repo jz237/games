@@ -58,6 +58,9 @@ const object = (id, overrides) => Object.freeze({
   tether: null,
   slowFrames: 0,
   staggerFrames: 0,
+  releaseFrames: Object.freeze([4, 5, 6, 7]),
+  impactLabel: "OBJECT HIT",
+  variants: null,
   ...overrides,
 });
 
@@ -79,6 +82,7 @@ export const FIGHTER_THROWABLES = Object.freeze({
     spin: 13,
     wobble: 11,
     lifeFrames: 170,
+    impactLabel: "PIZZA SPLAT",
     sound: "pizza",
   }),
   jez: object("mouse", {
@@ -101,6 +105,7 @@ export const FIGHTER_THROWABLES = Object.freeze({
     spin: 3,
     // A clean hit drags the victim to just outside DeathBlow-range of Jez.
     tether: Object.freeze({ reelSpeed: 760, holdDistance: 118, retractOnBlock: true }),
+    impactLabel: "MOUSE TRAP",
     sound: "mouse",
   }),
   alan: object("loogie", {
@@ -125,6 +130,7 @@ export const FIGHTER_THROWABLES = Object.freeze({
     lifeFrames: 52,
     staggerFrames: 9,
     hazardFrames: 0,
+    impactLabel: "STICKY HIT",
     sound: "loogie",
   }),
   post: object("wires", {
@@ -150,6 +156,7 @@ export const FIGHTER_THROWABLES = Object.freeze({
     hazardWidth: 96,
     slowFrames: 48,
     spin: 5,
+    impactLabel: "WIRED UP",
     sound: "wires",
   }),
   benny: object("xacto", {
@@ -169,6 +176,7 @@ export const FIGHTER_THROWABLES = Object.freeze({
     blockstunFrames: 11,
     push: 190,
     lifeFrames: 96,
+    impactLabel: "PRECISION CUT",
     sound: "xacto",
   }),
   donald: object("golfball", {
@@ -193,6 +201,18 @@ export const FIGHTER_THROWABLES = Object.freeze({
     bounces: 2,
     bounceDamping: 0.62,
     spin: 18,
+    impactLabel: "FORE!",
+    variants: Object.freeze({
+      high: Object.freeze({
+        name: "HIGH GOLF BALL",
+        launchY: -420,
+        gravity: 1380,
+        bounces: 1,
+        damage: 9,
+        hitstunFrames: 20,
+        push: 235,
+      }),
+    }),
     sound: "golfball",
   }),
   cyraxx: object("bedbugs", {
@@ -217,6 +237,7 @@ export const FIGHTER_THROWABLES = Object.freeze({
     hazardFrames: 130,
     hazardWidth: 104,
     staggerFrames: 7,
+    impactLabel: "INFESTED",
     sound: "bedbugs",
   }),
   ali: object("vinyl", {
@@ -240,6 +261,7 @@ export const FIGHTER_THROWABLES = Object.freeze({
     lifeFrames: 175,
     knockdown: true,
     spin: 22,
+    impactLabel: "BASS DROP",
     sound: "vinyl",
   }),
 });
@@ -259,16 +281,18 @@ export function throwableUses(fighterId) {
  * by the projectile system on the active frame, so this only owns the wind-up,
  * the commitment and the recovery that makes a whiff punishable.
  */
-export function createThrowObjectMove(fighterId) {
+export function createThrowObjectMove(fighterId, { strength = "light" } = {}) {
   const profile = getThrowable(fighterId);
   if (!profile) return null;
+  const throwableVariant = strength === "heavy" && profile.variants?.high ? "high" : "";
+  const variant = throwableVariant ? profile.variants[throwableVariant] : null;
   return {
     id: `${fighterId}-throw-${profile.id}`,
     baseKind: "special",
     kind: "special",
     cancelProfileId: `throw-object`,
     level: ATTACK_LEVELS.MID,
-    moveName: profile.name,
+    moveName: variant?.name || profile.name,
     startupFrames: profile.startupFrames,
     activeFrames: profile.activeFrames,
     recoveryFrames: profile.recoveryFrames,
@@ -283,6 +307,8 @@ export function createThrowObjectMove(fighterId) {
     hitboxes: [],
     throwableId: profile.id,
     throwableFighterId: fighterId,
+    throwableVariant,
+    animation: Object.freeze({ bank: "specials", frames: profile.releaseFrames }),
     command: THROWABLE_COMMAND.display,
   };
 }

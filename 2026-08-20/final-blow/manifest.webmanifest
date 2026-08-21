@@ -1,5 +1,6 @@
 {
-  "name": "Final Blow: Philly After Dark",
+  "name": "Final Blow 1.2: Philly After Dark",
+  "version": "1.2",
   "short_name": "Final Blow",
   "description": "A Philadelphia after-dark arcade weapon fighter.",
   "start_url": "./",

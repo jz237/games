@@ -135,6 +135,7 @@ import {
   CROWD_LAYERS,
   POSTURES,
   TAILGATE_POSTURES,
+  catPosition,
   createCrowd,
   crowdPosition,
   crowdSnapshot,
@@ -549,6 +550,11 @@ const stages = {
     name: "CRUISE-SHIP POOL DECK",
     ticker: "MAIN POOL DECK // DECK 11 // SAILING SOMEWHERE",
     src: "assets/cruise-pool-deck.webp",
+  },
+  janney: {
+    name: "JANNEY STREET VACANT LOT",
+    ticker: "JANNEY STREET // VACANT LOT // EARLY DUSK",
+    src: "assets/janney-street-vacant-lot.webp",
   },
 };
 
@@ -2485,7 +2491,9 @@ function triggerFinisherImpact(finisher, impact) {
       life: (finalImpact ? .65 : .22) + visualRandom() * (finalImpact ? 1.15 : .42),
       max: finalImpact ? 1.8 : .64,
       size: 2 + visualRandom() * (finalImpact ? 8 : 5),
-      color: splatter ? "#d90b19" : visualRandom() > .38 ? attacker.def.accent : attacker.def.color,
+      color: gore
+        ? splatter ? "#d90b19" : visualRandom() > .45 ? "#a50713" : "#e32632"
+        : "#862833",
     });
   }
 
@@ -2986,7 +2994,9 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     limb: limb || input.limb || "punch",
   };
   if (action === "throwObject" && fighter.throwableUses <= 0) return false;
-  const throwObjectProfile = action === "throwObject" ? createThrowObjectMove(fighter.kitId) : null;
+  const throwObjectProfile = action === "throwObject"
+    ? createThrowObjectMove(fighter.kitId, { strength: input.heavy ? "heavy" : "light" })
+    : null;
   if (action === "throwObject" && !throwObjectProfile) return false;
   const kitMove = throwObjectProfile
     ? createAttackInstance(throwObjectProfile.baseKind, { ...throwObjectProfile, profileId: throwObjectProfile.id })
@@ -3380,16 +3390,55 @@ function startDash(fighter, direction) {
   sound("dash", fighter);
 }
 
+function spawnKnockdownImpact(fighter, landingVelocity) {
+  const force = clamp(Math.abs(landingVelocity) / 760, 0.55, 1.35);
+  const count = Math.max(5, Math.round(14 * force * state.performance.particleScale));
+  for (let index = 0; index < count; index += 1) {
+    const direction = visualRandom() < 0.5 ? -1 : 1;
+    state.particles.push({
+      kind: "dust",
+      x: fighter.x + (visualRandom() - 0.5) * 54,
+      y: FLOOR - 3,
+      vx: direction * (40 + visualRandom() * 210) * force,
+      vy: -35 - visualRandom() * 150 * force,
+      gravity: 440,
+      drag: 0.96,
+      life: 0.25 + visualRandom() * 0.42,
+      max: 0.67,
+      size: 4 + visualRandom() * 10,
+      color: visualRandom() > 0.4 ? "#777067" : "#4e4a46",
+    });
+  }
+  state.effects.push({
+    kind: "floorImpact", x: fighter.x, y: FLOOR - 4,
+    width: 62 + force * 74, life: 0.44, max: 0.44, color: "#b7a99a",
+  });
+  if (state.graphicFatalities) {
+    const life = 2.4 + force;
+    state.effects.push({
+      kind: "bloodDecal", tier: "heavy", x: fighter.x, y: FLOOR + 3,
+      width: 28 + force * 34, life, max: life, color: "#65060c",
+    });
+  }
+  applyViolenceResponse(force > 1.08 ? "throw" : "heavy");
+  sound("hit-heavy", state.fighters[state.lastImpactSide] || fighter);
+}
+
 function applyFighterPhysics(fighter, dt) {
   fighter.vy += GRAVITY * dt;
   fighter.x += fighter.vx * dt;
   fighter.y += fighter.vy * dt;
   if (fighter.y >= FLOOR) {
     const landed = !fighter.grounded;
+    const landingVelocity = fighter.vy;
+    const violentLanding = landed && fighter.pendingKnockdown;
     fighter.y = FLOOR;
     fighter.vy = 0;
     fighter.grounded = true;
-    if (fighter.pendingKnockdown) enterKnockdown(fighter);
+    if (fighter.pendingKnockdown) {
+      enterKnockdown(fighter);
+      if (violentLanding) spawnKnockdownImpact(fighter, landingVelocity);
+    }
     else if (landed && fighter.attacking?.profileId.startsWith("air-")) {
       fighter.attacking = null;
       fighter.attackTime = 0;
@@ -3777,10 +3826,9 @@ function triggerPaintTrap(trap, victim) {
   victim.meter = clamp(victim.meter + 13 * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
   owner.attackConnected = blocked ? "block" : "hit";
   state.effects.push({ kind: "paintTrapBurst", x: trap.x, y: trap.y - 24, life: 0.62, max: 0.62, color: trap.color });
-  spawnHit(trap.x, trap.y - 63, { ...owner.def, accent: trap.color }, "special", blocked);
+  spawnHit(trap.x, trap.y - 63, owner.def, "special", blocked, { direction: owner.facing });
   spawnCombatText(trap.x, trap.y - 112, blocked ? "WET BLOCK" : "WET PAINT!", trap.color);
-  state.shake = Math.max(state.shake, blocked ? 0.12 : 0.28);
-  state.hitstop = Math.max(state.hitstop, blocked ? 0.035 : 0.09);
+  applyViolenceResponse("special", { blocked });
   state.lastImpactSide = owner.side;
   sound(blocked ? "block" : "hit-heavy", blocked ? victim : owner);
   updateHud();
@@ -3806,42 +3854,48 @@ function maybeSpawnThrowable(fighter, attack) {
   if (fighter.attackFrame < attack.activeStartFrame) return;
   const profile = getThrowable(fighter.kitId);
   if (!profile) return;
+  const variant = attack.throwableVariant && profile.variants?.[attack.throwableVariant]
+    ? profile.variants[attack.throwableVariant]
+    : null;
+  const flight = variant ? { ...profile, ...variant } : profile;
   fighter.throwableSpawned = true;
   const scale = FIGHTER_SCALE;
   state.projectiles.push({
     id: `${fighter.side}-obj-${state.simulationTick}`,
     ownerSide: fighter.side,
     throwable: profile.id,
-    x: fighter.x + fighter.facing * profile.spawnX * scale,
-    y: FLOOR + profile.spawnY * scale,
-    vx: fighter.facing * profile.speed * scale,
-    vy: profile.launchY * scale,
-    gravity: profile.gravity * scale,
+    x: fighter.x + fighter.facing * flight.spawnX * scale,
+    y: FLOOR + flight.spawnY * scale,
+    vx: fighter.facing * flight.speed * scale,
+    vy: flight.launchY * scale,
+    gravity: flight.gravity * scale,
     direction: fighter.facing,
-    width: profile.width * scale,
-    height: profile.height * scale,
-    hazardWidth: profile.hazardWidth * scale,
-    damage: profile.damage,
-    chipDamage: profile.chipDamage,
-    hitstunFrames: profile.hitstunFrames,
-    blockstunFrames: profile.blockstunFrames,
-    push: Math.round(profile.push * scale),
-    level: profile.level,
-    knockdown: Boolean(profile.knockdown),
-    lifeFrames: profile.lifeFrames,
-    maxLifeFrames: profile.lifeFrames,
+    width: flight.width * scale,
+    height: flight.height * scale,
+    hazardWidth: flight.hazardWidth * scale,
+    damage: flight.damage,
+    chipDamage: flight.chipDamage,
+    hitstunFrames: flight.hitstunFrames,
+    blockstunFrames: flight.blockstunFrames,
+    push: Math.round(flight.push * scale),
+    level: flight.level,
+    knockdown: Boolean(flight.knockdown),
+    lifeFrames: flight.lifeFrames,
+    maxLifeFrames: flight.lifeFrames,
     armFrames: 0,
     maxArmFrames: 0,
-    bouncesLeft: profile.bounces,
-    bounceDamping: profile.bounceDamping,
-    hazardFrames: profile.hazardFrames,
+    bouncesLeft: flight.bounces,
+    bounceDamping: flight.bounceDamping,
+    hazardFrames: flight.hazardFrames,
     hazard: false,
-    spin: profile.spin,
+    spin: flight.spin,
     spinAngle: 0,
-    wobble: profile.wobble,
-    tether: profile.tether ? { ...profile.tether } : null,
-    slowFrames: profile.slowFrames,
-    staggerFrames: profile.staggerFrames,
+    wobble: flight.wobble,
+    tether: flight.tether ? { ...flight.tether } : null,
+    slowFrames: flight.slowFrames,
+    staggerFrames: flight.staggerFrames,
+    impactLabel: flight.impactLabel,
+    variant: attack.throwableVariant || "low",
     color: fighter.def.accent,
     style: profile.style,
     sequenceIndex: 0,
@@ -3849,7 +3903,7 @@ function maybeSpawnThrowable(fighter, attack) {
   });
   sound("throw", fighter);
   if (!rollbackResimulating) objectSound(profile.style);
-  spawnCombatText(fighter.x, fighter.y - fighter.height - 46, profile.name, fighter.def.accent);
+  spawnCombatText(fighter.x, fighter.y - fighter.height - 46, flight.name, fighter.def.accent);
 }
 
 function maybeSpawnProjectile(fighter, attack) {
@@ -3932,9 +3986,9 @@ function spawnThrowableImpact(projectile, phase) {
   }
   if (!rollbackResimulating) objectSound(projectile.style);
   state.effects.push({
-    kind: settling ? "guard" : "hit",
+    kind: "objectImpact",
     style: projectile.style,
-    attackKind: "throw-object",
+    settling,
     x: projectile.x,
     y: projectile.y,
     life: 0.3,
@@ -4024,6 +4078,9 @@ function triggerProjectile(projectile, victim) {
       }
     }
     spawnThrowableImpact(projectile, "hit");
+    if (!blocked && !armored && projectile.impactLabel) {
+      spawnCombatText(projectile.x, projectile.y - 58, projectile.impactLabel, owner.def.accent);
+    }
     if (projectile.hazard) projectile.lifeFrames = 0;
   }
   owner.attackConnected = blocked ? "block" : "hit";
@@ -4031,12 +4088,12 @@ function triggerProjectile(projectile, victim) {
   owner.meter = clamp(owner.meter + 15 * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
   victim.meter = clamp(victim.meter + 15 * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
   state.effects.push({ kind: projectile.style === "feedback" ? "feedbackBurst" : "projectileBurst", x: projectile.x, y: projectile.y, life: 0.5, max: 0.5, color: projectile.color });
-  spawnHit(projectile.x, projectile.y, { ...owner.def, accent: projectile.color }, "special", blocked);
+  const impactTier = projectile.stageWeapon ? "weapon" : projectile.throwable ? "heavy" : "special";
+  spawnHit(projectile.x, projectile.y, owner.def, impactTier, blocked, { direction: hitDirection, counter });
   if (projectile.style === "feedback") spawnCombatText(projectile.x, projectile.y - 86, blocked ? "ECHO BLOCK" : "FEEDBACK ECHO!", projectile.color);
   else if (counter) spawnCombatText(projectile.x, projectile.y - 72, "COUNTER", projectile.color);
   else if (!blocked && projectile.level === ATTACK_LEVELS.LOW) spawnCombatText(projectile.x, projectile.y - 61, "LOW SHOT", projectile.color);
-  state.shake = Math.max(state.shake, blocked ? 0.1 : 0.25);
-  state.hitstop = Math.max(state.hitstop, blocked ? 0.035 : 0.085);
+  applyViolenceResponse(impactTier, { blocked, counter });
   state.lastImpactSide = owner.side;
   projectile.hit = true;
   sound(blocked ? "block" : "hit-heavy", blocked ? victim : owner);
@@ -4423,12 +4480,12 @@ function resolveGrabThrow(attacker, victim, grab, style, direction) {
   attacker.combo.reset();
   attacker.meter = clamp(attacker.meter + grab.meter * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
   victim.meter = clamp(victim.meter + grab.meter * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
-  state.shake = Math.max(state.shake, style.shake);
-  state.hitstop = Math.max(state.hitstop, 0.11);
+  applyViolenceResponse("throw");
+  state.shake = Math.max(state.shake, style.shake * 1.2);
   state.lastImpactSide = attacker.side;
   const impactX = victim.x;
   const impactY = FLOOR - 60;
-  spawnHit(impactX, impactY, attacker.def, "throw", false);
+  spawnHit(impactX, impactY, attacker.def, "throw", false, { direction });
   spawnCombatText(impactX, impactY - 78, grab.back ? "BACK THROW" : "THROW", attacker.def.accent);
   sound("hit-heavy", attacker);
   if (state.mode === "training" && attacker.side === 0) {
@@ -4517,11 +4574,10 @@ function triggerSouthpawCounter(counterFighter, incomingFighter, incomingAttack,
     x: incomingFighter.x - counterFighter.facing * 28,
     y: incomingFighter.y - 132,
   };
-  spawnHit(impact.x, impact.y, counterFighter.def, "special", false);
+  spawnHit(impact.x, impact.y, counterFighter.def, "special", false, { direction: counterFighter.facing, counter: true });
   state.effects.push({ kind: "counterPunch", x: impact.x, y: impact.y, life: 0.62, max: 0.62, color: counterFighter.def.accent });
   spawnCombatText(impact.x, impact.y - 128, "COUNTER-PUNCH!", counterFighter.def.accent);
-  state.hitstop = Math.max(state.hitstop, 0.16);
-  state.shake = Math.max(state.shake, 0.42);
+  applyViolenceResponse("special", { counter: true });
   state.lastImpactSide = counterFighter.side;
   if ($("#flashToggle").checked) state.flash = Math.max(state.flash, 0.11);
   sound("hit-heavy", counterFighter);
@@ -4654,11 +4710,17 @@ function hit(attacker, victim, attack, collision) {
   }
   attacker.meter = clamp(attacker.meter + attack.meter * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
   victim.meter = clamp(victim.meter + attack.meter * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
-  state.shake = Math.max(state.shake, attack.kind === "special" || attack.kind === "throw" ? 0.34 : 0.13);
-  if (!blocked && (attack.superMove || attack.kind === "special")) stirCrowd(attack.superMove ? 1.1 : 0.4);
-  state.hitstop = Math.max(state.hitstop, blocked ? 0.035 : attack.kind === "special" || attack.kind === "throw" ? 0.105 : attack.kind === "heavy" ? 0.075 : 0.045);
+  const impactTier = attack.superMove ? "super"
+    : attack.kind === "throw" ? "throw"
+      : attack.kind === "special" ? "special"
+        : attack.kind === "heavy" ? "heavy" : "light";
+  applyViolenceResponse(impactTier, {
+    blocked,
+    counter,
+    final: attack.superMove && attacker.attackHits >= (attack.maxHits || 1),
+  });
   const impact = collision?.point || { x: victim.x - attacker.facing * 22, y: victim.y - 105 };
-  spawnHit(impact.x, impact.y, attacker.def, attack.kind, blocked);
+  spawnHit(impact.x, impact.y, attacker.def, impactTier, blocked, { direction: attacker.facing, counter });
   if (attack.superMove) {
     state.effects.push({ kind: "super", x: impact.x, y: impact.y, life: 0.55, max: 0.55, color: attacker.def.accent });
     if ($("#flashToggle").checked) state.flash = Math.max(state.flash, attacker.attackHits >= attack.maxHits ? 0.22 : 0.08);
@@ -4760,15 +4822,98 @@ function updateComboState() {
   }
 }
 
-function spawnHit(x, y, def, attackKind, blocked) {
-  const baseCount = blocked ? 9 : attackKind === "special" ? 28 : attackKind === "heavy" ? 18 : 12;
-  const count = Math.max(3, Math.round(baseCount * state.performance.particleScale));
-  for (let i = 0; i < count; i += 1) {
-    const angle = visualRandom() * Math.PI * 2;
-    const speed = 90 + visualRandom() * 310;
-    state.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 0.18 + visualRandom() * 0.34, max: 0.55, size: 2 + visualRandom() * 6, color: visualRandom() > 0.34 ? def.accent : def.color });
+const VIOLENCE_TIERS = Object.freeze({
+  light: Object.freeze({ particles: 10, speed: 250, life: 0.72, size: 4.2, shake: 0.16, hitstop: 0.052, crowd: 0.12, decal: false }),
+  heavy: Object.freeze({ particles: 22, speed: 430, life: 1.08, size: 6.2, shake: 0.31, hitstop: 0.08, crowd: 0.34, decal: true }),
+  special: Object.freeze({ particles: 30, speed: 520, life: 1.24, size: 7.2, shake: 0.43, hitstop: 0.112, crowd: 0.56, decal: true }),
+  throw: Object.freeze({ particles: 26, speed: 470, life: 1.18, size: 7, shake: 0.46, hitstop: 0.12, crowd: 0.62, decal: true }),
+  weapon: Object.freeze({ particles: 28, speed: 540, life: 1.28, size: 7.6, shake: 0.5, hitstop: 0.126, crowd: 0.68, decal: true }),
+  super: Object.freeze({ particles: 44, speed: 700, life: 1.58, size: 9, shake: 0.76, hitstop: 0.15, crowd: 1.05, decal: true }),
+});
+
+function violenceTier(kind = "light") {
+  return VIOLENCE_TIERS[kind] || VIOLENCE_TIERS.light;
+}
+
+function applyViolenceResponse(kind, { blocked = false, counter = false, final = false } = {}) {
+  if (blocked) {
+    state.shake = Math.max(state.shake, 0.1);
+    state.hitstop = Math.max(state.hitstop, 0.035);
+    return;
   }
-  state.effects.push({ kind: blocked ? "guard" : "hit", style: def.vfx, attackKind, x, y, life: attackKind === "special" ? 0.42 : 0.28, max: attackKind === "special" ? 0.42 : 0.28, color: def.accent });
+  const profile = violenceTier(kind);
+  const counterScale = counter ? 1.22 : 1;
+  state.shake = Math.max(state.shake, profile.shake * counterScale);
+  const hitstop = kind === "super" && !final ? 0.108 : profile.hitstop;
+  state.hitstop = Math.max(state.hitstop, hitstop * counterScale);
+  stirCrowd(profile.crowd * counterScale);
+}
+
+function spawnHit(x, y, def, attackKind, blocked, { direction = 1, counter = false } = {}) {
+  if (blocked) {
+    const count = Math.max(3, Math.round(8 * state.performance.particleScale));
+    for (let index = 0; index < count; index += 1) {
+      const angle = visualRandom() * Math.PI * 2;
+      const speed = 90 + visualRandom() * 220;
+      state.particles.push({
+        kind: "guardSpark", x, y,
+        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+        gravity: 420, drag: 0.975,
+        life: 0.16 + visualRandom() * 0.2, max: 0.36,
+        size: 1.5 + visualRandom() * 4, color: visualRandom() > 0.5 ? "#f5f7ff" : def.accent,
+      });
+    }
+    state.effects.push({ kind: "guard", x, y, life: 0.28, max: 0.28, color: def.accent });
+    return;
+  }
+
+  const tierName = VIOLENCE_TIERS[attackKind] ? attackKind : attackKind === "throw-object" ? "weapon" : "light";
+  const profile = violenceTier(tierName);
+  const graphicScale = state.graphicFatalities ? 1 : 0.34;
+  const counterScale = counter ? 1.26 : 1;
+  const count = Math.max(4, Math.round(profile.particles * graphicScale * counterScale * state.performance.particleScale));
+  const bloodPalette = state.graphicFatalities
+    ? ["#8f0710", "#bd0c18", "#e32632", "#5b060b"]
+    : ["#7e1520", "#a52a34"];
+  for (let index = 0; index < count; index += 1) {
+    const spread = (visualRandom() - 0.5) * 1.65;
+    const speed = 90 + visualRandom() * profile.speed * counterScale;
+    state.particles.push({
+      kind: "blood",
+      x: x + (visualRandom() - 0.5) * 8,
+      y: y + (visualRandom() - 0.5) * 12,
+      vx: direction * (speed * (0.38 + visualRandom() * 0.7)) + Math.sin(spread) * speed * 0.34,
+      vy: -80 - Math.cos(spread) * speed * (0.26 + visualRandom() * 0.5),
+      gravity: 860,
+      drag: 0.982,
+      life: 0.28 + visualRandom() * profile.life,
+      max: profile.life + 0.28,
+      size: 1.8 + visualRandom() * profile.size * graphicScale,
+      color: bloodPalette[Math.floor(visualRandom() * bloodPalette.length) % bloodPalette.length],
+    });
+  }
+  state.effects.push({
+    kind: "bloodBurst", tier: tierName, direction, x, y,
+    life: tierName === "super" ? 0.52 : 0.34,
+    max: tierName === "super" ? 0.52 : 0.34,
+    color: "#d41120",
+  });
+  state.effects.push({
+    kind: "impactFlash", tier: tierName, x, y,
+    life: tierName === "super" ? 0.22 : 0.12,
+    max: tierName === "super" ? 0.22 : 0.12,
+    color: "#fff4df",
+  });
+  if (profile.decal && state.graphicFatalities) {
+    const decalLife = 2.8 + visualRandom() * 2.4;
+    state.effects.push({
+      kind: "bloodDecal", tier: tierName,
+      x: clamp(x + direction * (28 + visualRandom() * 68), 28, W - 28),
+      y: FLOOR + 3,
+      width: 24 + visualRandom() * (tierName === "super" ? 82 : 46),
+      life: decalLife, max: decalLife, color: "#72060d",
+    });
+  }
 }
 
 function separateFighters() {
@@ -4904,10 +5049,10 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
 
   for (const particle of state.particles) {
     particle.life -= dt;
-    particle.vy += 720 * dt;
+    particle.vy += (particle.gravity ?? 720) * dt;
     particle.x += particle.vx * dt;
     particle.y += particle.vy * dt;
-    particle.vx *= 0.985;
+    particle.vx *= particle.drag ?? 0.985;
   }
   state.particles = state.particles.filter((particle) => particle.life > 0);
   for (const effect of state.effects) effect.life -= dt;
@@ -5499,6 +5644,83 @@ function drawPoolDeckAtmosphere(frame, centre, reaction) {
   ctx.restore();
 }
 
+function drawVacantLotCat(cat, x, gait, paused, startled) {
+  const scale = cat.scale;
+  const step = paused ? 0 : Math.sin(gait) * 4.2;
+  const crouch = startled ? 2 : 0;
+  ctx.save();
+  ctx.translate(x, cat.y + crouch);
+  ctx.scale(scale * cat.direction, scale);
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = "rgba(0,0,0,.55)";
+  ctx.beginPath();
+  ctx.ellipse(0, 3, 18, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = cat.coat;
+  ctx.beginPath();
+  ctx.ellipse(0, -9, 17, 9, startled ? -0.08 : 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(15, -15, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(10, -20); ctx.lineTo(12, -29); ctx.lineTo(16, -21);
+  ctx.moveTo(16, -21); ctx.lineTo(21, -28); ctx.lineTo(21, -18);
+  ctx.fill();
+  ctx.strokeStyle = cat.coat;
+  ctx.lineWidth = 5;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-14, -10);
+  ctx.quadraticCurveTo(-31, -23 - cat.tailCurl * 5, -27, -39 + cat.tailCurl * 4);
+  ctx.stroke();
+  ctx.lineWidth = 3.5;
+  ctx.beginPath();
+  ctx.moveTo(-8, -4); ctx.lineTo(-9 + step, 1);
+  ctx.moveTo(6, -4); ctx.lineTo(8 - step, 1);
+  ctx.stroke();
+  ctx.fillStyle = startled ? "#ffd96a" : "#9fc6a8";
+  ctx.beginPath(); ctx.arc(17, -16, 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// The generated stage already contains parked cars. These tiny suspension and
+// reflection shifts make two of them feel occupied without drawing people or
+// showing anything explicit.
+function drawJanneyAtmosphere(frame, centre, reaction, crowd) {
+  const parallax = (centre - W * 0.5) * -0.12;
+  for (const [index, baseX] of [122, 1158].entries()) {
+    const phase = frame * (0.031 + index * 0.004) + index * 2.4;
+    const rock = Math.sin(phase) * (1.5 + reaction * 0.9);
+    const x = baseX + parallax;
+    const y = index ? 426 : 420;
+    ctx.save();
+    ctx.translate(x, y + Math.abs(rock) * 0.5);
+    ctx.rotate(rock * 0.0025 * (index ? -1 : 1));
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = index ? "#8eb1bb" : "#77899a";
+    ctx.beginPath();
+    ctx.roundRect(-74, -18, 148, 32, 8);
+    ctx.fill();
+    ctx.globalAlpha = 0.24;
+    ctx.fillStyle = "#ffd28a";
+    ctx.fillRect(index ? -63 : 53, -8 + rock * 0.25, 10, 4);
+    ctx.restore();
+  }
+  for (const cat of crowd.cats || []) {
+    const position = catPosition(cat, frame, crowd.span, crowd.minX, reaction);
+    const drawX = position.x + (centre - W * 0.5) * -0.2;
+    if (drawX < -45 || drawX > W + 45) continue;
+    drawVacantLotCat(cat, drawX, position.gait, position.paused, position.startled);
+  }
+  // A restrained dusk glow catches dust above the open fight floor.
+  const glow = ctx.createRadialGradient(W * 0.5, 440, 40, W * 0.5, 440, 430);
+  glow.addColorStop(0, "rgba(255,197,123,.06)");
+  glow.addColorStop(1, "rgba(79,92,157,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 260, W, 300);
+}
+
 function drawCrowd(time) {
   const crowd = state.crowd;
   if (!crowd) return;
@@ -5542,6 +5764,10 @@ function drawCrowd(time) {
   }
   if (crowd.variant === "poolside") {
     drawPoolDeckAtmosphere(frame, centre, reaction);
+    return;
+  }
+  if (crowd.variant === "vacantLot") {
+    drawJanneyAtmosphere(frame, centre, reaction, crowd);
     return;
   }
 
@@ -6050,6 +6276,13 @@ function drawThrowable(projectile, time, life) {
       break;
     }
     case "xacto": {
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      ctx.globalAlpha = 0.35 + Math.abs(Math.sin(time * 0.022)) * 0.55;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-w * 0.85, 0); ctx.lineTo(-w * 0.2, 0); ctx.stroke();
+      ctx.restore();
       ctx.rotate(Math.atan2(projectile.vy, Math.abs(projectile.vx)));
       ctx.fillStyle = "#2b3038";
       ctx.fillRect(-w * 0.5, -h * 0.5, w * 0.45, h);
@@ -6069,6 +6302,14 @@ function drawThrowable(projectile, time, life) {
       break;
     }
     case "golfball": {
+      ctx.globalAlpha *= 0.52;
+      ctx.fillStyle = "#ffffff";
+      for (let trail = 1; trail <= 3; trail += 1) {
+        ctx.beginPath();
+        ctx.arc(-w * (0.55 + trail * 0.32), 0, Math.max(2, w * (0.15 - trail * 0.025)), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = Math.min(1, life * 2.2);
       ctx.rotate(angle);
       ctx.fillStyle = "#ffffff";
       ctx.beginPath();
@@ -6105,6 +6346,16 @@ function drawThrowable(projectile, time, life) {
       break;
     }
     case "vinyl": {
+      ctx.save();
+      ctx.globalAlpha = 0.22 + Math.abs(Math.sin(time * 0.018)) * 0.2;
+      ctx.strokeStyle = "#ff4fb9";
+      ctx.lineWidth = 2;
+      for (let ring = 1; ring <= 2; ring += 1) {
+        ctx.beginPath();
+        ctx.ellipse(0, 0, w * (0.5 + ring * 0.22), h * (0.32 + ring * 0.12), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
       ctx.rotate(angle);
       ctx.fillStyle = "#16161a";
       ctx.beginPath();
@@ -6811,11 +7062,21 @@ function drawDizzyStars(fighter, time) {
 
 function drawParticles() {
   for (const particle of state.particles) {
-    ctx.globalAlpha = clamp(particle.life / particle.max, 0, 1);
+    const alpha = clamp(particle.life / particle.max, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = particle.kind === "dust" ? alpha * 0.42 : alpha;
     ctx.fillStyle = particle.color;
     ctx.beginPath();
-    ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+    if (particle.kind === "blood") {
+      const angle = Math.atan2(particle.vy || 0, particle.vx || 1);
+      ctx.ellipse(particle.x, particle.y, particle.size * 1.65, Math.max(1, particle.size * 0.62), angle, 0, Math.PI * 2);
+    } else if (particle.kind === "dust") {
+      ctx.ellipse(particle.x, particle.y, particle.size * 1.5, particle.size * 0.6, 0, 0, Math.PI * 2);
+    } else {
+      ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+    }
     ctx.fill();
+    ctx.restore();
   }
   ctx.globalAlpha = 1;
   for (const effect of state.effects) {
@@ -6841,6 +7102,69 @@ function drawParticles() {
       drawFinisherImpact(effect, alpha);
     } else if (effect.kind === "fatalityPool") {
       drawFatalityPool(effect, alpha);
+    } else if (effect.kind === "bloodBurst") {
+      const scale = effect.tier === "super" ? 1.45 : effect.tier === "light" ? 0.7 : 1;
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = effect.color;
+      ctx.fillStyle = effect.color;
+      ctx.lineCap = "round";
+      for (let spray = 0; spray < 7; spray += 1) {
+        const spread = (spray - 3) * 0.22;
+        const reach = (18 + (1 - alpha) * (58 + spray * 7)) * scale;
+        ctx.globalAlpha = alpha * (0.45 + spray % 2 * 0.22);
+        ctx.lineWidth = (2.5 + spray % 3) * scale;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(effect.direction * reach * 0.55, spread * reach - 18, effect.direction * reach, spread * reach);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(effect.direction * reach, spread * reach, (2 + spray % 3) * scale, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (effect.kind === "impactFlash") {
+      const radius = (effect.tier === "super" ? 64 : effect.tier === "light" ? 26 : 42) * alpha;
+      ctx.globalCompositeOperation = "screen";
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 5 * alpha;
+      for (let ray = 0; ray < 6; ray += 1) {
+        const angle = ray * Math.PI / 3;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * 4, Math.sin(angle) * 4);
+        ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+        ctx.stroke();
+      }
+    } else if (effect.kind === "bloodDecal") {
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = Math.min(0.68, alpha * 0.82);
+      ctx.fillStyle = effect.color;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, effect.width * 0.5, Math.max(3, effect.width * 0.1), 0, 0, Math.PI * 2);
+      ctx.fill();
+      for (let drop = 0; drop < 5; drop += 1) {
+        const angle = drop * 2.37;
+        ctx.beginPath();
+        ctx.arc(Math.cos(angle) * effect.width * 0.55, Math.sin(angle) * effect.width * 0.1, 2 + drop % 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (effect.kind === "floorImpact") {
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = alpha * 0.55;
+      ctx.strokeStyle = effect.color;
+      ctx.lineWidth = 5 * alpha;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, effect.width * (1 - alpha * 0.25), 12 + (1 - alpha) * 12, 0, Math.PI, Math.PI * 2);
+      ctx.stroke();
+    } else if (effect.kind === "objectImpact") {
+      ctx.shadowBlur = 8;
+      ctx.lineWidth = effect.settling ? 2 : 5;
+      const radius = (effect.settling ? 18 : 30) + (1 - alpha) * 28;
+      for (let slash = 0; slash < 5; slash += 1) {
+        const angle = slash * Math.PI * 2 / 5;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * radius * 0.35, Math.sin(angle) * radius * 0.35);
+        ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+        ctx.stroke();
+      }
     } else if (effect.kind === "paintDeploy" || effect.kind === "paintTrapBurst") {
       const burst = effect.kind === "paintTrapBurst";
       const radius = (1 - alpha) * (burst ? 138 : 72) + 12;
@@ -6925,29 +7249,6 @@ function drawParticles() {
       ctx.beginPath();
       ctx.arc(0, 0, radius + 15, -1.18, 1.18);
       ctx.stroke();
-    } else if (effect.kind === "hit") {
-      const radius = (1 - alpha) * (effect.attackKind === "special" ? 120 : 68) + 18;
-      ctx.lineWidth = (effect.attackKind === "special" ? 12 : 7) * alpha;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, Math.PI * 2);
-      ctx.stroke();
-      const rays = effect.attackKind === "special" ? 12 : 8;
-      for (let i = 0; i < rays; i += 1) {
-        const angle = i * Math.PI * 2 / rays + (effect.style === "feedback" ? 0.18 : 0);
-        const start = radius * 0.45;
-        const end = radius * (effect.style === "seismic" && i % 2 ? 1.8 : 1.3);
-        ctx.lineWidth = i % 2 ? 3 : 6;
-        ctx.beginPath();
-        ctx.moveTo(Math.cos(angle) * start, Math.sin(angle) * start);
-        ctx.lineTo(Math.cos(angle) * end, Math.sin(angle) * end);
-        ctx.stroke();
-      }
-      if (["bass", "feedback", "voltage"].includes(effect.style)) {
-        ctx.globalAlpha *= 0.65;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, radius * 1.45, radius * 0.55, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
     } else {
       const radius = (1 - alpha) * 165 + 25;
       ctx.lineWidth = 11 * alpha;
@@ -7070,8 +7371,8 @@ function drawDebugOverlay() {
 function draw(time) {
   ctx.save();
   const shakeScale = state.accessibility.reducedMotion ? 0 : state.accessibility.shakeScale;
-  const shakeX = state.shake > 0 ? (Math.random() - 0.5) * state.shake * 18 * shakeScale : 0;
-  const shakeY = state.shake > 0 ? (Math.random() - 0.5) * state.shake * 12 * shakeScale : 0;
+  const shakeX = state.shake > 0 ? Math.sin((state.simulationTick + 1) * 12.9898) * state.shake * 9 * shakeScale : 0;
+  const shakeY = state.shake > 0 ? Math.cos((state.simulationTick + 1) * 7.233) * state.shake * 6 * shakeScale : 0;
   ctx.translate(shakeX, shakeY);
   if (state.finisher) {
     ctx.translate(W * .5, H * .53);
@@ -7984,7 +8285,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.1-philly-after-dark",
+  version: "1.2-janney-blood-edition",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -8033,6 +8334,15 @@ window.__finalBlowEngine = {
       })),
       crowd: crowdSnapshot(state.crowd, state.simulationTick, { viewLeft: 0, viewRight: W }),
       crowdReaction: Number(state.crowdReaction.toFixed(3)),
+      violence: {
+        bloodParticles: state.particles.filter((particle) => particle.kind === "blood").length,
+        dustParticles: state.particles.filter((particle) => particle.kind === "dust").length,
+        bloodBursts: state.effects.filter((effect) => effect.kind === "bloodBurst").length,
+        bloodDecals: state.effects.filter((effect) => effect.kind === "bloodDecal").length,
+        genericHitEffects: state.effects.filter((effect) => effect.kind === "hit").length,
+        shake: Number(state.shake.toFixed(3)),
+        hitstop: Number(state.hitstop.toFixed(4)),
+      },
       stageWeapon: weaponSnapshot(state.stageWeapon),
       stageWeaponsEnabled: state.stageWeaponsEnabled,
       projectiles: state.projectiles.map((projectile) => ({
@@ -8049,6 +8359,8 @@ window.__finalBlowEngine = {
         style: projectile.style,
         enhanced: projectile.enhanced,
         throwable: projectile.throwable || null,
+        impactLabel: projectile.impactLabel || null,
+        variant: projectile.variant || null,
         hazard: Boolean(projectile.hazard),
         bouncesLeft: projectile.bouncesLeft ?? 0,
         vy: projectile.vy ?? 0,

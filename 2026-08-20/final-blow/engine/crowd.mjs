@@ -153,6 +153,16 @@ export const CROWD_VARIANTS = Object.freeze({
     counts: Object.freeze({ far: 20, mid: 15, near: 9 }),
     incidents: 6,
   }),
+  // Janney Street is deliberately resident-free. Its background life is a
+  // seeded colony of cats rather than generic pedestrians.
+  vacantLot: Object.freeze({
+    postures: POSTURES,
+    coats: null,
+    trousers: null,
+    accents: null,
+    counts: Object.freeze({ far: 0, mid: 0, near: 0 }),
+    cats: 16,
+  }),
 });
 
 export const STAGE_CROWD_VARIANT = Object.freeze({
@@ -161,6 +171,7 @@ export const STAGE_CROWD_VARIANT = Object.freeze({
   wildwood: "boardwalk",
   buffet: "buffet",
   cruise: "poolside",
+  janney: "vacantLot",
 });
 
 /**
@@ -271,12 +282,47 @@ export function createCrowd(stageId, { seed = 1, minX = -90, maxX = 1370 } = {})
       });
     }
   }
+  const cats = [];
+  for (let index = 0; index < (variant.cats || 0); index += 1) {
+    const slot = (index + rng.nextFloat() * 0.72) / variant.cats;
+    cats.push({
+      originX: minX + slot * span,
+      y: 414 + Math.floor(rng.nextFloat() * 112),
+      direction: rng.nextFloat() < 0.5 ? -1 : 1,
+      pace: 0.45 + rng.nextFloat() * 0.9,
+      gaitPhase: rng.nextFloat() * Math.PI * 2,
+      pausePeriod: 150 + Math.floor(rng.nextFloat() * 360),
+      pauseLength: 35 + Math.floor(rng.nextFloat() * 120),
+      pauseOffset: Math.floor(rng.nextFloat() * 480),
+      scale: 0.55 + rng.nextFloat() * 0.42,
+      coat: pick(rng, ["#17191d", "#302a25", "#5a554e", "#8a8176", "#c0b8aa", "#5b4435"]),
+      tailCurl: rng.nextFloat() < 0.5 ? -1 : 1,
+    });
+  }
   const scuffles = variantId === "tailgate"
     ? createScuffles(rng, minX, span, SCUFFLE_KINDS, 5)
     : variantId === "poolside"
       ? createScuffles(rng, minX, span, POOL_INCIDENT_KINDS, variant.incidents || 6)
       : [];
-  return { stageId, variant: variantId, seed, minX, maxX, span, people, scuffles };
+  return { stageId, variant: variantId, seed, minX, maxX, span, people, cats, scuffles };
+}
+
+/** Seeded stray-cat movement for the vacant lot. */
+export function catPosition(cat, frame, span, minX, reaction = 0) {
+  const cycle = (frame + cat.pauseOffset) % cat.pausePeriod;
+  const startled = reaction > 0.18;
+  const paused = !startled && cycle < cat.pauseLength;
+  const cycles = Math.floor((frame + cat.pauseOffset) / cat.pausePeriod);
+  const movingFrames = frame - cycles * cat.pauseLength - (paused ? cycle : cat.pauseLength);
+  const speed = cat.pace * (startled ? 2.7 + reaction * 0.8 : 0.55);
+  let x = cat.originX + cat.direction * Math.max(0, movingFrames) * speed;
+  x = ((x - minX) % span + span) % span + minX;
+  return {
+    x,
+    paused,
+    gait: paused ? 0 : frame * speed * 0.16 + cat.gaitPhase,
+    startled,
+  };
 }
 
 /** Several simultaneous fight loops, each with its own kind, place and phase. */
@@ -341,9 +387,16 @@ export function crowdSnapshot(crowd, frame, { viewLeft = 0, viewRight = 1280 } =
       postures[person.posture] = (postures[person.posture] || 0) + 1;
     }
   }
+  let visibleCats = 0;
+  for (const cat of crowd.cats || []) {
+    const { x } = catPosition(cat, frame, crowd.span, crowd.minX);
+    if (x > viewLeft - 40 && x < viewRight + 40) visibleCats += 1;
+  }
   return {
     total: crowd.people.length,
-    visible,
+    visible: visible + visibleCats,
+    cats: (crowd.cats || []).length,
+    visibleCats,
     layers,
     postures,
     variant: crowd.variant,

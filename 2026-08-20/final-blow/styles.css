@@ -836,6 +836,7 @@ kbd,
 .wildwood-preview { background-image: linear-gradient(180deg, transparent, rgba(0,0,0,.22)), url("assets/wildwood-boardwalk.webp"); }
 .buffet-preview { background-image: linear-gradient(180deg, transparent, rgba(0,0,0,.22)), url("assets/chinese-buffet.webp"); }
 .cruise-preview { background-image: linear-gradient(180deg, transparent, rgba(0,0,0,.22)), url("assets/cruise-pool-deck.webp"); }
+.janney-preview { background-image: linear-gradient(180deg, transparent, rgba(0,0,0,.22)), url("assets/janney-street-vacant-lot.webp"); }
 
 .stage-card strong {
   display: block;

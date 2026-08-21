@@ -23,6 +23,8 @@ function testCompleteDeterministicLadder() {
   assert.equal(first.matches.at(-2).kind, "rival");
   assert.equal(new Set(first.matches.map(({ opponentId }) => opponentId)).size, 8);
   assert.ok(!first.matches.some(({ opponentId }) => opponentId === "deathblow"));
+  assert.ok(first.matches.some(({ stage }) => stage === "janney"), "the vacant lot must appear in Arcade");
+  assert.ok(new Set(first.matches.slice(0, -1).map(({ stage }) => stage)).size >= 5, "Arcade must rotate through the expanded stage list");
 }
 
 function testProgressAndRetry() {

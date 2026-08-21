@@ -306,7 +306,7 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.1/);
+  assert.match(title.build, /1\.2/);
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
@@ -324,7 +324,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.1-philly-after-dark');
+  assert.equal(title.engineVersion, '1.2-janney-blood-edition');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
 
@@ -1033,6 +1033,40 @@ try {
   const counterHit = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   assert.equal(counterHit.fighters[1].lastHitResult, "counter");
 
+  // Blood replaces the old generic post-hit ring, and impact strength is visibly
+  // tiered without changing block clarity or gameplay timing.
+  const violence = await evaluate(client, `(() => {
+    const strike = (action, meter = 0, guard = false) => {
+      window.__finalBlowQa.fight('deathblow', 'jez');
+      window.__finalBlowQa.positions(500, 610);
+      if (meter) window.__finalBlowQa.fighter(0, { meter });
+      if (guard) window.__finalBlowQa.input(1, { guard: true }, 120);
+      window.__finalBlowQa.input(0, { [action]: true });
+      for (let frame = 0; frame < 90; frame += 1) {
+        window.__finalBlowQa.step(1 / 60);
+        const snapshot = window.__finalBlowEngine.snapshot();
+        if (snapshot.fighters[1].health < 100 || snapshot.fighters[1].lastHitResult.startsWith('blocked-')) return {
+          result: snapshot.fighters[1].lastHitResult,
+          ...snapshot.violence,
+        };
+      }
+      return null;
+    };
+    return {
+      light: strike('light'),
+      heavy: strike('heavy'),
+      super: strike('super', 100),
+      blocked: strike('heavy', 0, true),
+    };
+  })()`);
+  assert.ok(violence.light?.bloodParticles > 0, "a clean light must spray blood");
+  assert.ok(violence.heavy.bloodParticles > violence.light.bloodParticles, "a heavy needs more blood than a light");
+  assert.ok(violence.super.bloodParticles > violence.heavy.bloodParticles, "a super needs the largest normal-match spray");
+  assert.ok(violence.heavy.shake > violence.light.shake, "heavy camera response must exceed light response");
+  assert.equal(violence.blocked.bloodParticles, 0, "blocking must never create blood");
+  assert.match(violence.blocked.result, /^blocked-/);
+  assert.equal(violence.light.genericHitEffects, 0, "the disliked generic hit effect is removed");
+
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.positions(500, 585)`);
   await dispatchKey(client, "keyDown", "KeyD", "d", 68);
   await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
@@ -1393,7 +1427,7 @@ try {
   const newStages = await evaluate(client, `(() => {
     const cards = [...document.querySelectorAll('.stage-card')].map((card) => card.dataset.stage);
     const out = { cards, stages: {} };
-    for (const stage of ['wildwood', 'buffet', 'cruise']) {
+    for (const stage of ['wildwood', 'buffet', 'cruise', 'janney']) {
       window.__finalBlowQa.fight('benny', 'ali');
       window.__finalBlowQa.stage(stage);
       window.__finalBlowQa.positions(300, 1000);
@@ -1403,7 +1437,7 @@ try {
       out.stages[stage] = {
         ticker: document.querySelector('#stageTicker').textContent,
         crowd: snapshot.crowd,
-        weapon: weapon.weaponId,
+        weapon: weapon?.weaponId || null,
         floor: snapshot.fighters[0].y,
         bounds: [snapshot.fighters[0].movement.stageMinX, snapshot.fighters[0].movement.stageMaxX],
       };
@@ -1414,7 +1448,7 @@ try {
   })()`);
   assert.deepEqual(
     newStages.cards,
-    ["kensington", "vet", "wildwood", "buffet", "cruise"],
+    ["kensington", "vet", "wildwood", "buffet", "cruise", "janney"],
     "every stage is selectable",
   );
   assert.match(newStages.stages.wildwood.ticker, /WILDWOOD BOARDWALK/);
@@ -1426,6 +1460,10 @@ try {
   assert.equal(newStages.stages.cruise.weapon, "souvenir-cup", "the pool deck carries the souvenir cup");
   assert.match(newStages.stages.cruise.ticker, /MAIN POOL DECK/);
   assert.equal(newStages.stages.cruise.crowd.variant, "poolside");
+  assert.match(newStages.stages.janney.ticker, /JANNEY STREET.*VACANT LOT/);
+  assert.equal(newStages.stages.janney.crowd.variant, "vacantLot");
+  assert.ok(newStages.stages.janney.crowd.visibleCats >= 12, "the lot must keep numerous animated cats on camera");
+  assert.equal(newStages.stages.janney.weapon, null, "the Janney pickup remains intentionally open for a later choice");
   // The pool deck is the densest crowd in the game: 35+ passengers at once.
   assert.ok(
     newStages.stages.cruise.crowd.visible >= 35,
@@ -1440,13 +1478,14 @@ try {
     "pool-deck incidents must use different loops",
   );
   for (const [id, stage] of Object.entries(newStages.stages)) {
-    assert.ok(stage.crowd.visible >= 20, `${id} must feel occupied, saw ${stage.crowd.visible}`);
+    const minimumLife = id === "janney" ? 12 : 20;
+    assert.ok(stage.crowd.visible >= minimumLife, `${id} must feel alive, saw ${stage.crowd.visible}`);
     assert.equal(stage.floor, 600, `${id} must share the same floor line`);
     assert.deepEqual(stage.bounds, [76, 1204], `${id} must share the same stage bounds`);
   }
   assert.deepEqual(
     [...newStages.demoStages].sort(),
-    ["buffet", "cruise", "kensington", "vet", "wildwood"],
+    ["buffet", "cruise", "janney", "kensington", "vet", "wildwood"],
     "Watch Demo must shuffle through every stage",
   );
 
@@ -2337,13 +2376,15 @@ try {
       hasFighterAudioEngine: Boolean(cache && await cache.match('./engine/fighter-audio.mjs')),
       hasDeathBlowFatal: Boolean(cache && await cache.match('./assets/audio/fighters/deathblow/fatal.mp3')),
       hasAliSuper: Boolean(cache && await cache.match('./assets/audio/fighters/ali/super.mp3')),
+      hasJanney: Boolean(cache && await cache.match('./assets/janney-street-vacant-lot.webp')),
       hasMusic: Boolean(cache && await cache.match('./assets/audio/subway-after-midnight.mp3')),
       ready: window.__finalBlowEngine.snapshot().offlineReady,
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.1/);
-  assert.ok(offlineCache.entries >= 156);
+  assert.match(offlineCache.name, /final-blow-offline-1\.2/);
+  assert.equal(offlineCache.hasJanney, true);
+  assert.ok(offlineCache.entries >= 157);
   assert.equal(offlineCache.hasGame, true);
   assert.equal(offlineCache.hasRollback, true);
   assert.equal(offlineCache.hasDemo, true);
@@ -2369,8 +2410,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.1/);
-  assert.equal(offlineBoot.version, '1.1-philly-after-dark');
+  assert.match(offlineBoot.build, /1\.2/);
+  assert.equal(offlineBoot.version, '1.2-janney-blood-edition');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
