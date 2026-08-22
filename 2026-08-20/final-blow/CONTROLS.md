@@ -1,6 +1,6 @@
-# Final Blow 1.3A four-button controls
+# Final Blow 1.3B four-button controls
 
-Version 1.3A uses the approved classic layout: one directional control plus
+Version 1.3B uses the approved classic layout: one directional control plus
 **LP, HP, LK, HK**. No legacy
 guard, special, super, throw or Final Blow button is required anywhere in the game.
 

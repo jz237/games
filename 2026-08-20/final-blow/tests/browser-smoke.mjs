@@ -323,8 +323,8 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.3A/);
-  assert.equal(title.version.text, 'VERSION 1.3A');
+  assert.match(title.build, /1\.3B/);
+  assert.equal(title.version.text, 'VERSION 1.3B');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -349,7 +349,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.3a-light-finishers');
+  assert.equal(title.engineVersion, '1.3b-death-blow-call');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
   assert.equal(title.engine.tournament.version, '1.3');
@@ -2406,7 +2406,16 @@ try {
   await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
   await delay(100);
   await dispatchKey(client, "keyUp", "KeyJ", "j", 74);
-  await evaluate(client, `window.__finalBlowQa.step(1.25)`);
+  await evaluate(client, `window.__finalBlowQa.step(0.12)`);
+  const finisherStart = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  const finisherMidpoint = (finisherStart.fighters[0].x + finisherStart.fighters[1].x) * 0.5;
+  assert.deepEqual(finisherStart.audio.lastEvent, {
+    kind: 'final', fighterId: null, signature: false, src: 'assets/audio/final-blow.mp3',
+  }, 'execution must fire the dedicated Death Blow announcer track');
+  assert.equal(finisherStart.camera.mode, 'finisher');
+  assert.ok(finisherStart.camera.zoom >= 1.18, `finisher camera must punch in, got ${finisherStart.camera.zoom}`);
+  assert.ok(Math.abs(finisherStart.camera.x - finisherMidpoint) < 0.001, 'camera must center both characters');
+  await evaluate(client, `window.__finalBlowQa.step(1.13)`);
   const finisher = await evaluate(client, `window.__finalBlowQa.status()`);
   assert.equal(finisher.fighter, "deathblow");
   assert.equal(finisher.fatalityFamily, "rupture", "LP selects Finisher A");
@@ -2434,7 +2443,13 @@ try {
       for (const variant of [0, 1]) {
         const status = window.__finalBlowQa.graphicFatality(fighter, variant, 4.7);
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        results.push(status);
+        const snapshot = window.__finalBlowEngine.snapshot();
+        const midpoint = (snapshot.fighters[0].x + snapshot.fighters[1].x) * 0.5;
+        results.push({
+          ...status,
+          camera: snapshot.camera,
+          cameraOffset: Math.abs(snapshot.camera.x - midpoint),
+        });
       }
     }
     return results;
@@ -2447,6 +2462,9 @@ try {
     assert.equal(fatality.graphicFatalities, true);
     assert.equal(fatality.fatalityTriggered, true);
     assert.ok(fatality.fatalityPools >= 1);
+    assert.equal(fatality.camera.mode, 'finisher');
+    assert.ok(fatality.camera.zoom >= 1.18);
+    assert.ok(fatality.cameraOffset < 0.001);
   }
 
   const deathblowVictory = await evaluate(client, `window.__finalBlowQa.result('deathblow')`);
@@ -2563,6 +2581,7 @@ try {
       hasDemo: Boolean(cache && await cache.match('./engine/demo.mjs')),
       hasFatalities: Boolean(cache && await cache.match('./engine/fatalities.mjs')),
       hasFighterAudioEngine: Boolean(cache && await cache.match('./engine/fighter-audio.mjs')),
+      hasDeathBlowCall: Boolean(cache && await cache.match('./assets/audio/final-blow.mp3')),
       hasDeathBlowFatal: Boolean(cache && await cache.match('./assets/audio/fighters/deathblow/fatal.mp3')),
       hasAliSuper: Boolean(cache && await cache.match('./assets/audio/fighters/ali/super.mp3')),
       hasJanney: Boolean(cache && await cache.match('./assets/janney-street-vacant-lot.webp')),
@@ -2571,7 +2590,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.3/);
+  assert.match(offlineCache.name, /final-blow-offline-1\.3b/);
   assert.equal(offlineCache.hasJanney, true);
   assert.ok(offlineCache.entries >= 157);
   assert.equal(offlineCache.hasGame, true);
@@ -2579,6 +2598,7 @@ try {
   assert.equal(offlineCache.hasDemo, true);
   assert.equal(offlineCache.hasFatalities, true);
   assert.equal(offlineCache.hasFighterAudioEngine, true);
+  assert.equal(offlineCache.hasDeathBlowCall, true);
   assert.equal(offlineCache.hasDeathBlowFatal, true);
   assert.equal(offlineCache.hasAliSuper, true);
   assert.equal(offlineCache.hasMusic, true);
@@ -2599,8 +2619,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.3A/);
-  assert.equal(offlineBoot.version, '1.3a-light-finishers');
+  assert.match(offlineBoot.build, /1\.3B/);
+  assert.equal(offlineBoot.version, '1.3b-death-blow-call');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2644,7 +2664,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 1.3A');
+  assert.equal(landscape.version.text, 'VERSION 1.3B');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);
@@ -3017,7 +3037,12 @@ try {
         superDamage: gritSuper.fighters[0].combo.damage,
       },
     },
-    finisher: { elapsed: finisher.elapsed, impacts: finisher.impacts },
+    finisher: {
+      elapsed: finisher.elapsed,
+      impacts: finisher.impacts,
+      zoom: finisherStart.camera.zoom,
+      announcer: finisherStart.audio.lastEvent.src,
+    },
     demo: {
       firstMatchup: demoOpening.demo.cycle.picks,
       cycles: demoMarathon.cycles.length,

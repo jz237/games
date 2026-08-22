@@ -1,4 +1,4 @@
-# Final Blow v1.3A — Handoff
+# Final Blow v1.3B — Handoff
 
 Paste this whole file to the next agent as context before asking it to touch
 Final Blow. It describes what exists, where it lives, the traps, and how to
@@ -11,9 +11,10 @@ This file lives at `2026-08-20/final-blow/HANDOFF.md` in `jz237/games`.
 ## 1. What this is
 
 `Final Blow: Philly After Dark` is a browser 2D versus fighting game. Version
-**1.3A** shipped on 2026-08-22. It keeps the seven-part Tournament Feel pass in
-`TOURNAMENT.md` and restricts distance-free finishers to LP (Finisher A) or LK
-(Finisher B); HP/HK no longer execute a finisher.
+**1.3B** shipped on 2026-08-22. It keeps the seven-part Tournament Feel pass and
+1.3A's distance-free LP/LK finishers, then adds a dedicated spoken "Death Blow"
+cue at execution plus a minimum 1.18× cinematic camera that continuously centers
+both characters.
 
 **Source of truth:** `git@github.com:jz237/games.git`, at `2026-08-20/final-blow/`.
 The local working clone is:
@@ -25,8 +26,8 @@ The local working clone is:
 That clone is on a branch called `final-blow-goal` which tracks `origin/main`.
 Do not create a new location for this game — the URLs below are fixed.
 
-**Recovery tag:** `final-blow-v1.3a` on `jz237/games`.
-If anything is ever lost, `git checkout final-blow-v1.3a` restores the exact
+**Recovery tag:** `final-blow-v1.3b` on `jz237/games`.
+If anything is ever lost, `git checkout final-blow-v1.3b` restores the exact
 shipped state.
 
 ---
@@ -303,13 +304,13 @@ works fine and was used for all the new art.
 
 ## 9. Current repo state
 
-- Canonical release: `jz237/games` tag `final-blow-v1.3a`.
+- Canonical release: `jz237/games` tag `final-blow-v1.3b`.
 - Never publish from a long-lived `jez237-site` clone. Other agents may own its
   local commits or it may be far behind `origin/main`; use the fresh-clone mirror
   procedure in section 2.
 - Untracked and deliberately preserved in the canonical game folder:
   `BACKLOG.md` and `assets/references/`. They are private and are not part of the
-  v1.3A commit or mirror.
+  v1.3B commit or mirror.
 
 ---
 

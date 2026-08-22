@@ -597,7 +597,8 @@ for (const fighter of [...roster, arcadeBoss]) {
   }
 }
 
-// Original soundtrack and combat cues generated with the ElevenLabs API.
+// Original soundtrack and combat cues generated with the ElevenLabs API. The
+// dedicated 1.3B "Death Blow" announcer call is mixed into the `final` asset.
 const audioAssets = {
   select: "assets/audio/ui-select.mp3",
   jump: "assets/audio/jump.mp3",
@@ -2488,13 +2489,16 @@ function performFinisher(winner, type) {
     fatalityAt,
     fatalityTriggered: false,
   };
-  state.cinematicZoom = 1.02;
+  state.cinematicZoom = 1.18;
   state.shake = .16;
   if (!rollbackResimulating) {
     setTouchPrompt("");
     $("#touchControls").classList.add("cinematic");
   }
+  // Keep the fighter's launch accent, then place the dedicated spoken cue on
+  // top so every LP/LK execution clearly announces "Death Blow" once.
   sound("special", attacker);
+  sound("final");
   return script.duration + .55;
 }
 
@@ -2634,7 +2638,9 @@ function updateFinisher(dt) {
   victim.block = false;
   attacker.crouch = false;
   victim.crouch = false;
-  state.cinematicZoom = pose.zoom;
+  // Hold a readable punch-in for the whole cinematic even where an older
+  // character script asked for a wide establishing frame.
+  state.cinematicZoom = Math.max(1.18, pose.zoom);
 
   while (finisher.impactIndex < finisher.script.impacts.length
     && finisher.script.impacts[finisher.impactIndex].t <= finisher.elapsed) {
@@ -7553,6 +7559,17 @@ function drawDebugOverlay() {
   ctx.restore();
 }
 
+function finisherCameraTarget() {
+  const finisher = state.finisher;
+  if (!finisher || state.fighters.length !== 2) return { x: W * .5, y: H * .5 };
+  const attacker = state.fighters[finisher.winner];
+  const victim = state.fighters[1 - finisher.winner];
+  return {
+    x: (attacker.x + victim.x) * .5,
+    y: clamp((attacker.y + victim.y) * .5 - 150, H * .32, H * .58),
+  };
+}
+
 function draw(time) {
   ctx.save();
   const shakeScale = state.accessibility.reducedMotion ? 0 : state.accessibility.shakeScale;
@@ -7560,9 +7577,10 @@ function draw(time) {
   const shakeY = state.shake > 0 ? Math.cos((state.simulationTick + 1) * 7.233) * state.shake * 6 * shakeScale : 0;
   ctx.translate(shakeX, shakeY);
   if (state.finisher) {
+    const camera = finisherCameraTarget();
     ctx.translate(W * .5, H * .53);
     ctx.scale(state.cinematicZoom, state.cinematicZoom);
-    ctx.translate(-W * .5, -H * .53);
+    ctx.translate(-camera.x, -camera.y);
   }
   drawStage(time);
   if (state.screen === "fight") {
@@ -8528,13 +8546,14 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.3a-light-finishers",
+  version: "1.3b-death-blow-call",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
     return state.debug;
   },
   snapshot() {
+    const cameraTarget = finisherCameraTarget();
     return {
       tick: state.simulationTick,
       phase: state.phase,
@@ -8571,8 +8590,8 @@ window.__finalBlowEngine = {
         priority: [...TOURNAMENT_ACTION_PRIORITY],
       },
       camera: {
-        x: W * 0.5,
-        y: H * 0.5,
+        x: cameraTarget.x,
+        y: cameraTarget.y,
         zoom: state.finisher ? state.cinematicZoom : 1,
         locked: !state.finisher,
         mode: state.finisher ? "finisher" : "arena",
