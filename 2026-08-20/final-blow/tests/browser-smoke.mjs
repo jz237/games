@@ -330,8 +330,8 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.3C/);
-  assert.equal(title.version.text, 'VERSION 1.3C');
+  assert.match(title.build, /1\.4/);
+  assert.equal(title.version.text, 'VERSION 1.4');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -356,7 +356,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.3c-cinematic-gore');
+  assert.equal(title.engineVersion, '1.4-red-cinema');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
   assert.equal(title.engine.tournament.version, '1.3');
@@ -1794,6 +1794,27 @@ try {
   assert.ok(sceneDressing.superDim > 0.3, `the super spotlight must darken the stage, got ${sceneDressing.superDim}`);
   assert.ok(sceneDressing.superDimSettled < 0.1, "the spotlight must lift after the super ends");
 
+  // Fatality realism: the killing blow dilates time, the wound pumps arterial
+  // spray, and landed droplets leave a persistent stain layer on the floor.
+  const goreAftermath = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.graphicFatality('deathblow', 0, 0.1);
+    const peak = { arterial: 0, stains: 0, slowMo: false };
+    for (let frame = 0; frame < 460; frame += 1) {
+      window.__finalBlowQa.step(1 / 60);
+      const violence = window.__finalBlowEngine.snapshot().violence;
+      peak.arterial = Math.max(peak.arterial, violence.arterialSprays);
+      peak.stains = Math.max(peak.stains, violence.bloodStains);
+      if (violence.fatalitySlowMo) peak.slowMo = true;
+    }
+    return peak;
+  })()`);
+  assert.ok(goreAftermath.slowMo, "the killing blow must dilate time");
+  assert.ok(goreAftermath.arterial > 10, `the wound must pump a sustained spray, peaked at ${goreAftermath.arterial}`);
+  assert.ok(goreAftermath.stains > 8, `landed droplets must stain the floor, peaked at ${goreAftermath.stains}`);
+  assert.ok(goreAftermath.stains <= 56, "the stain layer must respect its cap");
+
   // Dizzy: repeated clean hits stun, the meter bleeds off when they stop, the
   // dizzy is a real punish window, and recovery grants a long immunity so it can
   // never loop.
@@ -2692,7 +2713,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-shell-1\.3e/);
+  assert.match(offlineCache.name, /final-blow-shell-1\.4a/);
   assert.equal(offlineCache.entries, 20);
   assert.equal(offlineCache.hasIndex, false);
   assert.equal(offlineCache.rootRedirected, false);
@@ -2712,8 +2733,8 @@ try {
     version: window.__finalBlowEngine?.version,
   }))()`);
   assert.match(controlledReload.title, /Final Blow/);
-  assert.match(controlledReload.build, /1\.3C/);
-  assert.equal(controlledReload.version, '1.3c-cinematic-gore');
+  assert.match(controlledReload.build, /1\.4/);
+  assert.equal(controlledReload.version, '1.4-red-cinema');
 
   await client.send('Network.emulateNetworkConditions', {
     offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
@@ -2730,8 +2751,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.3C/);
-  assert.equal(offlineBoot.version, '1.3c-cinematic-gore');
+  assert.match(offlineBoot.build, /1\.4/);
+  assert.equal(offlineBoot.version, '1.4-red-cinema');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2775,7 +2796,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 1.3C');
+  assert.equal(landscape.version.text, 'VERSION 1.4');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);

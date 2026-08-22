@@ -2512,7 +2512,7 @@ function performFinisher(winner, type) {
   // top so every LP/LK execution clearly announces "Death Blow" once.
   sound("special", attacker);
   sound("final");
-  return script.duration + .55;
+  return script.duration + 1.1;
 }
 
 function sampleFinisher(keys, elapsed) {
@@ -2653,6 +2653,10 @@ function triggerFinisherImpact(finisher, impact) {
     const scriptId = attacker.def.finisherScriptId || attacker.def.id;
     const fatality = getGraphicFatality(scriptId, finisher.type);
     finisher.fatalityTriggered = true;
+    // Time dilation for the killing blow, then a pumping wound. Both are plain
+    // numbers on the finisher, so rollback snapshots reproduce them exactly.
+    finisher.slowMotionTicks = 42;
+    finisher.arterialFrames = 156;
     finisher.beatLabel = fatality.title;
     finisher.beatLife = 1.45;
     const decalLife = Math.max(1.4, finisher.script.duration - finisher.elapsed + .8);
@@ -2740,7 +2744,9 @@ function updateFinisher(dt) {
   if (!finisher) return;
   const attacker = state.fighters[finisher.winner];
   const victim = state.fighters[1 - finisher.winner];
-  finisher.elapsed = Math.min(finisher.script.duration, finisher.elapsed + dt);
+  const slowMo = (finisher.slowMotionTicks || 0) > 0;
+  if (slowMo) finisher.slowMotionTicks -= 1;
+  finisher.elapsed = Math.min(finisher.script.duration, finisher.elapsed + dt * (slowMo ? 0.38 : 1));
   finisher.beatLife = Math.max(0, finisher.beatLife - dt);
   const pose = sampleFinisher(finisher.script.keys, finisher.elapsed);
 
@@ -2756,6 +2762,17 @@ function updateFinisher(dt) {
   victim.cinematicFrame = pose.vf;
   attacker.cinematicRotation = pose.ar * finisher.direction;
   victim.cinematicRotation = pose.vr * finisher.direction;
+  if (finisher.fatalityTriggered && state.graphicFatalities && !state.accessibility.reducedMotion
+    && finisher.elapsed > finisher.fatalityAt) {
+    const aftermath = finisher.elapsed - finisher.fatalityAt;
+    const fade = Math.max(0, 1 - aftermath / 2.4);
+    if (fade > 0) {
+      // Twitches arrive in spasms rather than a constant buzz: the slow sine
+      // gates the fast one, and the whole thing decays to stillness.
+      const spasm = Math.sin(state.simulationTick * 1.7) * Math.max(0, Math.sin(state.simulationTick * 0.11));
+      victim.cinematicRotation += spasm * 0.055 * fade;
+    }
+  }
   attacker.specialGlow = Math.max(attacker.specialGlow, .28 + Math.sin(finisher.elapsed * 9) * .08);
   attacker.block = false;
   victim.block = false;
@@ -2773,6 +2790,31 @@ function updateFinisher(dt) {
     && finisher.script.impacts[finisher.impactIndex].t <= finisher.elapsed) {
     triggerFinisherImpact(finisher, finisher.script.impacts[finisher.impactIndex]);
     finisher.impactIndex += 1;
+  }
+
+  // Arterial spray: the wound pumps on a heartbeat for ~2.6 seconds after the
+  // killing blow. Droplets arc away from the attacker, and each one that lands
+  // becomes a floor stain plus a small splash back up.
+  if (finisher.fatalityTriggered && state.graphicFatalities && (finisher.arterialFrames || 0) > 0) {
+    finisher.arterialFrames -= 1;
+    const pump = 0.5 + 0.5 * Math.abs(Math.sin(state.simulationTick * 0.16));
+    if (state.simulationTick % 2 === 0) {
+      const jets = 1 + (pump > 0.82 ? 1 : 0) + (state.performance.particleScale >= 1 ? 1 : 0);
+      for (let jet = 0; jet < jets; jet += 1) {
+        const vr = visualRandom();
+        state.particles.push({
+          kind: "arterial",
+          x: victim.x + finisher.direction * (4 + vr * 10),
+          y: victim.y - 44 - vr * 18,
+          vx: finisher.direction * (70 + vr * 310) * pump + (visualRandom() - 0.5) * 90,
+          vy: -(150 + visualRandom() * 400) * pump,
+          gravity: 1150, drag: 0.985,
+          life: 1.5, max: 1.5,
+          size: 2 + visualRandom() * 2.6,
+          color: vr > 0.4 ? "#a50713" : "#d90b19",
+        });
+      }
+    }
   }
 }
 
@@ -5414,6 +5456,29 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
     particle.y += particle.vy * dt;
     particle.vx *= particle.drag ?? 0.985;
     if (Number.isFinite(particle.spin)) particle.rotation = (particle.rotation || 0) + particle.spin * dt;
+    if (particle.kind === "arterial" && particle.y >= FLOOR - 2 && particle.vy > 0) {
+      particle.life = 0;
+      // Cap the stain layer so a long spray cannot evict combat text and other
+      // effects from the trimmed effect budget.
+      const stains = state.effects.reduce((total, effect) => total + (effect.kind === "bloodDecal" && effect.stain ? 1 : 0), 0);
+      if (stains >= 56) continue;
+      const stainLife = 3.4 + visualRandom() * 2.2;
+      state.effects.push({
+        kind: "bloodDecal", stain: true, tier: "light",
+        x: clamp(particle.x, 24, W - 24), y: FLOOR + 3,
+        width: 9 + visualRandom() * 20,
+        life: stainLife, max: stainLife, color: "#6b050c",
+      });
+      for (let splash = 0; splash < 2; splash += 1) {
+        state.particles.push({
+          kind: "blood", x: particle.x, y: FLOOR - 3,
+          vx: (visualRandom() - 0.5) * 130, vy: -40 - visualRandom() * 90,
+          gravity: 900, drag: 0.98,
+          life: 0.18 + visualRandom() * 0.2, max: 0.38,
+          size: 1.4 + visualRandom() * 2, color: "#a50713",
+        });
+      }
+    }
   }
   state.particles = state.particles.filter((particle) => particle.life > 0);
   for (const effect of state.effects) effect.life -= dt;
@@ -7597,6 +7662,20 @@ const STAGE_GRADES = Object.freeze({
 
 function drawStageGrade() {
   if (state.accessibility.highContrast) return;
+  // The killing blow drains the colour out of the scene, so the reds of the
+  // pool, spray and vignette are the only saturated thing left on screen.
+  const finisher = state.finisher;
+  if (state.graphicFatalities && finisher?.fatalityTriggered) {
+    const aftermath = Math.max(0, finisher.elapsed - finisher.fatalityAt);
+    const drain = Math.min(0.55, aftermath * 1.1);
+    if (drain > 0.01) {
+      ctx.save();
+      ctx.globalCompositeOperation = "saturation";
+      ctx.fillStyle = `rgba(128,128,128,${drain.toFixed(3)})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+  }
   const grade = STAGE_GRADES[state.stage];
   if (!grade) return;
   ctx.save();
@@ -7630,7 +7709,7 @@ function drawParticles() {
       ctx.restore();
       continue;
     }
-    if (particle.kind === "blood") {
+    if (particle.kind === "blood" || particle.kind === "arterial") {
       const angle = Math.atan2(particle.vy || 0, particle.vx || 1);
       ctx.ellipse(particle.x, particle.y, particle.size * 1.65, Math.max(1, particle.size * 0.62), angle, 0, Math.PI * 2);
     } else if (particle.kind === "goreFragment") {
@@ -8526,7 +8605,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.3e");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.4a");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -8994,7 +9073,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.3c-cinematic-gore",
+  version: "1.4-red-cinema",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -9077,6 +9156,9 @@ window.__finalBlowEngine = {
         lensBlood: state.effects.filter((effect) => effect.kind === "lensBlood").length,
         genericHitEffects: state.effects.filter((effect) => effect.kind === "hit").length,
         sparkLines: state.particles.filter((particle) => particle.kind === "sparkLine").length,
+        arterialSprays: state.particles.filter((particle) => particle.kind === "arterial").length,
+        bloodStains: state.effects.filter((effect) => effect.kind === "bloodDecal" && effect.stain).length,
+        fatalitySlowMo: Boolean((state.finisher?.slowMotionTicks || 0) > 0),
         shockRings: state.effects.filter((effect) => effect.kind === "shockRing").length,
         afterimages: state.effects.filter((effect) => effect.kind === "afterimage").length,
         superDim: Number(superDimLevel.toFixed(3)),
