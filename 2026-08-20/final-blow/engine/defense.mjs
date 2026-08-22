@@ -50,6 +50,14 @@ export const MOVEMENT_RULES = Object.freeze({
   crouchingPushboxHalfWidth: spatial(35),
 });
 
+export const COLLISION_RULES = Object.freeze({
+  // A jump must clear the standing fighter's shoulders before a side switch is
+  // legal. Below this height the pushboxes remain solid, preventing low-air
+  // body overlap and corner tunnelling while preserving authored cross-ups.
+  crossupClearance: spatial(92),
+  overlapEpsilon: 0.001,
+});
+
 export const DEFENSE_RULES = Object.freeze({
   throwTechWindowFrames: 6,
   // Long post-throw protection is what stops throw loops without a defensive answer.
@@ -502,4 +510,18 @@ export function resolvePushboxPositions(a, b, minX = MOVEMENT_RULES.stageMinX, m
   return aIsLeft
     ? { aX: left, bX: right, overlap }
     : { aX: right, bX: left, overlap };
+}
+
+export function resolveArenaCollision(a, b, {
+  minX = MOVEMENT_RULES.stageMinX,
+  maxX = MOVEMENT_RULES.stageMaxX,
+  floorY = 600,
+} = {}) {
+  const aClearance = a.grounded === false ? floorY - a.y : 0;
+  const bClearance = b.grounded === false ? floorY - b.y : 0;
+  const legalCrossup = Math.max(aClearance, bClearance) >= COLLISION_RULES.crossupClearance;
+  if (legalCrossup) {
+    return { aX: a.x, bX: b.x, overlap: 0, legalCrossup: true };
+  }
+  return { ...resolvePushboxPositions(a, b, minX, maxX), legalCrossup: false };
 }

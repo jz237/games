@@ -1,8 +1,15 @@
-# Final Blow four-button controls
+# Final Blow 1.3 four-button controls
 
-Version 1.1A replaces the old light/heavy/special/guard/super/FB button set with the
-approved classic layout: one directional control plus **LP, HP, LK, HK**. No legacy
+Version 1.3 uses the approved classic layout: one directional control plus
+**LP, HP, LK, HK**. No legacy
 guard, special, super, throw or Final Blow button is required anywhere in the game.
+
+Tournament input uses a six-frame default buffer (never less than four), bounded
+motion leniency, and the shared priority **Super → EX → Special → Throw → Normal**.
+If a high-priority buffered action is not currently legal, the engine continues to
+the next legal action instead of swallowing the press. During intro and round-over,
+any attack or Up skips the wait and is consumed so it cannot become an accidental
+opening normal.
 
 ## Movement and defence
 

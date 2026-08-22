@@ -1,5 +1,11 @@
 # Final Blow combat direction
 
+Version 1.3 adds the **Tournament Feel** pass documented in `TOURNAMENT.md`: a
+120-normal frame/box audit, shoulder-clearance cross-up collision, all-28-matchup
+CPU simulation, deterministic repetition limits, telegraphed/capped hazards,
+expanded Training and faster round flow. The full-stage arena camera remains fixed
+outside authored finisher cinematics.
+
 Version 1.1C rebuilds the fight around **Street Fighter II: Hyper Fighting** neutral
 and **Mortal Kombat 3** impact. The roster, Grit identity, signature moves, supers and
 finishers are unchanged — only the mechanical proportions moved.

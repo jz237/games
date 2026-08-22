@@ -475,7 +475,7 @@ const postMoves = {
     cancelProfileId: "command-special", level: ATTACK_LEVELS.LOW,
     startupFrames: 5, activeFrames: 7, recoveryFrames: 18, range: 0, damage: 0, push: 0, meter: 0,
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0,
-    trap: { deployFrame: 8, offsets: [112], armFrames: 15, lifetimeFrames: 360, radius: 66, damage: 10, chipDamage: 2, hitstunFrames: 25, blockstunFrames: 16, push: 255, knockdown: true, color: "#ff3bbf" },
+    trap: { deployFrame: 8, offsets: [112], armFrames: 20, lifetimeFrames: 360, radius: 58, damage: 8, chipDamage: 1, hitstunFrames: 20, blockstunFrames: 13, push: 220, knockdown: false, maxOwned: 2, color: "#ff3bbf" },
     moveName: "WET PAINT", command: "↓ ← + PUNCH · persistent low trap", animation: anim(1), hitboxes: [],
   }),
   launcher: move("post-tag-updraft", "heavy", {
@@ -507,7 +507,7 @@ const postMoves = {
     startupFrames: 3, activeFrames: 9, recoveryFrames: 15, range: 0, damage: 0, push: 0, meter: 0,
     hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, gritCost: GRIT_RULES.enhancedSpecialCost,
     reversalInvulnerableFrames: 5,
-    trap: { deployFrame: 6, offsets: [88, 205], armFrames: 9, lifetimeFrames: 480, radius: 78, damage: 12, chipDamage: 3, hitstunFrames: 28, blockstunFrames: 19, push: 285, knockdown: true, color: "#ff3bbf" },
+    trap: { deployFrame: 6, offsets: [88, 205], armFrames: 15, armFramesByIndex: [15, 27], lifetimeFrames: 360, radius: 66, damage: 9, chipDamage: 2, hitstunFrames: 22, blockstunFrames: 15, push: 245, knockdown: false, maxOwned: 2, color: "#ff3bbf" },
     moveName: "WET PAINT EX", command: "↓ ← + LP&HP · two traps", animation: anim(1), hitboxes: [],
   }),
   enhancedLauncher: move("post-ex-tag-updraft", "special", {

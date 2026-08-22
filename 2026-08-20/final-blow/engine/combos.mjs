@@ -265,15 +265,28 @@ export class ComboTracker {
   }
 }
 
+export const COMMAND_INPUT_RULES = Object.freeze({
+  // Six tenths of a second for the whole motion and three tenths between
+  // directions keeps quarter-circles comfortable on keyboards, pads and touch.
+  // The attack button must still be fresh, and excessive direction waggling is
+  // rejected, so the added leniency does not manufacture accidental specials.
+  maxWindowFrames: 36,
+  maxGapFrames: 18,
+  terminalWindowFrames: 4,
+  maxSkippedEntries: 3,
+});
+
 export function matchCommandSequence(history, sequence, currentFrame, {
-  maxWindowFrames = 32,
-  maxGapFrames = 14,
-  terminalWindowFrames = 2,
+  maxWindowFrames = COMMAND_INPUT_RULES.maxWindowFrames,
+  maxGapFrames = COMMAND_INPUT_RULES.maxGapFrames,
+  terminalWindowFrames = COMMAND_INPUT_RULES.terminalWindowFrames,
+  maxSkippedEntries = COMMAND_INPUT_RULES.maxSkippedEntries,
 } = {}) {
   let cursor = history.length - 1;
   let nextFrame = currentFrame;
   let startIndex = -1;
   let endIndex = -1;
+  let skippedEntries = 0;
   for (let sequenceIndex = sequence.length - 1; sequenceIndex >= 0; sequenceIndex -= 1) {
     let found = -1;
     while (cursor >= 0) {
@@ -284,9 +297,11 @@ export function matchCommandSequence(history, sequence, currentFrame, {
         found = cursor;
         break;
       }
+      if (entry.frame <= nextFrame) skippedEntries += 1;
       cursor -= 1;
     }
     if (found < 0) return null;
+    if (skippedEntries > maxSkippedEntries) return null;
     if (sequenceIndex === sequence.length - 1 && currentFrame - history[found].frame > terminalWindowFrames) return null;
     if (endIndex < 0) endIndex = found;
     startIndex = found;
@@ -299,7 +314,7 @@ export function matchCommandSequence(history, sequence, currentFrame, {
 
 export function recognizeCombatCommand(history, currentFrame) {
   const candidates = [
-    { action: "super", sequence: ["down", "forward", "down", "forward", "punch"], terminal: "punch", options: { maxWindowFrames: 48, maxGapFrames: 18 } },
+    { action: "super", sequence: ["down", "forward", "down", "forward", "punch"], terminal: "punch", options: { maxWindowFrames: 54, maxGapFrames: 20, maxSkippedEntries: 4 } },
     { action: "launcher", sequence: ["forward", "down", "forward", "punch"], terminal: "punch" },
     { action: "driveHeavy", sequence: ["back", "forward", "kick"], terminal: "kick" },
     { action: "commandSpecial", sequence: ["down", "forward", "punch"], terminal: "punch" },

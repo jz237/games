@@ -119,6 +119,23 @@ export function formatKeyCode(code) {
 export const SUPER_GRIT_COST = 100;
 export const ENHANCED_GRIT_COST = 25;
 
+// A single public ordering shared by neutral starts, cancels and buffered
+// wakeups. Motion attacks count as specials. This is intentionally explicit so
+// a same-frame chord can never be eaten by the normal used to complete it.
+export const TOURNAMENT_ACTION_PRIORITY = Object.freeze([
+  "super",
+  "enhancedLauncher", "enhancedBackSpecial", "enhancedCommandSpecial", "enhanced",
+  "throwObject", "launcher", "backSpecial", "driveHeavy", "commandSpecial", "special",
+  "throw",
+  "heavy", "light",
+]);
+
+export function hasFlowSkipInput(input = {}) {
+  if (input.fourButton && ATTACK_BUTTONS.some((button) => input[button])) return true;
+  return Boolean(input.jump || input.up || input.light || input.heavy || input.special
+    || input.enhanced || input.throw || input.super || input.final);
+}
+
 /**
  * Translate the raw four-button pad/keyboard/touch reading into the engine's
  * action vocabulary. Nothing here needs a fifth button:

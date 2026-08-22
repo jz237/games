@@ -1,4 +1,4 @@
-# Final Blow v1.1 — Handoff
+# Final Blow v1.3 — Handoff
 
 Paste this whole file to the next agent as context before asking it to touch
 Final Blow. It describes what exists, where it lives, the traps, and how to
@@ -11,7 +11,8 @@ This file lives at `2026-08-20/final-blow/HANDOFF.md` in `jz237/games`.
 ## 1. What this is
 
 `Final Blow: Philly After Dark` is a browser 2D versus fighting game. Version
-**1.1** shipped on 2026-08-21 and delivered all twelve items in `BACKLOG.md`.
+**1.3** shipped on 2026-08-22 and adds the seven-part Tournament Feel pass in
+`TOURNAMENT.md` on top of the earlier backlog releases.
 
 **Source of truth:** `git@github.com:jz237/games.git`, at `2026-08-20/final-blow/`.
 The local working clone is:
@@ -23,8 +24,8 @@ The local working clone is:
 That clone is on a branch called `final-blow-goal` which tracks `origin/main`.
 Do not create a new location for this game — the URLs below are fixed.
 
-**Recovery tag:** `final-blow-v1.1` → commit `d87b64c` on `jz237/games`.
-If anything is ever lost, `git checkout final-blow-v1.1` restores the exact
+**Recovery tag:** `final-blow-v1.3` on `jz237/games`.
+If anything is ever lost, `git checkout final-blow-v1.3` restores the exact
 shipped state.
 
 ---
@@ -55,21 +56,20 @@ a step that drops the folder from the Pages artifact:
 
 1. Commit and push to `jz237/games` `main` — this is the source of truth.
 2. Mirror to `jez237-site`. `main` there is a **protected branch that rejects
-   merge commits**, so do NOT `git pull` and push. Use a clean single-commit
-   branch built off `origin/main`:
+   merge commits**, so do NOT use an old working clone. Use a fresh shallow clone
+   of `origin/main` and make one fast-forward commit:
 
 ```sh
-cd /home/jez237/.openclaw/workspace/jez237-website
-git fetch origin
-git checkout -B publish/final-blow-<label> origin/main
+FINAL_BLOW_MIRROR_DIR=$(mktemp -d)
+git clone --depth 1 git@github.com:jz237/jez237-site.git "$FINAL_BLOW_MIRROR_DIR"
+cd "$FINAL_BLOW_MIRROR_DIR"
 SRC=/home/jez237/.openclaw/agents/gamemaster/workspace/final-blow-goal/2026-08-20/final-blow
 rsync -a --delete \
   --exclude 'assets/references/' --exclude 'BACKLOG.md' --exclude '.git' \
   "$SRC/" games/2026-08-20/final-blow/
 git add games/2026-08-20/final-blow
 git commit -m "Publish Final Blow <label>"
-git push origin publish/final-blow-<label>:main
-git checkout main && git branch -D publish/final-blow-<label>
+git push origin HEAD:main
 ```
 
 3. **The two rsync excludes are mandatory.** `assets/references/` holds a private
@@ -256,7 +256,7 @@ Frame roles are documented in `tools/README.md`.
 ```sh
 cd /home/jez237/.openclaw/agents/gamemaster/workspace/final-blow-goal/2026-08-20/final-blow
 
-node --test tests/*.test.mjs        # 33 unit tests, ~1s
+node --test tests/*.test.mjs        # 38 unit/module tests
 node tests/browser-smoke.mjs        # full browser suite, needs Chrome, ~2min
 
 # online rollback (two browsers against a local signaling worker)
@@ -264,17 +264,18 @@ cd signaling && npx wrangler dev --port 8787 --local &
 FINAL_BLOW_SIGNALING_API=http://127.0.0.1:8787 node tests/online-browser-smoke.mjs
 ```
 
-`browser-smoke.mjs` covers keyboard, an emulated XInput pad, touch, the 844x390
+`browser-smoke.mjs` covers all 28 roster matchups, keyboard, an emulated XInput pad, touch, the 844x390
 landscape layout, PWA offline boot, Training, Arcade, Watch Demo, the portrait
 gate, all eight grabs and throwables, stage weapons, Passive CPU, dizzy, crowd
-density, and fighter framing. **A green run here is the bar for publishing.**
+density, fighter framing, controller disconnect, flow skips and same-fighters
+stage selection. **A green run here is the bar for publishing.**
 
 The game exposes `window.__finalBlowQa` for driving it headlessly —
 `fight()`, `stage()`, `positions()`, `input()`, `step()`, `difficulty()`,
 `forceStageWeapon()`, `demo()` and more. Read the object at the bottom of
 `game.js` before writing new tests.
 
-**Test philosophy used throughout 1.1:** assert the *rule*, not a frozen number.
+**Test philosophy used throughout:** assert the *rule*, not a frozen number.
 Frame counts and damage totals move whenever `ARCADE_TUNING` changes, so tests
 check things like "recovery must exceed the authored base" and "a super must
 out-damage a single heavy while leaving most of the bar."
@@ -298,15 +299,13 @@ works fine and was used for all the new art.
 
 ## 9. Current repo state
 
-- `jz237/games` — clean, 0 unpushed, 0 uncommitted. Tag `final-blow-v1.1` on remote.
-- `jez237-site` local clone at `/home/jez237/.openclaw/workspace/jez237-website`
-  was stale and would have reverted the live game if pushed. It has been merged up
-  to `origin/main` and now matches. It still carries three unpushed newsbot
-  commits and some merge commits from other agent sessions — **those belong to
-  other work, leave them alone.** Because it contains merge commits it cannot be
-  pushed to the protected branch anyway, which is a useful safety net.
-- Untracked and deliberately preserved in the game folder: `BACKLOG.md` and
-  `assets/references/`.
+- Canonical release: `jz237/games` tag `final-blow-v1.3`.
+- Never publish from a long-lived `jez237-site` clone. Other agents may own its
+  local commits or it may be far behind `origin/main`; use the fresh-clone mirror
+  procedure in section 2.
+- Untracked and deliberately preserved in the canonical game folder:
+  `BACKLOG.md` and `assets/references/`. They are private and are not part of the
+  v1.3 commit or mirror.
 
 ---
 

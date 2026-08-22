@@ -306,6 +306,11 @@ try {
     aiDifficulties: [...document.querySelectorAll('#aiDifficultySelect option')].map((option) => option.value),
     aiDifficulty: document.querySelector('#aiDifficultySelect')?.value,
     visualQualities: [...document.querySelectorAll('#visualQualitySelect option')].map((option) => option.value),
+    trainingDummyModes: [...document.querySelectorAll('#trainingDummySelect option')].map((option) => option.value),
+    trainingTools: ['trainingHitboxToggle', 'trainingRecordButton', 'trainingPlaybackButton', 'trainingTrialSelect', 'trainingTrialResetButton']
+      .filter((id) => document.getElementById(id)).length,
+    flowSkipHint: Boolean(document.querySelector('#flowSkipHint')),
+    newStageButton: Boolean(document.querySelector('#newStageButton')),
     pauseButtons: document.querySelectorAll('#pausePanel button').length,
     soundCaptions: document.querySelector('#soundCaptionsToggle')?.checked,
     onlineButton: document.querySelector('#onlineButton')?.textContent.trim(),
@@ -318,8 +323,8 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.2B/);
-  assert.equal(title.version.text, 'VERSION 1.2B');
+  assert.match(title.build, /1\.3/);
+  assert.equal(title.version.text, 'VERSION 1.3');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -329,6 +334,10 @@ try {
   assert.equal(title.moveListRows, 10);
   assert.deepEqual(title.aiDifficulties, ['passive', 'rookie', 'street', 'pro', 'final']);
   assert.deepEqual(title.visualQualities, ['auto', 'high', 'balanced', 'battery']);
+  assert.ok(['guard-after-first', 'reversal', 'wakeup', 'record', 'playback'].every((mode) => title.trainingDummyModes.includes(mode)));
+  assert.equal(title.trainingTools, 5);
+  assert.equal(title.flowSkipHint, true);
+  assert.equal(title.newStageButton, true);
   assert.equal(title.pauseButtons, 4);
   assert.equal(title.soundCaptions, true);
   assert.match(title.onlineButton, /PRIVATE ROOM/);
@@ -340,9 +349,86 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.2b-title-version');
+  assert.equal(title.engineVersion, '1.3-tournament-feel');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
+  assert.equal(title.engine.tournament.version, '1.3');
+  assert.equal(title.engine.tournament.matchupCount, 28);
+  assert.deepEqual(title.engine.tournament.violations, []);
+  assert.deepEqual(title.engine.inputRules.buffer, { minimumFrames: 4, defaultFrames: 6, maximumFrames: 6 });
+  assert.deepEqual(title.engine.inputRules.priority.slice(0, 5), [
+    'super', 'enhancedLauncher', 'enhancedBackSpecial', 'enhancedCommandSpecial', 'enhanced',
+  ]);
+  assert.deepEqual(title.engine.camera, { x: 640, y: 360, zoom: 1, locked: true, mode: 'arena' });
+
+  const tournamentLab = await evaluate(client, `(() => {
+    window.__finalBlowQa.training('deathblow', 'jez');
+    document.querySelector('#trainingHitboxToggle').click();
+    window.__finalBlowQa.trainingRecordStart();
+    window.__finalBlowQa.trainingRecordFrame({ right: true, hp: true });
+    window.__finalBlowQa.trainingRecordFrame({ down: true });
+    const recorded = window.__finalBlowQa.trainingRecordStop(true);
+    const trial = window.__finalBlowQa.trainingTrial(1);
+    const options = [...document.querySelectorAll('#trainingTrialSelect option')].map((option) => option.textContent);
+    const snapshot = window.__finalBlowEngine.snapshot();
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    const picks = [...window.__finalBlowEngine.snapshot().picks];
+    window.__finalBlowQa.flowPhase('intro', 3);
+    const introHint = !document.querySelector('#flowSkipHint').hidden;
+    window.__finalBlowQa.input(0, { light: true });
+    window.__finalBlowQa.step(1 / 60);
+    const introSkipped = window.__finalBlowEngine.snapshot();
+    window.__finalBlowQa.flowPhase('roundover', 3, 0);
+    window.__finalBlowQa.input(0, { heavy: true });
+    window.__finalBlowQa.step(1 / 60);
+    const result = window.__finalBlowEngine.snapshot();
+    const resultUi = {
+      rematch: document.querySelector('#rematchButton').textContent,
+      newStageHidden: document.querySelector('#newStageButton').hidden,
+    };
+    document.querySelector('#newStageButton').click();
+    const stageSelect = window.__finalBlowEngine.snapshot();
+    return { recorded, trial, options, snapshot, picks, introHint, introSkipped, result, resultUi, stageSelect };
+  })()`);
+  assert.equal(tournamentLab.recorded.recordingFrames, 2);
+  assert.equal(tournamentLab.recorded.dummyMode, 'playback');
+  assert.equal(tournamentLab.trial.index, 1);
+  assert.equal(tournamentLab.trial.count, 2);
+  assert.equal(tournamentLab.options.length, 2);
+  assert.equal(tournamentLab.snapshot.training.showHitboxes, true);
+  assert.equal(tournamentLab.introHint, true);
+  assert.equal(tournamentLab.introSkipped.phase, 'fight');
+  assert.equal(tournamentLab.introSkipped.fighters[0].attack, null, 'skip input may not become an accidental normal');
+  assert.equal(tournamentLab.result.screen, 'result');
+  assert.match(tournamentLab.resultUi.rematch, /INSTANT REMATCH/);
+  assert.equal(tournamentLab.resultUi.newStageHidden, false);
+  assert.equal(tournamentLab.stageSelect.screen, 'stage');
+  assert.deepEqual(tournamentLab.stageSelect.picks, tournamentLab.picks, 'new-stage flow must preserve both fighters');
+
+  const disconnectPause = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.controllerDisconnect(1);
+    const snapshot = window.__finalBlowEngine.snapshot();
+    const reason = document.querySelector('#pauseReason').textContent;
+    const reasonHidden = document.querySelector('#pauseReason').hidden;
+    window.__finalBlowQa.pause(false);
+    return { snapshot, reason, reasonHidden };
+  })()`);
+  assert.equal(disconnectPause.snapshot.paused, true);
+  assert.match(disconnectPause.snapshot.pauseReason, /PLAYER 2 CONTROLLER DISCONNECTED/);
+  assert.equal(disconnectPause.reasonHidden, false);
+  assert.equal(disconnectPause.reason, disconnectPause.snapshot.pauseReason);
+
+  const tournamentMatrix = await evaluate(client, `window.__finalBlowQa.tournamentMatrix(4, 'pro')`);
+  assert.equal(tournamentMatrix.matchups.length, 28);
+  assert.ok(tournamentMatrix.matchups.every(({ nonFinite }) => !nonFinite));
+  assert.ok(
+    tournamentMatrix.matchups.every(({ maximumGroundOverlap }) => maximumGroundOverlap <= 0.001),
+    `ground overlap: ${JSON.stringify(tournamentMatrix.matchups.filter(({ maximumGroundOverlap }) => maximumGroundOverlap > 0.001))}`,
+  );
+  assert.ok(tournamentMatrix.matchups.every(({ decisions }) => decisions.every((count) => count > 0)));
+  assert.ok(tournamentMatrix.matchups.every(({ maximumProjectiles }) => maximumProjectiles <= 4));
+  assert.ok(tournamentMatrix.matchups.every(({ maximumTraps }) => maximumTraps <= 2));
 
   const fighterAudioRoutes = await evaluate(client, `(() => {
     const fighterIds = ['deathblow', 'jez', 'alan', 'post', 'benny', 'donald', 'cyraxx', 'ali'];
@@ -760,6 +846,11 @@ try {
   const blockedGolfBall = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   assert.equal(blockedGolfBall.fighters[1].health, 97, 'Golden Shockwave should deal three chip damage');
   assert.equal(blockedGolfBall.fighters[1].lastHitResult, 'blocked-mid-projectile');
+
+  await evaluate(client, `window.__finalBlowQa.fight('donald', 'donald'); window.__finalBlowQa.positions(350, 930); window.__finalBlowQa.input(0, { commandSpecial: true }); window.__finalBlowQa.input(1, { commandSpecial: true }); window.__finalBlowQa.step(0.75)`);
+  const projectileClash = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(projectileClash.projectiles.length, 0, 'opposing projectiles should cancel each other');
+  assert.deepEqual(projectileClash.fighters.map(({ health }) => health), [100, 100], 'a canceled projectile may not hit after the clash');
 
   await evaluate(client, `window.__finalBlowQa.fight('donald', 'benny'); window.__finalBlowQa.positions(350, 920); window.__finalBlowQa.fighter(0, { meter: 50 }); window.__finalBlowQa.input(0, { enhancedCommandSpecial: true }); window.__finalBlowQa.step(0.3)`);
   const doubleShockwave = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
@@ -2425,7 +2516,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.2/);
+  assert.match(offlineCache.name, /final-blow-offline-1\.3/);
   assert.equal(offlineCache.hasJanney, true);
   assert.ok(offlineCache.entries >= 157);
   assert.equal(offlineCache.hasGame, true);
@@ -2453,8 +2544,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.2B/);
-  assert.equal(offlineBoot.version, '1.2b-title-version');
+  assert.match(offlineBoot.build, /1\.3/);
+  assert.equal(offlineBoot.version, '1.3-tournament-feel');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2498,7 +2589,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 1.2B');
+  assert.equal(landscape.version.text, 'VERSION 1.3');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);

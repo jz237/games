@@ -4,6 +4,7 @@ import {
   FIGHTER_STATES,
   FixedStepClock,
   FrameInputBuffer,
+  INPUT_BUFFER_RULES,
   SIMULATION_HZ,
   SIMULATION_STEP_SECONDS,
   createAttackInstance,
@@ -25,7 +26,7 @@ import {
   getActiveHitboxes,
   getHurtboxes,
   isCounterHit,
-  resolvePushboxPositions,
+  resolveArenaCollision,
 } from "./engine/defense.mjs";
 import {
   COMBO_RULES,
@@ -74,9 +75,11 @@ import {
   DEFAULT_PAD_MAP,
   PAD_BUTTON_LABELS,
   REMAPPABLE_ACTIONS,
+  TOURNAMENT_ACTION_PRIORITY,
   applyControlStyle,
   detectPadLabelSet,
   formatKeyCode,
+  hasFlowSkipInput,
   normalizeControlStyle,
   normalizeKeyMaps,
   normalizePadMap,
@@ -87,12 +90,20 @@ import {
 } from "./engine/controls.mjs";
 import {
   TRAINING_DUMMY_MODES,
+  beginTrainingRecording,
+  comboTrialsForFighter,
   createTrainingState,
+  finishTrainingRecording,
+  recordTrainingFrame,
+  recordTrainingTrialHit,
+  resetTrainingScenario,
+  selectTrainingTrial,
   trainingDummyInput,
   trainingSnapshot,
 } from "./engine/training.mjs";
 import {
   auditFighterBalance,
+  auditTournamentBalance,
   normalizeVisualQuality,
   resolvePerformanceProfile,
   trimVisualBudget,
@@ -299,6 +310,8 @@ const roster = [
 
 const balanceAudit = auditFighterBalance(roster.map(({ id }) => getFighterKit(id)));
 if (balanceAudit.violations.length) console.warn("Final Blow balance guardrail warning", balanceAudit.violations);
+const tournamentAudit = auditTournamentBalance(roster.map(({ id }) => id));
+if (tournamentAudit.violations.length) console.warn("Final Blow tournament audit warning", tournamentAudit.violations);
 const fatalityAudit = auditGraphicFatalities(roster.map(({ id }) => id));
 if (fatalityAudit.errors.length) console.warn("Final Blow graphic fatality warning", fatalityAudit.errors);
 
@@ -684,6 +697,7 @@ const keys = new Set();
 const pressed = new Set();
 const touch = new Set();
 const previousPads = new Map();
+const assignedPadBySide = [null, null];
 const commandHistory = [[], []];
 const qaInputOverrides = [null, null];
 
@@ -741,6 +755,7 @@ const state = {
   audioUnlocked: false,
   musicDuck: 1,
   paused: false,
+  pauseReason: "",
   musicChoice: localStorage.getItem("final-blow-music-choice") || "auto",
   musicVolume: clamp(Number(localStorage.getItem("final-blow-music-volume") ?? "1"), 0, 1),
   sfxVolume: clamp(Number(localStorage.getItem("final-blow-sfx-volume") ?? "1"), 0, 1),
@@ -1635,7 +1650,7 @@ function refreshOnlinePauseOverlay() {
   const suspended = onlineSession.localSuspended || onlineSession.remoteSuspended;
   onlineSession.networkPaused = onlineSession.reconnecting || onlineSession.awaitingResume || suspended;
   if (suspended) setOnlineInterruption(true, "MATCH HOLD", onlineSession.localSuspended
-    ? "Return to landscape play to resume both fighters."
+    ? state.pauseReason || "Return to landscape play to resume both fighters."
     : "The other fighter is restoring the arena view…");
   else if (!onlineSession.networkPaused) setOnlineInterruption(false);
   updateOnlineHud(onlineSession.networkPaused ? "warning" : "sync");
@@ -2108,7 +2123,9 @@ function showScreen(name) {
   const playing = name === "fight";
   if (!playing) {
     state.paused = false;
+    state.pauseReason = "";
     $("#pausePanel").hidden = true;
+    $("#pauseReason").hidden = true;
   }
   $("#hud").classList.toggle("hidden", !playing);
   $("#hud").setAttribute("aria-hidden", String(!playing));
@@ -2121,6 +2138,7 @@ function showScreen(name) {
   $("#touchPauseButton").classList.toggle("playing", playerControlled);
   $("#touchPauseButton").hidden = playing && state.mode === "online";
   if (!playing) $("#announcer").classList.add("hidden");
+  updateFlowSkipHint();
   updateOnlineHud();
   updateDemoUi();
   syncMusic();
@@ -2133,6 +2151,16 @@ function startSelect(mode) {
   unlockAudio();
   state.mode = ["arcade", "versus", "training"].includes(mode) ? mode : "arcade";
   state.arcadeRun = null;
+  if (state.mode === "training") {
+    // A fresh lab entry keeps accessibility-style toggles but clears transient
+    // playback, trial and dummy state so an old recording cannot move P2 during
+    // the next intro or silently queue a dash before FIGHT.
+    state.training = createTrainingState({
+      autoRecover: state.training.autoRecover,
+      infiniteGrit: state.training.infiniteGrit,
+      showHitboxes: state.training.showHitboxes,
+    });
+  }
   state.picks = [0, state.mode === "arcade" ? 4 : 1];
   state.locks = [false, state.mode === "arcade"];
   state.selectingPlayer = 0;
@@ -2225,6 +2253,8 @@ function startMatch(resetSet = true) {
       lastDamage: 0,
       lastResult: "READY",
     });
+    resetTrainingScenario(state.training);
+    selectTrainingTrial(state.training, state.fighters[0].kitId, state.training.trialIndex);
     if (state.training.infiniteGrit) state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
   }
   state.particles.length = 0;
@@ -2359,6 +2389,7 @@ function resetRound() {
   $("#touchControls").classList.remove("cinematic");
   commandHistory[0].length = 0;
   commandHistory[1].length = 0;
+  updateFlowSkipHint();
   updateHud();
   announce(`ROUND ${state.round}`, "SETTLE IT", 1.15);
   scheduleFightAnnouncement(() => {
@@ -2374,6 +2405,32 @@ function announce(main, sub = "", duration = 1) {
   box.classList.remove("hidden");
   clearTimeout(announce.timer);
   announce.timer = setTimeout(() => box.classList.add("hidden"), duration * 1000);
+}
+
+function updateFlowSkipHint() {
+  const visible = state.screen === "fight" && (state.phase === "intro" || state.phase === "roundover");
+  $("#flowSkipHint").hidden = !visible;
+}
+
+function trySkipFightFlow(input0 = {}, input1 = {}) {
+  if (!hasFlowSkipInput(input0) && !hasFlowSkipInput(input1)) return false;
+  if (state.phase === "intro") {
+    state.phase = "fight";
+    state.phaseTime = 0;
+    cancelFightAnnouncement();
+    announce("FIGHT!", "INTRO SKIPPED", 0.55);
+    updateFlowSkipHint();
+    return true;
+  }
+  if (state.phase === "roundover") {
+    state.phaseTime = 0;
+    state.finisher = null;
+    state.cinematicZoom = 1;
+    $("#touchControls").classList.remove("cinematic");
+    updateFlowSkipHint();
+    return true;
+  }
+  return false;
 }
 
 function finishRound(winner, type = -1) {
@@ -2397,6 +2454,7 @@ function finishRound(winner, type = -1) {
     announce(`${winDef.name} WINS`, "KNOCKOUT", 1.65);
     sound("ko", state.fighters[1 - winner]);
   }
+  updateFlowSkipHint();
   updateHud();
 }
 
@@ -2589,6 +2647,7 @@ function showResult(winner) {
   state.phase = "result";
   state.finisher = null;
   state.cinematicZoom = 1;
+  updateFlowSkipHint();
   const def = state.fighters[winner].def;
   const kit = getFighterKit(def.kitId || def.id);
   const arcadeDefeat = state.mode === "arcade" && winner === 1 && state.arcadeRun;
@@ -2604,8 +2663,9 @@ function showResult(winner) {
     ? `url("assets/moves/${def.id}-specials.webp")`
     : `url("assets/fighters/${def.id}.webp")`;
   $("#resultQuote").textContent = def.victoryQuote || kit?.victory.quote || "PHILLY REMEMBERS THE WINNER.";
-  $("#rematchButton").textContent = arcadeDefeat ? "CONTINUE" : "REMATCH";
+  $("#rematchButton").textContent = arcadeDefeat ? "CONTINUE" : state.mode === "online" ? "REQUEST REMATCH" : "INSTANT REMATCH";
   $("#reselectButton").textContent = arcadeDefeat ? "ABANDON RUN" : state.mode === "online" ? "LEAVE ROOM" : "SELECT FIGHTERS";
+  $("#newStageButton").hidden = state.mode !== "versus";
   showScreen("result");
   if (state.mode === "demo") scheduleNextDemoMatch();
   else $("#demoResultStatus").hidden = true;
@@ -2614,6 +2674,16 @@ function showResult(winner) {
     updateOnlineRematchUi();
     persistOnlineResume(true);
   }
+}
+
+function showSameFightersStageSelect() {
+  if (state.screen !== "result" || state.mode !== "versus") return false;
+  state.locks = [true, true];
+  state.selectingPlayer = 1;
+  state.phase = "idle";
+  showStageSelect();
+  $("#fightButton").textContent = "FIGHT NEW STAGE →";
+  return true;
 }
 
 function showArcadeLadder(clearedMatch) {
@@ -2729,11 +2799,26 @@ function resetTrainingPosition(countReset = true) {
   state.hitstop = 0;
   state.phase = "fight";
   state.phaseTime = 0;
+  resetTrainingScenario(state.training);
+  selectTrainingTrial(state.training, state.fighters[0].kitId, state.training.trialIndex);
   if (state.training.infiniteGrit) state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
   if (countReset) state.training.resets += 1;
   state.training.lastDamage = 0;
   updateHud();
   updateTrainingUi();
+}
+
+function renderTrainingTrials() {
+  if (state.mode !== "training" || !state.fighters.length) return;
+  const fighterId = state.fighters[0].kitId;
+  const trials = comboTrialsForFighter(fighterId);
+  const select = $("#trainingTrialSelect");
+  if (state.training.trialFighterId !== fighterId) selectTrainingTrial(state.training, fighterId, 0);
+  if (select.dataset.fighterId !== fighterId) {
+    select.dataset.fighterId = fighterId;
+    select.innerHTML = trials.map((trial, index) => `<option value="${index}">${index + 1} · ${trial.name}</option>`).join("");
+  }
+  select.value = String(state.training.trialIndex);
 }
 
 function updateTrainingUi(input = {}) {
@@ -2759,13 +2844,14 @@ function updateTrainingUi(input = {}) {
   if (inputLabel && (inputLabel !== state.training.lastInputLabel
     || state.simulationTick - state.training.lastInputFrame > 6)) {
     state.training.inputHistory.push(inputLabel);
-    state.training.inputHistory = state.training.inputHistory.slice(-8);
+    state.training.inputHistory = state.training.inputHistory.slice(-12);
     state.training.lastInputLabel = inputLabel;
     state.training.lastInputFrame = state.simulationTick;
   } else if (!inputLabel) {
     state.training.lastInputLabel = "";
   }
   const snapshot = trainingSnapshot(state.training);
+  renderTrainingTrials();
   const move = snapshot.lastMove;
   $("#trainingDamage").textContent = Number(snapshot.lastDamage).toFixed(1).replace(/\.0$/, "");
   $("#trainingCombo").textContent = `${combo.hits} HIT`;
@@ -2776,9 +2862,16 @@ function updateTrainingUi(input = {}) {
     ? move ? `${move.onHit >= 0 ? "+" : ""}${move.onHit} HIT · ${move.onBlock >= 0 ? "+" : ""}${move.onBlock} BLOCK` : "—"
     : `${snapshot.lastAdvantage >= 0 ? "+" : ""}${snapshot.lastAdvantage} ACTUAL`;
   $("#trainingInputs").textContent = `INPUT: ${snapshot.inputHistory.join(" › ") || "—"}  //  DUMMY: ${snapshot.dummyMode.toUpperCase()}  //  RESETS: ${snapshot.resets}`;
+  $("#trainingTrialSteps").innerHTML = `TRIAL: ${snapshot.trial.steps.map((step, index) => `<span class="${step.complete ? "done" : index === snapshot.trial.step ? "next" : ""}">${step.label}</span>`).join(" › ") || "—"}`;
+  $("#trainingTrialStatus").textContent = `${snapshot.trial.status}${snapshot.trial.complete ? ` · ${snapshot.trial.completions} CLEAR` : ""}`;
   $("#trainingDummySelect").value = snapshot.dummyMode;
   $("#trainingRecoverToggle").checked = snapshot.autoRecover;
   $("#trainingGritToggle").checked = snapshot.infiniteGrit;
+  $("#trainingHitboxToggle").checked = snapshot.showHitboxes;
+  $("#trainingRecordButton").textContent = snapshot.recordingActive ? "STOP & PLAY" : "RECORD P2";
+  $("#trainingPlaybackButton").disabled = snapshot.recordingFrames === 0;
+  $("#trainingPlaybackButton").textContent = snapshot.dummyMode === "playback"
+    ? `PLAYING ${snapshot.recordingFrames}F` : `PLAY LOOP ${snapshot.recordingFrames || "—"}F`;
 }
 
 function syncNewOptionsUi() {
@@ -2811,6 +2904,7 @@ function buttonValue(pad, index) {
 function readInput(side) {
   const map = keyMaps[side];
   const pad = getPad(side);
+  assignedPadBySide[side] = pad?.index ?? null;
   const previous = previousPads.get(pad?.index) || [];
   const axisX = pad ? pad.axes[0] || 0 : 0;
   const axisY = pad ? pad.axes[1] || 0 : 0;
@@ -2870,7 +2964,7 @@ function aiInput(fighter, opponent, dt) {
   fighter.aiClock -= dt;
   const input = { left: false, right: false, down: false, guard: false, jump: false, light: false, heavy: false, special: false, enhanced: false, throw: false, super: false, final: false };
   if (isPassiveDifficulty(fighter.aiBrain?.difficulty)) return input;
-  const cpuFinisher = state.mode === "demo" || fighter.side === 1;
+  const cpuFinisher = state.mode === "demo" || state.mode === "tournament" || fighter.side === 1;
   if (state.phase === "finish" && state.finishWinner === fighter.side && cpuFinisher) {
     input.final = fighter.aiClock <= 0;
     if (input.final) fighter.aiClock = 2;
@@ -2994,6 +3088,11 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     limb: limb || input.limb || "punch",
   };
   if (action === "throwObject" && fighter.throwableUses <= 0) return false;
+  if (action === "throwObject") {
+    const profile = getThrowable(fighter.kitId);
+    const activeObjects = state.projectiles.filter((projectile) => projectile.ownerSide === fighter.side && projectile.throwable === profile?.id);
+    if (profile && activeObjects.length >= profile.maxActive) return false;
+  }
   const throwObjectProfile = action === "throwObject"
     ? createThrowObjectMove(fighter.kitId, { strength: input.heavy ? "heavy" : "light" })
     : null;
@@ -3454,25 +3553,25 @@ function applyFighterPhysics(fighter, dt) {
   fighter.x = clamp(fighter.x, MOVEMENT_RULES.stageMinX, MOVEMENT_RULES.stageMaxX);
 }
 
-const attackActionPriority = [
-  "super",
-  "throwObject",
-  "enhancedLauncher",
-  "enhancedBackSpecial",
-  "enhancedCommandSpecial",
-  "enhanced",
-  "launcher",
-  "backSpecial",
-  "driveHeavy",
-  "commandSpecial",
-  "throw",
-  "special",
-  "heavy",
-  "light",
-];
+const attackActionPriority = [...TOURNAMENT_ACTION_PRIORITY];
 
 function bufferedAction(fighter, actions = attackActionPriority) {
   return actions.find((action) => fighter.inputBuffer.has(action, state.simulationTick)) || null;
+}
+
+function tryStartBufferedAttack(fighter, input, actions = attackActionPriority, options = {}) {
+  for (const action of actions) {
+    const entry = fighter.inputBuffer.consume(action, state.simulationTick);
+    if (!entry) continue;
+    const started = beginAttack(fighter, action, input, {
+      ...options,
+      reversal: Boolean(options.reversalActions?.includes(action)),
+      limb: entry.payload?.limb,
+      backThrow: action === "throw" ? Boolean(entry.payload?.back) : null,
+    });
+    if (started) return true;
+  }
+  return false;
 }
 
 function tryGuardReversal(fighter, input) {
@@ -3698,11 +3797,10 @@ function updateFighter(fighter, opponent, input, dt) {
           fighter.inputBuffer.consume("heavy", state.simulationTick);
           return;
         }
-        const bufferedAttack = fighter.inputBuffer.consume(attackActionPriority, state.simulationTick);
-        if (bufferedAttack) beginAttack(fighter, bufferedAttack.action, input, {
-          reversal: fighter.reversalWindowFrames > 0 && bufferedAttack.action === "special",
-          limb: bufferedAttack.payload?.limb,
-          backThrow: bufferedAttack.action === "throw" ? Boolean(bufferedAttack.payload?.back) : null,
+        tryStartBufferedAttack(fighter, input, attackActionPriority, {
+          reversalActions: fighter.reversalWindowFrames > 0
+            ? ["special", "commandSpecial", "backSpecial", "launcher", "enhancedLauncher"]
+            : [],
         });
       }
     }
@@ -3764,14 +3862,14 @@ function maybeDeployTrap(fighter, attack) {
     blockstunFrames: profile.blockstunFrames,
     push: profile.push,
     knockdown: profile.knockdown,
-    armFrames: profile.armFrames,
+    armFrames: profile.armFramesByIndex?.[index] ?? profile.armFrames,
     lifeFrames: profile.lifetimeFrames,
     maxLifeFrames: profile.lifetimeFrames,
     enhanced: offsets.length > 1,
     color,
   }));
   const ownerTraps = state.traps.filter((trap) => trap.ownerSide === fighter.side);
-  const removeCount = Math.max(0, ownerTraps.length + newTraps.length - 3);
+  const removeCount = Math.max(0, ownerTraps.length + newTraps.length - (profile.maxOwned || 2));
   if (removeCount) {
     const retired = new Set(ownerTraps.slice(0, removeCount).map((trap) => trap.id));
     state.traps = state.traps.filter((trap) => !retired.has(trap.id));
@@ -3887,6 +3985,7 @@ function maybeSpawnThrowable(fighter, attack) {
     bouncesLeft: flight.bounces,
     bounceDamping: flight.bounceDamping,
     hazardFrames: flight.hazardFrames,
+    hazardArmFrames: flight.hazardArmFrames || 0,
     hazard: false,
     spin: flight.spin,
     spinAngle: 0,
@@ -3942,8 +4041,9 @@ function maybeSpawnProjectile(fighter, attack) {
       sequenceIndex: index,
       enhanced: spawnFrames.length > 1,
     };
-    const owned = state.projectiles.filter((item) => item.ownerSide === fighter.side);
-    if (owned.length >= (profile.maxOwned || 5)) {
+    const owned = state.projectiles.filter((item) => item.ownerSide === fighter.side
+      && !item.throwable && !item.stageWeapon);
+    if (owned.length >= (profile.maxOwned || 2)) {
       const oldest = owned[0];
       state.projectiles = state.projectiles.filter((item) => item.id !== oldest.id);
     }
@@ -4102,6 +4202,7 @@ function triggerProjectile(projectile, victim) {
 
 function updateProjectiles(dt) {
   for (const projectile of state.projectiles) {
+    if (projectile.hit) continue;
     projectile.lifeFrames -= 1;
     projectile.armFrames = Math.max(0, (projectile.armFrames || 0) - 1);
     if (projectile.throwable) {
@@ -4112,7 +4213,11 @@ function updateProjectiles(dt) {
         maxX: MOVEMENT_RULES.stageMaxX + 140,
       });
       if (phase === "bounce" && !rollbackResimulating) objectSound(projectile.style);
-      if (phase === "settle") spawnThrowableImpact(projectile, "settle");
+      if (phase === "settle") {
+        projectile.armFrames = projectile.hazardArmFrames || 0;
+        projectile.maxArmFrames = projectile.armFrames;
+        spawnThrowableImpact(projectile, "settle");
+      }
       if (phase === "expired") {
         projectile.lifeFrames = 0;
         spawnThrowableImpact(projectile, "expire");
@@ -4124,6 +4229,33 @@ function updateProjectiles(dt) {
       || projectile.x < MOVEMENT_RULES.stageMinX - 160
       || projectile.x > MOVEMENT_RULES.stageMaxX + 160) continue;
     if (projectile.armFrames > 0) continue;
+    if (!projectile.throwable && !projectile.stageWeapon) {
+      const projectileBox = {
+        x: projectile.x - projectile.width * 0.5,
+        y: projectile.y - projectile.height * 0.5,
+        width: projectile.width,
+        height: projectile.height,
+      };
+      const rival = state.projectiles.find((other) => other !== projectile
+        && other.ownerSide !== projectile.ownerSide
+        && !other.throwable && !other.stageWeapon && !other.hit
+        && other.lifeFrames > 0
+        && (other.armFrames || 0) <= 0
+        && boxesOverlap(projectileBox, {
+          x: other.x - other.width * 0.5,
+          y: other.y - other.height * 0.5,
+          width: other.width,
+          height: other.height,
+        }));
+      if (rival) {
+        projectile.hit = true;
+        rival.hit = true;
+        state.effects.push({ kind: "projectileClash", x: (projectile.x + rival.x) * 0.5, y: (projectile.y + rival.y) * 0.5, life: 0.36, max: 0.36, color: "#ffffff" });
+        spawnCombatText((projectile.x + rival.x) * 0.5, Math.min(projectile.y, rival.y) - 48, "CLASH", "#7fe9ff");
+        sound("block");
+        continue;
+      }
+    }
     const victim = state.fighters[1 - projectile.ownerSide];
     if (!victim || victim.down || victim.wakeupFrames > 0) continue;
     const projectileBox = {
@@ -4637,6 +4769,14 @@ function hit(attacker, victim, attack, collision) {
     guarding: victim.guarding,
     grounded: victim.grounded,
   });
+  if (state.mode === "training" && attacker.side === 0 && !blocked) {
+    recordTrainingTrialHit(state.training, {
+      fighterId: attacker.kitId,
+      action: attack.kitAction || attack.kind,
+      attackSerial: attack.attackSerial,
+      frame: state.simulationTick,
+    });
+  }
   const armored = !blocked
     && attack.level !== ATTACK_LEVELS.THROW
     && victim.attacking?.armorFrames > 0
@@ -4921,18 +5061,22 @@ function separateFighters() {
   if (!a || !b) return;
   if (a.grabbing || b.grabbing || a.grabbed || b.grabbed) return;
   if (a.attacking?.ignorePushbox || b.attacking?.ignorePushbox) return;
-  if ((!a.grounded && a.y < FLOOR - 34) || (!b.grounded && b.y < FLOOR - 34)) return;
-  const positions = resolvePushboxPositions(
+  const positions = resolveArenaCollision(
     {
       x: a.x,
+      y: a.y,
+      grounded: a.grounded,
       side: a.side,
       halfWidth: a.crouch ? a.movement.crouchingPushboxHalfWidth : a.movement.standingPushboxHalfWidth,
     },
     {
       x: b.x,
+      y: b.y,
+      grounded: b.grounded,
       side: b.side,
       halfWidth: b.crouch ? b.movement.crouchingPushboxHalfWidth : b.movement.standingPushboxHalfWidth,
     },
+    { floorY: FLOOR },
   );
   a.x = positions.aX;
   b.x = positions.bX;
@@ -4983,6 +5127,11 @@ function syncFighterStateMachines() {
 }
 
 function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
+  const skippedFlow = trySkipFightFlow(input0, input1);
+  if (skippedFlow && state.phase === "fight") {
+    input0 = {};
+    input1 = {};
+  }
   if (state.hitstop > 0) {
     state.hitstop = Math.max(0, state.hitstop - dt);
     return;
@@ -4995,7 +5144,10 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
   if (state.phase === "intro") {
     input0 = {};
     input1 = {};
-    if (state.phaseTime <= 0) state.phase = "fight";
+    if (state.phaseTime <= 0) {
+      state.phase = "fight";
+      updateFlowSkipHint();
+    }
   }
 
   input0 = prepareFighterInput(state.fighters[0], input0);
@@ -5078,15 +5230,30 @@ function simulateOfflineGameTick(dt) {
     state.hitstop = Math.max(0, state.hitstop - dt);
     return;
   }
+  const bothCpu = state.mode === "demo" || state.mode === "tournament";
   let input0 = readQaInput(0)
-    || (state.mode === "demo" ? aiInput(state.fighters[0], state.fighters[1], dt) : readInput(0));
-  const trainingDummy = state.mode === "training"
+    || (bothCpu ? aiInput(state.fighters[0], state.fighters[1], dt) : readInput(0));
+  const manualTrainingInput = state.mode === "training" && state.training.dummyMode === "record"
+    ? readInput(1) : null;
+  let trainingDummy = state.mode === "training"
     ? trainingDummyInput(state.training, state.simulationTick, {
       attackLevel: state.fighters[0]?.attacking?.level,
+      attackConnected: state.fighters[0]?.attackConnected,
+      comboHits: state.fighters[0]?.combo.snapshot(state.simulationTick).hits || 0,
+      hitstunFrames: state.fighters[1]?.hitstunFrames || 0,
+      blockstunFrames: state.fighters[1]?.blockstunFrames || 0,
+      wakeupFrames: state.fighters[1]?.wakeupFrames || 0,
+      down: Boolean(state.fighters[1]?.down),
+      justWoke: Boolean(state.fighters[1]?.justWoke),
+      manualInput: manualTrainingInput,
     })
     : null;
+  if (trainingDummy?.trainingKnockdown && state.fighters[1]) {
+    enterKnockdown(state.fighters[1]);
+    trainingDummy = { ...trainingDummy, trainingKnockdown: false };
+  }
   let input1 = readQaInput(1)
-    || (state.mode === "arcade" || state.mode === "demo" || (state.mode === "training" && trainingDummy === null)
+    || (state.mode === "arcade" || bothCpu || (state.mode === "training" && trainingDummy === null)
       ? aiInput(state.fighters[1], state.fighters[0], dt)
       : trainingDummy || readInput(1));
   simulatePreparedGameTick(dt, input0, input1);
@@ -7331,7 +7498,8 @@ function drawFinisherOverlay() {
 }
 
 function drawDebugOverlay() {
-  if (!state.debug) return;
+  const trainingBoxes = state.mode === "training" && state.training.showHitboxes;
+  if (!state.debug && !trainingBoxes) return;
   ctx.save();
   ctx.lineWidth = 2;
   ctx.font = "700 14px ui-monospace, SFMono-Regular, Menlo, monospace";
@@ -7348,6 +7516,11 @@ function drawDebugOverlay() {
     ctx.strokeRect(fighter.x - pushHalf, fighter.y - 112, pushHalf * 2, 112);
     ctx.strokeStyle = "#ffef5a";
     for (const box of getActiveHitboxes(fighter)) ctx.strokeRect(box.x, box.y, box.width, box.height);
+  }
+
+  if (!state.debug) {
+    ctx.restore();
+    return;
   }
 
   const lines = [
@@ -7908,7 +8081,7 @@ window.addEventListener("appinstalled", () => {
 window.addEventListener("online", updateOfflineBadge);
 window.addEventListener("offline", updateOfflineBadge);
 
-function setPaused(paused) {
+function setPaused(paused, reason = "") {
   if (state.screen !== "fight") return false;
   if (state.mode === "online" || state.mode === "demo") {
     state.paused = false;
@@ -7916,7 +8089,10 @@ function setPaused(paused) {
     return false;
   }
   state.paused = Boolean(paused);
+  state.pauseReason = state.paused ? String(reason || state.pauseReason || "") : "";
   $("#pausePanel").hidden = !state.paused;
+  $("#pauseReason").hidden = !state.pauseReason;
+  $("#pauseReason").textContent = state.pauseReason;
   $("#touchControls").classList.toggle("paused", state.paused);
   if (state.paused) {
     fightMusic.pause();
@@ -7927,6 +8103,22 @@ function setPaused(paused) {
     canvas.focus();
   }
   return state.paused;
+}
+
+function handleControllerDisconnect(index = null, forcedSide = null) {
+  if (state.screen !== "fight" || state.mode === "demo") return false;
+  const side = Number.isInteger(forcedSide)
+    ? forcedSide
+    : assignedPadBySide.findIndex((padIndex) => padIndex === index);
+  if (side < 0) return false;
+  const reason = `PLAYER ${side + 1} CONTROLLER DISCONNECTED`;
+  state.pauseReason = reason;
+  if (state.mode === "online") {
+    setOnlineLocalSuspended(true);
+    return true;
+  }
+  setPaused(true, reason);
+  return true;
 }
 
 function restartPausedRound() {
@@ -7992,9 +8184,18 @@ document.addEventListener("pointerdown", () => noteUserActivity(), true);
 window.addEventListener("gamepadconnected", (event) => {
   $("#padStatus").classList.add("connected");
   $("#padStatus").lastChild.textContent = ` ${event.gamepad.id.split("(")[0].trim().slice(0, 28)} READY`;
+  if (state.paused && state.pauseReason.includes("CONTROLLER DISCONNECTED")) {
+    state.pauseReason = "CONTROLLER RECONNECTED · RESUME WHEN READY";
+    $("#pauseReason").textContent = state.pauseReason;
+  }
+  if (state.mode === "online" && onlineSession.localSuspended && state.pauseReason.includes("CONTROLLER")) {
+    state.pauseReason = "";
+    setOnlineLocalSuspended(false);
+  }
   sound("select");
 });
-window.addEventListener("gamepaddisconnected", () => {
+window.addEventListener("gamepaddisconnected", (event) => {
+  handleControllerDisconnect(event.gamepad?.index ?? null);
   if (![...(navigator.getGamepads?.() || [])].filter(Boolean).length) {
     $("#padStatus").classList.remove("connected");
     $("#padStatus").lastChild.textContent = " KEYBOARD READY";
@@ -8177,7 +8378,11 @@ $("#resetBindingsButton").addEventListener("click", () => {
 });
 $("#trainingDummySelect").addEventListener("change", (event) => {
   if (!TRAINING_DUMMY_MODES.includes(event.target.value)) return;
+  if (state.training.recordingActive && event.target.value !== "record") finishTrainingRecording(state.training, { play: false });
   state.training.dummyMode = event.target.value;
+  state.training.playbackFrame = 0;
+  state.training.guardAfterTriggered = false;
+  state.training.reversalArmed = false;
   syncDifficultyUi();
   updateTrainingUi();
 });
@@ -8189,6 +8394,31 @@ $("#trainingGritToggle").addEventListener("change", (event) => {
   state.training.infiniteGrit = event.target.checked;
   if (event.target.checked) state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
   updateHud();
+  updateTrainingUi();
+});
+$("#trainingHitboxToggle").addEventListener("change", (event) => {
+  state.training.showHitboxes = event.target.checked;
+  updateTrainingUi();
+});
+$("#trainingRecordButton").addEventListener("click", () => {
+  if (state.training.recordingActive) finishTrainingRecording(state.training);
+  else beginTrainingRecording(state.training);
+  updateTrainingUi();
+});
+$("#trainingPlaybackButton").addEventListener("click", () => {
+  if (!state.training.recording.length) return;
+  state.training.recordingActive = false;
+  state.training.playbackFrame = 0;
+  state.training.dummyMode = "playback";
+  state.training.lastResult = "DUMMY LOOP PLAYING";
+  updateTrainingUi();
+});
+$("#trainingTrialSelect").addEventListener("change", (event) => {
+  selectTrainingTrial(state.training, state.fighters[0]?.kitId, Number(event.target.value));
+  updateTrainingUi();
+});
+$("#trainingTrialResetButton").addEventListener("click", () => {
+  selectTrainingTrial(state.training, state.fighters[0]?.kitId, state.training.trialIndex);
   updateTrainingUi();
 });
 $("#trainingResetButton").addEventListener("click", () => resetTrainingPosition(true));
@@ -8238,6 +8468,7 @@ $("#rematchButton").addEventListener("click", () => {
   if (state.mode === "online") requestOnlineRematch();
   else startMatch(true);
 });
+$("#newStageButton").addEventListener("click", showSameFightersStageSelect);
 $("#reselectButton").addEventListener("click", () => startSelect(state.mode));
 $("#resumeButton").addEventListener("click", () => setPaused(false));
 $("#restartButton").addEventListener("click", restartPausedRound);
@@ -8296,7 +8527,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.2b-title-version",
+  version: "1.3-tournament-feel",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -8308,8 +8539,11 @@ window.__finalBlowEngine = {
       phase: state.phase,
       screen: state.screen,
       mode: state.mode,
+      stage: state.stage,
+      picks: [...state.picks],
       aiDifficulty: state.aiDifficulty,
       paused: state.paused,
+      pauseReason: state.pauseReason,
       controlStyle: state.controlStyle,
       visualQuality: state.visualQuality,
       performance: { ...state.performance },
@@ -8330,6 +8564,18 @@ window.__finalBlowEngine = {
       online: onlineSnapshot(),
       demo: demoSnapshot(),
       balance: balanceAudit,
+      tournament: tournamentAudit,
+      inputRules: {
+        buffer: { ...INPUT_BUFFER_RULES },
+        priority: [...TOURNAMENT_ACTION_PRIORITY],
+      },
+      camera: {
+        x: W * 0.5,
+        y: H * 0.5,
+        zoom: state.finisher ? state.cinematicZoom : 1,
+        locked: !state.finisher,
+        mode: state.finisher ? "finisher" : "arena",
+      },
       arcade: arcadeRunSnapshot(state.arcadeRun),
       seed: state.matchSeed,
       rng: state.rng.getState(),
@@ -8501,6 +8747,30 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       updateTrainingUi();
       return trainingSnapshot(state.training);
     },
+    trainingRecordStart() {
+      if (state.mode !== "training") throw new Error("Start training first");
+      beginTrainingRecording(state.training);
+      updateTrainingUi();
+      return trainingSnapshot(state.training);
+    },
+    trainingRecordStop(play = true) {
+      if (state.mode !== "training") throw new Error("Start training first");
+      finishTrainingRecording(state.training, { play: Boolean(play) });
+      updateTrainingUi();
+      return trainingSnapshot(state.training);
+    },
+    trainingRecordFrame(input = {}) {
+      if (state.mode !== "training" || !state.training.recordingActive) throw new Error("Start dummy recording first");
+      recordTrainingFrame(state.training, input);
+      updateTrainingUi();
+      return trainingSnapshot(state.training);
+    },
+    trainingTrial(index = 0) {
+      if (state.mode !== "training") throw new Error("Start training first");
+      selectTrainingTrial(state.training, state.fighters[0].kitId, index);
+      updateTrainingUi();
+      return trainingSnapshot(state.training).trial;
+    },
     stage(stageId = "kensington") {
       if (!stages[stageId]) throw new Error(`Unknown stage: ${stageId}`);
       state.stage = stageId;
@@ -8546,6 +8816,22 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     pause(paused = true) {
       return setPaused(paused);
     },
+    flowPhase(phase = "intro", seconds = 2.4, winner = 0) {
+      if (!["intro", "roundover"].includes(phase)) throw new Error(`Unsupported flow phase: ${phase}`);
+      if (state.screen !== "fight") throw new Error("Start a QA fight first");
+      state.phase = phase;
+      state.phaseTime = Math.max(0, Number(seconds) || 0);
+      if (phase === "roundover") {
+        const side = winner === 1 ? 1 : 0;
+        state.rounds = side === 0 ? [2, 0] : [0, 2];
+        state.finisherType = -1;
+      }
+      updateFlowSkipHint();
+      return window.__finalBlowEngine.snapshot();
+    },
+    controllerDisconnect(side = 0) {
+      return handleControllerDisconnect(null, side === 1 ? 1 : 0);
+    },
     quality(quality = "auto") {
       state.visualQuality = normalizeVisualQuality(quality);
       applyPerformanceSettings();
@@ -8584,6 +8870,54 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       setAiDifficulty(difficulty);
       state.mode = "arcade";
       return window.__finalBlowEngine.snapshot();
+    },
+    tournamentMatrix(seconds = 8, difficulty = "pro") {
+      const fighterIds = roster.map(({ id }) => id);
+      const durationFrames = Math.max(120, Math.min(1200, Math.floor(seconds * SIMULATION_HZ)));
+      const previousStageWeapons = state.stageWeaponsEnabled;
+      state.stageWeaponsEnabled = false;
+      const matchups = [];
+      for (let first = 0; first < fighterIds.length; first += 1) {
+        for (let second = first + 1; second < fighterIds.length; second += 1) {
+          this.fight(fighterIds[first], fighterIds[second]);
+          state.mode = "tournament";
+          setAiDifficulty(difficulty);
+          state.fighters.forEach((fighter) => resetAiBrain(fighter.aiBrain, difficulty));
+          let maximumGroundOverlap = 0;
+          let maximumProjectiles = 0;
+          let maximumTraps = 0;
+          let nonFinite = false;
+          for (let frame = 0; frame < durationFrames && state.screen === "fight"; frame += 1) {
+            simulationClock.stepOnce(runSimulationStep);
+            const [a, b] = state.fighters;
+            if (!a || !b) break;
+            if (![a.x, a.y, a.health, b.x, b.y, b.health].every(Number.isFinite)) nonFinite = true;
+            const collisionExempt = a.grabbing || b.grabbing || a.grabbed || b.grabbed
+              || a.attacking?.ignorePushbox || b.attacking?.ignorePushbox;
+            if (a.grounded && b.grounded && !collisionExempt) {
+              const required = (a.crouch ? a.movement.crouchingPushboxHalfWidth : a.movement.standingPushboxHalfWidth)
+                + (b.crouch ? b.movement.crouchingPushboxHalfWidth : b.movement.standingPushboxHalfWidth);
+              maximumGroundOverlap = Math.max(maximumGroundOverlap, required - Math.abs(a.x - b.x));
+            }
+            maximumProjectiles = Math.max(maximumProjectiles, state.projectiles.length);
+            maximumTraps = Math.max(maximumTraps, state.traps.length);
+            if (["result", "roundover"].includes(state.phase)) break;
+          }
+          const snapshot = window.__finalBlowEngine.snapshot();
+          matchups.push({
+            fighters: [fighterIds[first], fighterIds[second]],
+            health: snapshot.fighters.map((fighter) => Number(fighter.health.toFixed(2))),
+            decisions: snapshot.fighters.map((fighter) => fighter.ai.decisions),
+            maximumGroundOverlap: Number(Math.max(0, maximumGroundOverlap).toFixed(3)),
+            maximumProjectiles,
+            maximumTraps,
+            nonFinite,
+          });
+        }
+      }
+      state.stageWeaponsEnabled = previousStageWeapons;
+      this.fight("deathblow", "jez");
+      return { difficulty, seconds: durationFrames / SIMULATION_HZ, matchups };
     },
     demoStages() {
       // The stage list the attract director shuffles through.

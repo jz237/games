@@ -9,8 +9,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="description" content="Final Blow: Philly After Dark — a playable 1990s-inspired weapon fighter prototype.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23080b13'/%3E%3Cpath d='M14 10h39l-4 12H29l-2 8h18l-4 11H24l-5 15H5z' fill='%23ef2c28'/%3E%3C/svg%3E">
-  <title>Final Blow 1.2B: Philly After Dark</title>
-  <meta name="application-version" content="1.2B">
+  <title>Final Blow 1.3: Philly After Dark</title>
+  <meta name="application-version" content="1.3">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -20,7 +20,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">PHILLY AFTER DARK <b>1.2B</b></div>
+      <div class="build-tag">TOURNAMENT FEEL <b>1.3</b></div>
       <div id="offlineBadge" class="offline-badge" aria-live="polite">CACHE CHECK</div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
@@ -64,26 +64,40 @@
         <div class="training-tools">
           <label>DUMMY <select id="trainingDummySelect">
             <option value="stand">STAND</option><option value="guard">AUTO GUARD</option>
-            <option value="crouch">CROUCH</option><option value="jump">JUMP</option><option value="cpu">CPU</option>
+            <option value="guard-after-first">GUARD AFTER 1ST</option><option value="reversal">REVERSAL</option>
+            <option value="wakeup">WAKEUP DRILL</option><option value="crouch">CROUCH</option>
+            <option value="jump">JUMP</option><option value="record">RECORDING P2</option>
+            <option value="playback">PLAY RECORDED</option><option value="cpu">CPU</option>
           </select></label>
           <label><input id="trainingRecoverToggle" type="checkbox" checked> AUTO LIFE</label>
           <label><input id="trainingGritToggle" type="checkbox" checked> INFINITE GRIT</label>
+          <label><input id="trainingHitboxToggle" type="checkbox"> HITBOXES</label>
+          <button id="trainingRecordButton" type="button">RECORD P2</button>
+          <button id="trainingPlaybackButton" type="button" disabled>PLAY LOOP</button>
           <button id="trainingResetButton" type="button">RESET POSITION</button>
           <button id="trainingWeaponButton" type="button">SPAWN STAGE WEAPON</button>
         </div>
+        <div class="training-trial-tools">
+          <label>COMBO TRIAL <select id="trainingTrialSelect"></select></label>
+          <button id="trainingTrialResetButton" type="button">RESET TRIAL</button>
+          <b id="trainingTrialStatus">READY</b>
+        </div>
         <div id="trainingInputs" class="training-inputs">INPUT: —</div>
+        <div id="trainingTrialSteps" class="training-trial-steps">TRIAL: —</div>
         <div id="trainingGrabHint" class="training-grab-hint">GRAB: STEP IN CLOSE, THEN TOWARD OR AWAY + LP OR LK</div>
       </aside>
 
       <div id="announcer" class="announcer hidden" aria-live="assertive">
         <strong></strong><span></span>
       </div>
+      <div id="flowSkipHint" class="flow-skip-hint" hidden>ANY ATTACK / START · SKIP</div>
       <div id="soundCaption" class="sound-caption" aria-live="polite" hidden></div>
 
       <section id="pausePanel" class="pause-panel" aria-labelledby="pauseTitle" hidden>
         <p class="eyebrow">THE STREET WAITS</p>
         <h2 id="pauseTitle">PAUSED</h2>
         <div id="pausePerformance" class="pause-performance">AUTO VISUALS</div>
+        <div id="pauseReason" class="pause-reason" hidden></div>
         <div class="menu-stack">
           <button id="resumeButton" class="arcade-button primary menu-focus" type="button">RESUME</button>
           <button id="restartButton" class="arcade-button" type="button">RESTART ROUND</button>
@@ -99,7 +113,7 @@
           <p class="eyebrow">A PHILADELPHIA WEAPON FIGHTER</p>
           <h1 id="gameTitle"><span>FINAL</span><strong>BLOW</strong></h1>
           <h2>PHILLY AFTER DARK</h2>
-          <p id="titleVersion" class="title-version" aria-label="Version 1.2B">VERSION 1.2B</p>
+          <p id="titleVersion" class="title-version" aria-label="Version 1.3">VERSION 1.3</p>
           <p class="hook">Eight fighters. Two streets. One last chance to finish it.</p>
         </div>
         <div class="menu-stack">
@@ -276,6 +290,7 @@
           <p id="demoResultStatus" class="demo-result-status" hidden>NEXT RANDOM FIGHT IN 5 SECONDS · PRESS ANY BUTTON TO PLAY</p>
           <div class="menu-stack horizontal">
             <button id="rematchButton" class="arcade-button primary menu-focus">REMATCH</button>
+            <button id="newStageButton" class="arcade-button">SAME FIGHTERS · NEW STAGE</button>
             <button id="reselectButton" class="arcade-button">SELECT FIGHTERS</button>
             <button class="arcade-button ghost" data-back="title">TITLE</button>
           </div>

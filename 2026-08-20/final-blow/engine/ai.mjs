@@ -11,31 +11,31 @@ export const AI_DIFFICULTIES = Object.freeze({
     id: "passive", label: "PASSIVE", reactionFrames: 24, decisionFrames: 24,
     defenseChance: 0, antiAirChance: 0, comboChance: 0,
     throwChance: 0, meterChance: 0, wakeupReversalChance: 0, errorChance: 0,
-    throwTechChance: 0, grabPressureChance: 0, inert: true,
+    throwTechChance: 0, grabPressureChance: 0, repeatLimit: 0, inert: true,
   }),
   rookie: Object.freeze({
     id: "rookie", label: "ROOKIE", reactionFrames: 20, decisionFrames: 18,
     defenseChance: 0.46, antiAirChance: 0.38, comboChance: 0.22,
     throwChance: 0.09, meterChance: 0.24, wakeupReversalChance: 0.16, errorChance: 0.24,
-    throwTechChance: 0.12, grabPressureChance: 0.1,
+    throwTechChance: 0.12, grabPressureChance: 0.1, repeatLimit: 2,
   }),
   street: Object.freeze({
     id: "street", label: "STREET", reactionFrames: 14, decisionFrames: 13,
     defenseChance: 0.62, antiAirChance: 0.55, comboChance: 0.42,
     throwChance: 0.15, meterChance: 0.44, wakeupReversalChance: 0.31, errorChance: 0.14,
-    throwTechChance: 0.3, grabPressureChance: 0.2,
+    throwTechChance: 0.3, grabPressureChance: 0.2, repeatLimit: 2,
   }),
   pro: Object.freeze({
     id: "pro", label: "PRO", reactionFrames: 9, decisionFrames: 9,
     defenseChance: 0.76, antiAirChance: 0.72, comboChance: 0.65,
     throwChance: 0.22, meterChance: 0.68, wakeupReversalChance: 0.52, errorChance: 0.08,
-    throwTechChance: 0.56, grabPressureChance: 0.34,
+    throwTechChance: 0.56, grabPressureChance: 0.34, repeatLimit: 3,
   }),
   final: Object.freeze({
     id: "final", label: "FINAL", reactionFrames: 6, decisionFrames: 7,
     defenseChance: 0.87, antiAirChance: 0.84, comboChance: 0.8,
     throwChance: 0.29, meterChance: 0.84, wakeupReversalChance: 0.7, errorChance: 0.04,
-    throwTechChance: 0.78, grabPressureChance: 0.48,
+    throwTechChance: 0.78, grabPressureChance: 0.48, repeatLimit: 3,
   }),
 });
 
@@ -62,6 +62,8 @@ export function createAiBrain(difficulty = DEFAULT_AI_DIFFICULTY) {
     lastDecisionFrame: -Infinity,
     lastObservedFrame: -1,
     lastComboKey: "",
+    recentActions: [],
+    suppressedRepeats: 0,
     decisions: 0,
   };
 }
@@ -182,6 +184,19 @@ function comboFollowup(self, settings, roll) {
 
 export const PASSIVE_INTENT = Object.freeze({ movement: "hold", action: null, reason: "passive" });
 
+function applyRepetitionGuard(brain, intent, settings, roll) {
+  if (!intent.action || !settings.repeatLimit) return intent;
+  const consecutive = [...brain.recentActions].reverse().findIndex((action) => action !== intent.action);
+  const repeated = consecutive < 0 ? brain.recentActions.length : consecutive;
+  if (repeated < settings.repeatLimit) return intent;
+  brain.suppressedRepeats += 1;
+  return {
+    movement: mixRoll(roll, 21) < 0.5 ? "advance" : "retreat",
+    action: null,
+    reason: "reposition-break",
+  };
+}
+
 export function decideAiIntent(brain, {
   frame,
   self,
@@ -284,7 +299,14 @@ export function stepAiBrain(brain, {
   brain.lastObservedFrame = observation.frame;
   if (frame < brain.nextDecisionFrame) return inputFromIntent(brain.intent, self, observation, false);
 
-  brain.intent = decideAiIntent(brain, { frame, self, observation, roll });
+  brain.intent = applyRepetitionGuard(
+    brain,
+    decideAiIntent(brain, { frame, self, observation, roll }),
+    AI_DIFFICULTIES[brain.difficulty],
+    roll,
+  );
+  brain.recentActions.push(brain.intent.action || null);
+  brain.recentActions = brain.recentActions.slice(-6);
   if (brain.intent.comboKey) brain.lastComboKey = brain.intent.comboKey;
   brain.lastDecisionFrame = frame;
   brain.decisions += 1;
@@ -304,6 +326,8 @@ export function aiBrainSnapshot(brain) {
     lastObservedFrame: brain.lastObservedFrame,
     nextDecisionFrame: brain.nextDecisionFrame,
     decisions: brain.decisions,
+    recentActions: [...brain.recentActions],
+    suppressedRepeats: brain.suppressedRepeats,
     intent: { ...brain.intent },
   };
 }

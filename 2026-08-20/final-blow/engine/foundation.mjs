@@ -1,6 +1,11 @@
 export const SIMULATION_HZ = 60;
 export const SIMULATION_STEP_SECONDS = 1 / SIMULATION_HZ;
-export const DEFAULT_INPUT_BUFFER_FRAMES = 6;
+export const INPUT_BUFFER_RULES = Object.freeze({
+  minimumFrames: 4,
+  defaultFrames: 6,
+  maximumFrames: 6,
+});
+export const DEFAULT_INPUT_BUFFER_FRAMES = INPUT_BUFFER_RULES.defaultFrames;
 
 export const FIGHTER_STATES = Object.freeze({
   IDLE: "idle",
