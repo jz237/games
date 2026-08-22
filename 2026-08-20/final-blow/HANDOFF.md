@@ -66,16 +66,19 @@ cd "$FINAL_BLOW_MIRROR_DIR"
 SRC=/home/jez237/.openclaw/agents/gamemaster/workspace/final-blow-goal/2026-08-20/final-blow
 rsync -a --delete \
   --exclude 'assets/references/' --exclude 'BACKLOG.md' --exclude '.git' \
+  --exclude '.wrangler/' --exclude 'node_modules/' \
   "$SRC/" games/2026-08-20/final-blow/
 git add games/2026-08-20/final-blow
 git commit -m "Publish Final Blow <label>"
 git push origin HEAD:main
 ```
 
-3. **The two rsync excludes are mandatory.** `assets/references/` holds a private
+3. **All rsync excludes are mandatory.** `assets/references/` holds a private
    photo of a real person that Jez supplied as art reference, and `BACKLOG.md` is
-   an internal spec. Neither may ever reach a public repo. Both currently return
-   404 on all live URLs — keep it that way.
+   an internal spec. Neither may ever reach a public repo. `.wrangler/` contains
+   local Durable Object state and `node_modules/` is local tooling; neither belongs
+   in the static site. The private files currently return 404 on all live URLs —
+   keep it that way.
 
 ### Deployment traps
 
