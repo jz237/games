@@ -1748,6 +1748,52 @@ try {
   assert.equal(difficultyUi.versusHidden, true, "no CPU picker in local versus");
   await evaluate(client, `window.__finalBlowQa.difficulty('street'); document.querySelector('#homeLink').click();`);
 
+  // Scene dressing: reflections, afterimages, dust, layered sparks, and the
+  // super spotlight all have to be alive on the default profile.
+  const sceneDressing = await evaluate(client, `(() => {
+    const out = {};
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.positions(430, 900);
+    window.__finalBlowQa.input(0, { right: true }, 2); window.__finalBlowQa.step(3 / 60);
+    window.__finalBlowQa.input(0, {}, 2); window.__finalBlowQa.step(3 / 60);
+    window.__finalBlowQa.input(0, { right: true }, 2); window.__finalBlowQa.step(4 / 60);
+    let snapshot = window.__finalBlowEngine.snapshot();
+    out.dash = {
+      afterimages: snapshot.violence.afterimages,
+      dust: snapshot.violence.dustParticles,
+      reflections: snapshot.violence.reflections,
+    };
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.positions(500, 610);
+    window.__finalBlowQa.input(0, { heavy: true });
+    out.peakSparks = 0;
+    out.peakRings = 0;
+    for (let frame = 0; frame < 40; frame += 1) {
+      window.__finalBlowQa.step(1 / 60);
+      const violence = window.__finalBlowEngine.snapshot().violence;
+      out.peakSparks = Math.max(out.peakSparks, violence.sparkLines);
+      out.peakRings = Math.max(out.peakRings, violence.shockRings);
+    }
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.positions(480, 640);
+    window.__finalBlowQa.fighter(0, { meter: 100 });
+    window.__finalBlowQa.input(0, { super: true });
+    window.__finalBlowQa.step(0.25);
+    out.superDim = window.__finalBlowEngine.snapshot().violence.superDim;
+    window.__finalBlowQa.step(3);
+    out.superDimSettled = window.__finalBlowEngine.snapshot().violence.superDim;
+    return out;
+  })()`);
+  assert.ok(sceneDressing.dash.afterimages > 0, "a dash must leave a ghost trail");
+  assert.ok(sceneDressing.dash.dust > 0, "a dash must kick up dust");
+  assert.equal(sceneDressing.dash.reflections, true, "K&A's wet street must reflect the fighters");
+  assert.ok(sceneDressing.peakSparks > 0, "a landed heavy must throw speed-line sparks");
+  assert.ok(sceneDressing.peakRings > 0, "a landed heavy must ring a shockwave");
+  assert.ok(sceneDressing.superDim > 0.3, `the super spotlight must darken the stage, got ${sceneDressing.superDim}`);
+  assert.ok(sceneDressing.superDimSettled < 0.1, "the spotlight must lift after the super ends");
+
   // Dizzy: repeated clean hits stun, the meter bleeds off when they stop, the
   // dizzy is a real punish window, and recovery grants a long immunity so it can
   // never loop.

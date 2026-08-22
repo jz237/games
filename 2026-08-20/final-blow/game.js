@@ -1865,6 +1865,9 @@ function makeFighter(index, side, overrideDef = null) {
 }
 
 let rollbackResimulating = false;
+// Eased super-flash darkness. Module-level and render-only: it never enters a
+// rollback snapshot, so a resimulation just re-eases it harmlessly.
+let superDimLevel = 0;
 const rollbackFighterReferences = new Set(["def", "kit", "movement", "combo", "directionTapTracker", "inputBuffer", "projectileSpawnFrames"]);
 const rollbackPresentationFighterFields = new Set([
   "animTime", "walkTime", "hitFlash", "specialGlow", "cinematicFrame", "cinematicRotation", "cinematicScale", "lastHitResult",
@@ -3617,7 +3620,28 @@ function startDash(fighter, direction) {
   fighter.guarding = false;
   fighter.crouch = false;
   if (!forward) fighter.invulnerableFrames = Math.max(fighter.invulnerableFrames, fighter.movement.backDashInvulnerableFrames);
+  spawnFootDust(fighter, 6, 30, direction);
   sound("dash", fighter);
+}
+
+function spawnFootDust(fighter, count, spread, kick) {
+  const total = Math.max(2, Math.round(count * state.performance.particleScale));
+  for (let index = 0; index < total; index += 1) {
+    const side = kick !== 0 ? -Math.sign(kick) : (visualRandom() < 0.5 ? -1 : 1);
+    state.particles.push({
+      kind: "dust",
+      x: fighter.x + (visualRandom() - 0.5) * spread,
+      y: FLOOR - 2,
+      vx: side * (30 + visualRandom() * 130) + kick * 60,
+      vy: -25 - visualRandom() * 85,
+      gravity: 400,
+      drag: 0.955,
+      life: 0.2 + visualRandom() * 0.3,
+      max: 0.5,
+      size: 3 + visualRandom() * 7,
+      color: visualRandom() > 0.4 ? "#777067" : "#4e4a46",
+    });
+  }
 }
 
 function spawnKnockdownImpact(fighter, landingVelocity) {
@@ -3674,9 +3698,11 @@ function applyFighterPhysics(fighter, dt) {
       fighter.attackTime = 0;
       fighter.attackFrame = 0;
       fighter.landingRecoveryFrames = DEFENSE_RULES.airAttackLandingRecoveryFrames;
+      spawnFootDust(fighter, 8, 48, 0);
     } else if (landed && !fighter.down) {
       // Even an empty jump costs a few frames on the way down.
       fighter.landingRecoveryFrames = Math.max(fighter.landingRecoveryFrames, DEFENSE_RULES.landingRecoveryFrames);
+      spawnFootDust(fighter, 6, 44, 0);
     }
   } else {
     fighter.grounded = false;
@@ -3940,6 +3966,19 @@ function updateFighter(fighter, opponent, input, dt) {
   if (fighter.dashFrames > 0 && !fighter.attacking) {
     const forward = fighter.dashDirection === fighter.facing;
     fighter.vx = fighter.dashDirection * (forward ? fighter.movement.forwardDashSpeed : fighter.movement.backDashSpeed) * flowSpeed;
+    // Ghost trail: a fading snapshot of the sprite every other tick of a dash.
+    if (state.performance.trailScale > 0 && !state.accessibility.reducedMotion
+      && state.simulationTick % 2 === 0) {
+      const ghostPose = fighterAnimationPose(fighter);
+      if (ghostPose.bank === "base") {
+        state.effects.push({
+          kind: "afterimage", fighterId: fighter.def.id, frame: ghostPose.frame,
+          x: fighter.x, y: fighter.y, facing: fighter.facing,
+          size: fighterRenderSize(fighter.def.id),
+          life: 0.2, max: 0.2, color: fighter.def.accent,
+        });
+      }
+    }
     fighter.dashFrames -= 1;
     fighter.block = false;
     fighter.guarding = false;
@@ -5175,6 +5214,31 @@ function spawnHit(x, y, def, attackKind, blocked, { direction = 1, counter = fal
     max: tierName === "super" ? 0.22 : 0.12,
     color: "#fff4df",
   });
+  // White-hot speed-line sparks along the hit direction, drawn additively so
+  // they bloom against the dark stages; a shock ring joins the heavy tiers.
+  const ringSizes = { heavy: 74, special: 96, super: 128, weapon: 82 };
+  if (ringSizes[tierName] || counter) {
+    state.effects.push({
+      kind: "shockRing", x, y,
+      size: (ringSizes[tierName] || 64) * (counter ? 1.3 : 1),
+      life: 0.26, max: 0.26, color: "#fff2d8",
+    });
+  }
+  const sparkCount = Math.max(3, Math.round((tierName === "light" ? 4 : 9)
+    * counterScale * state.performance.particleScale));
+  for (let index = 0; index < sparkCount; index += 1) {
+    const cone = (visualRandom() - 0.5) * 1.9;
+    const sparkSpeed = 260 + visualRandom() * 520;
+    state.particles.push({
+      kind: "sparkLine", x, y,
+      vx: direction * Math.cos(cone) * sparkSpeed,
+      vy: Math.sin(cone) * sparkSpeed - 40,
+      gravity: 320, drag: 0.94,
+      life: 0.1 + visualRandom() * 0.18, max: 0.28,
+      size: 1.2 + visualRandom() * 2.2,
+      color: index % 3 ? "#fff6db" : def.accent,
+    });
+  }
   if (profile.decal && state.graphicFatalities) {
     const decalLife = 2.8 + visualRandom() * 2.4;
     state.effects.push({
@@ -5289,6 +5353,8 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
   updateGrabHolds();
   updateStageWeapon();
   state.crowdReaction = Math.max(0, state.crowdReaction - 0.016);
+  const superActive = state.fighters.some((fighter) => fighter.attacking?.superMove);
+  superDimLevel = clamp(superDimLevel + (superActive ? 0.09 : -0.055), 0, 1);
   if (state.finisher) updateFinisher(dt);
   else {
     updateProjectiles(dt);
@@ -7447,6 +7513,105 @@ function drawDizzyStars(fighter, time) {
   ctx.restore();
 }
 
+// ---------------------------------------------------------------------------
+// Scene dressing: reflections, spotlight, afterimages and colour grade.
+// All of it is presentation-only — driven by visualRandom or the tick, gated by
+// the performance profile, and invisible to rollback checksums.
+// ---------------------------------------------------------------------------
+
+// How mirror-like each stage floor is. Wet asphalt and polished tile reflect
+// hard; the Vet's dry lot barely does.
+const STAGE_REFLECTIONS = Object.freeze({
+  kensington: 0.30, vet: 0.15, wildwood: 0.22, buffet: 0.34, cruise: 0.26,
+});
+const REFLECTION_DEPTH = 128;
+
+function drawFighterReflections(time) {
+  if (!state.performance.shadows) return;
+  const strength = STAGE_REFLECTIONS[state.stage] ?? 0.18;
+  if (strength <= 0) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, FLOOR + 1, W, REFLECTION_DEPTH);
+  ctx.clip();
+  // Mirror the fighters through the floor line. drawFighter may override the
+  // filter briefly during hit flashes; the tail fade below keeps that subtle.
+  ctx.translate(0, FLOOR * 2 + 8);
+  ctx.scale(1, -1);
+  ctx.filter = `opacity(${Math.round(strength * 100)}%)`;
+  for (const fighter of state.fighters) drawFighter(fighter, time);
+  ctx.filter = "none";
+  ctx.restore();
+  // Sink the reflection into the floor so it reads as sheen, not a twin.
+  const fade = ctx.createLinearGradient(0, FLOOR, 0, FLOOR + REFLECTION_DEPTH);
+  fade.addColorStop(0, "rgba(7,10,15,0.05)");
+  fade.addColorStop(1, "rgba(7,10,15,0.62)");
+  ctx.save();
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, FLOOR + 1, W, REFLECTION_DEPTH);
+  ctx.restore();
+}
+
+// Classic super presentation: the street goes dark, the fighters stay lit.
+function drawSuperSpotlight() {
+  if (superDimLevel <= 0.02) return;
+  ctx.fillStyle = `rgba(3,5,16,${(0.58 * superDimLevel).toFixed(3)})`;
+  ctx.fillRect(-120, -120, W + 240, H + 240);
+  for (const fighter of state.fighters) {
+    const radius = fighterRenderSize(fighter.def.id) * 0.62;
+    const glow = ctx.createRadialGradient(
+      fighter.x, fighter.y - radius * 0.55, radius * 0.12,
+      fighter.x, fighter.y - radius * 0.55, radius,
+    );
+    glow.addColorStop(0, `rgba(255,244,214,${(0.15 * superDimLevel).toFixed(3)})`);
+    glow.addColorStop(1, "rgba(255,244,214,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(fighter.x - radius, fighter.y - radius * 1.65, radius * 2, radius * 2.1);
+  }
+}
+
+function drawAfterimages() {
+  for (const effect of state.effects) {
+    if (effect.kind !== "afterimage") continue;
+    const atlas = fighterAtlases[effect.fighterId];
+    if (!atlas) continue;
+    ctx.save();
+    ctx.translate(effect.x, effect.y);
+    ctx.scale(effect.facing, 1);
+    ctx.globalAlpha = clamp(effect.life / effect.max, 0, 1) * 0.34;
+    drawAtlasFrame(atlas, effect.frame, effect.size);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Per-stage colour grade plus an edge vignette: one soft-light tint pulls each
+// arena toward its own palette without crushing the sprite art.
+const STAGE_GRADES = Object.freeze({
+  kensington: { tint: "rgba(44,74,110,0.30)", vignette: 0.30 },
+  vet: { tint: "rgba(96,74,40,0.24)", vignette: 0.26 },
+  wildwood: { tint: "rgba(88,44,110,0.26)", vignette: 0.28 },
+  buffet: { tint: "rgba(112,78,40,0.26)", vignette: 0.22 },
+  cruise: { tint: "rgba(40,104,118,0.20)", vignette: 0.18 },
+});
+
+function drawStageGrade() {
+  if (state.accessibility.highContrast) return;
+  const grade = STAGE_GRADES[state.stage];
+  if (!grade) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "soft-light";
+  ctx.fillStyle = grade.tint;
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = "source-over";
+  const vignette = ctx.createRadialGradient(W * 0.5, H * 0.44, H * 0.42, W * 0.5, H * 0.52, W * 0.72);
+  vignette.addColorStop(0, "rgba(4,6,12,0)");
+  vignette.addColorStop(1, `rgba(4,6,12,${grade.vignette})`);
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
 function drawParticles() {
   for (const particle of state.particles) {
     const alpha = clamp(particle.life / particle.max, 0, 1);
@@ -7454,6 +7619,17 @@ function drawParticles() {
     ctx.globalAlpha = particle.kind === "dust" ? alpha * 0.42 : alpha;
     ctx.fillStyle = particle.color;
     ctx.beginPath();
+    if (particle.kind === "sparkLine") {
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = particle.color;
+      ctx.lineWidth = particle.size;
+      ctx.lineCap = "round";
+      ctx.moveTo(particle.x, particle.y);
+      ctx.lineTo(particle.x - (particle.vx || 0) * 0.045, particle.y - (particle.vy || 0) * 0.045);
+      ctx.stroke();
+      ctx.restore();
+      continue;
+    }
     if (particle.kind === "blood") {
       const angle = Math.atan2(particle.vy || 0, particle.vx || 1);
       ctx.ellipse(particle.x, particle.y, particle.size * 1.65, Math.max(1, particle.size * 0.62), angle, 0, Math.PI * 2);
@@ -7669,6 +7845,18 @@ function drawParticles() {
       ctx.moveTo(-170, 110);
       ctx.lineTo(160, -150);
       ctx.stroke();
+    } else if (effect.kind === "shockRing") {
+      const growth = 1 - alpha;
+      ctx.globalCompositeOperation = "lighter";
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 2.5 + alpha * 5;
+      ctx.globalAlpha = alpha * 0.85;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, (effect.size || 60) * (0.25 + growth), (effect.size || 60) * (0.18 + growth * 0.7), 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalCompositeOperation = "source-over";
+    } else if (effect.kind === "afterimage") {
+      // Rendered in the world pass before the fighters; nothing to do here.
     } else if (effect.kind === "guard") {
       const radius = (1 - alpha) * 64 + 42;
       ctx.lineWidth = 9 * alpha;
@@ -7840,15 +8028,19 @@ function draw(time) {
   }
   drawStage(time);
   if (state.screen === "fight") {
+    drawSuperSpotlight();
+    drawFighterReflections(time);
     drawPaintTraps(time);
     drawStageWeapon(time);
     drawProjectiles(time);
+    drawAfterimages();
     const ordered = [...state.fighters].sort((a, b) => a.y - b.y);
     ordered.forEach((fighter) => drawFighter(fighter, time));
     state.fighters.forEach((fighter) => drawDizzyStars(fighter, time));
     drawParticles();
   }
   ctx.restore();
+  drawStageGrade();
   drawFinisherOverlay();
   if (state.flash > 0) {
     ctx.fillStyle = `rgba(255,245,220,${clamp(state.flash * 3, 0, 0.9)})`;
@@ -8884,6 +9076,11 @@ window.__finalBlowEngine = {
         goreShockwaves: state.effects.filter((effect) => effect.kind === "goreShockwave").length,
         lensBlood: state.effects.filter((effect) => effect.kind === "lensBlood").length,
         genericHitEffects: state.effects.filter((effect) => effect.kind === "hit").length,
+        sparkLines: state.particles.filter((particle) => particle.kind === "sparkLine").length,
+        shockRings: state.effects.filter((effect) => effect.kind === "shockRing").length,
+        afterimages: state.effects.filter((effect) => effect.kind === "afterimage").length,
+        superDim: Number(superDimLevel.toFixed(3)),
+        reflections: Boolean(state.performance.shadows && (STAGE_REFLECTIONS[state.stage] ?? 0) > 0),
         shake: Number(state.shake.toFixed(3)),
         hitstop: Number(state.hitstop.toFixed(4)),
       },
