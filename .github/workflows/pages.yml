@@ -36,6 +36,9 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
+      - name: Guard Final Blow service worker
+        run: node --test 2026-08-20/final-blow/tests/service-worker-guard.test.mjs
+
       # Games that live in this repo but are published somewhere else. Their
       # source and history stay here; they are just dropped from the artifact so
       # jz237.github.io/games/ does not serve a second copy.

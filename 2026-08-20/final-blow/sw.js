@@ -1,7 +1,9 @@
-const CACHE_NAME = "final-blow-offline-1.3c";
-const PRECACHE = [
+// Keep offline startup reliable. Images and audio are intentionally fetched on
+// demand: preloading the complete game was a 19 MB / 162-request install that
+// could make Chrome abort the page before it rendered.
+const CACHE_NAME = "final-blow-shell-1.3e";
+const SHELL = [
   "./",
-  "./index.html",
   "./styles.css",
   "./game.js",
   "./manifest.webmanifest",
@@ -21,157 +23,17 @@ const PRECACHE = [
   "./engine/demo.mjs",
   "./engine/fatalities.mjs",
   "./engine/fighter-audio.mjs",
-  "./assets/kensington-allegheny.webp",
-  "./assets/veterans-stadium.webp",
-  "./assets/wildwood-boardwalk.webp",
-  "./assets/chinese-buffet.webp",
-  "./assets/cruise-pool-deck.webp",
-  "./assets/janney-street-vacant-lot.webp",
-  "./assets/fighters/deathblow.webp",
-  "./assets/fighters/jez.webp",
-  "./assets/fighters/alan.webp",
-  "./assets/fighters/post.webp",
-  "./assets/fighters/benny.webp",
-  "./assets/fighters/donald.webp",
-  "./assets/fighters/cyraxx.webp",
-  "./assets/fighters/ali.webp",
-  "./assets/fighters/commissioner.webp",
-  "./assets/atlases/deathblow.webp",
-  "./assets/atlases/jez.webp",
-  "./assets/atlases/alan.webp",
-  "./assets/atlases/post.webp",
-  "./assets/atlases/benny.webp",
-  "./assets/atlases/donald.webp",
-  "./assets/atlases/cyraxx.webp",
-  "./assets/atlases/ali.webp",
-  "./assets/atlases/commissioner.webp",
-  "./assets/moves/deathblow-specials.webp",
-  "./assets/moves/jez-specials.webp",
-  "./assets/moves/alan-specials.webp",
-  "./assets/moves/post-specials.webp",
-  "./assets/moves/benny-specials.webp",
-  "./assets/moves/donald-specials.webp",
-  "./assets/moves/cyraxx-specials.webp",
-  "./assets/moves/ali-specials.webp",
-  "./assets/audio/ui-select.mp3",
-  "./assets/audio/jump.mp3",
-  "./assets/audio/light-swing.mp3",
-  "./assets/audio/heavy-swing.mp3",
-  "./assets/audio/special-swing.mp3",
-  "./assets/audio/body-hit.mp3",
-  "./assets/audio/block.mp3",
-  "./assets/audio/finish-ready.mp3",
-  "./assets/audio/final-blow.mp3",
-  "./assets/audio/knockout.mp3",
-  "./assets/audio/fighters/deathblow/jump.mp3",
-  "./assets/audio/fighters/deathblow/dash.mp3",
-  "./assets/audio/fighters/deathblow/light.mp3",
-  "./assets/audio/fighters/deathblow/heavy.mp3",
-  "./assets/audio/fighters/deathblow/special.mp3",
-  "./assets/audio/fighters/deathblow/throw.mp3",
-  "./assets/audio/fighters/deathblow/hit-light.mp3",
-  "./assets/audio/fighters/deathblow/hit-heavy.mp3",
-  "./assets/audio/fighters/deathblow/block.mp3",
-  "./assets/audio/fighters/deathblow/super.mp3",
-  "./assets/audio/fighters/deathblow/fatal.mp3",
-  "./assets/audio/fighters/deathblow/ko.mp3",
-  "./assets/audio/fighters/jez/jump.mp3",
-  "./assets/audio/fighters/jez/dash.mp3",
-  "./assets/audio/fighters/jez/light.mp3",
-  "./assets/audio/fighters/jez/heavy.mp3",
-  "./assets/audio/fighters/jez/special.mp3",
-  "./assets/audio/fighters/jez/throw.mp3",
-  "./assets/audio/fighters/jez/hit-light.mp3",
-  "./assets/audio/fighters/jez/hit-heavy.mp3",
-  "./assets/audio/fighters/jez/block.mp3",
-  "./assets/audio/fighters/jez/super.mp3",
-  "./assets/audio/fighters/jez/fatal.mp3",
-  "./assets/audio/fighters/jez/ko.mp3",
-  "./assets/audio/fighters/alan/jump.mp3",
-  "./assets/audio/fighters/alan/dash.mp3",
-  "./assets/audio/fighters/alan/light.mp3",
-  "./assets/audio/fighters/alan/heavy.mp3",
-  "./assets/audio/fighters/alan/special.mp3",
-  "./assets/audio/fighters/alan/throw.mp3",
-  "./assets/audio/fighters/alan/hit-light.mp3",
-  "./assets/audio/fighters/alan/hit-heavy.mp3",
-  "./assets/audio/fighters/alan/block.mp3",
-  "./assets/audio/fighters/alan/super.mp3",
-  "./assets/audio/fighters/alan/fatal.mp3",
-  "./assets/audio/fighters/alan/ko.mp3",
-  "./assets/audio/fighters/post/jump.mp3",
-  "./assets/audio/fighters/post/dash.mp3",
-  "./assets/audio/fighters/post/light.mp3",
-  "./assets/audio/fighters/post/heavy.mp3",
-  "./assets/audio/fighters/post/special.mp3",
-  "./assets/audio/fighters/post/throw.mp3",
-  "./assets/audio/fighters/post/hit-light.mp3",
-  "./assets/audio/fighters/post/hit-heavy.mp3",
-  "./assets/audio/fighters/post/block.mp3",
-  "./assets/audio/fighters/post/super.mp3",
-  "./assets/audio/fighters/post/fatal.mp3",
-  "./assets/audio/fighters/post/ko.mp3",
-  "./assets/audio/fighters/benny/jump.mp3",
-  "./assets/audio/fighters/benny/dash.mp3",
-  "./assets/audio/fighters/benny/light.mp3",
-  "./assets/audio/fighters/benny/heavy.mp3",
-  "./assets/audio/fighters/benny/special.mp3",
-  "./assets/audio/fighters/benny/throw.mp3",
-  "./assets/audio/fighters/benny/hit-light.mp3",
-  "./assets/audio/fighters/benny/hit-heavy.mp3",
-  "./assets/audio/fighters/benny/block.mp3",
-  "./assets/audio/fighters/benny/super.mp3",
-  "./assets/audio/fighters/benny/fatal.mp3",
-  "./assets/audio/fighters/benny/ko.mp3",
-  "./assets/audio/fighters/donald/jump.mp3",
-  "./assets/audio/fighters/donald/dash.mp3",
-  "./assets/audio/fighters/donald/light.mp3",
-  "./assets/audio/fighters/donald/heavy.mp3",
-  "./assets/audio/fighters/donald/special.mp3",
-  "./assets/audio/fighters/donald/throw.mp3",
-  "./assets/audio/fighters/donald/hit-light.mp3",
-  "./assets/audio/fighters/donald/hit-heavy.mp3",
-  "./assets/audio/fighters/donald/block.mp3",
-  "./assets/audio/fighters/donald/super.mp3",
-  "./assets/audio/fighters/donald/fatal.mp3",
-  "./assets/audio/fighters/donald/ko.mp3",
-  "./assets/audio/fighters/cyraxx/jump.mp3",
-  "./assets/audio/fighters/cyraxx/dash.mp3",
-  "./assets/audio/fighters/cyraxx/light.mp3",
-  "./assets/audio/fighters/cyraxx/heavy.mp3",
-  "./assets/audio/fighters/cyraxx/special.mp3",
-  "./assets/audio/fighters/cyraxx/throw.mp3",
-  "./assets/audio/fighters/cyraxx/hit-light.mp3",
-  "./assets/audio/fighters/cyraxx/hit-heavy.mp3",
-  "./assets/audio/fighters/cyraxx/block.mp3",
-  "./assets/audio/fighters/cyraxx/super.mp3",
-  "./assets/audio/fighters/cyraxx/fatal.mp3",
-  "./assets/audio/fighters/cyraxx/ko.mp3",
-  "./assets/audio/fighters/ali/jump.mp3",
-  "./assets/audio/fighters/ali/dash.mp3",
-  "./assets/audio/fighters/ali/light.mp3",
-  "./assets/audio/fighters/ali/heavy.mp3",
-  "./assets/audio/fighters/ali/special.mp3",
-  "./assets/audio/fighters/ali/throw.mp3",
-  "./assets/audio/fighters/ali/hit-light.mp3",
-  "./assets/audio/fighters/ali/hit-heavy.mp3",
-  "./assets/audio/fighters/ali/block.mp3",
-  "./assets/audio/fighters/ali/super.mp3",
-  "./assets/audio/fighters/ali/fatal.mp3",
-  "./assets/audio/fighters/ali/ko.mp3",
-  "./assets/audio/philly-after-dark.mp3",
-  "./assets/audio/vet-parking-lot.mp3",
-  "./assets/audio/neon-sign-war.mp3",
-  "./assets/audio/subway-after-midnight.mp3",
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(Promise.all([
-    caches.keys().then((names) => Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name)))),
+    caches.keys().then((names) => Promise.all(names
+      .filter((name) => name.startsWith("final-blow-") && name !== CACHE_NAME)
+      .map((name) => caches.delete(name)))),
     self.clients.claim(),
   ]));
 });
@@ -179,15 +41,17 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
   if (event.request.method !== "GET" || requestUrl.origin !== self.location.origin) return;
+
   if (event.request.mode === "navigate") {
-    event.respondWith(caches.match("./index.html").then((cached) => cached || fetch(event.request)));
+    // Cloudflare Pages redirects /index.html to the directory URL. Returning
+    // that redirected CacheStorage response from a navigation fetch event is
+    // rejected by browsers as ERR_FAILED. The directory entry is the same
+    // document without a redirect history, so it is safe to use offline.
+    event.respondWith(caches.match("./").then((cached) => cached || fetch(event.request)));
     return;
   }
-  event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
-    if (response.ok) {
-      const copy = response.clone();
-      caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-    }
-    return response;
-  })));
+
+  // Only the intentionally small shell is cached. Do not add runtime media
+  // here; doing so would quietly recreate the oversized installation.
+  event.respondWith(caches.match(event.request, { ignoreSearch: true }).then((cached) => cached || fetch(event.request)));
 });

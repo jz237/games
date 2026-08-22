@@ -63,6 +63,14 @@ a step that drops the folder from the Pages artifact:
    merge commits**, so do NOT use an old working clone. Use a fresh shallow clone
    of `origin/main` and make one fast-forward commit:
 
+Before mirroring, the service-worker guard must pass:
+
+```sh
+node --test 2026-08-20/final-blow/tests/service-worker-guard.test.mjs
+```
+
+Do not publish Final Blow if that guard fails.
+
 ```sh
 FINAL_BLOW_MIRROR_DIR=$(mktemp -d)
 git clone --depth 1 git@github.com:jz237/jez237-site.git "$FINAL_BLOW_MIRROR_DIR"
@@ -110,7 +118,7 @@ as a module; `game.js` imports from `engine/`.
   index.html          UI, screens, controls dialog, HUD
   game.js             ~8k lines: simulation loop, rendering, input, QA hooks
   styles.css
-  sw.js               PWA precache — ADD ANY NEW ASSET HERE
+  sw.js               Small PWA shell cache — never add images, audio, or index.html
   engine/
     foundation.mjs    frame clock, RNG, move instancing, ARCADE_TUNING
     defense.mjs       movement/defense rules, hitboxes, FIGHTER_SCALE, STUN_RULES
@@ -209,7 +217,13 @@ reproduce them exactly. Keep it that way.
   roster stays inside 68–74% of the playable area. Adding a HUD row shrinks that
   area and fails the test — the throwable readout was deliberately packed into the
   existing Grit row for this reason. `.grit-row` is a 5-column grid; keep it one line.
-- **Add every new asset to `sw.js` PRECACHE**, or offline play silently misses it.
+- **Keep `sw.js` small and redirect-safe.** The old 19 MB / 162-request media
+  precache made browsers load Final Blow once and then fail with `ERR_FAILED`.
+  Cache only the root URL and core code shell; never cache `./index.html`, images,
+  audio, or runtime media. Navigations must fall back to cached `./`, because
+  Cloudflare redirects `/index.html` and browsers reject that redirected cached
+  response on later navigations. Keep the cache name, `sw.js?v=` registration,
+  and `game.js?v=` entry version aligned, then run the service-worker guard.
 - **Rollback protocol is at version 2.** If you add an input field that affects
   the simulation, add a bit in `NET_INPUT`, handle it in `inputToBits`/`bitsToInput`,
   and bump `ROLLBACK_PROTOCOL_VERSION`.
@@ -263,7 +277,7 @@ Frame roles are documented in `tools/README.md`.
 ```sh
 cd /home/jez237/.openclaw/agents/gamemaster/workspace/final-blow-goal/2026-08-20/final-blow
 
-node --test tests/*.test.mjs        # 38 unit/module tests
+node --test tests/*.test.mjs        # 39 unit/module/guard tests
 node tests/browser-smoke.mjs        # full browser suite, needs Chrome, ~2min
 
 # online rollback (two browsers against a local signaling worker)
