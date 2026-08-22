@@ -323,8 +323,8 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.3B/);
-  assert.equal(title.version.text, 'VERSION 1.3B');
+  assert.match(title.build, /1\.3C/);
+  assert.equal(title.version.text, 'VERSION 1.3C');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -349,7 +349,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.3b-death-blow-call');
+  assert.equal(title.engineVersion, '1.3c-cinematic-gore');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
   assert.equal(title.engine.tournament.version, '1.3');
@@ -359,7 +359,10 @@ try {
   assert.deepEqual(title.engine.inputRules.priority.slice(0, 5), [
     'super', 'enhancedLauncher', 'enhancedBackSpecial', 'enhancedCommandSpecial', 'enhanced',
   ]);
-  assert.deepEqual(title.engine.camera, { x: 640, y: 360, zoom: 1, locked: true, mode: 'arena' });
+  assert.deepEqual(title.engine.camera, {
+    x: 640, y: 360, zoom: 1, locked: true, mode: 'arena', shot: 'arena', intensity: 0,
+    cuts: 0, impactCloseUps: 0, peakZoom: 1, slowMotionHits: 0,
+  });
 
   const tournamentLab = await evaluate(client, `(() => {
     window.__finalBlowQa.training('deathblow', 'jez');
@@ -2413,7 +2416,8 @@ try {
     kind: 'final', fighterId: null, signature: false, src: 'assets/audio/final-blow.mp3',
   }, 'execution must fire the dedicated Death Blow announcer track');
   assert.equal(finisherStart.camera.mode, 'finisher');
-  assert.ok(finisherStart.camera.zoom >= 1.18, `finisher camera must punch in, got ${finisherStart.camera.zoom}`);
+  assert.equal(finisherStart.camera.shot, 'establishing');
+  assert.ok(finisherStart.camera.zoom >= 1.24, `finisher camera must open cinematically, got ${finisherStart.camera.zoom}`);
   assert.ok(Math.abs(finisherStart.camera.x - finisherMidpoint) < 0.001, 'camera must center both characters');
   await evaluate(client, `window.__finalBlowQa.step(1.13)`);
   const finisher = await evaluate(client, `window.__finalBlowQa.status()`);
@@ -2437,6 +2441,9 @@ try {
   assert.equal(lightKickFinisher.fatalityFamily, "crush", "LK selects Finisher B");
 
   const graphicFatalities = await evaluate(client, `(async () => {
+    const reduced = document.querySelector('#reducedMotionToggle');
+    reduced.checked = false;
+    reduced.dispatchEvent(new Event('change', { bubbles: true }));
     const fighters = ['deathblow', 'jez', 'alan', 'post', 'benny', 'donald', 'cyraxx', 'ali'];
     const results = [];
     for (const fighter of fighters) {
@@ -2462,10 +2469,52 @@ try {
     assert.equal(fatality.graphicFatalities, true);
     assert.equal(fatality.fatalityTriggered, true);
     assert.ok(fatality.fatalityPools >= 1);
+    assert.ok(fatality.goreFragments >= 12, `${fatality.fatalityId} must throw detailed gore fragments`);
+    assert.ok(fatality.goreShockwaves >= 1, `${fatality.fatalityId} must render a gore shockwave`);
+    assert.ok(fatality.lensBlood >= 1, `${fatality.fatalityId} must splatter the camera lens`);
+    assert.ok(fatality.cinematicCuts >= 4, `${fatality.fatalityId} must use multiple cinematic cuts`);
+    assert.ok(fatality.impactCloseUps >= 4, `${fatality.fatalityId} must close in on impact beats`);
+    assert.ok(fatality.peakZoom >= 1.6, `${fatality.fatalityId} must reach an extreme final-impact close-up`);
+    assert.equal(fatality.slowMotionHits, 1, `${fatality.fatalityId} must hold exactly one final hit in slow motion`);
     assert.equal(fatality.camera.mode, 'finisher');
-    assert.ok(fatality.camera.zoom >= 1.18);
+    assert.ok(['final-impact', 'aftermath'].includes(fatality.camera.shot));
+    assert.ok(fatality.camera.zoom >= 1.48, `${fatality.fatalityId} aftermath zoom ${fatality.camera.zoom} (${fatality.camera.shot})`);
     assert.ok(fatality.cameraOffset < 0.001);
   }
+
+  // The same multi-cut sequence survives the Graphic Fatalities and reduced-
+  // motion accessibility paths without leaking gore or violent camera shake.
+  await evaluate(client, `(() => {
+    const gore = document.querySelector('#goreToggle');
+    gore.checked = false;
+    gore.dispatchEvent(new Event('change', { bubbles: true }));
+    window.__finalBlowQa.graphicFatality('deathblow', 0, 4.7, false);
+  })()`);
+  const goreOff = await evaluate(client, `({ status: window.__finalBlowQa.status(), snapshot: window.__finalBlowEngine.snapshot() })`);
+  assert.equal(goreOff.status.graphicFatalities, false);
+  assert.equal(goreOff.status.goreFragments, 0);
+  assert.equal(goreOff.status.goreShockwaves, 0);
+  assert.equal(goreOff.status.lensBlood, 0);
+  assert.equal(goreOff.status.fatalityPools, 0);
+  assert.ok(goreOff.status.cinematicCuts >= 4, `gore-off cinematic cuts ${goreOff.status.cinematicCuts} at ${goreOff.status.cinematicShot}`);
+  assert.ok(goreOff.status.peakZoom >= 1.6);
+  assert.equal(goreOff.status.slowMotionHits, 1);
+
+  await evaluate(client, `(() => {
+    const gore = document.querySelector('#goreToggle');
+    gore.checked = true;
+    gore.dispatchEvent(new Event('change', { bubbles: true }));
+    const reduced = document.querySelector('#reducedMotionToggle');
+    reduced.checked = true;
+    reduced.dispatchEvent(new Event('change', { bubbles: true }));
+    window.__finalBlowQa.graphicFatality('deathblow', 0, 4.7, true);
+  })()`);
+  const reducedFinisher = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  assert.equal(reducedFinisher.accessibility.reducedMotion, true);
+  assert.ok(reducedFinisher.camera.peakZoom >= 1.6, 'reduced motion keeps the authored cinematic coverage');
+  assert.ok(reducedFinisher.camera.zoom <= 1.4, 'reduced motion must cap the rendered camera snap');
+  // Leave the setting in its prior enabled state for the remaining persisted-
+  // preference and offline-boot checks.
 
   const deathblowVictory = await evaluate(client, `window.__finalBlowQa.result('deathblow')`);
   assert.equal(deathblowVictory.title, "DEATHBLOW WINS");
@@ -2590,7 +2639,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-offline-1\.3b/);
+  assert.match(offlineCache.name, /final-blow-offline-1\.3c/);
   assert.equal(offlineCache.hasJanney, true);
   assert.ok(offlineCache.entries >= 157);
   assert.equal(offlineCache.hasGame, true);
@@ -2619,8 +2668,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.3B/);
-  assert.equal(offlineBoot.version, '1.3b-death-blow-call');
+  assert.match(offlineBoot.build, /1\.3C/);
+  assert.equal(offlineBoot.version, '1.3c-cinematic-gore');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2664,7 +2713,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 1.3B');
+  assert.equal(landscape.version.text, 'VERSION 1.3C');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);
@@ -2922,6 +2971,16 @@ try {
   )`);
   assert.ok(touchLightKickFinisher.elapsed > 0, "touch LK must execute a finisher");
   assert.equal(touchLightKickFinisher.fatalityFamily, "crush");
+  await evaluate(client, `window.__finalBlowQa.step(4.58)`);
+  const mobileFinisher = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
+  const mobileFinisherMidpoint = (mobileFinisher.fighters[0].x + mobileFinisher.fighters[1].x) * .5;
+  assert.equal(mobileFinisher.camera.mode, 'finisher');
+  assert.ok(['final-impact', 'aftermath'].includes(mobileFinisher.camera.shot));
+  assert.ok(mobileFinisher.camera.peakZoom >= 1.6);
+  assert.ok(mobileFinisher.camera.zoom <= 1.4, 'mobile reduced-motion zoom must remain capped');
+  assert.ok(Math.abs(mobileFinisher.camera.x - mobileFinisherMidpoint) < .001);
+  assert.ok(mobileFinisher.violence.goreFragments >= 12);
+  assert.ok(mobileFinisher.violence.lensBlood >= 1);
 
   const mobileVictory = await evaluate(client, `(() => {
     window.__finalBlowQa.result('deathblow');

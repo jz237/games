@@ -598,7 +598,7 @@ for (const fighter of [...roster, arcadeBoss]) {
 }
 
 // Original soundtrack and combat cues generated with the ElevenLabs API. The
-// dedicated 1.3B "Death Blow" announcer call is mixed into the `final` asset.
+// dedicated "Death Blow" announcer call is mixed into the `final` asset.
 const audioAssets = {
   select: "assets/audio/ui-select.mp3",
   jump: "assets/audio/jump.mp3",
@@ -1992,6 +1992,11 @@ function combatRollbackState() {
   delete snapshot.shake;
   delete snapshot.flash;
   delete snapshot.cinematicZoom;
+  if (snapshot.finisher) {
+    for (const field of ["cinematicShot", "cinematicCuts", "impactCloseUps", "peakZoom", "slowMotionHits"]) {
+      delete snapshot.finisher[field];
+    }
+  }
   for (const fighter of snapshot.fighters) {
     for (const field of rollbackPresentationFighterFields) delete fighter.values[field];
   }
@@ -2488,8 +2493,13 @@ function performFinisher(winner, type) {
     fatalityId: fatality.id,
     fatalityAt,
     fatalityTriggered: false,
+    cinematicShot: "establishing",
+    cinematicCuts: 0,
+    impactCloseUps: 0,
+    peakZoom: 1.24,
+    slowMotionHits: 0,
   };
-  state.cinematicZoom = 1.18;
+  state.cinematicZoom = 1.24;
   state.shake = .16;
   if (!rollbackResimulating) {
     setTouchPrompt("");
@@ -2524,6 +2534,64 @@ function sampleFinisher(keys, elapsed) {
   };
 }
 
+// Camera choreography is derived only from the current scripted beat. That
+// keeps every cut deterministic in rollback play while allowing each client to
+// soften the zoom locally when reduced motion is enabled.
+function finisherCinematicCamera(poseZoom = 1.18) {
+  const finisher = state.finisher;
+  if (!finisher || state.fighters.length !== 2) {
+    return { x: W * .5, y: H * .5, zoom: 1, shot: "arena", intensity: 0 };
+  }
+  const attacker = state.fighters[finisher.winner];
+  const victim = state.fighters[1 - finisher.winner];
+  const elapsed = finisher.elapsed;
+  const closestImpact = finisher.script.impacts.reduce((closest, impact) => (
+    Math.abs(impact.t - elapsed) < Math.abs(closest.t - elapsed) ? impact : closest
+  ), finisher.script.impacts[0]);
+  const impactDelta = elapsed - closestImpact.t;
+  const inImpactWindow = impactDelta >= -.12 && impactDelta <= .24;
+  const inFinalWindow = closestImpact.final && impactDelta >= -.16 && impactDelta <= .46;
+  let shot = "pursuit";
+  let zoom = Math.max(1.27, poseZoom);
+  let intensity = .36;
+
+  if (elapsed < .42) {
+    shot = "establishing";
+    zoom = Math.max(1.24, poseZoom);
+    intensity = .2;
+  } else if (inFinalWindow) {
+    shot = "final-impact";
+    zoom = Math.max(1.62, poseZoom);
+    intensity = 1;
+  } else if (inImpactWindow) {
+    shot = "impact-close-up";
+    zoom = Math.max(1.43, poseZoom);
+    intensity = .72;
+  } else if (finisher.fatalityTriggered && elapsed > finisher.fatalityAt) {
+    shot = "aftermath";
+    zoom = Math.max(1.48, poseZoom);
+    intensity = .84;
+  }
+
+  // Keep the full exchange legible even when a script briefly throws the two
+  // bodies apart, then settle the vertical focus onto the victim at impact.
+  const separation = Math.abs(attacker.x - victim.x);
+  const framingLimit = clamp((W * .72) / Math.max(340, separation), 1.18, 1.68);
+  zoom = Math.min(zoom, framingLimit);
+  const nominalZoom = zoom;
+  if (state.accessibility.reducedMotion) zoom = Math.min(zoom, shot === "final-impact" ? 1.4 : 1.32);
+  const midpointY = (attacker.y + victim.y) * .5 - 150;
+  const impactY = victim.y - (shot === "final-impact" ? 132 : 145);
+  return {
+    x: (attacker.x + victim.x) * .5,
+    y: clamp(inImpactWindow || shot === "aftermath" ? lerp(midpointY, impactY, .68) : midpointY, H * .3, H * .59),
+    zoom,
+    nominalZoom,
+    shot,
+    intensity,
+  };
+}
+
 function triggerFinisherImpact(finisher, impact) {
   const attacker = state.fighters[finisher.winner];
   const victim = state.fighters[1 - finisher.winner];
@@ -2535,17 +2603,22 @@ function triggerFinisherImpact(finisher, impact) {
 
   victim.hitFlash = finalImpact ? .22 : .11;
   attacker.specialGlow = finalImpact ? 1.1 : .45;
-  state.hitstop = Math.max(state.hitstop, finalImpact ? .16 : .045 + impact.power * .028);
+  // The long final-frame hold reads as time dilation without changing the
+  // authored pose timeline or introducing a second simulation clock.
+  state.hitstop = Math.max(state.hitstop, finalImpact ? .26 : .055 + impact.power * .032);
   state.shake = Math.max(state.shake, finalImpact ? 1.1 : .16 + impact.power * .22);
   if (finalImpact && $("#flashToggle").checked) state.flash = .34;
   finisher.beatLabel = impact.label;
   finisher.beatLife = finalImpact ? 1.05 : .48;
+  finisher.impactCloseUps += 1;
+  if (finalImpact) finisher.slowMotionHits += 1;
 
   for (let index = 0; index < count; index += 1) {
     const angle = visualRandom() * Math.PI * 2;
     const speed = 100 + visualRandom() * (finalImpact ? 670 : 330) * impact.power;
     const splatter = finalImpact && gore && visualRandom() > .34;
     state.particles.push({
+      kind: gore ? "blood" : "impact",
       x: pointX,
       y: pointY,
       vx: Math.cos(angle) * speed,
@@ -2598,6 +2671,7 @@ function triggerFinisherImpact(finisher, impact) {
       const angle = -Math.PI * (.12 + visualRandom() * .76);
       const speed = 180 + visualRandom() * 620 * fatality.separation;
       state.particles.push({
+        kind: "blood",
         x: pointX + (visualRandom() - .5) * 34,
         y: pointY + (visualRandom() - .5) * 42,
         vx: Math.cos(angle) * speed * (visualRandom() > .5 ? 1 : -1),
@@ -2608,6 +2682,52 @@ function triggerFinisherImpact(finisher, impact) {
         color: visualRandom() > .28 ? fatality.palette[0] : fatality.palette[1],
       });
     }
+    const fragmentCount = Math.max(12, Math.round(30 * fatality.separation * state.performance.particleScale));
+    for (let index = 0; index < fragmentCount; index += 1) {
+      const angle = -Math.PI * (.08 + visualRandom() * .84);
+      const speed = 230 + visualRandom() * 760 * fatality.separation;
+      state.particles.push({
+        kind: "goreFragment",
+        x: pointX + (visualRandom() - .5) * 46,
+        y: pointY + (visualRandom() - .5) * 56,
+        vx: Math.cos(angle) * speed * (visualRandom() > .5 ? 1 : -1),
+        vy: Math.sin(angle) * speed - 45,
+        gravity: 940,
+        drag: .981,
+        rotation: visualRandom() * Math.PI * 2,
+        spin: (visualRandom() - .5) * 18,
+        spikes: 5 + index % 4,
+        bone: index % 6 === 0,
+        life: 1 + visualRandom() * 1.5,
+        max: 2.5,
+        size: 6 + visualRandom() * 13,
+        color: index % 4 ? fatality.palette[0] : fatality.palette[1],
+      });
+    }
+    state.effects.push({
+      kind: "goreShockwave",
+      family: fatality.family,
+      direction: finisher.direction,
+      x: pointX,
+      y: pointY,
+      life: 1.45,
+      max: 1.45,
+      color: fatality.palette[0],
+      secondary: fatality.palette[1],
+      scale: fatality.separation,
+    });
+    state.effects.push({
+      kind: "lensBlood",
+      family: fatality.family,
+      variant: finisher.type,
+      x: pointX,
+      y: pointY,
+      life: decalLife,
+      max: decalLife,
+      color: fatality.palette[0],
+      secondary: fatality.palette[1],
+      scale: fatality.blood,
+    });
   }
   sound(finalImpact ? "fatal" : impact.sound, attacker);
 }
@@ -2638,9 +2758,13 @@ function updateFinisher(dt) {
   victim.block = false;
   attacker.crouch = false;
   victim.crouch = false;
-  // Hold a readable punch-in for the whole cinematic even where an older
-  // character script asked for a wide establishing frame.
-  state.cinematicZoom = Math.max(1.18, pose.zoom);
+  const cinematic = finisherCinematicCamera(pose.zoom);
+  if (cinematic.shot !== finisher.cinematicShot) {
+    finisher.cinematicShot = cinematic.shot;
+    finisher.cinematicCuts += 1;
+  }
+  finisher.peakZoom = Math.max(finisher.peakZoom, cinematic.nominalZoom);
+  state.cinematicZoom = cinematic.zoom;
 
   while (finisher.impactIndex < finisher.script.impacts.length
     && finisher.script.impacts[finisher.impactIndex].t <= finisher.elapsed) {
@@ -5223,6 +5347,7 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
     particle.x += particle.vx * dt;
     particle.y += particle.vy * dt;
     particle.vx *= particle.drag ?? 0.985;
+    if (Number.isFinite(particle.spin)) particle.rotation = (particle.rotation || 0) + particle.spin * dt;
   }
   state.particles = state.particles.filter((particle) => particle.life > 0);
   for (const effect of state.effects) effect.life -= dt;
@@ -7199,6 +7324,83 @@ function drawFatalityPool(effect, alpha) {
   ctx.restore();
 }
 
+function drawCinematicGoreOverlay() {
+  if (!state.graphicFatalities || !state.finisher) return;
+  const overlays = state.effects.filter((effect) => effect.kind === "lensBlood");
+  for (const effect of overlays) {
+    const lifeAlpha = clamp(effect.life / effect.max, 0, 1);
+    const reveal = clamp((1 - lifeAlpha) * 8, 0, 1);
+    const alpha = reveal * Math.min(1, lifeAlpha * 2.2);
+    if (alpha <= 0) continue;
+    const familySeed = [...effect.family].reduce((total, character) => total + character.charCodeAt(0), 0)
+      + effect.variant * 97;
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+
+    const vignette = ctx.createRadialGradient(W * .5, H * .46, W * .18, W * .5, H * .46, W * .68);
+    vignette.addColorStop(0, "rgba(60,0,7,0)");
+    vignette.addColorStop(.72, `rgba(96,0,12,${alpha * .12})`);
+    vignette.addColorStop(1, `rgba(20,0,4,${alpha * .66})`);
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = effect.color;
+    ctx.strokeStyle = effect.secondary;
+    ctx.shadowColor = "rgba(35,0,4,.8)";
+    ctx.shadowBlur = 5;
+    for (let drop = 0; drop < 31; drop += 1) {
+      const x = ((drop * 173 + familySeed * 29) % 1180) / 1180 * W;
+      const y = ((drop * 97 + familySeed * 43) % 640) / 640 * H;
+      const edgeBias = drop % 3 === 0 ? (drop % 2 ? H * .1 : H * .88) : y;
+      const radius = (4 + drop % 7 * 2.8) * (effect.scale || 1);
+      ctx.globalAlpha = alpha * (.2 + drop % 5 * .09);
+      ctx.beginPath();
+      ctx.ellipse(x, edgeBias, radius * (drop % 4 === 0 ? 2.4 : 1), radius, (drop * .71) % Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+      if (drop % 5 === 0) {
+        ctx.lineWidth = Math.max(2, radius * .28);
+        ctx.beginPath();
+        ctx.moveTo(x, edgeBias);
+        ctx.quadraticCurveTo(x + (drop % 2 ? -34 : 34), edgeBias + 38, x + (drop % 2 ? -22 : 22), edgeBias + 92);
+        ctx.stroke();
+      }
+    }
+
+    ctx.globalAlpha = alpha * .56;
+    ctx.lineCap = "round";
+    if (["slice", "rupture", "launch"].includes(effect.family)) {
+      ctx.lineWidth = effect.family === "slice" ? 19 : 13;
+      ctx.beginPath();
+      ctx.moveTo(W * .08, H * (effect.family === "launch" ? .76 : .68));
+      ctx.quadraticCurveTo(W * .48, H * .25, W * .94, H * (effect.family === "rupture" ? .18 : .34));
+      ctx.stroke();
+    } else if (["crush", "implode"].includes(effect.family)) {
+      ctx.fillStyle = effect.secondary;
+      ctx.beginPath();
+      ctx.ellipse(W * .5, H * .93, W * .43, H * .1, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (effect.family === "electrocute") {
+      ctx.globalCompositeOperation = "screen";
+      ctx.strokeStyle = "#ff3048";
+      ctx.lineWidth = 6;
+      for (let bolt = 0; bolt < 6; bolt += 1) {
+        ctx.beginPath();
+        ctx.moveTo((bolt + 1) * W / 7, 0);
+        ctx.lineTo((bolt + .7) * W / 7, H * .2);
+        ctx.lineTo((bolt + 1.25) * W / 7, H * .42);
+        ctx.stroke();
+      }
+    } else {
+      ctx.fillStyle = effect.color;
+      for (let strip = 0; strip < 8; strip += 1) {
+        ctx.globalAlpha = alpha * (.18 + strip % 3 * .1);
+        ctx.fillRect((strip * 191 + familySeed) % W, H * (.12 + strip * .1), W * (.08 + strip % 3 * .04), 5 + strip % 3 * 5);
+      }
+    }
+    ctx.restore();
+  }
+}
+
 // Unmistakable dizzy feedback: a ring of stars orbiting the head plus a label.
 function drawDizzyStars(fighter, time) {
   if (!fighter || fighter.dizzyFrames <= 0) return;
@@ -7255,12 +7457,27 @@ function drawParticles() {
     if (particle.kind === "blood") {
       const angle = Math.atan2(particle.vy || 0, particle.vx || 1);
       ctx.ellipse(particle.x, particle.y, particle.size * 1.65, Math.max(1, particle.size * 0.62), angle, 0, Math.PI * 2);
+    } else if (particle.kind === "goreFragment") {
+      ctx.translate(particle.x, particle.y);
+      ctx.rotate(particle.rotation || 0);
+      const spikes = particle.spikes || 6;
+      for (let point = 0; point < spikes * 2; point += 1) {
+        const angle = point * Math.PI / spikes;
+        const radius = particle.size * (point % 2 ? .48 : 1);
+        if (point === 0) ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+        else ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+      }
+      ctx.closePath();
     } else if (particle.kind === "dust") {
       ctx.ellipse(particle.x, particle.y, particle.size * 1.5, particle.size * 0.6, 0, 0, Math.PI * 2);
     } else {
       ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
     }
     ctx.fill();
+    if (particle.kind === "goreFragment" && particle.bone) {
+      ctx.fillStyle = "#ead7b7";
+      ctx.fillRect(-particle.size * .58, -2, particle.size * 1.16, 4);
+    }
     ctx.restore();
   }
   ctx.globalAlpha = 1;
@@ -7287,6 +7504,34 @@ function drawParticles() {
       drawFinisherImpact(effect, alpha);
     } else if (effect.kind === "fatalityPool") {
       drawFatalityPool(effect, alpha);
+    } else if (effect.kind === "goreShockwave") {
+      const growth = 1 - alpha;
+      const reach = (54 + growth * 250) * (effect.scale || 1);
+      ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = effect.color;
+      ctx.fillStyle = effect.secondary;
+      ctx.lineCap = "round";
+      for (let spray = 0; spray < 17; spray += 1) {
+        const angle = -1.42 + spray * .18 + (effect.family === "launch" ? -.18 : 0);
+        const length = reach * (.38 + (spray % 6) * .12);
+        ctx.globalAlpha = alpha * (.28 + spray % 4 * .14);
+        ctx.lineWidth = 3 + spray % 5;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(
+          Math.cos(angle) * length * .5 * effect.direction,
+          Math.sin(angle) * length * .55 - 20,
+          Math.cos(angle) * length * effect.direction,
+          Math.sin(angle) * length,
+        );
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(Math.cos(angle) * length * effect.direction, Math.sin(angle) * length, 3 + spray % 4 * 2, 7 + spray % 5 * 2, angle, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (effect.kind === "lensBlood") {
+      // Screen-space pass in drawCinematicGoreOverlay().
     } else if (effect.kind === "bloodBurst") {
       const scale = effect.tier === "super" ? 1.45 : effect.tier === "light" ? 0.7 : 1;
       ctx.shadowBlur = 0;
@@ -7450,18 +7695,35 @@ function drawFinisherOverlay() {
   if (!finisher) return;
   const attacker = state.fighters[finisher.winner];
   const progress = finisher.elapsed / finisher.script.duration;
-  const barHeight = 24 + Math.sin(clamp(progress * 2, 0, 1) * Math.PI * .5) * 17;
+  const cinematic = finisherCinematicCamera(state.cinematicZoom);
+  const barHeight = 30 + cinematic.intensity * 30 + Math.sin(clamp(progress * 2, 0, 1) * Math.PI * .5) * 7;
   const tint = ctx.createRadialGradient(W * .5, H * .48, 90, W * .5, H * .48, W * .72);
-  tint.addColorStop(0, `${attacker.def.accent}16`);
-  tint.addColorStop(1, "rgba(0,0,0,.22)");
+  tint.addColorStop(0, `${attacker.def.accent}${cinematic.shot === "final-impact" ? "2f" : "16"}`);
+  tint.addColorStop(.62, "rgba(60,0,8,.08)");
+  tint.addColorStop(1, `rgba(0,0,0,${.28 + cinematic.intensity * .24})`);
   ctx.fillStyle = tint;
   ctx.fillRect(0, 0, W, H);
+  drawCinematicGoreOverlay();
   ctx.fillStyle = "rgba(0,0,0,.9)";
   ctx.fillRect(0, 0, W, barHeight);
   ctx.fillRect(0, H - barHeight, W, barHeight);
   ctx.fillStyle = attacker.def.accent;
   ctx.fillRect(0, barHeight - 3, W, 3);
   ctx.fillRect(0, H - barHeight, W, 3);
+
+  ctx.save();
+  ctx.textAlign = "left";
+  ctx.font = "900 11px Arial Narrow, Arial";
+  ctx.fillStyle = attacker.def.accent;
+  ctx.globalAlpha = .82;
+  ctx.fillText(`CINEMATIC · ${cinematic.shot.replaceAll("-", " ").toUpperCase()}`, 24, barHeight - 11);
+  if (cinematic.shot === "final-impact") {
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#fff0df";
+    ctx.font = "1000 14px Arial Narrow, Arial";
+    ctx.fillText("FINAL-HIT SLOW MOTION", W - 24, barHeight - 11);
+  }
+  ctx.restore();
 
   if (finisher.beatLife > 0) {
     const alpha = clamp(finisher.beatLife * 2.2, 0, 1);
@@ -7560,14 +7822,8 @@ function drawDebugOverlay() {
 }
 
 function finisherCameraTarget() {
-  const finisher = state.finisher;
-  if (!finisher || state.fighters.length !== 2) return { x: W * .5, y: H * .5 };
-  const attacker = state.fighters[finisher.winner];
-  const victim = state.fighters[1 - finisher.winner];
-  return {
-    x: (attacker.x + victim.x) * .5,
-    y: clamp((attacker.y + victim.y) * .5 - 150, H * .32, H * .58),
-  };
+  const camera = finisherCinematicCamera(state.cinematicZoom);
+  return { x: camera.x, y: camera.y };
 }
 
 function draw(time) {
@@ -8546,7 +8802,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.3b-death-blow-call",
+  version: "1.3c-cinematic-gore",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -8554,6 +8810,7 @@ window.__finalBlowEngine = {
   },
   snapshot() {
     const cameraTarget = finisherCameraTarget();
+    const cinematicCamera = finisherCinematicCamera(state.cinematicZoom);
     return {
       tick: state.simulationTick,
       phase: state.phase,
@@ -8595,6 +8852,12 @@ window.__finalBlowEngine = {
         zoom: state.finisher ? state.cinematicZoom : 1,
         locked: !state.finisher,
         mode: state.finisher ? "finisher" : "arena",
+        shot: cinematicCamera.shot,
+        intensity: Number(cinematicCamera.intensity.toFixed(3)),
+        cuts: state.finisher?.cinematicCuts || 0,
+        impactCloseUps: state.finisher?.impactCloseUps || 0,
+        peakZoom: state.finisher?.peakZoom || 1,
+        slowMotionHits: state.finisher?.slowMotionHits || 0,
       },
       arcade: arcadeRunSnapshot(state.arcadeRun),
       seed: state.matchSeed,
@@ -8613,9 +8876,13 @@ window.__finalBlowEngine = {
       crowdReaction: Number(state.crowdReaction.toFixed(3)),
       violence: {
         bloodParticles: state.particles.filter((particle) => particle.kind === "blood").length,
+        goreFragments: state.particles.filter((particle) => particle.kind === "goreFragment").length,
         dustParticles: state.particles.filter((particle) => particle.kind === "dust").length,
         bloodBursts: state.effects.filter((effect) => effect.kind === "bloodBurst").length,
         bloodDecals: state.effects.filter((effect) => effect.kind === "bloodDecal").length,
+        fatalityPools: state.effects.filter((effect) => effect.kind === "fatalityPool").length,
+        goreShockwaves: state.effects.filter((effect) => effect.kind === "goreShockwave").length,
+        lensBlood: state.effects.filter((effect) => effect.kind === "lensBlood").length,
         genericHitEffects: state.effects.filter((effect) => effect.kind === "hit").length,
         shake: Number(state.shake.toFixed(3)),
         hitstop: Number(state.hitstop.toFixed(4)),
@@ -9102,10 +9369,10 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       updateHud();
       setTouchPrompt("final");
     },
-    graphicFatality(id, type = 0, seconds = 4.7) {
+    graphicFatality(id, type = 0, seconds = 4.7, enabled = true) {
       this.ready(id, type);
-      state.graphicFatalities = true;
-      $("#goreToggle").checked = true;
+      state.graphicFatalities = Boolean(enabled);
+      $("#goreToggle").checked = state.graphicFatalities;
       finishRound(0, type);
       this.step(seconds);
       return this.status();
@@ -9144,6 +9411,14 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         fatalityFamily: fatality?.family || null,
         fatalityTriggered: Boolean(state.finisher?.fatalityTriggered),
         fatalityPools: state.effects.filter((effect) => effect.kind === "fatalityPool").length,
+        goreFragments: state.particles.filter((particle) => particle.kind === "goreFragment").length,
+        goreShockwaves: state.effects.filter((effect) => effect.kind === "goreShockwave").length,
+        lensBlood: state.effects.filter((effect) => effect.kind === "lensBlood").length,
+        cinematicShot: state.finisher?.cinematicShot || "arena",
+        cinematicCuts: state.finisher?.cinematicCuts || 0,
+        impactCloseUps: state.finisher?.impactCloseUps || 0,
+        peakZoom: state.finisher?.peakZoom || 1,
+        slowMotionHits: state.finisher?.slowMotionHits || 0,
         simulationTick: state.simulationTick,
         simulationHz: SIMULATION_HZ,
       };
