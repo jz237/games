@@ -145,7 +145,7 @@ export function hasFlowSkipInput(input = {}) {
  *  - motion + punch: command specials; motion + kick: the kit's base special
  *  - LP+HP or LK+HK chord: enhanced (EX) version of whatever motion preceded it
  *  - HP+HK chord at full Grit, or a double-quarter-circle motion: super
- *  - during the finishing window a single fresh button executes a finisher
+ *  - during the finishing window LP selects Finisher A and LK selects Finisher B
  */
 export function resolveFourButtonInput(raw = {}, {
   facing = 1,
@@ -190,12 +190,15 @@ export function resolveFourButtonInput(raw = {}, {
   const pressed = ATTACK_BUTTONS.filter((button) => edge[button]);
   if (!pressed.length) return out;
 
-  // A fresh single press finishes the round; LP/LK pick finisher A, HP/HK pick B.
+  // Finishers are deliberately restricted to one fresh light-button press:
+  // LP selects A and LK selects B. HP/HK and multi-button chords are swallowed
+  // by the finishing window so they cannot execute a finisher accidentally.
   if (finishing) {
     if (!finishArmed) return out;
+    if (pressed.length !== 1 || (pressed[0] !== "lp" && pressed[0] !== "lk")) return out;
     out.final = true;
     out.button = pressed[0];
-    out.finisherVariant = (edge.hp || edge.hk) ? 1 : 0;
+    out.finisherVariant = pressed[0] === "lk" ? 1 : 0;
     return out;
   }
 

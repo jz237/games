@@ -323,8 +323,8 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.3/);
-  assert.equal(title.version.text, 'VERSION 1.3');
+  assert.match(title.build, /1\.3A/);
+  assert.equal(title.version.text, 'VERSION 1.3A');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -349,7 +349,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.3-tournament-feel');
+  assert.equal(title.engineVersion, '1.3a-light-finishers');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
   assert.equal(title.engine.tournament.version, '1.3');
@@ -2209,6 +2209,29 @@ try {
   assert.equal(gamepadTriggerSuper.fighters[0].move, "deathblow-epicenter-execution");
   assert.equal(gamepadTriggerSuper.fighters[0].meter, 0);
 
+  // XInput B (HK) cannot finish; A (LK) selects Finisher B at any distance.
+  await evaluate(client, `(() => {
+    window.__finalBlowQa.ready('deathblow', 1);
+    window.__finalBlowQa.positions(80, 1200);
+    window.__finalBlowQa.step(0.05);
+    window.__qaPad.buttons[1] = { pressed: true, value: 1 };
+    return true;
+  })()`);
+  await evaluate(client, `window.__finalBlowQa.step(0.08)`);
+  const gamepadHeavyFinisherAttempt = await evaluate(client, `window.__finalBlowQa.status()`);
+  await evaluate(client, `(() => {
+    window.__qaPad.buttons[1] = { pressed: false, value: 0 };
+    window.__finalBlowQa.step(0.05);
+    window.__qaPad.buttons[0] = { pressed: true, value: 1 };
+    return true;
+  })()`);
+  assert.equal(gamepadHeavyFinisherAttempt.elapsed, 0, "XInput B/HK must not execute a finisher");
+  await evaluate(client, `window.__finalBlowQa.step(0.12)`);
+  const gamepadLightKickFinisher = await evaluate(client, `window.__finalBlowQa.status()`);
+  await evaluate(client, `window.__qaPad.buttons[0] = { pressed: false, value: 0 }`);
+  assert.ok(gamepadLightKickFinisher.elapsed > 0, "XInput A/LK must execute a finisher");
+  assert.equal(gamepadLightKickFinisher.fatalityFamily, "crush");
+
   const trainingUi = await evaluate(client, `(() => {
     document.querySelector('[data-mode="training"]').click();
     document.querySelectorAll('.fighter-card')[0].click();
@@ -2361,16 +2384,48 @@ try {
   assert.equal(attack.fighters[0].state, "attack");
   assert.ok(attack.fighters[0].attackFrame > 0);
 
-  await evaluate(client, `window.__finalBlowQa.ready('deathblow', 0)`);
+  // Finishers are light-button only and distance-free. Arm the window, place
+  // the fighters at opposite stage limits, and prove HP cannot trigger it.
+  const finisherDistance = await evaluate(client, `(() => {
+    window.__finalBlowQa.ready('deathblow', 0);
+    window.__finalBlowQa.positions(80, 1200);
+    window.__finalBlowQa.step(0.05);
+    const fighters = window.__finalBlowEngine.snapshot().fighters;
+    return Math.abs(fighters[1].x - fighters[0].x);
+  })()`);
+  assert.ok(finisherDistance > 1000, `finisher test must span the stage, got ${finisherDistance}px`);
+  await dispatchKey(client, "keyDown", "KeyK", "k", 75);
+  await evaluate(client, `window.__finalBlowQa.step(0.08)`);
+  const heavyFinisherAttempt = await evaluate(client, `window.__finalBlowQa.status()`);
+  await dispatchKey(client, "keyUp", "KeyK", "k", 75);
+  assert.equal(heavyFinisherAttempt.phase, "finish");
+  assert.equal(heavyFinisherAttempt.elapsed, 0, "HP must not execute a finisher");
+  await evaluate(client, `window.__finalBlowQa.step(0.05)`);
+
+  // LP executes Finisher A from the opposite end of the stage.
   await dispatchKey(client, "keyDown", "KeyJ", "j", 74);
   await delay(100);
   await dispatchKey(client, "keyUp", "KeyJ", "j", 74);
   await evaluate(client, `window.__finalBlowQa.step(1.25)`);
   const finisher = await evaluate(client, `window.__finalBlowQa.status()`);
   assert.equal(finisher.fighter, "deathblow");
+  assert.equal(finisher.fatalityFamily, "rupture", "LP selects Finisher A");
   assert.ok(finisher.elapsed > 1);
   assert.ok(finisher.impacts >= 2);
   assert.equal(finisher.simulationHz, 60);
+
+  // LK executes Finisher B from the opposite end of the stage.
+  await evaluate(client, `(() => {
+    window.__finalBlowQa.ready('deathblow', 1);
+    window.__finalBlowQa.positions(80, 1200);
+    window.__finalBlowQa.step(0.05);
+  })()`);
+  await dispatchKey(client, "keyDown", "KeyN", "n", 78);
+  await evaluate(client, `window.__finalBlowQa.step(0.12)`);
+  const lightKickFinisher = await evaluate(client, `window.__finalBlowQa.status()`);
+  await dispatchKey(client, "keyUp", "KeyN", "n", 78);
+  assert.ok(lightKickFinisher.elapsed > 0, "LK must execute a finisher");
+  assert.equal(lightKickFinisher.fatalityFamily, "crush", "LK selects Finisher B");
 
   const graphicFatalities = await evaluate(client, `(async () => {
     const fighters = ['deathblow', 'jez', 'alan', 'post', 'benny', 'donald', 'cyraxx', 'ali'];
@@ -2544,8 +2599,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.3/);
-  assert.equal(offlineBoot.version, '1.3-tournament-feel');
+  assert.match(offlineBoot.build, /1\.3A/);
+  assert.equal(offlineBoot.version, '1.3a-light-finishers');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2589,7 +2644,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 1.3');
+  assert.equal(landscape.version.text, 'VERSION 1.3A');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);
@@ -2811,6 +2866,42 @@ try {
   })()`);
   assert.equal(touchSuper.fighters[0].move, "deathblow-epicenter-execution");
   assert.equal(touchSuper.fighters[0].meter, 0);
+
+  const touchFinisherSetup = await evaluate(client, `(() => {
+    window.__finalBlowQa.ready('deathblow', 1);
+    window.__finalBlowQa.positions(80, 1200);
+    window.__finalBlowQa.step(0.05);
+    const fighters = window.__finalBlowEngine.snapshot().fighters;
+    document.querySelector('[data-touch="hp"]').dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }),
+    );
+    return {
+      distance: Math.abs(fighters[1].x - fighters[0].x),
+      prompt: document.querySelector('#touchPrompt').textContent,
+    };
+  })()`);
+  assert.ok(touchFinisherSetup.distance > 1000);
+  assert.match(touchFinisherSetup.prompt, /LP = A · LK = B · ANY DISTANCE/);
+  await evaluate(client, `window.__finalBlowQa.step(0.08)`);
+  const touchHeavyFinisherAttempt = await evaluate(client, `window.__finalBlowQa.status()`);
+  await evaluate(client, `(() => {
+    document.querySelector('[data-touch="hp"]').dispatchEvent(
+      new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' }),
+    );
+    window.__finalBlowQa.step(0.05);
+    document.querySelector('[data-touch="lk"]').dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }),
+    );
+    return true;
+  })()`);
+  assert.equal(touchHeavyFinisherAttempt.elapsed, 0, "touch HP must not execute a finisher");
+  await evaluate(client, `window.__finalBlowQa.step(0.12)`);
+  const touchLightKickFinisher = await evaluate(client, `window.__finalBlowQa.status()`);
+  await evaluate(client, `document.querySelector('[data-touch="lk"]').dispatchEvent(
+    new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' }),
+  )`);
+  assert.ok(touchLightKickFinisher.elapsed > 0, "touch LK must execute a finisher");
+  assert.equal(touchLightKickFinisher.fatalityFamily, "crush");
 
   const mobileVictory = await evaluate(client, `(() => {
     window.__finalBlowQa.result('deathblow');

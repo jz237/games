@@ -2778,7 +2778,7 @@ function updateHud() {
 function setTouchPrompt(kind = "") {
   const prompt = $("#touchPrompt");
   const actions = $(".touch-action");
-  const label = kind === "final" ? "FINISH HIM · ANY BUTTON"
+  const label = kind === "final" ? "FINISH HIM · LP = A · LK = B · ANY DISTANCE"
     : kind === "super" ? "SUPER READY · \u2193 \u2192 \u2193 \u2192 + PUNCH"
       : "";
   prompt.textContent = label;
@@ -3049,7 +3049,8 @@ function recordInput(side, input, fighter) {
 function tryFinish(side, input) {
   if (state.phase !== "finish" || state.finishWinner !== side) return false;
   if (!input.final) return false;
-  // Any one of LP / HP / LK / HK finishes: lights pick Finisher A, heavies pick B.
+  // Input resolution only emits `final` for a fresh LP (A) or LK (B). There is
+  // intentionally no distance check: the winner can finish from anywhere.
   const type = state.graphicFatalities ? (input.finisherVariant === 1 ? 1 : 0) : 0;
   finishRound(side, type);
   return true;
@@ -4914,7 +4915,7 @@ function checkKnockout() {
   attacker.attacking = null;
   duckMusic(0.34, 1900);
   stirCrowd(1.4);
-  announce("FINISH THEM", "ANY BUTTON  ·  LP/LK = A  ·  HP/HK = B", 2.2);
+  announce("FINISH THEM", "LP = A  ·  LK = B  ·  ANY DISTANCE", 2.2);
   if (!rollbackResimulating) setTouchPrompt("final");
   updateHud();
   sound("finish");
@@ -8527,7 +8528,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.3-tournament-feel",
+  version: "1.3a-light-finishers",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);

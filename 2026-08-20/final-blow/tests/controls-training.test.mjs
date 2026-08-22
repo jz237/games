@@ -98,15 +98,22 @@ function testChords() {
 }
 
 function testFinishingWindow() {
-  // A fresh single press finishes; lights pick A, heavies pick B.
-  const a = resolveFourButtonInput({ lk: true }, { finishing: true, finishArmed: true });
+  // Only a fresh LP or LK finishes: LP picks A and LK picks B.
+  const a = resolveFourButtonInput({ lp: true }, { finishing: true, finishArmed: true });
   assert.equal(a.final, true);
   assert.equal(a.finisherVariant, 0);
-  const b = resolveFourButtonInput({ hp: true }, { finishing: true, finishArmed: true });
+  const b = resolveFourButtonInput({ lk: true }, { finishing: true, finishArmed: true });
   assert.equal(b.final, true);
   assert.equal(b.finisherVariant, 1);
+  for (const button of ["hp", "hk"]) {
+    const blocked = resolveFourButtonInput({ [button]: true }, { finishing: true, finishArmed: true });
+    assert.equal(blocked.final, false, `${button.toUpperCase()} must not execute a finisher`);
+    assert.equal(blocked.heavy, false, "the finishing window swallows non-finisher attacks");
+  }
+  const chord = resolveFourButtonInput({ lp: true, lk: true }, { finishing: true, finishArmed: true });
+  assert.equal(chord.final, false, "a multi-button chord must not execute a finisher");
   // A held button that never released cannot trigger the finisher.
-  const held = resolveFourButtonInput({ hp: true }, { finishing: true, finishArmed: false });
+  const held = resolveFourButtonInput({ lp: true }, { finishing: true, finishArmed: false });
   assert.equal(held.final, false);
   assert.equal(held.heavy, false, "a disarmed finishing window swallows the press entirely");
   // No press, no finisher.

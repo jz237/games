@@ -1,6 +1,6 @@
-# Final Blow 1.3 four-button controls
+# Final Blow 1.3A four-button controls
 
-Version 1.3 uses the approved classic layout: one directional control plus
+Version 1.3A uses the approved classic layout: one directional control plus
 **LP, HP, LK, HK**. No legacy
 guard, special, super, throw or Final Blow button is required anywhere in the game.
 
@@ -80,10 +80,11 @@ can also take over during the first six frames of a normal it accidentally start
 - The CPU grabs and techs on a per-difficulty profile (`throwTechChance` and
   `grabPressureChance` in `engine/ai.mjs`), and holds a real direction when it does so
   it goes through the same proximity rule a human uses.
-- **Final Blow:** once the finishing prompt appears, any single fresh press of LP, HP,
-  LK or HK executes a finisher. LP or LK selects Finisher A, HP or HK selects
-  Finisher B. The window only arms after every combat button has been released, so
-  the KO-causing attack and held buttons can never trigger a finisher.
+- **Final Blow:** once the finishing prompt appears, one fresh press of **LP** selects
+  Finisher A or one fresh press of **LK** selects Finisher B. HP, HK and multi-button
+  chords do not execute finishers. There is no proximity requirement: LP or LK works
+  from anywhere on the stage. The window only arms after every combat button has
+  been released, so the KO-causing attack and held buttons can never trigger one.
 
 ## Touch
 
@@ -91,8 +92,8 @@ The landscape HUD is an eight-direction movement pad on the left and an LP/HP/LK
 cluster on the right. Punches are the amber top row, kicks the cyan bottom row. The
 button size is derived from the viewport height so the pad fits the 844×390 landscape
 target; left-handed mode mirrors the two clusters. A prompt above the cluster shows
-the super command when Grit is full and `FINISH HIM · ANY BUTTON` during the
-finishing window.
+the super command when Grit is full and `FINISH HIM · LP = A · LK = B · ANY DISTANCE`
+during the finishing window.
 
 ## Autonomous decisions taken for this checkpoint
 
