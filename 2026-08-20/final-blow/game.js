@@ -323,7 +323,7 @@ const balanceAudit = auditFighterBalance(roster.map(({ id }) => getFighterKit(id
 if (balanceAudit.violations.length) console.warn("Final Blow balance guardrail warning", balanceAudit.violations);
 const tournamentAudit = auditTournamentBalance(roster.map(({ id }) => id));
 if (tournamentAudit.violations.length) console.warn("Final Blow tournament audit warning", tournamentAudit.violations);
-const fatalityAudit = auditGraphicFatalities(roster.map(({ id }) => id));
+const fatalityAudit = auditGraphicFatalities(roster);
 if (fatalityAudit.errors.length) console.warn("Final Blow graphic fatality warning", fatalityAudit.errors);
 
 const arcadeBoss = Object.freeze({
@@ -346,7 +346,7 @@ const arcadeBoss = Object.freeze({
 // Each Final Blow is staged as a short, character-specific arcade cinematic.
 // Coordinates are local to the victim: negative X begins behind the attacker,
 // Y is height above the floor, and frame numbers address the 4x4 atlas grammar.
-const finisherScripts = {
+const finisherChoreography = {
   deathblow: {
     combo: "FAULTLINE FIVE",
     duration: 5.35,
@@ -548,6 +548,37 @@ const finisherScripts = {
     ],
   },
 };
+
+// Release 1.8 R-RATED EXECUTIONS: the older sequences read as extended combo
+// reels. Keep their authored poses and camera path, but focus every execution
+// into three deliberate beats: restraint, the fighter's assigned signature
+// special, and one final severing strike. Both fatality variants for a fighter
+// share that assigned special; their profile selects the limb and trap device.
+const finisherScripts = Object.freeze(Object.fromEntries(
+  Object.entries(finisherChoreography).map(([fighterId, script]) => {
+    const fatality = getGraphicFatality(fighterId, 0);
+    const setup = script.impacts[0];
+    const signature = script.impacts.find((impact) => impact.sound === "special" && impact.t > setup.t)
+      || script.impacts.find((impact) => impact.sound === "special")
+      || script.impacts[Math.max(0, script.impacts.length - 2)];
+    const final = script.impacts.find((impact) => impact.final) || script.impacts.at(-1);
+    return [fighterId, Object.freeze({
+      ...script,
+      combo: `${fatality.special} EXECUTION`,
+      signatureSpecial: fatality.special,
+      impacts: Object.freeze([
+        Object.freeze({ ...setup, label: "RESTRAINT LOCK", power: Math.min(setup.power, .5) }),
+        Object.freeze({
+          ...signature,
+          t: Math.min(signature.t, setup.t + .36),
+          label: fatality.special,
+          power: Math.max(signature.power, .92),
+        }),
+        Object.freeze({ ...final, label: `${fatality.special} · LIMB SEVER`, power: Math.max(final.power, 1.48), final: true }),
+      ]),
+    })];
+  }),
+));
 
 const stages = {
   kensington: {
@@ -4030,13 +4061,27 @@ function finisherCinematicCamera(poseZoom = 1.18) {
   };
 }
 
+function fatalityWoundPoint(victim, fatality, direction) {
+  const leg = fatality.limb.endsWith("leg");
+  const side = fatality.limb.startsWith("left") ? -1 : 1;
+  return {
+    x: victim.x + direction * side * (leg ? 18 : 34),
+    y: victim.y - (leg ? 58 : 132),
+  };
+}
+
 function triggerFinisherImpact(finisher, impact) {
   const attacker = state.fighters[finisher.winner];
   const victim = state.fighters[1 - finisher.winner];
   const finalImpact = Boolean(impact.final);
-  const pointX = victim.x - finisher.direction * 12;
-  const pointY = victim.y - (finalImpact ? 108 : 125);
   const gore = state.graphicFatalities;
+  const scriptId = attacker.def.finisherScriptId || attacker.def.id;
+  const fatality = finalImpact && gore ? getGraphicFatality(scriptId, finisher.type) : null;
+  const wound = fatality
+    ? fatalityWoundPoint(victim, fatality, finisher.direction)
+    : { x: victim.x - finisher.direction * 12, y: victim.y - 125 };
+  const pointX = wound.x;
+  const pointY = wound.y;
   const count = Math.round((finalImpact ? 52 : 12) * impact.power * (gore ? 1.35 : 1));
 
   victim.hitFlash = finalImpact ? .22 : .11;
@@ -4093,13 +4138,13 @@ function triggerFinisherImpact(finisher, impact) {
     secondary: attacker.def.color,
   });
   if (finalImpact && gore) {
-    const scriptId = attacker.def.finisherScriptId || attacker.def.id;
-    const fatality = getGraphicFatality(scriptId, finisher.type);
     finisher.fatalityTriggered = true;
     // Time dilation for the killing blow, then a pumping wound. Both are plain
     // numbers on the finisher, so rollback snapshots reproduce them exactly.
     finisher.slowMotionTicks = 42;
-    finisher.arterialFrames = 156;
+    finisher.arterialFrames = 210;
+    finisher.fatalityLimb = fatality.limb;
+    finisher.fatalitySpecial = fatality.special;
     finisher.beatLabel = fatality.title;
     finisher.beatLife = 1.45;
     const decalLife = Math.max(1.4, finisher.script.duration - finisher.elapsed + .8);
@@ -4178,6 +4223,33 @@ function triggerFinisherImpact(finisher, impact) {
       secondary: fatality.palette[1],
       scale: fatality.blood,
     });
+    // One unmistakable complete limb, not an abstract meat fragment. It arcs
+    // out of the signature-special impact, bounces once, and stays in the
+    // aftermath beside its own blood trail for the full cinematic hold.
+    state.effects.push({
+      kind: "severedLimb",
+      profileId: fatality.id,
+      limb: fatality.limb,
+      special: fatality.special,
+      device: fatality.device,
+      x: pointX,
+      y: pointY,
+      vx: finisher.direction * (240 + visualRandom() * 190),
+      vy: -(390 + visualRandom() * 170),
+      gravity: 1080,
+      drag: .988,
+      rotation: visualRandom() * Math.PI * 2,
+      spin: finisher.direction * (7 + visualRandom() * 7),
+      resting: false,
+      bounced: false,
+      life: decalLife,
+      max: decalLife,
+      color: fatality.palette[0],
+      secondary: fatality.palette[1],
+      clothColor: victim.def.color,
+      clothAccent: victim.def.accent,
+      direction: finisher.direction,
+    });
   }
   sound(finalImpact ? "fatal" : impact.sound, attacker);
 }
@@ -4241,16 +4313,19 @@ function updateFinisher(dt) {
   if (finisher.fatalityTriggered && state.graphicFatalities && (finisher.arterialFrames || 0) > 0) {
     finisher.arterialFrames -= 1;
     const pump = 0.5 + 0.5 * Math.abs(Math.sin(state.simulationTick * 0.16));
+    const scriptId = attacker.def.finisherScriptId || attacker.def.id;
+    const fatality = getGraphicFatality(scriptId, finisher.type);
+    const wound = fatalityWoundPoint(victim, fatality, finisher.direction);
     if (state.simulationTick % 2 === 0) {
       const jets = 1 + (pump > 0.82 ? 1 : 0) + (state.performance.particleScale >= 1 ? 1 : 0);
       for (let jet = 0; jet < jets; jet += 1) {
         const vr = visualRandom();
         state.particles.push({
           kind: "arterial",
-          x: victim.x + finisher.direction * (4 + vr * 10),
-          y: victim.y - 44 - vr * 18,
-          vx: finisher.direction * (70 + vr * 310) * pump + (visualRandom() - 0.5) * 90,
-          vy: -(150 + visualRandom() * 400) * pump,
+          x: wound.x + (visualRandom() - .5) * 8,
+          y: wound.y + (visualRandom() - .5) * 7,
+          vx: finisher.direction * (110 + vr * 390) * pump + (visualRandom() - 0.5) * 110,
+          vy: -(190 + visualRandom() * 460) * pump,
           gravity: 1150, drag: 0.985,
           life: 1.5, max: 1.5,
           size: 2 + visualRandom() * 2.6,
@@ -7389,7 +7464,29 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
     }
   }
   state.particles = state.particles.filter((particle) => particle.life > 0);
-  for (const effect of state.effects) effect.life -= dt;
+  for (const effect of state.effects) {
+    effect.life -= dt;
+    if (effect.kind !== "severedLimb" || effect.resting) continue;
+    effect.vy += (effect.gravity || 1080) * dt;
+    effect.x += effect.vx * dt;
+    effect.y += effect.vy * dt;
+    effect.vx *= effect.drag || .988;
+    effect.rotation += effect.spin * dt;
+    const floorY = FLOOR - (effect.limb.endsWith("leg") ? 22 : 16);
+    if (effect.y < floorY || effect.vy <= 0) continue;
+    effect.y = floorY;
+    if (!effect.bounced && effect.vy > 170) {
+      effect.vy *= -.28;
+      effect.vx *= .66;
+      effect.spin *= .58;
+      effect.bounced = true;
+    } else {
+      effect.vy = 0;
+      effect.vx = 0;
+      effect.spin = 0;
+      effect.resting = true;
+    }
+  }
   state.effects = state.effects.filter((effect) => effect.life > 0);
   state.particles = trimVisualBudget(state.particles, state.performance.particleBudget);
   state.effects = trimVisualBudget(state.effects, state.performance.effectBudget);
@@ -8383,6 +8480,33 @@ function drawFatalitySkeleton(size, fatality, pulse) {
   ctx.restore();
 }
 
+function drawFatalityStump(size, fatality, direction) {
+  const leg = fatality.limb.endsWith("leg");
+  const side = fatality.limb.startsWith("left") ? -1 : 1;
+  const x = side * direction * size * (leg ? .14 : .22);
+  const y = -size * (leg ? .29 : .61);
+  const radius = size * (leg ? .055 : .045);
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.translate(x, y);
+  ctx.rotate(side * direction * (leg ? .18 : -.32));
+  ctx.shadowColor = fatality.palette[0];
+  ctx.shadowBlur = 16;
+  ctx.fillStyle = fatality.palette[1];
+  ctx.beginPath();
+  ctx.ellipse(0, 0, radius * 1.24, radius, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = fatality.palette[0];
+  ctx.beginPath();
+  ctx.ellipse(0, 1, radius * .92, radius * .7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ead7b7";
+  ctx.beginPath();
+  ctx.ellipse(0, 0, radius * .21, radius * .18, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawGraphicFatalityVictim(atlas, frame, size, fatality, time) {
   const reveal = fatality.reveal;
   const settle = fatality.settle;
@@ -8508,6 +8632,7 @@ function drawGraphicFatalityVictim(atlas, frame, size, fatality, time) {
   } else {
     whole();
   }
+  drawFatalityStump(size, fatality, direction);
   ctx.restore();
 }
 
@@ -9827,6 +9952,76 @@ function drawFatalityPool(effect, alpha) {
   ctx.restore();
 }
 
+function drawSeveredLimb(effect, alpha) {
+  const leg = effect.limb.endsWith("leg");
+  const length = leg ? 92 : 72;
+  const thickness = leg ? 30 : 23;
+  ctx.save();
+  ctx.rotate(effect.rotation || 0);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = Math.min(1, alpha * 4);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.shadowColor = "rgba(20,0,4,.72)";
+  ctx.shadowBlur = 8;
+
+  // Clothing shell and exposed flesh make the silhouette read instantly as a
+  // complete arm/leg rather than one more irregular gore particle.
+  ctx.strokeStyle = effect.clothColor;
+  ctx.lineWidth = thickness;
+  ctx.beginPath();
+  ctx.moveTo(-length * .36, 0);
+  ctx.lineTo(length * .28, leg ? 6 : -3);
+  ctx.stroke();
+  ctx.strokeStyle = effect.clothAccent;
+  ctx.lineWidth = Math.max(5, thickness * .22);
+  ctx.beginPath();
+  ctx.moveTo(-length * .2, -thickness * .24);
+  ctx.lineTo(length * .18, -thickness * .18);
+  ctx.stroke();
+
+  ctx.strokeStyle = "#c98b70";
+  ctx.lineWidth = thickness * .66;
+  ctx.beginPath();
+  ctx.moveTo(length * .18, leg ? 5 : -2);
+  ctx.lineTo(length * .46, leg ? 10 : 2);
+  ctx.stroke();
+
+  // Wet stump, pale bone core, and a boot/hand at the far end.
+  ctx.fillStyle = effect.secondary;
+  ctx.beginPath();
+  ctx.ellipse(-length * .42, 0, thickness * .46, thickness * .36, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = effect.color;
+  ctx.beginPath();
+  ctx.ellipse(-length * .43, 0, thickness * .31, thickness * .24, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ead7b7";
+  ctx.beginPath();
+  ctx.ellipse(-length * .44, 0, thickness * .09, thickness * .08, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (leg) {
+    ctx.fillStyle = "#17191f";
+    ctx.beginPath();
+    ctx.moveTo(length * .37, -thickness * .12);
+    ctx.lineTo(length * .61, -thickness * .08);
+    ctx.lineTo(length * .66, thickness * .24);
+    ctx.lineTo(length * .35, thickness * .28);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    ctx.fillStyle = "#c98b70";
+    ctx.beginPath();
+    ctx.ellipse(length * .52, 2, thickness * .31, thickness * .4, -.18, 0, Math.PI * 2);
+    ctx.fill();
+    for (let finger = 0; finger < 4; finger += 1) {
+      ctx.fillRect(length * (.48 + finger * .035), -thickness * .43, 4, thickness * .28);
+    }
+  }
+  ctx.restore();
+}
+
 function drawCinematicGoreOverlay() {
   if (!state.graphicFatalities || !state.finisher) return;
   const overlays = state.effects.filter((effect) => effect.kind === "lensBlood");
@@ -10339,6 +10534,8 @@ function drawParticles() {
       drawFinisherImpact(effect, alpha);
     } else if (effect.kind === "fatalityPool") {
       drawFatalityPool(effect, alpha);
+    } else if (effect.kind === "severedLimb") {
+      drawSeveredLimb(effect, alpha);
     } else if (effect.kind === "goreShockwave") {
       const growth = 1 - alpha;
       const reach = (54 + growth * 250) * (effect.scale || 1);
@@ -10626,6 +10823,13 @@ function drawFinisherOverlay() {
   ctx.fillStyle = attacker.def.accent;
   ctx.globalAlpha = .82;
   ctx.fillText(`CINEMATIC · ${cinematic.shot.replaceAll("-", " ").toUpperCase()}`, 24, barHeight - 11);
+  if (state.graphicFatalities) {
+    const attackerId = attacker.def.finisherScriptId || attacker.def.id;
+    const fatality = getGraphicFatality(attackerId, finisher.type);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#d90b19";
+    ctx.fillText(`R-RATED EXECUTION · ${fatality.device}`, W * .5, barHeight - 11);
+  }
   if (cinematic.shot === "final-impact") {
     ctx.textAlign = "right";
     ctx.fillStyle = "#fff0df";
@@ -10646,7 +10850,7 @@ function drawFinisherOverlay() {
     ctx.fillText(finisher.beatLabel, W * .5, H - barHeight - 16);
     ctx.font = "900 11px Arial";
     ctx.fillStyle = attacker.def.accent;
-    ctx.fillText(`${finisher.impactIndex} HIT FINAL COMBINATION`, W * .5, H - barHeight + 19);
+    ctx.fillText(`${finisher.impactIndex} / 3 EXECUTION BEATS`, W * .5, H - barHeight + 19);
     ctx.restore();
   }
 
@@ -10671,6 +10875,13 @@ function drawFinisherOverlay() {
     ctx.fillStyle = "#fff0df";
     ctx.strokeText(`${fatality.title} · ${fatality.caption}`, W * .5, H * .3);
     ctx.fillText(`${fatality.title} · ${fatality.caption}`, W * .5, H * .3);
+    ctx.font = "900 14px Arial Narrow, Arial, sans-serif";
+    ctx.lineWidth = 6;
+    ctx.fillStyle = attacker.def.accent;
+    const severed = fatality.limb.replace("-", " ").toUpperCase();
+    const signatureLine = `${fatality.special} · ${fatality.device} · ${severed} SEVERED`;
+    ctx.strokeText(signatureLine, W * .5, H * .345);
+    ctx.fillText(signatureLine, W * .5, H * .345);
     ctx.restore();
   }
 }
@@ -12974,7 +13185,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.7a");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.8");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -13456,7 +13667,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.7a-clean-hits",
+  version: "1.8-r-rated-executions",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -13557,6 +13768,7 @@ window.__finalBlowEngine = {
         genericHitEffects: state.effects.filter((effect) => effect.kind === "hit").length,
         sparkLines: state.particles.filter((particle) => particle.kind === "sparkLine").length,
         arterialSprays: state.particles.filter((particle) => particle.kind === "arterial").length,
+        severedLimbs: state.effects.filter((effect) => effect.kind === "severedLimb").length,
         bloodStains: state.effects.filter((effect) => effect.kind === "bloodDecal" && effect.stain).length,
         fatalitySlowMo: Boolean((state.finisher?.slowMotionTicks || 0) > 0),
         shockRings: state.effects.filter((effect) => effect.kind === "shockRing").length,
@@ -14204,11 +14416,15 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         graphicFatalities: state.graphicFatalities,
         fatalityId: state.finisher?.fatalityId || null,
         fatalityFamily: fatality?.family || null,
+        fatalitySpecial: fatality?.special || null,
+        fatalityLimb: fatality?.limb || null,
+        fatalityDevice: fatality?.device || null,
         fatalityTriggered: Boolean(state.finisher?.fatalityTriggered),
         fatalityPools: state.effects.filter((effect) => effect.kind === "fatalityPool").length,
         goreFragments: state.particles.filter((particle) => particle.kind === "goreFragment").length,
         goreShockwaves: state.effects.filter((effect) => effect.kind === "goreShockwave").length,
         lensBlood: state.effects.filter((effect) => effect.kind === "lensBlood").length,
+        severedLimbs: state.effects.filter((effect) => effect.kind === "severedLimb").length,
         cinematicShot: state.finisher?.cinematicShot || "arena",
         cinematicCuts: state.finisher?.cinematicCuts || 0,
         impactCloseUps: state.finisher?.impactCloseUps || 0,

@@ -1,6 +1,6 @@
-# Final Blow 1.7A four-button controls
+# Final Blow 1.8 four-button controls
 
-Version 1.7A uses the approved classic layout: one directional control plus
+Version 1.8 uses the approved classic layout: one directional control plus
 **LP, HP, LK, HK**. No legacy
 guard, special, super, throw or Final Blow button is required anywhere in the game.
 
@@ -89,6 +89,10 @@ can also take over during the first six frames of a normal it accidentally start
   chords do not execute finishers. There is no proximity requirement: LP or LK works
   from anywhere on the stage. The window only arms after every combat button has
   been released, so the KO-causing attack and held buttons can never trigger one.
+- With **Graphic Fatalities** enabled, every fighter's two finishers are focused
+  three-beat executions: restraint, that fighter's assigned signature special,
+  then one explicit arm or leg sever. A complete limb remains in the aftermath
+  while the wound pumps arterial blood. See `FATALITIES.md` for the full matrix.
 
 ## Touch
 

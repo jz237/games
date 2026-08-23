@@ -9,11 +9,19 @@ export const GRAPHIC_FATALITY_FAMILIES = Object.freeze([
   "implode",
 ]);
 
+export const GRAPHIC_FATALITY_LIMBS = Object.freeze([
+  "left-arm",
+  "right-arm",
+  "left-leg",
+  "right-leg",
+]);
+
 const profile = (values) => Object.freeze({
   blood: 1,
   separation: 1,
   angle: 0,
   pieces: 3,
+  rating: "R",
   palette: Object.freeze(["#d1081c", "#65000d"]),
   ...values,
 });
@@ -24,7 +32,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "faultline-rupture",
       title: "FAULTLINE RUPTURE",
       family: "rupture",
-      caption: "SEISMIC DISMEMBERMENT",
+      caption: "SEISMIC ARM AVULSION",
+      special: "FAULTLINE PUNCH",
+      limb: "right-arm",
+      device: "RUSTED FAULTLINE VISE",
       blood: 1.6,
       separation: 1.2,
       pieces: 4,
@@ -33,7 +44,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "aftershock-burial",
       title: "AFTERSHOCK BURIAL",
       family: "crush",
-      caption: "GROUND-ZERO CRUSH",
+      caption: "GROUND-ZERO LEG SHEAR",
+      special: "FAULTLINE PUNCH",
+      limb: "left-leg",
+      device: "AFTERSHOCK FLOOR LOCK",
       blood: 1.35,
       separation: 0.7,
       pieces: 3,
@@ -44,7 +58,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "neon-guillotine",
       title: "NEON GUILLOTINE",
       family: "slice",
-      caption: "THREE-WAY NEON BISECTION",
+      caption: "NEON ARM GUILLOTINE",
+      special: "NEON PALM",
+      limb: "left-arm",
+      device: "NEON SIGNBLADE STOCKS",
       blood: 1.25,
       separation: 1.1,
       angle: -0.58,
@@ -55,7 +72,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "vinyl-wrap",
       title: "VINYL WRAP",
       family: "slice",
-      caption: "RAZOR-RIBBON DISSECTION",
+      caption: "RAZOR-RIBBON LEG DISSECTION",
+      special: "NEON PALM",
+      limb: "right-leg",
+      device: "VINYL WIRE TOURNIQUET",
       blood: 1.4,
       separation: 1.35,
       angle: 0.42,
@@ -68,7 +88,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "heavy-hand-crush",
       title: "THE HEAVY HAND",
       family: "crush",
-      caption: "FULL-BODY IMPACT",
+      caption: "SOUTH STREET ARM TEAR",
+      special: "SOUTH STREET SLAM",
+      limb: "right-arm",
+      device: "HEAVYWEIGHT CHAIN FRAME",
       blood: 1.35,
       separation: 0.85,
       pieces: 4,
@@ -77,7 +100,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "south-street-shutdown",
       title: "SOUTH STREET SHUTDOWN",
       family: "rupture",
-      caption: "HEAD-TO-HEEL BREAKDOWN",
+      caption: "SOUTH STREET LEG BREAKDOWN",
+      special: "SOUTH STREET SLAM",
+      limb: "left-leg",
+      device: "SOUTH STREET SLAM TABLE",
       blood: 1.5,
       separation: 1.05,
       angle: 0.22,
@@ -89,7 +115,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "full-coverage",
       title: "FULL COVERAGE",
       family: "dissolve",
-      caption: "PAINT-AND-BLOOD DISSOLVE",
+      caption: "PRESSURIZED ARM STRIPPING",
+      special: "PAINT THE TOWN",
+      limb: "left-arm",
+      device: "PAINT-PRESSURE RESTRAINT",
       blood: 1.15,
       separation: 0.9,
       pieces: 6,
@@ -99,7 +128,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "wet-paint",
       title: "WET PAINT",
       family: "dissolve",
-      caption: "LIQUEFIED STREET ART",
+      caption: "LIQUEFIED LEG REMOVAL",
+      special: "PAINT THE TOWN",
+      limb: "right-leg",
+      device: "WET-PAINT CABLE SNARE",
       blood: 1.45,
       separation: 1.1,
       pieces: 8,
@@ -111,7 +143,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "circuit-breaker",
       title: "CIRCUIT BREAKER",
       family: "electrocute",
-      caption: "SKELETAL ARC FLASH",
+      caption: "ARC-FLASH ARM SEVER",
+      special: "BENNY BLITZ",
+      limb: "right-arm",
+      device: "BREAKER-BOX SHACKLES",
       blood: 0.85,
       separation: 0.75,
       pieces: 4,
@@ -121,7 +156,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "last-call-overload",
       title: "BENNY'S LAST CALL",
       family: "electrocute",
-      caption: "TOTAL SYSTEM OVERLOAD",
+      caption: "OVERLOADED LEG DETACHMENT",
+      special: "BENNY BLITZ",
+      limb: "left-leg",
+      device: "LIVE-WIRE ANKLE CLAMP",
       blood: 1.25,
       separation: 1.2,
       pieces: 6,
@@ -133,7 +171,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "golden-send-off",
       title: "GOLDEN SEND-OFF",
       family: "launch",
-      caption: "HEAD OVER THE BACK NINE",
+      caption: "BACK-NINE ARM LAUNCH",
+      special: "GOLDEN SHOCKWAVE",
+      limb: "left-arm",
+      device: "GILDED CLUBHOUSE STOCKS",
       blood: 1.25,
       separation: 1.45,
       angle: -0.32,
@@ -143,7 +184,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "youre-fired",
       title: "YOU'RE FIRED!",
       family: "launch",
-      caption: "CLUBHOUSE DISASSEMBLY",
+      caption: "GOLDEN LEG DISASSEMBLY",
+      special: "GOLDEN SHOCKWAVE",
+      limb: "right-leg",
+      device: "GOLDEN TEE LEG VISE",
       blood: 1.45,
       separation: 1.15,
       angle: 0.5,
@@ -155,7 +199,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "feedback-blackout",
       title: "FEEDBACK BLACKOUT",
       family: "glitch",
-      caption: "SIGNAL-SLICE DELETION",
+      caption: "SIGNAL-SLICE ARM DELETION",
+      special: "BUFFERING",
+      limb: "right-arm",
+      device: "FEEDBACK CABLE RESTRAINT",
       blood: 1.1,
       separation: 1.05,
       pieces: 7,
@@ -165,7 +212,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "internet-meltdown",
       title: "INTERNET MELTDOWN",
       family: "glitch",
-      caption: "CORRUPTED BODY BUFFER",
+      caption: "CORRUPTED LEG BUFFER",
+      special: "BUFFERING",
+      limb: "left-leg",
+      device: "BUFFER-LOCK FLOOR PORT",
       blood: 1.35,
       separation: 1.35,
       pieces: 10,
@@ -177,7 +227,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "mic-drop-implosion",
       title: "MIC DROP",
       family: "implode",
-      caption: "BASS-PRESSURE IMPLOSION",
+      caption: "BASS-PRESSURE ARM IMPLOSION",
+      special: "BASS DROP",
+      limb: "left-arm",
+      device: "MIC-CABLE ARM CINCH",
       blood: 1.2,
       separation: 0.9,
       pieces: 5,
@@ -187,7 +240,10 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       id: "west-staines-massive",
       title: "WEST STAINES MASSIVE",
       family: "implode",
-      caption: "MAXIMUM BASS DETONATION",
+      caption: "MAXIMUM BASS LEG DETONATION",
+      special: "BASS DROP",
+      limb: "right-leg",
+      device: "WEST STAINES BASS CAGE",
       blood: 1.55,
       separation: 1.45,
       pieces: 8,
@@ -213,10 +269,12 @@ export function graphicFatalitySnapshot(fighterId, variant = 0, elapsed = 0, imp
   };
 }
 
-export function auditGraphicFatalities(fighterIds = Object.keys(GRAPHIC_FATALITIES)) {
+export function auditGraphicFatalities(fighters = Object.keys(GRAPHIC_FATALITIES)) {
   const ids = new Set();
   const errors = [];
-  for (const fighterId of fighterIds) {
+  for (const fighter of fighters) {
+    const fighterId = typeof fighter === "string" ? fighter : fighter?.id;
+    const assignedSpecial = typeof fighter === "string" ? null : fighter?.special;
     const profiles = GRAPHIC_FATALITIES[fighterId];
     if (!profiles || profiles.length !== 2) {
       errors.push(`${fighterId}:expected-two-fatalities`);
@@ -227,10 +285,15 @@ export function auditGraphicFatalities(fighterIds = Object.keys(GRAPHIC_FATALITI
       ids.add(fatality.id);
       if (!GRAPHIC_FATALITY_FAMILIES.includes(fatality.family)) errors.push(`${fighterId}:family:${fatality.family}`);
       if (!fatality.title || !fatality.caption) errors.push(`${fighterId}:missing-copy:${fatality.id}`);
+      if (!fatality.special) errors.push(`${fighterId}:missing-special:${fatality.id}`);
+      if (assignedSpecial && fatality.special !== assignedSpecial) errors.push(`${fighterId}:wrong-special:${fatality.id}`);
+      if (!GRAPHIC_FATALITY_LIMBS.includes(fatality.limb)) errors.push(`${fighterId}:limb:${fatality.id}`);
+      if (!fatality.device) errors.push(`${fighterId}:missing-device:${fatality.id}`);
+      if (fatality.rating !== "R") errors.push(`${fighterId}:rating:${fatality.id}`);
       for (const field of ["blood", "separation", "pieces"]) {
         if (!Number.isFinite(fatality[field]) || fatality[field] <= 0) errors.push(`${fighterId}:${fatality.id}:${field}`);
       }
     }
   }
-  return { fighters: fighterIds.length, fatalities: ids.size, errors };
+  return { fighters: fighters.length, fatalities: ids.size, errors };
 }

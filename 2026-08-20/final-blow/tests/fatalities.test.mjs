@@ -3,17 +3,44 @@ import test from "node:test";
 
 import {
   GRAPHIC_FATALITIES,
+  GRAPHIC_FATALITY_LIMBS,
   auditGraphicFatalities,
   getGraphicFatality,
   graphicFatalitySnapshot,
 } from "../engine/fatalities.mjs";
 
 const fighters = ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali"];
+const assignedSpecials = {
+  deathblow: "FAULTLINE PUNCH",
+  jez: "NEON PALM",
+  alan: "SOUTH STREET SLAM",
+  post: "PAINT THE TOWN",
+  benny: "BENNY BLITZ",
+  donald: "GOLDEN SHOCKWAVE",
+  cyraxx: "BUFFERING",
+  ali: "BASS DROP",
+};
 
 test("all eight fighters receive two unique graphic fatalities", () => {
-  const audit = auditGraphicFatalities(fighters);
+  const audit = auditGraphicFatalities(fighters.map((id) => ({ id, special: assignedSpecials[id] })));
   assert.deepEqual(audit, { fighters: 8, fatalities: 16, errors: [] });
   assert.equal(Object.keys(GRAPHIC_FATALITIES).length, 8);
+  for (const fighter of fighters) {
+    for (const fatality of GRAPHIC_FATALITIES[fighter]) {
+      assert.equal(fatality.special, assignedSpecials[fighter], `${fatality.id} must use the assigned special`);
+      assert.ok(GRAPHIC_FATALITY_LIMBS.includes(fatality.limb), `${fatality.id} must sever a complete limb`);
+      assert.ok(fatality.device, `${fatality.id} must have a deliberate restraint device`);
+      assert.equal(fatality.rating, "R");
+    }
+  }
+});
+
+test("the audit rejects a fatality that does not match the assigned special", () => {
+  const audit = auditGraphicFatalities([{ id: "deathblow", special: "WRONG MOVE" }]);
+  assert.deepEqual(audit.errors, [
+    "deathblow:wrong-special:faultline-rupture",
+    "deathblow:wrong-special:aftershock-burial",
+  ]);
 });
 
 test("variant selection is stable and wraps safely", () => {

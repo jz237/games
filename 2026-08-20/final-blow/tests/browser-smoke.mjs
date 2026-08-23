@@ -344,8 +344,8 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.7A/);
-  assert.equal(title.version.text, 'VERSION 1.7A');
+  assert.match(title.build, /1\.8/);
+  assert.equal(title.version.text, 'VERSION 1.8');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -373,7 +373,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.7a-clean-hits');
+  assert.equal(title.engineVersion, '1.8-r-rated-executions');
   assert.deepEqual(title.engine.presentationRules, {
     hitFlashFilter: 'brightness(1.55) saturate(1.12)',
     attackNamePopups: false,
@@ -1876,18 +1876,20 @@ try {
     window.__finalBlowQa.fight('deathblow', 'jez');
     window.__finalBlowQa.stage('kensington');
     window.__finalBlowQa.graphicFatality('deathblow', 0, 0.1);
-    const peak = { arterial: 0, stains: 0, slowMo: false };
+    const peak = { arterial: 0, stains: 0, severedLimbs: 0, slowMo: false };
     for (let frame = 0; frame < 460; frame += 1) {
       window.__finalBlowQa.step(1 / 60);
       const violence = window.__finalBlowEngine.snapshot().violence;
       peak.arterial = Math.max(peak.arterial, violence.arterialSprays);
       peak.stains = Math.max(peak.stains, violence.bloodStains);
+      peak.severedLimbs = Math.max(peak.severedLimbs, violence.severedLimbs);
       if (violence.fatalitySlowMo) peak.slowMo = true;
     }
     return peak;
   })()`);
   assert.ok(goreAftermath.slowMo, "the killing blow must dilate time");
   assert.ok(goreAftermath.arterial > 10, `the wound must pump a sustained spray, peaked at ${goreAftermath.arterial}`);
+  assert.equal(goreAftermath.severedLimbs, 1, "every graphic execution must throw one complete severed limb");
   assert.ok(goreAftermath.stains > 8, `landed droplets must stain the floor, peaked at ${goreAftermath.stains}`);
   assert.ok(goreAftermath.stains <= 56, "the stain layer must respect its cap");
 
@@ -2615,15 +2617,23 @@ try {
   assert.equal(new Set(graphicFatalities.map((fatality) => fatality.fatalityId)).size, 16);
   assert.deepEqual([...new Set(graphicFatalities.map((fatality) => fatality.fatalityFamily))].sort(),
     ['crush', 'dissolve', 'electrocute', 'glitch', 'implode', 'launch', 'rupture', 'slice']);
+  const assignedFatalitySpecials = {
+    deathblow: 'FAULTLINE PUNCH', jez: 'NEON PALM', alan: 'SOUTH STREET SLAM', post: 'PAINT THE TOWN',
+    benny: 'BENNY BLITZ', donald: 'GOLDEN SHOCKWAVE', cyraxx: 'BUFFERING', ali: 'BASS DROP',
+  };
   for (const fatality of graphicFatalities) {
     assert.equal(fatality.graphicFatalities, true);
     assert.equal(fatality.fatalityTriggered, true);
+    assert.equal(fatality.fatalitySpecial, assignedFatalitySpecials[fatality.fighter], `${fatality.fatalityId} must use its fighter's assigned special`);
+    assert.match(fatality.fatalityLimb, /^(left|right)-(arm|leg)$/);
+    assert.ok(fatality.fatalityDevice, `${fatality.fatalityId} must use a deliberate execution restraint`);
+    assert.equal(fatality.severedLimbs, 1, `${fatality.fatalityId} must leave one complete severed limb on screen`);
     assert.ok(fatality.fatalityPools >= 1);
     assert.ok(fatality.goreFragments >= 12, `${fatality.fatalityId} must throw detailed gore fragments`);
     assert.ok(fatality.goreShockwaves >= 1, `${fatality.fatalityId} must render a gore shockwave`);
     assert.ok(fatality.lensBlood >= 1, `${fatality.fatalityId} must splatter the camera lens`);
     assert.ok(fatality.cinematicCuts >= 4, `${fatality.fatalityId} must use multiple cinematic cuts`);
-    assert.ok(fatality.impactCloseUps >= 4, `${fatality.fatalityId} must close in on impact beats`);
+    assert.equal(fatality.impactCloseUps, 3, `${fatality.fatalityId} must stay focused on exactly three execution beats`);
     assert.ok(fatality.peakZoom >= 1.6, `${fatality.fatalityId} must reach an extreme final-impact close-up`);
     assert.equal(fatality.slowMotionHits, 1, `${fatality.fatalityId} must hold exactly one final hit in slow motion`);
     assert.equal(fatality.camera.mode, 'finisher');
@@ -2646,6 +2656,7 @@ try {
   assert.equal(goreOff.status.goreShockwaves, 0);
   assert.equal(goreOff.status.lensBlood, 0);
   assert.equal(goreOff.status.fatalityPools, 0);
+  assert.equal(goreOff.status.severedLimbs, 0);
   assert.ok(goreOff.status.cinematicCuts >= 4, `gore-off cinematic cuts ${goreOff.status.cinematicCuts} at ${goreOff.status.cinematicShot}`);
   assert.ok(goreOff.status.peakZoom >= 1.6);
   assert.equal(goreOff.status.slowMotionHits, 1);
@@ -2789,7 +2800,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-shell-1\.7a/);
+  assert.match(offlineCache.name, /final-blow-shell-1\.8/);
   assert.equal(offlineCache.entries, 20);
   assert.equal(offlineCache.hasIndex, false);
   assert.equal(offlineCache.rootRedirected, false);
@@ -2809,8 +2820,8 @@ try {
     version: window.__finalBlowEngine?.version,
   }))()`);
   assert.match(controlledReload.title, /Final Blow/);
-  assert.match(controlledReload.build, /1\.7A/);
-  assert.equal(controlledReload.version, '1.7a-clean-hits');
+  assert.match(controlledReload.build, /1\.8/);
+  assert.equal(controlledReload.version, '1.8-r-rated-executions');
 
   await client.send('Network.emulateNetworkConditions', {
     offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
@@ -2827,8 +2838,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.7A/);
-  assert.equal(offlineBoot.version, '1.7a-clean-hits');
+  assert.match(offlineBoot.build, /1\.8/);
+  assert.equal(offlineBoot.version, '1.8-r-rated-executions');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2872,7 +2883,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 1.7A');
+  assert.equal(landscape.version.text, 'VERSION 1.8');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);
