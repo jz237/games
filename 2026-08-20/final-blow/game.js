@@ -665,6 +665,25 @@ const musicTracks = [
   { title: "SUBWAY AFTER MIDNIGHT", src: "assets/audio/subway-after-midnight.mp3" },
 ];
 let currentTrackIndex = 0;
+// Release 1.6 "LOUD": stage-matched AUTO music, chosen by vibe/title fit.
+// Four tracks cover six stages for now; each entry may also name a planned
+// track via todoTrack, and stageMusicTrackIndex() automatically prefers that
+// file the moment it appears in musicTracks.
+// TODO(wildwood-boardwalk-night): compose with ElevenLabs when auth returns,
+// append it to musicTracks, and the wildwood mapping below picks it up.
+// TODO(cruise-deck-disco): same deal for the cruise pool deck.
+const STAGE_MUSIC = Object.freeze({
+  kensington: Object.freeze({ title: "PHILLY AFTER DARK" }),
+  vet: Object.freeze({ title: "VET PARKING LOT" }),
+  wildwood: Object.freeze({ title: "NEON SIGN WAR", todoTrack: "wildwood-boardwalk-night" }),
+  buffet: Object.freeze({ title: "NEON SIGN WAR" }),
+  cruise: Object.freeze({ title: "SUBWAY AFTER MIDNIGHT", todoTrack: "cruise-deck-disco" }),
+  janney: Object.freeze({ title: "SUBWAY AFTER MIDNIGHT" }),
+});
+// True while the current track was picked by the stage map in AUTO mode.
+// Render-only latch (never snapshotted): cleared by any manual track move or
+// the auto-jukebox advancing at the end of a song.
+let stageMusicAutoApplied = false;
 const fightMusic = new Audio(musicTracks[currentTrackIndex].src);
 fightMusic.preload = "auto";
 fightMusic.loop = false;
@@ -3518,7 +3537,9 @@ function updateStageUI() {
 function startMatch(resetSet = true) {
   cancelFightAnnouncement();
   if (!(state.mode === "demo" && demoSession.attract)) unlockAudio();
-  if (state.musicChoice === "auto" && state.mode !== "demo") advanceTrack();
+  // Release 1.6: AUTO mode now picks the stage-matched track instead of
+  // cycling the jukebox. Demo/attract keeps whatever was already playing.
+  if (state.mode !== "demo") applyAutoStageMusic();
   resetMusicDuck();
   if (resetSet) {
     state.rounds = [0, 0];
@@ -3580,7 +3601,6 @@ function startOnlineMatch(config) {
   if (!validOnlineMatchConfig(config)) return false;
   cancelFightAnnouncement();
   unlockAudio();
-  if (state.musicChoice === "auto") advanceTrack();
   resetMusicDuck();
   state.mode = "online";
   state.arcadeRun = null;
@@ -3601,6 +3621,8 @@ function startOnlineMatch(config) {
   onlineSession.lobby.remoteReady = false;
   state.picks = config.picks.map((id) => roster.findIndex((fighter) => fighter.id === id));
   state.stage = config.stage;
+  // Release 1.6: online AUTO music maps to the agreed stage (set just above).
+  applyAutoStageMusic();
   state.rounds = [0, 0];
   state.round = 1;
   state.matchSerial += 1;
@@ -3929,6 +3951,8 @@ function triggerFinisherImpact(finisher, impact) {
   finisher.beatLife = finalImpact ? 1.05 : .48;
   finisher.impactCloseUps += 1;
   if (finalImpact) finisher.slowMotionHits += 1;
+  // Release 1.6 LOUD: synth heft under the scripted cinematic impacts too.
+  impactLayerAudio(finalImpact ? "super" : "heavy", { counter: false });
 
   for (let index = 0; index < count; index += 1) {
     const angle = visualRandom() * Math.PI * 2;
@@ -4743,6 +4767,9 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   }
   updateHud();
   sound(fighter.attacking.superMove ? "super" : actionGroup === "throw" ? "throw" : fighter.attacking.kind, fighter);
+  // Release 1.6 LOUD: synthesized pre-impact whoosh layered under the swing
+  // sample (guards + tier gating live inside).
+  impactSwingWhoosh(fighter.attacking);
   return true;
 }
 
@@ -6736,6 +6763,9 @@ function spawnHit(x, y, def, attackKind, blocked, { direction = 1, counter = fal
 
   const tierName = VIOLENCE_TIERS[attackKind] ? attackKind : attackKind === "throw-object" ? "weapon" : "light";
   const profile = violenceTier(tierName);
+  // Release 1.6 LOUD: layered synth components under the hit sample by
+  // violence tier (rollback guard + toggles live inside).
+  impactLayerAudio(tierName, { counter });
   const graphicScale = state.graphicFatalities ? 1 : 0.34;
   const counterScale = counter ? 1.26 : 1;
   const count = Math.max(4, Math.round(profile.particles * graphicScale * counterScale * state.performance.particleScale));
@@ -7178,6 +7208,9 @@ function resetCrowd() {
 // Big moments ripple through the crowd, then it goes back to its routes.
 function stirCrowd(amount = 1) {
   state.crowdReaction = Math.min(1.4, state.crowdReaction + amount);
+  // Release 1.6 LOUD: big stirs also latch a one-shot crowd swell/gasp for
+  // the render-side crowd bus (guarded + tick-deduped inside the latch).
+  if (amount >= 0.5) latchCrowdSwell(amount);
 }
 
 function drawPedestrian(person, layer, x, gait, paused, reaction) {
@@ -10879,6 +10912,10 @@ function draw(time) {
   // before the world transform is built. Runs unconditionally so the camera
   // hard-resets to identity the moment the fight screen goes away.
   updateCinematicCamera(hudDtMs);
+  // Release 1.6 LOUD: ease the render-side audio buses (crowd bed, music
+  // intensity routing, stage ambience) from observed state. Unconditional so
+  // every bed settles/tears down the moment the fight screen goes away.
+  updateAudioPresentation(time, hudDtMs);
   // Wave 7 DPR-sharp baseline: all logical-coordinate code below draws through
   // this transform; identity when sharp render is off (renderDpr === 1).
   ctx.setTransform(renderDpr, 0, 0, renderDpr, 0, 0);
@@ -11170,10 +11207,13 @@ function setTrack(index, restart = true) {
 }
 
 function advanceTrack() {
+  // Any manual/jukebox advance means the track is no longer stage-matched.
+  stageMusicAutoApplied = false;
   setTrack(currentTrackIndex + 1, true);
 }
 
 function chooseMusic(choice) {
+  stageMusicAutoApplied = false;
   state.musicChoice = choice;
   localStorage.setItem("final-blow-music-choice", choice);
   if (choice !== "auto") setTrack(Number(choice), true);
@@ -11181,6 +11221,28 @@ function chooseMusic(choice) {
     updateMusicUi();
     syncMusic();
   }
+}
+
+// Release 1.6: resolve the best-fit track for a stage. Prefers a stage's
+// planned todoTrack if that file has been composed and added to musicTracks;
+// otherwise falls back to the mapped existing track.
+function stageMusicTrackIndex(stageId) {
+  const entry = STAGE_MUSIC[stageId];
+  if (!entry) return currentTrackIndex;
+  if (entry.todoTrack) {
+    const pending = musicTracks.findIndex((track) => track.src.includes(entry.todoTrack));
+    if (pending >= 0) return pending;
+  }
+  const index = musicTracks.findIndex((track) => track.title === entry.title);
+  return index >= 0 ? index : currentTrackIndex;
+}
+
+// Applied at match start when the music mode is AUTO: the header keeps its
+// existing "AUTO · <TRACK>" readout, manual track picking is untouched.
+function applyAutoStageMusic() {
+  if (state.musicChoice !== "auto") return;
+  setTrack(stageMusicTrackIndex(state.stage), true);
+  stageMusicAutoApplied = true;
 }
 
 function syncMusic() {
@@ -11245,6 +11307,9 @@ function unlockAudio() {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (AudioContextClass && !state.audio) state.audio = new AudioContextClass();
     if (state.audio?.state === "suspended") state.audio.resume();
+    // Release 1.6 LOUD: the shared master gain -> limiter bus rides the same
+    // first-gesture lazy-init path, so nothing audio-graph runs at boot.
+    if (state.audio) ensureAudioGraph();
   }
   syncMusic();
 }
@@ -11334,7 +11399,7 @@ function noiseBurst(now, amount, seconds, filterHz) {
   const gain = state.audio.createGain();
   gain.gain.setValueAtTime(Math.max(0.0001, amount * 0.09 * state.sfxVolume), now);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
-  source.connect(filter).connect(gain).connect(state.audio.destination);
+  source.connect(filter).connect(gain).connect(masterBusInput());
   source.start(now);
   source.stop(now + seconds);
 }
@@ -11354,7 +11419,7 @@ function objectSound(styleId) {
   oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, endHz), now + seconds);
   gain.gain.setValueAtTime(Math.max(0.0001, gainValue * state.sfxVolume), now);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
-  oscillator.connect(gain).connect(state.audio.destination);
+  oscillator.connect(gain).connect(masterBusInput());
   oscillator.start(now);
   oscillator.stop(now + seconds);
   noiseBurst(now, noiseAmount, noiseSeconds, filterHz);
@@ -11382,9 +11447,724 @@ function proceduralSound(kind) {
   oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, settings[1]), now + settings[2]);
   gain.gain.setValueAtTime(Math.max(0.0001, settings[4] * state.sfxVolume), now);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + settings[2]);
-  oscillator.connect(gain).connect(state.audio.destination);
+  oscillator.connect(gain).connect(masterBusInput());
   oscillator.start(now);
   oscillator.stop(now + settings[2]);
+}
+
+// ---------------------------------------------------------------------------
+// Release 1.6 "LOUD" — the synthesized soundstage. Everything below is
+// render/presentation audio on the documented superDimLevel pattern:
+// module-level, never snapshotted, never read by the simulation, so rollback
+// checksums are untouched. Sim-path triggers (crowd swells, impact layers)
+// follow the announce() pattern (rollbackResimulating guard + simulationTick
+// dedupe); all parameter jitter comes from presentationHash01 tick hashes so
+// no RNG stream — gameplay or visual — is ever consumed. The whole graph
+// lazy-initialises on the existing unlockAudio() first-user-gesture path:
+// nothing here touches WebAudio at boot, so autoplay policy stays silent.
+// Every synth voice routes through one shared master gain -> compressor
+// limiter, so super + crowd + music + impact stacking cannot clip.
+// ---------------------------------------------------------------------------
+
+// Monotonic one-shot totals on the hudFxDebug pattern, exposed via
+// snapshot().violence. nodesCreated counts every WebAudio node ever built so
+// the leak probe can assert creation stays proportional to events.
+const audioFxDebug = {
+  impactLayers: 0, crowdSwells: 0, ambienceEvents: 0, nodesCreated: 0,
+};
+// Live node bookkeeping for the QA node-graph hook: persistent = currently
+// connected long-lived nodes (master bus, beds, music routing), one-shots =
+// currently sounding envelope voices (decremented by their "ended" events).
+let audioPersistentNodes = 0;
+let audioLiveOneShots = 0;
+let audioGraph = null;
+let sharedNoiseBuffer = null;
+
+function audioContextRunning() {
+  return Boolean(state.audio && state.audio.state === "running");
+}
+
+// Shared master bus: gain headroom trim into a limiter-tuned compressor.
+function ensureAudioGraph() {
+  if (!state.audio) return null;
+  if (!audioGraph) {
+    const master = state.audio.createGain();
+    master.gain.value = 0.92;
+    const limiter = state.audio.createDynamicsCompressor();
+    limiter.threshold.value = -12;
+    limiter.knee.value = 6;
+    limiter.ratio.value = 12;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.24;
+    master.connect(limiter).connect(state.audio.destination);
+    audioGraph = { master, limiter };
+    audioPersistentNodes += 2;
+    audioFxDebug.nodesCreated += 2;
+  }
+  return audioGraph;
+}
+
+function masterBusInput() {
+  return ensureAudioGraph()?.master || state.audio?.destination || null;
+}
+
+// One shared deterministic pseudo-noise loop (the noiseBurst hash formula):
+// every noise layer and burst reads this buffer through its own filter, so a
+// full soundstage costs one buffer allocation.
+function ambientNoiseBuffer() {
+  if (!state.audio) return null;
+  if (!sharedNoiseBuffer || sharedNoiseBuffer.sampleRate !== state.audio.sampleRate) {
+    const frames = Math.max(1, Math.floor(state.audio.sampleRate * 1.7));
+    const buffer = state.audio.createBuffer(1, frames, state.audio.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let index = 0; index < frames; index += 1) {
+      const value = Math.sin(index * 12.9898 + 78.233) * 43758.5453;
+      data[index] = ((value - Math.floor(value)) * 2 - 1) * 0.86;
+    }
+    sharedNoiseBuffer = buffer;
+  }
+  return sharedNoiseBuffer;
+}
+
+function trackOneShot(source, extraNodes = 0) {
+  audioLiveOneShots += 1;
+  audioFxDebug.nodesCreated += 1 + extraNodes;
+  source.addEventListener("ended", () => {
+    audioLiveOneShots = Math.max(0, audioLiveOneShots - 1);
+  }, { once: true });
+}
+
+// Filtered-noise envelope voice. Only ever builds nodes on a running context
+// so a suspended (headless/stub) context can never accumulate zombie sources.
+function synthNoiseShot({
+  delay = 0, seconds, filterType = "lowpass", freq, freqEnd = 0, q = 0.8,
+  peak, attack = 0.004, rate = 1,
+} = {}) {
+  if (!audioContextRunning() || !(peak > 0) || !(seconds > 0)) return;
+  const bus = masterBusInput();
+  const buffer = ambientNoiseBuffer();
+  if (!bus || !buffer) return;
+  const now = state.audio.currentTime + delay;
+  const source = state.audio.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  source.playbackRate.value = rate;
+  const filter = state.audio.createBiquadFilter();
+  filter.type = filterType;
+  filter.Q.value = q;
+  filter.frequency.setValueAtTime(Math.max(40, freq), now);
+  if (freqEnd > 0) filter.frequency.exponentialRampToValueAtTime(Math.max(40, freqEnd), now + seconds);
+  const gain = state.audio.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.linearRampToValueAtTime(Math.max(0.0002, peak), now + Math.min(attack, seconds * 0.5));
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
+  source.connect(filter).connect(gain).connect(bus);
+  source.start(now);
+  source.stop(now + seconds + 0.03);
+  trackOneShot(source, 2);
+}
+
+// Oscillator envelope voice with optional filter and vibrato LFO.
+function synthToneShot({
+  delay = 0, seconds, wave = "sine", from, to = 0, peak, attack = 0.003,
+  filterType = "", freq = 0, q = 1, vibratoRate = 0, vibratoDepth = 0,
+} = {}) {
+  if (!audioContextRunning() || !(peak > 0) || !(seconds > 0)) return;
+  const bus = masterBusInput();
+  if (!bus) return;
+  const now = state.audio.currentTime + delay;
+  const oscillator = state.audio.createOscillator();
+  oscillator.type = wave;
+  oscillator.frequency.setValueAtTime(Math.max(20, from), now);
+  if (to > 0) oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, to), now + seconds);
+  const gain = state.audio.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.linearRampToValueAtTime(Math.max(0.0002, peak), now + Math.min(attack, seconds * 0.5));
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
+  let head = oscillator;
+  let extraNodes = 1;
+  if (filterType) {
+    const filter = state.audio.createBiquadFilter();
+    filter.type = filterType;
+    filter.frequency.setValueAtTime(Math.max(40, freq), now);
+    filter.Q.value = q;
+    oscillator.connect(filter);
+    head = filter;
+    extraNodes += 1;
+  }
+  if (vibratoRate > 0) {
+    const lfo = state.audio.createOscillator();
+    lfo.frequency.value = vibratoRate;
+    const lfoGain = state.audio.createGain();
+    lfoGain.gain.value = vibratoDepth;
+    lfo.connect(lfoGain).connect(oscillator.frequency);
+    lfo.start(now);
+    lfo.stop(now + seconds + 0.03);
+    extraNodes += 2;
+  }
+  head.connect(gain).connect(bus);
+  oscillator.start(now);
+  oscillator.stop(now + seconds + 0.03);
+  trackOneShot(oscillator, extraNodes);
+}
+
+// --- Feature: layered impact audio by VIOLENCE_TIERS class -----------------
+
+const IMPACT_LAYER_TIERS = Object.freeze({
+  light: Object.freeze({ thump: 0.034, thumpHz: 150, seconds: 0.09, noise: 0 }),
+  heavy: Object.freeze({ thump: 0.07, thumpHz: 118, seconds: 0.15, noise: 0.032 }),
+  special: Object.freeze({ thump: 0.085, thumpHz: 102, seconds: 0.19, noise: 0.04 }),
+  throw: Object.freeze({ thump: 0.078, thumpHz: 95, seconds: 0.19, noise: 0.036 }),
+  weapon: Object.freeze({ thump: 0.072, thumpHz: 110, seconds: 0.17, noise: 0.034, ring: true }),
+  super: Object.freeze({ thump: 0.11, thumpHz: 86, seconds: 0.25, noise: 0.05 }),
+});
+
+// Shared guard for every sim-path synth trigger: the announce() pattern plus
+// the exact toggle/attract gating sound() applies to sampled SFX.
+function impactAudioAllowed() {
+  if (rollbackResimulating) return false;
+  if (!$("#soundToggle").checked || state.sfxVolume <= 0) return false;
+  if (demoSession.attract && !state.audioUnlocked) return false;
+  return true;
+}
+
+function impactLayerAudio(tierName, { counter = false } = {}) {
+  if (!impactAudioAllowed()) return;
+  const profile = IMPACT_LAYER_TIERS[tierName] || IMPACT_LAYER_TIERS.light;
+  audioFxDebug.impactLayers += 1;
+  // Tick-hash jitter (never an RNG stream) so repeated hits never sound
+  // machine-identical; the layer serial keeps same-tick multi-hits distinct.
+  const jitter = (salt) => presentationHash01(state.simulationTick, audioFxDebug.impactLayers, salt) - 0.5;
+  const level = state.sfxVolume;
+  // Low sine sub-thump under every clean hit, bigger for the heavy tiers.
+  synthToneShot({
+    wave: "sine",
+    from: profile.thumpHz * (1 + jitter(3) * 0.18),
+    to: 36,
+    seconds: profile.seconds * (1 + jitter(5) * 0.14),
+    peak: profile.thump * level,
+    attack: 0.004,
+  });
+  if (profile.noise > 0) {
+    synthNoiseShot({
+      seconds: profile.seconds * 0.8,
+      filterType: "lowpass",
+      freq: 900 * (1 + jitter(7) * 0.3),
+      freqEnd: 160,
+      peak: profile.noise * level,
+    });
+  }
+  if (counter) {
+    // Sharper crunch transient so counter hits snap out of the mix.
+    synthNoiseShot({
+      seconds: 0.055,
+      filterType: "highpass",
+      freq: 1500 * (1 + jitter(11) * 0.2),
+      q: 0.9,
+      peak: 0.05 * level,
+      attack: 0.002,
+    });
+  }
+  if (profile.ring) {
+    // Inharmonic partial pair (1 : 1.5024) reads as struck metal.
+    const ringHz = 1160 * (1 + jitter(13) * 0.12);
+    synthToneShot({
+      wave: "triangle", from: ringHz, seconds: 0.42, peak: 0.026 * level,
+      attack: 0.002, filterType: "bandpass", freq: ringHz, q: 6,
+    });
+    synthToneShot({
+      wave: "triangle", from: ringHz * 1.5024, seconds: 0.3, peak: 0.017 * level,
+      attack: 0.002, filterType: "bandpass", freq: ringHz * 1.5024, q: 6,
+    });
+  }
+}
+
+// Pre-impact whoosh layered under the swing sample at attack start.
+function impactSwingWhoosh(attack) {
+  if (!attack || !impactAudioAllowed()) return;
+  const kind = attack.superMove ? "super" : attack.kind;
+  const size = kind === "super" ? 1 : kind === "special" ? 0.8 : kind === "heavy" ? 0.62 : 0;
+  if (!size) return;
+  const jitter = presentationHash01(state.simulationTick, 29) - 0.5;
+  synthNoiseShot({
+    seconds: 0.16 + size * 0.08,
+    filterType: "bandpass",
+    freq: 340 * (1 + jitter * 0.3),
+    freqEnd: 1500 + size * 900,
+    q: 1.4,
+    peak: (0.016 + size * 0.02) * state.sfxVolume,
+    attack: 0.03,
+  });
+}
+
+// --- Feature: crowd audio bus driven by state.crowdReaction ----------------
+
+// One chatter-bed voicing per crowd variant (engine/crowd.mjs). rate warps the
+// shared noise loop so no two variants share a texture.
+const CROWD_AUDIO_PROFILES = Object.freeze({
+  street: Object.freeze({ base: 0.013, react: 0.042, filterType: "lowpass", filterBase: 430, filterReact: 950, rate: 0.72, swell: "gasp" }),
+  tailgate: Object.freeze({ base: 0.021, react: 0.062, filterType: "lowpass", filterBase: 620, filterReact: 1500, rate: 0.86, swell: "roar" }),
+  boardwalk: Object.freeze({ base: 0.011, react: 0.034, filterType: "lowpass", filterBase: 520, filterReact: 1050, rate: 0.78, swell: "gasp" }),
+  buffet: Object.freeze({ base: 0.012, react: 0.032, filterType: "bandpass", filterBase: 1150, filterReact: 850, rate: 1.06, swell: "clatter" }),
+  poolside: Object.freeze({ base: 0.017, react: 0.055, filterType: "lowpass", filterBase: 780, filterReact: 1450, rate: 0.94, swell: "whoop" }),
+  vacantLot: Object.freeze({ base: 0.005, react: 0.015, filterType: "lowpass", filterBase: 300, filterReact: 480, rate: 0.6, swell: "echo" }),
+});
+
+// Eased applied bus level (0-1), exposed as snapshot().violence.crowdBusLevel.
+let crowdAudioLevel = 0;
+let crowdBed = null;
+// One-shot swell latch fed by stirCrowd (sim path, guarded + tick-deduped).
+let crowdSwellPending = 0;
+let crowdSwellTick = -1;
+// Post-fatal-blow bed swell and its render-side edge observer.
+let crowdKillSwell = 0;
+let crowdObservedKillHits = 0;
+
+function latchCrowdSwell(amount) {
+  if (rollbackResimulating || crowdSwellTick === state.simulationTick) return;
+  crowdSwellTick = state.simulationTick;
+  crowdSwellPending = Math.max(crowdSwellPending, Math.min(1.6, amount));
+}
+
+function buildCrowdBed(variant) {
+  const profile = CROWD_AUDIO_PROFILES[variant] || CROWD_AUDIO_PROFILES.street;
+  const bus = masterBusInput();
+  const buffer = ambientNoiseBuffer();
+  if (!bus || !buffer) return null;
+  const source = state.audio.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  source.playbackRate.value = profile.rate;
+  const filter = state.audio.createBiquadFilter();
+  filter.type = profile.filterType;
+  filter.frequency.value = profile.filterBase;
+  filter.Q.value = 0.9;
+  const gain = state.audio.createGain();
+  gain.gain.value = 0.0001;
+  source.connect(filter).connect(gain).connect(bus);
+  source.start();
+  audioPersistentNodes += 3;
+  audioFxDebug.nodesCreated += 3;
+  return { variant, profile, source, filter, gain };
+}
+
+function teardownCrowdBed() {
+  if (!crowdBed) return;
+  try { crowdBed.source.stop(); } catch { /* already stopped */ }
+  crowdBed.source.disconnect();
+  crowdBed.filter.disconnect();
+  crowdBed.gain.disconnect();
+  audioPersistentNodes = Math.max(0, audioPersistentNodes - 3);
+  crowdBed = null;
+}
+
+function playCrowdSwell(variant, amount) {
+  const profile = CROWD_AUDIO_PROFILES[variant] || CROWD_AUDIO_PROFILES.street;
+  const strength = clamp(amount / 1.4, 0.25, 1.15);
+  const level = state.sfxVolume;
+  const jitter = presentationHash01(state.simulationTick, audioFxDebug.crowdSwells) - 0.5;
+  switch (profile.swell) {
+    case "roar":
+      synthNoiseShot({ seconds: 0.9 + strength * 0.5, filterType: "lowpass", freq: 700 + strength * 700, freqEnd: 420, peak: 0.05 * strength * level, attack: 0.16 });
+      break;
+    case "whoop":
+      synthNoiseShot({ seconds: 0.6 + strength * 0.3, filterType: "bandpass", freq: 900, q: 1.2, peak: 0.038 * strength * level, attack: 0.1 });
+      synthToneShot({ wave: "triangle", from: 520 * (1 + jitter * 0.2), to: 980, seconds: 0.34, peak: 0.014 * strength * level, attack: 0.05, filterType: "bandpass", freq: 800, q: 2 });
+      break;
+    case "clatter":
+      synthNoiseShot({ seconds: 0.5, filterType: "bandpass", freq: 1400, q: 1.4, peak: 0.03 * strength * level, attack: 0.06 });
+      synthToneShot({ wave: "triangle", from: 2300 * (1 + jitter * 0.3), seconds: 0.16, peak: 0.012 * strength * level, attack: 0.002, filterType: "bandpass", freq: 2300, q: 7, delay: 0.09 });
+      break;
+    case "echo":
+      // Janney: one sparse gasp and its late slap-back off the rowhomes.
+      synthNoiseShot({ seconds: 0.42, filterType: "bandpass", freq: 420, q: 1.6, peak: 0.02 * strength * level, attack: 0.05 });
+      synthNoiseShot({ seconds: 0.36, filterType: "bandpass", freq: 380, q: 1.6, peak: 0.009 * strength * level, attack: 0.05, delay: 0.24 });
+      break;
+    default:
+      synthNoiseShot({ seconds: 0.55 + strength * 0.3, filterType: "lowpass", freq: 520 + strength * 520, freqEnd: 300, peak: 0.04 * strength * level, attack: 0.12 });
+  }
+}
+
+function updateCrowdAudio(dt) {
+  const fightLive = state.screen === "fight" && state.fighters.length === 2;
+  const soundOn = Boolean($("#soundToggle")?.checked) && state.sfxVolume > 0;
+  // Fatality cinematics: the bed drops away pre-kill so the gore soundscape
+  // owns the frame, then swells on the killing blow. The kill is observed
+  // render-side via finisher.slowMotionHits (set for gore on or off).
+  const finisherHits = state.finisher?.slowMotionHits || 0;
+  if (fightLive && finisherHits > crowdObservedKillHits) {
+    crowdKillSwell = 1;
+    crowdSwellPending = Math.max(crowdSwellPending, 1.5);
+  }
+  crowdObservedKillHits = state.finisher ? finisherHits : 0;
+  crowdKillSwell = Math.max(0, crowdKillSwell - dt / 2.6);
+  const preKillDuck = state.finisher && finisherHits === 0 ? 0.12 : 1;
+  const target = fightLive
+    ? clamp(clamp(state.crowdReaction / 1.4, 0, 1) * preKillDuck + crowdKillSwell * 0.8, 0, 1)
+    : 0;
+  // Fast attack, slow decay — the crowd catches its breath rather than
+  // snapping quiet.
+  const tau = target > crowdAudioLevel ? 0.14 : 0.85;
+  crowdAudioLevel += (target - crowdAudioLevel) * (1 - Math.exp(-dt / tau));
+  if (crowdAudioLevel < 0.0005) crowdAudioLevel = 0;
+  // One-shot swell/gasp bursts latched by stirCrowd spikes and the kill.
+  if (crowdSwellPending > 0) {
+    const amount = crowdSwellPending;
+    crowdSwellPending = 0;
+    if (fightLive && soundOn) {
+      audioFxDebug.crowdSwells += 1;
+      playCrowdSwell(state.crowd?.variant || "street", amount);
+    }
+  }
+  const wantBed = fightLive && soundOn && audioContextRunning();
+  if (wantBed) {
+    const variant = state.crowd?.variant || "street";
+    if (crowdBed && crowdBed.variant !== variant) teardownCrowdBed();
+    if (!crowdBed) crowdBed = buildCrowdBed(variant);
+    if (crowdBed) {
+      const profile = crowdBed.profile;
+      const pauseDuck = state.paused ? 0.35 : 1;
+      const now = state.audio.currentTime;
+      crowdBed.gain.gain.setTargetAtTime(
+        Math.max(0.0001, (profile.base + crowdAudioLevel * profile.react) * state.sfxVolume * pauseDuck),
+        now,
+        0.09,
+      );
+      crowdBed.filter.frequency.setTargetAtTime(profile.filterBase + crowdAudioLevel * profile.filterReact, now, 0.12);
+    }
+  } else if (crowdBed) teardownCrowdBed();
+}
+
+// --- Feature: dynamic music intensity via WebAudio routing -----------------
+
+// Eased intensity (0-1), exposed as snapshot().violence.musicIntensity. Kept
+// state-side so QA can read it even where the audio stack is stubbed.
+let musicIntensityLevel = 0.45;
+// null until routed | "failed" if the element tap ever throws | node bundle.
+let musicRouting = null;
+let musicDuckPulse = 0;
+let musicObservedSuperDim = 0;
+let musicObservedFinishPhase = false;
+
+function ensureMusicRouting() {
+  if (musicRouting || !audioContextRunning()) return musicRouting;
+  const bus = masterBusInput();
+  if (!bus) return null;
+  try {
+    // One-time tap: after this the element's output exists only inside the
+    // graph. Element volume (musicBaseVolume * duck * settings) still applies
+    // upstream, so duckMusic()/syncMusic() keep working exactly as before —
+    // this stage only adds the intensity filter + presence gain.
+    const source = state.audio.createMediaElementSource(fightMusic);
+    const filter = state.audio.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 5200;
+    filter.Q.value = 0.55;
+    const presence = state.audio.createGain();
+    presence.gain.value = 1;
+    source.connect(filter).connect(presence).connect(bus);
+    musicRouting = { source, filter, presence };
+    audioPersistentNodes += 3;
+    audioFxDebug.nodesCreated += 3;
+  } catch {
+    // Element already claimed or the context refused the tap — leave the
+    // element's direct output alone rather than killing the music.
+    musicRouting = "failed";
+  }
+  return musicRouting;
+}
+
+function updateMusicIntensity(dt) {
+  const fightLive = state.screen === "fight" && state.fighters.length === 2;
+  let target = 0.45;
+  let tau = 0.4;
+  if (fightLive) {
+    const lowHealth = state.fighters.some((fighter) => fighter.health <= 30);
+    const matchPoint = state.rounds[0] >= 1 || state.rounds[1] >= 1;
+    if (lowHealth) target = 0.8;
+    else if (matchPoint) target = 0.62;
+    if (superDimLevel > 0.3 || state.phase === "finish") target = 1;
+    if (state.phase === "roundover" && !state.finisher) target = 0.35;
+    if (state.finisher) {
+      // Fatality cinematic: heavy duck under the gore mix, fast.
+      target = 0.12;
+      tau = 0.16;
+    }
+  }
+  // Brief duck on the super-flash / FINISH THEM edge, then the full-open ride.
+  const finishNow = fightLive && state.phase === "finish";
+  if ((superDimLevel > 0.25 && musicObservedSuperDim <= 0.25) || (finishNow && !musicObservedFinishPhase)) {
+    musicDuckPulse = 1;
+  }
+  musicObservedSuperDim = superDimLevel;
+  musicObservedFinishPhase = finishNow;
+  musicDuckPulse = Math.max(0, musicDuckPulse - dt / 0.33);
+  musicIntensityLevel += (target - musicIntensityLevel) * (1 - Math.exp(-dt / tau));
+  if (!$("#musicToggle")?.checked) return;
+  const routing = ensureMusicRouting();
+  if (!routing || routing === "failed") return;
+  const now = state.audio.currentTime;
+  const open = clamp(musicIntensityLevel, 0, 1);
+  // setTargetAtTime on eased levels: two smoothing stages, zero zipper noise.
+  routing.filter.frequency.setTargetAtTime(650 + 16800 * open ** 1.7, now, 0.09);
+  routing.presence.gain.setTargetAtTime(
+    clamp((0.82 + 0.44 * open) * (1 - 0.55 * musicDuckPulse), 0.05, 1.3),
+    now,
+    0.08,
+  );
+}
+
+// --- Feature: per-stage ambience beds --------------------------------------
+
+// One shared ambience engine, per-stage parameter tables. Layers are
+// persistent loops (noise/tone + filter + gain + optional gain-LFO); events
+// are sparse one-shots on their own render-clock cadence. Everything sits far
+// below the music and ducks with it during cinematics.
+const AMBIENCE_PROFILES = Object.freeze({
+  kensington: Object.freeze({
+    layers: Object.freeze([
+      // Distant traffic wash.
+      Object.freeze({ kind: "noise", rate: 0.6, filterType: "lowpass", filterFreq: 280, q: 0.7, gain: 0.02, lfoRate: 0.07, lfoDepth: 0.3 }),
+      // Substation hum under the el structure.
+      Object.freeze({ kind: "tone", wave: "sawtooth", freq: 51, filterType: "lowpass", filterFreq: 130, q: 0.7, gain: 0.006, lfoRate: 0.11, lfoDepth: 0.25 }),
+      // El-train rumble; gain is driven by the train visual's x position.
+      Object.freeze({ kind: "noise", rate: 0.42, filterType: "bandpass", filterFreq: 105, q: 1.2, gain: 0.028, train: true }),
+    ]),
+    events: Object.freeze([]),
+  }),
+  vet: Object.freeze({
+    layers: Object.freeze([
+      Object.freeze({ kind: "noise", rate: 0.66, filterType: "lowpass", filterFreq: 240, q: 0.7, gain: 0.02, lfoRate: 0.05, lfoDepth: 0.5 }),
+    ]),
+    events: Object.freeze([Object.freeze({ kind: "stadiumSwell", min: 13, max: 30 })]),
+  }),
+  wildwood: Object.freeze({
+    layers: Object.freeze([
+      // Surf, deep slow LFO.
+      Object.freeze({ kind: "noise", rate: 0.7, filterType: "lowpass", filterFreq: 430, q: 0.6, gain: 0.024, lfoRate: 0.09, lfoDepth: 0.7 }),
+      // Faint carousel tone drifting on the wind.
+      Object.freeze({ kind: "tone", wave: "triangle", freq: 392, filterType: "bandpass", filterFreq: 420, q: 2.4, gain: 0.0035, lfoRate: 0.4, lfoDepth: 0.5, vibratoRate: 5.2, vibratoDepth: 4 }),
+    ]),
+    events: Object.freeze([Object.freeze({ kind: "boardwalkCreak", min: 7, max: 18 })]),
+  }),
+  buffet: Object.freeze({
+    layers: Object.freeze([
+      Object.freeze({ kind: "tone", wave: "sine", freq: 92, gain: 0.008, lfoRate: 0.9, lfoDepth: 0.12 }),
+      Object.freeze({ kind: "noise", rate: 0.55, filterType: "lowpass", filterFreq: 190, q: 0.7, gain: 0.012, lfoRate: 0.06, lfoDepth: 0.2 }),
+    ]),
+    events: Object.freeze([Object.freeze({ kind: "kitchenClatter", min: 2.6, max: 7.5 })]),
+  }),
+  cruise: Object.freeze({
+    layers: Object.freeze([
+      // Engine drone from decks below.
+      Object.freeze({ kind: "tone", wave: "sawtooth", freq: 46, filterType: "lowpass", filterFreq: 120, q: 0.8, gain: 0.01, lfoRate: 0.16, lfoDepth: 0.18 }),
+      // Pool water lap.
+      Object.freeze({ kind: "noise", rate: 0.8, filterType: "lowpass", filterFreq: 520, q: 0.6, gain: 0.014, lfoRate: 0.27, lfoDepth: 0.75 }),
+    ]),
+    events: Object.freeze([Object.freeze({ kind: "gullCry", min: 8, max: 21 })]),
+  }),
+  janney: Object.freeze({
+    layers: Object.freeze([
+      Object.freeze({ kind: "noise", rate: 0.62, filterType: "bandpass", filterFreq: 330, q: 1.1, gain: 0.018, lfoRate: 0.08, lfoDepth: 0.65 }),
+    ]),
+    events: Object.freeze([Object.freeze({ kind: "chainRattle", min: 6, max: 16 })]),
+  }),
+});
+
+let ambienceRig = null;
+// State-side engagement flag, exposed as snapshot().violence.ambienceActive.
+let ambienceEngaged = false;
+let ambienceNextEventAt = 0;
+let ambienceEventSerial = 0;
+
+function buildAmbienceLayer(layerSpec, master) {
+  const sources = [];
+  let nodeCount = 0;
+  let head;
+  if (layerSpec.kind === "noise") {
+    const source = state.audio.createBufferSource();
+    source.buffer = ambientNoiseBuffer();
+    source.loop = true;
+    source.playbackRate.value = layerSpec.rate || 1;
+    sources.push(source);
+    nodeCount += 1;
+    head = source;
+  } else {
+    const oscillator = state.audio.createOscillator();
+    oscillator.type = layerSpec.wave || "sine";
+    oscillator.frequency.value = layerSpec.freq || 220;
+    sources.push(oscillator);
+    nodeCount += 1;
+    if (layerSpec.vibratoRate) {
+      const vibrato = state.audio.createOscillator();
+      vibrato.frequency.value = layerSpec.vibratoRate;
+      const vibratoGain = state.audio.createGain();
+      vibratoGain.gain.value = layerSpec.vibratoDepth || 1;
+      vibrato.connect(vibratoGain).connect(oscillator.frequency);
+      sources.push(vibrato);
+      nodeCount += 2;
+    }
+    head = oscillator;
+  }
+  if (layerSpec.filterType) {
+    const filter = state.audio.createBiquadFilter();
+    filter.type = layerSpec.filterType;
+    filter.frequency.value = layerSpec.filterFreq || 400;
+    filter.Q.value = layerSpec.q ?? 0.8;
+    head.connect(filter);
+    head = filter;
+    nodeCount += 1;
+  }
+  const gain = state.audio.createGain();
+  gain.gain.value = layerSpec.train ? 0.0001 : layerSpec.gain;
+  nodeCount += 1;
+  if (layerSpec.lfoRate) {
+    const lfo = state.audio.createOscillator();
+    lfo.frequency.value = layerSpec.lfoRate;
+    const lfoGain = state.audio.createGain();
+    lfoGain.gain.value = layerSpec.gain * (layerSpec.lfoDepth || 0.3);
+    lfo.connect(lfoGain).connect(gain.gain);
+    sources.push(lfo);
+    nodeCount += 2;
+  }
+  head.connect(gain).connect(master);
+  for (const source of sources) source.start();
+  return { spec: layerSpec, gain, sources, nodeCount };
+}
+
+function buildAmbienceRig(stageId) {
+  const profile = AMBIENCE_PROFILES[stageId];
+  const bus = masterBusInput();
+  if (!profile || !bus || !ambientNoiseBuffer()) return null;
+  const master = state.audio.createGain();
+  master.gain.value = 0.0001;
+  master.connect(bus);
+  let nodeCount = 1;
+  const layers = [];
+  for (const layerSpec of profile.layers) {
+    const layer = buildAmbienceLayer(layerSpec, master);
+    nodeCount += layer.nodeCount;
+    layers.push(layer);
+  }
+  audioPersistentNodes += nodeCount;
+  audioFxDebug.nodesCreated += nodeCount;
+  return { stage: stageId, master, layers, nodeCount };
+}
+
+function teardownAmbienceRig() {
+  if (!ambienceRig) return;
+  for (const layer of ambienceRig.layers) {
+    for (const source of layer.sources) {
+      try { source.stop(); } catch { /* never started */ }
+    }
+    layer.gain.disconnect();
+  }
+  ambienceRig.master.disconnect();
+  audioPersistentNodes = Math.max(0, audioPersistentNodes - ambienceRig.nodeCount);
+  ambienceRig = null;
+}
+
+function playAmbienceEvent(kind) {
+  const level = state.sfxVolume;
+  const hash = (salt) => presentationHash01(ambienceEventSerial, salt);
+  switch (kind) {
+    case "stadiumSwell":
+      synthNoiseShot({ seconds: 2.6 + hash(3) * 1.6, filterType: "bandpass", freq: 480 + hash(5) * 220, q: 0.9, peak: 0.014 * level, attack: 1.1 });
+      break;
+    case "boardwalkCreak":
+      synthToneShot({ wave: "sawtooth", from: 150 * (0.85 + hash(3) * 0.4), to: 68, seconds: 0.4, peak: 0.007 * level, attack: 0.06, filterType: "lowpass", freq: 620, q: 1.2 });
+      break;
+    case "kitchenClatter": {
+      const ticks = 2 + Math.floor(hash(3) * 3);
+      for (let index = 0; index < ticks; index += 1) {
+        synthNoiseShot({ delay: index * (0.05 + hash(7 + index) * 0.07), seconds: 0.035, filterType: "highpass", freq: 2300, peak: 0.011 * level, attack: 0.002 });
+      }
+      synthToneShot({ wave: "triangle", from: 2600 * (0.9 + hash(11) * 0.3), seconds: 0.22, peak: 0.006 * level, attack: 0.002, filterType: "bandpass", freq: 2600, q: 8, delay: 0.04 });
+      break;
+    }
+    case "gullCry": {
+      const cries = 1 + (hash(3) < 0.4 ? 1 : 0);
+      for (let index = 0; index < cries; index += 1) {
+        synthToneShot({ wave: "triangle", from: 1500 * (0.9 + hash(5 + index) * 0.25), to: 940, seconds: 0.4, peak: 0.007 * level, attack: 0.05, filterType: "bandpass", freq: 1300, q: 3, vibratoRate: 9, vibratoDepth: 70, delay: index * 0.5 });
+      }
+      break;
+    }
+    case "chainRattle": {
+      const ticks = 3 + Math.floor(hash(3) * 3);
+      for (let index = 0; index < ticks; index += 1) {
+        synthToneShot({ wave: "square", from: 1750 * (0.85 + hash(9 + index) * 0.4), seconds: 0.045, peak: 0.005 * level, attack: 0.002, filterType: "highpass", freq: 1250, delay: index * (0.04 + hash(17 + index) * 0.05) });
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+function updateAmbienceAudio(time, dt) {
+  // Stage select previews the highlighted stage at half level; fights run at
+  // full level; every other screen is silent (and tears the rig down).
+  const wantScreens = state.screen === "fight" || state.screen === "stage";
+  const soundOn = Boolean($("#soundToggle")?.checked) && state.sfxVolume > 0;
+  ambienceEngaged = wantScreens && soundOn;
+  if (!ambienceEngaged) {
+    ambienceNextEventAt = 0;
+    if (ambienceRig) teardownAmbienceRig();
+    return;
+  }
+  const profile = AMBIENCE_PROFILES[state.stage];
+  // Event cadence runs off the render clock (not the context clock) so the
+  // rhythm — and the QA counter — never depend on audio backend state.
+  if (profile?.events.length) {
+    if (!ambienceNextEventAt) ambienceNextEventAt = time + 2500 + presentationHash01(ambienceEventSerial, 61) * 4000;
+    if (time >= ambienceNextEventAt) {
+      ambienceEventSerial += 1;
+      const roll = presentationHash01(ambienceEventSerial, 97);
+      const event = profile.events[Math.floor(roll * profile.events.length) % profile.events.length];
+      audioFxDebug.ambienceEvents += 1;
+      if (state.screen === "fight") playAmbienceEvent(event.kind);
+      ambienceNextEventAt = time + (event.min + presentationHash01(ambienceEventSerial, 131) * (event.max - event.min)) * 1000;
+    }
+  } else ambienceNextEventAt = 0;
+  if (!audioContextRunning()) return;
+  if (ambienceRig && ambienceRig.stage !== state.stage) teardownAmbienceRig();
+  if (!ambienceRig) ambienceRig = buildAmbienceRig(state.stage);
+  if (!ambienceRig) return;
+  const now = state.audio.currentTime;
+  const cinematicDuck = state.finisher ? 0.25 : 1;
+  const preview = state.screen === "stage" ? 0.5 : 1;
+  const pauseDuck = state.paused ? 0.35 : 1;
+  // Follows musicDuck so cinematic ducks pull the bed down with the music.
+  const target = clamp(state.sfxVolume, 0, 1) * cinematicDuck * preview * pauseDuck * (0.35 + 0.65 * state.musicDuck);
+  ambienceRig.master.gain.setTargetAtTime(Math.max(0.0001, target), now, 0.25);
+  // K&A: el-train rumble loosely follows the train visual (same x formula as
+  // the drawKensington street life pass).
+  const trainLayer = ambienceRig.layers.find((layer) => layer.spec.train);
+  if (trainLayer) {
+    const trainX = ((time * 0.08) % (W + 650)) - 500;
+    const visible = trainX > -430 && trainX < W;
+    trainLayer.gain.gain.setTargetAtTime(visible ? trainLayer.spec.gain : 0.0001, now, 0.6);
+  }
+}
+
+// Hidden tabs stop the render loop; drop the beds instantly so they cannot
+// drone at their last eased level until the tab returns.
+function muteRenderAudioBeds() {
+  if (!state.audio) return;
+  const now = state.audio.currentTime;
+  if (crowdBed) crowdBed.gain.gain.setTargetAtTime(0.0001, now, 0.06);
+  if (ambienceRig) ambienceRig.master.gain.setTargetAtTime(0.0001, now, 0.06);
+}
+
+// Per-rendered-frame audio observer, called from draw() beside the cinematic
+// camera update. Levels ease state-side even where WebAudio is stubbed, so
+// the QA counters stay meaningful headless; nodes are only touched when the
+// context is genuinely running.
+function updateAudioPresentation(time, dtMs) {
+  const dt = clamp(dtMs / 1000, 0.001, 0.1);
+  updateCrowdAudio(dt);
+  updateMusicIntensity(dt);
+  updateAmbienceAudio(time, dt);
 }
 
 function back(target) {
@@ -11843,6 +12623,11 @@ document.addEventListener("visibilitychange", () => {
   else if (document.hidden && state.screen === "fight" && !state.paused) setPaused(true);
   if (document.hidden) clearIdleDemoTimer();
   else if (state.screen === "title") scheduleIdleDemo();
+  // Release 1.6 LOUD: rAF stops in hidden tabs, so drop the synth beds here
+  // rather than letting them drone at their last eased level. The render loop
+  // re-eases them when the tab returns; music restart stays syncMusic's job,
+  // so nothing double-starts on visibility flips.
+  if (document.hidden) muteRenderAudioBeds();
   syncMusic();
 });
 $("#fighterContinue").addEventListener("click", showStageSelect);
@@ -12076,6 +12861,22 @@ window.__finalBlowEngine = {
         sloMoBlurFrames: hudFxDebug.sloMoBlurFrames,
         crtMode: crtOverlayActive() ? 1 : 0,
         superCutIns: hudFxDebug.superCutIns,
+        // Release 1.6 LOUD: live synth-bus levels (eased render values),
+        // monotonic one-shot totals (audioFxDebug) and the audio node-graph
+        // debug counts. All render-side observers — nothing here reads back
+        // into the simulation.
+        crowdBusLevel: Number(crowdAudioLevel.toFixed(3)),
+        crowdSwells: audioFxDebug.crowdSwells,
+        impactLayers: audioFxDebug.impactLayers,
+        musicIntensity: Number(musicIntensityLevel.toFixed(3)),
+        ambienceActive: ambienceEngaged ? 1 : 0,
+        ambienceStage: ambienceEngaged ? state.stage : "",
+        ambienceEvents: audioFxDebug.ambienceEvents,
+        stageMusicAuto: state.musicChoice === "auto" && stageMusicAutoApplied ? 1 : 0,
+        audioContextState: state.audio ? state.audio.state : "none",
+        audioNodesLive: audioPersistentNodes,
+        audioOneShots: audioLiveOneShots,
+        audioNodesCreated: audioFxDebug.nodesCreated,
       },
       stageWeapon: weaponSnapshot(state.stageWeapon),
       stageWeaponsEnabled: state.stageWeaponsEnabled,
