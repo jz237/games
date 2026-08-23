@@ -267,14 +267,28 @@ try {
 
   const runtimeErrors = [];
   const failedResponses = [];
+  const voiceProbe404s = [];
+  // Wave 9 voice plumbing: the game HEAD-probes announcer/fighter voice bank
+  // files exactly once per bank per session and skips missing takes silently.
+  // A 404 on those canonical paths is the expected "bank not recorded yet"
+  // answer, not a failure — but each URL may be probed AT MOST once, which is
+  // asserted at the end of the run alongside the zero-error checks.
+  const isVoiceBankProbe = (url = "") => /\/assets\/audio\/(?:announcer|fighters)\/.+\.mp3$/.test(url);
   client.on("Runtime.exceptionThrown", ({ exceptionDetails }) => {
     runtimeErrors.push(exceptionDetails.exception?.description || exceptionDetails.text);
   });
   client.on("Log.entryAdded", ({ entry }) => {
-    if (entry.level === "error") runtimeErrors.push(entry.text);
+    if (entry.level !== "error") return;
+    if (entry.source === "network" && isVoiceBankProbe(entry.url)) return;
+    runtimeErrors.push(entry.text);
   });
   client.on("Network.responseReceived", ({ response }) => {
-    if (response.status >= 400) failedResponses.push(`${response.status} ${response.url}`);
+    if (response.status < 400) return;
+    if (response.status === 404 && isVoiceBankProbe(response.url)) {
+      voiceProbe404s.push(response.url);
+      return;
+    }
+    failedResponses.push(`${response.status} ${response.url}`);
   });
 
   await Promise.all([
@@ -352,7 +366,10 @@ try {
   assert.equal(title.attractEnabled, true);
   assert.equal(title.graphicFatalities, true);
   assert.deepEqual(title.engine.fatalityAudit, { fighters: 8, fatalities: 16, errors: [] });
-  assert.deepEqual(title.engine.audio.audit, { fighters: 8, cuesPerFighter: 12, totalCues: 96, errors: [] });
+  assert.deepEqual(title.engine.audio.audit, {
+    fighters: 8, cuesPerFighter: 17, coreCues: 12, reactiveCues: 5,
+    variantSlots: 3, totalCues: 136, totalVariantPaths: 408, errors: [],
+  });
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
@@ -3178,6 +3195,13 @@ try {
 
   assert.deepEqual(runtimeErrors, []);
   assert.deepEqual(failedResponses, []);
+  // Wave 9: missing voice banks must be probed at most once per file — any
+  // duplicate 404 for the same canonical path means the probe cache broke.
+  assert.deepEqual(
+    voiceProbe404s.filter((url, index) => voiceProbe404s.indexOf(url) !== index),
+    [],
+    "voice bank probes must never re-fetch a missing file",
+  );
   console.log(JSON.stringify({
     status: "passed",
     desktop: {

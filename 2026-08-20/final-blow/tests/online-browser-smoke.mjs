@@ -135,7 +135,13 @@ async function createTarget(debugPort, url) {
   const errors = [];
   const requestUrls = [];
   client.on("Runtime.exceptionThrown", ({ exceptionDetails }) => errors.push(exceptionDetails.exception?.description || exceptionDetails.text));
-  client.on("Log.entryAdded", ({ entry }) => { if (entry.level === "error") errors.push(entry.text); });
+  // Wave 9 voice plumbing: one-time HEAD probes of not-yet-recorded voice
+  // bank mp3s 404 by design — those network log entries are not failures.
+  client.on("Log.entryAdded", ({ entry }) => {
+    if (entry.level !== "error") return;
+    if (entry.source === "network" && /\/assets\/audio\/(?:announcer|fighters)\/.+\.mp3$/.test(entry.url || "")) return;
+    errors.push(entry.text);
+  });
   client.on("Network.requestWillBeSent", ({ request }) => requestUrls.push(request.url));
   client.on("Network.webSocketCreated", ({ url: socketUrl }) => requestUrls.push(socketUrl));
   await Promise.all([client.send("Runtime.enable"), client.send("Log.enable"), client.send("Network.enable"), client.send("Page.enable")]);

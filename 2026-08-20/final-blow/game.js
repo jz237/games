@@ -171,8 +171,10 @@ import {
 import {
   FIGHTER_AUDIO_CUES,
   FIGHTER_AUDIO_LABELS,
+  FIGHTER_REACTIVE_PLACEHOLDERS,
   auditFighterAudio,
   fighterAudioCue,
+  fighterAudioVariants,
 } from "./engine/fighter-audio.mjs";
 
 const canvas = document.querySelector("#game");
@@ -629,6 +631,12 @@ const sfxVolumes = {
   finish: 0.78,
   final: 0.92,
   ko: 0.8,
+  // Wave 9 reactive fighter voice cues.
+  dizzy: 0.7,
+  counter: 0.72,
+  tech: 0.6,
+  desperation: 0.68,
+  scream: 0.95,
 };
 
 function createSfxPool(kind, src) {
@@ -656,6 +664,14 @@ const fallbackSoundKinds = Object.freeze({
   super: "final",
   fatal: "final",
   "stage-weapon": "select",
+  // Wave 9 reactive voice cues: shared-sample/procedural fallbacks mirror the
+  // FIGHTER_REACTIVE_PLACEHOLDERS mapping so a fighter with no palette at all
+  // still lands on the nearest generic sound.
+  dizzy: "hit",
+  counter: "special",
+  tech: "block",
+  desperation: "hit",
+  scream: "final",
 });
 
 const musicTracks = [
@@ -1355,6 +1371,10 @@ async function connectOnlineTransport() {
     onStatus(kind, detail) {
       if (generation !== onlineSession.generation || peerGeneration !== onlineSession.peerGeneration) return;
       if (kind === "connected") {
+        // Wave 9: fresh lobby link -> "opponent connected"; a reconnect
+        // outside a live match resolves here too -> "connection recovered"
+        // (mid-match recovery announces from completeOnlineResume instead).
+        const wasReconnecting = onlineSession.reconnecting || onlineSession.reconnectAttempts > 0;
         onlineSession.reconnectAttempts = 0;
         onlineSession.reconnecting = false;
         onlineSession.peers.add(onlineRemoteRole());
@@ -1362,7 +1382,10 @@ async function connectOnlineTransport() {
         updateOnlineSeats();
         updateOnlineMatchSetup();
         if (onlineSession.matchActive) beginOnlineResumeHandshake();
-        else sendOnlineLobbyState();
+        else {
+          sendOnlineLobbyState();
+          announcerOnlineMoment(wasReconnecting ? "recovered" : "connected");
+        }
         persistOnlineResume(false);
         return;
       }
@@ -1613,6 +1636,7 @@ function requestOnlineRematch() {
   onlineSession.rematchVotes.add(onlineSession.role);
   sendOnlineControl({ type: "rematch-vote", matchId: onlineSession.matchConfig?.matchId });
   updateOnlineRematchUi();
+  checkRematchAccepted();
   maybeLaunchOnlineRematch();
 }
 
@@ -1667,6 +1691,8 @@ function completeOnlineResume() {
   onlineSession.remoteChecksums.clear();
   refreshOnlinePauseOverlay();
   persistOnlineResume(true);
+  // Wave 9: the resync handshake finished — the announcer confirms the link.
+  if (onlineSession.matchActive) announcerOnlineMoment("recovered");
 }
 
 function refreshOnlinePauseOverlay() {
@@ -1731,6 +1757,7 @@ function receiveOnlineControl(message) {
   } else if (message.type === "rematch-vote" && state.screen === "result") {
     onlineSession.rematchVotes.add(onlineRemoteRole());
     updateOnlineRematchUi();
+    checkRematchAccepted();
     maybeLaunchOnlineRematch();
   } else if (message.type === "peer-suspend") {
     onlineSession.remoteSuspended = Boolean(message.suspended);
@@ -3489,6 +3516,9 @@ function chooseFighter(index) {
     restartCssAnimation(lockedCard, "locked-flash");
     hudFxDebug.selectSlams += 1;
   }
+  // Wave 9: the announcer calls the locked fighter's name — unless this lock
+  // completes the pair, in which case the VS slam calls both names instead.
+  if (!(state.locks[0] && state.locks[1])) announcerSay(`${roster[index].id}-name`);
   updateRosterUI();
 }
 
@@ -3509,6 +3539,9 @@ function updateRosterUI() {
   if (bothLocked && !selectBothLocked) {
     restartCssAnimation(readout, "vs-slam");
     hudFxDebug.selectSlams += 1;
+    // Wave 9: the VS slam calls the matchup — both names in sequence.
+    announcerSay(`${roster[state.picks[0]].id}-name`);
+    announcerSay(`${roster[state.picks[1]].id}-name`, { delay: 700 });
   } else if (!bothLocked) readout.classList.remove("vs-slam");
   selectBothLocked = bothLocked;
   $("#fighterContinue").disabled = !bothLocked;
@@ -3591,6 +3624,12 @@ function startMatch(resetSet = true) {
     : arcadeMatch?.kind === "rival" ? `RIVAL BOUT · ${state.fighters[1].def.name}`
       : stages[state.stage].name;
   announce(`ROUND ${state.round}`, introLabel, 1.2);
+  // Wave 9: the arcade final boss bout gets its own announcer intro, queued
+  // behind ROUND 1 / FIGHT via the announcer busy window.
+  if (arcadeMatch?.kind === "boss") {
+    voiceFxDebug.storyCallouts += 1;
+    announcerSay("boss-intro", { delay: 2100 });
+  }
   scheduleFightAnnouncement(() => {
     if (state.screen === "fight" && state.phase === "intro") announce("FIGHT!", "NO MERCY ON THESE STREETS", 0.8);
   }, 1150);
@@ -3714,6 +3753,9 @@ function announce(main, sub = "", duration = 1) {
   const box = $("#announcer");
   const strong = box.querySelector("strong");
   const text = String(main);
+  // Wave 9: every banner also books its spoken announcer call (captions
+  // always; audio only once real takes exist in assets/audio/announcer/).
+  announcerSpeakBanner(text);
   const letters = [...text];
   // Letter-by-letter slam: each character lands with its own scale-punch on a
   // short stagger. The innerHTML rebuild also restarts the animation on
@@ -3795,6 +3837,9 @@ function finishRound(winner, type = -1) {
     announce(`${winDef.name} WINS`, "KNOCKOUT", 2.4);
     sound("ko", state.fighters[1 - winner]);
   }
+  // Wave 9: round-story callouts (FLAWLESS / COMEBACK / time-over / fatality)
+  // layered after the primary call — guarded + deduped like announce().
+  if (!rollbackResimulating) queueStoryCallouts(winner, type);
   updateFlowSkipHint();
   updateHud();
 }
@@ -3953,6 +3998,9 @@ function triggerFinisherImpact(finisher, impact) {
   if (finalImpact) finisher.slowMotionHits += 1;
   // Release 1.6 LOUD: synth heft under the scripted cinematic impacts too.
   impactLayerAudio(finalImpact ? "super" : "heavy", { counter: false });
+  // Wave 9: the victim's fatality scream on the killing blow — a distinct
+  // cue from the shared ko bell (guarded + tick-deduped inside).
+  if (finalImpact) fighterReactiveCue(victim, "scream");
 
   for (let index = 0; index < count; index += 1) {
     const angle = visualRandom() * Math.PI * 2;
@@ -4950,6 +4998,8 @@ function enterDizzy(fighter, attacker) {
   spawnCombatText(fighter.x, fighter.y - fighter.height - 52, "DIZZY", "#ffd54a");
   duckMusic(0.55, 620);
   sound("ko", fighter);
+  // Wave 9: dazed voice bark layered over the ring (guarded + tick-deduped).
+  fighterReactiveCue(fighter, "dizzy");
   // Wave 6: camera pop on the dizzy trigger (render-only latch, guarded +
   // tick-deduped inside).
   latchDizzyCameraPunch(fighter);
@@ -6380,6 +6430,8 @@ function techThrow(attacker, victim) {
   state.shake = Math.max(state.shake, 0.11);
   spawnCombatText((attacker.x + victim.x) * 0.5, Math.min(attacker.y, victim.y) - 205, "THROW TECH", "#68f5ff");
   sound("block", victim);
+  // Wave 9: tech shout from the escaping fighter (guarded + tick-deduped).
+  fighterReactiveCue(victim, "tech");
 }
 
 function triggerSouthpawCounter(counterFighter, incomingFighter, incomingAttack, collision) {
@@ -6766,6 +6818,8 @@ function spawnHit(x, y, def, attackKind, blocked, { direction = 1, counter = fal
   // Release 1.6 LOUD: layered synth components under the hit sample by
   // violence tier (rollback guard + toggles live inside).
   impactLayerAudio(tierName, { counter });
+  // Wave 9: counter-hit attacker bark (guarded + tick-deduped inside).
+  if (counter) fighterReactiveCue(def.id, "counter");
   const graphicScale = state.graphicFatalities ? 1 : 0.34;
   const counterScale = counter ? 1.26 : 1;
   const count = Math.max(4, Math.round(profile.particles * graphicScale * counterScale * state.performance.particleScale));
@@ -11286,18 +11340,106 @@ function fighterSoundId(fighter) {
   return fighter?.def?.id || fighter?.id || null;
 }
 
-function fighterSoundPool(kind, fighter) {
-  const fighterId = fighterSoundId(fighter);
-  const src = fighterAudioCue(fighterId, kind);
-  if (!src) return null;
-  const key = `${fighterId}:${kind}`;
-  if (!fighterSfxPools.has(key)) fighterSfxPools.set(key, createSfxPool(kind, src));
-  return { key, pool: fighterSfxPools.get(key) };
+// ---------------------------------------------------------------------------
+// Wave 9 "voice plumbing" — fighter voice variant banks. Module-level render
+// state only (never snapshotted, never read by the simulation): which
+// canonical variant files exist on disk, probed exactly once per bank per
+// session via HEAD requests so missing takes can never spam the network.
+// Everything ships working with zero new mp3 files present and picks up real
+// takes automatically the moment they appear at their canonical paths.
+// ---------------------------------------------------------------------------
+
+// Monotonic wave-9 voice totals, exposed via snapshot().violence.
+const voiceFxDebug = {
+  announcerCalls: 0, announcerBanksLoaded: 0, voiceVariantPlays: 0,
+  reactiveCues: 0, storyCallouts: 0, onlineMoments: 0,
+};
+// Every probe HEAD request ever issued — QA asserts this stays flat when the
+// same missing bank is requested repeatedly (probe once, cached forever).
+let voiceProbeRequests = 0;
+
+function probeAudioFile(url) {
+  voiceProbeRequests += 1;
+  return fetch(url, { method: "HEAD" })
+    .then((response) => response.ok)
+    .catch(() => false);
+}
+
+// `${fighterId}:${cue}` -> { srcs: confirmed variant files, probed }. Core
+// cues optimistically trust variant 1 (those 96 files shipped with 1.5);
+// reactive cues start empty until the probe confirms real takes exist.
+const fighterVoiceBanks = new Map();
+
+function fighterVoiceBank(fighterId, cue) {
+  const variants = fighterAudioVariants(fighterId, cue);
+  if (!variants) return null;
+  const key = `${fighterId}:${cue}`;
+  let bank = fighterVoiceBanks.get(key);
+  if (!bank) {
+    const core = !FIGHTER_REACTIVE_PLACEHOLDERS[cue];
+    bank = { key, srcs: core ? [variants[0]] : [], probed: false };
+    fighterVoiceBanks.set(key, bank);
+    // One probe pass per bank per session, sequential and stopping at the
+    // first gap (banks are contiguous), so a fully-missing bank costs a
+    // single request and a present bank grows the rotation in place.
+    (async () => {
+      const found = core ? [variants[0]] : [];
+      for (let index = core ? 1 : 0; index < variants.length; index += 1) {
+        if (!(await probeAudioFile(variants[index]))) break;
+        found.push(variants[index]);
+      }
+      bank.srcs = found;
+      bank.probed = true;
+    })();
+  }
+  return bank;
+}
+
+function fighterVoicePool(kind, bankKey, variantIndex, src) {
+  const poolKey = `${bankKey}:${variantIndex}`;
+  if (!fighterSfxPools.has(poolKey)) fighterSfxPools.set(poolKey, createSfxPool(kind, src));
+  return fighterSfxPools.get(poolKey);
+}
+
+/**
+ * Resolve the next fighter voice take for a cue. The fighterSfxCursors
+ * round-robin is the no-repeat rotation across confirmed variants; a bank
+ * with a single real take gets deterministic playbackRate micro-variation
+ * (visualRandom — checksum-exempt, never state.rng) so consecutive plays are
+ * never identical; reactive cues with no takes yet borrow their pitch-offset
+ * placeholder take from FIGHTER_REACTIVE_PLACEHOLDERS.
+ */
+function fighterVoiceTake(kind, fighterId) {
+  if (!fighterId) return null;
+  let cue = kind;
+  let rate = 1;
+  let bank = fighterVoiceBank(fighterId, cue);
+  if (!bank) return null;
+  if (!bank.srcs.length) {
+    const placeholder = FIGHTER_REACTIVE_PLACEHOLDERS[cue];
+    if (!placeholder) return null;
+    cue = placeholder.cue;
+    rate = placeholder.rate;
+    bank = fighterVoiceBank(fighterId, cue);
+    if (!bank?.srcs.length) return null;
+  }
+  const cursorKey = `${fighterId}:${cue}`;
+  const cursor = fighterSfxCursors.get(cursorKey) || 0;
+  fighterSfxCursors.set(cursorKey, cursor + 1);
+  const variantIndex = cursor % bank.srcs.length;
+  const pool = fighterVoicePool(cue, bank.key, variantIndex, bank.srcs[variantIndex]);
+  if (!pool?.length) return null;
+  if (bank.srcs.length === 1) rate *= 0.94 + visualRandom() * 0.12;
+  return { sample: pool[Math.floor(cursor / bank.srcs.length) % pool.length], rate };
 }
 
 function warmFighterAudio(fighters = state.fighters) {
   for (const fighter of fighters) {
-    for (const cue of FIGHTER_AUDIO_CUES) fighterSoundPool(cue, fighter);
+    const fighterId = fighterSoundId(fighter);
+    for (const cue of FIGHTER_AUDIO_CUES) {
+      const bank = fighterVoiceBank(fighterId, cue);
+      bank?.srcs.forEach((src, index) => fighterVoicePool(cue, bank.key, index, src));
+    }
   }
 }
 
@@ -11329,18 +11471,30 @@ function sound(kind, fighter = null) {
   if (!$("#soundToggle").checked) return;
   if (demoSession.attract && !state.audioUnlocked) return;
   unlockAudio();
-  const signature = fighterSoundPool(kind, fighter);
-  const pool = signature?.pool || sfxPools[fallbackKind];
+  // Wave 9: signature cues route through the variant banks (no-repeat
+  // rotation + micro-variation + reactive placeholders). playbackRate and
+  // preservesPitch are set explicitly on every play because pool elements
+  // are reused and a detuned take must never leak into the next play.
+  const take = fighterVoiceTake(kind, fighterId);
+  if (take) {
+    voiceFxDebug.voiceVariantPlays += 1;
+    const sample = take.sample;
+    sample.pause();
+    sample.currentTime = 0;
+    sample.preservesPitch = take.rate === 1;
+    sample.playbackRate = take.rate;
+    sample.volume = (sfxVolumes[kind] ?? 0.62) * state.sfxVolume;
+    const playback = sample.play();
+    if (playback?.catch) playback.catch(() => proceduralSound(fallbackKind));
+    return;
+  }
+  const pool = sfxPools[fallbackKind];
   if (!pool?.length) {
     proceduralSound(fallbackKind);
     return;
   }
-  const cursorKey = signature?.key || fallbackKind;
-  const cursor = signature
-    ? (fighterSfxCursors.get(cursorKey) || 0) % pool.length
-    : (sfxCursors[cursorKey] || 0) % pool.length;
-  if (signature) fighterSfxCursors.set(cursorKey, cursor + 1);
-  else sfxCursors[cursorKey] = cursor + 1;
+  const cursor = (sfxCursors[fallbackKind] || 0) % pool.length;
+  sfxCursors[fallbackKind] = cursor + 1;
   const sample = pool[cursor];
   sample.pause();
   sample.currentTime = 0;
@@ -11349,17 +11503,19 @@ function sound(kind, fighter = null) {
   if (playback?.catch) playback.catch(() => proceduralSound(fallbackKind));
 }
 
-function showSoundCaption(kind, fighter = null) {
+function showSoundCaption(kind, fighter = null, overrideText = "") {
   if (!state.soundCaptions) return;
   const caption = $("#soundCaption");
   const fighterId = fighterSoundId(fighter);
   const fighterName = fighter?.def?.name || roster.find(({ id }) => id === fighterId)?.name;
-  const label = FIGHTER_AUDIO_LABELS[kind] || soundCaptionLabels[kind];
+  // Wave 9: spoken announcer lines echo their exact text (they are not fixed
+  // cue labels) and hold slightly longer so the line can be read.
+  const label = overrideText || FIGHTER_AUDIO_LABELS[kind] || soundCaptionLabels[kind];
   if (!caption || !label) return;
   window.clearTimeout(soundCaptionTimer);
   caption.textContent = `◀ ${fighterName ? `${fighterName} · ` : ""}${label} ▶`;
   caption.hidden = false;
-  soundCaptionTimer = window.setTimeout(() => { caption.hidden = true; }, 720);
+  soundCaptionTimer = window.setTimeout(() => { caption.hidden = true; }, overrideText ? 1150 : 720);
 }
 
 /**
@@ -12156,6 +12312,260 @@ function muteRenderAudioBeds() {
   if (ambienceRig) ambienceRig.master.gain.setTargetAtTime(0.0001, now, 0.06);
 }
 
+// --- Wave 9: spoken announcer bank system ----------------------------------
+// Banks live at assets/audio/announcer/<cue>-<n>.mp3. None of those files
+// exist yet (ElevenLabs auth is down): every cue still fires — the caption
+// always shows its line — and each bank is HEAD-probed exactly once per
+// session, so real takes drop in the moment they land on disk. All module
+// state below is render-side (announce() pattern), never snapshotted, and
+// its only randomness is visualRandom (checksum-exempt) — never state.rng.
+
+const ANNOUNCER_MAX_TAKES = 5;
+
+// One line per planned take, mirrored exactly by MISSING-AUDIO.md — the
+// caption index and the mp3 take index stay aligned as files appear.
+const ANNOUNCER_LINES = (() => {
+  const banks = {
+    round1: ["ROUND ONE", "ROUND ONE — SETTLE IT", "FIRST ROUND — FIGHT'S ON"],
+    round2: ["ROUND TWO", "SECOND ROUND", "ROUND TWO — NO MERCY"],
+    finalround: ["FINAL ROUND", "LAST ROUND — MAKE IT COUNT", "THE FINAL ROUND"],
+    fight: ["FIGHT!", "GET IT ON!", "THROW DOWN!", "GO!"],
+    finishthem: ["FINISH THEM!", "END THIS!", "PUT THEM DOWN!"],
+    ko: ["K.O.!", "KNOCKOUT!", "IT'S OVER!", "LIGHTS OUT!"],
+    perfect: ["PERFECT!", "UNTOUCHABLE!", "NOT A SCRATCH!"],
+    flawless: ["FLAWLESS VICTORY!", "AN ABSOLUTE SHUTOUT!"],
+    comeback: ["WHAT A COMEBACK!", "BACK FROM THE DEAD!", "NEVER COUNT THEM OUT!"],
+    timeover: ["TIME OVER — DECISION!", "THE CLOCK CALLS IT!", "TIME! JUDGES' DECISION!"],
+    "fatality-performed": ["FATALITY.", "A GRAPHIC FINISH.", "THAT WAS A FINAL BLOW."],
+    "boss-intro": ["THE FINAL AUTHORITY STEPS IN.", "FINAL BOUT — THE BLACK BOOK CLOSES TONIGHT.", "THE COMMISSIONER IS WAITING."],
+    connected: ["CHALLENGER CONNECTED!", "YOUR OPPONENT HAS ENTERED!", "THE WIRE IS LIVE!"],
+    setpoint: ["SET POINT!", "ONE ROUND FROM GLORY!", "THE MATCH IS ON THE LINE!"],
+    rematch: ["REMATCH ACCEPTED!", "RUN IT BACK!", "ONE MORE TIME!"],
+    recovered: ["CONNECTION RESTORED!", "BACK IN SYNC!", "THE LINK HOLDS!"],
+  };
+  for (const { id, name } of roster) {
+    banks[`${id}-name`] = [name, name, name];
+    banks[`${id}-wins`] = [`${name} WINS!`, `THE WINNER — ${name}!`, `${name} TAKES IT!`];
+  }
+  return Object.freeze(banks);
+})();
+
+// Shuffle bags per cue: every take plays once before any repeats, and the
+// reshuffle never lets the same take land back-to-back across bag borders.
+const announcerBags = new Map();
+
+function announcerBagDraw(cue, size) {
+  if (size <= 1) return 0;
+  let bag = announcerBags.get(cue);
+  if (!bag || bag.size !== size) {
+    bag = { size, order: [], position: 0, last: -1 };
+    announcerBags.set(cue, bag);
+  }
+  if (bag.position >= bag.order.length) {
+    const order = Array.from({ length: size }, (_, index) => index);
+    for (let index = order.length - 1; index > 0; index -= 1) {
+      const swap = Math.floor(visualRandom() * (index + 1));
+      [order[index], order[swap]] = [order[swap], order[index]];
+    }
+    if (order[0] === bag.last) [order[0], order[order.length - 1]] = [order[order.length - 1], order[0]];
+    bag.order = order;
+    bag.position = 0;
+  }
+  const pick = bag.order[bag.position];
+  bag.position += 1;
+  bag.last = pick;
+  return pick;
+}
+
+// cue -> { takes: [Audio...], probed }. Probed sequentially (<cue>-1.mp3,
+// -2, ... stop at the first gap) exactly once per session; a fully missing
+// bank costs one HEAD request forever.
+const announcerBankCache = new Map();
+
+function announcerBank(cue) {
+  let bank = announcerBankCache.get(cue);
+  if (bank) return bank;
+  bank = { cue, takes: [], probed: false };
+  announcerBankCache.set(cue, bank);
+  (async () => {
+    const found = [];
+    for (let take = 1; take <= ANNOUNCER_MAX_TAKES; take += 1) {
+      const src = `assets/audio/announcer/${cue}-${take}.mp3`;
+      if (!(await probeAudioFile(src))) break;
+      found.push(src);
+    }
+    bank.takes = found.map((src) => {
+      const sample = new Audio(src);
+      sample.preload = "auto";
+      return sample;
+    });
+    bank.probed = true;
+    if (found.length) voiceFxDebug.announcerBanksLoaded += 1;
+  })();
+  return bank;
+}
+
+// Serialised speech clock: each accepted call reserves a busy window so
+// layered calls (KO -> fighter-wins -> story) never talk over each other.
+let announcerBusyUntil = 0;
+
+function announcerEstimateMs(line) {
+  return Math.min(1700, 420 + line.split(/\s+/).length * 260);
+}
+
+/**
+ * Queue a spoken announcer line. Same guard discipline as announce(): early
+ * return during rollback resimulation, everything downstream render-side.
+ * The caption always shows the exact line even with zero mp3 assets; music
+ * ducks under real takes only.
+ */
+function announcerSay(cue, { delay = 0 } = {}) {
+  if (rollbackResimulating) return false;
+  const lines = ANNOUNCER_LINES[cue];
+  if (!lines?.length) return false;
+  voiceFxDebug.announcerCalls += 1;
+  const bank = announcerBank(cue);
+  const now = performance.now();
+  const pick = announcerBagDraw(cue, Math.max(lines.length, bank.takes.length));
+  const line = lines[pick % lines.length];
+  const startAt = Math.max(now + delay, announcerBusyUntil + 90);
+  announcerBusyUntil = startAt + announcerEstimateMs(line);
+  window.setTimeout(() => {
+    showSoundCaption("announcer", null, line);
+    if (!$("#soundToggle").checked) return;
+    if (demoSession.attract && !state.audioUnlocked) return;
+    const take = bank.takes.length ? bank.takes[pick % bank.takes.length] : null;
+    if (!take) return;
+    unlockAudio();
+    duckMusic(0.45, Math.max(750, announcerEstimateMs(line)));
+    take.pause();
+    take.currentTime = 0;
+    take.volume = 0.9 * state.sfxVolume;
+    const playback = take.play();
+    if (playback?.catch) playback.catch(() => {});
+  }, Math.max(0, startAt - now));
+  return true;
+}
+
+// Banner -> spoken cue map. Runs inside announce() after its rollback guard,
+// so every existing announce call site (round intros, FIGHT, FINISH THEM,
+// KO, FINAL BLOW) gains the spoken call without new sim-path hooks.
+function announcerSpeakBanner(text) {
+  if (text === "FIGHT!") {
+    announcerSay("fight");
+    return;
+  }
+  const roundMatch = text.match(/^(?:ONLINE )?ROUND (\d+)$/);
+  if (roundMatch) {
+    const round = Number(roundMatch[1]);
+    announcerSay(round === 1 ? "round1" : round === 2 ? "round2" : "finalround");
+    return;
+  }
+  if (text === "FINISH THEM") {
+    announcerSay("finishthem");
+    return;
+  }
+  if (text === "FINAL BLOW") {
+    announcerSay("ko");
+    return;
+  }
+  if (text.endsWith(" WINS")) {
+    announcerSay("ko");
+    const fighter = roster.find(({ name }) => text === `${name} WINS`);
+    if (fighter) announcerSay(`${fighter.id}-wins`, { delay: 950 });
+  }
+}
+
+// --- Wave 9: reactive fighter cues + match-story callouts ------------------
+
+// Sim-path reactive voice trigger: announce() pattern (resim guard) plus a
+// per-cue simulationTick dedupe, mirroring the camera latches.
+const reactiveCueTicks = new Map();
+
+function fighterReactiveCue(fighter, cue) {
+  if (rollbackResimulating || reactiveCueTicks.get(cue) === state.simulationTick) return;
+  reactiveCueTicks.set(cue, state.simulationTick);
+  voiceFxDebug.reactiveCues += 1;
+  sound(cue, fighter);
+}
+
+// Render-observed per-round health story: minimum health per side (feeds the
+// COMEBACK callout) and the once-per-round desperation bark under 20%.
+let voiceRoundKey = "";
+let voiceRoundMinHealth = [100, 100];
+const desperationFired = [false, false];
+
+function updateVoiceCallouts() {
+  if (state.screen !== "fight" || state.fighters.length !== 2) return;
+  const key = `${state.matchSerial}:${state.round}`;
+  if (key !== voiceRoundKey) {
+    voiceRoundKey = key;
+    voiceRoundMinHealth = [100, 100];
+    desperationFired[0] = false;
+    desperationFired[1] = false;
+  }
+  state.fighters.forEach((fighter, side) => {
+    voiceRoundMinHealth[side] = Math.min(voiceRoundMinHealth[side], fighter.health);
+    if (!desperationFired[side] && state.phase === "fight" && fighter.health > 0 && fighter.health <= 20) {
+      desperationFired[side] = true;
+      voiceFxDebug.reactiveCues += 1;
+      sound("desperation", fighter);
+    }
+  });
+}
+
+// Round-story detection, called from finishRound behind a rollback guard.
+// Pure reads of existing round state plus the render-observed minimum-health
+// track above; deduped per round result so a resimulated finish can never
+// re-queue. Callouts layer after the primary KO/FINAL BLOW call via the
+// announcerSay busy window plus a base delay.
+let storyRoundKey = "";
+
+function queueStoryCallouts(winner, type) {
+  const key = `${state.matchSerial}:${state.round}:${winner}:${state.rounds[winner]}`;
+  if (key === storyRoundKey) return;
+  storyRoundKey = key;
+  const loser = state.fighters[1 - winner];
+  if (type >= 0) {
+    voiceFxDebug.storyCallouts += 1;
+    announcerSay("fatality-performed", { delay: 2400 });
+  } else if (state.timer <= 0 && loser.health > 0) {
+    voiceFxDebug.storyCallouts += 1;
+    announcerSay("timeover", { delay: 1100 });
+  } else if (state.fighters[winner].health >= 100) {
+    voiceFxDebug.storyCallouts += 1;
+    announcerSay("perfect", { delay: 1200 });
+    announcerSay("flawless", { delay: 2300 });
+  } else if (voiceRoundMinHealth[winner] <= 15) {
+    voiceFxDebug.storyCallouts += 1;
+    announcerSay("comeback", { delay: 1400 });
+  }
+  // Online set point: a player is now one round from taking the match.
+  if (state.mode === "online" && state.rounds[winner] === 1 && state.rounds[1 - winner] < 2) {
+    voiceFxDebug.onlineMoments += 1;
+    announcerSay("setpoint", { delay: 2100 });
+  }
+}
+
+// --- Wave 9: online-moments hooks (UI/network side, never checksummed) -----
+
+let rematchAnnounced = false;
+
+function announcerOnlineMoment(cue) {
+  voiceFxDebug.onlineMoments += 1;
+  announcerSay(cue);
+}
+
+function checkRematchAccepted() {
+  if (onlineSession.rematchVotes.size < 2) {
+    rematchAnnounced = false;
+    return;
+  }
+  if (rematchAnnounced) return;
+  rematchAnnounced = true;
+  announcerOnlineMoment("rematch");
+}
+
 // Per-rendered-frame audio observer, called from draw() beside the cinematic
 // camera update. Levels ease state-side even where WebAudio is stubbed, so
 // the QA counters stay meaningful headless; nodes are only touched when the
@@ -12165,6 +12575,7 @@ function updateAudioPresentation(time, dtMs) {
   updateCrowdAudio(dt);
   updateMusicIntensity(dt);
   updateAmbienceAudio(time, dt);
+  updateVoiceCallouts();
 }
 
 function back(target) {
@@ -12877,6 +13288,16 @@ window.__finalBlowEngine = {
         audioNodesLive: audioPersistentNodes,
         audioOneShots: audioLiveOneShots,
         audioNodesCreated: audioFxDebug.nodesCreated,
+        // Wave 9 voice systems: monotonic call totals (voiceFxDebug pattern)
+        // plus the probe-request count QA uses to prove missing banks are
+        // probed exactly once, never per call.
+        announcerCalls: voiceFxDebug.announcerCalls,
+        announcerBanksLoaded: voiceFxDebug.announcerBanksLoaded,
+        voiceVariantPlays: voiceFxDebug.voiceVariantPlays,
+        reactiveCues: voiceFxDebug.reactiveCues,
+        storyCallouts: voiceFxDebug.storyCallouts,
+        onlineMoments: voiceFxDebug.onlineMoments,
+        voiceProbeRequests,
       },
       stageWeapon: weaponSnapshot(state.stageWeapon),
       stageWeaponsEnabled: state.stageWeaponsEnabled,
