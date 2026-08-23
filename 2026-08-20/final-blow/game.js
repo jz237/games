@@ -1868,6 +1868,22 @@ let rollbackResimulating = false;
 // Eased super-flash darkness. Module-level and render-only: it never enters a
 // rollback snapshot, so a resimulation just re-eases it harmlessly.
 let superDimLevel = 0;
+// True while drawFighterReflections re-runs drawFighter into the floor sheen
+// band; the mirror pass skips the extra silhouette/ghost copies so it stays a
+// single sprite draw per fighter.
+let reflectionPassActive = false;
+// Per-rendered-frame counters for the fighter presentation passes, exposed via
+// snapshot().violence for QA smoke tests. Reset at the top of each fight frame
+// in draw(); reflection-pass copies are deliberately excluded.
+const presentationDebug = {
+  rimLights: 0, hitSmears: 0, dizzyGhosts: 0, breathing: 0,
+  contactShadows: 0, gritAuras: 0, lastLegs: 0,
+};
+// Grit super-ready flare latches, one per side. Render-only module state on the
+// superDimLevel pattern: never snapshotted, only ever read/written from the
+// draw path, so rollback resimulation cannot touch it.
+const gritFlareLevel = [0, 0];
+const gritReadyLatched = [false, false];
 const rollbackFighterReferences = new Set(["def", "kit", "movement", "combo", "directionTapTracker", "inputBuffer", "projectileSpawnFrames"]);
 const rollbackPresentationFighterFields = new Set([
   "animTime", "walkTime", "hitFlash", "specialGlow", "cinematicFrame", "cinematicRotation", "cinematicScale", "lastHitResult",
@@ -3369,6 +3385,7 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     spawnCombatText(fighter.x, fighter.y - fighter.height - 25, label, fighter.def.accent);
   }
   if (fighter.attacking.kind === "special") fighter.specialGlow = fighter.attacking.superMove ? 1.25 : 0.7;
+  if (fighter.attacking.kind === "heavy" || fighter.attacking.kind === "special") spawnSweat(fighter, 4, 1.1);
   if (fighter.attacking.superMove) {
     if ($("#flashToggle").checked) state.flash = Math.max(state.flash, 0.22);
     state.hitstop = Math.max(state.hitstop, 0.09);
@@ -3647,6 +3664,7 @@ function advanceFighterTimers(fighter) {
       fighter.juggleCount = 0;
       fighter.reversalWindowFrames = DEFENSE_RULES.reversalWindowFrames;
       fighter.invulnerableFrames = DEFENSE_RULES.reversalWindowFrames;
+      spawnSweat(fighter, 5, 0.9);
     }
   } else {
     fighter.hitstunFrames = Math.max(0, fighter.hitstunFrames - 1);
@@ -3685,6 +3703,34 @@ function spawnFootDust(fighter, count, spread, kick) {
       max: 0.5,
       size: 3 + visualRandom() * 7,
       color: visualRandom() > 0.4 ? "#777067" : "#4e4a46",
+    });
+  }
+}
+
+// SF2-style sweat spray: below 40% health, heavy exertions (big attacks,
+// wake-ups, landings) fling glinting droplets off the fighter's head — harder
+// still under 25%. Presentation-only: visualRandom + checksum-exempt
+// state.particles, trimmed by the shared particle budget.
+function spawnSweat(fighter, count, energy = 1) {
+  if (fighter.health > 40) return;
+  const strain = fighter.health < 25 ? 1.35 : 1;
+  const total = Math.max(2, Math.round(count * strain * state.performance.particleScale));
+  const headY = fighter.y - fighter.height * 0.94;
+  for (let index = 0; index < total; index += 1) {
+    const angle = -Math.PI / 2 + (visualRandom() - 0.5) * 2.3;
+    const speed = (110 + visualRandom() * 210) * energy;
+    state.particles.push({
+      kind: "sweat",
+      x: fighter.x + (visualRandom() - 0.5) * 34,
+      y: headY + (visualRandom() - 0.5) * 20,
+      vx: Math.cos(angle) * speed + fighter.vx * 0.12,
+      vy: Math.sin(angle) * speed - 40,
+      gravity: 780,
+      drag: 0.982,
+      life: 0.24 + visualRandom() * 0.26,
+      max: 0.5,
+      size: 1.8 + visualRandom() * 2.2,
+      color: index % 3 ? "#d9f1ff" : "#9fd7ff",
     });
   }
 }
@@ -3744,10 +3790,12 @@ function applyFighterPhysics(fighter, dt) {
       fighter.attackFrame = 0;
       fighter.landingRecoveryFrames = DEFENSE_RULES.airAttackLandingRecoveryFrames;
       spawnFootDust(fighter, 8, 48, 0);
+      spawnSweat(fighter, 3, 1);
     } else if (landed && !fighter.down) {
       // Even an empty jump costs a few frames on the way down.
       fighter.landingRecoveryFrames = Math.max(fighter.landingRecoveryFrames, DEFENSE_RULES.landingRecoveryFrames);
       spawnFootDust(fighter, 6, 44, 0);
+      spawnSweat(fighter, 3, 0.8);
     }
   } else {
     fighter.grounded = false;
@@ -6300,6 +6348,46 @@ function drawAtlasFrame(atlas, frame, size) {
   ctx.drawImage(atlas, (frame % 4) * cell, Math.floor(frame / 4) * cell, cell, cell, -size * 0.5, -size, size, size);
 }
 
+// ---------------------------------------------------------------------------
+// Tinted silhouette infrastructure. One persistent atlas-cell-sized offscreen:
+// the requested frame is drawn in, then flooded with a colour via source-in,
+// yielding a flat tinted cut-out of the sprite. Shared by the stage rim light,
+// the dizzy double-vision ghosts and the Grit-ready flare, and intended for
+// reuse by any future tinted-copy pass (wave 2). The last atlas/frame/colour
+// key is cached so repeated blits of the same tint skip the rebuild.
+// ---------------------------------------------------------------------------
+const SILHOUETTE_CELL = 320;
+const silhouetteScratch = document.createElement("canvas");
+silhouetteScratch.width = SILHOUETTE_CELL;
+silhouetteScratch.height = SILHOUETTE_CELL;
+const silhouetteScratchCtx = silhouetteScratch.getContext("2d");
+let silhouetteScratchKey = "";
+
+function tintedSilhouette(atlas, frame, color) {
+  const key = `${atlas.src}|${frame}|${color}`;
+  if (key !== silhouetteScratchKey) {
+    silhouetteScratchKey = key;
+    silhouetteScratchCtx.globalCompositeOperation = "source-over";
+    silhouetteScratchCtx.clearRect(0, 0, SILHOUETTE_CELL, SILHOUETTE_CELL);
+    silhouetteScratchCtx.drawImage(
+      atlas,
+      (frame % 4) * SILHOUETTE_CELL, Math.floor(frame / 4) * SILHOUETTE_CELL,
+      SILHOUETTE_CELL, SILHOUETTE_CELL,
+      0, 0, SILHOUETTE_CELL, SILHOUETTE_CELL,
+    );
+    silhouetteScratchCtx.globalCompositeOperation = "source-in";
+    silhouetteScratchCtx.fillStyle = color;
+    silhouetteScratchCtx.fillRect(0, 0, SILHOUETTE_CELL, SILHOUETTE_CELL);
+  }
+  return silhouetteScratch;
+}
+
+// Blit a tinted silhouette with the exact footprint drawAtlasFrame uses, so
+// callers can layer it under/over the real sprite in the same transform space.
+function drawSilhouetteFrame(atlas, frame, size, color) {
+  ctx.drawImage(tintedSilhouette(atlas, frame, color), -size * 0.5, -size, size, size);
+}
+
 function activeGraphicFatality(fighter) {
   const finisher = state.finisher;
   if (!state.graphicFatalities || !finisher?.fatalityTriggered || fighter.side === finisher.winner) return null;
@@ -7124,6 +7212,67 @@ function fighterRenderSize(fighterId) {
   return FIGHTER_RENDER_BASE * FIGHTER_SCALE * (FIGHTER_SIZE_ADJUST[fighterId] || 1);
 }
 
+// Deterministic 0..1 hash for aura embers: pure function of an integer seed so
+// positions replay identically across rollback resimulation without touching
+// either RNG stream.
+function emberHash(seed) {
+  const scrambled = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+  return scrambled - Math.floor(scrambled);
+}
+
+function hexToRgbChannels(hex) {
+  const value = parseInt(hex.slice(1, 7), 16);
+  return `${(value >> 16) & 255},${(value >> 8) & 255},${value & 255}`;
+}
+
+// Soft contact shadow: radius/alpha derive from jump height, the ellipse
+// stretches with dashes and lunges, and an accent bounce joins in while a
+// special glows or the super spotlight is up. Pure function of existing render
+// state; the battery profile keeps the original single flat ellipse.
+function drawContactShadow(fighter, jump, renderSize, lunge) {
+  const baseRadius = renderSize * 0.24;
+  if (!state.performance.shadows) {
+    ctx.fillStyle = "rgba(0,0,0,.58)";
+    ctx.beginPath();
+    ctx.ellipse(0, jump + 5, baseRadius, 15, 0, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  const airFade = clamp(1 - jump / 430, 0.22, 1);
+  const stretch = 1 + Math.abs(lunge) / (renderSize * 0.9) + (fighter.dashFrames > 0 ? 0.35 : 0);
+  const radius = baseRadius * (0.66 + 0.34 * airFade) * stretch;
+  const alpha = 0.62 * airFade;
+  ctx.save();
+  ctx.translate(0, jump + 5);
+  ctx.scale(1, 15 / baseRadius);
+  const soft = ctx.createRadialGradient(0, 0, radius * 0.1, 0, 0, radius);
+  soft.addColorStop(0, `rgba(0,0,0,${alpha.toFixed(3)})`);
+  soft.addColorStop(0.62, `rgba(0,0,0,${(alpha * 0.44).toFixed(3)})`);
+  soft.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = soft;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius, 0, Math.PI * 2);
+  ctx.fill();
+  const accentStrength = Math.max(
+    clamp(fighter.specialGlow, 0, 1) * 0.5,
+    superDimLevel > 0.02 ? superDimLevel * 0.42 : 0,
+  );
+  if (accentStrength > 0.02 && !state.accessibility.highContrast) {
+    // Match the warm spotlight pools during a super, the accent otherwise.
+    const tone = superDimLevel > 0.02 ? "255,214,150" : hexToRgbChannels(fighter.def.accent);
+    const bounce = ctx.createRadialGradient(0, 0, radius * 0.05, 0, 0, radius * 0.9);
+    bounce.addColorStop(0, `rgba(${tone},${(accentStrength * 0.5).toFixed(3)})`);
+    bounce.addColorStop(1, `rgba(${tone},0)`);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = bounce;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  if (!reflectionPassActive) presentationDebug.contactShadows += 1;
+}
+
 function drawFighter(fighter, time) {
   const jump = FLOOR - fighter.y;
   const attack = fighter.attacking;
@@ -7151,13 +7300,28 @@ function drawFighter(fighter, time) {
   const lunge = attackSwing * (attackKind === "special" ? 68 : attackKind === "heavy" ? 46 : 29);
   const crouchScale = fighter.crouch ? 0.88 : 1;
   const crouchDrop = fighter.crouch ? 21 : 0;
+  const reducedMotion = state.accessibility.reducedMotion;
+  // Breathing idle: chest-rise scaleY whose rate and depth grow as health
+  // drops, so a gassed fighter visibly heaves before any UI is checked.
+  // Transform math only — health/animTime are render-safe reads.
+  const breathing = fighter.cinematicFrame === null && fighter.grounded && !fighter.down
+    && !attack && !fighter.stun && !fighter.block && fighter.dizzyFrames <= 0;
+  const fatigue = clamp(1 - fighter.health / 100, 0, 1);
+  const breath = breathing
+    ? Math.sin(fighter.animTime * (5.2 + fatigue * 5.6) + fighter.side * 1.9)
+      * (0.009 + fatigue * 0.015) * (reducedMotion ? 0.5 : 1)
+    : 0;
+  // Hunched-forward exhaustion lean once idle health dips under 25%.
+  const exhausted = breathing && !moving && fighter.health < 25 ? 1 - fighter.health / 25 : 0;
+  // Hit-reaction smear intensity: normalised from the decaying hitFlash timer
+  // (0.11-0.22s), gated exactly like the attack trails.
+  const hitSmear = state.performance.trailScale > 0 && !reducedMotion
+    ? clamp(fighter.hitFlash / 0.14, 0, 1)
+    : 0;
 
   ctx.save();
   ctx.translate(fighter.x, fighter.y + bob);
-  ctx.fillStyle = "rgba(0,0,0,.58)";
-  ctx.beginPath();
-  ctx.ellipse(0, jump + 5, renderSize * 0.24, 15, 0, 0, Math.PI * 2);
-  ctx.fill();
+  drawContactShadow(fighter, jump, renderSize, lunge);
 
   if (fighter.def.id === "ali" && fighter.rhythmStacks > 0) {
     ctx.save();
@@ -7188,6 +7352,13 @@ function drawFighter(fighter, time) {
   ctx.translate(lunge - startupPower * 8, crouchDrop - attackSwing * (attackKind === "special" ? 13 : 5));
   ctx.rotate(-attackSwing * (attackKind === "heavy" ? 0.07 : 0.025));
   ctx.scale(1 + activePower * 0.045 - startupPower * 0.025, crouchScale + startupPower * 0.035 - activePower * 0.025);
+  // Breathing + exhaustion posture: the origin sits at the feet, so the
+  // chest-rise anchors correctly and the hunch pivots forward over the toes.
+  if (breath !== 0) ctx.scale(1, 1 + breath);
+  if (breathing && !reflectionPassActive) presentationDebug.breathing += 1;
+  if (exhausted > 0) ctx.rotate(0.085 * exhausted * (reducedMotion ? 0.5 : 1));
+  // Impact squash-and-recover, decaying with the same hitFlash the smear uses.
+  if (hitSmear > 0) ctx.scale(1 + hitSmear * 0.05, 1 - hitSmear * 0.06);
 
   if (fighter.specialGlow > 0) {
     const glow = ctx.createRadialGradient(0, -135, 16, 0, -135, 178);
@@ -7195,6 +7366,69 @@ function drawFighter(fighter, time) {
     glow.addColorStop(1, `${fighter.def.accent}00`);
     ctx.fillStyle = glow;
     ctx.fillRect(-205, -335, 410, 350);
+  }
+
+  // Super-ready Grit aura: the moment the meter can pay for a super, a pulsing
+  // accent under-glow wraps the sprite and embers rise off the shoulders.
+  // Render-only read of snapshotted sim state (same check as the HUD grit-row
+  // "full" class); ember positions are hashed from the simulation tick so no
+  // visualRandom is consumed and rollback has nothing to re-wind. Kept under
+  // highContrast because super-ready is gameplay information, not decoration.
+  const superReady = state.phase === "fight" && fighter.cinematicFrame === null
+    && fighter.meter >= GRIT_RULES.superCost;
+  if (!reflectionPassActive) {
+    if (superReady && !gritReadyLatched[fighter.side]) {
+      gritReadyLatched[fighter.side] = true;
+      gritFlareLevel[fighter.side] = 1;
+    } else if (!superReady && gritReadyLatched[fighter.side]) {
+      gritReadyLatched[fighter.side] = false;
+    }
+  }
+  if (superReady) {
+    const pulse = reducedMotion ? 0.5 : 0.5 + Math.sin(time * 0.006 + fighter.side * 2.4) * 0.5;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = 0.5 + pulse * 0.3;
+    const auraReach = renderSize * 0.6;
+    const aura = ctx.createRadialGradient(0, -renderSize * 0.32, 14, 0, -renderSize * 0.32, auraReach);
+    aura.addColorStop(0, `${fighter.def.accent}8c`);
+    aura.addColorStop(0.55, `${fighter.def.accent}3c`);
+    aura.addColorStop(1, `${fighter.def.accent}00`);
+    ctx.fillStyle = aura;
+    ctx.fillRect(-auraReach, -renderSize * 0.32 - auraReach, auraReach * 2, auraReach * 2);
+    if (atlas?.complete && atlas.naturalWidth) {
+      // Pulsing accent outline: a slightly enlarged silhouette behind the
+      // sprite leaves a charged fringe all the way around the body (the KI/SF3
+      // max-meter read). Feet-anchored scale keeps it grounded.
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.32 + pulse * 0.26;
+      const outline = 1.03 + pulse * 0.012;
+      ctx.scale(outline, outline);
+      drawSilhouetteFrame(atlas, frame, renderSize, fighter.def.accent);
+      ctx.restore();
+    }
+    if (!reducedMotion && state.performance.trailScale > 0) {
+      const emberCount = Math.max(3, Math.round(7 * state.performance.trailScale));
+      ctx.globalCompositeOperation = "lighter";
+      ctx.shadowColor = fighter.def.accent;
+      ctx.shadowBlur = 9;
+      for (let ember = 0; ember < emberCount; ember += 1) {
+        const cycleFrames = 66 + (ember % 3) * 14;
+        const clock = state.simulationTick + ember * 31;
+        const progress = (clock % cycleFrames) / cycleFrames;
+        const jitter = emberHash(Math.floor(clock / cycleFrames) * 13 + ember * 7 + fighter.side * 101);
+        const emberX = (jitter - 0.5) * renderSize * 0.44 + Math.sin((progress + jitter) * Math.PI * 2) * 5;
+        const emberY = -renderSize * (0.66 + progress * 0.32);
+        ctx.globalAlpha = (1 - progress) * 0.85;
+        ctx.fillStyle = ember % 2 ? fighter.def.accent : "#fff3d8";
+        ctx.beginPath();
+        ctx.arc(emberX, emberY, 2.4 + jitter * 2.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+    if (!reflectionPassActive) presentationDebug.gritAuras += 1;
   }
 
   drawAttackVfx(fighter, time, activePower);
@@ -7235,15 +7469,83 @@ function drawFighter(fighter, time) {
       ctx.restore();
     }
 
+    if (!reflectionPassActive && state.performance.shadows && !graphicFatality
+      && !state.accessibility.highContrast) {
+      // Stage-keyed rim light: a tinted silhouette peeking 2-3px past the edge
+      // that faces the arena's key light. The sprite draw below covers all but
+      // the lit edge; the colour warms while the super spotlight is up.
+      const rim = STAGE_RIM_LIGHTS[state.stage] || STAGE_RIM_LIGHTS.kensington;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.35;
+      ctx.translate(rim.direction * fighter.facing * 3, -2);
+      drawSilhouetteFrame(atlas, frame, renderSize, stageRimColor());
+      ctx.restore();
+      presentationDebug.rimLights += 1;
+    }
+
+    if (!reflectionPassActive && hitSmear > 0) {
+      // Directional hit-reaction smear: stretched additive ghosts trailing
+      // opposite the knockback on the frames the white hit flash is live.
+      const knock = Math.abs(fighter.vx) > 30 ? Math.sign(fighter.vx) : -fighter.facing;
+      const localKnock = knock * fighter.facing;
+      const copies = Math.max(1, Math.round(2 * state.performance.trailScale));
+      for (let copy = 1; copy <= copies; copy += 1) {
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        ctx.globalAlpha = (0.22 * hitSmear) / copy;
+        ctx.translate(-localKnock * copy * 26 * hitSmear, 0);
+        ctx.scale(1 + copy * 0.06 * hitSmear, 1 - copy * 0.03 * hitSmear);
+        drawAtlasFrame(atlas, frame, renderSize);
+        ctx.restore();
+        presentationDebug.hitSmears += 1;
+      }
+    }
+
+    if (!reflectionPassActive && fighter.dizzyFrames > 0
+      && state.performance.trailScale > 0 && !reducedMotion) {
+      // Dizzy double vision: two hue-split silhouette ghosts sway apart and
+      // drift back; the amplitude collapses with the drain bar so recovery is
+      // telegraphed. Time-driven only — no RNG, mobile-cheap tinted blits.
+      const drain = fighter.dizzyFrames / Math.max(1, fighter.dizzyTotalFrames);
+      const sway = Math.sin(time * 0.008 + fighter.side * 1.7) * 7 * (0.35 + 0.65 * drain);
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      ctx.globalAlpha = 0.28;
+      ctx.translate(sway, -1.5);
+      drawSilhouetteFrame(atlas, frame, renderSize, "rgb(255,120,170)");
+      ctx.translate(-sway * 2, 3);
+      drawSilhouetteFrame(atlas, frame, renderSize, "rgb(110,205,255)");
+      ctx.restore();
+      presentationDebug.dizzyGhosts += 2;
+    }
+
     ctx.save();
     ctx.shadowColor = fighter.specialGlow > 0 ? fighter.def.accent : "rgba(0,0,0,.9)";
     ctx.shadowBlur = state.performance.shadows ? fighter.specialGlow > 0 ? 25 : 9 : 0;
     ctx.shadowOffsetY = 6;
     if (fighter.hitFlash > 0) ctx.filter = "brightness(2.5) saturate(.28)";
     else if (fighter.block) ctx.filter = "brightness(.82) saturate(.78)";
+    else if (!graphicFatality && fighter.health < 25 && !state.accessibility.highContrast) {
+      // Last-legs grade: drained, slightly desaturated and contrasty. Lowest
+      // priority in the filter chain — hit flash and block keep precedence.
+      ctx.filter = "saturate(.68) contrast(1.14) brightness(.93)";
+      if (!reflectionPassActive) presentationDebug.lastLegs += 1;
+    }
     if (graphicFatality) drawGraphicFatalityVictim(atlas, frame, renderSize, graphicFatality, time);
     else drawAtlasFrame(atlas, frame, renderSize);
     ctx.restore();
+
+    const flare = gritFlareLevel[fighter.side];
+    if (flare > 0.01 && !reflectionPassActive && !graphicFatality) {
+      // One-time threshold flare the frame the meter banks a super: a bright
+      // full-body silhouette flash that decays over ~0.3s.
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = (reducedMotion ? 0.4 : 0.8) * flare;
+      drawSilhouetteFrame(atlas, frame, renderSize, "#fff6da");
+      ctx.restore();
+    }
   } else {
     ctx.fillStyle = fighter.def.color;
     ctx.fillRect(-48, -205, 96, 205);
@@ -7624,7 +7926,9 @@ function drawFighterReflections(time) {
   ctx.translate(0, FLOOR * 2 + 8);
   ctx.scale(1, -1);
   ctx.filter = `opacity(${Math.round(strength * 100)}%)`;
+  reflectionPassActive = true;
   for (const fighter of state.fighters) drawFighter(fighter, time);
+  reflectionPassActive = false;
   ctx.filter = "none";
   ctx.restore();
   // Sink the reflection into the floor so it reads as sheen, not a twin.
@@ -7668,6 +7972,27 @@ function drawAfterimages() {
     ctx.restore();
   }
   ctx.globalAlpha = 1;
+}
+
+// Stage key lights for the fighter rim pass: the colour of each arena's
+// dominant practical light and which world-space side it comes from. The rim
+// blends toward the warm spotlight tone while the super dim is up.
+const STAGE_RIM_LIGHTS = Object.freeze({
+  kensington: Object.freeze({ color: Object.freeze([126, 178, 255]), direction: -1 }), // cool blue el-track arcs
+  vet: Object.freeze({ color: Object.freeze([255, 178, 84]), direction: 1 }),          // sodium lot floods
+  wildwood: Object.freeze({ color: Object.freeze([255, 104, 214]), direction: 1 }),    // boardwalk neon pink
+  buffet: Object.freeze({ color: Object.freeze([255, 190, 108]), direction: -1 }),     // lantern amber
+  cruise: Object.freeze({ color: Object.freeze([108, 226, 255]), direction: -1 }),     // pool-deck cyan
+});
+const SUPER_RIM_WARMTH = Object.freeze([255, 214, 150]);
+
+function stageRimColor() {
+  const rim = STAGE_RIM_LIGHTS[state.stage] || STAGE_RIM_LIGHTS.kensington;
+  const warmth = clamp(superDimLevel, 0, 1);
+  const red = Math.round(lerp(rim.color[0], SUPER_RIM_WARMTH[0], warmth));
+  const green = Math.round(lerp(rim.color[1], SUPER_RIM_WARMTH[1], warmth));
+  const blue = Math.round(lerp(rim.color[2], SUPER_RIM_WARMTH[2], warmth));
+  return `rgb(${red},${green},${blue})`;
 }
 
 // Per-stage colour grade plus an edge vignette: one soft-light tint pulls each
@@ -7726,6 +8051,25 @@ function drawParticles() {
       ctx.moveTo(particle.x, particle.y);
       ctx.lineTo(particle.x - (particle.vx || 0) * 0.045, particle.y - (particle.vy || 0) * 0.045);
       ctx.stroke();
+      ctx.restore();
+      continue;
+    }
+    if (particle.kind === "sweat") {
+      // Glinting droplet: an additive bead stretched along its velocity with a
+      // small white highlight trailing it.
+      ctx.globalCompositeOperation = "lighter";
+      const angle = Math.atan2(particle.vy || 0, particle.vx || 1);
+      ctx.ellipse(particle.x, particle.y, particle.size * 1.4, Math.max(0.8, particle.size * 0.5), angle, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = alpha * 0.8;
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(
+        particle.x - Math.cos(angle) * particle.size * 0.6,
+        particle.y - Math.sin(angle) * particle.size * 0.6,
+        Math.max(0.6, particle.size * 0.3), 0, Math.PI * 2,
+      );
+      ctx.fill();
       ctx.restore();
       continue;
     }
@@ -8127,6 +8471,9 @@ function draw(time) {
   }
   drawStage(time);
   if (state.screen === "fight") {
+    for (const key of Object.keys(presentationDebug)) presentationDebug[key] = 0;
+    gritFlareLevel[0] = Math.max(0, gritFlareLevel[0] - 0.05);
+    gritFlareLevel[1] = Math.max(0, gritFlareLevel[1] - 0.05);
     drawSuperSpotlight();
     drawFighterReflections(time);
     drawPaintTraps(time);
@@ -9181,6 +9528,15 @@ window.__finalBlowEngine = {
         fatalitySlowMo: Boolean((state.finisher?.slowMotionTicks || 0) > 0),
         shockRings: state.effects.filter((effect) => effect.kind === "shockRing").length,
         afterimages: state.effects.filter((effect) => effect.kind === "afterimage").length,
+        sweatDrops: state.particles.filter((particle) => particle.kind === "sweat").length,
+        rimLights: presentationDebug.rimLights,
+        hitSmears: presentationDebug.hitSmears,
+        dizzyGhosts: presentationDebug.dizzyGhosts,
+        breathingFighters: presentationDebug.breathing,
+        contactShadows: presentationDebug.contactShadows,
+        gritAuras: presentationDebug.gritAuras,
+        lastLegsFighters: presentationDebug.lastLegs,
+        gritFlare: Number(Math.max(gritFlareLevel[0], gritFlareLevel[1]).toFixed(3)),
         superDim: Number(superDimLevel.toFixed(3)),
         reflections: Boolean(state.performance.shadows && (STAGE_REFLECTIONS[state.stage] ?? 0) > 0),
         shake: Number(state.shake.toFixed(3)),
@@ -9614,6 +9970,8 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         "juggleCount",
         "rhythmStacks",
         "rhythmExpiresFrame",
+        "dizzyFrames",
+        "dizzyTotalFrames",
       ]);
       for (const [key, value] of Object.entries(values)) {
         if (!allowed.has(key) || !Number.isFinite(value)) continue;
