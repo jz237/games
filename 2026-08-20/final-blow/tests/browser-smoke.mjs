@@ -345,7 +345,7 @@ try {
   }))()`);
   assert.match(title.title, /Final Blow/);
   assert.match(title.build, /1\.8/);
-  assert.equal(title.version.text, 'VERSION 1.8A');
+  assert.equal(title.version.text, 'VERSION 1.8B');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -373,7 +373,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.8a-signature-executions');
+  assert.equal(title.engineVersion, '1.8b-projectile-fatalities');
   assert.deepEqual(title.engine.presentationRules, {
     hitFlashFilter: 'brightness(1.55) saturate(1.12)',
     attackNamePopups: false,
@@ -389,6 +389,7 @@ try {
   ]);
   assert.deepEqual(title.engine.camera, {
     x: 640, y: 360, zoom: 1, locked: true, mode: 'arena', shot: 'arena', intensity: 0,
+    focus: 'fighters', projectileId: null,
     cuts: 0, impactCloseUps: 0, peakZoom: 1, slowMotionHits: 0,
     presentation: { zoom: 1, x: 0, y: 0, rotation: 0, letterbox: 0 },
   });
@@ -2618,14 +2619,14 @@ try {
   assert.deepEqual([...new Set(graphicFatalities.map((fatality) => fatality.fatalityFamily))].sort(),
     ['crush', 'dissolve', 'electrocute', 'glitch', 'implode', 'launch', 'rupture', 'slice']);
   const assignedFatalityProjectiles = {
-    deathblow: { id: 'pizza', name: 'WHOLE PIZZA' },
-    jez: { id: 'mouse', name: 'CORDED MOUSE' },
-    alan: { id: 'loogie', name: 'LOOGIES' },
-    post: { id: 'wires', name: 'TANGLED WIRES' },
-    benny: { id: 'xacto', name: 'X-ACTO KNIFE' },
-    donald: { id: 'golfball', name: 'GOLF BALL' },
-    cyraxx: { id: 'bedbugs', name: 'BED BUGS' },
-    ali: { id: 'vinyl', name: 'VINYL RECORD' },
+    deathblow: { id: 'pizza', name: 'WHOLE PIZZA', token: 'PIZZA' },
+    jez: { id: 'mouse', name: 'CORDED MOUSE', token: 'MOUSE' },
+    alan: { id: 'loogie', name: 'LOOGIES', token: 'LOOGIE' },
+    post: { id: 'wires', name: 'TANGLED WIRES', token: 'WIRE' },
+    benny: { id: 'xacto', name: 'X-ACTO KNIFE', token: 'X-ACTO' },
+    donald: { id: 'golfball', name: 'GOLF BALL', token: 'GOLF' },
+    cyraxx: { id: 'bedbugs', name: 'BED BUGS', token: 'BED-BUG' },
+    ali: { id: 'vinyl', name: 'VINYL RECORD', token: 'VINYL' },
   };
   for (const fatality of graphicFatalities) {
     assert.equal(fatality.graphicFatalities, true);
@@ -2635,6 +2636,18 @@ try {
     assert.equal(fatality.fatalityProjectileId, assignedProjectile.id, `${fatality.fatalityId} must use its fighter's assigned projectile`);
     assert.equal(fatality.signatureProjectileTriggered, true, `${fatality.fatalityId} must launch its fighter's projectile on camera`);
     assert.equal(fatality.signatureProjectiles, 1, `${fatality.fatalityId} must keep its fighter's projectile visible through the aftermath`);
+    assert.equal(fatality.projectileFocusBeats, 3, `${fatality.fatalityId} must give all three beats to the assigned projectile`);
+    assert.equal(fatality.projectileFocusBursts, 3, `${fatality.fatalityId} must visually accent all three projectile beats`);
+    assert.equal(fatality.projectilePhase, 'kill', `${fatality.fatalityId} must end on the projectile killing phase`);
+    assert.deepEqual(fatality.projectileBeatLabels, [
+      fatality.fatalityProjectileSetup,
+      fatality.fatalityProjectileAction,
+      fatality.fatalityProjectileFinale,
+    ], `${fatality.fatalityId} must execute its own three object-specific captions in order`);
+    assert.equal(fatality.beat, fatality.fatalityProjectileFinale, `${fatality.fatalityId} must name the projectile as the final cause`);
+    for (const copy of [fatality.fatalityProjectileSetup, fatality.fatalityProjectileAction, fatality.fatalityProjectileFinale]) {
+      assert.match(copy, new RegExp(assignedProjectile.token), `${fatality.fatalityId} must foreground ${assignedProjectile.name} in every beat`);
+    }
     assert.match(fatality.fatalityLimb, /^(left|right)-(arm|leg)$/);
     assert.ok(fatality.fatalityDevice, `${fatality.fatalityId} must use a deliberate execution restraint`);
     assert.equal(fatality.severedLimbs, 1, `${fatality.fatalityId} must leave one complete severed limb on screen`);
@@ -2649,7 +2662,9 @@ try {
     assert.equal(fatality.camera.mode, 'finisher');
     assert.ok(['final-impact', 'aftermath'].includes(fatality.camera.shot));
     assert.ok(fatality.camera.zoom >= 1.48, `${fatality.fatalityId} aftermath zoom ${fatality.camera.zoom} (${fatality.camera.shot})`);
-    assert.ok(fatality.cameraOffset < 0.001);
+    assert.equal(fatality.camera.focus, 'projectile', `${fatality.fatalityId} camera must prioritize the assigned projectile`);
+    assert.equal(fatality.camera.projectileId, assignedProjectile.id);
+    assert.ok(fatality.cameraOffset < 90, `${fatality.fatalityId} projectile framing drifted ${fatality.cameraOffset}px from the fight`);
   }
 
   // The same multi-cut sequence survives the Graphic Fatalities and reduced-
@@ -2668,6 +2683,10 @@ try {
   assert.equal(goreOff.status.fatalityPools, 0);
   assert.equal(goreOff.status.severedLimbs, 0);
   assert.equal(goreOff.status.signatureProjectiles, 1, 'the assigned projectile remains visible when only gore is disabled');
+  assert.equal(goreOff.status.projectileFocusBeats, 3, 'gore-off still preserves all three projectile beats');
+  assert.equal(goreOff.status.projectilePhase, 'kill');
+  assert.equal(goreOff.snapshot.camera.focus, 'projectile');
+  assert.equal(goreOff.snapshot.camera.projectileId, 'pizza');
   assert.ok(goreOff.status.cinematicCuts >= 4, `gore-off cinematic cuts ${goreOff.status.cinematicCuts} at ${goreOff.status.cinematicShot}`);
   assert.ok(goreOff.status.peakZoom >= 1.6);
   assert.equal(goreOff.status.slowMotionHits, 1);
@@ -2832,7 +2851,7 @@ try {
   }))()`);
   assert.match(controlledReload.title, /Final Blow/);
   assert.match(controlledReload.build, /1\.8/);
-  assert.equal(controlledReload.version, '1.8a-signature-executions');
+  assert.equal(controlledReload.version, '1.8b-projectile-fatalities');
 
   await client.send('Network.emulateNetworkConditions', {
     offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
@@ -2850,7 +2869,7 @@ try {
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
   assert.match(offlineBoot.build, /1\.8/);
-  assert.equal(offlineBoot.version, '1.8a-signature-executions');
+  assert.equal(offlineBoot.version, '1.8b-projectile-fatalities');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2894,7 +2913,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 1.8A');
+  assert.equal(landscape.version.text, 'VERSION 1.8B');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);

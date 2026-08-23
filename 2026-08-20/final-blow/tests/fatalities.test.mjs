@@ -11,6 +11,16 @@ import {
 import { FIGHTER_THROWABLES } from "../engine/throwables.mjs";
 
 const fighters = ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali"];
+const projectileFocusTokens = Object.freeze({
+  deathblow: "PIZZA",
+  jez: "MOUSE",
+  alan: "LOOGIE",
+  post: "WIRE",
+  benny: "X-ACTO",
+  donald: "GOLF",
+  cyraxx: "BED-BUG",
+  ali: "VINYL",
+});
 
 test("all eight fighters receive two unique graphic fatalities", () => {
   const audit = auditGraphicFatalities(fighters.map((id) => ({ id, projectile: FIGHTER_THROWABLES[id] })));
@@ -20,6 +30,10 @@ test("all eight fighters receive two unique graphic fatalities", () => {
     for (const fatality of GRAPHIC_FATALITIES[fighter]) {
       assert.equal(fatality.special, FIGHTER_THROWABLES[fighter].name, `${fatality.id} must name the assigned projectile`);
       assert.equal(fatality.projectileId, FIGHTER_THROWABLES[fighter].id, `${fatality.id} must use the assigned projectile`);
+      for (const field of ["caption", "projectileSetup", "projectileAction", "projectileFinale"]) {
+        assert.match(fatality[field], new RegExp(projectileFocusTokens[fighter]),
+          `${fatality.id} ${field} must make the assigned projectile the focus`);
+      }
       assert.ok(GRAPHIC_FATALITY_LIMBS.includes(fatality.limb), `${fatality.id} must sever a complete limb`);
       assert.ok(fatality.device, `${fatality.id} must have a deliberate restraint device`);
       assert.equal(fatality.rating, "R");
