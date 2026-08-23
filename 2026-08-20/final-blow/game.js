@@ -764,6 +764,10 @@ const state = {
   arcadeRun: null,
   controlStyle: normalizeControlStyle(localStorage.getItem("final-blow-control-style") || "classic"),
   visualQuality: normalizeVisualQuality(localStorage.getItem("final-blow-visual-quality") || "auto"),
+  // Wave 7 display toggles. Sharp render defaults on (it only ever engages on
+  // the desktop high profile); CRT mode is an opt-in look and defaults off.
+  sharpRender: localStorage.getItem("final-blow-sharp-render") !== "0",
+  crtMode: localStorage.getItem("final-blow-crt-mode") === "1",
   performance: null,
   soundCaptions: localStorage.getItem("final-blow-sound-captions") !== "0",
   attractEnabled: localStorage.getItem("final-blow-attract-mode") !== "0",
@@ -1882,6 +1886,8 @@ const presentationDebug = {
   practicalLights: 0, weatherParticles: 0, foregroundOccluders: 0, crowdFlashes: 0,
   counterFlashes: 0, projectileGlows: 0, swipeRibbons: 0, wallSplats: 0,
   focusLines: 0, lightSpills: 0,
+  // Wave 7 steady screen-space passes, counted per rendered frame.
+  bloomPasses: 0, rgbSplits: 0,
 };
 // Grit super-ready flare latches, one per side. Render-only module state on the
 // superDimLevel pattern: never snapshotted, only ever read/written from the
@@ -1946,6 +1952,10 @@ function clearBattleDamage() {
 const hudFxDebug = {
   damageGhosts: 0, letterSlams: 0, comboHeat: 0, slashWipes: 0,
   selectSlams: 0, victoryEntrances: 0, pipFlips: 0, timerPulses: 0,
+  // Wave 7 render-tech one-shots: monotonic totals on the same pattern.
+  // sloMoBlurFrames counts rendered frames with the slow-mo smear active
+  // (like cinemaFxDebug.handheldFrames — still monotonic, never reset).
+  distortionRings: 0, sloMoBlurFrames: 0, superCutIns: 0,
 };
 // Per-side damage-ghost render state: `health` is the last observed fraction,
 // `shown` the ghost bar's current scaleX, `holdMs` the remaining freeze time.
@@ -3912,6 +3922,9 @@ function triggerFinisherImpact(finisher, impact) {
   state.hitstop = Math.max(state.hitstop, finalImpact ? .26 : .055 + impact.power * .032);
   state.shake = Math.max(state.shake, finalImpact ? 1.1 : .16 + impact.power * .22);
   if (finalImpact && $("#flashToggle").checked) state.flash = .34;
+  // Wave 7: the killing blow tears the screen — distortion ring from the
+  // impact point plus a short RGB-split impulse (render-only latches).
+  if (finalImpact) latchFatalImpactPresentation(pointX, pointY);
   finisher.beatLabel = impact.label;
   finisher.beatLife = finalImpact ? 1.05 : .48;
   finisher.impactCloseUps += 1;
@@ -4712,6 +4725,9 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     if ($("#flashToggle").checked) state.flash = Math.max(state.flash, 0.22);
     state.hitstop = Math.max(state.hitstop, 0.09);
     spawnCombatText(fighter.x, fighter.y - fighter.height - 35, "FULL GRIT SUPER", fighter.def.accent);
+    // Wave 7: portrait cut-in band + screen-space distortion ring, latched
+    // module-level on the announce() pattern (rollback guard + tick dedupe).
+    latchSuperPresentation(fighter);
   }
   if (linkedFrom) spawnCombatText(fighter.x, fighter.y - fighter.height - 20, "LINK", fighter.def.accent);
   const suppressFlowMoveLabel = fighter.def.id === "ali"
@@ -5114,6 +5130,9 @@ function spawnWallImpact(fighter, wallDirection) {
   const last = wallSplatLastTick[fighter.side];
   if (tick > last && tick - last < WALL_SPLAT_COOLDOWN_TICKS) return;
   wallSplatLastTick[fighter.side] = tick;
+  // Wave 7: a wall splat is a heavy moment — kick the RGB-split impulse.
+  // Module-level render-only latch; profile/accessibility gates apply at draw.
+  if (!rollbackResimulating) aberrationImpulse = Math.max(aberrationImpulse, 0.55);
   const wallX = wallDirection < 0
     ? MOVEMENT_RULES.stageMinX - 30
     : MOVEMENT_RULES.stageMaxX + 30;
@@ -10314,6 +10333,541 @@ function finisherCameraTarget() {
   return { x: camera.x, y: camera.y };
 }
 
+// ---------------------------------------------------------------------------
+// Wave 7 render tech. Offscreen-canvas compositing passes, all module-level
+// render-only state on the documented superDimLevel pattern: never
+// snapshotted, never read by the simulation, so rollback checksums are
+// untouched. Latches set from simulation paths follow the announce() pattern
+// (rollbackResimulating guard + simulationTick dedupe). Performance
+// discipline: every pass is skipped outright on the battery profile
+// (!performance.shadows) and degrades on balanced; offscreen surfaces are
+// cached and only ever (re)sized on a backing-store change, never allocated
+// per frame.
+// ---------------------------------------------------------------------------
+
+// Backing-store scale for the DPR-sharp mode (feature: SHARP RENDER). Logical
+// coordinates stay W x H = 1280x720 everywhere; draw() applies a
+// setTransform(renderDpr,...) baseline so all existing code is untouched.
+let renderDpr = 1;
+
+function createOffscreen(width, height) {
+  const surface = document.createElement("canvas");
+  surface.width = width;
+  surface.height = height;
+  return surface;
+}
+
+// Cached offscreen surfaces, lazily created once and resized in place only
+// when the backing store or profile resolution changes.
+const renderSurfaces = {
+  bloom: null,
+  aberrRed: null,
+  aberrCyan: null,
+  aberrMask: null,
+  crtPattern: null,
+  crtVignette: null,
+};
+
+function ensureSurface(key, width, height) {
+  let surface = renderSurfaces[key];
+  if (!surface) {
+    surface = createOffscreen(width, height);
+    renderSurfaces[key] = surface;
+  } else if (surface.width !== width || surface.height !== height) {
+    surface.width = width;
+    surface.height = height;
+  }
+  return surface;
+}
+
+// --- Frame capture service -------------------------------------------------
+// Every pass that resamples the composited frame reads a one-frame-late
+// ImageBitmap snapshot instead of drawImage(canvas, ...): sampling the live
+// canvas forces a synchronous raster flush/readback that is catastrophically
+// slow on software rasterisers (~50ms/frame measured headless), while
+// createImageBitmap snapshots asynchronously off the critical path (~1ms).
+// One frame of latency is invisible in a soft additive glow or a smear.
+// The capture is taken after the stage grade + slow-mo blend and before the
+// bloom composite, so the smear accumulates recursively but bloom can never
+// feed back into itself.
+let frameBitmap = null;
+let frameBitmapPending = false;
+let slowMoBlurWasActive = false;
+// Adaptive refresh cadence. On GPU-composited browsers a capture is a cheap
+// texture copy and the snapshot refreshes every frame. Software rasterisers
+// (headless QA, --disable-gpu) pay a synchronous full-frame raster per
+// capture, so the cadence backs off and the passes composite from a slightly
+// stale snapshot instead — the counters and the look survive, the stall is
+// amortised.
+let frameCaptureCooldown = 0;
+let frameCaptureCostEma = 0;
+
+function requestFrameCapture() {
+  // Bloom runs on every high/balanced fight frame, and every other consumer
+  // (ring, RGB split, slow-mo smear) is inside that same gate — so battery
+  // never pays for a single capture.
+  if (state.screen !== "fight" || !state.performance.shadows) return;
+  if (frameBitmapPending || typeof createImageBitmap !== "function") return;
+  if (frameCaptureCooldown > 0) {
+    frameCaptureCooldown -= 1;
+    return;
+  }
+  frameBitmapPending = true;
+  const started = performance.now();
+  const capture = createImageBitmap(canvas);
+  // The raster stall, when there is one, is synchronous inside the call.
+  const syncCost = performance.now() - started;
+  frameCaptureCostEma = frameCaptureCostEma
+    ? frameCaptureCostEma * 0.8 + syncCost * 0.2
+    : syncCost;
+  frameCaptureCooldown = frameCaptureCostEma > 40 ? 7
+    : frameCaptureCostEma > 20 ? 3
+      : frameCaptureCostEma > 8 ? 1 : 0;
+  capture.then((bitmap) => {
+    if (frameBitmap) frameBitmap.close();
+    frameBitmap = bitmap;
+    frameBitmapPending = false;
+  }).catch(() => {
+    frameBitmapPending = false;
+  });
+}
+
+// Draw the latest frame snapshot stretched over the full backing store.
+function drawFrameBitmap(target) {
+  target.drawImage(
+    frameBitmap,
+    0, 0, frameBitmap.width, frameBitmap.height,
+    0, 0, canvas.width, canvas.height,
+  );
+}
+
+// Sizes the canvas backing store to min(devicePixelRatio, 2) on the desktop
+// high profile so atlases and HUD text render at native DPI. CSS sizing
+// (width/height 100%) is untouched, so layout, touch mapping and the smoke
+// suite's CSS-pixel measurements never change.
+function applyBackingStoreResolution() {
+  const environment = performanceEnvironment(state.accessibility.reducedMotion);
+  const nativeDpr = Number(window.devicePixelRatio) || 1;
+  const sharp = Boolean(state.sharpRender)
+    && state.performance.id === "high"
+    && !environment.coarsePointer
+    && nativeDpr > 1;
+  const dpr = sharp ? Math.min(2, nativeDpr) : 1;
+  const width = Math.round(W * dpr);
+  const height = Math.round(H * dpr);
+  if (renderDpr === dpr && canvas.width === width && canvas.height === height) return;
+  renderDpr = dpr;
+  canvas.width = width;
+  canvas.height = height;
+  if (frameBitmap) {
+    frameBitmap.close();
+    frameBitmap = null;
+  }
+  ctx.setTransform(renderDpr, 0, 0, renderDpr, 0, 0);
+}
+
+// --- Feature 1: quarter-res bloom composite --------------------------------
+// The whole composited frame is downsampled to a small offscreen, squared
+// against itself (a free highlight threshold: midtones collapse, neon and
+// spark whites survive) and drawn back full-screen additively — the bilinear
+// upscale supplies the soft blur. High: 320x180. Balanced: 160x90 at lower
+// alpha. Battery: skipped.
+function drawBloomComposite() {
+  if (state.screen !== "fight" || !state.performance.shadows || !frameBitmap) return;
+  const high = state.performance.id === "high";
+  const bloomWidth = high ? 320 : 160;
+  const bloomHeight = high ? 180 : 90;
+  const surface = ensureSurface("bloom", bloomWidth, bloomHeight);
+  const bloomCtx = surface.getContext("2d");
+  bloomCtx.globalCompositeOperation = "copy";
+  bloomCtx.drawImage(frameBitmap, 0, 0, frameBitmap.width, frameBitmap.height, 0, 0, bloomWidth, bloomHeight);
+  // Self-multiply squares the image (a free highlight threshold); squaring
+  // twice on high (image^4) keeps the glow to genuine emitters — neon,
+  // practicals, sparks — instead of lifting whole bright sprites.
+  bloomCtx.globalCompositeOperation = "multiply";
+  bloomCtx.drawImage(surface, 0, 0);
+  if (high) bloomCtx.drawImage(surface, 0, 0);
+  bloomCtx.globalCompositeOperation = "source-over";
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // "screen" rolls off softly near white, so bright sprites glow without
+  // clipping the way straight additive compositing does.
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = high ? 0.34 : 0.18;
+  ctx.drawImage(surface, 0, 0, bloomWidth, bloomHeight, 0, 0, canvas.width, canvas.height);
+  ctx.restore();
+  presentationDebug.bloomPasses += 1;
+}
+
+// --- Feature 2: RGB-split chromatic aberration -----------------------------
+// Heavy moments only: a render-side impulse (fatal impact, wall splat, super
+// ignition) or a super in flight (superDimLevel > 0.5, suppressed during the
+// long finisher aftermath so the tear never becomes steady-state). Channel
+// isolation: two cached offscreens hold red / cyan multiplied copies of the
+// frame, edge-masked (destination-in radial falloff, centre stays sharp) and
+// recombined "lighter" at opposite offsets.
+let aberrationImpulse = 0;
+
+function chromaticAberrationLevel() {
+  const superFlight = !state.finisher && superDimLevel > 0.5
+    ? Math.min(1, (superDimLevel - 0.5) * 2.4) : 0;
+  return Math.max(aberrationImpulse, superFlight);
+}
+
+function ensureAberrationMask(width, height) {
+  const cached = renderSurfaces.aberrMask;
+  if (cached && cached.width === width && cached.height === height) return cached;
+  const surface = ensureSurface("aberrMask", width, height);
+  const maskCtx = surface.getContext("2d");
+  maskCtx.clearRect(0, 0, width, height);
+  const gradient = maskCtx.createRadialGradient(
+    width * 0.5, height * 0.5, Math.min(width, height) * 0.22,
+    width * 0.5, height * 0.5, Math.max(width, height) * 0.62,
+  );
+  gradient.addColorStop(0, "rgba(0,0,0,0)");
+  gradient.addColorStop(0.55, "rgba(0,0,0,0.3)");
+  gradient.addColorStop(1, "rgba(0,0,0,1)");
+  maskCtx.fillStyle = gradient;
+  maskCtx.fillRect(0, 0, width, height);
+  return surface;
+}
+
+function drawChromaticAberration() {
+  if (aberrationImpulse > 0) aberrationImpulse = Math.max(0, aberrationImpulse - 0.15);
+  if (state.screen !== "fight" || !state.performance.shadows || !frameBitmap) return;
+  if (state.accessibility.reducedMotion) return;
+  const level = chromaticAberrationLevel();
+  if (level <= 0.02) return;
+  const high = state.performance.id === "high";
+  // Balanced degrades to half-res ghost copies (the upscale blurs them a
+  // touch, which reads fine for a 2px tear) at a smaller max offset.
+  const scale = high ? 1 : 0.5;
+  const splitWidth = Math.round(canvas.width * scale);
+  const splitHeight = Math.round(canvas.height * scale);
+  const mask = ensureAberrationMask(splitWidth, splitHeight);
+  const passes = [
+    ["aberrRed", "#ff0000"],
+    ["aberrCyan", "#00ffff"],
+  ];
+  for (const [key, channel] of passes) {
+    const surface = ensureSurface(key, splitWidth, splitHeight);
+    const splitCtx = surface.getContext("2d");
+    splitCtx.globalCompositeOperation = "copy";
+    splitCtx.drawImage(frameBitmap, 0, 0, frameBitmap.width, frameBitmap.height, 0, 0, splitWidth, splitHeight);
+    splitCtx.globalCompositeOperation = "multiply";
+    splitCtx.fillStyle = channel;
+    splitCtx.fillRect(0, 0, splitWidth, splitHeight);
+    splitCtx.globalCompositeOperation = "destination-in";
+    splitCtx.drawImage(mask, 0, 0);
+    splitCtx.globalCompositeOperation = "source-over";
+  }
+  const offset = (high ? 3 : 2) * level * renderDpr;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = Math.min(0.85, 0.5 + level * 0.35);
+  ctx.drawImage(renderSurfaces.aberrRed, -offset, 0, canvas.width, canvas.height);
+  ctx.drawImage(renderSurfaces.aberrCyan, offset, 0, canvas.width, canvas.height);
+  ctx.restore();
+  presentationDebug.rgbSplits += 1;
+}
+
+// --- Feature 3: screen-space distortion ring -------------------------------
+// One concurrent refraction ring: concentric annulus slices of the already
+// composited frame redrawn with tiny alternating scale offsets around the
+// impact point (no per-pixel work). World-space origin is projected through
+// the world transform captured just before the restore in draw().
+let distortionRing = null;
+let distortionRingTick = -1;
+let worldScreenTransform = null;
+
+function latchDistortionRing(x, y) {
+  if (rollbackResimulating || distortionRingTick === state.simulationTick) return;
+  if (distortionRing) return; // cap: 1 concurrent ring
+  if (state.accessibility.reducedMotion || !state.performance.shadows) return;
+  if (!$("#flashToggle").checked) return;
+  distortionRingTick = state.simulationTick;
+  distortionRing = { x, y, age: 0, duration: 0.3 };
+  hudFxDebug.distortionRings += 1;
+}
+
+function drawDistortionRing(dtMs) {
+  if (!distortionRing) return;
+  const ring = distortionRing;
+  ring.age += dtMs / 1000;
+  if (ring.age >= ring.duration || state.screen !== "fight"
+    || !state.performance.shadows || state.accessibility.reducedMotion) {
+    distortionRing = null;
+    return;
+  }
+  if (!frameBitmap) return;
+  const matrix = worldScreenTransform;
+  const originX = matrix ? matrix.a * ring.x + matrix.c * ring.y + matrix.e : ring.x * renderDpr;
+  const originY = matrix ? matrix.b * ring.x + matrix.d * ring.y + matrix.f : ring.y * renderDpr;
+  const progress = ring.age / ring.duration;
+  const eased = 1 - (1 - progress) ** 2;
+  const radius = (36 + eased * 330) * renderDpr;
+  const strength = (1 - progress) * 0.028;
+  const slices = state.performance.id === "high" ? 4 : 2;
+  const sliceDepth = 8 * renderDpr;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  for (let index = 0; index < slices; index += 1) {
+    const inner = radius + index * sliceDepth;
+    const outer = inner + sliceDepth;
+    const magnify = 1 + strength * (index % 2 === 0 ? 1 : -0.7) * (1 - index / (slices + 1));
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(originX, originY, outer, 0, Math.PI * 2);
+    ctx.arc(originX, originY, inner, 0, Math.PI * 2, true);
+    ctx.clip();
+    ctx.translate(originX, originY);
+    ctx.scale(magnify, magnify);
+    ctx.translate(-originX, -originY);
+    drawFrameBitmap(ctx);
+    ctx.restore();
+  }
+  // Hairline additive rim so the refraction edge reads at speed.
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = 0.1 * (1 - progress);
+  ctx.strokeStyle = "#cfe6ff";
+  ctx.lineWidth = 1.5 * renderDpr;
+  ctx.beginPath();
+  ctx.arc(originX, originY, radius + sliceDepth * slices * 0.5, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// --- Feature 5: slow-mo motion-blur buffer ---------------------------------
+// While fatality time dilation runs, the previous frame's capture (the single
+// cached copy) is blended over the fresh world at low alpha. Because the next
+// capture is taken after this blend, the smear accumulates recursively with a
+// 0.35 geometric decay — trailing photographic smears confined to the slow-mo
+// window. The first blend after activation is skipped (the standing capture
+// predates the window), and nothing leaks out: normal frames simply never
+// blend.
+function updateSlowMoBlur() {
+  const active = state.screen === "fight"
+    && (state.finisher?.slowMotionTicks || 0) > 0
+    && state.performance.id !== "battery"
+    && !state.accessibility.reducedMotion;
+  if (!active) {
+    slowMoBlurWasActive = false;
+    return;
+  }
+  if (frameBitmap && slowMoBlurWasActive) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 0.35;
+    drawFrameBitmap(ctx);
+    ctx.restore();
+    hudFxDebug.sloMoBlurFrames += 1;
+  }
+  slowMoBlurWasActive = true;
+}
+
+// --- Feature 6: CRT display mode -------------------------------------------
+// Opt-in arcade-monitor look: cached RGB phosphor-stripe + scanline pattern,
+// cached low-res barrel vignette upscaled over the corners, and a faint
+// rolling flicker band (gated on #flashToggle and reduced motion). Pure
+// screen-space, applied after everything; skipped on battery.
+function crtOverlayActive() {
+  return Boolean(state.crtMode) && state.performance.id !== "battery";
+}
+
+function ensureCrtPattern() {
+  if (renderSurfaces.crtPattern) return renderSurfaces.crtPattern;
+  const tile = createOffscreen(3, 3);
+  const tileCtx = tile.getContext("2d");
+  tileCtx.fillStyle = "rgba(255,64,64,0.055)";
+  tileCtx.fillRect(0, 0, 1, 3);
+  tileCtx.fillStyle = "rgba(64,255,96,0.05)";
+  tileCtx.fillRect(1, 0, 1, 3);
+  tileCtx.fillStyle = "rgba(80,128,255,0.06)";
+  tileCtx.fillRect(2, 0, 1, 3);
+  tileCtx.fillStyle = "rgba(4,6,10,0.17)";
+  tileCtx.fillRect(0, 2, 3, 1);
+  renderSurfaces.crtPattern = ctx.createPattern(tile, "repeat");
+  return renderSurfaces.crtPattern;
+}
+
+function ensureCrtVignette() {
+  if (renderSurfaces.crtVignette) return renderSurfaces.crtVignette;
+  const surface = createOffscreen(320, 180);
+  const vignetteCtx = surface.getContext("2d");
+  const gradient = vignetteCtx.createRadialGradient(160, 90, 74, 160, 90, 208);
+  gradient.addColorStop(0, "rgba(0,0,0,0)");
+  gradient.addColorStop(0.72, "rgba(0,0,0,0.05)");
+  gradient.addColorStop(1, "rgba(0,0,0,0.36)");
+  vignetteCtx.fillStyle = gradient;
+  vignetteCtx.fillRect(0, 0, 320, 180);
+  renderSurfaces.crtVignette = surface;
+  return surface;
+}
+
+function drawCrtOverlay(time) {
+  if (!crtOverlayActive()) return;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = ensureCrtPattern();
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(ensureCrtVignette(), 0, 0, canvas.width, canvas.height);
+  if ($("#flashToggle").checked && !state.accessibility.reducedMotion) {
+    const bandHeight = canvas.height * 0.16;
+    const bandY = ((time * 0.055) % (canvas.height + bandHeight)) - bandHeight;
+    const gradient = ctx.createLinearGradient(0, bandY, 0, bandY + bandHeight);
+    gradient.addColorStop(0, "rgba(255,255,255,0)");
+    gradient.addColorStop(0.5, "rgba(255,255,255,0.045)");
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, bandY, canvas.width, bandHeight);
+  }
+  ctx.restore();
+}
+
+// --- Feature 7: super portrait cut-in band ---------------------------------
+// FULL GRIT SUPER slams the attacker's roster portrait (the select-screen
+// webp art, already preloaded in fighterImages) across a diagonal accent band
+// for ~0.7s. Deliberately cheap (one drawImage + gradients), so it runs on
+// every profile; reduced motion swaps the sweep for a static fade.
+let superCutIn = null;
+let superCutInTick = -1;
+const SUPER_CUT_IN_SECONDS = 0.7;
+
+function latchSuperPresentation(fighter) {
+  if (rollbackResimulating || superCutInTick === state.simulationTick) return;
+  superCutInTick = state.simulationTick;
+  superCutIn = {
+    side: fighter.side,
+    fighterId: fighter.def.id,
+    name: fighter.def.name,
+    accent: fighter.def.accent,
+    color: fighter.def.color,
+    t: 0,
+  };
+  hudFxDebug.superCutIns += 1;
+  latchDistortionRing(fighter.x, fighter.y - fighter.height * 0.6);
+  if (state.performance.shadows && !state.accessibility.reducedMotion) {
+    aberrationImpulse = Math.max(aberrationImpulse, 0.7);
+  }
+}
+
+function latchFatalImpactPresentation(x, y) {
+  if (rollbackResimulating) return;
+  latchDistortionRing(x, y);
+  if (state.performance.shadows && !state.accessibility.reducedMotion) {
+    aberrationImpulse = Math.max(aberrationImpulse, 1);
+  }
+}
+
+function drawSuperCutIn(dtMs) {
+  if (!superCutIn) return;
+  if (state.screen !== "fight") {
+    superCutIn = null;
+    return;
+  }
+  const cut = superCutIn;
+  cut.t += dtMs / 1000;
+  if (cut.t >= SUPER_CUT_IN_SECONDS) {
+    superCutIn = null;
+    return;
+  }
+  const reduced = state.accessibility.reducedMotion;
+  const progress = clamp(cut.t / SUPER_CUT_IN_SECONDS, 0, 1);
+  const alpha = Math.min(clamp(progress / 0.07, 0, 1), clamp((1 - progress) / 0.16, 0, 1));
+  const fromLeft = cut.side === 0;
+  // Band held to the upper-middle third: clear of the HUD and low enough to
+  // frame the portrait without burying the fighters for its 0.7s life.
+  const bandTop = H * 0.19;
+  const bandBottom = H * 0.46;
+  const tilt = 32;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(-60, bandTop + tilt);
+  ctx.lineTo(W + 60, bandTop - tilt);
+  ctx.lineTo(W + 60, bandBottom - tilt);
+  ctx.lineTo(-60, bandBottom + tilt);
+  ctx.closePath();
+  ctx.clip();
+  // Near-opaque dark core with a hard accent wash so the portrait pops on any
+  // stage and the band reads as a cut-in, not a tint.
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = "rgba(5,7,13,0.93)";
+  ctx.fillRect(0, bandTop - tilt, W, bandBottom - bandTop + tilt * 2);
+  const wash = ctx.createLinearGradient(fromLeft ? 0 : W, 0, fromLeft ? W : 0, 0);
+  wash.addColorStop(0, `${cut.accent}e6`);
+  wash.addColorStop(0.4, `${cut.color}55`);
+  wash.addColorStop(1, "rgba(8,10,18,0)");
+  ctx.fillStyle = wash;
+  ctx.fillRect(0, bandTop - tilt, W, bandBottom - bandTop + tilt * 2);
+  // Speed lines streak against the sweep (skipped under reduced motion).
+  if (!reduced) {
+    ctx.globalCompositeOperation = "lighter";
+    for (let index = 0; index < 11; index += 1) {
+      const seed = Math.sin((index + 1) * 12.9898) * 43758.5453;
+      const jitter = seed - Math.floor(seed);
+      const lineY = bandTop + 10 + jitter * (bandBottom - bandTop - 20);
+      const speed = (1100 + jitter * 1100) * (fromLeft ? 1 : -1);
+      const span = W + 700;
+      let lineX = (fromLeft ? -350 : W + 350) + speed * cut.t * 1.7;
+      // Wrap so the streaks keep flowing for the whole 0.7s hold.
+      lineX = fromLeft ? ((lineX + 350) % span) - 350 : ((lineX - W - 350) % span) + W + 350;
+      ctx.globalAlpha = alpha * (0.3 + jitter * 0.34);
+      ctx.fillStyle = index % 3 === 0 ? cut.accent : "#eef4ff";
+      ctx.fillRect(lineX, lineY, (150 + jitter * 240) * (fromLeft ? 1 : -1), 2.5 + jitter * 2.5);
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+  // Portrait slam: eased slide toward centre (static under reduced motion),
+  // riding an accent glow pool so the cutout art separates from the band.
+  const image = fighterImages[cut.fighterId];
+  if (image?.complete && image.naturalWidth > 0) {
+    const portraitHeight = (bandBottom - bandTop) * 2.15;
+    const portraitWidth = portraitHeight * (image.naturalWidth / image.naturalHeight);
+    const slide = reduced ? 1 : 1 - (1 - clamp(progress / 0.34, 0, 1)) ** 3;
+    const targetX = W * 0.5 - portraitWidth * 0.5;
+    const startX = fromLeft ? -portraitWidth - 80 : W + 80;
+    const portraitX = lerp(startX, targetX, slide)
+      + (reduced ? 0 : (fromLeft ? 1 : -1) * (1 - progress) * 30);
+    const glowX = portraitX + portraitWidth * 0.5;
+    const glowY = (bandTop + bandBottom) * 0.5;
+    const glow = ctx.createRadialGradient(glowX, glowY, 12, glowX, glowY, portraitHeight * 0.52);
+    glow.addColorStop(0, `${cut.accent}b4`);
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.globalAlpha = alpha;
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, bandTop - tilt, W, bandBottom - bandTop + tilt * 2);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.drawImage(image, portraitX, bandTop - portraitHeight * 0.24, portraitWidth, portraitHeight);
+  }
+  // Name plate riding the band's lower edge.
+  ctx.globalAlpha = alpha;
+  ctx.font = "italic 1000 44px Arial Narrow, Impact, sans-serif";
+  ctx.textAlign = fromLeft ? "right" : "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = "rgba(0,0,0,.92)";
+  ctx.fillStyle = "#f4f7ff";
+  const nameX = fromLeft ? W - 54 : 54;
+  ctx.strokeText(cut.name, nameX, bandBottom - 18);
+  ctx.fillText(cut.name, nameX, bandBottom - 18);
+  ctx.restore();
+  // Band edge strokes drawn unclipped so they stay crisp.
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.95;
+  ctx.strokeStyle = cut.accent;
+  ctx.lineWidth = 3.5;
+  ctx.beginPath();
+  ctx.moveTo(-60, bandTop + tilt);
+  ctx.lineTo(W + 60, bandTop - tilt);
+  ctx.moveTo(-60, bandBottom + tilt);
+  ctx.lineTo(W + 60, bandBottom - tilt);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function draw(time) {
   // Wave 5 HUD observers: phase-edge slash wipe and the hold-then-drain
   // damage ghosts, both driven from observed state in the render loop.
@@ -10325,6 +10879,9 @@ function draw(time) {
   // before the world transform is built. Runs unconditionally so the camera
   // hard-resets to identity the moment the fight screen goes away.
   updateCinematicCamera(hudDtMs);
+  // Wave 7 DPR-sharp baseline: all logical-coordinate code below draws through
+  // this transform; identity when sharp render is off (renderDpr === 1).
+  ctx.setTransform(renderDpr, 0, 0, renderDpr, 0, 0);
   ctx.save();
   const shakeScale = state.accessibility.reducedMotion ? 0 : state.accessibility.shakeScale;
   const shakeX = state.shake > 0 ? Math.sin((state.simulationTick + 1) * 12.9898) * state.shake * 9 * shakeScale : 0;
@@ -10374,14 +10931,27 @@ function draw(time) {
     drawForegroundOccluders(state.fighters.length
       ? (state.fighters[0].x + state.fighters[1].x) * 0.5 : W * 0.5);
   }
+  // Wave 7: capture the live world transform so the screen-space distortion
+  // ring can project its world-space origin after the restore.
+  if (distortionRing) worldScreenTransform = ctx.getTransform();
   ctx.restore();
   drawStageGrade();
+  // Wave 7 screen-space composite passes, in order: slow-mo smear first, then
+  // the frame capture (so the smear recursively accumulates but bloom can
+  // never feed back into itself), then bloom and the one-shot warps.
+  updateSlowMoBlur();
+  requestFrameCapture();
+  drawBloomComposite();
+  drawDistortionRing(hudDtMs);
+  drawChromaticAberration();
   drawIntroLetterbox();
   drawFinisherOverlay();
   if (state.flash > 0) {
     ctx.fillStyle = `rgba(255,245,220,${clamp(state.flash * 3, 0, 0.9)})`;
     ctx.fillRect(0, 0, W, H);
   }
+  drawSuperCutIn(hudDtMs);
+  drawCrtOverlay(time);
   drawDebugOverlay();
 }
 
@@ -10462,7 +11032,11 @@ function applyPerformanceSettings() {
   );
   document.body.dataset.quality = state.performance.id;
   $("#visualQualitySelect").value = state.visualQuality;
+  $("#sharpRenderToggle").checked = Boolean(state.sharpRender);
+  $("#crtModeToggle").checked = Boolean(state.crtMode);
   $("#pausePerformance").textContent = `${state.visualQuality.toUpperCase()} VISUALS · ${state.performance.id.toUpperCase()} PROFILE · ${state.performance.particleBudget} FX BUDGET`;
+  // Wave 7: quality switches re-apply the DPR-sharp backing store.
+  applyBackingStoreResolution();
 }
 
 // The movement pad is three rows tall now, so on a short landscape phone the
@@ -11138,6 +11712,15 @@ $("#visualQualitySelect").addEventListener("change", (event) => {
   localStorage.setItem("final-blow-visual-quality", state.visualQuality);
   applyPerformanceSettings();
 });
+$("#sharpRenderToggle").addEventListener("change", (event) => {
+  state.sharpRender = event.target.checked;
+  localStorage.setItem("final-blow-sharp-render", state.sharpRender ? "1" : "0");
+  applyPerformanceSettings();
+});
+$("#crtModeToggle").addEventListener("change", (event) => {
+  state.crtMode = event.target.checked;
+  localStorage.setItem("final-blow-crt-mode", state.crtMode ? "1" : "0");
+});
 $("#soundCaptionsToggle").addEventListener("change", (event) => {
   state.soundCaptions = event.target.checked;
   localStorage.setItem("final-blow-sound-captions", event.target.checked ? "1" : "0");
@@ -11483,6 +12066,16 @@ window.__finalBlowEngine = {
         // sampling reads the 2-4px magnitude without racing the decay.
         impactRecoilKick: Number(cameraRecoil.ampX.toFixed(3)),
         winPoseDim: Number(roundOverDimLevel.toFixed(3)),
+        // Wave 7 render tech: per-frame pass counts (presentationDebug) for
+        // the steady composites, monotonic one-shot totals (hudFxDebug) for
+        // the latched effects, and 0/1 current display-mode states.
+        bloomPasses: presentationDebug.bloomPasses,
+        rgbSplits: presentationDebug.rgbSplits,
+        distortionRings: hudFxDebug.distortionRings,
+        sharpRender: renderDpr > 1 ? 1 : 0,
+        sloMoBlurFrames: hudFxDebug.sloMoBlurFrames,
+        crtMode: crtOverlayActive() ? 1 : 0,
+        superCutIns: hudFxDebug.superCutIns,
       },
       stageWeapon: weaponSnapshot(state.stageWeapon),
       stageWeaponsEnabled: state.stageWeaponsEnabled,
