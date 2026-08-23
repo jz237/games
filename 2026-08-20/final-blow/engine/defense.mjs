@@ -389,7 +389,7 @@ function deepFreeze(value) {
  */
 export const KICK_VARIANTS = deepFreeze({
   standLightKick: {
-    source: "standLight", suffix: "lk", moveName: "LOW KICK", level: ATTACK_LEVELS.MID,
+    source: "standLight", suffix: "lk", moveName: "LIGHT KICK", level: ATTACK_LEVELS.MID,
     range: 1.2, damage: 1, push: 1.12, startup: 1, active: 0, recovery: 2,
     hitstun: 0, blockstun: 1, boxY: 0.9, boxHeight: 1.06,
   },

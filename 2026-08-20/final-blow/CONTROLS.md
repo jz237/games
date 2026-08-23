@@ -1,6 +1,6 @@
-# Final Blow 1.3C four-button controls
+# Final Blow 1.7 four-button controls
 
-Version 1.3C uses the approved classic layout: one directional control plus
+Version 1.7 uses the approved classic layout: one directional control plus
 **LP, HP, LK, HK**. No legacy
 guard, special, super, throw or Final Blow button is required anywhere in the game.
 
@@ -25,10 +25,10 @@ opening normal.
 
 | Button | Keyboard P1 | Keyboard P2 | XInput | Attack |
 | --- | --- | --- | --- | --- |
-| LP | J | Num 1 | X | Light punch |
-| HP | K | Num 2 | Y | Heavy punch |
+| LP | J | Num 1 | X | Jab |
+| HP | K | Num 2 | Y | Hook |
 | LK | N | Num 4 | A | Light kick |
-| HK | M | Num 5 | B | Heavy kick |
+| HK | M | Num 5 | B | Roundhouse |
 
 PlayStation and Nintendo pads are detected from the gamepad id and relabelled
 (□ △ ✕ ○ and Y X B A respectively). Every binding is remappable and persisted.
@@ -37,7 +37,7 @@ Each button authors a distinct normal in every stance:
 
 | Stance | LP | HP | LK | HK |
 | --- | --- | --- | --- | --- |
-| Standing | jab | strong punch | low kick | roundhouse |
+| Standing | jab | hook | light kick | roundhouse |
 | Forward | body check | overhead | roundhouse | roundhouse |
 | Crouching | low jab | crouching strong | short kick | **sweep** (low, knockdown) |
 | Air | jump punch | jump strong | jump kick | jump roundhouse |

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   ATTACK_BUTTONS,
+  BUTTON_NAMES,
   DEFAULT_KEY_MAPS,
   DEFAULT_PAD_MAP,
   REMAPPABLE_ACTIONS,
@@ -45,6 +46,10 @@ function testFourButtonBindings() {
 
   assert.deepEqual(ATTACK_BUTTONS.map(buttonStrength), ["light", "heavy", "light", "heavy"]);
   assert.deepEqual(ATTACK_BUTTONS.map(buttonLimb), ["punch", "punch", "kick", "kick"]);
+  assert.deepEqual(
+    ATTACK_BUTTONS.map((button) => BUTTON_NAMES[button]),
+    ["JAB", "HOOK", "LIGHT KICK", "ROUNDHOUSE"],
+  );
 }
 
 function testPadRemapping() {

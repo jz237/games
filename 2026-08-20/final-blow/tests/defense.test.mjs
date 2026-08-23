@@ -28,7 +28,9 @@ function testMoveSelection() {
 
   // Four-button layout: the kick buttons select their own derived normals.
   assert.equal(selectMoveProfile("light", { limb: "kick" }).id, "stand-light-lk");
+  assert.equal(selectMoveProfile("light", { limb: "kick" }).moveName, "LIGHT KICK");
   assert.equal(selectMoveProfile("heavy", { limb: "kick" }).id, "stand-heavy-hk");
+  assert.equal(selectMoveProfile("heavy", { limb: "kick" }).moveName, "ROUNDHOUSE");
   assert.equal(selectMoveProfile("heavy", { limb: "kick", crouching: true }).id, "crouch-heavy-sweep");
   assert.equal(selectMoveProfile("light", { limb: "kick", crouching: true }).id, "crouch-light-lk");
   assert.equal(selectMoveProfile("heavy", { limb: "kick", airborne: true }).id, "air-heavy-hk");

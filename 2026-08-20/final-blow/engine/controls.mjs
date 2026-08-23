@@ -7,10 +7,10 @@ export const ATTACK_BUTTONS = Object.freeze(["lp", "hp", "lk", "hk"]);
 export const BUTTON_LABELS = Object.freeze({ lp: "LP", hp: "HP", lk: "LK", hk: "HK" });
 
 export const BUTTON_NAMES = Object.freeze({
-  lp: "LIGHT PUNCH",
-  hp: "HEAVY PUNCH",
+  lp: "JAB",
+  hp: "HOOK",
   lk: "LIGHT KICK",
-  hk: "HEAVY KICK",
+  hk: "ROUNDHOUSE",
 });
 
 export const REMAPPABLE_ACTIONS = Object.freeze([
