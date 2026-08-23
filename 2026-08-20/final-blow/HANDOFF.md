@@ -336,7 +336,7 @@ Frame roles are documented in `tools/README.md`.
 ```sh
 cd /home/jez237/.openclaw/agents/gamemaster/workspace/final-blow-goal/2026-08-20/final-blow
 
-node --test tests/*.test.mjs        # 39 unit/module/guard tests
+node --test tests/*.test.mjs        # 102 unit/module/guard tests
 node tests/browser-smoke.mjs        # full browser suite, needs Chrome, ~2min
 
 # online rollback (two browsers against a local signaling worker)
@@ -386,6 +386,15 @@ works fine and was used for all the new art.
 - Untracked and deliberately preserved in the canonical game folder:
   `BACKLOG.md` and `assets/references/`. They are private and are not part of the
   v1.8E commit or mirror.
+- Audio is now gated on Jez's SFX review. `engine/audio-review.mjs` is generated
+  from his verdict and is the single source of truth for which takes may ship;
+  `tests/audio-review.test.mjs` fails the build if a rejected recording comes
+  back, whether as a file or as a reference. Adding a fighter take means adding
+  it to his accepted list and regenerating, not dropping an mp3 into
+  `assets/audio/fighters/`. The kick cues (`light-kick-swing`,
+  `light-kick-impact`, `roundhouse-swing`, `roundhouse-impact`) are pooled per
+  fighter and picked by a render-only cursor, so they never touch `state.rng`
+  and stay rollback-safe.
 
 ---
 
@@ -397,6 +406,7 @@ every autonomous decision made during 1.1:
 | File | Covers |
 | --- | --- |
 | `CONTROLS.md` | Four-button layout, motions, chords, grabs, 10 design decisions |
+| `MISSING-AUDIO.md` | The outstanding voice work order, and which takes the SFX review rejected |
 | `COMBAT.md` | SF2HF/MK3 tuning tables, dizzy, fighter scale, the movement-ratio bug |
 | `THROWABLES.md` | Personal objects and stage weapons |
 | `CYRAXX.md` | The rebuild, identity cues, pipeline, the fal edit-mode limitation |

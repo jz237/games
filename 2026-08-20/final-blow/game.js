@@ -187,11 +187,13 @@ import {
   throwableUses,
 } from "./engine/throwables.mjs";
 import {
+  FIGHTER_AUDIO_BANK_KINDS,
   FIGHTER_AUDIO_CUES,
   FIGHTER_AUDIO_LABELS,
   FIGHTER_REACTIVE_PLACEHOLDERS,
   FIGHTER_TAUNT_LINES,
   auditFighterAudio,
+  fighterAudioBankKind,
   fighterAudioCue,
   fighterAudioVariants,
 } from "./engine/fighter-audio.mjs";
@@ -690,18 +692,18 @@ for (const fighter of [...roster, arcadeBoss]) {
   }
 }
 
-// Original soundtrack and combat cues generated with the ElevenLabs API. The
-// dedicated "Death Blow" announcer call is mixed into the `final` asset.
+// Original soundtrack and combat cues generated with the ElevenLabs API, less
+// the three stage-wide takes Jez rejected on review: the special swing, the
+// guard impact and the "Death Blow" announcer call. Those files are deleted,
+// so `special`, `block` and `final` deliberately have no entry here and reach
+// proceduralSound() instead — see fallbackSoundKinds below.
 const audioAssets = {
   select: "assets/audio/ui-select.mp3",
   jump: "assets/audio/jump.mp3",
   light: "assets/audio/light-swing.mp3",
   heavy: "assets/audio/heavy-swing.mp3",
-  special: "assets/audio/special-swing.mp3",
   hit: "assets/audio/body-hit.mp3",
-  block: "assets/audio/block.mp3",
   finish: "assets/audio/finish-ready.mp3",
-  final: "assets/audio/final-blow.mp3",
   ko: "assets/audio/knockout.mp3",
 };
 
@@ -717,6 +719,12 @@ const sfxVolumes = {
   "hit-light": 0.66,
   "hit-heavy": 0.76,
   block: 0.62,
+  // Reviewed kick takes. The swings sit just under their punch equivalents so
+  // a limb switch reads as a different weapon, not a louder one.
+  "light-kick-swing": 0.48,
+  "roundhouse-swing": 0.56,
+  "light-kick-impact": 0.68,
+  "roundhouse-impact": 0.78,
   super: 0.86,
   fatal: 0.94,
   finish: 0.78,
@@ -749,11 +757,23 @@ const fighterSfxPools = new Map();
 const fighterSfxCursors = new Map();
 const fighterAudioAudit = auditFighterAudio();
 
+// Where a cue lands when the fighter has no recorded take of their own. Each
+// target names an accepted shared sample where one fits; the three that point
+// at `special`, `block` and `final` no longer resolve to a file at all, because
+// those takes were rejected and deleted — they name a proceduralSound() voice
+// instead, which is the whole point of routing through a kind rather than a
+// path. Nothing here may ever name a rejected recording.
 const fallbackSoundKinds = Object.freeze({
   dash: "jump",
   throw: "heavy",
   "hit-light": "hit",
   "hit-heavy": "hit",
+  // Reviewed kick cues fall back to the shared swing and body-impact takes,
+  // all three of which he accepted, whenever a fighter's own pool is empty.
+  "light-kick-swing": "light",
+  "roundhouse-swing": "heavy",
+  "light-kick-impact": "hit",
+  "roundhouse-impact": "hit",
   super: "final",
   fatal: "final",
   "stage-weapon": "select",
@@ -5158,7 +5178,7 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   // training data, but normal play no longer narrates each attack over the
   // fighters. Tactical callouts such as COUNTER, LOW and GUARD CRUSH remain.
   updateHud();
-  sound(fighter.attacking.superMove ? "super" : actionGroup === "throw" ? "throw" : fighter.attacking.kind, fighter);
+  sound(attackSwingCue(fighter.attacking, actionGroup), fighter);
   // Release 1.6 LOUD: synthesized pre-impact whoosh layered under the swing
   // sample (guards + tier gating live inside).
   impactSwingWhoosh(fighter.attacking);
@@ -7387,10 +7407,7 @@ function hit(attacker, victim, attack, collision) {
     });
     spawnCombatText(impact.x, impact.y - 80, "PERFECT", "#63f2ff");
   }
-  sound(
-    blocked ? "block" : attack.kind === "light" ? "hit-light" : "hit-heavy",
-    blocked ? victim : attacker,
-  );
+  sound(attackImpactCue(attack, blocked), blocked ? victim : attacker);
   // The distinct 'tink' variant layered over the block cue on a just-defend.
   if (perfect) perfectGuardTink();
   updateHud();
@@ -12593,9 +12610,16 @@ function probeAudioFile(url) {
     .catch(() => false);
 }
 
-// `${fighterId}:${cue}` -> { srcs: confirmed variant files, probed }. Core
-// cues optimistically trust variant 1 (those 96 files shipped with 1.5);
-// reactive cues start empty until the probe confirms real takes exist.
+// `${fighterId}:${cue}` -> { srcs: confirmed variant files, probed }. How a
+// bank fills depends on what the review left behind:
+//   recorded    — the reviewed kick pools. Every path is an accepted take that
+//                 ships, so the bank is complete on creation and never probes.
+//   probed      — a surviving 1.5 core take. Variant 1 is known to exist;
+//                 slots 2 and 3 are speculative and cost one HEAD each.
+//   placeholder — a reactive cue with nothing recorded yet; starts empty and
+//                 borrows a detuned take until real files appear.
+// A cue whose recording was rejected has no palette entry at all, so it never
+// reaches this function and can never be requested from the network.
 const fighterVoiceBanks = new Map();
 
 function fighterVoiceBank(fighterId, cue) {
@@ -12604,15 +12628,21 @@ function fighterVoiceBank(fighterId, cue) {
   const key = `${fighterId}:${cue}`;
   let bank = fighterVoiceBanks.get(key);
   if (!bank) {
-    const core = !FIGHTER_REACTIVE_PLACEHOLDERS[cue];
-    bank = { key, srcs: core ? [variants[0]] : [], probed: false };
+    const kind = fighterAudioBankKind(cue);
+    if (kind === FIGHTER_AUDIO_BANK_KINDS.recorded) {
+      bank = { key, srcs: [...variants], probed: true };
+      fighterVoiceBanks.set(key, bank);
+      return bank;
+    }
+    const seeded = kind === FIGHTER_AUDIO_BANK_KINDS.probed ? 1 : 0;
+    bank = { key, srcs: variants.slice(0, seeded), probed: false };
     fighterVoiceBanks.set(key, bank);
     // One probe pass per bank per session, sequential and stopping at the
     // first gap (banks are contiguous), so a fully-missing bank costs a
     // single request and a present bank grows the rotation in place.
     (async () => {
-      const found = core ? [variants[0]] : [];
-      for (let index = core ? 1 : 0; index < variants.length; index += 1) {
+      const found = variants.slice(0, seeded);
+      for (let index = seeded; index < variants.length; index += 1) {
         if (!(await probeAudioFile(variants[index]))) break;
         found.push(variants[index]);
       }
@@ -12682,6 +12712,34 @@ function unlockAudio() {
     if (state.audio) ensureAudioGraph();
   }
   syncMusic();
+}
+
+/**
+ * Which cue a swing announces. Every derived kick profile is tagged
+ * `limb: "kick"` by the sim itself, so light and heavy normals thrown with a
+ * leg claim the reviewed kick cues instead of the punch-flavoured ones. The
+ * tag rides on the move instance that actually spawned, so the audio can never
+ * disagree with the attack on screen. Supers and throws keep their own cue
+ * whichever limb threw them.
+ */
+function attackSwingCue(move, actionGroup) {
+  if (move.superMove) return "super";
+  if (actionGroup === "throw") return "throw";
+  if (move.limb === "kick") {
+    if (move.kind === "light") return "light-kick-swing";
+    if (move.kind === "heavy") return "roundhouse-swing";
+  }
+  return move.kind;
+}
+
+/** The impact counterpart of attackSwingCue. A blocked hit stays a guard cue. */
+function attackImpactCue(attack, blocked) {
+  if (blocked) return "block";
+  if (attack.limb === "kick") {
+    if (attack.kind === "light") return "light-kick-impact";
+    if (attack.kind === "heavy") return "roundhouse-impact";
+  }
+  return attack.kind === "light" ? "hit-light" : "hit-heavy";
 }
 
 function sound(kind, fighter = null) {

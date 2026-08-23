@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { REJECTED_PATHS, WITHHELD_CANDIDATE_PATHS } from "../engine/audio-review.mjs";
+
 const testDir = dirname(fileURLToPath(import.meta.url));
 const gameRoot = normalize(join(testDir, ".."));
 const chromePath = process.env.CHROME_PATH || "/usr/bin/google-chrome-stable";
@@ -367,8 +369,9 @@ try {
   assert.equal(title.graphicFatalities, true);
   assert.deepEqual(title.engine.fatalityAudit, { fighters: 8, fatalities: 16, errors: [] });
   assert.deepEqual(title.engine.audio.audit, {
-    fighters: 8, cuesPerFighter: 19, coreCues: 12, reactiveCues: 7,
-    variantSlots: 3, totalCues: 152, totalVariantPaths: 456, errors: [],
+    fighters: 8, cuesPerFighter: 23, coreCues: 12, kickCues: 4, reactiveCues: 7,
+    variantSlots: 3, approvedCoreTakes: 15, approvedKickTakes: 30,
+    recordedTakes: 45, totalVariantPaths: 243, errors: [],
   });
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
@@ -463,48 +466,110 @@ try {
   assert.ok(tournamentMatrix.matchups.every(({ maximumProjectiles }) => maximumProjectiles <= 4));
   assert.ok(tournamentMatrix.matchups.every(({ maximumTraps }) => maximumTraps <= 2));
 
+  // Jez's SFX review deleted most of the 1.5 per-fighter takes and added a
+  // reviewed kick pool. A cue whose recording he rejected must report itself
+  // as unsignatured and route to a shared take he kept (or to nothing at all,
+  // meaning procedural), never to the file that was removed.
   const fighterAudioRoutes = await evaluate(client, `(() => {
     const fighterIds = ['deathblow', 'jez', 'alan', 'post', 'benny', 'donald', 'cyraxx', 'ali'];
-    const cues = ['jump', 'dash', 'light', 'heavy', 'special', 'throw', 'hit-light', 'hit-heavy', 'block', 'super', 'fatal', 'ko'];
+    const cues = [
+      'jump', 'dash', 'light', 'heavy', 'special', 'throw', 'hit-light', 'hit-heavy', 'block', 'super', 'fatal', 'ko',
+      'light-kick-swing', 'light-kick-impact', 'roundhouse-swing', 'roundhouse-impact',
+    ];
     const soundToggle = document.querySelector('#soundToggle');
     const enabled = soundToggle.checked;
     soundToggle.checked = false;
-    const routes = fighterIds.flatMap((fighterId) => cues.map((cue) => window.__finalBlowQa.soundCue(fighterId, cue)));
+    const routes = fighterIds.flatMap((fighterId) => cues.map((cue) => ({
+      cue, ...window.__finalBlowQa.soundCue(fighterId, cue),
+    })));
     soundToggle.checked = enabled;
     return routes;
   })()`);
-  assert.equal(fighterAudioRoutes.length, 96);
-  assert.ok(fighterAudioRoutes.every(({ signature }) => signature));
-  assert.equal(new Set(fighterAudioRoutes.map(({ src }) => src)).size, 96);
-  assert.equal(fighterAudioRoutes[0].src, 'assets/audio/fighters/deathblow/jump.mp3');
-  assert.equal(fighterAudioRoutes.at(-1).src, 'assets/audio/fighters/ali/ko.mp3');
+  assert.equal(fighterAudioRoutes.length, 128);
+  // 15 surviving core takes plus 22 fighter/role pairs with an accepted kick.
+  const signatureRoutes = fighterAudioRoutes.filter(({ signature }) => signature);
+  assert.equal(signatureRoutes.length, 37);
+  assert.equal(new Set(signatureRoutes.map(({ src }) => src)).size, 37);
+  assert.ok(signatureRoutes.every(({ src }) => src.startsWith('assets/audio/fighters/')));
+  // Nothing unsignatured may still name a personal take: it either borrows a
+  // shared sample or reports no file at all.
+  assert.ok(fighterAudioRoutes
+    .filter(({ signature }) => !signature)
+    .every(({ src }) => src === null || /^assets\/audio\/[\w-]+\.mp3$/.test(src)));
+  assert.deepEqual(fighterAudioRoutes[0], {
+    cue: 'jump', kind: 'jump', fighterId: 'deathblow', signature: true,
+    src: 'assets/audio/fighters/deathblow/jump.mp3',
+  });
+  // He rejected every one of Jez's own core takes, so that fighter runs on
+  // shared and procedural audio apart from two kick cues: the light-kick swing
+  // (both takes accepted) and the roundhouse impact (the b take only).
+  assert.deepEqual(
+    fighterAudioRoutes.filter(({ fighterId, signature }) => fighterId === 'jez' && signature).map(({ cue }) => cue),
+    ['light-kick-swing', 'roundhouse-impact'],
+  );
+  const routeFor = (fighterId, cue) => fighterAudioRoutes.find((route) => route.fighterId === fighterId && route.cue === cue);
+  assert.deepEqual(routeFor('deathblow', 'roundhouse-swing'), {
+    cue: 'roundhouse-swing', kind: 'roundhouse-swing', fighterId: 'deathblow', signature: true,
+    src: 'assets/audio/fighters/deathblow/roundhouse-swing-a.mp3',
+  });
+  // Both of Donald's light-kick swings were rejected, so the role falls back
+  // to the shared light swing he kept.
+  assert.deepEqual(routeFor('donald', 'light-kick-swing'), {
+    cue: 'light-kick-swing', kind: 'light-kick-swing', fighterId: 'donald', signature: false,
+    src: 'assets/audio/light-swing.mp3',
+  });
+  // The guard cue lost both its personal and its shared recording: procedural.
+  assert.deepEqual(routeFor('jez', 'block'), {
+    cue: 'block', kind: 'block', fighterId: 'jez', signature: false, src: null,
+  });
 
   const contextualAudio = await evaluate(client, `(() => {
     const soundToggle = document.querySelector('#soundToggle');
     const enabled = soundToggle.checked;
     soundToggle.checked = false;
+    const lastEvent = () => window.__finalBlowEngine.snapshot().audio.lastEvent;
     window.__finalBlowQa.fight('deathblow', 'jez');
     window.__finalBlowQa.positions(500, 585);
     window.__finalBlowQa.input(0, { light: true });
     window.__finalBlowQa.step(0.45);
-    const hit = window.__finalBlowEngine.snapshot().audio.lastEvent;
+    const hit = lastEvent();
     window.__finalBlowQa.fight('deathblow', 'jez');
     window.__finalBlowQa.positions(500, 585);
     window.__finalBlowQa.input(1, { guard: true }, 40);
     window.__finalBlowQa.input(0, { light: true });
     window.__finalBlowQa.step(0.45);
-    const block = window.__finalBlowEngine.snapshot().audio.lastEvent;
+    const block = lastEvent();
+    // A heavy normal thrown with a leg is a roundhouse, and claims the
+    // reviewed kick cues on both the swing and the impact.
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.positions(500, 585);
+    window.__finalBlowQa.input(0, { heavy: true, limb: 'kick' });
+    window.__finalBlowQa.step(1 / 60);
+    const kickSwing = lastEvent();
+    window.__finalBlowQa.step(0.45);
+    const kickImpact = lastEvent();
     soundToggle.checked = enabled;
     document.querySelector('#homeLink').click();
-    return { hit, block };
+    return { hit, block, kickSwing, kickImpact };
   })()`);
+  // Both takes behind these two moments were rejected: the light impact drops
+  // to the shared body hit, and the guard cue has no recording left at all.
   assert.deepEqual(contextualAudio.hit, {
-    kind: 'hit-light', fighterId: 'deathblow', signature: true,
-    src: 'assets/audio/fighters/deathblow/hit-light.mp3',
+    kind: 'hit-light', fighterId: 'deathblow', signature: false,
+    src: 'assets/audio/body-hit.mp3',
   });
   assert.deepEqual(contextualAudio.block, {
-    kind: 'block', fighterId: 'jez', signature: true,
-    src: 'assets/audio/fighters/jez/block.mp3',
+    kind: 'block', fighterId: 'jez', signature: false, src: null,
+  });
+  assert.deepEqual(contextualAudio.kickSwing, {
+    kind: 'roundhouse-swing', fighterId: 'deathblow', signature: true,
+    src: 'assets/audio/fighters/deathblow/roundhouse-swing-a.mp3',
+  });
+  // He accepted the b take of this impact and not the a, and the import kept
+  // his lettering rather than renumbering it into the old variant slots.
+  assert.deepEqual(contextualAudio.kickImpact, {
+    kind: 'roundhouse-impact', fighterId: 'deathblow', signature: true,
+    src: 'assets/audio/fighters/deathblow/roundhouse-impact-b.mp3',
   });
 
   const cleanHitLabels = await evaluate(client, `(() => {
@@ -2723,9 +2788,11 @@ try {
   await evaluate(client, `window.__finalBlowQa.step(0.12)`);
   const finisherStart = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   const finisherMidpoint = (finisherStart.fighters[0].x + finisherStart.fighters[1].x) * 0.5;
+  // Jez rejected the recorded Death Blow announcer call, so the moment still
+  // fires its own cue but synthesises it rather than naming a deleted file.
   assert.deepEqual(finisherStart.audio.lastEvent, {
-    kind: 'final', fighterId: null, signature: false, src: 'assets/audio/final-blow.mp3',
-  }, 'execution must fire the dedicated Death Blow announcer track');
+    kind: 'final', fighterId: null, signature: false, src: null,
+  }, 'execution must fire the Death Blow cue without a rejected recording');
   assert.equal(finisherStart.camera.mode, 'finisher');
   assert.equal(finisherStart.camera.shot, 'establishing');
   assert.ok(finisherStart.camera.zoom >= 1.24, `finisher camera must open cinematically, got ${finisherStart.camera.zoom}`);
@@ -3013,7 +3080,7 @@ try {
       hasDemo: Boolean(cache && await cache.match('./engine/demo.mjs')),
       hasFatalities: Boolean(cache && await cache.match('./engine/fatalities.mjs')),
       hasFighterAudioEngine: Boolean(cache && await cache.match('./engine/fighter-audio.mjs')),
-      hasDeathBlowCall: Boolean(cache && await cache.match('./assets/audio/final-blow.mp3')),
+      hasRuntimeAudio: Boolean(cache && await cache.match('./assets/audio/light-swing.mp3')),
       hasJanney: Boolean(cache && await cache.match('./assets/janney-street-vacant-lot.webp')),
       hasSomerset: Boolean(cache && await cache.match('./assets/somerset-septa.webp')),
       ready: window.__finalBlowEngine.snapshot().offlineReady,
@@ -3029,7 +3096,7 @@ try {
   assert.equal(offlineCache.hasDemo, true);
   assert.equal(offlineCache.hasFatalities, true);
   assert.equal(offlineCache.hasFighterAudioEngine, true);
-  assert.equal(offlineCache.hasDeathBlowCall, false);
+  assert.equal(offlineCache.hasRuntimeAudio, false);
   assert.equal(offlineCache.hasJanney, false);
   assert.equal(offlineCache.hasSomerset, false);
   assert.equal(offlineCache.ready, true);
@@ -3465,6 +3532,16 @@ try {
     voiceProbe404s.filter((url, index) => voiceProbe404s.indexOf(url) !== index),
     [],
     "voice bank probes must never re-fetch a missing file",
+  );
+  // A 404 above is only acceptable for a take nobody has recorded yet — a
+  // speculative -2/-3 slot or a reactive cue. A take Jez rejected is gone from
+  // disk, so requesting one is a live reference to a deleted file, and the
+  // permissive probe filter must not be what hides it.
+  const guardedTakes = [...REJECTED_PATHS, ...WITHHELD_CANDIDATE_PATHS];
+  assert.deepEqual(
+    [...new Set(voiceProbe404s.filter((entry) => guardedTakes.some((path) => entry.endsWith(path))))],
+    [],
+    "a rejected or withheld take was requested at runtime",
   );
   console.log(JSON.stringify({
     status: "passed",

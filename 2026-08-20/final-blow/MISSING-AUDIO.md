@@ -15,7 +15,8 @@ stops at the first missing number, so generate `-1` before `-2` before `-3`.
 Announcer voice (all `assets/audio/announcer/` files): one voice — a deep,
 gritty arena MC. Short, punchy takes with hard consonants and a little tail
 reverb feel; no music, no crowd, clean mono. Target loudness matched to the
-existing `assets/audio/final-blow.mp3` call.
+existing `assets/audio/knockout.mp3` call — the old `final-blow.mp3` reference
+went out with the SFX review (see Priority 0 below).
 
 Line text below is exact and positional: take `-1` speaks line 1, `-2` line 2,
 and so on (`ANNOUNCER_LINES` in game.js mirrors this table — keep both in sync
@@ -98,7 +99,10 @@ archetypes, `CYRAXX.md`). These are vocalisations, not scripted words; the
 Until these exist the game pitch-shifts the nearest recorded take
 (dizzy→hit-heavy ×0.86, counter→special ×1.09, tech→block ×1.06,
 desperation→hit-light ×0.93, scream→fatal ×1.14, crush→block ×0.78,
-taunt→jump ×1.18 — further offset per rotating line).
+taunt→jump ×1.18 — further offset per rotating line). The SFX review deleted
+most of those borrowed cues, so for the majority of fighters there is now
+nothing to pitch-shift and the reactive moment falls through to the shared or
+procedural sound — which makes recording these takes more valuable, not less.
 
 | Cue | Performance | Length |
 | --- | --- | --- |
@@ -182,20 +186,40 @@ for each id in `deathblow, jez, alan, post, benny, donald, cyraxx, ali`.
 
 ## Priority 5 — variant retakes for the existing fighter cues
 
-The 96 shipped single takes (`assets/audio/fighters/<id>/<cue>.mp3` for the 12
-core cues) each want two alternate takes so the interim pitch-jitter can
-retire: `<cue>-2.mp3` and `<cue>-3.mp3`, same persona and energy as the
-original take, different read (8 fighters × 12 cues × 2 = 192 files). Core
-cues: `jump, dash, light, heavy, special, throw, hit-light, hit-heavy, block,
-super, fatal, ko`.
+The 15 surviving single takes (`assets/audio/fighters/<id>/<cue>.mp3`) each
+want two alternate takes so the interim pitch-jitter can retire:
+`<cue>-2.mp3` and `<cue>-3.mp3`, same persona and energy as the original take,
+different read (15 × 2 = 30 files). Which cue survived for which fighter is
+`APPROVED_CORE_CUES` in `engine/audio-review.mjs`; a cue that is not listed
+there needs a fresh original take first (Priority 0), not a variant.
+
+## Priority 0 — retakes for the cues the SFX review rejected
+
+Jez reviewed all 170 sounds on 2026-08-23 and rejected 117. The 84 that had
+shipped are deleted, so those moments now play a shared take he kept or
+synthesise procedurally — which works, but is generic. Re-recording them is the
+highest-value audio work outstanding.
+
+| Group | Files to re-record |
+| --- | --- |
+| Shared: special swing, guard impact, Death Blow call | 3 |
+| Per-fighter core cues | 81 |
+| Kick takes he turned down (10 of 32 fighter/role pairs have no accepted take) | 33 |
+
+`engine/audio-review.mjs` is generated from his review and lists every id in
+each bucket — `REVIEW_REJECTED` is the work list. Regenerate it with
+`tools/build-audio-review.mjs` if he re-rates anything. One sound is still
+unrated, `post-light-kick-impact-b`, and is deliberately held outside the tree
+until he decides either way.
 
 ## Totals
 
 | Group | Files |
 | --- | --- |
+| P0 rejected-cue retakes | 3 + 81 + 33 = 117 |
 | P1 announcer core | 29 + 24 name + 24 wins = 77 |
 | P2 fighter reactive | 168 |
 | P3 match-story | 14 |
 | P4 online moments | 12 |
-| P5 fighter variant retakes | 192 |
-| **Total** | **463** |
+| P5 fighter variant retakes | 30 |
+| **Total** | **418** |
