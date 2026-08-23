@@ -352,7 +352,7 @@ try {
   assert.equal(title.rosterCards, 8);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
-  assert.equal(title.moveListRows, 10);
+  assert.equal(title.moveListRows, 13);
   assert.deepEqual(title.aiDifficulties, ['passive', 'rookie', 'street', 'pro', 'final']);
   assert.deepEqual(title.visualQualities, ['auto', 'high', 'balanced', 'battery']);
   assert.ok(['guard-after-first', 'reversal', 'wakeup', 'record', 'playback'].every((mode) => title.trainingDummyModes.includes(mode)));
@@ -367,8 +367,8 @@ try {
   assert.equal(title.graphicFatalities, true);
   assert.deepEqual(title.engine.fatalityAudit, { fighters: 8, fatalities: 16, errors: [] });
   assert.deepEqual(title.engine.audio.audit, {
-    fighters: 8, cuesPerFighter: 18, coreCues: 12, reactiveCues: 6,
-    variantSlots: 3, totalCues: 144, totalVariantPaths: 432, errors: [],
+    fighters: 8, cuesPerFighter: 19, coreCues: 12, reactiveCues: 7,
+    variantSlots: 3, totalCues: 152, totalVariantPaths: 456, errors: [],
   });
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
@@ -583,7 +583,7 @@ try {
     [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280],
     [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280],
   ]);
-  assert.equal(kitUi.rows.length, 10);
+  assert.equal(kitUi.rows.length, 13);
   assert.ok(kitUi.rows.includes('Vinyl Step'));
   assert.match(kitUi.identity, /FOOTSIES/);
 
