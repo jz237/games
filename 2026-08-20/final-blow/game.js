@@ -1879,6 +1879,7 @@ const presentationDebug = {
   rimLights: 0, hitSmears: 0, dizzyGhosts: 0, breathing: 0,
   contactShadows: 0, gritAuras: 0, lastLegs: 0,
   battleDamage: 0, castShadows: 0,
+  practicalLights: 0, weatherParticles: 0, foregroundOccluders: 0, crowdFlashes: 0,
 };
 // Grit super-ready flare latches, one per side. Render-only module state on the
 // superDimLevel pattern: never snapshotted, only ever read/written from the
@@ -1925,6 +1926,717 @@ function clearBattleDamage() {
   battleDamageMarks[1].length = 0;
   battleDamageRevision[0] += 1;
   battleDamageRevision[1] += 1;
+}
+
+// ---------------------------------------------------------------------------
+// Wave 3 stage presentation. Everything below is module-level render-only
+// state on the documented superDimLevel pattern: never snapshotted, never read
+// by the simulation, so rollback checksums are untouched.
+// ---------------------------------------------------------------------------
+
+// Small deterministic hash for presentation scatter (weather fields, crowd
+// flash picks, light flicker phases). Pure function of its inputs — it never
+// consumes the visualRandom stream, so draw order can't perturb other effects.
+function presentationHash01(...nums) {
+  let h = 2166136261;
+  for (const n of nums) {
+    h ^= Math.imul((n | 0) + 0x9e3779b9, 2654435761);
+    h = Math.imul(h ^ (h >>> 13), 3266489917);
+  }
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+// --- Rack focus: pre-blurred half-res stage covers, cross-faded in by the ---
+// --- super dim ease / fatality state so the world softens behind the kill ---
+const RACK_FOCUS_W = 640;
+const RACK_FOCUS_H = 360;
+const blurredStageCovers = {};
+// Eased focus level (0 sharp → 1 fully racked). Render-only module state.
+let rackFocusLevel = 0;
+
+// Lazily pre-blur ONE stage backdrop the first time its rack focus is needed,
+// not every stage at boot. ~640x360 RGBA is ~0.9MB per stage; even all six
+// stay under 6MB.
+function blurredStageCover(stageId) {
+  const cached = blurredStageCovers[stageId];
+  if (cached) return cached;
+  const image = stageImages[stageId];
+  if (!image?.complete || !image.naturalWidth) return null;
+  const cover = document.createElement("canvas");
+  cover.width = RACK_FOCUS_W;
+  cover.height = RACK_FOCUS_H;
+  const paint = cover.getContext("2d");
+  const scale = Math.max(RACK_FOCUS_W / image.naturalWidth, RACK_FOCUS_H / image.naturalHeight);
+  const dw = image.naturalWidth * scale;
+  const dh = image.naturalHeight * scale;
+  // Blur at half resolution: 5px here reads as ~10px once upscaled to 1280.
+  paint.filter = "blur(5px)";
+  paint.drawImage(image, (RACK_FOCUS_W - dw) * 0.5, (RACK_FOCUS_H - dh) * 0.5, dw, dh);
+  paint.filter = "none";
+  blurredStageCovers[stageId] = cover;
+  return cover;
+}
+
+// Ease + draw the blurred copy over the sharp cover. Alpha rides the existing
+// superDimLevel ease while a super flies; a triggered fatality holds the world
+// soft for the whole aftermath. Static cross-fade — not motion — so it stays
+// on under reducedMotion, exactly like the super spotlight.
+function drawRackFocus(parallax) {
+  const target = Math.max(superDimLevel, state.finisher?.fatalityTriggered ? 1 : 0);
+  rackFocusLevel = clamp(rackFocusLevel + clamp(target - rackFocusLevel, -0.05, 0.08), 0, 1);
+  if (rackFocusLevel <= 0.02) return;
+  const cover = blurredStageCover(state.stage);
+  if (!cover) return;
+  // Same cover-fit math as drawCover, oversized 2% to hide the blur fringe.
+  const scale = Math.max(W / cover.width, H / cover.height) * 1.02;
+  const dw = cover.width * scale;
+  const dh = cover.height * scale;
+  ctx.save();
+  ctx.globalAlpha = rackFocusLevel;
+  ctx.drawImage(cover, (W - dw) * 0.5 + parallax, (H - dh) * 0.5, dw, dh);
+  ctx.restore();
+}
+
+// --- Stage battle scars: the arena wears the fight ------------------------
+// Cheap stroked crack polylines + scuff ellipses under the fighters. Stored
+// module-level (never snapshotted), guarded against rollback resimulation AND
+// deduped by (tick, x) so no impact can double-mark, survives resetRound on
+// purpose and clears on match start.
+const STAGE_SCAR_CAP = 24;
+const STAGE_SCAR_CAP_BATTERY = 10;
+const stageScars = [];
+
+function pushStageScar(x, force = 1) {
+  if (rollbackResimulating) return;
+  const tick = state.simulationTick;
+  if (stageScars.some((scar) => scar.tick === tick && Math.abs(scar.x - x) < 1)) return;
+  const heavy = force > 1.02;
+  const points = [[0, 0]];
+  const branch = [];
+  const segments = 3 + Math.floor(visualRandom() * 3);
+  const baseAngle = visualRandom() * Math.PI * 2;
+  let px = 0;
+  let py = 0;
+  for (let index = 0; index < segments; index += 1) {
+    const angle = baseAngle + (visualRandom() - 0.5) * 1.9;
+    const length = 9 + visualRandom() * (heavy ? 24 : 15);
+    px += Math.cos(angle) * length;
+    py += Math.sin(angle) * length * 0.34; // squashed into the floor perspective
+    points.push([px, py]);
+    if (index === 1 && visualRandom() < 0.7) {
+      const branchAngle = angle + (visualRandom() < 0.5 ? 1 : -1) * (0.9 + visualRandom() * 0.8);
+      branch.push([px, py], [
+        px + Math.cos(branchAngle) * (8 + visualRandom() * 12),
+        py + Math.sin(branchAngle) * (8 + visualRandom() * 12) * 0.34,
+      ]);
+    }
+  }
+  stageScars.push({
+    tick,
+    x: clamp(x, 70, W - 70),
+    y: FLOOR + 8 + visualRandom() * 58,
+    points,
+    branch,
+    scuffW: 26 + force * 22 + visualRandom() * 16,
+    scuffH: 5 + visualRandom() * 5,
+    rot: (visualRandom() - 0.5) * 0.5,
+    alpha: 0.45 + visualRandom() * 0.22,
+    heavy,
+  });
+  const cap = state.performance.trailScale === 0 ? STAGE_SCAR_CAP_BATTERY : STAGE_SCAR_CAP;
+  if (stageScars.length > cap) stageScars.splice(0, stageScars.length - cap);
+}
+
+function clearStageScars() {
+  stageScars.length = 0;
+}
+
+function drawStageScars() {
+  if (!stageScars.length) return;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const scar of stageScars) {
+    ctx.save();
+    ctx.translate(scar.x, scar.y);
+    ctx.rotate(scar.rot);
+    // Chalky scuff first so the cracks sit on a pale bruised patch — reads on
+    // dark asphalt and light tile alike.
+    ctx.globalAlpha = scar.alpha * 0.34;
+    ctx.fillStyle = "rgba(196,184,164,0.55)";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, scar.scuffW, scar.scuffH, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = scar.alpha;
+    // Pale chipped edge offset one pixel up, then the dark crack itself.
+    for (const [style, width, offsetY] of [
+      ["rgba(188,176,156,0.42)", scar.heavy ? 3 : 2.2, -1.4],
+      ["rgba(10,9,8,0.92)", scar.heavy ? 2.2 : 1.5, 0],
+    ]) {
+      ctx.strokeStyle = style;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(scar.points[0][0], scar.points[0][1] + offsetY);
+      for (let index = 1; index < scar.points.length; index += 1) {
+        ctx.lineTo(scar.points[index][0], scar.points[index][1] + offsetY);
+      }
+      if (scar.branch.length === 2) {
+        ctx.moveTo(scar.branch[0][0], scar.branch[0][1] + offsetY);
+        ctx.lineTo(scar.branch[1][0], scar.branch[1][1] + offsetY);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// --- Practical light sprites ----------------------------------------------
+// Each glow/cone is rendered once into a small offscreen canvas so the
+// per-frame cost is a handful of drawImages, never fresh gradients.
+const practicalSpriteCache = {};
+
+function practicalSprite(key, width, height, painter) {
+  let sprite = practicalSpriteCache[key];
+  if (!sprite) {
+    sprite = document.createElement("canvas");
+    sprite.width = width;
+    sprite.height = height;
+    painter(sprite.getContext("2d"), width, height);
+    practicalSpriteCache[key] = sprite;
+  }
+  return sprite;
+}
+
+function glowSprite(red, green, blue) {
+  return practicalSprite(`glow-${red}-${green}-${blue}`, 128, 128, (paint, width, height) => {
+    const gradient = paint.createRadialGradient(64, 64, 4, 64, 64, 62);
+    gradient.addColorStop(0, `rgba(${red},${green},${blue},0.55)`);
+    gradient.addColorStop(0.55, `rgba(${red},${green},${blue},0.18)`);
+    gradient.addColorStop(1, `rgba(${red},${green},${blue},0)`);
+    paint.fillStyle = gradient;
+    paint.fillRect(0, 0, width, height);
+  });
+}
+
+function coneSprite(red, green, blue) {
+  return practicalSprite(`cone-${red}-${green}-${blue}`, 160, 256, (paint, width, height) => {
+    paint.beginPath();
+    paint.moveTo(width * 0.5 - 7, 0);
+    paint.lineTo(width * 0.5 + 7, 0);
+    paint.lineTo(width, height);
+    paint.lineTo(0, height);
+    paint.closePath();
+    const fall = paint.createLinearGradient(0, 0, 0, height);
+    fall.addColorStop(0, `rgba(${red},${green},${blue},0.5)`);
+    fall.addColorStop(0.65, `rgba(${red},${green},${blue},0.16)`);
+    fall.addColorStop(1, `rgba(${red},${green},${blue},0)`);
+    paint.fillStyle = fall;
+    paint.fill();
+    // Soften the cone sides so it reads as haze, not a hard triangle.
+    paint.globalCompositeOperation = "destination-in";
+    const side = paint.createLinearGradient(0, 0, width, 0);
+    side.addColorStop(0, "rgba(0,0,0,0)");
+    side.addColorStop(0.3, "rgba(0,0,0,1)");
+    side.addColorStop(0.7, "rgba(0,0,0,1)");
+    side.addColorStop(1, "rgba(0,0,0,0)");
+    paint.fillStyle = side;
+    paint.fillRect(0, 0, width, height);
+  });
+}
+
+// --- Practical light sources that cast onto the scene ---------------------
+// The lights painted into each backdrop start behaving like lights. All
+// additive, all flicker phases from simulationTick hashes, flicker amplitude
+// forced to 0 under reducedMotion, whole pass skipped without shadows.
+function drawPracticalLights(time, frame, centre, reaction) {
+  if (!state.performance.shadows) return;
+  const reduced = state.accessibility.reducedMotion;
+  const flicker = (speed, phase, amount) =>
+    reduced ? 0 : Math.sin(frame * speed + phase * Math.PI * 2) * amount;
+  const backdropShift = (centre - W * 0.5) * -0.035;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  if (state.stage === "kensington") {
+    // The passing El sweeps a band of warm window-light across the pavement.
+    const trainX = ((time * 0.08) % (W + 650)) - 500; // same formula as drawCrowd
+    const bandX = trainX + 215;
+    if (bandX > -280 && bandX < W + 280) {
+      const band = glowSprite(255, 208, 116);
+      ctx.globalAlpha = 0.34 + flicker(0.31, 0.2, 0.05);
+      ctx.drawImage(band, bandX - 260, FLOOR - 66, 520, 132);
+      ctx.globalAlpha = 0.2;
+      ctx.drawImage(band, bandX - 150, 158, 300, 110); // spill around the cars
+      presentationDebug.practicalLights += 2;
+    }
+  } else if (state.stage === "wildwood") {
+    // Neon throbs coloured pools onto the wet planks; the two boardwalk
+    // lamps keep steady warm pools beneath their heads.
+    const pools = [
+      { x: 430, red: 255, green: 122, blue: 214, phase: 0.13, radiusX: 190 },
+      { x: 665, red: 255, green: 170, blue: 130, phase: 0.47, radiusX: 220 },
+      { x: 915, red: 255, green: 104, blue: 190, phase: 0.79, radiusX: 190 },
+      { x: 82, red: 255, green: 198, blue: 122, phase: 0.31, radiusX: 130 },
+      { x: 1204, red: 255, green: 198, blue: 122, phase: 0.67, radiusX: 130 },
+    ];
+    for (const pool of pools) {
+      const x = pool.x + backdropShift;
+      if (x < -220 || x > W + 220) continue;
+      ctx.globalAlpha = 0.24 + flicker(0.06, pool.phase, 0.09);
+      ctx.drawImage(glowSprite(pool.red, pool.green, pool.blue), x - pool.radiusX, FLOOR - 34, pool.radiusX * 2, 120);
+      presentationDebug.practicalLights += 1;
+    }
+    for (const lampX of [82, 1204]) {
+      const x = lampX + backdropShift;
+      ctx.globalAlpha = 0.3 + flicker(0.17, lampX, 0.04);
+      ctx.drawImage(glowSprite(255, 208, 130), x - 56, 118, 112, 112);
+      presentationDebug.practicalLights += 1;
+    }
+  } else if (state.stage === "buffet") {
+    // Heat-lamp cones flicker over the steam table, hanging from the same
+    // swaying pendants the atmosphere pass draws (same x, same phase).
+    const sway = (0.02 + reaction * 0.05) * Math.sin(frame * 0.03);
+    const cone = coneSprite(255, 186, 104);
+    for (let index = 0; index < 6; index += 1) {
+      const x = 150 + index * 200 + (centre - W * 0.5) * -0.1 + Math.sin(sway + index) * 12;
+      if (x < -120 || x > W + 120) continue;
+      ctx.globalAlpha = 0.3 + flicker(0.052, index * 0.37, 0.08);
+      ctx.drawImage(cone, x - 82, 132, 164, 310);
+      presentationDebug.practicalLights += 1;
+    }
+  } else if (state.stage === "janney") {
+    // One sodium streetlight cone with dust drifting down through it.
+    const lampX = 887 + backdropShift;
+    const lampY = 148;
+    ctx.globalAlpha = 0.34 + flicker(0.043, 0.61, 0.05);
+    ctx.drawImage(coneSprite(255, 178, 84), lampX - 120, lampY, 240, FLOOR - lampY + 20);
+    ctx.globalAlpha = 0.4;
+    ctx.drawImage(glowSprite(255, 196, 110), lampX - 42, lampY - 40, 84, 84);
+    presentationDebug.practicalLights += 2;
+    const motes = Math.round(9 * state.performance.particleScale);
+    ctx.fillStyle = "rgba(255,214,150,0.5)";
+    for (let index = 0; index < motes; index += 1) {
+      const seedA = presentationHash01(index, 7);
+      const seedB = presentationHash01(index, 19);
+      const progress = ((reduced ? seedB : frame * (0.0011 + seedB * 0.0013)) + seedA) % 1;
+      const spread = 14 + progress * 100;
+      const moteX = lampX + (presentationHash01(index, 37) - 0.5) * 2 * spread
+        + (reduced ? 0 : Math.sin(frame * 0.01 + index * 2.1) * 5);
+      const moteY = lampY + 16 + progress * (FLOOR - lampY - 24);
+      ctx.globalAlpha = 0.3 * Math.sin(progress * Math.PI);
+      ctx.fillRect(moteX, moteY, 1.6, 1.6);
+    }
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+// --- Time-of-day drift: pure function of the round number -----------------
+function timeOfDayLevel() {
+  return clamp(((state.round || 1) - 1) / 2, 0, 1);
+}
+
+// A soft horizon band over the sky pulls the backdrop later in the evening as
+// rounds go by. Colour comes from the stage grade's "late" tint. Skipped under
+// high contrast like every colour overlay.
+function drawTimeOfDayHorizon() {
+  if (state.accessibility.highContrast) return;
+  const late = timeOfDayLevel();
+  if (late <= 0.01) return;
+  const grade = STAGE_GRADES[state.stage];
+  if (!grade) return;
+  const [red, green, blue] = grade.late;
+  const band = ctx.createLinearGradient(0, 0, 0, H * 0.52);
+  band.addColorStop(0, `rgba(${red},${green},${blue},${(0.2 * late).toFixed(3)})`);
+  band.addColorStop(1, `rgba(${red},${green},${blue},0)`);
+  ctx.fillStyle = band;
+  ctx.fillRect(0, 0, W, H * 0.52);
+}
+
+// --- Per-stage ambient air: deterministic weather particle fields ---------
+// Every particle is a pure function of (index, simulationTick), so the field
+// is exact under rollback/replay and costs zero state. Frozen to a static
+// scatter under reducedMotion, scaled by particleScale, skipped on battery.
+const STAGE_WEATHER = Object.freeze({
+  kensington: { count: 24, kind: "litter" },
+  vet: { count: 30, kind: "ashSmoke" },
+  wildwood: { count: 40, kind: "mist" },
+  buffet: { count: 26, kind: "steam" },
+  cruise: { count: 32, kind: "sparkle" },
+  janney: { count: 36, kind: "motes" },
+});
+
+function drawStageWeather(frame, centre) {
+  const config = STAGE_WEATHER[state.stage];
+  if (!config || state.performance.trailScale === 0) return;
+  const reduced = state.accessibility.reducedMotion;
+  const tick = reduced ? 0 : frame;
+  const count = Math.max(6, Math.round(config.count * state.performance.particleScale));
+  const drift = centre - W * 0.5;
+  ctx.save();
+  for (let index = 0; index < count; index += 1) {
+    const seedA = presentationHash01(index, 11);
+    const seedB = presentationHash01(index, 29);
+    const seedC = presentationHash01(index, 47);
+    const seedD = presentationHash01(index, 83);
+    const depth = 0.05 + presentationHash01(index, 131) * 0.13;
+    let x = 0;
+    let y = 0;
+    let alpha = 0;
+    let size = 2;
+    let additive = true;
+    let color = "255,255,255";
+    let stretch = 1;
+    if (config.kind === "mist") {
+      // Sea-mist droplets glinting past the neon.
+      x = (((seedA * (W + 160)) - tick * (0.35 + seedB * 0.55)) % (W + 160) + (W + 160)) % (W + 160) - 80;
+      y = 235 + seedC * 300 + (reduced ? 0 : Math.sin(tick * 0.01 + seedD * 6.28) * 9);
+      const glint = reduced ? 0.12 : Math.max(0, Math.sin(tick * 0.05 + seedD * 20)) ** 3 * 0.4;
+      alpha = 0.14 + glint;
+      size = 1 + seedD * 1.6;
+      color = "208,232,255";
+    } else if (config.kind === "ashSmoke") {
+      if (seedD < 0.45) {
+        // Grill smoke wisps drifting up off the lots.
+        const cycle = ((tick * (0.22 + seedB * 0.26) + seedA * 300) % 300 + 300) % 300;
+        x = 80 + seedA * 1120 + (reduced ? 0 : Math.sin(tick * 0.008 + seedC * 6.28) * 16);
+        y = 540 - cycle * 0.9;
+        alpha = 0.07 * (1 - cycle / 300) + 0.02;
+        size = 7 + cycle * 0.03;
+        additive = false;
+        color = "196,204,210";
+      } else {
+        // Drifting ash, falling slow and dark.
+        const cycle = ((tick * (0.16 + seedB * 0.22) + seedA * 430) % 430 + 430) % 430;
+        x = 40 + seedA * 1200 + (reduced ? 0 : Math.sin(tick * 0.013 + seedC * 6.28) * 22);
+        y = 170 + cycle;
+        alpha = 0.24 * Math.sin((cycle / 430) * Math.PI);
+        size = 1 + seedC * 1.4;
+        additive = false;
+        color = "48,44,42";
+      }
+    } else if (config.kind === "steam") {
+      // Steam curling up off the buffet line.
+      const cycle = ((tick * (0.5 + seedB * 0.6) + seedA * 230) % 230 + 230) % 230;
+      x = 110 + seedA * 1060 + (reduced ? 0 : Math.sin(cycle * 0.05 + seedC * 6.28) * 11);
+      y = 436 - cycle * 0.78;
+      alpha = 0.11 * (1 - cycle / 230) + 0.015;
+      size = 4 + cycle * 0.05;
+      additive = false;
+      color = "238,242,246";
+    } else if (config.kind === "motes") {
+      // Golden dust hanging in the dusk.
+      x = 130 + seedA * 1020 + (reduced ? 0 : Math.sin(tick * 0.004 + seedB * 6.28) * 22);
+      y = 250 + seedC * 310 + (reduced ? 0 : Math.sin(tick * 0.006 + seedD * 6.28) * 13);
+      alpha = 0.1 + (reduced ? 0.06 : (Math.sin(tick * 0.02 + seedB * 6.28) * 0.5 + 0.5) * 0.14);
+      size = 0.9 + seedD * 1.3;
+      color = "255,214,140";
+    } else if (config.kind === "litter") {
+      // Wind-blown litter and grit skimming the K&A pavement.
+      x = (((seedA * (W + 140)) + tick * (0.9 + seedB * 1.3)) % (W + 140) + (W + 140)) % (W + 140) - 70;
+      y = 462 + seedC * 128 + (reduced ? 0 : Math.sin(tick * 0.02 + seedD * 6.28) * 7);
+      alpha = 0.2;
+      size = 1.4 + seedD * 2;
+      additive = false;
+      color = "125,135,148";
+      stretch = 2.4;
+    } else if (config.kind === "sparkle") {
+      // Sun sparkle over the pool deck.
+      x = 70 + seedA * 1140;
+      y = 415 + seedC * 165;
+      alpha = reduced ? 0.18 : Math.max(0, Math.sin(tick * 0.06 + seedD * 6.28)) ** 4 * 0.65;
+      size = 0.8 + seedB * 1.4;
+      color = "255,252,238";
+    }
+    if (alpha <= 0.01) continue;
+    const drawX = x + drift * -depth;
+    if (drawX < -30 || drawX > W + 30) continue;
+    ctx.globalCompositeOperation = additive ? "lighter" : "source-over";
+    ctx.globalAlpha = clamp(alpha, 0, 1);
+    ctx.fillStyle = `rgb(${color})`;
+    ctx.beginPath();
+    ctx.ellipse(drawX, y, size * stretch, size, 0, 0, Math.PI * 2);
+    ctx.fill();
+    presentationDebug.weatherParticles += 1;
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+// --- Foreground occluder rig ----------------------------------------------
+// Silhouetted near-depth dressing at the frame edges, drawn after fighters
+// and particles with ~3x the backdrop parallax. Pre-rendered once per stage
+// with gradient-soft inner edges (fake depth of field, no per-frame filter),
+// confined to the outer ~90px of the frame.
+const occluderRigs = {};
+
+function occluderCanvas(width, height, painter, softEdge) {
+  const canvasEl = document.createElement("canvas");
+  canvasEl.width = width;
+  canvasEl.height = height;
+  const paint = canvasEl.getContext("2d");
+  painter(paint, width, height);
+  // Fade the inner edge so the rig reads as out-of-focus depth, not a wall.
+  paint.globalCompositeOperation = "destination-in";
+  const fade = softEdge === "right"
+    ? paint.createLinearGradient(0, 0, width, 0)
+    : paint.createLinearGradient(width, 0, 0, 0);
+  fade.addColorStop(0, "rgba(0,0,0,1)");
+  fade.addColorStop(0.55, "rgba(0,0,0,0.9)");
+  fade.addColorStop(1, "rgba(0,0,0,0)");
+  paint.fillStyle = fade;
+  paint.fillRect(0, 0, width, height);
+  return canvasEl;
+}
+
+function buildOccluderRig(stageId) {
+  const rig = [];
+  if (stageId === "kensington") {
+    // Chain-link fence corner hugging the left edge.
+    rig.push({
+      baseX: -34, y: 96, minX: -70, maxX: -6,
+      canvas: occluderCanvas(124, 560, (paint, width, height) => {
+        paint.strokeStyle = "rgba(8,10,13,0.94)";
+        paint.lineWidth = 7;
+        paint.beginPath();
+        paint.moveTo(16, 0);
+        paint.lineTo(16, height);
+        paint.stroke();
+        paint.lineWidth = 2.4;
+        for (let offset = -height; offset < width + height; offset += 26) {
+          paint.beginPath();
+          paint.moveTo(offset, 0);
+          paint.lineTo(offset + height * 0.55, height);
+          paint.moveTo(offset + height * 0.55, 0);
+          paint.lineTo(offset, height);
+          paint.stroke();
+        }
+        paint.lineWidth = 4;
+        paint.beginPath();
+        paint.moveTo(0, 26);
+        paint.lineTo(width, 44);
+        paint.stroke();
+      }, "right"),
+    });
+    // Steaming grate slats in the near right corner.
+    rig.push({
+      baseX: W - 128, y: H - 118, minX: W - 156, maxX: W - 96, steam: true,
+      canvas: occluderCanvas(160, 118, (paint, width, height) => {
+        paint.fillStyle = "rgba(6,8,10,0.96)";
+        for (let row = 0; row < 5; row += 1) {
+          paint.beginPath();
+          paint.ellipse(width * 0.62, height - 12 - row * 21, width * 0.52, 8, -0.06, 0, Math.PI * 2);
+          paint.fill();
+        }
+      }, "left"),
+    });
+  } else if (stageId === "wildwood") {
+    // A soft-edged railing post at the right of frame.
+    rig.push({
+      baseX: W - 112, y: 0, minX: W - 148, maxX: W - 72,
+      canvas: occluderCanvas(120, H, (paint, width, height) => {
+        paint.fillStyle = "rgba(9,7,12,0.95)";
+        paint.fillRect(48, 0, 44, height);
+        paint.fillRect(30, 96, 80, 26);
+        paint.fillRect(30, 342, 80, 26);
+        paint.beginPath();
+        paint.ellipse(70, 70, 34, 20, 0, 0, Math.PI * 2);
+        paint.fill();
+      }, "left"),
+    });
+  } else if (stageId === "buffet") {
+    // Sneeze-guard glass glare sliding along the left edge.
+    rig.push({
+      baseX: -18, y: 120, minX: -54, maxX: 6, glare: true,
+      canvas: occluderCanvas(110, 460, (paint, width, height) => {
+        paint.fillStyle = "rgba(16,20,24,0.55)";
+        paint.fillRect(0, 0, 30, height);
+        const glare = paint.createLinearGradient(0, 0, width, height * 0.4);
+        glare.addColorStop(0, "rgba(235,242,250,0)");
+        glare.addColorStop(0.45, "rgba(235,242,250,0.34)");
+        glare.addColorStop(0.55, "rgba(235,242,250,0.4)");
+        glare.addColorStop(1, "rgba(235,242,250,0)");
+        paint.fillStyle = glare;
+        paint.fillRect(8, 0, width - 8, height);
+      }, "right"),
+    });
+  } else if (stageId === "cruise") {
+    // Hanging bar glasses in the top right corner (below the HUD band).
+    rig.push({
+      baseX: W - 150, y: 168, minX: W - 180, maxX: W - 110,
+      canvas: occluderCanvas(210, 128, (paint) => {
+        paint.fillStyle = "rgba(10,12,16,0.9)";
+        paint.fillRect(0, 0, 210, 16);
+        for (let slot = 0; slot < 4; slot += 1) {
+          const x = 34 + slot * 46;
+          paint.fillRect(x - 2, 16, 4, 18);
+          paint.beginPath();
+          paint.moveTo(x - 13, 34);
+          paint.lineTo(x + 13, 34);
+          paint.lineTo(x + 5, 74);
+          paint.lineTo(x - 5, 74);
+          paint.closePath();
+          paint.fill();
+        }
+      }, "left"),
+    });
+  }
+  return rig;
+}
+
+function drawForegroundOccluders(centre) {
+  if (!state.performance.shadows) return;
+  let rig = occluderRigs[state.stage];
+  if (!rig) {
+    rig = buildOccluderRig(state.stage);
+    occluderRigs[state.stage] = rig;
+  }
+  if (!rig.length) return;
+  // ~3x the backdrop parallax; pinned still under reducedMotion.
+  const shift = state.accessibility.reducedMotion ? 0 : (centre - W * 0.5) * -0.105;
+  const frame = state.simulationTick;
+  for (const occluder of rig) {
+    const x = clamp(occluder.baseX + shift, occluder.minX, occluder.maxX);
+    ctx.drawImage(occluder.canvas, x, occluder.y);
+    if (occluder.steam) {
+      // Grate steam: an additive pulse rising off the slats.
+      const pulse = state.accessibility.reducedMotion ? 0.5 : Math.sin(frame * 0.035) * 0.5 + 0.5;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.1 + pulse * 0.12;
+      ctx.drawImage(glowSprite(210, 222, 230), x + 30, occluder.y - 130 - pulse * 22, 130, 190);
+      ctx.restore();
+    }
+    presentationDebug.foregroundOccluders += 1;
+  }
+  ctx.globalAlpha = 1;
+}
+
+// --- Crowd flashbulbs + round-win light beats -----------------------------
+// Flash picks hash (window, person index) — never the visualRandom stream —
+// and are hard-capped at ~3/sec regardless of reaction level. Under
+// reducedMotion the strobes become one dim steady glow.
+let crowdFlashCacheCrowd = null;
+let crowdFlashCandidates = [];
+
+function crowdFlashPick(crowd, frame, reaction) {
+  if (reaction <= 0.7 || !crowd.people?.length) return null;
+  if (crowdFlashCacheCrowd !== crowd) {
+    crowdFlashCacheCrowd = crowd;
+    const phones = [];
+    crowd.people.forEach((person, index) => {
+      if (person.prop === "phone") phones.push(index);
+    });
+    // Bias toward the poolside phone holders when the stage has them.
+    crowdFlashCandidates = phones.length >= 3 ? phones : crowd.people.map((_, index) => index);
+  }
+  const reduced = state.accessibility.reducedMotion;
+  const windowTicks = reduced ? 60 : 20; // 20 ticks @60Hz → ≤3 pops per second
+  const windowIndex = Math.floor(frame / windowTicks);
+  const inWindow = frame - windowIndex * windowTicks;
+  if (!reduced && inWindow >= 8) return null;
+  const pick = crowdFlashCandidates[
+    Math.floor(presentationHash01(windowIndex, crowdFlashCandidates.length) * crowdFlashCandidates.length)
+    % crowdFlashCandidates.length
+  ];
+  return { index: pick, fade: reduced ? 1 : 1 - inWindow / 8, reduced };
+}
+
+function drawCrowdFlash(spot, pick) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const bloom = glowSprite(255, 255, 255);
+  ctx.globalAlpha = pick.reduced ? 0.24 : 0.75 * pick.fade;
+  ctx.drawImage(bloom, spot.x - spot.size * 2.2, spot.y - spot.size * 2.2, spot.size * 4.4, spot.size * 4.4);
+  if (!pick.reduced) {
+    // Tiny white starburst over the phone.
+    ctx.strokeStyle = `rgba(255,255,255,${(0.85 * pick.fade).toFixed(3)})`;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, -0.7]]) {
+      ctx.moveTo(spot.x, spot.y);
+      ctx.lineTo(spot.x + dx * spot.size, spot.y + dy * spot.size);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+  presentationDebug.crowdFlashes += 1;
+}
+
+// Round-win light beat: one stage-signature moment when a round is won.
+// Latched purely from the render path (draw never runs during rollback
+// resimulation), timed from the simulation tick.
+const ROUND_WIN_BEAT_TICKS = 84;
+let roundWinBeatStartTick = -1;
+
+function updateRoundWinBeatLatch() {
+  if (state.phase === "roundover" && !state.finisher) {
+    if (roundWinBeatStartTick < 0) roundWinBeatStartTick = state.simulationTick;
+  } else if (state.phase !== "roundover" && roundWinBeatStartTick >= 0) {
+    roundWinBeatStartTick = -1;
+  }
+}
+
+function roundWinBeatLevel(frame) {
+  if (roundWinBeatStartTick < 0) return 0;
+  const t = (frame - roundWinBeatStartTick) / ROUND_WIN_BEAT_TICKS;
+  return t >= 1 || t < 0 ? 0 : 1 - t;
+}
+
+const ROUND_WIN_BEATS = Object.freeze({
+  wildwood: { glows: [{ x: 668, y: 96, rx: 170, ry: 120, color: [255, 150, 216] }], firework: true },
+  kensington: { glows: [{ x: 640, y: 184, rx: 300, ry: 80, color: [255, 211, 105] }] },
+  vet: {
+    glows: [
+      { x: 148, y: 186, rx: 130, ry: 110, color: [214, 232, 255] },
+      { x: 1200, y: 312, rx: 120, ry: 100, color: [214, 232, 255] },
+    ],
+  },
+  buffet: { glows: [{ x: 640, y: 250, rx: 340, ry: 90, color: [255, 196, 118] }] },
+  cruise: { glows: [{ x: 640, y: 396, rx: 330, ry: 70, color: [140, 232, 255] }] },
+  janney: { glows: [{ x: 887, y: 150, rx: 130, ry: 110, color: [255, 186, 96] }] },
+});
+
+function drawRoundWinBeat(frame, centre) {
+  const level = roundWinBeatLevel(frame);
+  if (level <= 0.01) return;
+  const beat = ROUND_WIN_BEATS[state.stage];
+  if (!beat) return;
+  const reduced = state.accessibility.reducedMotion;
+  const backdropShift = (centre - W * 0.5) * -0.035;
+  const ease = level * level;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (const glow of beat.glows) {
+    ctx.globalAlpha = 0.5 * ease;
+    ctx.drawImage(
+      glowSprite(glow.color[0], glow.color[1], glow.color[2]),
+      glow.x + backdropShift - glow.rx, glow.y - glow.ry, glow.rx * 2, glow.ry * 2,
+    );
+  }
+  if (beat.firework && !reduced) {
+    // A single firework bursting over the WILDWOOD sign.
+    const burst = 1 - level;
+    const x = 668 + backdropShift;
+    const y = 88;
+    ctx.globalAlpha = 0.9 * ease;
+    ctx.lineWidth = 2;
+    for (let spark = 0; spark < 12; spark += 1) {
+      const angle = (spark / 12) * Math.PI * 2 + 0.26;
+      const radius = 14 + burst * 86;
+      const droop = burst * burst * 26;
+      const gold = spark % 2 === 0;
+      ctx.strokeStyle = gold ? "rgba(255,214,130,0.9)" : "rgba(255,150,216,0.9)";
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(angle) * radius * 0.62, y + Math.sin(angle) * radius * 0.62 + droop * 0.5);
+      ctx.lineTo(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius + droop);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 0.8 * ease;
+    ctx.drawImage(glowSprite(255, 224, 170), x - 34, y - 34, 68, 68);
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
 }
 const rollbackFighterReferences = new Set(["def", "kit", "movement", "combo", "directionTapTracker", "inputBuffer", "projectileSpawnFrames"]);
 const rollbackPresentationFighterFields = new Set([
@@ -2325,6 +3037,7 @@ function startMatch(resetSet = true) {
     if (state.training.infiniteGrit) state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
   }
   clearBattleDamage();
+  clearStageScars();
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
@@ -2392,6 +3105,7 @@ function startOnlineMatch(config) {
   resetCrowd();
   warmFighterAudio();
   clearBattleDamage();
+  clearStageScars();
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
@@ -3803,6 +4517,8 @@ function spawnKnockdownImpact(fighter, landingVelocity) {
     kind: "floorImpact", x: fighter.x, y: FLOOR - 4,
     width: 62 + force * 74, life: 0.44, max: 0.44, color: "#b7a99a",
   });
+  // The arena wears the fight: a persistent crack + scuff under the impact.
+  pushStageScar(fighter.x, force);
   if (state.graphicFatalities) {
     const life = 2.4 + force;
     state.effects.push({
@@ -5701,6 +6417,8 @@ function drawStage(time) {
   const center = state.fighters.length ? (state.fighters[0].x + state.fighters[1].x) * 0.5 : W * 0.5;
   const parallax = (center - W * 0.5) * -0.035;
   drawCover(stageImages[state.stage], parallax);
+  drawRackFocus(parallax);
+  drawTimeOfDayHorizon();
   const shade = ctx.createLinearGradient(0, 0, 0, H);
   shade.addColorStop(0, "rgba(0,8,18,.12)");
   shade.addColorStop(0.58, "rgba(0,0,0,.03)");
@@ -5710,6 +6428,7 @@ function drawStage(time) {
 
   drawCrowd(time);
   if (state.stage === "vet") drawVetAtmosphere(time);
+  drawStageWeather(state.simulationTick, center);
 
   ctx.fillStyle = "rgba(6,8,11,.26)";
   ctx.fillRect(0, FLOOR, W, H - FLOOR);
@@ -5721,6 +6440,10 @@ function drawStage(time) {
     ctx.lineTo(W * 0.5 + (x - W * 0.5) * 1.65, H);
     ctx.stroke();
   }
+  drawStageScars();
+  drawPracticalLights(time, state.simulationTick, center, state.crowdReaction);
+  updateRoundWinBeatLatch();
+  drawRoundWinBeat(state.simulationTick, center);
 }
 
 const POSTURE_BY_ID = Object.fromEntries(
@@ -6287,14 +7010,25 @@ function drawCrowd(time) {
   const reaction = state.crowdReaction;
   const frame = state.simulationTick;
   // Cheapest possible culling: skip anyone whose parallaxed x is off screen.
+  // A hard-stirred crowd pops scattered phone flashes; the pick hashes
+  // (window, person) so it can never perturb the visualRandom stream.
+  const flashPick = crowdFlashPick(crowd, frame, reaction);
+  let flashSpot = null;
+  let personIndex = -1;
   for (const person of crowd.people) {
+    personIndex += 1;
     const layer = CROWD_LAYERS.find((entry) => entry.id === person.layer);
     const { x, gait, paused } = crowdPosition(person, layer, frame, crowd.span, crowd.minX);
     const drawX = x + (centre - W * 0.5) * -layer.parallax;
     if (drawX < -70 || drawX > W + 70) continue;
     drawPedestrian(person, layer, drawX, gait, paused, reaction);
+    if (flashPick && personIndex === flashPick.index) {
+      const scale = layer.scale * person.height;
+      flashSpot = { x: drawX + person.direction * 8 * scale, y: person.y - 118 * scale, size: 8 + 9 * layer.scale };
+    }
   }
   ctx.globalAlpha = 1;
+  if (flashSpot) drawCrowdFlash(flashSpot, flashPick);
 
   for (const group of crowd.scuffles || []) drawScuffle(group, frame, centre, reaction);
   if (crowd.variant === "tailgate") {
@@ -8166,13 +8900,18 @@ function stageRimColor() {
 }
 
 // Per-stage colour grade plus an edge vignette: one soft-light tint pulls each
-// arena toward its own palette without crushing the sprite art.
+// arena toward its own palette without crushing the sprite art. Each entry now
+// carries a second "late" tint: round 1 → round 3 the evening visibly gets
+// later, lerped purely from state.round so it is exact under rollback and
+// replay (the fill count in drawStageGrade never changes). Janney finally gets
+// the grade entry it was silently missing.
 const STAGE_GRADES = Object.freeze({
-  kensington: { tint: "rgba(44,74,110,0.30)", vignette: 0.30 },
-  vet: { tint: "rgba(96,74,40,0.24)", vignette: 0.26 },
-  wildwood: { tint: "rgba(88,44,110,0.26)", vignette: 0.28 },
-  buffet: { tint: "rgba(112,78,40,0.26)", vignette: 0.22 },
-  cruise: { tint: "rgba(40,104,118,0.20)", vignette: 0.18 },
+  kensington: { tint: [44, 74, 110, 0.30], late: [26, 50, 122, 0.38], vignette: 0.30, lateVignette: 0.36 },
+  vet: { tint: [96, 74, 40, 0.24], late: [52, 68, 108, 0.30], vignette: 0.26, lateVignette: 0.32 },           // floodlights take over, cooler cast
+  wildwood: { tint: [88, 44, 110, 0.26], late: [62, 24, 126, 0.34], vignette: 0.28, lateVignette: 0.34 },     // sky deepens, neon reads hotter
+  buffet: { tint: [112, 78, 40, 0.26], late: [98, 56, 54, 0.32], vignette: 0.22, lateVignette: 0.28 },
+  cruise: { tint: [40, 104, 118, 0.20], late: [124, 88, 58, 0.26], vignette: 0.18, lateVignette: 0.24 },      // afternoon slides toward golden hour
+  janney: { tint: [122, 84, 52, 0.26], late: [86, 54, 132, 0.34], vignette: 0.24, lateVignette: 0.32 },       // early dusk amber → violet
 });
 
 function drawStageGrade() {
@@ -8193,14 +8932,17 @@ function drawStageGrade() {
   }
   const grade = STAGE_GRADES[state.stage];
   if (!grade) return;
+  const late = timeOfDayLevel();
+  const tint = `rgba(${Math.round(lerp(grade.tint[0], grade.late[0], late))},${Math.round(lerp(grade.tint[1], grade.late[1], late))},${Math.round(lerp(grade.tint[2], grade.late[2], late))},${lerp(grade.tint[3], grade.late[3], late).toFixed(3)})`;
+  const vignetteStrength = lerp(grade.vignette, grade.lateVignette, late).toFixed(3);
   ctx.save();
   ctx.globalCompositeOperation = "soft-light";
-  ctx.fillStyle = grade.tint;
+  ctx.fillStyle = tint;
   ctx.fillRect(0, 0, W, H);
   ctx.globalCompositeOperation = "source-over";
   const vignette = ctx.createRadialGradient(W * 0.5, H * 0.44, H * 0.42, W * 0.5, H * 0.52, W * 0.72);
   vignette.addColorStop(0, "rgba(4,6,12,0)");
-  vignette.addColorStop(1, `rgba(4,6,12,${grade.vignette})`);
+  vignette.addColorStop(1, `rgba(4,6,12,${vignetteStrength})`);
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, W, H);
   ctx.restore();
@@ -8639,11 +9381,17 @@ function draw(time) {
     ctx.scale(state.cinematicZoom, state.cinematicZoom);
     ctx.translate(-camera.x, -camera.y);
   }
-  drawStage(time);
+  // Counters reset before drawStage so the stage-level passes (weather,
+  // practicals, flashbulbs, occluders) count into the same rendered frame.
+  // Unconditional: drawStage runs on every screen, so a gated reset would let
+  // the stage counters accumulate without bound outside the fight.
+  for (const key of Object.keys(presentationDebug)) presentationDebug[key] = 0;
   if (state.screen === "fight") {
-    for (const key of Object.keys(presentationDebug)) presentationDebug[key] = 0;
     gritFlareLevel[0] = Math.max(0, gritFlareLevel[0] - 0.05);
     gritFlareLevel[1] = Math.max(0, gritFlareLevel[1] - 0.05);
+  }
+  drawStage(time);
+  if (state.screen === "fight") {
     drawSuperSpotlight();
     drawFighterCastShadows();
     drawFighterReflections(time);
@@ -8655,6 +9403,8 @@ function draw(time) {
     ordered.forEach((fighter) => drawFighter(fighter, time));
     state.fighters.forEach((fighter) => drawDizzyStars(fighter, time));
     drawParticles();
+    drawForegroundOccluders(state.fighters.length
+      ? (state.fighters[0].x + state.fighters[1].x) * 0.5 : W * 0.5);
   }
   ctx.restore();
   drawStageGrade();
@@ -9710,6 +10460,14 @@ window.__finalBlowEngine = {
         battleDamageMarks: battleDamageMarks[0].length + battleDamageMarks[1].length,
         battleDamageDrawn: presentationDebug.battleDamage,
         castShadows: presentationDebug.castShadows,
+        stageScars: stageScars.length,
+        rackFocus: Number(rackFocusLevel.toFixed(3)),
+        practicalLights: presentationDebug.practicalLights,
+        weatherParticles: presentationDebug.weatherParticles,
+        foregroundOccluders: presentationDebug.foregroundOccluders,
+        crowdFlashes: presentationDebug.crowdFlashes,
+        timeOfDay: Number(timeOfDayLevel().toFixed(3)),
+        roundWinBeat: Number(roundWinBeatLevel(state.simulationTick).toFixed(3)),
         gritFlare: Number(Math.max(gritFlareLevel[0], gritFlareLevel[1]).toFixed(3)),
         superDim: Number(superDimLevel.toFixed(3)),
         reflections: Boolean(state.performance.shadows && (STAGE_REFLECTIONS[state.stage] ?? 0) > 0),
@@ -9827,6 +10585,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       resetStageWeapon();
       resetCrowd();
       clearBattleDamage();
+      clearStageScars();
       state.particles.length = 0;
       state.effects.length = 0;
       state.traps.length = 0;
