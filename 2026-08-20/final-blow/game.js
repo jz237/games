@@ -1880,6 +1880,8 @@ const presentationDebug = {
   contactShadows: 0, gritAuras: 0, lastLegs: 0,
   battleDamage: 0, castShadows: 0,
   practicalLights: 0, weatherParticles: 0, foregroundOccluders: 0, crowdFlashes: 0,
+  counterFlashes: 0, projectileGlows: 0, swipeRibbons: 0, wallSplats: 0,
+  focusLines: 0, lightSpills: 0,
 };
 // Grit super-ready flare latches, one per side. Render-only module state on the
 // superDimLevel pattern: never snapshotted, only ever read/written from the
@@ -4530,6 +4532,76 @@ function spawnKnockdownImpact(fighter, landingVelocity) {
   sound("hit-heavy", state.fighters[state.lastImpactSide] || fighter);
 }
 
+// --- Corner wall-splat (wave 4): the arena edge answers a slammed fighter ---
+// A vertical dust column erupts off the invisible wall, stage-toned debris
+// chips spray and tumble down, and a tall shock ellipse marks the slam.
+// Fired from applyFighterPhysics when the stage clamp actually arrests a fast
+// hitstun/knockdown flight. Presentation only: everything lands in the
+// checksum-exempt particle/effect arrays. The per-side cooldown tick lives
+// module-level on the documented superDimLevel pattern (never snapshotted):
+// re-executing the same or an earlier tick after a rollback restore re-fires
+// the spawn (the restored arrays lost it), while the strictly-later ticks of a
+// normal wall grind dedupe inside the window.
+const WALL_SPLAT_COOLDOWN_TICKS = 22;
+const wallSplatLastTick = [-Infinity, -Infinity];
+
+function spawnWallImpact(fighter, wallDirection) {
+  const tick = state.simulationTick;
+  const last = wallSplatLastTick[fighter.side];
+  if (tick > last && tick - last < WALL_SPLAT_COOLDOWN_TICKS) return;
+  wallSplatLastTick[fighter.side] = tick;
+  const wallX = wallDirection < 0
+    ? MOVEMENT_RULES.stageMinX - 30
+    : MOVEMENT_RULES.stageMaxX + 30;
+  const impactY = fighter.y - fighter.height * 0.55;
+  const force = clamp(Math.abs(fighter.vx) / 640, 0.6, 1.3);
+  const dustCount = Math.max(5, Math.round(15 * force * state.performance.particleScale));
+  for (let index = 0; index < dustCount; index += 1) {
+    state.particles.push({
+      kind: "dust",
+      x: wallX + wallDirection * visualRandom() * 10,
+      y: FLOOR - visualRandom() * (fighter.height + 44),
+      vx: -wallDirection * (30 + visualRandom() * 170) * force,
+      vy: -60 - visualRandom() * 240 * force,
+      gravity: 420,
+      drag: 0.955,
+      life: 0.22 + visualRandom() * 0.4,
+      max: 0.62,
+      size: 3.5 + visualRandom() * 8,
+      color: visualRandom() > 0.4 ? "#777067" : "#4e4a46",
+    });
+  }
+  const chipCount = Math.max(3, Math.round(8 * force * state.performance.particleScale));
+  for (let index = 0; index < chipCount; index += 1) {
+    state.particles.push({
+      kind: "debris",
+      x: wallX,
+      y: impactY + (visualRandom() - 0.5) * fighter.height * 0.8,
+      vx: -wallDirection * (60 + visualRandom() * 260) * force,
+      vy: -120 - visualRandom() * 190,
+      gravity: 980,
+      drag: 0.985,
+      spin: (visualRandom() - 0.5) * 18,
+      rotation: visualRandom() * Math.PI,
+      life: 0.34 + visualRandom() * 0.42,
+      max: 0.76,
+      size: 2.4 + visualRandom() * 3.6,
+      color: visualRandom() > 0.5 ? "#8a8175" : "#635c52",
+    });
+  }
+  state.effects.push({
+    kind: "wallShock",
+    x: wallX - wallDirection * 6,
+    y: impactY,
+    size: 66 + force * 44,
+    direction: -wallDirection,
+    life: 0.3,
+    max: 0.3,
+    color: "#e9dfc8",
+  });
+  state.shake = Math.max(state.shake, 0.2 * force); // checksum-exempt, like flash
+}
+
 function applyFighterPhysics(fighter, dt) {
   fighter.vy += GRAVITY * dt;
   fighter.x += fighter.vx * dt;
@@ -4561,7 +4633,18 @@ function applyFighterPhysics(fighter, dt) {
   } else {
     fighter.grounded = false;
   }
+  const preClampX = fighter.x;
   fighter.x = clamp(fighter.x, MOVEMENT_RULES.stageMinX, MOVEMENT_RULES.stageMaxX);
+  // Corner wall-splat (wave 4): the clamp just arrested a fast hitstun or
+  // knockdown flight. Hitstun bleeds vx 10% per tick before physics runs, so
+  // a cornered victim reaches the clamp with 0.9x the attack's push: 220
+  // keeps the burst for heavy/special/throw-grade slams (push 260-405+,
+  // arriving at 234+) and never light pokes (145-210, arriving under 190).
+  if (fighter.x !== preClampX
+    && (fighter.hitstunFrames > 0 || fighter.pendingKnockdown)
+    && Math.abs(fighter.vx) > 220) {
+    spawnWallImpact(fighter, preClampX < MOVEMENT_RULES.stageMinX ? -1 : 1);
+  }
 }
 
 const attackActionPriority = [...TOURNAMENT_ACTION_PRIORITY];
@@ -6067,12 +6150,28 @@ function spawnHit(x, y, def, attackKind, blocked, { direction = 1, counter = fal
     max: tierName === "super" ? 0.52 : 0.34,
     color: "#d41120",
   });
+  // Impact light spill (wave 4): heavy-tier and counter hits briefly become a
+  // one-shot light source that tints the surrounding stage with the attacker's
+  // spark colour. Carried on the existing impactFlash effect (same life/max,
+  // so sparkLine/shockRing/impactFlash counts are untouched); the flash toggle
+  // gates it at push time exactly like the full-screen flashes.
+  const spillTier = ["heavy", "special", "super", "weapon"].includes(tierName) || counter;
   state.effects.push({
     kind: "impactFlash", tier: tierName, x, y,
     life: tierName === "super" ? 0.22 : 0.12,
     max: tierName === "super" ? 0.22 : 0.12,
     color: "#fff4df",
+    spill: spillTier && $("#flashToggle").checked ? def.accent : null,
   });
+  if (counter) {
+    // Counter-hit focus burst (wave 4): a distinct gold ring of anime speed
+    // lines converging on the impact point, layered with the victim's
+    // inverted flash pop in drawFighter so counters read instantly.
+    state.effects.push({
+      kind: "counterFocus", x, y,
+      life: 0.3, max: 0.3, color: "#ffd94f",
+    });
+  }
   // White-hot speed-line sparks along the hit direction, drawn additively so
   // they bloom against the dark stages; a shock ring joins the heavy tiers.
   const ringSizes = { heavy: 74, special: 96, super: 128, weapon: 82 };
@@ -7447,6 +7546,57 @@ function drawAttackVfx(fighter, time, activePower) {
   ctx.shadowBlur = strong ? 26 : 13;
   ctx.lineCap = "round";
 
+  // Swipe ribbon (wave 4): heavies and specials trace a tapered additive arc
+  // that sweeps with the swing — wide and bright at the fist, thinning to
+  // nothing at the trail's start. Shared pass ahead of the per-fighter vfx
+  // branches; pure render math off attackTime, jittered by presentationHash01
+  // so rollback and the mirror pass replay it identically.
+  if ((attack.kind === "heavy" || attack.kind === "special")
+    && state.performance.trailScale > 0 && !state.accessibility.reducedMotion) {
+    const progress = clamp(fighter.attackTime / attack.duration, 0, 1);
+    if (progress > 0.12) {
+      const eased = Math.sin(Math.min(1, progress * 1.15) * Math.PI * 0.5);
+      const startAngle = -2.3;
+      const headAngle = startAngle + eased * 2.65;
+      const tailAngle = Math.max(startAngle, headAngle - 1.6);
+      const segments = Math.max(3, Math.round(7 * state.performance.trailScale));
+      const seed = (attack.attackSerial || 0) * 7 + fighter.side * 131;
+      const pivotX = 8;
+      const pivotY = -126;
+      const headWidth = strong ? 19 : 13;
+      ctx.save();
+      for (let seg = 0; seg < segments; seg += 1) {
+        const t0 = seg / segments;
+        const t1 = (seg + 1) / segments;
+        const a0 = lerp(tailAngle, headAngle, t0);
+        const a1 = lerp(tailAngle, headAngle, t1);
+        const r0 = reach * (0.62 + 0.3 * t0) * (0.97 + presentationHash01(seed, seg) * 0.06);
+        const r1 = reach * (0.62 + 0.3 * t1) * (0.97 + presentationHash01(seed, seg + 1) * 0.06);
+        ctx.globalAlpha = clamp(activePower, 0, 1) * (0.12 + 0.62 * t1 * t1);
+        ctx.lineWidth = Math.max(1, headWidth * t1);
+        ctx.beginPath();
+        ctx.moveTo(pivotX + Math.cos(a0) * r0, pivotY + Math.sin(a0) * r0);
+        ctx.quadraticCurveTo(
+          pivotX + Math.cos((a0 + a1) * 0.5) * (r0 + r1) * 0.515,
+          pivotY + Math.sin((a0 + a1) * 0.5) * (r0 + r1) * 0.515,
+          pivotX + Math.cos(a1) * r1,
+          pivotY + Math.sin(a1) * r1,
+        );
+        ctx.stroke();
+        // White-hot core on the leading edge so the arc pops off dark stages.
+        if (seg === segments - 1) {
+          ctx.strokeStyle = "#fff6df";
+          ctx.globalAlpha = clamp(activePower, 0, 1) * 0.5;
+          ctx.lineWidth = Math.max(1, headWidth * 0.34);
+          ctx.stroke();
+          ctx.strokeStyle = fighter.def.accent;
+        }
+      }
+      ctx.restore();
+      if (!reflectionPassActive) presentationDebug.swipeRibbons += 1;
+    }
+  }
+
   if (fighter.def.vfx === "seismic") {
     ctx.lineWidth = strong ? 9 : 5;
     for (let i = 0; i < 5; i += 1) {
@@ -7952,6 +8102,32 @@ function drawProjectiles(time) {
     const direction = Math.sign(projectile.vx) || projectile.direction || 1;
     const life = clamp(projectile.lifeFrames / projectile.maxLifeFrames, 0, 1);
     const pulse = 1 + Math.sin(time * 0.018 + projectile.x * 0.03) * 0.11;
+    // Travelling light pool (wave 4): every projectile and thrown object casts
+    // an additive colour glow onto the floor beneath it, brightening as it
+    // flies lower. Sibling of the throwable ground shadow; the battery
+    // profile (shadows off) skips it.
+    if (state.performance.shadows && projectile.y < FLOOR + 4) {
+      const height = Math.max(0, FLOOR - projectile.y);
+      const closeness = clamp(1 - height / 620, 0.25, 1);
+      const reach = ((projectile.width || 44) * 1.6 + 52) * (0.8 + closeness * 0.4);
+      const channels = /^#[0-9a-fA-F]{6}/.test(projectile.color || "")
+        ? hexToRgbChannels(projectile.color)
+        : "255,240,200";
+      const glowAlpha = 0.42 * closeness * Math.min(1, life * 2) * pulse;
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      ctx.translate(projectile.x, FLOOR + 4);
+      ctx.scale(1, 0.24);
+      const poolGlow = ctx.createRadialGradient(0, 0, 6, 0, 0, reach);
+      poolGlow.addColorStop(0, `rgba(${channels},${clamp(glowAlpha, 0, 0.55).toFixed(3)})`);
+      poolGlow.addColorStop(1, `rgba(${channels},0)`);
+      ctx.fillStyle = poolGlow;
+      ctx.beginPath();
+      ctx.arc(0, 0, reach, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      presentationDebug.projectileGlows += 1;
+    }
     ctx.save();
     ctx.translate(projectile.x, projectile.y);
     ctx.scale(direction, 1);
@@ -8334,6 +8510,36 @@ function drawFighter(fighter, time) {
       presentationDebug.rimLights += 1;
     }
 
+    if (!reflectionPassActive && !graphicFatality && state.performance.trailScale > 0
+      && !state.accessibility.highContrast && state.projectiles.length) {
+      // Projectile rim light (wave 4): the nearest incoming projectile or
+      // thrown object tints the fighter's silhouette edge on the side facing
+      // it, brightening as it closes in — same offset-silhouette technique as
+      // the stage rim pass above. Render-only read of state.projectiles.
+      let nearest = null;
+      let nearestDistance = 300;
+      const chestY = fighter.y - fighter.height * 0.55;
+      for (const projectile of state.projectiles) {
+        const distance = Math.hypot(projectile.x - fighter.x, projectile.y - chestY);
+        if (distance < nearestDistance) {
+          nearest = projectile;
+          nearestDistance = distance;
+        }
+      }
+      if (nearest) {
+        const strength = clamp(1 - nearestDistance / 300, 0, 1);
+        const towardLocal = (Math.sign(nearest.x - fighter.x) || 1) * fighter.facing;
+        const tint = /^#[0-9a-fA-F]{6}/.test(nearest.color || "") ? nearest.color : "#ffe9b8";
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        ctx.globalAlpha = 0.55 * strength;
+        ctx.translate(towardLocal * 5, -2);
+        drawSilhouetteFrame(atlas, frame, renderSize, tint);
+        ctx.restore();
+        presentationDebug.projectileGlows += 1;
+      }
+    }
+
     if (!reflectionPassActive && hitSmear > 0) {
       // Directional hit-reaction smear: stretched additive ghosts trailing
       // opposite the knockback on the frames the white hit flash is live.
@@ -8374,8 +8580,18 @@ function drawFighter(fighter, time) {
     ctx.shadowColor = fighter.specialGlow > 0 ? fighter.def.accent : "rgba(0,0,0,.9)";
     ctx.shadowBlur = state.performance.shadows ? fighter.specialGlow > 0 ? 25 : 9 : 0;
     ctx.shadowOffsetY = 6;
-    if (fighter.hitFlash > 0) ctx.filter = "brightness(2.5) saturate(.28)";
-    else if (fighter.block) ctx.filter = "brightness(.82) saturate(.78)";
+    if (fighter.hitFlash > 0) {
+      // Counter-hit flash frames (wave 4): through hitstop and the first few
+      // ticks after, a counter victim renders as a stark inverted silhouette
+      // (the SF6 Punish Counter pop), then falls back to the standard white
+      // flash for the tail. High contrast keeps the plain flash.
+      const counterPop = fighter.hitFlash > 0.055
+        && typeof fighter.lastHitResult === "string"
+        && (fighter.lastHitResult.startsWith("counter") || fighter.lastHitResult === "southpaw-countered")
+        && !state.accessibility.highContrast;
+      ctx.filter = counterPop ? "invert(1) contrast(1.4)" : "brightness(2.5) saturate(.28)";
+      if (counterPop && !reflectionPassActive) presentationDebug.counterFlashes += 1;
+    } else if (fighter.block) ctx.filter = "brightness(.82) saturate(.78)";
     else if (!graphicFatality && fighter.health < 25 && !state.accessibility.highContrast) {
       // Last-legs grade: drained, slightly desaturated and contrasty. Lowest
       // priority in the filter chain — hit flash and block keep precedence.
@@ -8859,6 +9075,49 @@ function drawSuperSpotlight() {
   }
 }
 
+// Super focus lines (wave 4): while the spotlight dim is up, sparse comic-style
+// speed lines converge from past the frame edges onto the super's attacker.
+// Pure render pass driven by superDimLevel and snapshotted fighter state; the
+// side latch is module-level render-only state on the superDimLevel pattern so
+// the lines hold their target while the dim decays after the super ends.
+let superFocusSide = 0;
+
+function drawSuperFocusLines(time) {
+  if (superDimLevel <= 0.5 || state.accessibility.highContrast) return;
+  const attacker = state.fighters.find((fighter) => fighter.attacking?.superMove);
+  if (attacker) superFocusSide = attacker.side;
+  const target = state.fighters[superFocusSide];
+  if (!target) return;
+  const reducedMotion = state.accessibility.reducedMotion;
+  const count = Math.max(8, Math.round(26 * state.performance.particleScale));
+  const cx = target.x;
+  const cy = target.y - target.height * 0.62;
+  const strength = clamp((superDimLevel - 0.5) / 0.5, 0, 1);
+  const spin = reducedMotion ? 0 : time * 0.00022;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.strokeStyle = target.def.accent;
+  ctx.lineCap = "round";
+  for (let line = 0; line < count; line += 1) {
+    const jitterA = presentationHash01(line, 17);
+    const jitterB = presentationHash01(line, 91);
+    const angle = (line / count) * Math.PI * 2 + jitterA * 0.5 + spin;
+    const outer = 860 + jitterB * 260;
+    // Animated lines rush inward on a staggered cycle; reduced motion holds
+    // them static at low alpha instead.
+    const rush = reducedMotion ? 0.55 : 0.35 + 0.4 * ((time * 0.0011 + jitterA) % 1);
+    const inner = outer * (0.4 + rush * 0.3);
+    ctx.globalAlpha = (reducedMotion ? 0.05 : 0.05 + jitterB * 0.07) * strength;
+    ctx.lineWidth = 1.5 + jitterA * 2.5;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(angle) * outer, cy + Math.sin(angle) * outer);
+    ctx.lineTo(cx + Math.cos(angle) * inner, cy + Math.sin(angle) * inner);
+    ctx.stroke();
+    presentationDebug.focusLines += 1;
+  }
+  ctx.restore();
+}
+
 function drawAfterimages() {
   for (const effect of state.effects) {
     if (effect.kind !== "afterimage") continue;
@@ -8963,6 +9222,15 @@ function drawParticles() {
       ctx.moveTo(particle.x, particle.y);
       ctx.lineTo(particle.x - (particle.vx || 0) * 0.045, particle.y - (particle.vy || 0) * 0.045);
       ctx.stroke();
+      ctx.restore();
+      continue;
+    }
+    if (particle.kind === "debris") {
+      // Wall-splat chip (wave 4): a stage-toned slab tumbling under the shared
+      // spin/rotation integration the gore fragments already use.
+      ctx.translate(particle.x, particle.y);
+      ctx.rotate(particle.rotation || 0);
+      ctx.fillRect(-particle.size, -particle.size * 0.42, particle.size * 2, particle.size * 0.84);
       ctx.restore();
       continue;
     }
@@ -9085,6 +9353,25 @@ function drawParticles() {
     } else if (effect.kind === "impactFlash") {
       const radius = (effect.tier === "super" ? 64 : effect.tier === "light" ? 26 : 42) * alpha;
       ctx.globalCompositeOperation = "screen";
+      if (effect.spill && !state.accessibility.highContrast) {
+        // Impact light spill (wave 4): one radial gradient splash of the spark
+        // colour across the nearby stage, snapping back with the flash's own
+        // life. Radius halves on the battery profile and eases down with the
+        // effect budget so the balanced tier stays cheap.
+        const reach = (effect.tier === "super" ? 500 : 330)
+          * (state.performance.shadows ? 1 : 0.5)
+          * (0.6 + 0.4 * Math.min(1, state.performance.effectBudget / 220));
+        const channels = hexToRgbChannels(effect.spill);
+        const spillAlpha = alpha * (effect.tier === "super" ? 0.38 : 0.24);
+        ctx.shadowBlur = 0;
+        const spill = ctx.createRadialGradient(0, 0, 12, 0, 0, reach);
+        spill.addColorStop(0, `rgba(${channels},${spillAlpha.toFixed(3)})`);
+        spill.addColorStop(0.55, `rgba(${channels},${(spillAlpha * 0.4).toFixed(3)})`);
+        spill.addColorStop(1, `rgba(${channels},0)`);
+        ctx.fillStyle = spill;
+        ctx.fillRect(-reach, -reach, reach * 2, reach * 2);
+        presentationDebug.lightSpills += 1;
+      }
       ctx.shadowBlur = 18;
       ctx.lineWidth = 5 * alpha;
       for (let ray = 0; ray < 6; ray += 1) {
@@ -9154,6 +9441,49 @@ function drawParticles() {
         ctx.lineTo(Math.cos(angle) * radius * 1.35, Math.sin(angle) * radius * 1.35);
         ctx.stroke();
       }
+    } else if (effect.kind === "counterFocus") {
+      // Counter-hit focus burst (wave 4): gold anime speed lines rushing in on
+      // the impact point. Skipped under reduced motion — the victim's inverted
+      // flash pop still marks the counter. Deterministic jitter only.
+      if (!state.accessibility.reducedMotion) {
+        const rush = 1 - alpha;
+        ctx.globalCompositeOperation = "screen";
+        ctx.shadowBlur = 0;
+        ctx.lineCap = "round";
+        for (let line = 0; line < 12; line += 1) {
+          const jitter = presentationHash01(line, 29);
+          const angle = line * (Math.PI * 2 / 12) + jitter * 0.42;
+          const outer = (150 + jitter * 70) * (1 - rush * 0.45);
+          const inner = outer * (0.36 + rush * 0.36);
+          ctx.globalAlpha = alpha * (0.5 + jitter * 0.4);
+          ctx.lineWidth = 1.5 + rush * 2 + jitter * 2;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+          ctx.lineTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+          ctx.stroke();
+        }
+        presentationDebug.counterFlashes += 1;
+      }
+    } else if (effect.kind === "wallShock") {
+      // Corner wall-splat (wave 4): a tall shock ellipse hugging the arena
+      // edge plus an offset shimmer ring that reads as compressed air coming
+      // off the wall. Static, dimmer variant under reduced motion.
+      const reducedMotion = state.accessibility.reducedMotion;
+      const growth = reducedMotion ? 0.4 : 1 - alpha;
+      const size = effect.size || 84;
+      ctx.globalCompositeOperation = "screen";
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = alpha * (reducedMotion ? 0.4 : 0.85);
+      ctx.lineWidth = 2.5 + alpha * 5.5;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, size * (0.14 + growth * 0.4), size * (0.55 + growth * 1.05), 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha *= 0.45;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(effect.direction * (6 + growth * 16), 0, size * (0.2 + growth * 0.5), size * (0.62 + growth * 1.2), 0, 0, Math.PI * 2);
+      ctx.stroke();
+      presentationDebug.wallSplats += 1;
     } else if (effect.kind === "flowPulse") {
       const radius = 35 + (1 - alpha) * (80 + effect.stacks * 18);
       ctx.globalCompositeOperation = "screen";
@@ -9393,6 +9723,7 @@ function draw(time) {
   drawStage(time);
   if (state.screen === "fight") {
     drawSuperSpotlight();
+    drawSuperFocusLines(time);
     drawFighterCastShadows();
     drawFighterReflections(time);
     drawPaintTraps(time);
@@ -10466,6 +10797,12 @@ window.__finalBlowEngine = {
         weatherParticles: presentationDebug.weatherParticles,
         foregroundOccluders: presentationDebug.foregroundOccluders,
         crowdFlashes: presentationDebug.crowdFlashes,
+        counterFlashes: presentationDebug.counterFlashes,
+        projectileGlows: presentationDebug.projectileGlows,
+        swipeRibbons: presentationDebug.swipeRibbons,
+        wallSplats: presentationDebug.wallSplats,
+        focusLines: presentationDebug.focusLines,
+        lightSpills: presentationDebug.lightSpills,
         timeOfDay: Number(timeOfDayLevel().toFixed(3)),
         roundWinBeat: Number(roundWinBeatLevel(state.simulationTick).toFixed(3)),
         gritFlare: Number(Math.max(gritFlareLevel[0], gritFlareLevel[1]).toFixed(3)),
