@@ -33,7 +33,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "FAULTLINE RUPTURE",
       family: "rupture",
       caption: "SEISMIC ARM AVULSION",
-      special: "FAULTLINE PUNCH",
+      special: "WHOLE PIZZA",
+      projectileId: "pizza",
       limb: "right-arm",
       device: "RUSTED FAULTLINE VISE",
       blood: 1.6,
@@ -45,7 +46,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "AFTERSHOCK BURIAL",
       family: "crush",
       caption: "GROUND-ZERO LEG SHEAR",
-      special: "FAULTLINE PUNCH",
+      special: "WHOLE PIZZA",
+      projectileId: "pizza",
       limb: "left-leg",
       device: "AFTERSHOCK FLOOR LOCK",
       blood: 1.35,
@@ -59,7 +61,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "NEON GUILLOTINE",
       family: "slice",
       caption: "NEON ARM GUILLOTINE",
-      special: "NEON PALM",
+      special: "CORDED MOUSE",
+      projectileId: "mouse",
       limb: "left-arm",
       device: "NEON SIGNBLADE STOCKS",
       blood: 1.25,
@@ -73,7 +76,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "VINYL WRAP",
       family: "slice",
       caption: "RAZOR-RIBBON LEG DISSECTION",
-      special: "NEON PALM",
+      special: "CORDED MOUSE",
+      projectileId: "mouse",
       limb: "right-leg",
       device: "VINYL WIRE TOURNIQUET",
       blood: 1.4,
@@ -89,7 +93,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "THE HEAVY HAND",
       family: "crush",
       caption: "SOUTH STREET ARM TEAR",
-      special: "SOUTH STREET SLAM",
+      special: "LOOGIES",
+      projectileId: "loogie",
       limb: "right-arm",
       device: "HEAVYWEIGHT CHAIN FRAME",
       blood: 1.35,
@@ -101,7 +106,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "SOUTH STREET SHUTDOWN",
       family: "rupture",
       caption: "SOUTH STREET LEG BREAKDOWN",
-      special: "SOUTH STREET SLAM",
+      special: "LOOGIES",
+      projectileId: "loogie",
       limb: "left-leg",
       device: "SOUTH STREET SLAM TABLE",
       blood: 1.5,
@@ -116,7 +122,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "FULL COVERAGE",
       family: "dissolve",
       caption: "PRESSURIZED ARM STRIPPING",
-      special: "PAINT THE TOWN",
+      special: "TANGLED WIRES",
+      projectileId: "wires",
       limb: "left-arm",
       device: "PAINT-PRESSURE RESTRAINT",
       blood: 1.15,
@@ -129,7 +136,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "WET PAINT",
       family: "dissolve",
       caption: "LIQUEFIED LEG REMOVAL",
-      special: "PAINT THE TOWN",
+      special: "TANGLED WIRES",
+      projectileId: "wires",
       limb: "right-leg",
       device: "WET-PAINT CABLE SNARE",
       blood: 1.45,
@@ -144,7 +152,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "CIRCUIT BREAKER",
       family: "electrocute",
       caption: "ARC-FLASH ARM SEVER",
-      special: "BENNY BLITZ",
+      special: "X-ACTO KNIFE",
+      projectileId: "xacto",
       limb: "right-arm",
       device: "BREAKER-BOX SHACKLES",
       blood: 0.85,
@@ -157,7 +166,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "BENNY'S LAST CALL",
       family: "electrocute",
       caption: "OVERLOADED LEG DETACHMENT",
-      special: "BENNY BLITZ",
+      special: "X-ACTO KNIFE",
+      projectileId: "xacto",
       limb: "left-leg",
       device: "LIVE-WIRE ANKLE CLAMP",
       blood: 1.25,
@@ -172,7 +182,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "GOLDEN SEND-OFF",
       family: "launch",
       caption: "BACK-NINE ARM LAUNCH",
-      special: "GOLDEN SHOCKWAVE",
+      special: "GOLF BALL",
+      projectileId: "golfball",
       limb: "left-arm",
       device: "GILDED CLUBHOUSE STOCKS",
       blood: 1.25,
@@ -185,7 +196,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "YOU'RE FIRED!",
       family: "launch",
       caption: "GOLDEN LEG DISASSEMBLY",
-      special: "GOLDEN SHOCKWAVE",
+      special: "GOLF BALL",
+      projectileId: "golfball",
       limb: "right-leg",
       device: "GOLDEN TEE LEG VISE",
       blood: 1.45,
@@ -200,7 +212,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "FEEDBACK BLACKOUT",
       family: "glitch",
       caption: "SIGNAL-SLICE ARM DELETION",
-      special: "BUFFERING",
+      special: "BED BUGS",
+      projectileId: "bedbugs",
       limb: "right-arm",
       device: "FEEDBACK CABLE RESTRAINT",
       blood: 1.1,
@@ -213,7 +226,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "INTERNET MELTDOWN",
       family: "glitch",
       caption: "CORRUPTED LEG BUFFER",
-      special: "BUFFERING",
+      special: "BED BUGS",
+      projectileId: "bedbugs",
       limb: "left-leg",
       device: "BUFFER-LOCK FLOOR PORT",
       blood: 1.35,
@@ -228,7 +242,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "MIC DROP",
       family: "implode",
       caption: "BASS-PRESSURE ARM IMPLOSION",
-      special: "BASS DROP",
+      special: "VINYL RECORD",
+      projectileId: "vinyl",
       limb: "left-arm",
       device: "MIC-CABLE ARM CINCH",
       blood: 1.2,
@@ -241,7 +256,8 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       title: "WEST STAINES MASSIVE",
       family: "implode",
       caption: "MAXIMUM BASS LEG DETONATION",
-      special: "BASS DROP",
+      special: "VINYL RECORD",
+      projectileId: "vinyl",
       limb: "right-leg",
       device: "WEST STAINES BASS CAGE",
       blood: 1.55,
@@ -274,7 +290,7 @@ export function auditGraphicFatalities(fighters = Object.keys(GRAPHIC_FATALITIES
   const errors = [];
   for (const fighter of fighters) {
     const fighterId = typeof fighter === "string" ? fighter : fighter?.id;
-    const assignedSpecial = typeof fighter === "string" ? null : fighter?.special;
+    const assignedProjectile = typeof fighter === "string" ? null : fighter?.projectile;
     const profiles = GRAPHIC_FATALITIES[fighterId];
     if (!profiles || profiles.length !== 2) {
       errors.push(`${fighterId}:expected-two-fatalities`);
@@ -286,7 +302,11 @@ export function auditGraphicFatalities(fighters = Object.keys(GRAPHIC_FATALITIES
       if (!GRAPHIC_FATALITY_FAMILIES.includes(fatality.family)) errors.push(`${fighterId}:family:${fatality.family}`);
       if (!fatality.title || !fatality.caption) errors.push(`${fighterId}:missing-copy:${fatality.id}`);
       if (!fatality.special) errors.push(`${fighterId}:missing-special:${fatality.id}`);
-      if (assignedSpecial && fatality.special !== assignedSpecial) errors.push(`${fighterId}:wrong-special:${fatality.id}`);
+      if (!fatality.projectileId) errors.push(`${fighterId}:missing-projectile:${fatality.id}`);
+      if (assignedProjectile && (fatality.special !== assignedProjectile.name
+        || fatality.projectileId !== assignedProjectile.id)) {
+        errors.push(`${fighterId}:wrong-projectile:${fatality.id}`);
+      }
       if (!GRAPHIC_FATALITY_LIMBS.includes(fatality.limb)) errors.push(`${fighterId}:limb:${fatality.id}`);
       if (!fatality.device) errors.push(`${fighterId}:missing-device:${fatality.id}`);
       if (fatality.rating !== "R") errors.push(`${fighterId}:rating:${fatality.id}`);

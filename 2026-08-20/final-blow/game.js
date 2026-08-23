@@ -323,7 +323,10 @@ const balanceAudit = auditFighterBalance(roster.map(({ id }) => getFighterKit(id
 if (balanceAudit.violations.length) console.warn("Final Blow balance guardrail warning", balanceAudit.violations);
 const tournamentAudit = auditTournamentBalance(roster.map(({ id }) => id));
 if (tournamentAudit.violations.length) console.warn("Final Blow tournament audit warning", tournamentAudit.violations);
-const fatalityAudit = auditGraphicFatalities(roster);
+const fatalityAudit = auditGraphicFatalities(roster.map(({ id }) => ({
+  id,
+  projectile: getThrowable(id),
+})));
 if (fatalityAudit.errors.length) console.warn("Final Blow graphic fatality warning", fatalityAudit.errors);
 
 const arcadeBoss = Object.freeze({
@@ -549,11 +552,11 @@ const finisherChoreography = {
   },
 };
 
-// Release 1.8 R-RATED EXECUTIONS: the older sequences read as extended combo
+// Release 1.8A SIGNATURE EXECUTIONS: the older sequences read as extended combo
 // reels. Keep their authored poses and camera path, but focus every execution
-// into three deliberate beats: restraint, the fighter's assigned signature
-// special, and one final severing strike. Both fatality variants for a fighter
-// share that assigned special; their profile selects the limb and trap device.
+// into three deliberate beats: restraint, the fighter's assigned personal
+// projectile, and one final severing strike. Both fatality variants for a
+// fighter share that projectile; their profile selects the limb and trap device.
 const finisherScripts = Object.freeze(Object.fromEntries(
   Object.entries(finisherChoreography).map(([fighterId, script]) => {
     const fatality = getGraphicFatality(fighterId, 0);
@@ -566,6 +569,7 @@ const finisherScripts = Object.freeze(Object.fromEntries(
       ...script,
       combo: `${fatality.special} EXECUTION`,
       signatureSpecial: fatality.special,
+      signatureProjectile: fatality.projectileId,
       impacts: Object.freeze([
         Object.freeze({ ...setup, label: "RESTRAINT LOCK", power: Math.min(setup.power, .5) }),
         Object.freeze({
@@ -573,6 +577,7 @@ const finisherScripts = Object.freeze(Object.fromEntries(
           t: Math.min(signature.t, setup.t + .36),
           label: fatality.special,
           power: Math.max(signature.power, .92),
+          signatureProjectile: true,
         }),
         Object.freeze({ ...final, label: `${fatality.special} · LIMB SEVER`, power: Math.max(final.power, 1.48), final: true }),
       ]),
@@ -3966,6 +3971,9 @@ function performFinisher(winner, type) {
     impactCloseUps: 0,
     peakZoom: 1.24,
     slowMotionHits: 0,
+    signatureProjectileTriggered: false,
+    signatureProjectileId: null,
+    signatureProjectileName: null,
   };
   state.cinematicZoom = 1.24;
   state.shake = .16;
@@ -4070,15 +4078,55 @@ function fatalityWoundPoint(victim, fatality, direction) {
   };
 }
 
+function spawnFinisherProjectile(finisher, attacker, victim, fatality) {
+  const projectile = getThrowable(attacker.def.finisherScriptId || attacker.def.id);
+  if (!projectile || projectile.id !== fatality.projectileId) return;
+  const target = fatalityWoundPoint(victim, fatality, finisher.direction);
+  const startX = attacker.x + finisher.direction * 58;
+  const startY = attacker.y - 142;
+  const life = Math.max(1.4, finisher.script.duration - finisher.elapsed + 1.1);
+  state.effects = state.effects.filter((effect) => effect.kind !== "fatalityProjectile");
+  state.effects.push({
+    kind: "fatalityProjectile",
+    projectileId: projectile.id,
+    name: projectile.name,
+    style: projectile.style,
+    ownerSide: finisher.winner,
+    x: startX,
+    y: startY,
+    startX,
+    startY,
+    targetX: target.x,
+    targetY: target.y,
+    width: projectile.width * FIGHTER_SCALE * 1.18,
+    height: projectile.height * FIGHTER_SCALE * 1.18,
+    vx: finisher.direction * Math.max(320, projectile.speed),
+    vy: projectile.launchY || -180,
+    spin: projectile.spin || 8,
+    spinAngle: 0,
+    wobble: projectile.wobble || 0,
+    hazard: false,
+    landed: false,
+    direction: finisher.direction,
+    life,
+    max: life,
+    color: attacker.def.accent,
+  });
+  finisher.signatureProjectileTriggered = true;
+  finisher.signatureProjectileId = projectile.id;
+  finisher.signatureProjectileName = projectile.name;
+}
+
 function triggerFinisherImpact(finisher, impact) {
   const attacker = state.fighters[finisher.winner];
   const victim = state.fighters[1 - finisher.winner];
   const finalImpact = Boolean(impact.final);
   const gore = state.graphicFatalities;
   const scriptId = attacker.def.finisherScriptId || attacker.def.id;
-  const fatality = finalImpact && gore ? getGraphicFatality(scriptId, finisher.type) : null;
-  const wound = fatality
-    ? fatalityWoundPoint(victim, fatality, finisher.direction)
+  const fatalityProfile = getGraphicFatality(scriptId, finisher.type);
+  const fatality = finalImpact && gore ? fatalityProfile : null;
+  const wound = finalImpact
+    ? fatalityWoundPoint(victim, fatalityProfile, finisher.direction)
     : { x: victim.x - finisher.direction * 12, y: victim.y - 125 };
   const pointX = wound.x;
   const pointY = wound.y;
@@ -4098,6 +4146,22 @@ function triggerFinisherImpact(finisher, impact) {
   finisher.beatLife = finalImpact ? 1.05 : .48;
   finisher.impactCloseUps += 1;
   if (finalImpact) finisher.slowMotionHits += 1;
+  if (impact.signatureProjectile) {
+    spawnFinisherProjectile(finisher, attacker, victim, fatalityProfile);
+  }
+  if (finalImpact) {
+    const signatureProjectile = state.effects.find((effect) => effect.kind === "fatalityProjectile"
+      && effect.projectileId === fatalityProfile.projectileId);
+    if (signatureProjectile) {
+      signatureProjectile.x = pointX;
+      signatureProjectile.y = pointY;
+      signatureProjectile.targetX = pointX;
+      signatureProjectile.targetY = pointY;
+      signatureProjectile.landed = true;
+      signatureProjectile.hazard = ["wires", "bedbugs"].includes(signatureProjectile.style);
+      spawnThrowableImpact({ ...signatureProjectile, throwable: true }, "impact");
+    }
+  }
   // Release 1.6 LOUD: synth heft under the scripted cinematic impacts too.
   impactLayerAudio(finalImpact ? "super" : "heavy", { counter: false });
   // Wave 9: the victim's fatality scream on the killing blow — a distinct
@@ -4277,6 +4341,13 @@ function updateFinisher(dt) {
   victim.cinematicFrame = pose.vf;
   attacker.cinematicRotation = pose.ar * finisher.direction;
   victim.cinematicRotation = pose.vr * finisher.direction;
+  const fatalityProfile = getGraphicFatality(attacker.def.finisherScriptId || attacker.def.id, finisher.type);
+  const projectileTarget = fatalityWoundPoint(victim, fatalityProfile, finisher.direction);
+  for (const effect of state.effects) {
+    if (effect.kind !== "fatalityProjectile") continue;
+    effect.targetX = projectileTarget.x;
+    effect.targetY = projectileTarget.y;
+  }
   if (finisher.fatalityTriggered && state.graphicFatalities && !state.accessibility.reducedMotion
     && finisher.elapsed > finisher.fatalityAt) {
     const aftermath = finisher.elapsed - finisher.fatalityAt;
@@ -7466,6 +7537,21 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
   state.particles = state.particles.filter((particle) => particle.life > 0);
   for (const effect of state.effects) {
     effect.life -= dt;
+    if (effect.kind === "fatalityProjectile") {
+      effect.spinAngle += (effect.spin || 8) * dt;
+      if (effect.landed) {
+        effect.x = effect.targetX;
+        effect.y = effect.targetY;
+      } else {
+        const progress = clamp((1 - effect.life / effect.max) * 4.2, 0, 1);
+        const eased = progress * progress * (3 - 2 * progress);
+        effect.x = lerp(effect.startX, effect.targetX, eased);
+        effect.y = lerp(effect.startY, effect.targetY, eased) - Math.sin(progress * Math.PI) * 62;
+        effect.landed = progress >= 1;
+        effect.hazard = effect.landed && ["wires", "bedbugs"].includes(effect.style);
+      }
+      continue;
+    }
     if (effect.kind !== "severedLimb" || effect.resting) continue;
     effect.vy += (effect.gravity || 1080) * dt;
     effect.x += effect.vx * dt;
@@ -10022,6 +10108,36 @@ function drawSeveredLimb(effect, alpha) {
   ctx.restore();
 }
 
+function drawFatalityProjectile(effect, alpha) {
+  const reveal = clamp((1 - alpha) * 12, 0, 1);
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = Math.min(1, alpha * 3) * reveal;
+  ctx.shadowColor = effect.color;
+  ctx.shadowBlur = effect.landed ? 22 : 12;
+  ctx.strokeStyle = effect.color;
+  ctx.lineWidth = effect.landed ? 6 : 3;
+  ctx.beginPath();
+  ctx.arc(0, 0, Math.max(effect.width, effect.height) * (.58 + (1 - alpha) * .08), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.save();
+  ctx.scale(1.12, 1.12);
+  drawThrowable(effect, state.simulationTick * 1000 / SIMULATION_HZ, alpha);
+  ctx.restore();
+  if (effect.landed) {
+    ctx.globalAlpha = Math.min(1, alpha * 4);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "1000 13px Arial Narrow, Arial, sans-serif";
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "rgba(0,0,0,.92)";
+    ctx.fillStyle = "#fff0df";
+    ctx.strokeText(effect.name, 0, -Math.max(38, effect.height * .72));
+    ctx.fillText(effect.name, 0, -Math.max(38, effect.height * .72));
+  }
+  ctx.restore();
+}
+
 function drawCinematicGoreOverlay() {
   if (!state.graphicFatalities || !state.finisher) return;
   const overlays = state.effects.filter((effect) => effect.kind === "lensBlood");
@@ -10532,6 +10648,8 @@ function drawParticles() {
       ctx.fillText(effect.label, 0, 0);
     } else if (effect.kind === "finisherImpact") {
       drawFinisherImpact(effect, alpha);
+    } else if (effect.kind === "fatalityProjectile") {
+      drawFatalityProjectile(effect, alpha);
     } else if (effect.kind === "fatalityPool") {
       drawFatalityPool(effect, alpha);
     } else if (effect.kind === "severedLimb") {
@@ -13185,7 +13303,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.8");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.8a");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -13667,7 +13785,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.8-r-rated-executions",
+  version: "1.8a-signature-executions",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -13769,6 +13887,7 @@ window.__finalBlowEngine = {
         sparkLines: state.particles.filter((particle) => particle.kind === "sparkLine").length,
         arterialSprays: state.particles.filter((particle) => particle.kind === "arterial").length,
         severedLimbs: state.effects.filter((effect) => effect.kind === "severedLimb").length,
+        signatureProjectiles: state.effects.filter((effect) => effect.kind === "fatalityProjectile").length,
         bloodStains: state.effects.filter((effect) => effect.kind === "bloodDecal" && effect.stain).length,
         fatalitySlowMo: Boolean((state.finisher?.slowMotionTicks || 0) > 0),
         shockRings: state.effects.filter((effect) => effect.kind === "shockRing").length,
@@ -14417,6 +14536,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         fatalityId: state.finisher?.fatalityId || null,
         fatalityFamily: fatality?.family || null,
         fatalitySpecial: fatality?.special || null,
+        fatalityProjectileId: fatality?.projectileId || null,
         fatalityLimb: fatality?.limb || null,
         fatalityDevice: fatality?.device || null,
         fatalityTriggered: Boolean(state.finisher?.fatalityTriggered),
@@ -14425,6 +14545,8 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         goreShockwaves: state.effects.filter((effect) => effect.kind === "goreShockwave").length,
         lensBlood: state.effects.filter((effect) => effect.kind === "lensBlood").length,
         severedLimbs: state.effects.filter((effect) => effect.kind === "severedLimb").length,
+        signatureProjectiles: state.effects.filter((effect) => effect.kind === "fatalityProjectile").length,
+        signatureProjectileTriggered: Boolean(state.finisher?.signatureProjectileTriggered),
         cinematicShot: state.finisher?.cinematicShot || "arena",
         cinematicCuts: state.finisher?.cinematicCuts || 0,
         impactCloseUps: state.finisher?.impactCloseUps || 0,

@@ -8,26 +8,18 @@ import {
   getGraphicFatality,
   graphicFatalitySnapshot,
 } from "../engine/fatalities.mjs";
+import { FIGHTER_THROWABLES } from "../engine/throwables.mjs";
 
 const fighters = ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali"];
-const assignedSpecials = {
-  deathblow: "FAULTLINE PUNCH",
-  jez: "NEON PALM",
-  alan: "SOUTH STREET SLAM",
-  post: "PAINT THE TOWN",
-  benny: "BENNY BLITZ",
-  donald: "GOLDEN SHOCKWAVE",
-  cyraxx: "BUFFERING",
-  ali: "BASS DROP",
-};
 
 test("all eight fighters receive two unique graphic fatalities", () => {
-  const audit = auditGraphicFatalities(fighters.map((id) => ({ id, special: assignedSpecials[id] })));
+  const audit = auditGraphicFatalities(fighters.map((id) => ({ id, projectile: FIGHTER_THROWABLES[id] })));
   assert.deepEqual(audit, { fighters: 8, fatalities: 16, errors: [] });
   assert.equal(Object.keys(GRAPHIC_FATALITIES).length, 8);
   for (const fighter of fighters) {
     for (const fatality of GRAPHIC_FATALITIES[fighter]) {
-      assert.equal(fatality.special, assignedSpecials[fighter], `${fatality.id} must use the assigned special`);
+      assert.equal(fatality.special, FIGHTER_THROWABLES[fighter].name, `${fatality.id} must name the assigned projectile`);
+      assert.equal(fatality.projectileId, FIGHTER_THROWABLES[fighter].id, `${fatality.id} must use the assigned projectile`);
       assert.ok(GRAPHIC_FATALITY_LIMBS.includes(fatality.limb), `${fatality.id} must sever a complete limb`);
       assert.ok(fatality.device, `${fatality.id} must have a deliberate restraint device`);
       assert.equal(fatality.rating, "R");
@@ -35,11 +27,11 @@ test("all eight fighters receive two unique graphic fatalities", () => {
   }
 });
 
-test("the audit rejects a fatality that does not match the assigned special", () => {
-  const audit = auditGraphicFatalities([{ id: "deathblow", special: "WRONG MOVE" }]);
+test("the audit rejects a fatality that does not match the assigned projectile", () => {
+  const audit = auditGraphicFatalities([{ id: "deathblow", projectile: { id: "brick", name: "PHILLY BRICK" } }]);
   assert.deepEqual(audit.errors, [
-    "deathblow:wrong-special:faultline-rupture",
-    "deathblow:wrong-special:aftershock-burial",
+    "deathblow:wrong-projectile:faultline-rupture",
+    "deathblow:wrong-projectile:aftershock-burial",
   ]);
 });
 
