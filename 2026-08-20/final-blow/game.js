@@ -18,6 +18,7 @@ import {
   DirectionTapTracker,
   FIGHTER_SCALE,
   GUARD_RULES,
+  HURTBOX_MAX_EXTENT,
   MOVEMENT_RULES,
   PERFECT_GUARD_RULES,
   STUN_RULES,
@@ -129,6 +130,10 @@ import {
   roomFingerprint,
   scrubInviteFromAddress,
 } from "./engine/rooms.mjs";
+import {
+  fighterCanTurn,
+  resolvePairFacing,
+} from "./engine/facing.mjs";
 import { FinalBlowPeer } from "./engine/webrtc.mjs";
 import {
   RollbackSession,
@@ -859,6 +864,11 @@ const state = {
   finishWinner: -1,
   finisherType: 0,
   finisher: null,
+  // Which way the pair is oriented: +1 when side 1 stands right of side 0. Both
+  // fighters derive their facing from this single value, so they can never end
+  // up pointing the same way. It is simulation state, not presentation — it
+  // carries the facing deadband's memory and so rides along with rollback.
+  facingAxis: 1,
   // A finisher only fires on a button press that starts after the prompt appears,
   // so the KO-causing attack or a held button can never trigger one.
   finishArmed: [false, false],
@@ -3374,6 +3384,7 @@ function saveRollbackState() {
     finishWinner: state.finishWinner,
     finisherType: state.finisherType,
     finisher,
+    facingAxis: state.facingAxis,
     cinematicZoom: state.cinematicZoom,
     shake: state.shake,
     flash: state.flash,
@@ -3405,6 +3416,9 @@ function restoreRollbackState(snapshot) {
   state.phaseTime = snapshot.phaseTime;
   state.finishWinner = snapshot.finishWinner;
   state.finisherType = snapshot.finisherType;
+  // Older peers predate the pair axis; fall back to side 0's stored facing so a
+  // mixed-build resimulation still restores a coherent orientation.
+  state.facingAxis = snapshot.facingAxis ?? snapshot.fighters[0]?.values?.facing ?? 1;
   state.cinematicZoom = snapshot.cinematicZoom;
   state.shake = snapshot.shake;
   state.flash = snapshot.flash;
@@ -3567,6 +3581,10 @@ function prepareArcadeOpponent(usePlannedStage = false) {
 function makeMatchFighters() {
   const match = state.mode === "arcade" ? currentArcadeMatch(state.arcadeRun) : null;
   const bossOverride = match?.opponentId === ARCADE_BOSS_ID ? arcadeBoss : null;
+  // Fresh fighters always spawn side 0 left of side 1, so every path that
+  // rebuilds the pair — new match, rematch, round reset, online seed — resets
+  // the axis with them rather than inheriting a crossed-over orientation.
+  state.facingAxis = 1;
   return [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1, bossOverride)];
 }
 
@@ -4446,6 +4464,10 @@ function updateFinisher(dt) {
   victim.y = FLOOR - pose.vy;
   attacker.facing = victim.x >= attacker.x ? 1 : -1;
   victim.facing = -attacker.facing;
+  // Keep the pair axis tracking the cinematic so the fighters stay oriented
+  // through a script that walks them past each other, and so anything that
+  // resumes after the finisher inherits the correct side.
+  state.facingAxis = state.fighters[0].facing;
   attacker.grounded = pose.ay < 2;
   victim.grounded = pose.vy < 2;
   attacker.cinematicFrame = pose.af;
@@ -7658,40 +7680,39 @@ function separateFighters() {
   b.x = positions.bX;
 }
 
-// Fighters within this horizontal distance keep their current facing: at a
-// near-perfect overlap the sign of dx flips every frame, and re-facing on it
-// made sprites jitter left-right during cross-throughs and deep jump-ins.
-const FACING_DEADBAND = 14;
-
-function attackLastHitboxFrame(attack) {
-  // The frame after which the move can no longer touch anyone. For most moves
-  // this equals activeEndFrame; for single-window moves with long active tails
-  // it lets the fighter turn a few frames sooner.
-  if (!attack) return -1;
-  const boxes = attack.hitboxes;
-  if (!Array.isArray(boxes) || boxes.length === 0) return attack.activeEndFrame;
-  let last = 0;
-  for (const entry of boxes) last = Math.max(last, (entry.to ?? 0) + 1);
-  return Math.min(attack.activeEndFrame, attack.activeStartFrame + last);
+// Offset of the opponent along the fighter's own facing: positive in front,
+// negative behind. That sign is what lets the reach test tell a close cross-up
+// (still reachable, keep the lock) from an opponent stranded across the stage.
+function turnContext(fighter, opponent) {
+  return {
+    opponentOffset: (opponent.x - fighter.x) * fighter.facing,
+    scale: FIGHTER_SCALE,
+    allowance: HURTBOX_MAX_EXTENT,
+  };
 }
 
 function updateFacings() {
   const [a, b] = state.fighters;
   if (!a || !b || state.finisher) return;
-  if (a.grabbing || b.grabbing || a.grabbed || b.grabbed) return;
+  // Grabs pose both fighters explicitly and finishers are fully scripted; both
+  // still keep the axis current so whatever follows resumes oriented correctly.
+  const posed = a.grabbing || b.grabbing || a.grabbed || b.grabbed;
   // Preserve a move's committed direction while it can still hit, so cross-ups
   // punish whiffs instead of auto-correcting the hitbox. The moment the last
-  // hitbox window closes, turn the fighter back toward the opponent.
-  const canTurn = (fighter) => !fighter.attacking
-    || fighter.attackFrame > attackLastHitboxFrame(fighter.attacking);
-  const toward = (fighter, opponent) => {
-    const delta = opponent.x - fighter.x;
-    if (Math.abs(delta) > FACING_DEADBAND) return delta > 0 ? 1 : -1;
-    // Inside the deadband, keep whatever we had rather than flip-flopping.
-    return fighter.facing;
-  };
-  if (canTurn(a)) a.facing = toward(a, b);
-  if (canTurn(b)) b.facing = toward(b, a);
+  // hitbox window closes, the fighter snaps back onto the pair's axis.
+  const resolved = resolvePairFacing({
+    previousAxis: state.facingAxis,
+    aX: a.x,
+    bX: b.x,
+    aFacing: a.facing,
+    bFacing: b.facing,
+    aCanTurn: !posed && fighterCanTurn(a, turnContext(a, b)),
+    bCanTurn: !posed && fighterCanTurn(b, turnContext(b, a)),
+  });
+  state.facingAxis = resolved.axis;
+  if (posed) return;
+  a.facing = resolved.aFacing;
+  b.facing = resolved.bFacing;
 }
 
 function resolveFighterState(fighter) {
@@ -13909,7 +13930,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.9");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.9a");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -14391,7 +14412,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.9-disrespect",
+  version: "1.9a-disrespect",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);

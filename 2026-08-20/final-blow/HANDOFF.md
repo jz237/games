@@ -1,4 +1,4 @@
-# Final Blow v1.8E — Handoff
+# Final Blow v1.9A — Handoff
 
 Paste this whole file to the next agent as context before asking it to touch
 Final Blow. It describes what exists, where it lives, the traps, and how to
@@ -10,7 +10,31 @@ This file lives at `2026-08-20/final-blow/HANDOFF.md` in `jz237/games`.
 
 ## 1. What this is
 
-`Final Blow: Philly After Dark` is a browser 2D versus fighting game. Version
+`Final Blow: Philly After Dark` is a browser 2D versus fighting game.
+
+**Version history since 1.8E** — 1.9 "Disrespect" added the wave-eleven
+offensive-depth pass and encoded real attack buttons in online play. **1.9A**
+is a facing bugfix release, with two distinct fixes in `engine/facing.mjs`:
+
+1. **Shared pair axis.** Both fighters now derive facing from one axis instead
+   of each deciding alone, so they can never end up pointing the same way. The
+   overlap deadband holds that axis rather than each fighter's stale value, so a
+   fighter free to turn is never stranded facing backwards. The axis is
+   simulation state and rides along with rollback.
+2. **Range-aware facing lock.** A committed attacker still holds its cross-up
+   direction, but only while that direction can plausibly matter. Past
+   `FACING_RULES.lockVisibilityFrames` — the same tolerance the browser suite's
+   sustained-wrong-facing guard uses — a fighter whose opponent is outside the
+   move's authored hitbox reach turns to face them. This ends the 1.9 defect
+   where a long EX special (cyraxx BUFFER SKIP EX) left a fighter visibly facing
+   away for over a third of a second at a distance it could never reach. Reach
+   is derived from authored hitbox data and body extents, never per-fighter
+   exceptions, so it tracks whatever the kits ship.
+
+Note that the detailed sections below still describe the 1.8E baseline; 1.9 did
+not update them.
+
+Version
 **1.8E** shipped on 2026-08-23. It keeps the Tournament Feel, cinematic-finisher,
 presentation and living-soundstage passes, then adds guard crush, Perfect Guard,
 quick/delayed wake-up choices and air recovery. The four-button neutral roles are

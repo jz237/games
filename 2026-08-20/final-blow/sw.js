@@ -1,7 +1,7 @@
 // Keep offline startup reliable. Images and audio are intentionally fetched on
 // demand: preloading the complete game was a 19 MB / 162-request install that
 // could make Chrome abort the page before it rendered.
-const CACHE_NAME = "final-blow-shell-1.9";
+const CACHE_NAME = "final-blow-shell-1.9a";
 const SHELL = [
   "./",
   "./styles.css",
@@ -18,6 +18,7 @@ const SHELL = [
   "./engine/training.mjs",
   "./engine/polish.mjs",
   "./engine/rooms.mjs",
+  "./engine/facing.mjs",
   "./engine/webrtc.mjs",
   "./engine/rollback.mjs",
   "./engine/demo.mjs",

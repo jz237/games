@@ -345,7 +345,7 @@ try {
   }))()`);
   assert.match(title.title, /Final Blow/);
   assert.match(title.build, /1\.9/);
-  assert.equal(title.version.text, 'VERSION 1.9');
+  assert.equal(title.version.text, 'VERSION 1.9A');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -373,7 +373,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.9-disrespect');
+  assert.equal(title.engineVersion, '1.9a-disrespect');
   assert.deepEqual(title.engine.presentationRules, {
     hitFlashFilter: 'brightness(1.55) saturate(1.12)',
     attackNamePopups: false,
@@ -1861,13 +1861,23 @@ try {
   // wrong facing for a third of a second in any state, and the KO scene must
   // hold long enough to be seen before the next round begins.
   const facingAndHold = await evaluate(client, `(() => {
-    const out = { wrongFacingStreaks: 0 };
+    const out = { wrongFacingStreaks: 0, unopposedFrames: 0 };
     window.__finalBlowQa.aiFight('jez', 'cyraxx', 'final');
     let streaks = [0, 0];
+    // A fighter still inside its attack's active window is allowed to point
+    // away — that committed direction is what makes a cross-up punishable.
+    const committed = (f) => Boolean(f.attack) && f.attackFrame <= (f.activeEndFrame ?? Infinity);
     for (let frame = 0; frame < 1800; frame += 1) {
       window.__finalBlowQa.step(1 / 60);
       const snapshot = window.__finalBlowEngine.snapshot();
       if (snapshot.phase !== 'fight') { streaks = [0, 0]; continue; }
+      // Pair invariant: whenever nobody is grabbing or mid-attack, the two
+      // fighters must face *each other*. Unlike the streak check below this
+      // holds inside the overlap deadband as well — the exact window where
+      // per-fighter resolution used to strand both sprites facing the same way.
+      const [a, b] = snapshot.fighters;
+      const posed = a.grabbing || a.grabbed || b.grabbing || b.grabbed;
+      if (!posed && !committed(a) && !committed(b) && a.facing !== -b.facing) out.unopposedFrames += 1;
       for (const side of [0, 1]) {
         const me = snapshot.fighters[side];
         const op = snapshot.fighters[1 - side];
@@ -1892,6 +1902,128 @@ try {
     return out;
   })()`);
   assert.equal(facingAndHold.wrongFacingStreaks, 0, "no sustained wrong facing in any state");
+  assert.equal(facingAndHold.unopposedFrames, 0, "idle fighters must always face each other");
+
+  // A jump-in cross-up is the case the streak probe above cannot reach: an
+  // airborne pair skips pushbox separation, so the two fighters sit right on
+  // top of each other for several frames. Resolving facing per-fighter used to
+  // strand both sprites pointing the same way in exactly that window, and it
+  // persisted after the jump because neither was far enough apart to re-face.
+  const crossup = await evaluate(client, `(() => {
+    const out = {
+      minGap: Infinity, unopposedFrames: 0, airborneFrames: 0,
+      releasedInsideDeadband: 0, settledWrong: 0, cases: 0,
+    };
+    const committed = (f) => Boolean(f.attack) && f.attackFrame <= (f.activeEndFrame ?? Infinity);
+    // Sweep the button timing: the stranded window opens only when a committed
+    // attack *ends* while the pair is still overlapped, so a single fixed
+    // timing can miss it entirely. Every press frame is deterministic.
+    for (let pressFrame = 0; pressFrame <= 26; pressFrame += 2) {
+      window.__finalBlowQa.fight('deathblow', 'jez');
+      window.__finalBlowQa.positions(560, 640);
+      window.__finalBlowQa.input(0, { jump: true, right: true }, 6);
+      out.cases += 1;
+      let wasCommitted = false;
+      for (let frame = 0; frame < 110; frame += 1) {
+        if (frame === pressFrame) window.__finalBlowQa.input(0, { heavy: true, right: true }, 4);
+        window.__finalBlowQa.step(1 / 60);
+        const [a, b] = window.__finalBlowEngine.snapshot().fighters;
+        const posed = a.grabbing || a.grabbed || b.grabbing || b.grabbed;
+        const gap = Math.abs(b.x - a.x);
+        if (!a.grounded || !b.grounded) out.airborneFrames += 1;
+        const nowCommitted = committed(a) || committed(b);
+        // The exact frame an attack releases while still inside the overlap.
+        if (wasCommitted && !nowCommitted && gap <= 14) out.releasedInsideDeadband += 1;
+        wasCommitted = nowCommitted;
+        if (posed || nowCommitted) continue;
+        out.minGap = Math.min(out.minGap, gap);
+        if (a.facing !== -b.facing) out.unopposedFrames += 1;
+      }
+      const [a, b] = window.__finalBlowEngine.snapshot().fighters;
+      if (a.facing !== (b.x > a.x ? 1 : -1) || b.facing !== (a.x > b.x ? 1 : -1)) out.settledWrong += 1;
+    }
+    return out;
+  })()`);
+  assert.ok(crossup.airborneFrames > 0, "the cross-up probe must actually leave the ground");
+  assert.ok(
+    crossup.minGap <= 14,
+    `the cross-up probe must close inside the facing deadband, got ${crossup.minGap}`,
+  );
+  assert.ok(
+    crossup.releasedInsideDeadband > 0,
+    "the sweep must land at least one attack release inside the overlap, or it never tests the stranded window",
+  );
+  assert.equal(crossup.unopposedFrames, 0, "a jump-in cross-up must never leave both fighters facing the same way");
+  assert.equal(crossup.settledWrong, 0, `once the jump settles, both fighters must look at each other (${crossup.cases} timings swept)`);
+
+  // Online play rolls back and resimulates, so every field the facing decision
+  // reads has to survive a snapshot round-trip. The pair axis is the one piece
+  // of facing state that lives on the match rather than on a fighter, which is
+  // exactly the kind of field a snapshot is easy to forget.
+  const rollbackFacing = await evaluate(client, `(() => {
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.positions(560, 640);
+    // Get airborne and overlapping first, so the deadband is actively holding
+    // the axis instead of it being trivially recomputable from positions.
+    window.__finalBlowQa.input(0, { jump: true, right: true }, 6);
+    window.__finalBlowQa.step(0.3);
+    const before = window.__finalBlowEngine.snapshot().fighters.map((f) => f.facing);
+    const probe = window.__finalBlowQa.rollbackProbe(0.5);
+    const after = window.__finalBlowEngine.snapshot().fighters.map((f) => f.facing);
+    return { ...probe, before, after };
+  })()`);
+  // 1.9 regression, captured live: cyraxx committed to BUFFER SKIP EX faced the
+  // wrong way for 21+ frames with the opponent 248px BEHIND it. The move's
+  // hitboxes span local x 19..274, so they cannot reach backwards at all — the
+  // lock was protecting a cross-up that could not exist. Drive the real move,
+  // sample it inside the release window, and check both sides of the rule.
+  const exReach = await evaluate(client, `(() => {
+    const out = { triggered: false };
+    window.__finalBlowQa.fight('cyraxx', 'jez');
+    window.__finalBlowQa.fighter(0, { meter: 100 });
+    window.__finalBlowQa.positions(700, 820);
+    window.__finalBlowQa.input(0, { enhancedBackSpecial: true }, 3);
+    for (let frame = 0; frame < 60; frame += 1) {
+      window.__finalBlowQa.step(1 / 60);
+      const me = window.__finalBlowEngine.snapshot().fighters[0];
+      if (me.move !== 'cyraxx-ex-buffer-skip') continue;
+      out.seen = true;
+      // Past the visibility window but still able to hit: the exact overlap
+      // that stranded the sprite facing backwards.
+      if (me.attackFrame <= 21) continue;
+      out.triggered = true;
+      out.attackFrame = me.attackFrame;
+      // Place the opponent BEHIND whichever way this fighter currently faces,
+      // so the assertion is about the rule and not about a hardcoded sign.
+      const anchor = 700;
+      const facing = me.facing;
+      out.facing = facing;
+      // 40px behind is a genuine cross-up: still reachable, lock must hold.
+      const close = window.__finalBlowQa.positions(anchor, anchor - 40 * facing).fighters[0];
+      out.closeMove = close.move;
+      out.closeHeld = close.facing === facing;
+      // 248px behind is the captured distance: unreachable, must turn.
+      const far = window.__finalBlowQa.positions(anchor, anchor - 248 * facing).fighters[0];
+      out.farMove = far.move;
+      out.farTurned = far.facing === -facing;
+      break;
+    }
+    return out;
+  })()`);
+  assert.equal(exReach.seen, true, "the probe must actually land BUFFER SKIP EX, or it asserts nothing");
+  assert.equal(exReach.triggered, true, "the probe must sample the move past the visibility window");
+  assert.equal(exReach.closeMove, 'cyraxx-ex-buffer-skip', "the close-range check must still be mid-move");
+  assert.equal(exReach.closeHeld, true, "a committed attacker keeps facing a cross-up opponent 40px behind it");
+  assert.equal(exReach.farMove, 'cyraxx-ex-buffer-skip', "the long-range check must still be mid-move");
+  assert.equal(exReach.farTurned, true, "an opponent 248px behind is unreachable, so the fighter must turn to face them");
+
+  assert.equal(rollbackFacing.mutated, true, "the rollback probe must actually advance the sim before restoring");
+  assert.equal(
+    rollbackFacing.match,
+    true,
+    "a rollback must restore every simulation field the facing decision reads, pair axis included",
+  );
+  assert.deepEqual(rollbackFacing.after, rollbackFacing.before, "facings must come back unchanged after a rollback");
   assert.equal(facingAndHold.afterKO, "finish");
   assert.equal(facingAndHold.afterFinishWindow, "roundover", "an unclaimed finish window falls to the KO hold");
   assert.equal(facingAndHold.midHold, "roundover", "the KO scene must hold ~4.9s so the aftermath is visible");
@@ -2889,7 +3021,7 @@ try {
   })()`);
   assert.equal(offlineCache.controlled, true);
   assert.match(offlineCache.name, /final-blow-shell-1\.9/);
-  assert.equal(offlineCache.entries, 20);
+  assert.equal(offlineCache.entries, 21);
   assert.equal(offlineCache.hasIndex, false);
   assert.equal(offlineCache.rootRedirected, false);
   assert.equal(offlineCache.hasGame, true);
@@ -2910,7 +3042,7 @@ try {
   }))()`);
   assert.match(controlledReload.title, /Final Blow/);
   assert.match(controlledReload.build, /1\.9/);
-  assert.equal(controlledReload.version, '1.9-disrespect');
+  assert.equal(controlledReload.version, '1.9a-disrespect');
 
   await client.send('Network.emulateNetworkConditions', {
     offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
@@ -2928,7 +3060,7 @@ try {
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
   assert.match(offlineBoot.build, /1\.9/);
-  assert.equal(offlineBoot.version, '1.9-disrespect');
+  assert.equal(offlineBoot.version, '1.9a-disrespect');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2972,7 +3104,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 1.9');
+  assert.equal(landscape.version.text, 'VERSION 1.9A');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);

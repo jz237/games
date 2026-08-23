@@ -706,31 +706,50 @@ export function getActiveHitboxes(fighter) {
     .map((entry) => localBoxToWorld(fighter, entry.box));
 }
 
+// Authored in the same body-local units as hitboxes. Hoisted out of
+// getHurtboxes so the widest a body can ever be is derivable rather than
+// guessed — spacing rules that need "could this possibly touch?" read it below.
+const HURTBOX_SHAPES = Object.freeze({
+  air: Object.freeze([
+    { x: -34, y: -181, width: 68, height: 72 },
+    { x: -42, y: -111, width: 84, height: 91 },
+  ]),
+  crouch: Object.freeze([
+    { x: -39, y: -126, width: 78, height: 60 },
+    { x: -47, y: -68, width: 94, height: 68 },
+  ]),
+  stand: Object.freeze([
+    { x: -31, y: -199, width: 62, height: 61 },
+    { x: -43, y: -142, width: 86, height: 91 },
+    { x: -39, y: -55, width: 78, height: 55 },
+  ]),
+  startup: Object.freeze([{ x: 18, y: -169, width: 46, height: 63 }]),
+  active: Object.freeze([{ x: 24, y: -158, width: 58, height: 72 }]),
+});
+
+// The furthest any hurtbox reaches from the fighter's origin, in world units.
+// The +10 is the recovery widening applied below, counted so this stays an
+// upper bound on every shape the body can take.
+export const HURTBOX_MAX_EXTENT = Math.max(
+  ...Object.values(HURTBOX_SHAPES).flat().flatMap(({ x, width }) => [Math.abs(x), Math.abs(x + width)]),
+  ...HURTBOX_SHAPES.stand.map(({ x, width }) => Math.abs(x) + width + 10),
+) * FIGHTER_SCALE;
+
 export function getHurtboxes(fighter) {
   if (fighter.invulnerableFrames > 0 || fighter.down || fighter.knockdownFrames > 0 || fighter.wakeupFrames > 0) return [];
   let boxes;
   if (!fighter.grounded) {
-    boxes = [
-      { x: -34, y: -181, width: 68, height: 72 },
-      { x: -42, y: -111, width: 84, height: 91 },
-    ];
+    boxes = HURTBOX_SHAPES.air.map((box) => ({ ...box }));
   } else if (fighter.crouch || fighter.guardHeight === "low") {
-    boxes = [
-      { x: -39, y: -126, width: 78, height: 60 },
-      { x: -47, y: -68, width: 94, height: 68 },
-    ];
+    boxes = HURTBOX_SHAPES.crouch.map((box) => ({ ...box }));
   } else {
-    boxes = [
-      { x: -31, y: -199, width: 62, height: 61 },
-      { x: -43, y: -142, width: 86, height: 91 },
-      { x: -39, y: -55, width: 78, height: 55 },
-    ];
+    boxes = HURTBOX_SHAPES.stand.map((box) => ({ ...box }));
   }
   if (fighter.attacking) {
     const phase = fighter.attackFrame < fighter.attacking.activeStartFrame ? "startup"
       : fighter.attackFrame < fighter.attacking.activeEndFrame ? "active" : "recovery";
-    if (phase === "startup") boxes.push({ x: 18, y: -169, width: 46, height: 63 });
-    if (phase === "active") boxes.push({ x: 24, y: -158, width: 58, height: 72 });
+    if (phase === "startup") boxes.push({ ...HURTBOX_SHAPES.startup[0] });
+    if (phase === "active") boxes.push({ ...HURTBOX_SHAPES.active[0] });
     if (phase === "recovery") boxes[1] = { ...boxes[1], width: boxes[1].width + 10 };
   }
   return boxes.map((box) => localBoxToWorld(fighter, box));

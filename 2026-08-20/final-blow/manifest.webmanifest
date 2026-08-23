@@ -1,15 +1,23 @@
 {
-  "name": "Final Blow 1.8E: Eagles Tailgate",
-  "version": "1.8E",
+  "name": "Final Blow 1.9A: Disrespect",
+  "version": "1.9A",
   "short_name": "Final Blow",
   "description": "A Philadelphia after-dark arcade weapon fighter.",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
   "orientation": "landscape",
-  "categories": ["games", "entertainment"],
+  "categories": [
+    "games",
+    "entertainment"
+  ],
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
   ],
   "background_color": "#030407",
   "theme_color": "#080b13"
