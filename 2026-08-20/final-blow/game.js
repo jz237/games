@@ -1966,6 +1966,351 @@ let hudFxLastTime = 0;
 // Select-screen latch so the VS slam fires once per double lock.
 let selectBothLocked = false;
 
+// ---------------------------------------------------------------------------
+// Wave 6 cinematic camera. COMBAT.md guarantees a fixed tournament framing, so
+// this is NOT a gameplay camera: it never tracks fighters during normal play.
+// Every move here is a brief presentation beat (intro dolly, KO punch-in,
+// FINISH THEM dread creep, counter pops, fatality handheld, win settle,
+// directional recoil) that eases back to exact identity. All state is
+// module-level render-only on the documented superDimLevel pattern: never
+// snapshotted, never read by the simulation. Latches set from simulation paths
+// follow the announce() pattern (`if (rollbackResimulating) return`) plus a
+// simulationTick dedupe so a re-executed tick can never double-fire.
+// ---------------------------------------------------------------------------
+
+// The single shared render camera applied around the world draw. zoom/x/y/
+// rotation are the applied values (identity = 1/0/0/0); focusX/focusY is the
+// world-space pivot the zoom magnifies around (irrelevant at zoom 1). Zoom is
+// always >= 1 so the world always overdraws the frame; the HUD layer and all
+// screen-space passes draw after the world restore and are never affected.
+const cinematicCamera = { zoom: 1, x: 0, y: 0, rotation: 0, focusX: W * 0.5, focusY: H * 0.5 };
+// Monotonic one-shot event totals on the hudFxDebug pattern, exposed via
+// snapshot().violence. handheldFrames counts rendered frames with the fatality
+// handheld wobble active (still monotonic, never reset).
+const cinemaFxDebug = {
+  koPunchIns: 0, introDollies: 0, dreadCreeps: 0, counterPunchIns: 0,
+  handheldFrames: 0, winSettles: 0, impactRecoils: 0,
+};
+// Transient zoom-punch envelope: { age, attack, hold, release, magnitude,
+// focusX, focusY }. Shared by the KO punch-in and the counter/dizzy pops; the
+// biggest young punch wins, smaller latches are dropped instead of stacking.
+let cameraPunch = null;
+let cameraKoTick = -1;
+let cameraCounterTick = -1;
+let cameraDizzyTick = -1;
+// Directional impact recoil (screen px). Displacement is kicked along the hit
+// direction and returned by an analytic damped oscillation — a push with one
+// tiny rebound, not a vibration. Closed-form (amplitude * e^-13t * cos 17t)
+// rather than an integrated spring so it is unconditionally stable no matter
+// how long a render frame takes.
+const cameraRecoil = { x: 0, y: 0, ampX: 0, ampY: 0, age: 0 };
+let cameraRecoilTick = -1;
+const CAMERA_RECOIL_PX = Object.freeze({ heavy: 2.4, special: 3.2, throw: 3, weapon: 3.4, super: 4 });
+// Eased phase-pose state (intro dolly / dread creep / win settle).
+let cameraPhaseZoom = 1;
+let cameraPhaseRotation = 0;
+let cameraFocusX = W * 0.5;
+let cameraFocusY = H * 0.5;
+// Fatality handheld drift (smoothed visualRandom walk) and dutch tilt.
+let cameraHandheldX = 0;
+let cameraHandheldY = 0;
+let cameraHandheldTargetX = 0;
+let cameraHandheldTargetY = 0;
+let cameraHandheldClock = 0;
+let cameraDutch = 0;
+// Render-side phase edge observer for the one-shot counters (same pattern as
+// hudObservedPhase — draw() never runs during rollback resimulation).
+let cameraObservedPhase = null;
+// Intro cinema-bar deployment level (0..1), canvas-drawn screen-space.
+let letterboxLevel = 0;
+// Win-pose curtain-call dim, eased in the sim tick beside superDimLevel on the
+// same deliberately-unsnapshotted pattern (a resimulation just re-eases it).
+let roundOverDimLevel = 0;
+
+function cameraMotionScale() {
+  return state.accessibility.reducedMotion ? 0 : state.accessibility.shakeScale;
+}
+
+// KO freeze-frame punch-in: latched from checkKnockout() on the killing hit.
+// Fast attack, held through the hitstop freeze, easing back out while the
+// FINISH THEM stand-off (and later the roundover call) takes over.
+function latchKoCameraPunch() {
+  if (rollbackResimulating || cameraKoTick === state.simulationTick) return;
+  cameraKoTick = state.simulationTick;
+  const [first, second] = state.fighters;
+  const focusX = first && second ? (first.x + second.x) * 0.5 : W * 0.5;
+  const focusY = first && second ? (first.y + second.y) * 0.5 - 128 : H * 0.5;
+  cameraPunch = {
+    age: 0, attack: 0.07, hold: 0.5, release: 0.45, magnitude: 0.08,
+    focusX: clamp(focusX, 0, W), focusY: clamp(focusY, 0, H),
+  };
+  cinemaFxDebug.koPunchIns += 1;
+}
+
+function latchCameraPunchEnvelope(magnitude, focusX, focusY, attack, hold, release) {
+  if (cameraPunch && cameraPunch.magnitude > magnitude
+    && cameraPunch.age < cameraPunch.attack + cameraPunch.hold) return false;
+  cameraPunch = {
+    age: 0, attack, hold, release, magnitude,
+    focusX: clamp(focusX, 0, W), focusY: clamp(focusY, 0, H),
+  };
+  return true;
+}
+
+// Counter-hit pop: ~5 frame attack to 1.05x on the impact point, back inside
+// 0.4s. Latched from spawnHit's counter path so projectiles count too.
+function latchCounterCameraPunch(x, y) {
+  if (rollbackResimulating || cameraCounterTick === state.simulationTick) return;
+  cameraCounterTick = state.simulationTick;
+  if (latchCameraPunchEnvelope(0.05, x, y, 0.08, 0.05, 0.26)) cinemaFxDebug.counterPunchIns += 1;
+}
+
+// Dizzy pop: same magnitude, slightly longer hold on the stumbling victim.
+function latchDizzyCameraPunch(fighter) {
+  if (rollbackResimulating || cameraDizzyTick === state.simulationTick) return;
+  cameraDizzyTick = state.simulationTick;
+  if (latchCameraPunchEnvelope(0.05, fighter.x, fighter.y - 118, 0.08, 0.08, 0.24)) {
+    cinemaFxDebug.counterPunchIns += 1;
+  }
+}
+
+// Directional impact recoil for landed heavy-class hits. Replaces nothing:
+// the existing noise shake still runs; this layers a 2-4px directional shove
+// under it. Scaled by the shake setting, zeroed under reduced motion.
+function latchCameraRecoil(kind, direction) {
+  const px = CAMERA_RECOIL_PX[kind];
+  if (!px || rollbackResimulating || cameraRecoilTick === state.simulationTick) return;
+  cameraRecoilTick = state.simulationTick;
+  const scale = cameraMotionScale();
+  cameraRecoil.ampX = clamp(cameraRecoil.x + direction * px * scale, -6, 6);
+  cameraRecoil.ampY = clamp(cameraRecoil.y + px * 0.22 * scale, -6, 6);
+  cameraRecoil.age = 0;
+  cinemaFxDebug.impactRecoils += 1;
+}
+
+// One call from spawnHit covers both cinema latches for a landed hit.
+function latchImpactCinema(x, y, kind, blocked, direction, counter) {
+  if (blocked) return;
+  latchCameraRecoil(kind, direction);
+  if (counter) latchCounterCameraPunch(x, y);
+}
+
+function resetCinematicCamera() {
+  cameraPunch = null;
+  cameraRecoil.x = 0;
+  cameraRecoil.y = 0;
+  cameraRecoil.ampX = 0;
+  cameraRecoil.ampY = 0;
+  cameraRecoil.age = 0;
+  cameraPhaseZoom = 1;
+  cameraPhaseRotation = 0;
+  cameraFocusX = W * 0.5;
+  cameraFocusY = H * 0.5;
+  cameraHandheldX = 0;
+  cameraHandheldY = 0;
+  cameraHandheldTargetX = 0;
+  cameraHandheldTargetY = 0;
+  cameraHandheldClock = 0;
+  cameraDutch = 0;
+  cameraObservedPhase = null;
+  letterboxLevel = 0;
+  cinematicCamera.zoom = 1;
+  cinematicCamera.x = 0;
+  cinematicCamera.y = 0;
+  cinematicCamera.rotation = 0;
+  cinematicCamera.focusX = W * 0.5;
+  cinematicCamera.focusY = H * 0.5;
+}
+
+// Called once per rendered frame from draw(), before the world transform.
+// Observes snapshotted state (phase, phaseTime, finisher progress, fighter
+// positions), eases the presentation camera toward the current beat's pose and
+// always back to exact identity when nothing owns the frame. Never writes sim
+// state; never runs during rollback resimulation (draw() cannot).
+function updateCinematicCamera(dtMs) {
+  const dt = clamp(dtMs / 1000, 0.001, 0.1);
+  const cam = cinematicCamera;
+  if (state.screen !== "fight" || state.fighters.length !== 2) {
+    resetCinematicCamera();
+    return;
+  }
+  const motion = cameraMotionScale();
+  const reduced = state.accessibility.reducedMotion;
+  const phase = state.phase;
+  const finisher = state.finisher;
+  const [first, second] = state.fighters;
+  const midX = (first.x + second.x) * 0.5;
+  const midY = clamp((first.y + second.y) * 0.5 - 128, H * 0.3, H * 0.72);
+
+  // One-shot beat counters on phase edges (fires even when reduced motion
+  // strips the zoom itself — the beat still happened, bars/spotlight remain).
+  if (cameraObservedPhase !== phase) {
+    if (phase === "intro") cinemaFxDebug.introDollies += 1;
+    else if (phase === "finish" && !finisher) cinemaFxDebug.dreadCreeps += 1;
+    else if (phase === "roundover" && !finisher && state.finisherType < 0) cinemaFxDebug.winSettles += 1;
+    cameraObservedPhase = phase;
+  }
+
+  // Phase pose target. Identity by default: normal fight play NEVER gets a
+  // tracking pose, only the transient punch/recoil envelopes below.
+  let targetZoom = 1;
+  let targetFocusX = W * 0.5;
+  let targetFocusY = H * 0.5;
+  let targetRotation = 0;
+  let ease = 1 - Math.exp(-dt * 9);
+  if (finisher) {
+    // The scripted finisher camera owns framing: collapse the pose and any
+    // pending punch instantly so nothing leaks under the cinematic transform.
+    cameraPhaseZoom = 1;
+    cameraPhaseRotation = 0;
+    cameraPunch = null;
+  } else if (phase === "intro" && !reduced) {
+    // Broadcast open: start 1.08x tight on the square-up, pull out to full
+    // arena width timed so identity lands with FIGHT! (phaseTime 2.1 -> 0.9).
+    // A flow-skip flips phase to "fight" and the brisk default ease whips the
+    // camera home in a few frames, which reads as a cut.
+    const progress = clamp((2.1 - state.phaseTime) / 1.2, 0, 1);
+    const eased = progress * progress * (3 - 2 * progress);
+    targetZoom = 1 + 0.08 * (1 - eased);
+    targetFocusX = midX;
+    targetFocusY = midY;
+    ease = 1 - Math.exp(-dt * 14);
+  } else if (phase === "finish" && !reduced) {
+    // FINISH THEM dread: slow 1.04x creep biased onto the helpless victim
+    // with a subtle 0.3-degree sway. Expiry or a finisher start both leave
+    // this branch, and the default ease snaps the pose back to identity.
+    const victim = state.fighters[1 - state.finishWinner] || second;
+    const creep = clamp((6 - state.phaseTime) / 5.5, 0, 1);
+    targetZoom = 1 + 0.04 * creep;
+    targetFocusX = lerp(midX, victim.x, 0.7);
+    targetFocusY = clamp(victim.y - 128, H * 0.3, H * 0.72);
+    targetRotation = Math.sin(state.simulationTick * 0.021) * (Math.PI / 180) * 0.3 * creep;
+    ease = 1 - Math.exp(-dt * 3.2);
+  } else if (phase === "roundover" && state.finisherType < 0 && !reduced) {
+    // Win-pose settle: gentle 1.03x drift toward the winner under the
+    // curtain-call spotlight. Skipped whenever a fatality owns the frame.
+    const winner = first.health >= second.health ? first : second;
+    targetZoom = 1.03;
+    targetFocusX = winner.x;
+    targetFocusY = clamp(winner.y - 128, H * 0.3, H * 0.72);
+    ease = 1 - Math.exp(-dt * 2.2);
+  }
+  cameraPhaseZoom += (targetZoom - cameraPhaseZoom) * ease;
+  cameraPhaseRotation += (targetRotation - cameraPhaseRotation) * (1 - Math.exp(-dt * 6));
+  cameraFocusX += (targetFocusX - cameraFocusX) * ease;
+  cameraFocusY += (targetFocusY - cameraFocusY) * ease;
+
+  // Transient zoom-punch envelope (KO / counter / dizzy).
+  let punchZoom = 1;
+  if (cameraPunch) {
+    cameraPunch.age += dt;
+    const { age, attack, hold, release, magnitude } = cameraPunch;
+    let shape = 0;
+    if (age < attack) shape = age / attack;
+    else if (age < attack + hold) shape = 1;
+    else if (age < attack + hold + release) {
+      const tail = (age - attack - hold) / release;
+      shape = 1 - tail * tail * (3 - 2 * tail);
+    } else cameraPunch = null;
+    if (cameraPunch && shape > 0 && motion > 0) {
+      punchZoom = 1 + magnitude * shape * motion;
+      const pull = shape * (1 - Math.exp(-dt * 12));
+      cameraFocusX += (cameraPunch.focusX - cameraFocusX) * pull;
+      cameraFocusY += (cameraPunch.focusY - cameraFocusY) * pull;
+    }
+  }
+
+  // Directional recoil: closed-form fast return with one small rebound,
+  // then a hard zero (~0.3s from kick to rest).
+  if (cameraRecoil.ampX !== 0 || cameraRecoil.ampY !== 0) {
+    cameraRecoil.age += dt;
+    const decay = Math.exp(-13 * cameraRecoil.age);
+    const wave = Math.cos(17 * cameraRecoil.age);
+    cameraRecoil.x = cameraRecoil.ampX * decay * wave;
+    cameraRecoil.y = cameraRecoil.ampY * decay * wave;
+    if (decay < 0.02) {
+      cameraRecoil.x = 0;
+      cameraRecoil.y = 0;
+      cameraRecoil.ampX = 0;
+      cameraRecoil.ampY = 0;
+      cameraRecoil.age = 0;
+    }
+  }
+
+  // Fatality handheld drift + dutch tilt, only while a finisher cinematic
+  // plays. Drift is a smoothed visualRandom walk (~2px), the dutch eases in
+  // hard at the fatal impact and unwinds through the aftermath. Both are
+  // zeroed by reduced motion and scale with the shake setting.
+  if (finisher && motion > 0) {
+    const aftermath = Math.max(0, finisher.elapsed - finisher.fatalityAt);
+    const fade = clamp(1 - aftermath / 2.6, 0, 1);
+    const amplitude = 2 * motion * fade;
+    cameraHandheldClock -= dt;
+    if (cameraHandheldClock <= 0) {
+      cameraHandheldClock = 0.18 + visualRandom() * 0.22;
+      cameraHandheldTargetX = (visualRandom() - 0.5) * 2 * amplitude;
+      cameraHandheldTargetY = (visualRandom() - 0.5) * 1.4 * amplitude;
+    }
+    const drift = 1 - Math.exp(-dt * 3.4);
+    cameraHandheldX += (cameraHandheldTargetX - cameraHandheldX) * drift;
+    cameraHandheldY += (cameraHandheldTargetY - cameraHandheldY) * drift;
+    if (amplitude > 0.05) cinemaFxDebug.handheldFrames += 1;
+    const struck = finisher.elapsed >= finisher.fatalityAt;
+    const dutchTarget = struck
+      ? (Math.PI / 180) * 2.5 * finisher.direction * clamp(1 - aftermath / 2.2, 0, 1) * motion
+      : 0;
+    const dutchRate = struck && aftermath < 0.4 ? 10 : 2.6;
+    cameraDutch += (dutchTarget - cameraDutch) * (1 - Math.exp(-dt * dutchRate));
+  } else {
+    cameraHandheldTargetX = 0;
+    cameraHandheldTargetY = 0;
+    const settle = 1 - Math.exp(-dt * 8);
+    cameraHandheldX += (0 - cameraHandheldX) * settle;
+    cameraHandheldY += (0 - cameraHandheldY) * settle;
+    cameraDutch += (0 - cameraDutch) * settle;
+  }
+
+  // Intro cinema bars: slide in during the intro, retract as FIGHT! lands.
+  const barTarget = phase === "intro" && !finisher ? 1 : 0;
+  letterboxLevel += (barTarget - letterboxLevel) * (1 - Math.exp(-dt * (barTarget > letterboxLevel ? 9 : 13)));
+  if (letterboxLevel < 0.004) letterboxLevel = 0;
+
+  // Compose, then snap-to-identity epsilons: a stuck camera is the failure
+  // mode that matters, so anything within a hair of identity becomes identity.
+  cam.zoom = cameraPhaseZoom * punchZoom;
+  cam.rotation = cameraPhaseRotation + cameraDutch;
+  cam.x = cameraRecoil.x + cameraHandheldX;
+  cam.y = cameraRecoil.y + cameraHandheldY;
+  cam.focusX = clamp(cameraFocusX, 0, W);
+  cam.focusY = clamp(cameraFocusY, 0, H);
+  if (Math.abs(cam.zoom - 1) < 0.0006) {
+    cam.zoom = 1;
+    if (Math.abs(cameraPhaseZoom - 1) < 0.0006) cameraPhaseZoom = 1;
+  }
+  if (Math.abs(cam.rotation) < 0.00025) {
+    cam.rotation = 0;
+    if (Math.abs(cameraPhaseRotation) < 0.00025) cameraPhaseRotation = 0;
+    if (Math.abs(cameraDutch) < 0.00025) cameraDutch = 0;
+  }
+  if (Math.abs(cam.x) < 0.03) cam.x = 0;
+  if (Math.abs(cam.y) < 0.03) cam.y = 0;
+}
+
+// Screen-space intro cinema bars, drawn after the world restore + stage grade
+// so the camera transform never touches them. The finisher overlay owns its
+// own bars, so these stand down whenever a finisher is live.
+function drawIntroLetterbox() {
+  if (letterboxLevel <= 0 || state.finisher || state.screen !== "fight") return;
+  const barHeight = Math.round(52 * letterboxLevel);
+  if (barHeight < 1) return;
+  ctx.fillStyle = "rgba(0,0,0,.92)";
+  ctx.fillRect(0, 0, W, barHeight);
+  ctx.fillRect(0, H - barHeight, W, barHeight);
+  ctx.fillStyle = `rgba(255,213,74,${(0.75 * letterboxLevel).toFixed(3)})`;
+  ctx.fillRect(0, barHeight - 2, W, 2);
+  ctx.fillRect(0, H - barHeight, W, 2);
+}
+
 // Remove-reflow-add so a one-shot CSS animation class replays reliably.
 function restartCssAnimation(element, className) {
   if (!element) return;
@@ -4562,6 +4907,9 @@ function enterDizzy(fighter, attacker) {
   spawnCombatText(fighter.x, fighter.y - fighter.height - 52, "DIZZY", "#ffd54a");
   duckMusic(0.55, 620);
   sound("ko", fighter);
+  // Wave 6: camera pop on the dizzy trigger (render-only latch, guarded +
+  // tick-deduped inside).
+  latchDizzyCameraPunch(fighter);
 }
 
 // Mashing buttons and directions shortens the dizzy but never removes the punish
@@ -6246,6 +6594,9 @@ function checkKnockout() {
   if (!rollbackResimulating) setTouchPrompt("final");
   updateHud();
   sound("finish");
+  // Wave 6: KO freeze-frame punch-in on the killing hit (render-only latch,
+  // guarded + tick-deduped inside).
+  latchKoCameraPunch();
 }
 
 function resolveCombatInteractions() {
@@ -6344,6 +6695,9 @@ function applyViolenceResponse(kind, { blocked = false, counter = false, final =
 }
 
 function spawnHit(x, y, def, attackKind, blocked, { direction = 1, counter = false } = {}) {
+  // Wave 6: directional camera recoil on landed heavy-class hits plus the
+  // counter-hit punch-in (render-only latches, guarded + tick-deduped inside).
+  latchImpactCinema(x, y, attackKind, blocked, direction, counter);
   if (blocked) {
     const count = Math.max(3, Math.round(8 * state.performance.particleScale));
     for (let index = 0; index < count; index += 1) {
@@ -6572,6 +6926,11 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
   state.crowdReaction = Math.max(0, state.crowdReaction - 0.016);
   const superActive = state.fighters.some((fighter) => fighter.attacking?.superMove);
   superDimLevel = clamp(superDimLevel + (superActive ? 0.09 : -0.055), 0, 1);
+  // Wave 6 win-pose curtain call, eased beside superDimLevel on the same
+  // deliberately-unsnapshotted pattern. Keyed off a fatality-free roundover so
+  // the finisher cinematic always owns its own frame.
+  const winPoseActive = state.phase === "roundover" && !state.finisher && state.finisherType < 0;
+  roundOverDimLevel = clamp(roundOverDimLevel + (winPoseActive ? 0.045 : -0.06), 0, 1);
   if (state.finisher) updateFinisher(dt);
   else {
     updateProjectiles(dt);
@@ -9300,21 +9659,35 @@ function drawFighterCastShadows() {
 }
 
 // Classic super presentation: the street goes dark, the fighters stay lit.
-function drawSuperSpotlight() {
-  if (superDimLevel <= 0.02) return;
-  ctx.fillStyle = `rgba(3,5,16,${(0.58 * superDimLevel).toFixed(3)})`;
+function drawSpotlightPool(dim, targets, darkness = 0.58) {
+  if (dim <= 0.02) return;
+  ctx.fillStyle = `rgba(3,5,16,${(darkness * dim).toFixed(3)})`;
   ctx.fillRect(-120, -120, W + 240, H + 240);
-  for (const fighter of state.fighters) {
+  for (const fighter of targets) {
     const radius = fighterRenderSize(fighter.def.id) * 0.62;
     const glow = ctx.createRadialGradient(
       fighter.x, fighter.y - radius * 0.55, radius * 0.12,
       fighter.x, fighter.y - radius * 0.55, radius,
     );
-    glow.addColorStop(0, `rgba(255,244,214,${(0.15 * superDimLevel).toFixed(3)})`);
+    glow.addColorStop(0, `rgba(255,244,214,${(0.15 * dim).toFixed(3)})`);
     glow.addColorStop(1, "rgba(255,244,214,0)");
     ctx.fillStyle = glow;
     ctx.fillRect(fighter.x - radius, fighter.y - radius * 1.65, radius * 2, radius * 2.1);
   }
+}
+
+function drawSuperSpotlight() {
+  drawSpotlightPool(superDimLevel, state.fighters);
+}
+
+// Wave 6 win-pose curtain call: the stage dims like the super spotlight while
+// only the round winner keeps the warm pool. Static light on the documented
+// spotlight pattern, so it stays on under reduced motion; a live finisher
+// cinematic owns the frame instead (roundOverDimLevel also stays down then).
+function drawWinPoseSpotlight() {
+  if (roundOverDimLevel <= 0.02 || state.finisher || state.fighters.length !== 2) return;
+  const [first, second] = state.fighters;
+  drawSpotlightPool(roundOverDimLevel, [first.health >= second.health ? first : second], 0.44);
 }
 
 // Super focus lines (wave 4): while the spotlight dim is up, sparse comic-style
@@ -9942,28 +10315,43 @@ function finisherCameraTarget() {
 }
 
 function draw(time) {
-  ctx.save();
-  const shakeScale = state.accessibility.reducedMotion ? 0 : state.accessibility.shakeScale;
-  const shakeX = state.shake > 0 ? Math.sin((state.simulationTick + 1) * 12.9898) * state.shake * 9 * shakeScale : 0;
-  const shakeY = state.shake > 0 ? Math.cos((state.simulationTick + 1) * 7.233) * state.shake * 6 * shakeScale : 0;
-  ctx.translate(shakeX, shakeY);
-  if (state.finisher) {
-    const camera = finisherCameraTarget();
-    ctx.translate(W * .5, H * .53);
-    ctx.scale(state.cinematicZoom, state.cinematicZoom);
-    ctx.translate(-camera.x, -camera.y);
-  }
-  // Counters reset before drawStage so the stage-level passes (weather,
-  // practicals, flashbulbs, occluders) count into the same rendered frame.
-  // Unconditional: drawStage runs on every screen, so a gated reset would let
-  // the stage counters accumulate without bound outside the fight.
-  for (const key of Object.keys(presentationDebug)) presentationDebug[key] = 0;
   // Wave 5 HUD observers: phase-edge slash wipe and the hold-then-drain
   // damage ghosts, both driven from observed state in the render loop.
   const hudDtMs = clamp(time - hudFxLastTime, 0, 100) || 16.7;
   hudFxLastTime = time;
   observeFightPhaseWipes();
   updateDamageGhosts(hudDtMs);
+  // Wave 6 cinematic camera: observe state and ease the presentation camera
+  // before the world transform is built. Runs unconditionally so the camera
+  // hard-resets to identity the moment the fight screen goes away.
+  updateCinematicCamera(hudDtMs);
+  ctx.save();
+  const shakeScale = state.accessibility.reducedMotion ? 0 : state.accessibility.shakeScale;
+  const shakeX = state.shake > 0 ? Math.sin((state.simulationTick + 1) * 12.9898) * state.shake * 9 * shakeScale : 0;
+  const shakeY = state.shake > 0 ? Math.cos((state.simulationTick + 1) * 7.233) * state.shake * 6 * shakeScale : 0;
+  // Recoil/handheld offsets ride beside the existing noise shake translate.
+  ctx.translate(shakeX + cinematicCamera.x, shakeY + cinematicCamera.y);
+  if (state.finisher) {
+    const camera = finisherCameraTarget();
+    ctx.translate(W * .5, H * .53);
+    // Fatality dutch tilt rolls the scripted cinematic about screen centre.
+    if (cinematicCamera.rotation !== 0) ctx.rotate(cinematicCamera.rotation);
+    ctx.scale(state.cinematicZoom, state.cinematicZoom);
+    ctx.translate(-camera.x, -camera.y);
+  } else if (cinematicCamera.zoom !== 1 || cinematicCamera.rotation !== 0) {
+    // Presentation-only zoom punch/dolly about its focus point. Zoom is always
+    // >= 1 and the focus stays inside the frame, so the world always covers
+    // the canvas; identity (the normal-play state) skips this entirely.
+    ctx.translate(cinematicCamera.focusX, cinematicCamera.focusY);
+    if (cinematicCamera.rotation !== 0) ctx.rotate(cinematicCamera.rotation);
+    ctx.scale(cinematicCamera.zoom, cinematicCamera.zoom);
+    ctx.translate(-cinematicCamera.focusX, -cinematicCamera.focusY);
+  }
+  // Counters reset before drawStage so the stage-level passes (weather,
+  // practicals, flashbulbs, occluders) count into the same rendered frame.
+  // Unconditional: drawStage runs on every screen, so a gated reset would let
+  // the stage counters accumulate without bound outside the fight.
+  for (const key of Object.keys(presentationDebug)) presentationDebug[key] = 0;
   if (state.screen === "fight") {
     gritFlareLevel[0] = Math.max(0, gritFlareLevel[0] - 0.05);
     gritFlareLevel[1] = Math.max(0, gritFlareLevel[1] - 0.05);
@@ -9971,6 +10359,7 @@ function draw(time) {
   drawStage(time);
   if (state.screen === "fight") {
     drawSuperSpotlight();
+    drawWinPoseSpotlight();
     drawSuperFocusLines(time);
     drawFighterCastShadows();
     drawFighterReflections(time);
@@ -9987,6 +10376,7 @@ function draw(time) {
   }
   ctx.restore();
   drawStageGrade();
+  drawIntroLetterbox();
   drawFinisherOverlay();
   if (state.flash > 0) {
     ctx.fillStyle = `rgba(255,245,220,${clamp(state.flash * 3, 0, 0.9)})`;
@@ -10948,7 +11338,7 @@ window.__finalBlowEngine = {
   },
   snapshot() {
     const cameraTarget = finisherCameraTarget();
-    const cinematicCamera = finisherCinematicCamera(state.cinematicZoom);
+    const finisherCinematic = finisherCinematicCamera(state.cinematicZoom);
     return {
       tick: state.simulationTick,
       phase: state.phase,
@@ -10990,12 +11380,22 @@ window.__finalBlowEngine = {
         zoom: state.finisher ? state.cinematicZoom : 1,
         locked: !state.finisher,
         mode: state.finisher ? "finisher" : "arena",
-        shot: cinematicCamera.shot,
-        intensity: Number(cinematicCamera.intensity.toFixed(3)),
+        shot: finisherCinematic.shot,
+        intensity: Number(finisherCinematic.intensity.toFixed(3)),
         cuts: state.finisher?.cinematicCuts || 0,
         impactCloseUps: state.finisher?.impactCloseUps || 0,
         peakZoom: state.finisher?.peakZoom || 1,
         slowMotionHits: state.finisher?.slowMotionHits || 0,
+        // Wave 6 presentation camera: applied render values. Identity is
+        // exactly 1/0/0/0 — smoke tests assert it returns there after every
+        // cinematic beat.
+        presentation: {
+          zoom: Number(cinematicCamera.zoom.toFixed(4)),
+          x: Number(cinematicCamera.x.toFixed(3)),
+          y: Number(cinematicCamera.y.toFixed(3)),
+          rotation: Number(cinematicCamera.rotation.toFixed(5)),
+          letterbox: Number(letterboxLevel.toFixed(3)),
+        },
       },
       arcade: arcadeRunSnapshot(state.arcadeRun),
       seed: state.matchSeed,
@@ -11069,6 +11469,20 @@ window.__finalBlowEngine = {
         victoryEntrances: hudFxDebug.victoryEntrances,
         pipFlips: hudFxDebug.pipFlips,
         timerPulses: hudFxDebug.timerPulses,
+        // Wave 6 cinematic camera: cumulative one-shot beat totals on the
+        // same monotonic pattern, plus the win-pose dim level.
+        koPunchIns: cinemaFxDebug.koPunchIns,
+        introDollies: cinemaFxDebug.introDollies,
+        dreadCreeps: cinemaFxDebug.dreadCreeps,
+        counterPunchIns: cinemaFxDebug.counterPunchIns,
+        handheldFrames: cinemaFxDebug.handheldFrames,
+        winSettles: cinemaFxDebug.winSettles,
+        impactRecoils: cinemaFxDebug.impactRecoils,
+        // Signed live kick amplitude (screen px along the hit direction).
+        // Holds the full kick value for the ~0.3s return, so per-frame peak
+        // sampling reads the 2-4px magnitude without racing the decay.
+        impactRecoilKick: Number(cameraRecoil.ampX.toFixed(3)),
+        winPoseDim: Number(roundOverDimLevel.toFixed(3)),
       },
       stageWeapon: weaponSnapshot(state.stageWeapon),
       stageWeaponsEnabled: state.stageWeaponsEnabled,
