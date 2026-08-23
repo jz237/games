@@ -1,4 +1,4 @@
-# Final Blow v1.9A — Handoff
+# Final Blow v1.9B — Handoff
 
 Paste this whole file to the next agent as context before asking it to touch
 Final Blow. It describes what exists, where it lives, the traps, and how to
@@ -30,6 +30,13 @@ is a facing bugfix release, with two distinct fixes in `engine/facing.mjs`:
    away for over a third of a second at a distance it could never reach. Reach
    is derived from authored hitbox data and body extents, never per-fighter
    exceptions, so it tracks whatever the kits ship.
+
+**1.9B "Approved Audio"** applies Jez's 170-sound review literally: 84
+rejected recordings were removed from the game, 33 rejected candidates remain
+outside it, and the 30 accepted kick candidates now drive light-kick and
+roundhouse swings/impacts. Empty fighter pools use accepted shared sounds or
+procedural audio. The generated policy and regression guard prevent rejected
+files from returning or being requested at runtime.
 
 Note that the detailed sections below still describe the 1.8E baseline; 1.9 did
 not update them.
