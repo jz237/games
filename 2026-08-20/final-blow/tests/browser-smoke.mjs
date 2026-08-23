@@ -344,8 +344,8 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /1\.4/);
-  assert.equal(title.version.text, 'VERSION 1.5');
+  assert.match(title.build, /1\.6/);
+  assert.equal(title.version.text, 'VERSION 1.6');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -373,7 +373,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.5-showtime');
+  assert.equal(title.engineVersion, '1.6-loud');
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
   assert.equal(title.engine.tournament.version, '1.3');
@@ -2770,7 +2770,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-shell-1\.4a/);
+  assert.match(offlineCache.name, /final-blow-shell-1\.6a/);
   assert.equal(offlineCache.entries, 20);
   assert.equal(offlineCache.hasIndex, false);
   assert.equal(offlineCache.rootRedirected, false);
@@ -2790,8 +2790,8 @@ try {
     version: window.__finalBlowEngine?.version,
   }))()`);
   assert.match(controlledReload.title, /Final Blow/);
-  assert.match(controlledReload.build, /1\.4/);
-  assert.equal(controlledReload.version, '1.5-showtime');
+  assert.match(controlledReload.build, /1\.6/);
+  assert.equal(controlledReload.version, '1.6-loud');
 
   await client.send('Network.emulateNetworkConditions', {
     offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
@@ -2808,8 +2808,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /1\.4/);
-  assert.equal(offlineBoot.version, '1.5-showtime');
+  assert.match(offlineBoot.build, /1\.6/);
+  assert.equal(offlineBoot.version, '1.6-loud');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2853,7 +2853,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 1.5');
+  assert.equal(landscape.version.text, 'VERSION 1.6');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);

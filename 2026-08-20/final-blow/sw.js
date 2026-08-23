@@ -1,7 +1,7 @@
 // Keep offline startup reliable. Images and audio are intentionally fetched on
 // demand: preloading the complete game was a 19 MB / 162-request install that
 // could make Chrome abort the page before it rendered.
-const CACHE_NAME = "final-blow-shell-1.5a";
+const CACHE_NAME = "final-blow-shell-1.6a";
 const SHELL = [
   "./",
   "./styles.css",
