@@ -1931,6 +1931,138 @@ function clearBattleDamage() {
 }
 
 // ---------------------------------------------------------------------------
+// Wave 5 HUD/screen-space presentation. Module-level render-only state on the
+// documented superDimLevel pattern: never snapshotted, never read by the
+// simulation, driven purely from observed state (health deltas, phase changes,
+// combo counts, round wins), so rollback checksums are untouched. Every write
+// path is either the render loop (never runs during resimulation) or a DOM
+// update function that already early-returns on rollbackResimulating.
+// ---------------------------------------------------------------------------
+
+// Cumulative one-shot event totals exposed via snapshot().violence. Unlike
+// presentationDebug these are NOT reset per frame: they count discrete DOM/CSS
+// effect triggers (an announce, a pip flip) that a per-frame sampler would
+// race against, so peak-sampling simply reads the latest monotonic total.
+const hudFxDebug = {
+  damageGhosts: 0, letterSlams: 0, comboHeat: 0, slashWipes: 0,
+  selectSlams: 0, victoryEntrances: 0, pipFlips: 0, timerPulses: 0,
+};
+// Per-side damage-ghost render state: `health` is the last observed fraction,
+// `shown` the ghost bar's current scaleX, `holdMs` the remaining freeze time.
+const damageGhostState = [
+  { health: null, shown: 1, holdMs: 0, written: -1 },
+  { health: null, shown: 1, holdMs: 0, written: -1 },
+];
+// Per-side combo readout render state for hit-pops, heat tiers and the
+// damage count-up.
+const comboFxState = [
+  { hits: 0, tier: 0, damageShown: 0, damageWritten: -1 },
+  { hits: 0, tier: 0, damageShown: 0, damageWritten: -1 },
+];
+// Render-side phase observer for the round-transition slash wipe.
+let hudObservedPhase = null;
+// Render-frame clock for the damage-ghost hold/drain easing.
+let hudFxLastTime = 0;
+// Select-screen latch so the VS slam fires once per double lock.
+let selectBothLocked = false;
+
+// Remove-reflow-add so a one-shot CSS animation class replays reliably.
+function restartCssAnimation(element, className) {
+  if (!element) return;
+  element.classList.remove(className);
+  void element.offsetWidth;
+  element.classList.add(className);
+}
+
+function escapeAnnounceChar(character) {
+  return character === "&" ? "&amp;" : character === "<" ? "&lt;" : character === ">" ? "&gt;" : character;
+}
+
+// Diagonal accent slash across the screen on round transitions. Pure
+// compositor CSS; body.reduced-motion swaps the sweep for a soft crossfade
+// via a higher-specificity override in styles.css.
+function triggerScreenWipe(accent) {
+  const wipe = $("#screenWipe");
+  if (!wipe) return;
+  wipe.style.setProperty("--wipe-accent", accent);
+  restartCssAnimation(wipe, "run");
+  hudFxDebug.slashWipes += 1;
+}
+
+// Observed-phase edge detector, called once per rendered frame from draw().
+// Fires the slash wipe leaving the intro (intro -> fight) and entering
+// roundover. draw() never runs during rollback resimulation, so no guard is
+// needed beyond the screen check.
+function observeFightPhaseWipes() {
+  if (state.screen !== "fight") {
+    hudObservedPhase = null;
+    return;
+  }
+  const phase = state.phase;
+  if (hudObservedPhase === null) {
+    hudObservedPhase = phase;
+    return;
+  }
+  if (phase === hudObservedPhase) return;
+  if (hudObservedPhase === "intro" && phase === "fight") triggerScreenWipe("var(--cyan)");
+  else if (phase === "roundover") triggerScreenWipe("var(--red)");
+  hudObservedPhase = phase;
+}
+
+// SF-style hold-then-drain damage ghost. Runs in the render loop: freshly
+// lost health freezes the pale ghost segment (bright + a white chunk flash)
+// for ~0.6s — extended while the victim is still being combo'd — then drains
+// down in one smooth sweep. Under reducedMotion the drain snaps instead.
+function updateDamageGhosts(dtMs) {
+  if (state.screen !== "fight" || state.fighters.length < 2) {
+    damageGhostState[0].health = null;
+    damageGhostState[1].health = null;
+    return;
+  }
+  const reduced = state.accessibility.reducedMotion;
+  for (let side = 0; side < 2; side += 1) {
+    const fighter = state.fighters[side];
+    const ghost = damageGhostState[side];
+    const element = $(`#p${side + 1}Damage`);
+    if (!element) continue;
+    const health = clamp(fighter.health, 0, 100) / 100;
+    if (ghost.health === null || health > ghost.health + 0.0001) {
+      // Fresh round or a heal (training auto-recover): snap, no ghost.
+      ghost.shown = health;
+      ghost.holdMs = 0;
+    } else if (health < ghost.health - 0.0001) {
+      // Damage: freeze the ghost at the pre-hit value so the whole combo's
+      // loss reads as one bright chunk, and flash the fresh chunk white.
+      ghost.shown = Math.max(ghost.shown, ghost.health);
+      ghost.holdMs = 600;
+      hudFxDebug.damageGhosts += 1;
+      if ($("#flashToggle").checked && !reduced) restartCssAnimation(element, "chunk-flash");
+    }
+    ghost.health = health;
+    const inCombo = fighter.hitstunFrames > 0 || fighter.pendingKnockdown;
+    if (ghost.shown > health + 0.0001) {
+      if (inCombo) ghost.holdMs = Math.max(ghost.holdMs, 240);
+      if (ghost.holdMs > 0) ghost.holdMs = Math.max(0, ghost.holdMs - dtMs);
+      else if (reduced) ghost.shown = health;
+      else {
+        // Proportional sweep: big chunks drain visibly faster, small chips
+        // still clear in well under a second.
+        const rate = Math.max(0.55, (ghost.shown - health) * 2.6);
+        ghost.shown = Math.max(health, ghost.shown - rate * (dtMs / 1000));
+      }
+    } else {
+      ghost.shown = health;
+      ghost.holdMs = 0;
+    }
+    element.classList.toggle("hold", ghost.holdMs > 0);
+    if (Math.abs(ghost.shown - ghost.written) > 0.0005) {
+      ghost.written = ghost.shown;
+      element.style.transform = `scaleX(${ghost.shown.toFixed(4)})`;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Wave 3 stage presentation. Everything below is module-level render-only
 // state on the documented superDimLevel pattern: never snapshotted, never read
 // by the simulation, so rollback checksums are untouched.
@@ -2977,6 +3109,12 @@ function chooseFighter(index) {
     state.selectingPlayer = 1;
   }
   sound("select");
+  // Lock-in stamp: white card flash + punch-scale on the confirmed portrait.
+  const lockedCard = $(`.fighter-card[data-index="${index}"]`);
+  if (lockedCard) {
+    restartCssAnimation(lockedCard, "locked-flash");
+    hudFxDebug.selectSlams += 1;
+  }
   updateRosterUI();
 }
 
@@ -2987,8 +3125,19 @@ function updateRosterUI() {
     card.classList.toggle("p2-pick", state.locks[1] && state.picks[1] === index);
     card.classList.toggle("focused", !state.locks[state.selectingPlayer] && state.picks[state.selectingPlayer] === index);
   });
-  $("#selectionReadout").innerHTML = `<span>P1</span> ${roster[state.picks[0]].name} <i>VS</i> <span>P2</span> ${roster[state.picks[1]].name}`;
-  $("#fighterContinue").disabled = !(state.locks[0] && state.locks[1]);
+  const readout = $("#selectionReadout");
+  readout.innerHTML = `<span>P1</span> <b class="vs-name p1n">${roster[state.picks[0]].name}</b> <i>VS</i> <span>P2</span> <b class="vs-name p2n">${roster[state.picks[1]].name}</b>`;
+  const bothLocked = state.locks[0] && state.locks[1];
+  readout.classList.toggle("both-locked", bothLocked);
+  // VS slam: once both slots lock, the two names slam in from the sides
+  // around the flashing VS with a clash flash between them. Latched so
+  // later roster refreshes don't replay it.
+  if (bothLocked && !selectBothLocked) {
+    restartCssAnimation(readout, "vs-slam");
+    hudFxDebug.selectSlams += 1;
+  } else if (!bothLocked) readout.classList.remove("vs-slam");
+  selectBothLocked = bothLocked;
+  $("#fighterContinue").disabled = !bothLocked;
 }
 
 function showStageSelect() {
@@ -3186,11 +3335,38 @@ function resetRound() {
 function announce(main, sub = "", duration = 1) {
   if (rollbackResimulating) return;
   const box = $("#announcer");
-  box.querySelector("strong").textContent = main;
+  const strong = box.querySelector("strong");
+  const text = String(main);
+  const letters = [...text];
+  // Letter-by-letter slam: each character lands with its own scale-punch on a
+  // short stagger. The innerHTML rebuild also restarts the animation on
+  // consecutive announces (ROUND N -> FIGHT!) which the old textContent write
+  // never replayed. Spaces keep white-space:pre so textContent round-trips
+  // exactly (QA reads the announcer text).
+  const stagger = 55;
+  strong.setAttribute("aria-label", text);
+  strong.innerHTML = letters.map((character, index) => (character === " "
+    ? `<i class="gap" aria-hidden="true"> </i>`
+    : `<i aria-hidden="true" style="animation-delay:${index * stagger}ms">${escapeAnnounceChar(character)}</i>`)).join("");
+  hudFxDebug.letterSlams += letters.filter((character) => character !== " ").length;
   box.querySelector("span").textContent = sub;
-  box.classList.remove("hidden");
+  box.classList.remove("hidden", "out");
+  // Small screen kick per landing letter: a jolt animation on the frame whose
+  // duration tracks the letter count. Killed outright by body.reduced-motion.
+  if (!state.accessibility.reducedMotion) {
+    const frame = $("#gameFrame");
+    frame.style.setProperty("--announce-kick-ms", `${Math.min(letters.length, 14) * stagger + 180}ms`);
+    restartCssAnimation(frame, "announce-kick");
+  }
   clearTimeout(announce.timer);
-  announce.timer = setTimeout(() => box.classList.add("hidden"), duration * 1000);
+  clearTimeout(announce.outTimer);
+  // Punch out with a quick scale-snap instead of blinking off; the final
+  // hide still lands at exactly duration * 1000 so no hold timing moves.
+  announce.outTimer = setTimeout(() => box.classList.add("out"), Math.max(0, duration * 1000 - 150));
+  announce.timer = setTimeout(() => {
+    box.classList.add("hidden");
+    box.classList.remove("out");
+  }, duration * 1000);
 }
 
 function updateFlowSkipHint() {
@@ -3622,6 +3798,15 @@ function showResult(winner) {
   $("#reselectButton").textContent = arcadeDefeat ? "ABANDON RUN" : state.mode === "online" ? "LEAVE ROOM" : "SELECT FIGHTERS";
   $("#newStageButton").hidden = state.mode !== "versus";
   showScreen("result");
+  // Victory entrance: pose rises from the bottom edge, the WINS title slams
+  // in with a scale-settle, the finisher name stamps down last, and a light
+  // sweep passes across the copy panel. One-shot per match end; all classes
+  // are flattened by body.reduced-motion into static end states.
+  restartCssAnimation(victoryPose, "enter");
+  restartCssAnimation($("#resultTitle"), "enter");
+  restartCssAnimation($("#resultFinisher"), "enter");
+  restartCssAnimation($(".result-copy"), "sweep");
+  hudFxDebug.victoryEntrances += 1;
   if (state.mode === "demo") scheduleNextDemoMatch();
   else $("#demoResultStatus").hidden = true;
   if (state.mode === "online") {
@@ -3708,11 +3893,26 @@ function updateHud() {
     const healthBar = $(`#${prefix}Health`);
     healthBar.style.transform = `scaleX(${health})`;
     healthBar.classList.toggle("danger", health <= 0.25);
-    $(`#${prefix}Damage`).style.transform = `scaleX(${health})`;
+    // The damage ghost (#p1Damage/#p2Damage) is driven per rendered frame by
+    // updateDamageGhosts() — hold-then-drain — so it is not synced here.
     $(`#${prefix}Meter`).style.transform = `scaleX(${clamp(fighter.meter, 0, 100) / 100})`;
     $(`#${prefix}Grit`).textContent = String(Math.floor(fighter.meter));
     $(`#${prefix}Meter`).closest(".grit-row").classList.toggle("full", fighter.meter >= GRIT_RULES.superCost);
-    $(`#${prefix}Rounds`).innerHTML = [0, 1].map((round) => `<i class="${state.rounds[side] > round ? "won" : ""}"></i>`).join("");
+    // Round pips only rebuild when the win count changes (updateHud fires on
+    // every hit and timer tick, which would restart the flip constantly). The
+    // freshly earned pip carries .flip for the 180° flash-flip entrance.
+    const roundsEl = $(`#${prefix}Rounds`);
+    const wins = state.rounds[side];
+    if (roundsEl.dataset.wins !== String(wins)) {
+      const previousWins = Number(roundsEl.dataset.wins || 0);
+      roundsEl.dataset.wins = String(wins);
+      roundsEl.innerHTML = [0, 1].map((round) => {
+        const won = wins > round;
+        const fresh = won && wins > previousWins && round === wins - 1;
+        if (fresh) hudFxDebug.pipFlips += 1;
+        return `<i class="${won ? (fresh ? "won flip" : "won") : ""}"></i>`;
+      }).join("");
+    }
   });
   state.fighters.forEach((fighter, side) => {
     const prefix = `p${side + 1}`;
@@ -3722,7 +3922,23 @@ function updateHud() {
       ? Array.from({ length: profile.usesPerRound }, (_, index) => `<i class="${index < fighter.throwableUses ? "left" : ""}"></i>`).join("")
       : "";
   });
-  $("#timer").textContent = state.mode === "training" ? "∞" : String(Math.ceil(state.timer)).padStart(2, "0");
+  // Final-10-seconds urgency: red heartbeat pulse, quickening under 5. The
+  // red comes from the static .low class (not the animation) so reducedMotion
+  // keeps a calm steady red once the CSS kill-rule flattens the keyframes.
+  const timerEl = $("#timer");
+  const timerValue = state.mode === "training" ? "∞" : String(Math.ceil(state.timer)).padStart(2, "0");
+  const timerLow = state.mode !== "training" && state.phase === "fight" && state.timer <= 10;
+  timerEl.classList.toggle("low", timerLow);
+  timerEl.classList.toggle("critical", timerLow && state.timer <= 5);
+  if (timerEl.dataset.value !== timerValue) {
+    timerEl.dataset.value = timerValue;
+    timerEl.textContent = timerValue;
+    if (timerLow) {
+      restartCssAnimation(timerEl, "tick");
+      hudFxDebug.timerPulses += 1;
+    }
+  }
+  if (!timerLow) timerEl.classList.remove("tick");
   $("#roundLabel").textContent = state.mode === "training" ? "TRAINING"
     : state.mode === "demo" ? `DEMO · ROUND ${state.round}` : `ROUND ${state.round}`;
   const finishing = state.phase === "finish" && state.finishWinner === 0;
@@ -6069,8 +6285,34 @@ function updateComboState() {
     if (!readout) continue;
     const combo = attacker.combo.snapshot(state.simulationTick);
     readout.classList.toggle("active", combo.visible);
-    readout.querySelector("b").textContent = String(combo.hits);
-    readout.querySelector("em").textContent = `${Math.round(combo.damage)} DAMAGE`;
+    const fx = comboFxState[attacker.side];
+    const numberEl = readout.querySelector("b");
+    if (combo.visible && combo.hits !== fx.hits) {
+      numberEl.textContent = String(combo.hits);
+      // Physical hit-pop on every increment (scale overshoot back to 1).
+      if (combo.hits > fx.hits) restartCssAnimation(numberEl, "pop");
+    }
+    // Heat tiers: styling escalates at 3 / 5 / 8+ hits and the label upgrades.
+    const tier = !combo.visible ? 0 : combo.hits >= 8 ? 3 : combo.hits >= 5 ? 2 : combo.hits >= 3 ? 1 : 0;
+    if (tier !== fx.tier) {
+      readout.classList.toggle("hot", tier >= 1);
+      readout.classList.toggle("blazing", tier >= 2);
+      readout.classList.toggle("inferno", tier >= 3);
+      readout.querySelector("span").textContent = tier >= 3 ? "FINAL COMBO" : tier >= 2 ? "SAVAGE COMBO" : "HIT COMBO";
+      if (tier > fx.tier) hudFxDebug.comboHeat += 1;
+      fx.tier = tier;
+    }
+    fx.hits = combo.visible ? combo.hits : 0;
+    // The damage line counts up toward the real total instead of jumping.
+    const damageTarget = Math.round(combo.damage);
+    fx.damageShown = !combo.visible || damageTarget < fx.damageShown
+      ? damageTarget
+      : Math.min(damageTarget, fx.damageShown + Math.max(1, (damageTarget - fx.damageShown) * 0.22));
+    const damageLabel = Math.round(fx.damageShown);
+    if (damageLabel !== fx.damageWritten) {
+      fx.damageWritten = damageLabel;
+      readout.querySelector("em").textContent = `${damageLabel} DAMAGE`;
+    }
   }
 }
 
@@ -9716,6 +9958,12 @@ function draw(time) {
   // Unconditional: drawStage runs on every screen, so a gated reset would let
   // the stage counters accumulate without bound outside the fight.
   for (const key of Object.keys(presentationDebug)) presentationDebug[key] = 0;
+  // Wave 5 HUD observers: phase-edge slash wipe and the hold-then-drain
+  // damage ghosts, both driven from observed state in the render loop.
+  const hudDtMs = clamp(time - hudFxLastTime, 0, 100) || 16.7;
+  hudFxLastTime = time;
+  observeFightPhaseWipes();
+  updateDamageGhosts(hudDtMs);
   if (state.screen === "fight") {
     gritFlareLevel[0] = Math.max(0, gritFlareLevel[0] - 0.05);
     gritFlareLevel[1] = Math.max(0, gritFlareLevel[1] - 0.05);
@@ -10810,6 +11058,17 @@ window.__finalBlowEngine = {
         reflections: Boolean(state.performance.shadows && (STAGE_REFLECTIONS[state.stage] ?? 0) > 0),
         shake: Number(state.shake.toFixed(3)),
         hitstop: Number(state.hitstop.toFixed(4)),
+        // Wave 5 HUD effects: cumulative one-shot trigger totals (see
+        // hudFxDebug) — monotonic, so per-frame peak sampling reads them
+        // without racing the presentationDebug frame reset.
+        damageGhosts: hudFxDebug.damageGhosts,
+        letterSlams: hudFxDebug.letterSlams,
+        comboHeat: hudFxDebug.comboHeat,
+        slashWipes: hudFxDebug.slashWipes,
+        selectSlams: hudFxDebug.selectSlams,
+        victoryEntrances: hudFxDebug.victoryEntrances,
+        pipFlips: hudFxDebug.pipFlips,
+        timerPulses: hudFxDebug.timerPulses,
       },
       stageWeapon: weaponSnapshot(state.stageWeapon),
       stageWeaponsEnabled: state.stageWeaponsEnabled,

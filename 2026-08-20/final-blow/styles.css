@@ -203,6 +203,41 @@ canvas {
   to { opacity: 1; transform: scale(1); }
 }
 
+/* Round-transition slash wipe: a skewed accent band (matching the FINAL BLOW
+   logo angle) sweeps corner to corner. Pure compositor transform, triggered
+   from the render loop in game.js; --wipe-accent is set per destination. */
+.screen-wipe {
+  position: absolute;
+  z-index: 26;
+  inset: -14% -30%;
+  opacity: 0;
+  background: linear-gradient(90deg,
+    transparent 6%,
+    color-mix(in srgb, var(--wipe-accent, var(--red)) 55%, transparent) 26%,
+    color-mix(in srgb, var(--wipe-accent, var(--red)) 92%, #200205) 45%,
+    #fff 50%,
+    color-mix(in srgb, var(--wipe-accent, var(--red)) 92%, #200205) 55%,
+    color-mix(in srgb, var(--wipe-accent, var(--red)) 55%, transparent) 74%,
+    transparent 94%);
+  transform: translateX(-140%) skewX(-18deg);
+  pointer-events: none;
+}
+.screen-wipe.run { animation: slash-wipe .5s cubic-bezier(.72,0,.24,1) both; }
+@keyframes slash-wipe {
+  0% { opacity: 1; transform: translateX(-140%) skewX(-18deg); }
+  100% { opacity: 1; transform: translateX(140%) skewX(-18deg); }
+}
+/* reducedMotion: soft accent crossfade instead of the sweep. Higher
+   specificity (ID) beats the global reduced-motion animation kill-rule. */
+body.reduced-motion #screenWipe.run {
+  animation: wipe-fade .5s ease-out both !important;
+  transform: none;
+}
+@keyframes wipe-fade {
+  0% { opacity: .42; }
+  100% { opacity: 0; }
+}
+
 .title-screen {
   align-items: center;
   justify-content: center;
@@ -622,6 +657,21 @@ kbd,
 .fighter-card.p2-pick { outline: 4px solid var(--red); }
 .fighter-card.p1-pick.p2-pick { box-shadow: 0 0 0 4px var(--red), 0 0 30px var(--cyan); }
 
+/* Lock-in stamp: white card flash + punch-scale when a fighter confirms. */
+.fighter-card.locked-flash { animation: card-lock .38s cubic-bezier(.2,1.5,.4,1); }
+@keyframes card-lock {
+  0% { transform: scale(1.1); filter: brightness(2.4) saturate(.35); }
+  45% { transform: scale(.97); filter: brightness(1.45); }
+  100% { transform: scale(1); filter: none; }
+}
+
+/* Idle breathing on the roster portraits via the standalone scale property,
+   so it composes with (instead of fighting) the hover/focus transform. */
+.fighter-portrait { animation: portrait-breathe 3.6s ease-in-out infinite; }
+@keyframes portrait-breathe {
+  50% { scale: 1.022; }
+}
+
 .fighter-portrait {
   position: absolute;
   z-index: 1;
@@ -790,7 +840,43 @@ kbd,
 
 #selectionReadout span:first-child { color: var(--cyan); }
 #selectionReadout span:last-of-type { color: var(--red); }
-#selectionReadout i { margin: 0 12px; color: var(--amber); }
+#selectionReadout i { margin: 0 12px; color: var(--amber); display: inline-block; }
+#selectionReadout .vs-name { display: inline-block; font-weight: inherit; }
+
+/* VS slam: both slots locked — the names slam in from the sides around a
+   flashing VS with a clash flash between them. */
+#selectionReadout.both-locked { color: #fff; font-size: clamp(11px, 1.3vw, 18px); }
+#selectionReadout.both-locked i { color: var(--amber); text-shadow: 0 0 12px rgba(255,177,27,.8); }
+#selectionReadout.vs-slam { position: relative; }
+#selectionReadout.vs-slam .p1n { animation: vs-name-left .32s cubic-bezier(.2,1.4,.4,1) both; }
+#selectionReadout.vs-slam .p2n { animation: vs-name-right .32s cubic-bezier(.2,1.4,.4,1) both; }
+@keyframes vs-name-left {
+  from { opacity: 0; transform: translateX(-46px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes vs-name-right {
+  from { opacity: 0; transform: translateX(46px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+#selectionReadout.vs-slam i { animation: vs-stamp .42s cubic-bezier(.16,1.5,.36,1) .2s both; }
+@keyframes vs-stamp {
+  0% { opacity: 0; transform: scale(3); color: #fff; filter: blur(3px); }
+  55% { opacity: 1; transform: scale(.88); color: #fff; filter: blur(0); }
+  100% { opacity: 1; transform: scale(1); }
+}
+#selectionReadout.vs-slam::after {
+  position: absolute;
+  content: "";
+  inset: -18px -8%;
+  background: radial-gradient(circle at 50% 50%, rgba(255,244,214,.85), rgba(255,177,27,.3) 38%, transparent 62%);
+  opacity: 0;
+  animation: vs-clash .34s ease-out .24s;
+  pointer-events: none;
+}
+@keyframes vs-clash {
+  0% { opacity: 1; transform: scaleX(.25); }
+  100% { opacity: 0; transform: scaleX(1.25); }
+}
 
 .stage-screen { justify-content: space-between; }
 
@@ -996,7 +1082,14 @@ body.demo-active .touch-pause { display: none !important; }
   transform-origin: left;
 }
 
-.health-shell em { z-index: 1; background: #f5f1d7; opacity: .58; transition: transform .55s ease-out; }
+/* Damage ghost: transform is driven per-frame by updateDamageGhosts() in
+   game.js (hold-then-drain), so no transform transition here. */
+.health-shell em { z-index: 1; background: #f5f1d7; opacity: .58; }
+.health-shell em.hold { background: #fff; opacity: .92; box-shadow: 0 0 10px rgba(255,244,214,.85); }
+.health-shell em.chunk-flash { animation: ghost-chunk-flash .12s ease-out; }
+@keyframes ghost-chunk-flash {
+  from { background: #fff; opacity: 1; filter: brightness(1.8); }
+}
 .health-shell i { z-index: 2; background: linear-gradient(180deg, #caff44, #45b829); transition: transform .12s linear; }
 .health-shell i.danger { background: linear-gradient(180deg, #ffcb3c, #ee2d25); animation: danger-pulse .5s steps(2) infinite; }
 
@@ -1054,15 +1147,46 @@ body.demo-active .touch-pause { display: none !important; }
   align-items: end;
   gap: 0 8px;
   opacity: 0;
-  transform: translateX(-24px) scale(.84);
-  transition: opacity .1s, transform .12s;
+  transform: translateX(-34px) scale(.84);
+  /* Slow slide-fade on the way out; .active below restores the snappy pop-in. */
+  transition: opacity .34s ease-in .04s, transform .4s cubic-bezier(.5,0,.75,.5) .04s;
   pointer-events: none;
   filter: drop-shadow(3px 4px 0 rgba(0,0,0,.9));
 }
-.combo-readout.active { opacity: 1; transform: translateX(0) scale(1); }
+.combo-readout.active { opacity: 1; transform: translateX(0) scale(1); transition: opacity .1s, transform .12s; }
 .combo-readout b { grid-row: 1 / 3; color: var(--amber); font-family: Impact, sans-serif; font-size: clamp(40px, 6vw, 86px); line-height: .82; }
 .combo-readout span { color: white; font-size: clamp(12px, 1.3vw, 20px); font-style: italic; font-weight: 950; letter-spacing: .08em; }
 .combo-readout em { color: #8defff; font-size: clamp(8px, .75vw, 12px); font-style: normal; font-weight: 900; letter-spacing: .1em; }
+
+/* Hit-pop: the big number physically lands on every increment. */
+.combo-readout b.pop { animation: combo-pop .2s cubic-bezier(.2,2.1,.42,1) both; }
+@keyframes combo-pop {
+  from { transform: scale(1.35); filter: brightness(1.7); }
+  to { transform: scale(1); filter: brightness(1); }
+}
+
+/* Heat tiers: 3+ hot (orange), 5+ blazing (orange-red glow, bigger),
+   8+ inferno (red, rage shake). Label text upgrades in game.js. */
+.combo-readout.hot b { color: #ff8f1f; text-shadow: 0 0 14px rgba(255,143,31,.55); }
+.combo-readout.hot span { color: #ffd9a0; }
+.combo-readout.blazing b {
+  color: #ff5a22;
+  font-size: clamp(46px, 6.7vw, 97px);
+  text-shadow: 0 0 18px rgba(255,90,34,.75);
+}
+.combo-readout.blazing span { color: #ffb27a; }
+.combo-readout.inferno b {
+  color: var(--red);
+  font-size: clamp(52px, 7.4vw, 108px);
+  text-shadow: 0 0 10px #ffb11b, 0 0 26px rgba(239,44,40,.9);
+  animation: combo-rage .16s linear infinite alternate;
+}
+.combo-readout.inferno span { color: var(--amber); text-shadow: 0 0 10px rgba(255,177,27,.7); }
+@keyframes combo-rage {
+  from { transform: translate(-1px, 1px); }
+  to { transform: translate(1px, -1px); }
+}
+.combo-readout.inferno b.pop { animation: combo-pop .2s cubic-bezier(.2,2.1,.42,1) both, combo-rage .16s linear .2s infinite alternate; }
 
 .training-panel {
   position: absolute;
@@ -1143,12 +1267,34 @@ body.demo-active .touch-pause { display: none !important; }
 }
 .pause-reason[hidden] { display: none !important; }
 .p1-combo { left: 4%; }
-.p2-combo { right: 4%; direction: rtl; transform: translateX(24px) scale(.84); text-align: right; }
+.p2-combo { right: 4%; direction: rtl; transform: translateX(34px) scale(.84); text-align: right; }
 .p2-combo.active { transform: translateX(0) scale(1); }
 
 .round-pips { display: flex; gap: 3px; }
-.round-pips i { width: 8px; height: 8px; border: 1px solid #d8d8d2; transform: rotate(45deg); }
+.round-pips i { position: relative; width: 8px; height: 8px; border: 1px solid #d8d8d2; transform: rotate(45deg); }
 .round-pips i.won { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+
+/* Round-pip win flip: the earned diamond flips 180°, flashes white mid-turn
+   and settles into its amber glow with a small radial burst. */
+.round-pips i.flip { animation: pip-flip .55s cubic-bezier(.3,1.3,.42,1) both; }
+@keyframes pip-flip {
+  0% { transform: rotate(45deg) rotateY(0deg); background: transparent; box-shadow: none; }
+  45% { transform: rotate(45deg) rotateY(96deg); background: #fff; box-shadow: 0 0 14px #fff; }
+  60% { background: #fff; box-shadow: 0 0 12px #fff; }
+  100% { transform: rotate(45deg) rotateY(180deg); background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+}
+.round-pips i.flip::after {
+  position: absolute;
+  content: "";
+  inset: -5px;
+  border: 1px solid var(--amber);
+  opacity: 0;
+  animation: pip-burst .45s ease-out .16s;
+}
+@keyframes pip-burst {
+  0% { opacity: .9; transform: scale(.35); }
+  100% { opacity: 0; transform: scale(1.5); }
+}
 
 .timer-wrap {
   display: flex;
@@ -1169,6 +1315,18 @@ body.demo-active .touch-pause { display: none !important; }
   font-size: clamp(27px, 3vw, 48px);
   line-height: 1;
   text-shadow: 3px 3px 0 #7d0c12;
+}
+
+/* Final-10-seconds urgency: static red from .low (so reducedMotion keeps a
+   calm steady red), heartbeat scale-tick retriggered per second change; the
+   .critical tier under 5s beats twice as fast. */
+.timer-wrap b.low { color: var(--red); text-shadow: 3px 3px 0 #2f0204, 0 0 16px rgba(239,44,40,.6); }
+.timer-wrap b.low.tick { animation: timer-heartbeat .48s cubic-bezier(.2,1.7,.45,1) both; }
+.timer-wrap b.critical.tick { animation: timer-heartbeat .3s cubic-bezier(.2,1.7,.45,1) 2 both; }
+@keyframes timer-heartbeat {
+  0% { transform: scale(1.34); filter: brightness(1.75); }
+  55% { transform: scale(.97); filter: brightness(1.1); }
+  100% { transform: scale(1); filter: brightness(1); }
 }
 
 .announcer {
@@ -1192,7 +1350,42 @@ body.demo-active .touch-pause { display: none !important; }
   line-height: .92;
   -webkit-text-stroke: 2px #4d070b;
   text-shadow: 5px 8px 0 #56070b, 0 0 30px #000;
-  animation: announce-in .24s cubic-bezier(.16,1.4,.4,1) both;
+}
+
+/* Letter-slam: each character lands with its own staggered scale-punch
+   (delays are set inline by announce() in game.js). */
+.announcer strong i {
+  display: inline-block;
+  font-style: inherit;
+  animation: letter-slam .3s cubic-bezier(.16,1.4,.4,1) both;
+}
+.announcer strong i.gap { white-space: pre; animation: none; }
+/* The stagger is an inline animation-delay, which the global reduced-motion
+   kill-rule does not zero — flatten it here so text appears at once. */
+body.reduced-motion .announcer strong i { animation-delay: 0ms !important; }
+@keyframes letter-slam {
+  0% { opacity: 0; transform: scale(2.7) translateY(-14px); filter: blur(6px); }
+  62% { opacity: 1; transform: scale(.9) translateY(1px); filter: blur(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Punch-out: quick scale-snap before the hidden class lands. */
+.announcer.out { animation: announce-out .15s ease-in both; }
+@keyframes announce-out {
+  to { opacity: 0; transform: translate(-50%, -50%) scale(1.26); filter: blur(4px); }
+}
+
+/* Small screen kick per landing letter; duration set inline per announce. */
+.game-frame.announce-kick { animation: announce-kick var(--announce-kick-ms, .45s) linear both; }
+@keyframes announce-kick {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(2px, -1px); }
+  24% { transform: translate(-2px, 1px); }
+  38% { transform: translate(1px, -2px); }
+  52% { transform: translate(-1px, 1px); }
+  66% { transform: translate(2px, 1px); }
+  80% { transform: translate(-1px, -1px); }
+  92% { transform: translate(1px, 0); }
 }
 
 .announcer span {
@@ -1241,10 +1434,6 @@ body.demo-active .touch-pause { display: none !important; }
 .pause-performance { margin: 10px 0 3px; color: var(--cyan); font-size: 9px; font-weight: 900; letter-spacing: .14em; }
 .pause-panel .menu-stack { width: min(390px, 72%); margin-top: 12px; }
 
-@keyframes announce-in {
-  from { opacity: 0; transform: scale(2.2) rotate(-5deg); filter: blur(7px); }
-  to { opacity: 1; transform: scale(1); filter: blur(0); }
-}
 
 .ladder-screen,
 .ending-screen {
@@ -1477,6 +1666,44 @@ body.demo-active .touch-pause { display: none !important; }
 .victory-pose.portrait-art {
   background-position: center bottom;
   background-size: contain;
+}
+
+/* Victory entrance: pose rises from the bottom edge, the WINS title slams in
+   with a scale-settle, the finisher name ink-stamps down last, and a light
+   sweep passes across the copy panel. */
+.victory-pose.enter { animation: pose-rise .6s cubic-bezier(.18,1.08,.32,1) both; }
+@keyframes pose-rise {
+  from { opacity: 0; transform: translateY(9%); filter: drop-shadow(0 22px 24px #000) brightness(.4); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.result-screen h2.enter { animation: title-settle .5s cubic-bezier(.16,1.45,.36,1) .08s both; }
+@keyframes title-settle {
+  0% { opacity: 0; transform: scale(1.75); filter: blur(6px); }
+  55% { opacity: 1; transform: scale(.955); filter: blur(0); }
+  100% { opacity: 1; transform: scale(1); }
+}
+#resultFinisher.enter { animation: finisher-stamp .34s ease-out .4s both; }
+@keyframes finisher-stamp {
+  0% { opacity: 0; transform: scale(2.1) rotate(-4deg); }
+  70% { opacity: 1; transform: scale(.94) rotate(1.2deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+.result-copy.sweep::after {
+  position: absolute;
+  content: "";
+  inset: -6% -10%;
+  background: linear-gradient(105deg,
+    transparent 34%,
+    rgba(255, 200, 150, .13) 47%,
+    rgba(255, 246, 230, .3) 50%,
+    rgba(255, 200, 150, .13) 53%,
+    transparent 66%);
+  transform: translateX(-130%);
+  animation: light-sweep .85s ease-out .3s both;
+  pointer-events: none;
+}
+@keyframes light-sweep {
+  to { transform: translateX(130%); }
 }
 
 #resultFinisher {
