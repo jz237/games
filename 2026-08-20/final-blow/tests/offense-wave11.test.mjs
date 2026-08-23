@@ -442,3 +442,20 @@ test("every wave-11 offense fighter field round-trips the rollback snapshot mach
     assert.notEqual(checksumState(changed), baseline, `${name} must be checksum-visible`);
   }
 });
+
+test("online encoding: resolved four-button input carries attack bits; raw does not", () => {
+  // The online tick must resolve raw four-button reads before inputToBits —
+  // the raw object encodes zero attack buttons (the 1.9 regression fix).
+  const rawBits = inputToBits({ fourButton: true, lk: true });
+  assert.equal(rawBits & NET_INPUT.LIGHT, 0, "raw lk must NOT set LIGHT (documents why resolution is mandatory)");
+  const resolved = resolveFourButtonInput({ lk: true });
+  const bits = inputToBits(resolved);
+  assert.ok(bits & NET_INPUT.LIGHT, "resolved light kick sets LIGHT");
+  assert.ok(bits & NET_INPUT.KICK, "resolved light kick sets KICK limb");
+  const heavy = inputToBits(resolveFourButtonInput({ hp: true }));
+  assert.ok(heavy & NET_INPUT.HEAVY, "resolved heavy punch sets HEAVY");
+  assert.equal(heavy & NET_INPUT.KICK, 0, "punch limb leaves KICK clear");
+  const taunt = inputToBits(resolveFourButtonInput({ lk: true, hkHeld: true }, { tauntArmed: true }));
+  assert.ok((taunt & NET_INPUT.LIGHT) && (taunt & NET_INPUT.HEAVY) && (taunt & NET_INPUT.KICK),
+    "taunt resolves to the light+heavy+kick wire encoding");
+});

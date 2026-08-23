@@ -7939,10 +7939,32 @@ function maybeSendOnlineChecksum() {
   sendOnlineControl({ type: "checksum", matchId: onlineSession.matchConfig?.matchId, frame: checkpoint, checksum });
 }
 
+// Raw four-button reads must be resolved to the action vocabulary BEFORE they
+// are encoded: inputToBits only knows action fields, so encoding the raw
+// object silently drops every attack button. Resolution happens sender-side
+// against the local fighter's current state — that is what the dedicated
+// limb/taunt wire bits exist for — and the sim's own resolve branch only runs
+// for objects still carrying fourButton, so nothing resolves twice.
+function resolveOnlineLocalInput() {
+  const raw = readQaInput(0) || readInput(0);
+  if (!raw?.fourButton) return raw;
+  const side = onlineLocalSide();
+  const fighter = state.fighters[side];
+  if (!fighter) return raw;
+  return resolveFourButtonInput(raw, {
+    facing: fighter.facing,
+    style: activeControlStyle(side),
+    meter: fighter.meter,
+    finishing: state.phase === "finish" && state.finishWinner === side,
+    finishArmed: state.finishArmed[side],
+    tauntArmed: state.simulationTick <= fighter.tauntArmedUntilTick,
+  });
+}
+
 function simulateOnlineGameTick() {
   const rollback = onlineSession.rollback;
   if (!rollback || onlineSession.networkPaused) return;
-  const localInput = readQaInput(0) || readInput(0);
+  const localInput = resolveOnlineLocalInput();
   const result = rollback.advance(inputToBits(localInput));
   if (onlineSession.peer?.connected) onlineSession.peer.sendInput(rollback.inputPacket());
   if (!result.advanced) {
@@ -13887,7 +13909,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.8e");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.9");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -14369,7 +14391,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.8e-eagles-tailgate",
+  version: "1.9-disrespect",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
