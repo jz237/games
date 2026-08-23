@@ -246,5 +246,9 @@ export function weaponSnapshot(weapon) {
     frames: weapon.frames ?? 0,
     slot: weapon.slot ?? -1,
     spawnFrame: weapon.spawnFrame ?? -1,
+    // Release 1.8 GRIND: Weapons Rain wave counter (0 = the round's original
+    // drop; each deterministic respawn increments it).
+    wave: weapon.wave ?? 0,
+    rainFrames: weapon.rainFrames ?? 0,
   };
 }

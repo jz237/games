@@ -120,7 +120,10 @@
         </div>
         <div class="menu-stack">
           <button class="arcade-button primary menu-focus" data-mode="arcade">1 PLAYER · ARCADE</button>
+          <button class="arcade-button" data-mode="survival">SURVIVAL · THE GAUNTLET</button>
           <button class="arcade-button" data-mode="versus">2 PLAYER · LOCAL VERSUS</button>
+          <button class="arcade-button" data-mode="team">TEAM BATTLE · 3V3 BLOCK WAR</button>
+          <button class="arcade-button daily-button" id="dailyButton">DAILY JAWN<small id="dailyStatus">FRESH RUN READY</small></button>
           <button class="arcade-button online-button" id="onlineButton">ONLINE · PRIVATE ROOM</button>
           <button class="arcade-button" data-mode="training">TRAINING LAB</button>
           <button class="arcade-button demo-button" id="demoButton">WATCH DEMO · CPU VS CPU</button>
@@ -245,6 +248,11 @@
             <small>PHILADELPHIA · EARLY DUSK</small>
           </button>
         </div>
+        <div id="mutatorBar" class="mutator-bar" aria-label="House Rules match mutators" hidden>
+          <span class="mutator-title">HOUSE RULES</span>
+          <div id="mutatorOptions" class="mutator-options"></div>
+          <p id="mutatorHint" class="mutator-hint">OPTIONAL HOUSE RULES · STACK AS MANY AS YOU WANT</p>
+        </div>
         <div class="selection-footer">
           <button class="text-button" data-back="select">← FIGHTERS</button>
           <div id="stageReadout">SOMERSET SEPTA STATION</div>
@@ -266,6 +274,42 @@
         </div>
       </section>
 
+      <section id="tallyScreen" class="screen tally-screen" aria-labelledby="tallyTitle">
+        <div class="tally-panel">
+          <p class="eyebrow" id="tallySub">BONUS TALLY</p>
+          <h2 id="tallyTitle">BOUT CLEARED</h2>
+          <div id="tallyRows" class="tally-rows"></div>
+          <div class="tally-total-block">
+            <div class="tally-multiplier" id="tallyMultiplier">DIFFICULTY MULTIPLIER ×1</div>
+            <div class="tally-total"><span>BOUT TOTAL</span><b id="tallyBoutTotal">0</b></div>
+            <div class="tally-run-total"><span>RUN SCORE</span><b id="tallyRunTotal">0</b></div>
+          </div>
+          <button id="tallyContinueButton" class="arcade-button primary menu-focus">CONTINUE →</button>
+        </div>
+      </section>
+
+      <section id="initialsScreen" class="screen initials-screen" aria-labelledby="initialsTitle">
+        <div class="initials-panel">
+          <p class="eyebrow">YOU MADE THE BOARD</p>
+          <h2 id="initialsTitle">ENTER YOUR INITIALS</h2>
+          <div class="initials-context"><b id="initialsScore">0 PTS</b><span id="initialsMode">ARCADE</span></div>
+          <div id="initialsSlots" class="initials-slots" aria-label="Three letter initials">
+            <button type="button" class="initials-slot cursor">A</button>
+            <button type="button" class="initials-slot">A</button>
+            <button type="button" class="initials-slot">A</button>
+          </div>
+          <p class="initials-hint">TYPE LETTERS · ↑↓ CYCLE · ←→ MOVE · TAP A SLOT TO SPIN IT</p>
+          <button id="initialsConfirmButton" class="arcade-button primary menu-focus">LOCK IT IN</button>
+        </div>
+      </section>
+
+      <div id="attractScores" class="attract-scores" aria-hidden="true" hidden>
+        <p class="eyebrow">FINAL BLOW · TOP FIGHTERS</p>
+        <h3>HIGH SCORES</h3>
+        <div id="attractScoresRows" class="attract-score-rows"></div>
+        <small>PRESS ANY BUTTON TO PLAY</small>
+      </div>
+
       <section id="endingScreen" class="screen ending-screen" aria-labelledby="endingTitle">
         <div id="endingArt" class="ending-art" aria-hidden="true"></div>
         <div class="ending-copy">
@@ -274,6 +318,10 @@
           <blockquote id="endingQuote">THE LAST BELL RANG UNDER HIS FEET.</blockquote>
           <p id="endingStory"></p>
           <div class="ending-stamp"><span>THE COMMISSIONER</span><b>DEFEATED</b></div>
+          <div id="dailyEndingBanner" class="daily-banner" hidden>
+            <b>DAILY JAWN</b><em>—</em>
+            <button id="shareDailyEndingButton" class="arcade-button compact" type="button">COPY SHARE TEXT</button>
+          </div>
           <div class="menu-stack horizontal">
             <button id="endingReplayButton" class="arcade-button primary menu-focus">NEW ARCADE RUN</button>
             <button class="arcade-button ghost" data-back="title">TITLE</button>
@@ -290,6 +338,10 @@
           <blockquote id="resultQuote">THE STREET MOVED FIRST.</blockquote>
           <p id="onlineRematchStatus" class="online-rematch-status" hidden>REMATCH VOTES · 0 / 2</p>
           <p id="demoResultStatus" class="demo-result-status" hidden>NEXT RANDOM FIGHT IN 5 SECONDS · PRESS ANY BUTTON TO PLAY</p>
+          <div id="dailyResultBanner" class="daily-banner" hidden>
+            <b>DAILY JAWN</b><em>—</em>
+            <button id="shareDailyButton" class="arcade-button compact" type="button">COPY SHARE TEXT</button>
+          </div>
           <div class="menu-stack horizontal">
             <button id="rematchButton" class="arcade-button primary menu-focus">REMATCH</button>
             <button id="newStageButton" class="arcade-button">SAME FIGHTERS · NEW STAGE</button>

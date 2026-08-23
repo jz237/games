@@ -70,9 +70,45 @@ import {
   createAiBrain,
   isPassiveDifficulty,
   normalizeAiDifficulty,
+  registerAiDifficulty,
   resetAiBrain,
   stepAiBrain,
 } from "./engine/ai.mjs";
+import {
+  DAILY_RULES,
+  MUTATORS,
+  MUTATOR_ORDER,
+  SCORE_RULES,
+  TEAM_ELIMINATION_LINES,
+  TEAM_RULES,
+  createBoutTally,
+  createDailyPlan,
+  createSurvivalRun,
+  createTeamBattle,
+  currentSurvivalBout,
+  currentTeamPair,
+  dailyDateString,
+  dailyShareText,
+  highScoreQualifies,
+  insertHighScore,
+  mutatorLabel,
+  nextDailyRecord,
+  normalizeInitials,
+  normalizeMutators,
+  previousDateString,
+  teamFightersRemaining,
+  recordSurvivalDefeat,
+  recordSurvivalWin,
+  recordTeamKo,
+  resolveMatchRules,
+  scaleMovementForRules,
+  scoreDifficultyMultiplier,
+  scoreForHit,
+  survivalRunSnapshot,
+  tallyRows,
+  tallyTotal,
+  teamBattleSnapshot,
+} from "./engine/modes.mjs";
 import {
   ARCADE_BOSS_ID,
   arcadeRunSnapshot,
@@ -919,6 +955,19 @@ const state = {
   sfxVolume: clamp(Number(localStorage.getItem("final-blow-sfx-volume") ?? "1"), 0, 1),
   aiDifficulty: normalizeAiDifficulty(localStorage.getItem("final-blow-ai-difficulty") || DEFAULT_AI_DIFFICULTY),
   arcadeRun: null,
+  // Release 1.8 GRIND: survival ladder + 3v3 team battle bookkeeping (offline
+  // modes; never part of the rollback snapshot) and the House Rules mutator
+  // config. `mutators` IS sim-affecting match config: it is snapshotted by the
+  // rollback machinery and `matchRules` is re-derived from it on restore, so
+  // both online peers always agree (plain rooms simply never set it).
+  survivalRun: null,
+  teamBattle: null,
+  teamPicks: [[], []],
+  mutators: [],
+  matchRules: resolveMatchRules([]),
+  // One-shot per round: has the Sudden Death mutator's first-clean-hit dizzy
+  // fired yet? Sim state (snapshotted + checksummed via saveRollbackState).
+  suddenDeathHitDone: false,
   controlStyle: normalizeControlStyle(localStorage.getItem("final-blow-control-style") || "classic"),
   visualQuality: normalizeVisualQuality(localStorage.getItem("final-blow-visual-quality") || "auto"),
   // Wave 7 display toggles. Sharp render defaults on (it only ever engages on
@@ -1010,6 +1059,209 @@ const demoSession = {
   idleTimer: 0,
 };
 let fightAnnouncementTimer = 0;
+
+// --- Release 1.8 GRIND: score attack / daily / mutator sessions ------------
+// Score is pure presentation/meta, tracked OUTSIDE the checksummed sim state
+// (module-level, on the demoSession pattern). Every increment that runs on a
+// sim path sits behind a rollbackResimulating guard, and online mode is
+// excluded outright, so rollback and determinism never see the score.
+const SCORE_STORAGE_KEY = "final-blow-high-scores";
+const SCORE_INITIALS_KEY = "final-blow-initials";
+const SURVIVAL_BEST_KEY = "final-blow-survival-best";
+const SCORES_API = "https://game-scores.jez237.workers.dev/scores/final-blow";
+
+const scoreSession = {
+  active: false,
+  mode: "",
+  detail: "",
+  total: 0,
+  boutCount: 0,
+  multiplier: 1,
+  bout: createBoutTally(),
+  roundFirstHitDone: false,
+  lastBout: null,
+  lastBoutTotal: 0,
+  submitted: false,
+};
+
+const dailySession = {
+  active: false,
+  date: "",
+  plan: null,
+  finished: false,
+  outcome: null,
+};
+
+// Render-side mutator picks from the versus/team stage-select screen. Consumed
+// (normalized) into state.mutators by startMatch; never read by the sim.
+let pendingMutators = [];
+
+// Tally screen + initials entry transients (render-only).
+const tallyUi = {
+  active: false,
+  rows: [],
+  total: 0,
+  runTotal: 0,
+  multiplier: 1,
+  startedAt: 0,
+  done: false,
+  onContinue: null,
+};
+const initialsUi = {
+  active: false,
+  letters: ["A", "A", "A"],
+  cursor: 0,
+  score: 0,
+  onDone: null,
+};
+// Monotonic one-shot totals for the new modes, on the hudFxDebug pattern.
+const modeFxDebug = {
+  tallyScreens: 0,
+  tallyCountUps: 0,
+  initialsEntries: 0,
+  survivalMilestones: 0,
+  teamEliminations: 0,
+  teamWalkIns: 0,
+  dailyRuns: 0,
+  attractScoreBoards: 0,
+  scoreSubmissions: 0,
+};
+
+function loadHighScores() {
+  const stored = storedJson(SCORE_STORAGE_KEY, []);
+  return Array.isArray(stored) ? stored.filter((row) => row && Number.isFinite(row.score)) : [];
+}
+
+function saveHighScores(list) {
+  try {
+    localStorage.setItem(SCORE_STORAGE_KEY, JSON.stringify(list.slice(0, SCORE_RULES.tableSize)));
+  } catch { /* storage full/blocked — table stays in-memory for the session */ }
+}
+
+function loadSurvivalBest() {
+  const stored = storedJson(SURVIVAL_BEST_KEY, null);
+  return {
+    streak: Math.max(0, Math.round(Number(stored?.streak) || 0)),
+    score: Math.max(0, Math.round(Number(stored?.score) || 0)),
+  };
+}
+
+function saveSurvivalBest(best) {
+  try {
+    localStorage.setItem(SURVIVAL_BEST_KEY, JSON.stringify(best));
+  } catch { /* non-fatal */ }
+}
+
+function loadDailyRecord() {
+  return storedJson(DAILY_RULES.storageKey, null);
+}
+
+function saveDailyRecord(record) {
+  try {
+    localStorage.setItem(DAILY_RULES.storageKey, JSON.stringify(record));
+  } catch { /* non-fatal */ }
+}
+
+// Offline-first, failure-silent submission to Jez's first-party score worker
+// (the pinball-fantasies / hard-hat-mac client pattern). The local table is
+// already written before this is ever called; any network problem is ignored.
+async function submitScoreToWorker(initials, score, detail) {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    await fetch(SCORES_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ initials, score, extra: detail }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    modeFxDebug.scoreSubmissions += 1;
+  } catch { /* offline or worker down — the local table already has it */ }
+}
+
+function scoreTrackingActive() {
+  return scoreSession.active && (state.mode === "arcade" || state.mode === "survival");
+}
+
+function beginScoreRun(mode, detail, multiplier) {
+  scoreSession.active = true;
+  scoreSession.mode = mode;
+  scoreSession.detail = detail;
+  scoreSession.total = 0;
+  scoreSession.boutCount = 0;
+  scoreSession.multiplier = multiplier;
+  scoreSession.bout = createBoutTally();
+  scoreSession.roundFirstHitDone = false;
+  scoreSession.lastBout = null;
+  scoreSession.lastBoutTotal = 0;
+  scoreSession.submitted = false;
+}
+
+function endScoreRun() {
+  scoreSession.active = false;
+}
+
+function resetRoundScoreTracking() {
+  scoreSession.roundFirstHitDone = false;
+}
+
+// Per-hit points, called from the sim's hit/grab/projectile damage sites.
+// Guarded: never during resimulation, never online, only the human player.
+function awardHitScore(attacker, kind, { counter = false } = {}) {
+  if (rollbackResimulating || !scoreTrackingActive() || attacker.side !== 0) return;
+  const points = scoreForHit(kind, { counter });
+  scoreSession.bout.fightPoints += points;
+  scoreSession.bout.hits += 1;
+  if (!scoreSession.roundFirstHitDone) {
+    scoreSession.roundFirstHitDone = true;
+    scoreSession.bout.firstAttacks += 1;
+  }
+}
+
+function awardDizzyScore(attacker) {
+  if (rollbackResimulating || !scoreTrackingActive() || attacker?.side !== 0) return;
+  scoreSession.bout.dizzies += 1;
+}
+
+// Round-end bonuses, captured in finishRound (sim path, resim-guarded there).
+function captureRoundBonuses(winner, finisherType) {
+  if (!scoreTrackingActive() || winner !== 0) return;
+  const player = state.fighters[0];
+  scoreSession.bout.rounds += 1;
+  scoreSession.bout.timeSeconds += Math.max(0, Math.ceil(state.timer));
+  scoreSession.bout.vitality += Math.max(0, Math.round(player?.health || 0));
+  if ((player?.health ?? 0) >= 100) scoreSession.bout.perfects += 1;
+  if (finisherType >= 0) scoreSession.bout.fatalities += 1;
+}
+
+// Close out the finished bout: bank its multiplied total into the run score
+// and hand back the tally for the SF2 count-up screen.
+function finalizeBoutTally() {
+  if (!scoreTrackingActive()) return null;
+  const tally = scoreSession.bout;
+  const boutTotal = tallyTotal(tally, scoreSession.multiplier);
+  scoreSession.total += boutTotal;
+  scoreSession.boutCount += 1;
+  scoreSession.lastBout = tally;
+  scoreSession.lastBoutTotal = boutTotal;
+  scoreSession.bout = createBoutTally();
+  return { tally, boutTotal, runTotal: scoreSession.total, multiplier: scoreSession.multiplier };
+}
+
+function scoreSessionSnapshot() {
+  return {
+    active: scoreSession.active,
+    mode: scoreSession.mode,
+    detail: scoreSession.detail,
+    total: scoreSession.total,
+    boutCount: scoreSession.boutCount,
+    multiplier: scoreSession.multiplier,
+    bout: { ...scoreSession.bout },
+    lastBoutTotal: scoreSession.lastBoutTotal,
+    roundFirstHitDone: scoreSession.roundFirstHitDone,
+  };
+}
 
 function onlineSnapshot() {
   const rollback = onlineSession.rollback?.metrics() || null;
@@ -1105,6 +1357,7 @@ function endDemoSession() {
   document.body.classList.remove("demo-active");
   $("#demoHud").hidden = true;
   $("#demoResultStatus").hidden = true;
+  $("#attractScores").hidden = true;
   if (state.mode === "demo") state.mode = "arcade";
   if (state.musicChoice !== "auto") setTrack(Number(state.musicChoice), false);
 }
@@ -1127,8 +1380,13 @@ function startNextDemoMatch() {
   demoSession.matches += 1;
   demoSession.superSide = (cycle.cycle - 1) % 2;
   demoSession.superShown = false;
+  $("#attractScores").hidden = true;
   state.mode = "demo";
   state.arcadeRun = null;
+  state.survivalRun = null;
+  state.teamBattle = null;
+  dailySession.active = false;
+  endScoreRun();
   state.picks = picks;
   state.locks = [true, true];
   state.stage = cycle.stage;
@@ -1169,6 +1427,15 @@ function scheduleNextDemoMatch() {
   if (!demoSession.active) return;
   clearDemoResultTimer();
   $("#demoResultStatus").hidden = false;
+  // Release 1.8 GRIND: real-cabinet attract loop — while the idle demo holds
+  // its result, the local high-score table takes the screen.
+  if (demoSession.attract) {
+    const table = renderHighScoreBoard();
+    if (table.length) {
+      $("#attractScores").hidden = false;
+      modeFxDebug.attractScoreBoards += 1;
+    }
+  }
   demoSession.resultTimer = window.setTimeout(() => {
     demoSession.resultTimer = 0;
     startNextDemoMatch();
@@ -1716,7 +1983,11 @@ function validOnlineMatchConfig(config) {
     && Number.isInteger(config.inputDelay)
     && config.inputDelay >= 0
     && config.inputDelay <= 4
-    && config.controlStyles?.length === 2,
+    && config.controlStyles?.length === 2
+    // Optional shared House Rules: absent (plain rooms) or a list of known
+    // mutator ids agreed by both peers. Unknown ids reject the config.
+    && (config.mutators === undefined
+      || (Array.isArray(config.mutators) && config.mutators.every((id) => Boolean(MUTATORS[id])))),
   );
 }
 
@@ -1936,7 +2207,11 @@ function makeFighter(index, side, overrideDef = null) {
   const def = overrideDef || roster[index];
   const kitId = def.kitId || def.id;
   const kit = getFighterKit(kitId);
-  const movement = getFighterMovement(kitId, MOVEMENT_RULES);
+  // Release 1.8 GRIND: the Turbo mutator scales walk/dash speeds here, at
+  // build time. Movement is a derived-from-config reference (never cloned by
+  // the rollback snapshot), and mutators are constant for the whole match, so
+  // a rollback rebuild derives the identical object.
+  const movement = scaleMovementForRules(getFighterMovement(kitId, MOVEMENT_RULES), state.matchRules);
   return {
     def,
     kitId,
@@ -2002,6 +2277,9 @@ function makeFighter(index, side, overrideDef = null) {
     previousDirectionalInput: { left: false, right: false },
     justWoke: false,
     throwTechFlashFrames: 0,
+    // Release 1.8 GRIND: Block War walk-in target during the intro (plain
+    // data — snapshot-cloned like every other fighter field; null when idle).
+    introWalkTarget: null,
     // Personal throwable ammunition, refreshed at the start of every round.
     throwableUses: throwableUses(kitId),
     throwableSpawned: false,
@@ -3419,6 +3697,11 @@ function saveRollbackState() {
     hitstop: state.hitstop,
     matchSeed: state.matchSeed,
     lastImpactSide: state.lastImpactSide,
+    // Release 1.8 GRIND: House Rules config + the Sudden Death one-shot are
+    // sim inputs, so they live in the snapshot (matchRules is derived from
+    // mutators on restore rather than stored — single source of truth).
+    mutators: [...state.mutators],
+    suddenDeathHitDone: state.suddenDeathHitDone,
     rng: state.rng.getState(),
     visualRng: state.visualRng.getState(),
     fighters: state.fighters.map(saveRollbackFighter),
@@ -3453,6 +3736,11 @@ function restoreRollbackState(snapshot) {
   state.hitstop = snapshot.hitstop;
   state.matchSeed = snapshot.matchSeed;
   state.lastImpactSide = snapshot.lastImpactSide;
+  // Mutator config restores BEFORE the fighters: makeFighter derives movement
+  // from state.matchRules, so a mid-restore rebuild must see the right rules.
+  state.mutators = [...(snapshot.mutators || [])];
+  state.matchRules = resolveMatchRules(state.mutators);
+  state.suddenDeathHitDone = Boolean(snapshot.suddenDeathHitDone);
   state.rng.setState(snapshot.rng);
   state.visualRng.setState(snapshot.visualRng);
   for (let side = 0; side < 2; side += 1) {
@@ -3616,6 +3904,574 @@ function makeMatchFighters() {
   return [makeFighter(state.picks[0], 0), makeFighter(state.picks[1], 1, bossOverride)];
 }
 
+// ===========================================================================
+// Release 1.8 GRIND — mode flows: The Gauntlet (survival), Block War (3v3),
+// The Daily Jawn, House Rules mutators, and the SF2 tally / initials /
+// high-score loop. Sim-affecting values all flow through state.mutators →
+// state.matchRules (snapshotted config); everything else here is meta/UI.
+// ===========================================================================
+
+const FIGHTER_HOME_X = [355, 925];
+
+function rosterIndexById(id) {
+  return roster.findIndex((fighter) => fighter.id === id);
+}
+
+function roundsToWinValue() {
+  if (state.mode === "survival" || state.mode === "team") return 1;
+  return state.matchRules.roundsToWin || 2;
+}
+
+// The mutator set the NEXT match should run under. Online reads the shared
+// match config (plain rooms never set it — mutators stay gated out of online);
+// the daily forces its single seeded rule; versus and Block War read the
+// stage-select picker; every other mode is clean.
+function activeMutatorsForMatch() {
+  if (state.mode === "online") return state.mutators;
+  if (dailySession.active && state.mode === "arcade") return dailySession.plan?.mutator ? [dailySession.plan.mutator] : [];
+  if (state.mode === "versus" || state.mode === "team") return pendingMutators;
+  return [];
+}
+
+function applyMatchRulesForMatch() {
+  state.mutators = normalizeMutators(activeMutatorsForMatch());
+  state.matchRules = resolveMatchRules(state.mutators);
+  state.suddenDeathHitDone = false;
+}
+
+// Block War: incoming teammates start at the near arena edge and walk to
+// their slot during the intro. Fixed-dt math on snapshotted fields only.
+function updateIntroWalkIns(dt) {
+  for (const fighter of state.fighters) {
+    if (!Number.isFinite(fighter.introWalkTarget)) continue;
+    const speed = Math.max(220, Number(fighter.movement.forwardWalkSpeed) || 0);
+    const delta = fighter.introWalkTarget - fighter.x;
+    const step = Math.sign(delta) * speed * dt;
+    if (Math.abs(delta) <= Math.abs(step) + 1) {
+      fighter.x = fighter.introWalkTarget;
+      fighter.introWalkTarget = null;
+    } else {
+      fighter.x += step;
+      fighter.walkTime += dt * 2;
+    }
+  }
+}
+
+// Mode-specific fighter setup, applied right after makeMatchFighters() in
+// startMatch. Health carry-in, regen results and AI tuning are all sim inputs
+// derived from the run/battle config (never ad-hoc mid-round writes).
+function applyModeFighterSetup() {
+  if (state.mode === "survival" && state.survivalRun) {
+    const bout = currentSurvivalBout(state.survivalRun);
+    if (bout) {
+      state.fighters[0].health = clamp(bout.carryHealth, 1, 100);
+      state.fighters[1].aiBrain = createAiBrain(bout.difficultyId);
+    }
+  } else if (state.mode === "team" && state.teamBattle) {
+    const battle = state.teamBattle;
+    for (const side of [0, 1]) {
+      state.fighters[side].health = clamp(battle.carryHealth[side], 1, 100);
+      state.fighters[side].meter = clamp(battle.carryMeter[side], 0, GRIT_RULES.maximum);
+    }
+    const incomingSide = battle.lastElimination && !battle.lastElimination.over
+      ? battle.lastElimination.loserSide : -1;
+    if (incomingSide === 0 || incomingSide === 1) {
+      const fighter = state.fighters[incomingSide];
+      fighter.introWalkTarget = FIGHTER_HOME_X[incomingSide];
+      fighter.x = incomingSide === 0 ? MOVEMENT_RULES.stageMinX : MOVEMENT_RULES.stageMaxX;
+    }
+    if (battle.cpu) state.fighters[1].aiBrain = createAiBrain(state.aiDifficulty);
+  } else if (dailySession.active && state.mode === "arcade") {
+    // The Daily Jawn is identical everywhere: CPU difficulty is pinned to the
+    // plan's fixed tier regardless of the local difficulty setting.
+    state.fighters[1].aiBrain = createAiBrain(dailySession.plan?.difficulty || DAILY_RULES.difficulty);
+  }
+  if (state.matchRules.infiniteGrit) {
+    for (const fighter of state.fighters) fighter.meter = GRIT_RULES.maximum;
+  }
+}
+
+// --- Survival: The Gauntlet ------------------------------------------------
+
+function startSurvivalRun(fighterId, seed = null) {
+  state.mode = "survival";
+  state.arcadeRun = null;
+  state.teamBattle = null;
+  dailySession.active = false;
+  const runSeed = Number.isFinite(seed) ? Number(seed) >>> 0 : state.rng.nextUint32();
+  state.survivalRun = createSurvivalRun({
+    playerId: fighterId,
+    fighterIds: roster.map(({ id }) => id),
+    stageIds: Object.keys(stages),
+    seed: runSeed,
+  });
+  beginScoreRun("survival", `survival-${fighterId}`, currentSurvivalBout(state.survivalRun).multiplier);
+  prepareSurvivalBout();
+  startMatch(true);
+  return state.survivalRun;
+}
+
+function prepareSurvivalBout() {
+  const run = state.survivalRun;
+  const bout = currentSurvivalBout(run);
+  if (!run || !bout) return null;
+  registerAiDifficulty(bout.difficultyId, bout.difficultySettings);
+  state.picks[0] = Math.max(0, rosterIndexById(run.playerId));
+  state.picks[1] = Math.max(0, rosterIndexById(bout.opponentId));
+  state.locks = [true, true];
+  state.stage = bout.stage;
+  scoreSession.multiplier = bout.multiplier;
+  return bout;
+}
+
+function survivalBestSummary() {
+  return loadSurvivalBest();
+}
+
+function resolveSurvivalResult(winner) {
+  const run = state.survivalRun;
+  if (!run) {
+    showResult(winner);
+    return;
+  }
+  if (winner === 0) {
+    const tallyContext = finalizeBoutTally();
+    const outcome = recordSurvivalWin(run, state.fighters[0].health);
+    const best = loadSurvivalBest();
+    if (outcome.wins > best.streak) saveSurvivalBest({ ...best, streak: outcome.wins });
+    const proceed = () => {
+      prepareSurvivalBout();
+      startMatch(true);
+    };
+    const announceMilestone = () => {
+      if (!outcome.milestone) return;
+      modeFxDebug.survivalMilestones += 1;
+      announce(`${outcome.wins} STRAIGHT`, outcome.milestoneLine, 1.9);
+      announcerSay("perfect", { delay: 350 });
+    };
+    if (tallyContext) {
+      showBoutTally(tallyContext, proceed, {
+        title: `BOUT ${outcome.wins} CLEARED`,
+        sub: `${outcome.wins} WIN STREAK · NEXT: ${arcadeOpponentDef({ opponentId: outcome.next.opponentId })?.name || outcome.next.opponentId.toUpperCase()}`,
+        onShown: announceMilestone,
+      });
+    } else {
+      announceMilestone();
+      proceed();
+    }
+    return;
+  }
+  // Defeat: the run is over. Points earned during the losing bout still count
+  // (banked without a tally screen), then initials if the total charts.
+  recordSurvivalDefeat(run);
+  finalizeBoutTally();
+  const best = loadSurvivalBest();
+  saveSurvivalBest({
+    streak: Math.max(best.streak, run.wins),
+    score: Math.max(best.score, scoreSession.total),
+  });
+  scoreSession.detail = `survival-${run.wins}`;
+  maybeEnterInitials(() => showResult(winner));
+}
+
+// --- Team battle: Block War ------------------------------------------------
+
+function prepareTeamPairing() {
+  const battle = state.teamBattle;
+  const pair = currentTeamPair(battle);
+  if (!pair) return null;
+  state.picks[0] = Math.max(0, rosterIndexById(pair[0]));
+  state.picks[1] = Math.max(0, rosterIndexById(pair[1]));
+  state.locks = [true, true];
+  return pair;
+}
+
+function beginTeamBattle(cpuOpponent = false) {
+  state.teamBattle = createTeamBattle(state.teamPicks[0], state.teamPicks[1]);
+  state.teamBattle.cpu = Boolean(cpuOpponent);
+  prepareTeamPairing();
+  return state.teamBattle;
+}
+
+function resolveTeamResult(winner) {
+  const battle = state.teamBattle;
+  if (!battle) {
+    showResult(winner);
+    return;
+  }
+  const winnerFighter = state.fighters[winner];
+  const outcome = recordTeamKo(battle, winner, winnerFighter?.health || 0, winnerFighter?.meter || 0);
+  if (!outcome || outcome.over) {
+    showResult(winner);
+    return;
+  }
+  modeFxDebug.teamWalkIns += 1;
+  prepareTeamPairing();
+  startMatch(true);
+}
+
+// --- Daily challenge: The Daily Jawn ---------------------------------------
+
+function startDailyRun(dateOverride = null, { force = false } = {}) {
+  // The date string is computed ONCE here, render-side; the whole run derives
+  // from it (seed, fighter, opponents, stages, mutator) — never from a clock.
+  const date = dateOverride || dailyDateString();
+  const record = loadDailyRecord();
+  if (!force && !dateOverride && record?.date === date && record.played) {
+    updateDailyBanners();
+    refreshDailyUi();
+    sound("select");
+    return false;
+  }
+  const plan = createDailyPlan(date, roster.map(({ id }) => id));
+  dailySession.active = true;
+  dailySession.date = date;
+  dailySession.plan = plan;
+  dailySession.finished = false;
+  dailySession.outcome = null;
+  modeFxDebug.dailyRuns += 1;
+  endDemoSession();
+  state.mode = "arcade";
+  state.survivalRun = null;
+  state.teamBattle = null;
+  state.arcadeRun = plan.run;
+  state.picks = [Math.max(0, rosterIndexById(plan.fighterId)), 0];
+  state.locks = [true, true];
+  beginScoreRun("daily", `daily-${date}`, scoreDifficultyMultiplier(plan.difficulty));
+  prepareArcadeOpponent(true);
+  enterImmersiveMode();
+  unlockAudio();
+  startMatch(true);
+  return true;
+}
+
+function finishDailyRun(cleared) {
+  if (!dailySession.active || dailySession.finished) return null;
+  if (!cleared) finalizeBoutTally();
+  const run = state.arcadeRun;
+  const record = nextDailyRecord(loadDailyRecord(), {
+    date: dailySession.date,
+    score: scoreSession.total,
+    wins: run?.wins || 0,
+    bouts: run?.matches?.length || 8,
+    cleared,
+  });
+  saveDailyRecord(record);
+  dailySession.finished = true;
+  dailySession.outcome = {
+    cleared: Boolean(cleared),
+    score: scoreSession.total,
+    wins: run?.wins || 0,
+    bouts: run?.matches?.length || 8,
+    streak: record.streak,
+  };
+  scoreSession.detail = `daily-${dailySession.date}`;
+  updateDailyBanners();
+  refreshDailyUi();
+  return dailySession.outcome;
+}
+
+function dailyShareTextForOutcome() {
+  const outcome = dailySession.outcome;
+  if (!outcome) return "";
+  return dailyShareText({
+    date: dailySession.date,
+    fighterName: roster.find(({ id }) => id === dailySession.plan?.fighterId)?.name || dailySession.plan?.fighterId,
+    score: outcome.score,
+    wins: outcome.wins,
+    bouts: outcome.bouts,
+    cleared: outcome.cleared,
+    streak: outcome.streak,
+    mutator: dailySession.plan?.mutator,
+  });
+}
+
+async function shareDailyResult(button) {
+  const text = dailyShareTextForOutcome();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const scratch = document.createElement("textarea");
+    scratch.value = text;
+    document.body.append(scratch);
+    scratch.select();
+    document.execCommand("copy");
+    scratch.remove();
+  }
+  if (button) {
+    const label = button.dataset.label || button.textContent;
+    button.dataset.label = label;
+    button.textContent = "COPIED TO CLIPBOARD";
+    setTimeout(() => { button.textContent = label; }, 1400);
+  }
+}
+
+// Title-screen row state: fresh / completed + live streak readout.
+function refreshDailyUi() {
+  const status = $("#dailyStatus");
+  if (!status) return;
+  const today = dailyDateString();
+  const record = loadDailyRecord();
+  const playedToday = record?.date === today && record.played;
+  const liveStreak = record && (record.date === today || record.lastClearedDate === previousDateString(today))
+    ? record.streak : 0;
+  if (playedToday) {
+    status.textContent = `DONE · ${Math.round(record.score).toLocaleString("en-US")} PTS${liveStreak > 0 ? ` · STREAK ${liveStreak}` : ""}`;
+    $("#dailyButton")?.classList.add("daily-done");
+  } else {
+    status.textContent = `${today} · FRESH JAWN${liveStreak > 0 ? ` · STREAK ${liveStreak}` : ""}`;
+    $("#dailyButton")?.classList.remove("daily-done");
+  }
+}
+
+function updateDailyBanners() {
+  const visible = dailySession.finished && Boolean(dailySession.outcome);
+  for (const id of ["#dailyResultBanner", "#dailyEndingBanner"]) {
+    const banner = $(id);
+    if (!banner) continue;
+    banner.hidden = !visible;
+    if (!visible) continue;
+    const outcome = dailySession.outcome;
+    banner.querySelector("b").textContent = `DAILY JAWN ${dailySession.date} · ${outcome.cleared ? "CLEARED" : `OUT AT ${outcome.wins}/${outcome.bouts}`}`;
+    banner.querySelector("em").textContent = `${Math.round(outcome.score).toLocaleString("en-US")} PTS${outcome.streak > 0 ? ` · STREAK ${outcome.streak}` : ""}${dailySession.plan?.mutator ? ` · ${MUTATORS[dailySession.plan.mutator].name}` : ""}`;
+  }
+}
+
+// --- SF2 tally screen ------------------------------------------------------
+
+function showBoutTally(context, onContinue, { title = "BOUT CLEARED", sub = "", onShown = null } = {}) {
+  tallyUi.active = true;
+  tallyUi.rows = tallyRows(context.tally);
+  tallyUi.total = context.boutTotal;
+  tallyUi.runTotal = context.runTotal;
+  tallyUi.multiplier = context.multiplier;
+  tallyUi.done = false;
+  tallyUi.onContinue = onContinue;
+  tallyUi.startedAt = performance.now();
+  tallyUi.lastTickedRow = -1;
+  modeFxDebug.tallyScreens += 1;
+  $("#tallyTitle").textContent = title;
+  $("#tallySub").textContent = sub || `DIFFICULTY ×${context.multiplier}`;
+  $("#tallyRows").innerHTML = tallyUi.rows.map((row) => `
+    <div class="tally-row" data-row="${row.id}">
+      <span>${row.label}</span>
+      <small>${row.count > 0 ? `× ${row.count}` : "—"}</small>
+      <b data-points="${row.points}">0</b>
+    </div>`).join("");
+  $("#tallyMultiplier").textContent = `DIFFICULTY MULTIPLIER ×${context.multiplier}`;
+  $("#tallyBoutTotal").textContent = "0";
+  $("#tallyRunTotal").textContent = Math.round(context.runTotal - context.boutTotal).toLocaleString("en-US");
+  showScreen("tally");
+  restartCssAnimation($("#tallyScreen").querySelector(".tally-panel"), "enter");
+  if (onShown) onShown();
+  requestAnimationFrame(stepTallyCountUp);
+}
+
+// Count-up: each row ticks up on a short stagger, then the multiplied bout
+// total and run total land. A button press mid-count snaps to the final
+// numbers; the next press continues. Reduced motion resolves instantly.
+function stepTallyCountUp() {
+  if (!tallyUi.active || state.screen !== "tally") return;
+  const reduced = state.accessibility.reducedMotion;
+  const elapsed = (performance.now() - tallyUi.startedAt) / 1000;
+  const rowSlot = 0.16;
+  const rowDuration = 0.42;
+  const rowElements = $$("#tallyRows .tally-row");
+  let allDone = true;
+  rowElements.forEach((element, index) => {
+    const points = Number(element.querySelector("b").dataset.points) || 0;
+    const progress = reduced ? 1 : clamp((elapsed - index * rowSlot) / rowDuration, 0, 1);
+    if (progress < 1) allDone = false;
+    element.classList.toggle("counting", progress > 0 && progress < 1);
+    element.classList.toggle("landed", progress >= 1);
+    element.querySelector("b").textContent = Math.round(points * progress).toLocaleString("en-US");
+    if (progress >= 1 && tallyUi.lastTickedRow < index) {
+      tallyUi.lastTickedRow = index;
+      if (points > 0 && !reduced) sound("select");
+    }
+  });
+  const totalStart = reduced ? 0 : rowElements.length * rowSlot + rowDuration;
+  const totalProgress = reduced ? 1 : clamp((elapsed - totalStart) / 0.5, 0, 1);
+  $("#tallyBoutTotal").textContent = Math.round(tallyUi.total * totalProgress).toLocaleString("en-US");
+  const runBase = tallyUi.runTotal - tallyUi.total;
+  $("#tallyRunTotal").textContent = Math.round(runBase + tallyUi.total * totalProgress).toLocaleString("en-US");
+  if (allDone && totalProgress >= 1) {
+    if (!tallyUi.done) {
+      tallyUi.done = true;
+      modeFxDebug.tallyCountUps += 1;
+      $("#tallyContinueButton").classList.add("ready");
+    }
+    return;
+  }
+  requestAnimationFrame(stepTallyCountUp);
+}
+
+function tallyContinue() {
+  if (!tallyUi.active) return false;
+  if (!tallyUi.done) {
+    // First press: snap the count-up to its final numbers, resolved
+    // synchronously so the CONTINUE button arms immediately (and scripted
+    // probes can press straight through without waiting on a rAF).
+    tallyUi.startedAt = -Infinity;
+    stepTallyCountUp();
+    return true;
+  }
+  tallyUi.active = false;
+  $("#tallyContinueButton").classList.remove("ready");
+  const proceed = tallyUi.onContinue;
+  tallyUi.onContinue = null;
+  sound("select");
+  if (proceed) proceed();
+  return true;
+}
+
+// --- Initials entry + high-score table -------------------------------------
+
+function maybeEnterInitials(onDone) {
+  const score = Math.round(scoreSession.total);
+  if (!highScoreQualifies(loadHighScores(), score)) {
+    onDone();
+    return;
+  }
+  initialsUi.active = true;
+  initialsUi.score = score;
+  initialsUi.cursor = 0;
+  initialsUi.letters = normalizeInitials(localStorage.getItem(SCORE_INITIALS_KEY) || "AAA").split("");
+  initialsUi.onDone = onDone;
+  modeFxDebug.initialsEntries += 1;
+  $("#initialsScore").textContent = `${score.toLocaleString("en-US")} PTS`;
+  $("#initialsMode").textContent = scoreSession.mode === "survival"
+    ? "THE GAUNTLET" : scoreSession.mode === "daily" ? "DAILY JAWN" : "ARCADE";
+  renderInitials();
+  showScreen("initials");
+}
+
+function renderInitials() {
+  $$("#initialsSlots .initials-slot").forEach((slot, index) => {
+    slot.textContent = initialsUi.letters[index] || "A";
+    slot.classList.toggle("cursor", initialsUi.active && index === initialsUi.cursor);
+  });
+}
+
+const INITIALS_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+function cycleInitialLetter(direction) {
+  const current = initialsUi.letters[initialsUi.cursor] || "A";
+  const index = (INITIALS_ALPHABET.indexOf(current) + direction + INITIALS_ALPHABET.length) % INITIALS_ALPHABET.length;
+  initialsUi.letters[initialsUi.cursor] = INITIALS_ALPHABET[index];
+  renderInitials();
+}
+
+function commitInitials() {
+  if (!initialsUi.active) return false;
+  const initials = normalizeInitials(initialsUi.letters.join(""));
+  try {
+    localStorage.setItem(SCORE_INITIALS_KEY, initials);
+  } catch { /* non-fatal */ }
+  const { list } = insertHighScore(loadHighScores(), {
+    initials,
+    score: initialsUi.score,
+    mode: scoreSession.mode || "arcade",
+    detail: scoreSession.detail,
+    date: dailySession.finished ? dailySession.date : dailyDateString(),
+  });
+  saveHighScores(list);
+  // Optional first-party leaderboard: offline-first, silent on any failure.
+  submitScoreToWorker(initials, initialsUi.score, `${scoreSession.mode}:${scoreSession.detail}`);
+  initialsUi.active = false;
+  const done = initialsUi.onDone;
+  initialsUi.onDone = null;
+  sound("select");
+  if (done) done();
+  else showScreen("title");
+  return true;
+}
+
+function handleInitialsKey(event) {
+  if (state.screen !== "initials" || !initialsUi.active) return false;
+  const { code } = event;
+  if (/^Key[A-Z]$/.test(code)) {
+    initialsUi.letters[initialsUi.cursor] = code.slice(3);
+    initialsUi.cursor = Math.min(2, initialsUi.cursor + 1);
+  } else if (/^Digit\d$/.test(code)) {
+    initialsUi.letters[initialsUi.cursor] = code.slice(5);
+    initialsUi.cursor = Math.min(2, initialsUi.cursor + 1);
+  } else if (code === "ArrowLeft") initialsUi.cursor = Math.max(0, initialsUi.cursor - 1);
+  else if (code === "ArrowRight") initialsUi.cursor = Math.min(2, initialsUi.cursor + 1);
+  else if (code === "ArrowUp") cycleInitialLetter(1);
+  else if (code === "ArrowDown") cycleInitialLetter(-1);
+  else if (code === "Backspace") {
+    initialsUi.letters[initialsUi.cursor] = "A";
+    initialsUi.cursor = Math.max(0, initialsUi.cursor - 1);
+  } else if (["Enter", "Space", "Escape"].includes(code)) {
+    commitInitials();
+    return true;
+  } else return false;
+  event.preventDefault();
+  renderInitials();
+  return true;
+}
+
+function handleTallyKey(event) {
+  if (state.screen !== "tally" || !tallyUi.active) return false;
+  if (!["Enter", "Space", "Escape", "KeyJ", "KeyK"].includes(event.code)) return false;
+  event.preventDefault();
+  tallyContinue();
+  return true;
+}
+
+function renderHighScoreBoard(container) {
+  const table = loadHighScores();
+  const target = container || $("#attractScoresRows");
+  if (!target) return table;
+  target.innerHTML = table.length
+    ? table.map((row, index) => `
+      <div class="attract-score-row${index === 0 ? " top" : ""}">
+        <span>${String(index + 1).padStart(2, "0")}</span>
+        <b>${row.initials}</b>
+        <em>${row.mode === "survival" ? "GAUNTLET" : row.mode === "daily" ? "DAILY" : "ARCADE"}</em>
+        <strong>${Math.round(row.score).toLocaleString("en-US")}</strong>
+      </div>`).join("")
+    : `<div class="attract-score-row empty"><b>NO SCORES YET</b><strong>BE FIRST</strong></div>`;
+  return table;
+}
+
+// --- Mutator picker (versus / Block War stage select) ----------------------
+
+function renderMutatorBar() {
+  const bar = $("#mutatorBar");
+  if (!bar) return;
+  const available = ["versus", "team"].includes(state.mode);
+  bar.hidden = !available;
+  if (!available) return;
+  const options = $("#mutatorOptions");
+  if (!options.childElementCount) {
+    options.innerHTML = MUTATOR_ORDER.map((id) => `
+      <button type="button" class="mutator-chip" data-mutator="${id}" title="${MUTATORS[id].blurb}">
+        <b>${MUTATORS[id].name}</b><small>${MUTATORS[id].blurb}</small>
+      </button>`).join("");
+    options.querySelectorAll(".mutator-chip").forEach((chip) => {
+      chip.addEventListener("click", () => toggleMutator(chip.dataset.mutator));
+    });
+  }
+  options.querySelectorAll(".mutator-chip").forEach((chip) => {
+    chip.classList.toggle("selected", pendingMutators.includes(chip.dataset.mutator));
+  });
+  $("#mutatorHint").textContent = pendingMutators.length
+    ? `HOUSE RULES ON: ${mutatorLabel(pendingMutators)}`
+    : "OPTIONAL HOUSE RULES · STACK AS MANY AS YOU WANT";
+}
+
+function toggleMutator(id) {
+  if (!MUTATORS[id]) return;
+  pendingMutators = pendingMutators.includes(id)
+    ? pendingMutators.filter((existing) => existing !== id)
+    : normalizeMutators([...pendingMutators, id]);
+  sound("select");
+  renderMutatorBar();
+}
+
 function showScreen(name) {
   if (demoSession.active && !["fight", "result"].includes(name)) endDemoSession();
   const keepsOnlineLink = state.mode === "online" && ["online", "fight", "result"].includes(name);
@@ -3644,15 +4500,24 @@ function showScreen(name) {
   updateOnlineHud();
   updateDemoUi();
   syncMusic();
-  if (name === "title") scheduleIdleDemo();
-  else clearIdleDemoTimer();
+  if (name === "title") {
+    refreshDailyUi();
+    scheduleIdleDemo();
+  } else clearIdleDemoTimer();
+  if (name !== "result" && name !== "ending") updateDailyBanners();
+  if (name === "stage") renderMutatorBar();
 }
 
 function startSelect(mode) {
   enterImmersiveMode();
   unlockAudio();
-  state.mode = ["arcade", "versus", "training"].includes(mode) ? mode : "arcade";
+  state.mode = ["arcade", "versus", "training", "survival", "team"].includes(mode) ? mode : "arcade";
   state.arcadeRun = null;
+  state.survivalRun = null;
+  state.teamBattle = null;
+  state.teamPicks = [[], []];
+  dailySession.active = false;
+  endScoreRun();
   if (state.mode === "training") {
     // A fresh lab entry keeps accessibility-style toggles but clears transient
     // playback, trial and dummy state so an old recording cannot move P2 during
@@ -3664,11 +4529,15 @@ function startSelect(mode) {
     });
   }
   state.picks = [0, state.mode === "arcade" ? 4 : 1];
-  state.locks = [false, state.mode === "arcade"];
+  state.locks = [false, state.mode === "arcade" || state.mode === "survival"];
   state.selectingPlayer = 0;
   $("#selectPrompt").textContent = state.mode === "training"
     ? "CHOOSE YOUR TRAINING FIGHTER"
-    : "PLAYER 1 — CHOOSE";
+    : state.mode === "survival"
+      ? "THE GAUNTLET — CHOOSE YOUR FIGHTER"
+      : state.mode === "team"
+        ? "BLOCK WAR · PLAYER 1 — PICK 3 (1/3)"
+        : "PLAYER 1 — CHOOSE";
   showScreen("select");
   syncDifficultyUi();
   updateRosterUI();
@@ -3676,6 +4545,47 @@ function startSelect(mode) {
 
 function chooseFighter(index) {
   unlockAudio();
+  if (state.mode === "survival") {
+    // The Gauntlet: one pick, straight into bout 1 — no stage select, the
+    // seeded ladder owns the route.
+    state.picks[0] = index;
+    state.locks = [true, true];
+    sound("select");
+    const lockedCard = $(`.fighter-card[data-index="${index}"]`);
+    if (lockedCard) {
+      restartCssAnimation(lockedCard, "locked-flash");
+      hudFxDebug.selectSlams += 1;
+    }
+    announcerSay(`${roster[index].id}-name`);
+    startSurvivalRun(roster[index].id);
+    return;
+  }
+  if (state.mode === "team") {
+    const side = state.locks[0] ? 1 : 0;
+    const team = state.teamPicks[side];
+    if (team.includes(roster[index].id) || team.length >= TEAM_RULES.teamSize) return;
+    team.push(roster[index].id);
+    state.picks[side] = index;
+    state.selectingPlayer = side;
+    if (team.length >= TEAM_RULES.teamSize) {
+      state.locks[side] = true;
+      state.selectingPlayer = 1;
+    }
+    $("#selectPrompt").textContent = state.locks[0] && state.locks[1]
+      ? "BLOCK WAR · TEAMS SET — STAGE SELECT"
+      : state.locks[0]
+        ? `BLOCK WAR · PLAYER 2 — PICK 3 (${state.teamPicks[1].length + 1}/3)`
+        : `BLOCK WAR · PLAYER 1 — PICK 3 (${state.teamPicks[0].length + 1}/3)`;
+    sound("select");
+    const lockedCard = $(`.fighter-card[data-index="${index}"]`);
+    if (lockedCard) {
+      restartCssAnimation(lockedCard, "locked-flash");
+      hudFxDebug.selectSlams += 1;
+    }
+    if (!(state.locks[0] && state.locks[1])) announcerSay(`${roster[index].id}-name`);
+    updateRosterUI();
+    return;
+  }
   if (state.mode === "arcade") {
     state.picks[0] = index;
     state.locks = [true, true];
@@ -3684,6 +4594,8 @@ function chooseFighter(index) {
       roster.map(({ id }) => id),
       state.rng.nextUint32(),
     );
+    // Release 1.8 GRIND: every arcade run is a score-attack run.
+    beginScoreRun("arcade", `arcade-${roster[index].id}`, scoreDifficultyMultiplier(state.aiDifficulty));
     prepareArcadeOpponent(false);
   } else if (!state.locks[0]) {
     state.picks[0] = index;
@@ -3711,14 +4623,22 @@ function chooseFighter(index) {
 }
 
 function updateRosterUI() {
+  const teamMode = state.mode === "team";
   $$(".fighter-card").forEach((card) => {
     const index = Number(card.dataset.index);
-    card.classList.toggle("p1-pick", state.locks[0] && state.picks[0] === index);
-    card.classList.toggle("p2-pick", state.locks[1] && state.picks[1] === index);
+    const id = roster[index]?.id;
+    card.classList.toggle("p1-pick", teamMode
+      ? state.teamPicks[0].includes(id)
+      : state.locks[0] && state.picks[0] === index);
+    card.classList.toggle("p2-pick", teamMode
+      ? state.teamPicks[1].includes(id)
+      : state.locks[1] && state.picks[1] === index);
     card.classList.toggle("focused", !state.locks[state.selectingPlayer] && state.picks[state.selectingPlayer] === index);
   });
   const readout = $("#selectionReadout");
-  readout.innerHTML = `<span>P1</span> <b class="vs-name p1n">${roster[state.picks[0]].name}</b> <i>VS</i> <span>P2</span> <b class="vs-name p2n">${roster[state.picks[1]].name}</b>`;
+  readout.innerHTML = teamMode
+    ? `<span>P1</span> <b class="vs-name p1n">${state.teamPicks[0].map((id) => roster[rosterIndexById(id)].mark).join("·") || "—"}</b> <i>VS</i> <span>P2</span> <b class="vs-name p2n">${state.teamPicks[1].map((id) => roster[rosterIndexById(id)].mark).join("·") || "—"}</b>`
+    : `<span>P1</span> <b class="vs-name p1n">${roster[state.picks[0]].name}</b> <i>VS</i> <span>P2</span> <b class="vs-name p2n">${roster[state.picks[1]].name}</b>`;
   const bothLocked = state.locks[0] && state.locks[1];
   readout.classList.toggle("both-locked", bothLocked);
   // VS slam: once both slots lock, the two names slam in from the sides
@@ -3768,8 +4688,22 @@ function startMatch(resetSet = true) {
   }
   state.matchSerial += 1;
   state.qaManualMode = false;
+  // Release 1.8 GRIND: build the Block War roster on the first FIGHT press,
+  // then lock the House Rules config for this match BEFORE the fighters are
+  // built (Turbo scales movement at makeFighter time).
+  if (state.mode === "team" && !state.teamBattle && state.teamPicks[0].length === TEAM_RULES.teamSize) {
+    beginTeamBattle(false);
+  }
+  applyMatchRulesForMatch();
+  resetRoundScoreTracking();
+  // Arcade bouts score against the CURRENT difficulty setting; survival and
+  // the daily pin their own multipliers when they prepare the bout.
+  if (scoreSession.active && scoreSession.mode === "arcade" && state.mode === "arcade") {
+    scoreSession.multiplier = scoreDifficultyMultiplier(state.aiDifficulty);
+  }
   seedMatch(state.round);
   state.fighters = makeMatchFighters();
+  applyModeFighterSetup();
   resetStageWeapon();
   resetCrowd();
   warmFighterAudio();
@@ -3808,10 +4742,28 @@ function startMatch(resetSet = true) {
   showScreen("fight");
   updateTrainingUi();
   const arcadeMatch = state.mode === "arcade" ? currentArcadeMatch(state.arcadeRun) : null;
-  const introLabel = arcadeMatch?.kind === "boss" ? "FINAL BOUT · THE COMMISSIONER"
+  let introLabel = arcadeMatch?.kind === "boss" ? "FINAL BOUT · THE COMMISSIONER"
     : arcadeMatch?.kind === "rival" ? `RIVAL BOUT · ${state.fighters[1].def.name}`
       : stages[state.stage].name;
-  announce(`ROUND ${state.round}`, introLabel, 1.2);
+  let introMain = `ROUND ${state.round}`;
+  // Release 1.8 GRIND: mode-flavoured intro banners. Survival counts bouts,
+  // Block War calls the pairing (and the walk-in), active House Rules get
+  // named, and a walked-in teammate gets their name-call intro voice cue.
+  if (state.mode === "survival" && state.survivalRun) {
+    const bout = currentSurvivalBout(state.survivalRun);
+    introMain = `BOUT ${(bout?.index ?? 0) + 1}`;
+    introLabel = `${state.fighters[1].def.name} · ${state.survivalRun.wins} WIN STREAK`;
+  } else if (state.mode === "team" && state.teamBattle) {
+    const battle = state.teamBattle;
+    const incoming = battle.lastElimination?.incomingId;
+    introMain = `BOUT ${battle.bout}`;
+    introLabel = incoming
+      ? `${roster[rosterIndexById(incoming)]?.name || incoming} STEPS IN · ${teamFightersRemaining(battle, 0)}V${teamFightersRemaining(battle, 1)}`
+      : `BLOCK WAR · ${teamFightersRemaining(battle, 0)}V${teamFightersRemaining(battle, 1)}`;
+    if (incoming) announcerSay(`${incoming}-name`, { delay: 300 });
+  }
+  if (state.mutators.length) introLabel = `${introLabel} · ${mutatorLabel(state.mutators)}`;
+  announce(introMain, introLabel, 1.2);
   // Wave 9: the arcade final boss bout gets its own announcer intro, queued
   // behind ROUND 1 / FIGHT via the announcer busy window.
   if (arcadeMatch?.kind === "boss") {
@@ -3831,6 +4783,16 @@ function startOnlineMatch(config) {
   resetMusicDuck();
   state.mode = "online";
   state.arcadeRun = null;
+  state.survivalRun = null;
+  state.teamBattle = null;
+  dailySession.active = false;
+  endScoreRun();
+  // Release 1.8 GRIND: mutators only run online when BOTH sides carry them in
+  // the shared match config. The lobby never offers them, so plain/ranked
+  // rooms always derive the clean default rules on both peers.
+  state.mutators = normalizeMutators(config.mutators || []);
+  state.matchRules = resolveMatchRules(state.mutators);
+  state.suddenDeathHitDone = false;
   state.qaManualMode = false;
   state.paused = false;
   onlineSession.matchConfig = cloneRollbackValue(config);
@@ -3903,11 +4865,16 @@ function resetRound() {
   const carriedGrit = state.fighters.map((fighter) => fighter.meter);
   state.round += 1;
   state.qaManualMode = false;
+  // Release 1.8 GRIND: per-round sim/meta resets — the Sudden Death one-shot
+  // re-arms (sim state) and the FIRST ATTACK score flag re-arms (meta).
+  state.suddenDeathHitDone = false;
+  resetRoundScoreTracking();
   if (state.mode === "online") seedOnlineRound(state.round);
   else seedMatch(state.round);
   state.fighters = makeMatchFighters();
   warmFighterAudio();
   state.fighters.forEach((fighter, side) => { fighter.meter = carriedGrit[side] || 0; });
+  if (state.matchRules.infiniteGrit) state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
   resetStageWeapon();
   resetCrowd();
   clearBattleDamage();
@@ -3981,18 +4948,36 @@ function updateFlowSkipHint() {
   $("#flowSkipHint").hidden = !visible;
 }
 
+// Release 1.8 GRIND: only HUMAN inputs may skip the intro/round-over flow. A
+// CPU pressing buttons (arcade zoners, survival, Block War, demo) used to
+// fast-forward straight through — which would eat the new elimination
+// callouts and team walk-ins entirely.
+function sideIsCpuControlled(side) {
+  if (state.mode === "demo" || state.mode === "tournament") return true;
+  if (side !== 1) return false;
+  return state.mode === "arcade"
+    || state.mode === "survival"
+    || (state.mode === "team" && Boolean(state.teamBattle?.cpu))
+    || (state.mode === "training" && state.training.dummyMode === "cpu");
+}
+
 function trySkipFightFlow(input0 = {}, input1 = {}) {
-  if (!hasFlowSkipInput(input0) && !hasFlowSkipInput(input1)) return false;
-  // In the CPU-only modes the "any button" here is the AI mashing, and a
-  // finisher is the thing being exhibited — the showcase must never cancel
-  // itself. (Before inputs flowed through hitstop this was only ever
-  // protected by decision-cadence luck.) A human watching a demo leaves via
-  // the real exit path, which does not come through the simulation inputs.
+  const humanInput0 = sideIsCpuControlled(0) ? {} : input0;
+  const humanInput1 = sideIsCpuControlled(1) ? {} : input1;
+  if (!hasFlowSkipInput(humanInput0) && !hasFlowSkipInput(humanInput1)) return false;
+  // In the CPU-only modes a finisher is the thing being exhibited — the
+  // showcase must never cancel itself. The CPU-input filter above already
+  // covers demo and tournament; kept as belt-and-braces.
   if (state.phase === "roundover" && state.finisher
     && (state.mode === "demo" || state.mode === "tournament")) return false;
   if (state.phase === "intro") {
     state.phase = "fight";
     state.phaseTime = 0;
+    // A skipped intro lands any Block War walk-in on their slot instantly.
+    for (const fighter of state.fighters) {
+      if (Number.isFinite(fighter.introWalkTarget)) fighter.x = fighter.introWalkTarget;
+      fighter.introWalkTarget = null;
+    }
     cancelFightAnnouncement();
     announce("FIGHT!", "INTRO SKIPPED", 0.55);
     updateFlowSkipHint();
@@ -4035,6 +5020,25 @@ function finishRound(winner, type = -1) {
   // Wave 9: round-story callouts (FLAWLESS / COMEBACK / time-over / fatality)
   // layered after the primary call — guarded + deduped like announce().
   if (!rollbackResimulating) queueStoryCallouts(winner, type);
+  // Release 1.8 GRIND: bank the SF2 tally bonuses for this round (score is
+  // meta, tracked outside the checksummed state) and, in Block War, layer the
+  // elimination callout behind the KO banner via the announcer busy window.
+  if (!rollbackResimulating) {
+    captureRoundBonuses(winner, type);
+    if (state.mode === "team" && state.teamBattle && !state.teamBattle.over) {
+      const loserDef = state.fighters[1 - winner].def;
+      const remaining = teamFightersRemaining(state.teamBattle, 1 - winner) - 1;
+      const line = TEAM_ELIMINATION_LINES[
+        (state.teamBattle.eliminated[0].length + state.teamBattle.eliminated[1].length) % TEAM_ELIMINATION_LINES.length
+      ];
+      modeFxDebug.teamEliminations += 1;
+      scheduleFightAnnouncement(() => {
+        if (state.screen === "fight" && state.phase === "roundover") {
+          announce(`${loserDef.name} ELIMINATED`, remaining > 0 ? line : "LAST ONE DOWN · BLOCK WAR OVER", 1.7);
+        }
+      }, 2550);
+    }
+  }
   updateFlowSkipHint();
   updateHud();
 }
@@ -4582,22 +5586,39 @@ function showResult(winner) {
   updateFlowSkipHint();
   const def = state.fighters[winner].def;
   const kit = getFighterKit(def.kitId || def.id);
-  const arcadeDefeat = state.mode === "arcade" && winner === 1 && state.arcadeRun;
+  const dailyOver = dailySession.active && dailySession.finished;
+  const arcadeDefeat = state.mode === "arcade" && winner === 1 && state.arcadeRun && !dailyOver;
+  const survivalOver = state.mode === "survival" && state.survivalRun?.over;
+  const teamOver = state.mode === "team" && state.teamBattle?.over;
   $("#resultEyebrow").textContent = state.mode === "demo" ? `WATCH DEMO · CYCLE ${demoSession.cycle?.cycle || 1}`
-    : arcadeDefeat ? "ARCADE RUN INTERRUPTED" : "MATCH COMPLETE";
-  $("#resultTitle").textContent = `${def.name} WINS`;
-  $("#resultFinisher").textContent = arcadeDefeat
-    ? `${currentArcadeMatch(state.arcadeRun)?.label || "BOUT"} · CONTINUE?`
-    : state.finisherType >= 0 ? def.finishers[state.finisherType] : "KNOCKOUT";
+    : survivalOver ? "THE GAUNTLET · RUN ENDED"
+      : teamOver ? "BLOCK WAR · 3V3 SETTLED"
+        : dailyOver ? "THE DAILY JAWN · ONE SHOT A DAY"
+          : arcadeDefeat ? "ARCADE RUN INTERRUPTED" : "MATCH COMPLETE";
+  $("#resultTitle").textContent = teamOver ? `TEAM P${state.teamBattle.winnerSide + 1} WINS` : `${def.name} WINS`;
+  $("#resultFinisher").textContent = survivalOver
+    ? `${state.survivalRun.wins} WINS · ${Math.round(scoreSession.total).toLocaleString("en-US")} PTS · BEST ${survivalBestSummary().streak}`
+    : teamOver
+      ? `${def.name} HOLDS THE BLOCK · ${teamFightersRemaining(state.teamBattle, state.teamBattle.winnerSide)} STILL STANDING`
+      : dailyOver
+        ? `${dailySession.outcome?.cleared ? "CLEARED" : "RUN OVER"} · ${Math.round(scoreSession.total).toLocaleString("en-US")} PTS`
+        : arcadeDefeat
+          ? `${currentArcadeMatch(state.arcadeRun)?.label || "BOUT"} · CONTINUE?`
+          : state.finisherType >= 0 ? def.finishers[state.finisherType] : "KNOCKOUT";
   const victoryPose = $("#victoryPose");
   victoryPose.classList.toggle("portrait-art", !kit || def.boss);
   victoryPose.style.backgroundImage = kit && !def.boss
     ? `url("assets/moves/${def.id}-specials.webp")`
     : `url("assets/fighters/${def.id}.webp")`;
   $("#resultQuote").textContent = def.victoryQuote || kit?.victory.quote || "PHILLY REMEMBERS THE WINNER.";
-  $("#rematchButton").textContent = arcadeDefeat ? "CONTINUE" : state.mode === "online" ? "REQUEST REMATCH" : "INSTANT REMATCH";
-  $("#reselectButton").textContent = arcadeDefeat ? "ABANDON RUN" : state.mode === "online" ? "LEAVE ROOM" : "SELECT FIGHTERS";
+  $("#rematchButton").textContent = survivalOver ? "NEW GAUNTLET RUN"
+    : teamOver ? "REMATCH · SAME TEAMS"
+      : dailyOver ? "BACK TO TITLE"
+        : arcadeDefeat ? "CONTINUE" : state.mode === "online" ? "REQUEST REMATCH" : "INSTANT REMATCH";
+  $("#reselectButton").textContent = arcadeDefeat ? "ABANDON RUN"
+    : state.mode === "online" ? "LEAVE ROOM" : "SELECT FIGHTERS";
   $("#newStageButton").hidden = state.mode !== "versus";
+  updateDailyBanners();
   showScreen("result");
   // Victory entrance: pose rises from the bottom edge, the WINS title slams
   // in with a scale-settle, the finisher name stamps down last, and a light
@@ -4660,25 +5681,55 @@ function showArcadeEnding() {
   $("#endingStory").textContent = ending.story;
   $("#endingArt").style.backgroundImage = `url("assets/moves/${def.id}-specials.webp")`;
   renderArcadeRoute();
+  updateDailyBanners();
   showScreen("ending");
 }
 
 function resolveMatchResult(winner) {
+  // Release 1.8 GRIND: mode routing. Survival and Block War resolve their
+  // single-round bouts here; arcade (and the Daily Jawn riding it) keeps the
+  // ladder flow but gains the SF2 tally + initials loop.
+  if (state.mode === "survival" && state.survivalRun) {
+    resolveSurvivalResult(winner);
+    return;
+  }
+  if (state.mode === "team" && state.teamBattle) {
+    resolveTeamResult(winner);
+    return;
+  }
   if (state.mode !== "arcade" || !state.arcadeRun) {
     showResult(winner);
     return;
   }
   const outcome = recordArcadeResult(state.arcadeRun, winner === 0);
   if (winner !== 0) {
+    // The Daily Jawn is one attempt — a defeat ends the run (score recorded,
+    // streak broken) with no continues, then initials if the total charts.
+    if (dailySession.active && !dailySession.finished) {
+      finishDailyRun(false);
+      maybeEnterInitials(() => showResult(winner));
+      return;
+    }
     showResult(winner);
     return;
   }
-  if (outcome.completed) {
-    showArcadeEnding();
-    return;
-  }
-  prepareArcadeOpponent(true);
-  showArcadeLadder(outcome.match);
+  const tallyContext = finalizeBoutTally();
+  const proceed = () => {
+    if (outcome.completed) {
+      if (dailySession.active && !dailySession.finished) finishDailyRun(true);
+      maybeEnterInitials(() => showArcadeEnding());
+      return;
+    }
+    prepareArcadeOpponent(true);
+    showArcadeLadder(outcome.match);
+  };
+  if (tallyContext) {
+    const cleared = arcadeOpponentDef(outcome.match)?.name || "";
+    showBoutTally(tallyContext, proceed, {
+      title: outcome.completed ? "ARCADE CLEARED" : `${outcome.match.label} CLEARED`,
+      sub: cleared ? `${cleared} DEFEATED · ×${tallyContext.multiplier} DIFFICULTY` : "",
+    });
+  } else proceed();
 }
 
 function updateHud() {
@@ -4740,8 +5791,12 @@ function updateHud() {
     }
   }
   if (!timerLow) timerEl.classList.remove("tick");
+  const battle = state.teamBattle;
   $("#roundLabel").textContent = state.mode === "training" ? "TRAINING"
-    : state.mode === "demo" ? `DEMO · ROUND ${state.round}` : `ROUND ${state.round}`;
+    : state.mode === "demo" ? `DEMO · ROUND ${state.round}`
+      : state.mode === "survival" ? `GAUNTLET · BOUT ${(currentSurvivalBout(state.survivalRun)?.index ?? 0) + 1}`
+        : state.mode === "team" && battle ? `BLOCK WAR · ${teamFightersRemaining(battle, 0)}V${teamFightersRemaining(battle, 1)}`
+          : `ROUND ${state.round}`;
   const finishing = state.phase === "finish" && state.finishWinner === 0;
   const superReady = state.phase === "fight" && state.fighters[0]?.meter >= GRIT_RULES.superCost;
   setTouchPrompt(finishing ? "final" : superReady ? "super" : "");
@@ -5384,6 +6439,9 @@ function recoverFromDizzy(fighter) {
 }
 
 function enterDizzy(fighter, attacker) {
+  // Release 1.8 GRIND: score attack — dizzying the CPU banks a tally bonus
+  // (guarded meta bookkeeping; no sim state involved).
+  awardDizzyScore(attacker);
   fighter.dizzyFrames = STUN_RULES.dizzyFrames;
   fighter.dizzyTotalFrames = STUN_RULES.dizzyFrames;
   fighter.dizzyMashCount = 0;
@@ -6348,6 +7406,9 @@ function triggerPaintTrap(trap, victim) {
     const comboResult = owner.combo.registerHit(state.simulationTick, victim.juggleCount);
     damage = trap.damage * comboResult.damageScale;
     owner.combo.addDamage(damage);
+    // Release 1.8 GRIND: score attack — a landed trap scores as a special
+    // (guarded meta bookkeeping inside; never touches sim state).
+    awardHitScore(owner, "special");
   }
   victim.health = blocked
     ? Math.max(1, victim.health - damage)
@@ -6626,6 +7687,9 @@ function triggerProjectile(projectile, victim) {
   victim.lastHitResult = blocked ? `blocked-${projectile.level}-${resultKind}` : armored ? "armor" : counter ? `counter-${resultKind}` : projectile.style === "feedback" ? "feedback-echo" : `${projectile.level}-projectile`;
   victim.hitFlash = 0.13;
   if (!blocked && !armored) {
+    // Release 1.8 GRIND: score attack — projectiles/thrown objects score as
+    // specials (guarded meta bookkeeping; never touches sim state).
+    awardHitScore(owner, "special", { counter });
     owner.combo.addDamage(damage);
     victim.attacking = null;
     victim.attackTime = 0;
@@ -6836,7 +7900,10 @@ function resetStageWeapon() {
     fighter.carriedWeapon = null;
     fighter.carryFrames = 0;
   }
-  if (!state.stageWeaponsEnabled) {
+  // Release 1.8 GRIND: the Weapons Rain house rule forces stage weapons on
+  // for the match even when the persisted toggle is off — the rule comes from
+  // matchRules (mutator config), so both peers derive the same answer.
+  if (!state.stageWeaponsEnabled && !state.matchRules.weaponsRain) {
     state.stageWeapon = null;
     return;
   }
@@ -6876,6 +7943,35 @@ function updateStageWeapon() {
   const profile = stageWeaponProfile();
   if (!profile) return;
   weapon.frames += 1;
+  // Release 1.8 GRIND: Weapons Rain house rule — a "gone" weapon re-plans the
+  // next deterministic drop after a fixed cooldown. All counters live on the
+  // snapshotted weapon object and the plan derives from matchSeed + wave, so
+  // the rain is identical on both rollback peers and across resims.
+  if (weapon.phase === "gone" && state.matchRules.weaponsRain && !state.finisher && state.phase === "fight") {
+    weapon.rainFrames = (weapon.rainFrames || 0) + 1;
+    if (weapon.rainFrames >= state.matchRules.weaponRespawnFrames) {
+      const wave = (weapon.wave || 0) + 1;
+      const plan = planStageWeapon(state.stage, {
+        matchSeed: hashSeed(state.matchSeed, "weapons-rain", wave),
+        round: state.round,
+        minX: MOVEMENT_RULES.stageMinX,
+        maxX: MOVEMENT_RULES.stageMaxX,
+      });
+      if (plan) {
+        state.stageWeapon = {
+          ...plan,
+          spawnFrame: 60,
+          phase: "pending",
+          y: FLOOR,
+          holder: -1,
+          frames: 0,
+          wave,
+          roundStartTick: state.simulationTick,
+        };
+      }
+    }
+    return;
+  }
   if (weapon.phase === "pending") {
     // spawnFrame counts from the start of the round, not from match boot.
     if (state.simulationTick - weapon.roundStartTick < weapon.spawnFrame) return;
@@ -7076,6 +8172,8 @@ function resolveGrabThrow(attacker, victim, grab, style, direction) {
   attacker.grabbing = null;
   victim.grabbed = null;
   victim.cinematicRotation = 0;
+  // Release 1.8 GRIND: score attack — a completed grab scores as a throw.
+  awardHitScore(attacker, "throw");
   victim.health = clamp(victim.health - grab.damage, 0, 100);
   victim.lastDamageFrame = state.simulationTick;
   victim.lastHitResult = ATTACK_LEVELS.THROW;
@@ -7326,6 +8424,9 @@ function hit(attacker, victim, attack, collision) {
     : blocked ? (perfect ? "perfect-guard" : `blocked-${attack.level}`)
       : armored ? "armor" : counter ? "counter" : attack.level;
   if (!blocked && !armored) {
+    // Release 1.8 GRIND: score attack — clean hits score by move class
+    // (guarded meta bookkeeping inside; never touches sim state).
+    awardHitScore(attacker, attack.superMove ? "super" : attack.kind, { counter });
     attacker.combo.addDamage(damage);
     registerAliFlow(attacker, attack);
     if (wasJuggle) victim.juggleCount += 1;
@@ -7385,6 +8486,14 @@ function hit(attacker, victim, attack, collision) {
   }
   victim.hitFlash = 0.12;
   if (!blocked && !armored) {
+    // Release 1.8 GRIND: Sudden Death house rule — the round's FIRST clean
+    // melee hit instantly dizzies its victim. The one-shot flag is sim state
+    // (snapshotted + checksummed) and the rule itself comes from matchRules,
+    // which both rollback peers derive from the same mutator config.
+    if (state.matchRules.suddenDeathDizzy && !state.suddenDeathHitDone) {
+      state.suddenDeathHitDone = true;
+      if (victim.dizzyFrames <= 0 && victim.stunImmuneFrames <= 0) enterDizzy(victim, attacker);
+    }
     addStun(victim, attacker, attack, { counter, blocked });
     if (victim.carriedWeapon) dropStageWeapon(victim, false);
   }
@@ -7827,8 +8936,13 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
   if (state.phase === "intro") {
     input0 = {};
     input1 = {};
+    // Release 1.8 GRIND — Block War walk-in: an incoming teammate strolls to
+    // their slot during the intro. Pure dt math on snapshotted plain fields
+    // (introWalkTarget), so it is deterministic and rollback-safe by shape.
+    updateIntroWalkIns(dt);
     if (state.phaseTime <= 0) {
       state.phase = "fight";
+      for (const fighter of state.fighters) fighter.introWalkTarget = null;
       updateFlowSkipHint();
     }
   }
@@ -7840,6 +8954,17 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
   updateFighter(state.fighters[1], state.fighters[0], input1, dt);
   updateGrabHolds();
   updateStageWeapon();
+  // Release 1.8 GRIND: Infinite Grit house rule — meters pinned full, exactly
+  // the training-lab precedent. Derived from matchRules (mutator config), so
+  // both rollback peers agree; the pin re-derives identically on resim.
+  if (state.matchRules.infiniteGrit) {
+    let gritHudDirty = false;
+    for (const fighter of state.fighters) {
+      if (fighter.meter < GRIT_RULES.maximum) gritHudDirty = true;
+      fighter.meter = GRIT_RULES.maximum;
+    }
+    if (gritHudDirty) updateHud();
+  }
   state.crowdReaction = Math.max(0, state.crowdReaction - 0.016);
   const superActive = state.fighters.some((fighter) => fighter.attacking?.superMove);
   superDimLevel = clamp(superDimLevel + (superActive ? 0.09 : -0.055), 0, 1);
@@ -7896,7 +9021,10 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
     finishRound(state.finishWinner, -1);
   } else if (state.phase === "roundover" && state.phaseTime <= 0) {
     const winner = state.rounds[0] > state.rounds[1] ? 0 : 1;
-    if (state.rounds[winner] >= 2) resolveMatchResult(winner);
+    // Release 1.8 GRIND: rounds-to-win is match config now — survival and
+    // Block War pairings are single-round, and the One-Round Showdown house
+    // rule shortens versus sets the same way.
+    if (state.rounds[winner] >= roundsToWinValue()) resolveMatchResult(winner);
     else resetRound();
   }
 
@@ -8005,8 +9133,13 @@ function simulateOfflineGameTick(dt) {
     enterKnockdown(state.fighters[1]);
     trainingDummy = { ...trainingDummy, trainingKnockdown: false };
   }
+  const cpuOpponent = state.mode === "arcade"
+    || state.mode === "survival"
+    || (state.mode === "team" && state.teamBattle?.cpu)
+    || bothCpu
+    || (state.mode === "training" && trainingDummy === null);
   let input1 = readQaInput(1)
-    || (state.mode === "arcade" || bothCpu || (state.mode === "training" && trainingDummy === null)
+    || (cpuOpponent
       ? aiInput(state.fighters[1], state.fighters[0], dt)
       : trainingDummy || readInput(1));
   simulatePreparedGameTick(dt, input0, input1);
@@ -14282,6 +15415,9 @@ window.addEventListener("keydown", (event) => {
   }
   if (!keys.has(event.code)) pressed.add(event.code);
   keys.add(event.code);
+  // Release 1.8 GRIND: tally count-up and initials entry own the keyboard
+  // while their screens are up.
+  if (handleTallyKey(event) || handleInitialsKey(event)) return;
   titleKeyboard(event);
 });
 window.addEventListener("keyup", (event) => keys.delete(event.code));
@@ -14336,9 +15472,16 @@ function menuPadLoop() {
     } else if (state.screen === "stage") startMatch(true);
     else if (state.screen === "ladder") startMatch(true);
     else if (state.screen === "ending") startSelect("arcade");
+    else if (state.screen === "tally") tallyContinue();
+    else if (state.screen === "initials") commitInitials();
     else if (state.screen === "result") {
       if (state.mode === "online") requestOnlineRematch();
-      else startMatch(true);
+      else if (dailySession.active && dailySession.finished) showScreen("title");
+      else if (state.mode === "survival" && state.survivalRun?.over) startSurvivalRun(state.survivalRun.playerId);
+      else if (state.mode === "team" && state.teamBattle?.over) {
+        beginTeamBattle(state.teamBattle.cpu);
+        startMatch(true);
+      } else startMatch(true);
     }
   }
   menuPadWasPressed = confirm;
@@ -14586,11 +15729,42 @@ $("#fightButton").addEventListener("click", () => startMatch(true));
 $("#arcadeContinueButton").addEventListener("click", () => startMatch(true));
 $("#endingReplayButton").addEventListener("click", () => startSelect("arcade"));
 $("#rematchButton").addEventListener("click", () => {
-  if (state.mode === "online") requestOnlineRematch();
-  else startMatch(true);
+  if (state.mode === "online") {
+    requestOnlineRematch();
+    return;
+  }
+  // Release 1.8 GRIND: run-based modes restart their RUN, not the lost bout.
+  if (state.mode === "survival" && state.survivalRun?.over) {
+    startSurvivalRun(state.survivalRun.playerId);
+    return;
+  }
+  if (state.mode === "team" && state.teamBattle?.over) {
+    beginTeamBattle(state.teamBattle.cpu);
+    startMatch(true);
+    return;
+  }
+  if (dailySession.active && dailySession.finished) {
+    showScreen("title");
+    return;
+  }
+  startMatch(true);
 });
 $("#newStageButton").addEventListener("click", showSameFightersStageSelect);
 $("#reselectButton").addEventListener("click", () => startSelect(state.mode));
+// Release 1.8 GRIND: new-mode surfaces.
+$("#dailyButton").addEventListener("click", () => startDailyRun());
+$("#tallyContinueButton").addEventListener("click", () => tallyContinue());
+$("#initialsConfirmButton").addEventListener("click", () => commitInitials());
+$$("#initialsSlots .initials-slot").forEach((slot, index) => {
+  slot.addEventListener("click", () => {
+    if (!initialsUi.active) return;
+    if (initialsUi.cursor === index) cycleInitialLetter(1);
+    else initialsUi.cursor = index;
+    renderInitials();
+  });
+});
+$("#shareDailyButton").addEventListener("click", (event) => shareDailyResult(event.currentTarget));
+$("#shareDailyEndingButton").addEventListener("click", (event) => shareDailyResult(event.currentTarget));
 $("#resumeButton").addEventListener("click", () => setPaused(false));
 $("#restartButton").addEventListener("click", restartPausedRound);
 $("#pauseOptionsButton").addEventListener("click", () => $("#controlsDialog").showModal());
@@ -14764,6 +15938,42 @@ window.__finalBlowEngine = {
         filmGrainPasses: presentationDebug.filmGrainPasses,
       },
       arcade: arcadeRunSnapshot(state.arcadeRun),
+      // Release 1.8 GRIND: mode/meta block — score attack, survival, Block
+      // War, the Daily Jawn, House Rules config, and the one-shot totals.
+      meta: {
+        score: scoreSessionSnapshot(),
+        survival: survivalRunSnapshot(state.survivalRun),
+        team: teamBattleSnapshot(state.teamBattle),
+        daily: {
+          active: dailySession.active,
+          date: dailySession.date,
+          finished: dailySession.finished,
+          fighterId: dailySession.plan?.fighterId || null,
+          mutator: dailySession.plan?.mutator || null,
+          outcome: dailySession.outcome ? { ...dailySession.outcome } : null,
+          record: loadDailyRecord(),
+        },
+        mutators: [...state.mutators],
+        pendingMutators: [...pendingMutators],
+        matchRules: { ...state.matchRules },
+        suddenDeathHitDone: state.suddenDeathHitDone,
+        tally: {
+          active: tallyUi.active,
+          done: tallyUi.done,
+          total: tallyUi.total,
+          runTotal: tallyUi.runTotal,
+          rows: tallyUi.rows.map((row) => ({ ...row })),
+        },
+        initials: {
+          active: initialsUi.active,
+          letters: [...initialsUi.letters],
+          cursor: initialsUi.cursor,
+          score: initialsUi.score,
+        },
+        highScores: loadHighScores(),
+        survivalBest: loadSurvivalBest(),
+        fx: { ...modeFxDebug },
+      },
       seed: state.matchSeed,
       rng: state.rng.getState(),
       commands: commandHistory.map((history) => history.map((entry) => ({ ...entry }))),
@@ -14902,6 +16112,15 @@ window.__finalBlowEngine = {
         exThrowables: mechFxDebug.exThrowables,
         commandKicks: mechFxDebug.commandKicks,
         taunts: mechFxDebug.taunts,
+        // Release 1.8 GRIND mode systems, same monotonic one-shot pattern
+        // (full detail lives in snapshot().meta.fx).
+        tallyScreens: modeFxDebug.tallyScreens,
+        initialsEntries: modeFxDebug.initialsEntries,
+        survivalMilestones: modeFxDebug.survivalMilestones,
+        teamEliminations: modeFxDebug.teamEliminations,
+        teamWalkIns: modeFxDebug.teamWalkIns,
+        dailyRuns: modeFxDebug.dailyRuns,
+        attractScoreBoards: modeFxDebug.attractScoreBoards,
       },
       stageWeapon: weaponSnapshot(state.stageWeapon),
       stageWeaponsEnabled: state.stageWeaponsEnabled,
@@ -15023,6 +16242,13 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       if (firstIndex < 0 || secondIndex < 0) throw new Error(`Unknown matchup: ${firstId} vs ${secondId}`);
       state.mode = "versus";
       state.arcadeRun = null;
+      state.survivalRun = null;
+      state.teamBattle = null;
+      dailySession.active = false;
+      endScoreRun();
+      // Release 1.8 GRIND: QA fights honour the pending House Rules picker so
+      // probes can demonstrate mutators altering a versus match.
+      applyMatchRulesForMatch();
       state.qaManualMode = true;
       state.picks = [firstIndex, secondIndex];
       state.rounds = [0, 0];
@@ -15198,6 +16424,88 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       setAiDifficulty(difficulty);
       state.mode = "arcade";
       return window.__finalBlowEngine.snapshot();
+    },
+    // --- Release 1.8 GRIND mode probes ------------------------------------
+    survival(fighterId = "deathblow", seed = 237) {
+      if (rosterIndexById(fighterId) < 0) throw new Error(`Unknown fighter: ${fighterId}`);
+      startSurvivalRun(fighterId, seed);
+      return window.__finalBlowEngine.snapshot();
+    },
+    // Resolve the current survival/arcade/team bout as a player win through
+    // the REAL finishRound → roundover → resolveMatchResult pipeline. Pass
+    // hold=true to leave the round-over ceremony playing in real time (so
+    // wall-clock layers like the Block War elimination callout can fire).
+    winBout(playerHealth = null, hold = false) {
+      if (state.screen !== "fight") throw new Error("Start a fight first");
+      if (Number.isFinite(playerHealth)) state.fighters[0].health = clamp(playerHealth, 1, 100);
+      finishRound(0, -1);
+      if (!hold) {
+        state.phaseTime = 0;
+        simulationClock.stepOnce(runSimulationStep);
+      }
+      return window.__finalBlowEngine.snapshot();
+    },
+    loseBout() {
+      if (state.screen !== "fight") throw new Error("Start a fight first");
+      finishRound(1, -1);
+      state.phaseTime = 0;
+      simulationClock.stepOnce(runSimulationStep);
+      return window.__finalBlowEngine.snapshot();
+    },
+    teamBattle(teamA = ["deathblow", "jez", "alan"], teamB = ["post", "benny", "donald"], cpu = true) {
+      state.mode = "team";
+      state.arcadeRun = null;
+      state.survivalRun = null;
+      dailySession.active = false;
+      endScoreRun();
+      state.teamPicks = [[...teamA], [...teamB]];
+      beginTeamBattle(Boolean(cpu));
+      startMatch(true);
+      return window.__finalBlowEngine.snapshot();
+    },
+    daily(dateString = null) {
+      startDailyRun(dateString, { force: true });
+      return window.__finalBlowEngine.snapshot();
+    },
+    dailyPlan(dateString = null) {
+      const date = dateString || dailyDateString();
+      const plan = createDailyPlan(date, roster.map(({ id }) => id));
+      return {
+        date: plan.date,
+        seed: plan.seed,
+        fighterId: plan.fighterId,
+        mutator: plan.mutator,
+        difficulty: plan.difficulty,
+        matches: plan.run.matches.map(({ opponentId, stage, kind }) => ({ opponentId, stage, kind })),
+      };
+    },
+    mutators(ids = []) {
+      pendingMutators = normalizeMutators(ids);
+      renderMutatorBar();
+      return [...pendingMutators];
+    },
+    tallyContinue() {
+      // Mirrors a player: a press mid-count snaps the numbers, the next press
+      // continues. The helper presses through both stages in one call.
+      tallyContinue();
+      if (tallyUi.active && tallyUi.done) tallyContinue();
+      return window.__finalBlowEngine.snapshot();
+    },
+    enterInitials(text = "JEZ") {
+      if (!initialsUi.active) throw new Error("Initials entry is not active");
+      initialsUi.letters = normalizeInitials(text).split("");
+      renderInitials();
+      commitInitials();
+      return window.__finalBlowEngine.snapshot();
+    },
+    highScores() {
+      return loadHighScores();
+    },
+    clearScores() {
+      saveHighScores([]);
+      localStorage.removeItem(DAILY_RULES.storageKey);
+      localStorage.removeItem(SURVIVAL_BEST_KEY);
+      return true;
     },
     tournamentMatrix(seconds = 8, difficulty = "pro") {
       const fighterIds = roster.map(({ id }) => id);

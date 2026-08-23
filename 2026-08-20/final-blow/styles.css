@@ -2337,3 +2337,229 @@ body:has(#app:fullscreen) {
 #app:fullscreen .object-name { font-size: 6px; max-width: 9ch; }
 .mobile-landscape .object-pips i,
 #app:fullscreen .object-pips i { width: 5px; height: 5px; }
+
+/* === Release 1.8 GRIND — game modes: Gauntlet, Block War, Daily Jawn,
+   House Rules mutators, SF2 tally / initials / attract high scores ========= */
+
+.daily-button {
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  border-color: #7a5f1f;
+  background: linear-gradient(180deg, #3d3212, #171006);
+  color: #ffe9b0;
+}
+.daily-button small {
+  font-size: clamp(7px, .72vw, 10px);
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: .14em;
+  color: #cdae62;
+}
+.daily-button.daily-done { border-color: #3f8a54; background: linear-gradient(180deg, #14371f, #08150c); color: #b8f4c6; }
+.daily-button.daily-done small { color: #7fc892; }
+
+/* House Rules picker (versus / Block War stage select) */
+.mutator-bar {
+  display: grid;
+  gap: 6px;
+  width: min(980px, 96%);
+  margin: 10px auto 0;
+  padding: 8px 12px;
+  border: 1px solid #3a2a4d;
+  background: rgba(16, 9, 24, .78);
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.mutator-title {
+  font-size: clamp(9px, .9vw, 12px);
+  font-style: italic;
+  font-weight: 950;
+  letter-spacing: .22em;
+  color: #c78bff;
+}
+.mutator-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.mutator-chip {
+  display: grid;
+  gap: 1px;
+  justify-items: start;
+  padding: 5px 12px;
+  border: 1px solid #4a3763;
+  background: rgba(26, 16, 38, .85);
+  color: #cbb6e6;
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: .12s ease;
+}
+.mutator-chip b { font-size: clamp(8px, .82vw, 11px); font-style: italic; letter-spacing: .12em; }
+.mutator-chip small { font-size: clamp(6px, .6vw, 8px); letter-spacing: .1em; color: #8f7ab0; }
+.mutator-chip:hover, .mutator-chip:focus-visible { outline: 0; border-color: #c78bff; color: #efe2ff; }
+.mutator-chip.selected {
+  border-color: #d9a9ff;
+  background: linear-gradient(180deg, #6d2fa8, #38134f);
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(199, 139, 255, .45);
+}
+.mutator-chip.selected small { color: #dcc2f4; }
+.mutator-hint { margin: 0; font-size: clamp(7px, .7vw, 10px); letter-spacing: .16em; color: #8f7ab0; }
+
+/* SF2 bonus tally */
+.tally-screen, .initials-screen { align-items: center; justify-content: center; }
+.tally-panel, .initials-panel {
+  display: grid;
+  gap: clamp(8px, 1.4vw, 16px);
+  justify-items: center;
+  width: min(660px, 94%);
+  padding: clamp(18px, 3vw, 34px);
+  border: 1px solid #66450f;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 177, 27, .12), transparent 55%),
+    linear-gradient(180deg, rgba(24, 18, 6, .96), rgba(8, 6, 2, .98));
+  clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+  text-align: center;
+}
+.tally-panel.enter { animation: tally-panel-in .34s cubic-bezier(.16, 1.3, .4, 1) both; }
+@keyframes tally-panel-in {
+  from { transform: translateY(26px) scale(.92); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.tally-panel h2, .initials-panel h2 {
+  margin: 0;
+  font-size: clamp(24px, 3.4vw, 44px);
+  font-style: italic;
+  font-weight: 950;
+  letter-spacing: .04em;
+  color: var(--amber);
+  text-shadow: 0 3px 0 #4a2e05, 0 0 26px rgba(255, 177, 27, .35);
+}
+.tally-rows { display: grid; gap: 4px; width: 100%; }
+.tally-row {
+  display: grid;
+  grid-template-columns: 1fr auto minmax(96px, auto);
+  gap: 12px;
+  align-items: baseline;
+  padding: 4px 10px;
+  border-bottom: 1px dashed rgba(255, 177, 27, .18);
+  font-size: clamp(11px, 1.2vw, 16px);
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: .14em;
+  color: #d9cba6;
+  text-align: left;
+}
+.tally-row small { font-size: clamp(8px, .8vw, 11px); color: #8d7f5c; }
+.tally-row b { font-family: ui-monospace, monospace; font-size: clamp(13px, 1.4vw, 19px); color: #fff; text-align: right; }
+.tally-row.counting b { color: var(--amber); text-shadow: 0 0 12px rgba(255, 177, 27, .6); }
+.tally-row.landed b { color: #ffe9b0; }
+.tally-total-block { display: grid; gap: 3px; width: 100%; }
+.tally-multiplier { font-size: clamp(8px, .85vw, 11px); font-weight: 900; letter-spacing: .2em; color: #c78bff; }
+.tally-total, .tally-run-total {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 10px;
+  font-style: italic;
+  font-weight: 950;
+  letter-spacing: .16em;
+}
+.tally-total { font-size: clamp(14px, 1.6vw, 21px); color: var(--amber); }
+.tally-run-total { font-size: clamp(11px, 1.2vw, 15px); color: #9fb2c2; }
+.tally-total b, .tally-run-total b { font-family: ui-monospace, monospace; }
+#tallyContinueButton { opacity: .55; }
+#tallyContinueButton.ready { opacity: 1; box-shadow: 0 0 18px rgba(244, 66, 53, .5); }
+
+/* Initials entry */
+.initials-context { display: grid; gap: 2px; }
+.initials-context b {
+  font-family: ui-monospace, monospace;
+  font-size: clamp(18px, 2.2vw, 30px);
+  color: var(--amber);
+  text-shadow: 0 0 18px rgba(255, 177, 27, .4);
+}
+.initials-context span { font-size: clamp(9px, .9vw, 12px); font-weight: 900; letter-spacing: .3em; color: #8d7f5c; }
+.initials-slots { display: flex; gap: clamp(10px, 1.6vw, 18px); }
+.initials-slot {
+  width: clamp(58px, 7vw, 86px);
+  height: clamp(70px, 8.4vw, 104px);
+  border: 2px solid #66450f;
+  background: linear-gradient(180deg, #241a08, #0d0903);
+  color: #ffe9b0;
+  font-family: ui-monospace, monospace;
+  font-size: clamp(36px, 4.6vw, 60px);
+  font-weight: 900;
+  cursor: pointer;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  transition: .12s ease;
+}
+.initials-slot.cursor {
+  border-color: var(--amber);
+  color: #fff;
+  box-shadow: 0 0 22px rgba(255, 177, 27, .45);
+  animation: initials-blink 1s steps(2) infinite;
+}
+@keyframes initials-blink { 50% { background: linear-gradient(180deg, #4a3410, #1c1206); } }
+.initials-hint { margin: 0; font-size: clamp(7px, .75vw, 10px); font-weight: 700; letter-spacing: .18em; color: #8d7f5c; }
+
+/* Attract-loop high-score board */
+.attract-scores {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: clamp(6px, 1vw, 12px);
+  padding: clamp(18px, 4vw, 60px);
+  background:
+    radial-gradient(circle at 50% 30%, rgba(27, 40, 57, .5), transparent 60%),
+    linear-gradient(180deg, rgba(2, 4, 8, .88), rgba(3, 5, 9, .94));
+  text-align: center;
+}
+.attract-scores h3 {
+  margin: 0;
+  font-size: clamp(26px, 3.8vw, 52px);
+  font-style: italic;
+  font-weight: 950;
+  letter-spacing: .06em;
+  color: var(--amber);
+  text-shadow: 0 4px 0 #4a2e05, 0 0 34px rgba(255, 177, 27, .4);
+}
+.attract-scores small { font-size: clamp(8px, .9vw, 12px); font-weight: 900; letter-spacing: .3em; color: #9fb2c2; animation: attract-press 1.4s steps(2) infinite; }
+@keyframes attract-press { 50% { opacity: .25; } }
+.attract-score-rows { display: grid; gap: 3px; width: min(560px, 92%); }
+.attract-score-row {
+  display: grid;
+  grid-template-columns: 34px 70px 1fr auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 3px 12px;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: .14em;
+  color: #d9cba6;
+  text-align: left;
+}
+.attract-score-row span { color: #8d7f5c; font-family: ui-monospace, monospace; }
+.attract-score-row b { color: #fff; font-family: ui-monospace, monospace; font-size: clamp(12px, 1.3vw, 18px); }
+.attract-score-row em { font-size: clamp(8px, .8vw, 10px); font-style: normal; color: #7f95a8; letter-spacing: .2em; }
+.attract-score-row strong { color: var(--amber); font-family: ui-monospace, monospace; text-align: right; }
+.attract-score-row.top b, .attract-score-row.top strong { color: #fff; text-shadow: 0 0 16px rgba(255, 177, 27, .8); }
+.attract-score-row.empty { grid-template-columns: 1fr auto; color: #8d7f5c; }
+
+/* Daily Jawn result banners */
+.daily-banner {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  margin: 10px 0 2px;
+  padding: 8px 14px;
+  border-left: 3px solid var(--amber);
+  background: rgba(38, 28, 8, .72);
+}
+.daily-banner b { font-size: clamp(10px, 1vw, 13px); font-style: italic; font-weight: 950; letter-spacing: .18em; color: var(--amber); }
+.daily-banner em { font-size: clamp(9px, .9vw, 12px); font-style: normal; font-weight: 700; letter-spacing: .12em; color: #d9cba6; }
+
+/* Explicit display rules above would defeat the hidden attribute (the
+   codebase-wide [hidden] convention). */
+.mutator-bar[hidden] { display: none !important; }
+.attract-scores[hidden] { display: none !important; }
+.daily-banner[hidden] { display: none !important; }

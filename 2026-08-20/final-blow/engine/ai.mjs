@@ -59,6 +59,27 @@ export const DEFAULT_AI_DIFFICULTY = "street";
 // Ordered easiest to hardest for the difficulty pickers.
 export const AI_DIFFICULTY_ORDER = Object.freeze(["passive", "rookie", "street", "pro", "final"]);
 
+// Release 1.8 GRIND: registered custom difficulty tiers (the survival ramp
+// lerps between the named tiers and registers the blend per bout). The
+// registry is deterministic-derived config — never written from a sim path —
+// and the persisted difficulty picker still only ever sees the named tiers
+// because normalizeAiDifficulty deliberately ignores custom entries.
+const CUSTOM_AI_DIFFICULTIES = new Map();
+
+export function registerAiDifficulty(id, settings) {
+  if (AI_DIFFICULTIES[id]) throw new Error(`Cannot override built-in AI difficulty: ${id}`);
+  CUSTOM_AI_DIFFICULTIES.set(String(id), Object.freeze({ ...settings, id: String(id) }));
+  return CUSTOM_AI_DIFFICULTIES.get(String(id));
+}
+
+export function resolveAiSettings(id) {
+  return AI_DIFFICULTIES[id] || CUSTOM_AI_DIFFICULTIES.get(id) || AI_DIFFICULTIES[DEFAULT_AI_DIFFICULTY];
+}
+
+function isKnownAiDifficulty(id) {
+  return Boolean(AI_DIFFICULTIES[id] || CUSTOM_AI_DIFFICULTIES.has(id));
+}
+
 export function isPassiveDifficulty(difficulty) {
   return normalizeAiDifficulty(difficulty) === "passive";
 }
@@ -68,7 +89,7 @@ export function normalizeAiDifficulty(id) {
 }
 
 export function createAiBrain(difficulty = DEFAULT_AI_DIFFICULTY) {
-  const id = normalizeAiDifficulty(difficulty);
+  const id = isKnownAiDifficulty(difficulty) ? String(difficulty) : DEFAULT_AI_DIFFICULTY;
   return {
     difficulty: id,
     observations: [],
@@ -117,13 +138,13 @@ export function visibleOpponentObservation(opponent, frame) {
 export function recordAiObservation(brain, frame, opponent) {
   const observation = visibleOpponentObservation(opponent, frame);
   brain.observations.push(observation);
-  const retention = AI_DIFFICULTIES[brain.difficulty].reactionFrames + 90;
+  const retention = resolveAiSettings(brain.difficulty).reactionFrames + 90;
   while (brain.observations.length > retention) brain.observations.shift();
   return observation;
 }
 
 export function getReactionObservation(brain, frame) {
-  const cutoff = frame - AI_DIFFICULTIES[brain.difficulty].reactionFrames;
+  const cutoff = frame - resolveAiSettings(brain.difficulty).reactionFrames;
   for (let index = brain.observations.length - 1; index >= 0; index -= 1) {
     if (brain.observations[index].frame <= cutoff) return brain.observations[index];
   }
@@ -240,7 +261,7 @@ export function decideAiIntent(brain, {
   observation,
   roll = 0.5,
 } = {}) {
-  const settings = AI_DIFFICULTIES[brain.difficulty];
+  const settings = resolveAiSettings(brain.difficulty);
   if (settings.inert) return { ...PASSIVE_INTENT };
   const fighterId = self.kitId || self.def?.kitId || self.id || self.def?.id;
   const kit = getFighterKit(fighterId);
@@ -376,7 +397,7 @@ export function stepAiBrain(brain, {
 } = {}) {
   recordAiObservation(brain, frame, opponent);
   // A passive brain never produces an input, whatever it can see.
-  if (AI_DIFFICULTIES[brain.difficulty].inert) {
+  if (resolveAiSettings(brain.difficulty).inert) {
     brain.intent = { ...PASSIVE_INTENT };
     brain.lastObservedFrame = frame;
     return emptyInput();
@@ -389,7 +410,7 @@ export function stepAiBrain(brain, {
   brain.intent = applyRepetitionGuard(
     brain,
     decideAiIntent(brain, { frame, self, observation, roll }),
-    AI_DIFFICULTIES[brain.difficulty],
+    resolveAiSettings(brain.difficulty),
     roll,
   );
   brain.recentActions.push(brain.intent.action || null);
@@ -398,13 +419,13 @@ export function stepAiBrain(brain, {
   brain.lastDecisionFrame = frame;
   brain.decisions += 1;
   brain.nextDecisionFrame = frame
-    + AI_DIFFICULTIES[brain.difficulty].decisionFrames
+    + resolveAiSettings(brain.difficulty).decisionFrames
     + Math.floor(mixRoll(roll, 16) * 4);
   return inputFromIntent(brain.intent, self, observation, true, frame);
 }
 
 export function aiBrainSnapshot(brain) {
-  const settings = AI_DIFFICULTIES[brain.difficulty];
+  const settings = resolveAiSettings(brain.difficulty);
   return {
     difficulty: brain.difficulty,
     reactionFrames: settings.reactionFrames,

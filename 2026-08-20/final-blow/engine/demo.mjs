@@ -17,7 +17,9 @@ function shuffled(values, rng) {
   return result;
 }
 
-function refillBag(values, rng, previous, key = (value) => value) {
+// Exported for the survival "Gauntlet" ladder (engine/modes.mjs), which reuses
+// the exact demo shuffle-bag discipline: never repeat the previous draw first.
+export function refillBag(values, rng, previous, key = (value) => value) {
   const bag = shuffled(values, rng);
   if (bag.length > 1 && previous !== null && key(bag[0]) === key(previous)) {
     const different = bag.findIndex((value) => key(value) !== key(previous));
