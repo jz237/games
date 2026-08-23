@@ -2458,9 +2458,11 @@ function finishRound(winner, type = -1) {
     const scriptId = winDef.finisherScriptId || winDef.id;
     announce("FINAL BLOW", `${winDef.finishers[type]} · ${finisherScripts[scriptId].combo}`, 2.45);
   } else {
-    state.phaseTime = 2.4;
-    duckMusic(0.28, 1700);
-    announce(`${winDef.name} WINS`, "KNOCKOUT", 1.65);
+    // Hold the KO scene so the blood, dust and reactions can be seen before the
+    // next round or the result screen takes over.
+    state.phaseTime = 4.9;
+    duckMusic(0.28, 2600);
+    announce(`${winDef.name} WINS`, "KNOCKOUT", 2.4);
     sound("ko", state.fighters[1 - winner]);
   }
   updateFlowSkipHint();
@@ -2512,7 +2514,8 @@ function performFinisher(winner, type) {
   // top so every LP/LK execution clearly announces "Death Blow" once.
   sound("special", attacker);
   sound("final");
-  return script.duration + 1.1;
+  // Slow-mo debt plus a long look at the aftermath before the result screen.
+  return script.duration + 3.4;
 }
 
 function sampleFinisher(keys, elapsed) {
@@ -5319,20 +5322,37 @@ function separateFighters() {
   b.x = positions.bX;
 }
 
+// Fighters within this horizontal distance keep their current facing: at a
+// near-perfect overlap the sign of dx flips every frame, and re-facing on it
+// made sprites jitter left-right during cross-throughs and deep jump-ins.
+const FACING_DEADBAND = 14;
+
+function attackLastHitboxFrame(attack) {
+  // The frame after which the move can no longer touch anyone. For most moves
+  // this equals activeEndFrame; for single-window moves with long active tails
+  // it lets the fighter turn a few frames sooner.
+  if (!attack) return -1;
+  const boxes = attack.hitboxes;
+  if (!Array.isArray(boxes) || boxes.length === 0) return attack.activeEndFrame;
+  let last = 0;
+  for (const entry of boxes) last = Math.max(last, (entry.to ?? 0) + 1);
+  return Math.min(attack.activeEndFrame, attack.activeStartFrame + last);
+}
+
 function updateFacings() {
   const [a, b] = state.fighters;
   if (!a || !b || state.finisher) return;
   if (a.grabbing || b.grabbing || a.grabbed || b.grabbed) return;
-  // Preserve a move's committed direction through startup and active frames so
-  // cross-ups still punish whiffs instead of auto-correcting the hitbox. The
-  // instant recovery begins, turn the fighter back toward the opponent; keeping
-  // facing locked for the full recovery was what left fighters looking away.
+  // Preserve a move's committed direction while it can still hit, so cross-ups
+  // punish whiffs instead of auto-correcting the hitbox. The moment the last
+  // hitbox window closes, turn the fighter back toward the opponent.
   const canTurn = (fighter) => !fighter.attacking
-    || fighter.attackFrame > fighter.attacking.activeEndFrame;
+    || fighter.attackFrame > attackLastHitboxFrame(fighter.attacking);
   const toward = (fighter, opponent) => {
     const delta = opponent.x - fighter.x;
-    if (Math.abs(delta) > 1e-6) return delta > 0 ? 1 : -1;
-    return fighter.side < opponent.side ? 1 : -1;
+    if (Math.abs(delta) > FACING_DEADBAND) return delta > 0 ? 1 : -1;
+    // Inside the deadband, keep whatever we had rather than flip-flopping.
+    return fighter.facing;
   };
   if (canTurn(a)) a.facing = toward(a, b);
   if (canTurn(b)) b.facing = toward(b, a);

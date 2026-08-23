@@ -1794,6 +1794,46 @@ try {
   assert.ok(sceneDressing.superDim > 0.3, `the super spotlight must darken the stage, got ${sceneDressing.superDim}`);
   assert.ok(sceneDressing.superDimSettled < 0.1, "the spotlight must lift after the super ends");
 
+  // Facing regression: outside grabs and finishers, no fighter may sustain a
+  // wrong facing for a third of a second in any state, and the KO scene must
+  // hold long enough to be seen before the next round begins.
+  const facingAndHold = await evaluate(client, `(() => {
+    const out = { wrongFacingStreaks: 0 };
+    window.__finalBlowQa.aiFight('jez', 'cyraxx', 'final');
+    let streaks = [0, 0];
+    for (let frame = 0; frame < 1800; frame += 1) {
+      window.__finalBlowQa.step(1 / 60);
+      const snapshot = window.__finalBlowEngine.snapshot();
+      if (snapshot.phase !== 'fight') { streaks = [0, 0]; continue; }
+      for (const side of [0, 1]) {
+        const me = snapshot.fighters[side];
+        const op = snapshot.fighters[1 - side];
+        if (Math.abs(op.x - me.x) < 20 || me.grabbing || me.grabbed) { streaks[side] = 0; continue; }
+        const want = op.x > me.x ? 1 : -1;
+        streaks[side] = me.facing !== want ? streaks[side] + 1 : 0;
+        if (streaks[side] === 21) out.wrongFacingStreaks += 1;
+      }
+    }
+    window.__finalBlowQa.fight('deathblow', 'jez');
+    window.__finalBlowQa.positions(500, 600);
+    window.__finalBlowQa.fighter(1, { health: 1 });
+    window.__finalBlowQa.input(0, { heavy: true });
+    window.__finalBlowQa.step(0.6);
+    out.afterKO = window.__finalBlowEngine.snapshot().phase;
+    window.__finalBlowQa.step(6.2);
+    out.afterFinishWindow = window.__finalBlowEngine.snapshot().phase;
+    window.__finalBlowQa.step(3.6);
+    out.midHold = window.__finalBlowEngine.snapshot().phase;
+    window.__finalBlowQa.step(3.5);
+    out.afterHold = window.__finalBlowEngine.snapshot().phase;
+    return out;
+  })()`);
+  assert.equal(facingAndHold.wrongFacingStreaks, 0, "no sustained wrong facing in any state");
+  assert.equal(facingAndHold.afterKO, "finish");
+  assert.equal(facingAndHold.afterFinishWindow, "roundover", "an unclaimed finish window falls to the KO hold");
+  assert.equal(facingAndHold.midHold, "roundover", "the KO scene must hold ~4.9s so the aftermath is visible");
+  assert.notEqual(facingAndHold.afterHold, "roundover", "the hold must still end and move on");
+
   // Fatality realism: the killing blow dilates time, the wound pumps arterial
   // spray, and landed droplets leave a persistent stain layer on the floor.
   const goreAftermath = await evaluate(client, `(() => {
