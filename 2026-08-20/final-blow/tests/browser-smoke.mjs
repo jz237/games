@@ -345,7 +345,7 @@ try {
   }))()`);
   assert.match(title.title, /Final Blow/);
   assert.match(title.build, /1\.8/);
-  assert.equal(title.version.text, 'VERSION 1.8C');
+  assert.equal(title.version.text, 'VERSION 1.8D');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -373,7 +373,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.8c-reality-break');
+  assert.equal(title.engineVersion, '1.8d-somerset-after-dark');
   assert.deepEqual(title.engine.presentationRules, {
     hitFlashFilter: 'brightness(1.55) saturate(1.12)',
     attackNamePopups: false,
@@ -1369,13 +1369,13 @@ try {
   // fair floor slot, contested with down + HP, thrown with HP, single use.
   const weaponPlans = await evaluate(client, `(() => {
     window.__finalBlowQa.fight('deathblow', 'jez');
-    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.stage('somerset');
     const plan = (stage, round) => window.__finalBlowQa.stageWeaponPlan(stage, round);
-    const first = plan('kensington', 1);
+    const first = plan('somerset', 1);
     return {
-      repeat: JSON.stringify(plan('kensington', 1)) === JSON.stringify(first),
-      perRound: JSON.stringify(plan('kensington', 2)) !== JSON.stringify(first),
-      stages: ['kensington', 'vet', 'wildwood', 'buffet', 'cruise'].map((stage) => plan(stage, 1)),
+      repeat: JSON.stringify(plan('somerset', 1)) === JSON.stringify(first),
+      perRound: JSON.stringify(plan('somerset', 2)) !== JSON.stringify(first),
+      stages: ['somerset', 'vet', 'wildwood', 'buffet', 'cruise'].map((stage) => plan(stage, 1)),
       first,
     };
   })()`);
@@ -1394,7 +1394,7 @@ try {
     const out = {};
     window.__finalBlowQa.stageWeapons(true);
     window.__finalBlowQa.fight('deathblow', 'jez');
-    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.stage('somerset');
     window.__finalBlowQa.forceStageWeapon(600);
     window.__finalBlowQa.positions(600, 1050);
     out.onFloor = window.__finalBlowEngine.snapshot().stageWeapon;
@@ -1435,7 +1435,7 @@ try {
   // Out of pickup range, down + HP is still just a crouching heavy.
   const farPickup = await evaluate(client, `(() => {
     window.__finalBlowQa.fight('deathblow', 'jez');
-    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.stage('somerset');
     window.__finalBlowQa.forceStageWeapon(1100);
     window.__finalBlowQa.positions(300, 950);
     window.__finalBlowQa.input(0, { down: true, heavy: true }, 3);
@@ -1451,7 +1451,7 @@ try {
   const weaponRules = await evaluate(client, `(() => {
     window.__finalBlowQa.difficulty('passive');
     window.__finalBlowQa.aiFight('deathblow', 'jez', 'passive');
-    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.stage('somerset');
     window.__finalBlowQa.forceStageWeapon(900);
     window.__finalBlowQa.positions(880, 920);
     for (let frame = 0; frame < 240; frame += 1) window.__finalBlowQa.step(1 / 60);
@@ -1532,12 +1532,12 @@ try {
   assert.deepEqual(cyraxxArt.specials.size, [1280, 1280]);
   assert.deepEqual(cyraxxArt.portrait.size, [588, 720]);
 
-  // K&A crowd: at least 25 pedestrians on screen at once, spread across depth
-  // layers, dominated by hunched and shuffling postures, deterministic, and
-  // never inside the fighters' floor plane or collision space.
+  // Somerset's people live in the generated photoreal plate instead of being
+  // overpainted with arcade pedestrians. They stay visibly folded forward with
+  // heads near their knees while the open foreground remains the fight plane.
   const crowdProbe = await evaluate(client, `(() => {
     window.__finalBlowQa.fight('deathblow', 'jez');
-    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.stage('somerset');
     const samples = [];
     for (let step = 0; step < 12; step += 1) {
       window.__finalBlowQa.step(1.5);
@@ -1545,27 +1545,35 @@ try {
     }
     const first = window.__finalBlowEngine.snapshot().crowd;
     // Same seed and round must rebuild the identical crowd.
-    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.stage('somerset');
     const rebuilt = window.__finalBlowEngine.snapshot().crowd;
-    return { samples, first, rebuilt, reaction: window.__finalBlowEngine.snapshot().crowdReaction };
+    const snapshot = window.__finalBlowEngine.snapshot();
+    return {
+      samples,
+      first,
+      rebuilt,
+      art: snapshot.stageArt,
+      ticker: document.querySelector('#stageTicker').textContent,
+      preview: getComputedStyle(document.querySelector('.somerset-preview')).backgroundImage,
+      reaction: snapshot.crowdReaction,
+    };
   })()`);
   const visibleCounts = crowdProbe.samples.map((sample) => sample.visible);
-  assert.ok(
-    Math.min(...visibleCounts) >= 25,
-    `at least 25 pedestrians must be visible at all times, saw a low of ${Math.min(...visibleCounts)}`,
-  );
-  assert.ok(crowdProbe.samples[0].total >= 25);
+  assert.ok(Math.min(...visibleCounts) >= 8, "the Somerset plate must keep its seated background adults visible");
   for (const sample of crowdProbe.samples) {
-    assert.ok(Object.keys(sample.layers).length >= 3, "the crowd must span several depth layers");
-    assert.ok(Object.keys(sample.postures).length >= 4, "postures must be varied, not cloned");
-    const hunched = ["hunch", "shuffle", "stoop", "linger"]
-      .reduce((total, id) => total + (sample.postures[id] || 0), 0);
-    assert.ok(
-      hunched / sample.visible > 0.55,
-      `hunched and shuffling postures must dominate, got ${Math.round(hunched / sample.visible * 100)}%`,
-    );
+    assert.equal(sample.variant, "somerset");
+    assert.equal(sample.embeddedPeople, 9);
+    assert.equal(sample.embeddedPose, "deep-slump-head-near-knees");
+    assert.equal(Object.keys(sample.layers).length, 0, "arcade pedestrians must not cover the photoreal people");
   }
-  assert.deepEqual(crowdProbe.rebuilt.layers, crowdProbe.first.layers, "the crowd must rebuild deterministically");
+  assert.deepEqual(crowdProbe.rebuilt, crowdProbe.first, "the Somerset presentation metadata must rebuild deterministically");
+  assert.equal(crowdProbe.art.asset, "assets/somerset-septa.webp");
+  assert.equal(crowdProbe.art.loaded, true);
+  assert.equal(crowdProbe.art.style, "photorealistic-street");
+  assert.equal(crowdProbe.art.embeddedPeople, 9);
+  assert.equal(crowdProbe.art.embeddedPose, "deep-slump-head-near-knees");
+  assert.match(crowdProbe.ticker, /SOMERSET SEPTA STATION.*STREET ENTRANCE/);
+  assert.match(crowdProbe.preview, /somerset-septa\.webp/);
 
   // The Vet is a rowdy bird-football tailgate: a dense fan crowd with drinking
   // postures and several simultaneous scuffles, all deterministic.
@@ -1577,7 +1585,7 @@ try {
       window.__finalBlowQa.step(1.5);
       samples.push(window.__finalBlowEngine.snapshot().crowd);
     }
-    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.stage('somerset');
     const street = window.__finalBlowEngine.snapshot().crowd;
     window.__finalBlowQa.stage('vet');
     const rebuilt = window.__finalBlowEngine.snapshot().crowd;
@@ -1595,8 +1603,9 @@ try {
       `the lot must be dominated by drinking, got ${Math.round(drinking / sample.visible * 100)}%`,
     );
   }
-  assert.equal(tailgate.street.variant, "street", "K&A keeps its own street crowd");
-  assert.equal(tailgate.street.scuffles, 0, "the street crowd has no tailgate scuffles");
+  assert.equal(tailgate.street.variant, "somerset", "Somerset keeps its photographic background actors");
+  assert.equal(tailgate.street.embeddedPeople, 9);
+  assert.equal(tailgate.street.scuffles, 0, "the Somerset sidewalks have no tailgate scuffles");
   assert.deepEqual(
     tailgate.rebuilt.scuffleKinds,
     tailgate.samples[0].scuffleKinds,
@@ -1608,7 +1617,7 @@ try {
   const newStages = await evaluate(client, `(() => {
     const cards = [...document.querySelectorAll('.stage-card')].map((card) => card.dataset.stage);
     const out = { cards, stages: {} };
-    for (const stage of ['wildwood', 'buffet', 'cruise', 'janney']) {
+    for (const stage of ['somerset', 'wildwood', 'buffet', 'cruise', 'janney']) {
       window.__finalBlowQa.fight('benny', 'ali');
       window.__finalBlowQa.stage(stage);
       window.__finalBlowQa.positions(300, 1000);
@@ -1629,10 +1638,13 @@ try {
   })()`);
   assert.deepEqual(
     newStages.cards,
-    ["kensington", "vet", "wildwood", "buffet", "cruise", "janney"],
+    ["somerset", "vet", "wildwood", "buffet", "cruise", "janney"],
     "every stage is selectable",
   );
   assert.match(newStages.stages.wildwood.ticker, /WILDWOOD BOARDWALK/);
+  assert.match(newStages.stages.somerset.ticker, /SOMERSET SEPTA STATION/);
+  assert.equal(newStages.stages.somerset.crowd.variant, "somerset");
+  assert.equal(newStages.stages.somerset.crowd.embeddedPose, "deep-slump-head-near-knees");
   assert.match(newStages.stages.buffet.ticker, /CRAB-LEG SECTION/);
   assert.equal(newStages.stages.wildwood.crowd.variant, "boardwalk");
   assert.equal(newStages.stages.buffet.crowd.variant, "buffet");
@@ -1659,21 +1671,21 @@ try {
     "pool-deck incidents must use different loops",
   );
   for (const [id, stage] of Object.entries(newStages.stages)) {
-    const minimumLife = id === "janney" ? 12 : 20;
+    const minimumLife = id === "somerset" ? 8 : id === "janney" ? 12 : 20;
     assert.ok(stage.crowd.visible >= minimumLife, `${id} must feel alive, saw ${stage.crowd.visible}`);
     assert.equal(stage.floor, 600, `${id} must share the same floor line`);
     assert.deepEqual(stage.bounds, [76, 1204], `${id} must share the same stage bounds`);
   }
   assert.deepEqual(
     [...newStages.demoStages].sort(),
-    ["buffet", "cruise", "janney", "kensington", "vet", "wildwood"],
+    ["buffet", "cruise", "janney", "somerset", "vet", "wildwood"],
     "Watch Demo must shuffle through every stage",
   );
 
   // The crowd reacts to a super and then settles back to its routes.
   const crowdReaction = await evaluate(client, `(() => {
     window.__finalBlowQa.fight('deathblow', 'jez');
-    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.stage('somerset');
     window.__finalBlowQa.positions(500, 600);
     window.__finalBlowQa.fighter(0, { meter: 100 });
     window.__finalBlowQa.input(0, { super: true });
@@ -1790,7 +1802,7 @@ try {
   const sceneDressing = await evaluate(client, `(() => {
     const out = {};
     window.__finalBlowQa.fight('deathblow', 'jez');
-    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.stage('somerset');
     window.__finalBlowQa.positions(430, 900);
     window.__finalBlowQa.input(0, { right: true }, 2); window.__finalBlowQa.step(3 / 60);
     window.__finalBlowQa.input(0, {}, 2); window.__finalBlowQa.step(3 / 60);
@@ -1802,7 +1814,7 @@ try {
       reflections: snapshot.violence.reflections,
     };
     window.__finalBlowQa.fight('deathblow', 'jez');
-    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.stage('somerset');
     window.__finalBlowQa.positions(500, 610);
     window.__finalBlowQa.input(0, { heavy: true });
     out.peakSparks = 0;
@@ -1825,7 +1837,7 @@ try {
   })()`);
   assert.ok(sceneDressing.dash.afterimages > 0, "a dash must leave a ghost trail");
   assert.ok(sceneDressing.dash.dust > 0, "a dash must kick up dust");
-  assert.equal(sceneDressing.dash.reflections, true, "K&A's wet street must reflect the fighters");
+  assert.equal(sceneDressing.dash.reflections, true, "Somerset's wet street must reflect the fighters");
   assert.ok(sceneDressing.peakSparks > 0, "a landed heavy must throw speed-line sparks");
   assert.ok(sceneDressing.peakRings > 0, "a landed heavy must ring a shockwave");
   assert.ok(sceneDressing.superDim > 0.3, `the super spotlight must darken the stage, got ${sceneDressing.superDim}`);
@@ -1875,7 +1887,7 @@ try {
   // spray, and landed droplets leave a persistent stain layer on the floor.
   const goreAftermath = await evaluate(client, `(() => {
     window.__finalBlowQa.fight('deathblow', 'jez');
-    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.stage('somerset');
     window.__finalBlowQa.graphicFatality('deathblow', 0, 0.1);
     const peak = { arterial: 0, stains: 0, severedLimbs: 0, slowMo: false };
     for (let frame = 0; frame < 460; frame += 1) {
@@ -2694,11 +2706,12 @@ try {
 
   // The same multi-cut sequence survives the Graphic Fatalities and reduced-
   // motion accessibility paths without leaking gore or violent camera shake.
-  await evaluate(client, `(() => {
+  await evaluate(client, `(async () => {
     const gore = document.querySelector('#goreToggle');
     gore.checked = false;
     gore.dispatchEvent(new Event('change', { bubbles: true }));
     window.__finalBlowQa.graphicFatality('deathblow', 0, 4.7, false);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   })()`);
   const goreOff = await evaluate(client, `({ status: window.__finalBlowQa.status(), snapshot: window.__finalBlowEngine.snapshot() })`);
   assert.equal(goreOff.status.graphicFatalities, false);
@@ -2856,6 +2869,7 @@ try {
       hasFighterAudioEngine: Boolean(cache && await cache.match('./engine/fighter-audio.mjs')),
       hasDeathBlowCall: Boolean(cache && await cache.match('./assets/audio/final-blow.mp3')),
       hasJanney: Boolean(cache && await cache.match('./assets/janney-street-vacant-lot.webp')),
+      hasSomerset: Boolean(cache && await cache.match('./assets/somerset-septa.webp')),
       ready: window.__finalBlowEngine.snapshot().offlineReady,
     };
   })()`);
@@ -2871,6 +2885,7 @@ try {
   assert.equal(offlineCache.hasFighterAudioEngine, true);
   assert.equal(offlineCache.hasDeathBlowCall, false);
   assert.equal(offlineCache.hasJanney, false);
+  assert.equal(offlineCache.hasSomerset, false);
   assert.equal(offlineCache.ready, true);
 
   await reload(client);
@@ -2881,7 +2896,7 @@ try {
   }))()`);
   assert.match(controlledReload.title, /Final Blow/);
   assert.match(controlledReload.build, /1\.8/);
-  assert.equal(controlledReload.version, '1.8c-reality-break');
+  assert.equal(controlledReload.version, '1.8d-somerset-after-dark');
 
   await client.send('Network.emulateNetworkConditions', {
     offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
@@ -2899,7 +2914,7 @@ try {
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
   assert.match(offlineBoot.build, /1\.8/);
-  assert.equal(offlineBoot.version, '1.8c-reality-break');
+  assert.equal(offlineBoot.version, '1.8d-somerset-after-dark');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2943,7 +2958,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 1.8C');
+  assert.equal(landscape.version.text, 'VERSION 1.8D');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);
@@ -2992,11 +3007,13 @@ try {
 
   const mobileCrowd = await evaluate(client, `(() => {
     window.__finalBlowQa.fight('deathblow', 'jez');
-    window.__finalBlowQa.stage('kensington');
+    window.__finalBlowQa.stage('somerset');
     window.__finalBlowQa.step(2.5);
     return window.__finalBlowEngine.snapshot().crowd;
   })()`);
-  assert.ok(mobileCrowd.visible >= 25, `the crowd must stay dense on 844x390, saw ${mobileCrowd.visible}`);
+  assert.ok(mobileCrowd.visible >= 8, `Somerset's photographic background adults must remain visible on 844x390, saw ${mobileCrowd.visible}`);
+  assert.equal(mobileCrowd.variant, "somerset");
+  assert.equal(mobileCrowd.embeddedPose, "deep-slump-head-near-knees");
 
   const mobilePoolDeck = await evaluate(client, `(() => {
     window.__finalBlowQa.fight('deathblow', 'jez');
@@ -3008,7 +3025,7 @@ try {
     mobilePoolDeck.visible >= 35,
     `the pool deck must hold 35+ passengers on 844x390, saw ${mobilePoolDeck.visible}`,
   );
-  await evaluate(client, `window.__finalBlowQa.stage('kensington')`);
+  await evaluate(client, `window.__finalBlowQa.stage('somerset')`);
 
   const mobileFraming = await evaluate(client, FIGHTER_FRAMING_PROBE);
   assertFighterFraming(mobileFraming, "844x390 landscape");

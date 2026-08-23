@@ -9,8 +9,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="description" content="Final Blow: Philly After Dark — a playable 1990s-inspired weapon fighter prototype.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23080b13'/%3E%3Cpath d='M14 10h39l-4 12H29l-2 8h18l-4 11H24l-5 15H5z' fill='%23ef2c28'/%3E%3C/svg%3E">
-  <title>Final Blow 1.8C: Reality Break</title>
-  <meta name="application-version" content="1.8C">
+  <title>Final Blow 1.8D: Somerset After Dark</title>
+  <meta name="application-version" content="1.8D">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -20,7 +20,7 @@
       <a class="mini-brand" href="#" id="homeLink" aria-label="Return to title">
         <span>FINAL</span><strong>BLOW</strong>
       </a>
-      <div class="build-tag">REALITY BREAK <b>1.8C</b></div>
+      <div class="build-tag">SOMERSET AFTER DARK <b>1.8D</b></div>
       <div id="offlineBadge" class="offline-badge" aria-live="polite">CACHE CHECK</div>
       <button id="trackButton" class="track-button" type="button" aria-label="Play next soundtrack">♫ PHILLY AFTER DARK</button>
       <div id="padStatus" class="pad-status" aria-live="polite"><i></i> KEYBOARD READY</div>
@@ -115,7 +115,7 @@
           <p class="eyebrow">A PHILADELPHIA WEAPON FIGHTER</p>
           <h1 id="gameTitle"><span>FINAL</span><strong>BLOW</strong></h1>
           <h2>PHILLY AFTER DARK</h2>
-          <p id="titleVersion" class="title-version" aria-label="Version 1.8C">VERSION 1.8C</p>
+          <p id="titleVersion" class="title-version" aria-label="Version 1.8D">VERSION 1.8D</p>
           <p class="hook">Eight fighters. Two streets. One last chance to finish it.</p>
         </div>
         <div class="menu-stack">
@@ -169,7 +169,7 @@
                 </select></label>
                 <div class="online-opponent"><span>OPPONENT</span><b id="onlineOpponentFighter">CHOOSING…</b></div>
                 <label>STAGE<select id="onlineStageSelect" aria-label="Online stage">
-                  <option value="kensington">KENSINGTON &amp; ALLEGHENY</option><option value="vet">THE VET PARKING LOT</option>
+                  <option value="somerset">SOMERSET SEPTA STATION</option><option value="vet">THE VET PARKING LOT</option>
                   <option value="wildwood">WILDWOOD BOARDWALK</option><option value="buffet">CHINESE BUFFET</option>
                   <option value="cruise">CRUISE POOL DECK</option><option value="janney">JANNEY STREET VACANT LOT</option>
                 </select></label>
@@ -214,10 +214,10 @@
         </header>
         <div id="arcadeRoutePreview" class="arcade-route-preview" aria-label="Arcade ladder" hidden></div>
         <div id="stageGrid" class="stage-grid">
-          <button class="stage-card menu-focus selected" data-stage="kensington">
-            <span class="stage-preview kensington-preview"></span>
-            <strong>KENSINGTON &amp; ALLEGHENY</strong>
-            <small>BENEATH THE EL · MIDNIGHT</small>
+          <button class="stage-card menu-focus selected" data-stage="somerset">
+            <span class="stage-preview somerset-preview"></span>
+            <strong>SOMERSET SEPTA STATION</strong>
+            <small>STREET ENTRANCE · AFTER MIDNIGHT</small>
           </button>
           <button class="stage-card" data-stage="vet">
             <span class="stage-preview vet-preview"></span>
@@ -247,7 +247,7 @@
         </div>
         <div class="selection-footer">
           <button class="text-button" data-back="select">← FIGHTERS</button>
-          <div id="stageReadout">KENSINGTON &amp; ALLEGHENY</div>
+          <div id="stageReadout">SOMERSET SEPTA STATION</div>
           <button id="fightButton" class="arcade-button compact primary">FIGHT →</button>
         </div>
       </section>
@@ -323,7 +323,7 @@
     </section>
 
     <footer class="footer-strip">
-      <span id="stageTicker">KENSINGTON &amp; ALLEGHENY // PHILADELPHIA</span>
+      <span id="stageTicker">SOMERSET SEPTA STATION // STREET ENTRANCE // PHILADELPHIA</span>
       <span>CHAINS · CANCELS · JUGGLES · GRIT SUPERS · FINAL BLOWS</span>
     </footer>
   </main>
@@ -482,6 +482,6 @@
     <button id="fullscreenButton" class="arcade-button primary" type="button">ENTER FULLSCREEN</button>
   </aside>
 
-  <script type="module" src="game.js?v=final-blow-1.8c"></script>
+  <script type="module" src="game.js?v=final-blow-1.8d"></script>
 </body>
 </html>

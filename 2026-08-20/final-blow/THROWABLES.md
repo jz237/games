@@ -73,7 +73,7 @@ per stage, one physical weapon on the playfield at a time, once per round.
 
 | Stage | Weapon | Behaviour |
 | --- | --- | --- |
-| Kensington & Allegheny | Discarded needle | Quick pickup, very fast straight dart, tiny hitbox, low damage and brief hitstun, bright glint for readability, one use, no status effect |
+| Somerset SEPTA Station | Discarded needle | Quick pickup, very fast straight dart, tiny hitbox, low damage and brief hitstun, bright glint for readability, one use, no status effect |
 | The Vet Parking Lot | Beer bottle | Quick one-handed pickup, fast short-to-medium arc, moderate damage and a stagger, glass shatter with shards that vanish immediately |
 | Wildwood Boardwalk | Dead pigeon | Floppy tumbling arc, broad soft hitbox, feather burst, removed cleanly on landing |
 | Chinese Buffet | Serving tongs | Medium-speed end-over-end throw, narrow hitbox, sharp metallic clang |

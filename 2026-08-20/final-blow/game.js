@@ -615,10 +615,10 @@ function projectileFinisherScript(fighterId, variant = 0) {
 }
 
 const stages = {
-  kensington: {
-    name: "KENSINGTON & ALLEGHENY",
-    ticker: "KENSINGTON & ALLEGHENY // PHILADELPHIA",
-    src: "assets/kensington-allegheny.webp",
+  somerset: {
+    name: "SOMERSET SEPTA STATION",
+    ticker: "SOMERSET SEPTA STATION // STREET ENTRANCE // PHILADELPHIA",
+    src: "assets/somerset-septa.webp",
   },
   vet: {
     name: "THE VET PARKING LOT",
@@ -773,7 +773,7 @@ let currentTrackIndex = 0;
 // append it to musicTracks, and the wildwood mapping below picks it up.
 // TODO(cruise-deck-disco): same deal for the cruise pool deck.
 const STAGE_MUSIC = Object.freeze({
-  kensington: Object.freeze({ title: "PHILLY AFTER DARK" }),
+  somerset: Object.freeze({ title: "PHILLY AFTER DARK" }),
   vet: Object.freeze({ title: "VET PARKING LOT" }),
   wildwood: Object.freeze({ title: "NEON SIGN WAR", todoTrack: "wildwood-boardwalk-night" }),
   buffet: Object.freeze({ title: "NEON SIGN WAR" }),
@@ -839,7 +839,7 @@ const state = {
   picks: [0, 1],
   locks: [false, false],
   selectingPlayer: 0,
-  stage: "kensington",
+  stage: "somerset",
   fighters: [],
   particles: [],
   effects: [],
@@ -937,7 +937,7 @@ const onlineSession = {
   lobby: {
     localFighter: "deathblow",
     remoteFighter: "jez",
-    stage: "kensington",
+    stage: "somerset",
     delayChoice: "auto",
     localReady: false,
     remoteReady: false,
@@ -1657,7 +1657,7 @@ function makeOnlineMatchConfig({ rematch = false } = {}) {
     matchId: crypto.randomUUID(),
     seed: seedBytes[0] || 237,
     picks: [lobby.localFighter, lobby.remoteFighter],
-    stage: stages[lobby.stage] ? lobby.stage : "kensington",
+    stage: stages[lobby.stage] ? lobby.stage : "somerset",
     inputDelay: Math.max(delayChoiceFrames(lobby.delayChoice), delayChoiceFrames(lobby.remoteDelayChoice)),
     controlStyles: [state.controlStyle, lobby.remoteControlStyle],
     rematch: Boolean(rematch),
@@ -2823,7 +2823,7 @@ function drawPracticalLights(time, frame, centre, reaction) {
   const backdropShift = (centre - W * 0.5) * -0.035;
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
-  if (state.stage === "kensington") {
+  if (state.stage === "somerset") {
     // The passing El sweeps a band of warm window-light across the pavement.
     const trainX = ((time * 0.08) % (W + 650)) - 500; // same formula as drawCrowd
     const bandX = trainX + 215;
@@ -2924,7 +2924,7 @@ function drawTimeOfDayHorizon() {
 // is exact under rollback/replay and costs zero state. Frozen to a static
 // scatter under reducedMotion, scaled by particleScale, skipped on battery.
 const STAGE_WEATHER = Object.freeze({
-  kensington: { count: 24, kind: "litter" },
+  somerset: { count: 24, kind: "litter" },
   vet: { count: 30, kind: "ashSmoke" },
   wildwood: { count: 40, kind: "mist" },
   buffet: { count: 26, kind: "steam" },
@@ -2998,7 +2998,7 @@ function drawStageWeather(frame, centre) {
       size = 0.9 + seedD * 1.3;
       color = "255,214,140";
     } else if (config.kind === "litter") {
-      // Wind-blown litter and grit skimming the K&A pavement.
+      // Wind-blown litter and grit skimming the Somerset pavement.
       x = (((seedA * (W + 140)) + tick * (0.9 + seedB * 1.3)) % (W + 140) + (W + 140)) % (W + 140) - 70;
       y = 462 + seedC * 128 + (reduced ? 0 : Math.sin(tick * 0.02 + seedD * 6.28) * 7);
       alpha = 0.2;
@@ -3057,7 +3057,7 @@ function occluderCanvas(width, height, painter, softEdge) {
 
 function buildOccluderRig(stageId) {
   const rig = [];
-  if (stageId === "kensington") {
+  if (stageId === "somerset") {
     // Chain-link fence corner hugging the left edge.
     rig.push({
       baseX: -34, y: 96, minX: -70, maxX: -6,
@@ -3251,7 +3251,7 @@ function roundWinBeatLevel(frame) {
 
 const ROUND_WIN_BEATS = Object.freeze({
   wildwood: { glows: [{ x: 668, y: 96, rx: 170, ry: 120, color: [255, 150, 216] }], firework: true },
-  kensington: { glows: [{ x: 640, y: 184, rx: 300, ry: 80, color: [255, 211, 105] }] },
+  somerset: { glows: [{ x: 640, y: 184, rx: 300, ry: 80, color: [255, 211, 105] }] },
   vet: {
     glows: [
       { x: 148, y: 186, rx: 130, ry: 110, color: [214, 232, 255] },
@@ -8479,10 +8479,14 @@ function drawCrowd(time) {
     return;
   }
 
-  // Street life behind the K&A crowd: the El train and drifting litter.
+  // Somerset keeps the old K&A motion layer: a passing El train, warm windows,
+  // and wind-blown litter over the photoreal street plate. The people are baked
+  // into that plate so their deep folded postures stay genuinely realistic.
   const trainX = ((time * 0.08) % (W + 650)) - 500;
-  ctx.fillStyle = "rgba(18,31,40,.7)";
+  ctx.fillStyle = "rgba(157,166,174,.42)";
   ctx.fillRect(trainX, 154, 430, 58);
+  ctx.fillStyle = "rgba(23,60,92,.48)";
+  ctx.fillRect(trainX, 196, 430, 7);
   for (let x = trainX + 24; x < trainX + 410; x += 53) {
     ctx.fillStyle = "rgba(255,211,105,.75)";
     ctx.fillRect(x, 166, 34, 22);
@@ -9854,7 +9858,7 @@ function drawFighter(fighter, time) {
       // Stage-keyed rim light: a tinted silhouette peeking 2-3px past the edge
       // that faces the arena's key light. The sprite draw below covers all but
       // the lit edge; the colour warms while the super spotlight is up.
-      const rim = STAGE_RIM_LIGHTS[state.stage] || STAGE_RIM_LIGHTS.kensington;
+      const rim = STAGE_RIM_LIGHTS[state.stage] || STAGE_RIM_LIGHTS.somerset;
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
       ctx.globalAlpha = 0.35;
@@ -10558,7 +10562,7 @@ function drawGuardCrushMarker(fighter, time) {
 // How mirror-like each stage floor is. Wet asphalt and polished tile reflect
 // hard; the Vet's dry lot barely does.
 const STAGE_REFLECTIONS = Object.freeze({
-  kensington: 0.30, vet: 0.15, wildwood: 0.22, buffet: 0.34, cruise: 0.26,
+  somerset: 0.30, vet: 0.15, wildwood: 0.22, buffet: 0.34, cruise: 0.26,
 });
 const REFLECTION_DEPTH = 128;
 
@@ -10602,7 +10606,7 @@ function drawFighterReflections(time) {
 // safe — and the battery profile (shadows off) skips the pass entirely.
 function drawFighterCastShadows() {
   if (!state.performance.shadows) return;
-  const rim = STAGE_RIM_LIGHTS[state.stage] || STAGE_RIM_LIGHTS.kensington;
+  const rim = STAGE_RIM_LIGHTS[state.stage] || STAGE_RIM_LIGHTS.somerset;
   const away = -rim.direction; // shadows fall away from the key light
   const deepen = clamp(superDimLevel, 0, 1);
   const stretch = (rim.castStretch ?? 0.45) * (1 + deepen * 0.45);
@@ -10732,7 +10736,7 @@ function drawAfterimages() {
 // practicals like the el-track arcs and boardwalk neon throw long, raked
 // shadows; the buffet's overhead lanterns keep them short and steep).
 const STAGE_RIM_LIGHTS = Object.freeze({
-  kensington: Object.freeze({ color: Object.freeze([126, 178, 255]), direction: -1, castShear: 0.66, castStretch: 0.44 }), // cool blue el-track arcs
+  somerset: Object.freeze({ color: Object.freeze([126, 178, 255]), direction: -1, castShear: 0.66, castStretch: 0.44 }), // cool blue el-track arcs
   vet: Object.freeze({ color: Object.freeze([255, 178, 84]), direction: 1, castShear: 0.5, castStretch: 0.5 }),            // sodium lot floods
   wildwood: Object.freeze({ color: Object.freeze([255, 104, 214]), direction: 1, castShear: 0.76, castStretch: 0.4 }),     // boardwalk neon pink
   buffet: Object.freeze({ color: Object.freeze([255, 190, 108]), direction: -1, castShear: 0.36, castStretch: 0.48 }),     // lantern amber
@@ -10741,7 +10745,7 @@ const STAGE_RIM_LIGHTS = Object.freeze({
 const SUPER_RIM_WARMTH = Object.freeze([255, 214, 150]);
 
 function stageRimColor() {
-  const rim = STAGE_RIM_LIGHTS[state.stage] || STAGE_RIM_LIGHTS.kensington;
+  const rim = STAGE_RIM_LIGHTS[state.stage] || STAGE_RIM_LIGHTS.somerset;
   const warmth = clamp(superDimLevel, 0, 1);
   const red = Math.round(lerp(rim.color[0], SUPER_RIM_WARMTH[0], warmth));
   const green = Math.round(lerp(rim.color[1], SUPER_RIM_WARMTH[1], warmth));
@@ -10756,7 +10760,7 @@ function stageRimColor() {
 // replay (the fill count in drawStageGrade never changes). Janney finally gets
 // the grade entry it was silently missing.
 const STAGE_GRADES = Object.freeze({
-  kensington: { tint: [44, 74, 110, 0.30], late: [26, 50, 122, 0.38], vignette: 0.30, lateVignette: 0.36 },
+  somerset: { tint: [44, 74, 110, 0.30], late: [26, 50, 122, 0.38], vignette: 0.30, lateVignette: 0.36 },
   vet: { tint: [96, 74, 40, 0.24], late: [52, 68, 108, 0.30], vignette: 0.26, lateVignette: 0.32 },           // floodlights take over, cooler cast
   wildwood: { tint: [88, 44, 110, 0.26], late: [62, 24, 126, 0.34], vignette: 0.28, lateVignette: 0.34 },     // sky deepens, neon reads hotter
   buffet: { tint: [112, 78, 40, 0.26], late: [98, 56, 54, 0.32], vignette: 0.22, lateVignette: 0.28 },
@@ -12811,6 +12815,7 @@ function impactSwingWhoosh(attack) {
 // shared noise loop so no two variants share a texture.
 const CROWD_AUDIO_PROFILES = Object.freeze({
   street: Object.freeze({ base: 0.013, react: 0.042, filterType: "lowpass", filterBase: 430, filterReact: 950, rate: 0.72, swell: "gasp" }),
+  somerset: Object.freeze({ base: 0.008, react: 0.024, filterType: "lowpass", filterBase: 360, filterReact: 720, rate: 0.66, swell: "gasp" }),
   tailgate: Object.freeze({ base: 0.021, react: 0.062, filterType: "lowpass", filterBase: 620, filterReact: 1500, rate: 0.86, swell: "roar" }),
   boardwalk: Object.freeze({ base: 0.011, react: 0.034, filterType: "lowpass", filterBase: 520, filterReact: 1050, rate: 0.78, swell: "gasp" }),
   buffet: Object.freeze({ base: 0.012, react: 0.032, filterType: "bandpass", filterBase: 1150, filterReact: 850, rate: 1.06, swell: "clatter" }),
@@ -13029,7 +13034,7 @@ function updateMusicIntensity(dt) {
 // are sparse one-shots on their own render-clock cadence. Everything sits far
 // below the music and ducks with it during cinematics.
 const AMBIENCE_PROFILES = Object.freeze({
-  kensington: Object.freeze({
+  somerset: Object.freeze({
     layers: Object.freeze([
       // Distant traffic wash.
       Object.freeze({ kind: "noise", rate: 0.6, filterType: "lowpass", filterFreq: 280, q: 0.7, gain: 0.02, lfoRate: 0.07, lfoDepth: 0.3 }),
@@ -13245,8 +13250,7 @@ function updateAmbienceAudio(time, dt) {
   // Follows musicDuck so cinematic ducks pull the bed down with the music.
   const target = clamp(state.sfxVolume, 0, 1) * cinematicDuck * preview * pauseDuck * (0.35 + 0.65 * state.musicDuck);
   ambienceRig.master.gain.setTargetAtTime(Math.max(0.0001, target), now, 0.25);
-  // K&A: el-train rumble loosely follows the train visual (same x formula as
-  // the drawKensington street life pass).
+  // Somerset: El-train rumble loosely follows the moving train-light layer.
   const trainLayer = ambienceRig.layers.find((layer) => layer.spec.train);
   if (trainLayer) {
     const trainX = ((time * 0.08) % (W + 650)) - 500;
@@ -13585,7 +13589,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.8c");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.8d");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -14067,7 +14071,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.8c-reality-break",
+  version: "1.8d-somerset-after-dark",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -14082,6 +14086,13 @@ window.__finalBlowEngine = {
       screen: state.screen,
       mode: state.mode,
       stage: state.stage,
+      stageArt: {
+        asset: stages[state.stage]?.src || "",
+        loaded: Boolean(stageImages[state.stage]?.complete && stageImages[state.stage]?.naturalWidth),
+        style: state.stage === "somerset" ? "photorealistic-street" : "cinematic-arcade",
+        embeddedPeople: state.crowd?.embeddedPeople || 0,
+        embeddedPose: state.crowd?.embeddedPose || "",
+      },
       picks: [...state.picks],
       aiDifficulty: state.aiDifficulty,
       paused: state.paused,
@@ -14473,7 +14484,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       updateTrainingUi();
       return trainingSnapshot(state.training).trial;
     },
-    stage(stageId = "kensington") {
+    stage(stageId = "somerset") {
       if (!stages[stageId]) throw new Error(`Unknown stage: ${stageId}`);
       state.stage = stageId;
       updateStageUI();

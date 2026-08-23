@@ -246,7 +246,7 @@ body.reduced-motion #screenWipe.run {
   background:
     linear-gradient(90deg, rgba(2,3,5,.96), rgba(2,3,5,.42) 33%, rgba(2,3,5,.4) 67%, rgba(2,3,5,.96)),
     linear-gradient(180deg, rgba(1,2,4,.25), rgba(1,2,4,.94)),
-    url("assets/kensington-allegheny.webp") center 48% / cover;
+    url("assets/somerset-septa.webp") center 48% / cover;
 }
 
 .title-screen::before {
@@ -932,7 +932,7 @@ kbd,
   filter: saturate(.8) contrast(1.12);
 }
 
-.kensington-preview { background-image: linear-gradient(180deg, transparent, rgba(0,0,0,.22)), url("assets/kensington-allegheny.webp"); }
+.somerset-preview { background-image: linear-gradient(180deg, transparent, rgba(0,0,0,.22)), url("assets/somerset-septa.webp"); background-position: center 52%; }
 .vet-preview { background-image: linear-gradient(180deg, transparent, rgba(0,0,0,.22)), url("assets/veterans-stadium.webp"); }
 .wildwood-preview { background-image: linear-gradient(180deg, transparent, rgba(0,0,0,.22)), url("assets/wildwood-boardwalk.webp"); }
 .buffet-preview { background-image: linear-gradient(180deg, transparent, rgba(0,0,0,.22)), url("assets/chinese-buffet.webp"); }

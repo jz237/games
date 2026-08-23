@@ -3,7 +3,7 @@ import test from "node:test";
 import { createDemoDirector, demoMatchupKey } from "../engine/demo.mjs";
 
 const fighters = ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali"];
-const stages = ["kensington", "vet", "wildwood", "buffet", "cruise", "janney"];
+const stages = ["somerset", "vet", "wildwood", "buffet", "cruise", "janney"];
 
 test("demo director is deterministic and exhausts every matchup before repeating", () => {
   const first = createDemoDirector({ fighterIds: fighters, stageIds: stages, trackCount: 4, seed: 237 });

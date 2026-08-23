@@ -24,9 +24,9 @@ export const CROWD_LAYERS = Object.freeze([
 export const CROWD_TOTAL = CROWD_LAYERS.reduce((total, layer) => total + layer.count, 0);
 
 /**
- * Posture archetypes. The K&A brief asks for a crowd dominated by hunched,
- * shuffling and lingering figures, so those weigh heaviest, with a minority of
- * upright walkers and leaners for variety.
+ * Legacy street-posture archetypes remain available to crowd variants that need
+ * hunched, shuffling and lingering figures, with a minority of upright walkers
+ * and leaners for variety. Somerset uses embedded photographic actors instead.
  */
 export const POSTURES = Object.freeze([
   Object.freeze({ id: "hunch", weight: 26, lean: 0.30, headDrop: 0.22, stride: 0.46, armSwing: 0.30, bob: 0.7 }),
@@ -141,6 +141,18 @@ const RESORT_ACCENTS = Object.freeze([
 
 export const CROWD_VARIANTS = Object.freeze({
   street: Object.freeze({ postures: POSTURES, coats: null, trousers: null, accents: null }),
+  // Somerset's adults are rendered into the generated photographic plate so
+  // their fabric, anatomy, depth and deeply folded head-near-knees poses remain
+  // realistic. Canvas pedestrians would visibly break that treatment.
+  somerset: Object.freeze({
+    postures: POSTURES,
+    coats: null,
+    trousers: null,
+    accents: null,
+    counts: Object.freeze({ far: 0, mid: 0, near: 0 }),
+    embeddedPeople: 9,
+    embeddedPose: "deep-slump-head-near-knees",
+  }),
   tailgate: Object.freeze({ postures: TAILGATE_POSTURES, coats: FAN_COLOURS, trousers: FAN_TROUSERS, accents: FAN_ACCENTS }),
   boardwalk: Object.freeze({ postures: BOARDWALK_POSTURES, coats: BOARDWALK_COLOURS, trousers: null, accents: null }),
   buffet: Object.freeze({ postures: BUFFET_POSTURES, coats: BUFFET_COLOURS, trousers: null, accents: null }),
@@ -166,7 +178,7 @@ export const CROWD_VARIANTS = Object.freeze({
 });
 
 export const STAGE_CROWD_VARIANT = Object.freeze({
-  kensington: "street",
+  somerset: "somerset",
   vet: "tailgate",
   wildwood: "boardwalk",
   buffet: "buffet",
@@ -304,7 +316,19 @@ export function createCrowd(stageId, { seed = 1, minX = -90, maxX = 1370 } = {})
     : variantId === "poolside"
       ? createScuffles(rng, minX, span, POOL_INCIDENT_KINDS, variant.incidents || 6)
       : [];
-  return { stageId, variant: variantId, seed, minX, maxX, span, people, cats, scuffles };
+  return {
+    stageId,
+    variant: variantId,
+    seed,
+    minX,
+    maxX,
+    span,
+    people,
+    cats,
+    scuffles,
+    embeddedPeople: variant.embeddedPeople || 0,
+    embeddedPose: variant.embeddedPose || "",
+  };
 }
 
 /** Seeded stray-cat movement for the vacant lot. */
@@ -392,9 +416,12 @@ export function crowdSnapshot(crowd, frame, { viewLeft = 0, viewRight = 1280 } =
     const { x } = catPosition(cat, frame, crowd.span, crowd.minX);
     if (x > viewLeft - 40 && x < viewRight + 40) visibleCats += 1;
   }
+  const embeddedPeople = crowd.embeddedPeople || 0;
   return {
-    total: crowd.people.length,
-    visible: visible + visibleCats,
+    total: crowd.people.length + embeddedPeople,
+    visible: visible + visibleCats + embeddedPeople,
+    embeddedPeople,
+    embeddedPose: crowd.embeddedPose || "",
     cats: (crowd.cats || []).length,
     visibleCats,
     layers,

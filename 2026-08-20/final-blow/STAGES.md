@@ -1,61 +1,39 @@
 # Stage crowds
 
-## Kensington & Allegheny
+## Somerset SEPTA Station
 
-The K&A street is now genuinely occupied. `engine/crowd.mjs` builds **32
-pedestrians** once per round from the match seed and animates them purely from the
-simulation tick, so the crowd is byte-identical under replay, rollback, the
-AI-vs-AI demo and automated tests while never touching gameplay state.
+The former Kensington & Allegheny arena has been removed. Its replacement is a
+highly detailed photoreal night view from the street into the Somerset station
+entrance beneath the Market-Frankford elevated railway.
 
-**At least 27 are on screen at any moment** — the walking band is only slightly
-wider than the 1280px frame, so the street never empties.
+### Street composition
 
-### Depth
+The entrance and **SOMERSET** sign sit clearly in the middle background. Blue El
+girders, a silver-and-blue train, distressed rowhouses and storefronts, traffic
+signals, parked cars, wet asphalt reflections and scattered litter retain the
+movement, density and amber/cold-blue lighting language of the old stage. The
+center foreground remains open for the fighters and stage weapon.
 
-Three layers, each with its own scale, walking speed, opacity, detail level and
-parallax factor:
+### Background people
 
-| Layer | People | Scale | Speed | Opacity | Parallax |
-| --- | --- | --- | --- | --- | --- |
-| far | 14 | 0.58 | 0.42 | 0.72 | 0.09 |
-| mid | 11 | 0.74 | 0.68 | 0.82 | 0.17 |
-| near | 7 | 0.92 | 1.00 | 0.90 | 0.29 |
+Nine anonymous adults sit or crouch along the far and middle-background
+sidewalks. Their clothing, anatomy and depth are rendered directly into the
+photographic plate, and their torsos are deeply folded with their heads lowered
+near their knees. They remain non-interactive, non-graphic and outside the fight
+plane.
 
-Every layer sits well above the fighters' floor line and none of them are in
-collision space — the crowd is drawn before the fighters and has no simulation
-presence whatsoever.
+The old stage's 32 canvas pedestrians are disabled here. Overlaying those arcade
+figures would cover the requested poses and break the realistic material
+treatment. `engine/crowd.mjs` exposes the plate's actor count and posture as
+deterministic metadata for QA without pretending the embedded people are moving
+simulation entities.
 
-### Variety
+### Activity and performance
 
-Each pedestrian is generated with its own posture archetype, build, height, width,
-shoulder slope, head tilt, direction, pace, gait phase, pause rhythm, coat,
-trousers, accent colour, hood, hat and bag. There are seven posture archetypes,
-weighted so **hunched, shuffling, stooping and lingering figures make up around
-84%** of the crowd, with a minority of upright walkers and leaners for contrast.
-
-Nothing is synchronised: pace, gait phase, pause period, pause length and pause
-offset are all independent, so two neighbours on the same layer drift apart within
-seconds and stop at different times for different lengths.
-
-### Contrast
-
-The palette is deliberately mid-tone and desaturated, the crowd is drawn behind
-the fighters, and every figure carries a soft contact shadow so it sits on the
-pavement. The brightest values, sharpest edges and strongest effects stay with the
-playable characters.
-
-### Reactions
-
-A landed special stirs the crowd slightly, a super stirs it hard, and the
-finishing prompt stirs it hardest. Reacting pedestrians flinch and hunch for a
-moment, then decay back to their routes — they never become interactive.
-
-### Performance
-
-Figures are drawn with plain canvas primitives, culled the moment their
-parallaxed position leaves the frame, and drop bag and hat detail on the far
-layer. The browser suite asserts the crowd stays at 25 or more visible on the
-844x390 landscape target as well as on desktop.
+The existing El motion and rumble, passing window-light sweep, drifting litter,
+weather particles, wet-floor reflections, cool rim light and stage ambience stay
+active. The optimized `assets/somerset-septa.webp` plate is 1280x720 and loaded
+through the same on-demand media path as the other stage art.
 
 ## The Vet Parking Lot
 
@@ -137,12 +115,13 @@ Stage weapon: the **serving tongs**.
 
 ## Shared
 
-Both stages are selectable from stage select, join the Arcade rotation, versus,
-Training, online play, deterministic replays, random selection and the Watch Demo
-shuffle bag, and are precached for offline play. Both share the same floor line
-and stage bounds as the original two, so the enlarged fighters, their shadows,
-projectiles, throwable objects, stage weapons and Final Blow cameras all frame
-identically. Backgrounds are original art generated for this project.
+Every stage is selectable from stage select and joins Arcade, versus, Training,
+online play, deterministic replays, random selection and the Watch Demo shuffle
+bag. They share one floor line and one set of stage bounds, so the enlarged
+fighters, shadows, projectiles, throwable objects, stage weapons and Final Blow
+cameras frame identically. Backgrounds are original art generated for this
+project and follow the small-shell PWA policy: code boots offline, while media is
+loaded on demand.
 
 ### Blocker
 

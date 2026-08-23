@@ -61,7 +61,7 @@ const weapon = (id, overrides) => Object.freeze({
 });
 
 export const STAGE_WEAPONS = Object.freeze({
-  kensington: weapon("needle", {
+  somerset: weapon("needle", {
     name: "DISCARDED NEEDLE",
     style: "needle",
     // Quick pickup, fast straight dart. Very small hitbox, low damage, brief

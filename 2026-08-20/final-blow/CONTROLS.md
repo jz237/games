@@ -1,6 +1,6 @@
-# Final Blow 1.8C four-button controls
+# Final Blow 1.8D four-button controls
 
-Version 1.8C uses the approved classic layout: one directional control plus
+Version 1.8D uses the approved classic layout: one directional control plus
 **LP, HP, LK, HK**. No legacy
 guard, special, super, throw or Final Blow button is required anywhere in the game.
 

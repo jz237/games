@@ -93,7 +93,7 @@ export function createArcadeRun(playerId, fighterIds, seed = 0) {
     `${playerId}:${seed}`,
   );
   if (rivalId && roster.includes(rivalId)) challengers.push(rivalId);
-  const arcadeStages = ["kensington", "wildwood", "buffet", "janney", "cruise", "vet"];
+  const arcadeStages = ["somerset", "wildwood", "buffet", "janney", "cruise", "vet"];
   const stageOffset = Math.abs(Number(seed) || 0) % arcadeStages.length;
   const matches = challengers.map((opponentId, index) => Object.freeze({
     index,

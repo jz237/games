@@ -1,4 +1,4 @@
-# Final Blow v1.8C — Handoff
+# Final Blow v1.8D — Handoff
 
 Paste this whole file to the next agent as context before asking it to touch
 Final Blow. It describes what exists, where it lives, the traps, and how to
@@ -11,7 +11,7 @@ This file lives at `2026-08-20/final-blow/HANDOFF.md` in `jz237/games`.
 ## 1. What this is
 
 `Final Blow: Philly After Dark` is a browser 2D versus fighting game. Version
-**1.8C** shipped on 2026-08-23. It keeps the Tournament Feel, cinematic-finisher,
+**1.8D** shipped on 2026-08-23. It keeps the Tournament Feel, cinematic-finisher,
 presentation and living-soundstage passes, then adds guard crush, Perfect Guard,
 quick/delayed wake-up choices and air recovery. The four-button neutral roles are
 now named consistently everywhere: **LP Jab, HP Hook, LK Light Kick, HK
@@ -35,6 +35,15 @@ detail without removing the photoreal environment or projectile choreography.
 The environment plate follows the existing on-demand media policy and is not in
 the service-worker install shell; filmic code-native lighting remains the
 offline fallback if that image has never been fetched.
+SOMERSET AFTER DARK removes the Kensington & Allegheny stage and replaces it
+with a street-level view into Somerset SEPTA Station. The generated 1280x720
+photoreal plate keeps the El, passing train, wet reflections, rowhouses,
+storefronts, traffic lights and litter, while nine anonymous adult background
+figures are realistically seated or crouched with their torsos deeply folded and
+heads lowered near their knees. Those people are part of the photographic plate;
+the old 32-person arcade crowd is disabled on this stage so it cannot cover them
+or break the visual treatment. El motion, lighting, litter, ambience and the
+existing stage weapon remain active.
 
 **Source of truth:** `git@github.com:jz237/games.git`, at `2026-08-20/final-blow/`.
 The local working clone is:
@@ -46,8 +55,8 @@ The local working clone is:
 That clone is on a branch called `final-blow-goal` which tracks `origin/main`.
 Do not create a new location for this game — the URLs below are fixed.
 
-**Recovery tag:** `final-blow-v1.8c` on `jz237/games`.
-If anything is ever lost, `git checkout final-blow-v1.8c` restores the exact
+**Recovery tag:** `final-blow-v1.8d` on `jz237/games`.
+If anything is ever lost, `git checkout final-blow-v1.8d` restores the exact
 shipped state.
 
 ---
@@ -215,9 +224,11 @@ reproduce them exactly. Keep it that way.
     serving tongs / souvenir cup. Persistent ON/OFF option. Passive CPU never
     takes one.
 11. **Cyraxx rebuilt** as the blue-shirted Chance Wilkins likeness — see §6.
-12. **Five stages, all with crowds.** K&A street (32 people), Vet tailgate
-    (fan crowd + 5 looping scuffles), Wildwood boardwalk, Chinese buffet,
-    cruise pool deck (44 people, 6 incident loops).
+12. **Six stages with distinct background life.** Somerset SEPTA Station
+    (photoreal street plate with nine deeply slumped background adults), Vet
+    tailgate (fan crowd + 5 looping scuffles), Wildwood boardwalk, Chinese
+    buffet, cruise pool deck (44 people, 6 incident loops), and the cat-filled
+    Janney Street vacant lot.
 
 ---
 
@@ -338,13 +349,13 @@ works fine and was used for all the new art.
 
 ## 9. Current repo state
 
-- Canonical release: `jz237/games` tag `final-blow-v1.8c`.
+- Canonical release: `jz237/games` tag `final-blow-v1.8d`.
 - Never publish from a long-lived `jez237-site` clone. Other agents may own its
   local commits or it may be far behind `origin/main`; use the fresh-clone mirror
   procedure in section 2.
 - Untracked and deliberately preserved in the canonical game folder:
   `BACKLOG.md` and `assets/references/`. They are private and are not part of the
-  v1.8C commit or mirror.
+  v1.8D commit or mirror.
 
 ---
 
