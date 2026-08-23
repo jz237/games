@@ -3135,6 +3135,16 @@ try {
     return true;
   })()`);
   await evaluate(client, `window.__finalBlowQa.step(2.5)`);
+  // Arcade runs live on RAF here, so the AI is free to act while this probe
+  // samples. Without a neutral, uninterruptible window the press lands during
+  // whatever the opponent happened to be doing — 1.9's offensive pass shifted
+  // that timing enough to leave the fighter in hitstun, and a stunned fighter
+  // correctly refuses to attack. Clear the stun and hold invulnerability so
+  // this tests touch input rather than arcade AI timing.
+  await evaluate(client, `window.__finalBlowQa.fighter(0, {
+    hitstunFrames: 0, blockstunFrames: 0, knockdownFrames: 0,
+    wakeupFrames: 0, dizzyFrames: 0, guardCrushFrames: 0, invulnerableFrames: 90,
+  })`);
   await evaluate(client, `(() => {
     const button = document.querySelector('[data-touch="lp"]');
     button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
