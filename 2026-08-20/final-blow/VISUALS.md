@@ -1,9 +1,31 @@
 # Visual presentation systems
 
 Version 1.4 "Red Cinema" added two presentation passes on top of 1.3's violence
-tiers. Everything here is render/presentation-only: driven by `visualRandom` or
-the simulation tick, gated by the performance profile, and invisible to rollback
-checksums. Nothing in this file affects gameplay outcomes.
+tiers; version 1.5 "Showtime" added seven more waves (44 features) on the same
+contract. Everything here is render/presentation-only: driven by `visualRandom`,
+`presentationHash01` or the simulation tick, gated by the performance profile,
+and invisible to rollback checksums. Nothing in this file affects gameplay
+outcomes.
+
+## 1.5 "Showtime" wave map (where to look in game.js)
+
+| Wave | Systems | Key symbols |
+| --- | --- | --- |
+| 1 fighters | rim lights, hit smears, dizzy ghosts, breathing idle, contact shadows, grit auras, last-legs desperation | `STAGE_RIM_LIGHTS`, `tintedSilhouette`, `presentationDebug` |
+| 2 damage | accumulating battle damage composited into the sprite; key-light cast shadows | `pushBattleDamageMark`, `drawFighterCastShadows` |
+| 3 stages | rack-focus blur, practical lights, floor battle scars, time-of-day drift, ambient weather, foreground occluders, crowd flashbulbs + round-win beats | `blurredStageCover`, `stageScars`, `drawStageWeather` |
+| 4 impact | counter-hit invert flash, projectile lighting, swipe ribbons, corner wall-splat, super focus lines, impact light spill | `spawnWallImpact`, `drawSuperFocusLines`, `counterFocus` |
+| 5 HUD | damage ghost bars, announcer letter-slam, combo heat tiers, round slash wipe, select lock-in/VS slam, victory entrance, pip flip, timer urgency | `updateDamageGhosts`, `hudFxDebug`, `#screenWipe` |
+| 6 camera | KO punch-in, intro dolly + letterbox, FINISH THEM dread creep, counter/dizzy pops, fatality handheld + dutch tilt, win-pose settle, directional recoil | `cinematicCamera`, `snapshot().camera.presentation` |
+| 7 tech | quarter-res bloom, RGB-split aberration, distortion rings, DPR-sharp backing store, slow-mo motion blur, CRT mode, super portrait cut-in | `applyBackingStoreResolution`, SHARP RENDER / CRT MODE toggles |
+
+Wave rules that keep this safe (binding for future work): spawn from sim paths
+only behind `if (rollbackResimulating)` + simulation-tick dedupe; camera motion
+must ease back to exact identity (assert `snapshot().camera.presentation` is
+1/0/0/0); one-shot DOM events use monotonic `hudFxDebug` counters because the
+per-frame `presentationDebug` reset would race a sampler; battery profile skips
+every wave-7 pass; reducedMotion calms or skips every animation and
+highContrast keeps text legible.
 
 ## Scene dressing (`game.js`, above `drawParticles`)
 
