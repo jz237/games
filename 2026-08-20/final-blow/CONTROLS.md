@@ -1,6 +1,6 @@
-# Final Blow 1.7 four-button controls
+# Final Blow 1.7A four-button controls
 
-Version 1.7 uses the approved classic layout: one directional control plus
+Version 1.7A uses the approved classic layout: one directional control plus
 **LP, HP, LK, HK**. No legacy
 guard, special, super, throw or Final Blow button is required anywhere in the game.
 
@@ -32,6 +32,10 @@ opening normal.
 
 PlayStation and Nintendo pads are detected from the gamepad id and relabelled
 (□ △ ✕ ○ and Y X B A respectively). Every binding is remappable and persisted.
+
+Attack names stay in the move list and training data, but they are not shown as
+combat-text popups during play. Tactical alerts such as **COUNTER**, **LOW**,
+**OVERHEAD** and **GUARD CRUSH** remain visible.
 
 Each button authors a distinct normal in every stance:
 

@@ -1954,6 +1954,11 @@ const presentationDebug = {
   // Wave 7 steady screen-space passes, counted per rendered frame.
   bloomPasses: 0, rgbSplits: 0,
 };
+
+// Release 1.7A CLEAN HITS: preserve the fighter palette during hit feedback.
+// Hitstop, particles, camera recoil and sound still carry the impact; this
+// short brightness lift replaces the old desaturated/inverted silhouette.
+const HIT_FLASH_FILTER = "brightness(1.55) saturate(1.12)";
 // Grit super-ready flare latches, one per side. Render-only module state on the
 // superDimLevel pattern: never snapshotted, only ever read/written from the
 // draw path, so rollback resimulation cannot touch it.
@@ -4856,17 +4861,9 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     latchSuperPresentation(fighter);
   }
   if (linkedFrom) spawnCombatText(fighter.x, fighter.y - fighter.height - 20, "LINK", fighter.def.accent);
-  const suppressFlowMoveLabel = fighter.def.id === "ali"
-    && cancelledFrom
-    && fighter.rhythmStacks >= 2;
-  if (fighter.attacking.moveName && !suppressFlowMoveLabel) {
-    spawnCombatText(
-      fighter.x + fighter.facing * 28,
-      fighter.y - fighter.height - 42,
-      fighter.attacking.moveName,
-      fighter.def.accent,
-    );
-  }
+  // Release 1.7A CLEAN HITS: move names remain available in the move list and
+  // training data, but normal play no longer narrates each attack over the
+  // fighters. Tactical callouts such as COUNTER, LOW and GUARD CRUSH remain.
   updateHud();
   sound(fighter.attacking.superMove ? "super" : actionGroup === "throw" ? "throw" : fighter.attacking.kind, fighter);
   // Release 1.6 LOUD: synthesized pre-impact whoosh layered under the swing
@@ -9571,16 +9568,7 @@ function drawFighter(fighter, time) {
     ctx.shadowBlur = state.performance.shadows ? fighter.specialGlow > 0 ? 25 : 9 : 0;
     ctx.shadowOffsetY = 6;
     if (fighter.hitFlash > 0) {
-      // Counter-hit flash frames (wave 4): through hitstop and the first few
-      // ticks after, a counter victim renders as a stark inverted silhouette
-      // (the SF6 Punish Counter pop), then falls back to the standard white
-      // flash for the tail. High contrast keeps the plain flash.
-      const counterPop = fighter.hitFlash > 0.055
-        && typeof fighter.lastHitResult === "string"
-        && (fighter.lastHitResult.startsWith("counter") || fighter.lastHitResult === "southpaw-countered")
-        && !state.accessibility.highContrast;
-      ctx.filter = counterPop ? "invert(1) contrast(1.4)" : "brightness(2.5) saturate(.28)";
-      if (counterPop && !reflectionPassActive) presentationDebug.counterFlashes += 1;
+      ctx.filter = HIT_FLASH_FILTER;
     } else if (fighter.block) ctx.filter = "brightness(.82) saturate(.78)";
     else if (!graphicFatality && fighter.health < 25 && !state.accessibility.highContrast) {
       // Last-legs grade: drained, slightly desaturated and contrasty. Lowest
@@ -10491,8 +10479,8 @@ function drawParticles() {
       }
     } else if (effect.kind === "counterFocus") {
       // Counter-hit focus burst (wave 4): gold anime speed lines rushing in on
-      // the impact point. Skipped under reduced motion — the victim's inverted
-      // flash pop still marks the counter. Deterministic jitter only.
+      // the impact point. Skipped under reduced motion; the color-preserving
+      // brightness pop still marks the counter. Deterministic jitter only.
       if (!state.accessibility.reducedMotion) {
         const rush = 1 - alpha;
         ctx.globalCompositeOperation = "screen";
@@ -12986,7 +12974,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.7");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.7a");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -13468,7 +13456,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.7-depth",
+  version: "1.7a-clean-hits",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -13512,6 +13500,13 @@ window.__finalBlowEngine = {
         buffer: { ...INPUT_BUFFER_RULES },
         priority: [...TOURNAMENT_ACTION_PRIORITY],
       },
+      presentationRules: {
+        hitFlashFilter: HIT_FLASH_FILTER,
+        attackNamePopups: false,
+      },
+      combatTextLabels: state.effects
+        .filter((effect) => effect.kind === "combatText")
+        .map((effect) => effect.label),
       camera: {
         x: cameraTarget.x,
         y: cameraTarget.y,
