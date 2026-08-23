@@ -1878,12 +1878,54 @@ let reflectionPassActive = false;
 const presentationDebug = {
   rimLights: 0, hitSmears: 0, dizzyGhosts: 0, breathing: 0,
   contactShadows: 0, gritAuras: 0, lastLegs: 0,
+  battleDamage: 0, castShadows: 0,
 };
 // Grit super-ready flare latches, one per side. Render-only module state on the
 // superDimLevel pattern: never snapshotted, only ever read/written from the
 // draw path, so rollback resimulation cannot touch it.
 const gritFlareLevel = [0, 0];
 const gritReadyLatched = [false, false];
+// Accumulating battle damage: MK3-style bruise/cut smudges baked onto each
+// fighter's sprite. Module-level per-side arrays on the superDimLevel pattern —
+// render-only, never snapshotted, so rollback checksums are untouched. Mark
+// creation is resimulation-proof twice over: pushes bail while
+// rollbackResimulating (the announce() pattern) AND dedupe against the
+// simulationTick stored on each mark, so no (tick, side) pair can ever
+// double-mark even if a hit tick is executed twice.
+const BATTLE_DAMAGE_MARK_CAP = 10;
+const battleDamageMarks = [[], []];
+// Bumped on every push/clear so the compositor cache key invalidates cheaply.
+const battleDamageRevision = [0, 0];
+
+function pushBattleDamageMark(victim, tier = "light") {
+  if (rollbackResimulating) return;
+  const side = victim?.side;
+  if (side !== 0 && side !== 1) return;
+  const marks = battleDamageMarks[side];
+  if (marks.some((mark) => mark.tick === state.simulationTick)) return;
+  const heavy = tier !== "light";
+  // Cell-space (320px atlas cell) coordinates biased to the head/torso bands.
+  const band = visualRandom() < 0.38
+    ? { top: 48, span: 60 }
+    : { top: 112, span: 94 };
+  marks.push({
+    tick: state.simulationTick,
+    x: 160 + (visualRandom() - 0.5) * 104,
+    y: band.top + visualRandom() * band.span,
+    size: (heavy ? 14 : 9) + visualRandom() * (heavy ? 12 : 7),
+    cut: heavy && visualRandom() < 0.6,
+    lean: (visualRandom() - 0.5) * 1.6,
+  });
+  if (marks.length > BATTLE_DAMAGE_MARK_CAP) marks.shift();
+  battleDamageRevision[side] += 1;
+}
+
+function clearBattleDamage() {
+  battleDamageMarks[0].length = 0;
+  battleDamageMarks[1].length = 0;
+  battleDamageRevision[0] += 1;
+  battleDamageRevision[1] += 1;
+}
 const rollbackFighterReferences = new Set(["def", "kit", "movement", "combo", "directionTapTracker", "inputBuffer", "projectileSpawnFrames"]);
 const rollbackPresentationFighterFields = new Set([
   "animTime", "walkTime", "hitFlash", "specialGlow", "cinematicFrame", "cinematicRotation", "cinematicScale", "lastHitResult",
@@ -2282,6 +2324,7 @@ function startMatch(resetSet = true) {
     selectTrainingTrial(state.training, state.fighters[0].kitId, state.training.trialIndex);
     if (state.training.infiniteGrit) state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
   }
+  clearBattleDamage();
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
@@ -2348,6 +2391,7 @@ function startOnlineMatch(config) {
   resetStageWeapon();
   resetCrowd();
   warmFighterAudio();
+  clearBattleDamage();
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
@@ -2397,6 +2441,7 @@ function resetRound() {
   state.fighters.forEach((fighter, side) => { fighter.meter = carriedGrit[side] || 0; });
   resetStageWeapon();
   resetCrowd();
+  clearBattleDamage();
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
@@ -4187,6 +4232,7 @@ function triggerPaintTrap(trap, victim) {
   victim.meter = clamp(victim.meter + 13 * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
   owner.attackConnected = blocked ? "block" : "hit";
   state.effects.push({ kind: "paintTrapBurst", x: trap.x, y: trap.y - 24, life: 0.62, max: 0.62, color: trap.color });
+  if (!blocked) pushBattleDamageMark(victim, "special");
   spawnHit(trap.x, trap.y - 63, owner.def, "special", blocked, { direction: owner.facing });
   spawnCombatText(trap.x, trap.y - 112, blocked ? "WET BLOCK" : "WET PAINT!", trap.color);
   applyViolenceResponse("special", { blocked });
@@ -4452,6 +4498,7 @@ function triggerProjectile(projectile, victim) {
   victim.meter = clamp(victim.meter + 15 * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
   state.effects.push({ kind: projectile.style === "feedback" ? "feedbackBurst" : "projectileBurst", x: projectile.x, y: projectile.y, life: 0.5, max: 0.5, color: projectile.color });
   const impactTier = projectile.stageWeapon ? "weapon" : projectile.throwable ? "heavy" : "special";
+  if (!blocked && !armored) pushBattleDamageMark(victim, impactTier);
   spawnHit(projectile.x, projectile.y, owner.def, impactTier, blocked, { direction: hitDirection, counter });
   if (projectile.style === "feedback") spawnCombatText(projectile.x, projectile.y - 86, blocked ? "ECHO BLOCK" : "FEEDBACK ECHO!", projectile.color);
   else if (counter) spawnCombatText(projectile.x, projectile.y - 72, "COUNTER", projectile.color);
@@ -4880,6 +4927,7 @@ function resolveGrabThrow(attacker, victim, grab, style, direction) {
   state.lastImpactSide = attacker.side;
   const impactX = victim.x;
   const impactY = FLOOR - 60;
+  pushBattleDamageMark(victim, "throw");
   spawnHit(impactX, impactY, attacker.def, "throw", false, { direction });
   spawnCombatText(impactX, impactY - 78, grab.back ? "BACK THROW" : "THROW", attacker.def.accent);
   sound("hit-heavy", attacker);
@@ -4969,6 +5017,7 @@ function triggerSouthpawCounter(counterFighter, incomingFighter, incomingAttack,
     x: incomingFighter.x - counterFighter.facing * 28,
     y: incomingFighter.y - 132,
   };
+  pushBattleDamageMark(incomingFighter, "special");
   spawnHit(impact.x, impact.y, counterFighter.def, "special", false, { direction: counterFighter.facing, counter: true });
   state.effects.push({ kind: "counterPunch", x: impact.x, y: impact.y, life: 0.62, max: 0.62, color: counterFighter.def.accent });
   spawnCombatText(impact.x, impact.y - 128, "COUNTER-PUNCH!", counterFighter.def.accent);
@@ -5117,6 +5166,7 @@ function hit(attacker, victim, attack, collision) {
     : attack.kind === "throw" ? "throw"
       : attack.kind === "special" ? "special"
         : attack.kind === "heavy" ? "heavy" : "light";
+  if (!blocked && !armored) pushBattleDamageMark(victim, impactTier);
   applyViolenceResponse(impactTier, {
     blocked,
     counter,
@@ -6388,6 +6438,66 @@ function drawSilhouetteFrame(atlas, frame, size, color) {
   ctx.drawImage(tintedSilhouette(atlas, frame, color), -size * 0.5, -size, size, size);
 }
 
+// ---------------------------------------------------------------------------
+// Battle-damage compositor: one atlas-cell scratch per side. The current frame
+// is drawn in, then the fighter's accumulated bruise/cut marks are stamped
+// with source-atop so they clip to the sprite's alpha and ride the animation.
+// The result blits with drawAtlasFrame's exact footprint. Keyed on
+// atlas/frame/mark revision/gore so held poses reuse the composite; a frame
+// change costs one cell draw plus at most BATTLE_DAMAGE_MARK_CAP gradients.
+// ---------------------------------------------------------------------------
+const damageScratches = [document.createElement("canvas"), document.createElement("canvas")];
+const damageScratchContexts = damageScratches.map((scratch) => {
+  scratch.width = SILHOUETTE_CELL;
+  scratch.height = SILHOUETTE_CELL;
+  return scratch.getContext("2d");
+});
+const damageScratchKeys = ["", ""];
+
+function drawDamagedAtlasFrame(side, atlas, frame, size) {
+  const scratchCtx = damageScratchContexts[side];
+  const gore = state.graphicFatalities;
+  const key = `${atlas.src}|${frame}|${battleDamageRevision[side]}|${gore ? 1 : 0}`;
+  if (key !== damageScratchKeys[side]) {
+    damageScratchKeys[side] = key;
+    scratchCtx.globalCompositeOperation = "source-over";
+    scratchCtx.clearRect(0, 0, SILHOUETTE_CELL, SILHOUETTE_CELL);
+    scratchCtx.drawImage(
+      atlas,
+      (frame % 4) * SILHOUETTE_CELL, Math.floor(frame / 4) * SILHOUETTE_CELL,
+      SILHOUETTE_CELL, SILHOUETTE_CELL,
+      0, 0, SILHOUETTE_CELL, SILHOUETTE_CELL,
+    );
+    scratchCtx.globalCompositeOperation = "source-atop";
+    for (const mark of battleDamageMarks[side]) {
+      // Blood-red cuts honour the GRAPHIC FATALITIES toggle; with it off every
+      // mark renders as a plain bruise.
+      const bloody = mark.cut && gore;
+      scratchCtx.save();
+      scratchCtx.translate(mark.x, mark.y);
+      scratchCtx.rotate(mark.lean);
+      scratchCtx.scale(1, bloody ? 1.45 : 0.85);
+      const smear = scratchCtx.createRadialGradient(0, 0, mark.size * 0.15, 0, 0, mark.size);
+      if (bloody) {
+        smear.addColorStop(0, "rgba(122,10,18,0.68)");
+        smear.addColorStop(0.55, "rgba(88,8,16,0.44)");
+        smear.addColorStop(1, "rgba(60,6,12,0)");
+      } else {
+        smear.addColorStop(0, "rgba(56,32,56,0.6)");
+        smear.addColorStop(0.55, "rgba(42,26,46,0.38)");
+        smear.addColorStop(1, "rgba(28,18,34,0)");
+      }
+      scratchCtx.fillStyle = smear;
+      scratchCtx.beginPath();
+      scratchCtx.arc(0, 0, mark.size, 0, Math.PI * 2);
+      scratchCtx.fill();
+      scratchCtx.restore();
+    }
+    scratchCtx.globalCompositeOperation = "source-over";
+  }
+  ctx.drawImage(damageScratches[side], -size * 0.5, -size, size, size);
+}
+
 function activeGraphicFatality(fighter) {
   const finisher = state.finisher;
   if (!state.graphicFatalities || !finisher?.fatalityTriggered || fighter.side === finisher.winner) return null;
@@ -7208,6 +7318,14 @@ const FIGHTER_SIZE_ADJUST = Object.freeze({
   benny: 1, donald: 1.02, cyraxx: 1.02, ali: 0.99, commissioner: 1.03,
 });
 
+// Per-fighter correction when a pose comes from the specials move sheet, whose
+// cells frame the body slightly differently. Shared by drawFighter and the
+// cast-shadow pass so both size a specials frame identically.
+const MOVE_SHEET_ADJUST = Object.freeze({
+  deathblow: 1.14, jez: 1.03, alan: 1.06, post: 1.02, benny: 1.02,
+  donald: 1.04, cyraxx: 1.05, ali: 1.04, commissioner: 1.02,
+});
+
 function fighterRenderSize(fighterId) {
   return FIGHTER_RENDER_BASE * FIGHTER_SCALE * (FIGHTER_SIZE_ADJUST[fighterId] || 1);
 }
@@ -7292,9 +7410,7 @@ function drawFighter(fighter, time) {
   const frame = pose.frame;
   const graphicFatality = activeGraphicFatality(fighter);
   const sizeAdjust = FIGHTER_SIZE_ADJUST[fighter.def.id] || 1;
-  const moveSheetAdjust = pose.bank === "specials"
-    ? ({ deathblow: 1.14, jez: 1.03, alan: 1.06, post: 1.02, benny: 1.02, donald: 1.04, cyraxx: 1.05, ali: 1.04, commissioner: 1.02 }[fighter.def.id] || 1)
-    : 1;
+  const moveSheetAdjust = pose.bank === "specials" ? (MOVE_SHEET_ADJUST[fighter.def.id] || 1) : 1;
   const renderSize = fighterRenderSize(fighter.def.id) * moveSheetAdjust;
   const attackKind = attack?.kind;
   const lunge = attackSwing * (attackKind === "special" ? 68 : attackKind === "heavy" ? 46 : 29);
@@ -7533,7 +7649,13 @@ function drawFighter(fighter, time) {
       if (!reflectionPassActive) presentationDebug.lastLegs += 1;
     }
     if (graphicFatality) drawGraphicFatalityVictim(atlas, frame, renderSize, graphicFatality, time);
-    else drawAtlasFrame(atlas, frame, renderSize);
+    else if (!reflectionPassActive && state.performance.shadows && battleDamageMarks[fighter.side].length) {
+      // Accumulating battle damage: composite the accrued marks onto this
+      // frame's sprite. The mirror pass and the battery profile stay on the
+      // plain atlas blit so the extra composite never doubles up.
+      drawDamagedAtlasFrame(fighter.side, atlas, frame, renderSize);
+      presentationDebug.battleDamage += battleDamageMarks[fighter.side].length;
+    } else drawAtlasFrame(atlas, frame, renderSize);
     ctx.restore();
 
     const flare = gritFlareLevel[fighter.side];
@@ -7941,6 +8063,50 @@ function drawFighterReflections(time) {
   ctx.restore();
 }
 
+// Key-light cast shadows: each fighter throws a long, soft, sheared black
+// silhouette across the floor away from the stage's key light — the exact
+// sibling of drawFighterReflections (same clipped floor band, one sprite draw
+// per fighter) but squashed, skewed and black instead of mirrored and tinted.
+// Direction and rake come from STAGE_RIM_LIGHTS, so the rim highlight and the
+// cast shadow always agree about where the light hangs. Airborne fighters
+// slide the whole shadow down-light and fade it, visibly detaching it from
+// the feet; while the super spotlight is up the shadows deepen and lengthen
+// with superDimLevel. Static transform of snapshotted state — reducedMotion
+// safe — and the battery profile (shadows off) skips the pass entirely.
+function drawFighterCastShadows() {
+  if (!state.performance.shadows) return;
+  const rim = STAGE_RIM_LIGHTS[state.stage] || STAGE_RIM_LIGHTS.kensington;
+  const away = -rim.direction; // shadows fall away from the key light
+  const deepen = clamp(superDimLevel, 0, 1);
+  const stretch = (rim.castStretch ?? 0.45) * (1 + deepen * 0.45);
+  const shear = away * (rim.castShear ?? 0.55) * (1 + deepen * 0.3);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, FLOOR + 1, W, REFLECTION_DEPTH);
+  ctx.clip();
+  for (const fighter of state.fighters) {
+    const pose = fighterAnimationPose(fighter);
+    const atlas = pose.bank === "specials"
+      ? fighterMoveAtlases[fighter.def.id] || fighterAtlases[fighter.def.id]
+      : fighterAtlases[fighter.def.id];
+    if (!atlas?.complete || !atlas.naturalWidth) continue;
+    const renderSize = fighterRenderSize(fighter.def.id)
+      * (pose.bank === "specials" ? MOVE_SHEET_ADJUST[fighter.def.id] || 1 : 1);
+    const jump = Math.max(0, FLOOR - fighter.y);
+    const airFade = clamp(1 - jump / 520, 0.25, 1);
+    ctx.save();
+    // Feet anchor; height above the floor slides the contact point down-light.
+    ctx.translate(fighter.x + away * jump * 0.5, FLOOR + 2 + jump * 0.1);
+    ctx.transform(1, 0, shear, 1, 0, 0); // rake the far end down-light
+    ctx.scale(fighter.facing, -stretch);  // flip into the floor, squashed long
+    ctx.globalAlpha = (0.3 + deepen * 0.22) * airFade;
+    drawSilhouetteFrame(atlas, pose.frame, renderSize, "#04060a");
+    ctx.restore();
+    presentationDebug.castShadows += 1;
+  }
+  ctx.restore();
+}
+
 // Classic super presentation: the street goes dark, the fighters stay lit.
 function drawSuperSpotlight() {
   if (superDimLevel <= 0.02) return;
@@ -7977,12 +8143,16 @@ function drawAfterimages() {
 // Stage key lights for the fighter rim pass: the colour of each arena's
 // dominant practical light and which world-space side it comes from. The rim
 // blends toward the warm spotlight tone while the super dim is up.
+// castShear/castStretch drive the floor cast-shadow pass: how hard the same
+// key light skews the shadow down-light and how long it throws (low harsh
+// practicals like the el-track arcs and boardwalk neon throw long, raked
+// shadows; the buffet's overhead lanterns keep them short and steep).
 const STAGE_RIM_LIGHTS = Object.freeze({
-  kensington: Object.freeze({ color: Object.freeze([126, 178, 255]), direction: -1 }), // cool blue el-track arcs
-  vet: Object.freeze({ color: Object.freeze([255, 178, 84]), direction: 1 }),          // sodium lot floods
-  wildwood: Object.freeze({ color: Object.freeze([255, 104, 214]), direction: 1 }),    // boardwalk neon pink
-  buffet: Object.freeze({ color: Object.freeze([255, 190, 108]), direction: -1 }),     // lantern amber
-  cruise: Object.freeze({ color: Object.freeze([108, 226, 255]), direction: -1 }),     // pool-deck cyan
+  kensington: Object.freeze({ color: Object.freeze([126, 178, 255]), direction: -1, castShear: 0.66, castStretch: 0.44 }), // cool blue el-track arcs
+  vet: Object.freeze({ color: Object.freeze([255, 178, 84]), direction: 1, castShear: 0.5, castStretch: 0.5 }),            // sodium lot floods
+  wildwood: Object.freeze({ color: Object.freeze([255, 104, 214]), direction: 1, castShear: 0.76, castStretch: 0.4 }),     // boardwalk neon pink
+  buffet: Object.freeze({ color: Object.freeze([255, 190, 108]), direction: -1, castShear: 0.36, castStretch: 0.48 }),     // lantern amber
+  cruise: Object.freeze({ color: Object.freeze([108, 226, 255]), direction: -1, castShear: 0.58, castStretch: 0.42 }),     // pool-deck cyan
 });
 const SUPER_RIM_WARMTH = Object.freeze([255, 214, 150]);
 
@@ -8475,6 +8645,7 @@ function draw(time) {
     gritFlareLevel[0] = Math.max(0, gritFlareLevel[0] - 0.05);
     gritFlareLevel[1] = Math.max(0, gritFlareLevel[1] - 0.05);
     drawSuperSpotlight();
+    drawFighterCastShadows();
     drawFighterReflections(time);
     drawPaintTraps(time);
     drawStageWeapon(time);
@@ -9536,6 +9707,9 @@ window.__finalBlowEngine = {
         contactShadows: presentationDebug.contactShadows,
         gritAuras: presentationDebug.gritAuras,
         lastLegsFighters: presentationDebug.lastLegs,
+        battleDamageMarks: battleDamageMarks[0].length + battleDamageMarks[1].length,
+        battleDamageDrawn: presentationDebug.battleDamage,
+        castShadows: presentationDebug.castShadows,
         gritFlare: Number(Math.max(gritFlareLevel[0], gritFlareLevel[1]).toFixed(3)),
         superDim: Number(superDimLevel.toFixed(3)),
         reflections: Boolean(state.performance.shadows && (STAGE_REFLECTIONS[state.stage] ?? 0) > 0),
@@ -9652,6 +9826,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.fighters = [makeFighter(firstIndex, 0), makeFighter(secondIndex, 1)];
       resetStageWeapon();
       resetCrowd();
+      clearBattleDamage();
       state.particles.length = 0;
       state.effects.length = 0;
       state.traps.length = 0;
