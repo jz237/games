@@ -1,4 +1,4 @@
-# Final Blow 1.8D Reality Break fatalities
+# Final Blow 1.8E Reality Break fatalities
 
 Every Graphic Fatality gives all three cinematic beats to the fighter's
 assigned personal projectile:

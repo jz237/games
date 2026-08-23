@@ -345,7 +345,7 @@ try {
   }))()`);
   assert.match(title.title, /Final Blow/);
   assert.match(title.build, /1\.8/);
-  assert.equal(title.version.text, 'VERSION 1.8D');
+  assert.equal(title.version.text, 'VERSION 1.8E');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -373,7 +373,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.8d-somerset-after-dark');
+  assert.equal(title.engineVersion, '1.8e-eagles-tailgate');
   assert.deepEqual(title.engine.presentationRules, {
     hitFlashFilter: 'brightness(1.55) saturate(1.12)',
     attackNamePopups: false,
@@ -1575,8 +1575,8 @@ try {
   assert.match(crowdProbe.ticker, /SOMERSET SEPTA STATION.*STREET ENTRANCE/);
   assert.match(crowdProbe.preview, /somerset-septa\.webp/);
 
-  // The Vet is a rowdy bird-football tailgate: a dense fan crowd with drinking
-  // postures and several simultaneous scuffles, all deterministic.
+  // The Vet is an unmistakable Eagles keg tailgate: a dense fan crowd with
+  // drinking postures, six keg stations and several deterministic scuffles.
   const tailgate = await evaluate(client, `(() => {
     window.__finalBlowQa.fight('deathblow', 'donald');
     window.__finalBlowQa.stage('vet');
@@ -1589,10 +1589,19 @@ try {
     const street = window.__finalBlowEngine.snapshot().crowd;
     window.__finalBlowQa.stage('vet');
     const rebuilt = window.__finalBlowEngine.snapshot().crowd;
-    return { samples, street, rebuilt };
+    const snapshot = window.__finalBlowEngine.snapshot();
+    return {
+      samples,
+      street,
+      rebuilt,
+      art: snapshot.stageArt,
+      ticker: document.querySelector('#stageTicker').textContent,
+      preview: getComputedStyle(document.querySelector('.vet-preview')).backgroundImage,
+    };
   })()`);
   for (const sample of tailgate.samples) {
     assert.equal(sample.variant, "tailgate");
+    assert.equal(sample.kegs, 6, "the animated layer must keep six tapped keg stations");
     assert.ok(sample.visible >= 25, `the tailgate must stay dense, saw ${sample.visible}`);
     assert.ok(sample.scuffles >= 3, `several scuffles must be running, saw ${sample.scuffles}`);
     assert.ok(sample.scuffleKinds.length >= 3, "scuffles must use different fight loops");
@@ -1606,6 +1615,11 @@ try {
   assert.equal(tailgate.street.variant, "somerset", "Somerset keeps its photographic background actors");
   assert.equal(tailgate.street.embeddedPeople, 9);
   assert.equal(tailgate.street.scuffles, 0, "the Somerset sidewalks have no tailgate scuffles");
+  assert.equal(tailgate.art.asset, "assets/veterans-stadium.webp");
+  assert.equal(tailgate.art.loaded, true);
+  assert.equal(tailgate.art.style, "photorealistic-eagles-tailgate");
+  assert.match(tailgate.ticker, /VETERANS STADIUM.*SOUTH PHILADELPHIA/);
+  assert.match(tailgate.preview, /veterans-stadium\.webp/);
   assert.deepEqual(
     tailgate.rebuilt.scuffleKinds,
     tailgate.samples[0].scuffleKinds,
@@ -2896,7 +2910,7 @@ try {
   }))()`);
   assert.match(controlledReload.title, /Final Blow/);
   assert.match(controlledReload.build, /1\.8/);
-  assert.equal(controlledReload.version, '1.8d-somerset-after-dark');
+  assert.equal(controlledReload.version, '1.8e-eagles-tailgate');
 
   await client.send('Network.emulateNetworkConditions', {
     offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
@@ -2914,7 +2928,7 @@ try {
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
   assert.match(offlineBoot.build, /1\.8/);
-  assert.equal(offlineBoot.version, '1.8d-somerset-after-dark');
+  assert.equal(offlineBoot.version, '1.8e-eagles-tailgate');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2958,7 +2972,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 1.8D');
+  assert.equal(landscape.version.text, 'VERSION 1.8E');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);

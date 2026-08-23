@@ -39,7 +39,7 @@ export const POSTURES = Object.freeze([
 ]);
 
 /**
- * Tailgate postures. The Vet parking lot is a rowdy bird-football tailgate, so
+ * Tailgate postures. The Vet parking lot is a rowdy Eagles tailgate, so
  * its crowd is dominated by people drinking, toasting, chugging and arguing
  * rather than shuffling past.
  */
@@ -55,9 +55,9 @@ export const TAILGATE_POSTURES = Object.freeze([
 ]);
 
 /**
- * Fictional bird-team colours. Deliberately no official Philadelphia Eagles, NFL
- * or sponsor marks anywhere - the identity comes from the colours, wing motifs,
- * handmade numbers and face paint.
+ * Philadelphia Eagles fan colours. The photographic plate carries the readable
+ * team identity; these animated supporters echo its green, white, black and
+ * silver clothing, wing motifs, handmade numbers and face paint.
  */
 const FAN_COLOURS = Object.freeze([
   "#1c4f42", "#143d33", "#255f4e", "#0f2f28", "#2d6b57",
@@ -326,6 +326,7 @@ export function createCrowd(stageId, { seed = 1, minX = -90, maxX = 1370 } = {})
     people,
     cats,
     scuffles,
+    kegs: variantId === "tailgate" ? 6 : 0,
     embeddedPeople: variant.embeddedPeople || 0,
     embeddedPose: variant.embeddedPose || "",
   };
@@ -427,6 +428,7 @@ export function crowdSnapshot(crowd, frame, { viewLeft = 0, viewRight = 1280 } =
     layers,
     postures,
     variant: crowd.variant,
+    kegs: crowd.kegs || 0,
     scuffles: (crowd.scuffles || []).length,
     scuffleKinds: [...new Set((crowd.scuffles || []).map((group) => group.kind))],
   };

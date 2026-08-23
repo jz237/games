@@ -8198,38 +8198,78 @@ function drawScuffle(group, frame, centre, reaction) {
   ctx.restore();
 }
 
-// Coolers, folding tables and grills the tailgate gathers around.
+// Six tapped steel kegs plus tables, coolers and grills. The split placement
+// keeps the fight lane clear while making the Eagles tailgate unmistakable.
 function drawTailgateProps(frame, centre) {
-  const spots = [180, 470, 760, 1050];
+  const spots = [90, 215, 360, 920, 1065, 1190];
   for (let index = 0; index < spots.length; index += 1) {
     const x = spots[index] + (centre - W * 0.5) * -0.14;
     if (x < -80 || x > W + 80) continue;
-    const y = 498 + (index % 2) * 16;
+    const y = 498 + (index % 3) * 8;
     ctx.save();
-    ctx.globalAlpha = 0.8;
+    ctx.globalAlpha = 0.9;
     ctx.translate(x, y);
-    if (index % 2 === 0) {
-      ctx.fillStyle = "#c3cad0";
-      ctx.fillRect(-22, -20, 44, 20);
-      ctx.fillStyle = "#1c4f42";
-      ctx.fillRect(-22, -24, 44, 5);
-    } else {
+
+    // The keg body remains readable against both the plate and animated fans.
+    const steel = ctx.createLinearGradient(-18, 0, 18, 0);
+    steel.addColorStop(0, "#59636a");
+    steel.addColorStop(0.22, "#d9e0e3");
+    steel.addColorStop(0.55, "#87939a");
+    steel.addColorStop(0.78, "#edf1f2");
+    steel.addColorStop(1, "#4c555c");
+    ctx.fillStyle = steel;
+    ctx.beginPath();
+    ctx.ellipse(0, -31, 18, 6, 0, Math.PI, 0);
+    ctx.lineTo(18, -3);
+    ctx.ellipse(0, -3, 18, 6, 0, 0, Math.PI);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(24,31,35,.75)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0, -31, 18, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, -17, 18, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, -3, 18, 6, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Pump, tap and a small green cup make the interaction legible.
+    ctx.strokeStyle = "#cbd3d7";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, -36); ctx.lineTo(0, -52); ctx.lineTo(9, -52);
+    ctx.stroke();
+    ctx.fillStyle = "#10171a";
+    ctx.fillRect(-3, -57, 6, 9);
+    ctx.fillStyle = "#1c6a56";
+    ctx.fillRect(11, -14, 9, 12);
+
+    if (index === 1 || index === 4) {
+      // Folding table with green cups beside the keg.
       ctx.fillStyle = "#4a5057";
-      ctx.fillRect(-20, -26, 40, 6);
+      ctx.fillRect(-46, -25, 27, 5);
       ctx.strokeStyle = "#3a4046";
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(-14, -20); ctx.lineTo(-17, 2);
-      ctx.moveTo(14, -20); ctx.lineTo(17, 2);
+      ctx.moveTo(-42, -20); ctx.lineTo(-44, 2);
+      ctx.moveTo(-24, -20); ctx.lineTo(-22, 2);
       ctx.stroke();
-      // Grill smoke.
+      ctx.fillStyle = "#1f765f";
+      ctx.fillRect(-41, -34, 7, 9);
+      ctx.fillRect(-31, -32, 7, 7);
+    }
+
+    if (index === 2 || index === 3) {
+      // Grill smoke behind the two innermost keg stations.
+      ctx.fillStyle = "#4a5057";
+      ctx.fillRect(25, -27, 28, 6);
       const smoke = 12 + Math.sin(frame * 0.03 + index) * 5;
-      const gradient = ctx.createRadialGradient(0, -40, 2, 0, -40, smoke * 2.4);
+      const gradient = ctx.createRadialGradient(39, -44, 2, 39, -44, smoke * 2.4);
       gradient.addColorStop(0, "rgba(214,222,228,.2)");
       gradient.addColorStop(1, "rgba(214,222,228,0)");
       ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.arc(0, -40, smoke * 2.4, 0, Math.PI * 2);
+      ctx.arc(39, -44, smoke * 2.4, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
@@ -13589,7 +13629,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.8d");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.8e");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -14071,7 +14111,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.8d-somerset-after-dark",
+  version: "1.8e-eagles-tailgate",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -14089,7 +14129,11 @@ window.__finalBlowEngine = {
       stageArt: {
         asset: stages[state.stage]?.src || "",
         loaded: Boolean(stageImages[state.stage]?.complete && stageImages[state.stage]?.naturalWidth),
-        style: state.stage === "somerset" ? "photorealistic-street" : "cinematic-arcade",
+        style: state.stage === "somerset"
+          ? "photorealistic-street"
+          : state.stage === "vet"
+            ? "photorealistic-eagles-tailgate"
+            : "cinematic-arcade",
         embeddedPeople: state.crowd?.embeddedPeople || 0,
         embeddedPose: state.crowd?.embeddedPose || "",
       },

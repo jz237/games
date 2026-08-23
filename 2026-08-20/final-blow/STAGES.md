@@ -47,13 +47,11 @@ Eight tailgate postures replace the street set, weighted so **drinking, chugging
 toasting, pouring and stumbling make up over 60%** of the lot: people raise cups,
 tip cans back, clink toasts, pour drinks, wave flags, hold up handmade signs and
 mill about. Props are drawn in the raised hand — plastic cups, cans, flags on
-poles and hand-scrawled signs whose marks are deliberately abstract scribbles.
-
-The palette is a wholly original fictional bird team: deep greens, whites,
-silvers and blacks, with a third of the crowd wearing face paint stripes. **There
-are no official Philadelphia Eagles, NFL or sponsor marks anywhere** — no real
-logos, no real wordmarks, no reproduced merchandise. The identity comes entirely
-from colour, face paint, flags and handmade signage.
+poles and hand-scrawled signs. The new 1280x720 photoreal plate makes the setting
+explicit: a dense adult **Philadelphia Eagles** tailgate in green, white, black
+and silver, with wing hats, face paint, jerseys, flags and a large readable
+**EAGLES** banner. The crowd remains anonymous and no identifiable real person
+appears.
 
 ### The scuffles
 
@@ -68,10 +66,12 @@ and missing — with no graphic detail.
 
 ### Props and reactions
 
-Coolers, folding tables and grills are placed along the lot, with the grills
-giving off drifting smoke. When the crowd is stirred hardest — a super, or the
-finishing prompt — cups are thrown into the air across the whole lot, then
-everything settles back to its routes.
+At least six polished steel beer kegs, pump taps, hoses and stacks of cups are
+visible in the plate. Six more deterministic tapped-keg props sit along the far
+left and right sides of the animated layer, together with folding tables,
+coolers and smoking grills. The middle stays open for combat. When the crowd is
+stirred hardest — a super, or the finishing prompt — cups are thrown into the air
+across the whole lot, then everything settles back to its routes.
 
 ### Not in the way
 
