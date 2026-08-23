@@ -345,7 +345,7 @@ try {
   }))()`);
   assert.match(title.title, /Final Blow/);
   assert.match(title.build, /1\.8/);
-  assert.equal(title.version.text, 'VERSION 1.8B');
+  assert.equal(title.version.text, 'VERSION 1.8C');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -373,7 +373,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.8b-projectile-fatalities');
+  assert.equal(title.engineVersion, '1.8c-reality-break');
   assert.deepEqual(title.engine.presentationRules, {
     hitFlashFilter: 'brightness(1.55) saturate(1.12)',
     attackNamePopups: false,
@@ -2608,6 +2608,7 @@ try {
         results.push({
           ...status,
           camera: snapshot.camera,
+          art: snapshot.finalBlowArt,
           cameraOffset: Math.abs(snapshot.camera.x - midpoint),
         });
       }
@@ -2665,7 +2666,31 @@ try {
     assert.equal(fatality.camera.focus, 'projectile', `${fatality.fatalityId} camera must prioritize the assigned projectile`);
     assert.equal(fatality.camera.projectileId, assignedProjectile.id);
     assert.ok(fatality.cameraOffset < 90, `${fatality.fatalityId} projectile framing drifted ${fatality.cameraOffset}px from the fight`);
+    assert.equal(fatality.cinematicArtStyle, 'photorealistic');
+    assert.equal(fatality.realityBreakActive, true);
+    assert.equal(fatality.realityBreakAmount, 1, `${fatality.fatalityId} must complete the realistic-art transition`);
+    assert.equal(fatality.realisticBackdropLoaded, true, 'the photoreal environment plate must be decoded');
+    assert.equal(fatality.art.style, 'photorealistic');
+    assert.equal(fatality.art.transition, 1);
+    assert.equal(fatality.art.backdropAsset, 'assets/final-blow-reality.webp');
+    assert.equal(fatality.art.backdropLoaded, true);
+    assert.ok(fatality.art.backdropPasses >= 1, `${fatality.fatalityId} must render the photoreal backdrop`);
+    assert.ok(fatality.art.lightingPasses >= 2, `${fatality.fatalityId} must render practical and filmic realism lighting`);
+    assert.ok(fatality.art.portraitPasses >= 1, `${fatality.fatalityId} must layer high-resolution fighter detail`);
+    assert.equal(fatality.art.filmGrainPasses, 0, 'the battery profile keeps the photoreal plate but skips film grain');
   }
+
+  const highFidelityReality = await evaluate(client, `(async () => {
+    window.__finalBlowQa.quality('high');
+    window.__finalBlowQa.graphicFatality('deathblow', 0, 4.7);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    return window.__finalBlowEngine.snapshot().finalBlowArt;
+  })()`);
+  assert.equal(highFidelityReality.style, 'photorealistic');
+  assert.equal(highFidelityReality.transition, 1);
+  assert.ok(highFidelityReality.backdropPasses >= 1);
+  assert.ok(highFidelityReality.portraitPasses >= 1);
+  assert.ok(highFidelityReality.filmGrainPasses >= 1, 'high quality adds the restrained cinematic grain pass');
 
   // The same multi-cut sequence survives the Graphic Fatalities and reduced-
   // motion accessibility paths without leaking gore or violent camera shake.
@@ -2687,6 +2712,9 @@ try {
   assert.equal(goreOff.status.projectilePhase, 'kill');
   assert.equal(goreOff.snapshot.camera.focus, 'projectile');
   assert.equal(goreOff.snapshot.camera.projectileId, 'pizza');
+  assert.equal(goreOff.snapshot.finalBlowArt.style, 'photorealistic');
+  assert.equal(goreOff.snapshot.finalBlowArt.transition, 1);
+  assert.ok(goreOff.snapshot.finalBlowArt.portraitPasses >= 2, 'gore-off preserves realistic detail on both complete fighters');
   assert.ok(goreOff.status.cinematicCuts >= 4, `gore-off cinematic cuts ${goreOff.status.cinematicCuts} at ${goreOff.status.cinematicShot}`);
   assert.ok(goreOff.status.peakZoom >= 1.6);
   assert.equal(goreOff.status.slowMotionHits, 1);
@@ -2704,6 +2732,8 @@ try {
   assert.equal(reducedFinisher.accessibility.reducedMotion, true);
   assert.ok(reducedFinisher.camera.peakZoom >= 1.6, 'reduced motion keeps the authored cinematic coverage');
   assert.ok(reducedFinisher.camera.zoom <= 1.4, 'reduced motion must cap the rendered camera snap');
+  assert.equal(reducedFinisher.finalBlowArt.style, 'photorealistic');
+  assert.equal(reducedFinisher.finalBlowArt.transition, 1, 'reduced motion preserves the finished realistic-art treatment');
   // Leave the setting in its prior enabled state for the remaining persisted-
   // preference and offline-boot checks.
 
@@ -2851,7 +2881,7 @@ try {
   }))()`);
   assert.match(controlledReload.title, /Final Blow/);
   assert.match(controlledReload.build, /1\.8/);
-  assert.equal(controlledReload.version, '1.8b-projectile-fatalities');
+  assert.equal(controlledReload.version, '1.8c-reality-break');
 
   await client.send('Network.emulateNetworkConditions', {
     offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
@@ -2869,7 +2899,7 @@ try {
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
   assert.match(offlineBoot.build, /1\.8/);
-  assert.equal(offlineBoot.version, '1.8b-projectile-fatalities');
+  assert.equal(offlineBoot.version, '1.8c-reality-break');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -2913,7 +2943,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 1.8B');
+  assert.equal(landscape.version.text, 'VERSION 1.8C');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);

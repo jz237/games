@@ -654,6 +654,13 @@ for (const [id, stage] of Object.entries(stages)) {
   stageImages[id] = image;
 }
 
+// Release 1.8C REALITY BREAK: a generated photoreal environment plate replaces
+// the arcade arena only while a Final Blow is active. It is deliberately one
+// shared set so all 16 finishers retain identical deterministic staging and the
+// additional on-demand download stays tiny.
+const finalBlowRealityImage = new Image();
+finalBlowRealityImage.src = "assets/final-blow-reality.webp";
+
 const fighterImages = {};
 const fighterAtlases = {};
 const fighterMoveAtlases = {};
@@ -2018,6 +2025,8 @@ const presentationDebug = {
   focusLines: 0, lightSpills: 0,
   // Wave 7 steady screen-space passes, counted per rendered frame.
   bloomPasses: 0, rgbSplits: 0,
+  // Release 1.8C REALITY BREAK steady render-only passes.
+  realisticBackdrops: 0, realisticLighting: 0, realisticPortraits: 0, filmGrainPasses: 0,
 };
 
 // Release 1.7A CLEAN HITS: preserve the fighter palette during hit feedback.
@@ -7764,9 +7773,50 @@ function drawCover(image, offsetX = 0) {
   ctx.drawImage(image, (W - dw) * 0.5 + offsetX, (H - dh) * 0.5, dw, dh);
 }
 
+function finisherRealityAmount() {
+  const finisher = state.finisher;
+  if (!finisher) return 0;
+  const duration = state.accessibility.reducedMotion ? .16 : .42;
+  const linear = clamp(finisher.elapsed / duration, 0, 1);
+  return linear * linear * (3 - 2 * linear);
+}
+
+function drawRealityBreakAtmosphere(time, amount) {
+  if (amount <= .01) return;
+  ctx.save();
+  ctx.globalAlpha = amount;
+  ctx.globalCompositeOperation = "screen";
+  const warm = ctx.createRadialGradient(W * .12, H * .32, 10, W * .12, H * .32, W * .55);
+  warm.addColorStop(0, "rgba(255,164,78,.22)");
+  warm.addColorStop(1, "rgba(255,110,48,0)");
+  ctx.fillStyle = warm;
+  ctx.fillRect(0, 0, W, H);
+  const cold = ctx.createRadialGradient(W * .82, H * .26, 15, W * .82, H * .26, W * .56);
+  cold.addColorStop(0, "rgba(104,194,255,.2)");
+  cold.addColorStop(1, "rgba(70,120,255,0)");
+  ctx.fillStyle = cold;
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = "source-over";
+  const dustCount = state.performance.shadows ? 28 : 12;
+  for (let mote = 0; mote < dustCount; mote += 1) {
+    const clock = state.accessibility.reducedMotion ? mote * 19 : state.simulationTick + mote * 37;
+    const x = ((mote * 181 + clock * (.18 + mote % 4 * .07)) % (W + 80)) - 40;
+    const y = 80 + ((mote * 113 + clock * (.08 + mote % 3 * .04)) % Math.max(1, FLOOR - 120));
+    const glow = .14 + (mote % 5) * .035;
+    ctx.globalAlpha = amount * glow;
+    ctx.fillStyle = mote % 3 ? "#d8c2a1" : "#9fc9dc";
+    ctx.beginPath();
+    ctx.arc(x, y, 1 + mote % 3 * .65, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  presentationDebug.realisticLighting += 1;
+}
+
 function drawStage(time) {
   const center = state.fighters.length ? (state.fighters[0].x + state.fighters[1].x) * 0.5 : W * 0.5;
   const parallax = (center - W * 0.5) * -0.035;
+  const reality = finisherRealityAmount();
   drawCover(stageImages[state.stage], parallax);
   drawRackFocus(parallax);
   drawTimeOfDayHorizon();
@@ -7793,6 +7843,17 @@ function drawStage(time) {
   }
   drawStageScars();
   drawPracticalLights(time, state.simulationTick, center, state.crowdReaction);
+  // Overlaying the plate after the normal arena dressing gives us a true
+  // crossfade without an expensive full-canvas CSS filter. At 1.0 it cleanly
+  // replaces every arcade layer beneath it.
+  if (reality > .01 && finalBlowRealityImage.complete && finalBlowRealityImage.naturalWidth) {
+    ctx.save();
+    ctx.globalAlpha = reality;
+    drawCover(finalBlowRealityImage, parallax * .18);
+    ctx.restore();
+    presentationDebug.realisticBackdrops += 1;
+  }
+  drawRealityBreakAtmosphere(time, reality);
   updateRoundWinBeatLatch();
   drawRoundWinBeat(state.simulationTick, center);
 }
@@ -9604,6 +9665,7 @@ function drawFighter(fighter, time) {
     : fighterAtlases[fighter.def.id];
   const frame = pose.frame;
   const graphicFatality = activeGraphicFatality(fighter);
+  const reality = finisherRealityAmount();
   const sizeAdjust = FIGHTER_SIZE_ADJUST[fighter.def.id] || 1;
   const moveSheetAdjust = pose.bank === "specials" ? (MOVE_SHEET_ADJUST[fighter.def.id] || 1) : 1;
   const renderSize = fighterRenderSize(fighter.def.id) * moveSheetAdjust;
@@ -9890,6 +9952,23 @@ function drawFighter(fighter, time) {
       presentationDebug.battleDamage += battleDamageMarks[fighter.side].length;
     } else drawAtlasFrame(atlas, frame, renderSize);
     ctx.restore();
+
+    // The roster portraits are substantially higher resolution than an atlas
+    // cell. A restrained soft-light pass brings their skin/fabric/material
+    // detail into the slow cinematic poses without replacing the authored
+    // animation or disturbing the dismemberment compositor.
+    const portrait = fighterImages[fighter.def.id];
+    if (reality > .01 && !reflectionPassActive && !graphicFatality
+      && portrait?.complete && portrait.naturalWidth && !state.accessibility.highContrast) {
+      const portraitHeight = renderSize * 1.02;
+      const portraitWidth = portraitHeight * portrait.naturalWidth / portrait.naturalHeight;
+      ctx.save();
+      ctx.globalCompositeOperation = "soft-light";
+      ctx.globalAlpha = reality * .2;
+      ctx.drawImage(portrait, -portraitWidth * .5, -portraitHeight, portraitWidth, portraitHeight);
+      ctx.restore();
+      presentationDebug.realisticPortraits += 1;
+    }
 
     const flare = gritFlareLevel[fighter.side];
     if (flare > 0.01 && !reflectionPassActive && !graphicFatality) {
@@ -10719,6 +10798,42 @@ function drawStageGrade() {
   ctx.restore();
 }
 
+function drawFinisherRealityComposite() {
+  const reality = finisherRealityAmount();
+  if (reality <= .01) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "soft-light";
+  ctx.globalAlpha = reality;
+  const splitLight = ctx.createLinearGradient(0, 0, W, H);
+  splitLight.addColorStop(0, "rgba(255,142,66,.32)");
+  splitLight.addColorStop(.43, "rgba(62,44,46,.08)");
+  splitLight.addColorStop(1, "rgba(72,164,230,.28)");
+  ctx.fillStyle = splitLight;
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = "source-over";
+  const vignette = ctx.createRadialGradient(W * .5, H * .47, H * .18, W * .5, H * .47, W * .7);
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(.72, `rgba(4,4,7,${(reality * .08).toFixed(3)})`);
+  vignette.addColorStop(1, `rgba(1,2,4,${(reality * .5).toFixed(3)})`);
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, W, H);
+  presentationDebug.realisticLighting += 1;
+
+  if (state.performance.shadows && !state.accessibility.highContrast) {
+    ctx.globalCompositeOperation = "overlay";
+    const grainTick = state.accessibility.reducedMotion ? 0 : state.simulationTick;
+    for (let grain = 0; grain < 96; grain += 1) {
+      const x = (grain * 197 + grainTick * 17) % W;
+      const y = (grain * 109 + grainTick * 11) % H;
+      ctx.globalAlpha = reality * (.025 + grain % 4 * .008);
+      ctx.fillStyle = grain % 2 ? "#e8dfd2" : "#2a3340";
+      ctx.fillRect(x, y, 1 + grain % 3, 1 + (grain + 1) % 2);
+    }
+    presentationDebug.filmGrainPasses += 1;
+  }
+  ctx.restore();
+}
+
 function drawParticles() {
   for (const particle of state.particles) {
     const alpha = clamp(particle.life / particle.max, 0, 1);
@@ -11113,7 +11228,7 @@ function drawFinisherOverlay() {
     const fatality = getGraphicFatality(attackerId, finisher.type);
     ctx.textAlign = "center";
     ctx.fillStyle = "#d90b19";
-    ctx.fillText(`${fatality.special} FATALITY · ${fatality.device}`, W * .5, barHeight - 11);
+    ctx.fillText(`REALITY BREAK · ${fatality.special} FATALITY`, W * .5, barHeight - 11);
   }
   if (cinematic.shot === "final-impact") {
     ctx.textAlign = "right";
@@ -11838,6 +11953,7 @@ function draw(time) {
   if (distortionRing) worldScreenTransform = ctx.getTransform();
   ctx.restore();
   drawStageGrade();
+  drawFinisherRealityComposite();
   // Wave 7 screen-space composite passes, in order: slow-mo smear first, then
   // the frame capture (so the smear recursively accumulates but bloom can
   // never feed back into itself), then bloom and the one-shot warps.
@@ -13469,7 +13585,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.8b");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.8c");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -13951,7 +14067,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.8b-projectile-fatalities",
+  version: "1.8c-reality-break",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -14026,6 +14142,18 @@ window.__finalBlowEngine = {
           rotation: Number(cinematicCamera.rotation.toFixed(5)),
           letterbox: Number(letterboxLevel.toFixed(3)),
         },
+      },
+      finalBlowArt: {
+        active: Boolean(state.finisher),
+        style: state.finisher ? "photorealistic" : "arcade",
+        transition: Number(finisherRealityAmount().toFixed(3)),
+        phase: state.finisher?.projectilePhase || "waiting",
+        backdropAsset: "assets/final-blow-reality.webp",
+        backdropLoaded: Boolean(finalBlowRealityImage.complete && finalBlowRealityImage.naturalWidth),
+        backdropPasses: presentationDebug.realisticBackdrops,
+        lightingPasses: presentationDebug.realisticLighting,
+        portraitPasses: presentationDebug.realisticPortraits,
+        filmGrainPasses: presentationDebug.filmGrainPasses,
       },
       arcade: arcadeRunSnapshot(state.arcadeRun),
       seed: state.matchSeed,
@@ -14723,6 +14851,10 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         projectileFocusBeats: state.finisher?.projectileFocusBeats || 0,
         projectileBeatLabels: [...(state.finisher?.projectileBeatLabels || [])],
         projectilePhase: state.finisher?.projectilePhase || "waiting",
+        cinematicArtStyle: state.finisher ? "photorealistic" : "arcade",
+        realityBreakActive: Boolean(state.finisher),
+        realityBreakAmount: Number(finisherRealityAmount().toFixed(3)),
+        realisticBackdropLoaded: Boolean(finalBlowRealityImage.complete && finalBlowRealityImage.naturalWidth),
         signatureProjectileTriggered: Boolean(state.finisher?.signatureProjectileTriggered),
         cinematicShot: state.finisher?.cinematicShot || "arena",
         cinematicCuts: state.finisher?.cinematicCuts || 0,
