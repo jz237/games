@@ -12,12 +12,21 @@ import {
   transitionFighterState,
 } from "./engine/foundation.mjs";
 import {
+  AIR_RECOVERY_RULES,
   ATTACK_LEVELS,
   DEFENSE_RULES,
   DirectionTapTracker,
   FIGHTER_SCALE,
+  GUARD_RULES,
   MOVEMENT_RULES,
+  PERFECT_GUARD_RULES,
   STUN_RULES,
+  WAKEUP_RULES,
+  canAirRecover,
+  createDepthFighterFields,
+  guardGainForAttack,
+  isPerfectGuard,
+  resolveWakeOption,
   stunGainForAttack,
   boxesOverlap,
   canGuardAttack,
@@ -637,6 +646,8 @@ const sfxVolumes = {
   tech: 0.6,
   desperation: 0.68,
   scream: 0.95,
+  // Release 1.7 DEPTH: guard-crush shatter bark.
+  crush: 0.74,
 };
 
 function createSfxPool(kind, src) {
@@ -672,6 +683,7 @@ const fallbackSoundKinds = Object.freeze({
   tech: "block",
   desperation: "hit",
   scream: "final",
+  crush: "block",
 });
 
 const musicTracks = [
@@ -727,6 +739,8 @@ const soundCaptionLabels = Object.freeze({
   ko: "KNOCKOUT",
   pause: "GAME PAUSED",
   resume: "FIGHT RESUMED",
+  // Release 1.7 DEPTH: the Perfect Guard 'tink' block variant.
+  "perfect-guard": "PERFECT GUARD",
 });
 
 const keys = new Set();
@@ -1890,6 +1904,11 @@ function makeFighter(index, side, overrideDef = null) {
     dizzyTotalFrames: 0,
     stunImmuneFrames: 0,
     dizzyMashCount: 0,
+    // Release 1.7 DEPTH: guard gauge / wake-up option / air recovery /
+    // Perfect Guard fields. All plain data, so the rollback fighter snapshot
+    // (which clones every enumerable non-reference field) captures each one
+    // and every one counts toward the combat checksum.
+    ...createDepthFighterFields(),
     // Live grab sequence state. `grabbing` is set on the thrower and `grabbed` on
     // the victim; both are plain data so rollback snapshots clone them directly.
     grabbing: null,
@@ -2003,6 +2022,14 @@ const hudFxDebug = {
   // (like cinemaFxDebug.handheldFrames — still monotonic, never reset).
   distortionRings: 0, sloMoBlurFrames: 0, superCutIns: 0,
 };
+// Release 1.7 DEPTH: monotonic one-shot totals for the new defensive
+// mechanics, on the same hudFxDebug pattern. Each increment site sits inside
+// a sim path but is guarded by `if (!rollbackResimulating)` (the announce()
+// discipline), so a resimulated tick can never double-count and the counters
+// never enter a rollback snapshot or checksum.
+const mechFxDebug = {
+  guardCrushes: 0, quickRises: 0, wakeDelays: 0, airRecoveries: 0, perfectGuards: 0,
+};
 // Per-side damage-ghost render state: `health` is the last observed fraction,
 // `shown` the ghost bar's current scaleX, `holdMs` the remaining freeze time.
 const damageGhostState = [
@@ -2054,6 +2081,7 @@ let cameraPunch = null;
 let cameraKoTick = -1;
 let cameraCounterTick = -1;
 let cameraDizzyTick = -1;
+let cameraGuardCrushTick = -1;
 // Directional impact recoil (screen px). Displacement is kicked along the hit
 // direction and returned by an analytic damped oscillation — a push with one
 // tiny rebound, not a vibration. Closed-form (amplitude * e^-13t * cos 17t)
@@ -2126,6 +2154,16 @@ function latchDizzyCameraPunch(fighter) {
   if (rollbackResimulating || cameraDizzyTick === state.simulationTick) return;
   cameraDizzyTick = state.simulationTick;
   if (latchCameraPunchEnvelope(0.05, fighter.x, fighter.y - 118, 0.08, 0.08, 0.24)) {
+    cinemaFxDebug.counterPunchIns += 1;
+  }
+}
+
+// Release 1.7: guard-crush pop on the shattered defender — the dizzy latch
+// pattern verbatim (render-only, resim-guarded, tick-deduped).
+function latchGuardCrushCameraPunch(fighter) {
+  if (rollbackResimulating || cameraGuardCrushTick === state.simulationTick) return;
+  cameraGuardCrushTick = state.simulationTick;
+  if (latchCameraPunchEnvelope(0.05, fighter.x, fighter.y - 118, 0.08, 0.1, 0.26)) {
     cinemaFxDebug.counterPunchIns += 1;
   }
 }
@@ -2459,6 +2497,20 @@ function updateDamageGhosts(dtMs) {
     if (Math.abs(ghost.shown - ghost.written) > 0.0005) {
       ghost.written = ghost.shown;
       element.style.transform = `scaleX(${ghost.shown.toFixed(4)})`;
+    }
+    // Release 1.7: guard-gauge sliver INSIDE the health frame (a new HUD row
+    // would shrink the fighter-framing area — HANDOFF.md landmine). Synced
+    // per rendered frame beside the damage ghost so decay visibly drains;
+    // during a crush the sliver flips into the flashing crush-drain bar.
+    const guardGauge = $(`#p${side + 1}GuardGauge`);
+    if (guardGauge) {
+      const crushed = fighter.guardCrushFrames > 0;
+      const level = crushed
+        ? fighter.guardCrushFrames / Math.max(1, fighter.guardCrushTotalFrames)
+        : clamp(fighter.guardMeter, 0, GUARD_RULES.threshold) / GUARD_RULES.threshold;
+      guardGauge.style.transform = `scaleX(${level.toFixed(4)})`;
+      guardGauge.classList.toggle("crushed", crushed);
+      guardGauge.classList.toggle("charged", !crushed && fighter.guardMeter >= GUARD_RULES.threshold * 0.65);
     }
   }
 }
@@ -4462,6 +4514,8 @@ function updateTrainingUi(input = {}) {
   $("#trainingAdvantage").textContent = snapshot.lastAdvantage === null
     ? move ? `${move.onHit >= 0 ? "+" : ""}${move.onHit} HIT · ${move.onBlock >= 0 ? "+" : ""}${move.onBlock} BLOCK` : "—"
     : `${snapshot.lastAdvantage >= 0 ? "+" : ""}${snapshot.lastAdvantage} ACTUAL`;
+  // Release 1.7: Perfect Guard practice readout (player just-defends landed).
+  $("#trainingPerfectGuards").textContent = String(snapshot.perfectGuards);
   $("#trainingInputs").textContent = `INPUT: ${snapshot.inputHistory.join(" › ") || "—"}  //  DUMMY: ${snapshot.dummyMode.toUpperCase()}  //  RESETS: ${snapshot.resets}`;
   $("#trainingTrialSteps").innerHTML = `TRIAL: ${snapshot.trial.steps.map((step, index) => `<span class="${step.complete ? "done" : index === snapshot.trial.step ? "next" : ""}">${step.label}</span>`).join(" › ") || "—"}`;
   $("#trainingTrialStatus").textContent = `${snapshot.trial.status}${snapshot.trial.complete ? ` · ${snapshot.trial.completions} CLEAR` : ""}`;
@@ -5037,7 +5091,99 @@ function enterKnockdown(fighter) {
   fighter.vx *= 0.28;
   fighter.vy = 0;
   fighter.attacking = null;
+  // Release 1.7: a fresh knockdown resets the wake-up option and any pending
+  // air-recovery eligibility — the juggle is over.
+  fighter.wakeOption = "";
+  fighter.airTechArmed = false;
+  fighter.airHitstunFrames = 0;
+  fighter.airTechFlipFrames = 0;
+  fighter.airTechTaxPending = false;
   fighter.inputBuffer.clear();
+}
+
+// Release 1.7: guard gauge — the addStun mirror for BLOCKED pressure. Fed
+// from the blocked branch of hit() where blockstunFrames is set; immune and
+// already-crushed defenders take no pressure, and a Perfect Guard absorbs the
+// gain entirely inside guardGainForAttack.
+function addGuardPressure(victim, attacker, attack, { perfect = false } = {}) {
+  if (victim.guardImmuneFrames > 0 || victim.guardCrushFrames > 0) return;
+  const gain = guardGainForAttack(attack, { blocked: true, perfect });
+  if (gain <= 0) return;
+  victim.guardMeter = Number((victim.guardMeter + gain).toFixed(3));
+  victim.guardDecayDelay = GUARD_RULES.decayGraceFrames;
+  if (victim.guardMeter >= GUARD_RULES.threshold) enterGuardCrush(victim, attacker);
+}
+
+// GUARD CRUSH: the enterDizzy path re-used for the shattered guard — the
+// fighter is briefly helpless, with its own immunity window on recovery so a
+// crush can never loop. All spectacle routes through the existing wave 1-9
+// systems from this sim event, never the other way round.
+function enterGuardCrush(fighter, attacker) {
+  fighter.guardMeter = 0;
+  fighter.guardDecayDelay = 0;
+  fighter.guardCrushFrames = GUARD_RULES.crushFrames;
+  fighter.guardCrushTotalFrames = GUARD_RULES.crushFrames;
+  fighter.attacking = null;
+  fighter.attackFrame = 0;
+  fighter.attackTime = 0;
+  fighter.hitstunFrames = 0;
+  fighter.blockstunFrames = 0;
+  fighter.stun = 0;
+  fighter.block = false;
+  fighter.guarding = false;
+  fighter.dashFrames = 0;
+  fighter.queuedDashDirection = 0;
+  fighter.inputBuffer.clear();
+  fighter.lastHitResult = "guard-crush";
+  state.hitstop = Math.max(state.hitstop, 0.14);
+  state.shake = Math.max(state.shake, 0.3);
+  if ($("#flashToggle").checked) state.flash = Math.max(state.flash, 0.16);
+  if (!rollbackResimulating) mechFxDebug.guardCrushes += 1;
+  spawnCombatText(fighter.x, fighter.y - fighter.height - 52, "GUARD CRUSH", "#7de8ff");
+  // Announcer letter-slam banner + its spoken bank cue (announce() carries the
+  // resim guard and books the guardcrush announcer bank).
+  announce("GUARD CRUSH", "", 1.05);
+  duckMusic(0.55, 620);
+  sound("block", fighter);
+  // Wave 9: crush-specific reactive voice bark (guarded + tick-deduped).
+  fighterReactiveCue(fighter, "crush");
+  // Wave 6: camera punch-in on the shatter (render-only latch).
+  latchGuardCrushCameraPunch(fighter);
+  if (attacker) state.lastImpactSide = attacker.side;
+}
+
+function recoverFromGuardCrush(fighter) {
+  fighter.guardCrushFrames = 0;
+  fighter.guardCrushTotalFrames = 0;
+  fighter.guardMeter = 0;
+  fighter.guardDecayDelay = 0;
+  // The long immunity after recovery is what makes crush loops impossible.
+  fighter.guardImmuneFrames = GUARD_RULES.immuneFrames;
+  fighter.hitstunFrames = 0;
+  fighter.stun = 0;
+  fighter.invulnerableFrames = Math.max(fighter.invulnerableFrames, 6);
+  spawnCombatText(fighter.x, fighter.y - fighter.height - 40, "GUARD RESTORED", fighter.def.accent);
+  sound("block", fighter);
+}
+
+// Release 1.7: air recovery (juggle tech) — escapes the juggle into a brief
+// invulnerable back-flip; the landing tax is applied by applyFighterPhysics.
+function performAirRecovery(fighter) {
+  fighter.pendingKnockdown = false;
+  fighter.hitstunFrames = 0;
+  fighter.stun = 0;
+  fighter.airTechArmed = false;
+  fighter.airHitstunFrames = 0;
+  fighter.airTechFlipFrames = AIR_RECOVERY_RULES.flipFrames;
+  fighter.airTechTaxPending = true;
+  fighter.invulnerableFrames = Math.max(fighter.invulnerableFrames, AIR_RECOVERY_RULES.invulnerableFrames);
+  fighter.vx = -fighter.facing * AIR_RECOVERY_RULES.driftVelocityX;
+  fighter.vy = Math.min(fighter.vy, AIR_RECOVERY_RULES.liftVelocityY);
+  fighter.lastHitResult = "air-tech";
+  if (!rollbackResimulating) mechFxDebug.airRecoveries += 1;
+  spawnCombatText(fighter.x, fighter.y - fighter.height - 44, "AIR TECH", fighter.def.accent);
+  // Wave 9: the throw-tech shout reads naturally on an air tech too.
+  fighterReactiveCue(fighter, "tech");
 }
 
 function advanceFighterTimers(fighter) {
@@ -5061,6 +5207,20 @@ function advanceFighterTimers(fighter) {
   } else if (fighter.stunMeter > 0) {
     fighter.stunMeter = Math.max(0, Number((fighter.stunMeter - STUN_RULES.decayPerFrame).toFixed(3)));
   }
+  // Release 1.7: guard gauge clocks — the stun decay chain mirrored exactly.
+  fighter.guardImmuneFrames = Math.max(0, fighter.guardImmuneFrames - 1);
+  fighter.airTechFlipFrames = Math.max(0, fighter.airTechFlipFrames - 1);
+  if (fighter.guardCrushFrames > 0) {
+    fighter.guardCrushFrames -= 1;
+    if (fighter.guardCrushFrames === 0) recoverFromGuardCrush(fighter);
+  } else if (fighter.guardDecayDelay > 0) {
+    fighter.guardDecayDelay -= 1;
+  } else if (fighter.guardMeter > 0) {
+    fighter.guardMeter = Math.max(0, Number((fighter.guardMeter - GUARD_RULES.decayPerFrame).toFixed(3)));
+  }
+  // Release 1.7: airborne-hitstun clock for the juggle-tech window.
+  if (!fighter.grounded && fighter.pendingKnockdown) fighter.airHitstunFrames += 1;
+  else fighter.airHitstunFrames = 0;
   if (fighter.rhythmStacks > 0 && state.simulationTick > fighter.rhythmExpiresFrame) {
     fighter.rhythmStacks = 0;
     fighter.rhythmExpiresFrame = 0;
@@ -5080,8 +5240,14 @@ function advanceFighterTimers(fighter) {
     if (fighter.wakeupFrames === 0) {
       fighter.justWoke = true;
       fighter.juggleCount = 0;
-      fighter.reversalWindowFrames = DEFENSE_RULES.reversalWindowFrames;
-      fighter.invulnerableFrames = DEFENSE_RULES.reversalWindowFrames;
+      // Release 1.7: a quick rise trades a slightly shorter reversal window
+      // for getting up early. The delay option keeps the full window.
+      const reversalFrames = fighter.wakeOption === "quick"
+        ? Math.max(1, DEFENSE_RULES.reversalWindowFrames - WAKEUP_RULES.quickRiseReversalPenaltyFrames)
+        : DEFENSE_RULES.reversalWindowFrames;
+      fighter.reversalWindowFrames = reversalFrames;
+      fighter.invulnerableFrames = reversalFrames;
+      fighter.wakeOption = "";
       spawnSweat(fighter, 5, 0.9);
     }
   } else {
@@ -5282,6 +5448,18 @@ function applyFighterPhysics(fighter, dt) {
       fighter.attackTime = 0;
       fighter.attackFrame = 0;
       fighter.landingRecoveryFrames = DEFENSE_RULES.airAttackLandingRecoveryFrames;
+      // An attack on the way down supersedes the air-tech tax — same price.
+      fighter.airTechTaxPending = false;
+      fighter.airTechFlipFrames = 0;
+      spawnFootDust(fighter, 8, 48, 0);
+      spawnSweat(fighter, 3, 1);
+    } else if (landed && fighter.airTechTaxPending) {
+      // Release 1.7: the air-recovery landing tax — the existing air-attack
+      // landing recovery, so a read meaty still punishes the escape.
+      fighter.airTechTaxPending = false;
+      fighter.airTechFlipFrames = 0;
+      fighter.juggleCount = 0;
+      fighter.landingRecoveryFrames = Math.max(fighter.landingRecoveryFrames, DEFENSE_RULES.airAttackLandingRecoveryFrames);
       spawnFootDust(fighter, 8, 48, 0);
       spawnSweat(fighter, 3, 1);
     } else if (landed && !fighter.down) {
@@ -5426,6 +5604,9 @@ function tryStartupChordOverride(fighter, input) {
 function updateFighter(fighter, opponent, input, dt) {
   fighter.animTime += dt;
   advanceFighterTimers(fighter);
+  // Release 1.7: remember whether a guard was already held so the Perfect
+  // Guard start tick below only stamps genuinely fresh guard inputs.
+  const wasGuarding = fighter.guarding;
   fighter.block = false;
   fighter.guarding = false;
   fighter.crouch = false;
@@ -5452,6 +5633,31 @@ function updateFighter(fighter, opponent, input, dt) {
     applyFighterPhysics(fighter, dt);
     return;
   }
+  // Release 1.7: GUARD CRUSH reuses the dizzy handling path — briefly
+  // helpless, but with no mash relief so the punish window is always real.
+  if (fighter.guardCrushFrames > 0) {
+    fighter.vx *= 0.82;
+    fighter.inputBuffer.clear();
+    applyFighterPhysics(fighter, dt);
+    return;
+  }
+  // Release 1.7: wake-up options. Up during the knockdown quick-rises, Down
+  // held delays the getaway — both from input bits already in the protocol.
+  if (fighter.down && fighter.knockdownFrames > 1 && !fighter.wakeOption) {
+    const bufferedJump = fighter.inputBuffer.consume("jump", state.simulationTick);
+    const option = resolveWakeOption({ jump: Boolean(input.jump || bufferedJump), down: input.down });
+    if (option === "quick") {
+      fighter.wakeOption = "quick";
+      fighter.knockdownFrames = Math.max(1, fighter.knockdownFrames - WAKEUP_RULES.quickRiseFrames);
+      if (!rollbackResimulating) mechFxDebug.quickRises += 1;
+      spawnCombatText(fighter.x, fighter.y - fighter.height - 30, "QUICK RISE", fighter.def.accent);
+    } else if (option === "delay") {
+      fighter.wakeOption = "delay";
+      fighter.knockdownFrames += WAKEUP_RULES.delayFrames;
+      if (!rollbackResimulating) mechFxDebug.wakeDelays += 1;
+      spawnCombatText(fighter.x, fighter.y - fighter.height - 30, "DELAYED", "#8a93a5");
+    }
+  }
   const flowSpeed = fighter.def.id === "ali" ? 1 + fighter.rhythmStacks * 0.045 : 1;
 
   if (fighter.blockstunFrames > 0 && tryGuardReversal(fighter, input)) {
@@ -5463,6 +5669,17 @@ function updateFighter(fighter, opponent, input, dt) {
     fighter.vx *= 0.84;
   } else if (fighter.hitstunFrames > 0 || fighter.pendingKnockdown) {
     fighter.vx *= 0.9;
+    // Release 1.7: air recovery (juggle tech). Any attack button once the
+    // airborne-hitstun window opens — armed only when the last hit was
+    // neither knockdown-final nor a super — techs out of the juggle. The
+    // buffered press is only consumed once the window is genuinely open, so
+    // early mashes are not eaten.
+    if (!fighter.grounded && fighter.pendingKnockdown && fighter.airTechArmed
+      && fighter.airHitstunFrames >= AIR_RECOVERY_RULES.minimumHitstunFrames) {
+      const buffered = fighter.inputBuffer.consume(["light", "heavy", "special"], state.simulationTick);
+      const pressed = Boolean(buffered || input.light || input.heavy || input.special);
+      if (canAirRecover(fighter, pressed)) performAirRecovery(fighter);
+    }
   } else if (fighter.down || fighter.wakeupFrames > 0 || fighter.landingRecoveryFrames > 0 || fighter.throwTechFlashFrames > 0) {
     fighter.vx *= 0.72;
   } else if (!fighter.attacking) {
@@ -5608,6 +5825,11 @@ function updateFighter(fighter, opponent, input, dt) {
     }
   }
 
+  // Release 1.7: Perfect Guard — stamp the tick a FRESH guard began. Blockstun
+  // holds guarding true continuously, so a held guard keeps its original
+  // stamp; only releasing and re-tapping back can arm a new just-defend.
+  if (fighter.guarding && !wasGuarding) fighter.guardStartedTick = state.simulationTick;
+
   applyFighterPhysics(fighter, dt);
 }
 
@@ -5685,6 +5907,9 @@ function triggerPaintTrap(trap, victim) {
       victim.pendingKnockdown = true;
       victim.grounded = false;
       victim.vy = -245;
+      // Trap knockdowns are knockdown-final: no air tech.
+      victim.airTechArmed = false;
+      victim.airHitstunFrames = 0;
     }
   }
   owner.meter = clamp(owner.meter + 13 * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
@@ -5928,7 +6153,10 @@ function triggerProjectile(projectile, victim) {
       victim.pendingKnockdown = true;
       victim.grounded = false;
       victim.vy = -245;
+      // Projectile knockdowns are knockdown-final: no air tech.
+      victim.airTechArmed = false;
     }
+    victim.airHitstunFrames = 0;
   } else if (armored) {
     victim.armorHits += 1;
     spawnCombatText(victim.x, victim.y - victim.height - 18, "SEISMIC ARMOR", victim.def.accent);
@@ -6370,6 +6598,9 @@ function resolveGrabThrow(attacker, victim, grab, style, direction) {
   victim.juggleCount = 0;
   victim.pendingKnockdown = true;
   victim.grounded = false;
+  // Throws are never air-techable.
+  victim.airTechArmed = false;
+  victim.airHitstunFrames = 0;
   victim.vx = direction * grab.push * style.launch;
   victim.vy = -371 * style.drop;
   victim.x = clamp(
@@ -6467,6 +6698,9 @@ function triggerSouthpawCounter(counterFighter, incomingFighter, incomingAttack,
   incomingFighter.vx = counterFighter.facing * stance.counterPush;
   incomingFighter.pendingKnockdown = true;
   incomingFighter.grounded = false;
+  // The Southpaw counter launch is knockdown-final: no air tech.
+  incomingFighter.airTechArmed = false;
+  incomingFighter.airHitstunFrames = 0;
   incomingFighter.vy = stance.counterLaunchVelocityY;
   incomingFighter.lastHitResult = "southpaw-countered";
   incomingFighter.hitFlash = 0.17;
@@ -6542,6 +6776,9 @@ function hit(attacker, victim, attack, collision) {
     guarding: victim.guarding,
     grounded: victim.grounded,
   });
+  // Release 1.7: Perfect Guard — the block STARTED within the just-defend
+  // window of this impact. Purely derived from existing frame counters.
+  const perfect = blocked && isPerfectGuard(victim.guardStartedTick, state.simulationTick);
   if (state.mode === "training" && attacker.side === 0 && !blocked) {
     recordTrainingTrialHit(state.training, {
       fighterId: attacker.kitId,
@@ -6570,25 +6807,36 @@ function hit(attacker, victim, attack, collision) {
     * (counter ? DEFENSE_RULES.counterDamageMultiplier : 1)
     * comboResult.damageScale
     * (armored ? 0.65 : 1);
-  const damage = blocked ? attack.chipDamage : baseDamage;
+  // A Perfect Guard takes zero chip and sheds blockstun frames.
+  const damage = blocked ? (perfect ? 0 : attack.chipDamage) : baseDamage;
   victim.health = blocked
     ? Math.max(1, victim.health - damage)
     : clamp(victim.health - damage, 0, 100);
   victim.lastDamageFrame = state.simulationTick;
-  victim.blockstunFrames = blocked ? attack.blockstunFrames : 0;
+  victim.blockstunFrames = blocked
+    ? Math.max(1, attack.blockstunFrames - (perfect ? PERFECT_GUARD_RULES.blockstunReductionFrames : 0))
+    : 0;
   victim.hitstunFrames = blocked || armored ? 0 : attack.hitstunFrames + (counter ? DEFENSE_RULES.counterHitstunBonusFrames : 0);
   victim.stun = Math.max(victim.hitstunFrames, victim.blockstunFrames) / SIMULATION_HZ;
+  // Release 1.7: blocked hits pressure the guard gauge exactly where the
+  // blockstun is set; a full gauge shatters into GUARD CRUSH inside.
+  if (blocked) addGuardPressure(victim, attacker, attack, { perfect });
   if (state.mode === "training" && attacker.side === 0) {
     const remainingRecovery = Math.max(0, (attack.durationFrames || 0) - attacker.attackFrame);
     state.training.lastAdvantage = (victim.blockstunFrames || victim.hitstunFrames) - remainingRecovery;
-    state.training.lastResult = blocked ? "BLOCK" : armored ? "ARMOR" : "HIT";
+    state.training.lastResult = blocked ? (perfect ? "PERFECT GUARD" : "BLOCK") : armored ? "ARMOR" : "HIT";
   }
+  // Training readout: the player's own Perfect Guards are counted for practice.
+  if (state.mode === "training" && perfect && victim.side === 0) state.training.perfectGuards += 1;
   // A back throw sends the victim behind the thrower, which is how corners get
   // swapped in SF2. Everything else pushes along the attacker's facing.
   const pushDirection = attack.backThrow ? -attacker.facing : attacker.facing;
-  victim.vx = pushDirection * attack.push * (blocked ? 0.28 : armored ? 0.12 : 1);
+  // A Perfect Guard also sheds most of the block pushback, holding ground.
+  victim.vx = pushDirection * attack.push * (blocked ? (perfect ? 0.12 : 0.28) : armored ? 0.12 : 1);
   victim.guardHeight = victim.crouch ? "low" : victim.guardHeight;
-  victim.lastHitResult = blocked ? `blocked-${attack.level}` : armored ? "armor" : counter ? "counter" : attack.level;
+  victim.lastHitResult = victim.guardCrushFrames > 0 ? "guard-crush"
+    : blocked ? (perfect ? "perfect-guard" : `blocked-${attack.level}`)
+      : armored ? "armor" : counter ? "counter" : attack.level;
   if (!blocked && !armored) {
     attacker.combo.addDamage(damage);
     registerAliFlow(attacker, attack);
@@ -6612,6 +6860,15 @@ function hit(attacker, victim, attack, collision) {
       victim.grounded = false;
       victim.vy = attack.juggleLift;
     }
+    // Release 1.7: air recovery arming — every clean hit restarts the
+    // airborne-hitstun clock. Authored launches (launchVelocityY juggle
+    // starters, juggleLift mid-hits) and plain juggle hits stay escapable —
+    // the classic tech read against launchers — while knockdown-final tumbles
+    // (sweeps, air heavies, specials, a multi-hit's closing knockdown) and
+    // every super hit still ride to the floor.
+    victim.airHitstunFrames = 0;
+    const authoredLaunch = Boolean(attack.launchVelocityY || attack.juggleLift);
+    victim.airTechArmed = !attack.superMove && (authoredLaunch || !shouldKnockDown);
   } else if (armored) {
     victim.armorHits += 1;
     spawnCombatText(victim.x, victim.y - victim.height - 18, "SEISMIC ARMOR", victim.def.accent);
@@ -6623,6 +6880,8 @@ function hit(attacker, victim, attack, collision) {
   }
   attacker.meter = clamp(attacker.meter + attack.meter * GRIT_RULES.hitGainMultiplier, 0, GRIT_RULES.maximum);
   victim.meter = clamp(victim.meter + attack.meter * GRIT_RULES.damageTakenGainMultiplier, 0, GRIT_RULES.maximum);
+  // Release 1.7: a Perfect Guard banks bonus Grit for the defender.
+  if (perfect) victim.meter = clamp(victim.meter + PERFECT_GUARD_RULES.gritBonus, 0, GRIT_RULES.maximum);
   const impactTier = attack.superMove ? "super"
     : attack.kind === "throw" ? "throw"
       : attack.kind === "special" ? "special"
@@ -6643,10 +6902,22 @@ function hit(attacker, victim, attack, collision) {
   else if (!blocked && attack.level === ATTACK_LEVELS.OVERHEAD) spawnCombatText(impact.x, impact.y - 70, "OVERHEAD", attacker.def.accent);
   else if (!blocked && attack.level === ATTACK_LEVELS.LOW) spawnCombatText(impact.x, impact.y - 64, "LOW", attacker.def.accent);
   else if (!blocked && attack.level === ATTACK_LEVELS.THROW) spawnCombatText(impact.x, impact.y - 72, "THROW", attacker.def.accent);
+  // Release 1.7: Perfect Guard flash — a cyan ring plus PERFECT combat text
+  // (checksum-exempt state.effects, same channel every hit spark uses).
+  if (perfect) {
+    if (!rollbackResimulating) mechFxDebug.perfectGuards += 1;
+    state.effects.push({
+      kind: "shockRing", x: impact.x, y: impact.y,
+      size: 78, life: 0.3, max: 0.3, color: "#63f2ff",
+    });
+    spawnCombatText(impact.x, impact.y - 80, "PERFECT", "#63f2ff");
+  }
   sound(
     blocked ? "block" : attack.kind === "light" ? "hit-light" : "hit-heavy",
     blocked ? victim : attacker,
   );
+  // The distinct 'tink' variant layered over the block cue on a just-defend.
+  if (perfect) perfectGuardTink();
   updateHud();
   state.lastImpactSide = attacker.side;
 }
@@ -6975,6 +7246,9 @@ function resolveFighterState(fighter) {
   if (fighter.down || fighter.knockdownFrames > 0) return FIGHTER_STATES.KNOCKDOWN;
   if (fighter.wakeupFrames > 0) return FIGHTER_STATES.WAKEUP;
   if (fighter.dizzyFrames > 0) return FIGHTER_STATES.HITSTUN;
+  // Release 1.7: GUARD CRUSH is helpless — it reads as hitstun to every
+  // downstream system, exactly like dizzy.
+  if (fighter.guardCrushFrames > 0) return FIGHTER_STATES.HITSTUN;
   if (fighter.grabbing || fighter.grabbed) return FIGHTER_STATES.THROW;
   if (fighter.throwTechFlashFrames > 0) return FIGHTER_STATES.THROW_TECH;
   if (fighter.blockstunFrames > 0) return FIGHTER_STATES.BLOCKSTUN;
@@ -7907,7 +8181,9 @@ function fighterAnimationPose(fighter) {
   const base = (frame) => ({ bank: "base", frame });
   if (fighter.cinematicFrame !== null) return base(fighter.cinematicFrame);
   if (fighter.grabbed) return base(15);
-  if (fighter.dizzyFrames > 0) return base(12 + Math.floor(fighter.animTime * 6) % 2);
+  if (fighter.dizzyFrames > 0 || fighter.guardCrushFrames > 0) return base(12 + Math.floor(fighter.animTime * 6) % 2);
+  // Release 1.7: air-recovery back-flip tuck.
+  if (fighter.airTechFlipFrames > 0) return base(13);
   if (fighter.down || fighter.knockdownFrames > 0 || fighter.hitFlash > 0 || fighter.hitstunFrames > 21) return base(15);
   if (fighter.wakeupFrames > 0) return base(fighter.wakeupFrames > 9 ? 15 : 12);
   if (fighter.throwTechFlashFrames > 0) return base(12);
@@ -9038,7 +9314,7 @@ function drawFighter(fighter, time) {
   // drops, so a gassed fighter visibly heaves before any UI is checked.
   // Transform math only — health/animTime are render-safe reads.
   const breathing = fighter.cinematicFrame === null && fighter.grounded && !fighter.down
-    && !attack && !fighter.stun && !fighter.block && fighter.dizzyFrames <= 0;
+    && !attack && !fighter.stun && !fighter.block && fighter.dizzyFrames <= 0 && fighter.guardCrushFrames <= 0;
   const fatigue = clamp(1 - fighter.health / 100, 0, 1);
   const breath = breathing
     ? Math.sin(fighter.animTime * (5.2 + fatigue * 5.6) + fighter.side * 1.9)
@@ -9079,6 +9355,13 @@ function drawFighter(fighter, time) {
   if (fighter.down) {
     ctx.rotate(-fighter.facing * 1.35);
     ctx.translate(-fighter.facing * 45, 17);
+  }
+
+  // Release 1.7: air-recovery back-flip — one backward rotation across the
+  // flip window. Render-only read of a snapshotted frame counter.
+  if (fighter.airTechFlipFrames > 0 && !reducedMotion) {
+    const flip = 1 - fighter.airTechFlipFrames / AIR_RECOVERY_RULES.flipFrames;
+    ctx.rotate(fighter.facing * flip * Math.PI * 2);
   }
 
   ctx.scale(fighter.facing, 1);
@@ -9675,6 +9958,50 @@ function drawDizzyStars(fighter, time) {
   ctx.fillStyle = "rgba(0,0,0,.55)";
   ctx.fillRect(centreX - 34, centreY - 22, 68, 5);
   ctx.fillStyle = "#ffd54a";
+  ctx.fillRect(centreX - 34, centreY - 22, 68 * remaining, 5);
+  ctx.restore();
+}
+
+// Release 1.7: GUARD CRUSH marker — the dizzy-stars pattern with shard motes
+// instead of stars, a CRUSHED label and the same legible drain bar. Pure
+// render-side reads of snapshotted fields.
+function drawGuardCrushMarker(fighter, time) {
+  if (!fighter || fighter.guardCrushFrames <= 0 || fighter.dizzyFrames > 0) return;
+  const centreX = fighter.x;
+  const drawnHeight = fighterRenderSize(fighter.def.id) * 0.956;
+  const centreY = fighter.y - drawnHeight - 26;
+  const remaining = fighter.guardCrushFrames / Math.max(1, fighter.guardCrushTotalFrames);
+  ctx.save();
+  ctx.globalAlpha = 0.55 + 0.45 * Math.abs(Math.sin(time * 7));
+  // Broken-guard shards tumbling around the head.
+  for (let index = 0; index < 6; index += 1) {
+    const angle = time * 3.6 + (index / 6) * Math.PI * 2;
+    const x = centreX + Math.cos(angle) * 50;
+    const y = centreY + Math.sin(angle) * 14;
+    const size = 6 + Math.sin(angle * 2) * 2;
+    ctx.fillStyle = index % 2 ? "#7de8ff" : "#d8f9ff";
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle * 1.7);
+    ctx.beginPath();
+    ctx.moveTo(0, -size);
+    ctx.lineTo(size * 0.8, size * 0.6);
+    ctx.lineTo(-size * 0.7, size * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  ctx.font = "900 20px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#7de8ff";
+  ctx.strokeStyle = "rgba(0,0,0,.72)";
+  ctx.lineWidth = 4;
+  ctx.strokeText("CRUSHED", centreX, centreY - 30);
+  ctx.fillText("CRUSHED", centreX, centreY - 30);
+  ctx.fillStyle = "rgba(0,0,0,.55)";
+  ctx.fillRect(centreX - 34, centreY - 22, 68, 5);
+  ctx.fillStyle = "#7de8ff";
   ctx.fillRect(centreX - 34, centreY - 22, 68 * remaining, 5);
   ctx.restore();
 }
@@ -10398,7 +10725,7 @@ function drawDebugOverlay() {
       const move = fighter.attacking?.profileId || "—";
       const guard = fighter.guarding ? fighter.guardHeight.toUpperCase() : "—";
       const combo = fighter.combo.snapshot(state.simulationTick);
-      return `P${fighter.side + 1} ${fighter.combatState.toUpperCase()} F${fighter.stateFrame} · ${move} · GRIT ${Math.floor(fighter.meter)} · FLOW ${fighter.rhythmStacks || 0} · COMBO ${combo.hits}/${combo.damage.toFixed(1)} · JUG ${state.fighters[1 - fighter.side]?.juggleCount || 0} · GUARD ${guard} · HS ${fighter.hitstunFrames}/BS ${fighter.blockstunFrames}/KD ${fighter.knockdownFrames} · BUF ${fighter.inputBuffer.snapshot().map((entry) => entry.action).join("/") || "—"}`;
+      return `P${fighter.side + 1} ${fighter.combatState.toUpperCase()} F${fighter.stateFrame} · ${move} · GRIT ${Math.floor(fighter.meter)} · FLOW ${fighter.rhythmStacks || 0} · COMBO ${combo.hits}/${combo.damage.toFixed(1)} · JUG ${state.fighters[1 - fighter.side]?.juggleCount || 0} · GUARD ${guard} · GM ${Math.floor(fighter.guardMeter)}${fighter.guardCrushFrames > 0 ? ` CRUSH ${fighter.guardCrushFrames}` : ""} · HS ${fighter.hitstunFrames}/BS ${fighter.blockstunFrames}/KD ${fighter.knockdownFrames} · BUF ${fighter.inputBuffer.snapshot().map((entry) => entry.action).join("/") || "—"}`;
     }),
     ...commandHistory.map((history, side) => `P${side + 1} INPUT ${history.slice(-8).map((entry) => entry.token).join(" › ") || "—"}`),
   ];
@@ -11018,6 +11345,7 @@ function draw(time) {
     const ordered = [...state.fighters].sort((a, b) => a.y - b.y);
     ordered.forEach((fighter) => drawFighter(fighter, time));
     state.fighters.forEach((fighter) => drawDizzyStars(fighter, time));
+    state.fighters.forEach((fighter) => drawGuardCrushMarker(fighter, time));
     drawParticles();
     drawForegroundOccluders(state.fighters.length
       ? (state.fighters[0].x + state.fighters[1].x) * 0.5 : W * 0.5);
@@ -11558,6 +11886,31 @@ function noiseBurst(now, amount, seconds, filterHz) {
   source.connect(filter).connect(gain).connect(masterBusInput());
   source.start(now);
   source.stop(now + seconds);
+}
+
+/**
+ * Release 1.7: Perfect Guard 'tink' — a bright metallic ping layered over the
+ * ordinary block cue so a just-defend reads instantly by ear. Synthesized on
+ * the objectSound pattern (no new samples), render-side only with the
+ * announce() resim guard; no gameplay reads or writes.
+ */
+function perfectGuardTink() {
+  if (rollbackResimulating) return;
+  showSoundCaption("perfect-guard");
+  if (!$("#soundToggle").checked) return;
+  unlockAudio();
+  if (!state.audio) return;
+  const now = state.audio.currentTime;
+  const oscillator = state.audio.createOscillator();
+  const gain = state.audio.createGain();
+  oscillator.type = "triangle";
+  oscillator.frequency.setValueAtTime(2600, now);
+  oscillator.frequency.exponentialRampToValueAtTime(1450, now + 0.09);
+  gain.gain.setValueAtTime(Math.max(0.0001, 0.07 * state.sfxVolume), now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+  oscillator.connect(gain).connect(masterBusInput());
+  oscillator.start(now);
+  oscillator.stop(now + 0.11);
 }
 
 function objectSound(styleId) {
@@ -12337,6 +12690,8 @@ const ANNOUNCER_LINES = (() => {
     comeback: ["WHAT A COMEBACK!", "BACK FROM THE DEAD!", "NEVER COUNT THEM OUT!"],
     timeover: ["TIME OVER — DECISION!", "THE CLOCK CALLS IT!", "TIME! JUDGES' DECISION!"],
     "fatality-performed": ["FATALITY.", "A GRAPHIC FINISH.", "THAT WAS A FINAL BLOW."],
+    // Release 1.7 DEPTH: the guard-crush letter-slam's spoken call.
+    guardcrush: ["GUARD CRUSH!", "DEFENSE SHATTERED!", "THE GUARD BREAKS!"],
     "boss-intro": ["THE FINAL AUTHORITY STEPS IN.", "FINAL BOUT — THE BLACK BOOK CLOSES TONIGHT.", "THE COMMISSIONER IS WAITING."],
     connected: ["CHALLENGER CONNECTED!", "YOUR OPPONENT HAS ENTERED!", "THE WIRE IS LIVE!"],
     setpoint: ["SET POINT!", "ONE ROUND FROM GLORY!", "THE MATCH IS ON THE LINE!"],
@@ -12463,6 +12818,10 @@ function announcerSpeakBanner(text) {
   }
   if (text === "FINISH THEM") {
     announcerSay("finishthem");
+    return;
+  }
+  if (text === "GUARD CRUSH") {
+    announcerSay("guardcrush");
     return;
   }
   if (text === "FINAL BLOW") {
@@ -13298,6 +13657,13 @@ window.__finalBlowEngine = {
         storyCallouts: voiceFxDebug.storyCallouts,
         onlineMoments: voiceFxDebug.onlineMoments,
         voiceProbeRequests,
+        // Release 1.7 DEPTH: sim-mechanic one-shot totals (mechFxDebug —
+        // monotonic, resim-guarded at every increment site).
+        guardCrushes: mechFxDebug.guardCrushes,
+        quickRises: mechFxDebug.quickRises,
+        wakeDelays: mechFxDebug.wakeDelays,
+        airRecoveries: mechFxDebug.airRecoveries,
+        perfectGuards: mechFxDebug.perfectGuards,
       },
       stageWeapon: weaponSnapshot(state.stageWeapon),
       stageWeaponsEnabled: state.stageWeaponsEnabled,
@@ -13378,6 +13744,18 @@ window.__finalBlowEngine = {
         dizzyFrames: fighter.dizzyFrames,
         dizzy: fighter.dizzyFrames > 0,
         stunImmuneFrames: fighter.stunImmuneFrames,
+        guardMeter: fighter.guardMeter,
+        guardCrushFrames: fighter.guardCrushFrames,
+        guardCrushed: fighter.guardCrushFrames > 0,
+        guardImmuneFrames: fighter.guardImmuneFrames,
+        guardStartedTick: fighter.guardStartedTick,
+        wakeOption: fighter.wakeOption,
+        airTechArmed: fighter.airTechArmed,
+        airHitstunFrames: fighter.airHitstunFrames,
+        airTechFlipFrames: fighter.airTechFlipFrames,
+        airTechTaxPending: fighter.airTechTaxPending,
+        landingRecoveryFrames: fighter.landingRecoveryFrames,
+        reversalWindowFrames: fighter.reversalWindowFrames,
         grabbing: fighter.grabbing ? { ...fighter.grabbing } : null,
         grabbed: fighter.grabbed ? { ...fighter.grabbed } : null,
         throwInvulnerableFrames: fighter.throwInvulnerableFrames,
@@ -13731,6 +14109,12 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         "rhythmExpiresFrame",
         "dizzyFrames",
         "dizzyTotalFrames",
+        // Release 1.7 DEPTH fields, settable for probe setup.
+        "guardMeter",
+        "guardCrushFrames",
+        "guardCrushTotalFrames",
+        "guardImmuneFrames",
+        "airHitstunFrames",
       ]);
       for (const [key, value] of Object.entries(values)) {
         if (!allowed.has(key) || !Number.isFinite(value)) continue;
@@ -13844,6 +14228,26 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       for (let frame = 0; frame < frames; frame += 1) simulationClock.stepOnce(runSimulationStep);
       state.simulationTick = simulationClock.tick;
       return this.status();
+    },
+    // Release 1.7 DEPTH: live rollback round-trip. Snapshots the real combat
+    // state, mutates it by simulating ahead, restores, and reports whether the
+    // combat checksum returned to the pre-snapshot value — proving every
+    // fighter field (including the DEPTH additions) is captured and restored.
+    rollbackProbe(seconds = 0.5) {
+      if (state.fighters.length !== 2) throw new Error("Start a QA fight first");
+      const checksumBefore = checksumState(combatRollbackState());
+      const snapshot = saveRollbackState();
+      this.step(seconds);
+      const checksumMutated = checksumState(combatRollbackState());
+      restoreRollbackState(structuredClone(snapshot));
+      const checksumAfter = checksumState(combatRollbackState());
+      return {
+        match: checksumBefore === checksumAfter,
+        mutated: checksumMutated !== checksumBefore,
+        checksumBefore,
+        checksumMutated,
+        checksumAfter,
+      };
     },
   };
 }

@@ -50,6 +50,9 @@ if a line changes).
 | assets/audio/announcer/perfect-1.mp3 | PERFECT! |
 | assets/audio/announcer/perfect-2.mp3 | UNTOUCHABLE! |
 | assets/audio/announcer/perfect-3.mp3 | NOT A SCRATCH! |
+| assets/audio/announcer/guardcrush-1.mp3 | GUARD CRUSH! |
+| assets/audio/announcer/guardcrush-2.mp3 | DEFENSE SHATTERED! |
+| assets/audio/announcer/guardcrush-3.mp3 | THE GUARD BREAKS! |
 
 ### Fighter name calls (select lock-in + VS slam)
 
@@ -91,7 +94,7 @@ archetypes, `CYRAXX.md`). These are vocalisations, not scripted words; the
 `<cue>.mp3`, `<cue>-2.mp3`, `<cue>-3.mp3` under `assets/audio/fighters/<id>/`.
 Until these exist the game pitch-shifts the nearest recorded take
 (dizzy→hit-heavy ×0.86, counter→special ×1.09, tech→block ×1.06,
-desperation→hit-light ×0.93, scream→fatal ×1.14).
+desperation→hit-light ×0.93, scream→fatal ×1.14, crush→block ×0.78).
 
 | Cue | Performance | Length |
 | --- | --- | --- |
@@ -100,6 +103,7 @@ desperation→hit-light ×0.93, scream→fatal ×1.14).
 | tech | strained escape shout breaking a throw | 0.4–0.7s |
 | desperation | panicked low-health snarl / ragged breathing burst (fires once per round under 20%) | 0.8–1.2s |
 | scream | full fatality death scream — must read bigger and longer than the existing `ko.mp3` groan | 1.0–2.0s |
+| crush | guard-shatter cry — arms blown open, staggered disbelief (Release 1.7 GUARD CRUSH) | 0.6–1.0s |
 
 Voice directions per fighter:
 
@@ -114,8 +118,8 @@ Voice directions per fighter:
 | CYRAXX (cyraxx) | Feedback trickster (see CYRAXX.md). Unhinged chaos gremlin; cracking falsetto shrieks, distorted edges. |
 | ALI G (ali) | West Staines MC, rhythm fighter. Mock-hip-hop swagger; rhythmic ad-lib energy. |
 
-Full file list (8 fighters × 5 cues × 3 takes = 120 files):
-`assets/audio/fighters/<id>/{dizzy,counter,tech,desperation,scream}{,-2,-3}.mp3`
+Full file list (8 fighters × 6 cues × 3 takes = 144 files):
+`assets/audio/fighters/<id>/{dizzy,counter,tech,desperation,scream,crush}{,-2,-3}.mp3`
 for each id in `deathblow, jez, alan, post, benny, donald, cyraxx, ali`.
 
 ## Priority 3 — match-story callouts (announcer voice)
@@ -167,9 +171,9 @@ super, fatal, ko`.
 
 | Group | Files |
 | --- | --- |
-| P1 announcer core | 23 + 24 name + 24 wins = 71 |
-| P2 fighter reactive | 120 |
+| P1 announcer core | 26 + 24 name + 24 wins = 74 |
+| P2 fighter reactive | 144 |
 | P3 match-story | 14 |
 | P4 online moments | 12 |
 | P5 fighter variant retakes | 192 |
-| **Total** | **409** |
+| **Total** | **436** |

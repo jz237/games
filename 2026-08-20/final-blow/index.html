@@ -32,13 +32,13 @@
       <div id="hud" class="hud hidden" aria-hidden="true">
         <div class="fighter-hud p1-hud">
           <div class="hud-name"><span class="side-tag">P1</span><b id="p1Name">DEATHBLOW</b><span id="p1Rounds" class="round-pips"></span></div>
-          <div class="health-shell"><i id="p1Health"></i><em id="p1Damage"></em></div>
+          <div class="health-shell"><i id="p1Health"></i><em id="p1Damage"></em><s id="p1GuardGauge" class="guard-gauge"></s></div>
           <div class="grit-row"><span>GRIT</span><div class="meter-shell"><i id="p1Meter"></i></div><b id="p1Grit">0</b><span id="p1ObjectName" class="object-name">—</span><span id="p1Objects" class="object-pips" aria-label="Throwable objects left"></span></div>
         </div>
         <div class="timer-wrap"><span id="roundLabel">ROUND 1</span><b id="timer">99</b></div>
         <div class="fighter-hud p2-hud">
           <div class="hud-name"><span id="p2Rounds" class="round-pips"></span><b id="p2Name">JEZ</b><span class="side-tag">P2</span></div>
-          <div class="health-shell"><i id="p2Health"></i><em id="p2Damage"></em></div>
+          <div class="health-shell"><i id="p2Health"></i><em id="p2Damage"></em><s id="p2GuardGauge" class="guard-gauge"></s></div>
           <div class="grit-row"><span id="p2Objects" class="object-pips" aria-label="Throwable objects left"></span><span id="p2ObjectName" class="object-name">—</span><b id="p2Grit">0</b><div class="meter-shell"><i id="p2Meter"></i></div><span>GRIT</span></div>
         </div>
       </div>
@@ -60,6 +60,7 @@
           <span><small>COMBO</small><b id="trainingCombo">0</b></span>
           <span><small>FRAME DATA</small><b id="trainingFrames">—</b></span>
           <span><small>ADVANTAGE</small><b id="trainingAdvantage">—</b></span>
+          <span><small>PERFECT GUARD</small><b id="trainingPerfectGuards">0</b></span>
         </div>
         <div class="training-tools">
           <label>DUMMY <select id="trainingDummySelect">

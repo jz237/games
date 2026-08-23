@@ -34,6 +34,8 @@ export const FIGHTER_REACTIVE_CUES = Object.freeze([
   "tech",
   "desperation",
   "scream",
+  // Release 1.7 DEPTH: the guard-crush shatter bark.
+  "crush",
 ]);
 
 export const FIGHTER_AUDIO_CUES = Object.freeze([
@@ -66,6 +68,7 @@ export const FIGHTER_AUDIO_LABELS = Object.freeze({
   tech: "THROW TECH SHOUT",
   desperation: "DESPERATION",
   scream: "FATALITY SCREAM",
+  crush: "GUARD CRUSHED",
 });
 
 // Until real reactive takes exist, each new cue borrows the nearest recorded
@@ -77,6 +80,7 @@ export const FIGHTER_REACTIVE_PLACEHOLDERS = Object.freeze({
   tech: Object.freeze({ cue: "block", rate: 1.06 }),
   desperation: Object.freeze({ cue: "hit-light", rate: 0.93 }),
   scream: Object.freeze({ cue: "fatal", rate: 1.14 }),
+  crush: Object.freeze({ cue: "block", rate: 0.78 }),
 });
 
 function variantPath(fighterId, cue, variant) {

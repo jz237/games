@@ -100,6 +100,118 @@ export function stunGainForAttack(attack, { counter = false, blocked = false } =
   return Math.max(0, Number(((base + levelBonus + (counter ? STUN_RULES.counterBonus : 0)) * scale).toFixed(3)));
 }
 
+/**
+ * Release 1.7 DEPTH — guard gauge, mirroring the STUN_RULES pattern exactly:
+ * integer gains per BLOCKED hit, a grace window, per-frame decay, a helpless
+ * CRUSHED state at full charge and a long immunity after recovery so a crush
+ * can never loop. Every value is integer or frame-based and lives on the
+ * fighter, so the gauge is fully deterministic under replay and rollback.
+ * Blocked chip pressure can never take the last hit point (blocks already
+ * floor health at 1), so the crush is the long-game payoff instead.
+ */
+export const GUARD_RULES = Object.freeze({
+  threshold: 100,
+  decayGraceFrames: 30,
+  decayPerFrame: 0.5,
+  crushFrames: 60,
+  immuneFrames: 300,
+  gain: Object.freeze({ light: 7, heavy: 13, special: 16, throw: 0 }),
+});
+
+export function guardGainForAttack(attack, { blocked = false, perfect = false } = {}) {
+  // Only blocked strikes pressure the gauge, and a Perfect Guard absorbs the
+  // pressure entirely — the just-defend reward against blockstrings.
+  if (!attack || !blocked || perfect || attack.level === ATTACK_LEVELS.THROW) return 0;
+  const base = GUARD_RULES.gain[attack.kind] ?? GUARD_RULES.gain.light;
+  const scale = attack.maxHits > 1 ? 1 / Math.min(4, attack.maxHits) : 1;
+  return Math.max(0, Number((base * scale).toFixed(3)));
+}
+
+/**
+ * Release 1.7 DEPTH — wake-up options. Knockdowns are a fixed 48+16 frames;
+ * pressing Up during the knockdown quick-rises (shorter, with a slightly
+ * shorter reversal window), holding Down delays the getaway. Both directions
+ * already travel in the 16-bit net input, so no protocol change.
+ */
+export const WAKEUP_RULES = Object.freeze({
+  quickRiseFrames: 14,
+  delayFrames: 12,
+  quickRiseReversalPenaltyFrames: 1,
+});
+
+export function resolveWakeOption(input = {}) {
+  if (input.jump) return "quick";
+  if (input.down) return "delay";
+  return null;
+}
+
+/**
+ * Release 1.7 DEPTH — air recovery (juggle tech). Any attack button pressed
+ * after enough airborne hitstun techs out of a juggle — unless the last hit
+ * was knockdown-final or a super — into a brief invulnerable back-flip, then
+ * the existing air-attack landing recovery as the tax so meaties still work.
+ */
+export const AIR_RECOVERY_RULES = Object.freeze({
+  minimumHitstunFrames: 14,
+  invulnerableFrames: 8,
+  flipFrames: 12,
+  driftVelocityX: 150,
+  liftVelocityY: -250,
+});
+
+export function canAirRecover(fighter, pressed = false) {
+  return Boolean(pressed)
+    && !fighter.grounded
+    && Boolean(fighter.pendingKnockdown)
+    && Boolean(fighter.airTechArmed)
+    && (fighter.airHitstunFrames || 0) >= AIR_RECOVERY_RULES.minimumHitstunFrames;
+}
+
+/**
+ * Release 1.7 DEPTH — Perfect Guard (just-defend). A block whose guard input
+ * began within the window frames of impact takes zero chip, sheds blockstun,
+ * banks a little Grit and absorbs all guard-gauge pressure. Derived purely
+ * from existing inputs and frame counters — rollback-safe, no protocol change.
+ */
+export const PERFECT_GUARD_RULES = Object.freeze({
+  windowFrames: 4,
+  blockstunReductionFrames: 4,
+  gritBonus: 3,
+});
+
+export function isPerfectGuard(guardStartedTick, impactTick) {
+  return Number.isFinite(guardStartedTick)
+    && impactTick - guardStartedTick >= 0
+    && impactTick - guardStartedTick <= PERFECT_GUARD_RULES.windowFrames;
+}
+
+/**
+ * The DEPTH gameplay fields added to every fighter. All plain data (numbers,
+ * booleans, short strings and the -Infinity sentinel the rollback transport
+ * already canonicalises), so the fighter snapshot machinery — which clones
+ * every enumerable non-reference field — captures and restores each one, and
+ * every one of them counts toward the combat checksum.
+ */
+export function createDepthFighterFields() {
+  return {
+    // Guard gauge and its deterministic decay / crush / immunity clocks.
+    guardMeter: 0,
+    guardDecayDelay: 0,
+    guardCrushFrames: 0,
+    guardCrushTotalFrames: 0,
+    guardImmuneFrames: 0,
+    // Perfect Guard: the tick this guard input began.
+    guardStartedTick: -Infinity,
+    // Wake-up option chosen during the current knockdown ("", "quick", "delay").
+    wakeOption: "",
+    // Air recovery: eligibility + airborne-hitstun clock + flip/tax latches.
+    airTechArmed: false,
+    airHitstunFrames: 0,
+    airTechFlipFrames: 0,
+    airTechTaxPending: false,
+  };
+}
+
 const moveProfiles = {
   standLight: {
     id: "stand-light",

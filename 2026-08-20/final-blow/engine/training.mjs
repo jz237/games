@@ -105,6 +105,8 @@ export function createTrainingState(overrides = {}) {
     trialLastFrame: Number.isInteger(overrides.trialLastFrame) ? overrides.trialLastFrame : -Infinity,
     trialLastAttackSerial: Number.isInteger(overrides.trialLastAttackSerial) ? overrides.trialLastAttackSerial : -1,
     trialCompletions: Number.isInteger(overrides.trialCompletions) ? Math.max(0, overrides.trialCompletions) : 0,
+    // Release 1.7: player Perfect Guards landed this training session.
+    perfectGuards: Number.isInteger(overrides.perfectGuards) ? Math.max(0, overrides.perfectGuards) : 0,
   };
 }
 
@@ -273,6 +275,7 @@ export function trainingSnapshot(training) {
     recordingActive: training.recordingActive,
     playbackFrame: training.playbackFrame,
     playbackLoops: training.playbackLoops,
+    perfectGuards: training.perfectGuards,
     trial: trainingTrialSnapshot(training),
   };
 }

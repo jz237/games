@@ -7,6 +7,7 @@ import {
   isPassiveDifficulty,
   decideAiIntent,
   getReactionObservation,
+  justDefendHold,
   recordAiObservation,
   stepAiBrain,
   visibleOpponentObservation,
@@ -57,6 +58,12 @@ function testDifficultyFairness() {
   // Grab pressure and tech skill rise with the ladder.
   assert.ok(AI_DIFFICULTIES.final.throwTechChance > AI_DIFFICULTIES.rookie.throwTechChance);
   assert.ok(AI_DIFFICULTIES.pro.grabPressureChance > AI_DIFFICULTIES.rookie.grabPressureChance);
+  // Release 1.7: the defensive-depth skills rise with the ladder too, and
+  // every fighting level actually uses each one.
+  for (const key of ["quickRiseChance", "wakeDelayChance", "airRecoveryChance", "perfectGuardChance"]) {
+    assert.ok(fighting.every((settings) => settings[key] > 0), `every fighting level uses ${key}`);
+    assert.ok(AI_DIFFICULTIES.final[key] > AI_DIFFICULTIES.rookie[key], `${key} rises with the ladder`);
+  }
 }
 
 function testPassiveIsInert() {
@@ -65,7 +72,8 @@ function testPassiveIsInert() {
   const settings = AI_DIFFICULTIES.passive;
   assert.equal(settings.inert, true);
   for (const key of ["defenseChance", "antiAirChance", "comboChance", "throwChance",
-    "meterChance", "wakeupReversalChance", "errorChance", "throwTechChance", "grabPressureChance"]) {
+    "meterChance", "wakeupReversalChance", "errorChance", "throwTechChance", "grabPressureChance",
+    "quickRiseChance", "wakeDelayChance", "airRecoveryChance", "perfectGuardChance"]) {
     assert.equal(settings[key], 0, `passive ${key} must be zero`);
   }
 
@@ -162,10 +170,66 @@ function testArchetypesAndDeterminism() {
   assert.ok(aiBrainSnapshot(first).lastObservedFrame <= 89 - AI_DIFFICULTIES.street.reactionFrames);
 }
 
+// Release 1.7: the CPU interacts with every DEPTH mechanic through the same
+// inputs a human uses — Up/Down while downed, an attack button while juggled,
+// and a timed guard hold for the just-defend.
+function testDepthDefensiveOptions() {
+  const brain = createAiBrain("final");
+  const observation = visibleOpponentObservation(fighter("jez", { x: 640 }), 0);
+
+  const downed = fighter("deathblow", { down: true, knockdownFrames: 30 });
+  const quickRoll = findRoll((roll) => decideAiIntent(brain, { frame: 10, self: downed, observation, roll }).reason === "quick-rise");
+  const quickRise = decideAiIntent(brain, { frame: 10, self: downed, observation, roll: quickRoll });
+  assert.equal(quickRise.jump, true, "quick rise arrives as the Up input");
+  assert.equal(quickRise.action, null);
+  const delayRoll = findRoll((roll) => decideAiIntent(brain, { frame: 10, self: downed, observation, roll }).reason === "delay-wakeup");
+  const delayed = decideAiIntent(brain, { frame: 10, self: downed, observation, roll: delayRoll });
+  assert.equal(delayed.down, true, "delayed wake-up arrives as the Down input");
+
+  const juggled = fighter("deathblow", { grounded: false, y: 420, pendingKnockdown: true, airTechArmed: true });
+  const techRoll = findRoll((roll) => decideAiIntent(brain, { frame: 20, self: juggled, observation, roll }).reason === "air-tech");
+  assert.equal(decideAiIntent(brain, { frame: 20, self: juggled, observation, roll: techRoll }).action, "light");
+  const unarmed = fighter("deathblow", { grounded: false, y: 420, pendingKnockdown: true, airTechArmed: false });
+  for (let step = 1; step < 400; step += 1) {
+    assert.notEqual(decideAiIntent(brain, { frame: 20, self: unarmed, observation, roll: step / 400 }).reason, "air-tech",
+      "an unarmed juggle can never be teched");
+  }
+
+  const incoming = visibleOpponentObservation(fighter("jez", { x: 600, attacking: attack({ activeStartFrame: 20 }) }), 0);
+  const self = fighter("deathblow", { x: 500 });
+  const justDefendRoll = findRoll((roll) => {
+    const intent = decideAiIntent(brain, { frame: 5, self, observation: incoming, roll });
+    return intent.guard === true && intent.justDefend === true;
+  });
+  assert.ok(justDefendRoll > 0, "FINAL sometimes times its blocks as just-defends");
+
+  // The hold gate: guard is withheld until the observed attack is within the
+  // Perfect Guard window of going active, then held through impact.
+  const observed = { ...incoming, attackFrame: 2, attackStartupFrame: 20 };
+  assert.equal(justDefendHold(observed, observed.frame + 4), false, "far from active: keep baiting");
+  assert.equal(justDefendHold(observed, observed.frame + 14), true, "inside the window: guard goes down");
+  assert.equal(justDefendHold(observed, observed.frame + 30), true, "already active: still holds the late block");
+  assert.equal(justDefendHold(visibleOpponentObservation(fighter("jez"), 0), 10), false, "no attack: nothing to just-defend");
+
+  // Passive stays inert through every one of the new options.
+  const passive = createAiBrain("passive");
+  for (let frame = 0; frame < 200; frame += 1) {
+    const input = stepAiBrain(passive, {
+      frame,
+      self: fighter("deathblow", { down: frame % 2 === 0, knockdownFrames: 20, pendingKnockdown: frame % 2 === 1, grounded: frame % 2 === 0, airTechArmed: true }),
+      opponent: fighter("jez", { x: 600, attacking: attack() }),
+      roll: (frame % 89) / 89,
+    });
+    assert.equal(input.jump || input.light || input.heavy || input.special || input.guard || input.down, false,
+      `passive produced a defensive-option input on frame ${frame}`);
+  }
+}
+
 testDifficultyFairness();
 testPassiveIsInert();
 testDelayedVisibleObservations();
 testDefenseAntiAirWakeupAndCombos();
 testArchetypesAndDeterminism();
+testDepthDefensiveOptions();
 
 console.log("Final Blow fair AI tests passed");

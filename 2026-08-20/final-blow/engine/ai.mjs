@@ -11,31 +11,41 @@ export const AI_DIFFICULTIES = Object.freeze({
     id: "passive", label: "PASSIVE", reactionFrames: 24, decisionFrames: 24,
     defenseChance: 0, antiAirChance: 0, comboChance: 0,
     throwChance: 0, meterChance: 0, wakeupReversalChance: 0, errorChance: 0,
-    throwTechChance: 0, grabPressureChance: 0, repeatLimit: 0, inert: true,
+    throwTechChance: 0, grabPressureChance: 0,
+    quickRiseChance: 0, wakeDelayChance: 0, airRecoveryChance: 0, perfectGuardChance: 0,
+    repeatLimit: 0, inert: true,
   }),
   rookie: Object.freeze({
     id: "rookie", label: "ROOKIE", reactionFrames: 20, decisionFrames: 18,
     defenseChance: 0.46, antiAirChance: 0.38, comboChance: 0.22,
     throwChance: 0.09, meterChance: 0.24, wakeupReversalChance: 0.16, errorChance: 0.24,
-    throwTechChance: 0.12, grabPressureChance: 0.1, repeatLimit: 2,
+    throwTechChance: 0.12, grabPressureChance: 0.1,
+    quickRiseChance: 0.14, wakeDelayChance: 0.08, airRecoveryChance: 0.12, perfectGuardChance: 0.05,
+    repeatLimit: 2,
   }),
   street: Object.freeze({
     id: "street", label: "STREET", reactionFrames: 14, decisionFrames: 13,
     defenseChance: 0.62, antiAirChance: 0.55, comboChance: 0.42,
     throwChance: 0.15, meterChance: 0.44, wakeupReversalChance: 0.31, errorChance: 0.14,
-    throwTechChance: 0.3, grabPressureChance: 0.2, repeatLimit: 2,
+    throwTechChance: 0.3, grabPressureChance: 0.2,
+    quickRiseChance: 0.32, wakeDelayChance: 0.12, airRecoveryChance: 0.28, perfectGuardChance: 0.12,
+    repeatLimit: 2,
   }),
   pro: Object.freeze({
     id: "pro", label: "PRO", reactionFrames: 9, decisionFrames: 9,
     defenseChance: 0.76, antiAirChance: 0.72, comboChance: 0.65,
     throwChance: 0.22, meterChance: 0.68, wakeupReversalChance: 0.52, errorChance: 0.08,
-    throwTechChance: 0.56, grabPressureChance: 0.34, repeatLimit: 3,
+    throwTechChance: 0.56, grabPressureChance: 0.34,
+    quickRiseChance: 0.55, wakeDelayChance: 0.16, airRecoveryChance: 0.5, perfectGuardChance: 0.24,
+    repeatLimit: 3,
   }),
   final: Object.freeze({
     id: "final", label: "FINAL", reactionFrames: 6, decisionFrames: 7,
     defenseChance: 0.87, antiAirChance: 0.84, comboChance: 0.8,
     throwChance: 0.29, meterChance: 0.84, wakeupReversalChance: 0.7, errorChance: 0.04,
-    throwTechChance: 0.78, grabPressureChance: 0.48, repeatLimit: 3,
+    throwTechChance: 0.78, grabPressureChance: 0.48,
+    quickRiseChance: 0.78, wakeDelayChance: 0.2, airRecoveryChance: 0.68, perfectGuardChance: 0.38,
+    repeatLimit: 3,
   }),
 });
 
@@ -139,10 +149,25 @@ function applyMovement(input, movement, self, observation) {
   }
 }
 
-function inputFromIntent(intent, self, observation, pulseAction = false) {
+/**
+ * Release 1.7: just-defend gate. A justDefend intent only actually holds the
+ * guard input once the observed attack is within the Perfect Guard window of
+ * going active (compensating for how stale the reaction-delayed observation
+ * is), so the AI's block STARTS just before impact exactly like a human
+ * tapping back late. Pure frame math on the visible observation — no reads of
+ * hidden opponent state.
+ */
+export function justDefendHold(observation, frame) {
+  if (!observation?.attacking) return false;
+  const observationAge = frame - observation.frame;
+  const framesUntilActive = (observation.attackStartupFrame - observation.attackFrame) - observationAge;
+  return framesUntilActive <= 4;
+}
+
+function inputFromIntent(intent, self, observation, pulseAction = false, frame = observation.frame) {
   const input = emptyInput();
   applyMovement(input, intent.movement, self, observation);
-  input.guard = Boolean(intent.guard);
+  input.guard = Boolean(intent.guard) && (!intent.justDefend || justDefendHold(observation, frame));
   input.down = Boolean(intent.down);
   input.jump = Boolean(intent.jump && pulseAction);
   if (pulseAction && intent.action) input[intent.action] = true;
@@ -213,6 +238,27 @@ export function decideAiIntent(brain, {
     return { movement: "hold", action: combo.action, reason: "hit-confirm", comboKey: combo.comboKey };
   }
 
+  // Release 1.7: downed — pick a wake-up option through the same inputs a
+  // human uses (Up pulse quick-rises, Down held delays the getaway).
+  if (self.down && self.knockdownFrames > 0) {
+    if (mixRoll(roll, 22) < (settings.quickRiseChance || 0)) {
+      return { movement: "hold", action: null, jump: true, reason: "quick-rise" };
+    }
+    if (mixRoll(roll, 23) < (settings.wakeDelayChance || 0)) {
+      return { movement: "hold", action: null, down: true, reason: "delay-wakeup" };
+    }
+    return { movement: "hold", action: null, guard: true, reason: "downed" };
+  }
+
+  // Release 1.7: juggled — tech out with an attack button once the sim's
+  // escape window opens, at the difficulty's configured rate.
+  if (!self.grounded && self.pendingKnockdown) {
+    if (self.airTechArmed && mixRoll(roll, 24) < (settings.airRecoveryChance || 0)) {
+      return { movement: "hold", action: "light", reason: "air-tech" };
+    }
+    return { movement: "hold", action: null, reason: "juggled" };
+  }
+
   const incomingRange = Math.min(300, (observation.attackRange || 105) + 42);
   if (observation.attacking && distance <= incomingRange) {
     const defend = mixRoll(roll, 5) < settings.defenseChance;
@@ -226,10 +272,16 @@ export function decideAiIntent(brain, {
         : { movement: "retreat", action: "backSpecial", reason: "throw-evade" };
     }
     if (defend) {
+      // Release 1.7: sometimes time the block as a just-defend — the guard
+      // input is then withheld until the attack is about to land (see
+      // justDefendHold), which is exactly how a human fishes for a Perfect
+      // Guard instead of holding back all day.
+      const justDefend = mixRoll(roll, 25) < (settings.perfectGuardChance || 0);
       return {
         movement: "hold",
         action: null,
         guard: true,
+        justDefend,
         down: observation.attackLevel === ATTACK_LEVELS.LOW,
         reason: observation.attackLevel === ATTACK_LEVELS.LOW ? "low-block" : "high-block",
       };
@@ -297,7 +349,7 @@ export function stepAiBrain(brain, {
   const observation = getReactionObservation(brain, frame);
   if (!observation) return emptyInput();
   brain.lastObservedFrame = observation.frame;
-  if (frame < brain.nextDecisionFrame) return inputFromIntent(brain.intent, self, observation, false);
+  if (frame < brain.nextDecisionFrame) return inputFromIntent(brain.intent, self, observation, false, frame);
 
   brain.intent = applyRepetitionGuard(
     brain,
@@ -313,7 +365,7 @@ export function stepAiBrain(brain, {
   brain.nextDecisionFrame = frame
     + AI_DIFFICULTIES[brain.difficulty].decisionFrames
     + Math.floor(mixRoll(roll, 16) * 4);
-  return inputFromIntent(brain.intent, self, observation, true);
+  return inputFromIntent(brain.intent, self, observation, true, frame);
 }
 
 export function aiBrainSnapshot(brain) {
