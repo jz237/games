@@ -21,9 +21,13 @@ import {
   MOVEMENT_RULES,
   PERFECT_GUARD_RULES,
   STUN_RULES,
+  TAUNT_RULES,
   WAKEUP_RULES,
+  WALL_BOUNCE_RULES,
   canAirRecover,
   createDepthFighterFields,
+  createOffenseFighterFields,
+  qualifiesForWallBounce,
   guardGainForAttack,
   isPerfectGuard,
   resolveWakeOption,
@@ -181,6 +185,7 @@ import {
   FIGHTER_AUDIO_CUES,
   FIGHTER_AUDIO_LABELS,
   FIGHTER_REACTIVE_PLACEHOLDERS,
+  FIGHTER_TAUNT_LINES,
   auditFighterAudio,
   fighterAudioCue,
   fighterAudioVariants,
@@ -1981,6 +1986,9 @@ function makeFighter(index, side, overrideDef = null) {
     // (which clones every enumerable non-reference field) captures each one
     // and every one counts toward the combat checksum.
     ...createDepthFighterFields(),
+    // Release 1.7 wave 11: wall-bounce latches + taunt clocks + the
+    // double-tap-Down tracker, on the same plain-data snapshot contract.
+    ...createOffenseFighterFields(),
     // Live grab sequence state. `grabbing` is set on the thrower and `grabbed` on
     // the victim; both are plain data so rollback snapshots clone them directly.
     grabbing: null,
@@ -2108,6 +2116,8 @@ const hudFxDebug = {
 // never enter a rollback snapshot or checksum.
 const mechFxDebug = {
   guardCrushes: 0, quickRises: 0, wakeDelays: 0, airRecoveries: 0, perfectGuards: 0,
+  // Release 1.7 wave 11 offense mechanics, same monotonic resim-guarded pattern.
+  wallBounces: 0, exThrowables: 0, commandKicks: 0, taunts: 0,
 };
 // Per-side damage-ghost render state: `health` is the last observed fraction,
 // `shown` the ghost bar's current scaleX, `holdMs` the remaining freeze time.
@@ -3328,6 +3338,7 @@ function saveRollbackFighter(fighter) {
       startedFrame: fighter.combo.startedFrame,
       lastHitFrame: fighter.combo.lastHitFrame,
       displayUntilFrame: fighter.combo.displayUntilFrame,
+      graceUntilFrame: fighter.combo.graceUntilFrame,
       peakHits: fighter.combo.peakHits,
     },
     directionTaps: fighter.directionTapTracker.snapshot(),
@@ -4973,6 +4984,7 @@ function directionContext(fighter, input) {
 
 const advancedActions = new Set([
   "throwObject",
+  "enhancedThrowObject",
   "commandSpecial",
   "launcher",
   "driveHeavy",
@@ -4994,22 +5006,30 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     forwardHeld: direction.forwardHeld,
     limb: limb || input.limb || "punch",
   };
-  if (action === "throwObject" && fighter.throwableUses <= 0) return false;
-  if (action === "throwObject") {
+  const throwObjectAction = action === "throwObject" || action === "enhancedThrowObject";
+  if (throwObjectAction && fighter.throwableUses <= 0) return false;
+  if (throwObjectAction) {
     const profile = getThrowable(fighter.kitId);
     const activeObjects = state.projectiles.filter((projectile) => projectile.ownerSide === fighter.side && projectile.throwable === profile?.id);
     if (profile && activeObjects.length >= profile.maxActive) return false;
   }
-  const throwObjectProfile = action === "throwObject"
-    ? createThrowObjectMove(fighter.kitId, { strength: input.heavy ? "heavy" : "light" })
+  const throwObjectProfile = throwObjectAction
+    ? createThrowObjectMove(fighter.kitId, {
+      strength: input.heavy ? "heavy" : "light",
+      enhanced: action === "enhancedThrowObject",
+    })
     : null;
-  if (action === "throwObject" && !throwObjectProfile) return false;
+  if (throwObjectAction && !throwObjectProfile) return false;
   const kitMove = throwObjectProfile
     ? createAttackInstance(throwObjectProfile.baseKind, { ...throwObjectProfile, profileId: throwObjectProfile.id })
     : createFighterMove(fighter.kitId, action, moveContext);
-  const gritCost = kitMove && !throwObjectProfile
-    ? fighterActionCost(fighter.kitId, action, moveContext)
-    : gritCostForAction(action);
+  // The EX throwable carries its Grit price on the profile itself; the pip
+  // cost below is shared with the base throw.
+  const gritCost = throwObjectProfile
+    ? (throwObjectProfile.gritCost || 0)
+    : kitMove
+      ? fighterActionCost(fighter.kitId, action, moveContext)
+      : gritCostForAction(action);
   if (fighter.meter < gritCost) return false;
   const validLink = !cancelledFrom
     && fighter.linkWindow?.connected === "hit"
@@ -5026,6 +5046,11 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   }
   fighter.attackSerial += 1;
   fighter.attacking.attackSerial = fighter.attackSerial;
+  // Release 1.7 wave 11: QA counter for the derived forward command kicks
+  // (their derive suffixes are the stable signature).
+  if (!rollbackResimulating && /-(step-knee|axe-kick|slide)$/.test(fighter.attacking.profileId || "")) {
+    mechFxDebug.commandKicks += 1;
+  }
   if (throwObjectProfile) {
     fighter.throwableUses = Math.max(0, fighter.throwableUses - 1);
     fighter.throwableSpawned = false;
@@ -5121,6 +5146,8 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
 const bufferedActions = [
   "jump",
   "throwObject",
+  "enhancedThrowObject",
+  "taunt",
   "throw",
   "super",
   "enhanced",
@@ -5195,6 +5222,20 @@ function applyProximityGrab(fighter, normalized) {
 function prepareFighterInput(fighter, input) {
   const side = fighter.side;
   const finishing = state.phase === "finish" && state.finishWinner === side;
+  // Release 1.7 wave 11: double-tap-Down tracker for the taunt chord. Runs on
+  // the raw down state before resolution, entirely on snapshotted fighter
+  // fields, so both rollback peers arm and expire the window identically. A
+  // second press only counts after a genuine release (dash-style edge), so a
+  // slow quarter-circle can never arm it.
+  const downHeld = Boolean(input?.down);
+  if (downHeld && !fighter.downTapHeld) {
+    if (state.simulationTick - fighter.downTapLastTick <= TAUNT_RULES.doubleTapWindowFrames) {
+      fighter.tauntArmedUntilTick = state.simulationTick + TAUNT_RULES.armFrames;
+    }
+    fighter.downTapLastTick = state.simulationTick;
+  }
+  fighter.downTapHeld = downHeld;
+  const tauntArmed = state.simulationTick <= fighter.tauntArmedUntilTick;
   const source = input?.fourButton
     ? resolveFourButtonInput(input, {
       facing: fighter.facing,
@@ -5202,9 +5243,15 @@ function prepareFighterInput(fighter, input) {
       meter: fighter.meter,
       finishing,
       finishArmed: state.finishArmed[side],
+      tauntArmed,
     })
     : input;
-  const normalPress = Boolean(source.light || source.heavy);
+  // The taunt travels as light+heavy+kick — a combination nothing else emits —
+  // so remote bits, QA overrides and the AI's direct taunt flag all decode to
+  // the same deliberate input.
+  const tauntPressed = Boolean(source.taunt
+    || (source.light && source.heavy && source.limb === "kick"));
+  const normalPress = !tauntPressed && Boolean(source.light || source.heavy);
   const limb = source.limb === "kick" ? "kick" : "punch";
   const normalized = {
     left: Boolean(source.left),
@@ -5222,9 +5269,14 @@ function prepareFighterInput(fighter, input) {
     final: Boolean(source.final),
     finisherVariant: Number.isInteger(source.finisherVariant) ? source.finisherVariant : 0,
     limb,
-    punch: Boolean(source.punch ?? (normalPress && limb === "punch")),
-    kick: Boolean(source.kick ?? (normalPress && limb === "kick")),
+    taunt: tauntPressed,
+    punch: !tauntPressed && Boolean(source.punch ?? (normalPress && limb === "punch")),
+    kick: !tauntPressed && Boolean(source.kick ?? (normalPress && limb === "kick")),
   };
+  if (tauntPressed) {
+    normalized.light = false;
+    normalized.heavy = false;
+  }
   for (const action of advancedActions) normalized[action] = Boolean(normalized[action] || source[action]);
   Object.assign(normalized, applyControlStyle(normalized, activeControlStyle(side), fighter.facing));
   recordInput(side, normalized, fighter);
@@ -5233,6 +5285,9 @@ function prepareFighterInput(fighter, input) {
       fighter.kitId,
       commandHistory[side],
       state.simulationTick,
+      // The chord limb splits the down-back EX read: punch chord = EX back
+      // special, kick chord = EX personal throwable.
+      { limb: normalized.enhanced ? normalized.limb : "" },
     ) || recognizeCombatCommand(commandHistory[side], state.simulationTick);
     const terminal = command?.terminal
       || (command?.action === "commandSpecial" ? "special" : "heavy");
@@ -5315,6 +5370,41 @@ function relieveDizzy(fighter, input) {
   fighter.dizzyFrames = Math.max(floor, fighter.dizzyFrames - STUN_RULES.mashRelief);
 }
 
+// Release 1.7 wave 11 — the punishable taunt. ~45 fully vulnerable frames in
+// the fighter's victory pose. The voice line is drawn from state.rng HERE, in
+// the simulation, so both rollback peers rotate identically (the draw itself
+// must never be resim-guarded — only the audible side effects are).
+function performTaunt(fighter) {
+  if (fighter.tauntFrames > 0) return;
+  fighter.tauntFrames = TAUNT_RULES.durationFrames;
+  fighter.tauntTotalFrames = TAUNT_RULES.durationFrames;
+  fighter.tauntArmedUntilTick = -Infinity;
+  fighter.vx = 0;
+  fighter.block = false;
+  fighter.guarding = false;
+  fighter.crouch = false;
+  const lines = FIGHTER_TAUNT_LINES[fighter.kitId]?.length || TAUNT_RULES.voiceLines;
+  fighter.tauntLine = Math.floor(random() * lines) % lines;
+  if (!rollbackResimulating) mechFxDebug.taunts += 1;
+  spawnCombatText(fighter.x, fighter.y - fighter.height - 44, "TAUNT", fighter.def.accent);
+  stirCrowd(0.25);
+  fighterTauntCue(fighter, fighter.tauntLine);
+}
+
+function interruptTaunt(fighter) {
+  fighter.tauntFrames = 0;
+  fighter.tauntTotalFrames = 0;
+}
+
+function completeTaunt(fighter) {
+  fighter.tauntTotalFrames = 0;
+  if (fighter.tauntGritGranted) return;
+  fighter.tauntGritGranted = true;
+  fighter.meter = clamp(fighter.meter + TAUNT_RULES.gritBonus, 0, GRIT_RULES.maximum);
+  spawnCombatText(fighter.x, fighter.y - fighter.height - 40, `+${TAUNT_RULES.gritBonus} GRIT`, fighter.def.accent);
+  updateHud();
+}
+
 function addStun(victim, attacker, attack, { counter = false, blocked = false } = {}) {
   if (victim.stunImmuneFrames > 0 || victim.dizzyFrames > 0) return;
   const gain = stunGainForAttack(attack, { counter, blocked });
@@ -5326,6 +5416,9 @@ function addStun(victim, attacker, attack, { counter = false, blocked = false } 
 
 function enterKnockdown(fighter) {
   fighter.pendingKnockdown = false;
+  // Landing before reaching the wall forfeits the pending bounce conversion.
+  fighter.wallBounceArmed = 0;
+  if (fighter.tauntFrames > 0) interruptTaunt(fighter);
   fighter.down = true;
   fighter.knockdownFrames = DEFENSE_RULES.knockdownFrames;
   fighter.wakeupFrames = 0;
@@ -5413,6 +5506,7 @@ function recoverFromGuardCrush(fighter) {
 // invulnerable back-flip; the landing tax is applied by applyFighterPhysics.
 function performAirRecovery(fighter) {
   fighter.pendingKnockdown = false;
+  fighter.wallBounceArmed = 0;
   fighter.hitstunFrames = 0;
   fighter.stun = 0;
   fighter.airTechArmed = false;
@@ -5483,6 +5577,8 @@ function advanceFighterTimers(fighter) {
     if (fighter.wakeupFrames === 0) {
       fighter.justWoke = true;
       fighter.juggleCount = 0;
+      // The combo is over: the once-per-combo wall bounce re-arms with it.
+      fighter.wallBounceUsed = false;
       // Release 1.7: a quick rise trades a slightly shorter reversal window
       // for getting up early. The delay option keeps the full window.
       const reversalFrames = fighter.wakeOption === "quick"
@@ -5702,6 +5798,7 @@ function applyFighterPhysics(fighter, dt) {
       fighter.airTechTaxPending = false;
       fighter.airTechFlipFrames = 0;
       fighter.juggleCount = 0;
+      fighter.wallBounceUsed = false;
       fighter.landingRecoveryFrames = Math.max(fighter.landingRecoveryFrames, DEFENSE_RULES.airAttackLandingRecoveryFrames);
       spawnFootDust(fighter, 8, 48, 0);
       spawnSweat(fighter, 3, 1);
@@ -5716,16 +5813,64 @@ function applyFighterPhysics(fighter, dt) {
   }
   const preClampX = fighter.x;
   fighter.x = clamp(fighter.x, MOVEMENT_RULES.stageMinX, MOVEMENT_RULES.stageMaxX);
-  // Corner wall-splat (wave 4): the clamp just arrested a fast hitstun or
-  // knockdown flight. Hitstun bleeds vx 10% per tick before physics runs, so
-  // a cornered victim reaches the clamp with 0.9x the attack's push: 220
-  // keeps the burst for heavy/special/throw-grade slams (push 260-405+,
-  // arriving at 234+) and never light pokes (145-210, arriving under 190).
-  if (fighter.x !== preClampX
-    && (fighter.hitstunFrames > 0 || fighter.pendingKnockdown)
-    && Math.abs(fighter.vx) > 220) {
-    spawnWallImpact(fighter, preClampX < MOVEMENT_RULES.stageMinX ? -1 : 1);
+  if (fighter.x !== preClampX && (fighter.hitstunFrames > 0 || fighter.pendingKnockdown)) {
+    const wallDirection = preClampX < MOVEMENT_RULES.stageMinX ? -1 : 1;
+    // Release 1.7 wave 11: the armed knockdown converts at the wall into the
+    // splat freeze + juggleable rebound. Otherwise the wave-4 presentation
+    // splat fires exactly as before: hitstun bleeds vx 10% per tick before
+    // physics runs, so a cornered victim reaches the clamp with 0.9x the
+    // attack's push — 220 keeps the burst for heavy/special/throw-grade
+    // slams (push 260-405+, arriving at 234+) and never light pokes
+    // (145-210, arriving under 190).
+    if (fighter.wallBounceArmed === wallDirection && !fighter.wallBounceUsed) {
+      performWallBounce(fighter, wallDirection);
+    } else if (Math.abs(fighter.vx) > 220) {
+      spawnWallImpact(fighter, wallDirection);
+    }
   }
+}
+
+// Release 1.7 wave 11 — the wall-bounce conversion itself. Pure snapshotted
+// fighter state plus state.hitstop (already in the combat snapshot); all
+// spectacle routes through the existing wave 1-9 systems from this sim event.
+function performWallBounce(fighter, wallDirection) {
+  fighter.wallBounceArmed = 0;
+  fighter.wallBounceUsed = true;
+  // The bounce consumes a juggle point, so juggleLimit:2 still bounds the combo.
+  fighter.juggleCount += 1;
+  fighter.pendingKnockdown = true;
+  fighter.grounded = false;
+  fighter.vx = -wallDirection * WALL_BOUNCE_RULES.reboundVelocityX;
+  fighter.vy = WALL_BOUNCE_RULES.reboundVelocityY;
+  fighter.hitstunFrames = Math.max(fighter.hitstunFrames, WALL_BOUNCE_RULES.hitstunFrames);
+  fighter.stun = Math.max(fighter.hitstunFrames, fighter.blockstunFrames) / SIMULATION_HZ;
+  // Brief splat freeze — state.hitstop is sim state in the rollback snapshot.
+  state.hitstop = Math.max(state.hitstop, WALL_BOUNCE_RULES.splatFreezeSeconds);
+  if (!rollbackResimulating) mechFxDebug.wallBounces += 1;
+  // The rebound arc outlives the ordinary 38-frame combo gap while the victim
+  // is completely helpless, so the attacker's combo stays open through it —
+  // the conversion counts (and scales) as the same combo.
+  const attacker = state.fighters[1 - fighter.side];
+  if (attacker) {
+    attacker.combo.graceUntilFrame = Math.max(
+      attacker.combo.graceUntilFrame ?? -Infinity,
+      state.simulationTick + WALL_BOUNCE_RULES.comboGraceFrames,
+    );
+  }
+  // Spectacle through the existing systems: the wave-4 splat, the crowd surge
+  // (0.75 clears the crowdFlashPick flashbulb threshold), combat text, the
+  // announcer bank and the shared violence response.
+  spawnWallImpact(fighter, wallDirection);
+  stirCrowd(0.75);
+  applyViolenceResponse("heavy");
+  spawnCombatText(
+    fighter.x - wallDirection * 46,
+    fighter.y - fighter.height - 50,
+    "WALL BOUNCE",
+    "#ffd54a",
+  );
+  announcerSay("wallbounce");
+  sound("hit-heavy", fighter);
 }
 
 const attackActionPriority = [...TOURNAMENT_ACTION_PRIORITY];
@@ -5884,6 +6029,17 @@ function updateFighter(fighter, opponent, input, dt) {
     applyFighterPhysics(fighter, dt);
     return;
   }
+  // Release 1.7 wave 11: the taunt hold. Fully vulnerable — no guard, no
+  // actions, ordinary hurtboxes — and interruptible only by being hit or
+  // grabbed. Completing it uninterrupted banks the once-per-round Grit.
+  if (fighter.tauntFrames > 0) {
+    fighter.tauntFrames -= 1;
+    fighter.vx *= 0.8;
+    fighter.crouch = false;
+    if (fighter.tauntFrames === 0) completeTaunt(fighter);
+    applyFighterPhysics(fighter, dt);
+    return;
+  }
   // Release 1.7: wake-up options. Up during the knockdown quick-rises, Down
   // held delays the getaway — both from input bits already in the protocol.
   if (fighter.down && fighter.knockdownFrames > 1 && !fighter.wakeOption) {
@@ -5911,7 +6067,9 @@ function updateFighter(fighter, opponent, input, dt) {
     fighter.crouch = fighter.guardHeight === "low";
     fighter.vx *= 0.84;
   } else if (fighter.hitstunFrames > 0 || fighter.pendingKnockdown) {
-    fighter.vx *= 0.9;
+    // An armed wall-bounce flight holds its carry velocity to the wall; every
+    // other hitstun flight bleeds 10% per tick exactly as before.
+    if (!fighter.wallBounceArmed) fighter.vx *= 0.9;
     // Release 1.7: air recovery (juggle tech). Any attack button once the
     // airborne-hitstun window opens — armed only when the last hit was
     // neither knockdown-final nor a super — techs out of the juggle. The
@@ -5951,12 +6109,17 @@ function updateFighter(fighter, opponent, input, dt) {
           "enhancedBackSpecial",
           "enhancedCommandSpecial",
           "enhanced",
+          "enhancedThrowObject",
           "launcher",
           "backSpecial",
           "driveHeavy",
           "commandSpecial",
+          "taunt",
         ]);
-        if (commandAction) {
+        if (commandAction === "taunt") {
+          fighter.inputBuffer.consume("taunt", state.simulationTick);
+          performTaunt(fighter);
+        } else if (commandAction) {
           fighter.inputBuffer.consume(commandAction, state.simulationTick);
           beginAttack(fighter, commandAction, input, {
             reversal: fighter.reversalWindowFrames > 0
@@ -6192,50 +6355,58 @@ function maybeSpawnThrowable(fighter, attack) {
     ? profile.variants[attack.throwableVariant]
     : null;
   const flight = variant ? { ...profile, ...variant } : profile;
+  const enhanced = Boolean(attack.enhancedThrowable);
   fighter.throwableSpawned = true;
   const scale = FIGHTER_SCALE;
-  state.projectiles.push({
-    id: `${fighter.side}-obj-${state.simulationTick}`,
-    ownerSide: fighter.side,
-    throwable: profile.id,
-    x: fighter.x + fighter.facing * flight.spawnX * scale,
-    y: FLOOR + flight.spawnY * scale,
-    vx: fighter.facing * flight.speed * scale,
-    vy: flight.launchY * scale,
-    gravity: flight.gravity * scale,
-    direction: fighter.facing,
-    width: flight.width * scale,
-    height: flight.height * scale,
-    hazardWidth: flight.hazardWidth * scale,
-    damage: flight.damage,
-    chipDamage: flight.chipDamage,
-    hitstunFrames: flight.hitstunFrames,
-    blockstunFrames: flight.blockstunFrames,
-    push: Math.round(flight.push * scale),
-    level: flight.level,
-    knockdown: Boolean(flight.knockdown),
-    lifeFrames: flight.lifeFrames,
-    maxLifeFrames: flight.lifeFrames,
-    armFrames: 0,
-    maxArmFrames: 0,
-    bouncesLeft: flight.bounces,
-    bounceDamping: flight.bounceDamping,
-    hazardFrames: flight.hazardFrames,
-    hazardArmFrames: flight.hazardArmFrames || 0,
-    hazard: false,
-    spin: flight.spin,
-    spinAngle: 0,
-    wobble: flight.wobble,
-    tether: flight.tether ? { ...flight.tether } : null,
-    slowFrames: flight.slowFrames,
-    staggerFrames: flight.staggerFrames,
-    impactLabel: flight.impactLabel,
-    variant: attack.throwableVariant || "low",
-    color: fighter.def.accent,
-    style: profile.style,
-    sequenceIndex: 0,
-    enhanced: false,
+  // Release 1.7 wave 11: an EX variant may author extraSpawns — additional
+  // projectiles released on the same active frame, each merging its own
+  // overrides over the EX flight (pizza slices, twin blades, dub plates).
+  const releases = [flight, ...(flight.extraSpawns || []).map((extra) => ({ ...flight, ...extra }))];
+  releases.forEach((release, index) => {
+    state.projectiles.push({
+      id: `${fighter.side}-obj-${state.simulationTick}${index ? `-${index}` : ""}`,
+      ownerSide: fighter.side,
+      throwable: profile.id,
+      x: fighter.x + fighter.facing * release.spawnX * scale,
+      y: FLOOR + release.spawnY * scale,
+      vx: fighter.facing * release.speed * scale,
+      vy: release.launchY * scale,
+      gravity: release.gravity * scale,
+      direction: fighter.facing,
+      width: release.width * scale,
+      height: release.height * scale,
+      hazardWidth: release.hazardWidth * scale,
+      damage: release.damage,
+      chipDamage: release.chipDamage,
+      hitstunFrames: release.hitstunFrames,
+      blockstunFrames: release.blockstunFrames,
+      push: Math.round(release.push * scale),
+      level: release.level,
+      knockdown: Boolean(release.knockdown),
+      lifeFrames: release.lifeFrames,
+      maxLifeFrames: release.lifeFrames,
+      armFrames: 0,
+      maxArmFrames: 0,
+      bouncesLeft: release.bounces,
+      bounceDamping: release.bounceDamping,
+      hazardFrames: release.hazardFrames,
+      hazardArmFrames: release.hazardArmFrames || 0,
+      hazard: false,
+      spin: release.spin,
+      spinAngle: 0,
+      wobble: release.wobble,
+      tether: release.tether ? { ...release.tether } : null,
+      slowFrames: release.slowFrames,
+      staggerFrames: release.staggerFrames,
+      impactLabel: release.impactLabel,
+      variant: attack.throwableVariant || "low",
+      color: fighter.def.accent,
+      style: profile.style,
+      sequenceIndex: index,
+      enhanced,
+    });
   });
+  if (enhanced && !rollbackResimulating) mechFxDebug.exThrowables += 1;
   sound("throw", fighter);
   if (!rollbackResimulating) objectSound(profile.style);
   spawnCombatText(fighter.x, fighter.y - fighter.height - 46, flight.name, fighter.def.accent);
@@ -6346,6 +6517,19 @@ function applyThrowableTether(projectile, victim, owner, blocked) {
   const target = owner.x + owner.facing * holdDistance;
   victim.x = clamp(target, MOVEMENT_RULES.stageMinX, MOVEMENT_RULES.stageMaxX);
   victim.vx = 0;
+  // Release 1.7 wave 11: the EX reel is a guaranteed launcher — the victim is
+  // popped airborne beside the owner, juggleable but never techable (the
+  // whole point of paying the Grit).
+  if (tether.launch) {
+    victim.grounded = false;
+    victim.pendingKnockdown = true;
+    victim.vy = Math.round((tether.launchVelocityY ?? -520) * FIGHTER_SCALE);
+    victim.airTechArmed = false;
+    victim.airHitstunFrames = 0;
+    spawnCombatText((owner.x + victim.x) * 0.5, victim.y - victim.height - 30, "REELED LAUNCH", owner.def.accent);
+    state.shake = Math.max(state.shake, 0.3);
+    return;
+  }
   victim.vy = 0;
   victim.grounded = true;
   victim.pendingKnockdown = false;
@@ -6839,6 +7023,8 @@ function resolveGrabThrow(attacker, victim, grab, style, direction) {
   victim.lastDamageFrame = state.simulationTick;
   victim.lastHitResult = ATTACK_LEVELS.THROW;
   victim.juggleCount = 0;
+  victim.wallBounceUsed = false;
+  victim.wallBounceArmed = 0;
   victim.pendingKnockdown = true;
   victim.grounded = false;
   // Throws are never air-techable.
@@ -7006,6 +7192,8 @@ function hit(attacker, victim, attack, collision) {
       techThrow(attacker, victim);
       return;
     }
+    // Release 1.7 wave 11: getting grabbed punishes the taunt too.
+    if (victim.tauntFrames > 0) interruptTaunt(victim);
     beginGrabHold(attacker, victim, attack);
     return;
   }
@@ -7084,6 +7272,8 @@ function hit(attacker, victim, attack, collision) {
     attacker.combo.addDamage(damage);
     registerAliFlow(attacker, attack);
     if (wasJuggle) victim.juggleCount += 1;
+    // Release 1.7 wave 11: a landed hit punishes the taunt — no Grit.
+    if (victim.tauntFrames > 0) interruptTaunt(victim);
     victim.attacking = null;
     victim.attackTime = 0;
     victim.attackFrame = 0;
@@ -7093,6 +7283,26 @@ function hit(attacker, victim, attack, collision) {
     const finalAttackHit = attacker.attackHits >= (attack.maxHits || 1);
     const shouldKnockDown = (attack.knockdown && (!attack.knockdownOnFinal || finalAttackHit))
       || attack.level === ATTACK_LEVELS.THROW;
+    // Release 1.7 wave 11: corner wall-bounce arming. A knockdown-class
+    // heavy/special connecting with the victim already within one body width
+    // of the wall it is being pushed toward converts, once per combo, when
+    // the flight actually reaches that wall (applyFighterPhysics). The bounce
+    // will consume a juggle point, so it is never armed with the juggle
+    // budget already spent.
+    victim.wallBounceArmed = 0;
+    if ((shouldKnockDown || attack.juggleLift)
+      && qualifiesForWallBounce(attack)
+      && !victim.wallBounceUsed
+      && victim.juggleCount < (attack.juggleLimit || COMBO_RULES.juggleLimit)) {
+      const wallX = pushDirection > 0 ? MOVEMENT_RULES.stageMaxX : MOVEMENT_RULES.stageMinX;
+      const bodyWidth = victim.width * WALL_BOUNCE_RULES.proximityBodyWidths;
+      if (Math.abs(wallX - victim.x) <= bodyWidth) {
+        victim.wallBounceArmed = pushDirection;
+        // The armed flight commits to the wall: the carry velocity always
+        // reaches the clamp before the knockdown landing can clear the arm.
+        victim.vx = pushDirection * Math.max(Math.abs(victim.vx), WALL_BOUNCE_RULES.carryVelocityX);
+      }
+    }
     if (shouldKnockDown) {
       victim.pendingKnockdown = true;
       victim.grounded = false;
@@ -8563,6 +8773,10 @@ function fighterAnimationPose(fighter) {
   if (fighter.dizzyFrames > 0 || fighter.guardCrushFrames > 0) return base(12 + Math.floor(fighter.animTime * 6) % 2);
   // Release 1.7: air-recovery back-flip tuck.
   if (fighter.airTechFlipFrames > 0) return base(13);
+  // Release 1.7 wave 11: the taunt holds the fighter's victory pose frame.
+  if (fighter.tauntFrames > 0 && fighter.kit?.victory) {
+    return { bank: fighter.kit.victory.bank, frame: fighter.kit.victory.frame };
+  }
   if (fighter.down || fighter.knockdownFrames > 0 || fighter.hitFlash > 0 || fighter.hitstunFrames > 21) return base(15);
   if (fighter.wakeupFrames > 0) return base(fighter.wakeupFrames > 9 ? 15 : 12);
   if (fighter.throwTechFlashFrames > 0) return base(12);
@@ -13335,6 +13549,8 @@ const ANNOUNCER_LINES = (() => {
     "fatality-performed": ["FATALITY.", "A GRAPHIC FINISH.", "THAT WAS A FINAL BLOW."],
     // Release 1.7 DEPTH: the guard-crush letter-slam's spoken call.
     guardcrush: ["GUARD CRUSH!", "DEFENSE SHATTERED!", "THE GUARD BREAKS!"],
+    // Release 1.7 wave 11: the corner wall-bounce conversion.
+    wallbounce: ["OFF THE WALL!", "CORNER CARNAGE!", "THE WALL HITS BACK!"],
     "boss-intro": ["THE FINAL AUTHORITY STEPS IN.", "FINAL BOUT — THE BLACK BOOK CLOSES TONIGHT.", "THE COMMISSIONER IS WAITING."],
     connected: ["CHALLENGER CONNECTED!", "YOUR OPPONENT HAS ENTERED!", "THE WIRE IS LIVE!"],
     setpoint: ["SET POINT!", "ONE ROUND FROM GLORY!", "THE MATCH IS ON THE LINE!"],
@@ -13483,6 +13699,48 @@ function announcerSpeakBanner(text) {
 // Sim-path reactive voice trigger: announce() pattern (resim guard) plus a
 // per-cue simulationTick dedupe, mirroring the camera latches.
 const reactiveCueTicks = new Map();
+
+// Release 1.7 wave 11 — taunt voice payoff. The LINE INDEX was already drawn
+// from state.rng inside performTaunt (sim state, checksummed); this side is
+// pure presentation on the announce() guard discipline. The caption always
+// shows the exact authored line; audio plays the matching bank variant when
+// its take exists and falls back to the pitch-shifted placeholder until then.
+function fighterTauntCue(fighter, line = 0) {
+  if (rollbackResimulating) return;
+  voiceFxDebug.reactiveCues += 1;
+  const fighterId = fighterSoundId(fighter);
+  const lineText = FIGHTER_TAUNT_LINES[fighterId]?.[line] || "";
+  showSoundCaption("taunt", fighter, lineText);
+  if (!$("#soundToggle").checked) return;
+  if (demoSession.attract && !state.audioUnlocked) return;
+  unlockAudio();
+  const bank = fighterVoiceBank(fighterId, "taunt");
+  const src = bank?.srcs?.[line];
+  const pool = src ? fighterVoicePool("taunt", bank.key, line, src) : null;
+  const sample = pool?.[0];
+  if (sample) {
+    voiceFxDebug.voiceVariantPlays += 1;
+    sample.pause();
+    sample.currentTime = 0;
+    sample.preservesPitch = true;
+    sample.playbackRate = 1;
+    sample.volume = (sfxVolumes.taunt ?? 0.62) * state.sfxVolume;
+    sample.play()?.catch?.(() => {});
+    return;
+  }
+  // No take on disk yet: the nearest recorded cue, detuned per line so the
+  // three rotating lines still read differently.
+  const take = fighterVoiceTake("taunt", fighterId);
+  if (!take) return;
+  voiceFxDebug.voiceVariantPlays += 1;
+  const fallback = take.sample;
+  fallback.pause();
+  fallback.currentTime = 0;
+  fallback.preservesPitch = false;
+  fallback.playbackRate = take.rate * (1 + line * 0.05);
+  fallback.volume = (sfxVolumes.taunt ?? 0.62) * state.sfxVolume;
+  fallback.play()?.catch?.(() => {});
+}
 
 function fighterReactiveCue(fighter, cue) {
   if (rollbackResimulating || reactiveCueTicks.get(cue) === state.simulationTick) return;
@@ -14342,6 +14600,11 @@ window.__finalBlowEngine = {
         wakeDelays: mechFxDebug.wakeDelays,
         airRecoveries: mechFxDebug.airRecoveries,
         perfectGuards: mechFxDebug.perfectGuards,
+        // Release 1.7 wave 11 offense mechanics, same monotonic pattern.
+        wallBounces: mechFxDebug.wallBounces,
+        exThrowables: mechFxDebug.exThrowables,
+        commandKicks: mechFxDebug.commandKicks,
+        taunts: mechFxDebug.taunts,
       },
       stageWeapon: weaponSnapshot(state.stageWeapon),
       stageWeaponsEnabled: state.stageWeaponsEnabled,
@@ -14428,6 +14691,13 @@ window.__finalBlowEngine = {
         guardImmuneFrames: fighter.guardImmuneFrames,
         guardStartedTick: fighter.guardStartedTick,
         wakeOption: fighter.wakeOption,
+        // Release 1.7 wave 11 offense fields.
+        wallBounceArmed: fighter.wallBounceArmed,
+        wallBounceUsed: fighter.wallBounceUsed,
+        tauntFrames: fighter.tauntFrames,
+        taunting: fighter.tauntFrames > 0,
+        tauntGritGranted: fighter.tauntGritGranted,
+        tauntLine: fighter.tauntLine,
         airTechArmed: fighter.airTechArmed,
         airHitstunFrames: fighter.airHitstunFrames,
         airTechFlipFrames: fighter.airTechFlipFrames,
@@ -14450,7 +14720,7 @@ window.__finalBlowEngine = {
 
 if (["127.0.0.1", "localhost"].includes(location.hostname)) {
   window.__finalBlowQa = {
-    fight(firstId = "deathblow", secondId = "jez") {
+    fight(firstId = "deathblow", secondId = "jez", serial = null) {
       const firstIndex = roster.findIndex((fighter) => fighter.id === firstId);
       const secondIndex = roster.findIndex((fighter) => fighter.id === secondId);
       if (firstIndex < 0 || secondIndex < 0) throw new Error(`Unknown matchup: ${firstId} vs ${secondId}`);
@@ -14460,7 +14730,11 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.picks = [firstIndex, secondIndex];
       state.rounds = [0, 0];
       state.round = 1;
-      state.matchSerial += 1;
+      // Release 1.7 wave 11: a pinned serial reproduces the exact match seed
+      // (and therefore the state.rng stream), so determinism probes can run
+      // the same scripted sequence twice from identical initial state.
+      if (Number.isFinite(serial)) state.matchSerial = serial;
+      else state.matchSerial += 1;
       seedMatch(state.round);
       state.fighters = [makeFighter(firstIndex, 0), makeFighter(secondIndex, 1)];
       resetStageWeapon();

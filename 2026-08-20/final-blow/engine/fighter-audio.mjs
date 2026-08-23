@@ -36,6 +36,10 @@ export const FIGHTER_REACTIVE_CUES = Object.freeze([
   "scream",
   // Release 1.7 DEPTH: the guard-crush shatter bark.
   "crush",
+  // Release 1.7 wave 11: the punishable-taunt voice line. The LINE is chosen
+  // by the simulation via state.rng (so rollback peers agree); this cue owns
+  // the variant bank the chosen take plays from.
+  "taunt",
 ]);
 
 export const FIGHTER_AUDIO_CUES = Object.freeze([
@@ -69,6 +73,7 @@ export const FIGHTER_AUDIO_LABELS = Object.freeze({
   desperation: "DESPERATION",
   scream: "FATALITY SCREAM",
   crush: "GUARD CRUSHED",
+  taunt: "TAUNT",
 });
 
 // Until real reactive takes exist, each new cue borrows the nearest recorded
@@ -81,6 +86,58 @@ export const FIGHTER_REACTIVE_PLACEHOLDERS = Object.freeze({
   desperation: Object.freeze({ cue: "hit-light", rate: 0.93 }),
   scream: Object.freeze({ cue: "fatal", rate: 1.14 }),
   crush: Object.freeze({ cue: "block", rate: 0.78 }),
+  taunt: Object.freeze({ cue: "jump", rate: 1.18 }),
+});
+
+/**
+ * Release 1.7 wave 11 — authored taunt lines, three per fighter, in persona
+ * (voice directions live in MISSING-AUDIO.md). Positional contract: line
+ * index N is spoken by the taunt variant file with slot N+1
+ * (`taunt.mp3`, `taunt-2.mp3`, `taunt-3.mp3`), and the caption always shows
+ * the exact line even before the takes exist. The index is chosen by the
+ * simulation from state.rng, so both rollback peers rotate identically.
+ */
+export const FIGHTER_TAUNT_LINES = Object.freeze({
+  deathblow: Object.freeze([
+    "I POUR CONCRETE HARDER THAN YOU.",
+    "ROCK BOTTOM SUITS YOU.",
+    "STAY DOWN. IT'S LOAD-BEARING.",
+  ]),
+  jez: Object.freeze([
+    "READ THE SIGN.",
+    "I MADE THAT LOOK EASY.",
+    "LIGHTS OUT, PAL.",
+  ]),
+  alan: Object.freeze([
+    "YOUSE DONE ALREADY?",
+    "GET UP. I AIN'T FINISHED.",
+    "THAT ALL YOU GOT, HUH?",
+  ]),
+  post: Object.freeze([
+    "CAN'T CATCH ME.",
+    "I'LL TAG YOUR TOMBSTONE.",
+    "SPRAYED AND SLAYED.",
+  ]),
+  benny: Object.freeze([
+    "TOO SLOW. WAY TOO SLOW.",
+    "PRECISION, BABY.",
+    "CLIPPED YA.",
+  ]),
+  donald: Object.freeze([
+    "TOTAL DISASTER. SAD.",
+    "NOBODY FIGHTS BETTER THAN ME.",
+    "YOU'RE FIRED.",
+  ]),
+  cyraxx: Object.freeze([
+    "HEHEHE... FEEDBACK!",
+    "YOU HEAR THAT? THAT'S LOSING.",
+    "CRANK IT UP!",
+  ]),
+  ali: Object.freeze([
+    "BOOYAKASHA!",
+    "IS IT COS I IS WINNING?",
+    "RESPEK. NOT FOR YOU, THOUGH.",
+  ]),
 });
 
 function variantPath(fighterId, cue, variant) {

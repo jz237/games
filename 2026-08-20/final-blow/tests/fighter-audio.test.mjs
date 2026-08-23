@@ -17,23 +17,23 @@ import {
   fighterAudioVariants,
 } from "../engine/fighter-audio.mjs";
 
-test("all eight fighters have eighteen unique sound cues in three variant slots", () => {
+test("all eight fighters have nineteen unique sound cues in three variant slots", () => {
   assert.deepEqual(auditFighterAudio(), {
     fighters: 8,
-    cuesPerFighter: 18,
+    cuesPerFighter: 19,
     coreCues: 12,
-    reactiveCues: 6,
+    reactiveCues: 7,
     variantSlots: 3,
-    totalCues: 144,
-    totalVariantPaths: 432,
+    totalCues: 152,
+    totalVariantPaths: 456,
     errors: [],
   });
   assert.equal(FIGHTER_AUDIO_IDS.length, 8);
   assert.equal(FIGHTER_AUDIO_CORE_CUES.length, 12);
-  assert.equal(FIGHTER_REACTIVE_CUES.length, 6);
-  assert.equal(FIGHTER_AUDIO_CUES.length, 18);
-  assert.equal(new Set(fighterAudioManifest()).size, 144);
-  assert.equal(new Set(fighterAudioVariantManifest()).size, 432);
+  assert.equal(FIGHTER_REACTIVE_CUES.length, 7);
+  assert.equal(FIGHTER_AUDIO_CUES.length, 19);
+  assert.equal(new Set(fighterAudioManifest()).size, 152);
+  assert.equal(new Set(fighterAudioVariantManifest()).size, 456);
 });
 
 test("fighter cue paths preserve both identity and action", () => {
@@ -75,6 +75,6 @@ test("reactive cues carry placeholder mappings and caption labels", () => {
   }
   assert.deepEqual(
     Object.fromEntries(FIGHTER_REACTIVE_CUES.map((cue) => [cue, FIGHTER_REACTIVE_PLACEHOLDERS[cue].cue])),
-    { dizzy: "hit-heavy", counter: "special", tech: "block", desperation: "hit-light", scream: "fatal", crush: "block" },
+    { dizzy: "hit-heavy", counter: "special", tech: "block", desperation: "hit-light", scream: "fatal", crush: "block", taunt: "jump" },
   );
 });

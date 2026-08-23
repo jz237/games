@@ -53,6 +53,9 @@ if a line changes).
 | assets/audio/announcer/guardcrush-1.mp3 | GUARD CRUSH! |
 | assets/audio/announcer/guardcrush-2.mp3 | DEFENSE SHATTERED! |
 | assets/audio/announcer/guardcrush-3.mp3 | THE GUARD BREAKS! |
+| assets/audio/announcer/wallbounce-1.mp3 | OFF THE WALL! |
+| assets/audio/announcer/wallbounce-2.mp3 | CORNER CARNAGE! |
+| assets/audio/announcer/wallbounce-3.mp3 | THE WALL HITS BACK! |
 
 ### Fighter name calls (select lock-in + VS slam)
 
@@ -94,7 +97,8 @@ archetypes, `CYRAXX.md`). These are vocalisations, not scripted words; the
 `<cue>.mp3`, `<cue>-2.mp3`, `<cue>-3.mp3` under `assets/audio/fighters/<id>/`.
 Until these exist the game pitch-shifts the nearest recorded take
 (dizzy→hit-heavy ×0.86, counter→special ×1.09, tech→block ×1.06,
-desperation→hit-light ×0.93, scream→fatal ×1.14, crush→block ×0.78).
+desperation→hit-light ×0.93, scream→fatal ×1.14, crush→block ×0.78,
+taunt→jump ×1.18 — further offset per rotating line).
 
 | Cue | Performance | Length |
 | --- | --- | --- |
@@ -104,6 +108,24 @@ desperation→hit-light ×0.93, scream→fatal ×1.14, crush→block ×0.78).
 | desperation | panicked low-health snarl / ragged breathing burst (fires once per round under 20%) | 0.8–1.2s |
 | scream | full fatality death scream — must read bigger and longer than the existing `ko.mp3` groan | 1.0–2.0s |
 | crush | guard-shatter cry — arms blown open, staggered disbelief (Release 1.7 GUARD CRUSH) | 0.6–1.0s |
+| taunt | SCRIPTED spoken lines (wave 11 punishable taunt) — exact text below, strictly positional: the sim picks line N via state.rng and plays take N+1, so the caption and the take must match | 0.8–1.6s |
+
+### Taunt line scripts (positional — take 1 = line 1, take 2 = line 2, take 3 = line 3)
+
+`FIGHTER_TAUNT_LINES` in `engine/fighter-audio.mjs` mirrors this table exactly;
+keep both in sync if a line changes. Files:
+`assets/audio/fighters/<id>/taunt.mp3`, `taunt-2.mp3`, `taunt-3.mp3`.
+
+| Fighter (id) | Line 1 | Line 2 | Line 3 |
+| --- | --- | --- | --- |
+| DEATHBLOW (deathblow) | I POUR CONCRETE HARDER THAN YOU. | ROCK BOTTOM SUITS YOU. | STAY DOWN. IT'S LOAD-BEARING. |
+| JEZ (jez) | READ THE SIGN. | I MADE THAT LOOK EASY. | LIGHTS OUT, PAL. |
+| ALLAN (alan) | YOUSE DONE ALREADY? | GET UP. I AIN'T FINISHED. | THAT ALL YOU GOT, HUH? |
+| POST (post) | CAN'T CATCH ME. | I'LL TAG YOUR TOMBSTONE. | SPRAYED AND SLAYED. |
+| BENNY (benny) | TOO SLOW. WAY TOO SLOW. | PRECISION, BABY. | CLIPPED YA. |
+| DONALD TRUMP (donald) | TOTAL DISASTER. SAD. | NOBODY FIGHTS BETTER THAN ME. | YOU'RE FIRED. |
+| CYRAXX (cyraxx) | HEHEHE... FEEDBACK! | YOU HEAR THAT? THAT'S LOSING. | CRANK IT UP! |
+| ALI G (ali) | BOOYAKASHA! | IS IT COS I IS WINNING? | RESPEK. NOT FOR YOU, THOUGH. |
 
 Voice directions per fighter:
 
@@ -118,8 +140,8 @@ Voice directions per fighter:
 | CYRAXX (cyraxx) | Feedback trickster (see CYRAXX.md). Unhinged chaos gremlin; cracking falsetto shrieks, distorted edges. |
 | ALI G (ali) | West Staines MC, rhythm fighter. Mock-hip-hop swagger; rhythmic ad-lib energy. |
 
-Full file list (8 fighters × 6 cues × 3 takes = 144 files):
-`assets/audio/fighters/<id>/{dizzy,counter,tech,desperation,scream,crush}{,-2,-3}.mp3`
+Full file list (8 fighters × 7 cues × 3 takes = 168 files):
+`assets/audio/fighters/<id>/{dizzy,counter,tech,desperation,scream,crush,taunt}{,-2,-3}.mp3`
 for each id in `deathblow, jez, alan, post, benny, donald, cyraxx, ali`.
 
 ## Priority 3 — match-story callouts (announcer voice)
@@ -171,9 +193,9 @@ super, fatal, ko`.
 
 | Group | Files |
 | --- | --- |
-| P1 announcer core | 26 + 24 name + 24 wins = 74 |
-| P2 fighter reactive | 144 |
+| P1 announcer core | 29 + 24 name + 24 wins = 77 |
+| P2 fighter reactive | 168 |
 | P3 match-story | 14 |
 | P4 online moments | 12 |
 | P5 fighter variant retakes | 192 |
-| **Total** | **436** |
+| **Total** | **463** |

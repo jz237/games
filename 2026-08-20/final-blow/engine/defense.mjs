@@ -186,6 +186,96 @@ export function isPerfectGuard(guardStartedTick, impactTick) {
 }
 
 /**
+ * Release 1.7 wave 11 — corner wall-bounce. The wave-4 wall splat gains its
+ * gameplay half: a knockdown-class heavy/special that connects with the
+ * victim already within one body width of a stage bound converts the
+ * knockdown, when the flight reaches that wall, into a brief splat freeze and
+ * a juggleable rebound pop. The bounce is once per combo and counts as a
+ * juggle point, so the juggleLimit:2 contract still keeps combos short.
+ * Velocities are absolute canvas-space values (the AIR_RECOVERY_RULES
+ * convention), every clock is a frame count, and both latch fields live on
+ * the fighter so the rollback snapshot carries them.
+ */
+export const WALL_BOUNCE_RULES = Object.freeze({
+  // Armed only when the victim is already this many body-widths from the wall
+  // the push is driving them toward, so mid-screen knockdowns never convert.
+  proximityBodyWidths: 1,
+  // An ordinary knockdown push (~300, bleeding 10%/frame) covers barely half
+  // a body width before landing, so an armed flight commits to the wall with
+  // this carry velocity instead — the MK3 rocket-into-the-corner read. It
+  // clears a full body width in ~10 frames, always beating the ~15-frame
+  // knockdown landing, which is what makes the conversion deterministic.
+  carryVelocityX: 680,
+  // The rebound pop must hang longer than a knockdown-class heavy's remaining
+  // recovery (~32 frames after its hit) or the set piece could never be
+  // converted; -700 against the scaled gravity is ~34 airborne frames while
+  // staying well under the 815 jump impulse.
+  reboundVelocityX: 200,
+  reboundVelocityY: -700,
+  // The splat freeze re-uses state.hitstop (already in the combat snapshot).
+  splatFreezeSeconds: 0.1,
+  // Rebound hitstun floor so a read follow-up can actually connect.
+  hitstunFrames: 26,
+  // The rebound arc (~34 airborne frames plus the follow-up's startup) may
+  // exceed COMBO_RULES.resetGapFrames while the victim is helpless, so the
+  // bounce holds the attacker's combo open this long. Grace, not licence:
+  // the juggle limit still caps the conversion at one extra hit.
+  comboGraceFrames: 60,
+});
+
+export function qualifiesForWallBounce(attack) {
+  return Boolean(attack)
+    && !attack.superMove
+    && attack.level !== ATTACK_LEVELS.THROW
+    && (attack.kind === "heavy" || attack.kind === "special")
+    && Boolean(attack.knockdown || attack.knockdownOnFinal || attack.launchVelocityY);
+}
+
+/**
+ * Release 1.7 wave 11 — punishable taunt. Double-tap Down arms a short
+ * window; the LK&HK chord inside it starts a fully vulnerable victory-pose
+ * hold. Completing it uninterrupted banks +8 Grit once per round. The double
+ * tap requires a genuine release between presses (dash-style edge tracking on
+ * the fighter), so a slow quarter-circle can never arm it by accident.
+ */
+export const TAUNT_RULES = Object.freeze({
+  durationFrames: 45,
+  gritBonus: 8,
+  // Second Down press must land within this window of the first…
+  doubleTapWindowFrames: 12,
+  // …and the kick chord within this window of the second press.
+  armFrames: 14,
+  // Rotating voice lines per fighter; the pick must come from state.rng so
+  // both rollback peers agree on the line.
+  voiceLines: 3,
+});
+
+/**
+ * The wave-11 offense fields added to every fighter, on the exact
+ * createDepthFighterFields pattern: plain data only (numbers, booleans and
+ * the -Infinity sentinel), so the rollback fighter snapshot clones and
+ * restores each one and every one counts toward the combat checksum.
+ */
+export function createOffenseFighterFields() {
+  return {
+    // Corner wall-bounce: pending conversion direction (-1 toward stageMinX,
+    // +1 toward stageMaxX, 0 idle) and the once-per-combo latch.
+    wallBounceArmed: 0,
+    wallBounceUsed: false,
+    // Taunt: countdown, authored total (for the pose), once-per-round Grit
+    // latch and the state.rng-chosen voice line for this taunt.
+    tauntFrames: 0,
+    tauntTotalFrames: 0,
+    tauntGritGranted: false,
+    tauntLine: 0,
+    // Double-tap-Down edge tracker feeding the taunt chord arm window.
+    downTapHeld: false,
+    downTapLastTick: -Infinity,
+    tauntArmedUntilTick: -Infinity,
+  };
+}
+
+/**
  * The DEPTH gameplay fields added to every fighter. All plain data (numbers,
  * booleans, short strings and the -Infinity sentinel the rollback transport
  * already canonicalises), so the fighter snapshot machinery — which clones
@@ -252,6 +342,27 @@ const moveProfiles = {
     hitboxes: [
       { from: 0, to: 2, box: { x: 32, y: -178, width: 98, height: 84 } },
       { from: 3, to: 7, box: { x: 45, y: -167, width: 118, height: 90 } },
+    ],
+  },
+  // Generic forward+LP advancing check. Every kit authors its own forwardLight;
+  // this exists so the shared derive table can build the forward command kicks
+  // for kit-less fallbacks exactly like it does for the other kick normals.
+  forwardLight: {
+    id: "forward-light",
+    baseKind: "light",
+    level: ATTACK_LEVELS.MID,
+    startupFrames: 7,
+    activeFrames: 5,
+    recoveryFrames: 10,
+    range: 128,
+    damage: 8,
+    push: 190,
+    hitstunFrames: 22,
+    blockstunFrames: 10,
+    chipDamage: 0,
+    advanceSpeed: 140,
+    hitboxes: [
+      { from: 0, to: 4, box: { x: 26, y: -176, width: 112, height: 88 } },
     ],
   },
   crouchHeavy: {
@@ -418,7 +529,45 @@ export const KICK_VARIANTS = deepFreeze({
     range: 1.22, damage: 1.03, push: 1.18, startup: 1, active: 0, recovery: 2,
     hitstun: 0, blockstun: 1, boxY: 0.9, boxHeight: 1.08,
   },
+  // Release 1.7 wave 11 — the two dead forward directions. Forward+LK derives
+  // an advancing step knee from each fighter's authored forwardLight (the
+  // advanceSpeed personality rides along); forward+HK derives either an
+  // axe-kick overhead from the fighter's authored overhead or, for the `slide`
+  // archetypes (FORWARD_KICK_STYLES in fighter-kits.mjs), a short advancing
+  // low slide from the authored sweep — clearly punishable on block.
+  forwardLightKick: {
+    source: "forwardLight", suffix: "step-knee", moveName: "STEP KNEE", level: ATTACK_LEVELS.MID,
+    range: 1.04, damage: 1.06, push: 1.08, startup: 2, active: 0, recovery: 3,
+    hitstun: 1, blockstun: 1, boxY: 0.92, boxHeight: 1.04,
+    // Zoners whose forwardLight is a stationary poke still step with the knee.
+    extra: { advanceSpeed: 140 },
+  },
+  forwardHeavyKick: {
+    source: "overhead", suffix: "axe-kick", moveName: "AXE KICK", level: ATTACK_LEVELS.OVERHEAD,
+    range: 1.12, damage: 0.97, push: 1.22, startup: 2, active: 1, recovery: 4,
+    hitstun: 0, blockstun: 1, boxY: 0.9, boxHeight: 1.08,
+    slide: {
+      source: "crouchHeavy", suffix: "slide", moveName: "SLIDE KICK", level: ATTACK_LEVELS.LOW,
+      range: 0.94, damage: 0.92, push: 1.12, startup: 3, active: 2, recovery: 7,
+      hitstun: 0, blockstun: 1, boxY: 1.02, boxHeight: 0.96, knockdown: true,
+      extra: { advanceSpeed: 225 },
+    },
+  },
 });
+
+export const FORWARD_KICK_KEYS = Object.freeze(["forwardLightKick", "forwardHeavyKick"]);
+
+/**
+ * Resolve the effective transform for a kick-variant key. The forward heavy
+ * kick carries its two authored flavours in one table entry; every other key
+ * has exactly one.
+ */
+export function resolveKickVariant(key, style = "") {
+  const variant = KICK_VARIANTS[key];
+  if (!variant) return null;
+  if (style === "slide" && variant.slide) return variant.slide;
+  return variant;
+}
 
 export const KICK_MOVE_KEYS = Object.freeze(Object.keys(KICK_VARIANTS));
 
@@ -428,8 +577,8 @@ function resolveField(source, base, field) {
   return Number.isFinite(source?.[field]) ? source[field] : base[field];
 }
 
-export function deriveKickProfile(source, key) {
-  const variant = KICK_VARIANTS[key];
+export function deriveKickProfile(source, key, style = "") {
+  const variant = resolveKickVariant(key, style);
   if (!source || !variant) return null;
   const base = BASE_MOVES[source.baseKind] || BASE_MOVES.light;
   const scaleRange = variant.range;
@@ -461,12 +610,20 @@ export function deriveKickProfile(source, key) {
     })),
   };
   if (variant.knockdown) derived.knockdown = true;
+  // `extra` fields are defaults: authored source personality wins where the
+  // source already sets the field (a zoner's stationary poke still steps
+  // forward as a knee, but an authored advance speed rides through).
+  if (variant.extra) {
+    for (const [field, value] of Object.entries(variant.extra)) {
+      if (!Number.isFinite(derived[field])) derived[field] = value;
+    }
+  }
   for (const field of droppedOnDerive) delete derived[field];
   return derived;
 }
 
 for (const key of KICK_MOVE_KEYS) {
-  const derived = deriveKickProfile(moveProfiles[KICK_VARIANTS[key].source], key);
+  const derived = deriveKickProfile(moveProfiles[resolveKickVariant(key).source], key);
   if (derived) moveProfiles[key] = derived;
 }
 
@@ -482,6 +639,10 @@ export function selectMoveProfile(kind, context = {}) {
   }
   if (kind === "light" && context.crouching) return COMBAT_MOVE_PROFILES[kick ? "crouchLightKick" : "crouchLight"];
   if (kind === "heavy" && context.crouching) return COMBAT_MOVE_PROFILES[kick ? "crouchHeavyKick" : "crouchHeavy"];
+  // Release 1.7 wave 11: forward+kick no longer collapses to the standing
+  // kick — the derive table gives every fighter forward command kicks.
+  if (kind === "light" && context.forwardHeld && kick) return COMBAT_MOVE_PROFILES.forwardLightKick;
+  if (kind === "heavy" && context.forwardHeld && kick) return COMBAT_MOVE_PROFILES.forwardHeavyKick;
   if (kind === "heavy" && context.forwardHeld && !kick) return COMBAT_MOVE_PROFILES.overhead;
   if (kind === "special") return COMBAT_MOVE_PROFILES.special;
   if (kind === "heavy") return COMBAT_MOVE_PROFILES[kick ? "standHeavyKick" : "standHeavy"];

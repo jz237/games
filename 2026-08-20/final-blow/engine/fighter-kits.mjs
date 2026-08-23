@@ -1,7 +1,7 @@
 import { createAttackInstance } from "./foundation.mjs";
-import { ATTACK_LEVELS, KICK_VARIANTS, deriveKickProfile } from "./defense.mjs";
+import { ATTACK_LEVELS, KICK_VARIANTS, deriveKickProfile, resolveKickVariant } from "./defense.mjs";
 import { GRIT_RULES, matchCommandSequence } from "./combos.mjs";
-import { FIGHTER_THROWABLES, THROWABLE_COMMAND } from "./throwables.mjs";
+import { ENHANCED_THROWABLE_COMMAND, FIGHTER_THROWABLES, THROWABLE_COMMAND } from "./throwables.mjs";
 
 export const KIT_ACTIONS = Object.freeze([
   "backSpecial",
@@ -1269,20 +1269,40 @@ export function selectKitMoveKey(action, context = {}) {
   if (action === "light") {
     if (context.airborne) return kick ? "airLightKick" : "airLight";
     if (context.crouching) return kick ? "crouchLightKick" : "crouchLight";
-    if (kick) return "standLightKick";
+    // Release 1.7 wave 11: forward+LK is the advancing step knee instead of
+    // collapsing to the standing light kick.
+    if (kick) return context.forwardHeld ? "forwardLightKick" : "standLightKick";
     if (context.forwardHeld) return "forwardLight";
     return "standLight";
   }
   if (action === "heavy") {
     if (context.airborne) return kick ? "airHeavyKick" : "airHeavy";
     if (context.crouching) return kick ? "crouchHeavyKick" : "crouchHeavy";
-    if (kick) return "standHeavyKick";
+    // Release 1.7 wave 11: forward+HK is the per-archetype axe kick or slide.
+    if (kick) return context.forwardHeld ? "forwardHeavyKick" : "standHeavyKick";
     if (context.forwardHeld) return "overhead";
     return "standHeavy";
   }
   if (action === "special" && context.airborne) return "airSpecial";
   return action;
 }
+
+/**
+ * Release 1.7 wave 11 — the authored forward+HK flavour per archetype. Slide
+ * archetypes trade the axe-kick overhead for a short advancing low that is
+ * clearly punishable on block; everyone else swings the axe. One word per
+ * fighter is the whole authoring cost — the derive table does the rest.
+ */
+export const FORWARD_KICK_STYLES = Object.freeze({
+  deathblow: "axe",
+  jez: "slide",
+  alan: "slide",
+  post: "axe",
+  benny: "slide",
+  donald: "axe",
+  cyraxx: "slide",
+  ali: "axe",
+});
 
 // Per-fighter kick normals are derived once from that fighter's own punch
 // normals, so every character keeps a personal kick game without a second set of
@@ -1293,8 +1313,11 @@ const derivedKickCache = new Map();
 function kitKickProfile(fighterId, kit, key) {
   const cacheKey = `${fighterId}:${key}`;
   if (derivedKickCache.has(cacheKey)) return derivedKickCache.get(cacheKey);
-  const source = kit.moves[KICK_VARIANTS[key].source];
-  const derived = deepFreeze(deriveKickProfile(source, key));
+  // The forward heavy kick reads the fighter's authored flavour; every other
+  // key resolves to its single table entry with the style ignored.
+  const style = key === "forwardHeavyKick" ? FORWARD_KICK_STYLES[fighterId] || "" : "";
+  const source = kit.moves[resolveKickVariant(key, style).source];
+  const derived = deepFreeze(deriveKickProfile(source, key, style));
   derivedKickCache.set(cacheKey, derived);
   return derived;
 }
@@ -1367,7 +1390,12 @@ export function getFighterMovement(fighterId, fallback) {
 export const FIGHTER_COMMANDS = Object.freeze([
   { action: "super", sequence: ["down", "forward", "down", "forward", "punch"], terminal: "punch", display: "↓ → ↓ → + PUNCH", options: { maxWindowFrames: 48, maxGapFrames: 18 } },
   { action: "enhancedLauncher", sequence: ["forward", "down", "forward", "enhanced"], terminal: "enhanced", display: "→ ↓ → + LP+HP" },
-  { action: "enhancedBackSpecial", sequence: ["down", "back", "enhanced"], terminal: "enhanced", display: "↓ ← + LP+HP" },
+  // The down-back chord splits by limb exactly like its single-button pair
+  // below: the punch chord is the EX back special, the kick chord the EX
+  // personal throwable. Callers that pass no limb keep the pre-wave-11
+  // behaviour (the back special matches first).
+  { action: "enhancedBackSpecial", sequence: ["down", "back", "enhanced"], terminal: "enhanced", limb: "punch", display: "↓ ← + LP+HP" },
+  { action: "enhancedThrowObject", sequence: [...ENHANCED_THROWABLE_COMMAND.sequence], terminal: ENHANCED_THROWABLE_COMMAND.terminal, limb: ENHANCED_THROWABLE_COMMAND.limb, display: ENHANCED_THROWABLE_COMMAND.display },
   { action: "enhancedCommandSpecial", sequence: ["down", "forward", "enhanced"], terminal: "enhanced", display: "↓ → + LP+HP" },
   { action: "launcher", sequence: ["forward", "down", "forward", "punch"], terminal: "punch", display: "→ ↓ → + PUNCH" },
   { action: "driveHeavy", sequence: ["back", "forward", "kick"], terminal: "kick", display: "← → + KICK" },
@@ -1378,9 +1406,12 @@ export const FIGHTER_COMMANDS = Object.freeze([
   { action: "throwObject", sequence: ["down", "back", "kick"], terminal: "kick", display: "↓ ← + KICK" },
 ]);
 
-export function recognizeFighterCommand(fighterId, history, currentFrame) {
+export function recognizeFighterCommand(fighterId, history, currentFrame, { limb = "" } = {}) {
   if (!getFighterKit(fighterId)) return null;
   for (const candidate of FIGHTER_COMMANDS) {
+    // A limb-tagged candidate only matches when the caller's chord limb
+    // agrees; with no limb supplied the tag is ignored (legacy behaviour).
+    if (candidate.limb && limb && candidate.limb !== limb) continue;
     const match = matchCommandSequence(history, candidate.sequence, currentFrame, candidate.options);
     if (match) return { ...candidate, ...match };
   }
@@ -1432,6 +1463,18 @@ export function listFighterMoves(fighterId) {
   const kit = getFighterKit(fighterId);
   if (!kit) return [];
   const moves = kit.moveList.map(([name, command]) => ({ name, command }));
+  // Release 1.7 wave 11: the two forward command kicks are derived data, so
+  // they are listed from their derived profiles rather than hand-copied into
+  // every kit's move list.
+  const stepKnee = getKitMoveProfile(fighterId, "light", { limb: "kick", forwardHeld: true });
+  const forwardHeavy = getKitMoveProfile(fighterId, "heavy", { limb: "kick", forwardHeld: true });
+  if (stepKnee) moves.splice(1, 0, { name: stepKnee.moveName, command: "→ + LK" });
+  if (forwardHeavy) {
+    moves.splice(2, 0, {
+      name: forwardHeavy.moveName,
+      command: `→ + HK · ${forwardHeavy.level === ATTACK_LEVELS.LOW ? "low" : "overhead"}`,
+    });
+  }
   // The personal throwable is data-driven, so it is listed from the throwable
   // table rather than duplicated into every kit's move list.
   const throwable = FIGHTER_THROWABLES[fighterId];
@@ -1440,6 +1483,12 @@ export function listFighterMoves(fighterId) {
       name: throwable.name,
       command: `${THROWABLE_COMMAND.display} · ${throwable.usesPerRound} per round`,
     });
+    if (throwable.variants?.ex) {
+      moves.splice(Math.max(0, moves.length - 1), 0, {
+        name: throwable.variants.ex.name || `${throwable.name} EX`,
+        command: `${ENHANCED_THROWABLE_COMMAND.display} · ${GRIT_RULES.enhancedSpecialCost} Grit + 1 object`,
+      });
+    }
   }
   return moves;
 }

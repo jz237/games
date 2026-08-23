@@ -24,7 +24,9 @@ function testMoveSelection() {
   assert.equal(selectMoveProfile("heavy", { airborne: true }).id, "air-heavy");
   assert.equal(selectMoveProfile("special", { airborne: true }).id, "air-special");
   assert.equal(selectMoveProfile("throw").level, ATTACK_LEVELS.THROW);
-  assert.equal(Object.keys(COMBAT_MOVE_PROFILES).length, 16);
+  // 16 pre-wave-11 profiles + the generic forwardLight source + the two
+  // derived forward command kicks.
+  assert.equal(Object.keys(COMBAT_MOVE_PROFILES).length, 19);
 
   // Four-button layout: the kick buttons select their own derived normals.
   assert.equal(selectMoveProfile("light", { limb: "kick" }).id, "stand-light-lk");
@@ -35,8 +37,14 @@ function testMoveSelection() {
   assert.equal(selectMoveProfile("light", { limb: "kick", crouching: true }).id, "crouch-light-lk");
   assert.equal(selectMoveProfile("heavy", { limb: "kick", airborne: true }).id, "air-heavy-hk");
   assert.equal(selectMoveProfile("light", { limb: "kick", airborne: true }).id, "air-light-lk");
-  // Forward + HK stays a roundhouse rather than the punch overhead.
-  assert.equal(selectMoveProfile("heavy", { limb: "kick", forwardHeld: true }).id, "stand-heavy-hk");
+  // Release 1.7 wave 11: the dead forward+kick directions are live. Forward
+  // +LK is the advancing step knee, forward+HK the axe-kick overhead (the
+  // generic table's flavour), both derived, both distinct from the punches.
+  assert.equal(selectMoveProfile("light", { limb: "kick", forwardHeld: true }).id, "forward-light-step-knee");
+  assert.equal(selectMoveProfile("light", { limb: "kick", forwardHeld: true }).moveName, "STEP KNEE");
+  assert.equal(selectMoveProfile("heavy", { limb: "kick", forwardHeld: true }).id, "overhead-axe-kick");
+  assert.equal(selectMoveProfile("heavy", { limb: "kick", forwardHeld: true }).moveName, "AXE KICK");
+  assert.equal(selectMoveProfile("heavy", { limb: "kick", forwardHeld: true }).level, ATTACK_LEVELS.OVERHEAD);
 
   // The generic profiles inherit unset fields from BASE_MOVES, so compare the
   // resolved values a real attack instance would use.

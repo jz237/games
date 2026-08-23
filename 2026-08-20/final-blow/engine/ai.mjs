@@ -13,6 +13,7 @@ export const AI_DIFFICULTIES = Object.freeze({
     throwChance: 0, meterChance: 0, wakeupReversalChance: 0, errorChance: 0,
     throwTechChance: 0, grabPressureChance: 0,
     quickRiseChance: 0, wakeDelayChance: 0, airRecoveryChance: 0, perfectGuardChance: 0,
+    tauntChance: 0,
     repeatLimit: 0, inert: true,
   }),
   rookie: Object.freeze({
@@ -21,6 +22,7 @@ export const AI_DIFFICULTIES = Object.freeze({
     throwChance: 0.09, meterChance: 0.24, wakeupReversalChance: 0.16, errorChance: 0.24,
     throwTechChance: 0.12, grabPressureChance: 0.1,
     quickRiseChance: 0.14, wakeDelayChance: 0.08, airRecoveryChance: 0.12, perfectGuardChance: 0.05,
+    tauntChance: 0.35,
     repeatLimit: 2,
   }),
   street: Object.freeze({
@@ -29,6 +31,7 @@ export const AI_DIFFICULTIES = Object.freeze({
     throwChance: 0.15, meterChance: 0.44, wakeupReversalChance: 0.31, errorChance: 0.14,
     throwTechChance: 0.3, grabPressureChance: 0.2,
     quickRiseChance: 0.32, wakeDelayChance: 0.12, airRecoveryChance: 0.28, perfectGuardChance: 0.12,
+    tauntChance: 0.12,
     repeatLimit: 2,
   }),
   pro: Object.freeze({
@@ -37,6 +40,7 @@ export const AI_DIFFICULTIES = Object.freeze({
     throwChance: 0.22, meterChance: 0.68, wakeupReversalChance: 0.52, errorChance: 0.08,
     throwTechChance: 0.56, grabPressureChance: 0.34,
     quickRiseChance: 0.55, wakeDelayChance: 0.16, airRecoveryChance: 0.5, perfectGuardChance: 0.24,
+    tauntChance: 0.05,
     repeatLimit: 3,
   }),
   final: Object.freeze({
@@ -45,6 +49,7 @@ export const AI_DIFFICULTIES = Object.freeze({
     throwChance: 0.29, meterChance: 0.84, wakeupReversalChance: 0.7, errorChance: 0.04,
     throwTechChance: 0.78, grabPressureChance: 0.48,
     quickRiseChance: 0.78, wakeDelayChance: 0.2, airRecoveryChance: 0.68, perfectGuardChance: 0.38,
+    tauntChance: 0.02,
     repeatLimit: 3,
   }),
 });
@@ -171,6 +176,13 @@ function inputFromIntent(intent, self, observation, pulseAction = false, frame =
   input.down = Boolean(intent.down);
   input.jump = Boolean(intent.jump && pulseAction);
   if (pulseAction && intent.action) input[intent.action] = true;
+  // Release 1.7 wave 11: a kick-limbed normal rides the same limb selector a
+  // human uses, so advancing lights and heavies naturally come out as the
+  // forward command kicks.
+  if (pulseAction && intent.limb === "kick" && (intent.action === "light" || intent.action === "heavy")) {
+    input.limb = "kick";
+    input.kick = true;
+  }
   if (intent.action === "throw") {
     // Grabs are a direction plus LP/LK, so hold toward or away from the opponent
     // exactly like a human would.
@@ -259,6 +271,13 @@ export function decideAiIntent(brain, {
     return { movement: "hold", action: null, reason: "juggled" };
   }
 
+  // Release 1.7 wave 11: disrespect. With the opponent visibly down and the
+  // spacing safe, low difficulties sometimes burn the knockdown on a taunt —
+  // through the same taunt input a human uses. Passive never reaches here.
+  if (observation.down && distance > 190 && mixRoll(roll, 26) < (settings.tauntChance || 0)) {
+    return { movement: "hold", action: "taunt", reason: "taunt" };
+  }
+
   const incomingRange = Math.min(300, (observation.attackRange || 105) + 42);
   if (observation.attacking && distance <= incomingRange) {
     const defend = mixRoll(roll, 5) < settings.defenseChance;
@@ -329,6 +348,22 @@ export function decideAiIntent(brain, {
     return mixRoll(roll, 15) < 0.55
       ? { movement: "hold", action: null, reason: "hesitation" }
       : { movement: intent.movement === "advance" ? "retreat" : "advance", action: null, reason: "spacing-error" };
+  }
+  // Release 1.7 wave 11: normals split between limbs, so held-position pokes
+  // mix the kick normals into ordinary move selection…
+  if (["light", "heavy"].includes(intent.action) && mixRoll(roll, 27) < 0.4) {
+    intent = { ...intent, limb: "kick" };
+  }
+  // …and an empty-handed approach sometimes walks in behind an advancing kick
+  // — which is exactly the forward command normals, reached through the same
+  // forward-held + kick-limb inputs a human uses.
+  if (intent.movement === "advance" && !intent.action && mixRoll(roll, 28) < 0.35) {
+    intent = {
+      ...intent,
+      action: mixRoll(roll, 29) < 0.5 ? "light" : "heavy",
+      limb: "kick",
+      reason: "advancing-kick",
+    };
   }
   return { ...intent, reason: intent.reason || "archetype" };
 }

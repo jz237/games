@@ -25,9 +25,10 @@ function testCompleteKits() {
   for (const id of Object.keys(FIGHTER_KITS)) {
     const kit = FIGHTER_KITS[id];
     assert.ok(kit.archetype.length > 8);
-    // Nine authored entries plus the fighter's personal throwable object.
+    // Nine authored entries plus the two derived forward command kicks, the
+    // personal throwable object and its wave-11 EX tier.
     const moves = listFighterMoves(id);
-    assert.equal(moves.length, 10);
+    assert.equal(moves.length, 13);
     const throwable = moves.find((move) => move.command.includes("↓ ← + KICK"));
     assert.ok(throwable, `${id} must list a personal throwable object`);
     assert.match(throwable.command, /per round/);

@@ -125,6 +125,7 @@ export const ENHANCED_GRIT_COST = 25;
 export const TOURNAMENT_ACTION_PRIORITY = Object.freeze([
   "super",
   "enhancedLauncher", "enhancedBackSpecial", "enhancedCommandSpecial", "enhanced",
+  "enhancedThrowObject",
   "throwObject", "launcher", "backSpecial", "driveHeavy", "commandSpecial", "special",
   "throw",
   "heavy", "light",
@@ -145,6 +146,9 @@ export function hasFlowSkipInput(input = {}) {
  *  - motion + punch: command specials; motion + kick: the kit's base special
  *  - LP+HP or LK+HK chord: enhanced (EX) version of whatever motion preceded it
  *  - HP+HK chord at full Grit, or a double-quarter-circle motion: super
+ *  - double-tap Down (tauntArmed) + LK&HK chord: the punishable taunt. It is
+ *    encoded as light+heavy+kick — a combination no other resolution emits —
+ *    so it round-trips the existing 16-bit net input with no new bits.
  *  - during the finishing window LP selects Finisher A and LK selects Finisher B
  */
 export function resolveFourButtonInput(raw = {}, {
@@ -153,6 +157,7 @@ export function resolveFourButtonInput(raw = {}, {
   meter = 0,
   finishing = false,
   finishArmed = true,
+  tauntArmed = false,
 } = {}) {
   const held = {
     lp: Boolean(raw.lpHeld ?? raw.lp),
@@ -207,6 +212,17 @@ export function resolveFourButtonInput(raw = {}, {
   const heavyChord = (edge.hp && held.hk) || (edge.hk && held.hp);
   const lightChord = (edge.lp && held.lk) || (edge.lk && held.lp);
 
+  // Release 1.7 wave 11: the taunt outranks the EX read only inside the
+  // double-tap-Down arm window, and works at any meter. light+heavy+kick is
+  // the wire encoding — no other path ever raises light and heavy together.
+  if (kickChord && tauntArmed) {
+    out.taunt = true;
+    out.light = true;
+    out.heavy = true;
+    out.limb = "kick";
+    out.button = "hk";
+    return out;
+  }
   if (heavyChord && meter >= SUPER_GRIT_COST) {
     out.super = true;
     out.button = "hp";

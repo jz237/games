@@ -1,4 +1,5 @@
 import { ATTACK_LEVELS } from "./defense.mjs";
+import { GRIT_RULES } from "./combos.mjs";
 
 /**
  * Personal throwable objects.
@@ -25,6 +26,23 @@ export const THROWABLE_COMMAND = Object.freeze({
   sequence: Object.freeze(["down", "back", "kick"]),
   terminal: "kick",
   display: "↓ ← + KICK",
+});
+
+/**
+ * Release 1.7 wave 11 — the EX tier. Same motion finished with the LK&HK
+ * chord instead of a single kick, costing GRIT_RULES.enhancedSpecialCost plus
+ * one throwable pip. Every EX behaviour is authored data inside the profile's
+ * `variants.ex` block (merged over the base flight exactly like Donald's
+ * existing high golf ball), so determinism and rollback are inherited from
+ * the ordinary projectile state. `extraSpawns` entries release additional
+ * projectiles on the same active frame, each merging its own overrides.
+ */
+export const ENHANCED_THROWABLE_COMMAND = Object.freeze({
+  action: "enhancedThrowObject",
+  sequence: Object.freeze(["down", "back", "enhanced"]),
+  terminal: "enhanced",
+  limb: "kick",
+  display: "↓ ← + LK&HK",
 });
 
 const object = (id, overrides) => Object.freeze({
@@ -85,6 +103,24 @@ export const FIGHTER_THROWABLES = Object.freeze({
     wobble: 11,
     lifeFrames: 170,
     impactLabel: "PIZZA SPLAT",
+    variants: Object.freeze({
+      // EX: the whole pie splits into two slices — a flat drive plus a lofted
+      // arc that lands behind it, covering two heights at once.
+      ex: Object.freeze({
+        name: "PIZZA PARTY",
+        width: 62,
+        height: 62,
+        speed: 380,
+        damage: 8,
+        chipDamage: 2,
+        hitstunFrames: 22,
+        push: 260,
+        spin: 19,
+        extraSpawns: Object.freeze([
+          Object.freeze({ launchY: -360, gravity: 1150, speed: 320, spawnY: -150 }),
+        ]),
+      }),
+    }),
     sound: "pizza",
   }),
   jez: object("mouse", {
@@ -108,6 +144,23 @@ export const FIGHTER_THROWABLES = Object.freeze({
     // A clean hit drags the victim to just outside DeathBlow-range of Jez.
     tether: Object.freeze({ reelSpeed: 760, holdDistance: 118, retractOnBlock: true }),
     impactLabel: "MOUSE TRAP",
+    variants: Object.freeze({
+      // EX: the cable reel becomes a guaranteed launcher — the victim is
+      // dragged in and popped airborne beside Jez, juggleable but untechable.
+      ex: Object.freeze({
+        name: "EX MOUSE REEL",
+        speed: 660,
+        damage: 9,
+        hitstunFrames: 32,
+        tether: Object.freeze({
+          reelSpeed: 760,
+          holdDistance: 118,
+          retractOnBlock: true,
+          launch: true,
+          launchVelocityY: -520,
+        }),
+      }),
+    }),
     sound: "mouse",
   }),
   alan: object("loogie", {
@@ -133,6 +186,19 @@ export const FIGHTER_THROWABLES = Object.freeze({
     staggerFrames: 9,
     hazardFrames: 0,
     impactLabel: "STICKY HIT",
+    variants: Object.freeze({
+      // EX: the loogie leaves a brief floor splat that slows whoever stands
+      // in it — Allan's close pressure gains a sticky patch of ring control.
+      ex: Object.freeze({
+        name: "FLOOR LOOGIE",
+        damage: 7,
+        lifeFrames: 130,
+        hazardFrames: 90,
+        hazardArmFrames: 10,
+        hazardWidth: 110,
+        slowFrames: 55,
+      }),
+    }),
     sound: "loogie",
   }),
   post: object("wires", {
@@ -160,6 +226,18 @@ export const FIGHTER_THROWABLES = Object.freeze({
     slowFrames: 48,
     spin: 5,
     impactLabel: "WIRED UP",
+    variants: Object.freeze({
+      // EX: live wires — a wider tangle that lingers longer, snares harder
+      // and stings on the way in.
+      ex: Object.freeze({
+        name: "LIVE WIRES",
+        damage: 9,
+        hazardFrames: 160,
+        hazardWidth: 150,
+        slowFrames: 70,
+        staggerFrames: 8,
+      }),
+    }),
     sound: "wires",
   }),
   benny: object("xacto", {
@@ -180,6 +258,18 @@ export const FIGHTER_THROWABLES = Object.freeze({
     push: 190,
     lifeFrames: 96,
     impactLabel: "PRECISION CUT",
+    variants: Object.freeze({
+      // EX: twin cut — a second blade rides a lower line a beat behind the
+      // first, so one guess covers neither height.
+      ex: Object.freeze({
+        name: "TWIN CUT",
+        speed: 760,
+        damage: 8,
+        extraSpawns: Object.freeze([
+          Object.freeze({ spawnY: -70, speed: 640 }),
+        ]),
+      }),
+    }),
     sound: "xacto",
   }),
   donald: object("golfball", {
@@ -215,6 +305,19 @@ export const FIGHTER_THROWABLES = Object.freeze({
         hitstunFrames: 20,
         push: 235,
       }),
+      // EX: one vicious low drive — a single hard skip off the turf, faster,
+      // heavier and a knockdown on the clean hit.
+      ex: Object.freeze({
+        name: "GOLD DRIVE",
+        speed: 640,
+        launchY: -160,
+        gravity: 1700,
+        bounces: 1,
+        damage: 10,
+        hitstunFrames: 21,
+        push: 250,
+        knockdown: true,
+      }),
     }),
     sound: "golfball",
   }),
@@ -242,6 +345,18 @@ export const FIGHTER_THROWABLES = Object.freeze({
     hazardWidth: 104,
     staggerFrames: 7,
     impactLabel: "INFESTED",
+    variants: Object.freeze({
+      // EX: the swarm truly lingers — wider, longer-lived floor denial with a
+      // nastier stagger for anyone who wades through it.
+      ex: Object.freeze({
+        name: "FULL INFESTATION",
+        damage: 7,
+        lifeFrames: 240,
+        hazardFrames: 200,
+        hazardWidth: 150,
+        staggerFrames: 10,
+      }),
+    }),
     sound: "bedbugs",
   }),
   ali: object("vinyl", {
@@ -266,6 +381,17 @@ export const FIGHTER_THROWABLES = Object.freeze({
     knockdown: true,
     spin: 22,
     impactLabel: "BASS DROP",
+    variants: Object.freeze({
+      // EX: dub plates — the steep anti-air lob plus a second, shallower
+      // record on a faster line, closing both the jump and the walk-in.
+      ex: Object.freeze({
+        name: "DUB PLATES",
+        damage: 9,
+        extraSpawns: Object.freeze([
+          Object.freeze({ launchY: -300, gravity: 1400, speed: 480, spawnY: -140 }),
+        ]),
+      }),
+    }),
     sound: "vinyl",
   }),
 });
@@ -283,15 +409,19 @@ export function throwableUses(fighterId) {
 /**
  * Build the attack instance for the throwing motion itself. The object is spawned
  * by the projectile system on the active frame, so this only owns the wind-up,
- * the commitment and the recovery that makes a whiff punishable.
+ * the commitment and the recovery that makes a whiff punishable. The EX tier
+ * (enhanced: true) selects the authored `ex` variant and carries the Grit
+ * price; the pip cost is shared with the base throw in beginAttack.
  */
-export function createThrowObjectMove(fighterId, { strength = "light" } = {}) {
+export function createThrowObjectMove(fighterId, { strength = "light", enhanced = false } = {}) {
   const profile = getThrowable(fighterId);
   if (!profile) return null;
-  const throwableVariant = strength === "heavy" && profile.variants?.high ? "high" : "";
+  if (enhanced && !profile.variants?.ex) return null;
+  const throwableVariant = enhanced ? "ex"
+    : strength === "heavy" && profile.variants?.high ? "high" : "";
   const variant = throwableVariant ? profile.variants[throwableVariant] : null;
   return {
-    id: `${fighterId}-throw-${profile.id}`,
+    id: `${fighterId}-throw-${profile.id}${enhanced ? "-ex" : ""}`,
     baseKind: "special",
     kind: "special",
     cancelProfileId: `throw-object`,
@@ -312,8 +442,10 @@ export function createThrowObjectMove(fighterId, { strength = "light" } = {}) {
     throwableId: profile.id,
     throwableFighterId: fighterId,
     throwableVariant,
+    enhancedThrowable: enhanced,
+    gritCost: enhanced ? GRIT_RULES.enhancedSpecialCost : 0,
     animation: Object.freeze({ bank: "specials", frames: profile.releaseFrames }),
-    command: THROWABLE_COMMAND.display,
+    command: enhanced ? ENHANCED_THROWABLE_COMMAND.display : THROWABLE_COMMAND.display,
   };
 }
 

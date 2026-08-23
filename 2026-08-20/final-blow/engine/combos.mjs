@@ -217,11 +217,20 @@ export class ComboTracker {
     this.startedFrame = -Infinity;
     this.lastHitFrame = -Infinity;
     this.displayUntilFrame = -Infinity;
+    // Release 1.7 wave 11: a set piece (the corner wall-bounce) may hold the
+    // combo open past the ordinary reset gap while the defender is helpless
+    // riding its arc. Granted only by the simulation, snapshot-carried.
+    this.graceUntilFrame = -Infinity;
     this.peakHits = this.peakHits || 0;
   }
 
+  #gapExpired(frame) {
+    return frame - this.lastHitFrame > COMBO_RULES.resetGapFrames
+      && frame > (this.graceUntilFrame ?? -Infinity);
+  }
+
   registerHit(frame, juggleCount = 0) {
-    if (!this.active || frame - this.lastHitFrame > COMBO_RULES.resetGapFrames) {
+    if (!this.active || this.#gapExpired(frame)) {
       const peak = this.peakHits;
       this.reset();
       this.peakHits = peak;
@@ -245,7 +254,7 @@ export class ComboTracker {
   tick(frame, defenderInCombo = false) {
     if (this.hits === 0) return;
     if (this.active && !defenderInCombo && frame > this.lastHitFrame + 1) this.active = false;
-    if (this.active && frame - this.lastHitFrame > COMBO_RULES.resetGapFrames) this.active = false;
+    if (this.active && this.#gapExpired(frame)) this.active = false;
   }
 
   visible(frame) {
