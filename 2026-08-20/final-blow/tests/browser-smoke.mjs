@@ -347,7 +347,7 @@ try {
   }))()`);
   assert.match(title.title, /Final Blow/);
   assert.match(title.build, /1\.9/);
-  assert.equal(title.version.text, 'VERSION 1.9D');
+  assert.equal(title.version.text, 'VERSION 1.9E');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
@@ -376,7 +376,7 @@ try {
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '1.9d-mobile-gate');
+  assert.equal(title.engineVersion, '1.9e-mobile-parity');
   assert.deepEqual(title.engine.presentationRules, {
     hitFlashFilter: 'brightness(1.55) saturate(1.12)',
     attackNamePopups: false,
@@ -3097,6 +3097,7 @@ try {
       hasDemo: Boolean(cache && await cache.match('./engine/demo.mjs')),
       hasFatalities: Boolean(cache && await cache.match('./engine/fatalities.mjs')),
       hasFighterAudioEngine: Boolean(cache && await cache.match('./engine/fighter-audio.mjs')),
+      hasAtlasFacing: Boolean(cache && await cache.match('./engine/atlas-facing.mjs')),
       hasRuntimeAudio: Boolean(cache && await cache.match('./assets/audio/light-swing.mp3')),
       hasJanney: Boolean(cache && await cache.match('./assets/janney-street-vacant-lot.webp')),
       hasSomerset: Boolean(cache && await cache.match('./assets/somerset-septa.webp')),
@@ -3105,7 +3106,10 @@ try {
   })()`);
   assert.equal(offlineCache.controlled, true);
   assert.match(offlineCache.name, /final-blow-shell-1\.9/);
-  assert.equal(offlineCache.entries, 21);
+  // 1.9E added engine/atlas-facing.mjs to the shell: game.js imports it, so
+  // offline boot needs it cached.
+  assert.equal(offlineCache.entries, 22);
+  assert.equal(offlineCache.hasAtlasFacing, true);
   assert.equal(offlineCache.hasIndex, false);
   assert.equal(offlineCache.rootRedirected, false);
   assert.equal(offlineCache.hasGame, true);
@@ -3126,7 +3130,7 @@ try {
   }))()`);
   assert.match(controlledReload.title, /Final Blow/);
   assert.match(controlledReload.build, /1\.9/);
-  assert.equal(controlledReload.version, '1.9d-mobile-gate');
+  assert.equal(controlledReload.version, '1.9e-mobile-parity');
 
   await client.send('Network.emulateNetworkConditions', {
     offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
@@ -3144,7 +3148,7 @@ try {
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
   assert.match(offlineBoot.build, /1\.9/);
-  assert.equal(offlineBoot.version, '1.9d-mobile-gate');
+  assert.equal(offlineBoot.version, '1.9e-mobile-parity');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -3188,7 +3192,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 1.9D');
+  assert.equal(landscape.version.text, 'VERSION 1.9E');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);

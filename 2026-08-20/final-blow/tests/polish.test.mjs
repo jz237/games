@@ -12,8 +12,14 @@ const fighterIds = ["deathblow", "jez", "alan", "post", "benny", "donald", "cyra
 
 assert.equal(normalizeVisualQuality("unknown"), "auto");
 assert.equal(resolvePerformanceProfile("high").id, "high");
-assert.equal(resolvePerformanceProfile("auto", { coarsePointer: true }).id, "balanced");
+// 1.9E mobile parity: pointer type no longer downgrades — capability does. A
+// capable phone (coarse pointer, strong hardware) earns high; weak hardware
+// lands on balanced whatever the pointer; the saver guards outrank both.
+assert.equal(resolvePerformanceProfile("auto", { coarsePointer: true, hardwareConcurrency: 8, deviceMemory: 8 }).id, "high");
+assert.equal(resolvePerformanceProfile("auto", { coarsePointer: true, hardwareConcurrency: 4, deviceMemory: 4 }).id, "balanced");
+assert.equal(resolvePerformanceProfile("auto", { mobile: true, deviceMemory: 2 }).id, "balanced");
 assert.equal(resolvePerformanceProfile("auto", { reducedMotion: true }).id, "battery");
+assert.equal(resolvePerformanceProfile("auto", { saveData: true, hardwareConcurrency: 12 }).id, "battery");
 assert.equal(resolvePerformanceProfile("auto", { hardwareConcurrency: 12, deviceMemory: 16 }).id, "high");
 assert.ok(PERFORMANCE_PROFILES.high.particleBudget > PERFORMANCE_PROFILES.balanced.particleBudget);
 assert.ok(PERFORMANCE_PROFILES.balanced.particleBudget > PERFORMANCE_PROFILES.battery.particleBudget);

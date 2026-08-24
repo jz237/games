@@ -186,6 +186,7 @@ import {
   stepThrowable,
   throwableUses,
 } from "./engine/throwables.mjs";
+import { atlasFrameFacing } from "./engine/atlas-facing.mjs";
 import {
   FIGHTER_AUDIO_BANK_KINDS,
   FIGHTER_AUDIO_CUES,
@@ -2061,6 +2062,10 @@ const presentationDebug = {
   rimLights: 0, hitSmears: 0, dizzyGhosts: 0, breathing: 0,
   contactShadows: 0, gritAuras: 0, lastLegs: 0,
   battleDamage: 0, castShadows: 0,
+  // 1.9E: the effective sprite mirror last used per side — numeric facing ×
+  // authored atlas facing — so QA can prove a mixed-orientation sheet (post)
+  // renders toward the opponent instead of trusting numeric facing alone.
+  lastFighterMirror: [null, null],
   practicalLights: 0, weatherParticles: 0, foregroundOccluders: 0, crowdFlashes: 0,
   counterFlashes: 0, projectileGlows: 0, swipeRibbons: 0, wallSplats: 0,
   focusLines: 0, lightSpills: 0,
@@ -10095,7 +10100,17 @@ function drawFighter(fighter, time) {
     ctx.rotate(fighter.facing * flip * Math.PI * 2);
   }
 
-  ctx.scale(fighter.facing, 1);
+  // The mirror combines the fighter's numeric facing with the direction the
+  // AUTHORED cell actually points (atlas-facing.mjs) — post's sheets mix
+  // left- and right-facing art, so facing alone drew him looking away from
+  // the opponent while his attacks still extended the right way.
+  const renderMirror = fighter.facing * atlasFrameFacing(fighter.def.id, pose.bank, frame);
+  if (!reflectionPassActive) {
+    presentationDebug.lastFighterMirror[fighter.side] = {
+      fighterId: fighter.def.id, bank: pose.bank, frame, facing: fighter.facing, mirror: renderMirror,
+    };
+  }
+  ctx.scale(renderMirror, 1);
   ctx.translate(lunge - startupPower * 8, crouchDrop - attackSwing * (attackKind === "special" ? 13 : 5));
   ctx.rotate(-attackSwing * (attackKind === "heavy" ? 0.07 : 0.025));
   ctx.scale(1 + activePower * 0.045 - startupPower * 0.025, crouchScale + startupPower * 0.035 - activePower * 0.025);
@@ -10995,7 +11010,9 @@ function drawFighterCastShadows() {
     // Feet anchor; height above the floor slides the contact point down-light.
     ctx.translate(fighter.x + away * jump * 0.5, FLOOR + 2 + jump * 0.1);
     ctx.transform(1, 0, shear, 1, 0, 0); // rake the far end down-light
-    ctx.scale(fighter.facing, -stretch);  // flip into the floor, squashed long
+    // Same authored-facing correction the body draw applies, so the cast
+    // shadow of a mixed-orientation sheet cannot point opposite its fighter.
+    ctx.scale(fighter.facing * atlasFrameFacing(fighter.def.id, pose.bank, pose.frame), -stretch);  // flip into the floor, squashed long
     ctx.globalAlpha = (0.3 + deepen * 0.22) * airFade;
     drawSilhouetteFrame(atlas, pose.frame, renderSize, "#04060a");
     ctx.restore();
@@ -11086,7 +11103,7 @@ function drawAfterimages() {
     if (!atlas) continue;
     ctx.save();
     ctx.translate(effect.x, effect.y);
-    ctx.scale(effect.facing, 1);
+    ctx.scale(effect.facing * atlasFrameFacing(effect.fighterId, "base", effect.frame), 1);
     ctx.globalAlpha = clamp(effect.life / effect.max, 0, 1) * 0.34;
     drawAtlasFrame(atlas, effect.frame, effect.size);
     ctx.restore();
@@ -11828,11 +11845,18 @@ function drawFrameBitmap(target) {
 // (width/height 100%) is untouched, so layout, touch mapping and the smoke
 // suite's CSS-pixel measurements never change.
 function applyBackingStoreResolution() {
-  const environment = performanceEnvironment(state.accessibility.reducedMotion);
   const nativeDpr = Number(window.devicePixelRatio) || 1;
+  // Sharp rendering follows the profile, not the pointer type: a phone that
+  // earned the high profile renders sharp exactly like a HiDPI desktop
+  // (1.9E mobile parity — the old coarse-pointer ban left phones upscaling a
+  // 1x backing store across ~3x screens, which is also what let the scanline
+  // overlay shred large lettering). The cap stays at the desktop-proven 2x
+  // (2560x1440, ~3.7 MP): a denser phone still gets the 2x store scaled to
+  // its screen, crisp without allocating a ~7 MP canvas no shipped build has
+  // ever driven. Battery/balanced and the sharp-render toggle still force
+  // 1x, so constrained devices keep the cheap path.
   const sharp = Boolean(state.sharpRender)
     && state.performance.id === "high"
-    && !environment.coarsePointer
     && nativeDpr > 1;
   const dpr = sharp ? Math.min(2, nativeDpr) : 1;
   const width = Math.round(W * dpr);
@@ -12294,7 +12318,13 @@ function draw(time) {
   // practicals, flashbulbs, occluders) count into the same rendered frame.
   // Unconditional: drawStage runs on every screen, so a gated reset would let
   // the stage counters accumulate without bound outside the fight.
-  for (const key of Object.keys(presentationDebug)) presentationDebug[key] = 0;
+  for (const key of Object.keys(presentationDebug)) {
+    // lastFighterMirror is a latch, not a counter: it holds the most recent
+    // per-side sprite mirror for the QA facing probe rather than a per-frame
+    // tally, so the counter reset must leave it alone.
+    if (key === "lastFighterMirror") continue;
+    presentationDebug[key] = 0;
+  }
   if (state.screen === "fight") {
     gritFlareLevel[0] = Math.max(0, gritFlareLevel[0] - 0.05);
     gritFlareLevel[1] = Math.max(0, gritFlareLevel[1] - 0.05);
@@ -14136,7 +14166,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.9d");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.9e");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -14634,7 +14664,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.9d-mobile-gate",
+  version: "1.9e-mobile-parity",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -14778,6 +14808,8 @@ window.__finalBlowEngine = {
         battleDamageMarks: battleDamageMarks[0].length + battleDamageMarks[1].length,
         battleDamageDrawn: presentationDebug.battleDamage,
         castShadows: presentationDebug.castShadows,
+        // 1.9E facing probe: numeric facing × authored atlas facing per side.
+        fighterMirrors: presentationDebug.lastFighterMirror.map((entry) => (entry ? { ...entry } : null)),
         stageScars: stageScars.length,
         rackFocus: Number(rackFocusLevel.toFixed(3)),
         practicalLights: presentationDebug.practicalLights,

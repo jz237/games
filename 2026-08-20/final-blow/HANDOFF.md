@@ -1,4 +1,4 @@
-# Final Blow v1.9D — Handoff
+# Final Blow v1.9E — Handoff
 
 Paste this whole file to the next agent as context before asking it to touch
 Final Blow. It describes what exists, where it lives, the traps, and how to
@@ -37,6 +37,30 @@ outside it, and the 30 accepted kick candidates now drive light-kick and
 roundhouse swings/impacts. Empty fighter pools use accepted shared sounds or
 procedural audio. The generated policy and regression guard prevent rejected
 files from returning or being requested at runtime.
+
+**1.9E "Mobile Parity"** answers Jez's three phone-Chrome reports.
+(1) POST FACED BACKWARD: his sheets mix authored orientations — idle/walk/
+block/down painted facing left, punch and spray actives extending right —
+while the renderer mirrored every cell as if right-authored.
+`engine/atlas-facing.mjs` now records authored facing per fighter/bank/frame
+and every mirrored draw (body, cast shadow, dash afterimage) multiplies by it.
+`tests/atlas-facing.test.mjs` locks the mapping; `tests/mobile-parity.mjs`
+locks the SHIPPED ART to the mapping with perceptual hashes and probes the
+live renderer's effective mirror, because numeric-facing tests cannot see
+this bug. Re-authoring a sheet: GENERATE_BASELINES=1 regenerates the hash
+table, then re-verify facings by eye.
+(2) LETTERING CUTS: the `.game-frame::before` scanline overlay sat at z 50,
+above the announcer (z 9) and title screens (z 10); on mobile high-DPI
+resampling its stripes carved through the large scaled glyphs. It now sits at
+z 2 — above the canvas (gameplay keeps the arcade texture) and below every
+DOM text layer.
+(3) MOBILE AUTO-DOWNGRADE: coarse pointers were forced to the balanced
+profile and banned from sharp DPR rendering. Profiles are now capability-
+based (cores/memory; reduced-motion and data-saver still force battery) and
+sharp rendering follows the profile with the desktop-proven 2x cap, so a
+capable phone renders a crisp 2x backing store like a HiDPI desktop while
+weak devices keep the cheap path. Simulation is untouched — profiles only drive render budgets, and the
+effects they gate are checksum-exempt.
 
 **1.9D "Mobile Gate"** makes the portrait gate environment-aware. The old
 gate showed one ENTER FULLSCREEN button whose failure paths were all silent:
@@ -392,9 +416,10 @@ Frame roles are documented in `tools/README.md`.
 ```sh
 cd /home/jez237/.openclaw/agents/gamemaster/workspace/final-blow-goal/2026-08-20/final-blow
 
-node --test tests/*.test.mjs        # 102 unit/module/guard tests
+node --test tests/*.test.mjs        # 106 unit/module/guard tests
 node tests/browser-smoke.mjs        # full browser suite, needs Chrome, ~2min
 node tests/orientation-gate.mjs     # portrait-gate capability scenarios, needs Chrome
+node tests/mobile-parity.mjs        # 1.9E atlas-facing / scanline / profile parity, needs Chrome
 
 # online rollback (two browsers against a local signaling worker)
 cd signaling && npx wrangler dev --port 8787 --local &

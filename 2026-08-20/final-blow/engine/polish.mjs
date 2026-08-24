@@ -32,7 +32,14 @@ export function resolvePerformanceProfile(quality = "auto", environment = {}) {
   if (environment.reducedMotion || environment.saveData) return PERFORMANCE_PROFILES.battery;
   const hardwareConcurrency = Number(environment.hardwareConcurrency) || 8;
   const deviceMemory = Number(environment.deviceMemory) || 8;
-  if (environment.coarsePointer || environment.mobile || hardwareConcurrency <= 4 || deviceMemory <= 4) {
+  // Capability decides, not input modality: a flagship phone gets the same
+  // presentation as a desktop (1.9E mobile parity). Weak hardware — few
+  // cores or little memory, whatever the pointer type — still lands on
+  // balanced, and the reduced-motion/data-saver guards above outrank
+  // everything. Browsers that hide these fields report undefined and fall
+  // to the capable defaults; the explicit quality picker remains the
+  // override for devices that misreport.
+  if (hardwareConcurrency <= 4 || deviceMemory <= 4) {
     return PERFORMANCE_PROFILES.balanced;
   }
   return PERFORMANCE_PROFILES.high;

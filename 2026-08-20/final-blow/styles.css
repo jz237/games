@@ -155,6 +155,14 @@ button { color: inherit; }
 }
 
 .game-frame::before {
+  /* The scanline pass sits just above the canvas and BELOW every DOM layer.
+     At z 50 it overlaid the announcer and title lockups too, and on mobile
+     high-DPI resampling its 3px stripes carved visible cuts through the big
+     scaled lettering (1.9E report). Gameplay and the painted backdrops live
+     on the canvas, so the arcade texture is unchanged where it matters; DOM
+     lettering now renders clean above it. The ::after vignette stays at 50 —
+     a smooth inset shade cannot damage glyphs. */
+  z-index: 2;
   background: repeating-linear-gradient(
     180deg,
     rgba(255,255,255,.02) 0,
