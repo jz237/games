@@ -1,4 +1,4 @@
-# Final Blow v1.9C — Handoff
+# Final Blow v1.9D — Handoff
 
 Paste this whole file to the next agent as context before asking it to touch
 Final Blow. It describes what exists, where it lives, the traps, and how to
@@ -37,6 +37,23 @@ outside it, and the 30 accepted kick candidates now drive light-kick and
 roundhouse swings/impacts. Empty fighter pools use accepted shared sounds or
 procedural audio. The generated policy and regression guard prevent rejected
 files from returning or being requested at runtime.
+
+**1.9D "Mobile Gate"** makes the portrait gate environment-aware. The old
+gate showed one ENTER FULLSCREEN button whose failure paths were all silent:
+iPhones have no element fullscreen at all, and in-app browsers (the reported
+case is Discord's WKWebView, which also pins itself to portrait so rotating
+the phone does nothing) left the player trapped behind a dead button.
+Capability checks — not user-agent sniffing — now pick the gate's mode at
+render time: a capable browser keeps the immersive button; a browser with no
+fullscreen support gets rotate guidance; a detected in-app container
+additionally gets "Open in Safari/your browser" instructions plus a
+COPY GAME LINK control (a page cannot launch Safari itself, so the copy never
+claims to); and a fullscreen request that rejects at runtime retires the
+button on the spot and surfaces the DOMException name in the hint. The UA
+string only refines the wording for known containers. Landscape still clears
+the gate in every mode, and `tests/orientation-gate.mjs` holds all five
+scenarios — run it with GAME_ROOT pointing at a pre-1.9D checkout to watch it
+catch the old silent failure.
 
 **1.9C "Readability"** is a visual-clarity pass built from Jez's own playtest
 notes ("not anchored to the ground", "too much happens at once", "they often
@@ -377,6 +394,7 @@ cd /home/jez237/.openclaw/agents/gamemaster/workspace/final-blow-goal/2026-08-20
 
 node --test tests/*.test.mjs        # 102 unit/module/guard tests
 node tests/browser-smoke.mjs        # full browser suite, needs Chrome, ~2min
+node tests/orientation-gate.mjs     # portrait-gate capability scenarios, needs Chrome
 
 # online rollback (two browsers against a local signaling worker)
 cd signaling && npx wrangler dev --port 8787 --local &

@@ -14011,6 +14011,7 @@ function syncOrientationGate() {
   const blocked = phone && portrait;
   document.body.classList.toggle("orientation-blocked", blocked);
   document.body.classList.toggle("mobile-landscape", phone && !portrait);
+  if (blocked) renderRotateGate();
   setOnlineLocalSuspended(blocked || document.hidden);
 }
 
@@ -14019,11 +14020,103 @@ function lockLandscape() {
   screen.orientation.lock("landscape").catch(() => {});
 }
 
+// ---------------------------------------------------------------------------
+// Portrait gate capability handling. The gate must never show a button that
+// silently does nothing: iOS offers no element fullscreen at all, and in-app
+// browsers (Discord's WKWebView is the reported case) additionally pin the
+// webview to portrait so physically rotating the phone changes nothing either.
+// Capability checks decide the gate's mode; the user agent only refines the
+// wording for known in-app containers. A page cannot programmatically launch
+// Safari, so the fallback gives instructions plus a copy-the-link control
+// rather than pretending to.
+// ---------------------------------------------------------------------------
+
+// Render-only latch: the DOMException (or Error) name of a fullscreen request
+// that failed at runtime, so the gate can say why the button disappeared.
+let immersiveModeFailure = null;
+// The last gate mode written to the DOM, so aria-live only announces changes.
+let rotateGateRenderedMode = "";
+
+function fullscreenRequestSupported() {
+  const app = $("#app");
+  if (typeof app.requestFullscreen === "function") return document.fullscreenEnabled !== false;
+  return typeof app.webkitRequestFullscreen === "function";
+}
+
+// Best-effort naming of a known in-app browser. Purely cosmetic on top of the
+// capability checks: it decides the copy, never whether the button works.
+function inAppBrowserName() {
+  const ua = navigator.userAgent || "";
+  if (/discord/i.test(ua)) return "Discord";
+  if (/\bFBAN|\bFBAV|Instagram|Snapchat|TikTok|musical_ly|\bLine\//i.test(ua)) return "this app";
+  // A WKWebView identifies as iPhone/iPad without Safari's own token. Real
+  // iOS Safari (and Chrome/Firefox on iOS) all end with "Safari/…".
+  const iosDevice = /iPhone|iPad|iPod/.test(ua)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (iosDevice && !/Safari\//.test(ua)) return "this app";
+  return null;
+}
+
+function isIosDevice() {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent || "")
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function rotateGateMode() {
+  if (document.fullscreenElement || document.webkitFullscreenElement) return "rotate-fullscreen";
+  if (immersiveModeFailure) return inAppBrowserName() ? "in-app" : "request-failed";
+  if (fullscreenRequestSupported()) return "immersive";
+  return inAppBrowserName() ? "in-app" : "rotate-only";
+}
+
+function renderRotateGate() {
+  const mode = rotateGateMode();
+  if (mode === rotateGateRenderedMode) return;
+  rotateGateRenderedMode = mode;
+  const hint = $("#rotateGateHint");
+  const fullscreenButton = $("#fullscreenButton");
+  const copyButton = $("#copyGameLinkButton");
+  fullscreenButton.hidden = mode !== "immersive";
+  copyButton.hidden = mode !== "in-app";
+  const browser = isIosDevice() ? "Safari" : "your regular browser";
+  if (mode === "immersive") {
+    hint.textContent = "Final Blow requires landscape on mobile.";
+  } else if (mode === "rotate-fullscreen") {
+    hint.textContent = "You're in fullscreen — now turn your phone sideways to play.";
+  } else if (mode === "in-app") {
+    const container = inAppBrowserName() || "this app";
+    const why = immersiveModeFailure ? `Fullscreen was blocked (${immersiveModeFailure})` : "Fullscreen isn't available";
+    hint.textContent = `${why} inside ${container}'s browser, and it usually stays locked to portrait. `
+      + `Use the menu (⋯ or share) and choose “Open in ${browser}”, or copy the game link below and paste it into ${browser} — then turn your phone sideways.`;
+  } else if (mode === "request-failed") {
+    hint.textContent = `Fullscreen was blocked here (${immersiveModeFailure}) — turn your phone sideways to play.`;
+  } else {
+    hint.textContent = "Fullscreen isn't available in this browser — turn your phone sideways to play.";
+  }
+}
+
+function failImmersiveMode(error) {
+  immersiveModeFailure = error?.name || error?.message || "blocked";
+  renderRotateGate();
+}
+
 function enterImmersiveMode() {
   if (!isPhoneViewport()) return;
   const app = $("#app");
-  const request = app.requestFullscreen?.({ navigationUI: "hide" }) || app.webkitRequestFullscreen?.();
-  if (request?.then) request.then(lockLandscape).catch(() => {});
+  if (!fullscreenRequestSupported()) {
+    failImmersiveMode(new Error("not supported"));
+    return;
+  }
+  let request;
+  try {
+    request = app.requestFullscreen
+      ? app.requestFullscreen({ navigationUI: "hide" })
+      : app.webkitRequestFullscreen();
+  } catch (error) {
+    failImmersiveMode(error);
+    return;
+  }
+  if (request?.then) request.then(lockLandscape).catch(failImmersiveMode);
   else lockLandscape();
 }
 
@@ -14043,7 +14136,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.9c");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.9d");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -14489,6 +14582,21 @@ $("#fullscreenButton").addEventListener("click", () => {
   unlockAudio();
   enterImmersiveMode();
 });
+$("#copyGameLinkButton").addEventListener("click", async () => {
+  const url = new URL(location.href);
+  url.searchParams.delete("debug");
+  const link = url.toString();
+  const button = $("#copyGameLinkButton");
+  try {
+    await navigator.clipboard.writeText(link);
+    button.textContent = "LINK COPIED";
+  } catch {
+    // No clipboard access in this container: surface the address itself so it
+    // can be long-pressed and copied by hand.
+    $("#rotateGateHint").textContent = `Copy this address into your browser: ${link}`;
+    button.textContent = "COPY BY HAND";
+  }
+});
 window.addEventListener("resize", () => {
   syncOrientationGate();
   document.documentElement.style.setProperty("--touch-button-size", `${touchButtonSize()}px`);
@@ -14499,6 +14607,7 @@ window.addEventListener("orientationchange", () => {
   document.documentElement.style.setProperty("--touch-button-size", `${touchButtonSize()}px`);
 });
 document.addEventListener("fullscreenchange", syncOrientationGate);
+document.addEventListener("webkitfullscreenchange", syncOrientationGate);
 
 $$("[data-touch]").forEach((button) => {
   // A pad button may map to two tokens at once, e.g. the up-forward corner.
@@ -14525,7 +14634,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.9c-readability",
+  version: "1.9d-mobile-gate",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
