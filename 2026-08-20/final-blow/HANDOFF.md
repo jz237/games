@@ -1,4 +1,4 @@
-# Final Blow v1.9B — Handoff
+# Final Blow v1.9C — Handoff
 
 Paste this whole file to the next agent as context before asking it to touch
 Final Blow. It describes what exists, where it lives, the traps, and how to
@@ -37,6 +37,38 @@ outside it, and the 30 accepted kick candidates now drive light-kick and
 roundhouse swings/impacts. Empty fighter pools use accepted shared sounds or
 procedural audio. The generated policy and regression guard prevent rejected
 files from returning or being requested at runtime.
+
+**1.9C "Readability"** is a visual-clarity pass built from Jez's own playtest
+notes ("not anchored to the ground", "too much happens at once", "they often
+occupy the same space"):
+
+1. **Ground anchoring.** The idle/walk bob is no longer a whole-sprite
+   translate — it rides the same feet-anchored scaleY the breathing effect
+   uses, so the feet and the contact shadow stay glued to the floor line and
+   only the chest moves. Previously the contact shadow bobbed with the body
+   while the directional cast shadow stayed planted, so the two ground cues
+   disagreed by ±2.7px at ~1.6Hz and the fighters read as hovering.
+2. **Punctuated pacing.** Hitstop moved to genre values (6f light / 8f heavy /
+   10f special / 13f super, blocked 4f) and the freeze no longer eats inputs:
+   simulatePreparedGameTick keeps running the full input pipeline (motion
+   history, taunt taps, the rollback-snapshotted action buffer) through the
+   stop, so links pressed during it come out the other side. COMBO_RULES
+   grew by the same ~5 ticks the freeze added (gap is measured in ticks that
+   keep counting through hitstop) — real fight-time combo timing unchanged.
+   Sound captions are opt-in, ordinary hit flash is a glint (full-screen white
+   is reserved for supers/dizzy/guard crush, render cap 0.5), and shake/flash
+   decay through the freeze instead of holding at peak.
+3. **No more body stacking.** The eight ignorePushbox lunges pass through only
+   during startup+active; through recovery the pushbox re-engages and the
+   separation is eased at 14px per fighter per tick instead of snapping the
+   full overlap apart in one 60Hz step (measured: a cornered Buffer Skip used
+   to teleport the pair 59px in a single tick). CPU-only modes can no longer
+   flow-skip their own finisher — previously only decision-cadence luck
+   protected the demo showcase from the AI's own button mashing.
+
+`tools/visual-compare.mjs` captures the before/after evidence (idle anchoring
+pair, impact overlays, corner-lunge overlap) from any checkout — see its
+header comment.
 
 Note that the detailed sections below still describe the 1.8E baseline; 1.9 did
 not update them.

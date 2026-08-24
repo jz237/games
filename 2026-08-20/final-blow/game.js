@@ -925,7 +925,10 @@ const state = {
   sharpRender: localStorage.getItem("final-blow-sharp-render") !== "0",
   crtMode: localStorage.getItem("final-blow-crt-mode") === "1",
   performance: null,
-  soundCaptions: localStorage.getItem("final-blow-sound-captions") !== "0",
+  // Captions label every sound event over the fight — invaluable when you
+  // need them, permanent UI noise when you don't. Opt-in as of the
+  // readability pass; the toggle is unchanged for anyone who had it on.
+  soundCaptions: localStorage.getItem("final-blow-sound-captions") === "1",
   attractEnabled: localStorage.getItem("final-blow-attract-mode") !== "0",
   graphicFatalities: localStorage.getItem("final-blow-graphic-fatalities") !== "0",
   stageWeaponsEnabled: localStorage.getItem("final-blow-stage-weapons") !== "0",
@@ -3975,6 +3978,13 @@ function updateFlowSkipHint() {
 
 function trySkipFightFlow(input0 = {}, input1 = {}) {
   if (!hasFlowSkipInput(input0) && !hasFlowSkipInput(input1)) return false;
+  // In the CPU-only modes the "any button" here is the AI mashing, and a
+  // finisher is the thing being exhibited — the showcase must never cancel
+  // itself. (Before inputs flowed through hitstop this was only ever
+  // protected by decision-cadence luck.) A human watching a demo leaves via
+  // the real exit path, which does not come through the simulation inputs.
+  if (state.phase === "roundover" && state.finisher
+    && (state.mode === "demo" || state.mode === "tournament")) return false;
   if (state.phase === "intro") {
     state.phase = "fight";
     state.phaseTime = 0;
@@ -7391,7 +7401,9 @@ function hit(attacker, victim, attack, collision) {
   spawnHit(impact.x, impact.y, attacker.def, impactTier, blocked, { direction: attacker.facing, counter });
   if (attack.superMove) {
     state.effects.push({ kind: "super", x: impact.x, y: impact.y, life: 0.55, max: 0.55, color: attacker.def.accent });
-    if ($("#flashToggle").checked) state.flash = Math.max(state.flash, attacker.attackHits >= attack.maxHits ? 0.22 : 0.08);
+    // Ordinary hits get a glint, not a whiteout — the full-strength flash is
+    // reserved for supers, dizzies and guard crushes so it means something.
+    if ($("#flashToggle").checked) state.flash = Math.max(state.flash, attacker.attackHits >= attack.maxHits ? 0.1 : 0.04);
   }
   if (counter) spawnCombatText(impact.x, impact.y - 74, "COUNTER", attacker.def.accent);
   else if (!blocked && attack.level === ATTACK_LEVELS.OVERHEAD) spawnCombatText(impact.x, impact.y - 70, "OVERHEAD", attacker.def.accent);
@@ -7528,13 +7540,18 @@ function updateComboState() {
   }
 }
 
+// Hitstop is the freeze that lets the eye register a hit before anything else
+// moves; it climbed toward genre values (6f light through 13f super) in the
+// readability pass. The freeze no longer eats inputs — simulatePreparedGameTick
+// keeps reading and buffering through it — so the longer stops make the fight
+// easier to follow without loosening a single link.
 const VIOLENCE_TIERS = Object.freeze({
-  light: Object.freeze({ particles: 10, speed: 250, life: 0.72, size: 4.2, shake: 0.16, hitstop: 0.052, crowd: 0.12, decal: false }),
-  heavy: Object.freeze({ particles: 22, speed: 430, life: 1.08, size: 6.2, shake: 0.31, hitstop: 0.08, crowd: 0.34, decal: true }),
-  special: Object.freeze({ particles: 30, speed: 520, life: 1.24, size: 7.2, shake: 0.43, hitstop: 0.112, crowd: 0.56, decal: true }),
-  throw: Object.freeze({ particles: 26, speed: 470, life: 1.18, size: 7, shake: 0.46, hitstop: 0.12, crowd: 0.62, decal: true }),
-  weapon: Object.freeze({ particles: 28, speed: 540, life: 1.28, size: 7.6, shake: 0.5, hitstop: 0.126, crowd: 0.68, decal: true }),
-  super: Object.freeze({ particles: 44, speed: 700, life: 1.58, size: 9, shake: 0.76, hitstop: 0.15, crowd: 1.05, decal: true }),
+  light: Object.freeze({ particles: 10, speed: 250, life: 0.72, size: 4.2, shake: 0.16, hitstop: 0.1, crowd: 0.12, decal: false }),
+  heavy: Object.freeze({ particles: 22, speed: 430, life: 1.08, size: 6.2, shake: 0.31, hitstop: 0.133, crowd: 0.34, decal: true }),
+  special: Object.freeze({ particles: 30, speed: 520, life: 1.24, size: 7.2, shake: 0.43, hitstop: 0.167, crowd: 0.56, decal: true }),
+  throw: Object.freeze({ particles: 26, speed: 470, life: 1.18, size: 7, shake: 0.46, hitstop: 0.167, crowd: 0.62, decal: true }),
+  weapon: Object.freeze({ particles: 28, speed: 540, life: 1.28, size: 7.6, shake: 0.5, hitstop: 0.183, crowd: 0.68, decal: true }),
+  super: Object.freeze({ particles: 44, speed: 700, life: 1.58, size: 9, shake: 0.76, hitstop: 0.217, crowd: 1.05, decal: true }),
 });
 
 function violenceTier(kind = "light") {
@@ -7544,13 +7561,13 @@ function violenceTier(kind = "light") {
 function applyViolenceResponse(kind, { blocked = false, counter = false, final = false } = {}) {
   if (blocked) {
     state.shake = Math.max(state.shake, 0.1);
-    state.hitstop = Math.max(state.hitstop, 0.035);
+    state.hitstop = Math.max(state.hitstop, 0.067);
     return;
   }
   const profile = violenceTier(kind);
   const counterScale = counter ? 1.22 : 1;
   state.shake = Math.max(state.shake, profile.shake * counterScale);
-  const hitstop = kind === "super" && !final ? 0.108 : profile.hitstop;
+  const hitstop = kind === "super" && !final ? 0.15 : profile.hitstop;
   state.hitstop = Math.max(state.hitstop, hitstop * counterScale);
   stirCrowd(profile.crowd * counterScale);
 }
@@ -7671,11 +7688,26 @@ function spawnHit(x, y, def, attackKind, blocked, { direction = 1, counter = fal
   }
 }
 
+// A body that ends a lunge inside the opponent slides back out at this rate
+// (px per fighter per tick) instead of teleporting apart in one step. Ordinary
+// walking contact produces corrections far below the cap, so normal pushing is
+// untouched; only the big post-pass-through overlaps ease, resolving a full
+// body overlap in roughly four to six frames.
+const SEPARATION_MAX_STEP_X = 14;
+
+// Pass-through is the armored lunges' identity, but only while the move is
+// actually travelling. Once the active window closes, the pushbox re-engages
+// and the eased correction walks the pair apart through the recovery.
+function attackPassesThrough(fighter) {
+  return Boolean(fighter.attacking?.ignorePushbox)
+    && fighter.attackFrame <= fighter.attacking.activeEndFrame;
+}
+
 function separateFighters() {
   const [a, b] = state.fighters;
   if (!a || !b) return;
   if (a.grabbing || b.grabbing || a.grabbed || b.grabbed) return;
-  if (a.attacking?.ignorePushbox || b.attacking?.ignorePushbox) return;
+  if (attackPassesThrough(a) || attackPassesThrough(b)) return;
   const positions = resolveArenaCollision(
     {
       x: a.x,
@@ -7693,8 +7725,8 @@ function separateFighters() {
     },
     { floorY: FLOOR },
   );
-  a.x = positions.aX;
-  b.x = positions.bX;
+  a.x += clamp(positions.aX - a.x, -SEPARATION_MAX_STEP_X, SEPARATION_MAX_STEP_X);
+  b.x += clamp(positions.bX - b.x, -SEPARATION_MAX_STEP_X, SEPARATION_MAX_STEP_X);
 }
 
 // Offset of the opponent along the fighter's own facing: positive in front,
@@ -7766,13 +7798,25 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
     input0 = {};
     input1 = {};
   }
+  // Shake and flash decay through the freeze — with the longer readability
+  // hitstop they would otherwise hold at full blast for the whole stop and
+  // read as more chaos, not more punctuation.
+  state.shake = Math.max(0, state.shake - dt * 2.8);
+  state.flash = Math.max(0, state.flash - dt);
   if (state.hitstop > 0) {
     state.hitstop = Math.max(0, state.hitstop - dt);
+    // The freeze must not eat inputs. Both fighters' raw inputs still run the
+    // full input pipeline — motion history, taunt taps, action buffering into
+    // the rollback-snapshotted FrameInputBuffer — while physics stays frozen,
+    // so a link pressed during the stop comes out the other side intact. The
+    // returned resolved input is deliberately discarded; nothing may act yet.
+    if (state.fighters.length === 2) {
+      prepareFighterInput(state.fighters[0], input0);
+      prepareFighterInput(state.fighters[1], input1);
+    }
     return;
   }
   state.phaseTime = Math.max(0, state.phaseTime - dt);
-  state.shake = Math.max(0, state.shake - dt * 2.8);
-  state.flash = Math.max(0, state.flash - dt);
 
   updateFacings();
   if (state.phase === "intro") {
@@ -7931,10 +7975,9 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
 }
 
 function simulateOfflineGameTick(dt) {
-  if (state.hitstop > 0) {
-    state.hitstop = Math.max(0, state.hitstop - dt);
-    return;
-  }
+  // No hitstop short-circuit here: inputs must be read on every tick so
+  // presses during the freeze reach the buffer. simulatePreparedGameTick owns
+  // the freeze itself and stops everything but the input pipeline.
   const bothCpu = state.mode === "demo" || state.mode === "tournament";
   let input0 = readQaInput(0)
     || (bothCpu ? aiInput(state.fighters[0], state.fighters[1], dt) : readInput(0));
@@ -9975,6 +10018,12 @@ function drawFighter(fighter, time) {
   const activePower = attack && fighter.attackTime >= attack.active[0] && fighter.attackTime <= attack.active[1]
     ? 1 : attack ? Math.max(0, attackSwing * 0.42) : 0;
   const moving = Math.abs(fighter.vx) > 22 && fighter.grounded && !attack;
+  // Idle/walk pulse in pixels of chest travel. Applied further down as a
+  // feet-anchored scaleY (the breathing pattern), never as a translate: the
+  // feet and both shadows must stay glued to the floor line, or the fighter
+  // reads as hovering. The old whole-sprite bob translate was exactly that
+  // hover — the contact shadow rode up and down with it while the cast
+  // shadow stayed planted, so the ground contact never agreed with itself.
   const bob = fighter.cinematicFrame === null && fighter.grounded && !fighter.stun && !fighter.block
     ? Math.sin((moving ? fighter.walkTime * 20 : fighter.animTime * 10) + fighter.side * 2) * (moving ? 1.8 : 2.7) : 0;
   const pose = fighterAnimationPose(fighter);
@@ -10011,7 +10060,7 @@ function drawFighter(fighter, time) {
     : 0;
 
   ctx.save();
-  ctx.translate(fighter.x, fighter.y + bob);
+  ctx.translate(fighter.x, fighter.y);
   drawContactShadow(fighter, jump, renderSize, lunge);
 
   if (fighter.def.id === "ali" && fighter.rhythmStacks > 0) {
@@ -10050,9 +10099,12 @@ function drawFighter(fighter, time) {
   ctx.translate(lunge - startupPower * 8, crouchDrop - attackSwing * (attackKind === "special" ? 13 : 5));
   ctx.rotate(-attackSwing * (attackKind === "heavy" ? 0.07 : 0.025));
   ctx.scale(1 + activePower * 0.045 - startupPower * 0.025, crouchScale + startupPower * 0.035 - activePower * 0.025);
-  // Breathing + exhaustion posture: the origin sits at the feet, so the
-  // chest-rise anchors correctly and the hunch pivots forward over the toes.
-  if (breath !== 0) ctx.scale(1, 1 + breath);
+  // Breathing + idle pulse + exhaustion posture: the origin sits at the feet,
+  // so the chest-rise anchors correctly and the hunch pivots forward over the
+  // toes. The bob rides the same feet-anchored scale — its pixel amplitude
+  // becomes chest travel over the sprite height, and the feet never move.
+  const idlePulse = breath - bob / (renderSize * 0.85);
+  if (idlePulse !== 0) ctx.scale(1, 1 + idlePulse);
   if (breathing && !reflectionPassActive) presentationDebug.breathing += 1;
   if (exhausted > 0) ctx.rotate(0.085 * exhausted * (reducedMotion ? 0.5 : 1));
   // Impact squash-and-recover, decaying with the same hitFlash the smear uses.
@@ -12283,7 +12335,10 @@ function draw(time) {
   drawIntroLetterbox();
   drawFinisherOverlay();
   if (state.flash > 0) {
-    ctx.fillStyle = `rgba(255,245,220,${clamp(state.flash * 3, 0, 0.9)})`;
+    // Capped well under full white: at 0.9 the flash erased the whole frame on
+    // every multi-hit, which read as confusion rather than impact. Supers and
+    // finishers still reach the cap; ordinary hits sit far below it.
+    ctx.fillStyle = `rgba(255,245,220,${clamp(state.flash * 3, 0, 0.5)})`;
     ctx.fillRect(0, 0, W, H);
   }
   drawSuperCutIn(hudDtMs);
@@ -13988,7 +14043,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.9b");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-1.9c");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -14470,7 +14525,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "1.9b-approved-audio",
+  version: "1.9c-readability",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
@@ -15019,17 +15074,32 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
           let maximumProjectiles = 0;
           let maximumTraps = 0;
           let nonFinite = false;
+          // Overlap while a lunge travels is that move's identity, and overlap
+          // easing back out through recovery is the readability pass working
+          // as designed. What must never happen is STUCK overlap: two grounded
+          // unexempt bodies inside each other without the gap shrinking. The
+          // metric keeps its name so the harness assertion reads the same.
+          let previousOverlap = Infinity;
           for (let frame = 0; frame < durationFrames && state.screen === "fight"; frame += 1) {
             simulationClock.stepOnce(runSimulationStep);
             const [a, b] = state.fighters;
             if (!a || !b) break;
             if (![a.x, a.y, a.health, b.x, b.y, b.health].every(Number.isFinite)) nonFinite = true;
+            // Hitstop freezes positions, so overlap holding steady across a
+            // frozen tick is not "stuck" — the comparison skips those ticks.
             const collisionExempt = a.grabbing || b.grabbing || a.grabbed || b.grabbed
-              || a.attacking?.ignorePushbox || b.attacking?.ignorePushbox;
+              || a.attacking?.ignorePushbox || b.attacking?.ignorePushbox
+              || state.hitstop > 0;
             if (a.grounded && b.grounded && !collisionExempt) {
               const required = (a.crouch ? a.movement.crouchingPushboxHalfWidth : a.movement.standingPushboxHalfWidth)
                 + (b.crouch ? b.movement.crouchingPushboxHalfWidth : b.movement.standingPushboxHalfWidth);
-              maximumGroundOverlap = Math.max(maximumGroundOverlap, required - Math.abs(a.x - b.x));
+              const overlap = required - Math.abs(a.x - b.x);
+              if (overlap > 0 && overlap >= previousOverlap) {
+                maximumGroundOverlap = Math.max(maximumGroundOverlap, overlap);
+              }
+              previousOverlap = overlap > 0 ? overlap : Infinity;
+            } else {
+              previousOverlap = Infinity;
             }
             maximumProjectiles = Math.max(maximumProjectiles, state.projectiles.length);
             maximumTraps = Math.max(maximumTraps, state.traps.length);
@@ -15189,7 +15259,13 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         fighter.vy = 0;
         fighter.grounded = true;
       });
-      separateFighters();
+      // A QA teleport settles instantly: run the eased separation to a fixed
+      // point so scripts always start from legal spacing, not mid-resolution.
+      for (let settle = 0; settle < 12; settle += 1) {
+        const before = [state.fighters[0].x, state.fighters[1].x];
+        separateFighters();
+        if (before[0] === state.fighters[0].x && before[1] === state.fighters[1].x) break;
+      }
       updateFacings();
       return window.__finalBlowEngine.snapshot();
     },

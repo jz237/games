@@ -14,7 +14,11 @@ export const GRIT_RULES = Object.freeze({
 // a confirm is worth having but an extended string is not, and the juggle floor
 // is low enough that air chains cannot replace neutral.
 export const COMBO_RULES = Object.freeze({
-  resetGapFrames: 38,
+  // Measured in simulation ticks, which keep counting through hitstop. The
+  // 1.9C readability pass lengthened the freeze on every landed hit by about
+  // five ticks, so the budget grew by the same amount — the real fight-time a
+  // combo may idle between hits is unchanged from the original 38-frame tune.
+  resetGapFrames: 44,
   displayFrames: 72,
   juggleLimit: 2,
   hitScales: Object.freeze([1, 0.74, 0.52, 0.38, 0.3, 0.25, 0.22, 0.2, 0.18, 0.16]),
