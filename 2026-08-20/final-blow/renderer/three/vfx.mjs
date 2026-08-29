@@ -12,7 +12,7 @@
 // replace/extend per-tier effects without touching this file's plumbing.
 import * as THREE from "three";
 import { PX, worldX, worldY, mulberry32 } from "./shared.mjs";
-import { softDotTexture, ringTexture, impactBurstTexture } from "./textures.mjs";
+import { softDotTexture, ringTexture, impactBurstTexture, halftoneRingTexture, smearArcTexture } from "./textures.mjs";
 
 const MAX_SPARKS = 240;
 const MAX_EMBERS = 64;
@@ -125,6 +125,13 @@ export class ImpactVfxLayer {
     this.kickMax = 0.16;
     this.kickMag = 0;
 
+    // One-shot radial-blur/chromatic pulse on the impact frame (read by
+    // main.mjs, fed to the post grade). ~2 render frames, heavier tiers hit
+    // harder; decays fast so the frame never smears through hitstop.
+    this.pulseTtl = 0;
+    this.pulseMax = 0.11;
+    this.pulseMag = 0;
+
     // Layered impact pop: hot white core + soft coloured halo per slot.
     this.cores = [];
     for (let i = 0; i < 2; i += 1) {
@@ -163,7 +170,7 @@ export class ImpactVfxLayer {
       const mesh = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 1),
         new THREE.MeshBasicMaterial({
-          map: ringTexture(160, 0x51ab + i * 977),
+          map: ringTexture(320, 0x51ab + i * 977), // 2x: no stair-stepped arcs
           color: 0xffffff,
           transparent: true,
           opacity: 0,
@@ -185,7 +192,7 @@ export class ImpactVfxLayer {
     // of one star scaling up.
     this.bursts = [];
     for (let i = 0; i < 2; i += 1) {
-      const maps = [0, 1, 2].map((f) => impactBurstTexture(256, 0xb1a57 + i * 613 + f * 7919));
+      const maps = [0, 1, 2].map((f) => impactBurstTexture(512, 0xb1a57 + i * 613 + f * 7919));
       const mesh = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 1),
         new THREE.MeshBasicMaterial({
@@ -203,6 +210,56 @@ export class ImpactVfxLayer {
       this.group.add(mesh);
       this.bursts.push({ mesh, maps, ttl: 0, max: 0.16, size: 1 });
     }
+
+    // Expanding halftone shock rings (SF6 print language): dot-screen donuts
+    // that grow past the burst and die — replaces the "one flat star" read.
+    this.halftones = [];
+    for (let i = 0; i < 2; i += 1) {
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          // 512 (2x): the 256 dot-screen aliased into crunchy stair-steps at
+          // ring size on the impact frame (critic fix 5).
+          map: halftoneRingTexture(512, 0x7a11 + i * 733),
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          fog: false,
+        }),
+      );
+      mesh.visible = false;
+      mesh.renderOrder = 7;
+      this.group.add(mesh);
+      this.halftones.push({ mesh, ttl: 0, max: 0.26, size: 1, squash: 0.8, spin: 0 });
+    }
+
+    // Curved anime smear arcs: 2-3 hand-drawn crescent whips framing the
+    // contact, each differently seeded, spun and mirrored per impact.
+    this.smears = [];
+    for (let i = 0; i < 6; i += 1) {
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          map: smearArcTexture(256, 0x53a2 + i * 977),
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          fog: false,
+        }),
+      );
+      mesh.visible = false;
+      mesh.renderOrder = 8;
+      this.group.add(mesh);
+      this.smears.push({ mesh, ttl: 0, max: 0.13, size: 1, spin: 0 });
+    }
+
+    // Contact-point lens pop (read by main.mjs -> post): world x/y of the
+    // latest hit + a ~1-2 frame ttl for the local refraction/chroma punch.
+    this.popState = { x: 0, y: 0, ttl: 0, max: 0.055, mag: 0 };
 
     // Latest impact spill for the fighter layer: burst-coloured light that
     // relights both sprites and decays with the flash.
@@ -278,6 +335,22 @@ export class ImpactVfxLayer {
     if (this.kickTtl <= 0) return 0;
     const t = this.kickTtl / this.kickMax;
     return this.kickMag * t * t;
+  }
+
+  // 0..1 radial-blur/chromatic impact pulse (0 when idle), sharp attack and
+  // a two-frame tail.
+  pulseLevel() {
+    if (this.pulseTtl <= 0) return 0;
+    const t = this.pulseTtl / this.pulseMax;
+    return this.pulseMag * t * t;
+  }
+
+  // Contact-point lens pop: null when cold, else { x, y, level } in world
+  // space for the ~1-2 frame local refraction punch (main.mjs projects it).
+  popInfo() {
+    if (this.popState.ttl <= 0) return null;
+    const t = this.popState.ttl / this.popState.max;
+    return { x: this.popState.x, y: this.popState.y, level: this.popState.mag * t };
   }
 
   // Future domain agents plug richer effects in here.
@@ -376,26 +449,75 @@ export class ImpactVfxLayer {
     core.max = style.tier === "super" ? 0.24 : 0.17;
     core.ttl = core.max;
     core.core.scale.setScalar(core.size * 0.42);
-    core.halo.scale.setScalar(core.size * 0.9);
+    core.halo.scale.setScalar(core.size * 0.82);
     core.core.material.opacity = 1;
-    core.halo.material.opacity = 0.42;
+    core.halo.material.opacity = 0.32;
     core.core.visible = core.halo.visible = true;
 
-    // Orange/red radial shards on every tier: rotated + squashed randomly and
-    // flip-booked over 3 differently-seeded stars so no two frames repeat.
+    // Shard star DEMOTED to a brief first-frame accent (the flat 8-point
+    // star + paper shards read 2015-indie): the layered read now comes from
+    // the smear arcs + halftone ring below.
     const burst = this.bursts.find((b) => b.ttl <= 0) || this.bursts[0];
-    burst.mesh.material.color.set(style.shard ?? style.color).lerp(new THREE.Color(0xffffff), 0.18).multiplyScalar(2.1);
+    burst.mesh.material.color.set(style.shard ?? style.color).lerp(new THREE.Color(0xffffff), 0.18).multiplyScalar(1.7);
     burst.mesh.position.set(x, y, 0.36);
     burst.mesh.rotation.z = this.rand() * Math.PI * 2;
-    burst.size = (style.core ?? 0.5) * (style.ring ? 1.6 : 1.2);
-    burst.max = style.tier === "super" ? 0.2 : 0.15;
+    burst.size = (style.core ?? 0.5) * (style.ring ? 1.2 : 0.9);
+    burst.max = style.tier === "super" ? 0.13 : 0.11;
     burst.ttl = burst.max;
     burst.jx = 0.85 + this.rand() * 0.4;
     burst.jy = 0.85 + this.rand() * 0.4;
     burst.mesh.material.map = burst.maps[0];
     burst.mesh.scale.set(burst.size * burst.jx, burst.size * burst.jy, 1);
-    burst.mesh.material.opacity = 1;
+    // Radiating ink/spark ray lines get real presence beside the halftone
+    // ring (critic fix 5: bright core + radiating streaks, not dots alone).
+    burst.mesh.material.opacity = 0.85;
     burst.mesh.visible = true;
+
+    // 2-3 CURVED ANIME SMEAR ARCS: hand-drawn crescent whips around the
+    // contact point — rotated, mirrored and scaled per impact so no two hits
+    // draw the same calligraphy. Warm-white in the shard colour family.
+    const smearCount = style.ring ? 3 : 2;
+    for (let s = 0; s < smearCount; s += 1) {
+      const smear = this.smears.find((m) => m.ttl <= 0) || this.smears[(s * 2 + 1) % this.smears.length];
+      smear.mesh.material.color.set(0xffffff).lerp(new THREE.Color(style.shard ?? style.color), 0.35).multiplyScalar(1.9);
+      smear.mesh.position.set(
+        x + (this.rand() - 0.5) * 0.12,
+        y + (this.rand() - 0.5) * 0.12,
+        0.37 + s * 0.005,
+      );
+      smear.mesh.rotation.z = this.rand() * Math.PI * 2;
+      smear.spin = (this.rand() - 0.5) * 7;
+      smear.size = (style.core ?? 0.5) * (0.85 + this.rand() * 0.5) * (style.ring ? 1.15 : 1);
+      smear.max = 0.11 + this.rand() * 0.05;
+      smear.ttl = smear.max;
+      const mirror = this.rand() < 0.5 ? -1 : 1;
+      smear.mesh.scale.set(smear.size * mirror, smear.size, 1);
+      smear.mesh.material.opacity = 0.95;
+      smear.mesh.visible = true;
+    }
+
+    // EXPANDING RADIAL HALFTONE RING: the dot-screen pressure donut that
+    // carries the graphic SF6 read; meaningful tiers only, ~0.26s life.
+    if (style.tier !== "blocked") {
+      const halftone = this.halftones.find((r) => r.ttl <= 0) || this.halftones[0];
+      halftone.mesh.material.color.set(0xffffff).lerp(new THREE.Color(style.shard ?? style.color), 0.3).multiplyScalar(1.5);
+      halftone.mesh.position.set(x, y, 0.33);
+      halftone.mesh.rotation.z = this.rand() * Math.PI * 2;
+      halftone.size = (style.ring ? 1.05 : 0.72) * (style.tier === "super" ? 1.25 : 1);
+      halftone.squash = 0.66 + this.rand() * 0.16;
+      halftone.spin = (this.rand() - 0.5) * 2.4; // slight live rotation (fix 5)
+      halftone.max = style.ring ? 0.26 : 0.18;
+      halftone.ttl = halftone.max;
+      halftone.mesh.scale.set(0.22, 0.22 * halftone.squash, 1);
+      halftone.mesh.material.opacity = 0.85;
+      halftone.mesh.visible = true;
+    }
+
+    // Contact-point lens pop for the post grade (~1-2 frames, local).
+    this.popState.x = x;
+    this.popState.y = y;
+    this.popState.mag = style.ring ? 1 : style.tier === "blocked" ? 0.25 : 0.6;
+    this.popState.ttl = this.popState.max;
 
     if (style.ring) {
       // CYAN speedline ring: broken tapered shock arc, ~150ms, elliptical
@@ -419,7 +541,10 @@ export class ImpactVfxLayer {
     const pop = this.pops.find((p) => p.ttl <= 0) || this.pops[0];
     pop.light.color.set(style.color).lerp(new THREE.Color(0xffffff), 0.45);
     pop.light.position.set(x, Math.max(0.4, y), 1.2);
-    pop.peak = 9 + style.intensity * 1.7;
+    // Cut from 9+1.7i: on the true impact frame that peak (plus the victim's
+    // hit-white emissive) flooded the centre third of the frame to paper
+    // white — the core sprite carries the heat, the light only spills.
+    pop.peak = 2.5 + style.intensity * 0.7;
     pop.ttl = pop.max;
     pop.light.intensity = pop.peak;
     pop.light.visible = true;
@@ -446,6 +571,11 @@ export class ImpactVfxLayer {
     // Presentation camera kick (2-3px) beside the sim's own hit-stop.
     this.kickMag = style.kick ?? 2;
     this.kickTtl = this.kickMax;
+
+    // Radial-blur/chromatic screen pulse: only meaningful hits ring the lens
+    // (blocked taps stay clean so turtling never strobes the frame).
+    this.pulseMag = style.ring ? 1 : style.tier === "blocked" ? 0.18 : 0.5;
+    this.pulseTtl = this.pulseMax;
   }
 
   update(state, dtSec) {
@@ -465,6 +595,8 @@ export class ImpactVfxLayer {
     }
     this.pending.length = 0;
     this.kickTtl = Math.max(0, this.kickTtl - dtSec);
+    this.pulseTtl = Math.max(0, this.pulseTtl - dtSec);
+    this.popState.ttl = Math.max(0, this.popState.ttl - dtSec);
 
     // Advance sparks; mirror each into its motion-streak segment.
     let anyAlive = false;
@@ -608,6 +740,41 @@ export class ImpactVfxLayer {
       ring.mesh.material.opacity = 0.95 * Math.pow(1 - t, 1.5);
     }
 
+    // Halftone shock rings: grow past the burst with an eased front, dots
+    // thinning as they fade — the print-language pressure wave.
+    for (const halftone of this.halftones) {
+      if (halftone.ttl <= 0) continue;
+      halftone.ttl -= dtSec;
+      if (halftone.ttl <= 0) {
+        halftone.mesh.visible = false;
+        halftone.mesh.material.opacity = 0;
+        continue;
+      }
+      const t = 1 - halftone.ttl / halftone.max;
+      const eased = 1 - (1 - t) * (1 - t) * (1 - t);
+      const grow = 0.22 + eased * halftone.size;
+      halftone.mesh.rotation.z += halftone.spin * dtSec; // dot screen slowly turns
+      halftone.mesh.scale.set(grow, grow * halftone.squash, 1);
+      halftone.mesh.material.opacity = 0.85 * Math.pow(1 - t, 1.5);
+    }
+
+    // Smear arcs: whip around the contact (slight spin), stretch a touch,
+    // and die inside ~0.13s — calligraphy, not geometry.
+    for (const smear of this.smears) {
+      if (smear.ttl <= 0) continue;
+      smear.ttl -= dtSec;
+      if (smear.ttl <= 0) {
+        smear.mesh.visible = false;
+        smear.mesh.material.opacity = 0;
+        continue;
+      }
+      const t = 1 - smear.ttl / smear.max;
+      smear.mesh.rotation.z += smear.spin * dtSec;
+      const stretch = 1 + t * 0.35;
+      smear.mesh.scale.set(Math.sign(smear.mesh.scale.x) * smear.size * stretch, smear.size * stretch, 1);
+      smear.mesh.material.opacity = 0.95 * Math.pow(1 - t, 1.6);
+    }
+
     // Shard stars: hold ~2 frames, then collapse fast while the tips stretch
     // slightly outward, swapping through the 3-frame flipbook as they age.
     for (const burst of this.bursts) {
@@ -623,7 +790,7 @@ export class ImpactVfxLayer {
       if (burst.maps) burst.mesh.material.map = burst.maps[Math.min(2, Math.floor(t * 3))];
       burst.mesh.scale.x = burst.size * (burst.jx ?? 1) * stretch;
       burst.mesh.scale.y = burst.size * (burst.jy ?? 1) * stretch;
-      burst.mesh.material.opacity = Math.pow(1 - t, 1.7);
+      burst.mesh.material.opacity = 0.85 * Math.pow(1 - t, 1.7);
     }
     this.spillState.ttl = Math.max(0, this.spillState.ttl - dtSec);
 

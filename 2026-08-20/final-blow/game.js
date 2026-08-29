@@ -13292,31 +13292,33 @@ let cutInHalftonePattern = null;
 let cutInBrushPattern = null;
 function cutInPatterns() {
   if (cutInHalftonePattern) return { halftone: cutInHalftonePattern, brush: cutInBrushPattern };
+  // Tiles authored at 2x and played back through a 0.5 pattern transform:
+  // the 1x banner dot screen read visibly aliased (AAA-critic fix 5).
   const dots = document.createElement("canvas");
-  dots.width = dots.height = 48;
+  dots.width = dots.height = 96;
   const dctx = dots.getContext("2d");
   dctx.fillStyle = "rgba(0,0,0,0.85)";
   for (let y = 0; y < 4; y += 1) {
     for (let x = 0; x < 4; x += 1) {
-      const r = 2.1 + ((x * 7 + y * 13) % 5) * 0.55;
+      const r = (2.1 + ((x * 7 + y * 13) % 5) * 0.55) * 2;
       dctx.beginPath();
-      dctx.arc(x * 12 + (y % 2 ? 6 : 0) + 3, y * 12 + 3, r, 0, Math.PI * 2);
+      dctx.arc(x * 24 + (y % 2 ? 12 : 0) + 6, y * 24 + 6, r, 0, Math.PI * 2);
       dctx.fill();
     }
   }
   const brush = document.createElement("canvas");
-  brush.width = 256;
-  brush.height = 64;
+  brush.width = 512;
+  brush.height = 128;
   const bctx = brush.getContext("2d");
   for (let i = 0; i < 34; i += 1) {
     const seed = Math.sin((i + 3) * 12.9898) * 43758.5453;
     const jitter = seed - Math.floor(seed);
     bctx.strokeStyle = `rgba(255,255,255,${(0.05 + jitter * 0.16).toFixed(3)})`;
-    bctx.lineWidth = 0.8 + jitter * 2.6;
-    const y = jitter * 64;
+    bctx.lineWidth = (0.8 + jitter * 2.6) * 2;
+    const y = jitter * 128;
     bctx.beginPath();
-    bctx.moveTo(-12, y + 5);
-    bctx.lineTo(268, y - 6);
+    bctx.moveTo(-24, y + 10);
+    bctx.lineTo(536, y - 12);
     bctx.stroke();
   }
   cutInHalftonePattern = dots;
@@ -13324,15 +13326,81 @@ function cutInPatterns() {
   return { halftone: dots, brush };
 }
 
+// Half-scale playback transform for the 2x cut-in tiles (3D banner only).
+const CUT_IN_PATTERN_SCALE = new DOMMatrix([0.5, 0, 0, 0.5, 0, 0]);
+
+// CINEMA 3D super portrait (AAA-critic fix 6): a dedicated aggressive
+// close-up composed at 2x from the attacker's ACTUAL super wind-up atlas
+// frame (HD atlas when available) with a hard white key rim, an accent
+// back-rim and a contrast push — not the idle roster art re-pasted. 3D-mode
+// only: none of this runs while the classic 2D banner draws.
+const superPortraitHdImages = new Map();
+const superPortraitCache = new Map();
+function superPortrait3d(cut) {
+  const bank = cut.poseBank === "specials" && fighterMoveAtlases[cut.fighterId] ? "specials" : "base";
+  const sdAtlas = bank === "specials" ? fighterMoveAtlases[cut.fighterId] : fighterAtlases[cut.fighterId];
+  if (!sdAtlas?.complete || !sdAtlas.naturalWidth) return null;
+  const hdPath = `renderer/hd/${cut.fighterId}${bank === "specials" ? "-specials" : ""}.webp`;
+  if (!superPortraitHdImages.has(hdPath)) {
+    const img = new Image();
+    img.src = hdPath; // warm in the fighter layer's HTTP cache; SD fallback
+    superPortraitHdImages.set(hdPath, img);
+  }
+  const hd = superPortraitHdImages.get(hdPath);
+  const atlas = hd.complete && hd.naturalWidth ? hd : sdAtlas;
+  const key = `${cut.fighterId}:${bank}:${cut.poseFrame}:${atlas === hd ? "hd" : "sd"}`;
+  if (superPortraitCache.has(key)) return superPortraitCache.get(key);
+  const cellW = atlas.naturalWidth / 4;
+  const cellH = atlas.naturalHeight / 4;
+  const crop = 0.68; // head + torso + raised fists: the wind-up close-up
+  const sx = (cut.poseFrame % 4) * cellW;
+  const sy = Math.floor(cut.poseFrame / 4) * cellH;
+  const sh = cellH * crop;
+  const canvas = document.createElement("canvas");
+  canvas.height = 584; // ~2x the on-screen portrait height
+  canvas.width = Math.round(584 * (cellW / sh));
+  const pctx = canvas.getContext("2d");
+  // Tinted stamp helper: the frame silhouette filled with one colour.
+  const stamp = document.createElement("canvas");
+  stamp.width = canvas.width;
+  stamp.height = canvas.height;
+  const stampCtx = stamp.getContext("2d");
+  const drawFrame = (target) => target.drawImage(atlas, sx, sy, cellW, sh, 0, 0, canvas.width, canvas.height);
+  const tinted = (color) => {
+    stampCtx.clearRect(0, 0, stamp.width, stamp.height);
+    drawFrame(stampCtx);
+    stampCtx.globalCompositeOperation = "source-in";
+    stampCtx.fillStyle = color;
+    stampCtx.fillRect(0, 0, stamp.width, stamp.height);
+    stampCtx.globalCompositeOperation = "source-over";
+    return stamp;
+  };
+  // Accent back-rim (down-right) then hard white key rim (up-left) under the
+  // real frame: the close-up reads studio-lit, punched off the band.
+  pctx.drawImage(tinted(cut.accent), 9, 7);
+  pctx.drawImage(tinted("rgba(255,255,255,0.95)"), -7, -6);
+  pctx.drawImage(tinted("rgba(255,255,255,0.95)"), -3, -3);
+  pctx.filter = "contrast(1.14) saturate(1.12)";
+  drawFrame(pctx);
+  pctx.filter = "none";
+  superPortraitCache.set(key, canvas);
+  return canvas;
+}
+
 function latchSuperPresentation(fighter) {
   if (rollbackResimulating || superCutInTick === state.simulationTick) return;
   superCutInTick = state.simulationTick;
+  // poseBank/poseFrame capture the live wind-up pose for the CINEMA 3D
+  // close-up portrait; plain data, unread by the classic 2D banner path.
+  const pose = fighterAnimationPose(fighter);
   superCutIn = {
     side: fighter.side,
     fighterId: fighter.def.id,
     name: fighter.def.name,
     accent: fighter.def.accent,
     color: fighter.def.color,
+    poseBank: pose.bank,
+    poseFrame: pose.frame,
     t: 0,
   };
   hudFxDebug.superCutIns += 1;
@@ -13402,6 +13470,7 @@ function drawSuperCutIn(dtMs) {
     ctx.globalAlpha = alpha * 0.5;
     ctx.globalCompositeOperation = "multiply";
     const dotPattern = ctx.createPattern(halftone, "repeat");
+    dotPattern.setTransform(CUT_IN_PATTERN_SCALE);
     ctx.translate((fromLeft ? -1 : 1) * cut.t * 160, 0);
     ctx.fillStyle = dotPattern;
     ctx.fillRect(-W, bandTop - tilt, W * 3, bandBottom - bandTop + tilt * 2);
@@ -13410,6 +13479,7 @@ function drawSuperCutIn(dtMs) {
     ctx.globalAlpha = alpha * 0.55;
     ctx.globalCompositeOperation = "overlay";
     const brushPattern = ctx.createPattern(brush, "repeat");
+    brushPattern.setTransform(CUT_IN_PATTERN_SCALE);
     ctx.translate((fromLeft ? 1 : -1) * cut.t * 420, 0);
     ctx.fillStyle = brushPattern;
     ctx.fillRect(-W, bandTop - tilt, W * 3, bandBottom - bandTop + tilt * 2);
@@ -13435,17 +13505,18 @@ function drawSuperCutIn(dtMs) {
   }
   // Portrait slam: eased slide toward centre (static under reduced motion),
   // riding an accent glow pool so the cutout art separates from the band.
+  // CINEMA 3D uses the dedicated 2x wind-up close-up (superPortrait3d) with a
+  // speed-line burst behind it; the 2D roster-art path is byte-for-byte
+  // unchanged.
   const image = fighterImages[cut.fighterId];
-  if (image?.complete && image.naturalWidth > 0) {
-    // CINEMA 3D reframe: the classic 2.15x portrait pushes the head above the
-    // band's top clip edge (a headless-torso crop). In 3D mode the cut-in
-    // instead crops the roster art to a HEAD-AND-TORSO bust and sits it
-    // INSIDE the band so the face carries the moment. The 2D path is
-    // byte-for-byte unchanged.
+  const closeUp = in3d ? superPortrait3d(cut) : null;
+  if (closeUp || (image?.complete && image.naturalWidth > 0)) {
     const bustFraction = 0.46; // top of the roster art: head + torso
-    const sourceHeight = in3d ? image.naturalHeight * bustFraction : image.naturalHeight;
-    const portraitHeight = (bandBottom - bandTop) * (in3d ? 1.18 : 2.15);
-    const portraitWidth = portraitHeight * (image.naturalWidth / sourceHeight);
+    const sourceHeight = in3d ? (image?.naturalHeight ?? 1) * bustFraction : image?.naturalHeight ?? 1;
+    const portraitHeight = (bandBottom - bandTop) * (closeUp ? 1.46 : in3d ? 1.18 : 2.15);
+    const portraitWidth = portraitHeight * (closeUp
+      ? closeUp.width / closeUp.height
+      : (image?.naturalWidth ?? 1) / sourceHeight);
     const slide = reduced ? 1 : 1 - (1 - clamp(progress / 0.34, 0, 1)) ** 3;
     const targetX = W * 0.5 - portraitWidth * 0.5;
     const startX = fromLeft ? -portraitWidth - 80 : W + 80;
@@ -13461,6 +13532,29 @@ function drawSuperCutIn(dtMs) {
     ctx.fillStyle = glow;
     ctx.fillRect(0, bandTop - tilt, W, bandBottom - bandTop + tilt * 2);
     ctx.globalCompositeOperation = "source-over";
+    if (in3d && closeUp && !reduced) {
+      // SPEED-LINE BURST behind the close-up: comic rays converging on the
+      // portrait, wound slightly by the band's life (SF6 cut-in energy).
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.lineCap = "round";
+      for (let ray = 0; ray < 22; ray += 1) {
+        const seed = Math.sin((ray + 5) * 78.233) * 43758.5453;
+        const jitter = seed - Math.floor(seed);
+        const angle = (ray / 22) * Math.PI * 2 + jitter * 0.4 + cut.t * 0.5;
+        const outer = portraitHeight * (0.85 + jitter * 0.7);
+        const inner = portraitHeight * (0.34 + jitter * 0.16);
+        ctx.globalAlpha = alpha * (0.16 + jitter * 0.3);
+        ctx.strokeStyle = ray % 3 === 0 ? cut.accent : "#fff6e6";
+        ctx.lineWidth = 1.5 + jitter * 3.5;
+        ctx.beginPath();
+        ctx.moveTo(glowX + Math.cos(angle) * outer, glowY + Math.sin(angle) * outer);
+        ctx.lineTo(glowX + Math.cos(angle) * inner, glowY + Math.sin(angle) * inner);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.globalAlpha = alpha;
+    }
     if (in3d) {
       // Portrait PUNCH: slams in oversized and slightly rolled, easing to
       // rest over the first quarter of the band's life (SF6 cut-in energy).
@@ -13474,10 +13568,16 @@ function drawSuperCutIn(dtMs) {
       ctx.translate(pcx, pcy);
       ctx.rotate(punchRot);
       ctx.scale(punchScale, punchScale);
-      ctx.drawImage(
-        image, 0, 0, image.naturalWidth, sourceHeight,
-        -portraitWidth * 0.5, -portraitHeight * 0.5, portraitWidth, portraitHeight,
-      );
+      if (closeUp) {
+        // Mirror the P2 close-up so the wind-up drives INTO the frame.
+        if (!fromLeft) ctx.scale(-1, 1);
+        ctx.drawImage(closeUp, -portraitWidth * 0.5, -portraitHeight * 0.5, portraitWidth, portraitHeight);
+      } else {
+        ctx.drawImage(
+          image, 0, 0, image.naturalWidth, sourceHeight,
+          -portraitWidth * 0.5, -portraitHeight * 0.5, portraitWidth, portraitHeight,
+        );
+      }
       ctx.restore();
     } else {
       ctx.drawImage(image, portraitX, bandTop - portraitHeight * 0.24, portraitWidth, portraitHeight);

@@ -193,6 +193,83 @@ function fenceTexture() {
   }, { srgb: true, repeat: true });
 }
 
+// NON-REPEATING damage/dressing overlay laid across the whole fence run:
+// bent-link scars, a sagging patch, taped posters — the breaks that stop the
+// 16px diamond tile from reading as wallpaper at midground blur distance.
+function fenceBreaksTexture() {
+  return canvasTexture(2048, 160, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    const rand = mulberry32(0xfe9ce);
+    // --- Bent/mangled link scars: wavy strokes overpainting the lattice ----
+    const scarAt = (sx, sy, spread, count) => {
+      ctx.strokeStyle = "rgba(148,158,174,0.9)";
+      for (let i = 0; i < count; i += 1) {
+        ctx.lineWidth = 1.4 + rand() * 1.3;
+        ctx.beginPath();
+        const x0 = sx + (rand() - 0.5) * spread;
+        const y0 = sy + (rand() - 0.5) * spread * 0.6;
+        ctx.moveTo(x0, y0);
+        let px = x0;
+        let py = y0;
+        for (let s = 0; s < 4; s += 1) {
+          px += (rand() - 0.2) * spread * 0.5;
+          py += (rand() - 0.5) * spread * 0.7;
+          const cx = px + (rand() - 0.5) * 18;
+          const cy = py + (rand() - 0.5) * 18;
+          ctx.quadraticCurveTo(cx, cy, px, py);
+        }
+        ctx.stroke();
+      }
+      // Dark hole behind the mangle: the lattice is torn open there.
+      const hole = ctx.createRadialGradient(sx, sy, 2, sx, sy, spread * 0.55);
+      hole.addColorStop(0, "rgba(5,7,10,0.55)");
+      hole.addColorStop(1, "rgba(5,7,10,0)");
+      ctx.fillStyle = hole;
+      ctx.fillRect(sx - spread, sy - spread, spread * 2, spread * 2);
+    };
+    // Visible fence span at midground depth is u ~0.32..0.68 of the 30-unit
+    // run — every break lands inside it or it dresses nothing but offscreen.
+    scarAt(w * 0.365, h * 0.42, 46, 9);
+    scarAt(w * 0.575, h * 0.6, 56, 11);
+    scarAt(w * 0.655, h * 0.36, 38, 7);
+    // --- Sagging top-rail dip: the rail bows where a car clipped it --------
+    ctx.strokeStyle = "rgba(150,160,175,0.85)";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.4, 4);
+    ctx.quadraticCurveTo(w * 0.45, 22, w * 0.5, 6);
+    ctx.stroke();
+    // --- Taped posters/flyers: dull paper rectangles with print lines ------
+    const poster = (px, py, pw, ph, tone, lean) => {
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(lean);
+      ctx.fillStyle = tone;
+      ctx.fillRect(-pw / 2, -ph / 2, pw, ph);
+      ctx.fillStyle = "rgba(28,32,40,0.85)";
+      for (let line = 0; line < 4; line += 1) {
+        const ly = -ph / 2 + ph * (0.22 + line * 0.18);
+        ctx.fillRect(-pw * 0.36, ly, pw * (0.5 + rand() * 0.22), ph * 0.07);
+      }
+      // Torn corner + tape glints.
+      ctx.fillStyle = "rgba(8,10,14,0.6)";
+      ctx.beginPath();
+      ctx.moveTo(pw / 2, ph / 2);
+      ctx.lineTo(pw / 2 - pw * 0.3, ph / 2);
+      ctx.lineTo(pw / 2, ph / 2 - ph * 0.3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(210,218,228,0.5)";
+      ctx.fillRect(-pw / 2 - 2, -ph / 2 - 2, 8, 5);
+      ctx.fillRect(pw / 2 - 6, -ph / 2 - 2, 8, 5);
+      ctx.restore();
+    };
+    poster(w * 0.405, h * 0.52, 46, 62, "#8d8471", -0.06);
+    poster(w * 0.625, h * 0.47, 40, 54, "#767f83", 0.08);
+    poster(w * 0.34, h * 0.58, 34, 46, "#837768", 0.04);
+  }, { srgb: true });
+}
+
 // Two-frame walking figure for the midground pedestrians — LIT, not a flat
 // black cutout: clothing tones, a coloured rim highlight down one side (from
 // whichever practical is nearest) and a subtle top kiss on head/shoulders.
@@ -494,6 +571,12 @@ export function buildSomersetStage(host, { quality }) {
   groundStreak(0xffb060, -7.4, -4.8, 3.6, 1.4, 0.09);
   groundStreak(0x3fd6ff, 6.3, -2.4, 4.4, 0.85, 0.3);                          // cyan check-cashing
   groundStreak(0xffc070, 7.6, -4.6, 3.2, 1.4, 0.09);
+  // Shelter lightbox: the lit ad panel answers on the wet street below it —
+  // EVERY emissive in frame owns a reflection, the lightbox included.
+  const shelterStreak = groundStreak(0xffe9c0, -0.25, -5.7, 4.2, 1.05, 0.14);
+  // Traffic-signal smear: red/green swaps with the signal phase (wired into
+  // the signal flicker below), so even the corner light reflects.
+  const signalStreak = groundStreak(0xff2b1e, -4.05, -1.75, 3.2, 0.62, 0.12);
 
   // Sidewalk curb line behind the fighters.
   const curb = new THREE.Mesh(
@@ -742,6 +825,8 @@ export function buildSomersetStage(host, { quality }) {
     const hum = 1 + Math.sin(t * 43 + 4.1) * 0.04 + (hash01(Math.floor(t * 8 + 5)) > 0.96 ? -0.4 : 0);
     shelterLight.intensity = 4.5 * Math.max(0.4, hum);
     shelterPanel.material.color.setRGB(1.02, 0.99, 0.92).multiplyScalar(Math.max(0.55, hum));
+    // The lightbox's wet-street answer hums with its fluorescents.
+    shelterStreak.material.opacity = 0.14 * Math.max(0.5, hum);
   });
 
   // --- Chain-link fence line: midground structure at the curb --------------
@@ -814,6 +899,26 @@ export function buildSomersetStage(host, { quality }) {
     const hum = 1 + Math.sin(t * 41) * 0.05;
     fenceGlint.material.opacity = 0.5 * Math.max(0.5, hum);
   });
+  // Tiling breaks: one NON-repeating overlay across the whole run — bent-link
+  // scars, a bowed rail, taped posters — so the diamond lattice stops reading
+  // as wallpaper in wide framings (composition fix).
+  const fenceBreaks = new THREE.Mesh(
+    new THREE.PlaneGeometry(30, 1.55),
+    new THREE.MeshStandardMaterial({
+      map: fenceBreaksTexture(),
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      color: 0x9aa4b8,
+      roughness: 0.62,
+      metalness: 0.35,
+      envMapIntensity: 0.5,
+    }),
+  );
+  fenceBreaks.name = "fb-fence-breaks";
+  fenceBreaks.position.set(0, 0.78, -5.04);
+  fenceBreaks.renderOrder = 1;
+  group.add(fenceBreaks);
 
   // --- Animated silhouette pedestrians behind the fence --------------------
   // Two parallax crowds: a near line just behind the fence (sharp, dark) and
@@ -920,6 +1025,10 @@ export function buildSomersetStage(host, { quality }) {
   const steams = [
     { mesh: steamPlume(0xbfe8d4, 1.5, 2.6, 0.13, 3.1), x: 0.75, z: -3.85 },
     { mesh: steamPlume(0xc8d8e8, 1.4, 2.4, 0.11, 8.7), x: -3.4, z: -4.55 },
+    // Third plume rising THROUGH the fence line mid-right: a moving vertical
+    // break across the lattice (magenta-kissed toward the K&A corner), placed
+    // clear of the corner so a cornered fighter never hides it.
+    { mesh: steamPlume(0xe0c6e2, 1.4, 2.4, 0.11, 12.3), x: 1.7, z: -4.95 },
   ];
   for (const steam of steams) {
     steam.mesh.position.set(steam.x, steam.mesh.geometry.parameters.height * 0.5 + 0.05, steam.z);
@@ -1003,6 +1112,116 @@ export function buildSomersetStage(host, { quality }) {
     carStreak.material.opacity = 0.5 * swell;
   });
 
+  // --- Passing SEPTA trolley on the far cross-street (composition fix 4) ---
+  // The wide framing's centre band was a dead blur wall; it now gets a moving
+  // subject: a two-car SEPTA trolley sliding across the far street behind the
+  // fence every 9s — dark body, a strip of lit windows with passenger
+  // silhouettes, marker lights and a fluorescent glow the wet street answers.
+  // (The el deck itself sits above the HUD line in fight framing, so the
+  // street level is where a passing train can actually be SEEN.)
+  // Deterministic in t so screenshots freeze cleanly.
+  const train = new THREE.Group();
+  const trainBodyMaterial = new THREE.MeshStandardMaterial({ color: 0x232a33, roughness: 0.5, metalness: 0.6 });
+  const trainBody = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.92, 0.9), trainBodyMaterial);
+  trainBody.position.y = 0.46;
+  train.add(trainBody);
+  const trainRoof = new THREE.Mesh(new THREE.BoxGeometry(9.7, 0.1, 0.8), new THREE.MeshStandardMaterial({ color: 0x161b22, roughness: 0.7, metalness: 0.4 }));
+  trainRoof.position.y = 0.95;
+  train.add(trainRoof);
+  // Lit window band with passenger silhouettes + door gaps.
+  const trainWindowTexture = canvasTexture(768, 64, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    const rand = mulberry32(0x5e97a);
+    const carW = w / 2; // two cars per span
+    for (let car = 0; car < 2; car += 1) {
+      const x0 = car * carW;
+      // Window run: warm-white fluorescent panes, broken by door posts.
+      for (let i = 0; i < 8; i += 1) {
+        const wx = x0 + carW * (0.06 + i * 0.115);
+        const ww = carW * 0.09;
+        ctx.fillStyle = "#f6eecb";
+        ctx.fillRect(wx, h * 0.22, ww, h * 0.56);
+        // Passenger silhouettes: head+shoulder lumps in some panes.
+        if (rand() > 0.4) {
+          ctx.fillStyle = "#2a2620";
+          const px = wx + ww * (0.2 + rand() * 0.5);
+          ctx.beginPath();
+          ctx.arc(px, h * 0.52, h * 0.11, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillRect(px - h * 0.14, h * 0.58, h * 0.28, h * 0.2);
+        }
+      }
+    }
+  }, { srgb: true });
+  const trainWindows = new THREE.Mesh(
+    new THREE.PlaneGeometry(9.4, 0.5),
+    new THREE.MeshBasicMaterial({
+      map: trainWindowTexture,
+      transparent: true,
+      color: new THREE.Color(1.6, 1.52, 1.3), // hot enough to kiss the bloom knee
+      fog: false,
+    }),
+  );
+  trainWindows.position.set(0, 0.52, 0.46);
+  train.add(trainWindows);
+  // End marker lights.
+  const markerF = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff3d0).multiplyScalar(2.6), fog: false }),
+  );
+  markerF.position.set(4.85, 0.52, 0.2);
+  markerF.rotation.y = Math.PI / 2;
+  train.add(markerF);
+  const markerR = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.09, 0.09),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff4030).multiplyScalar(2.2), fog: false }),
+  );
+  markerR.position.set(-4.85, 0.52, 0.2);
+  markerR.rotation.y = -Math.PI / 2;
+  train.add(markerR);
+  // Rumble glow: the trolley's fluorescent interior spills onto the street.
+  const trainLight = new THREE.PointLight(0xfff0c8, 0, 8, 2);
+  trainLight.position.set(0, 0.6, 0.9);
+  train.add(trainLight);
+  // Wet-street answer sliding with the trolley: every emissive reflects.
+  const trainStreak = new THREE.Mesh(
+    new THREE.PlaneGeometry(7.5, 1.3),
+    new THREE.MeshBasicMaterial({
+      map: streakTexture(),
+      color: 0xfff0c8,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    }),
+  );
+  trainStreak.rotation.x = -Math.PI / 2;
+  trainStreak.position.set(0, 0.015, 1.05);
+  train.add(trainStreak);
+  train.position.set(0, 0, -7.55);
+  train.visible = false;
+  group.add(train);
+  const TRAIN_PERIOD = 9;
+  const TRAIN_ACTIVE = 3.4;
+  updaters.push((t) => {
+    const cycle = Math.floor(t / TRAIN_PERIOD);
+    const local = t - cycle * TRAIN_PERIOD;
+    if (local > TRAIN_ACTIVE) {
+      train.visible = false;
+      trainLight.intensity = 0;
+      return;
+    }
+    const dir = hash01(cycle * 7 + 2) > 0.5 ? 1 : -1;
+    const p = local / TRAIN_ACTIVE;
+    train.visible = true;
+    train.position.x = THREE.MathUtils.lerp(-15, 15, p) * dir;
+    train.scale.x = dir;
+    const swell = Math.sin(p * Math.PI);
+    trainLight.intensity = 6.5 * swell;
+    trainStreak.material.opacity = 0.24 * swell;
+  });
+
   // --- El-train overpass: real lit geometry casting real shadows -----------
   const steel = new THREE.MeshStandardMaterial({ color: 0x1b241f, roughness: 0.72, metalness: 0.3 });
   const rust = new THREE.MeshStandardMaterial({ color: 0x37312a, roughness: 0.8, metalness: 0.25 });
@@ -1070,6 +1289,11 @@ export function buildSomersetStage(host, { quality }) {
     light.shadow.bias = -0.0004;
     light.shadow.camera.near = 0.4;
     light.shadow.camera.far = 9;
+    // Half-strength shadow print: each sodium head throwing a SECOND full
+    // fighter silhouette stacked into the key light's one is what merged the
+    // grounding into an amorphous blob (critic fix 3) — the pole/prop shadows
+    // stay, the duplicate fighter shadow becomes a faint secondary.
+    light.shadow.intensity = 0.45;
     group.add(light);
     group.add(light.target);
     const shaft = volumeShaft(SODIUM, 0.14, 0.8, 3.4, 0.12);
@@ -1083,8 +1307,7 @@ export function buildSomersetStage(host, { quality }) {
     });
     return light;
   };
-  streetlight(-2.7);
-  streetlight(2.7);
+  const sodiumSpots = [streetlight(-2.7), streetlight(2.7)];
 
   // Traffic signal on the corner, cycling red/green deterministically.
   const signalPole = new THREE.Mesh(
@@ -1117,6 +1340,8 @@ export function buildSomersetStage(host, { quality }) {
     lensRed.material.color.set(0xff2b1e).multiplyScalar(phase ? 3.2 : 0.25);
     lensGreen.material.color.set(0x2bff7a).multiplyScalar(phase ? 0.2 : 2.3);
     signalLight.color.set(phase ? 0xff2b1e : 0x2bff7a);
+    // The wet-street smear swaps colour with the live lens.
+    signalStreak.material.color.set(phase ? 0xff2b1e : 0x2bff7a);
   });
 
   // Buzzing corner-store neon (magenta) + its point light.
@@ -1359,7 +1584,10 @@ export function buildSomersetStage(host, { quality }) {
   // fluorescent glow rising out of it, light spilling up the steps and onto
   // the asphalt in front — the stage's place-identity light source.
   const station = new THREE.Group();
-  station.position.set(2.9, 0, -4.75);
+  // 2.55 (was 2.9): keeps the full SOMERSET plate inside even the punched-in
+  // framings — at 2.9 the plate's right end kissed the frame edge and the
+  // sign read as cut off mid-word.
+  station.position.set(2.55, 0, -4.75);
   const masonry = new THREE.MeshStandardMaterial({ color: 0x232830, roughness: 0.85, metalness: 0.05 });
   // Side cheek walls of the stair mouth.
   for (const side of [-1, 1]) {
@@ -1415,25 +1643,63 @@ export function buildSomersetStage(host, { quality }) {
   const stationLight = new THREE.PointLight(0xcaffe4, 3.2, 4.5, 2);
   stationLight.position.set(0, 1.05, 0.4);
   station.add(stationLight);
-  // "SOMERSET" plate over the mouth — LIT, not flat: the stairwell's
-  // green-white spill grazes the plate face from below-left, the far corner
-  // falls off dark, and a faint top sheen catches the enamel.
-  const plateTexture = canvasTexture(256, 48, (ctx, w, h) => {
+  // "SOMERSET" plate over the mouth — STAGE GEOMETRY, not a UI overlay
+  // (critic fix 8): weathered enamel with rust drips from the mount bolts,
+  // chipped edge wear, the stairwell's green spill grazing it from below-left,
+  // a soft 0.6px defocus matching its depth plane, and the whole plate skewed
+  // to the fence line's perspective instead of squarely facing the lens.
+  const plateTexture = bluredCardTexture(512, 96, 0.6, (ctx, w, h) => {
+    const rand = mulberry32(0x50e57);
     ctx.fillStyle = "#101418";
     ctx.fillRect(0, 0, w, h);
     ctx.strokeStyle = "rgba(190,210,200,0.5)";
-    ctx.strokeRect(2, 2, w - 4, h - 4);
-    ctx.font = "700 26px Arial Narrow, sans-serif";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(4, 4, w - 8, h - 8);
+    ctx.font = "700 52px Arial Narrow, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#cfe6da";
-    ctx.fillText("SOMERSET", w / 2, h / 2 + 1);
+    ctx.fillText("SOMERSET", w / 2, h / 2 + 2);
+    // Mount bolts + rust drips running off them down the enamel.
+    for (const bx of [w * 0.045, w * 0.955]) {
+      ctx.fillStyle = "#6a6f74";
+      ctx.beginPath();
+      ctx.arc(bx, h * 0.2, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(20,22,25,0.8)";
+      ctx.beginPath();
+      ctx.arc(bx + 1.4, h * 0.2 + 1.4, 3, 0, Math.PI * 2);
+      ctx.fill();
+      const drip = ctx.createLinearGradient(0, h * 0.24, 0, h * 0.95);
+      drip.addColorStop(0, "rgba(112,64,30,0.5)");
+      drip.addColorStop(1, "rgba(80,44,20,0)");
+      ctx.fillStyle = drip;
+      ctx.fillRect(bx - 3, h * 0.24, 6 + rand() * 4, h * 0.7);
+    }
+    // Grime scuffs: soft dark blotches breaking the enamel's uniform face.
+    for (let i = 0; i < 9; i += 1) {
+      const gx = rand() * w;
+      const gy = rand() * h;
+      const gr = 8 + rand() * 26;
+      const blot = ctx.createRadialGradient(gx, gy, 1, gx, gy, gr);
+      blot.addColorStop(0, `rgba(8,10,12,${(0.12 + rand() * 0.16).toFixed(3)})`);
+      blot.addColorStop(1, "rgba(8,10,12,0)");
+      ctx.fillStyle = blot;
+      ctx.fillRect(gx - gr, gy - gr, gr * 2, gr * 2);
+    }
+    // Edge wear: chipped bright nicks along the border where paint flaked.
+    ctx.fillStyle = "rgba(168,182,178,0.6)";
+    for (let i = 0; i < 14; i += 1) {
+      const along = rand();
+      if (rand() > 0.5) ctx.fillRect(along * w, rand() > 0.5 ? 3 : h - 6, 3 + rand() * 7, 2.4);
+      else ctx.fillRect(rand() > 0.5 ? 3 : w - 6, along * h, 2.4, 3 + rand() * 6);
+    }
     // Fluorescent spill from the stair throat: bright pool low-left, decaying
     // across the face (screen-blended so the letterforms brighten with it).
     ctx.globalCompositeOperation = "screen";
-    const spill = ctx.createRadialGradient(w * 0.3, h * 1.25, 4, w * 0.3, h * 1.25, w * 0.62);
-    spill.addColorStop(0, "rgba(150,220,185,0.5)");
-    spill.addColorStop(0.55, "rgba(96,150,126,0.22)");
+    const spill = ctx.createRadialGradient(w * 0.3, h * 1.25, 8, w * 0.3, h * 1.25, w * 0.62);
+    spill.addColorStop(0, "rgba(150,220,185,0.55)");
+    spill.addColorStop(0.55, "rgba(96,150,126,0.24)");
     spill.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = spill;
     ctx.fillRect(0, 0, w, h);
@@ -1444,10 +1710,10 @@ export function buildSomersetStage(host, { quality }) {
     ctx.fillStyle = sheen;
     ctx.fillRect(0, 0, w, h * 0.4);
     ctx.globalCompositeOperation = "multiply";
-    // Emissive falloff: the far-right corner drops off into the night.
-    const fall = ctx.createLinearGradient(w * 0.45, 0, w, 0);
+    // Emissive falloff: the far-right corner dims but stays LEGIBLE.
+    const fall = ctx.createLinearGradient(w * 0.62, 0, w, 0);
     fall.addColorStop(0, "#ffffff");
-    fall.addColorStop(1, "#5e6a71");
+    fall.addColorStop(1, "#a7b6b0");
     ctx.fillStyle = fall;
     ctx.fillRect(0, 0, w, h);
     ctx.globalCompositeOperation = "source-over";
@@ -1457,6 +1723,11 @@ export function buildSomersetStage(host, { quality }) {
     new THREE.MeshBasicMaterial({ map: plateTexture, fog: false }),
   );
   plate.position.set(0, 1.04, 0.76);
+  // Perspective skew: the plate follows the receding station/fence plane
+  // (right edge away from the lens) with a hair of forward lean — stage
+  // geometry, not an HTML rectangle floating over the blur.
+  plate.rotation.y = -0.2;
+  plate.rotation.x = -0.03;
   station.add(plate);
   // Soft green kiss floating just off the plate face: the spill catches the
   // air in front of the sign the way it does over the stair mouth.
@@ -1464,9 +1735,9 @@ export function buildSomersetStage(host, { quality }) {
     new THREE.PlaneGeometry(1.1, 0.5),
     new THREE.MeshBasicMaterial({
       map: softDotTexture(96),
-      color: new THREE.Color(0xbfffe0).multiplyScalar(0.5),
+      color: new THREE.Color(0xbfffe0).multiplyScalar(0.62),
       transparent: true,
-      opacity: 0.2,
+      opacity: 0.3, // lifted: the plate visibly picks up the green lamp bloom
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       fog: false,
@@ -1617,9 +1888,19 @@ export function buildSomersetStage(host, { quality }) {
     setDim(dim) {
       const keep = 1 - dim * 0.72;
       key.intensity = 3.4 * keep;
+      // Key shadow softens out with the dim: the frozen fighters read as ONE
+      // clean silhouette each under the banner, not sprite + printed twin
+      // (the critic's "doubled ghost legs").
+      key.shadow.intensity = 1 - dim * 0.85;
+      for (const spot of sodiumSpots) {
+        spot.intensity *= keep; // called after update(): overrides the flicker
+        spot.shadow.intensity = 0.45 * (1 - dim * 0.9);
+      }
       hemisphere.intensity = 0.85 * (1 - dim * 0.6);
       backdropMaterial.color.setRGB(1.08 * keep, 1.06 * keep, 1.14 * keep);
       fence.material.opacity = 0.88 * (1 - dim * 0.5);
+      // Train windows settle with the freeze (absolute set — never compounds).
+      trainWindows.material.color.setRGB(1.6, 1.52, 1.3).multiplyScalar(1 - dim * 0.7);
     },
     update(timeSec) {
       for (const flicker of flickers) flicker(timeSec);

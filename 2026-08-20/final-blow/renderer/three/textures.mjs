@@ -223,6 +223,79 @@ export function impactBurstTexture(size = 256, seed = 0xb1a57) {
   });
 }
 
+// Expanding halftone shock ring: a donut band of graphic screen-print dots,
+// dense and fat at the band's spine, shrinking to pinpricks at both edges —
+// the SF6 Drive-Impact print language (dots, not airbrush) for the hit answer.
+export function halftoneRingTexture(size = 256, seed = 0x7a11) {
+  const rand = mulberry32(seed);
+  return canvasTexture(size, size, (ctx, w, h) => {
+    const cx = w / 2;
+    const cy = h / 2;
+    const rMid = w * 0.4;
+    const band = w * 0.07;
+    // Polar dot grid: a THIN open donut (wide bands read as a dot doily
+    // pasted over the victim instead of a pressure ring passing him).
+    for (let ring = -2; ring <= 2; ring += 1) {
+      const rr = rMid + (ring / 2) * band;
+      const count = Math.round((Math.PI * 2 * rr) / (w * 0.052));
+      const phase = rand() * Math.PI * 2;
+      // Dot size tapers away from the band spine.
+      const dotR = w * 0.016 * (1 - Math.abs(ring) / 2.7) * (0.85 + rand() * 0.3);
+      for (let i = 0; i < count; i += 1) {
+        const a = phase + (i / count) * Math.PI * 2;
+        const jitter = (rand() - 0.5) * w * 0.008;
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(a) * (rr + jitter), cy + Math.sin(a) * (rr + jitter), dotR, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${(0.75 + rand() * 0.25).toFixed(3)})`;
+        ctx.fill();
+      }
+    }
+    // Thin solid leading lip just outside the dots: reads as the wavefront.
+    ctx.strokeStyle = "rgba(255,255,255,0.8)";
+    ctx.lineWidth = w * 0.007;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rMid + band * 1.6, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+}
+
+// Curved anime smear arc: one thick crescent stroke (fat middle, whipped
+// pointed tips) with a couple of thin trailing hairlines — the hand-drawn
+// swing smear that frames an impact instead of a symmetric star.
+export function smearArcTexture(size = 256, seed = 0x53a2) {
+  const rand = mulberry32(seed);
+  return canvasTexture(size, size, (ctx, w, h) => {
+    const cx = w / 2;
+    const cy = h / 2;
+    const r = w * (0.3 + rand() * 0.08);
+    const start = rand() * Math.PI * 2;
+    const span = 1.5 + rand() * 0.9;             // ~86-137 degrees of arc
+    const steps = 26;
+    const fat = w * (0.035 + rand() * 0.02);
+    ctx.lineCap = "round";
+    for (let s = 0; s < steps; s += 1) {
+      const p = s / (steps - 1);
+      const taper = Math.pow(Math.sin(p * Math.PI), 1.35); // whip-pointed tips
+      const a0 = start + span * p;
+      const a1 = start + span * (p + 1.3 / steps);
+      ctx.strokeStyle = `rgba(255,255,255,${(0.92 * taper).toFixed(3)})`;
+      ctx.lineWidth = Math.max(0.8, fat * taper * 2);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, a0, a1);
+      ctx.stroke();
+      // Trailing hairlines riding just inside/outside the main smear.
+      ctx.strokeStyle = `rgba(255,255,255,${(0.4 * taper).toFixed(3)})`;
+      ctx.lineWidth = Math.max(0.6, fat * taper * 0.4);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + fat * 1.7, a0, a1);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r - fat * 1.6, a0 + 0.04, a1 + 0.04);
+      ctx.stroke();
+    }
+  });
+}
+
 // Per-frame foot metrics for a 4x4 sprite atlas: where the visible soles
 // actually END inside each cell (atlases carry transparent padding under the
 // feet, which made the fighters hover above the 3D ground plane), plus the

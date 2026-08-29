@@ -24,6 +24,7 @@
 import * as THREE from "three";
 import { PX, worldX, worldY, SIM_FLOOR } from "./shared.mjs";
 import { normalMapForAtlas, softDotTexture, hardShadowTexture, blurredAtlasTexture, bleedAtlasCanvas, hdComposedCanvas, atlasFootMetrics } from "./textures.mjs";
+import { FIGHTER_MASK_LAYER } from "./post.mjs";
 
 // HD (2x) atlas variants for 3D mode only (renderer/hd/MANIFEST.json).
 // Loaded lazily per fighter; on any failure the bank silently keeps the
@@ -54,7 +55,7 @@ const ATLAS_ROWS = 4;
 // light) — nothing glows uniformly around the silhouette.
 const SODIUM_RIM = new THREE.Color(0xffa04a);
 const NEON_RIM = new THREE.Color(0xff4fd8);
-const LAMP_KEY = new THREE.Color(0xc8ffdf);
+const LAMP_KEY = new THREE.Color(0xa9f7d2); // green-cyan: reads as the lamp's colour, not white
 const BODEGA_WARM = new THREE.Color(0xffc27a);
 const CYAN_RIM = new THREE.Color(0x3fd6ff);
 // Green overhead lamp the contact shadows stretch away from.
@@ -68,55 +69,12 @@ function applyAtlasFrame(texture, frame) {
   texture.offset.set(column / ATLAS_COLUMNS, 1 - (row + 1) / ATLAS_ROWS);
 }
 
-// Silhouette-projected floor shadow: the sprite's own alpha matte, skewed and
-// flattened along the ground, multiplied dark — sharp at the feet (sharp atlas
-// alpha) and feathering into the blurred matte with distance, exactly how a
-// body shadows a floor under an overhead lamp. Replaces the hovering ellipse.
-function shadowProjectionMaterial(map, blurMap) {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uMap: { value: map },
-      uBlurMap: { value: blurMap },
-      uUvOffset: { value: new THREE.Vector2(0, 0) },
-      uUvRepeat: { value: new THREE.Vector2(1, 1) },
-      uOpacity: { value: 0.6 },
-    },
-    vertexShader: /* glsl */ `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform sampler2D uMap;
-      uniform sampler2D uBlurMap;
-      uniform vec2 uUvOffset;
-      uniform vec2 uUvRepeat;
-      uniform float uOpacity;
-      varying vec2 vUv;
-      void main() {
-        vec2 uv = uUvOffset + vUv * uUvRepeat;
-        float aSharp = texture2D(uMap, uv).a;
-        float aBlur = texture2D(uBlurMap, uv).a;
-        // Sharp contact at the sole line, soft penumbra by the head-end.
-        float d = vUv.y;
-        float a = mix(aSharp, aBlur * 0.92, smoothstep(0.03, 0.62, d));
-        // Distance fade: darkest right at the feet, gone before full length.
-        float fade = 1.0 - smoothstep(0.04, 0.9, d);
-        gl_FragColor = vec4(0.0, 0.0, 0.0, a * fade * uOpacity);
-      }
-    `,
-    transparent: true,
-    depthWrite: false,
-    fog: false,
-  });
-}
-
-// Scratch vectors for the per-frame shadow-projection basis (no per-frame GC).
-const PROJ_X = new THREE.Vector3();
-const PROJ_Y = new THREE.Vector3();
-const PROJ_Z = new THREE.Vector3();
+// (The old silhouette-projected floor shadow is GONE: stacked on top of the
+// shadow-mapped key silhouette, the per-foot ellipses and the penumbra it
+// merged into one amorphous dark blob spanning both fighters — the exact
+// grounding failure the AAA critic called out. Grounding now reads as: two
+// tight per-foot contact ellipses + AO cores, ONE pose-true shadow-mapped
+// silhouette from the key light, and the wet-floor mirror.)
 
 // Colour texture from the BLED atlas (RGB dilated into the transparent
 // region): raw atlases store white under alpha=0, and linear filtering blended
@@ -150,10 +108,15 @@ function patchSpriteMaterial(material, atlasWidth, atlasHeight) {
     fillLeftColor: new THREE.Color(0x000000),
     fillRightColor: new THREE.Color(0x000000),
     floorBounce: new THREE.Color(0x000000),
+    zoneTint: new THREE.Color(1, 1, 1),
     facing: { value: 1 },
     hitWhite: { value: 0 },
     flashGuard: { value: 0 },
     superDim: { value: 0 },
+    // Screen-space sheen: lamp-relative x offset (moves the glint as the
+    // fighter crosses the stage) + overall specular budget.
+    lampDx: { value: 0 },
+    specStrength: { value: 0.6 },
     texel: new THREE.Vector2(1 / atlasWidth, 1 / atlasHeight),
   };
   material.userData.fb = fb;
@@ -167,10 +130,13 @@ function patchSpriteMaterial(material, atlasWidth, atlasHeight) {
     shader.uniforms.uFbFillLeftColor = { value: fb.fillLeftColor };
     shader.uniforms.uFbFillRightColor = { value: fb.fillRightColor };
     shader.uniforms.uFbFloorBounce = { value: fb.floorBounce };
+    shader.uniforms.uFbZoneTint = { value: fb.zoneTint };
     shader.uniforms.uFbFacing = fb.facing;
     shader.uniforms.uFbHitWhite = fb.hitWhite;
     shader.uniforms.uFbFlashGuard = fb.flashGuard;
     shader.uniforms.uFbSuperDim = fb.superDim;
+    shader.uniforms.uFbLampDx = fb.lampDx;
+    shader.uniforms.uFbSpecStrength = fb.specStrength;
     shader.uniforms.uFbTexel = { value: fb.texel };
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vFbWorld;\nvarying vec2 vFbLocal;")
@@ -189,10 +155,13 @@ uniform float uFbTopStrength;
 uniform vec3 uFbFillLeftColor;
 uniform vec3 uFbFillRightColor;
 uniform vec3 uFbFloorBounce;
+uniform vec3 uFbZoneTint;
 uniform float uFbFacing;
 uniform float uFbHitWhite;
 uniform float uFbFlashGuard;
 uniform float uFbSuperDim;
+uniform float uFbLampDx;
+uniform float uFbSpecStrength;
 uniform vec2 uFbTexel;`)
       // 1px-ERODED matte + derivative-smoothed cut at 0.5: the alpha is taken
       // as the MIN of this texel and its 4 neighbours, which shrinks the matte
@@ -206,9 +175,23 @@ float fbAe = min(diffuseColor.a, min(
       texture2D(map, vMapUv - vec2(0.0, uFbTexel.y)).a)));
 float fbAw = max(fwidth(fbAe), 0.0001);
 float fbCut = smoothstep(0.5 - fbAw, 0.5 + fbAw, fbAe);
-if (fbCut < 0.5) discard;
+// ONE-MEDIUM edge dither: jitter the cut threshold with a per-pixel screen
+// hash so the silhouette's nearest-neighbour staircase breaks into dithered
+// texels that the FXAA + shared film grain then melt into the stage, instead
+// of a hard 1px stair-step against smooth painterly bokeh.
+float fbDitherN = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453);
+if (fbCut < 0.32 + fbDitherN * 0.36) discard;
 diffuseColor.a = 1.0;`)
       .replace("#include <map_fragment>", `#include <map_fragment>
+// --- ONE-MEDIUM softening: quarter-texel tent blur folds the atlas's
+// nearest-neighbour micro-stairs into the same soft-media response as the
+// painterly stage (the unsharp mask downstream restores macro edge snap).
+vec3 fbSoft = (
+  texture2D(map, vMapUv + uFbTexel * vec2(0.65, 0.65)).rgb +
+  texture2D(map, vMapUv + uFbTexel * vec2(-0.65, 0.65)).rgb +
+  texture2D(map, vMapUv + uFbTexel * vec2(0.65, -0.65)).rgb +
+  texture2D(map, vMapUv + uFbTexel * vec2(-0.65, -0.65)).rgb) * 0.25;
+diffuseColor.rgb = mix(diffuseColor.rgb, fbSoft, 0.38);
 // --- Stage grade: desaturate, then warm the shadow tones toward the scene's
 // sodium ambient (the street bounces warm light, not blue) and keep the
 // upper body kissed by the cool overhead air.
@@ -218,6 +201,19 @@ float fbTone = smoothstep(0.08, 0.72, fbLum);
 diffuseColor.rgb *= mix(vec3(1.06, 0.94, 0.82), vec3(0.98, 0.99, 1.03), fbTone);
 float fbUp = clamp(vFbWorld.y * 0.5, 0.0, 1.0);
 diffuseColor.rgb *= mix(vec3(1.05, 0.99, 0.9), vec3(0.94, 1.01, 1.0), fbUp);
+// --- POSITION-DRIVEN ZONE GRADE (set per frame in poseRig): the body's own
+// exposure + colour temperature track the practical the fighter stands under
+// (sodium-warm left, green-white lamp centre, magenta by the K&A corner).
+// Shadow-weighted: the lift lives in the mids/shadows so highlights keep
+// their level — this is what stops a dark outfit sitting stops below the
+// wall behind it while the highlights stay honest.
+diffuseColor.rgb *= mix(uFbZoneTint, vec3(1.0), fbTone * 0.55);
+// --- OVERHEAD-DOWNLIGHT VERTICAL RESPONSE: the stage's one hard lamp keys
+// the crown/shoulders bright and lets the shins fall toward street shadow.
+// Scaled by lamp proximity (uFbTopStrength tracks it), so walking under the
+// lamp visibly re-lights the body top-down — the sprite is IN the room.
+float fbLampGrad = mix(0.80, 1.12, smoothstep(0.04, 0.92, vFbLocal.y));
+diffuseColor.rgb *= mix(1.0, fbLampGrad, 0.45 + 0.5 * clamp(uFbTopStrength, 0.0, 1.2));
 // --- Scene-light body fill (position-driven, set per frame in poseRig) ----
 // A lateral screen-space gradient ACROSS the body, screen-blended so it
 // lives in the shadow tones: the fighter visibly picks up magenta standing
@@ -237,9 +233,12 @@ diffuseColor.rgb = mix(diffuseColor.rgb,
   diffuseColor.rgb * vec3(0.88, 1.12, 0.99) + uFbTopColor * 0.085,
   fbTopBody * 0.8);
 // --- Warm FLOOR BOUNCE climbing the lower legs from the sodium-lit boards:
-// screen-blended into the shadow tones so shoes/shins pick up the floor.
-float fbLow = 1.0 - smoothstep(0.02, 0.34, vFbLocal.y);
-diffuseColor.rgb += uFbFloorBounce * fbLow * (vec3(1.0) - diffuseColor.rgb) * (0.5 + 0.5 * (1.0 - fbTone));
+// screen-blended so shoes/shins visibly pick up the orange light pools (the
+// critic's fix 2: the fighters must answer the floor light, obviously).
+// Reaches to the knee, strongest at the shoe, and rides on ALL tones so
+// bright trainers warm up too instead of only the shadow pixels.
+float fbLow = 1.0 - smoothstep(0.02, 0.42, vFbLocal.y);
+diffuseColor.rgb += uFbFloorBounce * fbLow * (vec3(1.0) - diffuseColor.rgb) * (0.75 + 0.25 * (1.0 - fbTone));
 // Super freeze: the body drops toward a silhouette (rims boosted in JS).
 diffuseColor.rgb *= 1.0 - uFbSuperDim * 0.62;`)
       .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
@@ -256,8 +255,10 @@ float fbEdgeL = clamp((1.0 - texture2D(map, vMapUv + fbLeftOff * 1.5).a) * 0.8
 float fbEdgeR = clamp((1.0 - texture2D(map, vMapUv - fbLeftOff * 1.5).a) * 0.8
   + (1.0 - texture2D(map, vMapUv - fbLeftOff * 3.0).a) * 0.3, 0.0, 1.0);
 vec2 fbTopOff = vec2(0.0, uFbTexel.y);
-float fbEdgeT = clamp((1.0 - texture2D(map, vMapUv + fbTopOff * 1.8).a) * 0.8
-  + (1.0 - texture2D(map, vMapUv + fbTopOff * 3.6).a) * 0.3, 0.0, 1.0);
+// Wider top reach (2.6/5.2 texels): the lamp strip must read as a STRIP
+// along hair/shoulders, not a 1px thread the FXAA melts away.
+float fbEdgeT = clamp((1.0 - texture2D(map, vMapUv + fbTopOff * 2.6).a) * 0.85
+  + (1.0 - texture2D(map, vMapUv + fbTopOff * 5.2).a) * 0.4, 0.0, 1.0);
 float fbFaceL = clamp(-normal.x * 2.1, 0.0, 1.0);
 float fbFaceR = clamp(normal.x * 2.1, 0.0, 1.0);
 float fbFaceT = clamp(normal.y * 1.8, 0.0, 1.0);
@@ -265,27 +266,65 @@ float fbRimL = fbEdgeL * pow(fbFaceL, 1.25);
 // The K&A neon hangs high on screen-right: its rim fades out down the legs
 // instead of outlining the trainers in pink.
 float fbRimR = fbEdgeR * pow(fbFaceR, 1.25) * (0.25 + 0.75 * vFbLocal.y);
-float fbRimT = fbEdgeT * pow(fbFaceT, 1.2);
+// Overhead-lamp rim STRIP (critic fix 2): the green-cyan stroke reads along
+// hair/shoulders — weighted hard toward the top of the body and allowed to
+// spill onto the upper side edges the way a real downlight wraps a crown.
+float fbTopBand = smoothstep(0.55, 0.9, vFbLocal.y);
+float fbRimT = fbEdgeT * pow(fbFaceT, 1.1) * (0.4 + 0.6 * fbTopBand)
+  + (fbEdgeL + fbEdgeR) * 0.5 * fbTopBand * clamp(normal.y * 1.4 + 0.2, 0.0, 1.0);
 float fbGuardFade = 1.0 - uFbFlashGuard * 0.4;
 float fbSuperRim = 1.0 + uFbSuperDim * 1.5;
 totalEmissiveRadiance += uFbRimLeftColor * (fbRimL * uFbRimLeftStrength * fbGuardFade * fbSuperRim);
 totalEmissiveRadiance += uFbRimRightColor * (fbRimR * uFbRimRightStrength * fbGuardFade * fbSuperRim);
-totalEmissiveRadiance += uFbTopColor * (fbRimT * uFbTopStrength * fbGuardFade * fbSuperRim);
+totalEmissiveRadiance += uFbTopColor * (fbRimT * uFbTopStrength * 1.75 * fbGuardFade * fbSuperRim);
 // Unlit-side edge discipline: silhouette pixels whose normals face AWAY from
 // every practical darken toward the night instead of glowing.
 float fbEdgeAny = clamp(fbEdgeL + fbEdgeR + fbEdgeT * 0.5, 0.0, 1.0);
 float fbLit = max(fbFaceL, max(fbFaceR, fbFaceT * 0.7));
 diffuseColor.rgb *= 1.0 - fbEdgeAny * (1.0 - fbLit) * 0.45;
-// --- Flash guard: darker inner rim keeps the silhouette through bursts ----
-diffuseColor.rgb *= 1.0 - uFbFlashGuard * (0.22 + 0.55 * fbEdgeAny);
+// --- BAKED-OUTLINE REPLACEMENT (one-medium fix): the atlas's hard black
+// contour, where it rides the silhouette, is repainted as stage rim light —
+// sodium-warm screen-left/top, K&A magenta on the neon side — so the sprite
+// is bounded by scene light like every 3D prop, not by printer ink. Unlit
+// stretches melt into the night instead of reading as a black sticker edge.
+float fbInk = fbEdgeAny * (1.0 - smoothstep(0.035, 0.16, fbLum));
+vec3 fbEdgeLight = uFbRimLeftColor * (fbEdgeL * (0.45 + 0.55 * fbFaceL) * uFbRimLeftStrength)
+  + uFbRimRightColor * (fbEdgeR * (0.3 + 0.7 * fbFaceR) * uFbRimRightStrength)
+  + uFbTopColor * (fbEdgeT * (0.4 + 0.6 * fbFaceT) * uFbTopStrength);
+diffuseColor.rgb = mix(diffuseColor.rgb, fbEdgeLight * 0.5 + vec3(0.02, 0.02, 0.03), fbInk * 0.8);
+// --- SCREEN-SPACE SHEEN (materials): normal-mapped glints keyed to the
+// overhead lamp — moving highlights on Deathblow's metal gauntlet, Jez's
+// glasses lenses, glove leather, and a faint sweat sheen on skin. Gloss
+// favours low-saturation surfaces (metal/glass/leather) and bright mids
+// (sweat), and the glint direction slides with uFbLampDx as fighters move.
+vec3 fbSpecDir = normalize(vec3(-uFbLampDx * 0.42, 0.58, 0.72));
+float fbSpec = pow(clamp(dot(normalize(normal), fbSpecDir), 0.0, 1.0), 16.0);
+float fbCmax = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
+float fbCmin = min(diffuseColor.r, min(diffuseColor.g, diffuseColor.b));
+float fbSatSpec = (fbCmax - fbCmin) / max(fbCmax, 0.001);
+float fbGloss = (0.3 + 0.7 * (1.0 - fbSatSpec)) * smoothstep(0.1, 0.5, fbLum);
+totalEmissiveRadiance += (uFbTopColor * 0.85 + vec3(0.15)) * (fbSpec * fbGloss * uFbSpecStrength);
+// Super freeze: the fighter is lit BY the freeze — a warm amber halo hugs
+// the silhouette and a faint body lift keeps him above the dimmed stage.
+totalEmissiveRadiance += vec3(1.0, 0.56, 0.2) * (uFbSuperDim * (fbEdgeAny * 0.7 + 0.08));
+// --- Flash guard (SF6 Drive-Impact discipline): while a burst is live the
+// interior keeps its OWN contrast (deepened S-curve, not a flat wash) and
+// the silhouette carries a hot high-contrast rim — the character must stay
+// fully readable through the flash instead of collapsing into a khaki blob.
+diffuseColor.rgb *= 1.0 - uFbFlashGuard * (0.14 + 0.6 * fbEdgeAny);
+vec3 fbGuardDeep = diffuseColor.rgb * diffuseColor.rgb * (3.0 - 2.0 * diffuseColor.rgb);
+diffuseColor.rgb = mix(diffuseColor.rgb, fbGuardDeep, uFbFlashGuard * 0.6);
+totalEmissiveRadiance += vec3(1.12, 0.98, 0.8) * (uFbFlashGuard * fbEdgeAny * 0.95);
 // Impact white flash: masked to the sprite alpha by construction (this whole
-// shader only survives the alpha test) — never a screen-space circle. Held
-// just under the bloom knee so the body reads white without flooding the
-// frame with a bloom halo.
-totalEmissiveRadiance += vec3(1.35, 1.35, 1.45) * uFbHitWhite;`);
+// shader only survives the alpha test) — never a screen-space circle.
+// Luminance-weighted and held UNDER the bloom knee (the old flat 1.35-1.45
+// crossed it: the whole victim bloomed into a frame-flooding white column on
+// the impact frame) — highlights snap white, shadow tones only lift, so the
+// body reads struck while its silhouette survives its own flash.
+totalEmissiveRadiance += vec3(1.02, 1.02, 1.1) * (uFbHitWhite * (0.4 + 0.6 * fbLum));`);
   };
   // Distinct program per patched material (uniforms differ per bank).
-  material.customProgramCacheKey = () => "fb-sprite-grade-v5";
+  material.customProgramCacheKey = () => "fb-sprite-grade-v8";
   return fb;
 }
 
@@ -312,13 +351,15 @@ float fbVnoise(vec2 p) {
              mix(fbHash(i + vec2(0.0, 1.0)), fbHash(i + vec2(1.0, 1.0)), f.x), f.y);
 }`)
       .replace("#include <map_fragment>", `#include <map_fragment>
-// Height fade: mirror strongest at the contact line, gone within ~one
-// character height of the feet — a glossy-floor sheen, not a ghost twin.
-diffuseColor.a *= 1.0 - smoothstep(0.02, 0.62, vFbRawUv.y);
+// Height fade: mirror strongest at the contact line, releasing by the chest
+// so the legs/torso silhouette genuinely reads before the water eats it.
+diffuseColor.a *= 1.0 - smoothstep(0.03, 0.72, vFbRawUv.y);
 // Roughness breakup: tall thin noise ribbons (x tight, y long) so the mirror
 // smears into interrupted vertical streaks like SF6 night-stage water.
+// Softened floor (0.72): the breakup interrupts the mirror without shredding
+// the silhouette into anonymous ribbons.
 float fbStreak = fbVnoise(vec2(vFbWorld.x * 11.0, vFbWorld.y * 1.7));
-fbStreak = 0.6 + 0.4 * smoothstep(0.25, 0.8, fbStreak);
+fbStreak = 0.72 + 0.28 * smoothstep(0.25, 0.8, fbStreak);
 // Fine horizontal ripple bands riding on the streaks.
 float fbRipple = 0.85 + 0.15 * sin(vFbWorld.y * 34.0 + vFbWorld.x * 3.0);
 // Gentle wetness variation (the old hard puddle gate erased the mirror on
@@ -326,7 +367,7 @@ float fbRipple = 0.85 + 0.15 * sin(vFbWorld.y * 34.0 + vFbWorld.x * 3.0);
 float fbPool = smoothstep(0.2, 0.55, fbVnoise(vec2(vFbWorld.x * 0.45 + 4.7, vFbWorld.y * 0.3 + 1.3)));
 diffuseColor.a *= fbStreak * fbRipple * (0.72 + 0.28 * fbPool);`);
   };
-  material.customProgramCacheKey = () => "fb-sprite-reflection-v4";
+  material.customProgramCacheKey = () => "fb-sprite-reflection-v5";
 }
 
 export class FighterLayer {
@@ -376,28 +417,31 @@ export class FighterLayer {
       map,
       alphaTest: 0.5,
     });
-    // Wet-floor reflection: blurred atlas, faded by height, tinted toward the
-    // floor's own warm sodium-lit boards (a mirror picks up the surface it
-    // lives on — the old cool-blue lift vanished against the warm floor).
-    const reflMap = blurredAtlasTexture(image, 3);
+    // Wet-floor reflection: LIGHTLY blurred atlas (radius 2 — the mirror must
+    // still read as the fighter's own flipped silhouette tracking every pose,
+    // not a colour blob), faded by height, tinted per-frame toward whichever
+    // practical the fighter stands under (poseRig grades the mirror colour).
+    const reflMap = blurredAtlasTexture(image, 2);
     applyAtlasFrame(reflMap, 0);
     const reflMaterial = new THREE.MeshBasicMaterial({
       map: reflMap,
       transparent: true,
-      opacity: 0.42,
+      opacity: 0.34,
       depthTest: false,
       depthWrite: false,
       side: THREE.DoubleSide,
-      color: new THREE.Color(1.1, 0.99, 0.86),
+      // Near-neutral lift: the mirror reads as the fighter's own flipped
+      // silhouette. The old 1.5/1.34/1.12 tint turned it into a warm colour
+      // smear that matched neither fighter (the critic's "coloured smears
+      // offset from the feet").
+      color: new THREE.Color(1.16, 1.12, 1.05),
       fog: false,
     });
     patchReflectionMaterial(reflMaterial);
-    // Silhouette-projected floor shadow (shares the colour + blurred mattes).
-    const shadowProj = shadowProjectionMaterial(map, reflMap);
     // Per-frame sole line + foot positions: kills the hover (transparent
     // padding under the feet) and drives the per-foot contact shadows.
     const footMetrics = atlasFootMetrics(image);
-    const bank = { map, normalMap, material, depthMaterial, reflMap, reflMaterial, shadowProj, fb, footMetrics, disposed: false };
+    const bank = { map, normalMap, material, depthMaterial, reflMap, reflMaterial, fb, footMetrics, disposed: false };
     // HD swap: once the 2x atlas arrives, replace the colour/emissive/depth
     // map with the HD composite. Alpha is byte-identical NN-2x, so pose,
     // shadow silhouette and rim sampling stay aligned — only fb.texel moves
@@ -414,7 +458,6 @@ export class FighterLayer {
         material.map = hdTexture;
         material.emissiveMap = hdTexture;
         depthMaterial.map = hdTexture;
-        shadowProj.uniforms.uMap.value = hdTexture;
         fb.texel.set(1 / hdImage.naturalWidth, 1 / hdImage.naturalHeight);
         material.needsUpdate = true;
         depthMaterial.needsUpdate = true;
@@ -439,6 +482,9 @@ export class FighterLayer {
     mesh.customDepthMaterial = banks.base.depthMaterial;
     mesh.castShadow = true;
     mesh.receiveShadow = false;
+    // Also on the fighter-mask layer: the painterly stage pass renders this
+    // layer alone to build its sprite-protection mask.
+    mesh.layers.enable(FIGHTER_MASK_LAYER);
 
     const root = new THREE.Group();
     root.add(mesh);
@@ -470,28 +516,23 @@ export class FighterLayer {
     const penumbra = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), shadowMaterial(this.blobTexture, 0.2));
     const footA = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), shadowMaterial(this.hardBlobTexture, 0.75));
     const footB = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), shadowMaterial(this.hardBlobTexture, 0.75));
-    for (const blob of [penumbra, footA, footB]) {
+    // Tight near-black AO cores INSIDE the sole ellipses: the darkest read
+    // sits directly under each shoe, which is what locks feet to the floor.
+    const coreA = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), shadowMaterial(this.hardBlobTexture, 0.9));
+    const coreB = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), shadowMaterial(this.hardBlobTexture, 0.9));
+    for (const blob of [penumbra, footA, footB, coreA, coreB]) {
       blob.rotation.x = -Math.PI / 2;
       blob.renderOrder = 2;
       shadow.add(blob);
     }
     footA.renderOrder = footB.renderOrder = 3; // sole ellipses read over the stretch
-
-    // Silhouette-projected floor shadow: feet-anchored quad, world matrix
-    // composed by hand each frame (flatten + skew along the lamp-away throw).
-    const projGeometry = new THREE.PlaneGeometry(1, 1);
-    projGeometry.translate(0, 0.5, 0);
-    const proj = new THREE.Mesh(projGeometry, banks.base.shadowProj);
-    proj.matrixAutoUpdate = false;
-    proj.renderOrder = 2;
-    proj.frustumCulled = false;
+    coreA.renderOrder = coreB.renderOrder = 3;
 
     this.group.add(shadow);
-    this.group.add(proj);
     this.group.add(reflRoot);
     this.group.add(root);
     return {
-      id, banks, mesh, root, reflMesh, reflRoot, shadow, footA, footB, penumbra, proj,
+      id, banks, mesh, root, reflMesh, reflRoot, shadow, footA, footB, coreA, coreB, penumbra,
       currentBank: "base", lastHitFlash: 0, hitWhiteTtl: 0,
     };
   }
@@ -501,20 +542,17 @@ export class FighterLayer {
     this.group.remove(rig.root);
     this.group.remove(rig.reflRoot);
     this.group.remove(rig.shadow);
-    this.group.remove(rig.proj);
     for (const bank of Object.values(rig.banks)) {
       bank.disposed = true; // cancels any in-flight HD swap
       bank.material.dispose();
       bank.depthMaterial.dispose();
       bank.reflMaterial.dispose();
-      bank.shadowProj.dispose();
       bank.map.dispose();
       bank.reflMap.dispose();
     }
     rig.mesh.geometry.dispose();
     rig.reflMesh.geometry.dispose();
-    rig.proj.geometry.dispose();
-    for (const blob of [rig.footA, rig.footB, rig.penumbra]) {
+    for (const blob of [rig.footA, rig.footB, rig.coreA, rig.coreB, rig.penumbra]) {
       blob.geometry.dispose();
       blob.material.dispose();
     }
@@ -526,7 +564,7 @@ export class FighterLayer {
       const fighter = fighters[side];
       let rig = this.rigs[side];
       if (!fighter) {
-        if (rig) rig.root.visible = rig.reflRoot.visible = rig.shadow.visible = rig.proj.visible = false;
+        if (rig) rig.root.visible = rig.reflRoot.visible = rig.shadow.visible = false;
         continue;
       }
       if (!rig || rig.id !== fighter.def.id) {
@@ -549,7 +587,6 @@ export class FighterLayer {
       rig.mesh.material = bank.material;
       rig.mesh.customDepthMaterial = bank.depthMaterial;
       rig.reflMesh.material = bank.reflMaterial;
-      rig.proj.material = bank.shadowProj;
       rig.currentBank = bankName;
     }
     applyAtlasFrame(bank.map, pose.frame);
@@ -621,20 +658,26 @@ export class FighterLayer {
     if (upright && footPad > 0) rig.root.position.y -= footPad * Math.abs(rig.mesh.scale.y);
 
     // --- Wet-floor reflection: exact mirror across the ground plane --------
+    // Silhouette-true (critic fix): near-1:1 vertical scale + a visible shear
+    // so the mirror tracks the actual pose instead of smearing into a colour
+    // blob offset from the feet. ~25-30% opacity, near-neutral tint.
     rig.reflRoot.position.set(rig.root.position.x, -rig.root.position.y, -0.015);
     rig.reflRoot.rotation.z = -rootRotation;
     rig.reflMesh.scale.set(
       rig.mesh.scale.x,
-      -rig.mesh.scale.y * 1.28, // vertical smear down the wet street
+      -rig.mesh.scale.y * 1.06, // whisper of vertical stretch down the street
       1,
     );
-    // Slight shear off vertical: mirrored light on rippled water never sits
+    // Visible shear off vertical: mirrored light on rippled water never sits
     // perfectly under its source.
-    rig.reflMesh.rotation.z = -rig.mesh.rotation.z + facing * 0.045;
+    rig.reflMesh.rotation.z = -rig.mesh.rotation.z + facing * 0.1;
     const airFade = THREE.MathUtils.clamp(1 - jump / 430, 0.22, 1);
     // Impact answer: the wet street brightens its mirror while a flash lives.
-    const flashBoost = 1 + THREE.MathUtils.clamp(this.getFlashLevel(), 0, 1) * 0.9;
-    bank.reflMaterial.opacity = Math.min(0.6, 0.34 * (0.55 + 0.45 * airFade) * flashBoost);
+    const flashBoost = 1 + THREE.MathUtils.clamp(this.getFlashLevel(), 0, 1) * 0.45;
+    // Super freeze: the mirror ducks out so the frozen fighters read as ONE
+    // clean silhouette each (no ghost twin under the banner).
+    bank.reflMaterial.opacity = Math.min(0.5, 0.38 * (0.55 + 0.45 * airFade) * flashBoost)
+      * (1 - this.superDim * 0.75);
 
     // --- Body-heat emissive: grit-ready aura + special glow -----------------
     const superReady = state.phase === "fight" && fighter.cinematicFrame === null
@@ -670,32 +713,59 @@ export class FighterLayer {
     const neonMix = THREE.MathUtils.clamp((fx + 0.5) / 5.5, 0, 1);
     fb.rimRightColor.copy(NEON_RIM).lerp(CYAN_RIM, THREE.MathUtils.clamp((fx - 3.4) / 3, 0, 1) * 0.55);
     fb.rimRightStrength.value = 0.22 + neonMix * neonMix * 1.15;
-    // Green-white top key from the overhead station lamp: strongest when the
+    // Green-cyan top key from the overhead station lamp: strongest when the
     // fighter stands near the lamp column, never fully off. Drives BOTH the
-    // silhouette stroke and the broad top-body gradient in the shader.
+    // silhouette strip along hair/shoulders and the broad top-body gradient.
+    // Raised hard (critic fix 2): the lamp directly above the fight line must
+    // OBVIOUSLY key the fighters' crowns.
     const lampNear = Math.exp(-((fx - LAMP_X) * (fx - LAMP_X)) / 7);
     fb.topColor.copy(LAMP_KEY);
-    fb.topStrength.value = 0.55 + lampNear * 0.5;
+    fb.topStrength.value = 0.85 + lampNear * 0.65;
     // --- Scene-light BODY fill (not just edges): the cheap trick that sits
     // the fighter IN the scene. Magenta wash rises across the body as the
     // fighter nears the K&A neon; warm sodium fill answers from screen-left;
     // both slide across the sprite as it moves.
-    fb.fillLeftColor.copy(SODIUM_RIM).multiplyScalar(0.12 + leftNear * 0.18);
-    fb.fillRightColor.copy(NEON_RIM).multiplyScalar(0.1 + neonMix * neonMix * 0.48);
-    // Warm floor bounce on shoes/shins from the sodium-lit boards; brightens
-    // where the fighter stands in a lamp pool.
+    fb.fillLeftColor.copy(SODIUM_RIM).multiplyScalar(0.17 + leftNear * 0.24);
+    fb.fillRightColor.copy(NEON_RIM).multiplyScalar(0.14 + neonMix * neonMix * 0.6);
+    // Warm ORANGE floor bounce on shoes/shins from the sodium light pools —
+    // deliberately obvious (critic fix 2): the lower legs read lit BY the
+    // street, brightest standing in a pool.
     fb.floorBounce.copy(SODIUM_RIM).lerp(BODEGA_WARM, 0.35)
-      .multiplyScalar(0.16 + lampNear * 0.1 + leftNear * 0.06);
+      .multiplyScalar(0.32 + lampNear * 0.16 + leftNear * 0.12);
+    // Position-driven ZONE GRADE: overall body exposure + temperature slide
+    // with the nearest practical. Base lift keeps a dark outfit level with
+    // the wall behind it (the shader weights this into the shadows/mids);
+    // walking neon-corner -> lamp -> sodium left visibly re-colours the body.
+    fb.zoneTint.setRGB(
+      1.16 * (1 + leftNear * 0.20 + neonMix * neonMix * 0.16),
+      1.16 * (1 + lampNear * 0.22 + leftNear * 0.05),
+      1.16 * (1 + neonMix * neonMix * 0.34 + lampNear * 0.10 - leftNear * 0.12),
+    );
     // Impact light spill: the burst relights the near side of BOTH fighters
     // in the burst's own colour for its ~0.25s life.
     const spill = this.getImpactSpill?.();
     if (spill && spill.level > 0.01) {
       const near = Math.exp(-((fx - spill.x) * (fx - spill.x)) / 1.6) * spill.level;
       const target = spill.x >= fx - 0.05 ? fb.fillRightColor : fb.fillLeftColor;
-      target.r += spill.color.r * near * 0.55;
-      target.g += spill.color.g * near * 0.55;
-      target.b += spill.color.b * near * 0.55;
+      // 0.32 (was 0.55): a point-blank burst warms the near side visibly
+      // without repainting the whole attacker as an orange lantern.
+      target.r += spill.color.r * near * 0.32;
+      target.g += spill.color.g * near * 0.32;
+      target.b += spill.color.b * near * 0.32;
     }
+    // Screen-space sheen: glint direction slides with the fighter's offset
+    // from the lamp; budget rises standing under it (specular pass, fix 6).
+    fb.lampDx.value = THREE.MathUtils.clamp((fx - LAMP_X) / 2.5, -1, 1);
+    fb.specStrength.value = 0.5 + lampNear * 0.55;
+    // Wet-floor mirror graded by position — GENTLY. The tint only nudges the
+    // mirror toward the practical the fighter stands under; the silhouette's
+    // own colours stay the read (a strong grade here is what turned the
+    // mirror into an anonymous colour smear).
+    bank.reflMaterial.color.setRGB(
+      1.12 + leftNear * 0.1 - neonMix * 0.03,
+      1.08 + lampNear * 0.1 + leftNear * 0.03,
+      1.0 + neonMix * neonMix * 0.24 + lampNear * 0.05,
+    );
     // Super freeze: body toward silhouette, rims boosted (set in the shader).
     fb.superDim.value = this.superDim;
     // Impact white flash: pop on the frame the sim hit lands (rising edge of
@@ -732,42 +802,34 @@ export class FighterLayer {
     };
     footFor(rig.footA, feet[0], -0.1);
     footFor(rig.footB, feet[1] || feet[0], 0.1);
+    // Tight AO core: a second, half-size near-black ellipse dead under each
+    // sole (slightly higher so it wins the depth sort) — the contact-darkest
+    // point that locks the shoe to the boards.
+    const coreFor = (blob, foot, fallbackU) => {
+      const u = foot ? foot.u : fallbackU;
+      blob.rotation.set(-Math.PI / 2, 0, 0);
+      blob.position.set(u * rig.mesh.scale.x + slide * 0.2, soleY + 0.002, -0.045 + slide * 0.15);
+      blob.scale.set(footScaleX * 0.48, footScaleZ * 0.55, 1);
+      blob.material.opacity = 0.95 * airFade * airFade * (0.6 + 0.4 * (foot ? 1 : 0));
+    };
+    coreFor(rig.coreA, feet[0], -0.1);
+    coreFor(rig.coreB, feet[1] || feet[0], 0.1);
     // Directional throw away from the green lamp.
     const awayX = THREE.MathUtils.clamp((fx - LAMP_X) / 3.2, -1, 1);
     const dirX = awayX * 0.85;
     const dirZ = 0.55; // lamp hangs behind the fight line: shadow falls forward
     const dirLen = Math.hypot(dirX, dirZ);
-
-    // --- Silhouette-projected shadow: the sprite's own alpha, flattened and
-    // skewed along the floor away from the lamp. Sharp at the feet, feathered
-    // with distance (in the shader). The old wide penumbra ellipse drops to a
-    // faint haze underneath — overlapping soft ellipses were the hover tell.
-    const projOk = upright && airFade > 0.3;
-    rig.proj.visible = projOk;
-    if (projOk) {
-      const sy = Math.abs(rig.mesh.scale.y);
-      const flat = 0.55; // flattened to ~half height along the throw
-      PROJ_X.set(rig.mesh.scale.x * 1.02, 0, 0);
-      PROJ_Y.set((dirX / dirLen) * sy * flat, 0, (dirZ / dirLen) * sy * flat);
-      PROJ_Z.set(0, 1, 0);
-      rig.proj.matrix.makeBasis(PROJ_X, PROJ_Y, PROJ_Z);
-      rig.proj.matrix.setPosition(rig.root.position.x + slide * 0.25, 0.0075, 0.045);
-      rig.proj.matrixWorldNeedsUpdate = true;
-      const projUniforms = bank.shadowProj.uniforms;
-      projUniforms.uUvOffset.value.copy(bank.map.offset);
-      projUniforms.uUvRepeat.value.copy(bank.map.repeat);
-      projUniforms.uOpacity.value = 0.62 * airFade;
-    }
-    const throwLen = renderSize * (0.5 + Math.abs(awayX) * 0.4);
+    // ONE faint soft ambient pool under the body (no more projected-silhouette
+    // stack — the shadow-mapped key silhouette is the single pose shadow now).
+    // Tight and shallow: the per-foot ellipses + AO cores carry the contact.
+    const throwLen = renderSize * (0.36 + Math.abs(awayX) * 0.2);
     rig.penumbra.rotation.set(-Math.PI / 2, 0, -Math.atan2(dirZ, dirX));
     rig.penumbra.position.set(
-      (dirX / dirLen) * throwLen * 0.32 + slide * 0.3,
+      (dirX / dirLen) * throwLen * 0.26 + slide * 0.3,
       0.002,
-      (dirZ / dirLen) * throwLen * 0.32 + slide * 0.2,
+      (dirZ / dirLen) * throwLen * 0.26 + slide * 0.2,
     );
-    rig.penumbra.scale.set(throwLen, renderSize * 0.24, 1);
-    // Faint ambient pool only while the projected silhouette carries the
-    // grounding; full strength again for down/rotated poses.
-    rig.penumbra.material.opacity = (projOk ? 0.09 : 0.24) * (0.35 + 0.65 * airFade);
+    rig.penumbra.scale.set(throwLen, renderSize * 0.2, 1);
+    rig.penumbra.material.opacity = 0.16 * (0.35 + 0.65 * airFade) * (1 - this.superDim * 0.7);
   }
 }

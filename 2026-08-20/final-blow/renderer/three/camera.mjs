@@ -11,8 +11,15 @@ import { PX, SIM_W, SIM_H, SIM_FLOOR, worldX, worldY } from "./shared.mjs";
 const BASE_FOV = 30;
 const EYE_HEIGHT = 1.02;              // low-angle SF6 hero framing (chest height)
 const FLOOR_NDC_Y = 1 - 2 * (SIM_FLOOR / SIM_H); // -0.6667: 2D floor line
-const FRAME_MARGIN = 0.95;            // world units kept beyond the far fighter
+const FRAME_MARGIN = 0.5;             // world units kept beyond the far fighter
+                                      // (0.62 still framed timidly next to SF6's
+                                      // frame-filling characters — critic fix 7)
 const PARALLAX_FOLLOW = 0.34;         // how much the camera trucks with the midpoint
+// Minimum punch-in: the camera never frames wider than this fraction of the
+// full 1280px stage width. Pushed in ~10% (0.86 -> 0.94): a neutral round
+// start now fills the frame with fighters the way SF6 frames its neutral,
+// instead of leaving them small inside CRT margins.
+const MIN_FILL = 0.94;
 
 export class FramingCamera {
   constructor(aspect = SIM_W / SIM_H) {
@@ -46,7 +53,8 @@ export class FramingCamera {
       this.smoothedMid += (0 - this.smoothedMid) * ease;
     }
     const camX = this.smoothedMid * PARALLAX_FOLLOW;
-    const distance = this.baseDistance * Math.max(1, halfNeed / (this.halfWidthAtPlane * 0.985));
+    const fillFloor = fighters.length === 2 ? MIN_FILL : 1;
+    const distance = this.baseDistance * Math.max(fillFloor, halfNeed / (this.halfWidthAtPlane * 0.985));
     this.smoothedDistance += (distance - this.smoothedDistance) * ease;
 
     // --- Cinematic presentation moves (KO punch-in, recoil, dutch tilt) ----

@@ -41,7 +41,10 @@ body {
   display: grid;
   place-items: center;
   min-height: 100svh;
-  padding: clamp(0px, 1.5vw, 22px);
+  /* --fb-margin defaults to 1 (identical layout); only the CINEMA 3D
+     renderer writes it (~0.3 while 3D is active) so the dark page margins
+     stop eating viewport that the picture could own. */
+  padding: calc(clamp(0px, 1.5vw, 22px) * var(--fb-margin, 1));
   overscroll-behavior: none;
 }
 
@@ -171,11 +174,20 @@ button { color: inherit; }
     rgba(0,0,0,.08) 3px
   );
   mix-blend-mode: overlay;
-  opacity: .68;
+  /* --fb-crt-fade defaults to 1 (identical look); only the CINEMA 3D
+     renderer writes it, easing toward .5 during supers/finishers so peak
+     frames shed the scanline veil. */
+  opacity: calc(.68 * var(--fb-crt-fade, 1));
 }
 
 .game-frame::after {
-  box-shadow: inset 0 0 80px rgba(0, 0, 0, .68), inset 0 0 8px rgba(255, 255, 255, .2);
+  /* --fb-bezel-scale defaults to 1 (identical look); only the CINEMA 3D
+     renderer writes it (~0.5 while 3D is active) so the inner CRT vignette
+     stops eating the frame edges — the picture reclaims the tube. */
+  box-shadow: inset 0 0 calc(80px * var(--fb-bezel-scale, 1)) rgba(0, 0, 0, .68), inset 0 0 8px rgba(255, 255, 255, .2);
+  /* Same contract: the inner-bezel vignette lifts during peak moments so
+     the image reads as bleeding past the tube edge. Default 1 = unchanged. */
+  opacity: var(--fb-bezel-fade, 1);
 }
 
 canvas {

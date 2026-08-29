@@ -52,12 +52,26 @@ export function createRenderer(host) {
   let fpsEstimate = 60;
   let lastStatsFrame = { calls: 0, triangles: 0 };
   const layers = new Map();
+  // ONE-MEDIUM direction (spike winner): the stage is painted toward the
+  // sprites — fighter-masked Kuwahara smoothing + posterize/paper finish, so
+  // the whole frame shares the sprites' graphic fidelity (SF6's own trick:
+  // simplified painted backdrop, characters crispest). Default ON in 3D;
+  // window.__fbStyle = "off" disables it live for A/B probes.
+  let styleMode = null;
   // Super-freeze presentation: eased 0..1 while a grit super is in flight.
   // Drops the stage + fighter bodies toward a rim-lit silhouette and fires a
   // one-shot chromatic-split pulse on ignition. Render-only.
   let superDim = 0;
   let superWasActive = false;
   let aberrPulse = 0;
+  // KO / round-start echo of the super-freeze graphic language: eased levels
+  // that pull a lighter dose of the same duotone/radial DNA (render-only).
+  let koGrade = 0;
+  let introGrade = 0;
+  // CRT/bezel dial-back at peak moments (super, KO): last CSS var written so
+  // the DOM is only touched when the eased value actually moves.
+  let lastPeakVar = -1;
+  const scratchPop = new THREE.Vector3();
 
   function resolveQuality() {
     if (manualQuality) return manualQuality;
@@ -102,7 +116,9 @@ export function createRenderer(host) {
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       quality = resolveQuality();
-      const pixelRatio = quality === "high" ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+      // DPR cap 2 (was 1.5) on the high tier: on hi-dpi displays the sprite
+      // texels stop beating against the CSS scanline pitch (critic fix 7).
+      const pixelRatio = quality === "high" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
       renderer.setPixelRatio(pixelRatio);
       renderer.setSize(SIM_W, SIM_H, false);
 
@@ -150,10 +166,33 @@ export function createRenderer(host) {
       height: SIM_H,
       quality,
     });
+    post.setPainterly?.(styleMode === "a");
+  }
+
+  // Screen real-estate reclaim (critic fix 7), 3D-active only: slim the CRT
+  // bezel vignette, drop the page margins and calm the always-on scanline
+  // veil. Every var defaults to 1 in CSS and is REMOVED the moment the 3D
+  // world goes inactive — the 2D presentation stays byte-identical.
+  let frameVarsApplied = false;
+  function applyFrameVars(visible) {
+    if (visible === frameVarsApplied) return;
+    frameVarsApplied = visible;
+    const frame = host.gameCanvas.parentElement;
+    if (visible) {
+      frame?.style.setProperty("--fb-bezel-scale", "0.5");
+      document.body.style.setProperty("--fb-margin", "0.3");
+    } else {
+      frame?.style.removeProperty("--fb-bezel-scale");
+      frame?.style.removeProperty("--fb-crt-fade");
+      frame?.style.removeProperty("--fb-bezel-fade");
+      document.body.style.removeProperty("--fb-margin");
+      lastPeakVar = -1;
+    }
   }
 
   renderer3d.setVisible = (visible) => {
     if (renderer3d.canvas) renderer3d.canvas.style.display = visible ? "block" : "none";
+    applyFrameVars(Boolean(visible && renderer3d.ready));
   };
 
   renderer3d.renderFrame = (timeMs, dtMs) => {
@@ -161,7 +200,7 @@ export function createRenderer(host) {
     const requested = resolveQuality();
     if (requested !== quality) {
       quality = requested;
-      renderer.setPixelRatio(quality === "high" ? Math.min(window.devicePixelRatio || 1, 1.5) : 1);
+      renderer.setPixelRatio(quality === "high" ? Math.min(window.devicePixelRatio || 1, 2) : 1);
       renderer.setSize(SIM_W, SIM_H, false);
       rebuildPost();
       // Stage shadow-map budgets differ per tier; rebuild lazily.
@@ -180,6 +219,13 @@ export function createRenderer(host) {
     }
     const t = freeze ? frozenAt : clockSec;
 
+    // Painterly-stage switch (QA can set window.__fbStyle = "off" to compare).
+    const requestedStyle = window.__fbStyle === "off" ? "off" : "a";
+    if (requestedStyle !== styleMode) {
+      styleMode = requestedStyle;
+      post.setPainterly?.(styleMode === "a");
+    }
+
     const state = host.state;
     framing.update(state, host.cinematicCamera, freeze ? 0.0001 : dtSec, t);
     stage.update?.(t, state);
@@ -196,10 +242,48 @@ export function createRenderer(host) {
     const fightersLayer = layers.get("fighters");
     if (fightersLayer) fightersLayer.superDim = superDim;
     stage.setDim?.(superDim);
-    post.setAberration?.(Math.max(aberrPulse, superDim > 0.5 ? (superDim - 0.5) * 0.45 : 0));
+    // Impact screen answer: a ~2-frame radial-blur + chromatic pulse rings
+    // the lens on meaningful hits (the VFX layer decays it fast).
+    const impactPulse = layers.get("vfx")?.pulseLevel?.() ?? 0;
+    post.setAberration?.(Math.max(aberrPulse, impactPulse * 0.85, superDim > 0.5 ? (superDim - 0.5) * 0.45 : 0));
+    // Super freeze adds a sustained radial whip on the stage behind the
+    // attacker (the fighters sit in the sharp centre by construction).
+    post.setRadial?.(Math.max(impactPulse, superDim * 0.42));
+    // Contact-point lens pop: project the hit's world point into screen uv
+    // for the ~1-2 frame local refraction/chroma punch.
+    const popInfo = layers.get("vfx")?.popInfo?.();
+    if (popInfo) {
+      scratchPop.set(popInfo.x, popInfo.y, 0).project(framing.camera);
+      post.setImpactPop?.(popInfo.level, (scratchPop.x + 1) / 2, (scratchPop.y + 1) / 2);
+    } else {
+      post.setImpactPop?.(0, 0.5, 0.5);
+    }
+    // KO + round-start echo the super's graphic DNA at a lighter dose, so
+    // the peak-moment language is consistent instead of super-only.
+    const koActive = state.phase === "roundover" || state.phase === "finish" || state.phase === "result";
+    koGrade = THREE.MathUtils.clamp(koGrade + (koActive ? 2.4 : -3) * stepSec, 0, 1);
+    const introActive = state.phase === "intro";
+    introGrade = THREE.MathUtils.clamp(introGrade + (introActive ? 2.4 : -3) * stepSec, 0, 1);
     // SF6 super-flash: the frozen gameplay behind the cut-in band grades to a
     // two-tone indigo/amber while the super owns the frame. Render-only.
-    post.setDuotone?.(superDim * 0.72);
+    post.setDuotone?.(Math.max(superDim * 0.82, koGrade * 0.3, introGrade * 0.18));
+    // Fighter-masked stage settle behind the super (desaturated warm-grey).
+    post.setSuper?.(superDim);
+    // CRT/bezel dial-back (peak moments feel bigger than the screen): fade
+    // the always-on scanline overlay ~50% and let the inner-bezel vignette
+    // drop while a super or KO owns the frame. CSS vars default to 1, and
+    // ONLY this 3D path ever writes them — 2D mode is byte-identical.
+    const peak = Math.max(superDim, koGrade);
+    const peakVar = Math.round(peak * 40) / 40;
+    if (peakVar !== lastPeakVar) {
+      lastPeakVar = peakVar;
+      const frame = host.gameCanvas.parentElement;
+      // 0.62 base (critic fix 7): the full-strength scanline veil shimmered
+      // across the sprite faces and cheapened the character art; 3D mode
+      // keeps the CRT flavour at ~60% and still sheds more at peak moments.
+      frame?.style.setProperty("--fb-crt-fade", (0.62 * (1 - peakVar * 0.5)).toFixed(3));
+      frame?.style.setProperty("--fb-bezel-fade", (1 - peakVar * 0.55).toFixed(3));
+    }
     for (const layer of layers.values()) layer.update(state, freeze ? 0 : dtSec, t);
     // Impact camera kick: a decaying 2-3px presentation shake on hits, layered
     // on top of the sim-driven shake the framing camera already maps.
