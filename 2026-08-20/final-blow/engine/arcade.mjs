@@ -159,3 +159,82 @@ export function arcadeRunSnapshot(run) {
 export function getArcadeEnding(playerId) {
   return ARCADE_ENDINGS[playerId] || null;
 }
+
+// ---------------------------------------------------------------------------
+// Release 1.8 GRIND — arcade endings pass. Each fighter's single text card
+// expands into a 3-panel resolution sequence. Panels reuse art the game
+// already ships (the 4x4 specials atlas and the roster portrait) under CSS
+// treatments — `art` picks the asset, `frame` addresses the atlas cell, and
+// `treat` names the CSS grade the renderer applies. No new image assets.
+// ---------------------------------------------------------------------------
+
+const panel = (title, text, art, frame, treat) => Object.freeze({ title, text, art, frame, treat });
+
+export const ARCADE_ENDING_PANELS = Object.freeze({
+  deathblow: Object.freeze([
+    panel("THE LAST BELL", "The Commissioner's ledger hit the parking lot before he did. DeathBlow stood over the cracked asphalt and let the silence do the counting.", "specials", 10, "night"),
+    panel("THE GYM", "The hidden purse bought heavy bags, headgear, and a door that never locks. Every kid from Somerset learned the stance before the swing. Nobody pays dues to fight fair.", "portrait", 0, "work"),
+    panel("THE GROUND REMEMBERS", "They still point at the cracks in the lot and tell the story wrong. DeathBlow doesn't correct them. The ground keeps the only record that matters.", "specials", 14, "dawn"),
+  ]),
+  jez: Object.freeze([
+    panel("LIGHTS OUT", "Jez cut the power to the circuit with a sign-cutter and a smile. The last thing the Commissioner saw at the Vet was his own scoreboard going dark.", "specials", 10, "night"),
+    panel("THE SHOP", "By week's end the shop had a waiting list: storefronts, barbershops, one very apologetic pretzel cart. Every sign went up free for anybody the circuit ever bled.", "portrait", 0, "work"),
+    panel("CITY OF NEON", "Above the Vet lot a new blue-and-pink sign hums all night. It reads EVERYBODY GETS HOME. In this city, a good sign doesn't point — it leads.", "specials", 14, "dawn"),
+  ]),
+  alan: Object.freeze([
+    panel("THE HEAVY HAND", "Allan didn't celebrate the knockout. He picked the Commissioner's keys off the concrete and weighed them like a decision he'd already made.", "specials", 10, "night"),
+    panel("OPEN DOORS", "Every locked training room in South Philly opened the same morning. The hardest punch in the city spent it holding pads for rookies. Nobody laughed twice.", "portrait", 0, "work"),
+    panel("WHAT'S LEFT STANDING", "They ask him what strength is. Allan points at the crowded gym floor, the noise, the bad footwork getting better. Strength is what you leave standing.", "specials", 14, "dawn"),
+  ]),
+  post: Object.freeze([
+    panel("WET PAINT", "The black book made a terrible read and a beautiful primer. Post rolled the first coat across the arena wall before the crowd finished leaving.", "specials", 10, "night"),
+    panel("FULL COVERAGE", "Names, dates, stolen wins — the whole ledger went up in color, forty feet tall and impossible to subpoena. The city's largest mural doesn't fade. It testifies.", "portrait", 0, "work"),
+    panel("THE WALLS TALK", "Tour buses slow down on the boulevard now. Kids read the wall out loud to their parents. Post signs it the same way every time: THE WALLS FINALLY TOLD THE WHOLE STORY.", "specials", 14, "dawn"),
+  ]),
+  benny: Object.freeze([
+    panel("BREAKER THROWN", "Benny found the arena's stolen feed in a junction box the Commissioner thought nobody could read. One rewire and the whole crooked grid went honest.", "specials", 10, "night"),
+    panel("THE GRID ALIVE", "The El ran bright past midnight. Corner lights came back on blocks that had learned to live dark. A hundred rowhomes hummed like the city remembered their names.", "portrait", 0, "work"),
+    panel("NO CLOSED CIRCUITS", "They offered him the utility's reward money. Benny asked for a ladder and a longer coil of wire. No circuit stays closed forever — not while he's holding the pliers.", "specials", 14, "dawn"),
+  ]),
+  donald: Object.freeze([
+    panel("THE TROPHY", "The brass cup was loud, gaudy, and exactly his taste. Donald fired the Commissioner's entire ringside crew from the podium, alphabetically, savoring each one.", "specials", 10, "night"),
+    panel("THE BACK NINE", "The private clubhouse became the loudest public driving range in Philadelphia. Tee time is free if you can prove the old circuit ever charged you anything.", "portrait", 0, "work"),
+    panel("THE WALK HOME", "He tells everyone the range was a business decision. But the regulars notice he stays after close, picking up stray balls under the lights. The walk home was quiet.", "specials", 14, "dawn"),
+  ]),
+  cyraxx: Object.freeze([
+    panel("SIGNAL FOUND", "The Commissioner's archive was buried under six passwords and a lie. Cyraxx streamed the whole thing raw — distorted, deafening, impossible to mute.", "specials", 10, "night"),
+    panel("NO MORE BUFFERING", "Every screen from Kensington to South Philly carried the truth at full volume. The feedback squeal became the city's favorite ringtone out of pure spite.", "portrait", 0, "work"),
+    panel("STILL LIVE", "The channel never went dark again. Cyraxx signs off every broadcast the same way, mic against the speaker: the signal was never lost. Only buried.", "specials", 14, "dawn"),
+  ]),
+  ali: Object.freeze([
+    panel("LAST TRACK", "The final bell dropped like a bassline. Ali G grabbed the arena PA before security grabbed him, and the Vet became a venue whether it liked it or not.", "specials", 10, "night"),
+    panel("BLOCK PARTY", "The party ran until the stadium lights gave out and three blocks past that. Nobody remembered the Commissioner's rules. Everybody remembered the chorus.", "portrait", 0, "work"),
+    panel("KEEP THE BEAT", "He left the mic taped to the fence with a note: FOR WHOEVER'S NEXT. West Staines massive, Philly local. Give the block the mic and it never goes quiet.", "specials", 14, "dawn"),
+  ]),
+});
+
+export function endingPanelsFor(playerId) {
+  return ARCADE_ENDING_PANELS[playerId] || null;
+}
+
+// SF2-style credits roll data: the roster cast crawls first (the renderer
+// joins these role lines with the live roster list), then the crew. All of it
+// is plain data so tests can hold the contributor credits to account.
+export const ARCADE_CREDITS = Object.freeze({
+  heading: "FINAL BLOW",
+  subheading: "PHILLY AFTER DARK",
+  castTitle: "THE ROSTER",
+  bossCredit: Object.freeze({ role: "AND THE COMMISSIONER AS", name: "KEEPER OF THE BLACK BOOK" }),
+  crewTitle: "THE CREW",
+  crew: Object.freeze([
+    Object.freeze({ role: "CREATED BY", name: "JEZ" }),
+    Object.freeze({ role: "GAME DIRECTION", name: "CLAW · THE OPENCLAW DESK" }),
+    Object.freeze({ role: "ENGINEERING", name: "GAMEMAKER · THE AGENT FLEET" }),
+    Object.freeze({ role: "FIGHTER & STAGE ART", name: "GPT-IMAGE" }),
+    Object.freeze({ role: "MUSIC & SOUND", name: "ELEVENLABS" }),
+    Object.freeze({ role: "QA BOT CREW", name: "HEADLESS CHROME · LOCAL 1280" }),
+    Object.freeze({ role: "FILMED ON LOCATION IN", name: "PHILADELPHIA · WILDWOOD · INTERNATIONAL WATERS" }),
+    Object.freeze({ role: "SPECIAL THANKS", name: "EVERY CORNER STORE THAT STAYED OPEN LATE" }),
+  ]),
+  finale: "EVERYBODY GETS HOME.",
+});
