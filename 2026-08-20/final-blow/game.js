@@ -974,6 +974,11 @@ const state = {
   // the desktop high profile); CRT mode is an opt-in look and defaults off.
   sharpRender: localStorage.getItem("final-blow-sharp-render") !== "0",
   crtMode: localStorage.getItem("final-blow-crt-mode") === "1",
+  // CINEMA 3D experimental Three.js presentation renderer. Persisted like the
+  // other toggles; ?renderer=3d forces it on for the session without
+  // persisting. Battery profile refuses activation (see cinema3dAllowed).
+  cinema3d: new URLSearchParams(location.search).get("renderer") === "3d"
+    || localStorage.getItem("final-blow-cinema-3d") === "1",
   performance: null,
   // Captions label every sound event over the fight — invaluable when you
   // need them, permanent UI noise when you don't. Opt-in as of the
@@ -8690,6 +8695,12 @@ function spawnHit(x, y, def, attackKind, blocked, { direction = 1, counter = fal
   // Wave 6: directional camera recoil on landed heavy-class hits plus the
   // counter-hit punch-in (render-only latches, guarded + tick-deduped inside).
   latchImpactCinema(x, y, attackKind, blocked, direction, counter);
+  // CINEMA 3D impact latch: null when 3D is off (zero-cost), presentation-only
+  // when on — the bridge guards rollbackResimulating + tick-dedupes inside,
+  // following the announce()/latch pattern above.
+  if (cinema3dBridge.onHit) {
+    cinema3dBridge.onHit({ x, y, kind: attackKind, blocked, direction, counter, tick: state.simulationTick });
+  }
   if (blocked) {
     const count = Math.max(3, Math.round(8 * state.performance.particleScale));
     for (let index = 0; index < count; index += 1) {
@@ -13425,6 +13436,16 @@ function draw(time) {
   // Wave 7 DPR-sharp baseline: all logical-coordinate code below draws through
   // this transform; identity when sharp render is off (renderDpr === 1).
   ctx.setTransform(renderDpr, 0, 0, renderDpr, 0, 0);
+  // CINEMA 3D: when the experimental Three.js world renderer is active it
+  // draws the world on its own canvas UNDER this one; the 2D canvas is
+  // cleared so only the screen-space overlay passes composite on top. When
+  // inactive this is a no-op and the 2D path below is untouched.
+  const cinema3dWorld = cinema3dWorldActive();
+  cinema3dBridge.renderer?.setVisible(cinema3dWorld);
+  if (cinema3dWorld) {
+    cinema3dBridge.renderer.renderFrame(time, hudDtMs);
+    ctx.clearRect(0, 0, W, H);
+  }
   ctx.save();
   const shakeScale = state.accessibility.reducedMotion ? 0 : state.accessibility.shakeScale;
   const shakeX = state.shake > 0 ? Math.sin((state.simulationTick + 1) * 12.9898) * state.shake * 9 * shakeScale : 0;
@@ -13462,46 +13483,58 @@ function draw(time) {
     gritFlareLevel[0] = Math.max(0, gritFlareLevel[0] - 0.05);
     gritFlareLevel[1] = Math.max(0, gritFlareLevel[1] - 0.05);
   }
-  drawStage(time);
-  if (state.screen === "fight") {
-    drawSuperSpotlight();
-    drawWinPoseSpotlight();
-    drawSuperFocusLines(time);
-    drawFighterCastShadows();
-    drawFighterReflections(time);
-    drawPaintTraps(time);
-    drawStageWeapon(time);
-    drawProjectiles(time);
-    drawAfterimages();
-    const ordered = [...state.fighters].sort((a, b) => a.y - b.y);
-    ordered.forEach((fighter) => drawFighter(fighter, time));
-    state.fighters.forEach((fighter) => drawDizzyStars(fighter, time));
-    state.fighters.forEach((fighter) => drawGuardCrushMarker(fighter, time));
-    drawParticles();
-    drawForegroundOccluders(state.fighters.length
-      ? (state.fighters[0].x + state.fighters[1].x) * 0.5 : W * 0.5);
+  if (!cinema3dWorld) {
+    drawStage(time);
+    if (state.screen === "fight") {
+      drawSuperSpotlight();
+      drawWinPoseSpotlight();
+      drawSuperFocusLines(time);
+      drawFighterCastShadows();
+      drawFighterReflections(time);
+      drawPaintTraps(time);
+      drawStageWeapon(time);
+      drawProjectiles(time);
+      drawAfterimages();
+      const ordered = [...state.fighters].sort((a, b) => a.y - b.y);
+      ordered.forEach((fighter) => drawFighter(fighter, time));
+      state.fighters.forEach((fighter) => drawDizzyStars(fighter, time));
+      state.fighters.forEach((fighter) => drawGuardCrushMarker(fighter, time));
+      drawParticles();
+      drawForegroundOccluders(state.fighters.length
+        ? (state.fighters[0].x + state.fighters[1].x) * 0.5 : W * 0.5);
+    }
   }
   // Wave 7: capture the live world transform so the screen-space distortion
   // ring can project its world-space origin after the restore.
   if (distortionRing) worldScreenTransform = ctx.getTransform();
   ctx.restore();
-  drawStageGrade();
-  drawFinisherRealityComposite();
-  // Wave 7 screen-space composite passes, in order: slow-mo smear first, then
-  // the frame capture (so the smear recursively accumulates but bloom can
-  // never feed back into itself), then bloom and the one-shot warps.
-  updateSlowMoBlur();
-  requestFrameCapture();
-  drawBloomComposite();
-  drawDistortionRing(hudDtMs);
-  drawChromaticAberration();
+  // CINEMA 3D handles grade/bloom/grain in its own post stack; the 2D
+  // frame-capture composites would smear a transparent canvas, so they are
+  // skipped while the 3D world is live. UI-readability overlays (letterbox,
+  // cut-ins, flash, CRT, debug) still draw on top either way.
+  if (!cinema3dWorld) {
+    drawStageGrade();
+    drawFinisherRealityComposite();
+    // Wave 7 screen-space composite passes, in order: slow-mo smear first, then
+    // the frame capture (so the smear recursively accumulates but bloom can
+    // never feed back into itself), then bloom and the one-shot warps.
+    updateSlowMoBlur();
+    requestFrameCapture();
+    drawBloomComposite();
+    drawDistortionRing(hudDtMs);
+    drawChromaticAberration();
+  }
   drawIntroLetterbox();
   drawFinisherOverlay();
   if (state.flash > 0) {
-    // Capped well under full white: at 0.9 the flash erased the whole frame on
-    // every multi-hit, which read as confusion rather than impact. Supers and
-    // finishers still reach the cap; ordinary hits sit far below it.
-    ctx.fillStyle = `rgba(255,245,220,${clamp(state.flash * 3, 0, 0.5)})`;
+// CINEMA 3D carries its own layered impact flash (hit-masked white pop,
+    // shockwave ring, embers in the world), so the screen wash is nearly off
+    // there. The 2D path keeps the 1.9E cap: at 0.9 the flash erased the
+    // whole frame on every multi-hit; supers and finishers still reach it.
+    const flashAlpha = cinema3dWorld
+      ? clamp(state.flash * 0.4, 0, 0.08)
+      : clamp(state.flash * 3, 0, 0.5);
+    ctx.fillStyle = `rgba(255,245,220,${flashAlpha})`;
     ctx.fillRect(0, 0, W, H);
   }
   drawSuperCutIn(hudDtMs);
@@ -13588,6 +13621,9 @@ function applyPerformanceSettings() {
   $("#visualQualitySelect").value = state.visualQuality;
   $("#sharpRenderToggle").checked = Boolean(state.sharpRender);
   $("#crtModeToggle").checked = Boolean(state.crtMode);
+  $("#cinema3dToggle").checked = Boolean(state.cinema3d);
+  // Profile switches can grant/revoke CINEMA 3D eligibility (battery refuses).
+  ensureCinema3d();
   $("#pausePerformance").textContent = `${state.visualQuality.toUpperCase()} VISUALS · ${state.performance.id.toUpperCase()} PROFILE · ${state.performance.particleBudget} FX BUDGET`;
   // Wave 7: quality switches re-apply the DPR-sharp backing store.
   applyBackingStoreResolution();
@@ -15594,6 +15630,13 @@ $("#crtModeToggle").addEventListener("change", (event) => {
   state.crtMode = event.target.checked;
   localStorage.setItem("final-blow-crt-mode", state.crtMode ? "1" : "0");
 });
+$("#cinema3dToggle").addEventListener("change", (event) => {
+  state.cinema3d = event.target.checked;
+  localStorage.setItem("final-blow-cinema-3d", state.cinema3d ? "1" : "0");
+  // Live-switch: the module lazy-loads on first activation; toggling off just
+  // hides the 3D canvas and resumes the 2D world draw next frame.
+  ensureCinema3d();
+});
 $("#soundCaptionsToggle").addEventListener("change", (event) => {
   state.soundCaptions = event.target.checked;
   localStorage.setItem("final-blow-sound-captions", event.target.checked ? "1" : "0");
@@ -16851,6 +16894,62 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
 
 setupRoster();
 renderMoveList();
+// ---------------------------------------------------------------------------
+// CINEMA 3D bridge — experimental Three.js presentation renderer.
+// The module lazy-loads on first activation (toggle or ?renderer=3d) so the
+// 2D game never pays its cost. The 3D renderer only READS sim state; the
+// world-draw handoff happens per-frame in draw() via cinema3dWorldActive().
+// Battery performance profile refuses activation entirely.
+// ---------------------------------------------------------------------------
+const cinema3dBridge = { renderer: null, loading: false, onHit: null };
+
+function cinema3dAllowed() {
+  return state.performance?.id !== "battery";
+}
+
+function cinema3dWorldActive() {
+  return Boolean(
+    cinema3dBridge.renderer?.ready
+    && state.cinema3d
+    && cinema3dAllowed()
+    && state.screen === "fight"
+    // Scripted fatality finishers keep their bespoke 2D cinematic presentation.
+    && !state.finisher,
+  );
+}
+
+function ensureCinema3d() {
+  if (!state.cinema3d || !cinema3dAllowed()) {
+    cinema3dBridge.renderer?.setVisible(false);
+    return;
+  }
+  if (cinema3dBridge.renderer || cinema3dBridge.loading) return;
+  cinema3dBridge.loading = true;
+  import("./renderer/three/main.mjs").then((module) => {
+    const renderer3d = module.createRenderer({
+      state,
+      cinematicCamera,
+      stageImages,
+      fighterAtlases,
+      fighterMoveAtlases,
+      fighterRenderSize,
+      fighterAnimationPose,
+      moveSheetAdjust: MOVE_SHEET_ADJUST,
+      gritSuperCost: GRIT_RULES.superCost,
+      gameCanvas: canvas,
+      isRollbackResimulating: () => rollbackResimulating,
+      getPerformanceProfile: () => state.performance,
+      isWorldActive: () => cinema3dWorldActive(),
+    });
+    cinema3dBridge.renderer = renderer3d;
+    cinema3dBridge.onHit = (payload) => renderer3d.onHit(payload);
+  }).catch((error) => {
+    console.warn("CINEMA 3D failed to load; staying on the 2D renderer.", error);
+  }).finally(() => {
+    cinema3dBridge.loading = false;
+  });
+}
+
 renderBindings();
 applyAccessibilitySettings();
 applyTouchSettings();
