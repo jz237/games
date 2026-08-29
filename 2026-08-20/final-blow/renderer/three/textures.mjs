@@ -19,8 +19,65 @@ export function canvasTexture(width, height, paint, options = {}) {
   return texture;
 }
 
+// Alpha-bleed (RGB dilation): floods the colour of each opaque pixel outward
+// into the transparent region around it. The source atlases store WHITE under
+// their transparent texels, so linear filtering / mipmapping at the sprite
+// edge blended toward white — the single biggest cause of the "sticker halo".
+// After bleeding, edge texels filter toward the character's own colours.
+const bleedCache = new Map();
+export function bleedAtlasCanvas(image, passes = 7) {
+  const key = image.src || image;
+  if (bleedCache.has(key)) return bleedCache.get(key);
+  const w = image.naturalWidth;
+  const h = image.naturalHeight;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(image, 0, 0);
+  const img = ctx.getImageData(0, 0, w, h);
+  const data = img.data;
+  const known = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i += 1) known[i] = data[i * 4 + 3] > 12 ? 1 : 0;
+  const next = new Uint8Array(w * h);
+  for (let pass = 0; pass < passes; pass += 1) {
+    next.set(known);
+    let changed = false;
+    for (let y = 0; y < h; y += 1) {
+      const row = y * w;
+      for (let x = 0; x < w; x += 1) {
+        const i = row + x;
+        if (known[i]) continue;
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        let n = 0;
+        // 4-neighbourhood is enough per pass and keeps this loop cheap.
+        if (x > 0 && known[i - 1]) { const p = (i - 1) * 4; r += data[p]; g += data[p + 1]; b += data[p + 2]; n += 1; }
+        if (x < w - 1 && known[i + 1]) { const p = (i + 1) * 4; r += data[p]; g += data[p + 1]; b += data[p + 2]; n += 1; }
+        if (y > 0 && known[i - w]) { const p = (i - w) * 4; r += data[p]; g += data[p + 1]; b += data[p + 2]; n += 1; }
+        if (y < h - 1 && known[i + w]) { const p = (i + w) * 4; r += data[p]; g += data[p + 1]; b += data[p + 2]; n += 1; }
+        if (!n) continue;
+        const p = i * 4;
+        data[p] = r / n;
+        data[p + 1] = g / n;
+        data[p + 2] = b / n;
+        next[i] = 1;
+        changed = true;
+      }
+    }
+    known.set(next);
+    if (!changed) break;
+  }
+  ctx.putImageData(img, 0, 0);
+  bleedCache.set(key, canvas);
+  return canvas;
+}
+
 // Blurred copy of a sprite atlas for the wet-floor reflections: the mirror
 // image must be softer than the sprite itself or it reads as a second fighter.
+// Blurs the BLED atlas — blurring the raw atlas dragged the white transparent
+// RGB into the mirror image as a grey haze.
 // The blurred CANVAS is cached; each caller gets its own texture so mirror
 // matches can drive two frame windows independently.
 const blurCache = new Map();
@@ -33,7 +90,7 @@ export function blurredAtlasTexture(image, blurPx = 3) {
     canvas.height = image.naturalHeight;
     const ctx = canvas.getContext("2d");
     ctx.filter = `blur(${blurPx}px)`;
-    ctx.drawImage(image, 0, 0);
+    ctx.drawImage(bleedAtlasCanvas(image), 0, 0);
     ctx.filter = "none";
     blurCache.set(key, canvas);
   }
@@ -41,6 +98,28 @@ export function blurredAtlasTexture(image, blurPx = 3) {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 2;
   return texture;
+}
+
+// HD atlas composition: the 2x upscaled atlas stamped over the ORIGINAL's
+// bled RGB (scaled up), so the HD sprite's transparent texels inherit
+// character-coloured RGB instead of the upscaler's white — same fringe-free
+// filtering as the SD path, without running the per-pixel dilation over a
+// 2560x2560 image on the main thread.
+const hdComposeCache = new Map();
+export function hdComposedCanvas(hdImage, originalImage) {
+  const key = hdImage.src || hdImage;
+  if (hdComposeCache.has(key)) return hdComposeCache.get(key);
+  const w = hdImage.naturalWidth;
+  const h = hdImage.naturalHeight;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(bleedAtlasCanvas(originalImage), 0, 0, w, h);
+  ctx.drawImage(hdImage, 0, 0);
+  hdComposeCache.set(key, canvas);
+  return canvas;
 }
 
 // Horizontal soft streak (bright core, feathered ends) — headlight smears on
@@ -64,22 +143,151 @@ export function streakTexture(size = 256) {
   });
 }
 
-// Tight expanding shockwave ring for impact VFX. Deliberately THIN: the band
-// occupies only the outer ~12% of the radius so at full scale it reads as a
-// crisp pressure wave, never a translucent soap bubble filling the frame.
-export function ringTexture(size = 256) {
+// Broken, tapered shockwave ring for impact VFX. NOT a uniform-width circle
+// stroke (that reads as a canvas arc primitive): 6-8 tapered arc segments of
+// varying width/length with gaps, a hot outer lip and a dark inner trailing
+// edge so the expanding band reads as a refracting pressure wave.
+export function ringTexture(size = 256, seed = 0x51ab) {
+  const rand = mulberry32(seed);
   return canvasTexture(size, size, (ctx, w, h) => {
-    const r = w * 0.46;
-    const gradient = ctx.createRadialGradient(w / 2, h / 2, r * 0.7, w / 2, h / 2, r);
-    gradient.addColorStop(0, "rgba(255,255,255,0)");
-    gradient.addColorStop(0.62, "rgba(255,255,255,0)");
-    gradient.addColorStop(0.8, "rgba(255,255,255,0.28)");
-    gradient.addColorStop(0.9, "rgba(255,255,255,1)");
-    gradient.addColorStop(0.97, "rgba(255,255,255,0.3)");
-    gradient.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = gradient;
+    const cx = w / 2;
+    const cy = h / 2;
+    const r = w * 0.42;
+    ctx.lineCap = "round";
+    let angle = rand() * Math.PI * 2;
+    for (let i = 0; i < 7; i += 1) {
+      const span = 0.5 + rand() * 1.15;           // arc length varies
+      const steps = 14;
+      const baseWidth = w * (0.007 + rand() * 0.016);
+      const wobble = (rand() - 0.5) * w * 0.02;
+      for (let s = 0; s < steps; s += 1) {
+        const p = s / (steps - 1);
+        const taper = Math.sin(p * Math.PI);      // fat middle, pointed ends
+        const a0 = angle + span * p;
+        const a1 = angle + span * (p + 1.15 / steps);
+        const rr = r + wobble * Math.sin(p * 5 + i);
+        ctx.strokeStyle = `rgba(255,255,255,${(0.85 * taper).toFixed(3)})`;
+        ctx.lineWidth = Math.max(1, baseWidth * taper * 2.2);
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr, a0, a1);
+        ctx.stroke();
+        // Dark trailing inner edge: pseudo-refraction (band compresses light).
+        ctx.strokeStyle = `rgba(0,0,0,${(0.35 * taper).toFixed(3)})`;
+        ctx.lineWidth = Math.max(1, baseWidth * taper * 1.6);
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr - baseWidth * 2.4, a0, a1);
+        ctx.stroke();
+      }
+      angle += span + 0.2 + rand() * 0.6;         // gap before the next arc
+    }
+  });
+}
+
+// Radial impact burst: tapered spark streaks of varying length and width
+// radiating from a hot core — the SF6-style star burst that replaces the
+// uniform circle stroke. Rendered additively and rotated randomly per impact.
+export function impactBurstTexture(size = 256, seed = 0xb1a57) {
+  const rand = mulberry32(seed);
+  return canvasTexture(size, size, (ctx, w, h) => {
+    const cx = w / 2;
+    const cy = h / 2;
+    const rays = 15;
+    for (let i = 0; i < rays; i += 1) {
+      const angle = (i / rays) * Math.PI * 2 + (rand() - 0.5) * 0.45;
+      const len = w * (0.16 + rand() * 0.32);     // long and short rays mixed
+      const base = w * (0.008 + rand() * 0.02);   // varying root width
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      const px = -dy;
+      const py = dx;
+      const r0 = w * 0.015;
+      const gradient = ctx.createLinearGradient(cx + dx * r0, cy + dy * r0, cx + dx * len, cy + dy * len);
+      gradient.addColorStop(0, "rgba(255,255,255,0.95)");
+      gradient.addColorStop(0.45, "rgba(255,255,255,0.55)");
+      gradient.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = gradient;
+      // Tapered quad: full base width at the core, a point at the tip.
+      ctx.beginPath();
+      ctx.moveTo(cx + dx * r0 + px * base, cy + dy * r0 + py * base);
+      ctx.lineTo(cx + dx * len, cy + dy * len);
+      ctx.lineTo(cx + dx * r0 - px * base, cy + dy * r0 - py * base);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Small hot core knot where the rays root.
+    const core = ctx.createRadialGradient(cx, cy, 1, cx, cy, w * 0.06);
+    core.addColorStop(0, "rgba(255,255,255,1)");
+    core.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = core;
     ctx.fillRect(0, 0, w, h);
   });
+}
+
+// Per-frame foot metrics for a 4x4 sprite atlas: where the visible soles
+// actually END inside each cell (atlases carry transparent padding under the
+// feet, which made the fighters hover above the 3D ground plane), plus the
+// x-centroids of up to two foot clusters so contact shadows can sit under
+// each shoe instead of one oversized blob under the sprite centre.
+//   padBottom[frame] — fraction of the CELL height that is empty below the
+//                      lowest opaque pixel (0 = feet touch the cell edge);
+//   feet[frame]      — array of 1-2 { u } offsets in -0.5..0.5 cell widths
+//                      from the cell centre (sprite-local, pre-facing).
+const footMetricsCache = new Map();
+export function atlasFootMetrics(image, columns = 4, rows = 4) {
+  const key = image.src || image;
+  if (footMetricsCache.has(key)) return footMetricsCache.get(key);
+  const w = image.naturalWidth;
+  const h = image.naturalHeight;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(image, 0, 0);
+  const data = ctx.getImageData(0, 0, w, h).data;
+  const cellW = Math.floor(w / columns);
+  const cellH = Math.floor(h / rows);
+  const padBottom = new Float32Array(columns * rows);
+  const feet = [];
+  for (let frame = 0; frame < columns * rows; frame += 1) {
+    const cx0 = (frame % columns) * cellW;
+    const cy0 = Math.floor(frame / columns) * cellH;
+    let footRow = -1;
+    for (let y = cellH - 1; y >= 0 && footRow < 0; y -= 1) {
+      const row = (cy0 + y) * w;
+      for (let x = 0; x < cellW; x += 1) {
+        if (data[(row + cx0 + x) * 4 + 3] > 96) { footRow = y; break; }
+      }
+    }
+    if (footRow < 0) { padBottom[frame] = 0; feet.push([]); continue; }
+    padBottom[frame] = (cellH - 1 - footRow) / cellH;
+    // Opaque columns within the sole band (bottom ~5% of the sprite).
+    const band = Math.max(3, Math.round(cellH * 0.045));
+    const hits = [];
+    for (let x = 0; x < cellW; x += 1) {
+      let any = false;
+      for (let y = Math.max(0, footRow - band); y <= footRow && !any; y += 1) {
+        if (data[((cy0 + y) * w + cx0 + x) * 4 + 3] > 96) any = true;
+      }
+      if (any) hits.push(x);
+    }
+    // Cluster by gaps: a break wider than 6% of the cell splits the feet.
+    const clusters = [];
+    let start = hits[0];
+    let prev = hits[0];
+    for (let i = 1; i <= hits.length; i += 1) {
+      const x = hits[i];
+      if (x === undefined || x - prev > cellW * 0.06) {
+        clusters.push({ mid: (start + prev) / 2, size: prev - start + 1 });
+        start = x;
+      }
+      prev = x ?? prev;
+    }
+    clusters.sort((a, b) => b.size - a.size);
+    feet.push(clusters.slice(0, 2).map((c) => ({ u: c.mid / cellW - 0.5 })));
+  }
+  const metrics = { padBottom, feet };
+  footMetricsCache.set(key, metrics);
+  return metrics;
 }
 
 // Tight, hard-edged contact-shadow ellipse: near-full darkness across the
@@ -115,6 +323,14 @@ export function wetStreakTexture(size = 256) {
       ctx.fillStyle = `rgba(0,0,0,${strength.toFixed(3)})`;
       ctx.fillRect(0, y, w, 2 + (y % 5));
     }
+    // Plank/grain breakup ALONG the smear: vertical ribbons of varying
+    // strength so the light pool breaks over the floor boards instead of
+    // reading as a smooth decal laid on top of them.
+    for (let x = 3; x < w; x += 5 + (x * 11) % 9) {
+      const strength = 0.08 + ((x * 29) % 23) / 23 * 0.3;
+      ctx.fillStyle = `rgba(0,0,0,${strength.toFixed(3)})`;
+      ctx.fillRect(x, 0, 1 + (x % 3), h);
+    }
     // Soft width falloff.
     const across = ctx.createLinearGradient(0, 0, w, 0);
     across.addColorStop(0, "rgba(0,0,0,1)");
@@ -124,6 +340,22 @@ export function wetStreakTexture(size = 256) {
     ctx.fillStyle = across;
     ctx.fillRect(0, 0, w, h);
     ctx.globalCompositeOperation = "source-over";
+  });
+}
+
+// Defocused-light bokeh disc: near-flat bright body with a slightly hotter
+// rim and a hard-ish edge — the discrete circle a distant practical becomes
+// through a wide-open lens (NOT a gaussian glow; the edge is the read).
+export function bokehDiscTexture(size = 64) {
+  return canvasTexture(size, size, (ctx, w, h) => {
+    const gradient = ctx.createRadialGradient(w / 2, h / 2, 1, w / 2, h / 2, w / 2);
+    gradient.addColorStop(0, "rgba(255,255,255,0.72)");
+    gradient.addColorStop(0.62, "rgba(255,255,255,0.78)");
+    gradient.addColorStop(0.85, "rgba(255,255,255,0.95)");
+    gradient.addColorStop(0.95, "rgba(255,255,255,0.5)");
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, w, h);
   });
 }
 
@@ -210,12 +442,55 @@ export function normalMapForAtlas(image, { strength = 1.6 } = {}) {
   return texture;
 }
 
-// Wet-asphalt PBR set: albedo + roughness + metalness sharing one seeded
-// layout. Wetness is broad anisotropic damp streaks (screen-length smears the
-// way a wet street actually reads), NOT elliptical puddle stamps — repeated
-// ellipse decals read as sticker sheets from across the room.
+// Wet-street PBR set: albedo + roughness + metalness + bump sharing one
+// seeded layout. The surface is authored as CONCRETE SIDEWALK SLABS — a
+// readable expansion-joint grid with per-slab tone shifts and aggregate
+// speckle — because a floor with structure is what grounds the fighters
+// (SF6's stone flags carry half the grounding). Wetness is broad anisotropic
+// damp streaks plus a few glossy standing-water puddles; the joints go glossy
+// too (grooves hold water), so specular pooling draws the grid at night.
 export function asphaltMaps(seed = 20260829, size = 1024) {
   const rand = mulberry32(seed);
+  // Expansion-joint slab grid (5x4 per tile): slight jitter so the grid
+  // reads poured-in-place, not vector-drawn.
+  const SLAB_X = 5;
+  const SLAB_Y = 4;
+  const jointsX = [];
+  for (let x = 0; x <= SLAB_X; x += 1) jointsX.push((x / SLAB_X) * size + (rand() - 0.5) * size * 0.02);
+  const jointsY = [];
+  for (let y = 0; y <= SLAB_Y; y += 1) jointsY.push((y / SLAB_Y) * size + (rand() - 0.5) * size * 0.025);
+  const slabTones = [];
+  for (let i = 0; i < SLAB_X * SLAB_Y; i += 1) slabTones.push(0.84 + rand() * 0.36);
+  const paintSlabs = (ctx, base) => {
+    // Per-slab albedo variation: neighbouring slabs never share a tone.
+    for (let sy = 0; sy < SLAB_Y; sy += 1) {
+      for (let sx = 0; sx < SLAB_X; sx += 1) {
+        const tone = slabTones[sy * SLAB_X + sx];
+        ctx.fillStyle = `rgb(${Math.round(base[0] * tone)},${Math.round(base[1] * tone)},${Math.round(base[2] * tone)})`;
+        ctx.fillRect(jointsX[sx], jointsY[sy], jointsX[sx + 1] - jointsX[sx] + 1, jointsY[sy + 1] - jointsY[sy] + 1);
+      }
+    }
+  };
+  // Fixed per-joint lean so the groove lines land identically in every map
+  // (albedo darkening, roughness gloss and bump recess must coincide).
+  const jointLeanX = jointsX.map(() => (rand() - 0.5) * 6);
+  const jointLeanY = jointsY.map(() => (rand() - 0.5) * 6);
+  const paintJoints = (ctx, style, width) => {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = width;
+    for (let i = 1; i < jointsX.length - 1; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(jointsX[i], 0);
+      ctx.lineTo(jointsX[i] + jointLeanX[i], size);
+      ctx.stroke();
+    }
+    for (let i = 1; i < jointsY.length - 1; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(0, jointsY[i]);
+      ctx.lineTo(size, jointsY[i] + jointLeanY[i]);
+      ctx.stroke();
+    }
+  };
   // Damp streaks: long, soft, mostly-vertical smears at varying widths.
   const streaks = [];
   for (let i = 0; i < 14; i += 1) {
@@ -226,6 +501,35 @@ export function asphaltMaps(seed = 20260829, size = 1024) {
       strength: 0.35 + rand() * 0.6,
     });
   }
+  // Standing-water puddles: a few irregular soft-edged pools that go glossy
+  // (near-zero roughness, high metalness) so they MIRROR the night scene.
+  const puddles = [];
+  for (let i = 0; i < 6; i += 1) {
+    puddles.push({
+      x: rand() * size,
+      y: rand() * size,
+      rx: size * (0.05 + rand() * 0.09),
+      ry: size * (0.025 + rand() * 0.05),
+      rot: (rand() - 0.5) * 0.8,
+    });
+  }
+  const paintPuddles = (ctx, rgb, alpha) => {
+    for (const puddle of puddles) {
+      ctx.save();
+      ctx.translate(puddle.x, puddle.y);
+      ctx.rotate(puddle.rot);
+      const gradient = ctx.createRadialGradient(0, 0, 1, 0, 0, puddle.rx);
+      gradient.addColorStop(0, `rgba(${rgb},${alpha})`);
+      gradient.addColorStop(0.72, `rgba(${rgb},${alpha})`);
+      gradient.addColorStop(1, `rgba(${rgb},0)`);
+      ctx.scale(1, puddle.ry / puddle.rx);
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(0, 0, puddle.rx, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  };
   const cracks = [];
   for (let i = 0; i < 26; i += 1) {
     const points = [{ x: rand() * size, y: rand() * size }];
@@ -259,16 +563,19 @@ export function asphaltMaps(seed = 20260829, size = 1024) {
   };
 
   const albedo = canvasTexture(size, size, (ctx) => {
-    ctx.fillStyle = "#1d2026";
-    ctx.fillRect(0, 0, size, size);
-    // Visible aggregate: brighter, higher-contrast speckle so the concrete
-    // reads in-focus at the fight line instead of a featureless brown wash.
+    // Dark wet concrete slabs: base stays low so light pools and speculars
+    // carry the night read, but the slab grid + aggregate keep STRUCTURE in
+    // focus at the fight line instead of a featureless wash.
+    paintSlabs(ctx, [17, 19, 23]);
+    // Visible aggregate: high-contrast speckle inside every slab.
     for (const speck of speckles) {
-      const tone = 20 + Math.round(speck.v * 52);
-      ctx.fillStyle = `rgb(${tone},${tone + 3},${tone + 7})`;
+      const tone = 14 + Math.round(speck.v * 44);
+      ctx.fillStyle = `rgb(${tone},${tone + 2},${tone + 6})`;
       ctx.fillRect(speck.x, speck.y, speck.r, speck.r);
     }
-    ctx.strokeStyle = "rgba(6,7,9,0.85)";
+    // Expansion joints: dark recessed grooves drawing the slab grid.
+    paintJoints(ctx, "rgba(4,5,8,0.95)", 7);
+    ctx.strokeStyle = "rgba(4,5,7,0.85)";
     ctx.lineWidth = 1.6;
     for (const crack of cracks) {
       ctx.beginPath();
@@ -277,20 +584,22 @@ export function asphaltMaps(seed = 20260829, size = 1024) {
       ctx.stroke();
     }
     // Faded lane paint fragments.
-    ctx.fillStyle = "rgba(180,170,120,0.10)";
+    ctx.fillStyle = "rgba(180,170,120,0.08)";
     for (let i = 0; i < 5; i += 1) ctx.fillRect(size * 0.1 + i * size * 0.19, size * 0.46, size * 0.075, size * 0.015);
     // Damp streaks read slightly darker + cooler in albedo.
-    paintStreaks(ctx, "8,12,22", 0.4);
+    paintStreaks(ctx, "5,8,16", 0.5);
+    // Puddles darken further: standing water over dark concrete.
+    paintPuddles(ctx, "4,6,12", 0.75);
     ctx.globalCompositeOperation = "screen";
-    paintStreaks(ctx, "52,66,104", 0.12);
+    paintStreaks(ctx, "40,52,86", 0.1);
     ctx.globalCompositeOperation = "source-over";
   }, { srgb: true, repeat: true, mirror: true });
 
   const roughness = canvasTexture(size, size, (ctx) => {
-    ctx.fillStyle = "#d9d9d9";
+    ctx.fillStyle = "#c9c9c9";
     ctx.fillRect(0, 0, size, size);
     for (const speck of speckles) {
-      const tone = 190 + Math.round(speck.v * 55);
+      const tone = 180 + Math.round(speck.v * 55);
       ctx.fillStyle = `rgb(${tone},${tone},${tone})`;
       ctx.fillRect(speck.x, speck.y, speck.r, speck.r);
     }
@@ -299,22 +608,54 @@ export function asphaltMaps(seed = 20260829, size = 1024) {
       const x = ((i * 173.3) % size);
       const y = ((i * 311.7) % size);
       const gradient = ctx.createRadialGradient(x, y, 4, x, y, size * 0.3);
-      gradient.addColorStop(0, "rgba(120,120,120,0.35)");
-      gradient.addColorStop(1, "rgba(120,120,120,0)");
+      gradient.addColorStop(0, "rgba(110,110,110,0.35)");
+      gradient.addColorStop(1, "rgba(110,110,110,0)");
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, size, size);
     }
-    // Damp streaks: glossy (low roughness) smears, not mirror ellipses.
-    paintStreaks(ctx, "26,26,26", 0.8);
+    // Damp streaks: glossy smears, but with a roughness FLOOR — a near-zero
+    // roughness band under a 30-intensity spot fires a clipped specular spike
+    // that blooms straight over the fighters' legs.
+    paintStreaks(ctx, "90,90,90", 0.75);
+    // Wet joints: the grooves hold water, so specular pooling draws the slab
+    // grid at night — the floor's identity survives the light pools.
+    paintJoints(ctx, "rgba(40,40,40,0.8)", 5);
+    // Puddles: glossy standing water (localised, so glints read as pools
+    // without firing a clipped white ball through bloom).
+    paintPuddles(ctx, "44,44,44", 0.95);
   }, { repeat: true, mirror: true });
 
   const metalness = canvasTexture(size, size, (ctx) => {
-    ctx.fillStyle = "#161616";
+    ctx.fillStyle = "#1c1c1c";
     ctx.fillRect(0, 0, size, size);
-    paintStreaks(ctx, "150,150,150", 0.5);
+    paintStreaks(ctx, "160,160,160", 0.55);
+    paintJoints(ctx, "rgba(120,120,120,0.6)", 4);
+    // Puddles reflect like water: metalness high inside the pool (held just
+    // off full mirror so lamp glints glow instead of clipping).
+    paintPuddles(ctx, "200,200,200", 0.92);
   }, { repeat: true, mirror: true });
 
-  return { albedo, roughness, metalness };
+  // Bump: recessed joints + aggregate grain so the slabs catch raking light.
+  const bump = canvasTexture(size, size, (ctx) => {
+    ctx.fillStyle = "#808080";
+    ctx.fillRect(0, 0, size, size);
+    for (const speck of speckles) {
+      const tone = 110 + Math.round(speck.v * 60);
+      ctx.fillStyle = `rgb(${tone},${tone},${tone})`;
+      ctx.fillRect(speck.x, speck.y, speck.r, speck.r);
+    }
+    paintJoints(ctx, "rgba(30,30,30,0.95)", 6);
+    ctx.strokeStyle = "rgba(52,52,52,0.8)";
+    ctx.lineWidth = 1.6;
+    for (const crack of cracks) {
+      ctx.beginPath();
+      ctx.moveTo(crack[0].x, crack[0].y);
+      for (const point of crack.slice(1)) ctx.lineTo(point.x, point.y);
+      ctx.stroke();
+    }
+  }, { repeat: true, mirror: true });
+
+  return { albedo, roughness, metalness, bump };
 }
 
 // Night-street environment for PMREM: dark sky dome, sodium horizon band and

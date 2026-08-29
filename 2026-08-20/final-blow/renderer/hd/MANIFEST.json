@@ -1,0 +1,314 @@
+{
+  "generated": "2026-08-29",
+  "purpose": "HD (2x) fighter sprite atlases for the experimental Three.js renderer only. Originals untouched.",
+  "upscaler": "fal Clarity Upscaler via mcp__fal__upscale_image; alpha recombined locally (Pillow) because the upscaler outputs RGB",
+  "fallbacks_used": 0,
+  "files": [
+    {
+      "original": "assets/atlases/alan.webp",
+      "hd": "renderer/hd/alan.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 1408444,
+      "sha256": "91b35f7af6ddc03d"
+    },
+    {
+      "original": "assets/atlases/ali.webp",
+      "hd": "renderer/hd/ali.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 1438348,
+      "sha256": "997f0916c0f681f0"
+    },
+    {
+      "original": "assets/atlases/benny.webp",
+      "hd": "renderer/hd/benny.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 1288316,
+      "sha256": "266ce1fe9cef7617"
+    },
+    {
+      "original": "assets/atlases/commissioner.webp",
+      "hd": "renderer/hd/commissioner.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 1063426,
+      "sha256": "d502a0960695e107"
+    },
+    {
+      "original": "assets/atlases/cyraxx.webp",
+      "hd": "renderer/hd/cyraxx.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 943170,
+      "sha256": "9edd98e4a692b392"
+    },
+    {
+      "original": "assets/atlases/deathblow.webp",
+      "hd": "renderer/hd/deathblow.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 1227290,
+      "sha256": "7ca96a6c60caf8b3"
+    },
+    {
+      "original": "assets/atlases/donald.webp",
+      "hd": "renderer/hd/donald.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 1122758,
+      "sha256": "3e2aef3f29f64754"
+    },
+    {
+      "original": "assets/atlases/jez.webp",
+      "hd": "renderer/hd/jez.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 1137340,
+      "sha256": "a905971e99a4221a"
+    },
+    {
+      "original": "assets/atlases/post.webp",
+      "hd": "renderer/hd/post.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 1437276,
+      "sha256": "52c8bc1a4ff34e33"
+    },
+    {
+      "original": "assets/moves/alan-specials.webp",
+      "hd": "renderer/hd/alan-specials.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 1332176,
+      "sha256": "a3bb99ac0fd54531"
+    },
+    {
+      "original": "assets/moves/ali-specials.webp",
+      "hd": "renderer/hd/ali-specials.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 1216594,
+      "sha256": "738379a1cd7876ec"
+    },
+    {
+      "original": "assets/moves/benny-specials.webp",
+      "hd": "renderer/hd/benny-specials.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 842892,
+      "sha256": "152aecc4996e59eb"
+    },
+    {
+      "original": "assets/moves/cyraxx-specials.webp",
+      "hd": "renderer/hd/cyraxx-specials.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 921338,
+      "sha256": "8e1cdbc1ee01ff88"
+    },
+    {
+      "original": "assets/moves/deathblow-specials.webp",
+      "hd": "renderer/hd/deathblow-specials.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 917104,
+      "sha256": "8cc332542c5a57c8"
+    },
+    {
+      "original": "assets/moves/donald-specials.webp",
+      "hd": "renderer/hd/donald-specials.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 1146800,
+      "sha256": "a2679b4b45246541"
+    },
+    {
+      "original": "assets/moves/jez-specials.webp",
+      "hd": "renderer/hd/jez-specials.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 1297884,
+      "sha256": "607f8d4f85f53274"
+    },
+    {
+      "original": "assets/moves/post-specials.webp",
+      "hd": "renderer/hd/post-specials.webp",
+      "original_size": [
+        1280,
+        1280
+      ],
+      "hd_size": [
+        2560,
+        2560
+      ],
+      "scale": 2,
+      "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
+      "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
+      "format": "webp q95 (alpha channel lossless)",
+      "bytes": 1374624,
+      "sha256": "be852ed0b810d81f"
+    }
+  ]
+}

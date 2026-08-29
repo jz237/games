@@ -52,6 +52,12 @@ export function createRenderer(host) {
   let fpsEstimate = 60;
   let lastStatsFrame = { calls: 0, triangles: 0 };
   const layers = new Map();
+  // Super-freeze presentation: eased 0..1 while a grit super is in flight.
+  // Drops the stage + fighter bodies toward a rim-lit silhouette and fires a
+  // one-shot chromatic-split pulse on ignition. Render-only.
+  let superDim = 0;
+  let superWasActive = false;
+  let aberrPulse = 0;
 
   function resolveQuality() {
     if (manualQuality) return manualQuality;
@@ -120,6 +126,8 @@ export function createRenderer(host) {
       // Silhouette guard: fighter sprites darken their edges while an impact
       // flash is live, so bursts never erase the characters.
       fighters.getFlashLevel = () => vfx.flashLevel();
+      // Impact colour spill: the burst relights both fighters' sprites.
+      fighters.getImpactSpill = () => vfx.spill();
 
       post = buildPostStack(renderer, scene, framing.camera, {
         width: SIM_W,
@@ -175,6 +183,23 @@ export function createRenderer(host) {
     const state = host.state;
     framing.update(state, host.cinematicCamera, freeze ? 0.0001 : dtSec, t);
     stage.update?.(t, state);
+    // Super freeze: ease the rim-lit silhouette dim while a grit super is in
+    // flight (mirrors the 2D superDimLevel ease) + chromatic pulse on the
+    // ignition frame. Read-only on sim state.
+    const superActive = state.phase !== "over"
+      && (state.fighters || []).some((fighter) => fighter.attacking?.superMove);
+    const stepSec = freeze ? 0 : dtSec;
+    superDim = THREE.MathUtils.clamp(superDim + (superActive ? 5.4 : -3.3) * stepSec, 0, 1);
+    if (superActive && !superWasActive) aberrPulse = 1;
+    superWasActive = superActive;
+    aberrPulse = Math.max(0, aberrPulse - stepSec * 8);
+    const fightersLayer = layers.get("fighters");
+    if (fightersLayer) fightersLayer.superDim = superDim;
+    stage.setDim?.(superDim);
+    post.setAberration?.(Math.max(aberrPulse, superDim > 0.5 ? (superDim - 0.5) * 0.45 : 0));
+    // SF6 super-flash: the frozen gameplay behind the cut-in band grades to a
+    // two-tone indigo/amber while the super owns the frame. Render-only.
+    post.setDuotone?.(superDim * 0.72);
     for (const layer of layers.values()) layer.update(state, freeze ? 0 : dtSec, t);
     // Impact camera kick: a decaying 2-3px presentation shake on hits, layered
     // on top of the sim-driven shake the framing camera already maps.

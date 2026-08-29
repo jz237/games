@@ -95,7 +95,8 @@ export function buildGenericStage(host, { quality, stageId }) {
 
   return {
     group,
-    fog: new THREE.FogExp2(mood.fog, 0.028),
+    // Depth-graded: clear at the fight plane, thickening past mid-ground.
+    fog: new THREE.Fog(mood.fog, 8.8, 27),
     background: new THREE.Color(0x05070d),
     keyLight: key,
     update() {},

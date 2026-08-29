@@ -13285,6 +13285,45 @@ let superCutIn = null;
 let superCutInTick = -1;
 const SUPER_CUT_IN_SECONDS = 0.7;
 
+// CINEMA 3D cut-in dressing: halftone dot + brush-streak pattern tiles, built
+// once on first use. Only the 3D-mode banner draws these; the 2D banner path
+// is byte-for-byte untouched.
+let cutInHalftonePattern = null;
+let cutInBrushPattern = null;
+function cutInPatterns() {
+  if (cutInHalftonePattern) return { halftone: cutInHalftonePattern, brush: cutInBrushPattern };
+  const dots = document.createElement("canvas");
+  dots.width = dots.height = 48;
+  const dctx = dots.getContext("2d");
+  dctx.fillStyle = "rgba(0,0,0,0.85)";
+  for (let y = 0; y < 4; y += 1) {
+    for (let x = 0; x < 4; x += 1) {
+      const r = 2.1 + ((x * 7 + y * 13) % 5) * 0.55;
+      dctx.beginPath();
+      dctx.arc(x * 12 + (y % 2 ? 6 : 0) + 3, y * 12 + 3, r, 0, Math.PI * 2);
+      dctx.fill();
+    }
+  }
+  const brush = document.createElement("canvas");
+  brush.width = 256;
+  brush.height = 64;
+  const bctx = brush.getContext("2d");
+  for (let i = 0; i < 34; i += 1) {
+    const seed = Math.sin((i + 3) * 12.9898) * 43758.5453;
+    const jitter = seed - Math.floor(seed);
+    bctx.strokeStyle = `rgba(255,255,255,${(0.05 + jitter * 0.16).toFixed(3)})`;
+    bctx.lineWidth = 0.8 + jitter * 2.6;
+    const y = jitter * 64;
+    bctx.beginPath();
+    bctx.moveTo(-12, y + 5);
+    bctx.lineTo(268, y - 6);
+    bctx.stroke();
+  }
+  cutInHalftonePattern = dots;
+  cutInBrushPattern = brush;
+  return { halftone: dots, brush };
+}
+
 function latchSuperPresentation(fighter) {
   if (rollbackResimulating || superCutInTick === state.simulationTick) return;
   superCutInTick = state.simulationTick;
@@ -13327,6 +13366,9 @@ function drawSuperCutIn(dtMs) {
   const progress = clamp(cut.t / SUPER_CUT_IN_SECONDS, 0, 1);
   const alpha = Math.min(clamp(progress / 0.07, 0, 1), clamp((1 - progress) / 0.16, 0, 1));
   const fromLeft = cut.side === 0;
+  // CINEMA 3D banner treatment (halftone band, textured type, portrait punch)
+  // only fires over the 3D world; the classic 2D banner is untouched.
+  const in3d = cinema3dWorldActive();
   // Band held to the upper-middle third: clear of the HUD and low enough to
   // frame the portrait without burying the fighters for its 0.7s life.
   const bandTop = H * 0.19;
@@ -13351,6 +13393,28 @@ function drawSuperCutIn(dtMs) {
   wash.addColorStop(1, "rgba(8,10,18,0)");
   ctx.fillStyle = wash;
   ctx.fillRect(0, bandTop - tilt, W, bandBottom - bandTop + tilt * 2);
+  if (in3d) {
+    // Print texture INTO the accent band: a drifting halftone dot screen in
+    // the wash's own shadow tone plus raking brush streaks, so the slash
+    // reads as inked print, not a flat gradient.
+    const { halftone, brush } = cutInPatterns();
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.5;
+    ctx.globalCompositeOperation = "multiply";
+    const dotPattern = ctx.createPattern(halftone, "repeat");
+    ctx.translate((fromLeft ? -1 : 1) * cut.t * 160, 0);
+    ctx.fillStyle = dotPattern;
+    ctx.fillRect(-W, bandTop - tilt, W * 3, bandBottom - bandTop + tilt * 2);
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.globalCompositeOperation = "overlay";
+    const brushPattern = ctx.createPattern(brush, "repeat");
+    ctx.translate((fromLeft ? 1 : -1) * cut.t * 420, 0);
+    ctx.fillStyle = brushPattern;
+    ctx.fillRect(-W, bandTop - tilt, W * 3, bandBottom - bandTop + tilt * 2);
+    ctx.restore();
+  }
   // Speed lines streak against the sweep (skipped under reduced motion).
   if (!reduced) {
     ctx.globalCompositeOperation = "lighter";
@@ -13373,8 +13437,15 @@ function drawSuperCutIn(dtMs) {
   // riding an accent glow pool so the cutout art separates from the band.
   const image = fighterImages[cut.fighterId];
   if (image?.complete && image.naturalWidth > 0) {
-    const portraitHeight = (bandBottom - bandTop) * 2.15;
-    const portraitWidth = portraitHeight * (image.naturalWidth / image.naturalHeight);
+    // CINEMA 3D reframe: the classic 2.15x portrait pushes the head above the
+    // band's top clip edge (a headless-torso crop). In 3D mode the cut-in
+    // instead crops the roster art to a HEAD-AND-TORSO bust and sits it
+    // INSIDE the band so the face carries the moment. The 2D path is
+    // byte-for-byte unchanged.
+    const bustFraction = 0.46; // top of the roster art: head + torso
+    const sourceHeight = in3d ? image.naturalHeight * bustFraction : image.naturalHeight;
+    const portraitHeight = (bandBottom - bandTop) * (in3d ? 1.18 : 2.15);
+    const portraitWidth = portraitHeight * (image.naturalWidth / sourceHeight);
     const slide = reduced ? 1 : 1 - (1 - clamp(progress / 0.34, 0, 1)) ** 3;
     const targetX = W * 0.5 - portraitWidth * 0.5;
     const startX = fromLeft ? -portraitWidth - 80 : W + 80;
@@ -13390,19 +13461,76 @@ function drawSuperCutIn(dtMs) {
     ctx.fillStyle = glow;
     ctx.fillRect(0, bandTop - tilt, W, bandBottom - bandTop + tilt * 2);
     ctx.globalCompositeOperation = "source-over";
-    ctx.drawImage(image, portraitX, bandTop - portraitHeight * 0.24, portraitWidth, portraitHeight);
+    if (in3d) {
+      // Portrait PUNCH: slams in oversized and slightly rolled, easing to
+      // rest over the first quarter of the band's life (SF6 cut-in energy).
+      const punch = reduced ? 1 : clamp(progress / 0.24, 0, 1);
+      const punchEase = 1 - (1 - punch) ** 3;
+      const punchScale = 1.22 - punchEase * 0.22;
+      const punchRot = (fromLeft ? -1 : 1) * (1 - punchEase) * 0.09 - 0.025;
+      const pcx = portraitX + portraitWidth * 0.5;
+      const pcy = bandTop + 6 + portraitHeight * 0.5;
+      ctx.save();
+      ctx.translate(pcx, pcy);
+      ctx.rotate(punchRot);
+      ctx.scale(punchScale, punchScale);
+      ctx.drawImage(
+        image, 0, 0, image.naturalWidth, sourceHeight,
+        -portraitWidth * 0.5, -portraitHeight * 0.5, portraitWidth, portraitHeight,
+      );
+      ctx.restore();
+    } else {
+      ctx.drawImage(image, portraitX, bandTop - portraitHeight * 0.24, portraitWidth, portraitHeight);
+    }
   }
   // Name plate riding the band's lower edge.
   ctx.globalAlpha = alpha;
-  ctx.font = "italic 1000 44px Arial Narrow, Impact, sans-serif";
   ctx.textAlign = fromLeft ? "right" : "left";
   ctx.textBaseline = "alphabetic";
-  ctx.lineWidth = 7;
-  ctx.strokeStyle = "rgba(0,0,0,.92)";
-  ctx.fillStyle = "#f4f7ff";
   const nameX = fromLeft ? W - 54 : 54;
-  ctx.strokeText(cut.name, nameX, bandBottom - 18);
-  ctx.fillText(cut.name, nameX, bandBottom - 18);
+  if (in3d) {
+    // Textured display type: skewed heavy caps punched in with the portrait,
+    // hot accent under-stroke offset like misregistered ink, gradient fill,
+    // halftone screen INSIDE the letterforms and a hard black contour.
+    const namePunch = reduced ? 1 : clamp((progress - 0.04) / 0.2, 0, 1);
+    const nameEase = 1 - (1 - namePunch) ** 3;
+    const nameY = bandBottom - 16;
+    ctx.save();
+    ctx.translate(nameX, nameY);
+    ctx.transform(1, 0, -0.24, 1, 0, 0); // slam-forward skew
+    ctx.scale(1 + (1 - nameEase) * 0.35, 1 + (1 - nameEase) * 0.35);
+    ctx.globalAlpha = alpha * (0.25 + nameEase * 0.75);
+    ctx.font = "1000 58px Arial Narrow, Impact, sans-serif";
+    // Misregistered accent pass first (offset down-right).
+    ctx.fillStyle = cut.accent;
+    ctx.fillText(cut.name, 4, 4);
+    // Hard contour.
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 9;
+    ctx.strokeStyle = "rgba(3,4,8,.95)";
+    ctx.strokeText(cut.name, 0, 0);
+    // Gradient body: hot top light falling to steel.
+    const nameGrad = ctx.createLinearGradient(0, -48, 0, 6);
+    nameGrad.addColorStop(0, "#ffffff");
+    nameGrad.addColorStop(0.52, "#f2f5ff");
+    nameGrad.addColorStop(0.56, "#c9d2e8");
+    nameGrad.addColorStop(1, "#9aa6c4");
+    ctx.fillStyle = nameGrad;
+    ctx.fillText(cut.name, 0, 0);
+    // Halftone screen inside the letterforms only.
+    const { halftone } = cutInPatterns();
+    ctx.globalAlpha = alpha * 0.3;
+    ctx.fillStyle = ctx.createPattern(halftone, "repeat");
+    ctx.fillText(cut.name, 0, 0);
+    ctx.restore();
+  } else {
+    ctx.font = "italic 1000 44px Arial Narrow, Impact, sans-serif";
+    ctx.lineWidth = 7;
+    ctx.strokeStyle = "rgba(0,0,0,.92)";
+    ctx.fillStyle = "#f4f7ff";
+    ctx.strokeText(cut.name, nameX, bandBottom - 18);
+    ctx.fillText(cut.name, nameX, bandBottom - 18);
+  }
   ctx.restore();
   // Band edge strokes drawn unclipped so they stay crisp.
   ctx.save();

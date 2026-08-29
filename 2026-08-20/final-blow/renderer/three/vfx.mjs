@@ -12,7 +12,7 @@
 // replace/extend per-tier effects without touching this file's plumbing.
 import * as THREE from "three";
 import { PX, worldX, worldY, mulberry32 } from "./shared.mjs";
-import { softDotTexture, ringTexture } from "./textures.mjs";
+import { softDotTexture, ringTexture, impactBurstTexture } from "./textures.mjs";
 
 const MAX_SPARKS = 240;
 const MAX_EMBERS = 64;
@@ -23,15 +23,19 @@ const RING_POOL = 2;
 // blows the character to white through ACES+bloom. The visual "pop" comes
 // from the core/halo sprites; the light only kisses nearby surfaces.
 // `kick` is the presentation-only camera shake budget in screen pixels.
+// `shard` is the orange/red radial-shard colour (SF6-style layered hit: hot
+// white core -> warm shards -> cyan speedline ring, never one white star).
 const TIER_STYLE = {
-  blocked: { color: 0x9fd8ff, intensity: 1.6, sparks: 12, embers: 4, speed: 1.8, core: 0.3, ring: false, kick: 1.2 },
-  light: { color: 0xffd9a0, intensity: 3, sparks: 16, embers: 8, speed: 2.4, core: 0.4, ring: false, kick: 1.8 },
-  heavy: { color: 0xffb36b, intensity: 5.5, sparks: 30, embers: 11, speed: 3.4, core: 0.56, ring: true, kick: 3 },
-  special: { color: 0xffc46b, intensity: 7, sparks: 42, embers: 12, speed: 4, core: 0.66, ring: true, kick: 3 },
-  super: { color: 0xfff0c0, intensity: 9, sparks: 58, embers: 14, speed: 5, core: 0.8, ring: true, kick: 3.4 },
-  weapon: { color: 0xffe08a, intensity: 6, sparks: 34, embers: 11, speed: 3.7, core: 0.58, ring: true, kick: 3 },
-  throw: { color: 0xd8c8ff, intensity: 4, sparks: 20, embers: 8, speed: 2.9, core: 0.44, ring: false, kick: 2.2 },
+  blocked: { color: 0x9fd8ff, shard: 0x86b8ff, intensity: 1.6, sparks: 12, embers: 4, speed: 1.8, core: 0.3, ring: false, kick: 1.2 },
+  light: { color: 0xffd9a0, shard: 0xff8438, intensity: 3, sparks: 16, embers: 8, speed: 2.4, core: 0.4, ring: false, kick: 1.8 },
+  heavy: { color: 0xffb36b, shard: 0xff6a26, intensity: 5.5, sparks: 30, embers: 11, speed: 3.4, core: 0.56, ring: true, kick: 3 },
+  special: { color: 0xffc46b, shard: 0xff701e, intensity: 7, sparks: 42, embers: 12, speed: 4, core: 0.66, ring: true, kick: 3 },
+  super: { color: 0xfff0c0, shard: 0xff5a1a, intensity: 9, sparks: 58, embers: 14, speed: 5, core: 0.8, ring: true, kick: 3.4 },
+  weapon: { color: 0xffe08a, shard: 0xff7c2c, intensity: 6, sparks: 34, embers: 11, speed: 3.7, core: 0.58, ring: true, kick: 3 },
+  throw: { color: 0xd8c8ff, shard: 0xb08cff, intensity: 4, sparks: 20, embers: 8, speed: 2.9, core: 0.44, ring: false, kick: 2.2 },
 };
+// Cyan speedline ring colour: reads as a pressure wave against the warm shards.
+const RING_CYAN = 0x8feaff;
 
 export class ImpactVfxLayer {
   constructor(host) {
@@ -151,13 +155,15 @@ export class ImpactVfxLayer {
       });
     }
 
-    // Expanding shockwave rings (heavy tiers): thin, fast, camera-facing.
+    // Expanding shockwave rings (heavy tiers): broken tapered arcs, squashed
+    // into a slight ellipse and randomly rotated per impact so no two hits
+    // draw the same circle. Fast: bright birth, gone in ~0.15s.
     this.rings = [];
     for (let i = 0; i < RING_POOL; i += 1) {
       const mesh = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 1),
         new THREE.MeshBasicMaterial({
-          map: ringTexture(128),
+          map: ringTexture(160, 0x51ab + i * 977),
           color: 0xffffff,
           transparent: true,
           opacity: 0,
@@ -169,8 +175,38 @@ export class ImpactVfxLayer {
       mesh.visible = false;
       mesh.renderOrder = 7;
       this.group.add(mesh);
-      this.rings.push({ mesh, ttl: 0, max: 0.28, size: 1 });
+      this.rings.push({ mesh, ttl: 0, max: 0.15, size: 1, squash: 0.75 });
     }
+
+    // Tapered radial spark-burst star: the layer that replaces the uniform
+    // circle stroke read. Random rotation + anisotropic scale per impact, and
+    // a 3-frame FLIPBOOK per slot (differently-seeded shard stars swapped over
+    // the burst's life) so consecutive frames genuinely change shape instead
+    // of one star scaling up.
+    this.bursts = [];
+    for (let i = 0; i < 2; i += 1) {
+      const maps = [0, 1, 2].map((f) => impactBurstTexture(256, 0xb1a57 + i * 613 + f * 7919));
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          map: maps[0],
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          fog: false,
+        }),
+      );
+      mesh.visible = false;
+      mesh.renderOrder = 8;
+      this.group.add(mesh);
+      this.bursts.push({ mesh, maps, ttl: 0, max: 0.16, size: 1 });
+    }
+
+    // Latest impact spill for the fighter layer: burst-coloured light that
+    // relights both sprites and decays with the flash.
+    this.spillState = { x: 0, color: new THREE.Color(0xffffff), ttl: 0, max: 0.26 };
 
     // Flash-light pool. Intensities are budgeted: the pop reads from the core
     // sprite; the light only kisses the scene surfaces around the impact.
@@ -181,6 +217,49 @@ export class ImpactVfxLayer {
       this.group.add(light);
       this.flashes.push({ light, ttl: 0, max: 1, peak: 0, level: 0 });
     }
+
+    // 2-frame WHITE-HOT pop: a separate, much hotter point light that fires on
+    // the impact frame and dies ~2 render frames later. Pushed toward the
+    // camera so it genuinely relights BOTH fighters' sprite faces and pools
+    // hard on the wet asphalt for exactly the hit-confirm instant.
+    this.pops = [];
+    for (let i = 0; i < 2; i += 1) {
+      const light = new THREE.PointLight(0xffffff, 0, 9, 2);
+      light.visible = false;
+      this.group.add(light);
+      this.pops.push({ light, ttl: 0, max: 0.034, peak: 0 });
+    }
+
+    // Ground-reflection flash pool: an additive radial pool flat on the
+    // asphalt under the impact — the wet street answers the hit for ~0.3s.
+    this.groundFlashes = [];
+    for (let i = 0; i < 2; i += 1) {
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          map: softDotTexture(96),
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          fog: false,
+        }),
+      );
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.visible = false;
+      mesh.renderOrder = 5;
+      this.group.add(mesh);
+      this.groundFlashes.push({ mesh, ttl: 0, max: 0.3, size: 1 });
+    }
+  }
+
+  // Latest impact spill for the fighter layer: null when cold, otherwise
+  // { x, color, level } with level decaying 1 -> 0 over ~0.26s.
+  spill() {
+    if (this.spillState.ttl <= 0) return null;
+    const t = this.spillState.ttl / this.spillState.max;
+    return { x: this.spillState.x, color: this.spillState.color, level: t * t };
   }
 
   // 0..1 how hard the strongest live flash is burning — the fighter layer
@@ -285,35 +364,84 @@ export class ImpactVfxLayer {
     slot.light.visible = true;
 
     const core = this.cores.find((c) => c.ttl <= 0) || this.cores[0];
-    // Hot white centre, coloured halo — layered, not one smear. The core is
-    // pushed well past the bloom threshold: for its ~2 frames of life it is
-    // deliberately the brightest thing on screen.
-    core.core.material.color.set(0xffffff).multiplyScalar(4.5);
-    core.halo.material.color.set(style.color).multiplyScalar(1.7);
+    // Small HOT WHITE CORE (well under 15% screen height) inside an orange/red
+    // halo — layered like SF6, never one frame-nuking star. The core still
+    // crosses the bloom knee for its ~2 frames but stays tight, so both
+    // fighters' silhouettes read straight through the hit.
+    core.core.material.color.set(0xffffff).multiplyScalar(2.7);
+    core.halo.material.color.set(style.shard ?? style.color).lerp(new THREE.Color(0xff3a10), 0.25).multiplyScalar(1.5);
     core.core.position.set(x, y, 0.32);
     core.halo.position.set(x, y, 0.3);
     core.size = style.core ?? 0.5;
     core.max = style.tier === "super" ? 0.24 : 0.17;
     core.ttl = core.max;
-    core.core.scale.setScalar(core.size * 0.6);
-    core.halo.scale.setScalar(core.size * 1.25);
+    core.core.scale.setScalar(core.size * 0.42);
+    core.halo.scale.setScalar(core.size * 0.9);
     core.core.material.opacity = 1;
-    core.halo.material.opacity = 0.5;
+    core.halo.material.opacity = 0.42;
     core.core.visible = core.halo.visible = true;
 
+    // Orange/red radial shards on every tier: rotated + squashed randomly and
+    // flip-booked over 3 differently-seeded stars so no two frames repeat.
+    const burst = this.bursts.find((b) => b.ttl <= 0) || this.bursts[0];
+    burst.mesh.material.color.set(style.shard ?? style.color).lerp(new THREE.Color(0xffffff), 0.18).multiplyScalar(2.1);
+    burst.mesh.position.set(x, y, 0.36);
+    burst.mesh.rotation.z = this.rand() * Math.PI * 2;
+    burst.size = (style.core ?? 0.5) * (style.ring ? 1.6 : 1.2);
+    burst.max = style.tier === "super" ? 0.2 : 0.15;
+    burst.ttl = burst.max;
+    burst.jx = 0.85 + this.rand() * 0.4;
+    burst.jy = 0.85 + this.rand() * 0.4;
+    burst.mesh.material.map = burst.maps[0];
+    burst.mesh.scale.set(burst.size * burst.jx, burst.size * burst.jy, 1);
+    burst.mesh.material.opacity = 1;
+    burst.mesh.visible = true;
+
     if (style.ring) {
-      // Tight expanding shockwave ring: ~150ms, additive, fades as it grows.
-      // Thin band texture — reads as a pressure wave, never a soap bubble.
+      // CYAN speedline ring: broken tapered shock arc, ~150ms, elliptical
+      // squash + random spin — a cool pressure wave against the warm shards.
       const ring = this.rings.find((r) => r.ttl <= 0) || this.rings[0];
-      ring.mesh.material.color.set(style.color).lerp(new THREE.Color(0xffffff), 0.55).multiplyScalar(2.1);
+      ring.mesh.material.color.set(RING_CYAN).multiplyScalar(1.7);
       ring.mesh.position.set(x, y, 0.34);
-      ring.size = style.tier === "super" ? 2.1 : 1.55;
-      ring.max = 0.19;
+      ring.mesh.rotation.z = this.rand() * Math.PI * 2;
+      ring.size = style.tier === "super" ? 1.5 : 1.15;
+      ring.squash = 0.68 + this.rand() * 0.18;
+      ring.max = 0.15;
       ring.ttl = ring.max;
-      ring.mesh.scale.setScalar(0.18);
-      ring.mesh.material.opacity = 0.95;
+      ring.mesh.scale.set(0.18, 0.18 * ring.squash, 1);
+      ring.mesh.material.opacity = 0.85;
       ring.mesh.visible = true;
     }
+
+    // 2-frame hot pop light in the BURST'S OWN COLOUR: the impact spills
+    // coloured light onto both fighters' sprites and the wet floor. Budgeted:
+    // at the old 18+3.2i peak it washed both sprites to white through ACES.
+    const pop = this.pops.find((p) => p.ttl <= 0) || this.pops[0];
+    pop.light.color.set(style.color).lerp(new THREE.Color(0xffffff), 0.45);
+    pop.light.position.set(x, Math.max(0.4, y), 1.2);
+    pop.peak = 9 + style.intensity * 1.7;
+    pop.ttl = pop.max;
+    pop.light.intensity = pop.peak;
+    pop.light.visible = true;
+
+    // Sprite-side spill: fighter layer reads this and warms the near side of
+    // both fighters in the burst colour while it decays.
+    this.spillState.x = x;
+    this.spillState.color.set(style.color).lerp(new THREE.Color(0xffffff), 0.25);
+    this.spillState.max = style.tier === "super" ? 0.34 : 0.26;
+    this.spillState.ttl = this.spillState.max;
+
+    // Wet-asphalt answer: additive reflection pool under the impact. Kept in
+    // the shard colour and modest — the old half-opacity white disc repainted
+    // the floor under both fighters as a white pond every hit.
+    const groundFlash = this.groundFlashes.find((g) => g.ttl <= 0) || this.groundFlashes[0];
+    groundFlash.mesh.material.color.set(style.shard ?? style.color).lerp(new THREE.Color(0xffffff), 0.25);
+    groundFlash.mesh.position.set(x, 0.018, 0.25);
+    groundFlash.size = 0.9 + (style.core ?? 0.5) * 1.1;
+    groundFlash.ttl = groundFlash.max;
+    groundFlash.mesh.scale.setScalar(groundFlash.size);
+    groundFlash.mesh.material.opacity = 0.3;
+    groundFlash.mesh.visible = true;
 
     // Presentation camera kick (2-3px) beside the sim's own hit-stop.
     this.kickMag = style.kick ?? 2;
@@ -455,13 +583,15 @@ export class ImpactVfxLayer {
         continue;
       }
       const t = 1 - core.ttl / core.max;
-      core.core.scale.setScalar(core.size * (0.55 + t * 0.5));
-      core.halo.scale.setScalar(core.size * (1.5 + t * 1.3));
+      // Core stays TIGHT (its job is heat, not coverage); the warm halo
+      // swells a little further but never past ~one head height.
+      core.core.scale.setScalar(core.size * (0.4 + t * 0.28));
+      core.halo.scale.setScalar(core.size * (0.95 + t * 0.6));
       core.core.material.opacity = 0.9 * (1 - t) * (1 - t);
-      core.halo.material.opacity = 0.38 * (1 - t);
+      core.halo.material.opacity = 0.32 * (1 - t);
     }
 
-    // Expand + fade shockwave rings.
+    // Expand + fade shockwave arcs (elliptical squash held while growing).
     for (const ring of this.rings) {
       if (ring.ttl <= 0) continue;
       ring.ttl -= dtSec;
@@ -472,10 +602,30 @@ export class ImpactVfxLayer {
       }
       const t = 1 - ring.ttl / ring.max;
       const eased = 1 - (1 - t) * (1 - t) * (1 - t);
-      ring.mesh.scale.setScalar(0.18 + eased * ring.size);
+      const grow = 0.18 + eased * ring.size;
+      ring.mesh.scale.set(grow, grow * ring.squash, 1);
       // Fades as it grows: bright birth, gone by full expansion.
       ring.mesh.material.opacity = 0.95 * Math.pow(1 - t, 1.5);
     }
+
+    // Shard stars: hold ~2 frames, then collapse fast while the tips stretch
+    // slightly outward, swapping through the 3-frame flipbook as they age.
+    for (const burst of this.bursts) {
+      if (burst.ttl <= 0) continue;
+      burst.ttl -= dtSec;
+      if (burst.ttl <= 0) {
+        burst.mesh.visible = false;
+        burst.mesh.material.opacity = 0;
+        continue;
+      }
+      const t = 1 - burst.ttl / burst.max;
+      const stretch = 1 + t * 0.5;
+      if (burst.maps) burst.mesh.material.map = burst.maps[Math.min(2, Math.floor(t * 3))];
+      burst.mesh.scale.x = burst.size * (burst.jx ?? 1) * stretch;
+      burst.mesh.scale.y = burst.size * (burst.jy ?? 1) * stretch;
+      burst.mesh.material.opacity = Math.pow(1 - t, 1.7);
+    }
+    this.spillState.ttl = Math.max(0, this.spillState.ttl - dtSec);
 
     // Decay flashes.
     for (const flash of this.flashes) {
@@ -488,6 +638,32 @@ export class ImpactVfxLayer {
       }
       const t = flash.ttl / flash.max;
       flash.light.intensity = flash.peak * t * t;
+    }
+
+    // White-hot pops die hard: full blast for their ~2 frames, then gone.
+    for (const pop of this.pops) {
+      if (pop.ttl <= 0) continue;
+      pop.ttl -= dtSec;
+      if (pop.ttl <= 0) {
+        pop.light.intensity = 0;
+        pop.light.visible = false;
+        continue;
+      }
+      pop.light.intensity = pop.peak * (pop.ttl / pop.max);
+    }
+
+    // Ground-reflection pools: swell slightly while fading over ~0.3s.
+    for (const groundFlash of this.groundFlashes) {
+      if (groundFlash.ttl <= 0) continue;
+      groundFlash.ttl -= dtSec;
+      if (groundFlash.ttl <= 0) {
+        groundFlash.mesh.visible = false;
+        groundFlash.mesh.material.opacity = 0;
+        continue;
+      }
+      const t = 1 - groundFlash.ttl / groundFlash.max;
+      groundFlash.mesh.scale.setScalar(groundFlash.size * (1 + t * 0.8));
+      groundFlash.mesh.material.opacity = 0.32 * (1 - t) * (1 - t);
     }
   }
 }
