@@ -221,6 +221,7 @@ import {
 } from "./engine/facing.mjs";
 import { FinalBlowPeer } from "./engine/webrtc.mjs";
 import {
+  ROLLBACK_PROTOCOL_VERSION,
   RollbackSession,
   bitsToInput,
   checksumState,
@@ -231,6 +232,33 @@ import {
   recommendedInputDelay,
   serializeRollbackState,
 } from "./engine/rollback.mjs";
+import {
+  createReplayHeader,
+  createReplayRecord,
+  decodeReplayStreams,
+  pushReplayToRing,
+  replayCompatibility,
+  replayFileName,
+  replaySummary,
+  validateReplayRecord,
+} from "./engine/replay.mjs";
+import {
+  ONLINE_QOL_LEVEL,
+  SET_LENGTHS,
+  connectionTier,
+  createSetState,
+  ewma,
+  normalizeSetLength,
+  recordSetWin,
+  sanitizeLobbyQol,
+  sanitizeSetSync,
+  setComplete,
+  setPointSides,
+  setSummary,
+  setWinnerSide,
+  stagePickerRole,
+  validReturnLobbyMessage,
+} from "./engine/online-qol.mjs";
 import {
   DEMO_AI_DIFFICULTY,
   DEMO_IDLE_DELAY_MS,
@@ -1278,7 +1306,17 @@ const onlineSession = {
     remotePalette: 0,
     remoteFighterRaw: "",
     remoteCommissionerUnlocked: false,
+    // R2.1 STREETS: optional QoL lobby fields. Older peers never send them;
+    // every default below reproduces the plain 2.3 room behaviour.
+    setChoice: "1",
+    remoteSetLength: 1,
+    remoteQol: 0,
+    remotePing: null,
   },
+  // R2.1 STREETS: first-to-N set bookkeeping (side 0 = host seat) and the
+  // loser-picks-stage latch. Meta only — never part of any rollback snapshot.
+  set: createSetState(1),
+  lastLoserRole: "",
   matchConfig: null,
   rollback: null,
   matchActive: false,
@@ -1306,6 +1344,96 @@ const demoSession = {
   idleTimer: 0,
 };
 let fightAnnouncementTimer = 0;
+
+// ===========================================================================
+// R2.1 STREETS — REPLAY THEATER + online QoL module state. Everything here is
+// meta/render-side on the demoSession pattern: never snapshotted, never read
+// by the checksummed sim. The recorder only OBSERVES the confirmed input
+// stream (overwriting on resimulation, so predicted values never survive);
+// playback IS the sim driver, feeding the exact recorded bits back through
+// simulatePreparedGameTick the same way the online rollback step does.
+// ===========================================================================
+
+// The shipping build tag — stamped into every replay beside the rollback
+// protocol version. Either stamp mismatching refuses playback.
+const GAME_VERSION = document.querySelector('meta[name="application-version"]')?.content || "0.0";
+const REPLAY_STORAGE_KEY = "final-blow-replays-v1";
+
+const replayRecorder = {
+  active: false,
+  kind: "",            // "offline" | "online"
+  mode: "",            // state.mode when armed — a mode swap aborts
+  header: null,
+  frames0: [],          // offline: append-only bits per tick
+  frames1: [],
+  burns: [],            // offline: state.rng draws consumed BEFORE the tick (AI)
+  onlineFrames: null,   // online: Map(frame -> [bits0, bits1]), overwrite on resim
+  startTick: null,
+  matchKey: "",
+  aborted: false,
+};
+
+const replayPlayback = {
+  active: false,
+  header: null,
+  record: null,
+  frames0: [],
+  frames1: [],
+  burns: [],
+  index: 0,
+  speed: 1,
+  paused: false,
+  carry: 0,
+  pendingStep: 0,
+  saved: null,          // restore bundle for module/global values we borrow
+  outcome: null,
+};
+
+const replayUi = { status: "", lastOutcome: null };
+
+// Offline versus set session (feature 2) — mirrors onlineSession.set.
+let pendingSetLength = 1;
+let offlineSet = null;
+
+// Connection-quality meter state (feature 3). Pure meta, fed from the peer
+// latency callback + packet cadence + RollbackSession.metrics().
+const connMeter = {
+  ewmaPing: null,
+  ewmaJitter: null,
+  lastPing: null,
+  lastPacketAt: 0,
+  ewmaGapMs: null,
+  tier: 0,
+  toastedTier: 0,
+  detail: false,
+  lastRenderAt: 0,
+  baseline: null,       // {rollbacks, stalledFrames, tick} recent-window anchor
+  recentRollbackDepth: 0,
+  recentStalled: 0,
+  forced: null,         // QA stub sample
+  readyCheckShownFor: "",
+};
+
+// One-shot / live counters for the orchestrator's smoke tests.
+const netFxDebug = {
+  replaysRecorded: 0,
+  replaysSaved: 0,
+  replayPlaybacks: 0,
+  replayRefusals: 0,
+  replayImports: 0,
+  replayExports: 0,
+  setFolds: 0,
+  setPointCallouts: 0,
+  setWins: 0,
+  connToasts: 0,
+  readyChecks: 0,
+  returnLobby: 0,
+};
+
+// Monotonic count of state.rng draws — lets the offline recorder note how many
+// gameplay draws the AI consumed before each sim tick so playback can burn the
+// identical draws. Pure observation: the stream itself is untouched.
+let rngDrawSerial = 0;
 
 // --- Release 1.8 GRIND: score attack / daily / mutator sessions ------------
 // Score is pure presentation/meta, tracked OUTSIDE the checksummed sim state
@@ -2615,6 +2743,58 @@ function onlineSnapshot() {
   };
 }
 
+// R2.1 STREETS: replay/set/connection/rematch observability for smoke tests
+// and QA probes — counters on the monotonic netFxDebug pattern plus live
+// module state. Read-only.
+function netQolSnapshot() {
+  return {
+    counters: { ...netFxDebug },
+    recorder: {
+      active: replayRecorder.active,
+      kind: replayRecorder.kind,
+      aborted: replayRecorder.aborted,
+      frames: replayRecorder.kind === "online"
+        ? (replayRecorder.onlineFrames?.size || 0)
+        : replayRecorder.frames0.length,
+      startTick: replayRecorder.startTick,
+      matchKey: replayRecorder.matchKey,
+    },
+    playback: {
+      active: replayPlayback.active,
+      index: replayPlayback.index,
+      frames: replayPlayback.frames0.length,
+      paused: replayPlayback.paused,
+      speed: replayPlayback.speed,
+      kind: replayPlayback.header?.kind || "",
+      lastOutcome: replayUi.lastOutcome ? { ...replayUi.lastOutcome } : null,
+      status: replayUi.status,
+    },
+    ringCount: loadReplayRing().length,
+    set: {
+      pendingLength: pendingSetLength,
+      offline: offlineSet ? setSummary(offlineSet) : null,
+      online: setSummary(onlineSession.set),
+      lastLoserRole: onlineSession.lastLoserRole,
+      stagePickerRole: onlineStagePickerRole(),
+    },
+    connection: {
+      tier: connMeter.tier,
+      sample: connMeterSample(),
+      detail: connMeter.detail,
+      forced: Boolean(connMeter.forced),
+      toastedTier: connMeter.toastedTier,
+    },
+    lobbyQol: {
+      remoteQol: onlineSession.lobby.remoteQol,
+      remotePing: onlineSession.lobby.remotePing,
+      setChoice: onlineSession.lobby.setChoice,
+      remoteSetLength: onlineSession.lobby.remoteSetLength,
+    },
+    gameVersion: GAME_VERSION,
+    protocol: ROLLBACK_PROTOCOL_VERSION,
+  };
+}
+
 function demoSnapshot() {
   return {
     active: demoSession.active,
@@ -2845,6 +3025,14 @@ function persistOnlineResume(includeState = false) {
     matchConfig: onlineSession.matchConfig,
     matchActive: onlineSession.matchActive,
     screen: state.screen,
+    // R2.1 STREETS: the running first-to-N set + the loser-picks-stage latch
+    // survive a reload with the room.
+    set: {
+      length: onlineSession.set.length,
+      scores: [...onlineSession.set.scores],
+      history: onlineSession.set.history.map((entry) => ({ ...entry })),
+    },
+    lastLoserRole: onlineSession.lastLoserRole,
     savedAt: Date.now(),
   };
   if (includeState && onlineSession.rollback && state.screen === "fight") {
@@ -2884,6 +3072,115 @@ function updateOnlineHud(kind = "sync") {
   $("#onlineHudPing").textContent = onlineSession.latency === null ? "— MS" : `${onlineSession.latency} MS`;
   $("#onlineHudDelay").textContent = `${metrics?.inputDelay ?? onlineSession.matchConfig?.inputDelay ?? 0}F DELAY`;
   $("#onlineHudRollbacks").textContent = `${metrics?.rollbacks || 0} RB`;
+  // R2.1 STREETS: running set score + the signal-bars connection meter.
+  const setScore = $("#onlineHudSet");
+  const liveSet = onlineSession.set.length > 1 && onlineSession.matchConfig;
+  setScore.hidden = !liveSet;
+  if (liveSet) setScore.textContent = `SET ${onlineSession.set.scores[0]}–${onlineSession.set.scores[1]} · FT${onlineSession.set.length}`;
+  renderConnMeter(metrics);
+}
+
+// ===========================================================================
+// R2.1 STREETS — CONNECTION METER. Pure meta: EWMA ping/jitter from the peer
+// latency callback, packet cadence from receiveOnlineInput, recent rollback
+// behaviour from RollbackSession.metrics(). connMeter.forced is the QA stub.
+// ===========================================================================
+
+function connMeterSample() {
+  if (connMeter.forced) return { ...connMeter.forced };
+  return {
+    pingMs: connMeter.ewmaPing ?? (onlineSession.latency === null ? null : onlineSession.latency),
+    jitterMs: connMeter.ewmaJitter,
+    rollbackDepth: connMeter.recentRollbackDepth,
+    stalledRecent: connMeter.recentStalled,
+  };
+}
+
+function feedConnMeterLatency(milliseconds) {
+  if (!Number.isFinite(milliseconds)) return;
+  if (Number.isFinite(connMeter.lastPing)) {
+    connMeter.ewmaJitter = ewma(connMeter.ewmaJitter, Math.abs(milliseconds - connMeter.lastPing));
+  }
+  connMeter.lastPing = milliseconds;
+  connMeter.ewmaPing = ewma(connMeter.ewmaPing, milliseconds);
+}
+
+function renderConnMeter(metrics = null) {
+  const meter = $("#connMeter");
+  if (!meter) return;
+  const sample = connMeterSample();
+  const rating = connectionTier(sample);
+  connMeter.tier = rating.tier;
+  meter.dataset.grade = rating.grade;
+  $("#connMeterLabel").textContent = rating.label;
+  meter.querySelectorAll("i").forEach((bar, index) => {
+    bar.classList.toggle("lit", index < 4 - rating.tier);
+  });
+  // One-shot degradation toast per worsening step; re-arms on recovery.
+  if (rating.tier >= 2 && rating.tier > connMeter.toastedTier && state.screen === "fight") {
+    connMeter.toastedTier = rating.tier;
+    netFxDebug.connToasts += 1;
+    showConnToast(rating.tier >= 3
+      ? "CONNECTION ROUGH · PREDICTION RUNNING DEEP"
+      : "CONNECTION SHAKY · EXPECT SMALL ROLLBACKS");
+  } else if (rating.tier < connMeter.toastedTier) {
+    connMeter.toastedTier = rating.tier;
+  }
+  const detail = $("#connMeterDetail");
+  detail.hidden = !connMeter.detail;
+  if (connMeter.detail) {
+    const stats = metrics || onlineSession.rollback?.metrics() || null;
+    detail.innerHTML = [
+      `PING ${sample.pingMs === null || sample.pingMs === undefined ? "—" : `${Math.round(sample.pingMs)}MS`}`,
+      `JITTER ${Number.isFinite(sample.jitterMs) ? `${Math.round(sample.jitterMs)}MS` : "—"}`,
+      `DELAY ${stats?.inputDelay ?? onlineSession.matchConfig?.inputDelay ?? 0}F`,
+      `RB DEPTH ${sample.rollbackDepth || 0}F`,
+      `STALLS ${sample.stalledRecent || 0}`,
+      `LINK ${rating.label}`,
+    ].map((row) => `<span>${row}</span>`).join("");
+  }
+}
+
+let connToastTimer = 0;
+
+function showConnToast(text) {
+  const toast = $("#connToast");
+  if (!toast) return;
+  toast.textContent = text;
+  toast.hidden = false;
+  toast.classList.remove("out");
+  window.clearTimeout(connToastTimer);
+  connToastTimer = window.setTimeout(() => { toast.hidden = true; }, 3200);
+}
+
+// Pre-match 3-2-1 sync countdown: wall-clock DOM beats over the deterministic
+// intro phase. Presentation only — the rollback session starts regardless.
+let syncCountdownTimers = [];
+
+function beginSyncCountdown() {
+  clearSyncCountdown();
+  const node = $("#syncCountdown");
+  if (!node) return;
+  netFxDebug.readyChecks += 1;
+  const beats = ["3", "2", "1"];
+  beats.forEach((beat, index) => {
+    syncCountdownTimers.push(window.setTimeout(() => {
+      // Only ever scheduled from an online match start (or the QA hook) — the
+      // fight-screen gate alone keeps stray beats off the menus.
+      if (state.screen !== "fight") return;
+      node.textContent = beat;
+      node.hidden = false;
+      restartCssAnimation(node, "beat");
+    }, 250 + index * 520));
+  });
+  syncCountdownTimers.push(window.setTimeout(() => { node.hidden = true; }, 250 + beats.length * 520));
+}
+
+function clearSyncCountdown() {
+  for (const timer of syncCountdownTimers) window.clearTimeout(timer);
+  syncCountdownTimers = [];
+  const node = $("#syncCountdown");
+  if (node) node.hidden = true;
 }
 
 // Wave 16: the Commissioner appears in the online fighter list only while
@@ -2923,17 +3220,58 @@ function updateOnlineMatchSetup() {
       : "CHOOSING…";
   const paletteSelect = $("#onlinePaletteSelect");
   if (paletteSelect) paletteSelect.value = String(lobby.localPalette);
+  // R2.1 STREETS: MK-style loser-picks-stage. The stage cursor belongs to the
+  // last match's loser once both peers speak QoL; otherwise the 2.3 host rule.
+  const stageOwner = onlineStagePickerRole();
   $("#onlineStageSelect").value = lobby.stage;
-  $("#onlineStageSelect").disabled = onlineSession.role !== "host";
+  $("#onlineStageSelect").disabled = onlineSession.role !== stageOwner;
+  const stageOwnerNote = $("#onlineStageOwner");
+  if (stageOwnerNote) {
+    stageOwnerNote.textContent = onlineSession.lastLoserRole && lobby.remoteQol >= 1
+      ? (stageOwner === onlineSession.role ? "LOSER'S CALL · YOU PICK" : "LOSER'S CALL · OPPONENT PICKS")
+      : (stageOwner === onlineSession.role ? "HOST PICKS" : "HOST'S CALL");
+  }
   $("#onlineDelaySelect").value = lobby.delayChoice;
+  // First-to-N set length: host-picked, mirrored to the guest, disabled
+  // entirely against a 2.3 peer (the config would fall back to one match).
+  const setSelect = $("#onlineSetSelect");
+  if (setSelect) {
+    setSelect.value = lobby.setChoice;
+    setSelect.disabled = onlineSession.role !== "host" || lobby.remoteQol < 1;
+    setSelect.title = lobby.remoteQol < 1 ? "OPPONENT'S BUILD PREDATES SETS" : "";
+  }
   const readyButton = $("#onlineReadyButton");
   readyButton.disabled = !connected;
   readyButton.textContent = lobby.localReady ? "READY LOCKED · CANCEL" : "READY FOR ROLLBACK";
+  // Pre-ready connection check: measured RTT + the AUTO delay it would tune.
+  const connBadge = $("#lobbyConnBadge");
+  if (connBadge) {
+    const ping = connMeter.forced?.pingMs ?? connMeter.ewmaPing ?? onlineSession.latency;
+    if (Number.isFinite(ping)) {
+      const rating = connectionTier(connMeterSample());
+      connBadge.hidden = false;
+      connBadge.dataset.grade = rating.grade;
+      connBadge.textContent = `CONNECTION ${rating.label} · ${Math.round(ping)}MS · AUTO = ${recommendedInputDelay(ping)}F`;
+    } else {
+      connBadge.hidden = false;
+      connBadge.dataset.grade = "";
+      connBadge.textContent = "CONNECTION · MEASURING…";
+    }
+  }
   setup.classList.toggle("ready", lobby.localReady && lobby.remoteReady);
   $("#onlineMatchStatus").textContent = lobby.localReady && lobby.remoteReady
     ? onlineSession.role === "host" ? "BOTH READY · LAUNCHING MATCH" : "BOTH READY · HOST IS LAUNCHING"
     : lobby.localReady ? "YOU ARE READY · WAITING FOR OPPONENT"
       : lobby.remoteReady ? "OPPONENT READY · LOCK YOUR FIGHTER" : "CHOOSE, TUNE DELAY, THEN READY UP";
+}
+
+// Which seat owns the lobby stage cursor right now (see stagePickerRole).
+function onlineStagePickerRole() {
+  return stagePickerRole({
+    localQol: ONLINE_QOL_LEVEL,
+    remoteQol: onlineSession.lobby.remoteQol,
+    lastLoserRole: onlineSession.lastLoserRole,
+  });
 }
 
 function sendOnlineControl(message) {
@@ -2953,6 +3291,11 @@ function sendOnlineLobbyState() {
     // Wave 16: color pick + Commissioner eligibility handshake.
     palette: lobby.localPalette,
     commissioner: commissionerUnlocked(),
+    // R2.1 STREETS: versioned QoL extension. Older peers ignore all three;
+    // sanitizeLobbyQol on the receive side defaults them to 2.3 behaviour.
+    qol: ONLINE_QOL_LEVEL,
+    ping: onlineSession.latency ?? undefined,
+    setLength: normalizeSetLength(lobby.setChoice),
   });
 }
 
@@ -3025,9 +3368,35 @@ function disconnectOnline(resetStatus = true, { clearStored = true } = {}) {
   onlineSession.lastPersistedFrame = -1;
   onlineSession.lobby.localReady = false;
   onlineSession.lobby.remoteReady = false;
+  // R2.1 STREETS: the set, the stage-cursor latch, the peer's QoL level and
+  // the connection meter all die with the room.
+  onlineSession.set = createSetState(1);
+  onlineSession.lastLoserRole = "";
+  onlineSession.lobby.remoteQol = 0;
+  onlineSession.lobby.remotePing = null;
+  onlineSession.lobby.remoteSetLength = 1;
+  onlineSession.lobby.setChoice = "1";
+  resetConnMeter();
+  clearSyncCountdown();
+  resetReplayRecorder();
   if (clearStored) safeSessionWrite(null);
   resetOnlineUi();
   if (resetStatus) setOnlineStatus("idle", "Create a room or open a private invite.");
+}
+
+function resetConnMeter() {
+  connMeter.ewmaPing = null;
+  connMeter.ewmaJitter = null;
+  connMeter.lastPing = null;
+  connMeter.lastPacketAt = 0;
+  connMeter.ewmaGapMs = null;
+  connMeter.tier = 0;
+  connMeter.toastedTier = 0;
+  connMeter.detail = false;
+  connMeter.baseline = null;
+  connMeter.recentRollbackDepth = 0;
+  connMeter.recentStalled = 0;
+  connMeter.forced = null;
 }
 
 function renderOnlineRoom() {
@@ -3146,8 +3515,12 @@ async function connectOnlineTransport() {
     onLatency(milliseconds) {
       if (generation !== onlineSession.generation || peerGeneration !== onlineSession.peerGeneration) return;
       onlineSession.latency = milliseconds;
+      // R2.1 STREETS: EWMA ping + jitter feed for the connection meter, and
+      // the lobby's pre-ready connection line.
+      feedConnMeterLatency(milliseconds);
       $("#onlineLatency").textContent = `${milliseconds} MS · ENCRYPTED`;
       updateOnlineHud();
+      if (!onlineSession.matchActive) updateOnlineMatchSetup();
     },
     onControl(message) {
       if (generation !== onlineSession.generation || peerGeneration !== onlineSession.peerGeneration) return;
@@ -3211,8 +3584,15 @@ async function resumeStoredOnlineConnection(resume) {
   onlineSession.inviteUrl = credentials.role === "host" ? String(resume.inviteUrl || "") : "";
   Object.assign(onlineSession.lobby, resume.lobby || {});
   onlineSession.peers.add(credentials.role);
+  // R2.1 STREETS: restore the room's set + stage latch (sanitized — the
+  // stored blob is only as trusted as any other message).
+  onlineSession.set = sanitizeSetSync(resume.set, resume.set?.length ?? 1);
+  onlineSession.lastLoserRole = ["host", "guest"].includes(resume.lastLoserRole) ? resume.lastLoserRole : "";
   if (resume.matchActive && validOnlineMatchConfig(resume.matchConfig)) {
     startOnlineMatch(resume.matchConfig);
+    // startOnlineMatch re-adopted the config's match-start snapshot; the
+    // persisted scores are at least as fresh.
+    onlineSession.set = sanitizeSetSync(resume.set, resume.set?.length ?? 1);
     if (resume.rollback?.state && Number.isInteger(resume.rollback.frame)) {
       onlineSession.rollback.importSync({
         frame: resume.rollback.frame,
@@ -3319,6 +3699,12 @@ function makeOnlineMatchConfig({ rematch = false } = {}) {
   // never offers him otherwise; this is the belt to that suspenders.
   const commissionerEligible = commissionerUnlocked() && lobby.remoteCommissionerUnlocked;
   if ([lobby.localFighter, lobby.remoteFighter].includes(ARCADE_BOSS_ID) && !commissionerEligible) return null;
+  // R2.1 STREETS: first-to-N carry. A finished (or re-sized) set restarts
+  // before the config snapshots it, so the guest adopts a coherent scoreboard.
+  const setLength = lobby.remoteQol >= 1 ? normalizeSetLength(lobby.setChoice) : 1;
+  if (onlineSession.set.length !== setLength || setComplete(onlineSession.set)) {
+    onlineSession.set = createSetState(setLength);
+  }
   return {
     version: 1,
     matchId: crypto.randomUUID(),
@@ -3330,6 +3716,13 @@ function makeOnlineMatchConfig({ rematch = false } = {}) {
     // Wave 16: agreed color picks, one per side, in picks order.
     palettes: [lobby.localPalette === 1 ? 1 : 0, lobby.remotePalette === 1 ? 1 : 0],
     rematch: Boolean(rematch),
+    // R2.1 STREETS: optional QoL extension — an older guest ignores all of it
+    // and simply plays a single match under the 2.3 rules.
+    qol: ONLINE_QOL_LEVEL,
+    setLength,
+    set: setLength > 1
+      ? { length: setLength, scores: [...onlineSession.set.scores], history: onlineSession.set.history.map((entry) => ({ ...entry })) }
+      : undefined,
   };
 }
 
@@ -3355,7 +3748,11 @@ function validOnlineMatchConfig(config) {
     // one 0/1 per side. Anything else rejects the config.
     && (config.palettes === undefined
       || (Array.isArray(config.palettes) && config.palettes.length === 2
-        && config.palettes.every((palette) => palette === 0 || palette === 1))),
+        && config.palettes.every((palette) => palette === 0 || palette === 1)))
+    // R2.1 STREETS: optional first-to-N extension. Absent (older host) or a
+    // known FT length; the set snapshot itself is sanitized on adoption.
+    && (config.setLength === undefined || SET_LENGTHS.includes(config.setLength))
+    && (config.set === undefined || (config.set && typeof config.set === "object")),
   );
 }
 
@@ -3482,7 +3879,19 @@ function receiveOnlineControl(message) {
   if (message.type === "lobby-state" && !onlineSession.matchActive) {
     onlineSession.lobby.remoteFighterRaw = typeof message.fighter === "string" ? message.fighter : "";
     if (onlineFighterIds.has(message.fighter)) onlineSession.lobby.remoteFighter = message.fighter;
-    if (onlineSession.role === "guest" && stages[message.stage]) onlineSession.lobby.stage = message.stage;
+    // R2.1 STREETS: sanitize the optional QoL extension FIRST — the stage
+    // adoption below depends on who owns the cursor (loser-picks-stage).
+    const qol = sanitizeLobbyQol(message);
+    onlineSession.lobby.remoteQol = qol.qol;
+    onlineSession.lobby.remotePing = qol.ping;
+    onlineSession.lobby.remoteSetLength = qol.setLength;
+    // The set length is host law: a guest mirrors it into its own display.
+    if (onlineSession.role === "guest" && qol.qol >= 1) onlineSession.lobby.setChoice = String(qol.setLength);
+    // Stage cursor: the NON-owner adopts the owner's pick. With an older peer
+    // (qol 0) the owner is always the host — exactly the 2.3 rule.
+    if (stages[message.stage] && onlineStagePickerRole() !== onlineSession.role) {
+      onlineSession.lobby.stage = message.stage;
+    }
     onlineSession.lobby.remoteDelayChoice = ["auto", "0", "1", "2", "3", "4"].includes(String(message.delayChoice))
       ? String(message.delayChoice) : "auto";
     onlineSession.lobby.remoteControlStyle = normalizeControlStyle(message.controlStyle);
@@ -3539,11 +3948,49 @@ function receiveOnlineControl(message) {
   } else if (message.type === "peer-suspend") {
     onlineSession.remoteSuspended = Boolean(message.suspended);
     refreshOnlinePauseOverlay();
+  } else if (validReturnLobbyMessage(message, onlineSession.matchConfig.matchId)) {
+    // R2.1 STREETS: CHANGE FIGHTERS — the opponent asked to drop back to the
+    // shared lobby with room, credentials and set score intact.
+    returnToOnlineLobby();
   }
+}
+
+// R2.1 STREETS: back to #onlineMatchSetup without leaving the room. The set
+// scoreboard, credentials and peer link all survive; readiness resets so both
+// sides must lock in again. Safe to call on either seat, idempotent.
+function returnToOnlineLobby() {
+  if (!onlineSession.roomId || state.mode !== "online") return;
+  if (!onlineSession.matchActive && state.screen === "online") return;
+  onlineSession.matchActive = false;
+  onlineSession.rollback = null;
+  onlineSession.networkPaused = false;
+  onlineSession.awaitingResume = false;
+  onlineSession.remoteSuspended = false;
+  onlineSession.localSuspended = false;
+  onlineSession.rematchVotes.clear();
+  onlineSession.remoteChecksums.clear();
+  onlineSession.lobby.localReady = false;
+  onlineSession.lobby.remoteReady = false;
+  resetReplayRecorder();
+  clearSyncCountdown();
+  setOnlineInterruption(false);
+  state.paused = false;
+  netFxDebug.returnLobby += 1;
+  showScreen("online");
+  updateOnlineMatchSetup();
+  sendOnlineLobbyState();
+  persistOnlineResume(false);
 }
 
 function receiveOnlineInput(packet) {
   if (!onlineSession.matchActive || !onlineSession.rollback) return;
+  // R2.1 STREETS: packet cadence for the connection meter (meta only). A
+  // widening EWMA gap between input packets reads as jitter alongside ping.
+  const now = performance.now();
+  if (connMeter.lastPacketAt > 0) {
+    connMeter.ewmaGapMs = ewma(connMeter.ewmaGapMs, now - connMeter.lastPacketAt, 0.2);
+  }
+  connMeter.lastPacketAt = now;
   try {
     const result = onlineSession.rollback.receivePacket(packet);
     if (!result.accepted) return;
@@ -3556,6 +4003,9 @@ function receiveOnlineInput(packet) {
 }
 
 function random() {
+  // R2.1 STREETS: draw counter for the replay recorder (observation only —
+  // the value and the stream are untouched).
+  rngDrawSerial += 1;
   return state.rng.nextFloat();
 }
 
@@ -3564,6 +4014,23 @@ function visualRandom() {
 }
 
 function seedMatch(round = state.round) {
+  // R2.1 STREETS: replay playback re-derives the EXACT recorded seed. Online
+  // replays reuse the online formula with the header's shared seed; offline
+  // replays reuse the offline formula with the header's arcade context (the
+  // arcadeRun object itself is not reconstructed for playback). Identical to
+  // the plain path whenever no replay is running.
+  if (replayPlayback.active && replayPlayback.header?.kind === "online") {
+    state.matchSeed = hashSeed("FINAL-BLOW-ONLINE", replayPlayback.header.seed || 237, round);
+    state.rng.setState(state.matchSeed);
+    state.visualRng.setState(hashSeed(state.matchSeed, "visual"));
+    return;
+  }
+  const arcadeCurrent = replayPlayback.active
+    ? replayPlayback.header?.arcadeCurrent || 0
+    : state.arcadeRun?.current || 0;
+  const arcadeOpponent = replayPlayback.active
+    ? replayPlayback.header?.arcadeOpponent || "versus"
+    : currentArcadeMatch(state.arcadeRun)?.opponentId || "versus";
   state.matchSeed = hashSeed(
     initialSeed,
     state.matchSerial,
@@ -3571,8 +4038,8 @@ function seedMatch(round = state.round) {
     state.picks[0],
     state.picks[1],
     state.stage,
-    state.arcadeRun?.current || 0,
-    currentArcadeMatch(state.arcadeRun)?.opponentId || "versus",
+    arcadeCurrent,
+    arcadeOpponent,
   );
   state.rng.setState(state.matchSeed);
   state.visualRng.setState(hashSeed(state.matchSeed, "visual"));
@@ -3582,6 +4049,582 @@ function seedOnlineRound(round = state.round) {
   state.matchSeed = hashSeed("FINAL-BLOW-ONLINE", onlineSession.matchConfig?.seed || 237, round);
   state.rng.setState(state.matchSeed);
   state.visualRng.setState(hashSeed(state.matchSeed, "visual"));
+}
+
+// ===========================================================================
+// R2.1 STREETS — REPLAY THEATER: recorder, ring storage, playback driver.
+// ===========================================================================
+
+function loadReplayRing() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(REPLAY_STORAGE_KEY));
+    return Array.isArray(parsed) ? parsed.filter((entry) => entry && typeof entry === "object") : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveReplayRing(ring) {
+  try {
+    localStorage.setItem(REPLAY_STORAGE_KEY, JSON.stringify(ring));
+    return true;
+  } catch {
+    // Storage full or denied — the match still played; the save just skips.
+    return false;
+  }
+}
+
+function resetReplayRecorder() {
+  replayRecorder.active = false;
+  replayRecorder.kind = "";
+  replayRecorder.mode = "";
+  replayRecorder.header = null;
+  replayRecorder.frames0 = [];
+  replayRecorder.frames1 = [];
+  replayRecorder.burns = [];
+  replayRecorder.onlineFrames = null;
+  replayRecorder.startTick = null;
+  replayRecorder.matchKey = "";
+  replayRecorder.aborted = false;
+}
+
+// Arm the recorder for a freshly-constructed match. Offline covers versus and
+// arcade bouts (the same deterministic sim); online records the confirmed
+// rollback stream. Never during replay playback itself.
+function beginReplayRecording(kind) {
+  resetReplayRecorder();
+  if (replayPlayback.active) return;
+  if (kind === "offline" && !["versus", "arcade"].includes(state.mode)) return;
+  if (kind === "offline" && (state.survivalRun || state.teamBattle)) return;
+  const online = kind === "online";
+  const config = online ? onlineSession.matchConfig : null;
+  if (online && !config) return;
+  replayRecorder.active = true;
+  replayRecorder.kind = online ? "online" : "offline";
+  replayRecorder.mode = online ? "online" : state.mode;
+  replayRecorder.matchKey = online ? String(config.matchId) : `serial-${state.matchSerial}`;
+  replayRecorder.onlineFrames = online ? new Map() : null;
+  replayRecorder.header = createReplayHeader({
+    kind: replayRecorder.kind,
+    mode: replayRecorder.mode,
+    protocol: ROLLBACK_PROTOCOL_VERSION,
+    gameVersion: GAME_VERSION,
+    picks: online
+      ? [...config.picks]
+      : [roster[state.picks[0]]?.id || "", roster[state.picks[1]]?.id || ""],
+    palettes: online ? config.palettes || [0, 0] : [...pendingPalettes],
+    stage: state.stage,
+    mutators: [...state.mutators],
+    stageWeaponsEnabled: state.stageWeaponsEnabled,
+    startPhase: { phase: state.phase, phaseTime: state.phaseTime },
+    // Online step() runs frame 0 with simulationTick = 1; offline stamps the
+    // live tick lazily on the first recorded frame.
+    startTick: online ? 1 : 0,
+    matchSerial: state.matchSerial,
+    arcadeCurrent: state.arcadeRun?.current || 0,
+    arcadeOpponent: currentArcadeMatch(state.arcadeRun)?.opponentId || "versus",
+    arcadeBoss: Boolean(state.mode === "arcade" && currentArcadeMatch(state.arcadeRun)?.opponentId === ARCADE_BOSS_ID),
+    seed: online ? config.seed : 0,
+    inputDelay: online ? config.inputDelay : 0,
+    matchId: online ? config.matchId : "",
+    recordedAt: Date.now(),
+  });
+  if (online) replayRecorder.startTick = 1;
+  netFxDebug.replaysRecorded += 1;
+}
+
+function abortReplayRecording() {
+  if (replayRecorder.active) replayRecorder.aborted = true;
+}
+
+function recordOfflineReplayFrame(input0, input1, rngBurn) {
+  if (replayRecorder.aborted) return;
+  if (replayRecorder.startTick === null) {
+    replayRecorder.startTick = state.simulationTick;
+    replayRecorder.header.startTick = state.simulationTick;
+  }
+  // A round restart or QA time-jump breaks the contiguous input timeline —
+  // the recording can no longer reproduce the match, so it disarms.
+  if (state.simulationTick !== replayRecorder.startTick + replayRecorder.frames0.length) {
+    replayRecorder.aborted = true;
+    return;
+  }
+  replayRecorder.frames0.push(inputToBits(resolveSideInput(0, input0)));
+  replayRecorder.frames1.push(inputToBits(resolveSideInput(1, input1)));
+  replayRecorder.burns.push(Math.max(0, Math.min(0xffff, rngBurn | 0)));
+}
+
+// Flatten the online frame map (0..last, no gaps) or refuse.
+function collectOnlineReplayFrames() {
+  const map = replayRecorder.onlineFrames;
+  if (!map || !map.size) return null;
+  let last = -1;
+  for (const frame of map.keys()) last = Math.max(last, frame);
+  const frames0 = [];
+  const frames1 = [];
+  for (let frame = 0; frame <= last; frame += 1) {
+    const pair = map.get(frame);
+    if (!pair) return null;
+    frames0.push(pair[0]);
+    frames1.push(pair[1]);
+  }
+  return { frames0, frames1 };
+}
+
+// Called from resolveMatchResult (never during resimulation) — banks the
+// finished match into the localStorage ring.
+function finalizeReplayRecording(winner) {
+  if (!replayRecorder.active) return;
+  const recorder = replayRecorder;
+  const online = recorder.kind === "online";
+  const streams = online
+    ? collectOnlineReplayFrames()
+    : { frames0: recorder.frames0, frames1: recorder.frames1 };
+  const modeStable = online ? state.mode === "online" : state.mode === recorder.mode;
+  if (recorder.aborted || !modeStable || !streams || !streams.frames0.length) {
+    resetReplayRecorder();
+    return;
+  }
+  const record = createReplayRecord({
+    header: recorder.header,
+    frames0: streams.frames0,
+    frames1: streams.frames1,
+    burns: online ? [] : recorder.burns,
+    outcome: {
+      winner: winner === 1 ? 1 : 0,
+      rounds: [...state.rounds],
+      healths: state.fighters.map((fighter) => Number((fighter?.health ?? 0).toFixed(2))),
+    },
+  });
+  resetReplayRecorder();
+  if (saveReplayRing(pushReplayToRing(loadReplayRing(), record))) {
+    netFxDebug.replaysSaved += 1;
+  }
+}
+
+// --- Playback --------------------------------------------------------------
+
+function exitReplayPlayback(status = "") {
+  if (!replayPlayback.active) return;
+  stopReplayPlayback();
+  if (status) replayUi.status = status;
+  showReplayTheater();
+}
+
+// Tear playback down and restore the module/global values it borrowed. Never
+// navigates — callers decide the next screen.
+function stopReplayPlayback() {
+  if (!replayPlayback.active) return;
+  replayPlayback.active = false;
+  const saved = replayPlayback.saved;
+  replayPlayback.saved = null;
+  replayPlayback.frames0 = [];
+  replayPlayback.frames1 = [];
+  replayPlayback.burns = [];
+  replayPlayback.header = null;
+  replayPlayback.record = null;
+  if (saved) {
+    state.matchSerial = saved.matchSerial;
+    state.stageWeaponsEnabled = saved.stageWeaponsEnabled;
+    pendingPalettes = saved.pendingPalettes;
+    state.qaManualMode = saved.qaManualMode;
+    state.mode = "versus";
+    simulationClock.tick = state.simulationTick;
+  }
+  $("#replayHud").hidden = true;
+}
+
+// The replay finished through the real resolveMatchResult pipeline — verify
+// determinism against the recorded outcome and land back in the theater.
+function finishReplayPlayback(winner) {
+  const record = replayPlayback.record;
+  const outcome = {
+    winner: winner === 1 ? 1 : 0,
+    rounds: [...state.rounds],
+    healths: state.fighters.map((fighter) => Number((fighter?.health ?? 0).toFixed(2))),
+  };
+  const expected = record?.outcome;
+  const verified = !expected
+    || (expected.winner === outcome.winner
+      && expected.rounds[0] === outcome.rounds[0]
+      && expected.rounds[1] === outcome.rounds[1]
+      && Math.abs(expected.healths[0] - outcome.healths[0]) < 0.01
+      && Math.abs(expected.healths[1] - outcome.healths[1]) < 0.01);
+  replayUi.lastOutcome = { ...outcome, verified, expected: expected ? { ...expected } : null };
+  const name = roster[state.picks[outcome.winner]]?.name || `P${outcome.winner + 1}`;
+  exitReplayPlayback(`REPLAY FINISHED · ${name} WINS${expected ? (verified ? " · DETERMINISM VERIFIED" : " · OUTCOME DIVERGED") : ""}`);
+}
+
+function startReplayPlayback(record, { manual = false } = {}) {
+  const compat = replayCompatibility(record?.header, { protocol: ROLLBACK_PROTOCOL_VERSION, gameVersion: GAME_VERSION });
+  if (!compat.ok) {
+    netFxDebug.replayRefusals += 1;
+    replayUi.status = `REPLAY REFUSED · ${compat.reason}`;
+    renderReplayList();
+    return { ok: false, reason: compat.reason };
+  }
+  const header = record.header;
+  const picks = header.picks.map((id) => rosterIndexById(id));
+  if (picks.some((index) => index < 0)) {
+    netFxDebug.replayRefusals += 1;
+    replayUi.status = "REPLAY REFUSED · UNKNOWN FIGHTER IN HEADER";
+    renderReplayList();
+    return { ok: false, reason: "unknown-fighter" };
+  }
+  let streams;
+  try {
+    streams = decodeReplayStreams(record);
+  } catch {
+    netFxDebug.replayRefusals += 1;
+    replayUi.status = "REPLAY REFUSED · CORRUPT INPUT STREAM";
+    renderReplayList();
+    return { ok: false, reason: "corrupt-stream" };
+  }
+  resetReplayRecorder();
+  cancelFightAnnouncement();
+  unlockAudio();
+  resetMusicDuck();
+  replayPlayback.saved = {
+    matchSerial: state.matchSerial,
+    stageWeaponsEnabled: state.stageWeaponsEnabled,
+    pendingPalettes: [...pendingPalettes],
+    qaManualMode: state.qaManualMode,
+  };
+  replayPlayback.active = true;
+  replayPlayback.header = header;
+  replayPlayback.record = record;
+  replayPlayback.frames0 = streams.frames0;
+  replayPlayback.frames1 = streams.frames1;
+  replayPlayback.burns = streams.burns;
+  replayPlayback.index = 0;
+  replayPlayback.speed = 1;
+  replayPlayback.paused = false;
+  replayPlayback.carry = 0;
+  replayPlayback.pendingStep = 0;
+  replayPlayback.outcome = null;
+  state.mode = "replay";
+  state.arcadeRun = null;
+  state.survivalRun = null;
+  state.teamBattle = null;
+  dailySession.active = false;
+  endScoreRun();
+  state.qaManualMode = manual;
+  state.paused = false;
+  state.mutators = normalizeMutators(header.mutators);
+  state.matchRules = resolveMatchRules(state.mutators);
+  state.suddenDeathHitDone = false;
+  state.stageWeaponsEnabled = header.stageWeaponsEnabled;
+  pendingPalettes = [...header.palettes];
+  state.picks = picks;
+  state.stage = stages[header.stage] ? header.stage : "somerset";
+  applyAutoStageMusic();
+  state.rounds = [0, 0];
+  state.round = 1;
+  state.matchSerial = header.matchSerial;
+  // Fighters were BUILT one tick before the first recorded frame in both
+  // originals (offline startMatch and online startOnlineMatch at tick 0), and
+  // makeFighter latches state.simulationTick into stateEnteredTick — so the
+  // rebuild must happen at startTick - 1, then the stream drives the tick.
+  state.simulationTick = Math.max(0, header.startTick - 1);
+  simulationClock.tick = state.simulationTick;
+  seedMatch(1);
+  progressionResetMatch();
+  applyMatchPalettes([roster[picks[0]], roster[picks[1]]], pendingPalettes);
+  state.facingAxis = 1;
+  state.fighters = [
+    makeFighter(picks[0], 0),
+    makeFighter(picks[1], 1, header.arcadeBoss ? arcadeBoss : null),
+  ];
+  if (state.matchRules.infiniteGrit) {
+    for (const fighter of state.fighters) fighter.meter = GRIT_RULES.maximum;
+  }
+  resetStageWeapon();
+  resetCrowd();
+  warmFighterAudio();
+  clearBattleDamage();
+  clearStageScars();
+  state.particles.length = 0;
+  state.effects.length = 0;
+  state.traps.length = 0;
+  state.projectiles.length = 0;
+  state.timer = 99;
+  state.timerCarry = 0;
+  state.phase = header.startPhase.phase;
+  state.phaseTime = header.startPhase.phaseTime;
+  state.hitstop = 0;
+  state.lastImpactSide = -1;
+  state.finishWinner = -1;
+  state.finisherType = 0;
+  state.finisher = null;
+  state.cinematicZoom = 1;
+  state.shake = 0;
+  state.flash = 0;
+  commandHistory[0].length = 0;
+  commandHistory[1].length = 0;
+  updateStageUI();
+  updateHud();
+  showScreen("fight");
+  updateReplayHud();
+  announce("REPLAY", `${roster[picks[0]].name} VS ${roster[picks[1]].name} · THEATER`, 1.1);
+  netFxDebug.replayPlaybacks += 1;
+  canvas.focus();
+  return { ok: true, frames: replayPlayback.frames0.length };
+}
+
+// One recorded frame through the exact online step contract: set the tick,
+// burn the recorded AI draws, feed the decoded pair to the sim.
+function stepReplayFrame() {
+  const playback = replayPlayback;
+  const index = playback.index;
+  const bits0 = playback.frames0[index] ?? 0;
+  const bits1 = playback.frames1[index] ?? 0;
+  const burn = playback.burns[index] ?? 0;
+  state.simulationTick = playback.header.startTick + index;
+  for (let draw = 0; draw < burn; draw += 1) random();
+  simulatePreparedGameTick(SIMULATION_STEP_SECONDS, bitsToInput(bits0), bitsToInput(bits1));
+  playback.index += 1;
+  // Watchdog: a stream that somehow never reaches a result stops a minute
+  // past its own end instead of looping forever.
+  if (playback.active && playback.index > playback.frames0.length + 3600) {
+    exitReplayPlayback("REPLAY ENDED · NO RESULT IN STREAM");
+  }
+}
+
+function simulateReplayTick() {
+  const playback = replayPlayback;
+  if (!playback.active) return;
+  let ticks = 0;
+  if (playback.paused) {
+    ticks = Math.min(1, playback.pendingStep);
+    playback.pendingStep = Math.max(0, playback.pendingStep - ticks);
+  } else {
+    playback.carry += playback.speed;
+    ticks = Math.floor(playback.carry);
+    playback.carry -= ticks;
+  }
+  for (let tick = 0; tick < ticks && playback.active && state.screen === "fight"; tick += 1) {
+    stepReplayFrame();
+  }
+  updateReplayHudFrame();
+}
+
+function setReplaySpeed(speed) {
+  const allowed = [0.5, 1, 2];
+  replayPlayback.speed = allowed.includes(Number(speed)) ? Number(speed) : 1;
+  replayPlayback.carry = 0;
+  updateReplayHud();
+  return replayPlayback.speed;
+}
+
+function cycleReplaySpeed() {
+  const order = [0.5, 1, 2];
+  const next = order[(order.indexOf(replayPlayback.speed) + 1) % order.length];
+  return setReplaySpeed(next);
+}
+
+function toggleReplayPause(paused = !replayPlayback.paused) {
+  replayPlayback.paused = Boolean(paused);
+  replayPlayback.pendingStep = 0;
+  replayPlayback.carry = 0;
+  updateReplayHud();
+  return replayPlayback.paused;
+}
+
+function updateReplayHud() {
+  const hud = $("#replayHud");
+  if (!hud) return;
+  const visible = replayPlayback.active && state.screen === "fight";
+  hud.hidden = !visible;
+  if (!visible) return;
+  const header = replayPlayback.header;
+  $("#replayHudLabel").textContent = header
+    ? `${roster[state.picks[0]]?.name || header.picks[0]} VS ${roster[state.picks[1]]?.name || header.picks[1]}`
+    : "REPLAY";
+  $("#replayPauseButton").textContent = replayPlayback.paused ? "▶" : "⏸";
+  $("#replaySpeedButton").textContent = `${replayPlayback.speed}×`;
+  updateReplayHudFrame();
+}
+
+function updateReplayHudFrame() {
+  if (!replayPlayback.active || state.screen !== "fight") return;
+  const total = replayPlayback.frames0.length;
+  $("#replayHudFrame").textContent = `${Math.min(replayPlayback.index, total)} / ${total}F`;
+}
+
+// --- Theater screen --------------------------------------------------------
+
+function showReplayTheater() {
+  enterImmersiveMode();
+  unlockAudio();
+  showScreen("replays");
+  renderReplayList();
+}
+
+function replayMatchupLabel(summary) {
+  const names = summary.picks.map((id) => roster.find((fighter) => fighter.id === id)?.name || id.toUpperCase());
+  return `${names[0]} VS ${names[1]}`;
+}
+
+function renderReplayList() {
+  const list = $("#replayList");
+  if (!list) return;
+  const ring = loadReplayRing();
+  const here = { protocol: ROLLBACK_PROTOCOL_VERSION, gameVersion: GAME_VERSION };
+  list.innerHTML = ring.length ? ring.map((record, index) => {
+    const summary = replaySummary(record, index);
+    const compat = replayCompatibility(record.header, here);
+    const winner = summary.winner === null ? "" : ` · ${(summary.picks[summary.winner] || "?").toUpperCase()} WON`;
+    const when = summary.recordedAt ? new Date(summary.recordedAt).toLocaleDateString() : "";
+    return `
+      <div class="replay-row${compat.ok ? "" : " stale"}" data-replay-index="${index}">
+        <div class="replay-row-copy">
+          <b>${replayMatchupLabel(summary)}</b>
+          <small>${summary.mode.toUpperCase()} · ${stages[summary.stage]?.name || summary.stage.toUpperCase()} · ${summary.seconds}S${winner}</small>
+          <small>${when} · V${summary.gameVersion} · PROTOCOL ${summary.protocol}${compat.ok ? "" : ` · ${compat.reason}`}</small>
+        </div>
+        <div class="replay-row-actions">
+          <button type="button" class="arcade-button compact primary" data-replay-action="watch" ${compat.ok ? "" : "disabled"}>WATCH</button>
+          <button type="button" class="arcade-button compact" data-replay-action="export">EXPORT</button>
+          <button type="button" class="arcade-button compact ghost" data-replay-action="delete">DELETE</button>
+        </div>
+      </div>`;
+  }).join("") : '<p class="replay-empty">NO REPLAYS YET — FINISH A VERSUS, ARCADE OR ONLINE MATCH AND IT LANDS HERE.</p>';
+  $("#replayStatus").textContent = replayUi.status || `LAST ${ring.length} MATCHES KEPT · EXPORT SHARES A .FBR FILE`;
+}
+
+function exportReplay(record) {
+  const blob = new Blob([JSON.stringify(record)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = replayFileName(record);
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  netFxDebug.replayExports += 1;
+}
+
+function importReplayText(text) {
+  let record;
+  try {
+    record = validateReplayRecord(JSON.parse(text));
+  } catch (error) {
+    replayUi.status = `IMPORT REFUSED · ${(error instanceof Error ? error.message : "UNREADABLE FILE").toUpperCase()}`;
+    renderReplayList();
+    return false;
+  }
+  saveReplayRing(pushReplayToRing(loadReplayRing(), record));
+  netFxDebug.replayImports += 1;
+  replayUi.status = `IMPORTED · ${replayMatchupLabel(replaySummary(record))}`;
+  renderReplayList();
+  return true;
+}
+
+function handleReplayListClick(event) {
+  const button = event.target.closest("[data-replay-action]");
+  if (!button) return;
+  const row = button.closest("[data-replay-index]");
+  const index = Number(row?.dataset.replayIndex);
+  const ring = loadReplayRing();
+  const record = ring[index];
+  if (!record) return;
+  replayUi.status = "";
+  if (button.dataset.replayAction === "watch") {
+    startReplayPlayback(record);
+  } else if (button.dataset.replayAction === "export") {
+    exportReplay(record);
+    replayUi.status = "EXPORTED · SHARE THE .FBR FILE";
+    renderReplayList();
+  } else if (button.dataset.replayAction === "delete") {
+    ring.splice(index, 1);
+    saveReplayRing(ring);
+    renderReplayList();
+  }
+}
+
+// ===========================================================================
+// R2.1 STREETS — FIRST-TO-N SETS: winner-stays bookkeeping shared by online
+// rooms (onlineSession.set, side 0 = host seat) and offline versus
+// (offlineSet). Meta only — never snapshotted, folded once per finished match
+// via the matchKey dedupe inside recordSetWin.
+// ===========================================================================
+
+// The set the CURRENT match belongs to, or null when set play is inert.
+function activeSetState() {
+  if (state.mode === "online" && onlineSession.matchConfig) return onlineSession.set;
+  if (state.mode === "versus" && !state.teamBattle && offlineSet) return offlineSet;
+  return null;
+}
+
+function setSideNames() {
+  return [
+    state.fighters[0]?.def.name || roster[state.picks[0]]?.name || "P1",
+    state.fighters[1]?.def.name || roster[state.picks[1]]?.name || "P2",
+  ];
+}
+
+// Fold one finished match into the live set. Called from resolveMatchResult
+// (never during resimulation). The announcer layers ride the wave-9 pattern:
+// scheduled past the KO call, gated on the round-over scene still playing.
+function foldSetResult(winner) {
+  const set = activeSetState();
+  if (!set || set.length <= 1) return;
+  const matchKey = state.mode === "online"
+    ? String(onlineSession.matchConfig?.matchId || "")
+    : `serial-${state.matchSerial}`;
+  const summary = recordSetWin(set, winner === 1 ? 1 : 0, {
+    matchKey,
+    picks: [state.fighters[0]?.def.id || "", state.fighters[1]?.def.id || ""],
+    rounds: [...state.rounds],
+  });
+  if (!summary) return;
+  netFxDebug.setFolds += 1;
+  if (state.mode === "online") persistOnlineResume(false);
+  if (summary.complete) {
+    netFxDebug.setWins += 1;
+  } else if (summary.setPoint[0] || summary.setPoint[1]) {
+    // Wave-9 setpoint bank: someone is now one MATCH from taking the set.
+    netFxDebug.setPointCallouts += 1;
+    announcerSay("setpoint", { delay: 2700 });
+    scheduleFightAnnouncement(() => {
+      if (state.screen === "fight" && state.phase === "roundover") {
+        const side = summary.setPoint[0] && summary.setPoint[1] ? -1 : summary.setPoint[0] ? 0 : 1;
+        const names = setSideNames();
+        announce("SET POINT", side < 0 ? "EITHER FIGHTER CAN CLOSE IT OUT" : `${names[side]} CAN TAKE THE SET`, 1.6);
+      }
+    }, 3050);
+  }
+}
+
+// The winner-stays scoreboard card on the result screen. Shows whenever the
+// finished match belongs to a live FT set (online or offline versus).
+function renderSetScoreCard() {
+  const card = $("#setScoreCard");
+  if (!card) return;
+  const set = activeSetState();
+  const summary = set && set.length > 1 ? setSummary(set) : null;
+  card.hidden = !summary;
+  if (!summary) return;
+  const names = setSideNames();
+  const champion = summary.complete ? summary.winnerSide : -1;
+  $("#setScoreTitle").textContent = champion >= 0
+    ? `SET CHAMPION · ${names[champion]}`
+    : summary.setPoint[0] || summary.setPoint[1] ? "SET POINT · WINNER STAYS" : "WINNER STAYS";
+  $("#setScoreLine").innerHTML = `
+    <b class="${champion === 0 ? "champ" : ""}">${names[0]}</b>
+    <span>${summary.scores[0]} — ${summary.scores[1]}</span>
+    <b class="${champion === 1 ? "champ" : ""}">${names[1]}</b>`;
+  $("#setScoreSub").textContent = `FIRST TO ${summary.length} · ${summary.history.length} MATCH${summary.history.length === 1 ? "" : "ES"} PLAYED`;
+  $("#setScorePips").innerHTML = summary.history
+    .map((entry) => `<i class="${entry.winner === 0 ? "left" : "right"}"></i>`)
+    .join("");
+  card.classList.toggle("champion", champion >= 0);
+  if (champion >= 0) {
+    // Set-winner celebration: banner + card shine, one-shot per set end.
+    announce("SET CHAMPION", `${names[champion]} TAKES THE SET ${summary.scores[0]}–${summary.scores[1]}`, 1.8);
+    restartCssAnimation(card, "crowned");
+  }
 }
 
 function makeFighter(index, side, overrideDef = null) {
@@ -5186,6 +6229,12 @@ function createOnlineRollback(config, initialFrame = 0) {
       rollbackResimulating = resimulating;
       try {
         state.simulationTick = frame + 1;
+        // R2.1 STREETS: replay recorder — keyed by frame in an independent
+        // append store (the session prunes its own maps after ~180 frames)
+        // and OVERWRITTEN on resimulation, so only confirmed values survive.
+        if (replayRecorder.active && replayRecorder.kind === "online" && replayRecorder.onlineFrames) {
+          replayRecorder.onlineFrames.set(frame, [Number(inputs[0]) & 0xffff, Number(inputs[1]) & 0xffff]);
+        }
         simulatePreparedGameTick(SIMULATION_STEP_SECONDS, bitsToInput(inputs[0]), bitsToInput(inputs[1]));
       } finally {
         rollbackResimulating = previous;
@@ -5905,6 +6954,40 @@ function renderMutatorBar() {
     : "OPTIONAL HOUSE RULES · STACK AS MANY AS YOU WANT";
 }
 
+// R2.1 STREETS: offline versus FIRST-TO-N picker — lives beside the House
+// Rules bar on the stage screen, versus only. Meta config, applied by the
+// next startMatch(true).
+function renderSetLengthBar() {
+  const bar = $("#setLengthBar");
+  if (!bar) return;
+  const available = state.mode === "versus";
+  bar.hidden = !available;
+  if (!available) return;
+  const options = $("#setLengthOptions");
+  if (!options.childElementCount) {
+    options.innerHTML = SET_LENGTHS.map((length) => `
+      <button type="button" class="set-length-chip" data-set-length="${length}">
+        ${length <= 1 ? "SINGLE MATCH" : `FIRST TO ${length}`}
+      </button>`).join("");
+    options.querySelectorAll(".set-length-chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        pendingSetLength = normalizeSetLength(chip.dataset.setLength);
+        sound("select");
+        renderSetLengthBar();
+      });
+    });
+  }
+  options.querySelectorAll(".set-length-chip").forEach((chip) => {
+    chip.classList.toggle("selected", normalizeSetLength(chip.dataset.setLength) === pendingSetLength);
+  });
+  const live = offlineSet && offlineSet.length === pendingSetLength && !setComplete(offlineSet) && offlineSet.history.length;
+  $("#setLengthHint").textContent = pendingSetLength <= 1
+    ? "ONE MATCH · NO SCOREBOARD"
+    : live
+      ? `SET LIVE · ${offlineSet.scores[0]}–${offlineSet.scores[1]} · WINNER STAYS`
+      : `FIRST TO ${pendingSetLength} MATCH WINS TAKES THE SET`;
+}
+
 function toggleMutator(id) {
   if (!MUTATORS[id]) return;
   pendingMutators = pendingMutators.includes(id)
@@ -5937,13 +7020,14 @@ function showScreen(name) {
   $("#inputHistoryColumn").hidden = !trainingVisible;
   if (!trainingVisible) $("#schoolPanel").hidden = true;
   else renderSchoolPanel();
-  const playerControlled = playing && state.mode !== "demo";
+  const playerControlled = playing && state.mode !== "demo" && !replayPlayback.active;
   $("#touchControls").classList.toggle("playing", playerControlled);
-  $("#touchPauseButton").classList.toggle("playing", playerControlled);
+  $("#touchPauseButton").classList.toggle("playing", playerControlled || (playing && replayPlayback.active));
   $("#touchPauseButton").hidden = playing && state.mode === "online";
   if (!playing) $("#announcer").classList.add("hidden");
   updateFlowSkipHint();
   updateOnlineHud();
+  updateReplayHud();
   updateDemoUi();
   syncMusic();
   if (name === "title") {
@@ -5955,7 +7039,10 @@ function showScreen(name) {
   // stale panel/credits timers can never advance a dead screen.
   if (name !== "ending" && endingSequence.active) cancelEndingSequence();
   if (name !== "result" && name !== "ending") updateDailyBanners();
-  if (name === "stage") renderMutatorBar();
+  if (name === "stage") {
+    renderMutatorBar();
+    renderSetLengthBar();
+  }
   // Wave 15: hold the screen awake through fights/attract, release on menus;
   // cabinet marquee lives and dies with the title screen.
   syncWakeLock();
@@ -6157,6 +7244,15 @@ function startMatch(resetSet = true) {
   }
   state.matchSerial += 1;
   state.qaManualMode = false;
+  // R2.1 STREETS: offline versus set prep. A fresh FT pick (or a finished
+  // set) rebuilds the scoreboard; matching live sets carry across rematches.
+  if (state.mode === "versus" && !state.teamBattle && resetSet) {
+    if (pendingSetLength > 1 && (!offlineSet || offlineSet.length !== pendingSetLength || setComplete(offlineSet))) {
+      offlineSet = createSetState(pendingSetLength);
+    } else if (pendingSetLength <= 1) {
+      offlineSet = null;
+    }
+  }
   // Release 1.8 GRIND: build the Block War roster on the first FIGHT press,
   // then lock the House Rules config for this match BEFORE the fighters are
   // built (Turbo scales movement at makeFighter time).
@@ -6249,6 +7345,11 @@ function startMatch(resetSet = true) {
   scheduleFightAnnouncement(() => {
     if (state.screen === "fight" && state.phase === "intro") announce("FIGHT!", "NO MERCY ON THESE STREETS", 0.8);
   }, dialogueSeconds > 0 ? Math.round(dialogueSeconds * 1000) - 650 : 1150);
+  // R2.1 STREETS: arm the replay recorder once the match config is FINAL
+  // (mutators, palettes, stage and the dialogue-stretched intro clock). Only
+  // fresh matches record — a mid-match round restart cannot be replayed.
+  if (resetSet && state.round === 1) beginReplayRecording("offline");
+  else resetReplayRecorder();
   canvas.focus();
 }
 
@@ -6320,7 +7421,21 @@ function startOnlineMatch(config) {
   state.flash = 0;
   commandHistory[0].length = 0;
   commandHistory[1].length = 0;
+  // R2.1 STREETS: adopt the set carried in the shared config. The host is
+  // authoritative (its scores snapshot rides the config); a config from an
+  // older host simply resets to a dormant single-match session.
+  const setLength = normalizeSetLength(config.setLength);
+  if (config.set && typeof config.set === "object") {
+    onlineSession.set = sanitizeSetSync(config.set, setLength);
+  } else if (onlineSession.set.length !== setLength || setComplete(onlineSession.set)) {
+    onlineSession.set = createSetState(setLength);
+  }
+  // Arm the confirmed-input recorder BEFORE the session exists so frame 0 of
+  // the step callback is already observed.
+  beginReplayRecording("online");
   onlineSession.rollback = createOnlineRollback(config, 0);
+  // Pre-fight 3-2-1 sync countdown over the intro (pure presentation).
+  beginSyncCountdown();
   $("#onlineMatchSetup").hidden = true;
   $("#onlineRematchStatus").hidden = true;
   $("#touchControls").classList.remove("cinematic");
@@ -6343,7 +7458,9 @@ function resetRound() {
   resetMusicDuck();
   const carriedGrit = state.fighters.map((fighter) => fighter.meter);
   state.round += 1;
-  state.qaManualMode = false;
+  // R2.1 STREETS: a manually-stepped replay stays manual across the round
+  // break (qaManualMode is meta — never checksummed).
+  if (!replayPlayback.active) state.qaManualMode = false;
   // Release 1.8 GRIND: per-round sim/meta resets — the Sudden Death one-shot
   // re-arms (sim state) and the FIRST ATTACK score flag re-arms (meta).
   state.suddenDeathHitDone = false;
@@ -7281,6 +8398,10 @@ function showResult(winner) {
   hudFxDebug.victoryEntrances += 1;
   if (state.mode === "demo") scheduleNextDemoMatch();
   else $("#demoResultStatus").hidden = true;
+  // R2.1 STREETS: winner-stays scoreboard card (online rooms + offline versus
+  // sets) and the CHANGE FIGHTERS path back to a QoL-speaking lobby.
+  renderSetScoreCard();
+  $("#changeFightersButton").hidden = !(state.mode === "online" && onlineSession.lobby.remoteQol >= 1);
   if (state.mode === "online") {
     onlineSession.rematchVotes.clear();
     updateOnlineRematchUi();
@@ -7487,6 +8608,23 @@ function showArcadeEnding() {
 }
 
 function resolveMatchResult(winner) {
+  // R2.1 STREETS: a finished REPLAY never touches records, sets or the ring —
+  // it verifies determinism against the recorded outcome and returns to the
+  // theater. Intercepted before every mode route.
+  if (replayPlayback.active) {
+    finishReplayPlayback(winner);
+    return;
+  }
+  // R2.1 STREETS: bank the finished match into the replay ring and fold the
+  // first-to-N set (meta paths — observation only, never during resimulation).
+  if (!rollbackResimulating) {
+    finalizeReplayRecording(winner);
+    foldSetResult(winner);
+    // Loser-picks-stage latch (side 0 is always the host seat online).
+    if (state.mode === "online" && onlineSession.matchConfig) {
+      onlineSession.lastLoserRole = winner === 0 ? "guest" : "host";
+    }
+  }
   // Release 1.8 GRIND: mode routing. Survival and Block War resolve their
   // single-round bouts here; arcade (and the Daily Jawn riding it) keeps the
   // ladder flow but gains the SF2 tally + initials loop.
@@ -7609,9 +8747,10 @@ function updateHud() {
   const battle = state.teamBattle;
   $("#roundLabel").textContent = state.mode === "training" ? "TRAINING"
     : state.mode === "demo" ? `DEMO · ROUND ${state.round}`
-      : state.mode === "survival" ? `GAUNTLET · BOUT ${(currentSurvivalBout(state.survivalRun)?.index ?? 0) + 1}`
-        : state.mode === "team" && battle ? `BLOCK WAR · ${teamFightersRemaining(battle, 0)}V${teamFightersRemaining(battle, 1)}`
-          : `ROUND ${state.round}`;
+      : state.mode === "replay" ? `REPLAY · ROUND ${state.round}`
+        : state.mode === "survival" ? `GAUNTLET · BOUT ${(currentSurvivalBout(state.survivalRun)?.index ?? 0) + 1}`
+          : state.mode === "team" && battle ? `BLOCK WAR · ${teamFightersRemaining(battle, 0)}V${teamFightersRemaining(battle, 1)}`
+            : `ROUND ${state.round}`;
   const finishing = state.phase === "finish" && state.finishWinner === 0;
   const superReady = state.phase === "fight" && state.fighters[0]?.meter >= GRIT_RULES.superCost;
   setTouchPrompt(finishing ? "final" : superReady ? "super" : "");
@@ -11112,6 +12251,7 @@ function simulateOfflineGameTick(dt) {
   // No hitstop short-circuit here: inputs must be read on every tick so
   // presses during the freeze reach the buffer. simulatePreparedGameTick owns
   // the freeze itself and stops everything but the input pipeline.
+  const rngDrawsBefore = rngDrawSerial;
   const bothCpu = state.mode === "demo" || state.mode === "tournament";
   // R1.9: a running trial demo drives the player seat through the QA-style
   // scripted input path (training mode only; readQaInput still outranks it so
@@ -11147,6 +12287,14 @@ function simulateOfflineGameTick(dt) {
     || (cpuOpponent
       ? aiInput(state.fighters[1], state.fighters[0], dt)
       : trainingDummy || readInput(1));
+  // R2.1 STREETS: record the confirmed input pair entering the sim (resolved
+  // sender-side to the action vocabulary exactly like the online encode path)
+  // plus the count of gameplay rng draws the AI consumed above, so playback
+  // can burn the identical draws. Pure observation — inputs pass through
+  // untouched.
+  if (replayRecorder.active && replayRecorder.kind === "offline") {
+    recordOfflineReplayFrame(input0, input1, rngDrawSerial - rngDrawsBefore);
+  }
   simulatePreparedGameTick(dt, input0, input1);
 }
 
@@ -11169,10 +12317,8 @@ function maybeSendOnlineChecksum() {
 // against the local fighter's current state — that is what the dedicated
 // limb/taunt wire bits exist for — and the sim's own resolve branch only runs
 // for objects still carrying fourButton, so nothing resolves twice.
-function resolveOnlineLocalInput() {
-  const raw = readQaInput(0) || readInput(0);
+function resolveSideInput(side, raw) {
   if (!raw?.fourButton) return raw;
-  const side = onlineLocalSide();
   const fighter = state.fighters[side];
   if (!fighter) return raw;
   return resolveFourButtonInput(raw, {
@@ -11183,6 +12329,11 @@ function resolveOnlineLocalInput() {
     finishArmed: state.finishArmed[side],
     tauntArmed: state.simulationTick <= fighter.tauntArmedUntilTick,
   });
+}
+
+function resolveOnlineLocalInput() {
+  const raw = readQaInput(0) || readInput(0);
+  return resolveSideInput(onlineLocalSide(), raw);
 }
 
 function simulateOnlineGameTick() {
@@ -11203,6 +12354,13 @@ function simulateOnlineGameTick() {
     onlineSession.lastPersistedFrame = metrics.frame;
     persistOnlineResume(true);
   }
+  // R2.1 STREETS: connection-meter recent window (~2s). Depth reads the last
+  // rollback's size while it is fresh; stalls are the delta over the window.
+  connMeter.recentRollbackDepth = metrics.frame - metrics.lastRollbackFrame <= 120 ? metrics.lastRollbackFrames : 0;
+  if (!connMeter.baseline || metrics.frame - connMeter.baseline.frame >= 120) {
+    connMeter.recentStalled = connMeter.baseline ? Math.max(0, metrics.stalledFrames - connMeter.baseline.stalledFrames) : 0;
+    connMeter.baseline = { frame: metrics.frame, stalledFrames: metrics.stalledFrames };
+  }
   updateOnlineHud(metrics.frame - metrics.lastRollbackFrame < 30 ? "warning" : "sync");
 }
 
@@ -11210,6 +12368,12 @@ function simulateGameTick(dt) {
   if (state.screen !== "fight" || !state.fighters.length) return;
   if (document.body.classList.contains("orientation-blocked")) return;
   if (state.paused) return;
+  // R2.1 STREETS: replay playback owns the sim while active — the recorded
+  // pairs are the only inputs, at the theater's own pause/speed cadence.
+  if (replayPlayback.active) {
+    simulateReplayTick();
+    return;
+  }
   if (state.mode === "online" && onlineSession.matchActive) simulateOnlineGameTick();
   else simulateOfflineGameTick(dt);
 }
@@ -19634,13 +20798,36 @@ function handleControllerDisconnect(index = null, forcedSide = null) {
 }
 
 function restartPausedRound() {
-  if (state.screen !== "fight") return;
+  if (state.screen !== "fight" || replayPlayback.active) return;
   setPaused(false);
   startMatch(false);
 }
 
 function titleKeyboard(event) {
   if (state.screen === "title" && (event.code === "Enter" || event.code === "Space")) startSelect("arcade");
+  // R2.1 STREETS: replay theater transport keys — playback has its own pause
+  // (never the pause panel, whose RESTART would corrupt the stream).
+  if (replayPlayback.active && state.screen === "fight") {
+    if (event.code === "Escape") {
+      event.preventDefault();
+      exitReplayPlayback("REPLAY CLOSED");
+    } else if (event.code === "Space" || event.code === "KeyP") {
+      event.preventDefault();
+      toggleReplayPause();
+    } else if (event.code === "ArrowRight" && replayPlayback.paused) {
+      event.preventDefault();
+      replayPlayback.pendingStep += 1;
+    } else if (event.code === "KeyF") {
+      event.preventDefault();
+      cycleReplaySpeed();
+    }
+    return;
+  }
+  if (state.screen === "replays" && event.code === "Escape") {
+    event.preventDefault();
+    showScreen("title");
+    return;
+  }
   if (state.screen === "fight" && (event.code === "Escape" || event.code === "KeyP")) {
     event.preventDefault();
     setPaused(!state.paused);
@@ -19922,6 +21109,7 @@ const PAD_BACK_TARGETS = Object.freeze({
   records: "title",
   ending: "title",
   result: "title",
+  replays: "title",
 });
 
 function handleGenericPadBack() {
@@ -20080,8 +21268,19 @@ $("#onlineFighterSelect").addEventListener("change", (event) => {
   persistOnlineResume(false);
 });
 $("#onlineStageSelect").addEventListener("change", (event) => {
-  if (onlineSession.role !== "host" || !stages[event.target.value]) return;
+  // R2.1 STREETS: the stage cursor belongs to the loser-picks-stage owner
+  // (which is the host until both peers speak QoL and a match has been lost).
+  if (onlineSession.role !== onlineStagePickerRole() || !stages[event.target.value]) return;
   onlineSession.lobby.stage = event.target.value;
+  onlineSession.lobby.localReady = false;
+  sendOnlineLobbyState();
+  updateOnlineMatchSetup();
+  persistOnlineResume(false);
+});
+// R2.1 STREETS: host-picked first-to-N set length.
+$("#onlineSetSelect")?.addEventListener("change", (event) => {
+  if (onlineSession.role !== "host") return;
+  onlineSession.lobby.setChoice = String(normalizeSetLength(event.target.value));
   onlineSession.lobby.localReady = false;
   sendOnlineLobbyState();
   updateOnlineMatchSetup();
@@ -20404,6 +21603,34 @@ $("#dailyButton").addEventListener("click", () => startDailyRun());
 // v2.1 PROGRESSION surfaces: the ledger screens + ending sequence skips.
 $("#blackBookButton").addEventListener("click", () => { unlockAudio(); showBlackBookScreen(); });
 $("#recordsButton").addEventListener("click", () => { unlockAudio(); showRecordsScreen(); });
+// R2.1 STREETS: REPLAY THEATER surfaces.
+$("#replayTheaterButton").addEventListener("click", () => showReplayTheater());
+$("#replayList").addEventListener("click", handleReplayListClick);
+$("#replayImportButton").addEventListener("click", () => $("#replayImportInput").click());
+$("#replayImportInput").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  importReplayText(await file.text());
+});
+$("#replayPauseButton").addEventListener("click", () => toggleReplayPause());
+$("#replaySpeedButton").addEventListener("click", () => cycleReplaySpeed());
+$("#replayStepButton").addEventListener("click", () => {
+  if (!replayPlayback.paused) toggleReplayPause(true);
+  replayPlayback.pendingStep += 1;
+});
+$("#replayExitButton").addEventListener("click", () => exitReplayPlayback("REPLAY CLOSED"));
+// CHANGE FIGHTERS: back to the shared lobby, room + set score intact.
+$("#changeFightersButton").addEventListener("click", () => {
+  if (state.mode !== "online" || state.screen !== "result" || !onlineSession.peer?.connected) return;
+  sendOnlineControl({ type: "return-lobby", matchId: onlineSession.matchConfig?.matchId || "" });
+  returnToOnlineLobby();
+});
+// Connection meter: tap/click expands the detail readout.
+$("#connMeter").addEventListener("click", () => {
+  connMeter.detail = !connMeter.detail;
+  renderConnMeter();
+});
 $("#endingPanels").addEventListener("pointerdown", (event) => {
   event.preventDefault();
   advanceEndingSequence();
@@ -20437,7 +21664,10 @@ $("#installButton").addEventListener("click", async () => {
 });
 $("#touchPauseButton").addEventListener("pointerdown", (event) => {
   event.preventDefault();
-  setPaused(!state.paused);
+  // R2.1 STREETS: during replay playback the pause chip drives the theater's
+  // own transport, never the pause panel.
+  if (replayPlayback.active) toggleReplayPause();
+  else setPaused(!state.paused);
 });
 $$("[data-back]").forEach((button) => button.addEventListener("click", () => back(button.dataset.back)));
 $("#homeLink").addEventListener("click", (event) => { event.preventDefault(); showScreen("title"); });
@@ -20702,6 +21932,8 @@ window.__finalBlowEngine = {
       },
       training: trainingSnapshot(state.training),
       online: onlineSnapshot(),
+      // R2.1 STREETS: replay theater + online QoL block.
+      netQol: netQolSnapshot(),
       demo: demoSnapshot(),
       balance: balanceAudit,
       tournament: tournamentAudit,
@@ -21136,10 +22368,15 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       showScreen("fight");
       updateHud();
       updateFacings();
+      // R2.1 STREETS: QA fights record like real ones (config is final here),
+      // so determinism probes can bank and replay a scripted match.
+      beginReplayRecording("offline");
       return window.__finalBlowEngine.snapshot();
     },
     training(firstId = "deathblow", secondId = "jez", dummyMode = "stand") {
       window.__finalBlowQa.fight(firstId, secondId);
+      // R2.1 STREETS: the lab never records (mirrors the real training path).
+      resetReplayRecorder();
       state.mode = "training";
       state.training = createTrainingState({ dummyMode });
       state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
@@ -21353,6 +22590,9 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       window.__finalBlowQa.fight(firstId, secondId);
       setAiDifficulty(difficulty);
       state.mode = "arcade";
+      // R2.1 STREETS: re-arm under the final mode so the header stamps
+      // "arcade" and the finalize mode-stability check holds.
+      beginReplayRecording("offline");
       return window.__finalBlowEngine.snapshot();
     },
     // --- Release 1.8 GRIND mode probes ------------------------------------
@@ -21884,6 +23124,106 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
         checksumMutated,
         checksumAfter,
       };
+    },
+    // --- R2.1 STREETS wave 18 probes ---------------------------------------
+    netQol() {
+      return netQolSnapshot();
+    },
+    replays() {
+      return loadReplayRing().map((record, index) => replaySummary(record, index));
+    },
+    replayClear() {
+      saveReplayRing([]);
+      replayUi.status = "";
+      replayUi.lastOutcome = null;
+      return true;
+    },
+    theater() {
+      showReplayTheater();
+      return {
+        screen: state.screen,
+        rows: $("#replayList").querySelectorAll(".replay-row").length,
+        status: $("#replayStatus").textContent,
+      };
+    },
+    replayWatch(index = 0, manual = true) {
+      const record = loadReplayRing()[index];
+      if (!record) throw new Error(`No replay at index ${index}`);
+      return startReplayPlayback(record, { manual });
+    },
+    replayStop() {
+      exitReplayPlayback("REPLAY CLOSED");
+      return netQolSnapshot().playback;
+    },
+    replayExportText(index = 0) {
+      const record = loadReplayRing()[index];
+      if (!record) throw new Error(`No replay at index ${index}`);
+      netFxDebug.replayExports += 1;
+      return JSON.stringify(record);
+    },
+    replayImportText(text) {
+      return importReplayText(String(text));
+    },
+    replayPause(paused = null) {
+      return toggleReplayPause(paused === null ? !replayPlayback.paused : Boolean(paused));
+    },
+    replaySpeed(speed = 1) {
+      return setReplaySpeed(speed);
+    },
+    setLength(length = 1) {
+      pendingSetLength = normalizeSetLength(length);
+      offlineSet = pendingSetLength > 1 ? createSetState(pendingSetLength) : null;
+      renderSetLengthBar();
+      return netQolSnapshot().set;
+    },
+    // Stub the connection meter with a fixed sample (null restores live
+    // metrics) and force the HUD visible so probes can screenshot it.
+    connStub(sample = null, { show = true, detail = false } = {}) {
+      connMeter.forced = sample && typeof sample === "object" ? { ...sample } : null;
+      connMeter.detail = Boolean(detail);
+      if (show) $("#onlineHud").hidden = false;
+      renderConnMeter();
+      return netQolSnapshot().connection;
+    },
+    syncCountdown() {
+      beginSyncCountdown();
+      return netFxDebug.readyChecks;
+    },
+    // Render the ONLINE result-screen rematch strip without a live peer (UI
+    // evidence only — the message shapes are unit-tested). Stubs the minimum
+    // session meta, shows the result, reads the DOM, restores everything.
+    rematchUiPreview(remoteQol = 1, winner = 0) {
+      if (state.fighters.length !== 2) throw new Error("Start a QA fight first");
+      const saved = {
+        mode: state.mode,
+        matchConfig: onlineSession.matchConfig,
+        remoteQol: onlineSession.lobby.remoteQol,
+        set: onlineSession.set,
+      };
+      state.mode = "online";
+      onlineSession.matchConfig = onlineSession.matchConfig || {
+        version: 1, matchId: "qa-preview-match", seed: 1, picks: ["deathblow", "jez"],
+        stage: state.stage, inputDelay: 2, controlStyles: ["modern", "modern"], setLength: 3,
+      };
+      onlineSession.lobby.remoteQol = remoteQol >= 1 ? 1 : 0;
+      onlineSession.set = createSetState(3);
+      recordSetWin(onlineSession.set, winner, { matchKey: "qa-preview-match", picks: ["deathblow", "jez"], rounds: [2, 0] });
+      showResult(winner);
+      const dom = {
+        rematchLabel: $("#rematchButton").textContent,
+        reselectLabel: $("#reselectButton").textContent,
+        changeFightersHidden: $("#changeFightersButton").hidden,
+        rematchStatusHidden: $("#onlineRematchStatus").hidden,
+        rematchStatus: $("#onlineRematchStatus").textContent,
+        setCardHidden: $("#setScoreCard").hidden,
+        setCardTitle: $("#setScoreTitle").textContent,
+        newStageHidden: $("#newStageButton").hidden,
+      };
+      state.mode = saved.mode;
+      onlineSession.matchConfig = saved.matchConfig;
+      onlineSession.lobby.remoteQol = saved.remoteQol;
+      onlineSession.set = saved.set;
+      return dom;
     },
   };
 }

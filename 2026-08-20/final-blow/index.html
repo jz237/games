@@ -43,7 +43,24 @@
         </div>
       </div>
       <div id="onlineHud" class="online-hud" aria-live="polite" hidden>
-        <b id="onlineHudState">ROLLBACK SYNC</b><span id="onlineHudPing">— MS</span><span id="onlineHudDelay">2F DELAY</span><span id="onlineHudRollbacks">0 RB</span>
+        <b id="onlineHudState">ROLLBACK SYNC</b><span id="onlineHudPing">— MS</span><span id="onlineHudDelay">2F DELAY</span><span id="onlineHudRollbacks">0 RB</span><span id="onlineHudSet" hidden>SET 0–0</span>
+        <button id="connMeter" class="conn-meter" type="button" aria-label="Connection quality, tap for detail" data-grade="green">
+          <i></i><i></i><i></i><i></i><b id="connMeterLabel">GREEN</b>
+        </button>
+        <div id="connMeterDetail" class="conn-meter-detail" hidden></div>
+      </div>
+      <div id="connToast" class="conn-toast" aria-live="polite" hidden></div>
+      <div id="syncCountdown" class="sync-countdown" aria-hidden="true" hidden>3</div>
+      <div id="replayHud" class="replay-hud" aria-label="Replay controls" hidden>
+        <b class="replay-hud-tag">REPLAY</b>
+        <span id="replayHudLabel">—</span>
+        <em id="replayHudFrame">0 / 0F</em>
+        <div class="replay-hud-buttons">
+          <button id="replayPauseButton" type="button" aria-label="Pause or resume replay">⏸</button>
+          <button id="replayStepButton" type="button" aria-label="Step one frame">⏭</button>
+          <button id="replaySpeedButton" type="button" aria-label="Cycle playback speed">1×</button>
+          <button id="replayExitButton" type="button" aria-label="Close replay">✕</button>
+        </div>
       </div>
       <div id="demoHud" class="demo-hud" aria-live="polite" hidden>
         <b>WATCH DEMO</b><span id="demoHudMatchup">DEATHBLOW VS JEZ</span><em id="demoHudCycle">CYCLE 1</em><small>PRESS ANY BUTTON TO PLAY</small>
@@ -163,7 +180,10 @@
             <button class="arcade-button school-button" id="fightSchoolButton">FIGHT SCHOOL<small id="fightSchoolStatus">7 LESSONS · FREE</small></button>
             <button class="arcade-button school-button" id="comboTrialsButton">COMBO TRIALS<small id="comboTrialsStatus">EARN MEDALS</small></button>
           </div>
-          <button class="arcade-button demo-button" id="demoButton">WATCH DEMO · CPU VS CPU</button>
+          <div class="menu-row">
+            <button class="arcade-button demo-button" id="demoButton">WATCH DEMO · CPU VS CPU</button>
+            <button class="arcade-button demo-button" id="replayTheaterButton">REPLAY THEATER<small id="replayTheaterStatus">WATCH SAVED MATCHES</small></button>
+          </div>
           <button class="arcade-button ghost" id="controlsButton">CONTROLS & OPTIONS</button>
         </div>
         <div class="start-hint">PRESS <kbd>ENTER</kbd> OR <span class="xbox-a">A</span> TO START</div>
@@ -212,7 +232,7 @@
                 <label>COLORS<select id="onlinePaletteSelect" aria-label="Your fighter colors">
                   <option value="0">COLOR 1 · PRIMARY</option><option value="1">COLOR 2 · ALT</option>
                 </select></label>
-                <label>STAGE<select id="onlineStageSelect" aria-label="Online stage">
+                <label>STAGE <small id="onlineStageOwner" class="stage-owner-note">HOST PICKS</small><select id="onlineStageSelect" aria-label="Online stage">
                   <option value="somerset">SOMERSET SEPTA STATION</option><option value="vet">THE VET PARKING LOT</option>
                   <option value="wildwood">WILDWOOD BOARDWALK</option><option value="buffet">CHINESE BUFFET</option>
                   <option value="cruise">CRUISE POOL DECK</option><option value="janney">JANNEY STREET VACANT LOT</option>
@@ -221,7 +241,12 @@
                   <option value="auto">AUTO · PING TUNED</option><option value="0">0 FRAMES</option><option value="1">1 FRAME</option>
                   <option value="2">2 FRAMES</option><option value="3">3 FRAMES</option><option value="4">4 FRAMES</option>
                 </select></label>
+                <label>SET LENGTH<select id="onlineSetSelect" aria-label="First-to-N set length">
+                  <option value="1">SINGLE MATCH</option><option value="2">FIRST TO 2</option>
+                  <option value="3">FIRST TO 3</option><option value="5">FIRST TO 5</option>
+                </select></label>
               </div>
+              <p id="lobbyConnBadge" class="lobby-conn-badge" data-grade="" hidden>CONNECTION · MEASURING…</p>
               <button id="onlineReadyButton" class="arcade-button primary" type="button">READY FOR ROLLBACK</button>
               <p id="onlineMatchStatus">LINK BOTH SEATS TO ARM THE MATCH</p>
             </div>
@@ -294,6 +319,11 @@
           <span class="mutator-title">HOUSE RULES</span>
           <div id="mutatorOptions" class="mutator-options"></div>
           <p id="mutatorHint" class="mutator-hint">OPTIONAL HOUSE RULES · STACK AS MANY AS YOU WANT</p>
+        </div>
+        <div id="setLengthBar" class="set-length-bar" aria-label="First-to-N set length" hidden>
+          <span class="mutator-title">SET</span>
+          <div id="setLengthOptions" class="set-length-options"></div>
+          <p id="setLengthHint" class="mutator-hint">ONE MATCH · NO SCOREBOARD</p>
         </div>
         <div class="selection-footer">
           <button class="text-button" data-back="select">← FIGHTERS</button>
@@ -412,6 +442,21 @@
         </div>
       </section>
 
+      <section id="replaysScreen" class="screen replays-screen" aria-labelledby="replaysTitle">
+        <header class="screen-header">
+          <p>EVERY GREAT SET, SAVED TO THE STREET</p>
+          <h2 id="replaysTitle">REPLAY THEATER</h2>
+          <div id="replayStatus" class="replay-status" aria-live="polite">LAST 10 MATCHES KEPT · EXPORT SHARES A .FBR FILE</div>
+        </header>
+        <div id="replayList" class="replay-list" role="list" aria-label="Saved replays"></div>
+        <div class="selection-footer">
+          <button class="text-button" data-back="title">← BACK TO TITLE</button>
+          <div class="replay-footnote">SPACE · PAUSE&nbsp;&nbsp;→ · STEP&nbsp;&nbsp;F · SPEED&nbsp;&nbsp;ESC · CLOSE</div>
+          <button id="replayImportButton" class="arcade-button compact" type="button">IMPORT .FBR</button>
+        </div>
+        <input id="replayImportInput" type="file" accept=".fbr,application/json,.json" hidden>
+      </section>
+
       <section id="resultScreen" class="screen result-screen" aria-labelledby="resultTitle">
         <div id="victoryPose" class="victory-pose" aria-hidden="true"></div>
         <div class="result-copy">
@@ -419,6 +464,12 @@
           <h2 id="resultTitle">DEATHBLOW WINS</h2>
           <div id="resultFinisher">FAULTLINE EXECUTION</div>
           <blockquote id="resultQuote">THE STREET MOVED FIRST.</blockquote>
+          <div id="setScoreCard" class="set-score-card" aria-label="Set scoreboard" hidden>
+            <b id="setScoreTitle">WINNER STAYS</b>
+            <div id="setScoreLine" class="set-score-line"></div>
+            <div id="setScorePips" class="set-score-pips" aria-hidden="true"></div>
+            <small id="setScoreSub">FIRST TO 3</small>
+          </div>
           <p id="onlineRematchStatus" class="online-rematch-status" hidden>REMATCH VOTES · 0 / 2</p>
           <p id="demoResultStatus" class="demo-result-status" hidden>NEXT RANDOM FIGHT IN 5 SECONDS · PRESS ANY BUTTON TO PLAY</p>
           <div id="dailyResultBanner" class="daily-banner" hidden>
@@ -428,6 +479,7 @@
           <div class="menu-stack horizontal">
             <button id="rematchButton" class="arcade-button primary menu-focus">REMATCH</button>
             <button id="newStageButton" class="arcade-button">SAME FIGHTERS · NEW STAGE</button>
+            <button id="changeFightersButton" class="arcade-button" hidden>CHANGE FIGHTERS</button>
             <button id="reselectButton" class="arcade-button">SELECT FIGHTERS</button>
             <button class="arcade-button ghost" data-back="title">TITLE</button>
           </div>

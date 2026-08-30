@@ -3372,3 +3372,257 @@ body.reduced-motion .cabinet-marquee { animation: none; }
   width: min(100%, 1220px);
 }
 .fighter-card.secret-card .fighter-info strong { font-size: 84%; letter-spacing: .02em; }
+
+/* ==========================================================================
+   R2.1 STREETS — wave 18: Replay Theater, first-to-N sets, connection meter,
+   rematch flow. All chrome; reduced-motion kill rules at the end.
+   ========================================================================== */
+
+/* --- Connection meter (in the online HUD) -------------------------------- */
+.conn-meter {
+  display: inline-flex;
+  gap: 2px;
+  align-items: flex-end;
+  padding: 2px 4px;
+  margin-left: 2px;
+  border: 1px solid rgba(78,221,245,.35);
+  background: rgba(2,10,15,.6);
+  cursor: pointer;
+  pointer-events: auto;
+  color: inherit;
+  font: inherit;
+}
+.conn-meter i {
+  width: 3px;
+  background: rgba(158,176,185,.28);
+}
+.conn-meter i:nth-child(1) { height: 4px; }
+.conn-meter i:nth-child(2) { height: 6px; }
+.conn-meter i:nth-child(3) { height: 8px; }
+.conn-meter i:nth-child(4) { height: 10px; }
+.conn-meter[data-grade="green"] i.lit { background: var(--green); }
+.conn-meter[data-grade="yellow"] i.lit { background: var(--amber); }
+.conn-meter[data-grade="red"] i.lit { background: var(--red); }
+.conn-meter b { margin-left: 3px; font-size: inherit; }
+.conn-meter[data-grade="yellow"] b { color: var(--amber); }
+.conn-meter[data-grade="red"] b { color: var(--red); }
+.conn-meter-detail {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 3px 10px;
+  padding: 5px 8px;
+  border: 1px solid rgba(78,221,245,.45);
+  background: rgba(2,10,15,.92);
+  white-space: nowrap;
+}
+.conn-meter-detail[hidden] { display: none !important; }
+.conn-toast {
+  position: absolute;
+  z-index: 9;
+  top: 19%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 12px;
+  border: 1px solid var(--amber);
+  background: rgba(12,7,2,.9);
+  color: var(--amber);
+  font-size: clamp(7px, .62vw, 10px);
+  font-weight: 900;
+  letter-spacing: .09em;
+  pointer-events: none;
+  animation: conn-toast-in .25s ease-out;
+}
+.conn-toast[hidden] { display: none !important; }
+@keyframes conn-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.sync-countdown {
+  position: absolute;
+  z-index: 10;
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--cyan);
+  font-size: clamp(38px, 5.4vw, 84px);
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-shadow: 0 0 22px rgba(78,221,245,.65), 0 4px 0 #000;
+  pointer-events: none;
+}
+.sync-countdown[hidden] { display: none !important; }
+.sync-countdown.beat { animation: sync-beat .5s ease-out; }
+@keyframes sync-beat {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(1.7); }
+  30% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: .25; transform: translate(-50%, -50%) scale(.92); }
+}
+.lobby-conn-badge {
+  margin: 6px 0 2px;
+  padding: 4px 8px;
+  border: 1px solid rgba(78,221,245,.4);
+  background: rgba(2,10,15,.6);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.lobby-conn-badge[data-grade="yellow"] { color: var(--amber); border-color: rgba(255,177,27,.5); }
+.lobby-conn-badge[data-grade="red"] { color: var(--red); border-color: rgba(255,60,60,.5); }
+.lobby-conn-badge[hidden] { display: none !important; }
+.stage-owner-note {
+  margin-left: 5px;
+  color: var(--cyan);
+  font-size: 8px;
+  letter-spacing: .08em;
+}
+
+/* --- Replay transport HUD ------------------------------------------------- */
+.replay-hud {
+  position: absolute;
+  z-index: 9;
+  bottom: 3%;
+  left: 50%;
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid rgba(202,63,214,.6);
+  background: rgba(10,2,14,.88);
+  color: #cad2d7;
+  font-size: clamp(7px, .6vw, 10px);
+  font-weight: 900;
+  letter-spacing: .07em;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.replay-hud[hidden] { display: none !important; }
+.replay-hud-tag { color: #e88df2; }
+.replay-hud em { color: var(--cyan); font-style: normal; }
+.replay-hud-buttons { display: flex; gap: 5px; }
+.replay-hud-buttons button {
+  min-width: 30px;
+  padding: 3px 7px;
+  border: 1px solid rgba(202,63,214,.55);
+  background: rgba(30,6,38,.8);
+  color: #f4e9f6;
+  font: inherit;
+  cursor: pointer;
+}
+.replay-hud-buttons button:hover { background: rgba(202,63,214,.35); }
+
+/* --- Replay Theater screen ------------------------------------------------
+   (display comes from the base .screen/.screen.active rules — never set it
+   here or the section leaks over other screens) */
+.replays-screen.active {
+  flex-direction: column;
+  gap: 12px;
+  padding: 4.2% 6% 3%;
+}
+.replay-status {
+  margin-top: 6px;
+  color: var(--cyan);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .1em;
+}
+.replay-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px;
+}
+.replay-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 13px;
+  border: 1px solid rgba(78,221,245,.35);
+  background: rgba(4,12,18,.78);
+}
+.replay-row.stale { opacity: .62; border-color: rgba(255,177,27,.4); }
+.replay-row-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.replay-row-copy b { font-size: 13px; letter-spacing: .07em; }
+.replay-row-copy small { color: #9eb0b9; font-size: 9px; letter-spacing: .08em; }
+.replay-row-actions { display: flex; flex-shrink: 0; gap: 7px; }
+.replay-empty {
+  padding: 26px 6px;
+  color: #9eb0b9;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-align: center;
+}
+.replay-footnote { color: #9eb0b9; font-size: 9px; font-weight: 900; letter-spacing: .1em; }
+
+/* --- First-to-N set picker + scoreboard card ------------------------------ */
+.set-length-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 6px;
+}
+.set-length-options { display: flex; gap: 6px; }
+.set-length-chip {
+  padding: 5px 10px;
+  border: 1px solid rgba(78,221,245,.4);
+  background: rgba(4,12,18,.75);
+  color: #9eb0b9;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .09em;
+  cursor: pointer;
+}
+.set-length-chip.selected {
+  border-color: var(--cyan);
+  background: rgba(78,221,245,.16);
+  color: #fff;
+}
+.set-score-card {
+  margin: 8px 0 2px;
+  padding: 9px 14px;
+  border: 1px solid rgba(78,221,245,.5);
+  background: rgba(4,12,18,.82);
+  text-align: center;
+}
+.set-score-card > b {
+  display: block;
+  color: var(--cyan);
+  font-size: 10px;
+  letter-spacing: .14em;
+}
+.set-score-line {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  justify-content: center;
+  margin-top: 5px;
+}
+.set-score-line b { font-size: 13px; letter-spacing: .06em; }
+.set-score-line b.champ { color: var(--amber); text-shadow: 0 0 10px rgba(255,177,27,.55); }
+.set-score-line span { color: #fff; font-size: 21px; font-weight: 900; letter-spacing: .1em; }
+.set-score-pips { display: flex; gap: 4px; justify-content: center; margin-top: 5px; }
+.set-score-pips i { width: 9px; height: 9px; border: 1px solid rgba(158,176,185,.6); }
+.set-score-pips i.left { background: var(--cyan); border-color: var(--cyan); }
+.set-score-pips i.right { background: var(--red); border-color: var(--red); }
+.set-score-card small { display: block; margin-top: 5px; color: #9eb0b9; font-size: 8px; letter-spacing: .11em; }
+.set-score-card.champion { border-color: var(--amber); box-shadow: 0 0 18px rgba(255,177,27,.28); }
+.set-score-card.crowned { animation: set-crowned .8s ease-out; }
+@keyframes set-crowned {
+  from { transform: scale(.9); box-shadow: 0 0 0 rgba(255,177,27,0); }
+  45% { transform: scale(1.04); box-shadow: 0 0 34px rgba(255,177,27,.6); }
+  to { transform: scale(1); }
+}
+#onlineHudSet { color: var(--amber); }
+
+/* Reduced motion: flatten every wave-18 animation to its end state. */
+body.reduced-motion .conn-toast,
+body.reduced-motion .sync-countdown.beat,
+body.reduced-motion .set-score-card.crowned { animation: none; }
