@@ -12,7 +12,7 @@
 // replace/extend per-tier effects without touching this file's plumbing.
 import * as THREE from "three";
 import { PX, worldX, worldY, mulberry32 } from "./shared.mjs";
-import { softDotTexture, ringTexture, impactBurstTexture, halftoneRingTexture, smearArcTexture, paintStreakTexture } from "./textures.mjs";
+import { softDotTexture, ringTexture, impactBurstTexture, smearArcTexture, paintStreakTexture } from "./textures.mjs";
 import { FIGHTER_MASK_LAYER } from "./post.mjs";
 
 const MAX_SPARKS = 240;
@@ -28,12 +28,12 @@ const RING_POOL = 2;
 // white core -> warm shards -> cyan speedline ring, never one white star).
 const TIER_STYLE = {
   blocked: { color: 0x9fd8ff, shard: 0x86b8ff, intensity: 1.6, sparks: 12, embers: 4, speed: 1.8, core: 0.3, ring: false, kick: 1.2 },
-  light: { color: 0xffd9a0, shard: 0xff8438, intensity: 3, sparks: 16, embers: 8, speed: 2.4, core: 0.4, ring: false, kick: 1.8 },
-  heavy: { color: 0xffb36b, shard: 0xff6a26, intensity: 5.5, sparks: 30, embers: 11, speed: 3.4, core: 0.56, ring: true, kick: 3 },
-  special: { color: 0xffc46b, shard: 0xff701e, intensity: 7, sparks: 42, embers: 12, speed: 4, core: 0.66, ring: true, kick: 3 },
-  super: { color: 0xfff0c0, shard: 0xff5a1a, intensity: 9, sparks: 58, embers: 14, speed: 5, core: 0.8, ring: true, kick: 3.4 },
-  weapon: { color: 0xffe08a, shard: 0xff7c2c, intensity: 6, sparks: 34, embers: 11, speed: 3.7, core: 0.58, ring: true, kick: 3 },
-  throw: { color: 0xd8c8ff, shard: 0xb08cff, intensity: 4, sparks: 20, embers: 8, speed: 2.9, core: 0.44, ring: false, kick: 2.2 },
+  light: { color: 0xffd9a0, shard: 0xff8438, intensity: 3, sparks: 16, embers: 8, speed: 2.4, core: 0.38, ring: false, kick: 1.8 },
+  heavy: { color: 0xffb36b, shard: 0xff6a26, intensity: 5.5, sparks: 30, embers: 11, speed: 3.4, core: 0.5, ring: true, kick: 3 },
+  special: { color: 0xffc46b, shard: 0xff701e, intensity: 7, sparks: 42, embers: 12, speed: 4, core: 0.56, ring: true, kick: 3 },
+  super: { color: 0xfff0c0, shard: 0xff5a1a, intensity: 9, sparks: 58, embers: 14, speed: 5, core: 0.68, ring: true, kick: 3.4 },
+  weapon: { color: 0xffe08a, shard: 0xff7c2c, intensity: 6, sparks: 34, embers: 11, speed: 3.7, core: 0.52, ring: true, kick: 3 },
+  throw: { color: 0xd8c8ff, shard: 0xb08cff, intensity: 4, sparks: 20, embers: 8, speed: 2.9, core: 0.42, ring: false, kick: 2.2 },
 };
 // Cyan speedline ring colour: reads as a pressure wave against the warm shards.
 const RING_CYAN = 0x8feaff;
@@ -212,30 +212,11 @@ export class ImpactVfxLayer {
       this.bursts.push({ mesh, maps, ttl: 0, max: 0.16, size: 1 });
     }
 
-    // Expanding halftone shock rings (SF6 print language): dot-screen donuts
-    // that grow past the burst and die — replaces the "one flat star" read.
+    // (Round-3: the free-floating halftone dot-screen donuts are GONE — at
+    // point-blank they stamped a flat dot tile across the receiver's body.
+    // The halftone answer now lives in the fighter shader, projected onto the
+    // struck body and masked by its own alpha.)
     this.halftones = [];
-    for (let i = 0; i < 2; i += 1) {
-      const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(1, 1),
-        new THREE.MeshBasicMaterial({
-          // 1024 (4x): even the 512 dot-screen shimmered when the expanding
-          // ring scaled through the pixel grid — at 1024 with mipmaps the
-          // dots stay round through the whole life (critic fix f).
-          map: halftoneRingTexture(1024, 0x7a11 + i * 733),
-          color: 0xffffff,
-          transparent: true,
-          opacity: 0,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-          fog: false,
-        }),
-      );
-      mesh.visible = false;
-      mesh.renderOrder = 7;
-      this.group.add(mesh);
-      this.halftones.push({ mesh, ttl: 0, max: 0.26, size: 1, squash: 0.8, spin: 0 });
-    }
 
     // Curved anime smear arcs: 2-3 hand-drawn crescent whips framing the
     // contact, each differently seeded, spun and mirrored per impact.
@@ -259,12 +240,15 @@ export class ImpactVfxLayer {
       this.smears.push({ mesh, ttl: 0, max: 0.13, size: 1, spin: 0 });
     }
 
-    // STRUCTURED PAINT-STREAK FAN (critic fix 4): 6-10 tapered comet strokes
-    // with built-in chromatic fringe, fanned around the contact with a hard
-    // directional bias — the layer that replaces the soft radial bloom-blob
-    // read. Pooled; 3 seeded stroke variants so no two rays match.
+    // STRUCTURED PAINT-STREAK FAN (round-3 hierarchy): 8-14 tapered comet
+    // strokes of genuinely varying length/width, fanned around the contact
+    // with a hard directional bias. LAYERED BEHIND THE FIGHTERS (negative z +
+    // depth test): the ribbons whip past the silhouettes the way SF6 layers
+    // Drive-Impact energy, so the RECEIVER stays readable through the flash
+    // instead of being buried under an additive wash. Pooled; 3 seeded
+    // stroke variants so no two rays match.
     this.streakRays = [];
-    for (let i = 0; i < 12; i += 1) {
+    for (let i = 0; i < 16; i += 1) {
       const mesh = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 0.375),
         new THREE.MeshBasicMaterial({
@@ -291,7 +275,7 @@ export class ImpactVfxLayer {
 
     // Latest impact spill for the fighter layer: burst-coloured light that
     // relights both sprites and decays with the flash.
-    this.spillState = { x: 0, color: new THREE.Color(0xffffff), ttl: 0, max: 0.26 };
+    this.spillState = { x: 0, y: 0, color: new THREE.Color(0xffffff), ttl: 0, max: 0.26 };
 
     // Flash-light pool. Intensities are budgeted: the pop reads from the core
     // sprite; the light only kisses the scene surfaces around the impact.
@@ -354,7 +338,7 @@ export class ImpactVfxLayer {
   spill() {
     if (this.spillState.ttl <= 0) return null;
     const t = this.spillState.ttl / this.spillState.max;
-    return { x: this.spillState.x, color: this.spillState.color, level: t * t };
+    return { x: this.spillState.x, y: this.spillState.y, color: this.spillState.color, level: t * t };
   }
 
   // 0..1 how hard the strongest live flash is burning — the fighter layer
@@ -486,18 +470,21 @@ export class ImpactVfxLayer {
     core.size = style.core ?? 0.5;
     core.max = style.tier === "super" ? 0.24 : 0.17;
     core.ttl = core.max;
-    core.core.scale.setScalar(core.size * 0.42);
-    // Halo DEMOTED (critic fix 4): the soft radial bloom blob was reading as
-    // the whole impact — now it is a faint warm cushion behind the structured
-    // streak fan, not the statement.
-    core.halo.scale.setScalar(core.size * 0.6);
+    core.core.scale.setScalar(core.size * 0.38);
+    // Halo CUT AGAIN (round-3 hierarchy): the additive cushion was still the
+    // loudest layer at point-blank — it is now a whisper behind the core; the
+    // statement is core + spark fan + one chromatic ring.
+    core.halo.scale.setScalar(core.size * 0.5);
     core.core.material.opacity = 1;
-    core.halo.material.opacity = 0.16;
+    core.halo.material.opacity = 0.09;
     core.core.visible = core.halo.visible = true;
 
-    // STRUCTURED PAINT-STREAK FAN: 6-9 tapered chromatic comet strokes fanned
-    // hard toward the hit direction (a couple whip backward for recoil).
-    const rayCount = style.ring ? 9 : 6;
+    // RADIAL SPARK-STREAK FAN, 8-14 strokes BEHIND the fighters: thin, hot,
+    // saturated ribbons of hard-varied length/width fanned toward the hit
+    // direction (a few whip backward for recoil). Negative z + depth test
+    // means every stroke that crosses a fighter is occluded by the sprite —
+    // the energy frames the silhouettes instead of erasing them.
+    const rayCount = style.ring ? 14 : 8;
     const dirAngle = direction >= 0 ? 0 : Math.PI;
     for (let s = 0; s < rayCount; s += 1) {
       const ray = this.streakRays.find((r) => r.ttl <= 0)
@@ -506,21 +493,22 @@ export class ImpactVfxLayer {
       const spread = (this.rand() - 0.5) * (backward ? 1.3 : 2.4);
       const angle = dirAngle + spread + (backward ? Math.PI : 0);
       ray.mesh.rotation.z = angle;
-      ray.mesh.position.set(x, y, 0.38 + s * 0.002);
-      ray.size = (style.core ?? 0.5) * (0.85 + this.rand() * 0.9)
-        * (style.ring ? 1.5 : 1.05) * (backward ? 0.6 : 1);
-      ray.mesh.scale.set(ray.size, ray.size * (0.62 + this.rand() * 0.5), 1);
+      ray.mesh.position.set(x, y, -0.24 - s * 0.004);
+      // Length varies 3x root-to-tip across the fan; width varies ~2.5x.
+      ray.size = (style.core ?? 0.5) * (0.6 + this.rand() * 1.6)
+        * (style.ring ? 1.5 : 1.05) * (backward ? 0.55 : 1);
+      ray.mesh.scale.set(ray.size, ray.size * (0.22 + this.rand() * 0.34), 1);
       ray.max = 0.11 + this.rand() * 0.05;
       ray.ttl = ray.max;
       ray.mesh.material.color.set(0xffffff)
-        .lerp(new THREE.Color(style.shard ?? style.color), 0.25).multiplyScalar(1.6);
+        .lerp(new THREE.Color(style.shard ?? style.color), 0.45).multiplyScalar(1.8);
       ray.mesh.material.opacity = 0.95;
       ray.mesh.visible = true;
     }
 
     // Shard star DEMOTED to a brief first-frame accent (the flat 8-point
     // star + paper shards read 2015-indie): the layered read now comes from
-    // the smear arcs + halftone ring below.
+    // the spark fan + chromatic ring.
     const burst = this.bursts.find((b) => b.ttl <= 0) || this.bursts[0];
     burst.mesh.material.color.set(style.shard ?? style.color).lerp(new THREE.Color(0xffffff), 0.18).multiplyScalar(1.7);
     burst.mesh.position.set(x, y, 0.36);
@@ -532,22 +520,21 @@ export class ImpactVfxLayer {
     burst.jy = 0.85 + this.rand() * 0.4;
     burst.mesh.material.map = burst.maps[0];
     burst.mesh.scale.set(burst.size * burst.jx, burst.size * burst.jy, 1);
-    // Radiating ink/spark ray lines get real presence beside the halftone
-    // ring (critic fix 5: bright core + radiating streaks, not dots alone).
-    burst.mesh.material.opacity = 0.85;
+    burst.mesh.material.opacity = 0.55;
     burst.mesh.visible = true;
 
-    // 2-3 CURVED ANIME SMEAR ARCS: hand-drawn crescent whips around the
-    // contact point — rotated, mirrored and scaled per impact so no two hits
-    // draw the same calligraphy. Warm-white in the shard colour family.
-    const smearCount = style.ring ? 3 : 2;
+    // 1-2 CURVED ANIME SMEAR ARCS behind the fighters: crescent whips framing
+    // the contact — rotated, mirrored and scaled per impact. Moved off the
+    // face of the burst (round-3): stacked over the core they were part of
+    // the additive fog that buried the receiver.
+    const smearCount = style.ring ? 2 : 1;
     for (let s = 0; s < smearCount; s += 1) {
       const smear = this.smears.find((m) => m.ttl <= 0) || this.smears[(s * 2 + 1) % this.smears.length];
       smear.mesh.material.color.set(0xffffff).lerp(new THREE.Color(style.shard ?? style.color), 0.35).multiplyScalar(1.9);
       smear.mesh.position.set(
         x + (this.rand() - 0.5) * 0.12,
         y + (this.rand() - 0.5) * 0.12,
-        0.37 + s * 0.005,
+        -0.2 - s * 0.01,
       );
       smear.mesh.rotation.z = this.rand() * Math.PI * 2;
       smear.spin = (this.rand() - 0.5) * 7;
@@ -556,29 +543,14 @@ export class ImpactVfxLayer {
       smear.ttl = smear.max;
       const mirror = this.rand() < 0.5 ? -1 : 1;
       smear.mesh.scale.set(smear.size * mirror, smear.size, 1);
-      smear.mesh.material.opacity = 0.95;
+      smear.mesh.material.opacity = 0.8;
       smear.mesh.visible = true;
     }
 
-    // EXPANDING RADIAL HALFTONE RING: the dot-screen pressure donut that
-    // carries the graphic SF6 read; meaningful tiers only, ~0.26s life.
-    if (style.tier !== "blocked") {
-      const halftone = this.halftones.find((r) => r.ttl <= 0) || this.halftones[0];
-      halftone.mesh.material.color.set(0xffffff).lerp(new THREE.Color(style.shard ?? style.color), 0.3).multiplyScalar(1.5);
-      halftone.mesh.position.set(x, y, 0.33);
-      halftone.mesh.rotation.z = this.rand() * Math.PI * 2;
-      // CONSTRAINED (critic fix 4): the dot ring stays a tight pressure band
-      // AROUND the contact point — the old 1.05-1.3 growth stamped a dot
-      // doily across both fighters' bodies at point-blank range.
-      halftone.size = (style.ring ? 0.78 : 0.58) * (style.tier === "super" ? 1.12 : 1);
-      halftone.squash = 0.66 + this.rand() * 0.16;
-      halftone.spin = (this.rand() - 0.5) * 2.4; // slight live rotation (fix 5)
-      halftone.max = style.ring ? 0.2 : 0.15;
-      halftone.ttl = halftone.max;
-      halftone.mesh.scale.set(0.22, 0.22 * halftone.squash, 1);
-      halftone.mesh.material.opacity = 0.68;
-      halftone.mesh.visible = true;
-    }
+    // NO free-floating halftone doily any more (round-3): the dot-screen
+    // answer is PROJECTED ONTO THE RECEIVER'S BODY by the fighter shader
+    // (uFbHitTone — masked and warped by the sprite's own alpha), never a
+    // flat screen-space tile pasted over the frame.
 
     // Contact-point lens pop for the post grade (~1-2 frames, local).
     this.popState.x = x;
@@ -587,10 +559,12 @@ export class ImpactVfxLayer {
     this.popState.ttl = this.popState.max;
 
     if (style.ring) {
-      // CYAN speedline ring: broken tapered shock arc, ~150ms, elliptical
-      // squash + random spin — a cool pressure wave against the warm shards.
+      // ONE CHROMATIC-FRINGED SHOCKWAVE RING: broken tapered arc with a red
+      // outer lip and cyan inner lip baked into the texture, ~150ms,
+      // elliptical squash + random spin — the pressure wave reads as lens
+      // physics, not a canvas circle.
       const ring = this.rings.find((r) => r.ttl <= 0) || this.rings[0];
-      ring.mesh.material.color.set(RING_CYAN).multiplyScalar(1.7);
+      ring.mesh.material.color.set(0xffffff).lerp(new THREE.Color(RING_CYAN), 0.25).multiplyScalar(1.6);
       ring.mesh.position.set(x, y, 0.34);
       ring.mesh.rotation.z = this.rand() * Math.PI * 2;
       ring.size = style.tier === "super" ? 1.5 : 1.15;
@@ -608,17 +582,19 @@ export class ImpactVfxLayer {
     const pop = this.pops.find((p) => p.ttl <= 0) || this.pops[0];
     pop.light.color.set(style.color).lerp(new THREE.Color(0xffffff), 0.45);
     pop.light.position.set(x, Math.max(0.4, y), 1.2);
-    // Cut from 9+1.7i: on the true impact frame that peak (plus the victim's
-    // hit-white emissive) flooded the centre third of the frame to paper
-    // white — the core sprite carries the heat, the light only spills.
-    pop.peak = 2.5 + style.intensity * 0.7;
+    // Cut AGAIN (round-3 bloom clamp): at 2.5+0.7i the pop light + hit-white
+    // emissive still fogged the receiver beige — the receiver must stay
+    // >=50% readable through every flash. The core sprite carries the heat.
+    pop.peak = 1.5 + style.intensity * 0.42;
     pop.ttl = pop.max;
     pop.light.intensity = pop.peak;
     pop.light.visible = true;
 
     // Sprite-side spill: fighter layer reads this and warms the near side of
-    // both fighters in the burst colour while it decays.
+    // both fighters in the burst colour while it decays. Carries the contact
+    // Y too, so the receiver's body-halftone can centre on the actual hit.
     this.spillState.x = x;
+    this.spillState.y = y;
     this.spillState.color.set(style.color).lerp(new THREE.Color(0xffffff), 0.25);
     this.spillState.max = style.tier === "super" ? 0.34 : 0.26;
     this.spillState.ttl = this.spillState.max;
@@ -632,7 +608,7 @@ export class ImpactVfxLayer {
     groundFlash.size = 0.9 + (style.core ?? 0.5) * 1.1;
     groundFlash.ttl = groundFlash.max;
     groundFlash.mesh.scale.setScalar(groundFlash.size);
-    groundFlash.mesh.material.opacity = 0.3;
+    groundFlash.mesh.material.opacity = 0.22;
     groundFlash.mesh.visible = true;
 
     // Presentation camera kick (2-3px) beside the sim's own hit-stop.

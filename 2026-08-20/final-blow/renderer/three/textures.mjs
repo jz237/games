@@ -118,10 +118,19 @@ export function smearedAtlasTexture(image) {
     ctx.filter = "blur(1.2px)";
     ctx.drawImage(bled, 0, 0);
     ctx.filter = "none";
-    ctx.globalAlpha = 0.30;
-    for (const dy of [-3, 3, -6, 6, -10, 10]) {
+    // Decaying smear weights (round-3 palette fix): the flat 0.30 stamps let
+    // far rows (warm face/skin) bleed 10px through a dark shirt, so every
+    // mirror drifted orange-brown regardless of what the fighter wears. Near
+    // offsets dominate; the base frame is re-asserted so the mirror keeps the
+    // sprite's OWN palette rows.
+    for (const [dy, weight] of [[-3, 0.3], [3, 0.3], [-6, 0.2], [6, 0.2], [-10, 0.11], [10, 0.11]]) {
+      ctx.globalAlpha = weight;
       ctx.drawImage(bled, 0, dy);
     }
+    ctx.globalAlpha = 0.5;
+    ctx.filter = "blur(0.6px)";
+    ctx.drawImage(bled, 0, 0);
+    ctx.filter = "none";
     ctx.globalAlpha = 1;
     smearCache.set(key, canvas);
   }
@@ -174,10 +183,11 @@ export function streakTexture(size = 256) {
   });
 }
 
-// Broken, tapered shockwave ring for impact VFX. NOT a uniform-width circle
-// stroke (that reads as a canvas arc primitive): 6-8 tapered arc segments of
-// varying width/length with gaps, a hot outer lip and a dark inner trailing
-// edge so the expanding band reads as a refracting pressure wave.
+// Broken, tapered shockwave ring for impact VFX with a CHROMATIC FRINGE. NOT
+// a uniform-width circle stroke: 6-8 tapered arc segments of varying
+// width/length with gaps — each arc carries a warm red lip riding OUTSIDE the
+// white core and a cyan lip riding INSIDE (lens dispersion at the pressure
+// front), plus a dark trailing edge so the band reads as refraction.
 export function ringTexture(size = 256, seed = 0x51ab) {
   const rand = mulberry32(seed);
   return canvasTexture(size, size, (ctx, w, h) => {
@@ -197,6 +207,18 @@ export function ringTexture(size = 256, seed = 0x51ab) {
         const a0 = angle + span * p;
         const a1 = angle + span * (p + 1.15 / steps);
         const rr = r + wobble * Math.sin(p * 5 + i);
+        // Chromatic dispersion lips: red just outside, cyan just inside.
+        ctx.strokeStyle = `rgba(255,72,48,${(0.6 * taper).toFixed(3)})`;
+        ctx.lineWidth = Math.max(1, baseWidth * taper * 1.7);
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr + baseWidth * 1.9, a0, a1);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(70,210,255,${(0.55 * taper).toFixed(3)})`;
+        ctx.lineWidth = Math.max(1, baseWidth * taper * 1.5);
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr - baseWidth * 1.7, a0 + 0.015, a1 + 0.015);
+        ctx.stroke();
+        // White-hot core band.
         ctx.strokeStyle = `rgba(255,255,255,${(0.85 * taper).toFixed(3)})`;
         ctx.lineWidth = Math.max(1, baseWidth * taper * 2.2);
         ctx.beginPath();
@@ -206,7 +228,7 @@ export function ringTexture(size = 256, seed = 0x51ab) {
         ctx.strokeStyle = `rgba(0,0,0,${(0.35 * taper).toFixed(3)})`;
         ctx.lineWidth = Math.max(1, baseWidth * taper * 1.6);
         ctx.beginPath();
-        ctx.arc(cx, cy, rr - baseWidth * 2.4, a0, a1);
+        ctx.arc(cx, cy, rr - baseWidth * 3.2, a0, a1);
         ctx.stroke();
       }
       angle += span + 0.2 + rand() * 0.6;         // gap before the next arc
@@ -301,7 +323,9 @@ export function paintStreakTexture(width = 256, height = 96, seed = 0x77aa) {
     const cy = h / 2;
     const rootX = w * 0.06;
     const len = w * (0.82 + rand() * 0.12);
-    const rootW = h * (0.2 + rand() * 0.1);
+    // Thinner root (round-3): these read as SPARK STREAKS behind the
+    // fighters now, not paint slabs — hairline energy, 2.5x width variance.
+    const rootW = h * (0.11 + rand() * 0.09);
     const wob = (rand() - 0.5) * h * 0.24;
     const path = (offY, scaleW) => {
       // paint the stroke as stacked tapered segments with edge jitter
@@ -477,9 +501,12 @@ export function wetStreakTexture(size = 256) {
     along.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = along;
     ctx.fillRect(0, 0, w, h);
-    // Broken-water interruptions: horizontal dark ripple bands.
+    // Broken-water interruptions: horizontal dark ripple bands. SPARSER
+    // (round-3): at a ~12px pitch the bands tiled the light pools into a
+    // plank-deck read that fought the slab grid — fewer, irregular breaks
+    // read as water without drawing a second floor.
     ctx.globalCompositeOperation = "destination-out";
-    for (let y = 8; y < h; y += 10 + (y * 7) % 13) {
+    for (let y = 14; y < h; y += 26 + (y * 7) % 21) {
       const strength = 0.12 + ((y * 13) % 17) / 17 * 0.3;
       ctx.fillStyle = `rgba(0,0,0,${strength.toFixed(3)})`;
       ctx.fillRect(0, y, w, 2 + (y % 5));

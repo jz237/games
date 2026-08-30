@@ -11967,6 +11967,127 @@ function fatalityDropletCanvas() {
   return c;
 }
 
+// Round-3 debris variety (critic item 2): the lens pass mixes FOUR distinct
+// sprites — glossy droplet (above), a matte torn MEAT CHUNK with a fat seam,
+// a pale BONE FLECK, and an elongated SPLASH RIVULET — so the gore field
+// stops reading as one pepperoni ellipse stamped 31 times. All lit from
+// upper-left (the lamp) with a dark underside.
+function fatalityChunkCanvas() {
+  if (fatalityDressing.chunk) return fatalityDressing.chunk;
+  const size = 96;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const p = c.getContext("2d");
+  const cx = size / 2;
+  // irregular torn polygon
+  p.fillStyle = "#7c0d16";
+  p.beginPath();
+  p.moveTo(cx - size * 0.3, cx - size * 0.08);
+  p.lineTo(cx - size * 0.12, cx - size * 0.3);
+  p.lineTo(cx + size * 0.16, cx - size * 0.24);
+  p.lineTo(cx + size * 0.32, cx + size * 0.02);
+  p.lineTo(cx + size * 0.18, cx + size * 0.26);
+  p.lineTo(cx - size * 0.1, cx + size * 0.3);
+  p.lineTo(cx - size * 0.28, cx + size * 0.12);
+  p.closePath();
+  p.fill();
+  // darker muscle striations
+  p.strokeStyle = "#4e050c";
+  p.lineWidth = 2.5;
+  for (const [y0, y1] of [[-0.12, 0.08], [0.02, 0.2], [-0.22, -0.05]]) {
+    p.beginPath();
+    p.moveTo(cx - size * 0.2, cx + size * y0);
+    p.quadraticCurveTo(cx, cx + size * (y0 + y1) * 0.5 + 3, cx + size * 0.2, cx + size * y1);
+    p.stroke();
+  }
+  // fat seam + lamp-side highlight
+  p.fillStyle = "rgba(232,206,178,0.85)";
+  p.beginPath();
+  p.ellipse(cx - size * 0.08, cx - size * 0.16, size * 0.12, size * 0.05, -0.4, 0, Math.PI * 2);
+  p.fill();
+  p.fillStyle = "rgba(214,80,72,0.7)";
+  p.beginPath();
+  p.ellipse(cx - size * 0.14, cx - size * 0.06, size * 0.08, size * 0.05, -0.5, 0, Math.PI * 2);
+  p.fill();
+  // dark underside
+  p.fillStyle = "rgba(30,2,6,0.6)";
+  p.beginPath();
+  p.ellipse(cx + size * 0.06, cx + size * 0.2, size * 0.2, size * 0.08, 0.2, 0, Math.PI * 2);
+  p.fill();
+  fatalityDressing.chunk = c;
+  return c;
+}
+function fatalityBoneCanvas() {
+  if (fatalityDressing.bone) return fatalityDressing.bone;
+  const size = 64;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const p = c.getContext("2d");
+  const cx = size / 2;
+  p.lineCap = "round";
+  // shard shaft with a snapped, flared end
+  p.strokeStyle = "#e6d3b2";
+  p.lineWidth = size * 0.14;
+  p.beginPath();
+  p.moveTo(cx - size * 0.24, cx + size * 0.16);
+  p.lineTo(cx + size * 0.2, cx - size * 0.14);
+  p.stroke();
+  p.strokeStyle = "#f4e8cd";
+  p.lineWidth = size * 0.07;
+  p.beginPath();
+  p.moveTo(cx - size * 0.22, cx + size * 0.13);
+  p.lineTo(cx + size * 0.18, cx - size * 0.14);
+  p.stroke();
+  // splintered tip + marrow fleck + blood stain at the root
+  p.fillStyle = "#f4e8cd";
+  p.beginPath();
+  p.moveTo(cx + size * 0.16, cx - size * 0.2);
+  p.lineTo(cx + size * 0.32, cx - size * 0.24);
+  p.lineTo(cx + size * 0.22, cx - size * 0.06);
+  p.closePath();
+  p.fill();
+  p.fillStyle = "#b89a74";
+  p.beginPath();
+  p.arc(cx + size * 0.12, cx - size * 0.1, size * 0.045, 0, Math.PI * 2);
+  p.fill();
+  p.fillStyle = "rgba(150,12,16,0.85)";
+  p.beginPath();
+  p.ellipse(cx - size * 0.22, cx + size * 0.16, size * 0.1, size * 0.07, 0.5, 0, Math.PI * 2);
+  p.fill();
+  fatalityDressing.bone = c;
+  return c;
+}
+function fatalityRivuletCanvas() {
+  if (fatalityDressing.rivulet) return fatalityDressing.rivulet;
+  const w = 48;
+  const h = 128;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const p = c.getContext("2d");
+  // elongated tear: fat glossy head, whipping thin tail
+  const grad = p.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, "rgba(196,32,28,0.98)");
+  grad.addColorStop(0.4, "rgba(150,12,16,0.95)");
+  grad.addColorStop(1, "rgba(80,2,10,0.2)");
+  p.fillStyle = grad;
+  p.beginPath();
+  p.moveTo(w * 0.5, h * 0.04);
+  p.bezierCurveTo(w * 0.92, h * 0.16, w * 0.72, h * 0.42, w * 0.58, h * 0.66);
+  p.quadraticCurveTo(w * 0.5, h * 0.86, w * 0.44, h * 0.97);
+  p.quadraticCurveTo(w * 0.38, h * 0.8, w * 0.34, h * 0.6);
+  p.bezierCurveTo(w * 0.2, h * 0.36, w * 0.14, h * 0.14, w * 0.5, h * 0.04);
+  p.closePath();
+  p.fill();
+  // glossy head kiss
+  p.fillStyle = "rgba(255,182,170,0.8)";
+  p.beginPath();
+  p.ellipse(w * 0.4, h * 0.14, w * 0.12, h * 0.045, -0.4, 0, Math.PI * 2);
+  p.fill();
+  fatalityDressing.rivulet = c;
+  return c;
+}
+
 function drawFatalityPool(effect, alpha) {
   const growth = 1 - alpha;
   const scale = effect.scale || 1;
@@ -12048,10 +12169,264 @@ function drawFatalityPool(effect, alpha) {
   ctx.restore();
 }
 
+// CINEMA 3D painted severed limb (round-3, critic item 2): the flat capsule
+// strokes read as a pink rubber glove on a teal toy — this builds a properly
+// PAINTED limb sprite once per (limb, palette): shaded torn sleeve, modelled
+// forearm + curled fist (or jeans + boot), a real gore stump (blood ring,
+// bone, hanging shreds), warm rim light from the wheel's glow along one edge
+// and a cool night kiss on the other, matching the fighters' rendered-paint
+// language. Built lazily, cached; the classic 2D primitives are untouched.
+const severedLimbCache = new Map();
+function severedLimbPaintedCanvas(effect) {
+  const leg = effect.limb.endsWith("leg");
+  const key = `${leg ? "leg" : "arm"}:${effect.clothColor}:${effect.clothAccent}:${effect.color}:${effect.secondary}`;
+  if (severedLimbCache.has(key)) return severedLimbCache.get(key);
+  const length = leg ? 92 : 72;
+  const thickness = leg ? 30 : 23;
+  const scale = 2; // authored at 2x, played back at 1x
+  const c = document.createElement("canvas");
+  c.width = Math.round(length * 1.5 * scale);
+  c.height = Math.round(thickness * 3.2 * scale);
+  const p = c.getContext("2d");
+  p.scale(scale, scale);
+  p.translate(length * 0.75, thickness * 1.6);
+  p.lineCap = "round";
+  p.lineJoin = "round";
+  const shade = (hex, f) => {
+    const n = parseInt(hex.replace("#", ""), 16);
+    const r = Math.min(255, Math.round(((n >> 16) & 255) * f));
+    const g = Math.min(255, Math.round(((n >> 8) & 255) * f));
+    const b = Math.min(255, Math.round((n & 255) * f));
+    return `rgb(${r},${g},${b})`;
+  };
+  // Fabric, not roster accent: the raw def.color is a UI hue (Jez's is
+  // near-cyan) — pulled 72% toward a night-fabric slate so the sleeve reads
+  // as the fighter's CLOTHING under stage light, never a toy shell.
+  const mixHex = (hexA, hexB, t) => {
+    const a = parseInt((hexA || "#3a5a8c").replace("#", ""), 16);
+    const b = parseInt(hexB.replace("#", ""), 16);
+    const channel = (sh) => Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t)
+      .toString(16).padStart(2, "0");
+    return `#${channel(16)}${channel(8)}${channel(0)}`;
+  };
+  const cloth = mixHex(effect.clothColor, "#33415e", 0.72);
+  const skin = "#c98b70";
+  const gore = effect.color || "#a11220";
+  const goreDeep = effect.secondary || "#6d0c19";
+  // The limb is built as STACKED TAPERED STROKES (dark underlayer, mid tone,
+  // top-half highlight) along a gently sagging axis — round painted forms,
+  // no straight bars, no full-length rim rods.
+  const sag = leg ? 4 : 2.6;
+  const axis = (t) => ({ x: t * length, y: Math.sin((t + 0.42) * 2.4) * sag });
+  const strokeAlong = (t0, t1, width, tone, offY = 0, alphaScale = 1) => {
+    p.strokeStyle = tone;
+    p.globalAlpha = alphaScale;
+    p.lineWidth = width;
+    p.beginPath();
+    const a0 = axis(t0);
+    const mid = axis((t0 + t1) / 2);
+    const a1 = axis(t1);
+    p.moveTo(a0.x, a0.y + offY);
+    p.quadraticCurveTo(mid.x, mid.y + offY + 1.2, a1.x, a1.y + offY);
+    p.stroke();
+    p.globalAlpha = 1;
+  };
+  const stumpT = -0.42;
+  const stumpAt = axis(stumpT);
+  if (leg) {
+    // thigh->calf in torn jeans, boot at the far end
+    strokeAlong(-0.36, 0.3, thickness * 1.04, shade(cloth, 0.62));
+    strokeAlong(-0.36, 0.3, thickness * 0.9, cloth);
+    strokeAlong(-0.34, 0.26, thickness * 0.4, shade(cloth, 1.3), -thickness * 0.2, 0.85);
+    // knee crease + fold shadows
+    p.strokeStyle = shade(cloth, 0.55);
+    p.lineWidth = 1.8;
+    for (const fx of [-0.12, 0.05, 0.2]) {
+      const at = axis(fx);
+      p.beginPath();
+      p.moveTo(at.x, at.y - thickness * 0.3);
+      p.quadraticCurveTo(at.x + 2.5, at.y, at.x + 1, at.y + thickness * 0.32);
+      p.stroke();
+    }
+    // boot: rounded leather mass + heel + pale sole line
+    const bootAt = axis(0.42);
+    p.fillStyle = "#1a1c22";
+    p.beginPath();
+    p.ellipse(bootAt.x + thickness * 0.16, bootAt.y + 1, thickness * 0.52, thickness * 0.42, 0.12, 0, Math.PI * 2);
+    p.fill();
+    p.beginPath();
+    p.ellipse(bootAt.x + thickness * 0.62, bootAt.y + thickness * 0.16, thickness * 0.34, thickness * 0.28, 0.3, 0, Math.PI * 2);
+    p.fill();
+    p.fillStyle = "#2e323c"; // top-light on the toe
+    p.beginPath();
+    p.ellipse(bootAt.x + thickness * 0.5, bootAt.y - thickness * 0.08, thickness * 0.24, thickness * 0.12, 0.3, 0, Math.PI * 2);
+    p.fill();
+    p.strokeStyle = "#565c68";
+    p.lineWidth = 2.2;
+    p.beginPath();
+    p.moveTo(bootAt.x + thickness * 0.1, bootAt.y + thickness * 0.36);
+    p.quadraticCurveTo(bootAt.x + thickness * 0.5, bootAt.y + thickness * 0.44, bootAt.x + thickness * 0.86, bootAt.y + thickness * 0.3);
+    p.stroke();
+  } else {
+    // --- torn tee sleeve over the upper arm ---------------------------------
+    strokeAlong(-0.36, -0.08, thickness * 1.02, shade(cloth, 0.6));
+    strokeAlong(-0.36, -0.08, thickness * 0.88, cloth);
+    strokeAlong(-0.35, -0.1, thickness * 0.36, shade(cloth, 1.34), -thickness * 0.18, 0.85);
+    // torn cuff: small cloth-dark triangles biting into the arm
+    p.fillStyle = shade(cloth, 0.72);
+    const cuffAt = axis(-0.08);
+    for (let z = 0; z < 3; z += 1) {
+      p.beginPath();
+      p.moveTo(cuffAt.x - 2, cuffAt.y - thickness * 0.42 + z * thickness * 0.3);
+      p.lineTo(cuffAt.x + thickness * 0.24, cuffAt.y - thickness * 0.3 + z * thickness * 0.3);
+      p.lineTo(cuffAt.x - 2, cuffAt.y - thickness * 0.18 + z * thickness * 0.3);
+      p.closePath();
+      p.fill();
+    }
+    // sleeve fold shadows
+    p.strokeStyle = shade(cloth, 0.52);
+    p.lineWidth = 1.6;
+    for (const fx of [-0.28, -0.17]) {
+      const at = axis(fx);
+      p.beginPath();
+      p.moveTo(at.x, at.y - thickness * 0.3);
+      p.quadraticCurveTo(at.x + 2.2, at.y + 1, at.x + 0.5, at.y + thickness * 0.3);
+      p.stroke();
+    }
+    // --- forearm: rounded skin with a top-half light plane ------------------
+    strokeAlong(-0.1, 0.36, thickness * 0.74, shade(skin, 0.68));
+    strokeAlong(-0.1, 0.36, thickness * 0.62, skin);
+    strokeAlong(-0.08, 0.32, thickness * 0.26, shade(skin, 1.2), -thickness * 0.13, 0.9);
+    // tendon hint + wrist crease (short, curved)
+    p.strokeStyle = shade(skin, 0.58);
+    p.lineWidth = 1.3;
+    const tA = axis(0.05);
+    const tB = axis(0.3);
+    p.beginPath();
+    p.moveTo(tA.x, tA.y - thickness * 0.06);
+    p.quadraticCurveTo((tA.x + tB.x) / 2, tA.y - thickness * 0.12, tB.x, tB.y - thickness * 0.02);
+    p.stroke();
+    const wr = axis(0.37);
+    p.beginPath();
+    p.moveTo(wr.x, wr.y - thickness * 0.2);
+    p.quadraticCurveTo(wr.x + 1.6, wr.y, wr.x, wr.y + thickness * 0.18);
+    p.stroke();
+    // --- curled fist: palm mass, knuckle arc along the top, tucked thumb ----
+    const fist = axis(0.48);
+    p.fillStyle = shade(skin, 0.82);
+    p.beginPath();
+    p.ellipse(fist.x + thickness * 0.1, fist.y + 1, thickness * 0.34, thickness * 0.38, -0.12, 0, Math.PI * 2);
+    p.fill();
+    // knuckle bumps riding the leading arc
+    for (let finger = 0; finger < 4; finger += 1) {
+      const ka = -1.05 + finger * 0.6;
+      const kx = fist.x + thickness * 0.1 + Math.cos(ka) * thickness * 0.32;
+      const ky = fist.y + 1 + Math.sin(ka) * thickness * 0.36;
+      p.fillStyle = finger % 2 ? skin : shade(skin, 1.1);
+      p.beginPath();
+      p.ellipse(kx, ky, thickness * 0.12, thickness * 0.1, ka, 0, Math.PI * 2);
+      p.fill();
+    }
+    // finger creases between the knuckles
+    p.strokeStyle = shade(skin, 0.55);
+    p.lineWidth = 1.2;
+    for (let crease = 0; crease < 3; crease += 1) {
+      const ca = -0.75 + crease * 0.6;
+      p.beginPath();
+      p.arc(fist.x + thickness * 0.1, fist.y + 1, thickness * 0.3, ca - 0.14, ca + 0.14);
+      p.stroke();
+    }
+    // thumb wrapping low across the palm
+    p.fillStyle = shade(skin, 1.06);
+    p.beginPath();
+    p.ellipse(fist.x - thickness * 0.02, fist.y + thickness * 0.24, thickness * 0.17, thickness * 0.1, 0.5, 0, Math.PI * 2);
+    p.fill();
+  }
+  // --- gore stump at the shoulder/thigh end (drawn OVER the limb root) -----
+  // Torn cross-section: dark rim, meat wedges, off-centre bone chip — an
+  // anatomy read, not a glossy ball.
+  p.fillStyle = goreDeep;
+  p.beginPath();
+  p.ellipse(stumpAt.x, stumpAt.y, thickness * 0.44, thickness * 0.4, -0.1, 0, Math.PI * 2);
+  p.fill();
+  // meat wedges: radial pie segments in two reds
+  for (let wedge = 0; wedge < 5; wedge += 1) {
+    const a0 = wedge * 1.256 + 0.35;
+    const wr = thickness * (0.27 + ((wedge * 37) % 11) / 11 * 0.09);
+    p.fillStyle = wedge % 2 ? gore : shade(gore, 0.78);
+    p.beginPath();
+    p.moveTo(stumpAt.x + Math.cos(a0 + 0.5) * 2, stumpAt.y + Math.sin(a0 + 0.5) * 2);
+    p.arc(stumpAt.x, stumpAt.y, wr, a0, a0 + 1.15);
+    p.closePath();
+    p.fill();
+  }
+  // wet sheen crescent on the upper lip of the cut
+  p.strokeStyle = "rgba(255,158,148,0.55)";
+  p.lineWidth = 1.8;
+  p.beginPath();
+  p.arc(stumpAt.x, stumpAt.y, thickness * 0.32, Math.PI * 1.15, Math.PI * 1.75);
+  p.stroke();
+  // bone chip: pale, high of centre, with a marrow fleck
+  p.fillStyle = "#e6d3b2";
+  p.beginPath();
+  p.ellipse(stumpAt.x - thickness * 0.11, stumpAt.y - thickness * 0.14, thickness * 0.08, thickness * 0.065, 0.3, 0, Math.PI * 2);
+  p.fill();
+  p.fillStyle = "#a8906c";
+  p.beginPath();
+  p.arc(stumpAt.x - thickness * 0.11, stumpAt.y - thickness * 0.14, thickness * 0.028, 0, Math.PI * 2);
+  p.fill();
+  // one short drip + a flung droplet — restrained
+  p.strokeStyle = gore;
+  p.lineWidth = 2;
+  p.beginPath();
+  p.moveTo(stumpAt.x - thickness * 0.12, stumpAt.y + thickness * 0.36);
+  p.quadraticCurveTo(stumpAt.x - thickness * 0.18, stumpAt.y + thickness * 0.62, stumpAt.x - thickness * 0.12, stumpAt.y + thickness * 0.8);
+  p.stroke();
+  p.fillStyle = gore;
+  p.beginPath();
+  p.ellipse(stumpAt.x - thickness * 0.34, stumpAt.y + thickness * 0.5, 2.1, 2.8, 0.3, 0, Math.PI * 2);
+  p.fill();
+  // --- light story: SHORT warm dashes on the wheel side, one cool kiss ------
+  p.lineCap = "round";
+  p.strokeStyle = "rgba(255,166,70,0.55)";
+  p.lineWidth = 1.7;
+  for (const [d0, d1, hug] of [[-0.3, -0.2, leg ? 0.47 : 0.4], [-0.04, 0.08, leg ? 0.44 : 0.28], [0.22, 0.32, leg ? 0.42 : 0.26]]) {
+    const a0 = axis(d0);
+    const a1 = axis(d1);
+    p.beginPath();
+    p.moveTo(a0.x, a0.y + thickness * hug);
+    p.quadraticCurveTo((a0.x + a1.x) / 2, (a0.y + a1.y) / 2 + thickness * (hug + 0.04), a1.x, a1.y + thickness * (hug - 0.02));
+    p.stroke();
+  }
+  p.strokeStyle = "rgba(150,190,255,0.35)";
+  p.lineWidth = 1.4;
+  const c0 = axis(-0.26);
+  const c1 = axis(-0.06);
+  p.beginPath();
+  p.moveTo(c0.x, c0.y - thickness * 0.46);
+  p.quadraticCurveTo((c0.x + c1.x) / 2, (c0.y + c1.y) / 2 - thickness * 0.5, c1.x, c1.y - thickness * 0.44);
+  p.stroke();
+  severedLimbCache.set(key, c);
+  return c;
+}
+
 function drawSeveredLimb(effect, alpha) {
   const leg = effect.limb.endsWith("leg");
   const length = leg ? 92 : 72;
   const thickness = leg ? 30 : 23;
+  if (cinema3dDressingActive()) {
+    // CINEMA 3D: painted limb sprite (same footprint/rotation as the 2D
+    // primitives, so flight physics and resting pose read identically).
+    const painted = severedLimbPaintedCanvas(effect);
+    ctx.save();
+    ctx.rotate(effect.rotation || 0);
+    ctx.globalAlpha = Math.min(1, alpha * 4);
+    ctx.shadowColor = "rgba(20,0,4,.72)";
+    ctx.shadowBlur = 8;
+    ctx.drawImage(painted, -length * 0.75, -thickness * 1.6, painted.width / 2, painted.height / 2);
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.rotate(effect.rotation || 0);
   ctx.globalCompositeOperation = "source-over";
@@ -12264,6 +12639,24 @@ function drawCinematicGoreOverlay() {
     ctx.shadowBlur = 5;
     const dressed = cinema3dDressingActive();
     const droplet3d = dressed ? fatalityDropletCanvas() : null;
+    // Round-3 wheel occlusion (critic item 2): debris whose screen position
+    // falls inside the landed signature wheel is SKIPPED — it reads as
+    // having flown behind the disc, so the gore field sits in depth instead
+    // of floating over the centrepiece as an overlay.
+    let wheelOccluder = null;
+    if (dressed && state.finisher) {
+      const wheelProjectile = state.effects.find((fx) => fx.kind === "fatalityProjectile");
+      if (wheelProjectile) {
+        const goreCamera = finisherCinematicCamera(state.cinematicZoom);
+        const goreZoom = goreCamera.zoom || 1;
+        wheelOccluder = {
+          x: W * .5 + (wheelProjectile.x - goreCamera.x) * goreZoom,
+          y: H * .53 + (wheelProjectile.y - goreCamera.y) * goreZoom,
+          r: Math.max(wheelProjectile.width, wheelProjectile.height) * .6 * goreZoom
+            * (wheelProjectile.phase === "kill" ? 1.24 : 1.12),
+        };
+      }
+    }
     for (let drop = 0; drop < 31; drop += 1) {
       const x = ((drop * 173 + familySeed * 29) % 1180) / 1180 * W;
       const y = ((drop * 97 + familySeed * 43) % 640) / 640 * H;
@@ -12271,15 +12664,34 @@ function drawCinematicGoreOverlay() {
       const radius = (4 + drop % 7 * 2.8) * (effect.scale || 1);
       ctx.globalAlpha = alpha * (.2 + drop % 5 * .09);
       if (dressed) {
-        // CINEMA 3D: dimensional lens droplets — a gradient-cored spatter
-        // sprite rotated per drop, elongated ones smearing DOWN the glass,
-        // with gravity run-tails that thin as they fall. No flat clipart.
+        // CINEMA 3D: FOUR debris types — glossy droplets, torn meat chunks,
+        // pale bone flecks and elongated rivulets smearing down the glass —
+        // each rotated per drop with a consistent upper-left lamp key.
+        if (wheelOccluder) {
+          const wdx = x - wheelOccluder.x;
+          const wdy = edgeBias - wheelOccluder.y;
+          if (wdx * wdx + wdy * wdy < wheelOccluder.r * wheelOccluder.r) continue;
+        }
         const stretch = drop % 4 === 0 ? 2.2 : drop % 3 === 0 ? 1.5 : 1;
         ctx.save();
         ctx.translate(x, edgeBias);
-        ctx.rotate(stretch > 1 ? Math.PI / 2 + (drop % 2 ? 0.14 : -0.12) : (drop * .71) % Math.PI);
-        ctx.scale(1, stretch);
-        ctx.drawImage(droplet3d, -radius * 1.35, -radius * 1.35, radius * 2.7, radius * 2.7);
+        if (drop % 7 === 2) {
+          // matte meat chunk: full spin variety, slightly bigger presence
+          ctx.rotate((drop * 1.17) % (Math.PI * 2));
+          ctx.drawImage(fatalityChunkCanvas(), -radius * 1.5, -radius * 1.5, radius * 3, radius * 3);
+        } else if (drop % 7 === 5) {
+          // bone fleck: small, pale, catches the eye against the reds
+          ctx.rotate((drop * 2.31) % (Math.PI * 2));
+          ctx.globalAlpha *= 0.9;
+          ctx.drawImage(fatalityBoneCanvas(), -radius * 1.1, -radius * 1.1, radius * 2.2, radius * 2.2);
+        } else if (stretch > 1) {
+          // rivulet: hangs DOWN the glass with a slight tilt
+          ctx.rotate(drop % 2 ? 0.14 : -0.12);
+          ctx.drawImage(fatalityRivuletCanvas(), -radius * 0.7, -radius * 1.2, radius * 1.4, radius * 3.4);
+        } else {
+          ctx.rotate((drop * .71) % Math.PI);
+          ctx.drawImage(droplet3d, -radius * 1.35, -radius * 1.35, radius * 2.7, radius * 2.7);
+        }
         ctx.restore();
         if (drop % 5 === 0) {
           // run-tail: darkening, thinning gravity streak
@@ -13195,7 +13607,10 @@ function drawFinisherOverlay() {
   }
   ctx.restore();
 
-  if (finisher.beatLife > 0) {
+  // 3D mode drops the beat-label block once the fatality banner owns the
+  // frame (round-3, critic item 2): "PIZZA WHEEL ARM SEVER" was printing in
+  // the banner AND down here — four stacked text elements over one shot.
+  if (finisher.beatLife > 0 && !(dressedOverlay && finisher.fatalityTriggered)) {
     const alpha = clamp(finisher.beatLife * 2.2, 0, 1);
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -13233,14 +13648,19 @@ function drawFinisherOverlay() {
     ctx.font = "900 18px Arial Narrow, Arial, sans-serif";
     ctx.lineWidth = 7;
     ctx.fillStyle = "#fff0df";
-    ctx.strokeText(`${fatality.title} · ${fatality.caption}`, W * .5, H * .3);
-    ctx.fillText(`${fatality.title} · ${fatality.caption}`, W * .5, H * .3);
-    ctx.font = "900 14px Arial Narrow, Arial, sans-serif";
-    ctx.lineWidth = 6;
-    ctx.fillStyle = attacker.def.accent;
-    const signatureLine = `${fatality.projectileFinale} · ${fatality.device}`;
-    ctx.strokeText(signatureLine, W * .5, H * .345);
-    ctx.fillText(signatureLine, W * .5, H * .345);
+    // 3D mode: ONE title line under the header (round-3, critic item 2) —
+    // the cinematic carries the story; the caption stack is gone.
+    const titleLine = dressedOverlay ? fatality.caption : `${fatality.title} · ${fatality.caption}`;
+    ctx.strokeText(titleLine, W * .5, H * .3);
+    ctx.fillText(titleLine, W * .5, H * .3);
+    if (!dressedOverlay) {
+      ctx.font = "900 14px Arial Narrow, Arial, sans-serif";
+      ctx.lineWidth = 6;
+      ctx.fillStyle = attacker.def.accent;
+      const signatureLine = `${fatality.projectileFinale} · ${fatality.device}`;
+      ctx.strokeText(signatureLine, W * .5, H * .345);
+      ctx.fillText(signatureLine, W * .5, H * .345);
+    }
     ctx.restore();
   }
 }
@@ -13938,34 +14358,74 @@ function superPortraitArcs(portrait, accent, variant) {
       points.push([x, y]);
     }
     if (points.length < 5) continue;
-    const path = () => {
-      octx.beginPath();
-      octx.moveTo(points[0][0], points[0][1]);
-      for (let p = 1; p < points.length; p += 1) {
-        // per-segment jitter: the bolt crackles instead of flowing
-        octx.lineTo(points[p][0] + (hash(p * 7 + arc) - 0.5) * 3, points[p][1] + (hash(p * 11 + arc) - 0.5) * 3);
+    // BLANKA-GRAMMAR BOLT (round-3, critic item 6): drawn segment-by-segment
+    // with real WIDTH VARIATION — a fat rooted trunk tapering to a whipped
+    // point, jittered per step — in three passes: a soft orange falloff glow,
+    // a hot amber body, and a thin WHITE-HOT core. No more uniform noodle.
+    const jittered = points.map((pt, p) => [
+      pt[0] + (hash(p * 7 + arc) - 0.5) * 3,
+      pt[1] + (hash(p * 11 + arc) - 0.5) * 3,
+    ]);
+    const drawBolt = (pts, rootWidth, seedBase) => {
+      const segs = pts.length - 1;
+      for (let p = 0; p < segs; p += 1) {
+        const t = p / Math.max(1, segs - 1);
+        // taper root -> tip with per-segment crackle so no two widths match
+        const wSeg = Math.max(0.7, rootWidth * (1 - t * 0.78) * (0.62 + hash(seedBase + p * 13) * 0.76));
+        const seg = () => {
+          octx.beginPath();
+          octx.moveTo(pts[p][0], pts[p][1]);
+          octx.lineTo(pts[p + 1][0], pts[p + 1][1]);
+          octx.stroke();
+        };
+        // orange falloff glow
+        octx.globalAlpha = 0.3 * (1 - t * 0.4);
+        octx.strokeStyle = "rgba(255,118,20,1)";
+        octx.lineWidth = wSeg * 3.1;
+        seg();
+        // hot amber body
+        octx.globalAlpha = 0.82;
+        octx.strokeStyle = "rgba(255,178,58,1)";
+        octx.lineWidth = wSeg;
+        seg();
+        // white-hot core
+        octx.globalAlpha = 0.95;
+        octx.strokeStyle = "rgba(255,250,238,1)";
+        octx.lineWidth = Math.max(0.6, wSeg * 0.34);
+        seg();
       }
-      octx.stroke();
     };
-    octx.globalAlpha = 0.75;
-    octx.strokeStyle = accent;
-    octx.lineWidth = Math.max(3, w * 0.014);
-    path();
-    octx.globalAlpha = 0.92;
-    octx.strokeStyle = "#fff6ea";
-    octx.lineWidth = Math.max(1.4, w * 0.005);
-    path();
-    // fork: a short branch off a mid point
-    const mid = points[Math.floor(points.length * (0.4 + hash(arc + 77) * 0.3))];
-    const fx = mid[0] + (hash(arc + 91) - 0.5) * w * 0.12;
-    const fy = mid[1] + (hash(arc + 93) - 0.5) * h * 0.08;
-    octx.globalAlpha = 0.6;
-    octx.strokeStyle = accent;
-    octx.lineWidth = Math.max(1.6, w * 0.006);
-    octx.beginPath();
-    octx.moveTo(mid[0], mid[1]);
-    octx.lineTo(fx, fy);
-    octx.stroke();
+    drawBolt(jittered, Math.max(3.4, w * 0.016), arc * 101);
+    // BRANCHES: 2 true forks walked off mid points with their own taper —
+    // branching is what separates lightning from scribble.
+    for (let br = 0; br < 2; br += 1) {
+      const rootIndex = Math.floor(jittered.length * (0.3 + hash(arc * 17 + br * 29) * 0.45));
+      const root = jittered[rootIndex];
+      if (!root) continue;
+      let bx = root[0];
+      let by = root[1];
+      let bAngle = hash(arc * 23 + br * 31) * Math.PI * 2;
+      const branchPts = [[bx, by]];
+      const bStep = Math.max(4.5, w * 0.02);
+      for (let s = 0; s < 7; s += 1) {
+        bAngle += (hash(arc * 41 + br * 7 + s) - 0.5) * 1.3;
+        let nx = bx + Math.cos(bAngle) * bStep;
+        let ny = by + Math.sin(bAngle) * bStep;
+        if (!solid(nx, ny)) {
+          let turned = false;
+          for (const dTurn of [0.8, -0.8, 1.5, -1.5]) {
+            const tx = bx + Math.cos(bAngle + dTurn) * bStep;
+            const ty = by + Math.sin(bAngle + dTurn) * bStep;
+            if (solid(tx, ty)) { bAngle += dTurn; nx = tx; ny = ty; turned = true; break; }
+          }
+          if (!turned) break;
+        }
+        bx = nx;
+        by = ny;
+        branchPts.push([bx, by]);
+      }
+      if (branchPts.length >= 3) drawBolt(branchPts, Math.max(1.8, w * 0.008), arc * 211 + br * 57);
+    }
   }
   // hot emitter knot where every bolt roots
   const knot = octx.createRadialGradient(ex, ey, 2, ex, ey, w * 0.075);
@@ -14102,6 +14562,12 @@ function drawSuperCutIn(dtMs) {
   // unchanged.
   const image = fighterImages[cut.fighterId];
   const closeUp = in3d ? superPortrait3d(cut) : null;
+  // 3D deliberate band break (round-3, critic item 6): the portrait's head +
+  // shoulders COMMIT past the band's top edge instead of grazing it — drawn
+  // after the clip ends, through a top-open window bounded at the band's
+  // bottom edge. Geometry is computed here; the actual punch draw happens
+  // post-restore so the edge stroke passes BEHIND the figure.
+  let breakDraw = null;
   if (closeUp || (image?.complete && image.naturalWidth > 0)) {
     const bustFraction = 0.46; // top of the roster art: head + torso
     const sourceHeight = in3d ? (image?.naturalHeight ?? 1) * bustFraction : image?.naturalHeight ?? 1;
@@ -14148,39 +14614,52 @@ function drawSuperCutIn(dtMs) {
       ctx.globalAlpha = alpha;
     }
     if (in3d) {
-      // Portrait PUNCH: slams in oversized and slightly rolled, easing to
-      // rest over the first quarter of the band's life (SF6 cut-in energy).
+      // Portrait PUNCH geometry: slams in oversized and slightly rolled,
+      // easing to rest over the first quarter of the band's life. Anchored
+      // HIGH: the crown clears the band's top edge by a committed margin.
       const punch = reduced ? 1 : clamp(progress / 0.24, 0, 1);
       const punchEase = 1 - (1 - punch) ** 3;
       const punchScale = 1.22 - punchEase * 0.22;
       const punchRot = (fromLeft ? -1 : 1) * (1 - punchEase) * 0.09 - 0.025;
       const pcx = portraitX + portraitWidth * 0.5;
-      const pcy = bandTop + 6 + portraitHeight * 0.5;
-      ctx.save();
-      ctx.translate(pcx, pcy);
-      ctx.rotate(punchRot);
-      ctx.scale(punchScale, punchScale);
-      if (closeUp) {
-        // Mirror the P2 close-up so the wind-up drives INTO the frame.
-        if (!fromLeft) ctx.scale(-1, 1);
-        ctx.drawImage(closeUp, -portraitWidth * 0.5, -portraitHeight * 0.5, portraitWidth, portraitHeight);
-        // Limb-following energy bolts from the chest emitter, flickering
-        // between two seeded variants over the band's life (critic fix 7).
-        if (!reduced) {
-          const arcs = superPortraitArcs(closeUp, cut.accent, Math.floor(cut.t * 21) % 2);
-          ctx.save();
-          ctx.globalCompositeOperation = "lighter";
-          ctx.globalAlpha = alpha * (0.75 + 0.25 * Math.sin(cut.t * 47));
-          ctx.drawImage(arcs, -portraitWidth * 0.5, -portraitHeight * 0.5, portraitWidth, portraitHeight);
-          ctx.restore();
+      const pcy = bandTop - 20 + portraitHeight * 0.5;
+      breakDraw = () => {
+        ctx.save();
+        // Top-open window: free above, cut at the band's bottom edge so the
+        // torso still exits INTO the band (a raw crop line never shows).
+        ctx.beginPath();
+        ctx.moveTo(-60, -H);
+        ctx.lineTo(W + 60, -H);
+        ctx.lineTo(W + 60, bandBottom - tilt);
+        ctx.lineTo(-60, bandBottom + tilt);
+        ctx.closePath();
+        ctx.clip();
+        ctx.globalAlpha = alpha;
+        ctx.translate(pcx, pcy);
+        ctx.rotate(punchRot);
+        ctx.scale(punchScale, punchScale);
+        if (closeUp) {
+          // Mirror the P2 close-up so the wind-up drives INTO the frame.
+          if (!fromLeft) ctx.scale(-1, 1);
+          ctx.drawImage(closeUp, -portraitWidth * 0.5, -portraitHeight * 0.5, portraitWidth, portraitHeight);
+          // Limb-following energy bolts from the chest emitter, flickering
+          // between two seeded variants over the band's life.
+          if (!reduced) {
+            const arcs = superPortraitArcs(closeUp, cut.accent, Math.floor(cut.t * 21) % 2);
+            ctx.save();
+            ctx.globalCompositeOperation = "lighter";
+            ctx.globalAlpha = alpha * (0.75 + 0.25 * Math.sin(cut.t * 47));
+            ctx.drawImage(arcs, -portraitWidth * 0.5, -portraitHeight * 0.5, portraitWidth, portraitHeight);
+            ctx.restore();
+          }
+        } else {
+          ctx.drawImage(
+            image, 0, 0, image.naturalWidth, sourceHeight,
+            -portraitWidth * 0.5, -portraitHeight * 0.5, portraitWidth, portraitHeight,
+          );
         }
-      } else {
-        ctx.drawImage(
-          image, 0, 0, image.naturalWidth, sourceHeight,
-          -portraitWidth * 0.5, -portraitHeight * 0.5, portraitWidth, portraitHeight,
-        );
-      }
-      ctx.restore();
+        ctx.restore();
+      };
     } else {
       ctx.drawImage(image, portraitX, bandTop - portraitHeight * 0.24, portraitWidth, portraitHeight);
     }
@@ -14234,7 +14713,9 @@ function drawSuperCutIn(dtMs) {
     ctx.fillText(cut.name, nameX, bandBottom - 18);
   }
   ctx.restore();
-  // Band edge strokes drawn unclipped so they stay crisp.
+  // Band edge strokes drawn unclipped so they stay crisp — BEFORE the 3D
+  // portrait break, so the top edge line passes BEHIND the figure and the
+  // crown reads as a designed break, not a graze.
   ctx.save();
   ctx.globalAlpha = alpha * 0.95;
   ctx.strokeStyle = cut.accent;
@@ -14246,6 +14727,12 @@ function drawSuperCutIn(dtMs) {
   ctx.lineTo(W + 60, bandBottom - tilt);
   ctx.stroke();
   ctx.restore();
+  // 3D-only: the committed band break (no-op in 2D — breakDraw stays null).
+  if (breakDraw) {
+    ctx.save();
+    breakDraw();
+    ctx.restore();
+  }
 }
 
 function draw(time) {

@@ -520,10 +520,15 @@ export function buildSomersetStage(host, { quality }) {
   // the fight line (readable slabs, specular pooling in the grooves) instead
   // of a blurry wash.
   const maps = asphaltMaps(0x50fa57);
-  maps.albedo.repeat.set(4, 2);
-  maps.roughness.repeat.set(4, 2);
-  maps.metalness.repeat.set(4, 2);
-  maps.bump.repeat.set(4, 2);
+  // Coarser repeat (round-3, critic item 3): at (4,2) the slab grid behind
+  // the curb compressed into a dense bathroom-tile read against the wide
+  // plank-like slabs at the fight line — two floors in one frame. At
+  // (2.4, 1.2) the joint pitch stays big enough to read as the SAME poured
+  // slabs receding in perspective, front band to fence line.
+  maps.albedo.repeat.set(2.4, 1.2);
+  maps.roughness.repeat.set(2.4, 1.2);
+  maps.metalness.repeat.set(2.4, 1.2);
+  maps.bump.repeat.set(2.4, 1.2);
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(46, 13),
     new THREE.MeshStandardMaterial({
@@ -841,7 +846,7 @@ export function buildSomersetStage(host, { quality }) {
     ctx.arc(w * 0.22, h * 0.92, w * 0.055, 0, Math.PI * 2);
     ctx.arc(w * 0.76, h * 0.92, w * 0.055, 0, Math.PI * 2);
     ctx.fill();
-  }, 4.2, 1.5, -4.7, 0.8, -7.0, { tw: 512, th: 192, opacity: 0.92, boost: 1.2 });
+  }, 4.2, 1.5, -4.7, 0.8, -7.0, { tw: 512, th: 192, opacity: 0.94, boost: 1.3 });
   // Fare kiosk: tall cabinet, cool screen glow, card slot, base plinth.
   storyProp((ctx, w, h) => {
     ctx.clearRect(0, 0, w, h);
@@ -917,6 +922,154 @@ export function buildSomersetStage(host, { quality }) {
 
   // Shared contact-ellipse matte for all static background figures.
   const bystanderShadowMap = softDotTexture(96, "rgba(0,0,0,1)", "rgba(0,0,0,0)");
+
+  // --- Round-3 band density (critic item 5) --------------------------------
+  // The props existed but did not READ: the band gets individual dim
+  // practicals (platform downlights with halos + wet answers), a waiting
+  // bench, two STANDING rim-lit figures, and a lit laundromat storefront
+  // filling the near-black left third. Every glow is small and dim — story
+  // light, never competition for the fight line.
+  const bandGlowMap = softDotTexture(96);
+  const bandGlow = (color, x, y, z, size, opacity) => {
+    const glow = new THREE.Mesh(
+      new THREE.PlaneGeometry(size, size),
+      new THREE.MeshBasicMaterial({
+        map: bandGlowMap,
+        color,
+        transparent: true,
+        opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        fog: false,
+      }),
+    );
+    glow.position.set(x, y, z);
+    glow.renderOrder = 2;
+    group.add(glow);
+    return glow;
+  };
+  // Three platform downlights along the station band: gooseneck stem +
+  // shade + bright head, halo hugging the fixture — each glow is ANCHORED
+  // to visible hardware (a bare ball of light is exactly the matte-residue
+  // read the head-halo fix just killed).
+  const fixtureSteel = new THREE.MeshBasicMaterial({ color: 0x2a2f38, fog: false });
+  for (const [plx, hue] of [[-3.5, 0xffd9a0], [-0.9, 0xd6ffe9], [2.35, 0xffd9a0]]) {
+    const stem = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.85, 0.05), fixtureSteel);
+    stem.position.set(plx, 2.62, -6.4);
+    group.add(stem);
+    const shade = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 0.16), fixtureSteel);
+    shade.position.set(plx, 2.2, -6.4);
+    group.add(shade);
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.05, 0.1),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(hue).multiplyScalar(3.1), fog: false }),
+    );
+    head.position.set(plx, 2.14, -6.38);
+    group.add(head);
+    bandGlow(hue, plx, 2.05, -6.42, 0.8, 0.34);
+    // Dim pool on the platform below each fixture.
+    const pool = bandGlow(hue, plx, 0.28, -6.35, 1.5, 0.16);
+    pool.scale.y = 0.5;
+  }
+  // Waiting bench under the right platform light, slatted top catching it.
+  storyProp((ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#151a21";
+    ctx.fillRect(w * 0.06, h * 0.34, w * 0.88, h * 0.16); // seat mass
+    ctx.fillRect(w * 0.1, h * 0.5, w * 0.08, h * 0.44);   // legs
+    ctx.fillRect(w * 0.82, h * 0.5, w * 0.08, h * 0.44);
+    ctx.fillRect(w * 0.06, h * 0.06, w * 0.88, h * 0.12); // back rail
+    ctx.fillRect(w * 0.12, h * 0.18, w * 0.05, h * 0.2);  // back posts
+    ctx.fillRect(w * 0.83, h * 0.18, w * 0.05, h * 0.2);
+    // lamp catch on the seat slats + back rail top edge
+    ctx.fillStyle = "rgba(255,214,150,0.5)";
+    ctx.fillRect(w * 0.06, h * 0.34, w * 0.88, h * 0.035);
+    ctx.fillStyle = "rgba(255,214,150,0.32)";
+    ctx.fillRect(w * 0.06, h * 0.06, w * 0.88, h * 0.03);
+    for (let s = 0; s < 5; s += 1) ctx.fillRect(w * (0.1 + s * 0.17), h * 0.37, w * 0.02, h * 0.1);
+  }, 1.15, 0.42, 2.6, 0.21, -6.2, { tw: 256, th: 96, opacity: 0.95, boost: 1.1 });
+  // Two STANDING figures behind the fence — planted, rim-lit, watching the
+  // fight (the walkers pass; these two give the band persistent human mass).
+  const standerSpecs = [
+    { x: -1.85, z: -6.18, scale: 1.58, flip: 1, style: { rim: "rgba(214,255,233,0.75)", rimSide: 1, jacket: "#181d26", top: "rgba(190,255,222,0.45)" } },
+    { x: 3.55, z: -6.28, scale: 1.66, flip: -1, style: { rim: "rgba(255,178,92,0.8)", rimSide: -1, jacket: "#221c1a", body: "#120f14", top: "rgba(255,214,150,0.35)" } },
+  ];
+  for (const spec of standerSpecs) {
+    const stander = new THREE.Mesh(
+      new THREE.PlaneGeometry(spec.scale * 0.5, spec.scale),
+      new THREE.MeshBasicMaterial({
+        map: pedestrianTexture(0, 0, spec.style),
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+        color: 0x8d94a2,
+      }),
+    );
+    stander.position.set(spec.x, spec.scale * 0.5, spec.z);
+    stander.scale.x = spec.flip;
+    stander.renderOrder = 1;
+    group.add(stander);
+    const standerContact = new THREE.Mesh(
+      new THREE.PlaneGeometry(spec.scale * 0.3, spec.scale * 0.08),
+      new THREE.MeshBasicMaterial({
+        map: bystanderShadowMap,
+        transparent: true,
+        opacity: 0.45,
+        depthWrite: false,
+        color: 0x000000,
+      }),
+    );
+    standerContact.rotation.x = -Math.PI / 2;
+    standerContact.position.set(spec.x, 0.012, spec.z + 0.06);
+    standerContact.renderOrder = 1;
+    group.add(standerContact);
+  }
+  // Lit laundromat storefront: the left-third void gets a place. Warm window
+  // grid over machine silhouettes, cyan OPEN sign, awning mass — baked 1.5px
+  // soft (deep plane: the depth-graded defocus is IN the texture, farther
+  // than the tack-sharp turnstiles, softer than the bus).
+  storyProp((ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.filter = "blur(1.5px)";
+    ctx.fillStyle = "#0e1218";
+    ctx.fillRect(0, 0, w, h); // building mass
+    // window band
+    ctx.fillStyle = "rgba(255,206,138,0.88)";
+    ctx.fillRect(w * 0.08, h * 0.34, w * 0.84, h * 0.42);
+    // interior: washer drums + counter silhouettes
+    ctx.fillStyle = "rgba(46,38,30,0.9)";
+    for (let m = 0; m < 4; m += 1) {
+      ctx.fillRect(w * (0.12 + m * 0.2), h * 0.52, w * 0.15, h * 0.24);
+      ctx.fillStyle = "rgba(255,232,190,0.5)";
+      ctx.beginPath();
+      ctx.arc(w * (0.195 + m * 0.2), h * 0.63, w * 0.045, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(46,38,30,0.9)";
+    }
+    // window mullions
+    ctx.fillStyle = "#0e1218";
+    for (let i = 1; i < 4; i += 1) ctx.fillRect(w * (0.08 + i * 0.21), h * 0.34, w * 0.02, h * 0.42);
+    // awning
+    ctx.fillStyle = "#181320";
+    ctx.fillRect(w * 0.04, h * 0.22, w * 0.92, h * 0.12);
+    ctx.fillStyle = "rgba(255,150,60,0.35)";
+    ctx.fillRect(w * 0.04, h * 0.31, w * 0.92, h * 0.03);
+    // cyan OPEN sign
+    ctx.fillStyle = "rgba(88,232,255,0.9)";
+    ctx.font = `700 ${Math.round(h * 0.09)}px Arial Narrow, Arial`;
+    ctx.textAlign = "center";
+    ctx.fillText("WASH", w * 0.24, h * 0.16);
+    ctx.filter = "none";
+  }, 3.6, 2.6, -6.4, 1.72, -8.5, { tw: 320, th: 224, opacity: 0.95, boost: 1.12 });
+  // The storefront answers on the street + a dim body of light in the void
+  // (upper half rides above the parked bus, filling the dead left third).
+  bandGlow(0xffc586, -6.4, 1.6, -8.3, 3.4, 0.16);
+  const laundromatLight = new THREE.PointLight(0xffc586, 3.2, 7, 2);
+  laundromatLight.position.set(-6.3, 1.9, -7.9);
+  group.add(laundromatLight);
+  groundStreak(0xffc586, -6.4, -6.9, 3.4, 1.8, 0.11);
+  // SEPTA keystone sign gets its own dim downlight halo so it reads.
+  bandGlow(0xcfe0ff, 5.7, 1.62, -6.2, 1.05, 0.22);
 
   // --- Centre focal element: lit SEPTA waiting shelter + two riders ---------
   // The wide shot's centre used to be an empty defocused smear; a practical
@@ -2110,9 +2263,12 @@ export function buildSomersetStage(host, { quality }) {
 
   // --- Key + ambient --------------------------------------------------------
   // Cool sky key: modest, so the practicals and grade own the fighters' look
-  // instead of a daylight-strength wash.
+  // instead of a daylight-strength wash. STEEPENED (round-3, critic item 3):
+  // at the old (-4.5, 7.5) elevation the silhouette shadow landed ~1.2 units
+  // right of the feet — a disconnected second shadow floating on the sodium
+  // pool. Steeper key prints the pose shadow rooted at the stance.
   const key = new THREE.DirectionalLight(0xa6c0ee, 3.4);
-  key.position.set(-4.5, 7.5, 5.5);
+  key.position.set(-2.6, 9.6, 4.4);
   key.castShadow = true;
   key.shadow.mapSize.set(shadowSize, shadowSize);
   key.shadow.camera.left = -8;

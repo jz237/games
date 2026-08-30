@@ -111,6 +111,12 @@ function patchSpriteMaterial(material, atlasWidth, atlasHeight) {
     zoneTint: new THREE.Color(1, 1, 1),
     facing: { value: 1 },
     hitWhite: { value: 0 },
+    // Impact halftone PROJECTED ON THE BODY (round-3, critic item 1): level +
+    // sprite-local uv of the contact. The dot screen lives in the sprite's
+    // own uv space, so it warps with the quad and is masked by the alpha test
+    // by construction — never a flat screen-space tile.
+    hitTone: { value: 0 },
+    hitUv: new THREE.Vector2(0.5, 0.55),
     flashGuard: { value: 0 },
     superDim: { value: 0 },
     // 1 while this fighter is the super's VICTIM: at freeze the two fighters
@@ -139,6 +145,8 @@ function patchSpriteMaterial(material, atlasWidth, atlasHeight) {
     shader.uniforms.uFbZoneTint = { value: fb.zoneTint };
     shader.uniforms.uFbFacing = fb.facing;
     shader.uniforms.uFbHitWhite = fb.hitWhite;
+    shader.uniforms.uFbHitTone = fb.hitTone;
+    shader.uniforms.uFbHitUv = { value: fb.hitUv };
     shader.uniforms.uFbFlashGuard = fb.flashGuard;
     shader.uniforms.uFbSuperDim = fb.superDim;
     shader.uniforms.uFbSuperVictim = fb.superVictim;
@@ -165,6 +173,8 @@ uniform vec3 uFbFloorBounce;
 uniform vec3 uFbZoneTint;
 uniform float uFbFacing;
 uniform float uFbHitWhite;
+uniform float uFbHitTone;
+uniform vec2 uFbHitUv;
 uniform float uFbFlashGuard;
 uniform float uFbSuperDim;
 uniform float uFbSuperVictim;
@@ -200,6 +210,25 @@ vec3 fbSoft = (
   texture2D(map, vMapUv + uFbTexel * vec2(0.65, -0.65)).rgb +
   texture2D(map, vMapUv + uFbTexel * vec2(-0.65, -0.65)).rgb) * 0.25;
 diffuseColor.rgb = mix(diffuseColor.rgb, fbSoft, 0.38);
+// --- ONE SPRITE PIPELINE (round-3, critic item 4): both fighter atlases are
+// pulled through the SAME cel treatment so a painted-3D source and a
+// hand-drawn cel source read as one game. (a) Luminance posterized into ~7
+// painted tone steps — smooth airbrush ramps snap into cel bands, art that
+// is already flat barely moves. (b) A shared interior INK LINE: strong
+// colour gradients repaint as a consistent dark contour, giving both bodies
+// the same line weight language.
+float fbCelLum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+float fbCelQ = (floor(fbCelLum * 7.0) + 0.5) / 7.0;
+diffuseColor.rgb *= mix(1.0, fbCelQ / max(fbCelLum, 0.004), 0.32);
+vec3 fbInkR = texture2D(map, vMapUv + vec2(uFbTexel.x * 1.6, 0.0)).rgb;
+vec3 fbInkL2 = texture2D(map, vMapUv - vec2(uFbTexel.x * 1.6, 0.0)).rgb;
+vec3 fbInkU = texture2D(map, vMapUv + vec2(0.0, uFbTexel.y * 1.6)).rgb;
+vec3 fbInkD = texture2D(map, vMapUv - vec2(0.0, uFbTexel.y * 1.6)).rgb;
+float fbInkG = length(vec2(
+  dot(abs(fbInkR - fbInkL2), vec3(0.333)),
+  dot(abs(fbInkU - fbInkD), vec3(0.333))));
+float fbInkLine = smoothstep(0.18, 0.5, fbInkG);
+diffuseColor.rgb *= 1.0 - fbInkLine * 0.26;
 // --- Stage grade: desaturate, then SPLIT the shadow temperature across the
 // body (critic fix j): the sodium-facing screen-left shadows stay street
 // warm, the far side falls toward cool night blue — the warm-practical vs
@@ -292,7 +321,11 @@ float fbGuardFade = 1.0 - uFbFlashGuard * 0.4;
 float fbSuperRim = 1.0 + uFbSuperDim * 1.5 * (1.0 - uFbSuperVictim * 0.85);
 totalEmissiveRadiance += uFbRimLeftColor * (fbRimL * uFbRimLeftStrength * fbGuardFade * fbSuperRim);
 totalEmissiveRadiance += uFbRimRightColor * (fbRimR * uFbRimRightStrength * fbGuardFade * fbSuperRim);
-totalEmissiveRadiance += uFbTopColor * (fbRimT * uFbTopStrength * 1.75 * fbGuardFade * fbSuperRim);
+// Top-lamp strip HELD UNDER THE BLOOM KNEE (round-3, critic item 7): at the
+// old 1.75x both crowns burned past the threshold and bloom painted an
+// identical green-white halo BEHIND each head — matte residue. The strip
+// stays a lit edge on hair/shoulders; the lamp glow belongs to the lamp.
+totalEmissiveRadiance += uFbTopColor * (fbRimT * uFbTopStrength * 0.95 * fbGuardFade * fbSuperRim);
 // Unlit-side edge discipline: silhouette pixels whose normals face AWAY from
 // every practical darken toward the night instead of glowing.
 float fbEdgeAny = clamp(fbEdgeL + fbEdgeR + fbEdgeT * 0.5, 0.0, 1.0);
@@ -315,10 +348,11 @@ diffuseColor.rgb = mix(diffuseColor.rgb, fbEdgeLight * 0.5 + vec3(0.02, 0.02, 0.
 // (sweat), and the glint direction slides with uFbLampDx as fighters move.
 vec3 fbSpecDir = normalize(vec3(-uFbLampDx * 0.42, 0.58, 0.72));
 float fbSpecNdl = clamp(dot(normalize(normal), fbSpecDir), 0.0, 1.0);
-// TWO-LOBE material read (critic fix h): a tight exponent-26 glint (metal
-// gauntlets, glasses lenses, buckles — sparks of the lamp itself) over a
-// broad exponent-5 sheen (glove leather, sweat on skin — soft wet rake).
-// Both slide with uFbLampDx as the fighter crosses the stage.
+// TWO-STEP CEL SPECULAR (round-3, critic item 4): the same quantized
+// highlight language on BOTH fighters — a broad soft sheen step and a tight
+// hot glint step, each a hard cel band instead of a continuous exponent
+// ramp. Bounded: the tight lobe can no longer integrate into the white
+// glitch-blob that sat on Deathblow's glasses lens.
 float fbSpecTight = pow(fbSpecNdl, 26.0);
 float fbSpecBroad = pow(fbSpecNdl, 5.0);
 float fbCmax = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
@@ -330,8 +364,10 @@ float fbSatSpec = (fbCmax - fbCmin) / max(fbCmax, 0.001);
 // glints by luminance had silenced every metal in frame.
 float fbGloss = (0.3 + 0.7 * (1.0 - fbSatSpec))
   * max(smoothstep(0.1, 0.5, fbLum), (1.0 - fbSatSpec) * 0.6 * smoothstep(0.025, 0.1, fbLum));
+float fbSpecStep = smoothstep(0.22, 0.3, fbSpecBroad) * 0.24
+  + smoothstep(0.34, 0.42, fbSpecTight) * 0.62;
 totalEmissiveRadiance += (uFbTopColor * 0.85 + vec3(0.15))
-  * ((fbSpecTight * 2.3 + fbSpecBroad * 0.3) * fbGloss * uFbSpecStrength);
+  * (fbSpecStep * fbGloss * uFbSpecStrength);
 // Super freeze: the ATTACKER is lit BY the freeze — a warm amber halo hugs
 // his silhouette and a faint body lift keeps him above the dimmed stage.
 // The victim gets almost none of it (identical halos on two point-blank
@@ -346,19 +382,30 @@ diffuseColor.rgb *= 1.0 - uFbFlashGuard * (0.14 + 0.6 * fbEdgeAny);
 vec3 fbGuardDeep = diffuseColor.rgb * diffuseColor.rgb * (3.0 - 2.0 * diffuseColor.rgb);
 diffuseColor.rgb = mix(diffuseColor.rgb, fbGuardDeep, uFbFlashGuard * 0.6);
 totalEmissiveRadiance += vec3(1.12, 0.98, 0.8) * (uFbFlashGuard * fbEdgeAny * 0.95);
-// Impact white flash: masked to the sprite alpha by construction (this whole
-// shader only survives the alpha test) — never a screen-space circle.
-// Luminance-weighted and held UNDER the bloom knee (the old flat 1.35-1.45
-// crossed it: the whole victim bloomed into a frame-flooding white column on
-// the impact frame) — highlights snap white, shadow tones only lift, so the
-// body reads struck while its silhouette survives its own flash.
-// 0.22 + 0.78*lum (was 0.4+0.6): the flash lives in the highlights — the
-// body reads STRUCK, not dipped in cream; shadow tones keep their depth so
-// the victim's internal contrast survives his own flash.
-totalEmissiveRadiance += vec3(1.02, 1.02, 1.1) * (uFbHitWhite * (0.22 + 0.78 * fbLum));`);
+// Impact PAIN FLASH on the receiver only (round-3, critic item 1): masked to
+// the sprite alpha by construction — never a screen-space circle. Warm
+// red-shifted highlight snap (the body reads STRUCK, hot at the wound) with
+// the shadows CRUSHED instead of lifted, so the receiver's internal contrast
+// goes UP through the flash — >=50% readable is the contract.
+totalEmissiveRadiance += vec3(1.08, 0.82, 0.68) * (uFbHitWhite * (0.16 + 0.84 * fbLum));
+vec3 fbPainDeep = diffuseColor.rgb * diffuseColor.rgb * (3.0 - 2.0 * diffuseColor.rgb);
+diffuseColor.rgb = mix(diffuseColor.rgb, fbPainDeep, uFbHitWhite * 0.45);
+// IMPACT HALFTONE PROJECTED ONTO THE STRUCK BODY: a dot screen in the
+// sprite's OWN uv space, windowed around the contact point — dots swell in
+// the shadow tones, prick in the highlights, and warp/mask with the pose by
+// construction. The SF6 print-language answer, worn by the body itself.
+if (uFbHitTone > 0.001) {
+  vec2 fbToneD = (vFbLocal - uFbHitUv) * vec2(1.0, 1.7);
+  float fbToneWin = smoothstep(0.42, 0.1, length(fbToneD));
+  vec2 fbToneCell = fract(vFbLocal * vec2(30.0, 52.0)) - 0.5;
+  float fbToneR = (0.16 + 0.3 * (1.0 - fbLum)) * fbToneWin * uFbHitTone;
+  float fbToneDot = smoothstep(fbToneR, fbToneR - 0.14, length(fbToneCell));
+  totalEmissiveRadiance += vec3(1.15, 0.62, 0.4) * (fbToneDot * fbToneWin * uFbHitTone * 0.5);
+  diffuseColor.rgb *= 1.0 - fbToneDot * fbToneWin * uFbHitTone * 0.3;
+}`);
   };
   // Distinct program per patched material (uniforms differ per bank).
-  material.customProgramCacheKey = () => "fb-sprite-grade-v9";
+  material.customProgramCacheKey = () => "fb-sprite-grade-v10";
   return fb;
 }
 
@@ -385,6 +432,12 @@ float fbVnoise(vec2 p) {
              mix(fbHash(i + vec2(0.0, 1.0)), fbHash(i + vec2(1.0, 1.0)), f.x), f.y);
 }`)
       .replace("#include <map_fragment>", `#include <map_fragment>
+// A mirror NEVER rises above the water (round-3 glitch-tower kill): any
+// reflection texel that lands above the ground plane — rotated cinematic
+// poses, freeze-frame partial states — is simply not drawn. This is the
+// hard guard behind the "segmented boot column" between the super-freeze
+// silhouettes.
+if (vFbWorld.y > 0.015) discard;
 // Height fade: mirror strongest at the contact line, releasing by the chest
 // so the legs/torso silhouette genuinely reads before the water eats it.
 diffuseColor.a *= 1.0 - smoothstep(0.03, 0.72, vFbRawUv.y);
@@ -396,17 +449,17 @@ float fbStreak = fbVnoise(vec2(vFbWorld.x * 11.0, vFbWorld.y * 1.7));
 fbStreak = 0.72 + 0.28 * smoothstep(0.25, 0.8, fbStreak);
 // Fine horizontal ripple bands riding on the streaks.
 float fbRipple = 0.85 + 0.15 * sin(vFbWorld.y * 34.0 + vFbWorld.x * 3.0);
-// FLOOR-SEAM BREAKS (critic grounding fix): the concrete slab joints cut the
-// mirror into segments — a hard-ish dark break roughly every slab, phase
-// drifting slightly with x so the cuts track the poured grid, not the sprite.
-float fbSeamP = fract(vFbWorld.y * 1.35 + vFbWorld.x * 0.07 + 0.31);
-float fbSeam = 0.42 + 0.58 * smoothstep(0.015, 0.075, min(fbSeamP, 1.0 - fbSeamP));
+// FLOOR-SEAM BREAKS: the concrete slab joints cut the mirror into segments.
+// Pitch matched to the ground material's expansion-joint spacing (round-3
+// one-material-story fix) so the cuts and the drawn grid agree.
+float fbSeamP = fract(vFbWorld.y * 0.62 + vFbWorld.x * 0.07 + 0.31);
+float fbSeam = 0.42 + 0.58 * smoothstep(0.012, 0.06, min(fbSeamP, 1.0 - fbSeamP));
 // Gentle wetness variation (the old hard puddle gate erased the mirror on
 // the boards where it happened to land, which read as NO reflection at all).
 float fbPool = smoothstep(0.2, 0.55, fbVnoise(vec2(vFbWorld.x * 0.45 + 4.7, vFbWorld.y * 0.3 + 1.3)));
 diffuseColor.a *= fbStreak * fbRipple * fbSeam * (0.72 + 0.28 * fbPool);`);
   };
-  material.customProgramCacheKey = () => "fb-sprite-reflection-v6";
+  material.customProgramCacheKey = () => "fb-sprite-reflection-v7";
 }
 
 export class FighterLayer {
@@ -470,11 +523,10 @@ export class FighterLayer {
       depthTest: false,
       depthWrite: false,
       side: THREE.DoubleSide,
-      // Near-neutral lift: the mirror reads as the fighter's own flipped
-      // silhouette. The old 1.5/1.34/1.12 tint turned it into a warm colour
-      // smear that matched neither fighter (the critic's "coloured smears
-      // offset from the feet").
-      color: new THREE.Color(1.16, 1.12, 1.05),
+      // TRUE-PALETTE mirror (round-3, critic item 3): NO warm lift at all —
+      // a dark shirt must reflect dark, not orange-brown. The mirror's colour
+      // is the smeared atlas's own rows with only a whisper of cool water.
+      color: new THREE.Color(1.0, 1.01, 1.06),
       fog: false,
     });
     patchReflectionMaterial(reflMaterial);
@@ -577,7 +629,7 @@ export class FighterLayer {
     this.group.add(root);
     return {
       id, banks, mesh, root, reflMesh, reflRoot, shadow, footA, footB, coreA, coreB, penumbra,
-      currentBank: "base", lastHitFlash: 0, hitWhiteTtl: 0,
+      currentBank: "base", lastHitFlash: 0, hitWhiteTtl: 0, hitToneTtl: 0,
     };
   }
 
@@ -720,13 +772,14 @@ export class FighterLayer {
     const airFade = THREE.MathUtils.clamp(1 - jump / 430, 0.22, 1);
     // Impact answer: the wet street brightens its mirror while a flash lives.
     const flashBoost = 1 + THREE.MathUtils.clamp(this.getFlashLevel(), 0, 1) * 0.45;
-    // Super freeze: the mirror dies out COMPLETELY by half-freeze — at the
-    // point-blank freeze framing the ripple-banded upright mirror of a boot
-    // between the two fighters read as a broken segmented column.
+    // Super freeze: the mirror dies within ~2 frames of ignition (6x, was
+    // 2.2x — the freeze-frame could still catch a partially-faded mirror as
+    // a segmented column; the shader's above-ground discard is the second
+    // lock on that artifact).
     // 0.44 (was 0.38): the seam cuts + streak breakup dim the mirror's mean
     // level, so the base comes up to keep the same presence it graded at.
     bank.reflMaterial.opacity = Math.min(0.55, 0.44 * (0.55 + 0.45 * airFade) * flashBoost)
-      * Math.max(0, 1 - this.superDim * 2.2);
+      * Math.max(0, 1 - this.superDim * 6);
 
     // --- Body-heat emissive: grit-ready aura + special glow -----------------
     const superReady = state.phase === "fight" && fighter.cinematicFrame === null
@@ -772,7 +825,11 @@ export class FighterLayer {
     // OBVIOUSLY key the fighters' crowns.
     const lampNear = Math.exp(-((fx - LAMP_X) * (fx - LAMP_X)) / 7);
     fb.topColor.copy(LAMP_KEY);
-    fb.topStrength.value = 0.85 + lampNear * 0.65;
+    // Anchored to the actual lamp (round-3, critic item 7): the crown light
+    // follows lamp proximity instead of a near-constant floor, so two
+    // fighters no longer wear identical green-white crowns wherever they
+    // stand — the light belongs to the fixture.
+    fb.topStrength.value = 0.5 + lampNear * 0.95;
     // --- Scene-light BODY fill (not just edges): the cheap trick that sits
     // the fighter IN the scene. Magenta wash rises across the body as the
     // fighter nears the K&A neon; warm sodium fill answers from screen-left;
@@ -811,14 +868,14 @@ export class FighterLayer {
     // sheens, skin sweats — so the sheen pass now carries a real budget.
     fb.lampDx.value = THREE.MathUtils.clamp((fx - LAMP_X) / 2.5, -1, 1);
     fb.specStrength.value = 0.72 + lampNear * 0.68;
-    // Wet-floor mirror graded by position — GENTLY. The tint only nudges the
-    // mirror toward the practical the fighter stands under; the silhouette's
-    // own colours stay the read (a strong grade here is what turned the
-    // mirror into an anonymous colour smear).
+    // Wet-floor mirror graded by position — BARELY (round-3 palette fix).
+    // The sprite's own colours ARE the mirror; the stage only breathes a
+    // few percent of its practical hue into it. The old 1.12-1.26 warm lift
+    // is what turned Deathblow's black shirt into an orange-brown smear.
     bank.reflMaterial.color.setRGB(
-      1.12 + leftNear * 0.1 - neonMix * 0.03,
-      1.08 + lampNear * 0.1 + leftNear * 0.03,
-      1.0 + neonMix * neonMix * 0.24 + lampNear * 0.05,
+      1.0 + leftNear * 0.04 - neonMix * 0.02,
+      1.01 + lampNear * 0.05 + leftNear * 0.01,
+      1.06 + neonMix * neonMix * 0.14 + lampNear * 0.03,
     );
     // Super freeze: body toward silhouette, rims boosted (set in the shader).
     // Only the attacker owns the freeze light; the other fighter reads as the
@@ -826,13 +883,31 @@ export class FighterLayer {
     fb.superDim.value = this.superDim;
     const anySuper = (state.fighters || []).some((f) => f.attacking?.superMove);
     fb.superVictim.value = anySuper && !fighter.attacking?.superMove ? 1 : 0;
-    // Impact white flash: pop on the frame the sim hit lands (rising edge of
+    // Impact pain flash: pop on the frame the sim hit lands (rising edge of
     // the sim's own hitFlash timer), gone ~4 render frames later. Emissive is
     // masked to the sprite pixels, so the play area never desaturates.
-    if (fighter.hitFlash > rig.lastHitFlash + 0.02) rig.hitWhiteTtl = 0.1;
+    // The body-halftone rides a slightly longer tail (0.16s) and centres on
+    // the actual contact point via the VFX layer's spill position.
+    if (fighter.hitFlash > rig.lastHitFlash + 0.02) {
+      rig.hitWhiteTtl = 0.1;
+      rig.hitToneTtl = 0.16;
+      // Seed at chest height on the attacker-facing side; refined below the
+      // moment the VFX layer publishes the true contact point.
+      fb.hitUv.set(0.62, 0.58);
+    }
     rig.lastHitFlash = fighter.hitFlash;
     rig.hitWhiteTtl = Math.max(0, rig.hitWhiteTtl - dtSec);
+    rig.hitToneTtl = Math.max(0, (rig.hitToneTtl ?? 0) - dtSec);
+    if (rig.hitToneTtl > 0.08 && spill && spill.level > 0.35) {
+      const meshW = Math.abs(rig.mesh.scale.x) || 1;
+      const meshH = Math.abs(rig.mesh.scale.y) || 1;
+      fb.hitUv.set(
+        THREE.MathUtils.clamp(0.5 + ((spill.x - fx) / meshW) * facing, 0.12, 0.88),
+        THREE.MathUtils.clamp(((spill.y ?? 0) - rig.root.position.y) / meshH, 0.15, 0.9),
+      );
+    }
     fb.hitWhite.value = rig.hitWhiteTtl / 0.1;
+    fb.hitTone.value = rig.hitToneTtl / 0.16;
     const flash = THREE.MathUtils.clamp(this.getFlashLevel(), 0, 1);
     fb.flashGuard.value = flash * 0.85 * (1 - fb.hitWhite.value);
 
@@ -872,22 +947,17 @@ export class FighterLayer {
     };
     coreFor(rig.coreA, feet[0], -0.1);
     coreFor(rig.coreB, feet[1] || feet[0], 0.1);
-    // Directional throw away from the green lamp.
-    const awayX = THREE.MathUtils.clamp((fx - LAMP_X) / 3.2, -1, 1);
-    const dirX = awayX * 0.85;
-    const dirZ = 0.55; // lamp hangs behind the fight line: shadow falls forward
-    const dirLen = Math.hypot(dirX, dirZ);
-    // ONE faint soft ambient pool under the body (no more projected-silhouette
-    // stack — the shadow-mapped key silhouette is the single pose shadow now).
-    // Tight and shallow: the per-foot ellipses + AO cores carry the contact.
-    const throwLen = renderSize * (0.36 + Math.abs(awayX) * 0.2);
-    rig.penumbra.rotation.set(-Math.PI / 2, 0, -Math.atan2(dirZ, dirX));
-    rig.penumbra.position.set(
-      (dirX / dirLen) * throwLen * 0.26 + slide * 0.3,
-      0.002,
-      (dirZ / dirLen) * throwLen * 0.26 + slide * 0.2,
-    );
-    rig.penumbra.scale.set(throwLen, renderSize * 0.2, 1);
-    rig.penumbra.material.opacity = 0.16 * (0.35 + 0.65 * airFade) * (1 - this.superDim * 0.7);
+    // ONE faint ambient AO pool DEAD UNDER the body (round-3, critic item 3:
+    // "delete the doubled offset shadow"). The old lamp-relative throw could
+    // stretch this pool LEFT while the key light printed the silhouette
+    // RIGHT — two shadows in opposing directions off one fighter. The pool
+    // now hugs the stance with only a whisper of bias toward the key throw
+    // (+x), so the frame reads exactly one shadow story: key silhouette +
+    // per-foot contact + this under-body core.
+    const throwLen = renderSize * 0.34;
+    rig.penumbra.rotation.set(-Math.PI / 2, 0, 0);
+    rig.penumbra.position.set(throwLen * 0.14 + slide * 0.3, 0.002, 0.1 + slide * 0.2);
+    rig.penumbra.scale.set(throwLen, renderSize * 0.16, 1);
+    rig.penumbra.material.opacity = 0.13 * (0.35 + 0.65 * airFade) * (1 - this.superDim * 0.7);
   }
 }
