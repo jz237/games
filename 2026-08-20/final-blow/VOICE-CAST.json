@@ -1,0 +1,75 @@
+{
+  "comment": "Canonical ElevenLabs casting for the Release 1.6 LOUD voice pack (MISSING-AUDIO.md). Reuse these exact voice_ids and settings for every retake so the cast stays consistent. Voice settings are per performance class; eleven_v3 stability accepts only 0.0 (creative), 0.5 (natural), 1.0 (robust).",
+  "generated": "2026-08-30",
+  "model_primary": "eleven_v3",
+  "model_fallback": "eleven_multilingual_v2",
+  "output_format": "mp3_44100_128",
+  "speakers": {
+    "announcer": {
+      "voice_name": "Adam",
+      "voice_id": "pNInz6obpgDQGcFmaJgB",
+      "direction": "Deep, gritty arena MC. Short punchy takes, hard consonants.",
+      "settings": { "scripted": { "stability": 0.5 }, "hushed": { "stability": 0.5 } }
+    },
+    "deathblow": {
+      "voice_name": "Brian",
+      "voice_id": "nPczCjzI2devNBz1zQrb",
+      "direction": "Seismic bruiser-grappler. Gravel-deep chest voice, slow monster grunts.",
+      "settings": { "scripted": { "stability": 0.5 }, "effort": { "stability": 0.0 } }
+    },
+    "jez": {
+      "voice_name": "Chris",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "direction": "Blue-gi signsmith. Confident mid-range martial artist, crisp kiai energy, slightly playful.",
+      "settings": { "scripted": { "stability": 0.5 }, "effort": { "stability": 0.0 } }
+    },
+    "alan": {
+      "voice_name": "Roger",
+      "voice_id": "CwhRBWXzGAHq8TQ4Fs17",
+      "direction": "South Philly heavyweight counter-puncher. Thick Philly accent, gruff bar-brawler low bark.",
+      "settings": { "scripted": { "stability": 0.5 }, "effort": { "stability": 0.0 } }
+    },
+    "post": {
+      "voice_name": "Liam",
+      "voice_id": "TX3LPaxmHKxFdv7VOQHJ",
+      "direction": "Spray-can graffiti zoner. Young, cocky, nasal street-punk; quick taunting edge, raspy.",
+      "settings": { "scripted": { "stability": 0.5 }, "effort": { "stability": 0.0 } }
+    },
+    "benny": {
+      "voice_name": "Will",
+      "voice_id": "bIHbv24MWmeRgasZH58o",
+      "direction": "Street technician, electrical rushdown. Wiry and fast; clipped, crackling shouts.",
+      "settings": { "scripted": { "stability": 0.5 }, "effort": { "stability": 0.0 } }
+    },
+    "donald": {
+      "voice_name": "Eric",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "direction": "Gilded showman. Brash bluster, self-satisfied drawl, showman projection.",
+      "settings": { "scripted": { "stability": 0.5 }, "effort": { "stability": 0.0 } }
+    },
+    "cyraxx": {
+      "voice_name": "Callum",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "direction": "Feedback trickster. Unhinged chaos gremlin; cracking falsetto shrieks, distorted edges.",
+      "settings": { "scripted": { "stability": 0.0 }, "effort": { "stability": 0.0 } }
+    },
+    "ali": {
+      "voice_name": "Charlie",
+      "voice_id": "IKne3meq5aSn9XLyUdCD",
+      "direction": "West Staines MC, rhythm fighter. Mock-hip-hop swagger; rhythmic ad-lib energy.",
+      "settings": { "scripted": { "stability": 0.5 }, "effort": { "stability": 0.0 } }
+    },
+    "commissioner": {
+      "voice_name": "Bill",
+      "voice_id": "pqHfZKP75CvOlQylNhV4",
+      "direction": "Aged Philadelphia power broker. Deep, dry, unhurried gravel; contempt, not rage; courtroom cadence.",
+      "settings": { "scripted": { "stability": 0.5 }, "effort": { "stability": 0.5 }, "scream": { "stability": 0.0 } }
+    },
+    "devil": {
+      "voice_name": "Harry",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+      "direction": "Screechy South-Jersey cryptid. Raptor screeches and goat-bleat breaks over a dry unimpressed local drawl. Loudest voice in the cast.",
+      "settings": { "scripted": { "stability": 0.0 }, "effort": { "stability": 0.0 } }
+    }
+  }
+}

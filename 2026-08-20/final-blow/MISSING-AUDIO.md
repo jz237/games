@@ -1,16 +1,40 @@
 # MISSING-AUDIO.md — Release 1.6 "LOUD" voice work order
 
 > INTERNAL WORK ORDER — fine to commit to jz237/games, but keep this file out
-> of the publish mirror (do not add it to the deploy/publish list). It is the
-> exact ElevenLabs batch to run the moment auth is fixed (a real `sk_` key —
-> the config currently holds a key ID).
+> of the publish mirror (do not add it to the deploy/publish list). Auth was
+> fixed and the ElevenLabs batch ran on 2026-08-30.
 
-Every system below already ships and runs with zero mp3 files: captions show
-the exact lines, missing banks are HEAD-probed once per session and skipped
-silently, and single-take fighter cues get deterministic playbackRate/detune
-jitter. **Drop a file at its canonical path and it joins the rotation on the
-next page load — no code changes needed.** Banks are contiguous: the probe
-stops at the first missing number, so generate `-1` before `-2` before `-3`.
+## Batch status (2026-08-30)
+
+The full P1–P5 batch was generated with the casting in `VOICE-CAST.json`
+(model `eleven_v3`, `mp3_44100_128`): **427 of 427 files are on disk and
+verified** (valid mp3, 0.4–6.0s, mean above −35 dB, peak below −0.5 dB).
+
+| Group | Status |
+| --- | --- |
+| P1 announcer core | DONE — 77/77 |
+| P2 fighter reactive | DONE — 168/168 |
+| P2B Commissioner | DONE — 63/63 |
+| P2C Pinelands Devil | DONE — 63/63 |
+| P3 match-story | DONE — 14/14 |
+| P4 online moments | DONE — 12/12 |
+| P5 variant retakes | DONE — 30/30 |
+| P0 rejected-cue retakes | NOT GENERATED — 0/117, blocked (see Priority 0) |
+
+P0 is not a quota problem: fresh takes for the rejected cues cannot land at
+their canonical paths while the review contract holds — rejected recordings
+must stay deleted from the tree (`tests/audio-review.test.mjs` enforces it)
+until Jez rates new candidates and `engine/audio-review.mjs` is regenerated
+from that review. Run P0 as a candidate-review cycle with him, not as a
+drop-in batch.
+
+Every system below shipped caption-first before the files existed: captions
+show the exact lines, missing banks are HEAD-probed once per session and
+skipped silently, and single-take fighter cues get deterministic
+playbackRate/detune jitter. **Drop a file at its canonical path and it joins
+the rotation on the next page load — no code changes needed.** Banks are
+contiguous: the probe stops at the first missing number, so generate `-1`
+before `-2` before `-3`.
 
 Announcer voice (all `assets/audio/announcer/` files): one voice — a deep,
 gritty arena MC. Short, punchy takes with hard consonants and a little tail
@@ -22,7 +46,7 @@ Line text below is exact and positional: take `-1` speaks line 1, `-2` line 2,
 and so on (`ANNOUNCER_LINES` in game.js mirrors this table — keep both in sync
 if a line changes).
 
-## Priority 1 — announcer core
+## Priority 1 — announcer core — DONE (77/77 generated + verified)
 
 ### Round / fight flow
 
@@ -90,7 +114,7 @@ Take lines are positional per fighter (`<NAME>` = the name in the table above):
 | CYRAXX | assets/audio/announcer/cyraxx-wins-1.mp3 … -3.mp3 |
 | ALI G | assets/audio/announcer/ali-wins-1.mp3 … -3.mp3 |
 
-## Priority 2 — fighter reactive cues
+## Priority 2 — fighter reactive cues — DONE (168/168 generated + verified)
 
 Per-fighter voices — match each persona (kit docs: `engine/fighter-kits.mjs`
 archetypes, `CYRAXX.md`). These are vocalisations, not scripted words; the
@@ -148,7 +172,7 @@ Full file list (8 fighters × 7 cues × 3 takes = 168 files):
 `assets/audio/fighters/<id>/{dizzy,counter,tech,desperation,scream,crush,taunt}{,-2,-3}.mp3`
 for each id in `deathblow, jez, alan, post, benny, donald, cyraxx, ali`.
 
-## Priority 2B — THE COMMISSIONER (wave 16 boss voice)
+## Priority 2B — THE COMMISSIONER (wave 16 boss voice) — DONE (63/63 generated + verified)
 
 New in R2.0 FAMILY: the boss (and secret unlockable) has his own kit and his
 own voice slots. **Nothing is recorded yet** — every slot below is caption-
@@ -195,7 +219,7 @@ Contempt, not rage; courtroom cadence; the cane taps between clauses.
 | assets/audio/announcer/commissioner-name-1.mp3 … -3.mp3 | THE COMMISSIONER (1 neutral, 2 hyped, 3 drawn-out) |
 | assets/audio/announcer/commissioner-wins-1.mp3 … -3.mp3 | THE COMMISSIONER WINS! / THE WINNER — THE COMMISSIONER! / THE COMMISSIONER TAKES IT! |
 
-## Priority 2C — THE PINELANDS DEVIL (wave 17 roster voice)
+## Priority 2C — THE PINELANDS DEVIL (wave 17 roster voice) — DONE (63/63 generated + verified)
 
 New in R2.0 FAMILY wave 17: the tenth fighter ships caption-first on the same
 contract as the Commissioner (`CAPTION_FIRST_AUDIO_IDS` in
@@ -244,7 +268,7 @@ The screech should genuinely spike — this is the loudest voice in the cast.
 | assets/audio/announcer/devil-name-1.mp3 … -3.mp3 | THE PINELANDS DEVIL (1 neutral, 2 hyped, 3 drawn-out) |
 | assets/audio/announcer/devil-wins-1.mp3 … -3.mp3 | THE PINELANDS DEVIL WINS! / THE WINNER — THE PINELANDS DEVIL! / THE PINELANDS DEVIL TAKES IT! |
 
-## Priority 3 — match-story callouts (announcer voice)
+## Priority 3 — match-story callouts (announcer voice) — DONE (14/14 generated + verified)
 
 | File | Line to speak |
 | --- | --- |
@@ -263,7 +287,7 @@ The screech should genuinely spike — this is the loudest voice in the cast.
 | assets/audio/announcer/boss-intro-2.mp3 | FINAL BOUT — THE BLACK BOOK CLOSES TONIGHT. (ominous) |
 | assets/audio/announcer/boss-intro-3.mp3 | THE COMMISSIONER IS WAITING. (ominous) |
 
-## Priority 4 — online moments (announcer voice)
+## Priority 4 — online moments (announcer voice) — DONE (12/12 generated + verified)
 
 | File | Line to speak |
 | --- | --- |
@@ -280,7 +304,7 @@ The screech should genuinely spike — this is the loudest voice in the cast.
 | assets/audio/announcer/recovered-2.mp3 | BACK IN SYNC! |
 | assets/audio/announcer/recovered-3.mp3 | THE LINK HOLDS! |
 
-## Priority 5 — variant retakes for the existing fighter cues
+## Priority 5 — variant retakes for the existing fighter cues — DONE (30/30 generated + verified)
 
 The 15 surviving single takes (`assets/audio/fighters/<id>/<cue>.mp3`) each
 want two alternate takes so the interim pitch-jitter can retire:
@@ -289,7 +313,7 @@ different read (15 × 2 = 30 files). Which cue survived for which fighter is
 `APPROVED_CORE_CUES` in `engine/audio-review.mjs`; a cue that is not listed
 there needs a fresh original take first (Priority 0), not a variant.
 
-## Priority 0 — retakes for the cues the SFX review rejected
+## Priority 0 — retakes for the cues the SFX review rejected — NOT GENERATED (0/117, blocked on review cycle)
 
 Jez reviewed all 170 sounds on 2026-08-23 and rejected 117. The 84 that had
 shipped are deleted, so those moments now play a shared take he kept or

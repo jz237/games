@@ -157,7 +157,7 @@ test("the unrated candidate stays outside the game until Jez rates it", () => {
   ]);
 });
 
-test("the fighter audio tree holds nothing but accepted takes", () => {
+test("the fighter audio tree holds nothing but accepted or routed voice-pack takes", () => {
   const shipped = [];
   for (const fighterId of FIGHTER_AUDIO_IDS) {
     const dir = resolve(`assets/audio/fighters/${fighterId}`);
@@ -165,10 +165,22 @@ test("the fighter audio tree holds nothing but accepted takes", () => {
       shipped.push(`assets/audio/fighters/${fighterId}/${name}`);
     }
   }
-  assert.equal(shipped.length, 45, "the tree must hold exactly the accepted fighter takes");
+  // The Release 1.6 LOUD voice pack landed the reactive banks and the -2/-3
+  // variant retakes (MISSING-AUDIO.md P2/P5) at their canonical probe paths,
+  // so the tree now holds the review's accepted takes plus files the runtime
+  // legitimately probes for — and nothing else. Every accepted fighter take
+  // must still be present, and nothing rejected or unrouted may lurk here.
   const accepted = new Set(REVIEW_ACCEPTED.map((id) => REVIEW_SOUND_PATHS[id]));
+  const routed = new Set(fighterAudioVariantManifest());
   for (const path of shipped) {
-    assert.ok(accepted.has(path), `${path} is on disk but was never accepted`);
+    assert.ok(accepted.has(path) || routed.has(path), `${path} is on disk but was never accepted or routed`);
+    assert.ok(isShippablePath(path), `${path} is on disk but not shippable`);
+  }
+  const shippedSet = new Set(shipped);
+  for (const path of accepted) {
+    if (path.startsWith("assets/audio/fighters/")) {
+      assert.ok(shippedSet.has(path), `accepted ${path} is missing from the tree`);
+    }
   }
 });
 
