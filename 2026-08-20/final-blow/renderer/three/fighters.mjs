@@ -113,6 +113,12 @@ function patchSpriteMaterial(material, atlasWidth, atlasHeight) {
     hitWhite: { value: 0 },
     flashGuard: { value: 0 },
     superDim: { value: 0 },
+    // 1 while this fighter is the super's VICTIM: at freeze the two fighters
+    // stand point-blank, and identical hot amber rims on both made their
+    // overlapping legs/boots fuse into one four-legged blob (the critic's
+    // "doubled ghost legs"). The victim drops to a deep near-silhouette with
+    // a whisper of rim so the pair reads as two depth-separated figures.
+    superVictim: { value: 0 },
     // Screen-space sheen: lamp-relative x offset (moves the glint as the
     // fighter crosses the stage) + overall specular budget.
     lampDx: { value: 0 },
@@ -135,6 +141,7 @@ function patchSpriteMaterial(material, atlasWidth, atlasHeight) {
     shader.uniforms.uFbHitWhite = fb.hitWhite;
     shader.uniforms.uFbFlashGuard = fb.flashGuard;
     shader.uniforms.uFbSuperDim = fb.superDim;
+    shader.uniforms.uFbSuperVictim = fb.superVictim;
     shader.uniforms.uFbLampDx = fb.lampDx;
     shader.uniforms.uFbSpecStrength = fb.specStrength;
     shader.uniforms.uFbTexel = { value: fb.texel };
@@ -160,6 +167,7 @@ uniform float uFbFacing;
 uniform float uFbHitWhite;
 uniform float uFbFlashGuard;
 uniform float uFbSuperDim;
+uniform float uFbSuperVictim;
 uniform float uFbLampDx;
 uniform float uFbSpecStrength;
 uniform vec2 uFbTexel;`)
@@ -192,13 +200,17 @@ vec3 fbSoft = (
   texture2D(map, vMapUv + uFbTexel * vec2(0.65, -0.65)).rgb +
   texture2D(map, vMapUv + uFbTexel * vec2(-0.65, -0.65)).rgb) * 0.25;
 diffuseColor.rgb = mix(diffuseColor.rgb, fbSoft, 0.38);
-// --- Stage grade: desaturate, then warm the shadow tones toward the scene's
-// sodium ambient (the street bounces warm light, not blue) and keep the
-// upper body kissed by the cool overhead air.
+// --- Stage grade: desaturate, then SPLIT the shadow temperature across the
+// body (critic fix j): the sodium-facing screen-left shadows stay street
+// warm, the far side falls toward cool night blue — the warm-practical vs
+// cool-air modelling every SF6 night fighter carries. A uniformly warm
+// shadow tint had been mushing the whole body monochrome amber.
 float fbLum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(fbLum), 0.2);
 float fbTone = smoothstep(0.08, 0.72, fbLum);
-diffuseColor.rgb *= mix(vec3(1.06, 0.94, 0.82), vec3(0.98, 0.99, 1.03), fbTone);
+float fbAirU = mix(1.0 - vFbLocal.x, vFbLocal.x, step(0.0, uFbFacing));
+vec3 fbShadowTint = mix(vec3(1.08, 0.94, 0.80), vec3(0.90, 0.95, 1.10), fbAirU * 0.75);
+diffuseColor.rgb *= mix(fbShadowTint, vec3(0.98, 0.99, 1.03), fbTone);
 float fbUp = clamp(vFbWorld.y * 0.5, 0.0, 1.0);
 diffuseColor.rgb *= mix(vec3(1.05, 0.99, 0.9), vec3(0.94, 1.01, 1.0), fbUp);
 // --- POSITION-DRIVEN ZONE GRADE (set per frame in poseRig): the body's own
@@ -240,7 +252,9 @@ diffuseColor.rgb = mix(diffuseColor.rgb,
 float fbLow = 1.0 - smoothstep(0.02, 0.42, vFbLocal.y);
 diffuseColor.rgb += uFbFloorBounce * fbLow * (vec3(1.0) - diffuseColor.rgb) * (0.75 + 0.25 * (1.0 - fbTone));
 // Super freeze: the body drops toward a silhouette (rims boosted in JS).
-diffuseColor.rgb *= 1.0 - uFbSuperDim * 0.62;`)
+// The VICTIM digs deeper — a dark shape against the duotone stage, the way
+// SF6 keeps the super's owner lit while time stops around the other guy.
+diffuseColor.rgb *= 1.0 - uFbSuperDim * (0.62 + uFbSuperVictim * 0.24);`)
       .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
 // --- Directional silhouette rims -------------------------------------------
 // Tight 1-2px edge strokes from outward alpha sampling, converted to SCREEN
@@ -273,7 +287,9 @@ float fbTopBand = smoothstep(0.55, 0.9, vFbLocal.y);
 float fbRimT = fbEdgeT * pow(fbFaceT, 1.1) * (0.4 + 0.6 * fbTopBand)
   + (fbEdgeL + fbEdgeR) * 0.5 * fbTopBand * clamp(normal.y * 1.4 + 0.2, 0.0, 1.0);
 float fbGuardFade = 1.0 - uFbFlashGuard * 0.4;
-float fbSuperRim = 1.0 + uFbSuperDim * 1.5;
+// Freeze rim boost is the ATTACKER's: the victim keeps his normal rims so
+// only one silhouette burns hot under the banner.
+float fbSuperRim = 1.0 + uFbSuperDim * 1.5 * (1.0 - uFbSuperVictim * 0.85);
 totalEmissiveRadiance += uFbRimLeftColor * (fbRimL * uFbRimLeftStrength * fbGuardFade * fbSuperRim);
 totalEmissiveRadiance += uFbRimRightColor * (fbRimR * uFbRimRightStrength * fbGuardFade * fbSuperRim);
 totalEmissiveRadiance += uFbTopColor * (fbRimT * uFbTopStrength * 1.75 * fbGuardFade * fbSuperRim);
@@ -298,15 +314,30 @@ diffuseColor.rgb = mix(diffuseColor.rgb, fbEdgeLight * 0.5 + vec3(0.02, 0.02, 0.
 // favours low-saturation surfaces (metal/glass/leather) and bright mids
 // (sweat), and the glint direction slides with uFbLampDx as fighters move.
 vec3 fbSpecDir = normalize(vec3(-uFbLampDx * 0.42, 0.58, 0.72));
-float fbSpec = pow(clamp(dot(normalize(normal), fbSpecDir), 0.0, 1.0), 16.0);
+float fbSpecNdl = clamp(dot(normalize(normal), fbSpecDir), 0.0, 1.0);
+// TWO-LOBE material read (critic fix h): a tight exponent-26 glint (metal
+// gauntlets, glasses lenses, buckles — sparks of the lamp itself) over a
+// broad exponent-5 sheen (glove leather, sweat on skin — soft wet rake).
+// Both slide with uFbLampDx as the fighter crosses the stage.
+float fbSpecTight = pow(fbSpecNdl, 26.0);
+float fbSpecBroad = pow(fbSpecNdl, 5.0);
 float fbCmax = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
 float fbCmin = min(diffuseColor.r, min(diffuseColor.g, diffuseColor.b));
 float fbSatSpec = (fbCmax - fbCmin) / max(fbCmax, 0.001);
-float fbGloss = (0.3 + 0.7 * (1.0 - fbSatSpec)) * smoothstep(0.1, 0.5, fbLum);
-totalEmissiveRadiance += (uFbTopColor * 0.85 + vec3(0.15)) * (fbSpec * fbGloss * uFbSpecStrength);
-// Super freeze: the fighter is lit BY the freeze — a warm amber halo hugs
-// the silhouette and a faint body lift keeps him above the dimmed stage.
-totalEmissiveRadiance += vec3(1.0, 0.56, 0.2) * (uFbSuperDim * (fbEdgeAny * 0.7 + 0.08));
+// Gloss gate: bright surfaces sweat/shine as before, but DARK desaturated
+// surfaces (gauntlet metal, glove leather) now keep a specular voice too —
+// dark + colourless + lit is exactly what metal looks like, and gating all
+// glints by luminance had silenced every metal in frame.
+float fbGloss = (0.3 + 0.7 * (1.0 - fbSatSpec))
+  * max(smoothstep(0.1, 0.5, fbLum), (1.0 - fbSatSpec) * 0.6 * smoothstep(0.025, 0.1, fbLum));
+totalEmissiveRadiance += (uFbTopColor * 0.85 + vec3(0.15))
+  * ((fbSpecTight * 2.3 + fbSpecBroad * 0.3) * fbGloss * uFbSpecStrength);
+// Super freeze: the ATTACKER is lit BY the freeze — a warm amber halo hugs
+// his silhouette and a faint body lift keeps him above the dimmed stage.
+// The victim gets almost none of it (identical halos on two point-blank
+// fighters is what fused their legs into the "doubled ghost legs" read).
+totalEmissiveRadiance += vec3(1.0, 0.56, 0.2)
+  * (uFbSuperDim * (fbEdgeAny * 0.7 + 0.08) * (1.0 - uFbSuperVictim * 0.88));
 // --- Flash guard (SF6 Drive-Impact discipline): while a burst is live the
 // interior keeps its OWN contrast (deepened S-curve, not a flat wash) and
 // the silhouette carries a hot high-contrast rim — the character must stay
@@ -321,10 +352,13 @@ totalEmissiveRadiance += vec3(1.12, 0.98, 0.8) * (uFbFlashGuard * fbEdgeAny * 0.
 // crossed it: the whole victim bloomed into a frame-flooding white column on
 // the impact frame) — highlights snap white, shadow tones only lift, so the
 // body reads struck while its silhouette survives its own flash.
-totalEmissiveRadiance += vec3(1.02, 1.02, 1.1) * (uFbHitWhite * (0.4 + 0.6 * fbLum));`);
+// 0.22 + 0.78*lum (was 0.4+0.6): the flash lives in the highlights — the
+// body reads STRUCK, not dipped in cream; shadow tones keep their depth so
+// the victim's internal contrast survives his own flash.
+totalEmissiveRadiance += vec3(1.02, 1.02, 1.1) * (uFbHitWhite * (0.22 + 0.78 * fbLum));`);
   };
   // Distinct program per patched material (uniforms differ per bank).
-  material.customProgramCacheKey = () => "fb-sprite-grade-v8";
+  material.customProgramCacheKey = () => "fb-sprite-grade-v9";
   return fb;
 }
 
@@ -674,10 +708,11 @@ export class FighterLayer {
     const airFade = THREE.MathUtils.clamp(1 - jump / 430, 0.22, 1);
     // Impact answer: the wet street brightens its mirror while a flash lives.
     const flashBoost = 1 + THREE.MathUtils.clamp(this.getFlashLevel(), 0, 1) * 0.45;
-    // Super freeze: the mirror ducks out so the frozen fighters read as ONE
-    // clean silhouette each (no ghost twin under the banner).
+    // Super freeze: the mirror dies out COMPLETELY by half-freeze — at the
+    // point-blank freeze framing the ripple-banded upright mirror of a boot
+    // between the two fighters read as a broken segmented column.
     bank.reflMaterial.opacity = Math.min(0.5, 0.38 * (0.55 + 0.45 * airFade) * flashBoost)
-      * (1 - this.superDim * 0.75);
+      * Math.max(0, 1 - this.superDim * 2.2);
 
     // --- Body-heat emissive: grit-ready aura + special glow -----------------
     const superReady = state.phase === "fight" && fighter.cinematicFrame === null
@@ -710,7 +745,10 @@ export class FighterLayer {
     // K&A magenta near the sign, cooled toward the cyan check-cashing glow at
     // the far right edge. Strength tapers hard with distance — mid-stage the
     // right edge goes DARK instead of wearing a constant pink outline.
-    const neonMix = THREE.MathUtils.clamp((fx + 0.5) / 5.5, 0, 1);
+    // Normalised to the REAL right-corner reach (fx tops out ~2.9 at the
+    // wall): the old /5.5 span meant a cornered fighter only ever collected
+    // half the K&A magenta — the corner signature never landed (fix j).
+    const neonMix = THREE.MathUtils.clamp((fx + 0.4) / 3.3, 0, 1);
     fb.rimRightColor.copy(NEON_RIM).lerp(CYAN_RIM, THREE.MathUtils.clamp((fx - 3.4) / 3, 0, 1) * 0.55);
     fb.rimRightStrength.value = 0.22 + neonMix * neonMix * 1.15;
     // Green-cyan top key from the overhead station lamp: strongest when the
@@ -754,9 +792,11 @@ export class FighterLayer {
       target.b += spill.color.b * near * 0.32;
     }
     // Screen-space sheen: glint direction slides with the fighter's offset
-    // from the lamp; budget rises standing under it (specular pass, fix 6).
+    // from the lamp; budget rises standing under it. Raised (critic fix h):
+    // every material must declare itself at a glance — metal sparks, leather
+    // sheens, skin sweats — so the sheen pass now carries a real budget.
     fb.lampDx.value = THREE.MathUtils.clamp((fx - LAMP_X) / 2.5, -1, 1);
-    fb.specStrength.value = 0.5 + lampNear * 0.55;
+    fb.specStrength.value = 0.72 + lampNear * 0.68;
     // Wet-floor mirror graded by position — GENTLY. The tint only nudges the
     // mirror toward the practical the fighter stands under; the silhouette's
     // own colours stay the read (a strong grade here is what turned the
@@ -767,7 +807,11 @@ export class FighterLayer {
       1.0 + neonMix * neonMix * 0.24 + lampNear * 0.05,
     );
     // Super freeze: body toward silhouette, rims boosted (set in the shader).
+    // Only the attacker owns the freeze light; the other fighter reads as the
+    // dark shape time stopped around (fixes the fused-legs "ghost" read).
     fb.superDim.value = this.superDim;
+    const anySuper = (state.fighters || []).some((f) => f.attacking?.superMove);
+    fb.superVictim.value = anySuper && !fighter.attacking?.superMove ? 1 : 0;
     // Impact white flash: pop on the frame the sim hit lands (rising edge of
     // the sim's own hitFlash timer), gone ~4 render frames later. Emissive is
     // masked to the sprite pixels, so the play area never desaturates.

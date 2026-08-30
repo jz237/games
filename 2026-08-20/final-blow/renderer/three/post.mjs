@@ -99,7 +99,14 @@ const KuwaharaStageShader = {
       // painted patches must OWN the stage surface, with only a whisper of
       // true detail keeping thin structure legible.
       vec3 painted = best / max(vec3(1.0) - best, vec3(0.001));
-      vec3 result = mix(original.rgb, painted, 0.9 * strength * (1.0 - m));
+      // DEPTH-GRADED painterliness (coherence fix i): screen-y is a solid
+      // depth proxy in a fixed-floor side view — the near floor band keeps
+      // ~half its true micro-structure (slab grid, aggregate, curb chips),
+      // the fence/station band keeps a third, and only the far plate gets
+      // the full painted flatten. Crisp sprites now stand on semi-crisp
+      // ground instead of floating over uniform airbrush.
+      float depthProxy = 0.52 + 0.48 * smoothstep(0.26, 0.6, vUv.y);
+      vec3 result = mix(original.rgb, painted, 0.9 * strength * (1.0 - m) * depthProxy);
       gl_FragColor = vec4(result, original.a);
     }
   `,
@@ -354,10 +361,13 @@ const VignetteGrainShader = {
         vec3 duo = mix(vec3(0.05, 0.03, 0.15), vec3(1.05, 0.62, 0.2), smoothstep(0.04, 0.92, lum));
         color.rgb = mix(color.rgb, duo * (0.25 + 0.75 * lum + 0.25 * smoothstep(0.5, 1.0, lum)), duotone);
       }
-      // HUD shelf mask: the render eases to near-black under the DOM HUD
-      // strip so stage glow (el steel, sodium sky) never bleeds into the
-      // health-bar band — the top of frame reads designed, not leaking.
-      color.rgb *= mix(0.14, 1.0, smoothstep(1.0, 0.90, vUv.y));
+      // HUD shelf mask: the render drops to near-black under the DOM HUD
+      // strip so stage glow (lamp bloom, sodium sky) never bleeds into the
+      // health-bar band. The shelf edge sits BELOW the whole HUD block
+      // (bars + grit labels reach vUv.y ~0.89) with a tight 2% soft edge —
+      // a designed letterbox shelf, not a leaky gradient. Runs post-bloom,
+      // so even hot lamp halos die before they touch the bars.
+      color.rgb *= mix(0.045, 1.0, 1.0 - smoothstep(0.878, 0.906, vUv.y));
       // Fine luminance-weighted film grain with a chroma component (shared
       // by stage AND sprites — the one-medium dither both layers sit in).
       float g = hash(vUv * vec2(1287.0, 727.0) + vec2(mod(time * 61.7, 941.0)));

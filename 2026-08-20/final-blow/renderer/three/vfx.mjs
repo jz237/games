@@ -13,6 +13,7 @@
 import * as THREE from "three";
 import { PX, worldX, worldY, mulberry32 } from "./shared.mjs";
 import { softDotTexture, ringTexture, impactBurstTexture, halftoneRingTexture, smearArcTexture } from "./textures.mjs";
+import { FIGHTER_MASK_LAYER } from "./post.mjs";
 
 const MAX_SPARKS = 240;
 const MAX_EMBERS = 64;
@@ -218,9 +219,10 @@ export class ImpactVfxLayer {
       const mesh = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 1),
         new THREE.MeshBasicMaterial({
-          // 512 (2x): the 256 dot-screen aliased into crunchy stair-steps at
-          // ring size on the impact frame (critic fix 5).
-          map: halftoneRingTexture(512, 0x7a11 + i * 733),
+          // 1024 (4x): even the 512 dot-screen shimmered when the expanding
+          // ring scaled through the pixel grid — at 1024 with mipmaps the
+          // dots stay round through the whole life (critic fix f).
+          map: halftoneRingTexture(1024, 0x7a11 + i * 733),
           color: 0xffffff,
           transparent: true,
           opacity: 0,
@@ -309,6 +311,16 @@ export class ImpactVfxLayer {
       this.group.add(mesh);
       this.groundFlashes.push({ mesh, ttl: 0, max: 0.3, size: 1 });
     }
+
+    // CRISP-THROUGH-THE-FLASH (critic fix k): every visual in this layer
+    // joins the fighter protection mask, so the painterly stage pass
+    // (Kuwahara + posterize + ink edge) never flattens the burst's tapered
+    // streaks and dot screens into soft milky patches — impact energy keeps
+    // the same edge snap as the sprites, the stage stays painted around it.
+    // (Lights are left on their default layer.)
+    this.group.traverse((node) => {
+      if (node.isMesh || node.isPoints || node.isLineSegments) node.layers.enable(FIGHTER_MASK_LAYER);
+    });
   }
 
   // Latest impact spill for the fighter layer: null when cold, otherwise

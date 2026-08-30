@@ -691,8 +691,10 @@ export function asphaltMaps(seed = 20260829, size = 1024) {
     // that blooms straight over the fighters' legs.
     paintStreaks(ctx, "90,90,90", 0.75);
     // Wet joints: the grooves hold water, so specular pooling draws the slab
-    // grid at night — the floor's identity survives the light pools.
-    paintJoints(ctx, "rgba(40,40,40,0.8)", 5);
+    // grid at night — the floor's identity survives the light pools. Pushed
+    // glossier + wider (critic fix h): the sodium pools must visibly BREAK
+    // at the seams instead of washing over them.
+    paintJoints(ctx, "rgba(24,24,24,0.92)", 7);
     // Puddles: glossy standing water (localised, so glints read as pools
     // without firing a clipped white ball through bloom).
     paintPuddles(ctx, "44,44,44", 0.95);
@@ -702,7 +704,7 @@ export function asphaltMaps(seed = 20260829, size = 1024) {
     ctx.fillStyle = "#1c1c1c";
     ctx.fillRect(0, 0, size, size);
     paintStreaks(ctx, "160,160,160", 0.55);
-    paintJoints(ctx, "rgba(120,120,120,0.6)", 4);
+    paintJoints(ctx, "rgba(150,150,150,0.7)", 5);
     // Puddles reflect like water: metalness high inside the pool (held just
     // off full mirror so lamp glints glow instead of clipping).
     paintPuddles(ctx, "200,200,200", 0.92);

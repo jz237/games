@@ -258,15 +258,17 @@ export function createRenderer(host) {
     } else {
       post.setImpactPop?.(0, 0.5, 0.5);
     }
-    // KO + round-start echo the super's graphic DNA at a lighter dose, so
-    // the peak-moment language is consistent instead of super-only.
+    // KO + round-start echo the super's graphic DNA at a stronger dose than
+    // before (critic fix l): one graphic language across every peak moment —
+    // the KO visibly pulls the same indigo/amber print grade the super owns,
+    // round-start carries a lighter breath of it.
     const koActive = state.phase === "roundover" || state.phase === "finish" || state.phase === "result";
     koGrade = THREE.MathUtils.clamp(koGrade + (koActive ? 2.4 : -3) * stepSec, 0, 1);
     const introActive = state.phase === "intro";
     introGrade = THREE.MathUtils.clamp(introGrade + (introActive ? 2.4 : -3) * stepSec, 0, 1);
     // SF6 super-flash: the frozen gameplay behind the cut-in band grades to a
     // two-tone indigo/amber while the super owns the frame. Render-only.
-    post.setDuotone?.(Math.max(superDim * 0.82, koGrade * 0.3, introGrade * 0.18));
+    post.setDuotone?.(Math.max(superDim * 0.82, koGrade * 0.44, introGrade * 0.26));
     // Fighter-masked stage settle behind the super (desaturated warm-grey).
     post.setSuper?.(superDim);
     // CRT/bezel dial-back (peak moments feel bigger than the screen): fade

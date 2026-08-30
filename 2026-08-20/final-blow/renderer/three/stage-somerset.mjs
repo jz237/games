@@ -227,11 +227,46 @@ function fenceBreaksTexture() {
       ctx.fillStyle = hole;
       ctx.fillRect(sx - spread, sy - spread, spread * 2, spread * 2);
     };
-    // Visible fence span at midground depth is u ~0.32..0.68 of the 30-unit
-    // run — every break lands inside it or it dresses nothing but offscreen.
+    // Visible fence span in the standard FIGHT framing is only u ~0.39..0.61
+    // (the wide corner shot reaches ~0.32..0.68) — the breaks must cluster
+    // inside the narrow band or the on-screen run still reads as wallpaper.
     scarAt(w * 0.365, h * 0.42, 46, 9);
+    scarAt(w * 0.505, h * 0.5, 44, 8);
     scarAt(w * 0.575, h * 0.6, 56, 11);
     scarAt(w * 0.655, h * 0.36, 38, 7);
+    // --- Broad grime patches: soft dark blotches that modulate whole zones
+    // of the lattice up/down — the low-frequency variation a real weathered
+    // fence run has, and the strongest anti-wallpaper term at fight framing.
+    for (let i = 0; i < 7; i += 1) {
+      const gx = w * (0.34 + i * 0.048 + (rand() - 0.5) * 0.02);
+      const gy = h * (0.3 + rand() * 0.5);
+      const gr = 70 + rand() * 120;
+      const patch = ctx.createRadialGradient(gx, gy, 4, gx, gy, gr);
+      patch.addColorStop(0, `rgba(6,8,11,${(0.16 + rand() * 0.2).toFixed(3)})`);
+      patch.addColorStop(1, "rgba(6,8,11,0)");
+      ctx.fillStyle = patch;
+      ctx.fillRect(gx - gr, gy - gr, gr * 2, gr * 2);
+    }
+    // Snagged plastic bag: a pale scrap caught in the links, mid-band.
+    ctx.save();
+    ctx.translate(w * 0.472, h * 0.34);
+    ctx.rotate(-0.2);
+    ctx.fillStyle = "rgba(148,150,146,0.6)";
+    ctx.beginPath();
+    ctx.moveTo(-14, -10);
+    ctx.quadraticCurveTo(4, -22, 16, -8);
+    ctx.quadraticCurveTo(22, 6, 6, 14);
+    ctx.quadraticCurveTo(-10, 18, -16, 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "rgba(60,62,60,0.5)";
+    ctx.beginPath();
+    ctx.moveTo(-6, -8);
+    ctx.quadraticCurveTo(6, -4, 4, 8);
+    ctx.quadraticCurveTo(-8, 8, -6, -8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
     // --- Sagging top-rail dip: the rail bows where a car clipped it --------
     ctx.strokeStyle = "rgba(150,160,175,0.85)";
     ctx.lineWidth = 5;
@@ -265,6 +300,8 @@ function fenceBreaksTexture() {
       ctx.restore();
     };
     poster(w * 0.405, h * 0.52, 46, 62, "#8d8471", -0.06);
+    poster(w * 0.455, h * 0.44, 38, 50, "#7c8577", 0.1);
+    poster(w * 0.545, h * 0.55, 44, 58, "#8a7d6b", -0.09);
     poster(w * 0.625, h * 0.47, 40, 54, "#767f83", 0.08);
     poster(w * 0.34, h * 0.58, 34, 46, "#837768", 0.04);
   }, { srgb: true });
@@ -578,10 +615,33 @@ export function buildSomersetStage(host, { quality }) {
   // the signal flicker below), so even the corner light reflects.
   const signalStreak = groundStreak(0xff2b1e, -4.05, -1.75, 3.2, 0.62, 0.12);
 
-  // Sidewalk curb line behind the fighters.
+  // Sidewalk curb line behind the fighters: expansion cuts + a worn top-edge
+  // highlight so the long horizontal band carries mid-frequency detail
+  // instead of reading as one flat extrusion (coherence fix i).
+  const curbTexture = canvasTexture(512, 64, (ctx, w, h) => {
+    const rand = mulberry32(0xc07b);
+    ctx.fillStyle = "#1d2026";
+    ctx.fillRect(0, 0, w, h);
+    // Tonal patches along the run.
+    for (let i = 0; i < 10; i += 1) {
+      const px = rand() * w;
+      const pw = 30 + rand() * 60;
+      ctx.fillStyle = `rgba(${12 + Math.round(rand() * 14)},${14 + Math.round(rand() * 14)},${18 + Math.round(rand() * 16)},0.55)`;
+      ctx.fillRect(px, 0, pw, h);
+    }
+    // Expansion cuts.
+    ctx.fillStyle = "rgba(5,6,9,0.9)";
+    for (let x = 26; x < w; x += 84) ctx.fillRect(x + (rand() - 0.5) * 8, 0, 2.5, h);
+    // Worn top-edge highlight, chipped in places.
+    ctx.fillStyle = "rgba(96,104,118,0.5)";
+    ctx.fillRect(0, 0, w, 3);
+    ctx.fillStyle = "rgba(10,12,16,0.8)";
+    for (let i = 0; i < 8; i += 1) ctx.fillRect(rand() * w, 0, 4 + rand() * 10, 3);
+  }, { srgb: true, repeat: true });
+  curbTexture.repeat.set(8, 1);
   const curb = new THREE.Mesh(
     new THREE.BoxGeometry(46, 0.14, 1.7),
-    new THREE.MeshStandardMaterial({ color: 0x191b20, roughness: 0.85 }),
+    new THREE.MeshStandardMaterial({ map: curbTexture, color: 0xb8bcc4, roughness: 0.85 }),
   );
   curb.name = "fb-curb";
   curb.position.set(0, 0.07, -4.2);
@@ -702,13 +762,17 @@ export function buildSomersetStage(host, { quality }) {
         fog: false,
       }),
     );
-    // Bigger discs when further defocused (deeper), clustered along the
-    // street band; a few high ones read as el-platform lamps.
+    // Bigger discs when further defocused (deeper). CONSTRAINED to the lit
+    // street band (y 0.85..2.35): scattered any higher they landed over the
+    // dark building silhouettes, and a defocused light circle floating on a
+    // solid dark tower reads as bokeh IN FRONT of the midground (critic
+    // fix e) — the street band is the only zone that legibly holds distant
+    // practicals behind the fence.
     const scale = (0.16 + bokehRand() * 0.2) * (1 + depth * 0.9);
     disc.scale.setScalar(scale);
     disc.position.set(
       (bokehRand() - 0.5) * 21,
-      0.8 + bokehRand() * 3.4,
+      0.85 + bokehRand() * 1.5,
       -8.6 - depth * 2.8,
     );
     disc.renderOrder = 1;
@@ -843,9 +907,12 @@ export function buildSomersetStage(host, { quality }) {
       opacity: 0.92,
       depthWrite: false,
       color: 0x939eb6,
-      roughness: 0.34,
-      metalness: 0.78,
-      envMapIntensity: 0.8,
+      // Calmer base sheen: the uniform metallic sparkle across the whole run
+      // was half the wallpaper read — localized glints (fenceGlint near the
+      // lamp) now carry the wire speculars instead.
+      roughness: 0.48,
+      metalness: 0.58,
+      envMapIntensity: 0.6,
     }),
   );
   fence.name = "fb-fence";
@@ -1158,7 +1225,11 @@ export function buildSomersetStage(host, { quality }) {
     new THREE.MeshBasicMaterial({
       map: trainWindowTexture,
       transparent: true,
-      color: new THREE.Color(1.6, 1.52, 1.3), // hot enough to kiss the bloom knee
+      // 1.22 (was 1.6): the old level crossed the bloom knee and the window
+      // run blew out into six formless white blobs mid-frame (the critic's
+      // dead-centre read). Under the knee the panes stay warm fluorescent
+      // and the passenger silhouettes survive ACES.
+      color: new THREE.Color(1.22, 1.14, 0.95),
       fog: false,
     }),
   );
@@ -1238,9 +1309,63 @@ export function buildSomersetStage(host, { quality }) {
     girder.castShadow = true;
     el.add(girder);
   }
+  // Riveted column steel (coherence fix i): the columns flank the fight line
+  // as tall near-background slabs — plate seams, rivet lines, rust bleed and
+  // chipped green SEPTA paint give them the legible mid-frequency detail the
+  // crisp sprites need behind them (they read as airbrushed voids before).
+  const columnTexture = canvasTexture(128, 512, (ctx, w, h) => {
+    const rand = mulberry32(0xc0157);
+    ctx.fillStyle = "#37322b";
+    ctx.fillRect(0, 0, w, h);
+    // Chipped remains of the old green paint in patches.
+    for (let i = 0; i < 12; i += 1) {
+      const py = rand() * h;
+      const ph = 14 + rand() * 60;
+      ctx.fillStyle = `rgba(38,${52 + Math.round(rand() * 16)},44,${(0.18 + rand() * 0.3).toFixed(3)})`;
+      ctx.fillRect(0, py, w, ph);
+    }
+    // Horizontal plate seams every ~90px with a bolt/rivet row on each.
+    for (let y = 46; y < h; y += 88) {
+      ctx.fillStyle = "rgba(12,11,9,0.85)";
+      ctx.fillRect(0, y, w, 3);
+      ctx.fillStyle = "rgba(96,90,78,0.5)";
+      ctx.fillRect(0, y + 3, w, 1.4);
+      for (let x = 10; x < w; x += 18) {
+        ctx.fillStyle = "rgba(20,18,15,0.9)";
+        ctx.beginPath();
+        ctx.arc(x, y + 11, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(120,112,96,0.55)";
+        ctx.beginPath();
+        ctx.arc(x - 0.7, y + 10.3, 1.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    // Vertical edge stiffeners.
+    ctx.fillStyle = "rgba(14,13,11,0.6)";
+    ctx.fillRect(3, 0, 3, h);
+    ctx.fillRect(w - 6, 0, 3, h);
+    // Rust bleed streaks running down from seams.
+    for (let i = 0; i < 9; i += 1) {
+      const rx = rand() * w;
+      const ry = 46 + Math.floor(rand() * 5) * 88;
+      const rl = 30 + rand() * 90;
+      const drip = ctx.createLinearGradient(0, ry, 0, ry + rl);
+      drip.addColorStop(0, "rgba(96,54,26,0.5)");
+      drip.addColorStop(1, "rgba(96,54,26,0)");
+      ctx.fillStyle = drip;
+      ctx.fillRect(rx, ry, 3 + rand() * 5, rl);
+    }
+  }, { srgb: true });
+  const columnSteel = new THREE.MeshStandardMaterial({
+    map: columnTexture,
+    color: 0xbdb9b2,
+    roughness: 0.72,
+    metalness: 0.35,
+  });
   const columnXs = [-8.6, -3.4, 3.4, 8.6];
   for (const x of columnXs) {
-    const column = new THREE.Mesh(new THREE.BoxGeometry(0.5, 3.3, 0.5), rust);
+    const column = new THREE.Mesh(new THREE.BoxGeometry(0.5, 3.3, 0.5), columnSteel);
     column.position.set(x, 1.65, -4.2);
     column.castShadow = true;
     column.receiveShadow = true;
@@ -1648,7 +1773,9 @@ export function buildSomersetStage(host, { quality }) {
   // chipped edge wear, the stairwell's green spill grazing it from below-left,
   // a soft 0.6px defocus matching its depth plane, and the whole plate skewed
   // to the fence line's perspective instead of squarely facing the lens.
-  const plateTexture = bluredCardTexture(512, 96, 0.6, (ctx, w, h) => {
+  // 0.9px bake blur: the letterforms sit at the same focus level as the
+  // fence/station plane instead of HUD-crisp over the painterly midground.
+  const plateTexture = bluredCardTexture(512, 96, 0.9, (ctx, w, h) => {
     const rand = mulberry32(0x50e57);
     ctx.fillStyle = "#101418";
     ctx.fillRect(0, 0, w, h);
@@ -1658,7 +1785,7 @@ export function buildSomersetStage(host, { quality }) {
     ctx.font = "700 52px Arial Narrow, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = "#cfe6da";
+    ctx.fillStyle = "#bdd6c9";
     ctx.fillText("SOMERSET", w / 2, h / 2 + 2);
     // Mount bolts + rust drips running off them down the enamel.
     for (const bx of [w * 0.045, w * 0.955]) {
@@ -1718,17 +1845,38 @@ export function buildSomersetStage(host, { quality }) {
     ctx.fillRect(0, 0, w, h);
     ctx.globalCompositeOperation = "source-over";
   }, { srgb: true });
-  const plate = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.5, 0.28),
-    new THREE.MeshBasicMaterial({ map: plateTexture, fog: false }),
-  );
-  plate.position.set(0, 1.04, 0.76);
-  // Perspective skew: the plate follows the receding station/fence plane
-  // (right edge away from the lens) with a hair of forward lean — stage
-  // geometry, not an HTML rectangle floating over the blur.
-  plate.rotation.y = -0.2;
-  plate.rotation.x = -0.03;
-  station.add(plate);
+  // Plate rig: the sign + its mounts + its glow kiss turn TOGETHER, so the
+  // whole assembly reads as one piece of street furniture bolted to the
+  // station mouth. The strong y-turn is the fix for the "floating HTML
+  // overlay" read: at -0.42 rad the right edge visibly recedes and the
+  // enamel face foreshortens like everything else at its depth.
+  const plateRig = new THREE.Group();
+  plateRig.position.set(0, 1.02, 0.76);
+  plateRig.rotation.y = -0.42;
+  plateRig.rotation.x = -0.04;
+  plateRig.rotation.z = 0.018; // a hair of sag: bolted years ago, not typeset
+  // LIT enamel, not an unlit card: the standard material answers the green
+  // station spill and the neon corner like the masonry around it, while a
+  // modest emissive (the plate texture itself) keeps SOMERSET legible at
+  // night — a lightbox sign, graded by the scene.
+  const plateMaterial = new THREE.MeshStandardMaterial({
+    map: plateTexture,
+    emissiveMap: plateTexture,
+    emissive: new THREE.Color(0xffffff),
+    emissiveIntensity: 0.34,
+    roughness: 0.42,
+    metalness: 0.22,
+    envMapIntensity: 0.7,
+  });
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.28), plateMaterial);
+  plateRig.add(plate);
+  // Mounting stubs down to the lintel: the plate is BOLTED to the masonry.
+  const stubMaterial = new THREE.MeshStandardMaterial({ color: 0x171b20, roughness: 0.7, metalness: 0.45 });
+  for (const sx of [-0.56, 0.56]) {
+    const stub = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.16, 0.05), stubMaterial);
+    stub.position.set(sx, -0.17, -0.03);
+    plateRig.add(stub);
+  }
   // Soft green kiss floating just off the plate face: the spill catches the
   // air in front of the sign the way it does over the stair mouth.
   const plateKiss = new THREE.Mesh(
@@ -1743,16 +1891,20 @@ export function buildSomersetStage(host, { quality }) {
       fog: false,
     }),
   );
-  plateKiss.position.set(-0.2, 0.98, 0.8);
+  plateKiss.position.set(-0.24, -0.05, 0.05);
   plateKiss.renderOrder = 2;
-  station.add(plateKiss);
+  plateRig.add(plateKiss);
+  station.add(plateRig);
   group.add(station);
   flickers.push((t) => {
     // Fluorescent hum: the station spill breathes slightly out of phase with
-    // the under-el tube.
+    // the under-el tube; the enamel plate's lightbox glow hums WITH it, so
+    // the sign is wired to the same ballast as the stairwell below it.
     const hum = 1 + Math.sin(t * 37 + 1.7) * 0.04 + (hash01(Math.floor(t * 7 + 3)) > 0.95 ? -0.35 : 0);
     stationLight.intensity = 3.2 * Math.max(0.4, hum);
     stationGlow.material.opacity = 0.26 * Math.max(0.5, hum);
+    plateMaterial.emissiveIntensity = 0.34 * Math.max(0.55, hum);
+    plateKiss.material.opacity = 0.3 * Math.max(0.5, hum);
   });
 
   // --- Street dressing at staggered depths ----------------------------------
@@ -1900,7 +2052,7 @@ export function buildSomersetStage(host, { quality }) {
       backdropMaterial.color.setRGB(1.08 * keep, 1.06 * keep, 1.14 * keep);
       fence.material.opacity = 0.88 * (1 - dim * 0.5);
       // Train windows settle with the freeze (absolute set — never compounds).
-      trainWindows.material.color.setRGB(1.6, 1.52, 1.3).multiplyScalar(1 - dim * 0.7);
+      trainWindows.material.color.setRGB(1.22, 1.14, 0.95).multiplyScalar(1 - dim * 0.7);
     },
     update(timeSec) {
       for (const flicker of flickers) flicker(timeSec);
