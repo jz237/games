@@ -17880,7 +17880,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-2.0");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-2.1");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -18445,7 +18445,7 @@ $$("[data-touch]").forEach((button) => {
 });
 
 window.__finalBlowEngine = {
-  version: "2.0-cinema",
+  version: "2.1-legacy",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
