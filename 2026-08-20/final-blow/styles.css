@@ -261,6 +261,12 @@ body.reduced-motion #screenWipe.run {
 .title-screen {
   align-items: center;
   justify-content: center;
+  /* The menu has grown to 13 rows: when it overflows, "safe" falls back to
+     start-alignment and the screen scrolls instead of clipping the logo off
+     the top. Plain center stays for browsers without the safe keyword. */
+  justify-content: safe center;
+  overflow-y: auto;
+  padding-block: 12px 16px;
   flex-direction: column;
   text-align: center;
   background:
@@ -268,6 +274,11 @@ body.reduced-motion #screenWipe.run {
     linear-gradient(180deg, rgba(1,2,4,.25), rgba(1,2,4,.94)),
     url("assets/somerset-septa.webp") center 48% / cover;
 }
+
+/* Compact the grown menu so the full stack fits a 720px-class window
+   without scrolling in the common case. */
+.title-screen .menu-stack { gap: 5px; margin-top: clamp(10px, 1.8vw, 22px); }
+.title-screen .arcade-button { min-height: 34px; padding: 6px 14px; }
 
 .title-screen::before {
   position: absolute;
@@ -703,17 +714,20 @@ kbd,
 .fighter-portrait {
   position: absolute;
   z-index: 1;
-  bottom: 18%;
+  bottom: 15%;
   left: 50%;
   width: auto;
-  max-width: 116%;
-  height: 88%;
+  /* 15% bottom + 80% height * 1.03 scale (origin at the feet) tops out
+     under 100% of the card, so heads can never crop on the wide-short
+     cards small windows produce. */
+  max-width: 104%;
+  height: 80%;
   object-fit: contain;
   object-position: center bottom;
   filter: drop-shadow(0 12px 10px rgba(0,0,0,.86)) brightness(1.18) saturate(1.08) contrast(1.08);
   pointer-events: none;
   transform: translateX(-50%) scale(1.03);
-  transform-origin: 50% 82%;
+  transform-origin: 50% 100%;
   transition: transform .15s ease, filter .15s ease;
   user-select: none;
 }
@@ -722,7 +736,8 @@ kbd,
 .fighter-card:focus-visible .fighter-portrait,
 .fighter-card.focused .fighter-portrait {
   filter: drop-shadow(0 12px 15px rgba(0,0,0,.92)) drop-shadow(0 0 10px var(--fighter)) brightness(1.27) saturate(1.18) contrast(1.1);
-  transform: translateX(-50%) scale(1.1);
+  /* 15% + 80% * 1.06 = 99.8% — the focus pop must also stay inside the card. */
+  transform: translateX(-50%) scale(1.06);
 }
 
 .fighter-art {
