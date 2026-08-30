@@ -32,6 +32,9 @@ test("the palette carries exactly the takes the review left standing", () => {
     // probe-all, nothing recorded yet.
     bossFighters: 1,
     bossVoiceSlots: 12,
+    // Wave 17: the Pinelands Devil rides the same caption-first contract.
+    captionFirstFighters: 2,
+    captionFirstVoiceSlots: 24,
     cuesPerFighter: 23,
     coreCues: 12,
     kickCues: 4,
@@ -41,8 +44,8 @@ test("the palette carries exactly the takes the review left standing", () => {
     approvedCoreTakes: 15,
     approvedKickTakes: 30,
     recordedTakes: 45,
-    // 243 reviewed-roster paths + the Commissioner's (12 + 7) × 3 probes.
-    totalVariantPaths: 300,
+    // 243 reviewed-roster paths + (Commissioner + Devil) × (12 + 7) × 3 probes.
+    totalVariantPaths: 357,
     errors: [],
   });
   assert.equal(FIGHTER_AUDIO_IDS.length, 8);
@@ -51,7 +54,7 @@ test("the palette carries exactly the takes the review left standing", () => {
   assert.equal(FIGHTER_REACTIVE_CUES.length, 7);
   assert.equal(FIGHTER_AUDIO_CUES.length, 23);
   assert.equal(new Set(fighterAudioManifest()).size, 45);
-  assert.equal(new Set(fighterAudioVariantManifest()).size, 300);
+  assert.equal(new Set(fighterAudioVariantManifest()).size, 357);
 });
 
 test("a surviving core cue keeps the original single-take path", () => {

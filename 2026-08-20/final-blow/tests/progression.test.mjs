@@ -22,7 +22,9 @@ import {
 } from "../engine/progression.mjs";
 import { ARCADE_CREDITS, ARCADE_ENDING_PANELS, endingPanelsFor } from "../engine/arcade.mjs";
 
-const FIGHTERS = ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali"];
+// Wave 17: the Pinelands Devil joins the base roster the set-collection
+// entries count over (the Commissioner stays the secret extra).
+const FIGHTERS = ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali", "devil"];
 const STAGES = ["somerset", "vet", "wildwood", "buffet", "cruise", "janney"];
 
 // --- Mastery derivation ------------------------------------------------------
@@ -180,9 +182,10 @@ test("the spec's required entries all exist", () => {
 
 test("set-collection entries need the full set (throwables, stages, variants)", () => {
   const progress = createBlackBookProgress();
-  for (const id of FIGHTERS.slice(0, 7)) blackBookObserve(progress, { type: "event", kind: "throwableLand", fighterId: id });
+  for (const id of FIGHTERS.slice(0, 8)) blackBookObserve(progress, { type: "event", kind: "throwableLand", fighterId: id });
   assert.equal(blackBookEntry("every-jawn-thrown").test(progress), false);
-  blackBookObserve(progress, { type: "event", kind: "throwableLand", fighterId: "ali" });
+  // Wave 17: the ninth jawn — the Devil's hex charm — closes the set.
+  blackBookObserve(progress, { type: "event", kind: "throwableLand", fighterId: "devil" });
   assert.equal(blackBookEntry("every-jawn-thrown").test(progress), true);
 
   for (const stage of STAGES.slice(0, 5)) blackBookObserve(progress, { type: "event", kind: "weaponKo", stage });
@@ -196,7 +199,7 @@ test("set-collection entries need the full set (throwables, stages, variants)", 
   }
   for (const id of FIGHTERS) blackBookObserve(progress, { type: "roundEnd", won: true, fatality: { fighterId: id, variant: 1 } });
   assert.equal(blackBookEntry("double-feature").test(progress), true);
-  assert.equal(progress.tallies.fatalities, 16, "every observed finisher also counts once");
+  assert.equal(progress.tallies.fatalities, 18, "every observed finisher also counts once");
 });
 
 test("round-end predicates: no-jump, perfect, decision, chip, combo, boss finish", () => {

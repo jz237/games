@@ -635,6 +635,13 @@ kbd,
   width: min(100%, 1120px);
 }
 
+/* Wave 17: nine base cards (ten with the unlocked Commissioner) sit in five
+   columns so the grid never orphans a lone card onto a third row. */
+.roster-grid.wide {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  width: min(100%, 1240px);
+}
+
 .fighter-card {
   --fighter: #d32f2f;
   position: relative;

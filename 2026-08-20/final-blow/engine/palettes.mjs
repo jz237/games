@@ -152,6 +152,16 @@ export const FIGHTER_ALT_PALETTES = Object.freeze({
       window_({ center: 52, width: 14, rotate: 250, minSat: 0.52 }),
     ]),
   }),
+  devil: Object.freeze({
+    name: "CRANBERRY BOG",
+    accent: "#c23b52",
+    windows: Object.freeze([
+      // The moss-green wraps, shin bindings and charm glow swing to cranberry
+      // crimson — the OTHER thing the barrens are famous for. His umber hide
+      // and bone chest sit inside the protected skin band and never move.
+      window_({ center: 95, width: 40, rotate: 255, minSat: 0.18, satScale: 1.15, lightScale: 0.95 }),
+    ]),
+  }),
   commissioner: Object.freeze({
     name: "MIDNIGHT DOCKET",
     accent: "#3a4f9e",

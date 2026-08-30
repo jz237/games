@@ -23,7 +23,8 @@ function history(tokens) {
 function testCompleteKits() {
   // Wave 16: the Commissioner's real kit joins the eight mains — every rule
   // in this loop now holds him to the same standard.
-  assert.deepEqual(Object.keys(FIGHTER_KITS), ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali", "commissioner"]);
+  // Wave 17: the Pinelands Devil is the tenth kit under the same contract.
+  assert.deepEqual(Object.keys(FIGHTER_KITS), ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali", "devil", "commissioner"]);
   for (const id of Object.keys(FIGHTER_KITS)) {
     const kit = FIGHTER_KITS[id];
     assert.ok(kit.archetype.length > 8);

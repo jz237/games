@@ -45,9 +45,10 @@ function testProgressAndRetry() {
 
 function testEightUniqueEndings() {
   // Wave 16: the secret ninth ending joins the eight mains.
-  const endingIds = [...fighters, ARCADE_BOSS_ID];
+  // Wave 17: the Pinelands Devil makes it ten.
+  const endingIds = [...fighters, "devil", ARCADE_BOSS_ID];
   assert.deepEqual(Object.keys(ARCADE_ENDINGS), endingIds);
-  assert.equal(new Set(endingIds.map((id) => getArcadeEnding(id).title)).size, 9);
+  assert.equal(new Set(endingIds.map((id) => getArcadeEnding(id).title)).size, 10);
   for (const id of endingIds) {
     const ending = getArcadeEnding(id);
     assert.ok(ending.quote.length > 12);

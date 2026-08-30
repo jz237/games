@@ -251,9 +251,11 @@ export function recordsSummary(store) {
 // ---------------------------------------------------------------------------
 
 export const BLACK_BOOK_RULES = Object.freeze({
-  fighters: 8,
+  // Wave 17: the Pinelands Devil makes nine base fighters (the Commissioner
+  // stays outside the set-collection counts — his card is the secret tenth).
+  fighters: 9,
   stages: 6,
-  fatalityVariants: 16,
+  fatalityVariants: 18,
   matchGrabTechs: 5,
   matchDizzies: 3,
   matchSupers: 3,
@@ -608,11 +610,20 @@ export const BLACK_BOOK_ENTRIES = Object.freeze([
     test: (p) => p.tallies.arcadeClears >= 1,
   },
   {
+    // Wave 17: nine base fighters now — the id stays stable so earned
+    // unlocks survive, the copy counts the new roster.
     id: "eight-signatures",
-    title: "EIGHT SIGNATURES",
+    title: "NINE SIGNATURES",
     line: `Cleared arcade with all ${BLACK_BOOK_RULES.fighters} fighters. Every ending, earned in person.`,
     hint: `Beat arcade with all ${BLACK_BOOK_RULES.fighters} fighters.`,
     test: (p) => setSize(p.sets.arcadeFighters) >= BLACK_BOOK_RULES.fighters,
+  },
+  {
+    id: "native-son",
+    title: "NATIVE SON",
+    line: "Cleared the ladder as the Pinelands Devil. South Jersey finally sent its own.",
+    hint: "Beat arcade with the Pinelands Devil.",
+    test: (p) => Boolean(p.sets.arcadeFighters.devil),
   },
   {
     id: "the-book-closes",
@@ -624,7 +635,7 @@ export const BLACK_BOOK_ENTRIES = Object.freeze([
   {
     id: "keepers-keys",
     title: "KEEPER'S KEYS",
-    line: "Took the Commissioner's keys on FINAL difficulty. The ninth card in the deck is his — and now it deals for you.",
+    line: "Took the Commissioner's keys on FINAL difficulty. The tenth card in the deck is his — and now it deals for you.",
     hint: "Beat arcade on FINAL difficulty to claim the secret ninth fighter.",
     test: (p) => p.tallies.finalArcadeClears >= 1,
   },

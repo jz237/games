@@ -15,11 +15,13 @@ const expected = Object.freeze({
   donald: ["golfball", "FORE!"],
   cyraxx: ["bedbugs", "INFESTED"],
   ali: ["vinyl", "BASS DROP"],
+  // Wave 17: the Devil's bone-and-twine curse lob.
+  devil: ["charm", "HEXED"],
   // Wave 16: the steel cane the backlog reserved for the Commissioner.
   commissioner: ["cane", "ORDER RESTORED"],
 });
 
-test("all nine approved personal objects have authored identity and release animation", () => {
+test("all ten approved personal objects have authored identity and release animation", () => {
   assert.deepEqual(Object.keys(FIGHTER_THROWABLES), Object.keys(expected));
   const signatures = new Set();
   for (const [fighterId, [style, label]] of Object.entries(expected)) {
@@ -36,7 +38,7 @@ test("all nine approved personal objects have authored identity and release anim
       profile.height, profile.bounces, profile.hazardFrames, Boolean(profile.tether),
     ].join(":"));
   }
-  assert.equal(signatures.size, 9, "none of the nine objects may be a generic reskin");
+  assert.equal(signatures.size, 10, "none of the ten objects may be a generic reskin");
 });
 
 // Wave 16: the cane's wave-11-pattern EX tier — gold tip, knockdown, no

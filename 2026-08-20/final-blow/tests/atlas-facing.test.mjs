@@ -34,7 +34,8 @@ test("his punch and spray actives keep the right-facing convention", () => {
 });
 
 test("every other fighter and unknown lookup defaults to right-authored", () => {
-  for (const fighterId of ["deathblow", "jez", "alan", "benny", "donald", "cyraxx", "ali", "commissioner"]) {
+  // Wave 17: the Devil's sheets were generated right-authored end to end.
+  for (const fighterId of ["deathblow", "jez", "alan", "benny", "donald", "cyraxx", "ali", "devil", "commissioner"]) {
     assert.equal(atlasFrameFacing(fighterId, "base", 0), 1, fighterId);
     assert.equal(atlasFrameFacing(fighterId, "specials", 7), 1, fighterId);
   }

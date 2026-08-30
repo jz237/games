@@ -195,6 +195,55 @@ Contempt, not rage; courtroom cadence; the cane taps between clauses.
 | assets/audio/announcer/commissioner-name-1.mp3 … -3.mp3 | THE COMMISSIONER (1 neutral, 2 hyped, 3 drawn-out) |
 | assets/audio/announcer/commissioner-wins-1.mp3 … -3.mp3 | THE COMMISSIONER WINS! / THE WINNER — THE COMMISSIONER! / THE COMMISSIONER TAKES IT! |
 
+## Priority 2C — THE PINELANDS DEVIL (wave 17 roster voice)
+
+New in R2.0 FAMILY wave 17: the tenth fighter ships caption-first on the same
+contract as the Commissioner (`CAPTION_FIRST_AUDIO_IDS` in
+`engine/fighter-audio.mjs`) — nothing recorded, every bank probe-all, files
+join the rotation at their canonical paths with zero code changes.
+
+Voice direction: **a screechy South-Jersey cryptid.** Two layers in one
+throat: an animal register — raptor screeches, goat-bleat breaks, leathery
+wing snaps behind the breath — over a dry, unimpressed local drawl for the
+scripted lines. Folkloric, feral, but a LOCAL; never a cartoon demon growl.
+The screech should genuinely spike — this is the loudest voice in the cast.
+
+### The 12 core cue slots (12 cues × 3 takes = 36 files)
+
+`assets/audio/fighters/devil/<cue>{,-2,-3}.mp3` for each cue:
+
+| Cue | Performance |
+| --- | --- |
+| jump | wing-snap effort chirp, air catching leather |
+| dash | quick hoof-scrabble hiss, low and fast |
+| light | clipped talon-jab screech, short |
+| heavy | horn-swing effort bellow with a goat-bleat crack |
+| special | the PINEY SCREECH itself — full sonic shriek, his signature read |
+| throw | snarling wing-grab exertion, teeth closed |
+| hit-light | annoyed animal chuff |
+| hit-heavy | pained bleat-howl, dignity gone |
+| block | tight leathery brace grunt |
+| super | the BARRENS CURSE — layered screech over a muttered hex, biggest take |
+| fatal | long savoring predator rattle as the wings close |
+| ko | crumpling screech dying into a sad little bleat |
+
+### Reactive cues (7 cues × 3 takes = 21 files, same contract as the mains)
+
+`assets/audio/fighters/devil/{dizzy,counter,tech,desperation,scream,crush,taunt}{,-2,-3}.mp3`
+
+### Taunt line scripts (positional, mirrors `FIGHTER_TAUNT_LINES`)
+
+| Fighter (id) | Line 1 | Line 2 | Line 3 |
+| --- | --- | --- | --- |
+| PINELANDS DEVIL (devil) | THE PINES ARE HUNGRY TONIGHT. | THIRTEENTH CHILD, FIRST PLACE. | SKREEE! ...THAT MEANS RUN. |
+
+### Announcer additions
+
+| File | Line to speak |
+| --- | --- |
+| assets/audio/announcer/devil-name-1.mp3 … -3.mp3 | THE PINELANDS DEVIL (1 neutral, 2 hyped, 3 drawn-out) |
+| assets/audio/announcer/devil-wins-1.mp3 … -3.mp3 | THE PINELANDS DEVIL WINS! / THE WINNER — THE PINELANDS DEVIL! / THE PINELANDS DEVIL TAKES IT! |
+
 ## Priority 3 — match-story callouts (announcer voice)
 
 | File | Line to speak |
@@ -267,7 +316,8 @@ until he decides either way.
 | P1 announcer core | 29 + 24 name + 24 wins = 77 |
 | P2 fighter reactive | 168 |
 | P2B Commissioner voice (wave 16) | 36 core + 21 reactive + 6 announcer = 63 |
+| P2C Pinelands Devil voice (wave 17) | 36 core + 21 reactive + 6 announcer = 63 |
 | P3 match-story | 14 |
 | P4 online moments | 12 |
 | P5 fighter variant retakes | 30 |
-| **Total** | **481** |
+| **Total** | **544** |

@@ -1043,6 +1043,145 @@ const aliMoves = {
 // from the arcade ladder's AI tier and the boss movement buff, not from a
 // stat cheat.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// R2.0 FAMILY wave 17 — THE PINELANDS DEVIL. A winged hit-and-run predator:
+// hooved speed, the wing-glide jump (movement.glideFallCap, applied in the
+// shared physics step as a pure function of snapshotted velocity — no new
+// state field), a horn-charge running heavy, a tail-whip sweep, the
+// short-range PINEY SCREECH cone, the LEATHERWING DIVE air special and the
+// BARRENS CURSE super. Kick normals derive from these via the standard table.
+// ---------------------------------------------------------------------------
+const devilMoves = {
+  standLight: move("devil-talon-jab", "light", {
+    cancelProfileId: "stand-light", level: ATTACK_LEVELS.MID,
+    startupFrames: 5, activeFrames: 5, recoveryFrames: 9, range: 108, damage: 6, push: 150, meter: 10,
+    hitstunFrames: 22, blockstunFrames: 9, chipDamage: 0,
+    hitboxes: [box(24, -170, 88, 64, 0, 4)],
+  }),
+  forwardLight: move("devil-wing-hook", "light", {
+    cancelProfileId: "stand-light", level: ATTACK_LEVELS.MID,
+    startupFrames: 8, activeFrames: 5, recoveryFrames: 11, range: 128, damage: 8, push: 195, meter: 11,
+    hitstunFrames: 23, blockstunFrames: 10, chipDamage: 0, advanceSpeed: 150,
+    hitboxes: [box(26, -176, 104, 88, 0, 4)],
+  }),
+  crouchLight: move("devil-hoof-scrape", "light", {
+    cancelProfileId: "crouch-light", level: ATTACK_LEVELS.LOW,
+    startupFrames: 6, activeFrames: 5, recoveryFrames: 10, range: 112, damage: 6, push: 140, meter: 10,
+    hitstunFrames: 21, blockstunFrames: 10, chipDamage: 0,
+    hitboxes: [box(26, -70, 92, 42, 0, 4)],
+  }),
+  standHeavy: move("devil-horn-hook", "heavy", {
+    cancelProfileId: "stand-heavy", level: ATTACK_LEVELS.MID,
+    startupFrames: 13, activeFrames: 7, recoveryFrames: 16, range: 150, damage: 14, push: 300, meter: 17,
+    hitstunFrames: 24, blockstunFrames: 14, chipDamage: 0,
+    hitboxes: [box(30, -186, 112, 94, 0, 2), box(46, -176, 126, 90, 3, 6)],
+  }),
+  crouchHeavy: move("devil-tail-whip", "heavy", {
+    cancelProfileId: "crouch-heavy", level: ATTACK_LEVELS.LOW,
+    startupFrames: 12, activeFrames: 8, recoveryFrames: 20, range: 172, damage: 13, push: 270, meter: 17,
+    hitstunFrames: 22, blockstunFrames: 15, chipDamage: 0, knockdown: true,
+    hitboxes: [box(26, -64, 124, 42, 0, 3), box(44, -58, 144, 38, 4, 7)],
+  }),
+  overhead: move("devil-perch-drop", "heavy", {
+    cancelProfileId: "overhead", level: ATTACK_LEVELS.OVERHEAD,
+    startupFrames: 21, activeFrames: 6, recoveryFrames: 19, range: 148, damage: 16, push: 305, meter: 18,
+    hitstunFrames: 25, blockstunFrames: 15, chipDamage: 0,
+    hitboxes: [box(22, -226, 104, 110, 0, 1), box(40, -208, 124, 140, 2, 5)],
+  }),
+  driveHeavy: move("devil-horn-charge", "heavy", {
+    cancelProfileId: "drive-heavy", level: ATTACK_LEVELS.MID,
+    startupFrames: 15, activeFrames: 9, recoveryFrames: 19, range: 196, damage: 16, push: 345, meter: 19,
+    hitstunFrames: 25, blockstunFrames: 16, chipDamage: 0, advanceSpeed: 265,
+    command: "← → + KICK", hitboxes: [box(30, -188, 150, 124, 0, 4), box(50, -176, 172, 116, 5, 8)],
+  }),
+  throw: move("devil-wing-snatch", "throw", {
+    cancelProfileId: "throw", level: ATTACK_LEVELS.THROW,
+    startupFrames: 5, activeFrames: 3, recoveryFrames: 24, range: 84, damage: 16, push: 215, meter: 15,
+    hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, knockdown: true, animation: anim(1),
+    hitboxes: [box(20, -178, 74, 148, 0, 2)],
+  }),
+  special: move("devil-piney-screech", "special", {
+    cancelProfileId: "ground-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 11, activeFrames: 12, recoveryFrames: 18, range: 176, damage: 15, push: 310, meter: 21,
+    hitstunFrames: 26, blockstunFrames: 17, chipDamage: 3, knockdown: true,
+    moveName: "PINEY SCREECH", command: "SPECIAL", animation: anim(0),
+    hitboxes: [box(30, -196, 150, 150, 0, 5), box(44, -186, 172, 140, 6, 11)],
+  }),
+  commandSpecial: move("devil-pine-howl", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 14, activeFrames: 11, recoveryFrames: 18, range: 210, damage: 18, push: 360, meter: 24,
+    hitstunFrames: 27, blockstunFrames: 18, chipDamage: 4, knockdown: true, advanceSpeed: 180,
+    moveName: "PINE HOWL", command: "↓ → + PUNCH", animation: anim(0),
+    hitboxes: [box(34, -198, 176, 146, 0, 5), box(50, -188, 200, 136, 6, 10)],
+  }),
+  backSpecial: move("devil-wing-flit", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 9, activeFrames: 8, recoveryFrames: 16, range: 132, damage: 10, push: 210, meter: 18,
+    hitstunFrames: 22, blockstunFrames: 13, chipDamage: 0, ignorePushbox: true, advanceSpeed: 330,
+    moveName: "WING FLIT", command: "↓ ← + PUNCH · cross-through", animation: anim(1),
+    hitboxes: [box(18, -180, 104, 132, 0, 3), box(30, -172, 118, 124, 4, 7)],
+  }),
+  launcher: move("devil-updraft-talon", "heavy", {
+    cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
+    startupFrames: 10, activeFrames: 8, recoveryFrames: 24, range: 136, damage: 12, push: 78, meter: 17,
+    hitstunFrames: 27, blockstunFrames: 15, chipDamage: 0, knockdown: true, launchVelocityY: -575,
+    juggleStarter: true,
+    moveName: "UPDRAFT TALON", command: "→ ↓ → + PUNCH", animation: anim(2),
+    hitboxes: [box(20, -214, 106, 168, 0, 3), box(34, -256, 122, 206, 4, 7)],
+  }),
+  enhanced: move("devil-ex-piney-screech", "special", {
+    cancelProfileId: "ground-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 8, activeFrames: 16, recoveryFrames: 15, range: 198, damage: 9, push: 100, meter: 9,
+    hitstunFrames: 25, blockstunFrames: 19, chipDamage: 3, knockdown: true, knockdownOnFinal: true,
+    maxHits: 2, rehitFrames: 8, gritCost: GRIT_RULES.enhancedSpecialCost,
+    moveName: "PINEY SCREECH EX", command: "LP&HP", animation: anim(0),
+    hitboxes: [box(28, -202, 172, 156, 0, 7), box(46, -190, 196, 144, 8, 15)],
+  }),
+  enhancedCommandSpecial: move("devil-ex-pine-howl", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 10, activeFrames: 18, recoveryFrames: 15, range: 236, damage: 11, push: 118, meter: 10,
+    hitstunFrames: 27, blockstunFrames: 20, chipDamage: 4, knockdown: true, knockdownOnFinal: true,
+    maxHits: 2, rehitFrames: 9, gritCost: GRIT_RULES.enhancedSpecialCost, advanceSpeed: 240,
+    moveName: "PINE HOWL EX", command: "↓ → + LP&HP", animation: anim(0),
+    hitboxes: [box(32, -204, 198, 152, 0, 8), box(52, -192, 224, 140, 9, 17)],
+  }),
+  enhancedBackSpecial: move("devil-ex-wing-flit", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 6, activeFrames: 8, recoveryFrames: 14, range: 148, damage: 13, push: 230, meter: 10,
+    hitstunFrames: 24, blockstunFrames: 15, chipDamage: 0, ignorePushbox: true, advanceSpeed: 380,
+    gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 6,
+    moveName: "WING FLIT EX", command: "↓ ← + LP&HP", animation: anim(1),
+    hitboxes: [box(16, -184, 116, 138, 0, 7)],
+  }),
+  enhancedLauncher: move("devil-ex-updraft-talon", "special", {
+    cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
+    startupFrames: 7, activeFrames: 13, recoveryFrames: 21, range: 156, damage: 9, push: 72, meter: 9,
+    hitstunFrames: 27, blockstunFrames: 17, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
+    launchVelocityY: -620, juggleStarter: true, maxHits: 2, rehitFrames: 7,
+    gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 10,
+    moveName: "UPDRAFT TALON EX", command: "→ ↓ → + LP&HP", animation: anim(2),
+    hitboxes: [box(17, -220, 118, 176, 0, 5), box(32, -264, 138, 216, 6, 12)],
+  }),
+  super: move("devil-barrens-curse", "special", {
+    cancelProfileId: "grit-super", level: ATTACK_LEVELS.MID,
+    startupFrames: 9, activeFrames: 38, recoveryFrames: 26, range: 246, damage: 9, push: 58, meter: 0,
+    hitstunFrames: 28, blockstunFrames: 22, chipDamage: 3, knockdown: true, knockdownOnFinal: true,
+    juggleLift: -220, maxHits: 5, rehitFrames: 8, gritCost: GRIT_RULES.superCost,
+    superMove: true,
+    moveName: "BARRENS CURSE", command: "FULL GRIT + ↓ → ↓ → PUNCH", animation: anim(3),
+    hitboxes: [box(22, -214, 178, 172, 0, 8), box(44, -204, 214, 160, 9, 18), box(24, -230, 234, 190, 19, 28), box(48, -212, 250, 174, 29, 37)],
+  }),
+  // The DIVE: his air special drops lower and carries wing momentum forward,
+  // overriding the shared airSpecial the rest of the cast uses.
+  airSpecial: move("devil-leatherwing-dive", "special", {
+    level: ATTACK_LEVELS.AIR, startupFrames: 11, activeFrames: 12, recoveryFrames: 15,
+    range: 170, damage: 15, push: 320, meter: 22, hitstunFrames: 25, blockstunFrames: 17, chipDamage: 3,
+    knockdown: true, advanceSpeed: 300,
+    moveName: "LEATHERWING DIVE",
+    hitboxes: [box(20, -140, 130, 130, 0, 5), box(34, -120, 150, 120, 6, 11)],
+  }),
+};
+
 const commissionerMoves = {
   standLight: move("commissioner-cane-jab", "light", {
     cancelProfileId: "stand-light", level: ATTACK_LEVELS.MID,
@@ -1374,6 +1513,38 @@ const fighterKits = {
     ],
     moves: { ...shared, ...aliMoves },
   },
+  devil: {
+    id: "devil",
+    archetype: "WINGED BARRENS PREDATOR / HIT-AND-RUN",
+    summary: "A pine-barrens cryptid on hooves: quick feet, a wing-glide jump that hangs over anti-airs, a horn charge, a tail-whip sweep and a screech that shreds up close. He has to keep moving — nothing about him holds ground.",
+    movement: {
+      forwardWalkSpeed: 322, backWalkSpeed: 262, jumpVelocityY: -772,
+      forwardJumpVelocityX: 344, backJumpVelocityX: 300, neutralJumpVelocityX: 0,
+      forwardDashSpeed: 648, forwardDashFrames: 9, backDashSpeed: 566, backDashFrames: 11,
+      backDashInvulnerableFrames: 7, dashCooldownFrames: 7,
+      standingPushboxHalfWidth: 37, crouchingPushboxHalfWidth: 34,
+      // Wave 17 — the wing-glide quirk: his leathery wings cap fall speed
+      // (world px/s) during any controlled airborne state. Applied in
+      // applyFighterPhysics as a pure function of already-snapshotted fields,
+      // so rollback needs no new state. Hitstun/knockdown/grabs fall at full
+      // gravity like everyone else.
+      glideFallCap: 350,
+    },
+    ai: { preferredRange: 150, retreatRange: 74, approachRange: 300, antiAirAction: "launcher", pokeAction: "special", closeAction: "backSpecial", rangedAction: "commandSpecial" },
+    victory: { bank: "specials", frame: 15, quote: "THE PINES KEEP WHAT THEY CATCH." },
+    moveList: [
+      ["Talon Jab / Wing Hook", "LP / → + LP"],
+      ["Perch Drop", "→ + HP · overhead"],
+      ["Piney Screech", "↓ → + KICK · sonic cone"],
+      ["Pine Howl", "↓ → + PUNCH"],
+      ["Wing Flit", "↓ ← + PUNCH · cross-through"],
+      ["Updraft Talon", "→ ↓ → + PUNCH · anti-air"],
+      ["Enhanced specials", "Repeat motion + LP&HP · 25 Grit"],
+      ["Wing Snatch", "CLOSE + → or ← + LP/LK"],
+      ["Barrens Curse", "FULL GRIT + ↓ → ↓ → PUNCH"],
+    ],
+    moves: { ...shared, ...devilMoves },
+  },
   commissioner: {
     id: "commissioner",
     archetype: "STEEL-CANE AUTHORITY / SPACING TYRANT",
@@ -1459,6 +1630,8 @@ export const FORWARD_KICK_STYLES = Object.freeze({
   donald: "axe",
   cyraxx: "slide",
   ali: "axe",
+  // Wave 17: the Devil's forward heavy kick is a low tail-slide off the sweep.
+  devil: "slide",
   // Wave 16: the Commissioner swings the cane like an axe — no slides in a suit.
   commissioner: "axe",
 });
@@ -1770,7 +1943,8 @@ export const FIGHTER_WIN_QUOTES = deepFreeze({
   },
   cyraxx: {
     default: quotes("THE ECHO GETS THE LAST WORD.", "HEHEHE... STILL LIVE!", "YOU GOT BUFFERED, SON."),
-    rival: quotes("YOUR BEAT DROPPED, ALI. SO DID YOU.", "WEST STAINES? NEVER HEARD OF IT, ALI.", "MY FEEDBACK EATS YOUR BASSLINE, ALI."),
+    // Wave 17: the rivalry retunes — the internet cryptid hunts the real one.
+    rival: quotes("CAUGHT THE DEVIL ON CAMERA, BABY!", "YOUR SCREECH PEAKED MY MIC, DEVIL. STILL WON.", "THE PINE BARRENS GOT WIFI NOW, DEVIL."),
     fatality: quotes("THAT'S GOING ON THE CHANNEL.", "CLIP IT. LOOP IT. SCREAM IT.", "DELETED. LIKE, PERMANENTLY."),
     flawless: quotes("ZERO PACKET LOSS, BABY!", "YOU COULDN'T EVEN TOUCH THE MIC.", "FULL SIGNAL. NO DAMAGE."),
     comeback: quotes("YOU CAN'T MUTE ME TWICE.", "BUFFERING... BUFFERING... BOOM.", "THE SIGNAL WAS NEVER LOST."),
@@ -1778,15 +1952,26 @@ export const FIGHTER_WIN_QUOTES = deepFreeze({
   },
   ali: {
     default: quotes("KEEP IT MASSIVE.", "BOOYAKASHA. FIGHT OVER.", "RESPEK... FOR ME, OBVIOUSLY."),
-    rival: quotes("IS IT COS YOUR WIFI DROPPED, CYRAXX?", "YOUR FEEDBACK IS WELL WEAK, CYRAXX.", "STICK TO STREAMING, CYRAXX."),
+    // Wave 17: Ali's beef moves upstairs — the MC versus the COMMISSIONER.
+    rival: quotes("CHECK IT — THE COMMISSIONER GOT SERVED.", "YOUR RULES IS WELL BORING, COMMISSIONER.", "IS IT COS I IS BANNED, COMMISSIONER? NOT NO MORE."),
     fatality: quotes("THAT WAS WELL OUT OF ORDER. INNIT.", "DROPPED THE MIC AND THE MAN.", "TELL THE MASSIVE WHAT YOU SAW."),
     flawless: quotes("NOT EVEN A SCRATCH ON THE CHAINS.", "UNTOUCHABLE, ME.", "AII, THAT WAS TOO EASY."),
     comeback: quotes("THE BEAT ALWAYS COMES BACK ROUND.", "YOU HAD ME ON MUTE FOR A MINUTE.", "BIG FINISH. AS REHEARSED."),
     boss: quotes("YOUR RULES GOT REMIXED, COMMISSIONER.", "THE BLOCK'S GOT THE MIC NOW.", "WEST STAINES RUNS THE VET TONIGHT."),
   },
+  // Wave 17 — the tenth voice: the Pinelands Devil.
+  devil: {
+    default: quotes("THE PINES KEEP WHAT THEY CATCH.", "SKREEE! ...LOOSELY, THAT MEANS 'NEXT'.", "GO HOME. THE BARRENS ARE CLOSED."),
+    rival: quotes("NO SIGNAL IN THE PINES, CYRAXX.", "YOUR FEEDBACK AIN'T FOLKLORE, CYRAXX.", "STREAM THAT, CYRAXX. LAST EPISODE."),
+    fatality: quotes("THE BARRENS FEED TONIGHT.", "THIRTEENTH CHILD. FIRST BLOOD.", "THEY'LL TELL THIS ONE AROUND CAMPFIRES."),
+    flawless: quotes("NOT A FEATHER OUT OF PLACE.", "YOU NEVER TOUCHED THE WINGS.", "TWO CENTURIES UNCAUGHT. STILL COUNTING."),
+    comeback: quotes("YOU CORNERED A CRYPTID. BAD IDEA.", "THE PINES ALWAYS GROW BACK.", "LEGENDS DON'T STAY DOWN."),
+    boss: quotes("MY NAME WAS NEVER IN YOUR BOOK, KEEPER.", "JERSEY DOESN'T ANSWER TO PHILADELPHIA.", "PUT THE CANE DOWN. THE PINES ARE OWED."),
+  },
   commissioner: {
     default: quotes("THE BOOK CLOSES WHEN I SAY IT CLOSES.", "COURT IS ADJOURNED.", "YOUR PURSE IS FORFEIT. READ THE FINE PRINT."),
-    rival: quotes("EVERY NAME IN MY BOOK LOSES EVENTUALLY.", "YOU SIGNED. I COLLECTED.", "THE HOUSE ALWAYS HOLDS THE PEN."),
+    // Wave 17: the Keeper's rivalry lands on the loudest mouth in the lobby.
+    rival: quotes("THE COURT FINDS MR. G IN CONTEMPT.", "YOUR APPEAL IS DENIED, MR. G.", "NO ENCORES IN MY COURTROOM, MR. G."),
     fatality: quotes("SESSION CLOSED. PERMANENTLY.", "THE CANE REMEMBERS EVERY DEBT.", "STRICKEN FROM THE RECORD."),
     flawless: quotes("YOU NEVER TOUCHED THE SUIT.", "OBJECTION NOTED. OVERRULED.", "NOT ONE MARK ON THE LEDGER."),
     comeback: quotes("I WROTE THE LAST CHAPTER MYSELF.", "APPEALS COURT FOUND IN MY FAVOR.", "YOU NEARLY BALANCED THE BOOKS. NEARLY."),

@@ -16,7 +16,12 @@ export const FIGHTER_AUDIO_IDS = Object.freeze([...REVIEW_FIGHTER_IDS]);
 // moment they land at their canonical paths (see MISSING-AUDIO.md).
 export const BOSS_AUDIO_IDS = Object.freeze(["commissioner"]);
 
-export const ALL_FIGHTER_AUDIO_IDS = Object.freeze([...FIGHTER_AUDIO_IDS, ...BOSS_AUDIO_IDS]);
+// Wave 17: the Pinelands Devil ships on the exact same caption-first contract
+// — no review exists for him either, so all of his banks probe every slot.
+// The list names every fighter outside the reviewed roster.
+export const CAPTION_FIRST_AUDIO_IDS = Object.freeze([...BOSS_AUDIO_IDS, "devil"]);
+
+export const ALL_FIGHTER_AUDIO_IDS = Object.freeze([...FIGHTER_AUDIO_IDS, ...CAPTION_FIRST_AUDIO_IDS]);
 
 // The original single-take cue set shipped with 1.5. One mp3 each on disk —
 // but only where the take survived Jez's review; the rest are gone and route
@@ -152,6 +157,13 @@ export const FIGHTER_TAUNT_LINES = Object.freeze({
     "IS IT COS I IS WINNING?",
     "RESPEK. NOT FOR YOU, THOUGH.",
   ]),
+  // Wave 17: the Devil's screech-adjacent gloating, in persona (voice
+  // directions in MISSING-AUDIO.md). Same positional contract as the mains.
+  devil: Object.freeze([
+    "THE PINES ARE HUNGRY TONIGHT.",
+    "THIRTEENTH CHILD, FIRST PLACE.",
+    "SKREEE! ...THAT MEANS RUN.",
+  ]),
   // Wave 16: the Commissioner's contempt, in persona (voice directions in
   // MISSING-AUDIO.md). Same positional caption/take contract as the mains.
   commissioner: Object.freeze([
@@ -192,9 +204,10 @@ export function fighterAudioBankKind(cue, fighterId = "") {
   if (FIGHTER_KICK_CUES.includes(cue)) return FIGHTER_AUDIO_BANK_KINDS.recorded;
   if (FIGHTER_REACTIVE_CUES.includes(cue)) return FIGHTER_AUDIO_BANK_KINDS.placeholder;
   if (FIGHTER_AUDIO_CORE_CUES.includes(cue)) {
-    // Boss slots have no shipped variant-1 take yet, so every slot is probed
-    // (a "probed" bank would trust slot 1 blindly and 404 at play time).
-    return BOSS_AUDIO_IDS.includes(fighterId)
+    // Caption-first fighters (the boss, the Devil) have no shipped variant-1
+    // take yet, so every slot is probed (a "probed" bank would trust slot 1
+    // blindly and 404 at play time).
+    return CAPTION_FIRST_AUDIO_IDS.includes(fighterId)
       ? FIGHTER_AUDIO_BANK_KINDS.placeholder
       : FIGHTER_AUDIO_BANK_KINDS.probed;
   }
@@ -208,15 +221,15 @@ export function fighterAudioBankKind(cue, fighterId = "") {
  * unknown-cue cases already used.
  */
 export const FIGHTER_AUDIO = Object.freeze(Object.fromEntries(ALL_FIGHTER_AUDIO_IDS.map((fighterId) => {
-  const boss = BOSS_AUDIO_IDS.includes(fighterId);
+  const captionFirst = CAPTION_FIRST_AUDIO_IDS.includes(fighterId);
   const palette = {};
   for (const cue of FIGHTER_AUDIO_CORE_CUES) {
-    // Reviewed mains route only the takes Jez approved; the Commissioner's 12
-    // core slots all route (probe-all — nothing is recorded yet).
-    if (boss || APPROVED_CORE_CUES[fighterId].includes(cue)) palette[cue] = probeVariants(fighterId, cue);
+    // Reviewed mains route only the takes Jez approved; the caption-first
+    // fighters' 12 core slots all route (probe-all — nothing is recorded yet).
+    if (captionFirst || APPROVED_CORE_CUES[fighterId].includes(cue)) palette[cue] = probeVariants(fighterId, cue);
   }
   for (const cue of FIGHTER_KICK_CUES) {
-    const pool = boss ? [] : APPROVED_KICK_POOLS[fighterId][cue];
+    const pool = captionFirst ? [] : APPROVED_KICK_POOLS[fighterId][cue];
     if (pool.length) palette[cue] = Object.freeze([...pool]);
   }
   for (const cue of FIGHTER_REACTIVE_CUES) {
@@ -306,10 +319,11 @@ export function auditFighterAudio() {
       }
     }
   }
-  // Wave 16: the Commissioner's caption-first slots — all 12 core cues must
-  // route probe-all banks (no review exists to trim them), every reactive cue
-  // keeps its slots, and nothing may pretend to be a recorded kick take.
-  for (const fighterId of BOSS_AUDIO_IDS) {
+  // Waves 16/17: the caption-first fighters (the Commissioner, the Devil) —
+  // all 12 core cues must route probe-all banks (no review exists to trim
+  // them), every reactive cue keeps its slots, and nothing may pretend to be
+  // a recorded kick take.
+  for (const fighterId of CAPTION_FIRST_AUDIO_IDS) {
     const palette = FIGHTER_AUDIO[fighterId];
     if (!palette) {
       errors.push(`${fighterId}: missing palette`);
@@ -360,6 +374,9 @@ export function auditFighterAudio() {
     fighters: FIGHTER_AUDIO_IDS.length,
     bossFighters: BOSS_AUDIO_IDS.length,
     bossVoiceSlots: BOSS_AUDIO_IDS.length * FIGHTER_AUDIO_CORE_CUES.length,
+    // Wave 17: everyone outside the reviewed roster — boss plus the Devil.
+    captionFirstFighters: CAPTION_FIRST_AUDIO_IDS.length,
+    captionFirstVoiceSlots: CAPTION_FIRST_AUDIO_IDS.length * FIGHTER_AUDIO_CORE_CUES.length,
     cuesPerFighter: FIGHTER_AUDIO_CUES.length,
     coreCues: FIGHTER_AUDIO_CORE_CUES.length,
     kickCues: FIGHTER_KICK_CUES.length,

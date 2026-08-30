@@ -394,6 +394,51 @@ export const FIGHTER_THROWABLES = Object.freeze({
     }),
     sound: "vinyl",
   }),
+  // R2.0 FAMILY wave 17 — the Pinelands Devil's bone-and-twine hex charm. A
+  // lobbed pine-barrens curse: slow, arcing, and it STAGGERS whoever it marks
+  // (the hex jolt buys the Devil his swoop-in). The EX tier follows the
+  // wave-11 hazard pattern: the charm settles into a lingering curse zone
+  // that slows anyone who wades through the marked ground.
+  devil: object("charm", {
+    name: "HEX CHARM",
+    style: "charm",
+    archetype: "curse lob — a slow hexed arc that jolts whoever it marks",
+    startupFrames: 12,
+    activeFrames: 4,
+    recoveryFrames: 26,
+    usesPerRound: 2,
+    speed: 350,
+    gravity: 1200,
+    launchY: -380,
+    spawnY: -140,
+    width: 40,
+    height: 40,
+    damage: 8,
+    chipDamage: 1,
+    hitstunFrames: 19,
+    blockstunFrames: 11,
+    push: 170,
+    lifeFrames: 160,
+    spin: 7,
+    wobble: 6,
+    staggerFrames: 8,
+    impactLabel: "HEXED",
+    variants: Object.freeze({
+      // EX: LINGERING CURSE — the charm settles where it lands and hexes the
+      // ground itself, a pine-green zone that saps anyone standing in it.
+      ex: Object.freeze({
+        name: "LINGERING CURSE",
+        damage: 8,
+        lifeFrames: 210,
+        hazardFrames: 140,
+        hazardArmFrames: 20,
+        hazardWidth: 120,
+        slowFrames: 60,
+        staggerFrames: 0,
+      }),
+    }),
+    sound: "charm",
+  }),
   // R2.0 FAMILY wave 16 — the steel cane the backlog reserved for the
   // Commissioner. A hard, flat, end-over-end steel throw: fast, heavy on the
   // clean hit, and it STAGGERS — the cane buys him the walk-in his feet can't.

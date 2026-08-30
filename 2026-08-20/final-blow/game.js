@@ -415,6 +415,21 @@ const roster = [
     vfx: "bass",
     finishers: ["MIC DROP", "WEST STAINES MASSIVE"],
   },
+  // R2.0 FAMILY wave 17: the Jersey Devil crawls out of the Pine Barrens and
+  // into the tenth roster slot. Public-domain folklore, native son of the NJ
+  // stages, and the loudest silhouette in the game.
+  {
+    id: "devil",
+    name: "PINELANDS DEVIL",
+    title: "SOUTH JERSEY CRYPTID",
+    mark: "PD",
+    color: "#6b4a2f",
+    accent: "#7fae5a",
+    weapon: "talons",
+    special: "PINEY SCREECH",
+    vfx: "barrens",
+    finishers: ["WING SHEAR", "HOOF STOMP"],
+  },
 ];
 
 // R2.0 FAMILY wave 16: the boss carries his own kit, finishers and fatalities
@@ -678,6 +693,35 @@ const finisherChoreography = {
       { t: 1.95, label: "MASSIVE AIR", sound: "special", power: 1 },
       { t: 2.42, label: "MIC DROP", sound: "heavy", power: 1.08 },
       { t: 3.98, label: "WEST STAINES MASSIVE", sound: "final", power: 1.5, final: true },
+    ],
+  },
+  // Wave 17 — the Devil's ceremony is a hunt: a swoop in, talons, the horn
+  // charge, a screech that lifts the victim off the floor, and the wings
+  // closing for WING SHEAR like a trap springing shut.
+  devil: {
+    combo: "BARRENS CURSE",
+    duration: 5.3,
+    keys: [
+      { t: 0, ax: -315, ay: 0, af: 0, vx: 0, vy: 0, vf: 15, zoom: 1.02 },
+      { t: .4, ax: -170, ay: 0, af: 6, vx: 0, vy: 0, vf: 15, zoom: 1.07 },
+      { t: .64, ax: -52, ay: 0, af: 9, vx: 6, vy: 0, vf: 15, zoom: 1.12 },
+      { t: .92, ax: 44, ay: 0, af: 10, vx: -5, vy: 12, vf: 15, vr: .06, zoom: 1.15 },
+      { t: 1.24, ax: -44, ay: 0, af: 9, vx: 10, vy: 26, vf: 15, vr: -.1, zoom: 1.17 },
+      { t: 1.58, ax: -30, ay: 0, af: 13, vx: 34, vy: 100, vf: 15, vr: -.24, zoom: 1.2 },
+      { t: 1.98, ax: -6, ay: 130, af: 14, vx: 52, vy: 195, vf: 15, vr: -.5, zoom: 1.25 },
+      { t: 2.46, ax: 58, ay: 72, af: 13, vx: 34, vy: 95, vf: 15, vr: .58, zoom: 1.2 },
+      { t: 3.05, ax: -150, ay: 0, af: 12, vx: 26, vy: 0, vf: 15, vr: .72, zoom: 1.12 },
+      { t: 3.98, ax: -18, ay: 0, af: 14, vx: 50, vy: 0, vf: 15, vr: 1.2, zoom: 1.35 },
+      { t: 5.3, ax: -150, ay: 0, af: 0, vx: 76, vy: 0, vf: 15, vr: 1.38, zoom: 1.08 },
+    ],
+    impacts: [
+      { t: .64, label: "SWOOP IN", sound: "light", power: .4 },
+      { t: .92, label: "TALON RIP", sound: "hit", power: .54 },
+      { t: 1.24, label: "TAIL LASH", sound: "light", power: .58 },
+      { t: 1.58, label: "HORN CHARGE", sound: "heavy", power: .82 },
+      { t: 1.98, label: "SCREECH LIFT", sound: "special", power: 1 },
+      { t: 2.46, label: "PINE DROP", sound: "heavy", power: 1.06 },
+      { t: 3.98, label: "WING SHEAR", sound: "final", power: 1.46, final: true },
     ],
   },
   // Wave 16 — the Commissioner's own ceremony: unhurried, procedural, cruel.
@@ -5161,6 +5205,9 @@ function createOnlineRollback(config, initialFrame = 0) {
 function setupRoster() {
   const grid = $("#rosterGrid");
   grid.innerHTML = "";
+  // Wave 17: ten cards need five columns; the classic 4x2 stays for any
+  // hypothetical eight-fighter roster so the layout rule is data-driven.
+  grid.classList.toggle("wide", roster.length > 8);
   roster.forEach((fighter, index) => {
     const card = document.createElement("button");
     // Wave 16: the unlocked Commissioner is the dark-red ninth card.
@@ -8714,6 +8761,19 @@ function spawnWallImpact(fighter, wallDirection) {
 
 function applyFighterPhysics(fighter, dt) {
   fighter.vy += GRAVITY * dt;
+  // Wave 17 — the Pinelands Devil's wing-glide: his authored movement caps
+  // descent speed during any CONTROLLED airborne state, so his jump hangs
+  // like something that owns the air. Pure function of already-snapshotted
+  // fields (vy, grounded, hitstun/knockdown/grab state) and a static kit
+  // constant: rollback resimulation reproduces it exactly and no new state
+  // field exists to snapshot. Hitstun, juggles, knockdowns and grabs fall at
+  // full gravity like everyone else — the wings only work when he does.
+  const glideCap = fighter.movement.glideFallCap;
+  if (glideCap > 0 && fighter.vy > glideCap && !fighter.grounded
+    && !fighter.down && !fighter.pendingKnockdown && !fighter.grabbed
+    && fighter.hitstunFrames === 0 && fighter.dizzyFrames === 0) {
+    fighter.vy = glideCap;
+  }
   fighter.x += fighter.vx * dt;
   fighter.y += fighter.vy * dt;
   if (fighter.y >= FLOOR) {
@@ -9687,6 +9747,10 @@ const THROW_STYLES = Object.freeze({
   donald: { hold: 15, lift: 52, offset: 70, spin: -0.3, launch: 1.3, drop: 0.9, shake: 0.32, label: "HEAVE" },
   cyraxx: { hold: 12, lift: 34, offset: 56, spin: -0.6, launch: 1, drop: 1, shake: 0.26, label: "SHOVE" },
   ali: { hold: 13, lift: 70, offset: 50, spin: -1.35, launch: 1.12, drop: 1.1, shake: 0.3, label: "JUDO" },
+  // Wave 17: the Devil's wing-grab — the highest lift in the game (the wings
+  // do the work), a hard spin, and a downward flick that reads like dropped
+  // prey rather than a wrestler's slam.
+  devil: { hold: 12, lift: 92, offset: 58, spin: -1, launch: 1.14, drop: 1.3, shake: 0.32, label: "SNATCH" },
   commissioner: { hold: 16, lift: 60, offset: 64, spin: -0.65, launch: 1.24, drop: 1.25, shake: 0.4, label: "HOOK" },
 });
 
@@ -13065,7 +13129,7 @@ function drawProjectiles(time) {
 const FIGHTER_RENDER_BASE = 330;
 const FIGHTER_SIZE_ADJUST = Object.freeze({
   deathblow: 1.068, jez: 0.995, alan: 1.062, post: 1.04,
-  benny: 1, donald: 1.02, cyraxx: 1.02, ali: 0.99, commissioner: 1.03,
+  benny: 1, donald: 1.02, cyraxx: 1.02, ali: 0.99, devil: 1.05, commissioner: 1.03,
 });
 
 // Per-fighter correction when a pose comes from the specials move sheet, whose
@@ -13073,7 +13137,7 @@ const FIGHTER_SIZE_ADJUST = Object.freeze({
 // cast-shadow pass so both size a specials frame identically.
 const MOVE_SHEET_ADJUST = Object.freeze({
   deathblow: 1.14, jez: 1.03, alan: 1.06, post: 1.02, benny: 1.02,
-  donald: 1.04, cyraxx: 1.05, ali: 1.04, commissioner: 1.02,
+  donald: 1.04, cyraxx: 1.05, ali: 1.04, devil: 1.04, commissioner: 1.02,
 });
 
 function fighterRenderSize(fighterId) {

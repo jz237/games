@@ -1,5 +1,10 @@
 export const ARCADE_BOSS_ID = "commissioner";
 
+// Wave 17: ten fighters, five pairs. The Devil takes Cyraxx (the internet
+// cryptid versus the real one), which frees Ali G for the Commissioner —
+// authority versus the loudest mouth it ever banned. Ali's rival never
+// appears mid-ladder (the boss is excluded from the challenger pool), so his
+// grudge match IS the FINAL BOUT.
 export const ARCADE_RIVALS = Object.freeze({
   deathblow: "alan",
   jez: "post",
@@ -7,8 +12,10 @@ export const ARCADE_RIVALS = Object.freeze({
   post: "jez",
   benny: "donald",
   donald: "benny",
-  cyraxx: "ali",
-  ali: "cyraxx",
+  cyraxx: "devil",
+  devil: "cyraxx",
+  ali: "commissioner",
+  commissioner: "ali",
 });
 
 export const ARCADE_ENDINGS = Object.freeze({
@@ -60,6 +67,13 @@ export const ARCADE_ENDINGS = Object.freeze({
     story: "Ali G turned the final arena into a block party that lasted until the stadium lights went dark. Nobody remembered the Commissioner's rules. Everybody remembered the chorus.",
     color: "#f4d21f",
   }),
+  // Wave 17: the native son takes the long flight home.
+  devil: Object.freeze({
+    title: "THE PINES ANSWER",
+    quote: "SOME LEGENDS COLLECT DEBTS IN PERSON.",
+    story: "The Pinelands Devil tore its page from the black book and nailed it to a pitch pine at the Wildwood line. Every fighter the circuit ever swallowed got walked home through the barrens — and nothing followed them out.",
+    color: "#7fae5a",
+  }),
   // Wave 16: the secret ninth ending — the Commissioner reclaims his own book.
   commissioner: Object.freeze({
     title: "THE BOOK STAYS OPEN",
@@ -99,10 +113,19 @@ export const ARCADE_RIVAL_DIALOGUE = Object.freeze({
     exchange("benny", "YOUR TOWER'S WIRED WRONG, DONALD. ALL OF IT.", "donald", "IT'S GOLD-PLATED. GOLD DOESN'T FAIL."),
     exchange("donald", "NOBODY KNOWS VOLTAGE BETTER THAN ME.", "benny", "HOLD THIS WIRE AND SAY THAT AGAIN."),
   ]),
-  "ali:cyraxx": Object.freeze([
-    exchange("cyraxx", "YOUR WHOLE ACT IS BUFFERING, ALI.", "ali", "AT LEAST MY STREAM'S GOT VIEWERS, INNIT."),
-    exchange("ali", "WEST STAINES MASSIVE IN THE BUILDING.", "cyraxx", "HEHEHE... I'LL FEEDBACK YOUR BASSLINE TO BITS."),
-    exchange("cyraxx", "CRANK IT UP! I EAT MICS FOR BREAKFAST.", "ali", "THAT'S WHY YOUR TEETH IS LIKE THAT."),
+  // Wave 17: the trickster hunts the cryptid — Cyraxx has been trying to get
+  // the Jersey Devil on stream for years, and now it walked out of the pines.
+  "cyraxx:devil": Object.freeze([
+    exchange("cyraxx", "I'VE BEEN HUNTING YOU FOR SIX SEASONS, DEVIL!", "devil", "AND THE PINES WERE HUNTING YOU BACK."),
+    exchange("devil", "TURN THE CAMERA OFF, GREMLIN.", "cyraxx", "HEHEHE... THE CHAT SAYS MAKE HIM SCREECH."),
+    exchange("cyraxx", "YOU'RE JUST A GUY IN A SUIT! PROBABLY!", "devil", "COUNT MY TOES AND SAY THAT AGAIN."),
+  ]),
+  // Wave 17: Ali G versus the man who banned him from every venue in the
+  // book. The pairing pays off at the FINAL BOUT — no mid-ladder rival beat.
+  "ali:commissioner": Object.freeze([
+    exchange("commissioner", "YOU ARE BANNED FROM THIS BUILDING, MR. G.", "ali", "CAN'T BAN ME BRUV, I'M THE MAIN EVENT."),
+    exchange("ali", "ME MASSIVE VOTED YOU OUT, COMMISSIONER.", "commissioner", "THE BOOK DOES NOT HOLD ELECTIONS."),
+    exchange("commissioner", "THIS COURT RECOGNIZES NO 'BOOYAKASHA'.", "ali", "IT WELL DOES NOW. BOOYAKASHA."),
   ]),
 });
 
@@ -141,6 +164,11 @@ export const ARCADE_BOSS_DIALOGUE = Object.freeze({
   ali: Object.freeze([
     exchange("commissioner", "THIS IS A COURTROOM, NOT A CONCERT.", "ali", "WRONG. IT'S A BLOCK PARTY NOW, INNIT."),
     exchange("commissioner", "RESPECT THE AUTHORITY, MR. G.", "ali", "RESPEK IS EARNED, BRUV. SWING THAT CANE."),
+  ]),
+  // Wave 17: the Devil's FINAL BOUT — the Keeper has no page for folklore.
+  devil: Object.freeze([
+    exchange("commissioner", "THERE IS NO PAGE FOR YOU IN MY BOOK, CREATURE.", "devil", "THE PINES KEPT THEIR OWN LEDGER. YOU'RE IN IT."),
+    exchange("commissioner", "JERSEY FIGHTERS PAY DOUBLE IN PHILADELPHIA.", "devil", "COLLECT IT YOURSELF. BRING A LANTERN."),
   ]),
   commissioner: Object.freeze([
     exchange("commissioner", "AN IMPOSTOR IN MY OWN COAT.", "commissioner", "THE BOOK RECOGNIZES ONLY ONE HAND."),
@@ -342,6 +370,12 @@ export const ARCADE_ENDING_PANELS = Object.freeze({
     panel("LAST TRACK", "The final bell dropped like a bassline. Ali G grabbed the arena PA before security grabbed him, and the Vet became a venue whether it liked it or not.", "specials", 10, "night"),
     panel("BLOCK PARTY", "The party ran until the stadium lights gave out and three blocks past that. Nobody remembered the Commissioner's rules. Everybody remembered the chorus.", "portrait", 0, "work"),
     panel("KEEP THE BEAT", "He left the mic taped to the fence with a note: FOR WHOEVER'S NEXT. West Staines massive, Philly local. Give the block the mic and it never goes quiet.", "specials", 14, "dawn"),
+  ]),
+  // Wave 17: the tenth resolution — South Jersey's native son goes home.
+  devil: Object.freeze([
+    panel("LAST CALL AT THE VET", "The Commissioner reached for a page that was never written. The Devil reached back. What the crowd remembers is the screech; what the book remembers is the talon through its spine.", "specials", 10, "night"),
+    panel("THE WALK HOME", "One by one, every fighter the circuit swallowed got an escort through the barrens — hooves in the sand behind them, wings overhead, nothing daring to follow. Even the ones who'd thrown hands at it. Especially those.", "portrait", 0, "work"),
+    panel("THE PINES ANSWER", "At the Wildwood line a single black-book page hangs nailed to a pitch pine, and the locals leave it alone. Some legends collect debts in person. This one collects them for the whole state.", "specials", 14, "dawn"),
   ]),
   // Wave 16: the secret ninth resolution.
   commissioner: Object.freeze([

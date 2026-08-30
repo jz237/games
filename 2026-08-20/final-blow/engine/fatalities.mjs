@@ -314,6 +314,47 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       palette: Object.freeze(["#ff1245", "#720019"]),
     }),
   ]),
+  // R2.0 FAMILY wave 17 — the Pinelands Devil. Both profiles ride his hex
+  // charm (the audit demands the assigned projectile own every beat): the
+  // charm binds the limb, then the wings shear or the hoof comes down.
+  devil: Object.freeze([
+    profile({
+      id: "wing-shear",
+      title: "WING SHEAR",
+      family: "slice",
+      caption: "HEX-CHARM ARM SHEAR",
+      special: "HEX CHARM",
+      projectileId: "charm",
+      projectileSetup: "HEX CHARM FLUNG",
+      projectileAction: "CHARM CURSE ARM BIND",
+      projectileFinale: "HEX-CHARM ARM SHEAR",
+      limb: "right-arm",
+      device: "LEATHERWING SHEAR FRAME",
+      blood: 1.3,
+      separation: 1.15,
+      angle: -0.4,
+      pieces: 4,
+      palette: Object.freeze(["#e00e2e", "#5c0016"]),
+    }),
+    profile({
+      id: "hoof-stomp",
+      title: "HOOF STOMP",
+      family: "crush",
+      caption: "CHARM-PINNED LEG STOMP",
+      special: "HEX CHARM",
+      projectileId: "charm",
+      projectileSetup: "HEX CHARM DROPPED",
+      projectileAction: "CHARM HEX LEG PIN",
+      projectileFinale: "CHARM-PINNED LEG CRUSH",
+      limb: "left-leg",
+      device: "PINE-ROOT STOMP BRACE",
+      blood: 1.45,
+      separation: 0.85,
+      angle: 0.3,
+      pieces: 5,
+      palette: Object.freeze(["#cf0a24", "#470010"]),
+    }),
+  ]),
   // R2.0 FAMILY wave 16 — the Commissioner stops borrowing DeathBlow's
   // finishers. Both profiles ride his steel-cane throwable (the audit demands
   // the assigned projectile owns every beat): one pure cane execution, one

@@ -26,7 +26,9 @@ import {
 } from "../engine/palettes.mjs";
 import { BLACK_BOOK_ENTRIES, blackBookObserve, createBlackBookProgress, evaluateBlackBook } from "../engine/progression.mjs";
 
-const MAINS = ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali"];
+// Wave 17: the Pinelands Devil joins the mains; the Commissioner stays the
+// extra tenth voice.
+const MAINS = ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali", "devil"];
 const EVERYONE = [...MAINS, "commissioner"];
 
 // --- Context win-quote pools -------------------------------------------------
@@ -41,11 +43,12 @@ test("every fighter carries full win-quote pools with 3+ variants", () => {
       for (const line of pools[name]) assert.equal(line, line.toUpperCase(), `${fighterId}.${name} caption-cased`);
     }
   }
-  // The eight mains gloat over the beaten boss; the boss gloats at his mirror.
+  // The nine mains gloat over the beaten boss; the boss gloats at his mirror.
   for (const fighterId of MAINS) assert.ok(FIGHTER_WIN_QUOTES[fighterId].boss?.length >= 3, `${fighterId}.boss pool`);
   assert.ok(FIGHTER_WIN_QUOTES.commissioner.mirror?.length >= 3);
-  // The rival pool names the SPECIFIC rival for every paired main.
-  const rivalNames = { deathblow: "ALLAN", jez: "POST", alan: "DEATHBLOW", post: "JEZ", benny: "DONALD", donald: "BENNY", cyraxx: "ALI", ali: "CYRAXX" };
+  // The rival pool names the SPECIFIC rival for every paired fighter (wave 17
+  // rebalance: cyraxx↔devil, ali↔commissioner).
+  const rivalNames = { deathblow: "ALLAN", jez: "POST", alan: "DEATHBLOW", post: "JEZ", benny: "DONALD", donald: "BENNY", cyraxx: "DEVIL", devil: "CYRAXX", ali: "COMMISSIONER", commissioner: "MR. G" };
   for (const [fighterId, rivalName] of Object.entries(rivalNames)) {
     assert.ok(
       FIGHTER_WIN_QUOTES[fighterId].rival.some((line) => line.includes(rivalName)),
@@ -80,8 +83,9 @@ test("the win-quote selector honours context priority and never repeats back-to-
 test("dialogue data covers every rival pair and every FINAL BOUT challenger", () => {
   const audit = auditArcadeDialogue(EVERYONE);
   assert.deepEqual(audit.errors, []);
-  assert.equal(audit.rivalPairs, 4);
-  assert.equal(audit.bossExchanges, 9);
+  // Wave 17: five full pairs across ten fighters, ten FINAL BOUT exchanges.
+  assert.equal(audit.rivalPairs, 5);
+  assert.equal(audit.bossExchanges, 10);
   // Both directions of a rivalry resolve to the same authored conversation.
   for (const [playerId, rivalId] of Object.entries(ARCADE_RIVALS)) {
     const variants = rivalDialogueVariants(playerId, rivalId);
