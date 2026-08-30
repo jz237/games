@@ -329,3 +329,42 @@ export function applyControlStyle(input, style, facing = 1, context = {}) {
   }
   return normalized;
 }
+
+// ---------------------------------------------------------------------------
+// R1.9 wave 15: thumb-slide sector math for the 3x3 touch movement pad.
+// Pure geometry so it is unit-testable: given a pointer offset from the pad
+// centre (screen coordinates, y grows downward) and the pad's half-extent,
+// answer which direction tokens that thumb position means. The game layer
+// diffs consecutive answers to swap tokens in the existing touch Set as the
+// thumb crosses cells — no new inputs, no new net bits, just the same
+// left/right/up/down vocabulary readInput already speaks. CONTROLS.md
+// decision 5 (directions recorded on state change) is what makes the rolled
+// QCF/DP sequences this produces recognisable.
+// ---------------------------------------------------------------------------
+export const TOUCH_PAD_RULES = Object.freeze({
+  // Inside this fraction of the pad radius the thumb reads as neutral — the
+  // resting spot over the centre cell.
+  deadZoneRatio: 0.17,
+  sectorDegrees: 45,
+});
+
+// Octant index 0 is due east (screen +x), winding clockwise in y-down screen
+// space, each sector 45 degrees wide and centred on its cardinal/diagonal.
+const TOUCH_SECTOR_TOKENS = Object.freeze([
+  Object.freeze(["right"]),
+  Object.freeze(["down", "right"]),
+  Object.freeze(["down"]),
+  Object.freeze(["down", "left"]),
+  Object.freeze(["left"]),
+  Object.freeze(["up", "left"]),
+  Object.freeze(["up"]),
+  Object.freeze(["up", "right"]),
+]);
+
+export function touchPadTokens(dx, dy, radius, rules = TOUCH_PAD_RULES) {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy) || !(radius > 0)) return [];
+  if (Math.hypot(dx, dy) < radius * rules.deadZoneRatio) return [];
+  const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+  const octant = ((Math.round(angle / rules.sectorDegrees) % 8) + 8) % 8;
+  return [...TOUCH_SECTOR_TOKENS[octant]];
+}

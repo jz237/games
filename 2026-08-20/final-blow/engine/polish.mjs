@@ -45,6 +45,158 @@ export function resolvePerformanceProfile(quality = "auto", environment = {}) {
   return PERFORMANCE_PROFILES.high;
 }
 
+// ---------------------------------------------------------------------------
+// R1.9 wave 15: adaptive runtime performance governor.
+// Pure hysteresis state machine — the render loop feeds it real frame times
+// and applies whatever tier change it emits. state.performance is render-only
+// and never checksummed, so every decision here is rollback-safe by
+// construction. The caller is responsible for never feeding it during online
+// matches or while the player has forced a fixed profile.
+// ---------------------------------------------------------------------------
+export const GOVERNOR_TIERS = Object.freeze(["battery", "balanced", "high"]);
+
+export const GOVERNOR_RULES = Object.freeze({
+  // A 60Hz frame has 16.7ms; 18ms sustained means the device is genuinely
+  // missing vsync, not just jittering.
+  budgetMs: 18,
+  windowFrames: 120,
+  missRatio: 0.5,
+  // After any tier change, hold for 6 seconds before another one — the
+  // hysteresis that stops a boundary device from ping-ponging.
+  cooldownFrames: 360,
+  // Recovery is deliberately cautious: ~30 seconds of unbroken headroom
+  // before stepping back up.
+  recoveryFrames: 1800,
+  recoveryBudgetMs: 14,
+  // A single enormous frame is a tab switch or a GC stall, not thermal
+  // evidence. It resets the recovery streak but never counts as a miss.
+  ignoreAboveMs: 120,
+});
+
+function governorTier(profileId) {
+  const tier = GOVERNOR_TIERS.indexOf(profileId);
+  return tier < 0 ? GOVERNOR_TIERS.length - 1 : tier;
+}
+
+export function createPerformanceGovernor({ profileId = "high", baselineId = profileId, rules = GOVERNOR_RULES } = {}) {
+  return {
+    rules,
+    // The governor never climbs above the profile static resolution picked —
+    // it only sheds load and claws back what it shed.
+    baselineTier: governorTier(baselineId),
+    tier: Math.min(governorTier(profileId), governorTier(baselineId)),
+    windowFrames: 0,
+    windowMisses: 0,
+    recoveryStreak: 0,
+    cooldown: 0,
+    steps: 0,
+    profile() {
+      return GOVERNOR_TIERS[this.tier];
+    },
+    observe(frameMs) {
+      if (!Number.isFinite(frameMs) || frameMs <= 0) return null;
+      if (frameMs > this.rules.ignoreAboveMs) {
+        this.recoveryStreak = 0;
+        return null;
+      }
+      if (this.cooldown > 0) this.cooldown -= 1;
+      // Step-down evidence: a rolling window where at least half the frames
+      // blew the budget.
+      this.windowFrames += 1;
+      if (frameMs > this.rules.budgetMs) this.windowMisses += 1;
+      let change = null;
+      if (this.windowFrames >= this.rules.windowFrames) {
+        const missed = this.windowMisses / this.windowFrames;
+        this.windowFrames = 0;
+        this.windowMisses = 0;
+        if (missed >= this.rules.missRatio && this.tier > 0 && this.cooldown <= 0) {
+          const from = this.profile();
+          this.tier -= 1;
+          this.cooldown = this.rules.cooldownFrames;
+          this.recoveryStreak = 0;
+          this.steps += 1;
+          change = { action: "down", from, to: this.profile() };
+        }
+      }
+      // Step-up evidence: a long unbroken run of clear headroom.
+      if (frameMs <= this.rules.recoveryBudgetMs) this.recoveryStreak += 1;
+      else this.recoveryStreak = 0;
+      if (!change && this.recoveryStreak >= this.rules.recoveryFrames
+        && this.tier < this.baselineTier && this.cooldown <= 0) {
+        const from = this.profile();
+        this.tier += 1;
+        this.cooldown = this.rules.cooldownFrames;
+        this.recoveryStreak = 0;
+        this.steps += 1;
+        change = { action: "up", from, to: this.profile() };
+      }
+      return change;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// R1.9 wave 15: combat-event haptic pattern selection.
+// Pure lookup + scaling so the tiers are unit-testable. The game layer owns
+// every gate (haptics toggle, rollbackResimulating, rate cap) — this module
+// only answers "what does this event feel like".
+// vibrate: navigator.vibrate() pattern (pulse/gap milliseconds).
+// rumble:  gamepad dual-rumble effect parameters, magnitudes clamped 0..1.
+// ---------------------------------------------------------------------------
+const HAPTIC_TIERS = Object.freeze({
+  press: Object.freeze({ vibrate: Object.freeze([12]), strong: 0, weak: 0.22, duration: 20 }),
+  block: Object.freeze({ vibrate: Object.freeze([8]), strong: 0.04, weak: 0.2, duration: 26 }),
+  light: Object.freeze({ vibrate: Object.freeze([14]), strong: 0.18, weak: 0.34, duration: 45 }),
+  heavy: Object.freeze({ vibrate: Object.freeze([32]), strong: 0.48, weak: 0.5, duration: 90 }),
+  special: Object.freeze({ vibrate: Object.freeze([42]), strong: 0.6, weak: 0.55, duration: 110 }),
+  weapon: Object.freeze({ vibrate: Object.freeze([46]), strong: 0.64, weak: 0.58, duration: 120 }),
+  // Throws and corner wall-splats double-pulse: impact, beat, ground.
+  throw: Object.freeze({ vibrate: Object.freeze([30, 45, 38]), strong: 0.58, weak: 0.5, duration: 135 }),
+  wallSplat: Object.freeze({ vibrate: Object.freeze([26, 40, 34]), strong: 0.56, weak: 0.48, duration: 120 }),
+  super: Object.freeze({ vibrate: Object.freeze([68]), strong: 0.85, weak: 0.7, duration: 160 }),
+  // Dizzy flutters — a train of tiny pulses, weak-motor biased.
+  dizzy: Object.freeze({ vibrate: Object.freeze([10, 26, 10, 26, 10, 26, 10]), strong: 0.14, weak: 0.4, duration: 150 }),
+  ko: Object.freeze({ vibrate: Object.freeze([110, 60, 40]), strong: 1, weak: 0.85, duration: 220 }),
+  // One lub-dub of the fatality heartbeat; the game layer fires it on each
+  // peak of the existing sin(tick*0.16) arterial pump.
+  fatalityHeartbeat: Object.freeze({ vibrate: Object.freeze([26, 96, 44]), strong: 0.9, weak: 0.35, duration: 190 }),
+});
+
+export const HAPTIC_KINDS = Object.freeze(Object.keys(HAPTIC_TIERS));
+
+const HAPTIC_LIMITS = Object.freeze({ maxPulseMs: 250, maxDamage: 28 });
+
+// Only strike-class events scale with damage; ceremonies (dizzy/ko/heartbeat)
+// are authored as fixed patterns.
+const DAMAGE_SCALED_KINDS = Object.freeze(new Set(["light", "heavy", "special", "weapon", "throw", "super"]));
+
+function clamp01(value) {
+  return Math.min(1, Math.max(0, value));
+}
+
+export function hapticPatternFor(kind, { damage = 0, blocked = false, counter = false } = {}) {
+  const key = blocked ? "block" : (HAPTIC_TIERS[kind] ? kind : "light");
+  const base = HAPTIC_TIERS[key];
+  let scale = 1;
+  if (!blocked && DAMAGE_SCALED_KINDS.has(key)) {
+    const damageRatio = clamp01(Math.max(0, damage) / HAPTIC_LIMITS.maxDamage);
+    scale = 1 + damageRatio * 0.6 + (counter ? 0.15 : 0);
+  }
+  const vibrate = base.vibrate.map((ms, index) => (index % 2 === 0
+    ? Math.min(HAPTIC_LIMITS.maxPulseMs, Math.round(ms * scale))
+    : ms));
+  return {
+    kind: key,
+    vibrate,
+    rumble: {
+      duration: Math.min(HAPTIC_LIMITS.maxPulseMs, Math.round(base.duration * scale)),
+      startDelay: 0,
+      strongMagnitude: clamp01(base.strong * scale),
+      weakMagnitude: clamp01(base.weak * scale),
+    },
+  };
+}
+
 function outside(value, [minimum, maximum]) {
   return !Number.isFinite(value) || value < minimum || value > maximum;
 }

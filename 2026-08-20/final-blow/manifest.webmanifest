@@ -1,8 +1,8 @@
 {
-  "name": "Final Blow 1.9E: Mobile Parity",
-  "version": "1.9E",
+  "name": "Final Blow: Philly After Dark",
   "short_name": "Final Blow",
-  "description": "A Philadelphia after-dark arcade weapon fighter.",
+  "description": "Eight fighters, six Philadelphia stages, rollback online rooms, full fatalities and a self-running attract mode — a 90s arcade weapon fighter that installs and plays offline.",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
@@ -16,7 +16,59 @@
       "src": "icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "assets/somerset-septa.webp",
+      "sizes": "1280x720",
+      "type": "image/webp",
+      "form_factor": "wide",
+      "label": "Somerset SEPTA Station — street entrance after midnight"
+    },
+    {
+      "src": "assets/veterans-stadium.webp",
+      "sizes": "1280x720",
+      "type": "image/webp",
+      "form_factor": "wide",
+      "label": "The Vet parking lot — Eagles tailgate, 1999"
+    },
+    {
+      "src": "assets/janney-street-vacant-lot.webp",
+      "sizes": "1280x720",
+      "type": "image/webp",
+      "form_factor": "wide",
+      "label": "Janney Street vacant lot at dusk"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Arcade Run",
+      "short_name": "Arcade",
+      "description": "Start a one-player arcade ladder",
+      "url": "./?mode=arcade",
+      "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Survival: The Gauntlet",
+      "short_name": "Survival",
+      "description": "One health bar against the whole roster",
+      "url": "./?mode=survival",
+      "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Daily Jawn",
+      "short_name": "Daily",
+      "description": "Today's seeded challenge run",
+      "url": "./?mode=daily",
+      "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
     }
   ],
   "background_color": "#030407",

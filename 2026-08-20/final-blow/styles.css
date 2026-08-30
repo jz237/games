@@ -3178,3 +3178,96 @@ body.reduced-motion .input-flash-chip { animation: none; }
   letter-spacing: .04em;
 }
 .touch-controls[data-control-style="legend"] .touch-hp::after { content: "SPL·SUPER"; }
+
+/* ------------------------------------------------------------------------- */
+/* R1.9 wave 15 — SCHOOL & POCKET platform layer                             */
+/* ------------------------------------------------------------------------- */
+
+/* Thumb-slide input: the two control groups track pointers at group level,
+   so they take hits directly — a thumb landing in a grid gap or on the
+   neutral centre cell still starts the slide. The cinematic fade must then
+   silence the groups explicitly (children with explicit pointer-events stay
+   hittable under a pointer-events:none parent). */
+.touch-move,
+.touch-action { pointer-events: auto; touch-action: none; }
+.touch-controls.cinematic .touch-move,
+.touch-controls.cinematic .touch-action { pointer-events: none; }
+
+/* Gamepad menu navigation: the visible focus ring the d-pad moves. */
+.pad-focus {
+  outline: 3px solid var(--amber, #ffb11b) !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 1px rgba(3,7,12,.9), 0 0 18px rgba(255,177,27,.5);
+}
+
+/* Arcade Cabinet mode: TV preset. Touch HUD gone, fight HUD ~15% larger
+   (insets widened so the scaled grid still fits the frame), cursor hidden
+   once the room goes quiet. */
+body.cabinet-mode .touch-controls,
+body.cabinet-mode .touch-pause { display: none !important; }
+body.cabinet-mode .hud {
+  right: 6.4%;
+  left: 6.4%;
+  transform: scale(1.15);
+  transform-origin: 50% 0;
+}
+body.cabinet-mode.cabinet-idle,
+body.cabinet-mode.cabinet-idle * { cursor: none !important; }
+
+.cabinet-marquee {
+  position: absolute;
+  z-index: 30;
+  top: 44%;
+  right: 0;
+  left: 0;
+  padding: 14px 0;
+  border-top: 2px solid var(--amber, #ffb11b);
+  border-bottom: 2px solid var(--amber, #ffb11b);
+  background: rgba(3,7,12,.88);
+  color: var(--amber, #ffb11b);
+  font: 950 clamp(20px, 3.4vw, 34px)/1 "Arial Black", system-ui, sans-serif;
+  letter-spacing: .34em;
+  text-indent: .34em;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 0 34px rgba(255,177,27,.28), inset 0 0 26px rgba(0,0,0,.6);
+  animation: cabinet-marquee-blink 1.15s steps(2, jump-none) infinite;
+  pointer-events: none; /* the band is pure signage — clicks pass through */
+}
+.cabinet-marquee[hidden] { display: none; }
+@keyframes cabinet-marquee-blink { 50% { opacity: .55; } }
+body.reduced-motion .cabinet-marquee { animation: none; }
+
+/* iOS install coach mark — offline-badge styling, one dismissal forever. */
+.ios-coach {
+  position: fixed;
+  z-index: 60;
+  right: max(10px, env(safe-area-inset-right));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  max-width: min(430px, 92vw);
+  padding: 8px 10px;
+  border: 1px solid #75de59;
+  border-radius: 4px;
+  background: rgba(4,12,6,.92);
+  color: #a7ff89;
+  font: 800 10px/1.4 ui-monospace, monospace;
+  letter-spacing: .05em;
+  box-shadow: 0 6px 18px rgba(0,0,0,.55);
+}
+.ios-coach[hidden] { display: none; }
+.ios-coach b { font-size: 10px; letter-spacing: .12em; white-space: nowrap; }
+.ios-coach .ios-share-glyph { font-style: normal; color: #d9ffcb; }
+.ios-coach button {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(167,255,137,.6);
+  border-radius: 3px;
+  background: transparent;
+  color: #a7ff89;
+  font: 950 13px/1 system-ui, sans-serif;
+  cursor: pointer;
+}

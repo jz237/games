@@ -158,6 +158,7 @@ import {
   remapKeyBinding,
   remapPadBinding,
   resolveFourButtonInput,
+  touchPadTokens,
 } from "./engine/controls.mjs";
 import {
   FIGHT_SCHOOL_COACH_LINES,
@@ -187,8 +188,11 @@ import {
   trialDemoScript,
 } from "./engine/training.mjs";
 import {
+  PERFORMANCE_PROFILES,
   auditFighterBalance,
   auditTournamentBalance,
+  createPerformanceGovernor,
+  hapticPatternFor,
   normalizeVisualQuality,
   resolvePerformanceProfile,
   trimVisualBudget,
@@ -1009,6 +1013,11 @@ const state = {
   // the desktop high profile); CRT mode is an opt-in look and defaults off.
   sharpRender: localStorage.getItem("final-blow-sharp-render") !== "0",
   crtMode: localStorage.getItem("final-blow-crt-mode") === "1",
+  // R1.9 wave 15: Arcade Cabinet preset — big-screen TV mode. Persisted like
+  // attractEnabled; while on it forces the high profile, hides the touch HUD,
+  // enlarges the fight HUD and keeps the attract loop cycling. Render/UI
+  // only — never part of any rollback snapshot.
+  cabinetMode: localStorage.getItem("final-blow-cabinet-mode") === "1",
   // CINEMA 3D experimental Three.js presentation renderer. Persisted like the
   // other toggles; ?renderer=3d forces it on for the session without
   // persisting. Battery profile refuses activation (see cinema3dAllowed).
@@ -2521,10 +2530,13 @@ function scheduleNextDemoMatch() {
 
 function scheduleIdleDemo() {
   clearIdleDemoTimer();
-  if (!state.attractEnabled || demoSession.active || state.screen !== "title" || document.hidden) return;
+  // Wave 15: CABINET MODE always attracts — a cabinet with the demo switched
+  // off is just a dark TV.
+  const attracts = state.attractEnabled || state.cabinetMode;
+  if (!attracts || demoSession.active || state.screen !== "title" || document.hidden) return;
   demoSession.idleTimer = window.setTimeout(() => {
     demoSession.idleTimer = 0;
-    if (state.attractEnabled && state.screen === "title" && !document.hidden && !$("#controlsDialog").open) startDemo({ attract: true });
+    if ((state.attractEnabled || state.cabinetMode) && state.screen === "title" && !document.hidden && !$("#controlsDialog").open) startDemo({ attract: true });
   }, DEMO_IDLE_DELAY_MS);
 }
 
@@ -5637,6 +5649,11 @@ function showScreen(name) {
   if (name !== "ending" && endingSequence.active) cancelEndingSequence();
   if (name !== "result" && name !== "ending") updateDailyBanners();
   if (name === "stage") renderMutatorBar();
+  // Wave 15: hold the screen awake through fights/attract, release on menus;
+  // cabinet marquee lives and dies with the title screen.
+  syncWakeLock();
+  const marquee = $("#cabinetMarquee");
+  if (marquee) marquee.hidden = !(state.cabinetMode && name === "title");
 }
 
 function startSelect(mode) {
@@ -6145,6 +6162,9 @@ function finishRound(winner, type = -1) {
   state.rounds[winner] += 1;
   state.finisherType = type;
   const winDef = state.fighters[winner].def;
+  // Wave 15: the KO slams in the hands — for both the knockout hold and the
+  // opening of a Final Blow ceremony (all gates inside combatHaptic).
+  combatHaptic("ko");
   if (type >= 0) {
     const duration = performFinisher(winner, type);
     state.phaseTime = duration;
@@ -6701,6 +6721,13 @@ function updateFinisher(dt) {
   if (finisher.fatalityTriggered && state.graphicFatalities && (finisher.arterialFrames || 0) > 0) {
     finisher.arterialFrames -= 1;
     const pump = 0.5 + 0.5 * Math.abs(Math.sin(state.simulationTick * 0.16));
+    // Wave 15: one haptic lub-dub per peak of the same arterial pump wave.
+    // Module-level tick latch on the wallSplatLastTick pattern; combatHaptic
+    // carries the rollbackResimulating guard.
+    if (pump > 0.94 && state.simulationTick - lastHeartbeatHapticTick > 12) {
+      lastHeartbeatHapticTick = state.simulationTick;
+      combatHaptic("fatalityHeartbeat");
+    }
     const scriptId = attacker.def.finisherScriptId || attacker.def.id;
     const fatality = getGraphicFatality(scriptId, finisher.type);
     const wound = fatalityWoundPoint(victim, fatality, finisher.direction);
@@ -7250,6 +7277,7 @@ function syncNewOptionsUi() {
   $("#soundCaptionsToggle").checked = state.soundCaptions;
   $("#visualQualitySelect").value = state.visualQuality;
   $("#attractModeToggle").checked = state.attractEnabled;
+  if ($("#cabinetModeToggle")) $("#cabinetModeToggle").checked = state.cabinetMode;
 }
 
 function getPad(index) {
@@ -7824,6 +7852,8 @@ function enterDizzy(fighter, attacker) {
   spawnCombatText(fighter.x, fighter.y - fighter.height - 52, "DIZZY", "#ffd54a");
   duckMusic(0.55, 620);
   sound("ko", fighter);
+  // Wave 15: the dizzy flutters in the hands (all gates inside).
+  combatHaptic("dizzy");
   // Wave 9: dazed voice bark layered over the ring (guarded + tick-deduped).
   fighterReactiveCue(fighter, "dizzy");
   // Wave 6: camera pop on the dizzy trigger (render-only latch, guarded +
@@ -8197,6 +8227,8 @@ function spawnWallImpact(fighter, wallDirection) {
   // Wave 7: a wall splat is a heavy moment — kick the RGB-split impulse.
   // Module-level render-only latch; profile/accessibility gates apply at draw.
   if (!rollbackResimulating) aberrationImpulse = Math.max(aberrationImpulse, 0.55);
+  // Wave 15: the corner answers in the hands too — double pulse.
+  combatHaptic("wallSplat");
   const wallX = wallDirection < 0
     ? MOVEMENT_RULES.stageMinX - 30
     : MOVEMENT_RULES.stageMaxX + 30;
@@ -9950,6 +9982,7 @@ function hit(attacker, victim, attack, collision) {
     blocked,
     counter,
     final: attack.superMove && attacker.attackHits >= (attack.maxHits || 1),
+    damage: attack.damage,
   });
   const impact = collision?.point || { x: victim.x - attacker.facing * 22, y: victim.y - 105 };
   spawnHit(impact.x, impact.y, attacker.def, impactTier, blocked, { direction: attacker.facing, counter });
@@ -10134,7 +10167,11 @@ function violenceTier(kind = "light") {
   return VIOLENCE_TIERS[kind] || VIOLENCE_TIERS.light;
 }
 
-function applyViolenceResponse(kind, { blocked = false, counter = false, final = false } = {}) {
+function applyViolenceResponse(kind, { blocked = false, counter = false, final = false, damage = 0 } = {}) {
+  // Wave 15: every screen response has a matching hand response — phone
+  // vibration plus pad dual-rumble (toggle, resim guard and rate cap all
+  // live inside combatHaptic).
+  combatHaptic(kind, { damage, blocked, counter });
   if (blocked) {
     state.shake = Math.max(state.shake, 0.1);
     state.hitstop = Math.max(state.hitstop, 0.067);
@@ -16999,6 +17036,9 @@ function runSimulationStep(dt, tick) {
 function loop(now) {
   const elapsed = Math.max(0, (now - state.lastRenderTime) / 1000 || 0);
   state.lastRenderTime = now;
+  // Wave 15: the adaptive governor watches real frame times (all gates,
+  // including the online/forced-profile exclusions, live inside).
+  feedPerformanceGovernor(elapsed * 1000);
   const frame = state.qaManualMode
     ? {
       steps: 0,
@@ -17055,16 +17095,210 @@ function applyAccessibilitySettings() {
   applyPerformanceSettings();
 }
 
+// ---------------------------------------------------------------------------
+// R1.9 wave 15: adaptive runtime performance governor (integration layer).
+// The pure hysteresis machine lives in engine/polish.mjs; this layer feeds it
+// real render-loop frame times and applies its tier decisions. Hard gates:
+// only in AUTO quality (never fighting a user-forced profile), never during
+// online matches (fixed presentation pacing for determinism of feel), never
+// in CABINET MODE (which pins high), and only while a fight or demo is
+// actually rendering. state.performance is render-only and un-checksummed,
+// so every decision is rollback-safe by construction.
+// ---------------------------------------------------------------------------
+const performanceGovernor = { machine: null, steps: 0, lastChange: "" };
+let governorToastTimer = 0;
+
+function governorEligible() {
+  return state.visualQuality === "auto"
+    && !state.cabinetMode
+    && state.mode !== "online"
+    && !document.hidden
+    && (state.screen === "fight" || demoSession.active);
+}
+
+// One-line HUD toast on a tier change, on the sound-caption channel's element
+// (same look, own timer) so it never fights an actual caption for long.
+function governorToast(text) {
+  const caption = $("#soundCaption");
+  if (!caption) return;
+  window.clearTimeout(governorToastTimer);
+  window.clearTimeout(soundCaptionTimer);
+  caption.textContent = `◀ ${text} ▶`;
+  caption.hidden = false;
+  governorToastTimer = window.setTimeout(() => { caption.hidden = true; }, 2400);
+}
+
+function applyGovernorChange(change) {
+  if (!change) return;
+  performanceGovernor.steps += 1;
+  performanceGovernor.lastChange = `${change.action}:${change.from}->${change.to}`;
+  applyPerformanceSettings();
+  governorToast(change.action === "down"
+    ? `AUTO PERFORMANCE · COOLING TO ${change.to.toUpperCase()}`
+    : `AUTO PERFORMANCE · RESTORED TO ${change.to.toUpperCase()}`);
+}
+
+function feedPerformanceGovernor(frameMs) {
+  if (!governorEligible()) {
+    // Leaving eligibility (online match, forced profile, cabinet) drops the
+    // machine entirely so the static resolution rules the profile again and a
+    // later return to AUTO re-baselines from scratch.
+    if (performanceGovernor.machine) {
+      performanceGovernor.machine = null;
+      applyPerformanceSettings();
+    }
+    return;
+  }
+  if (!performanceGovernor.machine) {
+    const baseline = resolvePerformanceProfile("auto", performanceEnvironment(state.accessibility.reducedMotion)).id;
+    performanceGovernor.machine = createPerformanceGovernor({ profileId: state.performance.id, baselineId: baseline });
+  }
+  applyGovernorChange(performanceGovernor.machine.observe(frameMs));
+}
+
+// ---------------------------------------------------------------------------
+// R1.9 wave 15: combat-event haptics + gamepad dual-rumble.
+// Follows the sound() pattern exactly: early-return on rollbackResimulating,
+// gated behind the persisted HAPTICS toggle, rate-capped so a multi-hit never
+// turns the phone into a hair clipper. Pattern selection is pure
+// (hapticPatternFor in engine/polish.mjs); pads rumble per human side via the
+// same getPad plumbing readInput uses. Presentation only — nothing here can
+// touch the simulation.
+// ---------------------------------------------------------------------------
+const hapticsDebug = { events: 0, rumbles: 0, suppressed: 0, lastKind: "" };
+// Tick latch for the fatality heartbeat pulse (wallSplatLastTick pattern —
+// module-level, render-only, never snapshotted).
+let lastHeartbeatHapticTick = -Infinity;
+const HAPTIC_MIN_GAP_MS = 45;
+const HAPTIC_PRIORITY_KINDS = new Set(["ko", "dizzy", "fatalityHeartbeat", "super", "throw", "wallSplat"]);
+let lastHapticAt = 0;
+
+function combatHaptic(kind, { damage = 0, blocked = false, counter = false } = {}) {
+  if (rollbackResimulating) return;
+  if (!state.touchSettings.haptics) return;
+  // Nobody is holding anything during the self-running attract loop.
+  if (state.mode === "demo" || state.mode === "tournament") return;
+  const now = performance.now();
+  if (now - lastHapticAt < HAPTIC_MIN_GAP_MS && !HAPTIC_PRIORITY_KINDS.has(kind)) {
+    hapticsDebug.suppressed += 1;
+    return;
+  }
+  lastHapticAt = now;
+  const pattern = hapticPatternFor(kind, { damage, blocked, counter });
+  hapticsDebug.events += 1;
+  hapticsDebug.lastKind = pattern.kind;
+  try {
+    navigator.vibrate?.(pattern.vibrate);
+  } catch {
+    // Some browsers throw instead of ignoring vibration without a gesture.
+  }
+  for (const side of [0, 1]) {
+    if (sideIsCpuControlled(side)) continue;
+    const pad = getPad(side);
+    const actuator = pad?.vibrationActuator;
+    if (!actuator?.playEffect) continue;
+    hapticsDebug.rumbles += 1;
+    try {
+      const played = actuator.playEffect("dual-rumble", pattern.rumble);
+      played?.catch?.(() => {});
+    } catch {
+      // A pad may vanish between getPad and playEffect; rumble is best-effort.
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// R1.9 wave 15: screen wake lock. Held during fights and the attract demo,
+// released on menus/pause/hidden tab, re-acquired on visibilitychange. Silent
+// no-op where unsupported, like screen.orientation.lock.
+// ---------------------------------------------------------------------------
+let wakeLockSentinel = null;
+let wakeLockWanted = false;
+let wakeLockRequesting = false;
+
+function syncWakeLock() {
+  wakeLockWanted = !document.hidden
+    && ((state.screen === "fight" && !state.paused) || demoSession.active);
+  if (wakeLockWanted && !wakeLockSentinel && !wakeLockRequesting && navigator.wakeLock?.request) {
+    wakeLockRequesting = true;
+    navigator.wakeLock.request("screen").then((sentinel) => {
+      wakeLockRequesting = false;
+      wakeLockSentinel = sentinel;
+      // The browser can release it on its own (tab hidden); track that.
+      sentinel.addEventListener?.("release", () => {
+        if (wakeLockSentinel === sentinel) wakeLockSentinel = null;
+      });
+      // The screen may have changed while the request was in flight.
+      if (!wakeLockWanted) syncWakeLock();
+    }).catch(() => {
+      wakeLockRequesting = false;
+    });
+  } else if (!wakeLockWanted && wakeLockSentinel) {
+    const sentinel = wakeLockSentinel;
+    wakeLockSentinel = null;
+    try {
+      sentinel.release?.()?.catch?.(() => {});
+    } catch {
+      // Already released.
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// R1.9 wave 15: ARCADE CABINET mode. Composes existing pieces into one TV
+// preset: high profile pinned, CRT defaulted on at activation, touch HUD
+// hidden, fight HUD enlarged ~15%, attract loop + high-score cycling forced,
+// cursor auto-hidden at idle, and any pad press on the title dropping
+// straight into character select (handled in menuPadLoop).
+// ---------------------------------------------------------------------------
+let cabinetCursorTimer = 0;
+
+function applyCabinetMode() {
+  document.body.classList.toggle("cabinet-mode", state.cabinetMode);
+  const marquee = $("#cabinetMarquee");
+  if (marquee) marquee.hidden = !(state.cabinetMode && state.screen === "title");
+  if (!state.cabinetMode) {
+    window.clearTimeout(cabinetCursorTimer);
+    cabinetCursorTimer = 0;
+    document.body.classList.remove("cabinet-idle");
+  } else {
+    scheduleCabinetCursorHide();
+    scheduleIdleDemo();
+  }
+  applyPerformanceSettings();
+}
+
+function scheduleCabinetCursorHide() {
+  window.clearTimeout(cabinetCursorTimer);
+  cabinetCursorTimer = window.setTimeout(() => {
+    if (state.cabinetMode) document.body.classList.add("cabinet-idle");
+  }, 4000);
+}
+
+document.addEventListener("mousemove", () => {
+  if (!state.cabinetMode) return;
+  document.body.classList.remove("cabinet-idle");
+  scheduleCabinetCursorHide();
+}, { passive: true });
+
 function applyPerformanceSettings() {
   state.visualQuality = normalizeVisualQuality(state.visualQuality);
-  state.performance = resolvePerformanceProfile(
-    state.visualQuality,
-    performanceEnvironment(state.accessibility.reducedMotion),
-  );
+  // Wave 15 resolution order: CABINET MODE pins high for the TV; otherwise
+  // the adaptive governor may hold a stepped-down tier while quality is AUTO;
+  // otherwise the static device resolution decides. A user-forced profile
+  // always wins because the governor machine only exists under AUTO.
+  let resolved = state.cabinetMode
+    ? PERFORMANCE_PROFILES.high
+    : resolvePerformanceProfile(state.visualQuality, performanceEnvironment(state.accessibility.reducedMotion));
+  if (!state.cabinetMode && state.visualQuality === "auto" && performanceGovernor.machine) {
+    resolved = PERFORMANCE_PROFILES[performanceGovernor.machine.profile()] || resolved;
+  }
+  state.performance = resolved;
   document.body.dataset.quality = state.performance.id;
   $("#visualQualitySelect").value = state.visualQuality;
   $("#sharpRenderToggle").checked = Boolean(state.sharpRender);
   $("#crtModeToggle").checked = Boolean(state.crtMode);
+  if ($("#cabinetModeToggle")) $("#cabinetModeToggle").checked = Boolean(state.cabinetMode);
   $("#cinema3dToggle").checked = Boolean(state.cinema3d);
   // Profile switches can grant/revoke CINEMA 3D eligibility (battery refuses).
   ensureCinema3d();
@@ -18743,7 +18977,16 @@ function failImmersiveMode(error) {
   renderRotateGate();
 }
 
+// Wave 15: the manifest-shortcut boot router starts a mode without a user
+// gesture; a fullscreen request would reject and latch a bogus gate failure,
+// so the router suppresses exactly one immersive attempt.
+let suppressImmersivePrompt = false;
+
 function enterImmersiveMode() {
+  if (suppressImmersivePrompt) {
+    suppressImmersivePrompt = false;
+    return;
+  }
   if (!isPhoneViewport()) return;
   const app = $("#app");
   if (!fullscreenRequestSupported()) {
@@ -18798,6 +19041,30 @@ window.addEventListener("appinstalled", () => {
   deferredInstallPrompt = null;
   $("#installButton").hidden = true;
 });
+
+// ---------------------------------------------------------------------------
+// R1.9 wave 15: iOS "Add to Home Screen" coach mark. Safari on iOS never
+// fires beforeinstallprompt, so the only install path is the share sheet —
+// point at it once, dismissible forever, and only in real iOS Safari when
+// the game is not already running standalone.
+// ---------------------------------------------------------------------------
+function maybeShowIosCoachMark() {
+  const coach = $("#iosCoachMark");
+  if (!coach) return false;
+  if (!isIosDevice() || inAppBrowserName()) return false;
+  if (!/Safari\//.test(navigator.userAgent || "")) return false;
+  if (navigator.standalone === true) return false;
+  if (window.matchMedia?.("(display-mode: standalone)").matches
+    || window.matchMedia?.("(display-mode: fullscreen)").matches) return false;
+  if (localStorage.getItem("final-blow-ios-coach") === "1") return false;
+  coach.hidden = false;
+  return true;
+}
+
+$("#iosCoachDismiss")?.addEventListener("click", () => {
+  localStorage.setItem("final-blow-ios-coach", "1");
+  $("#iosCoachMark").hidden = true;
+});
 window.addEventListener("online", updateOfflineBadge);
 window.addEventListener("offline", updateOfflineBadge);
 
@@ -18822,6 +19089,8 @@ function setPaused(paused, reason = "") {
     syncMusic();
     canvas.focus();
   }
+  // Wave 15: the wake lock releases while paused and returns on resume.
+  syncWakeLock();
   return state.paused;
 }
 
@@ -18925,51 +19194,327 @@ window.addEventListener("gamepaddisconnected", (event) => {
   }
 });
 
-let menuPadWasPressed = false;
-let menuPadPauseWasPressed = false;
+// ---------------------------------------------------------------------------
+// R1.9 wave 15: full gamepad menu navigation.
+// menuPadLoop grows from a single confirm button into a complete navigator:
+// d-pad/left stick moves a visible focus (or the roster/stage cursor on the
+// screens that already have one), A confirms, B backs out, and a second pad
+// drives P2's pick in the local two-player modes. Everything routes through
+// handleMenuPadEvent so the QA layer can drive the exact same paths
+// headlessly. Keyboard and touch handling are untouched — pad navigation
+// clicks the same DOM buttons they do.
+// ---------------------------------------------------------------------------
+const MENU_PAD_REPEAT = Object.freeze({ initialMs: 340, repeatMs: 150 });
+const menuPadSlots = [
+  { direction: "", nextRepeatAt: 0, buttons: new Map() },
+  { direction: "", nextRepeatAt: 0, buttons: new Map() },
+];
+const padNavDebug = { moves: 0, confirms: 0, backs: 0 };
+let padFocusElement = null;
 let menuPadAnyWasPressed = false;
+
+function padMenuDirection(pad) {
+  const axisX = pad.axes?.[0] || 0;
+  const axisY = pad.axes?.[1] || 0;
+  if (buttonValue(pad, 12) || axisY < -0.55) return "up";
+  if (buttonValue(pad, 13) || axisY > 0.55) return "down";
+  if (buttonValue(pad, 14) || axisX < -0.55) return "left";
+  if (buttonValue(pad, 15) || axisX > 0.55) return "right";
+  return "";
+}
+
+function menuPadDirectionEvents(pad, slot, now) {
+  const direction = pad ? padMenuDirection(pad) : "";
+  const events = [];
+  if (direction !== slot.direction) {
+    slot.direction = direction;
+    if (direction) {
+      events.push(direction);
+      slot.nextRepeatAt = now + MENU_PAD_REPEAT.initialMs;
+    }
+  } else if (direction && now >= slot.nextRepeatAt) {
+    events.push(direction);
+    slot.nextRepeatAt = now + MENU_PAD_REPEAT.repeatMs;
+  }
+  return events;
+}
+
+function menuPadButtonEdge(pad, slot, index) {
+  const pressed = Boolean(pad && buttonValue(pad, index));
+  const was = slot.buttons.get(index) || false;
+  slot.buttons.set(index, pressed);
+  return pressed && !was;
+}
+
+function menuFocusRoot() {
+  const dialog = $("#controlsDialog");
+  if (dialog.open) return dialog;
+  if (state.screen === "fight") return state.paused ? $("#pausePanel") : null;
+  return $(`#${state.screen}Screen`);
+}
+
+function menuFocusables(root) {
+  if (!root) return [];
+  return [...root.querySelectorAll("button, select, input:not([type=hidden])")].filter((element) => {
+    if (element.disabled || element.hidden || element.closest("[hidden]")) return false;
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  });
+}
+
+function setPadFocus(element) {
+  if (padFocusElement === element) return;
+  padFocusElement?.classList.remove("pad-focus");
+  padFocusElement = element || null;
+  if (padFocusElement) {
+    padFocusElement.classList.add("pad-focus");
+    padFocusElement.focus?.({ preventScroll: true });
+    padFocusElement.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    padNavDebug.moves += 1;
+  }
+}
+
+function movePadFocus(delta) {
+  const focusables = menuFocusables(menuFocusRoot());
+  if (!focusables.length) return false;
+  const index = focusables.indexOf(padFocusElement);
+  if (index < 0) {
+    setPadFocus(focusables.find((element) => element.classList.contains("menu-focus")) || focusables[0]);
+    return true;
+  }
+  setPadFocus(focusables[(index + delta + focusables.length) % focusables.length]);
+  return true;
+}
+
+// Left/right on a focused select or slider adjusts it instead of moving focus.
+function adjustPadFocusValue(direction) {
+  const element = padFocusElement;
+  if (!element || !menuFocusRoot()?.contains(element)) return false;
+  if (element.tagName === "SELECT") {
+    const next = element.selectedIndex + (direction === "right" ? 1 : -1);
+    if (next >= 0 && next < element.options.length) {
+      element.selectedIndex = next;
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    return true;
+  }
+  if (element.tagName === "INPUT" && element.type === "range") {
+    const step = Number(element.step) || 1;
+    const value = Number(element.value) + (direction === "right" ? step : -step);
+    element.value = String(Math.min(Number(element.max) || 100, Math.max(Number(element.min) || 0, value)));
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+  return false;
+}
+
+function handleSelectPadEvent(kind, padIndex) {
+  if (kind === "back") {
+    padNavDebug.backs += 1;
+    back("title");
+    return;
+  }
+  const twoPlayer = ["versus", "team"].includes(state.mode);
+  if (padIndex === 1 && !twoPlayer) return;
+  // Pad 0 drives whichever side is currently picking (the keyboard-cursor
+  // rule); a second pad always owns P2's pick in the two-player modes.
+  const side = padIndex === 1 ? 1 : (state.locks[0] ? 1 : 0);
+  if (kind === "confirm") {
+    padNavDebug.confirms += 1;
+    if (state.locks[0] && state.locks[1]) {
+      showStageSelect();
+      return;
+    }
+    if (padIndex === 1 && !state.locks[0]) return; // P2's pad waits for P1's lock
+    if (state.mode !== "team" && state.locks[side]) return;
+    chooseFighter(state.picks[side]);
+    return;
+  }
+  if (state.mode === "arcade" && state.locks[0]) return;
+  if (state.mode !== "team" && state.locks[side]) return;
+  const delta = kind === "left" ? -1 : kind === "right" ? 1 : kind === "up" ? -4 : 4;
+  state.picks[side] = (state.picks[side] + delta + roster.length) % roster.length;
+  // P2's pad may browse early, but the shared keyboard cursor only follows
+  // the side whose turn it actually is.
+  if (padIndex === 0 || state.locks[0]) state.selectingPlayer = side;
+  updateRosterUI();
+  padNavDebug.moves += 1;
+}
+
+function handleStagePadEvent(kind) {
+  if (kind === "back") {
+    padNavDebug.backs += 1;
+    showScreen("select");
+    return;
+  }
+  if (kind === "confirm") {
+    padNavDebug.confirms += 1;
+    startMatch(true);
+    return;
+  }
+  const ids = $$("#stageGrid .stage-card").map((card) => card.dataset.stage);
+  if (!ids.length) return;
+  const index = Math.max(0, ids.indexOf(state.stage));
+  const delta = kind === "left" ? -1 : kind === "right" ? 1 : kind === "up" ? -3 : 3;
+  chooseStage(ids[(index + delta + ids.length) % ids.length]);
+  padNavDebug.moves += 1;
+}
+
+function handleInitialsPadEvent(kind) {
+  if (!initialsUi.active) return;
+  if (kind === "up") cycleInitialLetter(1);
+  else if (kind === "down") cycleInitialLetter(-1);
+  else if (kind === "left") initialsUi.cursor = Math.max(0, initialsUi.cursor - 1);
+  else if (kind === "right") initialsUi.cursor = Math.min(2, initialsUi.cursor + 1);
+  else if (kind === "confirm") {
+    padNavDebug.confirms += 1;
+    commitInitials();
+    return;
+  } else if (kind === "back") return;
+  renderInitials();
+}
+
+const PAD_BACK_TARGETS = Object.freeze({
+  online: "title",
+  blackbook: "title",
+  records: "title",
+  ending: "title",
+  result: "title",
+});
+
+function handleGenericPadBack() {
+  padNavDebug.backs += 1;
+  if (state.screen === "ending" && endingSequence.active) {
+    advanceEndingSequence();
+    return;
+  }
+  // An online rematch screen must never be torn down by a stray B press.
+  if (state.screen === "result" && state.mode === "online") return;
+  const target = PAD_BACK_TARGETS[state.screen];
+  if (target) showScreen(target);
+}
+
+function handleGenericPadConfirm() {
+  padNavDebug.confirms += 1;
+  // v2.1: pad confirm skips the current ending beat first; only the resting
+  // card starts a fresh arcade run.
+  if (state.screen === "ending" && endingSequence.active) {
+    advanceEndingSequence();
+    return;
+  }
+  const root = menuFocusRoot();
+  if (padFocusElement && root?.contains(padFocusElement)) {
+    padFocusElement.click();
+    return;
+  }
+  // No focus engaged: the pre-wave-15 defaults.
+  if (state.screen === "title") startSelect("arcade");
+  else if (state.screen === "ladder") startMatch(true);
+  else if (state.screen === "ending") startSelect("arcade");
+  else if (state.screen === "tally") tallyContinue();
+  else if (state.screen === "result") {
+    if (state.mode === "online") requestOnlineRematch();
+    else if (dailySession.active && dailySession.finished) showScreen("title");
+    else if (state.mode === "survival" && state.survivalRun?.over) startSurvivalRun(state.survivalRun.playerId);
+    else if (state.mode === "team" && state.teamBattle?.over) {
+      beginTeamBattle(state.teamBattle.cpu);
+      startMatch(true);
+    } else startMatch(true);
+  }
+}
+
+function handleMenuPadEvent(kind, padIndex = 0) {
+  const dialog = $("#controlsDialog");
+  if (dialog.open) {
+    if (kind === "back") {
+      padNavDebug.backs += 1;
+      dialog.close();
+      return;
+    }
+    if (kind === "confirm") {
+      padNavDebug.confirms += 1;
+      if (padFocusElement && dialog.contains(padFocusElement)) padFocusElement.click();
+      return;
+    }
+    if ((kind === "left" || kind === "right") && adjustPadFocusValue(kind)) return;
+    movePadFocus(kind === "up" || kind === "left" ? -1 : 1);
+    return;
+  }
+  if (state.screen === "fight") {
+    if (!state.paused) return; // combat owns the pad through readInput
+    if (kind === "back") {
+      padNavDebug.backs += 1;
+      setPaused(false);
+      return;
+    }
+    if (kind === "confirm") {
+      padNavDebug.confirms += 1;
+      if (padFocusElement && $("#pausePanel").contains(padFocusElement)) padFocusElement.click();
+      else setPaused(false);
+      return;
+    }
+    movePadFocus(kind === "up" || kind === "left" ? -1 : 1);
+    return;
+  }
+  if (state.screen === "select") return handleSelectPadEvent(kind, padIndex);
+  if (state.screen === "stage") return handleStagePadEvent(kind);
+  if (state.screen === "initials") return handleInitialsPadEvent(kind);
+  if (kind === "back") return handleGenericPadBack();
+  if (kind === "confirm") return handleGenericPadConfirm();
+  // The two ledger screens scroll their list with up/down.
+  if ((state.screen === "blackbook" || state.screen === "records") && (kind === "up" || kind === "down")) {
+    const scroller = state.screen === "blackbook" ? $("#blackBookList") : $("#recordsGrid");
+    if (scroller && scroller.scrollHeight > scroller.clientHeight + 4) {
+      scroller.scrollBy({ top: kind === "down" ? 150 : -150, behavior: "smooth" });
+      return;
+    }
+  }
+  movePadFocus(kind === "up" || kind === "left" ? -1 : 1);
+}
+
+// Mouse/touch use dismisses the pad focus ring until the pad speaks again.
+document.addEventListener("pointerdown", () => {
+  if (padFocusElement) {
+    padFocusElement.classList.remove("pad-focus");
+    padFocusElement = null;
+  }
+}, true);
+
 function menuPadLoop() {
-  const pad = getPad(0);
-  const anyInput = Boolean(pad && (pad.buttons.some((button) => button.pressed || button.value > 0.55)
-    || pad.axes.some((axis) => Math.abs(axis) > 0.55)));
+  const now = performance.now();
+  const pads = [getPad(0), getPad(1)];
+  const anyInput = pads.some((pad) => Boolean(pad && (pad.buttons.some((button) => button.pressed || button.value > 0.55)
+    || pad.axes.some((axis) => Math.abs(axis) > 0.55))));
   if (demoSession.active && anyInput && !menuPadAnyWasPressed) {
     menuPadAnyWasPressed = true;
     exitDemo();
+    // Wave 15 CABINET MODE: interrupting the attract loop drops straight
+    // into character select — insert coin, pick your fighter.
+    if (state.cabinetMode) startSelect("arcade");
     requestAnimationFrame(menuPadLoop);
     return;
   }
   if (!demoSession.active && anyInput && !menuPadAnyWasPressed) noteUserActivity();
   menuPadAnyWasPressed = anyInput;
-  const pause = buttonValue(pad, 9);
-  if (state.screen === "fight" && pause && !menuPadPauseWasPressed) setPaused(!state.paused);
-  menuPadPauseWasPressed = pause;
-  const confirm = buttonValue(pad, 0);
-  if (confirm && !menuPadWasPressed) {
-    if (state.screen === "title") startSelect("arcade");
-    else if (state.screen === "select") {
-      if (state.locks[0] && state.locks[1]) showStageSelect();
-      else chooseFighter(state.picks[state.selectingPlayer]);
-    } else if (state.screen === "stage") startMatch(true);
-    else if (state.screen === "ladder") startMatch(true);
-    else if (state.screen === "ending") {
-      // v2.1: pad confirm skips the current ending beat first; only the
-      // resting card starts a fresh arcade run.
-      if (endingSequence.active) advanceEndingSequence();
-      else startSelect("arcade");
+  for (const padIndex of [0, 1]) {
+    const pad = pads[padIndex];
+    const slot = menuPadSlots[padIndex];
+    const pause = menuPadButtonEdge(pad, slot, 9);
+    if (pause && state.screen === "fight") setPaused(!state.paused);
+    const confirm = menuPadButtonEdge(pad, slot, 0);
+    const backEdge = menuPadButtonEdge(pad, slot, 1);
+    const directions = menuPadDirectionEvents(pad, slot, now);
+    if (state.screen === "fight" && !state.paused) continue; // edges consumed, combat untouched
+    // Wave 15 CABINET MODE: any face-button press on the title starts a run.
+    if (state.cabinetMode && state.screen === "title" && (confirm || backEdge)) {
+      startSelect("arcade");
+      continue;
     }
-    else if (state.screen === "tally") tallyContinue();
-    else if (state.screen === "initials") commitInitials();
-    else if (state.screen === "result") {
-      if (state.mode === "online") requestOnlineRematch();
-      else if (dailySession.active && dailySession.finished) showScreen("title");
-      else if (state.mode === "survival" && state.survivalRun?.over) startSurvivalRun(state.survivalRun.playerId);
-      else if (state.mode === "team" && state.teamBattle?.over) {
-        beginTeamBattle(state.teamBattle.cpu);
-        startMatch(true);
-      } else startMatch(true);
-    }
+    if (confirm) handleMenuPadEvent("confirm", padIndex);
+    if (backEdge) handleMenuPadEvent("back", padIndex);
+    for (const direction of directions) handleMenuPadEvent(direction, padIndex);
   }
-  menuPadWasPressed = confirm;
   requestAnimationFrame(menuPadLoop);
 }
 
@@ -19079,6 +19624,18 @@ $("#sharpRenderToggle").addEventListener("change", (event) => {
 $("#crtModeToggle").addEventListener("change", (event) => {
   state.crtMode = event.target.checked;
   localStorage.setItem("final-blow-crt-mode", state.crtMode ? "1" : "0");
+});
+$("#cabinetModeToggle").addEventListener("change", (event) => {
+  state.cabinetMode = event.target.checked;
+  localStorage.setItem("final-blow-cabinet-mode", state.cabinetMode ? "1" : "0");
+  // The cabinet preset defaults the CRT look on at activation; it stays a
+  // free choice afterwards.
+  if (state.cabinetMode && !state.crtMode) {
+    state.crtMode = true;
+    localStorage.setItem("final-blow-crt-mode", "1");
+  }
+  applyCabinetMode();
+  scheduleIdleDemo();
 });
 $("#cinema3dToggle").addEventListener("change", (event) => {
   state.cinema3d = event.target.checked;
@@ -19258,6 +19815,9 @@ document.addEventListener("visibilitychange", () => {
   // so nothing double-starts on visibility flips.
   if (document.hidden) muteRenderAudioBeds();
   syncMusic();
+  // Wave 15: browsers drop the wake lock on a hidden tab; re-acquire it here
+  // when the fight/attract screen returns to view.
+  syncWakeLock();
 });
 $("#fighterContinue").addEventListener("click", showStageSelect);
 $$(".stage-card").forEach((card) => card.addEventListener("click", () => chooseStage(card.dataset.stage)));
@@ -19360,29 +19920,165 @@ window.addEventListener("orientationchange", () => {
 document.addEventListener("fullscreenchange", syncOrientationGate);
 document.addEventListener("webkitfullscreenchange", syncOrientationGate);
 
-$$("[data-touch]").forEach((button) => {
-  // A pad button may map to two tokens at once, e.g. the up-forward corner.
-  const tokens = button.dataset.touch.split(/\s+/).filter(Boolean);
-  const start = (event) => {
+// ---------------------------------------------------------------------------
+// R1.9 wave 15: thumb-slide touch input.
+// The old per-button pointerdown/pointerup binding meant implicit pointer
+// capture pinned a touch to the first cell it landed on — sliding a thumb
+// from Down to Down-Forward to Forward never fired the next cell, which made
+// QCF/DP/double-QCF motions physically impossible on a phone. Both control
+// groups now track pointers at group level:
+//   · the 3x3 movement pad runs sector math around its centre
+//     (touchPadTokens, engine/controls.mjs) and swaps direction tokens in the
+//     existing touch Set as the thumb crosses cells — CONTROLS.md decision 5
+//     (directions recorded on state change) makes the rolled QCF readable;
+//   · the LP/HP/LK/HK cluster re-hit-tests on pointermove, piano-roll style:
+//     rolling LP onto HP keeps LP held and edges HP, which is exactly the
+//     "one button edges while its partner is held" chord read, landing the
+//     existing 6-frame chord-takeover window for EX moves and supers.
+// Everything still flows through the same touch tokens into readInput's
+// action vocabulary: no new inputs, no new net bits, no timing changes.
+// ---------------------------------------------------------------------------
+const touchFxDebug = { padSlides: 0, clusterRolls: 0 };
+
+function pressTouchTokens(tokens) {
+  for (const token of tokens) {
+    touch.add(token);
+    touch.add(`${token}:pressed`);
+  }
+}
+
+function releaseTouchTokens(tokens) {
+  for (const token of tokens) touch.delete(token);
+}
+
+function touchTokenKey(tokens) {
+  return [...tokens].sort().join(" ");
+}
+
+function capturePointer(element, pointerId) {
+  try {
+    element.setPointerCapture?.(pointerId);
+  } catch {
+    // Synthetic QA PointerEvents have no live pointer to capture; the group
+    // listeners still receive the dispatched moves directly.
+  }
+}
+
+(() => {
+  const pad = $(".touch-move");
+  if (!pad) return;
+  // Sorted token key -> cell button, for the pressed-cell highlight only.
+  const cellButtons = new Map();
+  for (const button of pad.querySelectorAll("[data-touch]")) {
+    cellButtons.set(touchTokenKey(button.dataset.touch.split(/\s+/).filter(Boolean)), button);
+  }
+  const pointers = new Map(); // pointerId -> { tokens, rect }
+  const setHighlight = () => {
+    const activeKeys = new Set([...pointers.values()].map((entry) => touchTokenKey(entry.tokens)));
+    for (const [key, button] of cellButtons) button.classList.toggle("active", activeKeys.has(key));
+  };
+  const tokensAt = (entry, event) => {
+    const dx = event.clientX - (entry.rect.left + entry.rect.width / 2);
+    const dy = event.clientY - (entry.rect.top + entry.rect.height / 2);
+    return touchPadTokens(dx, dy, Math.min(entry.rect.width, entry.rect.height) / 2);
+  };
+  const applyTokens = (entry, nextTokens) => {
+    if (touchTokenKey(entry.tokens) === touchTokenKey(nextTokens)) return;
+    releaseTouchTokens(entry.tokens.filter((token) => !nextTokens.includes(token)));
+    pressTouchTokens(nextTokens.filter((token) => !entry.tokens.includes(token)));
+    if (entry.tokens.length) touchFxDebug.padSlides += 1;
+    entry.tokens = nextTokens;
+    setHighlight();
+  };
+  pad.addEventListener("pointerdown", (event) => {
     event.preventDefault();
-    for (const token of tokens) {
-      touch.add(token);
-      touch.add(`${token}:pressed`);
-    }
-    button.classList.add("active");
+    capturePointer(pad, event.pointerId);
+    const entry = { tokens: [], rect: pad.getBoundingClientRect() };
+    pointers.set(event.pointerId, entry);
+    applyTokens(entry, tokensAt(entry, event));
     if (state.touchSettings.haptics && event.isTrusted) navigator.vibrate?.(12);
     unlockAudio();
-  };
-  const end = (event) => {
+  });
+  pad.addEventListener("pointermove", (event) => {
+    const entry = pointers.get(event.pointerId);
+    if (!entry) return;
     event.preventDefault();
-    for (const token of tokens) touch.delete(token);
-    button.classList.remove("active");
+    applyTokens(entry, tokensAt(entry, event));
+  });
+  const end = (event) => {
+    const entry = pointers.get(event.pointerId);
+    if (!entry) return;
+    event.preventDefault();
+    releaseTouchTokens(entry.tokens);
+    pointers.delete(event.pointerId);
+    setHighlight();
   };
-  button.addEventListener("pointerdown", start);
-  button.addEventListener("pointerup", end);
-  button.addEventListener("pointercancel", end);
-  button.addEventListener("pointerleave", end);
-});
+  pad.addEventListener("pointerup", end);
+  pad.addEventListener("pointercancel", end);
+})();
+
+(() => {
+  const cluster = $(".touch-action");
+  if (!cluster) return;
+  const buttons = [...cluster.querySelectorAll("[data-touch]")];
+  const pointers = new Map(); // pointerId -> { rects, held, current }
+  const refresh = () => {
+    const held = new Set();
+    for (const entry of pointers.values()) for (const button of entry.held) held.add(button);
+    for (const button of buttons) button.classList.toggle("active", held.has(button));
+  };
+  const buttonAt = (entry, event) => {
+    for (const [button, rect] of entry.rects) {
+      if (event.clientX >= rect.left && event.clientX <= rect.right
+        && event.clientY >= rect.top && event.clientY <= rect.bottom) return button;
+    }
+    return null;
+  };
+  const applyButton = (entry, next, trusted) => {
+    if (!next || next === entry.current) {
+      if (!next) entry.current = null;
+      return;
+    }
+    // Piano-roll: the earlier button of this touch stays held until lift-off,
+    // so the new edge lands as a chord with it.
+    if (!entry.held.has(next)) {
+      pressTouchTokens([next.dataset.touch]);
+      entry.held.add(next);
+      if (entry.current) touchFxDebug.clusterRolls += 1;
+      if (state.touchSettings.haptics && trusted) navigator.vibrate?.(12);
+    }
+    entry.current = next;
+    refresh();
+  };
+  cluster.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    capturePointer(cluster, event.pointerId);
+    const entry = {
+      rects: buttons.map((button) => [button, button.getBoundingClientRect()]),
+      held: new Set(),
+      current: null,
+    };
+    pointers.set(event.pointerId, entry);
+    applyButton(entry, buttonAt(entry, event), event.isTrusted);
+    unlockAudio();
+  });
+  cluster.addEventListener("pointermove", (event) => {
+    const entry = pointers.get(event.pointerId);
+    if (!entry) return;
+    event.preventDefault();
+    applyButton(entry, buttonAt(entry, event), event.isTrusted);
+  });
+  const end = (event) => {
+    const entry = pointers.get(event.pointerId);
+    if (!entry) return;
+    event.preventDefault();
+    releaseTouchTokens([...entry.held].map((button) => button.dataset.touch));
+    pointers.delete(event.pointerId);
+    refresh();
+  };
+  cluster.addEventListener("pointerup", end);
+  cluster.addEventListener("pointercancel", end);
+})();
 
 window.__finalBlowEngine = {
   version: "2.1-legacy",
@@ -19431,6 +20127,27 @@ window.__finalBlowEngine = {
       offlineReady: state.offlineReady,
       accessibility: { ...state.accessibility },
       touchSettings: { ...state.touchSettings },
+      // R1.9 wave 15 platform blocks: thumb-slide input, haptics, pad menu
+      // navigation, cabinet mode, the adaptive governor and the wake lock.
+      touchInput: { ...touchFxDebug, activeTokens: [...touch] },
+      haptics: { ...hapticsDebug, enabled: state.touchSettings.haptics },
+      padNav: {
+        ...padNavDebug,
+        focused: padFocusElement ? (padFocusElement.id || padFocusElement.textContent.trim().slice(0, 28)) : null,
+      },
+      cabinetMode: state.cabinetMode,
+      governor: {
+        eligible: governorEligible(),
+        active: Boolean(performanceGovernor.machine),
+        profile: state.performance.id,
+        steps: performanceGovernor.steps,
+        lastChange: performanceGovernor.lastChange,
+      },
+      wakeLock: {
+        supported: Boolean(navigator.wakeLock),
+        wanted: wakeLockWanted,
+        held: Boolean(wakeLockSentinel),
+      },
       training: trainingSnapshot(state.training),
       online: onlineSnapshot(),
       demo: demoSnapshot(),
@@ -20500,6 +21217,62 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       state.simulationTick = simulationClock.tick;
       return this.status();
     },
+    // --- R1.9 wave 15 platform probes -------------------------------------
+    touchDebug() {
+      return { ...touchFxDebug, tokens: [...touch] };
+    },
+    haptics(enabled = null) {
+      if (enabled !== null) state.touchSettings.haptics = Boolean(enabled);
+      return { ...hapticsDebug, enabled: state.touchSettings.haptics };
+    },
+    hapticEvent(kind = "heavy", damage = 0) {
+      combatHaptic(kind, { damage });
+      return { ...hapticsDebug };
+    },
+    padMenu(kind, padIndex = 0) {
+      handleMenuPadEvent(kind, padIndex);
+      return {
+        screen: state.screen,
+        focused: padFocusElement ? (padFocusElement.id || padFocusElement.textContent.trim().slice(0, 28)) : null,
+        ...padNavDebug,
+      };
+    },
+    cabinet(enabled = true) {
+      state.cabinetMode = Boolean(enabled);
+      if (state.cabinetMode && !state.crtMode) state.crtMode = true;
+      applyCabinetMode();
+      return {
+        cabinetMode: state.cabinetMode,
+        crtMode: state.crtMode,
+        profile: state.performance.id,
+        touchDisplay: getComputedStyle($("#touchControls")).display,
+        marqueeVisible: Boolean($("#cabinetMarquee") && !$("#cabinetMarquee").hidden),
+      };
+    },
+    governorInject(frameMs = 25, frames = 130) {
+      if (!performanceGovernor.machine) {
+        const baseline = resolvePerformanceProfile("auto", performanceEnvironment(state.accessibility.reducedMotion)).id;
+        performanceGovernor.machine = createPerformanceGovernor({ profileId: state.performance.id, baselineId: baseline });
+      }
+      for (let frame = 0; frame < Math.max(1, Math.floor(frames)); frame += 1) {
+        applyGovernorChange(performanceGovernor.machine.observe(frameMs));
+      }
+      return {
+        eligible: governorEligible(),
+        profile: state.performance.id,
+        machineProfile: performanceGovernor.machine?.profile() || null,
+        steps: performanceGovernor.steps,
+        lastChange: performanceGovernor.lastChange,
+      };
+    },
+    wakeLock() {
+      syncWakeLock();
+      return { supported: Boolean(navigator.wakeLock), wanted: wakeLockWanted, held: Boolean(wakeLockSentinel) };
+    },
+    iosCoach(show = true) {
+      $("#iosCoachMark").hidden = !show;
+      return !$("#iosCoachMark").hidden;
+    },
     // Release 1.7 DEPTH: live rollback round-trip. Snapshots the real combat
     // state, mutates it by simulating ahead, restores, and reports whether the
     // combat checksum returned to the pre-snapshot value — proving every
@@ -20584,6 +21357,8 @@ function ensureCinema3d() {
 renderBindings();
 applyAccessibilitySettings();
 applyTouchSettings();
+applyCabinetMode();
+maybeShowIosCoachMark();
 syncNewOptionsUi();
 updateMusicUi();
 updateVolumeUi();
@@ -20599,7 +21374,20 @@ if (pendingOnlineInvite) {
   setOnlineStatus("waiting", "Private invite detected. Press Join Private Room.");
 } else if (storedOnlineResume) {
   resumeStoredOnlineConnection(storedOnlineResume);
-} else showScreen("title");
+} else {
+  // Wave 15 PWA shortcuts: ?mode=arcade|survival|daily deep-links from the
+  // manifest jump list land past the title, straight into their mode.
+  const bootMode = new URLSearchParams(location.search).get("mode");
+  if (bootMode === "arcade" || bootMode === "survival") {
+    showScreen("title");
+    suppressImmersivePrompt = true;
+    startSelect(bootMode);
+  } else if (bootMode === "daily") {
+    showScreen("title");
+    suppressImmersivePrompt = true;
+    startDailyRun();
+  } else showScreen("title");
+}
 updateStageUI();
 requestAnimationFrame(loop);
 requestAnimationFrame(menuPadLoop);

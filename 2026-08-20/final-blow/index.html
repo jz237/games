@@ -138,6 +138,7 @@
 
       <section id="titleScreen" class="screen title-screen active" aria-labelledby="gameTitle">
         <div class="title-glow"></div>
+        <div id="cabinetMarquee" class="cabinet-marquee" aria-hidden="true" hidden>PRESS ANY BUTTON</div>
         <div class="title-lockup">
           <p class="eyebrow">A PHILADELPHIA WEAPON FIGHTER</p>
           <h1 id="gameTitle"><span>FINAL</span><strong>BLOW</strong></h1>
@@ -500,6 +501,7 @@
           <label><input id="flashToggle" type="checkbox" checked><span>SCREEN FLASH</span></label>
           <label><input id="sharpRenderToggle" type="checkbox" checked><span>SHARP RENDER · NATIVE DPI</span></label>
           <label><input id="crtModeToggle" type="checkbox"><span>CRT MODE · ARCADE MONITOR</span></label>
+          <label><input id="cabinetModeToggle" type="checkbox"><span>ARCADE CABINET · BIG-SCREEN TV PRESET</span></label>
           <label><input id="cinema3dToggle" type="checkbox"><span>CINEMA 3D · EXPERIMENTAL</span></label>
           <label><input id="musicToggle" type="checkbox" checked><span>ELEVENLABS MUSIC</span></label>
           <label><input id="soundToggle" type="checkbox" checked><span>ELEVENLABS SFX</span></label>
@@ -572,7 +574,7 @@
             <label for="touchOpacity"><span>TOUCH OPACITY</span><output id="touchOpacityValue">82%</output></label>
             <input id="touchOpacity" type="range" min="40" max="100" step="2" value="82">
           </div>
-          <label><input id="touchHapticsToggle" type="checkbox" checked><span>TOUCH HAPTICS</span></label>
+          <label><input id="touchHapticsToggle" type="checkbox" checked><span>HAPTICS · TOUCH, HITS &amp; PAD RUMBLE</span></label>
           <button id="installButton" class="install-button" type="button" hidden>INSTALL OFFLINE GAME</button>
         </section>
         <section class="remap-panel">
@@ -603,6 +605,12 @@
       <button class="arcade-button primary dialog-done" value="close">DONE</button>
     </form>
   </dialog>
+
+  <aside id="iosCoachMark" class="ios-coach" role="note" aria-label="Install on iPhone" hidden>
+    <b>ADD TO HOME SCREEN</b>
+    <span>Tap <i class="ios-share-glyph" aria-hidden="true">⎋</i> Share, then “Add to Home Screen” for fullscreen offline play.</span>
+    <button id="iosCoachDismiss" type="button" aria-label="Dismiss install tip">×</button>
+  </aside>
 
   <aside id="rotateGate" class="rotate-gate" aria-live="polite" aria-label="Rotate phone to play">
     <div class="phone-turn" aria-hidden="true"><i></i><b>↻</b></div>
