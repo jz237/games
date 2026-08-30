@@ -622,6 +622,13 @@ export const BLACK_BOOK_ENTRIES = Object.freeze([
     test: (p) => p.tallies.finalArcadeClears >= 1,
   },
   {
+    id: "keepers-keys",
+    title: "KEEPER'S KEYS",
+    line: "Took the Commissioner's keys on FINAL difficulty. The ninth card in the deck is his — and now it deals for you.",
+    hint: "Beat arcade on FINAL difficulty to claim the secret ninth fighter.",
+    test: (p) => p.tallies.finalArcadeClears >= 1,
+  },
+  {
     id: "five-deep",
     title: "FIVE DEEP IN THE GAUNTLET",
     line: `${BLACK_BOOK_RULES.survivalStreakFirst} straight Gauntlet wins. The line behind you keeps growing.`,

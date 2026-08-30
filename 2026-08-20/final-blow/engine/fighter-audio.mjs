@@ -9,6 +9,15 @@ import {
 
 export const FIGHTER_AUDIO_IDS = Object.freeze([...REVIEW_FIGHTER_IDS]);
 
+// R2.0 FAMILY wave 16: the Commissioner joins the voice system OUTSIDE the
+// reviewed-roster list (the SFX review never rated him — there is nothing to
+// approve or reject yet). Every slot below is caption-first: captions and
+// procedural/shared fallbacks ship now, and the mp3s join the rotation the
+// moment they land at their canonical paths (see MISSING-AUDIO.md).
+export const BOSS_AUDIO_IDS = Object.freeze(["commissioner"]);
+
+export const ALL_FIGHTER_AUDIO_IDS = Object.freeze([...FIGHTER_AUDIO_IDS, ...BOSS_AUDIO_IDS]);
+
 // The original single-take cue set shipped with 1.5. One mp3 each on disk —
 // but only where the take survived Jez's review; the rest are gone and route
 // to a shared or procedural fallback instead.
@@ -143,6 +152,13 @@ export const FIGHTER_TAUNT_LINES = Object.freeze({
     "IS IT COS I IS WINNING?",
     "RESPEK. NOT FOR YOU, THOUGH.",
   ]),
+  // Wave 16: the Commissioner's contempt, in persona (voice directions in
+  // MISSING-AUDIO.md). Same positional caption/take contract as the mains.
+  commissioner: Object.freeze([
+    "YOU'RE NOT IN THE BOOK.",
+    "COURT FEES DOUBLE AFTER DARK.",
+    "SIT DOWN. SESSION'S NOT OVER.",
+  ]),
 });
 
 function variantPath(fighterId, cue, variant) {
@@ -172,10 +188,16 @@ export const FIGHTER_AUDIO_BANK_KINDS = Object.freeze({
   placeholder: "placeholder",
 });
 
-export function fighterAudioBankKind(cue) {
+export function fighterAudioBankKind(cue, fighterId = "") {
   if (FIGHTER_KICK_CUES.includes(cue)) return FIGHTER_AUDIO_BANK_KINDS.recorded;
   if (FIGHTER_REACTIVE_CUES.includes(cue)) return FIGHTER_AUDIO_BANK_KINDS.placeholder;
-  if (FIGHTER_AUDIO_CORE_CUES.includes(cue)) return FIGHTER_AUDIO_BANK_KINDS.probed;
+  if (FIGHTER_AUDIO_CORE_CUES.includes(cue)) {
+    // Boss slots have no shipped variant-1 take yet, so every slot is probed
+    // (a "probed" bank would trust slot 1 blindly and 404 at play time).
+    return BOSS_AUDIO_IDS.includes(fighterId)
+      ? FIGHTER_AUDIO_BANK_KINDS.placeholder
+      : FIGHTER_AUDIO_BANK_KINDS.probed;
+  }
   return null;
 }
 
@@ -185,13 +207,16 @@ export function fighterAudioBankKind(cue) {
  * below reports "no take" through the same `null` the unknown-fighter and
  * unknown-cue cases already used.
  */
-export const FIGHTER_AUDIO = Object.freeze(Object.fromEntries(FIGHTER_AUDIO_IDS.map((fighterId) => {
+export const FIGHTER_AUDIO = Object.freeze(Object.fromEntries(ALL_FIGHTER_AUDIO_IDS.map((fighterId) => {
+  const boss = BOSS_AUDIO_IDS.includes(fighterId);
   const palette = {};
   for (const cue of FIGHTER_AUDIO_CORE_CUES) {
-    if (APPROVED_CORE_CUES[fighterId].includes(cue)) palette[cue] = probeVariants(fighterId, cue);
+    // Reviewed mains route only the takes Jez approved; the Commissioner's 12
+    // core slots all route (probe-all — nothing is recorded yet).
+    if (boss || APPROVED_CORE_CUES[fighterId].includes(cue)) palette[cue] = probeVariants(fighterId, cue);
   }
   for (const cue of FIGHTER_KICK_CUES) {
-    const pool = APPROVED_KICK_POOLS[fighterId][cue];
+    const pool = boss ? [] : APPROVED_KICK_POOLS[fighterId][cue];
     if (pool.length) palette[cue] = Object.freeze([...pool]);
   }
   for (const cue of FIGHTER_REACTIVE_CUES) {
@@ -227,7 +252,7 @@ export function fighterAudioManifest() {
 
 /** Every path the runtime may reference, shipped or merely probed for. */
 export function fighterAudioVariantManifest() {
-  return FIGHTER_AUDIO_IDS.flatMap((fighterId) => FIGHTER_AUDIO_CUES.flatMap(
+  return ALL_FIGHTER_AUDIO_IDS.flatMap((fighterId) => FIGHTER_AUDIO_CUES.flatMap(
     (cue) => [...(fighterAudioVariants(fighterId, cue) || [])],
   ));
 }
@@ -281,6 +306,37 @@ export function auditFighterAudio() {
       }
     }
   }
+  // Wave 16: the Commissioner's caption-first slots — all 12 core cues must
+  // route probe-all banks (no review exists to trim them), every reactive cue
+  // keeps its slots, and nothing may pretend to be a recorded kick take.
+  for (const fighterId of BOSS_AUDIO_IDS) {
+    const palette = FIGHTER_AUDIO[fighterId];
+    if (!palette) {
+      errors.push(`${fighterId}: missing palette`);
+      continue;
+    }
+    for (const cue of [...FIGHTER_AUDIO_CORE_CUES, ...FIGHTER_REACTIVE_CUES]) {
+      const variants = palette[cue];
+      if (variants?.length !== FIGHTER_AUDIO_VARIANT_SLOTS) {
+        errors.push(`${fighterId}: ${cue} has ${variants?.length ?? 0} variant slots`);
+        continue;
+      }
+      variants.forEach((path, index) => {
+        if (path !== variantPath(fighterId, cue, index + 1)) {
+          errors.push(`${fighterId}: ${cue} variant ${index + 1} misnamed (${path})`);
+        }
+      });
+      if (fighterAudioBankKind(cue, fighterId) !== FIGHTER_AUDIO_BANK_KINDS.placeholder) {
+        errors.push(`${fighterId}: ${cue} must probe all slots (no recorded takes exist)`);
+      }
+    }
+    for (const cue of FIGHTER_KICK_CUES) {
+      if (palette[cue]) errors.push(`${fighterId}: ${cue} routes takes no review accepted`);
+    }
+    if ((FIGHTER_TAUNT_LINES[fighterId]?.length || 0) !== FIGHTER_AUDIO_VARIANT_SLOTS) {
+      errors.push(`${fighterId}: taunt lines must fill the positional variant contract`);
+    }
+  }
   for (const [cue, placeholder] of Object.entries(FIGHTER_REACTIVE_PLACEHOLDERS)) {
     if (!FIGHTER_REACTIVE_CUES.includes(cue)) errors.push(`placeholder for unknown reactive cue ${cue}`);
     if (!FIGHTER_AUDIO_CORE_CUES.includes(placeholder.cue)) errors.push(`${cue}: placeholder source ${placeholder.cue} is not a core cue`);
@@ -302,6 +358,8 @@ export function auditFighterAudio() {
   if (new Set(variantPaths).size !== variantPaths.length) errors.push("variant paths must be unique");
   return Object.freeze({
     fighters: FIGHTER_AUDIO_IDS.length,
+    bossFighters: BOSS_AUDIO_IDS.length,
+    bossVoiceSlots: BOSS_AUDIO_IDS.length * FIGHTER_AUDIO_CORE_CUES.length,
     cuesPerFighter: FIGHTER_AUDIO_CUES.length,
     coreCues: FIGHTER_AUDIO_CORE_CUES.length,
     kickCues: FIGHTER_KICK_CUES.length,

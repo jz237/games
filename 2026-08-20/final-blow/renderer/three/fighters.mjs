@@ -562,11 +562,16 @@ export class FighterLayer {
   buildRig(fighter) {
     const host = this.host;
     const id = fighter.def.id;
-    const baseImage = host.fighterAtlases[id];
-    const moveImage = host.fighterMoveAtlases[id];
+    // Wave 16 alt palettes: the host hands the palette-resolved atlas (an
+    // Image for the primary colors, a remapped canvas shimmed with
+    // complete/naturalWidth for the alt). HD swaps are skipped for alt rigs —
+    // the HD sheets carry the primary colors only.
+    const paletteKey = host.fighterPaletteKey ? host.fighterPaletteKey(fighter) : "";
+    const baseImage = host.fighterAtlasFor ? host.fighterAtlasFor(fighter, "base") : host.fighterAtlases[id];
+    const moveImage = host.fighterAtlasFor ? host.fighterAtlasFor(fighter, "specials") : host.fighterMoveAtlases[id];
     if (!baseImage?.complete || !baseImage.naturalWidth) return null;
-    const banks = { base: this.buildBank(baseImage, `renderer/hd/${id}.webp`) };
-    if (moveImage?.complete && moveImage.naturalWidth) banks.specials = this.buildBank(moveImage, `renderer/hd/${id}-specials.webp`);
+    const banks = { base: this.buildBank(baseImage, paletteKey ? null : `renderer/hd/${id}.webp`) };
+    if (moveImage?.complete && moveImage.naturalWidth) banks.specials = this.buildBank(moveImage, paletteKey ? null : `renderer/hd/${id}-specials.webp`);
 
     const geometry = new THREE.PlaneGeometry(1, 1);
     geometry.translate(0, 0.5, 0); // feet-anchored, matching drawAtlasFrame
@@ -628,7 +633,7 @@ export class FighterLayer {
     this.group.add(reflRoot);
     this.group.add(root);
     return {
-      id, banks, mesh, root, reflMesh, reflRoot, shadow, footA, footB, coreA, coreB, penumbra,
+      id, paletteKey, banks, mesh, root, reflMesh, reflRoot, shadow, footA, footB, coreA, coreB, penumbra,
       currentBank: "base", lastHitFlash: 0, hitWhiteTtl: 0, hitToneTtl: 0,
     };
   }
@@ -663,7 +668,10 @@ export class FighterLayer {
         if (rig) rig.root.visible = rig.reflRoot.visible = rig.shadow.visible = false;
         continue;
       }
-      if (!rig || rig.id !== fighter.def.id) {
+      // Wave 16: a changed palette pick rebuilds the side's rig exactly like
+      // a changed fighter (the alt atlas is a different texture source).
+      const paletteKey = this.host.fighterPaletteKey ? this.host.fighterPaletteKey(fighter) : "";
+      if (!rig || rig.id !== fighter.def.id || (rig.paletteKey || "") !== paletteKey) {
         this.disposeRig(rig);
         rig = this.buildRig(fighter);
         this.rigs[side] = rig;

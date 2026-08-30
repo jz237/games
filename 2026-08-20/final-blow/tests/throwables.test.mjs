@@ -15,9 +15,11 @@ const expected = Object.freeze({
   donald: ["golfball", "FORE!"],
   cyraxx: ["bedbugs", "INFESTED"],
   ali: ["vinyl", "BASS DROP"],
+  // Wave 16: the steel cane the backlog reserved for the Commissioner.
+  commissioner: ["cane", "ORDER RESTORED"],
 });
 
-test("all eight approved personal objects have authored identity and release animation", () => {
+test("all nine approved personal objects have authored identity and release animation", () => {
   assert.deepEqual(Object.keys(FIGHTER_THROWABLES), Object.keys(expected));
   const signatures = new Set();
   for (const [fighterId, [style, label]] of Object.entries(expected)) {
@@ -34,7 +36,21 @@ test("all eight approved personal objects have authored identity and release ani
       profile.height, profile.bounces, profile.hazardFrames, Boolean(profile.tether),
     ].join(":"));
   }
-  assert.equal(signatures.size, 8, "none of the eight objects may be a generic reskin");
+  assert.equal(signatures.size, 9, "none of the nine objects may be a generic reskin");
+});
+
+// Wave 16: the cane's wave-11-pattern EX tier — gold tip, knockdown, no
+// lingering hazard (his ring control is the stagger on the base throw).
+test("the Commissioner's cane carries a distinct EX variant", () => {
+  const base = createThrowObjectMove("commissioner");
+  const ex = createThrowObjectMove("commissioner", { enhanced: true });
+  assert.equal(base.throwableVariant, "");
+  assert.equal(ex.throwableVariant, "ex");
+  assert.equal(ex.moveName, "GOLD-TIP CANE");
+  assert.equal(ex.gritCost, 25);
+  assert.equal(FIGHTER_THROWABLES.commissioner.variants.ex.knockdown, true);
+  assert.ok(FIGHTER_THROWABLES.commissioner.staggerFrames > 0, "the base throw staggers");
+  assert.equal(FIGHTER_THROWABLES.commissioner.variants.ex.staggerFrames, 0);
 });
 
 test("approved secondary behavior is encoded in the data", () => {

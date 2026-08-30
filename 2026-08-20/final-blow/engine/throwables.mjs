@@ -394,6 +394,46 @@ export const FIGHTER_THROWABLES = Object.freeze({
     }),
     sound: "vinyl",
   }),
+  // R2.0 FAMILY wave 16 — the steel cane the backlog reserved for the
+  // Commissioner. A hard, flat, end-over-end steel throw: fast, heavy on the
+  // clean hit, and it STAGGERS — the cane buys him the walk-in his feet can't.
+  // Punishable recovery keeps it a decision, not a zoning tool.
+  commissioner: object("cane", {
+    name: "STEEL CANE",
+    style: "cane",
+    archetype: "authority spacing — one flat steel throw that staggers and opens the walk-in",
+    startupFrames: 13,
+    activeFrames: 3,
+    recoveryFrames: 28,
+    usesPerRound: 2,
+    speed: 560,
+    width: 88,
+    height: 20,
+    damage: 10,
+    chipDamage: 2,
+    hitstunFrames: 22,
+    blockstunFrames: 12,
+    push: 230,
+    lifeFrames: 110,
+    spin: 9,
+    staggerFrames: 8,
+    impactLabel: "ORDER RESTORED",
+    variants: Object.freeze({
+      // EX: the gold-tip serve — faster, harder, and a knockdown on the clean
+      // hit, so the contract grab is guaranteed meaty on the wake-up.
+      ex: Object.freeze({
+        name: "GOLD-TIP CANE",
+        speed: 640,
+        damage: 11,
+        hitstunFrames: 24,
+        push: 260,
+        spin: 13,
+        knockdown: true,
+        staggerFrames: 0,
+      }),
+    }),
+    sound: "cane",
+  }),
 });
 
 export const THROWABLE_IDS = Object.freeze(Object.keys(FIGHTER_THROWABLES));

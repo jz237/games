@@ -311,8 +311,9 @@ test("black book store load is tolerant of junk and round-trips unlocks", () => 
 // --- Arcade ending panels + credits data -------------------------------------
 
 test("every roster fighter has a full 3-panel ending over shipped art", () => {
-  assert.deepEqual(Object.keys(ARCADE_ENDING_PANELS).sort(), [...FIGHTERS].sort());
-  for (const id of FIGHTERS) {
+  // Wave 16: the secret ninth resolution ships beside the eight mains.
+  assert.deepEqual(Object.keys(ARCADE_ENDING_PANELS).sort(), [...FIGHTERS, "commissioner"].sort());
+  for (const id of [...FIGHTERS, "commissioner"]) {
     const panels = endingPanelsFor(id);
     assert.equal(panels.length, 3, `${id} has exactly three panels`);
     for (const panel of panels) {
@@ -324,7 +325,8 @@ test("every roster fighter has a full 3-panel ending over shipped art", () => {
       assert.ok(["night", "work", "dawn"].includes(panel.treat), `${id} uses a known CSS grade`);
     }
   }
-  assert.equal(endingPanelsFor("commissioner"), null, "the boss has no player ending");
+  // Wave 16: the boss IS a player now — his panels ship like everyone's.
+  assert.equal(endingPanelsFor("commissioner")?.length, 3, "the unlocked Commissioner has a player ending");
 });
 
 test("the credits roll data credits Jez, the agents, and the toolchain", () => {

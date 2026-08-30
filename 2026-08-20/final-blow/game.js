@@ -65,7 +65,14 @@ import {
   listFighterMoves,
   prettyProfileName,
   recognizeFighterCommand,
+  selectWinQuote,
 } from "./engine/fighter-kits.mjs";
+import {
+  FIGHTER_ALT_PALETTES,
+  getAltPalette,
+  remapImageBytes,
+  resolveMatchPalettes,
+} from "./engine/palettes.mjs";
 import {
   AI_DIFFICULTIES,
   AI_DIFFICULTY_ORDER,
@@ -116,12 +123,15 @@ import {
 import {
   ARCADE_BOSS_ID,
   ARCADE_CREDITS,
+  ARCADE_RIVALS,
   arcadeRunSnapshot,
+  bossDialogueVariants,
   createArcadeRun,
   currentArcadeMatch,
   endingPanelsFor,
   getArcadeEnding,
   recordArcadeResult,
+  rivalDialogueVariants,
 } from "./engine/arcade.mjs";
 import {
   BLACK_BOOK_ENTRIES,
@@ -407,19 +417,11 @@ const roster = [
   },
 ];
 
-const balanceAudit = auditFighterBalance(roster.map(({ id }) => getFighterKit(id)));
-if (balanceAudit.violations.length) console.warn("Final Blow balance guardrail warning", balanceAudit.violations);
-const tournamentAudit = auditTournamentBalance(roster.map(({ id }) => id));
-if (tournamentAudit.violations.length) console.warn("Final Blow tournament audit warning", tournamentAudit.violations);
-const fatalityAudit = auditGraphicFatalities(roster.map(({ id }) => ({
-  id,
-  projectile: getThrowable(id),
-})));
-if (fatalityAudit.errors.length) console.warn("Final Blow graphic fatality warning", fatalityAudit.errors);
-
+// R2.0 FAMILY wave 16: the boss carries his own kit, finishers and fatalities
+// now — the DeathBlow reskin is gone.
 const arcadeBoss = Object.freeze({
   id: ARCADE_BOSS_ID,
-  kitId: "deathblow",
+  kitId: "commissioner",
   name: "THE COMMISSIONER",
   title: "KEEPER OF THE BLACK BOOK",
   mark: "TC",
@@ -431,8 +433,48 @@ const arcadeBoss = Object.freeze({
   boss: true,
   finishers: ["CLOSED SESSION", "FINAL AUTHORITY"],
   victoryQuote: "THE BOOK CLOSES WHEN I SAY IT CLOSES.",
-  finisherScriptId: "deathblow",
+  finisherScriptId: "commissioner",
 });
+
+// ---------------------------------------------------------------------------
+// Wave 16 — the secret ninth slot. Beating the arcade ladder on FINAL
+// difficulty writes final-blow-commissioner-unlocked (the standard
+// final-blow-* settings pattern) and the Commissioner joins the roster as a
+// playable fighter: same kit, no boss movement buff, dark-red card.
+// ---------------------------------------------------------------------------
+const COMMISSIONER_UNLOCK_KEY = "final-blow-commissioner-unlocked";
+
+const commissionerPlayableDef = Object.freeze({
+  ...arcadeBoss,
+  boss: false,
+  secret: true,
+});
+
+function commissionerUnlocked() {
+  return localStorage.getItem(COMMISSIONER_UNLOCK_KEY) === "1";
+}
+
+function rosterHasCommissioner() {
+  return roster.some(({ id }) => id === ARCADE_BOSS_ID);
+}
+
+if (commissionerUnlocked()) roster.push(commissionerPlayableDef);
+
+// The canonical eight-fighter cast — seeded runs everyone shares (the Daily
+// Jawn) must derive from the same list on every machine, unlocked or not.
+function baseRosterIds() {
+  return roster.filter(({ secret }) => !secret).map(({ id }) => id);
+}
+
+const balanceAudit = auditFighterBalance(roster.map(({ id }) => getFighterKit(id)));
+if (balanceAudit.violations.length) console.warn("Final Blow balance guardrail warning", balanceAudit.violations);
+const tournamentAudit = auditTournamentBalance(roster.map(({ id }) => id));
+if (tournamentAudit.violations.length) console.warn("Final Blow tournament audit warning", tournamentAudit.violations);
+const fatalityAudit = auditGraphicFatalities(roster.map(({ id }) => ({
+  id,
+  projectile: getThrowable(id),
+})));
+if (fatalityAudit.errors.length) console.warn("Final Blow graphic fatality warning", fatalityAudit.errors);
 
 // Each Final Blow is staged as a short, character-specific arcade cinematic.
 // Coordinates are local to the victim: negative X begins behind the attacker,
@@ -638,6 +680,34 @@ const finisherChoreography = {
       { t: 3.98, label: "WEST STAINES MASSIVE", sound: "final", power: 1.5, final: true },
     ],
   },
+  // Wave 16 — the Commissioner's own ceremony: unhurried, procedural, cruel.
+  // Cane taps close the distance, the hook drags the victim to the book, and
+  // FINAL AUTHORITY lands like a sentence being read out.
+  commissioner: {
+    combo: "FINAL AUTHORITY",
+    duration: 5.4,
+    keys: [
+      { t: 0, ax: -310, ay: 0, af: 0, vx: 0, vy: 0, vf: 15, zoom: 1.02 },
+      { t: .5, ax: -215, ay: 0, af: 6, vx: 0, vy: 0, vf: 15, zoom: 1.06 },
+      { t: .8, ax: -120, ay: 0, af: 9, vx: 6, vy: 0, vf: 15, zoom: 1.11 },
+      { t: 1.14, ax: -58, ay: 0, af: 10, vx: 18, vy: 6, vf: 15, vr: -.06, zoom: 1.14 },
+      { t: 1.5, ax: -34, ay: 0, af: 13, vx: 34, vy: 52, vf: 15, vr: -.16, zoom: 1.18 },
+      { t: 1.92, ax: -14, ay: 0, af: 14, vx: 56, vy: 182, vf: 15, vr: -.44, zoom: 1.24 },
+      { t: 2.4, ax: -88, ay: 120, af: 13, vx: 60, vy: 216, vf: 15, vr: -.56, zoom: 1.19 },
+      { t: 2.9, ax: 6, ay: 20, af: 14, vx: 26, vy: 0, vf: 15, vr: .7, zoom: 1.29 },
+      { t: 3.5, ax: -140, ay: 0, af: 12, vx: 26, vy: 0, vf: 15, vr: .7, zoom: 1.12 },
+      { t: 4.1, ax: -16, ay: 0, af: 14, vx: 50, vy: 0, vf: 15, vr: 1.2, zoom: 1.35 },
+      { t: 5.4, ax: -132, ay: 0, af: 0, vx: 74, vy: 0, vf: 15, vr: 1.36, zoom: 1.08 },
+    ],
+    impacts: [
+      { t: .8, label: "CANE TAP", sound: "light", power: .42 },
+      { t: 1.14, label: "WRIT SERVED", sound: "hit", power: .55 },
+      { t: 1.5, label: "GAVEL CRACK", sound: "heavy", power: .78 },
+      { t: 1.92, label: "OVERRULE", sound: "special", power: .95 },
+      { t: 2.9, label: "CONTEMPT", sound: "heavy", power: 1.08 },
+      { t: 4.1, label: "FINAL AUTHORITY", sound: "final", power: 1.48, final: true },
+    ],
+  },
 };
 
 // Release 1.8B PROJECTILE FOCUS: the assigned personal projectile owns all
@@ -752,7 +822,10 @@ finalBlowRealityImage.src = "assets/final-blow-reality.webp";
 const fighterImages = {};
 const fighterAtlases = {};
 const fighterMoveAtlases = {};
-for (const fighter of [...roster, arcadeBoss]) {
+// The boss def loads the Commissioner's art even when the playable def is in
+// the roster: he has no separate specials sheet, so his kit poses address the
+// combat atlas (the boss branch below) for both the boss AND the unlock.
+for (const fighter of [...roster.filter(({ id }) => id !== ARCADE_BOSS_ID), arcadeBoss]) {
   const image = new Image();
   image.src = `assets/fighters/${fighter.id}.webp`;
   fighterImages[fighter.id] = image;
@@ -766,6 +839,81 @@ for (const fighter of [...roster, arcadeBoss]) {
     moveAtlas.src = `assets/moves/${fighter.id}-specials.webp`;
     fighterMoveAtlases[fighter.id] = moveAtlas;
   }
+}
+
+// The Commissioner has no separate specials sheet, so DOM art paths (victory
+// pose, ending panels) address his combat atlas — the same fallback the
+// canvas renderer uses via fighterMoveAtlases.
+function posesSheetUrl(def) {
+  return def.boss || def.secret
+    ? `assets/atlases/${def.id}.webp`
+    : `assets/moves/${def.id}-specials.webp`;
+}
+
+// ---------------------------------------------------------------------------
+// R2.0 FAMILY wave 16 — alt palettes. Each fighter's authored alt is a cached
+// canvas hue-remap of the shipped atlas (engine/palettes.mjs owns the pure
+// pixel math). Built lazily once per atlas per session, zero per-frame cost;
+// the canvas is shimmed with Image-like fields (src/complete/naturalWidth) so
+// every existing consumer — tintedSilhouette's cache key, the 3D renderer's
+// readiness guard and texture builders — accepts it unchanged.
+// Palette STATE is deliberately module-level presentation config (never on
+// fighters, never in state): both online peers derive the same pair from the
+// shared match config, so rollback checksums are untouched.
+// ---------------------------------------------------------------------------
+const paletteFxDebug = { built: 0, altSides: 0 };
+const altAtlasCache = new Map();
+
+// Which palette each SIDE renders this match (0 primary, 1 alt)...
+let matchPalettes = [0, 0];
+// ...and which palettes the select screen has staged for the next match.
+let pendingPalettes = [0, 0];
+
+function altAtlasSource(fighterId, bank) {
+  const specials = bank === "specials" ? fighterMoveAtlases[fighterId] : null;
+  // The boss shares one sheet across banks — collapse to one cache entry.
+  if (specials && specials !== fighterAtlases[fighterId]) return { image: specials, key: `${fighterId}:specials` };
+  return { image: fighterAtlases[fighterId], key: `${fighterId}:base` };
+}
+
+function ensureAltAtlas(fighterId, bank = "base") {
+  const spec = getAltPalette(fighterId);
+  const { image, key } = altAtlasSource(fighterId, bank);
+  if (!spec || !image?.complete || !image.naturalWidth) return null;
+  let alt = altAtlasCache.get(key);
+  if (alt) return alt;
+  const scratch = document.createElement("canvas");
+  scratch.width = image.naturalWidth;
+  scratch.height = image.naturalHeight;
+  const scratchCtx = scratch.getContext("2d", { willReadFrequently: true });
+  scratchCtx.drawImage(image, 0, 0);
+  const pixels = scratchCtx.getImageData(0, 0, scratch.width, scratch.height);
+  remapImageBytes(pixels.data, spec);
+  scratchCtx.putImageData(pixels, 0, 0);
+  // Image-interface shim for every downstream consumer.
+  alt = scratch;
+  alt.src = `alt-palette:${key}`;
+  alt.complete = true;
+  alt.naturalWidth = scratch.width;
+  alt.naturalHeight = scratch.height;
+  altAtlasCache.set(key, alt);
+  paletteFxDebug.built += 1;
+  return alt;
+}
+
+/** The atlas a side should draw from, alt palette applied when selected. */
+function paletteAtlas(fighterId, side, bank = "base") {
+  const base = bank === "specials"
+    ? fighterMoveAtlases[fighterId] || fighterAtlases[fighterId]
+    : fighterAtlases[fighterId];
+  if (matchPalettes[side] !== 1) return base;
+  return ensureAltAtlas(fighterId, bank) || base;
+}
+
+/** Set the active per-side palettes for the match being built. */
+function applyMatchPalettes(defs, picks) {
+  matchPalettes = resolveMatchPalettes(defs.map((def) => def?.id), picks);
+  paletteFxDebug.altSides = matchPalettes.filter((palette) => palette === 1).length;
 }
 
 // Original soundtrack and combat cues generated with the ElevenLabs API, less
@@ -1080,6 +1228,12 @@ const onlineSession = {
     remoteReady: false,
     remoteControlStyle: "classic",
     remoteDelayChoice: "auto",
+    // Wave 16: SF2 color pick + Commissioner eligibility, exchanged as plain
+    // optional lobby fields (older peers ignore them; no protocol change).
+    localPalette: 0,
+    remotePalette: 0,
+    remoteFighterRaw: "",
+    remoteCommissionerUnlocked: false,
   },
   matchConfig: null,
   rollback: null,
@@ -1794,6 +1948,11 @@ const modeFxDebug = {
   endingSequences: 0,
   blackBookScreens: 0,
   recordsScreens: 0,
+  // R2.0 FAMILY wave 16 one-shot totals.
+  commissionerUnlocks: 0,
+  dialogueExchanges: 0,
+  dialogueCardsShown: 0,
+  winQuoteSelections: 0,
 };
 
 // ===========================================================================
@@ -2091,6 +2250,40 @@ function progressionRunEnd(kind, detail = {}) {
   blackBookObserve(blackBookLedger, { type: "runEnd", kind, ...detail });
   progressionEvaluateLedger();
   saveBlackBookLedger();
+  // Wave 16: a FINAL-difficulty arcade clear hands over the Keeper's keys.
+  if (kind === "arcade" && detail.finalDifficulty) unlockCommissioner();
+}
+
+// ---------------------------------------------------------------------------
+// Wave 16 — playable-Commissioner unlock plumbing. Persisted via the standard
+// final-blow-* localStorage pattern; the roster, the select grid and the
+// online eligibility set all resync from the one flag.
+// ---------------------------------------------------------------------------
+function unlockCommissioner({ quiet = false } = {}) {
+  const fresh = !commissionerUnlocked();
+  localStorage.setItem(COMMISSIONER_UNLOCK_KEY, "1");
+  if (!rosterHasCommissioner()) {
+    roster.push(commissionerPlayableDef);
+    setupRoster();
+  }
+  onlineFighterIds.add(ARCADE_BOSS_ID);
+  syncOnlineCommissionerOption();
+  if (fresh && !quiet) {
+    modeFxDebug.commissionerUnlocks += 1;
+    progressionToasts.push({ kind: "unlock", title: "KEEPER'S KEYS", sub: "THE COMMISSIONER JOINS THE ROSTER · 9TH SLOT" });
+    pumpProgressionToasts();
+  }
+  return fresh;
+}
+
+function relockCommissioner() {
+  localStorage.removeItem(COMMISSIONER_UNLOCK_KEY);
+  const index = roster.findIndex(({ id }) => id === ARCADE_BOSS_ID);
+  if (index >= 0) roster.splice(index, 1);
+  onlineFighterIds.delete(ARCADE_BOSS_ID);
+  syncOnlineCommissionerOption();
+  setupRoster();
+  return true;
 }
 
 function progressionHighScore(rank) {
@@ -2649,6 +2842,29 @@ function updateOnlineHud(kind = "sync") {
   $("#onlineHudRollbacks").textContent = `${metrics?.rollbacks || 0} RB`;
 }
 
+// Wave 16: the Commissioner appears in the online fighter list only while
+// BOTH peers have him unlocked (the lobby handshake carries the flags). A
+// peer who loses eligibility mid-lobby is snapped back to DeathBlow.
+function syncOnlineCommissionerOption() {
+  const select = $("#onlineFighterSelect");
+  if (!select) return;
+  const eligible = commissionerUnlocked() && onlineSession.lobby.remoteCommissionerUnlocked;
+  let option = select.querySelector('option[value="commissioner"]');
+  if (eligible && !option) {
+    option = document.createElement("option");
+    option.value = ARCADE_BOSS_ID;
+    option.textContent = "THE COMMISSIONER";
+    select.append(option);
+  } else if (!eligible && option) {
+    option.remove();
+    if (onlineSession.lobby.localFighter === ARCADE_BOSS_ID) {
+      onlineSession.lobby.localFighter = "deathblow";
+      onlineSession.lobby.localReady = false;
+      sendOnlineLobbyState();
+    }
+  }
+}
+
 function updateOnlineMatchSetup() {
   const connected = Boolean(onlineSession.peer?.connected);
   const setup = $("#onlineMatchSetup");
@@ -2657,8 +2873,12 @@ function updateOnlineMatchSetup() {
   const lobby = onlineSession.lobby;
   $("#onlineFighterSelect").value = lobby.localFighter;
   $("#onlineOpponentFighter").textContent = onlineFighterIds.has(lobby.remoteFighter)
-    ? roster.find(({ id }) => id === lobby.remoteFighter).name
-    : "CHOOSING…";
+    ? `${roster.find(({ id }) => id === lobby.remoteFighter).name}${lobby.remotePalette === 1 ? " · ALT" : ""}`
+    : lobby.remoteFighterRaw === ARCADE_BOSS_ID
+      ? "THE COMMISSIONER · LOCKED HERE"
+      : "CHOOSING…";
+  const paletteSelect = $("#onlinePaletteSelect");
+  if (paletteSelect) paletteSelect.value = String(lobby.localPalette);
   $("#onlineStageSelect").value = lobby.stage;
   $("#onlineStageSelect").disabled = onlineSession.role !== "host";
   $("#onlineDelaySelect").value = lobby.delayChoice;
@@ -2686,6 +2906,9 @@ function sendOnlineLobbyState() {
     delayChoice: lobby.delayChoice,
     controlStyle: state.controlStyle,
     ready: lobby.localReady,
+    // Wave 16: color pick + Commissioner eligibility handshake.
+    palette: lobby.localPalette,
+    commissioner: commissionerUnlocked(),
   });
 }
 
@@ -3047,6 +3270,11 @@ function makeOnlineMatchConfig({ rematch = false } = {}) {
   const lobby = onlineSession.lobby;
   const seedBytes = new Uint32Array(1);
   crypto.getRandomValues(seedBytes);
+  // Wave 16: the Commissioner may only enter the config when BOTH peers have
+  // him unlocked — the same both-sides-agree gate mutators use. The lobby UI
+  // never offers him otherwise; this is the belt to that suspenders.
+  const commissionerEligible = commissionerUnlocked() && lobby.remoteCommissionerUnlocked;
+  if ([lobby.localFighter, lobby.remoteFighter].includes(ARCADE_BOSS_ID) && !commissionerEligible) return null;
   return {
     version: 1,
     matchId: crypto.randomUUID(),
@@ -3055,6 +3283,8 @@ function makeOnlineMatchConfig({ rematch = false } = {}) {
     stage: stages[lobby.stage] ? lobby.stage : "somerset",
     inputDelay: Math.max(delayChoiceFrames(lobby.delayChoice), delayChoiceFrames(lobby.remoteDelayChoice)),
     controlStyles: [state.controlStyle, lobby.remoteControlStyle],
+    // Wave 16: agreed color picks, one per side, in picks order.
+    palettes: [lobby.localPalette === 1 ? 1 : 0, lobby.remotePalette === 1 ? 1 : 0],
     rematch: Boolean(rematch),
   };
 }
@@ -3076,7 +3306,12 @@ function validOnlineMatchConfig(config) {
     // Optional shared House Rules: absent (plain rooms) or a list of known
     // mutator ids agreed by both peers. Unknown ids reject the config.
     && (config.mutators === undefined
-      || (Array.isArray(config.mutators) && config.mutators.every((id) => Boolean(MUTATORS[id])))),
+      || (Array.isArray(config.mutators) && config.mutators.every((id) => Boolean(MUTATORS[id]))))
+    // Wave 16: optional agreed color picks — absent (older peer) or exactly
+    // one 0/1 per side. Anything else rejects the config.
+    && (config.palettes === undefined
+      || (Array.isArray(config.palettes) && config.palettes.length === 2
+        && config.palettes.every((palette) => palette === 0 || palette === 1))),
   );
 }
 
@@ -3201,18 +3436,31 @@ function setOnlineLocalSuspended(suspended) {
 function receiveOnlineControl(message) {
   if (!message || typeof message !== "object") return;
   if (message.type === "lobby-state" && !onlineSession.matchActive) {
+    onlineSession.lobby.remoteFighterRaw = typeof message.fighter === "string" ? message.fighter : "";
     if (onlineFighterIds.has(message.fighter)) onlineSession.lobby.remoteFighter = message.fighter;
     if (onlineSession.role === "guest" && stages[message.stage]) onlineSession.lobby.stage = message.stage;
     onlineSession.lobby.remoteDelayChoice = ["auto", "0", "1", "2", "3", "4"].includes(String(message.delayChoice))
       ? String(message.delayChoice) : "auto";
     onlineSession.lobby.remoteControlStyle = normalizeControlStyle(message.controlStyle);
     onlineSession.lobby.remoteReady = Boolean(message.ready);
+    // Wave 16: optional fields — absent from an older peer means primary
+    // color and a locked Commissioner, which is the safe default both ways.
+    onlineSession.lobby.remotePalette = message.palette === 1 ? 1 : 0;
+    onlineSession.lobby.remoteCommissionerUnlocked = Boolean(message.commissioner);
+    syncOnlineCommissionerOption();
     updateOnlineMatchSetup();
     maybeLaunchOnlineMatch();
     return;
   }
-  if (message.type === "match-start" && onlineSession.role === "guest" && validOnlineMatchConfig(message.config)) {
-    startOnlineMatch(message.config);
+  if (message.type === "match-start" && onlineSession.role === "guest") {
+    if (validOnlineMatchConfig(message.config)) {
+      startOnlineMatch(message.config);
+    } else if (message.config?.picks?.includes?.(ARCADE_BOSS_ID) && !commissionerUnlocked()) {
+      // The mutator-style gate tripped: the config names a fighter this
+      // machine has not earned. Refuse the match and say exactly why.
+      setOnlineStatus("error", "THE COMMISSIONER IS LOCKED ON THIS MACHINE — BEAT ARCADE ON FINAL DIFFICULTY TO ACCEPT THIS MATCH.");
+      setOnlineError("Match refused: THE COMMISSIONER is not unlocked on this machine.");
+    }
     return;
   }
   if (!onlineSession.matchConfig || message.matchId !== onlineSession.matchConfig.matchId) return;
@@ -4915,7 +5163,8 @@ function setupRoster() {
   grid.innerHTML = "";
   roster.forEach((fighter, index) => {
     const card = document.createElement("button");
-    card.className = "fighter-card";
+    // Wave 16: the unlocked Commissioner is the dark-red ninth card.
+    card.className = fighter.secret ? "fighter-card secret-card" : "fighter-card";
     card.dataset.index = index;
     card.dataset.mark = fighter.mark;
     card.style.setProperty("--fighter", fighter.color);
@@ -5011,6 +5260,17 @@ function prepareArcadeOpponent(usePlannedStage = false) {
 function makeMatchFighters() {
   const match = state.mode === "arcade" ? currentArcadeMatch(state.arcadeRun) : null;
   const bossOverride = match?.opponentId === ARCADE_BOSS_ID ? arcadeBoss : null;
+  // Wave 16: resolve the per-side palettes for this build. Online reads the
+  // shared match config (both peers derive the identical pair); offline reads
+  // the select-screen picks. Deterministic on every rebuild — rollback resim
+  // included — so the mirror auto-alt can never flicker.
+  const defs = [
+    roster[state.picks[0]] || null,
+    bossOverride || roster[state.picks[1]] || null,
+  ];
+  applyMatchPalettes(defs, state.mode === "online"
+    ? onlineSession.matchConfig?.palettes || [0, 0]
+    : pendingPalettes);
   // Fresh fighters always spawn side 0 left of side 1, so every path that
   // rebuilds the pair — new match, rematch, round reset, online seed — resets
   // the axis with them rather than inheriting a crossed-over orientation.
@@ -5254,7 +5514,7 @@ function startDailyRun(dateOverride = null, { force = false } = {}) {
     sound("select");
     return false;
   }
-  const plan = createDailyPlan(date, roster.map(({ id }) => id));
+  const plan = createDailyPlan(date, baseRosterIds());
   dailySession.active = true;
   dailySession.date = date;
   dailySession.plan = plan;
@@ -5679,6 +5939,8 @@ function startSelect(mode) {
   state.picks = [0, state.mode === "arcade" ? 4 : 1];
   state.locks = [false, state.mode === "arcade" || state.mode === "survival"];
   state.selectingPlayer = 0;
+  // Wave 16: fresh color picks each visit to the select screen.
+  pendingPalettes = [0, 0];
   $("#selectPrompt").textContent = state.mode === "training"
     ? "CHOOSE YOUR TRAINING FIGHTER"
     : state.mode === "survival"
@@ -5693,8 +5955,14 @@ function startSelect(mode) {
   updateRosterUI();
 }
 
-function chooseFighter(index) {
+// Wave 16: `palette` is the SF2-style color pick riding the confirm input —
+// LP/click/Enter/pad-A locks color 1, HP (or pad Y) locks color 2. Stored per
+// seat in pendingPalettes; resolveMatchPalettes applies the mirror auto-alt.
+function chooseFighter(index, palette = 0) {
   unlockAudio();
+  const paletteSeat = state.mode === "team" ? -1
+    : state.mode === "arcade" || state.mode === "survival" || !state.locks[0] ? 0 : 1;
+  if (paletteSeat >= 0) pendingPalettes[paletteSeat] = palette === 1 ? 1 : 0;
   if (state.mode === "survival") {
     // The Gauntlet: one pick, straight into bout 1 — no stage select, the
     // seeded ladder owns the route.
@@ -5784,6 +6052,10 @@ function updateRosterUI() {
       ? state.teamPicks[1].includes(id)
       : state.locks[1] && state.picks[1] === index);
     card.classList.toggle("focused", !state.locks[state.selectingPlayer] && state.picks[state.selectingPlayer] === index);
+    // Wave 16: the alt-color stamp on a locked card.
+    card.classList.toggle("alt-pick", !teamMode && (
+      (state.locks[0] && state.picks[0] === index && pendingPalettes[0] === 1)
+      || (state.locks[1] && state.picks[1] === index && pendingPalettes[1] === 1)));
   });
   const readout = $("#selectionReadout");
   readout.innerHTML = teamMode
@@ -5917,6 +6189,10 @@ function startMatch(resetSet = true) {
   }
   if (state.mutators.length) introLabel = `${introLabel} · ${mutatorLabel(state.mutators)}`;
   announce(introMain, introLabel, 1.2);
+  // Wave 16: rival and FINAL BOUT intros open with a spoken-card exchange —
+  // the intro window stretches to fit the read, and the FIGHT call waits.
+  const dialogueSeconds = beginIntroDialogue(arcadeMatch);
+  if (dialogueSeconds > 0) state.phaseTime = dialogueSeconds;
   // Wave 9: the arcade final boss bout gets its own announcer intro, queued
   // behind ROUND 1 / FIGHT via the announcer busy window.
   if (arcadeMatch?.kind === "boss") {
@@ -5925,7 +6201,7 @@ function startMatch(resetSet = true) {
   }
   scheduleFightAnnouncement(() => {
     if (state.screen === "fight" && state.phase === "intro") announce("FIGHT!", "NO MERCY ON THESE STREETS", 0.8);
-  }, 1150);
+  }, dialogueSeconds > 0 ? Math.round(dialogueSeconds * 1000) - 650 : 1150);
   canvas.focus();
 }
 
@@ -6105,6 +6381,129 @@ function announce(main, sub = "", duration = 1) {
 function updateFlowSkipHint() {
   const visible = state.screen === "fight" && (state.phase === "intro" || state.phase === "roundover");
   $("#flowSkipHint").hidden = !visible;
+}
+
+// ---------------------------------------------------------------------------
+// R2.0 FAMILY wave 16 — pre-fight dialogue exchanges. Arcade-only: a rival
+// bout or the FINAL BOUT opens with a two-card spoken exchange during the
+// intro window (extended to fit the read). Pure presentation on module-level
+// state — never snapshotted, never read by the sim; the intro phase clock it
+// keys off is ordinary deterministic match config. Skippable through the
+// existing flow-skip (phase leaves "intro" -> cards drop on the next frame);
+// reduced motion shows both cards instantly with no slide.
+// ---------------------------------------------------------------------------
+const INTRO_DIALOGUE_SECONDS = 4.9;
+const INTRO_DIALOGUE_CARD_TIMES = [0.35, 2.45];
+
+const introDialogue = {
+  active: false,
+  kind: "",
+  lines: [],
+  total: 0,
+  revealed: 0,
+};
+// Last variant shown per pairing, so back-to-back runs never repeat while an
+// alternative exists. visualRandom only — presentation stream.
+const dialogueVariantMemory = new Map();
+
+function dialogueSpeakerDef(fighterId) {
+  return fighterId === ARCADE_BOSS_ID
+    ? arcadeBoss
+    : roster.find(({ id }) => id === fighterId) || null;
+}
+
+function pickDialogueVariant(key, variants) {
+  if (!variants?.length) return null;
+  let pick = Math.floor(visualRandom() * variants.length) % variants.length;
+  if (variants.length > 1 && pick === dialogueVariantMemory.get(key)) pick = (pick + 1) % variants.length;
+  dialogueVariantMemory.set(key, pick);
+  return variants[pick];
+}
+
+function cancelIntroDialogue() {
+  introDialogue.active = false;
+  introDialogue.lines = [];
+  introDialogue.revealed = 0;
+  const box = $("#introDialogue");
+  if (box) {
+    box.hidden = true;
+    box.innerHTML = "";
+  }
+}
+
+/**
+ * Arm the exchange for the match being started. Returns the intro length the
+ * bout should run (0 = no dialogue, keep the standard fast intro).
+ */
+function beginIntroDialogue(arcadeMatch) {
+  cancelIntroDialogue();
+  if (state.mode !== "arcade" || !arcadeMatch || !state.arcadeRun) return 0;
+  const playerId = state.arcadeRun.playerId;
+  let variant = null;
+  if (arcadeMatch.kind === "rival") {
+    variant = pickDialogueVariant(
+      `rival:${[playerId, arcadeMatch.opponentId].sort().join(":")}`,
+      rivalDialogueVariants(playerId, arcadeMatch.opponentId),
+    );
+  } else if (arcadeMatch.kind === "boss") {
+    variant = pickDialogueVariant(`boss:${playerId}`, bossDialogueVariants(playerId));
+  }
+  if (!variant) return 0;
+  introDialogue.active = true;
+  introDialogue.kind = arcadeMatch.kind;
+  introDialogue.total = INTRO_DIALOGUE_SECONDS;
+  introDialogue.revealed = 0;
+  introDialogue.lines = variant.map((card, index) => {
+    const def = dialogueSpeakerDef(card.id);
+    // Which corner speaks: match the card to a fighter side; a mirror (both
+    // the same id) gives the opening line to the far corner.
+    const sides = state.fighters
+      .map((fighter, side) => ({ side, id: fighter.def.kitId === "commissioner" ? ARCADE_BOSS_ID : fighter.def.id }))
+      .filter((entry) => entry.id === card.id);
+    const side = sides.length === 1 ? sides[0].side : index === 0 ? 1 : 0;
+    return {
+      id: card.id,
+      line: card.line,
+      name: def?.name || card.id.toUpperCase(),
+      color: def?.color || "#d8d8d8",
+      side,
+    };
+  });
+  modeFxDebug.dialogueExchanges += 1;
+  const box = $("#introDialogue");
+  if (box) {
+    box.innerHTML = introDialogue.lines.map((card, index) => `
+      <div class="speech-card ${card.side === 0 ? "from-left" : "from-right"}" data-card="${index}" hidden>
+        <b style="--speaker:${card.color}">${card.name}</b>
+        <p>${card.line}</p>
+      </div>`).join("");
+    box.hidden = false;
+  }
+  return INTRO_DIALOGUE_SECONDS;
+}
+
+// Per-rendered-frame card reveal, driven by the intro phase clock so pause
+// holds the cards and the flow-skip drops them with the phase.
+function updateIntroDialogue() {
+  const box = $("#introDialogue");
+  if (!box) return;
+  const live = introDialogue.active && state.screen === "fight" && state.phase === "intro";
+  if (!live) {
+    if (introDialogue.active && (state.phase !== "intro" || state.screen !== "fight")) cancelIntroDialogue();
+    else if (!box.hidden && !introDialogue.active) box.hidden = true;
+    return;
+  }
+  const reduced = state.accessibility.reducedMotion;
+  const elapsed = introDialogue.total - state.phaseTime;
+  box.querySelectorAll(".speech-card").forEach((cardEl, index) => {
+    const show = reduced || elapsed >= (INTRO_DIALOGUE_CARD_TIMES[index] ?? 0);
+    if (show && cardEl.hidden) {
+      cardEl.hidden = false;
+      cardEl.classList.toggle("instant", reduced);
+      modeFxDebug.dialogueCardsShown += 1;
+      introDialogue.revealed = Math.max(introDialogue.revealed, index + 1);
+    }
+  });
 }
 
 // Release 1.8 GRIND: only HUMAN inputs may skip the intro/round-over flow. A
@@ -6751,6 +7150,35 @@ function updateFinisher(dt) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Wave 16 — context win quotes. The pools and the pure selector live in
+// engine/fighter-kits.mjs; this side supplies the CONTEXT (all states the
+// result path already knows) plus the visualRandom roll and the per-fighter
+// no-repeat memory. lastWinQuoteSelection is exposed for QA probes.
+// ---------------------------------------------------------------------------
+const lastWinQuoteKeys = new Map();
+let lastWinQuoteSelection = null;
+
+function selectResultQuote(winner, def) {
+  const loserDef = state.fighters[1 - winner]?.def;
+  const winnerId = def.kitId || def.id;
+  const loserId = loserDef ? loserDef.kitId || loserDef.id : "";
+  const context = {
+    fatality: state.finisherType >= 0,
+    flawless: (state.fighters[winner]?.health ?? 0) >= 100,
+    comeback: state.finisherType < 0 && (voiceRoundMinHealth[winner] ?? 100) <= 15,
+    boss: loserId === ARCADE_BOSS_ID && winnerId !== ARCADE_BOSS_ID,
+    rival: Boolean(loserId) && ARCADE_RIVALS[winnerId] === loserId,
+    mirror: Boolean(loserId) && loserId === winnerId,
+  };
+  const selection = selectWinQuote(winnerId, context, visualRandom(), lastWinQuoteKeys.get(winnerId) || "");
+  if (!selection) return "";
+  lastWinQuoteKeys.set(winnerId, selection.key);
+  lastWinQuoteSelection = { fighterId: winnerId, ...selection, context };
+  modeFxDebug.winQuoteSelections += 1;
+  return selection.text;
+}
+
 function showResult(winner) {
   state.phase = "result";
   state.finisher = null;
@@ -6778,11 +7206,14 @@ function showResult(winner) {
           ? `${currentArcadeMatch(state.arcadeRun)?.label || "BOUT"} · CONTINUE?`
           : state.finisherType >= 0 ? def.finishers[state.finisherType] : "KNOCKOUT";
   const victoryPose = $("#victoryPose");
-  victoryPose.classList.toggle("portrait-art", !kit || def.boss);
-  victoryPose.style.backgroundImage = kit && !def.boss
-    ? `url("assets/moves/${def.id}-specials.webp")`
+  victoryPose.classList.toggle("portrait-art", !kit || def.boss || def.secret);
+  victoryPose.style.backgroundImage = kit && !def.boss && !def.secret
+    ? `url("${posesSheetUrl(def)}")`
     : `url("assets/fighters/${def.id}.webp")`;
-  $("#resultQuote").textContent = def.victoryQuote || kit?.victory.quote || "PHILLY REMEMBERS THE WINNER.";
+  // Wave 16: context-aware win quote — pool keyed to HOW the match was won,
+  // rotated no-repeat via visualRandom (presentation stream only).
+  $("#resultQuote").textContent = selectResultQuote(winner, def)
+    || def.victoryQuote || kit?.victory.quote || "PHILLY REMEMBERS THE WINNER.";
   $("#rematchButton").textContent = survivalOver ? "NEW GAUNTLET RUN"
     : teamOver ? "REMATCH · SAME TEAMS"
       : dailyOver ? "BACK TO TITLE"
@@ -6889,7 +7320,7 @@ function renderEndingPanel(step) {
   art.classList.toggle("atlas", !isPortrait);
   art.style.backgroundImage = isPortrait
     ? `url("assets/fighters/${def.id}.webp")`
-    : `url("assets/moves/${def.id}-specials.webp")`;
+    : `url("${posesSheetUrl(def)}")`;
   if (isPortrait) {
     art.style.backgroundPosition = "";
   } else {
@@ -6996,7 +7427,7 @@ function showArcadeEnding() {
   $("#endingTitle").textContent = ending.title;
   $("#endingQuote").textContent = ending.quote;
   $("#endingStory").textContent = ending.story;
-  $("#endingArt").style.backgroundImage = `url("assets/moves/${def.id}-specials.webp")`;
+  $("#endingArt").style.backgroundImage = `url("${posesSheetUrl(def)}")`;
   renderArcadeRoute();
   updateDailyBanners();
   showScreen("ending");
@@ -8996,6 +9427,7 @@ const THROWABLE_IMPACT_COLORS = Object.freeze({
   golfball: ["#ffffff", "#e6ecf5", "#c8d3e2"],
   bedbugs: ["#7a3a2c", "#c4552f", "#3d1f17"],
   vinyl: ["#1b1b1f", "#d8d8d2", "#ff4fb9"],
+  cane: ["#aeb6c6", "#d6b56b", "#5a6274"],
 });
 
 // Each object breaks, splatters or settles in its own way.
@@ -12307,6 +12739,28 @@ function drawThrowable(projectile, time, life) {
       ctx.fill();
       break;
     }
+    // Wave 16 — the Commissioner's steel cane: a hard end-over-end steel shaft
+    // with a gold crook and ferrule, so the flat authority throw reads at a
+    // glance against every other object in the set.
+    case "cane": {
+      ctx.rotate(angle);
+      const shaft = w * 0.94;
+      // steel shaft with a cold top highlight
+      ctx.fillStyle = "#3b4150";
+      ctx.fillRect(-shaft * 0.5, -h * 0.18, shaft, h * 0.36);
+      ctx.fillStyle = "rgba(214,222,236,.5)";
+      ctx.fillRect(-shaft * 0.5, -h * 0.18, shaft, h * 0.12);
+      // gold crook handle
+      ctx.strokeStyle = "#d6b56b";
+      ctx.lineWidth = h * 0.3;
+      ctx.beginPath();
+      ctx.arc(-shaft * 0.5, -h * 0.5, h * 0.42, Math.PI * 0.15, Math.PI * 1.2);
+      ctx.stroke();
+      // gold ferrule tip
+      ctx.fillStyle = "#d6b56b";
+      ctx.fillRect(shaft * 0.5 - w * 0.08, -h * 0.22, w * 0.08, h * 0.44);
+      break;
+    }
     case "needle": {
       ctx.rotate(Math.atan2(projectile.vy, Math.abs(projectile.vx) || 1));
       ctx.fillStyle = "#cfd6e2";
@@ -12706,9 +13160,8 @@ function drawFighter(fighter, time) {
   const bob = fighter.cinematicFrame === null && fighter.grounded && !fighter.stun && !fighter.block
     ? Math.sin((moving ? fighter.walkTime * 20 : fighter.animTime * 10) + fighter.side * 2) * (moving ? 1.8 : 2.7) : 0;
   const pose = fighterAnimationPose(fighter);
-  const atlas = pose.bank === "specials"
-    ? fighterMoveAtlases[fighter.def.id] || fighterAtlases[fighter.def.id]
-    : fighterAtlases[fighter.def.id];
+  // Wave 16: the side's palette pick decides which cached atlas draws.
+  const atlas = paletteAtlas(fighter.def.id, fighter.side, pose.bank);
   const frame = pose.frame;
   const graphicFatality = activeGraphicFatality(fighter);
   const reality = finisherRealityAmount();
@@ -17560,7 +18013,9 @@ function fighterVoiceBank(fighterId, cue) {
   const key = `${fighterId}:${cue}`;
   let bank = fighterVoiceBanks.get(key);
   if (!bank) {
-    const kind = fighterAudioBankKind(cue);
+    // Wave 16: the bank kind is fighter-aware — the Commissioner's core cues
+    // probe all slots because no recorded variant 1 exists yet.
+    const kind = fighterAudioBankKind(cue, fighterId);
     if (kind === FIGHTER_AUDIO_BANK_KINDS.recorded) {
       bank = { key, srcs: [...variants], probed: true };
       fighterVoiceBanks.set(key, bank);
@@ -17753,6 +18208,8 @@ const OBJECT_SOUNDS = Object.freeze({
   golfball: [900, 380, 0.09, "sine", 0.055, 0.16, 0.06, 4200],
   bedbugs: [260, 320, 0.34, "triangle", 0.05, 0.7, 0.32, 2400],
   vinyl: [520, 90, 0.26, "sawtooth", 0.08, 0.34, 0.2, 1800],
+  // Steel cane: a hard metallic ring with a short clatter tail.
+  cane: [980, 240, 0.16, "triangle", 0.07, 0.28, 0.12, 5200],
 });
 
 function noiseBurst(now, amount, seconds, filterHz) {
@@ -18869,6 +19326,8 @@ function updateAudioPresentation(time, dtMs) {
   updateMusicIntensity(dt);
   updateAmbienceAudio(time, dt);
   updateVoiceCallouts();
+  // Wave 16: pre-fight dialogue card reveal rides the same per-frame observer.
+  updateIntroDialogue();
 }
 
 function back(target) {
@@ -19137,6 +19596,23 @@ function titleKeyboard(event) {
     updateRosterUI();
   }
   if (state.screen === "select" && event.code === "Enter") chooseFighter(state.picks[state.selectingPlayer]);
+  // Wave 16: SF2-style color select — confirming with a LIGHT button locks
+  // color 1, confirming with a HEAVY button locks color 2 (either seat's
+  // bindings work on the shared cursor, exactly like the ending-skip keys).
+  if (state.screen === "select" && !(state.locks[0] && state.locks[1])) {
+    for (const map of keyMaps) {
+      if (event.code === map.lp || event.code === map.lk) {
+        event.preventDefault();
+        chooseFighter(state.picks[state.selectingPlayer], 0);
+        return;
+      }
+      if (event.code === map.hp || event.code === map.hk) {
+        event.preventDefault();
+        chooseFighter(state.picks[state.selectingPlayer], 1);
+        return;
+      }
+    }
+  }
 }
 
 window.addEventListener("keydown", (event) => {
@@ -19320,7 +19796,7 @@ function handleSelectPadEvent(kind, padIndex) {
   // Pad 0 drives whichever side is currently picking (the keyboard-cursor
   // rule); a second pad always owns P2's pick in the two-player modes.
   const side = padIndex === 1 ? 1 : (state.locks[0] ? 1 : 0);
-  if (kind === "confirm") {
+  if (kind === "confirm" || kind === "altConfirm") {
     padNavDebug.confirms += 1;
     if (state.locks[0] && state.locks[1]) {
       showStageSelect();
@@ -19328,7 +19804,8 @@ function handleSelectPadEvent(kind, padIndex) {
     }
     if (padIndex === 1 && !state.locks[0]) return; // P2's pad waits for P1's lock
     if (state.mode !== "team" && state.locks[side]) return;
-    chooseFighter(state.picks[side]);
+    // Wave 16: A confirms color 1, Y confirms color 2.
+    chooseFighter(state.picks[side], kind === "altConfirm" ? 1 : 0);
     return;
   }
   if (state.mode === "arcade" && state.locks[0]) return;
@@ -19512,6 +19989,9 @@ function menuPadLoop() {
       continue;
     }
     if (confirm) handleMenuPadEvent("confirm", padIndex);
+    // Wave 16: Y/triangle on the select screen is the alt-color confirm.
+    const altConfirm = menuPadButtonEdge(pad, slot, 3);
+    if (altConfirm && state.screen === "select") handleMenuPadEvent("altConfirm", padIndex);
     if (backEdge) handleMenuPadEvent("back", padIndex);
     for (const direction of directions) handleMenuPadEvent(direction, padIndex);
   }
@@ -19538,6 +20018,14 @@ $("#onlineFighterSelect").addEventListener("change", (event) => {
 $("#onlineStageSelect").addEventListener("change", (event) => {
   if (onlineSession.role !== "host" || !stages[event.target.value]) return;
   onlineSession.lobby.stage = event.target.value;
+  onlineSession.lobby.localReady = false;
+  sendOnlineLobbyState();
+  updateOnlineMatchSetup();
+  persistOnlineResume(false);
+});
+// Wave 16: the SF2 color pick travels the lobby like the fighter choice.
+$("#onlinePaletteSelect")?.addEventListener("change", (event) => {
+  onlineSession.lobby.localPalette = event.target.value === "1" ? 1 : 0;
   onlineSession.lobby.localReady = false;
   sendOnlineLobbyState();
   updateOnlineMatchSetup();
@@ -20327,6 +20815,12 @@ window.__finalBlowEngine = {
         roundWinBeat: Number(roundWinBeatLevel(state.simulationTick).toFixed(3)),
         gritFlare: Number(Math.max(gritFlareLevel[0], gritFlareLevel[1]).toFixed(3)),
         superDim: Number(superDimLevel.toFixed(3)),
+        // R2.0 FAMILY wave 16 counters.
+        dialogueExchanges: modeFxDebug.dialogueExchanges,
+        dialogueCardsShown: modeFxDebug.dialogueCardsShown,
+        winQuoteSelections: modeFxDebug.winQuoteSelections,
+        altPalettesBuilt: paletteFxDebug.built,
+        altPaletteSides: [...matchPalettes],
         reflections: Boolean(state.performance.shadows && (STAGE_REFLECTIONS[state.stage] ?? 0) > 0),
         shake: Number(state.shake.toFixed(3)),
         hitstop: Number(state.hitstop.toFixed(4)),
@@ -20550,6 +21044,8 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       if (Number.isFinite(serial)) state.matchSerial = serial;
       else state.matchSerial += 1;
       seedMatch(state.round);
+      // Wave 16: QA fights honour the staged color picks + mirror auto-alt.
+      applyMatchPalettes([roster[firstIndex], roster[secondIndex]], pendingPalettes);
       state.fighters = [makeFighter(firstIndex, 0), makeFighter(secondIndex, 1)];
       resetStageWeapon();
       resetCrowd();
@@ -20698,6 +21194,38 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     fighterScale() {
       return FIGHTER_SCALE;
     },
+    // --- R2.0 FAMILY wave 16 probes ---------------------------------------
+    commissioner(unlock = true) {
+      if (unlock) unlockCommissioner();
+      else relockCommissioner();
+      return {
+        unlocked: commissionerUnlocked(),
+        rosterIds: roster.map(({ id }) => id),
+        cards: $$(".fighter-card").length,
+      };
+    },
+    palettes(first = 0, second = 0) {
+      pendingPalettes = [first === 1 ? 1 : 0, second === 1 ? 1 : 0];
+      if (state.fighters.length === 2) {
+        applyMatchPalettes(state.fighters.map(({ def }) => def), pendingPalettes);
+      }
+      return { pendingPalettes: [...pendingPalettes], matchPalettes: [...matchPalettes], built: paletteFxDebug.built };
+    },
+    dialogue() {
+      return {
+        active: introDialogue.active,
+        kind: introDialogue.kind,
+        revealed: introDialogue.revealed,
+        lines: introDialogue.lines.map(({ id, name, line, side }) => ({ id, name, line, side })),
+        exchanges: modeFxDebug.dialogueExchanges,
+        cardsShown: modeFxDebug.dialogueCardsShown,
+        phase: state.phase,
+        phaseTime: Number(state.phaseTime.toFixed(2)),
+      };
+    },
+    winQuote() {
+      return lastWinQuoteSelection ? { ...lastWinQuoteSelection } : null;
+    },
     fighterRenderSizes() {
       // Mirrors the sizing drawFighter uses, so tests can assert on-screen framing.
       return Object.fromEntries(roster.map(({ id }) => [id, fighterRenderSize(id)]));
@@ -20807,7 +21335,7 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     },
     dailyPlan(dateString = null) {
       const date = dateString || dailyDateString();
-      const plan = createDailyPlan(date, roster.map(({ id }) => id));
+      const plan = createDailyPlan(date, baseRosterIds());
       return {
         date: plan.date,
         seed: plan.seed,
@@ -21296,6 +21824,11 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
   };
 }
 
+// Wave 16: a FINAL clear inked in the Black Book before this build shipped
+// still counts — grant the ninth slot retroactively (quiet: no toast at boot).
+if (!commissionerUnlocked() && blackBookLedger.tallies.finalArcadeClears >= 1) {
+  unlockCommissioner({ quiet: true });
+}
 setupRoster();
 renderMoveList();
 // ---------------------------------------------------------------------------
@@ -21336,6 +21869,11 @@ function ensureCinema3d() {
       stageImages,
       fighterAtlases,
       fighterMoveAtlases,
+      // Wave 16: the 3D rigs consume the same palette-remapped atlas canvases
+      // the 2D renderer draws (canvas shimmed with Image-like fields). The
+      // palette key invalidates a side's rig when its color pick changes.
+      fighterAtlasFor: (fighter, bank) => paletteAtlas(fighter.def.id, fighter.side, bank),
+      fighterPaletteKey: (fighter) => (matchPalettes[fighter.side] === 1 ? "alt" : ""),
       fighterRenderSize,
       fighterAnimationPose,
       moveSheetAdjust: MOVE_SHEET_ADJUST,

@@ -1034,6 +1034,137 @@ const aliMoves = {
   }),
 };
 
+// ---------------------------------------------------------------------------
+// R2.0 FAMILY wave 16 — THE COMMISSIONER's real kit. The arcade boss (and the
+// secret unlockable) stops borrowing DeathBlow's sheet: every move is the
+// steel cane. Identity: the longest grounded pokes in the game on the slowest
+// feet, an unblockable contract grab, and one armored ceremony of a super.
+// Damage sits mid-table — the reach IS the boss fight; difficulty still comes
+// from the arcade ladder's AI tier and the boss movement buff, not from a
+// stat cheat.
+// ---------------------------------------------------------------------------
+const commissionerMoves = {
+  standLight: move("commissioner-cane-jab", "light", {
+    cancelProfileId: "stand-light", level: ATTACK_LEVELS.MID,
+    startupFrames: 7, activeFrames: 5, recoveryFrames: 11, range: 150, damage: 7, push: 172, meter: 10,
+    hitstunFrames: 22, blockstunFrames: 10, chipDamage: 0,
+    hitboxes: [box(30, -172, 132, 58, 0, 4)],
+  }),
+  forwardLight: move("commissioner-writ-server", "light", {
+    cancelProfileId: "stand-light", level: ATTACK_LEVELS.MID,
+    startupFrames: 9, activeFrames: 5, recoveryFrames: 12, range: 178, damage: 8, push: 196, meter: 11,
+    hitstunFrames: 22, blockstunFrames: 11, chipDamage: 0, advanceSpeed: 118,
+    hitboxes: [box(36, -176, 158, 64, 0, 4)],
+  }),
+  crouchLight: move("commissioner-docket-tap", "light", {
+    cancelProfileId: "crouch-light", level: ATTACK_LEVELS.LOW,
+    startupFrames: 7, activeFrames: 5, recoveryFrames: 11, range: 156, damage: 6, push: 150, meter: 10,
+    hitstunFrames: 21, blockstunFrames: 10, chipDamage: 0,
+    hitboxes: [box(30, -70, 138, 42, 0, 4)],
+  }),
+  standHeavy: move("commissioner-gavel-crack", "heavy", {
+    cancelProfileId: "stand-heavy", level: ATTACK_LEVELS.MID,
+    startupFrames: 14, activeFrames: 7, recoveryFrames: 17, range: 198, damage: 14, push: 300, meter: 17,
+    hitstunFrames: 24, blockstunFrames: 14, chipDamage: 0,
+    hitboxes: [box(38, -186, 150, 84, 0, 2), box(56, -178, 176, 82, 3, 6)],
+  }),
+  crouchHeavy: move("commissioner-fee-sweep", "heavy", {
+    cancelProfileId: "crouch-heavy", level: ATTACK_LEVELS.LOW,
+    startupFrames: 14, activeFrames: 7, recoveryFrames: 21, range: 202, damage: 12, push: 262, meter: 16,
+    hitstunFrames: 23, blockstunFrames: 14, chipDamage: 0, knockdown: true,
+    hitboxes: [box(34, -64, 148, 40, 0, 2), box(56, -57, 172, 36, 3, 6)],
+  }),
+  overhead: move("commissioner-sentence-drop", "heavy", {
+    cancelProfileId: "overhead", level: ATTACK_LEVELS.OVERHEAD,
+    startupFrames: 20, activeFrames: 6, recoveryFrames: 19, range: 182, damage: 16, push: 312, meter: 18,
+    hitstunFrames: 25, blockstunFrames: 15, chipDamage: 0,
+    hitboxes: [box(26, -226, 118, 108, 0, 1), box(48, -206, 152, 138, 2, 5)],
+  }),
+  driveHeavy: move("commissioner-court-order", "heavy", {
+    cancelProfileId: "drive-heavy", level: ATTACK_LEVELS.MID,
+    startupFrames: 16, activeFrames: 9, recoveryFrames: 18, range: 216, damage: 16, push: 348, meter: 19,
+    hitstunFrames: 25, blockstunFrames: 16, chipDamage: 0, advanceSpeed: 228,
+    command: "← → + KICK", hitboxes: [box(36, -188, 168, 120, 0, 4), box(58, -176, 196, 112, 5, 8)],
+  }),
+  throw: move("commissioner-contempt-hold", "throw", {
+    cancelProfileId: "throw", level: ATTACK_LEVELS.THROW,
+    startupFrames: 5, activeFrames: 3, recoveryFrames: 24, range: 84, damage: 16, push: 215, meter: 15,
+    hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, knockdown: true, animation: anim(1),
+    hitboxes: [box(19, -180, 76, 150, 0, 2)],
+  }),
+  special: move("commissioner-cane-check", "special", {
+    cancelProfileId: "ground-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 12, activeFrames: 10, recoveryFrames: 19, range: 226, damage: 15, push: 320, meter: 21,
+    hitstunFrames: 26, blockstunFrames: 17, chipDamage: 3, knockdown: true, armorFrames: 8,
+    moveName: "CANE CHECK", command: "SPECIAL", animation: anim(0),
+    hitboxes: [box(34, -190, 178, 132, 0, 4), box(54, -180, 208, 124, 5, 9)],
+  }),
+  commandSpecial: move("commissioner-ledger-lance", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 14, activeFrames: 11, recoveryFrames: 19, range: 268, damage: 18, push: 372, meter: 24,
+    hitstunFrames: 27, blockstunFrames: 18, chipDamage: 4, knockdown: true, advanceSpeed: 165,
+    moveName: "LEDGER LANCE", command: "↓ → + PUNCH", animation: anim(0),
+    hitboxes: [box(42, -196, 214, 138, 0, 5), box(64, -186, 246, 128, 6, 10)],
+  }),
+  backSpecial: move("commissioner-binding-clause", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.THROW,
+    startupFrames: 9, activeFrames: 4, recoveryFrames: 27, range: 96, damage: 19, push: 240, meter: 17,
+    hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, knockdown: true,
+    moveName: "BINDING CLAUSE", command: "↓ ← + PUNCH · unblockable contract", animation: anim(1),
+    hitboxes: [box(18, -182, 88, 152, 0, 3)],
+  }),
+  launcher: move("commissioner-overrule", "heavy", {
+    cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
+    startupFrames: 10, activeFrames: 8, recoveryFrames: 24, range: 142, damage: 12, push: 76, meter: 17,
+    hitstunFrames: 27, blockstunFrames: 15, chipDamage: 0, knockdown: true, launchVelocityY: -570,
+    juggleStarter: true, reversalInvulnerableFrames: 6,
+    moveName: "OVERRULE", command: "→ ↓ → + PUNCH", animation: anim(2),
+    hitboxes: [box(21, -218, 110, 172, 0, 3), box(36, -258, 126, 210, 4, 7)],
+  }),
+  enhanced: move("commissioner-ex-cane-check", "special", {
+    cancelProfileId: "ground-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 9, activeFrames: 17, recoveryFrames: 16, range: 252, damage: 9, push: 96, meter: 9,
+    hitstunFrames: 25, blockstunFrames: 19, chipDamage: 3, knockdown: true, knockdownOnFinal: true,
+    maxHits: 2, rehitFrames: 8, gritCost: GRIT_RULES.enhancedSpecialCost, armorFrames: 12,
+    moveName: "CANE CHECK EX", command: "LP&HP", animation: anim(0),
+    hitboxes: [box(32, -196, 200, 140, 0, 7), box(56, -184, 232, 130, 8, 16)],
+  }),
+  enhancedCommandSpecial: move("commissioner-ex-ledger-lance", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.MID,
+    startupFrames: 10, activeFrames: 19, recoveryFrames: 16, range: 298, damage: 11, push: 118, meter: 10,
+    hitstunFrames: 27, blockstunFrames: 20, chipDamage: 4, knockdown: true, knockdownOnFinal: true,
+    maxHits: 2, rehitFrames: 9, gritCost: GRIT_RULES.enhancedSpecialCost, advanceSpeed: 210,
+    moveName: "LEDGER LANCE EX", command: "↓ → + LP&HP", animation: anim(0),
+    hitboxes: [box(40, -202, 238, 148, 0, 8), box(66, -190, 276, 136, 9, 18)],
+  }),
+  enhancedBackSpecial: move("commissioner-ex-binding-clause", "special", {
+    cancelProfileId: "command-special", level: ATTACK_LEVELS.THROW,
+    startupFrames: 6, activeFrames: 6, recoveryFrames: 24, range: 118, damage: 24, push: 280, meter: 12,
+    hitstunFrames: 0, blockstunFrames: 0, chipDamage: 0, knockdown: true,
+    gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 5,
+    moveName: "BINDING CLAUSE EX", command: "↓ ← + LP&HP", animation: anim(1),
+    hitboxes: [box(15, -188, 110, 158, 0, 5)],
+  }),
+  enhancedLauncher: move("commissioner-ex-overrule", "special", {
+    cancelProfileId: "rising-launcher", level: ATTACK_LEVELS.MID,
+    startupFrames: 7, activeFrames: 13, recoveryFrames: 21, range: 162, damage: 9, push: 70, meter: 9,
+    hitstunFrames: 27, blockstunFrames: 17, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
+    launchVelocityY: -615, juggleStarter: true, maxHits: 2, rehitFrames: 7,
+    gritCost: GRIT_RULES.enhancedSpecialCost, reversalInvulnerableFrames: 11,
+    moveName: "OVERRULE EX", command: "→ ↓ → + LP&HP", animation: anim(2),
+    hitboxes: [box(18, -224, 122, 180, 0, 6), box(35, -270, 142, 226, 7, 12)],
+  }),
+  super: move("commissioner-final-authority", "special", {
+    cancelProfileId: "grit-super", level: ATTACK_LEVELS.MID,
+    startupFrames: 8, activeFrames: 40, recoveryFrames: 26, range: 262, damage: 8, push: 56, meter: 0,
+    hitstunFrames: 28, blockstunFrames: 22, chipDamage: 2, knockdown: true, knockdownOnFinal: true,
+    juggleLift: -212, maxHits: 5, rehitFrames: 8, gritCost: GRIT_RULES.superCost, juggleLimit: 7,
+    superMove: true, armorFrames: 12,
+    moveName: "FINAL AUTHORITY", command: "FULL GRIT + ↓ → ↓ → PUNCH", animation: anim(3),
+    hitboxes: [box(22, -216, 190, 176, 0, 9), box(46, -206, 226, 164, 10, 19), box(26, -234, 246, 194, 20, 29), box(50, -216, 262, 178, 30, 39)],
+  }),
+};
+
 const fighterKits = {
   deathblow: {
     id: "deathblow",
@@ -1243,6 +1374,32 @@ const fighterKits = {
     ],
     moves: { ...shared, ...aliMoves },
   },
+  commissioner: {
+    id: "commissioner",
+    archetype: "STEEL-CANE AUTHORITY / SPACING TYRANT",
+    summary: "The longest grounded reach in Philadelphia on the slowest feet. Controls tip range with the cane, signs you into an unblockable contract up close, and armors through anything during FINAL AUTHORITY.",
+    movement: {
+      forwardWalkSpeed: 238, backWalkSpeed: 196, jumpVelocityY: -696,
+      forwardJumpVelocityX: 272, backJumpVelocityX: 234, neutralJumpVelocityX: 0,
+      forwardDashSpeed: 505, forwardDashFrames: 13, backDashSpeed: 452, backDashFrames: 15,
+      backDashInvulnerableFrames: 6, dashCooldownFrames: 10,
+      standingPushboxHalfWidth: 43, crouchingPushboxHalfWidth: 39,
+    },
+    ai: { preferredRange: 212, retreatRange: 94, approachRange: 322, antiAirAction: "launcher", pokeAction: "commandSpecial", closeAction: "backSpecial", rangedAction: "commandSpecial" },
+    victory: { bank: "specials", frame: 15, quote: "THE BOOK CLOSES WHEN I SAY IT CLOSES." },
+    moveList: [
+      ["Cane Jab / Writ Server", "LP / → + LP"],
+      ["Sentence Drop", "→ + HP · overhead"],
+      ["Cane Check", "↓ → + KICK · armored"],
+      ["Ledger Lance", "↓ → + PUNCH · long reach"],
+      ["Binding Clause", "↓ ← + PUNCH · unblockable contract"],
+      ["Overrule", "→ ↓ → + PUNCH · anti-air"],
+      ["Enhanced specials", "Repeat motion + LP&HP · 25 Grit"],
+      ["Contempt Hold", "CLOSE + → or ← + LP/LK"],
+      ["Final Authority", "FULL GRIT + ↓ → ↓ → PUNCH · armored"],
+    ],
+    moves: { ...shared, ...commissionerMoves },
+  },
 };
 
 function deepFreeze(value) {
@@ -1302,6 +1459,8 @@ export const FORWARD_KICK_STYLES = Object.freeze({
   donald: "axe",
   cyraxx: "slide",
   ali: "axe",
+  // Wave 16: the Commissioner swings the cane like an axe — no slides in a suit.
+  commissioner: "axe",
 });
 
 // Per-fighter kick normals are derived once from that fighter's own punch
@@ -1548,4 +1707,115 @@ export function listFighterFrameData(fighterId) {
     });
   }
   return rows;
+}
+
+// ---------------------------------------------------------------------------
+// R2.0 FAMILY wave 16 — context-aware win-quote pools. kit.victory.quote stays
+// as the last-resort fallback; the result screen asks selectWinQuote() for a
+// line keyed to HOW the match was won. Pure data + a pure selector so tests
+// can hold every pool and the rotation contract to account. Presentation only:
+// the roll comes from visualRandom() at the call site, never state.rng.
+// ---------------------------------------------------------------------------
+
+const quotes = (...lines) => Object.freeze(lines);
+
+export const FIGHTER_WIN_QUOTES = deepFreeze({
+  deathblow: {
+    default: quotes("THE STREET MOVED FIRST.", "CONCRETE SETS. SO DO I.", "GO HOME. THE GROUND'S TAKEN."),
+    rival: quotes("SOUTH PHILLY'S TOO SMALL FOR TWO OF US, ALLAN.", "YOUR HANDS ARE HEAVY, ALLAN. THE GROUND IS HEAVIER.", "TELL THE DOCKS THE QUARRY WON."),
+    fatality: quotes("THE GROUND KEEPS WHAT IT TAKES.", "THAT'S A LOAD-BEARING LESSON.", "CLEANUP'S ON YOU."),
+    flawless: quotes("NOT A CRACK ON ME.", "YOU NEVER TOUCHED THE FOUNDATION.", "INSPECTION PASSED. YOURS DIDN'T."),
+    comeback: quotes("YOU BUILT ON SAND.", "I WAS DOWN. THE GROUND WASN'T.", "AFTERSHOCKS HIT HARDEST."),
+    boss: quotes("YOUR LEDGER'S RUBBLE NOW.", "THE BOOK BREAKS LIKE EVERYTHING ELSE.", "FILE THAT UNDER DEMOLITION."),
+  },
+  jez: {
+    default: quotes("READ THE SIGN.", "LIGHTS OUT. SIGN'S STILL ON.", "THAT'S HOW YOU HANG A LETTER."),
+    rival: quotes("PAINT DRIPS, POST. NEON HOLDS.", "TAG THAT, POST — IF YOUR ARM STILL WORKS.", "MY SIGN OUTLASTS YOUR WALL, POST."),
+    fatality: quotes("SOME SIGNS YOU ONLY READ ONCE.", "THAT ONE'S PERMANENT INSTALLATION.", "CLOSED. FOREVER. SEE SIGN."),
+    flawless: quotes("CLEAN INSTALL. NO SCRATCHES.", "YOU NEVER TOUCHED THE GLASS.", "SHOWROOM FINISH."),
+    comeback: quotes("FLICKERED. NEVER WENT DARK.", "YOU FORGOT NEON RUNS ALL NIGHT.", "LAST LIGHT STANDING WINS."),
+    boss: quotes("YOUR NAME'S OFF THE MARQUEE, COMMISSIONER.", "NEW SIGN GOING UP: EVERYBODY GETS HOME.", "THE BOOK'S CLOSED. THE SHOP'S OPEN."),
+  },
+  alan: {
+    default: quotes("SIX SHOTS. ONE ANSWER.", "YOUSE SEEN ENOUGH?", "THAT'S HOW WE SETTLE IT DOWN HERE."),
+    rival: quotes("TOO SLOW, DEATHBLOW. TOO LOUD.", "THE GROUND DIDN'T SAVE YA, DEATHBLOW.", "QUARRY'S CLOSED, BIG MAN."),
+    fatality: quotes("I TOLD YA TO STAY DOWN.", "THAT ONE'S ON YOU.", "NO REMATCH FOR THAT."),
+    flawless: quotes("YOUSE NEVER LAID A GLOVE.", "MY CORNER DIDN'T EVEN STAND UP.", "UNTOUCHED. UNBOTHERED."),
+    comeback: quotes("HEART OF SOUTH PHILLY, BABY.", "I EAT COUNTS OF EIGHT FOR BREAKFAST.", "YA HAD ME. YA BLEW IT."),
+    boss: quotes("KEYS ARE MINE NOW, COMMISSIONER.", "EVERY DOOR YOU LOCKED OPENS TONIGHT.", "THE BOOK READS DIFFERENT IN MY HANDS."),
+  },
+  post: {
+    default: quotes("THE WHOLE CITY IS MY WALL.", "FRESH COAT. SAME RESULT.", "CAN'T BUFF THIS ONE OUT."),
+    rival: quotes("YOUR SIGN'S JUST A STENCIL, JEZ.", "NEON BURNS OUT, JEZ. PAINT SOAKS IN.", "I'LL TAG YOUR SHOP WINDOW ON THE WAY HOME, JEZ."),
+    fatality: quotes("THAT'S A MURAL NOW.", "RED'S A GOOD COLOR ON YOU.", "SIGNED IT. DATED IT."),
+    flawless: quotes("NOT A DROP ON ME.", "CLEAN LINES, NO DRIPS.", "YOU SPRAYED AIR ALL NIGHT."),
+    comeback: quotes("SECOND COAT ALWAYS COVERS.", "YOU CORNERED ME INTO A MASTERPIECE.", "WET PAINT DRIES. I DON'T."),
+    boss: quotes("YOUR BLACK BOOK'S MY PRIMER, COMMISSIONER.", "FORTY FEET TALL AND IMPOSSIBLE TO SUBPOENA.", "THE WALLS TALK NOW. THEY SAY YOU LOST."),
+  },
+  benny: {
+    default: quotes("CURRENT STAYS WITH ME.", "GROUNDED. YOU, I MEAN.", "CIRCUIT CLOSED. GO HOME."),
+    rival: quotes("MONEY CAN'T BUY AMPS, DONALD.", "SHOULDA PAID YOUR ELECTRIC BILL, DONALD.", "YOUR CADDY CAN'T CARRY THAT ONE, DONALD."),
+    fatality: quotes("PRECISION WORK. NO REFUNDS.", "CUT CLEAN. LIVE WIRE.", "THAT'S A CODE VIOLATION. YOURS."),
+    flawless: quotes("NEVER TOUCHED THE WIRING.", "ZERO FAULTS ON THE LINE.", "INSULATED, BABY."),
+    comeback: quotes("BREAKERS FLIP BACK.", "YOU LEFT ONE WIRE LIVE. MINE.", "SURGE PROTECTED, PAL."),
+    boss: quotes("YOUR GRID'S PUBLIC NOW, COMMISSIONER.", "I REROUTED YOUR WHOLE RACKET.", "LIGHTS ON IN KENSINGTON. BOOK CLOSED AT THE VET."),
+  },
+  donald: {
+    default: quotes("NINE HOLES. NO MERCY.", "TREMENDOUS. EVERYBODY SAYS SO.", "YOU'RE FIRED. OBVIOUSLY."),
+    rival: quotes("SAD LITTLE SPARKY, BENNY.", "I OWN THE POWER COMPANY, BENNY.", "YOUR UNION CAN'T SAVE YOU, BENNY."),
+    fatality: quotes("THAT'S A GOLD-PLATED FINISH.", "CLEANEST CUT ON THE COURSE.", "SOMEBODY FRAME THAT. BEAUTIFUL."),
+    flawless: quotes("A PERFECT ROUND. NATURALLY.", "UNTOUCHED. LIKE MY HAIRLINE.", "NOT A BLADE OF GRASS OUT OF PLACE."),
+    comeback: quotes("THE BACK NINE IS WHERE I WIN.", "THEY COUNTED ME OUT. LOSERS.", "GREATEST COMEBACK IN HISTORY. MAYBE EVER."),
+    boss: quotes("YOU'RE FIRED, COMMISSIONER.", "I'M KEEPING THE TROPHY AND THE CLUBHOUSE.", "YOUR LITTLE BOOK? TERRIBLE READ."),
+  },
+  cyraxx: {
+    default: quotes("THE ECHO GETS THE LAST WORD.", "HEHEHE... STILL LIVE!", "YOU GOT BUFFERED, SON."),
+    rival: quotes("YOUR BEAT DROPPED, ALI. SO DID YOU.", "WEST STAINES? NEVER HEARD OF IT, ALI.", "MY FEEDBACK EATS YOUR BASSLINE, ALI."),
+    fatality: quotes("THAT'S GOING ON THE CHANNEL.", "CLIP IT. LOOP IT. SCREAM IT.", "DELETED. LIKE, PERMANENTLY."),
+    flawless: quotes("ZERO PACKET LOSS, BABY!", "YOU COULDN'T EVEN TOUCH THE MIC.", "FULL SIGNAL. NO DAMAGE."),
+    comeback: quotes("YOU CAN'T MUTE ME TWICE.", "BUFFERING... BUFFERING... BOOM.", "THE SIGNAL WAS NEVER LOST."),
+    boss: quotes("YOUR ARCHIVE'S STREAMING NOW, COMMISSIONER.", "SIX PASSWORDS. ONE SCREAM.", "THE WHOLE CITY HEARD YOU LOSE."),
+  },
+  ali: {
+    default: quotes("KEEP IT MASSIVE.", "BOOYAKASHA. FIGHT OVER.", "RESPEK... FOR ME, OBVIOUSLY."),
+    rival: quotes("IS IT COS YOUR WIFI DROPPED, CYRAXX?", "YOUR FEEDBACK IS WELL WEAK, CYRAXX.", "STICK TO STREAMING, CYRAXX."),
+    fatality: quotes("THAT WAS WELL OUT OF ORDER. INNIT.", "DROPPED THE MIC AND THE MAN.", "TELL THE MASSIVE WHAT YOU SAW."),
+    flawless: quotes("NOT EVEN A SCRATCH ON THE CHAINS.", "UNTOUCHABLE, ME.", "AII, THAT WAS TOO EASY."),
+    comeback: quotes("THE BEAT ALWAYS COMES BACK ROUND.", "YOU HAD ME ON MUTE FOR A MINUTE.", "BIG FINISH. AS REHEARSED."),
+    boss: quotes("YOUR RULES GOT REMIXED, COMMISSIONER.", "THE BLOCK'S GOT THE MIC NOW.", "WEST STAINES RUNS THE VET TONIGHT."),
+  },
+  commissioner: {
+    default: quotes("THE BOOK CLOSES WHEN I SAY IT CLOSES.", "COURT IS ADJOURNED.", "YOUR PURSE IS FORFEIT. READ THE FINE PRINT."),
+    rival: quotes("EVERY NAME IN MY BOOK LOSES EVENTUALLY.", "YOU SIGNED. I COLLECTED.", "THE HOUSE ALWAYS HOLDS THE PEN."),
+    fatality: quotes("SESSION CLOSED. PERMANENTLY.", "THE CANE REMEMBERS EVERY DEBT.", "STRICKEN FROM THE RECORD."),
+    flawless: quotes("YOU NEVER TOUCHED THE SUIT.", "OBJECTION NOTED. OVERRULED.", "NOT ONE MARK ON THE LEDGER."),
+    comeback: quotes("I WROTE THE LAST CHAPTER MYSELF.", "APPEALS COURT FOUND IN MY FAVOR.", "YOU NEARLY BALANCED THE BOOKS. NEARLY."),
+    mirror: quotes("THERE IS ONLY ONE KEEPER.", "A FORGERY. I THOUGHT SO.", "THE BOOK RECOGNIZES ITS AUTHOR."),
+  },
+});
+
+/**
+ * Pick a win quote for `fighterId` given how the match ended. Priority runs
+ * most-specific-first: fatality > flawless > comeback > boss > rival > mirror
+ * > default. `roll` is a 0..1 presentation roll (visualRandom at the call
+ * site); `lastKey` is the previously shown quote key so back-to-back wins
+ * never repeat a line while the pool has an alternative.
+ */
+export function selectWinQuote(fighterId, context = {}, roll = 0, lastKey = "") {
+  const pools = FIGHTER_WIN_QUOTES[fighterId];
+  if (!pools) return null;
+  const order = [];
+  if (context.fatality) order.push("fatality");
+  if (context.flawless) order.push("flawless");
+  if (context.comeback) order.push("comeback");
+  if (context.boss) order.push("boss");
+  if (context.rival) order.push("rival");
+  if (context.mirror) order.push("mirror");
+  order.push("default");
+  const poolName = order.find((name) => pools[name]?.length) || "default";
+  const pool = pools[poolName];
+  const keyed = pool.map((text, index) => ({ text, key: `${fighterId}:${poolName}:${index}`, pool: poolName }));
+  const candidates = keyed.length > 1 ? keyed.filter((entry) => entry.key !== lastKey) : keyed;
+  const clamped = Math.min(0.999999, Math.max(0, Number(roll) || 0));
+  return candidates[Math.floor(clamped * candidates.length) % candidates.length];
 }

@@ -60,7 +60,135 @@ export const ARCADE_ENDINGS = Object.freeze({
     story: "Ali G turned the final arena into a block party that lasted until the stadium lights went dark. Nobody remembered the Commissioner's rules. Everybody remembered the chorus.",
     color: "#f4d21f",
   }),
+  // Wave 16: the secret ninth ending — the Commissioner reclaims his own book.
+  commissioner: Object.freeze({
+    title: "THE BOOK STAYS OPEN",
+    quote: "EVERY CITY GETS THE KEEPER IT DESERVES.",
+    story: "The Commissioner crossed out every name in the book, then met the thing wearing his coat at the Vet and closed that account too. At dawn the ledger lay open on the fifty-yard line — blank, waiting for new names.",
+    color: "#d6b56b",
+  }),
 });
+
+// ---------------------------------------------------------------------------
+// R2.0 FAMILY wave 16 — pre-fight dialogue exchanges. Pure data beside the
+// endings: rollback checksums never see any of it, and the intro presenter in
+// game.js picks a variant with visualRandom (no-repeat) at match start.
+// Every exchange is exactly two spoken cards; the first entry opens, the
+// second claps back. Rival pairs are keyed on the sorted pair id so both
+// directions of the rivalry share one authored conversation.
+// ---------------------------------------------------------------------------
+
+const exchange = (firstId, firstLine, secondId, secondLine) => Object.freeze([
+  Object.freeze({ id: firstId, line: firstLine }),
+  Object.freeze({ id: secondId, line: secondLine }),
+]);
+
+export const ARCADE_RIVAL_DIALOGUE = Object.freeze({
+  "alan:deathblow": Object.freeze([
+    exchange("deathblow", "THIS BLOCK ONLY CARRIES ONE HEAVYWEIGHT.", "alan", "YEAH. ME. ALWAYS BEEN ME."),
+    exchange("alan", "YOUSE SHOOK THE GROUND. I SHOOK THE PEOPLE.", "deathblow", "THE GROUND VOTES LAST."),
+    exchange("deathblow", "I POURED THE FOUNDATION YOU STAND ON.", "alan", "AND I'LL DROP YA RIGHT ON IT."),
+  ]),
+  "jez:post": Object.freeze([
+    exchange("post", "YOUR SIGNS COME DOWN WITH ONE COAT, JEZ.", "jez", "MY SIGNS RUN ON POWER. YOURS RUN."),
+    exchange("jez", "YOU TAGGED MY SHOP WINDOW, POST.", "post", "CONSIDER IT A FREE UPGRADE."),
+    exchange("post", "THE CITY READS MY WALLS, NOT YOUR NEON.", "jez", "ONLY 'CAUSE MY LIGHT'S SHINING ON THEM."),
+  ]),
+  "benny:donald": Object.freeze([
+    exchange("donald", "I BUY GUYS LIKE YOU BY THE DOZEN, BENNY.", "benny", "THEN YOU GOT ROBBED ON THE PRICE."),
+    exchange("benny", "YOUR TOWER'S WIRED WRONG, DONALD. ALL OF IT.", "donald", "IT'S GOLD-PLATED. GOLD DOESN'T FAIL."),
+    exchange("donald", "NOBODY KNOWS VOLTAGE BETTER THAN ME.", "benny", "HOLD THIS WIRE AND SAY THAT AGAIN."),
+  ]),
+  "ali:cyraxx": Object.freeze([
+    exchange("cyraxx", "YOUR WHOLE ACT IS BUFFERING, ALI.", "ali", "AT LEAST MY STREAM'S GOT VIEWERS, INNIT."),
+    exchange("ali", "WEST STAINES MASSIVE IN THE BUILDING.", "cyraxx", "HEHEHE... I'LL FEEDBACK YOUR BASSLINE TO BITS."),
+    exchange("cyraxx", "CRANK IT UP! I EAT MICS FOR BREAKFAST.", "ali", "THAT'S WHY YOUR TEETH IS LIKE THAT."),
+  ]),
+});
+
+// One authored exchange pool per challenger for the FINAL BOUT — the
+// Commissioner opens, the challenger answers. The mirror entry covers the
+// unlocked-Commissioner run meeting his own reflection.
+export const ARCADE_BOSS_DIALOGUE = Object.freeze({
+  deathblow: Object.freeze([
+    exchange("commissioner", "YOU CRACKED MY PARKING LOT, DEMOLITION MAN.", "deathblow", "TONIGHT I CRACK THE BOOK."),
+    exchange("commissioner", "YOUR PURSE WAS NEVER LEAVING THE VET.", "deathblow", "NEITHER ARE YOU."),
+  ]),
+  jez: Object.freeze([
+    exchange("commissioner", "YOUR LITTLE SIGN SHOP OWES ME RENT, JEZ.", "jez", "READ THE NEW SIGN: PAID IN FULL."),
+    exchange("commissioner", "I DECIDE WHO LIGHTS UP THIS CITY.", "jez", "FUNNY. I HOLD THE BREAKER."),
+  ]),
+  alan: Object.freeze([
+    exchange("commissioner", "EVERY WIN YOU EVER HAD, I SOLD TWICE.", "alan", "THEN YOUSE OWE ME MONEY AND AN APOLOGY."),
+    exchange("commissioner", "SOUTH PHILLY BELONGS TO THE BOOK.", "alan", "SOUTH PHILLY BELONGS TO SOUTH PHILLY."),
+  ]),
+  post: Object.freeze([
+    exchange("commissioner", "YOUR MURALS COME DOWN TOMORROW, VANDAL.", "post", "CAN'T DEMOLISH WHAT THE CITY MEMORIZED."),
+    exchange("commissioner", "I HAVE A PAGE HERE WITH YOUR NAME ON IT.", "post", "I GOT A WALL WITH YOURS. FORTY FEET TALL."),
+  ]),
+  benny: Object.freeze([
+    exchange("commissioner", "THE ARENA POWER RUNS THROUGH MY METER, BENNY.", "benny", "CHECK AGAIN. I REROUTED IT AN HOUR AGO."),
+    exchange("commissioner", "CAREFUL, TECHNICIAN. CONTRACTS BITE.", "benny", "SO DO LIVE WIRES."),
+  ]),
+  donald: Object.freeze([
+    exchange("commissioner", "YOUR MEMBERSHIP IS REVOKED, MR. TRUMP.", "donald", "WRONG. I'M BUYING THE WHOLE LEAGUE."),
+    exchange("commissioner", "THE TROPHY STAYS IN MY OFFICE.", "donald", "YOUR OFFICE IS MY NEW PRO SHOP."),
+  ]),
+  cyraxx: Object.freeze([
+    exchange("commissioner", "YOUR BROADCAST DIES TONIGHT, GREMLIN.", "cyraxx", "HEHEHE... I'M ALREADY LIVE, OLD MAN."),
+    exchange("commissioner", "NOBODY STREAMS MY LEDGER.", "cyraxx", "SIX PASSWORDS. TOOK ME SIX MINUTES."),
+  ]),
+  ali: Object.freeze([
+    exchange("commissioner", "THIS IS A COURTROOM, NOT A CONCERT.", "ali", "WRONG. IT'S A BLOCK PARTY NOW, INNIT."),
+    exchange("commissioner", "RESPECT THE AUTHORITY, MR. G.", "ali", "RESPEK IS EARNED, BRUV. SWING THAT CANE."),
+  ]),
+  commissioner: Object.freeze([
+    exchange("commissioner", "AN IMPOSTOR IN MY OWN COAT.", "commissioner", "THE BOOK RECOGNIZES ONLY ONE HAND."),
+    exchange("commissioner", "COURT IS IN SESSION. BOTH GAVELS.", "commissioner", "ONLY ONE OF US ADJOURNS."),
+  ]),
+});
+
+const pairKey = (firstId, secondId) => [firstId, secondId].sort().join(":");
+
+/** All authored variants for a rival pairing, order-normalized data. */
+export function rivalDialogueVariants(playerId, opponentId) {
+  return ARCADE_RIVAL_DIALOGUE[pairKey(playerId, opponentId)] || null;
+}
+
+/** All authored variants for a challenger's FINAL BOUT exchange. */
+export function bossDialogueVariants(challengerId) {
+  return ARCADE_BOSS_DIALOGUE[challengerId] || null;
+}
+
+export function auditArcadeDialogue(fighterIds = Object.keys(ARCADE_BOSS_DIALOGUE)) {
+  const errors = [];
+  for (const [key, variants] of Object.entries(ARCADE_RIVAL_DIALOGUE)) {
+    const [firstId, secondId] = key.split(":");
+    if (pairKey(firstId, secondId) !== key) errors.push(`${key}: pair key not sorted`);
+    if (ARCADE_RIVALS[firstId] !== secondId || ARCADE_RIVALS[secondId] !== firstId) errors.push(`${key}: not a rival pair`);
+    if (!variants?.length || variants.length < 2) errors.push(`${key}: needs 2+ variants`);
+    for (const variant of variants || []) {
+      if (variant.length !== 2) errors.push(`${key}: exchange must be two lines`);
+      for (const card of variant) {
+        if (![firstId, secondId].includes(card.id)) errors.push(`${key}: speaker ${card.id} outside pair`);
+        if (!card.line || card.line !== card.line.toUpperCase()) errors.push(`${key}: line must be caption-cased`);
+      }
+    }
+  }
+  for (const challengerId of fighterIds) {
+    const variants = ARCADE_BOSS_DIALOGUE[challengerId];
+    if (!variants?.length || variants.length < 2) {
+      errors.push(`${challengerId}: needs 2+ boss exchanges`);
+      continue;
+    }
+    for (const variant of variants) {
+      if (variant.length !== 2) errors.push(`${challengerId}: exchange must be two lines`);
+      if (variant[0].id !== ARCADE_BOSS_ID) errors.push(`${challengerId}: the Commissioner opens the final bout`);
+      if (variant[1].id !== challengerId) errors.push(`${challengerId}: the challenger answers`);
+    }
+  }
+  return { rivalPairs: Object.keys(ARCADE_RIVAL_DIALOGUE).length, bossExchanges: Object.keys(ARCADE_BOSS_DIALOGUE).length, errors };
+}
 
 function hashText(text) {
   let hash = 2166136261;
@@ -86,8 +214,12 @@ function shuffle(items, seed) {
 
 export function createArcadeRun(playerId, fighterIds, seed = 0) {
   const roster = [...new Set(fighterIds)].filter((id) => id !== ARCADE_BOSS_ID);
-  if (!roster.includes(playerId)) throw new Error(`Unknown arcade fighter: ${playerId}`);
-  const rivalId = ARCADE_RIVALS[playerId];
+  // Wave 16: the unlocked Commissioner climbs his own book — all eight names
+  // crossed out in shuffled order, no rival beat, then a boss-mirror FINAL
+  // BOUT at the Vet against the "real" Keeper.
+  const bossRun = playerId === ARCADE_BOSS_ID;
+  if (!bossRun && !roster.includes(playerId)) throw new Error(`Unknown arcade fighter: ${playerId}`);
+  const rivalId = bossRun ? null : ARCADE_RIVALS[playerId];
   const challengers = shuffle(
     roster.filter((id) => id !== playerId && id !== rivalId),
     `${playerId}:${seed}`,
@@ -210,6 +342,12 @@ export const ARCADE_ENDING_PANELS = Object.freeze({
     panel("LAST TRACK", "The final bell dropped like a bassline. Ali G grabbed the arena PA before security grabbed him, and the Vet became a venue whether it liked it or not.", "specials", 10, "night"),
     panel("BLOCK PARTY", "The party ran until the stadium lights gave out and three blocks past that. Nobody remembered the Commissioner's rules. Everybody remembered the chorus.", "portrait", 0, "work"),
     panel("KEEP THE BEAT", "He left the mic taped to the fence with a note: FOR WHOEVER'S NEXT. West Staines massive, Philly local. Give the block the mic and it never goes quiet.", "specials", 14, "dawn"),
+  ]),
+  // Wave 16: the secret ninth resolution.
+  commissioner: Object.freeze([
+    panel("EVERY NAME", "He worked the ladder the way he works a ledger: top to bottom, no skipped lines. Eight fighters signed the book in their own blood tonight.", "specials", 10, "night"),
+    panel("THE IMPOSTOR", "At the Vet something in his own coat was holding his own cane. The city watched two keepers argue jurisdiction until only one set of footprints left the lot.", "portrait", 0, "work"),
+    panel("THE BOOK STAYS OPEN", "He set the ledger on the fifty-yard line and left it there, open. Blank. Every city gets the keeper it deserves — and this one earned him twice.", "specials", 14, "dawn"),
   ]),
 });
 

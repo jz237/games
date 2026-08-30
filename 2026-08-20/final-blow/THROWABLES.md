@@ -17,9 +17,10 @@ and the command works identically on every control method.
 | Donald | Golf ball | Low bounce — skips off the floor twice and covers ground awkwardly | 3 |
 | Cyraxx | Bed bugs | Trickster trap — a slow crawling swarm that lingers on the floor | 2 |
 | Ali G | Vinyl record | Anti-air arc — the steepest lob, knocks down, punishes hesitation | 3 |
+| The Commissioner | Steel cane | Authority spacing — one flat end-over-end steel throw that staggers and opens the walk-in (EX: GOLD-TIP CANE, a knockdown) | 2 |
 
-The hidden Commissioner is deliberately left without one until the eight requested
-fighters are signed off, exactly as the backlog asks.
+The Commissioner's steel cane shipped in R2.0 FAMILY wave 16, once the eight
+requested fighters were signed off — exactly the order the backlog asked for.
 
 ## Decisions taken
 

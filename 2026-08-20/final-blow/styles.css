@@ -3271,3 +3271,97 @@ body.reduced-motion .cabinet-marquee { animation: none; }
   font: 950 13px/1 system-ui, sans-serif;
   cursor: pointer;
 }
+
+/* ===========================================================================
+   R2.0 FAMILY wave 16 — roster depth: pre-fight dialogue cards, SF2 color
+   select stamps and the secret ninth card.
+   =========================================================================== */
+
+/* Pre-fight speech cards (arcade rival + FINAL BOUT intros). */
+.intro-dialogue {
+  position: absolute;
+  z-index: 12;
+  inset: 12% 4% auto 4%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+.intro-dialogue[hidden] { display: none !important; }
+.speech-card {
+  --speaker: #d8d8d8;
+  max-width: 46%;
+  padding: 8px 12px 9px;
+  border: 1px solid color-mix(in srgb, var(--speaker), transparent 30%);
+  border-left: 4px solid var(--speaker);
+  background: rgba(0, 0, 0, .78);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .5);
+  animation: speech-card-in .22s cubic-bezier(.2, 1.4, .4, 1) both;
+}
+.speech-card[hidden] { display: none !important; }
+.speech-card b {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--speaker);
+  font: 900 9px/1 system-ui, sans-serif;
+  letter-spacing: .16em;
+}
+.speech-card p {
+  margin: 0;
+  color: rgba(255, 255, 255, .94);
+  font: 800 13px/1.35 system-ui, sans-serif;
+  letter-spacing: .04em;
+}
+.speech-card.from-left { align-self: flex-start; }
+.speech-card.from-right {
+  align-self: flex-end;
+  border-left: 1px solid color-mix(in srgb, var(--speaker), transparent 30%);
+  border-right: 4px solid var(--speaker);
+  text-align: right;
+}
+.speech-card.from-left { --slide: -26px; }
+.speech-card.from-right { --slide: 26px; }
+@keyframes speech-card-in {
+  from { opacity: 0; transform: translateX(var(--slide, 0)); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.speech-card.instant { animation: none; }
+
+/* SF2 color select. */
+.palette-hint {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, .55);
+  font: 800 9px/1 system-ui, sans-serif;
+  letter-spacing: .14em;
+}
+.fighter-card.alt-pick::after {
+  content: "COLOR 2";
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 2;
+  padding: 3px 5px;
+  border: 1px solid color-mix(in srgb, var(--fighter), white 35%);
+  background: rgba(0, 0, 0, .8);
+  color: color-mix(in srgb, var(--fighter), white 55%);
+  font: 900 7px/1 system-ui, sans-serif;
+  letter-spacing: .12em;
+}
+
+/* The unlocked Commissioner — dark-red authority card. */
+.fighter-card.secret-card {
+  border-color: color-mix(in srgb, #d6b56b, transparent 35%);
+  background:
+    radial-gradient(circle at 50% 40%, rgba(102, 20, 33, .85), transparent 60%),
+    linear-gradient(150deg, #2a0a12, #05060a 74%);
+  box-shadow: inset 0 0 42px #000, 0 0 14px rgba(102, 20, 33, .5);
+}
+.fighter-card.secret-card .fighter-info small { color: #d6b56b; }
+
+/* Wave 16: with the secret ninth card unlocked the grid grows a column so
+   every card stays on screen (5 + 4, the Commissioner closing the deck). */
+.roster-grid:has(.secret-card) {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  width: min(100%, 1220px);
+}
+.fighter-card.secret-card .fighter-info strong { font-size: 84%; letter-spacing: .02em; }

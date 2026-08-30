@@ -28,6 +28,10 @@ import {
 test("the palette carries exactly the takes the review left standing", () => {
   assert.deepEqual(auditFighterAudio(), {
     fighters: 8,
+    // Wave 16: the Commissioner's caption-first voice slots — 12 core cues,
+    // probe-all, nothing recorded yet.
+    bossFighters: 1,
+    bossVoiceSlots: 12,
     cuesPerFighter: 23,
     coreCues: 12,
     kickCues: 4,
@@ -37,7 +41,8 @@ test("the palette carries exactly the takes the review left standing", () => {
     approvedCoreTakes: 15,
     approvedKickTakes: 30,
     recordedTakes: 45,
-    totalVariantPaths: 243,
+    // 243 reviewed-roster paths + the Commissioner's (12 + 7) × 3 probes.
+    totalVariantPaths: 300,
     errors: [],
   });
   assert.equal(FIGHTER_AUDIO_IDS.length, 8);
@@ -46,7 +51,7 @@ test("the palette carries exactly the takes the review left standing", () => {
   assert.equal(FIGHTER_REACTIVE_CUES.length, 7);
   assert.equal(FIGHTER_AUDIO_CUES.length, 23);
   assert.equal(new Set(fighterAudioManifest()).size, 45);
-  assert.equal(new Set(fighterAudioVariantManifest()).size, 243);
+  assert.equal(new Set(fighterAudioVariantManifest()).size, 300);
 });
 
 test("a surviving core cue keeps the original single-take path", () => {
@@ -60,7 +65,9 @@ test("a surviving core cue keeps the original single-take path", () => {
     }
   }
   assert.equal(fighterAudioCue("deathblow", "jump"), "assets/audio/fighters/deathblow/jump.mp3");
-  assert.equal(fighterAudioCue("commissioner", "heavy"), null);
+  // Wave 16: the Commissioner routes canonical paths now — 12 caption-first
+  // core slots that fill the moment takes land (nothing recorded today).
+  assert.equal(fighterAudioCue("commissioner", "heavy"), "assets/audio/fighters/commissioner/heavy.mp3");
   assert.equal(fighterAudioCue("deathblow", "unknown"), null);
 });
 
@@ -91,7 +98,12 @@ test("core and reactive banks still follow the -2/-3 naming", () => {
       });
     }
   }
-  assert.equal(fighterAudioVariants("commissioner", "heavy"), null);
+  // Wave 16: the Commissioner's banks follow the exact same naming contract.
+  assert.deepEqual(fighterAudioVariants("commissioner", "heavy"), [
+    "assets/audio/fighters/commissioner/heavy.mp3",
+    "assets/audio/fighters/commissioner/heavy-2.mp3",
+    "assets/audio/fighters/commissioner/heavy-3.mp3",
+  ]);
   assert.equal(fighterAudioVariants("deathblow", "unknown"), null);
 });
 
@@ -133,6 +145,12 @@ test("bank kinds decide what may be probed", () => {
   }
   for (const cue of FIGHTER_REACTIVE_CUES) {
     assert.equal(fighterAudioBankKind(cue), FIGHTER_AUDIO_BANK_KINDS.placeholder);
+  }
+  // Wave 16: the Commissioner's core cues have no shipped variant 1, so his
+  // banks probe every slot instead of trusting slot 1 blindly.
+  for (const cue of FIGHTER_AUDIO_CORE_CUES) {
+    assert.equal(fighterAudioBankKind(cue, "commissioner"), FIGHTER_AUDIO_BANK_KINDS.placeholder);
+    assert.equal(fighterAudioBankKind(cue, "deathblow"), FIGHTER_AUDIO_BANK_KINDS.probed);
   }
   assert.equal(fighterAudioBankKind("unknown"), null);
 });

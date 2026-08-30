@@ -44,17 +44,38 @@ function testProgressAndRetry() {
 }
 
 function testEightUniqueEndings() {
-  assert.deepEqual(Object.keys(ARCADE_ENDINGS), fighters);
-  assert.equal(new Set(fighters.map((id) => getArcadeEnding(id).title)).size, 8);
-  for (const id of fighters) {
+  // Wave 16: the secret ninth ending joins the eight mains.
+  const endingIds = [...fighters, ARCADE_BOSS_ID];
+  assert.deepEqual(Object.keys(ARCADE_ENDINGS), endingIds);
+  assert.equal(new Set(endingIds.map((id) => getArcadeEnding(id).title)).size, 9);
+  for (const id of endingIds) {
     const ending = getArcadeEnding(id);
     assert.ok(ending.quote.length > 12);
     assert.ok(ending.story.length > 60);
   }
 }
 
+// Wave 16: the unlocked Commissioner climbs his own book — all eight mains in
+// shuffled order, no rival beat, then the boss-mirror FINAL BOUT at the Vet.
+function testCommissionerMirrorLadder() {
+  const run = createArcadeRun(ARCADE_BOSS_ID, fighters, 41);
+  const rerun = createArcadeRun(ARCADE_BOSS_ID, fighters, 41);
+  assert.deepEqual(arcadeRunSnapshot(run), arcadeRunSnapshot(rerun));
+  assert.equal(run.matches.length, 9, "eight challengers plus the mirror final");
+  assert.equal(run.rivalId, null);
+  assert.ok(run.matches.slice(0, -1).every(({ kind }) => kind === "challenger"));
+  assert.deepEqual(new Set(run.matches.slice(0, -1).map(({ opponentId }) => opponentId)), new Set(fighters));
+  const final = run.matches.at(-1);
+  assert.equal(final.opponentId, ARCADE_BOSS_ID);
+  assert.equal(final.kind, "boss");
+  assert.equal(final.stage, "vet");
+  for (let index = 0; index < 9; index += 1) recordArcadeResult(run, true);
+  assert.equal(run.completed, true);
+}
+
 testCompleteDeterministicLadder();
 testProgressAndRetry();
 testEightUniqueEndings();
+testCommissionerMirrorLadder();
 
 console.log("Final Blow arcade ladder tests passed");

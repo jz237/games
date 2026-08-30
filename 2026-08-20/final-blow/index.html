@@ -114,6 +114,7 @@
         <strong></strong><span></span>
       </div>
       <div id="flowSkipHint" class="flow-skip-hint" hidden>ANY ATTACK / START · SKIP</div>
+      <div id="introDialogue" class="intro-dialogue" aria-live="polite" hidden></div>
       <div id="soundCaption" class="sound-caption" aria-live="polite" hidden></div>
       <div id="screenWipe" class="screen-wipe" aria-hidden="true"></div>
       <div id="bookStampToast" class="book-stamp-toast" aria-live="polite" hidden>
@@ -207,6 +208,9 @@
                   <option value="cyraxx">CYRAXX</option><option value="ali">ALI G</option>
                 </select></label>
                 <div class="online-opponent"><span>OPPONENT</span><b id="onlineOpponentFighter">CHOOSING…</b></div>
+                <label>COLORS<select id="onlinePaletteSelect" aria-label="Your fighter colors">
+                  <option value="0">COLOR 1 · PRIMARY</option><option value="1">COLOR 2 · ALT</option>
+                </select></label>
                 <label>STAGE<select id="onlineStageSelect" aria-label="Online stage">
                   <option value="somerset">SOMERSET SEPTA STATION</option><option value="vet">THE VET PARKING LOT</option>
                   <option value="wildwood">WILDWOOD BOARDWALK</option><option value="buffet">CHINESE BUFFET</option>
@@ -232,6 +236,7 @@
           <p>CHOOSE YOUR WEAPON</p>
           <h2 id="selectTitle">SELECT FIGHTER</h2>
           <div id="selectPrompt">PLAYER 1 — CHOOSE</div>
+          <div id="paletteHint" class="palette-hint">LIGHT CONFIRM · COLOR 1 &nbsp;·&nbsp; HEAVY CONFIRM · COLOR 2</div>
         </header>
         <div id="rosterGrid" class="roster-grid" role="listbox" aria-label="Fighter roster"></div>
         <div id="difficultyBar" class="difficulty-bar" role="radiogroup" aria-label="CPU difficulty" hidden>

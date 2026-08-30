@@ -314,6 +314,48 @@ export const GRAPHIC_FATALITIES = Object.freeze({
       palette: Object.freeze(["#ff1245", "#720019"]),
     }),
   ]),
+  // R2.0 FAMILY wave 16 — the Commissioner stops borrowing DeathBlow's
+  // finishers. Both profiles ride his steel-cane throwable (the audit demands
+  // the assigned projectile owns every beat): one pure cane execution, one
+  // staged around the black-book ledger.
+  commissioner: Object.freeze([
+    profile({
+      id: "closed-session",
+      title: "CLOSED SESSION",
+      family: "crush",
+      caption: "STEEL-CANE ARM SHATTER",
+      special: "STEEL CANE",
+      projectileId: "cane",
+      projectileSetup: "STEEL CANE GAVEL RAP",
+      projectileAction: "CANE-HOOK ARM LOCK",
+      projectileFinale: "STEEL-CANE ARM SHATTER",
+      limb: "right-arm",
+      device: "STEEL-CANE ARM BRACE",
+      blood: 1.4,
+      separation: 0.95,
+      angle: -0.24,
+      pieces: 4,
+      palette: Object.freeze(["#c9081f", "#4a000e"]),
+    }),
+    profile({
+      id: "final-authority-ledger",
+      title: "FINAL AUTHORITY",
+      family: "rupture",
+      caption: "LEDGER-PRESS LEG SEVER",
+      special: "STEEL CANE",
+      projectileId: "cane",
+      projectileSetup: "BLACK-BOOK LEDGER OPENED",
+      projectileAction: "CANE-PIN LEDGER PRESS",
+      projectileFinale: "LEDGER-PRESS LEG SEVER",
+      limb: "left-leg",
+      device: "BLACK-BOOK LEDGER PRESS",
+      blood: 1.5,
+      separation: 1.2,
+      angle: 0.34,
+      pieces: 5,
+      palette: Object.freeze(["#d6102b", "#560014"]),
+    }),
+  ]),
 });
 
 export function getGraphicFatality(fighterId, variant = 0) {

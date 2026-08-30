@@ -146,7 +146,8 @@ function testFullTournamentAudit() {
   assert.equal(audit.version, "1.3");
   assert.equal(audit.matchupCount, 28);
   assert.equal(audit.normals.fighters.reduce((total, fighter) => total + Object.keys(fighter.roles).length, 0), 120);
-  assert.equal(audit.items.personalObjects, 8);
+  // Wave 16: the Commissioner's steel cane joins the audited object set.
+  assert.equal(audit.items.personalObjects, 9);
   assert.equal(audit.items.stageWeapons, 5);
   assert.equal(audit.identities.fighters.length, 8);
   assert.deepEqual(audit.violations, []);

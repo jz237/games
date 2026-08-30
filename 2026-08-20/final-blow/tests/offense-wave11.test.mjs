@@ -159,7 +159,8 @@ test("taunt chord encodes as light+heavy+kick using only existing input bits", (
 });
 
 test("every fighter has three authored taunt lines for the rng rotation", () => {
-  assert.deepEqual(Object.keys(FIGHTER_TAUNT_LINES).sort(), [...FIGHTER_AUDIO_IDS].sort());
+  // Wave 16: the Commissioner's taunt bank rides the same positional contract.
+  assert.deepEqual(Object.keys(FIGHTER_TAUNT_LINES).sort(), [...FIGHTER_AUDIO_IDS, "commissioner"].sort());
   for (const [fighterId, lines] of Object.entries(FIGHTER_TAUNT_LINES)) {
     assert.equal(lines.length, TAUNT_RULES.voiceLines, `${fighterId} authors a full rotation`);
     assert.equal(new Set(lines).size, lines.length, `${fighterId} lines are distinct`);

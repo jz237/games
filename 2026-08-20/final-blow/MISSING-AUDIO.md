@@ -148,6 +148,53 @@ Full file list (8 fighters × 7 cues × 3 takes = 168 files):
 `assets/audio/fighters/<id>/{dizzy,counter,tech,desperation,scream,crush,taunt}{,-2,-3}.mp3`
 for each id in `deathblow, jez, alan, post, benny, donald, cyraxx, ali`.
 
+## Priority 2B — THE COMMISSIONER (wave 16 boss voice)
+
+New in R2.0 FAMILY: the boss (and secret unlockable) has his own kit and his
+own voice slots. **Nothing is recorded yet** — every slot below is caption-
+first and probe-all (`BOSS_AUDIO_IDS` in `engine/fighter-audio.mjs`), so
+files join the rotation at their canonical paths with zero code changes.
+
+Voice direction: **aged Philadelphia power broker.** Deep, dry, unhurried
+gravel — a man who has never once raised his voice to win an argument.
+Contempt, not rage; courtroom cadence; the cane taps between clauses.
+
+### The 12 core cue slots (12 cues × 3 takes = 36 files)
+
+`assets/audio/fighters/commissioner/<cue>{,-2,-3}.mp3` for each cue:
+
+| Cue | Performance |
+| --- | --- |
+| jump | short effort exhale, disdainful |
+| dash | clipped movement grunt, cloth-and-cane |
+| light | terse cane-jab effort, almost bored |
+| heavy | committed swing grunt, weight behind the cane |
+| special | authoritative call — "ORDER." energy, in persona |
+| throw | contract-grab exertion, through the teeth |
+| hit-light | annoyed intake — an inconvenience |
+| hit-heavy | deep body-blow grunt, dignity cracking |
+| block | cane-parry effort, tight |
+| super | the FINAL AUTHORITY pronouncement — his biggest read |
+| fatal | low, savoring exhale as the sentence is carried out |
+| ko | long defeated collapse — the book hitting the floor |
+
+### Reactive cues (7 cues × 3 takes = 21 files, same contract as the mains)
+
+`assets/audio/fighters/commissioner/{dizzy,counter,tech,desperation,scream,crush,taunt}{,-2,-3}.mp3`
+
+### Taunt line scripts (positional, mirrors `FIGHTER_TAUNT_LINES`)
+
+| Fighter (id) | Line 1 | Line 2 | Line 3 |
+| --- | --- | --- | --- |
+| THE COMMISSIONER (commissioner) | YOU'RE NOT IN THE BOOK. | COURT FEES DOUBLE AFTER DARK. | SIT DOWN. SESSION'S NOT OVER. |
+
+### Announcer additions
+
+| File | Line to speak |
+| --- | --- |
+| assets/audio/announcer/commissioner-name-1.mp3 … -3.mp3 | THE COMMISSIONER (1 neutral, 2 hyped, 3 drawn-out) |
+| assets/audio/announcer/commissioner-wins-1.mp3 … -3.mp3 | THE COMMISSIONER WINS! / THE WINNER — THE COMMISSIONER! / THE COMMISSIONER TAKES IT! |
+
 ## Priority 3 — match-story callouts (announcer voice)
 
 | File | Line to speak |
@@ -219,7 +266,8 @@ until he decides either way.
 | P0 rejected-cue retakes | 3 + 81 + 33 = 117 |
 | P1 announcer core | 29 + 24 name + 24 wins = 77 |
 | P2 fighter reactive | 168 |
+| P2B Commissioner voice (wave 16) | 36 core + 21 reactive + 6 announcer = 63 |
 | P3 match-story | 14 |
 | P4 online moments | 12 |
 | P5 fighter variant retakes | 30 |
-| **Total** | **418** |
+| **Total** | **481** |

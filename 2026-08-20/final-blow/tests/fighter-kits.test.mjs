@@ -21,7 +21,9 @@ function history(tokens) {
 }
 
 function testCompleteKits() {
-  assert.deepEqual(Object.keys(FIGHTER_KITS), ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali"]);
+  // Wave 16: the Commissioner's real kit joins the eight mains — every rule
+  // in this loop now holds him to the same standard.
+  assert.deepEqual(Object.keys(FIGHTER_KITS), ["deathblow", "jez", "alan", "post", "benny", "donald", "cyraxx", "ali", "commissioner"]);
   for (const id of Object.keys(FIGHTER_KITS)) {
     const kit = FIGHTER_KITS[id];
     assert.ok(kit.archetype.length > 8);
@@ -113,6 +115,21 @@ function testDistinctArchetypesAndFrameData() {
   assert.equal(ali.moves.commandSpecial.maxHits, 3);
   assert.equal(ali.moves.super.maxHits, 8);
   assert.ok(ali.movement.forwardDashSpeed > cyraxx.movement.forwardDashSpeed);
+  // Wave 16 — the Commissioner: longest pokes in the game, slowest feet, a
+  // true command grab and the armored FINAL AUTHORITY. Not a DeathBlow reskin.
+  const commissioner = FIGHTER_KITS.commissioner;
+  assert.notEqual(commissioner.moves.commandSpecial.id, deathblow.moves.commandSpecial.id);
+  assert.ok(commissioner.moves.standLight.range > deathblow.moves.standLight.range, "cane jab outranges every brawler jab");
+  assert.ok(commissioner.moves.standHeavy.range > alan.moves.standHeavy.range);
+  assert.ok(commissioner.moves.commandSpecial.range >= 260, "Ledger Lance is a full-screen-third poke");
+  assert.equal(commissioner.moves.backSpecial.level, "throw", "Binding Clause is an unblockable contract grab");
+  assert.equal(commissioner.moves.enhancedBackSpecial.level, "throw");
+  assert.equal(commissioner.moves.super.moveName, "FINAL AUTHORITY");
+  assert.ok(commissioner.moves.super.armorFrames >= 10, "the super armors through the exchange");
+  assert.ok(commissioner.moves.special.armorFrames > 0, "Cane Check trades on armor");
+  assert.ok(commissioner.movement.forwardWalkSpeed < alan.movement.forwardWalkSpeed
+    || commissioner.movement.forwardWalkSpeed < deathblow.movement.forwardWalkSpeed, "slow feet balance the reach");
+  assert.ok(commissioner.moves.standLight.startupFrames >= jez.moves.standLight.startupFrames + 2, "reach is paid for in startup");
   assert.notEqual(deathblow.moves.commandSpecial.id, jez.moves.commandSpecial.id);
   assert.equal(selectKitMoveKey("light", { forwardHeld: true }), "forwardLight");
   assert.equal(selectKitMoveKey("heavy", { forwardHeld: true }), "overhead");
