@@ -1,4 +1,21 @@
-export const CONTROL_STYLES = Object.freeze(["classic", "modern"]);
+export const CONTROL_STYLES = Object.freeze(["classic", "modern", "legend"]);
+
+// R1.9 SCHOOL & POCKET: the one-button LEGEND style trades a flat slice of
+// special-class damage for auto-motions. The scale is deterministic match
+// config (state.controlStyle offline, matchConfig.controlStyles online), so
+// both rollback peers always apply it identically.
+export const LEGEND_DAMAGE_SCALE = 0.9;
+
+// The five actions LEGEND reaches with a single button — exactly these carry
+// the damage tax. Chorded EX moves still require the two-button press, so
+// they stay full price.
+const LEGEND_SCALED_ACTIONS = new Set([
+  "special", "commandSpecial", "backSpecial", "launcher", "super",
+]);
+
+export function legendScaledAction(action) {
+  return LEGEND_SCALED_ACTIONS.has(action);
+}
 
 // The approved four-button classic layout. Everything else in the game is reached
 // through the directional control plus these four buttons.
@@ -243,6 +260,23 @@ export function resolveFourButtonInput(raw = {}, {
     out.button = "lp";
     return out;
   }
+  if (normalizeControlStyle(style) === "legend" && pressed.length === 1 && (edge.hp || edge.hk)) {
+    // LEGEND one-button style: HP is the special button (the super at full
+    // Grit), HK the kit's base special; LP/LK stay honest normals so pokes,
+    // proximity throws and finishers keep working unchanged. Everything here
+    // emits only the standard 16-bit action vocabulary — `special` plus the
+    // KICK limb bit — and applyControlStyle() resolves the held direction
+    // into the concrete special identically on both rollback peers.
+    if (edge.hp && meter >= SUPER_GRIT_COST) {
+      out.super = true;
+      out.button = "hp";
+      return out;
+    }
+    out.special = true;
+    out.limb = edge.hk ? "kick" : "punch";
+    out.button = edge.hk ? "hk" : "hp";
+    return out;
+  }
 
   // Ordinary normal. One press produces exactly one deliberate attack.
   const button = edge.hp ? "hp" : edge.hk ? "hk" : edge.lp ? "lp" : "lk";
@@ -258,10 +292,28 @@ export function resolveFourButtonInput(raw = {}, {
  * Legacy control-style hook. Classic requires the authored motions; the
  * simplified style is handled inside resolveFourButtonInput, so this now only
  * normalizes and is kept so saved preferences and replays stay valid.
+ *
+ * R1.9: LEGEND expands its single `special` pulse here — this runs inside the
+ * simulation for both fighters on both peers (remote inputs decode through
+ * bitsToInput first), so the direction-to-special mapping needs no new wire
+ * bits and can never diverge. `context.airborne` keeps the air special
+ * reachable: an airborne pulse stays plain `special` (the air special path).
  */
-export function applyControlStyle(input, style, facing = 1) {
+export function applyControlStyle(input, style, facing = 1, context = {}) {
   const normalized = { ...input };
-  if (normalizeControlStyle(style) !== "modern") return normalized;
+  const resolved = normalizeControlStyle(style);
+  if (resolved === "legend") {
+    if (input.special && !input.commandSpecial && !input.backSpecial
+      && input.limb !== "kick" && !context.airborne) {
+      const absolute = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+      normalized.special = false;
+      if (input.down) normalized.launcher = true;
+      else if (absolute === -facing) normalized.backSpecial = true;
+      else normalized.commandSpecial = true;
+    }
+    return normalized;
+  }
+  if (resolved !== "modern") return normalized;
   const absolute = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   if (input.special && !input.commandSpecial && !input.backSpecial) {
     if (input.down) {

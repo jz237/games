@@ -93,7 +93,14 @@ function testArenaCollisionRules() {
 function testTrainingLab() {
   assert.ok(["guard-after-first", "reversal", "wakeup", "record", "playback"].every((mode) => TRAINING_DUMMY_MODES.includes(mode)));
   assert.equal(Object.keys(TRAINING_COMBO_TRIALS).length, 8);
-  assert.ok(fighterIds.every((id) => comboTrialsForFighter(id).length === 2));
+  // R1.9 SCHOOL & POCKET: trials grew into tiered ladders (6-8 per fighter);
+  // the two shipped hand-authored trials stay first with their ids intact.
+  assert.ok(fighterIds.every((id) => {
+    const trials = comboTrialsForFighter(id);
+    return trials.length >= 6 && trials.length <= 8;
+  }));
+  assert.equal(comboTrialsForFighter("deathblow")[0].id, "faultline-confirm");
+  assert.equal(comboTrialsForFighter("deathblow")[1].id, "quarry-cashout");
 
   const training = createTrainingState();
   beginTrainingRecording(training);

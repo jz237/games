@@ -658,6 +658,35 @@ export function createCombatMove(kind, context = {}) {
   });
 }
 
+/**
+ * R1.9 SCHOOL & POCKET: the single startup/active/recovery + advantage
+ * computation, factored out of the training panel so the move list and the
+ * frame meter read the SAME numbers the sim runs on. Feed it a live attack
+ * instance (createAttackInstance output — i.e. post-ARCADE_TUNING) and the
+ * derived values follow the instance's rules rather than hand-copied tables:
+ * startup falls back to activeStartFrame, active to the active window span,
+ * recovery to whatever remains of the duration, exactly as beginAttack did.
+ */
+export function attackFrameData(move) {
+  if (!move || typeof move !== "object") return null;
+  const startup = Number.isFinite(move.startupFrames) ? move.startupFrames : move.activeStartFrame || 0;
+  const active = Number.isFinite(move.activeFrames)
+    ? move.activeFrames
+    : Math.max(1, (move.activeEndFrame || 0) - (move.activeStartFrame || 0) + 1);
+  const recovery = Number.isFinite(move.recoveryFrames)
+    ? move.recoveryFrames
+    : Math.max(0, (move.durationFrames || move.totalFrames || 0) - (move.activeEndFrame || 0));
+  return {
+    startup,
+    active,
+    recovery,
+    onHit: (move.hitstunFrames || 0) - recovery,
+    onBlock: (move.blockstunFrames || 0) - recovery,
+    level: move.level || ATTACK_LEVELS.MID,
+    damage: Number.isFinite(move.damage) ? Number(move.damage.toFixed(1)) : 0,
+  };
+}
+
 export class DirectionTapTracker {
   constructor(windowFrames = MOVEMENT_RULES.dashTapWindowFrames) {
     this.windowFrames = windowFrames;

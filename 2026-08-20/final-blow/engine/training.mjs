@@ -1,3 +1,5 @@
+import { getKitMoveProfile, prettyProfileName } from "./fighter-kits.mjs";
+
 export const TRAINING_DUMMY_MODES = Object.freeze([
   "stand", "guard", "guard-after-first", "crouch", "jump",
   "reversal", "wakeup", "record", "playback", "cpu",
@@ -6,13 +8,18 @@ export const TRAINING_DUMMY_MODES = Object.freeze([
 export const TRAINING_RECORDING_MAX_FRAMES = 600;
 export const TRAINING_TRIAL_GAP_FRAMES = 180;
 
-const trial = (id, name, steps) => Object.freeze({
+const trial = (id, name, steps, tier = "bronze") => Object.freeze({
   id,
   name,
-  steps: Object.freeze(steps.map(([action, label]) => Object.freeze({ action, label }))),
+  tier,
+  steps: Object.freeze(steps.map(([action, label, limb]) => Object.freeze(limb ? { action, label, limb } : { action, label }))),
 });
 
-export const TRAINING_COMBO_TRIALS = Object.freeze({
+// R1.9 SCHOOL & POCKET: trials are tiered ladders now — bronze teaches the
+// confirm, silver the movement/grab/juggle vocabulary, gold the Grit economy.
+export const TRIAL_MEDAL_TIERS = Object.freeze(["bronze", "silver", "gold"]);
+
+const BASE_COMBO_TRIALS = {
   deathblow: Object.freeze([
     trial("faultline-confirm", "FAULTLINE CONFIRM", [["light", "HAMMER JAB"], ["heavy", "WRECKING HOOK"], ["commandSpecial", "FAULTLINE FIST"]]),
     trial("quarry-cashout", "QUARRY CASHOUT", [["launcher", "QUARRY BREAKER"], ["super", "EPICENTER EXECUTION"]]),
@@ -45,7 +52,65 @@ export const TRAINING_COMBO_TRIALS = Object.freeze({
     trial("massive-confirm", "MASSIVE CONFIRM", [["light", "MIC ONE"], ["heavy", "CHAIN WHIP"], ["commandSpecial", "MASSIVE STEP"]]),
     trial("bassline-cashout", "BASSLINE CASHOUT", [["launcher", "BASSLINE RISER"], ["super", "WEST STAINES MASSIVE"]]),
   ]),
-});
+};
+
+/**
+ * The expanded ladder is GENERATED from each fighter's real kit so every step
+ * is guaranteed to name a move that fighter actually has (the unit tests
+ * assert this for every trial). The two shipped hand-authored trials stay
+ * first with their ids untouched, tagged bronze.
+ */
+function kitMoveLabel(fighterId, action, context = {}) {
+  const profile = getKitMoveProfile(fighterId, action, context);
+  if (!profile) return null;
+  return profile.moveName || prettyProfileName(profile.id, fighterId);
+}
+
+function generatedTrialsForFighter(fighterId) {
+  const label = (action, context) => kitMoveLabel(fighterId, action, context);
+  const trials = [
+    trial(`${fighterId}-road-work`, "ROAD WORK", [
+      ["driveHeavy", label("driveHeavy")],
+      ["special", label("special")],
+    ], "bronze"),
+    trial(`${fighterId}-grab-and-go`, "GRAB AND GO", [
+      ["throw", label("throw")],
+      ["light", label("light")],
+      ["heavy", label("heavy")],
+    ], "silver"),
+    trial(`${fighterId}-rise-and-run`, "RISE AND RUN", [
+      ["launcher", label("launcher")],
+      ["driveHeavy", label("driveHeavy")],
+    ], "silver"),
+    trial(`${fighterId}-ex-spender`, "EX SPENDER", [
+      ["enhanced", label("enhanced")],
+      ["commandSpecial", label("commandSpecial")],
+    ], "gold"),
+    trial(`${fighterId}-full-grit-finale`, "FULL GRIT FINALE", [
+      ["light", label("light")],
+      ["heavy", label("heavy")],
+      ["commandSpecial", label("commandSpecial")],
+      ["super", label("super")],
+    ], "gold"),
+  ];
+  // Signature route only where the back special can actually land on the
+  // standing dummy (counters, traps and pure projectiles are excluded).
+  const backSpecial = getKitMoveProfile(fighterId, "backSpecial");
+  if (backSpecial?.hitboxes?.length && (backSpecial.damage || 0) > 0) {
+    trials.push(trial(`${fighterId}-signature-route`, "SIGNATURE ROUTE", [
+      ["backSpecial", label("backSpecial")],
+      ["launcher", label("launcher")],
+    ], "gold"));
+  }
+  return trials;
+}
+
+export const TRAINING_COMBO_TRIALS = Object.freeze(Object.fromEntries(
+  Object.entries(BASE_COMBO_TRIALS).map(([fighterId, base]) => [
+    fighterId,
+    Object.freeze([...base, ...generatedTrialsForFighter(fighterId)]),
+  ]),
+));
 
 const INPUT_FIELDS = Object.freeze([
   "fourButton", "left", "right", "down", "up", "jump", "guard",
@@ -86,6 +151,8 @@ export function createTrainingState(overrides = {}) {
     resets: Number.isInteger(overrides.resets) ? Math.max(0, overrides.resets) : 0,
     lastDamage: Number.isFinite(overrides.lastDamage) ? Math.max(0, overrides.lastDamage) : 0,
     lastResult: typeof overrides.lastResult === "string" ? overrides.lastResult : "",
+    // R1.9: SFV-style frame meter strip toggle (render-only feature flag).
+    showFrameMeter: Boolean(overrides.showFrameMeter),
     lastMove: overrides.lastMove && typeof overrides.lastMove === "object" ? { ...overrides.lastMove } : null,
     lastAdvantage: Number.isFinite(overrides.lastAdvantage) ? overrides.lastAdvantage : null,
     inputHistory: Array.isArray(overrides.inputHistory) ? overrides.inputHistory.slice(-12) : [],
@@ -170,6 +237,7 @@ export function trainingTrialSnapshot(training) {
     count: trials.length,
     id: current?.id || null,
     name: current?.name || "NO TRIAL",
+    tier: current?.tier || "bronze",
     steps: current ? current.steps.map((step, index) => ({ ...step, complete: index < training.trialStep })) : [],
     step: training.trialStep,
     status: training.trialStatus,
@@ -178,9 +246,16 @@ export function trainingTrialSnapshot(training) {
   };
 }
 
+function trialStepMatches(step, action, limb) {
+  if (!step || action !== step.action) return false;
+  if (step.limb && step.limb !== (limb || "punch")) return false;
+  return true;
+}
+
 export function recordTrainingTrialHit(training, {
   fighterId,
   action,
+  limb,
   attackSerial,
   frame,
 } = {}) {
@@ -193,7 +268,7 @@ export function recordTrainingTrialHit(training, {
   if (frame - training.trialLastFrame > TRAINING_TRIAL_GAP_FRAMES) training.trialStep = 0;
   if (training.trialStep >= current.steps.length) training.trialStep = 0;
   const expected = current.steps[training.trialStep];
-  if (action === expected.action) {
+  if (trialStepMatches(expected, action, limb)) {
     training.trialStep += 1;
     training.trialLastFrame = frame;
     if (training.trialStep >= current.steps.length) {
@@ -203,7 +278,7 @@ export function recordTrainingTrialHit(training, {
       training.trialStatus = `NEXT · ${current.steps[training.trialStep].label}`;
     }
   } else {
-    training.trialStep = action === current.steps[0].action ? 1 : 0;
+    training.trialStep = trialStepMatches(current.steps[0], action, limb) ? 1 : 0;
     training.trialLastFrame = frame;
     training.trialStatus = training.trialStep ? `NEXT · ${current.steps[1]?.label || "COMPLETE"}` : `RESET · START WITH ${current.steps[0].label}`;
   }
@@ -263,6 +338,7 @@ export function trainingSnapshot(training) {
     autoRecover: training.autoRecover,
     infiniteGrit: training.infiniteGrit,
     showHitboxes: training.showHitboxes,
+    showFrameMeter: training.showFrameMeter,
     resets: training.resets,
     lastDamage: training.lastDamage,
     lastResult: training.lastResult,
@@ -277,5 +353,332 @@ export function trainingSnapshot(training) {
     playbackLoops: training.playbackLoops,
     perfectGuards: training.perfectGuards,
     trial: trainingTrialSnapshot(training),
+  };
+}
+
+// ===========================================================================
+// R1.9 SCHOOL & POCKET — trial medals, authored trial demos, situation slots
+// and the FIGHT SCHOOL lesson machine. All pure data + pure functions; the
+// game wires them to guarded hook points.
+// ===========================================================================
+
+const MEDAL_RANK = Object.freeze({ bronze: 1, silver: 2, gold: 3 });
+
+export function normalizeTrialMedals(raw) {
+  const medals = {};
+  if (!raw || typeof raw !== "object") return medals;
+  for (const [fighterId, entries] of Object.entries(raw)) {
+    if (!entries || typeof entries !== "object") continue;
+    const clean = {};
+    for (const [trialId, tier] of Object.entries(entries)) {
+      if (TRIAL_MEDAL_TIERS.includes(tier)) clean[String(trialId)] = tier;
+    }
+    if (Object.keys(clean).length) medals[String(fighterId)] = clean;
+  }
+  return medals;
+}
+
+export function awardTrialMedal(medals, fighterId, trial) {
+  if (!trial || !TRIAL_MEDAL_TIERS.includes(trial.tier)) return medals;
+  if (!medals[fighterId]) medals[fighterId] = {};
+  medals[fighterId][trial.id] = trial.tier;
+  return medals;
+}
+
+export function medalForTrial(medals, fighterId, trialId) {
+  return medals?.[fighterId]?.[trialId] || "";
+}
+
+export function fighterMedalCounts(medals, fighterId) {
+  const counts = { bronze: 0, silver: 0, gold: 0, total: 0 };
+  for (const tier of Object.values(medals?.[fighterId] || {})) {
+    if (!(tier in MEDAL_RANK)) continue;
+    counts[tier] += 1;
+    counts.total += 1;
+  }
+  return counts;
+}
+
+/**
+ * Authored trial demo: a scripted input stream for the PLAYER seat that walks
+ * to contact, performs each step through the same direct action fields the QA
+ * input machinery uses, and re-approaches between steps so pushback can never
+ * whiff a later step. `forward` is a pseudo-direction the feeder maps onto
+ * left/right against the fighter's live facing (cross-through specials flip
+ * sides mid-demo).
+ */
+export const TRIAL_DEMO_SETTLE_FRAMES = 104;
+export const TRIAL_DEMO_APPROACH_FRAMES = 44;
+
+export function trialDemoScript(trial) {
+  if (!trial) return [];
+  const frames = [];
+  const approach = (count) => {
+    for (let index = 0; index < count; index += 1) frames.push({ forward: true });
+  };
+  approach(120);
+  for (const step of trial.steps) {
+    const press = { [step.action]: true };
+    if (step.limb === "kick") press.limb = "kick";
+    frames.push(press);
+    for (let index = 0; index < TRIAL_DEMO_SETTLE_FRAMES; index += 1) frames.push({});
+    approach(TRIAL_DEMO_APPROACH_FRAMES);
+  }
+  return frames;
+}
+
+// --- Situation slots -------------------------------------------------------
+
+export const TRAINING_SLOT_COUNT = 3;
+export const TRAINING_SLOT_VERSION = 1;
+
+/**
+ * Slot payloads carry the serialized rollback snapshot (the exact contract
+ * saveRollbackState/serializeRollbackState already ship for online resume) plus
+ * the dummy behaviour so one tap restores the whole situation.
+ */
+export function encodeTrainingSlot(slot = {}) {
+  if (typeof slot.state !== "string" || !slot.state.length) return null;
+  return JSON.stringify({
+    version: TRAINING_SLOT_VERSION,
+    savedAt: Number.isFinite(slot.savedAt) ? slot.savedAt : Date.now(),
+    label: typeof slot.label === "string" ? slot.label.slice(0, 48) : "",
+    stage: typeof slot.stage === "string" ? slot.stage : "",
+    dummyMode: TRAINING_DUMMY_MODES.includes(slot.dummyMode) ? slot.dummyMode : "stand",
+    recording: Array.isArray(slot.recording)
+      ? slot.recording.slice(0, TRAINING_RECORDING_MAX_FRAMES).map(sanitizeTrainingInput)
+      : [],
+    state: slot.state,
+  });
+}
+
+export function decodeTrainingSlot(text) {
+  let parsed = null;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || parsed.version !== TRAINING_SLOT_VERSION) return null;
+  if (typeof parsed.state !== "string" || !parsed.state.length) return null;
+  return {
+    version: TRAINING_SLOT_VERSION,
+    savedAt: Number.isFinite(parsed.savedAt) ? parsed.savedAt : 0,
+    label: typeof parsed.label === "string" ? parsed.label.slice(0, 48) : "",
+    stage: typeof parsed.stage === "string" ? parsed.stage : "",
+    dummyMode: TRAINING_DUMMY_MODES.includes(parsed.dummyMode) ? parsed.dummyMode : "stand",
+    recording: Array.isArray(parsed.recording)
+      ? parsed.recording.slice(0, TRAINING_RECORDING_MAX_FRAMES).map(sanitizeTrainingInput)
+      : [],
+    state: parsed.state,
+  };
+}
+
+// --- FIGHT SCHOOL ----------------------------------------------------------
+
+function freezeDeep(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  Object.values(value).forEach(freezeDeep);
+  return value;
+}
+
+/**
+ * The scripted curriculum. Step kinds:
+ *   walk     — hold the direction for `frames` sim ticks
+ *   block    — block a dummy attack of the given level (dummyScript arms the
+ *              scripted playback attack for the step)
+ *   hit      — land an attack matching action/limb/back/requireDizzy
+ *   finisher — execute the Final Blow after the KO
+ * Setup hooks (`setup`) are handled by the game: "dizzy" stuns the dummy,
+ * "lowHealth" drops it to a KO-able sliver with auto-life off.
+ */
+export const FIGHT_SCHOOL_LESSONS = freezeDeep([
+  {
+    id: "footwork",
+    name: "FOOTWORK & GUARD",
+    intro: "Walk with the stick. Holding away IS your block button.",
+    steps: [
+      { id: "walk-forward", kind: "walk", direction: "forward", frames: 40, label: "WALK IN ON THE DUMMY" },
+      { id: "walk-back", kind: "walk", direction: "back", frames: 40, label: "WALK OUT · GUARD UP" },
+    ],
+  },
+  {
+    id: "guard-heights",
+    name: "HIGH & LOW GUARD",
+    intro: "Overheads hit standing blockers high. Sweeps go under. Match the guard.",
+    steps: [
+      { id: "block-high", kind: "block", level: "overhead", dummyScript: "overhead", label: "STAND-BLOCK THE OVERHEAD" },
+      { id: "block-low", kind: "block", level: "low", dummyScript: "low", label: "CROUCH-BLOCK THE SWEEP" },
+    ],
+  },
+  {
+    id: "four-normals",
+    name: "THE FOUR BUTTONS",
+    intro: "LP jab, HP hook, LK kick, HK roundhouse. Land all four.",
+    steps: [
+      { id: "land-lp", kind: "hit", action: "light", limb: "punch", label: "LAND THE LP JAB" },
+      { id: "land-hp", kind: "hit", action: "heavy", limb: "punch", label: "LAND THE HP HOOK" },
+      { id: "land-lk", kind: "hit", action: "light", limb: "kick", label: "LAND THE LK" },
+      { id: "land-hk", kind: "hit", action: "heavy", limb: "kick", label: "LAND THE HK ROUNDHOUSE" },
+    ],
+  },
+  {
+    id: "qcf-special",
+    name: "THE QUARTER CIRCLE",
+    intro: "Roll down to forward, then punch. Smooth, not fast.",
+    steps: [
+      { id: "land-qcf", kind: "hit", action: "commandSpecial", label: "LAND \u2193 \u2192 + PUNCH" },
+    ],
+  },
+  {
+    id: "throw-tech",
+    name: "THE PROXIMITY GRAB",
+    intro: "Step chest to chest. Toward or away plus LP or LK throws \u2014 no whiff animation.",
+    steps: [
+      { id: "throw-forward", kind: "hit", action: "throw", back: false, label: "CLOSE + TOWARD + LP" },
+      { id: "throw-back", kind: "hit", action: "throw", back: true, label: "CLOSE + AWAY + LP \u00b7 SIDE SWAP" },
+    ],
+  },
+  {
+    id: "dizzy-punish",
+    name: "THE DIZZY PUNISH",
+    intro: "Stars mean free damage. Take the biggest thing you have.",
+    setup: "dizzy",
+    steps: [
+      { id: "punish-dizzy", kind: "hit", requireDizzy: true, label: "HIT THE DIZZIED DUMMY" },
+    ],
+  },
+  {
+    id: "final-blow",
+    name: "THE FINAL BLOW",
+    intro: "After the KO the street waits. LP is Finisher A, LK is B \u2014 any distance.",
+    setup: "lowHealth",
+    steps: [
+      { id: "execute-finisher", kind: "finisher", label: "KO \u00b7 THEN LP OR LK" },
+    ],
+  },
+]);
+
+// Philly corner-man voice. The game draws these through a no-repeat bag so a
+// line never lands back-to-back.
+export const FIGHT_SCHOOL_COACH_LINES = freezeDeep({
+  start: [
+    "Aight jawn, school's in. No slacking on my corner.",
+    "This the same lot I learned on. Pay attention.",
+    "Water ice after class if you land everything. Focus up.",
+    "They don't teach this at Temple. Eyes front.",
+    "Off the ropes, youngbul. We got work.",
+  ],
+  step: [
+    "There it is. Again like you mean it.",
+    "That's the one. Drill it till it's boring.",
+    "Clean. My man.",
+    "Yerrr! That's how we do it down here.",
+    "Textbook. If Philly had a textbook.",
+    "Now you cooking with grease.",
+  ],
+  lesson: [
+    "Lesson done. Shake it out, next page.",
+    "That's a wrap on that one. Keep moving.",
+    "You pass. Barely. Next lesson.",
+    "Broad Street would be proud. Moving on.",
+    "One more chapter closer to a real fighter.",
+  ],
+  graduate: [
+    "School's out. You're officially a problem.",
+    "That's the whole book. Go start something.",
+    "Graduated. First round of cheesesteaks on you.",
+  ],
+});
+
+export function createFightSchoolState(overrides = {}) {
+  const lessonCount = FIGHT_SCHOOL_LESSONS.length;
+  const completed = {};
+  if (overrides.completed && typeof overrides.completed === "object") {
+    for (const lesson of FIGHT_SCHOOL_LESSONS) {
+      if (overrides.completed[lesson.id]) completed[lesson.id] = true;
+    }
+  }
+  return {
+    lesson: Number.isInteger(overrides.lesson)
+      ? Math.max(0, Math.min(lessonCount, overrides.lesson))
+      : 0,
+    step: Number.isInteger(overrides.step) ? Math.max(0, overrides.step) : 0,
+    walkFrames: 0,
+    lastAttackSerial: -1,
+    completed,
+    graduated: Boolean(overrides.graduated) || Object.keys(completed).length >= lessonCount,
+  };
+}
+
+export function fightSchoolLesson(school) {
+  return FIGHT_SCHOOL_LESSONS[school?.lesson] || null;
+}
+
+/**
+ * The combo-trial step machine pattern applied to lessons: sequential steps,
+ * attackSerial dedupe on hit events, no failure state — a miss just leaves the
+ * step armed. Returns null when nothing advanced, otherwise a progress record.
+ */
+export function fightSchoolObserve(school, event = {}) {
+  const lesson = fightSchoolLesson(school);
+  if (!lesson) return null;
+  const step = lesson.steps[school.step];
+  if (!step) return null;
+  let advanced = false;
+  if (step.kind === "walk" && event.type === "walk") {
+    if (event.direction === step.direction) {
+      school.walkFrames += 1;
+      if (school.walkFrames >= step.frames) advanced = true;
+    }
+  } else if (step.kind === "block" && event.type === "block") {
+    if (event.level === step.level) advanced = true;
+  } else if (step.kind === "hit" && event.type === "hit") {
+    if (Number.isInteger(event.attackSerial) && event.attackSerial !== school.lastAttackSerial) {
+      school.lastAttackSerial = event.attackSerial;
+      const actionOk = !step.action || event.action === step.action;
+      const limbOk = !step.limb || step.limb === (event.limb || "punch");
+      const backOk = step.back === undefined || Boolean(event.back) === step.back;
+      const dizzyOk = !step.requireDizzy || Boolean(event.dizzy);
+      if (actionOk && limbOk && backOk && dizzyOk) advanced = true;
+    }
+  } else if (step.kind === "finisher" && event.type === "finisher") {
+    advanced = true;
+  }
+  if (!advanced) return null;
+  school.walkFrames = 0;
+  school.step += 1;
+  const lessonComplete = school.step >= lesson.steps.length;
+  if (lessonComplete) {
+    school.completed[lesson.id] = true;
+    school.lesson += 1;
+    school.step = 0;
+    if (school.lesson >= FIGHT_SCHOOL_LESSONS.length) school.graduated = true;
+  }
+  return {
+    stepComplete: true,
+    lessonComplete,
+    graduated: school.graduated,
+    lessonId: lesson.id,
+  };
+}
+
+export function fightSchoolSnapshot(school) {
+  if (!school) return null;
+  const lesson = fightSchoolLesson(school);
+  return {
+    lesson: school.lesson,
+    lessonCount: FIGHT_SCHOOL_LESSONS.length,
+    lessonId: lesson?.id || null,
+    lessonName: lesson?.name || "GRADUATED",
+    step: school.step,
+    steps: lesson ? lesson.steps.map((entry, index) => ({
+      id: entry.id,
+      label: entry.label,
+      complete: index < school.step,
+    })) : [],
+    completed: { ...school.completed },
+    graduated: school.graduated,
   };
 }

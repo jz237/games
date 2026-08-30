@@ -1,5 +1,5 @@
 import { createAttackInstance } from "./foundation.mjs";
-import { ATTACK_LEVELS, KICK_VARIANTS, deriveKickProfile, resolveKickVariant } from "./defense.mjs";
+import { ATTACK_LEVELS, KICK_VARIANTS, attackFrameData, deriveKickProfile, resolveKickVariant } from "./defense.mjs";
 import { GRIT_RULES, matchCommandSequence } from "./combos.mjs";
 import { ENHANCED_THROWABLE_COMMAND, FIGHTER_THROWABLES, THROWABLE_COMMAND } from "./throwables.mjs";
 
@@ -1491,4 +1491,61 @@ export function listFighterMoves(fighterId) {
     }
   }
   return moves;
+}
+
+/**
+ * R1.9 SCHOOL & POCKET: the move-list frame-data table. Every row is built
+ * from a LIVE attack instance (createFighterMove, i.e. post-ARCADE_TUNING and
+ * spatial scale), so the dialog can never drift from what the sim actually
+ * runs — the repo's assert-the-rule-not-the-number philosophy applied to UI.
+ */
+const FRAME_DATA_ROWS = Object.freeze([
+  { command: "LP", action: "light", context: {} },
+  { command: "\u2192 + LP", action: "light", context: { forwardHeld: true } },
+  { command: "\u2193 + LP", action: "light", context: { crouching: true } },
+  { command: "LK", action: "light", context: { limb: "kick" } },
+  { command: "\u2192 + LK", action: "light", context: { limb: "kick", forwardHeld: true } },
+  { command: "\u2193 + LK", action: "light", context: { limb: "kick", crouching: true } },
+  { command: "HP", action: "heavy", context: {} },
+  { command: "\u2192 + HP", action: "heavy", context: { forwardHeld: true } },
+  { command: "\u2193 + HP", action: "heavy", context: { crouching: true } },
+  { command: "HK", action: "heavy", context: { limb: "kick" } },
+  { command: "\u2192 + HK", action: "heavy", context: { limb: "kick", forwardHeld: true } },
+  { command: "\u2193 + HK", action: "heavy", context: { limb: "kick", crouching: true } },
+  { command: "CLOSE \u21c4 + LP/LK", action: "throw", context: {} },
+  { command: "", action: "special", context: {} },
+  { command: "", action: "commandSpecial", context: {} },
+  { command: "", action: "backSpecial", context: {} },
+  { command: "", action: "launcher", context: {} },
+  { command: "", action: "driveHeavy", context: {} },
+  { command: "", action: "enhanced", context: {} },
+  { command: "", action: "enhancedCommandSpecial", context: {} },
+  { command: "", action: "enhancedBackSpecial", context: {} },
+  { command: "", action: "enhancedLauncher", context: {} },
+  { command: "", action: "super", context: {} },
+]);
+
+export function prettyProfileName(profileId = "", fighterId = "") {
+  return String(profileId)
+    .replace(new RegExp(`^${fighterId}-`), "")
+    .replace(/-/g, " ")
+    .toUpperCase();
+}
+
+export function listFighterFrameData(fighterId) {
+  const kit = getFighterKit(fighterId);
+  if (!kit) return [];
+  const rows = [];
+  for (const { command, action, context } of FRAME_DATA_ROWS) {
+    const move = createFighterMove(fighterId, action, context);
+    if (!move) continue;
+    const data = attackFrameData(move);
+    rows.push({
+      action,
+      name: move.moveName || prettyProfileName(move.profileId, fighterId),
+      command: command || move.command || "",
+      ...data,
+    });
+  }
+  return rows;
 }

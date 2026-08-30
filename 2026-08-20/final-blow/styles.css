@@ -2997,3 +2997,184 @@ body.reduced-motion .book-stamp-toast strong i { animation-delay: 0ms !important
   .ending-panel-copy { bottom: 4%; padding: 8px 12px; }
   .menu-row .ledger-button { min-height: 30px; padding: 5px 8px; }
 }
+
+/* ===========================================================================
+   R1.9 SCHOOL & POCKET — Fight School panel, input history column, situation
+   slots, trial medals, frame-data move list, LEGEND touch labels.
+   =========================================================================== */
+
+.training-slot-tools {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: auto;
+}
+.training-slot-tools b { color: #8e9ba4; font-size: 8px; margin-right: 3px; }
+.training-slot-tools button {
+  padding: 4px 6px;
+  border: 1px solid #4d6574;
+  background: #09121b;
+  color: white;
+  font-size: 8px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.training-slot-tools button:disabled { opacity: .42; cursor: not-allowed; }
+.training-slot-tools button[data-slot-load].filled { border-color: rgba(78,221,245,.85); color: #7fe9ff; }
+.training-trial-medals { margin-left: 6px; letter-spacing: .12em; font-size: 9px; }
+.medal-bronze { color: #d08a4e; }
+.medal-silver { color: #cfd6de; }
+.medal-gold { color: #ffd54a; }
+
+/* Roster card medal readout (mastery-badge sibling). */
+.trial-medal-badge {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 3;
+  padding: 2px 5px;
+  border: 1px solid rgba(255,255,255,.25);
+  background: rgba(0,0,0,.72);
+  font: 900 8px/1 ui-monospace, monospace;
+  letter-spacing: .08em;
+  pointer-events: none;
+}
+.trial-medal-badge[hidden] { display: none; }
+
+/* Arcade-style input history column. */
+.input-history-column {
+  position: absolute;
+  z-index: 9;
+  left: 1.2%;
+  top: 24%;
+  bottom: 18%;
+  width: 118px;
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-start;
+  gap: 3px;
+  overflow: hidden;
+  pointer-events: none;
+  font: 900 10px/1 ui-monospace, monospace;
+}
+.input-history-column[hidden] { display: none; }
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 5px;
+  border-left: 2px solid rgba(78,221,245,.5);
+  background: rgba(3, 8, 13, .74);
+  color: #dce8ed;
+}
+.input-row .dir { min-width: 13px; color: #9fe9ff; font-size: 12px; }
+.input-row .chip {
+  padding: 2px 4px;
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: 2px;
+  font-size: 8px;
+}
+.input-row .chip.lp, .input-row .chip.lk { background: rgba(53,231,255,.16); border-color: rgba(53,231,255,.6); }
+.input-row .chip.hp, .input-row .chip.hk { background: rgba(255,77,109,.18); border-color: rgba(255,77,109,.6); }
+.input-row .held { margin-left: auto; color: #8e9ba4; font-size: 8px; }
+.input-row.flash {
+  border-left-color: #71f7a1;
+  background: rgba(21, 68, 38, .88);
+  color: #b8ffd2;
+}
+.input-flash-chip {
+  padding: 4px 6px;
+  border: 1px solid #71f7a1;
+  background: rgba(17, 84, 44, .92);
+  color: #ccffdf;
+  font-size: 9px;
+  letter-spacing: .08em;
+  animation: input-flash-pop .5s ease-out;
+}
+@keyframes input-flash-pop {
+  0% { transform: scale(1.22); filter: brightness(1.8); }
+  100% { transform: scale(1); filter: none; }
+}
+body.reduced-motion .input-flash-chip { animation: none; }
+
+/* FIGHT SCHOOL lesson panel. */
+.school-panel {
+  position: absolute;
+  z-index: 9;
+  right: 2.5%;
+  bottom: 6%;
+  width: 264px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 213, 74, .6);
+  background: rgba(6, 9, 15, .86);
+  color: #e9eef2;
+  font: 850 9px/1.35 system-ui, sans-serif;
+  letter-spacing: .05em;
+  pointer-events: auto;
+}
+.school-panel[hidden] { display: none; }
+.school-head { display: flex; justify-content: space-between; color: var(--amber); font-size: 8px; }
+.school-panel h3 { margin: 6px 0 4px; font-size: 13px; color: white; }
+.school-panel p { margin: 0 0 7px; color: #aeb9c2; }
+.school-steps { display: grid; gap: 3px; font-family: ui-monospace, monospace; font-size: 9px; }
+.school-steps span { padding: 3px 5px; border-left: 2px solid #4d6574; background: rgba(24,35,45,.7); }
+.school-steps span.done { border-left-color: #71f7a1; color: #71f7a1; text-decoration: line-through; }
+.school-steps span.next { border-left-color: var(--amber); color: var(--amber); }
+.school-actions { display: flex; gap: 6px; margin-top: 8px; }
+.school-actions button {
+  padding: 4px 7px;
+  border: 1px solid #4d6574;
+  background: #09121b;
+  color: white;
+  font-size: 8px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.school-button small { display: block; font-size: 8px; opacity: .72; margin-top: 2px; }
+
+/* Frame-data move list. */
+.move-list-rows.frame-data { display: grid; gap: 2px; font-size: 9px; }
+.move-list-row.frame-head,
+.move-list-row.frame-row {
+  display: grid;
+  grid-template-columns: 1.35fr 1.25fr 78px 84px 40px 52px;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 6px;
+}
+.move-list-row.frame-head { color: #8e9ba4; font-size: 7px; letter-spacing: .1em; }
+.move-list-row.frame-row { background: rgba(24,35,45,.5); }
+.move-list-row.frame-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.move-list-row.frame-row span { color: #aeb9c2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.move-list-row.frame-row .sar { font-family: ui-monospace, monospace; color: #dce8ed; }
+.level-chip {
+  justify-self: start;
+  padding: 2px 5px;
+  border-radius: 2px;
+  border: 1px solid rgba(255,255,255,.3);
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.level-chip.lvl-mid { background: rgba(53,231,255,.14); border-color: rgba(53,231,255,.55); color: #9fe9ff; }
+.level-chip.lvl-low { background: rgba(255,213,74,.16); border-color: rgba(255,213,74,.6); color: #ffe28e; }
+.level-chip.lvl-overhead { background: rgba(255,77,109,.16); border-color: rgba(255,77,109,.6); color: #ff9eb0; }
+.level-chip.lvl-throw { background: rgba(174,122,255,.16); border-color: rgba(174,122,255,.6); color: #cfaeff; }
+.level-chip.lvl-air { background: rgba(126,255,166,.14); border-color: rgba(126,255,166,.55); color: #a9f7c4; }
+
+/* LEGEND control style: touch buttons advertise their one-button jobs. */
+.touch-controls[data-control-style="legend"] .touch-hp::after,
+.touch-controls[data-control-style="legend"] .touch-hk::after {
+  content: "SPL";
+  position: absolute;
+  right: 8%;
+  top: 8%;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255,213,74,.85);
+  color: #0a0d13;
+  font: 900 8px/1.2 system-ui, sans-serif;
+  letter-spacing: .04em;
+}
+.touch-controls[data-control-style="legend"] .touch-hp::after { content: "SPL·SUPER"; }

@@ -73,19 +73,41 @@
           <label><input id="trainingRecoverToggle" type="checkbox" checked> AUTO LIFE</label>
           <label><input id="trainingGritToggle" type="checkbox" checked> INFINITE GRIT</label>
           <label><input id="trainingHitboxToggle" type="checkbox"> HITBOXES</label>
+          <label><input id="trainingFrameMeterToggle" type="checkbox"> FRAME METER</label>
           <button id="trainingRecordButton" type="button">RECORD P2</button>
           <button id="trainingPlaybackButton" type="button" disabled>PLAY LOOP</button>
           <button id="trainingResetButton" type="button">RESET POSITION</button>
           <button id="trainingWeaponButton" type="button">SPAWN STAGE WEAPON</button>
         </div>
+        <div class="training-slot-tools" aria-label="Training situation slots">
+          <b>SITUATION</b>
+          <button data-slot-save="0" type="button">SAVE 1</button><button data-slot-load="0" type="button" disabled>LOAD 1</button>
+          <button data-slot-save="1" type="button">SAVE 2</button><button data-slot-load="1" type="button" disabled>LOAD 2</button>
+          <button data-slot-save="2" type="button">SAVE 3</button><button data-slot-load="2" type="button" disabled>LOAD 3</button>
+        </div>
         <div class="training-trial-tools">
           <label>COMBO TRIAL <select id="trainingTrialSelect"></select></label>
           <button id="trainingTrialResetButton" type="button">RESET TRIAL</button>
+          <button id="trainingTrialDemoButton" type="button">WATCH DEMO</button>
           <b id="trainingTrialStatus">READY</b>
+          <span id="trainingTrialMedals" class="training-trial-medals"></span>
         </div>
         <div id="trainingInputs" class="training-inputs">INPUT: —</div>
         <div id="trainingTrialSteps" class="training-trial-steps">TRIAL: —</div>
         <div id="trainingGrabHint" class="training-grab-hint">GRAB: STEP IN CLOSE, THEN TOWARD OR AWAY + LP OR LK</div>
+      </aside>
+
+      <div id="inputHistoryColumn" class="input-history-column" aria-label="Input history" hidden></div>
+
+      <aside id="schoolPanel" class="school-panel" aria-label="Fight School lesson" hidden>
+        <div class="school-head"><b>FIGHT SCHOOL</b><span id="schoolLessonCounter">LESSON 1 / 7</span></div>
+        <h3 id="schoolLessonName">FOOTWORK &amp; GUARD</h3>
+        <p id="schoolLessonIntro"></p>
+        <div id="schoolSteps" class="school-steps"></div>
+        <div class="school-actions">
+          <button id="schoolSkipButton" type="button">SKIP LESSON</button>
+          <button id="schoolExitButton" type="button">LEAVE SCHOOL</button>
+        </div>
       </aside>
 
       <div id="announcer" class="announcer hidden" aria-live="assertive">
@@ -135,6 +157,10 @@
           </div>
           <button class="arcade-button online-button" id="onlineButton">ONLINE · PRIVATE ROOM</button>
           <button class="arcade-button" data-mode="training">TRAINING LAB</button>
+          <div class="menu-row">
+            <button class="arcade-button school-button" id="fightSchoolButton">FIGHT SCHOOL<small id="fightSchoolStatus">7 LESSONS · FREE</small></button>
+            <button class="arcade-button school-button" id="comboTrialsButton">COMBO TRIALS<small id="comboTrialsStatus">EARN MEDALS</small></button>
+          </div>
           <button class="arcade-button demo-button" id="demoButton">WATCH DEMO · CPU VS CPU</button>
           <button class="arcade-button ghost" id="controlsButton">CONTROLS & OPTIONS</button>
         </div>
@@ -511,6 +537,7 @@
             <select id="controlStyleSelect" aria-label="Control style">
               <option value="classic">CLASSIC · MOTION COMMANDS</option>
               <option value="modern">MODERN · DIRECTION + BUTTON</option>
+              <option value="legend">LEGEND · ONE-BUTTON SPECIALS</option>
             </select>
           </label>
           <label class="option-picker"><span>COLOR ASSIST</span>

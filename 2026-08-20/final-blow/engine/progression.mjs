@@ -300,6 +300,8 @@ export function createBlackBookProgress() {
       teamSweeps: 0,
       tableTops: 0,
       cinemaActivations: 0,
+      // R1.9 SCHOOL & POCKET: FIGHT SCHOOL graduations.
+      schoolGraduations: 0,
     },
     best: {
       matchTechs: 0,
@@ -357,6 +359,7 @@ export function blackBookObserve(progress, observation) {
         case "wallBounce": tallies.wallBounces += 1; break;
         case "exThrowable": tallies.exThrowables += 1; break;
         case "cinema3d": tallies.cinemaActivations += 1; break;
+        case "fightSchool": tallies.schoolGraduations += 1; break;
         case "throwableLand":
           if (observation.fighterId) progress.sets.throwables[String(observation.fighterId)] = 1;
           break;
@@ -673,6 +676,13 @@ export const BLACK_BOOK_ENTRIES = Object.freeze([
     line: "Rolled the fight in CINEMA 3D. Philly never looked so expensive.",
     hint: "Switch on CINEMA 3D for the first time.",
     test: (p) => p.tallies.cinemaActivations >= 1,
+  },
+  {
+    id: "the-graduate",
+    title: "THE GRADUATE",
+    line: "Finished every FIGHT SCHOOL lesson. The corner man finally cracked a smile.",
+    hint: "Graduate FIGHT SCHOOL.",
+    test: (p) => p.tallies.schoolGraduations >= 1,
   },
 ].map(Object.freeze));
 

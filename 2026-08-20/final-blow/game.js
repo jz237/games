@@ -33,6 +33,7 @@ import {
   isPerfectGuard,
   resolveWakeOption,
   stunGainForAttack,
+  attackFrameData,
   boxesOverlap,
   canGuardAttack,
   createCombatMove,
@@ -59,7 +60,10 @@ import {
   fighterActionGroup,
   getFighterKit,
   getFighterMovement,
+  getKitMoveProfile,
+  listFighterFrameData,
   listFighterMoves,
+  prettyProfileName,
   recognizeFighterCommand,
 } from "./engine/fighter-kits.mjs";
 import {
@@ -138,10 +142,12 @@ import {
   BUTTON_NAMES,
   DEFAULT_KEY_MAPS,
   DEFAULT_PAD_MAP,
+  LEGEND_DAMAGE_SCALE,
   PAD_BUTTON_LABELS,
   REMAPPABLE_ACTIONS,
   TOURNAMENT_ACTION_PRIORITY,
   applyControlStyle,
+  legendScaledAction,
   detectPadLabelSet,
   formatKeyCode,
   hasFlowSkipInput,
@@ -154,17 +160,31 @@ import {
   resolveFourButtonInput,
 } from "./engine/controls.mjs";
 import {
+  FIGHT_SCHOOL_COACH_LINES,
+  FIGHT_SCHOOL_LESSONS,
   TRAINING_DUMMY_MODES,
+  TRAINING_SLOT_COUNT,
+  awardTrialMedal,
   beginTrainingRecording,
   comboTrialsForFighter,
+  createFightSchoolState,
   createTrainingState,
+  decodeTrainingSlot,
+  encodeTrainingSlot,
+  fighterMedalCounts,
+  fightSchoolLesson,
+  fightSchoolObserve,
+  fightSchoolSnapshot,
   finishTrainingRecording,
+  medalForTrial,
+  normalizeTrialMedals,
   recordTrainingFrame,
   recordTrainingTrialHit,
   resetTrainingScenario,
   selectTrainingTrial,
   trainingDummyInput,
   trainingSnapshot,
+  trialDemoScript,
 } from "./engine/training.mjs";
 import {
   auditFighterBalance,
@@ -1127,6 +1147,617 @@ const tallyUi = {
   done: false,
   onContinue: null,
 };
+
+// ===========================================================================
+// R1.9 SCHOOL & POCKET — training & accessibility. Everything in this block
+// is render/meta-side module state on the demoSession pattern: never
+// snapshotted, never read by the checksummed sim. Hooks that run on sim paths
+// are guarded with `if (!rollbackResimulating)` (the announce() pattern) at
+// the call sites.
+// ===========================================================================
+
+// One-shot / live counters for the orchestrator's smoke tests (violence block).
+const trainingFxDebug = {
+  frameMeterTicks: 0,
+  motionFlashes: 0,
+  assistRecolors: 0,
+  schoolSteps: 0,
+  slotSaves: 0,
+  slotLoads: 0,
+  trialDemoRuns: 0,
+  medalAwards: 0,
+};
+
+// --- Color assist for canvas-drawn cues ------------------------------------
+// The DOM already reskins via body[data-color-assist] CSS variables; these are
+// the canvas render paths that used to keep hardcoded hues. Standard palette
+// returns the caller's original color so nothing changes for everyone else.
+const ASSIST_CANVAS_PALETTES = Object.freeze({
+  deuteranopia: Object.freeze({
+    hurtboxP1: "#39a9ff", hurtboxP2: "#ffffff", pushbox: "#b9a5ff", hitbox: "#ff8c00",
+    low: "#ffd166", overhead: "#ff6b35", dizzy: "#ffe066", dizzyAlt: "#ffffff", crush: "#82cfff",
+    frameStartup: "#39a9ff", frameActive: "#ff8c00", frameRecovery: "#9aa5b1", frameStun: "#ffd166",
+  }),
+  protanopia: Object.freeze({
+    hurtboxP1: "#36c8d8", hurtboxP2: "#ffffff", pushbox: "#c5b3ff", hitbox: "#f0a01e",
+    low: "#ffe066", overhead: "#f08a24", dizzy: "#ffe680", dizzyAlt: "#ffffff", crush: "#7cd4e8",
+    frameStartup: "#36c8d8", frameActive: "#f0a01e", frameRecovery: "#9aa5b1", frameStun: "#ffe066",
+  }),
+  tritanopia: Object.freeze({
+    hurtboxP1: "#4ce6c4", hurtboxP2: "#ff4f8b", pushbox: "#d8e34a", hitbox: "#ff5c39",
+    low: "#d8e34a", overhead: "#ff4f8b", dizzy: "#ffb3c8", dizzyAlt: "#ffffff", crush: "#4ce6c4",
+    frameStartup: "#4ce6c4", frameActive: "#ff5c39", frameRecovery: "#9aa5b1", frameStun: "#d8e34a",
+  }),
+});
+
+function assistColor(role, fallback) {
+  const palette = ASSIST_CANVAS_PALETTES[state.accessibility.colorAssist];
+  if (!palette || !palette[role]) return fallback;
+  trainingFxDebug.assistRecolors += 1;
+  return palette[role];
+}
+
+function colorAssistActive() {
+  return Boolean(ASSIST_CANVAS_PALETTES[state.accessibility.colorAssist]);
+}
+
+// --- Frame meter strip (training lab) --------------------------------------
+// One cell per simulation tick per fighter, fed once per NEW tick from
+// updateTrainingUi (which already early-returns during resimulation).
+const FRAME_METER_CELLS = 120;
+const frameMeter = {
+  history: [[], []],
+  lastTick: -1,
+};
+
+function trainingFramePhase(fighter) {
+  if (!fighter) return "idle";
+  if (fighter.dizzyFrames > 0 || fighter.hitstunFrames > 0) return "hitstun";
+  if (fighter.blockstunFrames > 0) return "blockstun";
+  const move = fighter.attacking;
+  if (move) {
+    if (fighter.attackFrame < move.activeStartFrame) return "startup";
+    if (fighter.attackFrame < move.activeEndFrame) return "active";
+    return "recovery";
+  }
+  return "idle";
+}
+
+function feedFrameMeter() {
+  if (state.simulationTick === frameMeter.lastTick) return;
+  frameMeter.lastTick = state.simulationTick;
+  for (const side of [0, 1]) {
+    const history = frameMeter.history[side];
+    history.push(trainingFramePhase(state.fighters[side]));
+    if (history.length > FRAME_METER_CELLS) history.shift();
+  }
+  trainingFxDebug.frameMeterTicks += 1;
+}
+
+// --- Arcade-style input history column -------------------------------------
+const INPUT_COLUMN_ROWS = 12;
+const inputColumn = {
+  rows: [],
+  lastKey: "",
+  flash: null,
+  renderedStamp: "",
+};
+
+function inputColumnDirection(input) {
+  const left = Boolean(input.left);
+  const right = Boolean(input.right);
+  const down = Boolean(input.down);
+  const up = Boolean(input.up || input.jump);
+  if (up && left) return "↖";
+  if (up && right) return "↗";
+  if (up) return "↑";
+  if (down && left) return "↙";
+  if (down && right) return "↘";
+  if (down) return "↓";
+  if (left) return "←";
+  if (right) return "→";
+  return "";
+}
+
+function inputColumnButtons(input) {
+  const buttons = [];
+  if (input.fourButton) {
+    for (const button of ATTACK_BUTTONS) {
+      if (input[button] || input[`${button}Held`]) buttons.push(button.toUpperCase());
+    }
+  } else {
+    const kick = input.limb === "kick";
+    if (input.light) buttons.push(kick ? "LK" : "LP");
+    if (input.heavy) buttons.push(kick ? "HK" : "HP");
+    if (input.special || input.commandSpecial || input.backSpecial) buttons.push("SP");
+    if (input.launcher) buttons.push("LN");
+    if (input.driveHeavy) buttons.push("DH");
+    if (input.enhanced) buttons.push("EX");
+    if (input.throw || input.throwObject) buttons.push("TH");
+    if (input.super) buttons.push("SU");
+    if (input.final) buttons.push("FB");
+  }
+  return buttons.slice(0, 4);
+}
+
+function feedInputColumn(input = {}) {
+  const dir = inputColumnDirection(input);
+  const buttons = inputColumnButtons(input);
+  if (!dir && !buttons.length) {
+    inputColumn.lastKey = "";
+    return;
+  }
+  const key = `${dir}|${buttons.join("+")}`;
+  const head = inputColumn.rows[0];
+  if (key === inputColumn.lastKey && head) {
+    head.frames = Math.min(99, head.frames + 1);
+    return;
+  }
+  inputColumn.lastKey = key;
+  inputColumn.rows.unshift({ dir, buttons, frames: 1 });
+  if (inputColumn.rows.length > INPUT_COLUMN_ROWS) inputColumn.rows.pop();
+}
+
+// Motion-recognition flash: latched from prepareFighterInput when a command is
+// consumed (guarded at the call site), shown as a green chip + green rows.
+let inputColumnFlash = null;
+
+function latchInputColumnFlash(action, fighter) {
+  const profile = getKitMoveProfile(fighter?.kitId, action);
+  inputColumnFlash = {
+    label: profile?.moveName || String(action).replace(/([A-Z])/g, " $1").toUpperCase(),
+    at: performance.now(),
+    rows: Math.min(4, inputColumn.rows.length || 1),
+  };
+  trainingFxDebug.motionFlashes += 1;
+}
+
+function renderInputColumn() {
+  const column = $("#inputHistoryColumn");
+  const visible = state.mode === "training" && state.screen === "fight";
+  column.hidden = !visible;
+  if (!visible) return;
+  const flashLive = inputColumnFlash && performance.now() - inputColumnFlash.at < 900;
+  if (!flashLive) inputColumnFlash = null;
+  const stamp = `${inputColumn.rows.map((row) => `${row.dir}${row.buttons.join("")}${row.frames}`).join(";")}|${flashLive ? inputColumnFlash.label : ""}`;
+  if (stamp === inputColumn.renderedStamp) return;
+  inputColumn.renderedStamp = stamp;
+  const rows = inputColumn.rows.map((row, index) => `
+    <div class="input-row${flashLive && index < inputColumnFlash.rows ? " flash" : ""}">
+      <span class="dir">${row.dir || "·"}</span>
+      ${row.buttons.map((button) => `<span class="chip ${button.toLowerCase()}">${button}</span>`).join("")}
+      <span class="held">${row.frames}F</span>
+    </div>`);
+  const flashChip = flashLive ? `<div class="input-flash-chip">✓ ${inputColumnFlash.label}</div>` : "";
+  column.innerHTML = rows.join("") + flashChip;
+}
+
+// --- Combo trial medals ----------------------------------------------------
+const TRIAL_MEDALS_KEY = "final-blow-trial-medals";
+
+function readStoredJson(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key));
+  } catch {
+    return null;
+  }
+}
+
+let trialMedals = normalizeTrialMedals(readStoredJson(TRIAL_MEDALS_KEY));
+
+function saveTrialMedals() {
+  localStorage.setItem(TRIAL_MEDALS_KEY, JSON.stringify(trialMedals));
+}
+
+const MEDAL_GLYPHS = Object.freeze({ bronze: "●", silver: "●", gold: "★" });
+
+function medalMarkup(counts) {
+  const parts = [];
+  if (counts.gold) parts.push(`<i class="medal-gold">★${counts.gold}</i>`);
+  if (counts.silver) parts.push(`<i class="medal-silver">●${counts.silver}</i>`);
+  if (counts.bronze) parts.push(`<i class="medal-bronze">●${counts.bronze}</i>`);
+  return parts.join(" ");
+}
+
+function refreshTrialMedalBadges() {
+  $$("#rosterGrid .fighter-card").forEach((card) => {
+    const fighter = roster[Number(card.dataset.index)];
+    if (!fighter) return;
+    let badge = card.querySelector(".trial-medal-badge");
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "trial-medal-badge";
+      card.append(badge);
+    }
+    const counts = fighterMedalCounts(trialMedals, fighter.id);
+    badge.hidden = counts.total === 0;
+    badge.innerHTML = medalMarkup(counts);
+  });
+}
+
+// --- Authored trial demos (WATCH DEMO) -------------------------------------
+// Feeds the PLAYER seat through the same direct action fields the QA input
+// machinery uses. `forward` frames are mapped onto left/right against the live
+// facing so cross-through specials cannot strand the walk-in.
+const trialDemo = { active: false, frames: [], index: 0, trialName: "" };
+
+function stopTrialDemo(message = "") {
+  if (!trialDemo.active) return;
+  trialDemo.active = false;
+  trialDemo.frames = [];
+  trialDemo.index = 0;
+  if (message) state.training.lastResult = message;
+  const button = $("#trainingTrialDemoButton");
+  if (button) button.textContent = "WATCH DEMO";
+}
+
+function startTrialDemo() {
+  if (state.mode !== "training" || !state.fighters.length) return false;
+  const fighterId = state.fighters[0].kitId;
+  const trial = comboTrialsForFighter(fighterId)[state.training.trialIndex];
+  if (!trial) return false;
+  resetTrainingPosition(false);
+  state.training.dummyMode = "stand";
+  selectTrainingTrial(state.training, fighterId, state.training.trialIndex);
+  state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
+  trialDemo.frames = trialDemoScript(trial);
+  trialDemo.index = 0;
+  trialDemo.active = true;
+  trialDemo.trialName = trial.name;
+  trainingFxDebug.trialDemoRuns += 1;
+  state.training.lastResult = `WATCH · ${trial.name}`;
+  $("#trainingTrialDemoButton").textContent = "STOP DEMO";
+  updateTrainingUi();
+  return true;
+}
+
+function trialDemoInput() {
+  if (!trialDemo.active) return null;
+  if (state.mode !== "training" || state.screen !== "fight") {
+    stopTrialDemo();
+    return null;
+  }
+  const frame = trialDemo.frames[trialDemo.index];
+  trialDemo.index += 1;
+  if (trialDemo.index >= trialDemo.frames.length) stopTrialDemo(`${trialDemo.trialName} · YOUR TURN`);
+  if (!frame) return null;
+  if (frame.forward) {
+    const [player, dummy] = state.fighters;
+    const toward = player && dummy && dummy.x < player.x ? "left" : "right";
+    return { [toward]: true };
+  }
+  return { ...frame };
+}
+
+// --- Situation slots -------------------------------------------------------
+const TRAINING_SLOT_KEY_PREFIX = "final-blow-training-slot-";
+
+const situationSlots = Array.from({ length: TRAINING_SLOT_COUNT }, (_, index) => (
+  decodeTrainingSlot(localStorage.getItem(`${TRAINING_SLOT_KEY_PREFIX}${index}`))
+));
+
+function refreshSituationSlotButtons() {
+  $$("[data-slot-load]").forEach((button) => {
+    const index = Number(button.dataset.slotLoad);
+    const filled = Boolean(situationSlots[index]);
+    button.disabled = !filled;
+    button.classList.toggle("filled", filled);
+  });
+}
+
+function saveSituationSlot(index) {
+  if (state.mode !== "training" || state.screen !== "fight") return false;
+  if (!Number.isInteger(index) || index < 0 || index >= TRAINING_SLOT_COUNT) return false;
+  const encoded = encodeTrainingSlot({
+    state: serializeRollbackState(saveRollbackState()),
+    stage: state.stage,
+    dummyMode: state.training.dummyMode,
+    recording: state.training.recording,
+    savedAt: Date.now(),
+  });
+  if (!encoded) return false;
+  localStorage.setItem(`${TRAINING_SLOT_KEY_PREFIX}${index}`, encoded);
+  situationSlots[index] = decodeTrainingSlot(encoded);
+  trainingFxDebug.slotSaves += 1;
+  state.training.lastResult = `SITUATION SAVED · SLOT ${index + 1}`;
+  refreshSituationSlotButtons();
+  updateTrainingUi();
+  return true;
+}
+
+function loadSituationSlot(index) {
+  if (state.mode !== "training" || state.screen !== "fight") return false;
+  const slot = situationSlots[index];
+  if (!slot) return false;
+  stopTrialDemo();
+  let parsed = null;
+  try {
+    parsed = parseRollbackState(slot.state);
+  } catch {
+    return false;
+  }
+  const previousStage = state.stage;
+  try {
+    restoreRollbackState(parsed);
+  } catch {
+    return false;
+  }
+  // Offline the fixed-step clock owns the tick counter, so it must resume
+  // from the snapshot's tick or every restored frame-relative counter
+  // (buffers, combo gaps, taunt windows) would sit in the wrong tick domain.
+  simulationClock.tick = state.simulationTick;
+  state.training.dummyMode = slot.dummyMode;
+  state.training.recording = slot.recording.map((frame) => ({ ...frame }));
+  state.training.recordingActive = false;
+  state.training.playbackFrame = 0;
+  state.training.guardAfterTriggered = false;
+  state.training.reversalArmed = false;
+  state.training.lastResult = `SITUATION LOADED · SLOT ${index + 1}`;
+  trainingFxDebug.slotLoads += 1;
+  if (state.stage !== previousStage) {
+    updateStageUI();
+    resetCrowd();
+  }
+  updateHud();
+  updateComboState();
+  updateTrainingUi();
+  return true;
+}
+
+// --- FIGHT SCHOOL ----------------------------------------------------------
+const SCHOOL_STORAGE_KEY = "final-blow-fight-school";
+
+const schoolSession = {
+  active: false,
+  machine: null,
+  savedDifficulty: "",
+  pendingSetup: null,
+  dizzyCooldownTick: -Infinity,
+  coachLast: {},
+};
+
+function loadSchoolProgress() {
+  const raw = readStoredJson(SCHOOL_STORAGE_KEY);
+  const completed = {};
+  if (raw?.completed && typeof raw.completed === "object") {
+    for (const lesson of FIGHT_SCHOOL_LESSONS) {
+      if (raw.completed[lesson.id]) completed[lesson.id] = true;
+    }
+  }
+  return { completed, graduated: Boolean(raw?.graduated) };
+}
+
+function saveSchoolProgress() {
+  if (!schoolSession.machine) return;
+  localStorage.setItem(SCHOOL_STORAGE_KEY, JSON.stringify({
+    version: 1,
+    completed: schoolSession.machine.completed,
+    graduated: schoolSession.machine.graduated,
+  }));
+}
+
+// Philly corner-man lines, drawn with a per-pool no-repeat latch so a line
+// can never land back-to-back. visualRandom only — never state.rng here.
+function schoolCoach(pool) {
+  const lines = FIGHT_SCHOOL_COACH_LINES[pool] || [];
+  if (!lines.length) return "";
+  if (lines.length === 1) return lines[0];
+  let pick = Math.floor(visualRandom() * lines.length) % lines.length;
+  if (pick === schoolSession.coachLast[pool]) pick = (pick + 1) % lines.length;
+  schoolSession.coachLast[pool] = pick;
+  return lines[pick];
+}
+
+let schoolPanelStamp = "";
+
+function renderSchoolPanel() {
+  const panel = $("#schoolPanel");
+  const visible = schoolSession.active && state.mode === "training" && state.screen === "fight";
+  panel.hidden = !visible;
+  if (!visible) {
+    schoolPanelStamp = "";
+    return;
+  }
+  const snapshot = fightSchoolSnapshot(schoolSession.machine);
+  const stamp = `${snapshot.lesson}:${snapshot.step}:${snapshot.graduated}`;
+  if (stamp === schoolPanelStamp) return;
+  schoolPanelStamp = stamp;
+  $("#schoolLessonCounter").textContent = snapshot.graduated
+    ? "GRADUATED"
+    : `LESSON ${Math.min(snapshot.lesson + 1, snapshot.lessonCount)} / ${snapshot.lessonCount}`;
+  $("#schoolLessonName").textContent = snapshot.lessonName;
+  const lesson = fightSchoolLesson(schoolSession.machine);
+  $("#schoolLessonIntro").textContent = lesson?.intro || "Every page of the book, landed. Class dismissed.";
+  $("#schoolSteps").innerHTML = snapshot.steps.map((step, index) => (
+    `<span class="${step.complete ? "done" : index === snapshot.step ? "next" : ""}">${step.label}</span>`
+  )).join("");
+}
+
+// Builds the scripted dummy attack loop for the guard lessons: walk toward the
+// player, swing the scripted attack, breathe, repeat — through the exact
+// sanitized-recording playback path the lab already ships.
+function schoolDummyScript(script) {
+  const frames = [];
+  for (let index = 0; index < 42; index += 1) frames.push({ left: true });
+  if (script === "low") frames.push({ down: true, heavy: true });
+  else frames.push({ left: true, heavy: true });
+  for (let index = 0; index < 66; index += 1) frames.push({});
+  return frames;
+}
+
+function applySchoolStepSetup() {
+  if (!schoolSession.active || !schoolSession.machine) return;
+  const lesson = fightSchoolLesson(schoolSession.machine);
+  const step = lesson?.steps[schoolSession.machine.step];
+  if (!lesson) return;
+  if (step?.dummyScript) {
+    state.training.recording = schoolDummyScript(step.dummyScript).map((frame) => ({ ...frame }));
+    state.training.recordingActive = false;
+    state.training.playbackFrame = 0;
+    state.training.dummyMode = "playback";
+  } else {
+    state.training.dummyMode = "cpu";
+  }
+  if (lesson.setup === "dizzy") {
+    schoolSession.pendingSetup = "dizzy";
+  } else if (lesson.setup === "lowHealth") {
+    state.training.autoRecover = false;
+    schoolSession.pendingSetup = "lowHealth";
+  } else {
+    state.training.autoRecover = true;
+    schoolSession.pendingSetup = null;
+  }
+  updateTrainingUi();
+}
+
+function applySchoolLessonSetup() {
+  if (!schoolSession.active) return;
+  resetTrainingPosition(false);
+  applySchoolStepSetup();
+}
+
+function exitFightSchool({ toTitle = false } = {}) {
+  if (!schoolSession.active) return;
+  schoolSession.active = false;
+  schoolSession.pendingSetup = null;
+  stopTrialDemo();
+  if (schoolSession.savedDifficulty) setAiDifficulty(schoolSession.savedDifficulty);
+  if (state.mode === "training") {
+    state.training.autoRecover = true;
+    state.training.dummyMode = "stand";
+  }
+  $("#schoolPanel").hidden = true;
+  if (!toTitle) updateTrainingUi();
+}
+
+function startFightSchool() {
+  unlockAudio();
+  exitDemo?.();
+  state.mode = "training";
+  state.arcadeRun = null;
+  state.survivalRun = null;
+  state.teamBattle = null;
+  dailySession.active = false;
+  endScoreRun();
+  const progress = loadSchoolProgress();
+  const firstOpen = FIGHT_SCHOOL_LESSONS.findIndex((lesson) => !progress.completed[lesson.id]);
+  state.picks = [0, 1];
+  state.locks = [true, true];
+  startMatch(true);
+  state.phase = "fight";
+  state.phaseTime = 0;
+  schoolSession.machine = createFightSchoolState({
+    lesson: firstOpen < 0 ? 0 : firstOpen,
+    completed: firstOpen < 0 ? {} : progress.completed,
+  });
+  schoolSession.active = true;
+  schoolSession.savedDifficulty = state.aiDifficulty;
+  schoolSession.coachLast = {};
+  setAiDifficulty("passive");
+  state.training.dummyMode = "cpu";
+  state.training.infiniteGrit = true;
+  state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
+  applySchoolLessonSetup();
+  renderSchoolPanel();
+  const lesson = fightSchoolLesson(schoolSession.machine);
+  announce(lesson ? lesson.name : "FIGHT SCHOOL", schoolCoach("start"), 2.4);
+  updateTrainingUi();
+}
+
+// COMBO TRIALS quick entry: boots the lab with the locked trial dummy config
+// (standing dummy, infinite Grit) using the current fighter picks.
+function startComboTrialsLab() {
+  unlockAudio();
+  schoolSession.active = false;
+  $("#schoolPanel").hidden = true;
+  state.mode = "training";
+  state.arcadeRun = null;
+  state.survivalRun = null;
+  state.teamBattle = null;
+  dailySession.active = false;
+  endScoreRun();
+  startMatch(true);
+  state.phase = "fight";
+  state.phaseTime = 0;
+  state.training.dummyMode = "stand";
+  state.training.infiniteGrit = true;
+  state.fighters.forEach((fighter) => { fighter.meter = GRIT_RULES.maximum; });
+  selectTrainingTrial(state.training, state.fighters[0].kitId, 0);
+  announce("COMBO TRIALS", "PICK A TRIAL · WATCH THE DEMO · EARN MEDALS", 1.8);
+  updateTrainingUi();
+}
+
+// R1.9 LEGEND: the touch HUD advertises the one-button jobs (CSS badges via
+// the data attribute, semantics via aria labels).
+function syncTouchControlStyle() {
+  $("#touchControls").dataset.controlStyle = state.controlStyle;
+  const legend = state.controlStyle === "legend";
+  $(".touch-hp").setAttribute("aria-label", legend
+    ? "Special attack, or super at full Grit"
+    : "Heavy punch, hook");
+  $(".touch-hk").setAttribute("aria-label", legend
+    ? "Kick special"
+    : "Heavy kick, roundhouse");
+}
+
+/**
+ * School progress fold. Called from guarded hook points (hit/block/finisher on
+ * sim paths behind !rollbackResimulating, walk from updateTrainingUi which
+ * already early-returns during resimulation).
+ */
+function schoolEvent(event) {
+  if (!schoolSession.active || !schoolSession.machine) return;
+  if (state.mode !== "training") return;
+  const progress = fightSchoolObserve(schoolSession.machine, event);
+  if (!progress) return;
+  trainingFxDebug.schoolSteps += 1;
+  saveSchoolProgress();
+  if (progress.graduated) {
+    announce("SCHOOL'S OUT", schoolCoach("graduate"), 2.6);
+    state.training.autoRecover = true;
+    // v2.1 PROGRESSION: graduation inks THE GRADUATE (ledger dedupes).
+    progressionEvent("fightSchool");
+    progressionEvaluateLedger();
+  } else if (progress.lessonComplete) {
+    const next = fightSchoolLesson(schoolSession.machine);
+    announce(next ? next.name : "FIGHT SCHOOL", schoolCoach("lesson"), 2.3);
+    applySchoolLessonSetup();
+  } else {
+    announce("NICE", schoolCoach("step"), 1.5);
+    applySchoolStepSetup();
+  }
+  renderSchoolPanel();
+}
+
+// Per-tick school observation: walking drills, the panel/dummy babysitting and
+// the deferred sim-side setups (dizzy stun, low-health KO dummy).
+function schoolTick() {
+  if (!schoolSession.active) return;
+  if (state.mode !== "training" || state.screen !== "fight") {
+    exitFightSchool({ toTitle: true });
+    return;
+  }
+  const machine = schoolSession.machine;
+  const lesson = fightSchoolLesson(machine);
+  const step = lesson?.steps[machine.step];
+  const [player, dummy] = state.fighters;
+  if (schoolSession.pendingSetup === "dizzy" && dummy
+    && state.simulationTick - schoolSession.dizzyCooldownTick > 90) {
+    if (dummy.dizzyFrames <= 0 && !dummy.down && dummy.wakeupFrames <= 0) {
+      enterDizzy(dummy, player);
+      schoolSession.dizzyCooldownTick = state.simulationTick;
+    }
+  }
+  if (schoolSession.pendingSetup === "lowHealth" && dummy && dummy.health > 5 && state.phase === "fight") {
+    dummy.health = 5;
+    updateHud();
+  }
+  if (step?.kind === "walk" && player && player.grounded && !player.attacking
+    && player.hitstunFrames <= 0 && player.blockstunFrames <= 0 && Math.abs(player.vx) > 40) {
+    const direction = Math.sign(player.vx) === player.facing ? "forward" : "back";
+    schoolEvent({ type: "walk", direction });
+  }
+}
 const initialsUi = {
   active: false,
   letters: ["A", "A", "A"],
@@ -4286,16 +4917,38 @@ function setupRoster() {
   });
   // v2.1 PROGRESSION: mastery chips on the fresh cards.
   refreshMasteryBadges();
+  // R1.9: combo-trial medal readout per fighter card.
+  refreshTrialMedalBadges();
   updateRosterUI();
 }
+
+// R1.9: the move list is a live frame-data reference now. Rows come from
+// listFighterFrameData — real attack instances, post-ARCADE_TUNING — so the
+// dialog can never drift from the sim. Level chips give LOW/OH/MID/THROW at a
+// glance (text + color, never hue alone).
+const MOVE_LEVEL_TAGS = Object.freeze({
+  mid: "MID", low: "LOW", overhead: "OH", throw: "THROW", air: "AIR",
+});
 
 function renderMoveList(fighterId = "deathblow") {
   const kit = getFighterKit(fighterId);
   if (!kit) return;
   $("#moveListIdentity").innerHTML = `<strong>${kit.archetype}</strong> · ${kit.summary}`;
-  $("#moveListRows").innerHTML = listFighterMoves(fighterId)
-    .map(({ name, command }) => `<div class="move-list-row"><b>${name}</b><span>${command}</span></div>`)
-    .join("");
+  const signed = (value) => `${value >= 0 ? "+" : ""}${value}`;
+  const rows = listFighterFrameData(fighterId).map((row) => `
+    <div class="move-list-row frame-row">
+      <b>${row.name}</b>
+      <span>${row.command}</span>
+      <span class="sar">${row.startup} / ${row.active} / ${row.recovery}</span>
+      <span class="sar">${row.level === "throw" ? "—" : `${signed(row.onHit)} / ${signed(row.onBlock)}`}</span>
+      <span class="sar">${row.damage}</span>
+      <em class="level-chip lvl-${row.level}">${MOVE_LEVEL_TAGS[row.level] || row.level.toUpperCase()}</em>
+    </div>`);
+  $("#moveListRows").className = "move-list-rows frame-data";
+  $("#moveListRows").innerHTML = `
+    <div class="move-list-row frame-head">
+      <b>MOVE</b><span>COMMAND</span><span>S / A / R</span><span>HIT / BLOCK</span><span>DMG</span><span>LVL</span>
+    </div>` + rows.join("");
 }
 
 function arcadeOpponentDef(match = currentArcadeMatch(state.arcadeRun)) {
@@ -4961,6 +5614,10 @@ function showScreen(name) {
   const trainingVisible = playing && state.mode === "training";
   $("#trainingPanel").hidden = !trainingVisible;
   $("#gameFrame").classList.toggle("training-active", trainingVisible);
+  // R1.9: the input column and school panel live and die with the lab.
+  $("#inputHistoryColumn").hidden = !trainingVisible;
+  if (!trainingVisible) $("#schoolPanel").hidden = true;
+  else renderSchoolPanel();
   const playerControlled = playing && state.mode !== "demo";
   $("#touchControls").classList.toggle("playing", playerControlled);
   $("#touchPauseButton").classList.toggle("playing", playerControlled);
@@ -6494,11 +7151,20 @@ function renderTrainingTrials() {
   const trials = comboTrialsForFighter(fighterId);
   const select = $("#trainingTrialSelect");
   if (state.training.trialFighterId !== fighterId) selectTrainingTrial(state.training, fighterId, 0);
-  if (select.dataset.fighterId !== fighterId) {
+  // R1.9: options carry the tier tag + a check for earned medals, so the
+  // rebuild key includes the medal count for this fighter.
+  const counts = fighterMedalCounts(trialMedals, fighterId);
+  const stamp = `${fighterId}:${counts.total}`;
+  if (select.dataset.stamp !== stamp) {
+    select.dataset.stamp = stamp;
     select.dataset.fighterId = fighterId;
-    select.innerHTML = trials.map((trial, index) => `<option value="${index}">${index + 1} · ${trial.name}</option>`).join("");
+    select.innerHTML = trials.map((trial, index) => {
+      const medal = medalForTrial(trialMedals, fighterId, trial.id);
+      return `<option value="${index}">${index + 1} · ${trial.name} · ${trial.tier.toUpperCase()}${medal ? " ✓" : ""}</option>`;
+    }).join("");
   }
   select.value = String(state.training.trialIndex);
+  $("#trainingTrialMedals").innerHTML = counts.total ? medalMarkup(counts) : "";
 }
 
 function updateTrainingUi(input = {}) {
@@ -6507,6 +7173,14 @@ function updateTrainingUi(input = {}) {
   const [player] = state.fighters;
   const combo = player.combo.snapshot(state.simulationTick);
   if (combo.damage > 0) state.training.lastDamage = combo.damage;
+  // R1.9: per-tick training feeds — frame meter cells, the arcade input
+  // column, and the FIGHT SCHOOL walk/setup babysitter. All render-side; this
+  // function already early-returns during rollback resimulation.
+  feedFrameMeter();
+  feedInputColumn(input);
+  renderInputColumn();
+  schoolTick();
+  renderSchoolPanel();
   const limbSuffix = input.limb === "kick" ? "K" : "P";
   const labels = [
     ["left", "←"], ["right", "→"], ["down", "↓"], ["jump", "↑"],
@@ -6543,13 +7217,16 @@ function updateTrainingUi(input = {}) {
     : `${snapshot.lastAdvantage >= 0 ? "+" : ""}${snapshot.lastAdvantage} ACTUAL`;
   // Release 1.7: Perfect Guard practice readout (player just-defends landed).
   $("#trainingPerfectGuards").textContent = String(snapshot.perfectGuards);
-  $("#trainingInputs").textContent = `INPUT: ${snapshot.inputHistory.join(" › ") || "—"}  //  DUMMY: ${snapshot.dummyMode.toUpperCase()}  //  RESETS: ${snapshot.resets}`;
+  // R1.9: the arcade input column (left edge) replaced the flat INPUT line;
+  // this line keeps the dummy/reset status readout only.
+  $("#trainingInputs").textContent = `DUMMY: ${snapshot.dummyMode.toUpperCase()}  //  RESETS: ${snapshot.resets}  //  ${snapshot.lastResult || "READY"}`;
   $("#trainingTrialSteps").innerHTML = `TRIAL: ${snapshot.trial.steps.map((step, index) => `<span class="${step.complete ? "done" : index === snapshot.trial.step ? "next" : ""}">${step.label}</span>`).join(" › ") || "—"}`;
   $("#trainingTrialStatus").textContent = `${snapshot.trial.status}${snapshot.trial.complete ? ` · ${snapshot.trial.completions} CLEAR` : ""}`;
   $("#trainingDummySelect").value = snapshot.dummyMode;
   $("#trainingRecoverToggle").checked = snapshot.autoRecover;
   $("#trainingGritToggle").checked = snapshot.infiniteGrit;
   $("#trainingHitboxToggle").checked = snapshot.showHitboxes;
+  $("#trainingFrameMeterToggle").checked = snapshot.showFrameMeter;
   $("#trainingRecordButton").textContent = snapshot.recordingActive ? "STOP & PLAY" : "RECORD P2";
   $("#trainingPlaybackButton").disabled = snapshot.recordingFrames === 0;
   $("#trainingPlaybackButton").textContent = snapshot.dummyMode === "playback"
@@ -6735,6 +7412,11 @@ function tryFinish(side, input) {
   // intentionally no distance check: the winner can finish from anywhere.
   const type = state.graphicFatalities ? (input.finisherVariant === 1 ? 1 : 0) : 0;
   finishRound(side, type);
+  // R1.9 FIGHT SCHOOL: the LP/LK Final Blow window lesson validates on the
+  // executed finisher (guarded meta observation, announce() pattern).
+  if (!rollbackResimulating && side === 0 && state.mode === "training") {
+    schoolEvent({ type: "finisher" });
+  }
   return true;
 }
 
@@ -6804,6 +7486,15 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   fighter.attacking = kitMove || (advancedActions.has(action)
     ? createAdvancedMove(action)
     : createCombatMove(action, moveContext));
+  // R1.9 LEGEND: one-button specials trade ~10% damage. Deterministic: the
+  // style is shared match config online (matchConfig.controlStyles) and the
+  // single local setting offline, so both rollback peers scale identically.
+  // CPU-driven seats never pay the tax.
+  if (legendScaledAction(action) && activeControlStyle(fighter.side) === "legend"
+    && !sideIsCpuControlled(fighter.side)) {
+    fighter.attacking.damage = Number((fighter.attacking.damage * LEGEND_DAMAGE_SCALE).toFixed(4));
+    fighter.attacking.chipDamage = Number(((fighter.attacking.chipDamage || 0) * LEGEND_DAMAGE_SCALE).toFixed(4));
+  }
   if (fighter.def.boss) {
     fighter.attacking.damage = Number((fighter.attacking.damage * 1.08).toFixed(4));
     fighter.attacking.chipDamage = Number(((fighter.attacking.chipDamage || 0) * 1.08).toFixed(4));
@@ -6838,21 +7529,18 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
     fighter.attacking.hitstunFrames += flow;
   }
   if (state.mode === "training" && fighter.side === 0) {
+    // R1.9: the S/A/R computation is the shared attackFrameData helper now, so
+    // this readout, the frame meter and the move list all agree by construction.
     const move = fighter.attacking;
-    const startup = Number.isFinite(move.startupFrames) ? move.startupFrames : move.activeStartFrame;
-    const active = Number.isFinite(move.activeFrames)
-      ? move.activeFrames
-      : Math.max(1, move.activeEndFrame - move.activeStartFrame + 1);
-    const recovery = Number.isFinite(move.recoveryFrames)
-      ? move.recoveryFrames
-      : Math.max(0, move.durationFrames - move.activeEndFrame);
+    const data = attackFrameData(move);
     state.training.lastMove = {
-      name: move.moveName || move.profileId || move.kind,
-      startup,
-      active,
-      recovery,
-      onHit: (move.hitstunFrames || 0) - recovery,
-      onBlock: (move.blockstunFrames || 0) - recovery,
+      name: move.moveName || prettyProfileName(move.profileId, fighter.kitId) || move.kind,
+      startup: data.startup,
+      active: data.active,
+      recovery: data.recovery,
+      onHit: data.onHit,
+      onBlock: data.onBlock,
+      level: data.level,
     };
     state.training.lastAdvantage = null;
   }
@@ -7046,7 +7734,12 @@ function prepareFighterInput(fighter, input) {
     normalized.heavy = false;
   }
   for (const action of advancedActions) normalized[action] = Boolean(normalized[action] || source[action]);
-  Object.assign(normalized, applyControlStyle(normalized, activeControlStyle(side), fighter.facing));
+  // R1.9: LEGEND expands its single special pulse against the held direction
+  // here, inside the sim, identically on both rollback peers. The airborne
+  // flag keeps the air special reachable from the one button.
+  Object.assign(normalized, applyControlStyle(normalized, activeControlStyle(side), fighter.facing, {
+    airborne: !fighter.grounded,
+  }));
   recordInput(side, normalized, fighter);
   if (state.phase === "fight") {
     const command = recognizeFighterCommand(
@@ -7068,6 +7761,12 @@ function prepareFighterInput(fighter, input) {
       normalized.heavy = false;
       normalized.enhanced = false;
       commandHistory[side].splice(0, command.endIndex + 1);
+      // R1.9: motion-recognition flash for the training input column — a
+      // render-side latch on the announce() pattern, fired exactly when the
+      // recognizer consumes the tokens.
+      if (!rollbackResimulating && state.mode === "training" && side === 0) {
+        latchInputColumnFlash(command.action, fighter);
+      }
     }
     // A completed motion always beats the proximity grab shortcut, so close-range
     // command specials stay reachable while touching an opponent.
@@ -8423,7 +9122,7 @@ function triggerProjectile(projectile, victim) {
   spawnHit(projectile.x, projectile.y, owner.def, impactTier, blocked, { direction: hitDirection, counter });
   if (projectile.style === "feedback") spawnCombatText(projectile.x, projectile.y - 86, blocked ? "ECHO BLOCK" : "FEEDBACK ECHO!", projectile.color);
   else if (counter) spawnCombatText(projectile.x, projectile.y - 72, "COUNTER", projectile.color);
-  else if (!blocked && projectile.level === ATTACK_LEVELS.LOW) spawnCombatText(projectile.x, projectile.y - 61, "LOW SHOT", projectile.color);
+  else if (!blocked && projectile.level === ATTACK_LEVELS.LOW) spawnCombatText(projectile.x, projectile.y - 61, colorAssistActive() ? "\u25bc LOW SHOT" : "LOW SHOT", assistColor("low", projectile.color));
   applyViolenceResponse(impactTier, { blocked, counter });
   state.lastImpactSide = owner.side;
   projectile.hit = true;
@@ -9026,6 +9725,45 @@ function registerAliFlow(attacker, attack) {
   if (massive && $("#flashToggle").checked) state.flash = Math.max(state.flash, 0.06);
 }
 
+// R1.9: shared trial/school observation for every landed player hit. Lives in
+// one helper because the grab path returns out of hit() before the ordinary
+// flow — throws and throw-type back specials must still advance trials and
+// FIGHT SCHOOL. Sim-visible state is only the trial machine the lab already
+// owned; medals/school are guarded meta on the announce() pattern.
+function observeTrainingHit(attacker, victim, attack) {
+  if (state.mode !== "training" || attacker.side !== 0) return;
+  const action = attack.kitAction || attack.kind;
+  const limb = attack.limb || "punch";
+  const trialProgress = recordTrainingTrialHit(state.training, {
+    fighterId: attacker.kitId,
+    action,
+    limb,
+    attackSerial: attack.attackSerial,
+    frame: state.simulationTick,
+  });
+  if (rollbackResimulating) return;
+  // Medal persistence: first completion of a trial banks its tier medal. Demo
+  // playback completes trials too but never earns the medal.
+  if (trialProgress.complete && !trialDemo.active) {
+    const trial = comboTrialsForFighter(attacker.kitId)[state.training.trialIndex];
+    if (trial && !medalForTrial(trialMedals, attacker.kitId, trial.id)) {
+      awardTrialMedal(trialMedals, attacker.kitId, trial);
+      saveTrialMedals();
+      trainingFxDebug.medalAwards += 1;
+      state.training.lastResult = `${trial.tier.toUpperCase()} MEDAL · ${trial.name}`;
+      refreshTrialMedalBadges();
+    }
+  }
+  schoolEvent({
+    type: "hit",
+    action,
+    limb,
+    attackSerial: attack.attackSerial,
+    back: Boolean(attack.backThrow),
+    dizzy: victim.dizzyFrames > 0,
+  });
+}
+
 function hit(attacker, victim, attack, collision) {
   if (triggerSouthpawCounter(victim, attacker, attack, collision)) return;
   if (attack.level === ATTACK_LEVELS.THROW) {
@@ -9039,6 +9777,7 @@ function hit(attacker, victim, attack, collision) {
     }
     // Release 1.7 wave 11: getting grabbed punishes the taunt too.
     if (victim.tauntFrames > 0) interruptTaunt(victim);
+    observeTrainingHit(attacker, victim, attack);
     beginGrabHold(attacker, victim, attack);
     return;
   }
@@ -9055,14 +9794,13 @@ function hit(attacker, victim, attack, collision) {
   // Release 1.7: Perfect Guard — the block STARTED within the just-defend
   // window of this impact. Purely derived from existing frame counters.
   const perfect = blocked && isPerfectGuard(victim.guardStartedTick, state.simulationTick);
-  if (state.mode === "training" && attacker.side === 0 && !blocked) {
-    recordTrainingTrialHit(state.training, {
-      fighterId: attacker.kitId,
-      action: attack.kitAction || attack.kind,
-      attackSerial: attack.attackSerial,
-      frame: state.simulationTick,
-    });
+  // R1.9 FIGHT SCHOOL: guard lessons validate on the block itself (the
+  // LOW/OVERHEAD combat-text hook level), landed-hit lessons below. Both are
+  // meta observations on the announce() guard pattern.
+  if (!rollbackResimulating && state.mode === "training" && blocked && victim.side === 0) {
+    schoolEvent({ type: "block", level: attack.level });
   }
+  if (!blocked) observeTrainingHit(attacker, victim, attack);
   const armored = !blocked
     && attack.level !== ATTACK_LEVELS.THROW
     && victim.attacking?.armorFrames > 0
@@ -9222,8 +9960,15 @@ function hit(attacker, victim, attack, collision) {
     if ($("#flashToggle").checked) state.flash = Math.max(state.flash, attacker.attackHits >= attack.maxHits ? 0.1 : 0.04);
   }
   if (counter) spawnCombatText(impact.x, impact.y - 74, "COUNTER", attacker.def.accent);
-  else if (!blocked && attack.level === ATTACK_LEVELS.OVERHEAD) spawnCombatText(impact.x, impact.y - 70, "OVERHEAD", attacker.def.accent);
-  else if (!blocked && attack.level === ATTACK_LEVELS.LOW) spawnCombatText(impact.x, impact.y - 64, "LOW", attacker.def.accent);
+  // R1.9 color assist: the two mixup callouts pick up the colorblind-safe
+  // palette plus a distinct glyph each (drop-arrow / down-chevron) so the cue
+  // never rides on hue alone. Standard palette keeps the shipped label text
+  // exactly (smoke tests read combatTextLabels).
+  else if (!blocked && attack.level === ATTACK_LEVELS.OVERHEAD) {
+    spawnCombatText(impact.x, impact.y - 70, colorAssistActive() ? "⤓ OVERHEAD" : "OVERHEAD", assistColor("overhead", attacker.def.accent));
+  } else if (!blocked && attack.level === ATTACK_LEVELS.LOW) {
+    spawnCombatText(impact.x, impact.y - 64, colorAssistActive() ? "▼ LOW" : "LOW", assistColor("low", attacker.def.accent));
+  }
   else if (!blocked && attack.level === ATTACK_LEVELS.THROW) spawnCombatText(impact.x, impact.y - 72, "THROW", attacker.def.accent);
   // Release 1.7: Perfect Guard flash — a cyan ring plus PERFECT combat text
   // (checksum-exempt state.effects, same channel every hit spark uses).
@@ -9246,9 +9991,20 @@ function hit(attacker, victim, attack, collision) {
   state.lastImpactSide = attacker.side;
 }
 
+// R1.9 FIGHT SCHOOL: the Final Blow lesson needs the REAL finish flow, which
+// training otherwise short-circuits. Armed only while the school's finisher
+// step is live and the dummy went down — training is strictly offline, so a
+// meta read here can never touch rollback determinism.
+function schoolFinisherArmed() {
+  if (!schoolSession.active || !schoolSession.machine) return false;
+  const lesson = fightSchoolLesson(schoolSession.machine);
+  return lesson?.steps[schoolSession.machine.step]?.kind === "finisher";
+}
+
 function checkKnockout() {
   if (state.phase !== "fight" || !state.fighters.some((fighter) => fighter.health <= 0)) return;
-  if (state.mode === "training") {
+  if (state.mode === "training"
+    && !(schoolFinisherArmed() && state.fighters[1].health <= 0 && state.fighters[0].health > 0)) {
     const winner = state.fighters[0].health <= 0 ? 1 : 0;
     if (state.training.autoRecover) {
       state.training.lastResult = `${state.fighters[winner].def.name.toUpperCase()} RESET`;
@@ -9824,7 +10580,11 @@ function simulateOfflineGameTick(dt) {
   // presses during the freeze reach the buffer. simulatePreparedGameTick owns
   // the freeze itself and stops everything but the input pipeline.
   const bothCpu = state.mode === "demo" || state.mode === "tournament";
+  // R1.9: a running trial demo drives the player seat through the QA-style
+  // scripted input path (training mode only; readQaInput still outranks it so
+  // probes can interrupt a demo).
   let input0 = readQaInput(0)
+    || trialDemoInput()
     || (bothCpu ? aiInput(state.fighters[0], state.fighters[1], dt) : readInput(0));
   const manualTrainingInput = state.mode === "training" && state.training.dummyMode === "record"
     ? readInput(1) : null;
@@ -14000,7 +14760,7 @@ function drawDizzyStars(fighter, time) {
     const x = centreX + Math.cos(angle) * 52;
     const y = centreY + Math.sin(angle) * 15;
     const size = 7 + Math.sin(angle * 2) * 2.4;
-    ctx.fillStyle = index % 2 ? "#ffd54a" : "#fff2b8";
+    ctx.fillStyle = index % 2 ? assistColor("dizzy", "#ffd54a") : assistColor("dizzyAlt", "#fff2b8");
     ctx.beginPath();
     for (let point = 0; point < 10; point += 1) {
       const radius = point % 2 ? size * 0.44 : size;
@@ -14016,7 +14776,7 @@ function drawDizzyStars(fighter, time) {
   ctx.globalAlpha = 1;
   ctx.font = "900 20px system-ui, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillStyle = "#ffd54a";
+  ctx.fillStyle = assistColor("dizzy", "#ffd54a");
   ctx.strokeStyle = "rgba(0,0,0,.72)";
   ctx.lineWidth = 4;
   ctx.strokeText("DIZZY", centreX, centreY - 30);
@@ -14024,7 +14784,7 @@ function drawDizzyStars(fighter, time) {
   // A thin drain bar shows the dizzy running out, so the punish window is legible.
   ctx.fillStyle = "rgba(0,0,0,.55)";
   ctx.fillRect(centreX - 34, centreY - 22, 68, 5);
-  ctx.fillStyle = "#ffd54a";
+  ctx.fillStyle = assistColor("dizzy", "#ffd54a");
   ctx.fillRect(centreX - 34, centreY - 22, 68 * remaining, 5);
   ctx.restore();
 }
@@ -14046,7 +14806,7 @@ function drawGuardCrushMarker(fighter, time) {
     const x = centreX + Math.cos(angle) * 50;
     const y = centreY + Math.sin(angle) * 14;
     const size = 6 + Math.sin(angle * 2) * 2;
-    ctx.fillStyle = index % 2 ? "#7de8ff" : "#d8f9ff";
+    ctx.fillStyle = index % 2 ? assistColor("crush", "#7de8ff") : "#d8f9ff";
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle * 1.7);
@@ -14061,14 +14821,14 @@ function drawGuardCrushMarker(fighter, time) {
   ctx.globalAlpha = 1;
   ctx.font = "900 20px system-ui, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillStyle = "#7de8ff";
+  ctx.fillStyle = assistColor("crush", "#7de8ff");
   ctx.strokeStyle = "rgba(0,0,0,.72)";
   ctx.lineWidth = 4;
   ctx.strokeText("CRUSHED", centreX, centreY - 30);
   ctx.fillText("CRUSHED", centreX, centreY - 30);
   ctx.fillStyle = "rgba(0,0,0,.55)";
   ctx.fillRect(centreX - 34, centreY - 22, 68, 5);
-  ctx.fillStyle = "#7de8ff";
+  ctx.fillStyle = assistColor("crush", "#7de8ff");
   ctx.fillRect(centreX - 34, centreY - 22, 68 * remaining, 5);
   ctx.restore();
 }
@@ -14893,6 +15653,71 @@ function drawFinisherOverlay() {
   }
 }
 
+// R1.9: hex + alpha helper for the viewer's translucent fills.
+function fillWithAlpha(hex, alpha) {
+  const value = parseInt(String(hex).replace("#", ""), 16);
+  if (!Number.isFinite(value)) return `rgba(255,255,255,${alpha})`;
+  return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
+}
+
+const FRAME_PHASE_ROLES = Object.freeze({
+  startup: ["frameStartup", "#59d66d"],
+  active: ["frameActive", "#ff4d5e"],
+  recovery: ["frameRecovery", "#3fa7ff"],
+  hitstun: ["frameStun", "#ffd54a"],
+  blockstun: ["frameStun", "#b8985a"],
+});
+
+function framePhaseColor(phase) {
+  const entry = FRAME_PHASE_ROLES[phase];
+  if (!entry) return "#252c35";
+  return assistColor(entry[0], entry[1]);
+}
+
+/**
+ * R1.9: SFV-style frame meter strip — one cell per simulation tick per
+ * fighter, colored startup/active/recovery/stun, with the measured ADVANTAGE
+ * number rendered at the live edge. Render-only, fed by feedFrameMeter(),
+ * gated behind the FRAME METER training toggle.
+ */
+function drawTrainingFrameMeter() {
+  if (state.mode !== "training" || !state.training.showFrameMeter) return;
+  if (state.screen !== "fight" || state.fighters.length !== 2) return;
+  const cellWidth = 7;
+  const cellHeight = 13;
+  const originX = 150;
+  const width = FRAME_METER_CELLS * (cellWidth + 1) + 12;
+  const originY = H - 104;
+  ctx.save();
+  ctx.fillStyle = "rgba(3,8,13,.82)";
+  ctx.fillRect(originX - 34, originY - 8, width + 116, cellHeight * 2 + 30);
+  ctx.strokeStyle = "rgba(78,221,245,.5)";
+  ctx.strokeRect(originX - 34, originY - 8, width + 116, cellHeight * 2 + 30);
+  ctx.font = "900 11px ui-monospace, monospace";
+  ctx.textBaseline = "top";
+  for (const side of [0, 1]) {
+    const history = frameMeter.history[side];
+    const rowY = originY + side * (cellHeight + 4);
+    ctx.fillStyle = side === 0
+      ? assistColor("hurtboxP1", "#35e7ff")
+      : assistColor("hurtboxP2", "#ff4dc4");
+    ctx.fillText(`P${side + 1}`, originX - 28, rowY + 2);
+    for (let index = 0; index < history.length; index += 1) {
+      const phase = history[index];
+      ctx.fillStyle = phase === "idle" ? "#1c232c" : framePhaseColor(phase);
+      ctx.fillRect(originX + index * (cellWidth + 1), rowY, cellWidth, cellHeight);
+    }
+  }
+  const advantage = state.training.lastAdvantage;
+  if (Number.isFinite(advantage)) {
+    ctx.fillStyle = advantage >= 0
+      ? assistColor("frameStartup", "#71f7a1")
+      : assistColor("frameActive", "#ff6478");
+    ctx.fillText(`${advantage >= 0 ? "+" : ""}${advantage}`, originX + width - 4, originY + 8);
+  }
+  ctx.restore();
+}
+
 function drawDebugOverlay() {
   const trainingBoxes = state.mode === "training" && state.training.showHitboxes;
   if (!state.debug && !trainingBoxes) return;
@@ -14901,17 +15726,90 @@ function drawDebugOverlay() {
   ctx.font = "700 14px ui-monospace, SFMono-Regular, Menlo, monospace";
   ctx.textBaseline = "top";
 
+  // R1.9 viewer polish: dashed hurtboxes with translucent phase-colored fills
+  // (startup/active/recovery from the live move), solid filled hitboxes with
+  // attack-level tags, dotted pushbox, and the proximity-grab ring — all
+  // through assistColor so the colorblind palettes reach the canvas too.
   for (const fighter of state.fighters) {
-    const hurtColor = fighter.side === 0 ? "#35e7ff" : "#ff4dc4";
+    const phase = trainingFramePhase(fighter);
+    const hurtColor = fighter.side === 0
+      ? assistColor("hurtboxP1", "#35e7ff")
+      : assistColor("hurtboxP2", "#ff4dc4");
+    ctx.setLineDash([6, 4]);
     ctx.strokeStyle = hurtColor;
-    for (const box of getHurtboxes(fighter)) ctx.strokeRect(box.x, box.y, box.width, box.height);
-    ctx.strokeStyle = "rgba(110,255,125,.88)";
+    const phaseTint = fighter.attacking ? framePhaseColor(phase) : null;
+    for (const box of getHurtboxes(fighter)) {
+      if (phaseTint) {
+        ctx.fillStyle = fillWithAlpha(phaseTint, 0.16);
+        ctx.fillRect(box.x, box.y, box.width, box.height);
+      }
+      ctx.strokeRect(box.x, box.y, box.width, box.height);
+    }
+    ctx.setLineDash([2, 3]);
+    ctx.strokeStyle = fillWithAlpha(assistColor("pushbox", "#6eff7d"), 0.88);
     const pushHalf = fighter.crouch
       ? fighter.movement.crouchingPushboxHalfWidth
       : fighter.movement.standingPushboxHalfWidth;
     ctx.strokeRect(fighter.x - pushHalf, fighter.y - 112, pushHalf * 2, 112);
-    ctx.strokeStyle = "#ffef5a";
-    for (const box of getActiveHitboxes(fighter)) ctx.strokeRect(box.x, box.y, box.width, box.height);
+    ctx.setLineDash([]);
+    const hitColor = assistColor("hitbox", "#ffef5a");
+    ctx.strokeStyle = hitColor;
+    ctx.fillStyle = fillWithAlpha(hitColor, 0.3);
+    let levelTagged = false;
+    for (const box of getActiveHitboxes(fighter)) {
+      ctx.fillRect(box.x, box.y, box.width, box.height);
+      ctx.strokeRect(box.x, box.y, box.width, box.height);
+      if (!levelTagged && fighter.attacking) {
+        levelTagged = true;
+        ctx.font = "900 12px ui-monospace, monospace";
+        ctx.fillStyle = "#0b0e14";
+        ctx.fillRect(box.x, box.y - 15, 9 * String(fighter.attacking.level).length + 8, 14);
+        ctx.fillStyle = hitColor;
+        ctx.fillText(String(fighter.attacking.level).toUpperCase(), box.x + 4, box.y - 14);
+        ctx.font = "700 14px ui-monospace, SFMono-Regular, Menlo, monospace";
+      }
+    }
+  }
+
+  if (trainingBoxes && state.fighters.length === 2) {
+    // 104px proximity-grab ring around the player, the same rule the grab
+    // hint reads — lights up exactly when a grab would connect.
+    const [player, opponent] = state.fighters;
+    const grabReady = inProximityGrabRange(player, opponent) && !player.attacking;
+    ctx.setLineDash(grabReady ? [] : [7, 6]);
+    ctx.lineWidth = grabReady ? 3 : 2;
+    ctx.strokeStyle = grabReady
+      ? assistColor("frameStartup", "#71f7a1")
+      : "rgba(255,255,255,.4)";
+    ctx.beginPath();
+    ctx.ellipse(player.x, player.y - 6, PROXIMITY_GRAB_RANGE, PROXIMITY_GRAB_RANGE * 0.24, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineWidth = 2;
+    // On-canvas legend for the viewer.
+    const legend = [
+      ["STARTUP", framePhaseColor("startup")],
+      ["ACTIVE", framePhaseColor("active")],
+      ["RECOVERY", framePhaseColor("recovery")],
+      ["HITBOX", assistColor("hitbox", "#ffef5a")],
+      ["HURTBOX P1", assistColor("hurtboxP1", "#35e7ff")],
+      ["HURTBOX P2", assistColor("hurtboxP2", "#ff4dc4")],
+      ["GRAB RING 104PX", "#ffffff"],
+    ];
+    // Right edge, below the training panel and above the school panel, clear
+    // of the left-side input history column.
+    const legendX = W - 150;
+    const legendY = Math.round(H * 0.5);
+    ctx.font = "900 10px ui-monospace, monospace";
+    ctx.fillStyle = "rgba(0,0,0,.72)";
+    ctx.fillRect(legendX, legendY, 136, legend.length * 15 + 10);
+    legend.forEach(([label, color], index) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(legendX + 6, legendY + 6 + index * 15, 9, 9);
+      ctx.fillStyle = "#e8eef4";
+      ctx.fillText(label, legendX + 20, legendY + 5 + index * 15);
+    });
+    ctx.font = "700 14px ui-monospace, SFMono-Regular, Menlo, monospace";
   }
 
   if (!state.debug) {
@@ -16085,6 +16983,7 @@ function draw(time) {
   drawSuperCutIn(hudDtMs);
   drawCrtOverlay(time);
   drawDebugOverlay();
+  drawTrainingFrameMeter();
 }
 
 function clearLatchedInputEdges() {
@@ -18146,6 +19045,7 @@ $("#controlStyleSelect").addEventListener("change", (event) => {
     updateOnlineMatchSetup();
   }
   syncNewOptionsUi();
+  syncTouchControlStyle();
 });
 $("#reducedMotionToggle").addEventListener("change", (event) => {
   state.accessibility.reducedMotion = event.target.checked;
@@ -18255,6 +19155,46 @@ $("#trainingHitboxToggle").addEventListener("change", (event) => {
   state.training.showHitboxes = event.target.checked;
   updateTrainingUi();
 });
+$("#trainingFrameMeterToggle").addEventListener("change", (event) => {
+  state.training.showFrameMeter = event.target.checked;
+  updateTrainingUi();
+});
+// R1.9: situation slots — save/load the full training situation.
+$$("[data-slot-save]").forEach((button) => button.addEventListener("click", () => {
+  saveSituationSlot(Number(button.dataset.slotSave));
+}));
+$$("[data-slot-load]").forEach((button) => button.addEventListener("click", () => {
+  loadSituationSlot(Number(button.dataset.slotLoad));
+}));
+// R1.9: authored trial demo playback.
+$("#trainingTrialDemoButton").addEventListener("click", () => {
+  if (trialDemo.active) stopTrialDemo("DEMO STOPPED");
+  else startTrialDemo();
+  updateTrainingUi();
+});
+// R1.9: FIGHT SCHOOL entries + panel controls.
+$("#fightSchoolButton").addEventListener("click", () => startFightSchool());
+$("#comboTrialsButton").addEventListener("click", () => startComboTrialsLab());
+$("#schoolSkipButton").addEventListener("click", () => {
+  if (!schoolSession.active || !schoolSession.machine) return;
+  const machine = schoolSession.machine;
+  if (machine.lesson + 1 >= FIGHT_SCHOOL_LESSONS.length) {
+    exitFightSchool();
+    return;
+  }
+  schoolSession.machine = createFightSchoolState({
+    lesson: machine.lesson + 1,
+    completed: machine.completed,
+  });
+  const lesson = fightSchoolLesson(schoolSession.machine);
+  announce(lesson ? lesson.name : "FIGHT SCHOOL", schoolCoach("start"), 2);
+  applySchoolLessonSetup();
+  renderSchoolPanel();
+});
+$("#schoolExitButton").addEventListener("click", () => exitFightSchool());
+// R1.9 boot sync: slot availability + touch style badges.
+refreshSituationSlotButtons();
+syncTouchControlStyle();
 $("#trainingRecordButton").addEventListener("click", () => {
   if (state.training.recordingActive) finishTrainingRecording(state.training);
   else beginTrainingRecording(state.training);
@@ -18590,6 +19530,12 @@ window.__finalBlowEngine = {
           fighterId: endingSequence.def?.id || null,
         },
         fx: { ...modeFxDebug },
+        // R1.9 SCHOOL & POCKET: lesson machine, slot presence, medal rollup.
+        school: schoolSession.machine
+          ? { active: schoolSession.active, ...fightSchoolSnapshot(schoolSession.machine) }
+          : null,
+        trainingSlots: situationSlots.map((slot) => Boolean(slot)),
+        trialMedals: Object.fromEntries(roster.map(({ id }) => [id, fighterMedalCounts(trialMedals, id)])),
       },
       seed: state.matchSeed,
       rng: state.rng.getState(),
@@ -18631,6 +19577,17 @@ window.__finalBlowEngine = {
         breathingFighters: presentationDebug.breathing,
         contactShadows: presentationDebug.contactShadows,
         gritAuras: presentationDebug.gritAuras,
+        // R1.9 SCHOOL & POCKET counters (trainingFxDebug: monotonic one-shots
+        // on the hudFxDebug pattern) for orchestrator smoke tests.
+        frameMeterTicks: trainingFxDebug.frameMeterTicks,
+        motionFlashes: trainingFxDebug.motionFlashes,
+        assistRecolors: trainingFxDebug.assistRecolors,
+        schoolSteps: trainingFxDebug.schoolSteps,
+        situationSlotSaves: trainingFxDebug.slotSaves,
+        situationSlotLoads: trainingFxDebug.slotLoads,
+        trialDemoRuns: trainingFxDebug.trialDemoRuns,
+        trialMedalAwards: trainingFxDebug.medalAwards,
+        inputHistoryRows: inputColumn.rows.length,
         lastLegsFighters: presentationDebug.lastLegs,
         battleDamageMarks: battleDamageMarks[0].length + battleDamageMarks[1].length,
         battleDamageDrawn: presentationDebug.battleDamage,
@@ -18942,6 +19899,51 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       if (state.mode !== "training") throw new Error("Start training first");
       selectTrainingTrial(state.training, state.fighters[0].kitId, index);
       updateTrainingUi();
+      return trainingSnapshot(state.training).trial;
+    },
+    // --- R1.9 SCHOOL & POCKET probes --------------------------------------
+    trainingSlotSave(slot = 0) {
+      return saveSituationSlot(slot);
+    },
+    trainingSlotLoad(slot = 0) {
+      return loadSituationSlot(slot);
+    },
+    trialDemo(index = null) {
+      if (state.mode !== "training") throw new Error("Start training first");
+      if (Number.isInteger(index)) selectTrainingTrial(state.training, state.fighters[0].kitId, index);
+      return startTrialDemo();
+    },
+    trialDemoActive() {
+      return trialDemo.active;
+    },
+    trialMedals() {
+      return JSON.parse(JSON.stringify(trialMedals));
+    },
+    clearTrialMedals() {
+      trialMedals = normalizeTrialMedals(null);
+      saveTrialMedals();
+      refreshTrialMedalBadges();
+      return true;
+    },
+    school() {
+      startFightSchool();
+      return { active: schoolSession.active, ...fightSchoolSnapshot(schoolSession.machine) };
+    },
+    schoolStatus() {
+      return schoolSession.machine
+        ? { active: schoolSession.active, ...fightSchoolSnapshot(schoolSession.machine) }
+        : null;
+    },
+    schoolExit() {
+      exitFightSchool();
+      return true;
+    },
+    schoolClear() {
+      localStorage.removeItem(SCHOOL_STORAGE_KEY);
+      return true;
+    },
+    comboTrialsLab() {
+      startComboTrialsLab();
       return trainingSnapshot(state.training).trial;
     },
     stage(stageId = "somerset") {
