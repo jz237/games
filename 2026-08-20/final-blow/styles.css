@@ -2575,3 +2575,425 @@ body:has(#app:fullscreen) {
 .mutator-bar[hidden] { display: none !important; }
 .attract-scores[hidden] { display: none !important; }
 .daily-banner[hidden] { display: none !important; }
+
+/* ===========================================================================
+   Release 1.8 GRIND remainder (ships as v2.1) — PROGRESSION surfaces:
+   The Black Book ledger, fight records + mastery, arcade ending panels and
+   the credits roll. Presentation only; all motion is flattened by the global
+   body.reduced-motion kill-rule (plus the explicit delay flattens below,
+   matching the announcer letter-slam pattern).
+   =========================================================================== */
+
+/* --- Title menu: paired ledger buttons ----------------------------------- */
+.menu-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; min-width: 0; }
+.ledger-button { min-height: 36px; padding: 7px 10px; font-size: clamp(9px, .95vw, 12px); }
+.ledger-button small {
+  display: block;
+  margin-top: 2px;
+  font-size: clamp(6px, .62vw, 9px);
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: .13em;
+  color: #cdae62;
+}
+
+/* --- The Black Book screen ------------------------------------------------ */
+.black-book-screen {
+  flex-direction: column;
+  padding: clamp(8px, 2vw, 22px) clamp(10px, 3vw, 40px);
+  background:
+    radial-gradient(circle at 82% 12%, rgba(115, 16, 28, .34), transparent 40%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.014) 0 1px, transparent 1px 26px),
+    linear-gradient(160deg, #0b0507 0%, #120a0d 55%, #05070b 100%);
+}
+.black-book-count {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 4px 12px;
+  border: 1px solid #7a1c26;
+  background: rgba(60, 8, 14, .55);
+  color: #e8b7ac;
+  font: 900 clamp(9px, 1vw, 13px)/1 system-ui, sans-serif;
+  letter-spacing: .2em;
+}
+.black-book-list {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 46vw), 1fr));
+  gap: 6px 12px;
+  align-content: start;
+  overflow-y: auto;
+  margin: 10px 0 6px;
+  padding-right: 6px;
+  scrollbar-width: thin;
+}
+.book-entry {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px 8px 34px;
+  border: 1px solid #33232a;
+  border-left: 3px solid #4a323a;
+  background: linear-gradient(120deg, rgba(24, 14, 18, .88), rgba(10, 6, 9, .92));
+  text-align: left;
+}
+.book-entry::before {
+  position: absolute;
+  top: 7px;
+  left: 9px;
+  content: attr(data-ordinal);
+  color: #6d5560;
+  font: 900 10px/1 system-ui, sans-serif;
+  letter-spacing: .06em;
+}
+.book-entry b {
+  font: italic 900 clamp(10px, 1.05vw, 14px)/1.05 Impact, sans-serif;
+  letter-spacing: .07em;
+  color: #f0e3d0;
+}
+.book-entry span { font: 700 clamp(8px, .82vw, 11px)/1.45 system-ui, sans-serif; color: #a9969c; }
+.book-entry .book-date { font: 800 8px/1 system-ui, sans-serif; letter-spacing: .16em; color: #8a5a63; }
+.book-entry.inked { border-left-color: var(--red); }
+.book-entry.inked::before { color: #d94b52; }
+.book-entry.inked::after {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  content: "✕";
+  color: rgba(229, 45, 45, .8);
+  font: 900 13px/1 system-ui, sans-serif;
+  text-shadow: 0 0 8px rgba(229, 45, 45, .5);
+  transform: rotate(-8deg);
+}
+/* Locked pages: the title reads as censor bars, the hint stays legible. */
+.book-entry.locked b {
+  color: transparent;
+  background: repeating-linear-gradient(0deg, #241820 0 100%);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  user-select: none;
+}
+.book-entry.locked span { font-style: italic; color: #7d6c72; }
+.black-book-footnote { color: #6d5560; font: 800 8px/1.3 system-ui, sans-serif; letter-spacing: .14em; }
+
+/* --- Fight Records screen ------------------------------------------------- */
+.records-screen {
+  flex-direction: column;
+  padding: clamp(8px, 2vw, 22px) clamp(10px, 3vw, 40px);
+  background:
+    radial-gradient(circle at 14% 18%, rgba(20, 90, 120, .22), transparent 42%),
+    linear-gradient(150deg, #060a10 0%, #0c1118 60%, #05070b 100%);
+}
+.records-lifetime {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  justify-content: center;
+  margin-top: 6px;
+}
+.records-lifetime span {
+  padding: 4px 9px;
+  border: 1px solid #2c3947;
+  background: rgba(10, 18, 26, .75);
+  color: #9fb4c4;
+  font: 800 clamp(8px, .8vw, 11px)/1 system-ui, sans-serif;
+  letter-spacing: .12em;
+}
+.records-lifetime span b { color: #e8f2f9; font-weight: 950; }
+.records-grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  align-content: start;
+  overflow-y: auto;
+  margin: 10px 0 6px;
+  scrollbar-width: thin;
+}
+.record-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 3px 8px;
+  padding: 8px;
+  border: 1px solid #2c3947;
+  border-top: 3px solid var(--fighter, #66717d);
+  background: linear-gradient(160deg, rgba(19, 27, 36, .92), rgba(7, 10, 15, .95));
+  text-align: left;
+}
+.record-card img {
+  grid-row: 1 / span 3;
+  width: 52px;
+  height: 58px;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 4px 6px #000);
+}
+.record-card h3 {
+  margin: 0;
+  font: italic 900 clamp(10px, 1vw, 14px)/1 Impact, sans-serif;
+  letter-spacing: .06em;
+  color: #eef3f7;
+}
+.record-card .record-rank {
+  justify-self: start;
+  padding: 2px 7px;
+  font: 900 8px/1.2 system-ui, sans-serif;
+  letter-spacing: .14em;
+}
+.record-card .record-lines { grid-column: 1 / -1; display: grid; gap: 2px; }
+.record-card .record-lines span {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  color: #8da0af;
+  font: 700 clamp(7px, .72vw, 10px)/1.3 system-ui, sans-serif;
+  letter-spacing: .08em;
+}
+.record-card .record-lines span b { color: #dce8f1; font-weight: 900; text-align: right; }
+.records-streaks { color: #7d8fa0; font: 800 8px/1.3 system-ui, sans-serif; letter-spacing: .14em; }
+
+/* Mastery tier chips — shared by records cards + select-screen badges. */
+.record-rank[data-tier="none"], .mastery-badge[data-tier="none"] { border: 1px solid #3a4653; background: #10161d; color: #74838f; }
+.record-rank[data-tier="bronze"], .mastery-badge[data-tier="bronze"] { border: 1px solid #a4692f; background: linear-gradient(180deg, #58351a, #2b1a0c); color: #ffc890; }
+.record-rank[data-tier="silver"], .mastery-badge[data-tier="silver"] { border: 1px solid #9fb2bf; background: linear-gradient(180deg, #4e5c66, #232b31); color: #eef6fb; }
+.record-rank[data-tier="gold"], .mastery-badge[data-tier="gold"] { border: 1px solid #f1bd26; background: linear-gradient(180deg, #6d5410, #2f2405); color: #ffe9a4; }
+.record-rank[data-tier="onyx"], .mastery-badge[data-tier="onyx"] { border: 1px solid #8f5aff; background: linear-gradient(180deg, #241238, #0c0616); color: #d9c2ff; box-shadow: 0 0 10px rgba(143, 90, 255, .45); }
+
+/* Select-screen mastery badge on each portrait card. */
+.mastery-badge {
+  position: absolute;
+  z-index: 3;
+  top: 4px;
+  right: 4px;
+  padding: 2px 6px;
+  font: 900 7px/1.2 system-ui, sans-serif;
+  letter-spacing: .13em;
+  pointer-events: none;
+}
+.mastery-badge[hidden] { display: none !important; }
+
+/* --- Black Book unlock toast: letter-slam + book stamp -------------------- */
+.book-stamp-toast {
+  position: absolute;
+  z-index: 11;
+  top: 9%;
+  left: 50%;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  width: min(88%, 720px);
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+}
+.book-stamp-toast[hidden] { display: none !important; }
+.book-stamp-toast strong {
+  display: block;
+  color: #f4ead3;
+  font-family: Impact, Haettenschweiler, sans-serif;
+  font-size: clamp(22px, 4vw, 52px);
+  font-style: italic;
+  letter-spacing: .03em;
+  line-height: .95;
+  -webkit-text-stroke: 1px #4d070b;
+  text-shadow: 3px 5px 0 #56070b, 0 0 22px #000;
+}
+.book-stamp-toast strong i { display: inline-block; font-style: inherit; animation: letter-slam .3s cubic-bezier(.16,1.4,.4,1) both; }
+/* During a bout the announcer banner slams the title; the toast keeps only
+   the seal + subtitle so the letters never double up on screen. */
+.book-stamp-toast.with-announcer strong { display: none; }
+.book-stamp-toast strong i.gap { white-space: pre; animation: none; }
+body.reduced-motion .book-stamp-toast strong i { animation-delay: 0ms !important; }
+.book-stamp-toast .stamp-sub {
+  color: #d99a92;
+  font: 800 clamp(8px, .9vw, 12px)/1 system-ui, sans-serif;
+  letter-spacing: .26em;
+}
+.book-stamp-toast .stamp-seal {
+  display: grid;
+  place-items: center;
+  width: clamp(44px, 5.4vw, 72px);
+  aspect-ratio: 1;
+  border: 3px double rgba(229, 45, 45, .85);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(90, 8, 14, .5), rgba(30, 3, 6, .25) 70%);
+  transform: rotate(-11deg);
+}
+.book-stamp-toast .stamp-seal.thud { animation: stamp-thud .4s cubic-bezier(.2, 1.6, .4, 1) both; }
+.book-stamp-toast .stamp-seal b {
+  color: #ff5f57;
+  font: 900 clamp(9px, 1vw, 14px)/1 Impact, sans-serif;
+  letter-spacing: .1em;
+  text-shadow: 0 0 10px rgba(229, 45, 45, .6);
+}
+.book-stamp-toast.rank-up .stamp-seal { border-color: rgba(241, 189, 38, .9); background: radial-gradient(circle, rgba(90, 68, 8, .5), rgba(30, 22, 3, .25) 70%); }
+.book-stamp-toast.rank-up .stamp-seal b { color: #ffd76b; text-shadow: 0 0 10px rgba(241, 189, 38, .6); }
+.book-stamp-toast.rank-up .stamp-sub { color: #e5cf96; }
+.book-stamp-toast.out { animation: announce-out .15s ease-in both; }
+@keyframes stamp-thud {
+  0% { opacity: 0; transform: rotate(-11deg) scale(2.6); filter: blur(5px); }
+  62% { opacity: 1; transform: rotate(-11deg) scale(.92); filter: blur(0); }
+  100% { opacity: 1; transform: rotate(-11deg) scale(1); }
+}
+
+/* --- Arcade ending: 3-panel sequence -------------------------------------- */
+.ending-screen.sequencing::before { content: none; }
+.ending-screen.sequencing .ending-art,
+.ending-screen.sequencing .ending-copy { display: none; }
+.ending-panels, .ending-credits { position: absolute; inset: 0; z-index: 3; }
+.ending-panels[hidden], .ending-credits[hidden] { display: none !important; }
+.ending-panel { position: absolute; inset: 0; overflow: hidden; }
+.ending-panel.enter { animation: panel-cut .5s ease-out both; }
+@keyframes panel-cut { from { opacity: 0; } to { opacity: 1; } }
+.ending-panel-art {
+  position: absolute;
+  inset: -4%;
+  background-repeat: no-repeat;
+  transform-origin: 50% 42%;
+}
+.ending-panel.enter .ending-panel-art { animation: panel-pan 9s ease-out both; }
+@keyframes panel-pan { from { transform: scale(1.02); } to { transform: scale(1.11) translateX(-1.4%); } }
+/* Atlas cells hold a single pose: frame the art like the victory pose does. */
+.ending-panel-art.atlas { background-size: 400% 400%; }
+.ending-panel-art.portrait { background-position: 62% 12%; background-size: cover; }
+/* Film-grade treatments over the reused art: duotone-ish washes + vignette. */
+.ending-panel-art::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  mix-blend-mode: soft-light;
+}
+.ending-panel-art::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: radial-gradient(circle at 42% 38%, transparent 42%, rgba(0, 0, 0, .82) 96%);
+}
+.ending-panel[data-treat="night"] .ending-panel-art { filter: saturate(.72) contrast(1.14) brightness(.82); }
+.ending-panel[data-treat="night"] .ending-panel-art::before { background: linear-gradient(160deg, rgba(24, 44, 116, .85), rgba(96, 18, 60, .65)); }
+.ending-panel[data-treat="work"] .ending-panel-art { filter: sepia(.34) saturate(1.05) contrast(1.06) brightness(.92); }
+.ending-panel[data-treat="work"] .ending-panel-art::before { background: linear-gradient(150deg, rgba(196, 128, 26, .7), rgba(70, 34, 8, .8)); }
+.ending-panel[data-treat="dawn"] .ending-panel-art { filter: saturate(1.12) contrast(1.05) brightness(1.02); }
+.ending-panel[data-treat="dawn"] .ending-panel-art::before { background: linear-gradient(200deg, rgba(255, 150, 84, .62), rgba(120, 32, 110, .66)); }
+.ending-panel-art .panel-grain {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 2px, transparent 2px 5px);
+  opacity: .55;
+  pointer-events: none;
+}
+.ending-panel-copy {
+  position: absolute;
+  right: 6%;
+  bottom: 9%;
+  left: 6%;
+  z-index: 3;
+  padding: clamp(10px, 1.6vw, 20px) clamp(12px, 2vw, 26px);
+  border-left: 4px solid var(--ending-color, var(--red));
+  background: linear-gradient(90deg, rgba(2, 3, 6, .88), rgba(2, 3, 6, .55) 70%, transparent);
+  text-align: left;
+}
+.ending-panel-index {
+  color: var(--ending-color, var(--red));
+  font: 900 clamp(8px, .9vw, 12px)/1 system-ui, sans-serif;
+  letter-spacing: .3em;
+}
+.ending-panel-copy h3 {
+  margin: 4px 0 6px;
+  color: #f7f1e7;
+  font: italic 900 clamp(20px, 3.2vw, 44px)/.95 Impact, sans-serif;
+  letter-spacing: .05em;
+  text-shadow: 3px 4px 0 #661014;
+}
+.ending-panel-copy p {
+  max-width: 860px;
+  margin: 0;
+  color: #d5dce2;
+  font: 700 clamp(10px, 1.15vw, 16px)/1.6 system-ui, sans-serif;
+}
+.ending-skip-hint {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  z-index: 4;
+  color: rgba(214, 222, 228, .5);
+  font: 800 8px/1 system-ui, sans-serif;
+  letter-spacing: .2em;
+}
+
+/* --- Arcade ending: SF2-style credits roll -------------------------------- */
+.ending-credits { overflow: hidden; background: linear-gradient(180deg, #04060a, #0b0710 55%, #04060a); }
+.credits-crawl {
+  display: grid;
+  gap: clamp(10px, 1.8vh, 20px);
+  justify-items: center;
+  width: min(86%, 760px);
+  margin: 0 auto;
+  text-align: center;
+  transform: translateY(100vh);
+}
+.credits-crawl.roll { animation: credits-crawl var(--credits-ms, 30s) linear both; }
+.ending-credits.static .credits-crawl {
+  overflow-y: auto;
+  max-height: 100%;
+  padding: 3vh 0;
+  transform: none;
+  animation: none;
+}
+@keyframes credits-crawl { from { transform: translateY(100vh); } to { transform: translateY(-100%); } }
+.credits-heading { display: grid; gap: 3px; justify-items: center; }
+.credits-heading b {
+  color: #f7f1e7;
+  font: italic 900 clamp(30px, 4.6vw, 64px)/.9 Impact, sans-serif;
+  letter-spacing: .04em;
+  text-shadow: 3px 4px 0 #661014;
+}
+.credits-heading span { color: var(--amber); font: 900 clamp(9px, 1vw, 14px)/1 system-ui, sans-serif; letter-spacing: .34em; }
+.credits-section {
+  margin-top: clamp(6px, 1.4vh, 16px);
+  color: #8d9aa6;
+  font: 900 clamp(9px, .95vw, 13px)/1 system-ui, sans-serif;
+  letter-spacing: .3em;
+}
+.credit-cast {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 2px 12px;
+  align-items: center;
+  width: min(100%, 430px);
+  text-align: left;
+}
+.credit-cast img {
+  grid-row: 1 / span 2;
+  width: 56px;
+  height: 62px;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 4px 6px #000);
+}
+.credit-cast b { font: italic 900 clamp(13px, 1.5vw, 21px)/1 Impact, sans-serif; letter-spacing: .05em; color: #eef3f7; }
+.credit-cast span { color: #93a3b1; font: 700 clamp(8px, .82vw, 11px)/1.2 system-ui, sans-serif; letter-spacing: .1em; }
+.credit-row { display: grid; gap: 2px; justify-items: center; }
+.credit-row span { color: #8d9aa6; font: 800 clamp(8px, .8vw, 11px)/1 system-ui, sans-serif; letter-spacing: .24em; }
+.credit-row b { color: #f0e6d2; font: italic 900 clamp(13px, 1.5vw, 21px)/1.1 Impact, sans-serif; letter-spacing: .06em; }
+.credit-finale {
+  margin: clamp(12px, 2.4vh, 26px) 0 8vh;
+  color: var(--cyan);
+  font: italic 900 clamp(18px, 2.6vw, 36px)/1 Impact, sans-serif;
+  letter-spacing: .08em;
+  text-shadow: 0 0 18px rgba(20, 203, 232, .45);
+}
+
+/* Phone landscape: tighter progression grids. */
+@media (max-height: 480px) {
+  .records-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+  .record-card img { display: none; }
+  .record-card { grid-template-columns: 1fr; }
+  .black-book-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px; }
+  .ending-panel-copy { bottom: 4%; padding: 8px 12px; }
+  .menu-row .ledger-button { min-height: 30px; padding: 5px 8px; }
+}

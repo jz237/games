@@ -94,6 +94,11 @@
       <div id="flowSkipHint" class="flow-skip-hint" hidden>ANY ATTACK / START · SKIP</div>
       <div id="soundCaption" class="sound-caption" aria-live="polite" hidden></div>
       <div id="screenWipe" class="screen-wipe" aria-hidden="true"></div>
+      <div id="bookStampToast" class="book-stamp-toast" aria-live="polite" hidden>
+        <span class="stamp-seal" aria-hidden="true"><b>INKED</b></span>
+        <strong></strong>
+        <span class="stamp-sub">THE BLACK BOOK · ENTRY INKED</span>
+      </div>
 
       <section id="pausePanel" class="pause-panel" aria-labelledby="pauseTitle" hidden>
         <p class="eyebrow">THE STREET WAITS</p>
@@ -124,6 +129,10 @@
           <button class="arcade-button" data-mode="versus">2 PLAYER · LOCAL VERSUS</button>
           <button class="arcade-button" data-mode="team">TEAM BATTLE · 3V3 BLOCK WAR</button>
           <button class="arcade-button daily-button" id="dailyButton">DAILY JAWN<small id="dailyStatus">FRESH RUN READY</small></button>
+          <div class="menu-row">
+            <button class="arcade-button ledger-button" id="blackBookButton">THE BLACK BOOK<small id="blackBookStatus">0 / 35 INKED</small></button>
+            <button class="arcade-button ledger-button" id="recordsButton">FIGHT RECORDS<small id="recordsStatus">NO FIGHTS LOGGED</small></button>
+          </div>
           <button class="arcade-button online-button" id="onlineButton">ONLINE · PRIVATE ROOM</button>
           <button class="arcade-button" data-mode="training">TRAINING LAB</button>
           <button class="arcade-button demo-button" id="demoButton">WATCH DEMO · CPU VS CPU</button>
@@ -310,7 +319,48 @@
         <small>PRESS ANY BUTTON TO PLAY</small>
       </div>
 
+      <section id="blackbookScreen" class="screen black-book-screen" aria-labelledby="blackBookTitle">
+        <header class="screen-header">
+          <p>THE COMMISSIONER'S LEDGER · EVERYTHING HE NEVER WANTED FINISHED</p>
+          <h2 id="blackBookTitle">THE BLACK BOOK</h2>
+          <div id="blackBookCount" class="black-book-count">0 / 35 INKED</div>
+        </header>
+        <div id="blackBookList" class="black-book-list" role="list" aria-label="Black Book entries"></div>
+        <div class="selection-footer">
+          <button class="text-button" data-back="title">← BACK TO TITLE</button>
+          <div class="black-book-footnote">LOCKED PAGES STAY REDACTED UNTIL THE STREET SAYS OTHERWISE</div>
+        </div>
+      </section>
+
+      <section id="recordsScreen" class="screen records-screen" aria-labelledby="recordsTitle">
+        <header class="screen-header">
+          <p>EVERY MATCH LEAVES A MARK</p>
+          <h2 id="recordsTitle">FIGHT RECORDS</h2>
+          <div id="recordsLifetime" class="records-lifetime" aria-label="Lifetime totals"></div>
+        </header>
+        <div id="recordsGrid" class="records-grid" role="list" aria-label="Per-fighter records"></div>
+        <div class="selection-footer">
+          <button class="text-button" data-back="title">← BACK TO TITLE</button>
+          <div id="recordsStreaks" class="records-streaks">—</div>
+        </div>
+      </section>
+
       <section id="endingScreen" class="screen ending-screen" aria-labelledby="endingTitle">
+        <div id="endingPanels" class="ending-panels" hidden>
+          <div id="endingPanel" class="ending-panel" data-treat="night">
+            <div id="endingPanelArt" class="ending-panel-art" aria-hidden="true"><i class="panel-grain"></i></div>
+            <div class="ending-panel-copy">
+              <span id="endingPanelIndex" class="ending-panel-index">PART I</span>
+              <h3 id="endingPanelTitle">THE LAST BELL</h3>
+              <p id="endingPanelText"></p>
+            </div>
+          </div>
+          <div class="ending-skip-hint">ANY ATTACK BUTTON · NEXT PANEL</div>
+        </div>
+        <div id="endingCredits" class="ending-credits" hidden>
+          <div id="endingCreditsCrawl" class="credits-crawl"></div>
+          <div class="ending-skip-hint">ANY ATTACK BUTTON · SKIP CREDITS</div>
+        </div>
         <div id="endingArt" class="ending-art" aria-hidden="true"></div>
         <div class="ending-copy">
           <p class="eyebrow">ARCADE CLEARED · PHILLY AFTER DARK</p>

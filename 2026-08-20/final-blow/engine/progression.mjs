@@ -299,6 +299,7 @@ export function createBlackBookProgress() {
       dailyClears: 0,
       teamSweeps: 0,
       tableTops: 0,
+      cinemaActivations: 0,
     },
     best: {
       matchTechs: 0,
@@ -355,6 +356,7 @@ export function blackBookObserve(progress, observation) {
         case "taunt": tallies.taunts += 1; break;
         case "wallBounce": tallies.wallBounces += 1; break;
         case "exThrowable": tallies.exThrowables += 1; break;
+        case "cinema3d": tallies.cinemaActivations += 1; break;
         case "throwableLand":
           if (observation.fighterId) progress.sets.throwables[String(observation.fighterId)] = 1;
           break;
@@ -664,6 +666,13 @@ export const BLACK_BOOK_ENTRIES = Object.freeze([
     line: "Topped the high-score table. Three letters, first row, no argument.",
     hint: "Take the #1 spot on the score table.",
     test: (p) => p.tallies.tableTops >= 1,
+  },
+  {
+    id: "the-picture-show",
+    title: "THE PICTURE SHOW",
+    line: "Rolled the fight in CINEMA 3D. Philly never looked so expensive.",
+    hint: "Switch on CINEMA 3D for the first time.",
+    test: (p) => p.tallies.cinemaActivations >= 1,
   },
 ].map(Object.freeze));
 

@@ -111,12 +111,27 @@ import {
 } from "./engine/modes.mjs";
 import {
   ARCADE_BOSS_ID,
+  ARCADE_CREDITS,
   arcadeRunSnapshot,
   createArcadeRun,
   currentArcadeMatch,
+  endingPanelsFor,
   getArcadeEnding,
   recordArcadeResult,
 } from "./engine/arcade.mjs";
+import {
+  BLACK_BOOK_ENTRIES,
+  applyMatchToRecords,
+  blackBookObserve,
+  blackBookSummary,
+  evaluateBlackBook,
+  favoriteMove,
+  masteryRank,
+  normalizeBlackBookStore,
+  normalizeRecordsStore,
+  prettyMoveName,
+  recordsSummary,
+} from "./engine/progression.mjs";
 import {
   ATTACK_BUTTONS,
   BUTTON_LABELS,
@@ -1130,7 +1145,433 @@ const modeFxDebug = {
   dailyRuns: 0,
   attractScoreBoards: 0,
   scoreSubmissions: 0,
+  // v2.1 PROGRESSION one-shot totals, same monotonic pattern.
+  blackBookToasts: 0,
+  bookStamps: 0,
+  rankSlams: 0,
+  endingPanelsShown: 0,
+  creditsRolls: 0,
+  endingSequences: 0,
+  blackBookScreens: 0,
+  recordsScreens: 0,
 };
+
+// ===========================================================================
+// v2.1 PROGRESSION (R1.8 GRIND remainder) — The Black Book achievements
+// ledger + fight records + mastery ranks. All logic lives in
+// engine/progression.mjs (pure); this block is observation + persistence +
+// UI. Everything here is render/meta-side on the scoreSession pattern:
+// module-level, never snapshotted, never read by the sim. Hooks that sit on
+// sim paths are announce()-guarded (`if (!rollbackResimulating)`) at the call
+// site, and the fold points dedupe by matchSerial/round key, so rollback
+// resimulation can never double-count. Online-safe by shape: observation only.
+// ===========================================================================
+
+const RECORDS_STORAGE_KEY = "final-blow-records";
+const BLACK_BOOK_STORAGE_KEY = "final-blow-black-book";
+
+let recordsStore = normalizeRecordsStore(storedJson(RECORDS_STORAGE_KEY, null));
+let blackBookLedger = normalizeBlackBookStore(storedJson(BLACK_BOOK_STORAGE_KEY, null));
+
+function saveRecordsStore() {
+  try {
+    localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(recordsStore));
+  } catch { /* storage full/blocked — records stay in-memory for the session */ }
+}
+
+function saveBlackBookLedger() {
+  try {
+    localStorage.setItem(BLACK_BOOK_STORAGE_KEY, JSON.stringify(blackBookLedger));
+  } catch { /* non-fatal */ }
+}
+
+// Per-match observation accumulators. Reset at every match start (real flows
+// and QA fights); folded exactly once per match by progressionMatchEnd.
+const progressionMatch = {
+  serial: -1,
+  folded: false,
+  rounds: 0,
+  roundWins: [0, 0],
+  perfectRounds: [0, 0],
+  damageDealt: [0, 0],
+  damageTaken: [0, 0],
+  dizzies: [0, 0],
+  techs: [0, 0],
+  supers: [0, 0],
+  moveUses: [{}, {}],
+  fatalities: [0, 0],
+  fatalityVariants: [[], []],
+  peakCombo: [0, 0],
+  timeOverWin: false,
+  // Per-round latches.
+  jumped: [false, false],
+  roundStartHealth: [100, 100],
+  // Last damage applied to each side: { tick, chip, weapon } — read only at
+  // round end to classify decision/weapon finishes.
+  lastDamage: [null, null],
+  roundKey: "",
+};
+
+function progressionResetRound() {
+  progressionMatch.jumped = [false, false];
+  progressionMatch.lastDamage = [null, null];
+  progressionMatch.roundStartHealth = state.fighters.map((fighter) => clamp(fighter?.health ?? 100, 0, 100));
+}
+
+function progressionResetMatch() {
+  progressionMatch.serial = state.matchSerial;
+  progressionMatch.folded = false;
+  progressionMatch.rounds = 0;
+  progressionMatch.roundWins = [0, 0];
+  progressionMatch.perfectRounds = [0, 0];
+  progressionMatch.damageDealt = [0, 0];
+  progressionMatch.damageTaken = [0, 0];
+  progressionMatch.dizzies = [0, 0];
+  progressionMatch.techs = [0, 0];
+  progressionMatch.supers = [0, 0];
+  progressionMatch.moveUses = [{}, {}];
+  progressionMatch.fatalities = [0, 0];
+  progressionMatch.fatalityVariants = [[], []];
+  progressionMatch.peakCombo = [0, 0];
+  progressionMatch.timeOverWin = false;
+  progressionMatch.roundKey = "";
+  progressionResetRound();
+}
+
+// Human seat rule: the ledger and records belong to the P1 seat (the cabinet
+// owner's book). Demo and tournament (CPU in seat 0) never write; the
+// arcade/survival/team CPU in seat 1 never earns credit. Online is
+// observation-only — the local player renders as side 0 there too.
+
+// Move usage observation from beginAttack (sim path; call site is guarded).
+// Distinct-move cap bounds localStorage growth against modded/QA move ids.
+function progressionNoteMove(fighter) {
+  if (state.screen !== "fight" || fighter.side !== 0 && fighter.side !== 1) return;
+  const name = String(fighter.attacking?.profileId || fighter.attacking?.kind || "").trim();
+  if (!name) return;
+  const uses = progressionMatch.moveUses[fighter.side];
+  if (uses[name] === undefined && Object.keys(uses).length >= 64) return;
+  uses[name] = (uses[name] || 0) + 1;
+}
+
+// Damage-source latch from every damage site (guarded call sites).
+function progressionNoteDamage(victimSide, { chip = false, weapon = false } = {}) {
+  if (victimSide !== 0 && victimSide !== 1) return;
+  progressionMatch.lastDamage[victimSide] = { tick: state.simulationTick, chip, weapon };
+}
+
+// Instant one-shot ledger events (throwables landed, perfect guards, taunts…).
+// Counters only — predicate evaluation waits for the next bounded fold point.
+function progressionEvent(kind, detail = {}, side = 0) {
+  if (side !== 0 || sideIsCpuControlled(0)) return;
+  blackBookObserve(blackBookLedger, { type: "event", kind, ...detail });
+}
+
+// Queue of pending unlock/rank toasts, shown one at a time via the announcer
+// letter-slam + the book-stamp overlay. Pure DOM/timer land.
+const progressionToasts = [];
+let progressionToastTimer = 0;
+let progressionToastHideTimer = 0;
+
+function queueBlackBookUnlocks(entries) {
+  for (const entry of entries) {
+    progressionToasts.push({ kind: "unlock", title: entry.title, sub: "THE BLACK BOOK · ENTRY INKED" });
+  }
+  pumpProgressionToasts();
+}
+
+function queueRankUpToast(rank, fighterName) {
+  progressionToasts.push({ kind: "rank", title: rank.name, sub: `${fighterName} · MASTERY ${rank.badge}` });
+  pumpProgressionToasts();
+}
+
+function pumpProgressionToasts(delay = 1400) {
+  if (progressionToastTimer || !progressionToasts.length) return;
+  progressionToastTimer = window.setTimeout(() => {
+    progressionToastTimer = 0;
+    const toast = progressionToasts.shift();
+    if (toast) showProgressionToast(toast);
+    if (progressionToasts.length) pumpProgressionToasts(3050);
+  }, delay);
+}
+
+function showProgressionToast(toast) {
+  const box = $("#bookStampToast");
+  if (!box) return;
+  const strong = box.querySelector("strong");
+  const letters = [...String(toast.title)];
+  const stagger = 45;
+  strong.setAttribute("aria-label", toast.title);
+  // Same per-letter slam markup as announce(): spaces keep white-space:pre so
+  // textContent round-trips exactly for QA reads.
+  strong.innerHTML = letters.map((character, index) => (character === " "
+    ? `<i class="gap" aria-hidden="true"> </i>`
+    : `<i aria-hidden="true" style="animation-delay:${index * stagger}ms">${escapeAnnounceChar(character)}</i>`)).join("");
+  box.querySelector(".stamp-sub").textContent = toast.sub;
+  box.querySelector(".stamp-seal b").textContent = toast.kind === "rank" ? "RANK" : "INKED";
+  box.classList.toggle("rank-up", toast.kind === "rank");
+  // On the fight screen the announcer banner slams the title itself, so the
+  // toast keeps just the seal + sub instead of doubling the letters.
+  box.classList.toggle("with-announcer", state.screen === "fight");
+  box.classList.remove("out");
+  box.hidden = false;
+  restartCssAnimation(box.querySelector(".stamp-seal"), "thud");
+  if (toast.kind === "rank") modeFxDebug.rankSlams += 1;
+  else modeFxDebug.blackBookToasts += 1;
+  modeFxDebug.bookStamps += 1;
+  // Mirror the call onto the fight announcer when a bout is on screen — the
+  // letter-slam pipeline proper (announce() self-guards against resim).
+  if (state.screen === "fight") announce(toast.title, toast.sub, 1.9);
+  sound("select");
+  window.clearTimeout(progressionToastHideTimer);
+  progressionToastHideTimer = window.setTimeout(() => {
+    box.classList.add("out");
+    window.setTimeout(() => { box.hidden = true; box.classList.remove("out"); }, 160);
+  }, 2600);
+}
+
+// Bounded evaluation point: run every locked predicate, stamp fresh unlocks
+// with today's date, persist, queue toasts.
+function progressionEvaluateLedger() {
+  const fresh = evaluateBlackBook(blackBookLedger, dailyDateString());
+  if (fresh.length) {
+    saveBlackBookLedger();
+    queueBlackBookUnlocks(fresh);
+    refreshProgressionUi();
+  }
+  return fresh;
+}
+
+// Round-end fold, called from finishRound inside its existing
+// `if (!rollbackResimulating)` block. Deduped by the same key shape
+// queueStoryCallouts uses so a re-entered round can never double-fold.
+function progressionRoundEnd(winner, type) {
+  if (state.fighters.length !== 2 || state.mode === "demo" || state.mode === "tournament") return;
+  const key = `${state.matchSerial}:${state.round}:${winner}:${state.rounds[winner]}`;
+  if (key === progressionMatch.roundKey) return;
+  progressionMatch.roundKey = key;
+  if (progressionMatch.serial !== state.matchSerial) progressionResetMatch();
+  const loser = 1 - winner;
+  const winnerFighter = state.fighters[winner];
+  const loserFighter = state.fighters[loser];
+  // Health deltas against the round-start latch (health only falls mid-round).
+  for (const side of [0, 1]) {
+    const dealt = Math.max(0, progressionMatch.roundStartHealth[1 - side] - clamp(state.fighters[1 - side].health, 0, 100));
+    const taken = Math.max(0, progressionMatch.roundStartHealth[side] - clamp(state.fighters[side].health, 0, 100));
+    progressionMatch.damageDealt[side] += dealt;
+    progressionMatch.damageTaken[side] += taken;
+    progressionMatch.peakCombo[side] = Math.max(progressionMatch.peakCombo[side], state.fighters[side].combo?.peakHits || 0);
+  }
+  progressionMatch.rounds += 1;
+  progressionMatch.roundWins[winner] += 1;
+  const perfect = winnerFighter.health >= 100;
+  if (perfect) progressionMatch.perfectRounds[winner] += 1;
+  const timeOver = state.timer <= 0 && loserFighter.health > 0;
+  if (timeOver && winner === 0) progressionMatch.timeOverWin = true;
+  if (type >= 0) {
+    progressionMatch.fatalities[winner] += 1;
+    if (!winnerFighter.def.boss) {
+      progressionMatch.fatalityVariants[winner].push(`${winnerFighter.def.id}:${type}`);
+    }
+  }
+  // The Black Book observes from the P1 seat only.
+  if (sideIsCpuControlled(0)) return;
+  const lastOnLoser = progressionMatch.lastDamage[loser];
+  if (winner === 0 && loserFighter.health <= 0 && lastOnLoser?.weapon) {
+    blackBookObserve(blackBookLedger, { type: "event", kind: "weaponKo", stage: state.stage });
+  }
+  blackBookObserve(blackBookLedger, {
+    type: "roundEnd",
+    won: winner === 0,
+    perfect: winner === 0 && perfect,
+    timeOver,
+    chip: Boolean(winner === 0 && timeOver && lastOnLoser?.chip),
+    jumped: progressionMatch.jumped[0],
+    combo: state.fighters[0].combo?.peakHits || 0,
+    fatality: type >= 0 && winner === 0 && !winnerFighter.def.boss
+      ? { fighterId: winnerFighter.def.id, variant: type, opponentIsBoss: Boolean(loserFighter.def.boss) }
+      : null,
+  });
+  progressionEvaluateLedger();
+}
+
+function progressionRecordMode() {
+  if (dailySession.active && state.mode === "arcade") return "daily";
+  if (["arcade", "survival", "team"].includes(state.mode)) return state.mode;
+  return "versus";
+}
+
+// Match-end fold: exactly once per matchSerial, from the resolveMatchResult
+// family (never a resim path — guarded anyway for safety).
+function progressionMatchEnd(winner) {
+  if (rollbackResimulating || progressionMatch.folded) return;
+  if (progressionMatch.serial !== state.matchSerial || state.fighters.length !== 2) return;
+  if (state.mode === "demo" || state.mode === "tournament") return;
+  progressionMatch.folded = true;
+  const heroDef = state.fighters[0]?.def;
+  if (!heroDef || heroDef.boss || sideIsCpuControlled(0)) return;
+  const won = winner === 0;
+  const result = applyMatchToRecords(recordsStore, {
+    fighterId: heroDef.id,
+    mode: progressionRecordMode(),
+    won,
+    rounds: progressionMatch.rounds,
+    roundWins: progressionMatch.roundWins[0],
+    damageDealt: progressionMatch.damageDealt[0],
+    damageTaken: progressionMatch.damageTaken[0],
+    fatalities: progressionMatch.fatalities[0],
+    fatalityVariants: progressionMatch.fatalityVariants[0],
+    dizzies: progressionMatch.dizzies[0],
+    perfects: progressionMatch.perfectRounds[0],
+    peakCombo: progressionMatch.peakCombo[0],
+    timeOverWin: progressionMatch.timeOverWin,
+    moveUses: progressionMatch.moveUses[0],
+  });
+  saveRecordsStore();
+  if (result?.rankedUp) queueRankUpToast(result.after, heroDef.name);
+  blackBookObserve(blackBookLedger, {
+    type: "matchEnd",
+    won,
+    stage: state.stage,
+    techs: progressionMatch.techs[0],
+    dizzies: progressionMatch.dizzies[0],
+    supers: progressionMatch.supers[0],
+    perfectRounds: progressionMatch.perfectRounds[0],
+    runScore: scoreTrackingActive() || scoreSession.total > 0 ? Math.round(scoreSession.total) : 0,
+  });
+  progressionEvaluateLedger();
+  saveBlackBookLedger();
+  refreshProgressionUi();
+}
+
+// Run-end fold (arcade clear, survival streak, daily, Block War) — pure
+// meta paths, called beside the mode resolvers.
+function progressionRunEnd(kind, detail = {}) {
+  if (rollbackResimulating || sideIsCpuControlled(0)) return;
+  blackBookObserve(blackBookLedger, { type: "runEnd", kind, ...detail });
+  progressionEvaluateLedger();
+  saveBlackBookLedger();
+}
+
+function progressionHighScore(rank) {
+  if (!Number.isFinite(rank) || rank < 0) return;
+  blackBookObserve(blackBookLedger, { type: "highScore", rank });
+  progressionEvaluateLedger();
+  saveBlackBookLedger();
+}
+
+// CINEMA 3D first activation — fired from the options toggle (DOM path).
+function progressionCinemaActivated() {
+  blackBookObserve(blackBookLedger, { type: "event", kind: "cinema3d" });
+  progressionEvaluateLedger();
+  saveBlackBookLedger();
+}
+
+// --- Progression UI: title status, Black Book screen, Records screen -------
+
+function refreshProgressionUi() {
+  const summary = blackBookSummary(blackBookLedger);
+  const bookStatus = $("#blackBookStatus");
+  if (bookStatus) bookStatus.textContent = `${summary.unlocked} / ${summary.total} INKED`;
+  const records = recordsSummary(recordsStore);
+  const recordsStatus = $("#recordsStatus");
+  if (recordsStatus) {
+    recordsStatus.textContent = records.matches > 0
+      ? `${records.wins}W · ${records.losses}L · ${records.rankedFighters} RANKED`
+      : "NO FIGHTS LOGGED";
+  }
+}
+
+function renderBlackBookScreen() {
+  const summary = blackBookSummary(blackBookLedger);
+  $("#blackBookCount").textContent = `${summary.unlocked} / ${summary.total} INKED`;
+  $("#blackBookList").innerHTML = BLACK_BOOK_ENTRIES.map((entry, index) => {
+    const date = blackBookLedger.unlocked[entry.id];
+    const ordinal = String(index + 1).padStart(2, "0");
+    if (date !== undefined) {
+      return `<div class="book-entry inked" role="listitem" data-ordinal="${ordinal}">
+        <b>${entry.title}</b><span>${entry.line}</span>
+        <span class="book-date">INKED${date ? ` · ${date}` : ""}</span>
+      </div>`;
+    }
+    return `<div class="book-entry locked" role="listitem" data-ordinal="${ordinal}">
+      <b aria-label="Redacted entry">${entry.title.replace(/[^ ]/g, "█")}</b>
+      <span>${entry.hint}</span>
+    </div>`;
+  }).join("");
+}
+
+function showBlackBookScreen() {
+  renderBlackBookScreen();
+  modeFxDebug.blackBookScreens += 1;
+  sound("select");
+  showScreen("blackbook");
+}
+
+function formatRecordNumber(value) {
+  return Math.round(value).toLocaleString("en-US");
+}
+
+function renderRecordsScreen() {
+  const records = recordsSummary(recordsStore);
+  $("#recordsLifetime").innerHTML = [
+    ["MATCHES", records.matches],
+    ["WINS", records.wins],
+    ["LOSSES", records.losses],
+    ["ROUNDS", records.rounds],
+    ["DMG DEALT", formatRecordNumber(records.damageDealt)],
+    ["DMG TAKEN", formatRecordNumber(records.damageTaken)],
+    ["FINAL BLOWS", records.fatalities],
+    ["PERFECTS", records.perfects],
+  ].map(([label, value]) => `<span>${label} <b>${value}</b></span>`).join("");
+  const best = loadSurvivalBest();
+  const daily = loadDailyRecord();
+  $("#recordsStreaks").textContent =
+    `GAUNTLET BEST ${best.streak} STRAIGHT · DAILY STREAK ${Math.max(0, Math.round(Number(daily?.streak) || 0))} (BEST ${Math.max(0, Math.round(Number(daily?.bestStreak) || 0))})`;
+  $("#recordsGrid").innerHTML = roster.map((def) => {
+    const record = recordsStore.fighters[def.id] || null;
+    const rank = masteryRank(record);
+    const favorite = favoriteMove(record);
+    const modes = record?.modes || {};
+    const arcadeWins = (modes.arcade?.wins || 0) + (modes.daily?.wins || 0);
+    return `<div class="record-card" role="listitem" style="--fighter:${def.color}">
+      <img src="assets/fighters/${def.id}.webp" alt="" draggable="false">
+      <h3>${def.name}</h3>
+      <span class="record-rank" data-tier="${rank.id}" title="${rank.points} PTS${rank.nextName ? ` · ${rank.toNext} TO ${rank.nextName}` : ""}">${rank.tierIndex > 0 ? rank.name : "UNRANKED"}</span>
+      <div class="record-lines">
+        <span>W — L <b>${record?.wins || 0} — ${record?.losses || 0}</b></span>
+        <span>ROUNDS <b>${record?.rounds || 0}</b></span>
+        <span>DMG DEALT <b>${formatRecordNumber(record?.damageDealt || 0)}</b></span>
+        <span>DMG TAKEN <b>${formatRecordNumber(record?.damageTaken || 0)}</b></span>
+        <span>GO-TO MOVE <b>${favorite ? prettyMoveName(favorite.action) : "—"}</b></span>
+        <span>FINAL BLOWS <b>${record?.fatalities || 0}</b></span>
+        <span>PEAK COMBO <b>${record?.peakCombo || 0} HITS</b></span>
+        <span>ARCADE WINS <b>${arcadeWins}</b></span>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function showRecordsScreen() {
+  renderRecordsScreen();
+  modeFxDebug.recordsScreens += 1;
+  sound("select");
+  showScreen("records");
+}
+
+// Small mastery chip on every select-screen portrait card.
+function refreshMasteryBadges() {
+  $$(".fighter-card .mastery-badge").forEach((badge) => {
+    const card = badge.closest(".fighter-card");
+    const id = roster[Number(card?.dataset.index)]?.id;
+    if (!id) return;
+    const rank = masteryRank(recordsStore.fighters[id]);
+    badge.hidden = rank.tierIndex === 0;
+    badge.dataset.tier = rank.id;
+    badge.textContent = rank.badge;
+    badge.title = `${rank.name} · ${rank.points} PTS`;
+  });
+}
 
 function loadHighScores() {
   const stored = storedJson(SCORE_STORAGE_KEY, []);
@@ -3837,11 +4278,14 @@ function setupRoster() {
     card.style.setProperty("--fighter", fighter.color);
     card.innerHTML = `
       <span class="pick-badge p1">P1</span><span class="pick-badge p2">P2</span>
+      <span class="mastery-badge" data-tier="none" hidden></span>
       <img class="fighter-portrait" src="assets/fighters/${fighter.id}.webp" alt="" aria-hidden="true" draggable="false">
       <span class="fighter-info"><strong>${fighter.name}</strong><small>${fighter.title}</small></span>`;
     card.addEventListener("click", () => chooseFighter(index));
     grid.append(card);
   });
+  // v2.1 PROGRESSION: mastery chips on the fresh cards.
+  refreshMasteryBadges();
   updateRosterUI();
 }
 
@@ -4044,6 +4488,10 @@ function resolveSurvivalResult(winner) {
     const outcome = recordSurvivalWin(run, state.fighters[0].health);
     const best = loadSurvivalBest();
     if (outcome.wins > best.streak) saveSurvivalBest({ ...best, streak: outcome.wins });
+    // v2.1 PROGRESSION: each Gauntlet bout is a single-round match; the live
+    // streak feeds the ledger on every win (best-of stays monotonic).
+    progressionMatchEnd(0);
+    progressionRunEnd("survival", { wins: outcome.wins });
     const proceed = () => {
       prepareSurvivalBout();
       startMatch(true);
@@ -4076,6 +4524,10 @@ function resolveSurvivalResult(winner) {
     score: Math.max(best.score, scoreSession.total),
   });
   scoreSession.detail = `survival-${run.wins}`;
+  // v2.1 PROGRESSION: the losing bout still counts; the run's final streak
+  // is observed one last time.
+  progressionMatchEnd(winner);
+  progressionRunEnd("survival", { wins: run.wins });
   maybeEnterInitials(() => showResult(winner));
 }
 
@@ -4106,6 +4558,15 @@ function resolveTeamResult(winner) {
   }
   const winnerFighter = state.fighters[winner];
   const outcome = recordTeamKo(battle, winner, winnerFighter?.health || 0, winnerFighter?.meter || 0);
+  // v2.1 PROGRESSION: every Block War pairing folds as a single-round match
+  // for the active P1 fighter; a finished war observes the sweep entry.
+  progressionMatchEnd(winner);
+  if (outcome?.over) {
+    progressionRunEnd("team", {
+      won: winner === 0,
+      sweep: winner === 0 && battle.eliminated[0].length === 0,
+    });
+  }
   if (!outcome || outcome.over) {
     showResult(winner);
     return;
@@ -4171,6 +4632,8 @@ function finishDailyRun(cleared) {
     streak: record.streak,
   };
   scoreSession.detail = `daily-${dailySession.date}`;
+  // v2.1 PROGRESSION: Daily Jawn clears + streaks feed the Black Book.
+  progressionRunEnd("daily", { cleared: Boolean(cleared), streak: record.streak });
   updateDailyBanners();
   refreshDailyUi();
   return dailySession.outcome;
@@ -4374,7 +4837,7 @@ function commitInitials() {
   try {
     localStorage.setItem(SCORE_INITIALS_KEY, initials);
   } catch { /* non-fatal */ }
-  const { list } = insertHighScore(loadHighScores(), {
+  const { list, rank } = insertHighScore(loadHighScores(), {
     initials,
     score: initialsUi.score,
     mode: scoreSession.mode || "arcade",
@@ -4382,6 +4845,8 @@ function commitInitials() {
     date: dailySession.finished ? dailySession.date : dailyDateString(),
   });
   saveHighScores(list);
+  // v2.1 PROGRESSION: taking the top row inks NAME IN LIGHTS.
+  progressionHighScore(rank);
   // Optional first-party leaderboard: offline-first, silent on any failure.
   submitScoreToWorker(initials, initialsUi.score, `${scoreSession.mode}:${scoreSession.detail}`);
   initialsUi.active = false;
@@ -4507,8 +4972,12 @@ function showScreen(name) {
   syncMusic();
   if (name === "title") {
     refreshDailyUi();
+    refreshProgressionUi();
     scheduleIdleDemo();
   } else clearIdleDemoTimer();
+  // v2.1 PROGRESSION: leaving the ending screen tears the sequence down so
+  // stale panel/credits timers can never advance a dead screen.
+  if (name !== "ending" && endingSequence.active) cancelEndingSequence();
   if (name !== "result" && name !== "ending") updateDailyBanners();
   if (name === "stage") renderMutatorBar();
 }
@@ -4545,6 +5014,8 @@ function startSelect(mode) {
         : "PLAYER 1 — CHOOSE";
   showScreen("select");
   syncDifficultyUi();
+  // v2.1 PROGRESSION: mastery chips reflect any records earned since boot.
+  refreshMasteryBadges();
   updateRosterUI();
 }
 
@@ -4725,6 +5196,9 @@ function startMatch(resetSet = true) {
   }
   clearBattleDamage();
   clearStageScars();
+  // v2.1 PROGRESSION: fresh per-match observation accumulators (fighters are
+  // built and any survival/team carry health is already applied above).
+  progressionResetMatch();
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
@@ -4828,6 +5302,9 @@ function startOnlineMatch(config) {
   warmFighterAudio();
   clearBattleDamage();
   clearStageScars();
+  // v2.1 PROGRESSION: observation-only accumulators reset for the online
+  // match too (nothing here ever writes back into the rollback sim).
+  progressionResetMatch();
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
@@ -4883,6 +5360,9 @@ function resetRound() {
   resetStageWeapon();
   resetCrowd();
   clearBattleDamage();
+  // v2.1 PROGRESSION: re-arm the per-round latches (jump/no-jump, damage
+  // sources, round-start health). resetRound runs on a sim path — guarded.
+  if (!rollbackResimulating) progressionResetRound();
   state.particles.length = 0;
   state.effects.length = 0;
   state.traps.length = 0;
@@ -5030,6 +5510,9 @@ function finishRound(winner, type = -1) {
   // elimination callout behind the KO banner via the announcer busy window.
   if (!rollbackResimulating) {
     captureRoundBonuses(winner, type);
+    // v2.1 PROGRESSION: round-end observation fold (dedupe key inside, same
+    // shape as queueStoryCallouts'), plus any Black Book unlock toasts.
+    progressionRoundEnd(winner, type);
     if (state.mode === "team" && state.teamBattle && !state.teamBattle.over) {
       const loserDef = state.fighters[1 - winner].def;
       const remaining = teamFightersRemaining(state.teamBattle, 1 - winner) - 1;
@@ -5671,6 +6154,151 @@ function showArcadeLadder(clearedMatch) {
   showScreen("ladder");
 }
 
+// ===========================================================================
+// v2.1 PROGRESSION — arcade ending sequence: three treated story panels over
+// art the game already ships (the 4x4 specials atlas + the roster portrait),
+// an SF2-style credits roll, then the classic resting ending card. Pure DOM
+// overlay, so it reads identically under the 2D canvas and CINEMA 3D. Every
+// beat is skippable with any attack button / tap / pad confirm; reduced
+// motion swaps crossfade+pan for instant cuts and a static credits list.
+// ===========================================================================
+
+const endingSequence = {
+  active: false,
+  def: null,
+  panels: [],
+  step: -1,
+  timer: 0,
+};
+
+const ENDING_PANEL_NUMERALS = ["I", "II", "III"];
+
+function clearEndingSequenceTimer() {
+  window.clearTimeout(endingSequence.timer);
+  endingSequence.timer = 0;
+}
+
+function cancelEndingSequence() {
+  clearEndingSequenceTimer();
+  endingSequence.active = false;
+  endingSequence.step = -1;
+  $("#endingScreen").classList.remove("sequencing");
+  $("#endingPanels").hidden = true;
+  $("#endingCredits").hidden = true;
+}
+
+function scheduleEndingAdvance(ms) {
+  clearEndingSequenceTimer();
+  endingSequence.timer = window.setTimeout(() => {
+    endingSequence.timer = 0;
+    advanceEndingSequence();
+  }, ms);
+}
+
+function renderEndingPanel(step) {
+  const panel = endingSequence.panels[step];
+  const def = endingSequence.def;
+  if (!panel || !def) return;
+  const art = $("#endingPanelArt");
+  const isPortrait = panel.art === "portrait";
+  art.classList.toggle("portrait", isPortrait);
+  art.classList.toggle("atlas", !isPortrait);
+  art.style.backgroundImage = isPortrait
+    ? `url("assets/fighters/${def.id}.webp")`
+    : `url("assets/moves/${def.id}-specials.webp")`;
+  if (isPortrait) {
+    art.style.backgroundPosition = "";
+  } else {
+    // Frame one 4x4 atlas cell exactly like the victory pose treatment does.
+    const frame = clamp(Math.round(panel.frame ?? 0), 0, 15);
+    art.style.backgroundPosition = `${((frame % 4) / 3) * 100}% ${(Math.floor(frame / 4) / 3) * 100}%`;
+  }
+  const panelEl = $("#endingPanel");
+  panelEl.dataset.treat = panel.treat || "night";
+  $("#endingPanelIndex").textContent = `PART ${ENDING_PANEL_NUMERALS[step] || step + 1} · ${def.name}`;
+  $("#endingPanelTitle").textContent = panel.title;
+  $("#endingPanelText").textContent = panel.text;
+  // Crossfade + slow pan; the global reduced-motion kill-rule flattens both
+  // into an instant cut.
+  restartCssAnimation(panelEl, "enter");
+  modeFxDebug.endingPanelsShown += 1;
+  scheduleEndingAdvance(state.accessibility.reducedMotion ? 5600 : 7400);
+}
+
+function renderEndingCredits() {
+  const reduced = state.accessibility.reducedMotion;
+  const crawl = $("#endingCreditsCrawl");
+  crawl.innerHTML = `
+    <div class="credits-heading"><b>${ARCADE_CREDITS.heading}</b><span>${ARCADE_CREDITS.subheading}</span></div>
+    <div class="credits-section">${ARCADE_CREDITS.castTitle}</div>
+    ${roster.map((def) => `<div class="credit-cast"><img src="assets/fighters/${def.id}.webp" alt="" draggable="false"><b>${def.name}</b><span>${def.title}</span></div>`).join("")}
+    <div class="credit-row"><span>${ARCADE_CREDITS.bossCredit.role}</span><b>${ARCADE_CREDITS.bossCredit.name}</b></div>
+    <div class="credits-section">${ARCADE_CREDITS.crewTitle}</div>
+    ${ARCADE_CREDITS.crew.map((row) => `<div class="credit-row"><span>${row.role}</span><b>${row.name}</b></div>`).join("")}
+    <div class="credit-finale">${ARCADE_CREDITS.finale}</div>`;
+  $("#endingPanels").hidden = true;
+  const container = $("#endingCredits");
+  container.classList.toggle("static", reduced);
+  container.hidden = false;
+  modeFxDebug.creditsRolls += 1;
+  if (reduced) {
+    crawl.classList.remove("roll");
+    scheduleEndingAdvance(9000);
+  } else {
+    crawl.style.setProperty("--credits-ms", "30s");
+    restartCssAnimation(crawl, "roll");
+    scheduleEndingAdvance(30800);
+  }
+}
+
+function finishEndingSequence() {
+  cancelEndingSequence();
+  // The resting ending card (replay / title / daily share) takes the screen.
+  restartCssAnimation($("#endingScreen").querySelector(".ending-copy"), "enter");
+}
+
+function advanceEndingSequence() {
+  if (!endingSequence.active) return false;
+  if (state.screen !== "ending") {
+    cancelEndingSequence();
+    return false;
+  }
+  clearEndingSequenceTimer();
+  endingSequence.step += 1;
+  if (endingSequence.step < endingSequence.panels.length) renderEndingPanel(endingSequence.step);
+  else if (endingSequence.step === endingSequence.panels.length) renderEndingCredits();
+  else finishEndingSequence();
+  return true;
+}
+
+function beginEndingSequence(def, panels) {
+  endingSequence.active = true;
+  endingSequence.def = def;
+  endingSequence.panels = [...panels];
+  endingSequence.step = -1;
+  $("#endingScreen").classList.add("sequencing");
+  $("#endingCredits").hidden = true;
+  $("#endingPanels").hidden = false;
+  modeFxDebug.endingSequences += 1;
+  advanceEndingSequence();
+}
+
+// Any attack button (either seat's bindings), Enter or Space skips the
+// current ending beat. Pad confirm routes in via menuPadLoop; taps via the
+// pointer handlers on the panel/credits containers.
+function endingSkipKeyCode(code) {
+  if (code === "Enter" || code === "Space") return true;
+  return keyMaps.some((map) => [map.lp, map.hp, map.lk, map.hk].includes(code));
+}
+
+function handleEndingKey(event) {
+  if (!endingSequence.active || state.screen !== "ending") return false;
+  if (!endingSkipKeyCode(event.code)) return false;
+  event.preventDefault();
+  advanceEndingSequence();
+  return true;
+}
+
 function showArcadeEnding() {
   const run = state.arcadeRun;
   const ending = getArcadeEnding(run?.playerId);
@@ -5688,6 +6316,12 @@ function showArcadeEnding() {
   renderArcadeRoute();
   updateDailyBanners();
   showScreen("ending");
+  // v2.1 PROGRESSION: the 3-panel resolution + credits roll runs first; the
+  // card above is the sequence's resting state (and the fallback if a fighter
+  // ever ships without panels).
+  const panels = endingPanelsFor(def.id);
+  if (panels?.length) beginEndingSequence(def, panels);
+  else cancelEndingSequence();
 }
 
 function resolveMatchResult(winner) {
@@ -5703,6 +6337,9 @@ function resolveMatchResult(winner) {
     return;
   }
   if (state.mode !== "arcade" || !state.arcadeRun) {
+    // v2.1 PROGRESSION: versus/online matches fold into the records book here
+    // (meta path — observation only, never during resimulation).
+    progressionMatchEnd(winner);
     showResult(winner);
     return;
   }
@@ -5712,13 +6349,24 @@ function resolveMatchResult(winner) {
     // streak broken) with no continues, then initials if the total charts.
     if (dailySession.active && !dailySession.finished) {
       finishDailyRun(false);
+      progressionMatchEnd(winner);
       maybeEnterInitials(() => showResult(winner));
       return;
     }
+    progressionMatchEnd(winner);
     showResult(winner);
     return;
   }
   const tallyContext = finalizeBoutTally();
+  // v2.1 PROGRESSION: fold the cleared bout (after the tally banks so the
+  // ledger sees the run score), and ink the ladder clear itself.
+  progressionMatchEnd(0);
+  if (outcome.completed) {
+    progressionRunEnd("arcade", {
+      fighterId: state.arcadeRun.playerId,
+      finalDifficulty: !dailySession.active && state.aiDifficulty === "final",
+    });
+  }
   const proceed = () => {
     if (outcome.completed) {
       if (dailySession.active && !dailySession.finished) finishDailyRun(true);
@@ -6168,6 +6816,9 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   if (!rollbackResimulating && /-(step-knee|axe-kick|slide)$/.test(fighter.attacking.profileId || "")) {
     mechFxDebug.commandKicks += 1;
   }
+  // v2.1 PROGRESSION: per-move usage tally (render-only meta counters on the
+  // mechFxDebug pattern; the guard keeps resimulated ticks from double-counting).
+  if (!rollbackResimulating) progressionNoteMove(fighter);
   if (throwObjectProfile) {
     fighter.throwableUses = Math.max(0, fighter.throwableUses - 1);
     fighter.throwableSpawned = false;
@@ -6447,6 +7098,10 @@ function enterDizzy(fighter, attacker) {
   // Release 1.8 GRIND: score attack — dizzying the CPU banks a tally bonus
   // (guarded meta bookkeeping; no sim state involved).
   awardDizzyScore(attacker);
+  // v2.1 PROGRESSION: per-match dizzy tally for the attacker (guarded).
+  if (!rollbackResimulating && (attacker?.side === 0 || attacker?.side === 1)) {
+    progressionMatch.dizzies[attacker.side] += 1;
+  }
   fighter.dizzyFrames = STUN_RULES.dizzyFrames;
   fighter.dizzyTotalFrames = STUN_RULES.dizzyFrames;
   fighter.dizzyMashCount = 0;
@@ -6505,7 +7160,11 @@ function performTaunt(fighter) {
   fighter.crouch = false;
   const lines = FIGHTER_TAUNT_LINES[fighter.kitId]?.length || TAUNT_RULES.voiceLines;
   fighter.tauntLine = Math.floor(random() * lines) % lines;
-  if (!rollbackResimulating) mechFxDebug.taunts += 1;
+  if (!rollbackResimulating) {
+    mechFxDebug.taunts += 1;
+    // v2.1 PROGRESSION: Black Book showboat entry (guarded, P1 seat only).
+    progressionEvent("taunt", {}, fighter.side);
+  }
   spawnCombatText(fighter.x, fighter.y - fighter.height - 44, "TAUNT", fighter.def.accent);
   stirCrowd(0.25);
   fighterTauntCue(fighter, fighter.tauntLine);
@@ -6594,7 +7253,11 @@ function enterGuardCrush(fighter, attacker) {
   state.hitstop = Math.max(state.hitstop, 0.14);
   state.shake = Math.max(state.shake, 0.3);
   if ($("#flashToggle").checked) state.flash = Math.max(state.flash, 0.16);
-  if (!rollbackResimulating) mechFxDebug.guardCrushes += 1;
+  if (!rollbackResimulating) {
+    mechFxDebug.guardCrushes += 1;
+    // v2.1 PROGRESSION: the crusher's ledger tally (guarded, P1 seat only).
+    if (attacker) progressionEvent("guardCrush", {}, attacker.side);
+  }
   spawnCombatText(fighter.x, fighter.y - fighter.height - 52, "GUARD CRUSH", "#7de8ff");
   // Announcer letter-slam banner + its spoken bank cue (announce() carries the
   // resim guard and books the guardcrush announcer bank).
@@ -6971,6 +7634,8 @@ function performWallBounce(fighter, wallDirection) {
   // is completely helpless, so the attacker's combo stays open through it —
   // the conversion counts (and scales) as the same combo.
   const attacker = state.fighters[1 - fighter.side];
+  // v2.1 PROGRESSION: wall-bounce conversion ledger event (guarded).
+  if (!rollbackResimulating && attacker) progressionEvent("wallBounce", {}, attacker.side);
   if (attacker) {
     attacker.combo.graceUntilFrame = Math.max(
       attacker.combo.graceUntilFrame ?? -Infinity,
@@ -7270,6 +7935,8 @@ function updateFighter(fighter, opponent, input, dt) {
           fighter.grounded = false;
           fighter.block = false;
           fighter.guarding = false;
+          // v2.1 PROGRESSION: no-jump-round observation latch (guarded).
+          if (!rollbackResimulating) progressionMatch.jumped[fighter.side] = true;
           sound("jump", fighter);
         } else {
           if (fighter.crouch) fighter.vx = 0;
@@ -7419,6 +8086,8 @@ function triggerPaintTrap(trap, victim) {
     ? Math.max(1, victim.health - damage)
     : clamp(victim.health - damage, 0, 100);
   victim.lastDamageFrame = state.simulationTick;
+  // v2.1 PROGRESSION: damage-source latch (guarded meta observation).
+  if (!rollbackResimulating) progressionNoteDamage(victim.side, { chip: blocked });
   victim.blockstunFrames = blocked ? trap.blockstunFrames : 0;
   victim.hitstunFrames = blocked ? 0 : trap.hitstunFrames;
   victim.stun = Math.max(victim.hitstunFrames, victim.blockstunFrames) / SIMULATION_HZ;
@@ -7529,7 +8198,11 @@ function maybeSpawnThrowable(fighter, attack) {
       enhanced,
     });
   });
-  if (enhanced && !rollbackResimulating) mechFxDebug.exThrowables += 1;
+  if (enhanced && !rollbackResimulating) {
+    mechFxDebug.exThrowables += 1;
+    // v2.1 PROGRESSION: EX throwable ledger event (guarded, P1 seat only).
+    progressionEvent("exThrowable", {}, fighter.side);
+  }
   sound("throw", fighter);
   if (!rollbackResimulating) objectSound(profile.style);
   spawnCombatText(fighter.x, fighter.y - fighter.height - 46, flight.name, fighter.def.accent);
@@ -7683,6 +8356,14 @@ function triggerProjectile(projectile, victim) {
   const damage = blocked ? projectile.chipDamage : baseDamage;
   victim.health = blocked ? Math.max(1, victim.health - damage) : clamp(victim.health - damage, 0, 100);
   victim.lastDamageFrame = state.simulationTick;
+  // v2.1 PROGRESSION: damage-source latch + personal-throwable-landed event
+  // (guarded meta observation on the announce() pattern).
+  if (!rollbackResimulating) {
+    progressionNoteDamage(victim.side, { chip: blocked, weapon: Boolean(projectile.stageWeapon) });
+    if (!blocked && !armored && projectile.throwable) {
+      progressionEvent("throwableLand", { fighterId: owner.def.id }, owner.side);
+    }
+  }
   victim.blockstunFrames = blocked ? projectile.blockstunFrames : 0;
   victim.hitstunFrames = blocked || armored ? 0 : projectile.hitstunFrames + (counter ? DEFENSE_RULES.counterHitstunBonusFrames : 0);
   victim.stun = Math.max(victim.hitstunFrames, victim.blockstunFrames) / SIMULATION_HZ;
@@ -8181,6 +8862,8 @@ function resolveGrabThrow(attacker, victim, grab, style, direction) {
   awardHitScore(attacker, "throw");
   victim.health = clamp(victim.health - grab.damage, 0, 100);
   victim.lastDamageFrame = state.simulationTick;
+  // v2.1 PROGRESSION: damage-source latch (guarded meta observation).
+  if (!rollbackResimulating) progressionNoteDamage(victim.side, {});
   victim.lastHitResult = ATTACK_LEVELS.THROW;
   victim.juggleCount = 0;
   victim.wallBounceUsed = false;
@@ -8252,6 +8935,8 @@ function techThrow(attacker, victim) {
   sound("block", victim);
   // Wave 9: tech shout from the escaping fighter (guarded + tick-deduped).
   fighterReactiveCue(victim, "tech");
+  // v2.1 PROGRESSION: the escapee's grab-tech tally (guarded meta counter).
+  if (!rollbackResimulating) progressionMatch.techs[victim.side] += 1;
 }
 
 function triggerSouthpawCounter(counterFighter, incomingFighter, incomingAttack, collision) {
@@ -8404,6 +9089,18 @@ function hit(attacker, victim, attack, collision) {
     ? Math.max(1, victim.health - damage)
     : clamp(victim.health - damage, 0, 100);
   victim.lastDamageFrame = state.simulationTick;
+  // v2.1 PROGRESSION: damage-source latch (chip / stage-weapon) read only at
+  // round end; a Perfect Guard deals nothing so it never becomes "the last
+  // word". Guarded meta observation — no sim state involved.
+  if (!rollbackResimulating && !(blocked && perfect)) {
+    progressionNoteDamage(victim.side, {
+      chip: blocked,
+      weapon: String(attack.profileId || "").startsWith("stage-weapon-"),
+    });
+    if (!blocked && !armored && attack.superMove && attacker.attackHits === 1) {
+      progressionMatch.supers[attacker.side] += 1;
+    }
+  }
   victim.blockstunFrames = blocked
     ? Math.max(1, attack.blockstunFrames - (perfect ? PERFECT_GUARD_RULES.blockstunReductionFrames : 0))
     : 0;
@@ -8531,7 +9228,11 @@ function hit(attacker, victim, attack, collision) {
   // Release 1.7: Perfect Guard flash — a cyan ring plus PERFECT combat text
   // (checksum-exempt state.effects, same channel every hit spark uses).
   if (perfect) {
-    if (!rollbackResimulating) mechFxDebug.perfectGuards += 1;
+    if (!rollbackResimulating) {
+      mechFxDebug.perfectGuards += 1;
+      // v2.1 PROGRESSION: the defender's Perfect Guard ledger event (guarded).
+      progressionEvent("perfectGuard", {}, victim.side);
+    }
     state.effects.push({
       kind: "shockRing", x: impact.x, y: impact.y,
       size: 78, life: 0.3, max: 0.3, color: "#63f2ff",
@@ -17296,8 +17997,8 @@ window.addEventListener("keydown", (event) => {
   if (!keys.has(event.code)) pressed.add(event.code);
   keys.add(event.code);
   // Release 1.8 GRIND: tally count-up and initials entry own the keyboard
-  // while their screens are up.
-  if (handleTallyKey(event) || handleInitialsKey(event)) return;
+  // while their screens are up. v2.1: the arcade ending sequence too.
+  if (handleTallyKey(event) || handleInitialsKey(event) || handleEndingKey(event)) return;
   titleKeyboard(event);
 });
 window.addEventListener("keyup", (event) => keys.delete(event.code));
@@ -17351,7 +18052,12 @@ function menuPadLoop() {
       else chooseFighter(state.picks[state.selectingPlayer]);
     } else if (state.screen === "stage") startMatch(true);
     else if (state.screen === "ladder") startMatch(true);
-    else if (state.screen === "ending") startSelect("arcade");
+    else if (state.screen === "ending") {
+      // v2.1: pad confirm skips the current ending beat first; only the
+      // resting card starts a fresh arcade run.
+      if (endingSequence.active) advanceEndingSequence();
+      else startSelect("arcade");
+    }
     else if (state.screen === "tally") tallyContinue();
     else if (state.screen === "initials") commitInitials();
     else if (state.screen === "result") {
@@ -17477,6 +18183,9 @@ $("#crtModeToggle").addEventListener("change", (event) => {
 $("#cinema3dToggle").addEventListener("change", (event) => {
   state.cinema3d = event.target.checked;
   localStorage.setItem("final-blow-cinema-3d", state.cinema3d ? "1" : "0");
+  // v2.1 PROGRESSION: first CINEMA 3D activation inks THE PICTURE SHOW
+  // (pure DOM path — the ledger dedupes via its unlocked map).
+  if (state.cinema3d) progressionCinemaActivated();
   // Live-switch: the module lazy-loads on first activation; toggling off just
   // hides the 3D canvas and resumes the 2D world draw next frame.
   ensureCinema3d();
@@ -17640,6 +18349,17 @@ $("#newStageButton").addEventListener("click", showSameFightersStageSelect);
 $("#reselectButton").addEventListener("click", () => startSelect(state.mode));
 // Release 1.8 GRIND: new-mode surfaces.
 $("#dailyButton").addEventListener("click", () => startDailyRun());
+// v2.1 PROGRESSION surfaces: the ledger screens + ending sequence skips.
+$("#blackBookButton").addEventListener("click", () => { unlockAudio(); showBlackBookScreen(); });
+$("#recordsButton").addEventListener("click", () => { unlockAudio(); showRecordsScreen(); });
+$("#endingPanels").addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  advanceEndingSequence();
+});
+$("#endingCredits").addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  advanceEndingSequence();
+});
 $("#tallyContinueButton").addEventListener("click", () => tallyContinue());
 $("#initialsConfirmButton").addEventListener("click", () => commitInitials());
 $$("#initialsSlots .initials-slot").forEach((slot, index) => {
@@ -17859,6 +18579,16 @@ window.__finalBlowEngine = {
         },
         highScores: loadHighScores(),
         survivalBest: loadSurvivalBest(),
+        // v2.1 PROGRESSION probes: unlocked count + records rollup + the
+        // ending sequence position, for smoke tests and QA scripts.
+        blackBook: blackBookSummary(blackBookLedger),
+        records: recordsSummary(recordsStore),
+        ending: {
+          active: endingSequence.active,
+          step: endingSequence.step,
+          panels: endingSequence.panels.length,
+          fighterId: endingSequence.def?.id || null,
+        },
         fx: { ...modeFxDebug },
       },
       seed: state.matchSeed,
@@ -18167,6 +18897,8 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       qaInputOverrides[1] = null;
       commandHistory[0].length = 0;
       commandHistory[1].length = 0;
+      // v2.1 PROGRESSION: QA fights accumulate records like real ones.
+      progressionResetMatch();
       showScreen("fight");
       updateHud();
       updateFacings();
@@ -18393,6 +19125,59 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       localStorage.removeItem(DAILY_RULES.storageKey);
       localStorage.removeItem(SURVIVAL_BEST_KEY);
       return true;
+    },
+    // --- v2.1 PROGRESSION probes -------------------------------------------
+    progression() {
+      return {
+        blackBook: blackBookSummary(blackBookLedger),
+        unlocked: Object.keys(blackBookLedger.unlocked),
+        tallies: { ...blackBookLedger.tallies },
+        best: { ...blackBookLedger.best },
+        sets: Object.fromEntries(Object.entries(blackBookLedger.sets).map(([group, keys]) => [group, Object.keys(keys)])),
+        records: recordsSummary(recordsStore),
+        fighters: Object.fromEntries(Object.entries(recordsStore.fighters).map(([id, record]) => [id, {
+          wins: record.wins,
+          losses: record.losses,
+          rounds: record.rounds,
+          damageDealt: Math.round(record.damageDealt),
+          damageTaken: Math.round(record.damageTaken),
+          fatalities: record.fatalities,
+          peakCombo: record.peakCombo,
+          favorite: favoriteMove(record),
+          rank: masteryRank(record),
+        }])),
+      };
+    },
+    clearProgression() {
+      recordsStore = normalizeRecordsStore(null);
+      blackBookLedger = normalizeBlackBookStore(null);
+      localStorage.removeItem(RECORDS_STORAGE_KEY);
+      localStorage.removeItem(BLACK_BOOK_STORAGE_KEY);
+      refreshProgressionUi();
+      return true;
+    },
+    blackBookScreen() {
+      showBlackBookScreen();
+      return blackBookSummary(blackBookLedger);
+    },
+    recordsScreen() {
+      showRecordsScreen();
+      return recordsSummary(recordsStore);
+    },
+    ending(playerId = "deathblow") {
+      // Complete an arcade ladder instantly and roll the ending sequence —
+      // the fast QA path to panels + credits.
+      const run = createArcadeRun(playerId, roster.map(({ id }) => id), 237);
+      while (!run.completed) recordArcadeResult(run, true);
+      state.mode = "arcade";
+      state.arcadeRun = run;
+      dailySession.active = false;
+      showArcadeEnding();
+      return window.__finalBlowEngine.snapshot().meta.ending;
+    },
+    endingAdvance() {
+      advanceEndingSequence();
+      return window.__finalBlowEngine.snapshot().meta.ending;
     },
     tournamentMatrix(seconds = 8, difficulty = "pro") {
       const fighterIds = roster.map(({ id }) => id);
