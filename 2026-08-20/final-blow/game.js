@@ -41,6 +41,7 @@ import {
   getActiveHitboxes,
   getHurtboxes,
   isCounterHit,
+  localBoxToWorld,
   resolveArenaCollision,
 } from "./engine/defense.mjs";
 import {
@@ -1038,6 +1039,29 @@ const audioAssets = {
   ko: "assets/audio/knockout.mp3",
 };
 
+// v2.6 ELEMENTS: one short generated layer per element (ElevenLabs
+// sound-effects API), fired from the element-kit release latch through
+// elementSfx() — sfx-toggle-gated and rate-capped there so mashed specials
+// never stack the layer. A separate table on purpose: audioAssets is the
+// review-guarded shared-cue table (exactly the seven takes Jez kept) and
+// these are new generated media, not reviewed recordings returning. They
+// join the same sfxPools below, so sound() plays them through the ordinary
+// pool/cursor/procedural-fallback machinery.
+const elementAudioAssets = Object.freeze({
+  "vfx-flame": "assets/audio/vfx/flame-whoosh.mp3",
+  "vfx-electric": "assets/audio/vfx/electric-crackle.mp3",
+  "vfx-seismic": "assets/audio/vfx/seismic-rumble.mp3",
+  "vfx-spark": "assets/audio/vfx/spark-hiss.mp3",
+  "vfx-smoke": "assets/audio/vfx/smoke-puff.mp3",
+  "vfx-bass": "assets/audio/vfx/bass-drop.mp3",
+  "vfx-curse": "assets/audio/vfx/curse-wind.mp3",
+  "vfx-glyph": "assets/audio/vfx/glyph-chime.mp3",
+  "vfx-paper": "assets/audio/vfx/paper-flutter.mp3",
+  "vfx-paint": "assets/audio/vfx/paint-spray.mp3",
+  "vfx-vinyl": "assets/audio/vfx/vinyl-scratch.mp3",
+  "vfx-cash": "assets/audio/vfx/cash-riffle.mp3",
+});
+
 const sfxVolumes = {
   select: 0.5,
   jump: 0.42,
@@ -1069,6 +1093,19 @@ const sfxVolumes = {
   scream: 0.95,
   // Release 1.7 DEPTH: guard-crush shatter bark.
   crush: 0.74,
+  // v2.6 ELEMENTS: elemental layers sit under the existing swing/impact cues.
+  "vfx-flame": 0.46,
+  "vfx-electric": 0.44,
+  "vfx-seismic": 0.5,
+  "vfx-spark": 0.4,
+  "vfx-smoke": 0.5,
+  "vfx-bass": 0.42,
+  "vfx-curse": 0.55,
+  "vfx-glyph": 0.42,
+  "vfx-paper": 0.62,
+  "vfx-paint": 0.5,
+  "vfx-vinyl": 0.42,
+  "vfx-cash": 0.5,
 };
 
 function createSfxPool(kind, src) {
@@ -1084,6 +1121,11 @@ const sfxPools = Object.fromEntries(Object.entries(audioAssets).map(([kind, src]
   createSfxPool(kind, src),
 ]));
 const sfxCursors = Object.fromEntries(Object.keys(audioAssets).map((kind) => [kind, 0]));
+// The elemental layers ride the same pools/cursors so sound() plays them.
+for (const [kind, src] of Object.entries(elementAudioAssets)) {
+  sfxPools[kind] = createSfxPool(kind, src);
+  sfxCursors[kind] = 0;
+}
 const fighterSfxPools = new Map();
 const fighterSfxCursors = new Map();
 const fighterAudioAudit = auditFighterAudio();
@@ -6100,6 +6142,588 @@ function fighterMotionTransform(fighter) {
       * 0.07 * (0.35 + 0.65 * drain);
   }
   return scratch;
+}
+
+// ---------------------------------------------------------------------------
+// v2.6 ELEMENTS — three-phase elemental special-attack VFX (the SF6 bar:
+// "special attacks with things like sparks, smoke, flames"). Every special/
+// EX/super and every personal throwable flight carries an element kit with
+// three phases: CHARGE (gathering aura + converging motes through startup),
+// ACTIVE (velocity-inherited trail off the moving limb/projectile through the
+// active window) and RELEASE (burst on the first active frame + ~0.5s of
+// settling residue). Sprites come from generated 4x4 flipbook sheets under
+// assets/vfx/ (magenta-keyed to alpha by tools/build_vfx_atlas.py;
+// MANIFEST.json carries per-frame trim boxes) with a procedural glow fallback
+// until the media arrives — the sheets follow the on-demand media policy and
+// are NOT in the service-worker shell.
+//
+// Everything in this block is presentation on the documented superDimLevel
+// pattern: module-level render-only state written exclusively from the render
+// loop (updateElementalVfx runs in draw(), which never executes during
+// rollback resimulation), tick-deduped like the motion observers, frame
+// selection uses visualRandom/tick hashes only, and the sprite pool is
+// budget-scaled by the performance profile (full on high, ~68% balanced,
+// minimal on battery). reducedMotion calms particle motion; the flash toggle
+// gates the bright release core and the super screen-edge wash. CINEMA 3D
+// consumes the same kits through the spawnHit latch: the payload now carries
+// the attacker's element id and the 3D impact layer re-tints its
+// protection-mask-joined burst stack per element.
+// ---------------------------------------------------------------------------
+
+// How particles cut from each sheet move and composite. anim sheets play
+// their 16 cells over the particle's life, scatter sheets pin one cell per
+// particle, flicker sheets hash a cell from the sim tick (live electricity).
+const ELEMENT_SHEET_PHYSICS = Object.freeze({
+  flame: Object.freeze({ additive: true, gravity: -150, drag: 0.9, spin: 0.5 }),
+  smoke: Object.freeze({ additive: false, gravity: -85, drag: 0.9, spin: 0.7, alpha: 0.82 }),
+  electric: Object.freeze({ additive: true, gravity: 0, drag: 0.86, spin: 0 }),
+  debris: Object.freeze({ additive: false, gravity: 960, drag: 0.985, spin: 7 }),
+  spark: Object.freeze({ additive: true, gravity: 430, drag: 0.94, spin: 0.8 }),
+  // Glyphs and curse wisps are PAINTED shapes (dark-edged volume, opaque
+  // gold): source-over keeps their silhouettes; additive washed them out
+  // against bright sprites. Both still get a backGlow halo so they separate
+  // from the night stages.
+  glyph: Object.freeze({ additive: false, gravity: -55, drag: 0.9, spin: 0.5, backGlow: true }),
+  paper: Object.freeze({ additive: false, gravity: 240, drag: 0.9, spin: 3.2, flutter: true }),
+  curse: Object.freeze({ additive: false, gravity: -130, drag: 0.9, spin: 0.4, alpha: 0.95, backGlow: true }),
+  // Near-black scatter sprites (feathers, vinyl shards) vanish on the night
+  // stages without a soft kit-coloured halo behind them.
+  feather: Object.freeze({ additive: false, gravity: 140, drag: 0.88, spin: 2.4, flutter: true, backGlow: true }),
+  paint: Object.freeze({ additive: false, gravity: 40, drag: 0.9, spin: 0.3, alpha: 0.9 }),
+  vinyl: Object.freeze({ additive: false, gravity: 880, drag: 0.985, spin: 7.5, backGlow: true }),
+  cash: Object.freeze({ additive: false, gravity: 180, drag: 0.9, spin: 2.8, flutter: true }),
+});
+
+// The element kits: which sheets each phase draws from, the kit's light
+// palette, and the generated SFX layer(s) fired at release (super adds the
+// second layer). Fighters map here through their roster `vfx` signature.
+const ELEMENT_KITS = Object.freeze({
+  seismic: Object.freeze({
+    id: "seismic", glow: "#e8b25a", core: "#ffe9bd", ring: "#d9c9a8", groundBurst: true,
+    charge: ["smoke", "debris"], trail: ["smoke", "debris"], burst: ["debris", "smoke", "spark"],
+    residue: ["smoke", "debris"], superBurst: ["flame"], sfx: "vfx-seismic", superSfx: "vfx-flame",
+  }),
+  neon: Object.freeze({
+    id: "neon", glow: "#5ee9ff", core: "#eafcff", ring: "#9ff2ff",
+    charge: ["electric", "spark"], trail: ["electric"], burst: ["electric", "spark"],
+    residue: ["spark"], superBurst: ["electric"], sfx: "vfx-electric", superSfx: "vfx-spark",
+  }),
+  concrete: Object.freeze({
+    id: "concrete", glow: "#e0e0e0", core: "#ffffff", ring: "#cfcfcf", groundBurst: true,
+    charge: ["spark"], trail: ["debris", "spark"], burst: ["debris", "spark"],
+    residue: ["smoke"], superBurst: ["smoke"], sfx: "vfx-spark", superSfx: "vfx-smoke",
+  }),
+  spray: Object.freeze({
+    id: "spray", glow: "#ff9b3d", core: "#ffd9a8", ring: "#ffb765",
+    charge: ["paint"], trail: ["paint"], burst: ["paint"],
+    residue: ["paint"], superBurst: ["paint"], sfx: "vfx-paint", superSfx: "vfx-smoke",
+  }),
+  tech: Object.freeze({
+    id: "tech", glow: "#7fd4ff", core: "#e8f7ff", ring: "#a8e2ff",
+    charge: ["electric"], trail: ["electric", "spark"], burst: ["electric"],
+    residue: ["spark"], superBurst: ["electric"], sfx: "vfx-electric", superSfx: "vfx-spark",
+  }),
+  gilded: Object.freeze({
+    id: "gilded", glow: "#ffd76b", core: "#fff3cf", ring: "#ffe49a",
+    charge: ["spark"], trail: ["cash", "spark"], burst: ["cash", "spark"],
+    residue: ["cash"], superBurst: ["cash"], sfx: "vfx-cash", superSfx: "vfx-glyph",
+  }),
+  feedback: Object.freeze({
+    id: "feedback", glow: "#b08cff", core: "#e9dcff", ring: "#8cff6b",
+    charge: ["electric"], trail: ["electric", "smoke"], burst: ["electric", "smoke"],
+    residue: ["smoke"], superBurst: ["electric"], sfx: "vfx-electric", superSfx: "vfx-smoke",
+  }),
+  bass: Object.freeze({
+    id: "bass", glow: "#ff8c5a", core: "#ffd9c2", ring: "#ffd9a8", rings: true,
+    charge: ["vinyl"], trail: ["vinyl"], burst: ["vinyl"],
+    residue: ["vinyl"], superBurst: ["vinyl"], sfx: "vfx-bass", superSfx: "vfx-vinyl",
+  }),
+  contract: Object.freeze({
+    id: "contract", glow: "#ffd76b", core: "#fff3cf", ring: "#ffc94f",
+    charge: ["glyph"], trail: ["glyph"], burst: ["glyph", "paper"],
+    residue: ["paper"], superBurst: ["glyph"], sfx: "vfx-glyph", superSfx: "vfx-paper",
+  }),
+  curse: Object.freeze({
+    id: "curse", glow: "#8cff5e", core: "#e4ffd4", ring: "#6bd44a", wind: true,
+    charge: ["curse"], trail: ["curse"], burst: ["curse", "feather"],
+    residue: ["feather"], superBurst: ["curse"], sfx: "vfx-curse", superSfx: "vfx-smoke",
+  }),
+});
+
+// Roster `vfx` signature -> element kit id (the data table's spine).
+const ELEMENT_BY_VFX = Object.freeze({
+  seismic: "seismic", neon: "neon", steel: "concrete", paint: "spray",
+  voltage: "tech", gilded: "gilded", feedback: "feedback", bass: "bass",
+  barrens: "curse", authority: "contract",
+});
+
+function fighterElementKit(def) {
+  return ELEMENT_KITS[ELEMENT_BY_VFX[def?.vfx]] || null;
+}
+
+// Monotonic one-shot totals on the motionFxDebug pattern (never reset),
+// exposed via snapshot().violence for orchestrator smoke tests.
+const elementFxDebug = {
+  elementCharges: 0, elementTrails: 0, elementBursts: 0, elementResidue: 0, vfxSfxPlays: 0,
+};
+
+// Render-only flipbook sprite pool + per-side phase observers.
+const elementParticles = [];
+const elementObs = [
+  { attackSerial: -1, releasedSerial: -1, chargeLevel: 0, limbX: 0, limbY: 0, prevLimbX: 0, prevLimbY: 0, hadLimb: false },
+  { attackSerial: -1, releasedSerial: -1, chargeLevel: 0, limbX: 0, limbY: 0, prevLimbX: 0, prevLimbY: 0, hadLimb: false },
+];
+let elementLastObservedTick = -1;
+let elementLastFrameMs = 0;
+// Super screen-edge element wash (eased render level + owning kit colour).
+const elementWash = { level: 0, color: null };
+// Rate cap per SFX kind so mashed specials never stack the layer.
+const elementSfxLast = new Map();
+const ELEMENT_SFX_MIN_MS = 300;
+
+// Lazy media: manifest + sheets fetched on first elemental emission, never in
+// the install shell. Draws fall back to procedural glows until they arrive.
+const elementSheets = { manifest: null, images: new Map(), requested: false };
+
+function ensureElementMedia() {
+  if (elementSheets.requested) return;
+  elementSheets.requested = true;
+  fetch("assets/vfx/MANIFEST.json")
+    .then((response) => (response.ok ? response.json() : null))
+    .then((manifest) => {
+      if (!manifest) return;
+      elementSheets.manifest = manifest;
+      for (const [name, entry] of Object.entries(manifest)) {
+        const image = new Image();
+        image.src = `assets/vfx/${entry.sheet}`;
+        elementSheets.images.set(name, image);
+      }
+    })
+    .catch(() => {});
+}
+
+function elementBudgetCap() {
+  // ~190 sprites on high, ~129 balanced, minimal (~80) on battery.
+  return Math.max(36, Math.round(190 * state.performance.particleScale));
+}
+
+function pushElementParticle(particle) {
+  if (elementParticles.length >= elementBudgetCap()) elementParticles.shift();
+  elementParticles.push(particle);
+}
+
+function elementSfx(kind, fighter = null) {
+  if (rollbackResimulating || !kind) return;
+  if (!$("#soundToggle").checked) return;
+  const now = performance.now();
+  if (now - (elementSfxLast.get(kind) || -Infinity) < ELEMENT_SFX_MIN_MS) return;
+  elementSfxLast.set(kind, now);
+  sound(kind, fighter);
+  elementFxDebug.vfxSfxPlays += 1;
+}
+
+// EX kits run denser/brighter; supers max all three phases.
+function elementTier(attack) {
+  if (attack.superMove) return 2;
+  return (attack.gritCost || 0) > 0 ? 1 : 0;
+}
+const ELEMENT_TIER_MULT = [1, 1.5, 2.1];
+
+// The limb the element rides: the furthest live hitbox during active frames,
+// the first authored hitbox (projected to world) during startup, the chest as
+// a last resort. Pure read of already-snapshotted sim state.
+function elementLimbPoint(fighter) {
+  const active = getActiveHitboxes(fighter);
+  const box = active.length ? active[active.length - 1]
+    : fighter.attacking?.hitboxes?.length ? localBoxToWorld(fighter, fighter.attacking.hitboxes[0].box) : null;
+  if (box) return { x: box.x + box.width * 0.5, y: box.y + box.height * 0.5 };
+  return { x: fighter.x + fighter.facing * 34, y: fighter.y - fighter.height * 0.55 };
+}
+
+function spawnElementSprite(sheet, options) {
+  const physics = ELEMENT_SHEET_PHYSICS[sheet];
+  if (!physics) return;
+  const calm = state.accessibility.reducedMotion ? 0.42 : 1;
+  const meta = elementSheets.manifest?.[sheet];
+  const life = options.life ?? 0.32 + visualRandom() * 0.2;
+  pushElementParticle({
+    sheet,
+    additive: physics.additive,
+    alpha: physics.alpha ?? 1,
+    x: options.x + (visualRandom() - 0.5) * (options.spread ?? 0),
+    y: options.y + (visualRandom() - 0.5) * (options.spread ?? 0),
+    vx: (options.vx ?? 0) * calm,
+    vy: (options.vy ?? 0) * calm,
+    homeX: options.homeX, homeY: options.homeY, converge: options.converge ?? 0,
+    gravity: physics.gravity * (state.accessibility.reducedMotion ? 0.45 : 1),
+    drag: physics.drag,
+    life, max: life,
+    size: options.size ?? 40,
+    backGlow: Boolean(physics.backGlow),
+    rotation: physics.spin ? visualRandom() * Math.PI * 2 : 0,
+    spin: (visualRandom() - 0.5) * physics.spin * calm,
+    flutter: physics.flutter ? 5 + visualRandom() * 4 : 0,
+    seed: Math.floor(visualRandom() * 4096),
+    frame: meta && meta.mode === "scatter" ? Math.floor(visualRandom() * 16) % 16 : 0,
+    glow: options.glow,
+  });
+}
+
+// --- phase emitters ---------------------------------------------------------
+
+function emitElementCharge(kit, fighter, attack, tier) {
+  const mult = ELEMENT_TIER_MULT[tier];
+  // Battery keeps its charge budget for supers only.
+  if (state.performance.particleScale < 0.5 && tier < 2) return;
+  const target = elementLimbPoint(fighter);
+  const count = Math.max(1, Math.round((tier === 2 ? 2 : 1) * state.performance.particleScale));
+  for (let index = 0; index < count; index += 1) {
+    const sheet = kit.charge[Math.floor(visualRandom() * kit.charge.length) % kit.charge.length];
+    const angle = visualRandom() * Math.PI * 2;
+    const radius = (36 + visualRandom() * 52) * mult;
+    const x = target.x + Math.cos(angle) * radius;
+    const y = target.y + Math.sin(angle) * radius * 0.7;
+    const life = 0.3 + visualRandom() * 0.18;
+    spawnElementSprite(sheet, {
+      x, y, life,
+      // Converging motes: aimed to arrive at the limb as they die. Reduced
+      // motion swaps the rush for a gentle drift + fade in place.
+      vx: state.accessibility.reducedMotion ? 0 : (target.x - x) / life * 0.8,
+      vy: state.accessibility.reducedMotion ? 0 : (target.y - y) / life * 0.8,
+      size: (24 + visualRandom() * 22) * mult,
+      glow: kit.glow,
+    });
+  }
+  if (kit.rings && (state.simulationTick & 7) === 0 && state.performance.trailScale > 0) {
+    state.effects.push({
+      kind: "shockRing", x: target.x, y: target.y,
+      size: 30 * mult, life: 0.2, max: 0.2, color: kit.ring,
+    });
+  }
+  elementFxDebug.elementCharges += 1;
+}
+
+function emitElementTrail(kit, x, y, vx, vy, tier, glow) {
+  const mult = ELEMENT_TIER_MULT[tier];
+  const cadence = state.performance.particleScale < 0.5 ? 3 : 1;
+  if (state.simulationTick % cadence !== 0) return;
+  const count = Math.max(1, Math.round((tier === 2 ? 3 : 2) * state.performance.particleScale));
+  for (let index = 0; index < count; index += 1) {
+    const sheet = kit.trail[Math.floor(visualRandom() * kit.trail.length) % kit.trail.length];
+    spawnElementSprite(sheet, {
+      x, y, spread: 40,
+      // Velocity-inherited: the trail streams off the moving limb/projectile.
+      vx: vx * 0.42 + (visualRandom() - 0.5) * 90,
+      vy: vy * 0.42 - 20 - visualRandom() * 60,
+      size: (38 + visualRandom() * 34) * mult,
+      life: 0.42 + visualRandom() * 0.3,
+      glow: glow || kit.glow,
+    });
+  }
+  elementFxDebug.elementTrails += 1;
+}
+
+function emitElementBurst(kit, fighter, attack, tier) {
+  const mult = ELEMENT_TIER_MULT[tier];
+  const point = elementLimbPoint(fighter);
+  const direction = fighter.facing;
+  const sheets = tier === 2 && kit.superBurst ? [...kit.burst, ...kit.superBurst] : kit.burst;
+  const count = Math.max(6, Math.round(13 * mult * state.performance.particleScale));
+  for (let index = 0; index < count; index += 1) {
+    const sheet = sheets[Math.floor(visualRandom() * sheets.length) % sheets.length];
+    const angle = (visualRandom() - 0.5) * 2.4;
+    const speed = (140 + visualRandom() * 320) * mult * 0.8;
+    spawnElementSprite(sheet, {
+      x: point.x, y: point.y, spread: 30,
+      vx: Math.cos(angle) * speed * 0.55 + direction * speed * 0.6,
+      vy: Math.sin(angle) * speed * 0.6 - 60,
+      size: (48 + visualRandom() * 46) * mult,
+      life: 0.42 + visualRandom() * 0.34,
+      glow: kit.glow,
+    });
+  }
+  // Seismic/concrete kits also erupt along the floor line — the ground-slam
+  // read: a fan of debris and dust kicked out of the street on both sides.
+  if (kit.groundBurst) {
+    const groundCount = Math.max(4, Math.round(8 * mult * state.performance.particleScale));
+    for (let index = 0; index < groundCount; index += 1) {
+      const side = index % 2 ? 1 : -1;
+      const sheet = kit.burst[Math.floor(visualRandom() * kit.burst.length) % kit.burst.length];
+      spawnElementSprite(sheet, {
+        x: point.x + side * (24 + visualRandom() * 90) * mult,
+        y: FLOOR - 6,
+        vx: side * (80 + visualRandom() * 220) * mult * 0.7,
+        vy: -180 - visualRandom() * 260 * mult,
+        size: (36 + visualRandom() * 34) * mult,
+        life: 0.45 + visualRandom() * 0.3,
+        glow: kit.glow,
+      });
+    }
+  }
+  // Element pressure ring in the kit colour (doubled for the bass kit, whose
+  // identity IS the shockwave), riding the existing shockRing effect path.
+  if (state.performance.trailScale > 0) {
+    state.effects.push({
+      kind: "shockRing", x: point.x, y: point.y,
+      size: (kit.rings ? 120 : 84) * mult, life: 0.26, max: 0.26, color: kit.ring,
+    });
+    if (kit.rings) {
+      state.effects.push({
+        kind: "shockRing", x: point.x, y: point.y,
+        size: 168 * mult, life: 0.34, max: 0.34, color: kit.glow,
+      });
+    }
+  }
+  // Bright release core, gated by the flash toggle like every hot flash.
+  if ($("#flashToggle").checked) {
+    state.effects.push({
+      kind: "impactFlash", tier: tier === 2 ? "super" : "special", x: point.x, y: point.y,
+      life: tier === 2 ? 0.2 : 0.12, max: tier === 2 ? 0.2 : 0.12,
+      color: kit.core, spill: kit.glow,
+    });
+  }
+  elementFxDebug.elementBursts += 1;
+  // RESIDUE: lingering settle for ~0.5s — embers/wisps/scraps coming to rest.
+  const residueCount = Math.max(3, Math.round(7 * mult * state.performance.particleScale));
+  for (let index = 0; index < residueCount; index += 1) {
+    const sheet = kit.residue[Math.floor(visualRandom() * kit.residue.length) % kit.residue.length];
+    spawnElementSprite(sheet, {
+      x: point.x, y: point.y, spread: 70 * mult,
+      vx: (visualRandom() - 0.5) * 130 + (kit.wind ? direction * 70 : 0),
+      vy: -30 - visualRandom() * 80,
+      size: (30 + visualRandom() * 30) * mult,
+      life: 0.55 + visualRandom() * 0.5,
+      glow: kit.glow,
+    });
+  }
+  elementFxDebug.elementResidue += 1;
+  elementSfx(kit.sfx, fighter);
+  if (tier === 2) elementSfx(kit.superSfx, fighter);
+}
+
+function resetElementObserver(obs) {
+  obs.attackSerial = -1;
+  obs.releasedSerial = -1;
+  obs.chargeLevel = 0;
+  obs.hadLimb = false;
+}
+
+// Per-rendered-frame elemental observation + pool integration. Runs once at
+// the top of draw() beside updateMotionObservers: emissions advance only on
+// sim-tick edges (tick-deduped, so QA manual stepping and 120Hz displays pace
+// identically), while the pool integrates on real render time so residue
+// settles smoothly through hitstop.
+function updateElementalVfx(nowMs) {
+  const dtSec = clamp((nowMs - elementLastFrameMs) / 1000 || 0, 0, 0.05);
+  elementLastFrameMs = nowMs;
+  // Integrate the sprite pool (render-time physics; cheap, allocation-free).
+  for (const particle of elementParticles) {
+    particle.life -= dtSec;
+    particle.vy += particle.gravity * dtSec;
+    if (particle.flutter) {
+      particle.vx += Math.sin(particle.life * particle.flutter * 6 + particle.seed) * 60 * dtSec;
+    }
+    particle.x += particle.vx * dtSec;
+    particle.y += particle.vy * dtSec;
+    particle.vx *= particle.drag;
+    if (particle.y > FLOOR - 2 && particle.vy > 0) {
+      // Residue settles on the floor line instead of sinking through it.
+      particle.y = FLOOR - 2;
+      particle.vy = 0;
+      particle.vx *= 0.82;
+      particle.spin *= 0.8;
+    }
+    particle.rotation += particle.spin * dtSec;
+  }
+  for (let index = elementParticles.length - 1; index >= 0; index -= 1) {
+    if (elementParticles[index].life <= 0) elementParticles.splice(index, 1);
+  }
+
+  if (state.screen !== "fight" || state.fighters.length < 2) {
+    elementParticles.length = 0;
+    elementObs.forEach(resetElementObserver);
+    elementWash.level = Math.max(0, elementWash.level - dtSec * 3);
+    elementLastObservedTick = -1;
+    return;
+  }
+  const tickAdvanced = state.simulationTick !== elementLastObservedTick;
+  elementLastObservedTick = state.simulationTick;
+
+  let washTarget = 0;
+  for (let side = 0; side < 2; side += 1) {
+    const fighter = state.fighters[side];
+    const obs = elementObs[side];
+    const attack = fighter.attacking;
+    const kit = fighterElementKit(fighter.def);
+    const elemental = attack && kit && attack.kind === "special" && !fighter.cinematicFrame;
+    if (!elemental) {
+      obs.attackSerial = -1;
+      obs.hadLimb = false;
+      obs.chargeLevel = Math.max(0, obs.chargeLevel - dtSec * 6);
+      continue;
+    }
+    ensureElementMedia();
+    const tier = elementTier(attack);
+    if (tier === 2) {
+      washTarget = 1;
+      elementWash.color = kit.glow;
+    }
+    const serial = attack.attackSerial ?? 0;
+    if (obs.attackSerial !== serial) {
+      obs.attackSerial = serial;
+      obs.hadLimb = false;
+    }
+    const point = elementLimbPoint(fighter);
+    obs.prevLimbX = obs.hadLimb ? obs.limbX : point.x;
+    obs.prevLimbY = obs.hadLimb ? obs.limbY : point.y;
+    obs.limbX = point.x;
+    obs.limbY = point.y;
+    obs.hadLimb = true;
+    if (!tickAdvanced) continue;
+    if (fighter.attackFrame < attack.activeStartFrame) {
+      // CHARGE — brief aura + gathering particles through the startup.
+      emitElementCharge(kit, fighter, attack, tier);
+      obs.chargeLevel = Math.min(1, obs.chargeLevel + 0.16 * (tier === 2 ? 1.6 : 1));
+    } else {
+      if (obs.releasedSerial !== serial) {
+        // RELEASE — burst at the first active frame (hit or whiff alike).
+        obs.releasedSerial = serial;
+        emitElementBurst(kit, fighter, attack, tier);
+      }
+      obs.chargeLevel = Math.max(0, obs.chargeLevel - 0.25);
+      if (fighter.attackFrame < attack.activeEndFrame) {
+        // ACTIVE — persistent trail off the moving limb.
+        const limbVx = (obs.limbX - obs.prevLimbX) * SIMULATION_HZ;
+        const limbVy = (obs.limbY - obs.prevLimbY) * SIMULATION_HZ;
+        emitElementTrail(kit, obs.limbX, obs.limbY,
+          clamp(limbVx, -900, 900), clamp(limbVy, -900, 900), tier);
+      }
+    }
+  }
+
+  // Personal throwable flights ride their owner's element kit.
+  if (tickAdvanced && state.projectiles.length) {
+    for (let index = 0; index < state.projectiles.length; index += 1) {
+      const projectile = state.projectiles[index];
+      if (!projectile.throwable || projectile.stageWeapon) continue;
+      if ((state.simulationTick + index) % 2 !== 0) continue;
+      const owner = state.fighters[projectile.ownerSide];
+      const kit = owner ? fighterElementKit(owner.def) : null;
+      if (!kit) continue;
+      ensureElementMedia();
+      emitElementTrail(kit, projectile.x, projectile.y,
+        (projectile.vx || 0) * 0.5, (projectile.vy || 0) * 0.5,
+        projectile.enhanced ? 1 : 0, projectile.color);
+    }
+  }
+
+  // Super screen-edge wash easing (drawn by drawElementalWash).
+  elementWash.level = washTarget > elementWash.level
+    ? Math.min(washTarget, elementWash.level + dtSec * 5)
+    : Math.max(washTarget, elementWash.level - dtSec * 2.4);
+}
+
+// Charge auras + flipbook sprites, drawn in the 2D world pass right above
+// drawParticles. CINEMA 3D gets its element read through the tinted impact
+// layer instead — this pass is 2D-renderer-only by construction.
+function drawElementalVfx() {
+  for (let side = 0; side < 2; side += 1) {
+    const obs = elementObs[side];
+    if (obs.chargeLevel <= 0.02) continue;
+    const fighter = state.fighters[side];
+    const kit = fighterElementKit(fighter?.def);
+    if (!kit) continue;
+    const tier = fighter.attacking ? elementTier(fighter.attacking) : 0;
+    const pulse = 1 + Math.sin(state.simulationTick * 0.55 + side) * 0.08;
+    const radius = (40 + tier * 16) * pulse * (0.6 + obs.chargeLevel * 0.4);
+    const gradient = ctx.createRadialGradient(obs.limbX, obs.limbY, radius * 0.12, obs.limbX, obs.limbY, radius);
+    gradient.addColorStop(0, kit.core);
+    gradient.addColorStop(0.45, kit.glow);
+    gradient.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.26 * obs.chargeLevel * (tier === 2 ? 1.35 : 1);
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(obs.limbX, obs.limbY, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  for (const particle of elementParticles) {
+    const meta = elementSheets.manifest?.[particle.sheet];
+    const image = elementSheets.images.get(particle.sheet);
+    const fade = clamp(particle.life / particle.max, 0, 1);
+    if (!meta || !image?.complete || !image.naturalWidth) {
+      // Procedural fallback until the on-demand sheet arrives.
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = fade * 0.5;
+      ctx.fillStyle = particle.glow || "#ffe9bd";
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, particle.size * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      continue;
+    }
+    let index;
+    if (meta.mode === "anim") index = Math.min(15, Math.floor((1 - fade) * meta.frames.length));
+    else if (meta.mode === "flicker") index = (particle.seed * 31 + ((state.simulationTick >> 1) * 7)) % 16;
+    else index = particle.frame;
+    const frame = meta.frames[index];
+    if (!frame || !frame.w) continue;
+    const scale = particle.size / Math.max(frame.w, frame.h);
+    if (particle.backGlow && particle.glow) {
+      // Soft kit-coloured halo behind dark sprites so their silhouettes
+      // separate from the night stages.
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = fade * 0.32;
+      ctx.fillStyle = particle.glow;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, particle.size * 0.58, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.save();
+    // Front-loaded fades: sprites hold near-full presence through most of
+    // their life and drop off at the end, instead of thinning immediately.
+    ctx.globalAlpha = (particle.additive
+      ? Math.min(1, fade * 1.35)
+      : Math.min(1, Math.sqrt(fade) * 1.08)) * particle.alpha;
+    ctx.globalCompositeOperation = particle.additive ? "lighter" : "source-over";
+    ctx.translate(particle.x, particle.y);
+    if (particle.rotation) ctx.rotate(particle.rotation);
+    ctx.drawImage(image, frame.x, frame.y, frame.w, frame.h,
+      -(frame.cx - frame.x) * scale, -(frame.cy - frame.y) * scale,
+      frame.w * scale, frame.h * scale);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+}
+
+// Screen-edge element wash while a super is in flight: the element bleeds in
+// from both sides of the frame. Flash-toggle-gated (it is a bright wash);
+// reduced motion halves it. Screen-space, drawn after the world restore.
+function drawElementalWash() {
+  if (elementWash.level <= 0.02 || !elementWash.color) return;
+  if (!$("#flashToggle").checked) return;
+  const strength = elementWash.level * (state.accessibility.reducedMotion ? 0.45 : 1) * 0.3;
+  const width = W * 0.17;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = strength;
+  const left = ctx.createLinearGradient(0, 0, width, 0);
+  left.addColorStop(0, elementWash.color);
+  left.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = left;
+  ctx.fillRect(0, 0, width, H);
+  const right = ctx.createLinearGradient(W, 0, W - width, 0);
+  right.addColorStop(0, elementWash.color);
+  right.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = right;
+  ctx.fillRect(W - width, 0, width, H);
+  ctx.restore();
 }
 
 // ---------------------------------------------------------------------------
@@ -13140,7 +13764,12 @@ function spawnHit(x, y, def, attackKind, blocked, { direction = 1, counter = fal
   // when on — the bridge guards rollbackResimulating + tick-dedupes inside,
   // following the announce()/latch pattern above.
   if (cinema3dBridge.onHit) {
-    cinema3dBridge.onHit({ x, y, kind: attackKind, blocked, direction, counter, tick: state.simulationTick });
+    // v2.6 ELEMENTS: the payload carries the attacker's element id so the 3D
+    // impact layer re-tints its protection-mask-joined burst stack per kit.
+    cinema3dBridge.onHit({
+      x, y, kind: attackKind, blocked, direction, counter, tick: state.simulationTick,
+      element: fighterElementKit(def)?.id || null,
+    });
   }
   if (blocked) {
     const count = Math.max(3, Math.round(8 * state.performance.particleScale));
@@ -20007,6 +20636,9 @@ function draw(time) {
   // the squash/wobble/crossfade counters BEFORE either renderer consumes the
   // shared motion transforms (the 3D renderFrame below reads the same layer).
   updateMotionObservers();
+  // v2.6 ELEMENTS: observe special-attack phases (charge/active/release) and
+  // integrate the flipbook sprite pool before either renderer draws.
+  updateElementalVfx(time);
   // Wave 7 DPR-sharp baseline: all logical-coordinate code below draws through
   // this transform; identity when sharp render is off (renderDpr === 1).
   ctx.setTransform(renderDpr, 0, 0, renderDpr, 0, 0);
@@ -20074,6 +20706,7 @@ function draw(time) {
       state.fighters.forEach((fighter) => drawDizzyStars(fighter, time));
       state.fighters.forEach((fighter) => drawGuardCrushMarker(fighter, time));
       drawParticles();
+      drawElementalVfx();
       drawForegroundOccluders(state.fighters.length
         ? (state.fighters[0].x + state.fighters[1].x) * 0.5 : W * 0.5);
     }
@@ -20099,6 +20732,7 @@ function draw(time) {
     drawChromaticAberration();
   }
   drawIntroLetterbox();
+  drawElementalWash();
   drawFinisherOverlay();
   if (state.flash > 0) {
 // CINEMA 3D carries its own layered impact flash (hit-masked white pop,
@@ -23547,6 +24181,15 @@ window.__finalBlowEngine = {
         attackSmears: presentationDebug.attackSmears,
         skidSmokes: motionFxDebug.skidSmokes,
         landingDust: motionFxDebug.landingDust,
+        // v2.6 ELEMENTS counters: monotonic one-shots (elementFxDebug) for the
+        // charge/trail/burst/residue emissions and the SFX layer plays, plus
+        // the live flipbook-sprite pool size for burst probes.
+        elementCharges: elementFxDebug.elementCharges,
+        elementTrails: elementFxDebug.elementTrails,
+        elementBursts: elementFxDebug.elementBursts,
+        elementResidue: elementFxDebug.elementResidue,
+        vfxSfxPlays: elementFxDebug.vfxSfxPlays,
+        elementParticleCount: elementParticles.length,
         focusLines: presentationDebug.focusLines,
         lightSpills: presentationDebug.lightSpills,
         timeOfDay: Number(timeOfDayLevel().toFixed(3)),

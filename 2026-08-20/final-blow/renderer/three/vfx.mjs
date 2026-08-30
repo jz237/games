@@ -38,6 +38,25 @@ const TIER_STYLE = {
 // Cyan speedline ring colour: reads as a pressure wave against the warm shards.
 const RING_CYAN = 0x8feaff;
 
+// v2.6 ELEMENTS: per-element tint overrides for special/super impacts. The
+// spawnHit latch now carries the attacker's element id; special-class bursts
+// re-tint the whole layered stack (core halo, shard fan, embers, spill and
+// flash lights) so a curse special flashes green and a gilded one gold. The
+// entire group already joins FIGHTER_MASK_LAYER (the painterly-pass
+// protection mask), so the tinted stack keeps sprite-grade edge snap.
+const ELEMENT_TINTS = {
+  seismic: { color: 0xe8b25a, shard: 0xc9862e },
+  neon: { color: 0x5ee9ff, shard: 0x2ec9ff },
+  concrete: { color: 0xe0e0e0, shard: 0xb8b8b8 },
+  spray: { color: 0xff9b3d, shard: 0xff7a1e },
+  tech: { color: 0x7fd4ff, shard: 0x3ea8ff },
+  gilded: { color: 0xffd76b, shard: 0xffb92e },
+  feedback: { color: 0xb08cff, shard: 0x8cff6b },
+  bass: { color: 0xff8c5a, shard: 0xff6a26 },
+  contract: { color: 0xffd76b, shard: 0xffc94f },
+  curse: { color: 0x8cff5e, shard: 0x4fd42e },
+};
+
 export class ImpactVfxLayer {
   constructor(host) {
     this.host = host;
@@ -422,6 +441,7 @@ export class ImpactVfxLayer {
   // instead of hairlines.
   spawnEmbers(x, y, style, direction, counter) {
     const count = Math.round((style.embers ?? 8) * (counter ? 1.3 : 1));
+    const emberTint = style.emberTint ? new THREE.Color(style.emberTint) : null;
     for (let i = 0; i < count; i += 1) {
       const index = this.emberCursor;
       this.emberCursor = (this.emberCursor + 1) % MAX_EMBERS;
@@ -434,11 +454,18 @@ export class ImpactVfxLayer {
       this.emberVelocities[base] = Math.cos(angle) * speed * 0.6 + direction * speed * 0.9;
       this.emberVelocities[base + 1] = Math.abs(Math.sin(angle)) * speed * 0.9 + 0.55;
       this.emberVelocities[base + 2] = (this.rand() - 0.5) * speed * 0.3;
-      // Molten orange, hot enough to bloom at birth, cooling to deep ember.
+      // Molten orange, hot enough to bloom at birth, cooling to deep ember —
+      // unless an element impact re-heats the pool in its own colour.
       const heat = 1.4 + this.rand() * 1.2;
-      this.emberColors[base] = 1.0 * heat * 2.1;
-      this.emberColors[base + 1] = 0.52 * heat * 1.6;
-      this.emberColors[base + 2] = 0.14 * heat;
+      if (emberTint) {
+        this.emberColors[base] = emberTint.r * heat * 2.1;
+        this.emberColors[base + 1] = emberTint.g * heat * 1.9;
+        this.emberColors[base + 2] = emberTint.b * heat * 1.7;
+      } else {
+        this.emberColors[base] = 1.0 * heat * 2.1;
+        this.emberColors[base + 1] = 0.52 * heat * 1.6;
+        this.emberColors[base + 2] = 0.14 * heat;
+      }
       this.emberMaxLife[index] = 0.42 + this.rand() * 0.34;
       this.emberLife[index] = this.emberMaxLife[index];
     }
@@ -626,6 +653,17 @@ export class ImpactVfxLayer {
     for (const payload of this.pending) {
       const tier = payload.blocked ? "blocked" : (TIER_STYLE[payload.kind] ? payload.kind : "light");
       const style = { ...TIER_STYLE[tier], tier };
+      // Element re-tint on the special class (specials, supers): the kit's
+      // colour takes over the whole burst stack.
+      const elementTint = !payload.blocked && ELEMENT_TINTS[payload.element]
+        && (tier === "special" || tier === "super") ? ELEMENT_TINTS[payload.element] : null;
+      if (elementTint) {
+        style.color = elementTint.color;
+        style.shard = elementTint.shard;
+        // Ember pool is normally hard-coded molten orange; an element impact
+        // re-heats it in the kit colour so the whole stack agrees.
+        style.emberTint = elementTint.shard;
+      }
       const x = worldX(payload.x);
       const y = worldY(payload.y);
       const custom = this.customEffects.get(tier);
