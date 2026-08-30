@@ -5665,6 +5665,8 @@ const presentationDebug = {
   practicalLights: 0, weatherParticles: 0, foregroundOccluders: 0, crowdFlashes: 0,
   counterFlashes: 0, projectileGlows: 0, swipeRibbons: 0, wallSplats: 0,
   focusLines: 0, lightSpills: 0,
+  // v2.6 MOTION steady per-frame passes (2D draw path).
+  squashStretchFrames: 0, poseCrossfades: 0, attackSmears: 0,
   // Wave 7 steady screen-space passes, counted per rendered frame.
   bloomPasses: 0, rgbSplits: 0,
   // Release 1.8C REALITY BREAK steady render-only passes.
@@ -5720,6 +5722,384 @@ function clearBattleDamage() {
   battleDamageMarks[1].length = 0;
   battleDamageRevision[0] += 1;
   battleDamageRevision[1] += 1;
+}
+
+// ---------------------------------------------------------------------------
+// v2.6 MOTION — the classic 2D-fighter movement-animation layer.
+// Jump flips, squash & stretch, pose cross-fades, attack smears, ground work
+// (dash plumes / skid smoke / landing rings / crack flashes) and recovery
+// wobble. ALL of it is presentation: the flip/stretch transforms are pure
+// functions of already-snapshotted sim fields (vy, y, vx, grounded, movement
+// constants), and the event latches live in module-level render-only observer
+// state on the documented superDimLevel pattern — written exclusively from
+// the render loop (updateMotionObservers runs in draw(), which never executes
+// during rollback resimulation), so checksums and resim are untouched.
+// Consumed by BOTH renderers: drawFighter applies the transform directly and
+// the CINEMA 3D poseRig reads the same fighterMotionTransform via the bridge.
+// ---------------------------------------------------------------------------
+const MOTION_RULES = Object.freeze({
+  crossfadeFrames: 3,        // sim-tick-paced pose cross-fade length
+  landSquashFrames: 4,       // landing impact squash duration
+  wobbleFrames: 10,          // hit-recoil settle after hitstun ends
+  jumpDirThreshold: 60,      // |vx| that reads as a directional jump
+  skidSpeed: 230,            // grounded |vx| that arms a reversal skid
+  skidCooldown: 10,          // ticks between skid puffs per side
+  crackFallSpeed: 940,       // fall speed that earns the ground-crack flash
+});
+// Monotonic one-shot totals on the hudFxDebug pattern (never reset), exposed
+// via snapshot().violence for orchestrator smoke tests.
+const motionFxDebug = { jumpFlips: 0, skidSmokes: 0, landingDust: 0 };
+// Render-frame gate: motion observers advance their frame counters only when
+// the simulation actually ticked, so 120Hz displays and QA manual stepping
+// both pace the latches in sim frames.
+let motionLastObservedTick = -1;
+
+function createMotionObserver() {
+  return {
+    fighterId: null,
+    wasGrounded: true, prevVy: 0, prevVx: 0, prevHitstun: 0, prevDashFrames: 0,
+    // Jump-flip latch: armed at a CONTROLLED launch, cancelled by any hit /
+    // air attack, cleared on landing. flipSpin is the world-space spin sign.
+    flipEligible: false, flipKind: "neutral", flipSpin: 1, airAttackLatch: false,
+    landFrames: 0, landMag: 0,
+    wobbleFrames: 0,
+    leanLevel: 0,
+    skidCooldown: 0, dashPuffClock: 0,
+    // Pose cross-fade bookkeeping (2D draw path only).
+    poseBank: null, poseFrame: -1, fadeBank: null, fadeFrame: -1, fadeLeft: 0,
+  };
+}
+const motionObs = [createMotionObserver(), createMotionObserver()];
+// Reusable transform results — fighterMotionTransform runs up to three times
+// per fighter per frame (main pass, reflection pass, 3D rig), so it writes
+// into these persistent scratches instead of allocating.
+const motionScratch = [
+  { rotation: 0, flipRotation: 0, scaleX: 1, scaleY: 1, stretchActive: false },
+  { rotation: 0, flipRotation: 0, scaleX: 1, scaleY: 1, stretchActive: false },
+];
+
+function resetMotionObserver(obs) {
+  const fresh = createMotionObserver();
+  for (const key of Object.keys(fresh)) obs[key] = fresh[key];
+}
+
+// Smootherstep ease shared by the flip arcs: zero-velocity endpoints so the
+// sprite leaves the ground upright and lands upright, with the rotation
+// concentrated through the middle of the arc (the "tuck").
+function motionEase01(edge0, edge1, value) {
+  const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+// Amplified dash dust (spec 5): a bigger directional plume kicked out behind
+// the launch foot. Render-path spawn into checksum-exempt state.particles.
+function spawnMotionDashPlume(fighter) {
+  const forward = fighter.dashDirection || fighter.facing;
+  const total = Math.max(3, Math.round(10 * state.performance.particleScale));
+  for (let index = 0; index < total; index += 1) {
+    state.particles.push({
+      kind: "dust",
+      x: fighter.x - forward * (10 + visualRandom() * 34),
+      y: FLOOR - 2 - visualRandom() * 14,
+      vx: -forward * (90 + visualRandom() * 220),
+      vy: -35 - visualRandom() * 110,
+      gravity: 340,
+      drag: 0.94,
+      life: 0.26 + visualRandom() * 0.3,
+      max: 0.56,
+      size: 5 + visualRandom() * 8,
+      color: visualRandom() > 0.4 ? "#7c756b" : "#524d48",
+    });
+  }
+}
+
+// Skid smoke (spec 5): pale drifting puffs when a grounded fighter reverses
+// direction at speed — the feet fighting the old momentum.
+function spawnMotionSkidSmoke(fighter, previousVx) {
+  const skidDir = Math.sign(previousVx) || fighter.facing;
+  const total = Math.max(3, Math.round(8 * state.performance.particleScale));
+  for (let index = 0; index < total; index += 1) {
+    state.particles.push({
+      kind: "dust",
+      x: fighter.x + skidDir * (6 + visualRandom() * 30),
+      y: FLOOR - 3 - visualRandom() * 8,
+      vx: skidDir * (60 + visualRandom() * 150),
+      vy: -50 - visualRandom() * 95,
+      gravity: 220,
+      drag: 0.93,
+      life: 0.3 + visualRandom() * 0.34,
+      max: 0.64,
+      size: 6 + visualRandom() * 8,
+      color: visualRandom() > 0.35 ? "#8a8378" : "#6b655e",
+    });
+  }
+  motionFxDebug.skidSmokes += 1;
+}
+
+// Landing dust ring + heavy-landing crack flash (spec 5). The ring reuses the
+// shockRing effect geometry in a dust palette, scaled by fall speed; a violent
+// fall adds a short crack flash in the stage-scar visual language (chalky
+// scuff, pale chipped edge, dark crack) that fades out completely — no scar
+// persistence, presentation only.
+function spawnMotionLandingDust(fighter, fallSpeed, heavy = false) {
+  const force = clamp(fallSpeed / 760, 0.45, 1.6) * (heavy ? 1.2 : 1);
+  if (state.performance.trailScale > 0 && !state.accessibility.reducedMotion) {
+    state.effects.push({
+      kind: "shockRing", x: fighter.x, y: FLOOR - 4,
+      size: 44 + force * 42, life: 0.26, max: 0.26, color: "#948b7d",
+    });
+  }
+  const total = Math.max(3, Math.round(7 * force * state.performance.particleScale));
+  for (let index = 0; index < total; index += 1) {
+    const side = visualRandom() < 0.5 ? -1 : 1;
+    state.particles.push({
+      kind: "dust",
+      x: fighter.x + side * (8 + visualRandom() * 26),
+      y: FLOOR - 2,
+      vx: side * (70 + visualRandom() * 160) * force,
+      vy: -30 - visualRandom() * 95 * force,
+      gravity: 380,
+      drag: 0.94,
+      life: 0.24 + visualRandom() * 0.3,
+      max: 0.54,
+      size: 4 + visualRandom() * 7,
+      color: visualRandom() > 0.4 ? "#7c756b" : "#4e4a46",
+    });
+  }
+  if (heavy && state.performance.trailScale > 0 && !state.accessibility.reducedMotion) {
+    // Crack polyline built once at spawn (same construction as pushStageScar,
+    // squashed into the floor perspective) — the draw pass just strokes it.
+    const points = [[0, 0]];
+    const segments = 4 + Math.floor(visualRandom() * 2);
+    const baseAngle = visualRandom() * Math.PI * 2;
+    let px = 0;
+    let py = 0;
+    for (let index = 0; index < segments; index += 1) {
+      const angle = baseAngle + (visualRandom() - 0.5) * 1.9;
+      const length = 12 + visualRandom() * 26;
+      px += Math.cos(angle) * length;
+      py += Math.sin(angle) * length * 0.34;
+      points.push([px, py]);
+    }
+    state.effects.push({
+      kind: "groundCrackFlash", x: fighter.x, y: FLOOR + 7,
+      life: 0.36, max: 0.36, color: "#efe6d4", points,
+      scuffW: 34 + force * 26 + visualRandom() * 14,
+      scuffH: 6 + visualRandom() * 5,
+      rot: (visualRandom() - 0.5) * 0.5,
+    });
+  }
+  motionFxDebug.landingDust += 1;
+}
+
+// Per-rendered-frame motion observation. Runs once at the top of draw() —
+// BEFORE either renderer consumes the transforms — and advances its frame
+// counters only on sim-tick edges so render rate never changes the pacing.
+function updateMotionObservers() {
+  if (state.screen !== "fight" || state.fighters.length < 2) {
+    motionObs.forEach(resetMotionObserver);
+    motionLastObservedTick = -1;
+    return;
+  }
+  const tickAdvanced = state.simulationTick !== motionLastObservedTick;
+  motionLastObservedTick = state.simulationTick;
+  if (!tickAdvanced) return;
+  const reducedMotion = state.accessibility.reducedMotion;
+  for (let side = 0; side < 2; side += 1) {
+    const fighter = state.fighters[side];
+    const obs = motionObs[side];
+    if (obs.fighterId !== fighter.def.id) {
+      resetMotionObserver(obs);
+      obs.fighterId = fighter.def.id;
+      obs.wasGrounded = fighter.grounded;
+      obs.prevVy = fighter.vy;
+      obs.prevVx = fighter.vx;
+    }
+    const controlled = fighter.hitstunFrames === 0 && !fighter.down
+      && !fighter.pendingKnockdown && !fighter.grabbed && fighter.dizzyFrames === 0
+      && fighter.airTechFlipFrames === 0 && fighter.cinematicFrame === null;
+    // --- Jump launch: arm the flip on a controlled leap ---------------------
+    if (!fighter.grounded && obs.wasGrounded && fighter.vy < 0 && controlled && !fighter.attacking) {
+      const jumpDir = Math.abs(fighter.vx) > MOTION_RULES.jumpDirThreshold ? Math.sign(fighter.vx) : 0;
+      obs.flipKind = jumpDir === 0 ? "neutral" : jumpDir === fighter.facing ? "forward" : "back";
+      obs.flipSpin = obs.flipKind === "back" ? -fighter.facing : fighter.facing;
+      obs.flipEligible = !reducedMotion;
+      obs.airAttackLatch = false;
+      if (obs.flipEligible) motionFxDebug.jumpFlips += 1;
+    }
+    // An air attack snaps the sprite upright for the REST of the arc — no
+    // rotation pops back in after the recovery (readability rule).
+    if (!fighter.grounded && fighter.attacking) obs.airAttackLatch = true;
+    // Getting hit / grabbed out of the jump cancels the flip outright.
+    if (!fighter.grounded && !controlled) obs.flipEligible = false;
+    // --- Landing ------------------------------------------------------------
+    if (fighter.grounded && !obs.wasGrounded) {
+      const fallSpeed = Math.max(0, obs.prevVy);
+      // "Heavy landing": slamming down out of an air attack (the latch is
+      // still live here) or a faster-than-any-jump fall — earns the crack
+      // flash tier inside spawnMotionLandingDust.
+      const heavyLanding = obs.airAttackLatch || fallSpeed > MOTION_RULES.crackFallSpeed;
+      obs.landFrames = MOTION_RULES.landSquashFrames;
+      obs.landMag = clamp(fallSpeed / 760, 0.55, 1.4);
+      obs.flipEligible = false;
+      obs.airAttackLatch = false;
+      // Controlled landings get the dust ring; knockdown slams already carry
+      // their own impact spectacle (spawnKnockdownImpact + stage scar), so
+      // those stay theirs.
+      if (fighter.hitstunFrames === 0 && !fighter.down && !fighter.pendingKnockdown
+        && state.phase === "fight") {
+        spawnMotionLandingDust(fighter, fallSpeed, heavyLanding);
+      }
+    } else if (obs.landFrames > 0) obs.landFrames -= 1;
+    // --- Skid smoke on grounded direction reversals at speed ----------------
+    if (obs.skidCooldown > 0) obs.skidCooldown -= 1;
+    if (fighter.grounded && obs.wasGrounded && obs.skidCooldown === 0
+      && Math.abs(obs.prevVx) > MOTION_RULES.skidSpeed
+      && Math.sign(fighter.vx) === -Math.sign(obs.prevVx)
+      && Math.abs(fighter.vx) > 100 && state.phase === "fight") {
+      spawnMotionSkidSmoke(fighter, obs.prevVx);
+      obs.skidCooldown = MOTION_RULES.skidCooldown;
+    }
+    // --- Dash plume + rolling dash dust -------------------------------------
+    if (fighter.dashFrames > 0 && obs.prevDashFrames <= 0 && state.phase === "fight") {
+      spawnMotionDashPlume(fighter);
+      obs.dashPuffClock = 0;
+    } else if (fighter.dashFrames > 0 && state.phase === "fight") {
+      obs.dashPuffClock += 1;
+      if (obs.dashPuffClock % 3 === 0 && state.performance.particleScale > 0.4) {
+        state.particles.push({
+          kind: "dust",
+          x: fighter.x - (fighter.dashDirection || fighter.facing) * (14 + visualRandom() * 18),
+          y: FLOOR - 2,
+          vx: -(fighter.dashDirection || fighter.facing) * (50 + visualRandom() * 110),
+          vy: -20 - visualRandom() * 60,
+          gravity: 320,
+          drag: 0.94,
+          life: 0.18 + visualRandom() * 0.2,
+          max: 0.38,
+          size: 3.5 + visualRandom() * 5,
+          color: "#6f6961",
+        });
+      }
+    }
+    // --- Hit-recoil wobble: settles over ~10 frames after hitstun ends ------
+    if (obs.prevHitstun > 0 && fighter.hitstunFrames === 0 && !fighter.down
+      && fighter.dizzyFrames === 0 && fighter.grounded) {
+      obs.wobbleFrames = MOTION_RULES.wobbleFrames;
+    } else if (obs.wobbleFrames > 0) obs.wobbleFrames -= 1;
+    // --- Dash/walk lean easing ----------------------------------------------
+    const moving = fighter.grounded && !fighter.attacking && !fighter.crouch
+      && !fighter.block && !fighter.down && fighter.hitstunFrames === 0
+      && fighter.cinematicFrame === null;
+    const leanTarget = reducedMotion || !moving ? 0
+      : fighter.dashFrames > 0 ? (fighter.dashDirection || fighter.facing) * 0.07
+        : Math.abs(fighter.vx) > 22 ? Math.sign(fighter.vx) * 0.035 : 0;
+    obs.leanLevel += clamp(leanTarget - obs.leanLevel, -0.018, 0.018);
+    // --- Pose cross-fade observation (spec 3) -------------------------------
+    // Tick-paced here so render rate never changes the fade length; the 2D
+    // draw path consumes fadeBank/fadeFrame/fadeLeft. A fade only ARMS on a
+    // clean pose change — hitstop freezes and hit flashes keep the snap (the
+    // snap IS the impact), battery keeps the plain blit.
+    const observedPose = fighterAnimationPose(fighter);
+    if (obs.poseBank !== observedPose.bank || obs.poseFrame !== observedPose.frame) {
+      if (obs.poseBank !== null && state.hitstop <= 0 && state.performance.trailScale > 0
+        && fighter.hitFlash <= 0 && fighter.cinematicFrame === null) {
+        obs.fadeBank = obs.poseBank;
+        obs.fadeFrame = obs.poseFrame;
+        obs.fadeLeft = MOTION_RULES.crossfadeFrames;
+      } else obs.fadeLeft = 0;
+      obs.poseBank = observedPose.bank;
+      obs.poseFrame = observedPose.frame;
+    } else if (obs.fadeLeft > 0) obs.fadeLeft -= 1;
+    // --- Store previous-frame fields ---------------------------------------
+    obs.wasGrounded = fighter.grounded;
+    obs.prevVy = fighter.vy;
+    obs.prevVx = fighter.vx;
+    obs.prevHitstun = fighter.hitstunFrames;
+    obs.prevDashFrames = fighter.dashFrames;
+  }
+}
+
+// The shared motion transform, consumed by drawFighter AND the CINEMA 3D
+// poseRig (via the bridge). Canvas conventions: rotation is world-space
+// y-down/clockwise; scales are feet-anchored. flipRotation pivots about the
+// body CENTRE (the somersault axis), everything else about the feet.
+function fighterMotionTransform(fighter) {
+  const scratch = motionScratch[fighter.side] || motionScratch[0];
+  scratch.rotation = 0;
+  scratch.flipRotation = 0;
+  scratch.scaleX = 1;
+  scratch.scaleY = 1;
+  scratch.stretchActive = false;
+  const obs = motionObs[fighter.side];
+  if (!obs || fighter.cinematicFrame !== null || state.screen !== "fight") return scratch;
+  const reducedMotion = state.accessibility.reducedMotion;
+  const squashScale = reducedMotion ? 0.5 : 1;
+  const controlledAir = !fighter.grounded && fighter.hitstunFrames === 0 && !fighter.down
+    && !fighter.pendingKnockdown && !fighter.grabbed && fighter.dizzyFrames === 0
+    && fighter.airTechFlipFrames === 0;
+
+  // 1. JUMP FLIP — a pure function of the ballistic arc. Rising half maps vy
+  // (launch → apex) onto progress 0→0.5; falling half maps the REMAINING
+  // height onto 0.5→1 so capped-descent kits (the Devil's glide) still land
+  // exactly upright. Air attacks and hits zero it instantly (snap upright).
+  if (controlledAir && obs.flipEligible && !fighter.attacking && !obs.airAttackLatch
+    && !reducedMotion) {
+    const launch = fighter.movement.jumpVelocityY || -720;
+    const apex = (launch * launch) / (2 * GRAVITY);
+    const height = Math.max(0, FLOOR - fighter.y);
+    const progress = fighter.vy < 0
+      ? 0.5 * (1 - clamp(fighter.vy / launch, 0, 1))
+      : 0.5 + 0.5 * clamp(1 - height / Math.max(1, apex), 0, 1);
+    // Neutral tuck-spin holds the takeoff/landing poses longer (subtler read);
+    // directional flips commit to the roll earlier.
+    const eased = obs.flipKind === "neutral"
+      ? motionEase01(0.14, 0.86, progress)
+      : motionEase01(0.05, 0.95, progress);
+    scratch.flipRotation = obs.flipSpin * Math.PI * 2 * eased;
+  }
+
+  // 2. SQUASH & STRETCH about the feet. Launch anticipation squat blends into
+  // the fast-rise stretch over the first ~30px of height; the landing squash
+  // scales with observed fall speed and recovers over 3-4 sim frames.
+  if (controlledAir && !fighter.attacking && fighter.vy < 0) {
+    const launch = fighter.movement.jumpVelocityY || -720;
+    const rise = clamp(fighter.vy / launch, 0, 1);
+    const height = Math.max(0, FLOOR - fighter.y);
+    const windup = clamp(1 - height / 30, 0, 1);
+    scratch.scaleY *= (1 + 0.06 * rise * squashScale) * (1 - windup) + (1 - 0.04 * squashScale) * windup;
+    scratch.scaleX *= (1 - 0.028 * rise * squashScale) * (1 - windup) + (1 + 0.035 * squashScale) * windup;
+    scratch.stretchActive = true;
+  }
+  if (obs.landFrames > 0 && fighter.grounded) {
+    const impact = (obs.landFrames / MOTION_RULES.landSquashFrames) * obs.landMag * squashScale;
+    scratch.scaleY *= 1 - 0.06 * impact;
+    scratch.scaleX *= 1 + 0.05 * impact;
+    scratch.stretchActive = true;
+  }
+
+  // Dash lean (~4°) / walk lean (~2°), eased by the observer.
+  if (!reducedMotion && Math.abs(obs.leanLevel) > 0.0025 && fighter.grounded && !fighter.down) {
+    scratch.rotation += obs.leanLevel;
+    scratch.stretchActive = true;
+  }
+
+  // 6. Hit-recoil wobble: damped oscillation settling after hitstun ends.
+  if (!reducedMotion && obs.wobbleFrames > 0 && fighter.grounded && !fighter.down
+    && fighter.hitstunFrames === 0 && !fighter.attacking) {
+    const settle = obs.wobbleFrames / MOTION_RULES.wobbleFrames;
+    scratch.rotation += Math.sin((MOTION_RULES.wobbleFrames - obs.wobbleFrames) * 1.15 + fighter.side)
+      * 0.055 * settle * settle;
+  }
+
+  // 6. Dizzy body sway (amplitude up): rides on top of the double-vision
+  // ghosts, collapsing with the drain bar. animTime-driven — deterministic.
+  if (!reducedMotion && fighter.dizzyFrames > 0 && !fighter.down) {
+    const drain = fighter.dizzyFrames / Math.max(1, fighter.dizzyTotalFrames);
+    scratch.rotation += Math.sin(fighter.animTime * 4.4 + fighter.side * 1.7)
+      * 0.07 * (0.35 + 0.65 * drain);
+  }
+  return scratch;
 }
 
 // ---------------------------------------------------------------------------
@@ -15392,6 +15772,19 @@ function drawFighter(fighter, time) {
     ctx.rotate(fighter.facing * flip * Math.PI * 2);
   }
 
+  // v2.6 MOTION: the shared movement-animation transform. Jump flips pivot
+  // about the body centre (the somersault axis); dash/walk lean, recoil
+  // wobble and dizzy sway pivot about the feet. Same layer feeds poseRig in
+  // the 3D renderer, so both worlds animate identically.
+  const motion = fighterMotionTransform(fighter);
+  if (motion.flipRotation !== 0) {
+    const flipPivot = renderSize * 0.52;
+    ctx.translate(0, -flipPivot);
+    ctx.rotate(motion.flipRotation);
+    ctx.translate(0, flipPivot);
+  }
+  if (motion.rotation !== 0) ctx.rotate(motion.rotation);
+
   // The mirror combines the fighter's numeric facing with the direction the
   // AUTHORED cell actually points (atlas-facing.mjs) — post's sheets mix
   // left- and right-facing art, so facing alone drew him looking away from
@@ -15416,6 +15809,10 @@ function drawFighter(fighter, time) {
   if (exhausted > 0) ctx.rotate(0.085 * exhausted * (reducedMotion ? 0.5 : 1));
   // Impact squash-and-recover, decaying with the same hitFlash the smear uses.
   if (hitSmear > 0) ctx.scale(1 + hitSmear * 0.05, 1 - hitSmear * 0.06);
+  // v2.6 MOTION squash & stretch: rise stretch / launch squat / landing squash
+  // from the shared motion layer, feet-anchored like every scale above it.
+  if (motion.scaleX !== 1 || motion.scaleY !== 1) ctx.scale(motion.scaleX, motion.scaleY);
+  if (motion.stretchActive && !reflectionPassActive) presentationDebug.squashStretchFrames += 1;
 
   if (fighter.specialGlow > 0) {
     const glow = ctx.createRadialGradient(0, -135, 16, 0, -135, 178);
@@ -15526,6 +15923,32 @@ function drawFighter(fighter, time) {
       ctx.restore();
     }
 
+    // v2.6 MOTION attack smears (spec 4): between startup and the active
+    // window on heavies/specials/supers, 1-2 accent-tinted sprite copies lag
+    // back along the swing arc — rotated toward the wind-up, stretched along
+    // the motion path, alpha-fading. Sibling of the wave-4 swipe ribbon (which
+    // traces the fist); these smear the BODY through the pose change. Pure
+    // render math off attackTime; the reflection pass stays one sprite draw.
+    if (!reflectionPassActive && attack && !graphicFatality
+      && (attackKind === "heavy" || attackKind === "special")
+      && state.performance.trailScale > 0 && !reducedMotion) {
+      const smearPower = Math.max(startupPower * 0.85, activePower);
+      if (smearPower > 0.3) {
+        const copies = Math.min(2, Math.max(1, Math.round(2 * state.performance.trailScale)));
+        for (let copy = 1; copy <= copies; copy += 1) {
+          ctx.save();
+          ctx.globalCompositeOperation = "screen";
+          ctx.globalAlpha = (0.36 * smearPower) / copy;
+          ctx.rotate(-0.16 * copy * smearPower);
+          ctx.translate(-copy * (17 + smearPower * 15), -copy * 2);
+          ctx.scale(1 + copy * 0.13 * smearPower, 1 - copy * 0.045 * smearPower);
+          drawSilhouetteFrame(atlas, frame, renderSize, fighter.def.accent);
+          ctx.restore();
+          presentationDebug.attackSmears += 1;
+        }
+      }
+    }
+
     if (!reflectionPassActive && state.performance.shadows && !graphicFatality
       && !state.accessibility.highContrast) {
       // Stage-keyed rim light: a tinted silhouette peeking 2-3px past the edge
@@ -15595,7 +16018,9 @@ function drawFighter(fighter, time) {
       // drift back; the amplitude collapses with the drain bar so recovery is
       // telegraphed. Time-driven only — no RNG, mobile-cheap tinted blits.
       const drain = fighter.dizzyFrames / Math.max(1, fighter.dizzyTotalFrames);
-      const sway = Math.sin(time * 0.008 + fighter.side * 1.7) * 7 * (0.35 + 0.65 * drain);
+      // v2.6 MOTION: sway amplitude up (7 → 10) — rides with the new dizzy
+      // body-sway rotation in fighterMotionTransform.
+      const sway = Math.sin(time * 0.008 + fighter.side * 1.7) * 10 * (0.35 + 0.65 * drain);
       ctx.save();
       ctx.globalCompositeOperation = "screen";
       ctx.globalAlpha = 0.28;
@@ -15629,6 +16054,26 @@ function drawFighter(fighter, time) {
       presentationDebug.battleDamage += battleDamageMarks[fighter.side].length;
     } else drawAtlasFrame(atlas, frame, renderSize);
     ctx.restore();
+
+    // v2.6 MOTION pose cross-fade (spec 3): the previous atlas cell lingers
+    // 2-3 sim frames at falling alpha OVER the fresh pose (keeps the fighter
+    // silhouette solid — no see-through frames), killing the pose snap.
+    // Armed/paced by updateMotionObservers; skipped during hitstop freezes,
+    // the dismemberment compositor, battery, and the mirror pass.
+    if (!reflectionPassActive && !graphicFatality && state.hitstop <= 0) {
+      const fadeObs = motionObs[fighter.side];
+      if (fadeObs.fadeLeft > 0 && (fadeObs.fadeBank !== pose.bank || fadeObs.fadeFrame !== frame)) {
+        const fadeAtlas = paletteAtlas(fighter.def.id, fighter.side, fadeObs.fadeBank);
+        if (fadeAtlas?.complete && fadeAtlas.naturalWidth) {
+          const fadeAdjust = fadeObs.fadeBank === "specials" ? (MOVE_SHEET_ADJUST[fighter.def.id] || 1) : 1;
+          ctx.save();
+          ctx.globalAlpha = 0.44 * (fadeObs.fadeLeft / MOTION_RULES.crossfadeFrames);
+          drawAtlasFrame(fadeAtlas, fadeObs.fadeFrame, fighterRenderSize(fighter.def.id) * fadeAdjust);
+          ctx.restore();
+          presentationDebug.poseCrossfades += 1;
+        }
+      }
+    }
 
     // The roster portraits are substantially higher resolution than an atlas
     // cell. A restrained soft-light pass brings their skin/fabric/material
@@ -18180,6 +18625,33 @@ function drawParticles() {
       ctx.globalCompositeOperation = "source-over";
     } else if (effect.kind === "afterimage") {
       // Rendered in the world pass before the fighters; nothing to do here.
+    } else if (effect.kind === "groundCrackFlash") {
+      // v2.6 MOTION heavy-landing crack flash (spec 5): the stage-scar visual
+      // language — chalky scuff, pale chipped edge, dark crack — as a ~0.35s
+      // flash that fades out completely. Presentation only, no persistence.
+      ctx.shadowBlur = 0;
+      ctx.rotate(effect.rot);
+      ctx.globalAlpha = alpha * 0.4;
+      ctx.fillStyle = "rgba(196,184,164,0.6)";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, effect.scuffW * (1.05 - alpha * 0.2), effect.scuffH, 0, 0, Math.PI * 2);
+      ctx.fill();
+      for (const [style, width, offsetY, passAlpha] of [
+        ["rgba(255,244,222,0.85)", 3.2, -1.4, 0.9],
+        ["rgba(10,9,8,0.95)", 2.2, 0, 0.75],
+      ]) {
+        ctx.globalAlpha = alpha * passAlpha;
+        ctx.strokeStyle = style;
+        ctx.lineWidth = width;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(effect.points[0][0], effect.points[0][1] + offsetY);
+        for (let index = 1; index < effect.points.length; index += 1) {
+          ctx.lineTo(effect.points[index][0], effect.points[index][1] + offsetY);
+        }
+        ctx.stroke();
+      }
     } else if (effect.kind === "guard") {
       const radius = (1 - alpha) * 64 + 42;
       ctx.lineWidth = 9 * alpha;
@@ -19531,6 +20003,10 @@ function draw(time) {
   // intensity routing, stage ambience) from observed state. Unconditional so
   // every bed settles/tears down the moment the fight screen goes away.
   updateAudioPresentation(time, hudDtMs);
+  // v2.6 MOTION: observe landings/skids/dash starts/hitstun edges and pace
+  // the squash/wobble/crossfade counters BEFORE either renderer consumes the
+  // shared motion transforms (the 3D renderFrame below reads the same layer).
+  updateMotionObservers();
   // Wave 7 DPR-sharp baseline: all logical-coordinate code below draws through
   // this transform; identity when sharp render is off (renderDpr === 1).
   ctx.setTransform(renderDpr, 0, 0, renderDpr, 0, 0);
@@ -23062,6 +23538,15 @@ window.__finalBlowEngine = {
         projectileGlows: presentationDebug.projectileGlows,
         swipeRibbons: presentationDebug.swipeRibbons,
         wallSplats: presentationDebug.wallSplats,
+        // v2.6 MOTION counters: monotonic one-shots (motionFxDebug) for the
+        // event spawns, per-rendered-frame passes (presentationDebug) for the
+        // steady 2D draw-path composites.
+        jumpFlips: motionFxDebug.jumpFlips,
+        squashStretchFrames: presentationDebug.squashStretchFrames,
+        poseCrossfades: presentationDebug.poseCrossfades,
+        attackSmears: presentationDebug.attackSmears,
+        skidSmokes: motionFxDebug.skidSmokes,
+        landingDust: motionFxDebug.landingDust,
         focusLines: presentationDebug.focusLines,
         lightSpills: presentationDebug.lightSpills,
         timeOfDay: Number(timeOfDayLevel().toFixed(3)),
@@ -24446,6 +24931,10 @@ function ensureCinema3d() {
       fighterPaletteKey: (fighter) => (matchPalettes[fighter.side] === 1 ? "alt" : ""),
       fighterRenderSize,
       fighterAnimationPose,
+      // v2.6 MOTION: the shared movement-animation transform (jump flips,
+      // squash & stretch, leans, wobble, dizzy sway) so poseRig animates
+      // identically to drawFighter. Canvas rotation convention (y-down).
+      fighterMotionTransform,
       moveSheetAdjust: MOVE_SHEET_ADJUST,
       gritSuperCost: GRIT_RULES.superCost,
       gameCanvas: canvas,

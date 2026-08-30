@@ -741,15 +741,35 @@ export class FighterLayer {
       const flip = 1 - fighter.airTechFlipFrames / 14;
       rootRotation += -facing * flip * Math.PI * 2;
     }
+    // v2.6 MOTION parity: the shared game-side motion layer (jump flips,
+    // dash/walk lean, recoil wobble, dizzy sway, squash & stretch). Canvas
+    // y-down rotations flip sign for three's z; the flip pivots about the
+    // body centre via the position fixup below, everything else about the
+    // feet like the 2D path.
+    const motion = host.fighterMotionTransform ? host.fighterMotionTransform(fighter) : null;
+    if (motion) {
+      if (motion.rotation) rootRotation += -motion.rotation;
+      if (motion.flipRotation) rootRotation += -motion.flipRotation;
+    }
     rig.root.rotation.z = rootRotation;
     if (fighter.down) rig.root.position.x += -facing * 45 * PX;
 
     const cineScale = fighter.cinematicScale !== 1 ? fighter.cinematicScale : 1;
-    const scaleX = (1 + activePower * 0.045 - startupPower * 0.025) * (1 + hitSmear * 0.05);
+    const scaleX = (1 + activePower * 0.045 - startupPower * 0.025) * (1 + hitSmear * 0.05)
+      * (motion ? motion.scaleX : 1);
     const scaleY = (crouchScale + startupPower * 0.035 - activePower * 0.025)
-      * (1 + breath) * (1 - hitSmear * 0.06);
+      * (1 + breath) * (1 - hitSmear * 0.06) * (motion ? motion.scaleY : 1);
     rig.mesh.scale.set(renderSize * facing * scaleX * cineScale, renderSize * scaleY * cineScale, 1);
     rig.mesh.rotation.z = facing * attackSwing * (attackKind === "heavy" ? 0.07 : 0.025);
+    if (motion && motion.flipRotation) {
+      // Pivot the somersault about the body centre, not the feet: rotating
+      // the feet-anchored root by θ then shifting the root so the centre
+      // point stays fixed is exactly a centre-pivot rotation.
+      const theta = -motion.flipRotation;
+      const centreY = Math.abs(rig.mesh.scale.y) * 0.52;
+      rig.root.position.x += centreY * Math.sin(theta);
+      rig.root.position.y += centreY * (1 - Math.cos(theta));
+    }
 
     // --- Foot anchoring: kill the hover -------------------------------------
     // The atlas frames carry transparent padding under the soles, so the
