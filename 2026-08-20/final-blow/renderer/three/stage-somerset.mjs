@@ -744,7 +744,10 @@ export function buildSomersetStage(host, { quality }) {
   // --- Bokeh disc field: the defocused street's lights as DISCRETE lens
   // circles (SF6 lantern bokeh), not gaussian smears. Hot enough to bloom a
   // little; sizes/colours scatter deterministically across the far planes.
-  const bokehMap = bokehDiscTexture(64);
+  // Three softness planes (critic fix 5): crisp near-defocus lens circles,
+  // mid melt, far fully-melted glows — the field carries genuinely different
+  // focus depths instead of one shared disc stamp.
+  const bokehMaps = [bokehDiscTexture(64, 0), bokehDiscTexture(64, 0.55), bokehDiscTexture(64, 1)];
   const bokehRand = mulberry32(0xb0ceb);
   const bokehColors = [0xffb066, 0xffd9a0, 0xff9a3c, 0x8fd8ff, 0xff7ce0, 0xfff2c8];
   for (let i = 0; i < 18; i += 1) {
@@ -752,7 +755,8 @@ export function buildSomersetStage(host, { quality }) {
     const disc = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({
-        map: bokehMap,
+        // softness follows depth (far discs melt) with a random half-step
+        map: bokehMaps[Math.min(2, Math.floor(depth * 2 + bokehRand() * 0.9))],
         color: new THREE.Color(bokehColors[Math.floor(bokehRand() * bokehColors.length)])
           .multiplyScalar(1.15 + bokehRand() * 1.15),
         transparent: true,
@@ -767,9 +771,10 @@ export function buildSomersetStage(host, { quality }) {
     // dark building silhouettes, and a defocused light circle floating on a
     // solid dark tower reads as bokeh IN FRONT of the midground (critic
     // fix e) — the street band is the only zone that legibly holds distant
-    // practicals behind the fence.
-    const scale = (0.16 + bokehRand() * 0.2) * (1 + depth * 0.9);
-    disc.scale.setScalar(scale);
+    // practicals behind the fence. WIDER size scatter (critic fix 5): tiny
+    // pinpricks through fat melted pools, slight ellipse per disc.
+    const scale = (0.11 + bokehRand() * 0.3) * (1 + depth * 1.1);
+    disc.scale.set(scale, scale * (0.9 + bokehRand() * 0.2), 1);
     disc.position.set(
       (bokehRand() - 0.5) * 21,
       0.85 + bokehRand() * 1.5,
@@ -778,6 +783,137 @@ export function buildSomersetStage(host, { quality }) {
     disc.renderOrder = 1;
     group.add(disc);
   }
+
+  // --- Station story props behind the fence (critic fix 5) -----------------
+  // Four RECOGNIZABLE silhouettes at just-below-fence contrast: a stopped
+  // SEPTA bus with a lit window band, a fare kiosk with a cool screen, a
+  // turnstile bank, and a keystone SEPTA pole sign. Dark bodies, one small
+  // emissive read each — story detail, never competition for the fighters.
+  const storyProp = (paint, w, h, x, y, z, opts = {}) => {
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({
+        map: canvasTexture(opts.tw ?? 256, opts.th ?? 256, paint, { srgb: true }),
+        transparent: true,
+        opacity: opts.opacity ?? 0.96,
+        depthWrite: false,
+        // slight lift on the lit elements so they survive the painterly
+        // flatten + night grade (fog still applies: same air as the street)
+        color: new THREE.Color(1, 1, 1).multiplyScalar(opts.boost ?? 1),
+      }),
+    );
+    mesh.position.set(x, y, z);
+    mesh.renderOrder = 1;
+    group.add(mesh);
+    return mesh;
+  };
+  // Stopped SEPTA bus, far screen-left: long dark mass, warm lit window band,
+  // glowing route header, wheel notches — instantly a bus through the fence.
+  storyProp((ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#141920";
+    ctx.beginPath();
+    ctx.moveTo(w * 0.02, h * 0.92);
+    ctx.lineTo(w * 0.02, h * 0.24);
+    ctx.quadraticCurveTo(w * 0.03, h * 0.1, w * 0.1, h * 0.1);
+    ctx.lineTo(w * 0.94, h * 0.1);
+    ctx.quadraticCurveTo(w * 0.98, h * 0.12, w * 0.98, h * 0.26);
+    ctx.lineTo(w * 0.98, h * 0.92);
+    ctx.closePath();
+    ctx.fill();
+    // window band: warm interior light broken by mullions + a rider head
+    ctx.fillStyle = "rgba(255,196,120,0.85)";
+    ctx.fillRect(w * 0.07, h * 0.22, w * 0.86, h * 0.24);
+    ctx.fillStyle = "#141920";
+    for (let i = 0; i < 7; i += 1) ctx.fillRect(w * (0.145 + i * 0.12), h * 0.22, w * 0.018, h * 0.24);
+    ctx.beginPath();
+    ctx.arc(w * 0.4, h * 0.42, w * 0.026, 0, Math.PI * 2); // silhouetted rider
+    ctx.fill();
+    // route header glow + marker lights
+    ctx.fillStyle = "rgba(255,150,60,0.95)";
+    ctx.fillRect(w * 0.07, h * 0.12, w * 0.2, h * 0.06);
+    ctx.fillStyle = "rgba(255,120,60,0.8)";
+    for (const mx of [0.05, 0.5, 0.95]) ctx.fillRect(w * mx - 2, h * 0.08, 4, 3);
+    // skirt shadow + wheel notches
+    ctx.fillStyle = "#080b10";
+    ctx.fillRect(w * 0.02, h * 0.78, w * 0.96, h * 0.14);
+    ctx.beginPath();
+    ctx.arc(w * 0.22, h * 0.92, w * 0.055, 0, Math.PI * 2);
+    ctx.arc(w * 0.76, h * 0.92, w * 0.055, 0, Math.PI * 2);
+    ctx.fill();
+  }, 4.2, 1.5, -4.7, 0.8, -7.0, { tw: 512, th: 192, opacity: 0.92, boost: 1.2 });
+  // Fare kiosk: tall cabinet, cool screen glow, card slot, base plinth.
+  storyProp((ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#161b23";
+    ctx.fillRect(w * 0.18, h * 0.06, w * 0.64, h * 0.88);
+    ctx.fillStyle = "#0c1017";
+    ctx.fillRect(w * 0.12, h * 0.9, w * 0.76, h * 0.08);
+    ctx.fillStyle = "rgba(127,196,255,0.9)"; // idle screen
+    ctx.fillRect(w * 0.28, h * 0.16, w * 0.44, h * 0.2);
+    ctx.fillStyle = "rgba(196,228,255,0.85)";
+    ctx.fillRect(w * 0.3, h * 0.19, w * 0.28, h * 0.03);
+    ctx.fillRect(w * 0.3, h * 0.25, w * 0.36, h * 0.02);
+    ctx.fillStyle = "rgba(255,214,150,0.75)"; // card reader
+    ctx.fillRect(w * 0.36, h * 0.46, w * 0.28, h * 0.045);
+    ctx.strokeStyle = "rgba(140,150,168,0.5)"; // panel seams
+    ctx.lineWidth = 2;
+    ctx.strokeRect(w * 0.24, h * 0.56, w * 0.52, h * 0.26);
+  }, 0.62, 1.32, -2.6, 0.66, -6.0, { tw: 128, th: 256, boost: 1.18 });
+  // Turnstile bank: three pedestals with tripod arms between end cabinets.
+  storyProp((ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    for (let i = 0; i < 3; i += 1) {
+      const px = w * (0.16 + i * 0.28);
+      ctx.fillStyle = "#171c24";
+      ctx.fillRect(px, h * 0.3, w * 0.1, h * 0.62); // pedestal
+      ctx.fillStyle = "#1e242e";
+      ctx.fillRect(px - w * 0.012, h * 0.26, w * 0.124, h * 0.08); // head
+      // tripod arms catching the station's green-white spill
+      ctx.strokeStyle = "rgba(168,188,178,0.85)";
+      ctx.lineCap = "round";
+      ctx.lineWidth = Math.max(2.5, w * 0.014);
+      ctx.beginPath();
+      ctx.moveTo(px + w * 0.05, h * 0.34);
+      ctx.lineTo(px + w * 0.185, h * 0.42);
+      ctx.moveTo(px + w * 0.05, h * 0.34);
+      ctx.lineTo(px + w * 0.14, h * 0.55);
+      ctx.moveTo(px + w * 0.05, h * 0.34);
+      ctx.lineTo(px - w * 0.02, h * 0.5);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(190,255,225,0.5)"; // fare-paid lamp dot
+      ctx.fillRect(px + w * 0.03, h * 0.29, w * 0.02, h * 0.02);
+    }
+  }, 1.9, 0.85, 1.25, 0.43, -6.05, { tw: 384, th: 160, opacity: 0.94, boost: 1.15 });
+  // Keystone SEPTA pole sign: the transit-authority read over the fence line.
+  storyProp((ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#10151d";
+    ctx.fillRect(w * 0.47, h * 0.3, w * 0.06, h * 0.7); // pole
+    // keystone plate
+    const kx = w * 0.5;
+    const ky = h * 0.18;
+    const kw = w * 0.62;
+    const kh = h * 0.3;
+    ctx.fillStyle = "#22355c";
+    ctx.beginPath();
+    ctx.moveTo(kx - kw * 0.5, ky - kh * 0.28);
+    ctx.lineTo(kx - kw * 0.3, ky - kh * 0.5);
+    ctx.lineTo(kx + kw * 0.3, ky - kh * 0.5);
+    ctx.lineTo(kx + kw * 0.5, ky - kh * 0.28);
+    ctx.lineTo(kx + kw * 0.38, ky + kh * 0.5);
+    ctx.lineTo(kx - kw * 0.38, ky + kh * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(214,228,246,0.85)";
+    ctx.lineWidth = Math.max(2, w * 0.015);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(224,236,250,0.92)";
+    ctx.font = `900 ${Math.round(h * 0.11)}px Arial Narrow, Arial`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("SEPTA", kx, ky + kh * 0.02);
+  }, 0.85, 1.7, 5.7, 1.06, -6.15, { tw: 128, th: 256, opacity: 0.95, boost: 1.15 });
 
   // Shared contact-ellipse matte for all static background figures.
   const bystanderShadowMap = softDotTexture(96, "rgba(0,0,0,1)", "rgba(0,0,0,0)");

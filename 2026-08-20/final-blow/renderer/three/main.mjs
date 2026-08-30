@@ -14,7 +14,7 @@
 // registerStage(id, builder) / registerLayer(name, layer) /
 // vfx.registerImpactEffect(tier, fn) without touching this file.
 import * as THREE from "three";
-import { PX, SIM_W, SIM_H } from "./shared.mjs";
+import { PX, SIM_W, SIM_H, worldX, worldY } from "./shared.mjs";
 import { buildNightEnvScene } from "./textures.mjs";
 import { FramingCamera } from "./camera.mjs";
 import { buildPostStack } from "./post.mjs";
@@ -343,6 +343,19 @@ export function createRenderer(host) {
     frozenAt = clockSec;
     window.__fbFreeze = true;
     return clockSec;
+  };
+
+  // Project a sim-space point (game.js pixel coordinates) through the live
+  // framing camera into sim-canvas screen pixels. Used by the 2D CRT overlay
+  // to lift its scanline veil off the character bodies (critic fix 6).
+  const scratchProject = new THREE.Vector3();
+  renderer3d.projectSim = (simX, simY) => {
+    if (!renderer3d.ready || !framing) return null;
+    scratchProject.set(worldX(simX), worldY(simY), 0).project(framing.camera);
+    return {
+      x: (scratchProject.x + 1) / 2 * SIM_W,
+      y: (1 - (scratchProject.y + 1) / 2) * SIM_H,
+    };
   };
 
   init();

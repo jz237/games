@@ -12,7 +12,7 @@
 // replace/extend per-tier effects without touching this file's plumbing.
 import * as THREE from "three";
 import { PX, worldX, worldY, mulberry32 } from "./shared.mjs";
-import { softDotTexture, ringTexture, impactBurstTexture, halftoneRingTexture, smearArcTexture } from "./textures.mjs";
+import { softDotTexture, ringTexture, impactBurstTexture, halftoneRingTexture, smearArcTexture, paintStreakTexture } from "./textures.mjs";
 import { FIGHTER_MASK_LAYER } from "./post.mjs";
 
 const MAX_SPARKS = 240;
@@ -259,6 +259,32 @@ export class ImpactVfxLayer {
       this.smears.push({ mesh, ttl: 0, max: 0.13, size: 1, spin: 0 });
     }
 
+    // STRUCTURED PAINT-STREAK FAN (critic fix 4): 6-10 tapered comet strokes
+    // with built-in chromatic fringe, fanned around the contact with a hard
+    // directional bias — the layer that replaces the soft radial bloom-blob
+    // read. Pooled; 3 seeded stroke variants so no two rays match.
+    this.streakRays = [];
+    for (let i = 0; i < 12; i += 1) {
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 0.375),
+        new THREE.MeshBasicMaterial({
+          map: paintStreakTexture(256, 96, 0x77aa + (i % 3) * 4099),
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          fog: false,
+        }),
+      );
+      // anchor at the stroke ROOT: geometry shifts so position = contact point
+      mesh.geometry.translate(0.5, 0, 0);
+      mesh.visible = false;
+      mesh.renderOrder = 8;
+      this.group.add(mesh);
+      this.streakRays.push({ mesh, ttl: 0, max: 0.14, size: 1, dir: 1 });
+    }
+
     // Contact-point lens pop (read by main.mjs -> post): world x/y of the
     // latest hit + a ~1-2 frame ttl for the local refraction/chroma punch.
     this.popState = { x: 0, y: 0, ttl: 0, max: 0.055, mag: 0 };
@@ -434,7 +460,7 @@ export class ImpactVfxLayer {
     }
   }
 
-  fireFlash(x, y, style, counter) {
+  fireFlash(x, y, style, counter, direction = 1) {
     const slot = this.flashes.find((flash) => flash.ttl <= 0) || this.flashes[0];
     slot.light.color.set(style.color);
     // Off-plane toward camera: grazes the sprites, pools on the floor.
@@ -461,10 +487,36 @@ export class ImpactVfxLayer {
     core.max = style.tier === "super" ? 0.24 : 0.17;
     core.ttl = core.max;
     core.core.scale.setScalar(core.size * 0.42);
-    core.halo.scale.setScalar(core.size * 0.82);
+    // Halo DEMOTED (critic fix 4): the soft radial bloom blob was reading as
+    // the whole impact — now it is a faint warm cushion behind the structured
+    // streak fan, not the statement.
+    core.halo.scale.setScalar(core.size * 0.6);
     core.core.material.opacity = 1;
-    core.halo.material.opacity = 0.32;
+    core.halo.material.opacity = 0.16;
     core.core.visible = core.halo.visible = true;
+
+    // STRUCTURED PAINT-STREAK FAN: 6-9 tapered chromatic comet strokes fanned
+    // hard toward the hit direction (a couple whip backward for recoil).
+    const rayCount = style.ring ? 9 : 6;
+    const dirAngle = direction >= 0 ? 0 : Math.PI;
+    for (let s = 0; s < rayCount; s += 1) {
+      const ray = this.streakRays.find((r) => r.ttl <= 0)
+        || this.streakRays[(s * 5 + 1) % this.streakRays.length];
+      const backward = s % 4 === 3;
+      const spread = (this.rand() - 0.5) * (backward ? 1.3 : 2.4);
+      const angle = dirAngle + spread + (backward ? Math.PI : 0);
+      ray.mesh.rotation.z = angle;
+      ray.mesh.position.set(x, y, 0.38 + s * 0.002);
+      ray.size = (style.core ?? 0.5) * (0.85 + this.rand() * 0.9)
+        * (style.ring ? 1.5 : 1.05) * (backward ? 0.6 : 1);
+      ray.mesh.scale.set(ray.size, ray.size * (0.62 + this.rand() * 0.5), 1);
+      ray.max = 0.11 + this.rand() * 0.05;
+      ray.ttl = ray.max;
+      ray.mesh.material.color.set(0xffffff)
+        .lerp(new THREE.Color(style.shard ?? style.color), 0.25).multiplyScalar(1.6);
+      ray.mesh.material.opacity = 0.95;
+      ray.mesh.visible = true;
+    }
 
     // Shard star DEMOTED to a brief first-frame accent (the flat 8-point
     // star + paper shards read 2015-indie): the layered read now comes from
@@ -515,13 +567,16 @@ export class ImpactVfxLayer {
       halftone.mesh.material.color.set(0xffffff).lerp(new THREE.Color(style.shard ?? style.color), 0.3).multiplyScalar(1.5);
       halftone.mesh.position.set(x, y, 0.33);
       halftone.mesh.rotation.z = this.rand() * Math.PI * 2;
-      halftone.size = (style.ring ? 1.05 : 0.72) * (style.tier === "super" ? 1.25 : 1);
+      // CONSTRAINED (critic fix 4): the dot ring stays a tight pressure band
+      // AROUND the contact point — the old 1.05-1.3 growth stamped a dot
+      // doily across both fighters' bodies at point-blank range.
+      halftone.size = (style.ring ? 0.78 : 0.58) * (style.tier === "super" ? 1.12 : 1);
       halftone.squash = 0.66 + this.rand() * 0.16;
       halftone.spin = (this.rand() - 0.5) * 2.4; // slight live rotation (fix 5)
-      halftone.max = style.ring ? 0.26 : 0.18;
+      halftone.max = style.ring ? 0.2 : 0.15;
       halftone.ttl = halftone.max;
       halftone.mesh.scale.set(0.22, 0.22 * halftone.squash, 1);
-      halftone.mesh.material.opacity = 0.85;
+      halftone.mesh.material.opacity = 0.68;
       halftone.mesh.visible = true;
     }
 
@@ -600,7 +655,7 @@ export class ImpactVfxLayer {
       const custom = this.customEffects.get(tier);
       if (custom) custom({ ...payload, worldX: x, worldY: y }, this);
       else {
-        this.fireFlash(x, y, style, payload.counter);
+        this.fireFlash(x, y, style, payload.counter, payload.direction >= 0 ? 1 : -1);
         this.spawnSparks(x, y, style, payload.direction >= 0 ? 1 : -1, payload.counter);
         this.spawnEmbers(x, y, style, payload.direction >= 0 ? 1 : -1, payload.counter);
       }
@@ -727,12 +782,27 @@ export class ImpactVfxLayer {
         continue;
       }
       const t = 1 - core.ttl / core.max;
-      // Core stays TIGHT (its job is heat, not coverage); the warm halo
-      // swells a little further but never past ~one head height.
+      // Core stays TIGHT (its job is heat, not coverage); the demoted halo
+      // is only a faint cushion behind the streak fan now.
       core.core.scale.setScalar(core.size * (0.4 + t * 0.28));
-      core.halo.scale.setScalar(core.size * (0.95 + t * 0.6));
+      core.halo.scale.setScalar(core.size * (0.6 + t * 0.3));
       core.core.material.opacity = 0.9 * (1 - t) * (1 - t);
-      core.halo.material.opacity = 0.32 * (1 - t);
+      core.halo.material.opacity = 0.16 * (1 - t);
+    }
+
+    // Paint-streak rays: root anchored at the contact — each stroke stretches
+    // outward a touch as it dies, so the fan reads as energy LEAVING the hit.
+    for (const ray of this.streakRays) {
+      if (ray.ttl <= 0) continue;
+      ray.ttl -= dtSec;
+      if (ray.ttl <= 0) {
+        ray.mesh.visible = false;
+        ray.mesh.material.opacity = 0;
+        continue;
+      }
+      const t = 1 - ray.ttl / ray.max;
+      ray.mesh.scale.x = ray.size * (1 + t * 0.45);
+      ray.mesh.material.opacity = 0.95 * Math.pow(1 - t, 1.5);
     }
 
     // Expand + fade shockwave arcs (elliptical squash held while growing).
@@ -767,7 +837,7 @@ export class ImpactVfxLayer {
       const grow = 0.22 + eased * halftone.size;
       halftone.mesh.rotation.z += halftone.spin * dtSec; // dot screen slowly turns
       halftone.mesh.scale.set(grow, grow * halftone.squash, 1);
-      halftone.mesh.material.opacity = 0.85 * Math.pow(1 - t, 1.5);
+      halftone.mesh.material.opacity = 0.68 * Math.pow(1 - t, 1.5);
     }
 
     // Smear arcs: whip around the contact (slight spin), stretch a touch,

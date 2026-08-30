@@ -10574,6 +10574,38 @@ function drawThrowable(projectile, time, life) {
   ctx.globalAlpha = Math.min(1, life * 2.2);
   switch (projectile.style) {
     case "pizza": {
+      if (cinema3dDressingActive()) {
+        // CINEMA 3D: the painted pizza-on-cutter wheel (crust blisters,
+        // mottled cheese, cupped pepperoni, rusted steel rim with a cold
+        // specular) + radial motion smear ghosts trailing the spin. The
+        // classic 2D primitives below stay byte-identical with 3D off.
+        const hd = fatalityPizzaCanvas();
+        const rim = fatalityPizzaRimCanvas();
+        ctx.rotate(angle + wobble);
+        const d = w * 1.04;
+        ctx.drawImage(hd, -d / 2, -d / 2, d, d);
+        // trailing RIM ghosts: the motion blur lives on the spinning edge —
+        // the face detail stays printed once (no doubled pepperoni).
+        ctx.save();
+        ctx.globalAlpha *= 0.3;
+        ctx.rotate(-0.1);
+        ctx.drawImage(rim, -d / 2, -d / 2, d, d);
+        ctx.rotate(-0.12);
+        ctx.globalAlpha *= 0.55;
+        ctx.drawImage(rim, -d / 2, -d / 2, d, d);
+        ctx.restore();
+        // rim speed smears: short bright arcs whipping off the cutting edge
+        ctx.strokeStyle = "rgba(255,244,225,0.55)";
+        ctx.lineCap = "round";
+        ctx.lineWidth = Math.max(1.5, w * 0.02);
+        for (let s = 0; s < 3; s += 1) {
+          const a0 = s * 2.1 + 0.4;
+          ctx.beginPath();
+          ctx.arc(0, 0, w * 0.52, a0, a0 + 0.5);
+          ctx.stroke();
+        }
+        break;
+      }
       ctx.rotate(angle + wobble);
       ctx.fillStyle = "#e8b23a";
       ctx.beginPath();
@@ -11702,6 +11734,239 @@ function drawFinisherImpact(effect, alpha) {
   }
 }
 
+// --- CINEMA 3D fatality dressing -------------------------------------------
+// True while the CINEMA 3D presentation is ON (toggle + eligible + loaded),
+// including during scripted finishers where the world temporarily renders 2D.
+// Every caller keeps the classic 2D path byte-identical when this is false.
+function cinema3dDressingActive() {
+  return Boolean(cinema3dBridge.renderer?.ready && state.cinema3d && cinema3dAllowed());
+}
+
+// One-time offscreen canvases for the 3D-mode fatality frame: an actually
+// painted pizza-on-cutter wheel and a dimensional blood droplet sprite.
+// Built lazily on first 3D fatality; nothing allocates per frame.
+const fatalityDressing = { pizza: null, pizzaRim: null, droplet: null };
+
+// Rim-only copy of the pizza wheel (outer steel + crust edge): the spin
+// ghosts draw THIS, so the motion blur lives on the wheel's rim where a
+// spinning disc actually smears, instead of double-printing the pepperoni.
+function fatalityPizzaRimCanvas() {
+  if (fatalityDressing.pizzaRim) return fatalityDressing.pizzaRim;
+  const source = fatalityPizzaCanvas();
+  const c = document.createElement("canvas");
+  c.width = c.height = source.width;
+  const p = c.getContext("2d");
+  p.drawImage(source, 0, 0);
+  p.globalCompositeOperation = "destination-out";
+  const hole = p.createRadialGradient(c.width / 2, c.width / 2, c.width * 0.24,
+    c.width / 2, c.width / 2, c.width * 0.4);
+  hole.addColorStop(0, "rgba(0,0,0,1)");
+  hole.addColorStop(1, "rgba(0,0,0,0)");
+  p.fillStyle = hole;
+  p.fillRect(0, 0, c.width, c.height);
+  p.globalCompositeOperation = "source-over";
+  fatalityDressing.pizzaRim = c;
+  return c;
+}
+
+function fatalityPizzaCanvas() {
+  if (fatalityDressing.pizza) return fatalityDressing.pizza;
+  const size = 512;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const p = c.getContext("2d");
+  const cx = size / 2;
+  const hash = (n) => {
+    const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  // --- rusted steel cutter wheel under the pizza ---------------------------
+  const steel = p.createRadialGradient(cx, cx, size * 0.3, cx, cx, size * 0.5);
+  steel.addColorStop(0, "#565049");
+  steel.addColorStop(0.82, "#6a635a");
+  steel.addColorStop(1, "#4a443e");
+  p.fillStyle = steel;
+  p.beginPath();
+  p.arc(cx, cx, size * 0.5 - 2, 0, Math.PI * 2);
+  p.fill();
+  // rust blotches riding the exposed rim
+  for (let i = 0; i < 26; i += 1) {
+    const a = hash(i) * Math.PI * 2;
+    const rr = size * (0.435 + hash(i + 40) * 0.05);
+    p.fillStyle = `rgba(${122 + Math.round(hash(i + 7) * 30)},${64 + Math.round(hash(i + 13) * 18)},38,${(0.35 + hash(i + 3) * 0.4).toFixed(2)})`;
+    p.beginPath();
+    p.ellipse(cx + Math.cos(a) * rr, cx + Math.sin(a) * rr,
+      size * (0.012 + hash(i + 21) * 0.02), size * (0.008 + hash(i + 33) * 0.012), a, 0, Math.PI * 2);
+    p.fill();
+  }
+  // sharpened cutting edge + cold specular arc (the metal must read METAL)
+  p.lineWidth = size * 0.012;
+  p.strokeStyle = "#b9bfc7";
+  p.beginPath();
+  p.arc(cx, cx, size * 0.488, 0, Math.PI * 2);
+  p.stroke();
+  p.lineWidth = size * 0.016;
+  p.strokeStyle = "rgba(240,246,252,0.95)";
+  p.beginPath();
+  p.arc(cx, cx, size * 0.488, Math.PI * 1.12, Math.PI * 1.62);
+  p.stroke();
+  p.lineWidth = size * 0.01;
+  p.strokeStyle = "rgba(18,16,14,0.8)";
+  p.beginPath();
+  p.arc(cx, cx, size * 0.488, Math.PI * 0.1, Math.PI * 0.55);
+  p.stroke();
+  // --- crust ring with charred blisters ------------------------------------
+  const crustR = size * 0.42;
+  const crust = p.createRadialGradient(cx, cx, size * 0.3, cx, cx, crustR);
+  crust.addColorStop(0, "#c9873c");
+  crust.addColorStop(0.75, "#d99a48");
+  crust.addColorStop(1, "#a86a2a");
+  p.fillStyle = crust;
+  p.beginPath();
+  p.arc(cx, cx, crustR, 0, Math.PI * 2);
+  p.fill();
+  for (let i = 0; i < 34; i += 1) {
+    const a = (i / 34) * Math.PI * 2 + hash(i + 60) * 0.18;
+    const rr = size * (0.365 + hash(i + 71) * 0.045);
+    const blister = size * (0.012 + hash(i + 82) * 0.016);
+    p.fillStyle = hash(i + 90) > 0.42 ? "rgba(122,70,26,0.85)" : "rgba(58,30,12,0.8)";
+    p.beginPath();
+    p.arc(cx + Math.cos(a) * rr, cx + Math.sin(a) * rr, blister, 0, Math.PI * 2);
+    p.fill();
+    p.fillStyle = "rgba(240,196,120,0.5)";
+    p.beginPath();
+    p.arc(cx + Math.cos(a) * rr - blister * 0.3, cx + Math.sin(a) * rr - blister * 0.35, blister * 0.4, 0, Math.PI * 2);
+    p.fill();
+  }
+  // --- cheese field: mottled melt over sauce -------------------------------
+  const cheeseR = size * 0.335;
+  p.fillStyle = "#b04226"; // sauce base peeking through
+  p.beginPath();
+  p.arc(cx, cx, cheeseR, 0, Math.PI * 2);
+  p.fill();
+  for (let i = 0; i < 120; i += 1) {
+    const a = hash(i + 200) * Math.PI * 2;
+    const rr = Math.sqrt(hash(i + 210)) * cheeseR * 0.96;
+    const blob = size * (0.02 + hash(i + 220) * 0.035);
+    const tone = hash(i + 230);
+    p.fillStyle = tone > 0.62 ? "rgba(242,220,143,0.9)" : tone > 0.25 ? "rgba(232,201,106,0.9)" : "rgba(214,178,84,0.85)";
+    p.beginPath();
+    p.ellipse(cx + Math.cos(a) * rr, cx + Math.sin(a) * rr, blob, blob * (0.6 + hash(i + 240) * 0.5), a, 0, Math.PI * 2);
+    p.fill();
+  }
+  // browned cheese bubbles
+  for (let i = 0; i < 26; i += 1) {
+    const a = hash(i + 300) * Math.PI * 2;
+    const rr = Math.sqrt(hash(i + 310)) * cheeseR * 0.9;
+    p.fillStyle = `rgba(168,112,40,${(0.3 + hash(i + 320) * 0.35).toFixed(2)})`;
+    p.beginPath();
+    p.arc(cx + Math.cos(a) * rr, cx + Math.sin(a) * rr, size * (0.006 + hash(i + 330) * 0.01), 0, Math.PI * 2);
+    p.fill();
+  }
+  // deep sauce gaps torn into the melt: the dark accents that keep the face
+  // readable through the finisher bloom + saturation drain
+  for (let i = 0; i < 12; i += 1) {
+    const a = hash(i + 500) * Math.PI * 2;
+    const rr = Math.sqrt(hash(i + 510)) * cheeseR * 0.85;
+    p.fillStyle = `rgba(112,30,16,${(0.55 + hash(i + 520) * 0.3).toFixed(2)})`;
+    p.beginPath();
+    p.ellipse(cx + Math.cos(a) * rr, cx + Math.sin(a) * rr,
+      size * (0.014 + hash(i + 530) * 0.022), size * (0.008 + hash(i + 540) * 0.012),
+      a * 1.7, 0, Math.PI * 2);
+    p.fill();
+  }
+  // edge shadow ring seating the cheese under the crust lip
+  p.lineWidth = size * 0.014;
+  p.strokeStyle = "rgba(88,44,14,0.7)";
+  p.beginPath();
+  p.arc(cx, cx, cheeseR * 0.99, 0, Math.PI * 2);
+  p.stroke();
+  // --- pepperoni: cupped discs with grease glints --------------------------
+  for (let i = 0; i < 8; i += 1) {
+    const a = (i / 8) * Math.PI * 2 + hash(i + 400) * 0.7;
+    const rr = i === 7 ? cheeseR * 0.2 : cheeseR * (0.38 + hash(i + 410) * 0.5);
+    const px = cx + Math.cos(a) * rr;
+    const py = cx + Math.sin(a) * rr;
+    const pr = size * (0.055 + hash(i + 420) * 0.014);
+    // flat cured-meat read (the deep sphere gradient read as chocolate)
+    const cup = p.createRadialGradient(px - pr * 0.2, py - pr * 0.24, pr * 0.3, px, py, pr);
+    cup.addColorStop(0, "#c8523a");
+    cup.addColorStop(0.7, "#b03a2a");
+    cup.addColorStop(0.92, "#8a251a");
+    cup.addColorStop(1, "#6e1a12");
+    p.fillStyle = cup;
+    p.beginPath();
+    p.arc(px, py, pr, 0, Math.PI * 2);
+    p.fill();
+    // charred cup rim + grease specular
+    p.lineWidth = pr * 0.16;
+    p.strokeStyle = "rgba(52,12,8,0.75)";
+    p.beginPath();
+    p.arc(px, py, pr * 0.92, Math.PI * 0.1, Math.PI * 1.1);
+    p.stroke();
+    p.fillStyle = "rgba(255,214,178,0.85)";
+    p.beginPath();
+    p.ellipse(px - pr * 0.3, py - pr * 0.34, pr * 0.16, pr * 0.1, -0.6, 0, Math.PI * 2);
+    p.fill();
+  }
+  // top-light: soft directional sheen across the whole face
+  const sheen = p.createLinearGradient(0, 0, size, size);
+  sheen.addColorStop(0, "rgba(255,240,210,0.16)");
+  sheen.addColorStop(0.45, "rgba(255,240,210,0)");
+  sheen.addColorStop(1, "rgba(30,10,4,0.18)");
+  p.fillStyle = sheen;
+  p.beginPath();
+  p.arc(cx, cx, crustR, 0, Math.PI * 2);
+  p.fill();
+  // hub + bolt
+  p.fillStyle = "#2c2a28";
+  p.beginPath();
+  p.arc(cx, cx, size * 0.055, 0, Math.PI * 2);
+  p.fill();
+  p.lineWidth = size * 0.008;
+  p.strokeStyle = "#9aa0a8";
+  p.stroke();
+  p.fillStyle = "#e8edf2";
+  p.beginPath();
+  p.arc(cx - size * 0.014, cx - size * 0.016, size * 0.014, 0, Math.PI * 2);
+  p.fill();
+  fatalityDressing.pizza = c;
+  return c;
+}
+
+// Dimensional blood droplet: dark-cored red gradient with an off-centre
+// specular kiss, drawn as 3 fused lobes so no two rotations read as the same
+// stamp. Replaces the flat clipart ellipses in the 3D lens-blood pass.
+function fatalityDropletCanvas() {
+  if (fatalityDressing.droplet) return fatalityDressing.droplet;
+  const size = 96;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const p = c.getContext("2d");
+  const cx = size / 2;
+  const lobe = (x, y, r) => {
+    const g = p.createRadialGradient(x - r * 0.2, y - r * 0.25, r * 0.1, x, y, r);
+    g.addColorStop(0, "rgba(196,32,28,0.98)");
+    g.addColorStop(0.55, "rgba(150,12,16,0.96)");
+    g.addColorStop(0.85, "rgba(96,4,10,0.9)");
+    g.addColorStop(1, "rgba(64,0,8,0)");
+    p.fillStyle = g;
+    p.beginPath();
+    p.arc(x, y, r, 0, Math.PI * 2);
+    p.fill();
+  };
+  lobe(cx, cx, size * 0.34);
+  lobe(cx + size * 0.16, cx + size * 0.1, size * 0.22);
+  lobe(cx - size * 0.14, cx + size * 0.16, size * 0.16);
+  // glossy kiss
+  p.fillStyle = "rgba(255,182,170,0.8)";
+  p.beginPath();
+  p.ellipse(cx - size * 0.1, cx - size * 0.12, size * 0.07, size * 0.045, -0.6, 0, Math.PI * 2);
+  p.fill();
+  fatalityDressing.droplet = c;
+  return c;
+}
+
 function drawFatalityPool(effect, alpha) {
   const growth = 1 - alpha;
   const scale = effect.scale || 1;
@@ -11717,14 +11982,57 @@ function drawFatalityPool(effect, alpha) {
   ctx.beginPath();
   ctx.ellipse(0, 0, (42 + growth * 112) * scale, 8 + growth * 25, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = effect.color;
-  for (let drop = 0; drop < 13; drop += 1) {
-    const angle = drop * 2.399 + (effect.family === "glitch" ? .4 : 0);
-    const reach = (24 + growth * 118) * (.45 + (drop % 5) * .14) * scale;
-    ctx.globalAlpha = alpha * (.38 + drop % 3 * .18);
+  if (cinema3dDressingActive()) {
+    // CINEMA 3D: the pool reads WET — a darkened blood core, a cold glossy
+    // streak answering the overhead lamp, and droplets become directional
+    // spatter with dimensional cores + run-tails instead of flat ellipses.
+    const core = ctx.createRadialGradient(0, 0, 2, 0, 0, 72 * scale);
+    core.addColorStop(0, "rgba(60,2,8,0.85)");
+    core.addColorStop(0.6, "rgba(96,6,12,0.4)");
+    core.addColorStop(1, "rgba(60,2,8,0)");
+    ctx.globalAlpha = Math.min(1, alpha * 1.6);
+    ctx.fillStyle = core;
     ctx.beginPath();
-    ctx.ellipse(Math.cos(angle) * reach, Math.sin(angle) * reach * .22, 4 + drop % 4 * 3, 2 + drop % 3 * 2, angle, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, (34 + growth * 74) * scale, 6 + growth * 15, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = Math.min(1, alpha * 1.2) * 0.55;
+    ctx.fillStyle = "rgba(210,236,225,0.5)"; // lamp streak on the wet surface
+    ctx.beginPath();
+    ctx.ellipse(10 * scale, -2, (20 + growth * 30) * scale, 2.6 + growth * 3, -0.06, 0, Math.PI * 2);
+    ctx.fill();
+    const droplet = fatalityDropletCanvas();
+    for (let drop = 0; drop < 13; drop += 1) {
+      const angle = drop * 2.399 + (effect.family === "glitch" ? .4 : 0);
+      const reach = (24 + growth * 118) * (.45 + (drop % 5) * .14) * scale;
+      const dx = Math.cos(angle) * reach;
+      const dy = Math.sin(angle) * reach * .22;
+      const size = (7 + drop % 4 * 4.5) * (1 + growth * 0.3);
+      ctx.globalAlpha = alpha * (.44 + drop % 3 * .2);
+      // run-tail streaking back toward the pool centre
+      ctx.strokeStyle = effect.color;
+      ctx.lineCap = "round";
+      ctx.lineWidth = Math.max(1.6, size * 0.22);
+      ctx.beginPath();
+      ctx.moveTo(dx * 0.55, dy * 0.55);
+      ctx.lineTo(dx, dy);
+      ctx.stroke();
+      ctx.save();
+      ctx.translate(dx, dy);
+      ctx.rotate(angle);
+      ctx.scale(1.35, 0.75); // squashed by the floor plane
+      ctx.drawImage(droplet, -size, -size, size * 2, size * 2);
+      ctx.restore();
+    }
+  } else {
+    ctx.fillStyle = effect.color;
+    for (let drop = 0; drop < 13; drop += 1) {
+      const angle = drop * 2.399 + (effect.family === "glitch" ? .4 : 0);
+      const reach = (24 + growth * 118) * (.45 + (drop % 5) * .14) * scale;
+      ctx.globalAlpha = alpha * (.38 + drop % 3 * .18);
+      ctx.beginPath();
+      ctx.ellipse(Math.cos(angle) * reach, Math.sin(angle) * reach * .22, 4 + drop % 4 * 3, 2 + drop % 3 * 2, angle, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   if (["rupture", "launch", "crush"].includes(effect.family)) {
     ctx.globalAlpha = alpha * .82;
@@ -11816,9 +12124,12 @@ function drawFatalityProjectile(effect, alpha) {
   ctx.globalCompositeOperation = "source-over";
   ctx.globalAlpha = Math.min(1, alpha * 3) * reveal;
   ctx.shadowColor = effect.color;
-  ctx.shadowBlur = effect.landed ? 22 : 12;
+  // 3D mode: halve the halo glow — the painted wheel carries its own values,
+  // and the old glow + bloom washed the face to a soft gold disc.
+  const dressedHalo = cinema3dDressingActive();
+  ctx.shadowBlur = (effect.landed ? 22 : 12) * (dressedHalo ? 0.5 : 1);
   ctx.strokeStyle = effect.color;
-  ctx.lineWidth = effect.landed ? 6 : 3;
+  ctx.lineWidth = (effect.landed ? 6 : 3) * (dressedHalo ? 0.6 : 1);
   ctx.beginPath();
   ctx.arc(0, 0, Math.max(effect.width, effect.height) * (.58 + (1 - alpha) * .08), 0, Math.PI * 2);
   ctx.stroke();
@@ -11826,22 +12137,31 @@ function drawFatalityProjectile(effect, alpha) {
   ctx.scale(effect.phase === "kill" ? 1.24 : 1.12, effect.phase === "kill" ? 1.24 : 1.12);
   drawThrowable(effect, state.simulationTick * 1000 / SIMULATION_HZ, alpha);
   ctx.restore();
-  ctx.globalAlpha = Math.min(1, alpha * 4);
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = "1000 13px Arial Narrow, Arial, sans-serif";
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = "rgba(0,0,0,.92)";
-  ctx.fillStyle = "#fff0df";
-  const focusLabel = `${effect.name} · ${effect.phase.toUpperCase()}`;
-  ctx.strokeText(focusLabel, 0, -Math.max(38, effect.height * .72));
-  ctx.fillText(focusLabel, 0, -Math.max(38, effect.height * .72));
+  // 3D mode: once the fatality banner block owns the frame, the floating
+  // world-space focus label only collides with it (the half-hidden
+  // "WHOLE PIZZA · KILL" ghosting through the caption) — drop it there.
+  if (!(cinema3dDressingActive() && state.finisher?.fatalityTriggered)) {
+    ctx.globalAlpha = Math.min(1, alpha * 4);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "1000 13px Arial Narrow, Arial, sans-serif";
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "rgba(0,0,0,.92)";
+    ctx.fillStyle = "#fff0df";
+    const focusLabel = `${effect.name} · ${effect.phase.toUpperCase()}`;
+    ctx.strokeText(focusLabel, 0, -Math.max(38, effect.height * .72));
+    ctx.fillText(focusLabel, 0, -Math.max(38, effect.height * .72));
+  }
   ctx.restore();
 }
 
 function drawProjectileFocusBurst(effect, alpha) {
   const growth = 1 - alpha;
   const radius = (effect.phase === "kill" ? 86 : 52) + growth * (effect.phase === "kill" ? 240 : 145);
+  // 3D mode + pizza/vinyl: the burst's energy stays OUTSIDE the painted
+  // wheel — centre-rooted rings/spokes were dissolving the face into a red
+  // starburst. Rings collapse to the outermost, spokes root past the rim.
+  const dressedBurst = cinema3dDressingActive() && ["pizza", "vinyl"].includes(effect.style);
   ctx.save();
   ctx.globalCompositeOperation = "screen";
   ctx.shadowBlur = 18;
@@ -11850,21 +12170,28 @@ function drawProjectileFocusBurst(effect, alpha) {
   ctx.fillStyle = effect.color;
   ctx.lineCap = "round";
   ctx.globalAlpha = alpha * .9;
-  for (let ring = 0; ring < 3; ring += 1) {
+  for (let ring = dressedBurst ? 2 : 0; ring < 3; ring += 1) {
     ctx.lineWidth = Math.max(2, 8 - ring * 2);
     ctx.beginPath();
     ctx.arc(0, 0, radius * (.52 + ring * .22), 0, Math.PI * 2);
     ctx.stroke();
   }
   if (["pizza", "vinyl"].includes(effect.style)) {
-    ctx.rotate(state.simulationTick * .16 * effect.direction);
-    for (let spoke = 0; spoke < 12; spoke += 1) {
-      const angle = spoke * Math.PI / 6;
-      ctx.lineWidth = spoke % 3 === 0 ? 8 : 3;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(angle) * radius * .18, Math.sin(angle) * radius * .18);
-      ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
-      ctx.stroke();
+    // 3D mode, landed kill wheel: NO spokes at all — at that scale every
+    // centre-rooted line lands across the painted face. The outer ring +
+    // rim ghosts + spatter carry the energy read.
+    if (!(dressedBurst && effect.phase === "kill")) {
+      ctx.rotate(state.simulationTick * .16 * effect.direction);
+      const spokeRoot = dressedBurst ? 1.02 : 0.18;
+      const spokeTip = dressedBurst ? 1.32 : 1;
+      for (let spoke = 0; spoke < 12; spoke += 1) {
+        const angle = spoke * Math.PI / 6;
+        ctx.lineWidth = spoke % 3 === 0 ? 8 : 3;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * radius * spokeRoot, Math.sin(angle) * radius * spokeRoot);
+        ctx.lineTo(Math.cos(angle) * radius * spokeTip, Math.sin(angle) * radius * spokeTip);
+        ctx.stroke();
+      }
     }
   } else if (["mouse", "wires"].includes(effect.style)) {
     for (let cable = 0; cable < 7; cable += 1) {
@@ -11935,12 +12262,41 @@ function drawCinematicGoreOverlay() {
     ctx.strokeStyle = effect.secondary;
     ctx.shadowColor = "rgba(35,0,4,.8)";
     ctx.shadowBlur = 5;
+    const dressed = cinema3dDressingActive();
+    const droplet3d = dressed ? fatalityDropletCanvas() : null;
     for (let drop = 0; drop < 31; drop += 1) {
       const x = ((drop * 173 + familySeed * 29) % 1180) / 1180 * W;
       const y = ((drop * 97 + familySeed * 43) % 640) / 640 * H;
       const edgeBias = drop % 3 === 0 ? (drop % 2 ? H * .1 : H * .88) : y;
       const radius = (4 + drop % 7 * 2.8) * (effect.scale || 1);
       ctx.globalAlpha = alpha * (.2 + drop % 5 * .09);
+      if (dressed) {
+        // CINEMA 3D: dimensional lens droplets — a gradient-cored spatter
+        // sprite rotated per drop, elongated ones smearing DOWN the glass,
+        // with gravity run-tails that thin as they fall. No flat clipart.
+        const stretch = drop % 4 === 0 ? 2.2 : drop % 3 === 0 ? 1.5 : 1;
+        ctx.save();
+        ctx.translate(x, edgeBias);
+        ctx.rotate(stretch > 1 ? Math.PI / 2 + (drop % 2 ? 0.14 : -0.12) : (drop * .71) % Math.PI);
+        ctx.scale(1, stretch);
+        ctx.drawImage(droplet3d, -radius * 1.35, -radius * 1.35, radius * 2.7, radius * 2.7);
+        ctx.restore();
+        if (drop % 5 === 0) {
+          // run-tail: darkening, thinning gravity streak
+          const runGrad = ctx.createLinearGradient(x, edgeBias, x, edgeBias + 92);
+          runGrad.addColorStop(0, effect.color);
+          runGrad.addColorStop(1, "rgba(64,0,10,0.15)");
+          ctx.strokeStyle = runGrad;
+          ctx.lineCap = "round";
+          ctx.lineWidth = Math.max(2, radius * .26);
+          ctx.beginPath();
+          ctx.moveTo(x, edgeBias);
+          ctx.quadraticCurveTo(x + (drop % 2 ? -18 : 18), edgeBias + 44, x + (drop % 2 ? -11 : 11), edgeBias + 92);
+          ctx.stroke();
+          ctx.strokeStyle = effect.secondary;
+        }
+        continue;
+      }
       ctx.beginPath();
       ctx.ellipse(x, edgeBias, radius * (drop % 4 === 0 ? 2.4 : 1), radius, (drop * .71) % Math.PI, 0, Math.PI * 2);
       ctx.fill();
@@ -12413,14 +12769,43 @@ function drawParticles() {
     }
     if (particle.kind === "blood" || particle.kind === "arterial") {
       const angle = Math.atan2(particle.vy || 0, particle.vx || 1);
+      if (cinema3dDressingActive()) {
+        // CINEMA 3D: dimensional spatter — the gradient droplet sprite
+        // stretched along its velocity with a thinning smear tail, instead
+        // of a flat solid ellipse.
+        const speed = Math.hypot(particle.vx || 0, particle.vy || 0);
+        const stretch = 1.2 + Math.min(1.6, speed * 0.0016);
+        ctx.strokeStyle = particle.color;
+        ctx.lineCap = "round";
+        ctx.lineWidth = Math.max(1, particle.size * 0.5);
+        ctx.globalAlpha = alpha * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(particle.x - (particle.vx || 0) * 0.03, particle.y - (particle.vy || 0) * 0.03);
+        ctx.lineTo(particle.x, particle.y);
+        ctx.stroke();
+        ctx.globalAlpha = alpha;
+        ctx.translate(particle.x, particle.y);
+        ctx.rotate(angle);
+        ctx.scale(stretch, 1);
+        const dropSize = particle.size * 2.1;
+        ctx.drawImage(fatalityDropletCanvas(), -dropSize, -dropSize, dropSize * 2, dropSize * 2);
+        ctx.restore();
+        continue;
+      }
       ctx.ellipse(particle.x, particle.y, particle.size * 1.65, Math.max(1, particle.size * 0.62), angle, 0, Math.PI * 2);
     } else if (particle.kind === "goreFragment") {
       ctx.translate(particle.x, particle.y);
       ctx.rotate(particle.rotation || 0);
       const spikes = particle.spikes || 6;
+      const dressedGore = cinema3dDressingActive();
       for (let point = 0; point < spikes * 2; point += 1) {
         const angle = point * Math.PI / spikes;
-        const radius = particle.size * (point % 2 ? .48 : 1);
+        // 3D mode: per-point jitter breaks the symmetric star into a torn
+        // irregular chunk (the flat throwing-star read was pure clipart).
+        const jag = dressedGore
+          ? 0.62 + (Math.abs(Math.sin((point * 37.7 + spikes * 91.3 + particle.size * 13.1))) * 0.55)
+          : (point % 2 ? .48 : 1);
+        const radius = particle.size * (dressedGore ? jag : jag);
         if (point === 0) ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
         else ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
       }
@@ -12475,10 +12860,44 @@ function drawParticles() {
       ctx.strokeStyle = effect.color;
       ctx.fillStyle = effect.secondary;
       ctx.lineCap = "round";
+      const dressedSpray = cinema3dDressingActive();
       for (let spray = 0; spray < 17; spray += 1) {
         const angle = -1.42 + spray * .18 + (effect.family === "launch" ? -.18 : 0);
         const length = reach * (.38 + (spray % 6) * .12);
         ctx.globalAlpha = alpha * (.28 + spray % 4 * .14);
+        if (dressedSpray) {
+          // CINEMA 3D: tapered arterial arcs — thick dark root fading down a
+          // gravity-bent path to a droplet-sprite tip; the straight uniform
+          // "red spoke" read is gone.
+          const tipX = Math.cos(angle) * length * effect.direction;
+          const tipY = Math.sin(angle) * length + length * 0.22; // gravity sag
+          const sprayGrad = ctx.createLinearGradient(0, 0, tipX, tipY);
+          sprayGrad.addColorStop(0, effect.secondary);
+          sprayGrad.addColorStop(0.5, effect.color);
+          sprayGrad.addColorStop(1, "rgba(96,4,10,0.25)");
+          ctx.strokeStyle = sprayGrad;
+          ctx.lineWidth = 4.5 + spray % 5;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.quadraticCurveTo(
+            Math.cos(angle) * length * .55 * effect.direction,
+            Math.sin(angle) * length * .45 - 24,
+            tipX, tipY,
+          );
+          ctx.stroke();
+          // thinner core pass rides the same arc: reads as a liquid rope
+          ctx.globalAlpha *= 0.7;
+          ctx.lineWidth = Math.max(1.4, (4.5 + spray % 5) * 0.4);
+          ctx.stroke();
+          const tipSize = 5 + spray % 4 * 2.4;
+          ctx.save();
+          ctx.translate(tipX, tipY);
+          ctx.rotate(angle + 0.5);
+          ctx.scale(1.4, 0.8);
+          ctx.drawImage(fatalityDropletCanvas(), -tipSize, -tipSize, tipSize * 2, tipSize * 2);
+          ctx.restore();
+          continue;
+        }
         ctx.lineWidth = 3 + spray % 5;
         ctx.beginPath();
         ctx.moveTo(0, 0);
@@ -12748,24 +13167,31 @@ function drawFinisherOverlay() {
   ctx.fillRect(0, barHeight - 3, W, 3);
   ctx.fillRect(0, H - barHeight, W, 3);
 
+  // CINEMA 3D text layout: the DOM HUD (health bars, grit) covers the TOP
+  // letterbox bar in 3D mode, which truncated every meta label into garbage
+  // ("CIN...", "REAK", "...ON" peeking around the bars — the critic's
+  // shipping blocker). All three meta labels move into the BOTTOM bar, which
+  // is actually visible. 2D-off path is byte-identical.
+  const dressedOverlay = cinema3dDressingActive();
+  const metaY = dressedOverlay ? H - 10 : barHeight - 11;
   ctx.save();
   ctx.textAlign = "left";
   ctx.font = "900 11px Arial Narrow, Arial";
   ctx.fillStyle = attacker.def.accent;
   ctx.globalAlpha = .82;
-  ctx.fillText(`CINEMATIC · ${cinematic.shot.replaceAll("-", " ").toUpperCase()}`, 24, barHeight - 11);
+  ctx.fillText(`CINEMATIC · ${cinematic.shot.replaceAll("-", " ").toUpperCase()}`, 24, metaY);
   if (state.graphicFatalities) {
     const attackerId = attacker.def.finisherScriptId || attacker.def.id;
     const fatality = getGraphicFatality(attackerId, finisher.type);
     ctx.textAlign = "center";
     ctx.fillStyle = "#d90b19";
-    ctx.fillText(`REALITY BREAK · ${fatality.special} FATALITY`, W * .5, barHeight - 11);
+    ctx.fillText(`REALITY BREAK · ${fatality.special} FATALITY`, W * .5, metaY);
   }
   if (cinematic.shot === "final-impact") {
     ctx.textAlign = "right";
     ctx.fillStyle = "#fff0df";
     ctx.font = "1000 14px Arial Narrow, Arial";
-    ctx.fillText("FINAL-HIT SLOW MOTION", W - 24, barHeight - 11);
+    ctx.fillText("FINAL-HIT SLOW MOTION", W - 24, metaY);
   }
   ctx.restore();
 
@@ -12781,7 +13207,10 @@ function drawFinisherOverlay() {
     ctx.fillText(finisher.beatLabel, W * .5, H - barHeight - 16);
     ctx.font = "900 11px Arial";
     ctx.fillStyle = attacker.def.accent;
-    ctx.fillText(`${finisher.impactIndex} / 3 PROJECTILE BEATS`, W * .5, H - barHeight + 19);
+    // 3D mode: the beats counter rides just under its beat label, clear of
+    // the meta line now living in the bottom bar.
+    ctx.fillText(`${finisher.impactIndex} / 3 PROJECTILE BEATS`, W * .5,
+      dressedOverlay ? H - barHeight - 2 : H - barHeight + 19);
     ctx.restore();
   }
 
@@ -13255,12 +13684,64 @@ function ensureCrtVignette() {
   return surface;
 }
 
+// Offscreen scratch for the 3D-mode CRT pass: the scanline pattern is built
+// here first so soft holes can be punched over the fighters (a straight
+// destination-out on the main canvas would erase the world beneath).
+let crtPunchCanvas = null;
+let crtPunchCtx = null;
+
 function drawCrtOverlay(time) {
   if (!crtOverlayActive()) return;
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = ensureCrtPattern();
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // CINEMA 3D (critic fix 6): the scanline veil lifts ~50% over the character
+  // bodies — full-strength scanlines beat against the sprite texels into
+  // moiré on faces. Stage keeps the full CRT flavour; 2D-off path untouched.
+  let punched = false;
+  if (cinema3dWorldActive() && cinema3dBridge.renderer?.projectSim && state.fighters?.length === 2) {
+    if (!crtPunchCanvas || crtPunchCanvas.width !== canvas.width || crtPunchCanvas.height !== canvas.height) {
+      crtPunchCanvas = document.createElement("canvas");
+      crtPunchCanvas.width = canvas.width;
+      crtPunchCanvas.height = canvas.height;
+      crtPunchCtx = crtPunchCanvas.getContext("2d");
+    }
+    const pctx = crtPunchCtx;
+    pctx.setTransform(1, 0, 0, 1, 0, 0);
+    pctx.clearRect(0, 0, crtPunchCanvas.width, crtPunchCanvas.height);
+    pctx.fillStyle = ensureCrtPattern();
+    pctx.fillRect(0, 0, crtPunchCanvas.width, crtPunchCanvas.height);
+    const px = canvas.width / W;
+    pctx.globalCompositeOperation = "destination-out";
+    for (const fighter of state.fighters) {
+      const feet = cinema3dBridge.renderer.projectSim(fighter.x, fighter.y);
+      const head = cinema3dBridge.renderer.projectSim(fighter.x, fighter.y - fighter.height * 1.02);
+      if (!feet || !head) continue;
+      const cx = feet.x * px;
+      const cy = (head.y + feet.y) * 0.5 * px;
+      const ry = Math.max(24, (feet.y - head.y) * 0.62 * px);
+      const rx = ry * 0.52;
+      const hole = pctx.createRadialGradient(cx, cy, ry * 0.25, cx, cy, ry);
+      hole.addColorStop(0, "rgba(0,0,0,0.5)");
+      hole.addColorStop(0.7, "rgba(0,0,0,0.4)");
+      hole.addColorStop(1, "rgba(0,0,0,0)");
+      pctx.save();
+      pctx.translate(cx, cy);
+      pctx.scale(rx / ry, 1);
+      pctx.translate(-cx, -cy);
+      pctx.fillStyle = hole;
+      pctx.beginPath();
+      pctx.arc(cx, cy, ry, 0, Math.PI * 2);
+      pctx.fill();
+      pctx.restore();
+    }
+    pctx.globalCompositeOperation = "source-over";
+    ctx.drawImage(crtPunchCanvas, 0, 0);
+    punched = true;
+  }
+  if (!punched) {
+    ctx.fillStyle = ensureCrtPattern();
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
   ctx.drawImage(ensureCrtVignette(), 0, 0, canvas.width, canvas.height);
   if ($("#flashToggle").checked && !state.accessibility.reducedMotion) {
     const bandHeight = canvas.height * 0.16;
@@ -13375,9 +13856,13 @@ function superPortrait3d(cut) {
     stampCtx.globalCompositeOperation = "source-over";
     return stamp;
   };
-  // Accent back-rim (down-right) then hard white key rim (up-left) under the
-  // real frame: the close-up reads studio-lit, punched off the band.
+  // Accent back-rim (down-right) then white key rim (up-left) under the real
+  // frame. The rim stamps are BLURRED (critic fix 7): the raw NN-scaled alpha
+  // printed a jaggy white staircase matte around the portrait — softened
+  // here, the sharp art on top still owns the silhouette.
+  pctx.filter = "blur(2.4px)";
   pctx.drawImage(tinted(cut.accent), 9, 7);
+  pctx.filter = "blur(1.5px)";
   pctx.drawImage(tinted("rgba(255,255,255,0.95)"), -7, -6);
   pctx.drawImage(tinted("rgba(255,255,255,0.95)"), -3, -3);
   pctx.filter = "contrast(1.14) saturate(1.12)";
@@ -13385,6 +13870,113 @@ function superPortrait3d(cut) {
   pctx.filter = "none";
   superPortraitCache.set(key, canvas);
   return canvas;
+}
+
+// Limb-following super-freeze energy arcs (critic fix 7): jagged bolts that
+// START at one emitter (the wind-up's chest/fist zone) and WALK the body —
+// each step stays inside the portrait's alpha, hugging the silhouette, so the
+// energy traces arms and shoulders instead of scribbling randomly. Two seeded
+// variants per portrait, cached; the cut-in flickers between them.
+const superArcCache = new Map();
+function superPortraitArcs(portrait, accent, variant) {
+  const key = `${portrait.width}x${portrait.height}:${accent}:${variant}`;
+  if (superArcCache.has(key)) return superArcCache.get(key);
+  const w = portrait.width;
+  const h = portrait.height;
+  const scratch = document.createElement("canvas");
+  scratch.width = w;
+  scratch.height = h;
+  const sctx = scratch.getContext("2d", { willReadFrequently: true });
+  sctx.drawImage(portrait, 0, 0);
+  const alphaData = sctx.getImageData(0, 0, w, h).data;
+  const solid = (x, y) => {
+    if (x < 2 || y < 2 || x >= w - 2 || y >= h - 2) return false;
+    return alphaData[(Math.round(y) * w + Math.round(x)) * 4 + 3] > 90;
+  };
+  const canvasOut = document.createElement("canvas");
+  canvasOut.width = w;
+  canvasOut.height = h;
+  const octx = canvasOut.getContext("2d");
+  const hash = (n) => {
+    const s = Math.sin(n * 127.1 + 311.7 + variant * 53.7) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  // emitter: chest/lead-fist zone of the wind-up crop
+  const ex = w * 0.52;
+  const ey = h * 0.46;
+  octx.lineCap = "round";
+  octx.lineJoin = "round";
+  for (let arc = 0; arc < 6; arc += 1) {
+    let x = ex + (hash(arc * 9 + 1) - 0.5) * w * 0.08;
+    let y = ey + (hash(arc * 9 + 2) - 0.5) * h * 0.06;
+    let angle = hash(arc * 9 + 3) * Math.PI * 2;
+    const points = [[x, y]];
+    const step = Math.max(6, w * 0.028);
+    for (let s = 0; s < 26; s += 1) {
+      angle += (hash(arc * 31 + s) - 0.5) * 1.1;
+      let nx = x + Math.cos(angle) * step;
+      let ny = y + Math.sin(angle) * step;
+      if (!solid(nx, ny)) {
+        // hug the silhouette: try tangential turns before giving up — this is
+        // what makes the bolt FOLLOW an arm instead of flying off it
+        let turned = false;
+        for (const dTurn of [0.7, -0.7, 1.3, -1.3, 2.0, -2.0]) {
+          const tx = x + Math.cos(angle + dTurn) * step;
+          const ty = y + Math.sin(angle + dTurn) * step;
+          if (solid(tx, ty)) {
+            angle += dTurn;
+            nx = tx;
+            ny = ty;
+            turned = true;
+            break;
+          }
+        }
+        if (!turned) break;
+      }
+      x = nx;
+      y = ny;
+      points.push([x, y]);
+    }
+    if (points.length < 5) continue;
+    const path = () => {
+      octx.beginPath();
+      octx.moveTo(points[0][0], points[0][1]);
+      for (let p = 1; p < points.length; p += 1) {
+        // per-segment jitter: the bolt crackles instead of flowing
+        octx.lineTo(points[p][0] + (hash(p * 7 + arc) - 0.5) * 3, points[p][1] + (hash(p * 11 + arc) - 0.5) * 3);
+      }
+      octx.stroke();
+    };
+    octx.globalAlpha = 0.75;
+    octx.strokeStyle = accent;
+    octx.lineWidth = Math.max(3, w * 0.014);
+    path();
+    octx.globalAlpha = 0.92;
+    octx.strokeStyle = "#fff6ea";
+    octx.lineWidth = Math.max(1.4, w * 0.005);
+    path();
+    // fork: a short branch off a mid point
+    const mid = points[Math.floor(points.length * (0.4 + hash(arc + 77) * 0.3))];
+    const fx = mid[0] + (hash(arc + 91) - 0.5) * w * 0.12;
+    const fy = mid[1] + (hash(arc + 93) - 0.5) * h * 0.08;
+    octx.globalAlpha = 0.6;
+    octx.strokeStyle = accent;
+    octx.lineWidth = Math.max(1.6, w * 0.006);
+    octx.beginPath();
+    octx.moveTo(mid[0], mid[1]);
+    octx.lineTo(fx, fy);
+    octx.stroke();
+  }
+  // hot emitter knot where every bolt roots
+  const knot = octx.createRadialGradient(ex, ey, 2, ex, ey, w * 0.075);
+  knot.addColorStop(0, "rgba(255,248,235,0.95)");
+  knot.addColorStop(0.4, `${accent}aa`);
+  knot.addColorStop(1, "rgba(0,0,0,0)");
+  octx.globalAlpha = 1;
+  octx.fillStyle = knot;
+  octx.fillRect(ex - w * 0.075, ey - w * 0.075, w * 0.15, w * 0.15);
+  superArcCache.set(key, canvasOut);
+  return canvasOut;
 }
 
 function latchSuperPresentation(fighter) {
@@ -13572,6 +14164,16 @@ function drawSuperCutIn(dtMs) {
         // Mirror the P2 close-up so the wind-up drives INTO the frame.
         if (!fromLeft) ctx.scale(-1, 1);
         ctx.drawImage(closeUp, -portraitWidth * 0.5, -portraitHeight * 0.5, portraitWidth, portraitHeight);
+        // Limb-following energy bolts from the chest emitter, flickering
+        // between two seeded variants over the band's life (critic fix 7).
+        if (!reduced) {
+          const arcs = superPortraitArcs(closeUp, cut.accent, Math.floor(cut.t * 21) % 2);
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          ctx.globalAlpha = alpha * (0.75 + 0.25 * Math.sin(cut.t * 47));
+          ctx.drawImage(arcs, -portraitWidth * 0.5, -portraitHeight * 0.5, portraitWidth, portraitHeight);
+          ctx.restore();
+        }
       } else {
         ctx.drawImage(
           image, 0, 0, image.naturalWidth, sourceHeight,

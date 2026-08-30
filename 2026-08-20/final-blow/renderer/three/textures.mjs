@@ -100,6 +100,37 @@ export function blurredAtlasTexture(image, blurPx = 3) {
   return texture;
 }
 
+// Vertically-smeared copy of a sprite atlas for the wet-floor mirror: a light
+// isotropic soften, then the frame re-stamped at growing VERTICAL offsets —
+// water drags a mirror image into vertical streaks (SF6 night-stage water),
+// it never blurs it evenly. Horizontal detail survives (silhouette still
+// tracks the pose); vertical detail melts.
+const smearCache = new Map();
+export function smearedAtlasTexture(image) {
+  const key = `${image.src || image}:vsmear`;
+  let canvas = smearCache.get(key);
+  if (!canvas) {
+    canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    const bled = bleedAtlasCanvas(image);
+    ctx.filter = "blur(1.2px)";
+    ctx.drawImage(bled, 0, 0);
+    ctx.filter = "none";
+    ctx.globalAlpha = 0.30;
+    for (const dy of [-3, 3, -6, 6, -10, 10]) {
+      ctx.drawImage(bled, 0, dy);
+    }
+    ctx.globalAlpha = 1;
+    smearCache.set(key, canvas);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 2;
+  return texture;
+}
+
 // HD atlas composition: the 2x upscaled atlas stamped over the ORIGINAL's
 // bled RGB (scaled up), so the HD sprite's transparent texels inherit
 // character-coloured RGB instead of the upscaler's white — same fringe-free
@@ -255,6 +286,63 @@ export function halftoneRingTexture(size = 256, seed = 0x7a11) {
     ctx.lineWidth = w * 0.007;
     ctx.beginPath();
     ctx.arc(cx, cy, rMid + band * 1.6, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+}
+
+// Tapered PAINT-STREAK ray with chromatic fringe: one long comet stroke —
+// fat rough root, whipped point — drawn as a warm-white core with a red
+// fringe riding one edge and a cyan fringe the other (the Luke Drive-Impact
+// ink language). Instanced radially per impact; each seed is a different
+// stroke so the fan never reads as a stamped star.
+export function paintStreakTexture(width = 256, height = 96, seed = 0x77aa) {
+  const rand = mulberry32(seed);
+  return canvasTexture(width, height, (ctx, w, h) => {
+    const cy = h / 2;
+    const rootX = w * 0.06;
+    const len = w * (0.82 + rand() * 0.12);
+    const rootW = h * (0.2 + rand() * 0.1);
+    const wob = (rand() - 0.5) * h * 0.24;
+    const path = (offY, scaleW) => {
+      // paint the stroke as stacked tapered segments with edge jitter
+      const steps = 22;
+      ctx.beginPath();
+      for (let s = 0; s <= steps; s += 1) {
+        const p = s / steps;
+        const x = rootX + p * len;
+        const half = rootW * scaleW * Math.pow(1 - p, 1.35) * (0.82 + 0.18 * Math.sin(p * 19 + seed));
+        const y = cy + offY + Math.sin(p * Math.PI) * wob;
+        if (s === 0) ctx.moveTo(x, y - half);
+        else ctx.lineTo(x, y - half);
+      }
+      for (let s = steps; s >= 0; s -= 1) {
+        const p = s / steps;
+        const x = rootX + p * len;
+        const half = rootW * scaleW * Math.pow(1 - p, 1.35) * (0.82 + 0.18 * Math.sin(p * 23 + seed));
+        const y = cy + offY + Math.sin(p * Math.PI) * wob;
+        ctx.lineTo(x, y + half);
+      }
+      ctx.closePath();
+      ctx.fill();
+    };
+    // chromatic fringes first (they peek past the core's edges)
+    ctx.fillStyle = "rgba(255,60,40,0.55)";
+    path(-rootW * 0.34, 0.95);
+    ctx.fillStyle = "rgba(70,200,255,0.5)";
+    path(rootW * 0.34, 0.95);
+    // warm-white core
+    const grad = ctx.createLinearGradient(rootX, 0, rootX + len, 0);
+    grad.addColorStop(0, "rgba(255,255,255,0.98)");
+    grad.addColorStop(0.55, "rgba(255,238,210,0.85)");
+    grad.addColorStop(1, "rgba(255,220,170,0)");
+    ctx.fillStyle = grad;
+    path(0, 0.8);
+    // hairline riding the core: hand-inked energy
+    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.lineWidth = Math.max(1, h * 0.03);
+    ctx.beginPath();
+    ctx.moveTo(rootX, cy + wob * 0.2);
+    ctx.quadraticCurveTo(rootX + len * 0.5, cy + wob, rootX + len * 0.92, cy + wob * 0.4);
     ctx.stroke();
   });
 }
@@ -419,13 +507,17 @@ export function wetStreakTexture(size = 256) {
 // Defocused-light bokeh disc: near-flat bright body with a slightly hotter
 // rim and a hard-ish edge — the discrete circle a distant practical becomes
 // through a wide-open lens (NOT a gaussian glow; the edge is the read).
-export function bokehDiscTexture(size = 64) {
+// `softness` 0..1 blends from that hard lens circle toward a melted far-out-
+// of-focus glow, so the field carries genuinely different focus depths.
+export function bokehDiscTexture(size = 64, softness = 0) {
   return canvasTexture(size, size, (ctx, w, h) => {
     const gradient = ctx.createRadialGradient(w / 2, h / 2, 1, w / 2, h / 2, w / 2);
-    gradient.addColorStop(0, "rgba(255,255,255,0.72)");
-    gradient.addColorStop(0.62, "rgba(255,255,255,0.78)");
-    gradient.addColorStop(0.85, "rgba(255,255,255,0.95)");
-    gradient.addColorStop(0.95, "rgba(255,255,255,0.5)");
+    const edge = 0.95 - softness * 0.45;   // where the falloff begins
+    const rimBoost = 0.95 - softness * 0.35;
+    gradient.addColorStop(0, `rgba(255,255,255,${(0.72 - softness * 0.12).toFixed(2)})`);
+    gradient.addColorStop(0.62 - softness * 0.25, `rgba(255,255,255,${(0.78 - softness * 0.15).toFixed(2)})`);
+    gradient.addColorStop(Math.min(edge - 0.1, 0.85), `rgba(255,255,255,${rimBoost.toFixed(2)})`);
+    gradient.addColorStop(edge, `rgba(255,255,255,${(0.5 - softness * 0.3).toFixed(2)})`);
     gradient.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, w, h);

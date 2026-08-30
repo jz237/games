@@ -109,8 +109,9 @@
       "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
       "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
       "format": "webp q95 (alpha channel lossless)",
-      "bytes": 1227290,
-      "sha256": "7ca96a6c60caf8b3"
+      "bytes": 1248234,
+      "sha256": "aafa3cc264340d38",
+      "repainted": "round2 2026-08-30"
     },
     {
       "original": "assets/atlases/donald.webp",
@@ -145,8 +146,9 @@
       "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
       "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
       "format": "webp q95 (alpha channel lossless)",
-      "bytes": 1137340,
-      "sha256": "a905971e99a4221a"
+      "bytes": 1150936,
+      "sha256": "d4fc7c2af4a7d6e7",
+      "repainted": "round2 2026-08-30"
     },
     {
       "original": "assets/atlases/post.webp",
@@ -253,8 +255,9 @@
       "method": "fal-clarity-upscaler-2x (creativity=0.1, resemblance=0.85, seed=1234) RGB + nearest-neighbor-2x original alpha recombine",
       "alpha": "recombined from original (upscaler returned RGB); byte-exact vs NN-2x original alpha",
       "format": "webp q95 (alpha channel lossless)",
-      "bytes": 917104,
-      "sha256": "8cc332542c5a57c8"
+      "bytes": 905172,
+      "sha256": "1345c4fce0483011",
+      "repainted": "round2 2026-08-30"
     },
     {
       "original": "assets/moves/donald-specials.webp",
@@ -310,5 +313,6 @@
       "bytes": 1374624,
       "sha256": "be852ed0b810d81f"
     }
-  ]
+  ],
+  "round2_note": "2026-08-30 resident-artist round 2: deathblow.webp, deathblow-specials.webp and jez.webp region-repainted in place (pizza-cutter disc + knuckle plates on DeathBlow's right gauntlet, knuckle/cuff structure on Jez's fists, eye whites + glasses glint on Jez's face). Paint masked to existing alpha; silhouettes unchanged. Tool: scratchpad r2-hands/repaint_hands.py. bytes/sha256 below refresh those 3 files."
 }

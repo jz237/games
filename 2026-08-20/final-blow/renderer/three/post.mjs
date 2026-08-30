@@ -368,12 +368,15 @@ const VignetteGrainShader = {
       // a designed letterbox shelf, not a leaky gradient. Runs post-bloom,
       // so even hot lamp halos die before they touch the bars.
       color.rgb *= mix(0.045, 1.0, 1.0 - smoothstep(0.878, 0.906, vUv.y));
-      // Fine luminance-weighted film grain with a chroma component (shared
-      // by stage AND sprites — the one-medium dither both layers sit in).
+      // Fine luminance-weighted film grain with a chroma component. CUT ~45%
+      // ON THE CHARACTER LAYER (critic fix 6): full-strength grain beat
+      // against the sprite texel grid into moiré on Jez's face — the stage
+      // keeps the full dither, the fighters sit almost clean inside it.
       float g = hash(vUv * vec2(1287.0, 727.0) + vec2(mod(time * 61.7, 941.0)));
       float g2 = hash(vUv * vec2(919.0, 613.0) + vec2(mod(time * 47.3, 733.0)));
       vec3 grainVec = mix(vec3(g), vec3(g, g2, 1.0 - g2 * 0.7 - g * 0.3), 0.45);
-      color.rgb += (grainVec - 0.5) * grainAmount * (0.25 + 0.75 * (1.0 - lum));
+      float fbGrainM = 1.0 - texture2D(tFbMask, vUv).a * 0.45;
+      color.rgb += (grainVec - 0.5) * grainAmount * fbGrainM * (0.25 + 0.75 * (1.0 - lum));
       gl_FragColor = color;
     }
   `,

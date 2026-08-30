@@ -23,7 +23,7 @@
 // Reads the exact same sim fields drawFighter reads; writes nothing back.
 import * as THREE from "three";
 import { PX, worldX, worldY, SIM_FLOOR } from "./shared.mjs";
-import { normalMapForAtlas, softDotTexture, hardShadowTexture, blurredAtlasTexture, bleedAtlasCanvas, hdComposedCanvas, atlasFootMetrics } from "./textures.mjs";
+import { normalMapForAtlas, softDotTexture, hardShadowTexture, smearedAtlasTexture, bleedAtlasCanvas, hdComposedCanvas, atlasFootMetrics } from "./textures.mjs";
 import { FIGHTER_MASK_LAYER } from "./post.mjs";
 
 // HD (2x) atlas variants for 3D mode only (renderer/hd/MANIFEST.json).
@@ -396,12 +396,17 @@ float fbStreak = fbVnoise(vec2(vFbWorld.x * 11.0, vFbWorld.y * 1.7));
 fbStreak = 0.72 + 0.28 * smoothstep(0.25, 0.8, fbStreak);
 // Fine horizontal ripple bands riding on the streaks.
 float fbRipple = 0.85 + 0.15 * sin(vFbWorld.y * 34.0 + vFbWorld.x * 3.0);
+// FLOOR-SEAM BREAKS (critic grounding fix): the concrete slab joints cut the
+// mirror into segments — a hard-ish dark break roughly every slab, phase
+// drifting slightly with x so the cuts track the poured grid, not the sprite.
+float fbSeamP = fract(vFbWorld.y * 1.35 + vFbWorld.x * 0.07 + 0.31);
+float fbSeam = 0.42 + 0.58 * smoothstep(0.015, 0.075, min(fbSeamP, 1.0 - fbSeamP));
 // Gentle wetness variation (the old hard puddle gate erased the mirror on
 // the boards where it happened to land, which read as NO reflection at all).
 float fbPool = smoothstep(0.2, 0.55, fbVnoise(vec2(vFbWorld.x * 0.45 + 4.7, vFbWorld.y * 0.3 + 1.3)));
-diffuseColor.a *= fbStreak * fbRipple * (0.72 + 0.28 * fbPool);`);
+diffuseColor.a *= fbStreak * fbRipple * fbSeam * (0.72 + 0.28 * fbPool);`);
   };
-  material.customProgramCacheKey = () => "fb-sprite-reflection-v5";
+  material.customProgramCacheKey = () => "fb-sprite-reflection-v6";
 }
 
 export class FighterLayer {
@@ -451,11 +456,12 @@ export class FighterLayer {
       map,
       alphaTest: 0.5,
     });
-    // Wet-floor reflection: LIGHTLY blurred atlas (radius 2 — the mirror must
-    // still read as the fighter's own flipped silhouette tracking every pose,
-    // not a colour blob), faded by height, tinted per-frame toward whichever
-    // practical the fighter stands under (poseRig grades the mirror colour).
-    const reflMap = blurredAtlasTexture(image, 2);
+    // Wet-floor reflection: VERTICALLY smeared atlas — the mirror keeps the
+    // fighter's own flipped silhouette (horizontal detail survives, so it
+    // tracks every pose) while water drags the image into vertical streaks.
+    // Faded by height, tinted per-frame toward whichever practical the
+    // fighter stands under (poseRig grades the mirror colour).
+    const reflMap = smearedAtlasTexture(image);
     applyAtlasFrame(reflMap, 0);
     const reflMaterial = new THREE.MeshBasicMaterial({
       map: reflMap,
@@ -556,11 +562,15 @@ export class FighterLayer {
     const coreB = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), shadowMaterial(this.hardBlobTexture, 0.9));
     for (const blob of [penumbra, footA, footB, coreA, coreB]) {
       blob.rotation.x = -Math.PI / 2;
-      blob.renderOrder = 2;
+      // ABOVE the stage's additive wet-streak light pools (renderOrder 2) and
+      // the mirror (4): a sodium pool crossing a shoe was re-lighting the
+      // contact patch INTO a light halo — feet must darken the floor last
+      // (critic: "left shoe sits on a light halo").
+      blob.renderOrder = 5;
       shadow.add(blob);
     }
-    footA.renderOrder = footB.renderOrder = 3; // sole ellipses read over the stretch
-    coreA.renderOrder = coreB.renderOrder = 3;
+    footA.renderOrder = footB.renderOrder = 6; // sole ellipses read over the stretch
+    coreA.renderOrder = coreB.renderOrder = 6;
 
     this.group.add(shadow);
     this.group.add(reflRoot);
@@ -702,16 +712,20 @@ export class FighterLayer {
       -rig.mesh.scale.y * 1.06, // whisper of vertical stretch down the street
       1,
     );
-    // Visible shear off vertical: mirrored light on rippled water never sits
-    // perfectly under its source.
-    rig.reflMesh.rotation.z = -rig.mesh.rotation.z + facing * 0.1;
+    // Exact mirror rotation: the old constant facing-shear (+0.1 rad) made
+    // the reflection read as an offset blob that never tracked the stance —
+    // the mirror now sits dead under the pose; the water read comes from the
+    // vertical smear + streak breakup instead (critic grounding fix).
+    rig.reflMesh.rotation.z = -rig.mesh.rotation.z;
     const airFade = THREE.MathUtils.clamp(1 - jump / 430, 0.22, 1);
     // Impact answer: the wet street brightens its mirror while a flash lives.
     const flashBoost = 1 + THREE.MathUtils.clamp(this.getFlashLevel(), 0, 1) * 0.45;
     // Super freeze: the mirror dies out COMPLETELY by half-freeze — at the
     // point-blank freeze framing the ripple-banded upright mirror of a boot
     // between the two fighters read as a broken segmented column.
-    bank.reflMaterial.opacity = Math.min(0.5, 0.38 * (0.55 + 0.45 * airFade) * flashBoost)
+    // 0.44 (was 0.38): the seam cuts + streak breakup dim the mirror's mean
+    // level, so the base comes up to keep the same presence it graded at.
+    bank.reflMaterial.opacity = Math.min(0.55, 0.44 * (0.55 + 0.45 * airFade) * flashBoost)
       * Math.max(0, 1 - this.superDim * 2.2);
 
     // --- Body-heat emissive: grit-ready aura + special glow -----------------
