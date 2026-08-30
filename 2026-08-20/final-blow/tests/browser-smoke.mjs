@@ -346,15 +346,15 @@ try {
     simHz: window.__finalBlowEngine?.simulationHz,
   }))()`);
   assert.match(title.title, /Final Blow/);
-  assert.match(title.build, /2.1/);
-  assert.equal(title.version.text, 'VERSION 2.4');
+  assert.match(title.build, /2\.5/);
+  assert.equal(title.version.text, 'VERSION 2.5');
   assert.notEqual(title.version.display, 'none');
   assert.ok(title.version.left >= 0 && title.version.top >= 0);
   assert.ok(title.version.right <= 1440 && title.version.bottom <= 900);
-  assert.equal(title.rosterCards, 8);
+  assert.equal(title.rosterCards, 9);
   assert.equal(title.gritLabels, 2);
   assert.equal(title.comboReadouts, 2);
-  assert.equal(title.moveListRows, 13);
+  assert.equal(title.moveListRows, 24);
   assert.deepEqual(title.aiDifficulties, ['passive', 'rookie', 'street', 'pro', 'final']);
   assert.deepEqual(title.visualQualities, ['auto', 'high', 'balanced', 'battery']);
   assert.ok(['guard-after-first', 'reversal', 'wakeup', 'record', 'playback'].every((mode) => title.trainingDummyModes.includes(mode)));
@@ -367,16 +367,17 @@ try {
   assert.match(title.demoButton, /WATCH DEMO/);
   assert.equal(title.attractEnabled, true);
   assert.equal(title.graphicFatalities, true);
-  assert.deepEqual(title.engine.fatalityAudit, { fighters: 8, fatalities: 16, errors: [] });
+  assert.deepEqual(title.engine.fatalityAudit, { fighters: 9, fatalities: 18, errors: [] });
   assert.deepEqual(title.engine.audio.audit, {
-    fighters: 8, cuesPerFighter: 23, coreCues: 12, kickCues: 4, reactiveCues: 7,
-    variantSlots: 3, approvedCoreTakes: 15, approvedKickTakes: 30,
-    recordedTakes: 45, totalVariantPaths: 243, errors: [],
+    fighters: 8, bossFighters: 1, bossVoiceSlots: 12, captionFirstFighters: 2,
+    captionFirstVoiceSlots: 24, cuesPerFighter: 23, coreCues: 12, kickCues: 4,
+    reactiveCues: 7, variantSlots: 3, approvedCoreTakes: 15, approvedKickTakes: 30,
+    recordedTakes: 45, totalVariantPaths: 357, errors: [],
   });
   assert.equal(title.engine.demo.idleScheduled, true);
   assert.equal(title.onlineSecurityBadges, 4);
   assert.equal(title.aiDifficulty, 'street');
-  assert.equal(title.engineVersion, '2.4-streets');
+  assert.equal(title.engineVersion, '2.5-voices');
   assert.deepEqual(title.engine.presentationRules, {
     hitFlashFilter: 'brightness(1.55) saturate(1.12)',
     attackNamePopups: false,
@@ -384,7 +385,7 @@ try {
   assert.equal(title.simHz, 60);
   assert.ok(title.engine.tick > 0, "fixed simulation should be ticking");
   assert.equal(title.engine.tournament.version, '1.3');
-  assert.equal(title.engine.tournament.matchupCount, 28);
+  assert.equal(title.engine.tournament.matchupCount, 36);
   assert.deepEqual(title.engine.tournament.violations, []);
   assert.deepEqual(title.engine.inputRules.buffer, { minimumFrames: 4, defaultFrames: 6, maximumFrames: 6 });
   assert.deepEqual(title.engine.inputRules.priority.slice(0, 5), [
@@ -429,8 +430,8 @@ try {
   assert.equal(tournamentLab.recorded.recordingFrames, 2);
   assert.equal(tournamentLab.recorded.dummyMode, 'playback');
   assert.equal(tournamentLab.trial.index, 1);
-  assert.equal(tournamentLab.trial.count, 2);
-  assert.equal(tournamentLab.options.length, 2);
+  assert.equal(tournamentLab.trial.count, 8);
+  assert.equal(tournamentLab.options.length, 8);
   assert.equal(tournamentLab.snapshot.training.showHitboxes, true);
   assert.equal(tournamentLab.introHint, true);
   assert.equal(tournamentLab.introSkipped.phase, 'fight');
@@ -456,7 +457,7 @@ try {
   assert.equal(disconnectPause.reason, disconnectPause.snapshot.pauseReason);
 
   const tournamentMatrix = await evaluate(client, `window.__finalBlowQa.tournamentMatrix(4, 'pro')`);
-  assert.equal(tournamentMatrix.matchups.length, 28);
+  assert.equal(tournamentMatrix.matchups.length, 36);
   assert.ok(tournamentMatrix.matchups.every(({ nonFinite }) => !nonFinite));
   assert.ok(
     tournamentMatrix.matchups.every(({ maximumGroundOverlap }) => maximumGroundOverlap <= 0.001),
@@ -648,8 +649,8 @@ try {
     [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280],
     [1280, 1280], [1280, 1280], [1280, 1280], [1280, 1280],
   ]);
-  assert.equal(kitUi.rows.length, 13);
-  assert.ok(kitUi.rows.includes('Vinyl Step'));
+  assert.equal(kitUi.rows.length, 24);
+  assert.ok(kitUi.rows.includes('VINYL STEP'));
   assert.match(kitUi.identity, /FOOTSIES/);
 
   const rookieAi = await evaluate(client, `(() => {
@@ -693,7 +694,7 @@ try {
   assert.deepEqual(arcadeAssets, [[800, 800], [1280, 1280]]);
 
   const arcadeOpening = await evaluate(client, `window.__finalBlowQa.arcade('deathblow', 'pro', 237)`);
-  assert.equal(arcadeOpening.arcade.matches.length, 8);
+  assert.equal(arcadeOpening.arcade.matches.length, 9);
   assert.equal(arcadeOpening.arcade.matches.at(-1).opponentId, 'commissioner');
   assert.equal(arcadeOpening.arcade.matches.at(-2).opponentId, 'alan');
   assert.equal(arcadeOpening.arcade.current, 0);
@@ -714,7 +715,7 @@ try {
 
   const bossReady = await evaluate(client, `(() => {
     window.__finalBlowQa.arcade('deathblow', 'final', 237);
-    for (let bout = 0; bout < 7; bout += 1) window.__finalBlowQa.arcadeResult(true);
+    for (let bout = 0; bout < 8; bout += 1) window.__finalBlowQa.arcadeResult(true);
     return {
       snapshot: window.__finalBlowEngine.snapshot(),
       nodes: document.querySelectorAll('#arcadeLadderNodes .ladder-node').length,
@@ -724,14 +725,14 @@ try {
       button: document.querySelector('#arcadeContinueButton').textContent,
     };
   })()`);
-  assert.equal(bossReady.snapshot.arcade.current, 7);
+  assert.equal(bossReady.snapshot.arcade.current, 8);
   assert.equal(bossReady.snapshot.arcade.currentMatch.opponentId, 'commissioner');
   assert.equal(bossReady.snapshot.fighters[1].id, 'commissioner');
-  assert.equal(bossReady.snapshot.fighters[1].kitId, 'deathblow');
+  assert.equal(bossReady.snapshot.fighters[1].kitId, 'commissioner');
   assert.equal(bossReady.snapshot.fighters[1].boss, true);
   assert.equal(bossReady.snapshot.screen, 'ladder');
-  assert.equal(bossReady.nodes, 8);
-  assert.equal(bossReady.cleared, 7);
+  assert.equal(bossReady.nodes, 9);
+  assert.equal(bossReady.cleared, 8);
   assert.equal(bossReady.currentBoss, 1);
   assert.match(bossReady.title, /FINAL AUTHORITY/);
   assert.match(bossReady.button, /FINAL BOUT/);
@@ -757,7 +758,7 @@ try {
     };
   })()`);
   assert.equal(arcadeEnding.snapshot.arcade.completed, true);
-  assert.equal(arcadeEnding.snapshot.arcade.wins, 8);
+  assert.equal(arcadeEnding.snapshot.arcade.wins, 9);
   assert.equal(arcadeEnding.snapshot.screen, 'ending');
   assert.equal(arcadeEnding.title, 'THE GROUND REMEMBERS');
   assert.ok(arcadeEnding.quote.length > 20);
@@ -871,7 +872,7 @@ try {
     };
   })()`);
   assert.match(allanMoveList.identity, /COUNTER-PUNCHER/);
-  assert.ok(allanMoveList.moves.includes('Southpaw Counter'));
+  assert.ok(allanMoveList.moves.includes('SOUTHPAW COUNTER'));
 
   await evaluate(client, `window.__finalBlowQa.fight('jez', 'alan'); window.__finalBlowQa.positions(500, 610); window.__finalBlowQa.input(1, { backSpecial: true }); window.__finalBlowQa.step(0.05)`);
   await evaluate(client, `window.__finalBlowQa.input(0, { heavy: true }); window.__finalBlowQa.step(0.24)`);
@@ -922,9 +923,9 @@ try {
     return { benny: read('benny'), donald: read('donald') };
   })()`);
   assert.match(rushKeepAwayLists.benny.identity, /RUSHDOWN/);
-  assert.ok(rushKeepAwayLists.benny.moves.includes('Benny Blitz'));
+  assert.ok(rushKeepAwayLists.benny.moves.includes('BENNY BLITZ'));
   assert.match(rushKeepAwayLists.donald.identity, /KEEP-AWAY/);
-  assert.ok(rushKeepAwayLists.donald.moves.includes('Golden Shockwave'));
+  assert.ok(rushKeepAwayLists.donald.moves.includes('GOLDEN SHOCKWAVE'));
 
   // Step budgets here and below grew with the 1.9C readability hitstop: each
   // landed hit freezes the sim longer, so scripted sequences need the same
@@ -997,9 +998,9 @@ try {
     return { cyraxx: read('cyraxx'), ali: read('ali') };
   })()`);
   assert.match(finalKitLists.cyraxx.identity, /FEEDBACK TRICKSTER/);
-  assert.ok(finalKitLists.cyraxx.moves.includes('Feedback Loop'));
+  assert.ok(finalKitLists.cyraxx.moves.includes('FEEDBACK LOOP'));
   assert.match(finalKitLists.ali.identity, /RHYTHM \/ MOMENTUM/);
-  assert.ok(finalKitLists.ali.moves.includes('Massive Step'));
+  assert.ok(finalKitLists.ali.moves.includes('MASSIVE STEP'));
 
   await evaluate(client, `window.__finalBlowQa.fight('cyraxx', 'ali'); window.__finalBlowQa.positions(350, 920); window.__finalBlowQa.input(0, { commandSpecial: true }); window.__finalBlowQa.step(0.2)`);
   const feedbackTelegraph = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
@@ -2768,7 +2769,7 @@ try {
   assert.equal(polishUi.restartedPaused, false);
   assert.match(polishUi.caption, /DEATHBLOW · LIGHT ATTACK/);
   assert.equal(polishUi.captionVisible, true);
-  assert.equal(polishUi.balance.fighters.length, 8);
+  assert.equal(polishUi.balance.fighters.length, 9);
   assert.deepEqual(polishUi.balance.violations, []);
 
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
@@ -2839,7 +2840,7 @@ try {
     const reduced = document.querySelector('#reducedMotionToggle');
     reduced.checked = false;
     reduced.dispatchEvent(new Event('change', { bubbles: true }));
-    const fighters = ['deathblow', 'jez', 'alan', 'post', 'benny', 'donald', 'cyraxx', 'ali'];
+    const fighters = ['deathblow', 'jez', 'alan', 'post', 'benny', 'donald', 'cyraxx', 'ali', 'devil'];
     const results = [];
     for (const fighter of fighters) {
       for (const variant of [0, 1]) {
@@ -2857,8 +2858,8 @@ try {
     }
     return results;
   })()`);
-  assert.equal(graphicFatalities.length, 16);
-  assert.equal(new Set(graphicFatalities.map((fatality) => fatality.fatalityId)).size, 16);
+  assert.equal(graphicFatalities.length, 18);
+  assert.equal(new Set(graphicFatalities.map((fatality) => fatality.fatalityId)).size, 18);
   assert.deepEqual([...new Set(graphicFatalities.map((fatality) => fatality.fatalityFamily))].sort(),
     ['crush', 'dissolve', 'electrocute', 'glitch', 'implode', 'launch', 'rupture', 'slice']);
   const assignedFatalityProjectiles = {
@@ -2870,6 +2871,7 @@ try {
     donald: { id: 'golfball', name: 'GOLF BALL', token: 'GOLF' },
     cyraxx: { id: 'bedbugs', name: 'BED BUGS', token: 'BED-BUG' },
     ali: { id: 'vinyl', name: 'VINYL RECORD', token: 'VINYL' },
+    devil: { id: 'charm', name: 'HEX CHARM', token: 'CHARM' },
   };
   for (const fatality of graphicFatalities) {
     assert.equal(fatality.graphicFatalities, true);
@@ -2982,35 +2984,35 @@ try {
 
   const deathblowVictory = await evaluate(client, `window.__finalBlowQa.result('deathblow')`);
   assert.equal(deathblowVictory.title, "DEATHBLOW WINS");
-  assert.equal(deathblowVictory.quote, "THE STREET MOVED FIRST.");
+  assert.ok(typeof deathblowVictory.quote === "string" && deathblowVictory.quote.length > 5, "victory quote must render from the rotating pool");
   assert.match(deathblowVictory.background, /deathblow-specials\.webp/);
   const jezVictory = await evaluate(client, `window.__finalBlowQa.result('jez')`);
   assert.equal(jezVictory.title, "JEZ WINS");
-  assert.equal(jezVictory.quote, "READ THE SIGN.");
+  assert.ok(typeof jezVictory.quote === "string" && jezVictory.quote.length > 5, "victory quote must render from the rotating pool");
   assert.match(jezVictory.background, /jez-specials\.webp/);
   const allanVictory = await evaluate(client, `window.__finalBlowQa.result('alan')`);
   assert.equal(allanVictory.title, "ALLAN WINS");
-  assert.equal(allanVictory.quote, "SIX SHOTS. ONE ANSWER.");
+  assert.ok(typeof allanVictory.quote === "string" && allanVictory.quote.length > 5, "victory quote must render from the rotating pool");
   assert.match(allanVictory.background, /alan-specials\.webp/);
   const postVictory = await evaluate(client, `window.__finalBlowQa.result('post')`);
   assert.equal(postVictory.title, "POST WINS");
-  assert.equal(postVictory.quote, "THE WHOLE CITY IS MY WALL.");
+  assert.ok(typeof postVictory.quote === "string" && postVictory.quote.length > 5, "victory quote must render from the rotating pool");
   assert.match(postVictory.background, /post-specials\.webp/);
   const bennyVictory = await evaluate(client, `window.__finalBlowQa.result('benny')`);
   assert.equal(bennyVictory.title, "BENNY WINS");
-  assert.equal(bennyVictory.quote, "CURRENT STAYS WITH ME.");
+  assert.ok(typeof bennyVictory.quote === "string" && bennyVictory.quote.length > 5, "victory quote must render from the rotating pool");
   assert.match(bennyVictory.background, /benny-specials\.webp/);
   const donaldVictory = await evaluate(client, `window.__finalBlowQa.result('donald')`);
   assert.equal(donaldVictory.title, "DONALD TRUMP WINS");
-  assert.equal(donaldVictory.quote, "NINE HOLES. NO MERCY.");
+  assert.ok(typeof donaldVictory.quote === "string" && donaldVictory.quote.length > 5, "victory quote must render from the rotating pool");
   assert.match(donaldVictory.background, /donald-specials\.webp/);
   const cyraxxVictory = await evaluate(client, `window.__finalBlowQa.result('cyraxx')`);
   assert.equal(cyraxxVictory.title, "CYRAXX WINS");
-  assert.equal(cyraxxVictory.quote, "THE ECHO GETS THE LAST WORD.");
+  assert.ok(typeof cyraxxVictory.quote === "string" && cyraxxVictory.quote.length > 5, "victory quote must render from the rotating pool");
   assert.match(cyraxxVictory.background, /cyraxx-specials\.webp/);
   const aliVictory = await evaluate(client, `window.__finalBlowQa.result('ali')`);
   assert.equal(aliVictory.title, "ALI G WINS");
-  assert.equal(aliVictory.quote, "KEEP IT MASSIVE.");
+  assert.ok(typeof aliVictory.quote === "string" && aliVictory.quote.length > 5, "victory quote must render from the rotating pool");
   assert.match(aliVictory.background, /ali-specials\.webp/);
   if (process.env.FINAL_BLOW_VICTORY_SCREENSHOT) {
     await evaluate(client, `window.__finalBlowEngine.toggleDebug(false)`);
@@ -3105,7 +3107,7 @@ try {
     };
   })()`);
   assert.equal(offlineCache.controlled, true);
-  assert.match(offlineCache.name, /final-blow-shell-2.1/);
+  assert.match(offlineCache.name, /final-blow-shell-2\.5/);
   // 1.9E added engine/atlas-facing.mjs to the shell: game.js imports it, so
   // offline boot needs it cached.
   assert.equal(offlineCache.entries, 22);
@@ -3129,8 +3131,8 @@ try {
     version: window.__finalBlowEngine?.version,
   }))()`);
   assert.match(controlledReload.title, /Final Blow/);
-  assert.match(controlledReload.build, /2.1/);
-  assert.equal(controlledReload.version, '2.4-streets');
+  assert.match(controlledReload.build, /2\.5/);
+  assert.equal(controlledReload.version, '2.5-voices');
 
   await client.send('Network.emulateNetworkConditions', {
     offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0,
@@ -3147,8 +3149,8 @@ try {
     badge: document.querySelector('#offlineBadge').textContent,
   }))()`);
   assert.match(offlineBoot.title, /Final Blow/);
-  assert.match(offlineBoot.build, /2.1/);
-  assert.equal(offlineBoot.version, '2.4-streets');
+  assert.match(offlineBoot.build, /2\.5/);
+  assert.equal(offlineBoot.version, '2.5-voices');
   assert.match(offlineBoot.badge, /OFFLINE (READY|PLAY)/);
   await client.send('Network.emulateNetworkConditions', {
     offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
@@ -3192,7 +3194,7 @@ try {
   assert.equal(landscape.mobileLandscape, true);
   assert.equal(landscape.orientationBlocked, false);
   assert.ok(landscape.frameWidth >= 840 && landscape.frameHeight >= 385);
-  assert.equal(landscape.version.text, 'VERSION 2.4');
+  assert.equal(landscape.version.text, 'VERSION 2.5');
   assert.notEqual(landscape.version.display, 'none');
   assert.ok(landscape.version.left >= 0 && landscape.version.top >= 0);
   assert.ok(landscape.version.right <= 844 && landscape.version.bottom <= 390);
@@ -3297,7 +3299,7 @@ try {
       pauseDisplay: getComputedStyle(pause).display,
       overflow: document.documentElement.scrollWidth > innerWidth,
     };
-    document.querySelector('#game').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+    ((el) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', pointerId: 9, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); })(document.querySelector('#game'));
     result.exit = window.__finalBlowEngine.snapshot();
     const demoButton = document.querySelector('#demoButton').getBoundingClientRect();
     const controlsButton = document.querySelector('#controlsButton').getBoundingClientRect();
@@ -3315,8 +3317,10 @@ try {
   assert.equal(mobileDemo.overflow, false);
   assert.equal(mobileDemo.exit.screen, 'title');
   assert.equal(mobileDemo.exit.demo.active, false);
-  assert.ok(mobileDemo.titleButtons.demo.left >= 0 && mobileDemo.titleButtons.demo.right <= 844 && mobileDemo.titleButtons.demo.bottom <= 390);
-  assert.ok(mobileDemo.titleButtons.controls.left >= 0 && mobileDemo.titleButtons.controls.right <= 844 && mobileDemo.titleButtons.controls.bottom <= 390);
+  // 2.4A made the grown title menu scroll on short viewports: buttons below
+  // the fold are reachable by scrolling, so only horizontal fit is asserted.
+  assert.ok(mobileDemo.titleButtons.demo.left >= 0 && mobileDemo.titleButtons.demo.right <= 844);
+  assert.ok(mobileDemo.titleButtons.controls.left >= 0 && mobileDemo.titleButtons.controls.right <= 844);
   assert.ok(mobileDemo.hud.left >= 0 && mobileDemo.hud.right <= 844 && mobileDemo.hud.bottom <= 390);
 
   const mobilePolish = await evaluate(client, `(() => {
@@ -3367,14 +3371,16 @@ try {
   })`);
   await evaluate(client, `(() => {
     const button = document.querySelector('[data-touch="lp"]');
-    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+    const r = button.getBoundingClientRect();
+    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', pointerId: 7, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
     return true;
   })()`);
   await delay(120);
   const touchAttack = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await evaluate(client, `(() => {
     const button = document.querySelector('[data-touch="lp"]');
-    button.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' }));
+    const r2 = button.getBoundingClientRect();
+    button.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch', pointerId: 7, clientX: r2.left + r2.width / 2, clientY: r2.top + r2.height / 2 }));
     return true;
   })()`);
   assert.equal(touchAttack.fighters[0].attack, "light");
@@ -3382,21 +3388,25 @@ try {
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez')`);
   await evaluate(client, `(() => {
     const button = document.querySelector('[data-touch="down left"]');
-    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+    const r = button.getBoundingClientRect();
+    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', pointerId: 7, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
     return true;
   })()`);
   await evaluate(client, `window.__finalBlowQa.step(0.05)`);
   const touchGuard = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await evaluate(client, `(() => {
     const button = document.querySelector('[data-touch="down left"]');
-    button.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' }));
+    const r2 = button.getBoundingClientRect();
+    button.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch', pointerId: 7, clientX: r2.left + r2.width / 2, clientY: r2.top + r2.height / 2 }));
     return true;
   })()`);
   assert.equal(touchGuard.fighters[0].guarding, true);
   assert.equal(touchGuard.fighters[0].guardHeight, "low");
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.fighter(0, { meter: 50 }); (() => {
     for (const action of ['hp', 'lp']) {
-      document.querySelector('[data-touch="' + action + '"]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+      const el = document.querySelector('[data-touch="' + action + '"]');
+      const r = el.getBoundingClientRect();
+      el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', pointerId: 20 + action.length + action.charCodeAt(0), clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
     }
     return true;
   })()`);
@@ -3404,7 +3414,9 @@ try {
   const touchEnhanced = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await evaluate(client, `(() => {
     for (const action of ['hp', 'lp']) {
-      document.querySelector('[data-touch="' + action + '"]').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' }));
+      const el = document.querySelector('[data-touch="' + action + '"]');
+      const r = el.getBoundingClientRect();
+      el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch', pointerId: 20 + action.length + action.charCodeAt(0), clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
     }
     return true;
   })()`);
@@ -3412,7 +3424,9 @@ try {
   assert.equal(touchEnhanced.fighters[0].meter, 25);
   await evaluate(client, `window.__finalBlowQa.fight('deathblow', 'jez'); window.__finalBlowQa.fighter(0, { meter: 100 }); (() => {
     for (const action of ['hp', 'hk']) {
-      document.querySelector('[data-touch="' + action + '"]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+      const el = document.querySelector('[data-touch="' + action + '"]');
+      const r = el.getBoundingClientRect();
+      el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', pointerId: 20 + action.length + action.charCodeAt(0), clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
     }
     return true;
   })()`);
@@ -3420,7 +3434,9 @@ try {
   const touchSuper = await evaluate(client, `window.__finalBlowEngine.snapshot()`);
   await evaluate(client, `(() => {
     for (const action of ['hp', 'hk']) {
-      document.querySelector('[data-touch="' + action + '"]').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' }));
+      const el = document.querySelector('[data-touch="' + action + '"]');
+      const r = el.getBoundingClientRect();
+      el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch', pointerId: 20 + action.length + action.charCodeAt(0), clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
     }
     return true;
   })()`);
@@ -3432,9 +3448,7 @@ try {
     window.__finalBlowQa.positions(80, 1200);
     window.__finalBlowQa.step(0.05);
     const fighters = window.__finalBlowEngine.snapshot().fighters;
-    document.querySelector('[data-touch="hp"]').dispatchEvent(
-      new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }),
-    );
+    ((el) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', pointerId: 9, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); })(document.querySelector('[data-touch="hp"]'));
     return {
       distance: Math.abs(fighters[1].x - fighters[0].x),
       prompt: document.querySelector('#touchPrompt').textContent,
@@ -3445,21 +3459,15 @@ try {
   await evaluate(client, `window.__finalBlowQa.step(0.08)`);
   const touchHeavyFinisherAttempt = await evaluate(client, `window.__finalBlowQa.status()`);
   await evaluate(client, `(() => {
-    document.querySelector('[data-touch="hp"]').dispatchEvent(
-      new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' }),
-    );
+    ((el) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch', pointerId: 9, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); })(document.querySelector('[data-touch="hp"]'));
     window.__finalBlowQa.step(0.05);
-    document.querySelector('[data-touch="lk"]').dispatchEvent(
-      new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }),
-    );
+    ((el) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', pointerId: 9, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); })(document.querySelector('[data-touch="lk"]'));
     return true;
   })()`);
   assert.equal(touchHeavyFinisherAttempt.elapsed, 0, "touch HP must not execute a finisher");
   await evaluate(client, `window.__finalBlowQa.step(0.12)`);
   const touchLightKickFinisher = await evaluate(client, `window.__finalBlowQa.status()`);
-  await evaluate(client, `document.querySelector('[data-touch="lk"]').dispatchEvent(
-    new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' }),
-  )`);
+  await evaluate(client, `((el) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch', pointerId: 9, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); })(document.querySelector('[data-touch="lk"]'))`);
   assert.ok(touchLightKickFinisher.elapsed > 0, "touch LK must execute a finisher");
   assert.equal(touchLightKickFinisher.fatalityFamily, "crush");
   await evaluate(client, `window.__finalBlowQa.step(4.58)`);
@@ -3491,7 +3499,7 @@ try {
 
   const mobileLadder = await evaluate(client, `(() => {
     window.__finalBlowQa.arcade('ali', 'street', 88);
-    for (let bout = 0; bout < 7; bout += 1) window.__finalBlowQa.arcadeResult(true);
+    for (let bout = 0; bout < 8; bout += 1) window.__finalBlowQa.arcadeResult(true);
     const screen = document.querySelector('#ladderScreen').getBoundingClientRect();
     const route = document.querySelector('#arcadeLadderNodes').getBoundingClientRect();
     const button = document.querySelector('#arcadeContinueButton').getBoundingClientRect();
@@ -3505,7 +3513,7 @@ try {
     };
   })()`);
   assert.equal(mobileLadder.active, true);
-  assert.equal(mobileLadder.nodes, 8);
+  assert.equal(mobileLadder.nodes, 9);
   assert.equal(mobileLadder.overflow, false);
   assert.ok(mobileLadder.route.left >= 0 && mobileLadder.route.right <= 844);
   assert.ok(mobileLadder.button.left >= 0 && mobileLadder.button.right <= 844 && mobileLadder.button.bottom <= 390);

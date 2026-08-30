@@ -19806,7 +19806,10 @@ function combatHaptic(kind, { damage = 0, blocked = false, counter = false } = {
   hapticsDebug.events += 1;
   hapticsDebug.lastKind = pattern.kind;
   try {
-    navigator.vibrate?.(pattern.vibrate);
+    // Chrome logs a console intervention (and ignores the call) for vibrate
+    // before any user gesture — keyboard-only sessions would see it on every
+    // hit. Only vibrate once the browser reports real user activation.
+    if (navigator.userActivation?.hasBeenActive !== false) navigator.vibrate?.(pattern.vibrate);
   } catch {
     // Some browsers throw instead of ignoring vibration without a gesture.
   }
@@ -21646,7 +21649,7 @@ async function registerOfflineGame() {
     return;
   }
   try {
-    await navigator.serviceWorker.register("./sw.js?v=final-blow-2.4a");
+    await navigator.serviceWorker.register("./sw.js?v=final-blow-2.5");
     await navigator.serviceWorker.ready;
     state.offlineReady = true;
     updateOfflineBadge();
@@ -22817,7 +22820,7 @@ function capturePointer(element, pointerId) {
 })();
 
 window.__finalBlowEngine = {
-  version: "2.4-streets",
+  version: "2.5-voices",
   simulationHz: SIMULATION_HZ,
   toggleDebug(enabled = !state.debug) {
     state.debug = Boolean(enabled);
