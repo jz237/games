@@ -4,11 +4,12 @@ interface __BaseEnv_Env {
 	ALLOWED_ORIGIN: "https://jz237.github.io";
 	ROOMS: DurableObjectNamespace<import("./src/index").FinalBlowRoom>;
 	CREATE_LIMITS: DurableObjectNamespace<import("./src/index").CreateLimiter>;
+	BOARDS: DurableObjectNamespace<import("./src/index").ChallengeBoard>;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
 		mainModule: typeof import("./src/index");
-		durableNamespaces: "FinalBlowRoom" | "CreateLimiter";
+		durableNamespaces: "FinalBlowRoom" | "CreateLimiter" | "ChallengeBoard";
 	}
 	interface Env extends __BaseEnv_Env {}
 }

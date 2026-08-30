@@ -173,6 +173,7 @@ const chrome = spawn(chromePath, [
 
 let host;
 let guest;
+let watcher;
 try {
   await waitForJson(`http://127.0.0.1:${debugPort}/json/version`);
   host = await createTarget(debugPort, gameUrl);
@@ -239,6 +240,19 @@ try {
   assert.equal(guest.requestUrls.some((url) => url.includes(guestSecret)), false);
   assert.equal(staticRequests.some((url) => url.includes(guestSecret)), false);
 
+  // Wave 19 — spectator seat: a THIRD browser opens the host's watch link
+  // while the room is still in its lobby (creating the tab here also avoids
+  // flipping page visibility mid-match, which would legitimately suspend the
+  // fighters). The broadcast starts automatically when the match does.
+  const watchUrl = await evaluate(host.client, `window.__finalBlowQa.watchUrl()`);
+  assert.match(new URL(watchUrl).hash, /online=watch/);
+  const watchSecret = new URLSearchParams(new URL(watchUrl).hash.slice(1)).get("key");
+  assert.equal(watchSecret.length, 43);
+  watcher = await createTarget(debugPort, watchUrl);
+  await waitFor(watcher.client, `document.readyState === 'complete' && Boolean(window.__finalBlowEngine)`);
+  await evaluate(watcher.client, `document.querySelector('#onlineJoinButton').click(); true`);
+  await waitFor(watcher.client, `window.__finalBlowQa.spectate().watcher.active === true`, 20_000);
+
   await delay(450);
   const mobileBounds = await evaluate(host.client, `(() => {
     document.querySelector('#onlineScreen').style.animation = 'none';
@@ -302,6 +316,8 @@ try {
       await Promise.all([
         evaluate(host.client, `window.__finalBlowQa.step(${chunk} / 60)`),
         evaluate(guest.client, `window.__finalBlowQa.step(${chunk} / 60)`),
+        // The spectator's replay driver rides the same fixed-step clock.
+        watcher ? evaluate(watcher.client, `window.__finalBlowQa.step(${chunk} / 60)`) : Promise.resolve(),
       ]);
       remaining -= chunk;
       await delay(12);
@@ -343,6 +359,28 @@ try {
   })()`, 20_000);
   assert.equal(hostSynced.confirmedChecksumFrame, guestSynced.confirmedChecksumFrame);
   assert.equal(hostSynced.confirmedChecksum, guestSynced.confirmedChecksum);
+
+  // Wave 19 — the spectator is now watching the same deterministic match a
+  // beat behind: the host has streamed batches, the watcher's replay driver
+  // has consumed them, and the SPECTATING badge is up.
+  const spectating = await waitFor(watcher.client, `(() => {
+    const value = window.__finalBlowQa.spectate();
+    const snapshot = window.__finalBlowEngine.snapshot();
+    return value.watcher.playing && value.watcher.index > 0 && snapshot.screen === 'fight' ? { spectate: value, screen: snapshot.screen, mode: snapshot.mode, picks: snapshot.fighters.map((fighter) => fighter.id) } : null;
+  })()`, 30_000);
+  assert.equal(spectating.mode, "replay");
+  assert.deepEqual(spectating.picks, ["deathblow", "jez"]);
+  assert.equal(spectating.spectate.watcher.spectatePlayback, true);
+  assert.equal(spectating.spectate.hudVisible, true);
+  assert.ok(spectating.spectate.watcher.buffered >= spectating.spectate.watcher.index);
+  const hostSpectate = await evaluate(host.client, `window.__finalBlowQa.spectate()`);
+  assert.ok(hostSpectate.counters.headersSent >= 1);
+  assert.ok(hostSpectate.counters.batchesSent >= 1);
+  assert.ok(hostSpectate.host.watchers >= 1);
+  // Watch token discipline: never in any request URL on any page.
+  for (const urls of [host.requestUrls, guest.requestUrls, watcher.requestUrls, staticRequests]) {
+    assert.equal(urls.some((url) => url.includes(watchSecret)), false);
+  }
   const convergedState = await Promise.all([
     evaluate(host.client, `window.__finalBlowEngine.snapshot()`),
     evaluate(guest.client, `window.__finalBlowEngine.snapshot()`),
@@ -395,8 +433,17 @@ try {
   })()`, 15_000);
   assert.equal(rematchHost.matchConfig.matchId, rematchGuest.matchConfig.matchId);
   assert.equal(rematchHost.matchConfig.rematch, true);
+
+  // Wave 19 — the broadcast follows the set: the rematch's fresh spectate
+  // header reaches the watcher and reseeds its replay driver.
+  const watcherRematch = await waitFor(watcher.client, `(() => {
+    const value = window.__finalBlowQa.spectate();
+    return value.watcher.matchId === '${rematchHost.matchConfig.matchId}' ? value : null;
+  })()`, 20_000);
+  assert.equal(watcherRematch.watcher.spectatePlayback, true);
   assert.deepEqual(host.errors, []);
   assert.deepEqual(guest.errors, []);
+  assert.deepEqual(watcher.errors, []);
   console.log(JSON.stringify({
     status: "passed",
     roomIdLength: hostConnected.roomId.length,
@@ -414,10 +461,20 @@ try {
       reconnectFrame: hostReconnected.rollback.frame,
       rematchId: rematchHost.matchConfig.matchId,
     },
+    spectator: {
+      joined: true,
+      framesPlayed: spectating.spectate.watcher.index,
+      buffered: spectating.spectate.watcher.buffered,
+      hostBatchesSent: hostSpectate.counters.batchesSent,
+      hostFramesSent: hostSpectate.counters.framesSent,
+      followedRematch: watcherRematch.watcher.matchId === rematchHost.matchConfig.matchId,
+      watchSecretInRequestUrls: false,
+    },
   }, null, 2));
 } finally {
   host?.client.close();
   guest?.client.close();
+  watcher?.client.close();
   const chromeExit = chrome.exitCode === null ? once(chrome, "exit") : Promise.resolve();
   chrome.kill("SIGTERM");
   await Promise.race([chromeExit, delay(3_000)]);

@@ -36,6 +36,15 @@ export function buildInviteUrl({ roomId, guestToken }, baseHref = globalThis.loc
   return url.toString();
 }
 
+// Wave 19 spectator seats: the read-only watch link. Same fragment discipline
+// as the guest invite — the token never rides in a query string or path.
+export function buildWatchUrl({ roomId, watchToken }, baseHref = globalThis.location?.href || "https://jz237.github.io/games/2026-08-20/final-blow/") {
+  assertCredentials({ roomId, token: watchToken });
+  const url = new URL(baseHref);
+  url.hash = new URLSearchParams({ online: "watch", room: roomId, key: watchToken }).toString();
+  return url.toString();
+}
+
 export function parseInvite(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   let fragment = value.trim();
@@ -45,10 +54,11 @@ export function parseInvite(value) {
     // A raw fragment may not be a complete URL.
   }
   const params = new URLSearchParams(fragment.replace(/^#/u, ""));
+  const kind = params.get("online");
   const roomId = params.get("room") || "";
   const token = params.get("key") || "";
-  if (params.get("online") !== "join" || !ROOM_ID_PATTERN.test(roomId) || !ROOM_TOKEN_PATTERN.test(token)) return null;
-  return { roomId, token, role: "guest" };
+  if (!["join", "watch"].includes(kind) || !ROOM_ID_PATTERN.test(roomId) || !ROOM_TOKEN_PATTERN.test(token)) return null;
+  return { roomId, token, role: kind === "watch" ? "watch" : "guest" };
 }
 
 export function scrubInviteFromAddress(locationLike = globalThis.location, historyLike = globalThis.history) {
@@ -81,10 +91,14 @@ export async function createPrivateRoom({ apiUrl = runtimeSignalingApiUrl(), fet
   if (!ROOM_ID_PATTERN.test(roomId) || !ROOM_TOKEN_PATTERN.test(hostToken) || !ROOM_TOKEN_PATTERN.test(guestToken)) {
     throw new Error("The room service returned invalid credentials.");
   }
+  // Wave 19: the optional read-only seat token. Absent on a pre-wave worker —
+  // every consumer treats "" as "no spectator seats on this room".
+  const watchToken = ROOM_TOKEN_PATTERN.test(String(payload?.watchToken || "")) ? String(payload.watchToken) : "";
   return {
     roomId,
     hostToken,
     guestToken,
+    watchToken,
     expiresAt: Number(payload.expiresAt) || Date.now(),
     inviteUrl: buildInviteUrl({ roomId, guestToken }),
   };
@@ -93,7 +107,7 @@ export async function createPrivateRoom({ apiUrl = runtimeSignalingApiUrl(), fet
 export class RoomSignalingClient {
   constructor({ roomId, role, token, apiUrl = runtimeSignalingApiUrl(), WebSocketImpl = globalThis.WebSocket }) {
     assertCredentials({ roomId, token });
-    if (!['host', 'guest'].includes(role)) throw new Error("Invalid private-room seat.");
+    if (!['host', 'guest', 'watch'].includes(role)) throw new Error("Invalid private-room seat.");
     if (typeof WebSocketImpl !== "function") throw new Error("This browser does not support private rooms.");
     this.roomId = roomId;
     this.role = role;

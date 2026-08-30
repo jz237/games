@@ -18,5 +18,8 @@
     "vitest": "4.1.11",
     "wrangler": "4.125.0",
     "ws": "8.21.3"
+  },
+  "allowScripts": {
+    "workerd@1.20260820.1": true
   }
 }

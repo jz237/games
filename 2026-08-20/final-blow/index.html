@@ -62,6 +62,9 @@
           <button id="replayExitButton" type="button" aria-label="Close replay">✕</button>
         </div>
       </div>
+      <div id="spectateHud" class="spectate-hud" aria-live="polite" hidden>
+        <b>SPECTATING</b><span id="spectateHudDetail">LIVE · A BEAT BEHIND</span>
+      </div>
       <div id="demoHud" class="demo-hud" aria-live="polite" hidden>
         <b>WATCH DEMO</b><span id="demoHudMatchup">DEATHBLOW VS JEZ</span><em id="demoHudCycle">CYCLE 1</em><small>PRESS ANY BUTTON TO PLAY</small>
       </div>
@@ -180,6 +183,7 @@
             <button class="arcade-button school-button" id="fightSchoolButton">FIGHT SCHOOL<small id="fightSchoolStatus">7 LESSONS · FREE</small></button>
             <button class="arcade-button school-button" id="comboTrialsButton">COMBO TRIALS<small id="comboTrialsStatus">EARN MEDALS</small></button>
           </div>
+          <button class="arcade-button bracket-button" id="phillyOpenButton">THE PHILLY OPEN · BRACKET<small id="phillyOpenStatus">4 OR 8 ENTRANTS · SINGLE ELIMINATION</small></button>
           <div class="menu-row">
             <button class="arcade-button demo-button" id="demoButton">WATCH DEMO · CPU VS CPU</button>
             <button class="arcade-button demo-button" id="replayTheaterButton">REPLAY THEATER<small id="replayTheaterStatus">WATCH SAVED MATCHES</small></button>
@@ -209,11 +213,33 @@
             <label for="onlineInviteInput">PASTE PRIVATE INVITE LINK</label>
             <input id="onlineInviteInput" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://…/#online=join…">
             <button id="onlineJoinButton" class="arcade-button" type="button">JOIN PRIVATE ROOM</button>
+            <div class="online-divider"><span>STREET LIST · OPEN CHALLENGES</span></div>
+            <div id="streetListPanel" class="street-list-panel" aria-label="Street List public challenges">
+              <div class="street-list-head">
+                <b>ANSWER A CHALLENGE</b>
+                <button id="streetListRefreshButton" class="arcade-button ghost compact" type="button">REFRESH</button>
+              </div>
+              <div id="streetListRows" class="street-list-rows" role="list"></div>
+              <p id="streetListStatus" class="street-list-status" aria-live="polite">PRESS REFRESH TO SCAN THE BOARD</p>
+            </div>
           </div>
           <div id="onlineRoomDetails" class="online-room-details" hidden>
             <div class="online-room-head"><span>ROOM FINGERPRINT</span><b id="onlineFingerprint">—</b><small id="onlineExpiry">EXPIRES IN 15:00</small></div>
             <label for="onlineInviteLink">PRIVATE GUEST INVITE</label>
             <div class="online-copy-row"><input id="onlineInviteLink" type="text" readonly><button id="onlineCopyButton" type="button">COPY</button></div>
+            <div id="onlineQrBlock" class="online-qr-block" hidden>
+              <canvas id="onlineQrCanvas" width="196" height="196" aria-label="Invite QR code — scan to join as guest"></canvas>
+              <div class="online-qr-side">
+                <small>SCAN ON A PHONE<br>LANDS IN THE GUEST SEAT</small>
+                <button id="onlineShareButton" class="arcade-button compact" type="button" hidden>SHARE INVITE</button>
+                <button id="onlineWatchLinkButton" class="arcade-button ghost compact" type="button" hidden>COPY WATCH LINK</button>
+              </div>
+            </div>
+            <div id="streetPostRow" class="street-post-row" hidden>
+              <label>STREET&nbsp;<select id="streetTagSelect" aria-label="Street List tag"></select></label>
+              <button id="streetPostButton" class="arcade-button compact" type="button">POST TO STREET LIST</button>
+              <b id="streetPostStatus" aria-live="polite"></b>
+            </div>
             <div class="online-seats">
               <span id="onlineHostSeat"><i></i><b>HOST</b><em>WAITING</em></span>
               <span id="onlineGuestSeat"><i></i><b>GUEST</b><em>WAITING</em></span>
@@ -442,6 +468,39 @@
         </div>
       </section>
 
+      <section id="bracketScreen" class="screen bracket-screen" aria-labelledby="bracketTitle">
+        <header class="screen-header">
+          <p id="bracketEyebrow">SINGLE ELIMINATION · WINNER TAKES THE STREET</p>
+          <h2 id="bracketTitle">THE PHILLY OPEN</h2>
+        </header>
+        <div id="bracketSetup" class="bracket-setup" hidden>
+          <div class="bracket-setup-row">
+            <span class="mutator-title">DRAW SIZE</span>
+            <button id="bracketSize4Button" class="arcade-button compact" data-size="4">4 ENTRANTS</button>
+            <button id="bracketSize8Button" class="arcade-button ghost compact" data-size="8">8 ENTRANTS</button>
+          </div>
+          <div id="bracketEntrantRows" class="bracket-entrant-rows"></div>
+          <button id="bracketStartButton" class="arcade-button primary menu-focus" type="button">OPEN THE BRACKET →</button>
+        </div>
+        <div id="bracketBoard" class="bracket-board" hidden></div>
+        <div id="bracketCeremony" class="bracket-ceremony" hidden>
+          <p class="eyebrow">UNDISPUTED · THE PHILLY OPEN</p>
+          <img id="bracketChampionArt" class="bracket-champion-art" src="" alt="" draggable="false">
+          <h3 id="bracketChampionName">—</h3>
+          <blockquote id="bracketChampionQuote">THE STREET MOVED FIRST.</blockquote>
+          <div class="ending-stamp"><span id="bracketChampionLabel">CHAMPION</span><b>CROWNED</b></div>
+          <div id="bracketCeremonyRoll" class="bracket-ceremony-roll"></div>
+        </div>
+        <div class="selection-footer">
+          <button class="text-button" data-back="title">← BACK TO TITLE</button>
+          <div id="bracketStatus" class="bracket-status">SET THE DRAW</div>
+          <div class="bracket-footer-actions">
+            <button id="bracketResetButton" class="arcade-button ghost compact" type="button" hidden>NEW OPEN</button>
+            <button id="bracketNextButton" class="arcade-button primary compact" type="button" hidden>NEXT MATCH →</button>
+          </div>
+        </div>
+      </section>
+
       <section id="replaysScreen" class="screen replays-screen" aria-labelledby="replaysTitle">
         <header class="screen-header">
           <p>EVERY GREAT SET, SAVED TO THE STREET</p>
@@ -481,6 +540,7 @@
             <button id="newStageButton" class="arcade-button">SAME FIGHTERS · NEW STAGE</button>
             <button id="changeFightersButton" class="arcade-button" hidden>CHANGE FIGHTERS</button>
             <button id="reselectButton" class="arcade-button">SELECT FIGHTERS</button>
+            <button id="bracketContinueButton" class="arcade-button primary" hidden>BACK TO THE BRACKET →</button>
             <button class="arcade-button ghost" data-back="title">TITLE</button>
           </div>
         </div>

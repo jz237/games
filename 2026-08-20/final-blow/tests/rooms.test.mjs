@@ -106,3 +106,33 @@ test("WebSocket authentication travels as a subprotocol, never in the URL", asyn
   assert.equal(JSON.parse(client.socket.sent).type, "ready");
   client.close();
 });
+
+// --- Wave 19: watch links + watch tokens ------------------------------------
+
+test("watch links keep the shared watch token in the fragment", async () => {
+  const { buildWatchUrl } = await import("../engine/rooms.mjs");
+  const watchToken = "W".repeat(43);
+  const watchUrl = buildWatchUrl({ roomId, watchToken }, "https://jz237.github.io/games/2026-08-20/final-blow/");
+  const url = new URL(watchUrl);
+  assert.equal(url.searchParams.has("key"), false);
+  assert.deepEqual(parseInvite(watchUrl), { roomId, token: watchToken, role: "watch" });
+  // Guest invites still parse exactly as before.
+  assert.deepEqual(parseInvite(buildInviteUrl({ roomId, guestToken })), { roomId, token: guestToken, role: "guest" });
+  // Unknown kinds refuse.
+  assert.equal(parseInvite(`#online=spy&room=${roomId}&key=${guestToken}`), null);
+});
+
+test("room creation adopts the optional watch token and tolerates its absence", async () => {
+  const withWatch = await createPrivateRoom({
+    apiUrl: "https://signal.example",
+    fetchImpl: async () => Response.json({
+      roomId, hostToken, guestToken, watchToken: "W".repeat(43), expiresAt: Date.now() + 900_000,
+    }, { status: 201 }),
+  });
+  assert.equal(withWatch.watchToken, "W".repeat(43));
+  const preWave = await createPrivateRoom({
+    apiUrl: "https://signal.example",
+    fetchImpl: async () => Response.json({ roomId, hostToken, guestToken, expiresAt: Date.now() + 900_000 }, { status: 201 }),
+  });
+  assert.equal(preWave.watchToken, "");
+});

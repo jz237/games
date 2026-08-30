@@ -11,11 +11,13 @@
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "FinalBlowRoom" },
-      { "name": "CREATE_LIMITS", "class_name": "CreateLimiter" }
+      { "name": "CREATE_LIMITS", "class_name": "CreateLimiter" },
+      { "name": "BOARDS", "class_name": "ChallengeBoard" }
     ]
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["FinalBlowRoom", "CreateLimiter"] }
+    { "tag": "v1", "new_sqlite_classes": ["FinalBlowRoom", "CreateLimiter"] },
+    { "tag": "v2", "new_sqlite_classes": ["ChallengeBoard"] }
   ],
   "observability": {
     "enabled": true,

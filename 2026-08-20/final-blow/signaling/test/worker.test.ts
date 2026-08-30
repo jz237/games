@@ -35,7 +35,7 @@ describe("Final Blow signaling Worker", () => {
     const response = await exports.default.fetch("https://service.test/health");
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
-    await expect(response.json()).resolves.toMatchObject({ status: "ok", version: "1.0.0" });
+    await expect(response.json()).resolves.toMatchObject({ status: "ok", version: "1.1.0" });
   });
 
   it("rejects foreign origins and oversized creation requests", async () => {

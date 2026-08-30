@@ -502,6 +502,7 @@ body.reduced-motion #screenWipe.run {
 @keyframes online-pulse { to { transform: scale(1.35); opacity: .68; } }
 
 .online-actions { display: grid; gap: 8px; margin-top: 14px; }
+.online-actions[hidden] { display: none !important; }
 .online-actions label,
 .online-room-details > label { color: #81929d; font-size: 8px; font-weight: 900; letter-spacing: .12em; }
 .online-actions input,
@@ -3626,3 +3627,103 @@ body.reduced-motion .cabinet-marquee { animation: none; }
 body.reduced-motion .conn-toast,
 body.reduced-motion .sync-countdown.beat,
 body.reduced-motion .set-score-card.crowned { animation: none; }
+
+/* =========================================================================
+   R2.1 STREETS wave 19 — QR invites, Street List, spectate badge, bracket.
+   ========================================================================= */
+
+/* --- QR + share block on the host's room card --- */
+.online-qr-block { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; padding: 8px; border: 1px solid #31515d; background: rgba(5,13,19,.92); }
+.online-qr-block[hidden] { display: none !important; }
+/* The global canvas rule absolutely positions render surfaces — the QR
+   canvas is ordinary flow content, so every one of those fields resets. */
+#onlineQrCanvas { position: static; z-index: auto; inset: auto; width: clamp(108px, 11vw, 164px); height: clamp(108px, 11vw, 164px); border: 4px solid #f4ecd9; background: #f4ecd9; object-fit: contain; image-rendering: pixelated; }
+.online-qr-side { display: grid; gap: 7px; justify-items: start; }
+.online-qr-side small { color: #7d919c; font-size: 7px; font-weight: 900; letter-spacing: .12em; line-height: 1.6; }
+.online-qr-side .arcade-button { min-height: 30px; padding: 6px 10px; font-size: 8px; }
+
+/* --- Street List post row (host) --- */
+.street-post-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 7px; align-items: end; padding: 8px; border: 1px solid #4a4326; background: rgba(19,15,4,.9); }
+.street-post-row[hidden] { display: none !important; }
+.street-post-row label { display: grid; gap: 3px; color: #a08f5b; font-size: 7px; font-weight: 900; letter-spacing: .1em; }
+.street-post-row select { height: 30px; padding: 4px 6px; border: 1px solid #5b5330; background: #0a0803; color: #f2e4bb; font-size: 8px; font-weight: 900; }
+.street-post-row .arcade-button { min-height: 30px; padding: 6px 9px; font-size: 8px; }
+.street-post-row b { grid-column: 1 / -1; min-height: 10px; color: var(--amber); font-size: 7px; font-weight: 900; letter-spacing: .1em; }
+.street-post-row.listed { border-color: #4d7657; }
+.street-post-row.listed b { color: var(--green); }
+
+/* --- Street List browse panel (beside CREATE/JOIN) --- */
+.street-list-panel { display: grid; gap: 6px; padding: 8px; border: 1px solid #31515d; background: rgba(4,10,15,.9); }
+.street-list-head { display: flex; align-items: center; justify-content: space-between; }
+.street-list-head b { color: #dce7ea; font-size: 8px; font-weight: 900; letter-spacing: .12em; }
+.street-list-head .arcade-button { min-height: 26px; padding: 4px 9px; font-size: 8px; }
+.street-list-rows { display: grid; gap: 5px; max-height: 148px; overflow-y: auto; }
+.street-row { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid #2c4450; background: #060e14; }
+.street-row .street-tag { padding: 3px 6px; border: 1px solid #8a2b27; background: rgba(90,13,12,.5); color: #ffb5b1; font-size: 7px; font-weight: 900; letter-spacing: .12em; }
+.street-row .street-fighter { overflow: hidden; color: var(--cyan); font-size: 9px; font-weight: 900; letter-spacing: .08em; text-overflow: ellipsis; white-space: nowrap; }
+.street-row .street-age { color: #6f8089; font-size: 7px; font-weight: 900; }
+.street-row button { min-height: 26px; padding: 4px 9px; border: 1px solid #4d7657; background: #0d2413; color: #b9f0ac; cursor: pointer; font-size: 8px; font-weight: 900; letter-spacing: .1em; }
+.street-row button:hover { background: #16391e; }
+.street-row button:disabled { opacity: .5; }
+.street-list-status { margin: 0; color: #667883; font-size: 7px; font-weight: 900; letter-spacing: .1em; }
+.street-list-status.error { color: #ffb5b1; }
+
+/* --- Spectator badge --- */
+.spectate-hud {
+  position: absolute; z-index: 9; top: 13.2%; left: 50%;
+  display: flex; gap: 8px; align-items: center;
+  padding: 5px 10px; border: 1px solid rgba(78,221,245,.72);
+  background: rgba(2,10,13,.88); color: #cbe9ef;
+  font-size: clamp(6px, .58vw, 9px); font-weight: 900; letter-spacing: .09em;
+  pointer-events: none; transform: translateX(-50%); white-space: nowrap;
+}
+.spectate-hud[hidden] { display: none !important; }
+.spectate-hud b { color: var(--cyan); animation: spectatePulse 1.6s ease-in-out infinite; }
+@keyframes spectatePulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .spectate-hud b { animation: none; } }
+
+/* --- THE PHILLY OPEN bracket screen --- */
+.bracket-screen.active { flex-direction: column; gap: clamp(8px, 1.6vh, 16px); justify-content: flex-start; padding: clamp(10px, 2vh, 26px) 4% 2%; overflow-y: auto; }
+.bracket-screen .screen-header { text-align: center; }
+.bracket-screen .selection-footer { width: min(880px, 96%); margin-top: auto; }
+.bracket-setup { display: grid; gap: 9px; width: min(680px, 92%); margin: 0 auto; }
+.bracket-setup[hidden] { display: none !important; }
+.bracket-setup-row { display: flex; gap: 8px; align-items: center; }
+.bracket-setup-row .arcade-button { min-height: 30px; padding: 6px 12px; font-size: 9px; }
+.bracket-entrant-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.bracket-entrant-row { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px; align-items: center; padding: 6px 8px; border: 1px solid #33454f; background: rgba(6,14,20,.9); }
+.bracket-entrant-row .seed-chip { width: 20px; color: var(--amber); font-size: 9px; font-weight: 900; text-align: center; }
+.bracket-entrant-row select { min-width: 0; height: 28px; padding: 3px 5px; border: 1px solid #385260; background: #03090e; color: #d4f8fb; font-size: 8px; font-weight: 900; }
+.bracket-board { display: flex; gap: clamp(10px, 2vw, 26px); justify-content: center; width: min(880px, 96%); margin: 0 auto; }
+.bracket-board[hidden] { display: none !important; }
+.bracket-round { display: flex; flex: 1; flex-direction: column; justify-content: space-around; gap: 8px; min-width: 0; }
+.bracket-round-name { color: #8f9aa4; font-size: 8px; font-weight: 900; letter-spacing: .14em; text-align: center; }
+.bracket-match { position: relative; display: grid; gap: 3px; padding: 6px 8px; border: 1px solid #33454f; background: rgba(5,12,18,.92); }
+.bracket-match.playable { border-color: var(--amber); box-shadow: 0 0 12px rgba(255,177,27,.18); }
+.bracket-match.decided { border-color: #2c4450; }
+/* advancing line stubs out the right edge of every decided match */
+.bracket-match.decided::after { position: absolute; top: 50%; right: -14px; width: 14px; height: 2px; background: var(--green); content: ""; }
+.bracket-round:last-child .bracket-match.decided::after { display: none; }
+.bracket-slot { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center; min-height: 18px; color: #cad2d7; font-size: 9px; font-weight: 900; letter-spacing: .06em; }
+.bracket-slot .slot-seed { color: #6f8089; font-size: 7px; }
+.bracket-slot .slot-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bracket-slot .slot-kind { color: #6f8089; font-size: 6px; letter-spacing: .1em; }
+.bracket-slot.tbd { color: #4d5b64; }
+.bracket-slot.won { color: var(--green); }
+.bracket-slot.won .slot-kind { color: #7fae74; }
+.bracket-slot.lost { color: #55626b; text-decoration: line-through; }
+.bracket-status { color: var(--amber); font-size: 8px; font-weight: 900; letter-spacing: .1em; }
+.bracket-footer-actions { display: flex; gap: 7px; }
+.bracket-ceremony { display: grid; gap: 8px; justify-items: center; width: min(560px, 92%); margin: 0 auto; text-align: center; }
+.bracket-ceremony[hidden] { display: none !important; }
+.bracket-champion-art { width: clamp(90px, 12vw, 150px); border: 2px solid var(--amber); background: #0a0803; filter: drop-shadow(0 0 18px rgba(255,177,27,.4)); }
+.bracket-ceremony h3 { margin: 0; color: var(--paper); font-size: clamp(16px, 2.4vw, 30px); letter-spacing: .08em; }
+.bracket-ceremony blockquote { margin: 0; color: #9fb2bc; font-size: clamp(9px, 1vw, 13px); font-style: italic; }
+.bracket-ceremony-roll { display: grid; gap: 3px; margin-top: 4px; color: #8f9aa4; font-size: 8px; font-weight: 900; letter-spacing: .1em; }
+.bracket-ceremony-roll .roll-line b { color: #cad2d7; }
+.bracket-ceremony-roll .roll-line.champ b { color: var(--amber); }
+@media (max-width: 900px) {
+  .bracket-entrant-rows { grid-template-columns: 1fr; }
+  .street-row { grid-template-columns: auto 1fr auto; }
+  .street-row .street-age { display: none; }
+}

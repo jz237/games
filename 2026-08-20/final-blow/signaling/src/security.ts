@@ -8,6 +8,34 @@ export const MESSAGE_LIMIT = 120;
 export const MAX_SIGNAL_BYTES = 32 * 1024;
 export const SOCKET_PROTOCOL = "final-blow-v1";
 export const AUTH_PROTOCOL_PREFIX = "fb-auth.";
+// Wave 19 spectator seats: one shared watch token per room, up to this many
+// concurrent viewer sockets. Same digest discipline as the player seats.
+export const WATCH_SEAT_LIMIT = 4;
+// Wave 19 Street List: the public challenge board. Entries die with their
+// room's 15-minute expiry; the open board itself is hard-capped.
+export const CHALLENGE_BOARD_LIMIT = 32;
+export const CHALLENGE_BODY_LIMIT = 512;
+
+// Curated Philly street tags — the ONLY strings the public board will store or
+// serve. The client mirrors this list for its picker; anything else is a 400.
+export const STREET_TAGS = Object.freeze([
+  "somerset", "kensington", "allegheny", "lehigh", "broad",
+  "passyunk", "girard", "frankford", "tioga", "venango",
+] as const);
+
+export type StreetTag = (typeof STREET_TAGS)[number];
+
+export function isStreetTag(value: unknown): value is StreetTag {
+  return typeof value === "string" && (STREET_TAGS as readonly string[]).includes(value);
+}
+
+export function isFighterId(value: unknown): value is string {
+  return typeof value === "string" && /^[a-z0-9-]{1,24}$/u.test(value);
+}
+
+export function isRoomToken(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{43}$/u.test(value);
+}
 
 const encoder = new TextEncoder();
 
@@ -65,6 +93,13 @@ export function isRoomId(value: string): boolean {
 
 export function isRole(value: string): value is "host" | "guest" {
   return value === "host" || value === "guest";
+}
+
+// Wave 19: the socket paths gain a read-only third seat class. Player-seat
+// checks everywhere else keep using isRole, so nothing about the original
+// two-seat contract loosens.
+export function isSocketRole(value: string): value is "host" | "guest" | "watch" {
+  return isRole(value) || value === "watch";
 }
 
 export function isAllowedOrigin(origin: string | null, configuredOrigin: string): boolean {
@@ -137,6 +172,67 @@ export function parseSignalMessage(message: string | ArrayBuffer): SignalRecord 
     return typeof record.nonce === "string" && record.nonce.length >= 1 && record.nonce.length <= 64
       ? { type: record.type, nonce: record.nonce }
       : null;
+  }
+  // Wave 19 spectator relay. Host -> watchers: a match header, a batch of
+  // confirmed input frames (RLE text), or an end card. Size is already capped
+  // by MAX_SIGNAL_BYTES; each field is bounded and normalized here.
+  if (record.type === "spectate") {
+    return normalizeSpectateMessage(record);
+  }
+  // Watcher -> host: request the header plus a resend from frame `have`.
+  if (record.type === "watch-hello") {
+    const have = record.have === undefined ? 0 : record.have;
+    return Number.isInteger(have) && Number(have) >= 0 && Number(have) <= 1_000_000
+      ? { type: "watch-hello", have: Number(have) }
+      : null;
+  }
+  return null;
+}
+
+function isMatchId(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 12 && value.length <= 64;
+}
+
+function normalizeSpectateMessage(record: Record<string, unknown>): SignalRecord | null {
+  if (!isMatchId(record.matchId)) return null;
+  if (record.kind === "header") {
+    const picks = record.picks;
+    if (!Array.isArray(picks) || picks.length !== 2 || !picks.every((pick) => isFighterId(pick))) return null;
+    if (!isFighterId(record.stage)) return null;
+    const mutators = record.mutators === undefined ? [] : record.mutators;
+    if (!Array.isArray(mutators) || mutators.length > 8 || !mutators.every((id) => isFighterId(id))) return null;
+    if (!Number.isInteger(record.seed)) return null;
+    if (!Number.isInteger(record.inputDelay) || Number(record.inputDelay) < 0 || Number(record.inputDelay) > 4) return null;
+    if (typeof record.gameVersion !== "string" || record.gameVersion.length > 16) return null;
+    if (!Number.isInteger(record.protocol) || Number(record.protocol) < 0 || Number(record.protocol) > 10_000) return null;
+    const palettes = Array.isArray(record.palettes) ? record.palettes : [0, 0];
+    return {
+      type: "spectate",
+      kind: "header",
+      level: Number.isInteger(record.level) && Number(record.level) >= 1 ? Number(record.level) : 1,
+      matchId: record.matchId,
+      seed: record.seed,
+      picks: [picks[0], picks[1]],
+      palettes: [palettes[0] === 1 ? 1 : 0, palettes[1] === 1 ? 1 : 0],
+      stage: record.stage,
+      inputDelay: record.inputDelay,
+      mutators,
+      gameVersion: record.gameVersion,
+      protocol: record.protocol,
+    };
+  }
+  if (record.kind === "frames") {
+    if (!Number.isInteger(record.start) || Number(record.start) < 0 || Number(record.start) > 1_000_000) return null;
+    if (!Number.isInteger(record.count) || Number(record.count) < 1 || Number(record.count) > 100_000) return null;
+    const streamPattern = /^[0-9a-fx.]{1,28672}$/u;
+    if (typeof record.p0 !== "string" || typeof record.p1 !== "string") return null;
+    if (!streamPattern.test(record.p0) || !streamPattern.test(record.p1)) return null;
+    return { type: "spectate", kind: "frames", matchId: record.matchId, start: record.start, count: record.count, p0: record.p0, p1: record.p1 };
+  }
+  if (record.kind === "end") {
+    const reason = ["ended", "host-left", "expired"].includes(String(record.reason)) ? String(record.reason) : "ended";
+    const winner = record.winner === 0 || record.winner === 1 ? record.winner : null;
+    return { type: "spectate", kind: "end", matchId: record.matchId, reason, winner };
   }
   return null;
 }

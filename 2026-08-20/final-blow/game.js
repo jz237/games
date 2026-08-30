@@ -209,12 +209,47 @@ import {
 } from "./engine/polish.mjs";
 import {
   buildInviteUrl,
+  buildWatchUrl,
   connectPrivateRoom,
   createPrivateRoom,
   parseInvite,
   roomFingerprint,
   scrubInviteFromAddress,
 } from "./engine/rooms.mjs";
+// R2.1 STREETS wave 19 — QR invites, the Street List, spectator seats and the
+// Philly Open bracket.
+import { decodeQr, encodeQr } from "./engine/qr.mjs";
+import {
+  STREET_TAGS,
+  claimChallenge,
+  fetchChallenges,
+  postChallenge,
+  sanitizeChallengeList,
+  streetTagLabel,
+} from "./engine/streets.mjs";
+import {
+  SPECTATE_BATCH_FRAMES,
+  buildSpectateHeader,
+  collectConfirmedRange,
+  createSpectatorFeed,
+  encodeSpectateBatch,
+  encodeSpectateEnd,
+  feedSpectateBatch,
+  feedSpectateEnd,
+  feedSpectateHeader,
+  planSpectateChunks,
+} from "./engine/spectate.mjs";
+import {
+  BRACKET_STORAGE_KEY,
+  bracketComplete,
+  bracketRoundName,
+  bracketSnapshot,
+  createBracket,
+  deserializeBracket,
+  nextBracketMatch,
+  reportBracketResult,
+  serializeBracket,
+} from "./engine/bracket.mjs";
 import {
   fighterCanTurn,
   resolvePairFacing,
@@ -1387,6 +1422,10 @@ const replayPlayback = {
   pendingStep: 0,
   saved: null,          // restore bundle for module/global values we borrow
   outcome: null,
+  // Wave 19: live spectator mode — frames0/frames1 alias the spectator feed's
+  // growing arrays, stepping never outruns the buffer, and the theater HUD is
+  // swapped for the SPECTATING badge.
+  spectate: false,
 };
 
 const replayUi = { status: "", lastOutcome: null };
@@ -1428,6 +1467,67 @@ const netFxDebug = {
   connToasts: 0,
   readyChecks: 0,
   returnLobby: 0,
+  // Wave 19 — ONLINE SOCIAL counters.
+  qrRenders: 0,
+  shareInvites: 0,
+  watchLinksCopied: 0,
+  streetRefreshes: 0,
+  streetPosts: 0,
+  streetClaims: 0,
+  spectateHeadersSent: 0,
+  spectateBatchesSent: 0,
+  spectateFramesSent: 0,
+  spectateBatchesReceived: 0,
+  spectateFramesPlayed: 0,
+  spectateEnds: 0,
+  bracketMatches: 0,
+  bracketChampions: 0,
+  bracketResumes: 0,
+};
+
+// --- Wave 19 module state ---------------------------------------------------
+// QR: the last painted matrix + payload, kept for the QA self-decode probe.
+const onlineQrState = { text: "", version: 0, size: 0, matrix: null };
+
+// Street List browse panel (meta only — tokens never persist here).
+const streetListUi = { rows: [], busy: false, stubbed: false, lastError: "" };
+
+// Host-side spectate pump. Watchers ride the SIGNALING socket, so everything
+// here is meta: confirmed-frame frontier bookkeeping plus a headcount.
+const spectateHost = {
+  watchers: 0,          // live watch sockets (from welcome/peer signals)
+  wantsStream: false,   // at least one watch-hello arrived
+  lastSentFrame: 0,     // exclusive frontier of frames already relayed
+  headerSentFor: "",    // matchId the current header went out for
+};
+
+// Watcher-side session: signaling client + the ordered confirmed-frame feed.
+// Playback rides the replay driver (replayPlayback.spectate = true) so the
+// spectator sim is the identical deterministic machine a replay uses.
+const spectatorSession = {
+  active: false,
+  generation: 0,
+  signaling: null,
+  stopSignal: null,
+  credentials: null,
+  feed: createSpectatorFeed(),
+  playing: false,
+  buffering: false,
+  hostPresent: false,
+  status: "",
+};
+
+// THE PHILLY OPEN — local bracket session (meta; the sim only ever sees the
+// two fighters of the current match through the normal versus/tournament
+// machinery).
+const bracketSession = {
+  active: false,
+  bracket: null,
+  playing: false,
+  current: null,        // { round, index, slots, sides: [entrantIndex, entrantIndex] }
+  matchCpu: [false, false],
+  setupSize: 4,
+  lastOutcome: null,
 };
 
 // Monotonic count of state.rng draws — lets the offline recorder note how many
@@ -2790,6 +2890,25 @@ function netQolSnapshot() {
       setChoice: onlineSession.lobby.setChoice,
       remoteSetLength: onlineSession.lobby.remoteSetLength,
     },
+    // Wave 19 — ONLINE SOCIAL summary block for the orchestrator's smoke.
+    social: {
+      qr: { rendered: Boolean(onlineQrState.matrix), version: onlineQrState.version, size: onlineQrState.size },
+      streets: { rows: streetListUi.rows.length, stubbed: streetListUi.stubbed, error: streetListUi.lastError },
+      spectate: {
+        hostWatchers: spectateHost.watchers,
+        hostStreaming: spectateHost.wantsStream,
+        watcherActive: spectatorSession.active,
+        watcherBuffered: spectatorSession.feed.frames0.length,
+        spectatePlayback: replayPlayback.spectate,
+      },
+      bracket: {
+        active: bracketSession.active,
+        playing: bracketSession.playing,
+        champion: bracketSession.bracket ? bracketSession.bracket.champion : -1,
+        playedMatches: bracketSession.bracket?.playedMatches || 0,
+        saved: Boolean(localStorage.getItem(BRACKET_STORAGE_KEY)),
+      },
+    },
     gameVersion: GAME_VERSION,
     protocol: ROLLBACK_PROTOCOL_VERSION,
   };
@@ -3352,6 +3471,15 @@ function disconnectOnline(resetStatus = true, { clearStored = true } = {}) {
   onlineSession.peers.clear();
   onlineSession.latency = null;
   onlineSession.credentials = null;
+  // Wave 19: QR, watch seats and any Street List posting die with the room.
+  onlineSession.watchToken = "";
+  onlineQrState.text = "";
+  onlineQrState.matrix = null;
+  spectateHost.watchers = 0;
+  spectateHost.wantsStream = false;
+  spectateHost.lastSentFrame = 0;
+  spectateHost.headerSentFor = "";
+  setStreetPostStatus("", false);
   onlineSession.reconnectAttempts = 0;
   onlineSession.reconnecting = false;
   onlineSession.rollback = null;
@@ -3405,9 +3533,90 @@ function renderOnlineRoom() {
   $("#onlineFingerprint").textContent = roomFingerprint(onlineSession.roomId);
   $("#onlineInviteLink").value = onlineSession.role === "host" ? onlineSession.inviteUrl : "PRIVATE INVITE AUTHENTICATED";
   $("#onlineCopyButton").hidden = onlineSession.role !== "host";
+  renderInviteQr();
+  renderStreetPostRow();
   updateOnlineSeats();
   updateOnlineMatchSetup();
   tickOnlineExpiry();
+}
+
+// --- Wave 19: QR-code + native-share invites --------------------------------
+// The invite URL (token in the fragment, as always) painted as a self-drawn
+// QR on the host's room card. Pure canvas: no external fetches, no library.
+
+function paintQrToCanvas(canvasNode, code) {
+  const context = canvasNode.getContext("2d");
+  const quiet = 4;
+  const cells = code.size + quiet * 2;
+  // Crisp integer scale; the CSS box scales it to layout size.
+  const scale = Math.max(2, Math.floor(196 / cells));
+  canvasNode.width = cells * scale;
+  canvasNode.height = cells * scale;
+  context.fillStyle = "#f4ecd9";
+  context.fillRect(0, 0, canvasNode.width, canvasNode.height);
+  context.fillStyle = "#05070c";
+  for (let row = 0; row < code.size; row += 1) {
+    for (let col = 0; col < code.size; col += 1) {
+      if (code.modules[row][col]) {
+        context.fillRect((col + quiet) * scale, (row + quiet) * scale, scale, scale);
+      }
+    }
+  }
+}
+
+function renderInviteQr() {
+  const block = $("#onlineQrBlock");
+  const isHost = onlineSession.role === "host" && Boolean(onlineSession.inviteUrl);
+  block.hidden = !isHost;
+  $("#onlineShareButton").hidden = !isHost || typeof navigator.share !== "function";
+  $("#onlineWatchLinkButton").hidden = !isHost || !onlineSession.watchToken;
+  if (!isHost) return;
+  if (onlineQrState.text !== onlineSession.inviteUrl) {
+    try {
+      const code = encodeQr(onlineSession.inviteUrl);
+      onlineQrState.text = onlineSession.inviteUrl;
+      onlineQrState.version = code.version;
+      onlineQrState.size = code.size;
+      onlineQrState.matrix = code.modules;
+      netFxDebug.qrRenders += 1;
+    } catch {
+      block.hidden = true;
+      return;
+    }
+  }
+  paintQrToCanvas($("#onlineQrCanvas"), { size: onlineQrState.size, modules: onlineQrState.matrix });
+}
+
+async function shareOnlineInvite() {
+  if (!onlineSession.inviteUrl) return;
+  netFxDebug.shareInvites += 1;
+  if (typeof navigator.share === "function") {
+    try {
+      await navigator.share({
+        title: "FINAL BLOW · PRIVATE ROOM",
+        text: "Answer the challenge — this invite seats you as my opponent.",
+        url: onlineSession.inviteUrl,
+      });
+      return;
+    } catch {
+      // Cancelled or unsupported target — fall back to the clipboard below.
+    }
+  }
+  await copyOnlineInvite();
+}
+
+async function copyOnlineWatchLink() {
+  if (!onlineSession.watchToken || !onlineSession.roomId) return;
+  const watchUrl = buildWatchUrl({ roomId: onlineSession.roomId, watchToken: onlineSession.watchToken });
+  try {
+    await navigator.clipboard.writeText(watchUrl);
+  } catch {
+    return;
+  }
+  netFxDebug.watchLinksCopied += 1;
+  const button = $("#onlineWatchLinkButton");
+  button.textContent = "WATCH LINK COPIED";
+  setTimeout(() => { button.textContent = "COPY WATCH LINK"; }, 1400);
 }
 
 function receiveOnlineSignal(message) {
@@ -3415,6 +3624,7 @@ function receiveOnlineSignal(message) {
     onlineSession.expiresAt = Number(message.expiresAt) || onlineSession.expiresAt;
     if (onlineSession.credentials) onlineSession.credentials.expiresAt = onlineSession.expiresAt;
     onlineSession.peers = new Set((message.peers || []).filter((role) => role === "host" || role === "guest"));
+    spectateHost.watchers = Math.max(0, Number(message.watchers) || 0);
     updateOnlineSeats();
     tickOnlineExpiry();
     persistOnlineResume(false);
@@ -3422,7 +3632,86 @@ function receiveOnlineSignal(message) {
     if (message.state === "joined") onlineSession.peers.add(message.role);
     else onlineSession.peers.delete(message.role);
     updateOnlineSeats();
+  } else if (message.type === "peer" && message.role === "watch") {
+    // Wave 19: watcher headcount (host bookkeeping only — old clients filter
+    // this role out entirely).
+    spectateHost.watchers = Math.max(0, spectateHost.watchers + (message.state === "joined" ? 1 : -1));
+    if (spectateHost.watchers === 0) spectateHost.wantsStream = false;
+  } else if (message.type === "watch-hello" && message.from === "watch" && onlineSession.role === "host") {
+    // A watcher asked for the stream: send the header plus a catch-up resend
+    // from wherever their buffer stands. Existing watchers dedupe overlap.
+    spectateHost.wantsStream = true;
+    sendSpectateHeader();
+    sendSpectateCatchup(Math.max(0, Number(message.have) || 0));
   }
+}
+
+// --- Wave 19: host-side spectate relay --------------------------------------
+// The host mirrors its CONFIRMED input stream (the wave-18 recorder map) over
+// the signaling socket: one 60-frame batch per second steady-state, chunked
+// catch-up for late joiners. Watchers replay the identical deterministic sim.
+
+function sendSpectate(message) {
+  return Boolean(onlineSession.signaling?.send(message));
+}
+
+function sendSpectateHeader() {
+  const config = onlineSession.matchConfig;
+  if (onlineSession.role !== "host" || !onlineSession.matchActive || !config) return false;
+  const header = buildSpectateHeader(config, { gameVersion: GAME_VERSION, protocol: ROLLBACK_PROTOCOL_VERSION });
+  if (!header || !sendSpectate(header)) return false;
+  spectateHost.headerSentFor = config.matchId;
+  netFxDebug.spectateHeadersSent += 1;
+  return true;
+}
+
+function sendSpectateRange(start, endExclusive) {
+  const config = onlineSession.matchConfig;
+  const map = replayRecorder.onlineFrames;
+  if (!config || !map) return;
+  for (const chunk of planSpectateChunks(start, endExclusive - start)) {
+    const range = collectConfirmedRange(map, chunk.start, chunk.start + chunk.count);
+    if (!range) return; // hole — that stretch is not confirmed yet
+    const batch = encodeSpectateBatch(config.matchId, chunk.start, range.frames0, range.frames1);
+    if (!batch || !sendSpectate(batch)) return;
+    spectateHost.lastSentFrame = Math.max(spectateHost.lastSentFrame, chunk.start + chunk.count);
+    netFxDebug.spectateBatchesSent += 1;
+    netFxDebug.spectateFramesSent += chunk.count;
+  }
+}
+
+function sendSpectateCatchup(fromFrame) {
+  if (onlineSession.role !== "host" || !onlineSession.matchActive) return;
+  if (spectateHost.lastSentFrame > fromFrame) sendSpectateRange(fromFrame, spectateHost.lastSentFrame);
+}
+
+function maybePumpSpectate(metrics) {
+  if (onlineSession.role !== "host" || !spectateHost.wantsStream || spectateHost.watchers <= 0) return;
+  const config = onlineSession.matchConfig;
+  if (!config || !replayRecorder.active || replayRecorder.kind !== "online") return;
+  if (spectateHost.headerSentFor !== config.matchId && !sendSpectateHeader()) return;
+  const confirmed = Math.min(metrics.frame, metrics.confirmedRemoteFrame + 1, metrics.acknowledgedLocalFrame + 1);
+  const target = Math.floor(confirmed / SPECTATE_BATCH_FRAMES) * SPECTATE_BATCH_FRAMES;
+  if (target > spectateHost.lastSentFrame) sendSpectateRange(spectateHost.lastSentFrame, target);
+}
+
+// Called from resolveMatchResult's meta path BEFORE the recorder is banked:
+// flush every remaining confirmed frame, then close the broadcast with the
+// outcome so watchers land on a clean end card.
+function flushSpectateAtResult(winner) {
+  if (onlineSession.role !== "host" || !spectateHost.wantsStream) return;
+  const config = onlineSession.matchConfig;
+  const map = replayRecorder.onlineFrames;
+  if (!config || !map || replayRecorder.kind !== "online") return;
+  if (spectateHost.headerSentFor !== config.matchId) sendSpectateHeader();
+  let last = -1;
+  for (const frame of map.keys()) last = Math.max(last, frame);
+  if (last + 1 > spectateHost.lastSentFrame) sendSpectateRange(spectateHost.lastSentFrame, last + 1);
+  if (sendSpectate(encodeSpectateEnd(config.matchId, { reason: "ended", winner }))) {
+    netFxDebug.spectateEnds += 1;
+  }
+  spectateHost.lastSentFrame = 0;
+  spectateHost.headerSentFor = "";
 }
 
 function scheduleOnlineReconnect(detail = "Encrypted peer link interrupted.") {
@@ -3540,14 +3829,19 @@ async function connectOnlineTransport() {
   });
 }
 
-async function beginOnlineConnection({ roomId, role, token, guestToken = "", expiresAt = 0 }) {
+async function beginOnlineConnection({ roomId, role, token, guestToken = "", watchToken = "", expiresAt = 0 }) {
+  // Wave 19: a watch-link invite opens the read-only spectator flow instead.
+  if (role === "watch") {
+    return beginSpectatorSession({ roomId, token, expiresAt });
+  }
   disconnectOnline(false, { clearStored: false });
   state.mode = "online";
   onlineSession.role = role;
   onlineSession.roomId = roomId;
   onlineSession.expiresAt = Number(expiresAt) || Date.now() + 15 * 60_000;
   onlineSession.inviteUrl = role === "host" ? buildInviteUrl({ roomId, guestToken }) : "";
-  onlineSession.credentials = { roomId, role, token, guestToken, expiresAt: onlineSession.expiresAt };
+  onlineSession.watchToken = role === "host" ? String(watchToken || "") : "";
+  onlineSession.credentials = { roomId, role, token, guestToken, watchToken: onlineSession.watchToken, expiresAt: onlineSession.expiresAt };
   onlineSession.lobby.localFighter = role === "host" ? "deathblow" : "jez";
   onlineSession.lobby.remoteFighter = role === "host" ? "jez" : "deathblow";
   onlineSession.lobby.localReady = false;
@@ -3582,6 +3876,7 @@ async function resumeStoredOnlineConnection(resume) {
   onlineSession.expiresAt = Number(credentials.expiresAt) || 0;
   onlineSession.credentials = cloneRollbackValue(credentials);
   onlineSession.inviteUrl = credentials.role === "host" ? String(resume.inviteUrl || "") : "";
+  onlineSession.watchToken = credentials.role === "host" ? String(credentials.watchToken || "") : "";
   Object.assign(onlineSession.lobby, resume.lobby || {});
   onlineSession.peers.add(credentials.role);
   // R2.1 STREETS: restore the room's set + stage latch (sanitized — the
@@ -3632,6 +3927,9 @@ function openOnlineLobby() {
     $("#onlineInviteInput").value = location.href;
     setOnlineStatus("waiting", "Private invite detected. Press Join Private Room.");
   }
+  // Wave 19: scan the Street List on entry (fire-and-forget; the panel shows
+  // its own status either way). QA stubs skip the network entirely.
+  if (!streetListUi.stubbed) refreshStreetList();
 }
 
 async function createOnlineRoom() {
@@ -3645,6 +3943,7 @@ async function createOnlineRoom() {
       role: "host",
       token: room.hostToken,
       guestToken: room.guestToken,
+      watchToken: room.watchToken,
       expiresAt: room.expiresAt,
     });
   } catch (error) {
@@ -3681,6 +3980,563 @@ async function copyOnlineInvite() {
   const button = $("#onlineCopyButton");
   button.textContent = "COPIED";
   setTimeout(() => { button.textContent = "COPY"; }, 1200);
+}
+
+// ===========================================================================
+// Wave 19 — STREET LIST: the public challenge board. Posting is a deliberate
+// host action; browsing/claiming flows straight into the normal join path.
+// All endpoints are additive on the worker — nothing here runs for 2.3 flows.
+// ===========================================================================
+
+function setStreetPostStatus(text, listed) {
+  const row = $("#streetPostRow");
+  if (!row) return;
+  $("#streetPostStatus").textContent = text;
+  row.classList.toggle("listed", Boolean(listed));
+}
+
+function renderStreetPostRow() {
+  const row = $("#streetPostRow");
+  if (!row) return;
+  const canPost = onlineSession.role === "host" && Boolean(onlineSession.credentials?.guestToken);
+  row.hidden = !canPost;
+  if (!canPost) return;
+  const select = $("#streetTagSelect");
+  if (!select.options.length) {
+    select.innerHTML = STREET_TAGS.map((tag) => `<option value="${tag.id}">${tag.label}</option>`).join("");
+  }
+}
+
+async function postStreetChallenge() {
+  const credentials = onlineSession.credentials;
+  if (onlineSession.role !== "host" || !credentials?.guestToken) return;
+  const button = $("#streetPostButton");
+  button.disabled = true;
+  setStreetPostStatus("POSTING…", false);
+  try {
+    const posted = await postChallenge({
+      roomId: credentials.roomId,
+      hostToken: credentials.token,
+      guestToken: credentials.guestToken,
+      tag: $("#streetTagSelect").value,
+      fighter: onlineSession.lobby.localFighter,
+    });
+    netFxDebug.streetPosts += 1;
+    setStreetPostStatus(`LISTED ON ${streetTagLabel($("#streetTagSelect").value)} · FIRST TAKER GETS THE SEAT`, true);
+    void posted;
+  } catch (error) {
+    setStreetPostStatus(String(error instanceof Error ? error.message : error).toUpperCase(), false);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderStreetList() {
+  const rowsNode = $("#streetListRows");
+  if (!rowsNode) return;
+  rowsNode.innerHTML = streetListUi.rows.map((row, index) => `
+    <div class="street-row" role="listitem">
+      <span class="street-tag">${row.tagLabel}</span>
+      <span class="street-fighter">${roster.find((fighter) => fighter.id === row.fighter)?.name || row.fighter.toUpperCase()}</span>
+      <span class="street-age">${row.ageLabel}</span>
+      <button type="button" data-street-claim="${index}">ANSWER</button>
+    </div>`).join("");
+  const status = $("#streetListStatus");
+  status.classList.toggle("error", Boolean(streetListUi.lastError));
+  status.textContent = streetListUi.lastError
+    || (streetListUi.rows.length
+      ? `${streetListUi.rows.length} OPEN CHALLENGE${streetListUi.rows.length === 1 ? "" : "S"} ON THE BOARD`
+      : "NO OPEN CHALLENGES · CREATE A ROOM AND POST YOURS");
+}
+
+async function refreshStreetList() {
+  if (streetListUi.busy) return;
+  streetListUi.busy = true;
+  streetListUi.stubbed = false;
+  streetListUi.lastError = "";
+  $("#streetListStatus").textContent = "SCANNING THE BOARD…";
+  try {
+    streetListUi.rows = await fetchChallenges();
+    netFxDebug.streetRefreshes += 1;
+  } catch (error) {
+    streetListUi.rows = [];
+    streetListUi.lastError = String(error instanceof Error ? error.message : error).toUpperCase();
+  } finally {
+    streetListUi.busy = false;
+    renderStreetList();
+  }
+}
+
+async function claimStreetChallenge(index) {
+  const row = streetListUi.rows[index];
+  if (!row || streetListUi.busy) return;
+  streetListUi.busy = true;
+  streetListUi.lastError = "";
+  $("#streetListStatus").textContent = `ANSWERING THE ${row.tagLabel} CHALLENGE…`;
+  try {
+    const credentials = await claimChallenge(row.id);
+    netFxDebug.streetClaims += 1;
+    streetListUi.rows = [];
+    streetListUi.busy = false;
+    renderStreetList();
+    // The claim released the guest token exactly once — straight into the
+    // standard join flow (same seat auth, same everything).
+    await beginOnlineConnection(credentials);
+    return;
+  } catch (error) {
+    streetListUi.lastError = String(error instanceof Error ? error.message : error).toUpperCase();
+    streetListUi.rows = streetListUi.rows.filter((entry) => entry !== row);
+  }
+  streetListUi.busy = false;
+  renderStreetList();
+}
+
+// ===========================================================================
+// Wave 19 — SPECTATOR SEATS (watcher side). A third browser authenticates the
+// read-only watch seat, receives the host's confirmed input stream over
+// signaling, seeds the identical deterministic match from the shared header
+// and plays it through the replay driver a beat behind live. No inputs, a
+// SPECTATING badge, and a clean end card when the broadcast stops.
+// ===========================================================================
+
+function updateSpectateHud() {
+  const hud = $("#spectateHud");
+  if (!hud) return;
+  const visible = replayPlayback.active && replayPlayback.spectate && state.screen === "fight";
+  hud.hidden = !visible;
+  if (!visible) return;
+  const feed = spectatorSession.feed;
+  const behind = Math.max(0, feed.frames0.length - replayPlayback.index);
+  $("#spectateHudDetail").textContent = spectatorSession.buffering
+    ? "BUFFERING · HOLDING FOR THE STREET FEED"
+    : `LIVE · ${Math.max(1, Math.round(behind / 60))}S BEHIND`;
+}
+
+function startSpectatePlayback() {
+  const feed = spectatorSession.feed;
+  const header = feed.header;
+  if (!header || replayPlayback.active) return false;
+  const record = createReplayRecord({
+    header: createReplayHeader({
+      kind: "online",
+      mode: "online",
+      protocol: header.protocol,
+      gameVersion: header.gameVersion,
+      picks: header.picks,
+      palettes: header.palettes,
+      stage: header.stage,
+      mutators: header.mutators,
+      stageWeaponsEnabled: true,
+      startPhase: { phase: "intro", phaseTime: 2.25 },
+      startTick: 1,
+      seed: header.seed,
+      inputDelay: header.inputDelay,
+      matchId: header.matchId,
+    }),
+    frames0: feed.frames0,
+    frames1: feed.frames1,
+  });
+  const started = startReplayPlayback(record, { manual: false });
+  if (!started.ok) {
+    endSpectate(`BROADCAST REFUSED · ${started.reason || "VERSION MISMATCH"}`.toUpperCase());
+    return false;
+  }
+  // Live aliasing: batches append into the feed arrays and playback sees them
+  // immediately; stepping is buffer-bounded so it never invents idle frames.
+  replayPlayback.spectate = true;
+  replayPlayback.frames0 = feed.frames0;
+  replayPlayback.frames1 = feed.frames1;
+  replayPlayback.burns = [];
+  spectatorSession.playing = true;
+  spectatorSession.buffering = feed.frames0.length === 0;
+  $("#replayHud").hidden = true;
+  const names = header.picks.map((id) => roster.find((fighter) => fighter.id === id)?.name || id.toUpperCase());
+  announce("SPECTATING", `${names[0]} VS ${names[1]} · LIVE FROM THE STREET`, 1.1);
+  updateSpectateHud();
+  return true;
+}
+
+function receiveSpectateSignal(message) {
+  const feed = spectatorSession.feed;
+  if (message.type === "welcome") {
+    spectatorSession.hostPresent = (message.peers || []).includes("host");
+    spectatorSession.signaling?.send({ type: "watch-hello", have: feed.frames0.length });
+    setOnlineStatus("connected", spectatorSession.hostPresent
+      ? "Spectator seat authenticated. Waiting for the broadcast…"
+      : "Spectator seat authenticated. The host is away — holding the seat.");
+    return;
+  }
+  if (message.type === "peer" && message.role === "host") {
+    spectatorSession.hostPresent = message.state === "joined";
+    if (message.state === "joined") {
+      spectatorSession.signaling?.send({ type: "watch-hello", have: feed.frames0.length });
+    } else if (replayPlayback.active && replayPlayback.spectate && replayPlayback.index >= feed.frames0.length && !feed.ended) {
+      // The broadcaster vanished and the buffer is dry — clean end screen.
+      endSpectate("BROADCAST ENDED · THE HOST LEFT THE ARENA");
+    }
+    return;
+  }
+  if (message.type !== "spectate" || message.from !== "host") return;
+  if (message.kind === "header") {
+    if (replayPlayback.active && replayPlayback.spectate && feed.header?.matchId === message.matchId) return;
+    if (replayPlayback.active && replayPlayback.spectate) stopReplayPlayback();
+    if (feedSpectateHeader(feed, message)) startSpectatePlayback();
+    return;
+  }
+  if (message.kind === "frames") {
+    const result = feedSpectateBatch(feed, message);
+    if (result.accepted && result.appended) {
+      netFxDebug.spectateBatchesReceived += 1;
+      spectatorSession.buffering = false;
+    } else if (result.gap) {
+      // Missed a stretch — ask the host to resend from our frontier.
+      spectatorSession.signaling?.send({ type: "watch-hello", have: feed.gapAt });
+    }
+    if (!replayPlayback.active && feed.header) startSpectatePlayback();
+    updateSpectateHud();
+    return;
+  }
+  if (message.kind === "end") {
+    feedSpectateEnd(feed, message);
+    // Let playback drain the remaining buffered frames; the natural result
+    // (or the drain check in simulateReplayTick) closes the broadcast.
+    if (!replayPlayback.active) {
+      endSpectate(feed.endWinner === null
+        ? "BROADCAST ENDED"
+        : `BROADCAST ENDED · ${roster.find((fighter) => fighter.id === feed.header?.picks?.[feed.endWinner])?.name || `P${feed.endWinner + 1}`} WINS`);
+    }
+  }
+}
+
+function endSpectate(statusMessage = "BROADCAST ENDED") {
+  const wasActive = spectatorSession.active;
+  spectatorSession.generation += 1;
+  spectatorSession.playing = false;
+  spectatorSession.buffering = false;
+  if (replayPlayback.active && replayPlayback.spectate) stopReplayPlayback();
+  spectatorSession.stopSignal?.();
+  spectatorSession.stopSignal = null;
+  spectatorSession.signaling?.close();
+  spectatorSession.signaling = null;
+  spectatorSession.active = false;
+  spectatorSession.feed = createSpectatorFeed();
+  $("#spectateHud").hidden = true;
+  if (!wasActive) return;
+  showScreen("online");
+  resetOnlineUi();
+  setOnlineStatus("closed", statusMessage.charAt(0) + statusMessage.slice(1).toLowerCase());
+  announce("BROADCAST OVER", statusMessage, 1.1);
+}
+
+async function beginSpectatorSession({ roomId, token, expiresAt = 0 }) {
+  endSpectate();
+  // A live player seat cannot coexist with the read-only seat on this device.
+  if (onlineSession.role) disconnectOnline(false);
+  spectatorSession.active = true;
+  const generation = ++spectatorSession.generation;
+  spectatorSession.credentials = { roomId, role: "watch", token, expiresAt };
+  spectatorSession.feed = createSpectatorFeed();
+  state.mode = "online";
+  showScreen("online");
+  $("#onlineActions").hidden = true;
+  setOnlineStatus("connecting", "Opening the read-only spectator seat…");
+  try {
+    const signaling = await connectPrivateRoom({ roomId, role: "watch", token });
+    if (generation !== spectatorSession.generation) {
+      signaling.close();
+      return;
+    }
+    spectatorSession.signaling = signaling;
+    spectatorSession.stopSignal = signaling.onMessage((message) => {
+      if (generation !== spectatorSession.generation) return;
+      receiveSpectateSignal(message);
+    });
+    signaling.onClose(({ code }) => {
+      if (generation !== spectatorSession.generation || !spectatorSession.active) return;
+      endSpectate(code === 4001 ? "BROADCAST ENDED · ROOM EXPIRED" : "BROADCAST ENDED · SIGNAL LOST");
+    });
+  } catch (error) {
+    spectatorSession.active = false;
+    const message = error instanceof Error ? error.message : "Could not open the spectator seat.";
+    setOnlineError(message);
+    setOnlineStatus("error", message);
+    resetOnlineUi();
+  }
+}
+
+// ===========================================================================
+// Wave 19 — THE PHILLY OPEN: local 4/8-entrant single-elimination bracket.
+// Pure meta around the existing versus/tournament match machinery: humans
+// hot-seat one keyboard (a lone human always takes the P1 controls; two
+// humans in the same match play couch P1/P2), CPUs fight at their chosen
+// difficulty, CPU-vs-CPU matches run watchably in tournament mode. The
+// bracket persists to localStorage so an accidental reload resumes.
+// ===========================================================================
+
+const BRACKET_CONTROL_CHOICES = Object.freeze([
+  { id: "human", label: "HUMAN" },
+  { id: "rookie", label: "CPU · ROOKIE" },
+  { id: "street", label: "CPU · STREET" },
+  { id: "pro", label: "CPU · PRO" },
+  { id: "final", label: "CPU · FINAL" },
+]);
+
+function saveBracket() {
+  try {
+    if (bracketSession.bracket) localStorage.setItem(BRACKET_STORAGE_KEY, serializeBracket(bracketSession.bracket));
+  } catch {
+    // Storage full or denied — the bracket still plays, resume just skips.
+  }
+}
+
+function clearSavedBracket() {
+  try {
+    localStorage.removeItem(BRACKET_STORAGE_KEY);
+  } catch {
+    // Nothing to clear.
+  }
+}
+
+function loadSavedBracket() {
+  try {
+    return deserializeBracket(localStorage.getItem(BRACKET_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function bracketEntrantDef(index) {
+  const entrant = bracketSession.bracket?.entrants[index];
+  return entrant ? roster.find((fighter) => fighter.id === entrant.fighter) || null : null;
+}
+
+function bracketEntrantName(index) {
+  const entrant = bracketSession.bracket?.entrants[index];
+  if (!entrant) return "TBD";
+  return bracketEntrantDef(index)?.name || entrant.fighter.toUpperCase();
+}
+
+function showPhillyOpen() {
+  enterImmersiveMode();
+  unlockAudio();
+  if (!bracketSession.bracket) {
+    const saved = loadSavedBracket();
+    if (saved) {
+      bracketSession.bracket = saved;
+      bracketSession.active = true;
+      if (saved.playedMatches > 0 && !bracketComplete(saved)) netFxDebug.bracketResumes += 1;
+    }
+  }
+  bracketSession.playing = false;
+  bracketSession.current = null;
+  showScreen("bracket");
+  if (bracketSession.bracket) renderBracketBoard();
+  else renderBracketSetup(true);
+}
+
+function renderBracketSetup(rebuildRows = false) {
+  bracketSession.active = false;
+  $("#bracketSetup").hidden = false;
+  $("#bracketBoard").hidden = true;
+  $("#bracketCeremony").hidden = true;
+  $("#bracketNextButton").hidden = true;
+  $("#bracketResetButton").hidden = true;
+  $("#bracketEyebrow").textContent = "SINGLE ELIMINATION · WINNER TAKES THE STREET";
+  $("#bracketStatus").textContent = `${bracketSession.setupSize} ENTRANTS · SEED 1 IS THE TOP LINE`;
+  $("#bracketSize4Button").classList.toggle("ghost", bracketSession.setupSize !== 4);
+  $("#bracketSize8Button").classList.toggle("ghost", bracketSession.setupSize !== 8);
+  const rowsNode = $("#bracketEntrantRows");
+  if (!rebuildRows && rowsNode.children.length === bracketSession.setupSize) return;
+  const pickable = roster.filter((fighter) => !fighter.secret || commissionerUnlocked());
+  const fighterOptions = (selected) => pickable
+    .map((fighter) => `<option value="${fighter.id}"${fighter.id === selected ? " selected" : ""}>${fighter.name}</option>`)
+    .join("");
+  const controlOptions = (selected) => BRACKET_CONTROL_CHOICES
+    .map((choice) => `<option value="${choice.id}"${choice.id === selected ? " selected" : ""}>${choice.label}</option>`)
+    .join("");
+  rowsNode.innerHTML = Array.from({ length: bracketSession.setupSize }, (_, index) => `
+    <div class="bracket-entrant-row">
+      <span class="seed-chip">${index + 1}</span>
+      <select data-bracket-fighter="${index}" aria-label="Seed ${index + 1} fighter">${fighterOptions(pickable[index % pickable.length].id)}</select>
+      <select data-bracket-control="${index}" aria-label="Seed ${index + 1} control">${controlOptions(index === 0 ? "human" : "street")}</select>
+    </div>`).join("");
+}
+
+function startPhillyOpenBracket(entrantsOverride = null) {
+  let entrants = entrantsOverride;
+  if (!entrants) {
+    entrants = Array.from({ length: bracketSession.setupSize }, (_, index) => {
+      const control = $(`[data-bracket-control="${index}"]`)?.value || "street";
+      return {
+        fighter: $(`[data-bracket-fighter="${index}"]`)?.value || roster[index % roster.length].id,
+        human: control === "human",
+        difficulty: control === "human" ? "street" : control,
+      };
+    });
+  }
+  const bracket = createBracket(entrants);
+  bracket.createdAt = Date.now();
+  bracketSession.bracket = bracket;
+  bracketSession.active = true;
+  bracketSession.playing = false;
+  bracketSession.current = null;
+  bracketSession.lastOutcome = null;
+  saveBracket();
+  renderBracketBoard();
+  announce("THE PHILLY OPEN", `${bracket.size} ENTER · ONE TAKES THE STREET`, 1.4);
+  return bracket;
+}
+
+function renderBracketBoard() {
+  const bracket = bracketSession.bracket;
+  if (!bracket) {
+    renderBracketSetup(true);
+    return;
+  }
+  $("#bracketSetup").hidden = true;
+  const complete = bracketComplete(bracket);
+  $("#bracketBoard").hidden = complete;
+  $("#bracketCeremony").hidden = !complete;
+  $("#bracketResetButton").hidden = false;
+  const next = nextBracketMatch(bracket);
+  const nextButton = $("#bracketNextButton");
+  nextButton.hidden = !next;
+  if (next) {
+    const names = next.slots.map((slot) => bracketEntrantName(slot));
+    nextButton.textContent = `NEXT MATCH · ${names[0]} VS ${names[1]} →`;
+    $("#bracketStatus").textContent = `${next.roundName} · MATCH ${next.index + 1}`;
+    $("#bracketEyebrow").textContent = `SINGLE ELIMINATION · ${bracket.playedMatches} OF ${bracket.size - 1} MATCHES DECIDED`;
+  }
+  if (complete) {
+    renderBracketCeremony();
+    return;
+  }
+  $("#bracketBoard").innerHTML = bracket.rounds.map((round, roundIndex) => `
+    <div class="bracket-round">
+      <div class="bracket-round-name">${bracketRoundName(bracket.size, roundIndex)}</div>
+      ${round.map((match, matchIndex) => {
+        const playable = next && next.round === roundIndex && next.index === matchIndex;
+        const classes = ["bracket-match", playable ? "playable" : "", match.winner >= 0 ? "decided" : ""].filter(Boolean).join(" ");
+        const slots = match.slots.map((slot) => {
+          if (slot < 0) return '<span class="bracket-slot tbd"><i class="slot-seed">—</i><span class="slot-name">TBD</span><em class="slot-kind"></em></span>';
+          const entrant = bracket.entrants[slot];
+          const outcome = match.winner < 0 ? "" : match.winner === slot ? "won" : "lost";
+          const kind = entrant.human ? entrant.label : `CPU ${entrant.difficulty.toUpperCase()}`;
+          return `<span class="bracket-slot ${outcome}"><i class="slot-seed">#${entrant.seed}</i><span class="slot-name">${bracketEntrantName(slot)}</span><em class="slot-kind">${kind}</em></span>`;
+        }).join("");
+        return `<div class="${classes}" data-bracket-match="${roundIndex}-${matchIndex}">${slots}</div>`;
+      }).join("")}
+    </div>`).join("");
+}
+
+function renderBracketCeremony() {
+  const bracket = bracketSession.bracket;
+  if (!bracket || bracket.champion < 0) return;
+  const champion = bracket.entrants[bracket.champion];
+  const def = bracketEntrantDef(bracket.champion);
+  $("#bracketEyebrow").textContent = "THE STREET HAS A NAME ON IT";
+  $("#bracketChampionArt").src = `assets/fighters/${champion.fighter}.webp`;
+  $("#bracketChampionName").textContent = bracketEntrantName(bracket.champion);
+  const quote = def ? selectWinQuote(def.id, {}, 0.237, "") : null;
+  $("#bracketChampionQuote").textContent = quote?.text?.toUpperCase() || "THE STREET MOVED FIRST.";
+  $("#bracketChampionLabel").textContent = champion.human ? `${champion.label} · CHAMPION` : "CHAMPION";
+  // Credits-style roll of every decided match, latest round last.
+  $("#bracketCeremonyRoll").innerHTML = bracket.rounds.map((round, roundIndex) => round
+    .filter((match) => match.winner >= 0)
+    .map((match) => {
+      const loser = match.slots[0] === match.winner ? match.slots[1] : match.slots[0];
+      const isFinal = roundIndex === bracket.rounds.length - 1;
+      return `<div class="roll-line${isFinal ? " champ" : ""}">${bracketRoundName(bracket.size, roundIndex)} · <b>${bracketEntrantName(match.winner)}</b> OVER ${bracketEntrantName(loser)}</div>`;
+    }).join("")).join("");
+  $("#bracketStatus").textContent = "CHAMPION CROWNED · NEW OPEN TO RUN IT BACK";
+}
+
+function startBracketMatch() {
+  const bracket = bracketSession.bracket;
+  const next = bracket ? nextBracketMatch(bracket) : null;
+  if (!next || bracketSession.playing) return false;
+  // Seat order: a lone human always takes side 0 (the shared P1 controls).
+  let sides = [next.slots[0], next.slots[1]];
+  const [top, bottom] = next.slots.map((slot) => bracket.entrants[slot]);
+  if (!top.human && bottom.human) sides = [next.slots[1], next.slots[0]];
+  const seated = sides.map((slot) => bracket.entrants[slot]);
+  bracketSession.current = { round: next.round, index: next.index, slots: [...next.slots], sides };
+  bracketSession.matchCpu = seated.map((entrant) => !entrant.human);
+  bracketSession.lastOutcome = null;
+  const bothCpu = bracketSession.matchCpu[0] && bracketSession.matchCpu[1];
+  state.mode = bothCpu ? "tournament" : "versus";
+  state.arcadeRun = null;
+  state.survivalRun = null;
+  state.teamBattle = null;
+  dailySession.active = false;
+  endScoreRun();
+  state.picks = seated.map((entrant) => rosterIndexById(entrant.fighter));
+  const stageIds = Object.keys(stages);
+  state.stage = stageIds[bracket.playedMatches % stageIds.length];
+  bracketSession.playing = true;
+  netFxDebug.bracketMatches += 1;
+  startMatch(true);
+  // Per-seat CPU difficulty straight from the entrant card (survival pattern).
+  state.fighters.forEach((fighter, side) => {
+    if (bracketSession.matchCpu[side]) {
+      fighter.aiBrain = createAiBrain(seated[side].difficulty || "street");
+    }
+  });
+  announce(next.roundName, `${bracketEntrantName(sides[0])} VS ${bracketEntrantName(sides[1])} · THE PHILLY OPEN`, 1.3);
+  updateStageUI();
+  updateHud();
+  return true;
+}
+
+// resolveMatchResult meta hook — fold the finished match into the bracket
+// BEFORE showResult reads the outcome (never during resimulation).
+function recordBracketMatchResult(winnerSide) {
+  const current = bracketSession.current;
+  const bracket = bracketSession.bracket;
+  if (!current || !bracket) return;
+  const winnerEntrant = current.sides[winnerSide === 1 ? 1 : 0];
+  const slotSide = current.slots.indexOf(winnerEntrant);
+  const outcome = slotSide >= 0 ? reportBracketResult(bracket, current.round, current.index, slotSide) : null;
+  bracketSession.playing = false;
+  bracketSession.current = null;
+  if (!outcome) return;
+  bracketSession.lastOutcome = { ...outcome, roundName: bracketRoundName(bracket.size, outcome.round) };
+  if (outcome.complete) netFxDebug.bracketChampions += 1;
+  saveBracket();
+}
+
+// Headless fast-forward for a CPU-vs-CPU bracket match (QA path and the
+// tournamentMatrix pattern): steps the real deterministic sim to the result.
+function fastForwardBracketMatch(maxSeconds = 400) {
+  if (!bracketSession.playing || state.screen !== "fight") return false;
+  if (!(bracketSession.matchCpu[0] && bracketSession.matchCpu[1])) return false;
+  const maxFrames = Math.max(60, Math.floor(maxSeconds * SIMULATION_HZ));
+  for (let frame = 0; frame < maxFrames && state.screen === "fight"; frame += 1) {
+    simulationClock.stepOnce(runSimulationStep);
+  }
+  state.simulationTick = simulationClock.tick;
+  return state.screen !== "fight";
+}
+
+function continueBracketAfterResult() {
+  if (!bracketSession.bracket) return;
+  bracketSession.lastOutcome = null;
+  showScreen("bracket");
+  renderBracketBoard();
+  if (bracketComplete(bracketSession.bracket)) {
+    const name = bracketEntrantName(bracketSession.bracket.champion);
+    announce("CHAMPION", `${name} TAKES THE PHILLY OPEN`, 1.6);
+  }
+}
+
+function resetPhillyOpen() {
+  bracketSession.bracket = null;
+  bracketSession.active = false;
+  bracketSession.playing = false;
+  bracketSession.current = null;
+  bracketSession.lastOutcome = null;
+  clearSavedBracket();
+  renderBracketSetup(true);
 }
 
 function delayChoiceFrames(choice) {
@@ -4223,6 +5079,8 @@ function stopReplayPlayback() {
   replayPlayback.burns = [];
   replayPlayback.header = null;
   replayPlayback.record = null;
+  replayPlayback.spectate = false;
+  $("#spectateHud").hidden = true;
   if (saved) {
     state.matchSerial = saved.matchSerial;
     state.stageWeaponsEnabled = saved.stageWeaponsEnabled;
@@ -4237,6 +5095,13 @@ function stopReplayPlayback() {
 // The replay finished through the real resolveMatchResult pipeline — verify
 // determinism against the recorded outcome and land back in the theater.
 function finishReplayPlayback(winner) {
+  // Wave 19: a spectated match reached its natural result — clean end card on
+  // the online screen instead of the theater.
+  if (replayPlayback.spectate) {
+    const name = roster[state.picks[winner === 1 ? 1 : 0]]?.name || `P${(winner === 1 ? 1 : 0) + 1}`;
+    endSpectate(`BROADCAST COMPLETE · ${name} WINS`);
+    return;
+  }
   const record = replayPlayback.record;
   const outcome = {
     winner: winner === 1 ? 1 : 0,
@@ -4384,8 +5249,9 @@ function stepReplayFrame() {
   simulatePreparedGameTick(SIMULATION_STEP_SECONDS, bitsToInput(bits0), bitsToInput(bits1));
   playback.index += 1;
   // Watchdog: a stream that somehow never reaches a result stops a minute
-  // past its own end instead of looping forever.
-  if (playback.active && playback.index > playback.frames0.length + 3600) {
+  // past its own end instead of looping forever. Live spectate streams are
+  // buffer-bounded in simulateReplayTick, so the watchdog never applies.
+  if (playback.active && !playback.spectate && playback.index > playback.frames0.length + 3600) {
     exitReplayPlayback("REPLAY ENDED · NO RESULT IN STREAM");
   }
 }
@@ -4403,8 +5269,27 @@ function simulateReplayTick() {
     playback.carry -= ticks;
   }
   for (let tick = 0; tick < ticks && playback.active && state.screen === "fight"; tick += 1) {
+    // Wave 19: a live spectator never steps past the confirmed buffer — it
+    // holds (BUFFERING) until the next batch lands, which is what keeps the
+    // spectator a beat behind by design.
+    if (playback.spectate && playback.index >= playback.frames0.length) {
+      spectatorSession.buffering = !spectatorSession.feed.ended;
+      // Drained a finished broadcast without a sim result (host quit mid-match).
+      if (spectatorSession.feed.ended && playback.active) {
+        endSpectate(spectatorSession.feed.endReason === "host-left"
+          ? "BROADCAST ENDED · THE HOST LEFT THE ARENA"
+          : "BROADCAST ENDED");
+        return;
+      }
+      break;
+    }
     stepReplayFrame();
+    if (playback.spectate) {
+      netFxDebug.spectateFramesPlayed += 1;
+      spectatorSession.buffering = false;
+    }
   }
+  if (playback.active && playback.spectate) updateSpectateHud();
   updateReplayHudFrame();
 }
 
@@ -4433,6 +5318,14 @@ function toggleReplayPause(paused = !replayPlayback.paused) {
 function updateReplayHud() {
   const hud = $("#replayHud");
   if (!hud) return;
+  // Wave 19: live spectate swaps the theater controls for the badge — a
+  // spectator can neither pause nor scrub someone else's match.
+  if (replayPlayback.spectate) {
+    hud.hidden = true;
+    updateSpectateHud();
+    return;
+  }
+  updateSpectateHud();
   const visible = replayPlayback.active && state.screen === "fight";
   hud.hidden = !visible;
   if (!visible) return;
@@ -4553,7 +5446,8 @@ function handleReplayListClick(event) {
 // The set the CURRENT match belongs to, or null when set play is inert.
 function activeSetState() {
   if (state.mode === "online" && onlineSession.matchConfig) return onlineSession.set;
-  if (state.mode === "versus" && !state.teamBattle && offlineSet) return offlineSet;
+  // Wave 19: bracket matches never fold into the casual versus scoreboard.
+  if (state.mode === "versus" && !state.teamBattle && !bracketSession.playing && offlineSet) return offlineSet;
   return null;
 }
 
@@ -6399,6 +7293,8 @@ function roundsToWinValue() {
 function activeMutatorsForMatch() {
   if (state.mode === "online") return state.mutators;
   if (dailySession.active && state.mode === "arcade") return dailySession.plan?.mutator ? [dailySession.plan.mutator] : [];
+  // Wave 19: THE PHILLY OPEN runs clean tournament rules — no House Rules.
+  if (bracketSession.playing) return [];
   if (state.mode === "versus" || state.mode === "team") return pendingMutators;
   return [];
 }
@@ -7233,6 +8129,9 @@ function updateStageUI() {
 
 function startMatch(resetSet = true) {
   cancelFightAnnouncement();
+  // Wave 19: any match that is NOT a bracket bout clears the pending bracket
+  // outcome so the result screen never wears the wrong buttons.
+  if (!bracketSession.playing) bracketSession.lastOutcome = null;
   if (!(state.mode === "demo" && demoSession.attract)) unlockAudio();
   // Release 1.6: AUTO mode now picks the stage-matched track instead of
   // cycling the jukebox. Demo/attract keeps whatever was already playing.
@@ -7246,7 +8145,7 @@ function startMatch(resetSet = true) {
   state.qaManualMode = false;
   // R2.1 STREETS: offline versus set prep. A fresh FT pick (or a finished
   // set) rebuilds the scoreboard; matching live sets carry across rematches.
-  if (state.mode === "versus" && !state.teamBattle && resetSet) {
+  if (state.mode === "versus" && !state.teamBattle && !bracketSession.playing && resetSet) {
     if (pendingSetLength > 1 && (!offlineSet || offlineSet.length !== pendingSetLength || setComplete(offlineSet))) {
       offlineSet = createSetState(pendingSetLength);
     } else if (pendingSetLength <= 1) {
@@ -7433,6 +8332,11 @@ function startOnlineMatch(config) {
   // Arm the confirmed-input recorder BEFORE the session exists so frame 0 of
   // the step callback is already observed.
   beginReplayRecording("online");
+  // Wave 19: fresh match, fresh broadcast frontier. The header goes out with
+  // the first pump once a watcher has said hello.
+  spectateHost.lastSentFrame = 0;
+  spectateHost.headerSentFor = "";
+  if (onlineSession.role === "host" && spectateHost.wantsStream) sendSpectateHeader();
   onlineSession.rollback = createOnlineRollback(config, 0);
   // Pre-fight 3-2-1 sync countdown over the intro (pure presentation).
   beginSyncCountdown();
@@ -7676,6 +8580,9 @@ function updateIntroDialogue() {
 // callouts and team walk-ins entirely.
 function sideIsCpuControlled(side) {
   if (state.mode === "demo" || state.mode === "tournament") return true;
+  // Wave 19: THE PHILLY OPEN — each seat's humanity comes from the bracket
+  // entrant list (a lone human always sits on side 0 for hot-seat play).
+  if (state.mode === "versus" && bracketSession.playing) return bracketSession.matchCpu[side];
   if (side !== 1) return false;
   return state.mode === "arcade"
     || state.mode === "survival"
@@ -8407,6 +9314,25 @@ function showResult(winner) {
     updateOnlineRematchUi();
     persistOnlineResume(true);
   }
+  // Wave 19: a decided PHILLY OPEN match reuses this whole victory treatment,
+  // then routes back to the bracket — the loop buttons make no sense here.
+  const bracketOutcome = bracketSession.lastOutcome;
+  $("#bracketContinueButton").hidden = !bracketOutcome;
+  if (bracketOutcome) {
+    $("#resultEyebrow").textContent = bracketOutcome.complete
+      ? "THE PHILLY OPEN · CHAMPIONSHIP DECIDED"
+      : `THE PHILLY OPEN · ${bracketOutcome.roundName}`;
+    $("#bracketContinueButton").textContent = bracketOutcome.complete
+      ? "CROWN THE CHAMPION →"
+      : "BACK TO THE BRACKET →";
+    $("#rematchButton").hidden = true;
+    $("#newStageButton").hidden = true;
+    $("#reselectButton").hidden = true;
+    $("#changeFightersButton").hidden = true;
+  } else {
+    $("#rematchButton").hidden = false;
+    $("#reselectButton").hidden = false;
+  }
 }
 
 function showSameFightersStageSelect() {
@@ -8618,8 +9544,14 @@ function resolveMatchResult(winner) {
   // R2.1 STREETS: bank the finished match into the replay ring and fold the
   // first-to-N set (meta paths — observation only, never during resimulation).
   if (!rollbackResimulating) {
+    // Wave 19: close the spectator broadcast BEFORE the recorder is banked
+    // (finalize resets the frame map the flush reads).
+    if (state.mode === "online") flushSpectateAtResult(winner);
     finalizeReplayRecording(winner);
     foldSetResult(winner);
+    // Wave 19: fold a PHILLY OPEN bout into the bracket before showResult
+    // reads the outcome (meta only — never during resimulation).
+    if (bracketSession.playing && bracketSession.current) recordBracketMatchResult(winner);
     // Loser-picks-stage latch (side 0 is always the host seat online).
     if (state.mode === "online" && onlineSession.matchConfig) {
       onlineSession.lastLoserRole = winner === 0 ? "guest" : "host";
@@ -12282,6 +13214,8 @@ function simulateOfflineGameTick(dt) {
     || state.mode === "survival"
     || (state.mode === "team" && state.teamBattle?.cpu)
     || bothCpu
+    // Wave 19: a bracket versus match with a CPU in the P2 seat.
+    || (state.mode === "versus" && bracketSession.playing && bracketSession.matchCpu[1])
     || (state.mode === "training" && trainingDummy === null);
   let input1 = readQaInput(1)
     || (cpuOpponent
@@ -12354,6 +13288,9 @@ function simulateOnlineGameTick() {
     onlineSession.lastPersistedFrame = metrics.frame;
     persistOnlineResume(true);
   }
+  // Wave 19: relay confirmed frames to any spectator seats (host only, low
+  // cadence, chunked far inside the signaling rate/size caps).
+  maybePumpSpectate(metrics);
   // R2.1 STREETS: connection-meter recent window (~2s). Depth reads the last
   // rollback's size while it is fresh; stalls are the delta over the window.
   connMeter.recentRollbackDepth = metrics.frame - metrics.lastRollbackFrame <= 120 ? metrics.lastRollbackFrames : 0;
@@ -21253,12 +22190,29 @@ function menuPadLoop() {
 $$('[data-mode]').forEach((button) => button.addEventListener("click", () => startSelect(button.dataset.mode)));
 $("#onlineButton").addEventListener("click", openOnlineLobby);
 $("#demoButton").addEventListener("click", () => startDemo());
+// Wave 19: THE PHILLY OPEN bracket screen.
+$("#phillyOpenButton")?.addEventListener("click", showPhillyOpen);
+$("#bracketSize4Button")?.addEventListener("click", () => { bracketSession.setupSize = 4; renderBracketSetup(true); });
+$("#bracketSize8Button")?.addEventListener("click", () => { bracketSession.setupSize = 8; renderBracketSetup(true); });
+$("#bracketStartButton")?.addEventListener("click", () => startPhillyOpenBracket());
+$("#bracketNextButton")?.addEventListener("click", () => startBracketMatch());
+$("#bracketResetButton")?.addEventListener("click", resetPhillyOpen);
+$("#bracketContinueButton")?.addEventListener("click", continueBracketAfterResult);
 $("#onlineCreateButton").addEventListener("click", createOnlineRoom);
 $("#onlineJoinButton").addEventListener("click", joinOnlineRoom);
 $("#onlineInviteInput").addEventListener("keydown", (event) => {
   if (event.key === "Enter") joinOnlineRoom();
 });
 $("#onlineCopyButton").addEventListener("click", copyOnlineInvite);
+// Wave 19: QR/native-share invites, the watch link, and the Street List.
+$("#onlineShareButton")?.addEventListener("click", shareOnlineInvite);
+$("#onlineWatchLinkButton")?.addEventListener("click", copyOnlineWatchLink);
+$("#streetPostButton")?.addEventListener("click", postStreetChallenge);
+$("#streetListRefreshButton")?.addEventListener("click", refreshStreetList);
+$("#streetListRows")?.addEventListener("click", (event) => {
+  const claim = event.target.closest?.("[data-street-claim]");
+  if (claim) claimStreetChallenge(Number(claim.dataset.streetClaim));
+});
 $("#onlineFighterSelect").addEventListener("change", (event) => {
   if (!onlineFighterIds.has(event.target.value)) return;
   onlineSession.lobby.localFighter = event.target.value;
@@ -23224,6 +24178,215 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       onlineSession.lobby.remoteQol = saved.remoteQol;
       onlineSession.set = saved.set;
       return dom;
+    },
+    // --- Wave 19 — ONLINE SOCIAL probes ------------------------------------
+    // Stub a hosted room (no network) so the QR block, share row and Street
+    // List post row all render for screenshots. The QR is then self-decoded.
+    qrPreview(url = "https://jz237.github.io/games/2026-08-20/final-blow/#online=join&room=QaProbeRoom0000000000A&key=QaProbeKey00000000000000000000000000000000B") {
+      state.mode = "online";
+      onlineSession.role = "host";
+      onlineSession.roomId = parseInvite(url)?.roomId || "QaProbeRoom0000000000A";
+      onlineSession.inviteUrl = url;
+      onlineSession.watchToken = "QaProbeWatch000000000000000000000000000000W";
+      onlineSession.expiresAt = Date.now() + 14 * 60_000;
+      onlineSession.credentials = {
+        roomId: onlineSession.roomId,
+        role: "host",
+        token: "QaProbeHost0000000000000000000000000000000H",
+        guestToken: parseInvite(url)?.token || "QaProbeKey00000000000000000000000000000000B",
+        watchToken: onlineSession.watchToken,
+        expiresAt: onlineSession.expiresAt,
+      };
+      showScreen("online");
+      renderOnlineRoom();
+      return window.__finalBlowQa.qrProbe();
+    },
+    // Decode the painted matrix with our own reader: proves the module output
+    // scans back to the exact invite URL (RS syndromes verified inside).
+    qrProbe() {
+      if (!onlineQrState.matrix) return { rendered: false };
+      const decoded = decodeQr(onlineQrState.matrix);
+      return {
+        rendered: !$("#onlineQrBlock").hidden,
+        version: onlineQrState.version,
+        size: onlineQrState.size,
+        decodedText: decoded.text,
+        matchesInvite: decoded.text === onlineQrState.text,
+        shareButtonAvailable: typeof navigator.share === "function",
+        watchLinkVisible: !$("#onlineWatchLinkButton").hidden,
+        renders: netFxDebug.qrRenders,
+      };
+    },
+    // Street List panel driven by a stubbed board (no worker required).
+    streetListStub(rows = null) {
+      streetListUi.stubbed = true;
+      streetListUi.lastError = "";
+      streetListUi.rows = sanitizeChallengeList({ challenges: rows ?? [
+        { id: "QaChalSomerset0000000A", tag: "somerset", fighter: "deathblow", createdAt: Date.now() - 30_000, expiresAt: Date.now() + 600_000 },
+        { id: "QaChalKensington00000B", tag: "kensington", fighter: "benny", createdAt: Date.now() - 150_000, expiresAt: Date.now() + 500_000 },
+        { id: "QaChalPassyunk0000000C", tag: "passyunk", fighter: "devil", createdAt: Date.now() - 540_000, expiresAt: Date.now() + 300_000 },
+      ] }, Date.now());
+      state.mode = "online";
+      showScreen("online");
+      renderStreetList();
+      return window.__finalBlowQa.streetList();
+    },
+    streetList() {
+      return {
+        rows: streetListUi.rows.map((row) => ({ id: row.id, tag: row.tag, fighter: row.fighter, ageLabel: row.ageLabel })),
+        renderedRows: $("#streetListRows").querySelectorAll(".street-row").length,
+        status: $("#streetListStatus").textContent,
+        error: streetListUi.lastError,
+        counters: {
+          refreshes: netFxDebug.streetRefreshes,
+          posts: netFxDebug.streetPosts,
+          claims: netFxDebug.streetClaims,
+        },
+      };
+    },
+    // Spectator pipeline WITHOUT sockets: header handoff -> replay-driver
+    // seeding -> batched confirmed frames -> buffer-bounded stepping. The
+    // frames come from a banked replay so the stream is a real match.
+    spectateStub(replayIndex = 0) {
+      const record = loadReplayRing()[replayIndex];
+      if (!record) throw new Error(`No replay at index ${replayIndex} to source frames from`);
+      if (record.header.kind !== "online") {
+        // Offline replays carry rng burns the spectate path does not use;
+        // QA scripted fights have zero burns, so the streams stay valid.
+        const burns = decodeReplayStreams(record).burns;
+        if (burns.some((value) => value > 0)) throw new Error("Pick a replay without AI rng burns");
+      }
+      const streams = decodeReplayStreams(record);
+      const header = buildSpectateHeader({
+        matchId: "qa-spectate-stub-match",
+        seed: record.header.seed,
+        picks: record.header.picks,
+        palettes: record.header.palettes,
+        stage: record.header.stage,
+        inputDelay: record.header.inputDelay,
+        mutators: record.header.mutators,
+      }, { gameVersion: GAME_VERSION, protocol: ROLLBACK_PROTOCOL_VERSION });
+      // Offline sources seeded differently — mirror the record's real context
+      // by replaying through the ONLINE seeding contract only when it was an
+      // online record; otherwise the QA stub just proves plumbing, not sim
+      // equivalence, and the drained end screen is the assertion target.
+      spectatorSession.active = true;
+      spectatorSession.feed = createSpectatorFeed();
+      feedSpectateHeader(spectatorSession.feed, header);
+      const started = startSpectatePlayback();
+      return {
+        started,
+        frames: { p0: streams.frames0, p1: streams.frames1 },
+        spectate: window.__finalBlowQa.spectate(),
+      };
+    },
+    spectateStubFrames(frames0, frames1, start = null) {
+      const feed = spectatorSession.feed;
+      const from = start === null ? feed.frames0.length : start;
+      const batch = encodeSpectateBatch(feed.header?.matchId || "", from, frames0, frames1);
+      const result = feedSpectateBatch(feed, batch);
+      if (result.accepted && result.appended) netFxDebug.spectateBatchesReceived += 1;
+      updateSpectateHud();
+      return { ...result, buffered: feed.frames0.length, spectate: window.__finalBlowQa.spectate() };
+    },
+    spectateStubEnd(winner = null) {
+      feedSpectateEnd(spectatorSession.feed, encodeSpectateEnd(spectatorSession.feed.header?.matchId || "", { reason: "ended", winner }));
+      return window.__finalBlowQa.spectate();
+    },
+    spectate() {
+      return {
+        host: { ...spectateHost },
+        watcher: {
+          active: spectatorSession.active,
+          playing: spectatorSession.playing,
+          buffering: spectatorSession.buffering,
+          buffered: spectatorSession.feed.frames0.length,
+          index: replayPlayback.index,
+          spectatePlayback: replayPlayback.spectate,
+          matchId: spectatorSession.feed.header?.matchId || "",
+          ended: spectatorSession.feed.ended,
+          endReason: spectatorSession.feed.endReason,
+        },
+        hudVisible: !$("#spectateHud").hidden,
+        hudDetail: $("#spectateHudDetail").textContent,
+        counters: {
+          headersSent: netFxDebug.spectateHeadersSent,
+          batchesSent: netFxDebug.spectateBatchesSent,
+          framesSent: netFxDebug.spectateFramesSent,
+          batchesReceived: netFxDebug.spectateBatchesReceived,
+          framesPlayed: netFxDebug.spectateFramesPlayed,
+          ends: netFxDebug.spectateEnds,
+        },
+      };
+    },
+    spectateEndStub(message = "BROADCAST ENDED · QA") {
+      endSpectate(message);
+      return { screen: state.screen, status: $("#onlineStatusDetail").textContent };
+    },
+    // The host's watch link (empty for guests / pre-wave workers).
+    watchUrl() {
+      if (!onlineSession.watchToken || !onlineSession.roomId) return "";
+      return buildWatchUrl({ roomId: onlineSession.roomId, watchToken: onlineSession.watchToken });
+    },
+    // THE PHILLY OPEN probes.
+    bracketStart(entrants = null, size = 4) {
+      resetPhillyOpen();
+      bracketSession.setupSize = size === 8 ? 8 : 4;
+      showScreen("bracket");
+      renderBracketSetup(true);
+      const defaults = entrants ?? Array.from({ length: bracketSession.setupSize }, (_, index) => ({
+        fighter: roster[index % roster.length].id,
+        human: false,
+        difficulty: "street",
+      }));
+      startPhillyOpenBracket(defaults);
+      return window.__finalBlowQa.bracket();
+    },
+    bracketNext() {
+      if (!startBracketMatch()) throw new Error("No playable bracket match");
+      return window.__finalBlowQa.bracket();
+    },
+    bracketFast(maxSeconds = 400) {
+      const finished = fastForwardBracketMatch(maxSeconds);
+      return { finished, ...window.__finalBlowQa.bracket() };
+    },
+    bracketContinue() {
+      continueBracketAfterResult();
+      return window.__finalBlowQa.bracket();
+    },
+    bracketOpen() {
+      showPhillyOpen();
+      return window.__finalBlowQa.bracket();
+    },
+    bracket() {
+      return {
+        screen: state.screen,
+        mode: state.mode,
+        playing: bracketSession.playing,
+        matchCpu: [...bracketSession.matchCpu],
+        lastOutcome: bracketSession.lastOutcome ? { ...bracketSession.lastOutcome } : null,
+        snapshot: bracketSnapshot(bracketSession.bracket),
+        saved: Boolean(localStorage.getItem(BRACKET_STORAGE_KEY)),
+        dom: {
+          setupVisible: !$("#bracketSetup").hidden,
+          boardVisible: !$("#bracketBoard").hidden,
+          ceremonyVisible: !$("#bracketCeremony").hidden,
+          nextLabel: $("#bracketNextButton").hidden ? "" : $("#bracketNextButton").textContent,
+          status: $("#bracketStatus").textContent,
+          championName: $("#bracketChampionName").textContent,
+          continueVisible: !$("#bracketContinueButton").hidden,
+          resultEyebrow: $("#resultEyebrow").textContent,
+        },
+        counters: {
+          matches: netFxDebug.bracketMatches,
+          champions: netFxDebug.bracketChampions,
+          resumes: netFxDebug.bracketResumes,
+        },
+      };
+    },
+    bracketClear() {
+      resetPhillyOpen();
+      return { saved: Boolean(localStorage.getItem(BRACKET_STORAGE_KEY)) };
     },
   };
 }
