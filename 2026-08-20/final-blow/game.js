@@ -11934,36 +11934,143 @@ function fatalityPizzaCanvas() {
   return c;
 }
 
-// Dimensional blood droplet: dark-cored red gradient with an off-centre
-// specular kiss, drawn as 3 fused lobes so no two rotations read as the same
-// stamp. Replaces the flat clipart ellipses in the 3D lens-blood pass.
+// Round-4 blood grammar (Kimberly-paint reference): a DIRECTIONAL teardrop —
+// fat glossy head pointing +x, comma tail whipping back along -x — so every
+// draw site can aim it along a velocity. Deep arterial reds (no browns), a
+// hot core inside the head, a dark wet rim, one bright specular kiss.
 function fatalityDropletCanvas() {
   if (fatalityDressing.droplet) return fatalityDressing.droplet;
   const size = 96;
   const c = document.createElement("canvas");
   c.width = c.height = size;
   const p = c.getContext("2d");
-  const cx = size / 2;
-  const lobe = (x, y, r) => {
-    const g = p.createRadialGradient(x - r * 0.2, y - r * 0.25, r * 0.1, x, y, r);
-    g.addColorStop(0, "rgba(196,32,28,0.98)");
-    g.addColorStop(0.55, "rgba(150,12,16,0.96)");
-    g.addColorStop(0.85, "rgba(96,4,10,0.9)");
-    g.addColorStop(1, "rgba(64,0,8,0)");
-    p.fillStyle = g;
+  // comma body: tail tip (12,47) -> top edge -> around the head -> sagging
+  // bottom edge back to the tip.
+  const body = () => {
     p.beginPath();
-    p.arc(x, y, r, 0, Math.PI * 2);
-    p.fill();
+    p.moveTo(12, 47);
+    p.bezierCurveTo(30, 37, 44, 31, 60, 31);
+    p.arc(60, 48, 17, -Math.PI / 2, Math.PI / 2);
+    p.bezierCurveTo(42, 66, 26, 57, 12, 47);
+    p.closePath();
   };
-  lobe(cx, cx, size * 0.34);
-  lobe(cx + size * 0.16, cx + size * 0.1, size * 0.22);
-  lobe(cx - size * 0.14, cx + size * 0.16, size * 0.16);
-  // glossy kiss
-  p.fillStyle = "rgba(255,182,170,0.8)";
+  const grad = p.createRadialGradient(64, 43, 3, 60, 48, 42);
+  grad.addColorStop(0, "#f3312c");
+  grad.addColorStop(0.4, "#c00a18");
+  grad.addColorStop(0.78, "#7c0411");
+  grad.addColorStop(1, "#4a020c");
+  p.fillStyle = grad;
+  body();
+  p.fill();
+  // dark wet rim
+  p.strokeStyle = "rgba(40,0,8,0.85)";
+  p.lineWidth = 2.4;
+  body();
+  p.stroke();
+  // hot arterial core inside the head
+  const core = p.createRadialGradient(63, 44, 1, 63, 44, 11);
+  core.addColorStop(0, "rgba(255,92,72,0.85)");
+  core.addColorStop(1, "rgba(255,92,72,0)");
+  p.fillStyle = core;
   p.beginPath();
-  p.ellipse(cx - size * 0.1, cx - size * 0.12, size * 0.07, size * 0.045, -0.6, 0, Math.PI * 2);
+  p.arc(63, 44, 11, 0, Math.PI * 2);
+  p.fill();
+  // specular kiss + glint on the head's upper-left (lamp side)
+  p.fillStyle = "rgba(255,226,216,0.92)";
+  p.beginPath();
+  p.ellipse(56, 40, 6.2, 3.4, -0.5, 0, Math.PI * 2);
+  p.fill();
+  p.fillStyle = "rgba(255,255,255,0.95)";
+  p.beginPath();
+  p.arc(66, 38, 1.9, 0, Math.PI * 2);
+  p.fill();
+  // faint warm floor-bounce along the belly
+  p.fillStyle = "rgba(255,122,88,0.28)";
+  p.beginPath();
+  p.ellipse(58, 58, 9, 2.6, 0.15, 0, Math.PI * 2);
   p.fill();
   fatalityDressing.droplet = c;
+  return c;
+}
+
+// Depth layering support: the same teardrop rendered through a tiny buffer so
+// it comes back soft-edged — the FAR band of the gore field draws this one,
+// while near droplets stay sharp (big sharp near, small soft far).
+function fatalityDropletSoftCanvas() {
+  if (fatalityDressing.dropletSoft) return fatalityDressing.dropletSoft;
+  const sharp = fatalityDropletCanvas();
+  const tiny = document.createElement("canvas");
+  tiny.width = tiny.height = 20;
+  tiny.getContext("2d").drawImage(sharp, 0, 0, 20, 20);
+  const c = document.createElement("canvas");
+  c.width = c.height = sharp.width;
+  const p = c.getContext("2d");
+  p.imageSmoothingEnabled = true;
+  p.globalAlpha = 0.85;
+  p.drawImage(tiny, 0, 0, c.width, c.height);
+  fatalityDressing.dropletSoft = c;
+  return c;
+}
+
+// Floor-hit splat: an irregular wet blot with RADIAL TAILS and satellite
+// beads — what a droplet becomes the frame after it lands. Squashed by the
+// caller onto the ground plane.
+function fatalitySplatCanvas() {
+  if (fatalityDressing.splat) return fatalityDressing.splat;
+  const size = 128;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const p = c.getContext("2d");
+  const cx = size / 2;
+  const hash = (n) => {
+    const s = Math.sin(n * 91.7 + 47.3) * 24634.5;
+    return s - Math.floor(s);
+  };
+  p.lineCap = "round";
+  // radial tails first (under the body): tapered strokes ending in beads
+  for (let tail = 0; tail < 7; tail += 1) {
+    const a = tail * 0.897 + hash(tail) * 0.5;
+    const len = size * (0.2 + hash(tail + 9) * 0.22);
+    const tx = cx + Math.cos(a) * len;
+    const ty = cx + Math.sin(a) * len;
+    p.strokeStyle = "rgba(122,4,17,0.9)";
+    p.lineWidth = 4.5 - hash(tail + 4) * 2;
+    p.beginPath();
+    p.moveTo(cx + Math.cos(a) * size * 0.1, cx + Math.sin(a) * size * 0.1);
+    p.quadraticCurveTo(cx + Math.cos(a) * len * 0.6, cx + Math.sin(a) * len * 0.6, tx, ty);
+    p.stroke();
+    p.fillStyle = "rgba(150,8,20,0.92)";
+    p.beginPath();
+    p.arc(tx, ty, 2.6 + hash(tail + 13) * 2, 0, Math.PI * 2);
+    p.fill();
+  }
+  // satellite micro-beads flung past the tails
+  for (let dot = 0; dot < 6; dot += 1) {
+    const a = dot * 1.13 + 0.4;
+    const len = size * (0.34 + hash(dot + 21) * 0.12);
+    p.fillStyle = "rgba(140,6,18,0.8)";
+    p.beginPath();
+    p.arc(cx + Math.cos(a) * len, cx + Math.sin(a) * len, 1.6 + hash(dot + 27) * 1.4, 0, Math.PI * 2);
+    p.fill();
+  }
+  // irregular blot body: overlapping lobes, dark rim tone under a hot centre
+  const lobes = [[0, 0, 0.17], [0.09, 0.04, 0.12], [-0.1, 0.05, 0.1], [0.03, -0.08, 0.11]];
+  for (const [ox, oy, r] of lobes) {
+    const g = p.createRadialGradient(cx + ox * size, cx + oy * size, 1, cx + ox * size, cx + oy * size, r * size);
+    g.addColorStop(0, "rgba(178,10,24,0.98)");
+    g.addColorStop(0.72, "rgba(112,4,16,0.95)");
+    g.addColorStop(1, "rgba(64,2,10,0.85)");
+    p.fillStyle = g;
+    p.beginPath();
+    p.arc(cx + ox * size, cx + oy * size, r * size, 0, Math.PI * 2);
+    p.fill();
+  }
+  // wet lamp streak
+  p.fillStyle = "rgba(255,206,196,0.55)";
+  p.beginPath();
+  p.ellipse(cx - size * 0.05, cx - size * 0.06, size * 0.07, size * 0.025, -0.4, 0, Math.PI * 2);
+  p.fill();
+  fatalityDressing.splat = c;
   return c;
 }
 
@@ -12139,9 +12246,17 @@ function drawFatalityPool(effect, alpha) {
       ctx.stroke();
       ctx.save();
       ctx.translate(dx, dy);
-      ctx.rotate(angle);
-      ctx.scale(1.35, 0.75); // squashed by the floor plane
-      ctx.drawImage(droplet, -size, -size, size * 2, size * 2);
+      if (drop % 4 === 0) {
+        // landed hit: splat with radial tails flattened onto the floor plane
+        ctx.rotate(angle * 0.3);
+        ctx.scale(1.3, 0.45);
+        ctx.drawImage(fatalitySplatCanvas(), -size * 1.4, -size * 1.4, size * 2.8, size * 2.8);
+      } else {
+        // teardrop head pointing away from the pool, tail meeting its run-tail
+        ctx.rotate(angle);
+        ctx.scale(1.3, 0.6);
+        ctx.drawImage(droplet, -size, -size, size * 2, size * 2);
+      }
       ctx.restore();
     }
   } else {
@@ -12177,9 +12292,44 @@ function drawFatalityPool(effect, alpha) {
 // and a cool night kiss on the other, matching the fighters' rendered-paint
 // language. Built lazily, cached; the classic 2D primitives are untouched.
 const severedLimbCache = new Map();
-function severedLimbPaintedCanvas(effect) {
+
+// Round-4 (ship-review item 2): the severed arm is composited from the
+// VICTIM'S OWN ATLAS PIXELS. Frame 10 of the shared 4x4 grammar is the fully
+// extended straight punch — a clean horizontal forearm + fist painted in the
+// fighter's own rendered language (Jez: bare muscled forearm, wrist wrap,
+// black glove, torn blue gi at the shoulder). HD sheet when ready (same map
+// the super close-up warms), SD atlas as fallback, null before either loads.
+function severedArmAtlasSource(victimId) {
+  const sd = fighterAtlases[victimId];
+  if (!sd?.complete || !sd.naturalWidth) return null;
+  const hdPath = `renderer/hd/${victimId}.webp`;
+  if (!superPortraitHdImages.has(hdPath)) {
+    const img = new Image();
+    img.src = hdPath;
+    superPortraitHdImages.set(hdPath, img);
+  }
+  const hd = superPortraitHdImages.get(hdPath);
+  const atlas = hd.complete && hd.naturalWidth ? hd : sd;
+  const cell = atlas.naturalWidth / 4;
+  const x0 = 2 * cell; // frame 10 = column 2, row 2
+  const y0 = 2 * cell;
+  return {
+    atlas,
+    tag: atlas === hd ? "hd" : "sd",
+    // crop: deltoid through glove knuckles (cell-normalised, grammar-level)
+    sx: x0 + cell * 0.4609, sy: y0 + cell * 0.1875,
+    sw: cell * 0.5234, sh: cell * 0.1953,
+    // arm axis anchors in atlas pixels: mid-shoulder -> fist knuckles
+    axAx: x0 + cell * 0.5312, axAy: y0 + cell * 0.2969,
+    axBx: x0 + cell * 0.9609, axBy: y0 + cell * 0.2734,
+  };
+}
+
+function severedLimbPaintedCanvas(effect, victimId = null, warmSide = 1) {
   const leg = effect.limb.endsWith("leg");
-  const key = `${leg ? "leg" : "arm"}:${effect.clothColor}:${effect.clothAccent}:${effect.color}:${effect.secondary}`;
+  const armSrc = !leg && victimId ? severedArmAtlasSource(victimId) : null;
+  const key = `${leg ? "leg" : "arm"}:${victimId || "-"}:${armSrc ? armSrc.tag : "painted"}:${warmSide}`
+    + `:${effect.clothColor}:${effect.clothAccent}:${effect.color}:${effect.secondary}`;
   if (severedLimbCache.has(key)) return severedLimbCache.get(key);
   const length = leg ? 92 : 72;
   const thickness = leg ? 30 : 23;
@@ -12267,6 +12417,248 @@ function severedLimbPaintedCanvas(effect) {
     p.moveTo(bootAt.x + thickness * 0.1, bootAt.y + thickness * 0.36);
     p.quadraticCurveTo(bootAt.x + thickness * 0.5, bootAt.y + thickness * 0.44, bootAt.x + thickness * 0.86, bootAt.y + thickness * 0.3);
     p.stroke();
+  } else if (armSrc) {
+    // --- HERO PROP: the victim's actual arm, cut off his sprite -------------
+    // The atlas punch-arm is clipped to a lumpy capsule along the limb axis,
+    // sheared off at the stump on a wedge plane, then dressed: torn sleeve
+    // lip with hanging threads, layered gore cross-section (dermis, muscle
+    // wedges, bone ring with marrow, wet sheen), warm wheel-glow rim on the
+    // screen-down edge (warmSide) and a night-cool key opposite.
+    const armPath = () => {
+      p.beginPath();
+      for (const [t, r] of [[-0.6, 0.64], [-0.48, 0.7], [-0.34, 0.68], [-0.2, 0.62], [-0.06, 0.56],
+        [0.08, 0.5], [0.2, 0.46], [0.3, 0.45], [0.4, 0.55], [0.48, 0.62]]) {
+        const at = axis(t);
+        p.moveTo(at.x + thickness * r, at.y);
+        p.arc(at.x, at.y, thickness * r, 0, Math.PI * 2);
+      }
+    };
+    // Cut plane sits INSIDE the sampled torn-sleeve band, so a strip of the
+    // victim's actual blue gi survives on the stump side of the sever.
+    const cutAt = axis(-0.56);
+    // 1) the sampled arm, axis-mapped shoulder->stump so the sever runs
+    //    through the torn gi sleeve and the glove stays at the far end
+    const dstA = axis(-0.52);
+    const dstB = axis(0.5);
+    const srcAngle = Math.atan2(armSrc.axBy - armSrc.axAy, armSrc.axBx - armSrc.axAx);
+    const dstAngle = Math.atan2(dstB.y - dstA.y, dstB.x - dstA.x);
+    const fit = Math.hypot(dstB.x - dstA.x, dstB.y - dstA.y)
+      / Math.hypot(armSrc.axBx - armSrc.axAx, armSrc.axBy - armSrc.axAy);
+    p.save();
+    armPath();
+    p.clip();
+    p.translate(dstA.x, dstA.y);
+    p.rotate(dstAngle - srcAngle);
+    p.scale(fit, fit * 1.16); // slight fatten across the axis: hero presence
+    p.drawImage(armSrc.atlas, armSrc.sx, armSrc.sy, armSrc.sw, armSrc.sh,
+      armSrc.sx - armSrc.axAx, armSrc.sy - armSrc.axAy, armSrc.sw, armSrc.sh);
+    p.restore();
+    // 2) light story clipped to the same silhouette: cool night key on the
+    //    screen-up edge, wheel-glow warmth on the screen-down edge, a soft
+    //    core shadow between them so the arm reads ROUND at play distance
+    p.save();
+    armPath();
+    p.clip();
+    const bboxX = -length * 0.82;
+    const bboxW = length * 1.64;
+    const coolG = p.createLinearGradient(0, -warmSide * thickness * 0.78, 0, -warmSide * thickness * 0.08);
+    coolG.addColorStop(0, "rgba(150,190,255,0.28)");
+    coolG.addColorStop(1, "rgba(150,190,255,0)");
+    p.fillStyle = coolG;
+    p.fillRect(bboxX, -thickness * 1.55, bboxW, thickness * 3.1);
+    const shadeG = p.createLinearGradient(0, warmSide * thickness * 0.05, 0, warmSide * thickness * 0.52);
+    shadeG.addColorStop(0, "rgba(26,8,16,0)");
+    shadeG.addColorStop(1, "rgba(26,8,16,0.3)");
+    p.fillStyle = shadeG;
+    p.fillRect(bboxX, -thickness * 1.55, bboxW, thickness * 3.1);
+    const warmG = p.createLinearGradient(0, warmSide * thickness * 0.3, 0, warmSide * thickness * 0.78);
+    warmG.addColorStop(0, "rgba(255,150,54,0)");
+    warmG.addColorStop(1, "rgba(255,158,58,0.5)");
+    p.fillStyle = warmG;
+    p.fillRect(bboxX, -thickness * 1.55, bboxW, thickness * 3.1);
+    p.restore();
+    // 3) shear everything past the cut plane off on a wedge angle
+    p.save();
+    p.translate(cutAt.x, cutAt.y);
+    p.rotate(-0.28);
+    p.globalCompositeOperation = "destination-out";
+    p.fillRect(-length * 1.4, -thickness * 2.4, length * 1.4, thickness * 4.8);
+    p.restore();
+    // 4) torn sleeve lip biting over the cut, threads whipping off the fray
+    p.save();
+    p.translate(cutAt.x, cutAt.y);
+    p.rotate(-0.28);
+    const fray = (n) => {
+      const s = Math.sin(n * 61.7 + 13.9) * 15731.3;
+      return s - Math.floor(s);
+    };
+    // gi-blue for the painted sleeve parts: the roster colour is a UI hue
+    // (Jez's is near-cyan), pulled hard toward the atlas gi's royal blue so
+    // painted cloth and sampled cloth read as the SAME garment
+    const gi = mixHex(effect.clothColor, "#31518f", 0.9);
+    // the surviving sleeve: a torn cloth band around the upper bicep, clear
+    // of the cross-section — jagged fist-side edge, fold shadows, a lit
+    // frayed lip on the cut side
+    p.beginPath();
+    p.moveTo(9.5, -thickness * 0.56);
+    for (let seg = 0; seg <= 6; seg += 1) {
+      p.lineTo(16.6 + (fray(seg + 51) - 0.5) * 5, -thickness * 0.56 + (seg / 6) * thickness * 1.12);
+    }
+    p.lineTo(9.5, thickness * 0.56);
+    p.closePath();
+    p.fillStyle = gi;
+    p.fill();
+    p.strokeStyle = shade(gi, 0.55); // fold shadows down the band
+    p.lineWidth = 1.1;
+    for (const fy of [-0.3, 0.02, 0.3]) {
+      p.beginPath();
+      p.moveTo(11.4, thickness * fy - 2.4);
+      p.quadraticCurveTo(13.8, thickness * fy + 0.5, 12.2, thickness * fy + 3.2);
+      p.stroke();
+    }
+    p.strokeStyle = shade(gi, 1.42); // lit frayed lip on the cut side
+    p.lineWidth = 1.2;
+    p.beginPath();
+    p.moveTo(10.2, -thickness * 0.5);
+    p.quadraticCurveTo(11.8, 0, 10.4, thickness * 0.5);
+    p.stroke();
+    for (let tooth = 0; tooth < 7; tooth += 1) {
+      const ta = (tooth / 7) * Math.PI * 2 + 0.3;
+      const rimX = Math.cos(ta) * thickness * 0.52;
+      const rimY = Math.sin(ta) * thickness * 0.46;
+      p.fillStyle = fray(tooth) > 0.55 ? shade(gi, 1.22) : shade(gi, 0.82);
+      p.beginPath();
+      p.moveTo(rimX, rimY - thickness * 0.1);
+      p.lineTo(rimX + 2.4 + fray(tooth + 5) * 2.6, rimY + (fray(tooth + 9) - 0.5) * 3);
+      p.lineTo(rimX, rimY + thickness * 0.1);
+      p.closePath();
+      p.fill();
+    }
+    p.lineCap = "round";
+    for (let thread = 0; thread < 3; thread += 1) {
+      const ty = (thread - 1) * thickness * 0.26 + 1;
+      p.strokeStyle = thread === 1 ? shade(gi, 1.5) : shade(gi, 0.7);
+      p.lineWidth = 0.9;
+      p.beginPath();
+      p.moveTo(-thickness * 0.1, ty);
+      p.quadraticCurveTo(
+        -thickness * (0.34 + fray(thread + 3) * 0.2),
+        ty + warmSide * (2 + fray(thread + 7) * 3.5),
+        -thickness * (0.52 + fray(thread + 11) * 0.26),
+        ty + warmSide * (5 + fray(thread + 13) * 4),
+      );
+      p.stroke();
+    }
+    // 5) the wedge cross-section: asymmetric, wet, torn — NOT a bullseye.
+    // Lumpy dark base, off-origin muscle bundles in two close reds with
+    // radial fibre strokes, a short skin lip on the lamp side only, a small
+    // off-centre bone chip, clots breaking the silhouette, sheen on top.
+    const rx = thickness * 0.52;
+    const ry = thickness * 0.46;
+    p.fillStyle = "#3c020b"; // congealed base, lumpy silhouette
+    p.beginPath();
+    p.ellipse(0, 0, rx, ry * 0.94, 0.18, 0, Math.PI * 2);
+    p.ellipse(rx * 0.2, -ry * 0.26, rx * 0.74, ry * 0.66, 0.5, 0, Math.PI * 2);
+    p.ellipse(-rx * 0.22, ry * 0.24, rx * 0.7, ry * 0.62, -0.4, 0, Math.PI * 2);
+    p.ellipse(rx * 0.05, ry * 0.4, rx * 0.6, ry * 0.5, 0.9, 0, Math.PI * 2);
+    p.fill();
+    for (let bundle = 0; bundle < 5; bundle += 1) { // muscle bundles, off-origin
+      const a0 = bundle * 1.256 + fray(bundle + 15) * 0.7;
+      const wr = rx * (0.5 + fray(bundle + 17) * 0.3);
+      const ox = (fray(bundle + 19) - 0.5) * rx * 0.5;
+      const oy = (fray(bundle + 21) - 0.5) * ry * 0.5;
+      p.fillStyle = bundle % 2 ? "#9c0715" : "#b30d1a";
+      p.beginPath();
+      p.ellipse(ox, oy, wr, wr * (0.55 + fray(bundle + 25) * 0.3), a0, 0, Math.PI * 2);
+      p.fill();
+    }
+    p.strokeStyle = "rgba(58,2,10,0.8)"; // radial fibre strokes
+    p.lineWidth = 1;
+    for (let fibre = 0; fibre < 5; fibre += 1) {
+      const fa = fibre * 1.35 + 0.5 + fray(fibre + 29) * 0.5;
+      p.beginPath();
+      p.moveTo(Math.cos(fa) * rx * 0.2, Math.sin(fa) * ry * 0.2);
+      p.lineTo(Math.cos(fa) * rx * (0.6 + fray(fibre + 33) * 0.28),
+        Math.sin(fa) * ry * (0.6 + fray(fibre + 35) * 0.28));
+      p.stroke();
+    }
+    // short skin lip on the lamp side only (no full outline ring)
+    p.lineWidth = 1.5;
+    p.strokeStyle = "rgba(235,176,148,0.75)";
+    p.beginPath();
+    p.ellipse(0, 0, rx * 0.94, ry * 0.92, 0.18, -2.5, -1.3);
+    p.stroke();
+    // small bone chip high of centre: pale wedge with a marrow fleck and an
+    // inner crescent shadow — a chip, not a ring
+    p.save();
+    p.translate(-rx * 0.26, -ry * 0.3);
+    p.rotate(-0.4);
+    p.fillStyle = "#f6ecd4";
+    p.beginPath();
+    p.ellipse(0, 0, thickness * 0.13, thickness * 0.1, 0, 0, Math.PI * 2);
+    p.fill();
+    p.strokeStyle = "rgba(150,118,80,0.7)";
+    p.lineWidth = 0.9;
+    p.beginPath();
+    p.arc(thickness * 0.02, thickness * 0.02, thickness * 0.09, 0.4, 2.2);
+    p.stroke();
+    p.fillStyle = "#c59f68";
+    p.beginPath();
+    p.ellipse(thickness * 0.035, thickness * 0.02, thickness * 0.045, thickness * 0.032, 0.3, 0, Math.PI * 2);
+    p.fill();
+    p.restore();
+    // dark clots riding the rim, breaking any circular read
+    p.fillStyle = "#2c0108";
+    p.beginPath();
+    p.ellipse(rx * 0.6, ry * 0.34, rx * 0.2, ry * 0.14, 0.6, 0, Math.PI * 2);
+    p.ellipse(-rx * 0.5, ry * 0.5, rx * 0.16, ry * 0.12, -0.5, 0, Math.PI * 2);
+    p.fill();
+    // wet sheen crescent + specular pin-lights on the cut's lamp side
+    p.strokeStyle = "rgba(255,198,188,0.8)";
+    p.lineWidth = 1.6;
+    p.beginPath();
+    p.arc(1, 0.5, rx * 0.74, -2.8, -1.7);
+    p.stroke();
+    p.fillStyle = "rgba(255,236,230,0.95)";
+    p.beginPath();
+    p.arc(-2.4, -3.6, 1.2, 0, Math.PI * 2);
+    p.arc(3.4, -1.2, 0.8, 0, Math.PI * 2);
+    p.fill();
+    // gore shreds sagging off the screen-down lip + two gravity drips
+    p.fillStyle = "#7c0512";
+    p.beginPath();
+    p.moveTo(-rx * 0.3, warmSide * ry * 0.7);
+    p.quadraticCurveTo(-rx * 0.16, warmSide * (ry * 0.7 + 4.6), -rx * 0.02, warmSide * ry * 0.74);
+    p.closePath();
+    p.fill();
+    p.beginPath();
+    p.moveTo(rx * 0.2, warmSide * ry * 0.78);
+    p.quadraticCurveTo(rx * 0.32, warmSide * (ry * 0.78 + 3.4), rx * 0.46, warmSide * ry * 0.7);
+    p.closePath();
+    p.fill();
+    p.strokeStyle = "#a50713";
+    p.lineWidth = 2;
+    p.beginPath();
+    p.moveTo(-rx * 0.1, warmSide * ry * 0.85);
+    p.quadraticCurveTo(-rx * 0.16, warmSide * (ry * 0.85 + 5), -rx * 0.1, warmSide * (ry * 0.85 + 8));
+    p.stroke();
+    p.lineWidth = 1.3;
+    p.beginPath();
+    p.moveTo(rx * 0.34, warmSide * ry * 0.8);
+    p.quadraticCurveTo(rx * 0.3, warmSide * (ry * 0.8 + 3.6), rx * 0.33, warmSide * (ry * 0.8 + 5.6));
+    p.stroke();
+    p.restore();
+    // 6) fine blood flecks blown back along the forearm from the wound
+    p.fillStyle = "rgba(156,7,21,0.75)";
+    for (let fleck = 0; fleck < 6; fleck += 1) {
+      const ft = -0.34 + fray(fleck + 23) * 0.5;
+      const at = axis(ft);
+      p.beginPath();
+      p.ellipse(at.x, at.y + (fray(fleck + 31) - 0.5) * thickness * 0.7,
+        1.5 + fray(fleck + 37) * 1.6, 0.8 + fray(fleck + 41) * 0.9,
+        fray(fleck + 43) * 3, 0, Math.PI * 2);
+      p.fill();
+    }
   } else {
     // --- torn tee sleeve over the upper arm ---------------------------------
     strokeAlong(-0.36, -0.08, thickness * 1.02, shade(cloth, 0.6));
@@ -12344,7 +12736,10 @@ function severedLimbPaintedCanvas(effect) {
   }
   // --- gore stump at the shoulder/thigh end (drawn OVER the limb root) -----
   // Torn cross-section: dark rim, meat wedges, off-centre bone chip — an
-  // anatomy read, not a glossy ball.
+  // anatomy read, not a glossy ball. (The atlas-composited arm carries its
+  // own layered wedge stump + light story above, so this round-3 pass only
+  // runs for legs and the no-atlas fallback.)
+  if (!armSrc) {
   p.fillStyle = goreDeep;
   p.beginPath();
   p.ellipse(stumpAt.x, stumpAt.y, thickness * 0.44, thickness * 0.4, -0.1, 0, Math.PI * 2);
@@ -12406,6 +12801,7 @@ function severedLimbPaintedCanvas(effect) {
   p.moveTo(c0.x, c0.y - thickness * 0.46);
   p.quadraticCurveTo((c0.x + c1.x) / 2, (c0.y + c1.y) / 2 - thickness * 0.5, c1.x, c1.y - thickness * 0.44);
   p.stroke();
+  }
   severedLimbCache.set(key, c);
   return c;
 }
@@ -12415,12 +12811,67 @@ function drawSeveredLimb(effect, alpha) {
   const length = leg ? 92 : 72;
   const thickness = leg ? 30 : 23;
   if (cinema3dDressingActive()) {
-    // CINEMA 3D: painted limb sprite (same footprint/rotation as the 2D
+    // CINEMA 3D: composited limb sprite (same footprint/rotation as the 2D
     // primitives, so flight physics and resting pose read identically).
-    const painted = severedLimbPaintedCanvas(effect);
+    // Round 4: the arm samples the victim's own atlas, its warm/cool rims and
+    // drips pick the sprite edge that currently faces the wheel/floor, and in
+    // flight it drags a motion smear + an arterial ribbon off the stump.
+    const victimId = state.finisher
+      ? state.fighters[1 - state.finisher.winner]?.def.id || null : null;
+    const rotation = effect.rotation || 0;
+    const warmSide = Math.cos(rotation) >= 0 ? 1 : -1;
+    const painted = severedLimbPaintedCanvas(effect, victimId, warmSide);
+    const baseAlpha = Math.min(1, alpha * 4);
+    const speed = Math.hypot(effect.vx || 0, effect.vy || 0);
     ctx.save();
-    ctx.rotate(effect.rotation || 0);
-    ctx.globalAlpha = Math.min(1, alpha * 4);
+    if (!effect.resting && speed > 60) {
+      const nx = (effect.vx || 0) / speed;
+      const ny = (effect.vy || 0) / speed;
+      // arterial ribbon whipping off the stump, bending under gravity
+      const ca = Math.cos(rotation);
+      const sa = Math.sin(rotation);
+      const stumpX = -length * 0.42 * ca;
+      const stumpY = -length * 0.42 * sa;
+      const trail = Math.min(66, speed * 0.11);
+      const endX = stumpX - nx * trail;
+      const endY = stumpY - ny * trail + trail * 0.35;
+      const ribbonGrad = ctx.createLinearGradient(stumpX, stumpY, endX, endY);
+      ribbonGrad.addColorStop(0, "rgba(178,8,22,0.9)");
+      ribbonGrad.addColorStop(1, "rgba(80,2,12,0)");
+      ctx.strokeStyle = ribbonGrad;
+      ctx.lineCap = "round";
+      ctx.globalAlpha = baseAlpha * 0.85;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(stumpX, stumpY);
+      ctx.quadraticCurveTo(stumpX - nx * trail * 0.55, stumpY - ny * trail * 0.55 + 6, endX, endY);
+      ctx.stroke();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(235,52,44,0.55)";
+      ctx.stroke();
+      // shed droplets riding the ribbon, heads leading back along it
+      const shedDir = Math.atan2(endY - stumpY, endX - stumpX);
+      for (const [at, size] of [[0.4, 6.4], [0.72, 4.6], [1.02, 3.2]]) {
+        ctx.save();
+        ctx.translate(stumpX + (endX - stumpX) * at, stumpY + (endY - stumpY) * at + 1.5);
+        ctx.rotate(shedDir);
+        ctx.globalAlpha = baseAlpha * (0.85 - at * 0.35);
+        ctx.drawImage(fatalityDropletCanvas(), -size, -size, size * 2, size * 2);
+        ctx.restore();
+      }
+      // motion smear on the trailing edge: two rotation-lagged ghosts that
+      // hug the limb (a detached copy reads as a second object)
+      for (let ghost = 2; ghost >= 1; ghost -= 1) {
+        ctx.save();
+        ctx.translate(-nx * ghost * 5.5, -ny * ghost * 5.5);
+        ctx.rotate(rotation - (effect.spin || 0) * 0.03 * ghost);
+        ctx.globalAlpha = baseAlpha * (ghost === 1 ? 0.13 : 0.07);
+        ctx.drawImage(painted, -length * 0.75, -thickness * 1.6, painted.width / 2, painted.height / 2);
+        ctx.restore();
+      }
+    }
+    ctx.rotate(rotation);
+    ctx.globalAlpha = baseAlpha;
     ctx.shadowColor = "rgba(20,0,4,.72)";
     ctx.shadowBlur = 8;
     ctx.drawImage(painted, -length * 0.75, -thickness * 1.6, painted.width / 2, painted.height / 2);
@@ -12664,49 +13115,124 @@ function drawCinematicGoreOverlay() {
       const radius = (4 + drop % 7 * 2.8) * (effect.scale || 1);
       ctx.globalAlpha = alpha * (.2 + drop % 5 * .09);
       if (dressed) {
-        // CINEMA 3D: FOUR debris types — glossy droplets, torn meat chunks,
-        // pale bone flecks and elongated rivulets smearing down the glass —
-        // each rotated per drop with a consistent upper-left lamp key.
+        // CINEMA 3D round-4 (ship-review item 1): a real droplet FIELD in the
+        // Kimberly-paint grammar. Teardrops stretch along their flight
+        // direction (radially out of the sever point), depth-graded — big
+        // sharp near, small soft far — with ribbon trails on the fast ones,
+        // camera-plane smears, floor splats with radial tails, and crescent
+        // occlusion behind the wheel rim. Density DROPS from 31 stamps to 24
+        // crafted shapes; the classic 2D branch below is untouched.
+        if (drop >= 24) continue;
+        const jitter = ((drop * 199 + familySeed * 17) % 97) / 97;
+        const originX = wheelOccluder ? wheelOccluder.x : W * 0.52;
+        const originY = wheelOccluder ? wheelOccluder.y : H * 0.5;
+        const dir = Math.atan2(edgeBias - originY, x - originX) + (jitter - 0.5) * 0.55;
+        let rimClip = false;
         if (wheelOccluder) {
           const wdx = x - wheelOccluder.x;
           const wdy = edgeBias - wheelOccluder.y;
-          if (wdx * wdx + wdy * wdy < wheelOccluder.r * wheelOccluder.r) continue;
+          const wd2 = wdx * wdx + wdy * wdy;
+          if (wd2 < wheelOccluder.r * wheelOccluder.r) continue;
+          // near-rim drops get CLIPPED against the disc: the crescent bite
+          // reads as the droplet flying BEHIND the wheel, not printed on it.
+          rimClip = wd2 < wheelOccluder.r * wheelOccluder.r * 1.69;
         }
-        const stretch = drop % 4 === 0 ? 2.2 : drop % 3 === 0 ? 1.5 : 1;
         ctx.save();
-        ctx.translate(x, edgeBias);
-        if (drop % 7 === 2) {
+        if (rimClip) {
+          ctx.beginPath();
+          ctx.rect(0, 0, W, H);
+          ctx.arc(wheelOccluder.x, wheelOccluder.y, wheelOccluder.r, 0, Math.PI * 2, true);
+          ctx.clip("evenodd");
+        }
+        if (drop % 6 === 0) {
+          // floor band (H*.88 edge bias): a LANDED hit — splat with radial
+          // tails squashed onto the ground plane, not a floating ellipse.
+          ctx.globalAlpha = alpha * (0.44 + (drop % 5) * 0.1);
+          ctx.translate(x, edgeBias);
+          ctx.rotate((jitter - 0.5) * 0.6);
+          ctx.scale(1.45, 0.52);
+          ctx.drawImage(fatalitySplatCanvas(), -radius * 2, -radius * 2, radius * 4, radius * 4);
+        } else if (drop % 7 === 2) {
           // matte meat chunk: full spin variety, slightly bigger presence
+          ctx.globalAlpha = alpha * (0.3 + (drop % 5) * 0.1);
+          ctx.translate(x, edgeBias);
           ctx.rotate((drop * 1.17) % (Math.PI * 2));
           ctx.drawImage(fatalityChunkCanvas(), -radius * 1.5, -radius * 1.5, radius * 3, radius * 3);
         } else if (drop % 7 === 5) {
           // bone fleck: small, pale, catches the eye against the reds
+          ctx.globalAlpha = alpha * (0.27 + (drop % 5) * 0.09);
+          ctx.translate(x, edgeBias);
           ctx.rotate((drop * 2.31) % (Math.PI * 2));
-          ctx.globalAlpha *= 0.9;
           ctx.drawImage(fatalityBoneCanvas(), -radius * 1.1, -radius * 1.1, radius * 2.2, radius * 2.2);
-        } else if (stretch > 1) {
-          // rivulet: hangs DOWN the glass with a slight tilt
+        } else if (drop % 6 === 3) {
+          // top band (H*.1 edge bias): a hit on the glass, smearing DOWN
+          ctx.globalAlpha = alpha * (0.32 + (drop % 5) * 0.09);
+          ctx.translate(x, edgeBias);
           ctx.rotate(drop % 2 ? 0.14 : -0.12);
           ctx.drawImage(fatalityRivuletCanvas(), -radius * 0.7, -radius * 1.2, radius * 1.4, radius * 3.4);
         } else {
-          ctx.rotate((drop * .71) % Math.PI);
-          ctx.drawImage(droplet3d, -radius * 1.35, -radius * 1.35, radius * 2.7, radius * 2.7);
+          // depth band off a second hash (drop % 3 is fully consumed by the
+          // floor/rivulet selectors above): 0 near, 1 mid, 2 far
+          const depthHash = ((drop * 131 + familySeed * 7) % 89) / 89;
+          const band = depthHash < 0.3 ? 0 : depthHash < 0.68 ? 1 : 2;
+          const sizeMul = band === 0 ? 1.85 : band === 1 ? 1.12 : 0.6;
+          const sprite = band === 2 ? fatalityDropletSoftCanvas() : droplet3d;
+          const fast = drop % 5 === 1;
+          const smear = band === 0 && drop % 4 === 1 && !fast;
+          let stretch = 1.12 + jitter * 0.85 + (fast ? 1.1 : 0);
+          ctx.globalAlpha = alpha * (0.3 + (drop % 5) * 0.11)
+            * (band === 0 ? 1.2 : band === 1 ? 1 : 0.7);
+          if (fast && !smear) {
+            // ribbon trail whipping back down the flight path, gravity-bent,
+            // with a brighter liquid core and a mid-trail bead
+            const ribbonLen = radius * (4.5 + jitter * 3);
+            const tx = x - Math.cos(dir) * ribbonLen;
+            const ty = edgeBias - Math.sin(dir) * ribbonLen + ribbonLen * 0.3;
+            const ribbonGrad = ctx.createLinearGradient(x, edgeBias, tx, ty);
+            ribbonGrad.addColorStop(0, "rgba(178,8,22,0.85)");
+            ribbonGrad.addColorStop(1, "rgba(80,2,12,0)");
+            ctx.strokeStyle = ribbonGrad;
+            ctx.lineCap = "round";
+            ctx.lineWidth = Math.max(1.6, radius * 0.5);
+            ctx.beginPath();
+            ctx.moveTo(x, edgeBias);
+            ctx.quadraticCurveTo(
+              x - Math.cos(dir) * ribbonLen * 0.55,
+              edgeBias - Math.sin(dir) * ribbonLen * 0.55 + 7,
+              tx, ty,
+            );
+            ctx.stroke();
+            ctx.lineWidth = Math.max(0.9, radius * 0.2);
+            ctx.strokeStyle = "rgba(240,64,54,0.5)";
+            ctx.stroke();
+            const beadSize = radius * 0.55;
+            ctx.save();
+            ctx.translate((x + tx) / 2, (edgeBias + ty) / 2 + 2);
+            ctx.rotate(dir);
+            ctx.drawImage(droplet3d, -beadSize * 1.35, -beadSize * 1.35, beadSize * 2.7, beadSize * 2.7);
+            ctx.restore();
+          }
+          ctx.translate(x, edgeBias);
+          ctx.rotate(dir);
+          if (smear) {
+            // crossing the camera plane: a long motion smear, not a shape
+            stretch = 5.6;
+            ctx.globalAlpha *= 0.5;
+          }
+          ctx.scale(stretch, 1);
+          const drawSize = radius * sizeMul;
+          ctx.drawImage(sprite, -drawSize * 1.35, -drawSize * 1.35, drawSize * 2.7, drawSize * 2.7);
+          if (smear) {
+            ctx.strokeStyle = "rgba(255,118,104,0.5)";
+            ctx.lineCap = "round";
+            ctx.lineWidth = drawSize * 0.28;
+            ctx.beginPath();
+            ctx.moveTo(-drawSize * 1.2, 0);
+            ctx.lineTo(drawSize * 1.2, 0);
+            ctx.stroke();
+          }
         }
         ctx.restore();
-        if (drop % 5 === 0) {
-          // run-tail: darkening, thinning gravity streak
-          const runGrad = ctx.createLinearGradient(x, edgeBias, x, edgeBias + 92);
-          runGrad.addColorStop(0, effect.color);
-          runGrad.addColorStop(1, "rgba(64,0,10,0.15)");
-          ctx.strokeStyle = runGrad;
-          ctx.lineCap = "round";
-          ctx.lineWidth = Math.max(2, radius * .26);
-          ctx.beginPath();
-          ctx.moveTo(x, edgeBias);
-          ctx.quadraticCurveTo(x + (drop % 2 ? -18 : 18), edgeBias + 44, x + (drop % 2 ? -11 : 11), edgeBias + 92);
-          ctx.stroke();
-          ctx.strokeStyle = effect.secondary;
-        }
         continue;
       }
       ctx.beginPath();
@@ -13304,8 +13830,9 @@ function drawParticles() {
           const tipSize = 5 + spray % 4 * 2.4;
           ctx.save();
           ctx.translate(tipX, tipY);
-          ctx.rotate(angle + 0.5);
-          ctx.scale(1.4, 0.8);
+          // teardrop head leads along the arc's end tangent (gravity-drooped)
+          ctx.rotate(angle + 0.3);
+          ctx.scale(1.5, 0.85);
           ctx.drawImage(fatalityDropletCanvas(), -tipSize, -tipSize, tipSize * 2, tipSize * 2);
           ctx.restore();
           continue;
