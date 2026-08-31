@@ -172,6 +172,69 @@ export function collapseEnvelope(aftermathSeconds, simulationTick) {
   return { slump, twitch, still: fade <= 0 };
 }
 
+/**
+ * Ballistic scatter for separated victim pieces (2.8 critic round, M6). The
+ * authored hover offsets become a burst velocity; the piece flies under
+ * gravity, takes one damped floor bounce, and settles on the ground plane.
+ * Pure closed-form function of the aftermath clock — deterministic, no RNG,
+ * so rollback resimulation and the mirror pass replay it exactly.
+ *
+ * burstX/burstY: authored scatter offsets in px (y negative = up).
+ * restY: the ground line in piece-local px below the spawn point (>= 0).
+ * Returns { x, y, progress: 0..1 flight easing, landed }.
+ */
+export function scatterBandOffset(burstX, burstY, restY, seconds, options = {}) {
+  const gravity = options.gravity ?? 1500;
+  const restitution = options.restitution ?? 0.32;
+  const launch = options.launch ?? 1.6;
+  const time = Math.max(0, Number(seconds) || 0);
+  const floor = Math.max(0, Number(restY) || 0);
+  const vx = (Number(burstX) || 0) * launch * 0.8;
+  // Up-biased pop so even a low authored offset visibly leaves the body
+  // before gravity takes the piece.
+  const vy = (Number(burstY) || 0) * launch * 1.15 - 120;
+  const disc = Math.sqrt(Math.max(0, vy * vy + 2 * gravity * floor));
+  const flight = Math.max(0.001, (disc - vy) / gravity);
+  if (time <= flight) {
+    return {
+      x: vx * time,
+      y: vy * time + 0.5 * gravity * time * time,
+      progress: Math.min(1, time / flight),
+      landed: false,
+    };
+  }
+  const impact = vy + gravity * flight;
+  const rebound = Math.max(0, impact) * restitution;
+  const bounceTime = (2 * rebound) / gravity;
+  const vxb = vx * 0.55;
+  const tau = Math.min(time - flight, bounceTime);
+  const landed = time - flight >= bounceTime;
+  return {
+    x: vx * flight + vxb * tau,
+    y: landed ? floor : floor - (rebound * tau - 0.5 * gravity * tau * tau),
+    progress: 1,
+    landed,
+  };
+}
+
+/**
+ * Clamp any palette colour into the arterial red family (2.8 critic round,
+ * S1): fighter-flavoured fatality palettes lean hot pink/magenta on some
+ * kits, which reads as candy once it colours BLOOD. Keeps the red channel
+ * (per-fighter brightness survives), crushes green/blue below arterial
+ * ratios. Signature EMITTERS (embers, arcs, glitch bits) never route through
+ * this — only blood-classed spawns and draws do.
+ */
+export function bloodTint(hex) {
+  const raw = typeof hex === "string" ? hex.replace("#", "") : "";
+  if (!/^[0-9a-fA-F]{6}$/.test(raw)) return "#b40714";
+  const value = parseInt(raw, 16);
+  const r = (value >> 16) & 255;
+  const g = Math.min((value >> 8) & 255, Math.round(r * 0.18));
+  const b = Math.min(value & 255, Math.round(r * 0.14));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+}
+
 export function auditSignatureGore(scriptIds) {
   const errors = [];
   for (const scriptId of scriptIds) {

@@ -317,10 +317,12 @@ import {
   GORE_SFX,
   arterialPressure,
   bloodSoak,
+  bloodTint,
   canSpawnFloorStain,
   canSpawnSmear,
   canSpawnWallStain,
   collapseEnvelope,
+  scatterBandOffset,
   signatureGore,
   stainBudget,
 } from "./engine/gore.mjs";
@@ -7711,7 +7713,9 @@ function updateCinematicCamera(dtMs) {
   // hard at the fatal impact and unwinds through the aftermath. Both are
   // zeroed by reduced motion and scale with the shake setting.
   if (finisher && motion > 0) {
-    const aftermath = Math.max(0, finisher.elapsed - finisher.fatalityAt);
+    // 2.8 critic round: ride the live hold clock so the handheld drift and
+    // dutch actually UNWIND through the aftermath (elapsed saturates).
+    const aftermath = finisherAftermathSeconds(finisher);
     const fade = clamp(1 - aftermath / 2.6, 0, 1);
     const amplitude = 2 * motion * fade;
     cameraHandheldClock -= dt;
@@ -10504,11 +10508,15 @@ function finisherCinematicCamera(poseZoom = 1.18) {
   const impactY = victim.y - (shot === "final-impact" ? 132 : 145);
   const midpointX = (attacker.x + victim.x) * .5;
   const baseY = inImpactWindow || shot === "aftermath" ? lerp(midpointY, impactY, .68) : midpointY;
+  // 2.8 critic round (M3): once the gore aftermath owns the frame the camera
+  // favours the BODY — the resting weapon only gets a light pull, so the
+  // money shot stays centred on the kill instead of drifting to a prop.
+  const goreAftermath = shot === "aftermath" && finisher.fatalityTriggered && state.graphicFatalities;
   const cameraX = projectileFocused && !state.accessibility.reducedMotion
-    ? lerp(midpointX, projectile.x, shot === "aftermath" ? .42 : shot === "final-impact" ? .55 : .72)
+    ? lerp(midpointX, projectile.x, shot === "aftermath" ? (goreAftermath ? .22 : .42) : shot === "final-impact" ? .55 : .72)
     : midpointX;
   const cameraY = projectileFocused && !state.accessibility.reducedMotion
-    ? lerp(baseY, projectile.y, shot === "aftermath" ? .32 : .55)
+    ? lerp(baseY, projectile.y, shot === "aftermath" ? (goreAftermath ? .2 : .32) : .55)
     : baseY;
   return {
     x: cameraX,
@@ -10522,12 +10530,47 @@ function finisherCinematicCamera(poseZoom = 1.18) {
   };
 }
 
+// The live aftermath clock: elapsed-based before saturation, then the
+// dedicated hold counter (2.8 critic round keystone — see updateFinisher).
+function finisherAftermathSeconds(finisher) {
+  if (!finisher) return 0;
+  return Math.max(
+    finisher.fatalityTriggered ? finisher.aftermathSeconds || 0 : 0,
+    Math.max(0, finisher.elapsed - finisher.fatalityAt),
+  );
+}
+
 function fatalityWoundPoint(victim, fatality, direction) {
   const leg = fatality.limb.endsWith("leg");
   const side = fatality.limb.startsWith("left") ? -1 : 1;
+  const finisher = state.finisher;
+  // Pre-kill (projectile targeting, scripted impacts): the authored
+  // standing-pose offsets, exactly as before.
+  if (!(finisher?.fatalityTriggered && state.graphicFatalities
+    && finisher.elapsed > finisher.fatalityAt)) {
+    return {
+      x: victim.x + direction * side * (leg ? 18 : 34),
+      y: victim.y - (leg ? 58 : 132),
+    };
+  }
+  // 2.8 critic round (M1): during the aftermath the wound anchor is the
+  // STUMP AS RENDERED — the same local offset drawFatalityStump draws at,
+  // pushed through the victim's live render transform (sprite mirror, then
+  // the cinematic rotation the slam scripts use to lay the body down, which
+  // also carries the collapse envelope). Spurts, the resting kill object and
+  // the spray pump out of the visible wound while the body settles — never
+  // out of the standing pose it left a second ago. Pure reads — rollback-safe.
+  const size = fighterRenderSize(victim.def.id);
+  const pose = fighterAnimationPose(victim);
+  const mirror = victim.facing * atlasFrameFacing(victim.def.id, pose.bank, pose.frame);
+  const localX = side * direction * size * (leg ? .14 : .22) * mirror;
+  const localY = -size * (leg ? .29 : .61);
+  const rot = victim.cinematicRotation || 0;
+  const cos = Math.cos(rot);
+  const sin = Math.sin(rot);
   return {
-    x: victim.x + direction * side * (leg ? 18 : 34),
-    y: victim.y - (leg ? 58 : 132),
+    x: victim.x + cos * localX - sin * localY,
+    y: Math.min(victim.y + sin * localX + cos * localY, FLOOR - 10),
   };
 }
 
@@ -10606,8 +10649,11 @@ function focusFinisherProjectile(finisher, attacker, victim, fatality, phase) {
     x: phase === "prime" ? projectile.x : target.x,
     y: phase === "prime" ? projectile.y : target.y,
     direction: finisher.direction,
-    life: phase === "kill" ? 1.35 : .72,
-    max: phase === "kill" ? 1.35 : .72,
+    // 2.8 critic round (M3): with gore ON the kill burst collapses inside
+    // ~33 ticks so the arterial systole window is readable; gore-off keeps
+    // the long burst because it carries the whole kill read there.
+    life: phase === "kill" ? (state.graphicFatalities ? .55 : 1.35) : .72,
+    max: phase === "kill" ? (state.graphicFatalities ? .55 : 1.35) : .72,
     color: attacker.def.accent,
   });
   finisher.projectilePhase = phase;
@@ -10631,6 +10677,44 @@ const goreFxDebug = {
 
 // Per-cue rate caps (manifest minMs) so pump peaks never stack the layer.
 const goreSfxLast = new Map();
+
+// 2.8 critic round (M2): monotonic spawn serial so a full stain budget
+// recycles its OLDEST decal instead of refusing the spawn — during the
+// frozen-life fatality hold nothing expires on its own, and the aftermath
+// must keep accumulating paint until scene teardown. Render-side only.
+let goreDecalSerial = 0;
+
+// Spawn a bloodDecal, or recycle the oldest decal of the same class when the
+// budget is full. `sameClass` picks the pool the decal competes in (floor
+// stain / wall stain / smear) so flags never leak across classes.
+function pushBloodDecal(decal, sameClass) {
+  const budget = stainBudget(state.effects);
+  const room = decal.smear ? canSpawnSmear(budget)
+    : decal.wall ? canSpawnWallStain(budget)
+      : canSpawnFloorStain(budget);
+  if (room) {
+    state.effects.push({ kind: "bloodDecal", age: 0, serial: goreDecalSerial += 1, ...decal });
+    return true;
+  }
+  let oldest = null;
+  for (const effect of state.effects) {
+    if (effect.kind !== "bloodDecal" || !sameClass(effect)) continue;
+    if (!oldest || (effect.serial || 0) < (oldest.serial || 0)) oldest = effect;
+  }
+  if (!oldest) return false;
+  for (const key of Object.keys(decal)) oldest[key] = decal[key];
+  oldest.age = 0;
+  oldest.serial = goreDecalSerial += 1;
+  return true;
+}
+
+// 2.8 critic round (S3): which stages actually SHOW a wall surface at the
+// arena bounds. The buffet interior and the cruise pool deck read as open
+// space at the movement limits, so wall spatter there hung mid-air — those
+// droplets convert to extra floor stains at the bound instead.
+const STAGE_WALL_SURFACES = Object.freeze({
+  somerset: true, vet: true, wildwood: true, buffet: false, cruise: false, janney: true,
+});
 
 function goreSfx(kind, fighter = null) {
   if (rollbackResimulating || !state.graphicFatalities) return;
@@ -10681,7 +10765,7 @@ function spawnSignatureGoreBeat(scriptId, fatality, x, y, direction) {
     state.effects.push({
       kind: "goreShockwave", family: "crush", direction,
       x, y: FLOOR - 6, life: 1.05, max: 1.05,
-      color: fatality.palette[0], secondary: fatality.palette[1], scale: 0.8,
+      color: bloodTint(fatality.palette[0]), secondary: bloodTint(fatality.palette[1]), scale: 0.8,
     });
   }
   if (sig.boneScale) {
@@ -10700,7 +10784,7 @@ function spawnSignatureGoreBeat(scriptId, fatality, x, y, direction) {
         spikes: 4 + index % 3,
         life: 0.9 + visualRandom() * 1.2, max: 2.1,
         size: 4 + visualRandom() * 7,
-        color: index % 3 ? "#e6d3b3" : fatality.palette[1],
+        color: index % 3 ? "#e6d3b3" : bloodTint(fatality.palette[1]),
       });
     }
   }
@@ -10716,7 +10800,7 @@ function spawnSignatureGoreBeat(scriptId, fatality, x, y, direction) {
         gravity: 760, drag: 0.96,
         life: 0.22 + visualRandom() * 0.14, max: 0.36,
         size: 2 + ray % 3,
-        color: ray % 4 ? fatality.palette[0] : "#ff3b4e",
+        color: ray % 4 ? bloodTint(fatality.palette[0]) : "#ff3b4e",
       });
     }
   }
@@ -10735,7 +10819,7 @@ function spawnSignatureGoreBeat(scriptId, fatality, x, y, direction) {
         rotation: Math.round(visualRandom() * 4) * (Math.PI / 2), spin: 0,
         life: 0.5 + visualRandom() * 0.7, max: 1.2,
         size: 3 + Math.round(visualRandom() * 3) * 2,
-        color: index % 3 ? sig.glitchColor : fatality.palette[0],
+        color: index % 3 ? sig.glitchColor : bloodTint(fatality.palette[0]),
       });
     }
   }
@@ -10753,7 +10837,7 @@ function spawnSignatureGoreBeat(scriptId, fatality, x, y, direction) {
         gravity: 1240, drag: 0.988,
         life: 0.8 + visualRandom() * 0.9, max: 1.7,
         size: (6 + visualRandom() * 8) * (sig.dropletScale || 1),
-        color: index % 3 ? fatality.palette[0] : fatality.palette[1],
+        color: index % 3 ? bloodTint(fatality.palette[0]) : bloodTint(fatality.palette[1]),
       });
     }
   }
@@ -10833,6 +10917,10 @@ function triggerFinisherImpact(finisher, impact) {
   });
   if (finalImpact && gore) {
     finisher.fatalityTriggered = true;
+    // 2.8 critic round (S1): everything blood-classed spawns in the arterial
+    // red family — fighter palettes only flavour signature emitters and copy.
+    const bloodBright = bloodTint(fatality.palette[0]);
+    const bloodDeep = bloodTint(fatality.palette[1]);
     // Time dilation for the killing blow, then a pumping wound. Both are plain
     // numbers on the finisher, so rollback snapshots reproduce them exactly.
     finisher.slowMotionTicks = 42;
@@ -10851,10 +10939,11 @@ function triggerFinisherImpact(finisher, impact) {
       family: fatality.family,
       x: victim.x,
       y: FLOOR + 4,
+      age: 0,
       life: decalLife,
       max: decalLife,
-      color: fatality.palette[0],
-      secondary: fatality.palette[1],
+      color: bloodBright,
+      secondary: bloodDeep,
       direction: finisher.direction,
       scale: fatality.blood,
     });
@@ -10871,7 +10960,7 @@ function triggerFinisherImpact(finisher, impact) {
         life: .75 + visualRandom() * 1.4,
         max: 2.15,
         size: 3 + visualRandom() * 9,
-        color: visualRandom() > .28 ? fatality.palette[0] : fatality.palette[1],
+        color: visualRandom() > .28 ? bloodBright : bloodDeep,
       });
     }
     const fragmentCount = Math.max(12, Math.round(30 * fatality.separation * state.performance.particleScale));
@@ -10893,7 +10982,7 @@ function triggerFinisherImpact(finisher, impact) {
         life: 1 + visualRandom() * 1.5,
         max: 2.5,
         size: 6 + visualRandom() * 13,
-        color: index % 4 ? fatality.palette[0] : fatality.palette[1],
+        color: index % 4 ? bloodBright : bloodDeep,
       });
     }
     state.effects.push({
@@ -10904,8 +10993,8 @@ function triggerFinisherImpact(finisher, impact) {
       y: pointY,
       life: 1.45,
       max: 1.45,
-      color: fatality.palette[0],
-      secondary: fatality.palette[1],
+      color: bloodBright,
+      secondary: bloodDeep,
       scale: fatality.separation,
     });
     state.effects.push({
@@ -10916,8 +11005,8 @@ function triggerFinisherImpact(finisher, impact) {
       y: pointY,
       life: decalLife,
       max: decalLife,
-      color: fatality.palette[0],
-      secondary: fatality.palette[1],
+      color: bloodBright,
+      secondary: bloodDeep,
       scale: fatality.blood,
     });
     // One unmistakable complete limb, not an abstract meat fragment. It arcs
@@ -10941,8 +11030,8 @@ function triggerFinisherImpact(finisher, impact) {
       bounced: false,
       life: decalLife,
       max: decalLife,
-      color: fatality.palette[0],
-      secondary: fatality.palette[1],
+      color: bloodBright,
+      secondary: bloodDeep,
       clothColor: victim.def.color,
       clothAccent: victim.def.accent,
       direction: finisher.direction,
@@ -10966,6 +11055,15 @@ function updateFinisher(dt) {
   const slowMo = (finisher.slowMotionTicks || 0) > 0;
   if (slowMo) finisher.slowMotionTicks -= 1;
   finisher.elapsed = Math.min(finisher.script.duration, finisher.elapsed + dt * (slowMo ? 0.38 : 1));
+  // 2.8 critic round (M1/M3/M6 keystone): finisher.elapsed SATURATES at the
+  // script duration, so every aftermath derived from it froze ~0.5s after
+  // the killing blow — scattered pieces hung mid-flight, the collapse
+  // envelope never slumped, and the title card never moved. This clock keeps
+  // counting through the whole cinematic hold (same timescale as elapsed, a
+  // plain snapshotted number, so rollback replays it exactly).
+  if (finisher.fatalityTriggered) {
+    finisher.aftermathSeconds = (finisher.aftermathSeconds || 0) + dt * (slowMo ? 0.38 : 1);
+  }
   finisher.beatLife = Math.max(0, finisher.beatLife - dt);
   const pose = sampleFinisher(finisher.script.keys, finisher.elapsed);
 
@@ -10987,14 +11085,27 @@ function updateFinisher(dt) {
   victim.cinematicRotation = pose.vr * finisher.direction;
   const fatalityProfile = getGraphicFatality(attacker.def.finisherScriptId || attacker.def.id, finisher.type);
   const projectileTarget = fatalityWoundPoint(victim, fatalityProfile, finisher.direction);
+  const killResting = finisher.fatalityTriggered && state.graphicFatalities;
   for (const effect of state.effects) {
     if (effect.kind !== "fatalityProjectile") continue;
-    effect.targetX = projectileTarget.x;
-    effect.targetY = projectileTarget.y;
+    if (killResting) {
+      // 2.8 critic round (M3): after the killing blow the giant signature
+      // sigil stops parking over the victim — it shrinks toward the impact
+      // point and comes to rest on the street beside the body (still in the
+      // scene through the whole aftermath, just no longer a billboard). The
+      // rest point stays within 130px of the body so the aftermath camera,
+      // which tracks the weapon, never drags framing off the fight.
+      effect.targetX = victim.x
+        + clamp(projectileTarget.x + finisher.direction * 46 - victim.x, -130, 130);
+      effect.targetY = FLOOR - Math.max(10, (effect.baseHeight || 40) * 0.16);
+    } else {
+      effect.targetX = projectileTarget.x;
+      effect.targetY = projectileTarget.y;
+    }
   }
   if (finisher.fatalityTriggered && state.graphicFatalities && !state.accessibility.reducedMotion
     && finisher.elapsed > finisher.fatalityAt) {
-    const aftermath = finisher.elapsed - finisher.fatalityAt;
+    const aftermath = finisherAftermathSeconds(finisher);
     // 2.8 collapse weight (engine/gore.mjs): a half-second beat of stillness,
     // then the joints unload into an eased slump layered on the authored
     // pose; spasms arrive in bursts that space out and decay quadratically
@@ -11012,28 +11123,35 @@ function updateFinisher(dt) {
     // elongated streak out of nearby blood instead of leaving it pristine.
     // Scripted drags are eased, so the slide ACCUMULATES: every ~18px of
     // grounded movement through the gore field leaves one streak.
+    // 2.8 critic round (S4): the accumulator never hard-resets on a slow
+    // tick — eased scripted drags move well under the old 0.45px/tick floor,
+    // which is why probes saw zero body smears. Every ~9px of grounded slide
+    // through the gore field now leaves a pair of streaks along the path.
     if (finisher.smearX === undefined) finisher.smearX = victim.x;
     const slide = victim.x - finisher.smearX;
     finisher.smearX = victim.x;
-    finisher.smearAccum = Math.abs(slide) > 0.45 && victim.grounded
-      ? (finisher.smearAccum || 0) + Math.abs(slide)
-      : 0;
-    if (finisher.smearAccum >= 18) {
+    if (Math.abs(slide) > 0.12 && victim.grounded) {
+      finisher.smearAccum = (finisher.smearAccum || 0) + Math.abs(slide);
+    }
+    if ((finisher.smearAccum || 0) >= 9) {
       finisher.smearAccum = 0;
-      const budget = stainBudget(state.effects);
       const nearBlood = state.effects.some((effect) => (effect.kind === "fatalityPool"
         || (effect.kind === "bloodDecal" && effect.stain && !effect.wall))
-        && Math.abs(effect.x - victim.x) < 150);
-      if (nearBlood && canSpawnSmear(budget)) {
-        const smearLife = 3 + visualRandom() * 2;
-        state.effects.push({
-          kind: "bloodDecal", smear: true,
-          x: victim.x - Math.sign(slide) * 14, y: FLOOR + 3,
-          width: 34 + visualRandom() * 40,
-          direction: Math.sign(slide) || 1,
-          life: smearLife, max: smearLife, color: "#5c040b",
-        });
-        goreFxDebug.smears += 1;
+        && Math.abs(effect.x - victim.x) < 260);
+      if (nearBlood) {
+        const smearDirection = Math.sign(slide) || 1;
+        for (let streak = 0; streak < 2; streak += 1) {
+          const smearLife = 3 + visualRandom() * 2;
+          pushBloodDecal({
+            smear: true,
+            x: victim.x - smearDirection * (14 + streak * 26 + visualRandom() * 10),
+            y: FLOOR + 3,
+            width: 46 + visualRandom() * 44,
+            direction: smearDirection,
+            life: smearLife, max: smearLife, color: "#5c040b",
+          }, (effect) => effect.smear);
+          goreFxDebug.smears += 1;
+        }
       }
     }
   }
@@ -11147,7 +11265,7 @@ function updateFinisher(dt) {
       if (pool) {
         state.effects.push({
           kind: "shockRing", x: pool.x, y: pool.y - 2, size: 64,
-          life: 0.4, max: 0.4, color: fatality.palette[0],
+          life: 0.4, max: 0.4, color: bloodTint(fatality.palette[0]),
         });
       }
     }
@@ -15105,17 +15223,16 @@ function advanceVisualEffects(dt) {
       particle.life = 0;
       // 2.8: budgets live in engine/gore.mjs — floor + wall stains sum to the
       // historical 56 cap so a long spray cannot evict combat text and other
-      // effects from the trimmed effect budget.
-      const budget = stainBudget(state.effects);
-      if (!canSpawnFloorStain(budget)) continue;
+      // effects from the trimmed effect budget. Critic round (M2): at the cap
+      // the OLDEST stain recycles, so a long bleed keeps painting the street.
       const stainLife = 3.4 + visualRandom() * 2.2;
-      state.effects.push({
-        kind: "bloodDecal", stain: true, tier: "light",
+      pushBloodDecal({
+        stain: true, tier: "light",
         x: clamp(particle.x, 24, W - 24), y: FLOOR + 3,
         // 2.8: the stain's footprint follows the droplet that made it.
         width: 6 + particle.size * 4.4 + visualRandom() * 11,
         life: stainLife, max: stainLife, color: "#6b050c",
-      });
+      }, (effect) => effect.stain && !effect.wall);
       for (let splash = 0; splash < 2; splash += 1) {
         state.particles.push({
           kind: "blood", x: particle.x, y: FLOOR - 3,
@@ -15131,31 +15248,65 @@ function advanceVisualEffects(dt) {
       // 2.8: droplets that reach an arena bound splatter on the wall and run,
       // instead of sailing through it. Wall budget shares the 56-stain cap.
       particle.life = 0;
-      const budget = stainBudget(state.effects);
-      if (!canSpawnWallStain(budget)) continue;
-      const wall = particle.x <= MOVEMENT_RULES.stageMinX - 14 ? -1 : 1;
       const stainLife = 3.8 + visualRandom() * 2.4;
-      state.effects.push({
-        kind: "bloodDecal", stain: true, wall,
+      if (STAGE_WALL_SURFACES[state.stage] === false) {
+        // 2.8 critic round (S3): open bound — nothing to catch the droplet,
+        // so it carries past the line and lands as one more floor stain.
+        pushBloodDecal({
+          stain: true, tier: "light",
+          x: clamp(particle.x, 24, W - 24), y: FLOOR + 3,
+          width: 5 + particle.size * 3.6 + visualRandom() * 9,
+          life: stainLife, max: stainLife, color: "#6b050c",
+        }, (effect) => effect.stain && !effect.wall);
+        continue;
+      }
+      const wall = particle.x <= MOVEMENT_RULES.stageMinX - 14 ? -1 : 1;
+      pushBloodDecal({
+        stain: true, wall,
         x: wall < 0 ? MOVEMENT_RULES.stageMinX - 16 : MOVEMENT_RULES.stageMaxX + 16,
         y: Math.min(particle.y, FLOOR - 12),
         width: 5 + particle.size * 3.2 + visualRandom() * 8,
         run: 10 + visualRandom() * 26,
         life: stainLife, max: stainLife, color: "#71060d",
-      });
+      }, (effect) => Boolean(effect.wall));
       goreFxDebug.wallStains += 1;
     }
   }
   state.particles = state.particles.filter((particle) => particle.life > 0);
+  // 2.8 critic round (M2): while a graphic fatality holds the frame, the
+  // aftermath decals STOP AGEING OUT — floor/wall stains, smears and the
+  // pool keep their paint until scene teardown (MK aftermath accumulates;
+  // it never dissolves mid-hold while the wound still dribbles). The decal's
+  // own age clock keeps running so soak/spread still evolve, and the normal
+  // fade tail resumes the moment the finisher releases the scene.
+  const goreHoldFreeze = Boolean(state.finisher?.fatalityTriggered) && state.graphicFatalities;
   for (const effect of state.effects) {
-    effect.life -= dt;
+    if (effect.kind === "bloodDecal" || effect.kind === "fatalityPool") {
+      effect.age = (effect.age || 0) + dt;
+      if (!goreHoldFreeze) effect.life -= dt;
+    } else {
+      effect.life -= dt;
+    }
     if (effect.kind === "fatalityProjectile") {
-      effect.spinAngle += (effect.spin || 8) * dt;
+      const killCollapse = Boolean(state.finisher?.fatalityTriggered) && state.graphicFatalities;
+      if (killCollapse) {
+        // 2.8 critic round (M3): collapse the money-shot blocker — the sigil
+        // shrinks toward the impact point over ~25 ticks, its spin dies, and
+        // it eases down to rest on the floor beside the body.
+        effect.killSettle = Math.min(1, (effect.killSettle || 0) + dt * 2.4);
+        effect.focusScale = Math.max(0.3, (effect.focusScale || 1) - dt * 4.2);
+      }
+      effect.spinAngle += (effect.spin || 8) * dt * (1 - (effect.killSettle || 0) * 0.94);
       effect.width = effect.baseWidth * (effect.focusScale || 1);
       effect.height = effect.baseHeight * (effect.focusScale || 1);
       if (effect.landed) {
-        effect.x = effect.targetX;
-        effect.y = effect.targetY;
+        if (killCollapse) {
+          effect.x = lerp(effect.x, effect.targetX, Math.min(1, dt * 5.5));
+          effect.y = lerp(effect.y, effect.targetY, Math.min(1, dt * 5.5));
+        } else {
+          effect.x = effect.targetX;
+          effect.y = effect.targetY;
+        }
       } else {
         effect.flightProgress = clamp((effect.flightProgress || 0) + dt / .3, 0, 1);
         const progress = effect.flightProgress;
@@ -15181,19 +15332,22 @@ function advanceVisualEffects(dt) {
       effect.vx *= .66;
       effect.spin *= .58;
       effect.bounced = true;
-      // 2.8: the limb's landing skids blood across the floor — a smear-class
-      // streak at the bounce point plus a short wet splash.
-      const budget = stainBudget(state.effects);
-      if (state.graphicFatalities && canSpawnSmear(budget)) {
-        const smearLife = 3.2 + visualRandom() * 2;
-        state.effects.push({
-          kind: "bloodDecal", smear: true,
-          x: clamp(effect.x, 30, W - 30), y: FLOOR + 3,
-          width: 30 + visualRandom() * 30,
-          direction: Math.sign(effect.vx) || 1,
-          life: smearLife, max: smearLife, color: "#5c040b",
-        });
-        goreFxDebug.smears += 1;
+      // 2.8: the limb's landing skids blood across the floor — smear-class
+      // streaks along the skid direction plus a short wet splash. Critic
+      // round (S4): two wider streaks so the skid is actually locatable.
+      if (state.graphicFatalities) {
+        const skidDirection = Math.sign(effect.vx) || 1;
+        for (let streak = 0; streak < 2; streak += 1) {
+          const smearLife = 3.2 + visualRandom() * 2;
+          pushBloodDecal({
+            smear: true,
+            x: clamp(effect.x + skidDirection * streak * 30, 30, W - 30), y: FLOOR + 3,
+            width: 44 + visualRandom() * 40,
+            direction: skidDirection,
+            life: smearLife, max: smearLife, color: "#5c040b",
+          }, (decal) => decal.smear);
+          goreFxDebug.smears += 1;
+        }
       }
       for (let splash = 0; splash < 4; splash += 1) {
         state.particles.push({
@@ -15481,8 +15635,12 @@ function drawPedestrian(person, layer, x, gait, paused, reaction) {
   const lean = posture.lean + flinch * 0.3;
 
   // Contact shadow so the pedestrian sits on the pavement rather than floating.
+  // 2.8 critic round (J1): background pedestrians drop further back during
+  // the fatality hold — at full spotlight they read as pale ghosts hovering
+  // behind the kill, so the hold fades them toward the dark.
+  const holdDim = 1 - fatalitySpotLevel * 0.62;
   ctx.save();
-  ctx.globalAlpha = layer.alpha * 0.45;
+  ctx.globalAlpha = layer.alpha * 0.45 * holdDim;
   ctx.fillStyle = "rgba(0,0,0,.8)";
   ctx.beginPath();
   ctx.ellipse(x, person.y + 2, 20 * layer.scale * person.width, 5 * layer.scale, 0, 0, Math.PI * 2);
@@ -15492,7 +15650,7 @@ function drawPedestrian(person, layer, x, gait, paused, reaction) {
   ctx.save();
   ctx.translate(x, person.y - bob);
   ctx.scale(scale * person.direction, scale);
-  ctx.globalAlpha = layer.alpha;
+  ctx.globalAlpha = layer.alpha * holdDim;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
@@ -16505,6 +16663,14 @@ function activeGraphicFatality(fighter) {
   // 2.8: the draw side needs the attacker's script id to select the
   // signature gore treatment (devil's scorched cuts etc.).
   snapshot.scriptId = scriptId;
+  // 2.8 critic round: the snapshot's aftermath must keep flowing through the
+  // hold (finisher.elapsed saturates at the script duration ~0.5s in).
+  const live = finisherAftermathSeconds(finisher);
+  if (live > snapshot.aftermath) {
+    snapshot.aftermath = live;
+    snapshot.reveal = Math.min(1, live / 0.42);
+    snapshot.settle = Math.min(1, live / 1.15);
+  }
   return snapshot;
 }
 
@@ -16527,6 +16693,30 @@ function drawFatalityAtlasBand(atlas, frame, size, top, bottom, transform = {}) 
   ctx.rect(-size * .52, y, size * 1.04, height);
   ctx.clip();
   drawAtlasFrame(atlas, frame, size);
+  // 2.8 critic round (M4): the razor-straight clip seams read as screenshot
+  // slices — every INTERIOR edge of a real piece re-stamps the victim's OWN
+  // atlas pixels in a thin strip, darkened/reddened with a small tear
+  // offset, so the lip exists ONLY on the body (never floating paint) and
+  // separated pieces read TORN, not cropped. Skipped for the thin dissolve/
+  // glitch strips whose identity is the clean signal slice.
+  if (state.graphicFatalities && (transform.alpha ?? 1) > 0.12 && height >= size * 0.14) {
+    const tornEdge = (edgeY, into) => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(-size * .52, into > 0 ? edgeY : edgeY - size * 0.028, size * 1.04, size * 0.028);
+      ctx.clip();
+      ctx.globalAlpha *= 0.55;
+      ctx.filter = "brightness(0.32) sepia(1) hue-rotate(-40deg) saturate(4.6) contrast(1.45)";
+      drawAtlasFrame(atlas, frame, size);
+      ctx.globalAlpha *= 0.7;
+      ctx.filter = "brightness(0.16) sepia(1) hue-rotate(-42deg) saturate(5) contrast(1.75)";
+      ctx.translate(2.2, into * 1.9);
+      drawAtlasFrame(atlas, frame, size);
+      ctx.restore();
+    };
+    if (top > 0.001) tornEdge(y, 1);
+    if (bottom < 0.999) tornEdge(y + height, -1);
+  }
   ctx.restore();
 }
 
@@ -16541,15 +16731,15 @@ function drawFatalityCut(size, yRatio, fatality, width = .32) {
     const depth = Math.min(1, 0.45 + wound.aftermath * 0.5);
     ctx.save();
     ctx.beginPath();
-    ctx.rect(-size * width, y - size * 0.055, size * width * 2, size * 0.11);
+    ctx.rect(-size * width * 0.72, y - size * 0.038, size * width * 1.44, size * 0.076);
     ctx.clip();
-    ctx.globalAlpha *= 0.42 + 0.3 * depth;
+    ctx.globalAlpha *= 0.32 + 0.22 * depth;
     ctx.filter = wound.scorch
       ? "brightness(0.24) saturate(0.4) contrast(1.6)"
       : "brightness(0.4) sepia(1) hue-rotate(-38deg) saturate(4.6) contrast(1.35)";
     ctx.translate(0, 1.6);
     drawAtlasFrame(wound.atlas, wound.frame, size);
-    ctx.globalAlpha *= 0.75;
+    ctx.globalAlpha *= 0.6;
     ctx.filter = wound.scorch
       ? "brightness(0.12) saturate(0.2) contrast(1.9)"
       : "brightness(0.24) sepia(1) hue-rotate(-40deg) saturate(5) contrast(1.6)";
@@ -16559,36 +16749,41 @@ function drawFatalityCut(size, yRatio, fatality, width = .32) {
   }
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
-  ctx.strokeStyle = fatality.palette[0];
-  ctx.fillStyle = fatality.palette[1];
-  ctx.shadowColor = fatality.palette[0];
+  ctx.strokeStyle = bloodTint(fatality.palette[0]);
+  ctx.fillStyle = bloodTint(fatality.palette[1]);
+  ctx.shadowColor = bloodTint(fatality.palette[0]);
   ctx.shadowBlur = 13;
-  ctx.lineWidth = 6;
+  // 2.8 critic round: the seam stroke hugs the body's actual cross-section
+  // instead of spanning the full band width, and the drip beads sit tight on
+  // the cut line — the old wide rows floated beside a rotated/lying body.
+  ctx.lineWidth = 5;
   ctx.beginPath();
-  ctx.moveTo(-size * width, y);
-  ctx.quadraticCurveTo(0, y + 9, size * width, y - 3);
+  ctx.moveTo(-size * width * 0.58, y);
+  ctx.quadraticCurveTo(0, y + 7, size * width * 0.58, y - 2);
   ctx.stroke();
-  for (let drop = 0; drop < 7; drop += 1) {
-    const x = (drop - 3) * size * width / 4;
+  for (let drop = 0; drop < 4; drop += 1) {
+    const x = (drop - 1.5) * size * width * 0.3;
     ctx.beginPath();
-    ctx.ellipse(x, y + 6 + (drop % 3) * 4, 3 + drop % 2 * 2, 7 + drop % 3 * 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 5 + (drop % 2) * 3, 2.6 + drop % 2 * 1.6, 5.5 + drop % 3 * 2.4, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
   // 2.8: wet specular glints riding the fresh viscera through the existing
   // lighting language — additive beads that shimmer and dry out over ~3s.
   if (wound && state.performance.shadows) {
+    // 2.8 critic round (M4): the wet read must actually land — bigger,
+    // brighter beads that shimmer while fresh and dry out over ~3s.
     const wet = Math.max(0, 1 - wound.aftermath / 3.2);
     if (wet > 0.05) {
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
       ctx.fillStyle = "#ffe9ec";
-      for (let glint = 0; glint < 4; glint += 1) {
-        const gx = (glint - 1.5) * size * width * 0.55 + Math.sin(wound.time * 0.011 + glint * 2.6) * 4;
+      for (let glint = 0; glint < 5; glint += 1) {
+        const gx = (glint - 2) * size * width * 0.46 + Math.sin(wound.time * 0.011 + glint * 2.6) * 4;
         const shimmer = 0.5 + 0.5 * Math.sin(wound.time * 0.019 + glint * 1.9);
-        ctx.globalAlpha = wet * shimmer * 0.5;
+        ctx.globalAlpha = wet * (0.35 + shimmer * 0.45);
         ctx.beginPath();
-        ctx.ellipse(gx, y + 3 + (glint % 2) * 3, 2.1, 1.2, 0, 0, Math.PI * 2);
+        ctx.ellipse(gx, y + 3 + (glint % 2) * 3, 3.4, 1.9, 0, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
@@ -16651,33 +16846,97 @@ function drawFatalityStump(size, fatality, direction) {
     drawAtlasFrame(wound.atlas, wound.frame, size);
     ctx.restore();
   }
-  ctx.shadowColor = fatality.palette[0];
+  // 2.8 critic round (M4): a torn cross-section everywhere, not a bullseye.
+  // Layered tissue with a dark blood lip, off-origin muscle bundles, an
+  // IRREGULAR splintered bone with a marrow hint, shreds bridging the cut,
+  // and wet glints big enough to actually read, drying over ~3s.
+  const gore = bloodTint(fatality.palette[0]);
+  const goreDeep = bloodTint(fatality.palette[1]);
+  ctx.shadowColor = gore;
   ctx.shadowBlur = 16;
-  ctx.fillStyle = fatality.palette[1];
+  // lumpy dermis silhouette (three overlapping lobes break the circle read)
+  ctx.fillStyle = goreDeep;
   ctx.beginPath();
-  ctx.ellipse(0, 0, radius * 1.24, radius, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = fatality.palette[0];
-  ctx.beginPath();
-  ctx.ellipse(0, 1, radius * .92, radius * .7, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, radius * 1.26, radius * 1.02, 0.14, 0, Math.PI * 2);
+  ctx.ellipse(radius * 0.3, -radius * 0.24, radius * 0.9, radius * 0.7, 0.5, 0, Math.PI * 2);
+  ctx.ellipse(-radius * 0.3, radius * 0.26, radius * 0.86, radius * 0.66, -0.4, 0, Math.PI * 2);
   ctx.fill();
   ctx.shadowBlur = 0;
-  // bone core + marrow shadow
-  ctx.fillStyle = "#ead7b7";
+  // dark congealed blood lip hugging the rim
+  ctx.strokeStyle = "#38020a";
+  ctx.lineWidth = radius * 0.22;
   ctx.beginPath();
-  ctx.ellipse(0, 0, radius * .24, radius * .2, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#b08a66";
+  ctx.ellipse(0, 0, radius * 1.12, radius * 0.9, 0.14, 0, Math.PI * 2);
+  ctx.stroke();
+  // muscle bundles in two close reds, off-origin
+  for (let bundle = 0; bundle < 4; bundle += 1) {
+    const lobe = bundle * 1.57 + 0.45;
+    ctx.fillStyle = bundle % 2 ? gore : "#8f0713";
+    ctx.beginPath();
+    ctx.ellipse(
+      Math.cos(lobe) * radius * 0.32, Math.sin(lobe) * radius * 0.24 + 1,
+      radius * (0.42 + (bundle % 3) * 0.09), radius * (0.3 + (bundle % 2) * 0.08),
+      lobe, 0, Math.PI * 2,
+    );
+    ctx.fill();
+  }
+  // radial fibre strokes pulling the meat toward the bone
+  ctx.strokeStyle = "rgba(56,2,10,0.8)";
+  ctx.lineWidth = 1.1;
+  for (let fibre = 0; fibre < 5; fibre += 1) {
+    const angle = fibre * 1.35 + 0.4;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(angle) * radius * 0.2, Math.sin(angle) * radius * 0.16);
+    ctx.lineTo(Math.cos(angle) * radius * 0.78, Math.sin(angle) * radius * 0.62);
+    ctx.stroke();
+  }
+  // splintered bone: jagged polygon with two long splinter spikes — a broken
+  // shaft end, never a smooth rounded rod. Fixed constants, deterministic.
+  ctx.save();
+  ctx.translate(-radius * 0.14, -radius * 0.12);
+  ctx.rotate(-0.35);
+  ctx.fillStyle = "#f2e5c8";
   ctx.beginPath();
-  ctx.ellipse(radius * .05, radius * .04, radius * .1, radius * .08, 0, 0, Math.PI * 2);
+  const boneR = radius * 0.3;
+  const spikes = [1, 0.62, 1.5, 0.7, 1.05, 0.6, 1.7, 0.66, 0.95, 0.58];
+  for (let point = 0; point < spikes.length; point += 1) {
+    const angle = (point / spikes.length) * Math.PI * 2;
+    const reach = boneR * spikes[point];
+    if (point === 0) ctx.moveTo(Math.cos(angle) * reach, Math.sin(angle) * reach * 0.82);
+    else ctx.lineTo(Math.cos(angle) * reach, Math.sin(angle) * reach * 0.82);
+  }
+  ctx.closePath();
   ctx.fill();
+  ctx.strokeStyle = "rgba(148,116,78,0.75)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  // marrow hint: dark warm core inside the shaft
+  ctx.fillStyle = "#a5773f";
+  ctx.beginPath();
+  ctx.ellipse(boneR * 0.08, boneR * 0.06, boneR * 0.42, boneR * 0.3, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#5e3c1c";
+  ctx.beginPath();
+  ctx.ellipse(boneR * 0.14, boneR * 0.1, boneR * 0.2, boneR * 0.13, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
   if (wound) {
     const aftermath = wound.aftermath;
-    // hanging shreds swaying slightly, stilling as the body does
-    ctx.strokeStyle = fatality.palette[1];
-    ctx.lineWidth = 2.4;
-    ctx.lineCap = "round";
     const sway = Math.sin(wound.time * 0.012) * Math.max(0, 1 - aftermath / 2.2) * 2.2;
+    ctx.lineCap = "round";
+    // shreds BRIDGING the cut mouth — strands still connected across the tear
+    ctx.strokeStyle = goreDeep;
+    ctx.lineWidth = 1.7;
+    for (let bridge = 0; bridge < 2; bridge += 1) {
+      const by = (bridge - 0.5) * radius * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(-radius * (0.95 - bridge * 0.2), by);
+      ctx.quadraticCurveTo(sway * 0.6, by + radius * (0.34 + bridge * 0.2), radius * (0.9 - bridge * 0.14), by - 1);
+      ctx.stroke();
+    }
+    // hanging shreds swaying slightly, stilling as the body does
+    ctx.strokeStyle = gore;
+    ctx.lineWidth = 2.4;
     for (let shred = 0; shred < 3; shred += 1) {
       const sx = (shred - 1) * radius * 0.62;
       ctx.beginPath();
@@ -16699,16 +16958,25 @@ function drawFatalityStump(size, fatality, direction) {
       ctx.arc(radius * 0.3, radius * 0.7 + drip, 1.9, 0, Math.PI * 2);
       ctx.fill();
     }
-    // wet glint answering the stage light while fresh
+    // wet glints answering the stage light while fresh — a sheen crescent
+    // plus two specular beads, all drying out over ~3s (2.8 critic round M4).
     if (state.performance.shadows) {
       const wet = Math.max(0, 1 - aftermath / 3.2);
       if (wet > 0.05) {
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
-        ctx.globalAlpha = wet * (0.35 + 0.3 * Math.sin(wound.time * 0.017));
-        ctx.fillStyle = "#ffe9ec";
+        const shimmer = 0.5 + 0.5 * Math.sin(wound.time * 0.017);
+        ctx.strokeStyle = "#ffd9de";
+        ctx.globalAlpha = wet * (0.4 + shimmer * 0.35);
+        ctx.lineWidth = 2.2;
         ctx.beginPath();
-        ctx.ellipse(-radius * 0.4, -radius * 0.3, radius * 0.3, radius * 0.14, -0.4, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, radius * 0.78, radius * 0.6, 0.14, -2.7, -1.45);
+        ctx.stroke();
+        ctx.fillStyle = "#ffeef1";
+        ctx.globalAlpha = wet * (0.5 + shimmer * 0.4);
+        ctx.beginPath();
+        ctx.ellipse(-radius * 0.42, -radius * 0.3, radius * 0.24, radius * 0.13, -0.4, 0, Math.PI * 2);
+        ctx.ellipse(radius * 0.34, -radius * 0.12, radius * 0.14, radius * 0.09, 0.3, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -16717,7 +16985,7 @@ function drawFatalityStump(size, fatality, direction) {
   ctx.restore();
 }
 
-function drawGraphicFatalityVictim(atlas, frame, size, fatality, time) {
+function drawGraphicFatalityVictim(atlas, frame, size, fatality, time, mirror = 1, bodyRotation = 0) {
   const reveal = fatality.reveal;
   const settle = fatality.settle;
   const force = fatality.separation;
@@ -16730,6 +16998,8 @@ function drawGraphicFatalityVictim(atlas, frame, size, fatality, time) {
     scorch: Boolean(signatureGore(fatality.scriptId || "deathblow").scorch),
   };
   const whole = (transform = {}) => drawFatalityAtlasBand(atlas, frame, size, 0, 1, transform);
+  // Authored drift band: kept for the dissolve/glitch treatments whose whole
+  // identity IS the non-physical strip motion.
   const band = (top, bottom, x, y, rotation = 0, extra = {}) => drawFatalityAtlasBand(
     atlas,
     frame,
@@ -16738,24 +17008,79 @@ function drawGraphicFatalityVictim(atlas, frame, size, fatality, time) {
     bottom,
     { x: x * direction * force * settle, y: y * force * settle, rotation: rotation * direction * settle, ...extra },
   );
+  // 2.8 critic round (M6): separated pieces obey gravity. The authored hover
+  // offsets become a burst velocity (engine/gore.mjs scatterBandOffset):
+  // each piece flies out, takes one damped floor bounce, and settles onto
+  // the ground plane with a blood smudge under its resting spot — nothing
+  // hangs motionless mid-air. Transforms are recorded so the cut overlays
+  // and the stump ride their OWN piece instead of floating at the standing
+  // pose (M1). Pure closed-form of the aftermath clock — deterministic.
+  const piecesDrawn = [];
+  // The slam scripts lay the victim's sprite down with a big cinematic
+  // rotation, so "down" in this local space is NOT down on screen. The
+  // ballistics run in WORLD space — burst out, fall to the street, bounce,
+  // rest — and the resulting world offset is mapped back through the render
+  // transform (rotation + mirror) the band actually draws under.
+  const cosBody = Math.cos(bodyRotation);
+  const sinBody = Math.sin(bodyRotation);
+  const victimWorldX = state.finisher ? state.fighters[1 - state.finisher.winner].x : W * 0.5;
+  const scatterPiece = (top, bottom, x, y, rotation = 0, extra = {}, delay = 0) => {
+    // world height of the piece centre above the feet/street line
+    const centreLocalY = size * ((top + bottom) / 2 - 1);
+    const fall = Math.max(0, -cosBody * centreLocalY - size * 0.12);
+    const scatter = scatterBandOffset(
+      x * direction * force,
+      y * force,
+      fall,
+      Math.max(0, (fatality.aftermath || 0) - delay),
+    );
+    // pieces stop at the arena bounds instead of sailing off-frame (a script
+    // that ends the kill at the wall would otherwise scatter half the body
+    // out of the shot)
+    scatter.x = clamp(scatter.x,
+      MOVEMENT_RULES.stageMinX + 26 - victimWorldX,
+      MOVEMENT_RULES.stageMaxX - 26 - victimWorldX);
+    const localX = (cosBody * scatter.x + sinBody * scatter.y) * mirror;
+    const localY = -sinBody * scatter.x + cosBody * scatter.y;
+    const transform = {
+      x: localX,
+      y: localY,
+      rotation: rotation * direction * scatter.progress,
+      ...extra,
+    };
+    drawFatalityAtlasBand(atlas, frame, size, top, bottom, transform);
+    piecesDrawn.push({ top, bottom, transform });
+    return transform;
+  };
+  const cutAt = (transform, yRatio, width = .32) => {
+    ctx.save();
+    ctx.translate(transform?.x || 0, transform?.y || 0);
+    ctx.rotate(transform?.rotation || 0);
+    if (transform && transform.alpha !== undefined) ctx.globalAlpha *= transform.alpha;
+    drawFatalityCut(size, yRatio, fatality, width);
+    ctx.restore();
+  };
 
   ctx.save();
   if (fatality.family === "rupture") {
-    band(0, .28, -74, -92, -.86);
-    band(.28, .52, 38, -42, .33);
-    band(.52, .73, -48, 12, -.25);
-    band(.73, 1, 64, 34, .5);
-    drawFatalityCut(size, .28, fatality);
-    drawFatalityCut(size, .52, fatality, .37);
-    drawFatalityCut(size, .73, fatality, .3);
+    scatterPiece(0, .28, -74, -92, -.86);
+    const torso = scatterPiece(.28, .52, 38, -42, .33);
+    const waist = scatterPiece(.52, .73, -48, 12, -.25);
+    const legs = scatterPiece(.73, 1, 64, 34, .5);
+    cutAt(torso, .28);
+    cutAt(waist, .52, .37);
+    cutAt(legs, .73, .3);
   } else if (fatality.family === "slice") {
     const pieces = Math.max(3, Math.min(5, fatality.pieces));
+    const transforms = [];
     for (let index = 0; index < pieces; index += 1) {
       const top = index / pieces;
       const bottom = (index + 1) / pieces;
       const side = index % 2 ? 1 : -1;
-      band(top, bottom, side * (42 + index * 12), -20 - index * 7, fatality.angle + side * .08);
-      if (index < pieces - 1) drawFatalityCut(size, bottom, fatality, .36 - index * .025);
+      transforms.push(scatterPiece(top, bottom, side * (42 + index * 12), -20 - index * 7, fatality.angle + side * .08));
+    }
+    for (let index = 0; index < pieces - 1; index += 1) {
+      cutAt(transforms[index + 1], (index + 1) / pieces, .36 - index * .025);
     }
   } else if (fatality.family === "crush") {
     const compression = 1 - reveal * .68;
@@ -16766,9 +17091,9 @@ function drawGraphicFatalityVictim(atlas, frame, size, fatality, time) {
       filter: "contrast(1.28) saturate(.72) brightness(.72)",
     });
     if (reveal > .46) {
-      band(0, .34, -54, -28, -.32, { alpha: reveal * .9 });
-      band(.34, .68, 45, 10, .22, { alpha: reveal * .82 });
-      drawFatalityCut(size, .43, fatality, .4);
+      scatterPiece(0, .34, -54, -28, -.32, { alpha: reveal * .9 }, .19);
+      const mid = scatterPiece(.34, .68, 45, 10, .22, { alpha: reveal * .82 }, .19);
+      cutAt(mid, .43, .4);
     }
   } else if (fatality.family === "dissolve") {
     const strips = Math.max(6, Math.min(10, fatality.pieces));
@@ -16782,7 +17107,7 @@ function drawGraphicFatalityVictim(atlas, frame, size, fatality, time) {
       });
     }
     ctx.globalAlpha *= .58 + reveal * .34;
-    ctx.fillStyle = fatality.palette[0];
+    ctx.fillStyle = bloodTint(fatality.palette[0]);
     for (let drop = 0; drop < 20; drop += 1) {
       const angle = drop * 2.399;
       const radius = (28 + (drop % 6) * 16) * reveal;
@@ -16799,20 +17124,21 @@ function drawGraphicFatalityVictim(atlas, frame, size, fatality, time) {
       });
       drawFatalitySkeleton(size, fatality, pulse);
     } else {
-      band(0, .26, -52, -70, -.58, { filter: "brightness(.2) saturate(0)" });
-      band(.26, .55, 38, -22, .28, { filter: "brightness(.2) saturate(0)" });
-      band(.55, .77, -44, 18, -.2, { filter: "brightness(.2) saturate(0)" });
-      band(.77, 1, 50, 28, .42, { filter: "brightness(.2) saturate(0)" });
-      drawFatalityCut(size, .55, fatality, .33);
+      // the charred pieces let go and drop once the arc releases (~.71s in)
+      scatterPiece(0, .26, -52, -70, -.58, { filter: "brightness(.2) saturate(0)" }, .71);
+      scatterPiece(.26, .55, 38, -22, .28, { filter: "brightness(.2) saturate(0)" }, .71);
+      const hips = scatterPiece(.55, .77, -44, 18, -.2, { filter: "brightness(.2) saturate(0)" }, .71);
+      scatterPiece(.77, 1, 50, 28, .42, { filter: "brightness(.2) saturate(0)" }, .71);
+      cutAt(hips, .55, .33);
     }
   } else if (fatality.family === "launch") {
-    band(.25, 1, 0, 22, .18, { filter: "contrast(1.15) brightness(.72)" });
-    band(0, .25, 135, -205, -1.65, { scaleX: .96, scaleY: .96 });
-    drawFatalityCut(size, .25, fatality, .24);
+    const body = scatterPiece(.25, 1, 0, 22, .18, { filter: "contrast(1.15) brightness(.72)" });
+    scatterPiece(0, .25, 135, -205, -1.65, { scaleX: .96, scaleY: .96 });
+    cutAt(body, .25, .24);
     if (fatality.pieces > 3) {
-      band(.36, .61, -48, -16, -.22, { alpha: reveal });
-      band(.61, .82, 55, 23, .31, { alpha: reveal });
-      drawFatalityCut(size, .61, fatality, .32);
+      scatterPiece(.36, .61, -48, -16, -.22, { alpha: reveal });
+      const hip = scatterPiece(.61, .82, 55, 23, .31, { alpha: reveal });
+      cutAt(hip, .61, .32);
     }
   } else if (fatality.family === "glitch") {
     const strips = Math.max(7, Math.min(12, fatality.pieces));
@@ -16836,20 +17162,31 @@ function drawGraphicFatalityVictim(atlas, frame, size, fatality, time) {
       const compression = 1 - settle * 1.05;
       whole({ scaleX: compression, scaleY: compression, y: -size * .34 * (1 - compression), filter: "contrast(1.5) brightness(.72)" });
     } else {
-      const burst = (settle - .5) * 2;
       const pieces = Math.max(5, Math.min(8, fatality.pieces));
+      let cutTransform = null;
       for (let index = 0; index < pieces; index += 1) {
         const top = index / pieces;
         const bottom = (index + 1) / pieces;
         const angle = index * Math.PI * 2 / pieces;
-        band(top, bottom, Math.cos(angle) * 86 * burst, Math.sin(angle) * 72 * burst - 26, (index - pieces / 2) * .16);
+        const transform = scatterPiece(top, bottom, Math.cos(angle) * 86, Math.sin(angle) * 72 - 26, (index - pieces / 2) * .16, {}, .575);
+        if (top <= .48 && bottom >= .48) cutTransform = transform;
       }
-      drawFatalityCut(size, .48, fatality, .42);
+      cutAt(cutTransform, .48, .42);
     }
   } else {
     whole();
   }
+  // The stump rides the piece that contains it (2.8 critic round, M1/M6) —
+  // it must never float at the standing pose while its band lies elsewhere.
+  const stumpRatio = fatality.limb.endsWith("leg") ? .71 : .39;
+  const host = piecesDrawn.find((piece) => piece.top <= stumpRatio && piece.bottom >= stumpRatio);
+  ctx.save();
+  if (host) {
+    ctx.translate(host.transform.x || 0, host.transform.y || 0);
+    ctx.rotate(host.transform.rotation || 0);
+  }
   drawFatalityStump(size, fatality, direction);
+  ctx.restore();
   fatalityWoundCtx = null;
   ctx.restore();
 }
@@ -17858,10 +18195,15 @@ function drawFighter(fighter, time) {
     && (!attack || attack.superMove) && !fighter.stun && !fighter.block
     && fighter.dizzyFrames <= 0 && fighter.guardCrushFrames <= 0;
   const fatigue = clamp(1 - fighter.health / 100, 0, 1);
+  // 2.8 critic round (S5): the WINNER keeps breathing through the fatality
+  // hold — a slow time-based chest-rise + sway instead of a statue lock.
+  // Render-only read of the snapshotted finisher; reduced motion stays still.
+  const finisherHoldWinner = Boolean(state.finisher?.fatalityTriggered)
+    && state.finisher.winner === fighter.side && !reducedMotion;
   const breath = breathing
     ? Math.sin(fighter.animTime * (5.2 + fatigue * 5.6) + fighter.side * 1.9)
       * (0.009 + fatigue * 0.015) * (reducedMotion ? 0.5 : 1)
-    : 0;
+    : finisherHoldWinner ? Math.sin(time * 0.0042 + fighter.side) * 0.011 : 0;
   // Hunched-forward exhaustion lean once idle health dips under 25%.
   const exhausted = breathing && !moving && fighter.health < 25 ? 1 - fighter.health / 25 : 0;
   // Hit-reaction smear intensity: normalised from the decaying hitFlash timer
@@ -17892,6 +18234,7 @@ function drawFighter(fighter, time) {
   }
 
   if (fighter.cinematicRotation) ctx.rotate(fighter.cinematicRotation);
+  if (finisherHoldWinner) ctx.rotate(Math.sin(time * 0.0012 + 0.8) * 0.011);
   if (fighter.cinematicScale !== 1) ctx.scale(fighter.cinematicScale, fighter.cinematicScale);
 
   if (fighter.down) {
@@ -18234,7 +18577,10 @@ function drawFighter(fighter, time) {
       ctx.filter = "saturate(.68) contrast(1.14) brightness(.93)";
       if (!reflectionPassActive) presentationDebug.lastLegs += 1;
     }
-    if (graphicFatality) drawGraphicFatalityVictim(atlas, frame, renderSize, graphicFatality, time);
+    if (graphicFatality) {
+      drawGraphicFatalityVictim(atlas, frame, renderSize, graphicFatality, time,
+        renderMirror, fighter.cinematicRotation || 0);
+    }
     else if (!reflectionPassActive && state.performance.shadows && battleDamageMarks[fighter.side].length) {
       // Accumulating battle damage: composite the accrued marks onto this
       // frame's sprite. The mirror pass and the battery profile stay on the
@@ -18958,11 +19304,13 @@ function fatalityRivuletCanvas() {
 }
 
 function drawFatalityPool(effect, alpha) {
-  const growth = 1 - alpha;
+  // 2.8 critic round (M2): the pool spreads and soaks on its own AGE clock,
+  // which keeps running while the fatality hold freezes decal lifetimes —
+  // the aftermath accumulates monotonically instead of dissolving mid-hold.
+  const age = effect.age ?? ((effect.max || 1) - effect.life);
+  const growth = Math.min(1, age / 3.2);
   const scale = effect.scale || 1;
-  // 2.8: the pool spreads over seconds and SOAKS — older blood mixes toward
-  // a dark matte core while the fresh rim stays bright (engine/gore.mjs).
-  const soak = bloodSoak((effect.max || 1) - effect.life);
+  const soak = bloodSoak(age);
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
   ctx.scale(effect.direction || 1, 1);
@@ -18982,75 +19330,55 @@ function drawFatalityPool(effect, alpha) {
     ctx.ellipse(0, 0, (36 + growth * 98) * scale, 7 + growth * 20, 0, 0, Math.PI * 2);
     ctx.fill();
   }
-  if (cinema3dDressingActive()) {
-    // CINEMA 3D: the pool reads WET — a darkened blood core, a cold glossy
-    // streak answering the overhead lamp, and droplets become directional
-    // spatter with dimensional cores + run-tails instead of flat ellipses.
-    const core = ctx.createRadialGradient(0, 0, 2, 0, 0, 72 * scale);
-    core.addColorStop(0, "rgba(60,2,8,0.85)");
-    core.addColorStop(0.6, "rgba(96,6,12,0.4)");
-    core.addColorStop(1, "rgba(60,2,8,0)");
-    ctx.globalAlpha = Math.min(1, alpha * 1.6);
-    ctx.fillStyle = core;
+  // 2.8 critic round (M4): the CINEMA 3D wet dressing is the DEFAULT now —
+  // darkened blood core, a glossy lamp streak that dies as the pool soaks
+  // matte, and directional spatter with dimensional cores + run-tails
+  // instead of flat matte ellipses.
+  const core = ctx.createRadialGradient(0, 0, 2, 0, 0, 72 * scale);
+  core.addColorStop(0, "rgba(60,2,8,0.85)");
+  core.addColorStop(0.6, "rgba(96,6,12,0.4)");
+  core.addColorStop(1, "rgba(60,2,8,0)");
+  ctx.globalAlpha = Math.min(1, alpha * 1.6);
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, (34 + growth * 74) * scale, 6 + growth * 15, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = Math.min(1, alpha * 1.2) * 0.55 * (1 - soak * 0.6);
+  ctx.fillStyle = "rgba(210,236,225,0.5)"; // lamp streak on the wet surface
+  ctx.beginPath();
+  ctx.ellipse(10 * scale, -2, (20 + growth * 30) * scale, 2.6 + growth * 3, -0.06, 0, Math.PI * 2);
+  ctx.fill();
+  const droplet = fatalityDropletCanvas();
+  for (let drop = 0; drop < 13; drop += 1) {
+    const angle = drop * 2.399 + (effect.family === "glitch" ? .4 : 0);
+    const reach = (24 + growth * 118) * (.45 + (drop % 5) * .14) * scale;
+    const dx = Math.cos(angle) * reach;
+    const dy = Math.sin(angle) * reach * .22;
+    const size = (7 + drop % 4 * 4.5) * (1 + growth * 0.3);
+    ctx.globalAlpha = alpha * (.44 + drop % 3 * .2);
+    // run-tail streaking back toward the pool centre
+    ctx.strokeStyle = effect.color;
+    ctx.lineCap = "round";
+    ctx.lineWidth = Math.max(1.6, size * 0.22);
     ctx.beginPath();
-    ctx.ellipse(0, 0, (34 + growth * 74) * scale, 6 + growth * 15, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = Math.min(1, alpha * 1.2) * 0.55;
-    ctx.fillStyle = "rgba(210,236,225,0.5)"; // lamp streak on the wet surface
-    ctx.beginPath();
-    ctx.ellipse(10 * scale, -2, (20 + growth * 30) * scale, 2.6 + growth * 3, -0.06, 0, Math.PI * 2);
-    ctx.fill();
-    const droplet = fatalityDropletCanvas();
-    for (let drop = 0; drop < 13; drop += 1) {
-      const angle = drop * 2.399 + (effect.family === "glitch" ? .4 : 0);
-      const reach = (24 + growth * 118) * (.45 + (drop % 5) * .14) * scale;
-      const dx = Math.cos(angle) * reach;
-      const dy = Math.sin(angle) * reach * .22;
-      const size = (7 + drop % 4 * 4.5) * (1 + growth * 0.3);
-      ctx.globalAlpha = alpha * (.44 + drop % 3 * .2);
-      // run-tail streaking back toward the pool centre
-      ctx.strokeStyle = effect.color;
-      ctx.lineCap = "round";
-      ctx.lineWidth = Math.max(1.6, size * 0.22);
-      ctx.beginPath();
-      ctx.moveTo(dx * 0.55, dy * 0.55);
-      ctx.lineTo(dx, dy);
-      ctx.stroke();
-      ctx.save();
-      ctx.translate(dx, dy);
-      if (drop % 4 === 0) {
-        // landed hit: splat with radial tails flattened onto the floor plane
-        ctx.rotate(angle * 0.3);
-        ctx.scale(1.3, 0.45);
-        ctx.drawImage(fatalitySplatCanvas(), -size * 1.4, -size * 1.4, size * 2.8, size * 2.8);
-      } else {
-        // teardrop head pointing away from the pool, tail meeting its run-tail
-        ctx.rotate(angle);
-        ctx.scale(1.3, 0.6);
-        ctx.drawImage(droplet, -size, -size, size * 2, size * 2);
-      }
-      ctx.restore();
+    ctx.moveTo(dx * 0.55, dy * 0.55);
+    ctx.lineTo(dx, dy);
+    ctx.stroke();
+    ctx.save();
+    ctx.translate(dx, dy);
+    if (drop % 4 === 0) {
+      // landed hit: splat with radial tails flattened onto the floor plane
+      ctx.rotate(angle * 0.3);
+      ctx.scale(1.3, 0.45);
+      ctx.drawImage(fatalitySplatCanvas(), -size * 1.4, -size * 1.4, size * 2.8, size * 2.8);
+    } else {
+      // teardrop head pointing away from the pool, kept shallow so the
+      // spatter lies ON the floor plane instead of standing up out of it
+      ctx.rotate(Math.sin(angle) * 0.35);
+      ctx.scale(1.3, 0.55);
+      ctx.drawImage(droplet, -size * 0.85, -size * 0.85, size * 1.7, size * 1.7);
     }
-  } else {
-    ctx.fillStyle = effect.color;
-    for (let drop = 0; drop < 13; drop += 1) {
-      const angle = drop * 2.399 + (effect.family === "glitch" ? .4 : 0);
-      const reach = (24 + growth * 118) * (.45 + (drop % 5) * .14) * scale;
-      ctx.globalAlpha = alpha * (.38 + drop % 3 * .18);
-      ctx.beginPath();
-      ctx.ellipse(Math.cos(angle) * reach, Math.sin(angle) * reach * .22, 4 + drop % 4 * 3, 2 + drop % 3 * 2, angle, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    if (state.performance.shadows) {
-      // 2.8: the stage's overhead light answers on the wet surface in the
-      // classic 2D pass too (the CINEMA 3D branch already carried a streak);
-      // the gloss dies as the pool soaks matte.
-      ctx.globalAlpha = Math.min(1, alpha * 1.1) * 0.3 * (1 - soak * 0.75);
-      ctx.fillStyle = "rgba(214,234,226,0.5)";
-      ctx.beginPath();
-      ctx.ellipse(12 * scale, -2, (16 + growth * 26) * scale, 2.2 + growth * 2.4, -0.05, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    ctx.restore();
   }
   if (["rupture", "launch", "crush"].includes(effect.family)) {
     ctx.globalAlpha = alpha * .82;
@@ -19610,10 +19938,11 @@ function drawSeveredLimb(effect, alpha) {
   const leg = effect.limb.endsWith("leg");
   const length = leg ? 92 : 72;
   const thickness = leg ? 30 : 23;
-  if (cinema3dDressingActive()) {
-    // CINEMA 3D: composited limb sprite (same footprint/rotation as the 2D
-    // primitives, so flight physics and resting pose read identically).
-    // Round 4: the arm samples the victim's own atlas, its warm/cool rims and
+  {
+    // 2.8 critic round (M4): the atlas-composited limb (with its arterial
+    // ribbon, motion smear and shed droplets in flight) is the DEFAULT
+    // renderer's prop now — the flat teal/pink capsule primitives are gone.
+    // The arm samples the victim's own atlas, its warm/cool rims and
     // drips pick the sprite edge that currently faces the wheel/floor, and in
     // flight it drags a motion smear + an arterial ribbon off the stump.
     const victimId = state.finisher
@@ -19676,76 +20005,16 @@ function drawSeveredLimb(effect, alpha) {
     ctx.shadowBlur = 8;
     ctx.drawImage(painted, -length * 0.75, -thickness * 1.6, painted.width / 2, painted.height / 2);
     ctx.restore();
-    return;
   }
-  ctx.save();
-  ctx.rotate(effect.rotation || 0);
-  ctx.globalCompositeOperation = "source-over";
-  ctx.globalAlpha = Math.min(1, alpha * 4);
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.shadowColor = "rgba(20,0,4,.72)";
-  ctx.shadowBlur = 8;
-
-  // Clothing shell and exposed flesh make the silhouette read instantly as a
-  // complete arm/leg rather than one more irregular gore particle.
-  ctx.strokeStyle = effect.clothColor;
-  ctx.lineWidth = thickness;
-  ctx.beginPath();
-  ctx.moveTo(-length * .36, 0);
-  ctx.lineTo(length * .28, leg ? 6 : -3);
-  ctx.stroke();
-  ctx.strokeStyle = effect.clothAccent;
-  ctx.lineWidth = Math.max(5, thickness * .22);
-  ctx.beginPath();
-  ctx.moveTo(-length * .2, -thickness * .24);
-  ctx.lineTo(length * .18, -thickness * .18);
-  ctx.stroke();
-
-  ctx.strokeStyle = "#c98b70";
-  ctx.lineWidth = thickness * .66;
-  ctx.beginPath();
-  ctx.moveTo(length * .18, leg ? 5 : -2);
-  ctx.lineTo(length * .46, leg ? 10 : 2);
-  ctx.stroke();
-
-  // Wet stump, pale bone core, and a boot/hand at the far end.
-  ctx.fillStyle = effect.secondary;
-  ctx.beginPath();
-  ctx.ellipse(-length * .42, 0, thickness * .46, thickness * .36, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = effect.color;
-  ctx.beginPath();
-  ctx.ellipse(-length * .43, 0, thickness * .31, thickness * .24, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#ead7b7";
-  ctx.beginPath();
-  ctx.ellipse(-length * .44, 0, thickness * .09, thickness * .08, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  if (leg) {
-    ctx.fillStyle = "#17191f";
-    ctx.beginPath();
-    ctx.moveTo(length * .37, -thickness * .12);
-    ctx.lineTo(length * .61, -thickness * .08);
-    ctx.lineTo(length * .66, thickness * .24);
-    ctx.lineTo(length * .35, thickness * .28);
-    ctx.closePath();
-    ctx.fill();
-  } else {
-    ctx.fillStyle = "#c98b70";
-    ctx.beginPath();
-    ctx.ellipse(length * .52, 2, thickness * .31, thickness * .4, -.18, 0, Math.PI * 2);
-    ctx.fill();
-    for (let finger = 0; finger < 4; finger += 1) {
-      ctx.fillRect(length * (.48 + finger * .035), -thickness * .43, 4, thickness * .28);
-    }
-  }
-  ctx.restore();
 }
 
 function drawFatalityProjectile(effect, alpha) {
   const reveal = clamp((1 - alpha) * 12, 0, 1);
+  // 2.8 critic round (M3): once the killing blow lands (gore on), the sigil
+  // treatment dies with the collapse — no halo ring, no glow, no floating
+  // label. The murder weapon simply rests in the scene at prop scale so the
+  // systole window over the body is READABLE.
+  const killResting = Boolean(state.finisher?.fatalityTriggered) && state.graphicFatalities;
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
   ctx.globalAlpha = Math.min(1, alpha * 3) * reveal;
@@ -19753,20 +20022,25 @@ function drawFatalityProjectile(effect, alpha) {
   // 3D mode: halve the halo glow — the painted wheel carries its own values,
   // and the old glow + bloom washed the face to a soft gold disc.
   const dressedHalo = cinema3dDressingActive();
-  ctx.shadowBlur = (effect.landed ? 22 : 12) * (dressedHalo ? 0.5 : 1);
-  ctx.strokeStyle = effect.color;
-  ctx.lineWidth = (effect.landed ? 6 : 3) * (dressedHalo ? 0.6 : 1);
-  ctx.beginPath();
-  ctx.arc(0, 0, Math.max(effect.width, effect.height) * (.58 + (1 - alpha) * .08), 0, Math.PI * 2);
-  ctx.stroke();
+  if (!killResting) {
+    ctx.shadowBlur = (effect.landed ? 22 : 12) * (dressedHalo ? 0.5 : 1);
+    ctx.strokeStyle = effect.color;
+    ctx.lineWidth = (effect.landed ? 6 : 3) * (dressedHalo ? 0.6 : 1);
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.max(effect.width, effect.height) * (.58 + (1 - alpha) * .08), 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha *= 0.92;
+  }
   ctx.save();
   ctx.scale(effect.phase === "kill" ? 1.24 : 1.12, effect.phase === "kill" ? 1.24 : 1.12);
   drawThrowable(effect, state.simulationTick * 1000 / SIMULATION_HZ, alpha);
   ctx.restore();
-  // 3D mode: once the fatality banner block owns the frame, the floating
-  // world-space focus label only collides with it (the half-hidden
-  // "WHOLE PIZZA · KILL" ghosting through the caption) — drop it there.
-  if (!(cinema3dDressingActive() && state.finisher?.fatalityTriggered)) {
+  // The floating world-space focus label collides with the fatality banner
+  // (and with the money shot itself) — dropped for every renderer once the
+  // fatality is triggered.
+  if (!(killResting || (cinema3dDressingActive() && state.finisher?.fatalityTriggered))) {
     ctx.globalAlpha = Math.min(1, alpha * 4);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -19880,174 +20154,81 @@ function drawCinematicGoreOverlay() {
     const vignette = ctx.createRadialGradient(W * .5, H * .46, W * .18, W * .5, H * .46, W * .68);
     vignette.addColorStop(0, "rgba(60,0,7,0)");
     vignette.addColorStop(.72, `rgba(96,0,12,${alpha * .12})`);
-    vignette.addColorStop(1, `rgba(20,0,4,${alpha * .66})`);
+    vignette.addColorStop(1, `rgba(20,0,4,${alpha * .42})`);
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.fillStyle = effect.color;
-    ctx.strokeStyle = effect.secondary;
+    // 2.8 critic round (M5): lens blood behaves like LIQUID on the glass.
+    // Every droplet is born on a stagger, slides slowly DOWN under gravity
+    // while elongating into a run, and dries/fades individually over 2-4s —
+    // no pixel-frozen confetti. Deterministic per (drop, familySeed) hash;
+    // count and size are cut so the layer accents instead of dominating.
+    // Canvas pass, so the DOM HUD always sits above it.
+    const age = (effect.max || 1) - effect.life;
+    const droplet = fatalityDropletCanvas();
     ctx.shadowColor = "rgba(35,0,4,.8)";
-    ctx.shadowBlur = 5;
-    const dressed = cinema3dDressingActive();
-    const droplet3d = dressed ? fatalityDropletCanvas() : null;
-    // Round-3 wheel occlusion (critic item 2): debris whose screen position
-    // falls inside the landed signature wheel is SKIPPED — it reads as
-    // having flown behind the disc, so the gore field sits in depth instead
-    // of floating over the centrepiece as an overlay.
-    let wheelOccluder = null;
-    if (dressed && state.finisher) {
-      const wheelProjectile = state.effects.find((fx) => fx.kind === "fatalityProjectile");
-      if (wheelProjectile) {
-        const goreCamera = finisherCinematicCamera(state.cinematicZoom);
-        const goreZoom = goreCamera.zoom || 1;
-        wheelOccluder = {
-          x: W * .5 + (wheelProjectile.x - goreCamera.x) * goreZoom,
-          y: H * .53 + (wheelProjectile.y - goreCamera.y) * goreZoom,
-          r: Math.max(wheelProjectile.width, wheelProjectile.height) * .6 * goreZoom
-            * (wheelProjectile.phase === "kill" ? 1.24 : 1.12),
-        };
-      }
-    }
-    for (let drop = 0; drop < 31; drop += 1) {
-      const x = ((drop * 173 + familySeed * 29) % 1180) / 1180 * W;
-      const y = ((drop * 97 + familySeed * 43) % 640) / 640 * H;
-      const edgeBias = drop % 3 === 0 ? (drop % 2 ? H * .1 : H * .88) : y;
-      const radius = (4 + drop % 7 * 2.8) * (effect.scale || 1);
-      ctx.globalAlpha = alpha * (.2 + drop % 5 * .09);
-      if (dressed) {
-        // CINEMA 3D round-4 (ship-review item 1): a real droplet FIELD in the
-        // Kimberly-paint grammar. Teardrops stretch along their flight
-        // direction (radially out of the sever point), depth-graded — big
-        // sharp near, small soft far — with ribbon trails on the fast ones,
-        // camera-plane smears, floor splats with radial tails, and crescent
-        // occlusion behind the wheel rim. Density DROPS from 31 stamps to 24
-        // crafted shapes; the classic 2D branch below is untouched.
-        if (drop >= 24) continue;
-        const jitter = ((drop * 199 + familySeed * 17) % 97) / 97;
-        const originX = wheelOccluder ? wheelOccluder.x : W * 0.52;
-        const originY = wheelOccluder ? wheelOccluder.y : H * 0.5;
-        const dir = Math.atan2(edgeBias - originY, x - originX) + (jitter - 0.5) * 0.55;
-        let rimClip = false;
-        if (wheelOccluder) {
-          const wdx = x - wheelOccluder.x;
-          const wdy = edgeBias - wheelOccluder.y;
-          const wd2 = wdx * wdx + wdy * wdy;
-          if (wd2 < wheelOccluder.r * wheelOccluder.r) continue;
-          // near-rim drops get CLIPPED against the disc: the crescent bite
-          // reads as the droplet flying BEHIND the wheel, not printed on it.
-          rimClip = wd2 < wheelOccluder.r * wheelOccluder.r * 1.69;
-        }
-        ctx.save();
-        if (rimClip) {
-          ctx.beginPath();
-          ctx.rect(0, 0, W, H);
-          ctx.arc(wheelOccluder.x, wheelOccluder.y, wheelOccluder.r, 0, Math.PI * 2, true);
-          ctx.clip("evenodd");
-        }
-        if (drop % 6 === 0) {
-          // floor band (H*.88 edge bias): a LANDED hit — splat with radial
-          // tails squashed onto the ground plane, not a floating ellipse.
-          ctx.globalAlpha = alpha * (0.44 + (drop % 5) * 0.1);
-          ctx.translate(x, edgeBias);
-          ctx.rotate((jitter - 0.5) * 0.6);
-          ctx.scale(1.45, 0.52);
-          ctx.drawImage(fatalitySplatCanvas(), -radius * 2, -radius * 2, radius * 4, radius * 4);
-        } else if (drop % 7 === 2) {
-          // matte meat chunk: full spin variety, slightly bigger presence
-          ctx.globalAlpha = alpha * (0.3 + (drop % 5) * 0.1);
-          ctx.translate(x, edgeBias);
-          ctx.rotate((drop * 1.17) % (Math.PI * 2));
-          ctx.drawImage(fatalityChunkCanvas(), -radius * 1.5, -radius * 1.5, radius * 3, radius * 3);
-        } else if (drop % 7 === 5) {
-          // bone fleck: small, pale, catches the eye against the reds
-          ctx.globalAlpha = alpha * (0.27 + (drop % 5) * 0.09);
-          ctx.translate(x, edgeBias);
-          ctx.rotate((drop * 2.31) % (Math.PI * 2));
-          ctx.drawImage(fatalityBoneCanvas(), -radius * 1.1, -radius * 1.1, radius * 2.2, radius * 2.2);
-        } else if (drop % 6 === 3) {
-          // top band (H*.1 edge bias): a hit on the glass, smearing DOWN
-          ctx.globalAlpha = alpha * (0.32 + (drop % 5) * 0.09);
-          ctx.translate(x, edgeBias);
-          ctx.rotate(drop % 2 ? 0.14 : -0.12);
-          ctx.drawImage(fatalityRivuletCanvas(), -radius * 0.7, -radius * 1.2, radius * 1.4, radius * 3.4);
-        } else {
-          // depth band off a second hash (drop % 3 is fully consumed by the
-          // floor/rivulet selectors above): 0 near, 1 mid, 2 far
-          const depthHash = ((drop * 131 + familySeed * 7) % 89) / 89;
-          const band = depthHash < 0.3 ? 0 : depthHash < 0.68 ? 1 : 2;
-          const sizeMul = band === 0 ? 1.85 : band === 1 ? 1.12 : 0.6;
-          const sprite = band === 2 ? fatalityDropletSoftCanvas() : droplet3d;
-          const fast = drop % 5 === 1;
-          const smear = band === 0 && drop % 4 === 1 && !fast;
-          let stretch = 1.12 + jitter * 0.85 + (fast ? 1.1 : 0);
-          ctx.globalAlpha = alpha * (0.3 + (drop % 5) * 0.11)
-            * (band === 0 ? 1.2 : band === 1 ? 1 : 0.7);
-          if (fast && !smear) {
-            // ribbon trail whipping back down the flight path, gravity-bent,
-            // with a brighter liquid core and a mid-trail bead
-            const ribbonLen = radius * (4.5 + jitter * 3);
-            const tx = x - Math.cos(dir) * ribbonLen;
-            const ty = edgeBias - Math.sin(dir) * ribbonLen + ribbonLen * 0.3;
-            const ribbonGrad = ctx.createLinearGradient(x, edgeBias, tx, ty);
-            ribbonGrad.addColorStop(0, "rgba(178,8,22,0.85)");
-            ribbonGrad.addColorStop(1, "rgba(80,2,12,0)");
-            ctx.strokeStyle = ribbonGrad;
-            ctx.lineCap = "round";
-            ctx.lineWidth = Math.max(1.6, radius * 0.5);
-            ctx.beginPath();
-            ctx.moveTo(x, edgeBias);
-            ctx.quadraticCurveTo(
-              x - Math.cos(dir) * ribbonLen * 0.55,
-              edgeBias - Math.sin(dir) * ribbonLen * 0.55 + 7,
-              tx, ty,
-            );
-            ctx.stroke();
-            ctx.lineWidth = Math.max(0.9, radius * 0.2);
-            ctx.strokeStyle = "rgba(240,64,54,0.5)";
-            ctx.stroke();
-            const beadSize = radius * 0.55;
-            ctx.save();
-            ctx.translate((x + tx) / 2, (edgeBias + ty) / 2 + 2);
-            ctx.rotate(dir);
-            ctx.drawImage(droplet3d, -beadSize * 1.35, -beadSize * 1.35, beadSize * 2.7, beadSize * 2.7);
-            ctx.restore();
-          }
-          ctx.translate(x, edgeBias);
-          ctx.rotate(dir);
-          if (smear) {
-            // crossing the camera plane: a long motion smear, not a shape
-            stretch = 5.6;
-            ctx.globalAlpha *= 0.5;
-          }
-          ctx.scale(stretch, 1);
-          const drawSize = radius * sizeMul;
-          ctx.drawImage(sprite, -drawSize * 1.35, -drawSize * 1.35, drawSize * 2.7, drawSize * 2.7);
-          if (smear) {
-            ctx.strokeStyle = "rgba(255,118,104,0.5)";
-            ctx.lineCap = "round";
-            ctx.lineWidth = drawSize * 0.28;
-            ctx.beginPath();
-            ctx.moveTo(-drawSize * 1.2, 0);
-            ctx.lineTo(drawSize * 1.2, 0);
-            ctx.stroke();
-          }
-        }
-        ctx.restore();
-        continue;
-      }
-      ctx.beginPath();
-      ctx.ellipse(x, edgeBias, radius * (drop % 4 === 0 ? 2.4 : 1), radius, (drop * .71) % Math.PI, 0, Math.PI * 2);
-      ctx.fill();
-      if (drop % 5 === 0) {
-        ctx.lineWidth = Math.max(2, radius * .28);
+    ctx.shadowBlur = 4;
+    for (let drop = 0; drop < 16; drop += 1) {
+      const h1 = ((drop * 173 + familySeed * 29) % 1180) / 1180;
+      const h2 = ((drop * 97 + familySeed * 43) % 640) / 640;
+      const h3 = ((drop * 199 + familySeed * 17) % 97) / 97;
+      const h4 = ((drop * 131 + familySeed * 7) % 89) / 89;
+      const x = h1 * W;
+      const y0 = (0.06 + h2 * 0.74) * H;
+      const born = h3 * 0.5;
+      const span = 2 + h4 * 2; // each droplet dries on its own 2-4s clock
+      const dropAge = age - born;
+      if (dropAge <= 0) continue;
+      const dry = Math.min(1, dropAge / span);
+      const dropAlpha = alpha * Math.min(1, dropAge / 0.12) * (1 - dry)
+        * (0.34 + (drop % 4) * 0.11);
+      if (dropAlpha <= 0.015) continue;
+      const radius = (2.6 + (drop % 5) * 1.5) * (effect.scale || 1);
+      // gravity run: the bead crawls down the glass, decelerating as it
+      // sheds volume and dries in place
+      const run = (26 + h3 * 52) * (1 - Math.exp(-dropAge / 1.15)) * (0.7 + h4 * 0.6);
+      const headY = y0 + run;
+      // the run it leaves behind: a thinning tinted streak drying above it
+      if (run > radius * 0.8) {
+        const trail = ctx.createLinearGradient(x, y0, x, headY);
+        trail.addColorStop(0, "rgba(74,3,10,0)");
+        trail.addColorStop(0.45, "rgba(96,4,13,0.55)");
+        trail.addColorStop(1, "rgba(150,7,20,0.85)");
+        ctx.strokeStyle = trail;
+        ctx.lineCap = "round";
+        ctx.globalAlpha = dropAlpha * 0.8;
+        ctx.lineWidth = Math.max(1.1, radius * 0.44);
         ctx.beginPath();
-        ctx.moveTo(x, edgeBias);
-        ctx.quadraticCurveTo(x + (drop % 2 ? -34 : 34), edgeBias + 38, x + (drop % 2 ? -22 : 22), edgeBias + 92);
+        ctx.moveTo(x, y0);
+        ctx.lineTo(x, headY);
         ctx.stroke();
+      }
+      // the bead itself: a teardrop head elongated by its slide, darker as
+      // it dries
+      ctx.save();
+      ctx.translate(x, headY);
+      ctx.rotate(Math.PI * 0.5);
+      ctx.scale(1 + Math.min(1.1, run / (radius * 7)), 1 - dry * 0.25);
+      ctx.globalAlpha = dropAlpha;
+      ctx.drawImage(droplet, -radius * 1.35, -radius * 1.35, radius * 2.7, radius * 2.7);
+      ctx.restore();
+      // wet glint on the fresh bead only
+      if (dry < 0.4) {
+        ctx.globalAlpha = dropAlpha * (0.4 - dry) * 1.6;
+        ctx.fillStyle = "#ffd9de";
+        ctx.beginPath();
+        ctx.ellipse(x - radius * 0.3, headY - radius * 0.4, radius * 0.32, radius * 0.2, -0.5, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
-    ctx.globalAlpha = alpha * .56;
+    // Family accent marks dry off within ~1.5s of the kill instead of
+    // sitting printed on the glass for the whole hold (M5).
+    const accentFade = clamp(1 - (age - 0.9) / 0.6, 0, 1);
+    if (accentFade > 0.02) {
+    ctx.fillStyle = effect.color;
+    ctx.strokeStyle = effect.secondary;
+    ctx.globalAlpha = alpha * .56 * accentFade;
     ctx.lineCap = "round";
     if (["slice", "rupture", "launch"].includes(effect.family)) {
       ctx.lineWidth = effect.family === "slice" ? 19 : 13;
@@ -20074,9 +20255,10 @@ function drawCinematicGoreOverlay() {
     } else {
       ctx.fillStyle = effect.color;
       for (let strip = 0; strip < 8; strip += 1) {
-        ctx.globalAlpha = alpha * (.18 + strip % 3 * .1);
+        ctx.globalAlpha = alpha * accentFade * (.18 + strip % 3 * .1);
         ctx.fillRect((strip * 191 + familySeed) % W, H * (.12 + strip * .1), W * (.08 + strip % 3 * .04), 5 + strip % 3 * 5);
       }
+    }
     }
     ctx.restore();
   }
@@ -20310,7 +20492,10 @@ function drawFatalitySpotlight() {
   if (fatalitySpotLevel <= 0.02 || !state.finisher || state.fighters.length !== 2) return;
   const victim = state.fighters[1 - state.finisher.winner];
   const attacker = state.fighters[state.finisher.winner];
-  drawSpotlightPool(fatalitySpotLevel, [victim, attacker], 0.5);
+  // 2.8 critic round (S2): lifted grade floor — 0.5 darkness crushed bright
+  // stages (buffet/cruise) to near-black, making dark-red gore, ash and
+  // ripple reads illegible. The spotlight still isolates the kill.
+  drawSpotlightPool(fatalitySpotLevel, [victim, attacker], 0.34);
 }
 
 // Super focus lines (wave 4): while the spotlight dim is up, sparse comic-style
@@ -20634,44 +20819,39 @@ function drawParticles() {
       continue;
     }
     if (particle.kind === "blood" || particle.kind === "arterial") {
+      // 2.8 critic round (M4): dimensional spatter is the DEFAULT — the
+      // gradient droplet sprite stretched along its velocity with a thinning
+      // smear tail, instead of a flat solid ellipse.
       const angle = Math.atan2(particle.vy || 0, particle.vx || 1);
-      if (cinema3dDressingActive()) {
-        // CINEMA 3D: dimensional spatter — the gradient droplet sprite
-        // stretched along its velocity with a thinning smear tail, instead
-        // of a flat solid ellipse.
-        const speed = Math.hypot(particle.vx || 0, particle.vy || 0);
-        const stretch = 1.2 + Math.min(1.6, speed * 0.0016);
-        ctx.strokeStyle = particle.color;
-        ctx.lineCap = "round";
-        ctx.lineWidth = Math.max(1, particle.size * 0.5);
-        ctx.globalAlpha = alpha * 0.55;
-        ctx.beginPath();
-        ctx.moveTo(particle.x - (particle.vx || 0) * 0.03, particle.y - (particle.vy || 0) * 0.03);
-        ctx.lineTo(particle.x, particle.y);
-        ctx.stroke();
-        ctx.globalAlpha = alpha;
-        ctx.translate(particle.x, particle.y);
-        ctx.rotate(angle);
-        ctx.scale(stretch, 1);
-        const dropSize = particle.size * 2.1;
-        ctx.drawImage(fatalityDropletCanvas(), -dropSize, -dropSize, dropSize * 2, dropSize * 2);
-        ctx.restore();
-        continue;
-      }
-      ctx.ellipse(particle.x, particle.y, particle.size * 1.65, Math.max(1, particle.size * 0.62), angle, 0, Math.PI * 2);
+      const speed = Math.hypot(particle.vx || 0, particle.vy || 0);
+      const stretch = 1.2 + Math.min(1.6, speed * 0.0016);
+      ctx.strokeStyle = particle.color;
+      ctx.lineCap = "round";
+      ctx.lineWidth = Math.max(1, particle.size * 0.5);
+      ctx.globalAlpha = alpha * 0.55;
+      ctx.beginPath();
+      ctx.moveTo(particle.x - (particle.vx || 0) * 0.03, particle.y - (particle.vy || 0) * 0.03);
+      ctx.lineTo(particle.x, particle.y);
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+      ctx.translate(particle.x, particle.y);
+      ctx.rotate(angle);
+      ctx.scale(stretch, 1);
+      const dropSize = particle.size * 2.1;
+      ctx.drawImage(fatalityDropletCanvas(), -dropSize, -dropSize, dropSize * 2, dropSize * 2);
+      ctx.restore();
+      continue;
     } else if (particle.kind === "goreFragment") {
       ctx.translate(particle.x, particle.y);
       ctx.rotate(particle.rotation || 0);
       const spikes = particle.spikes || 6;
-      const dressedGore = cinema3dDressingActive();
       for (let point = 0; point < spikes * 2; point += 1) {
         const angle = point * Math.PI / spikes;
-        // 3D mode: per-point jitter breaks the symmetric star into a torn
-        // irregular chunk (the flat throwing-star read was pure clipart).
-        const jag = dressedGore
-          ? 0.62 + (Math.abs(Math.sin((point * 37.7 + spikes * 91.3 + particle.size * 13.1))) * 0.55)
-          : (point % 2 ? .48 : 1);
-        const radius = particle.size * (dressedGore ? jag : jag);
+        // 2.8 critic round (M4): per-point jitter breaks the symmetric star
+        // into a torn irregular chunk in EVERY renderer (the flat
+        // throwing-star read was pure clipart).
+        const jag = 0.62 + (Math.abs(Math.sin((point * 37.7 + spikes * 91.3 + particle.size * 13.1))) * 0.55);
+        const radius = particle.size * jag;
         if (point === 0) ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
         else ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
       }
@@ -20726,58 +20906,41 @@ function drawParticles() {
       ctx.strokeStyle = effect.color;
       ctx.fillStyle = effect.secondary;
       ctx.lineCap = "round";
-      const dressedSpray = cinema3dDressingActive();
       for (let spray = 0; spray < 17; spray += 1) {
         const angle = -1.42 + spray * .18 + (effect.family === "launch" ? -.18 : 0);
         const length = reach * (.38 + (spray % 6) * .12);
         ctx.globalAlpha = alpha * (.28 + spray % 4 * .14);
-        if (dressedSpray) {
-          // CINEMA 3D: tapered arterial arcs — thick dark root fading down a
-          // gravity-bent path to a droplet-sprite tip; the straight uniform
-          // "red spoke" read is gone.
-          const tipX = Math.cos(angle) * length * effect.direction;
-          const tipY = Math.sin(angle) * length + length * 0.22; // gravity sag
-          const sprayGrad = ctx.createLinearGradient(0, 0, tipX, tipY);
-          sprayGrad.addColorStop(0, effect.secondary);
-          sprayGrad.addColorStop(0.5, effect.color);
-          sprayGrad.addColorStop(1, "rgba(96,4,10,0.25)");
-          ctx.strokeStyle = sprayGrad;
-          ctx.lineWidth = 4.5 + spray % 5;
-          ctx.beginPath();
-          ctx.moveTo(0, 0);
-          ctx.quadraticCurveTo(
-            Math.cos(angle) * length * .55 * effect.direction,
-            Math.sin(angle) * length * .45 - 24,
-            tipX, tipY,
-          );
-          ctx.stroke();
-          // thinner core pass rides the same arc: reads as a liquid rope
-          ctx.globalAlpha *= 0.7;
-          ctx.lineWidth = Math.max(1.4, (4.5 + spray % 5) * 0.4);
-          ctx.stroke();
-          const tipSize = 5 + spray % 4 * 2.4;
-          ctx.save();
-          ctx.translate(tipX, tipY);
-          // teardrop head leads along the arc's end tangent (gravity-drooped)
-          ctx.rotate(angle + 0.3);
-          ctx.scale(1.5, 0.85);
-          ctx.drawImage(fatalityDropletCanvas(), -tipSize, -tipSize, tipSize * 2, tipSize * 2);
-          ctx.restore();
-          continue;
-        }
-        ctx.lineWidth = 3 + spray % 5;
+        // 2.8 critic round (M4): tapered arterial arcs in EVERY renderer —
+        // thick dark root fading down a gravity-bent path to a droplet
+        // sprite tip; the straight uniform "red spoke" read is gone.
+        const tipX = Math.cos(angle) * length * effect.direction;
+        const tipY = Math.sin(angle) * length + length * 0.22; // gravity sag
+        const sprayGrad = ctx.createLinearGradient(0, 0, tipX, tipY);
+        sprayGrad.addColorStop(0, effect.secondary);
+        sprayGrad.addColorStop(0.5, effect.color);
+        sprayGrad.addColorStop(1, "rgba(96,4,10,0.25)");
+        ctx.strokeStyle = sprayGrad;
+        ctx.lineWidth = 4.5 + spray % 5;
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.quadraticCurveTo(
-          Math.cos(angle) * length * .5 * effect.direction,
-          Math.sin(angle) * length * .55 - 20,
-          Math.cos(angle) * length * effect.direction,
-          Math.sin(angle) * length,
+          Math.cos(angle) * length * .55 * effect.direction,
+          Math.sin(angle) * length * .45 - 24,
+          tipX, tipY,
         );
         ctx.stroke();
-        ctx.beginPath();
-        ctx.ellipse(Math.cos(angle) * length * effect.direction, Math.sin(angle) * length, 3 + spray % 4 * 2, 7 + spray % 5 * 2, angle, 0, Math.PI * 2);
-        ctx.fill();
+        // thinner core pass rides the same arc: reads as a liquid rope
+        ctx.globalAlpha *= 0.7;
+        ctx.lineWidth = Math.max(1.4, (4.5 + spray % 5) * 0.4);
+        ctx.stroke();
+        const tipSize = 5 + spray % 4 * 2.4;
+        ctx.save();
+        ctx.translate(tipX, tipY);
+        // teardrop head leads along the arc's end tangent (gravity-drooped)
+        ctx.rotate(angle + 0.3);
+        ctx.scale(1.5, 0.85);
+        ctx.drawImage(fatalityDropletCanvas(), -tipSize, -tipSize, tipSize * 2, tipSize * 2);
+        ctx.restore();
       }
     } else if (effect.kind === "lensBlood") {
       // Screen-space pass in drawCinematicGoreOverlay().
@@ -20908,11 +21071,13 @@ function drawParticles() {
       }
     } else if (effect.kind === "bloodDecal") {
       ctx.shadowBlur = 0;
+      // 2.8 critic round (M2): decals evolve on their own AGE clock, which
+      // keeps running while the fatality hold freezes their lifetimes.
+      const decalAge = effect.age ?? ((effect.max || 1) - effect.life);
       if (effect.wall) {
         // 2.8: wall spatter — a flattened smudge against the arena bound
         // whose drip run lengthens as the stain ages, ending in a bead.
-        const age = (effect.max || 1) - effect.life;
-        const run = Math.min(effect.run || 18, 4 + age * 26);
+        const run = Math.min(effect.run || 18, 4 + decalAge * 26);
         ctx.globalAlpha = Math.min(0.62, alpha * 0.8);
         ctx.fillStyle = effect.color;
         ctx.beginPath();
@@ -20925,19 +21090,26 @@ function drawParticles() {
         ctx.fill();
       } else if (effect.smear) {
         // 2.8: drag smear — an elongated streak with a feathered tail on the
-        // trailing side, left by a body sliding through its own pool.
-        ctx.globalAlpha = Math.min(0.55, alpha * 0.7);
+        // trailing side, left by a body sliding through its own pool. Critic
+        // round (S4): raised alpha/height so the streak is locatable.
+        ctx.globalAlpha = Math.min(0.85, alpha * 0.95);
         ctx.fillStyle = effect.color;
         ctx.beginPath();
-        ctx.ellipse(0, 0, effect.width * 0.62, 4.2, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, effect.width * 0.62, 6.6, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha *= 0.6;
         ctx.beginPath();
-        ctx.ellipse(-(effect.direction || 1) * effect.width * 0.5, 0, effect.width * 0.34, 2.6, 0, 0, Math.PI * 2);
+        ctx.ellipse(-(effect.direction || 1) * effect.width * 0.5, 0, effect.width * 0.34, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // a brighter wet core so the streak reads on dark asphalt too
+        ctx.globalAlpha = Math.min(0.6, alpha * 0.7);
+        ctx.fillStyle = "#8c0712";
+        ctx.beginPath();
+        ctx.ellipse((effect.direction || 1) * effect.width * 0.16, 0, effect.width * 0.34, 2.6, 0, 0, Math.PI * 2);
         ctx.fill();
       } else {
         // 2.8: floor stains soak in — older blood darkens toward matte.
-        const soak = bloodSoak((effect.max || 1) - effect.life);
+        const soak = bloodSoak(decalAge);
         ctx.globalAlpha = Math.min(0.68, alpha * 0.82) * (1 - soak * 0.22);
         ctx.fillStyle = soak > 0.55 ? "#43030a" : effect.color;
         ctx.beginPath();
@@ -21220,34 +21392,45 @@ function drawFinisherOverlay() {
   if (finisher.fatalityTriggered) {
     const attackerId = attacker.def.finisherScriptId || attacker.def.id;
     const fatality = graphicFatalitySnapshot(attackerId, finisher.type, finisher.elapsed, finisher.fatalityAt);
+    fatality.aftermath = Math.max(fatality.aftermath, finisherAftermathSeconds(finisher));
     const reveal = fatality.reveal;
+    // 2.8 critic round (M3): the title card gets its intro beat (~1s) parked
+    // over the frame, then LIFTS out of the victim's screen region — it
+    // tucks up under the top letterbox bar at reduced scale while the
+    // caption stack fades out, so the strongest arterial window is readable.
+    const lift = clamp((fatality.aftermath - 1.05) / 0.5, 0, 1);
+    const titleY = lerp(H * .23, barHeight + 30, lift);
     ctx.save();
     ctx.globalAlpha = Math.sin(reveal * Math.PI * .5) * clamp(1.45 - fatality.aftermath * .14, .55, 1);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.shadowColor = "rgba(0,0,0,.95)";
     ctx.shadowBlur = 18;
-    ctx.lineWidth = 12;
+    ctx.lineWidth = Math.round(lerp(12, 7, lift));
     ctx.strokeStyle = "rgba(0,0,0,.92)";
     ctx.fillStyle = fatality.palette[0];
-    ctx.font = "1000 52px Arial Narrow, Impact, sans-serif";
-    ctx.strokeText("GRAPHIC FATALITY", W * .5, H * .23);
-    ctx.fillText("GRAPHIC FATALITY", W * .5, H * .23);
-    ctx.font = "900 18px Arial Narrow, Arial, sans-serif";
-    ctx.lineWidth = 7;
-    ctx.fillStyle = "#fff0df";
-    // 3D mode: ONE title line under the header (round-3, critic item 2) —
-    // the cinematic carries the story; the caption stack is gone.
-    const titleLine = dressedOverlay ? fatality.caption : `${fatality.title} · ${fatality.caption}`;
-    ctx.strokeText(titleLine, W * .5, H * .3);
-    ctx.fillText(titleLine, W * .5, H * .3);
-    if (!dressedOverlay) {
-      ctx.font = "900 14px Arial Narrow, Arial, sans-serif";
-      ctx.lineWidth = 6;
-      ctx.fillStyle = attacker.def.accent;
-      const signatureLine = `${fatality.projectileFinale} · ${fatality.device}`;
-      ctx.strokeText(signatureLine, W * .5, H * .345);
-      ctx.fillText(signatureLine, W * .5, H * .345);
+    ctx.font = `1000 ${Math.round(lerp(52, 28, lift))}px Arial Narrow, Impact, sans-serif`;
+    ctx.strokeText("GRAPHIC FATALITY", W * .5, titleY);
+    ctx.fillText("GRAPHIC FATALITY", W * .5, titleY);
+    if (lift < 0.98) {
+      const captionAlpha = 1 - lift;
+      ctx.globalAlpha *= captionAlpha;
+      ctx.font = "900 18px Arial Narrow, Arial, sans-serif";
+      ctx.lineWidth = 7;
+      ctx.fillStyle = "#fff0df";
+      // 3D mode: ONE title line under the header (round-3, critic item 2) —
+      // the cinematic carries the story; the caption stack is gone.
+      const titleLine = dressedOverlay ? fatality.caption : `${fatality.title} · ${fatality.caption}`;
+      ctx.strokeText(titleLine, W * .5, titleY + H * .07);
+      ctx.fillText(titleLine, W * .5, titleY + H * .07);
+      if (!dressedOverlay) {
+        ctx.font = "900 14px Arial Narrow, Arial, sans-serif";
+        ctx.lineWidth = 6;
+        ctx.fillStyle = attacker.def.accent;
+        const signatureLine = `${fatality.projectileFinale} · ${fatality.device}`;
+        ctx.strokeText(signatureLine, W * .5, titleY + H * .115);
+        ctx.fillText(signatureLine, W * .5, titleY + H * .115);
+      }
     }
     ctx.restore();
   }
@@ -26947,6 +27130,39 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
       showScreen("fight");
       updateHud();
       setTouchPrompt("final");
+    },
+    // 2.8 critic round: raw aftermath telemetry for the gore filmstrips —
+    // the live hold clock, the tracked wound anchor, and where the key
+    // aftermath props actually sit. Read-only snapshot data.
+    goreProbe() {
+      const finisher = state.finisher;
+      const victim = finisher ? state.fighters[1 - finisher.winner] : null;
+      const attacker = finisher ? state.fighters[finisher.winner] : null;
+      const fatality = finisher && attacker
+        ? getGraphicFatality(attacker.def.finisherScriptId || attacker.def.id, finisher.type)
+        : null;
+      return {
+        aftermath: finisher ? Number(finisherAftermathSeconds(finisher).toFixed(3)) : 0,
+        elapsed: finisher ? Number(finisher.elapsed.toFixed(3)) : 0,
+        fatalityAt: finisher ? Number(finisher.fatalityAt.toFixed(3)) : 0,
+        wound: finisher && victim && fatality
+          ? (({ x, y }) => ({ x: Math.round(x), y: Math.round(y) }))(fatalityWoundPoint(victim, fatality, finisher.direction))
+          : null,
+        victim: victim
+          ? { x: Math.round(victim.x), y: Math.round(victim.y), rotation: Number((victim.cinematicRotation || 0).toFixed(3)), frame: victim.cinematicFrame }
+          : null,
+        renderSize: victim ? Math.round(fighterRenderSize(victim.def.id)) : 0,
+        projectiles: state.effects.filter((effect) => effect.kind === "fatalityProjectile")
+          .map((effect) => ({ x: Math.round(effect.x), y: Math.round(effect.y), scale: Number((effect.focusScale || 1).toFixed(2)), landed: effect.landed })),
+        limbs: state.effects.filter((effect) => effect.kind === "severedLimb")
+          .map((effect) => ({ x: Math.round(effect.x), y: Math.round(effect.y), resting: effect.resting })),
+        pool: state.effects.filter((effect) => effect.kind === "fatalityPool")
+          .map((effect) => ({ age: Number((effect.age || 0).toFixed(2)), life: Number(effect.life.toFixed(2)) })),
+        stains: state.effects.filter((effect) => effect.kind === "bloodDecal" && effect.stain && !effect.wall).length,
+        wallStains: state.effects.filter((effect) => effect.kind === "bloodDecal" && effect.wall).length,
+        smears: state.effects.filter((effect) => effect.kind === "bloodDecal" && effect.smear).length,
+        camera: { zoom: Number(state.cinematicZoom.toFixed(2)) },
+      };
     },
     graphicFatality(id, type = 0, seconds = 4.7, enabled = true) {
       this.ready(id, type);

@@ -9,10 +9,12 @@ import {
   arterialPressure,
   auditSignatureGore,
   bloodSoak,
+  bloodTint,
   canSpawnFloorStain,
   canSpawnSmear,
   canSpawnWallStain,
   collapseEnvelope,
+  scatterBandOffset,
   signatureGore,
   stainBudget,
 } from "../engine/gore.mjs";
@@ -130,6 +132,68 @@ test("every fatality script id has a bespoke signature gore beat", () => {
 test("signatureGore falls back to the deathblow beat for unknown ids", () => {
   assert.equal(signatureGore("nobody"), SIGNATURE_GORE.deathblow);
   assert.equal(signatureGore("benny").arcs, true);
+});
+
+test("scattered pieces obey gravity: fly, bounce, and settle on the ground plane", () => {
+  const restY = 210;
+  const launch = scatterBandOffset(135, -205, restY, 0);
+  assert.equal(launch.x, 0);
+  assert.equal(launch.y, 0);
+  assert.equal(launch.landed, false);
+  // early flight: the piece is airborne ABOVE its rest line and moving out
+  const early = scatterBandOffset(135, -205, restY, 0.3);
+  assert.ok(early.y < restY, `piece must still be airborne at 0.3s, y=${early.y}`);
+  assert.ok(early.x > 0, "piece must fly out along its burst direction");
+  assert.ok(early.progress > 0 && early.progress < 1);
+  // settled: by 2.5s every piece rests exactly on its ground line
+  const settled = scatterBandOffset(135, -205, restY, 2.5);
+  assert.equal(settled.landed, true);
+  assert.equal(settled.y, restY);
+  // and it STAYS there — no drift, no hover (deterministic rest pose)
+  const later = scatterBandOffset(135, -205, restY, 6);
+  assert.equal(later.x, settled.x);
+  assert.equal(later.y, restY);
+  assert.equal(later.landed, true);
+  // a bottom band (restY 0) settles almost immediately
+  const bottom = scatterBandOffset(64, 34, 0, 0.6);
+  assert.equal(bottom.landed, true);
+  assert.equal(bottom.y, 0);
+  // determinism: identical inputs, identical outputs
+  assert.deepEqual(scatterBandOffset(38, -42, 134, 0.5), scatterBandOffset(38, -42, 134, 0.5));
+});
+
+test("no scattered piece hangs mid-air: everything lands within ~1.6s", () => {
+  const bands = [
+    [-74 * 1.5, -92 * 1.5, 0.72 * 280], // rupture head, max separation force
+    [135 * 1.5, -205 * 1.5, 0.75 * 280], // launch head
+    [45, 10, 0.32 * 280], // crush mid
+    [0, 22, 0], // grounded body band
+  ];
+  for (const [burstX, burstY, restY] of bands) {
+    const state = scatterBandOffset(burstX, burstY, restY, 1.65);
+    assert.equal(state.landed, true, `piece (${burstX},${burstY}) must settle by 1.65s`);
+  }
+});
+
+test("bloodTint clamps candy palettes into the arterial red family", () => {
+  // hot pink / magenta accents crush their green+blue toward arterial ratios
+  for (const candy of ["#ff144f", "#ff2364", "#ff174f", "#ff1245"]) {
+    const clamped = bloodTint(candy);
+    const value = parseInt(clamped.slice(1), 16);
+    const red = (value >> 16) & 255;
+    const green = (value >> 8) & 255;
+    const blue = value & 255;
+    assert.equal(red, parseInt(candy.slice(1, 3), 16), "red channel carries the fighter's brightness");
+    assert.ok(green <= Math.round(red * 0.18), `${candy} -> ${clamped} green must sit at arterial ratio`);
+    assert.ok(blue <= Math.round(red * 0.14), `${candy} -> ${clamped} blue must sit at arterial ratio`);
+  }
+  // true arterial reds pass through untouched
+  assert.equal(bloodTint("#d1081c"), "#d1081c");
+  assert.equal(bloodTint("#65000d"), "#65000d");
+  // junk input falls back to a safe arterial red
+  assert.equal(bloodTint(""), "#b40714");
+  assert.equal(bloodTint(null), "#b40714");
+  assert.equal(bloodTint("#zzz"), "#b40714");
 });
 
 test("gore SFX manifest names distinct files with sane volumes and rate caps", () => {
