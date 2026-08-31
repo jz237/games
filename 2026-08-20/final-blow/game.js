@@ -312,6 +312,19 @@ import {
   graphicFatalitySnapshot,
 } from "./engine/fatalities.mjs";
 import {
+  ARTERIAL_FRAMES,
+  GORE_BUDGETS,
+  GORE_SFX,
+  arterialPressure,
+  bloodSoak,
+  canSpawnFloorStain,
+  canSpawnSmear,
+  canSpawnWallStain,
+  collapseEnvelope,
+  signatureGore,
+  stainBudget,
+} from "./engine/gore.mjs";
+import {
   BOARDWALK_POSTURES,
   BUFFET_POSTURES,
   POOLSIDE_POSTURES,
@@ -1106,6 +1119,14 @@ const elementAudioAssets = Object.freeze({
   "vfx-cash": "assets/audio/vfx/cash-riffle.mp3",
 });
 
+// 2.8 GORE: generated fatality layers (manifest in engine/gore.mjs) on the
+// elementAudioAssets pattern — new generated media joining the shared pools,
+// never touching the review-guarded audioAssets takes. Playback goes through
+// the rate-capped, graphicFatalities-gated goreSfx() wrapper only.
+const fatalityAudioAssets = Object.freeze(Object.fromEntries(
+  Object.entries(GORE_SFX).map(([kind, meta]) => [kind, `assets/audio/fatality/${meta.file}`]),
+));
+
 const sfxVolumes = {
   select: 0.5,
   jump: 0.42,
@@ -1151,6 +1172,8 @@ const sfxVolumes = {
   "vfx-vinyl": 0.42,
   "vfx-cash": 0.5,
 };
+// 2.8 GORE layer volumes ride the engine manifest so tests can audit them.
+for (const [kind, meta] of Object.entries(GORE_SFX)) sfxVolumes[kind] = meta.volume;
 
 function createSfxPool(kind, src) {
   return Array.from({ length: kind.startsWith("hit-") || kind === "hit" ? 5 : 3 }, () => {
@@ -1167,6 +1190,11 @@ const sfxPools = Object.fromEntries(Object.entries(audioAssets).map(([kind, src]
 const sfxCursors = Object.fromEntries(Object.keys(audioAssets).map((kind) => [kind, 0]));
 // The elemental layers ride the same pools/cursors so sound() plays them.
 for (const [kind, src] of Object.entries(elementAudioAssets)) {
+  sfxPools[kind] = createSfxPool(kind, src);
+  sfxCursors[kind] = 0;
+}
+// 2.8 GORE layers join the same machinery.
+for (const [kind, src] of Object.entries(fatalityAudioAssets)) {
   sfxPools[kind] = createSfxPool(kind, src);
   sfxCursors[kind] = 0;
 }
@@ -7358,6 +7386,9 @@ let letterboxLevel = 0;
 // Win-pose curtain-call dim, eased in the sim tick beside superDimLevel on the
 // same deliberately-unsnapshotted pattern (a resimulation just re-eases it).
 let roundOverDimLevel = 0;
+// 2.8: kill-spotlight dim for a triggered graphic fatality — the street goes
+// dark and the kill stays lit, on the same unsnapshotted eased-level pattern.
+let fatalitySpotLevel = 0;
 
 function cameraMotionScale() {
   return state.accessibility.reducedMotion ? 0 : state.accessibility.shakeScale;
@@ -10587,6 +10618,148 @@ function focusFinisherProjectile(finisher, attacker, victim, fatality, phase) {
     : phase === "trap" ? fatality.projectileAction : fatality.projectileFinale);
 }
 
+// ---------------------------------------------------------------------------
+// 2.8 FATALITY REALISM — gore audio wrapper, budgeted mist, and the
+// per-fighter signature beats. Data + envelopes live in engine/gore.mjs.
+// ---------------------------------------------------------------------------
+
+// Monotonic one-shot counters on the elementFxDebug pattern, exposed via
+// snapshot().violence for smoke probes.
+const goreFxDebug = {
+  signatureBeats: 0, goreSfxPlays: 0, mistPuffs: 0, wallStains: 0, smears: 0,
+};
+
+// Per-cue rate caps (manifest minMs) so pump peaks never stack the layer.
+const goreSfxLast = new Map();
+
+function goreSfx(kind, fighter = null) {
+  if (rollbackResimulating || !state.graphicFatalities) return;
+  const meta = GORE_SFX[kind];
+  if (!meta) return;
+  if (!$("#soundToggle").checked) return;
+  const now = performance.now();
+  if (now - (goreSfxLast.get(kind) || -Infinity) < meta.minMs) return;
+  goreSfxLast.set(kind, now);
+  sound(kind, fighter);
+  goreFxDebug.goreSfxPlays += 1;
+}
+
+// Aerosol blood mist / steam / ash: capped soft particles that billow and
+// rise a hair. Colour comes from the spawner so the same particle carries
+// benny's steam and devil's ash. Checksum-exempt array, visualRandom only.
+function spawnGoreMist(x, y, count, scale = 1, color = "#6b050c", rise = 1) {
+  if (!state.graphicFatalities) return;
+  let mist = 0;
+  for (const particle of state.particles) if (particle.kind === "mist") mist += 1;
+  const room = Math.max(0, GORE_BUDGETS.mist - mist);
+  const spawn = Math.min(room, Math.max(1, Math.round(count * state.performance.particleScale)));
+  for (let index = 0; index < spawn; index += 1) {
+    state.particles.push({
+      kind: "mist",
+      x: x + (visualRandom() - 0.5) * 46 * scale,
+      y: y + (visualRandom() - 0.5) * 30 * scale,
+      vx: (visualRandom() - 0.5) * 70,
+      vy: -(6 + visualRandom() * 26) * rise,
+      gravity: -14 * rise, drag: 0.965,
+      life: 0.8 + visualRandom() * 0.9, max: 1.7,
+      size: (11 + visualRandom() * 17) * scale,
+      color,
+    });
+  }
+  goreFxDebug.mistPuffs += spawn;
+}
+
+// The killing blow's bespoke per-fighter beat (SIGNATURE_GORE selects the
+// path). Everything lands in the checksum-exempt arrays with visualRandom,
+// inside the same finalImpact+gore gate as the rest of the fatality dressing.
+function spawnSignatureGoreBeat(scriptId, fatality, x, y, direction) {
+  const sig = signatureGore(scriptId);
+  const scale = state.performance.particleScale;
+  goreFxDebug.signatureBeats += 1;
+  if (sig.slamRing) {
+    // Seismic: the slam answers in the ground — a low blood shock ring.
+    state.effects.push({
+      kind: "goreShockwave", family: "crush", direction,
+      x, y: FLOOR - 6, life: 1.05, max: 1.05,
+      color: fatality.palette[0], secondary: fatality.palette[1], scale: 0.8,
+    });
+  }
+  if (sig.boneScale) {
+    // Heavier bone-chip fountain out of the crush point.
+    const chips = Math.max(4, Math.round(7 * sig.boneScale * scale));
+    for (let index = 0; index < chips; index += 1) {
+      const angle = -Math.PI * (0.2 + visualRandom() * 0.6);
+      const speed = 260 + visualRandom() * 520;
+      state.particles.push({
+        kind: "goreFragment", bone: true,
+        x: x + (visualRandom() - 0.5) * 30, y: y + (visualRandom() - 0.5) * 30,
+        vx: Math.cos(angle) * speed * (visualRandom() > 0.5 ? 1 : -1),
+        vy: Math.sin(angle) * speed - 60,
+        gravity: 980, drag: 0.982,
+        rotation: visualRandom() * Math.PI * 2, spin: (visualRandom() - 0.5) * 16,
+        spikes: 4 + index % 3,
+        life: 0.9 + visualRandom() * 1.2, max: 2.1,
+        size: 4 + visualRandom() * 7,
+        color: index % 3 ? "#e6d3b3" : fatality.palette[1],
+      });
+    }
+  }
+  if (sig.verdict) {
+    // Contract: a tight, precise seal-burst — ten exact rays of deep red.
+    for (let ray = 0; ray < 10; ray += 1) {
+      const angle = -Math.PI * 0.5 + (ray - 4.5) * 0.3;
+      const speed = 420 + (ray % 3) * 120;
+      state.particles.push({
+        kind: "sparkLine",
+        x, y,
+        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+        gravity: 760, drag: 0.96,
+        life: 0.22 + visualRandom() * 0.14, max: 0.36,
+        size: 2 + ray % 3,
+        color: ray % 4 ? fatality.palette[0] : "#ff3b4e",
+      });
+    }
+  }
+  if (sig.glitchBits) {
+    // Glitch: quantised signal-green debris tumbling with the fragments.
+    const bits = Math.max(6, Math.round(10 * scale));
+    for (let index = 0; index < bits; index += 1) {
+      const angle = Math.round(visualRandom() * 8) * (Math.PI / 4);
+      const speed = 180 + Math.round(visualRandom() * 3) * 140;
+      state.particles.push({
+        kind: "debris",
+        x: x + (Math.round(visualRandom() * 4) - 2) * 14,
+        y: y + (Math.round(visualRandom() * 4) - 2) * 14,
+        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 120,
+        gravity: 900, drag: 0.98,
+        rotation: Math.round(visualRandom() * 4) * (Math.PI / 2), spin: 0,
+        life: 0.5 + visualRandom() * 0.7, max: 1.2,
+        size: 3 + Math.round(visualRandom() * 3) * 2,
+        color: index % 3 ? sig.glitchColor : fatality.palette[0],
+      });
+    }
+  }
+  if (sig.gushScale) {
+    // Concrete crush: thick, slow gouts that fall close and pool fast.
+    const gouts = Math.max(5, Math.round(9 * scale));
+    for (let index = 0; index < gouts; index += 1) {
+      const angle = -Math.PI * (0.25 + visualRandom() * 0.5);
+      const speed = (110 + visualRandom() * 220) * 0.9;
+      state.particles.push({
+        kind: "blood",
+        x: x + (visualRandom() - 0.5) * 26, y: y + (visualRandom() - 0.5) * 26,
+        vx: Math.cos(angle) * speed * (visualRandom() > 0.5 ? 1 : -1),
+        vy: Math.sin(angle) * speed,
+        gravity: 1240, drag: 0.988,
+        life: 0.8 + visualRandom() * 0.9, max: 1.7,
+        size: (6 + visualRandom() * 8) * (sig.dropletScale || 1),
+        color: index % 3 ? fatality.palette[0] : fatality.palette[1],
+      });
+    }
+  }
+  if (sig.mistScale) spawnGoreMist(x, y, Math.round(6 * sig.mistScale), 1.25);
+}
+
 function triggerFinisherImpact(finisher, impact) {
   const attacker = state.fighters[finisher.winner];
   const victim = state.fighters[1 - finisher.winner];
@@ -10663,12 +10836,15 @@ function triggerFinisherImpact(finisher, impact) {
     // Time dilation for the killing blow, then a pumping wound. Both are plain
     // numbers on the finisher, so rollback snapshots reproduce them exactly.
     finisher.slowMotionTicks = 42;
-    finisher.arterialFrames = 210;
+    finisher.arterialFrames = ARTERIAL_FRAMES;
     finisher.fatalityLimb = fatality.limb;
     finisher.fatalitySpecial = fatality.special;
     finisher.beatLabel = fatality.projectileFinale;
     finisher.beatLife = 1.45;
-    const decalLife = Math.max(1.4, finisher.script.duration - finisher.elapsed + .8);
+    // 2.8: the fatality decals (pool, lens blood, severed limb) must survive
+    // the whole cinematic hold INCLUDING the longer pressure-model bleed-out —
+    // a pool vanishing while the wound still pumps read as a glitch.
+    const decalLife = Math.max(1.4, finisher.script.duration - finisher.elapsed + 4.2);
     state.effects.push({
       kind: "fatalityPool",
       profileId: fatality.id,
@@ -10771,6 +10947,13 @@ function triggerFinisherImpact(finisher, impact) {
       clothAccent: victim.def.accent,
       direction: finisher.direction,
     });
+    // 2.8: impact aerosol — heavy hits throw a low blood mist that hangs.
+    spawnGoreMist(pointX, pointY, 7 + Math.round(5 * fatality.blood), 1.2);
+    // 2.8: the fighter's bespoke signature gore beat (engine/gore.mjs table).
+    spawnSignatureGoreBeat(scriptId, fatality, pointX, pointY, finisher.direction);
+    // 2.8 gore audio: wet tear + bone report layered under the 'fatal' hit.
+    goreSfx("gore-squelch", victim);
+    goreSfx("gore-bone");
   }
   sound(finalImpact ? "fatal" : impact.sound, attacker);
 }
@@ -10812,12 +10995,46 @@ function updateFinisher(dt) {
   if (finisher.fatalityTriggered && state.graphicFatalities && !state.accessibility.reducedMotion
     && finisher.elapsed > finisher.fatalityAt) {
     const aftermath = finisher.elapsed - finisher.fatalityAt;
-    const fade = Math.max(0, 1 - aftermath / 2.4);
-    if (fade > 0) {
-      // Twitches arrive in spasms rather than a constant buzz: the slow sine
-      // gates the fast one, and the whole thing decays to stillness.
-      const spasm = Math.sin(state.simulationTick * 1.7) * Math.max(0, Math.sin(state.simulationTick * 0.11));
-      victim.cinematicRotation += spasm * 0.055 * fade;
+    // 2.8 collapse weight (engine/gore.mjs): a half-second beat of stillness,
+    // then the joints unload into an eased slump layered on the authored
+    // pose; spasms arrive in bursts that space out and decay quadratically
+    // to TRUE stillness — no residual buzz on the settled body.
+    const env = collapseEnvelope(aftermath, state.simulationTick);
+    victim.cinematicRotation += env.slump * 0.085 * finisher.direction
+      + env.twitch * 0.055;
+    // The settle lands with a heavy body-drop cue exactly once (plain flag on
+    // the snapshotted finisher; goreSfx carries the resim guard).
+    if (!finisher.bodyDropPlayed && env.slump >= 1 && (victim.grounded || aftermath > 1.6)) {
+      finisher.bodyDropPlayed = true;
+      goreSfx("gore-body-drop");
+    }
+    // 2.8 smearing: a body dragged/sliding through the aftermath pulls an
+    // elongated streak out of nearby blood instead of leaving it pristine.
+    // Scripted drags are eased, so the slide ACCUMULATES: every ~18px of
+    // grounded movement through the gore field leaves one streak.
+    if (finisher.smearX === undefined) finisher.smearX = victim.x;
+    const slide = victim.x - finisher.smearX;
+    finisher.smearX = victim.x;
+    finisher.smearAccum = Math.abs(slide) > 0.45 && victim.grounded
+      ? (finisher.smearAccum || 0) + Math.abs(slide)
+      : 0;
+    if (finisher.smearAccum >= 18) {
+      finisher.smearAccum = 0;
+      const budget = stainBudget(state.effects);
+      const nearBlood = state.effects.some((effect) => (effect.kind === "fatalityPool"
+        || (effect.kind === "bloodDecal" && effect.stain && !effect.wall))
+        && Math.abs(effect.x - victim.x) < 150);
+      if (nearBlood && canSpawnSmear(budget)) {
+        const smearLife = 3 + visualRandom() * 2;
+        state.effects.push({
+          kind: "bloodDecal", smear: true,
+          x: victim.x - Math.sign(slide) * 14, y: FLOOR + 3,
+          width: 34 + visualRandom() * 40,
+          direction: Math.sign(slide) || 1,
+          life: smearLife, max: smearLife, color: "#5c040b",
+        });
+        goreFxDebug.smears += 1;
+      }
     }
   }
   attacker.specialGlow = Math.max(attacker.specialGlow, .28 + Math.sin(finisher.elapsed * 9) * .08);
@@ -10844,34 +11061,102 @@ function updateFinisher(dt) {
   // becomes a floor stain plus a small splash back up.
   if (finisher.fatalityTriggered && state.graphicFatalities && (finisher.arterialFrames || 0) > 0) {
     finisher.arterialFrames -= 1;
-    const pump = 0.5 + 0.5 * Math.abs(Math.sin(state.simulationTick * 0.16));
-    // Wave 15: one haptic lub-dub per peak of the same arterial pump wave.
-    // Module-level tick latch on the wallSplatLastTick pattern; combatHaptic
-    // carries the rollbackResimulating guard.
-    if (pump > 0.94 && state.simulationTick - lastHeartbeatHapticTick > 12) {
+    // 2.8: pressure-based spurts (engine/gore.mjs) — the heartbeat slows and
+    // peak pressure decays as the supply drains, so the wound collapses from
+    // fast regular arcs into a weak dribble instead of pumping flat.
+    const ap = arterialPressure(finisher.arterialFrames, ARTERIAL_FRAMES);
+    // Wave 15: one haptic lub-dub per systolic peak. Module-level tick latch
+    // on the wallSplatLastTick pattern; combatHaptic carries the
+    // rollbackResimulating guard, and the 2.8 arterial hiss rides the same
+    // latch (goreSfx adds its own rate cap on top).
+    if (ap.peak && state.simulationTick - lastHeartbeatHapticTick > 12) {
       lastHeartbeatHapticTick = state.simulationTick;
       combatHaptic("fatalityHeartbeat");
+      goreSfx("gore-arterial", victim);
     }
     const scriptId = attacker.def.finisherScriptId || attacker.def.id;
     const fatality = getGraphicFatality(scriptId, finisher.type);
+    const sig = signatureGore(scriptId);
     const wound = fatalityWoundPoint(victim, fatality, finisher.direction);
-    if (state.simulationTick % 2 === 0) {
-      const jets = 1 + (pump > 0.82 ? 1 : 0) + (state.performance.particleScale >= 1 ? 1 : 0);
+    const speedMul = sig.gushScale ? 0.78 : 1;
+    const sizeMul = sig.dropletScale || 1;
+    if (state.simulationTick % 2 === 0 && ap.strength > 0.03) {
+      const jets = 1 + (ap.pulse > 0.72 ? 1 : 0)
+        + (state.performance.particleScale >= 1 && ap.pressure > 0.45 ? 1 : 0);
       for (let jet = 0; jet < jets; jet += 1) {
         const vr = visualRandom();
+        // Post's paint kit marbles the spray with the attacker's accent.
+        const marbled = sig.marbling && visualRandom() < 0.3;
         state.particles.push({
           kind: "arterial",
           x: wound.x + (visualRandom() - .5) * 8,
           y: wound.y + (visualRandom() - .5) * 7,
-          vx: finisher.direction * (110 + vr * 390) * pump + (visualRandom() - 0.5) * 110,
-          vy: -(190 + visualRandom() * 460) * pump,
+          vx: finisher.direction * (90 + vr * 430) * (0.3 + ap.strength * 0.9) * speedMul
+            + (visualRandom() - 0.5) * 90,
+          vy: -(150 + visualRandom() * 470) * (0.35 + ap.strength * 0.85) * speedMul,
           gravity: 1150, drag: 0.985,
           life: 1.5, max: 1.5,
-          size: 2 + visualRandom() * 2.6,
-          color: vr > 0.4 ? "#a50713" : "#d90b19",
+          size: (1.7 + visualRandom() * (2 + ap.pressure * 1.7)) * sizeMul,
+          color: marbled ? attacker.def.accent : vr > 0.4 ? "#a50713" : "#d90b19",
         });
       }
     }
+    // 2.8 per-fighter aftermath dressing on the same pump clock — every
+    // emitter is short-lived and in motion (never a static decal spark).
+    if (sig.emberColor && state.simulationTick % 3 === 0 && visualRandom() < (sig.emberRate || 0.5)) {
+      state.particles.push({
+        kind: "sparkLine",
+        x: wound.x + (visualRandom() - 0.5) * 12, y: wound.y + (visualRandom() - 0.5) * 12,
+        vx: (visualRandom() - 0.5) * 220, vy: -(40 + visualRandom() * 160),
+        gravity: 420, drag: 0.95,
+        life: 0.14 + visualRandom() * 0.16, max: 0.3,
+        size: 1.2 + visualRandom() * 1.6, color: sig.emberColor,
+      });
+    }
+    if (sig.arcs && ap.peak && state.simulationTick % 2 === 0) {
+      for (let arc = 0; arc < 3; arc += 1) {
+        const angle = visualRandom() * Math.PI * 2;
+        const speed = 260 + visualRandom() * 340;
+        state.particles.push({
+          kind: "sparkLine",
+          x: wound.x, y: wound.y,
+          vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+          gravity: 180, drag: 0.9,
+          life: 0.1 + visualRandom() * 0.12, max: 0.22,
+          size: 1.6 + visualRandom() * 2, color: sig.arcColor,
+        });
+      }
+      if (sig.steam) spawnGoreMist(wound.x, wound.y - 8, 2, 0.7, "#cfd8de", 1.7);
+    }
+    if (sig.ash && state.simulationTick % 5 === 0 && ap.reserve > 0.1) {
+      spawnGoreMist(wound.x, wound.y, 1, 0.45, sig.ashColor, 2.1);
+    }
+    if (sig.fleckColor && state.simulationTick % 4 === 0 && visualRandom() < (sig.fleckRate || 0.4)) {
+      state.particles.push({
+        kind: "sparkLine",
+        x: wound.x + (visualRandom() - 0.5) * 10, y: wound.y + (visualRandom() - 0.5) * 10,
+        vx: finisher.direction * (60 + visualRandom() * 260) * ap.strength,
+        vy: -(80 + visualRandom() * 260) * ap.strength,
+        gravity: 1050, drag: 0.98,
+        life: 0.3 + visualRandom() * 0.3, max: 0.6,
+        size: 1 + visualRandom() * 1.4, color: sig.fleckColor,
+      });
+    }
+    if (sig.poolRipples && ap.peak && state.simulationTick % 2 === 0) {
+      const pool = state.effects.find((effect) => effect.kind === "fatalityPool");
+      if (pool) {
+        state.effects.push({
+          kind: "shockRing", x: pool.x, y: pool.y - 2, size: 64,
+          life: 0.4, max: 0.4, color: fatality.palette[0],
+        });
+      }
+    }
+    // Heavy peaks atomise a little extra mist while pressure is high.
+    if (ap.peak && ap.pressure > 0.5 && state.simulationTick % 4 === 0) {
+      spawnGoreMist(wound.x, wound.y, 2, 0.8);
+    }
+    // Late bleed-out: the spray gives way to a slow drip tail by ear too.
+    if (ap.pressure < 0.22 && state.simulationTick % 96 === 0) goreSfx("gore-drip");
   }
 }
 
@@ -14741,6 +15026,10 @@ function simulatePreparedGameTick(dt, input0 = {}, input1 = {}) {
   // the finisher cinematic always owns its own frame.
   const winPoseActive = state.phase === "roundover" && !state.finisher && state.finisherType < 0;
   roundOverDimLevel = clamp(roundOverDimLevel + (winPoseActive ? 0.045 : -0.06), 0, 1);
+  // 2.8: the killing blow dims the street to a spotlight on the kill (reuses
+  // the wave-6 pool rig at draw time; eases out with the cinematic hold).
+  const fatalitySpotActive = Boolean(state.finisher?.fatalityTriggered) && state.graphicFatalities;
+  fatalitySpotLevel = clamp(fatalitySpotLevel + (fatalitySpotActive ? 0.05 : -0.07), 0, 1);
   if (state.finisher) updateFinisher(dt);
   else {
     updateProjectiles(dt);
@@ -14814,15 +15103,17 @@ function advanceVisualEffects(dt) {
     if (Number.isFinite(particle.spin)) particle.rotation = (particle.rotation || 0) + particle.spin * dt;
     if (particle.kind === "arterial" && particle.y >= FLOOR - 2 && particle.vy > 0) {
       particle.life = 0;
-      // Cap the stain layer so a long spray cannot evict combat text and other
+      // 2.8: budgets live in engine/gore.mjs — floor + wall stains sum to the
+      // historical 56 cap so a long spray cannot evict combat text and other
       // effects from the trimmed effect budget.
-      const stains = state.effects.reduce((total, effect) => total + (effect.kind === "bloodDecal" && effect.stain ? 1 : 0), 0);
-      if (stains >= 56) continue;
+      const budget = stainBudget(state.effects);
+      if (!canSpawnFloorStain(budget)) continue;
       const stainLife = 3.4 + visualRandom() * 2.2;
       state.effects.push({
         kind: "bloodDecal", stain: true, tier: "light",
         x: clamp(particle.x, 24, W - 24), y: FLOOR + 3,
-        width: 9 + visualRandom() * 20,
+        // 2.8: the stain's footprint follows the droplet that made it.
+        width: 6 + particle.size * 4.4 + visualRandom() * 11,
         life: stainLife, max: stainLife, color: "#6b050c",
       });
       for (let splash = 0; splash < 2; splash += 1) {
@@ -14834,6 +15125,25 @@ function advanceVisualEffects(dt) {
           size: 1.4 + visualRandom() * 2, color: "#a50713",
         });
       }
+    } else if (particle.kind === "arterial" && particle.life > 0
+      && ((particle.x <= MOVEMENT_RULES.stageMinX - 14 && particle.vx < 0)
+        || (particle.x >= MOVEMENT_RULES.stageMaxX + 14 && particle.vx > 0))) {
+      // 2.8: droplets that reach an arena bound splatter on the wall and run,
+      // instead of sailing through it. Wall budget shares the 56-stain cap.
+      particle.life = 0;
+      const budget = stainBudget(state.effects);
+      if (!canSpawnWallStain(budget)) continue;
+      const wall = particle.x <= MOVEMENT_RULES.stageMinX - 14 ? -1 : 1;
+      const stainLife = 3.8 + visualRandom() * 2.4;
+      state.effects.push({
+        kind: "bloodDecal", stain: true, wall,
+        x: wall < 0 ? MOVEMENT_RULES.stageMinX - 16 : MOVEMENT_RULES.stageMaxX + 16,
+        y: Math.min(particle.y, FLOOR - 12),
+        width: 5 + particle.size * 3.2 + visualRandom() * 8,
+        run: 10 + visualRandom() * 26,
+        life: stainLife, max: stainLife, color: "#71060d",
+      });
+      goreFxDebug.wallStains += 1;
     }
   }
   state.particles = state.particles.filter((particle) => particle.life > 0);
@@ -14871,6 +15181,30 @@ function advanceVisualEffects(dt) {
       effect.vx *= .66;
       effect.spin *= .58;
       effect.bounced = true;
+      // 2.8: the limb's landing skids blood across the floor — a smear-class
+      // streak at the bounce point plus a short wet splash.
+      const budget = stainBudget(state.effects);
+      if (state.graphicFatalities && canSpawnSmear(budget)) {
+        const smearLife = 3.2 + visualRandom() * 2;
+        state.effects.push({
+          kind: "bloodDecal", smear: true,
+          x: clamp(effect.x, 30, W - 30), y: FLOOR + 3,
+          width: 30 + visualRandom() * 30,
+          direction: Math.sign(effect.vx) || 1,
+          life: smearLife, max: smearLife, color: "#5c040b",
+        });
+        goreFxDebug.smears += 1;
+      }
+      for (let splash = 0; splash < 4; splash += 1) {
+        state.particles.push({
+          kind: "blood", x: effect.x, y: floorY + 8,
+          vx: (visualRandom() - 0.5) * 180 + effect.vx * 0.2,
+          vy: -50 - visualRandom() * 110,
+          gravity: 950, drag: 0.975,
+          life: 0.2 + visualRandom() * 0.22, max: 0.42,
+          size: 1.6 + visualRandom() * 2.2, color: "#8c0712",
+        });
+      }
     } else {
       effect.vy = 0;
       effect.vx = 0;
@@ -16167,8 +16501,18 @@ function activeGraphicFatality(fighter) {
   if (!state.graphicFatalities || !finisher?.fatalityTriggered || fighter.side === finisher.winner) return null;
   const attacker = state.fighters[finisher.winner];
   const scriptId = attacker?.def.finisherScriptId || attacker?.def.id || "deathblow";
-  return graphicFatalitySnapshot(scriptId, finisher.type, finisher.elapsed, finisher.fatalityAt);
+  const snapshot = graphicFatalitySnapshot(scriptId, finisher.type, finisher.elapsed, finisher.fatalityAt);
+  // 2.8: the draw side needs the attacker's script id to select the
+  // signature gore treatment (devil's scorched cuts etc.).
+  snapshot.scriptId = scriptId;
+  return snapshot;
 }
+
+// 2.8: per-frame wound-compositing context, set by drawGraphicFatalityVictim
+// before the family branches so drawFatalityCut/drawFatalityStump can
+// composite the victim's OWN atlas pixels (never painted-from-scratch
+// anatomy) without threading four more arguments through every call site.
+let fatalityWoundCtx = null; // { atlas, frame, size, aftermath, time, scorch }
 
 function drawFatalityAtlasBand(atlas, frame, size, top, bottom, transform = {}) {
   const y = -size + top * size;
@@ -16188,6 +16532,31 @@ function drawFatalityAtlasBand(atlas, frame, size, top, bottom, transform = {}) 
 
 function drawFatalityCut(size, yRatio, fatality, width = .32) {
   const y = -size + yRatio * size;
+  const wound = fatalityWoundCtx;
+  // 2.8: progressive wound compositing — a thin strip of the victim's OWN
+  // atlas pixels either side of the cut, re-stamped darkened/reddened with a
+  // small tear offset (identity holds; nothing painted from scratch). The
+  // tissue deepens over the aftermath; devil's curse scorches it dark.
+  if (wound?.atlas) {
+    const depth = Math.min(1, 0.45 + wound.aftermath * 0.5);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(-size * width, y - size * 0.055, size * width * 2, size * 0.11);
+    ctx.clip();
+    ctx.globalAlpha *= 0.42 + 0.3 * depth;
+    ctx.filter = wound.scorch
+      ? "brightness(0.24) saturate(0.4) contrast(1.6)"
+      : "brightness(0.4) sepia(1) hue-rotate(-38deg) saturate(4.6) contrast(1.35)";
+    ctx.translate(0, 1.6);
+    drawAtlasFrame(wound.atlas, wound.frame, size);
+    ctx.globalAlpha *= 0.75;
+    ctx.filter = wound.scorch
+      ? "brightness(0.12) saturate(0.2) contrast(1.9)"
+      : "brightness(0.24) sepia(1) hue-rotate(-40deg) saturate(5) contrast(1.6)";
+    ctx.translate(0, -3.4);
+    drawAtlasFrame(wound.atlas, wound.frame, size);
+    ctx.restore();
+  }
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
   ctx.strokeStyle = fatality.palette[0];
@@ -16206,6 +16575,25 @@ function drawFatalityCut(size, yRatio, fatality, width = .32) {
     ctx.fill();
   }
   ctx.restore();
+  // 2.8: wet specular glints riding the fresh viscera through the existing
+  // lighting language — additive beads that shimmer and dry out over ~3s.
+  if (wound && state.performance.shadows) {
+    const wet = Math.max(0, 1 - wound.aftermath / 3.2);
+    if (wet > 0.05) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = "#ffe9ec";
+      for (let glint = 0; glint < 4; glint += 1) {
+        const gx = (glint - 1.5) * size * width * 0.55 + Math.sin(wound.time * 0.011 + glint * 2.6) * 4;
+        const shimmer = 0.5 + 0.5 * Math.sin(wound.time * 0.019 + glint * 1.9);
+        ctx.globalAlpha = wet * shimmer * 0.5;
+        ctx.beginPath();
+        ctx.ellipse(gx, y + 3 + (glint % 2) * 3, 2.1, 1.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
 }
 
 function drawFatalitySkeleton(size, fatality, pulse) {
@@ -16240,10 +16628,29 @@ function drawFatalityStump(size, fatality, direction) {
   const x = side * direction * size * (leg ? .14 : .22);
   const y = -size * (leg ? .29 : .61);
   const radius = size * (leg ? .055 : .045);
+  const rotation = side * direction * (leg ? .18 : -.32);
+  const wound = fatalityWoundCtx;
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
   ctx.translate(x, y);
-  ctx.rotate(side * direction * (leg ? .18 : -.32));
+  ctx.rotate(rotation);
+  // 2.8: believable cross-section. The dark tissue ring is the victim's OWN
+  // atlas pixels stamped back through an elliptical clip (recolored, never
+  // painted anatomy), around a muscle ring, a pale bone core with a marrow
+  // shadow, hanging shreds and a slow drip while the wound is fresh.
+  if (wound?.atlas) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, radius * 1.42, radius * 1.14, 0, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.rotate(-rotation);
+    ctx.translate(-x, -y);
+    ctx.filter = wound.scorch
+      ? "brightness(0.2) saturate(0.35) contrast(1.7)"
+      : "brightness(0.3) sepia(1) hue-rotate(-40deg) saturate(5) contrast(1.5)";
+    drawAtlasFrame(wound.atlas, wound.frame, size);
+    ctx.restore();
+  }
   ctx.shadowColor = fatality.palette[0];
   ctx.shadowBlur = 16;
   ctx.fillStyle = fatality.palette[1];
@@ -16254,10 +16661,59 @@ function drawFatalityStump(size, fatality, direction) {
   ctx.beginPath();
   ctx.ellipse(0, 1, radius * .92, radius * .7, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.shadowBlur = 0;
+  // bone core + marrow shadow
   ctx.fillStyle = "#ead7b7";
   ctx.beginPath();
-  ctx.ellipse(0, 0, radius * .21, radius * .18, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, radius * .24, radius * .2, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.fillStyle = "#b08a66";
+  ctx.beginPath();
+  ctx.ellipse(radius * .05, radius * .04, radius * .1, radius * .08, 0, 0, Math.PI * 2);
+  ctx.fill();
+  if (wound) {
+    const aftermath = wound.aftermath;
+    // hanging shreds swaying slightly, stilling as the body does
+    ctx.strokeStyle = fatality.palette[1];
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = "round";
+    const sway = Math.sin(wound.time * 0.012) * Math.max(0, 1 - aftermath / 2.2) * 2.2;
+    for (let shred = 0; shred < 3; shred += 1) {
+      const sx = (shred - 1) * radius * 0.62;
+      ctx.beginPath();
+      ctx.moveTo(sx, radius * 0.4);
+      ctx.quadraticCurveTo(sx + sway, radius * (1 + shred * 0.32), sx + sway * 1.4, radius * (1.5 + shred * 0.4));
+      ctx.stroke();
+    }
+    // slow drip: a dark thread lengthening from the low edge, beading off
+    const drip = Math.min(radius * 2.6, aftermath * 14);
+    if (drip > 2) {
+      ctx.strokeStyle = "#5c040b";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(radius * 0.3, radius * 0.7);
+      ctx.lineTo(radius * 0.3, radius * 0.7 + drip);
+      ctx.stroke();
+      ctx.fillStyle = "#7a0611";
+      ctx.beginPath();
+      ctx.arc(radius * 0.3, radius * 0.7 + drip, 1.9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // wet glint answering the stage light while fresh
+    if (state.performance.shadows) {
+      const wet = Math.max(0, 1 - aftermath / 3.2);
+      if (wet > 0.05) {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = wet * (0.35 + 0.3 * Math.sin(wound.time * 0.017));
+        ctx.fillStyle = "#ffe9ec";
+        ctx.beginPath();
+        ctx.ellipse(-radius * 0.4, -radius * 0.3, radius * 0.3, radius * 0.14, -0.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
   ctx.restore();
 }
 
@@ -16266,6 +16722,13 @@ function drawGraphicFatalityVictim(atlas, frame, size, fatality, time) {
   const settle = fatality.settle;
   const force = fatality.separation;
   const direction = state.finisher?.direction || 1;
+  // 2.8: arm the wound-compositing context for the cut/stump helpers.
+  fatalityWoundCtx = {
+    atlas, frame, size,
+    aftermath: fatality.aftermath || 0,
+    time,
+    scorch: Boolean(signatureGore(fatality.scriptId || "deathblow").scorch),
+  };
   const whole = (transform = {}) => drawFatalityAtlasBand(atlas, frame, size, 0, 1, transform);
   const band = (top, bottom, x, y, rotation = 0, extra = {}) => drawFatalityAtlasBand(
     atlas,
@@ -16387,6 +16850,7 @@ function drawGraphicFatalityVictim(atlas, frame, size, fatality, time) {
     whole();
   }
   drawFatalityStump(size, fatality, direction);
+  fatalityWoundCtx = null;
   ctx.restore();
 }
 
@@ -18496,6 +18960,9 @@ function fatalityRivuletCanvas() {
 function drawFatalityPool(effect, alpha) {
   const growth = 1 - alpha;
   const scale = effect.scale || 1;
+  // 2.8: the pool spreads over seconds and SOAKS — older blood mixes toward
+  // a dark matte core while the fresh rim stays bright (engine/gore.mjs).
+  const soak = bloodSoak((effect.max || 1) - effect.life);
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
   ctx.scale(effect.direction || 1, 1);
@@ -18508,6 +18975,13 @@ function drawFatalityPool(effect, alpha) {
   ctx.beginPath();
   ctx.ellipse(0, 0, (42 + growth * 112) * scale, 8 + growth * 25, 0, 0, Math.PI * 2);
   ctx.fill();
+  if (soak > 0.05) {
+    ctx.globalAlpha = Math.min(1, alpha * 1.5) * soak * 0.55;
+    ctx.fillStyle = "#200105";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, (36 + growth * 98) * scale, 7 + growth * 20, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
   if (cinema3dDressingActive()) {
     // CINEMA 3D: the pool reads WET — a darkened blood core, a cold glossy
     // streak answering the overhead lamp, and droplets become directional
@@ -18565,6 +19039,16 @@ function drawFatalityPool(effect, alpha) {
       ctx.globalAlpha = alpha * (.38 + drop % 3 * .18);
       ctx.beginPath();
       ctx.ellipse(Math.cos(angle) * reach, Math.sin(angle) * reach * .22, 4 + drop % 4 * 3, 2 + drop % 3 * 2, angle, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (state.performance.shadows) {
+      // 2.8: the stage's overhead light answers on the wet surface in the
+      // classic 2D pass too (the CINEMA 3D branch already carried a streak);
+      // the gloss dies as the pool soaks matte.
+      ctx.globalAlpha = Math.min(1, alpha * 1.1) * 0.3 * (1 - soak * 0.75);
+      ctx.fillStyle = "rgba(214,234,226,0.5)";
+      ctx.beginPath();
+      ctx.ellipse(12 * scale, -2, (16 + growth * 26) * scale, 2.2 + growth * 2.4, -0.05, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -19818,6 +20302,17 @@ function drawWinPoseSpotlight() {
   drawSpotlightPool(roundOverDimLevel, [first.health >= second.health ? first : second], 0.44);
 }
 
+// 2.8: kill spotlight — while a graphic fatality is triggered the stage dims
+// hard and both participants keep their pools (the victim carries the beat,
+// the attacker never reads as a frozen cut-out in the dark). Same reuse of
+// the iter-13 spotlight machinery as the super/win-pose passes.
+function drawFatalitySpotlight() {
+  if (fatalitySpotLevel <= 0.02 || !state.finisher || state.fighters.length !== 2) return;
+  const victim = state.fighters[1 - state.finisher.winner];
+  const attacker = state.fighters[state.finisher.winner];
+  drawSpotlightPool(fatalitySpotLevel, [victim, attacker], 0.5);
+}
+
 // Super focus lines (wave 4): while the spotlight dim is up, sparse comic-style
 // speed lines converge from past the frame edges onto the super's attacker.
 // Pure render pass driven by superDimLevel and snapshotted fighter state; the
@@ -20100,6 +20595,22 @@ function drawParticles() {
       ctx.translate(particle.x, particle.y);
       ctx.rotate(particle.rotation || 0);
       ctx.fillRect(-particle.size, -particle.size * 0.42, particle.size * 2, particle.size * 0.84);
+      ctx.restore();
+      continue;
+    }
+    if (particle.kind === "mist") {
+      // 2.8: aerosol blood mist / steam / ash — a soft radial puff that
+      // billows out and thins as it rises; colour comes from the spawner.
+      const channels = hexToRgbChannels(particle.color || "#6b050c");
+      const radius = particle.size * (1 + (1 - alpha) * 1.5);
+      const puff = ctx.createRadialGradient(particle.x, particle.y, 1, particle.x, particle.y, radius);
+      puff.addColorStop(0, `rgba(${channels},${(alpha * 0.3).toFixed(3)})`);
+      puff.addColorStop(0.7, `rgba(${channels},${(alpha * 0.13).toFixed(3)})`);
+      puff.addColorStop(1, `rgba(${channels},0)`);
+      ctx.fillStyle = puff;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, radius, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
       continue;
     }
@@ -20397,16 +20908,47 @@ function drawParticles() {
       }
     } else if (effect.kind === "bloodDecal") {
       ctx.shadowBlur = 0;
-      ctx.globalAlpha = Math.min(0.68, alpha * 0.82);
-      ctx.fillStyle = effect.color;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, effect.width * 0.5, Math.max(3, effect.width * 0.1), 0, 0, Math.PI * 2);
-      ctx.fill();
-      for (let drop = 0; drop < 5; drop += 1) {
-        const angle = drop * 2.37;
+      if (effect.wall) {
+        // 2.8: wall spatter — a flattened smudge against the arena bound
+        // whose drip run lengthens as the stain ages, ending in a bead.
+        const age = (effect.max || 1) - effect.life;
+        const run = Math.min(effect.run || 18, 4 + age * 26);
+        ctx.globalAlpha = Math.min(0.62, alpha * 0.8);
+        ctx.fillStyle = effect.color;
         ctx.beginPath();
-        ctx.arc(Math.cos(angle) * effect.width * 0.55, Math.sin(angle) * effect.width * 0.1, 2 + drop % 3, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, Math.max(2.6, effect.width * 0.28), effect.width * 0.5, 0, 0, Math.PI * 2);
         ctx.fill();
+        ctx.globalAlpha = Math.min(0.5, alpha * 0.62);
+        ctx.fillRect(-1.4, 0, 2.8, run);
+        ctx.beginPath();
+        ctx.arc(0, run, 2.1, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (effect.smear) {
+        // 2.8: drag smear — an elongated streak with a feathered tail on the
+        // trailing side, left by a body sliding through its own pool.
+        ctx.globalAlpha = Math.min(0.55, alpha * 0.7);
+        ctx.fillStyle = effect.color;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, effect.width * 0.62, 4.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha *= 0.6;
+        ctx.beginPath();
+        ctx.ellipse(-(effect.direction || 1) * effect.width * 0.5, 0, effect.width * 0.34, 2.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // 2.8: floor stains soak in — older blood darkens toward matte.
+        const soak = bloodSoak((effect.max || 1) - effect.life);
+        ctx.globalAlpha = Math.min(0.68, alpha * 0.82) * (1 - soak * 0.22);
+        ctx.fillStyle = soak > 0.55 ? "#43030a" : effect.color;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, effect.width * 0.5, Math.max(3, effect.width * 0.1), 0, 0, Math.PI * 2);
+        ctx.fill();
+        for (let drop = 0; drop < 5; drop += 1) {
+          const angle = drop * 2.37;
+          ctx.beginPath();
+          ctx.arc(Math.cos(angle) * effect.width * 0.55, Math.sin(angle) * effect.width * 0.1, 2 + drop % 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     } else if (effect.kind === "floorImpact") {
       ctx.shadowBlur = 0;
@@ -22010,6 +22552,7 @@ function draw(time) {
       drawWallsplatEdgeCover();
       drawSuperSpotlight();
       drawWinPoseSpotlight();
+      drawFatalitySpotlight();
       drawSuperFocusLines(time);
       drawFighterCastShadows();
       drawFighterReflections(time);
@@ -25475,6 +26018,13 @@ window.__finalBlowEngine = {
         signatureProjectiles: state.effects.filter((effect) => effect.kind === "fatalityProjectile").length,
         projectileFocusBursts: state.effects.filter((effect) => effect.kind === "projectileFocusBurst").length,
         bloodStains: state.effects.filter((effect) => effect.kind === "bloodDecal" && effect.stain).length,
+        // 2.8 gore probes: mist aerosol, wall spatter, drag smears and the
+        // per-fighter signature beats, for filmstrip bursts and smoke tests.
+        bloodMist: state.particles.filter((particle) => particle.kind === "mist").length,
+        wallBloodStains: state.effects.filter((effect) => effect.kind === "bloodDecal" && effect.wall).length,
+        bloodSmears: state.effects.filter((effect) => effect.kind === "bloodDecal" && effect.smear).length,
+        signatureGoreBeats: goreFxDebug.signatureBeats,
+        goreSfxPlays: goreFxDebug.goreSfxPlays,
         fatalitySlowMo: Boolean((state.finisher?.slowMotionTicks || 0) > 0),
         shockRings: state.effects.filter((effect) => effect.kind === "shockRing").length,
         // MOTION FIX 1: the evolving hitspark effect, countable by probes.

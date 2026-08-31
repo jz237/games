@@ -1,0 +1,12 @@
+{
+  "version": "2.8",
+  "generator": "elevenlabs sound-generation",
+  "note": "Generated gore layers for the graphic-fatality presentation. Played only through goreSfx() (rate-capped, gated on the Graphic Fatalities toggle). Cue kinds and volumes are defined in engine/gore.mjs GORE_SFX.",
+  "cues": {
+    "gore-arterial": { "file": "arterial-spurt.mp3", "beat": "systolic spurt hiss on heartbeat peaks" },
+    "gore-squelch": { "file": "wet-squelch.mp3", "beat": "wet tissue tear on the killing blow" },
+    "gore-bone": { "file": "bone-crack.mp3", "beat": "bone report on the killing blow" },
+    "gore-body-drop": { "file": "body-drop.mp3", "beat": "the collapse settling, once per fatality" },
+    "gore-drip": { "file": "blood-drip.mp3", "beat": "late bleed-out drip tail" }
+  }
+}
