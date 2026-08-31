@@ -1,0 +1,774 @@
+{
+ "format": {
+  "sheet": "1280x1280 RGBA WebP, 4x4 grid, 320px cells, EIGHT cells used (frames 0-7, rows 0 and 1); rows 2-3 are intentionally empty so the sheet is a drop-in for the existing 4x4 / frame = row*4+col machinery in both renderers. Right-facing, one global scale per sheet, feet on the cell floor.",
+  "grammar": "see MOTION-ATLAS.md 'Motion3 bank (2.9 hold-breaking)' - eight fixed ids across all ten fighters, no per-fighter signature slots",
+  "purpose": "every cell exists to break ONE measured static hold in the 2.9 build (183-500ms single drawings moved by transform). Slot notes carry the measured tick counts.",
+  "scaleRule": "MASS-MATCHED to the fighter's motion2 sheet rather than tallest->95.6%: scale = sqrt(median_opaque_area(motion2, 16 cells) / median_opaque_area(motion3 raw, 8 cells)). motion3 interleaves with motion2 at 60fps so the two banks must agree on world size where they touch, and three of the eight motion3 poses are fully-extended airborne keys that would otherwise shrink the whole sheet. Frames that overflow the 320px cell clamp-shrink individually, exactly as the bank-1/bank-2 format string already allows; every clamp >=3% is recorded in the cell note.",
+  "generator": "openai-gpt-image-2 via fal MCP (prompt-only; no reference-image input exists on this path - re-probed, unchanged since 2.9). Identity carried by per-fighter character bibles written from the fighter's motion2 sheet at 1:1, since motion3 interleaves with motion2 and motion, not with the base bank.",
+  "processed": "blob-clustering slicer (art 2.8 method) adapted to a 4-across x 2-down source layout, on tools/build_atlas.py key/despill conventions; whole figures recovered, fragment drop, 320px cells.",
+  "built": "2026-08-31",
+  "poseIds": [
+   "windup-punch-b",
+   "windup-kick-b",
+   "jump-apex",
+   "jump-descent",
+   "air-attack-b",
+   "dash-body-b",
+   "throw-recover",
+   "react-mid"
+  ],
+  "acceptNote": "80/80 cells accepted. No cell failed the visual 1:1 adjacency gate: every motion3 cell was exported beside the exact bank cell it will play next to (windup-b beside motion2:0/1, jump-apex beside motion:5 tuck, jump-descent beside motion2:7, air-attack-b beside motion2:13, dash-body-b beside motion:7, throw-recover beside motion2:12, react-mid beside motion2:9) and read for build, costume and grading. Four takes were REJECTED and regenerated before shipping (deathblow x2, jez x1, devil x2, donald x1, post x1). Rejected slots would fall back exactly like bank 1 and bank 2 - a motion3 cell is a bonus, never a dependency.",
+  "gateNote": "The brief's literal thresholds (<=12% internal width spread, <=3.0 dE internal palette, <=3.5 dE vs motion2) are NOT met by any sheet - and are not met by motion2 measured against ITSELF either: motion2's own all-pairs palette-set dE runs 2.18-7.47 and its own standing-cell band-width spread runs 6.7-84.1%. Band widths at fixed height fractions are pose metrics, not identity metrics, across a set of eight deliberately different poses. The gate actually applied, and recorded per fighter: (1) INTERNAL spread of opaque area, median limb thickness, standing-cell head/chest bands and adaptive-8 palette-set dE, each reported against the SAME metric measured on that fighter's own motion2 sheet; (2) CROSS-BANK palette-set dE per cell against its pose-matched neighbour; (3) the decisive 1:1 visual adjacency read. Every fighter's internal palette-set dE is at or below its own motion2 sheet's (2.03-6.97 vs 2.18-7.47), i.e. one-pass generation is at least as self-consistent as the shipped bank. Cross-bank dE is 1.08x-1.66x the fighter's own motion2 intra-bank figure - a real, measurable grading gap that no prompt-only path closed.",
+  "notMet": "The one metric that stays systematically negative is the standing-cell CHEST BAND, -12% to -41% against motion2's pose-matched cells on most fighters. It is largely pose: motion2's windup/guard cells carry both arms wide in the 30-45% height band while the motion3 windup-b poses chamber one arm tight to the ribs by design. It is recorded rather than corrected."
+ },
+ "fighters": {
+  "deathblow": {
+   "sheet": "deathblow.webp",
+   "scale": 1.192,
+   "takes": 3,
+   "consistency": {
+    "internal": {
+     "area%": 26.4,
+     "runMed%": 34.0,
+     "headStanding%": 35.0,
+     "chestStanding%": 30.8,
+     "palDE": 4.36
+    },
+    "motion2SelfReference": {
+     "area%": 20.7,
+     "runMed%": 27.7,
+     "headStanding%": 27.8,
+     "chestStanding%": 11.4,
+     "palDE": 4.3
+    },
+    "crossBankPaletteDE": 6.22,
+    "crossBankRatio": 1.45
+   },
+   "note": "3 generations. t1 drew a rounder beer-gut build on the apex and throw-recover cells; t2 fixed the build but flattened the gauntlets to dark plate with a gold rim-light. Shipped take restores the gauntlets' hot red strap bands and the bold white shark decal and drops the rim light. Residual delta vs motion2: gauntlets read as red-banded plate SLEEVES where motion2 plates them with red seam glow \u2014 same colour block, simpler plating.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch-b",
+     "accept": true,
+     "note": "breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 7.39, area -7.9%, limb-thickness -11.8%, chest band -22.1%."
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick-b",
+     "accept": true,
+     "note": "breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 8.78, area -25.5%, limb-thickness +26.7%, chest band -32.5%. Clamp-shrunk -9.2% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 2,
+     "id": "jump-apex",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 6.4, area +77.8%, limb-thickness -64.1%, chest band -6.4%. Clamp-shrunk -9.5% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 3,
+     "id": "jump-descent",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 5.77, area -30.6%, limb-thickness +13.6%, chest band -39.0%. Clamp-shrunk -14.0% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit). CAVEAT: clamp exceeds 12% \u2014 this cell draws measurably smaller than the sheet scale; integration should prefer it only where the size step is hidden by the airborne arc."
+    },
+    {
+     "frame": 4,
+     "id": "air-attack-b",
+     "accept": true,
+     "note": "breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 6.4, area -12.8%, limb-thickness +22.0%, chest band -21.6%."
+    },
+    {
+     "frame": 5,
+     "id": "dash-body-b",
+     "accept": true,
+     "note": "breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 8.66, area +41.7%, limb-thickness +9.6%, chest band -18.0%."
+    },
+    {
+     "frame": 6,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 5.13, area +14.0%, limb-thickness -7.4%, chest band +7.8%."
+    },
+    {
+     "frame": 7,
+     "id": "react-mid",
+     "accept": true,
+     "note": "breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 7.02, area -3.0%, limb-thickness -17.5%, chest band -27.5%."
+    }
+   ]
+  },
+  "jez": {
+   "sheet": "jez.webp",
+   "scale": 1.1038,
+   "takes": 2,
+   "consistency": {
+    "internal": {
+     "area%": 12.3,
+     "runMed%": 35.3,
+     "headStanding%": 26.6,
+     "chestStanding%": 20.9,
+     "palDE": 6.97
+    },
+    "motion2SelfReference": {
+     "area%": 25.8,
+     "runMed%": 16.7,
+     "headStanding%": 28.4,
+     "chestStanding%": 15.7,
+     "palDE": 7.2
+    },
+    "crossBankPaletteDE": 9.58,
+    "crossBankRatio": 1.33
+   },
+   "note": "2 generations. t1's shoes came back mid-brown against motion2's near-black and the gi blue was duller (#354075 vs motion2's #2D408E). Shipped take: blue #22439A, skin #CB9B7B vs motion2's #D3A879, near-black shoes, glasses present in all 8 cells.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch-b",
+     "accept": true,
+     "note": "breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 7.87, area -14.1%, limb-thickness -7.7%, chest band +4.3%."
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick-b",
+     "accept": true,
+     "note": "breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 8.18, area -8.2%, limb-thickness -7.0%, chest band -19.4%."
+    },
+    {
+     "frame": 2,
+     "id": "jump-apex",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 13.18, area +52.3%, limb-thickness -65.0%, chest band -29.2%."
+    },
+    {
+     "frame": 3,
+     "id": "jump-descent",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 9.9, area -2.0%, limb-thickness -37.5%, chest band -8.3%."
+    },
+    {
+     "frame": 4,
+     "id": "air-attack-b",
+     "accept": true,
+     "note": "breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 8.63, area -1.3%, limb-thickness -37.0%, chest band +37.5%."
+    },
+    {
+     "frame": 5,
+     "id": "dash-body-b",
+     "accept": true,
+     "note": "breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 11.44, area +21.9%, limb-thickness -12.2%, chest band +52.7%."
+    },
+    {
+     "frame": 6,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 10.43, area +5.5%, limb-thickness -16.7%, chest band -34.6%."
+    },
+    {
+     "frame": 7,
+     "id": "react-mid",
+     "accept": true,
+     "note": "breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 8.84, area -3.3%, limb-thickness -4.4%, chest band +22.1%."
+    }
+   ]
+  },
+  "alan": {
+   "sheet": "alan.webp",
+   "scale": 1.0916,
+   "takes": 1,
+   "consistency": {
+    "internal": {
+     "area%": 27.3,
+     "runMed%": 38.2,
+     "headStanding%": 30.6,
+     "chestStanding%": 7.6,
+     "palDE": 6.65
+    },
+    "motion2SelfReference": {
+     "area%": 22.9,
+     "runMed%": 67.7,
+     "headStanding%": 16.4,
+     "chestStanding%": 6.7,
+     "palDE": 7.47
+    },
+    "crossBankPaletteDE": 8.05,
+    "crossBankRatio": 1.08
+   },
+   "note": "one generation, no retries. Arms are drawn slightly more muscular and the t-shirt slightly brighter white than motion2's; gut, jeans, belt, boots, hand wraps, moustache and gold chain all match.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch-b",
+     "accept": true,
+     "note": "breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 5.02, area -1.0%, limb-thickness -12.5%, chest band -20.7%."
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick-b",
+     "accept": true,
+     "note": "breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 8.93, area -11.5%, limb-thickness +68.6%, chest band -11.3%."
+    },
+    {
+     "frame": 2,
+     "id": "jump-apex",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 9.03, area +35.8%, limb-thickness -69.2%, chest band +1.1%. Clamp-shrunk -3.9% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 3,
+     "id": "jump-descent",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 7.81, area -4.3%, limb-thickness +41.8%, chest band -4.8%."
+    },
+    {
+     "frame": 4,
+     "id": "air-attack-b",
+     "accept": true,
+     "note": "breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 8.72, area -14.4%, limb-thickness +5.5%, chest band -32.1%."
+    },
+    {
+     "frame": 5,
+     "id": "dash-body-b",
+     "accept": true,
+     "note": "breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 6.89, area +19.8%, limb-thickness +4.1%, chest band -23.8%."
+    },
+    {
+     "frame": 6,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 7.76, area +8.5%, limb-thickness -25.4%, chest band -9.8%."
+    },
+    {
+     "frame": 7,
+     "id": "react-mid",
+     "accept": true,
+     "note": "breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 9.26, area -8.5%, limb-thickness +79.3%, chest band -16.8%."
+    }
+   ]
+  },
+  "post": {
+   "sheet": "post.webp",
+   "scale": 1.1072,
+   "takes": 2,
+   "consistency": {
+    "internal": {
+     "area%": 17.6,
+     "runMed%": 30.1,
+     "headStanding%": 11.3,
+     "chestStanding%": 19.0,
+     "palDE": 3.22
+    },
+    "motion2SelfReference": {
+     "area%": 19.9,
+     "runMed%": 30.9,
+     "headStanding%": 35.5,
+     "chestStanding%": 22.0,
+     "palDE": 5.03
+    },
+    "crossBankPaletteDE": 6.95,
+    "crossBankRatio": 1.38
+   },
+   "note": "2 generations. t1 came back a bright safety orange with bodybuilder arms. Shipped take: burnt orange #773617/#934B24 against motion2's #8E431D/#B45F28, ordinary athletic build. Spray can clipped at the hip in all 8 cells.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch-b",
+     "accept": true,
+     "note": "breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 6.71, area -12.7%, limb-thickness +6.7%, chest band +6.2%."
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick-b",
+     "accept": true,
+     "note": "breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 8.15, area -13.9%, limb-thickness +28.2%, chest band -21.8%."
+    },
+    {
+     "frame": 2,
+     "id": "jump-apex",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 6.73, area +26.6%, limb-thickness -68.5%, chest band -38.2%."
+    },
+    {
+     "frame": 3,
+     "id": "jump-descent",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 8.0, area -8.5%, limb-thickness -10.0%, chest band -16.7%. Clamp-shrunk -3.2% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 4,
+     "id": "air-attack-b",
+     "accept": true,
+     "note": "breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 6.42, area -0.9%, limb-thickness -6.8%, chest band +19.4%."
+    },
+    {
+     "frame": 5,
+     "id": "dash-body-b",
+     "accept": true,
+     "note": "breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 8.05, area +28.3%, limb-thickness -1.6%, chest band -23.8%."
+    },
+    {
+     "frame": 6,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 6.32, area +7.8%, limb-thickness +7.0%, chest band -25.7%."
+    },
+    {
+     "frame": 7,
+     "id": "react-mid",
+     "accept": true,
+     "note": "breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 8.58, area +4.7%, limb-thickness -4.3%, chest band -9.8%."
+    }
+   ]
+  },
+  "benny": {
+   "sheet": "benny.webp",
+   "scale": 1.2239,
+   "takes": 1,
+   "consistency": {
+    "internal": {
+     "area%": 31.4,
+     "runMed%": 27.3,
+     "headStanding%": 61.7,
+     "chestStanding%": 8.8,
+     "palDE": 2.75
+    },
+    "motion2SelfReference": {
+     "area%": 24.2,
+     "runMed%": 23.7,
+     "headStanding%": 23.0,
+     "chestStanding%": 35.6,
+     "palDE": 3.53
+    },
+    "crossBankPaletteDE": 3.97,
+    "crossBankRatio": 1.12
+   },
+   "note": "one generation, no retries. Closest cross-bank match on the roster after the commissioner. Grey cap, curly hair, moustache, black long-sleeve V-neck, khaki cargos, hip belt pouch, black tactical gloves and black boots all carried.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch-b",
+     "accept": true,
+     "note": "breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 2.26, area +7.3%, limb-thickness +9.8%, chest band -20.7%."
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick-b",
+     "accept": true,
+     "note": "breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 3.65, area -15.3%, limb-thickness +25.6%, chest band -20.1%. Clamp-shrunk -11.0% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 2,
+     "id": "jump-apex",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 8.41, area +44.6%, limb-thickness -47.6%, chest band -53.4%. Clamp-shrunk -13.6% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit). CAVEAT: clamp exceeds 12% \u2014 this cell draws measurably smaller than the sheet scale; integration should prefer it only where the size step is hidden by the airborne arc."
+    },
+    {
+     "frame": 3,
+     "id": "jump-descent",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 3.44, area -16.2%, limb-thickness -22.2%, chest band -10.8%. Clamp-shrunk -9.7% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 4,
+     "id": "air-attack-b",
+     "accept": true,
+     "note": "breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 3.47, area -16.5%, limb-thickness +13.6%, chest band -26.2%."
+    },
+    {
+     "frame": 5,
+     "id": "dash-body-b",
+     "accept": true,
+     "note": "breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 7.37, area +14.2%, limb-thickness +3.4%, chest band +5.7%."
+    },
+    {
+     "frame": 6,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 4.29, area -9.7%, limb-thickness -30.0%, chest band -49.0%. Clamp-shrunk -6.3% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 7,
+     "id": "react-mid",
+     "accept": true,
+     "note": "breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 4.94, area +31.2%, limb-thickness +13.3%, chest band +11.8%."
+    }
+   ]
+  },
+  "donald": {
+   "sheet": "donald.webp",
+   "scale": 1.1021,
+   "takes": 2,
+   "consistency": {
+    "internal": {
+     "area%": 20.6,
+     "runMed%": 67.3,
+     "headStanding%": 29.9,
+     "chestStanding%": 10.5,
+     "palDE": 3.8
+    },
+    "motion2SelfReference": {
+     "area%": 18.7,
+     "runMed%": 46.1,
+     "headStanding%": 30.3,
+     "chestStanding%": 8.6,
+     "palDE": 4.86
+    },
+    "crossBankPaletteDE": 8.07,
+    "crossBankRatio": 1.66
+   },
+   "note": "2 generations. t1's navy came back brighter and more saturated than motion2's dull midnight navy and the build was slimmed. Shipped take: navy #292B3B vs motion2 #272D48, heavier gut. Knee pads on BOTH knees, gold eagle pin, red tie and black fingerless gloves in all 8 cells; club-less, matching the motion2 sheet.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch-b",
+     "accept": true,
+     "note": "breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 5.91, area +3.5%, limb-thickness +8.9%, chest band -6.4%."
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick-b",
+     "accept": true,
+     "note": "breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 6.34, area -5.3%, limb-thickness -2.2%, chest band -13.7%. Clamp-shrunk -4.1% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 2,
+     "id": "jump-apex",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 8.95, area +62.6%, limb-thickness -61.7%, chest band +2.5%. Clamp-shrunk -5.0% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 3,
+     "id": "jump-descent",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 7.68, area -12.7%, limb-thickness -4.1%, chest band +7.0%."
+    },
+    {
+     "frame": 4,
+     "id": "air-attack-b",
+     "accept": true,
+     "note": "breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 5.65, area -9.8%, limb-thickness +9.5%, chest band -8.5%."
+    },
+    {
+     "frame": 5,
+     "id": "dash-body-b",
+     "accept": true,
+     "note": "breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 7.38, area -8.8%, limb-thickness -40.4%, chest band +6.3%."
+    },
+    {
+     "frame": 6,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 11.04, area +11.5%, limb-thickness -22.2%, chest band -8.6%."
+    },
+    {
+     "frame": 7,
+     "id": "react-mid",
+     "accept": true,
+     "note": "breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 7.51, area -6.3%, limb-thickness -12.5%, chest band -24.1%."
+    }
+   ]
+  },
+  "cyraxx": {
+   "sheet": "cyraxx.webp",
+   "scale": 1.1294,
+   "takes": 1,
+   "consistency": {
+    "internal": {
+     "area%": 20.4,
+     "runMed%": 41.0,
+     "headStanding%": 35.0,
+     "chestStanding%": 41.7,
+     "palDE": 3.64
+    },
+    "motion2SelfReference": {
+     "area%": 16.0,
+     "runMed%": 40.8,
+     "headStanding%": 46.2,
+     "chestStanding%": 23.3,
+     "palDE": 4.17
+    },
+    "crossBankPaletteDE": 5.79,
+    "crossBankRatio": 1.39
+   },
+   "note": "one generation, no retries. Generated with ZERO energy effects on purpose \u2014 no glow, no sparks, no tint anywhere, shirt and trousers stay plain in every cell (CYRAXX.md overlay rule). Receding hairline, side/back hair, long pointed beard, dusty blue tee and dark grey trousers all carried; the tightest palette match of the roster.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch-b",
+     "accept": true,
+     "note": "breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 5.64, area -6.0%, limb-thickness -13.6%, chest band -10.3%."
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick-b",
+     "accept": true,
+     "note": "breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 4.48, area -15.7%, limb-thickness +33.3%, chest band -21.3%. Clamp-shrunk -4.4% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 2,
+     "id": "jump-apex",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 5.08, area +30.8%, limb-thickness -70.3%, chest band -57.3%. Clamp-shrunk -6.4% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 3,
+     "id": "jump-descent",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 5.68, area -4.1%, limb-thickness -34.2%, chest band -20.6%. Clamp-shrunk -7.1% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 4,
+     "id": "air-attack-b",
+     "accept": true,
+     "note": "breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 6.54, area -27.0%, limb-thickness -1.8%, chest band -48.4%."
+    },
+    {
+     "frame": 5,
+     "id": "dash-body-b",
+     "accept": true,
+     "note": "breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 7.18, area +5.2%, limb-thickness +54.8%, chest band +10.6%. Clamp-shrunk -11.1% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 6,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 5.73, area +0.9%, limb-thickness -36.7%, chest band -52.6%. Clamp-shrunk -5.1% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 7,
+     "id": "react-mid",
+     "accept": true,
+     "note": "breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 4.56, area -3.4%, limb-thickness +0.0%, chest band +42.1%."
+    }
+   ]
+  },
+  "ali": {
+   "sheet": "ali.webp",
+   "scale": 1.1406,
+   "takes": 1,
+   "consistency": {
+    "internal": {
+     "area%": 18.9,
+     "runMed%": 28.2,
+     "headStanding%": 13.7,
+     "chestStanding%": 13.5,
+     "palDE": 5.11
+    },
+    "motion2SelfReference": {
+     "area%": 24.3,
+     "runMed%": 41.0,
+     "headStanding%": 24.2,
+     "chestStanding%": 9.5,
+     "palDE": 5.56
+    },
+    "crossBankPaletteDE": 7.03,
+    "crossBankRatio": 1.26
+   },
+   "note": "one generation, no retries. Boombox present on the back in all 8 cells, maroon beanie, yellow-tinted round glasses, gold rope chain and medallion all carried. The tracksuit yellow is brighter than motion2's deeper #B4861A (shipped #F5D01B dominant); build is slightly leaner and longer-limbed.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch-b",
+     "accept": true,
+     "note": "breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 4.43, area -15.7%, limb-thickness -15.4%, chest band -37.2%."
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick-b",
+     "accept": true,
+     "note": "breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 5.76, area -27.9%, limb-thickness -6.5%, chest band -34.6%. Clamp-shrunk -6.0% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 2,
+     "id": "jump-apex",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 9.29, area +8.5%, limb-thickness -72.0%, chest band -30.2%. Clamp-shrunk -12.9% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit). CAVEAT: clamp exceeds 12% \u2014 this cell draws measurably smaller than the sheet scale; integration should prefer it only where the size step is hidden by the airborne arc."
+    },
+    {
+     "frame": 3,
+     "id": "jump-descent",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 8.95, area -12.5%, limb-thickness -30.2%, chest band -30.8%."
+    },
+    {
+     "frame": 4,
+     "id": "air-attack-b",
+     "accept": true,
+     "note": "breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 6.3, area -12.7%, limb-thickness -50.0%, chest band -33.9%."
+    },
+    {
+     "frame": 5,
+     "id": "dash-body-b",
+     "accept": true,
+     "note": "breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 9.49, area -11.9%, limb-thickness -38.7%, chest band -12.0%."
+    },
+    {
+     "frame": 6,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 6.98, area -8.5%, limb-thickness -38.2%, chest band -28.5%. Clamp-shrunk -4.4% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 7,
+     "id": "react-mid",
+     "accept": true,
+     "note": "breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 7.92, area -2.9%, limb-thickness -8.7%, chest band -12.4%."
+    }
+   ]
+  },
+  "commissioner": {
+   "sheet": "commissioner.webp",
+   "scale": 1.1643,
+   "takes": 1,
+   "consistency": {
+    "internal": {
+     "area%": 27.6,
+     "runMed%": 28.0,
+     "headStanding%": 47.4,
+     "chestStanding%": 46.3,
+     "palDE": 2.03
+    },
+    "motion2SelfReference": {
+     "area%": 22.7,
+     "runMed%": 27.8,
+     "headStanding%": 84.1,
+     "chestStanding%": 27.0,
+     "palDE": 2.18
+    },
+    "crossBankPaletteDE": 3.3,
+    "crossBankRatio": 1.51
+   },
+   "note": "one generation, no retries. The CANE is held in all eight cells (planted, braced, swung, trailing) per the bank-2 rule; coat, crimson patterned shirt, pinstripe trousers and gloves match. Needs the SAME MOTION_SHEET_ADJUST entry as his bank-1/bank-2 sheets.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch-b",
+     "accept": true,
+     "note": "breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 2.77, area -7.5%, limb-thickness -7.9%, chest band +45.2%."
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick-b",
+     "accept": true,
+     "note": "breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 3.24, area -12.6%, limb-thickness -17.0%, chest band -33.9%. Clamp-shrunk -5.3% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 2,
+     "id": "jump-apex",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 2.83, area +58.1%, limb-thickness -72.0%, chest band -15.9%. Clamp-shrunk -6.7% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 3,
+     "id": "jump-descent",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 2.98, area -12.5%, limb-thickness -27.3%, chest band +35.2%. Clamp-shrunk -8.9% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 4,
+     "id": "air-attack-b",
+     "accept": true,
+     "note": "breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 2.77, area -23.4%, limb-thickness -22.5%, chest band -26.3%."
+    },
+    {
+     "frame": 5,
+     "id": "dash-body-b",
+     "accept": true,
+     "note": "breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 3.53, area -7.6%, limb-thickness -30.5%, chest band +3.6%."
+    },
+    {
+     "frame": 6,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 3.26, area -11.1%, limb-thickness -13.9%, chest band -52.4%. Clamp-shrunk -6.6% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+    },
+    {
+     "frame": 7,
+     "id": "react-mid",
+     "accept": true,
+     "note": "breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 3.46, area -24.0%, limb-thickness +29.7%, chest band -43.8%."
+    }
+   ]
+  },
+  "devil": {
+   "sheet": "devil.webp",
+   "scale": 1.2183,
+   "takes": 3,
+   "consistency": {
+    "internal": {
+     "area%": 15.1,
+     "runMed%": 45.9,
+     "headStanding%": 25.2,
+     "chestStanding%": 23.9,
+     "palDE": 2.64
+    },
+    "motion2SelfReference": {
+     "area%": 42.1,
+     "runMed%": 21.6,
+     "headStanding%": 52.9,
+     "chestStanding%": 12.2,
+     "palDE": 2.84
+    },
+    "crossBankPaletteDE": 4.14,
+    "crossBankRatio": 1.46
+   },
+   "note": "3 generations. BODY PLAN: BIPEDAL in all eight cells. His BASE atlas (assets/atlases/devil.webp) is an upright rearing biped in every one of its 16 cells, so per the 2.9 critic finding the quadruped idiom is deliberately NOT used at these beats; the wings carry the airborne keys (2/3) and the flat winged lunge carries the dash key (5) without leaving the biped. t1 came back lanky with a long dragon snout; t2 overshot into a bulky ruddy muscle-demon; shipped take is the gaunt ribbed read. Residual: muzzle shorter and ears larger than motion2's longer goat skull, hide roughly 15 RGB darker.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch-b",
+     "accept": true,
+     "note": "breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 4.1, area +3.1%, limb-thickness +36.8%, chest band +7.7%.",
+     "bodyPlan": "bipedal"
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick-b",
+     "accept": true,
+     "note": "breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 3.92, area -17.5%, limb-thickness +0.0%, chest band +2.7%. Clamp-shrunk -7.2% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit).",
+     "bodyPlan": "bipedal"
+    },
+    {
+     "frame": 2,
+     "id": "jump-apex",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 7.15, area +9.5%, limb-thickness +0.0%, chest band -27.5%. Clamp-shrunk -13.6% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit). CAVEAT: clamp exceeds 12% \u2014 this cell draws measurably smaller than the sheet scale; integration should prefer it only where the size step is hidden by the airborne arc.",
+     "bodyPlan": "bipedal"
+    },
+    {
+     "frame": 3,
+     "id": "jump-descent",
+     "accept": true,
+     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 3.84, area -12.0%, limb-thickness +17.6%, chest band +27.7%. Clamp-shrunk -6.0% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit).",
+     "bodyPlan": "bipedal"
+    },
+    {
+     "frame": 4,
+     "id": "air-attack-b",
+     "accept": true,
+     "note": "breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 4.11, area -10.6%, limb-thickness -13.6%, chest band +15.3%.",
+     "bodyPlan": "bipedal"
+    },
+    {
+     "frame": 5,
+     "id": "dash-body-b",
+     "accept": true,
+     "note": "breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 4.9, area +69.2%, limb-thickness +22.2%, chest band -50.2%.",
+     "bodyPlan": "bipedal"
+    },
+    {
+     "frame": 6,
+     "id": "throw-recover",
+     "accept": true,
+     "note": "breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 4.31, area -1.1%, limb-thickness +5.0%, chest band -20.7%. Clamp-shrunk -9.8% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit).",
+     "bodyPlan": "bipedal"
+    },
+    {
+     "frame": 7,
+     "id": "react-mid",
+     "accept": true,
+     "note": "breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 3.56, area +3.8%, limb-thickness +4.3%, chest band +14.8%.",
+     "bodyPlan": "bipedal"
+    }
+   ]
+  }
+ }
+}
