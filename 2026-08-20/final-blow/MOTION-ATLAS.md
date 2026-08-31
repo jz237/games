@@ -114,17 +114,31 @@ Decisions a future wave should know about:
   whose older base atlas normalises to the full 320px cell —
   `MOTION_SHEET_ADJUST` (game.js) scales his motion cells up 4.6% to meet it;
   both renderers read the same table.
-- **Beat map as wired:** punch/kick-ext replace the kit-less normals' active
-  peak (the procedural extension envelope thins to a reduced translate while
-  the authored cell draws — never double-stretched); smears flash ≤2 frames
-  before contact on standing heavies/specials/supers (risers get smear-v,
-  overheads keep authored windup — no downward smear exists); follow rides
-  the late-active third; tuck owns the ballistic tumbling band and the
-  air-tech spin; land covers the pre-touchdown gather + landing recovery;
-  dash replaces the dash walk-cycle; bighit/crumple/wallsplat/airrec sequence
-  the launched-victim reads; charge holds super/EX startups (and feeds the 3D
-  super portrait); victory2/sig2 rotate with the kit victory cell on taunt
-  and round-win by match-seed parity; sig1/sig2 hold the intro stance.
+- **Beat map as wired (2.7 critic round):** punch/kick-ext replace the
+  kit-less normals' active peak (the procedural extension envelope thins to a
+  reduced translate while the authored cell draws — never double-stretched);
+  heavies HOLD the extension cell through the mid-band into the follow key —
+  the old early drop back to the raised-fist base cell read as
+  punch/re-cock/punch (the beat's fallback IS that base cell, so a missing
+  bank keeps the 2.6 read); smears flash ≤2 frames before contact on standing
+  heavies/specials/supers (risers get smear-v, overheads keep authored windup
+  — no downward smear exists, and no KICK-limb smear either: both smear
+  cells are painted ARM streaks; the Commissioner's bare-fist kit-less
+  normals also skip the smear — his authored smears are cane thrusts and the
+  cane must not materialise for two frames on a bare-hand punch); follow
+  rides the late-active third; tuck owns the ballistic tumbling band and the
+  air-tech spin (donald's band opens almost at takeoff — his base ascent
+  cell is the golf swing with a baked crescent); land covers the
+  pre-touchdown gather + landing recovery; dash replaces the dash walk-cycle
+  and exits through the base gather cell for its final two ticks (stretch →
+  gather → upright, no 90° pop); bighit/crumple/wallsplat/airrec sequence
+  the launched-victim reads (crumple only engages in the last ~55px of the
+  fall — knees may not buckle on air); charge holds super/EX startups for
+  WHATEVER room exists above a 2-tick minimum, reserving only the smear
+  flash — not just startups ≥8 (and feeds the 3D super portrait);
+  victory2/sig2 rotate with the kit victory cell on taunt and round-win by
+  match-seed parity; sig1/sig2 hold the intro stance (devil's sig2 pounce
+  was flipped in-sheet to the grammar's right-facing, 2026-08-31).
 - **Skipped:** super-flash portrait moments beyond the charge-stance capture
   (the cut-in already composes from the live pose), and smears on overheads/
   crouch/air normals (no matching cell in the grammar).

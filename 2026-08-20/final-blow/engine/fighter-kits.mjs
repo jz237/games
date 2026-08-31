@@ -1817,17 +1817,36 @@ export function attackMotionBeat(attack, attackFrame) {
   if (attackFrame < start) {
     // 1-2 FLASH frames between windup and contact on standing heavies,
     // specials and supers. Rising arcs streak upward (smear-v); overheads
-    // keep their authored windup — the grammar has no downward smear.
-    if (attackFrame >= start - 2 && start >= 6 && !crouching && !airborne
-      && attack.kind !== "light" && attack.level !== ATTACK_LEVELS.OVERHEAD) {
+    // keep their authored windup — the grammar has no downward smear, and
+    // (2.7 critic round) no LEG smear either: both smear cells are painted
+    // ARM streaks, so kick-limb strikes keep their authored windup.
+    // (2.7 critic round J4) The Commissioner's authored smears are CANE
+    // thrusts, but his kit-less normals are bare-fisted — the cane
+    // materialised for the 2-frame flash and vanished at contact. His
+    // bare-hand normals keep their authored windup; kit moves (cane art
+    // throughout) keep the smear.
+    const smearEligible = start >= 6 && !crouching && !airborne
+      && attack.kind !== "light" && attack.level !== ATTACK_LEVELS.OVERHEAD
+      && attack.limb !== "kick"
+      && !(attack.fighterId === "commissioner" && !attack.animation);
+    if (smearEligible && attackFrame >= start - 2) {
       const rising = attack.juggleStarter
         || (Number.isFinite(attack.launchVelocityY) && attack.launchVelocityY < 0)
         || attack.kitAction === "launcher" || attack.kitAction === "enhancedLauncher";
       return { beat: "smear", cell: rising ? MOTION_CELLS.smearV : MOTION_CELLS.smearH };
     }
     // Super/EX startups hold the gathered charge stance until the smear.
-    if ((attack.superMove || (attack.gritCost || 0) > 0) && start >= 8 && attackFrame < start - 2) {
-      return { beat: "charge", cell: MOTION_CELLS.charge };
+    // 2.7 critic round: the stance occupies WHATEVER startup room exists
+    // above a 2-tick minimum — the old `start >= 8` gate left every short
+    // super/EX (cyraxx's whole meltdown kit, jez/benny/ali supers) holding a
+    // generic base windup while devil got his authored charge. Only the
+    // smear flash (when one will fire) is reserved out of the window;
+    // genuinely instant moves (< 2 ticks of room) still skip it.
+    if (attack.superMove || (attack.gritCost || 0) > 0) {
+      const chargeEnd = start - (smearEligible ? 2 : 0);
+      if (chargeEnd >= 2 && attackFrame < chargeEnd) {
+        return { beat: "charge", cell: MOTION_CELLS.charge };
+      }
     }
     return null;
   }
@@ -1835,10 +1854,15 @@ export function attackMotionBeat(attack, attackFrame) {
   const progress = (attackFrame - start) / Math.max(1, end - start);
   // Full-extension contact for the matching limb — kit-less normals only
   // (authored specials cells stay the contact art; driveHeavy is a shoulder/
-  // body run, not a limb extension).
+  // body run, not a limb extension). 2.7 critic round J1: heavies hold the
+  // extension cell straight through the mid-band into the follow key — the
+  // old 0.34 cutoff dropped back to the raised-fist base cell mid-swing,
+  // which read as punch / re-cock / punch. The extension beat's FALLBACK is
+  // that exact base cell, so a missing/rejected bank still shows the 2.6
+  // read frame-for-frame.
   if (!attack.animation && !crouching && !airborne && attack.kitAction !== "driveHeavy"
     && (attack.kind === "light" || attack.kind === "heavy")
-    && progress < (attack.kind === "light" ? 0.52 : 0.34)) {
+    && progress < (attack.kind === "light" ? 0.52 : 0.67)) {
     return { beat: "extension", cell: attack.limb === "kick" ? MOTION_CELLS.kickExt : MOTION_CELLS.punchExt };
   }
   // Follow-through key: the authored weight-carry replaces the recovery cell

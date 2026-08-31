@@ -570,8 +570,13 @@ export class FighterLayer {
     const baseImage = host.fighterAtlasFor ? host.fighterAtlasFor(fighter, "base") : host.fighterAtlases[id];
     const moveImage = host.fighterAtlasFor ? host.fighterAtlasFor(fighter, "specials") : host.fighterMoveAtlases[id];
     if (!baseImage?.complete || !baseImage.naturalWidth) return null;
-    const banks = { base: this.buildBank(baseImage, paletteKey ? null : `renderer/hd/${id}.webp`) };
-    if (moveImage?.complete && moveImage.naturalWidth) banks.specials = this.buildBank(moveImage, paletteKey ? null : `renderer/hd/${id}-specials.webp`);
+    // 2.7 critic round: the host's availability gate decides whether an HD
+    // sheet exists for this fighter/bank (renderer/hd/ covers only part of
+    // the roster — devil has no sheets at all). No gate, no request: a
+    // missing entry silently keeps the SD atlas instead of 404ing.
+    const hdFor = (bank) => (paletteKey || !host.hdSheetPath ? null : host.hdSheetPath(id, bank));
+    const banks = { base: this.buildBank(baseImage, hdFor("base")) };
+    if (moveImage?.complete && moveImage.naturalWidth) banks.specials = this.buildBank(moveImage, hdFor("specials"));
 
     const geometry = new THREE.PlaneGeometry(1, 1);
     geometry.translate(0, 0.5, 0); // feet-anchored, matching drawAtlasFrame
