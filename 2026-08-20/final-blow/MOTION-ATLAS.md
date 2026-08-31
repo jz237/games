@@ -214,7 +214,9 @@ consistent with his empty-handed base hit cells.
 
 Rejected slots ship `accept: false` in the manifest and MUST fall back to the
 current beat exactly like bank 1 — a motion2 cell is a bonus, never a
-dependency. (This wave: 160/160 accepted, so the fallback path is dormant.)
+dependency. (The generation wave landed 160/160 accepted; the 2.9 CRITIC ROUND
+then rejected all twenty `walk-a`/`walk-b` cells — see below — leaving
+140/160.)
 
 ### Pipeline notes (2.9 wave)
 
@@ -253,9 +255,8 @@ Beat map as wired (2.9):
   bare-fist normals windup → extension too, preserving the no-cane rule).
   Never on lights, crouch/air normals, overheads, driveHeavy, or authored-
   windup kit moves; startup length untouched.
-- **walk-a/b** interleave the base cycle at the old cadence (a → 5 → b → 7);
-  donald cycles his club-less pair self-contained so the golf club never pops
-  between banks.
+- **walk-a/b** — WITHDRAWN by the 2.9 critic round; the walk is base-only again,
+  exactly as 2.8 shipped it. See "Critic round" below.
 - **crouch-trans / turnaround** hold 3 ticks off render-only edge latches in
   the motion observers (crouch flip both ways; grounded facing flip — the
   cross-up defender wears the pivot). Never advanced during rollback resim.
@@ -288,3 +289,71 @@ Demo coverage: `crouchTrans`, `turnaround` and `airAttack` joined DEMO_BEATS
 (turnaround actively staged as a close-range cross-up; the other two fall out
 of the staged crouch/air normals) so the choreographer provably parades the
 new keys. Contracts live in tests/motion2-cells.test.mjs.
+
+## Critic round (2.9) — the base bank's frame grammar is NOT uniform
+
+A three-critic animation panel scored the motion2 integration 4/10 and 3.5/10.
+One root cause explained four of the five blockers: **every wave up to 2.9
+handed off to HARDCODED base indices as if the base atlas bank's frame grammar
+were uniform across the roster. It is not.** Verified cell by cell against
+`assets/atlases/<id>.webp` at 1:1 with silhouette/area/foot-cluster
+measurement:
+
+- `base(12)`, assumed "standing-ish, fine for guard", is a DEEP SQUAT on
+  deathblow / ali / benny / donald / post and a wing-wrapped cocoon on the
+  devil. Standing guard therefore dropped them into a crouch, and 2.9's
+  standing block-flinch made them rise ~80px INTO the punch. Those squat cells
+  are also drawn OVERSIZED — measured 1.13x-1.33x the standing figure's mass —
+  so entering crouch ballooned the character in one tick.
+- `base(13)`, assumed "second strike / stagger", is an ATTACK POSE on nine of
+  ten fighters (benny's high kick, ali's overhead mic swing, the devil's
+  airborne claw lunge, donald's golf swing with baked crescent VFX, alan's high
+  kick, jez's knee chamber, post's spray raise, cyraxx's airborne tuck) and on
+  DEATHBLOW is a DIFFERENT COSTUME (long tactical trousers, knee pads, combat
+  boots against his shorts + sneakers everywhere else). Only the Commissioner's
+  13 is the arms-out recoil the code assumed.
+
+**The fix is `BASE_CELL_ROLES` in `engine/fighter-kits.mjs`** — a per-fighter
+semantic map naming which base indices genuinely are `{guard, crouch, stagger,
+hit, secondStrike, walk, idle}`, plus an `attack` set (legal in an attack beat,
+never in a reaction) and an `unusable` set (art defects that must never draw at
+all, routed away by `swap` at the single choke point inside
+`resolveMotionPose`, which every consumer already reads through). Every beat
+consults the map; where a fighter has no suitable base cell the beat prefers an
+authored motion/motion2 cell. `tests/motion2-cells.test.mjs` asserts that no
+role a non-attack beat consumes can resolve to an attack or unusable cell.
+
+Also landed in this round:
+
+- **The walk is base-only again.** The motion2 walk pair could not be blended
+  into the base cycle (different generation: build, cap, decal, boots and arm
+  carriage all part; the devil's pair is an all-fours prowl against an upright
+  bipedal cycle; donald's is club-less against a club-carrying base walk), and
+  it cannot stand alone either — measured foot-cluster positions prove `walk-a`
+  and `walk-b` are the SAME STRIDE PHASE for all ten fighters (walk-b is the
+  same pose with a wider stance), so the pair is not a cycle and skates. All
+  twenty cells are `accept: false` with the measurements recorded; the art is
+  retained, not deleted.
+- **Reaction / dizzy / guard / air-normal handoffs** are authored or
+  map-resolved end to end. Dizzy holds one authored key carried by a procedural
+  sway instead of alternating with an attack cell; air normals wear the
+  authored jumping-strike key for their WHOLE window (startup, active AND
+  recovery) instead of borrowing grounded cells and then snapping.
+- **Throw timing.** `thrown` (a fully airborne horizontal body) is gated to the
+  real lift window; the grounded clinch wears a standing flinch so attacker and
+  victim agree in space.
+- **Crossfade ghost.** The old fixed "clip below 72% of the cell" rect assumed
+  the head lives in the top 28% — false for most authored cells, so the dash
+  stretch's mid-cell head drew a legible second face at the fighter's hip. The
+  ghost is now masked by the INCOMING pose's own silhouette (nothing can appear
+  outside the live body, by construction) and softened on any non-cycle pose
+  change so it carries colour but no readable features.
+- **Anticipation fills the startup room** (the 2.8 charge-gate shape) instead
+  of a 4-tick cap, so long-startup heavies stop leaking vestigial base cells.
+- **Per-cell draw corrections** (`baseCellDrawAdjust`, `cellFloorOffset`, both
+  shared with CINEMA 3D through the existing host bridge): the oversized crouch
+  cells are mass-normalised, and the Commissioner's base bank — the roster's
+  only registration outlier, content bottoming anywhere from 277 to 320 where
+  every other sheet is a flat 316 — is planted per cell. His
+  `MOTION_SHEET_ADJUST` was re-fitted from 1.046 (fitted to his 320px outlier
+  cell) to 1.033 (his actual 316px standing cells).

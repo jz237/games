@@ -737,10 +737,21 @@ export class FighterLayer {
     const moving = Math.abs(fighter.vx) > 22 && fighter.grounded && !attack;
     const bob = fighter.cinematicFrame === null && fighter.grounded && !fighter.stun && !fighter.block
       ? Math.sin((moving ? fighter.walkTime * 20 : fighter.animTime * 10) + fighter.side * 2) * (moving ? 1.8 : 2.7) : 0;
-    const sizeAdjust = bankName === "specials" ? (host.moveSheetAdjust[fighter.def.id] || 1)
+    // v2.9 critic round: the whole-sheet adjust times the PER-CELL adjust
+    // (M3 — the base bank's deep-squat crouch cells are drawn oversized), so
+    // the 3D rig holds the same constant mass across the crouch handoff the
+    // 2D path does.
+    const sizeAdjust = (bankName === "specials" ? (host.moveSheetAdjust[fighter.def.id] || 1)
       : bankName === "motion" || bankName === "motion2"
-        ? (host.motionSheetAdjust?.[fighter.def.id] || 1) : 1;
+        ? (host.motionSheetAdjust?.[fighter.def.id] || 1) : 1)
+      * (host.baseCellDrawAdjust ? host.baseCellDrawAdjust(fighter.def.id, bankName, pose.frame) : 1);
     const renderSize = host.fighterRenderSize(fighter.def.id) * sizeAdjust * PX;
+    // v2.9 critic round (M5): per-cell floor registration in sim pixels — the
+    // Commissioner's older base sheet bottoms out anywhere from 277 to 320.
+    const floorFix = host.cellFloorOffset
+      ? host.cellFloorOffset(fighter.def.id, bankName, pose.frame) / 320
+        * host.fighterRenderSize(fighter.def.id) * sizeAdjust
+      : 0;
     const lunge = attackSwing * (attackKind === "special" ? 68 : attackKind === "heavy" ? 46 : 29);
     const crouchScale = fighter.crouch ? 0.88 : 1;
     const crouchDrop = fighter.crouch ? 21 : 0;
@@ -758,7 +769,7 @@ export class FighterLayer {
     const jump = SIM_FLOOR - fighter.y;
 
     const offsetPx = (lunge - startupPower * 8) * facing;
-    const dropPx = crouchDrop - attackSwing * (attackKind === "special" ? 13 : 5);
+    const dropPx = floorFix + crouchDrop - attackSwing * (attackKind === "special" ? 13 : 5);
     rig.root.position.set(
       worldX(fighter.x) + offsetPx * PX,
       worldY(fighter.y + bob) - dropPx * PX,
