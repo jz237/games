@@ -84,6 +84,10 @@ import {
   motion3Pose,
   reactionTrackKeys,
   reactionFallbackCells,
+  wakeupRiseStretch,
+  wakeupSettleStart,
+  wakeupSettleTransform,
+  WAKEUP_SETTLE_FRAMES,
   REACTION_BANDS,
   blockRecoverTransform,
   BLOCK_EXIT_AT,
@@ -6255,6 +6259,10 @@ function createMotionObserver() {
     // on the authored turnaround pivot key and the crouch enter/leave
     // in-between. prevFacing 0 / prevCrouch null mean "not yet observed".
     prevFacing: 0, turnFrames: 0, turnPending: 0, prevCrouch: null, crouchTransFrames: 0,
+    // v2.9 final round (R5): the wake-up SETTLE. wakeLastRung remembers the
+    // cell the rise ended on (the drawn one, after the accept mask), so the
+    // standing cell can arrive at exactly that height and ease out of it.
+    prevWakeup: 0, wakeLastRung: null, wakeSettleFrames: 0, wakeSettleStart: 1,
     // v2.9 critic round 2 (B1): the blockstun window's LENGTH, latched the
     // tick it opens, so the blockstun key track has a denominator. Render-only
     // observer state on the documented pattern — never read by the sim, never
@@ -6691,6 +6699,23 @@ function updateMotionObservers() {
       if (obs.turnFrames > 0 && fighter.grounded) obs.turnFrames -= 1;
     }
     if (fighter.down) { obs.turnFrames = 0; obs.turnPending = 0; }
+    // v2.9 final round (R5) — the wake-up SETTLE latch. The rise's last rung
+    // is remembered while the countdown runs (obs.poseBank/poseFrame are the
+    // RESOLVED cell, so a rejected sheet is accounted for), and the tick the
+    // countdown ends the standing cell is handed the height that rung was
+    // actually drawn at. Render-only observer state, exactly like the turn and
+    // crouch latches — never advanced during rollback resimulation.
+    if (fighter.wakeupFrames > 0 && obs.poseBank) {
+      obs.wakeLastRung = { bank: obs.poseBank, frame: obs.poseFrame };
+    }
+    if (obs.prevWakeup > 0 && fighter.wakeupFrames === 0 && !fighter.down
+      && state.phase === "fight" && obs.wakeLastRung) {
+      obs.wakeSettleFrames = WAKEUP_SETTLE_FRAMES;
+      obs.wakeSettleStart = wakeupSettleStart(fighter.def.id,
+        obs.wakeLastRung.bank, obs.wakeLastRung.frame);
+      obs.wakeLastRung = null;
+    } else if (obs.wakeSettleFrames > 0) obs.wakeSettleFrames -= 1;
+    obs.prevWakeup = fighter.wakeupFrames;
     if (obs.prevCrouch !== null && fighter.crouch !== obs.prevCrouch
       && fighter.grounded && state.phase === "fight") {
       obs.crouchTransFrames = 3;
@@ -7047,12 +7072,36 @@ function fighterMotionTransform(fighter) {
   // pure helper, and reduced motion keeps a softened version (it is the only
   // thing that makes the recovery read as a rise at all).
   if (fighter.wakeupFrames > 0 && !fighter.down) {
-    const wake = wakeupRiseTransform(fighter.wakeupFrames, DEFENSE_RULES.wakeupFrames);
+    // v2.9 final round (R5): the bridge on the LAST rung is the measured
+    // per-fighter stretch onto the standing height, not round 2's flat 12%
+    // (which closed 1.12 of a ratio that runs to 1.40 on jez). obs.poseBank /
+    // poseFrame are the resolved cell this frame, so a rejected sheet is
+    // accounted for; before the first pose is latched it degrades to 1.
+    const rung = obs.poseBank
+      ? wakeupRiseStretch(fighter.def.id, obs.poseBank, obs.poseFrame) : 1;
+    const wake = wakeupRiseTransform(fighter.wakeupFrames, DEFENSE_RULES.wakeupFrames, rung);
     if (wake) {
       const calm = reducedMotion ? 0.5 : 1;
       scratch.scaleY *= 1 + (wake.scaleY - 1) * calm;
       scratch.scaleX *= 1 + (wake.scaleX - 1) * calm;
       scratch.rotation += fighter.facing * wake.pitch * calm;
+      scratch.stretchActive = true;
+    }
+  }
+
+  // v2.9 final round (R5) — the OTHER half of the wake-up seam. The stretch
+  // above is capped, so on the four fighters whose getup-b is more than 25%
+  // short of standing it cannot close the gap alone. The standing cell arrives
+  // compressed to exactly the height the last rung was drawn at and eases out
+  // over five ticks, so the handoff has no step in it at all. Floored at 0.88:
+  // a briefly compressed standing figure reads as the last of the push, a
+  // 37% stretched crouch would read as the character growing.
+  if (obs.wakeSettleFrames > 0 && fighter.grounded && !fighter.down
+    && fighter.wakeupFrames === 0) {
+    const settle = wakeupSettleTransform(obs.wakeSettleFrames, obs.wakeSettleStart);
+    if (settle) {
+      const calm = reducedMotion ? 0.5 : 1;
+      scratch.scaleY *= 1 + (settle.scaleY - 1) * calm;
       scratch.stretchActive = true;
     }
   }
@@ -17038,9 +17087,17 @@ function fighterPoseDescriptor(fighter) {
     // for the whole hold, which is exactly why one drawing owned all of it.
     const kitPose = fighter.attacking
       ? attackAnimationPose(fighter.attacking, fighter.attackFrame) : null;
+    // v2.9 final round: the kit-less fallback was the HARDCODED index 8 — the
+    // last raw base index left in this file after the semantic map landed.
+    // base:8 is deathblow's GUARD cell, so his throw drew the same stance
+    // twice fifteen ticks apart with the hurl in between; it is a braced wide
+    // stance on ali and a STRIKE on four of the roster, which is exactly the
+    // class of assumption BASE_CELL_ROLES exists to kill. The map's own guard
+    // read is what this branch always meant — a two-handed seize is the
+    // fighter squared up and set — and it is certified non-attack per fighter.
     const fallback = kitPose && !isAuthoredBank(kitPose.bank)
       ? { bank: kitPose.bank, frame: kitPose.frame }
-      : { bank: "base", frame: 8 };
+      : { bank: "base", frame: roles.guard };
     const hold = fighter.grabbing;
     const clinch = clamp((hold.frame || 0) / Math.max(1, hold.total || 1), 0, 0.999);
     return beatPoseAt(throwClinchKeys(), clinch, fallback);

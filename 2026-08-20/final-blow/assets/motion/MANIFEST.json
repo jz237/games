@@ -447,7 +447,7 @@
      "frame": 3,
      "id": "smear-v",
      "accept": true,
-     "note": "2.8 regen 2026-08-31: now reads as his blurred punching arm — streaked ribbon with the gloved fist at the apex, arcs riding the streak (old electric-column read fixed)"
+     "note": "2.8 regen 2026-08-31: now reads as his blurred punching arm \u2014 streaked ribbon with the gloved fist at the apex, arcs riding the streak (old electric-column read fixed)"
     },
     {
      "frame": 4,
@@ -858,7 +858,8 @@
     {
      "frame": 8,
      "id": "bighit",
-     "accept": true
+     "accept": false,
+     "note": "2.9 CANE CONTINUITY (R8) -- accept:false, commissioner only. Read at 1:1: this cell draws him with BOTH HANDS EMPTY, and it is the OPENING key of his heavy reaction track, sitting between base idle (cane) and motion3:7 (cane) -- the cane blinked out of his hand and back inside four ticks. His whole motion-bank reaction set (8 big-hit, 9 crumple, 10 wall-splat, 11 air recovery) is cane-less, which is consistent with the 2.7 finding that his kit-less normals are bare-fisted; only 8 is gated, because only 8 plays in a STANDING reaction bracketed by cane cells. 9/10/11 are knockdown, corner-splat and juggle reads where a dropped cane is defensible. The heavy opener falls back to base:12, the cane brace. PRIOR NOTE: "
     },
     {
      "frame": 9,

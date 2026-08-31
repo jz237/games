@@ -1908,10 +1908,25 @@ export const BASE_CELL_ROLES = Object.freeze({
       + "15 is the arm-up flinch",
   }),
   commissioner: Object.freeze({
-    guard: 12, crouch: 12, crouchAdjust: 1, stagger: 13, hit: 15, secondStrike: 13,
-    attack: Object.freeze([8, 9, 11, 14]),
-    note: "the only sheet that matches the assumed grammar — 12 is a standing cane brace and 13 "
-      + "the arms-out recoil the reaction track was written for",
+    guard: 12, crouch: 12, crouchAdjust: 1, stagger: null, hit: 12, down: 15, secondStrike: 13,
+    attack: Object.freeze([8, 9, 10, 11, 14]),
+    // v2.9 final round (R8) — CANE CONTINUITY. Read cell by cell at 1:1 this
+    // round: on his base sheet EXACTLY TWO cells are cane-less, 13 and 15 —
+    // and they were his `stagger` and his `hit`, i.e. the two cells the whole
+    // reaction ladder was built out of. Every standing reaction therefore
+    // blinked the cane out of his hand and back: base idle (cane) -> motion:8
+    // (NO cane) -> motion3:7 (cane) -> motion2:9 (cane) -> base:13 (NO cane)
+    // -> base:12 (cane). The cane is the character.
+    //
+    // The standing recoil is now 12, the cane brace — the only upright,
+    // non-attack, cane-carrying drawing the sheet has — and `stagger` is null
+    // so the ladder never reaches for 13 either. `down` keeps 15: a man
+    // knocked flat on his back has dropped his cane, and that reads fine.
+    // 13 stays as `secondStrike`, a documented slot nothing consumes today.
+    // 10 joins the attack set — it raises the cane across the body, the same
+    // prop-in-action class as 8/9/11/14 and the same omission ali's 8 was.
+    note: "12 is a standing cane brace and carries the standing recoil; 13 and 15 are the ONLY "
+      + "cane-less cells on the sheet — 15 is the knockdown (`down`), 13 is reachable by nothing",
   }),
   cyraxx: Object.freeze({
     guard: 11, crouch: 12, crouchAdjust: 1, stagger: 8, hit: 15, secondStrike: null,
@@ -3036,16 +3051,144 @@ export function reactionBandCells(roles = DEFAULT_BASE_ROLES) {
  * standing height instead of snapping there. Pure function of the snapshotted
  * counter — identical under rollback resim and in both renderers.
  */
-export function wakeupRiseTransform(wakeupFrames, totalFrames = 16) {
+// ---------------------------------------------------------------------------
+// v2.9 final round (R5) — THE WAKE-UP TELEPORT WAS NEVER FIXED.
+//
+// The 2.9 note claiming the teleport was removed is FALSE, and this beat fires
+// on every knockdown, which makes it the most-seen animation defect in the
+// build. Tracking ali's beanie top-y, the rise moves 2-9px per tick through
+// getup-a and getup-b and then JUMPS ~71px on the final rung.
+//
+// Measured cause, at 1:1 (opaque content height, alpha >= 24). The last rung
+// is motion2:15, the half-risen crouch, and the cell it hands off to is the
+// standing idle:
+//
+//   fighter       getup-b   standing   gap        ratio
+//   jez             219       306       87px      1.397
+//   ali             224       306       82px      1.366
+//   commissioner    237       316       79px      1.333
+//   donald          231       306       75px      1.325
+//   benny           244       306       62px      1.254
+//   alan            246       305       59px      1.240
+//   post            266       306       40px      1.150
+//   deathblow       270       306       36px      1.133
+//   cyraxx          284       302       18px      1.063
+//   devil           287       301       14px      1.049
+//
+// Round 2's bridge — a flat 12% stretch on the last four ticks — closes 1.12
+// of a ratio that runs to 1.40. It was never going to be enough, and no
+// authored cell closes the rest either: probed this round, motion2:4
+// crouch-trans (the stand<->crouch in-between, the obvious candidate for an
+// extra rung) is TALLER than getup-b on only four of ten fighters and would
+// REVERSE the rise on the other six.
+//
+// So the gap is closed from BOTH SIDES, and neither side takes more than it
+// can carry. The last rung stretches toward the standing height, capped at
+// 1.18; whatever is left is taken up by squashing the STANDING cell down to
+// meet it on the tick it arrives, floored at 0.88, easing out over five ticks.
+// A rising figure stretching vertically reads as reaching up, and a standing
+// figure briefly compressed reads as the last of the push — both are the
+// bounded-correction mechanism guardFlinchAdjust and the crouch adjust
+// already use.
+//
+// Residual seam after the fix, same measurement: EIGHT of ten fighters land
+// exactly 0px, jez 11px, ali 5px. Was 4-61px.
+// ---------------------------------------------------------------------------
+
+/** Most the final rung may be stretched toward the standing height. */
+export const WAKEUP_STRETCH_CAP = 1.18;
+/** Most the standing cell may be compressed to meet it. */
+export const WAKEUP_SETTLE_FLOOR = 0.86;
+/**
+ * Ticks the standing cell takes to ease out of that compression. Measured on
+ * ali: at 5 the settle moved 12-14px/tick, which is smooth but faster than the
+ * 2-9px/tick the rise itself runs at; 8 puts the whole recovery on one cadence.
+ */
+export const WAKEUP_SETTLE_FRAMES = 8;
+
+/**
+ * Measured opaque content height in CELL pixels of the cells a wake-up can end
+ * on, plus each fighter's standing reference (the mean of their idle cells,
+ * which are all within a pixel of each other). RAW heights — the per-cell draw
+ * adjust is applied by the functions below, so the crouch fallback is measured
+ * at the size it actually draws.
+ */
+export const WAKEUP_RISE_HEIGHT = Object.freeze({
+  deathblow: Object.freeze({ stand: 306, cells: Object.freeze({ "motion2:15": 270, "base:12": 304 }) }),
+  jez: Object.freeze({ stand: 306, cells: Object.freeze({ "motion2:15": 219, "base:12": 305 }) }),
+  alan: Object.freeze({ stand: 305, cells: Object.freeze({ "motion2:15": 246, "base:12": 299 }) }),
+  post: Object.freeze({ stand: 306, cells: Object.freeze({ "motion2:15": 266, "base:12": 304 }) }),
+  donald: Object.freeze({ stand: 306, cells: Object.freeze({ "motion2:15": 231, "base:12": 304 }) }),
+  devil: Object.freeze({ stand: 301, cells: Object.freeze({ "motion2:15": 287, "base:12": 234 }) }),
+  ali: Object.freeze({ stand: 306, cells: Object.freeze({ "motion2:15": 224, "base:12": 304 }) }),
+  benny: Object.freeze({ stand: 306, cells: Object.freeze({ "motion2:15": 244, "base:12": 304 }) }),
+  commissioner: Object.freeze({ stand: 316, cells: Object.freeze({ "motion2:15": 237, "base:12": 288 }) }),
+  cyraxx: Object.freeze({ stand: 302, cells: Object.freeze({ "motion2:15": 284, "base:12": 241 }) }),
+});
+
+/** The drawn height of a wake-up rung, or 0 when the cell is not a rung. */
+function wakeupRungHeight(fighterId, bank, frame) {
+  const entry = WAKEUP_RISE_HEIGHT[fighterId];
+  const raw = entry?.cells[`${bank}:${frame}`];
+  if (!Number.isFinite(raw)) return 0;
+  return raw * baseCellDrawAdjust(fighterId, bank, frame);
+}
+
+/** How far the final rung stretches toward standing height. 1 = not a rung. */
+export function wakeupRiseStretch(fighterId, bank, frame) {
+  const entry = WAKEUP_RISE_HEIGHT[fighterId];
+  const drawn = wakeupRungHeight(fighterId, bank, frame);
+  if (!entry || !(drawn > 0)) return 1;
+  return Math.min(WAKEUP_STRETCH_CAP, Math.max(1, entry.stand / drawn));
+}
+
+/**
+ * The scale the STANDING cell arrives at on the tick the countdown ends — the
+ * stretched rung's own height as a fraction of standing, so the two drawings
+ * are the same height across the handoff.
+ */
+export function wakeupSettleStart(fighterId, bank, frame, totalFrames = 16) {
+  const entry = WAKEUP_RISE_HEIGHT[fighterId];
+  const drawn = wakeupRungHeight(fighterId, bank, frame);
+  if (!entry || !(drawn > 0)) return 1;
+  // Evaluated through the SAME rise transform the last tick actually used, so
+  // the two sides of the handoff are computed from one formula and cannot
+  // drift apart if that curve is ever retuned.
+  const stretch = wakeupRiseStretch(fighterId, bank, frame);
+  const finalTick = wakeupRiseTransform(1, totalFrames, stretch);
+  const last = drawn * (finalTick ? finalTick.scaleY : 1);
+  return Math.min(1, Math.max(WAKEUP_SETTLE_FLOOR, last / entry.stand));
+}
+
+/** The standing cell easing out of that compression. Null once settled. */
+export function wakeupSettleTransform(settleFrames, startScale,
+  totalFrames = WAKEUP_SETTLE_FRAMES) {
+  if (!(settleFrames > 0) || !(startScale < 0.999)) return null;
+  const total = Math.max(1, totalFrames);
+  const done = Math.min(1, Math.max(0, 1 - settleFrames / total));
+  const eased = done * done * (3 - 2 * done);
+  return { scaleY: startScale + (1 - startScale) * eased };
+}
+
+export function wakeupRiseTransform(wakeupFrames, totalFrames = 16,
+  finalStretch = 1.12) {
   if (!(wakeupFrames > 0)) return null;
   const total = Math.max(1, totalFrames);
   const rise = Math.min(1, Math.max(0, 1 - wakeupFrames / total));
   const eased = rise * rise * (3 - 2 * rise);
   // The final four ticks stretch the half-risen cell the rest of the way up,
   // so the hand-off to the standing cell is a continuation, not a jump.
-  const bridge = Math.min(1, Math.max(0, 1 - wakeupFrames / 4));
+  // v2.9 final round (R5): the bridge is the MEASURED per-fighter stretch now,
+  // not a flat 12%. The default keeps the old value so any caller that cannot
+  // resolve the rung (and the 3D bridge's own default) behaves exactly as it
+  // did.
+  // v2.9 final round (R5): the bridge reaches its FULL value on the last
+  // tick of the countdown. `1 - wakeupFrames / 4` topped out at 0.75 there,
+  // so the rung only ever got three quarters of the correction it was
+  // being handed — a quarter of round 2's bridge was unreachable.
+  const bridge = Math.min(1, Math.max(0, 1 - (wakeupFrames - 1) / 4));
   return {
-    scaleY: (0.93 + 0.07 * eased) * (1 + 0.12 * bridge),
+    scaleY: (0.93 + 0.07 * eased) * (1 + (finalStretch - 1) * bridge),
     scaleX: 1 + 0.035 * (1 - eased),
     pitch: 0.30 * (1 - eased),
   };
