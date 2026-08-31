@@ -35,17 +35,58 @@ instead of whatever the archetype tables happen to roll:
   wall splat, juggle, counter-hit, dizzy, knockdown/wake-up, guarded contact,
   taunt, both dashes, all three jump arcs and the stage-weapon pickup where
   the stage plans one.
-- Selection biases strongly toward the least-shown item, with a 60/40 blend
-  against untouched Pro-AI windows so it still reads as a fight. Situational
-  beats are staged opportunistically (downed opponent → taunt, grounded
-  weapon → pickup, cornered opponent → wall splat, meter → super/EX).
+- **Two lanes.** Each side either LEADS a showcase of its own, FEEDS a beat
+  that needs a partner (block for guarded contact, swing into a counter-hit,
+  walk into a throw, brace for a stun string or a corner herd), or is handed
+  straight back to the archetype brain. Both fighters can be showcasing at
+  once, and the feed role is an active script — nothing ever stands inert.
+- **Throughput.** A directive ends the tick its move comes out rather than
+  holding the pipeline through the whole recovery; the gap between directives
+  is 0-3 ticks; timeouts are per-kind; and a confirmed hit chains the next
+  unshown checklist item into the sim's cancel window, so a light → heavy →
+  special string shows three entries in the animation time of one and a half.
+- **Staging distances are derived**, not constant: each move's band comes from
+  its own authored hitboxes (near edge to 90% of real reach, scaled and offset
+  by the defender's hurtbox), with the SF2 proximity-grab range carved out of
+  the forward-light bands so a showcase never silently converts to a throw.
+- **Motion hygiene.** The forward and crouching command normals share their
+  terminal button with ↓→+PUNCH, →↓→+PUNCH and ←→+KICK, and the recogniser
+  bridges an 18-frame gap, so a stale `down` token from the previous showcase
+  used to convert them into command specials. Each of those presses is now
+  preceded by ~22 ticks of one steady direction (or a plain crouch), which is
+  also the step-back-step-in these normals want on screen.
+- Selection biases strongly toward the least-shown item, breaks ties with the
+  cumulative attract ledger and then by spacing (an item already in range
+  costs no approach), with a 80/20 blend against untouched Pro-AI windows so
+  it still reads as a fight. Situational beats are staged opportunistically
+  (downed opponent → taunt, grounded weapon → pickup and USE, cornered
+  opponent → wall splat, filled stun bar → dizzy string, meter → super/EX),
+  and every staged beat has an attempt budget with backoff so a spectacle the
+  geometry will not allow right now can never starve the move checklist.
+- **The attract cycle is cumulative.** A three-round exhibition is ~40 seconds
+  of actual fight time per side and 30 moves is ~22 seconds of pure animation
+  before movement, jumps, hitstun and knockdowns — so one match honestly shows
+  a median of ~18 of 30 per fighter. The session therefore banks each
+  exhibition's coverage per fighter and a returning fighter opens with what
+  the cabinet has NOT shown yet: measured over a 16-exhibition attract run,
+  every fighter with 3+ appearances reaches 30/30, and 2 appearances reach
+  26-30.
 - The AI brain still observes every tick; a scripted directive merely outranks
   its input. Fully deterministic: a private rng seeded from the demo cycle,
   no `Math.random`, `state.rng` untouched, and no leaks into ranked/vs CPU
-  behaviour (everything is scoped to `state.mode === "demo"`).
+  behaviour (everything is scoped to `state.mode === "demo"`). The one sim
+  hook is demo-only too: an attract round pulls the stage weapon's arrival
+  forward, because a weapon planned for the ordinary 16-62 second contest
+  window never arrives before an exhibition KO.
 - `window.__finalBlowQa.demoCoverage()` returns the live ledger: featured
-  pair/stage, per-fighter move counts, beat counts and the matchup keys the
+  pair/stage, per-fighter move counts, beat counts, both lane roles, the
+  per-item pick tally, the cumulative session ledger and the matchup keys the
   session has already featured.
+- **Boss spoiler (deliberate).** On a locked cabinet the attract cycle
+  features 9 of the 10 fighters: the Commissioner is the arcade boss and the
+  roster only contains him once he is unlocked, exactly as on the select
+  screen and the ladder. Attract does not get a private exception to that
+  reveal. Once unlocked he joins the rotation and all 45 matchups play.
 
 ## Verification
 
@@ -54,5 +95,11 @@ instead of whatever the archetype tables happen to roll:
   sim-lite world (`tests/demo-mock-world.mjs`) and asserts 100% kit-move
   coverage plus every staged beat for the featured pair inside a bounded run,
   checklist completeness for all ten fighters, deterministic replay of the
-  ledger, and the ten-fighter/six-stage rotation property.
+  ledger, and the ten-fighter/six-stage rotation property. It also pins the
+  2.9 second-pass fixes: a directive-throughput floor, at least one cancel
+  chain, the fifteen moves the first pass never reached (the crouching and
+  forward command normals, every air normal, both throwables), the motion
+  beats that drew on zero ticks (guarded contact, both dashes, crouch
+  transitions, the neutral jump, air attacks, the weapon pickup), per-move
+  staging bands derived from real hitboxes, and the cumulative attract ledger.
 - `node tests/browser-smoke.mjs` checks two live AI brains, automatic Final Blow activation, result scheduling, 64 rapid cycles with one bounded intro timer, input-to-exit, mobile HUD bounds, hidden touch controls, and offline precaching.

@@ -24,7 +24,7 @@ function makeMockFighter(x, facing) {
     x, facing, grounded: true, down: 0, pendingKnockdown: false,
     wakeupFrames: 0, hitstunFrames: 0, blockstunFrames: 0, dizzyFrames: 0,
     tauntFrames: 0, grabbed: false, grabbing: false,
-    meter: 100, stunMeter: 0, throwableUses: 2, carriedWeapon: false,
+    meter: 100, stunMeter: 0, throwableUses: 2, carriedWeapon: false, carryFrames: 0,
     dashFrames: 0, dashDirection: 0, vx: 0, vy: 0,
     busyFrames: 0, startupLeft: 0, guardHeld: false, crouch: false,
     lastTap: { left: -Infinity, right: -Infinity },
@@ -46,7 +46,7 @@ function mockView(world) {
       wakeupFrames: fighter.wakeupFrames, hitstunFrames: fighter.hitstunFrames,
       blockstunFrames: fighter.blockstunFrames, dizzyFrames: fighter.dizzyFrames,
       tauntFrames: fighter.tauntFrames, attacking: fighter.busyFrames > 0,
-      crouch: fighter.crouch,
+      crouch: fighter.crouch, guarding: fighter.guardHeld,
       grabbed: fighter.grabbed, grabbing: fighter.grabbing,
       meter: fighter.meter, stunMeter: fighter.stunMeter,
       throwableUses: fighter.throwableUses, carriedWeapon: fighter.carriedWeapon,
@@ -63,8 +63,8 @@ function actionableMock(fighter) {
     && fighter.tauntFrames <= 0 && !fighter.grabbed;
 }
 
-export function createMockWorld({ pair, stageId, hasStageWeapon, seed }) {
-  const choreo = createDemoChoreographer({ pair, stageId, hasStageWeapon, seed });
+export function createMockWorld({ pair, stageId, hasStageWeapon, seed, priorShown = null }) {
+  const choreo = createDemoChoreographer({ pair, stageId, hasStageWeapon, seed, priorShown });
   const world = {
     tick: 0,
     fighters: [makeMockFighter(420, 1), makeMockFighter(860, -1)],
@@ -131,6 +131,7 @@ export function createMockWorld({ pair, stageId, hasStageWeapon, seed }) {
     const fighter = world.fighters[side];
     const opponent = world.fighters[1 - side];
     fighter.guardHeld = false;
+    if (fighter.grounded) fighter.vx = 0;
     if (!input) input = {};
     // dash double-tap edges (12-tick window, genuine release required)
     for (const dir of ["left", "right"]) {
@@ -188,13 +189,33 @@ export function createMockWorld({ pair, stageId, hasStageWeapon, seed }) {
       && Math.abs(fighter.x - world.weapon.x) <= 80) {
       world.weapon.phase = "held";
       fighter.carriedWeapon = true;
+      fighter.carryFrames = 0;
       world.choreo.noteBeat(side, "weaponPickup");
+      return;
+    }
+    // While carrying, HP throws the weapon instead of leaking out as a normal
+    // — and the pickup press itself must not double as the throw.
+    if (fighter.carriedWeapon) {
+      if (input.heavy && fighter.carryFrames >= 9) {
+        fighter.carriedWeapon = false;
+        fighter.carryFrames = 0;
+        world.weapon.phase = "gone";
+        fighter.busyFrames = 22;
+        fighter.startupLeft = 12;
+      }
+      if (!input.heavy) {
+        if (input.left) fighter.x -= 4;
+        if (input.right) fighter.x += 4;
+      }
       return;
     }
     let action = ACTION_ORDER.find((name) => input[name]);
     if (!action) {
-      if (input.left) fighter.x -= 5;
-      if (input.right) fighter.x += 5;
+      // vx is what the choreographer's liveliness watchdog reads to decide a
+      // fighter has stopped moving, so the walk has to report it here too.
+      fighter.vx = 0;
+      if (input.left) { fighter.x -= 5; fighter.vx = -300; }
+      if (input.right) { fighter.x += 5; fighter.vx = 300; }
       return;
     }
     const towardRight = opponent.x > fighter.x;
@@ -228,7 +249,11 @@ export function createMockWorld({ pair, stageId, hasStageWeapon, seed }) {
       action,
       tag,
       resolveTick: world.tick + fighter.startupLeft,
-      reach: action === "throw" ? 90 : action === "driveHeavy" ? 240 : 210,
+      // Grab reach tracks the real hitbox geometry (the authored throw boxes
+      // resolve to ~140 world units between origins once FIGHTER_SCALE and
+      // the defender's hurtbox are counted), not the old flat 90 — otherwise
+      // the harness rejects the very spacing the choreographer derives.
+      reach: action === "throw" ? 140 : action === "driveHeavy" ? 240 : 210,
       push: light ? 12 : action === "driveHeavy" ? 70 : ["heavy"].includes(action) ? 40 : 55,
       stun: light ? 9 : action === "heavy" ? 17 : 20,
     });
@@ -266,6 +291,7 @@ export function createMockWorld({ pair, stageId, hasStageWeapon, seed }) {
       if (fighter.stunMeter > 0 && fighter.hitstunFrames <= 0) {
         fighter.stunMeter = Math.max(0, fighter.stunMeter - 0.2);
       }
+      if (fighter.carriedWeapon) fighter.carryFrames += 1;
       fighter.meter = Math.min(100, fighter.meter + 0.15);
       fighter.x = Math.min(1204, Math.max(76, fighter.x));
     }
