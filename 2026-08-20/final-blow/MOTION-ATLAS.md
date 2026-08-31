@@ -142,3 +142,93 @@ Decisions a future wave should know about:
 - **Skipped:** super-flash portrait moments beyond the charge-stance capture
   (the cut-in already composes from the live pose), and smears on overheads/
   crouch/air normals (no matching cell in the grammar).
+
+## Motion2 bank (2.9)
+
+Every fighter carries a fourth 4x4 sheet, `assets/motion2/<id>.webp`: sixteen
+in-between and transition keys targeting every beat that still snaps after 2.7.
+Same physical format as the motion bank — 1280x1280 RGBA, 320px cells, ALL
+RIGHT-FACING, one global scale per sheet (tallest of frames 0-11 → 95.6% cell
+height, matching the base banks' world size; deathblow's walk cells measured
+304px against the base sheet's 303-304px as the cross-bank verification).
+Manifest: `assets/motion2/MANIFEST.json`, same shape as bank 1 (no signature
+slots — every id in this bank is fixed across the roster).
+
+### The grammar (fixed across all ten fighters)
+
+| # | id | pose contract |
+| --- | --- | --- |
+| 0 | `windup-punch` | cocked-back fist, weight loaded on the rear leg — the anticipation key before bank-1 `punch-ext` |
+| 1 | `windup-kick` | chambered knee on the support leg — the anticipation key before bank-1 `kick-ext` |
+| 2 | `walk-a` | walking mid-stride passing pose |
+| 3 | `walk-b` | walking opposite-stride contact pose |
+| 4 | `crouch-trans` | half-lowered between stand and crouch |
+| 5 | `turnaround` | mid-pivot seen from behind-ish, weight shifting |
+| 6 | `dash-brake` | dash-exit gather — rising from the horizontal lunge, one foot braking, arms trailing |
+| 7 | `jump-rise` | ascending body, knees starting to draw up — the pre-tuck key |
+| 8 | `block-hit` | guard flinch — arms up absorbing, head turned, slight skid |
+| 9 | `light-hit` | small head-jolt and shoulder turn — much less than bank-1 `bighit` |
+| 10 | `dizzy` | staggering sway, rubber legs, head lolling |
+| 11 | `thrown` | airborne victim held/hurled pose, limbs loose |
+| 12 | `throw-grab` | attacker seizing with both hands, weight forward |
+| 13 | `air-attack` | jumping strike — body tilted, limb extended downward-forward |
+| 14 | `getup-a` | ground rise phase 1 — knee up, hand pushing off the floor |
+| 15 | `getup-b` | ground rise phase 2 — half-risen crouch, head coming up |
+
+Physiology adaptations are in-grammar, not exceptions: the devil's walk pair is
+a prowling all-fours gait, his turnaround a mid-wing-pivot, his throw-grab a
+rearing two-claw seize, his block-hit a wing-shield; the commissioner keeps the
+cane wherever natural (walking stick in the walk pair, brace on crouch-trans /
+dizzy / getup, a bar across the body on block-hit, raised behind the seize on
+throw-grab, a spear thrust on air-attack) and drops it mid-air on `thrown`,
+consistent with his empty-handed base hit cells.
+
+### Where the frames want to live (integration intent, next agent)
+
+- `windup-punch` / `windup-kick`: 1-2 startup ticks immediately before the
+  active window on the matching kit-less normal, so the bank-1 extension stops
+  appearing from a neutral guard. Never on moves with authored windups.
+- `walk-a` / `walk-b`: cycle with the walk speed as in-between keys of the base
+  walk cells (a → base → b → base). Donald's pair is club-less while his base
+  walk carries the club — cycle his two motion2 cells as a self-contained pair
+  or skip him.
+- `crouch-trans`: 2-3 ticks on stand→crouch AND crouch→stand.
+- `turnaround`: 2-3 ticks when the fighter's facing flips.
+- `dash-brake`: the dash-exit gather — replaces the tail of bank-1 `dash`'s
+  exit through the base gather cell (stretch → brake → upright).
+- `jump-rise`: the ascent band between takeoff and the bank-1 `tuck`.
+- `block-hit`: flash on guarded contact (blockstun impact), then back to the
+  guard cell.
+- `light-hit`: light/medium hit reactions — the beat between "no reaction" and
+  the bank-1 `bighit` head-snap.
+- `dizzy`: loop/hold during the dizzy state (alternate with the base stagger
+  read if one exists).
+- `thrown`: the throw victim arc while held/hurled, before the launched-victim
+  reads (`bighit`/`airrec`/`crumple`) take over.
+- `throw-grab`: attacker's throw startup/grab connect, before the throw cinematic
+  beat.
+- `air-attack`: active window of air normals (replaces the ground punch cell
+  the jump attacks currently borrow).
+- `getup-a` → `getup-b`: sequenced on wake-up between the down cell and
+  standing, ending the teleport-to-feet.
+
+Rejected slots ship `accept: false` in the manifest and MUST fall back to the
+current beat exactly like bank 1 — a motion2 cell is a bonus, never a
+dependency. (This wave: 160/160 accepted, so the fallback path is dormant.)
+
+### Pipeline notes (2.9 wave)
+
+Same pipeline as bank 1 (bible → one full-sheet magenta generation per fighter
+→ key/despill → slice → identity gate), with one upgrade now standard: every
+sheet was sliced by BLOB CLUSTERING (the 2.8 method) instead of row-scanline
+splits, so interleaved figures never get severed at row boundaries. All ten
+sheets landed on the first generation — zero single-cell retries this wave.
+The identity gate compared 3+ cells per fighter against the base-atlas idle at
+1:1; benny/donald/cyraxx-style exposed fingertips were verified at 3x to be
+painted skin highlights, not magenta spill. Cyraxx was generated with zero
+energy effects by design — transition beats read cleaner and the CYRAXX.md
+no-tint rule cannot be violated by an effect that does not exist.
+
+World size: same normalisation as the base banks; the Commissioner's motion2
+sheet needs the SAME +4.6% `MOTION_SHEET_ADJUST` entry as his bank-1 sheet
+(one more row in the existing table, both renderers already read it).

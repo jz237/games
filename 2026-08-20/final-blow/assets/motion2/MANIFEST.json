@@ -1,0 +1,915 @@
+{
+ "format": {
+  "sheet": "1280x1280 RGBA WebP, 4x4 grid, 320px cells, right-facing, one global scale per sheet (tallest of frames 0-11 normalised to 95.6% cell height; taller frames clamp-shrink to fit)",
+  "grammar": "see MOTION-ATLAS.md 'Motion2 bank (2.9)' \u2014 frame ids fixed across all fighters, no per-fighter signature slots in this bank",
+  "generator": "openai-gpt-image-2 via fal MCP (prompt-only; no reference-image input \u2014 identity carried by per-fighter character bibles)",
+  "processed": "blob-clustering slicer (art 2.8 method) on tools/build_atlas.py key/despill conventions \u2014 whole figures recovered even when adjacent rows interleave, fragment drop, 320px cells",
+  "built": "2026-08-31",
+  "poseIds": [
+   "windup-punch",
+   "windup-kick",
+   "walk-a",
+   "walk-b",
+   "crouch-trans",
+   "turnaround",
+   "dash-brake",
+   "jump-rise",
+   "block-hit",
+   "light-hit",
+   "dizzy",
+   "thrown",
+   "throw-grab",
+   "air-attack",
+   "getup-a",
+   "getup-b"
+  ]
+ },
+ "fighters": {
+  "deathblow": {
+   "sheet": "deathblow.webp",
+   "scale": 1.403,
+   "note": "one full-sheet generation, no retries; walk cell height 304px matches base walk cells (303-304px) so world size verified against the base bank",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch",
+     "accept": true
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick",
+     "accept": true
+    },
+    {
+     "frame": 2,
+     "id": "walk-a",
+     "accept": true
+    },
+    {
+     "frame": 3,
+     "id": "walk-b",
+     "accept": true
+    },
+    {
+     "frame": 4,
+     "id": "crouch-trans",
+     "accept": true
+    },
+    {
+     "frame": 5,
+     "id": "turnaround",
+     "accept": true,
+     "note": "reads as a from-behind weight-shift step more than a snap pivot \u2014 right for a 2-3 tick turnaround key"
+    },
+    {
+     "frame": 6,
+     "id": "dash-brake",
+     "accept": true,
+     "note": "small keyed dust fleck at the braking foot, same class as bank-1's accepted keyed sludge"
+    },
+    {
+     "frame": 7,
+     "id": "jump-rise",
+     "accept": true
+    },
+    {
+     "frame": 8,
+     "id": "block-hit",
+     "accept": true
+    },
+    {
+     "frame": 9,
+     "id": "light-hit",
+     "accept": true
+    },
+    {
+     "frame": 10,
+     "id": "dizzy",
+     "accept": true
+    },
+    {
+     "frame": 11,
+     "id": "thrown",
+     "accept": true
+    },
+    {
+     "frame": 12,
+     "id": "throw-grab",
+     "accept": true
+    },
+    {
+     "frame": 13,
+     "id": "air-attack",
+     "accept": true
+    },
+    {
+     "frame": 14,
+     "id": "getup-a",
+     "accept": true
+    },
+    {
+     "frame": 15,
+     "id": "getup-b",
+     "accept": true
+    }
+   ]
+  },
+  "jez": {
+   "sheet": "jez.webp",
+   "scale": 1.319,
+   "note": "one full-sheet generation, no retries; gi reads a shade deeper blue than the base sheet, within bank-1 variance",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch",
+     "accept": true
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick",
+     "accept": true
+    },
+    {
+     "frame": 2,
+     "id": "walk-a",
+     "accept": true
+    },
+    {
+     "frame": 3,
+     "id": "walk-b",
+     "accept": true
+    },
+    {
+     "frame": 4,
+     "id": "crouch-trans",
+     "accept": true
+    },
+    {
+     "frame": 5,
+     "id": "turnaround",
+     "accept": true
+    },
+    {
+     "frame": 6,
+     "id": "dash-brake",
+     "accept": true
+    },
+    {
+     "frame": 7,
+     "id": "jump-rise",
+     "accept": true
+    },
+    {
+     "frame": 8,
+     "id": "block-hit",
+     "accept": true,
+     "note": "faint keyed skid smear at the feet"
+    },
+    {
+     "frame": 9,
+     "id": "light-hit",
+     "accept": true
+    },
+    {
+     "frame": 10,
+     "id": "dizzy",
+     "accept": true
+    },
+    {
+     "frame": 11,
+     "id": "thrown",
+     "accept": true
+    },
+    {
+     "frame": 12,
+     "id": "throw-grab",
+     "accept": true
+    },
+    {
+     "frame": 13,
+     "id": "air-attack",
+     "accept": true
+    },
+    {
+     "frame": 14,
+     "id": "getup-a",
+     "accept": true
+    },
+    {
+     "frame": 15,
+     "id": "getup-b",
+     "accept": true
+    }
+   ]
+  },
+  "alan": {
+   "sheet": "alan.webp",
+   "scale": 1.416,
+   "note": "one full-sheet generation, no retries; same heavier-gut silhouette bank-1 recorded",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch",
+     "accept": true
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick",
+     "accept": true
+    },
+    {
+     "frame": 2,
+     "id": "walk-a",
+     "accept": true
+    },
+    {
+     "frame": 3,
+     "id": "walk-b",
+     "accept": true
+    },
+    {
+     "frame": 4,
+     "id": "crouch-trans",
+     "accept": true
+    },
+    {
+     "frame": 5,
+     "id": "turnaround",
+     "accept": true
+    },
+    {
+     "frame": 6,
+     "id": "dash-brake",
+     "accept": true,
+     "note": "keyed dust puff at the braking foot"
+    },
+    {
+     "frame": 7,
+     "id": "jump-rise",
+     "accept": true
+    },
+    {
+     "frame": 8,
+     "id": "block-hit",
+     "accept": true,
+     "note": "faint keyed skid smear at the feet"
+    },
+    {
+     "frame": 9,
+     "id": "light-hit",
+     "accept": true
+    },
+    {
+     "frame": 10,
+     "id": "dizzy",
+     "accept": true
+    },
+    {
+     "frame": 11,
+     "id": "thrown",
+     "accept": true
+    },
+    {
+     "frame": 12,
+     "id": "throw-grab",
+     "accept": true
+    },
+    {
+     "frame": 13,
+     "id": "air-attack",
+     "accept": true
+    },
+    {
+     "frame": 14,
+     "id": "getup-a",
+     "accept": true
+    },
+    {
+     "frame": 15,
+     "id": "getup-b",
+     "accept": true
+    }
+   ]
+  },
+  "post": {
+   "sheet": "post.webp",
+   "scale": 1.372,
+   "note": "one full-sheet generation, no retries; spray can stays clipped at the hip in all 16 cells",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch",
+     "accept": true
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick",
+     "accept": true
+    },
+    {
+     "frame": 2,
+     "id": "walk-a",
+     "accept": true
+    },
+    {
+     "frame": 3,
+     "id": "walk-b",
+     "accept": true
+    },
+    {
+     "frame": 4,
+     "id": "crouch-trans",
+     "accept": true
+    },
+    {
+     "frame": 5,
+     "id": "turnaround",
+     "accept": true
+    },
+    {
+     "frame": 6,
+     "id": "dash-brake",
+     "accept": true
+    },
+    {
+     "frame": 7,
+     "id": "jump-rise",
+     "accept": true
+    },
+    {
+     "frame": 8,
+     "id": "block-hit",
+     "accept": true
+    },
+    {
+     "frame": 9,
+     "id": "light-hit",
+     "accept": true,
+     "note": "small painted impact spark by the head \u2014 on the effect layer, not the costume"
+    },
+    {
+     "frame": 10,
+     "id": "dizzy",
+     "accept": true
+    },
+    {
+     "frame": 11,
+     "id": "thrown",
+     "accept": true
+    },
+    {
+     "frame": 12,
+     "id": "throw-grab",
+     "accept": true
+    },
+    {
+     "frame": 13,
+     "id": "air-attack",
+     "accept": true
+    },
+    {
+     "frame": 14,
+     "id": "getup-a",
+     "accept": true
+    },
+    {
+     "frame": 15,
+     "id": "getup-b",
+     "accept": true
+    }
+   ]
+  },
+  "benny": {
+   "sheet": "benny.webp",
+   "scale": 1.403,
+   "note": "one full-sheet generation, no retries; belt pouch present throughout; no electric effects in this bank (transition beats read cleaner without them)",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch",
+     "accept": true
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick",
+     "accept": true
+    },
+    {
+     "frame": 2,
+     "id": "walk-a",
+     "accept": true
+    },
+    {
+     "frame": 3,
+     "id": "walk-b",
+     "accept": true
+    },
+    {
+     "frame": 4,
+     "id": "crouch-trans",
+     "accept": true
+    },
+    {
+     "frame": 5,
+     "id": "turnaround",
+     "accept": true
+    },
+    {
+     "frame": 6,
+     "id": "dash-brake",
+     "accept": true
+    },
+    {
+     "frame": 7,
+     "id": "jump-rise",
+     "accept": true
+    },
+    {
+     "frame": 8,
+     "id": "block-hit",
+     "accept": true
+    },
+    {
+     "frame": 9,
+     "id": "light-hit",
+     "accept": true
+    },
+    {
+     "frame": 10,
+     "id": "dizzy",
+     "accept": true
+    },
+    {
+     "frame": 11,
+     "id": "thrown",
+     "accept": true
+    },
+    {
+     "frame": 12,
+     "id": "throw-grab",
+     "accept": true,
+     "note": "exposed fingertips carry a warm skin highlight past the fingerless gloves \u2014 verified at 3x, not magenta spill"
+    },
+    {
+     "frame": 13,
+     "id": "air-attack",
+     "accept": true
+    },
+    {
+     "frame": 14,
+     "id": "getup-a",
+     "accept": true
+    },
+    {
+     "frame": 15,
+     "id": "getup-b",
+     "accept": true
+    }
+   ]
+  },
+  "donald": {
+   "sheet": "donald.webp",
+   "scale": 1.372,
+   "note": "one full-sheet generation, no retries; club-less sheet \u2014 base walk cells carry the golf club, so integration should cycle walk-a/walk-b as a pair (or accept the club popping between banks)",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch",
+     "accept": true
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick",
+     "accept": true
+    },
+    {
+     "frame": 2,
+     "id": "walk-a",
+     "accept": true
+    },
+    {
+     "frame": 3,
+     "id": "walk-b",
+     "accept": true
+    },
+    {
+     "frame": 4,
+     "id": "crouch-trans",
+     "accept": true
+    },
+    {
+     "frame": 5,
+     "id": "turnaround",
+     "accept": true
+    },
+    {
+     "frame": 6,
+     "id": "dash-brake",
+     "accept": true
+    },
+    {
+     "frame": 7,
+     "id": "jump-rise",
+     "accept": true
+    },
+    {
+     "frame": 8,
+     "id": "block-hit",
+     "accept": true,
+     "note": "small keyed skid spark at the feet"
+    },
+    {
+     "frame": 9,
+     "id": "light-hit",
+     "accept": true
+    },
+    {
+     "frame": 10,
+     "id": "dizzy",
+     "accept": true
+    },
+    {
+     "frame": 11,
+     "id": "thrown",
+     "accept": true
+    },
+    {
+     "frame": 12,
+     "id": "throw-grab",
+     "accept": true
+    },
+    {
+     "frame": 13,
+     "id": "air-attack",
+     "accept": true
+    },
+    {
+     "frame": 14,
+     "id": "getup-a",
+     "accept": true,
+     "note": "reads closer to all-fours than knee-up \u2014 still a clean ground-rise phase 1"
+    },
+    {
+     "frame": 15,
+     "id": "getup-b",
+     "accept": true
+    }
+   ]
+  },
+  "cyraxx": {
+   "sheet": "cyraxx.webp",
+   "scale": 1.384,
+   "note": "one full-sheet generation, no retries; generated with zero energy effects on purpose \u2014 shirt and trousers stay untinted in every cell (CYRAXX.md overlay rule)",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch",
+     "accept": true
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick",
+     "accept": true
+    },
+    {
+     "frame": 2,
+     "id": "walk-a",
+     "accept": true
+    },
+    {
+     "frame": 3,
+     "id": "walk-b",
+     "accept": true
+    },
+    {
+     "frame": 4,
+     "id": "crouch-trans",
+     "accept": true
+    },
+    {
+     "frame": 5,
+     "id": "turnaround",
+     "accept": true
+    },
+    {
+     "frame": 6,
+     "id": "dash-brake",
+     "accept": true
+    },
+    {
+     "frame": 7,
+     "id": "jump-rise",
+     "accept": true
+    },
+    {
+     "frame": 8,
+     "id": "block-hit",
+     "accept": true
+    },
+    {
+     "frame": 9,
+     "id": "light-hit",
+     "accept": true
+    },
+    {
+     "frame": 10,
+     "id": "dizzy",
+     "accept": true
+    },
+    {
+     "frame": 11,
+     "id": "thrown",
+     "accept": true
+    },
+    {
+     "frame": 12,
+     "id": "throw-grab",
+     "accept": true
+    },
+    {
+     "frame": 13,
+     "id": "air-attack",
+     "accept": true
+    },
+    {
+     "frame": 14,
+     "id": "getup-a",
+     "accept": true
+    },
+    {
+     "frame": 15,
+     "id": "getup-b",
+     "accept": true
+    }
+   ]
+  },
+  "ali": {
+   "sheet": "ali.webp",
+   "scale": 1.302,
+   "note": "one full-sheet generation, no retries; boombox on the back in all cells including the from-behind turnaround",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch",
+     "accept": true
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick",
+     "accept": true
+    },
+    {
+     "frame": 2,
+     "id": "walk-a",
+     "accept": true
+    },
+    {
+     "frame": 3,
+     "id": "walk-b",
+     "accept": true
+    },
+    {
+     "frame": 4,
+     "id": "crouch-trans",
+     "accept": true
+    },
+    {
+     "frame": 5,
+     "id": "turnaround",
+     "accept": true
+    },
+    {
+     "frame": 6,
+     "id": "dash-brake",
+     "accept": true,
+     "note": "keyed dust fleck at the braking foot"
+    },
+    {
+     "frame": 7,
+     "id": "jump-rise",
+     "accept": true
+    },
+    {
+     "frame": 8,
+     "id": "block-hit",
+     "accept": true
+    },
+    {
+     "frame": 9,
+     "id": "light-hit",
+     "accept": true,
+     "note": "painted spark by the head, glasses knocked askew \u2014 in character"
+    },
+    {
+     "frame": 10,
+     "id": "dizzy",
+     "accept": true
+    },
+    {
+     "frame": 11,
+     "id": "thrown",
+     "accept": true
+    },
+    {
+     "frame": 12,
+     "id": "throw-grab",
+     "accept": true
+    },
+    {
+     "frame": 13,
+     "id": "air-attack",
+     "accept": true
+    },
+    {
+     "frame": 14,
+     "id": "getup-a",
+     "accept": true
+    },
+    {
+     "frame": 15,
+     "id": "getup-b",
+     "accept": true
+    }
+   ]
+  },
+  "commissioner": {
+   "sheet": "commissioner.webp",
+   "scale": 1.41,
+   "note": "one full-sheet generation, no retries; cane kept where natural (walk/lean/brace), raised as a club on throw-grab, thrust on air-attack. Needs the same MOTION_SHEET_ADJUST +4.6% as bank-1 (his base atlas normalises to the full 320px cell)",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch",
+     "accept": true
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick",
+     "accept": true
+    },
+    {
+     "frame": 2,
+     "id": "walk-a",
+     "accept": true
+    },
+    {
+     "frame": 3,
+     "id": "walk-b",
+     "accept": true
+    },
+    {
+     "frame": 4,
+     "id": "crouch-trans",
+     "accept": true
+    },
+    {
+     "frame": 5,
+     "id": "turnaround",
+     "accept": true
+    },
+    {
+     "frame": 6,
+     "id": "dash-brake",
+     "accept": true
+    },
+    {
+     "frame": 7,
+     "id": "jump-rise",
+     "accept": true
+    },
+    {
+     "frame": 8,
+     "id": "block-hit",
+     "accept": true,
+     "note": "guards with the cane held across the body like a bar"
+    },
+    {
+     "frame": 9,
+     "id": "light-hit",
+     "accept": true
+    },
+    {
+     "frame": 10,
+     "id": "dizzy",
+     "accept": true,
+     "note": "dizzy leans on the planted cane with both hands \u2014 strongest cell on the sheet"
+    },
+    {
+     "frame": 11,
+     "id": "thrown",
+     "accept": true,
+     "note": "cane dropped mid-air, consistent with the base bank's empty-handed hit cells"
+    },
+    {
+     "frame": 12,
+     "id": "throw-grab",
+     "accept": true
+    },
+    {
+     "frame": 13,
+     "id": "air-attack",
+     "accept": true
+    },
+    {
+     "frame": 14,
+     "id": "getup-a",
+     "accept": true
+    },
+    {
+     "frame": 15,
+     "id": "getup-b",
+     "accept": true
+    }
+   ]
+  },
+  "devil": {
+   "sheet": "devil.webp",
+   "scale": 1.45,
+   "note": "one full-sheet generation, no retries; quadruped grammar adaptations \u2014 walk-a/b are a prowling all-fours gait, turnaround is a mid-wing-pivot seen from behind, throw-grab is a rearing two-claw seize, block-hit shields with wings wrapped forward. Hide a shade warmer than the base sheet, same variance bank-1 showed",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "windup-punch",
+     "accept": true
+    },
+    {
+     "frame": 1,
+     "id": "windup-kick",
+     "accept": true,
+     "note": "hind-hoof chamber balanced on one leg, wings half spread"
+    },
+    {
+     "frame": 2,
+     "id": "walk-a",
+     "accept": true
+    },
+    {
+     "frame": 3,
+     "id": "walk-b",
+     "accept": true
+    },
+    {
+     "frame": 4,
+     "id": "crouch-trans",
+     "accept": true
+    },
+    {
+     "frame": 5,
+     "id": "turnaround",
+     "accept": true
+    },
+    {
+     "frame": 6,
+     "id": "dash-brake",
+     "accept": true
+    },
+    {
+     "frame": 7,
+     "id": "jump-rise",
+     "accept": true
+    },
+    {
+     "frame": 8,
+     "id": "block-hit",
+     "accept": true
+    },
+    {
+     "frame": 9,
+     "id": "light-hit",
+     "accept": true
+    },
+    {
+     "frame": 10,
+     "id": "dizzy",
+     "accept": true
+    },
+    {
+     "frame": 11,
+     "id": "thrown",
+     "accept": true
+    },
+    {
+     "frame": 12,
+     "id": "throw-grab",
+     "accept": true
+    },
+    {
+     "frame": 13,
+     "id": "air-attack",
+     "accept": true
+    },
+    {
+     "frame": 14,
+     "id": "getup-a",
+     "accept": true
+    },
+    {
+     "frame": 15,
+     "id": "getup-b",
+     "accept": true,
+     "note": "half-risen on haunches with wings unfurling \u2014 feeds wake-up straight into the crouch stance read"
+    }
+   ]
+  }
+ }
+}
