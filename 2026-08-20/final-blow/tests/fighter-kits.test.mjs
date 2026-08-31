@@ -150,7 +150,12 @@ function testMoveInstancesAndArt() {
   assert.ok(faultline.recoveryFrames >= 20, "a whiffed command special is punishable");
   assert.deepEqual(attackAnimationPose(faultline, 0), { bank: "specials", frame: 0 });
   assert.deepEqual(attackAnimationPose(faultline, faultline.activeStartFrame), { bank: "specials", frame: 1 });
-  assert.deepEqual(attackAnimationPose(faultline, faultline.activeEndFrame - 1), { bank: "specials", frame: 2 });
+  // v2.6 BODY-FIRST: heavies/specials three-beat the active window — the
+  // mid-active frame is the second strike cell, and the FOLLOW-THROUGH
+  // (recovery cell) arrives a third early so no active window freezes.
+  const midActive = faultline.activeStartFrame + Math.floor(faultline.activeFrames * 0.5);
+  assert.deepEqual(attackAnimationPose(faultline, midActive), { bank: "specials", frame: 2 });
+  assert.deepEqual(attackAnimationPose(faultline, faultline.activeEndFrame - 1), { bank: "specials", frame: 3 });
   assert.deepEqual(attackAnimationPose(faultline, faultline.activeEndFrame), { bank: "specials", frame: 3 });
 
   const vinyl = createFighterMove("jez", "backSpecial");

@@ -715,8 +715,11 @@ export class FighterLayer {
     const crouchScale = fighter.crouch ? 0.88 : 1;
     const crouchDrop = fighter.crouch ? 21 : 0;
     const fatigue = THREE.MathUtils.clamp(1 - fighter.health / 100, 0, 1);
+    // BODY-FIRST (spec 9) parity: super storms keep the idle chest-rise
+    // alive through their long held active windows, same as the 2D path.
     const breathing = fighter.cinematicFrame === null && fighter.grounded && !fighter.down
-      && !attack && !fighter.stun && !fighter.block && fighter.dizzyFrames <= 0 && fighter.guardCrushFrames <= 0;
+      && (!attack || attack.superMove) && !fighter.stun && !fighter.block
+      && fighter.dizzyFrames <= 0 && fighter.guardCrushFrames <= 0;
     const breath = breathing
       ? Math.sin(fighter.animTime * (5.2 + fatigue * 5.6) + fighter.side * 1.9) * (0.009 + fatigue * 0.015)
       : 0;
@@ -753,6 +756,13 @@ export class FighterLayer {
     }
     rig.root.rotation.z = rootRotation;
     if (fighter.down) rig.root.position.x += -facing * 45 * PX;
+    // v2.6 BODY-FIRST parity: the shared world-space body offset (attack
+    // extension / victim stagger step). Sim x maps straight to world x; sim
+    // y is down-positive so it flips for world y.
+    if (motion && (motion.offsetX || motion.offsetY)) {
+      rig.root.position.x += motion.offsetX * PX;
+      rig.root.position.y -= motion.offsetY * PX;
+    }
 
     const cineScale = fighter.cinematicScale !== 1 ? fighter.cinematicScale : 1;
     const scaleX = (1 + activePower * 0.045 - startupPower * 0.025) * (1 + hitSmear * 0.05)

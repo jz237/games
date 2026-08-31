@@ -1757,7 +1757,14 @@ export function attackAnimationPose(attack, attackFrame) {
   if (attackFrame >= attack.activeEndFrame) index = 3;
   else if (attackFrame >= attack.activeStartFrame) {
     const activeProgress = (attackFrame - attack.activeStartFrame) / Math.max(1, attack.activeFrames);
-    index = activeProgress < 0.52 ? 1 : 2;
+    // v2.6 BODY-FIRST: heavies and specials play a full three-beat across the
+    // active window — strike, second strike pose, then the FOLLOW-THROUGH
+    // (the recovery cell arriving a third early, weight carrying past the
+    // target) — so no active window ever holds one frozen cell. Lights keep
+    // the tighter two-beat; their follow-through is the procedural extension
+    // transform in the renderers.
+    if (attack.kind === "light") index = activeProgress < 0.52 ? 1 : 2;
+    else index = activeProgress < 0.34 ? 1 : activeProgress < 0.67 ? 2 : 3;
   }
   return { bank: animation.bank, frame: animation.frames[index] };
 }
