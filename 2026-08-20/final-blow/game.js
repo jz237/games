@@ -305,7 +305,9 @@ import {
   DEMO_IDLE_DELAY_MS,
   DEMO_RESULT_HOLD_MS,
   createDemoDirector,
+  demoMatchupKey,
 } from "./engine/demo.mjs";
+import { createDemoChoreographer } from "./engine/demo-choreo.mjs";
 import {
   auditGraphicFatalities,
   getGraphicFatality,
@@ -1493,6 +1495,10 @@ const demoSession = {
   superShown: false,
   resultTimer: 0,
   idleTimer: 0,
+  // v2.9 FLOW: per-match coverage choreographer + the matchup keys this demo
+  // session has featured (bounded by the director's matchup count).
+  choreo: null,
+  pairsSeen: [],
 };
 let fightAnnouncementTimer = 0;
 
@@ -3092,6 +3098,8 @@ function endDemoSession() {
   demoSession.matches = 0;
   demoSession.superSide = 0;
   demoSession.superShown = false;
+  demoSession.choreo = null;
+  demoSession.pairsSeen = [];
   document.body.classList.remove("demo-active");
   $("#demoHud").hidden = true;
   $("#demoResultStatus").hidden = true;
@@ -3131,6 +3139,20 @@ function startNextDemoMatch() {
   $("#demoResultStatus").hidden = true;
   startMatch(true);
   state.fighters[demoSession.superSide].meter = GRIT_RULES.maximum;
+  // v2.9 FLOW: a fresh coverage choreographer per exhibition. It works from
+  // kit ids (what beginAttack resolves moves through) and knows whether this
+  // stage/round actually planned a weapon, so the pickup beat is only chased
+  // where one exists. The seed derives from the director's deterministic
+  // stream, so the same demo seed replays the same choreography.
+  demoSession.choreo = createDemoChoreographer({
+    pair: state.fighters.map((fighter) => fighter.kitId),
+    stageId: cycle.stage,
+    hasStageWeapon: Boolean(state.stageWeapon),
+    seed: hashSeed(demoSession.director.snapshot().seed, "choreo", cycle.cycle),
+  });
+  const pairKey = demoMatchupKey(...cycle.picks);
+  if (!demoSession.pairsSeen.includes(pairKey)) demoSession.pairsSeen.push(pairKey);
+  while (demoSession.pairsSeen.length > demoSession.director.snapshot().matchupCount) demoSession.pairsSeen.shift();
   updateHud();
   state.qaManualMode = demoSession.qa;
   setTrack(cycle.track, true);
@@ -10320,6 +10342,11 @@ function finishRound(winner, type = -1) {
   state.phase = "roundover";
   state.rounds[winner] += 1;
   state.finisherType = type;
+  // v2.9 FLOW: demo coverage — the round-end beat, plus the Final Blow
+  // ceremony when one executes (the gore/fatality toggles decide the flavour
+  // downstream exactly as before; this is pure observation).
+  demoChoreoBeat(winner, "roundEnd");
+  if (type >= 0) demoChoreoBeat(winner, "finisher");
   const winDef = state.fighters[winner].def;
   // Wave 15: the KO slams in the hands — for both the knockout hold and the
   // opening of a Final Blow ceremony (all gates inside combatHaptic).
@@ -11953,6 +11980,57 @@ function activeControlStyle(side) {
     : state.controlStyle;
 }
 
+// --- v2.9 FLOW: demo choreography plumbing ---------------------------------
+// The choreographer receives a plain-data view of the two fighters (never the
+// live objects) and reports back through raw inputs; its own state lives on
+// demoSession exactly like superShown. Everything here is scoped to
+// state.mode === "demo", so ranked/vs/arcade CPU behaviour is untouched.
+
+function demoChoreoFighterView(fighter) {
+  return {
+    x: fighter.x,
+    facing: fighter.facing,
+    grounded: fighter.grounded,
+    down: fighter.down,
+    pendingKnockdown: fighter.pendingKnockdown,
+    wakeupFrames: fighter.wakeupFrames,
+    hitstunFrames: fighter.hitstunFrames,
+    blockstunFrames: fighter.blockstunFrames,
+    dizzyFrames: fighter.dizzyFrames,
+    tauntFrames: fighter.tauntFrames,
+    attacking: Boolean(fighter.attacking),
+    grabbed: Boolean(fighter.grabbed),
+    grabbing: Boolean(fighter.grabbing),
+    meter: fighter.meter,
+    stunMeter: fighter.stunMeter,
+    throwableUses: fighter.throwableUses,
+    carriedWeapon: Boolean(fighter.carriedWeapon),
+    dashFrames: fighter.dashFrames,
+    dashDirection: fighter.dashDirection || 0,
+    vx: fighter.vx,
+    vy: fighter.vy,
+  };
+}
+
+function demoChoreoView() {
+  return {
+    tick: state.simulationTick,
+    phase: state.phase,
+    stageMinX: MOVEMENT_RULES.stageMinX,
+    stageMaxX: MOVEMENT_RULES.stageMaxX,
+    weapon: state.stageWeapon ? { phase: state.stageWeapon.phase, x: state.stageWeapon.x } : null,
+    fighters: state.fighters.map(demoChoreoFighterView),
+  };
+}
+
+// Beat observation from the sim call sites (dizzy, knockdown, wall splat,
+// grab, taunt, pickup, round end). Guarded exactly like the other meta
+// observers: demo only, never during a rollback resimulation.
+function demoChoreoBeat(side, beat) {
+  if (rollbackResimulating || state.mode !== "demo" || !demoSession.choreo) return;
+  demoSession.choreo.noteBeat(side, beat);
+}
+
 function aiInput(fighter, opponent, dt) {
   fighter.aiClock -= dt;
   const input = { left: false, right: false, down: false, guard: false, jump: false, light: false, heavy: false, special: false, enhanced: false, throw: false, super: false, final: false };
@@ -11977,12 +12055,22 @@ function aiInput(fighter, opponent, dt) {
     }
     return input;
   }
-  return stepAiBrain(fighter.aiBrain, {
+  const brainInput = stepAiBrain(fighter.aiBrain, {
     frame: state.simulationTick,
     self: fighter,
     opponent,
     roll: random(),
   });
+  // v2.9 FLOW: the demo choreographer rides on top of the live brain. The
+  // brain still observes every tick (so natural windows resume seamlessly);
+  // a scripted input simply outranks it while a showcase directive runs.
+  if (state.mode === "demo" && demoSession.choreo) {
+    const view = demoChoreoView();
+    if (fighter.side === 0) demoSession.choreo.observe(view);
+    const scripted = demoSession.choreo.step(fighter.side, view);
+    if (scripted) return scripted;
+  }
+  return brainInput;
 }
 
 function readQaInput(side) {
@@ -12144,6 +12232,11 @@ function beginAttack(fighter, action, input = {}, { reversal = false, force = fa
   // v2.1 PROGRESSION: per-move usage tally (render-only meta counters on the
   // mechFxDebug pattern; the guard keeps resimulated ticks from double-counting).
   if (!rollbackResimulating) progressionNoteMove(fighter);
+  // v2.9 FLOW: demo coverage — every started move reports its action+context
+  // so the choreographer's checklist and the recorded ids agree exactly.
+  if (!rollbackResimulating && state.mode === "demo" && demoSession.choreo) {
+    demoSession.choreo.noteMove(fighter.side, action, moveContext);
+  }
   if (throwObjectProfile) {
     fighter.throwableUses = Math.max(0, fighter.throwableUses - 1);
     fighter.throwableSpawned = false;
@@ -12435,6 +12528,8 @@ function enterDizzy(fighter, attacker) {
   if (!rollbackResimulating && (attacker?.side === 0 || attacker?.side === 1)) {
     progressionMatch.dizzies[attacker.side] += 1;
   }
+  // v2.9 FLOW: the dizzy animation belongs to the wobbling fighter.
+  demoChoreoBeat(fighter.side, "dizzy");
   fighter.dizzyFrames = STUN_RULES.dizzyFrames;
   fighter.dizzyTotalFrames = STUN_RULES.dizzyFrames;
   fighter.dizzyMashCount = 0;
@@ -12500,6 +12595,8 @@ function performTaunt(fighter) {
     // v2.1 PROGRESSION: Black Book showboat entry (guarded, P1 seat only).
     progressionEvent("taunt", {}, fighter.side);
   }
+  // v2.9 FLOW: demo coverage beat (guarded inside).
+  demoChoreoBeat(fighter.side, "taunt");
   spawnCombatText(fighter.x, fighter.y - fighter.height - 44, "TAUNT", fighter.def.accent);
   stirCrowd(0.25);
   fighterTauntCue(fighter, fighter.tauntLine);
@@ -12529,6 +12626,8 @@ function addStun(victim, attacker, attack, { counter = false, blocked = false } 
 }
 
 function enterKnockdown(fighter) {
+  // v2.9 FLOW: demo coverage beat (guarded inside; no-op outside the demo).
+  demoChoreoBeat(fighter.side, "knockdown");
   fighter.pendingKnockdown = false;
   // Landing before reaching the wall forfeits the pending bounce conversion.
   fighter.wallBounceArmed = 0;
@@ -12830,6 +12929,9 @@ function spawnWallImpact(fighter, wallDirection) {
   const last = wallSplatLastTick[fighter.side];
   if (tick > last && tick - last < WALL_SPLAT_COOLDOWN_TICKS) return;
   wallSplatLastTick[fighter.side] = tick;
+  // v2.9 FLOW: demo coverage beat — counted per distinct splat (the cooldown
+  // above dedupes wall grinds exactly like the presentation burst).
+  demoChoreoBeat(fighter.side, "wallsplat");
   // Wave 7: a wall splat is a heavy moment — kick the RGB-split impulse.
   // Module-level render-only latch; profile/accessibility gates apply at draw.
   if (!rollbackResimulating) aberrationImpulse = Math.max(aberrationImpulse, 0.55);
@@ -13902,6 +14004,8 @@ function throwStyle(fighter) {
 }
 
 function beginGrabHold(attacker, victim, attack) {
+  // v2.9 FLOW: demo coverage beat — a grab actually connected.
+  demoChoreoBeat(attacker.side, "throw");
   const style = throwStyle(attacker);
   const back = Boolean(attack.backThrow);
   attacker.grabbing = {
@@ -14079,6 +14183,8 @@ function tryPickUpStageWeapon(fighter, input) {
   weapon.phase = "held";
   weapon.holder = fighter.side;
   weapon.frames = 0;
+  // v2.9 FLOW: demo coverage beat — the stage weapon actually got picked up.
+  demoChoreoBeat(fighter.side, "weaponPickup");
   fighter.carriedWeapon = weapon.weaponId;
   fighter.carryFrames = 0;
   fighter.inputBuffer.consume("heavy", state.simulationTick);
@@ -14477,6 +14583,12 @@ function hit(attacker, victim, attack, collision) {
   attacker.confirmWindowFrames = 12;
   const counter = !blocked && !armored && attack.level !== ATTACK_LEVELS.THROW && isCounterHit(victim);
   const wasJuggle = !victim.grounded || victim.pendingKnockdown;
+  // v2.9 FLOW: demo coverage beats — a genuine counter-hit, and a hit landed
+  // on an already-launched victim (the strict juggle read). Guarded inside.
+  if (!blocked && !armored) {
+    if (counter) demoChoreoBeat(attacker.side, "counterhit");
+    if (!victim.grounded && victim.pendingKnockdown) demoChoreoBeat(attacker.side, "juggle");
+  }
   let comboResult = { hitNumber: 1, damageScale: 1 };
   if (!blocked && attack.level !== ATTACK_LEVELS.THROW) {
     comboResult = attacker.combo.registerHit(state.simulationTick, victim.juggleCount);
@@ -27003,6 +27115,21 @@ if (["127.0.0.1", "localhost"].includes(location.hostname)) {
     },
     exitDemo() {
       return exitDemo();
+    },
+    // v2.9 FLOW: live read of the demo choreographer's coverage ledger —
+    // per-fighter move counts, staged beats, the featured pair/stage and the
+    // matchup keys this demo session has already featured. Pure reads.
+    demoCoverage() {
+      if (!demoSession.active || !demoSession.choreo) return null;
+      return {
+        pair: [...demoSession.cycle.picks],
+        stage: demoSession.cycle.stage,
+        perFighter: demoSession.choreo.coverage(),
+        stats: demoSession.choreo.stats(),
+        directive: demoSession.choreo.directive(),
+        hasStageWeapon: demoSession.choreo.hasStageWeapon(),
+        cyclePairsSeen: [...demoSession.pairsSeen],
+      };
     },
     arcade(playerId = "deathblow", difficulty = DEFAULT_AI_DIFFICULTY, seed = 237) {
       const playerIndex = roster.findIndex(({ id }) => id === playerId);

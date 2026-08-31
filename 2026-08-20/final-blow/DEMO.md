@@ -23,7 +23,36 @@ Final Blow 1.0E can run a complete CPU-vs-CPU exhibition from the title screen.
 
 The director retains only the current bounded bags, so it does not accumulate match history during long unattended runs.
 
+## Coverage choreography (2.9 FLOW)
+
+`engine/demo-choreo.mjs` layers a deterministic choreographer over the two
+demo CPUs so every exhibition works through the featured pair's entire kit
+instead of whatever the archetype tables happen to roll:
+
+- Per-fighter checklist: all punch/kick normals (standing, crouching, air),
+  the forward command normals and overhead, every special, every EX version,
+  the super, the grab, the personal throwable (base + EX) — plus staged beats:
+  wall splat, juggle, counter-hit, dizzy, knockdown/wake-up, guarded contact,
+  taunt, both dashes, all three jump arcs and the stage-weapon pickup where
+  the stage plans one.
+- Selection biases strongly toward the least-shown item, with a 60/40 blend
+  against untouched Pro-AI windows so it still reads as a fight. Situational
+  beats are staged opportunistically (downed opponent → taunt, grounded
+  weapon → pickup, cornered opponent → wall splat, meter → super/EX).
+- The AI brain still observes every tick; a scripted directive merely outranks
+  its input. Fully deterministic: a private rng seeded from the demo cycle,
+  no `Math.random`, `state.rng` untouched, and no leaks into ranked/vs CPU
+  behaviour (everything is scoped to `state.mode === "demo"`).
+- `window.__finalBlowQa.demoCoverage()` returns the live ledger: featured
+  pair/stage, per-fighter move counts, beat counts and the matchup keys the
+  session has already featured.
+
 ## Verification
 
 - `node --test tests/demo.test.mjs` checks determinism, full matchup coverage, stage/track rotation, boundary behavior, invalid configuration, and 10,000 bounded cycles.
+- `node --test tests/demo-coverage.test.mjs` runs the choreographer against a
+  sim-lite world (`tests/demo-mock-world.mjs`) and asserts 100% kit-move
+  coverage plus every staged beat for the featured pair inside a bounded run,
+  checklist completeness for all ten fighters, deterministic replay of the
+  ledger, and the ten-fighter/six-stage rotation property.
 - `node tests/browser-smoke.mjs` checks two live AI brains, automatic Final Blow activation, result scheduling, 64 rapid cycles with one bounded intro timer, input-to-exit, mobile HUD bounds, hidden touch controls, and offline precaching.
