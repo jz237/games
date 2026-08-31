@@ -7380,6 +7380,16 @@ function fighterWallPin(fighter) {
 // active wall splat (composed into cinematicCamera.x beside recoil and
 // handheld). Snapped to exactly 0 once the pin releases and the ease lands.
 let wallsplatShift = 0;
+// 2.8 residual: a grounded (non-bounce) wall pin only satisfies
+// fighterWallPin() for the 2-3 ticks the slam velocity survives the wall
+// clamp, so the eased shift/push-in barely engaged before decaying. This
+// render-only dwell latch keeps the framing TARGET alive for a minimum beat
+// after the last live pin tick; the existing ease/decay still owns all the
+// motion and the snap back to exact identity the smoke asserts. Cleared by
+// resetCinematicCamera(), and self-invalidating if the sim tick ever moves
+// backwards past it (new match reseed).
+const WALLSPLAT_DWELL_TICKS = 14;
+let wallsplatHold = null; // { untilTick, victimIndex, pin }
 // Companion 0..1 focus level for the same beat: while a pin is live the
 // pinned side's foreground occluder dressing (the somerset chain-link was
 // drawing OVER the splat cell) racks down to ~15% and eases back after.
@@ -7464,6 +7474,7 @@ function resetCinematicCamera() {
   cameraPunch = null;
   wallsplatShift = 0;
   wallsplatFocus = 0;
+  wallsplatHold = null;
   cameraRecoil.x = 0;
   cameraRecoil.y = 0;
   cameraRecoil.ampX = 0;
@@ -7533,13 +7544,32 @@ function updateCinematicCamera(dtMs) {
   let splatVictim = null;
   let splatPin = 0;
   if (!finisher && !reduced && phase === "fight") {
-    for (const fighter of state.fighters) {
-      const pin = fighterWallPin(fighter);
+    for (let index = 0; index < state.fighters.length; index += 1) {
+      const pin = fighterWallPin(state.fighters[index]);
       if (!pin) continue;
-      splatVictim = fighter;
+      splatVictim = state.fighters[index];
       splatPin = pin;
+      // Refresh the dwell while the pin is live: engagement always outlasts
+      // the pin by WALLSPLAT_DWELL_TICKS so 2-3-tick grounded pins read.
+      wallsplatHold = {
+        untilTick: state.simulationTick + WALLSPLAT_DWELL_TICKS,
+        victimIndex: index,
+        pin,
+      };
       break;
     }
+    if (!splatVictim && wallsplatHold) {
+      const remaining = wallsplatHold.untilTick - state.simulationTick;
+      const heldVictim = state.fighters[wallsplatHold.victimIndex];
+      if (remaining <= 0 || remaining > WALLSPLAT_DWELL_TICKS || !heldVictim) {
+        wallsplatHold = null;
+      } else {
+        splatVictim = heldVictim;
+        splatPin = wallsplatHold.pin;
+      }
+    }
+  } else if (wallsplatHold) {
+    wallsplatHold = null;
   }
   if (finisher) {
     // The scripted finisher camera owns framing: collapse the pose and any
