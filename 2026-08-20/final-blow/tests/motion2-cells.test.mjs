@@ -153,8 +153,17 @@ function testWindupContract() {
       // One continuous swing: the windup hands off directly to the smear
       // flash (punch heavies) or the extension (kick heavies — no leg smear
       // exists in the bank-1 grammar).
-      assert.ok(firstAfter && (firstAfter.beat === "smear" || firstAfter.beat === "extension"),
-        `${id} ${limb} windup must hand off to smear/extension, got ${firstAfter?.beat}`);
+      // v2.9 final round (T3): kick heavies hand off through the ARC BRIDGE.
+      // There is no leg smear anywhere in the four banks, so a kick used to cut
+      // from the chambered knee straight to the extension in ONE tick; the two
+      // reserved ticks the punch spends on its smear are now spent on a
+      // transform arc that keeps the chamber drawing while the body rotates
+      // back onto the support leg. Punch heavies are unchanged.
+      const handoffOk = firstAfter && (firstAfter.beat === "smear"
+        || firstAfter.beat === "extension"
+        || (limb === "kick" && firstAfter.beat === "kickArc"));
+      assert.ok(handoffOk,
+        `${id} ${limb} windup must hand off to smear/extension/kickArc, got ${firstAfter?.beat}`);
     }
   }
   // Never on lights, crouch normals, air normals or the drive heavy.

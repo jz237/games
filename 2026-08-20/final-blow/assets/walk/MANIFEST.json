@@ -1,245 +1,245 @@
 {
-  "format": {
-    "sheet": "1280x1280 RGBA WebP, 320px cells, right-facing. Physically identical to the base/motion/motion2 banks (4x4 geometry, one global scale, feet on the cell floor) so drawAtlasFrame, tintedSilhouette, the crossfade ghost, the palette remap, the damage compositor and the 3D bank builder all read it unchanged. Only ROW 0 carries art: cells 0-3 are the four walk keys, cells 4-15 are empty and are never addressed.",
-    "grammar": "see MOTION-ATLAS.md 'Walk bank (2.10)'. Four keys of ONE stride, generated in ONE pass: 0 contact-left, 1 passing-left, 2 contact-right, 3 passing-right. The cycle plays 0-1-2-3-0. Keys 0 and 2 carry OPPOSITE lead legs; keys 1 and 3 swing opposite legs. Played as its own self-contained bank, NEVER interleaved with the base walk cells.",
-    "generator": "openai-gpt-image-2 via fal MCP (prompt-only; the tool exposes no image parameter, re-confirmed this wave -- identity is carried by per-fighter character bibles written from the base atlas)",
-    "processed": "blob-clustering slicer (walk30/slice4.py): soft magenta key + despill on tools/build_atlas.py conventions, run-length connected components with union-find, each figure masked by its OWN blob labels (a bbox crop drags in the neighbouring figure's arm on a tight filmstrip), ONE global scale for all four keys from the tallest key, foot bottoms registered to the shared floor row 315, torso centroid registered to the cell centre.",
-    "built": "2026-08-31",
-    "poseIds": [
-      "contact-left",
-      "passing-left",
-      "contact-right",
-      "passing-right"
-    ],
-    "cellCount": 4,
-    "scaleNote": "One global scale per sheet, taken from the TALLEST key so the passing keys keep their genuine extra body height -- the walk's vertical bob comes from the art, never from a per-cell rescale. The tallest key is normalised to the fighter's measured base walk cell height (deathblow 304px, jez 304px), which is how world size is verified against the base bank.",
-    "acceptNote": "Six of ten fighters ship a walk sheet: deathblow and jez from the 2.10 pilot, and post, cyraxx, ali and benny from the 2.11 roster pass. alan, donald, commissioner and devil were generated and REJECTED -- see rejected below. Every fighter without an accepted sheet keeps the pre-2.10 base-only walk byte-identically through the descriptor's chained fallback, so a partial roster costs nothing.",
-    "gate": "walk30/gate.py. W1a contact stride separation >= 60% of the fighter's base mean; W1b passing separation <= 55% of the contact mean; W1c a contact key plants TWO feet and a passing key exactly ONE; W1d the lead leg INVERTS between keys 0 and 2, measured by the near/far shading discriminator (a right-facing figure shows its LEFT side, so the near limbs are lit and the far limbs shadowed; the sign of forward-minus-rear leg luminance must flip); W1e adjacent-key silhouette IoU < 0.75; W2 head-band width spread <= 12% and head-region palette <= 3.0 dE; W4 foot bottoms within 6px.",
-    "gateCalibration": "Two metrics in the original spec were re-derived because they cannot score a walk cycle. (1) CHEST-band width: it is dominated by the swinging arms, not the build -- probed across the roster, a KNOWN-GOOD single-generation sheet spreads 1.2-31.1% on that band, so the literal 12% is unreachable by construction. The head band is pose-invariant and is gated instead; the chest band is reported as advisory. (2) PALETTE: the legs/feet regions are sampled by height fraction, so a contact key (legs spread, background between them) and a passing key (legs overlapping) sample different content of the SAME character -- alone worth 8-12 dE on jez while his head and torso sit at 0.4-1.8. The head region occupies the same pixels in every key and is gated instead. The gate was validated against the BASE bank as a negative control: pointed at base cells 4-7 it fails W1b, W1c, W1d and W1e on every fighter, which is the documented single-phase defect.",
-    "notGenerated": "None. The 2.11 wave generated all eight remaining fighters (17 fal calls). The decisive prompt move on top of the pilot's 1x4 filmstrip + occlusion + tonal grammar was to bind the near/far tonal rule to a NAMED, TRACKABLE COSTUME OBJECT -- 'the black shoe' / 'the pale hoof' / 'the hand holding the spray can' -- and then to restate the whole cycle as a one-line object sequence at the end of the prompt ('black boot behind, black boot lifted, black boot in front, black boot planted'). Every sheet that cleared W1d carried that closing line; the four rounds written with abstract 'bright leg / dark leg' language alone drew the SAME lead leg in both contact keys. Where the two legs wear the same colour the model will not invent the value split, so a fighter in uniformly dark trousers (alan, donald, commissioner) is the hard case: pushing the split hard enough to measure pushes the garment out of its base bank's value range, which is how commissioner lost W3 after winning W1d."
-  },
-  "fighters": {
-    "deathblow": {
-      "sheet": "deathblow.webp",
-      "scale": 0.6068,
-      "generations": 2,
-      "note": "Round 2 (1x4 filmstrip). Round 1 was a 2x2 grid and collapsed the two passing keys into one identical drawing (IoU 0.998) with no leg inversion, and read the 'heavyset' bible as obese. Keys measured: contact stride separation 123.5/132.0 against a base mean of 115.0; passing separation 0 (legs merged into one cluster, which IS the passing signature); ground-contact runs 2/1/2/1; adjacent-key IoU max 0.465; head-width spread 1.4%; head-region palette 0.7 dE; foot bottoms 315/315/316/315.",
-      "cells": [
-        {
-          "frame": 0,
-          "id": "contact-left",
-          "accept": true,
-          "note": "near (lit) leg leads, light-grey sneaker forward; legLumDelta +16.6"
-        },
-        {
-          "frame": 1,
-          "id": "passing-left",
-          "accept": true,
-          "note": "far leg swinging through, one foot planted, body at full height (304px vs 286px contact)"
-        },
-        {
-          "frame": 2,
-          "id": "contact-right",
-          "accept": true,
-          "note": "far (shadowed) leg leads, dark sneaker forward while the lit leg trails; legLumDelta -1.2. The sign inverts against key 0 as required, but the magnitude sits under the 5.0 noise threshold, so the inversion was adjudicated VISUALLY at 2.6x -- the light-grey shoe and lit calf swap from leading to trailing, which is a genuine phase mirror."
-        },
-        {
-          "frame": 3,
-          "id": "passing-right",
-          "accept": true,
-          "note": "near leg swinging through, opposite plant to key 1"
-        }
-      ],
-      "identityNote": "W3 marginal. Every costume element is present -- olive cap, dark shades, black beard, black tee with the white shark, segmented gauntlets on both forearms, charcoal cargo shorts with the hip chain, bare calves, grey/black high-tops -- and he is instantly recognisable. But at 1.8x against base cell 0 the signature gauntlets grade GUNMETAL-with-dark-red where the base bank's are red-dominant, the shark decal is a flat white silhouette against the base's modelled grey-blue shark, the sunglasses are wraparound against the base's narrower frames, and the build is leaner with more bare upper arm showing. Recognisable, not pixel-faithful."
+ "format": {
+  "sheet": "1280x1280 RGBA WebP, 320px cells, right-facing. Physically identical to the base/motion/motion2 banks (4x4 geometry, one global scale, feet on the cell floor) so drawAtlasFrame, tintedSilhouette, the crossfade ghost, the palette remap, the damage compositor and the 3D bank builder all read it unchanged. Only ROW 0 carries art: cells 0-3 are the four walk keys, cells 4-15 are empty and are never addressed.",
+  "grammar": "see MOTION-ATLAS.md 'Walk bank (2.10)'. Four keys of ONE stride, generated in ONE pass: 0 contact-left, 1 passing-left, 2 contact-right, 3 passing-right. The cycle plays 0-1-2-3-0. Keys 0 and 2 carry OPPOSITE lead legs; keys 1 and 3 swing opposite legs. Played as its own self-contained bank, NEVER interleaved with the base walk cells.",
+  "generator": "openai-gpt-image-2 via fal MCP (prompt-only; the tool exposes no image parameter, re-confirmed this wave -- identity is carried by per-fighter character bibles written from the base atlas)",
+  "processed": "blob-clustering slicer (walk30/slice4.py): soft magenta key + despill on tools/build_atlas.py conventions, run-length connected components with union-find, each figure masked by its OWN blob labels (a bbox crop drags in the neighbouring figure's arm on a tight filmstrip), ONE global scale for all four keys from the tallest key, foot bottoms registered to the shared floor row 315, torso centroid registered to the cell centre.",
+  "built": "2026-08-31",
+  "poseIds": [
+   "contact-left",
+   "passing-left",
+   "contact-right",
+   "passing-right"
+  ],
+  "cellCount": 4,
+  "scaleNote": "One global scale per sheet, taken from the TALLEST key so the passing keys keep their genuine extra body height -- the walk's vertical bob comes from the art, never from a per-cell rescale. The tallest key is normalised to the fighter's measured base walk cell height (deathblow 304px, jez 304px), which is how world size is verified against the base bank.",
+  "acceptNote": "Six of ten fighters ship a walk sheet: deathblow and jez from the 2.10 pilot, and post, cyraxx, ali and benny from the 2.11 roster pass. alan, donald, commissioner and devil were generated and REJECTED -- see rejected below. Every fighter without an accepted sheet keeps the pre-2.10 base-only walk byte-identically through the descriptor's chained fallback, so a partial roster costs nothing.",
+  "gate": "walk30/gate.py. W1a contact stride separation >= 60% of the fighter's base mean; W1b passing separation <= 55% of the contact mean; W1c a contact key plants TWO feet and a passing key exactly ONE; W1d the lead leg INVERTS between keys 0 and 2, measured by the near/far shading discriminator (a right-facing figure shows its LEFT side, so the near limbs are lit and the far limbs shadowed; the sign of forward-minus-rear leg luminance must flip); W1e adjacent-key silhouette IoU < 0.75; W2 head-band width spread <= 12% and head-region palette <= 3.0 dE; W4 foot bottoms within 6px.",
+  "gateCalibration": "Two metrics in the original spec were re-derived because they cannot score a walk cycle. (1) CHEST-band width: it is dominated by the swinging arms, not the build -- probed across the roster, a KNOWN-GOOD single-generation sheet spreads 1.2-31.1% on that band, so the literal 12% is unreachable by construction. The head band is pose-invariant and is gated instead; the chest band is reported as advisory. (2) PALETTE: the legs/feet regions are sampled by height fraction, so a contact key (legs spread, background between them) and a passing key (legs overlapping) sample different content of the SAME character -- alone worth 8-12 dE on jez while his head and torso sit at 0.4-1.8. The head region occupies the same pixels in every key and is gated instead. The gate was validated against the BASE bank as a negative control: pointed at base cells 4-7 it fails W1b, W1c, W1d and W1e on every fighter, which is the documented single-phase defect.",
+  "notGenerated": "None. The 2.11 wave generated all eight remaining fighters (17 fal calls). The decisive prompt move on top of the pilot's 1x4 filmstrip + occlusion + tonal grammar was to bind the near/far tonal rule to a NAMED, TRACKABLE COSTUME OBJECT -- 'the black shoe' / 'the pale hoof' / 'the hand holding the spray can' -- and then to restate the whole cycle as a one-line object sequence at the end of the prompt ('black boot behind, black boot lifted, black boot in front, black boot planted'). Every sheet that cleared W1d carried that closing line; the four rounds written with abstract 'bright leg / dark leg' language alone drew the SAME lead leg in both contact keys. Where the two legs wear the same colour the model will not invent the value split, so a fighter in uniformly dark trousers (alan, donald, commissioner) is the hard case: pushing the split hard enough to measure pushes the garment out of its base bank's value range, which is how commissioner lost W3 after winning W1d."
+ },
+ "fighters": {
+  "deathblow": {
+   "sheet": "deathblow.webp",
+   "scale": 0.6068,
+   "generations": 2,
+   "note": "Round 2 (1x4 filmstrip). Round 1 was a 2x2 grid and collapsed the two passing keys into one identical drawing (IoU 0.998) with no leg inversion, and read the 'heavyset' bible as obese. Keys measured: contact stride separation 123.5/132.0 against a base mean of 115.0; passing separation 0 (legs merged into one cluster, which IS the passing signature); ground-contact runs 2/1/2/1; adjacent-key IoU max 0.465; head-width spread 1.4%; head-region palette 0.7 dE; foot bottoms 315/315/316/315.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "contact-left",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: clear prescription glasses -> opaque black sunglasses; red plaid forearm wraps -> segmented gunmetal gauntlets; modelled grey shark decal -> flat white shark of a different outline. Measured stage-1 ratio R=2.0 (cell CDS 1.05 / base self-max 0.68; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: near (lit) leg leads, light-grey sneaker forward; legLumDelta +16.6"
     },
-    "jez": {
-      "sheet": "jez.webp",
-      "scale": 0.5409,
-      "generations": 3,
-      "note": "Round 3. Round 1 drew both contact keys on the SAME lead leg (legLumDelta +11.5 / +21.4, no inversion); round 2 moved it to +2.0 / -13.2, a sign flip too weak to call; round 3 added an explicit tonal rule (near leg lighter trouser and tan boot, far leg darker trouser and dark boot) plus occlusion language (which leg is drawn ON TOP where they cross) and landed +44.2 / -35.3, an unambiguous inversion. Keys measured: contact stride separation 108.0/124.5 against a base mean of 151.5; ground-contact runs 2/1/2/1; adjacent-key IoU max 0.429; head-width spread 2.2%; head-region palette 2.3 dE; foot bottoms 316/315/315/315.",
-      "cells": [
-        {
-          "frame": 0,
-          "id": "contact-left",
-          "accept": true,
-          "note": "light (near) leg leads; legLumDelta +44.2"
-        },
-        {
-          "frame": 1,
-          "id": "passing-left",
-          "accept": true,
-          "note": "dark leg swinging through, boot clear of the floor; body 303px vs 279px contact"
-        },
-        {
-          "frame": 2,
-          "id": "contact-right",
-          "accept": true,
-          "note": "dark (far) leg leads with the lit leg trailing; legLumDelta -35.3, a clean sign inversion against key 0 well above the noise threshold"
-        },
-        {
-          "frame": 3,
-          "id": "passing-right",
-          "accept": true,
-          "note": "light leg swinging through, opposite plant to key 1"
-        }
-      ],
-      "identityNote": "W3 marginal. Silver swept-back hair, black rectangular glasses, sleeveless slate-blue crossed gi, black belt, frayed blue trousers and black fingerless gloves are all present and correct. Deviations against base cell 0: the build is leaner through the arms and chest than the base bank's thicker musculature, the boots grade brown/tan against the base's dark boots, and the pale forearm wrap reads on one arm rather than both."
+    {
+     "frame": 1,
+     "id": "passing-left",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: clear prescription glasses -> opaque black sunglasses; red plaid forearm wraps -> segmented gunmetal gauntlets; modelled grey shark decal -> flat white shark of a different outline. Measured stage-1 ratio R=2.0 (cell CDS 1.67 / base self-max 0.68; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: far leg swinging through, one foot planted, body at full height (304px vs 286px contact)"
     },
-    "post": {
-      "sheet": "post.webp",
-      "scale": 0.5409,
-      "generations": 2,
-      "note": "Round 2. Round 1 drew keys 0 and 2 as the same drawing (IoU 0.973) with no inversion (+18.3 / +29.2); round 2 bound the tonal rule to named objects -- grey-brown near boot vs black far boot, spray can always in the near hand -- and closed with the object sequence 'black boot behind, lifted, in front, planted'. Keys measured: contact stride separation 136.0/135.0 against a base mean of 142.0; passing separation 0 (legs merged, the passing signature); ground-contact runs 2/1/2/1; adjacent-key IoU max 0.360; head-width spread 2.8%; head-region palette 1.6 dE; foot bottoms 316/315/315/315; key heights 286/304/282/302.",
-      "cells": [
-        {
-          "frame": 0,
-          "id": "contact-left",
-          "accept": true,
-          "note": "lit near leg leads, grey-brown boot forward, spray can swung back behind the hip; legLumDelta +46.0"
-        },
-        {
-          "frame": 1,
-          "id": "passing-left",
-          "accept": true,
-          "note": "dark far leg swinging through, one boot planted, body at full height (304px vs 286px contact)"
-        },
-        {
-          "frame": 2,
-          "id": "contact-right",
-          "accept": true,
-          "note": "shadowed far leg leads with the lit leg trailing and the spray can swung forward; legLumDelta -15.0, a clean sign inversion against key 0"
-        },
-        {
-          "frame": 3,
-          "id": "passing-right",
-          "accept": true,
-          "note": "near leg swinging through, opposite plant to key 1"
-        }
-      ],
-      "identityNote": "W3 marginal. Long wavy chestnut hair, horseshoe moustache, rust-orange sleeveless coverall with rolled cuffs and multi-colour paint flecks, black fingerless gloves, silver spray can and black work boots are all present and correct, and the lower-body colour band matches the base bank closely (mean luminance 55.0/62.8 against the base's 65.9/60.7). Deviations against base cell 0: the build is leaner through the arms and shoulders than the base bank's heavier musculature and the figure reads about half a head taller in proportion; the near boot grades grey-brown against the base's black. Recognisable, not pixel-faithful."
+    {
+     "frame": 2,
+     "id": "contact-right",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: clear prescription glasses -> opaque black sunglasses; red plaid forearm wraps -> segmented gunmetal gauntlets; modelled grey shark decal -> flat white shark of a different outline. Measured stage-1 ratio R=2.0 (cell CDS 0.87 / base self-max 0.68; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: far (shadowed) leg leads, dark sneaker forward while the lit leg trails; legLumDelta -1.2. The sign inverts against key 0 as required, but the magnitude sits under the 5.0 noise threshold, so the inversion was adjudicated VISUALLY at 2.6x -- the light-grey shoe and lit calf swap from leading to trailing, which is a genuine phase mirror."
     },
-    "cyraxx": {
-      "sheet": "cyraxx.webp",
-      "scale": 0.5195,
-      "generations": 1,
-      "note": "Round 1, first try -- the object-bound tonal grammar landed immediately. Keys measured: contact stride separation 102.5/106.5 against a base mean of 125.4; passing separation 0; ground-contact runs 2/1/2/1; adjacent-key IoU max 0.368; head-width spread 2.7%; head-region palette 1.0 dE; foot bottoms 316/315/315/315; key heights 297/306/296/306.",
-      "cells": [
-        {
-          "frame": 0,
-          "id": "contact-left",
-          "accept": true,
-          "note": "lit near leg leads, pale grey-olive sneaker forward; legLumDelta +51.3"
-        },
-        {
-          "frame": 1,
-          "id": "passing-left",
-          "accept": true,
-          "note": "dark far leg swinging through, one sneaker planted, body at full height (306px vs 297px contact)"
-        },
-        {
-          "frame": 2,
-          "id": "contact-right",
-          "accept": true,
-          "note": "shadowed far leg leads with the lit leg trailing; legLumDelta -16.7, a clean sign inversion against key 0"
-        },
-        {
-          "frame": 3,
-          "id": "passing-right",
-          "accept": true,
-          "note": "near leg swinging through, opposite plant to key 1"
-        }
-      ],
-      "identityNote": "W3 the strongest of the wave. Bald crown with long stringy brown side hair, long scraggly beard, faded blue tee, worn charcoal trousers and battered grey-olive sneakers are all present and correct, the gaunt narrow-shouldered build matches, and the lower-body colour sits on the base's value (mean luminance 68.8/53.7 against 54.2/54.8). CYRAXX.md's no-tint rule is honoured by construction: the sheet was generated with an explicit ban on glow, neon and energy effects, and carries none on clothing, skin or shoes. Deviations: the candidate stands more upright than the base's forward stoop and the beard reads slightly longer and straighter."
-    },
-    "ali": {
-      "sheet": "ali.webp",
-      "scale": 0.5497,
-      "generations": 1,
-      "note": "Round 1, first try. The strongest inversion of the wave -- the yellow/dark track-trouser split is a far louder cue than any grey-on-grey costume can carry. Keys measured: contact stride separation 127.0/125.0 against a base mean of 131.0; passing separation 0; ground-contact runs 2/1/2/1; adjacent-key IoU max 0.475; head-width spread 0.5%; head-region palette 2.1 dE; foot bottoms 315/315/316/315; key heights 289/304/289/302.",
-      "cells": [
-        {
-          "frame": 0,
-          "id": "contact-left",
-          "accept": true,
-          "note": "lit near leg leads, white-soled yellow trainer forward, microphone swung back behind the hip; legLumDelta +104.8"
-        },
-        {
-          "frame": 1,
-          "id": "passing-left",
-          "accept": true,
-          "note": "dark far leg swinging through, one trainer planted, body at full height (304px vs 289px contact)"
-        },
-        {
-          "frame": 2,
-          "id": "contact-right",
-          "accept": true,
-          "note": "shadowed far leg leads with the lit leg trailing and the microphone swung forward; legLumDelta -64.6"
-        },
-        {
-          "frame": 3,
-          "id": "passing-right",
-          "accept": true,
-          "note": "near leg swinging through, opposite plant to key 1"
-        }
-      ],
-      "identityNote": "W3 marginal. Crimson beanie, gold aviators, moustache and goatee, yellow-and-black shell tracksuit, heavy gold rope chain with medallion, gold wrist watch, black-and-gold boombox slung on the back, gold microphone with its coiled cable and yellow/black trainers are all present and correct. Deviations against base cell 0: the tracksuit's big black side PANELS are simplified to three-stripe piping, the jacket reads as a single smooth zip shell against the base's jacket-over-black-vest layering, the mic cable is shorter, and the far trouser leg grades amber-brown where the base keeps both legs yellow."
-    },
-    "benny": {
-      "sheet": "benny.webp",
-      "scale": 0.6283,
-      "generations": 3,
-      "note": "Round 3. Round 1 drew the same lead leg in both contact keys (+67.2 / +64.1); round 2 swapped the SHOES but left both trouser legs the same khaki, so the 0.78-0.99 leg band -- which on a man whose trousers break low over the shoe is mostly trouser -- still read +101.9 / +31.6, and its stride fell 2px short of W1a. Round 3 forced the value split onto the trouser itself (pale cream near leg, dark olive far leg) and lengthened the stride. Keys measured: contact stride separation 137.5/141.5 against a base mean of 157.6; passing separation 0; ground-contact runs 2/1/2/1; adjacent-key IoU max 0.344; head-width spread 3.8%; head-region palette 1.5 dE; foot bottoms 315/315/316/315; key heights 295/305/295/306.",
-      "cells": [
-        {
-          "frame": 0,
-          "id": "contact-left",
-          "accept": true,
-          "note": "lit near leg leads, pale cream trouser and tan shoe forward; legLumDelta +117.6"
-        },
-        {
-          "frame": 1,
-          "id": "passing-left",
-          "accept": true,
-          "note": "dark far leg swinging through, one shoe planted, body at full height (305px vs 295px contact)"
-        },
-        {
-          "frame": 2,
-          "id": "contact-right",
-          "accept": true,
-          "note": "shadowed far leg leads, dark olive trouser and black shoe forward while the lit leg trails; legLumDelta -85.9"
-        },
-        {
-          "frame": 3,
-          "id": "passing-right",
-          "accept": true,
-          "note": "near leg swinging through, opposite plant to key 1"
-        }
-      ],
-      "identityNote": "W3 marginal. Heather-grey curved-brim cap, rectangular glasses, stubble, black long-sleeved shirt, black belt, loose khaki cargo trousers, padded black fingerless tactical gloves and low dark shoes are all present, and the athletic build matches. The lower-body band tracks the base closely on the MEAN (107.2/113.9 against the base's 110.4/102.2) -- the split is light-and-shade inside khaki, not a wrong garment -- but its p95 runs 198 against the base's 166, so the near leg is noticeably brighter than any base cell. Other deviations: the navy undershirt at the open collar does not read, and the near shoe grades tan against the base's black."
+    {
+     "frame": 3,
+     "id": "passing-right",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: clear prescription glasses -> opaque black sunglasses; red plaid forearm wraps -> segmented gunmetal gauntlets; modelled grey shark decal -> flat white shark of a different outline. Measured stage-1 ratio R=2.0 (cell CDS 1.7 / base self-max 0.68; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: near leg swinging through, opposite plant to key 1"
     }
+   ],
+   "identityNote": "W3 marginal. Every costume element is present -- olive cap, dark shades, black beard, black tee with the white shark, segmented gauntlets on both forearms, charcoal cargo shorts with the hip chain, bare calves, grey/black high-tops -- and he is instantly recognisable. But at 1.8x against base cell 0 the signature gauntlets grade GUNMETAL-with-dark-red where the base bank's are red-dominant, the shark decal is a flat white silhouette against the base's modelled grey-blue shark, the sunglasses are wraparound against the base's narrower frames, and the build is leaner with more bare upper arm showing. Recognisable, not pixel-faithful."
   },
-  "rejected": {
-    "devil": {
-      "generations": 7,
-      "reason": "W3 IDENTITY FAIL, second wave running -- but for a DIFFERENT reason than the pilot's, and the pilot's two objections are now fixed. The 2.11 round 3 sheet passes EVERY numeric gate: contact separation 145.5/147.0 against a base mean of 189.8, passing separation 52.0/0, ground-contact runs 2/1/2/1, adjacent-key IoU max 0.545, head-width spread 6.0%, head-region palette 0.8 dE, foot bottoms flat at 315, and a clean inversion at +56.0 / -39.5. The creature is now thick-muscled and heavy-shouldered with full-span wings, so 'spindly with markedly smaller wings' no longer applies. What fails now is HEAD STRUCTURE, read at 2.4x against base cells 0 and 4: the candidate's horns are a tall tight spiral rising ABOVE the skull where the base's sweep back and down in a long arc along the neck; its snout is short and dog-like against the base's long tapering horse-like muzzle; its head is markedly smaller relative to the body and sits on a short thick neck where the base carries a long neck with the head thrust forward and down; and its posture is an upright human bodybuilder's where the base is hunched and forward-leaning. The hide also grades warm golden-brown, measured (97,70,42) over the torso band against the base's muted grey-brown (71,54,40). Different individual, same species -- the same verdict as 2.10, arrived at from the opposite direction.",
-      "physiologyNote": "Authored as an UPRIGHT BIPEDAL walk, deliberately NOT the all-fours prowl the brief called for. The devil's base atlas is bipedal in every walk and idle cell (verified at 1:1), and MOTION-ATLAS already records that the 2.9 motion2 prowl pair moved his head ~140px in one tick against the upright base cycle. A self-contained prowl bank would not strobe mid-cycle but WOULD fail W5 by construction, because entering and leaving the walk would swap his whole body plan against the idle. The brief's premise that he is a quadruped does not match the shipped art. Re-confirmed in 2.11: all four rounds were authored UPRIGHT BIPEDAL for the same reason, and the bipedal reading is not what failed -- the head and horn structure is.",
-      "roundsNote": "2.11 spent all four of its allotted attempts. Round 1 failed W1a (contact separation 85.0 against the 113.8 needed -- his base bank's 189.8 mean stride is the roster's widest and is genuinely hard to match) and W2 head-width 16.4%. Round 2 came within 1.8px of W1a at 112.0 but drew keys 0 and 2 as effectively the same image (IoU 0.960). Round 3 cleared everything numeric. Round 4 chased the identity fix -- cool grey-brown hide, hunched posture, larger head, clawed feet instead of hooves -- and got the stride (149.0/170.0) and the inversion (+68.0 / -60.6) but blew W2 apart at 99.4% head-width spread, with key heights swinging 231-274px. Round 3 remains the best sheet and it is still not the same devil."
+  "jez": {
+   "sheet": "jez.webp",
+   "scale": 0.5409,
+   "generations": 3,
+   "note": "Round 3. Round 1 drew both contact keys on the SAME lead leg (legLumDelta +11.5 / +21.4, no inversion); round 2 moved it to +2.0 / -13.2, a sign flip too weak to call; round 3 added an explicit tonal rule (near leg lighter trouser and tan boot, far leg darker trouser and dark boot) plus occlusion language (which leg is drawn ON TOP where they cross) and landed +44.2 / -35.3, an unambiguous inversion. Keys measured: contact stride separation 108.0/124.5 against a base mean of 151.5; ground-contact runs 2/1/2/1; adjacent-key IoU max 0.429; head-width spread 2.2%; head-region palette 2.3 dE; foot bottoms 316/315/315/315.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "contact-left",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: saturated royal-blue gi -> pale grey-blue; dark boots -> tan/brown boots; slimmer build than the base sheet. Measured stage-1 ratio R=9.67 (cell CDS 5.13 / base self-max 0.55; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: light (near) leg leads; legLumDelta +44.2"
     },
-    "alan": {
-      "generations": 3,
-      "reason": "W1d LEAD-LEG INVERSION FAIL, three rounds running -- every attempt drew the SAME leg leading in both contact keys. Round 1 (pre-object-binding prompt) +18.3 / +3.9 with W2 head-region palette 3.7 dE; round 2 +23.1 / +27.1 with keys 0 and 2 collapsed to one drawing (IoU 0.968) and keys 1 and 3 to another (0.971); round 3 +40.0 / +6.1 with W2 head-width spread 12.9% over the 12% gate. A shoe-level re-check of round 3 (bottom 8% band only, in case the leg band was reading trouser) agrees: +46.4 / +1.0, no inversion. Everything else was solid throughout -- contact separation 122.0/130.5, runs 2/1/2/1, adjacent IoU 0.444, foot bottoms within 1px.",
-      "styleNote": "Alan is the roster's one FLAT CEL-SHADED sprite -- bold outlines, hard two-tone shading -- and the sheets were prompted for that style and got it. The failure is phase, not style. Round 1 also read the 'heavyset' bible as obese with small arms against the base's strongman build; rounds 2 and 3 fixed the mass but not the stride."
+    {
+     "frame": 1,
+     "id": "passing-left",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: saturated royal-blue gi -> pale grey-blue; dark boots -> tan/brown boots; slimmer build than the base sheet. Measured stage-1 ratio R=9.67 (cell CDS 4.78 / base self-max 0.55; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: dark leg swinging through, boot clear of the floor; body 303px vs 279px contact"
     },
-    "donald": {
-      "generations": 3,
-      "reason": "NO SINGLE ROUND CLEARED EVERY GATE, and the attempt budget ran out with the three failures spread across three different gates. Round 1: W1a/b/c/e, W2 and W4 all pass, W1d escalates to the eye at +21.0 / +4.9 -- and the eye call goes AGAINST it, because the shoe-level re-check reads +18.7 / +1.9, no inversion; the golf club and the near arm swap between the contact keys but the legs do not follow, the same defect the commissioner showed. Round 2: W1d clean (+38.2 / -15.2, shoe-level +37.7 / -37.8) but W2 head-region palette 3.6 dE over the 3.0 gate. Round 3: W1d clean (+39.5 / -24.6) and W2 clean (head-width 0.5%, palette 2.2 dE) but W1a fails, key 0's contact separation collapsing to 82.5 against the 96.2 needed while key 2 sat at 121.5.",
-      "propNote": "The club-pop the brief warned about was avoided: every round carried the golf club in the near hand, swinging with that arm and held clear of the floor, so W1c never picked up a third ground-contact run and the idle-to-walk hand-off would not teleport the prop. That part of the grammar works and is worth reusing."
+    {
+     "frame": 2,
+     "id": "contact-right",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: saturated royal-blue gi -> pale grey-blue; dark boots -> tan/brown boots; slimmer build than the base sheet. Measured stage-1 ratio R=9.67 (cell CDS 5.51 / base self-max 0.55; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: dark (far) leg leads with the lit leg trailing; legLumDelta -35.3, a clean sign inversion against key 0 well above the noise threshold"
     },
-    "commissioner": {
-      "generations": 3,
-      "reason": "W3 IDENTITY FAIL on the one round that cleared the phase gate. Round 2 passes every numeric gate and passes them well -- contact separation 103.5/101.5 against a base mean of 124.8, runs 2/1/2/1, adjacent IoU max 0.592, head-width 2.3%, head palette 0.7 dE, foot bottoms within 1px, and the widest inversion of the wave at +125.8 / -98.2 -- but it bought that inversion by painting the near leg near-WHITE. Measured over the lower-body band (0.62-0.90 of figure height) the candidate runs mean luminance 60.1/59.2 with a p95 of 184.4, against the base bank's 29.7/34.1 with a p95 of 76.8-94.4: twice as bright, with the top of its range more than double the brightest trouser pixel the base bank owns. In game he would leave a charcoal-trousered idle and enter the walk in white trousers and a white shoe. Every other costume element is excellent -- silver swept-back hair, black leather trench to the knee with the crimson lining, dark red open-collared shirt with the gold chain, black gloves, silver-ball cane -- which is what makes the trouser value the whole of the fault.",
-      "otherRounds": "Round 1 and round 3 both keep the trousers correctly dark (round 3's band reads mean 31.1 / p95 63.7, a good match for the base) and both FAIL W1d: +17.3 / +21.5 and +22.3 / +6.8. In both, the CANE and the near arm swap correctly between the contact keys while the legs stay on the same lead -- proof that the model will follow a prop instruction without following the leg instruction, and the reason the wave's other sheets bind the tonal rule to the SHOE rather than to the hand.",
-      "registrationNote": "Registration was never the problem. His base bank is the roster's one height outlier (walk cells 299/287/280/248 where every other fighter is a flat 304-306, and MOTION_SHEET_ADJUST carries a 1.033 correction for his oversized base sheet), but the walk slicer normalises the tallest key to the fighter's OWN measured base walk height -- 299px for him -- so his sheets landed at 297-299px with foot bottoms within 1px and would have needed no WALK_SHEET_ADJUST entry. The coat also behaved: prompting the panels to flare back kept both legs and both shoes as separate shapes, so W1a and W1c read cleanly instead of the merged-feet blob his base cells produce."
+    {
+     "frame": 3,
+     "id": "passing-right",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: saturated royal-blue gi -> pale grey-blue; dark boots -> tan/brown boots; slimmer build than the base sheet. Measured stage-1 ratio R=9.67 (cell CDS 5.93 / base self-max 0.55; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: light leg swinging through, opposite plant to key 1"
     }
+   ],
+   "identityNote": "W3 marginal. Silver swept-back hair, black rectangular glasses, sleeveless slate-blue crossed gi, black belt, frayed blue trousers and black fingerless gloves are all present and correct. Deviations against base cell 0: the build is leaner through the arms and chest than the base bank's thicker musculature, the boots grade brown/tan against the base's dark boots, and the pale forearm wrap reads on one arm rather than both."
+  },
+  "post": {
+   "sheet": "post.webp",
+   "scale": 0.5409,
+   "generations": 2,
+   "note": "Round 2. Round 1 drew keys 0 and 2 as the same drawing (IoU 0.973) with no inversion (+18.3 / +29.2); round 2 bound the tonal rule to named objects -- grey-brown near boot vs black far boot, spray can always in the near hand -- and closed with the object sequence 'black boot behind, lifted, in front, planted'. Keys measured: contact stride separation 136.0/135.0 against a base mean of 142.0; passing separation 0 (legs merged, the passing signature); ground-contact runs 2/1/2/1; adjacent-key IoU max 0.360; head-width spread 2.8%; head-region palette 1.6 dE; foot bottoms 316/315/315/315; key heights 286/304/282/302.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "contact-left",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: heavy-set bodybuilder build -> thin figure (the largest build error on the sheet); spray-can cap loses its violet colour; paint-spattered boots -> plain dark boots. Measured stage-1 ratio R=2.04 (cell CDS 1.08 / base self-max 0.37; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: lit near leg leads, grey-brown boot forward, spray can swung back behind the hip; legLumDelta +46.0"
+    },
+    {
+     "frame": 1,
+     "id": "passing-left",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: heavy-set bodybuilder build -> thin figure (the largest build error on the sheet); spray-can cap loses its violet colour; paint-spattered boots -> plain dark boots. Measured stage-1 ratio R=2.04 (cell CDS 0.77 / base self-max 0.37; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: dark far leg swinging through, one boot planted, body at full height (304px vs 286px contact)"
+    },
+    {
+     "frame": 2,
+     "id": "contact-right",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: heavy-set bodybuilder build -> thin figure (the largest build error on the sheet); spray-can cap loses its violet colour; paint-spattered boots -> plain dark boots. Measured stage-1 ratio R=2.04 (cell CDS 0.74 / base self-max 0.37; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: shadowed far leg leads with the lit leg trailing and the spray can swung forward; legLumDelta -15.0, a clean sign inversion against key 0"
+    },
+    {
+     "frame": 3,
+     "id": "passing-right",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: heavy-set bodybuilder build -> thin figure (the largest build error on the sheet); spray-can cap loses its violet colour; paint-spattered boots -> plain dark boots. Measured stage-1 ratio R=2.04 (cell CDS 0.39 / base self-max 0.37; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: near leg swinging through, opposite plant to key 1"
+    }
+   ],
+   "identityNote": "W3 marginal. Long wavy chestnut hair, horseshoe moustache, rust-orange sleeveless coverall with rolled cuffs and multi-colour paint flecks, black fingerless gloves, silver spray can and black work boots are all present and correct, and the lower-body colour band matches the base bank closely (mean luminance 55.0/62.8 against the base's 65.9/60.7). Deviations against base cell 0: the build is leaner through the arms and shoulders than the base bank's heavier musculature and the figure reads about half a head taller in proportion; the near boot grades grey-brown against the base's black. Recognisable, not pixel-faithful."
+  },
+  "cyraxx": {
+   "sheet": "cyraxx.webp",
+   "scale": 0.5195,
+   "generations": 1,
+   "note": "Round 1, first try -- the object-bound tonal grammar landed immediately. Keys measured: contact stride separation 102.5/106.5 against a base mean of 125.4; passing separation 0; ground-contact runs 2/1/2/1; adjacent-key IoU max 0.368; head-width spread 2.7%; head-region palette 1.0 dE; foot bottoms 316/315/315/315; key heights 297/306/296/306.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "contact-left",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: bald crown -> full head of hair; beard length and shape differ; highest measured cross-bank ratio on the roster. Measured stage-1 ratio R=10.69 (cell CDS 7.77 / base self-max 0.57; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: lit near leg leads, pale grey-olive sneaker forward; legLumDelta +51.3"
+    },
+    {
+     "frame": 1,
+     "id": "passing-left",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: bald crown -> full head of hair; beard length and shape differ; highest measured cross-bank ratio on the roster. Measured stage-1 ratio R=10.69 (cell CDS 4.42 / base self-max 0.57; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: dark far leg swinging through, one sneaker planted, body at full height (306px vs 297px contact)"
+    },
+    {
+     "frame": 2,
+     "id": "contact-right",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: bald crown -> full head of hair; beard length and shape differ; highest measured cross-bank ratio on the roster. Measured stage-1 ratio R=10.69 (cell CDS 7.97 / base self-max 0.57; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: shadowed far leg leads with the lit leg trailing; legLumDelta -16.7, a clean sign inversion against key 0"
+    },
+    {
+     "frame": 3,
+     "id": "passing-right",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: bald crown -> full head of hair; beard length and shape differ; highest measured cross-bank ratio on the roster. Measured stage-1 ratio R=10.69 (cell CDS 4.18 / base self-max 0.57; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: near leg swinging through, opposite plant to key 1"
+    }
+   ],
+   "identityNote": "W3 the strongest of the wave. Bald crown with long stringy brown side hair, long scraggly beard, faded blue tee, worn charcoal trousers and battered grey-olive sneakers are all present and correct, the gaunt narrow-shouldered build matches, and the lower-body colour sits on the base's value (mean luminance 68.8/53.7 against 54.2/54.8). CYRAXX.md's no-tint rule is honoured by construction: the sheet was generated with an explicit ban on glow, neon and energy effects, and carries none on clothing, skin or shoes. Deviations: the candidate stands more upright than the base's forward stoop and the beard reads slightly longer and straighter."
+  },
+  "ali": {
+   "sheet": "ali.webp",
+   "scale": 0.5497,
+   "generations": 1,
+   "note": "Round 1, first try. The strongest inversion of the wave -- the yellow/dark track-trouser split is a far louder cue than any grey-on-grey costume can carry. Keys measured: contact stride separation 127.0/125.0 against a base mean of 131.0; passing separation 0; ground-contact runs 2/1/2/1; adjacent-key IoU max 0.475; head-width spread 0.5%; head-region palette 2.1 dE; foot bottoms 315/315/316/315; key heights 289/304/289/302.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "contact-left",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: bold blocked black/yellow tracksuit panels -> thin adidas-style side stripes; walk:0 wears BROWN trousers under the yellow jacket, which is not even internally consistent with keys 1-3. Measured stage-1 ratio R=5.56 (cell CDS 2.99 / base self-max 0.52; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: lit near leg leads, white-soled yellow trainer forward, microphone swung back behind the hip; legLumDelta +104.8"
+    },
+    {
+     "frame": 1,
+     "id": "passing-left",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: bold blocked black/yellow tracksuit panels -> thin adidas-style side stripes; walk:0 wears BROWN trousers under the yellow jacket, which is not even internally consistent with keys 1-3. Measured stage-1 ratio R=5.56 (cell CDS 2.77 / base self-max 0.52; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: dark far leg swinging through, one trainer planted, body at full height (304px vs 289px contact)"
+    },
+    {
+     "frame": 2,
+     "id": "contact-right",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: bold blocked black/yellow tracksuit panels -> thin adidas-style side stripes; walk:0 wears BROWN trousers under the yellow jacket, which is not even internally consistent with keys 1-3. Measured stage-1 ratio R=5.56 (cell CDS 3.3 / base self-max 0.52; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: shadowed far leg leads with the lit leg trailing and the microphone swung forward; legLumDelta -64.6"
+    },
+    {
+     "frame": 3,
+     "id": "passing-right",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: bold blocked black/yellow tracksuit panels -> thin adidas-style side stripes; walk:0 wears BROWN trousers under the yellow jacket, which is not even internally consistent with keys 1-3. Measured stage-1 ratio R=5.56 (cell CDS 2.79 / base self-max 0.52; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: near leg swinging through, opposite plant to key 1"
+    }
+   ],
+   "identityNote": "W3 marginal. Crimson beanie, gold aviators, moustache and goatee, yellow-and-black shell tracksuit, heavy gold rope chain with medallion, gold wrist watch, black-and-gold boombox slung on the back, gold microphone with its coiled cable and yellow/black trainers are all present and correct. Deviations against base cell 0: the tracksuit's big black side PANELS are simplified to three-stripe piping, the jacket reads as a single smooth zip shell against the base's jacket-over-black-vest layering, the mic cable is shorter, and the far trouser leg grades amber-brown where the base keeps both legs yellow."
+  },
+  "benny": {
+   "sheet": "benny.webp",
+   "scale": 0.6283,
+   "generations": 3,
+   "note": "Round 3. Round 1 drew the same lead leg in both contact keys (+67.2 / +64.1); round 2 swapped the SHOES but left both trouser legs the same khaki, so the 0.78-0.99 leg band -- which on a man whose trousers break low over the shoe is mostly trouser -- still read +101.9 / +31.6, and its stride fell 2px short of W1a. Round 3 forced the value split onto the trouser itself (pale cream near leg, dark olive far leg) and lengthened the stride. Keys measured: contact stride separation 137.5/141.5 against a base mean of 157.6; passing separation 0; ground-contact runs 2/1/2/1; adjacent-key IoU max 0.344; head-width spread 3.8%; head-region palette 1.5 dE; foot bottoms 315/315/316/315; key heights 295/305/295/306.",
+   "cells": [
+    {
+     "frame": 0,
+     "id": "contact-left",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: trouser colour alternates olive/khaki BETWEEN KEYS of one cycle; black boots -> tan boots; the base sheet's blue sleeve piping is absent. Measured stage-1 ratio R=3.01 (cell CDS 2.05 / base self-max 0.68; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: lit near leg leads, pale cream trouser and tan shoe forward; legLumDelta +117.6"
+    },
+    {
+     "frame": 1,
+     "id": "passing-left",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: trouser colour alternates olive/khaki BETWEEN KEYS of one cycle; black boots -> tan boots; the base sheet's blue sleeve piping is absent. Measured stage-1 ratio R=3.01 (cell CDS 2.05 / base self-max 0.68; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: dark far leg swinging through, one shoe planted, body at full height (305px vs 295px contact)"
+    },
+    {
+     "frame": 2,
+     "id": "contact-right",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: trouser colour alternates olive/khaki BETWEEN KEYS of one cycle; black boots -> tan boots; the base sheet's blue sleeve piping is absent. Measured stage-1 ratio R=3.01 (cell CDS 1.96 / base self-max 0.68; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: shadowed far leg leads, dark olive trouser and black shoe forward while the lit leg trails; legLumDelta -85.9"
+    },
+    {
+     "frame": 3,
+     "id": "passing-right",
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the base bank: trouser colour alternates olive/khaki BETWEEN KEYS of one cycle; black boots -> tan boots; the base sheet's blue sleeve piping is absent. Measured stage-1 ratio R=3.01 (cell CDS 2.48 / base self-max 0.68; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: near leg swinging through, opposite plant to key 1"
+    }
+   ],
+   "identityNote": "W3 marginal. Heather-grey curved-brim cap, rectangular glasses, stubble, black long-sleeved shirt, black belt, loose khaki cargo trousers, padded black fingerless tactical gloves and low dark shoes are all present, and the athletic build matches. The lower-body band tracks the base closely on the MEAN (107.2/113.9 against the base's 110.4/102.2) -- the split is light-and-shade inside khaki, not a wrong garment -- but its p95 runs 198 against the base's 166, so the near leg is noticeably brighter than any base cell. Other deviations: the navy undershirt at the open collar does not read, and the near shoe grades tan against the base's black."
   }
+ },
+ "rejected": {
+  "devil": {
+   "generations": 7,
+   "reason": "W3 IDENTITY FAIL, second wave running -- but for a DIFFERENT reason than the pilot's, and the pilot's two objections are now fixed. The 2.11 round 3 sheet passes EVERY numeric gate: contact separation 145.5/147.0 against a base mean of 189.8, passing separation 52.0/0, ground-contact runs 2/1/2/1, adjacent-key IoU max 0.545, head-width spread 6.0%, head-region palette 0.8 dE, foot bottoms flat at 315, and a clean inversion at +56.0 / -39.5. The creature is now thick-muscled and heavy-shouldered with full-span wings, so 'spindly with markedly smaller wings' no longer applies. What fails now is HEAD STRUCTURE, read at 2.4x against base cells 0 and 4: the candidate's horns are a tall tight spiral rising ABOVE the skull where the base's sweep back and down in a long arc along the neck; its snout is short and dog-like against the base's long tapering horse-like muzzle; its head is markedly smaller relative to the body and sits on a short thick neck where the base carries a long neck with the head thrust forward and down; and its posture is an upright human bodybuilder's where the base is hunched and forward-leaning. The hide also grades warm golden-brown, measured (97,70,42) over the torso band against the base's muted grey-brown (71,54,40). Different individual, same species -- the same verdict as 2.10, arrived at from the opposite direction.",
+   "physiologyNote": "Authored as an UPRIGHT BIPEDAL walk, deliberately NOT the all-fours prowl the brief called for. The devil's base atlas is bipedal in every walk and idle cell (verified at 1:1), and MOTION-ATLAS already records that the 2.9 motion2 prowl pair moved his head ~140px in one tick against the upright base cycle. A self-contained prowl bank would not strobe mid-cycle but WOULD fail W5 by construction, because entering and leaving the walk would swap his whole body plan against the idle. The brief's premise that he is a quadruped does not match the shipped art. Re-confirmed in 2.11: all four rounds were authored UPRIGHT BIPEDAL for the same reason, and the bipedal reading is not what failed -- the head and horn structure is.",
+   "roundsNote": "2.11 spent all four of its allotted attempts. Round 1 failed W1a (contact separation 85.0 against the 113.8 needed -- his base bank's 189.8 mean stride is the roster's widest and is genuinely hard to match) and W2 head-width 16.4%. Round 2 came within 1.8px of W1a at 112.0 but drew keys 0 and 2 as effectively the same image (IoU 0.960). Round 3 cleared everything numeric. Round 4 chased the identity fix -- cool grey-brown hide, hunched posture, larger head, clawed feet instead of hooves -- and got the stride (149.0/170.0) and the inversion (+68.0 / -60.6) but blew W2 apart at 99.4% head-width spread, with key heights swinging 231-274px. Round 3 remains the best sheet and it is still not the same devil."
+  },
+  "alan": {
+   "generations": 3,
+   "reason": "W1d LEAD-LEG INVERSION FAIL, three rounds running -- every attempt drew the SAME leg leading in both contact keys. Round 1 (pre-object-binding prompt) +18.3 / +3.9 with W2 head-region palette 3.7 dE; round 2 +23.1 / +27.1 with keys 0 and 2 collapsed to one drawing (IoU 0.968) and keys 1 and 3 to another (0.971); round 3 +40.0 / +6.1 with W2 head-width spread 12.9% over the 12% gate. A shoe-level re-check of round 3 (bottom 8% band only, in case the leg band was reading trouser) agrees: +46.4 / +1.0, no inversion. Everything else was solid throughout -- contact separation 122.0/130.5, runs 2/1/2/1, adjacent IoU 0.444, foot bottoms within 1px.",
+   "styleNote": "Alan is the roster's one FLAT CEL-SHADED sprite -- bold outlines, hard two-tone shading -- and the sheets were prompted for that style and got it. The failure is phase, not style. Round 1 also read the 'heavyset' bible as obese with small arms against the base's strongman build; rounds 2 and 3 fixed the mass but not the stride."
+  },
+  "donald": {
+   "generations": 3,
+   "reason": "NO SINGLE ROUND CLEARED EVERY GATE, and the attempt budget ran out with the three failures spread across three different gates. Round 1: W1a/b/c/e, W2 and W4 all pass, W1d escalates to the eye at +21.0 / +4.9 -- and the eye call goes AGAINST it, because the shoe-level re-check reads +18.7 / +1.9, no inversion; the golf club and the near arm swap between the contact keys but the legs do not follow, the same defect the commissioner showed. Round 2: W1d clean (+38.2 / -15.2, shoe-level +37.7 / -37.8) but W2 head-region palette 3.6 dE over the 3.0 gate. Round 3: W1d clean (+39.5 / -24.6) and W2 clean (head-width 0.5%, palette 2.2 dE) but W1a fails, key 0's contact separation collapsing to 82.5 against the 96.2 needed while key 2 sat at 121.5.",
+   "propNote": "The club-pop the brief warned about was avoided: every round carried the golf club in the near hand, swinging with that arm and held clear of the floor, so W1c never picked up a third ground-contact run and the idle-to-walk hand-off would not teleport the prop. That part of the grammar works and is worth reusing."
+  },
+  "commissioner": {
+   "generations": 3,
+   "reason": "W3 IDENTITY FAIL on the one round that cleared the phase gate. Round 2 passes every numeric gate and passes them well -- contact separation 103.5/101.5 against a base mean of 124.8, runs 2/1/2/1, adjacent IoU max 0.592, head-width 2.3%, head palette 0.7 dE, foot bottoms within 1px, and the widest inversion of the wave at +125.8 / -98.2 -- but it bought that inversion by painting the near leg near-WHITE. Measured over the lower-body band (0.62-0.90 of figure height) the candidate runs mean luminance 60.1/59.2 with a p95 of 184.4, against the base bank's 29.7/34.1 with a p95 of 76.8-94.4: twice as bright, with the top of its range more than double the brightest trouser pixel the base bank owns. In game he would leave a charcoal-trousered idle and enter the walk in white trousers and a white shoe. Every other costume element is excellent -- silver swept-back hair, black leather trench to the knee with the crimson lining, dark red open-collared shirt with the gold chain, black gloves, silver-ball cane -- which is what makes the trouser value the whole of the fault.",
+   "otherRounds": "Round 1 and round 3 both keep the trousers correctly dark (round 3's band reads mean 31.1 / p95 63.7, a good match for the base) and both FAIL W1d: +17.3 / +21.5 and +22.3 / +6.8. In both, the CANE and the near arm swap correctly between the contact keys while the legs stay on the same lead -- proof that the model will follow a prop instruction without following the leg instruction, and the reason the wave's other sheets bind the tonal rule to the SHOE rather than to the hand.",
+   "registrationNote": "Registration was never the problem. His base bank is the roster's one height outlier (walk cells 299/287/280/248 where every other fighter is a flat 304-306, and MOTION_SHEET_ADJUST carries a 1.033 correction for his oversized base sheet), but the walk slicer normalises the tallest key to the fighter's OWN measured base walk height -- 299px for him -- so his sheets landed at 297-299px with foot bottoms within 1px and would have needed no WALK_SHEET_ADJUST entry. The coat also behaved: prompting the panels to flare back kept both legs and both shoes as separate shapes, so W1a and W1c read cleanly instead of the merged-feet blob his base cells produce."
+  }
+ }
 }

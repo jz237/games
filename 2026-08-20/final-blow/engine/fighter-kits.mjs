@@ -1829,6 +1829,13 @@ const DEFAULT_BASE_ROLES = Object.freeze({
   crouchAdjust: 1,
   stagger: 15,
   hit: 15,
+  // v2.9 final round (R1) — `hit` and `down` are DIFFERENT ROLES. They are the
+  // same index on nine of ten sheets, so nothing ever forced them apart, and
+  // the devil is the counter-example that proves they are not the same
+  // question: his 15 is FLAT ON HIS BACK, which is the correct knockdown
+  // drawing and an absurd answer to "he just took a light jab". `down` is the
+  // prone / knockdown / wake-up read; `hit` is the STANDING recoil.
+  down: 15,
   secondStrike: null,
   attack: Object.freeze([9, 10, 13, 14]),
   unusable: Object.freeze([]),
@@ -1868,16 +1875,31 @@ export const BASE_CELL_ROLES = Object.freeze({
       + "lunge drawn 1.24x oversized; 13 is the full golf swing WITH a baked golden crescent",
   }),
   devil: Object.freeze({
-    guard: 11, crouch: 12, crouchAdjust: 0.9, stagger: null, hit: 15, secondStrike: null,
+    guard: 11, crouch: 12, crouchAdjust: 0.9, stagger: null, hit: 8, down: 15, secondStrike: null,
     attack: Object.freeze([9, 10, 13, 14]),
+    // v2.9 final round (R1): `hit` was 15 while this very note said 15 is flat
+    // on his back — so a single LIGHT jab laid him out mid-air, and the
+    // wake-up track's prone fallback and the hit-flash read both pointed at
+    // the same cell for opposite reasons. Re-read at 1:1 this round: the
+    // sheet has no standing recoil, but 8 is a hunched forward-leaning body
+    // with the weight on the back leg and the head dropped — the only upright,
+    // non-guard, non-attack drawing on the sheet, and a defensible absorb.
+    // The authored reaction keys (motion:8 big-hit, motion2:9 head snap,
+    // motion2:10 rubber-legs) still lead every reaction track; 8 is what shows
+    // underneath them. `down` keeps 15, which is the right knockdown drawing.
     note: "11 upright bipedal guard; 12 is the wing-wrapped cocoon; 13 is an AIRBORNE claw lunge; "
-      + "15 is flat on his back, so there is no standing stagger cell — reactions stay authored",
+      + "15 is FLAT ON HIS BACK — it is the `down` cell, never the standing `hit` cell; 8 is the "
+      + "only upright non-attack absorb the sheet has and carries the standing recoil",
   }),
   ali: Object.freeze({
     guard: 9, crouch: 12, crouchAdjust: 0.83, stagger: 15, hit: 15, secondStrike: null,
-    attack: Object.freeze([10, 11, 13, 14]),
+    // v2.9 final round (R2): 8 added — it is an OVERHEAD MIC SWING, the same
+    // prop-in-action class as 11/13/14, and its omission left it reachable by
+    // any beat that only consults `attack`.
+    attack: Object.freeze([8, 10, 11, 13, 14]),
     note: "9 is the braced wide stance (his only non-attack guard read); 12 is a deep squat drawn "
-      + "1.22x oversized; 11 and 13 are mic swings, 14 the sonic wave",
+      + "1.22x oversized; 8, 11 and 13 are mic swings, 14 the sonic wave. 15 is the arm-up flinch "
+      + "and carried BLED-IN sonic-wave crescents from cell 14 until the 2.9 atlas repair",
   }),
   benny: Object.freeze({
     guard: 11, crouch: 12, crouchAdjust: 0.8, stagger: 15, hit: 15, secondStrike: null,
@@ -1947,9 +1969,48 @@ export function safeBaseFrame(fighterId, frame) {
 export function baseCellDrawAdjust(fighterId, bank, frame) {
   if (bank !== "base") return 1;
   const roles = BASE_CELL_ROLES[fighterId];
-  if (!roles || frame !== roles.crouch) return 1;
-  return roles.crouchAdjust || 1;
+  if (!roles) return BASE_WALK_ADJUST[fighterId]?.[frame] || 1;
+  if (frame === roles.crouch) return roles.crouchAdjust || 1;
+  return BASE_WALK_ADJUST[fighterId]?.[frame] || 1;
 }
+
+// ---------------------------------------------------------------------------
+// v2.9 final round (T4) — THE BASE WALK SCALE POP.
+//
+// baseCellDrawAdjust corrected exactly one cell per fighter, the oversized
+// deep-squat crouch. Nothing corrected the WALK cells, and they are not all
+// drawn at the same scale either. Measured content height (opaque pixels,
+// alpha >= 24) of base cells 4-7 against the mean of that fighter's four idle
+// cells 0-3, at 1:1, this round:
+//
+//   donald        4:305  5:306  6:250  7:306   — cell 6 is -18.3%
+//   devil         4:274  5:273  6:273  7:268   — the WHOLE cycle is -9..-11%
+//   commissioner  4:299  5:287  6:280  7:248   — a -5% to -21% RAMP
+//   alan          4:291  5:305  6:305  7:305   — -4.6%, under the gate
+//   everyone else within +-1.4%
+//
+// donald's is the one the critics caught: he loses a fifth of his height for
+// 100ms, once per walk cycle, every cycle. The devil's and the commissioner's
+// were never reported because they are steady across the cycle rather than a
+// one-cell pop, but they are the same defect — the fighter is a different size
+// while walking than while standing.
+//
+// Corrections land each cell on the fighter's own idle height and are CAPPED
+// at 1.25, the same cap philosophy the crouch and guard-flinch corrections
+// use; the commissioner's cell 7 wants 1.27 and takes the cap. Cells within
+// 5% of the idle height are left alone — that is inside the honest measurement
+// noise of a hand-painted sheet.
+//
+// NOT FIXED HERE, and deliberately: donald's base walk draws the SAME LEAD LEG
+// in all four cells — a moonwalk. That is the known base-bank single-phase
+// defect (assets/walk/MANIFEST.json `gate` documents the negative control that
+// catches it), it is an ART problem, and no draw-scale table can touch it.
+// ---------------------------------------------------------------------------
+const BASE_WALK_ADJUST = Object.freeze({
+  donald: Object.freeze({ 6: 1.224 }),
+  devil: Object.freeze({ 4: 1.099, 5: 1.103, 6: 1.103, 7: 1.123 }),
+  commissioner: Object.freeze({ 5: 1.096, 6: 1.123, 7: 1.25 }),
+});
 
 // ---------------------------------------------------------------------------
 // v2.9 critic round 2 (M4) — GUARD / BLOCK-HIT STANCE RECONCILIATION.
@@ -2609,27 +2670,38 @@ export function wakeupKeys(totalFrames = 16, roles = DEFAULT_BASE_ROLES) {
  * ascent cell is his golf swing, so his opens almost immediately — kept
  * exactly as 2.7 shipped it).
  */
-export function jumpArcKeys(bandStart = 0.22) {
+export function jumpArcKeys(bandStart = 0.17) {
   // donald's band used to open at 0.06 because his BASE ascent cell is the
   // golf swing and a plain jump wore it for ~10 ticks. That workaround is
   // superseded: since 2.9 the ascent wears the authored jump-rise key, so his
   // opening is clamped back into the roster's range — leaving it at 0.06 gave
   // him a 3-tick rise and a 20-tick tuck, which is the very hold this track
   // exists to break.
-  const open = Math.min(0.26, Math.max(0.18, bandStart));
+  // v2.9 final round (T5): the clamp window moved down from [0.18, 0.26].
+  // The RISE band is linear in time (progress maps vy, and vy is linear in
+  // time under constant gravity), so its width in progress is its width in
+  // ticks: at 0.22 of a 46-tick arc that is 10 ticks on motion2:7, which is
+  // the measured overrun. 0.17 is 7.8.
+  const open = Math.min(0.20, Math.max(0.15, bandStart));
   // The airborne middle is divided RELATIVE to the opening, so an earlier or
   // later tuck cannot stretch one band past the budget.
-  const span = 0.73 - open;
+  const span = 0.72 - open;
   return [
     { at: 0, chain: [m2key(MOTION2_CELLS.jumpRise)] },
     { at: open, chain: [m1key(MOTION_CELLS.tuck)] },
-    { at: open + span * 0.25, chain: [m3key(MOTION3_KEYS.jumpApex), m1key(MOTION_CELLS.tuck)] },
-    { at: open + span * 0.5, chain: [m3key(MOTION3_KEYS.jumpDescent), m1key(MOTION_CELLS.airrec)] },
-    { at: open + span * 0.75, chain: [m1key(MOTION_CELLS.airrec)] },
+    // v2.9 final round (T5): the sub-band split is no longer uniform. The
+    // DESCENT half of the arc maps remaining HEIGHT onto progress, and height
+    // changes slowest at the apex — so a band just past 0.5 costs far more
+    // ticks than its width in progress suggests, which is why motion3:3
+    // measured 9. The bands are front-loaded to compensate: the descent key's
+    // window is 0.16 of the span where the others are 0.30/0.20/0.34.
+    { at: open + span * 0.30, chain: [m3key(MOTION3_KEYS.jumpApex), m1key(MOTION_CELLS.tuck)] },
+    { at: open + span * 0.50, chain: [m3key(MOTION3_KEYS.jumpDescent), m1key(MOTION_CELLS.airrec)] },
+    { at: open + span * 0.66, chain: [m1key(MOTION_CELLS.airrec)] },
     // The airborne gather. The TOUCHDOWN that follows it is the landing-
     // recovery branch's half-crouch, so the landing reads gather -> plant ->
     // stand across two drawings under one squash.
-    { at: 0.73, chain: [m1key(MOTION_CELLS.land)] },
+    { at: 0.72, chain: [m1key(MOTION_CELLS.land)] },
   ];
 }
 
@@ -2673,10 +2745,65 @@ export function heavyWindupKeys(limb) {
   // between, so a kick windup never borrows the punch's coil.
   const mid = kick ? MOTION3_KEYS.windupKickB : MOTION3_KEYS.windupPunchB;
   return [
-    { at: 0, chain: [m2key(MOTION2_CELLS.crouchTrans), m2key(cocked)] },
-    { at: 0.44, chain: [m3key(mid), m2key(cocked)] },
-    { at: 0.72, chain: [m2key(cocked)] },
+    // v2.9 final round (T1/T2) — THE ORDER WAS INVERTED, AND THE GATHER WAS
+    // THE WRONG DRAWING.
+    //
+    // Round 2 ran crouch-trans (0.0) -> motion3 mid (0.44) -> cocked (0.72),
+    // and the measured content heights on deathblow's heavy punch were
+    // 306 idle -> 258 gather -> 309 mid -> 290 cocked -> 249 smear: he
+    // squatted 48px, sprang 51px back up to 3px ABOVE his idle height in one
+    // tick, then dropped again. The heavy kick was worse (306 -> 258x7 ->
+    // 316x5 -> 306x5 -> 258). Two separate faults:
+    //
+    //  T1 the deepest coil played in the MIDDLE and a shallower cock played
+    //     last, right before the release — an anticipation that un-coils into
+    //     its own strike;
+    //  T2 motion2:4 crouch-trans is the stand<->crouch BRIDGE, a symmetric
+    //     two-footed squat measured 15-30% below the idle height on every
+    //     fighter (deathblow -48px, the devil -94px). As the OPENING key it
+    //     read "duck, then stand up and punch".
+    //
+    // The beat now runs COCK -> LOAD -> COMPRESS, and the drawings are
+    // ordered so the body gets lower as the release approaches. Measured on
+    // deathblow's heavy punch with the motion3 bank off (which is what he
+    // ships after this round's consistency gate): 306 idle -> 290 cocked ->
+    // 260 load -> 258 compress -> 249 smear. Monotonic; the bob is gone.
+    //
+    // 1. COCK — the limb chambers first, at very nearly the standing height.
+    { at: 0, chain: [m2key(cocked)] },
+    // 2. LOAD — the weight shifts onto the planted foot. The authored motion3
+    //    coil when the bank is there; motion2:6 dash-brake underneath it,
+    //    which is a one-foot-planted weight-shifted body with the arms
+    //    trailing — a WEIGHT SHIFT, which is what an anticipation is, rather
+    //    than the symmetric squat T2 threw out.
+    { at: 0.36, chain: [m3key(mid), m2key(MOTION2_CELLS.dashBrake)] },
+    // 3. COMPRESS — the deepest coil on the sheet, and now it is immediately
+    //    before the release instead of in the middle of the beat.
+    { at: 0.70, chain: [m2key(MOTION2_CELLS.crouchTrans)] },
   ];
+}
+
+/**
+ * v2.9 final round (T3) — THE HEAVY KICK'S MISSING BRIDGE.
+ *
+ * motion2:1 (knee chambered at waist, torso upright, measured 305-306px) cuts
+ * to motion:1 (leg extended at head height, torso leaned back) in ONE tick,
+ * and kicks are excluded from the smear beat — correctly, because both smear
+ * cells are painted ARM streaks (the 2.7 critic round rejected them on kicks)
+ * — so there is no flash to carry the eye across. The punch's equivalent beat
+ * is the best in the build precisely because it gets that flash.
+ *
+ * There is no leg-smear drawing anywhere in the four banks, so the bridge is a
+ * TRANSFORM ARC rather than a cell: over the last two startup ticks the body
+ * rotates back and rises onto the support leg along the arc the kick is about
+ * to travel, which is the in-between the two drawings do not contain. Returned
+ * as a beat so the pose functions and the transform read the same classifier,
+ * exactly like the smear.
+ */
+export function kickArcTransform(progress) {
+  const p = Math.min(1, Math.max(0, progress));
+  const ease = p * p * (3 - 2 * p);
+  return { lean: -0.16 * ease, lift: -7 * ease, reach: 0.09 * ease };
 }
 
 /**
@@ -2705,20 +2832,51 @@ export function dashKeys() {
  */
 export function throwClinchKeys() {
   return [
-    { at: 0, chain: [] },
-    { at: 0.18, chain: [m2key(MOTION2_CELLS.throwGrab)] },
-    { at: 0.5, chain: [m3key(MOTION3_KEYS.throwClinch)] },
-    { at: 0.72, chain: [] },
+    // v2.9 final round (R7) — THE GRAB MUST PRECEDE THE HURL. Measured on the
+    // 2.9 build: the victim leaves the ground at T10 and wears motion2:11
+    // `thrown` from T11, while the attacker's motion2:12 `throw-grab` — the
+    // SEIZING key, the drawing of two hands closing on the opponent — did not
+    // reach the screen until after that. The clinch is short and the old 0.18
+    // opening spent its first fifth on the kit cell, so on a fast throw the
+    // seize landed at or behind the launch. The seize now owns the clinch from
+    // the first tick; a grab you can see is the whole point of the beat.
+    // SEIZE — the two hands closing, on the first tick of the clinch.
+    { at: 0, chain: [m2key(MOTION2_CELLS.throwGrab)] },
+    // LOAD — the weight drops to lift.
+    { at: 0.34, chain: [m3key(MOTION3_KEYS.throwClinch), m2key(MOTION2_CELLS.crouchTrans)] },
+    // HURL — the kit's own release art, which the recovery beat then carries
+    // forward instead of re-showing. Never a return to the seize: the beat is
+    // monotonic, like the recovery below it.
+    { at: 0.66, chain: [] },
   ];
 }
 
 export function throwRecoveryKeys() {
+  // v2.9 final round (R7) — THE A-B-A FLIP. Round 2's track played
+  // specials:7 -> motion:4 -> specials:7 AGAIN -> motion3:6 -> base:9,
+  // because bands 0.00 and 0.40 both had EMPTY chains and therefore both
+  // resolved to the caller's kit cell, with the follow-through key between
+  // them. Returning to a drawing the animation has already left reads as a
+  // rewind hitch, not as recovery. The track is MONOTONIC now: the kit's
+  // release cell, then the follow-through, then the authored recovery key,
+  // then the stance — every band a drawing the beat has not worn yet.
+  //
+  // The beat runs 34 ticks and now has FOUR distinct drawings, so 8.5 ticks
+  // is the arithmetic floor and the worst run is 9. Round 2 met the 8-tick
+  // budget only by re-showing specials:7 — an in-budget REWIND, which is a
+  // worse read than a monotonic sequence one tick over. The bands are as even
+  // as four keys allow.
+  //
+  // The recovery does NOT re-open on the kit's release cell: the clinch beat
+  // immediately before it ends on that cell, so opening here would put the
+  // load key between two stretches of one drawing — the same A-B-A across the
+  // beat boundary. The kit cell stays the terminal fallback, so a missing
+  // motion bank still degrades to exactly the pre-fix read.
   return [
-    { at: 0, chain: [] },
-    { at: 0.18, chain: [m1key(MOTION_CELLS.follow)] },
-    { at: 0.40, chain: [] },
-    { at: 0.56, chain: [m3key(MOTION3_KEYS.throwRecover), m1key(MOTION_CELLS.follow)] },
-    { at: 0.74, chain: [] },
+    { at: 0, chain: [m1key(MOTION_CELLS.follow)] },
+    { at: 0.26, chain: [m3key(MOTION3_KEYS.throwRecover), m2key(MOTION2_CELLS.dashBrake)] },
+    { at: 0.52, chain: [] },
+    { at: 0.78, chain: [] },
   ];
 }
 
@@ -2749,9 +2907,37 @@ export function attackRecoveryKeys() {
 export function blockstunKeys() {
   return [
     { at: 0, chain: [m2key(MOTION2_CELLS.blockHit)] },
-    { at: 0.42, chain: [m3key(MOTION3_KEYS.blockSettle)] },
+    { at: BLOCK_EXIT_AT, chain: [m3key(MOTION3_KEYS.blockSettle)] },
     { at: 0.62, chain: [] },
   ];
+}
+
+/** The progress at which the flinch hands the beat back to the stance. */
+export const BLOCK_EXIT_AT = 0.42;
+
+/**
+ * v2.9 final round (R6) — THE GUARD-FLINCH EXIT WAS A HARD CUT.
+ *
+ * One tick from motion2:8 — a tucked, head-down cover with both forearms
+ * crossed in front of the face — to base `guard`, a tall wide brace with an
+ * arm extended forward. M4 already made the two the same HEIGHT
+ * (GUARD_FLINCH_ADJUST); what was still missing is that they are 90 degrees
+ * of torso rotation apart and nothing sat between them.
+ *
+ * No bank contains a half-uncovered guard, so the bridge is a transform on
+ * the RECEIVING cell rather than a third drawing: the stance arrives still
+ * carrying the flinch's tuck — lower, pitched forward, slightly compressed —
+ * and unwinds out of it over the next few ticks. Pure function of blockstun
+ * progress, so both renderers and a rollback resim agree, and it is exactly
+ * zero before the handoff (the flinch itself is never double-tucked) and
+ * exactly zero once settled.
+ */
+export function blockRecoverTransform(phase, exitAt = BLOCK_EXIT_AT) {
+  if (!(phase >= exitAt)) return null;
+  const p = Math.min(1, Math.max(0, (phase - exitAt) / 0.30));
+  const carry = 1 - p * p * (3 - 2 * p);
+  if (carry <= 0.001) return null;
+  return { lift: 6 * carry, pitch: 0.09 * carry, squash: 1 - 0.045 * carry };
 }
 
 /**
@@ -2768,20 +2954,76 @@ export function reactionTrackKeys(heavy) {
   return heavy
     ? [
       { at: 0, chain: [m1key(MOTION_CELLS.bighit)] },
-      { at: 0.12, chain: [m3key(MOTION3_KEYS.reactMid), m2key(MOTION2_CELLS.dizzy)] },
-      { at: 0.30, chain: [m2key(MOTION2_CELLS.lightHit)] },
-      { at: 0.44, chain: [] },
-      { at: 0.60, chain: [] },
-      { at: 0.78, chain: [] },
+      { at: REACTION_BANDS[1], chain: [m3key(MOTION3_KEYS.reactMid), m2key(MOTION2_CELLS.dizzy)] },
+      { at: REACTION_BANDS[2], chain: [m2key(MOTION2_CELLS.lightHit)] },
+      { at: REACTION_BANDS[3], chain: [] },
+      { at: REACTION_BANDS[4], chain: [] },
+      { at: REACTION_BANDS[5], chain: [] },
     ]
     : [
       { at: 0, chain: [m2key(MOTION2_CELLS.lightHit)] },
-      { at: 0.14, chain: [m2key(MOTION2_CELLS.blockHit)] },
-      { at: 0.30, chain: [] },
-      { at: 0.44, chain: [] },
-      { at: 0.60, chain: [] },
-      { at: 0.78, chain: [] },
+      // v2.9 final round (R3): this band used to be motion2:8, the authored
+      // GUARD FLINCH — both forearms crossed over the head — held ~7 ticks
+      // after a CLEAN UNBLOCKED hit, so a victim covered up as though he had
+      // blocked it. blockHit is now referenced by exactly one track,
+      // blockstunKeys, which is the beat it was drawn for. The light track
+      // folds through the map's standing recoil and then the authored
+      // rubber-legs key, which are both HURT drawings.
+      { at: REACTION_BANDS[1], chain: [] },
+      { at: REACTION_BANDS[2], chain: [m2key(MOTION2_CELLS.dizzy)] },
+      { at: REACTION_BANDS[3], chain: [] },
+      { at: REACTION_BANDS[4], chain: [] },
+      { at: REACTION_BANDS[5], chain: [] },
     ];
+}
+
+/**
+ * v2.9 final round (R4) — THE REACTION TAIL, and why it collapsed.
+ *
+ * Round 2's tail read `base(hitKey ? roles.hit : fold)` at 0.30 and
+ * `base(fold)` at 0.44, where `fold = roles.stagger ?? roles.hit`. On SEVEN OF
+ * TEN fighters there is no distinct stagger cell, so `fold === roles.hit` and
+ * the two bands were the SAME DRAWING — a single ~12-13 tick freeze closing
+ * every ground reaction. The hold audit could not see it because
+ * `defaultBeatKeyResolve` distinguishes empty-chain bands by their band
+ * position, not by the base cell the caller resolves them to.
+ *
+ * The band edges are now shared by both tracks and by this ladder, one cell
+ * per band, and the cells are chosen so that CONSECUTIVE BANDS CAN NEVER
+ * RESOLVE TO THE SAME FRAME:
+ *
+ *   snap    the standing recoil (roles.hit)
+ *   fold    the stagger step — roles.stagger when the sheet HAS one, and the
+ *           map's braced stance when it does not, because that is the only
+ *           other drawing the map certifies as non-attack and it is distinct
+ *           from `hit` on all ten fighters
+ *   settle  the braced stance — dropped (null) when `fold` already took it,
+ *           in which case the band hands STRAIGHT to the breathing idle
+ *           rather than repeating a drawing. Shortening the tail is the
+ *           honest answer when a sheet does not have the drawings for it.
+ */
+export const REACTION_BANDS = Object.freeze([0, 0.14, 0.30, 0.46, 0.64, 0.82]);
+
+export function reactionFallbackCells(roles = DEFAULT_BASE_ROLES) {
+  const hit = Number.isInteger(roles.hit) ? roles.hit : 15;
+  const guard = Number.isInteger(roles.guard) ? roles.guard : 12;
+  const stagger = Number.isInteger(roles.stagger) ? roles.stagger : null;
+  const fold = stagger !== null && stagger !== hit ? stagger : guard;
+  return { snap: hit, fold, settle: fold === guard ? null : guard };
+}
+
+/**
+ * The base cell each reaction band degrades to for one fighter — the read the
+ * hold audit has to make to see R4's collapse. Returns one entry per band.
+ */
+export function reactionBandCells(roles = DEFAULT_BASE_ROLES) {
+  const tail = reactionFallbackCells(roles);
+  return REACTION_BANDS.map((at) => {
+    if (at < REACTION_BANDS[2]) return tail.snap;
+    if (at < REACTION_BANDS[4]) return tail.fold;
+    if (at < REACTION_BANDS[5] && tail.settle !== null) return tail.settle;
+    return null; // the breathing idle cycle, which advances on its own
+  });
 }
 
 /**
@@ -3027,7 +3269,21 @@ export function attackMotionBeat(attack, attackFrame) {
       // the swing, which on deathblow is his costume-mismatched base(13):
       // five consecutive ticks (83ms) of tactical trousers and combat boots
       // in the middle of a kick. Only the smear flash is reserved.
-      const windupEnd = start - smearTicks;
+      // v2.9 final round (T3): a kick-limb heavy reserves the same two ticks
+      // the punch gives its smear, but spends them on the ARC TRANSFORM — the
+      // chamber cell keeps drawing while the body rotates back and rises onto
+      // the support leg, so the extension is arrived at instead of cut to.
+      const kickArcTicks = !smearEligible && attack.limb === "kick" && start >= 6 ? 2 : 0;
+      const windupEnd = start - smearTicks - kickArcTicks;
+      if (kickArcTicks && windupEnd >= 2 && attackFrame >= windupEnd) {
+        return {
+          // The arc CONTINUES the windup's last drawing — the deepest coil —
+          // rather than re-showing the chamber, which would be a rewind. The
+          // two ticks are a pure transform continuation into the extension.
+          beat: "kickArc", bank: "motion2", cell: MOTION2_CELLS.crouchTrans,
+          phase: Math.min(0.999, Math.max(0, (attackFrame - windupEnd) / kickArcTicks)),
+        };
+      }
       if (windupEnd >= 2 && attackFrame < windupEnd) {
         // v2.9 critic round 2 (B1): filling the window with ONE drawing was
         // the other half of the problem — deathblow's heavy kick owned 17

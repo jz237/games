@@ -77,7 +77,27 @@ function testAcceptMasks() {
   for (const id of WIRED) {
     assert.equal(masks[id].accept.length, WALK_CELL_COUNT,
       `${id} mask must cover exactly the 4-cell grammar, not the 16-cell one`);
-    assert.deepEqual([...masks[id].accept], [true, true, true, true]);
+    // v2.9 CROSS-BANK CONSISTENCY GATE (final round) — THE WHOLE WALK BANK IS
+    // DISABLED, on all six sheeted fighters, all four keys each.
+    //
+    // Every sheet was read at 1:1 beside the base cells it plays next to and
+    // every one of them redraws the character. Named, per fighter, in the
+    // manifest notes: deathblow's clear prescription glasses become opaque
+    // black sunglasses and his red plaid forearm wraps become segmented
+    // gunmetal gauntlets; jez's saturated royal-blue gi goes pale grey-blue
+    // and his dark boots go tan; post loses most of his build; ali's blocked
+    // black/yellow tracksuit panels become thin side stripes and key 0 wears
+    // BROWN trousers; benny's trousers alternate olive and khaki between keys
+    // of one cycle; cyraxx grows hair over a bald crown.
+    //
+    // Six fighters having a "true four-key cycle" that swaps their glasses on
+    // every walk entry and exit is worse than none, so the bank is off and the
+    // base walk that shipped in 2.8 is what plays. THIS ASSERTION IS THE LOCK:
+    // re-enabling any key requires a re-authored sheet and a deliberate edit
+    // here, not a manifest flag flipped in passing.
+    assert.deepEqual([...masks[id].accept], [false, false, false, false],
+      `${id} walk keys must stay DISABLED — see the consistency-gate notes in `
+      + `assets/walk/MANIFEST.json and MOTION-ATLAS.md`);
   }
   // A fighter absent from the manifest has NO mask at all, which is what makes
   // walkCellDrawable false for the other eight without ever requesting a sheet.

@@ -42,6 +42,7 @@ import {
   resolveMotionPose,
   throwRecoveryKeys,
   wakeupKeys,
+  reactionBandCells,
 } from "../engine/fighter-kits.mjs";
 
 // ---------------------------------------------------------------------------
@@ -142,7 +143,18 @@ function testHoldBudget() {
   assertBudget("heavy kick windup + motion3", heavyWindupKeys("kick"), SPANS.windup,
     MOTION_HOLD_BUDGET, withMotion3, 3);
   assertBudget("dash", dashKeys(), SPANS.dash);
-  assertBudget("throw recovery", throwRecoveryKeys(), SPANS.throwRecovery);
+  // v2.9 final round (R7): the throw recovery now has FOUR distinct
+  // drawings over a 34-tick beat, so 8.5 ticks is the arithmetic floor and
+  // the worst run is 9. Round 2 met the 8-tick budget only by playing
+  // specials:7 -> motion:4 -> specials:7 AGAIN — an in-budget REWIND, which
+  // reads worse than a monotonic sequence one tick over budget.
+  assertBudget("throw recovery", throwRecoveryKeys(), SPANS.throwRecovery,
+    MOTION_HOLD_BUDGET + 1, shipping, 4);
+  // ...and it must never RETURN to a drawing it has already left.
+  const recoveryCells = beatKeyRuns(throwRecoveryKeys(), SPANS.throwRecovery, shipping)
+    .map((run) => run.cell);
+  assert.equal(new Set(recoveryCells).size, recoveryCells.length,
+    `throw recovery must be MONOTONIC — no cell twice: ${recoveryCells.join(" -> ")}`);
   // The reaction's last band is the RECOVERED tail — game.js hands it the
   // breathing idle cycle, which advances on its own — and hitstun has almost
   // always ended before a fighter reaches it. Round 1 pinned the guard cell
@@ -462,7 +474,98 @@ function testPreloadPath() {
     "motion3 must check its manifest before requesting a sheet");
 }
 
+/**
+ * v2.9 CROSS-BANK CONSISTENCY GATE (final round) — THE DISABLED SET STAYS
+ * DISABLED.
+ *
+ * Every authored cell was scored against the cells it actually plays beside
+ * (motion/motion2/walk against the base bank's idle+walk cells; motion3
+ * against motion2, the bank it was authored to interleave with) and then read
+ * at 1:1 beside its neighbour. Two motion3 sheets redraw the character badly
+ * enough to read as a costume swap at gameplay size and are off, all eight
+ * cells each. The rest of the bank is untouched.
+ *
+ * This test is the LOCK. Re-enabling a cell means re-authoring the sheet and
+ * deliberately editing this list — not flipping a manifest flag in passing.
+ */
+const MOTION3_DISABLED = { deathblow: 8, donald: 8 };
+
+function testConsistencyGate() {
+  assert.ok(motion3Manifest, "the motion3 manifest must be on disk");
+  for (const id of ROSTER) {
+    const entry = motion3Manifest.fighters[id];
+    assert.ok(entry, `${id} must have a motion3 manifest entry`);
+    const off = entry.cells.filter((cell) => cell.accept === false);
+    assert.equal(off.length, MOTION3_DISABLED[id] || 0,
+      `${id} motion3 disabled-cell count changed — ${off.length} cells are `
+      + "accept:false; see the consistency-gate notes in the manifest and "
+      + "MOTION-ATLAS.md before touching this");
+    for (const cell of off) {
+      assert.match(cell.note, /CROSS-BANK CONSISTENCY GATE/,
+        `${id} motion3:${cell.frame} must carry the gate's measured note`);
+    }
+  }
+  // The gate must not have silently switched anything back ON either: the two
+  // rejected sheets are rejected WHOLE. A partly-accepted sheet would
+  // interleave the swapped costume with the correct one, which is worse than
+  // either.
+  for (const id of Object.keys(MOTION3_DISABLED)) {
+    const accepted = motion3Manifest.fighters[id].cells.filter((cell) => cell.accept !== false);
+    assert.equal(accepted.length, 0,
+      `${id}'s motion3 sheet is rejected WHOLE — a partly-accepted sheet `
+      + "interleaves the swapped costume with the correct one");
+  }
+  // And the disabled cells must still degrade cleanly: every motion3 key in
+  // every track carries a shipping-today fallback, which is what makes a
+  // rejected sheet cost nothing. The hold-budget assertions above all run on
+  // the `shipping` resolver, i.e. with motion3 absent, which is exactly the
+  // build deathblow and donald now get.
+}
+
+/**
+ * v2.9 final round (R4) — the reaction TAIL must be distinct drawings.
+ * `defaultBeatKeyResolve` distinguishes empty-chain bands by their band
+ * position, so the hold audit above cannot see two bands that resolve to the
+ * same BASE cell. This checks the real per-fighter reads.
+ */
+function testReactionTailDistinct() {
+  for (const id of ROSTER) {
+    const fallbacks = reactionBandCells(baseCellRoles(id));
+    for (const heavy of [true, false]) {
+      // The drawing each band ACTUALLY shows with the motion3 bank absent:
+      // the first non-motion3 link of its chain, or — when the chain is empty
+      // — the base cell game.js's ladder resolves that band to. `null` is the
+      // breathing idle cycle, which advances on its own and is never a hold.
+      const drawn = reactionTrackKeys(heavy).map((key, index) => {
+        const link = (key.chain || []).find((entry) => entry.bank !== "motion3");
+        return link ? `${link.bank}:${link.cell}` : (fallbacks[index] === null
+          ? `idle@${index}` : `base:${fallbacks[index]}`);
+      });
+      for (let index = 1; index < drawn.length; index += 1) {
+        assert.notEqual(drawn[index], drawn[index - 1],
+          `${id} ${heavy ? "heavy" : "light"}: reaction bands ${index - 1} and `
+          + `${index} are both ${drawn[index]} — two adjacent bands on one `
+          + `drawing is ONE hold, which is the R4 collapse. Track: `
+          + drawn.join(" -> "));
+      }
+    }
+  }
+  // The devil is the reason `hit` and `down` are separate roles: a light jab
+  // must not lay him flat on his back.
+  const devil = baseCellRoles("devil");
+  assert.notEqual(devil.hit, devil.down,
+    "the devil's standing recoil and his knockdown must be different cells");
+  assert.equal(devil.down, 15, "base:15 IS the devil's knockdown drawing");
+  assert.ok(!devil.attack.includes(devil.hit),
+    "the devil's standing recoil must not be an attack cell");
+  // ali's overhead mic swing must be barred from non-attack beats.
+  assert.ok(baseCellRoles("ali").attack.includes(8),
+    "ali base:8 is an overhead MIC SWING and must be in her attack set");
+}
+
 testHoldBudget();
+testConsistencyGate();
+testReactionTailDistinct();
 testMotion3OnlyImproves();
 testAirborneAnchor();
 testGuardFlinchReconciliation();

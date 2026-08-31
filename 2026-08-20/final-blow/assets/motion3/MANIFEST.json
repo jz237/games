@@ -49,50 +49,50 @@
     {
      "frame": 0,
      "id": "windup-punch-b",
-     "accept": true,
-     "note": "breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 7.39, area -7.9%, limb-thickness -11.8%, chest band -22.1%."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: red plaid/tartan forearm wraps -> horizontal red TAPE bands; modelled grey shark decal -> open-jawed flat white shark; barrel-chested brawler -> V-taper bodybuilder. Measured stage-1 ratio R=1.1 (cell CDS 1.9 / motion2 self-max 1.8; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 7.39, area -7.9%, limb-thickness -11.8%, chest band -22.1%."
     },
     {
      "frame": 1,
      "id": "windup-kick-b",
-     "accept": true,
-     "note": "breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 8.78, area -25.5%, limb-thickness +26.7%, chest band -32.5%. Clamp-shrunk -9.2% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: red plaid/tartan forearm wraps -> horizontal red TAPE bands; modelled grey shark decal -> open-jawed flat white shark; barrel-chested brawler -> V-taper bodybuilder. Measured stage-1 ratio R=1.1 (cell CDS 2.47 / motion2 self-max 1.8; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 8.78, area -25.5%, limb-thickness +26.7%, chest band -32.5%. Clamp-shrunk -9.2% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
     },
     {
      "frame": 2,
      "id": "jump-apex",
-     "accept": true,
-     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 6.4, area +77.8%, limb-thickness -64.1%, chest band -6.4%. Clamp-shrunk -9.5% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: red plaid/tartan forearm wraps -> horizontal red TAPE bands; modelled grey shark decal -> open-jawed flat white shark; barrel-chested brawler -> V-taper bodybuilder. Measured stage-1 ratio R=1.1 (cell CDS 2.12 / motion2 self-max 1.8; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 6.4, area +77.8%, limb-thickness -64.1%, chest band -6.4%. Clamp-shrunk -9.5% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
     },
     {
      "frame": 3,
      "id": "jump-descent",
-     "accept": true,
-     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 5.77, area -30.6%, limb-thickness +13.6%, chest band -39.0%. Clamp-shrunk -14.0% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit). CAVEAT: clamp exceeds 12% \u2014 this cell draws measurably smaller than the sheet scale; integration should prefer it only where the size step is hidden by the airborne arc."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: red plaid/tartan forearm wraps -> horizontal red TAPE bands; modelled grey shark decal -> open-jawed flat white shark; barrel-chested brawler -> V-taper bodybuilder. Measured stage-1 ratio R=1.1 (cell CDS 2.35 / motion2 self-max 1.8; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 5.77, area -30.6%, limb-thickness +13.6%, chest band -39.0%. Clamp-shrunk -14.0% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit). CAVEAT: clamp exceeds 12% \u2014 this cell draws measurably smaller than the sheet scale; integration should prefer it only where the size step is hidden by the airborne arc."
     },
     {
      "frame": 4,
      "id": "air-attack-b",
-     "accept": true,
-     "note": "breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 6.4, area -12.8%, limb-thickness +22.0%, chest band -21.6%."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: red plaid/tartan forearm wraps -> horizontal red TAPE bands; modelled grey shark decal -> open-jawed flat white shark; barrel-chested brawler -> V-taper bodybuilder. Measured stage-1 ratio R=1.1 (cell CDS 1.96 / motion2 self-max 1.8; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 6.4, area -12.8%, limb-thickness +22.0%, chest band -21.6%."
     },
     {
      "frame": 5,
      "id": "dash-body-b",
-     "accept": true,
-     "note": "breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 8.66, area +41.7%, limb-thickness +9.6%, chest band -18.0%."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: red plaid/tartan forearm wraps -> horizontal red TAPE bands; modelled grey shark decal -> open-jawed flat white shark; barrel-chested brawler -> V-taper bodybuilder. Measured stage-1 ratio R=1.1 (cell CDS 1.72 / motion2 self-max 1.8; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 8.66, area +41.7%, limb-thickness +9.6%, chest band -18.0%."
     },
     {
      "frame": 6,
      "id": "throw-recover",
-     "accept": true,
-     "note": "breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 5.13, area +14.0%, limb-thickness -7.4%, chest band +7.8%."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: red plaid/tartan forearm wraps -> horizontal red TAPE bands; modelled grey shark decal -> open-jawed flat white shark; barrel-chested brawler -> V-taper bodybuilder. Measured stage-1 ratio R=1.1 (cell CDS 1.99 / motion2 self-max 1.8; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 5.13, area +14.0%, limb-thickness -7.4%, chest band +7.8%."
     },
     {
      "frame": 7,
      "id": "react-mid",
-     "accept": true,
-     "note": "breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 7.02, area -3.0%, limb-thickness -17.5%, chest band -27.5%."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: red plaid/tartan forearm wraps -> horizontal red TAPE bands; modelled grey shark decal -> open-jawed flat white shark; barrel-chested brawler -> V-taper bodybuilder. Measured stage-1 ratio R=1.1 (cell CDS 1.97 / motion2 self-max 1.8; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 7.02, area -3.0%, limb-thickness -17.5%, chest band -27.5%."
     }
    ]
   },
@@ -419,50 +419,50 @@
     {
      "frame": 0,
      "id": "windup-punch-b",
-     "accept": true,
-     "note": "breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 5.91, area +3.5%, limb-thickness +8.9%, chest band -6.4%."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: slim buttoned navy suit -> open jacket with a large belly bulging over the waistband; different face. Measured stage-1 ratio R=1.86 (cell CDS 2.76 / motion2 self-max 1.72; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the heavy-punch windup hold (motion2:0 held 11 ticks / 183ms). Plays AFTER motion2:0. measured vs motion2:0: palette-set dE 5.91, area +3.5%, limb-thickness +8.9%, chest band -6.4%."
     },
     {
      "frame": 1,
      "id": "windup-kick-b",
-     "accept": true,
-     "note": "breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 6.34, area -5.3%, limb-thickness -2.2%, chest band -13.7%. Clamp-shrunk -4.1% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: slim buttoned navy suit -> open jacket with a large belly bulging over the waistband; different face. Measured stage-1 ratio R=1.86 (cell CDS 2.78 / motion2 self-max 1.72; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the heavy-kick windup hold (motion2:1 held 17 ticks / 283ms, one drawing sliding forward). Plays AFTER motion2:1. measured vs motion2:1: palette-set dE 6.34, area -5.3%, limb-thickness -2.2%, chest band -13.7%. Clamp-shrunk -4.1% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
     },
     {
      "frame": 2,
      "id": "jump-apex",
-     "accept": true,
-     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 8.95, area +62.6%, limb-thickness -61.7%, chest band +2.5%. Clamp-shrunk -5.0% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: slim buttoned navy suit -> open jacket with a large belly bulging over the waistband; different face. Measured stage-1 ratio R=1.86 (cell CDS 3.53 / motion2 self-max 1.72; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the jump hold (motion:5 tuck held 28 ticks / 467ms across the whole apex AND descent) \u2014 this is the apex half. measured vs motion:5: palette-set dE 8.95, area +62.6%, limb-thickness -61.7%, chest band +2.5%. Clamp-shrunk -5.0% to fit the cell (bank convention: one global scale, overflowing frames clamp to fit)."
     },
     {
      "frame": 3,
      "id": "jump-descent",
-     "accept": true,
-     "note": "breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 7.68, area -12.7%, limb-thickness -4.1%, chest band +7.0%."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: slim buttoned navy suit -> open jacket with a large belly bulging over the waistband; different face. Measured stage-1 ratio R=1.86 (cell CDS 3.04 / motion2 self-max 1.72; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the jump hold (motion:5 tuck held 28 ticks / 467ms) \u2014 this is the descent half. measured vs motion2:7: palette-set dE 7.68, area -12.7%, limb-thickness -4.1%, chest band +7.0%."
     },
     {
      "frame": 4,
      "id": "air-attack-b",
-     "accept": true,
-     "note": "breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 5.65, area -9.8%, limb-thickness +9.5%, chest band -8.5%."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: slim buttoned navy suit -> open jacket with a large belly bulging over the waistband; different face. Measured stage-1 ratio R=1.86 (cell CDS 3.58 / motion2 self-max 1.72; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the air-normal hold (motion2:13 held 30 ticks / 500ms with zero pose change through startup, active and recovery). Plays AFTER motion2:13. measured vs motion2:13: palette-set dE 5.65, area -9.8%, limb-thickness +9.5%, chest band -8.5%."
     },
     {
      "frame": 5,
      "id": "dash-body-b",
-     "accept": true,
-     "note": "breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 7.38, area -8.8%, limb-thickness -40.4%, chest band +6.3%."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: slim buttoned navy suit -> open jacket with a large belly bulging over the waistband; different face. Measured stage-1 ratio R=1.86 (cell CDS 3.35 / motion2 self-max 1.72; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the dash-body hold (motion:7 held 10 ticks static). Alternates with motion:7 so the dash body cycles. measured vs motion:7: palette-set dE 7.38, area -8.8%, limb-thickness -40.4%, chest band +6.3%."
     },
     {
      "frame": 6,
      "id": "throw-recover",
-     "accept": true,
-     "note": "breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 11.04, area +11.5%, limb-thickness -22.2%, chest band -8.6%."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: slim buttoned navy suit -> open jacket with a large belly bulging over the waistband; different face. Measured stage-1 ratio R=1.86 (cell CDS 2.97 / motion2 self-max 1.72; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the throw-attacker recovery hold (one kit cell held 28 ticks / ~470ms while the victim's whole fall plays). measured vs motion2:12: palette-set dE 11.04, area +11.5%, limb-thickness -22.2%, chest band -8.6%."
     },
     {
      "frame": 7,
      "id": "react-mid",
-     "accept": true,
-     "note": "breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 7.51, area -6.3%, limb-thickness -12.5%, chest band -24.1%."
+     "accept": false,
+     "note": "2.9 CROSS-BANK CONSISTENCY GATE (final round) -- accept:false. 1:1 adjacency read against the motion2 bank: slim buttoned navy suit -> open jacket with a large belly bulging over the waistband; different face. Measured stage-1 ratio R=1.86 (cell CDS 3.71 / motion2 self-max 1.72; screen threshold 3.0). Disabled: the beat falls back to its declared pre-2.9 cell, which is the base bank's own drawing of this character. PRIOR NOTE: breaks the reaction-track hold (light and heavy tracks both converge on one base cell held 6-7 ticks mid-track). Serves as the mid-key for BOTH tracks. measured vs motion2:9: palette-set dE 7.51, area -6.3%, limb-thickness -12.5%, chest band -24.1%."
     }
    ]
   },

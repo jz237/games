@@ -889,3 +889,164 @@ below hitstun, blockstun, knockdown, wake-up, grabs and dizzy — being hit
 outranks turning around. Verified on a real cross-up: the jumper crosses at
 tick 26, both facings flip, and the guarding defender draws motion2:5 for its
 full three ticks.
+
+## Critic round 3 (2.9 final) — THE CROSS-BANK CONSISTENCY GATE
+
+The round-2 build shipped four authored banks. The panel scored smoothness 4.0
+and reactions 3.5 and named four beats where the fighter **changes costume**
+mid-animation at gameplay size — not grading drift, a different wardrobe:
+
+* **walk / deathblow** — clear prescription glasses become opaque black
+  SUNGLASSES, red plaid forearm wraps become segmented gunmetal GAUNTLETS, and
+  the modelled grey shark decal becomes a flat white shark of a different
+  outline. On every walk entry and exit.
+* **walk / jez** — dark boots become tan, the saturated royal-blue gi goes pale
+  grey-blue.
+* **motion3:0 / deathblow** — barrel-chested brawler becomes a V-taper
+  bodybuilder with horizontal red TAPE where the plaid was and an open-jawed
+  shark, then back, four ticks into the middle of one punch.
+* **motion3:0 / donald** — slim buttoned suit becomes a LARGE BELLY bulging out
+  of an open jacket, and a different face, three times inside one punch.
+
+### The gate
+
+Two stages, per cell, roster-wide.
+
+**Stage 1 — the measured screen.** A COSTUME DELTA SCORE against the cells the
+bank actually plays beside (motion / motion2 / walk against the base bank's
+eight idle+walk cells; motion3 against motion2, the bank it was authored to
+interleave with — which is why the devil, whose motion2 already carries a brown
+body and purple wings where his base bank is green, passes: motion3 matches
+what it plays next to, and that is the only comparison the eye can make).
+
+Seven features, all whole-figure opaque-mass fractions rather than region
+bands, because a band at a fixed height fraction samples different body parts
+in different poses — the contamination that broke every earlier attempt:
+`red`, `blue`, `grey`, `white`, `black`, `skin`, plus `redTex`, the texture
+energy INSIDE the red mass (a woven plaid check is high-frequency, a solid tape
+band or a plated gauntlet is not — a mass fraction alone cannot tell red plaid
+from red tape). Head-anchored eyewear darkness and shoulder/waist taper are
+measured and REPORTED but not gated: probed this round, taper alone swings
+0.54-1.47 across the base bank's own idle-vs-walk cells. It is a pose metric.
+
+The null model is the fighter's own base cells 0-7 — one draughtsman, one
+costume, eight different poses — so the spread of a feature across them is
+exactly how much it moves for POSE reasons alone:
+`z = |v - mean| / max(std, 0.12*mean, 0.010)`, `CDS = RMS(z)`, and
+`R = CDS(bank median) / CDS(reference bank's own self-max)`. **Threshold
+R >= 3.0.**
+
+**Stage 2 — the 1:1 adjacency read, and it is the DECIDING stage.** Every
+bank x fighter under review exported at full size beside its neighbour cell and
+read for costume, accessories and build.
+
+### The finding, and it is the important one
+
+**A costume swap can be chromatically invisible, and the two worst swaps on the
+roster are.** Stage 1 ranks deathblow's motion3 sheet at R=1.10 and donald's at
+1.86 — the 26th and 31st worst cells on a 36-row table — while the devil's
+motion BANK, which is fine on screen, scores R=19.45. Stage 1 caught four of
+the six walk failures (jez 9.67, cyraxx 10.69, ali 5.56, benny 3.01) and NONE
+of the motion3 failures, and it produced a false positive it would have
+condemned (jez motion3, R=3.54, driven entirely by bare-arm skin exposure in
+dynamic poses) that the 1:1 read cleared.
+
+The reason is structural: deathblow's swap is glasses GEOMETRY, gauntlet
+PLATING and decal SHAPE inside an unchanged black/red/skin palette. Nothing
+that measures colour mass can see it. **A measured gate is a screen, never the
+decision.** Do not ship a wave on the numbers alone.
+
+### The pass/fail table
+
+Stage 1 is reported for all four banks; it was applied as an auto-fail only to
+the two banks under review this round. `motion` and `motion2` are not
+re-litigated — they have shipped through two critic rounds and the panel
+praised beats from both — but their R values are recorded here because they are
+the evidence that the measure does not rank what the eye ranks.
+
+| fighter | bank | vs | ref self-max | CDS med | R | stage 1 | verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| alan | motion | base | 0.80 | 3.35 | 4.19 | FAIL | kept |
+| ali | motion | base | 0.52 | 2.59 | 4.99 | FAIL | kept |
+| benny | motion | base | 0.68 | 3.66 | 5.38 | FAIL | kept |
+| commissioner | motion | base | 0.71 | 2.60 | 3.67 | FAIL | kept |
+| cyraxx | motion | base | 0.57 | 4.07 | 7.14 | FAIL | kept |
+| deathblow | motion | base | 0.68 | 1.34 | 1.97 | pass | kept |
+| devil | motion | base | 0.38 | 7.39 | 19.45 | FAIL | kept |
+| donald | motion | base | 0.79 | 2.15 | 2.72 | pass | kept |
+| jez | motion | base | 0.55 | 3.51 | 6.39 | FAIL | kept |
+| post | motion | base | 0.37 | 1.44 | 3.88 | FAIL | kept |
+| alan | motion2 | base | 0.80 | 6.06 | 7.58 | FAIL | kept |
+| ali | motion2 | base | 0.52 | 2.90 | 5.57 | FAIL | kept |
+| benny | motion2 | base | 0.68 | 2.84 | 4.18 | FAIL | kept |
+| commissioner | motion2 | base | 0.71 | 2.71 | 3.82 | FAIL | kept |
+| cyraxx | motion2 | base | 0.57 | 2.76 | 4.85 | FAIL | kept |
+| deathblow | motion2 | base | 0.68 | 1.62 | 2.38 | pass | kept |
+| devil | motion2 | base | 0.38 | 4.91 | 12.92 | FAIL | kept |
+| donald | motion2 | base | 0.79 | 2.71 | 3.44 | FAIL | kept |
+| jez | motion2 | base | 0.55 | 2.30 | 4.19 | FAIL | kept |
+| post | motion2 | base | 0.37 | 1.98 | 5.34 | FAIL | kept |
+| alan | motion3 | motion2 | 1.43 | 2.67 | 1.87 | pass | kept |
+| ali | motion3 | motion2 | 1.00 | 0.71 | 0.71 | pass | kept |
+| benny | motion3 | motion2 | 1.52 | 1.72 | 1.13 | pass | kept |
+| commissioner | motion3 | motion2 | 1.27 | 1.61 | 1.27 | pass | kept |
+| cyraxx | motion3 | motion2 | 1.37 | 3.69 | 2.69 | pass | kept |
+| deathblow | motion3 | motion2 | 1.80 | 1.98 | 1.10 | pass | **DISABLED** |
+| devil | motion3 | motion2 | 1.06 | 2.13 | 2.01 | pass | kept |
+| donald | motion3 | motion2 | 1.72 | 3.20 | 1.86 | pass | **DISABLED** |
+| jez | motion3 | motion2 | 1.11 | 3.93 | 3.54 | FAIL | kept |
+| post | motion3 | motion2 | 0.58 | 0.64 | 1.10 | pass | kept |
+| ali | walk | base | 0.52 | 2.89 | 5.56 | FAIL | **DISABLED** |
+| benny | walk | base | 0.68 | 2.05 | 3.01 | FAIL | **DISABLED** |
+| cyraxx | walk | base | 0.57 | 6.09 | 10.69 | FAIL | **DISABLED** |
+| deathblow | walk | base | 0.68 | 1.36 | 2.00 | pass | **DISABLED** |
+| jez | walk | base | 0.55 | 5.32 | 9.67 | FAIL | **DISABLED** |
+| post | walk | base | 0.37 | 0.76 | 2.04 | pass | **DISABLED** |
+
+### What is disabled, and what a player gets
+
+**40 cells, all of them whole sheets.** The accept mask never partially rejects
+a sheet: interleaving a swapped costume with the correct one is worse than
+either on its own.
+
+* **The WALK bank is off roster-wide** — all four keys on all six sheeted
+  fighters (deathblow, jez, post, cyraxx, ali, benny), 24 cells. Named
+  mismatches, per fighter, in `assets/walk/MANIFEST.json`: deathblow's glasses
+  and gauntlets and shark; jez's gi wash and tan boots; post losing most of his
+  build (a bodybuilder redrawn as a thin man); ali's blocked black/yellow
+  tracksuit panels becoming thin side stripes, with key 0 wearing BROWN
+  trousers under the yellow jacket — not even internally consistent; benny's
+  trousers alternating olive and khaki BETWEEN KEYS of one cycle, with tan
+  boots where the base sheet has black; cyraxx growing hair over a bald crown.
+  Six fighters having a "true four-key cycle" that swaps their glasses on every
+  walk entry and exit is worse than none. Locomotion is the 2.8 base walk,
+  byte-identically, through the chained fallback.
+* **motion3 is off for deathblow and donald**, 16 cells. Their heavy-windup
+  mid-key, jump apex/descent, dash body, air-attack, throw recovery and
+  react-mid degrade to the shipping-today keys every motion3 descriptor already
+  carried. The other eight fighters keep the bank.
+* `motion` and `motion2` are untouched, 320 cells accepted.
+
+### THE DURABLE FIX, and it is not another prompt
+
+Prompt-only generation cannot match an existing sheet's costume closely enough
+to INTERLEAVE with it. Three waves have now proved it from three directions:
+the 2.9 walk regeneration (4.3-10.9 dE against a 1.0-3.5 dE bank, -53% to +24%
+build error), motion3's cross-bank ratio floor of 1.08-1.66x that regenerating
+narrowed every time and never closed, and this round's finding that the
+residual is not even in the colour — it is in the accessories and the build,
+where no measurement the pipeline has ever run would have caught it.
+
+A separate generation is a separate draughtsman. Every sheet is internally
+consistent — one-pass generation works, and motion3's internal palette dE is at
+or below its own motion2 sheet's on all ten fighters — and every sheet is a
+different character from the one next to it, by a small amount that is
+invisible in aggregate and glaring on a two-tick cut.
+
+**The recommendation for a future wave: re-author a fighter's ENTIRE sheet set
+in ONE pass — base, motion, motion2, motion3, walk together, one generation,
+one draughtsman, one costume — rather than adding an nth bank beside n-1
+existing ones.** That is the only path that removes the interleave problem
+instead of measuring it. Until then a new bank should be judged by ONE
+question: at 1:1, beside the cell it will play next to, is this the same
+character? The number is a screen. The eye decides.
