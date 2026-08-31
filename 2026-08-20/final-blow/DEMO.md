@@ -37,9 +37,37 @@ instead of whatever the archetype tables happen to roll:
   the stage plans one.
 - **Two lanes.** Each side either LEADS a showcase of its own, FEEDS a beat
   that needs a partner (block for guarded contact, swing into a counter-hit,
-  walk into a throw, brace for a stun string or a corner herd), or is handed
-  straight back to the archetype brain. Both fighters can be showcasing at
-  once, and the feed role is an active script — nothing ever stands inert.
+  walk into a throw, brace for a stun string or a corner herd, plant for a
+  cross-up), or is handed straight back to the archetype brain. Both fighters
+  can be showcasing at once, and the feed role is an active script.
+- **Nothing stands still.** Guarding in this sim is SF2 directional and the
+  sim pins `vx` to zero for a crouch and for a directionless guard, so a
+  fighter holding either is a literally frozen sprite. Every idle and feed
+  mode therefore carries a direction — the fighter blocks WHILE stepping —
+  crouches are capped at a few ticks and never run back to back, and the
+  liveliness watchdog judges "did the sprite move" (grounded, free, `|vx| < 3`,
+  not dashing) on a nine-tick fuse instead of counting a crouch as motion. It
+  only ever replaces a NEUTRAL input, so a press, a held direction or a crouch
+  a showcase deliberately asked for is never disturbed. The scripts that used
+  to wait — the counter-hit bait, the juggle launch, the pressure and corner
+  strings standing over a downed victim, the guard feed's whole lease — rock
+  on the spot inside the window they have to hold instead of freezing.
+- **Interruption is not failure.** A showcase that takes a poke mid-approach
+  used to be abandoned on the spot, which was both the largest single source
+  of abandoned directives and the visible "approach, pause, reset" cadence.
+  It now rides the punishment out with its budget PAUSED and resumes its
+  approach, giving up only after a sustained grace.
+- **Cancel chains only off a confirmed hit.** `combos.mjs canCancelAttack()`
+  bails on an empty `attackConnected`, so a link pressed blind behind a WHIFF
+  could never come out: the directive waited out its chain window having shown
+  nothing. Measured over twenty exhibitions that single mistake was 199 of 316
+  abandoned directives. The sim's own confirm flag is now the gate, checked
+  once per tick while the swing is still animating.
+- **Showcases open during their own recovery.** The sim buffers a press for
+  six frames and fires it the instant a recovery ends, so a directive whose
+  spacing is already right arms its press through the tail of the previous
+  swing instead of waiting for the fighter to be free and only then starting
+  to walk. Jumps and dashes still wait for a genuinely free fighter.
 - **Throughput.** A directive ends the tick its move comes out rather than
   holding the pipeline through the whole recovery; the gap between directives
   is 0-3 ticks; timeouts are per-kind; and a confirmed hit chains the next
@@ -63,6 +91,24 @@ instead of whatever the archetype tables happen to roll:
   opponent → wall splat, filled stun bar → dizzy string, meter → super/EX),
   and every staged beat has an attempt budget with backoff so a spectacle the
   geometry will not allow right now can never starve the move checklist.
+- **The spectacles ride the move lane, not their own.** A wall splat needs the
+  victim against the clamp with the hit still carrying >220 vx, and a dizzy
+  needs a hundred stun points at nine a light against a 0.62/frame decay —
+  neither is something an exclusive directive can build from nothing, and in
+  the first pass every attempt cost the kit a showcase and still only reached
+  half the exhibitions. Both are now built for FREE: while either is unshown
+  the picker prefers, among the equally-least-shown candidates, the entries
+  that push the victim toward the wall they are already nearest or that carry
+  stun; once the bar is nearly full or the victim is genuinely cornered a
+  CLOSER tier takes the finishing move outright. The beat scripts themselves
+  throw the least-shown checklist entry that serves them (the corner herd used
+  to hammer one drive heavy 134 times across twenty exhibitions for no new
+  coverage), so building a spectacle costs the kit nothing.
+- **The movement beats repeat.** The authored dash-brake cell draws on a
+  dash's last two ticks and the turnaround key for the 2-3 latch ticks after a
+  grounded facing flip, so a one-shot ledger bought them 0.12% and 0.17% of an
+  exhibition. Dashes and cross-ups now come back on a cooldown with their own
+  offer share, and the idle script can dash on its own.
 - **The attract cycle is cumulative.** A three-round exhibition is ~40 seconds
   of actual fight time per side and 30 moves is ~22 seconds of pure animation
   before movement, jumps, hitstun and knockdowns — so one match honestly shows
@@ -78,10 +124,28 @@ instead of whatever the archetype tables happen to roll:
   hook is demo-only too: an attract round pulls the stage weapon's arrival
   forward, because a weapon planned for the ordinary 16-62 second contest
   window never arrives before an exhibition KO.
+- **Demo-only pacing.** An exhibition measured 54% actual fighting; the rest
+  was the round card, the FINISH THEM window the winning CPU spent waiting out
+  its ordinary reaction clock, and the ceremony. The attract loop shortens the
+  round card, holds a plain KO a little less and commits to its Final Blow
+  promptly. The Final Blow ceremony itself is the showcase and is deliberately
+  untouched. Every one of those three is gated on `state.mode === "demo"`, so
+  ranked/versus/arcade/tournament/online presentation is unchanged.
+- **Same-page determinism.** Every match seed derives from `state.matchSerial`
+  (`seedMatch`), which only ever grows across a page's lifetime, so a second
+  `qa.demo(555)` used to replay the same choreography against a different sim
+  stream. A SEEDED demo — the QA reproduction path, never the attract loop —
+  now rewinds the serial and both rng streams to exactly their cold-load
+  values, so a cold load is byte-identical to what it always was and a repeat
+  in the same page matches it.
 - `window.__finalBlowQa.demoCoverage()` returns the live ledger: featured
   pair/stage, per-fighter move counts, beat counts, both lane roles, the
   per-item pick tally, the cumulative session ledger and the matchup keys the
-  session has already featured.
+  session has already featured. `stats` also carries the round-2 diagnostics:
+  `abandonedBy`/`abandonedKind`/`abandonedItem` name WHY a directive ended
+  without its move, `substituted` catches a press the sim resolved as a
+  different move, and `interrupted`/`resumed`/`stunLanePicks`/`pushLanePicks`
+  measure the ride-out and the free lane.
 - **Boss spoiler (deliberate).** On a locked cabinet the attract cycle
   features 9 of the 10 fighters: the Commissioner is the arcade boss and the
   roster only contains him once he is unlocked, exactly as on the select
@@ -102,4 +166,11 @@ instead of whatever the archetype tables happen to roll:
   beats that drew on zero ticks (guarded contact, both dashes, crouch
   transitions, the neutral jump, air attacks, the weapon pickup), per-move
   staging bands derived from real hitboxes, and the cumulative attract ledger.
+  The round-2 naturalness contract is pinned there too, each assertion against
+  a number the critic panel measured: an inertness ceiling per side plus a cap
+  on the longest continuous still run, a directive completion floor, a
+  single-exhibition coverage floor and median, the free lane that builds the
+  stun string and the wall carry out of checklist moves, the rule that a
+  cancel chain is never pressed off a whiff (the sim-lite world can switch
+  confirms off), and repeatable dashes for the authored brake cell.
 - `node tests/browser-smoke.mjs` checks two live AI brains, automatic Final Blow activation, result scheduling, 64 rapid cycles with one bounded intro timer, input-to-exit, mobile HUD bounds, hidden touch controls, and offline precaching.

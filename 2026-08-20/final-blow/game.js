@@ -1558,6 +1558,16 @@ const demoSession = {
   // 30 ids), reset with the session, and never read by the sim.
   coverageCarry: {},
 };
+// v2.9 FLOW round 2 — DEMO-ONLY PACING. An exhibition measured 53.6% actual
+// fighting: the rest was the round intro, the FINISH THEM window the winning
+// CPU spent waiting out its ordinary reaction clock, and the ceremony. These
+// three constants reclaim the two parts that are pure waiting; the Final Blow
+// ceremony itself is the showcase and is deliberately left alone. Every use
+// site is gated on state.mode === "demo", so ranked/versus/arcade/tournament
+// and online presentation are byte-for-byte unchanged.
+const DEMO_FINISHER_REACTION = 0.35;
+const DEMO_ROUND_INTRO_SECONDS = 1.15;
+const DEMO_KO_HOLD_SECONDS = 3.1;
 let fightAnnouncementTimer = 0;
 
 // ===========================================================================
@@ -3238,6 +3248,29 @@ function startDemo({ attract = false, qa = false, seed = null } = {}) {
   demoSession.active = true;
   demoSession.attract = Boolean(attract);
   demoSession.qa = Boolean(qa);
+  // v2.9 FLOW round 2 — SAME-PAGE DETERMINISM. A seeded demo is the QA
+  // reproduction path, and every match seed derives from state.matchSerial
+  // (see seedMatch), which only ever GROWS across a page's lifetime. A second
+  // qa.demo(555) in the same page therefore replayed the same choreography
+  // against a DIFFERENT sim stream and diverged (measured: 7 moves vs 5 after
+  // 900 steps). Rewinding the serial and the rng streams restores exactly the
+  // cold-load starting point, so a cold load stays byte-identical to what it
+  // has always been and a same-page repeat now matches it. The attract loop
+  // never passes a seed, so nothing about unattended attract changes.
+  if (seed !== null) {
+    state.matchSerial = 0;
+    state.rng.setState(initialSeed);
+    state.visualRng.setState(hashSeed(initialSeed, "visual"));
+    // The tick domain has to rewind with it. Every frame-relative counter the
+    // choreographer and the sim own — decision gaps, beat cooldowns, command
+    // history, input buffers — is measured against state.simulationTick, which
+    // only ever grows, so a second run starting at tick 3000 diverged from a
+    // cold-load run starting at 0 even with identical seeds. Offline the
+    // fixed-step clock owns the counter, so both move together (the same pair
+    // replay playback rewinds; see loadReplayHeader).
+    state.simulationTick = 0;
+    simulationClock.tick = 0;
+  }
   demoSession.director = createDemoDirector({
     fighterIds: roster.map(({ id }) => id),
     stageIds: Object.keys(stages),
@@ -10237,7 +10270,10 @@ function resetRound() {
   state.timer = 99;
   state.timerCarry = 0;
   state.phase = "intro";
-  state.phaseTime = 2.1;
+  // v2.9 FLOW round 2: demo-only shorter round card — the exhibition owes the
+  // viewer fighting, not four seconds of ROUND 2 per exhibition. Every other
+  // mode keeps the full 2.1s presentation.
+  state.phaseTime = state.mode === "demo" ? DEMO_ROUND_INTRO_SECONDS : 2.1;
   state.hitstop = 0;
   state.lastImpactSide = -1;
   state.finishWinner = -1;
@@ -10498,7 +10534,9 @@ function finishRound(winner, type = -1) {
   } else {
     // Hold the KO scene so the blood, dust and reactions can be seen before the
     // next round or the result screen takes over.
-    state.phaseTime = 4.9;
+    // v2.9 FLOW round 2: the attract loop holds a plain KO a little shorter
+    // (demo-only; every other mode keeps the full 4.9s beat).
+    state.phaseTime = state.mode === "demo" ? DEMO_KO_HOLD_SECONDS : 4.9;
     duckMusic(0.28, 2600);
     announce(`${winDef.name} WINS`, "KNOCKOUT", 2.4);
     sound("ko", state.fighters[1 - winner]);
@@ -12137,6 +12175,13 @@ function demoChoreoFighterView(fighter) {
     dizzyFrames: fighter.dizzyFrames,
     tauntFrames: fighter.tauntFrames,
     attacking: Boolean(fighter.attacking),
+    // v2.9 FLOW round 2: the sim only opens a cancel window on a CONFIRMED
+    // hit (tryAttackCancel bails on an empty attackConnected). The
+    // choreographer used to chain off "a move came out", so a whiffed poke
+    // queued a link that could never cancel — measured, that single mistake
+    // was 63% of all abandoned directives and it is exactly the "press,
+    // nothing happens, stand there, reset" cadence on screen.
+    attackConnected: Boolean(fighter.attackConnected),
     // v2.9 FLOW: crouch edges feed the choreographer's crouchTrans beat, and
     // crouch/guard/vx together are how the choreographer's liveliness
     // watchdog knows a fighter has stopped moving on screen.
@@ -12180,6 +12225,12 @@ function aiInput(fighter, opponent, dt) {
   if (isPassiveDifficulty(fighter.aiBrain?.difficulty)) return input;
   const cpuFinisher = state.mode === "demo" || state.mode === "tournament" || fighter.side === 1;
   if (state.phase === "finish" && state.finishWinner === fighter.side && cpuFinisher) {
+    // v2.9 FLOW round 2 (demo only): the attract loop spent ~2 seconds of
+    // every round with the winner standing in front of a frozen victim
+    // waiting out the brain's ordinary reaction clock — measured, only 54%
+    // of an exhibition was actual fighting. The demo commits to its Final
+    // Blow promptly instead. Arcade/tournament/versus pacing is untouched.
+    if (state.mode === "demo") fighter.aiClock = Math.min(fighter.aiClock, DEMO_FINISHER_REACTION);
     input.final = fighter.aiClock <= 0;
     if (input.final) fighter.aiClock = 2;
     return input;

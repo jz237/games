@@ -27,6 +27,11 @@ function makeMockFighter(x, facing) {
     meter: 100, stunMeter: 0, throwableUses: 2, carriedWeapon: false, carryFrames: 0,
     dashFrames: 0, dashDirection: 0, vx: 0, vy: 0,
     busyFrames: 0, startupLeft: 0, guardHeld: false, crouch: false,
+    // v2.9 round 2: the sim only opens a cancel window on a CONFIRMED hit
+    // (tryAttackCancel bails on an empty attackConnected), and it is cleared
+    // when the next attack starts. The choreographer's chain links are gated
+    // on it, so the sim-lite world has to honour the same contract.
+    attackConnected: false,
     lastTap: { left: -Infinity, right: -Infinity },
     prevDir: { left: false, right: false },
     airFrames: 0,
@@ -48,6 +53,7 @@ function mockView(world) {
       tauntFrames: fighter.tauntFrames, attacking: fighter.busyFrames > 0,
       crouch: fighter.crouch, guarding: fighter.guardHeld,
       grabbed: fighter.grabbed, grabbing: fighter.grabbing,
+      attackConnected: fighter.attackConnected,
       meter: fighter.meter, stunMeter: fighter.stunMeter,
       throwableUses: fighter.throwableUses, carriedWeapon: fighter.carriedWeapon,
       dashFrames: fighter.dashFrames, dashDirection: fighter.dashDirection,
@@ -63,13 +69,20 @@ function actionableMock(fighter) {
     && fighter.tauntFrames <= 0 && !fighter.grabbed;
 }
 
-export function createMockWorld({ pair, stageId, hasStageWeapon, seed, priorShown = null }) {
+export function createMockWorld({
+  pair, stageId, hasStageWeapon, seed, priorShown = null,
+  // v2.9 round 2: with confirms switched off the sim never opens a cancel
+  // window, which is what a whiffing exhibition looks like. The choreographer
+  // must then issue ZERO chain links (see the gate in chainItem).
+  confirmHits = true,
+} = {}) {
   const choreo = createDemoChoreographer({ pair, stageId, hasStageWeapon, seed, priorShown });
   const world = {
     tick: 0,
     fighters: [makeMockFighter(420, 1), makeMockFighter(860, -1)],
     weapon: null,
     pendingHits: [],
+    census: { ticks: 0, inert: [0, 0], run: [0, 0], longest: [0, 0] },
     choreo,
   };
 
@@ -87,6 +100,7 @@ export function createMockWorld({ pair, stageId, hasStageWeapon, seed, priorShow
     const victim = world.fighters[1 - hit.side];
     const distance = Math.abs(attacker.x - victim.x);
     if (distance > hit.reach || victim.down > 0) return;
+    if (confirmHits) attacker.attackConnected = true;
     if (hit.action === "throw") {
       if (!victim.grounded) return;
       world.choreo.noteBeat(hit.side, "throw");
@@ -156,6 +170,7 @@ export function createMockWorld({ pair, stageId, hasStageWeapon, seed, priorShow
           forwardHeld: false,
           limb: input.limb === "kick" ? "kick" : "punch",
         });
+        fighter.attackConnected = false;
         fighter.busyFrames = Math.max(2, fighter.airFrames);
         fighter.startupLeft = airAction === "light" ? 5 : 9;
         world.pendingHits.push({
@@ -204,8 +219,12 @@ export function createMockWorld({ pair, stageId, hasStageWeapon, seed, priorShow
         fighter.startupLeft = 12;
       }
       if (!input.heavy) {
-        if (input.left) fighter.x -= 4;
-        if (input.right) fighter.x += 4;
+        // The carry walk reports vx exactly like the ordinary walk: the
+        // choreographer's liveliness watchdog reads it to decide whether the
+        // fighter has stopped moving on screen.
+        fighter.vx = 0;
+        if (input.left) { fighter.x -= 4; fighter.vx = -240; }
+        if (input.right) { fighter.x += 4; fighter.vx = 240; }
       }
       return;
     }
@@ -238,6 +257,7 @@ export function createMockWorld({ pair, stageId, hasStageWeapon, seed, priorShow
       limb: input.limb === "kick" ? "kick" : "punch",
     };
     world.choreo.noteMove(side, action, context);
+    fighter.attackConnected = false;
     fighter.meter -= cost;
     if (action === "throwObject" || action === "enhancedThrowObject") fighter.throwableUses -= 1;
     const light = action === "light";
@@ -261,7 +281,10 @@ export function createMockWorld({ pair, stageId, hasStageWeapon, seed, priorShow
 
   function physics() {
     for (const fighter of world.fighters) {
-      if (fighter.busyFrames > 0) fighter.busyFrames -= 1;
+      if (fighter.busyFrames > 0) {
+        fighter.busyFrames -= 1;
+        if (fighter.busyFrames === 0) fighter.attackConnected = false;
+      }
       if (fighter.startupLeft > 0) fighter.startupLeft -= 1;
       if (fighter.hitstunFrames > 0) fighter.hitstunFrames -= 1;
       if (fighter.blockstunFrames > 0) fighter.blockstunFrames -= 1;
@@ -300,6 +323,36 @@ export function createMockWorld({ pair, stageId, hasStageWeapon, seed, priorShow
     second.facing = -first.facing;
   }
 
+  // v2.9 round 2 — the liveliness census, measured with the critic's own
+  // definition: a fighter is INERT on a tick when it is not attacking, not in
+  // hitstun/blockstun/dizzy/wakeup/knockdown, grounded, not dashing and
+  // barely moving. Accumulated here so the coverage tests can pin a ceiling
+  // on both the fraction and the longest continuous run.
+  function inertMock(fighter) {
+    return fighter.grounded && fighter.busyFrames <= 0 && fighter.down <= 0
+      && fighter.wakeupFrames <= 0 && fighter.hitstunFrames <= 0
+      && fighter.blockstunFrames <= 0 && fighter.dizzyFrames <= 0
+      // A taunt is a 45-frame ANIMATION with vx pinned at zero. The critic's
+      // written definition does not list it, so the browser census keeps
+      // counting it for comparability; the choreographer contract pinned here
+      // does not, because staging a taunt is the opposite of standing still.
+      && fighter.tauntFrames <= 0
+      && fighter.dashFrames <= 0 && Math.abs(fighter.vx) < 3;
+  }
+
+  function censusTick() {
+    world.census.ticks += 1;
+    for (let side = 0; side < 2; side += 1) {
+      if (inertMock(world.fighters[side])) {
+        world.census.inert[side] += 1;
+        world.census.run[side] += 1;
+        if (world.census.run[side] > world.census.longest[side]) {
+          world.census.longest[side] = world.census.run[side];
+        }
+      } else world.census.run[side] = 0;
+    }
+  }
+
   function tick() {
     world.tick += 1;
     if (world.hasWeaponPlanned === undefined) world.hasWeaponPlanned = hasStageWeapon;
@@ -326,8 +379,14 @@ export function createMockWorld({ pair, stageId, hasStageWeapon, seed, priorShow
     world.pendingHits = world.pendingHits.filter((hit) => hit.resolveTick > world.tick);
     for (const hit of due) resolveHit(hit);
     physics();
+    censusTick();
   }
 
-  return { world, choreo, tick };
+  return { world, choreo, tick, census: () => ({
+    ticks: world.census.ticks,
+    inert: [...world.census.inert],
+    longest: [...world.census.longest],
+    fraction: world.census.inert.map((n) => n / Math.max(1, world.census.ticks)),
+  }) };
 }
 

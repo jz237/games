@@ -240,3 +240,149 @@ test("the demo rotation reaches all ten fighters and all six stages without imme
   assert.equal(fightersSeen.size, 10, "all ten fighters appear across the demo cycle");
   assert.equal(stagesSeen.size, 6, "all six stages appear across the demo cycle");
 });
+
+// ---------------------------------------------------------------------------
+// v2.9 FLOW round 2 — the naturalness contract. Every assertion below pins a
+// number the critic panel measured and scored FIX, so a regression names
+// itself instead of showing up as "it reads like a statue" three waves later.
+// ---------------------------------------------------------------------------
+
+const NATURALNESS_RUNS = [
+  [["deathblow", "jez"], "somerset", 237],
+  [["donald", "cyraxx"], "wildwood", 909],
+  [["benny", "ali"], "vet", 5150],
+  [["devil", "commissioner"], "janney", 31],
+  [["post", "alan"], "buffet", 424],
+  [["deathblow", "post"], "cruise", 8123],
+];
+
+// One exhibition's worth of fight time in the sim-lite world.
+const ONE_EXHIBITION_FRAMES = 2400;
+
+function runExhibitions(frames = ONE_EXHIBITION_FRAMES) {
+  return NATURALNESS_RUNS.map(([pair, stageId, seed]) => {
+    const world = createMockWorld({ pair, stageId, hasStageWeapon: true, seed });
+    for (let frame = 0; frame < frames; frame += 1) world.tick();
+    return {
+      pair,
+      seed,
+      coverage: world.choreo.coverage(),
+      stats: world.choreo.stats(),
+      census: world.census(),
+    };
+  });
+}
+
+test("no side is ever left standing still: the inertness ceiling", () => {
+  // The critic's own definition: a fighter is inert on a tick when it is not
+  // attacking, not in hitstun/blockstun/dizzy/wakeup/knockdown, grounded, not
+  // dashing and barely moving. The round-1 watchdog counted `crouch` and
+  // `guarding` as MOTION, but the sim pins vx to zero for both — so a demo
+  // that spent half its idle script on ducks and standing blocks scored as a
+  // statue while the watchdog reported everything was fine.
+  for (const { pair, seed, census } of runExhibitions()) {
+    for (let side = 0; side < 2; side += 1) {
+      assert.ok(census.fraction[side] < 0.22,
+        `${pair[side]} (seed ${seed}) must not be inert for ${(100 * census.fraction[side]).toFixed(1)}% of the fight`);
+      assert.ok(census.longest[side] <= 60,
+        `${pair[side]} (seed ${seed}) held still for ${census.longest[side]} ticks in a row`);
+    }
+  }
+});
+
+test("the large majority of staged directives complete", () => {
+  // Round 1 measured 22 completed against 23 timed out on seed 7 and 10 v 24
+  // on seed 101 — and that abandonment IS the approach/pause/whiff/reset
+  // cadence on screen. The dominant cause was a cancel chain pressed off a
+  // WHIFF: combos.mjs gates every cancel route on fighter.attackConnected, so
+  // those links could never come out and the directive waited out its window
+  // having shown nothing.
+  for (const { pair, seed, stats } of runExhibitions()) {
+    const total = stats.completed + stats.timedOut;
+    assert.ok(total > 20, `seed ${seed} must issue a real pipeline (got ${total})`);
+    const ratio = stats.completed / total;
+    assert.ok(ratio >= 0.7,
+      `${pair.join(" vs ")} (seed ${seed}) completed only ${(100 * ratio).toFixed(0)}% of its directives`);
+  }
+});
+
+test("a single exhibition shows most of each kit, not just the cycle", () => {
+  // The cumulative attract ledger still carries a returning fighter, but a
+  // viewer watching ONE exhibition has to see most of a kit: the panel found
+  // 21 of 40 sides under 20 of 30 and seven under 15.
+  const shown = [];
+  for (const { pair, seed, coverage } of runExhibitions()) {
+    for (const fighterId of pair) {
+      const entry = coverage[fighterId];
+      shown.push(entry.movesShown);
+      assert.ok(entry.movesShown >= 24,
+        `${fighterId} (seed ${seed}) showed only ${entry.movesShown} of ${entry.movesTotal} in one exhibition`);
+    }
+  }
+  shown.sort((a, b) => a - b);
+  assert.ok(shown[Math.floor(shown.length / 2)] >= 28,
+    `the single-exhibition median must stay high (got ${shown[Math.floor(shown.length / 2)]})`);
+});
+
+test("the stun string and the wall carry are built out of checklist moves", () => {
+  // Round 1 gave each spectacle its own exclusive directive — a 300px herd of
+  // drive heavies or a 100-point stun bar built from nothing — so every
+  // attempt cost the kit a showcase and the beats still only reached half the
+  // exhibitions (dizzy 6 of 20, wall splat 8 of 20). They now ride the
+  // ordinary move pipeline: while either is unshown the picker prefers, among
+  // the equally-least-shown candidates, the ones that push toward the
+  // victim's wall or carry stun, and the beat scripts themselves throw the
+  // least-shown checklist entry that serves the beat.
+  let dizzyRuns = 0;
+  let wallRuns = 0;
+  let laneRuns = 0;
+  for (const { pair, coverage, stats } of runExhibitions()) {
+    const beats = (beat) => coverage[pair[0]].beats[beat] + coverage[pair[1]].beats[beat];
+    if (beats("dizzy") > 0) dizzyRuns += 1;
+    if (beats("wallsplat") > 0) wallRuns += 1;
+    if (stats.stunLanePicks > 0 || stats.pushLanePicks > 0) laneRuns += 1;
+  }
+  assert.equal(laneRuns, NATURALNESS_RUNS.length,
+    "every exhibition must build its spectacles out of ordinary showcases");
+  assert.ok(dizzyRuns >= NATURALNESS_RUNS.length - 1,
+    `the stun string must reach nearly every exhibition (got ${dizzyRuns} of ${NATURALNESS_RUNS.length})`);
+  assert.ok(wallRuns >= 2,
+    `the wall carry must reach a real share of exhibitions (got ${wallRuns} of ${NATURALNESS_RUNS.length})`);
+});
+
+test("a cancel chain is never pressed off a whiff", () => {
+  // combos.mjs canCancelAttack() bails on an empty `connected`, so a link
+  // queued behind a swing that never touched anything cannot come out. With
+  // the sim-lite world's confirms switched off the choreographer must issue
+  // no links at all — and it must still complete the majority of its
+  // directives, because the chain is a bonus and never the plan.
+  const blind = createMockWorld({
+    pair: ["deathblow", "jez"], stageId: "somerset", hasStageWeapon: true,
+    seed: 237, confirmHits: false,
+  });
+  for (let frame = 0; frame < ONE_EXHIBITION_FRAMES; frame += 1) blind.tick();
+  const stats = blind.choreo.stats();
+  assert.equal(stats.chainLinks, 0, "a whiff must never open a chain link");
+  assert.ok(stats.completed > stats.timedOut,
+    "the pipeline must not depend on chaining to complete its showcases");
+
+  const confirmed = createMockWorld({
+    pair: ["deathblow", "jez"], stageId: "somerset", hasStageWeapon: true, seed: 237,
+  });
+  for (let frame = 0; frame < ONE_EXHIBITION_FRAMES; frame += 1) confirmed.tick();
+  assert.ok(confirmed.choreo.stats().chainLinks > 0,
+    "a confirmed hit must still chain into the next checklist item");
+});
+
+test("the repeatable movement beats come back for real screen time", () => {
+  // The authored dash-brake cell draws on a dash's last TWO ticks and the
+  // turnaround key for the 2-3 latch ticks after a grounded facing flip, so a
+  // one-shot ledger bought them 2 and 3 ticks of a ~1730-tick exhibition
+  // (0.12% and 0.17%). Both are repeatable on a cooldown now.
+  for (const { pair, seed, coverage } of runExhibitions()) {
+    const dashes = pair.reduce((total, id) => total
+      + coverage[id].beats.dashForward + coverage[id].beats.dashBack, 0);
+    assert.ok(dashes >= 4,
+      `seed ${seed} must dash repeatedly for the brake cell (got ${dashes})`);
+  }
+});
