@@ -89,13 +89,76 @@
 //      in a whole exhibition and the turnaround key (2-3 ticks per facing
 //      flip) three times. Both are now repeatable on a cooldown, and the idle
 //      script can dash on its own.
+//
+// v2.9 FLOW fourth pass — four measured defects, and this time the two
+// spectacles are solved against the SIM'S OWN RULES rather than traded away:
+//
+//   F1. THE AIR ROW WAS INVISIBLE (airLightKick fired in 6 of 16 fighter
+//       slots, the rest of the row 4-7 of 16). Three causes, all in the
+//       pipeline rather than the sim:
+//       (a) the free-lane and closer tie-breaks filter the least-shown pool
+//           down to PUSH_LANE_IDS / STUN_LANE_IDS, and NO air normal is in
+//           either set. Because wall splat and dizzy stayed unshown for
+//           essentially the whole exhibition, that filter was live for most
+//           of it and stripped the air row out of a majority of picks;
+//       (b) `!actionable -> return null` threw an air pick away completely
+//           whenever the fighter was in its own recovery tail — which is
+//           exactly when the pipeline deliberately starts showcases (see
+//           stageable). The sim buffers `jump` for six frames, so there was
+//           never a reason to discard it;
+//       (c) an air NORMAL took its jump direction from the least-shown jump
+//           ARC beat, so it was regularly thrown out of a back or neutral
+//           jump — and the approach guard only ran for jumpDir > 0, so those
+//           arcs also never closed the gap. The swing happened, metres from
+//           anybody. Air attacks now always jump toward, approach first, and
+//           the arc beats keep the least-shown choice to themselves.
+//       Plus the press is now a WINDOW (re-pressed each airborne tick until
+//       the move is out) instead of one tick at rise+6.
+//   F2. WALL SPLAT / DIZZY WERE FIGHTING THE WRONG PHYSICS.
+//       Wall splat: the herd's slam pressed driveHeavy, and driveHeavy does
+//       not qualify for a wall bounce on ANY of the nine kits. The only
+//       reliable splat is the ARMED bounce (applyFighterPhysics): a
+//       heavy/special-kind move carrying knockdown / knockdownOnFinal /
+//       launchVelocityY, landed while the victim is within ONE BODY WIDTH of
+//       the wall it is being pushed toward, sets carryVelocityX 680 and the
+//       clamp then always fires spawnWallImpact. The raw >220 route needs the
+//       victim inside ~40px because hitstun bleeds vx 10% a tick. So the
+//       slam set is now DERIVED per fighter from qualifiesForWallBounce and
+//       the herd commits at the arming distance, not at a guess.
+//       Dizzy: the round-3 note ("100 stun at 9 per light against a
+//       0.62/frame decay") ignored STUN_RULES.decayGraceFrames — the bar does
+//       not decay AT ALL while hits keep landing inside 48 frames. The real
+//       constraint is therefore HIT COUNT, and the lights-only string needed
+//       11-12 connected hits where a heavy/special string needs 5-6. The
+//       string is now heavy-led and derived (stun gain, no knockdown — a
+//       sweep hands the decay the whole knockdown), with the lights kept as
+//       the TOP-UP once the bar is within one hit of the threshold.
+//   F3. A DOMINATED FIGHTER FINISHED AT 6 OF 30. The attract loop is a
+//       showcase, not a competition. The choreographer now watches the
+//       coverage gap (and the health gap as the early warning) and YIELDS the
+//       leading side — it keeps moving and defending but stops spending the
+//       stage — while the trailing side loses its natural-window roll and its
+//       decision gap entirely. Duty-cycled so the leader never goes passive
+//       for a whole round.
+//   F4. THE TURNAROUND COUNTER WAS LYING. observe() counted every grounded
+//       facing flip, but fighterPoseDescriptor only reaches the authored
+//       pivot when the flipper is grounded, NOT attacking and not in
+//       hitstun / blockstun / knockdown / wake-up / a grab / dizzy. Most
+//       recorded flips were in exactly those states, so the beat read as
+//       FIRING while motion2:5 drew for zero frames. The beat is now noted
+//       only on a POSE-ELIGIBLE flip (deterministic, sim-state only — the
+//       render-verified per-cell tally lives in game.js and never feeds a
+//       decision), and the rejected flips are counted by reason.
 // ===========================================================================
 
 import { DeterministicRng, hashSeed } from "./foundation.mjs";
-import { FIGHTER_SCALE, MOVEMENT_RULES } from "./defense.mjs";
-import { getKitMoveProfile, selectKitMoveKey } from "./fighter-kits.mjs";
+import {
+  FIGHTER_SCALE, MOVEMENT_RULES, STUN_RULES, WALL_BOUNCE_RULES,
+  qualifiesForWallBounce, stunGainForAttack,
+} from "./defense.mjs";
+import { createFighterMove, getKitMoveProfile, selectKitMoveKey } from "./fighter-kits.mjs";
 import { getThrowable } from "./throwables.mjs";
-import { GRIT_RULES } from "./combos.mjs";
+import { COMBO_RULES, GRIT_RULES } from "./combos.mjs";
 
 // Coverage share of the pick policy: the rest of the time the choreographer
 // deliberately stands down and lets the archetype AI play a natural window.
@@ -157,8 +220,14 @@ const BEAT_BACKOFF_OVERRIDE = Object.freeze({ wallsplat: 70, dizzy: 80 });
 // 2 ticks of a ~1730-tick exhibition and the turnaround key (2-3 ticks per
 // grounded facing flip) for 3. Once these have been banked they may be staged
 // again after their cooldown, so the cells actually get screen time.
+// v2.9 round 4: the turnaround cooldown halves. The beat is now only banked
+// when the flip could genuinely draw the pivot (turnaroundBlocker), so the
+// ledger no longer credits itself for flips taken in hitstun or mid-swing —
+// which means the OLD cooldown was being started by attempts that put nothing
+// on screen. A cross-up that actually draws its three latch ticks has earned
+// the right to come back sooner.
 const BEAT_REPEAT_FRAMES = Object.freeze({
-  turnaround: 300, dashForward: 190, dashBack: 190,
+  turnaround: 165, dashForward: 190, dashBack: 190,
 });
 // ...and a repeat is only OFFERED this often. The checklist owns the pipeline;
 // a repeat is a garnish, and letting every cooled-down repeat into the lottery
@@ -168,7 +237,7 @@ const BEAT_REPEAT_FRAMES = Object.freeze({
 // so it is cheap enough to come back often. A cross-up costs a whole jump arc
 // plus the walk-in, so it does not.
 const BEAT_REPEAT_SHARE = Object.freeze({
-  dashForward: 0.6, dashBack: 0.6, turnaround: 0.3,
+  dashForward: 0.6, dashBack: 0.6, turnaround: 0.5,
 });
 const BEAT_REPEAT_DEFAULT = 0.25;
 // The same rule for individual checklist items (an EX the meter keeps eating,
@@ -242,6 +311,95 @@ export function demoCoverageChecklist(fighterId) {
   if (throwable) ids.push("throwObject");
   if (throwable?.variants?.ex) ids.push("enhancedThrowObject");
   return ids;
+}
+
+// --- v2.9 round 4: spectacle move tables, derived from the real move data ---
+// The two spectacles were being chased with hand-written id lists that did not
+// match what the sim actually rewards. Both tables below are built once per
+// exhibition out of the kit's own attack instances, so they are correct for
+// every fighter (and stay correct if a kit is retuned).
+
+/** The concrete attack instance a checklist id resolves to, or null. */
+function moveInstanceFor(fighterId, id) {
+  const row = ROW_FOR_ID.get(id);
+  if (!row) return null;
+  try {
+    return createFighterMove(fighterId, row.action, row.context) || null;
+  } catch {
+    return null;
+  }
+}
+
+// A move that will knock the victim off their feet. These are the ONLY moves
+// that can arm a wall bounce — and the last thing a stun string wants, because
+// a knockdown hands the decay the whole 48+16 frame get-up.
+function knocksDown(move) {
+  return Boolean(move
+    && (move.knockdown || move.knockdownOnFinal || move.launchVelocityY || move.juggleLift));
+}
+
+/**
+ * The grounded checklist ids whose move ARMS a corner wall bounce — the only
+ * deterministic route to a wall splat (see WALLSPLAT_ARM_GAP). Measured across
+ * the nine shipped kits this is 7-11 ids each, and `driveHeavy` — the id the
+ * previous herd hammered — is in NONE of them.
+ */
+export function demoWallSlamIds(fighterId) {
+  return demoCoverageChecklist(fighterId).filter((id) => {
+    if (id.startsWith("air")) return false;
+    // Same rule as the stun string: a forward-held command normal needs
+    // SPACE_SETTLE_FRAMES of one steady direction first or the motion
+    // recogniser converts the press, and a corner window does not last that
+    // long. (The command specials the recogniser would produce are in the set
+    // on their own merits anyway, pressed as resolved actions.)
+    if (ROW_FOR_ID.get(id)?.context?.forwardHeld) return false;
+    return qualifiesForWallBounce(moveInstanceFor(fighterId, id));
+  });
+}
+
+/**
+ * The stun string, per fighter.
+ *   topUp — the fastest stun-carrying normals: the string's OPENER (it exists
+ *           to confirm) and the whole string once the bar is one hit short.
+ *   build — the biggest stun-per-hit the kit can throw with no held direction.
+ *   link  — build entries the sim will accept as a CANCEL off a confirmed hit
+ *           (combos.mjs CANCEL_ROUTES keys on the action group, so the heavies
+ *           and the specials are the legal targets). This is where a real
+ *           string gets its points: a link lands inside the previous hit's
+ *           hitstun, ~10-14 ticks later, so the 48-frame decay grace never
+ *           expires — where a re-approached poke leaves a 55-70 tick gap and
+ *           hands most of the gain straight back.
+ * A knockdown is excluded from all three — it is worth the whole get-up in
+ * decay — and so is anything that needs a held direction, which the motion
+ * recogniser would convert mid-string.
+ */
+export function demoStunStringIds(fighterId) {
+  const build = [];
+  const topUp = [];
+  const link = [];
+  for (const id of demoCoverageChecklist(fighterId)) {
+    if (id.startsWith("air")) continue;
+    // Forward-held command normals need SPACE_SETTLE_FRAMES of one steady
+    // direction or the motion recogniser eats them; a string has no time.
+    if (ROW_FOR_ID.get(id)?.context?.forwardHeld) continue;
+    const move = moveInstanceFor(fighterId, id);
+    if (!move || knocksDown(move)) continue;
+    if (stunGainForAttack(move) < 12) {
+      if (STUN_TOPUP_IDS.has(id)) topUp.push(id);
+      continue;
+    }
+    build.push(id);
+    if (CHAIN_ITEMS.has(id)) link.push(id);
+    if (STUN_TOPUP_IDS.has(id)) topUp.push(id);
+  }
+  // Every kit keeps a usable set for each role: if its lights all sweep, or it
+  // owns no cancel-legal non-knockdown target, fall back rather than handing
+  // the string an empty allow-list.
+  return {
+    build: build.length ? build : topUp,
+    topUp: topUp.length ? topUp : build,
+    link: link.length ? link : build.length ? build : topUp,
+  };
 }
 
 // --- staging geometry ------------------------------------------------------
@@ -352,6 +510,27 @@ function awayInput(self, opponent) {
   return input;
 }
 
+/**
+ * Why a grounded facing flip could NOT have put the authored turnaround key on
+ * screen, or "" when it could. Mirrors the branches that outrank the pivot
+ * latch in fighterPoseDescriptor (hitstun / blockstun / knockdown / wake-up /
+ * throw-tech / grab / dizzy, plus its own `grounded && !attacking` test), so
+ * the demo's beat ledger and the renderer agree on what "fired" means.
+ * Exported for the coverage tests.
+ */
+export function turnaroundBlocker(fighter) {
+  if (!fighter) return "missing";
+  if (!fighter.grounded) return "airborne";
+  if (fighter.down || fighter.pendingKnockdown) return "knockdown";
+  if (fighter.wakeupFrames > 0) return "wakeup";
+  if (fighter.hitstunFrames > 0) return "hitstun";
+  if (fighter.blockstunFrames > 0) return "blockstun";
+  if (fighter.dizzyFrames > 0) return "dizzy";
+  if (fighter.grabbed || fighter.grabbing) return "grab";
+  if (fighter.attacking) return "attacking";
+  return "";
+}
+
 function actionable(fighter) {
   return fighter.grounded && !fighter.attacking && !fighter.down
     && fighter.wakeupFrames <= 0 && fighter.hitstunFrames <= 0
@@ -381,10 +560,16 @@ const KIND_TIMEOUT = Object.freeze({
   air: 110,
   dash: 60,
   weapon: 240,
-  pressure: 280,
+  // v2.9 round 4: a 100-point stun bar is 5-6 CONNECTED heavies, and a heavy's
+  // approach-press-recover cycle against a victim its own push keeps knocking
+  // out of range is ~55 ticks. 280 could not fit the string it was asked to
+  // build; measured, the bar plateaued at 20-46 and the beat reached 0-3 of 8
+  // exhibitions. Same for the herd: carrying a victim to a 105px arming window
+  // from mid-stage is several exchanges of real work.
+  pressure: 460,
   counter: 110,
   juggle: 140,
-  wallsplat: 260,
+  wallsplat: 420,
 });
 
 // A duet directive borrows the partner's lane, and every tick it holds is a
@@ -454,12 +639,30 @@ const INTERRUPT_GRACE_FRAMES = 48;
 // the sim cannot honour, and the beat was closed by backoff before a real
 // corner ever arrived. The free lane keeps pushing toward the near wall; this
 // directive only fires once the victim is genuinely there.
-const WALLSPLAT_STAGE_GAP = 190;
-// Same logic for the stun string: 100 points at 9 per light against a
-// 0.62/frame decay is not a thing a 280-tick directive can build from nothing.
-// The free lane carries the bar from 12 upward out of ordinary showcases, and
-// this directive is the short finish once it is nearly full.
-const DIZZY_STAGE_STUN = 34;
+// ...and round 4 measurement, which is what finally made the beat land. The
+// >220 route is not the route: there is a SECOND, deterministic one. A
+// knockdown-class heavy/special (qualifiesForWallBounce) that connects while
+// the victim is within WALL_BOUNCE_RULES.proximityBodyWidths of the wall it is
+// being pushed toward sets victim.vx to carryVelocityX (680) and the clamp
+// then ALWAYS fires spawnWallImpact — no velocity race, no decay to beat. The
+// arming distance is therefore the only geometry that matters, and it is one
+// body width (92 * FIGHTER_SCALE = 105px), not the 40px the raw route needs.
+const WALLSPLAT_ARM_GAP = Math.round(92 * FIGHTER_SCALE * WALL_BOUNCE_RULES.proximityBodyWidths);
+// The directive commits from a little outside the arming window so the last
+// approach step lands inside it, and the herd carries the victim the rest.
+const WALLSPLAT_STAGE_GAP = WALLSPLAT_ARM_GAP + 95;
+// Same logic for the stun string, and the same correction: the round-3 note
+// ("100 points at 9 per light against a 0.62/frame decay") left out
+// STUN_RULES.decayGraceFrames. The bar does not decay at ALL for 48 frames
+// after a hit, so a string that keeps connecting never loses a point and the
+// binding constraint is the HIT COUNT: 5-6 heavies/specials (17-22 each), or
+// 11-12 lights (9-11 each). The threshold the directive opens at is therefore
+// deliberately low — the string itself is now capable of covering the rest.
+const DIZZY_STAGE_STUN = 30;
+// One clean heavy from the threshold: below this the string builds with
+// heavies, at or above it the string TOPS UP with lights, whose shorter cycle
+// is the safest way to land one more hit inside the 48-frame grace.
+const DIZZY_TOPUP_STUN = STUN_RULES.threshold - 24;
 // The FREE lane. While either spectacle is unshown, the ordinary move picker
 // breaks its own ties toward the checklist entries that build it: heavies and
 // drives that carry the victim toward the wall they are already nearest, and
@@ -473,7 +676,10 @@ const WALLSPLAT_PRIME_GAP = 440;
 // still not a directive — it just decides WHICH checklist move the showcase
 // that was going to happen anyway throws.
 const DIZZY_CLOSE_STUN = 38;
-const WALLSPLAT_CLOSE_GAP = 115;
+// The closer opens exactly at the arming window: inside it any wall-bounce
+// move the fighter owns converts, so the showcase that was going to happen
+// anyway throws one of those instead of the next unshown id.
+const WALLSPLAT_CLOSE_GAP = WALLSPLAT_ARM_GAP;
 // Checklist ids that genuinely build a stun bar (throws and projectiles award
 // none; the crouching heavies sweep, and a knockdown hands the 0.62/frame
 // decay ~40 free frames).
@@ -488,11 +694,12 @@ const STUN_LANE_IDS = new Set([
 // forward-held command normals: those need SPACE_SETTLE_FRAMES of one steady
 // direction first or the motion recogniser turns them into command specials,
 // and a herd/stun string has no time for that.
-// Lights only: 9 stun every ~22 frames beats 17 every ~40, they never sweep
-// the victim down (a knockdown hands the 0.62/frame decay ~40 free frames and
-// undoes a quarter of the bar), and their hitstun outlasts their own recovery
-// so the string stays a real combo.
-const STUN_PRESS_IDS = new Set([
+// Round 4: the lights-only string is gone — see DIZZY_TOPUP_STUN. The build
+// and top-up sets are DERIVED per fighter from the real move data (see
+// stunStringIds), because "which of my normals carries stun without sweeping
+// the victim down" is a per-kit fact, not a shared id list. This stays as the
+// top-up floor: the four fastest no-direction normals every kit owns.
+const STUN_TOPUP_IDS = new Set([
   "standLight", "standLightKick", "crouchLight", "crouchLightKick",
 ]);
 const PUSH_PRESS_IDS = new Set([
@@ -508,6 +715,47 @@ const PUSH_LANE_IDS = new Set([
 ]);
 // A guard feed is a one-off block window, held on its own clock (see below).
 const GUARD_FEED_FRAMES = 60;
+// A cross-up feed has to survive the whole arc — a forward jump is ~45 frames
+// of hang time before the jumper is even overhead, and the ordinary 44-frame
+// lease expired before the defender ever had anything to turn around FOR.
+const CROSSUP_FEED_FRAMES = 96;
+// The stun string and the wall herd are the only two beats that take several
+// exchanges to BUILD rather than one moment to take, so their brace outlives
+// the ordinary lease. Still released with its lead.
+const SPECTACLE_FEED_FRAMES = 150;
+
+// --- v2.9 round 4: the air row ---------------------------------------------
+// The five air normals are the only rows in the checklist that no beat lane
+// and no closer can ever select (they push nothing toward a wall and the
+// victim is airborne for the stun), so every tie-break in the picker quietly
+// competed with them. They now get a reserved share of the picks taken BEFORE
+// those filters, for as long as the side still owes the cabinet an air move.
+const AIR_ROW_IDS = new Set(["airLight", "airLightKick", "airHeavy", "airHeavyKick", "airSpecial"]);
+const AIR_ROW_SHARE = 0.42;
+// The air normal's press is re-armed every airborne tick until the move is
+// out. A single press at rise+6 vanished whenever that exact frame could not
+// consume it — the six-frame buffer is a window, not a guarantee.
+const AIR_PRESS_FRAMES = 34;
+// An air ATTACK always jumps toward and closes first: an air normal thrown
+// out of a back jump is a swing at nothing. Sized off the forward jump's real
+// travel (forwardJumpVelocityX over the arc), so the attack lands on the
+// descent rather than the take-off.
+const AIR_ATTACK_APPROACH = 250;
+
+// --- v2.9 round 4: the losing side ------------------------------------------
+// The attract loop is a showcase, not a competition. Once one side is this far
+// ahead on its own checklist the choreographer stops treating the pair as
+// symmetric: the leader yields the stage and the trailer stops rolling for
+// natural windows.
+const COVERAGE_GAP_TOLERANCE = 4;
+// The early warning, before the coverage gap has already opened: a fighter
+// this far ahead on health is dominating the exchanges, which is how a
+// checklist column gets stranded in the first place.
+const HEALTH_GAP_TOLERANCE = 26;
+// Duty cycle. A leader that yielded indefinitely would just stand around if
+// the trailing side genuinely cannot convert, so the yield runs in bursts.
+const YIELD_FRAMES = 54;
+const YIELD_RELEASE_FRAMES = 40;
 
 /**
  * @param {object} options
@@ -533,6 +781,15 @@ export function createDemoChoreographer({
   const prior = pair.map((fighterId, side) => Object.fromEntries(
     checklists[side].map((id) => [id, Number(priorShown?.[fighterId]?.[id]) || 0]),
   ));
+  // v2.9 round 4 — the two spectacle tables, derived once per exhibition from
+  // this pair's real move data rather than a shared id list (see
+  // demoWallSlamIds / demoStunStringIds).
+  const slamIds = pair.map((fighterId) => new Set(demoWallSlamIds(fighterId)));
+  const stunIds = pair.map((fighterId) => {
+    const { build, topUp, link } = demoStunStringIds(fighterId);
+    return { build: new Set(build), topUp: new Set(topUp), link: new Set(link) };
+  });
+  const airIds = pair.map((fighterId, side) => checklists[side].filter((id) => AIR_ROW_IDS.has(id)));
   const coverage = pair.map((fighterId, side) => ({
     fighterId,
     side,
@@ -548,7 +805,18 @@ export function createDemoChoreographer({
     // abort-on-contact rule.
     interrupted: 0, resumed: 0, stunLanePicks: 0, pushLanePicks: 0,
     abandonedBy: {}, abandonedKind: {}, abandonedItem: {}, substituted: {},
-    leadTicks: 0, idleTicks: 0, gapTicks: 0, movesNoted: 0, preempted: 0, preempted: 0,
+    leadTicks: 0, idleTicks: 0, gapTicks: 0, movesNoted: 0, preempted: 0,
+    // v2.9 round 4 diagnostics.
+    //   airRowPicks   — picks taken by the reserved air-row share
+    //   slamPresses   — wall-bounce-qualifying slams thrown inside the arm gap
+    //   yieldTicks    — ticks the LEADING side stood down for the trailing one
+    //   trailerBoosts — natural-window rolls the trailing side skipped
+    //   turnaroundBlind — grounded facing flips REJECTED as beats because the
+    //     authored pivot could not have reached the screen in that state. This
+    //     is the honesty counter: it used to be silently added to `turnaround`.
+    airRowPicks: 0, slamPresses: 0, yieldTicks: 0, trailerBoosts: 0,
+    topUpCloserPicks: 0,
+    turnaroundSeen: 0, turnaroundBlind: {},
   };
   const previous = [null, null];
 
@@ -559,6 +827,11 @@ export function createDemoChoreographer({
   const inertTicks = [0, 0];
   const sidePicks = [0, 0];
   const itemPicks = {};
+  // v2.9 round 4 — the yield duty cycle (see COVERAGE_GAP_TOLERANCE). Per side:
+  // the tick this side's current yield burst ends, and the tick it may yield
+  // again. Both are plain tick counters off the sim clock, so they replay.
+  const yieldUntil = [0, 0];
+  const yieldReleaseUntil = [0, 0];
   const idleScript = [
     { mode: "stand", until: 0 },
     { mode: "stand", until: 0 },
@@ -646,8 +919,29 @@ export function createDemoChoreographer({
         // v2.9 FLOW animation beats: grounded facing flips (the turnaround
         // key), crouch enter/leave edges (the crouch-trans key) and an air
         // normal starting while airborne (the air-attack key).
+        //
+        // v2.9 round 4 — HONEST TURNAROUND COUNTING. This used to count every
+        // grounded facing flip, which is why qa.demoCoverage() reported the
+        // beat FIRING while motion2:5 drew for zero frames. The authored pivot
+        // sits below hitstun, blockstun, the block flinch, knockdown, wake-up,
+        // throw-tech, grabs and dizzy in fighterPoseDescriptor, and it needs
+        // `grounded && !attacking` on top of that — so a flip taken while
+        // being hit, while swinging or while getting up can never reach the
+        // screen. A flip is only a BEAT when the pivot could actually draw.
+        // The rejects are counted by reason instead of silently inflating the
+        // ledger. (Purely a state test on the same view the picks read, so
+        // determinism is untouched — the render-verified per-cell tally lives
+        // in game.js and never feeds a decision here.)
         if (fighter.grounded && before.facing !== undefined
-          && fighter.facing !== before.facing) noteBeat(side, "turnaround");
+          && fighter.facing !== before.facing) {
+          stats.turnaroundSeen += 1;
+          const blocker = turnaroundBlocker(fighter);
+          if (blocker) {
+            stats.turnaroundBlind[blocker] = (stats.turnaroundBlind[blocker] || 0) + 1;
+          } else {
+            noteBeat(side, "turnaround");
+          }
+        }
         if (fighter.grounded && before.crouch !== undefined
           && Boolean(fighter.crouch) !== Boolean(before.crouch)) noteBeat(side, "crouchTrans");
         if (!fighter.grounded && fighter.attacking && !before.attacking) noteBeat(side, "airAttack");
@@ -663,6 +957,47 @@ export function createDemoChoreographer({
         attacking: Boolean(fighter.attacking),
       };
     }
+  }
+
+  // v2.9 round 4 — can this victim still be ARMED for a corner wall bounce?
+  // The conversion is once per combo (wallBounceUsed clears on wake-up and on
+  // a throw) and it spends a juggle point, so a victim already at the juggle
+  // limit cannot take one. Chasing the beat while either is true is exactly
+  // how the attempt budget used to be spent on geometry the sim would refuse.
+  function canArmWallBounce(victim) {
+    return !victim.wallBounceUsed
+      && (victim.juggleCount ?? 0) < COMBO_RULES.juggleLimit;
+  }
+
+  // --- v2.9 round 4: coverage fairness -------------------------------------
+  // How much of its own checklist a side has put on screen, and how far ahead
+  // of the partner it is. A lopsided exhibition is not a better exhibition:
+  // the cabinet is showing off two kits, not settling an argument.
+  function shownCount(side) {
+    const moves = coverage[side].moves;
+    let shown = 0;
+    for (const id of checklists[side]) if (moves[id] > 0) shown += 1;
+    return shown;
+  }
+
+  function coverageGap(side) {
+    return shownCount(side) - shownCount(1 - side);
+  }
+
+  // The side is running away with the exhibition: either it has already shown
+  // materially more of its kit, or it is far enough ahead on health that it is
+  // about to (a fighter that spends the round in hitstun cannot stage
+  // anything, which is exactly how a 6-of-30 column happens).
+  function dominating(side, view) {
+    if (coverageGap(side) >= COVERAGE_GAP_TOLERANCE) return true;
+    const self = view.fighters[side];
+    const rival = view.fighters[1 - side];
+    if (!Number.isFinite(self?.health) || !Number.isFinite(rival?.health)) return false;
+    return self.health - rival.health >= HEALTH_GAP_TOLERANCE && coverageGap(side) > 0;
+  }
+
+  function trailing(side, view) {
+    return dominating(1 - side, view);
   }
 
   // --- the pick policy -----------------------------------------------------
@@ -688,7 +1023,13 @@ export function createDemoChoreographer({
       : opponent.x - view.stageMinX;
   }
 
-  function beatOpen(beat, view) {
+  // `urgent` skips the attempt budget and the backoff — never the "already
+  // shown" ledger. Reserved for a situation the fight has ALREADY built that
+  // is about to expire (a stun bar one hit from the threshold), where refusing
+  // to look at it because three earlier attempts failed is exactly how a beat
+  // that the exhibition had genuinely earned went unshown.
+  function beatOpen(beat, view, urgent = false) {
+    if (urgent) return beatTotal(beat) === 0;
     if (beatTotal(beat) !== 0) {
       // A beat that has landed is normally done for the exhibition. The
       // repeatable ones (see BEAT_REPEAT_FRAMES) come back on a cooldown
@@ -742,11 +1083,18 @@ export function createDemoChoreographer({
     // both are taken the moment they open. Attempt budgets and backoff still
     // bound them, and the 45-stun / 210px thresholds mean the fight has
     // already done most of the work.
-    if (beatOpen("dizzy", view) && !opponent.down
+    // Round 4: a bar within one hit of the threshold is URGENT — the fight has
+    // already done every bit of the work and the only thing between it and the
+    // beat is one more contact before the 48-frame grace runs out.
+    const nearlyStunned = opponent.stunMeter >= DIZZY_TOPUP_STUN;
+    if (beatOpen("dizzy", view, nearlyStunned) && !opponent.down
       && opponent.stunMeter >= DIZZY_STAGE_STUN && distance < 340) {
       return { beat: "dizzy", spec: { kind: "pressure", feed: "brace" } };
     }
-    if (beatOpen("wallsplat", view) && !opponent.down
+    // Round 4: only when the victim can still TAKE a bounce. Committing the
+    // directive against a victim whose conversion is already spent (or who is
+    // at the juggle limit) burned an attempt on a beat the sim would refuse.
+    if (beatOpen("wallsplat", view) && !opponent.down && canArmWallBounce(opponent)
       && pushWallGap(self, opponent, view) < WALLSPLAT_STAGE_GAP) {
       return { beat: "wallsplat", spec: { kind: "wallsplat", feed: "brace" } };
     }
@@ -779,8 +1127,14 @@ export function createDemoChoreographer({
       // runWallsplat) rather than hammering one drive heavy. Without it the
       // splat fell from 17 of 36 exhibitions to 8-12; with it the beat is paid
       // for out of moves the exhibition owed anyway.
-      if (beatOpen("wallsplat", view) && !opponent.down
-        && pushWallGap(self, opponent, view) < 240) {
+      // Round 4: the herd is the beat's real work — carrying the victim across
+      // the stage over several exchanges — so it may now be taken from further
+      // out (the arming window is only 105px wide; the free lane alone almost
+      // never delivered a victim into it). It still only runs for the side
+      // pushing toward the near wall, and only against a victim whose bounce
+      // conversion is still available.
+      if (beatOpen("wallsplat", view) && !opponent.down && canArmWallBounce(opponent)
+        && pushWallGap(self, opponent, view) < 420) {
         candidates.push({ beat: "wallsplat", make: () => ({ kind: "wallsplat", feed: feedIf("brace") }) });
       }
       if (beatOpen("counterhit", view) && !opponent.down) {
@@ -803,10 +1157,25 @@ export function createDemoChoreographer({
       // the ground when the jumper arrives, so the cross-up claims the feed
       // and plants it (aliveInput never jumps). Pair ledger (beatTotal): the
       // beat lands on the defender while the jumper stages it.
-      if (beatOpen("turnaround", view) && !opponent.down) {
+      //
+      // v2.9 round 4 — STAGE A FLIP THAT CAN ACTUALLY DRAW. The beat is only
+      // counted now when the flipping fighter is in a state the authored pivot
+      // can reach (see turnaroundBlocker), so the cross-up has to deliver the
+      // defender to the crossing GROUNDED, free, and not mid-swing. Three
+      // things changed: the defender must be actionable when the jump starts
+      // (an opponent already in blockstun or recovery is still in it when the
+      // jumper lands, and blockstun outranks the pivot); the jumper does not
+      // attack (a cross-up air normal puts the defender straight into
+      // blockstun or hitstun ON the flip, which is the state that made the old
+      // counter dishonest); and the feed lease is long enough to cover the
+      // whole arc rather than expiring mid-flight.
+      if (beatOpen("turnaround", view) && !opponent.down && actionable(opponent)) {
         candidates.push({
           beat: "turnaround",
-          make: () => ({ kind: "air", press: null, jumpDir: 1, approach: 100, crossup: true, feed: feedIf("plant") }),
+          make: () => ({
+            kind: "air", press: null, jumpDir: 1, approach: 110,
+            crossup: true, feed: feedIf("plant"),
+          }),
         });
       }
       if (beatOpen("juggle", view) && !opponent.down) {
@@ -852,22 +1221,55 @@ export function createDemoChoreographer({
       // The corner is checked first: it is the rarer and far more perishable
       // of the two windows (a victim walks out of a corner in a few dozen
       // ticks; a stun bar bleeds down slowly).
-      const closerSet = beatTotal("wallsplat") === 0
-        && pushWallGap(self, opponent, view) < WALLSPLAT_CLOSE_GAP ? PUSH_LANE_IDS
-        : beatTotal("dizzy") === 0 && opponent.stunMeter >= DIZZY_CLOSE_STUN
-          && distance < 280 ? STUN_LANE_IDS
-          : null;
-      if (closerSet && rng.nextFloat() < 0.8) {
+      //
+      // v2.9 round 4: the corner closer narrows to this fighter's WALL-BOUNCE
+      // set, not to "anything with a big push". Inside the arming window a
+      // qualifying knockdown heavy/special converts every time (carryVelocityX
+      // 680 into the clamp); a non-qualifying push — driveHeavy above all,
+      // which qualifies on none of the nine kits — cannot convert at all, and
+      // its raw carry has bled under the 220 threshold long before it arrives.
+      const armed = canArmWallBounce(opponent);
+      // v2.9 round 4 — A BAR ONE HIT FROM THE THRESHOLD OUTRANKS EVERYTHING.
+      // Measured after the cancel string landed, the stun bar was peaking at
+      // 85-96 of 100 and then bleeding back down: the last hit is worth more
+      // to the exhibition than any ordering rule, so at DIZZY_TOPUP_STUN the
+      // closer stops rolling dice and throws the kit's fastest stun normal.
+      const topUpCloser = beatTotal("dizzy") === 0 && !opponent.down
+        && opponent.stunMeter >= DIZZY_TOPUP_STUN && distance < 300;
+      const cornerCloser = !topUpCloser && beatTotal("wallsplat") === 0 && armed
+        && pushWallGap(self, opponent, view) <= WALLSPLAT_CLOSE_GAP;
+      const stunCloser = !topUpCloser && !cornerCloser && beatTotal("dizzy") === 0
+        && opponent.stunMeter >= DIZZY_CLOSE_STUN && distance < 280;
+      const closerSet = topUpCloser ? stunIds[side].topUp
+        : cornerCloser ? slamIds[side]
+          : stunCloser ? stunIds[side].build : null;
+      if (closerSet && (topUpCloser || rng.nextFloat() < 0.8)) {
         const closers = ids.filter((id) => closerSet.has(id));
         if (closers.length) {
           const low = Math.min(...closers.map((id) => moves[id]));
           const pool = closers.filter((id) => moves[id] === low);
           const chosen = pick(pool);
-          if (closerSet === STUN_LANE_IDS) stats.stunLanePicks += 1;
-          else stats.pushLanePicks += 1;
+          if (cornerCloser) stats.pushLanePicks += 1;
+          else stats.stunLanePicks += 1;
+          if (topUpCloser) stats.topUpCloserPicks += 1;
           return { id: chosen, count: moves[chosen] };
         }
       }
+    }
+    // THE AIR ROW (v2.9 round 4). Reserved ahead of the FREE LANE below (but
+    // deliberately behind the closer, whose windows are measured in tens of
+    // ticks), because the free lane is a filter no air normal can ever win:
+    // it narrows the pool to PUSH_LANE_IDS / STUN_LANE_IDS and no air normal
+    // is in either set. While wall splat and dizzy stayed unshown — measured,
+    // most of the exhibition — that narrowing was live for a majority of
+    // picks, which is how airLightKick reached 6 of 16 fighter slots. The
+    // reservation only runs while the side still OWES the cabinet an air move,
+    // so it costs the rest of the checklist nothing once the row is on screen.
+    const airOwed = airIds[side].filter((id) => ids.includes(id) && moves[id] === 0);
+    if (airOwed.length && rng.nextFloat() < AIR_ROW_SHARE) {
+      const chosen = pick(airOwed);
+      stats.airRowPicks += 1;
+      return { id: chosen, count: moves[chosen] };
     }
     // Strong least-shown bias inside this exhibition...
     const minimum = Math.min(...ids.map((id) => moves[id]));
@@ -892,11 +1294,39 @@ export function createDemoChoreographer({
     const wallGap = pushWallGap(self, opponent, view);
     const laneOpen = ids.length > 2 && !opponent.down && rng.nextFloat() < 0.55;
     const dizzyLaneOpen = laneOpen && beatTotal("dizzy") === 0;
-    if (laneOpen && beatTotal("wallsplat") === 0 && wallGap < WALLSPLAT_PRIME_GAP) {
-      const push = ids.filter((id) => PUSH_LANE_IDS.has(id));
+    // v2.9 round 4 — THE WALL LANE WAS EATING THE STUN LANE. WALLSPLAT_PRIME_GAP
+    // is 440 of a 1128px stage, so "the victim is somewhere in the outer third"
+    // was true most of the time, and because the wall arm is checked first with
+    // an `else if` the stun lane essentially never ran: measured over six
+    // exhibitions, stunLanePicks was 0-2 while the bar plateaued at 20-46 of
+    // the 100 it needs. Stun builds ANYWHERE, so the corner — which does not —
+    // only gets priority when the victim is genuinely near enough to convert.
+    // ...and the ORDER of the two arms is load-bearing. WALLSPLAT_PRIME_GAP is
+    // 440 of a 1128px stage, so "the victim is somewhere in the outer third"
+    // was true most of the time — and because the wall arm was tested first
+    // with an `else if`, the stun lane essentially never ran. Measured over
+    // six exhibitions: stunLanePicks 0-2, and the stun bar plateaued at 20-46
+    // of the 100 it needs. The corner takes priority only when it is CLOSE
+    // (the one situation the ordinary pipeline cannot reproduce on demand);
+    // a bar that is already climbing outranks a far-off wall, because stun
+    // builds anywhere and the corner does not.
+    const cornerClose = wallGap < WALLSPLAT_ARM_GAP + 170 && canArmWallBounce(opponent);
+    const wallLane = laneOpen && beatTotal("wallsplat") === 0 && wallGap < WALLSPLAT_PRIME_GAP;
+    const stunLane = dizzyLaneOpen && opponent.stunMeter >= DIZZY_PRIME_STUN && distance < 300;
+    if (wallLane && (cornerClose || !stunLane)) {
+      // Inside the arming window the free lane wants the moves that CONVERT,
+      // not the ones that merely push — outside it, the push set is still what
+      // carries the victim there.
+      const wantSlam = wallGap <= WALLSPLAT_ARM_GAP && canArmWallBounce(opponent);
+      const push = ids.filter((id) => (wantSlam ? slamIds[side] : PUSH_LANE_IDS).has(id));
       if (push.length) { ids = push; stats.pushLanePicks += 1; }
-    } else if (dizzyLaneOpen && opponent.stunMeter >= DIZZY_PRIME_STUN && distance < 300) {
-      const stun = ids.filter((id) => STUN_LANE_IDS.has(id));
+    } else if (stunLane) {
+      // ...and the stun lane leans on its heavies: with a 48-frame decay grace
+      // the bar only loses points when the string STOPS, so stun per hit is
+      // what matters, not stun per frame (see DIZZY_TOPUP_STUN).
+      const wantTopUp = opponent.stunMeter >= DIZZY_TOPUP_STUN;
+      const stunSet = wantTopUp ? stunIds[side].topUp : stunIds[side].build;
+      const stun = ids.filter((id) => stunSet.has(id));
       if (stun.length) { ids = stun; stats.stunLanePicks += 1; }
     }
     // ...and finally spacing. An item whose band already CONTAINS the current
@@ -923,18 +1353,25 @@ export function createDemoChoreographer({
   // 134 of 877 moves shown across twenty exhibitions were the same key, none
   // of it new coverage). Both now throw the LEAST-SHOWN checklist entry that
   // still serves the beat, so building a spectacle costs the kit nothing.
-  function beatPress(side, view, allowed) {
+  function beatChoice(side, view, allowed) {
     const self = view.fighters[side];
-    const opponent = view.fighters[1 - side];
     const moves = coverage[side].moves;
     const ids = checklists[side].filter((id) => {
       if (!allowed.has(id)) return false;
       if (EX_ACTIONS.has(id) && self.meter < GRIT_RULES.enhancedSpecialCost) return false;
+      if (id === "super" && self.meter < GRIT_RULES.superCost) return false;
       return true;
     });
     if (!ids.length) return null;
     const low = Math.min(...ids.map((id) => moves[id]));
-    const id = pick(ids.filter((entry) => moves[entry] === low));
+    return pick(ids.filter((entry) => moves[entry] === low));
+  }
+
+  function beatPress(side, view, allowed) {
+    const self = view.fighters[side];
+    const opponent = view.fighters[1 - side];
+    const id = beatChoice(side, view, allowed);
+    if (!id) return null;
     const spec = directiveForMove(side, id);
     return Object.assign(holdInput(spec, self, opponent), spec.press);
   }
@@ -949,7 +1386,13 @@ export function createDemoChoreographer({
       else if (id.startsWith("airLight")) press.light = true;
       else press.heavy = true;
       if (id.endsWith("Kick")) press.limb = "kick";
-      return { kind: "air", press, approach: band.max, jumpDir: null };
+      // v2.9 round 4 — an air ATTACK always jumps TOWARD. jumpDir used to be
+      // left null and then resolved to whichever jump ARC beat was least
+      // shown, so the row was regularly thrown out of a back or neutral jump:
+      // the swing came out metres from the opponent and — because the approach
+      // guard only ran for jumpDir > 0 — nothing ever closed that gap. The arc
+      // beats keep the least-shown choice; the attacks do not want it.
+      return { kind: "air", press, approach: Math.min(band.max, AIR_ATTACK_APPROACH), jumpDir: 1 };
     }
     const press = {};
     const spec = { kind: "ground", press, band, hold: {} };
@@ -1051,12 +1494,31 @@ export function createDemoChoreographer({
     const sticky = mode === "guard";
     // A defender that is mid-attack cannot raise a guard at all, so a block
     // window claimed on top of its recovery is spent before it starts. Stage
-    // guarded contact only against a fighter that can actually block now.
-    if (sticky && !actionable(view.fighters[partner])) return;
-    lanes[partner] = {
-      role: "feed", mode, lead, sticky,
-      until: view.tick + (sticky ? GUARD_FEED_FRAMES : FEED_LEASE_FRAMES),
-    };
+    // guarded contact only against a fighter that can actually block now — and
+    // the cross-up plant for the same reason: a defender who is still in
+    // blockstun or recovery when the jumper crosses is in a state the
+    // authored pivot cannot draw from (see turnaroundBlocker).
+    if ((sticky || mode === "plant") && !actionable(view.fighters[partner])) return;
+    // v2.9 round 4: the plant is NOT sticky (it is released with its lead, so
+    // the defender goes straight back to its own checklist the moment the
+    // cross-up resolves) but its LEASE has to outlast the whole arc. The
+    // 44-frame default expired while the jumper was still climbing, which
+    // handed the defender back to the brain — usually into a guard or a swing
+    // — before it ever had anything to turn around for.
+    // v2.9 round 4: a brace behind a STUN STRING or a WALL HERD is not a
+    // 44-tick favour — those two beats are the only ones in the module that
+    // take several exchanges to build, and handing the victim back to the
+    // brain a third of the way through is why the stun bar plateaued at 20-46
+    // of 100. The lease still ends with the lead (so it stops the instant the
+    // beat lands or gives up) and the fairness guard above still refuses to
+    // press a fighter that is BEHIND on its own checklist into the role.
+    const longBrace = mode === "brace"
+      && (lead?.spec?.kind === "pressure" || lead?.spec?.kind === "wallsplat");
+    const lease = mode === "guard" ? GUARD_FEED_FRAMES
+      : mode === "plant" ? CROSSUP_FEED_FRAMES
+        : longBrace ? SPECTACLE_FEED_FRAMES
+          : FEED_LEASE_FRAMES;
+    lanes[partner] = { role: "feed", mode, lead, sticky, until: view.tick + lease };
   }
 
   function maybeStart(side, view, momentOnly = false) {
@@ -1068,9 +1530,16 @@ export function createDemoChoreographer({
     let beat = null;
     const moment = momentBeatDirective(side, view);
     if (momentOnly && !moment) return null;
+    // v2.9 round 4 — THE TRAILING SIDE DOES NOT STAND DOWN. A fighter that is
+    // losing the exhibition is exactly the fighter that needs every window it
+    // can get; rolling it into an archetype-AI natural window on top of that
+    // is how a column finishes at 6 of 30. It keeps its natural windows only
+    // while the pair is level.
+    const behind = trailing(side, view);
+    if (behind) stats.trailerBoosts += 1;
     if (moment) {
       ({ spec, beat } = moment);
-    } else if (rng.nextFloat() >= blend) {
+    } else if (!behind && rng.nextFloat() >= blend) {
       // The natural side of the blend: a genuine archetype-AI window, so the
       // exhibition still reads as a fight rather than a moves checklist.
       // Short, because the OTHER lane is usually mid-showcase anyway.
@@ -1097,11 +1566,16 @@ export function createDemoChoreographer({
       // feed tick is a tick that fighter cannot showcase anything of its own.
       if (groundNormal && beats.guardedContact === 0) spec.feed = "guard";
     }
-    // A jump or a dash cannot come out of the tail of a swing, so those kinds
-    // still wait for a genuinely free fighter — starting them during recovery
-    // only burned their own timeout (measured: 31 abandoned air/dash
-    // directives once the buffered opener let showcases start early).
-    if ((spec.kind === "air" || spec.kind === "dash") && !actionable(self)) return null;
+    // A dash cannot come out of the tail of a swing (the double-tap needs real
+    // neutral edges), so it still waits for a genuinely free fighter.
+    //
+    // v2.9 round 4 — but a JUMP can. `jump` is a buffered action, so an air
+    // directive started during our own recovery tail simply leaps the instant
+    // the tail ends (runAir holds the take-off live). The old `!actionable ->
+    // return null` DISCARDED the pick — it never even reached the pick
+    // counters — and since the pipeline deliberately starts showcases in that
+    // tail, that was the single largest tax on the air row.
+    if (spec.kind === "dash" && !actionable(self)) return null;
     if (spec.kind === "air" && spec.jumpDir === null) {
       const jumps = [["jumpForward", 1], ["jumpNeutral", 0], ["jumpBack", -1]]
         .map(([name, dir]) => ({ dir, count: beats[name] }));
@@ -1217,6 +1691,19 @@ export function createDemoChoreographer({
       stats.resumed += 1;
       directive.spaceAway = undefined;
       enterPhase(directive, openingPhase(spec));
+    }
+    // v2.9 round 4 — RE-OFFER THE DUET ROLE. claimFeed refuses while the
+    // partner is mid-showcase of its own, and for the two beats that take
+    // several exchanges to BUILD that refusal was permanent: the feed was
+    // asked for once, at the one moment it could not be given. Traced at tick
+    // 593 of seed 1234 match 2, the stun bar sat at 94 of 100 for sixty ticks
+    // while the victim — never braced — ran its own launcher and drive heavy
+    // showcases and simply walked out of range, the string's distance drifting
+    // 166 -> 235. Only the multi-exchange kinds retry, and only while they do
+    // not already hold the partner, so the ordinary duet beats are unchanged.
+    if (spec.feed && RESILIENT_KINDS.has(spec.kind)
+      && lanes[1 - side]?.lead !== directive) {
+      claimFeed(side, spec.feed, directive, view);
     }
 
     switch (spec.kind) {
@@ -1387,25 +1874,40 @@ export function createDemoChoreographer({
     return recoverStep(directive, view, self);
   }
 
+  // The jump input for this directive's arc. An air ATTACK is always forward
+  // (see directiveForMove); only the pure arc beats spend a direction on
+  // coverage.
+  function airJumpInput(jumpDir, self, opponent) {
+    const input = jumpDir === 0 ? emptyInput()
+      : jumpDir > 0 ? towardInput(self, opponent) : awayInput(self, opponent);
+    input.jump = true;
+    return input;
+  }
+
   function runAir(directive, view, self, opponent, distance) {
     const { press, jumpDir } = directive.spec;
     if (directive.phase === "act") {
       // Cross-ups and air normals approach first: the jump must start close
-      // enough for the arc to reach.
-      if ((press || directive.spec.crossup) && jumpDir > 0
+      // enough for the arc to reach. v2.9 round 4 — the `jumpDir > 0` guard is
+      // gone: an attack directive is forward by construction, and the guard
+      // was silently skipping the approach for every arc the old least-shown
+      // resolver happened to point backwards.
+      if ((press || directive.spec.crossup)
         && distance > directive.spec.approach) return towardInput(self, opponent);
+      // v2.9 round 4 — BUFFER THE TAKE-OFF. This used to sit on emptyInput()
+      // through the fighter's own recovery tail, which is exactly the state
+      // most showcases start in (see stageable). `jump` is a buffered action
+      // in the sim, so holding it live fires the leap the instant the recovery
+      // ends, the same way the ground showcases buffer their opener.
       if (!actionable(self)) {
-        if (directive.frames > 60) finishDirective(directive, view, false, "airNotActionable");
-        return emptyInput();
-      }
-      const input = emptyInput();
-      input.jump = true;
-      if (jumpDir !== 0) {
-        const toward = jumpDir > 0 ? towardInput(self, opponent) : awayInput(self, opponent);
-        Object.assign(input, toward, { jump: true });
+        if (directive.frames > 60) {
+          finishDirective(directive, view, false, "airNotActionable");
+          return null;
+        }
+        return stageable(self) ? airJumpInput(jumpDir, self, opponent) : emptyInput();
       }
       enterPhase(directive, "rise");
-      return input;
+      return airJumpInput(jumpDir, self, opponent);
     }
     if (directive.phase === "rise") {
       if (self.grounded && directive.frames > 12) {
@@ -1416,17 +1918,39 @@ export function createDemoChoreographer({
       // Round 2: keep asking while we are still on the floor. A single-tick
       // press landing on a frame the sim could not consume simply vanished,
       // which is where the abandoned jump arcs came from.
-      if (self.grounded && actionable(self)) {
-        const retry = jumpDir === 0 ? emptyInput()
-          : jumpDir > 0 ? towardInput(self, opponent) : awayInput(self, opponent);
-        retry.jump = true;
-        return retry;
-      }
+      if (self.grounded && stageable(self)) return airJumpInput(jumpDir, self, opponent);
       if (!self.grounded && directive.frames >= 6) {
-        enterPhase(directive, "recover");
+        enterPhase(directive, press ? "airPress" : "recover");
         return press ? { ...emptyInput(), ...press } : emptyInput();
       }
       return emptyInput();
+    }
+    // v2.9 round 4 — THE PRESS IS A WINDOW. The attack used to be pressed on
+    // exactly one tick (rise + 6) and never again, so an air normal whose
+    // press landed on a frame the airborne branch could not consume — a tick
+    // still inside the take-off, a tick where the buffer had just been drained
+    // — simply never came out, and the directive rode the descent showing
+    // nothing. The press is now re-armed every airborne tick until the move
+    // starts. It stops the moment the sim reports the swing (executed), so it
+    // can never spill a second buffered attack into the landing.
+    if (directive.phase === "airPress") {
+      if (directive.executed) {
+        finishDirective(directive, view, true);
+        return emptyInput();
+      }
+      if (self.grounded) {
+        // Landed without the move — let recoverStep book it honestly.
+        enterPhase(directive, "recover");
+        return emptyInput();
+      }
+      if (directive.frames > AIR_PRESS_FRAMES) {
+        finishDirective(directive, view, false, "airPressSpent");
+        return null;
+      }
+      // Never press into an air-hitstun window: that is the juggle tech, not
+      // a showcase (runDirective's interrupt guard covers the rest).
+      if (self.hitstunFrames > 0 || self.pendingKnockdown) return emptyInput();
+      return self.attacking ? emptyInput() : { ...emptyInput(), ...press };
     }
     if (!self.grounded) {
       // Same rule as the ground showcases: once the air normal (or the jump
@@ -1552,8 +2076,31 @@ export function createDemoChoreographer({
     return recoverStep(directive, view, self);
   }
 
-  // Dizzy: stun is 100 at 17 per heavy / 9 per light with a 48-frame decay
-  // grace, so the beat needs a genuine sustained string rather than a poke.
+  // v2.9 round 4 — THE STUN STRING IS A COMBO, NOT A SERIES OF POKES.
+  //
+  // Measured across six exhibitions of the real sim, the poke string plateaued
+  // at 17-65 of the 100 the threshold needs, and the arithmetic says why. Each
+  // poke costs a full cycle: press, our own recovery, then a re-approach —
+  // because the hit's own push moves the victim out of range. That cycle is
+  // 55-70 ticks against STUN_RULES.decayGraceFrames of 48, so the bar spends
+  // 7-22 ticks DECAYING between every hit and gives back 4-14 of the 17-20 it
+  // just gained. Whether the string leans on lights or heavies barely matters:
+  // both lose the race to the gap between them.
+  //
+  // A CANCEL does not have that gap. combos.mjs opens a cancel route the tick
+  // the sim confirms a hit (fighter.attackConnected), and the link lands
+  // inside the victim's hitstun — no recovery, no re-approach, ~10-14 ticks
+  // after the previous hit instead of 55-70. Two hits per approach at a
+  // combined 26-30 stun, with the grace never once expiring, is a bar that
+  // actually fills. So the string opens with a fast light and cancels into the
+  // biggest non-knockdown hit the kit owns.
+  //
+  // Both sets stay derived per fighter (demoStunStringIds): no held direction
+  // — a forward light inside grab range proximity-converts into a throw, which
+  // awards zero stun — and no knockdown, because a sweep hands the decay the
+  // whole 48+16 frame get-up.
+  const STUN_LINK_LIMIT = 2;
+
   function runPressure(directive, view, self, opponent, distance) {
     if (opponent.dizzyFrames > 0) {
       directive.executed = true;
@@ -1563,23 +2110,42 @@ export function createDemoChoreographer({
     if (opponent.down || opponent.wakeupFrames > 0) {
       // Round 2: standing over a downed victim waiting for the wake-up was
       // pure dead air — pace the range instead so the string looks intended.
+      directive.stunLinks = 0;
       return distance > 170 ? towardInput(self, opponent) : rockInput(directive.side, view, 96, 168);
     }
-    if (distance > 155) return towardInput(self, opponent);
-    // Round 2: hold the next poke live through our own recovery so it fires
-    // the instant the sim frees us (six-frame buffer). The bar decays at
-    // 0.62/frame — every idle tick between pokes is stun given back.
+    const table = stunIds[directive.side];
+    // THE CANCEL. While our own swing is still on screen and the sim has
+    // confirmed it, the next hit goes in as a link rather than a new approach.
+    if (self.attacking) {
+      const links = directive.stunLinks || 0;
+      if (self.attackConnected && links < STUN_LINK_LIMIT) {
+        directive.stunLinks = links + 1;
+        // Cancel routes key on the action GROUP, so the legal targets are the
+        // heavies and the specials — a light cannot cancel into another light.
+        const link = beatPress(directive.side, view, table.link);
+        if (link) return link;
+        directive.stunLinks = STUN_LINK_LIMIT;
+      }
+      return emptyInput();
+    }
+    directive.stunLinks = 0;
+    // Round 4: a bar one hit from the threshold chases further. The traced
+    // failure was a victim drifting from 166 to 235 while the string held its
+    // 155px working range and waited for spacing that was never coming back.
+    const reach = opponent.stunMeter >= DIZZY_TOPUP_STUN ? 128 : 155;
+    if (distance > reach) return towardInput(self, opponent);
+    // Round 2: hold the next opener live through our own recovery so it fires
+    // the instant the sim frees us (six-frame buffer).
     if (!stageable(self)) return emptyInput();
-    // Standing normals WITHOUT a held direction — inside grab range a
-    // forward-held light would proximity-convert into a throw and reset the
-    // stun meter instead of building it, and the crouching heavies are the
-    // sweeps, which knock the victim down and hand the decay 60 free frames.
-    // Heavies carry nearly twice the stun, so the string leans on them.
-    // Lights, mostly: 9 stun every 22 frames beats 17 every 40, they never
-    // sweep the victim down (a knockdown hands the 0.62/frame decay ~40 free
-    // frames and undoes a quarter of the bar), and their hitstun outlasts
-    // their own recovery so the string stays a real combo.
-    return beatPress(directive.side, view, STUN_PRESS_IDS) || { ...emptyInput(), light: true };
+    // The OPENER is the fastest thing that carries stun: it exists to confirm,
+    // and the link behind it is where the points are. Once the bar is within
+    // one hit of the threshold the opener is all that is needed, so the string
+    // stops reaching for the link and just lands the fastest normal it owns.
+    const nearly = opponent.stunMeter >= DIZZY_TOPUP_STUN;
+    if (nearly) directive.stunLinks = STUN_LINK_LIMIT;
+    return beatPress(directive.side, view, table.topUp)
+      || beatPress(directive.side, view, table.build)
+      || { ...emptyInput(), light: true };
   }
 
   function runCounter(directive, view, self, opponent, distance) {
@@ -1626,24 +2192,47 @@ export function createDemoChoreographer({
       return distance > 200 ? towardInput(self, opponent) : rockInput(directive.side, view, 120, 198);
     }
     if (distance > 215) return towardInput(self, opponent);
-    if (!actionable(self)) return emptyInput();
+    if (!stageable(self)) return emptyInput();
     // Round 2: the herd used to be one move pressed over and over — measured,
     // driveHeavy accounted for 134 of 877 moves shown across twenty
     // exhibitions and none of them was new coverage. Any big-push swing
-    // carries the victim into the clamp at the >220 vx the splat needs, so
-    // the string alternates instead of hammering the same key.
+    // carries the victim toward the corner, so the string alternates instead
+    // of hammering the same key.
     directive.swings = (directive.swings || 0) + 1;
-    if (directive.swings > 7) {
+    // Round 4: the herd is the whole job (carry the victim there over several
+    // exchanges), so it gets the exchanges. Seven swings was not enough ground
+    // to cross a stage from the middle.
+    if (directive.swings > 12) {
       finishDirective(directive, view, Boolean(directive.executed), "herdSpent");
       return null;
     }
-    // The HERD rotates through the least-shown pushing checklist entries, so
-    // walking the victim to the corner is coverage. The SLAM does not: a hit
-    // only splats if the clamp arrests it above 220 vx and the carry bleeds
-    // 10% a tick, so once the victim is actually against the wall the biggest
-    // push in the kit is the only one that converts.
-    if (pushWallGap(self, opponent, view) < 70) {
-      return { ...emptyInput(), driveHeavy: true };
+    // v2.9 round 4 — THE SLAM IS A DIFFERENT MOVE FROM THE HERD, and the old
+    // one could never have worked. The herd rotates the least-shown PUSHING
+    // entries (so walking the victim to the corner is coverage); the slam has
+    // to ARM A WALL BOUNCE, which needs a heavy/special-kind move carrying
+    // knockdown / knockdownOnFinal / launchVelocityY. `driveHeavy` — what the
+    // old slam pressed, every time — satisfies that on NONE of the nine kits,
+    // and its raw carry has bled well under the 220 threshold by the time the
+    // clamp sees it. Inside the arming window the derived slam set converts
+    // deterministically: the sim sets the victim's carry to 680 and the clamp
+    // then always fires spawnWallImpact.
+    const gap = pushWallGap(self, opponent, view);
+    if (gap <= WALLSPLAT_ARM_GAP && canArmWallBounce(opponent)) {
+      const id = beatChoice(directive.side, view, slamIds[directive.side]);
+      if (id) {
+        // ...and it has to CONNECT. Measured: the slam was pressed from
+        // anywhere inside the herd's 215px working distance, which is well
+        // outside a sweep's or a launcher's real reach — eleven slam presses
+        // in one exhibition produced zero splats. Line the shot up on the
+        // chosen move's own derived band first; the corner is not going
+        // anywhere while we take the extra step.
+        const band = bands[directive.side][id];
+        if (band && distance > band.max) return towardInput(self, opponent);
+        if (band && distance < band.min) return awayInput(self, opponent);
+        const spec = directiveForMove(directive.side, id);
+        stats.slamPresses += 1;
+        return Object.assign(holdInput(spec, self, opponent), spec.press);
+      }
     }
     return beatPress(directive.side, view, PUSH_PRESS_IDS) || { ...emptyInput(), driveHeavy: true };
   }
@@ -1929,11 +2518,42 @@ export function createDemoChoreographer({
       }
     }
     // Moment beats (a downed opponent to disrespect, a weapon lying on the
-    // floor) claim the stage regardless of the decision gap — their window is
-    // NOW and the old gate is what made the pickup 0-for-10.
-    const moment = maybeStart(side, view, true);
-    if (moment) return liveliness(side, view, moment);
-    if (view.tick < nextDecision[side]) {
+    // floor, a nearly-full stun bar, a cornered victim) claim the stage
+    // regardless of the decision gap — and regardless of the yield below,
+    // because their window is NOW and it is measured in tens of ticks.
+    const momentFirst = maybeStart(side, view, true);
+    if (momentFirst) return liveliness(side, view, momentFirst);
+    // v2.9 round 4 — YIELD THE STAGE. Measured, seed 1234 match 5 finished
+    // with jez on 6 of 30 against ali on 19: he spent the exhibition in
+    // hitstun, so `stageable` was false whenever the pipeline looked at him
+    // and every directive he did start was abandoned as `punished`. No amount
+    // of pick-side tuning reaches that, because the problem is that the OTHER
+    // fighter will not stop hitting him. The attract loop is a showcase, not a
+    // competition: once one side is running away with it, that side keeps
+    // moving and defending but stops spending the stage, which hands the
+    // trailing fighter clean actionable ticks to showcase into.
+    //
+    // Duty-cycled (YIELD_FRAMES on, YIELD_RELEASE_FRAMES off) so a leader can
+    // never go passive for a whole round if the trailer genuinely cannot
+    // convert, and never entered while a directive is live — this is a
+    // decision about what to start next, not an abandonment.
+    if (view.tick < yieldUntil[side]) {
+      stats.yieldTicks += 1;
+      return liveliness(side, view, aliveInput(side, view, {
+        attackShare: 0, guardShare: 0.34, allowDash: true,
+      }));
+    }
+    if (view.tick >= yieldReleaseUntil[side] && dominating(side, view)) {
+      yieldUntil[side] = view.tick + YIELD_FRAMES;
+      yieldReleaseUntil[side] = view.tick + YIELD_FRAMES + YIELD_RELEASE_FRAMES;
+      stats.yieldTicks += 1;
+      return liveliness(side, view, aliveInput(side, view, {
+        attackShare: 0, guardShare: 0.34, allowDash: true,
+      }));
+    }
+    // The trailing side has no decision gap at all: every tick it is free is a
+    // tick it needs.
+    if (view.tick < nextDecision[side] && !trailing(side, view)) {
       stats.gapTicks += 1;
       return liveliness(side, view, null);
     }
@@ -1954,6 +2574,12 @@ export function createDemoChoreographer({
         movesTotal: total,
         movesShown: shown,
         missingMoves: checklists[entry.side].filter((id) => entry.moves[id] === 0),
+        // v2.9 round 4: the air row and the two spectacle tables this fighter
+        // is actually working from, so a probe can tell "never picked" from
+        // "picked and refused" without re-deriving the kit data.
+        airRow: airIds[entry.side].filter((id) => entry.moves[id] === 0),
+        slamIds: [...slamIds[entry.side]],
+        stunBuildIds: [...stunIds[entry.side].build],
       };
     }
     return perFighter;

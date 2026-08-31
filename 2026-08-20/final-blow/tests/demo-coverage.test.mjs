@@ -7,14 +7,50 @@ import {
   demoCoverageChecklist,
   demoCoverageMoveId,
   demoStagingBand,
+  demoStunStringIds,
+  demoWallSlamIds,
+  turnaroundBlocker,
 } from "../engine/demo-choreo.mjs";
 import { createDemoDirector, demoMatchupKey } from "../engine/demo.mjs";
 import { createMockWorld } from "./demo-mock-world.mjs";
-import { FIGHTER_KITS } from "../engine/fighter-kits.mjs";
+import { FIGHTER_KITS, createFighterMove } from "../engine/fighter-kits.mjs";
 import { GRIT_RULES } from "../engine/combos.mjs";
+import { stunGainForAttack } from "../engine/defense.mjs";
 
 const ROSTER_10 = Object.keys(FIGHTER_KITS);
 const STAGES_6 = ["somerset", "vet", "wildwood", "buffet", "cruise", "janney"];
+
+// The action/context a coverage id resolves from — the inverse of
+// demoCoverageMoveId, for the round-4 spectacle-table tests at the end.
+const MOVE_ROW_BY_ID = new Map([
+  ["standLight", ["light", {}]],
+  ["forwardLight", ["light", { forwardHeld: true }]],
+  ["crouchLight", ["light", { crouching: true }]],
+  ["standLightKick", ["light", { limb: "kick" }]],
+  ["forwardLightKick", ["light", { limb: "kick", forwardHeld: true }]],
+  ["crouchLightKick", ["light", { limb: "kick", crouching: true }]],
+  ["standHeavy", ["heavy", {}]],
+  ["overhead", ["heavy", { forwardHeld: true }]],
+  ["crouchHeavy", ["heavy", { crouching: true }]],
+  ["standHeavyKick", ["heavy", { limb: "kick" }]],
+  ["forwardHeavyKick", ["heavy", { limb: "kick", forwardHeld: true }]],
+  ["crouchHeavyKick", ["heavy", { limb: "kick", crouching: true }]],
+  ["special", ["special", {}]],
+  ["commandSpecial", ["commandSpecial", {}]],
+  ["backSpecial", ["backSpecial", {}]],
+  ["launcher", ["launcher", {}]],
+  ["driveHeavy", ["driveHeavy", {}]],
+  ["enhanced", ["enhanced", {}]],
+  ["enhancedCommandSpecial", ["enhancedCommandSpecial", {}]],
+  ["enhancedBackSpecial", ["enhancedBackSpecial", {}]],
+  ["enhancedLauncher", ["enhancedLauncher", {}]],
+  ["super", ["super", {}]],
+]);
+function moveRowFor(id) {
+  const row = MOVE_ROW_BY_ID.get(id);
+  assert.ok(row, `no move row registered for ${id}`);
+  return row;
+}
 
 // ---------------------------------------------------------------------------
 // A deterministic sim-lite world that honours the same contracts the real
@@ -385,4 +421,163 @@ test("the repeatable movement beats come back for real screen time", () => {
     assert.ok(dashes >= 4,
       `seed ${seed} must dash repeatedly for the brake cell (got ${dashes})`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// v2.9 round 4 — the four defects the third critic panel left open.
+// ---------------------------------------------------------------------------
+
+test("the air row is reachable: every air normal fires in every exhibition", () => {
+  // THE SYSTEMIC HOLE. Measured across 16 fighter-slots of the real sim
+  // (5 exhibitions on seed 1234 + 3 on seed 9001), airLightKick fired in 6,
+  // airHeavyKick in 4 and the rest of the row in 6-7. Three causes, all in
+  // the pipeline: the free lane and the closer both narrow the pool to
+  // PUSH_LANE_IDS / STUN_LANE_IDS and no air normal is in either set; an air
+  // pick was DISCARDED outright whenever the fighter was in its own recovery
+  // tail (which is exactly when showcases start); and the arc took its
+  // direction from the least-shown jump BEAT, so an air normal was regularly
+  // thrown out of a back jump with no approach at all.
+  const AIR_ROW = ["airLight", "airLightKick", "airHeavy", "airHeavyKick", "airSpecial"];
+  for (const { pair, seed, coverage } of runExhibitions()) {
+    for (const fighterId of pair) {
+      for (const id of AIR_ROW) {
+        assert.ok(coverage[fighterId].moves[id] > 0,
+          `${fighterId} (seed ${seed}) never showed ${id} — the air row must be reachable`);
+      }
+    }
+  }
+});
+
+test("the air row is reserved out of the picker, not left to the tie-breaks", () => {
+  // The reservation is what makes the row reachable, so it has to be visible
+  // in the ledger: if it ever stops firing the row goes straight back to
+  // losing every filter it can never win.
+  for (const { seed, stats } of runExhibitions()) {
+    assert.ok(stats.airRowPicks > 0,
+      `seed ${seed} must reserve picks for the unshown air row (got ${stats.airRowPicks})`);
+  }
+});
+
+test("the losing side gets a fair share of the showcase", () => {
+  // THE MANNEQUIN'S SEQUEL. Seed 1234 match 5 finished with jez on 6 of 30
+  // against ali on 19: he spent the exhibition in hitstun, so `stageable` was
+  // false whenever the pipeline looked at him. The attract loop is a showcase,
+  // not a competition — the leader yields the stage rather than convincing
+  // anyone. Pinned on the TRAILING column, which is the number that was broken.
+  for (const { pair, seed, coverage } of runExhibitions()) {
+    const shown = pair.map((id) => coverage[id].movesShown);
+    const low = Math.min(...shown);
+    const gap = Math.abs(shown[0] - shown[1]);
+    assert.ok(low >= 24,
+      `seed ${seed}: the trailing fighter showed only ${low} of 30`);
+    assert.ok(gap <= 6,
+      `seed ${seed}: a ${gap}-move gap between the two columns is a competition, not an exhibition`);
+  }
+});
+
+test("the yield is duty-cycled, never a whole round of standing down", () => {
+  // A leader that yielded indefinitely would just be a different kind of
+  // mannequin, so the stand-down runs in bursts and the inertness ceiling
+  // above still applies to every tick of it.
+  for (const { seed, stats, census } of runExhibitions()) {
+    assert.ok(stats.yieldTicks < census.ticks * 0.34,
+      `seed ${seed} yielded for ${stats.yieldTicks} of ${census.ticks} ticks`);
+  }
+});
+
+test("the turnaround beat is only counted when the pivot could reach the screen", () => {
+  // THE COUNTER WAS LYING. qa.demoCoverage() reported `turnaround` as FIRING
+  // while motion2:5 drew for zero frames, because observe() counted every
+  // grounded facing flip and fighterPoseDescriptor only reaches the authored
+  // pivot when the flipper is grounded, not attacking, and not in hitstun /
+  // blockstun / knockdown / wake-up / a grab / dizzy. Most recorded flips were
+  // in exactly those states.
+  assert.equal(turnaroundBlocker({ grounded: true }), "");
+  assert.equal(turnaroundBlocker({ grounded: false }), "airborne");
+  assert.equal(turnaroundBlocker({ grounded: true, hitstunFrames: 4 }), "hitstun");
+  assert.equal(turnaroundBlocker({ grounded: true, blockstunFrames: 4 }), "blockstun");
+  assert.equal(turnaroundBlocker({ grounded: true, down: true }), "knockdown");
+  assert.equal(turnaroundBlocker({ grounded: true, wakeupFrames: 3 }), "wakeup");
+  assert.equal(turnaroundBlocker({ grounded: true, dizzyFrames: 9 }), "dizzy");
+  assert.equal(turnaroundBlocker({ grounded: true, grabbed: true }), "grab");
+  assert.equal(turnaroundBlocker({ grounded: true, attacking: true }), "attacking");
+
+  // ...and the ledger must actually use it: every counted beat has to be a
+  // flip the renderer could have drawn, and the rejects have to be recorded
+  // rather than silently folded into the count.
+  let counted = 0;
+  let blind = 0;
+  for (const { coverage, pair, stats } of runExhibitions()) {
+    counted += pair.reduce((total, id) => total + coverage[id].beats.turnaround, 0);
+    blind += Object.values(stats.turnaroundBlind).reduce((a, b) => a + b, 0);
+    assert.equal(
+      counted + blind >= 0 && typeof stats.turnaroundSeen === "number", true,
+      "every observed flip must be classified as counted or blind",
+    );
+  }
+  assert.ok(blind > 0,
+    "flips taken in hitstun/knockdown/mid-swing are real and must be recorded as blind, not counted");
+  assert.ok(counted > 0,
+    "the cross-up staging must still produce flips the authored pivot can draw");
+});
+
+test("the wall splat is chased through the sim's own conversion, not a guess", () => {
+  // The herd used to slam with driveHeavy, which qualifies for a corner wall
+  // bounce on NONE of the nine kits — and the raw >220 vx route needs the
+  // victim inside ~40px because hitstun bleeds the carry 10% a tick. The
+  // deterministic route is the ARMED bounce: a knockdown-class heavy/special
+  // landing within one body width of the wall sets carryVelocityX 680 and the
+  // clamp always fires spawnWallImpact.
+  for (const fighterId of ROSTER_10) {
+    const slam = demoWallSlamIds(fighterId);
+    assert.ok(slam.length >= 3,
+      `${fighterId} must own several wall-bounce conversions (got ${slam.length})`);
+    assert.ok(!slam.includes("driveHeavy"),
+      `${fighterId}: driveHeavy cannot arm a wall bounce and must not be the slam`);
+    assert.ok(!slam.some((id) => id.startsWith("air")),
+      `${fighterId}: the grounded slam must not reach for an air normal`);
+  }
+});
+
+test("the stun string is a combo built from non-knockdown stun carriers", () => {
+  // The round-3 string was lights-only on "9 stun every 22 frames beats 17
+  // every 40", which left out STUN_RULES.decayGraceFrames — but the real
+  // problem is bigger than which button: a re-approached poke leaves a 55-70
+  // tick gap between hits against a 48-tick grace, so the bar hands most of
+  // every gain straight back. A CANCEL lands inside the previous hit's
+  // hitstun. Measured in the real sim, the string's peak went 17-65 -> 71-98
+  // when it started cancelling.
+  for (const fighterId of ROSTER_10) {
+    const { build, topUp, link } = demoStunStringIds(fighterId);
+    assert.ok(build.length > 0 && topUp.length > 0 && link.length > 0,
+      `${fighterId} must have a usable opener, build and link set`);
+    for (const id of [...build, ...topUp, ...link]) {
+      assert.ok(!id.startsWith("air"), `${fighterId}: ${id} cannot be part of a grounded string`);
+      const move = createFighterMove(fighterId, ...moveRowFor(id));
+      assert.ok(!move.knockdown && !move.knockdownOnFinal && !move.launchVelocityY && !move.juggleLift,
+        `${fighterId}: ${id} knocks the victim down and hands the decay the whole get-up`);
+      assert.ok(stunGainForAttack(move) > 0, `${fighterId}: ${id} awards no stun at all`);
+    }
+    for (const id of link) {
+      assert.ok(build.includes(id), `${fighterId}: ${id} must be a build entry to be a link`);
+    }
+  }
+});
+
+test("the two spectacles reach the exhibition", () => {
+  // The panel measured wall splat and dizzy as near-zero across 14 fighter
+  // slots. Both are now built deliberately — the victim is carried to the
+  // arming window over several exchanges and the stun bar is topped up with
+  // cancels — rather than hoped for.
+  let dizzyRuns = 0;
+  let wallRuns = 0;
+  for (const { pair, coverage } of runExhibitions()) {
+    const beats = (beat) => coverage[pair[0]].beats[beat] + coverage[pair[1]].beats[beat];
+    if (beats("dizzy") > 0) dizzyRuns += 1;
+    if (beats("wallsplat") > 0) wallRuns += 1;
+  }
+  assert.ok(dizzyRuns >= NATURALNESS_RUNS.length - 1,
+    `the stun string must reach nearly every exhibition (got ${dizzyRuns} of ${NATURALNESS_RUNS.length})`);
+  assert.ok(wallRuns >= 3,
+    `the wall splat must reach a real share of exhibitions (got ${wallRuns} of ${NATURALNESS_RUNS.length})`);
 });

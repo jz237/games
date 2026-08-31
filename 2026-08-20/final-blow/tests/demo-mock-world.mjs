@@ -1,13 +1,55 @@
 import { createDemoChoreographer } from "../engine/demo-choreo.mjs";
-import { GRIT_RULES } from "../engine/combos.mjs";
+import { COMBO_RULES, GRIT_RULES } from "../engine/combos.mjs";
+import { STUN_RULES, WALL_BOUNCE_RULES, qualifiesForWallBounce } from "../engine/defense.mjs";
+import { createFighterMove } from "../engine/fighter-kits.mjs";
 
 // Sim-lite world for the demo choreography tests (see demo-coverage.test.mjs
 // for the contract description). Not a test file itself.
 
-const KNOCKDOWN_ACTIONS = new Set([
-  "heavy-crouch", "special", "commandSpecial", "backSpecial", "driveHeavy",
-  "super", "enhanced", "enhancedCommandSpecial", "enhancedBackSpecial",
-]);
+// v2.9 round 4 — the mock's wall-splat model used to be "a push big enough to
+// shove the victim past the clamp", which is only the game's SECONDARY route
+// (|vx| > 220 at the clamp) and is why a herd of drive heavies looked like it
+// worked here. The primary and deterministic route is the ARMED CORNER BOUNCE:
+// a knockdown-class heavy/special connecting while the victim is within one
+// body width of the wall it is being pushed toward sets the carry to 680, so
+// the flight always reaches the clamp and always splats. Modelling only the
+// secondary route made this harness reward exactly the wrong move set.
+const BODY_WIDTH = 105; // Math.round(92 * FIGHTER_SCALE)
+const WALL_BOUNCE_GAP = BODY_WIDTH * WALL_BOUNCE_RULES.proximityBodyWidths;
+// Per-fighter, per-action: does this move arm the corner bounce? Read straight
+// off the real attack instance so the harness and the sim agree.
+const wallBounceCache = new Map();
+function armsWallBounce(fighterId, action, context) {
+  const key = `${fighterId}|${action}|${context.crouching ? "c" : ""}${context.forwardHeld ? "f" : ""}${context.airborne ? "a" : ""}${context.limb}`;
+  if (!wallBounceCache.has(key)) {
+    let move = null;
+    try { move = createFighterMove(fighterId, action, context); } catch { move = null; }
+    wallBounceCache.set(key, qualifiesForWallBounce(move));
+  }
+  return wallBounceCache.get(key);
+}
+
+// Damage is only modelled so the choreographer's LOPSIDEDNESS signal has
+// something to read (see the coverage-gap yield): the mock has no rounds, so
+// health floors instead of ending the match.
+const DAMAGE = { light: 4, heavy: 8 };
+
+// v2.9 round 4: which moves knock down is READ OFF THE KIT, not guessed from
+// the action name. The old shared set said every special/EX/drive floors the
+// victim, which is false for most kits — and it mattered, because a knockdown
+// is what ends a stun string (the get-up hands the decay ~60 free frames), so
+// the harness was punishing a string the sim would have let run.
+const knockdownCache = new Map();
+function knocksDownMove(fighterId, action, context) {
+  const key = `${fighterId}|${action}|${context.crouching ? "c" : ""}${context.forwardHeld ? "f" : ""}${context.airborne ? "a" : ""}${context.limb}`;
+  if (!knockdownCache.has(key)) {
+    let move = null;
+    try { move = createFighterMove(fighterId, action, context); } catch { move = null; }
+    knockdownCache.set(key, Boolean(move
+      && (move.knockdown || move.knockdownOnFinal || move.launchVelocityY || move.juggleLift)));
+  }
+  return knockdownCache.get(key);
+}
 const GROUND_ONLY = new Set([
   "throw", "throwObject", "enhancedThrowObject", "commandSpecial", "backSpecial",
   "launcher", "driveHeavy", "enhanced", "enhancedCommandSpecial",
@@ -19,8 +61,9 @@ const ACTION_ORDER = [
   "commandSpecial", "throwObject", "special", "throw", "heavy", "light",
 ];
 
-function makeMockFighter(x, facing) {
+function makeMockFighter(x, facing, kitId = "") {
   return {
+    kitId,
     x, facing, grounded: true, down: 0, pendingKnockdown: false,
     wakeupFrames: 0, hitstunFrames: 0, blockstunFrames: 0, dizzyFrames: 0,
     tauntFrames: 0, grabbed: false, grabbing: false,
@@ -35,6 +78,20 @@ function makeMockFighter(x, facing) {
     lastTap: { left: -Infinity, right: -Infinity },
     prevDir: { left: false, right: false },
     airFrames: 0,
+    // v2.9 round 4: the three sim fields the choreographer now reads.
+    // health drives the lopsidedness signal; juggleCount + wallBounceUsed are
+    // what decide whether a victim can still be armed for a corner bounce
+    // (once per combo, and it spends a juggle point).
+    health: 100,
+    juggleCount: 0,
+    wallBounceUsed: false,
+    // The real stun clock: every connected hit re-arms a 48-frame grace, so
+    // a string that keeps landing loses NOTHING. Modelling a flat drain (the
+    // old 0.2/frame with no grace) is what made a lights-only stun string look
+    // viable here when it is not.
+    stunDecayDelay: 0,
+    // Cancel links spent on the current swing (see the cancel route below).
+    cancelLinks: 0,
   };
 }
 
@@ -58,6 +115,9 @@ function mockView(world) {
       throwableUses: fighter.throwableUses, carriedWeapon: fighter.carriedWeapon,
       dashFrames: fighter.dashFrames, dashDirection: fighter.dashDirection,
       vx: fighter.vx, vy: fighter.vy,
+      health: fighter.health,
+      juggleCount: fighter.juggleCount,
+      wallBounceUsed: fighter.wallBounceUsed,
     })),
   };
 }
@@ -79,7 +139,7 @@ export function createMockWorld({
   const choreo = createDemoChoreographer({ pair, stageId, hasStageWeapon, seed, priorShown });
   const world = {
     tick: 0,
-    fighters: [makeMockFighter(420, 1), makeMockFighter(860, -1)],
+    fighters: [makeMockFighter(420, 1, pair[0]), makeMockFighter(860, -1, pair[1])],
     weapon: null,
     pendingHits: [],
     census: { ticks: 0, inert: [0, 0], run: [0, 0], longest: [0, 0] },
@@ -105,6 +165,9 @@ export function createMockWorld({
       if (!victim.grounded) return;
       world.choreo.noteBeat(hit.side, "throw");
       victim.x += attacker.facing * 60;
+      // A throw clears the combo, so the corner conversion re-arms with it.
+      victim.wallBounceUsed = false;
+      victim.juggleCount = 0;
       noteKnockdown(1 - hit.side);
       return;
     }
@@ -115,12 +178,32 @@ export function createMockWorld({
     if (victim.startupLeft > 0) world.choreo.noteBeat(hit.side, "counterhit");
     if (!victim.grounded && victim.pendingKnockdown) world.choreo.noteBeat(hit.side, "juggle");
     victim.hitstunFrames = 18;
+    victim.health = Math.max(5, victim.health - (DAMAGE[hit.action] || 10));
     victim.stunMeter += hit.stun;
-    if (victim.stunMeter >= 100) {
+    // The real clock: a connected hit re-arms the 48-frame decay grace.
+    victim.stunDecayDelay = STUN_RULES.decayGraceFrames;
+    if (victim.stunMeter >= STUN_RULES.threshold) {
       victim.stunMeter = 0;
       victim.dizzyFrames = 120;
       victim.hitstunFrames = 0;
       world.choreo.noteBeat(1 - hit.side, "dizzy");
+    }
+    // v2.9 round 4 — THE ARMED CORNER BOUNCE, the sim's primary splat route.
+    // A qualifying knockdown heavy/special landing with the victim already
+    // inside one body width of the wall it is being driven toward commits the
+    // flight to that wall (carryVelocityX 680) and the clamp then always fires
+    // spawnWallImpact. Once per combo, and it spends a juggle point.
+    const pushDirection = attacker.facing;
+    const wallX = pushDirection > 0 ? 1204 : 76;
+    if (hit.wallBounce && !victim.wallBounceUsed
+      && victim.juggleCount < COMBO_RULES.juggleLimit
+      && Math.abs(wallX - victim.x) <= WALL_BOUNCE_GAP) {
+      victim.wallBounceUsed = true;
+      victim.juggleCount += 1;
+      victim.x = wallX;
+      world.choreo.noteBeat(1 - hit.side, "wallsplat");
+      victim.hitstunFrames = WALL_BOUNCE_RULES.hitstunFrames;
+      return;
     }
     attacker.meter = Math.min(100, attacker.meter + 9);
     victim.meter = Math.min(100, victim.meter + 4); // damage-taken Grit gain
@@ -129,7 +212,7 @@ export function createMockWorld({
       victim.pendingKnockdown = true;
       victim.airFrames = 26;
       victim.vy = -400;
-    } else if (KNOCKDOWN_ACTIONS.has(hit.tag)) {
+    } else if (hit.knockdown) {
       noteKnockdown(1 - hit.side);
     }
     const before = victim.x;
@@ -177,11 +260,58 @@ export function createMockWorld({
           side, action: airAction, tag: `air-${airAction}`,
           resolveTick: world.tick + fighter.startupLeft,
           reach: 210, push: 25, stun: airAction === "light" ? 9 : 17,
+          wallBounce: armsWallBounce(fighter.kitId, airAction, {
+            airborne: true, crouching: false, forwardHeld: false,
+            limb: input.limb === "kick" ? "kick" : "punch",
+          }),
+          knockdown: knocksDownMove(fighter.kitId, airAction, {
+            airborne: true, crouching: false, forwardHeld: false,
+            limb: input.limb === "kick" ? "kick" : "punch",
+          }),
         });
       }
       return;
     }
+    // v2.9 round 4 — CANCELS. combos.mjs opens a cancel route the tick the sim
+    // confirms a hit, and the choreographer's stun string now depends on it
+    // (a link lands inside the victim's hitstun, so the 48-frame decay grace
+    // never expires — see runPressure). A harness that could only ever poke
+    // would have made that string look impossible. Route table simplified to
+    // the contract the choreographer uses: a CONFIRMED swing cancels into a
+    // heavy or a special, at most twice per attack.
+    if (fighter.grounded && fighter.busyFrames > 0 && fighter.attackConnected
+      && fighter.down <= 0 && fighter.hitstunFrames <= 0 && fighter.cancelLinks < 2) {
+      const cancelInto = ACTION_ORDER.find((name) => input[name] && name !== "light" && name !== "throw");
+      if (cancelInto && !(GROUND_ONLY.has(cancelInto) && !fighter.grounded)) {
+        const cost = cancelInto === "super" ? GRIT_RULES.superCost
+          : cancelInto.startsWith("enhanced") ? GRIT_RULES.enhancedSpecialCost : 0;
+        if (fighter.meter >= cost) {
+          const context = {
+            airborne: false, crouching: Boolean(input.down), forwardHeld: false,
+            limb: input.limb === "kick" ? "kick" : "punch",
+          };
+          world.choreo.noteMove(side, cancelInto, context);
+          fighter.meter -= cost;
+          fighter.cancelLinks += 1;
+          fighter.attackConnected = false;
+          fighter.busyFrames = 24;
+          fighter.startupLeft = 4; // cancels skip most of the startup
+          const tag = ["heavy"].includes(cancelInto) && context.crouching ? `${cancelInto}-crouch` : cancelInto;
+          world.pendingHits.push({
+            side, action: cancelInto, tag,
+            resolveTick: world.tick + fighter.startupLeft,
+            reach: cancelInto === "driveHeavy" ? 240 : 210,
+            push: cancelInto === "driveHeavy" ? 70 : cancelInto === "heavy" ? 40 : 55,
+            stun: cancelInto === "heavy" ? 17 : 20,
+            wallBounce: armsWallBounce(fighter.kitId, cancelInto, context),
+            knockdown: knocksDownMove(fighter.kitId, cancelInto, context),
+          });
+          return;
+        }
+      }
+    }
     if (!actionableMock(fighter)) return;
+    fighter.cancelLinks = 0;
     fighter.crouch = Boolean(input.down);
     if (input.guard) fighter.guardHeld = true;
     if (input.taunt) {
@@ -276,6 +406,10 @@ export function createMockWorld({
       reach: action === "throw" ? 140 : action === "driveHeavy" ? 240 : 210,
       push: light ? 12 : action === "driveHeavy" ? 70 : ["heavy"].includes(action) ? 40 : 55,
       stun: light ? 9 : action === "heavy" ? 17 : 20,
+      // Read off the real attack instance, so the harness rewards exactly the
+      // moves the sim's corner conversion rewards — and no others.
+      wallBounce: armsWallBounce(fighter.kitId, action, context),
+      knockdown: knocksDownMove(fighter.kitId, action, context),
     });
   }
 
@@ -310,9 +444,22 @@ export function createMockWorld({
         if (fighter.down === 0) fighter.wakeupFrames = 12;
       } else if (fighter.wakeupFrames > 0) {
         fighter.wakeupFrames -= 1;
+        // The combo ends with the get-up: the once-per-combo corner bounce and
+        // the juggle budget both re-arm, exactly as they do in game.js.
+        if (fighter.wakeupFrames === 0) {
+          fighter.wallBounceUsed = false;
+          fighter.juggleCount = 0;
+        }
       }
-      if (fighter.stunMeter > 0 && fighter.hitstunFrames <= 0) {
-        fighter.stunMeter = Math.max(0, fighter.stunMeter - 0.2);
+      // The real stun clock (STUN_RULES): a 48-frame grace after the last hit,
+      // then 0.62/frame. The old flat 0.2/frame with no grace both punished a
+      // slow string that was actually fine and forgave one that had stopped.
+      if (fighter.dizzyFrames > 0) {
+        // frozen while dizzy
+      } else if (fighter.stunDecayDelay > 0) {
+        fighter.stunDecayDelay -= 1;
+      } else if (fighter.stunMeter > 0) {
+        fighter.stunMeter = Math.max(0, fighter.stunMeter - STUN_RULES.decayPerFrame);
       }
       if (fighter.carriedWeapon) fighter.carryFrames += 1;
       fighter.meter = Math.min(100, fighter.meter + 0.15);
