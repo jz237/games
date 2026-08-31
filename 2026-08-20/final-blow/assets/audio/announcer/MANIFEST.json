@@ -14,7 +14,7 @@
     "commissioner-wins": 3,
     "connected": 3,
     "cyraxx-name": 3,
-    "cyraxx-wins": 3,
+    "cyraxx-wins": 4,
     "deathblow-name": 3,
     "deathblow-wins": 3,
     "devil-name": 3,
@@ -24,13 +24,13 @@
     "fatality-performed": 3,
     "fight": 4,
     "finalround": 3,
-    "finishthem": 3,
-    "flawless": 2,
+    "finishthem": 4,
+    "flawless": 3,
     "guardcrush": 3,
     "jez-name": 3,
     "jez-wins": 3,
-    "ko": 4,
-    "perfect": 3,
+    "ko": 5,
+    "perfect": 4,
     "post-name": 3,
     "post-wins": 3,
     "recovered": 3,
@@ -39,6 +39,6 @@
     "round2": 3,
     "setpoint": 3,
     "timeover": 3,
-    "wallbounce": 3
+    "wallbounce": 4
   }
 }
